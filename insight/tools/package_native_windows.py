@@ -49,7 +49,7 @@ def main():
         target = destination / 'checks' / exe.name
         shutil.copy2(exe, target)
         subprocess.run([a.strip, '--strip-unneeded', str(target)], check=True)
-    for name in ['Start-Native-Insight.ps1', 'Start-Native-Insight.cmd', 'Run-Checks.ps1', 'Run-Checks.cmd']:
+    for name in ['Start-Native-Insight.ps1', 'Start-Native-Insight.cmd', 'Diagnose-Windows.cmd', 'Run-Checks.ps1', 'Run-Checks.cmd']:
         shutil.copy2(ROOT / 'insight/packaging' / name, destination / name)
     shutil.copytree(ROOT / 'insight/examples', destination / 'examples')
     shutil.copytree(ROOT / 'insight/docs', destination / 'insight-docs')

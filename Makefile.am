@@ -133,6 +133,7 @@ EXTRA_DIST += \
 	insight/packaging/Start-Insight.cmd \
 	insight/packaging/Start-Insight.ps1 \
 	insight/packaging/Start-Native-Insight.cmd \
+	insight/packaging/Diagnose-Windows.cmd \
 	insight/packaging/Start-Native-Insight.ps1 \
 	insight/packaging/run-checks.sh \
 	insight/packaging/start-insight.sh \
