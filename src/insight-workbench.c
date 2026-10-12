@@ -24,7 +24,7 @@ static void frame_free(gpointer data) { ScanFrame *p=data; if(p->dir) g_dir_clos
 typedef struct { gchar *path; guint id; gulong line; } Location;
 static void location_free(gpointer data) { Location *p=data; g_free(p->path); g_free(p); }
 typedef struct {
- GtkWidget *pane,*box,*title,*follow,*choices,*browser,*symbol_entry,*symbol_view;
+ GtkWidget *pane,*box,*title,*follow,*choices,*browser,*symbol_entry,*symbol_view,*outline;
  GtkListStore *symbols;
  ScintillaObject *preview;
  guint refresh,source_id;
@@ -199,7 +199,9 @@ enum { SYMBOL_NAME,SYMBOL_SCOPE,SYMBOL_PATH,SYMBOL_LINE,SYMBOL_KIND,SYMBOL_COLUM
 static void browser_filter(GtkEditable *entry,gpointer data) {
  (void)entry; (void)data; if(!wb.symbols) return;
  refresh_index(); const InsightSymbol *found[500];
- size_t count=insight_index_find(wb.index,gtk_entry_get_text(GTK_ENTRY(wb.symbol_entry)),FALSE,found,500);
+ GeanyDocument *doc=document_get_current(); gboolean outline=wb.outline && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.outline));
+ const char *path=outline && doc && doc->file_name ? doc->file_name : NULL;
+ size_t count=outline && !path ? 0 : insight_index_query(wb.index,gtk_entry_get_text(GTK_ENTRY(wb.symbol_entry)),FALSE,NULL,NULL,path,0,found,500);
  gtk_list_store_clear(wb.symbols);
  for(size_t i=0;i<count && i<500;i++) {
   GtkTreeIter iter; gtk_list_store_append(wb.symbols,&iter);
@@ -216,6 +218,7 @@ static void browser_selected(GtkTreeSelection *selection,gpointer data) {
 static void browser_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) {
  (void)view; (void)path; (void)column; (void)data; open_context(NULL,NULL);
 }
+static void outline_changed(GtkToggleButton *button,gpointer data) { (void)button; (void)data; browser_filter(NULL,NULL); }
 static void create_browser(void) {
  wb.browser=gtk_box_new(GTK_ORIENTATION_VERTICAL,4); wb.symbol_entry=gtk_search_entry_new();
  gtk_entry_set_placeholder_text(GTK_ENTRY(wb.symbol_entry),"Find project symbol…");
@@ -227,6 +230,9 @@ static void create_browser(void) {
   gtk_tree_view_column_set_sort_column_id(column,i); gtk_tree_view_append_column(GTK_TREE_VIEW(wb.symbol_view),column);
  }
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),wb.symbol_view);
+ wb.outline=gtk_check_button_new_with_label("Current file outline");
+ g_signal_connect(wb.outline,"toggled",G_CALLBACK(outline_changed),NULL);
+ gtk_box_pack_start(GTK_BOX(wb.browser),wb.outline,FALSE,FALSE,0);
  gtk_box_pack_start(GTK_BOX(wb.browser),wb.symbol_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(wb.browser),scroll,TRUE,TRUE,0);
  gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),wb.browser,gtk_label_new("Workspace"));
  g_signal_connect(wb.symbol_entry,"changed",G_CALLBACK(browser_filter),NULL);
@@ -236,6 +242,7 @@ static void create_browser(void) {
 }
 static gboolean refresh_now(gpointer data) {
  (void)data; wb.refresh=0;
+ if(wb.outline && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.outline))) browser_filter(NULL,NULL);
  if(!wb.preview || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow))) return G_SOURCE_REMOVE;
  GeanyDocument *doc=document_get_current();
  if(!doc) { render_source("",NULL,1); return G_SOURCE_REMOVE; }
