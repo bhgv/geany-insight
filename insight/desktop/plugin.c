@@ -38,7 +38,8 @@ static int open_file(void *ctx,const char *path) {
  if(h->undo_doc && h->undo_doc!=next) { sci_end_undo_action(h->undo_doc->editor->sci); sci_start_undo_action(next->editor->sci); h->undo_doc=next; }
  h->doc=next; return 1;
 }
-static const InsightEditorAPI host_api={.position=get_position,.goto_line=go_line,.open_file=open_file};
+static int save_file(void *ctx) { Host *h=ctx; return h->doc->file_name && document_save_file(h->doc,FALSE); }
+static const InsightEditorAPI host_api={.position=get_position,.goto_line=go_line,.save_file=save_file,.open_file=open_file};
 static void invoke_command(GtkMenuItem *menu,gpointer data) {
  (void)data;
  const char *name=g_object_get_data(G_OBJECT(menu),"insight-command-id");

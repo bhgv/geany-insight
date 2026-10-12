@@ -7,6 +7,7 @@ typedef struct {
  unsigned long (*position)(void *);
  int (*goto_line)(void *,unsigned long);
  int (*open_file)(void *,const char *);
+ int (*save_file)(void *);
 } InsightEditorAPI;
 typedef struct {
  void *context;
