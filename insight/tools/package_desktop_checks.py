@@ -21,6 +21,8 @@ def main():
     parser.add_argument('--upstream-source', type=Path)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--verification-note', action='append', default=[])
+    parser.add_argument('--languages', nargs='+', help='Keep only these locale directories (English is builtin)')
+    parser.add_argument('--strip', help='Strip tool for own module and test executables only')
     args = parser.parse_args()
     if args.platform == 'windows' and not args.upstream_source:
         parser.error('Windows package needs Geany 2.1 source archive')
@@ -31,6 +33,10 @@ def main():
         parser.error('Staging destination already exists: '+str(dest))
     shutil.copytree(args.editor_root, dest, symlinks=args.platform == 'linux',
                     ignore=shutil.ignore_patterns('include', 'pkgconfig', '$PLUGINSDIR'))
+    if args.languages and (dest/'share/locale').exists():
+        for locale in (dest/'share/locale').iterdir():
+            if locale.is_dir() and locale.name not in args.languages:
+                shutil.rmtree(locale)
     windows = args.platform == 'windows'
     module = 'insight_lua.dll' if windows else 'insight_lua.so'
     (dest/'lib/geany').mkdir(parents=True, exist_ok=True)
@@ -39,6 +45,9 @@ def main():
     checks.mkdir()
     for path in args.checks_root.glob('*_test.exe' if windows else '*_test'):
         shutil.copy2(path, checks/path.name)
+    if args.strip:
+        for binary in [dest/'lib/geany'/module, *checks.iterdir()]:
+            subprocess.run([args.strip, '--strip-unneeded', str(binary)], check=True)
     launchers = ['Start-Insight.cmd', 'Start-Insight.ps1', 'Run-Checks.cmd', 'Run-Checks.ps1'] if windows else ['start-insight.sh', 'run-checks.sh']
     for filename in launchers:
         shutil.copy2(ROOT/'packaging'/filename, dest/filename)
@@ -56,6 +65,8 @@ def main():
     shutil.copy2(ROOT/'docs/desktop-check-builds.md', dest/'README.md')
     info = json.loads((args.checks_root/'build-info.json').read_text())
     info['source_revision'] = subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()
+    info['included_locales'] = args.languages or 'all available'
+    info['native_debug_symbols_stripped'] = bool(args.strip)
     info['editor_base'] = 'official Geany 2.1 x64' if windows else 'Geany 2.2 development built from included sources'
     info['verification'] = (['Cross compiled; Windows execution not verified'] if windows else ['8 core checks passed during compilation']) + args.verification_note
     info['linux_requirements'] = None if windows else 'Ubuntu 24.04 x64 or compatible: glibc >= 2.38, GLib >= 2.80, GTK3 >= 3.24 and dependencies'
