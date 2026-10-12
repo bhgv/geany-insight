@@ -17,7 +17,8 @@ static const char *fake_filename(void *ctx) { (void)ctx; return filename; }
 static int fake_range(void *ctx,unsigned long *start,unsigned long *end) { (void)ctx; *start=selection_start; *end=selection_end; return 1; }
 static int fake_selection(void *ctx,unsigned long a,unsigned long b) { (void)ctx; if(a>b || b>strlen(content)) return 0; selection_start=a; selection_end=b; return 1; }
 static unsigned long fake_count(void *ctx) { (void)ctx; return 1; }
-static const InsightEditorAPI api={.position=position,.goto_line=go,.line_count=fake_count,.set_selection=fake_selection,.selection_range=fake_range,.filename=fake_filename,.save_file=fake_save,.open_file=fake_open};
+static const char *fake_line(void *ctx,unsigned long line) { (void)ctx; return line==1 ? content : NULL; }
+static const InsightEditorAPI api={.position=position,.goto_line=go,.line_text=fake_line,.line_count=fake_count,.set_selection=fake_selection,.selection_range=fake_range,.filename=fake_filename,.save_file=fake_save,.open_file=fake_open};
 static int run(InsightHost *host,const char *source,char *error) { return insight_run(host,source,strlen(source),error,512); }
 int main(void) {
  InsightHost host={.text=text,.selection=text,.replace_selection=replace,.api=&api}; char error[512];
@@ -34,6 +35,8 @@ int main(void) {
  assert(run(&host,"editor.set_selection(4,1)",error)==1);
  assert(run(&host,"editor.set_selection(0,99)",error)==1);
  assert(run(&host,"assert(editor.line_count()==1)",error)==0);
+ assert(run(&host,"assert(editor.line_text(1)=='hello')",error)==0);
+ assert(run(&host,"editor.line_text(2)",error)==1);
  host.api=NULL; assert(run(&host,"editor.position()",error)==1 && strstr(error,"unavailable"));
  puts("editor API: all checks passed"); return 0;
 }

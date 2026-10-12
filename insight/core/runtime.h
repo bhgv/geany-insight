@@ -12,6 +12,7 @@ typedef struct {
  int (*selection_range)(void *,unsigned long *,unsigned long *);
  int (*set_selection)(void *,unsigned long,unsigned long);
  unsigned long (*line_count)(void *);
+ const char *(*line_text)(void *,unsigned long);
 } InsightEditorAPI;
 typedef struct {
  void *context;
