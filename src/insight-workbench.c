@@ -15,6 +15,7 @@
 #include "tagmanager/tm_workspace.h"
 #include <string.h>
 #include <gio/gio.h>
+#include "../insight/core/index.h"
 
 typedef struct { gchar *path; guint id; gulong line; } Location;
 static void location_free(gpointer data) { Location *p=data; g_free(p->path); g_free(p); }
@@ -22,6 +23,7 @@ typedef struct {
  GtkWidget *pane,*box,*title,*follow,*choices;
  ScintillaObject *preview;
  guint refresh,source_id;
+ InsightIndex *base,*index;
  gchar *source_path; gulong source_line;
  GPtrArray *history,*definitions; gint history_position; gboolean populating;
 } Workbench;
@@ -38,21 +40,42 @@ static void render_source(const char *text,GeanyFiletype *filetype,gulong line) 
  SSM(wb.preview,SCI_GOTOLINE,target,0);
  SSM(wb.preview,SCI_VERTICALCENTRECARET,0,0);
 }
-static TMTag *word_definition(GeanyDocument *doc,const char *word) {
+static gboolean import_tags(InsightIndex *index,TMSourceFile *file,const char *path) {
+ if(!file || !path || !file->tags_array) return TRUE;
+ guint count=file->tags_array->len,used=0;
+ if(count>250000 || insight_index_count(index)>250000) return FALSE;
+ InsightSymbol *symbols=g_new0(InsightSymbol,count); gchar (*kinds)[2]=g_malloc0((gsize)count*2);
+ for(guint i=0;i<count;i++) {
+  TMTag *tag=g_ptr_array_index(file->tags_array,i);
+  if(!tag->name || !*tag->name || !tag->line) continue;
+  kinds[used][0]=tag->kind_letter;
+  symbols[used]=(InsightSymbol){tag->name,path,tag->scope,kinds[used],tag->line}; used++;
+ }
+ gboolean ok=insight_index_update(index,path,symbols,used);
+ g_free(kinds); g_free(symbols); return ok;
+}
+static void refresh_index(void) {
+ InsightIndex *next=insight_index_clone(wb.base); if(!next) return;
+ for(guint i=0;i<documents_array->len;i++) {
+  GeanyDocument *doc=g_ptr_array_index(documents_array,i);
+  if(doc->is_valid && doc->file_name && !import_tags(next,doc->tm_file,doc->file_name)) { insight_index_free(next); return; }
+ }
+ insight_index_free(wb.index); wb.index=next;
+}
+static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word) {
  if(!wb.definitions || !doc) return NULL;
+ refresh_index();
  wb.populating=TRUE; g_ptr_array_set_size(wb.definitions,0); gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(wb.choices));
- GPtrArray *tags=tm_get_workspace()->tags_array; TMTag *chosen=NULL; gint selected=0;
- for(guint i=0;word && *word && i<tags->len && wb.definitions->len<256;i++) {
-  TMTag *tag=g_ptr_array_index(tags,i);
-  if(!tag->name || strcmp(tag->name,word) || !tag->file || !tag->line) continue;
-  gchar *path=utils_get_utf8_from_locale(tag->file->file_name);
-  gboolean duplicate=FALSE;
-  for(guint j=0;j<wb.definitions->len;j++) { Location *old=g_ptr_array_index(wb.definitions,j); if(old->line==tag->line && !g_strcmp0(old->path,path)) { duplicate=TRUE; break; } }
-  if(duplicate) { g_free(path); continue; }
-  Location *location=g_new0(Location,1); location->path=path; location->line=tag->line;
-  gchar *label=g_strdup_printf("%s%s%s — %s:%lu",word,tag->scope ? " • " : "",tag->scope ? tag->scope : "",path,tag->line);
+ const InsightSymbol *found[256],*chosen=NULL;
+ size_t count=word && *word ? insight_index_find(wb.index,word,TRUE,found,256) : 0; gint selected=0;
+ for(size_t i=0;i<count && i<256;i++) {
+  const InsightSymbol *tag=found[i]; gboolean duplicate=FALSE;
+  for(guint j=0;j<wb.definitions->len;j++) { Location *old=g_ptr_array_index(wb.definitions,j); if(old->line==tag->line && !g_strcmp0(old->path,tag->path)) { duplicate=TRUE; break; } }
+  if(duplicate) continue;
+  Location *location=g_new0(Location,1); location->path=g_strdup(tag->path); location->line=tag->line;
+  gchar *label=g_strdup_printf("%s • %s — %s:%lu",word,tag->scope,tag->path,tag->line);
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.choices),label); g_free(label);
-  if(!chosen || tag->file==doc->tm_file) { chosen=tag; selected=(gint)wb.definitions->len; }
+  if(!chosen || !g_strcmp0(tag->path,doc->file_name)) { chosen=tag; selected=(gint)wb.definitions->len; }
   g_ptr_array_add(wb.definitions,location);
  }
  gtk_combo_box_set_active(GTK_COMBO_BOX(wb.choices),wb.definitions->len ? selected : -1);
@@ -121,9 +144,9 @@ static gboolean refresh_now(gpointer data) {
  GeanyDocument *doc=document_get_current();
  if(!doc) { render_source("",NULL,1); return G_SOURCE_REMOVE; }
  gchar word[1025]={0}; editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);
- TMTag *definition=word_definition(doc,word);
+ const InsightSymbol *definition=word_definition(doc,word);
  if(definition) {
-  gchar *path=utils_get_utf8_from_locale(definition->file->file_name);
+  gchar *path=g_strdup(definition->path);
   gulong line=definition->line; show_location(path,0,line,FALSE); g_free(path);
  } else show_location(doc->file_name,doc->id,(gulong)sci_get_current_line(doc->editor->sci)+1,FALSE);
  return G_SOURCE_REMOVE;
@@ -160,9 +183,9 @@ static gboolean preview_button(GtkWidget *widget,GdkEventButton *event,gpointer 
  if(end<=start || end-start>1024) return TRUE;
  char word[1025]; for(gint i=start;i<end;i++) word[i-start]=(char)sci_get_char_at(wb.preview,i); word[end-start]=0;
  GeanyDocument *source=wb.source_id ? document_find_by_id(wb.source_id) : document_get_current();
- TMTag *definition=word_definition(source,word);
+ const InsightSymbol *definition=word_definition(source,word);
  if(definition) {
-  gchar *path=utils_get_utf8_from_locale(definition->file->file_name); gulong line=definition->line;
+  gchar *path=g_strdup(definition->path); gulong line=definition->line;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE);
   show_location(path,0,line,TRUE); g_free(path);
  } else ui_set_statusbar(TRUE,"Definition not found: %s",word);
@@ -182,6 +205,7 @@ void insight_workbench_init(void) {
  GtkWidget *existing=ui_lookup_widget(main_widgets.window,"vpaned1");
  GtkWidget *parent=gtk_widget_get_parent(existing); gint position=0;
  gtk_container_child_get(GTK_CONTAINER(parent),existing,"position",&position,NULL);
+ wb.base=insight_index_new(); wb.index=insight_index_new();
  wb.definitions=g_ptr_array_new_with_free_func(location_free);
  wb.history=g_ptr_array_new_with_free_func(location_free); wb.history_position=-1;
  wb.pane=gtk_paned_new(GTK_ORIENTATION_VERTICAL);
@@ -226,6 +250,7 @@ void insight_workbench_init(void) {
 void insight_workbench_finalize(void) {
  if(wb.refresh) g_source_remove(wb.refresh);
  g_free(wb.source_path);
+ insight_index_free(wb.base); insight_index_free(wb.index);
  if(wb.history) g_ptr_array_free(wb.history,TRUE);
  if(wb.definitions) g_ptr_array_free(wb.definitions,TRUE);
  memset(&wb,0,sizeof wb);

@@ -848,6 +848,12 @@ install_headers(
 	subdir: 'geany'
 )
 
+insight_native = static_library('insight_native',
+ 'insight/core/index.c',
+ c_args: geany_cflags,
+ include_directories: include_directories('insight/core'),
+ dependencies: deps)
+
 libgeany = shared_library('geany',
 	'src/about.c',
 	'src/about.h',
@@ -936,6 +942,7 @@ libgeany = shared_library('geany',
 	gen_src,
 	win_src,
 	osx_src,
+	link_with: insight_native,
 	soversion: '0',
 	c_args: geany_cflags + [ '-DG_LOG_DOMAIN="Geany"' ],
 	include_directories: [iscintilla],
