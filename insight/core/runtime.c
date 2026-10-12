@@ -190,8 +190,9 @@ static int register_command(lua_State *L) {
 static int on_event(lua_State *L) {
  Runtime *r=runtime(L);
  if(!r->registering) return luaL_error(L,"events can only be registered during extension load");
- const char *name=luaL_checkstring(L,1); luaL_checktype(L,2,LUA_TFUNCTION);
- if(strcmp(name,"document_save") && strcmp(name,"document_activate")) return luaL_error(L,"unsupported editor event");
+ size_t name_length; const char *name=luaL_checklstring(L,1,&name_length); luaL_checktype(L,2,LUA_TFUNCTION);
+ if(name_length>31 || memchr(name,0,name_length)) return luaL_error(L,"invalid event name");
+ if(strcmp(name,"document_save") && strcmp(name,"document_activate") && strcmp(name,"document_open")) return luaL_error(L,"unsupported editor event");
  if(r->event_count==32) return luaL_error(L,"event handler limit exceeded");
  size_t n=r->event_count; snprintf(r->events[n].name,sizeof r->events[n].name,"%s",name);
  lua_pushvalue(L,2); r->events[n].reference=luaL_ref(L,LUA_REGISTRYINDEX); r->event_count++; return 0;

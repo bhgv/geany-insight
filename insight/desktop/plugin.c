@@ -50,7 +50,7 @@ static int valid_range(Host *h,unsigned long start,unsigned long end) {
   (end==length || (((unsigned char)sci_get_char_at(sci,(gint)end)&0xc0)!=0x80));
 }
 static int set_selection(void *ctx,unsigned long start,unsigned long end) {
- Host *h=ctx; if(!valid_range(h,start,end)) return 0; sci_set_selection(h->doc->editor->sci,(gint)start,(gint)end); return 1;
+ Host *h=ctx; if(!valid_range(h,start,end)) return 0; sci_set_selection_start(h->doc->editor->sci,(gint)start); sci_set_selection_end(h->doc->editor->sci,(gint)end); return 1;
 }
 static unsigned long line_count(void *ctx) { return (unsigned long)sci_get_line_count(((Host *)ctx)->doc->editor->sci); }
 static const char *line_text(void *ctx,unsigned long line) {
@@ -170,7 +170,11 @@ static void on_save(GObject *object,GeanyDocument *doc,gpointer data) {
 static void on_activate(GObject *object,GeanyDocument *doc,gpointer data) {
  (void)object; (void)data; emit_document_event("document_activate",doc);
 }
+static void on_open(GObject *object,GeanyDocument *doc,gpointer data) {
+ (void)object; (void)data; emit_document_event("document_open",doc);
+}
 static PluginCallback callbacks[]={
+ {"document-open",(GCallback)on_open,TRUE,NULL},
  {"document-save",(GCallback)on_save,TRUE,NULL},
  {"document-activate",(GCallback)on_activate,TRUE,NULL},
  {NULL,NULL,FALSE,NULL}
