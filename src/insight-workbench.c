@@ -16,11 +16,14 @@
 #include <string.h>
 #include <gio/gio.h>
 
+typedef struct { gchar *path; guint id; gulong line; } Location;
+static void location_free(gpointer data) { Location *p=data; g_free(p->path); g_free(p); }
 typedef struct {
  GtkWidget *pane,*box,*title;
  ScintillaObject *preview;
  guint refresh,source_id;
  gchar *source_path; gulong source_line;
+ GPtrArray *history; gint history_position;
 } Workbench;
 static Workbench wb;
 static void render_source(const char *text,GeanyFiletype *filetype,gulong line) {
@@ -61,7 +64,20 @@ static char *read_disk_source(const char *utf8) {
  if(!ok || !g_utf8_validate(text->str,(gssize)text->len,NULL) || memchr(text->str,0,text->len)) { g_string_free(text,TRUE); return NULL; }
  return g_string_free(text,FALSE);
 }
-static gboolean show_location(const char *path,guint id,gulong line) {
+static void remember_location(const char *path,guint id,gulong line) {
+ if(!wb.history || !line) return;
+ if(wb.history_position>=0 && wb.history_position<(gint)wb.history->len) {
+  Location *old=g_ptr_array_index(wb.history,(guint)wb.history_position);
+  if(old->id==id && old->line==line && !g_strcmp0(old->path,path)) return;
+ }
+ while(wb.history->len && (gint)wb.history->len>wb.history_position+1) g_ptr_array_remove_index(wb.history,wb.history->len-1);
+ Location *next=g_new0(Location,1); next->path=g_strdup(path); next->id=id; next->line=line;
+ g_ptr_array_add(wb.history,next);
+ if(wb.history->len>64) g_ptr_array_remove_index(wb.history,0);
+ wb.history_position=(gint)wb.history->len-1;
+}
+static gboolean show_location(const char *path,guint id,gulong line,gboolean remember) {
+ if(remember && wb.history && !wb.history->len && wb.source_line) remember_location(wb.source_path,wb.source_id,wb.source_line);
  GeanyDocument *doc=id ? document_find_by_id(id) : (path ? document_find_by_filename(path) : NULL);
  char *text=NULL; GeanyFiletype *ft=NULL;
  if(doc) {
@@ -78,7 +94,9 @@ static gboolean show_location(const char *path,guint id,gulong line) {
  render_source(text,ft,line); g_free(text);
  g_free(wb.source_path); wb.source_path=owned_path; wb.source_id=doc ? doc->id : 0; wb.source_line=line;
  gchar *label=g_strdup_printf("Context — %s:%lu",owned_path ? owned_path : "untitled",line);
- gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label); return TRUE;
+ gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label);
+ if(remember) remember_location(wb.source_path,wb.source_id,line);
+ return TRUE;
 }
 static gboolean refresh_now(gpointer data) {
  (void)data; wb.refresh=0;
@@ -89,9 +107,15 @@ static gboolean refresh_now(gpointer data) {
  TMTag *definition=word_definition(doc,word);
  if(definition) {
   gchar *path=utils_get_utf8_from_locale(definition->file->file_name);
-  gulong line=definition->line; show_location(path,0,line); g_free(path);
- } else show_location(doc->file_name,doc->id,(gulong)sci_get_current_line(doc->editor->sci)+1);
+  gulong line=definition->line; show_location(path,0,line,FALSE); g_free(path);
+ } else show_location(doc->file_name,doc->id,(gulong)sci_get_current_line(doc->editor->sci)+1,FALSE);
  return G_SOURCE_REMOVE;
+}
+static void history_move(GtkButton *button,gpointer data) {
+ (void)button; gint next=wb.history_position+GPOINTER_TO_INT(data);
+ if(!wb.history || next<0 || next>=(gint)wb.history->len) return;
+ Location *location=g_ptr_array_index(wb.history,(guint)next);
+ if(show_location(location->path,location->id,location->line,FALSE)) wb.history_position=next;
 }
 static void open_context(GtkButton *button,gpointer data) {
  (void)button; (void)data;
@@ -120,7 +144,7 @@ static gboolean preview_button(GtkWidget *widget,GdkEventButton *event,gpointer 
  TMTag *definition=word_definition(source,word);
  if(definition) {
   gchar *path=utils_get_utf8_from_locale(definition->file->file_name); gulong line=definition->line;
-  show_location(path,0,line); g_free(path);
+  show_location(path,0,line,TRUE); g_free(path);
  } else ui_set_statusbar(TRUE,"Definition not found: %s",word);
  return TRUE;
 }
@@ -133,11 +157,16 @@ void insight_workbench_init(void) {
  GtkWidget *existing=ui_lookup_widget(main_widgets.window,"vpaned1");
  GtkWidget *parent=gtk_widget_get_parent(existing); gint position=0;
  gtk_container_child_get(GTK_CONTAINER(parent),existing,"position",&position,NULL);
+ wb.history=g_ptr_array_new_with_free_func(location_free); wb.history_position=-1;
  wb.pane=gtk_paned_new(GTK_ORIENTATION_VERTICAL);
  wb.box=gtk_box_new(GTK_ORIENTATION_VERTICAL,2);
  wb.title=gtk_label_new("Context — integrated source navigation");
  gtk_label_set_xalign(GTK_LABEL(wb.title),0.0f);
  GtkWidget *header=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4),*open=gtk_button_new_with_label("Open source");
+ GtkWidget *back=gtk_button_new_with_label("←"),*forward=gtk_button_new_with_label("→");
+ g_signal_connect(back,"clicked",G_CALLBACK(history_move),GINT_TO_POINTER(-1));
+ g_signal_connect(forward,"clicked",G_CALLBACK(history_move),GINT_TO_POINTER(1));
+ gtk_box_pack_start(GTK_BOX(header),back,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(header),forward,FALSE,FALSE,0);
  gtk_box_pack_start(GTK_BOX(header),wb.title,TRUE,TRUE,4); gtk_box_pack_end(GTK_BOX(header),open,FALSE,FALSE,4);
  g_signal_connect(open,"clicked",G_CALLBACK(open_context),NULL);
  gtk_box_pack_start(GTK_BOX(wb.box),header,FALSE,FALSE,2);
@@ -164,5 +193,6 @@ void insight_workbench_init(void) {
 void insight_workbench_finalize(void) {
  if(wb.refresh) g_source_remove(wb.refresh);
  g_free(wb.source_path);
+ if(wb.history) g_ptr_array_free(wb.history,TRUE);
  memset(&wb,0,sizeof wb);
 }
