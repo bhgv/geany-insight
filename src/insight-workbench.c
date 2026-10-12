@@ -24,7 +24,8 @@ static void frame_free(gpointer data) { ScanFrame *p=data; if(p->dir) g_dir_clos
 typedef struct { gchar *path; guint id; gulong line; } Location;
 static void location_free(gpointer data) { Location *p=data; g_free(p->path); g_free(p); }
 typedef struct {
- GtkWidget *pane,*box,*title,*follow,*choices,*browser,*symbol_entry,*symbol_view,*outline;
+ GtkWidget *pane,*box,*title,*follow,*choices,*browser,*symbol_entry,*symbol_view,*outline,*file_entry,*file_view;
+ GtkListStore *file_store;
  GtkListStore *symbols;
  ScintillaObject *preview;
  guint refresh,source_id;
@@ -36,6 +37,7 @@ typedef struct {
 static Workbench wb;
 static void open_context(GtkButton *,gpointer);
 static void browser_filter(GtkEditable *,gpointer);
+static void files_filter(GtkEditable *,gpointer);
 static void render_source(const char *text,GeanyFiletype *filetype,gulong line) {
  highlighting_set_styles(wb.preview,filetype ? filetype : filetypes[GEANY_FILETYPES_NONE]);
  sci_set_readonly(wb.preview,FALSE); sci_set_text(wb.preview,text);
@@ -79,7 +81,7 @@ static gboolean scan_step(gpointer data) {
  if(!wb.frames->len || wb.parsed>=10000) {
   wb.scan=0; g_ptr_array_set_size(wb.frames,0); refresh_index();
   ui_set_statusbar(TRUE,"Workspace: %u files, %zu symbols, %u skipped%s",wb.parsed,insight_index_count(wb.index),wb.skipped,wb.parsed>=10000 ? "; file limit reached" : "");
-  browser_filter(NULL,NULL); insight_workbench_refresh(); return G_SOURCE_REMOVE;
+  browser_filter(NULL,NULL); files_filter(NULL,NULL); insight_workbench_refresh(); return G_SOURCE_REMOVE;
  }
  ScanFrame *frame=g_ptr_array_index(wb.frames,wb.frames->len-1); const char *name=g_dir_read_name(frame->dir);
  if(!name) { g_ptr_array_remove_index(wb.frames,wb.frames->len-1); return G_SOURCE_CONTINUE; }
@@ -219,6 +221,39 @@ static void browser_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewCol
  (void)view; (void)path; (void)column; (void)data; open_context(NULL,NULL);
 }
 static void outline_changed(GtkToggleButton *button,gpointer data) { (void)button; (void)data; browser_filter(NULL,NULL); }
+static void files_filter(GtkEditable *entry,gpointer data) {
+ (void)entry; (void)data; if(!wb.file_store) return;
+ gchar *needle=g_utf8_casefold(gtk_entry_get_text(GTK_ENTRY(wb.file_entry)),-1);
+ GHashTable *seen=g_hash_table_new(g_str_hash,g_str_equal); gtk_list_store_clear(wb.file_store); guint shown=0;
+ for(guint i=0;i<wb.files->len+documents_array->len && shown<500;i++) {
+  const gchar *path=NULL;
+  if(i<wb.files->len) path=g_ptr_array_index(wb.files,i);
+  else { GeanyDocument *doc=g_ptr_array_index(documents_array,i-wb.files->len); if(doc->is_valid) path=doc->file_name; }
+  if(!path || !g_utf8_validate(path,-1,NULL) || g_hash_table_contains(seen,path)) continue;
+  g_hash_table_add(seen,(gpointer)path); gchar *folded=g_utf8_casefold(path,-1);
+  if(strstr(folded,needle)) { GtkTreeIter iter; gchar *name=g_path_get_basename(path); gtk_list_store_append(wb.file_store,&iter); gtk_list_store_set(wb.file_store,&iter,0,name,1,path,-1); g_free(name); shown++; }
+  g_free(folded);
+ }
+ g_hash_table_destroy(seen); g_free(needle);
+}
+static void file_selected(GtkTreeSelection *selection,gpointer data) {
+ (void)data; GtkTreeIter iter; GtkTreeModel *model;
+ if(!wb.preview || !gtk_tree_selection_get_selected(selection,&model,&iter)) return;
+ gchar *path; gtk_tree_model_get(model,&iter,1,&path,-1); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); show_location(path,0,1,TRUE); g_free(path);
+}
+static void create_files_browser(void) {
+ GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,4); wb.file_entry=gtk_search_entry_new();
+ gtk_entry_set_placeholder_text(GTK_ENTRY(wb.file_entry),"Find workspace file…");
+ wb.file_store=gtk_list_store_new(2,G_TYPE_STRING,G_TYPE_STRING); wb.file_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(wb.file_store));
+ for(int i=0;i<2;i++) gtk_tree_view_append_column(GTK_TREE_VIEW(wb.file_view),gtk_tree_view_column_new_with_attributes(i ? "Path" : "File",gtk_cell_renderer_text_new(),"text",i,NULL));
+ GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),wb.file_view);
+ gtk_box_pack_start(GTK_BOX(box),wb.file_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
+ gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),box,gtk_label_new("Project files"));
+ g_signal_connect(wb.file_entry,"changed",G_CALLBACK(files_filter),NULL);
+ g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.file_view)),"changed",G_CALLBACK(file_selected),NULL);
+ g_signal_connect(wb.file_view,"row-activated",G_CALLBACK(browser_activated),NULL);
+ gtk_widget_show_all(box); files_filter(NULL,NULL);
+}
 static void create_browser(void) {
  wb.browser=gtk_box_new(GTK_ORIENTATION_VERTICAL,4); wb.symbol_entry=gtk_search_entry_new();
  gtk_entry_set_placeholder_text(GTK_ENTRY(wb.symbol_entry),"Find project symbol…");
@@ -312,7 +347,7 @@ void insight_workbench_init(void) {
  wb.base=insight_index_new(); wb.index=insight_index_new();
  wb.definitions=g_ptr_array_new_with_free_func(location_free);
  wb.history=g_ptr_array_new_with_free_func(location_free); wb.history_position=-1;
- create_browser();
+ create_browser(); create_files_browser();
  wb.pane=gtk_paned_new(GTK_ORIENTATION_VERTICAL);
  wb.box=gtk_box_new(GTK_ORIENTATION_VERTICAL,2);
  wb.title=gtk_label_new("Context — integrated source navigation");
@@ -363,6 +398,7 @@ void insight_workbench_finalize(void) {
  g_free(wb.source_path);
  insight_index_free(wb.base); insight_index_free(wb.index);
  if(wb.symbols) g_object_unref(wb.symbols);
+ if(wb.file_store) g_object_unref(wb.file_store);
  if(wb.history) g_ptr_array_free(wb.history,TRUE);
  if(wb.definitions) g_ptr_array_free(wb.definitions,TRUE);
  memset(&wb,0,sizeof wb);
