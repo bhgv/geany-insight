@@ -35,7 +35,7 @@ typedef struct { gchar *path; guint id; gulong line; } Location;
 static void location_free(gpointer data) { Location *p=data; g_free(p->path); g_free(p); }
 typedef struct {
  GtkWidget *pane,*box,*title,*follow,*choices,*browser,*symbol_entry,*symbol_view,*outline,*file_entry,*file_view;
- GtkWidget *back,*forward,*open;
+ GtkWidget *back,*forward,*open,*wrap;
  GeanyFiletype *preview_filetype;
  GtkListStore *file_store,*matches;
  GtkWidget *usage_entry,*usage_status,*usage_buffer,*usage_view;
@@ -51,7 +51,7 @@ typedef struct {
  GtkCssProvider *css; GtkWidget *context_toggle;
  InsightIndex *base,*index;
  GPtrArray *frames,*files; gchar *root,*cache_path; guint scan,parsed,skipped;
- gchar *source_path; gulong source_line;
+ gchar *source_path,*source_digest; gulong source_line;
  GPtrArray *history,*definitions; gint history_position; gboolean populating;
 } Workbench;
 static Workbench wb;
@@ -60,6 +60,32 @@ static void browser_filter(GtkEditable *,gpointer);
 static void files_filter(GtkEditable *,gpointer);
 static void stop_usage(void);
 static void native_commands_rebuild(void);
+static gchar *source_digest(const char *text) {
+ /* Geany can remove a UTF-8 BOM and normalize CRLF while opening a file.
+  * Compare logical source content; navigation here uses line numbers. */
+ if(g_str_has_prefix(text,"\357\273\277")) text+=3;
+ GString *normalized=g_string_sized_new(strlen(text));
+ for(const char *p=text;*p;p++) if(*p!='\r' || p[1]!='\n') g_string_append_c(normalized,*p);
+ gchar *digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,normalized->str,(gssize)normalized->len);
+ g_string_free(normalized,TRUE); return digest;
+}
+static void editor_focus(void) {
+ GeanyDocument *doc=document_get_current(); if(doc) document_grab_focus(doc);
+}
+static gboolean browser_key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
+ (void)data;
+ if(event->keyval==GDK_KEY_Escape) { editor_focus(); return TRUE; }
+ if(event->keyval==GDK_KEY_Down && (widget==wb.symbol_entry || widget==wb.file_entry)) {
+  GtkWidget *view=widget==wb.symbol_entry ? wb.symbol_view : wb.file_view;
+  GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view)); GtkTreeIter iter;
+  if(gtk_tree_model_get_iter_first(model,&iter)) {
+   GtkTreePath *path=gtk_tree_model_get_path(model,&iter);
+   gtk_tree_view_set_cursor(GTK_TREE_VIEW(view),path,NULL,FALSE); gtk_tree_path_free(path); gtk_widget_grab_focus(view);
+  }
+  return TRUE;
+ }
+ return FALSE;
+}
 static void navigation_state(void) {
  if(wb.back) gtk_widget_set_sensitive(wb.back,wb.history_position>0);
  if(wb.forward) gtk_widget_set_sensitive(wb.forward,wb.history && wb.history_position+1<(gint)wb.history->len);
@@ -166,7 +192,7 @@ static void choose_root(GtkButton *button,gpointer data) {
  if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) { gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog)); if(!start_scan(path)) ui_set_statusbar(TRUE,"Cannot index source folder"); g_free(path); }
  gtk_widget_destroy(dialog);
 }
-static void cancel_scan(GtkButton *button,gpointer data) { (void)button; (void)data; stop_scan(); refresh_index(); ui_set_statusbar(TRUE,"Workspace scan cancelled; partial index retained"); }
+static void cancel_scan(GtkButton *button,gpointer data) { (void)button; (void)data; stop_scan(); refresh_index(); browser_filter(NULL,NULL); files_filter(NULL,NULL); insight_workbench_refresh(); ui_set_statusbar(TRUE,"Workspace scan cancelled; partial index retained"); }
 static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word,const char *preferred) {
  if(!wb.definitions) return NULL;
  if(!preferred && doc) preferred=doc->file_name;
@@ -232,14 +258,15 @@ static gboolean show_location(const char *path,guint id,gulong line,gboolean rem
  size_t begin,end,target_begin,target_end; unsigned long first;
  gboolean valid=insight_context_range(text,strlen(text),line,0,&begin,&end,&first,&target_begin,&target_end);
  if(remember && valid && wb.source_line) remember_location(wb.source_path,wb.source_id,(gulong)sci_get_current_line(wb.preview)+1);
- render_source(text,ft,valid ? line : 1); g_free(text);
+ render_source(text,ft,valid ? line : 1);
+ g_free(wb.source_digest); wb.source_digest=source_digest(text); g_free(text);
  if(!valid) line=0;
  g_free(wb.source_path); wb.source_path=owned_path; wb.source_id=doc ? doc->id : 0; wb.source_line=line;
  gchar *label=g_strdup_printf("Context — %s:%lu%s",owned_path ? owned_path : "untitled",line,line ? "" : " • definition line changed; reindex");
  gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label);
  if(remember) remember_location(wb.source_path,wb.source_id,line);
  navigation_state();
- return TRUE;
+ return valid;
 }
 static void definition_changed(GtkComboBox *combo,gpointer data) {
  (void)data; if(wb.populating || !wb.definitions) return;
@@ -270,7 +297,24 @@ static void browser_selected(GtkTreeSelection *selection,gpointer data) {
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); show_location(path,0,line,TRUE); g_free(path);
 }
 static void browser_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) {
- (void)view; (void)path; (void)column; (void)data; open_context(NULL,NULL);
+ (void)column; (void)data;
+ GtkTreeSelection *selection=gtk_tree_view_get_selection(view);
+ gtk_tree_selection_select_path(selection,path);
+ if(GTK_WIDGET(view)==wb.symbol_view) browser_selected(selection,NULL);
+ else if(GTK_WIDGET(view)==wb.file_view) {
+  GtkTreeIter iter; GtkTreeModel *model=gtk_tree_view_get_model(view);
+  if(!gtk_tree_model_get_iter(model,&iter,path)) return;
+  gchar *filename; gtk_tree_model_get(model,&iter,1,&filename,-1);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE);
+  gboolean shown=show_location(filename,0,1,TRUE); g_free(filename); if(!shown) return;
+ }
+ else return;
+ open_context(NULL,NULL);
+}
+static void browser_entry_activate(GtkEntry *entry,gpointer data) {
+ (void)data; GtkTreeView *view=GTK_TREE_VIEW(GTK_WIDGET(entry)==wb.symbol_entry ? wb.symbol_view : wb.file_view);
+ GtkTreeModel *model=gtk_tree_view_get_model(view); GtkTreeIter iter;
+ if(gtk_tree_model_get_iter_first(model,&iter)) { GtkTreePath *path=gtk_tree_model_get_path(model,&iter); browser_activated(view,path,NULL,NULL); gtk_tree_path_free(path); }
 }
 static void outline_changed(GtkToggleButton *button,gpointer data) { (void)button; (void)data; browser_filter(NULL,NULL); }
 static void files_filter(GtkEditable *entry,gpointer data) {
@@ -304,6 +348,9 @@ static void create_files_browser(void) {
  g_signal_connect(wb.file_entry,"changed",G_CALLBACK(files_filter),NULL);
  g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.file_view)),"changed",G_CALLBACK(file_selected),NULL);
  g_signal_connect(wb.file_view,"row-activated",G_CALLBACK(browser_activated),NULL);
+ g_signal_connect(wb.file_entry,"activate",G_CALLBACK(browser_entry_activate),NULL);
+ g_signal_connect(wb.file_entry,"key-press-event",G_CALLBACK(browser_key),NULL);
+ g_signal_connect(wb.file_view,"key-press-event",G_CALLBACK(browser_key),NULL);
  gtk_widget_show_all(box); files_filter(NULL,NULL);
 }
 enum { USAGE_DISPLAY,USAGE_PATH,USAGE_LINE,USAGE_START,USAGE_END,USAGE_ID,USAGE_DIGEST,USAGE_COLUMNS };
@@ -368,10 +415,15 @@ static void usage_selected(GtkTreeSelection *selection,gpointer data) {
  if(show_location(path,id,line,TRUE)) {
   gchar *text=sci_get_contents(wb.preview,sci_get_length(wb.preview)+1),*actual=g_compute_checksum_for_string(G_CHECKSUM_SHA256,text,-1);
   if(!g_strcmp0(actual,digest)) { SSM(wb.preview,SCI_SETSEL,start,end); SSM(wb.preview,SCI_VERTICALCENTRECARET,0,0); }
-  else { wb.source_line=0; ui_set_statusbar(TRUE,"Source changed after search; run the usage search again"); }
+  else { wb.source_line=0; navigation_state(); ui_set_statusbar(TRUE,"Source changed after search; run the usage search again"); }
   g_free(actual); g_free(text);
  }
  g_free(path); g_free(digest);
+}
+static void usage_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) {
+ (void)column; (void)data;
+ GtkTreeSelection *selection=gtk_tree_view_get_selection(view); gtk_tree_selection_select_path(selection,path);
+ usage_selected(selection,NULL); if(wb.source_line) open_context(NULL,NULL);
 }
 static void create_usage_browser(void) {
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,4),*controls=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,2);
@@ -388,7 +440,9 @@ static void create_usage_browser(void) {
  gtk_box_pack_start(GTK_BOX(box),wb.usage_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_buffer,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),controls,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_status,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
  gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),box,gtk_label_new("Usages"));
  g_signal_connect(search,"clicked",G_CALLBACK(usage_start),NULL); g_signal_connect(cancel,"clicked",G_CALLBACK(usage_cancel),NULL); g_signal_connect(wb.usage_entry,"activate",G_CALLBACK(usage_start),NULL);
- g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.usage_view)),"changed",G_CALLBACK(usage_selected),NULL); g_signal_connect(wb.usage_view,"row-activated",G_CALLBACK(browser_activated),NULL);
+ g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.usage_view)),"changed",G_CALLBACK(usage_selected),NULL); g_signal_connect(wb.usage_view,"row-activated",G_CALLBACK(usage_activated),NULL);
+ g_signal_connect(wb.usage_entry,"key-press-event",G_CALLBACK(browser_key),NULL);
+ g_signal_connect(wb.usage_view,"key-press-event",G_CALLBACK(browser_key),NULL);
  gtk_widget_show_all(box);
 }
 static void create_browser(void) {
@@ -408,6 +462,9 @@ static void create_browser(void) {
  gtk_box_pack_start(GTK_BOX(wb.browser),wb.symbol_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(wb.browser),scroll,TRUE,TRUE,0);
  gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),wb.browser,gtk_label_new("Workspace"));
  g_signal_connect(wb.symbol_entry,"changed",G_CALLBACK(browser_filter),NULL);
+ g_signal_connect(wb.symbol_entry,"activate",G_CALLBACK(browser_entry_activate),NULL);
+ g_signal_connect(wb.symbol_entry,"key-press-event",G_CALLBACK(browser_key),NULL);
+ g_signal_connect(wb.symbol_view,"key-press-event",G_CALLBACK(browser_key),NULL);
  g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.symbol_view)),"changed",G_CALLBACK(browser_selected),NULL);
  g_signal_connect(wb.symbol_view,"row-activated",G_CALLBACK(browser_activated),NULL);
  gtk_widget_show_all(wb.browser); browser_filter(NULL,NULL);
@@ -436,11 +493,16 @@ static void history_move(GtkButton *button,gpointer data) {
 }
 static void open_context(GtkButton *button,gpointer data) {
  (void)button; (void)data;
+ if(!wb.source_line) { ui_set_statusbar(TRUE,"Context has no valid source location"); return; }
  guint id=wb.source_id; gchar *path=g_strdup(wb.source_path);
  gulong line=wb.source_line ? (gulong)sci_get_current_line(wb.preview)+1 : 0;
  GeanyDocument *old=document_get_current(),*doc=id ? document_find_by_id(id) : NULL;
  if(!doc && path) { gchar *native=utils_get_locale_from_utf8(path); doc=document_open_file(native,FALSE,NULL,NULL); g_free(native); }
  if(doc && line && line<=(gulong)sci_get_line_count(doc->editor->sci)) {
+  gint length=sci_get_length(doc->editor->sci); gchar *current=length>=0 && length<=2*1024*1024 ? sci_get_contents(doc->editor->sci,length+1) : NULL;
+  gchar *digest=current && g_utf8_validate(current,length,NULL) && !memchr(current,0,(gsize)length) ? source_digest(current) : NULL;
+  gboolean unchanged=wb.source_digest && !g_strcmp0(digest,wb.source_digest); g_free(current); g_free(digest);
+  if(!unchanged) { ui_set_statusbar(TRUE,"Context source changed; refresh the preview before opening"); g_free(path); return; }
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),TRUE);
   navqueue_goto_line(old,doc,(gint)line); SSM(doc->editor->sci,SCI_VERTICALCENTRECARET,0,0); document_grab_focus(doc);
  } else ui_set_statusbar(TRUE,"Context source is unavailable or changed; refresh the index");
@@ -463,12 +525,15 @@ static gboolean preview_definition(gint position) {
 static gboolean preview_key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
  (void)widget; (void)data;
  if(event->keyval==GDK_KEY_Return && !(event->state&(GDK_CONTROL_MASK|GDK_MOD1_MASK))) { open_context(NULL,NULL); return TRUE; }
+ if(event->keyval==GDK_KEY_Escape) { editor_focus(); return TRUE; }
  if(event->keyval==GDK_KEY_F12 && !(event->state&(GDK_CONTROL_MASK|GDK_MOD1_MASK|GDK_SHIFT_MASK))) return preview_definition(sci_get_current_position(wb.preview));
  return FALSE;
 }
 static gboolean preview_button(GtkWidget *widget,GdkEventButton *event,gpointer data) {
  (void)widget; (void)data;
- if(event->button!=1 || !(event->state&GEANY_PRIMARY_MOD_MASK)) return FALSE;
+ if(event->button!=1) return FALSE;
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE);
+ if(!(event->state&GEANY_PRIMARY_MOD_MASK)) return FALSE;
  gint position=(gint)SSM(wb.preview,SCI_POSITIONFROMPOINTCLOSE,(uptr_t)event->x,(sptr_t)event->y);
  return preview_definition(position);
 }
@@ -706,6 +771,9 @@ static void save_workbench_settings(void) {
  g_key_file_set_integer(settings,"workbench","split",gtk_paned_get_position(GTK_PANED(wb.pane)));
  g_key_file_set_boolean(settings,"workbench","follow",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow)));
  g_key_file_set_boolean(settings,"workbench","visible",wb.context_visible);
+ g_key_file_set_boolean(settings,"workbench","outline",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.outline)));
+ g_key_file_set_boolean(settings,"workbench","usage-buffer",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_buffer)));
+ g_key_file_set_boolean(settings,"workbench","wrap",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.wrap)));
  gchar *encoded=wb.root ? g_base64_encode((const guchar *)wb.root,strlen(wb.root)) : g_strdup("");
  g_key_file_set_string(settings,"workbench","root-base64",encoded); g_free(encoded);
  gsize length; gchar *text=g_key_file_to_data(settings,&length,NULL),*directory=g_path_get_dirname(wb.prefs_path);
@@ -723,6 +791,9 @@ static void restore_workbench_settings(void) {
   gint split=g_key_file_get_integer(settings,"workbench","split",NULL); if(split>=150 && split<=10000) gtk_paned_set_position(GTK_PANED(wb.pane),split);
   if(g_key_file_has_key(settings,"workbench","follow",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),g_key_file_get_boolean(settings,"workbench","follow",NULL));
   if(g_key_file_has_key(settings,"workbench","visible",NULL)) wb.context_visible=g_key_file_get_boolean(settings,"workbench","visible",NULL);
+  if(g_key_file_has_key(settings,"workbench","outline",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.outline),g_key_file_get_boolean(settings,"workbench","outline",NULL));
+  if(g_key_file_has_key(settings,"workbench","usage-buffer",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.usage_buffer),g_key_file_get_boolean(settings,"workbench","usage-buffer",NULL));
+  if(g_key_file_has_key(settings,"workbench","wrap",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.wrap),g_key_file_get_boolean(settings,"workbench","wrap",NULL));
   gchar *encoded=g_key_file_get_string(settings,"workbench","root-base64",NULL);
   if(encoded && !wb.root) {
    gsize length; guchar *decoded=g_base64_decode(encoded,&length); gchar *canonical=g_base64_encode(decoded,length);
@@ -743,6 +814,16 @@ static void follow_changed(GtkToggleButton *button,gpointer data) {
  (void)data;
  if(gtk_toggle_button_get_active(button)) insight_workbench_refresh();
  else if(wb.refresh) { g_source_remove(wb.refresh); wb.refresh=0; }
+}
+static void wrap_changed(GtkToggleButton *button,gpointer data) {
+ (void)data; if(wb.preview) SSM(wb.preview,SCI_SETWRAPMODE,gtk_toggle_button_get_active(button) ? SC_WRAP_WORD : SC_WRAP_NONE,0);
+}
+static void copy_location(GtkButton *button,gpointer data) {
+ (void)button; (void)data;
+ if(!wb.source_path || !wb.source_line) { ui_set_statusbar(TRUE,"Context has no saved file location"); return; }
+ gchar *address=g_strdup_printf("%s:%d",wb.source_path,sci_get_current_line(wb.preview)+1);
+ gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),address,-1); g_free(address);
+ ui_set_statusbar(TRUE,"Context file:line copied");
 }
 void insight_workbench_init(void) {
  GtkWidget *existing=ui_lookup_widget(main_widgets.window,"vpaned1");
@@ -782,6 +863,13 @@ void insight_workbench_init(void) {
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),TRUE);
  g_signal_connect(wb.follow,"toggled",G_CALLBACK(follow_changed),NULL);
  gtk_box_pack_end(GTK_BOX(header),wb.follow,FALSE,FALSE,2);
+ wb.wrap=gtk_check_button_new_with_label("Wrap");
+ g_signal_connect(wb.wrap,"toggled",G_CALLBACK(wrap_changed),NULL);
+ gtk_box_pack_end(GTK_BOX(header),wb.wrap,FALSE,FALSE,2);
+ GtkWidget *copy=gtk_button_new_with_label("Copy location");
+ gtk_widget_set_tooltip_text(copy,"Copy the preview caret address as file:line");
+ g_signal_connect(copy,"clicked",G_CALLBACK(copy_location),NULL);
+ gtk_box_pack_end(GTK_BOX(header),copy,FALSE,FALSE,2);
  g_signal_connect(open,"clicked",G_CALLBACK(open_context),NULL);
  gtk_box_pack_start(GTK_BOX(wb.box),header,FALSE,FALSE,2);
  wb.choices=gtk_combo_box_text_new();
@@ -824,7 +912,7 @@ void insight_workbench_finalize(void) {
  g_free(wb.prefs_path);
  stop_usage(); g_ptr_array_free(wb.usage_paths,TRUE);
  stop_scan(); g_ptr_array_free(wb.frames,TRUE); g_ptr_array_free(wb.files,TRUE); g_free(wb.root); g_free(wb.cache_path);
- g_free(wb.source_path);
+ g_free(wb.source_path); g_free(wb.source_digest);
  insight_index_free(wb.base); insight_index_free(wb.index);
  if(wb.symbols) g_object_unref(wb.symbols);
  if(wb.file_store) g_object_unref(wb.file_store);
