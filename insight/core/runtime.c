@@ -188,6 +188,9 @@ int insight_session_load(InsightSession *s,const char *source,size_t length,char
  if(status) { destroy(next); return status; }
  destroy(s->current); s->current=next; return 0;
 }
+int insight_session_is_running(const InsightSession *s) {
+ return s && s->current && s->current->host;
+}
 size_t insight_session_command_count(const InsightSession *s) {
  return s && s->current ? s->current->command_count : 0;
 }
