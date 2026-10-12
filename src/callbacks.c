@@ -38,6 +38,7 @@
 #include "filetypes.h"
 #include "geanyobject.h"
 #include "highlighting.h"
+#include "insight-workbench.h"
 #include "keybindings.h"
 #include "keyfile.h"
 #include "log.h"
@@ -554,6 +555,7 @@ void on_normal_size1_activate(GtkMenuItem *menuitem, gpointer user_data)
 
 static void handle_switch_page(GeanyDocument *doc)
 {
+	insight_workbench_refresh();
 	if (doc != NULL)
 	{
 		GtkEntry *filter_entry = GTK_ENTRY(ui_lookup_widget(main_widgets.window, "entry_tagfilter"));

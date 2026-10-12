@@ -44,6 +44,7 @@
 #include "filetypesprivate.h"
 #include "geanyobject.h"
 #include "highlighting.h"
+#include "insight-workbench.h"
 #include "keybindings.h"
 #include "main.h"
 #include "navqueue.h"
@@ -1111,6 +1112,8 @@ static gboolean on_editor_notify(G_GNUC_UNUSED GObject *object, GeanyEditor *edi
 
 		case SCN_UPDATEUI:
 			on_update_ui(editor, nt);
+			if (doc == document_get_current() && (nt->updated & (SC_UPDATE_CONTENT | SC_UPDATE_SELECTION)))
+				insight_workbench_refresh();
 			break;
 
 		case SCN_PAINTED:

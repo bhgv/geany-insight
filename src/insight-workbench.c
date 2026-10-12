@@ -33,16 +33,22 @@ static void render_source(const char *text,GeanyFiletype *filetype,gulong line) 
  SSM(wb.preview,SCI_GOTOLINE,target,0);
  SSM(wb.preview,SCI_VERTICALCENTRECARET,0,0);
 }
-void insight_workbench_refresh(void) {
- if(!wb.preview) return;
+static gboolean refresh_now(gpointer data) {
+ (void)data; wb.refresh=0;
+ if(!wb.preview) return G_SOURCE_REMOVE;
  GeanyDocument *doc=document_get_current();
- if(!doc) { render_source("",NULL,1); return; }
+ if(!doc) { render_source("",NULL,1); return G_SOURCE_REMOVE; }
  gint length=sci_get_length(doc->editor->sci);
- if(length>2*1024*1024) { gtk_label_set_text(GTK_LABEL(wb.title),"Context: file exceeds 2 MiB"); return; }
+ if(length>2*1024*1024) { gtk_label_set_text(GTK_LABEL(wb.title),"Context: file exceeds 2 MiB"); return G_SOURCE_REMOVE; }
  gchar *text=sci_get_contents(doc->editor->sci,length+1);
  if(text && g_utf8_validate(text,length,NULL) && !memchr(text,0,(gsize)length))
   render_source(text,doc->file_type,(gulong)sci_get_current_line(doc->editor->sci)+1);
- g_free(text);
+ g_free(text); return G_SOURCE_REMOVE;
+}
+void insight_workbench_refresh(void) {
+ if(!wb.preview) return;
+ if(wb.refresh) g_source_remove(wb.refresh);
+ wb.refresh=g_timeout_add(60,refresh_now,NULL);
 }
 void insight_workbench_init(void) {
  GtkWidget *existing=ui_lookup_widget(main_widgets.window,"vpaned1");
