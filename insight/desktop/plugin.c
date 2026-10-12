@@ -173,7 +173,11 @@ static void on_activate(GObject *object,GeanyDocument *doc,gpointer data) {
 static void on_open(GObject *object,GeanyDocument *doc,gpointer data) {
  (void)object; (void)data; emit_document_event("document_open",doc);
 }
+static void on_close(GObject *object,GeanyDocument *doc,gpointer data) {
+ (void)object; (void)data; emit_document_event("document_close",doc);
+}
 static PluginCallback callbacks[]={
+ {"document-close",(GCallback)on_close,TRUE,NULL},
  {"document-open",(GCallback)on_open,TRUE,NULL},
  {"document-save",(GCallback)on_save,TRUE,NULL},
  {"document-activate",(GCallback)on_activate,TRUE,NULL},
