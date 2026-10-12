@@ -14,11 +14,13 @@
 #include "navqueue.h"
 #include "tagmanager/tm_workspace.h"
 #include <string.h>
+#include <gio/gio.h>
 
 typedef struct {
  GtkWidget *pane,*box,*title;
  ScintillaObject *preview;
- guint refresh;
+ guint refresh,source_id;
+ gchar *source_path; gulong source_line;
 } Workbench;
 static Workbench wb;
 static void render_source(const char *text,GeanyFiletype *filetype,gulong line) {
@@ -34,32 +36,62 @@ static void render_source(const char *text,GeanyFiletype *filetype,gulong line) 
  SSM(wb.preview,SCI_VERTICALCENTRECARET,0,0);
 }
 static TMTag *word_definition(GeanyDocument *doc,const char *word) {
- if(!word || !*word || !doc || !doc->tm_file || !doc->tm_file->tags_array) return NULL;
- GPtrArray *tags=doc->tm_file->tags_array;
+ if(!word || !*word || !doc) return NULL;
+ GPtrArray *tags=tm_get_workspace()->tags_array; TMTag *fallback=NULL;
  for(guint i=0;i<tags->len;i++) {
   TMTag *tag=g_ptr_array_index(tags,i);
-  if(tag->name && !strcmp(tag->name,word) && tag->line) return tag;
+  if(!tag->name || strcmp(tag->name,word) || !tag->file || !tag->line) continue;
+  if(tag->file==doc->tm_file) return tag;
+  if(!fallback) fallback=tag;
  }
- return NULL;
+ return fallback;
+}
+static char *read_disk_source(const char *utf8) {
+ gchar *native=utils_get_locale_from_utf8(utf8); GFile *file=g_file_new_for_path(native); g_free(native);
+ GFileInputStream *stream=g_file_read(file,NULL,NULL); g_object_unref(file);
+ if(!stream) return NULL;
+ GString *text=g_string_sized_new(16384); char chunk[16384]; gboolean ok=TRUE;
+ for(;;) {
+  gssize got=g_input_stream_read(G_INPUT_STREAM(stream),chunk,sizeof chunk,NULL,NULL);
+  if(got<0 || (got>0 && text->len+(gsize)got>2u*1024u*1024u)) { ok=FALSE; break; }
+  if(!got) break;
+  g_string_append_len(text,chunk,got);
+ }
+ g_object_unref(stream);
+ if(!ok || !g_utf8_validate(text->str,(gssize)text->len,NULL) || memchr(text->str,0,text->len)) { g_string_free(text,TRUE); return NULL; }
+ return g_string_free(text,FALSE);
+}
+static gboolean show_location(const char *path,guint id,gulong line) {
+ GeanyDocument *doc=id ? document_find_by_id(id) : (path ? document_find_by_filename(path) : NULL);
+ char *text=NULL; GeanyFiletype *ft=NULL;
+ if(doc) {
+  gint length=sci_get_length(doc->editor->sci);
+  if(length<=2*1024*1024) text=sci_get_contents(doc->editor->sci,length+1);
+  if(text && (!g_utf8_validate(text,length,NULL) || memchr(text,0,(gsize)length))) g_clear_pointer(&text,g_free);
+  ft=doc->file_type;
+ } else if(path) { text=read_disk_source(path); ft=filetypes_detect_from_file(path); }
+ if(!text) {
+  render_source("",NULL,1); gtk_label_set_text(GTK_LABEL(wb.title),"Context unavailable: requires a UTF-8 source file up to 2 MiB");
+  g_clear_pointer(&wb.source_path,g_free); wb.source_id=0; wb.source_line=0; return FALSE;
+ }
+ gchar *owned_path=g_strdup(path ? path : (doc ? doc->file_name : NULL));
+ render_source(text,ft,line); g_free(text);
+ g_free(wb.source_path); wb.source_path=owned_path; wb.source_id=doc ? doc->id : 0; wb.source_line=line;
+ gchar *label=g_strdup_printf("Context — %s:%lu",owned_path ? owned_path : "untitled",line);
+ gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label); return TRUE;
 }
 static gboolean refresh_now(gpointer data) {
  (void)data; wb.refresh=0;
  if(!wb.preview) return G_SOURCE_REMOVE;
  GeanyDocument *doc=document_get_current();
  if(!doc) { render_source("",NULL,1); return G_SOURCE_REMOVE; }
- gint length=sci_get_length(doc->editor->sci);
- if(length>2*1024*1024) { gtk_label_set_text(GTK_LABEL(wb.title),"Context: file exceeds 2 MiB"); return G_SOURCE_REMOVE; }
- gchar *text=sci_get_contents(doc->editor->sci,length+1);
- if(text && g_utf8_validate(text,length,NULL) && !memchr(text,0,(gsize)length))
-  {
-  gchar word[1025]={0}; editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);
-  TMTag *definition=word_definition(doc,word);
-  gulong line=definition ? definition->line : (gulong)sci_get_current_line(doc->editor->sci)+1;
-  render_source(text,doc->file_type,line);
-  gchar *label=g_strdup_printf("Context — %s%s • %s:%lu",definition ? word : "Current source",definition ? " (definition)" : "",doc->file_name ? doc->file_name : "untitled",line);
-  gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label);
- }
- g_free(text); return G_SOURCE_REMOVE;
+ gchar word[1025]={0}; editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);
+ TMTag *definition=word_definition(doc,word);
+ if(definition) {
+  gchar *path=utils_get_utf8_from_locale(definition->file->file_name);
+  gulong line=definition->line; show_location(path,0,line); g_free(path);
+ } else show_location(doc->file_name,doc->id,(gulong)sci_get_current_line(doc->editor->sci)+1);
+ return G_SOURCE_REMOVE;
 }
 void insight_workbench_refresh(void) {
  if(!wb.preview) return;
@@ -94,5 +126,6 @@ void insight_workbench_init(void) {
 }
 void insight_workbench_finalize(void) {
  if(wb.refresh) g_source_remove(wb.refresh);
+ g_free(wb.source_path);
  memset(&wb,0,sizeof wb);
 }
