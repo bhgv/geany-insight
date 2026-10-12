@@ -22,6 +22,9 @@ int main(void) {
  assert(insight_index_find_filtered(i,"foo",0,NULL,"unknown",NULL,0)==0);
  assert(insight_index_find(i,"",0,NULL,0)==3);
  assert(insight_index_find(i,"zzz",0,out,5)==0);
+ assert(insight_index_query(i,"foo",0,NULL,NULL,"a.cpp",1,out,5)==2 && !strcmp(out[0]->name,"foobar"));
+ assert(insight_index_query(i,"foo",1,"B","function","a.cpp",0,out,5)==0);
+ assert(insight_index_query(i,"foo",0,NULL,NULL,NULL,20,out,5)==3);
  InsightSymbol bad[]={ {NULL,NULL,NULL,NULL,1} };
  assert(!insight_index_update(i,"a.cpp",bad,1));
  assert(insight_index_count(i)==3);

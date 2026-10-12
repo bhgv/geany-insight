@@ -73,7 +73,7 @@ failure:
  for(size_t n=0;n<count;n++) release(&next[n]);
  free(next); return 0;
 }
-size_t insight_index_find_filtered(const InsightIndex *i,const char *query,int exact,const char *scope,const char *kind,
+size_t insight_index_query(const InsightIndex *i,const char *query,int exact,const char *scope,const char *kind,const char *path,size_t offset,
  const InsightSymbol **out,size_t capacity) {
  if(!i || !query) return 0;
  size_t left=0,right=i->count;
@@ -81,18 +81,22 @@ size_t insight_index_find_filtered(const InsightIndex *i,const char *query,int e
   size_t mid=left+(right-left)/2;
   if(strcmp(i->items[mid].name,query)<0) left=mid+1; else right=mid;
  }
- size_t length=strlen(query),matches=0;
+ size_t length=strlen(query),matches=0,shown=0;
  for(size_t n=left;n<i->count;n++) {
   int r=exact ? strcmp(i->items[n].name,query) : strncmp(i->items[n].name,query,length);
   if(r) break;
   if(scope && *scope && !strstr(i->items[n].scope,scope)) continue;
   if(kind && *kind && strcmp(i->items[n].kind,kind)) continue;
-  if(out && matches<capacity) out[matches]=&i->items[n];
+  if(path && *path && strcmp(i->items[n].path,path)) continue;
+  if(out && matches>=offset && shown<capacity) out[shown++]=&i->items[n];
   matches++;
  }
  return matches;
 }
 
+size_t insight_index_find_filtered(const InsightIndex *i,const char *query,int exact,const char *scope,const char *kind,const InsightSymbol **out,size_t capacity) {
+ return insight_index_query(i,query,exact,scope,kind,NULL,0,out,capacity);
+}
 size_t insight_index_find(const InsightIndex *i,const char *query,int exact,const InsightSymbol **out,size_t capacity) {
  return insight_index_find_filtered(i,query,exact,NULL,NULL,out,capacity);
 }

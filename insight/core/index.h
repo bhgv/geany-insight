@@ -31,4 +31,7 @@ int insight_index_update(InsightIndex *,const char *path,const InsightSymbol *,s
 size_t insight_index_find(const InsightIndex *,const char *,int exact,
  const InsightSymbol **out,size_t capacity);
 size_t insight_index_find_filtered(const InsightIndex *,const char *,int,const char *,const char *,const InsightSymbol **,size_t);
+/* Exact path filter, optional scope substring and exact kind; total independent
+ * of pagination. Results borrowed until index mutation. */
+size_t insight_index_query(const InsightIndex *,const char *,int,const char *,const char *,const char *,size_t,const InsightSymbol **,size_t);
 #endif
