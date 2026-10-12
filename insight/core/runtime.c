@@ -94,6 +94,11 @@ static int set_selection(lua_State *L) {
  if(start>end || !api->set_selection || !api->set_selection(write_host(L)->context,start,end)) return luaL_error(L,"cannot set selection");
  return 0;
 }
+static int line_count(lua_State *L) {
+ const InsightEditorAPI *api=editor_api(L);
+ if(!api->line_count) return luaL_error(L,"line count capability unavailable");
+ lua_pushinteger(L,(lua_Integer)api->line_count(active_host(L)->context)); return 1;
+}
 static int text(lua_State *L) {
  const InsightHost *h=active_host(L);
  const char *s=h->text(h->context);
@@ -206,6 +211,7 @@ static int setup(lua_State *L) {
  lua_pushcfunction(L,filename); lua_setfield(L,-2,"filename");
  lua_pushcfunction(L,selection_range); lua_setfield(L,-2,"selection_range");
  lua_pushcfunction(L,set_selection); lua_setfield(L,-2,"set_selection");
+ lua_pushcfunction(L,line_count); lua_setfield(L,-2,"line_count");
  lua_setglobal(L,"editor");
  lua_newtable(L); lua_pushcfunction(L,symbols); lua_setfield(L,-2,"symbols");
  lua_setglobal(L,"project");

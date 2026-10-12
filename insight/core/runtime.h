@@ -11,6 +11,7 @@ typedef struct {
  const char *(*filename)(void *);
  int (*selection_range)(void *,unsigned long *,unsigned long *);
  int (*set_selection)(void *,unsigned long,unsigned long);
+ unsigned long (*line_count)(void *);
 } InsightEditorAPI;
 typedef struct {
  void *context;

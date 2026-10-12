@@ -52,7 +52,8 @@ static int valid_range(Host *h,unsigned long start,unsigned long end) {
 static int set_selection(void *ctx,unsigned long start,unsigned long end) {
  Host *h=ctx; if(!valid_range(h,start,end)) return 0; sci_set_selection(h->doc->editor->sci,(gint)start,(gint)end); return 1;
 }
-static const InsightEditorAPI host_api={.position=get_position,.goto_line=go_line,.set_selection=set_selection,.selection_range=selection_range,.filename=filename,.save_file=save_file,.open_file=open_file};
+static unsigned long line_count(void *ctx) { return (unsigned long)sci_get_line_count(((Host *)ctx)->doc->editor->sci); }
+static const InsightEditorAPI host_api={.position=get_position,.goto_line=go_line,.line_count=line_count,.set_selection=set_selection,.selection_range=selection_range,.filename=filename,.save_file=save_file,.open_file=open_file};
 static void invoke_command(GtkMenuItem *menu,gpointer data) {
  (void)data;
  const char *name=g_object_get_data(G_OBJECT(menu),"insight-command-id");
