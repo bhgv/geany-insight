@@ -4,6 +4,7 @@
 #include "navigation.h"
 #include "extensions.h"
 #include <string.h>
+#include <limits.h>
 static GtkWidget *item, *commands_item, *commands_menu;
 static InsightExtensions *extensions;
 static Navigation *navigation;
@@ -20,12 +21,21 @@ static const char *get_selection(void *ctx) {
 static int replace_selection(void *ctx,const char *text) {
  Host *h=ctx; sci_replace_sel(h->doc->editor->sci,text); return 1;
 }
+static unsigned long get_position(void *ctx) {
+ Host *h=ctx; return (unsigned long)sci_get_current_position(h->doc->editor->sci);
+}
+static int go_line(void *ctx,unsigned long line) {
+ Host *h=ctx;
+ if(!line || line>(unsigned long)sci_get_line_count(h->doc->editor->sci)) return 0;
+ return navqueue_goto_line(h->doc,h->doc,(gint)line);
+}
+static const InsightEditorAPI host_api={.position=get_position,.goto_line=go_line};
 static void invoke_command(GtkMenuItem *menu,gpointer data) {
  (void)data;
  const char *name=g_object_get_data(G_OBJECT(menu),"insight-command-id");
  GeanyDocument *doc=document_get_current();
  if(!doc) { ui_set_statusbar(TRUE,"Lua: no active document"); return; }
- Host h={doc,NULL}; InsightHost host={&h,get_text,get_selection,replace_selection,navigation_index(navigation)};
+ Host h={doc,NULL}; InsightHost host={.context=&h,.text=get_text,.selection=get_selection,.replace_selection=replace_selection,.index=navigation_index(navigation),.api=&host_api};
  char error[512]; sci_start_undo_action(doc->editor->sci);
  int result=insight_session_invoke(insight_extensions_session(extensions),name,&host,error,sizeof error);
  sci_end_undo_action(doc->editor->sci); g_free(h.scratch);
@@ -88,7 +98,7 @@ static void activate(GtkMenuItem *menu,gpointer data) {
   else if (!insight_read_lua_file(path,&source,&size,&io_error)) {
    ui_set_statusbar(TRUE,"Lua: %s",io_error->message); g_error_free(io_error);
   } else {
-   Host h={doc,NULL}; InsightHost host={&h,get_text,get_selection,replace_selection,navigation_index(navigation)};
+   Host h={doc,NULL}; InsightHost host={.context=&h,.text=get_text,.selection=get_selection,.replace_selection=replace_selection,.index=navigation_index(navigation),.api=&host_api};
    char error[512]; sci_start_undo_action(doc->editor->sci);
    int result=insight_run(&host,source,size,error,sizeof error);
    sci_end_undo_action(doc->editor->sci); g_free(h.scratch);

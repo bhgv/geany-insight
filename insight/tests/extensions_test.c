@@ -21,7 +21,7 @@ static void write_file(const char *path,const char *contents) {
  GError *error=NULL; g_assert(g_file_set_contents(path,contents,-1,&error)); g_assert_no_error(error);
 }
 static void invoke(InsightExtensions *m,const char *name,const char *expected) {
- InsightHost host={NULL,text,text,replace,NULL}; char error[512];
+ InsightHost host={.context=NULL,.text=text,.selection=text,.replace_selection=replace,.index=NULL}; char error[512];
  g_assert_cmpint(insight_session_invoke(insight_extensions_session(m),name,&host,error,sizeof error),==,0);
  g_assert_cmpstr(result,==,expected);
 }
@@ -82,7 +82,7 @@ int main(int argc,char **argv) {
  g_assert(g_file_set_contents(bad,large,256*1024+1,&error)); g_assert_no_error(error); g_free(large);
  g_assert(!insight_extensions_select(m,bad,&error)); g_assert_nonnull(error); g_clear_error(&error);
  g_assert_cmpuint(insight_session_command_count(insight_extensions_session(m)),==,1);
- Reentry reentry={m,source}; InsightHost guarded={&reentry,text,text,reenter,NULL}; char message[512];
+ Reentry reentry={m,source}; InsightHost guarded={.context=&reentry,.text=text,.selection=text,.replace_selection=reenter,.index=NULL}; char message[512];
  g_assert_cmpint(insight_session_invoke(insight_extensions_session(m),"count",&guarded,message,sizeof message),==,0);
  g_assert(!insight_session_is_running(insight_extensions_session(m)));
  write_file(bad,""); char *empty=NULL; gsize empty_size=123;

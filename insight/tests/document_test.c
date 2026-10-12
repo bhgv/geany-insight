@@ -12,7 +12,7 @@ int main(void) {
  const char *text="AПривет😀Z";
  assert(insight_document_init(&d,text,strlen(text),1,13));
  assert(strcmp(insight_document_selection(&d),"Привет")==0);
- InsightHost host={&d,insight_document_text,insight_document_selection,insight_document_replace,NULL};
+ InsightHost host={.context=&d,.text=insight_document_text,.selection=insight_document_selection,.replace_selection=insight_document_replace,.index=NULL};
  char error[512]; const char *source="editor.replace_selection('мир')";
  assert(insight_run(&host,source,strlen(source),error,sizeof error)==0);
  assert(strcmp(d.text,"Aмир😀Z")==0 && d.start==1 && d.end==7);

@@ -4,6 +4,10 @@
 #include <stddef.h>
 #include "index.h"
 typedef struct {
+ unsigned long (*position)(void *);
+ int (*goto_line)(void *,unsigned long);
+} InsightEditorAPI;
+typedef struct {
  void *context;
  /* Borrowed UTF-8 strings, valid until the next host call. */
  const char *(*text)(void *);
@@ -11,6 +15,7 @@ typedef struct {
  int (*replace_selection)(void *, const char *);
  /* Optional project index; borrowed, immutable during script execution. */
  const InsightIndex *index;
+ const InsightEditorAPI *api;
 } InsightHost;
 /* Fresh interpreter per invocation. Host edits are immediate, not transactional.
  * Returns 0 on success, 1 on script error, 2 on invalid host/allocation failure. */

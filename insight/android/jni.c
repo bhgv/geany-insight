@@ -30,7 +30,7 @@ JNIEXPORT jobject JNICALL Java_org_geany_insight_NativeBridge_run(
  else if(start<0 || end<start || !insight_document_init(&doc,text,(size_t)text_length,(size_t)start,(size_t)end))
   strcpy(error,"Invalid UTF-8 document or selection");
  else {
-  InsightHost host={&doc,insight_document_text,insight_document_selection,insight_document_replace,NULL};
+  InsightHost host={.context=&doc,.text=insight_document_text,.selection=insight_document_selection,.replace_selection=insight_document_replace,.index=NULL};
   ok=insight_run(&host,source,(size_t)script_length,error,sizeof error)==0;
   if(!ok && !error[0]) strcpy(error,"Lua runtime unavailable");
  }

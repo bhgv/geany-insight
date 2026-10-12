@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #define MEMORY_LIMIT (16u * 1024u * 1024u)
 #define COMMAND_LIMIT 128u
 typedef struct { char name[64], label[256]; int reference; } Command;
@@ -36,6 +37,27 @@ static const InsightHost *active_host(lua_State *L) {
  const InsightHost *host=runtime(L)->host;
  if(!host) luaL_error(L,"editor/project API unavailable during extension load");
  return host;
+}
+static const InsightEditorAPI *editor_api(lua_State *L) {
+ const InsightEditorAPI *api=active_host(L)->api;
+ if(!api) luaL_error(L,"editor capability unavailable");
+ return api;
+}
+static unsigned long integer_arg(lua_State *L,int arg,unsigned long minimum) {
+ lua_Integer value=luaL_checkinteger(L,arg);
+ if(value<0 || (lua_Unsigned)value>ULONG_MAX || (lua_Unsigned)value<minimum)
+  luaL_error(L,"invalid editor position or line");
+ return (unsigned long)value;
+}
+static int position(lua_State *L) {
+ const InsightEditorAPI *api=editor_api(L);
+ if(!api->position) return luaL_error(L,"position capability unavailable");
+ lua_pushinteger(L,(lua_Integer)api->position(active_host(L)->context)); return 1;
+}
+static int goto_line(lua_State *L) {
+ unsigned long line=integer_arg(L,1,1); const InsightEditorAPI *api=editor_api(L);
+ if(!api->goto_line || !api->goto_line(active_host(L)->context,line)) return luaL_error(L,"cannot go to line");
+ return 0;
 }
 static int text(lua_State *L) {
  const InsightHost *h=active_host(L);
@@ -128,6 +150,8 @@ static int setup(lua_State *L) {
  lua_pushcfunction(L,text); lua_setfield(L,-2,"text");
  lua_pushcfunction(L,selection); lua_setfield(L,-2,"selection");
  lua_pushcfunction(L,replace); lua_setfield(L,-2,"replace_selection");
+ lua_pushcfunction(L,position); lua_setfield(L,-2,"position");
+ lua_pushcfunction(L,goto_line); lua_setfield(L,-2,"goto_line");
  lua_setglobal(L,"editor");
  lua_newtable(L); lua_pushcfunction(L,symbols); lua_setfield(L,-2,"symbols");
  lua_setglobal(L,"project");

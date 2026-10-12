@@ -8,7 +8,7 @@ static const char *text(void *p) { (void)p; return "hello world"; }
 static const char *selection(void *p) { (void)p; return "hello"; }
 static int replace(void *p,const char *s) { (void)p; snprintf(result,sizeof result,"%s",s); return 1; }
 static int run(const char *s,char *error) {
- InsightHost h={NULL,text,selection,replace,NULL};
+ InsightHost h={.context=NULL,.text=text,.selection=selection,.replace_selection=replace,.index=NULL};
  return insight_run(&h,s,strlen(s),error,512);
 }
 int main(void) {
@@ -30,7 +30,7 @@ int main(void) {
  InsightIndex *index=insight_index_new(); assert(index);
  InsightSymbol symbols[]={ {"foo",NULL,"namespace","f",42} };
  assert(insight_index_update(index,"project/a.cpp",symbols,1));
- InsightHost host={NULL,text,selection,replace,index};
+ InsightHost host={.context=NULL,.text=text,.selection=selection,.replace_selection=replace,.index=index};
  const char *script="local s,total=project.symbols('fo'); assert(total==1 and #s==1); assert(s[1].name=='foo' and s[1].line==42 and s[1].path=='project/a.cpp'); local e,n=project.symbols('fo',true); assert(#e==0 and n==0)";
  assert(insight_run(&host,script,strlen(script),error,sizeof error)==0);
  insight_index_free(index);

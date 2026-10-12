@@ -12,7 +12,7 @@ static int load(InsightSession *session,const char *source,char *error) {
 }
 int main(void) {
  InsightSession *session=insight_session_new(); assert(session);
- InsightHost host={NULL,text,selection,replace,NULL}; char error[512];
+ InsightHost host={.context=NULL,.text=text,.selection=selection,.replace_selection=replace,.index=NULL}; char error[512];
  assert(insight_session_command_count(session)==0);
  assert(insight_session_command_name(session,0)==NULL);
  assert(insight_session_command_label(session,0)==NULL);
