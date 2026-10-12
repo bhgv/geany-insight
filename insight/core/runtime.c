@@ -129,7 +129,7 @@ static int has(lua_State *L) {
  if(memchr(name,0,length)) { lua_pushboolean(L,0); return 1; }
  if(!strcmp(name,"has")) available=1;
  else if(host) {
-  if(!strcmp(name,"text")) available=host->text!=NULL;
+  if(!strcmp(name,"text") || !strcmp(name,"occurrences")) available=host->text!=NULL;
   else if(!strcmp(name,"selection")) available=host->selection!=NULL;
   else if(!strcmp(name,"replace_selection")) available=host->replace_selection && !host->read_only;
   else if(host->api) {
@@ -154,6 +154,44 @@ static int text(lua_State *L) {
  const char *s=h->text(h->context);
  if (!s) return luaL_error(L,"no active document");
  lua_pushstring(L,s); return 1;
+}
+/* Lexical matches include comments and strings; offsets are UTF-8 bytes. */
+static int identifier_byte(unsigned char c) {
+ return (c>='a' && c<='z') || (c>='A' && c<='Z') ||
+  (c>='0' && c<='9') || c=='_' || c>=128;
+}
+static int occurrences(lua_State *L) {
+ size_t n; const char *name=luaL_checklstring(L,1,&n);
+ lua_Integer limit=luaL_optinteger(L,2,1000);
+ if(!n || n>1024 || limit<1 || limit>10000 || memchr(name,0,n))
+  return luaL_error(L,"invalid identifier or result limit");
+ for(size_t i=0;i<n;i++) if(!identifier_byte((unsigned char)name[i]))
+  return luaL_error(L,"invalid identifier");
+ if(name[0]>='0' && name[0]<='9') return luaL_error(L,"invalid identifier");
+ const InsightHost *h=active_host(L);
+ const char *s=h->text ? h->text(h->context) : NULL;
+ if(!s) return luaL_error(L,"no active document");
+ size_t length=strlen(s),total=0,shown=0,line=1,column=0;
+ if(length>2u*1024u*1024u) return luaL_error(L,"document exceeds occurrence search limit");
+ lua_newtable(L);
+ for(size_t i=0;i<length;i++) {
+  if((!i || !identifier_byte((unsigned char)s[i-1])) &&
+   n<=length-i && (i+n==length || !identifier_byte((unsigned char)s[i+n])) &&
+   !memcmp(s+i,name,n)) {
+   total++;
+   if(shown<(size_t)limit) {
+    lua_createtable(L,0,4);
+    lua_pushinteger(L,(lua_Integer)i); lua_setfield(L,-2,"start");
+    lua_pushinteger(L,(lua_Integer)(i+n)); lua_setfield(L,-2,"finish");
+    lua_pushinteger(L,(lua_Integer)line); lua_setfield(L,-2,"line");
+    lua_pushinteger(L,(lua_Integer)column); lua_setfield(L,-2,"column");
+    lua_rawseti(L,-2,(lua_Integer)++shown);
+   }
+  }
+  if(s[i]=='\r' || (s[i]=='\n' && (!i || s[i-1]!='\r'))) { line++; column=0; }
+  else if(s[i]!='\n') column++;
+ }
+ lua_pushinteger(L,(lua_Integer)total); return 2;
 }
 static int selection(lua_State *L) {
  const InsightHost *h=active_host(L);
@@ -270,6 +308,7 @@ static int setup(lua_State *L) {
  lua_pushcfunction(L,filename); lua_setfield(L,-2,"filename");
  lua_pushcfunction(L,selection_range); lua_setfield(L,-2,"selection_range");
  lua_pushcfunction(L,set_selection); lua_setfield(L,-2,"set_selection");
+ lua_pushcfunction(L,occurrences); lua_setfield(L,-2,"occurrences");
  lua_pushcfunction(L,line_count); lua_setfield(L,-2,"line_count");
  lua_pushcfunction(L,line_text); lua_setfield(L,-2,"line_text");
  lua_pushcfunction(L,replace_range); lua_setfield(L,-2,"replace_range");
