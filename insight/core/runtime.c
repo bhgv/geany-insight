@@ -112,6 +112,11 @@ static int replace_range(lua_State *L) {
  if(start>end || memchr(text,0,n) || !api->replace_range || !api->replace_range(write_host(L)->context,start,end,text)) return luaL_error(L,"cannot replace range");
  return 0;
 }
+static int insert(lua_State *L) {
+ unsigned long at=integer_arg(L,1,0); size_t n; const char *text=luaL_checklstring(L,2,&n); const InsightEditorAPI *api=editor_api(L);
+ if(memchr(text,0,n) || !api->insert || !api->insert(write_host(L)->context,at,text)) return luaL_error(L,"cannot insert text");
+ return 0;
+}
 static int text(lua_State *L) {
  const InsightHost *h=active_host(L);
  const char *s=h->text(h->context);
@@ -227,6 +232,7 @@ static int setup(lua_State *L) {
  lua_pushcfunction(L,line_count); lua_setfield(L,-2,"line_count");
  lua_pushcfunction(L,line_text); lua_setfield(L,-2,"line_text");
  lua_pushcfunction(L,replace_range); lua_setfield(L,-2,"replace_range");
+ lua_pushcfunction(L,insert); lua_setfield(L,-2,"insert");
  lua_setglobal(L,"editor");
  lua_newtable(L); lua_pushcfunction(L,symbols); lua_setfield(L,-2,"symbols");
  lua_setglobal(L,"project");
