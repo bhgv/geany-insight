@@ -2355,6 +2355,20 @@ const gchar *utils_resource_dir(GeanyResourceDirType type)
 		}
 		else
 		{
+#ifdef INSIGHT_RELOCATABLE
+			/* The test bundle launcher supplies its absolute installation root. */
+			const gchar *bundle_prefix = g_getenv("GEANY_INSIGHT_PREFIX");
+			if (bundle_prefix && g_path_is_absolute(bundle_prefix))
+			{
+				resdirs[RESOURCE_DIR_DATA] = g_build_filename(bundle_prefix, "share", "geany", NULL);
+				resdirs[RESOURCE_DIR_ICON] = g_build_filename(bundle_prefix, "share", "icons", NULL);
+				resdirs[RESOURCE_DIR_DOC] = g_build_filename(bundle_prefix, "share", "doc", "geany", "html", NULL);
+				resdirs[RESOURCE_DIR_LOCALE] = g_build_filename(bundle_prefix, "share", "locale", NULL);
+				resdirs[RESOURCE_DIR_PLUGIN] = g_build_filename(bundle_prefix, "lib", "geany", NULL);
+				resdirs[RESOURCE_DIR_LIBEXEC] = g_build_filename(bundle_prefix, "libexec", "geany", NULL);
+				return resdirs[type];
+			}
+#endif
 			resdirs[RESOURCE_DIR_DATA] = g_build_filename(GEANY_DATADIR, "geany", NULL);
 			resdirs[RESOURCE_DIR_ICON] = g_build_filename(GEANY_DATADIR, "icons", NULL);
 			resdirs[RESOURCE_DIR_DOC] = g_build_filename(GEANY_DOCDIR, "html", NULL);
