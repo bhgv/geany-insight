@@ -21,7 +21,7 @@ if not "%INSIGHT_RESULT%"=="0" goto done
 if not exist "%INSIGHT_ROOT%profile" mkdir "%INSIGHT_ROOT%profile" >> "%INSIGHT_LOG%" 2>&1
 if not exist "%INSIGHT_ROOT%profile" goto missing
 >> "%INSIGHT_LOG%" echo [2] Starting GUI directly, without PowerShell
-"%INSIGHT_ROOT%bin\geany.exe" --new-instance --no-plugins --verbose --config "%INSIGHT_ROOT%profile" >> "%INSIGHT_LOG%" 2>&1
+"%INSIGHT_ROOT%bin\geany.exe" --new-instance --verbose --config "%INSIGHT_ROOT%profile" >> "%INSIGHT_LOG%" 2>&1
 set "INSIGHT_RESULT=%ERRORLEVEL%"
 >> "%INSIGHT_LOG%" echo GUI exit code: %INSIGHT_RESULT%
 goto done
