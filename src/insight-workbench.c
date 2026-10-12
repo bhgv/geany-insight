@@ -19,6 +19,8 @@
 #include "../insight/core/occurrences.h"
 #include <glib/gstdio.h>
 #include <sys/stat.h>
+#include "../insight/desktop/index_cache.h"
+#include <stdlib.h>
 
 typedef struct { gchar *path; GDir *dir; } ScanFrame;
 static void frame_free(gpointer data) { ScanFrame *p=data; if(p->dir) g_dir_close(p->dir); g_free(p->path); g_free(p); }
@@ -33,7 +35,7 @@ typedef struct {
  ScintillaObject *preview;
  guint refresh,source_id;
  InsightIndex *base,*index;
- GPtrArray *frames,*files; gchar *root; guint scan,parsed,skipped;
+ GPtrArray *frames,*files; gchar *root,*cache_path; guint scan,parsed,skipped;
  gchar *source_path; gulong source_line;
  GPtrArray *history,*definitions; gint history_position; gboolean populating;
 } Workbench;
@@ -80,10 +82,28 @@ static void stop_scan(void) {
  if(wb.scan) { g_source_remove(wb.scan); wb.scan=0; }
  if(wb.frames) g_ptr_array_set_size(wb.frames,0);
 }
+static void save_index_cache(void) {
+ if(!wb.root || !wb.cache_path) return;
+ gchar *directory=g_path_get_dirname(wb.cache_path); GError *error=NULL;
+ if(!g_mkdir_with_parents(directory,0700) && !insight_cache_save(wb.cache_path,wb.base,wb.root,&error)) { ui_set_statusbar(TRUE,"Workspace cache not saved: %s",error->message); g_clear_error(&error); }
+ g_free(directory);
+}
+static void restore_index_cache(void) {
+ if(!g_file_test(wb.cache_path,G_FILE_TEST_EXISTS)) return;
+ char *root=NULL; GError *error=NULL; InsightIndex *index=insight_cache_load(wb.cache_path,&root,&error);
+ if(!index) { ui_set_statusbar(TRUE,"Workspace cache ignored: %s",error ? error->message : "invalid snapshot"); g_clear_error(&error); return; }
+ insight_index_free(wb.base); wb.base=index; wb.root=g_strdup(root); free(root);
+ size_t count=insight_index_file_count(index);
+ if(count!=SIZE_MAX && count<=10000) {
+  const char **paths=g_new(const char *,count); insight_index_files(index,"",0,paths,count);
+  for(size_t i=0;i<count;i++) g_ptr_array_add(wb.files,g_strdup(paths[i])); g_free(paths);
+ }
+}
 static gboolean scan_step(gpointer data) {
  (void)data;
  if(!wb.frames->len || wb.parsed>=10000) {
   wb.scan=0; g_ptr_array_set_size(wb.frames,0); refresh_index();
+  if(wb.parsed<10000 && !wb.skipped) save_index_cache();
   ui_set_statusbar(TRUE,"Workspace: %u files, %zu symbols, %u skipped%s",wb.parsed,insight_index_count(wb.index),wb.skipped,wb.parsed>=10000 ? "; file limit reached" : "");
   browser_filter(NULL,NULL); files_filter(NULL,NULL); insight_workbench_refresh(); return G_SOURCE_REMOVE;
  }
@@ -435,6 +455,7 @@ void insight_workbench_init(void) {
  wb.usage_paths=g_ptr_array_new_with_free_func(location_free);
  wb.frames=g_ptr_array_new_with_free_func(frame_free); wb.files=g_ptr_array_new_with_free_func(g_free);
  wb.base=insight_index_new(); wb.index=insight_index_new();
+ wb.cache_path=g_build_filename(app->configdir,"insight","workspace.idx",NULL); restore_index_cache();
  wb.definitions=g_ptr_array_new_with_free_func(location_free);
  wb.history=g_ptr_array_new_with_free_func(location_free); wb.history_position=-1;
  create_browser(); create_files_browser(); create_usage_browser();
@@ -485,7 +506,7 @@ void insight_workbench_init(void) {
 void insight_workbench_finalize(void) {
  if(wb.refresh) g_source_remove(wb.refresh);
  stop_usage(); g_ptr_array_free(wb.usage_paths,TRUE);
- stop_scan(); g_ptr_array_free(wb.frames,TRUE); g_ptr_array_free(wb.files,TRUE); g_free(wb.root);
+ stop_scan(); g_ptr_array_free(wb.frames,TRUE); g_ptr_array_free(wb.files,TRUE); g_free(wb.root); g_free(wb.cache_path);
  g_free(wb.source_path);
  insight_index_free(wb.base); insight_index_free(wb.index);
  if(wb.symbols) g_object_unref(wb.symbols);
