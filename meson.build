@@ -848,11 +848,41 @@ install_headers(
 	subdir: 'geany'
 )
 
+insight_lua_sources = [
+ 'insight/vendor/lua/lapi.c',
+ 'insight/vendor/lua/lauxlib.c',
+ 'insight/vendor/lua/lbaselib.c',
+ 'insight/vendor/lua/lcode.c',
+ 'insight/vendor/lua/lctype.c',
+ 'insight/vendor/lua/ldebug.c',
+ 'insight/vendor/lua/ldo.c',
+ 'insight/vendor/lua/ldump.c',
+ 'insight/vendor/lua/lfunc.c',
+ 'insight/vendor/lua/lgc.c',
+ 'insight/vendor/lua/llex.c',
+ 'insight/vendor/lua/lmathlib.c',
+ 'insight/vendor/lua/lmem.c',
+ 'insight/vendor/lua/lobject.c',
+ 'insight/vendor/lua/lopcodes.c',
+ 'insight/vendor/lua/lparser.c',
+ 'insight/vendor/lua/lstate.c',
+ 'insight/vendor/lua/lstring.c',
+ 'insight/vendor/lua/lstrlib.c',
+ 'insight/vendor/lua/ltable.c',
+ 'insight/vendor/lua/ltablib.c',
+ 'insight/vendor/lua/ltests.c',
+ 'insight/vendor/lua/ltm.c',
+ 'insight/vendor/lua/lundump.c',
+ 'insight/vendor/lua/lutf8lib.c',
+ 'insight/vendor/lua/lvm.c',
+ 'insight/vendor/lua/lzio.c',
+]
 insight_native = static_library('insight_native',
  'insight/core/index.c', 'insight/core/document.c', 'insight/core/occurrences.c', 'insight/desktop/index_cache.c',
+ 'insight/core/runtime.c', 'insight/core/context.c', 'insight/desktop/extensions.c', insight_lua_sources,
  c_args: geany_cflags,
- include_directories: include_directories('insight/core'),
- dependencies: deps)
+ include_directories: include_directories('insight/core', 'insight/vendor/lua'),
+ dependencies: deps + [cc.find_library('m', required: false)])
 
 libgeany = shared_library('geany',
 	'src/about.c',

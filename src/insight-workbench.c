@@ -22,6 +22,8 @@
 #include "../insight/desktop/index_cache.h"
 #include <stdlib.h>
 #include <stdint.h>
+#include "../insight/core/runtime.h"
+#include "../insight/desktop/extensions.h"
 
 typedef struct { gchar *path; GDir *dir; } ScanFrame;
 static void frame_free(gpointer data) { ScanFrame *p=data; if(p->dir) g_dir_close(p->dir); g_free(p->path); g_free(p); }
@@ -36,6 +38,8 @@ typedef struct {
  ScintillaObject *preview;
  guint refresh,source_id; gboolean context_visible;
  gchar *prefs_path;
+ InsightExtensions *extensions; gboolean lua_running;
+ GtkWidget *lua_menu;
  InsightIndex *base,*index;
  GPtrArray *frames,*files; gchar *root,*cache_path; guint scan,parsed,skipped;
  gchar *source_path; gulong source_line;
@@ -46,6 +50,7 @@ static void open_context(GtkButton *,gpointer);
 static void browser_filter(GtkEditable *,gpointer);
 static void files_filter(GtkEditable *,gpointer);
 static void stop_usage(void);
+static void native_commands_rebuild(void);
 static void render_source(const char *text,GeanyFiletype *filetype,gulong line) {
  highlighting_set_styles(wb.preview,filetype ? filetype : filetypes[GEANY_FILETYPES_NONE]);
  sci_set_readonly(wb.preview,FALSE); sci_set_text(wb.preview,text);
@@ -445,6 +450,108 @@ void insight_workbench_refresh(void) {
  if(wb.refresh) g_source_remove(wb.refresh);
  wb.refresh=g_timeout_add(60,refresh_now,NULL);
 }
+typedef struct { GeanyDocument *doc; gchar *scratch; GeanyDocument *undo_doc; int message_set; } NativeHost;
+static const char *native_get_text(void *ctx) {
+ NativeHost *h=ctx; g_free(h->scratch);
+ h->scratch=sci_get_contents(h->doc->editor->sci,sci_get_length(h->doc->editor->sci)+1);
+ return h->scratch;
+}
+static const char *native_get_selection(void *ctx) {
+ NativeHost *h=ctx; g_free(h->scratch);
+ h->scratch=sci_get_selection_contents(h->doc->editor->sci); return h->scratch;
+}
+static int native_replace_selection(void *ctx,const char *text) {
+ NativeHost *h=ctx; sci_replace_sel(h->doc->editor->sci,text); return 1;
+}
+static unsigned long native_get_position(void *ctx) {
+ NativeHost *h=ctx; return (unsigned long)sci_get_current_position(h->doc->editor->sci);
+}
+static int native_go_line(void *ctx,unsigned long line) {
+ NativeHost *h=ctx;
+ if(!line || line>(unsigned long)sci_get_line_count(h->doc->editor->sci)) return 0;
+ return navqueue_goto_line(h->doc,h->doc,(gint)line);
+}
+static int native_open_file(void *ctx,const char *path) {
+ NativeHost *h=ctx; if(!g_utf8_validate(path,-1,NULL) || !g_path_is_absolute(path)) return 0;
+ gchar *locale=utils_get_locale_from_utf8(path); GeanyDocument *next=document_open_file(locale,FALSE,NULL,NULL); g_free(locale);
+ if(!next) return 0;
+ if(h->undo_doc && h->undo_doc!=next) { sci_end_undo_action(h->undo_doc->editor->sci); sci_start_undo_action(next->editor->sci); h->undo_doc=next; }
+ h->doc=next; return 1;
+}
+static int native_save_file(void *ctx) { NativeHost *h=ctx; return h->doc->file_name && document_save_file(h->doc,FALSE); }
+static const char *native_filename(void *ctx) { return ((NativeHost *)ctx)->doc->file_name; }
+static int native_selection_range(void *ctx,unsigned long *start,unsigned long *end) {
+ NativeHost *h=ctx; *start=(unsigned long)sci_get_selection_start(h->doc->editor->sci); *end=(unsigned long)sci_get_selection_end(h->doc->editor->sci); return 1;
+}
+static int native_valid_range(NativeHost *h,unsigned long start,unsigned long end) {
+ ScintillaObject *sci=h->doc->editor->sci; unsigned long length=(unsigned long)sci_get_length(sci);
+ if(start>end || end>length) return 0;
+ return (start==length || (((unsigned char)sci_get_char_at(sci,(gint)start)&0xc0)!=0x80)) &&
+  (end==length || (((unsigned char)sci_get_char_at(sci,(gint)end)&0xc0)!=0x80));
+}
+static int native_set_selection(void *ctx,unsigned long start,unsigned long end) {
+ NativeHost *h=ctx; if(!native_valid_range(h,start,end)) return 0; sci_set_selection_start(h->doc->editor->sci,(gint)start); sci_set_selection_end(h->doc->editor->sci,(gint)end); return 1;
+}
+static unsigned long native_line_count(void *ctx) { return (unsigned long)sci_get_line_count(((NativeHost *)ctx)->doc->editor->sci); }
+static const char *native_line_text(void *ctx,unsigned long line) {
+ NativeHost *h=ctx; if(!line || line>(unsigned long)sci_get_line_count(h->doc->editor->sci)) return NULL;
+ g_free(h->scratch); h->scratch=sci_get_line(h->doc->editor->sci,(gint)line-1); return h->scratch;
+}
+static int native_replace_range(void *ctx,unsigned long start,unsigned long end,const char *text) {
+ NativeHost *h=ctx; if(!native_valid_range(h,start,end) || !g_utf8_validate(text,-1,NULL)) return 0;
+ sci_set_target_start(h->doc->editor->sci,(gint)start); sci_set_target_end(h->doc->editor->sci,(gint)end);
+ return sci_replace_target(h->doc->editor->sci,text,FALSE)>=0;
+}
+static int native_insert(void *ctx,unsigned long at,const char *text) { return native_replace_range(ctx,at,at,text); }
+static int native_message(void *ctx,const char *text) {
+ NativeHost *h=ctx; if(!g_utf8_validate(text,-1,NULL)) return 0; h->message_set=1; ui_set_statusbar(TRUE,"%s",text); return 1;
+}
+static const InsightEditorAPI native_host_api={.position=native_get_position,.goto_line=native_go_line,.message=native_message,.insert=native_insert,.replace_range=native_replace_range,.line_text=native_line_text,.line_count=native_line_count,.set_selection=native_set_selection,.selection_range=native_selection_range,.filename=native_filename,.save_file=native_save_file,.open_file=native_open_file};
+static void execute_native(const char *id,const char *source,gsize length) {
+ if(wb.lua_running || insight_session_is_running(insight_extensions_session(wb.extensions))) { ui_set_statusbar(TRUE,"Lua command already running"); return; }
+ GeanyDocument *doc=document_get_current(); if(!doc) return;
+ refresh_index(); InsightIndex *snapshot=insight_index_clone(wb.index);
+ if(!snapshot) { ui_set_statusbar(TRUE,"Lua: unable to snapshot the project index"); return; }
+ NativeHost h={.doc=doc,.undo_doc=doc};
+ InsightHost host={.context=&h,.text=native_get_text,.selection=native_get_selection,.replace_selection=native_replace_selection,.index=snapshot,.api=&native_host_api};
+ char error[512]; wb.lua_running=TRUE; sci_start_undo_action(doc->editor->sci);
+ int result=id ? insight_session_invoke(insight_extensions_session(wb.extensions),id,&host,error,sizeof error) : insight_run(&host,source,length,error,sizeof error);
+ if(h.undo_doc && h.undo_doc->is_valid) sci_end_undo_action(h.undo_doc->editor->sci);
+ wb.lua_running=FALSE; g_free(h.scratch); insight_index_free(snapshot);
+ if(result || !h.message_set) ui_set_statusbar(TRUE,"Lua: %s",result ? (error[0] ? error : "runtime unavailable") : "completed");
+ insight_workbench_refresh();
+}
+static void choose_native_script(GtkMenuItem *item,gpointer data) {
+ (void)item;
+ if(wb.lua_running) return;
+ GtkWidget *dialog=gtk_file_chooser_dialog_new(data ? "Run Lua script" : "Load Lua extension",GTK_WINDOW(main_widgets.window),GTK_FILE_CHOOSER_ACTION_OPEN,"Cancel",GTK_RESPONSE_CANCEL,"Open",GTK_RESPONSE_ACCEPT,NULL);
+ gchar *path=NULL; if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+ gtk_widget_destroy(dialog); if(!path) return;
+ GError *error=NULL;
+ if(data) {
+  char *source; gsize length;
+  if(insight_read_lua_file(path,&source,&length,&error)) { execute_native(NULL,source,length); g_free(source); }
+ } else if(insight_extensions_select(wb.extensions,path,&error)) native_commands_rebuild();
+ if(error) { ui_set_statusbar(TRUE,"Lua: %s",error->message); g_error_free(error); }
+ g_free(path);
+}
+static void reload_native_script(GtkMenuItem *item,gpointer data) {
+ (void)item; GError *error=NULL;
+ gboolean ok=data ? insight_extensions_unload(wb.extensions,&error) : insight_extensions_restore(wb.extensions,&error);
+ if(ok) native_commands_rebuild();
+ else { ui_set_statusbar(TRUE,"Lua: %s",error ? error->message : "unable to load extension"); g_clear_error(&error); }
+}
+static void native_commands_rebuild(void) { }
+static void create_native_lua(void) {
+ gchar *settings=g_build_filename(app->configdir,"insight","lua-extension.conf",NULL);
+ wb.extensions=insight_extensions_new(settings); g_free(settings); GError *error=NULL;
+ if(!insight_extensions_restore(wb.extensions,&error)) { ui_set_statusbar(TRUE,"Lua startup: %s",error->message); g_clear_error(&error); }
+ GtkWidget *item=gtk_menu_item_new_with_label("Lua scripting"); wb.lua_menu=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(item),wb.lua_menu);
+ const char *labels[]={"Load extension…","Reload saved extension","Unload extension","Run script…"};
+ GCallback actions[]={G_CALLBACK(choose_native_script),G_CALLBACK(reload_native_script),G_CALLBACK(reload_native_script),G_CALLBACK(choose_native_script)};
+ for(guint i=0;i<4;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(labels[i]); gtk_container_add(GTK_CONTAINER(wb.lua_menu),entry); g_signal_connect(entry,"activate",actions[i],GINT_TO_POINTER(i>=2)); }
+ gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),item); gtk_widget_show_all(item); native_commands_rebuild();
+}
 static void save_workbench_settings(void) {
  if(!wb.prefs_path || !wb.pane) return;
  GKeyFile *settings=g_key_file_new();
@@ -546,10 +653,12 @@ void insight_workbench_init(void) {
  gtk_paned_set_position(GTK_PANED(wb.pane),430);
  gtk_widget_show_all(wb.pane);
  restore_workbench_settings();
+ create_native_lua();
  insight_workbench_refresh();
 }
 void insight_workbench_finalize(void) {
  save_workbench_settings();
+ insight_extensions_free(wb.extensions);
  if(wb.refresh) g_source_remove(wb.refresh);
  g_free(wb.prefs_path);
  stop_usage(); g_ptr_array_free(wb.usage_paths,TRUE);
