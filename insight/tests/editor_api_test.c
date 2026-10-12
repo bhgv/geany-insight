@@ -18,7 +18,12 @@ static int fake_range(void *ctx,unsigned long *start,unsigned long *end) { (void
 static int fake_selection(void *ctx,unsigned long a,unsigned long b) { (void)ctx; if(a>b || b>strlen(content)) return 0; selection_start=a; selection_end=b; return 1; }
 static unsigned long fake_count(void *ctx) { (void)ctx; return 1; }
 static const char *fake_line(void *ctx,unsigned long line) { (void)ctx; return line==1 ? content : NULL; }
-static const InsightEditorAPI api={.position=position,.goto_line=go,.line_text=fake_line,.line_count=fake_count,.set_selection=fake_selection,.selection_range=fake_range,.filename=fake_filename,.save_file=fake_save,.open_file=fake_open};
+static int fake_replace_range(void *ctx,unsigned long a,unsigned long b,const char *s) {
+ (void)ctx; size_t length=strlen(content),n=strlen(s);
+ if(a>b || b>length || length-(b-a)+n>=sizeof content) return 0;
+ memmove(content+a+n,content+b,length-b+1); memcpy(content+a,s,n); return 1;
+}
+static const InsightEditorAPI api={.position=position,.goto_line=go,.replace_range=fake_replace_range,.line_text=fake_line,.line_count=fake_count,.set_selection=fake_selection,.selection_range=fake_range,.filename=fake_filename,.save_file=fake_save,.open_file=fake_open};
 static int run(InsightHost *host,const char *source,char *error) { return insight_run(host,source,strlen(source),error,512); }
 int main(void) {
  InsightHost host={.text=text,.selection=text,.replace_selection=replace,.api=&api}; char error[512];
@@ -37,6 +42,8 @@ int main(void) {
  assert(run(&host,"assert(editor.line_count()==1)",error)==0);
  assert(run(&host,"assert(editor.line_text(1)=='hello')",error)==0);
  assert(run(&host,"editor.line_text(2)",error)==1);
+ assert(run(&host,"editor.replace_range(1,4,'XX'); assert(editor.text()=='hXXo')",error)==0);
+ assert(run(&host,"editor.replace_range(4,1,'x')",error)==1);
  host.api=NULL; assert(run(&host,"editor.position()",error)==1 && strstr(error,"unavailable"));
  puts("editor API: all checks passed"); return 0;
 }

@@ -57,7 +57,12 @@ static const char *line_text(void *ctx,unsigned long line) {
  Host *h=ctx; if(!line || line>(unsigned long)sci_get_line_count(h->doc->editor->sci)) return NULL;
  g_free(h->scratch); h->scratch=sci_get_line(h->doc->editor->sci,(gint)line-1); return h->scratch;
 }
-static const InsightEditorAPI host_api={.position=get_position,.goto_line=go_line,.line_text=line_text,.line_count=line_count,.set_selection=set_selection,.selection_range=selection_range,.filename=filename,.save_file=save_file,.open_file=open_file};
+static int replace_range(void *ctx,unsigned long start,unsigned long end,const char *text) {
+ Host *h=ctx; if(!valid_range(h,start,end) || !g_utf8_validate(text,-1,NULL)) return 0;
+ sci_set_target_start(h->doc->editor->sci,(gint)start); sci_set_target_end(h->doc->editor->sci,(gint)end);
+ return sci_replace_target(h->doc->editor->sci,text,FALSE)>=0;
+}
+static const InsightEditorAPI host_api={.position=get_position,.goto_line=go_line,.replace_range=replace_range,.line_text=line_text,.line_count=line_count,.set_selection=set_selection,.selection_range=selection_range,.filename=filename,.save_file=save_file,.open_file=open_file};
 static void invoke_command(GtkMenuItem *menu,gpointer data) {
  (void)data;
  const char *name=g_object_get_data(G_OBJECT(menu),"insight-command-id");
