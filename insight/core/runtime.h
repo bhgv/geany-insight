@@ -10,6 +10,7 @@ typedef struct {
  int (*save_file)(void *);
  const char *(*filename)(void *);
  int (*selection_range)(void *,unsigned long *,unsigned long *);
+ int (*set_selection)(void *,unsigned long,unsigned long);
 } InsightEditorAPI;
 typedef struct {
  void *context;

@@ -43,7 +43,16 @@ static const char *filename(void *ctx) { return ((Host *)ctx)->doc->file_name; }
 static int selection_range(void *ctx,unsigned long *start,unsigned long *end) {
  Host *h=ctx; *start=(unsigned long)sci_get_selection_start(h->doc->editor->sci); *end=(unsigned long)sci_get_selection_end(h->doc->editor->sci); return 1;
 }
-static const InsightEditorAPI host_api={.position=get_position,.goto_line=go_line,.selection_range=selection_range,.filename=filename,.save_file=save_file,.open_file=open_file};
+static int valid_range(Host *h,unsigned long start,unsigned long end) {
+ ScintillaObject *sci=h->doc->editor->sci; unsigned long length=(unsigned long)sci_get_length(sci);
+ if(start>end || end>length) return 0;
+ return (start==length || (((unsigned char)sci_get_char_at(sci,(gint)start)&0xc0)!=0x80)) &&
+  (end==length || (((unsigned char)sci_get_char_at(sci,(gint)end)&0xc0)!=0x80));
+}
+static int set_selection(void *ctx,unsigned long start,unsigned long end) {
+ Host *h=ctx; if(!valid_range(h,start,end)) return 0; sci_set_selection(h->doc->editor->sci,(gint)start,(gint)end); return 1;
+}
+static const InsightEditorAPI host_api={.position=get_position,.goto_line=go_line,.set_selection=set_selection,.selection_range=selection_range,.filename=filename,.save_file=save_file,.open_file=open_file};
 static void invoke_command(GtkMenuItem *menu,gpointer data) {
  (void)data;
  const char *name=g_object_get_data(G_OBJECT(menu),"insight-command-id");
