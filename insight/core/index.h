@@ -19,6 +19,9 @@ int insight_index_serialize(const InsightIndex *,const char *root,unsigned char 
 InsightIndex *insight_index_deserialize(const unsigned char *,size_t,char **root);
 size_t insight_index_count(const InsightIndex *);
 size_t insight_index_file_count(const InsightIndex *);
+/* Sorted unique paths represented by at least one symbol. Prefix byte match.
+ * Borrowed paths; total independent of offset/capacity. SIZE_MAX on OOM. */
+size_t insight_index_files(const InsightIndex *,const char *,size_t,const char **,size_t);
 /* Atomically replace all symbols for path; zero entries deletes that file.
  * Strings are copied. Returns 0 for invalid input/allocation failure. */
 int insight_index_update(InsightIndex *,const char *path,const InsightSymbol *,size_t);
