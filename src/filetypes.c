@@ -799,8 +799,7 @@ GeanyFiletype *filetypes_detect_from_document(GeanyDocument *doc)
 }
 
 
-#ifdef HAVE_PLUGINS
-/* Currently only used by external plugins (e.g. geanyprj). */
+/* Used by the native workbench and external plugins (e.g. geanyprj). */
 /**
  *  Detects filetype based on a shebang line in the file or the filename extension.
  *
@@ -832,7 +831,6 @@ GeanyFiletype *filetypes_detect_from_file(const gchar *utf8_filename)
 	}
 	return filetypes_detect_from_extension(utf8_filename);
 }
-#endif
 
 
 void filetypes_select_radio_item(const GeanyFiletype *ft)

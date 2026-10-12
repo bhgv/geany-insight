@@ -97,8 +97,10 @@ Android JNI или legacy plugin; native desktop UI собирается вме�
 Проверены полная Linux x64 сборка Geany, девять core-тестов в CMake с UBSan
 и в отдельном compiler runner, native tag adapter (в том числе UBSan), GIO
 cache/extensions с UBSan, JNI на JDK 17 с -Xcheck:jni и восемь примеров парсеров.
-Native workbench и adapter компилируются в Windows x64 objects с -Werror.
-Полная новая Windows GUI-сборка и интерактивные сценарии GUI на целевых машинах
+Полная Windows x64 кросс-сборка включает новый libgeany-0.dll, EXE,
+Context, индекс и встроенный Lua. Проверены PE x64 и именованные импорты
+EXE/DLL относительно поставляемого GTK runtime; собраны девять core-test EXE.
+Интерактивные сценарии GUI и исполнение Windows EXE на целевой машине
 не проверены; macOS и Android workbench требуют отдельной проверки/реализации.
 APK в этой серии не собирался.
 
@@ -106,3 +108,20 @@ APK в этой серии не собирался.
 Точное разрешение типов/областей видимости, семантические ссылки, call graph,
 полнота всех стандартов C/C++ и диалектов ассемблера ещё не реализованы.
 Поддержка извлечения символов и подсветки зависит от штатных parser/lexer Geany.
+
+## Переносимая проверочная сборка Windows x64
+
+Запуск `Start-Native-Insight.cmd` создаёт отдельный `profile` рядом с программой.
+Дополнения отключены при запуске: Context и Scripts являются частью редактора.
+`Run-Checks.cmd` запускает девять проверок ядра. Архив содержит GTK runtime,
+русские переводы, примеры Lua, документацию и Git bundle с полными исходниками.
+
+Для сборки используется Meson cross-file с MinGW-w64 C/C++/windres и Windows
+GTK3 SDK; `windres` должен использовать именно целевой GCC с `-E -xc -DRC_INVOKED`.
+Опции: `-Dplugins=false -Dsocket=true -Dvte=false -Dhtml-docs=disabled
+-Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false`, C/C++ link flags
+`-static-libgcc -static-libstdc++`. После `ninja` упаковка выполняется
+`insight/tools/package_native_windows.py --runtime GTK_RUNTIME --build MESON_BUILD
+--checks CORE_CHECKS --bundle GIT_BUNDLE --out OUTPUT --strip MINGW_STRIP`.
+Обе программы `bin/geany.exe` и `bin/libgeany-0.dll` берутся из новой сборки;
+штатный Geany из runtime заменяется. В `build-info.json` указан Git commit.

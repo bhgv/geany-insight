@@ -132,6 +132,8 @@ EXTRA_DIST += \
 	insight/packaging/Run-Checks.ps1 \
 	insight/packaging/Start-Insight.cmd \
 	insight/packaging/Start-Insight.ps1 \
+	insight/packaging/Start-Native-Insight.cmd \
+	insight/packaging/Start-Native-Insight.ps1 \
 	insight/packaging/run-checks.sh \
 	insight/packaging/start-insight.sh \
 	insight/tests/NativeBridgeTest.java \
@@ -153,6 +155,7 @@ EXTRA_DIST += \
 	insight/tests/snapshot_test.c \
 	insight/tools/build_desktop_checks.py \
 	insight/tools/package_desktop_checks.py \
+	insight/tools/package_native_windows.py \
 	insight/tools/verify_windows_imports.py \
 	insight/vendor/README.md \
 	insight/vendor/lua/lapi.c \

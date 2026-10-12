@@ -9,7 +9,8 @@ import re
 import subprocess
 
 SYSTEM = {'kernel32.dll', 'msvcrt.dll', 'ucrtbase.dll', 'user32.dll', 'advapi32.dll',
-          'shell32.dll', 'ole32.dll', 'ws2_32.dll', 'ntdll.dll'}
+          'shell32.dll', 'ole32.dll', 'ws2_32.dll', 'ntdll.dll', 'wsock32.dll',
+          'comdlg32.dll', 'gdi32.dll', 'winspool.drv', 'oleaut32.dll', 'dwmapi.dll'}
 
 
 def main():

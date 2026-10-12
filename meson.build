@@ -741,7 +741,8 @@ ctags = static_library('ctags',
 	dependencies: deps + [dep_fnmatch, dep_regex],
 	include_directories: [ictags]
 )
-dep_ctags = declare_dependency(link_with: [ctags], include_directories: [ictags])
+dep_ctags = declare_dependency(link_with: [ctags], include_directories: [ictags],
+ dependencies: [dep_fnmatch, dep_regex])
 
 install_headers(
 	'src/tagmanager/tm_source_file.h',
@@ -781,11 +782,16 @@ gen_src = custom_target('gen-signallist',
 win_src = []
 win_deps = []
 win_resc = []
+win_link_args = []
 if (host_machine.system() == 'windows')
 	windows = import('windows')
 	win_resc = windows.compile_resources('geany_private.rc')
 	win_src += [ 'src/win32.c', 'src/win32.h' ]
-	foreach lib : ['ole32', 'wsock32', 'comdlg32']
+	# Keep the editor's C++ allocator/runtime independent of the GTK bundle.
+	if cc.get_id() == 'gcc'
+		win_link_args = ['-static-libgcc', '-static-libstdc++']
+	endif
+	foreach lib : ['ole32', 'wsock32', 'comdlg32', 'dwmapi']
 		win_deps += cc.find_library(lib)
 	endforeach
 	# install Windows run helper
@@ -973,6 +979,7 @@ libgeany = shared_library('geany',
 	win_src,
 	osx_src,
 	link_with: insight_native,
+	link_args: win_link_args,
 	soversion: '0',
 	c_args: geany_cflags + [ '-DG_LOG_DOMAIN="Geany"' ],
 	include_directories: [iscintilla, include_directories('insight/core', 'insight/desktop')],
@@ -1012,7 +1019,9 @@ subdir('po')
 subdir('data')
 subdir('doc')
 subdir('icons')
-subdir('plugins')
+if get_option('plugins')
+ subdir('plugins')
+endif
 subdir('tests')
 
 install_data('COPYING', rename: 'GPL-2', install_dir: cdata.get('GEANY_DATA_DIR'))
