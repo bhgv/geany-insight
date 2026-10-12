@@ -19,11 +19,11 @@
 typedef struct { gchar *path; guint id; gulong line; } Location;
 static void location_free(gpointer data) { Location *p=data; g_free(p->path); g_free(p); }
 typedef struct {
- GtkWidget *pane,*box,*title,*follow;
+ GtkWidget *pane,*box,*title,*follow,*choices;
  ScintillaObject *preview;
  guint refresh,source_id;
  gchar *source_path; gulong source_line;
- GPtrArray *history; gint history_position;
+ GPtrArray *history,*definitions; gint history_position; gboolean populating;
 } Workbench;
 static Workbench wb;
 static void render_source(const char *text,GeanyFiletype *filetype,gulong line) {
@@ -39,15 +39,24 @@ static void render_source(const char *text,GeanyFiletype *filetype,gulong line) 
  SSM(wb.preview,SCI_VERTICALCENTRECARET,0,0);
 }
 static TMTag *word_definition(GeanyDocument *doc,const char *word) {
- if(!word || !*word || !doc) return NULL;
- GPtrArray *tags=tm_get_workspace()->tags_array; TMTag *fallback=NULL;
- for(guint i=0;i<tags->len;i++) {
+ if(!wb.definitions || !doc) return NULL;
+ wb.populating=TRUE; g_ptr_array_set_size(wb.definitions,0); gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(wb.choices));
+ GPtrArray *tags=tm_get_workspace()->tags_array; TMTag *chosen=NULL; gint selected=0;
+ for(guint i=0;word && *word && i<tags->len && wb.definitions->len<256;i++) {
   TMTag *tag=g_ptr_array_index(tags,i);
   if(!tag->name || strcmp(tag->name,word) || !tag->file || !tag->line) continue;
-  if(tag->file==doc->tm_file) return tag;
-  if(!fallback) fallback=tag;
+  gchar *path=utils_get_utf8_from_locale(tag->file->file_name);
+  gboolean duplicate=FALSE;
+  for(guint j=0;j<wb.definitions->len;j++) { Location *old=g_ptr_array_index(wb.definitions,j); if(old->line==tag->line && !g_strcmp0(old->path,path)) { duplicate=TRUE; break; } }
+  if(duplicate) { g_free(path); continue; }
+  Location *location=g_new0(Location,1); location->path=path; location->line=tag->line;
+  gchar *label=g_strdup_printf("%s%s%s — %s:%lu",word,tag->scope ? " • " : "",tag->scope ? tag->scope : "",path,tag->line);
+  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.choices),label); g_free(label);
+  if(!chosen || tag->file==doc->tm_file) { chosen=tag; selected=(gint)wb.definitions->len; }
+  g_ptr_array_add(wb.definitions,location);
  }
- return fallback;
+ gtk_combo_box_set_active(GTK_COMBO_BOX(wb.choices),wb.definitions->len ? selected : -1);
+ wb.populating=FALSE; return chosen;
 }
 static char *read_disk_source(const char *utf8) {
  gchar *native=utils_get_locale_from_utf8(utf8); GFile *file=g_file_new_for_path(native); g_free(native);
@@ -97,6 +106,14 @@ static gboolean show_location(const char *path,guint id,gulong line,gboolean rem
  gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label);
  if(remember) remember_location(wb.source_path,wb.source_id,line);
  return TRUE;
+}
+static void definition_changed(GtkComboBox *combo,gpointer data) {
+ (void)data; if(wb.populating || !wb.definitions) return;
+ gint active=gtk_combo_box_get_active(combo);
+ if(active<0 || active>=(gint)wb.definitions->len) return;
+ Location *location=g_ptr_array_index(wb.definitions,(guint)active);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE);
+ show_location(location->path,location->id,location->line,TRUE);
 }
 static gboolean refresh_now(gpointer data) {
  (void)data; wb.refresh=0;
@@ -165,6 +182,7 @@ void insight_workbench_init(void) {
  GtkWidget *existing=ui_lookup_widget(main_widgets.window,"vpaned1");
  GtkWidget *parent=gtk_widget_get_parent(existing); gint position=0;
  gtk_container_child_get(GTK_CONTAINER(parent),existing,"position",&position,NULL);
+ wb.definitions=g_ptr_array_new_with_free_func(location_free);
  wb.history=g_ptr_array_new_with_free_func(location_free); wb.history_position=-1;
  wb.pane=gtk_paned_new(GTK_ORIENTATION_VERTICAL);
  wb.box=gtk_box_new(GTK_ORIENTATION_VERTICAL,2);
@@ -182,6 +200,9 @@ void insight_workbench_init(void) {
  gtk_box_pack_end(GTK_BOX(header),wb.follow,FALSE,FALSE,2);
  g_signal_connect(open,"clicked",G_CALLBACK(open_context),NULL);
  gtk_box_pack_start(GTK_BOX(wb.box),header,FALSE,FALSE,2);
+ wb.choices=gtk_combo_box_text_new();
+ g_signal_connect(wb.choices,"changed",G_CALLBACK(definition_changed),NULL);
+ gtk_box_pack_start(GTK_BOX(wb.box),wb.choices,FALSE,FALSE,0);
  wb.preview=SCINTILLA(scintilla_new());
  sci_set_codepage(wb.preview,SC_CP_UTF8);
  SSM(wb.preview,SCI_SETUNDOCOLLECTION,0,0);
@@ -206,5 +227,6 @@ void insight_workbench_finalize(void) {
  if(wb.refresh) g_source_remove(wb.refresh);
  g_free(wb.source_path);
  if(wb.history) g_ptr_array_free(wb.history,TRUE);
+ if(wb.definitions) g_ptr_array_free(wb.definitions,TRUE);
  memset(&wb,0,sizeof wb);
 }
