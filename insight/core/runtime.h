@@ -15,4 +15,16 @@ typedef struct {
 /* Fresh interpreter per invocation. Host edits are immediate, not transactional.
  * Returns 0 on success, 1 on script error, 2 on invalid host/allocation failure. */
 int insight_run(const InsightHost *, const char *, size_t, char *, size_t);
+/* Single-threaded extension session. Successful loads replace the extension;
+ * failed loads retain its commands and state. Editor/project access is blocked
+ * during registration. Each invocation binds a temporary host and resets the
+ * instruction budget; Lua globals persist, total Lua memory is bounded. */
+typedef struct InsightSession InsightSession;
+InsightSession *insight_session_new(void);
+void insight_session_free(InsightSession *);
+int insight_session_load(InsightSession *,const char *,size_t,char *,size_t);
+size_t insight_session_command_count(const InsightSession *);
+const char *insight_session_command_name(const InsightSession *,size_t);
+const char *insight_session_command_label(const InsightSession *,size_t);
+int insight_session_invoke(InsightSession *,const char *,const InsightHost *,char *,size_t);
 #endif
