@@ -33,6 +33,15 @@ static void render_source(const char *text,GeanyFiletype *filetype,gulong line) 
  SSM(wb.preview,SCI_GOTOLINE,target,0);
  SSM(wb.preview,SCI_VERTICALCENTRECARET,0,0);
 }
+static TMTag *word_definition(GeanyDocument *doc,const char *word) {
+ if(!word || !*word || !doc || !doc->tm_file || !doc->tm_file->tags_array) return NULL;
+ GPtrArray *tags=doc->tm_file->tags_array;
+ for(guint i=0;i<tags->len;i++) {
+  TMTag *tag=g_ptr_array_index(tags,i);
+  if(tag->name && !strcmp(tag->name,word) && tag->line) return tag;
+ }
+ return NULL;
+}
 static gboolean refresh_now(gpointer data) {
  (void)data; wb.refresh=0;
  if(!wb.preview) return G_SOURCE_REMOVE;
@@ -42,7 +51,14 @@ static gboolean refresh_now(gpointer data) {
  if(length>2*1024*1024) { gtk_label_set_text(GTK_LABEL(wb.title),"Context: file exceeds 2 MiB"); return G_SOURCE_REMOVE; }
  gchar *text=sci_get_contents(doc->editor->sci,length+1);
  if(text && g_utf8_validate(text,length,NULL) && !memchr(text,0,(gsize)length))
-  render_source(text,doc->file_type,(gulong)sci_get_current_line(doc->editor->sci)+1);
+  {
+  gchar word[1025]={0}; editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);
+  TMTag *definition=word_definition(doc,word);
+  gulong line=definition ? definition->line : (gulong)sci_get_current_line(doc->editor->sci)+1;
+  render_source(text,doc->file_type,line);
+  gchar *label=g_strdup_printf("Context — %s%s • %s:%lu",definition ? word : "Current source",definition ? " (definition)" : "",doc->file_name ? doc->file_name : "untitled",line);
+  gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label);
+ }
  g_free(text); return G_SOURCE_REMOVE;
 }
 void insight_workbench_refresh(void) {
