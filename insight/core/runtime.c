@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "runtime.h"
+#include "occurrences.h"
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
@@ -155,41 +156,26 @@ static int text(lua_State *L) {
  if (!s) return luaL_error(L,"no active document");
  lua_pushstring(L,s); return 1;
 }
-/* Lexical matches include comments and strings; offsets are UTF-8 bytes. */
-static int identifier_byte(unsigned char c) {
- return (c>='a' && c<='z') || (c>='A' && c<='Z') ||
-  (c>='0' && c<='9') || c=='_' || c>=128;
-}
 static int occurrences(lua_State *L) {
  size_t n; const char *name=luaL_checklstring(L,1,&n);
  lua_Integer limit=luaL_optinteger(L,2,1000);
- if(!n || n>1024 || limit<1 || limit>10000 || memchr(name,0,n))
-  return luaL_error(L,"invalid identifier or result limit");
- for(size_t i=0;i<n;i++) if(!identifier_byte((unsigned char)name[i]))
-  return luaL_error(L,"invalid identifier");
- if(name[0]>='0' && name[0]<='9') return luaL_error(L,"invalid identifier");
+ if(limit<1 || limit>10000) return luaL_error(L,"invalid result limit");
  const InsightHost *h=active_host(L);
- const char *s=h->text ? h->text(h->context) : NULL;
- if(!s) return luaL_error(L,"no active document");
- size_t length=strlen(s),total=0,shown=0,line=1,column=0;
- if(length>2u*1024u*1024u) return luaL_error(L,"document exceeds occurrence search limit");
- lua_newtable(L);
- for(size_t i=0;i<length;i++) {
-  if((!i || !identifier_byte((unsigned char)s[i-1])) &&
-   n<=length-i && (i+n==length || !identifier_byte((unsigned char)s[i+n])) &&
-   !memcmp(s+i,name,n)) {
-   total++;
-   if(shown<(size_t)limit) {
-    lua_createtable(L,0,4);
-    lua_pushinteger(L,(lua_Integer)i); lua_setfield(L,-2,"start");
-    lua_pushinteger(L,(lua_Integer)(i+n)); lua_setfield(L,-2,"finish");
-    lua_pushinteger(L,(lua_Integer)line); lua_setfield(L,-2,"line");
-    lua_pushinteger(L,(lua_Integer)column); lua_setfield(L,-2,"column");
-    lua_rawseti(L,-2,(lua_Integer)++shown);
-   }
-  }
-  if(s[i]=='\r' || (s[i]=='\n' && (!i || s[i-1]!='\r'))) { line++; column=0; }
-  else if(s[i]!='\n') column++;
+ const char *source=h->text ? h->text(h->context) : NULL;
+ if(!source) return luaL_error(L,"no active document");
+ InsightOccurrence *found=lua_newuserdatauv(L,(size_t)limit*sizeof *found,0);
+ size_t total=0;
+ if(!insight_occurrences_find(source,strlen(source),name,n,0,found,(size_t)limit,&total))
+  return luaL_error(L,"invalid UTF-8 identifier or document (maximum 2 MiB)");
+ size_t count=total<(size_t)limit ? total : (size_t)limit;
+ lua_createtable(L,(int)count,0);
+ for(size_t i=0;i<count;i++) {
+  lua_createtable(L,0,4);
+  lua_pushinteger(L,(lua_Integer)found[i].start); lua_setfield(L,-2,"start");
+  lua_pushinteger(L,(lua_Integer)found[i].end); lua_setfield(L,-2,"finish");
+  lua_pushinteger(L,(lua_Integer)found[i].line); lua_setfield(L,-2,"line");
+  lua_pushinteger(L,(lua_Integer)found[i].column); lua_setfield(L,-2,"column");
+  lua_rawseti(L,-2,(lua_Integer)i+1);
  }
  lua_pushinteger(L,(lua_Integer)total); return 2;
 }

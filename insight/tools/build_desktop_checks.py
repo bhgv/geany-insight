@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXCLUDED = {'lua.c', 'luac.c', 'onelua.c', 'linit.c', 'liolib.c', 'loslib.c',
             'loadlib.c', 'lcorolib.c', 'ldblib.c'}
 TESTS = ['runtime', 'index', 'document', 'snapshot', 'commands', 'editor_api',
-         'events', 'context']
+         'events', 'context', 'occurrences']
 
 
 def main():
@@ -47,7 +47,7 @@ def main():
     windows = args.platform == 'windows'
     if not windows:
         common += ['-D_DEFAULT_SOURCE', '-fPIC']
-    core = [ROOT/'core'/p for p in ['runtime.c', 'index.c', 'document.c', 'context.c']]
+    core = [ROOT/'core'/p for p in ['runtime.c', 'index.c', 'document.c', 'context.c', 'occurrences.c']]
     core += sorted(p for p in (ROOT/'vendor/lua').glob('*.c') if p.name not in EXCLUDED)
     desktop = [ROOT/'desktop'/p for p in ['plugin.c', 'navigation.c', 'index_cache.c', 'extensions.c']]
 

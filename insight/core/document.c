@@ -2,7 +2,8 @@
 #include "document.h"
 #include <stdlib.h>
 #include <string.h>
-static int utf8(const char *text,size_t length) {
+int insight_document_validate_utf8(const char *text,size_t length) {
+ if(!text) return 0;
  const unsigned char *s=(const unsigned char *)text;
  for(size_t i=0;i<length;) {
   unsigned char a=s[i++];
@@ -28,7 +29,7 @@ static int boundary(const char *s,size_t length,size_t offset) {
 }
 int insight_document_init(InsightDocument *d,const char *s,size_t length,size_t start,size_t end) {
  if(!d || !s || length>INSIGHT_DOCUMENT_LIMIT || start>end ||
-  !utf8(s,length) || !boundary(s,length,start) || !boundary(s,length,end)) return 0;
+  !insight_document_validate_utf8(s,length) || !boundary(s,length,start) || !boundary(s,length,end)) return 0;
  char *copy=malloc(length+1); if(!copy) return 0;
  memcpy(copy,s,length); copy[length]=0;
  d->text=copy; d->length=length; d->start=start; d->end=end; d->selection=NULL;
@@ -51,7 +52,7 @@ int insight_document_replace(void *data,const char *s) {
  InsightDocument *d=data;
  if(!d || !d->text || !s) return 0;
  size_t length=strlen(s),remaining=d->length-(d->end-d->start);
- if(length>INSIGHT_DOCUMENT_LIMIT || remaining>INSIGHT_DOCUMENT_LIMIT-length || !utf8(s,length)) return 0;
+ if(length>INSIGHT_DOCUMENT_LIMIT || remaining>INSIGHT_DOCUMENT_LIMIT-length || !insight_document_validate_utf8(s,length)) return 0;
  size_t total=remaining+length;
  char *next=malloc(total+1); if(!next) return 0;
  memcpy(next,d->text,d->start); memcpy(next+d->start,s,length);

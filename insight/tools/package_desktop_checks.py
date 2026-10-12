@@ -68,7 +68,7 @@ def main():
     info['included_locales'] = args.languages or 'all available'
     info['native_debug_symbols_stripped'] = bool(args.strip)
     info['editor_base'] = 'official Geany 2.1 x64' if windows else 'Geany 2.2 development built from included sources'
-    info['verification'] = (['Cross compiled; Windows execution not verified'] if windows else ['8 core checks passed during compilation']) + args.verification_note
+    info['verification'] = (['Cross compiled; Windows execution not verified'] if windows else [str(len(info['tests']))+' core checks passed during compilation']) + args.verification_note
     info['linux_requirements'] = None if windows else 'Ubuntu 24.04 x64 or compatible: glibc >= 2.38, GLib >= 2.80, GTK3 >= 3.24 and dependencies'
     (dest/'BUILD-INFO.json').write_text(json.dumps(info, indent=2)+'\n')
     hashes = []

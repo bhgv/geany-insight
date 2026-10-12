@@ -9,6 +9,8 @@ typedef struct {
 } InsightDocument;
 /* Strict UTF-8, no embedded NUL; selection must be on code point boundaries.
  * doc must be zero-initialized, and disposed before reinitializing. */
+/* Strict UTF-8 without NUL; does not allocate. */
+int insight_document_validate_utf8(const char *,size_t);
 int insight_document_init(InsightDocument *,const char *,size_t,size_t,size_t);
 void insight_document_dispose(InsightDocument *);
 const char *insight_document_text(void *);
