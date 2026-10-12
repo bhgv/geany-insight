@@ -40,7 +40,8 @@ typedef struct {
  gchar *prefs_path;
  InsightExtensions *extensions; gboolean lua_running;
  GtkWidget *lua_menu,*lua_commands,*lua_item,*palette_item;
- GtkAccelGroup *lua_accels;
+ GtkAccelGroup *lua_accels,*navigation_accels;
+ GtkCssProvider *css; GtkWidget *context_toggle;
  InsightIndex *base,*index;
  GPtrArray *frames,*files; gchar *root,*cache_path; guint scan,parsed,skipped;
  gchar *source_path; gulong source_line;
@@ -608,6 +609,58 @@ static void create_native_lua(void) {
  wb.palette_item=gtk_menu_item_new_with_label("Command palette…"); g_signal_connect(wb.palette_item,"activate",G_CALLBACK(show_native_palette),NULL); gtk_container_add(GTK_CONTAINER(wb.lua_menu),wb.palette_item);
  gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),item); gtk_widget_show_all(item); native_commands_rebuild();
 }
+static void focus_browser(GtkMenuItem *item,gpointer data) {
+ (void)item; gint which=GPOINTER_TO_INT(data); GtkWidget *widget=which==1 ? wb.file_entry : (which==2 ? wb.usage_entry : wb.symbol_entry);
+ GtkWidget *page=widget; while(gtk_widget_get_parent(page)!=main_widgets.sidebar_notebook) page=gtk_widget_get_parent(page);
+ ui_prefs.sidebar_visible=TRUE; ui_sidebar_show_hide();
+ gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.sidebar_notebook),page));
+ if(which==1) files_filter(NULL,NULL); else if(which==0) browser_filter(NULL,NULL);
+ gtk_widget_grab_focus(widget);
+}
+static void go_definition(GtkMenuItem *item,gpointer data) {
+ (void)item; (void)data; GeanyDocument *doc=document_get_current(); if(!doc) return;
+ char word[1025]={0}; editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);
+ const InsightSymbol *definition=word_definition(doc,word);
+ if(!definition) { ui_set_statusbar(TRUE,"Definition not found: %s",word); return; }
+ gchar *path=g_strdup(definition->path); gulong line=definition->line;
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); if(show_location(path,0,line,TRUE)) open_context(NULL,NULL); g_free(path);
+}
+static void context_visible(GtkCheckMenuItem *item,gpointer data) {
+ (void)data; wb.context_visible=gtk_check_menu_item_get_active(item);
+ if(wb.context_visible) { gtk_widget_show(wb.box); insight_workbench_refresh(); } else gtk_widget_hide(wb.box);
+}
+static void create_workbench_menus(void) {
+ GtkWidget *menubar=ui_lookup_widget(main_widgets.window,"menubar1"),*navigate=gtk_menu_item_new_with_mnemonic("_Navigate"),*menu=gtk_menu_new();
+ gtk_menu_item_set_submenu(GTK_MENU_ITEM(navigate),menu); gtk_menu_shell_insert(GTK_MENU_SHELL(menubar),navigate,4);
+ wb.navigation_accels=gtk_accel_group_new(); gtk_window_add_accel_group(GTK_WINDOW(main_widgets.window),wb.navigation_accels);
+ const char *names[]={"Go to definition","Find symbol…","Find file…","Find usages…","Context back","Context forward"};
+ const char *shortcuts[]={"F12","<Primary>t","<Primary>p","<Primary><Shift>u","<Primary><Alt>Left","<Primary><Alt>Right"};
+ for(int i=0;i<6;i++) {
+  GtkWidget *entry=gtk_menu_item_new_with_label(names[i]); gtk_container_add(GTK_CONTAINER(menu),entry);
+  if(!i) g_signal_connect(entry,"activate",G_CALLBACK(go_definition),NULL);
+  else if(i<4) g_signal_connect(entry,"activate",G_CALLBACK(focus_browser),GINT_TO_POINTER(i-1));
+  else g_signal_connect(entry,"activate",G_CALLBACK(history_move),GINT_TO_POINTER(i==4 ? -1 : 1));
+  guint key; GdkModifierType mods; gtk_accelerator_parse(shortcuts[i],&key,&mods); gtk_widget_add_accelerator(entry,"activate",wb.navigation_accels,key,mods,GTK_ACCEL_VISIBLE);
+ }
+ g_object_ref(wb.lua_item); gtk_container_remove(GTK_CONTAINER(main_widgets.tools_menu),wb.lua_item); gtk_menu_item_set_label(GTK_MENU_ITEM(wb.lua_item),"Scripts"); gtk_menu_shell_insert(GTK_MENU_SHELL(menubar),wb.lua_item,5); g_object_unref(wb.lua_item);
+ wb.context_toggle=gtk_check_menu_item_new_with_label("Context window"); gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.context_toggle),wb.context_visible);
+ g_signal_connect(wb.context_toggle,"toggled",G_CALLBACK(context_visible),NULL); gtk_container_add(GTK_CONTAINER(ui_lookup_widget(main_widgets.window,"menu_view1_menu")),wb.context_toggle);
+ gtk_widget_show_all(navigate); gtk_widget_show(wb.context_toggle);
+ gtk_widget_set_name(wb.box,"insight-context"); gtk_widget_set_name(wb.title,"insight-context-title"); gtk_widget_set_name(wb.browser,"insight-workspace");
+ gtk_label_set_ellipsize(GTK_LABEL(wb.title),PANGO_ELLIPSIZE_MIDDLE);
+ GList *cells=gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(wb.choices)); for(GList *p=cells;p;p=p->next) g_object_set(p->data,"ellipsize",PANGO_ELLIPSIZE_MIDDLE,"max-width-chars",80,NULL); g_list_free(cells);
+ gtk_tree_view_column_set_visible(gtk_tree_view_get_column(GTK_TREE_VIEW(wb.symbol_view),SYMBOL_PATH),FALSE); gtk_tree_view_column_set_visible(gtk_tree_view_get_column(GTK_TREE_VIEW(wb.symbol_view),SYMBOL_KIND),FALSE); gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(wb.symbol_view),SYMBOL_PATH);
+ gtk_tree_view_column_set_visible(gtk_tree_view_get_column(GTK_TREE_VIEW(wb.file_view),1),FALSE); gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(wb.file_view),1);
+ wb.css=gtk_css_provider_new(); gtk_css_provider_load_from_data(wb.css,"#insight-context { border-top: 2px solid @theme_selected_bg_color; } #insight-context-title { font-weight: bold; padding: 3px; } #insight-workspace { padding: 3px; }",-1,NULL);
+ gtk_style_context_add_provider_for_screen(gdk_screen_get_default(),GTK_STYLE_PROVIDER(wb.css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+ gtk_widget_hide(ui_lookup_widget(main_widgets.window,"menu_build1"));
+ if(!g_file_test(wb.prefs_path,G_FILE_TEST_EXISTS)) {
+  gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(ui_lookup_widget(main_widgets.window,"menu_show_messages_window1")),FALSE);
+  ui_prefs.sidebar_visible=TRUE; ui_sidebar_show_hide(); gtk_paned_set_position(GTK_PANED(ui_lookup_widget(main_widgets.window,"hpaned1")),280);
+  gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.sidebar_notebook),wb.browser));
+ }
+ ui_set_window_title(document_get_current());
+}
 static void save_workbench_settings(void) {
  if(!wb.prefs_path || !wb.pane) return;
  GKeyFile *settings=g_key_file_new();
@@ -710,11 +763,14 @@ void insight_workbench_init(void) {
  gtk_widget_show_all(wb.pane);
  restore_workbench_settings();
  create_native_lua();
+ create_workbench_menus();
  insight_workbench_refresh();
 }
 void insight_workbench_finalize(void) {
  save_workbench_settings();
  if(wb.lua_accels) { gtk_window_remove_accel_group(GTK_WINDOW(main_widgets.window),wb.lua_accels); g_object_unref(wb.lua_accels); }
+ if(wb.navigation_accels) { gtk_window_remove_accel_group(GTK_WINDOW(main_widgets.window),wb.navigation_accels); g_object_unref(wb.navigation_accels); }
+ if(wb.css) { gtk_style_context_remove_provider_for_screen(gdk_screen_get_default(),GTK_STYLE_PROVIDER(wb.css)); g_object_unref(wb.css); }
  insight_extensions_free(wb.extensions);
  if(wb.refresh) g_source_remove(wb.refresh);
  g_free(wb.prefs_path);
