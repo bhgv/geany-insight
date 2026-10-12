@@ -32,5 +32,6 @@ size_t insight_session_command_count(const InsightSession *);
 int insight_session_is_running(const InsightSession *);
 const char *insight_session_command_name(const InsightSession *,size_t);
 const char *insight_session_command_label(const InsightSession *,size_t);
+const char *insight_session_command_shortcut(const InsightSession *,size_t);
 int insight_session_invoke(InsightSession *,const char *,const InsightHost *,char *,size_t);
 #endif

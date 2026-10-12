@@ -7,6 +7,8 @@
 #include <limits.h>
 static GtkWidget *item, *commands_item, *commands_menu;
 static InsightExtensions *extensions;
+static GtkAccelGroup *accelerators;
+static GtkWindow *main_window;
 static Navigation *navigation;
 typedef struct { GeanyDocument *doc; gchar *scratch; } Host;
 static const char *get_text(void *ctx) {
@@ -42,6 +44,9 @@ static void invoke_command(GtkMenuItem *menu,gpointer data) {
  ui_set_statusbar(TRUE,"Lua: %s",result ? (error[0] ? error : "runtime unavailable") : "completed");
 }
 static void rebuild_commands(void) {
+ if(accelerators) { gtk_window_remove_accel_group(main_window,accelerators); g_object_unref(accelerators); }
+ accelerators=gtk_accel_group_new(); gtk_window_add_accel_group(main_window,accelerators);
+ guint used_keys[128]={0}; GdkModifierType used_mods[128]={0};
  GList *items=gtk_container_get_children(GTK_CONTAINER(commands_menu));
  /* First four rows are load, reload, unload and separator. */
  for(GList *row=g_list_nth(items,4);row;row=row->next) gtk_widget_destroy(GTK_WIDGET(row->data));
@@ -54,6 +59,14 @@ static void rebuild_commands(void) {
   g_object_set_data_full(G_OBJECT(command),"insight-command-id",g_strdup(name),g_free);
   g_signal_connect(command,"activate",G_CALLBACK(invoke_command),NULL);
   gtk_container_add(GTK_CONTAINER(commands_menu),command); ui_add_document_sensitive(command); gtk_widget_show(command);
+  const char *shortcut=insight_session_command_shortcut(insight_extensions_session(extensions),n);
+  guint key=0; GdkModifierType mods=0; gtk_accelerator_parse(shortcut,&key,&mods);
+  gboolean duplicate=FALSE;
+  for(size_t k=0;k<n;k++) if(key && used_keys[k]==key && used_mods[k]==mods) duplicate=TRUE;
+  if(key && gtk_accelerator_valid(key,mods) && !duplicate) {
+   used_keys[n]=key; used_mods[n]=mods;
+   gtk_widget_add_accelerator(command,"activate",accelerators,key,mods,GTK_ACCEL_VISIBLE);
+  }
  }
 }
 static void load_extension(GtkMenuItem *menu,gpointer data) {
@@ -109,7 +122,7 @@ static void activate(GtkMenuItem *menu,gpointer data) {
  gtk_widget_destroy(dialog);
 }
 static gboolean init(GeanyPlugin *plugin,gpointer data) {
- (void)data; navigation=navigation_new(plugin);
+ (void)data; main_window=GTK_WINDOW(plugin->geany_data->main_widgets->window); navigation=navigation_new(plugin);
  if(!navigation) return FALSE;
  gchar *settings=g_build_filename(plugin->geany_data->app->configdir,"plugins","insight","extension.conf",NULL);
  extensions=insight_extensions_new(settings); g_free(settings);
@@ -139,6 +152,7 @@ static gboolean init(GeanyPlugin *plugin,gpointer data) {
 static void cleanup(GeanyPlugin *plugin,gpointer data) {
  (void)plugin; (void)data; gtk_widget_destroy(item); item=NULL;
  gtk_widget_destroy(commands_item); commands_item=NULL; commands_menu=NULL;
+ if(accelerators) { gtk_window_remove_accel_group(main_window,accelerators); g_object_unref(accelerators); accelerators=NULL; }
  insight_extensions_free(extensions); extensions=NULL;
  navigation_free(navigation); navigation=NULL;
 }

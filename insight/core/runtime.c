@@ -9,7 +9,7 @@
 #include <limits.h>
 #define MEMORY_LIMIT (16u * 1024u * 1024u)
 #define COMMAND_LIMIT 128u
-typedef struct { char name[64], label[256]; int reference; } Command;
+typedef struct { char name[64], label[256], shortcut[64]; int reference; } Command;
 typedef struct {
  size_t used; unsigned ticks; const InsightHost *host;
  lua_State *state;
@@ -106,6 +106,10 @@ static int register_command(lua_State *L) {
  const char *name=luaL_checklstring(L,1,&name_length);
  const char *label=luaL_checklstring(L,2,&label_length);
  luaL_checktype(L,3,LUA_TFUNCTION);
+ size_t shortcut_length=0;
+ const char *shortcut=luaL_optlstring(L,4,"",&shortcut_length);
+ if(shortcut_length>=sizeof r->commands[0].shortcut || memchr(shortcut,0,shortcut_length))
+  return luaL_error(L,"invalid command shortcut");
  if(!name_length || name_length>=sizeof r->commands[0].name || memchr(name,0,name_length))
   return luaL_error(L,"invalid command ID (maximum 63 ASCII characters)");
  for(size_t n=0;n<name_length;n++) {
@@ -120,6 +124,7 @@ static int register_command(lua_State *L) {
   if(!strcmp(name,r->commands[n].name)) return luaL_error(L,"duplicate command ID");
  if(r->command_count==COMMAND_LIMIT) return luaL_error(L,"command limit exceeded");
  Command *command=&r->commands[r->command_count];
+ memcpy(command->shortcut,shortcut,shortcut_length+1);
  memcpy(command->name,name,name_length+1); memcpy(command->label,label,label_length+1);
  lua_pushvalue(L,3); command->reference=luaL_ref(L,LUA_REGISTRYINDEX);
  r->command_count++; return 0;
@@ -223,6 +228,9 @@ const char *insight_session_command_name(const InsightSession *s,size_t n) {
 }
 const char *insight_session_command_label(const InsightSession *s,size_t n) {
  return n<insight_session_command_count(s) ? s->current->commands[n].label : NULL;
+}
+const char *insight_session_command_shortcut(const InsightSession *s,size_t n) {
+ return n<insight_session_command_count(s) ? s->current->commands[n].shortcut : NULL;
 }
 int insight_session_invoke(InsightSession *s,const char *name,const InsightHost *host,char *error,size_t capacity) {
  if(error && capacity) error[0]=0;
