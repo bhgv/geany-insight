@@ -248,6 +248,10 @@ static int setup(lua_State *L) {
  lua_newtable(L); lua_pushcfunction(L,on_event); lua_setfield(L,-2,"on"); lua_setglobal(L,"events");
  lua_pushliteral(L,"0.5"); lua_setglobal(L,"INSIGHT_API_VERSION"); return 0;
 }
+static int traceback(lua_State *L) {
+ const char *message=lua_type(L,1)==LUA_TSTRING ? lua_tostring(L,1) : "Lua error (non-string value)";
+ luaL_traceback(L,L,message,1); return 1;
+}
 static void report(lua_State *L,int status,char *error,size_t capacity) {
  if(status && error && capacity) {
   const char *message=lua_type(L,-1)==LUA_TSTRING ? lua_tostring(L,-1) : "Lua error (non-string value)";
@@ -259,15 +263,16 @@ static int valid_host(const InsightHost *host) {
 }
 static int initialize(Runtime *r,char *error,size_t capacity) {
  r->state=lua_newstate(allocate,r); if(!r->state) return 2;
- lua_pushcfunction(r->state,setup);
- int status=lua_pcall(r->state,0,0,0);
+ lua_pushcfunction(r->state,traceback); lua_pushcfunction(r->state,setup);
+ int status=lua_pcall(r->state,0,0,1);
  report(r->state,status,error,capacity);
  lua_settop(r->state,0); return status ? 1 : 0;
 }
 static int execute(Runtime *r,const char *source,size_t length,char *error,size_t capacity) {
  lua_State *L=r->state; r->ticks=0; lua_sethook(L,budget,LUA_MASKCOUNT,1000);
+ lua_pushcfunction(L,traceback);
  int status=luaL_loadbufferx(L,source,length,"script","t");
- if(!status) status=lua_pcall(L,0,0,0);
+ if(!status) status=lua_pcall(L,0,0,1);
  report(L,status,error,capacity); lua_settop(L,0); return status ? 1 : 0;
 }
 int insight_run(const InsightHost *host,const char *source,size_t length,char *error,size_t capacity) {
@@ -327,8 +332,9 @@ int insight_session_invoke(InsightSession *s,const char *name,const InsightHost 
  }
  r->host=host; r->ticks=0; lua_State *L=r->state;
  lua_sethook(L,budget,LUA_MASKCOUNT,1000);
+ lua_pushcfunction(L,traceback);
  lua_rawgeti(L,LUA_REGISTRYINDEX,r->commands[n].reference);
- int status=lua_pcall(L,0,0,0);
+ int status=lua_pcall(L,0,0,1);
  report(L,status,error,capacity); lua_settop(L,0); r->host=NULL;
  return status ? 1 : 0;
 }
@@ -348,8 +354,8 @@ int insight_session_emit(InsightSession *s,const char *name,const char *path,con
  for(size_t n=0;n<r->event_count;n++) {
   if(strcmp(name,r->events[n].name)) continue;
   r->event_reference=r->events[n].reference; r->ticks=0;
-  lua_sethook(r->state,budget,LUA_MASKCOUNT,1000); lua_pushcfunction(r->state,emit_one);
-  int status=lua_pcall(r->state,0,0,0);
+  lua_sethook(r->state,budget,LUA_MASKCOUNT,1000); lua_pushcfunction(r->state,traceback); lua_pushcfunction(r->state,emit_one);
+  int status=lua_pcall(r->state,0,0,1);
   if(status && !result) { report(r->state,status,error,capacity); result=1; }
   lua_settop(r->state,0);
  }

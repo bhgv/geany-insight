@@ -34,6 +34,7 @@ int main(void) {
  const char *script="local s,total=project.symbols('fo'); assert(total==1 and #s==1); assert(s[1].name=='foo' and s[1].line==42 and s[1].path=='project/a.cpp'); local e,n=project.symbols('fo',true); assert(#e==0 and n==0)";
  assert(insight_run(&host,script,strlen(script),error,sizeof error)==0);
  insight_index_free(index);
+ assert(run("local function inner() error('boom') end; inner()",error)==1 && strstr(error,"stack traceback"));
  assert(insight_run(NULL,"",0,error,sizeof error)==2);
  puts("runtime: all checks passed"); return 0;
 }
