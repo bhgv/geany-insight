@@ -3,6 +3,7 @@
 #include "tm_tag.h"
 #include "index_cache.h"
 #include "context.h"
+#include "extensions.h"
 #include <stdlib.h>
 #include <glib/gstdio.h>
 #include <sys/stat.h>
@@ -150,7 +151,7 @@ static void cancel(GtkMenuItem *item,gpointer data) {
  ui_set_statusbar(TRUE,"Insight: scan cancelled; partial index retained");
 }
 enum { NAME, SCOPE, PATH, LINE, KIND, COLUMNS };
-typedef struct { Navigation *n; GtkListStore *store; GtkWidget *status; int exact; } Search;
+typedef struct { Navigation *n; GtkListStore *store; GtkWidget *status, *preview; int exact; } Search;
 static void filter(GtkEditable *entry,gpointer data) {
  Search *s=data; if(s->n->idle) refresh_open(s->n);
  const char *query=gtk_entry_get_text(GTK_ENTRY(entry));
@@ -165,6 +166,24 @@ static void filter(GtkEditable *entry,gpointer data) {
  gchar *label=g_strdup_printf("%zu matches%s%s",total,total>500 ? " (first 500 shown)" : "",
   s->n->idle ? " — indexing in progress" : "");
  gtk_label_set_text(GTK_LABEL(s->status),label); g_free(label);
+}
+static void preview_selection(GtkTreeSelection *selection,gpointer data) {
+ Search *s=data; GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(s->preview));
+ GtkTreeIter iter; GtkTreeModel *model;
+ if(!gtk_tree_selection_get_selected(selection,&model,&iter)) { gtk_text_buffer_set_text(buffer,"",0); return; }
+ gchar *path; gulong line; gtk_tree_model_get(model,&iter,PATH,&path,LINE,&line,-1);
+ gchar *locale=utils_get_locale_from_utf8(path); g_free(path);
+ char *source=NULL; gsize length=0; GError *error=NULL;
+ size_t start,end,target_start,target_end; unsigned long first;
+ if(!insight_read_source_file(locale,&source,&length,&error)) {
+  gtk_text_buffer_set_text(buffer,error->message,-1); g_error_free(error);
+ } else if(!g_utf8_validate(source,(gssize)length,NULL) || memchr(source,0,length)) {
+  gtk_text_buffer_set_text(buffer,"Context requires UTF-8 text without NUL",-1);
+ } else if(!insight_context_range(source,length,line,5,&start,&end,&first,&target_start,&target_end)) {
+  gtk_text_buffer_set_text(buffer,"Symbol line is unavailable; reindex the project",-1);
+ } else if(end-start>65536) gtk_text_buffer_set_text(buffer,"Context exceeds 64 KiB; open the definition",-1);
+ else gtk_text_buffer_set_text(buffer,source+start,(gint)(end-start));
+ g_free(source); g_free(locale);
 }
 static void row_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) {
  (void)view; (void)path; (void)column; gtk_dialog_response(GTK_DIALOG(data),GTK_RESPONSE_ACCEPT);
@@ -190,7 +209,12 @@ static void show_search(Navigation *n,const char *initial,int exact) {
  gtk_box_pack_start(GTK_BOX(box),status,FALSE,FALSE,4);
  gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,4);
  gtk_entry_set_text(GTK_ENTRY(entry),initial ? initial : "");
- Search search={n,store,status,exact}; g_signal_connect(entry,"changed",G_CALLBACK(filter),&search);
+ GtkWidget *preview=gtk_text_view_new(); gtk_text_view_set_editable(GTK_TEXT_VIEW(preview),FALSE);
+ gtk_text_view_set_monospace(GTK_TEXT_VIEW(preview),TRUE);
+ GtkWidget *preview_scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(preview_scroll),preview);
+ gtk_widget_set_size_request(preview_scroll,-1,150); gtk_box_pack_start(GTK_BOX(box),preview_scroll,TRUE,TRUE,4);
+ Search search={n,store,status,preview,exact};
+ g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),"changed",G_CALLBACK(preview_selection),&search); g_signal_connect(entry,"changed",G_CALLBACK(filter),&search);
  g_signal_connect(view,"row-activated",G_CALLBACK(row_activated),dialog);
  filter(GTK_EDITABLE(entry),&search); gtk_widget_show_all(dialog);
  if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) {

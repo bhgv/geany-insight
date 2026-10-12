@@ -15,4 +15,5 @@ gboolean insight_extensions_unload(InsightExtensions *,GError **);
 InsightSession *insight_extensions_session(InsightExtensions *);
 /* Reads regular local Lua files only, <=256 KiB; g_free the returned source. */
 gboolean insight_read_lua_file(const char *,char **,gsize *,GError **);
+gboolean insight_read_source_file(const char *,char **,gsize *,GError **);
 #endif

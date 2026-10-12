@@ -11,5 +11,10 @@ int main(void) {
  assert(!insight_word_at("123",3,1,&a,&b));
  assert(!insight_word_at("",0,0,&a,&b));
  assert(!insight_word_at("foo",3,4,&a,&b));
+ size_t end,ts,te; unsigned long first;
+ assert(insight_context_range("a\r\nb\nc",6,2,1,&a,&end,&first,&ts,&te));
+ assert(a==0 && end==6 && first==1 && ts==3 && te==4);
+ assert(!insight_context_range("a",1,3,1,&a,&end,&first,&ts,&te));
+ assert(insight_context_range("a\n",2,2,0,&a,&end,&first,&ts,&te) && a==2 && end==2);
  puts("context: all checks passed"); return 0;
 }

@@ -43,6 +43,9 @@ static gboolean read_bounded(const char *path,gsize limit,char **source,gsize *s
 gboolean insight_read_lua_file(const char *path,char **source,gsize *size,GError **error) {
  return read_bounded(path,256u*1024u,source,size,error);
 }
+gboolean insight_read_source_file(const char *path,char **source,gsize *size,GError **error) {
+ return read_bounded(path,2u*1024u*1024u,source,size,error);
+}
 static gboolean save_selection(InsightExtensions *m,const char *path,GError **error) {
  if(path && (!g_path_is_absolute(path) || strlen(path)>PATH_LIMIT)) {
   invalid(error,"Extension path must be absolute and within 16 KiB"); return FALSE;
