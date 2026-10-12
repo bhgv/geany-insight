@@ -849,7 +849,7 @@ install_headers(
 )
 
 insight_native = static_library('insight_native',
- 'insight/core/index.c',
+ 'insight/core/index.c', 'insight/core/document.c', 'insight/core/occurrences.c',
  c_args: geany_cflags,
  include_directories: include_directories('insight/core'),
  dependencies: deps)

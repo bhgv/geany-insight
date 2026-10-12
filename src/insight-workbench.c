@@ -16,6 +16,7 @@
 #include <string.h>
 #include <gio/gio.h>
 #include "../insight/core/index.h"
+#include "../insight/core/occurrences.h"
 #include <glib/gstdio.h>
 #include <sys/stat.h>
 
@@ -25,7 +26,9 @@ typedef struct { gchar *path; guint id; gulong line; } Location;
 static void location_free(gpointer data) { Location *p=data; g_free(p->path); g_free(p); }
 typedef struct {
  GtkWidget *pane,*box,*title,*follow,*choices,*browser,*symbol_entry,*symbol_view,*outline,*file_entry,*file_view;
- GtkListStore *file_store;
+ GtkListStore *file_store,*matches;
+ GtkWidget *usage_entry,*usage_status,*usage_buffer,*usage_view;
+ GPtrArray *usage_paths; gchar *usage_name; guint usage_idle,usage_position,usage_shown,usage_skipped;
  GtkListStore *symbols;
  ScintillaObject *preview;
  guint refresh,source_id;
@@ -38,6 +41,7 @@ static Workbench wb;
 static void open_context(GtkButton *,gpointer);
 static void browser_filter(GtkEditable *,gpointer);
 static void files_filter(GtkEditable *,gpointer);
+static void stop_usage(void);
 static void render_source(const char *text,GeanyFiletype *filetype,gulong line) {
  highlighting_set_styles(wb.preview,filetype ? filetype : filetypes[GEANY_FILETYPES_NONE]);
  sci_set_readonly(wb.preview,FALSE); sci_set_text(wb.preview,text);
@@ -254,6 +258,91 @@ static void create_files_browser(void) {
  g_signal_connect(wb.file_view,"row-activated",G_CALLBACK(browser_activated),NULL);
  gtk_widget_show_all(box); files_filter(NULL,NULL);
 }
+enum { USAGE_DISPLAY,USAGE_PATH,USAGE_LINE,USAGE_START,USAGE_END,USAGE_ID,USAGE_DIGEST,USAGE_COLUMNS };
+static void stop_usage(void) {
+ if(wb.usage_idle) { g_source_remove(wb.usage_idle); wb.usage_idle=0; }
+ if(wb.usage_paths) g_ptr_array_set_size(wb.usage_paths,0);
+ g_clear_pointer(&wb.usage_name,g_free);
+}
+static gboolean usage_step(gpointer data) {
+ (void)data;
+ if(wb.usage_position>=wb.usage_paths->len || wb.usage_shown>=2000) {
+  wb.usage_idle=0;
+  gchar *label=g_strdup_printf("%u results • %u files scanned • %u skipped%s",wb.usage_shown,wb.usage_position,wb.usage_skipped,wb.usage_shown>=2000 ? " • result limit reached" : "");
+  gtk_label_set_text(GTK_LABEL(wb.usage_status),label); g_free(label); return G_SOURCE_REMOVE;
+ }
+ Location *location=g_ptr_array_index(wb.usage_paths,wb.usage_position++);
+ GeanyDocument *doc=location->id ? document_find_by_id(location->id) : document_find_by_filename(location->path);
+ char *text=NULL; guint id=doc ? doc->id : 0;
+ if(doc) { gint length=sci_get_length(doc->editor->sci); if(length<=2*1024*1024) text=sci_get_contents(doc->editor->sci,length+1); }
+ else if(location->path) text=read_disk_source(location->path);
+ InsightOccurrence *found=g_new(InsightOccurrence,2000-wb.usage_shown); size_t total=0;
+ if(text && insight_occurrences_find(text,strlen(text),wb.usage_name,strlen(wb.usage_name),0,found,2000-wb.usage_shown,&total)) {
+  gchar *digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,text,-1);
+  for(size_t i=0;i<total && wb.usage_shown<2000;i++) {
+   GtkTreeIter iter; gtk_list_store_append(wb.matches,&iter);
+   gtk_list_store_set(wb.matches,&iter,USAGE_DISPLAY,location->path ? location->path : "untitled",USAGE_PATH,location->path,USAGE_LINE,found[i].line,USAGE_START,(gulong)found[i].start,USAGE_END,(gulong)found[i].end,USAGE_ID,id,USAGE_DIGEST,digest,-1); wb.usage_shown++;
+  }
+  g_free(digest);
+ } else wb.usage_skipped++;
+ g_free(found); g_free(text);
+ gchar *label=g_strdup_printf("Searching… %u results • %u/%u files",wb.usage_shown,wb.usage_position,wb.usage_paths->len);
+ gtk_label_set_text(GTK_LABEL(wb.usage_status),label); g_free(label); return G_SOURCE_CONTINUE;
+}
+static void usage_start(GtkWidget *widget,gpointer data) {
+ (void)widget; (void)data; stop_usage();
+ const char *query=gtk_entry_get_text(GTK_ENTRY(wb.usage_entry)); size_t total;
+ if(!insight_occurrences_find("",0,query,strlen(query),0,NULL,0,&total)) { gtk_label_set_text(GTK_LABEL(wb.usage_status),"Enter one UTF-8 identifier"); return; }
+ gtk_list_store_clear(wb.matches); wb.usage_name=g_strdup(query); wb.usage_position=wb.usage_shown=wb.usage_skipped=0;
+ GHashTable *seen=g_hash_table_new(g_str_hash,g_str_equal);
+ if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_buffer))) {
+  for(guint i=0;i<wb.files->len && wb.usage_paths->len<10000;i++) {
+   const char *path=g_ptr_array_index(wb.files,i); if(g_hash_table_contains(seen,path)) continue;
+   Location *next=g_new0(Location,1); next->path=g_strdup(path); g_ptr_array_add(wb.usage_paths,next); g_hash_table_add(seen,next->path);
+  }
+ }
+ for(guint i=0;i<documents_array->len && wb.usage_paths->len<10000;i++) {
+  GeanyDocument *doc=g_ptr_array_index(documents_array,i);
+  if(!doc->is_valid || (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_buffer)) && doc!=document_get_current())) continue;
+  if(doc->file_name && g_hash_table_contains(seen,doc->file_name)) continue;
+  Location *next=g_new0(Location,1); next->path=g_strdup(doc->file_name); next->id=doc->id; g_ptr_array_add(wb.usage_paths,next);
+  if(next->path) g_hash_table_add(seen,next->path);
+ }
+ g_hash_table_destroy(seen); wb.usage_idle=g_idle_add(usage_step,NULL);
+}
+static void usage_cancel(GtkWidget *widget,gpointer data) { (void)widget; (void)data; stop_usage(); gtk_label_set_text(GTK_LABEL(wb.usage_status),"Search cancelled; partial results retained"); }
+static void usage_selected(GtkTreeSelection *selection,gpointer data) {
+ (void)data; GtkTreeIter iter; GtkTreeModel *model;
+ if(!gtk_tree_selection_get_selected(selection,&model,&iter)) return;
+ gchar *path,*digest; gulong line,start,end; guint id;
+ gtk_tree_model_get(model,&iter,USAGE_PATH,&path,USAGE_LINE,&line,USAGE_START,&start,USAGE_END,&end,USAGE_ID,&id,USAGE_DIGEST,&digest,-1);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE);
+ if(show_location(path,id,line,TRUE)) {
+  gchar *text=sci_get_contents(wb.preview,sci_get_length(wb.preview)+1),*actual=g_compute_checksum_for_string(G_CHECKSUM_SHA256,text,-1);
+  if(!g_strcmp0(actual,digest)) { SSM(wb.preview,SCI_SETSEL,start,end); SSM(wb.preview,SCI_VERTICALCENTRECARET,0,0); }
+  else ui_set_statusbar(TRUE,"Source changed after search; run the usage search again");
+  g_free(actual); g_free(text);
+ }
+ g_free(path); g_free(digest);
+}
+static void create_usage_browser(void) {
+ GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,4),*controls=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,2);
+ wb.usage_entry=gtk_search_entry_new(); gtk_entry_set_placeholder_text(GTK_ENTRY(wb.usage_entry),"Identifier usages (lexical)…");
+ wb.usage_status=gtk_label_new("Comments and strings included; no semantic scope resolution"); gtk_label_set_line_wrap(GTK_LABEL(wb.usage_status),TRUE);
+ wb.usage_buffer=gtk_check_button_new_with_label("Current buffer only");
+ GtkWidget *search=gtk_button_new_with_label("Search"),*cancel=gtk_button_new_with_label("Stop");
+ gtk_box_pack_start(GTK_BOX(controls),search,TRUE,TRUE,0); gtk_box_pack_start(GTK_BOX(controls),cancel,FALSE,FALSE,0);
+ wb.matches=gtk_list_store_new(USAGE_COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG,G_TYPE_ULONG,G_TYPE_ULONG,G_TYPE_UINT,G_TYPE_STRING);
+ wb.usage_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(wb.matches));
+ gtk_tree_view_append_column(GTK_TREE_VIEW(wb.usage_view),gtk_tree_view_column_new_with_attributes("File",gtk_cell_renderer_text_new(),"text",USAGE_DISPLAY,NULL));
+ gtk_tree_view_append_column(GTK_TREE_VIEW(wb.usage_view),gtk_tree_view_column_new_with_attributes("Line",gtk_cell_renderer_text_new(),"text",USAGE_LINE,NULL));
+ GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),wb.usage_view);
+ gtk_box_pack_start(GTK_BOX(box),wb.usage_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_buffer,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),controls,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_status,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
+ gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),box,gtk_label_new("Usages"));
+ g_signal_connect(search,"clicked",G_CALLBACK(usage_start),NULL); g_signal_connect(cancel,"clicked",G_CALLBACK(usage_cancel),NULL); g_signal_connect(wb.usage_entry,"activate",G_CALLBACK(usage_start),NULL);
+ g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.usage_view)),"changed",G_CALLBACK(usage_selected),NULL); g_signal_connect(wb.usage_view,"row-activated",G_CALLBACK(browser_activated),NULL);
+ gtk_widget_show_all(box);
+}
 static void create_browser(void) {
  wb.browser=gtk_box_new(GTK_ORIENTATION_VERTICAL,4); wb.symbol_entry=gtk_search_entry_new();
  gtk_entry_set_placeholder_text(GTK_ENTRY(wb.symbol_entry),"Find project symbol…");
@@ -343,11 +432,12 @@ void insight_workbench_init(void) {
  GtkWidget *existing=ui_lookup_widget(main_widgets.window,"vpaned1");
  GtkWidget *parent=gtk_widget_get_parent(existing); gint position=0;
  gtk_container_child_get(GTK_CONTAINER(parent),existing,"position",&position,NULL);
+ wb.usage_paths=g_ptr_array_new_with_free_func(location_free);
  wb.frames=g_ptr_array_new_with_free_func(frame_free); wb.files=g_ptr_array_new_with_free_func(g_free);
  wb.base=insight_index_new(); wb.index=insight_index_new();
  wb.definitions=g_ptr_array_new_with_free_func(location_free);
  wb.history=g_ptr_array_new_with_free_func(location_free); wb.history_position=-1;
- create_browser(); create_files_browser();
+ create_browser(); create_files_browser(); create_usage_browser();
  wb.pane=gtk_paned_new(GTK_ORIENTATION_VERTICAL);
  wb.box=gtk_box_new(GTK_ORIENTATION_VERTICAL,2);
  wb.title=gtk_label_new("Context — integrated source navigation");
@@ -394,11 +484,13 @@ void insight_workbench_init(void) {
 }
 void insight_workbench_finalize(void) {
  if(wb.refresh) g_source_remove(wb.refresh);
+ stop_usage(); g_ptr_array_free(wb.usage_paths,TRUE);
  stop_scan(); g_ptr_array_free(wb.frames,TRUE); g_ptr_array_free(wb.files,TRUE); g_free(wb.root);
  g_free(wb.source_path);
  insight_index_free(wb.base); insight_index_free(wb.index);
  if(wb.symbols) g_object_unref(wb.symbols);
  if(wb.file_store) g_object_unref(wb.file_store);
+ if(wb.matches) g_object_unref(wb.matches);
  if(wb.history) g_ptr_array_free(wb.history,TRUE);
  if(wb.definitions) g_ptr_array_free(wb.definitions,TRUE);
  memset(&wb,0,sizeof wb);
