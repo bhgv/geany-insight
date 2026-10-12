@@ -21,8 +21,13 @@ typedef struct {
  guint refresh;
 } Workbench;
 static Workbench wb;
-static void render_source(const char *text,gulong line) {
+static void render_source(const char *text,GeanyFiletype *filetype,gulong line) {
+ highlighting_set_styles(wb.preview,filetype ? filetype : filetypes[GEANY_FILETYPES_NONE]);
  sci_set_readonly(wb.preview,FALSE); sci_set_text(wb.preview,text);
+ SSM(wb.preview,SCI_COLOURISE,0,-1);
+ sci_set_line_numbers(wb.preview,TRUE);
+ SSM(wb.preview,SCI_SETCARETLINEVISIBLE,TRUE,0);
+ SSM(wb.preview,SCI_SETCARETLINEBACK,0xe9f0ff,0);
  SSM(wb.preview,SCI_EMPTYUNDOBUFFER,0,0); sci_set_readonly(wb.preview,TRUE);
  gint target=(gint)MIN(line ? line-1 : 0,(gulong)MAX(0,sci_get_line_count(wb.preview)-1));
  SSM(wb.preview,SCI_GOTOLINE,target,0);
@@ -31,12 +36,12 @@ static void render_source(const char *text,gulong line) {
 void insight_workbench_refresh(void) {
  if(!wb.preview) return;
  GeanyDocument *doc=document_get_current();
- if(!doc) { render_source("",1); return; }
+ if(!doc) { render_source("",NULL,1); return; }
  gint length=sci_get_length(doc->editor->sci);
  if(length>2*1024*1024) { gtk_label_set_text(GTK_LABEL(wb.title),"Context: file exceeds 2 MiB"); return; }
  gchar *text=sci_get_contents(doc->editor->sci,length+1);
  if(text && g_utf8_validate(text,length,NULL) && !memchr(text,0,(gsize)length))
-  render_source(text,(gulong)sci_get_current_line(doc->editor->sci)+1);
+  render_source(text,doc->file_type,(gulong)sci_get_current_line(doc->editor->sci)+1);
  g_free(text);
 }
 void insight_workbench_init(void) {
