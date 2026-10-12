@@ -41,6 +41,10 @@ int main(void) {
  host.text=multiline;
  const char *matches="local r,n=editor.occurrences('foo',2); assert(n==3 and #r==2 and r[2].line==2 and r[2].column==0); local u,t=editor.occurrences('имя'); assert(t==2 and u[1].line==4 and u[2].column==16)";
  assert(insight_run(&host,matches,strlen(matches),error,sizeof error)==0);
+ const char *paged="local r,n=editor.occurrences('foo',1,1); assert(n==3 and #r==1 and r[1].line==2); local e,t=editor.occurrences('foo',1,10); assert(t==3 and #e==0)";
+ assert(insight_run(&host,paged,strlen(paged),error,sizeof error)==0);
+ assert(run("editor.occurrences('hello',1,-1)",error)==1);
+ assert(run("editor.occurrences(string.char(255))",error)==1);
  insight_index_free(index);
  assert(run("local function inner() error('boom') end; inner()",error)==1 && strstr(error,"stack traceback"));
  assert(insight_run(NULL,"",0,error,sizeof error)==2);

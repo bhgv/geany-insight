@@ -159,15 +159,17 @@ static int text(lua_State *L) {
 static int occurrences(lua_State *L) {
  size_t n; const char *name=luaL_checklstring(L,1,&n);
  lua_Integer limit=luaL_optinteger(L,2,1000);
- if(limit<1 || limit>10000) return luaL_error(L,"invalid result limit");
+ lua_Integer offset=luaL_optinteger(L,3,0);
+ if(limit<1 || limit>10000 || offset<0 || (lua_Unsigned)offset>SIZE_MAX) return luaL_error(L,"invalid result limit or offset");
  const InsightHost *h=active_host(L);
  const char *source=h->text ? h->text(h->context) : NULL;
  if(!source) return luaL_error(L,"no active document");
  InsightOccurrence *found=lua_newuserdatauv(L,(size_t)limit*sizeof *found,0);
  size_t total=0;
- if(!insight_occurrences_find(source,strlen(source),name,n,0,found,(size_t)limit,&total))
+ if(!insight_occurrences_find(source,strlen(source),name,n,(size_t)offset,found,(size_t)limit,&total))
   return luaL_error(L,"invalid UTF-8 identifier or document (maximum 2 MiB)");
- size_t count=total<(size_t)limit ? total : (size_t)limit;
+ size_t count=total>(size_t)offset ? total-(size_t)offset : 0;
+ if(count>(size_t)limit) count=(size_t)limit;
  lua_createtable(L,(int)count,0);
  for(size_t i=0;i<count;i++) {
   lua_createtable(L,0,4);
