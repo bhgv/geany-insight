@@ -39,7 +39,8 @@ typedef struct {
  guint refresh,source_id; gboolean context_visible;
  gchar *prefs_path;
  InsightExtensions *extensions; gboolean lua_running;
- GtkWidget *lua_menu;
+ GtkWidget *lua_menu,*lua_commands,*lua_item,*palette_item;
+ GtkAccelGroup *lua_accels;
  InsightIndex *base,*index;
  GPtrArray *frames,*files; gchar *root,*cache_path; guint scan,parsed,skipped;
  gchar *source_path; gulong source_line;
@@ -103,7 +104,8 @@ static void restore_index_cache(void) {
  size_t count=insight_index_file_count(index);
  if(count!=SIZE_MAX && count<=10000) {
   const char **paths=g_new(const char *,count); insight_index_files(index,"",0,paths,count);
-  for(size_t i=0;i<count;i++) g_ptr_array_add(wb.files,g_strdup(paths[i])); g_free(paths);
+  for(size_t i=0;i<count;i++) g_ptr_array_add(wb.files,g_strdup(paths[i]));
+  g_free(paths);
  }
 }
 static gboolean scan_step(gpointer data) {
@@ -541,15 +543,69 @@ static void reload_native_script(GtkMenuItem *item,gpointer data) {
  if(ok) native_commands_rebuild();
  else { ui_set_statusbar(TRUE,"Lua: %s",error ? error->message : "unable to load extension"); g_clear_error(&error); }
 }
-static void native_commands_rebuild(void) { }
+static void invoke_native_command(GtkMenuItem *item,gpointer data) {
+ (void)data; execute_native(g_object_get_data(G_OBJECT(item),"native-command-id"),NULL,0);
+}
+typedef struct { GtkListStore *store; GtkWidget *view; } NativePalette;
+static void native_palette_filter(GtkEditable *entry,gpointer data) {
+ NativePalette *palette=data; gtk_list_store_clear(palette->store);
+ gchar *needle=g_utf8_casefold(gtk_entry_get_text(GTK_ENTRY(entry)),-1);
+ InsightSession *session=insight_extensions_session(wb.extensions);
+ for(size_t i=0;i<insight_session_command_count(session);i++) {
+  const char *id=insight_session_command_name(session,i),*label=insight_session_command_label(session,i);
+  if(!g_utf8_validate(label,-1,NULL)) label=id;
+  gchar *text=g_strconcat(label," ",id,NULL),*folded=g_utf8_casefold(text,-1);
+  if(strstr(folded,needle)) { GtkTreeIter iter; gtk_list_store_append(palette->store,&iter); gtk_list_store_set(palette->store,&iter,0,label,1,id,-1); }
+  g_free(text); g_free(folded);
+ }
+ g_free(needle); GtkTreeIter first;
+ if(gtk_tree_model_get_iter_first(GTK_TREE_MODEL(palette->store),&first)) gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(palette->view)),&first);
+}
+static void palette_activate(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) {
+ (void)view; (void)path; (void)column; gtk_dialog_response(GTK_DIALOG(data),GTK_RESPONSE_ACCEPT);
+}
+static void show_native_palette(GtkMenuItem *item,gpointer data) {
+ (void)item; (void)data; if(wb.lua_running) return;
+ GtkWidget *dialog=gtk_dialog_new_with_buttons("Lua command palette",GTK_WINDOW(main_widgets.window),GTK_DIALOG_DESTROY_WITH_PARENT,"Cancel",GTK_RESPONSE_CANCEL,"Run",GTK_RESPONSE_ACCEPT,NULL);
+ gtk_window_set_default_size(GTK_WINDOW(dialog),650,400); gtk_dialog_set_default_response(GTK_DIALOG(dialog),GTK_RESPONSE_ACCEPT);
+ GtkWidget *entry=gtk_search_entry_new(),*box=gtk_dialog_get_content_area(GTK_DIALOG(dialog)); gtk_entry_set_activates_default(GTK_ENTRY(entry),TRUE);
+ GtkListStore *store=gtk_list_store_new(2,G_TYPE_STRING,G_TYPE_STRING); GtkWidget *view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
+ for(int i=0;i<2;i++) gtk_tree_view_append_column(GTK_TREE_VIEW(view),gtk_tree_view_column_new_with_attributes(i ? "ID" : "Command",gtk_cell_renderer_text_new(),"text",i,NULL));
+ GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),view);
+ gtk_box_pack_start(GTK_BOX(box),entry,FALSE,FALSE,4); gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,4);
+ NativePalette palette={store,view}; g_signal_connect(entry,"changed",G_CALLBACK(native_palette_filter),&palette); g_signal_connect(view,"row-activated",G_CALLBACK(palette_activate),dialog);
+ native_palette_filter(GTK_EDITABLE(entry),&palette); gtk_widget_show_all(dialog); gchar *id=NULL;
+ if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) { GtkTreeIter iter; if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),NULL,&iter)) gtk_tree_model_get(GTK_TREE_MODEL(store),&iter,1,&id,-1); }
+ gtk_widget_destroy(dialog); g_object_unref(store); if(id) execute_native(id,NULL,0); g_free(id);
+}
+static void native_commands_rebuild(void) {
+ if(!wb.lua_commands) return;
+ if(wb.lua_accels) { gtk_window_remove_accel_group(GTK_WINDOW(main_widgets.window),wb.lua_accels); g_object_unref(wb.lua_accels); }
+ wb.lua_accels=gtk_accel_group_new(); gtk_window_add_accel_group(GTK_WINDOW(main_widgets.window),wb.lua_accels);
+ guint palette_key; GdkModifierType palette_mods; gtk_accelerator_parse("<Primary><Shift>p",&palette_key,&palette_mods);
+ gtk_widget_add_accelerator(wb.palette_item,"activate",wb.lua_accels,palette_key,palette_mods,GTK_ACCEL_VISIBLE);
+ GList *children=gtk_container_get_children(GTK_CONTAINER(wb.lua_commands)); for(GList *p=children;p;p=p->next) gtk_widget_destroy(p->data); g_list_free(children);
+ guint keys[128]={0}; GdkModifierType modifiers[128]={0}; InsightSession *session=insight_extensions_session(wb.extensions);
+ for(size_t i=0;i<insight_session_command_count(session);i++) {
+  const char *id=insight_session_command_name(session,i),*label=insight_session_command_label(session,i),*shortcut=insight_session_command_shortcut(session,i);
+  GtkWidget *item=gtk_menu_item_new_with_label(g_utf8_validate(label,-1,NULL) ? label : id);
+  g_object_set_data_full(G_OBJECT(item),"native-command-id",g_strdup(id),g_free); gtk_container_add(GTK_CONTAINER(wb.lua_commands),item); g_signal_connect(item,"activate",G_CALLBACK(invoke_native_command),NULL);
+  guint key; GdkModifierType mods; gtk_accelerator_parse(shortcut,&key,&mods); gboolean duplicate=key==palette_key && mods==palette_mods;
+  for(size_t j=0;j<i;j++) if(keys[j]==key && modifiers[j]==mods) duplicate=TRUE;
+  if(key && !duplicate && gtk_accelerator_valid(key,mods)) { gtk_widget_add_accelerator(item,"activate",wb.lua_accels,key,mods,GTK_ACCEL_VISIBLE); keys[i]=key; modifiers[i]=mods; }
+ }
+ gtk_widget_show_all(wb.lua_commands);
+}
 static void create_native_lua(void) {
  gchar *settings=g_build_filename(app->configdir,"insight","lua-extension.conf",NULL);
  wb.extensions=insight_extensions_new(settings); g_free(settings); GError *error=NULL;
  if(!insight_extensions_restore(wb.extensions,&error)) { ui_set_statusbar(TRUE,"Lua startup: %s",error->message); g_clear_error(&error); }
- GtkWidget *item=gtk_menu_item_new_with_label("Lua scripting"); wb.lua_menu=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(item),wb.lua_menu);
+ GtkWidget *item=gtk_menu_item_new_with_label("Lua scripting"); wb.lua_item=item; wb.lua_menu=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(item),wb.lua_menu);
  const char *labels[]={"Load extension…","Reload saved extension","Unload extension","Run script…"};
  GCallback actions[]={G_CALLBACK(choose_native_script),G_CALLBACK(reload_native_script),G_CALLBACK(reload_native_script),G_CALLBACK(choose_native_script)};
  for(guint i=0;i<4;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(labels[i]); gtk_container_add(GTK_CONTAINER(wb.lua_menu),entry); g_signal_connect(entry,"activate",actions[i],GINT_TO_POINTER(i>=2)); }
+ GtkWidget *commands=gtk_menu_item_new_with_label("Commands"); wb.lua_commands=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(commands),wb.lua_commands); gtk_container_add(GTK_CONTAINER(wb.lua_menu),commands);
+ wb.palette_item=gtk_menu_item_new_with_label("Command palette…"); g_signal_connect(wb.palette_item,"activate",G_CALLBACK(show_native_palette),NULL); gtk_container_add(GTK_CONTAINER(wb.lua_menu),wb.palette_item);
  gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),item); gtk_widget_show_all(item); native_commands_rebuild();
 }
 static void save_workbench_settings(void) {
@@ -658,6 +714,7 @@ void insight_workbench_init(void) {
 }
 void insight_workbench_finalize(void) {
  save_workbench_settings();
+ if(wb.lua_accels) { gtk_window_remove_accel_group(GTK_WINDOW(main_widgets.window),wb.lua_accels); g_object_unref(wb.lua_accels); }
  insight_extensions_free(wb.extensions);
  if(wb.refresh) g_source_remove(wb.refresh);
  g_free(wb.prefs_path);
