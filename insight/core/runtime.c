@@ -194,15 +194,32 @@ static int replace(lua_State *L) {
  if (!h->replace_selection(h->context,s)) return luaL_error(L,"replacement failed");
  return 0;
 }
+static const char *query_string(lua_State *L,int table,const char *key) {
+ lua_getfield(L,table,key);
+ size_t length=0; const char *value=lua_isnil(L,-1) ? "" : luaL_checklstring(L,-1,&length);
+ if(length>16384 || memchr(value,0,length)) luaL_error(L,"invalid query field %s",key);
+ return value; /* Keep field rooted on stack for the lifetime of query. */
+}
+static lua_Integer query_integer(lua_State *L,int table,const char *key,lua_Integer fallback) {
+ lua_getfield(L,table,key); lua_Integer value=lua_isnil(L,-1) ? fallback : luaL_checkinteger(L,-1); lua_pop(L,1); return value;
+}
 static int symbols(lua_State *L) {
  size_t length; const char *query=luaL_checklstring(L,1,&length);
  if(memchr(query,0,length)) return luaL_error(L,"embedded NUL is unsupported");
  const InsightIndex *index=active_host(L)->index;
  if(!index) return luaL_error(L,"project index unavailable");
  int exact=lua_toboolean(L,2);
- const InsightSymbol *found[256];
- size_t total=insight_index_find(index,query,exact,found,256);
- size_t count=total<256 ? total : 256;
+ const char *scope="",*kind="",*path=""; lua_Integer limit=256,offset=0;
+ if(!lua_isnoneornil(L,3)) {
+  luaL_checktype(L,3,LUA_TTABLE);
+  scope=query_string(L,3,"scope"); kind=query_string(L,3,"kind"); path=query_string(L,3,"path");
+  limit=query_integer(L,3,"limit",256); offset=query_integer(L,3,"offset",0);
+ }
+ if(limit<1 || limit>1024 || offset<0 || (lua_Unsigned)offset>SIZE_MAX) return luaL_error(L,"invalid symbol page");
+ const InsightSymbol **found=lua_newuserdatauv(L,(size_t)limit*sizeof *found,0);
+ size_t total=insight_index_query(index,query,exact,scope,kind,path,(size_t)offset,found,(size_t)limit);
+ size_t count=total>(size_t)offset ? total-(size_t)offset : 0;
+ if(count>(size_t)limit) count=(size_t)limit;
  lua_createtable(L,(int)count,0);
  for(size_t n=0;n<count;n++) {
   lua_createtable(L,0,5);

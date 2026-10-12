@@ -40,6 +40,8 @@ int main(void) {
  assert(insight_run(&host,script,strlen(script),error,sizeof error)==0);
  const char *file_query="local f,n=project.files('project/'); assert(n==1 and f[1]=='project/a.cpp'); local e,t=project.files('',1,1); assert(t==1 and #e==0)";
  assert(insight_run(&host,file_query,strlen(file_query),error,sizeof error)==0);
+ const char *advanced="local s,n=project.symbols('foo',true,{scope='namespace',kind='f',path='project/a.cpp',limit=1}); assert(n==1 and #s==1); local e,t=project.symbols('',false,{path='absent'}); assert(t==0 and #e==0)";
+ assert(insight_run(&host,advanced,strlen(advanced),error,sizeof error)==0);
  host.text=multiline;
  const char *matches="local r,n=editor.occurrences('foo',2); assert(n==3 and #r==2 and r[2].line==2 and r[2].column==0); local u,t=editor.occurrences('имя'); assert(t==2 and u[1].line==4 and u[2].column==16)";
  assert(insight_run(&host,matches,strlen(matches),error,sizeof error)==0);
