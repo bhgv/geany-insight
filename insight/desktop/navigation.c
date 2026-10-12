@@ -2,6 +2,7 @@
 #include "navigation.h"
 #include "tm_tag.h"
 #include "index_cache.h"
+#include "context.h"
 #include <stdlib.h>
 #include <glib/gstdio.h>
 #include <sys/stat.h>
@@ -149,12 +150,12 @@ static void cancel(GtkMenuItem *item,gpointer data) {
  ui_set_statusbar(TRUE,"Insight: scan cancelled; partial index retained");
 }
 enum { NAME, SCOPE, PATH, LINE, KIND, COLUMNS };
-typedef struct { Navigation *n; GtkListStore *store; GtkWidget *status; } Search;
+typedef struct { Navigation *n; GtkListStore *store; GtkWidget *status; int exact; } Search;
 static void filter(GtkEditable *entry,gpointer data) {
  Search *s=data; if(s->n->idle) refresh_open(s->n);
  const char *query=gtk_entry_get_text(GTK_ENTRY(entry));
  const InsightSymbol *found[500];
- size_t total=insight_index_find(s->n->index,query,0,found,500);
+ size_t total=insight_index_find(s->n->index,query,s->exact,found,500);
  gtk_list_store_clear(s->store);
  for(size_t j=0;j<total && j<500;j++) {
   GtkTreeIter iter; gtk_list_store_append(s->store,&iter);
@@ -168,8 +169,8 @@ static void filter(GtkEditable *entry,gpointer data) {
 static void row_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) {
  (void)view; (void)path; (void)column; gtk_dialog_response(GTK_DIALOG(data),GTK_RESPONSE_ACCEPT);
 }
-static void find_symbol(GtkMenuItem *item,gpointer data) {
- (void)item; Navigation *n=data; refresh_open(n);
+static void show_search(Navigation *n,const char *initial,int exact) {
+ refresh_open(n);
  GtkWidget *dialog=gtk_dialog_new_with_buttons("Find project symbol",
  GTK_WINDOW(n->plugin->geany_data->main_widgets->window),GTK_DIALOG_DESTROY_WITH_PARENT,
  "Cancel",GTK_RESPONSE_CANCEL,"Go to",GTK_RESPONSE_ACCEPT,NULL);
@@ -188,7 +189,8 @@ static void find_symbol(GtkMenuItem *item,gpointer data) {
  gtk_box_pack_start(GTK_BOX(box),entry,FALSE,FALSE,4);
  gtk_box_pack_start(GTK_BOX(box),status,FALSE,FALSE,4);
  gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,4);
- Search search={n,store,status}; g_signal_connect(entry,"changed",G_CALLBACK(filter),&search);
+ gtk_entry_set_text(GTK_ENTRY(entry),initial ? initial : "");
+ Search search={n,store,status,exact}; g_signal_connect(entry,"changed",G_CALLBACK(filter),&search);
  g_signal_connect(view,"row-activated",G_CALLBACK(row_activated),dialog);
  filter(GTK_EDITABLE(entry),&search); gtk_widget_show_all(dialog);
  if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) {
@@ -206,6 +208,30 @@ static void find_symbol(GtkMenuItem *item,gpointer data) {
  }
  gtk_widget_destroy(dialog); g_object_unref(store);
 }
+static void find_symbol(GtkMenuItem *item,gpointer data) {
+ (void)item; show_search(data,NULL,0);
+}
+void navigation_find_current(Navigation *n) {
+ GeanyDocument *current=document_get_current();
+ if(!current) { ui_set_statusbar(TRUE,"Insight: no active document"); return; }
+ gchar *text=sci_get_contents(current->editor->sci,sci_get_length(current->editor->sci)+1);
+ size_t start,end;
+ if(!insight_word_at(text,strlen(text),(size_t)sci_get_current_position(current->editor->sci),&start,&end) || end-start>255) {
+  g_free(text); ui_set_statusbar(TRUE,"Insight: no identifier under cursor"); return;
+ }
+ gchar *name=g_strndup(text+start,end-start); g_free(text); refresh_open(n);
+ const InsightSymbol *found[1]; size_t count=insight_index_find(n->index,name,1,found,1);
+ if(count==1) {
+  gchar *path=utils_get_locale_from_utf8(found[0]->path); gulong line=found[0]->line;
+  GeanyDocument *next=document_open_file(path,FALSE,NULL,NULL);
+  if(next && line<=INT_MAX) navqueue_goto_line(current,next,(gint)line);
+  else ui_set_statusbar(TRUE,"Insight: unable to navigate to symbol");
+  g_free(path);
+ } else if(count>1) show_search(n,name,1);
+ else ui_set_statusbar(TRUE,"Insight: symbol not found: %s",name);
+ g_free(name);
+}
+static void find_current(GtkMenuItem *item,gpointer data) { (void)item; navigation_find_current(data); }
 Navigation *navigation_new(GeanyPlugin *plugin) {
  Navigation *n=g_new0(Navigation,1); n->plugin=plugin;
  n->base=insight_index_new(); n->frames=g_ptr_array_new_with_free_func(frame_free);
@@ -221,8 +247,8 @@ Navigation *navigation_new(GeanyPlugin *plugin) {
  if(!n->index) { navigation_free(n); return NULL; }
  n->menu=gtk_menu_item_new_with_label("Insight: Project navigation");
  GtkWidget *submenu=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(n->menu),submenu);
- const char *labels[]={"Index source directory…","Reindex current directory","Find symbol…","Cancel indexing"};
- GCallback callbacks[]={G_CALLBACK(choose_root),G_CALLBACK(reindex),G_CALLBACK(find_symbol),G_CALLBACK(cancel)};
+ const char *labels[]={"Index source directory…","Reindex current directory","Find symbol…","Find identifier under cursor","Cancel indexing"};
+ GCallback callbacks[]={G_CALLBACK(choose_root),G_CALLBACK(reindex),G_CALLBACK(find_symbol),G_CALLBACK(find_current),G_CALLBACK(cancel)};
  for(guint j=0;j<G_N_ELEMENTS(labels);j++) {
   GtkWidget *item=gtk_menu_item_new_with_label(labels[j]);
   gtk_container_add(GTK_CONTAINER(submenu),item); g_signal_connect(item,"activate",callbacks[j],n);

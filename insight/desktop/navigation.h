@@ -7,4 +7,5 @@ typedef struct Navigation Navigation;
 Navigation *navigation_new(GeanyPlugin *);
 void navigation_free(Navigation *);
 const InsightIndex *navigation_index(Navigation *);
+void navigation_find_current(Navigation *);
 #endif
