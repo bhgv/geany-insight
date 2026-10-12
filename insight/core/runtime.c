@@ -78,6 +78,12 @@ static int save(lua_State *L) {
  if(!api->save_file || !api->save_file(write_host(L)->context)) return luaL_error(L,"cannot save named document");
  return 0;
 }
+static int filename(lua_State *L) {
+ const InsightEditorAPI *api=editor_api(L);
+ if(!api->filename) return luaL_error(L,"filename capability unavailable");
+ const char *name=api->filename(active_host(L)->context);
+ if(name) lua_pushstring(L,name); else lua_pushnil(L); return 1;
+}
 static int text(lua_State *L) {
  const InsightHost *h=active_host(L);
  const char *s=h->text(h->context);
@@ -187,6 +193,7 @@ static int setup(lua_State *L) {
  lua_pushcfunction(L,goto_line); lua_setfield(L,-2,"goto_line");
  lua_pushcfunction(L,open); lua_setfield(L,-2,"open");
  lua_pushcfunction(L,save); lua_setfield(L,-2,"save");
+ lua_pushcfunction(L,filename); lua_setfield(L,-2,"filename");
  lua_setglobal(L,"editor");
  lua_newtable(L); lua_pushcfunction(L,symbols); lua_setfield(L,-2,"symbols");
  lua_setglobal(L,"project");
