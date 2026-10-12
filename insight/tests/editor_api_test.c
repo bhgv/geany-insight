@@ -50,6 +50,8 @@ int main(void) {
  assert(run(&host,"editor.insert(1,'!'); assert(editor.text()=='h!XXo')",error)==0);
  host.read_only=1; assert(run(&host,"editor.insert(0,'x')",error)==1 && strstr(error,"read-only")); host.read_only=0;
  assert(run(&host,"editor.message('custom diagnostic')",error)==0 && !strcmp(displayed,"custom diagnostic"));
+ assert(run(&host,"assert(editor.has('open') and not editor.has('missing'))",error)==0);
+ host.read_only=1; assert(run(&host,"assert(not editor.has('insert') and editor.has('text'))",error)==0); host.read_only=0;
  host.api=NULL; assert(run(&host,"editor.position()",error)==1 && strstr(error,"unavailable"));
  puts("editor API: all checks passed"); return 0;
 }

@@ -17,7 +17,7 @@ int main(void) {
  assert(insight_session_command_name(session,0)==NULL);
  assert(insight_session_command_label(session,0)==NULL);
  const char *extension=
- "assert(INSIGHT_API_VERSION=='0.5'); local calls=0; local get=editor.text; "
+ "assert(INSIGHT_API_VERSION=='0.7'); local calls=0; local get=editor.text; "
  "commands.register('count','Count',function() calls=calls+1; editor.replace_selection(tostring(calls)) end,'<Primary><Alt>n'); "
  "commands.register('text','Text',function() editor.replace_selection(get()) end); "
  "commands.register('bad','Bad',function() error({}) end); "

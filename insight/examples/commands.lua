@@ -1,5 +1,5 @@
 -- Load through Tools → Insight: Lua commands → Load extension…
-assert(INSIGHT_API_VERSION == "0.5")
+assert(type(commands.register) == "function")
 
 commands.register("selection.uppercase", "Uppercase selection", function()
     editor.replace_selection(string.upper(editor.selection()))

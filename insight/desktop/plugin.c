@@ -71,6 +71,9 @@ static int message(void *ctx,const char *text) {
 }
 static const InsightEditorAPI host_api={.position=get_position,.goto_line=go_line,.message=message,.insert=insert,.replace_range=replace_range,.line_text=line_text,.line_count=line_count,.set_selection=set_selection,.selection_range=selection_range,.filename=filename,.save_file=save_file,.open_file=open_file};
 static void invoke_named_command(const char *name) {
+ if(insight_session_is_running(insight_extensions_session(extensions))) {
+  ui_set_statusbar(TRUE,"Lua: another command or event is running"); return;
+ }
  GeanyDocument *doc=document_get_current();
  if(!doc) { ui_set_statusbar(TRUE,"Lua: no active document"); return; }
  Host h={.doc=doc}; InsightHost host={.context=&h,.text=get_text,.selection=get_selection,.replace_selection=replace_selection,.index=navigation_index(navigation),.api=&host_api};
@@ -281,7 +284,7 @@ static void cleanup(GeanyPlugin *plugin,gpointer data) {
 }
 void geany_load_module(GeanyPlugin *plugin) {
  plugin->info->name="Insight Lua"; plugin->info->description="Shared embedded Lua editor runtime";
- plugin->info->version="0.6.0"; plugin->info->author="Insight contributors";
+ plugin->info->version="0.7.0"; plugin->info->author="Insight contributors";
  plugin->funcs->callbacks=callbacks;
  plugin->funcs->init=init; plugin->funcs->cleanup=cleanup;
  GEANY_PLUGIN_REGISTER(plugin,225);

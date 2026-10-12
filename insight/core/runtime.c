@@ -123,6 +123,32 @@ static int message(lua_State *L) {
  if(n>4096 || memchr(s,0,n) || !api->message || !api->message(active_host(L)->context,s)) return luaL_error(L,"cannot show message");
  return 0;
 }
+static int has(lua_State *L) {
+ size_t length; const char *name=luaL_checklstring(L,1,&length);
+ int available=0; const InsightHost *host=runtime(L)->host;
+ if(memchr(name,0,length)) { lua_pushboolean(L,0); return 1; }
+ if(!strcmp(name,"has")) available=1;
+ else if(host) {
+  if(!strcmp(name,"text")) available=host->text!=NULL;
+  else if(!strcmp(name,"selection")) available=host->selection!=NULL;
+  else if(!strcmp(name,"replace_selection")) available=host->replace_selection && !host->read_only;
+  else if(host->api) {
+   if(!strcmp(name,"position")) available=host->api->position!=NULL;
+   if(!strcmp(name,"goto_line")) available=host->api->goto_line!=NULL && !host->read_only;
+   if(!strcmp(name,"open")) available=host->api->open_file!=NULL && !host->read_only;
+   if(!strcmp(name,"save")) available=host->api->save_file!=NULL && !host->read_only;
+   if(!strcmp(name,"filename")) available=host->api->filename!=NULL;
+   if(!strcmp(name,"selection_range")) available=host->api->selection_range!=NULL;
+   if(!strcmp(name,"set_selection")) available=host->api->set_selection!=NULL && !host->read_only;
+   if(!strcmp(name,"line_count")) available=host->api->line_count!=NULL;
+   if(!strcmp(name,"line_text")) available=host->api->line_text!=NULL;
+   if(!strcmp(name,"replace_range")) available=host->api->replace_range!=NULL && !host->read_only;
+   if(!strcmp(name,"insert")) available=host->api->insert!=NULL && !host->read_only;
+   if(!strcmp(name,"message")) available=host->api->message!=NULL;
+  }
+ }
+ lua_pushboolean(L,available); return 1;
+}
 static int text(lua_State *L) {
  const InsightHost *h=active_host(L);
  const char *s=h->text(h->context);
@@ -249,6 +275,7 @@ static int setup(lua_State *L) {
  lua_pushcfunction(L,replace_range); lua_setfield(L,-2,"replace_range");
  lua_pushcfunction(L,insert); lua_setfield(L,-2,"insert");
  lua_pushcfunction(L,message); lua_setfield(L,-2,"message");
+ lua_pushcfunction(L,has); lua_setfield(L,-2,"has");
  lua_setglobal(L,"editor");
  lua_newtable(L); lua_pushcfunction(L,symbols); lua_setfield(L,-2,"symbols");
  lua_pushcfunction(L,stats); lua_setfield(L,-2,"stats");
@@ -256,7 +283,7 @@ static int setup(lua_State *L) {
  lua_newtable(L); lua_pushcfunction(L,register_command); lua_setfield(L,-2,"register");
  lua_setglobal(L,"commands");
  lua_newtable(L); lua_pushcfunction(L,on_event); lua_setfield(L,-2,"on"); lua_setglobal(L,"events");
- lua_pushliteral(L,"0.5"); lua_setglobal(L,"INSIGHT_API_VERSION"); return 0;
+ lua_pushliteral(L,"0.7"); lua_setglobal(L,"INSIGHT_API_VERSION"); return 0;
 }
 static int traceback(lua_State *L) {
  const char *message=lua_type(L,1)==LUA_TSTRING ? lua_tostring(L,1) : "Lua error (non-string value)";

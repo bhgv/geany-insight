@@ -29,3 +29,10 @@ commands_cmd=[os.environ.get('CC','cc'),'-std=c99','-O1','-g','-Wall','-Wextra',
 if os.environ.get('SANITIZE'): commands_cmd[1:1]=['-fsanitize='+os.environ['SANITIZE'],'-fno-omit-frame-pointer']
 subprocess.run(commands_cmd,check=True)
 subprocess.run([str(build/'commands_test')],check=True)
+
+for name in ['editor_api','events','context']:
+    sources=[str(root/'core/context.c')] if name=='context' else [str(root/'core/runtime.c'),str(root/'core/index.c'),*lua]
+    command=[os.environ.get('CC','cc'),'-std=c99','-O1','-g','-Wall','-Wextra','-Werror','-I'+str(root/'core'),'-I'+str(root/'vendor/lua'),*sources,str(root/'tests'/(name+'_test.c')),'-lm','-o',str(build/(name+'_test'))]
+    if os.environ.get('SANITIZE'): command[1:1]=['-fsanitize='+os.environ['SANITIZE'],'-fno-omit-frame-pointer']
+    subprocess.run(command,check=True)
+    subprocess.run([str(build/(name+'_test'))],check=True)
