@@ -92,3 +92,8 @@ options в `project.symbols` добавляет path/scope/kind/limit/offset.
 
 Постоянная нижняя панель встроена в libgeany, запускается без плагинов.
 Жизненный цикл подключён к libmain; это отдельная область от Messages.
+
+## Этап 34: native Scintilla preview
+
+Нижняя панель содержит отдельный read-only Scintilla с UTF-8 текстом текущего
+буфера, ограничением 2 МиБ и центрированием текущей строки.
