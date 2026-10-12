@@ -177,10 +177,18 @@ static void preview_selection(GtkTreeSelection *selection,gpointer data) {
  GtkTreeIter iter; GtkTreeModel *model;
  if(!gtk_tree_selection_get_selected(selection,&model,&iter)) { gtk_text_buffer_set_text(buffer,"",0); return; }
  gchar *path; gulong line; gtk_tree_model_get(model,&iter,PATH,&path,LINE,&line,-1);
- gchar *locale=utils_get_locale_from_utf8(path); g_free(path);
+ gchar *locale=utils_get_locale_from_utf8(path);
+ GeanyDocument *open=document_find_by_filename(path); g_free(path);
  char *source=NULL; gsize length=0; GError *error=NULL;
  size_t start,end,target_start,target_end; unsigned long first;
- if(!insight_read_source_file(locale,&source,&length,&error)) {
+ gboolean loaded;
+ if(open) {
+  gint size=sci_get_length(open->editor->sci);
+  if(size>2*1024*1024) { loaded=FALSE; g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Open buffer exceeds context size limit"); }
+  else { length=(gsize)size; source=sci_get_contents(open->editor->sci,size+1); loaded=source!=NULL;
+   if(!loaded) g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_FAILED,"Unable to read open buffer"); }
+ } else loaded=insight_read_source_file(locale,&source,&length,&error);
+ if(!loaded) {
   gtk_text_buffer_set_text(buffer,error->message,-1); g_error_free(error);
  } else if(!g_utf8_validate(source,(gssize)length,NULL) || memchr(source,0,length)) {
   gtk_text_buffer_set_text(buffer,"Context requires UTF-8 text without NUL",-1);
