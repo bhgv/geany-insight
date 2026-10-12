@@ -216,3 +216,18 @@ Native tag import выделен в тестируемый модуль: UTF-8, 
 движении курсора. Lua-события работают внутри редактора с read-only host и
 снимком индекса. Устаревшие строки/совпадения не дают подтверждённого перехода;
 закрытые документы и старые accelerators очищаются.
+
+## Этап 56: завершение native серии и API 0.8
+
+Завершены все 30 этапов 27–56. Main editor Primary-click использует native
+проектный resolver. Клавиши поиска не конфликтуют с Print/Ctrl+T upstream.
+Предпочтение реальной function-definition проверяется тестом adapter-а.
+Добавлены native backend test в Meson/CMake, описание нового интерфейса,
+пример Lua и Autotools source metadata. API версии 0.8 сохраняет старые вызовы.
+Финальный Git-коммит содержит многострочное описание реализации и проверок.
+
+Проверки: full Linux x64 Geany; core 9/9 CMake+UBSan и compiler runner;
+native adapter в Meson и с UBSan; cache/extensions+UBSan; JNI JDK17 -Xcheck:jni;
+восемь parser-примеров; Windows x64 native objects с -Werror. GUI не проверен
+на целевой машине. Новые APK и бинарные Windows/Linux архивы не выпускались.
+Следующий крупный шаг — GUI-проверка и семантический backend, не новые addons.

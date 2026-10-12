@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile Insight module and eight core test executables against an explicit SDK.
+"""Compile Insight module and nine core test executables against an explicit SDK.
 
 No downloads or editor installation. On Linux, executes the tests. On Windows
 cross builds, produces .exe checks for Run-Checks.ps1 on the target machine.

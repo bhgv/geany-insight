@@ -201,3 +201,81 @@ fix-ubuntu-libdir:
 	fi
 
 install-exec-hook: fix-ubuntu-libdir
+
+# Integrated Insight workbench and embedded Lua (no plugin needed).
+AM_CPPFLAGS += -I$(top_srcdir)/insight/core -I$(top_srcdir)/insight/vendor/lua
+libgeany_la_SOURCES += \
+	insight-workbench.c \
+	insight-workbench.h \
+	insight-index.c \
+	insight-index.h \
+	../insight/core/context.c \
+	../insight/core/context.h \
+	../insight/core/document.c \
+	../insight/core/document.h \
+	../insight/core/index.c \
+	../insight/core/index.h \
+	../insight/core/occurrences.c \
+	../insight/core/occurrences.h \
+	../insight/core/runtime.c \
+	../insight/core/runtime.h \
+	../insight/desktop/index_cache.c \
+	../insight/desktop/index_cache.h \
+	../insight/desktop/extensions.c \
+	../insight/desktop/extensions.h \
+	../insight/vendor/lua/lapi.c \
+	../insight/vendor/lua/lapi.h \
+	../insight/vendor/lua/lauxlib.c \
+	../insight/vendor/lua/lauxlib.h \
+	../insight/vendor/lua/lbaselib.c \
+	../insight/vendor/lua/lcode.c \
+	../insight/vendor/lua/lcode.h \
+	../insight/vendor/lua/lctype.c \
+	../insight/vendor/lua/lctype.h \
+	../insight/vendor/lua/ldebug.c \
+	../insight/vendor/lua/ldebug.h \
+	../insight/vendor/lua/ldo.c \
+	../insight/vendor/lua/ldo.h \
+	../insight/vendor/lua/ldump.c \
+	../insight/vendor/lua/lfunc.c \
+	../insight/vendor/lua/lfunc.h \
+	../insight/vendor/lua/lgc.c \
+	../insight/vendor/lua/lgc.h \
+	../insight/vendor/lua/ljumptab.h \
+	../insight/vendor/lua/llex.c \
+	../insight/vendor/lua/llex.h \
+	../insight/vendor/lua/llimits.h \
+	../insight/vendor/lua/lmathlib.c \
+	../insight/vendor/lua/lmem.c \
+	../insight/vendor/lua/lmem.h \
+	../insight/vendor/lua/lobject.c \
+	../insight/vendor/lua/lobject.h \
+	../insight/vendor/lua/lopcodes.c \
+	../insight/vendor/lua/lopcodes.h \
+	../insight/vendor/lua/lopnames.h \
+	../insight/vendor/lua/lparser.c \
+	../insight/vendor/lua/lparser.h \
+	../insight/vendor/lua/lprefix.h \
+	../insight/vendor/lua/lstate.c \
+	../insight/vendor/lua/lstate.h \
+	../insight/vendor/lua/lstring.c \
+	../insight/vendor/lua/lstring.h \
+	../insight/vendor/lua/lstrlib.c \
+	../insight/vendor/lua/ltable.c \
+	../insight/vendor/lua/ltable.h \
+	../insight/vendor/lua/ltablib.c \
+	../insight/vendor/lua/ltests.c \
+	../insight/vendor/lua/ltests.h \
+	../insight/vendor/lua/ltm.c \
+	../insight/vendor/lua/ltm.h \
+	../insight/vendor/lua/lua.h \
+	../insight/vendor/lua/luaconf.h \
+	../insight/vendor/lua/lualib.h \
+	../insight/vendor/lua/lundump.c \
+	../insight/vendor/lua/lundump.h \
+	../insight/vendor/lua/lutf8lib.c \
+	../insight/vendor/lua/lvm.c \
+	../insight/vendor/lua/lvm.h \
+	../insight/vendor/lua/lzio.c \
+	../insight/vendor/lua/lzio.h
+libgeany_la_LIBADD += -lm

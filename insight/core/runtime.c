@@ -344,7 +344,7 @@ static int setup(lua_State *L) {
  lua_newtable(L); lua_pushcfunction(L,register_command); lua_setfield(L,-2,"register");
  lua_setglobal(L,"commands");
  lua_newtable(L); lua_pushcfunction(L,on_event); lua_setfield(L,-2,"on"); lua_setglobal(L,"events");
- lua_pushliteral(L,"0.7"); lua_setglobal(L,"INSIGHT_API_VERSION"); return 0;
+ lua_pushliteral(L,"0.8"); lua_setglobal(L,"INSIGHT_API_VERSION"); return 0;
 }
 static int traceback(lua_State *L) {
  const char *message=lua_type(L,1)==LUA_TSTRING ? lua_tostring(L,1) : "Lua error (non-string value)";

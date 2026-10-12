@@ -319,7 +319,7 @@ static gboolean on_editor_button_press_event(GtkWidget *widget, GdkEventButton *
 		{
 			sci_set_current_position(editor->sci, editor_info.click_pos, FALSE);
 
-			if (!symbols_goto_tag(doc, editor_info.click_pos, TRUE))
+			if (!insight_workbench_goto_definition() && !symbols_goto_tag(doc, editor_info.click_pos, TRUE))
 				keybindings_send_command(GEANY_KEY_GROUP_GOTO, GEANY_KEYS_GOTO_MATCHINGBRACE);
 			return TRUE;
 		}

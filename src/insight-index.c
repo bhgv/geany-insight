@@ -19,5 +19,5 @@ gboolean insight_native_import(InsightIndex *index,TMSourceFile *file,const char
  g_free(kinds); g_free(symbols); return ok;
 }
 guint insight_native_definition_rank(const InsightSymbol *symbol,const char *path) {
- return (!g_strcmp0(symbol->path,path) ? 4u : 0u) + (!strcmp(symbol->kind,"f") ? 2u : 0u);
+ return (!g_strcmp0(symbol->path,path) ? 4u : 0u) + (!strcmp(symbol->kind,"f") ? 8u : 0u);
 }

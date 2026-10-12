@@ -284,7 +284,7 @@ static void cleanup(GeanyPlugin *plugin,gpointer data) {
 }
 void geany_load_module(GeanyPlugin *plugin) {
  plugin->info->name="Insight Lua"; plugin->info->description="Shared embedded Lua editor runtime";
- plugin->info->version="0.7.0"; plugin->info->author="Insight contributors";
+ plugin->info->version="0.8.0"; plugin->info->author="Insight contributors";
  plugin->funcs->callbacks=callbacks;
  plugin->funcs->init=init; plugin->funcs->cleanup=cleanup;
  GEANY_PLUGIN_REGISTER(plugin,225);

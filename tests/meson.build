@@ -389,3 +389,10 @@ test('ctags/processing-order', runner,
 test('utils', executable('test_utils', 'test_utils.c', dependencies: test_deps))
 test('sidebar', executable('test_sidebar', 'test_sidebar.c', dependencies: test_deps))
 test('encodings', executable('test_encodings', 'test_encodings.c', dependencies: test_deps))
+
+# Native Insight backend tests: no display or plugin required.
+insight_index_test = executable('test_insight_native_index',
+ '../insight/tests/native_index_test.c', link_with: insight_native,
+ include_directories: include_directories('../insight/core'),
+ c_args: ['-UNDEBUG'], dependencies: deps)
+test('Insight native index', insight_index_test)

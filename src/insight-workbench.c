@@ -24,6 +24,7 @@
 #include <stdint.h>
 #include "insight-index.h"
 #include "geanyobject.h"
+#include "keybindings.h"
 #include "../insight/core/context.h"
 #include "../insight/core/runtime.h"
 #include "../insight/desktop/extensions.h"
@@ -92,6 +93,12 @@ static void restore_index_cache(void) {
  if(!g_file_test(wb.cache_path,G_FILE_TEST_EXISTS)) return;
  char *root=NULL; GError *error=NULL; InsightIndex *index=insight_cache_load(wb.cache_path,&root,&error);
  if(!index) { ui_set_statusbar(TRUE,"Workspace cache ignored: %s",error ? error->message : "invalid snapshot"); g_clear_error(&error); return; }
+ gboolean valid=root && g_path_is_absolute(root); const InsightSymbol *page[256]; size_t total=insight_index_count(index);
+ for(size_t offset=0;valid && offset<total;offset+=256) {
+  insight_index_query(index,"",FALSE,NULL,NULL,NULL,offset,page,256);
+  for(size_t i=0;i<256 && offset+i<total;i++) if(!g_utf8_validate(page[i]->name,-1,NULL) || !g_utf8_validate(page[i]->path,-1,NULL) || !g_utf8_validate(page[i]->scope,-1,NULL) || !g_utf8_validate(page[i]->kind,-1,NULL) || !g_path_is_absolute(page[i]->path)) { valid=FALSE; break; }
+ }
+ if(!valid) { insight_index_free(index); free(root); ui_set_statusbar(TRUE,"Workspace cache contains invalid paths or text"); return; }
  insight_index_free(wb.base); wb.base=index; wb.root=g_strdup(root); free(root);
  size_t count=insight_index_file_count(index);
  if(count!=SIZE_MAX && count<=10000) {
@@ -146,8 +153,9 @@ static void choose_root(GtkButton *button,gpointer data) {
  gtk_widget_destroy(dialog);
 }
 static void cancel_scan(GtkButton *button,gpointer data) { (void)button; (void)data; stop_scan(); refresh_index(); ui_set_statusbar(TRUE,"Workspace scan cancelled; partial index retained"); }
-static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word) {
- if(!wb.definitions || !doc) return NULL;
+static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word,const char *preferred) {
+ if(!wb.definitions) return NULL;
+ if(!preferred && doc) preferred=doc->file_name;
  refresh_index();
  wb.populating=TRUE; g_ptr_array_set_size(wb.definitions,0); gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(wb.choices));
  const InsightSymbol *found[256],*chosen=NULL;
@@ -159,7 +167,7 @@ static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word)
   Location *location=g_new0(Location,1); location->path=g_strdup(tag->path); location->line=tag->line;
   gchar *label=g_strdup_printf("%s • %s — %s:%lu",word,tag->scope,tag->path,tag->line);
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.choices),label); g_free(label);
-  if(!chosen || insight_native_definition_rank(tag,doc->file_name)>insight_native_definition_rank(chosen,doc->file_name)) { chosen=tag; selected=(gint)wb.definitions->len; }
+  if(!chosen || insight_native_definition_rank(tag,preferred)>insight_native_definition_rank(chosen,preferred)) { chosen=tag; selected=(gint)wb.definitions->len; }
   g_ptr_array_add(wb.definitions,location);
  }
  gtk_combo_box_set_active(GTK_COMBO_BOX(wb.choices),wb.definitions->len ? selected : -1);
@@ -198,7 +206,7 @@ static gboolean show_location(const char *path,guint id,gulong line,gboolean rem
  char *text=NULL; GeanyFiletype *ft=NULL;
  if(doc) {
   gint length=sci_get_length(doc->editor->sci);
-  if(length<=2*1024*1024) text=sci_get_contents(doc->editor->sci,length+1);
+  if(length>=0 && length<=2*1024*1024) text=sci_get_contents(doc->editor->sci,length+1);
   if(text && (!g_utf8_validate(text,length,NULL) || memchr(text,0,(gsize)length))) g_clear_pointer(&text,g_free);
   ft=doc->file_type;
  } else if(path) { text=read_disk_source(path); ft=filetypes_detect_from_file(path); }
@@ -395,7 +403,7 @@ static gboolean refresh_now(gpointer data) {
  GeanyDocument *doc=document_get_current();
  if(!doc) { render_source("",NULL,1); g_clear_pointer(&wb.source_path,g_free); wb.source_id=0; wb.source_line=0; gtk_label_set_text(GTK_LABEL(wb.title),"Context — no active source"); return G_SOURCE_REMOVE; }
  gchar word[1025]={0}; editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);
- const InsightSymbol *definition=word_definition(doc,word);
+ const InsightSymbol *definition=word_definition(doc,word,NULL);
  if(definition) {
   gchar *path=g_strdup(definition->path);
   gulong line=definition->line; show_location(path,0,line,FALSE); g_free(path);
@@ -427,14 +435,14 @@ static gboolean preview_key(GtkWidget *widget,GdkEventKey *event,gpointer data) 
 }
 static gboolean preview_button(GtkWidget *widget,GdkEventButton *event,gpointer data) {
  (void)widget; (void)data;
- if(event->button!=1 || !(event->state&GDK_CONTROL_MASK)) return FALSE;
+ if(event->button!=1 || !(event->state&GEANY_PRIMARY_MOD_MASK)) return FALSE;
  gint position=(gint)SSM(wb.preview,SCI_POSITIONFROMPOINTCLOSE,(uptr_t)event->x,(sptr_t)event->y);
  if(position<0) return FALSE;
  gint start=(gint)SSM(wb.preview,SCI_WORDSTARTPOSITION,position,TRUE),end=(gint)SSM(wb.preview,SCI_WORDENDPOSITION,position,TRUE);
  if(end<=start || end-start>1024) return TRUE;
  char word[1025]; for(gint i=start;i<end;i++) word[i-start]=(char)sci_get_char_at(wb.preview,i); word[end-start]=0;
  GeanyDocument *source=wb.source_id ? document_find_by_id(wb.source_id) : document_get_current();
- const InsightSymbol *definition=word_definition(source,word);
+ const InsightSymbol *definition=word_definition(source,word,wb.source_path);
  if(definition) {
   gchar *path=g_strdup(definition->path); gulong line=definition->line;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE);
@@ -594,12 +602,13 @@ static void native_commands_rebuild(void) {
 static void native_document_event(GObject *object,GeanyDocument *doc,gpointer data) {
  (void)object; wb.index_dirty=TRUE; insight_workbench_refresh();
  if(!wb.extensions || wb.lua_running || !doc || !doc->is_valid || insight_session_is_running(insight_extensions_session(wb.extensions))) return;
- if(!strcmp(data,"document_save") && doc->file_name && !wb.scan) insight_native_import(wb.base,doc->tm_file,doc->file_name);
+ if(!strcmp(data,"document_save") && doc->file_name && !wb.scan && g_ptr_array_find_with_equal_func(wb.files,doc->file_name,(GEqualFunc)g_str_equal,NULL)) insight_native_import(wb.base,doc->tm_file,doc->file_name);
  refresh_index(); InsightIndex *snapshot=insight_index_clone(wb.index); if(!snapshot) return;
  NativeHost h={.doc=doc}; InsightHost host={.context=&h,.text=native_get_text,.selection=native_get_selection,.replace_selection=native_replace_selection,.index=snapshot,.api=&native_host_api};
  char error[512]; wb.lua_running=TRUE;
  int result=insight_session_emit(insight_extensions_session(wb.extensions),data,doc->file_name,&host,error,sizeof error);
  wb.lua_running=FALSE; g_free(h.scratch); insight_index_free(snapshot); if(result) ui_set_statusbar(TRUE,"Lua event: %s",error);
+ if(!strcmp(data,"document_close")) wb.index_dirty=TRUE;
 }
 static void create_native_lua(void) {
  gchar *settings=g_build_filename(app->configdir,"insight","lua-extension.conf",NULL);
@@ -621,14 +630,15 @@ static void focus_browser(GtkMenuItem *item,gpointer data) {
  if(which==1) files_filter(NULL,NULL); else if(which==0) browser_filter(NULL,NULL);
  gtk_widget_grab_focus(widget);
 }
-static void go_definition(GtkMenuItem *item,gpointer data) {
- (void)item; (void)data; GeanyDocument *doc=document_get_current(); if(!doc) return;
+gboolean insight_workbench_goto_definition(void) {
+ GeanyDocument *doc=document_get_current(); if(!wb.preview || !doc) return FALSE;
  char word[1025]={0}; editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);
- const InsightSymbol *definition=word_definition(doc,word);
- if(!definition) { ui_set_statusbar(TRUE,"Definition not found: %s",word); return; }
+ const InsightSymbol *definition=word_definition(doc,word,NULL);
+ if(!definition) return FALSE;
  gchar *path=g_strdup(definition->path); gulong line=definition->line;
- gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); if(show_location(path,0,line,TRUE)) open_context(NULL,NULL); g_free(path);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); gboolean shown=show_location(path,0,line,TRUE); if(shown) open_context(NULL,NULL); g_free(path); return shown;
 }
+static void go_definition(GtkMenuItem *item,gpointer data) { (void)item; (void)data; if(!insight_workbench_goto_definition()) ui_set_statusbar(TRUE,"Known definition not found"); }
 static void context_visible(GtkCheckMenuItem *item,gpointer data) {
  (void)data; wb.context_visible=gtk_check_menu_item_get_active(item);
  if(wb.context_visible) { gtk_widget_show(wb.box); insight_workbench_refresh(); } else gtk_widget_hide(wb.box);
@@ -638,7 +648,7 @@ static void create_workbench_menus(void) {
  gtk_menu_item_set_submenu(GTK_MENU_ITEM(navigate),menu); gtk_menu_shell_insert(GTK_MENU_SHELL(menubar),navigate,4);
  wb.navigation_accels=gtk_accel_group_new(); gtk_window_add_accel_group(GTK_WINDOW(main_widgets.window),wb.navigation_accels);
  const char *names[]={"Go to definition","Find symbol…","Find file…","Find usages…","Context back","Context forward"};
- const char *shortcuts[]={"F12","<Primary>t","<Primary>p","<Primary><Shift>u","<Primary><Alt>Left","<Primary><Alt>Right"};
+ const char *shortcuts[]={"F12","<Primary><Alt>s","<Primary><Alt>o","<Primary><Alt>r","<Primary><Alt>Left","<Primary><Alt>Right"};
  for(int i=0;i<6;i++) {
   GtkWidget *entry=gtk_menu_item_new_with_label(names[i]); gtk_container_add(GTK_CONTAINER(menu),entry);
   if(!i) g_signal_connect(entry,"activate",G_CALLBACK(go_definition),NULL);

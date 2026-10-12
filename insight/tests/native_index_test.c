@@ -12,8 +12,10 @@ int main(void) {
  assert(insight_native_import(index,&source,"/project/a.cpp")); name[0]='X';
  const InsightSymbol *found[2]; assert(insight_index_find(index,"foo",1,found,2)==1);
  assert(found[0]->line==7 && !strcmp(found[0]->scope,"Scope"));
- assert(insight_native_definition_rank(found[0],"/project/a.cpp")==6);
- assert(insight_native_definition_rank(found[0],"/project/b.cpp")==2);
+ assert(insight_native_definition_rank(found[0],"/project/a.cpp")==12);
+ assert(insight_native_definition_rank(found[0],"/project/b.cpp")==8);
+ InsightSymbol prototype={"foo","/project/a.cpp","Scope","p",1};
+ assert(insight_native_definition_rank(&prototype,"/project/a.cpp")<insight_native_definition_rank(found[0],"/project/b.cpp"));
  assert(!insight_native_import(index,&source,"\xff")); assert(insight_index_count(index)==1);
  GPtrArray huge={.pdata=NULL,.len=250001}; source.tags_array=&huge;
  assert(!insight_native_import(index,&source,"/project/a.cpp")); assert(insight_index_count(index)==1);
