@@ -1,0 +1,199 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+#include "navigation.h"
+#include "tm_tag.h"
+#include <glib/gstdio.h>
+#include <sys/stat.h>
+#include <limits.h>
+#include <string.h>
+typedef struct { gchar *path; GDir *dir; } Frame;
+struct Navigation {
+ GeanyPlugin *plugin;
+ InsightIndex *index;
+ GtkWidget *menu, *find_item;
+ GPtrArray *frames;
+ guint idle, files, skipped;
+};
+static void frame_free(gpointer data) {
+ Frame *f=data; if(f->dir) g_dir_close(f->dir); g_free(f->path); g_free(f);
+}
+static int import_tags(Navigation *n,TMSourceFile *file,const char *path) {
+ if(!file || !file->tags_array) return 1;
+ guint count=file->tags_array->len,used=0;
+ InsightSymbol *symbols=g_new0(InsightSymbol,count);
+ gchar (*kinds)[2]=g_malloc0((gsize)count*2);
+ for(guint j=0;j<count;j++) {
+  TMTag *tag=g_ptr_array_index(file->tags_array,j);
+  if(!tag->name || !*tag->name || !tag->line) continue;
+  kinds[used][0]=tag->kind_letter;
+  symbols[used]=(InsightSymbol){tag->name,path,tag->scope,kinds[used],tag->line}; used++;
+ }
+ int ok=insight_index_update(n->index,path,symbols,used);
+ g_free(kinds); g_free(symbols); return ok;
+}
+static void refresh_open(Navigation *n) {
+ GPtrArray *docs=n->plugin->geany_data->documents_array;
+ for(guint j=0;j<docs->len;j++) {
+  GeanyDocument *doc=g_ptr_array_index(docs,j);
+  if(doc->is_valid && doc->file_name && doc->tm_file)
+   if(!import_tags(n,doc->tm_file,doc->file_name))
+    ui_set_statusbar(TRUE,"Insight: index allocation failed");
+ }
+}
+const InsightIndex *navigation_index(Navigation *n) {
+ if(!n) return NULL;
+ refresh_open(n); return n->index;
+}
+static void stop_scan(Navigation *n) {
+ if(n->idle) { g_source_remove(n->idle); n->idle=0; }
+ g_ptr_array_set_size(n->frames,0);
+}
+static gboolean scan_step(gpointer data) {
+ Navigation *n=data;
+ if(!n->frames->len || n->files>=10000) {
+  gboolean limited=n->files>=10000;
+  n->idle=0; g_ptr_array_set_size(n->frames,0); refresh_open(n);
+  ui_set_statusbar(TRUE,"Insight: %u files, %zu symbols, %u skipped%s",n->files,
+   insight_index_count(n->index),n->skipped,limited ? " (file limit reached)" : "");
+  return G_SOURCE_REMOVE;
+ }
+ Frame *frame=g_ptr_array_index(n->frames,n->frames->len-1);
+ const char *entry=g_dir_read_name(frame->dir);
+ if(!entry) { g_ptr_array_remove_index(n->frames,n->frames->len-1); return G_SOURCE_CONTINUE; }
+ if(entry[0]=='.' || !strcmp(entry,"node_modules") || !strcmp(entry,"__pycache__"))
+  return G_SOURCE_CONTINUE;
+ gchar *path=g_build_filename(frame->path,entry,NULL);
+ GStatBuf st;
+ if(g_lstat(path,&st)!=0) { n->skipped++; g_free(path); return G_SOURCE_CONTINUE; }
+ if(S_ISDIR(st.st_mode)) {
+  GDir *dir=n->frames->len<64 ? g_dir_open(path,0,NULL) : NULL;
+  if(dir) { Frame *next=g_new0(Frame,1); next->path=path; next->dir=dir; g_ptr_array_add(n->frames,next); }
+  else { n->skipped++; g_free(path); }
+  return G_SOURCE_CONTINUE;
+ }
+ if(!S_ISREG(st.st_mode) || st.st_size>2*1024*1024) {
+  n->skipped++; g_free(path); return G_SOURCE_CONTINUE;
+ }
+ gchar *utf8=g_filename_to_utf8(path,-1,NULL,NULL,NULL);
+ GeanyFiletype *ft=utf8 ? filetypes_detect_from_file(utf8) : NULL;
+ if(ft && ft->lang>=0) {
+  TMSourceFile *file=tm_source_file_new(path,ft->name);
+  if(file) {
+   /* Custom filetypes may have a different name from their parser. */
+   file->lang=ft->lang;
+   /* Public Geany API parses on add; remove before releasing our source file. */
+   tm_workspace_add_source_file(file);
+   if(!import_tags(n,file,utf8)) {
+    ui_set_statusbar(TRUE,"Insight: index allocation failed; scan stopped");
+    tm_workspace_remove_source_file(file); tm_source_file_free(file);
+    g_free(utf8); g_free(path); n->idle=0;
+    g_ptr_array_set_size(n->frames,0); return G_SOURCE_REMOVE;
+   }
+   tm_workspace_remove_source_file(file); n->files++;
+  } else n->skipped++;
+  if(file) tm_source_file_free(file);
+ } else n->skipped++;
+ g_free(utf8); g_free(path); return G_SOURCE_CONTINUE;
+}
+static void choose_root(GtkMenuItem *item,gpointer data) {
+ (void)item; Navigation *n=data;
+ GtkWidget *dialog=gtk_file_chooser_dialog_new("Index source directory",
+ GTK_WINDOW(n->plugin->geany_data->main_widgets->window),GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+ "Cancel",GTK_RESPONSE_CANCEL,"Index",GTK_RESPONSE_ACCEPT,NULL);
+ if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) {
+  gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+  GDir *dir=g_dir_open(path,0,NULL); InsightIndex *next=insight_index_new();
+  if(dir && next) {
+   stop_scan(n); insight_index_free(n->index); n->index=next;
+   Frame *frame=g_new0(Frame,1); frame->path=path; frame->dir=dir;
+   g_ptr_array_add(n->frames,frame); n->files=0; n->skipped=0;
+   n->idle=g_idle_add(scan_step,n); ui_set_statusbar(TRUE,"Insight: indexing…");
+  } else {
+   if(dir) g_dir_close(dir);
+   insight_index_free(next); g_free(path);
+   ui_set_statusbar(TRUE,"Insight: cannot index directory");
+  }
+ }
+ gtk_widget_destroy(dialog);
+}
+static void cancel(GtkMenuItem *item,gpointer data) {
+ (void)item; Navigation *n=data; stop_scan(n);
+ ui_set_statusbar(TRUE,"Insight: scan cancelled; partial index retained");
+}
+enum { NAME, SCOPE, PATH, LINE, KIND, COLUMNS };
+typedef struct { Navigation *n; GtkListStore *store; GtkWidget *status; } Search;
+static void filter(GtkEditable *entry,gpointer data) {
+ Search *s=data; const char *query=gtk_entry_get_text(GTK_ENTRY(entry));
+ const InsightSymbol *found[500];
+ size_t total=insight_index_find(s->n->index,query,0,found,500);
+ gtk_list_store_clear(s->store);
+ for(size_t j=0;j<total && j<500;j++) {
+  GtkTreeIter iter; gtk_list_store_append(s->store,&iter);
+  gtk_list_store_set(s->store,&iter,NAME,found[j]->name,SCOPE,found[j]->scope,
+   PATH,found[j]->path,LINE,(gulong)found[j]->line,KIND,found[j]->kind,-1);
+ }
+ gchar *label=g_strdup_printf("%zu matches%s%s",total,total>500 ? " (first 500 shown)" : "",
+  s->n->idle ? " — indexing in progress" : "");
+ gtk_label_set_text(GTK_LABEL(s->status),label); g_free(label);
+}
+static void row_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) {
+ (void)view; (void)path; (void)column; gtk_dialog_response(GTK_DIALOG(data),GTK_RESPONSE_ACCEPT);
+}
+static void find_symbol(GtkMenuItem *item,gpointer data) {
+ (void)item; Navigation *n=data; refresh_open(n);
+ GtkWidget *dialog=gtk_dialog_new_with_buttons("Find project symbol",
+ GTK_WINDOW(n->plugin->geany_data->main_widgets->window),GTK_DIALOG_DESTROY_WITH_PARENT,
+ "Cancel",GTK_RESPONSE_CANCEL,"Go to",GTK_RESPONSE_ACCEPT,NULL);
+ gtk_window_set_default_size(GTK_WINDOW(dialog),900,500);
+ GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+ GtkWidget *entry=gtk_entry_new(),*status=gtk_label_new("");
+ gtk_entry_set_placeholder_text(GTK_ENTRY(entry),"Symbol prefix (case-sensitive)");
+ GtkListStore *store=gtk_list_store_new(COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG,G_TYPE_STRING);
+ GtkWidget *view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
+ const char *titles[]={"Name","Scope","File","Line","Kind"};
+ for(int j=0;j<COLUMNS;j++) {
+  GtkCellRenderer *renderer=gtk_cell_renderer_text_new();
+  gtk_tree_view_append_column(GTK_TREE_VIEW(view),gtk_tree_view_column_new_with_attributes(titles[j],renderer,"text",j,NULL));
+ }
+ GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),view);
+ gtk_box_pack_start(GTK_BOX(box),entry,FALSE,FALSE,4);
+ gtk_box_pack_start(GTK_BOX(box),status,FALSE,FALSE,4);
+ gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,4);
+ Search search={n,store,status}; g_signal_connect(entry,"changed",G_CALLBACK(filter),&search);
+ g_signal_connect(view,"row-activated",G_CALLBACK(row_activated),dialog);
+ filter(GTK_EDITABLE(entry),&search); gtk_widget_show_all(dialog);
+ if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) {
+  GtkTreeIter iter;
+  if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),NULL,&iter)) {
+   gchar *utf8; gulong line;
+   gtk_tree_model_get(GTK_TREE_MODEL(store),&iter,PATH,&utf8,LINE,&line,-1);
+   gchar *locale=utils_get_locale_from_utf8(utf8);
+   GeanyDocument *old=document_get_current();
+   GeanyDocument *doc=document_open_file(locale,FALSE,NULL,NULL);
+   if(doc && line<=INT_MAX) navqueue_goto_line(old,doc,(gint)line);
+   else ui_set_statusbar(TRUE,"Insight: unable to navigate to symbol");
+   g_free(locale); g_free(utf8);
+  }
+ }
+ gtk_widget_destroy(dialog); g_object_unref(store);
+}
+Navigation *navigation_new(GeanyPlugin *plugin) {
+ Navigation *n=g_new0(Navigation,1); n->plugin=plugin;
+ n->index=insight_index_new(); n->frames=g_ptr_array_new_with_free_func(frame_free);
+ if(!n->index) { navigation_free(n); return NULL; }
+ n->menu=gtk_menu_item_new_with_label("Insight: Project navigation");
+ GtkWidget *submenu=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(n->menu),submenu);
+ const char *labels[]={"Index source directory…","Find symbol…","Cancel indexing"};
+ GCallback callbacks[]={G_CALLBACK(choose_root),G_CALLBACK(find_symbol),G_CALLBACK(cancel)};
+ for(int j=0;j<3;j++) {
+  GtkWidget *item=gtk_menu_item_new_with_label(labels[j]);
+  gtk_container_add(GTK_CONTAINER(submenu),item); g_signal_connect(item,"activate",callbacks[j],n);
+ }
+ gtk_container_add(GTK_CONTAINER(plugin->geany_data->main_widgets->tools_menu),n->menu);
+ gtk_widget_show_all(n->menu); return n;
+}
+void navigation_free(Navigation *n) {
+ if(!n) return;
+ stop_scan(n);
+ if(n->menu) gtk_widget_destroy(n->menu);
+ g_ptr_array_free(n->frames,TRUE); insight_index_free(n->index); g_free(n);
+}
