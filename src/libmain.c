@@ -39,6 +39,7 @@
 #include "filetypes.h"
 #include "geanyobject.h"
 #include "highlighting.h"
+#include "insight-workbench.h"
 #include "keybindings.h"
 #include "keyfile.h"
 #include "log.h"
@@ -1246,6 +1247,8 @@ gint main_lib(gint argc, gchar **argv)
 
 	setup_window_position();
 
+	insight_workbench_init();
+
 	/* finally show the window */
 	document_grab_focus(doc);
 	gtk_widget_show(main_widgets.window);
@@ -1312,6 +1315,7 @@ static gboolean do_main_quit(void)
 	plugins_finalize();
 #endif
 
+	insight_workbench_finalize();
 	navqueue_free();
 	keybindings_free();
 	notebook_free();
