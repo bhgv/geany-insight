@@ -16,6 +16,7 @@ typedef struct {
  /* Optional project index; borrowed, immutable during script execution. */
  const InsightIndex *index;
  const InsightEditorAPI *api;
+ int read_only;
 } InsightHost;
 /* Fresh interpreter per invocation. Host edits are immediate, not transactional.
  * Returns 0 on success, 1 on script error, 2 on invalid host/allocation failure. */
@@ -34,4 +35,5 @@ const char *insight_session_command_name(const InsightSession *,size_t);
 const char *insight_session_command_label(const InsightSession *,size_t);
 const char *insight_session_command_shortcut(const InsightSession *,size_t);
 int insight_session_invoke(InsightSession *,const char *,const InsightHost *,char *,size_t);
+int insight_session_emit(InsightSession *,const char *,const char *,const InsightHost *,char *,size_t);
 #endif

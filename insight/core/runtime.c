@@ -14,6 +14,8 @@ typedef struct {
  size_t used; unsigned ticks; const InsightHost *host;
  lua_State *state;
  Command commands[COMMAND_LIMIT]; size_t command_count;
+ struct { char name[32]; int reference; } events[32]; size_t event_count;
+ const char *event_name,*event_path; int event_reference;
  int registering;
 } Runtime;
 struct InsightSession { Runtime *current; };
@@ -38,6 +40,11 @@ static const InsightHost *active_host(lua_State *L) {
  if(!host) luaL_error(L,"editor/project API unavailable during extension load");
  return host;
 }
+static const InsightHost *write_host(lua_State *L) {
+ const InsightHost *host=active_host(L);
+ if(host->read_only) luaL_error(L,"event document is read-only");
+ return host;
+}
 static const InsightEditorAPI *editor_api(lua_State *L) {
  const InsightEditorAPI *api=active_host(L)->api;
  if(!api) luaL_error(L,"editor capability unavailable");
@@ -56,7 +63,7 @@ static int position(lua_State *L) {
 }
 static int goto_line(lua_State *L) {
  unsigned long line=integer_arg(L,1,1); const InsightEditorAPI *api=editor_api(L);
- if(!api->goto_line || !api->goto_line(active_host(L)->context,line)) return luaL_error(L,"cannot go to line");
+ if(!api->goto_line || !api->goto_line(write_host(L)->context,line)) return luaL_error(L,"cannot go to line");
  return 0;
 }
 static int text(lua_State *L) {
@@ -74,7 +81,7 @@ static int selection(lua_State *L) {
 static int replace(lua_State *L) {
  size_t n; const char *s=luaL_checklstring(L,1,&n);
  if (memchr(s,0,n)) return luaL_error(L,"embedded NUL is unsupported");
- const InsightHost *h=active_host(L);
+ const InsightHost *h=write_host(L);
  if (!h->replace_selection(h->context,s)) return luaL_error(L,"replacement failed");
  return 0;
 }
@@ -129,6 +136,15 @@ static int register_command(lua_State *L) {
  lua_pushvalue(L,3); command->reference=luaL_ref(L,LUA_REGISTRYINDEX);
  r->command_count++; return 0;
 }
+static int on_event(lua_State *L) {
+ Runtime *r=runtime(L);
+ if(!r->registering) return luaL_error(L,"events can only be registered during extension load");
+ const char *name=luaL_checkstring(L,1); luaL_checktype(L,2,LUA_TFUNCTION);
+ if(strcmp(name,"document_save") && strcmp(name,"document_activate")) return luaL_error(L,"unsupported editor event");
+ if(r->event_count==32) return luaL_error(L,"event handler limit exceeded");
+ size_t n=r->event_count; snprintf(r->events[n].name,sizeof r->events[n].name,"%s",name);
+ lua_pushvalue(L,2); r->events[n].reference=luaL_ref(L,LUA_REGISTRYINDEX); r->event_count++; return 0;
+}
 /* Lua disables instruction hooks inside __gc. Prevent registration of script
  * finalizers so an extension cannot hang the editor during GC or unloading. */
 static int safe_setmetatable(lua_State *L) {
@@ -162,6 +178,7 @@ static int setup(lua_State *L) {
  lua_setglobal(L,"project");
  lua_newtable(L); lua_pushcfunction(L,register_command); lua_setfield(L,-2,"register");
  lua_setglobal(L,"commands");
+ lua_newtable(L); lua_pushcfunction(L,on_event); lua_setfield(L,-2,"on"); lua_setglobal(L,"events");
  lua_pushliteral(L,"0.5"); lua_setglobal(L,"INSIGHT_API_VERSION"); return 0;
 }
 static void report(lua_State *L,int status,char *error,size_t capacity) {
@@ -247,4 +264,27 @@ int insight_session_invoke(InsightSession *s,const char *name,const InsightHost 
  int status=lua_pcall(L,0,0,0);
  report(L,status,error,capacity); lua_settop(L,0); r->host=NULL;
  return status ? 1 : 0;
+}
+
+static int emit_one(lua_State *L) {
+ Runtime *r=runtime(L); lua_rawgeti(L,LUA_REGISTRYINDEX,r->event_reference);
+ lua_createtable(L,0,2); lua_pushstring(L,r->event_name); lua_setfield(L,-2,"name");
+ lua_pushstring(L,r->event_path ? r->event_path : ""); lua_setfield(L,-2,"path");
+ lua_call(L,1,0); return 0;
+}
+int insight_session_emit(InsightSession *s,const char *name,const char *path,const InsightHost *host,char *error,size_t capacity) {
+ if(error && capacity) error[0]=0;
+ if(!s || !name || !valid_host(host) || insight_session_is_running(s)) return 2;
+ Runtime *r=s->current; if(!r) return 0;
+ InsightHost readonly=*host; readonly.read_only=1; r->host=&readonly;
+ r->event_name=name; r->event_path=path; int result=0;
+ for(size_t n=0;n<r->event_count;n++) {
+  if(strcmp(name,r->events[n].name)) continue;
+  r->event_reference=r->events[n].reference; r->ticks=0;
+  lua_sethook(r->state,budget,LUA_MASKCOUNT,1000); lua_pushcfunction(r->state,emit_one);
+  int status=lua_pcall(r->state,0,0,0);
+  if(status && !result) { report(r->state,status,error,capacity); result=1; }
+  lua_settop(r->state,0);
+ }
+ r->host=NULL; r->event_name=NULL; r->event_path=NULL; return result;
 }

@@ -121,6 +121,26 @@ static void activate(GtkMenuItem *menu,gpointer data) {
  }
  gtk_widget_destroy(dialog);
 }
+static void emit_document_event(const char *name,GeanyDocument *doc) {
+ InsightSession *state=insight_extensions_session(extensions);
+ if(!extensions || !DOC_VALID(doc) || insight_session_is_running(state)) return;
+ Host h={doc,NULL}; InsightHost host={.context=&h,.text=get_text,.selection=get_selection,
+  .replace_selection=replace_selection,.index=navigation_index(navigation),.api=&host_api};
+ char error[512];
+ int result=insight_session_emit(state,name,doc->file_name,&host,error,sizeof error); g_free(h.scratch);
+ if(result) ui_set_statusbar(TRUE,"Lua event: %s",error[0] ? error : "runtime unavailable");
+}
+static void on_save(GObject *object,GeanyDocument *doc,gpointer data) {
+ (void)object; (void)data; emit_document_event("document_save",doc);
+}
+static void on_activate(GObject *object,GeanyDocument *doc,gpointer data) {
+ (void)object; (void)data; emit_document_event("document_activate",doc);
+}
+static PluginCallback callbacks[]={
+ {"document-save",(GCallback)on_save,TRUE,NULL},
+ {"document-activate",(GCallback)on_activate,TRUE,NULL},
+ {NULL,NULL,FALSE,NULL}
+};
 static gboolean init(GeanyPlugin *plugin,gpointer data) {
  (void)data; main_window=GTK_WINDOW(plugin->geany_data->main_widgets->window); navigation=navigation_new(plugin);
  if(!navigation) return FALSE;
@@ -159,6 +179,7 @@ static void cleanup(GeanyPlugin *plugin,gpointer data) {
 void geany_load_module(GeanyPlugin *plugin) {
  plugin->info->name="Insight Lua"; plugin->info->description="Shared embedded Lua editor runtime";
  plugin->info->version="0.6.0"; plugin->info->author="Insight contributors";
+ plugin->funcs->callbacks=callbacks;
  plugin->funcs->init=init; plugin->funcs->cleanup=cleanup;
  GEANY_PLUGIN_REGISTER(plugin,225);
 }
