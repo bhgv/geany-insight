@@ -26,4 +26,5 @@ int insight_index_update(InsightIndex *,const char *path,const InsightSymbol *,s
  * Pointers remain valid until the next successful update/free. */
 size_t insight_index_find(const InsightIndex *,const char *,int exact,
  const InsightSymbol **out,size_t capacity);
+size_t insight_index_find_filtered(const InsightIndex *,const char *,int,const char *,const char *,const InsightSymbol **,size_t);
 #endif

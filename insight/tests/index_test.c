@@ -13,6 +13,8 @@ int main(void) {
  assert(insight_index_find(i,"foo",1,out,5)==2);
  assert(strcmp(out[0]->path,"a.cpp")==0 && strcmp(out[1]->path,"b.cpp")==0);
  assert(insight_index_find(i,"foo",0,out,1)==3);
+ assert(insight_index_find_filtered(i,"foo",0,"B","function",out,5)==1 && out[0]->line==3);
+ assert(insight_index_find_filtered(i,"foo",0,NULL,"unknown",NULL,0)==0);
  assert(insight_index_find(i,"",0,NULL,0)==3);
  assert(insight_index_find(i,"zzz",0,out,5)==0);
  InsightSymbol bad[]={ {NULL,NULL,NULL,NULL,1} };

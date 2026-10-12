@@ -151,12 +151,12 @@ static void cancel(GtkMenuItem *item,gpointer data) {
  ui_set_statusbar(TRUE,"Insight: scan cancelled; partial index retained");
 }
 enum { NAME, SCOPE, PATH, LINE, KIND, COLUMNS };
-typedef struct { Navigation *n; GtkListStore *store; GtkWidget *status, *preview; int exact; } Search;
+typedef struct { Navigation *n; GtkListStore *store; GtkWidget *status, *preview, *entry, *scope, *kind, *exact, *view; } Search;
 static void filter(GtkEditable *entry,gpointer data) {
- Search *s=data; if(s->n->idle) refresh_open(s->n);
- const char *query=gtk_entry_get_text(GTK_ENTRY(entry));
+ (void)entry; Search *s=data; if(s->n->idle) refresh_open(s->n);
+ const char *query=gtk_entry_get_text(GTK_ENTRY(s->entry));
  const InsightSymbol *found[500];
- size_t total=insight_index_find(s->n->index,query,s->exact,found,500);
+ size_t total=insight_index_find_filtered(s->n->index,query,gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(s->exact)),gtk_entry_get_text(GTK_ENTRY(s->scope)),gtk_entry_get_text(GTK_ENTRY(s->kind)),found,500);
  gtk_list_store_clear(s->store);
  for(size_t j=0;j<total && j<500;j++) {
   GtkTreeIter iter; gtk_list_store_append(s->store,&iter);
@@ -166,6 +166,11 @@ static void filter(GtkEditable *entry,gpointer data) {
  gchar *label=g_strdup_printf("%zu matches%s%s",total,total>500 ? " (first 500 shown)" : "",
   s->n->idle ? " — indexing in progress" : "");
  gtk_label_set_text(GTK_LABEL(s->status),label); g_free(label);
+ GtkTreeIter first;
+ if(gtk_tree_model_get_iter_first(GTK_TREE_MODEL(s->store),&first)) gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(s->view)),&first);
+}
+static void filter_toggle(GtkToggleButton *toggle,gpointer data) {
+ (void)toggle; Search *s=data; filter(GTK_EDITABLE(s->entry),s);
 }
 static void preview_selection(GtkTreeSelection *selection,gpointer data) {
  Search *s=data; GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(s->preview));
@@ -202,7 +207,8 @@ static void show_search(Navigation *n,const char *initial,int exact) {
  const char *titles[]={"Name","Scope","File","Line","Kind"};
  for(int j=0;j<COLUMNS;j++) {
   GtkCellRenderer *renderer=gtk_cell_renderer_text_new();
-  gtk_tree_view_append_column(GTK_TREE_VIEW(view),gtk_tree_view_column_new_with_attributes(titles[j],renderer,"text",j,NULL));
+  GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(titles[j],renderer,"text",j,NULL);
+  gtk_tree_view_column_set_sort_column_id(column,j); gtk_tree_view_append_column(GTK_TREE_VIEW(view),column);
  }
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),view);
  gtk_box_pack_start(GTK_BOX(box),entry,FALSE,FALSE,4);
@@ -213,7 +219,15 @@ static void show_search(Navigation *n,const char *initial,int exact) {
  gtk_text_view_set_monospace(GTK_TEXT_VIEW(preview),TRUE);
  GtkWidget *preview_scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(preview_scroll),preview);
  gtk_widget_set_size_request(preview_scroll,-1,150); gtk_box_pack_start(GTK_BOX(box),preview_scroll,TRUE,TRUE,4);
- Search search={n,store,status,preview,exact};
+ GtkWidget *filters=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4),*exact_button=gtk_check_button_new_with_label("Exact name");
+ GtkWidget *scope=gtk_entry_new(),*kind=gtk_entry_new(); gtk_entry_set_placeholder_text(GTK_ENTRY(scope),"Scope contains…");
+ gtk_entry_set_placeholder_text(GTK_ENTRY(kind),"Kind letter"); gtk_entry_set_width_chars(GTK_ENTRY(kind),8);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(exact_button),exact);
+ gtk_box_pack_start(GTK_BOX(filters),exact_button,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(filters),scope,TRUE,TRUE,0);
+ gtk_box_pack_start(GTK_BOX(filters),kind,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),filters,FALSE,FALSE,4);
+ Search search={.n=n,.store=store,.status=status,.preview=preview,.entry=entry,.scope=scope,.kind=kind,.exact=exact_button,.view=view};
+ g_signal_connect(scope,"changed",G_CALLBACK(filter),&search); g_signal_connect(kind,"changed",G_CALLBACK(filter),&search);
+ g_signal_connect(exact_button,"toggled",G_CALLBACK(filter_toggle),&search);
  g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),"changed",G_CALLBACK(preview_selection),&search); g_signal_connect(entry,"changed",G_CALLBACK(filter),&search);
  g_signal_connect(view,"row-activated",G_CALLBACK(row_activated),dialog);
  filter(GTK_EDITABLE(entry),&search); gtk_widget_show_all(dialog);

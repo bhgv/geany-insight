@@ -54,7 +54,7 @@ failure:
  for(size_t n=0;n<count;n++) release(&next[n]);
  free(next); return 0;
 }
-size_t insight_index_find(const InsightIndex *i,const char *query,int exact,
+size_t insight_index_find_filtered(const InsightIndex *i,const char *query,int exact,const char *scope,const char *kind,
  const InsightSymbol **out,size_t capacity) {
  if(!i || !query) return 0;
  size_t left=0,right=i->count;
@@ -66,12 +66,17 @@ size_t insight_index_find(const InsightIndex *i,const char *query,int exact,
  for(size_t n=left;n<i->count;n++) {
   int r=exact ? strcmp(i->items[n].name,query) : strncmp(i->items[n].name,query,length);
   if(r) break;
+  if(scope && *scope && !strstr(i->items[n].scope,scope)) continue;
+  if(kind && *kind && strcmp(i->items[n].kind,kind)) continue;
   if(out && matches<capacity) out[matches]=&i->items[n];
   matches++;
  }
  return matches;
 }
 
+size_t insight_index_find(const InsightIndex *i,const char *query,int exact,const InsightSymbol **out,size_t capacity) {
+ return insight_index_find_filtered(i,query,exact,NULL,NULL,out,capacity);
+}
 InsightIndex *insight_index_clone(const InsightIndex *source) {
  if(!source) return NULL;
  InsightIndex *next=insight_index_new(); if(!next) return NULL;
