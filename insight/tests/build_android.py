@@ -12,7 +12,7 @@ parser.add_argument('--ninja',type=Path,required=True)
 parser.add_argument('--build-tools',type=Path,required=True)
 parser.add_argument('--android-jar',type=Path,required=True)
 parser.add_argument('--jdk',type=Path,required=True)
-parser.add_argument('--abis',nargs='+',default=['arm64-v8a','armeabi-v7a','x86_64'])
+parser.add_argument('--abis',nargs='+',default=['arm64-v8a'])
 args=parser.parse_args()
 for field in ['ndk','cmake','ninja','build_tools','android_jar','jdk']:
  setattr(args,field,getattr(args,field).resolve())

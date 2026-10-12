@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "navigation.h"
 #include "tm_tag.h"
+#include "index_cache.h"
+#include <stdlib.h>
 #include <glib/gstdio.h>
 #include <sys/stat.h>
 #include <limits.h>
@@ -8,7 +10,8 @@
 typedef struct { gchar *path; GDir *dir; } Frame;
 struct Navigation {
  GeanyPlugin *plugin;
- InsightIndex *index;
+ InsightIndex *index, *base;
+ gchar *root, *cache_path;
  GtkWidget *menu, *find_item;
  GPtrArray *frames;
  guint idle, files, skipped;
@@ -16,7 +19,7 @@ struct Navigation {
 static void frame_free(gpointer data) {
  Frame *f=data; if(f->dir) g_dir_close(f->dir); g_free(f->path); g_free(f);
 }
-static int import_tags(Navigation *n,TMSourceFile *file,const char *path) {
+static int import_tags(InsightIndex *index,TMSourceFile *file,const char *path) {
  if(!file || !file->tags_array) return 1;
  guint count=file->tags_array->len,used=0;
  InsightSymbol *symbols=g_new0(InsightSymbol,count);
@@ -27,17 +30,21 @@ static int import_tags(Navigation *n,TMSourceFile *file,const char *path) {
   kinds[used][0]=tag->kind_letter;
   symbols[used]=(InsightSymbol){tag->name,path,tag->scope,kinds[used],tag->line}; used++;
  }
- int ok=insight_index_update(n->index,path,symbols,used);
+ int ok=insight_index_update(index,path,symbols,used);
  g_free(kinds); g_free(symbols); return ok;
 }
 static void refresh_open(Navigation *n) {
+ InsightIndex *live=insight_index_clone(n->base);
+ if(!live) { ui_set_statusbar(TRUE,"Insight: index allocation failed"); return; }
  GPtrArray *docs=n->plugin->geany_data->documents_array;
  for(guint j=0;j<docs->len;j++) {
   GeanyDocument *doc=g_ptr_array_index(docs,j);
   if(doc->is_valid && doc->file_name && doc->tm_file)
-   if(!import_tags(n,doc->tm_file,doc->file_name))
-    ui_set_statusbar(TRUE,"Insight: index allocation failed");
+   if(!import_tags(live,doc->tm_file,doc->file_name)) {
+    insight_index_free(live); ui_set_statusbar(TRUE,"Insight: index allocation failed"); return;
+   }
  }
+ insight_index_free(n->index); n->index=live;
 }
 const InsightIndex *navigation_index(Navigation *n) {
  if(!n) return NULL;
@@ -47,6 +54,17 @@ static void stop_scan(Navigation *n) {
  if(n->idle) { g_source_remove(n->idle); n->idle=0; }
  g_ptr_array_set_size(n->frames,0);
 }
+static void save_cache(Navigation *n) {
+ if(!n->root) return;
+ gchar *directory=g_path_get_dirname(n->cache_path);
+ if(g_mkdir_with_parents(directory,0700)!=0) {
+  ui_set_statusbar(TRUE,"Insight: unable to create index cache directory"); g_free(directory); return;
+ }
+ g_free(directory); GError *error=NULL;
+ if(!insight_cache_save(n->cache_path,n->base,n->root,&error)) {
+  ui_set_statusbar(TRUE,"Insight: index cache not saved: %s",error->message); g_error_free(error);
+ }
+}
 static gboolean scan_step(gpointer data) {
  Navigation *n=data;
  if(!n->frames->len || n->files>=10000) {
@@ -54,6 +72,7 @@ static gboolean scan_step(gpointer data) {
   n->idle=0; g_ptr_array_set_size(n->frames,0); refresh_open(n);
   ui_set_statusbar(TRUE,"Insight: %u files, %zu symbols, %u skipped%s",n->files,
    insight_index_count(n->index),n->skipped,limited ? " (file limit reached)" : "");
+  if(!limited) save_cache(n);
   return G_SOURCE_REMOVE;
  }
  Frame *frame=g_ptr_array_index(n->frames,n->frames->len-1);
@@ -82,7 +101,7 @@ static gboolean scan_step(gpointer data) {
    file->lang=ft->lang;
    /* Public Geany API parses on add; remove before releasing our source file. */
    tm_workspace_add_source_file(file);
-   if(!import_tags(n,file,utf8)) {
+   if(!import_tags(n->base,file,utf8)) {
     ui_set_statusbar(TRUE,"Insight: index allocation failed; scan stopped");
     tm_workspace_remove_source_file(file); tm_source_file_free(file);
     g_free(utf8); g_free(path); n->idle=0;
@@ -94,6 +113,21 @@ static gboolean scan_step(gpointer data) {
  } else n->skipped++;
  g_free(utf8); g_free(path); return G_SOURCE_CONTINUE;
 }
+static gboolean start_scan(Navigation *n,const char *path) {
+ gchar *owned=g_strdup(path);
+ GDir *dir=g_dir_open(owned,0,NULL); InsightIndex *next=insight_index_new();
+ InsightIndex *live=next ? insight_index_clone(next) : NULL;
+ if(!dir || !next || !live) {
+  if(dir) g_dir_close(dir);
+  insight_index_free(next); insight_index_free(live); g_free(owned);
+  ui_set_statusbar(TRUE,"Insight: cannot index directory"); return FALSE;
+ }
+ stop_scan(n); insight_index_free(n->index); insight_index_free(n->base);
+ n->base=next; n->index=live; g_free(n->root); n->root=g_strdup(owned);
+ Frame *frame=g_new0(Frame,1); frame->path=owned; frame->dir=dir;
+ g_ptr_array_add(n->frames,frame); n->files=0; n->skipped=0;
+ n->idle=g_idle_add(scan_step,n); ui_set_statusbar(TRUE,"Insight: indexing…"); return TRUE;
+}
 static void choose_root(GtkMenuItem *item,gpointer data) {
  (void)item; Navigation *n=data;
  GtkWidget *dialog=gtk_file_chooser_dialog_new("Index source directory",
@@ -101,19 +135,14 @@ static void choose_root(GtkMenuItem *item,gpointer data) {
  "Cancel",GTK_RESPONSE_CANCEL,"Index",GTK_RESPONSE_ACCEPT,NULL);
  if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) {
   gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
-  GDir *dir=g_dir_open(path,0,NULL); InsightIndex *next=insight_index_new();
-  if(dir && next) {
-   stop_scan(n); insight_index_free(n->index); n->index=next;
-   Frame *frame=g_new0(Frame,1); frame->path=path; frame->dir=dir;
-   g_ptr_array_add(n->frames,frame); n->files=0; n->skipped=0;
-   n->idle=g_idle_add(scan_step,n); ui_set_statusbar(TRUE,"Insight: indexing…");
-  } else {
-   if(dir) g_dir_close(dir);
-   insight_index_free(next); g_free(path);
-   ui_set_statusbar(TRUE,"Insight: cannot index directory");
-  }
+  start_scan(n,path); g_free(path);
  }
  gtk_widget_destroy(dialog);
+}
+static void reindex(GtkMenuItem *item,gpointer data) {
+ (void)item; Navigation *n=data;
+ if(n->root && *n->root) start_scan(n,n->root);
+ else ui_set_statusbar(TRUE,"Insight: choose a source directory first");
 }
 static void cancel(GtkMenuItem *item,gpointer data) {
  (void)item; Navigation *n=data; stop_scan(n);
@@ -122,7 +151,8 @@ static void cancel(GtkMenuItem *item,gpointer data) {
 enum { NAME, SCOPE, PATH, LINE, KIND, COLUMNS };
 typedef struct { Navigation *n; GtkListStore *store; GtkWidget *status; } Search;
 static void filter(GtkEditable *entry,gpointer data) {
- Search *s=data; const char *query=gtk_entry_get_text(GTK_ENTRY(entry));
+ Search *s=data; if(s->n->idle) refresh_open(s->n);
+ const char *query=gtk_entry_get_text(GTK_ENTRY(entry));
  const InsightSymbol *found[500];
  size_t total=insight_index_find(s->n->index,query,0,found,500);
  gtk_list_store_clear(s->store);
@@ -178,13 +208,22 @@ static void find_symbol(GtkMenuItem *item,gpointer data) {
 }
 Navigation *navigation_new(GeanyPlugin *plugin) {
  Navigation *n=g_new0(Navigation,1); n->plugin=plugin;
- n->index=insight_index_new(); n->frames=g_ptr_array_new_with_free_func(frame_free);
+ n->base=insight_index_new(); n->frames=g_ptr_array_new_with_free_func(frame_free);
+ n->cache_path=g_build_filename(plugin->geany_data->app->configdir,"plugins","insight","project.idx",NULL);
+ if(n->base && g_file_test(n->cache_path,G_FILE_TEST_EXISTS)) {
+  char *root=NULL; GError *error=NULL;
+  InsightIndex *loaded=insight_cache_load(n->cache_path,&root,&error);
+  if(loaded) {
+   insight_index_free(n->base); n->base=loaded; n->root=g_strdup(root); free(root);
+  } else { ui_set_statusbar(TRUE,"Insight: cached index ignored: %s",error->message); g_error_free(error); }
+ }
+ n->index=insight_index_clone(n->base);
  if(!n->index) { navigation_free(n); return NULL; }
  n->menu=gtk_menu_item_new_with_label("Insight: Project navigation");
  GtkWidget *submenu=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(n->menu),submenu);
- const char *labels[]={"Index source directory…","Find symbol…","Cancel indexing"};
- GCallback callbacks[]={G_CALLBACK(choose_root),G_CALLBACK(find_symbol),G_CALLBACK(cancel)};
- for(int j=0;j<3;j++) {
+ const char *labels[]={"Index source directory…","Reindex current directory","Find symbol…","Cancel indexing"};
+ GCallback callbacks[]={G_CALLBACK(choose_root),G_CALLBACK(reindex),G_CALLBACK(find_symbol),G_CALLBACK(cancel)};
+ for(guint j=0;j<G_N_ELEMENTS(labels);j++) {
   GtkWidget *item=gtk_menu_item_new_with_label(labels[j]);
   gtk_container_add(GTK_CONTAINER(submenu),item); g_signal_connect(item,"activate",callbacks[j],n);
  }
@@ -195,5 +234,6 @@ void navigation_free(Navigation *n) {
  if(!n) return;
  stop_scan(n);
  if(n->menu) gtk_widget_destroy(n->menu);
- g_ptr_array_free(n->frames,TRUE); insight_index_free(n->index); g_free(n);
+ g_ptr_array_free(n->frames,TRUE); insight_index_free(n->index); insight_index_free(n->base);
+ g_free(n->root); g_free(n->cache_path); g_free(n);
 }

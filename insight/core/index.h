@@ -9,6 +9,14 @@ typedef struct {
 typedef struct InsightIndex InsightIndex;
 InsightIndex *insight_index_new(void);
 void insight_index_free(InsightIndex *);
+InsightIndex *insight_index_clone(const InsightIndex *);
+#define INSIGHT_INDEX_SNAPSHOT_LIMIT (64u * 1024u * 1024u)
+/* Versioned, endian-independent snapshot with CRC32 corruption detection.
+ * Root is metadata only; decoding never accesses paths from the snapshot.
+ * Serialized bytes/root are malloc-owned; caller frees them. On failure,
+ * output pointers are NULL and length is zero. Max 250k symbols, 64 KiB/field. */
+int insight_index_serialize(const InsightIndex *,const char *root,unsigned char **data,size_t *length);
+InsightIndex *insight_index_deserialize(const unsigned char *,size_t,char **root);
 size_t insight_index_count(const InsightIndex *);
 /* Atomically replace all symbols for path; zero entries deletes that file.
  * Strings are copied. Returns 0 for invalid input/allocation failure. */

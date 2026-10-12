@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <limits.h>
 struct InsightIndex { InsightSymbol *items; size_t count; };
 static char *copy(const char *s) {
  size_t n=strlen(s)+1; char *p=malloc(n); if(p) memcpy(p,s,n); return p;
@@ -69,4 +70,118 @@ size_t insight_index_find(const InsightIndex *i,const char *query,int exact,
   matches++;
  }
  return matches;
+}
+
+InsightIndex *insight_index_clone(const InsightIndex *source) {
+ if(!source) return NULL;
+ InsightIndex *next=insight_index_new(); if(!next) return NULL;
+ next->count=source->count;
+ next->items=source->count ? calloc(source->count,sizeof *next->items) : NULL;
+ if(source->count && !next->items) { next->count=0; insight_index_free(next); return NULL; }
+ for(size_t n=0;n<source->count;n++) {
+  next->items[n].name=copy(source->items[n].name);
+  next->items[n].path=copy(source->items[n].path);
+  next->items[n].scope=copy(source->items[n].scope);
+  next->items[n].kind=copy(source->items[n].kind);
+  next->items[n].line=source->items[n].line;
+  if(!next->items[n].name || !next->items[n].path || !next->items[n].scope || !next->items[n].kind) {
+   insight_index_free(next); return NULL;
+  }
+ }
+ return next;
+}
+#define SNAPSHOT_FIELDS_LIMIT 65536u
+#define SNAPSHOT_SYMBOLS_LIMIT 250000u
+static const unsigned char magic[8]={'G','I','S','I','D','X',0,1};
+static uint32_t checksum(const unsigned char *s,size_t length) {
+ uint32_t crc=UINT32_MAX;
+ for(size_t n=0;n<length;n++) {
+  crc^=s[n];
+  for(int bit=0;bit<8;bit++) crc=(crc>>1) ^ (0xedb88320u & (0u-(crc&1u)));
+ }
+ return crc^UINT32_MAX;
+}
+static int field_size(const char *s,size_t *total) {
+ size_t length=strlen(s);
+ if(length>SNAPSHOT_FIELDS_LIMIT || *total>INSIGHT_INDEX_SNAPSHOT_LIMIT-4-length) return 0;
+ *total+=4+length; return 1;
+}
+static void put32(unsigned char **cursor,uint32_t value) {
+ for(unsigned n=0;n<4;n++) *(*cursor)++=(unsigned char)(value>>(8*n));
+}
+static void put64(unsigned char **cursor,uint64_t value) {
+ for(unsigned n=0;n<8;n++) *(*cursor)++=(unsigned char)(value>>(8*n));
+}
+static void put_string(unsigned char **cursor,const char *s) {
+ size_t length=strlen(s); put32(cursor,(uint32_t)length);
+ memcpy(*cursor,s,length); *cursor+=length;
+}
+int insight_index_serialize(const InsightIndex *i,const char *root,unsigned char **data,size_t *length) {
+ if(data) *data=NULL;
+ if(length) *length=0;
+ if(!i || !root || !data || !length || i->count>SNAPSHOT_SYMBOLS_LIMIT) return 0;
+ size_t total=8+4+4; /* magic, count, checksum */
+ if(!field_size(root,&total)) return 0;
+ for(size_t n=0;n<i->count;n++) {
+  const InsightSymbol *s=&i->items[n];
+  if(total>INSIGHT_INDEX_SNAPSHOT_LIMIT-8) return 0;
+  total+=8;
+  if(!field_size(s->name,&total) || !field_size(s->path,&total) ||
+   !field_size(s->scope,&total) || !field_size(s->kind,&total)) return 0;
+ }
+ unsigned char *buffer=malloc(total); if(!buffer) return 0;
+ unsigned char *cursor=buffer; memcpy(cursor,magic,8); cursor+=8;
+ put32(&cursor,(uint32_t)i->count); put_string(&cursor,root);
+ for(size_t n=0;n<i->count;n++) {
+  const InsightSymbol *s=&i->items[n]; put64(&cursor,(uint64_t)s->line);
+  put_string(&cursor,s->name); put_string(&cursor,s->path);
+  put_string(&cursor,s->scope); put_string(&cursor,s->kind);
+ }
+ put32(&cursor,checksum(buffer,total-4));
+ *data=buffer; *length=total; return 1;
+}
+static uint32_t get32(const unsigned char *s) {
+ uint32_t value=0;
+ for(unsigned n=0;n<4;n++) value|=(uint32_t)s[n]<<(8*n);
+ return value;
+}
+static uint64_t get64(const unsigned char *s) {
+ uint64_t value=0;
+ for(unsigned n=0;n<8;n++) value|=(uint64_t)s[n]<<(8*n);
+ return value;
+}
+static char *get_string(const unsigned char **cursor,const unsigned char *end) {
+ if((size_t)(end-*cursor)<4) return NULL;
+ uint32_t length=get32(*cursor); *cursor+=4;
+ if(length>SNAPSHOT_FIELDS_LIMIT || (size_t)(end-*cursor)<length || memchr(*cursor,0,length)) return NULL;
+ char *s=malloc((size_t)length+1); if(!s) return NULL;
+ memcpy(s,*cursor,length); s[length]=0; *cursor+=length; return s;
+}
+InsightIndex *insight_index_deserialize(const unsigned char *data,size_t length,char **root) {
+ if(root) *root=NULL;
+ if(!data || !root || length<20 || length>INSIGHT_INDEX_SNAPSHOT_LIMIT || memcmp(data,magic,8)) return NULL;
+ if(checksum(data,length-4)!=get32(data+length-4)) return NULL;
+ uint32_t count=get32(data+8);
+ if(count>SNAPSHOT_SYMBOLS_LIMIT) return NULL;
+ const unsigned char *cursor=data+12,*end=data+length-4;
+ char *path=get_string(&cursor,end); if(!path) return NULL;
+ if(count>(size_t)(end-cursor)/26) { free(path); return NULL; }
+ InsightIndex *i=insight_index_new(); if(!i) { free(path); return NULL; }
+ i->items=count ? calloc(count,sizeof *i->items) : NULL;
+ if(count && !i->items) { free(path); insight_index_free(i); return NULL; }
+ i->count=count;
+ for(size_t n=0;n<count;n++) {
+  if((size_t)(end-cursor)<8) goto failure;
+  uint64_t line=get64(cursor); cursor+=8;
+  if(!line || line>ULONG_MAX) goto failure;
+  InsightSymbol *s=&i->items[n]; s->line=(unsigned long)line;
+  s->name=get_string(&cursor,end); s->path=get_string(&cursor,end);
+  s->scope=get_string(&cursor,end); s->kind=get_string(&cursor,end);
+  if(!s->name || !*s->name || !s->path || !*s->path || !s->scope || !s->kind) goto failure;
+ }
+ if(cursor!=end) goto failure;
+ if(count>1) qsort(i->items,count,sizeof *i->items,compare);
+ *root=path; return i;
+failure:
+ free(path); insight_index_free(i); return NULL;
 }

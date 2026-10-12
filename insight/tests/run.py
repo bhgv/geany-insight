@@ -19,3 +19,8 @@ document_cmd=[os.environ.get('CC','cc'),'-std=c99','-O1','-g','-Wall','-Wextra',
 if os.environ.get('SANITIZE'): document_cmd[1:1]=['-fsanitize='+os.environ['SANITIZE'],'-fno-omit-frame-pointer']
 subprocess.run(document_cmd,check=True)
 subprocess.run([str(build/'document_test')],check=True)
+
+snapshot_cmd=[os.environ.get('CC','cc'),'-std=c99','-O1','-g','-Wall','-Wextra','-Werror','-I'+str(root/'core'),str(root/'core/index.c'),str(root/'tests/snapshot_test.c'),'-o',str(build/'snapshot_test')]
+if os.environ.get('SANITIZE'): snapshot_cmd[1:1]=['-fsanitize='+os.environ['SANITIZE'],'-fno-omit-frame-pointer']
+subprocess.run(snapshot_cmd,check=True)
+subprocess.run([str(build/'snapshot_test')],check=True)
