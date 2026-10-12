@@ -117,6 +117,11 @@ static int insert(lua_State *L) {
  if(memchr(text,0,n) || !api->insert || !api->insert(write_host(L)->context,at,text)) return luaL_error(L,"cannot insert text");
  return 0;
 }
+static int message(lua_State *L) {
+ size_t n; const char *s=luaL_checklstring(L,1,&n); const InsightEditorAPI *api=editor_api(L);
+ if(n>4096 || memchr(s,0,n) || !api->message || !api->message(active_host(L)->context,s)) return luaL_error(L,"cannot show message");
+ return 0;
+}
 static int text(lua_State *L) {
  const InsightHost *h=active_host(L);
  const char *s=h->text(h->context);
@@ -234,6 +239,7 @@ static int setup(lua_State *L) {
  lua_pushcfunction(L,line_text); lua_setfield(L,-2,"line_text");
  lua_pushcfunction(L,replace_range); lua_setfield(L,-2,"replace_range");
  lua_pushcfunction(L,insert); lua_setfield(L,-2,"insert");
+ lua_pushcfunction(L,message); lua_setfield(L,-2,"message");
  lua_setglobal(L,"editor");
  lua_newtable(L); lua_pushcfunction(L,symbols); lua_setfield(L,-2,"symbols");
  lua_setglobal(L,"project");

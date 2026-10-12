@@ -10,7 +10,7 @@ static InsightExtensions *extensions;
 static GtkAccelGroup *accelerators;
 static GtkWindow *main_window;
 static Navigation *navigation;
-typedef struct { GeanyDocument *doc; gchar *scratch; GeanyDocument *undo_doc; } Host;
+typedef struct { GeanyDocument *doc; gchar *scratch; GeanyDocument *undo_doc; int message_set; } Host;
 static const char *get_text(void *ctx) {
  Host *h=ctx; g_free(h->scratch);
  h->scratch=sci_get_contents(h->doc->editor->sci,sci_get_length(h->doc->editor->sci)+1);
@@ -63,7 +63,10 @@ static int replace_range(void *ctx,unsigned long start,unsigned long end,const c
  return sci_replace_target(h->doc->editor->sci,text,FALSE)>=0;
 }
 static int insert(void *ctx,unsigned long at,const char *text) { return replace_range(ctx,at,at,text); }
-static const InsightEditorAPI host_api={.position=get_position,.goto_line=go_line,.insert=insert,.replace_range=replace_range,.line_text=line_text,.line_count=line_count,.set_selection=set_selection,.selection_range=selection_range,.filename=filename,.save_file=save_file,.open_file=open_file};
+static int message(void *ctx,const char *text) {
+ Host *h=ctx; if(!g_utf8_validate(text,-1,NULL)) return 0; h->message_set=1; ui_set_statusbar(TRUE,"%s",text); return 1;
+}
+static const InsightEditorAPI host_api={.position=get_position,.goto_line=go_line,.message=message,.insert=insert,.replace_range=replace_range,.line_text=line_text,.line_count=line_count,.set_selection=set_selection,.selection_range=selection_range,.filename=filename,.save_file=save_file,.open_file=open_file};
 static void invoke_command(GtkMenuItem *menu,gpointer data) {
  (void)data;
  const char *name=g_object_get_data(G_OBJECT(menu),"insight-command-id");
@@ -74,7 +77,7 @@ static void invoke_command(GtkMenuItem *menu,gpointer data) {
  int result=insight_session_invoke(insight_extensions_session(extensions),name,&host,error,sizeof error);
  if(h.undo_doc) sci_end_undo_action(h.undo_doc->editor->sci);
  g_free(h.scratch);
- ui_set_statusbar(TRUE,"Lua: %s",result ? (error[0] ? error : "runtime unavailable") : "completed");
+ if(result || !h.message_set) ui_set_statusbar(TRUE,"Lua: %s",result ? (error[0] ? error : "runtime unavailable") : "completed");
 }
 static void rebuild_commands(void) {
  if(accelerators) { gtk_window_remove_accel_group(main_window,accelerators); g_object_unref(accelerators); }
@@ -149,7 +152,7 @@ static void activate(GtkMenuItem *menu,gpointer data) {
    int result=insight_run(&host,source,size,error,sizeof error);
    if(h.undo_doc) sci_end_undo_action(h.undo_doc->editor->sci);
  g_free(h.scratch);
-   ui_set_statusbar(TRUE,"Lua: %s",result ? (error[0] ? error : "runtime unavailable") : "completed");
+   if(result || !h.message_set) ui_set_statusbar(TRUE,"Lua: %s",result ? (error[0] ? error : "runtime unavailable") : "completed");
   }
   g_free(source); g_free(path);
  }

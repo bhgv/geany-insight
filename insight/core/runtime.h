@@ -15,6 +15,7 @@ typedef struct {
  const char *(*line_text)(void *,unsigned long);
  int (*replace_range)(void *,unsigned long,unsigned long,const char *);
  int (*insert)(void *,unsigned long,const char *);
+ int (*message)(void *,const char *);
 } InsightEditorAPI;
 typedef struct {
  void *context;
