@@ -945,7 +945,7 @@ libgeany = shared_library('geany',
 	link_with: insight_native,
 	soversion: '0',
 	c_args: geany_cflags + [ '-DG_LOG_DOMAIN="Geany"' ],
-	include_directories: [iscintilla],
+	include_directories: [iscintilla, include_directories('insight/core', 'insight/desktop')],
 	dependencies: [dep_tagmanager, dep_ctags, dep_scintilla] + deps + win_deps + osx_deps,
 	install: true
 )

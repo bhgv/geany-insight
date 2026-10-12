@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 #include "../insight/desktop/index_cache.h"
 #include <stdlib.h>
+#include <stdint.h>
 
 typedef struct { gchar *path; GDir *dir; } ScanFrame;
 static void frame_free(gpointer data) { ScanFrame *p=data; if(p->dir) g_dir_close(p->dir); g_free(p->path); g_free(p); }
@@ -33,7 +34,8 @@ typedef struct {
  GPtrArray *usage_paths; gchar *usage_name; guint usage_idle,usage_position,usage_shown,usage_skipped;
  GtkListStore *symbols;
  ScintillaObject *preview;
- guint refresh,source_id;
+ guint refresh,source_id; gboolean context_visible;
+ gchar *prefs_path;
  InsightIndex *base,*index;
  GPtrArray *frames,*files; gchar *root,*cache_path; guint scan,parsed,skipped;
  gchar *source_path; gulong source_line;
@@ -443,6 +445,45 @@ void insight_workbench_refresh(void) {
  if(wb.refresh) g_source_remove(wb.refresh);
  wb.refresh=g_timeout_add(60,refresh_now,NULL);
 }
+static void save_workbench_settings(void) {
+ if(!wb.prefs_path || !wb.pane) return;
+ GKeyFile *settings=g_key_file_new();
+ g_key_file_set_integer(settings,"workbench","version",1);
+ g_key_file_set_integer(settings,"workbench","split",gtk_paned_get_position(GTK_PANED(wb.pane)));
+ g_key_file_set_boolean(settings,"workbench","follow",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow)));
+ g_key_file_set_boolean(settings,"workbench","visible",wb.context_visible);
+ gchar *encoded=wb.root ? g_base64_encode((const guchar *)wb.root,strlen(wb.root)) : g_strdup("");
+ g_key_file_set_string(settings,"workbench","root-base64",encoded); g_free(encoded);
+ gsize length; gchar *text=g_key_file_to_data(settings,&length,NULL),*directory=g_path_get_dirname(wb.prefs_path);
+ if(!g_mkdir_with_parents(directory,0700)) {
+  GFile *file=g_file_new_for_path(wb.prefs_path); GError *error=NULL;
+  if(!g_file_replace_contents(file,text,length,NULL,FALSE,G_FILE_CREATE_PRIVATE,NULL,NULL,&error)) { ui_set_statusbar(TRUE,"Workbench settings not saved: %s",error->message); g_clear_error(&error); }
+  g_object_unref(file);
+ }
+ g_free(directory); g_free(text); g_key_file_free(settings);
+}
+static void restore_workbench_settings(void) {
+ char *text=read_disk_source(wb.prefs_path); if(!text) return;
+ GKeyFile *settings=g_key_file_new();
+ if(strlen(text)<=32768 && g_key_file_load_from_data(settings,text,-1,G_KEY_FILE_NONE,NULL) && g_key_file_get_integer(settings,"workbench","version",NULL)==1) {
+  gint split=g_key_file_get_integer(settings,"workbench","split",NULL); if(split>=150 && split<=10000) gtk_paned_set_position(GTK_PANED(wb.pane),split);
+  if(g_key_file_has_key(settings,"workbench","follow",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),g_key_file_get_boolean(settings,"workbench","follow",NULL));
+  if(g_key_file_has_key(settings,"workbench","visible",NULL)) wb.context_visible=g_key_file_get_boolean(settings,"workbench","visible",NULL);
+  gchar *encoded=g_key_file_get_string(settings,"workbench","root-base64",NULL);
+  if(encoded && !wb.root) {
+   gsize length; guchar *decoded=g_base64_decode(encoded,&length); gchar *canonical=g_base64_encode(decoded,length);
+   if(length && length<=16384 && !memchr(decoded,0,length) && !strcmp(encoded,canonical)) { gchar *root=g_strndup((const gchar *)decoded,length); if(g_path_is_absolute(root)) wb.root=root; else g_free(root); }
+   g_free(canonical); g_free(decoded);
+  }
+  g_free(encoded);
+ }
+ g_free(text); g_key_file_free(settings);
+ if(!wb.context_visible) gtk_widget_hide(wb.box);
+}
+static void reindex_root(GtkButton *button,gpointer data) {
+ (void)button; (void)data;
+ if(!wb.root || !start_scan(wb.root)) ui_set_statusbar(TRUE,"Choose a readable source folder first");
+}
 static void follow_changed(GtkToggleButton *button,gpointer data) {
  (void)data;
  if(gtk_toggle_button_get_active(button)) insight_workbench_refresh();
@@ -453,6 +494,7 @@ void insight_workbench_init(void) {
  GtkWidget *parent=gtk_widget_get_parent(existing); gint position=0;
  gtk_container_child_get(GTK_CONTAINER(parent),existing,"position",&position,NULL);
  wb.usage_paths=g_ptr_array_new_with_free_func(location_free);
+ wb.context_visible=TRUE; wb.prefs_path=g_build_filename(app->configdir,"insight","workbench.conf",NULL);
  wb.frames=g_ptr_array_new_with_free_func(frame_free); wb.files=g_ptr_array_new_with_free_func(g_free);
  wb.base=insight_index_new(); wb.index=insight_index_new();
  wb.cache_path=g_build_filename(app->configdir,"insight","workspace.idx",NULL); restore_index_cache();
@@ -467,6 +509,8 @@ void insight_workbench_init(void) {
  GtkWidget *folder=gtk_button_new_with_label("Source folder…"),*cancel=gtk_button_new_with_label("Cancel scan");
  g_signal_connect(folder,"clicked",G_CALLBACK(choose_root),NULL); g_signal_connect(cancel,"clicked",G_CALLBACK(cancel_scan),NULL);
  GtkWidget *project_controls=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,2);
+ GtkWidget *reindex=gtk_button_new_with_label("Reindex"); g_signal_connect(reindex,"clicked",G_CALLBACK(reindex_root),NULL);
+ gtk_box_pack_start(GTK_BOX(project_controls),reindex,FALSE,FALSE,0);
  gtk_box_pack_start(GTK_BOX(project_controls),folder,TRUE,TRUE,0); gtk_box_pack_start(GTK_BOX(project_controls),cancel,FALSE,FALSE,0);
  gtk_box_pack_start(GTK_BOX(wb.browser),project_controls,FALSE,FALSE,0); gtk_box_reorder_child(GTK_BOX(wb.browser),project_controls,0); gtk_widget_show_all(project_controls);
  GtkWidget *back=gtk_button_new_with_label("←"),*forward=gtk_button_new_with_label("→");
@@ -501,10 +545,13 @@ void insight_workbench_init(void) {
  gtk_box_reorder_child(GTK_BOX(parent),wb.pane,position);
  gtk_paned_set_position(GTK_PANED(wb.pane),430);
  gtk_widget_show_all(wb.pane);
+ restore_workbench_settings();
  insight_workbench_refresh();
 }
 void insight_workbench_finalize(void) {
+ save_workbench_settings();
  if(wb.refresh) g_source_remove(wb.refresh);
+ g_free(wb.prefs_path);
  stop_usage(); g_ptr_array_free(wb.usage_paths,TRUE);
  stop_scan(); g_ptr_array_free(wb.frames,TRUE); g_ptr_array_free(wb.files,TRUE); g_free(wb.root); g_free(wb.cache_path);
  g_free(wb.source_path);
