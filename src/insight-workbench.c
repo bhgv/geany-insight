@@ -93,6 +93,22 @@ static gboolean refresh_now(gpointer data) {
  } else show_location(doc->file_name,doc->id,(gulong)sci_get_current_line(doc->editor->sci)+1);
  return G_SOURCE_REMOVE;
 }
+static gboolean preview_button(GtkWidget *widget,GdkEventButton *event,gpointer data) {
+ (void)widget; (void)data;
+ if(event->button!=1 || !(event->state&GDK_CONTROL_MASK)) return FALSE;
+ gint position=(gint)SSM(wb.preview,SCI_POSITIONFROMPOINTCLOSE,(uptr_t)event->x,(sptr_t)event->y);
+ if(position<0) return FALSE;
+ gint start=(gint)SSM(wb.preview,SCI_WORDSTARTPOSITION,position,TRUE),end=(gint)SSM(wb.preview,SCI_WORDENDPOSITION,position,TRUE);
+ if(end<=start || end-start>1024) return TRUE;
+ char word[1025]; for(gint i=start;i<end;i++) word[i-start]=(char)sci_get_char_at(wb.preview,i); word[end-start]=0;
+ GeanyDocument *source=wb.source_id ? document_find_by_id(wb.source_id) : document_get_current();
+ TMTag *definition=word_definition(source,word);
+ if(definition) {
+  gchar *path=utils_get_utf8_from_locale(definition->file->file_name); gulong line=definition->line;
+  show_location(path,0,line); g_free(path);
+ } else ui_set_statusbar(TRUE,"Definition not found: %s",word);
+ return TRUE;
+}
 void insight_workbench_refresh(void) {
  if(!wb.preview) return;
  if(wb.refresh) g_source_remove(wb.refresh);
@@ -113,6 +129,8 @@ void insight_workbench_init(void) {
  SSM(wb.preview,SCI_SETMARGINWIDTHN,1,0); SSM(wb.preview,SCI_SETMARGINWIDTHN,2,0);
  SSM(wb.preview,SCI_SETWRAPMODE,SC_WRAP_NONE,0);
  gtk_widget_set_direction(GTK_WIDGET(wb.preview),GTK_TEXT_DIR_LTR);
+ g_signal_connect(wb.preview,"button-press-event",G_CALLBACK(preview_button),NULL);
+ gtk_widget_set_tooltip_text(GTK_WIDGET(wb.preview),"Ctrl+click an identifier to follow its definition");
  gtk_box_pack_start(GTK_BOX(wb.box),GTK_WIDGET(wb.preview),TRUE,TRUE,0);
  gtk_widget_set_size_request(wb.box,-1,170);
  g_object_ref(existing); gtk_container_remove(GTK_CONTAINER(parent),existing);
