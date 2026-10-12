@@ -3,12 +3,16 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
-static unsigned long line;
-static const char *text(void *ctx) { (void)ctx; return "hello"; }
+static unsigned long line, selection_start, selection_end;
+static char content[128]="hello";
+static char filename[128]="/tmp/test.c";
+static int saved;
+static const char *text(void *ctx) { (void)ctx; return content; }
 static int replace(void *ctx,const char *s) { (void)ctx; (void)s; return 1; }
 static unsigned long position(void *ctx) { (void)ctx; return 42; }
 static int go(void *ctx,unsigned long value) { (void)ctx; if(value>100) return 0; line=value; return 1; }
-static const InsightEditorAPI api={.position=position,.goto_line=go};
+static int fake_open(void *ctx,const char *path) { (void)ctx; snprintf(filename,sizeof filename,"%s",path); return 1; }
+static const InsightEditorAPI api={.position=position,.goto_line=go,.open_file=fake_open};
 static int run(InsightHost *host,const char *source,char *error) { return insight_run(host,source,strlen(source),error,512); }
 int main(void) {
  InsightHost host={.text=text,.selection=text,.replace_selection=replace,.api=&api}; char error[512];
@@ -16,6 +20,8 @@ int main(void) {
  assert(run(&host,"editor.goto_line(0)",error)==1 && line==7);
  assert(run(&host,"editor.goto_line(-1)",error)==1);
  assert(run(&host,"editor.goto_line(101)",error)==1);
+ assert(run(&host,"editor.open('/tmp/other.c')",error)==0 && !strcmp(filename,"/tmp/other.c"));
+ assert(run(&host,"editor.open('a'..string.char(0))",error)==1);
  host.api=NULL; assert(run(&host,"editor.position()",error)==1 && strstr(error,"unavailable"));
  puts("editor API: all checks passed"); return 0;
 }

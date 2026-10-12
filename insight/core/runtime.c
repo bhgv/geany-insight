@@ -66,6 +66,13 @@ static int goto_line(lua_State *L) {
  if(!api->goto_line || !api->goto_line(write_host(L)->context,line)) return luaL_error(L,"cannot go to line");
  return 0;
 }
+static int open(lua_State *L) {
+ size_t n; const char *path=luaL_checklstring(L,1,&n);
+ if(!n || n>16384 || memchr(path,0,n)) return luaL_error(L,"invalid file path");
+ const InsightEditorAPI *api=editor_api(L);
+ if(!api->open_file || !api->open_file(write_host(L)->context,path)) return luaL_error(L,"cannot open document");
+ return 0;
+}
 static int text(lua_State *L) {
  const InsightHost *h=active_host(L);
  const char *s=h->text(h->context);
@@ -173,6 +180,7 @@ static int setup(lua_State *L) {
  lua_pushcfunction(L,replace); lua_setfield(L,-2,"replace_selection");
  lua_pushcfunction(L,position); lua_setfield(L,-2,"position");
  lua_pushcfunction(L,goto_line); lua_setfield(L,-2,"goto_line");
+ lua_pushcfunction(L,open); lua_setfield(L,-2,"open");
  lua_setglobal(L,"editor");
  lua_newtable(L); lua_pushcfunction(L,symbols); lua_setfield(L,-2,"symbols");
  lua_setglobal(L,"project");

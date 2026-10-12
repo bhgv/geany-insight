@@ -10,7 +10,7 @@ static InsightExtensions *extensions;
 static GtkAccelGroup *accelerators;
 static GtkWindow *main_window;
 static Navigation *navigation;
-typedef struct { GeanyDocument *doc; gchar *scratch; } Host;
+typedef struct { GeanyDocument *doc; gchar *scratch; GeanyDocument *undo_doc; } Host;
 static const char *get_text(void *ctx) {
  Host *h=ctx; g_free(h->scratch);
  h->scratch=sci_get_contents(h->doc->editor->sci,sci_get_length(h->doc->editor->sci)+1);
@@ -31,16 +31,24 @@ static int go_line(void *ctx,unsigned long line) {
  if(!line || line>(unsigned long)sci_get_line_count(h->doc->editor->sci)) return 0;
  return navqueue_goto_line(h->doc,h->doc,(gint)line);
 }
-static const InsightEditorAPI host_api={.position=get_position,.goto_line=go_line};
+static int open_file(void *ctx,const char *path) {
+ Host *h=ctx; if(!g_utf8_validate(path,-1,NULL) || !g_path_is_absolute(path)) return 0;
+ gchar *locale=utils_get_locale_from_utf8(path); GeanyDocument *next=document_open_file(locale,FALSE,NULL,NULL); g_free(locale);
+ if(!next) return 0;
+ if(h->undo_doc && h->undo_doc!=next) { sci_end_undo_action(h->undo_doc->editor->sci); sci_start_undo_action(next->editor->sci); h->undo_doc=next; }
+ h->doc=next; return 1;
+}
+static const InsightEditorAPI host_api={.position=get_position,.goto_line=go_line,.open_file=open_file};
 static void invoke_command(GtkMenuItem *menu,gpointer data) {
  (void)data;
  const char *name=g_object_get_data(G_OBJECT(menu),"insight-command-id");
  GeanyDocument *doc=document_get_current();
  if(!doc) { ui_set_statusbar(TRUE,"Lua: no active document"); return; }
- Host h={doc,NULL}; InsightHost host={.context=&h,.text=get_text,.selection=get_selection,.replace_selection=replace_selection,.index=navigation_index(navigation),.api=&host_api};
- char error[512]; sci_start_undo_action(doc->editor->sci);
+ Host h={.doc=doc}; InsightHost host={.context=&h,.text=get_text,.selection=get_selection,.replace_selection=replace_selection,.index=navigation_index(navigation),.api=&host_api};
+ char error[512]; h.undo_doc=doc; sci_start_undo_action(doc->editor->sci);
  int result=insight_session_invoke(insight_extensions_session(extensions),name,&host,error,sizeof error);
- sci_end_undo_action(doc->editor->sci); g_free(h.scratch);
+ if(h.undo_doc) sci_end_undo_action(h.undo_doc->editor->sci);
+ g_free(h.scratch);
  ui_set_statusbar(TRUE,"Lua: %s",result ? (error[0] ? error : "runtime unavailable") : "completed");
 }
 static void rebuild_commands(void) {
@@ -111,10 +119,11 @@ static void activate(GtkMenuItem *menu,gpointer data) {
   else if (!insight_read_lua_file(path,&source,&size,&io_error)) {
    ui_set_statusbar(TRUE,"Lua: %s",io_error->message); g_error_free(io_error);
   } else {
-   Host h={doc,NULL}; InsightHost host={.context=&h,.text=get_text,.selection=get_selection,.replace_selection=replace_selection,.index=navigation_index(navigation),.api=&host_api};
-   char error[512]; sci_start_undo_action(doc->editor->sci);
+   Host h={.doc=doc}; InsightHost host={.context=&h,.text=get_text,.selection=get_selection,.replace_selection=replace_selection,.index=navigation_index(navigation),.api=&host_api};
+   char error[512]; h.undo_doc=doc; sci_start_undo_action(doc->editor->sci);
    int result=insight_run(&host,source,size,error,sizeof error);
-   sci_end_undo_action(doc->editor->sci); g_free(h.scratch);
+   if(h.undo_doc) sci_end_undo_action(h.undo_doc->editor->sci);
+ g_free(h.scratch);
    ui_set_statusbar(TRUE,"Lua: %s",result ? (error[0] ? error : "runtime unavailable") : "completed");
   }
   g_free(source); g_free(path);
@@ -124,7 +133,7 @@ static void activate(GtkMenuItem *menu,gpointer data) {
 static void emit_document_event(const char *name,GeanyDocument *doc) {
  InsightSession *state=insight_extensions_session(extensions);
  if(!extensions || !DOC_VALID(doc) || insight_session_is_running(state)) return;
- Host h={doc,NULL}; InsightHost host={.context=&h,.text=get_text,.selection=get_selection,
+ Host h={.doc=doc}; InsightHost host={.context=&h,.text=get_text,.selection=get_selection,
   .replace_selection=replace_selection,.index=navigation_index(navigation),.api=&host_api};
  char error[512];
  int result=insight_session_emit(state,name,doc->file_name,&host,error,sizeof error); g_free(h.scratch);
