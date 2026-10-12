@@ -195,7 +195,17 @@ static void preview_selection(GtkTreeSelection *selection,gpointer data) {
  } else if(!insight_context_range(source,length,line,5,&start,&end,&first,&target_start,&target_end)) {
   gtk_text_buffer_set_text(buffer,"Symbol line is unavailable; reindex the project",-1);
  } else if(end-start>65536) gtk_text_buffer_set_text(buffer,"Context exceeds 64 KiB; open the definition",-1);
- else gtk_text_buffer_set_text(buffer,source+start,(gint)(end-start));
+ else {
+  gtk_text_buffer_set_text(buffer,source+start,(gint)(end-start));
+  GtkTextTag *tag=gtk_text_tag_table_lookup(gtk_text_buffer_get_tag_table(buffer),"target-line");
+  if(!tag) tag=gtk_text_buffer_create_tag(buffer,"target-line","background","#fff2b2","foreground","#202020",NULL);
+  GtkTextIter begin,finish;
+  gtk_text_buffer_get_iter_at_offset(buffer,&begin,(gint)g_utf8_strlen(source+start,(gssize)(target_start-start)));
+  gtk_text_buffer_get_iter_at_offset(buffer,&finish,(gint)g_utf8_strlen(source+start,(gssize)(target_end-start)));
+  gtk_text_buffer_apply_tag(buffer,tag,&begin,&finish);
+  gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(s->preview),&begin,0.1,TRUE,0.0,0.5);
+  gchar *tip=g_strdup_printf("Context starts at line %lu",first); gtk_widget_set_tooltip_text(s->preview,tip); g_free(tip);
+ }
  g_free(source); g_free(locale);
 }
 static void row_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) {
@@ -232,7 +242,7 @@ static void show_search(Navigation *n,const char *initial,int exact) {
  gtk_entry_set_placeholder_text(GTK_ENTRY(kind),"Kind letter"); gtk_entry_set_width_chars(GTK_ENTRY(kind),8);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(exact_button),exact);
  gtk_box_pack_start(GTK_BOX(filters),exact_button,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(filters),scope,TRUE,TRUE,0);
- gtk_box_pack_start(GTK_BOX(filters),kind,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),filters,FALSE,FALSE,4);
+ gtk_box_pack_start(GTK_BOX(filters),kind,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),filters,FALSE,FALSE,4); gtk_box_reorder_child(GTK_BOX(box),filters,2);
  Search search={.n=n,.store=store,.status=status,.preview=preview,.entry=entry,.scope=scope,.kind=kind,.exact=exact_button,.view=view};
  g_signal_connect(scope,"changed",G_CALLBACK(filter),&search); g_signal_connect(kind,"changed",G_CALLBACK(filter),&search);
  g_signal_connect(exact_button,"toggled",G_CALLBACK(filter_toggle),&search);
