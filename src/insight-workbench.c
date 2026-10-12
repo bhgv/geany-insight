@@ -16,7 +16,11 @@
 #include <string.h>
 #include <gio/gio.h>
 #include "../insight/core/index.h"
+#include <glib/gstdio.h>
+#include <sys/stat.h>
 
+typedef struct { gchar *path; GDir *dir; } ScanFrame;
+static void frame_free(gpointer data) { ScanFrame *p=data; if(p->dir) g_dir_close(p->dir); g_free(p->path); g_free(p); }
 typedef struct { gchar *path; guint id; gulong line; } Location;
 static void location_free(gpointer data) { Location *p=data; g_free(p->path); g_free(p); }
 typedef struct {
@@ -24,6 +28,7 @@ typedef struct {
  ScintillaObject *preview;
  guint refresh,source_id;
  InsightIndex *base,*index;
+ GPtrArray *frames,*files; gchar *root; guint scan,parsed,skipped;
  gchar *source_path; gulong source_line;
  GPtrArray *history,*definitions; gint history_position; gboolean populating;
 } Workbench;
@@ -62,6 +67,55 @@ static void refresh_index(void) {
  }
  insight_index_free(wb.index); wb.index=next;
 }
+static void stop_scan(void) {
+ if(wb.scan) { g_source_remove(wb.scan); wb.scan=0; }
+ if(wb.frames) g_ptr_array_set_size(wb.frames,0);
+}
+static gboolean scan_step(gpointer data) {
+ (void)data;
+ if(!wb.frames->len || wb.parsed>=10000) {
+  wb.scan=0; g_ptr_array_set_size(wb.frames,0); refresh_index();
+  ui_set_statusbar(TRUE,"Workspace: %u files, %zu symbols, %u skipped%s",wb.parsed,insight_index_count(wb.index),wb.skipped,wb.parsed>=10000 ? "; file limit reached" : "");
+  insight_workbench_refresh(); return G_SOURCE_REMOVE;
+ }
+ ScanFrame *frame=g_ptr_array_index(wb.frames,wb.frames->len-1); const char *name=g_dir_read_name(frame->dir);
+ if(!name) { g_ptr_array_remove_index(wb.frames,wb.frames->len-1); return G_SOURCE_CONTINUE; }
+ if(name[0]=='.' || !strcmp(name,"node_modules") || !strcmp(name,"__pycache__")) return G_SOURCE_CONTINUE;
+ gchar *path=g_build_filename(frame->path,name,NULL); GStatBuf st;
+ if(g_lstat(path,&st)) { wb.skipped++; g_free(path); return G_SOURCE_CONTINUE; }
+ if(S_ISDIR(st.st_mode)) {
+  GDir *dir=wb.frames->len<64 ? g_dir_open(path,0,NULL) : NULL;
+  if(dir) { ScanFrame *next=g_new0(ScanFrame,1); next->path=path; next->dir=dir; g_ptr_array_add(wb.frames,next); }
+  else { wb.skipped++; g_free(path); }
+  return G_SOURCE_CONTINUE;
+ }
+ if(!S_ISREG(st.st_mode) || st.st_size>2*1024*1024) { wb.skipped++; g_free(path); return G_SOURCE_CONTINUE; }
+ gchar *utf8=utils_get_utf8_from_locale(path); GeanyFiletype *ft=filetypes_detect_from_file(utf8);
+ if(ft && ft->lang>=0) {
+  TMSourceFile *file=tm_source_file_new(path,ft->name);
+  if(file) {
+   file->lang=ft->lang;
+   if(tm_source_file_parse(file,NULL,0,FALSE) && import_tags(wb.base,file,utf8)) { wb.parsed++; g_ptr_array_add(wb.files,g_strdup(utf8)); }
+   else wb.skipped++;
+   tm_source_file_free(file);
+  } else wb.skipped++;
+ }
+ g_free(utf8); g_free(path); return G_SOURCE_CONTINUE;
+}
+static gboolean start_scan(const char *root) {
+ gchar *owned=g_strdup(root); GDir *dir=g_dir_open(owned,0,NULL); InsightIndex *next=insight_index_new();
+ if(!dir || !next) { if(dir) g_dir_close(dir); insight_index_free(next); g_free(owned); return FALSE; }
+ stop_scan(); insight_index_free(wb.base); wb.base=next; g_free(wb.root); wb.root=g_strdup(owned);
+ g_ptr_array_set_size(wb.files,0); ScanFrame *frame=g_new0(ScanFrame,1); frame->path=owned; frame->dir=dir; g_ptr_array_add(wb.frames,frame);
+ wb.parsed=wb.skipped=0; wb.scan=g_idle_add(scan_step,NULL); ui_set_statusbar(TRUE,"Workspace: indexing source folder…"); return TRUE;
+}
+static void choose_root(GtkButton *button,gpointer data) {
+ (void)button; (void)data;
+ GtkWidget *dialog=gtk_file_chooser_dialog_new("Open source workspace",GTK_WINDOW(main_widgets.window),GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,"Cancel",GTK_RESPONSE_CANCEL,"Open",GTK_RESPONSE_ACCEPT,NULL);
+ if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) { gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog)); if(!start_scan(path)) ui_set_statusbar(TRUE,"Cannot index source folder"); g_free(path); }
+ gtk_widget_destroy(dialog);
+}
+static void cancel_scan(GtkButton *button,gpointer data) { (void)button; (void)data; stop_scan(); refresh_index(); ui_set_statusbar(TRUE,"Workspace scan cancelled; partial index retained"); }
 static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word) {
  if(!wb.definitions || !doc) return NULL;
  refresh_index();
@@ -205,6 +259,7 @@ void insight_workbench_init(void) {
  GtkWidget *existing=ui_lookup_widget(main_widgets.window,"vpaned1");
  GtkWidget *parent=gtk_widget_get_parent(existing); gint position=0;
  gtk_container_child_get(GTK_CONTAINER(parent),existing,"position",&position,NULL);
+ wb.frames=g_ptr_array_new_with_free_func(frame_free); wb.files=g_ptr_array_new_with_free_func(g_free);
  wb.base=insight_index_new(); wb.index=insight_index_new();
  wb.definitions=g_ptr_array_new_with_free_func(location_free);
  wb.history=g_ptr_array_new_with_free_func(location_free); wb.history_position=-1;
@@ -213,6 +268,9 @@ void insight_workbench_init(void) {
  wb.title=gtk_label_new("Context — integrated source navigation");
  gtk_label_set_xalign(GTK_LABEL(wb.title),0.0f);
  GtkWidget *header=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4),*open=gtk_button_new_with_label("Open source");
+ GtkWidget *folder=gtk_button_new_with_label("Source folder…"),*cancel=gtk_button_new_with_label("Cancel scan");
+ g_signal_connect(folder,"clicked",G_CALLBACK(choose_root),NULL); g_signal_connect(cancel,"clicked",G_CALLBACK(cancel_scan),NULL);
+ gtk_box_pack_start(GTK_BOX(header),folder,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(header),cancel,FALSE,FALSE,0);
  GtkWidget *back=gtk_button_new_with_label("←"),*forward=gtk_button_new_with_label("→");
  g_signal_connect(back,"clicked",G_CALLBACK(history_move),GINT_TO_POINTER(-1));
  g_signal_connect(forward,"clicked",G_CALLBACK(history_move),GINT_TO_POINTER(1));
@@ -249,6 +307,7 @@ void insight_workbench_init(void) {
 }
 void insight_workbench_finalize(void) {
  if(wb.refresh) g_source_remove(wb.refresh);
+ stop_scan(); g_ptr_array_free(wb.frames,TRUE); g_ptr_array_free(wb.files,TRUE); g_free(wb.root);
  g_free(wb.source_path);
  insight_index_free(wb.base); insight_index_free(wb.index);
  if(wb.history) g_ptr_array_free(wb.history,TRUE);
