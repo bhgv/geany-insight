@@ -84,6 +84,11 @@ static int filename(lua_State *L) {
  const char *name=api->filename(active_host(L)->context);
  if(name) lua_pushstring(L,name); else lua_pushnil(L); return 1;
 }
+static int selection_range(lua_State *L) {
+ const InsightEditorAPI *api=editor_api(L); unsigned long start,end;
+ if(!api->selection_range || !api->selection_range(active_host(L)->context,&start,&end)) return luaL_error(L,"selection range unavailable");
+ lua_pushinteger(L,(lua_Integer)start); lua_pushinteger(L,(lua_Integer)end); return 2;
+}
 static int text(lua_State *L) {
  const InsightHost *h=active_host(L);
  const char *s=h->text(h->context);
@@ -194,6 +199,7 @@ static int setup(lua_State *L) {
  lua_pushcfunction(L,open); lua_setfield(L,-2,"open");
  lua_pushcfunction(L,save); lua_setfield(L,-2,"save");
  lua_pushcfunction(L,filename); lua_setfield(L,-2,"filename");
+ lua_pushcfunction(L,selection_range); lua_setfield(L,-2,"selection_range");
  lua_setglobal(L,"editor");
  lua_newtable(L); lua_pushcfunction(L,symbols); lua_setfield(L,-2,"symbols");
  lua_setglobal(L,"project");

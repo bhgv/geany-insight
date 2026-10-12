@@ -14,7 +14,8 @@ static int go(void *ctx,unsigned long value) { (void)ctx; if(value>100) return 0
 static int fake_open(void *ctx,const char *path) { (void)ctx; snprintf(filename,sizeof filename,"%s",path); return 1; }
 static int fake_save(void *ctx) { (void)ctx; saved++; return 1; }
 static const char *fake_filename(void *ctx) { (void)ctx; return filename; }
-static const InsightEditorAPI api={.position=position,.goto_line=go,.filename=fake_filename,.save_file=fake_save,.open_file=fake_open};
+static int fake_range(void *ctx,unsigned long *start,unsigned long *end) { (void)ctx; *start=selection_start; *end=selection_end; return 1; }
+static const InsightEditorAPI api={.position=position,.goto_line=go,.selection_range=fake_range,.filename=fake_filename,.save_file=fake_save,.open_file=fake_open};
 static int run(InsightHost *host,const char *source,char *error) { return insight_run(host,source,strlen(source),error,512); }
 int main(void) {
  InsightHost host={.text=text,.selection=text,.replace_selection=replace,.api=&api}; char error[512];
@@ -26,6 +27,7 @@ int main(void) {
  assert(run(&host,"editor.open('a'..string.char(0))",error)==1);
  assert(run(&host,"editor.save()",error)==0 && saved==1);
  assert(run(&host,"assert(editor.filename()=='/tmp/other.c')",error)==0);
+ assert(run(&host,"local a,b=editor.selection_range(); assert(a==0 and b==0)",error)==0);
  host.api=NULL; assert(run(&host,"editor.position()",error)==1 && strstr(error,"unavailable"));
  puts("editor API: all checks passed"); return 0;
 }

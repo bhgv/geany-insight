@@ -9,6 +9,7 @@ typedef struct {
  int (*open_file)(void *,const char *);
  int (*save_file)(void *);
  const char *(*filename)(void *);
+ int (*selection_range)(void *,unsigned long *,unsigned long *);
 } InsightEditorAPI;
 typedef struct {
  void *context;

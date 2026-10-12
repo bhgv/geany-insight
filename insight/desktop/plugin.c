@@ -40,7 +40,10 @@ static int open_file(void *ctx,const char *path) {
 }
 static int save_file(void *ctx) { Host *h=ctx; return h->doc->file_name && document_save_file(h->doc,FALSE); }
 static const char *filename(void *ctx) { return ((Host *)ctx)->doc->file_name; }
-static const InsightEditorAPI host_api={.position=get_position,.goto_line=go_line,.filename=filename,.save_file=save_file,.open_file=open_file};
+static int selection_range(void *ctx,unsigned long *start,unsigned long *end) {
+ Host *h=ctx; *start=(unsigned long)sci_get_selection_start(h->doc->editor->sci); *end=(unsigned long)sci_get_selection_end(h->doc->editor->sci); return 1;
+}
+static const InsightEditorAPI host_api={.position=get_position,.goto_line=go_line,.selection_range=selection_range,.filename=filename,.save_file=save_file,.open_file=open_file};
 static void invoke_command(GtkMenuItem *menu,gpointer data) {
  (void)data;
  const char *name=g_object_get_data(G_OBJECT(menu),"insight-command-id");
