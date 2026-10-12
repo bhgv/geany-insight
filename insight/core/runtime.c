@@ -215,6 +215,22 @@ static int symbols(lua_State *L) {
  }
  lua_pushinteger(L,(lua_Integer)total); return 2;
 }
+static int files(lua_State *L) {
+ size_t n; const char *prefix=luaL_optlstring(L,1,"",&n);
+ lua_Integer limit=luaL_optinteger(L,2,256),offset=luaL_optinteger(L,3,0);
+ if(n>16384 || memchr(prefix,0,n) || limit<1 || limit>1024 || offset<0 || (lua_Unsigned)offset>SIZE_MAX)
+  return luaL_error(L,"invalid file query");
+ const InsightIndex *index=active_host(L)->index;
+ if(!index) return luaL_error(L,"project index unavailable");
+ const char **found=lua_newuserdatauv(L,(size_t)limit*sizeof *found,0);
+ size_t total=insight_index_files(index,prefix,(size_t)offset,found,(size_t)limit);
+ if(total==SIZE_MAX) return luaL_error(L,"unable to enumerate indexed files");
+ size_t count=total>(size_t)offset ? total-(size_t)offset : 0;
+ if(count>(size_t)limit) count=(size_t)limit;
+ lua_createtable(L,(int)count,0);
+ for(size_t i=0;i<count;i++) { lua_pushstring(L,found[i]); lua_rawseti(L,-2,(lua_Integer)i+1); }
+ lua_pushinteger(L,(lua_Integer)total); return 2;
+}
 static int stats(lua_State *L) {
  const InsightIndex *index=active_host(L)->index;
  if(!index) return luaL_error(L,"project index unavailable");
@@ -305,6 +321,7 @@ static int setup(lua_State *L) {
  lua_pushcfunction(L,has); lua_setfield(L,-2,"has");
  lua_setglobal(L,"editor");
  lua_newtable(L); lua_pushcfunction(L,symbols); lua_setfield(L,-2,"symbols");
+ lua_pushcfunction(L,files); lua_setfield(L,-2,"files");
  lua_pushcfunction(L,stats); lua_setfield(L,-2,"stats");
  lua_setglobal(L,"project");
  lua_newtable(L); lua_pushcfunction(L,register_command); lua_setfield(L,-2,"register");

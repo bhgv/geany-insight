@@ -38,6 +38,8 @@ int main(void) {
  InsightHost host={.context=NULL,.text=text,.selection=selection,.replace_selection=replace,.index=index};
  const char *script="local info=project.stats(); assert(info.symbols==1 and info.files_with_symbols==1); local s,total=project.symbols('fo'); assert(total==1 and #s==1); assert(s[1].name=='foo' and s[1].line==42 and s[1].path=='project/a.cpp'); local e,n=project.symbols('fo',true); assert(#e==0 and n==0)";
  assert(insight_run(&host,script,strlen(script),error,sizeof error)==0);
+ const char *file_query="local f,n=project.files('project/'); assert(n==1 and f[1]=='project/a.cpp'); local e,t=project.files('',1,1); assert(t==1 and #e==0)";
+ assert(insight_run(&host,file_query,strlen(file_query),error,sizeof error)==0);
  host.text=multiline;
  const char *matches="local r,n=editor.occurrences('foo',2); assert(n==3 and #r==2 and r[2].line==2 and r[2].column==0); local u,t=editor.occurrences('имя'); assert(t==2 and u[1].line==4 and u[2].column==16)";
  assert(insight_run(&host,matches,strlen(matches),error,sizeof error)==0);
