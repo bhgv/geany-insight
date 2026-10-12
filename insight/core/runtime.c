@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <stdint.h>
 #define MEMORY_LIMIT (16u * 1024u * 1024u)
 #define COMMAND_LIMIT 128u
 typedef struct { char name[64], label[256], shortcut[64]; int reference; } Command;
@@ -162,6 +163,14 @@ static int symbols(lua_State *L) {
  }
  lua_pushinteger(L,(lua_Integer)total); return 2;
 }
+static int stats(lua_State *L) {
+ const InsightIndex *index=active_host(L)->index;
+ if(!index) return luaL_error(L,"project index unavailable");
+ size_t files=insight_index_file_count(index);
+ if(files==SIZE_MAX) return luaL_error(L,"unable to compute project statistics");
+ lua_createtable(L,0,2); lua_pushinteger(L,(lua_Integer)insight_index_count(index)); lua_setfield(L,-2,"symbols");
+ lua_pushinteger(L,(lua_Integer)files); lua_setfield(L,-2,"files_with_symbols"); return 1;
+}
 static int register_command(lua_State *L) {
  Runtime *r=runtime(L);
  if(!r->registering) return luaL_error(L,"commands can only be registered during extension load");
@@ -242,6 +251,7 @@ static int setup(lua_State *L) {
  lua_pushcfunction(L,message); lua_setfield(L,-2,"message");
  lua_setglobal(L,"editor");
  lua_newtable(L); lua_pushcfunction(L,symbols); lua_setfield(L,-2,"symbols");
+ lua_pushcfunction(L,stats); lua_setfield(L,-2,"stats");
  lua_setglobal(L,"project");
  lua_newtable(L); lua_pushcfunction(L,register_command); lua_setfield(L,-2,"register");
  lua_setglobal(L,"commands");

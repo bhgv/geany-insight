@@ -9,6 +9,7 @@ int main(void) {
  InsightSymbol b[]={ {"foo",NULL,"B","function",3} };
  assert(insight_index_update(i,"a.cpp",a,2));
  assert(insight_index_update(i,"b.cpp",b,1));
+ assert(insight_index_file_count(i)==2);
  const InsightSymbol *out[5];
  assert(insight_index_find(i,"foo",1,out,5)==2);
  assert(strcmp(out[0]->path,"a.cpp")==0 && strcmp(out[1]->path,"b.cpp")==0);

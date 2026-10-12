@@ -27,6 +27,17 @@ void insight_index_free(InsightIndex *i) {
  free(i->items); free(i);
 }
 size_t insight_index_count(const InsightIndex *i) { return i ? i->count : 0; }
+static int compare_paths(const void *a,const void *b) { return strcmp(*(const char *const *)a,*(const char *const *)b); }
+size_t insight_index_file_count(const InsightIndex *i) {
+ if(!i || !i->count) return 0;
+ if(i->count>SIZE_MAX/sizeof(char *)) return SIZE_MAX;
+ const char **paths=malloc(i->count*sizeof *paths); if(!paths) return SIZE_MAX;
+ for(size_t n=0;n<i->count;n++) paths[n]=i->items[n].path;
+ qsort(paths,i->count,sizeof *paths,compare_paths);
+ size_t count=1;
+ for(size_t n=1;n<i->count;n++) if(strcmp(paths[n-1],paths[n])) count++;
+ free(paths); return count;
+}
 int insight_index_update(InsightIndex *i,const char *path,const InsightSymbol *s,size_t count) {
  if(!i || !path || !*path || (count && !s)) return 0;
  size_t keep=0;

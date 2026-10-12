@@ -31,7 +31,7 @@ int main(void) {
  InsightSymbol symbols[]={ {"foo",NULL,"namespace","f",42} };
  assert(insight_index_update(index,"project/a.cpp",symbols,1));
  InsightHost host={.context=NULL,.text=text,.selection=selection,.replace_selection=replace,.index=index};
- const char *script="local s,total=project.symbols('fo'); assert(total==1 and #s==1); assert(s[1].name=='foo' and s[1].line==42 and s[1].path=='project/a.cpp'); local e,n=project.symbols('fo',true); assert(#e==0 and n==0)";
+ const char *script="local info=project.stats(); assert(info.symbols==1 and info.files_with_symbols==1); local s,total=project.symbols('fo'); assert(total==1 and #s==1); assert(s[1].name=='foo' and s[1].line==42 and s[1].path=='project/a.cpp'); local e,n=project.symbols('fo',true); assert(#e==0 and n==0)";
  assert(insight_run(&host,script,strlen(script),error,sizeof error)==0);
  insight_index_free(index);
  assert(run("local function inner() error('boom') end; inner()",error)==1 && strstr(error,"stack traceback"));

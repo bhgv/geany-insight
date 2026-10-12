@@ -18,6 +18,7 @@ InsightIndex *insight_index_clone(const InsightIndex *);
 int insight_index_serialize(const InsightIndex *,const char *root,unsigned char **data,size_t *length);
 InsightIndex *insight_index_deserialize(const unsigned char *,size_t,char **root);
 size_t insight_index_count(const InsightIndex *);
+size_t insight_index_file_count(const InsightIndex *);
 /* Atomically replace all symbols for path; zero entries deletes that file.
  * Strings are copied. Returns 0 for invalid input/allocation failure. */
 int insight_index_update(InsightIndex *,const char *path,const InsightSymbol *,size_t);
