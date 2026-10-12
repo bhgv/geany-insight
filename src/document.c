@@ -33,6 +33,7 @@
 #include "callbacks.h" /* for ignore_callback */
 #include "dialogs.h"
 #include "documentprivate.h"
+#include "insight-workbench.h"
 #include "encodings.h"
 #include "encodingsprivate.h"
 #include "filetypesprivate.h"
@@ -2594,6 +2595,7 @@ gint document_replace_all(GeanyDocument *doc, const gchar *find_text, const gcha
  */
 void document_update_tags(GeanyDocument *doc)
 {
+	insight_workbench_index_changed();
 	guchar *buffer_ptr;
 	gsize len;
 

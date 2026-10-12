@@ -4,4 +4,5 @@
 void insight_workbench_init(void);
 void insight_workbench_finalize(void);
 void insight_workbench_refresh(void);
+void insight_workbench_index_changed(void);
 #endif
