@@ -10,5 +10,12 @@ int main(void) {
  find("тест ТЕСТ","тест",1,TRUE,0,9,FALSE); find("_foo foo1 foo","foo",0,TRUE,INSIGHT_SEARCH_WORD,10,FALSE);
  find("a\nb","^",1,TRUE,INSIGHT_SEARCH_REGEX,2,FALSE);
  gsize a,b; gboolean w; GError *e=NULL; g_assert_false(insight_context_find("a",1,"[",0,TRUE,INSIGHT_SEARCH_REGEX,&a,&b,&w,&e)); g_assert_nonnull(e); g_clear_error(&e);
- g_assert_false(insight_context_find("a",1,"missing",0,TRUE,0,&a,&b,&w,NULL)); g_print("Context search checks passed\n"); return 0;
+ g_assert_false(insight_context_find("a",1,"missing",0,TRUE,0,&a,&b,&w,NULL));
+ InsightSearchMatch matches[4]; gsize count=0;
+ g_assert_true(insight_context_collect("x\r\nx\rx\nx",8,"x",0,matches,2,&count,&e)); g_assert_no_error(e);g_assert_cmpuint(count,==,4);g_assert_cmpuint(matches[1].start,==,3);g_assert_cmpuint(matches[1].line,==,2);g_assert_cmpuint(matches[1].column,==,0);
+ g_assert_true(insight_context_collect("а\nб",5,"^",INSIGHT_SEARCH_REGEX,matches,4,&count,&e));g_assert_cmpuint(count,==,2);g_assert_cmpuint(matches[1].start,==,3);g_assert_cmpuint(matches[1].end,==,3);g_assert_cmpuint(matches[1].line,==,2);
+ g_assert_true(insight_context_collect("foo food FOO",12,"foo",INSIGHT_SEARCH_WORD,matches,4,&count,&e));g_assert_cmpuint(count,==,2);
+ g_assert_true(insight_context_collect("abc",3,"missing",0,NULL,0,&count,&e));g_assert_cmpuint(count,==,0);
+ g_assert_false(insight_context_collect("abc",3,"[",INSIGHT_SEARCH_REGEX,matches,4,&count,&e));g_assert_nonnull(e);g_clear_error(&e);g_assert_cmpuint(count,==,0);
+ g_print("Context search checks passed\n"); return 0;
 }

@@ -411,3 +411,8 @@ test('Insight notebook store', notebook_store_test)
 
 workspace_watch_test = executable('test_insight_workspace_watch', '../insight/tests/workspace_watch_test.c', '../insight/desktop/workspace_watch.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)
 test('Insight workspace watcher', workspace_watch_test)
+
+source_mask_test = executable('test_insight_source_mask', '../insight/tests/source_mask_test.c', '../insight/desktop/source_mask.c', '../insight/core/occurrences.c', '../insight/core/document.c', include_directories: include_directories('../insight/desktop'), dependencies: glib)
+test('Insight source mask', source_mask_test)
+relation_query_test = executable('test_insight_relation_query', '../insight/tests/relation_query_test.c', '../insight/desktop/relation_query.c', '../insight/core/index.c', include_directories: include_directories('../insight/desktop'), dependencies: glib)
+test('Insight relation query', relation_query_test)

@@ -227,6 +227,10 @@ libgeany_la_SOURCES += \
 	../insight/desktop/notebook_store.h \
 	../insight/desktop/workspace_watch.c \
 	../insight/desktop/workspace_watch.h \
+	../insight/desktop/source_mask.c \
+	../insight/desktop/source_mask.h \
+	../insight/desktop/relation_query.c \
+	../insight/desktop/relation_query.h \
 	../insight/desktop/layout_state.c \
 	../insight/desktop/layout_state.h \
 	../insight/desktop/lookup_filter.c \

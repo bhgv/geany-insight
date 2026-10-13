@@ -124,6 +124,10 @@ EXTRA_DIST += \
 	insight/desktop/notebook_store.h \
 	insight/desktop/workspace_watch.c \
 	insight/desktop/workspace_watch.h \
+	insight/desktop/source_mask.c \
+	insight/desktop/source_mask.h \
+	insight/desktop/relation_query.c \
+	insight/desktop/relation_query.h \
 	insight/desktop/layout_state.c \
 	insight/desktop/layout_state.h \
 	insight/desktop/lookup_filter.c \
@@ -136,6 +140,7 @@ EXTRA_DIST += \
 	insight/docs/desktop-check-builds.md \
 	insight/docs/lua-api.md \
 	insight/docs/progress.md \
+	insight/docs/source-insight-parity.md \
 	insight/examples/check_document.lua \
 	insight/examples/commands.lua \
 	insight/examples/find_symbols.lua \
@@ -165,6 +170,8 @@ EXTRA_DIST += \
 	insight/tests/context_search_test.c \
 	insight/tests/notebook_store_test.c \
 	insight/tests/workspace_watch_test.c \
+	insight/tests/source_mask_test.c \
+	insight/tests/relation_query_test.c \
 	insight/tests/layout_state_test.c \
 	insight/tests/lookup_filter_test.c \
 	insight/tests/occurrences_test.c \

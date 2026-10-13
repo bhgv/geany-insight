@@ -35,6 +35,8 @@
 #include "../insight/desktop/context_search.h"
 #include "../insight/desktop/notebook_store.h"
 #include "../insight/desktop/workspace_watch.h"
+#include "../insight/desktop/source_mask.h"
+#include "../insight/desktop/relation_query.h"
 
 typedef struct { gchar *path; GDir *dir; } ScanFrame;
 static void frame_free(gpointer data) { ScanFrame *p=data; if(p->dir) g_dir_close(p->dir); g_free(p->path); g_free(p); }
@@ -50,14 +52,18 @@ typedef struct {
  gint float_x,float_y,float_width,float_height; gboolean restore_float;
  InsightLayout layouts[4]; PanelHost hosts[10]; guint host_count; GtkWidget *panel_commands;
  GtkWidget *find_entry,*find_case,*find_word,*find_regex,*find_status;
- gchar *find_last_query,*find_last_digest; gsize find_last_begin,find_last_end;
+ gchar *find_last_query,*find_last_digest; gsize find_last_begin,find_last_end; guint find_last_flags;
  InsightNotes *notes; gchar *notes_path;
  GtkWidget *marks_entry,*marks_view,*clips_entry,*clips_view; GtkListStore *marks_store,*clips_store;
  InsightWorkspaceWatch *watch; guint watch_idle; gboolean watch_changed,watch_incomplete;
  guint local_doc_id;
  GeanyFiletype *preview_filetype;
  GtkListStore *file_store,*matches;
- GtkWidget *usage_entry,*usage_status,*usage_buffer,*usage_view;
+ GtkWidget *usage_entry,*usage_status,*usage_buffer,*usage_view,*usage_code,*relation_mode,*relation_follow;
+ gchar *relation_word; gint relation_last_mode; gboolean relation_dirty,usage_code_only,relation_setting;
+ gint usage_mode; guint usage_flags;
+ GtkWidget *project_query,*project_case,*project_word,*project_regex,*editor_query,*editor_case,*editor_word,*editor_regex,*project_search_row,*editor_search_row;
+ gchar *editor_find_query,*editor_find_digest; gsize editor_find_begin,editor_find_end; guint editor_find_id,editor_find_flags; GtkWidget *search_toolbars_toggle;
  GPtrArray *usage_paths; gchar *usage_name; guint usage_idle,usage_position,usage_shown,usage_skipped;
  GtkListStore *symbols;
  ScintillaObject *preview;
@@ -92,6 +98,9 @@ static void focus_widget_panel(GtkWidget *);
 static void select_project_tab(gint);
 static gboolean start_scan(const char *);
 static void workspace_changed(gpointer);
+static void create_search_toolbars(void);
+static guint text_search_flags(GtkWidget *,GtkWidget *,GtkWidget *);
+static char *read_disk_source(const char *,gboolean);
 static gchar *source_digest(const char *text) {
  /* Geany can remove a UTF-8 BOM and normalize CRLF while opening a file.
   * Compare logical source content; navigation here uses line numbers. */
@@ -196,7 +205,7 @@ static void restore_index_cache(void) {
 static gboolean scan_step(gpointer data) {
  (void)data;
  if(!wb.frames->len || wb.parsed>=10000) {
-  wb.scan=0; g_ptr_array_set_size(wb.frames,0); refresh_index();
+  wb.scan=0; wb.relation_dirty=TRUE; g_ptr_array_set_size(wb.frames,0); refresh_index();
   if(wb.parsed<10000 && !wb.scan_failed) save_index_cache();
   ui_set_statusbar(TRUE,"Workspace: %u files, %zu symbols, %u skipped%s",wb.parsed,insight_index_count(wb.index),wb.skipped,wb.parsed>=10000 ? "; file limit reached" : (wb.watch_incomplete ? "; directory monitoring incomplete" : ""));
   browser_filter(NULL,NULL); files_filter(NULL,NULL); tree_refresh(); file_types_refresh(); categories_filter(NULL,NULL); local_filter(NULL,NULL); insight_workbench_refresh();
@@ -224,9 +233,10 @@ static gboolean scan_step(gpointer data) {
   TMSourceFile *file=tm_source_file_new(path,ft->name);
   if(file) {
    file->lang=ft->lang;
-   if(tm_source_file_parse(file,NULL,0,FALSE) && insight_native_import(wb.base,file,utf8)) wb.index_dirty=TRUE;
+   gchar *decoded=read_disk_source(utf8,TRUE);
+   if(decoded && tm_source_file_parse(file,(guchar *)decoded,strlen(decoded),TRUE) && insight_native_import(wb.base,file,utf8)) wb.index_dirty=TRUE;
    else { wb.scan_failed=TRUE; wb.skipped++; }
-   tm_source_file_free(file);
+   g_free(decoded); tm_source_file_free(file);
   } else { wb.scan_failed=TRUE; wb.skipped++; }
  }
  if(wb.parsed && wb.parsed%25==0) { files_filter(NULL,NULL); gchar *status=g_strdup_printf("Workspace: indexing… %u files",wb.parsed); ui_set_statusbar(TRUE,"%s",status); g_free(status); }
@@ -432,11 +442,32 @@ static void create_files_browser(void) {
  g_signal_connect(wb.file_view,"key-press-event",G_CALLBACK(browser_key),NULL);
  gtk_widget_show_all(box); files_filter(NULL,NULL);
 }
-enum { USAGE_DISPLAY,USAGE_PATH,USAGE_LINE,USAGE_START,USAGE_END,USAGE_ID,USAGE_DIGEST,USAGE_COLUMNS };
+enum { USAGE_DISPLAY,USAGE_PATH,USAGE_LINE,USAGE_START,USAGE_END,USAGE_ID,USAGE_DIGEST,USAGE_SYMBOL,USAGE_SNIPPET,USAGE_COLUMNS };
 static void stop_usage(void) {
  if(wb.usage_idle) { g_source_remove(wb.usage_idle); wb.usage_idle=0; }
  if(wb.usage_paths) g_ptr_array_set_size(wb.usage_paths,0);
  g_clear_pointer(&wb.usage_name,g_free);
+}
+static gboolean source_dialect(GeanyFiletype *ft,InsightCodeDialect *out) {
+ if(!ft) return FALSE;
+ const char *name=ft->name;
+ if(!g_strcmp0(name,"Python")) *out=INSIGHT_CODE_PYTHON;
+ else if(!g_strcmp0(name,"Lua")) *out=INSIGHT_CODE_LUA;
+ else if(!g_strcmp0(name,"JavaScript") || !g_strcmp0(name,"TypeScript")) *out=INSIGHT_CODE_JS;
+ else if(!g_strcmp0(name,"Sh")) *out=INSIGHT_CODE_SHELL;
+ else if(!g_strcmp0(name,"C") || !g_strcmp0(name,"C++") || !g_strcmp0(name,"C#") || !g_strcmp0(name,"Java")) *out=INSIGHT_CODE_C;
+ else return FALSE;
+ return TRUE;
+}
+static gchar *reference_snippet(const char *text,gsize at) {
+ gsize begin=at,end=at;
+ while(begin && at-begin<320 && text[begin-1]!='\n' && text[begin-1]!='\r') begin--;
+ while(((guchar)text[begin]&0xc0)==0x80) begin++;
+ while(text[end] && end-at<480 && text[end]!='\n' && text[end]!='\r') end++;
+ while(((guchar)text[end]&0xc0)==0x80) end++;
+ gchar *line=g_strndup(text+begin,end-begin); g_strstrip(line);
+ if(g_utf8_strlen(line,-1)>180) { gchar *shortened=g_utf8_substring(line,0,180); g_free(line); line=g_strconcat(shortened,"…",NULL); g_free(shortened); }
+ return line;
 }
 static gboolean usage_step(gpointer data) {
  (void)data;
@@ -451,22 +482,50 @@ static gboolean usage_step(gpointer data) {
  if(doc) { gint length=sci_get_length(doc->editor->sci); if(length>=0 && length<=2*1024*1024) { text=sci_get_contents(doc->editor->sci,length+1); if(text && (!g_utf8_validate(text,length,NULL) || memchr(text,0,(gsize)length))) g_clear_pointer(&text,g_free); } }
  else if(location->path) text=read_disk_source(location->path,TRUE);
  InsightOccurrence *found=g_new(InsightOccurrence,2000-wb.usage_shown); size_t total=0;
- if(text && insight_occurrences_find(text,strlen(text),wb.usage_name,strlen(wb.usage_name),0,found,2000-wb.usage_shown,&total)) {
+ char *mask=NULL; gboolean code=wb.usage_mode==0 && wb.usage_code_only;
+ if(text && code) {
+  GeanyFiletype *ft=doc ? doc->file_type : (location->path ? filetypes_detect_from_file(location->path) : NULL); InsightCodeDialect dialect;
+  if(source_dialect(ft,&dialect)) mask=insight_source_code_mask(text,strlen(text),dialect,NULL);
+ }
+ const char *search_text=code ? mask : text;
+ gboolean valid=FALSE;
+ if(search_text && wb.usage_mode==3) {
+  InsightSearchMatch *matches=g_new(InsightSearchMatch,2000-wb.usage_shown);
+  valid=insight_context_collect(search_text,strlen(search_text),wb.usage_name,wb.usage_flags,matches,2000-wb.usage_shown,&total,NULL);
+  if(valid) for(size_t i=0;i<MIN(total,2000-wb.usage_shown);i++) found[i]=(InsightOccurrence){matches[i].start,matches[i].end,matches[i].line,matches[i].column};
+  g_free(matches);
+ } else if(search_text) valid=insight_occurrences_find(search_text,strlen(search_text),wb.usage_name,strlen(wb.usage_name),0,found,2000-wb.usage_shown,&total);
+ if(valid) {
   gchar *digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,text,-1);
   for(size_t i=0;i<total && wb.usage_shown<2000;i++) {
    GtkTreeIter iter; gtk_list_store_append(wb.matches,&iter);
-   gtk_list_store_set(wb.matches,&iter,USAGE_DISPLAY,location->path ? location->path : "untitled",USAGE_PATH,location->path,USAGE_LINE,found[i].line,USAGE_START,(gulong)found[i].start,USAGE_END,(gulong)found[i].end,USAGE_ID,id,USAGE_DIGEST,digest,-1); wb.usage_shown++;
+   gtk_list_store_set(wb.matches,&iter,USAGE_DISPLAY,location->path ? location->path : "untitled",USAGE_PATH,location->path,USAGE_LINE,found[i].line,USAGE_START,(gulong)found[i].start,USAGE_END,(gulong)found[i].end,USAGE_ID,id,USAGE_DIGEST,digest,USAGE_SYMBOL,wb.usage_name,-1);
+   gchar *snippet=reference_snippet(text,found[i].start); gtk_list_store_set(wb.matches,&iter,USAGE_SNIPPET,snippet,-1); g_free(snippet); wb.usage_shown++;
   }
   g_free(digest);
  } else wb.usage_skipped++;
- g_free(found); g_free(text);
+ g_free(mask); g_free(found); g_free(text);
  gchar *label=g_strdup_printf("Searching… %u results • %u/%u files",wb.usage_shown,wb.usage_position,wb.usage_paths->len);
  gtk_label_set_text(GTK_LABEL(wb.usage_status),label); g_free(label); return G_SOURCE_CONTINUE;
 }
 static void usage_start(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; stop_usage();
+ wb.usage_code_only=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_code)); gtk_list_store_clear(wb.matches);
  const char *query=gtk_entry_get_text(GTK_ENTRY(wb.usage_entry)); size_t total;
- if(!insight_occurrences_find("",0,query,strlen(query),0,NULL,0,&total)) { gtk_label_set_text(GTK_LABEL(wb.usage_status),"Enter one UTF-8 identifier"); return; }
+ gint mode=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode)); wb.usage_mode=mode;
+ if(mode==1 || mode==2) {
+  gtk_list_store_clear(wb.matches); refresh_index(); const InsightSymbol *found[2000];
+  total=insight_relation_query(wb.index,query,mode==1 ? INSIGHT_RELATION_DEFINITIONS : INSIGHT_RELATION_MEMBERS,0,found,G_N_ELEMENTS(found));
+  if(total==SIZE_MAX) { gtk_label_set_text(GTK_LABEL(wb.usage_status),"Enter a symbol name (or qualified owner for Members)"); return; }
+  for(size_t i=0;i<MIN(total,G_N_ELEMENTS(found));i++) { const InsightSymbol *tag=found[i]; GtkTreeIter iter; gtk_list_store_append(wb.matches,&iter); gchar *description=g_strdup_printf("%s • %s",tag->kind,tag->scope);
+   gtk_list_store_set(wb.matches,&iter,USAGE_DISPLAY,tag->path,USAGE_PATH,tag->path,USAGE_LINE,tag->line,USAGE_SYMBOL,tag->name,USAGE_SNIPPET,description,-1); g_free(description);
+  }
+  gchar *label=g_strdup_printf("%zu tag-based %s%s",total,mode==1 ? "definitions/declarations" : "direct members",total>2000 ? " • showing first 2000" : ""); gtk_label_set_text(GTK_LABEL(wb.usage_status),label); g_free(label); return;
+ }
+ wb.usage_flags=(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.project_case)) ? INSIGHT_SEARCH_CASE : 0)|(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.project_word)) ? INSIGHT_SEARCH_WORD : 0)|(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.project_regex)) ? INSIGHT_SEARCH_REGEX : 0);
+ GError *query_error=NULL;
+ if(mode==3 && !insight_context_collect("",0,query,wb.usage_flags,NULL,0,&total,&query_error)) { gtk_label_set_text(GTK_LABEL(wb.usage_status),query_error ? query_error->message : "Invalid text search query"); g_clear_error(&query_error); return; }
+ if(mode!=3 && !insight_occurrences_find("",0,query,strlen(query),0,NULL,0,&total)) { gtk_label_set_text(GTK_LABEL(wb.usage_status),"Enter one UTF-8 identifier"); return; }
  gtk_list_store_clear(wb.matches); wb.usage_name=g_strdup(query); wb.usage_position=wb.usage_shown=wb.usage_skipped=0;
  GHashTable *seen=g_hash_table_new(g_str_hash,g_str_equal);
  if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_buffer))) {
@@ -493,7 +552,8 @@ static void usage_selected(GtkTreeSelection *selection,gpointer data) {
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE);
  if(show_location(path,id,line,TRUE)) {
   gchar *text=sci_get_contents(wb.preview,sci_get_length(wb.preview)+1),*actual=g_compute_checksum_for_string(G_CHECKSUM_SHA256,text,-1);
-  if(!g_strcmp0(actual,digest)) { SSM(wb.preview,SCI_SETSEL,start,end); SSM(wb.preview,SCI_VERTICALCENTRECARET,0,0); }
+  if(!digest) { /* Definitions and members navigate by current tag location. */ }
+  else if(!g_strcmp0(actual,digest)) { SSM(wb.preview,SCI_SETSEL,end,start); SSM(wb.preview,SCI_VERTICALCENTRECARET,0,0); }
   else { wb.source_line=0; navigation_state(); ui_set_statusbar(TRUE,"Source changed after search; run the usage search again"); }
   g_free(actual); g_free(text);
  }
@@ -504,24 +564,63 @@ static void usage_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColum
  GtkTreeSelection *selection=gtk_tree_view_get_selection(view); gtk_tree_selection_select_path(selection,path);
  usage_selected(selection,NULL); if(wb.source_line) open_context(NULL,NULL);
 }
+static void relation_controls(GtkWidget *widget,gpointer data) {
+ (void)widget; (void)data; if(wb.relation_setting) return; wb.relation_dirty=TRUE; stop_usage();
+ gboolean references=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode))==0;
+ gtk_widget_set_sensitive(wb.usage_code,references); gtk_widget_set_sensitive(wb.usage_buffer,references || gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode))==3);
+ if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_follow))) insight_workbench_refresh();
+ else if(*gtk_entry_get_text(GTK_ENTRY(wb.usage_entry))) usage_start(NULL,NULL);
+ else { gtk_list_store_clear(wb.matches); gtk_label_set_text(GTK_LABEL(wb.usage_status),"Enter a symbol for Relations"); }
+}
+static void relation_update_from_editor(gboolean dirty) {
+ if(!wb.relation_follow || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_follow))) return;
+ GeanyDocument *doc=document_get_current(); gchar word[1025]={0};
+ if(doc) editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);
+ gint mode=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode));
+ if(!dirty && !wb.relation_dirty && mode==wb.relation_last_mode && !g_strcmp0(word,wb.relation_word)) return;
+ wb.relation_dirty=FALSE; wb.relation_last_mode=mode; g_free(wb.relation_word); wb.relation_word=g_strdup(word);
+ gtk_entry_set_text(GTK_ENTRY(wb.usage_entry),word);
+ if(*word) usage_start(NULL,NULL);
+ else { stop_usage(); gtk_list_store_clear(wb.matches); gtk_label_set_text(GTK_LABEL(wb.usage_status),"Relations — no selected identifier"); }
+}
 static void create_usage_browser(void) {
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,4),*controls=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,2);
- wb.usage_entry=gtk_search_entry_new(); gtk_entry_set_placeholder_text(GTK_ENTRY(wb.usage_entry),"Identifier usages (lexical)…");
+ wb.usage_entry=gtk_search_entry_new(); gtk_entry_set_placeholder_text(GTK_ENTRY(wb.usage_entry),"Symbol or qualified owner…");
  wb.usage_status=gtk_label_new("Comments and strings included; no semantic scope resolution"); gtk_label_set_line_wrap(GTK_LABEL(wb.usage_status),TRUE);
  wb.usage_buffer=gtk_check_button_new_with_label("Current buffer only");
+ wb.usage_code=gtk_check_button_new_with_label("References: code only");
+ wb.relation_follow=gtk_check_button_new_with_label("Follow symbol in editor");
+ wb.relation_mode=gtk_combo_box_text_new();
+ const char *modes[]={"References (lexical)","Definitions / declarations","Direct members (tags)","Text search (project)"};
+ for(guint i=0;i<G_N_ELEMENTS(modes);i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.relation_mode),modes[i]);
+ gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),0);
  GtkWidget *search=gtk_button_new_with_label("Search"),*cancel=gtk_button_new_with_label("Stop");
  gtk_box_pack_start(GTK_BOX(controls),search,TRUE,TRUE,0); gtk_box_pack_start(GTK_BOX(controls),cancel,FALSE,FALSE,0);
- wb.matches=gtk_list_store_new(USAGE_COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG,G_TYPE_ULONG,G_TYPE_ULONG,G_TYPE_UINT,G_TYPE_STRING);
+ wb.matches=gtk_list_store_new(USAGE_COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG,G_TYPE_ULONG,G_TYPE_ULONG,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING);
  wb.usage_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(wb.matches));
+ gtk_tree_view_append_column(GTK_TREE_VIEW(wb.usage_view),gtk_tree_view_column_new_with_attributes("Symbol",gtk_cell_renderer_text_new(),"text",USAGE_SYMBOL,NULL));
  gtk_tree_view_append_column(GTK_TREE_VIEW(wb.usage_view),gtk_tree_view_column_new_with_attributes("File",gtk_cell_renderer_text_new(),"text",USAGE_DISPLAY,NULL));
  gtk_tree_view_append_column(GTK_TREE_VIEW(wb.usage_view),gtk_tree_view_column_new_with_attributes("Line",gtk_cell_renderer_text_new(),"text",USAGE_LINE,NULL));
+ gtk_tree_view_append_column(GTK_TREE_VIEW(wb.usage_view),gtk_tree_view_column_new_with_attributes("Source / kind • scope",gtk_cell_renderer_text_new(),"text",USAGE_SNIPPET,NULL));
+ const gint columns[]={USAGE_SYMBOL,USAGE_DISPLAY,USAGE_LINE,USAGE_SNIPPET};
+ const gint widths[]={100,150,55,260};
+ for(guint i=0;i<G_N_ELEMENTS(columns);i++) {
+  GtkTreeViewColumn *column=gtk_tree_view_get_column(GTK_TREE_VIEW(wb.usage_view),(gint)i);
+  gtk_tree_view_column_set_sort_column_id(column,columns[i]); gtk_tree_view_column_set_sizing(column,GTK_TREE_VIEW_COLUMN_FIXED); gtk_tree_view_column_set_fixed_width(column,widths[i]); gtk_tree_view_column_set_resizable(column,TRUE);
+  GList *cells=gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(column)); for(GList *cell=cells;cell;cell=cell->next) g_object_set(cell->data,"ellipsize",PANGO_ELLIPSIZE_END,NULL); g_list_free(cells);
+ }
+ gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(wb.usage_view),USAGE_SNIPPET);
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),wb.usage_view);
- gtk_box_pack_start(GTK_BOX(box),wb.usage_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_buffer,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),controls,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_status,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
- gtk_notebook_append_page(GTK_NOTEBOOK(wb.project_notebook),box,gtk_label_new("Usages"));
+ gtk_box_pack_start(GTK_BOX(box),wb.usage_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_mode,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_follow,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_code,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_buffer,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),controls,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_status,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
+ gtk_notebook_append_page(GTK_NOTEBOOK(wb.project_notebook),box,gtk_label_new("Relations"));
  g_signal_connect(search,"clicked",G_CALLBACK(usage_start),NULL); g_signal_connect(cancel,"clicked",G_CALLBACK(usage_cancel),NULL); g_signal_connect(wb.usage_entry,"activate",G_CALLBACK(usage_start),NULL);
  g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.usage_view)),"changed",G_CALLBACK(usage_selected),NULL); g_signal_connect(wb.usage_view,"row-activated",G_CALLBACK(usage_activated),NULL);
  g_signal_connect(wb.usage_entry,"key-press-event",G_CALLBACK(browser_key),NULL);
  g_signal_connect(wb.usage_view,"key-press-event",G_CALLBACK(browser_key),NULL);
+ g_signal_connect(wb.relation_mode,"changed",G_CALLBACK(relation_controls),NULL);
+ g_signal_connect(wb.relation_follow,"toggled",G_CALLBACK(relation_controls),NULL);
+ g_signal_connect(wb.usage_code,"toggled",G_CALLBACK(relation_controls),NULL);
+ g_signal_connect(wb.usage_buffer,"toggled",G_CALLBACK(relation_controls),NULL);
  gtk_widget_show_all(box);
 }
 static void create_browser(void) {
@@ -797,6 +896,7 @@ static gboolean refresh_now(gpointer data) {
  GeanyDocument *active=document_get_current(); gboolean dirty=wb.index_dirty;
  if(dirty || wb.local_doc_id!=(active ? active->id : 0)) local_filter(NULL,NULL);
  if(dirty) { browser_filter(NULL,NULL); categories_filter(NULL,NULL); }
+ relation_update_from_editor(dirty);
  if(!wb.preview || !wb.context_visible || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow))) return G_SOURCE_REMOVE;
  GeanyDocument *doc=document_get_current();
  if(!doc) { render_source("",NULL,1); g_clear_pointer(&wb.source_path,g_free); wb.source_id=0; wb.source_line=0; navigation_state(); gtk_label_set_text(GTK_LABEL(wb.title),"Context — no active source"); return G_SOURCE_REMOVE; }
@@ -851,12 +951,13 @@ static void context_find(GtkWidget *widget,gpointer data) {
  (void)widget; gboolean forward=GPOINTER_TO_INT(data)!=-1; gchar *text=sci_get_contents(wb.preview,sci_get_length(wb.preview)+1); gsize size=strlen(text),begin,end; gboolean wrapped;
  const char *query=gtk_entry_get_text(GTK_ENTRY(wb.find_entry)); gchar *digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,text,-1);
  gsize a=(gsize)SSM(wb.preview,SCI_GETSELECTIONSTART,0,0),b=(gsize)SSM(wb.preview,SCI_GETSELECTIONEND,0,0),from=forward ? b : a;
- gboolean repeat=!g_strcmp0(query,wb.find_last_query) && !g_strcmp0(digest,wb.find_last_digest) && a==wb.find_last_begin && b==wb.find_last_end;
- gboolean edge_wrap=FALSE; if(repeat && a==b) { edge_wrap=forward ? b==size : a==0; from=forward ? (b<size ? b+1 : 0) : (a ? a-1 : size); }
  guint flags=(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.find_case)) ? INSIGHT_SEARCH_CASE : 0)|(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.find_word)) ? INSIGHT_SEARCH_WORD : 0)|(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.find_regex)) ? INSIGHT_SEARCH_REGEX : 0);
+ gboolean repeat=wb.find_last_flags==flags && !g_strcmp0(query,wb.find_last_query) && !g_strcmp0(digest,wb.find_last_digest) && a==wb.find_last_begin && b==wb.find_last_end;
+ gboolean edge_wrap=FALSE; if(repeat && a==b) { edge_wrap=forward ? b==size : a==0; from=forward ? (b<size ? b+1 : 0) : (a ? a-1 : size); }
+
  GError *error=NULL; if(insight_context_find(text,size,query,from,forward,flags,&begin,&end,&wrapped,&error)) {
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); SSM(wb.preview,SCI_SETSEL,begin,end); SSM(wb.preview,SCI_VERTICALCENTRECARET,0,0);
-  gtk_label_set_text(GTK_LABEL(wb.find_status),(wrapped || edge_wrap) ? "Wrapped" : "Match"); g_free(wb.find_last_query); wb.find_last_query=g_strdup(query); g_free(wb.find_last_digest); wb.find_last_digest=g_strdup(digest); wb.find_last_begin=begin; wb.find_last_end=end;
+  gtk_label_set_text(GTK_LABEL(wb.find_status),(wrapped || edge_wrap) ? "Wrapped" : "Match"); g_free(wb.find_last_query); wb.find_last_query=g_strdup(query); g_free(wb.find_last_digest); wb.find_last_digest=g_strdup(digest); wb.find_last_begin=begin; wb.find_last_end=end; wb.find_last_flags=flags;
  } else gtk_label_set_text(GTK_LABEL(wb.find_status),error ? error->message : "No match");
  g_clear_error(&error); g_free(digest); g_free(text);
 }
@@ -1085,7 +1186,7 @@ static void focus_widget_panel(GtkWidget *widget) {
 }
 static void focus_browser(GtkMenuItem *item,gpointer data) {
  (void)item; gint which=GPOINTER_TO_INT(data); GtkWidget *widget=which==1 ? wb.file_entry : (which==2 ? wb.usage_entry : wb.symbol_entry);
- if(which==1) files_filter(NULL,NULL); else if(which==0) browser_filter(NULL,NULL);
+ if(which==1) files_filter(NULL,NULL); else if(which==0) browser_filter(NULL,NULL); else if(which==2) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_follow),FALSE); gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),0); }
  focus_widget_panel(widget);
 }
 gboolean insight_workbench_goto_definition(void) {
@@ -1104,6 +1205,7 @@ static void context_visible(GtkCheckMenuItem *item,gpointer data) {
  if(wb.context_visible) { gtk_widget_show(wb.box); insight_workbench_refresh(); } else gtk_widget_hide(wb.box);
  for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].page==wb.box && wb.hosts[i].window) gtk_widget_set_visible(wb.hosts[i].window,wb.context_visible);
 }
+static void focus_relations(GtkMenuItem *item,gpointer data) { (void)item; (void)data; focus_widget_panel(wb.usage_entry); }
 static void focus_panel(GtkMenuItem *item,gpointer data) {
  (void)item; gint panel=GPOINTER_TO_INT(data); GtkWidget *view=panel==0 ? wb.local_entry : (panel==1 ? wb.tree_view : (panel==2 ? wb.category_entry : wb.types_view));
  if(!panel && !wb.hosts[8].window) { ui_prefs.sidebar_visible=TRUE; ui_sidebar_show_hide(); }
@@ -1232,6 +1334,7 @@ static void panel_menu(GtkWidget *view_menu) {
  for(guint i=0;i<4;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(focus[i]); g_signal_connect(entry,"activate",G_CALLBACK(focus_panel),GINT_TO_POINTER(i)); gtk_container_add(GTK_CONTAINER(menu),entry); }
  const char *expand[]={"Expand Folders","Collapse Folders","Expand Symbol Categories","Collapse Symbol Categories","Expand File Types","Collapse File Types"};
  for(guint i=0;i<6;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(expand[i]); g_signal_connect(entry,"activate",G_CALLBACK(expand_panel),GINT_TO_POINTER(i)); gtk_container_add(GTK_CONTAINER(menu),entry); }
+ GtkWidget *relations=gtk_menu_item_new_with_label("Relation Window"); gtk_container_add(GTK_CONTAINER(menu),relations); g_signal_connect(relations,"activate",G_CALLBACK(focus_relations),NULL);
  GtkWidget *project=gtk_check_menu_item_new_with_label("Project Window"),*local=gtk_check_menu_item_new_with_label("File Symbols Window"); wb.project_toggle=project; wb.local_toggle=local;
  gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(project),gtk_widget_get_visible(wb.project_notebook)); gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(local),ui_prefs.sidebar_visible);
  g_signal_connect(project,"toggled",G_CALLBACK(project_visible),NULL); g_signal_connect(local,"toggled",G_CALLBACK(local_visible),NULL); gtk_container_add(GTK_CONTAINER(menu),project); gtk_container_add(GTK_CONTAINER(menu),local);
@@ -1296,6 +1399,12 @@ static void save_workbench_settings(void) {
  g_key_file_set_boolean(settings,"workbench","visible",wb.context_visible);
  g_key_file_set_integer(settings,"workbench","right-split",gtk_paned_get_position(GTK_PANED(wb.right_pane)));
  g_key_file_set_integer(settings,"workbench","project-tab",project_tab_identity());
+ g_key_file_set_boolean(settings,"workbench","search-toolbars",gtk_widget_get_visible(wb.project_search_row));
+ g_key_file_set_integer(settings,"workbench","project-search-flags",text_search_flags(wb.project_case,wb.project_word,wb.project_regex));
+ g_key_file_set_integer(settings,"workbench","editor-search-flags",text_search_flags(wb.editor_case,wb.editor_word,wb.editor_regex));
+ g_key_file_set_integer(settings,"workbench","relation-mode",gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode)));
+ g_key_file_set_boolean(settings,"workbench","relation-follow",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_follow)));
+ g_key_file_set_boolean(settings,"workbench","references-code-only",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_code)));
  g_key_file_set_boolean(settings,"workbench","usage-buffer",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_buffer)));
  g_key_file_set_boolean(settings,"workbench","wrap",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.wrap)));
  gchar *encoded=wb.root ? g_base64_encode((const guchar *)wb.root,strlen(wb.root)) : g_strdup("");
@@ -1327,6 +1436,13 @@ static void restore_workbench_settings(void) {
   if(g_key_file_has_key(settings,"workbench","follow",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),g_key_file_get_boolean(settings,"workbench","follow",NULL));
   if(g_key_file_has_key(settings,"workbench","visible",NULL)) wb.context_visible=g_key_file_get_boolean(settings,"workbench","visible",NULL);
   gint right=g_key_file_get_integer(settings,"workbench","right-split",NULL); if(right>=200 && right<=10000) gtk_paned_set_position(GTK_PANED(wb.right_pane),right);
+  if(g_key_file_has_key(settings,"workbench","search-toolbars",NULL)) gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.search_toolbars_toggle),g_key_file_get_boolean(settings,"workbench","search-toolbars",NULL));
+  gint project_flags=g_key_file_get_integer(settings,"workbench","project-search-flags",NULL),editor_flags=g_key_file_get_integer(settings,"workbench","editor-search-flags",NULL);
+  if(project_flags>=0 && project_flags<=7) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_case),project_flags&INSIGHT_SEARCH_CASE); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_word),project_flags&INSIGHT_SEARCH_WORD); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_regex),project_flags&INSIGHT_SEARCH_REGEX); }
+  if(editor_flags>=0 && editor_flags<=7) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.editor_case),editor_flags&INSIGHT_SEARCH_CASE); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.editor_word),editor_flags&INSIGHT_SEARCH_WORD); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.editor_regex),editor_flags&INSIGHT_SEARCH_REGEX); }
+  gint relation=g_key_file_get_integer(settings,"workbench","relation-mode",NULL); if(relation>=0 && relation<4) gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),relation);
+  if(g_key_file_has_key(settings,"workbench","relation-follow",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_follow),g_key_file_get_boolean(settings,"workbench","relation-follow",NULL));
+  if(g_key_file_has_key(settings,"workbench","references-code-only",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.usage_code),g_key_file_get_boolean(settings,"workbench","references-code-only",NULL));
   gint tab=g_key_file_get_integer(settings,"workbench","project-tab",NULL); if(tab>=0 && tab<8) gtk_notebook_set_current_page(GTK_NOTEBOOK(wb.project_notebook),tab);
   if(g_key_file_has_key(settings,"workbench","usage-buffer",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.usage_buffer),g_key_file_get_boolean(settings,"workbench","usage-buffer",NULL));
   if(g_key_file_has_key(settings,"workbench","wrap",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.wrap),g_key_file_get_boolean(settings,"workbench","wrap",NULL));
@@ -1347,6 +1463,65 @@ static void reindex_root(GtkButton *button,gpointer data) {
 }
 static void toolbar_definition(GtkToolButton *button,gpointer data) { (void)button; go_definition(NULL,data); }
 static void toolbar_focus(GtkToolButton *button,gpointer data) { (void)button; focus_browser(NULL,data); }
+static guint text_search_flags(GtkWidget *sensitive,GtkWidget *word,GtkWidget *regex) {
+ return (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(sensitive)) ? INSIGHT_SEARCH_CASE : 0)|(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(word)) ? INSIGHT_SEARCH_WORD : 0)|(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(regex)) ? INSIGHT_SEARCH_REGEX : 0);
+}
+static void project_text_search(GtkWidget *widget,gpointer data) {
+ (void)widget; (void)data; wb.relation_setting=TRUE;
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_follow),FALSE);
+ gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),3);
+ gtk_entry_set_text(GTK_ENTRY(wb.usage_entry),gtk_entry_get_text(GTK_ENTRY(wb.project_query)));
+ wb.relation_setting=FALSE; relation_controls(NULL,NULL); focus_widget_panel(wb.usage_view);
+}
+static void editor_text_search(GtkWidget *widget,gpointer data) {
+ (void)widget; gboolean forward=GPOINTER_TO_INT(data)!=-1; GeanyDocument *doc=document_get_current();
+ if(!doc) { ui_set_statusbar(TRUE,"No active document"); return; }
+ gint length=sci_get_length(doc->editor->sci);
+ if(length<0 || length>2*1024*1024) { ui_set_statusbar(TRUE,"Toolbar search supports documents up to 2 MiB; use Geany Find for larger files"); return; }
+ gchar *text=sci_get_contents(doc->editor->sci,length+1),*digest=g_compute_checksum_for_data(G_CHECKSUM_SHA256,(const guchar *)text,(gsize)length);
+ guint flags=text_search_flags(wb.editor_case,wb.editor_word,wb.editor_regex);
+ const char *query=gtk_entry_get_text(GTK_ENTRY(wb.editor_query)); gsize begin,end,a=(gsize)SSM(doc->editor->sci,SCI_GETSELECTIONSTART,0,0),b=(gsize)SSM(doc->editor->sci,SCI_GETSELECTIONEND,0,0),from=forward ? b : a; gboolean wrapped=FALSE;
+ gboolean repeat=wb.editor_find_id==doc->id && wb.editor_find_flags==flags && !g_strcmp0(query,wb.editor_find_query) && !g_strcmp0(digest,wb.editor_find_digest) && a==wb.editor_find_begin && b==wb.editor_find_end;
+ if(repeat && a==b) from=forward ? (b<(gsize)length ? b+1 : 0) : (a ? a-1 : (gsize)length);
+ GError *error=NULL;
+ if(insight_context_find(text,(gsize)length,query,from,forward,flags,&begin,&end,&wrapped,&error)) {
+  SSM(doc->editor->sci,SCI_SETSEL,begin,end); SSM(doc->editor->sci,SCI_VERTICALCENTRECARET,0,0);
+  g_free(wb.editor_find_query); g_free(wb.editor_find_digest); wb.editor_find_query=g_strdup(query); wb.editor_find_digest=g_strdup(digest); wb.editor_find_begin=begin; wb.editor_find_end=end; wb.editor_find_id=doc->id; wb.editor_find_flags=flags;
+  ui_set_statusbar(TRUE,wrapped ? "Find: wrapped" : "Find: match"); insight_workbench_refresh();
+ } else ui_set_statusbar(TRUE,"Find: %s",error ? error->message : "no match");
+ g_clear_error(&error); g_free(text); g_free(digest);
+}
+static void search_toolbar_focus(GtkMenuItem *item,gpointer data) {
+ (void)item; GtkWidget *entry=GPOINTER_TO_INT(data) ? wb.editor_query : wb.project_query;
+ gtk_widget_show(wb.project_search_row); gtk_widget_show(wb.editor_search_row); gtk_widget_grab_focus(entry);
+}
+static void search_toolbars_visible(GtkCheckMenuItem *item,gpointer data) {
+ (void)data; gboolean visible=gtk_check_menu_item_get_active(item); gtk_widget_set_visible(wb.project_search_row,visible); gtk_widget_set_visible(wb.editor_search_row,visible);
+}
+static void create_search_toolbars(void) {
+ GtkWidget *parent=ui_lookup_widget(main_widgets.window,"vbox1");
+ gint position=gtk_widget_get_parent(main_widgets.toolbar)==parent ? 2 : 1;
+ for(guint i=0;i<2;i++) {
+  GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3),*field=gtk_search_entry_new(),*sensitive=gtk_check_button_new_with_label("Match case"),*word=gtk_check_button_new_with_label("Whole word"),*regex=gtk_check_button_new_with_label("Regex");
+  gtk_entry_set_max_length(GTK_ENTRY(field),1024); gtk_widget_set_hexpand(field,TRUE); gtk_widget_set_size_request(field,180,-1);
+  gtk_box_pack_start(GTK_BOX(row),gtk_label_new(i ? "Find:" : "Search project:"),FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(row),field,TRUE,TRUE,0);
+  if(i) {
+   wb.editor_search_row=row; wb.editor_query=field; wb.editor_case=sensitive; wb.editor_word=word; wb.editor_regex=regex;
+   GtkWidget *previous=gtk_button_new_with_label("Previous"),*next=gtk_button_new_with_label("Next");
+   gtk_box_pack_start(GTK_BOX(row),previous,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(row),next,FALSE,FALSE,0);
+   g_signal_connect(previous,"clicked",G_CALLBACK(editor_text_search),GINT_TO_POINTER(-1)); g_signal_connect(next,"clicked",G_CALLBACK(editor_text_search),NULL); g_signal_connect(field,"activate",G_CALLBACK(editor_text_search),NULL);
+  } else {
+   wb.project_search_row=row; wb.project_query=field; wb.project_case=sensitive; wb.project_word=word; wb.project_regex=regex;
+   GtkWidget *search=gtk_button_new_with_label("Search"); gtk_box_pack_start(GTK_BOX(row),search,FALSE,FALSE,0); g_signal_connect(search,"clicked",G_CALLBACK(project_text_search),NULL); g_signal_connect(field,"activate",G_CALLBACK(project_text_search),NULL);
+  }
+  gtk_box_pack_start(GTK_BOX(row),sensitive,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(row),word,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(row),regex,FALSE,FALSE,0);
+  g_signal_connect(field,"key-press-event",G_CALLBACK(browser_key),NULL); gtk_box_pack_start(GTK_BOX(parent),row,FALSE,FALSE,0); gtk_box_reorder_child(GTK_BOX(parent),row,position+(gint)i); gtk_widget_show_all(row);
+ }
+ GtkWidget *search_menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(ui_lookup_widget(main_widgets.window,"search1")));
+ const char *labels[]={"Search project toolbar…","Find in editor toolbar…"};
+ for(guint i=0;i<2;i++) { GtkWidget *item=gtk_menu_item_new_with_label(labels[i]); gtk_container_add(GTK_CONTAINER(search_menu),item); g_signal_connect(item,"activate",G_CALLBACK(search_toolbar_focus),GINT_TO_POINTER(i)); gtk_widget_show(item); }
+ GtkWidget *visible=gtk_check_menu_item_new_with_label("Search toolbars"); wb.search_toolbars_toggle=visible; gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(visible),TRUE); g_signal_connect(visible,"toggled",G_CALLBACK(search_toolbars_visible),NULL); gtk_container_add(GTK_CONTAINER(ui_lookup_widget(main_widgets.window,"menu_view1_menu")),visible); gtk_widget_show(visible);
+}
 static void create_browse_toolbar(void) {
  GtkToolbar *toolbar=GTK_TOOLBAR(main_widgets.toolbar);
  gtk_toolbar_insert(toolbar,gtk_separator_tool_item_new(),0);
@@ -1488,6 +1663,7 @@ void insight_workbench_init(void) {
  gtk_box_reorder_child(GTK_BOX(parent),wb.pane,position);
  gtk_paned_set_position(GTK_PANED(wb.pane),430);
  gtk_widget_show_all(wb.pane);
+ create_search_toolbars();
  restore_workbench_settings();
  create_native_lua();
  const char *signals[]={"document-open","document-save","document-activate","document-close"};
@@ -1520,6 +1696,8 @@ void insight_workbench_finalize(void) {
  if(wb.watch_idle) g_source_remove(wb.watch_idle);
  insight_workspace_watch_free(wb.watch);
  stop_scan(); g_ptr_array_free(wb.frames,TRUE); g_ptr_array_free(wb.files,TRUE); g_free(wb.root); g_free(wb.cache_path);
+ g_free(wb.editor_find_query); g_free(wb.editor_find_digest);
+ g_free(wb.relation_word);
  g_free(wb.source_path); g_free(wb.source_digest); g_free(wb.find_last_query); g_free(wb.find_last_digest);
  insight_index_free(wb.base); insight_index_free(wb.index);
  if(wb.symbols) g_object_unref(wb.symbols);

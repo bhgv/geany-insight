@@ -2,6 +2,7 @@
 """Package a complete native editor cross-build with a supplied GTK runtime."""
 import argparse
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -15,14 +16,22 @@ def main():
     p.add_argument('--runtime', type=Path, required=True)
     p.add_argument('--build', type=Path, required=True)
     p.add_argument('--checks', type=Path, required=True)
-    p.add_argument('--bundle', type=Path, required=True)
+    p.add_argument('--bundle', type=Path, help='Optional Git bundle; omitted for a binary-only check build')
+    p.add_argument('--name', help='Archive and directory name (default includes Git revision)')
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--strip', required=True)
     a = p.parse_args()
     options = json.loads((a.build / 'meson-info/intro-buildoptions.json').read_text())
     if not any(option['name'] == 'plugins' and option['value'] for option in options):
         raise SystemExit('Native Windows delivery requires a build with -Dplugins=true')
-    destination = a.out / 'geany-insight-0.8-native-windows-x64'
+    revision = subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()
+    match = re.search(r'^#define REVISION "([^"]+)"', (a.build / 'config.h').read_text(), re.MULTILINE)
+    if not match or not revision.startswith(match.group(1)):
+        raise SystemExit('Build revision differs from Git HEAD; reconfigure Meson and rebuild first')
+    package_name = a.name or ('geany-insight-' + revision[:8] + '-windows-x64')
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', package_name):
+        raise SystemExit('Package name must be a simple filename')
+    destination = a.out / package_name
     if destination.exists():
         raise SystemExit('Output directory already exists: ' + str(destination))
     destination.mkdir(parents=True)
@@ -39,8 +48,7 @@ def main():
         target = plugins / module.name
         shutil.copy2(module, target)
         subprocess.run([a.strip, '--strip-unneeded', str(target)], check=True)
-    for name in ['grep.exe', 'sort.exe']:
-        (destination / 'bin' / name).unlink(missing_ok=True)
+    # Preserve grep/sort supplied by the runtime for existing Geany commands.
     for name in ['geany.exe', 'libgeany-0.dll']:
         target = destination / 'bin' / name
         shutil.copy2(a.build / name, target)
@@ -56,7 +64,7 @@ def main():
                 if child.is_dir(): shutil.rmtree(child)
                 else: child.unlink()
     (destination / 'checks').mkdir()
-    for exe in a.checks.glob('*_test.exe'):
+    for exe in list(a.checks.glob('*_test.exe')) + list((a.build / 'tests').glob('test_insight*.exe')):
         target = destination / 'checks' / exe.name
         shutil.copy2(exe, target)
         subprocess.run([a.strip, '--strip-unneeded', str(target)], check=True)
@@ -64,20 +72,36 @@ def main():
         shutil.copy2(ROOT / 'insight/packaging' / name, destination / name)
     shutil.copytree(ROOT / 'insight/examples', destination / 'examples')
     shutil.copytree(ROOT / 'insight/docs', destination / 'insight-docs')
-    shutil.copy2(a.bundle, destination / a.bundle.name)
+    if a.bundle:
+        shutil.copy2(a.bundle, destination / a.bundle.name)
+    for name in ['LICENSE', 'LICENSES.md']:
+        shutil.copy2(ROOT / name, destination / name)
+    shutil.copy2(ROOT / 'scintilla/License.txt', destination / 'ScintillaLicense.txt')
+    lua_header = (ROOT / 'insight/vendor/lua/lua.h').read_text()
+    notice_start = lua_header.index('* Copyright (C)')
+    notice_end = lua_header.index('******************************************************************************/', notice_start)
+    notice = lua_header[notice_start:notice_end]
+    (destination / 'LuaLicense.txt').write_text('\n'.join(line[2:] if line.startswith('* ') else line.lstrip('*') for line in notice.splitlines()) + '\n')
+    check_names = sorted(file.name for file in (destination / 'checks').glob('*.exe'))
+    runner = "$ErrorActionPreference = 'Stop'\n$env:PATH = (Join-Path $PSScriptRoot 'bin') + ';' + $env:PATH\n"
+    runner += "foreach ($name in " + ', '.join("'" + name + "'" for name in check_names) + ") {\n"
+    runner += '    & (Join-Path $PSScriptRoot "checks\\$name")\n    if ($LASTEXITCODE -ne 0) { throw "Check failed: $name ($LASTEXITCODE)" }\n}\n'
+    runner += "Write-Host 'All " + str(len(check_names)) + " checks passed.'\n"
+    (destination / 'Run-Checks.ps1').write_text(runner, encoding='utf-8-sig')
     for license_file in a.runtime.glob('*.txt'):
         shutil.copy2(license_file, destination / license_file.name)
     (destination / 'Copying.txt').write_bytes((ROOT / 'COPYING').read_bytes())
-    info = {'revision': subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip(),
-            'editor': 'Geany Insight native 0.8 / Geany 2.2.0 development',
+    info = {'revision': revision,
+            'editor': 'Geany Insight / Geany 2.2.0 development',
+            'check_programs': check_names,
             'architecture': 'Windows x64', 'windows_execution_verified': False}
     (destination / 'build-info.json').write_text(json.dumps(info, indent=2) + '\n')
     (destination / 'README-CHECK.txt').write_text(
-        'Geany Insight 0.8 — Windows x64, проверочная сборка\n\n'
+        'Geany Insight ' + revision[:8] + ' — Windows x64, проверочная сборка\n\n'
         'Распакуйте весь ZIP в каталог с правом записи. Запуск: Start-Native-Insight.cmd.\n'
         'Настройки хранятся в profile рядом с редактором. Context и Lua встроены в редактор.\n'
         'Navigate: workspace, files, usages, F12. Ctrl+click в Context: переход по определениям.\n'
-        'Scripts > Load: examples/workbench.lua. Run-Checks.cmd: 9 проверок ядра.\n'
+        'Scripts > Load: examples/workbench.lua. Run-Checks.cmd запускает все включённые проверки.\n'
         'Сборка и таблицы импортов проверены; запуск GUI на Windows здесь не проверен.\n'
         'Документация и ограничения: insight-docs/native-workbench.md.\n', encoding='utf-8-sig')
     archive = a.out / (destination.name + '.zip')
