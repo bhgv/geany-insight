@@ -57,6 +57,15 @@ int main(void) {
  gchar *current_scope=insight_native_function_scope(index,absolute,4); assert(current_scope && !strcmp(current_scope,"current"));
  guint eligible=0; for(guint n=0;n<2;n++) if(insight_native_definition_rank_at(found[n],absolute,current_scope,4)>=0) { eligible++; assert(found[n]->line==3); assert(!strcmp(found[n]->kind,"l")); }
  assert(eligible==1); g_free(current_scope);
+ const char *member_code="typedef struct sCell Cell;\nstruct sCell { void *data; };\nstruct Other { void *data; };\nvoid use(Cell *sp, void *data) { (void)sp->data; }\n";
+ assert(insight_native_parse(index,parsed,absolute,member_code,strlen(member_code)));
+ gboolean is_member=FALSE; gchar *owner=insight_native_member_owner(index,absolute,"use",4,member_code,(gsize)(strstr(member_code,"sp->data")-member_code)+6,&is_member);
+ assert(is_member && owner && !strcmp(owner,"sCell"));
+ const InsightSymbol *members[16]; size_t member_count=insight_index_find(index,"data",1,members,16); assert(member_count>=3); eligible=0;
+ for(size_t n=0;n<member_count && n<16;n++) if(insight_native_member_matches(members[n],owner)) { eligible++; assert(members[n]->line==2); assert(!strcmp(members[n]->kind,"m")); }
+ assert(eligible==1); g_free(owner);
+ owner=insight_native_member_owner(index,absolute,"use",4,"unknown->data",12,&is_member); assert(is_member && !owner);
+ owner=insight_native_member_owner(index,absolute,"use",4,"data",3,&is_member); assert(!is_member && !owner);
  size_t before=insight_index_count(index);assert(!insight_native_parse(index,parsed,absolute,"a\0b",3));assert(insight_index_count(index)==before);
  assert(insight_native_parse(index,parsed,absolute,"",0));assert(insight_index_count(index)==0);
  /* Publication transfers worker tags and rewrites owner pointers. A pinned

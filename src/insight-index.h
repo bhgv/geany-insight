@@ -15,5 +15,7 @@ gboolean insight_native_parse(InsightIndex *,TMSourceFile *,const char *,const c
  * at or before the reference. Negative means outside the reference scope. */
 gint insight_native_definition_rank_at(const InsightSymbol *,const char *,const char *,gulong);
 gchar *insight_native_function_scope(const InsightIndex *,const char *,gulong);
+gchar *insight_native_member_owner(const InsightIndex *,const char *,const char *,gulong,const char *,gsize,gboolean *);
+gboolean insight_native_member_matches(const InsightSymbol *,const char *);
 guint insight_native_definition_rank(const InsightSymbol *,const char *);
 #endif

@@ -591,16 +591,19 @@ static void choose_root(GtkButton *button,gpointer data) {
  gtk_widget_destroy(dialog);
 }
 static void cancel_scan(GtkButton *button,gpointer data) { (void)button; (void)data; stop_scan(); insight_workspace_watch_clear(wb.watch); wb.watch_changed=FALSE; if(wb.watch_idle) { g_source_remove(wb.watch_idle); wb.watch_idle=0; } refresh_index(); browser_filter(NULL,NULL); files_filter(NULL,NULL); tree_refresh(); file_types_refresh(); categories_filter(NULL,NULL); local_filter(NULL,NULL); insight_workbench_refresh(); ui_set_statusbar(TRUE,"Workspace scan cancelled; partial index retained"); }
-static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word,const char *preferred,gulong reference_line) {
+static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word,const char *preferred,gulong reference_line,ScintillaObject *reference_sci,gint reference_position) {
  if(!wb.definitions) return NULL;
  if(!preferred && doc) preferred=doc->file_name;
  refresh_index();
  wb.populating=TRUE; g_ptr_array_set_size(wb.definitions,0); gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(wb.choices));
  const InsightSymbol *found[256],*chosen=NULL;
  gchar *scope=insight_native_function_scope(wb.index,preferred,reference_line);
+ gint reference_begin=MAX(0,reference_position-4096);
+ gchar *reference=reference_sci ? sci_get_contents_range(reference_sci,reference_begin,reference_position) : NULL; gboolean member=FALSE;
+ gchar *owner=insight_native_member_owner(wb.index,preferred,scope,reference_line,reference,reference_position-reference_begin,&member); g_free(reference);
  size_t count=word && *word ? insight_index_find(wb.index,word,TRUE,found,256) : 0; gint selected=0;
  for(size_t i=0;i<count && i<256;i++) {
-  const InsightSymbol *tag=found[i]; if(insight_native_definition_rank_at(tag,preferred,scope,reference_line)<0) continue; gboolean duplicate=FALSE;
+  const InsightSymbol *tag=found[i]; if(member ? !insight_native_member_matches(tag,owner) : insight_native_definition_rank_at(tag,preferred,scope,reference_line)<0) continue; gboolean duplicate=FALSE;
   for(guint j=0;j<wb.definitions->len;j++) { Location *old=g_ptr_array_index(wb.definitions,j); if(old->line==tag->line && !g_strcmp0(old->path,tag->path)) { duplicate=TRUE; break; } }
   if(duplicate) continue;
   Location *location=g_new0(Location,1); location->path=g_strdup(tag->path); location->line=tag->line;
@@ -610,7 +613,7 @@ static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word,
   g_ptr_array_add(wb.definitions,location);
  }
  gtk_combo_box_set_active(GTK_COMBO_BOX(wb.choices),wb.definitions->len ? selected : -1);
- wb.populating=FALSE; g_free(scope); return chosen;
+ wb.populating=FALSE; g_free(scope); g_free(owner); return chosen;
 }
 static char *read_disk_source_full(const char *utf8,gboolean decode,gint preferred,GCancellable *cancel) {
  gchar *native=utils_get_locale_from_utf8(utf8); GFile *file=g_file_new_for_path(native); g_free(native);
@@ -1580,11 +1583,12 @@ static void definition_job_run(GTask *task,gpointer source,gpointer data,GCancel
  (void)source; DefinitionJob *j=data;
  if(*j->query && !g_cancellable_is_cancelled(cancel)) {
   j->count=insight_relation_query(j->index,j->query,INSIGHT_RELATION_DEFINITIONS,0,j->matches,G_N_ELEMENTS(j->matches)); if(j->count==SIZE_MAX) j->count=0; j->count=MIN(j->count,G_N_ELEMENTS(j->matches));
-  gchar *scope=insight_native_function_scope(j->index,j->preferred,j->line); gsize eligible=0;
-  for(gsize n=0;n<j->count;n++) if(insight_native_definition_rank_at(j->matches[n],j->preferred,scope,j->line)>=0) j->matches[eligible++]=j->matches[n];
+  gchar *scope=insight_native_function_scope(j->index,j->preferred,j->line); gboolean member=FALSE;
+  gchar *owner=insight_native_member_owner(j->index,j->preferred,scope,j->line,j->text,j->position,&member); gsize eligible=0;
+  for(gsize n=0;n<j->count;n++) if(member ? insight_native_member_matches(j->matches[n],owner) : insight_native_definition_rank_at(j->matches[n],j->preferred,scope,j->line)>=0) j->matches[eligible++]=j->matches[n];
   j->count=eligible;
   for(gsize n=0;n<j->count;n++) if(n==0 || insight_native_definition_rank_at(j->matches[n],j->preferred,scope,j->line)>insight_native_definition_rank_at(j->matches[j->chosen],j->preferred,scope,j->line)) j->chosen=(gint)n;
-  g_free(scope);
+  g_free(scope); g_free(owner);
   if(j->count) { const InsightSymbol *hit=j->matches[j->chosen]; j->path=g_strdup(hit->path); j->line=hit->line; }
  }
  if(!j->path) j->path=g_strdup(j->preferred);
@@ -1676,7 +1680,7 @@ static gboolean preview_definition(gint position) {
  if(end<=start || end-start>1024) return TRUE;
  char word[1025]; for(gint i=start;i<end;i++) word[i-start]=(char)sci_get_char_at(wb.preview,i); word[end-start]=0;
  GeanyDocument *source=wb.source_id ? document_find_by_id(wb.source_id) : document_get_current();
- const InsightSymbol *definition=word_definition(source,word,wb.source_path,(gulong)sci_get_current_line(wb.preview)+1);
+ const InsightSymbol *definition=word_definition(source,word,wb.source_path,(gulong)sci_get_current_line(wb.preview)+1,wb.preview,position);
  if(definition) {
   gchar *path=g_strdup(definition->path); gulong line=definition->line;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE);
@@ -2072,7 +2076,7 @@ gboolean insight_workbench_goto_definition(void) {
   return preview_definition(sci_get_current_position(wb.preview));
  GeanyDocument *doc=document_get_current(); if(!wb.preview || !doc) return FALSE;
  char word[1025]={0}; editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);
- const InsightSymbol *definition=word_definition(doc,word,NULL,(gulong)sci_get_current_line(doc->editor->sci)+1);
+ const InsightSymbol *definition=word_definition(doc,word,NULL,(gulong)sci_get_current_line(doc->editor->sci)+1,doc->editor->sci,sci_get_current_position(doc->editor->sci));
  if(!definition) return FALSE;
  gchar *path=g_strdup(definition->path); gulong line=definition->line;
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); gboolean shown=show_location(path,0,line,TRUE); if(shown) open_context(NULL,NULL); g_free(path); return shown;

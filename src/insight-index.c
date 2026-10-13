@@ -44,6 +44,44 @@ gchar *insight_native_function_scope(const InsightIndex *index,const char *path,
  return *nearest->scope ? g_strconcat(nearest->scope,"::",nearest->name,NULL) : g_strdup(nearest->name);
 }
 
+static gboolean identifier_byte(gchar c) { return g_ascii_isalnum(c) || c=='_' || (guchar)c>=128; }
+static gchar *type_owner(const gchar *type) {
+ if(!type || !*type) return NULL;
+ gchar **words=g_strsplit_set(type," *&\t\r\n",-1); gchar *owner=NULL;
+ for(guint n=0;words[n];n++) if(*words[n] && strcmp(words[n],"const") && strcmp(words[n],"volatile") && strcmp(words[n],"struct") && strcmp(words[n],"class") && strcmp(words[n],"union")) { g_free(owner); owner=g_strdup(words[n]); }
+ g_strfreev(words); return owner;
+}
+gchar *insight_native_member_owner(const InsightIndex *index,const char *path,const char *scope,gulong line,const char *text,gsize position,gboolean *member) {
+ *member=FALSE; if(!text || position>strlen(text)) return NULL;
+ gsize at=position; while(at && identifier_byte(text[at-1])) at--; while(at && g_ascii_isspace(text[at-1])) at--;
+ if(at>=2 && text[at-2]=='-' && text[at-1]=='>') at-=2;
+ else if(at && text[at-1]=='.') at--;
+ else return NULL;
+ *member=TRUE; while(at && g_ascii_isspace(text[at-1])) at--; gsize end=at;
+ while(at && identifier_byte(text[at-1])) at--;
+ if(end==at) return NULL;
+ gchar *receiver=g_strndup(text+at,end-at); const InsightSymbol *vars[512],*best=NULL;
+ gsize count=MIN(insight_index_find(index,receiver,TRUE,vars,G_N_ELEMENTS(vars)),G_N_ELEMENTS(vars)); g_free(receiver);
+ for(gsize n=0;n<count;n++) {
+  const InsightSymbol *tag=vars[n]; if(strcmp(tag->kind,"l") && strcmp(tag->kind,"z") && strcmp(tag->kind,"v")) continue;
+  gint rank=insight_native_definition_rank_at(tag,path,scope,line); if(rank<0 || !tag->type || !*tag->type) continue;
+  if(!best || rank>insight_native_definition_rank_at(best,path,scope,line)) best=tag;
+ }
+ gchar *owner=best ? type_owner(best->type) : NULL;
+ /* Resolve simple typedef chains, including aliases of named structs. */
+ for(guint depth=0;owner && depth<8;depth++) {
+  const InsightSymbol *aliases[64],*alias=NULL; gsize count=MIN(insight_index_find(index,owner,TRUE,aliases,G_N_ELEMENTS(aliases)),G_N_ELEMENTS(aliases));
+  for(gsize n=0;n<count;n++) if(!strcmp(aliases[n]->kind,"t") && aliases[n]->type && *aliases[n]->type) { if(!alias || !g_strcmp0(aliases[n]->path,path)) alias=aliases[n]; }
+  gchar *next=alias ? type_owner(alias->type) : NULL;
+  if(!next || !strcmp(next,owner)) { g_free(next); break; } g_free(owner); owner=next;
+ }
+ return owner;
+}
+gboolean insight_native_member_matches(const InsightSymbol *symbol,const char *owner) {
+ if(!owner || !*owner || !symbol->scope || !*symbol->scope || !strcmp(symbol->kind,"l") || !strcmp(symbol->kind,"z")) return FALSE;
+ return !strcmp(symbol->scope,owner);
+}
+
 gboolean insight_native_parse(InsightIndex *index,TMSourceFile *file,const char *path,const char *text,gsize length) {
  if(!index || !file || !file->file_name || file->lang<0 || (guint)file->lang>=tm_ctags_get_lang_count() || !path || !*path || !g_utf8_validate(path,-1,NULL) || length>2u*1024u*1024u || (length && (!text || memchr(text,0,length) || !g_utf8_validate(text,(gssize)length,NULL)))) return FALSE;
  /* tm_source_file_parse currently fills tags but returns FALSE for nonempty
