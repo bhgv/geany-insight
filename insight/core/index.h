@@ -9,6 +9,11 @@ typedef struct {
 } InsightSymbol;
 typedef struct InsightIndex InsightIndex;
 InsightIndex *insight_index_new(void);
+/* Atomic lifetime management for immutable published snapshots. Updates still
+ * require exclusive ownership. free releases one reference. */
+InsightIndex *insight_index_ref(InsightIndex *);
+/* Valid only with an owned reference; writers must prevent new publication. */
+int insight_index_exclusive(const InsightIndex *);
 void insight_index_free(InsightIndex *);
 InsightIndex *insight_index_clone(const InsightIndex *);
 #define INSIGHT_INDEX_SNAPSHOT_LIMIT (64u * 1024u * 1024u)

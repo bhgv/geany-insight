@@ -54,6 +54,8 @@
 /* precompiled regexps */
 static GRegex *pregs[2];
 static gboolean pregs_loaded = FALSE;
+static GMutex worker_encoding_mutex;
+static gboolean worker_encoding_finalized;
 
 
 GeanyEncoding encodings[GEANY_ENCODINGS_MAX];
@@ -406,6 +408,8 @@ static void encodings_reload_radio_item_change_cb(GtkMenuItem *menuitem, gpointe
 
 void encodings_finalize(void)
 {
+	g_mutex_lock(&worker_encoding_mutex);
+	worker_encoding_finalized = TRUE;
 	if (pregs_loaded)
 	{
 		guint i, len;
@@ -413,8 +417,11 @@ void encodings_finalize(void)
 		for (i = 0; i < len; i++)
 		{
 			g_regex_unref(pregs[i]);
+			pregs[i] = NULL;
 		}
 	}
+	pregs_loaded = FALSE;
+	g_mutex_unlock(&worker_encoding_mutex);
 }
 
 
@@ -441,6 +448,7 @@ void encodings_init_headless(void)
 
 void encodings_init(void)
 {
+	worker_encoding_finalized = FALSE;
 	GtkWidget *menu[2];
 	GCallback cb_func[2];
 	const gchar *const groups[GEANY_ENCODING_GROUPS_MAX] =
@@ -727,6 +735,8 @@ static gchar *encodings_check_regexes(const gchar *buffer, gsize size)
 }
 
 
+static GPrivate worker_default_encoding = G_PRIVATE_INIT(NULL);
+
 static gchar *encodings_convert_to_utf8_with_suggestion(const gchar *buffer, gssize size,
 		const gchar *suggested_charset, gchar **used_encoding, gsize *utf8_size, GError **error)
 {
@@ -746,7 +756,8 @@ static gchar *encodings_convert_to_utf8_with_suggestion(const gchar *buffer, gss
 	check_locale = ! g_get_charset(&locale_charset);
 
 	/* First check for preferred charset, if specified */
-	preferred_charset = file_prefs.default_open_encoding;
+	gint *worker_default = g_private_get(&worker_default_encoding);
+	preferred_charset = worker_default ? *worker_default : file_prefs.default_open_encoding;
 
 	if (preferred_charset == (gint) encodings[GEANY_ENCODING_NONE].idx ||
 		preferred_charset < 0 ||
@@ -1126,4 +1137,13 @@ gboolean encodings_convert_to_utf8_auto(gchar **buf, gsize *size, const gchar *f
 
 	*buf = buffer.data;
 	return TRUE;
+}
+
+/* Snapshot the preference on the UI thread before dispatching a worker. */
+gboolean encodings_convert_to_utf8_worker(gchar **buf,gsize *size,gint preferred,gboolean *nuls)
+{
+ g_mutex_lock(&worker_encoding_mutex); if(worker_encoding_finalized) { g_mutex_unlock(&worker_encoding_mutex); return FALSE; }
+ gpointer previous=g_private_get(&worker_default_encoding); g_private_set(&worker_default_encoding,&preferred);
+ gboolean ok=encodings_convert_to_utf8_auto(buf,size,NULL,NULL,NULL,nuls,NULL);
+ g_private_set(&worker_default_encoding,previous); g_mutex_unlock(&worker_encoding_mutex); return ok;
 }

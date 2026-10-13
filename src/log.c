@@ -40,6 +40,7 @@
 #endif
 
 static GString *log_buffer = NULL;
+static GThread *log_main_thread;
 static GtkTextBuffer *dialog_textbuffer = NULL;
 
 enum
@@ -76,6 +77,7 @@ void geany_debug(gchar const *format, ...)
 static void handler_print(const gchar *msg)
 {
 	printf("%s", msg);
+	if (g_thread_self() != log_main_thread) return;
 	if (G_LIKELY(log_buffer != NULL))
 	{
 		g_string_append_printf(log_buffer, "%s", msg);
@@ -87,6 +89,7 @@ static void handler_print(const gchar *msg)
 static void handler_printerr(const gchar *msg)
 {
 	fprintf(stderr, "%s", msg);
+	if (g_thread_self() != log_main_thread) return;
 	if (G_LIKELY(log_buffer != NULL))
 	{
 		g_string_append_printf(log_buffer, "%s", msg);
@@ -119,6 +122,8 @@ static const gchar *get_log_prefix(GLogLevelFlags log_level)
 static void handler_log(const gchar *domain, GLogLevelFlags level, const gchar *msg, gpointer data)
 {
 	gchar *time_str;
+	/* Worker diagnostics must not touch GTK or the UI-owned log buffer. */
+	if (g_thread_self() != log_main_thread) { g_log_default_handler(domain, level, msg, data); return; }
 
 	if (G_LIKELY(app != NULL && app->debug_mode) ||
 		! ((G_LOG_LEVEL_DEBUG | G_LOG_LEVEL_INFO | G_LOG_LEVEL_MESSAGE) & level))
@@ -150,6 +155,7 @@ static void handler_log(const gchar *domain, GLogLevelFlags level, const gchar *
 
 void log_handlers_init(void)
 {
+	log_main_thread = g_thread_self();
 	log_buffer = g_string_sized_new(2048);
 
 	g_set_print_handler(handler_print);

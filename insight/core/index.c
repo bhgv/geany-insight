@@ -4,7 +4,17 @@
 #include <string.h>
 #include <stdint.h>
 #include <limits.h>
-struct InsightIndex { InsightSymbol *items; size_t count; };
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
+struct InsightIndex { InsightSymbol *items; size_t count; unsigned int refs; };
+static unsigned int ref_add(unsigned int *refs,int change) {
+#ifdef _MSC_VER
+ return change>0 ? (unsigned int)_InterlockedIncrement((volatile long *)refs) : (unsigned int)_InterlockedDecrement((volatile long *)refs);
+#else
+ return change>0 ? __atomic_add_fetch(refs,1,__ATOMIC_RELAXED) : __atomic_sub_fetch(refs,1,__ATOMIC_ACQ_REL);
+#endif
+}
 static char *copy(const char *s) {
  size_t n=strlen(s)+1; char *p=malloc(n); if(p) memcpy(p,s,n); return p;
 }
@@ -24,9 +34,18 @@ static int compare(const void *a,const void *b) {
  if(!r) r=strcmp(x->inheritance,y->inheritance);
  return r;
 }
-InsightIndex *insight_index_new(void) { return calloc(1,sizeof(InsightIndex)); }
+InsightIndex *insight_index_new(void) { InsightIndex *i=calloc(1,sizeof *i); if(i) i->refs=1; return i; }
+InsightIndex *insight_index_ref(InsightIndex *i) { if(i) ref_add(&i->refs,1); return i; }
+int insight_index_exclusive(const InsightIndex *i) {
+ if(!i) return 0;
+#ifdef _MSC_VER
+ return _InterlockedCompareExchange((volatile long *)&i->refs,0,0)==1;
+#else
+ return __atomic_load_n(&i->refs,__ATOMIC_ACQUIRE)==1;
+#endif
+}
 void insight_index_free(InsightIndex *i) {
- if(!i) return;
+ if(!i || ref_add(&i->refs,-1)) return;
  for(size_t n=0;n<i->count;n++) release(&i->items[n]);
  free(i->items); free(i);
 }

@@ -77,6 +77,8 @@ gboolean encodings_convert_to_utf8_auto(gchar **buf, gsize *size, const gchar *f
                                         gchar **used_encoding, gboolean *has_bom, gboolean *has_nuls,
                                         GError **error);
 
+gboolean encodings_convert_to_utf8_worker(gchar **,gsize *,gint,gboolean *);
+
 GeanyEncodingIndex encodings_scan_unicode_bom(const gchar *string, gsize len, guint *bom_len);
 
 GeanyEncodingIndex encodings_get_idx_from_charset(const gchar *charset);

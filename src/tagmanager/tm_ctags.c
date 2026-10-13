@@ -461,6 +461,8 @@ static void rename_anon_tags(TMSourceFile *source_file)
 }
 
 
+static GMutex ctags_parse_mutex;
+
 void tm_ctags_parse(guchar *buffer, gsize buffer_size,
 	const gchar *file_name, TMParserType language, TMSourceFile *source_file)
 {
@@ -469,9 +471,11 @@ void tm_ctags_parse(guchar *buffer, gsize buffer_size,
 	if (language == TM_PARSER_NONE)
 		return;
 
+	g_mutex_lock(&ctags_parse_mutex);
 	parseRawBuffer(file_name, buffer, buffer_size, language, source_file);
 
 	rename_anon_tags(source_file);
+	g_mutex_unlock(&ctags_parse_mutex);
 }
 
 

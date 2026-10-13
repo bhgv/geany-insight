@@ -12,7 +12,7 @@
 #include <string.h>
 typedef struct {
  guint id,timer; GtkWidget *pane,*host,*shade; ScintillaObject *map;
- gboolean dirty,dragging,positioned; GeanyFiletype *filetype; gint last_top,last_line,last_scale,drag_offset; gdouble drag_y;
+ gboolean dirty,style_dirty,dragging,positioned; GeanyFiletype *filetype; gint last_top,last_line,last_scale,drag_offset; gdouble drag_y;
 } Overview;
 static GList *overviews;
 static gboolean enabled=TRUE,show_selection=TRUE,show_viewport=TRUE;
@@ -42,14 +42,15 @@ static gboolean overview_sync(gpointer data) {
  Overview *o=data; o->timer=0; GeanyDocument *doc=owner(o); if(!doc || !enabled || !gtk_widget_get_mapped(o->host)) return G_SOURCE_REMOVE;
  ScintillaObject *source=doc->editor->sci; gint length=sci_get_length(source);
  if(length<0 || length>2*1024*1024) { gtk_widget_set_tooltip_text(o->host,"Overview supports files up to 2 MiB"); sci_set_readonly(o->map,FALSE); sci_set_text(o->map,""); sci_set_readonly(o->map,TRUE); return G_SOURCE_REMOVE; }
- if(o->dirty || o->last_scale!=scale || o->filetype!=doc->file_type) {
+ if(o->dirty || o->filetype!=doc->file_type) {
   gint old_top=first_document_line(o->map); gchar *text=sci_get_contents(source,length+1);
   /* Independent text and lexer: setting read-only on a shared Scintilla
    * document would also make the user's main editor read-only. */
   if(o->filetype!=doc->file_type) { o->filetype=doc->file_type; highlighting_set_styles(o->map,doc->file_type ? doc->file_type : filetypes[GEANY_FILETYPES_NONE]); }
   sci_set_readonly(o->map,FALSE); SSM(o->map,SCI_SETUNDOCOLLECTION,FALSE,0); sci_set_text(o->map,text); SSM(o->map,SCI_COLOURISE,0,-1); SSM(o->map,SCI_EMPTYUNDOBUFFER,0,0); sci_set_readonly(o->map,TRUE);
-  copy_styles(o,source); SSM(o->map,SCI_SETFIRSTVISIBLELINE,old_top,0); g_free(text); o->dirty=FALSE; o->last_scale=scale;
+  SSM(o->map,SCI_SETFIRSTVISIBLELINE,old_top,0); g_free(text); o->dirty=FALSE; o->style_dirty=TRUE;
  }
+ if(o->style_dirty || o->last_scale!=scale) { copy_styles(o,source); o->style_dirty=FALSE; o->last_scale=scale; }
  gint top=first_document_line(source),line=sci_get_current_line(source);
  if(!o->dragging && (top!=o->last_top || line!=o->last_line)) { gint rows=MAX(1,SSM(o->map,SCI_LINESONSCREEN,0,0)),visible=MAX(1,last_document_line(source)-top+1); gint start=MAX(0,top-MAX(0,rows-visible)/2); SSM(o->map,SCI_SETFIRSTVISIBLELINE,start,0); }
  o->last_top=top; o->last_line=line; gtk_widget_queue_draw(o->shade); return G_SOURCE_REMOVE;
@@ -57,7 +58,8 @@ static gboolean overview_sync(gpointer data) {
 static void queue_sync(Overview *o) { if(!o->timer) o->timer=g_timeout_add(80,overview_sync,o); }
 static void source_notify(ScintillaObject *source,gint message,SCNotification *n,GtkWidget *pane) {
  (void)source; (void)message; Overview *o=g_object_get_data(G_OBJECT(pane),"insight-overview"); if(!o) return;
- if(n->nmhdr.code==SCN_MODIFIED && (n->modificationType&(SC_MOD_INSERTTEXT|SC_MOD_DELETETEXT|SC_MOD_CHANGESTYLE))) { o->dirty=TRUE; if(o->timer) { g_source_remove(o->timer); o->timer=0; } }
+ if(n->nmhdr.code==SCN_MODIFIED && (n->modificationType&(SC_MOD_INSERTTEXT|SC_MOD_DELETETEXT))) { o->dirty=TRUE; if(o->timer) { g_source_remove(o->timer); o->timer=0; } }
+ if(n->nmhdr.code==SCN_MODIFIED && (n->modificationType&SC_MOD_CHANGESTYLE)) o->style_dirty=TRUE;
  if(n->nmhdr.code==SCN_ZOOM) o->last_scale=-1;
  if(n->nmhdr.code==SCN_UPDATEUI || n->nmhdr.code==SCN_MODIFIED || n->nmhdr.code==SCN_PAINTED || n->nmhdr.code==SCN_ZOOM) queue_sync(o);
 }

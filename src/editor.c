@@ -1112,8 +1112,11 @@ static gboolean on_editor_notify(G_GNUC_UNUSED GObject *object, GeanyEditor *edi
 
 		case SCN_UPDATEUI:
 			on_update_ui(editor, nt);
-			if (doc == document_get_current() && (nt->updated & (SC_UPDATE_CONTENT | SC_UPDATE_SELECTION)))
-				insight_workbench_refresh();
+			if (doc == document_get_current())
+			{
+				if (nt->updated & (SC_UPDATE_CONTENT | SC_UPDATE_SELECTION))
+					insight_workbench_editor_updated((nt->updated & SC_UPDATE_CONTENT) != 0);
+			}
 			break;
 
 		case SCN_PAINTED:

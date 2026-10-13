@@ -6,6 +6,7 @@
 #include <stdlib.h>
 int main(void) {
  InsightIndex *i=insight_index_new(); assert(i);
+ assert(insight_index_exclusive(i)); InsightIndex *retained=insight_index_ref(i); assert(retained==i && !insight_index_exclusive(i)); insight_index_free(retained); assert(insight_index_exclusive(i));
  InsightSymbol a[]={ {"foo",NULL,"A","function",10,NULL,NULL,NULL},{"foobar",NULL,NULL,NULL,20,NULL,NULL,NULL} };
  InsightSymbol b[]={ {"foo",NULL,"B","function",3,NULL,NULL,NULL} };
  assert(insight_index_update(i,"a.cpp",a,2));

@@ -7,6 +7,7 @@
 #include "insight-overview.h"
 #include "ui_utils.h"
 #include "document.h"
+#include "documentprivate.h"
 #include "editor.h"
 #include "filetypes.h"
 #include "projectprivate.h"
@@ -77,6 +78,8 @@ typedef struct {
  GtkListStore *symbols;
  ScintillaObject *preview;
  GHashTable *preview_names; gsize preview_names_position; guint preview_links_idle; gchar *preview_links_text; gint preview_links_position;
+ guint editor_follow_id; gint editor_follow_position,editor_follow_anchor;
+ gchar *follow_word; guint follow_doc; gulong follow_line;
  guint refresh,source_id; gboolean context_visible,index_dirty,scan_failed;
  gulong event_handlers[4];
  gulong project_handlers[3]; gchar *geany_root; gboolean workspace_from_project;
@@ -85,6 +88,7 @@ typedef struct {
  GtkWidget *lua_menu,*lua_commands,*lua_item,*palette_item;
  GtkAccelGroup *lua_accels,*navigation_accels;
  GtkCssProvider *css; GtkWidget *context_toggle;
+ gboolean alive; guint64 scan_generation,usage_generation,definition_generation; guint definition_timer; GCancellable *scan_worker,*search_worker,*definition_worker,*snapshot_worker; guint64 index_generation,index_version; gint64 publish_due;
  InsightIndex *base,*index;
  InsightProjectFiles *membership; gchar *membership_project; gboolean membership_valid;
  GPtrArray *frames,*files,*scan_files,*scan_trees; GHashTable *scan_seen; guint scan_file_position,scan_tree_position; gchar *root,*cache_path; guint scan,parsed,skipped;
@@ -92,6 +96,7 @@ typedef struct {
  GPtrArray *history,*definitions; gint history_position; gboolean populating;
 } Workbench;
 static Workbench wb;
+static guint64 workbench_epoch;
 static void open_context(GtkButton *,gpointer);
 static void browser_filter(GtkEditable *,gpointer);
 static void files_filter(GtkEditable *,gpointer);
@@ -101,6 +106,9 @@ static void categories_filter(GtkEditable *,gpointer);
 static void file_types_refresh(void);
 static GtkWidget *sort_selector(GtkListStore *);
 static void stop_usage(void);
+static void stop_definition(void);
+static void queue_definition(gboolean);
+static void mark_index_dirty(void);
 static void native_commands_rebuild(void);
 static void save_workbench_settings(void);
 static void save_search_settings(void);
@@ -215,15 +223,36 @@ static void render_source(const char *text,GeanyFiletype *filetype,gulong line) 
  SSM(wb.preview,SCI_GOTOLINE,target,0);
  SSM(wb.preview,SCI_VERTICALCENTRECARET,0,0);
 }
-static void refresh_index(void) {
- if(!wb.index_dirty) return;
- InsightIndex *next=insight_index_clone(wb.base); if(!next) return;
- gchar *root=wb.workspace_from_project && wb.root ? utils_get_utf8_from_locale(wb.root) : NULL;
- for(guint i=0;i<documents_array->len;i++) {
-  GeanyDocument *doc=g_ptr_array_index(documents_array,i);
-  if(doc->is_valid && doc->file_name && (!root || insight_project_files_contains(wb.membership,root,doc->file_name)) && !insight_native_import(next,doc->tm_file,doc->file_name)) { insight_index_free(next); g_free(root); return; }
+static void refresh_index(void);
+typedef struct { InsightIndex *base,*overlay,*result; GPtrArray *paths; guint64 epoch,generation; } SnapshotJob;
+static void retire_index_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) { (void)source; (void)cancel; insight_index_free(data); g_task_return_boolean(task,TRUE); }
+static void retire_index(InsightIndex *index) { if(!index) return; GTask *task=g_task_new(NULL,NULL,NULL,NULL); g_task_set_task_data(task,index,NULL); g_task_run_in_thread(task,retire_index_run); g_object_unref(task); }
+static void snapshot_job_free(gpointer data) { SnapshotJob *j=data; retire_index(j->base); retire_index(j->overlay); retire_index(j->result); g_ptr_array_free(j->paths,TRUE); g_free(j); }
+static void mark_index_dirty(void) { wb.index_generation++; wb.index_dirty=TRUE; if(wb.snapshot_worker) { g_cancellable_cancel(wb.snapshot_worker); g_clear_object(&wb.snapshot_worker); } }
+static void snapshot_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
+ (void)source; SnapshotJob *j=data; if(g_cancellable_is_cancelled(cancel)) { g_task_return_boolean(task,FALSE); return; }
+ j->result=insight_index_clone(j->base); gboolean ok=j->result!=NULL; gsize count=j->paths->len;
+ gchar **paths=(gchar **)j->paths->pdata;
+ for(gsize n=0;ok && n<count && !g_cancellable_is_cancelled(cancel);n++) {
+  gsize size=insight_index_query(j->overlay,"",FALSE,NULL,NULL,paths[n],0,NULL,0); const InsightSymbol **tags=g_new(const InsightSymbol *,size); InsightSymbol *rows=g_new(InsightSymbol,size); insight_index_query(j->overlay,"",FALSE,NULL,NULL,paths[n],0,tags,size); for(gsize k=0;k<size;k++) rows[k]=*tags[k];
+  gsize old=insight_index_query(j->result,"",FALSE,NULL,NULL,paths[n],0,NULL,0); ok=insight_index_count(j->result)-old+size<=250000 && insight_index_update(j->result,paths[n],rows,size); g_free(rows); g_free(tags);
  }
- g_free(root); g_clear_pointer(&wb.preview_names,g_hash_table_destroy); wb.preview_names_position=0; wb.preview_links_position=0; insight_index_free(wb.index); wb.index=next; wb.index_dirty=FALSE;
+ g_task_return_boolean(task,ok && !g_cancellable_is_cancelled(cancel));
+}
+static void snapshot_job_done(GObject *source,GAsyncResult *result,gpointer data) {
+ (void)source; (void)data; GTask *task=G_TASK(result); SnapshotJob *j=g_task_get_task_data(task); gboolean ok=g_task_propagate_boolean(task,NULL);
+ if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.index_generation) return;
+ g_clear_object(&wb.snapshot_worker);
+ if(!ok) { ui_set_statusbar(TRUE,"Index snapshot could not be rebuilt; previous snapshot retained"); return; }
+ g_clear_pointer(&wb.preview_names,g_hash_table_destroy); wb.preview_names_position=0; wb.preview_links_position=0; retire_index(wb.index); wb.index=j->result; j->result=NULL; wb.index_version++;
+ browser_filter(NULL,NULL); categories_filter(NULL,NULL); local_filter(NULL,NULL); preview_links(); wb.relation_dirty=TRUE; wb.follow_doc=0; insight_workbench_refresh();
+}
+static void refresh_index(void) {
+ if(!wb.alive || wb.scan_worker || wb.snapshot_worker || !wb.base || !wb.index_dirty) return;
+ SnapshotJob *j=g_new0(SnapshotJob,1); j->base=insight_index_ref(wb.base); j->overlay=insight_index_new(); j->paths=g_ptr_array_new_with_free_func(g_free); j->epoch=workbench_epoch; j->generation=wb.index_generation;
+ gchar *root=wb.workspace_from_project && wb.root ? utils_get_utf8_from_locale(wb.root) : NULL;
+ for(guint n=0;n<documents_array->len;n++) { GeanyDocument *doc=g_ptr_array_index(documents_array,n); if(doc->is_valid && doc->file_name && (!root || insight_project_files_contains(wb.membership,root,doc->file_name))) { g_ptr_array_add(j->paths,g_strdup(doc->file_name)); insight_native_import(j->overlay,doc->tm_file,doc->file_name); } }
+ g_free(root); wb.index_dirty=FALSE; wb.snapshot_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.snapshot_worker,snapshot_job_done,NULL); g_task_set_task_data(task,j,snapshot_job_free); g_task_run_in_thread(task,snapshot_job_run); g_object_unref(task);
 }
 static gboolean preview_links_step(gpointer data) {
  (void)data; gint64 deadline=g_get_monotonic_time()+6000;
@@ -268,6 +297,8 @@ static void preview_notify(ScintillaObject *sci,gint message,SCNotification *not
  if(notification->nmhdr.code==SCN_UPDATEUI && (notification->updated&SC_UPDATE_SELECTION)) decorate_selection(sci);
 }
 static void stop_scan(void) {
+ stop_definition();
+ wb.scan_generation++; if(wb.scan_worker) { g_cancellable_cancel(wb.scan_worker); g_clear_object(&wb.scan_worker); if(wb.alive && !wb.base) wb.base=insight_index_clone(wb.index); }
  if(wb.scan) { g_source_remove(wb.scan); wb.scan=0; }
  if(wb.frames) g_ptr_array_set_size(wb.frames,0);
  if(wb.scan_files) g_ptr_array_set_size(wb.scan_files,0);
@@ -280,7 +311,7 @@ static gboolean rescan_changed(gpointer data) {
 static void workspace_changed(gpointer data) {
  (void)data;
  if(!wb.root) return;
- if(wb.scan) { wb.watch_changed=TRUE; return; }
+ if(wb.scan || wb.scan_worker) { wb.watch_changed=TRUE; return; }
  if(!start_scan(wb.root)) ui_set_statusbar(TRUE,"Workspace changed but source folder is unavailable; previous index retained");
 }
 static void watch_directory(const char *path) {
@@ -312,23 +343,50 @@ static void restore_index_cache(void) {
   g_free(paths);
  }
 }
+static char *read_disk_source_full(const char *,gboolean,gint,GCancellable *);
+static gboolean scan_step(gpointer);
+typedef struct { InsightIndex *index; gchar *path,*utf8,*language; gint lang,encoding; guint64 generation,epoch; gboolean read,parsed,failed,skipped; } IndexJob;
+static void index_job_free(gpointer data) { IndexJob *j=data; insight_index_free(j->index); g_free(j->path); g_free(j->utf8); g_free(j->language); g_free(j); }
+static void index_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
+ (void)source; IndexJob *j=data; GStatBuf st;
+ if(g_cancellable_is_cancelled(cancel)) { g_task_return_boolean(task,FALSE); return; }
+ if(!insight_index_exclusive(j->index)) { InsightIndex *copy=insight_index_clone(j->index); if(!copy) { j->failed=TRUE; g_task_return_boolean(task,TRUE); return; } insight_index_free(j->index); j->index=copy; }
+ if(g_lstat(j->path,&st) || !S_ISREG(st.st_mode) || st.st_size>2*1024*1024) j->skipped=TRUE;
+ else if(j->read) {
+  gchar *text=read_disk_source_full(j->utf8,TRUE,j->encoding,cancel);
+  if(!text) j->failed=TRUE;
+  else {
+   j->parsed=TRUE;
+   if(j->lang>=0 && !g_cancellable_is_cancelled(cancel)) {
+    TMSourceFile *file=tm_source_file_new(j->path,j->language);
+    if(file) { file->lang=j->lang; if(!insight_native_parse(j->index,file,j->utf8,text,strlen(text))) j->failed=TRUE; tm_source_file_free(file); }
+    else j->failed=TRUE;
+   }
+   g_free(text);
+  }
+ }
+ g_task_return_boolean(task,TRUE);
+}
+static void index_job_done(GObject *source,GAsyncResult *result,gpointer data) {
+ (void)source; (void)data; GTask *task=G_TASK(result); IndexJob *j=g_task_get_task_data(task); gboolean ok=g_task_propagate_boolean(task,NULL);
+ if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.scan_generation) return;
+ g_clear_object(&wb.scan_worker); insight_index_free(wb.base); wb.base=j->index; j->index=NULL; wb.index_dirty=TRUE;
+ if(j->parsed) { wb.parsed++; g_ptr_array_add(wb.files,g_strdup(j->utf8)); }
+ if(j->failed || j->skipped || !ok) wb.skipped++;
+ if(j->failed) wb.scan_failed=TRUE;
+ if(wb.parsed && wb.parsed%25==0) { files_filter(NULL,NULL); ui_set_statusbar(TRUE,"Workspace: indexing… %u files",wb.parsed); }
+ if(g_get_monotonic_time()>=wb.publish_due) { wb.publish_due=g_get_monotonic_time()+1000000; refresh_index(); }
+ wb.scan=g_idle_add(scan_step,NULL);
+}
+static gboolean scan_continue(void) { if(wb.scan_worker) { wb.scan=0; return G_SOURCE_REMOVE; } return G_SOURCE_CONTINUE; }
 static void scan_source_file(const char *path,gboolean explicit_file) {
  if(g_hash_table_contains(wb.scan_seen,path)) return;
  g_hash_table_add(wb.scan_seen,g_strdup(path));
- GStatBuf st; if(g_lstat(path,&st) || !S_ISREG(st.st_mode) || st.st_size>2*1024*1024) { wb.skipped++; return; }
  gchar *utf8=utils_get_utf8_from_locale(path),*root=utils_get_utf8_from_locale(wb.root);
  if(wb.workspace_from_project && !insight_project_files_contains(wb.membership,root,utf8)) { g_free(root); g_free(utf8); return; }
- g_free(root); GeanyFiletype *ft=filetypes_detect_from_file(utf8); gboolean known=ft && ft->id!=GEANY_FILETYPES_NONE;
- gchar *decoded=(known || explicit_file) ? read_disk_source(utf8,TRUE) : NULL;
- if((known || explicit_file) && decoded) { wb.parsed++; g_ptr_array_add(wb.files,g_strdup(utf8)); }
- else if(known || explicit_file) { wb.skipped++; wb.scan_failed=TRUE; }
- if(decoded && ft && ft->lang>=0) {
-  TMSourceFile *file=tm_source_file_new(path,ft->name);
-  if(file) { file->lang=ft->lang; if(insight_native_parse(wb.base,file,utf8,decoded,strlen(decoded))) wb.index_dirty=TRUE; else { wb.scan_failed=TRUE; wb.skipped++; } tm_source_file_free(file); }
-  else { wb.scan_failed=TRUE; wb.skipped++; }
- }
- if(wb.parsed && wb.parsed%25==0) { files_filter(NULL,NULL); ui_set_statusbar(TRUE,"Workspace: indexing… %u files",wb.parsed); }
- g_free(decoded); g_free(utf8);
+ g_free(root); GeanyFiletype *ft=filetypes_detect_from_file(utf8);
+ IndexJob *j=g_new0(IndexJob,1); j->index=wb.base; wb.base=NULL; j->path=g_strdup(path); j->utf8=utf8; j->language=g_strdup(ft ? ft->name : NULL); j->lang=ft ? ft->lang : -1; j->read=explicit_file || (ft && ft->id!=GEANY_FILETYPES_NONE); j->encoding=file_prefs.default_open_encoding; j->generation=wb.scan_generation; j->epoch=workbench_epoch;
+ wb.scan_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.scan_worker,index_job_done,NULL); g_task_set_task_data(task,j,index_job_free); g_task_run_in_thread(task,index_job_run); g_object_unref(task);
 }
 static gboolean scan_step(gpointer data) {
  (void)data;
@@ -340,7 +398,7 @@ static gboolean scan_step(gpointer data) {
   if(wb.watch_changed && !wb.watch_idle) { wb.watch_changed=FALSE; wb.watch_idle=g_timeout_add(2000,rescan_changed,NULL); }
   return G_SOURCE_REMOVE;
  }
- if(wb.scan_file_position<wb.scan_files->len) { scan_source_file(g_ptr_array_index(wb.scan_files,wb.scan_file_position++),TRUE); return G_SOURCE_CONTINUE; }
+ if(wb.scan_file_position<wb.scan_files->len) { scan_source_file(g_ptr_array_index(wb.scan_files,wb.scan_file_position++),TRUE); return scan_continue(); }
  if(!wb.frames->len) {
   const char *path=g_ptr_array_index(wb.scan_trees,wb.scan_tree_position++);
   if(!g_hash_table_contains(wb.scan_seen,path)) { GDir *dir=g_dir_open(path,0,NULL); if(dir) { ScanFrame *extra=g_new0(ScanFrame,1); extra->path=g_strdup(path); extra->dir=dir; g_hash_table_add(wb.scan_seen,g_strdup(path)); g_ptr_array_add(wb.frames,extra); watch_directory(path); } else { wb.scan_failed=TRUE; wb.skipped++; } }
@@ -359,7 +417,7 @@ static gboolean scan_step(gpointer data) {
   else { wb.scan_failed=TRUE; wb.skipped++; g_free(path); }
   return G_SOURCE_CONTINUE;
  }
- scan_source_file(path,FALSE); g_free(path); return G_SOURCE_CONTINUE;
+ scan_source_file(path,FALSE); g_free(path); return scan_continue();
 }
 static gboolean start_scan(const char *root) {
  gchar *owned=g_canonicalize_filename(root,NULL); GDir *dir=g_dir_open(owned,0,NULL); InsightIndex *next=insight_index_new();
@@ -374,7 +432,7 @@ static gboolean start_scan(const char *root) {
   for(guint i=0;i<wb.membership->files->len;i++) { const char *path=g_ptr_array_index(wb.membership->files,i); gchar *native=utils_get_locale_from_utf8(path),*parent=g_path_get_dirname(native); g_ptr_array_add(wb.scan_files,native); watch_directory(parent); g_free(parent); }
   for(guint i=0;i<wb.membership->trees->len;i++) g_ptr_array_add(wb.scan_trees,utils_get_locale_from_utf8(g_ptr_array_index(wb.membership->trees,i)));
  }
- wb.scan_file_position=wb.scan_tree_position=0; wb.parsed=wb.skipped=0; wb.index_dirty=TRUE; wb.scan_failed=FALSE; wb.scan=g_idle_add(scan_step,NULL); ui_set_statusbar(TRUE,"Workspace: indexing source folder…"); return TRUE;
+ wb.scan_file_position=wb.scan_tree_position=0; wb.parsed=wb.skipped=0; mark_index_dirty(); wb.scan_failed=FALSE; wb.scan=g_idle_add(scan_step,NULL); ui_set_statusbar(TRUE,"Workspace: indexing source folder…"); return TRUE;
 }
 static void choose_root(GtkButton *button,gpointer data) {
  (void)button; (void)data;
@@ -403,13 +461,13 @@ static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word,
  gtk_combo_box_set_active(GTK_COMBO_BOX(wb.choices),wb.definitions->len ? selected : -1);
  wb.populating=FALSE; return chosen;
 }
-static char *read_disk_source(const char *utf8,gboolean decode) {
+static char *read_disk_source_full(const char *utf8,gboolean decode,gint preferred,GCancellable *cancel) {
  gchar *native=utils_get_locale_from_utf8(utf8); GFile *file=g_file_new_for_path(native); g_free(native);
- GFileInputStream *stream=g_file_read(file,NULL,NULL); g_object_unref(file);
+ GFileInputStream *stream=g_file_read(file,cancel,NULL); g_object_unref(file);
  if(!stream) return NULL;
  GString *text=g_string_sized_new(16384); char chunk[16384]; gboolean ok=TRUE;
  for(;;) {
-  gssize got=g_input_stream_read(G_INPUT_STREAM(stream),chunk,sizeof chunk,NULL,NULL);
+  gssize got=g_input_stream_read(G_INPUT_STREAM(stream),chunk,sizeof chunk,cancel,NULL);
   if(got<0 || (got>0 && text->len+(gsize)got>2u*1024u*1024u)) { ok=FALSE; break; }
   if(!got) break;
   g_string_append_len(text,chunk,got);
@@ -419,11 +477,12 @@ static char *read_disk_source(const char *utf8,gboolean decode) {
  gsize length=text->len; gchar *buffer=g_string_free(text,FALSE);
  if(decode) {
   gboolean nul=FALSE;
-  if(!encodings_convert_to_utf8_auto(&buffer,&length,NULL,NULL,NULL,&nul,NULL) || nul) { g_free(buffer); return NULL; }
+  if(!(preferred==G_MININT ? encodings_convert_to_utf8_auto(&buffer,&length,NULL,NULL,NULL,&nul,NULL) : encodings_convert_to_utf8_worker(&buffer,&length,preferred,&nul)) || nul) { g_free(buffer); return NULL; }
  }
  if(length>2u*1024u*1024u || !g_utf8_validate(buffer,(gssize)length,NULL) || memchr(buffer,0,length)) { g_free(buffer); return NULL; }
  return buffer;
 }
+static char *read_disk_source(const char *utf8,gboolean decode) { return read_disk_source_full(utf8,decode,G_MININT,NULL); }
 static void remember_location(const char *path,guint id,gulong line) {
  if(!wb.history || !line) return;
  if(wb.history_position>=0 && wb.history_position<(gint)wb.history->len) {
@@ -436,6 +495,10 @@ static void remember_location(const char *path,guint id,gulong line) {
  if(wb.history->len>64) g_ptr_array_remove_index(wb.history,0);
  wb.history_position=(gint)wb.history->len-1;
  navigation_state();
+}
+static void reveal_context(void) {
+ if(!wb.box || !wb.context_visible) return;
+ if(gtk_widget_get_parent(wb.box)==main_widgets.message_window_notebook) { msgwin_show_hide(TRUE); gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.message_window_notebook),wb.box)); }
 }
 static gboolean show_location(const char *path,guint id,gulong line,gboolean remember) {
  if(wb.context_toggle && !wb.context_visible) gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.context_toggle),TRUE);
@@ -501,7 +564,7 @@ static void browser_selected(GtkTreeSelection *selection,gpointer data) {
  if(!gtk_tree_selection_get_selected(selection,&model,&iter)) return;
  gchar *path,*name; gulong line; gtk_tree_model_get(model,&iter,SYMBOL_PATH,&path,SYMBOL_NAME,&name,SYMBOL_LINE,&line,-1);
  if(!line) { g_free(path); g_free(name); return; }
- gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); if(show_location(path,model==GTK_TREE_MODEL(wb.local_symbols) ? wb.local_doc_id : 0,line,TRUE)) preview_mark_symbol(name); g_free(path); g_free(name);
+ reveal_context(); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); if(show_location(path,model==GTK_TREE_MODEL(wb.local_symbols) ? wb.local_doc_id : 0,line,TRUE)) preview_mark_symbol(name); g_free(path); g_free(name);
 }
 static void browser_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) {
  (void)column; (void)data;
@@ -512,8 +575,9 @@ static void browser_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewCol
   GtkTreeIter iter; GtkTreeModel *model=gtk_tree_view_get_model(view);
   if(!gtk_tree_model_get_iter(model,&iter,path)) return;
   gchar *filename; gtk_tree_model_get(model,&iter,1,&filename,-1);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE);
-  gboolean shown=show_location(filename,0,1,TRUE); g_free(filename); if(!shown) return;
+  gchar *native=utils_get_locale_from_utf8(filename); GeanyDocument *doc=document_open_file(native,FALSE,NULL,NULL); g_free(native); g_free(filename);
+  if(doc) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),TRUE); document_grab_focus(doc); insight_workbench_refresh(); }
+  return;
  }
  else return;
  open_context(NULL,NULL);
@@ -541,7 +605,7 @@ static void files_filter(GtkEditable *entry,gpointer data) {
 static void file_selected(GtkTreeSelection *selection,gpointer data) {
  (void)data; GtkTreeIter iter; GtkTreeModel *model;
  if(!wb.preview || !gtk_tree_selection_get_selected(selection,&model,&iter)) return;
- gchar *path; gtk_tree_model_get(model,&iter,1,&path,-1); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); show_location(path,0,1,TRUE); g_free(path);
+ gchar *path; gtk_tree_model_get(model,&iter,1,&path,-1); reveal_context(); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); show_location(path,0,1,TRUE); g_free(path);
 }
 static void file_sort(GtkComboBox *combo,gpointer data) {
  (void)data; gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(wb.file_store),gtk_combo_box_get_active(combo)==1 ? 1 : 0,GTK_SORT_ASCENDING);
@@ -570,6 +634,7 @@ static void create_files_browser(void) {
 }
 enum { USAGE_DISPLAY,USAGE_PATH,USAGE_LINE,USAGE_START,USAGE_END,USAGE_ID,USAGE_DIGEST,USAGE_SYMBOL,USAGE_SNIPPET,USAGE_COLUMN,USAGE_COLUMNS };
 static void stop_usage(void) {
+ wb.usage_generation++; if(wb.search_worker) { g_cancellable_cancel(wb.search_worker); g_clear_object(&wb.search_worker); }
  if(wb.usage_idle) { g_source_remove(wb.usage_idle); wb.usage_idle=0; }
  if(wb.usage_paths) g_ptr_array_set_size(wb.usage_paths,0);
  g_clear_pointer(&wb.usage_name,g_free);
@@ -595,44 +660,49 @@ static gchar *reference_snippet(const char *text,gsize at) {
  if(g_utf8_strlen(line,-1)>180) { gchar *shortened=g_utf8_substring(line,0,180); g_free(line); line=g_strconcat(shortened,"…",NULL); g_free(shortened); }
  return line;
 }
+typedef struct { gchar *path,*query,*text,*digest; InsightOccurrence *found; gsize total; guint id,flags,context,capacity; gint mode,encoding; InsightCodeDialect dialect; gboolean keywords,code,have_dialect,valid; guint64 generation,epoch; } SearchJob;
+static gboolean usage_step(gpointer);
+static void search_job_free(gpointer data) { SearchJob *j=data; g_free(j->path); g_free(j->query); g_free(j->text); g_free(j->digest); g_free(j->found); g_free(j); }
+static void search_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
+ (void)source; SearchJob *j=data;
+ if(!j->text && j->path && !g_cancellable_is_cancelled(cancel)) j->text=read_disk_source_full(j->path,TRUE,j->encoding,cancel);
+ char *mask=j->text && j->code && j->have_dialect ? insight_source_code_mask(j->text,strlen(j->text),j->dialect,NULL) : NULL;
+ const char *text=j->code ? mask : j->text; j->found=g_new(InsightOccurrence,j->capacity);
+ if(text && !g_cancellable_is_cancelled(cancel)) {
+  if(j->mode==3) {
+   InsightSearchMatch *matches=g_new(InsightSearchMatch,j->capacity);
+   j->valid=j->keywords ? insight_keyword_collect(text,strlen(text),j->query,j->flags,j->context,matches,j->capacity,&j->total,NULL) : insight_context_collect(text,strlen(text),j->query,j->flags,matches,j->capacity,&j->total,NULL);
+   if(j->valid) for(gsize n=0;n<MIN(j->total,j->capacity);n++) j->found[n]=(InsightOccurrence){matches[n].start,matches[n].end,matches[n].line,matches[n].column};
+   g_free(matches);
+  } else j->valid=insight_occurrences_find(text,strlen(text),j->query,strlen(j->query),0,j->found,j->capacity,&j->total);
+  if(j->valid) j->digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,j->text,-1);
+ }
+ g_free(mask); g_task_return_boolean(task,TRUE);
+}
+static void search_job_done(GObject *source,GAsyncResult *result,gpointer data) {
+ (void)source; (void)data; GTask *task=G_TASK(result); SearchJob *j=g_task_get_task_data(task); gboolean ok=g_task_propagate_boolean(task,NULL);
+ if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.usage_generation) return;
+ g_clear_object(&wb.search_worker);
+ if(ok && j->valid) {
+  for(gsize n=0;n<MIN(j->total,j->capacity);n++) {
+   InsightOccurrence *hit=&j->found[n]; GtkTreeIter iter; gtk_list_store_append(wb.usage_target,&iter);
+   gchar *snippet=reference_snippet(j->text,hit->start);
+   gtk_list_store_set(wb.usage_target,&iter,USAGE_DISPLAY,j->path ? j->path : "untitled",USAGE_PATH,j->path,USAGE_LINE,hit->line,USAGE_COLUMN,(gulong)g_utf8_strlen(j->text+hit->start-hit->column,(gssize)hit->column)+1,USAGE_START,(gulong)hit->start,USAGE_END,(gulong)hit->end,USAGE_ID,j->id,USAGE_DIGEST,j->digest,USAGE_SYMBOL,j->query,USAGE_SNIPPET,snippet,-1); g_free(snippet); wb.usage_shown++;
+  }
+ } else wb.usage_skipped++;
+ gchar *label=g_strdup_printf("Searching… %u results • %u/%u files",wb.usage_shown,wb.usage_position,wb.usage_paths->len); set_usage_status(label); g_free(label);
+ wb.usage_idle=g_idle_add(usage_step,NULL);
+}
 static gboolean usage_step(gpointer data) {
  (void)data;
  if(wb.usage_position>=wb.usage_paths->len || wb.usage_shown>=2000) {
-  wb.usage_idle=0;
-  gchar *label=g_strdup_printf("%u results • %u files scanned • %u skipped%s",wb.usage_shown,wb.usage_position,wb.usage_skipped,wb.usage_shown>=2000 ? " • result limit reached" : "");
-  set_usage_status(label); g_free(label); return G_SOURCE_REMOVE;
+  wb.usage_idle=0; gchar *label=g_strdup_printf("%u results • %u files scanned • %u skipped%s",wb.usage_shown,wb.usage_position,wb.usage_skipped,wb.usage_shown>=2000 ? " • result limit reached" : ""); set_usage_status(label); g_free(label); return G_SOURCE_REMOVE;
  }
- Location *location=g_ptr_array_index(wb.usage_paths,wb.usage_position++);
- GeanyDocument *doc=location->id ? document_find_by_id(location->id) : document_find_by_filename(location->path);
- char *text=NULL; guint id=doc ? doc->id : 0;
- if(doc) { gint length=sci_get_length(doc->editor->sci); if(length>=0 && length<=2*1024*1024) { text=sci_get_contents(doc->editor->sci,length+1); if(text && (!g_utf8_validate(text,length,NULL) || memchr(text,0,(gsize)length))) g_clear_pointer(&text,g_free); } }
- else if(location->path) text=read_disk_source(location->path,TRUE);
- InsightOccurrence *found=g_new(InsightOccurrence,2000-wb.usage_shown); size_t total=0;
- char *mask=NULL; gboolean code=wb.usage_mode==0 && wb.usage_code_only;
- if(text && code) {
-  GeanyFiletype *ft=doc ? doc->file_type : (location->path ? filetypes_detect_from_file(location->path) : NULL); InsightCodeDialect dialect;
-  if(source_dialect(ft,&dialect)) mask=insight_source_code_mask(text,strlen(text),dialect,NULL);
- }
- const char *search_text=code ? mask : text;
- gboolean valid=FALSE;
- if(search_text && wb.usage_mode==3) {
-  InsightSearchMatch *matches=g_new(InsightSearchMatch,2000-wb.usage_shown);
-  valid=wb.usage_keywords ? insight_keyword_collect(search_text,strlen(search_text),wb.usage_name,wb.usage_flags,wb.usage_context,matches,2000-wb.usage_shown,&total,NULL) : insight_context_collect(search_text,strlen(search_text),wb.usage_name,wb.usage_flags,matches,2000-wb.usage_shown,&total,NULL);
-  if(valid) for(size_t i=0;i<MIN(total,2000-wb.usage_shown);i++) found[i]=(InsightOccurrence){matches[i].start,matches[i].end,matches[i].line,matches[i].column};
-  g_free(matches);
- } else if(search_text) valid=insight_occurrences_find(search_text,strlen(search_text),wb.usage_name,strlen(wb.usage_name),0,found,2000-wb.usage_shown,&total);
- if(valid) {
-  gchar *digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,text,-1);
-  for(size_t i=0;i<total && wb.usage_shown<2000;i++) {
-   GtkTreeIter iter; gtk_list_store_append(wb.usage_target,&iter);
-   gtk_list_store_set(wb.usage_target,&iter,USAGE_DISPLAY,location->path ? location->path : "untitled",USAGE_PATH,location->path,USAGE_LINE,found[i].line,USAGE_COLUMN,(gulong)g_utf8_strlen(text+found[i].start-found[i].column,(gssize)found[i].column)+1,USAGE_START,(gulong)found[i].start,USAGE_END,(gulong)found[i].end,USAGE_ID,id,USAGE_DIGEST,digest,USAGE_SYMBOL,wb.usage_name,-1);
-   gchar *snippet=reference_snippet(text,found[i].start); gtk_list_store_set(wb.usage_target,&iter,USAGE_SNIPPET,snippet,-1); g_free(snippet); wb.usage_shown++;
-  }
-  g_free(digest);
- } else wb.usage_skipped++;
- g_free(mask); g_free(found); g_free(text);
- gchar *label=g_strdup_printf("Searching… %u results • %u/%u files",wb.usage_shown,wb.usage_position,wb.usage_paths->len);
- set_usage_status(label); g_free(label); return G_SOURCE_CONTINUE;
+ Location *location=g_ptr_array_index(wb.usage_paths,wb.usage_position++); GeanyDocument *doc=location->id ? document_find_by_id(location->id) : document_find_by_filename(location->path);
+ SearchJob *j=g_new0(SearchJob,1); j->path=g_strdup(location->path); j->query=g_strdup(wb.usage_name); j->id=doc ? doc->id : 0; j->mode=wb.usage_mode; j->flags=wb.usage_flags; j->keywords=wb.usage_keywords; j->context=wb.usage_context; j->capacity=2000-wb.usage_shown; j->encoding=file_prefs.default_open_encoding; j->generation=wb.usage_generation; j->epoch=workbench_epoch;
+ if(doc) { gint length=sci_get_length(doc->editor->sci); if(length>=0 && length<=2*1024*1024) { j->text=sci_get_contents(doc->editor->sci,length+1); if(j->text && (!g_utf8_validate(j->text,length,NULL) || memchr(j->text,0,length))) g_clear_pointer(&j->text,g_free); } }
+ j->code=j->mode==0 && wb.usage_code_only; GeanyFiletype *ft=doc ? doc->file_type : (j->path ? filetypes_detect_from_extension(j->path) : NULL); j->have_dialect=source_dialect(ft,&j->dialect);
+ wb.search_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.search_worker,search_job_done,NULL); g_task_set_task_data(task,j,search_job_free); g_task_run_in_thread(task,search_job_run); g_object_unref(task); wb.usage_idle=0; return G_SOURCE_REMOVE;
 }
 static gboolean search_path_matches(const char *path) {
  const char *input=gtk_entry_get_text(GTK_ENTRY(wb.search_mask)); if(!*input) return TRUE;
@@ -712,7 +782,7 @@ static void relation_controls(GtkWidget *widget,gpointer data) {
  else { gtk_list_store_clear(wb.matches); set_usage_status("Enter a symbol for Relations"); }
 }
 static void relation_update_from_editor(gboolean dirty) {
- if(wb.usage_idle && wb.usage_mode==3) return;
+ if((wb.usage_idle || wb.search_worker) && wb.usage_mode==3) return;
  if(!wb.relation_follow || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_follow))) return;
  GeanyDocument *doc=document_get_current(); gchar word[1025]={0};
  if(doc) {
@@ -1093,6 +1163,59 @@ static void create_categories(void) {
  g_signal_connect(wb.category_entry,"changed",G_CALLBACK(categories_filter),NULL); g_signal_connect(wb.category_entry,"key-press-event",G_CALLBACK(browser_key),NULL); g_signal_connect(wb.category_view,"key-press-event",G_CALLBACK(browser_key),NULL);
  g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.category_view)),"changed",G_CALLBACK(browser_selected),NULL); g_signal_connect(wb.category_view,"row-activated",G_CALLBACK(category_activated),NULL); gtk_widget_show_all(box); categories_filter(NULL,NULL);
 }
+typedef struct { InsightIndex *index; gchar *query,*preferred,*path,*text,*digest; const InsightSymbol *matches[256]; gsize count; gint chosen,position,anchor,encoding; guint document; gulong line; guint64 generation,epoch,index_version; } DefinitionJob;
+static gchar *cursor_query(GeanyDocument *doc) {
+ gint a=(gint)SSM(doc->editor->sci,SCI_GETSELECTIONSTART,0,0),b=(gint)SSM(doc->editor->sci,SCI_GETSELECTIONEND,0,0);
+ if(b>a && b-a<=1024) { gchar *query=sci_get_selection_contents(doc->editor->sci); return g_strstrip(query); }
+ gchar word[1025]={0}; editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word); return g_strdup(word);
+}
+static void stop_definition(void) {
+ wb.definition_generation++; if(wb.definition_timer) { g_source_remove(wb.definition_timer); wb.definition_timer=0; }
+ if(wb.definition_worker) { g_cancellable_cancel(wb.definition_worker); g_clear_object(&wb.definition_worker); }
+}
+static void definition_job_free(gpointer data) { DefinitionJob *j=data; insight_index_free(j->index); g_free(j->query); g_free(j->preferred); g_free(j->path); g_free(j->text); g_free(j->digest); g_free(j); }
+static void definition_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
+ (void)source; DefinitionJob *j=data;
+ if(*j->query && !g_cancellable_is_cancelled(cancel)) {
+  j->count=insight_relation_query(j->index,j->query,INSIGHT_RELATION_DEFINITIONS,0,j->matches,G_N_ELEMENTS(j->matches)); if(j->count==SIZE_MAX) j->count=0; j->count=MIN(j->count,G_N_ELEMENTS(j->matches));
+  for(gsize n=0;n<j->count;n++) if(n==0 || insight_native_definition_rank(j->matches[n],j->preferred)>insight_native_definition_rank(j->matches[j->chosen],j->preferred)) j->chosen=(gint)n;
+  if(j->count) { const InsightSymbol *hit=j->matches[j->chosen]; j->path=g_strdup(hit->path); j->line=hit->line; }
+ }
+ if(!j->path) j->path=g_strdup(j->preferred);
+ if(g_strcmp0(j->path,j->preferred)) { g_clear_pointer(&j->text,g_free); if(!g_cancellable_is_cancelled(cancel)) j->text=read_disk_source_full(j->path,TRUE,j->encoding,cancel); }
+ if(j->text) j->digest=source_digest(j->text);
+ g_task_return_boolean(task,TRUE);
+}
+static void definition_job_done(GObject *source,GAsyncResult *result,gpointer data) {
+ (void)source; (void)data; GTask *task=G_TASK(result); DefinitionJob *j=g_task_get_task_data(task); gboolean ok=g_task_propagate_boolean(task,NULL);
+ if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.definition_generation) return;
+ g_clear_object(&wb.definition_worker); if(j->index_version!=wb.index_version) { queue_definition(TRUE); return; } GeanyDocument *current=document_get_current();
+ if(!ok || !current || current->id!=j->document || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow)) || sci_get_current_position(current->editor->sci)!=j->position || SSM(current->editor->sci,SCI_GETANCHOR,0,0)!=j->anchor) return;
+ GeanyDocument *doc=j->path ? document_find_by_filename(j->path) : current;
+ if(doc) { gint length=sci_get_length(doc->editor->sci); if(length>=0 && length<=2*1024*1024) { g_free(j->text); j->text=sci_get_contents(doc->editor->sci,length+1); g_free(j->digest); j->digest=source_digest(j->text); } }
+ if(!j->text) { ui_set_statusbar(TRUE,"Definition source unavailable or exceeds 2 MiB"); return; }
+ wb.populating=TRUE; g_ptr_array_set_size(wb.definitions,0); gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(wb.choices));
+ for(gsize n=0;n<j->count;n++) { const InsightSymbol *hit=j->matches[n]; Location *location=g_new0(Location,1); location->path=g_strdup(hit->path); location->line=hit->line; g_ptr_array_add(wb.definitions,location); gchar *label=g_strdup_printf("%s %s%s • %s — %s:%lu",hit->type,hit->name,hit->signature,hit->scope,hit->path,hit->line); gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.choices),label); g_free(label); }
+ gtk_combo_box_set_active(GTK_COMBO_BOX(wb.choices),j->count ? j->chosen : -1); wb.populating=FALSE;
+ GeanyFiletype *ft=doc ? doc->file_type : (j->path ? filetypes_detect_from_extension(j->path) : NULL); render_source(j->text,ft,j->line);
+ g_free(wb.source_path); wb.source_path=g_strdup(j->path); wb.source_id=doc ? doc->id : 0; wb.source_line=j->line<=(gulong)sci_get_line_count(wb.preview) ? j->line : 0; g_free(wb.source_digest); wb.source_digest=g_strdup(j->digest);
+ gchar *label=g_strdup_printf("Context — %s:%lu",j->path ? j->path : "untitled",j->line); gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label); if(j->count) { gchar word[1025]={0}; editor_find_current_word_sciwc(current->editor,j->position,word,sizeof word); preview_mark_symbol(word); } navigation_state();
+ wb.follow_doc=j->document; wb.follow_line=(gulong)sci_get_current_line(current->editor->sci)+1; g_free(wb.follow_word); wb.follow_word=g_strdup(j->query);
+ if(gtk_widget_has_focus(GTK_WIDGET(current->editor->sci)) && gtk_widget_get_parent(wb.box)==main_widgets.message_window_notebook) { msgwin_show_hide(TRUE); gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.message_window_notebook),wb.box)); }
+}
+static gboolean definition_timeout(gpointer data) {
+ (void)data; wb.definition_timer=0; if(!wb.alive || !wb.preview || !wb.context_visible || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow))) return G_SOURCE_REMOVE;
+ GeanyDocument *doc=document_get_current(); if(!doc) return G_SOURCE_REMOVE; refresh_index();
+ DefinitionJob *j=g_new0(DefinitionJob,1); j->index=insight_index_ref(wb.index); j->query=cursor_query(doc); j->preferred=g_strdup(doc->file_name); j->document=doc->id; j->position=sci_get_current_position(doc->editor->sci); j->anchor=(gint)SSM(doc->editor->sci,SCI_GETANCHOR,0,0); j->line=(gulong)sci_get_current_line(doc->editor->sci)+1; j->encoding=file_prefs.default_open_encoding; j->generation=wb.definition_generation; j->epoch=workbench_epoch; j->index_version=wb.index_version;
+ gint length=sci_get_length(doc->editor->sci); if(length>=0 && length<=2*1024*1024) j->text=sci_get_contents(doc->editor->sci,length+1);
+ wb.definition_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.definition_worker,definition_job_done,NULL); g_task_set_task_data(task,j,definition_job_free); g_task_run_in_thread(task,definition_job_run); g_object_unref(task); return G_SOURCE_REMOVE;
+}
+static void queue_definition(gboolean force) {
+ if(!wb.alive || !wb.preview || !wb.follow || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow))) return;
+ GeanyDocument *doc=document_get_current(); if(!doc) return; gchar *query=cursor_query(doc); gboolean same=wb.follow_doc==doc->id && wb.follow_line==(gulong)sci_get_current_line(doc->editor->sci)+1 && !g_strcmp0(wb.follow_word,query); g_free(query);
+ if(!force && (same || wb.definition_timer || wb.definition_worker)) return;
+ stop_definition(); wb.definition_timer=g_timeout_add(500,definition_timeout,NULL);
+}
 static gboolean refresh_now(gpointer data) {
  (void)data; wb.refresh=0;
  GeanyDocument *active=document_get_current(); gboolean dirty=wb.index_dirty;
@@ -1105,12 +1228,7 @@ static gboolean refresh_now(gpointer data) {
  if(!wb.preview || !wb.context_visible || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow))) return G_SOURCE_REMOVE;
  GeanyDocument *doc=document_get_current();
  if(!doc) { render_source("",NULL,1); g_clear_pointer(&wb.source_path,g_free); wb.source_id=0; wb.source_line=0; navigation_state(); gtk_label_set_text(GTK_LABEL(wb.title),"Context — no active source"); return G_SOURCE_REMOVE; }
- gchar word[1025]={0}; editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);
- const InsightSymbol *definition=word_definition(doc,word,NULL);
- if(definition) {
-  gchar *path=g_strdup(definition->path);
-  gulong line=definition->line; if(show_location(path,0,line,FALSE)) preview_mark_symbol(word); g_free(path);
- } else show_location(doc->file_name,doc->id,(gulong)sci_get_current_line(doc->editor->sci)+1,FALSE);
+ queue_definition(dirty);
  return G_SOURCE_REMOVE;
 }
 static void history_move(GtkButton *button,gpointer data) {
@@ -1200,6 +1318,15 @@ static gboolean preview_button(GtkWidget *widget,GdkEventButton *event,gpointer 
  gint position=(gint)SSM(wb.preview,SCI_POSITIONFROMPOINTCLOSE,(uptr_t)event->x,(sptr_t)event->y);
  if(!(event->state&GEANY_PRIMARY_MOD_MASK) && (position<0 || !SSM(wb.preview,SCI_INDICATORVALUEAT,INSIGHT_LINK,position))) return FALSE;
  return preview_definition(position);
+}
+void insight_workbench_editor_updated(gboolean content) {
+ GeanyDocument *doc=document_get_current(); if(!wb.preview || !doc) return;
+ gint position=sci_get_current_position(doc->editor->sci),anchor=(gint)SSM(doc->editor->sci,SCI_GETANCHOR,0,0);
+ if(!content && wb.editor_follow_id==doc->id && wb.editor_follow_position==position && wb.editor_follow_anchor==anchor) return;
+ stop_definition(); wb.follow_doc=0;
+ wb.editor_follow_id=doc->id; wb.editor_follow_position=position; wb.editor_follow_anchor=anchor;
+ if(gtk_widget_has_focus(GTK_WIDGET(doc->editor->sci))) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),TRUE);
+ queue_definition(FALSE); insight_workbench_refresh();
 }
 void insight_workbench_refresh(void) {
  if(!wb.preview) return;
@@ -1351,7 +1478,7 @@ static void native_commands_rebuild(void) {
  gtk_widget_show_all(wb.lua_commands);
 }
 static void native_document_event(GObject *object,GeanyDocument *doc,gpointer data) {
- (void)object; if(strcmp(data,"document_activate")) wb.index_dirty=TRUE; insight_workbench_refresh();
+ (void)object; if(strcmp(data,"document_activate")) mark_index_dirty(); insight_workbench_refresh();
  if(!wb.extensions || wb.lua_running || !doc || !doc->is_valid || insight_session_is_running(insight_extensions_session(wb.extensions))) return;
  if(!strcmp(data,"document_save") && doc->file_name && !wb.scan && g_ptr_array_find_with_equal_func(wb.files,doc->file_name,(GEqualFunc)g_str_equal,NULL)) insight_native_import(wb.base,doc->tm_file,doc->file_name);
  refresh_index(); InsightIndex *snapshot=insight_index_clone(wb.index); if(!snapshot) return;
@@ -1359,7 +1486,7 @@ static void native_document_event(GObject *object,GeanyDocument *doc,gpointer da
  char error[512]; wb.lua_running=TRUE;
  int result=insight_session_emit(insight_extensions_session(wb.extensions),data,doc->file_name,&host,error,sizeof error);
  wb.lua_running=FALSE; g_free(h.scratch); insight_index_free(snapshot); if(result) ui_set_statusbar(TRUE,"Lua event: %s",error);
- if(!strcmp(data,"document_close")) wb.index_dirty=TRUE;
+ if(!strcmp(data,"document_close")) mark_index_dirty();
 }
 static void native_project_update(GObject *object,GKeyFile *config,gpointer data) {
  (void)object; if(!wb.preview || !app->project) return;
@@ -1391,7 +1518,7 @@ static gboolean membership_apply(InsightProjectFiles *candidate) {
  if(ok) ok=g_key_file_load_from_file(config,filename,G_KEY_FILE_KEEP_COMMENTS,&error);
  if(ok) ok=insight_project_files_write(candidate,config,root,&error);
  if(ok) { gsize length; gchar *data=g_key_file_to_data(config,&length,&error); ok=data!=NULL && length<=8*1024*1024; if(!ok && !error) g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Project configuration exceeds 8 MiB"); if(ok) ok=g_file_replace_contents(file,data,length,NULL,FALSE,G_FILE_CREATE_PRIVATE,NULL,NULL,&error); g_free(data); }
- if(ok) { if(wb.usage_idle) { stop_usage(); gtk_label_set_text(GTK_LABEL(wb.search_status),"Project files changed; run the search again"); } insight_project_files_free(wb.membership); wb.membership=insight_project_files_clone(candidate); wb.membership_valid=TRUE; start_scan(wb.root); files_filter(NULL,NULL); }
+ if(ok) { if(wb.usage_idle || wb.search_worker) { stop_usage(); gtk_label_set_text(GTK_LABEL(wb.search_status),"Project files changed; run the search again"); } insight_project_files_free(wb.membership); wb.membership=insight_project_files_clone(candidate); wb.membership_valid=TRUE; start_scan(wb.root); files_filter(NULL,NULL); }
  else ui_set_statusbar(TRUE,"Project files not changed: %s",error ? error->message : "cannot save configuration");
  g_clear_error(&error); g_key_file_unref(config); g_object_unref(file); g_free(filename); g_free(root); return ok;
 }
@@ -1501,7 +1628,7 @@ static void project_files_drop(GtkWidget *widget,GdkDragContext *context,gint x,
 static void native_project_close(GObject *object,gpointer data) {
  (void)object; (void)data; g_clear_pointer(&wb.geany_root,g_free); g_clear_pointer(&wb.membership_project,g_free); wb.membership_valid=FALSE;
  if(!wb.workspace_from_project) return;
- wb.workspace_from_project=FALSE; stop_scan(); insight_workspace_watch_clear(wb.watch); wb.watch_changed=FALSE; if(wb.watch_idle) { g_source_remove(wb.watch_idle); wb.watch_idle=0; } insight_index_free(wb.base); wb.base=insight_index_new(); wb.index_dirty=TRUE; g_ptr_array_set_size(wb.files,0); g_clear_pointer(&wb.root,g_free);
+ wb.workspace_from_project=FALSE; stop_scan(); insight_workspace_watch_clear(wb.watch); wb.watch_changed=FALSE; if(wb.watch_idle) { g_source_remove(wb.watch_idle); wb.watch_idle=0; } insight_index_free(wb.base); wb.base=insight_index_new(); mark_index_dirty(); g_ptr_array_set_size(wb.files,0); g_clear_pointer(&wb.root,g_free);
  if(wb.cache_path) g_unlink(wb.cache_path);
  refresh_index(); browser_filter(NULL,NULL); files_filter(NULL,NULL); tree_refresh(); categories_filter(NULL,NULL); file_types_refresh(); insight_workbench_refresh();
 }
@@ -1541,7 +1668,7 @@ gboolean insight_workbench_goto_definition(void) {
 static void go_definition(GtkMenuItem *item,gpointer data) { (void)item; (void)data; if(!insight_workbench_goto_definition()) ui_set_statusbar(TRUE,"Known definition not found"); }
 static void context_visible(GtkCheckMenuItem *item,gpointer data) {
  (void)data; wb.context_visible=gtk_check_menu_item_get_active(item);
- if(wb.context_visible) { gtk_widget_show(wb.box); insight_workbench_refresh(); } else gtk_widget_hide(wb.box);
+ if(wb.context_visible) { gtk_widget_show(wb.box); reveal_context(); insight_workbench_refresh(); } else gtk_widget_hide(wb.box);
  for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].page==wb.box && wb.hosts[i].window) gtk_widget_set_visible(wb.hosts[i].window,wb.context_visible);
 }
 static void focus_relations(GtkMenuItem *item,gpointer data) { (void)item; (void)data; focus_widget_panel(wb.usage_entry); }
@@ -1614,7 +1741,7 @@ static void register_panels(void) {
  wb.host_count=10;
  for(guint i=0;i<8;i++) { PanelHost *host=&wb.hosts[i]; host->home=wb.project_notebook; host->page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(host->home),(gint)i); host->order=i; host->label=g_strdup(gtk_notebook_get_tab_label_text(GTK_NOTEBOOK(host->home),host->page)); }
  PanelHost *left=&wb.hosts[8]; left->home=main_widgets.sidebar_notebook; left->page=wb.local_entry; while(gtk_widget_get_parent(left->page)!=left->home) left->page=gtk_widget_get_parent(left->page); left->order=(guint)gtk_notebook_page_num(GTK_NOTEBOOK(left->home),left->page); left->label=g_strdup("File Symbols");
- PanelHost *context=&wb.hosts[9]; context->home=wb.pane; context->page=wb.box; context->pane=TRUE; context->label=g_strdup("Context");
+ PanelHost *context=&wb.hosts[9]; context->home=main_widgets.message_window_notebook; context->page=wb.box; context->order=(guint)gtk_notebook_page_num(GTK_NOTEBOOK(context->home),wb.box); context->pane=FALSE; context->label=g_strdup("Context");
  GtkWidget *floating=gtk_menu_item_new_with_label("Float individual panel"),*menu=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(floating),menu); gtk_container_add(GTK_CONTAINER(wb.panel_commands),floating);
  for(guint i=0;i<wb.host_count;i++) { GtkWidget *item=gtk_menu_item_new_with_label(wb.hosts[i].label); gtk_container_add(GTK_CONTAINER(menu),item); g_signal_connect(item,"activate",G_CALLBACK(float_panel_command),GUINT_TO_POINTER(i)); }
  GtkWidget *dock=gtk_menu_item_new_with_label("Dock all individual panels"); gtk_container_add(GTK_CONTAINER(wb.panel_commands),dock); g_signal_connect(dock,"activate",G_CALLBACK(dock_panels_command),NULL); gtk_widget_show_all(floating); gtk_widget_show(dock);
@@ -2036,12 +2163,12 @@ static void arrange_main_menus(void) {
   g_object_ref(item); gtk_container_remove(GTK_CONTAINER(bar),item); gtk_menu_shell_insert(GTK_MENU_SHELL(bar),item,(gint)i); g_object_unref(item);
  }
 }
-void insight_workbench_index_changed(void) { wb.index_dirty=TRUE; insight_workbench_refresh(); }
+void insight_workbench_index_changed(void) { stop_definition(); wb.follow_doc=0; mark_index_dirty(); insight_workbench_refresh(); }
 static gboolean remote_workspace(const char *path) { gboolean previous=wb.workspace_from_project; wb.workspace_from_project=FALSE; if(start_scan(path)) return TRUE; wb.workspace_from_project=previous; return FALSE; }
 static void follow_changed(GtkToggleButton *button,gpointer data) {
  (void)data;
- if(gtk_toggle_button_get_active(button)) insight_workbench_refresh();
- else if(wb.refresh) { g_source_remove(wb.refresh); wb.refresh=0; }
+ if(gtk_toggle_button_get_active(button)) { wb.follow_doc=0; queue_definition(TRUE); insight_workbench_refresh(); }
+ else { stop_definition(); if(wb.refresh) { g_source_remove(wb.refresh); wb.refresh=0; } }
 }
 static void wrap_changed(GtkToggleButton *button,gpointer data) {
  (void)data; if(wb.preview) SSM(wb.preview,SCI_SETWRAPMODE,gtk_toggle_button_get_active(button) ? SC_WRAP_WORD : SC_WRAP_NONE,0);
@@ -2054,6 +2181,7 @@ static void copy_location(GtkButton *button,gpointer data) {
  ui_set_statusbar(TRUE,"Context file:line copied");
 }
 void insight_workbench_init(void) {
+ wb.alive=TRUE; workbench_epoch++;
  GtkWidget *existing=ui_lookup_widget(main_widgets.window,"vpaned1");
  GtkWidget *parent=gtk_widget_get_parent(existing); gint position=0;
  gtk_container_child_get(GTK_CONTAINER(parent),existing,"position",&position,NULL);
@@ -2062,7 +2190,7 @@ void insight_workbench_init(void) {
  wb.watch=insight_workspace_watch_new(1500,workspace_changed,NULL);
  wb.membership=insight_project_files_new(); wb.scan_files=g_ptr_array_new_with_free_func(g_free); wb.scan_trees=g_ptr_array_new_with_free_func(g_free); wb.scan_seen=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
  wb.frames=g_ptr_array_new_with_free_func(frame_free); wb.files=g_ptr_array_new_with_free_func(g_free);
- wb.base=insight_index_new(); wb.index=insight_index_new(); wb.index_dirty=TRUE;
+ wb.base=insight_index_new(); wb.index=insight_index_new(); mark_index_dirty();
  wb.cache_path=g_build_filename(app->configdir,"insight","workspace.idx",NULL); restore_index_cache();
  wb.definitions=g_ptr_array_new_with_free_func(location_free);
  wb.history=g_ptr_array_new_with_free_func(location_free); wb.history_position=-1;
@@ -2127,7 +2255,7 @@ void insight_workbench_init(void) {
  gtk_widget_set_size_request(wb.project_notebook,300,-1);
  gtk_paned_set_position(GTK_PANED(wb.right_pane),850);
  gtk_paned_pack1(GTK_PANED(wb.pane),wb.right_pane,TRUE,FALSE);
- gtk_paned_pack2(GTK_PANED(wb.pane),wb.box,FALSE,FALSE);
+ gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),wb.box,gtk_label_new("Context")); gtk_widget_show_all(wb.box);
  gtk_box_pack_start(GTK_BOX(parent),wb.pane,TRUE,TRUE,0);
  gtk_box_reorder_child(GTK_BOX(parent),wb.pane,position);
  gtk_paned_set_position(GTK_PANED(wb.pane),430);
@@ -2159,6 +2287,7 @@ static void remove_group_accelerators(GtkWidget *widget,GtkAccelGroup *group) {
  g_list_free(closures);
 }
 void insight_workbench_finalize(void) {
+ wb.alive=FALSE; stop_definition(); mark_index_dirty();
  insight_remote_ui_finalize();
  save_search_settings(); save_workbench_settings(); dock_all_panels(); dock_project(NULL,NULL);
  for(guint i=0;i<wb.host_count;i++) g_free(wb.hosts[i].label);
@@ -2177,7 +2306,7 @@ void insight_workbench_finalize(void) {
  insight_workspace_watch_free(wb.watch);
  stop_scan(); insight_project_files_free(wb.membership); g_free(wb.membership_project); g_ptr_array_free(wb.scan_files,TRUE); g_ptr_array_free(wb.scan_trees,TRUE); g_hash_table_destroy(wb.scan_seen); g_ptr_array_free(wb.frames,TRUE); g_ptr_array_free(wb.files,TRUE); g_free(wb.root); g_free(wb.cache_path);
  g_free(wb.editor_find_query); g_free(wb.editor_find_digest);
- g_free(wb.relation_word);
+ g_free(wb.follow_word); g_free(wb.relation_word);
  g_free(wb.source_path); g_free(wb.source_digest); g_free(wb.find_last_query); g_free(wb.find_last_digest);
  if(wb.preview_links_idle) { g_source_remove(wb.preview_links_idle); wb.preview_links_idle=0; }
  g_clear_pointer(&wb.preview_links_text,g_free); g_clear_pointer(&wb.preview_names,g_hash_table_destroy);
