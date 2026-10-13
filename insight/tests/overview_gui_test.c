@@ -30,6 +30,9 @@ static gboolean edit_membership(gpointer data) {
  else { GtkWidget *view=find_named(dialog,"insight-project-membership-files"); g_assert_nonnull(view); g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),NULL),==,1); gtk_tree_selection_select_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(view))); GtkWidget *button=find_button(dialog,"Remove selected"); g_assert_nonnull(button); gtk_button_clicked(GTK_BUTTON(button)); gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_APPLY); }
  return G_SOURCE_REMOVE;
 }
+static gboolean pick_history(gpointer data) {
+ GtkWidget *button=data; GList *menus=gtk_menu_get_for_attach_widget(button); g_assert_nonnull(menus); GtkWidget *item=find_named(menus->data,"insight-search-history-0"); g_assert_nonnull(item); gtk_menu_shell_activate_item(GTK_MENU_SHELL(menus->data),item,TRUE); return G_SOURCE_REMOVE;
+}
 static gboolean select_project(gpointer data) {
  const gchar *target=GPOINTER_TO_INT(data)==2 ? second_project : (data ? bad_project : test_project); GList *windows=gtk_window_list_toplevels(); GtkWidget *dialog=NULL;
  for(GList *p=windows;p;p=p->next) if(GTK_IS_FILE_CHOOSER(p->data) && !g_strcmp0(gtk_window_get_title(GTK_WINDOW(p->data)),"Open Project")) dialog=p->data;
@@ -102,8 +105,10 @@ static gboolean step(gpointer data) {
   gdouble x=(gdouble)SSM(context,SCI_POINTXFROMPOSITION,0,position)+1,y=(gdouble)SSM(context,SCI_POINTYFROMPOSITION,0,position)+1;
   GdkEvent *event=gdk_event_new(GDK_MOTION_NOTIFY); event->motion.window=g_object_ref(gtk_widget_get_window(preview)); event->motion.x=x; event->motion.y=y; gtk_widget_event(preview,event); gdk_event_free(event); g_assert_cmpint(SSM(context,SCI_GETCURSOR,0,0),==,8);
   SSM(doc->editor->sci,SCI_SETSEL,0,0); event=gdk_event_new(GDK_BUTTON_PRESS); event->button.window=g_object_ref(gtk_widget_get_window(preview)); event->button.button=1; event->button.x=x; event->button.y=y; gtk_widget_event(preview,event); gdk_event_free(event); g_assert_cmpint(sci_get_current_line(doc->editor->sci),==,1);
+  GtkWidget *history=find_named(window,"insight-search-history"); g_assert_nonnull(history); gtk_button_clicked(GTK_BUTTON(history)); g_timeout_add(150,pick_history,history);
   document_set_text_changed(doc,FALSE); GeanyDocument *second=document_new_file(NULL,filetypes_lookup_by_name("C"),"int second(void) { return 2; }\n"); g_assert_nonnull(second); g_assert_true(document_close(document_find_by_id(original_id)));
  } else if(phase==5) {
+  g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(find_named(window,"insight-project-query"))),==,"save write");
   same_text(doc); document_set_text_changed(doc,FALSE); GtkWidget *view=find_named(window,"insight-project-files"); g_assert_nonnull(view); g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),NULL),==,1); GtkWidget *button=find_button(window,"Add and Remove Project Files…"); g_assert_nonnull(button); g_timeout_add(150,edit_membership,NULL); gtk_button_clicked(GTK_BUTTON(button));
  } else if(phase==6) {
   project_empty(); gchar *path=g_build_filename(test_directory,"overview-smoke.c",NULL); g_assert_nonnull(document_open_file(path,FALSE,filetypes_lookup_by_name("C"),NULL)); g_free(path);
@@ -127,7 +132,7 @@ static gboolean step(gpointer data) {
   g_timeout_add(150,select_project,NULL); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
  } else if(phase==13) {
   g_assert_nonnull(strstr(gtk_window_get_title(GTK_WINDOW(window)),"GUI smoke")); project_empty(); document_set_text_changed(doc,FALSE);
-  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: editor icons, syntax, independent read-only, edits, scrolling, toggling, keyword variations, preview-only result navigation, Context links, project Apply/Cancel, menu Open Project, invalid/malformed project preserves session, UTF-8 paths, project switching, tab close\n"); return G_SOURCE_REMOVE;
+  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: editor icons, syntax, independent read-only, edits, scrolling, toggling, keyword variations, saved query history, preview-only result navigation, Context links, project Apply/Cancel, menu Open Project, invalid/malformed project preserves session, UTF-8 paths, project switching, tab close\n"); return G_SOURCE_REMOVE;
  }
  phase++; return G_SOURCE_CONTINUE;
 }

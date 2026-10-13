@@ -6,9 +6,10 @@ typedef struct {
  gchar *query,*mask;
  guint flags,scope,context;
  gboolean keywords,variations;
- GPtrArray *files;
+ GPtrArray *files,*history;
 } InsightSearchState;
 InsightSearchState *insight_search_state_new(void);
+gboolean insight_search_history_record(GPtrArray *,const char *);
 void insight_search_state_free(InsightSearchState *);
 gboolean insight_search_state_save(const InsightSearchState *,const char *,GError **);
 InsightSearchState *insight_search_state_load(const char *,GError **);

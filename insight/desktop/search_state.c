@@ -2,13 +2,20 @@
 #include "search_state.h"
 #include <string.h>
 InsightSearchState *insight_search_state_new(void) {
- InsightSearchState *s=g_new0(InsightSearchState,1); s->query=g_strdup(""); s->mask=g_strdup(""); s->context=3; s->files=g_ptr_array_new_with_free_func(g_free); return s;
+ InsightSearchState *s=g_new0(InsightSearchState,1); s->query=g_strdup(""); s->mask=g_strdup(""); s->context=3; s->files=g_ptr_array_new_with_free_func(g_free); s->history=g_ptr_array_new_with_free_func(g_free); return s;
 }
-void insight_search_state_free(InsightSearchState *s) { if(!s) return; g_free(s->query); g_free(s->mask); g_ptr_array_free(s->files,TRUE); g_free(s); }
+void insight_search_state_free(InsightSearchState *s) { if(!s) return; g_free(s->query); g_free(s->mask); g_ptr_array_free(s->files,TRUE); g_ptr_array_free(s->history,TRUE); g_free(s); }
+gboolean insight_search_history_record(GPtrArray *history,const char *query) {
+ if(!history || !query || !*query || strlen(query)>4096 || !g_utf8_validate(query,-1,NULL)) return FALSE;
+ gchar *copy=g_strdup(query);
+ for(guint i=history->len;i>0;i--) if(!g_strcmp0(g_ptr_array_index(history,i-1),copy)) g_ptr_array_remove_index(history,i-1);
+ g_ptr_array_insert(history,0,copy); if(history->len>32) g_ptr_array_set_size(history,32); return TRUE;
+}
 static gboolean valid(const InsightSearchState *s,GError **error) {
- if(!s || !s->query || !s->mask || !s->files || strlen(s->query)>4096 || strlen(s->mask)>4096 || !g_utf8_validate(s->query,-1,NULL) || !g_utf8_validate(s->mask,-1,NULL) || s->flags>7 || s->scope>3 || s->context>50 || s->files->len>10000) {
+ if(!s || !s->query || !s->mask || !s->files || !s->history || s->history->len>32 || strlen(s->query)>4096 || strlen(s->mask)>4096 || !g_utf8_validate(s->query,-1,NULL) || !g_utf8_validate(s->mask,-1,NULL) || s->flags>7 || s->scope>3 || s->context>50 || s->files->len>10000) {
   g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid search settings"); return FALSE;
  }
+ for(guint i=0;i<s->history->len;i++) { const char *query=g_ptr_array_index(s->history,i); if(!query || !*query || strlen(query)>4096 || !g_utf8_validate(query,-1,NULL)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid search history query"); return FALSE; } }
  for(guint i=0;i<s->files->len;i++) { const char *path=g_ptr_array_index(s->files,i); if(!path || strlen(path)>16384 || !g_utf8_validate(path,-1,NULL) || !g_path_is_absolute(path)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid selected search path"); return FALSE; } }
  return TRUE;
 }
@@ -19,6 +26,7 @@ gboolean insight_search_state_save(const InsightSearchState *s,const char *path,
  g_key_file_set_integer(key,"search","flags",(gint)s->flags); g_key_file_set_integer(key,"search","scope",(gint)s->scope); g_key_file_set_integer(key,"search","context",(gint)s->context); g_key_file_set_boolean(key,"search","keywords",s->keywords);
  g_key_file_set_boolean(key,"search","variations",s->variations);
  g_key_file_set_string_list(key,"search","files",(const gchar *const *)s->files->pdata,s->files->len);
+ g_key_file_set_string_list(key,"search","history",(const gchar *const *)s->history->pdata,s->history->len);
  gsize length; gchar *data=g_key_file_to_data(key,&length,NULL); g_key_file_unref(key); gboolean ok=FALSE;
  if(length>8u*1024u*1024u) g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Search settings exceed 8 MiB");
  else { GFile *file=g_file_new_for_path(path); ok=g_file_replace_contents(file,data,length,NULL,FALSE,G_FILE_CREATE_PRIVATE,NULL,NULL,error); g_object_unref(file); }
@@ -44,6 +52,7 @@ InsightSearchState *insight_search_state_load(const char *path,GError **error) {
   if(ok) { s->keywords=g_key_file_get_boolean(key,"search","keywords",&e); ok=!e; }
   if(ok && g_key_file_has_key(key,"search","variations",NULL)) { s->variations=g_key_file_get_boolean(key,"search","variations",&e); ok=!e; }
   if(ok) { gsize count=0; gchar **paths=g_key_file_get_string_list(key,"search","files",&count,&e); if(!e && count<=10000) for(gsize i=0;i<count;i++) g_ptr_array_add(s->files,g_strdup(paths[i])); else if(!e) g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Too many selected search files"); g_strfreev(paths); ok=!e; }
+  if(ok && g_key_file_has_key(key,"search","history",NULL)) { gsize count=0; gchar **queries=g_key_file_get_string_list(key,"search","history",&count,&e); if(!e && count<=32) for(gsize i=0;i<count;i++) g_ptr_array_add(s->history,g_strdup(queries[i])); else if(!e) g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Too many search history queries"); g_strfreev(queries); ok=!e; }
   if(e) g_propagate_error(error,e);
  }
  if(ok) ok=valid(s,error);
