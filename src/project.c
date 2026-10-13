@@ -319,6 +319,15 @@ static void run_open_dialog(GtkFileChooser *dialog)
 	{
 		gchar *filename = gtk_file_chooser_get_filename(dialog);
 
+		/* A chooser can accept before an asynchronous selection resolves. */
+		if (filename == NULL || *filename == '\0')
+		{
+			g_free(filename);
+			geany_debug("Project open: chooser accepted without a local filename");
+			continue;
+		}
+		geany_debug("Project open: chooser selection resolved");
+
 		if (app->project && !project_close(FALSE)) {}
 		/* try to load the config */
 		else if (! project_load_file_with_session(filename))
@@ -341,6 +350,7 @@ static void run_open_dialog(GtkFileChooser *dialog)
 void project_open(void)
 {
 	const gchar *dir = local_prefs.project_file_path;
+	geany_debug("Project open: creating %s chooser", interface_prefs.use_native_windows_dialogs ? "native" : "GTK");
 	gchar *locale_path;
 	GtkFileChooser *dialog;
 	GtkFileFilter *filter;
@@ -386,7 +396,9 @@ void project_open(void)
 	}
 	g_free(locale_path);
 
+	geany_debug("Project open: running chooser");
 	run_open_dialog(dialog);
+	geany_debug("Project open: chooser completed");
 	dialogs_file_chooser_destroy(dialog);
 }
 
@@ -1097,6 +1109,7 @@ static gboolean load_config(const gchar *filename)
 		return FALSE;
 	}
 
+	geany_debug("Project load: key file parsed, creating project");
 	p = create_project();
 
 	foreach_slist(node, stash_groups)
@@ -1130,7 +1143,9 @@ static gboolean load_config(const gchar *filename)
 	}
 	/* read session files so they can be opened with configuration_open_files() */
 	p->priv->session_files = configuration_load_session_files(config);
+	geany_debug("Project load: session parsed, emitting project-open");
 	g_signal_emit_by_name(geany_object, "project-open", config);
+	geany_debug("Project load: project-open handlers completed");
 	g_key_file_free(config);
 
 	update_ui();
