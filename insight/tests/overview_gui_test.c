@@ -80,7 +80,7 @@ static gboolean step(gpointer data) {
   g_list_free(items); g_assert_nonnull(overview_menu); gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(overview_menu),TRUE);
  } else if(phase==1) {
   same_text(doc); GtkNotebook *sidebar=GTK_NOTEBOOK(ui_lookup_widget(window,"notebook3")); GtkWidget *page=gtk_notebook_get_nth_page(sidebar,gtk_notebook_get_current_page(sidebar)); g_assert_cmpstr(gtk_notebook_get_tab_label_text(sidebar,page),==,"File Symbols"); g_assert_nonnull(doc->tm_file); g_assert_cmpuint(doc->tm_file->tags_array->len,>,0); g_assert_cmpint(SSM(map_for(doc),SCI_GETSTYLEAT,0,0),!=,0);
-  SSM(doc->editor->sci,SCI_INSERTTEXT,0,(sptr_t)"/* modified saving writing */\n"); SSM(doc->editor->sci,SCI_SETSEL,0,3); SSM(doc->editor->sci,SCI_SETFIRSTVISIBLELINE,200,0);
+  SSM(doc->editor->sci,SCI_INSERTTEXT,0,(sptr_t)"/* данные saving writing */\n"); SSM(doc->editor->sci,SCI_SETSEL,0,3); SSM(doc->editor->sci,SCI_SETFIRSTVISIBLELINE,200,0);
  } else if(phase==2) {
   same_text(doc); ScintillaObject *map=map_for(doc); gint first=(gint)SSM(map,SCI_GETFIRSTVISIBLELINE,0,0),main_first=(gint)SSM(doc->editor->sci,SCI_GETFIRSTVISIBLELINE,0,0);
   g_assert_cmpint(first,<=,main_first); g_assert_cmpint(first+SSM(map,SCI_LINESONSCREEN,0,0),>,main_first);
@@ -99,7 +99,14 @@ static gboolean step(gpointer data) {
   GtkTreeIter iter; g_assert_true(gtk_tree_model_get_iter_first(model,&iter)); gulong start,end; gtk_tree_model_get(model,&iter,3,&start,4,&end,-1); g_assert_cmpuint(end-start,==,6); GtkTreePath *path=gtk_tree_path_new_from_indices(0,-1); gtk_tree_view_set_cursor(GTK_TREE_VIEW(view),path,NULL,FALSE); gtk_tree_path_free(path); g_assert_cmpint(SSM(SCINTILLA(preview),SCI_INDICATORVALUEAT,28,start),>,0); g_assert_cmpint(SSM(SCINTILLA(preview),SCI_INDICATORVALUEAT,29,start),>,0);
   gint before=sci_get_current_position(doc->editor->sci),anchor=SSM(doc->editor->sci,SCI_GETANCHOR,0,0);
   GdkEvent *browse=gdk_event_new(GDK_KEY_PRESS); browse->key.window=g_object_ref(gtk_widget_get_window(view)); browse->key.state=GDK_MOD1_MASK; browse->key.keyval=GDK_KEY_Down; gtk_widget_event(view,browse); gdk_event_free(browse);
-  g_assert_true(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),NULL,&iter)); GtkTreePath *selected=gtk_tree_model_get_path(model,&iter); g_assert_cmpint(gtk_tree_path_get_indices(selected)[0],==,1); gtk_tree_path_free(selected); gtk_tree_model_get(model,&iter,3,&start,4,&end,-1); g_assert_cmpuint(end-start,==,7); g_assert_cmpint(SSM(SCINTILLA(preview),SCI_INDICATORVALUEAT,29,start),>,0); g_assert_cmpint(sci_get_current_position(doc->editor->sci),==,before); g_assert_cmpint(SSM(doc->editor->sci,SCI_GETANCHOR,0,0),==,anchor);
+  g_assert_true(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),NULL,&iter)); GtkTreePath *selected=gtk_tree_model_get_path(model,&iter); g_assert_cmpint(gtk_tree_path_get_indices(selected)[0],==,1); gtk_tree_path_free(selected); gtk_tree_model_get(model,&iter,3,&start,4,&end,-1); g_assert_cmpuint(end-start,==,7); gulong column; gtk_tree_model_get(model,&iter,9,&column,-1); g_assert_cmpuint(column,==,18); g_assert_cmpint(SSM(SCINTILLA(preview),SCI_INDICATORVALUEAT,29,start),>,0); g_assert_cmpint(sci_get_current_position(doc->editor->sci),==,before); g_assert_cmpint(SSM(doc->editor->sci,SCI_GETANCHOR,0,0),==,anchor);
+  GdkEvent *activate=gdk_event_new(GDK_KEY_PRESS); activate->key.window=g_object_ref(gtk_widget_get_window(view)); activate->key.state=GDK_CONTROL_MASK; activate->key.keyval=GDK_KEY_l; gtk_widget_event(view,activate); gdk_event_free(activate);
+  g_assert_cmpint(SSM(doc->editor->sci,SCI_GETSELECTIONSTART,0,0),==,start); g_assert_cmpint(SSM(doc->editor->sci,SCI_GETSELECTIONEND,0,0),==,end); g_assert_cmpint(SSM(doc->editor->sci,SCI_INDICATORVALUEAT,28,start),>,0); g_assert_cmpint(SSM(doc->editor->sci,SCI_INDICATORVALUEAT,29,start),>,0);
+  const char *change="/* edited after search */\n"; SSM(doc->editor->sci,SCI_APPENDTEXT,strlen(change),(sptr_t)change);
+ } else if(phase==5) {
+  GtkWidget *view=find_named(window,"insight-search-results"),*preview=find_named(window,"insight-context-code"),*query=find_named(window,"insight-project-query"); GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view)); GtkTreeIter iter; g_assert_true(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),NULL,&iter)); gulong start,end; gtk_tree_model_get(model,&iter,3,&start,4,&end,-1);
+  gint before=sci_get_current_position(doc->editor->sci),anchor=SSM(doc->editor->sci,SCI_GETANCHOR,0,0); GtkTreePath *path=gtk_tree_model_get_path(model,&iter); gtk_tree_view_row_activated(GTK_TREE_VIEW(view),path,NULL); gtk_tree_path_free(path);
+  g_assert_cmpint(sci_get_current_position(doc->editor->sci),==,before); g_assert_cmpint(SSM(doc->editor->sci,SCI_GETANCHOR,0,0),==,anchor); g_assert_cmpint(SSM(SCINTILLA(preview),SCI_INDICATORVALUEAT,28,start),==,0); g_assert_cmpint(SSM(SCINTILLA(preview),SCI_INDICATORVALUEAT,29,start),==,0);
   gtk_entry_set_text(GTK_ENTRY(query),"("); g_signal_emit_by_name(query,"activate"); g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,2);
   ScintillaObject *context=SCINTILLA(preview); gchar *text=sci_get_contents(context,sci_get_length(context)+1),*name=strstr(text,"function_0"); g_assert_nonnull(name); gint position=(gint)(name-text); g_free(text); g_assert_cmpint(SSM(context,SCI_INDICATORVALUEAT,31,position),>,0); g_assert_cmpint(SSM(context,SCI_GETMARGINWIDTHN,0,0),>,0);
   gdouble x=(gdouble)SSM(context,SCI_POINTXFROMPOSITION,0,position)+1,y=(gdouble)SSM(context,SCI_POINTYFROMPOSITION,0,position)+1;
@@ -107,32 +114,32 @@ static gboolean step(gpointer data) {
   SSM(doc->editor->sci,SCI_SETSEL,0,0); event=gdk_event_new(GDK_BUTTON_PRESS); event->button.window=g_object_ref(gtk_widget_get_window(preview)); event->button.button=1; event->button.x=x; event->button.y=y; gtk_widget_event(preview,event); gdk_event_free(event); g_assert_cmpint(sci_get_current_line(doc->editor->sci),==,1);
   GtkWidget *history=find_named(window,"insight-search-history"); g_assert_nonnull(history); gtk_button_clicked(GTK_BUTTON(history)); g_timeout_add(150,pick_history,history);
   document_set_text_changed(doc,FALSE); GeanyDocument *second=document_new_file(NULL,filetypes_lookup_by_name("C"),"int second(void) { return 2; }\n"); g_assert_nonnull(second); g_assert_true(document_close(document_find_by_id(original_id)));
- } else if(phase==5) {
+ } else if(phase==6) {
   g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(find_named(window,"insight-project-query"))),==,"save write");
   same_text(doc); document_set_text_changed(doc,FALSE); GtkWidget *view=find_named(window,"insight-project-files"); g_assert_nonnull(view); g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),NULL),==,1); GtkWidget *button=find_button(window,"Add and Remove Project Files…"); g_assert_nonnull(button); g_timeout_add(150,edit_membership,NULL); gtk_button_clicked(GTK_BUTTON(button));
- } else if(phase==6) {
-  project_empty(); gchar *path=g_build_filename(test_directory,"overview-smoke.c",NULL); g_assert_nonnull(document_open_file(path,FALSE,filetypes_lookup_by_name("C"),NULL)); g_free(path);
  } else if(phase==7) {
-  project_empty(); GtkWidget *button=find_button(window,"Add and Remove Project Files…"); g_assert_nonnull(button); g_timeout_add(150,edit_membership,GINT_TO_POINTER(1)); gtk_button_clicked(GTK_BUTTON(button));
+  project_empty(); gchar *path=g_build_filename(test_directory,"overview-smoke.c",NULL); g_assert_nonnull(document_open_file(path,FALSE,filetypes_lookup_by_name("C"),NULL)); g_free(path);
  } else if(phase==8) {
+  project_empty(); GtkWidget *button=find_button(window,"Add and Remove Project Files…"); g_assert_nonnull(button); g_timeout_add(150,edit_membership,GINT_TO_POINTER(1)); gtk_button_clicked(GTK_BUTTON(button));
+ } else if(phase==9) {
   project_empty(); GKeyFile *key=g_key_file_new(); g_assert_true(g_key_file_load_from_file(key,test_project,G_KEY_FILE_NONE,NULL)); g_assert_true(g_key_file_get_boolean(key,"insight-project-files","automatic",NULL)); gsize count=0; gchar **excluded=g_key_file_get_string_list(key,"insight-project-files","excluded-files",&count,NULL); g_assert_cmpuint(count,==,1); g_assert_cmpstr(excluded[0],==,"overview-smoke.c"); g_strfreev(excluded); g_key_file_unref(key); document_set_text_changed(doc,FALSE);
 
   GtkWidget *close=ui_lookup_widget(window,"project_close1"),*open=ui_lookup_widget(window,"project_open1"); g_assert_true(GTK_IS_MENU_ITEM(close)); g_assert_true(GTK_IS_MENU_ITEM(open)); gtk_menu_item_activate(GTK_MENU_ITEM(close));  g_timeout_add(150,select_project,NULL); gtk_menu_item_activate(GTK_MENU_ITEM(open));
- } else if(phase==9) {
-  g_assert_nonnull(strstr(gtk_window_get_title(GTK_WINDOW(window)),"GUI smoke")); project_empty(); document_set_text_changed(doc,FALSE);
-  g_timeout_add(150,dismiss_invalid,NULL); g_timeout_add(150,select_project,GINT_TO_POINTER(1)); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
  } else if(phase==10) {
   g_assert_nonnull(strstr(gtk_window_get_title(GTK_WINDOW(window)),"GUI smoke")); project_empty(); document_set_text_changed(doc,FALSE);
-  g_assert_true(g_file_set_contents(bad_project,"[project\nname=Broken\n",-1,NULL)); g_timeout_add(150,dismiss_invalid,NULL); g_timeout_add(150,select_project,GINT_TO_POINTER(1)); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
+  g_timeout_add(150,dismiss_invalid,NULL); g_timeout_add(150,select_project,GINT_TO_POINTER(1)); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
  } else if(phase==11) {
   g_assert_nonnull(strstr(gtk_window_get_title(GTK_WINDOW(window)),"GUI smoke")); project_empty(); document_set_text_changed(doc,FALSE);
-  g_timeout_add(150,select_project,GINT_TO_POINTER(2)); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
+  g_assert_true(g_file_set_contents(bad_project,"[project\nname=Broken\n",-1,NULL)); g_timeout_add(150,dismiss_invalid,NULL); g_timeout_add(150,select_project,GINT_TO_POINTER(1)); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
  } else if(phase==12) {
+  g_assert_nonnull(strstr(gtk_window_get_title(GTK_WINDOW(window)),"GUI smoke")); project_empty(); document_set_text_changed(doc,FALSE);
+  g_timeout_add(150,select_project,GINT_TO_POINTER(2)); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
+ } else if(phase==13) {
   g_assert_nonnull(strstr(gtk_window_get_title(GTK_WINDOW(window)),"GUI second")); GtkWidget *view=find_named(window,"insight-project-files"); g_assert_nonnull(view); g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),NULL),==,1); document_set_text_changed(doc,FALSE);
   g_timeout_add(150,select_project,NULL); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
- } else if(phase==13) {
+ } else if(phase==14) {
   g_assert_nonnull(strstr(gtk_window_get_title(GTK_WINDOW(window)),"GUI smoke")); project_empty(); document_set_text_changed(doc,FALSE);
-  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: editor icons, syntax, independent read-only, edits, scrolling, toggling, keyword variations, saved query history, preview-only result navigation, Context links, project Apply/Cancel, menu Open Project, invalid/malformed project preserves session, UTF-8 paths, project switching, tab close\n"); return G_SOURCE_REMOVE;
+  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: editor icons, syntax, independent read-only, edits, scrolling, toggling, keyword variations, saved query history, preview-only result navigation, exact hit opening, result columns, stale result rejection, Context links, project Apply/Cancel, menu Open Project, invalid/malformed project preserves session, UTF-8 paths, project switching, tab close\n"); return G_SOURCE_REMOVE;
  }
  phase++; return G_SOURCE_CONTINUE;
 }

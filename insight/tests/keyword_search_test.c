@@ -4,7 +4,7 @@
 static gsize count(const char *text,const char *query,guint flags,guint context) {
  GError *error=NULL; InsightSearchMatch found[32]; gsize total=0;
  g_assert_true(insight_keyword_collect(text,strlen(text),query,flags,context,found,G_N_ELEMENTS(found),&total,&error)); g_assert_no_error(error);
- for(gsize i=0;i<MIN(total,G_N_ELEMENTS(found));i++) { g_assert_cmpuint(found[i].start,<=,found[i].end); g_assert_cmpuint(found[i].end,<=,strlen(text)); }
+ for(gsize i=0;i<MIN(total,G_N_ELEMENTS(found));i++) { g_assert_cmpuint(found[i].column,<=,found[i].start); g_assert_cmpuint(found[i].start,<=,found[i].end); g_assert_cmpuint(found[i].end,<=,strlen(text)); }
  return total;
 }
 int main(void) {
@@ -20,6 +20,7 @@ int main(void) {
  g_assert_cmpuint(count("error\r\nclean\r\n","NOT error",0,0),==,2);
  g_assert_cmpuint(count("cat\n","NOT NOT cat",0,0),==,1);
  g_assert_cmpuint(count("neutral","cat OR NOT dog",0,0),==,1);
+ InsightSearchMatch negative[4]; gsize negative_total=0; g_assert_true(insight_keyword_collect("clean\r\nдокумент",strlen("clean\r\nдокумент"),"NOT error",0,0,negative,4,&negative_total,NULL)); g_assert_cmpuint(negative_total,==,2); g_assert_cmpuint(negative[0].column,==,0); g_assert_cmpuint(negative[1].column,==,0);
  g_assert_cmpuint(count("dog food","cat OR dog AND missing OR food",INSIGHT_SEARCH_WORD,0),==,1);
  g_assert_cmpuint(count("beta gamma","(alpha AND beta) OR gamma",INSIGHT_SEARCH_WORD,0),==,1);
  /* Exhaust every assignment for mixed positive/negative branches, independently

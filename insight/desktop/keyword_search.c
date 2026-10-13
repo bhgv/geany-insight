@@ -116,7 +116,7 @@ gboolean insight_keyword_collect(const char *text,gsize size,const char *query,g
    }
    Proof proof=evaluate(&p,root,FALSE);
    for(guint i=0;i<p.terms;i++) eligible[i][line]=eligible[i][line-1]+!!(proof.witnesses&((guint32)1<<i));
-   if(proof.matched && !proof.witnesses) { gsize start=g_array_index(starts,gsize,line-1),end=line<starts->len ? g_array_index(starts,gsize,line) : size; while(end>start && (text[end-1]=='\r' || text[end-1]=='\n')) end--; InsightSearchMatch match={start,end,line,1}; g_array_append_val(results,match); }
+   if(proof.matched && !proof.witnesses) { gsize start=g_array_index(starts,gsize,line-1),end=line<starts->len ? g_array_index(starts,gsize,line) : size; while(end>start && (text[end-1]=='\r' || text[end-1]=='\n')) end--; InsightSearchMatch match={start,end,line,0}; g_array_append_val(results,match); }
   }
   for(guint i=0;i<p.count;i++) if(p.nodes[i].kind==TERM) for(guint j=0;j<p.nodes[i].matches->len;j++) {
    InsightSearchMatch match=g_array_index(p.nodes[i].matches,InsightSearchMatch,j); guint line=(guint)match.line,first=line>context ? line-context : 1;
