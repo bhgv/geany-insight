@@ -424,3 +424,5 @@ search_state_test = executable('test_insight_search_state', '../insight/tests/se
 test('Insight search state', search_state_test)
 project_files_test = executable('test_insight_project_files', '../insight/tests/project_files_test.c', '../insight/desktop/project_files.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)
 test('Insight project membership', project_files_test)
+overview_gui_test = executable('test_overview_gui', '../insight/tests/overview_gui_test.c', dependencies: test_deps)
+test('Insight overview GUI', overview_gui_test, timeout: 30)

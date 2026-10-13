@@ -27,6 +27,7 @@
 #endif
 
 #include "notebook.h"
+#include "insight-overview.h"
 
 #include "callbacks.h"
 #include "documentprivate.h"
@@ -713,7 +714,7 @@ gint notebook_new_tab(GeanyDocument *this)
 
 	/* page is packed into a vbox so we can stack infobars above it */
 	vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	page = GTK_WIDGET(this->editor->sci);
+	page = insight_overview_wrap(this);
 	gtk_box_pack_start(GTK_BOX(vbox), page, TRUE, TRUE, 0);
 
 	this->priv->tab_label = gtk_label_new(NULL);
