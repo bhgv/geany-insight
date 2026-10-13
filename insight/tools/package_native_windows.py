@@ -11,6 +11,31 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[2]
 
 
+
+def install_editor_icons(destination):
+    """Use the same theme layout as icons/meson.build for portable installs."""
+    for theme in ['hicolor', 'Tango']:
+        target = destination / 'share/icons' / theme
+        target.mkdir(parents=True, exist_ok=True)
+        if not (target / 'index.theme').exists():
+            shutil.copy2(ROOT / 'icons/index.theme', target / 'index.theme')
+        # Existing runtime caches do not contain the newly installed editor icons.
+        (target / 'icon-theme.cache').unlink(missing_ok=True)
+    for size in ['16x16', '24x24', '32x32', '48x48', 'scalable']:
+        extension = '.svg' if size == 'scalable' else '.png'
+        for name in ['geany', 'geany-build', 'geany-close-all', 'geany-save-all']:
+            context = 'apps' if name == 'geany' else 'actions'
+            target = destination / 'share/icons/hicolor' / size / context
+            target.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / 'icons' / size / (name + extension), target / (name + extension))
+        target = destination / 'share/icons/Tango' / size / 'actions'
+        target.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / 'icons/tango' / size / ('geany-save-all' + extension), target / ('geany-save-all' + extension))
+    target = destination / 'share/icons/hicolor/16x16/apps'
+    for source in sorted((ROOT / 'icons/16x16').glob('classviewer-*.png')):
+        shutil.copy2(source, target / source.name)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--runtime', type=Path, required=True)
@@ -40,6 +65,7 @@ def main():
     for name in ['bin', 'etc', 'lib', 'share']:
         if (a.runtime / name).exists():
             shutil.copytree(a.runtime / name, destination / name)
+    install_editor_icons(destination)
     schemas = destination / 'share/glib-2.0/schemas'
     if a.schema_compiler:
         subprocess.run([str(a.schema_compiler), '--strict', str(schemas)], check=True)

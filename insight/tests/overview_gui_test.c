@@ -66,6 +66,9 @@ static gboolean timeout_fail(gpointer data) { (void)data; g_error("Overview GUI 
 static gboolean step(gpointer data) {
  (void)data; GeanyDocument *doc=document_get_current(); g_assert_nonnull(doc);
  if(phase==0) {
+  const char *icons[]={"classviewer-class","classviewer-macro","classviewer-member","classviewer-method","classviewer-namespace","classviewer-other","classviewer-struct","classviewer-var","geany-save-all","geany-build","geany-close-all"};
+  for(guint i=0;i<G_N_ELEMENTS(icons);i++) { GError *error=NULL; GdkPixbuf *icon=gtk_icon_theme_load_icon(gtk_icon_theme_get_default(),icons[i],16,0,&error); g_assert_no_error(error); g_assert_nonnull(icon); g_object_unref(icon); }
+
   GString *source=g_string_new(NULL); for(guint i=0;i<500;i++) g_string_append_printf(source,"int function_%u(void) { return %u; }\n",i,i);
   gchar *path=g_build_filename(test_directory,"overview-smoke.c",NULL); g_assert_true(g_file_set_contents(path,source->str,-1,NULL)); doc=document_open_file(path,FALSE,filetypes_lookup_by_name("C"),NULL); g_free(path); g_string_free(source,TRUE); original_id=doc->id;
   window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci)); gtk_window_resize(GTK_WINDOW(window),1100,800);
@@ -124,7 +127,7 @@ static gboolean step(gpointer data) {
   g_timeout_add(150,select_project,NULL); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
  } else if(phase==13) {
   g_assert_nonnull(strstr(gtk_window_get_title(GTK_WINDOW(window)),"GUI smoke")); project_empty(); document_set_text_changed(doc,FALSE);
-  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: syntax, independent read-only, edits, scrolling, toggling, keyword variations, preview-only result navigation, Context links, project Apply/Cancel, menu Open Project, invalid/malformed project preserves session, UTF-8 paths, project switching, tab close\n"); return G_SOURCE_REMOVE;
+  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: editor icons, syntax, independent read-only, edits, scrolling, toggling, keyword variations, preview-only result navigation, Context links, project Apply/Cancel, menu Open Project, invalid/malformed project preserves session, UTF-8 paths, project switching, tab close\n"); return G_SOURCE_REMOVE;
  }
  phase++; return G_SOURCE_CONTINUE;
 }
