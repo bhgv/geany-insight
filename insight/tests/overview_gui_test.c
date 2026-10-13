@@ -16,7 +16,7 @@ static GtkWidget *window,*overview_menu;
 static gboolean definition_cancel_checked;
 static gboolean selection_stress; static gint64 heartbeat_previous,heartbeat_max_gap;
 static guint preview_heartbeats; static gint large_last; static guint heartbeat_source;
-static GtkTreeRowReference *retained_file_row;
+static GtkTreeRowReference *retained_file_row,*retained_relation_row;
 static GtkWidget *find_named(GtkWidget *root,const char *name) {
  if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;
  if(GTK_IS_CONTAINER(root)) { GList *children=gtk_container_get_children(GTK_CONTAINER(root)); GtkWidget *found=NULL; for(GList *p=children;p && !found;p=p->next) found=find_named(p->data,name); g_list_free(children); if(found) return found; }
@@ -180,26 +180,36 @@ static gboolean step(gpointer data) {
  } else if(phase==22) {
   GtkWidget *symbol_view=find_named(window,"insight-project-symbols"); GtkTreeModel *symbol_model=gtk_tree_view_get_model(GTK_TREE_VIEW(symbol_view)); if(gtk_tree_model_iter_n_children(symbol_model,NULL)!=1) return G_SOURCE_CONTINUE; GtkTreeIter selected_symbol; g_assert_true(gtk_tree_model_get_iter_first(symbol_model,&selected_symbol)); gchar *symbol_name=NULL; gtk_tree_model_get(symbol_model,&selected_symbol,0,&symbol_name,-1); g_assert_cmpstr(symbol_name,==,"worker_second"); g_free(symbol_name);
   GtkWidget *view=find_named(window,"insight-relations"); GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view)); if(gtk_tree_model_iter_n_children(model,NULL)!=1) return G_SOURCE_CONTINUE; GtkTreeIter iter; g_assert_true(gtk_tree_model_get_iter_first(model,&iter)); gchar *name=NULL; gtk_tree_model_get(model,&iter,7,&name,-1); g_assert_cmpstr(name,==,"worker_second"); g_free(name);
+  GtkTreePath *retained_path=gtk_tree_model_get_path(model,&iter); retained_relation_row=gtk_tree_row_reference_new(model,retained_path); gtk_tree_path_free(retained_path);
+  gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),&iter);
+  GtkWidget *query=find_named(window,"insight-relation-query"); g_signal_emit_by_name(query,"activate");
+ } else if(phase==23) {
+  GtkWidget *status=find_named(window,"insight-relation-status"); if(!g_str_has_prefix(gtk_label_get_text(GTK_LABEL(status)),"1 tag-based")) return G_SOURCE_CONTINUE;
+  GtkWidget *view=find_named(window,"insight-relations"); GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));
+  g_assert_true(gtk_tree_row_reference_valid(retained_relation_row)); GtkTreeIter iter;
+  g_assert_true(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),NULL,&iter));
+  gchar *name=NULL; gtk_tree_model_get(model,&iter,7,&name,-1); g_assert_cmpstr(name,==,"worker_second"); g_free(name);
+  gtk_tree_row_reference_free(retained_relation_row); retained_relation_row=NULL;
   /* A zero-tag unsaved buffer must hide old disk symbols in the project view. */
   sci_set_text(doc->editor->sci,"/* no definitions remain */\n"); document_set_text_changed(doc,FALSE);
- } else if(phase==23) {
+ } else if(phase==24) {
   GtkWidget *view=find_named(window,"insight-project-symbols"); GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view)); if(gtk_tree_model_iter_n_children(model,NULL)!=0) return G_SOURCE_CONTINUE;
   /* Remove a populated 10000-row model without monopolizing the UI loop. */
   GtkWidget *files=find_named(window,"insight-project-files"); GtkListStore *old=GTK_LIST_STORE(gtk_tree_view_get_model(GTK_TREE_VIEW(files))); g_object_ref(old); gtk_tree_view_set_model(GTK_TREE_VIEW(files),NULL); gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(old),GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID,GTK_SORT_ASCENDING);
   for(guint n=0;n<10000;n++) { GtkTreeIter iter; gchar *path=g_strdup_printf("/synthetic/file-%05u.c",n); gtk_list_store_append(old,&iter); gtk_list_store_set(old,&iter,0,path,1,path,-1); g_free(path); }
   gtk_tree_view_set_model(GTK_TREE_VIEW(files),GTK_TREE_MODEL(old)); g_object_unref(old); heartbeat_previous=0; heartbeat_max_gap=0; preview_heartbeats=0; heartbeat_source=g_timeout_add(5,preview_heartbeat,NULL); GtkWidget *query=find_named(window,"insight-file-query"); gtk_entry_set_text(GTK_ENTRY(query),"overview-smoke");
- } else if(phase==24) {
-  GtkWidget *files=find_named(window,"insight-project-files"); GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(files)); if(gtk_tree_model_iter_n_children(model,NULL)!=1) return G_SOURCE_CONTINUE; GtkTreeIter iter; g_assert_true(gtk_tree_model_get_iter_first(model,&iter)); gchar *name=NULL; gtk_tree_model_get(model,&iter,0,&name,-1); g_assert_cmpstr(name,==,"overview-smoke.c"); g_free(name); GtkTreePath *retained_path=gtk_tree_model_get_path(model,&iter); retained_file_row=gtk_tree_row_reference_new(model,retained_path); gtk_tree_path_free(retained_path); gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(files)),&iter); GtkWidget *query=find_named(window,"insight-file-query"); gtk_entry_set_text(GTK_ENTRY(query),"missing-file"); gtk_entry_set_text(GTK_ENTRY(query),"overview-smoke");
  } else if(phase==25) {
+  GtkWidget *files=find_named(window,"insight-project-files"); GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(files)); if(gtk_tree_model_iter_n_children(model,NULL)!=1) return G_SOURCE_CONTINUE; GtkTreeIter iter; g_assert_true(gtk_tree_model_get_iter_first(model,&iter)); gchar *name=NULL; gtk_tree_model_get(model,&iter,0,&name,-1); g_assert_cmpstr(name,==,"overview-smoke.c"); g_free(name); GtkTreePath *retained_path=gtk_tree_model_get_path(model,&iter); retained_file_row=gtk_tree_row_reference_new(model,retained_path); gtk_tree_path_free(retained_path); gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(files)),&iter); GtkWidget *query=find_named(window,"insight-file-query"); gtk_entry_set_text(GTK_ENTRY(query),"missing-file"); gtk_entry_set_text(GTK_ENTRY(query),"overview-smoke");
+ } else if(phase==26) {
   GtkWidget *files=find_named(window,"insight-project-files"); GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(files)); if(gtk_tree_model_iter_n_children(model,NULL)!=1) return G_SOURCE_CONTINUE; g_assert_true(gtk_widget_get_sensitive(files)); g_assert_true(gtk_tree_row_reference_valid(retained_file_row)); GtkTreeIter retained; g_assert_true(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(files)),NULL,&retained)); gtk_tree_row_reference_free(retained_file_row); retained_file_row=NULL; g_assert_cmpuint(preview_heartbeats,>,1); g_assert_cmpint(heartbeat_max_gap,<,500000); g_print("10000 file rows/incremental reconciliation: max UI heartbeat gap %.1f ms\n",heartbeat_max_gap/1000.0); g_source_remove(heartbeat_source); heartbeat_source=0;
   /* Pending tag timers/tasks must not follow a recycled document slot. */
   gchar *directory=g_path_get_dirname(test_project),*path=g_build_filename(directory,"tag-close-reopen.c",NULL); g_free(directory); g_assert_true(g_file_set_contents(path,"int retained_original(void) { return 1; }\n",-1,NULL)); GeanyDocument *temporary=document_open_file(path,FALSE,NULL,NULL); g_assert_nonnull(temporary); sci_set_text(temporary->editor->sci,"int stale_edit(void) { return 2; }\n"); document_set_text_changed(temporary,FALSE); guint retired_id=temporary->id; g_assert_true(document_close(temporary)); temporary=document_open_file(path,FALSE,NULL,NULL); g_assert_nonnull(temporary); g_assert_cmpuint(temporary->id,!=,retired_id); g_free(path);
- } else if(phase==26) {
+ } else if(phase==27) {
   g_assert_nonnull(doc->tm_file); gboolean original=FALSE; for(guint n=0;n<doc->tm_file->tags_array->len;n++) { TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,n); g_assert_cmpstr(tag->name,!=,"stale_edit"); if(!strcmp(tag->name,"retained_original")) original=TRUE; } g_assert_true(original);
   /* Quit while both a scan and a search are queued. */
   GtkWidget *reindex=find_button(window,"Reindex"); if(reindex) gtk_button_clicked(GTK_BUTTON(reindex));
   GtkWidget *query=find_named(window,"insight-project-query"); gtk_entry_set_text(GTK_ENTRY(query),"worker_second"); g_signal_emit_by_name(query,"activate");
-  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: editor icons, syntax, independent read-only, edits, scrolling, toggling, keyword variations, saved query history, preview-only result navigation, exact hit opening, result columns, stale result rejection, Context links, project Apply/Cancel, menu Open Project, invalid/malformed project preserves session, UTF-8 paths, project switching, responsive 1.4 MiB preview with 10000 batched highlights, asynchronous symbol filtering, Context notebook tab, double-click opens >2 MiB file, delayed and cancelled word/selection definition lookup, latest-request symbol relations, async document tag publication, 10000 file rows/batched clearing, latest file query, tag timer close/reopen, zero-tag overlay, shutdown with queued work, tab close\n"); return G_SOURCE_REMOVE;
+  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: editor icons, syntax, independent read-only, edits, scrolling, toggling, keyword variations, saved query history, preview-only result navigation, exact hit opening, result columns, stale result rejection, Context links, project Apply/Cancel, menu Open Project, invalid/malformed project preserves session, UTF-8 paths, project switching, responsive 1.4 MiB preview with 10000 batched highlights, asynchronous symbol filtering, Context notebook tab, double-click opens >2 MiB file, delayed and cancelled word/selection definition lookup, latest-request symbol relations, retained relation row and selection after completed identical query, async document tag publication, 10000 file rows/batched clearing, latest file query, tag timer close/reopen, zero-tag overlay, shutdown with queued work, tab close\n"); return G_SOURCE_REMOVE;
  }
  phase++; return G_SOURCE_CONTINUE;
 }

@@ -1010,9 +1010,9 @@ static gboolean search_path_matches(const char *path) {
  for(guint i=0;patterns[i];i++) { gchar *pattern=g_utf8_casefold(g_strstrip(patterns[i]),-1); if(*pattern && g_pattern_match_simple(pattern,folded)) matched=TRUE; g_free(pattern); }
  g_free(folded); g_free(name); g_strfreev(patterns); return matched;
 }
-typedef struct { InsightIndex *index; gchar *query; const InsightSymbol *found[2000]; gsize total,apply_position; GPtrArray *descriptions; gboolean clearing; gint mode; guint64 epoch,generation,index_version; } RelationJob;
+typedef struct { InsightIndex *index; gchar *query; const InsightSymbol *found[2000]; gsize total,apply_position; GPtrArray *descriptions; GHashTable *existing; GtkTreeIter iter; gboolean collecting,iter_valid,invalid; gint mode; guint64 epoch,generation,index_version; } RelationJob;
 static void usage_start(GtkWidget *,gpointer);
-static void relation_job_free(gpointer data) { RelationJob *j=data; retire_index(j->index); g_free(j->query); g_clear_pointer(&j->descriptions,g_ptr_array_unref); g_free(j); }
+static void relation_job_free(gpointer data) { RelationJob *j=data; retire_index(j->index); g_free(j->query); g_clear_pointer(&j->descriptions,g_ptr_array_unref); g_clear_pointer(&j->existing,g_hash_table_destroy); g_free(j); }
 static void relation_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
  (void)source; RelationJob *j=data; j->total=SIZE_MAX;
  if(!g_cancellable_is_cancelled(cancel)) j->total=insight_relation_query(j->index,j->query,j->mode==1 ? INSIGHT_RELATION_DEFINITIONS : (j->mode==2 ? INSIGHT_RELATION_MEMBERS : (j->mode==4 ? INSIGHT_RELATION_BASES : INSIGHT_RELATION_DERIVED)),0,j->found,G_N_ELEMENTS(j->found));
@@ -1022,24 +1022,52 @@ static void relation_job_run(GTask *task,gpointer source,gpointer data,GCancella
  }
  g_task_return_boolean(task,!g_cancellable_is_cancelled(cancel));
 }
+static gchar *relation_row_key(const gchar *display,const gchar *path,const gchar *name,const gchar *description,gulong line) {
+ GString *key=g_string_new(NULL); const gchar *fields[]={display,path,name,description};
+ for(guint k=0;k<G_N_ELEMENTS(fields);k++) {
+  if(fields[k]) g_string_append_printf(key,"%" G_GSIZE_FORMAT ":%s",strlen(fields[k]),fields[k]);
+  else g_string_append(key,"-1:");
+ }
+ g_string_append_printf(key,":%lu",line); return g_string_free(key,FALSE);
+}
+static gchar *relation_existing_key(GtkTreeModel *model,GtkTreeIter *iter) {
+ gchar *display=NULL,*path=NULL,*name=NULL,*description=NULL,*digest=NULL; gulong line=0,start=0,end=0,column=0; guint id=0;
+ gtk_tree_model_get(model,iter,USAGE_DISPLAY,&display,USAGE_PATH,&path,USAGE_SYMBOL,&name,USAGE_SNIPPET,&description,USAGE_LINE,&line,USAGE_START,&start,USAGE_END,&end,USAGE_ID,&id,USAGE_COLUMN,&column,USAGE_DIGEST,&digest,-1);
+ gchar *key=relation_row_key(display,path,name,description,line);
+ /* Reference rows also carry hit coordinates/digests and must not be reused
+  * as definition rows even when their visible strings happen to coincide. */
+ if(start || end || id || column || digest) { gchar *old=key; key=g_strconcat("reference:",old,NULL); g_free(old); }
+ g_free(display); g_free(path); g_free(name); g_free(description); g_free(digest); return key;
+}
 static gboolean relation_results_apply(gpointer data) {
  GTask *task=data; RelationJob *j=g_task_get_task_data(task);
  if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.usage_generation) return G_SOURCE_REMOVE;
  if(j->index_version!=wb.index_version) { wb.usage_idle=0; usage_start(NULL,NULL); return G_SOURCE_REMOVE; }
  gint64 deadline=g_get_monotonic_time()+3000;
- if(j->clearing) {
-  GtkTreeIter iter;
-  while(gtk_tree_model_get_iter_first(GTK_TREE_MODEL(wb.matches),&iter)) {
-   gtk_list_store_remove(wb.matches,&iter); if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
+ if(j->collecting) {
+  while(j->iter_valid) {
+   gchar *key=relation_existing_key(GTK_TREE_MODEL(wb.matches),&j->iter); GQueue *q=g_hash_table_lookup(j->existing,key);
+   if(!q) { q=g_queue_new(); g_hash_table_insert(j->existing,key,q); } else g_free(key);
+   GtkTreeIter *copy=g_new(GtkTreeIter,1); *copy=j->iter; g_queue_push_tail(q,copy);
+   j->iter_valid=gtk_tree_model_iter_next(GTK_TREE_MODEL(wb.matches),&j->iter);
+   if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
   }
-  j->clearing=FALSE;
+  j->collecting=FALSE;
  }
  while(j->apply_position<MIN(j->total,G_N_ELEMENTS(j->found))) {
-  gsize n=j->apply_position++; const InsightSymbol *tag=j->found[n]; GtkTreeIter iter; gtk_list_store_append(wb.matches,&iter);
-  gtk_list_store_set(wb.matches,&iter,USAGE_DISPLAY,tag->path,USAGE_PATH,tag->path,USAGE_LINE,tag->line,USAGE_SYMBOL,tag->name,USAGE_SNIPPET,(gchar *)g_ptr_array_index(j->descriptions,n),-1);
+  gsize n=j->apply_position++; const InsightSymbol *tag=j->found[n]; const gchar *description=g_ptr_array_index(j->descriptions,n);
+  gchar *key=relation_row_key(tag->path,tag->path,tag->name,description,tag->line); GQueue *q=g_hash_table_lookup(j->existing,key); GtkTreeIter *old=q ? g_queue_pop_head(q) : NULL; g_free(key);
+  if(old) g_free(old);
+  else { GtkTreeIter iter; gtk_list_store_append(wb.matches,&iter); gtk_list_store_set(wb.matches,&iter,USAGE_DISPLAY,tag->path,USAGE_PATH,tag->path,USAGE_LINE,tag->line,USAGE_SYMBOL,tag->name,USAGE_SNIPPET,description,-1); }
   if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
  }
- gchar *label=g_strdup_printf("%zu tag-based %s%s",j->total,j->mode==1 ? "definitions/declarations" : (j->mode==2 ? "direct members" : (j->mode==4 ? "base definitions" : "derived types")),j->total>2000 ? " • showing first 2000" : ""); set_usage_status(label); g_free(label);
+ GHashTableIter pending; gpointer value; g_hash_table_iter_init(&pending,j->existing);
+ while(g_hash_table_iter_next(&pending,NULL,&value)) {
+  GQueue *q=value; GtkTreeIter *old;
+  while((old=g_queue_pop_head(q))) { gtk_list_store_remove(wb.matches,old); g_free(old); if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE; }
+  g_hash_table_iter_remove(&pending);
+ }
+ gchar *label=g_strdup_printf("%zu tag-based %s%s",j->total,j->mode==1 ? "definitions/declarations" : (j->mode==2 ? "direct members" : (j->mode==4 ? "base definitions" : "derived types")),j->total>2000 ? " • showing first 2000" : ""); set_usage_status(j->invalid ? "Enter a symbol name (or qualified owner for Members)" : label); g_free(label);
  wb.usage_idle=0; return G_SOURCE_REMOVE;
 }
 static void relation_job_done(GObject *source,GAsyncResult *result,gpointer data) {
@@ -1048,8 +1076,8 @@ static void relation_job_done(GObject *source,GAsyncResult *result,gpointer data
  g_clear_object(&wb.search_worker);
  if(!ok) return;
  if(j->index_version!=wb.index_version) { usage_start(NULL,NULL); return; }
- if(j->total==SIZE_MAX) { set_usage_status("Enter a symbol name (or qualified owner for Members)"); return; }
- j->clearing=TRUE; wb.usage_idle=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,relation_results_apply,g_object_ref(task),g_object_unref);
+ if(j->total==SIZE_MAX) { j->invalid=TRUE; j->total=0; }
+ j->existing=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,symbol_iter_queue_free); j->collecting=TRUE; j->iter_valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(wb.matches),&j->iter); wb.usage_idle=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,relation_results_apply,g_object_ref(task),g_object_unref);
 }
 static void usage_start(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; stop_usage();
@@ -1145,7 +1173,7 @@ static void relation_update_from_editor(gboolean dirty) {
 static void create_usage_browser(void) {
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,4),*controls=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,2);
  wb.usage_entry=gtk_search_entry_new(); gtk_widget_set_name(wb.usage_entry,"insight-relation-query"); gtk_entry_set_placeholder_text(GTK_ENTRY(wb.usage_entry),"Symbol or qualified owner…");
- wb.usage_status=gtk_label_new("Comments and strings included; no semantic scope resolution"); gtk_label_set_line_wrap(GTK_LABEL(wb.usage_status),TRUE);
+ wb.usage_status=gtk_label_new("Comments and strings included; no semantic scope resolution"); gtk_widget_set_name(wb.usage_status,"insight-relation-status"); gtk_label_set_line_wrap(GTK_LABEL(wb.usage_status),TRUE);
  wb.usage_buffer=gtk_check_button_new_with_label("Current buffer only");
  wb.usage_code=gtk_check_button_new_with_label("References: code only");
  wb.relation_follow=gtk_check_button_new_with_label("Follow symbol in editor");
