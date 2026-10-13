@@ -116,6 +116,8 @@ EXTRA_DIST += \
 	insight/core/runtime.h \
 	insight/desktop/extensions.c \
 	insight/desktop/extensions.h \
+	insight/desktop/lookup_filter.c \
+	insight/desktop/lookup_filter.h \
 	insight/desktop/index_cache.c \
 	insight/desktop/index_cache.h \
 	insight/desktop/navigation.c \
@@ -150,6 +152,7 @@ EXTRA_DIST += \
 	insight/tests/index_test.c \
 	insight/tests/native_bridge.py \
 	insight/tests/native_index_test.c \
+	insight/tests/lookup_filter_test.c \
 	insight/tests/occurrences_test.c \
 	insight/tests/run.py \
 	insight/tests/runtime_test.c \

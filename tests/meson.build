@@ -396,3 +396,7 @@ insight_index_test = executable('test_insight_native_index',
  include_directories: include_directories('../insight/core'),
  c_args: ['-UNDEBUG'], dependencies: deps)
 test('Insight native index', insight_index_test)
+lookup_filter_test = executable('test_insight_lookup_filter',
+ '../insight/tests/lookup_filter_test.c', '../insight/desktop/lookup_filter.c',
+ include_directories: include_directories('../insight/desktop'), dependencies: glib)
+test('Insight lookup filters', lookup_filter_test)
