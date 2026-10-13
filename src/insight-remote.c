@@ -22,10 +22,11 @@ typedef enum { OPEN_FILE,OPEN_FOLDER,PROJECT_READ,PROJECT_FOLDER,UPLOAD } Transf
 typedef struct { RemoteRoot *root; TransferKind kind; gchar *target,*snapshot,*auth,*origin; GKeyFile *project; GSubprocess *process; GCancellable *cancel; } Transfer;
 static struct {
  GtkWidget *page,*host,*user,*port,*identity,*path,*status,*output,*input,*save_password,*automatic;
- GPtrArray *roots; GQueue pending,shell_pending; gboolean shell_writing; Transfer *active; GSubprocess *shell; GCancellable *shell_cancel;
+ GPtrArray *roots; GHashTable *upload_versions; GCancellable *snapshot_cancel; GQueue pending,shell_pending; gboolean shell_writing; Transfer *active; GSubprocess *shell; GCancellable *shell_cancel;
  gchar *shell_auth,*config,*directory; GString *tail; guint ansi; gboolean carriage,closing,loading;
  gulong signals[4]; gboolean (*workspace)(const char *);
 } remote_ui;
+static guint64 remote_epoch,upload_sequence;
 static void profile_save(void);
 static void transfer_run(Transfer *);
 static void root_free(gpointer data) { RemoteRoot *r=data; if(!r) return; insight_remote_free(r->remote); g_free(r->directory); g_free(r->config); g_free(r); }
@@ -126,20 +127,39 @@ static void open_remote(GtkWidget *widget,gpointer data) {
 static RemoteRoot *root_for_file(const char *path,gchar **remote) {
  for(gint i=(gint)remote_ui.roots->len-1;i>=0;i--) { RemoteRoot *root=g_ptr_array_index(remote_ui.roots,(guint)i); *remote=insight_remote_path(root->remote,path); if(*remote) return root; } return NULL;
 }
+typedef struct { Transfer *transfer; gchar *source,*key; guint64 sequence,epoch; } UploadSnapshot;
+static void upload_snapshot_free(gpointer data) { UploadSnapshot *j=data; transfer_free(j->transfer); g_free(j->source); g_free(j->key); g_free(j); }
+static void upload_snapshot_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
+ (void)source; UploadSnapshot *j=data; GFile *from=g_file_new_for_path(j->source),*to=g_file_new_for_path(j->transfer->snapshot); GError *error=NULL;
+ gboolean ok=g_file_copy(from,to,G_FILE_COPY_NONE,cancel,NULL,NULL,&error); g_object_unref(from); g_object_unref(to);
+ if(error) g_task_return_error(task,error); else g_task_return_boolean(task,ok);
+}
+static void upload_snapshot_done(GObject *source,GAsyncResult *result,gpointer data) {
+ (void)source; (void)data; GTask *task=G_TASK(result); UploadSnapshot *j=g_task_get_task_data(task); GError *error=NULL; gboolean copied=g_task_propagate_boolean(task,&error);
+ if(remote_ui.closing || j->epoch!=remote_epoch) { g_clear_error(&error); return; }
+ guint64 *latest=g_hash_table_lookup(remote_ui.upload_versions,j->key);
+ if(!latest || *latest!=j->sequence) { g_clear_error(&error); return; }
+ g_hash_table_remove(remote_ui.upload_versions,j->key);
+ if(!copied) { status(error ? error->message : "Could not snapshot saved source"); g_clear_error(&error); return; }
+ Transfer *t=j->transfer; j->transfer=NULL; InsightRemote *root=t->root->remote;
+ for(GList *item=remote_ui.pending.head,*next;item;item=next) {
+  next=item->next; Transfer *old=item->data;
+  if(old->kind==UPLOAD && !strcmp(old->root->remote->host,root->host) && !strcmp(old->root->remote->user,root->user) && old->root->remote->port==root->port && !strcmp(old->target,t->target)) { g_queue_delete_link(&remote_ui.pending,item); transfer_free(old); }
+ }
+ if(remote_ui.active) { g_queue_push_tail(&remote_ui.pending,t); status("Saved locally; latest SSH upload queued"); } else transfer_run(t);
+}
 static void upload_document(GeanyDocument *doc) {
  if(!doc || !doc->file_name) return;
  gchar *path=NULL; RemoteRoot *root=root_for_file(doc->file_name,&path); if(!root) { status("Current file is not associated with an SSH source folder"); return; }
  Transfer *t=g_new0(Transfer,1); t->kind=UPLOAD; t->root=root_copy(root); t->target=path; gchar *uuid=g_uuid_string_random(); t->snapshot=g_build_filename(remote_ui.directory,uuid,NULL); g_free(uuid);
- gchar *native=utils_get_locale_from_utf8(doc->file_name); GFile *source=g_file_new_for_path(native),*destination=g_file_new_for_path(t->snapshot); g_free(native); GError *error=NULL; gboolean copied=g_file_copy(source,destination,G_FILE_COPY_NONE,NULL,NULL,NULL,&error); g_object_unref(source); g_object_unref(destination);
- if(!copied) { status(error ? error->message : "Could not snapshot saved source"); g_clear_error(&error); transfer_free(t); return; }
- /* Coalesce queued saves of one remote file; an already running upload finishes
-  * before the latest saved snapshot, preventing older writes from winning. */
- for(GList *item=remote_ui.pending.head,*next;item;item=next) { next=item->next; Transfer *old=item->data; if(!strcmp(old->root->remote->host,root->remote->host) && !strcmp(old->root->remote->user,root->remote->user) && old->root->remote->port==root->remote->port && !strcmp(old->target,path)) { g_queue_delete_link(&remote_ui.pending,item); transfer_free(old); } }
- if(remote_ui.active) { g_queue_push_tail(&remote_ui.pending,t); status("Saved locally; latest SSH upload queued"); } else transfer_run(t);
+ UploadSnapshot *j=g_new0(UploadSnapshot,1); j->transfer=t; j->source=utils_get_locale_from_utf8(doc->file_name); j->epoch=remote_epoch; j->sequence=++upload_sequence;
+ gchar *target=credentials_target(root->remote); j->key=g_strconcat(target,":",path,NULL); g_free(target);
+ guint64 *version=g_new(guint64,1); *version=j->sequence; g_hash_table_replace(remote_ui.upload_versions,g_strdup(j->key),version);
+ GTask *task=g_task_new(NULL,remote_ui.snapshot_cancel,upload_snapshot_done,NULL); g_task_set_task_data(task,j,upload_snapshot_free); g_task_run_in_thread(task,upload_snapshot_run); g_object_unref(task); status("Saved locally; preparing SSH upload snapshot…");
 }
 static void saved_document(GObject *object,GeanyDocument *doc,gpointer data) { (void)object; (void)data; if(!doc || !doc->file_name) return; gchar *path=NULL; RemoteRoot *root=root_for_file(doc->file_name,&path); g_free(path); if(root && root->auto_upload) upload_document(doc); }
 static void save_remote(GtkWidget *widget,gpointer data) { (void)widget; (void)data; GeanyDocument *doc=document_get_current(); if(!doc) return; gchar *path=NULL; RemoteRoot *root=doc->file_name ? root_for_file(doc->file_name,&path) : NULL; g_free(path); if(!root) { status("Open a file through SSH first"); return; } if(!doc->changed) upload_document(doc); else if(document_save_file(doc,FALSE) && !root->auto_upload) upload_document(doc); }
-static void stop_transfer(GtkWidget *widget,gpointer data) { (void)widget; (void)data; if(remote_ui.active) { g_cancellable_cancel(remote_ui.active->cancel); g_subprocess_force_exit(remote_ui.active->process); } while(!g_queue_is_empty(&remote_ui.pending)) transfer_free(g_queue_pop_head(&remote_ui.pending)); status("Transfers stopped; local edits retained"); }
+static void stop_transfer(GtkWidget *widget,gpointer data) { (void)widget; (void)data; remote_epoch++; if(remote_ui.snapshot_cancel) { g_cancellable_cancel(remote_ui.snapshot_cancel); g_clear_object(&remote_ui.snapshot_cancel); } if(!remote_ui.closing) remote_ui.snapshot_cancel=g_cancellable_new(); if(remote_ui.upload_versions) g_hash_table_remove_all(remote_ui.upload_versions); if(remote_ui.active) { g_cancellable_cancel(remote_ui.active->cancel); g_subprocess_force_exit(remote_ui.active->process); } while(!g_queue_is_empty(&remote_ui.pending)) transfer_free(g_queue_pop_head(&remote_ui.pending)); status("Transfers stopped; local edits retained"); }
 static void shell_append(const gchar *bytes,gsize size) {
  GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(remote_ui.output)); g_string_append_len(remote_ui.tail,bytes,(gssize)size); GString *plain=g_string_new(NULL); gsize consumed=0;
  for(const gchar *p=remote_ui.tail->str,*end=p+remote_ui.tail->len;p<end;) {
@@ -242,6 +262,7 @@ static void project_closed(GObject *object,gpointer data) { (void)object; (void)
 static void forget_password(GtkWidget *widget,gpointer data) { (void)widget; (void)data; RemoteRoot *root=form_root("/",remote_ui.directory,remote_ui.directory,NULL); if(!root) return; gchar *target=credentials_target(root->remote); GError *error=NULL; if(insight_remote_password_forget(remote_ui.config,target,&error)) status("Saved login password removed from this config"); else status(error ? error->message : "Could not remove password"); g_clear_error(&error); g_free(target); root_free(root); }
 static void show_remote(GtkWidget *widget,gpointer data) { (void)widget; (void)data; msgwin_show_hide(TRUE); gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.message_window_notebook),remote_ui.page)); gtk_widget_grab_focus(remote_ui.host); }
 void insight_remote_ui_init(gboolean (*workspace)(const char *)) {
+ remote_epoch++; remote_ui.upload_versions=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free); remote_ui.snapshot_cancel=g_cancellable_new();
  remote_ui.workspace=workspace; remote_ui.roots=g_ptr_array_new_with_free_func(root_free); remote_ui.tail=g_string_new(NULL); remote_ui.directory=g_build_filename(app->configdir,"insight","remote",NULL); g_mkdir_with_parents(remote_ui.directory,0700); remote_ui.config=g_build_filename(app->configdir,"insight","ssh.conf",NULL);
  restore_roots();
  remote_ui.page=gtk_box_new(GTK_ORIENTATION_VERTICAL,2); GtkWidget *connection=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3); remote_ui.host=gtk_entry_new(); remote_ui.user=gtk_entry_new(); remote_ui.port=gtk_spin_button_new_with_range(1,65535,1); remote_ui.identity=gtk_entry_new(); gtk_spin_button_set_value(GTK_SPIN_BUTTON(remote_ui.port),22);
@@ -262,5 +283,5 @@ void insight_remote_ui_init(gboolean (*workspace)(const char *)) {
  for(guint i=0;i<2;i++) { GtkWidget *item=gtk_menu_item_new_with_label("SSH files / folders / projects…"); gtk_container_add(GTK_CONTAINER(menus[i]),item); g_signal_connect(item,"activate",G_CALLBACK(show_remote),NULL); gtk_widget_show(item); }
 }
 void insight_remote_ui_finalize(void) {
- profile_save(); remote_ui.closing=TRUE; for(guint i=0;i<4;i++) if(remote_ui.signals[i]) g_signal_handler_disconnect(geany_object,remote_ui.signals[i]); stop_transfer(NULL,NULL); shell_disconnect(NULL,NULL); g_ptr_array_free(remote_ui.roots,TRUE); g_string_free(remote_ui.tail,TRUE); g_free(remote_ui.config); g_free(remote_ui.directory);
+ profile_save(); remote_ui.closing=TRUE; for(guint i=0;i<4;i++) if(remote_ui.signals[i]) g_signal_handler_disconnect(geany_object,remote_ui.signals[i]); stop_transfer(NULL,NULL); g_clear_pointer(&remote_ui.upload_versions,g_hash_table_destroy); shell_disconnect(NULL,NULL); g_ptr_array_free(remote_ui.roots,TRUE); g_string_free(remote_ui.tail,TRUE); g_free(remote_ui.config); g_free(remote_ui.directory);
 }
