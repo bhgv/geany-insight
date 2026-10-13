@@ -13,6 +13,7 @@
 #define SSM(sci,msg,w,l) scintilla_send_message((sci),(msg),(w),(l))
 static guint phase,original_id; static gint initial_size; static gchar *test_directory,*test_project,*bad_project,*second_project;
 static GtkWidget *window,*overview_menu;
+static guint preview_heartbeats; static gint large_last; static guint heartbeat_source;
 static GtkWidget *find_named(GtkWidget *root,const char *name) {
  if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;
  if(GTK_IS_CONTAINER(root)) { GList *children=gtk_container_get_children(GTK_CONTAINER(root)); GtkWidget *found=NULL; for(GList *p=children;p && !found;p=p->next) found=find_named(p->data,name); g_list_free(children); if(found) return found; }
@@ -65,6 +66,7 @@ static void screenshot(void) {
  for(gint y=0;y<h;y++) for(gint x=0;x<w;x++) g_string_append_len(ppm,(const gchar *)pixels+y*stride+x*channels,3);
  g_file_set_contents("overview-gui-smoke.ppm",ppm->str,ppm->len,NULL); g_string_free(ppm,TRUE); g_object_unref(picture);
 }
+static gboolean preview_heartbeat(gpointer data) { (void)data; preview_heartbeats++; return G_SOURCE_CONTINUE; }
 static gboolean timeout_fail(gpointer data) { (void)data; g_error("Overview GUI smoke timed out"); return G_SOURCE_REMOVE; }
 static gboolean step(gpointer data) {
  (void)data; GeanyDocument *doc=document_get_current(); g_assert_nonnull(doc);
@@ -139,7 +141,13 @@ static gboolean step(gpointer data) {
   g_timeout_add(150,select_project,NULL); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
  } else if(phase==14) {
   g_assert_nonnull(strstr(gtk_window_get_title(GTK_WINDOW(window)),"GUI smoke")); project_empty(); document_set_text_changed(doc,FALSE);
-  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: editor icons, syntax, independent read-only, edits, scrolling, toggling, keyword variations, saved query history, preview-only result navigation, exact hit opening, result columns, stale result rejection, Context links, project Apply/Cancel, menu Open Project, invalid/malformed project preserves session, UTF-8 paths, project switching, tab close\n"); return G_SOURCE_REMOVE;
+  g_timeout_add(150,select_project,GINT_TO_POINTER(2)); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
+ } else if(phase==15) {
+  GString *large=g_string_sized_new(1400000); for(guint i=0;i<100000;i++) g_string_append(large,"function_0();\n"); large_last=(gint)large->len-14; gchar *directory=g_path_get_dirname(test_project),*filename=g_build_filename(directory,"large-preview.c",NULL); g_free(directory); g_assert_true(g_file_set_contents(filename,large->str,large->len,NULL)); g_string_free(large,TRUE);
+  GtkWidget *view=find_named(window,"insight-project-files"); GtkListStore *model=GTK_LIST_STORE(gtk_tree_view_get_model(GTK_TREE_VIEW(view))); GtkTreeIter iter; gtk_list_store_append(model,&iter); gtk_list_store_set(model,&iter,0,"large-preview.c",1,filename,-1); GtkTreePath *path=gtk_tree_model_get_path(GTK_TREE_MODEL(model),&iter); heartbeat_source=g_timeout_add(5,preview_heartbeat,NULL); gtk_tree_view_set_cursor(GTK_TREE_VIEW(view),path,NULL,FALSE); gtk_tree_path_free(path); g_free(filename);
+ } else if(phase==16) {
+  ScintillaObject *preview=SCINTILLA(find_named(window,"insight-context-code")); g_assert_cmpint(sci_get_length(preview),==,1400000); if(!SSM(preview,SCI_INDICATORVALUEAT,31,large_last)) return G_SOURCE_CONTINUE; g_assert_cmpuint(preview_heartbeats,>,1); g_source_remove(heartbeat_source); heartbeat_source=0;
+  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: editor icons, syntax, independent read-only, edits, scrolling, toggling, keyword variations, saved query history, preview-only result navigation, exact hit opening, result columns, stale result rejection, Context links, project Apply/Cancel, menu Open Project, invalid/malformed project preserves session, UTF-8 paths, project switching, responsive 1.4 MiB file selection, tab close\n"); return G_SOURCE_REMOVE;
  }
  phase++; return G_SOURCE_CONTINUE;
 }

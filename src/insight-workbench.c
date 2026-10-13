@@ -76,6 +76,7 @@ typedef struct {
  GPtrArray *usage_paths; gchar *usage_name; guint usage_idle,usage_position,usage_shown,usage_skipped;
  GtkListStore *symbols;
  ScintillaObject *preview;
+ GHashTable *preview_names; gsize preview_names_position; guint preview_links_idle; gchar *preview_links_text; gint preview_links_position;
  guint refresh,source_id; gboolean context_visible,index_dirty,scan_failed;
  gulong event_handlers[4];
  gulong project_handlers[3]; gchar *geany_root; gboolean workspace_from_project;
@@ -222,30 +223,40 @@ static void refresh_index(void) {
   GeanyDocument *doc=g_ptr_array_index(documents_array,i);
   if(doc->is_valid && doc->file_name && (!root || insight_project_files_contains(wb.membership,root,doc->file_name)) && !insight_native_import(next,doc->tm_file,doc->file_name)) { insight_index_free(next); g_free(root); return; }
  }
- g_free(root); insight_index_free(wb.index); wb.index=next; wb.index_dirty=FALSE;
+ g_free(root); g_clear_pointer(&wb.preview_names,g_hash_table_destroy); wb.preview_names_position=0; wb.preview_links_position=0; insight_index_free(wb.index); wb.index=next; wb.index_dirty=FALSE;
+}
+static gboolean preview_links_step(gpointer data) {
+ (void)data; gint64 deadline=g_get_monotonic_time()+6000;
+ if(!wb.preview_names) wb.preview_names=g_hash_table_new(g_str_hash,g_str_equal);
+ gsize count=insight_index_count(wb.index);
+ while(wb.preview_names_position<count) {
+  const InsightSymbol *symbol=insight_index_at(wb.index,wb.preview_names_position++);
+  if(symbol) g_hash_table_add(wb.preview_names,(gpointer)symbol->name);
+  if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
+ }
+ SSM(wb.preview,SCI_SETINDICATORCURRENT,INSIGHT_LINK,0);
+ gint length=(gint)strlen(wb.preview_links_text);
+ while(wb.preview_links_position<length) {
+  gint position=wb.preview_links_position,end=(gint)SSM(wb.preview,SCI_WORDENDPOSITION,position,TRUE);
+  if(end<=position) wb.preview_links_position=(gint)SSM(wb.preview,SCI_POSITIONAFTER,position,0);
+  else {
+   gint start=(gint)SSM(wb.preview,SCI_WORDSTARTPOSITION,position,TRUE);
+   if(start>=0 && end<=length && end-start<=1024) { gchar *name=g_strndup(wb.preview_links_text+start,(gsize)(end-start)); if(g_hash_table_contains(wb.preview_names,name)) SSM(wb.preview,SCI_INDICATORFILLRANGE,start,end-start); g_free(name); }
+   wb.preview_links_position=end;
+  }
+  if(wb.preview_links_position<=position) wb.preview_links_position=position+1;
+  if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
+ }
+ wb.preview_links_idle=0; g_clear_pointer(&wb.preview_links_text,g_free); return G_SOURCE_REMOVE;
 }
 static void preview_links(void) {
  if(!wb.preview) return;
- refresh_index();
+ if(wb.preview_links_idle) { g_source_remove(wb.preview_links_idle); wb.preview_links_idle=0; }
+ g_clear_pointer(&wb.preview_links_text,g_free); refresh_index();
  SSM(wb.preview,SCI_INDICSETSTYLE,INSIGHT_LINK,INDIC_PLAIN); SSM(wb.preview,SCI_INDICSETFORE,INSIGHT_LINK,0xcc5500);
  SSM(wb.preview,SCI_SETINDICATORCURRENT,INSIGHT_LINK,0); SSM(wb.preview,SCI_INDICATORCLEARRANGE,0,sci_get_length(wb.preview));
- GHashTable *names=g_hash_table_new(g_str_hash,g_str_equal); const InsightSymbol *page[256]; gsize total=insight_index_count(wb.index);
- for(gsize offset=0;offset<total;offset+=G_N_ELEMENTS(page)) {
-  insight_index_query(wb.index,"",FALSE,NULL,NULL,NULL,offset,page,G_N_ELEMENTS(page));
-  for(gsize i=0;i<MIN(total-offset,G_N_ELEMENTS(page));i++) g_hash_table_add(names,(gpointer)page[i]->name);
- }
- gchar *text=sci_get_contents(wb.preview,sci_get_length(wb.preview)+1);
- /* Use exactly the same word boundaries as Ctrl+click/F12, including the
-  * language's configurable wordchars and Scintilla's Unicode categories. */
- for(gint position=0,length=sci_get_length(wb.preview);position<length;) {
-  gint end=(gint)SSM(wb.preview,SCI_WORDENDPOSITION,position,TRUE);
-  if(end<=position) { position=(gint)SSM(wb.preview,SCI_POSITIONAFTER,position,0); continue; }
-  gint start=(gint)SSM(wb.preview,SCI_WORDSTARTPOSITION,position,TRUE); gchar *name=g_strndup(text+start,(gsize)(end-start));
-  if(g_hash_table_contains(names,name)) SSM(wb.preview,SCI_INDICATORFILLRANGE,start,end-start);
-  g_free(name);
-  position=end;
- }
- g_free(text); g_hash_table_destroy(names);
+ wb.preview_links_text=sci_get_contents(wb.preview,sci_get_length(wb.preview)+1); wb.preview_links_position=0;
+ wb.preview_links_idle=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,preview_links_step,NULL,NULL);
 }
 static gboolean preview_motion(GtkWidget *widget,GdkEventMotion *event,gpointer data) {
  (void)widget; (void)data; gint position=(gint)SSM(wb.preview,SCI_POSITIONFROMPOINTCLOSE,(uptr_t)event->x,(sptr_t)event->y);
@@ -2168,6 +2179,8 @@ void insight_workbench_finalize(void) {
  g_free(wb.editor_find_query); g_free(wb.editor_find_digest);
  g_free(wb.relation_word);
  g_free(wb.source_path); g_free(wb.source_digest); g_free(wb.find_last_query); g_free(wb.find_last_digest);
+ if(wb.preview_links_idle) { g_source_remove(wb.preview_links_idle); wb.preview_links_idle=0; }
+ g_clear_pointer(&wb.preview_links_text,g_free); g_clear_pointer(&wb.preview_names,g_hash_table_destroy);
  insight_index_free(wb.base); insight_index_free(wb.index);
  if(wb.symbols) g_object_unref(wb.symbols);
  if(wb.local_symbols) g_object_unref(wb.local_symbols);

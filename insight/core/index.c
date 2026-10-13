@@ -31,6 +31,7 @@ void insight_index_free(InsightIndex *i) {
  free(i->items); free(i);
 }
 size_t insight_index_count(const InsightIndex *i) { return i ? i->count : 0; }
+const InsightSymbol *insight_index_at(const InsightIndex *i,size_t n) { return i && n<i->count ? &i->items[n] : NULL; }
 static int compare_paths(const void *a,const void *b) { return strcmp(*(const char *const *)a,*(const char *const *)b); }
 size_t insight_index_files(const InsightIndex *i,const char *prefix,size_t offset,const char **out,size_t capacity) {
  if(!i || !i->count || !prefix) return 0;

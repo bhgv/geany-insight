@@ -19,6 +19,8 @@ InsightIndex *insight_index_clone(const InsightIndex *);
 int insight_index_serialize(const InsightIndex *,const char *root,unsigned char **data,size_t *length);
 InsightIndex *insight_index_deserialize(const unsigned char *,size_t,char **root);
 size_t insight_index_count(const InsightIndex *);
+/* O(1) sorted ordinal access; borrowed until mutation, NULL out of range. */
+const InsightSymbol *insight_index_at(const InsightIndex *,size_t);
 size_t insight_index_file_count(const InsightIndex *);
 /* Sorted unique paths represented by at least one symbol. Prefix byte match.
  * Borrowed paths; total independent of offset/capacity. SIZE_MAX on OOM. */

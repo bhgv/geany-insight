@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 int main(void) {
  InsightIndex *i=insight_index_new(); assert(i);
  InsightSymbol a[]={ {"foo",NULL,"A","function",10,NULL,NULL,NULL},{"foobar",NULL,NULL,NULL,20,NULL,NULL,NULL} };
@@ -10,6 +11,8 @@ int main(void) {
  assert(insight_index_update(i,"a.cpp",a,2));
  assert(insight_index_update(i,"b.cpp",b,1));
  assert(insight_index_file_count(i)==2);
+ assert(!insight_index_at(NULL,0)); assert(!insight_index_at(i,3));
+ assert(!strcmp(insight_index_at(i,0)->path,"a.cpp")); assert(!strcmp(insight_index_at(i,1)->path,"b.cpp")); assert(!strcmp(insight_index_at(i,2)->name,"foobar"));
  const char *paths[2];
  assert(insight_index_files(i,"",1,paths,1)==2 && !strcmp(paths[0],"b.cpp"));
  assert(insight_index_files(i,"a",0,paths,2)==1 && !strcmp(paths[0],"a.cpp"));
@@ -56,6 +59,12 @@ int main(void) {
    assert(insight_index_find(i,query,1,NULL,0)==expected);
   }
  }
+ /* Full-size snapshot traversal must use ordinal access, not repeated queries. */
+ InsightIndex *large=insight_index_new(); size_t count=250000; InsightSymbol *rows=calloc(count,sizeof *rows); assert(large && rows);
+ for(size_t n=0;n<count;n++) rows[n]=(InsightSymbol){"large_symbol",NULL,NULL,"function",n+1,NULL,NULL,NULL};
+ assert(insight_index_update(large,"large.c",rows,count)); free(rows);
+ for(size_t n=0;n<count;n++) { const InsightSymbol *symbol=insight_index_at(large,n); assert(symbol && symbol->line==n+1 && !strcmp(symbol->name,"large_symbol")); }
+ assert(!insight_index_at(large,count)); insight_index_free(large);
  insight_index_free(i); insight_index_free(NULL);
  puts("index: all checks passed"); return 0;
 }
