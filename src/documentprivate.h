@@ -23,6 +23,7 @@
 #define GEANY_DOCUMENT_PRIVATE_H 1
 
 #include <gtk/gtk.h>
+#include <gio/gio.h>
 
 G_BEGIN_DECLS
 
@@ -105,6 +106,8 @@ typedef struct GeanyDocumentPrivate
 	time_t			 mtime;
 	/* ID of the idle callback updating the tag list */
 	guint			 tag_list_update_source;
+	GCancellable *tag_parse_cancel;
+	guint64 tag_parse_generation;
 	/* Whether it's temporarily protected (read-only and saving needs confirmation). Does
 	 * not imply doc->readonly as writable files can be protected */
 	gint			 protected;

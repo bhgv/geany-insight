@@ -70,6 +70,10 @@ void tm_workspace_add_source_file_noupdate(TMSourceFile *source_file);
 void tm_workspace_update_source_file_buffer(TMSourceFile *source_file, guchar* text_buf,
 	gsize buf_size);
 
+/* Worker preparation touches only its private source; publication is UI-only. */
+void tm_workspace_prepare_source_file_tags(TMSourceFile *source_file);
+void tm_workspace_publish_source_file_tags(TMSourceFile *target, TMSourceFile *parsed);
+
 void tm_workspace_free(void);
 
 gboolean tm_workspace_is_autocomplete_tag(TMTag *tag, TMSourceFile *current_file,

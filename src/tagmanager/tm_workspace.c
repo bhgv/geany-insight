@@ -230,6 +230,22 @@ void tm_workspace_update_source_file_buffer(TMSourceFile *source_file, guchar* t
 }
 
 
+void tm_workspace_prepare_source_file_tags(TMSourceFile *source_file)
+{
+ tm_tags_sort(source_file->tags_array,file_tags_sort_attrs,FALSE,TRUE);
+}
+void tm_workspace_publish_source_file_tags(TMSourceFile *target,TMSourceFile *parsed)
+{
+ tm_tags_remove_file_tags(target,theWorkspace->tags_array);
+ tm_tags_remove_file_tags(target,theWorkspace->typename_array);
+ tm_tags_array_free(target->tags_array,TRUE);
+ target->tags_array=parsed->tags_array; parsed->tags_array=g_ptr_array_new();
+ target->trust_file_scope=parsed->trust_file_scope;
+ for(guint n=0;n<target->tags_array->len;n++) { TMTag *tag=g_ptr_array_index(target->tags_array,n); tag->file=target; }
+ tm_workspace_merge_tags(&theWorkspace->tags_array,target->tags_array);
+ merge_extracted_tags(&theWorkspace->typename_array,target->tags_array,TM_GLOBAL_TYPE_MASK);
+}
+
 static void remove_source_file_map(TMSourceFile *source_file)
 {
 	GPtrArray *file_arr = g_hash_table_lookup(theWorkspace->source_file_map, source_file->short_name);

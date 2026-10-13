@@ -644,12 +644,15 @@ static InsightLookupFilter *entry_filter(GtkWidget *entry,gboolean files) {
  gtk_entry_set_icon_tooltip_text(GTK_ENTRY(entry),GTK_ENTRY_ICON_SECONDARY,error ? error->message : NULL);
  g_clear_error(&error); return filter;
 }
-typedef struct { guint64 generation; GCancellable *cancel; guint apply; InsightIndex *index; const InsightSymbol **rows; guint count,position; } SymbolListState;
-typedef struct { GWeakRef store; InsightIndex *index; gchar *query,*path; const InsightSymbol **rows; guint count,limit; guint64 generation,epoch; } SymbolListJob;
+typedef struct { gchar *name,*path; } FileListRow;
+static void file_list_row_free(gpointer data) { FileListRow *r=data; g_free(r->name); g_free(r->path); g_free(r); }
+typedef struct { guint64 generation; GCancellable *cancel; guint apply; InsightIndex *index; const InsightSymbol **rows; GPtrArray *files; gchar *local_path; guint count,position; gboolean clearing,local; } SymbolListState;
+typedef struct { GWeakRef store; InsightIndex *index; gchar *query,*path; const InsightSymbol **rows; GPtrArray *paths,*files,*tags; guint count,limit; guint64 generation,epoch; gboolean local; } SymbolListJob;
+static GtkWidget *symbol_list_view(GtkListStore *store) { return store==wb.file_store ? wb.file_view : (store==wb.local_symbols ? wb.local_view : wb.symbol_view); }
 static void symbol_list_stop(SymbolListState *s) {
  s->generation++; if(s->cancel) { g_cancellable_cancel(s->cancel); g_clear_object(&s->cancel); }
  if(s->apply) { g_source_remove(s->apply); s->apply=0; }
- retire_index(s->index); s->index=NULL; g_clear_pointer(&s->rows,g_free); s->count=s->position=0;
+ retire_index(s->index); s->index=NULL; g_clear_pointer(&s->rows,g_free); g_clear_pointer(&s->files,g_ptr_array_unref); g_clear_pointer(&s->local_path,g_free); s->count=s->position=0;
 }
 static void symbol_list_state_free(gpointer data) { SymbolListState *s=data; symbol_list_stop(s); g_free(s); }
 static SymbolListState *symbol_list_state(GtkListStore *store) {
@@ -658,36 +661,62 @@ static SymbolListState *symbol_list_state(GtkListStore *store) {
 static gboolean symbol_list_apply(gpointer data) {
  GtkListStore *store=data; SymbolListState *s=symbol_list_state(store); gint64 deadline=g_get_monotonic_time()+3000;
  if(!wb.alive) { s->apply=0; return G_SOURCE_REMOVE; }
+ if(s->clearing) {
+  GtkTreeIter iter; while(gtk_tree_model_get_iter_first(GTK_TREE_MODEL(store),&iter)) { gtk_list_store_remove(store,&iter); if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE; }
+  s->clearing=FALSE; GtkWidget *view=symbol_list_view(store); if(view) gtk_widget_set_sensitive(view,TRUE);
+ }
  while(s->position<s->count) {
-  const InsightSymbol *tag=s->rows[s->position++]; GtkTreeIter iter; gtk_list_store_append(store,&iter); gtk_list_store_set(store,&iter,SYMBOL_NAME,tag->name,SYMBOL_SCOPE,tag->scope,SYMBOL_PATH,tag->path,SYMBOL_LINE,(gulong)tag->line,SYMBOL_KIND,tag->kind,-1);
+  guint n=s->position++; GtkTreeIter iter; gtk_list_store_append(store,&iter);
+  if(s->files) { FileListRow *r=g_ptr_array_index(s->files,n); gtk_list_store_set(store,&iter,0,r->name,1,r->path,-1); }
+  else { const InsightSymbol *tag=s->rows[n]; gtk_list_store_set(store,&iter,SYMBOL_NAME,tag->name,SYMBOL_SCOPE,tag->scope,SYMBOL_PATH,s->local ? s->local_path : tag->path,SYMBOL_LINE,(gulong)tag->line,SYMBOL_KIND,tag->kind,-1); }
   if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
  }
- s->apply=0; retire_index(s->index); s->index=NULL; g_clear_pointer(&s->rows,g_free); return G_SOURCE_REMOVE;
+ s->apply=0; retire_index(s->index); s->index=NULL; g_clear_pointer(&s->rows,g_free); g_clear_pointer(&s->files,g_ptr_array_unref); return G_SOURCE_REMOVE;
 }
-static void symbol_list_job_free(gpointer data) { SymbolListJob *j=data; g_weak_ref_clear(&j->store); retire_index(j->index); g_free(j->query); g_free(j->path); g_free(j->rows); g_free(j); }
+static void symbol_list_job_free(gpointer data) { SymbolListJob *j=data; g_weak_ref_clear(&j->store); retire_index(j->index); g_free(j->query); g_free(j->path); g_free(j->rows); g_clear_pointer(&j->paths,g_ptr_array_unref); g_clear_pointer(&j->files,g_ptr_array_unref); g_clear_pointer(&j->tags,g_ptr_array_unref); g_free(j); }
 static void symbol_list_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
- (void)source; SymbolListJob *j=data; InsightLookupFilter *filter=insight_lookup_filter_new(j->query,FALSE,NULL); j->rows=g_new(const InsightSymbol *,j->limit);
- if(filter) for(gsize n=0;n<insight_index_count(j->index) && j->count<j->limit;n++) {
-  if(g_cancellable_is_cancelled(cancel)) break;
-  const InsightSymbol *tag=insight_index_at(j->index,n); if(j->path && g_strcmp0(j->path,tag->path)) continue;
-  if(insight_lookup_filter_match(filter,tag->name,tag->scope,tag->path,tag->kind)) j->rows[j->count++]=tag;
+ (void)source; SymbolListJob *j=data; InsightLookupFilter *filter=insight_lookup_filter_new(j->query,j->paths!=NULL,NULL);
+ if(j->paths) {
+  j->files=g_ptr_array_new_with_free_func(file_list_row_free); GHashTable *seen=g_hash_table_new(g_str_hash,g_str_equal);
+  for(guint n=0;filter && n<j->paths->len && j->count<j->limit && !g_cancellable_is_cancelled(cancel);n++) {
+   const char *path=g_ptr_array_index(j->paths,n); if(!g_utf8_validate(path,-1,NULL) || g_hash_table_contains(seen,path)) continue; g_hash_table_add(seen,(gpointer)path);
+   if(insight_lookup_filter_match(filter,NULL,NULL,path,NULL)) { FileListRow *r=g_new0(FileListRow,1); r->path=g_strdup(path); r->name=g_path_get_basename(path); g_ptr_array_add(j->files,r); j->count++; }
+  }
+  g_hash_table_destroy(seen);
+ } else {
+  if(j->local && !g_cancellable_is_cancelled(cancel)) { j->index=insight_index_new(); TMSourceFile captured={.tags_array=j->tags}; if(!insight_native_import(j->index,&captured,j->path ? j->path : "@untitled")) { insight_lookup_filter_free(filter); g_task_return_boolean(task,FALSE); return; } }
+  j->rows=g_new(const InsightSymbol *,j->limit);
+  if(filter) for(gsize n=0;n<insight_index_count(j->index) && j->count<j->limit;n++) {
+   if(g_cancellable_is_cancelled(cancel)) break;
+   const InsightSymbol *tag=insight_index_at(j->index,n); if(j->path && g_strcmp0(j->path,tag->path)) continue;
+   if(insight_lookup_filter_match(filter,tag->name,tag->scope,tag->path,tag->kind)) j->rows[j->count++]=tag;
+  }
  }
  insight_lookup_filter_free(filter); g_task_return_boolean(task,TRUE);
 }
 static void symbol_list_job_done(GObject *source,GAsyncResult *result,gpointer data) {
  (void)source; (void)data; GTask *task=G_TASK(result); SymbolListJob *j=g_task_get_task_data(task); gboolean ok=g_task_propagate_boolean(task,NULL); GtkListStore *store=g_weak_ref_get(&j->store); if(!store) return;
  SymbolListState *s=symbol_list_state(store);
- if(ok && wb.alive && j->epoch==workbench_epoch && j->generation==s->generation) {
-  g_clear_object(&s->cancel); s->index=insight_index_ref(j->index); s->rows=j->rows; j->rows=NULL; s->count=j->count; s->position=0;
-  s->apply=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,symbol_list_apply,g_object_ref(store),g_object_unref);
+ if(wb.alive && j->epoch==workbench_epoch && j->generation==s->generation) {
+  g_clear_object(&s->cancel);
+  if(ok) { s->index=insight_index_ref(j->index); s->rows=j->rows; j->rows=NULL; s->files=j->files; j->files=NULL; s->count=j->count; s->position=0; s->local=j->local; s->local_path=g_strdup(j->path); }
+  else ui_set_statusbar(TRUE,"Symbol snapshot unavailable or exceeds its limit");
+  if(!s->apply) s->apply=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,symbol_list_apply,g_object_ref(store),g_object_unref);
  }
  g_object_unref(store);
 }
+static SymbolListJob *symbol_list_begin(GtkListStore *store,GtkWidget *entry,guint limit,gboolean files) {
+ SymbolListState *s=symbol_list_state(store); symbol_list_stop(s); s->clearing=TRUE; GtkWidget *view=symbol_list_view(store); if(view) gtk_widget_set_sensitive(view,FALSE);
+ s->apply=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,symbol_list_apply,g_object_ref(store),g_object_unref);
+ InsightLookupFilter *filter=entry_filter(entry,files); if(!filter) return NULL; insight_lookup_filter_free(filter);
+ SymbolListJob *j=g_new0(SymbolListJob,1); g_weak_ref_init(&j->store,store); j->query=g_strdup(gtk_entry_get_text(GTK_ENTRY(entry))); j->limit=limit; j->generation=s->generation; j->epoch=workbench_epoch; return j;
+}
+static void symbol_list_launch(GtkListStore *store,SymbolListJob *j) {
+ SymbolListState *s=symbol_list_state(store); s->cancel=g_cancellable_new(); GTask *task=g_task_new(NULL,s->cancel,symbol_list_job_done,NULL); g_task_set_task_data(task,j,symbol_list_job_free); g_task_run_in_thread(task,symbol_list_job_run); g_object_unref(task);
+}
 static void fill_symbol_list(GtkListStore *store,GtkWidget *entry,const char *path,guint limit) {
- refresh_index(); SymbolListState *s=symbol_list_state(store); symbol_list_stop(s); gtk_list_store_clear(store);
- InsightLookupFilter *filter=entry_filter(entry,FALSE); if(!filter) return; insight_lookup_filter_free(filter);
- SymbolListJob *j=g_new0(SymbolListJob,1); g_weak_ref_init(&j->store,store); j->index=insight_index_ref(wb.index); j->query=g_strdup(gtk_entry_get_text(GTK_ENTRY(entry))); j->path=g_strdup(path); j->limit=limit; j->generation=s->generation; j->epoch=workbench_epoch;
- s->cancel=g_cancellable_new(); GTask *task=g_task_new(NULL,s->cancel,symbol_list_job_done,NULL); g_task_set_task_data(task,j,symbol_list_job_free); g_task_run_in_thread(task,symbol_list_job_run); g_object_unref(task);
+ refresh_index(); SymbolListJob *j=symbol_list_begin(store,entry,limit,FALSE); if(!j) return;
+ j->index=insight_index_ref(wb.index); j->path=g_strdup(path); symbol_list_launch(store,j);
 }
 static void browser_filter(GtkEditable *entry,gpointer data) {
  (void)entry; (void)data; if(!wb.symbols) return;
@@ -724,18 +753,11 @@ static void browser_entry_activate(GtkEntry *entry,gpointer data) {
 }
 static void outline_changed(GtkToggleButton *button,gpointer data) { (void)button; (void)data; browser_filter(NULL,NULL); }
 static void files_filter(GtkEditable *entry,gpointer data) {
- (void)entry; (void)data; if(!wb.file_store) return;
- InsightLookupFilter *filter=entry_filter(wb.file_entry,TRUE); if(!filter) { gtk_list_store_clear(wb.file_store); return; }
- GHashTable *seen=g_hash_table_new(g_str_hash,g_str_equal); gtk_list_store_clear(wb.file_store); guint shown=0;
- for(guint i=0;i<wb.files->len+(wb.workspace_from_project ? 0 : documents_array->len) && shown<10000;i++) {
-  const gchar *path=NULL;
-  if(i<wb.files->len) path=g_ptr_array_index(wb.files,i);
-  else { GeanyDocument *doc=g_ptr_array_index(documents_array,i-wb.files->len); if(doc->is_valid) path=doc->file_name; }
-  if(!path || !g_utf8_validate(path,-1,NULL) || g_hash_table_contains(seen,path)) continue;
-  g_hash_table_add(seen,(gpointer)path);
-  if(insight_lookup_filter_match(filter,NULL,NULL,path,NULL)) { GtkTreeIter iter; gchar *name=g_path_get_basename(path); gtk_list_store_append(wb.file_store,&iter); gtk_list_store_set(wb.file_store,&iter,0,name,1,path,-1); g_free(name); shown++; }
- }
- g_hash_table_destroy(seen); insight_lookup_filter_free(filter);
+ (void)entry; (void)data; if(!wb.file_store) return; SymbolListJob *j=symbol_list_begin(wb.file_store,wb.file_entry,10000,TRUE); if(!j) return;
+ j->paths=g_ptr_array_new_with_free_func(g_free);
+ for(guint n=0;n<wb.files->len;n++) g_ptr_array_add(j->paths,g_strdup(g_ptr_array_index(wb.files,n)));
+ if(!wb.workspace_from_project) for(guint n=0;n<documents_array->len;n++) { GeanyDocument *doc=g_ptr_array_index(documents_array,n); if(doc->is_valid && doc->file_name) g_ptr_array_add(j->paths,g_strdup(doc->file_name)); }
+ symbol_list_launch(wb.file_store,j);
 }
 static void file_selected(GtkTreeSelection *selection,gpointer data) {
  (void)data; GtkTreeIter iter; GtkTreeModel *model;
@@ -746,7 +768,7 @@ static void file_sort(GtkComboBox *combo,gpointer data) {
  (void)data; gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(wb.file_store),gtk_combo_box_get_active(combo)==1 ? 1 : 0,GTK_SORT_ASCENDING);
 }
 static void create_files_browser(void) {
- GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,4); wb.file_entry=gtk_search_entry_new();
+ GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,4); wb.file_entry=gtk_search_entry_new(); gtk_widget_set_name(wb.file_entry,"insight-file-query");
  gtk_entry_set_placeholder_text(GTK_ENTRY(wb.file_entry),"Find workspace file…");
  wb.file_store=gtk_list_store_new(2,G_TYPE_STRING,G_TYPE_STRING); wb.file_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(wb.file_store)); gtk_widget_set_name(wb.file_view,"insight-project-files");
  for(int i=0;i<2;i++) { GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(i ? "Path" : "File",gtk_cell_renderer_text_new(),"text",i,NULL); gtk_tree_view_column_set_sort_column_id(column,i); gtk_tree_view_append_column(GTK_TREE_VIEW(wb.file_view),column); }
@@ -1030,17 +1052,13 @@ static void create_browser(void) {
  gtk_widget_show_all(wb.browser); browser_filter(NULL,NULL);
 }
 static void local_filter(GtkEditable *entry,gpointer data) {
- (void)entry; (void)data; if(!wb.local_symbols) return;
- refresh_index(); GeanyDocument *doc=document_get_current(); wb.local_doc_id=doc ? doc->id : 0;
+ (void)entry; (void)data; if(!wb.local_symbols) return; GeanyDocument *doc=document_get_current(); wb.local_doc_id=doc ? doc->id : 0;
  gtk_label_set_text(GTK_LABEL(wb.local_label),doc && doc->file_name ? doc->file_name : "Current file symbols");
- gtk_list_store_clear(wb.local_symbols); if(!doc || !doc->tm_file || !doc->tm_file->tags_array) return;
- InsightLookupFilter *filter=entry_filter(wb.local_entry,FALSE); if(!filter) return; guint shown=0;
- for(guint i=0;i<doc->tm_file->tags_array->len && shown<2000;i++) {
-  TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,i); if(!tag || !tag->name || !tag->line || !g_utf8_validate(tag->name,-1,NULL)) continue;
-  gchar kind[2]={tag->kind_letter,0}; if(!insight_lookup_filter_match(filter,tag->name,tag->scope && g_utf8_validate(tag->scope,-1,NULL) ? tag->scope : "",doc->file_name,kind)) continue; GtkTreeIter iter; gtk_list_store_append(wb.local_symbols,&iter);
-  gtk_list_store_set(wb.local_symbols,&iter,SYMBOL_NAME,tag->name,SYMBOL_SCOPE,tag->scope && g_utf8_validate(tag->scope,-1,NULL) ? tag->scope : "",SYMBOL_PATH,doc->file_name,SYMBOL_LINE,(gulong)tag->line,SYMBOL_KIND,kind,-1); shown++;
- }
- insight_lookup_filter_free(filter);
+ SymbolListJob *j=symbol_list_begin(wb.local_symbols,wb.local_entry,2000,FALSE); if(!j) return; j->local=TRUE; j->path=g_strdup(doc ? doc->file_name : NULL); j->tags=g_ptr_array_new_with_free_func((GDestroyNotify)tm_tag_unref);
+ /* Tags are immutable after publication and their reference count is atomic.
+  * Capture references, not GTK or a mutable TMSourceFile, for the worker. */
+ if(doc && doc->tm_file && doc->tm_file->tags_array) for(guint n=0;n<doc->tm_file->tags_array->len;n++) { TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,n); if(tag) g_ptr_array_add(j->tags,tm_tag_ref(tag)); }
+ symbol_list_launch(wb.local_symbols,j);
 }
 static void symbol_sort(GtkComboBox *combo,gpointer data) {
  GtkTreeSortable *model=GTK_TREE_SORTABLE(data); gint mode=gtk_combo_box_get_active(combo);
@@ -1054,9 +1072,9 @@ static GtkWidget *sort_selector(GtkListStore *model) {
 static void create_local_browser(void) {
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,3); wb.local_label=gtk_label_new("Current file symbols");
  gtk_label_set_ellipsize(GTK_LABEL(wb.local_label),PANGO_ELLIPSIZE_MIDDLE);
- wb.local_entry=gtk_search_entry_new(); gtk_entry_set_placeholder_text(GTK_ENTRY(wb.local_entry),"Symbol Name…");
+ wb.local_entry=gtk_search_entry_new(); gtk_widget_set_name(wb.local_entry,"insight-local-query"); gtk_entry_set_placeholder_text(GTK_ENTRY(wb.local_entry),"Symbol Name…");
  wb.local_symbols=gtk_list_store_new(SYMBOL_COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG,G_TYPE_STRING);
- wb.local_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(wb.local_symbols));
+ wb.local_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(wb.local_symbols)); gtk_widget_set_name(wb.local_view,"insight-local-symbols");
  gint columns[]={SYMBOL_NAME,SYMBOL_LINE,SYMBOL_KIND}; const char *labels[]={"Symbol","Line","Type"};
  for(guint i=0;i<3;i++) { GtkTreeViewColumn *c=gtk_tree_view_column_new_with_attributes(labels[i],gtk_cell_renderer_text_new(),"text",columns[i],NULL); gtk_tree_view_column_set_sort_column_id(c,columns[i]); gtk_tree_view_append_column(GTK_TREE_VIEW(wb.local_view),c); }
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),wb.local_view);
@@ -2470,6 +2488,8 @@ void insight_workbench_finalize(void) {
  if(wb.refresh) g_source_remove(wb.refresh);
  if(wb.panel_idle) g_source_remove(wb.panel_idle);
  if(wb.symbols) symbol_list_stop(symbol_list_state(wb.symbols));
+ if(wb.file_store) symbol_list_stop(symbol_list_state(wb.file_store));
+ if(wb.local_symbols) symbol_list_stop(symbol_list_state(wb.local_symbols));
  g_free(wb.prefs_path);
  stop_usage(); g_ptr_array_free(wb.usage_paths,TRUE);
  g_free(wb.search_state_path); g_ptr_array_free(wb.search_files,TRUE); g_ptr_array_free(wb.search_history,TRUE); g_object_unref(wb.search_matches);

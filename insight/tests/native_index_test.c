@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "../../src/tagmanager/tm_ctags.h"
+#include "../../src/tagmanager/tm_workspace.h"
 #include <glib/gstdio.h>
 typedef struct { TMSourceFile *source; const char *path; InsightIndex *shared; GMutex *mutex; GCond *ready; guint *waiting; gboolean *start; } ParserThread;
 static gpointer parse_in_worker(gpointer data) {
@@ -36,7 +37,7 @@ int main(void) {
  assert(insight_native_import(index,&source,"/project/a.cpp") && insight_index_count(index)==0);
  assert(insight_native_import(index,NULL,"/project/a.cpp"));
  g_ptr_array_free(tags,TRUE); insight_index_free(index);
- tm_ctags_init();
+ tm_get_workspace();
  const char *code="class Base {};\nclass Widget : public Base {\npublic: int run(int value) { return value; }\n};\nint parsed_function(int value) { return value; }\n";
  char filename[]="native-parser-test-XXXXXX"; gint descriptor=g_mkstemp(filename); assert(descriptor>=0); g_close(descriptor,NULL);
  char *absolute=g_canonicalize_filename(filename,NULL); TMSourceFile *parsed=tm_source_file_new(absolute,"C++"); assert(parsed && parsed->lang>=0);
@@ -45,6 +46,11 @@ int main(void) {
  assert(insight_index_find(index,"Widget",1,found,2)==1 && strstr(found[0]->inheritance,"Base"));
  size_t before=insight_index_count(index);assert(!insight_native_parse(index,parsed,absolute,"a\0b",3));assert(insight_index_count(index)==before);
  assert(insight_native_parse(index,parsed,absolute,"",0));assert(insight_index_count(index)==0);
+ /* Publication transfers worker tags and rewrites owner pointers. A pinned
+  * old tag remains valid even after its source's array is replaced. */
+ const char *before_text="int before_publication(void) { return 1; }\n"; assert(insight_native_parse(index,parsed,absolute,before_text,strlen(before_text))); tm_get_workspace(); tm_workspace_add_source_file_noupdate(parsed); assert(parsed->tags_array->len==1); TMTag *retained=tm_tag_ref(g_ptr_array_index(parsed->tags_array,0));
+ TMSourceFile *prepared=tm_source_file_new(absolute,"C++"); const char *after_text="int after_publication(void) { return 2; }\n"; tm_source_file_parse(prepared,(guchar *)after_text,strlen(after_text),TRUE); tm_workspace_prepare_source_file_tags(prepared); tm_workspace_publish_source_file_tags(parsed,prepared);
+ assert(prepared->tags_array->len==0 && parsed->tags_array->len==1); TMTag *published=g_ptr_array_index(parsed->tags_array,0); assert(published->file==parsed && !strcmp(published->name,"after_publication")); assert(!strcmp(retained->name,"before_publication")); assert(tm_get_workspace()->tags_array->len==1); assert(g_ptr_array_index(tm_get_workspace()->tags_array,0)==published); tm_tag_unref(retained); tm_source_file_free(prepared); tm_workspace_remove_source_file(parsed);
  /* Ctags' global parser state must be serialized across simultaneous jobs.
   * Readers retain a snapshot after its original owner releases it. */
  GMutex mutex; GCond ready; g_mutex_init(&mutex); g_cond_init(&ready); guint waiting=0; gboolean start=FALSE;
@@ -53,6 +59,6 @@ int main(void) {
  for(guint n=0;n<4;n++) { jobs[n]=(ParserThread){tm_source_file_new(absolute,"C++"),absolute,insight_index_ref(shared),&mutex,&ready,&waiting,&start}; assert(jobs[n].source); threads[n]=g_thread_new("parser-regression",parse_in_worker,&jobs[n]); }
  insight_index_free(shared); g_mutex_lock(&mutex); while(waiting<4) g_cond_wait(&ready,&mutex); start=TRUE; g_cond_broadcast(&ready); g_mutex_unlock(&mutex);
  for(guint n=0;n<4;n++) { g_thread_join(threads[n]); tm_source_file_free(jobs[n].source); } g_cond_clear(&ready); g_mutex_clear(&mutex);
- tm_source_file_free(parsed);insight_index_free(index);g_unlink(filename);g_free(absolute);
+ tm_source_file_free(parsed);insight_index_free(index);tm_workspace_free();g_unlink(filename);g_free(absolute);
  puts("native index: all checks passed"); return 0;
 }

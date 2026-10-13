@@ -106,6 +106,13 @@ enum
 
 
 static guint doc_id_counter = 0;
+static guint64 document_tags_epoch = 1;
+static void document_tags_cancel(GeanyDocument *doc) {
+ if(!doc || !doc->priv) return;
+ doc->priv->tag_parse_generation++;
+ if(doc->priv->tag_list_update_source) { g_source_remove(doc->priv->tag_list_update_source); doc->priv->tag_list_update_source=0; }
+ if(doc->priv->tag_parse_cancel) { g_cancellable_cancel(doc->priv->tag_parse_cancel); g_clear_object(&doc->priv->tag_parse_cancel); }
+}
 
 
 static void document_undo_clear_stack(GSList **stack);
@@ -344,11 +351,13 @@ void document_init_doclist(void)
 
 void document_finalize(void)
 {
+	document_tags_epoch++;
 	guint i;
 
 	for (i = 0; i < documents_array->len; i++)
 		g_free(documents[i]);
 	g_ptr_array_free(documents_array, TRUE);
+	documents_array = NULL;
 }
 
 
@@ -654,6 +663,7 @@ static gboolean remove_page(guint page_num)
 
 	/* tell any plugins that the document is about to be closed */
 	g_signal_emit_by_name(geany_object, "document-close", doc);
+	document_tags_cancel(doc);
 
 	/* Checking real_path makes it likely the file exists on disk */
 	if (! main_status.closing_all && doc->real_path != NULL)
@@ -2595,6 +2605,7 @@ gint document_replace_all(GeanyDocument *doc, const gchar *find_text, const gcha
  */
 void document_update_tags(GeanyDocument *doc)
 {
+	document_tags_cancel(doc);
 	insight_workbench_index_changed();
 	guchar *buffer_ptr;
 	gsize len;
@@ -2706,6 +2717,32 @@ void document_highlight_tags(GeanyDocument *doc)
 }
 
 
+typedef struct { TMSourceFile *parsed; gchar *path,*language; guchar *text; gsize length; TMParserType lang; guint document; guint64 generation,epoch; } DocumentTagsJob;
+static void document_tags_job_free(gpointer data) { DocumentTagsJob *j=data; tm_source_file_free(j->parsed); g_free(j->path); g_free(j->language); g_free(j->text); g_free(j); }
+static void document_tags_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
+ (void)source; DocumentTagsJob *j=data;
+ if(!g_cancellable_is_cancelled(cancel)) {
+  j->parsed=tm_source_file_new(j->path,j->language);
+  if(j->parsed) { j->parsed->lang=j->lang; tm_source_file_parse(j->parsed,j->text,j->length,TRUE); tm_workspace_prepare_source_file_tags(j->parsed); }
+ }
+ g_task_return_boolean(task,j->parsed!=NULL);
+}
+static void document_tags_job_done(GObject *source,GAsyncResult *result,gpointer data) {
+ (void)source; (void)data; GTask *task=G_TASK(result); DocumentTagsJob *j=g_task_get_task_data(task); gboolean ok=g_task_propagate_boolean(task,NULL);
+ if(j->epoch!=document_tags_epoch || main_status.quitting || !documents_array) return;
+ GeanyDocument *doc=document_find_by_id(j->document);
+ if(!DOC_VALID(doc) || !doc->priv || j->generation!=doc->priv->tag_parse_generation) return;
+ g_clear_object(&doc->priv->tag_parse_cancel);
+ if(!ok || !doc->tm_file || doc->tm_file->lang!=j->lang || g_strcmp0(doc->tm_file->file_name,j->path)) return;
+ tm_workspace_publish_source_file_tags(doc->tm_file,j->parsed);
+ sidebar_update_tag_list(doc,TRUE); document_highlight_tags(doc); insight_workbench_index_changed();
+}
+static void document_update_tags_async(GeanyDocument *doc) {
+ if(!DOC_VALID(doc) || !doc->tm_file || !doc->file_type || !filetype_has_tags(doc->file_type)) { document_update_tags(doc); return; }
+ document_tags_cancel(doc); DocumentTagsJob *j=g_new0(DocumentTagsJob,1); j->document=doc->id; j->generation=doc->priv->tag_parse_generation; j->epoch=document_tags_epoch; j->lang=doc->tm_file->lang; j->path=g_strdup(doc->tm_file->file_name); j->language=g_strdup(tm_source_file_get_lang_name(j->lang));
+ j->length=sci_get_length(doc->editor->sci); j->text=g_malloc(j->length+1); if(j->length) memcpy(j->text,(const void *)SSM(doc->editor->sci,SCI_GETCHARACTERPOINTER,0,0),j->length); j->text[j->length]=0;
+ doc->priv->tag_parse_cancel=g_cancellable_new(); GTask *task=g_task_new(NULL,doc->priv->tag_parse_cancel,document_tags_job_done,NULL); g_task_set_task_data(task,j,document_tags_job_free); g_task_run_in_thread(task,document_tags_job_run); g_object_unref(task);
+}
 static gboolean on_document_update_tag_list_idle(gpointer data)
 {
 	GeanyDocument *doc = data;
@@ -2714,7 +2751,7 @@ static gboolean on_document_update_tag_list_idle(gpointer data)
 		return FALSE;
 
 	if (! main_status.quitting)
-		document_update_tags(doc);
+		document_update_tags_async(doc);
 
 	doc->priv->tag_list_update_source = 0;
 
@@ -2725,6 +2762,7 @@ static gboolean on_document_update_tag_list_idle(gpointer data)
 
 void document_update_tag_list_in_idle(GeanyDocument *doc)
 {
+	document_tags_cancel(doc);
 	if (editor_prefs.autocompletion_update_freq <= 0 || ! filetype_has_tags(doc->file_type))
 		return;
 
