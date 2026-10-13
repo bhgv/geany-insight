@@ -54,6 +54,13 @@ static gchar *type_owner(const gchar *type) {
 gchar *insight_native_member_owner(const InsightIndex *index,const char *path,const char *scope,gulong line,const char *text,gsize position,gboolean *member) {
  *member=FALSE; if(!text || position>strlen(text)) return NULL;
  gsize at=position; while(at && identifier_byte(text[at-1])) at--; while(at && g_ascii_isspace(text[at-1])) at--;
+ if(at>=2 && text[at-2]==':' && text[at-1]==':') {
+  *member=TRUE; at-=2; while(at && g_ascii_isspace(text[at-1])) at--; gsize end=at;
+  while(at && (identifier_byte(text[at-1]) || text[at-1]==':')) at--;
+  gchar *qualified=g_strndup(text+at,end-at); gchar *owner=g_strdup(qualified);
+  while(g_str_has_prefix(owner,"::")) { gchar *next=g_strdup(owner+2); g_free(owner); owner=next; }
+  g_free(qualified); return owner;
+ }
  if(at>=2 && text[at-2]=='-' && text[at-1]=='>') at-=2;
  else if(at && text[at-1]=='.') at--;
  else return NULL;
@@ -78,7 +85,7 @@ gchar *insight_native_member_owner(const InsightIndex *index,const char *path,co
  return owner;
 }
 gboolean insight_native_member_matches(const InsightSymbol *symbol,const char *owner) {
- if(!owner || !*owner || !symbol->scope || !*symbol->scope || !strcmp(symbol->kind,"l") || !strcmp(symbol->kind,"z")) return FALSE;
+ if(!owner || !symbol->scope || !strcmp(symbol->kind,"l") || !strcmp(symbol->kind,"z")) return FALSE;
  return !strcmp(symbol->scope,owner);
 }
 

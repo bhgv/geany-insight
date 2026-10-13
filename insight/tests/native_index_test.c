@@ -66,6 +66,14 @@ int main(void) {
  assert(eligible==1); g_free(owner);
  owner=insight_native_member_owner(index,absolute,"use",4,"unknown->data",12,&is_member); assert(is_member && !owner);
  owner=insight_native_member_owner(index,absolute,"use",4,"data",3,&is_member); assert(!is_member && !owner);
+ const char *qualified_code="namespace std { int min(int a, int b) { return a; } }\nnamespace other { int min(int a, int b) { return b; } }\nvoid caller(int min) { (void)std::min(1, 2); }\n";
+ assert(insight_native_parse(index,parsed,absolute,qualified_code,strlen(qualified_code)));
+ owner=insight_native_member_owner(index,absolute,"caller",3,qualified_code,(gsize)(strstr(qualified_code,"std::min")-qualified_code)+7,&is_member);
+ assert(is_member && owner && !strcmp(owner,"std")); member_count=insight_index_find(index,"min",1,members,16); eligible=0;
+ for(size_t n=0;n<member_count && n<16;n++) if(insight_native_member_matches(members[n],owner)) { eligible++; assert(members[n]->line==1); assert(!strcmp(members[n]->kind,"f")); }
+ assert(eligible==1); g_free(owner);
+ owner=insight_native_member_owner(index,absolute,"caller",3,"outer::inner::min",16,&is_member); assert(is_member && !strcmp(owner,"outer::inner")); g_free(owner);
+ owner=insight_native_member_owner(index,absolute,"caller",3,"::min",5,&is_member); assert(is_member && owner && !*owner); g_free(owner);
  size_t before=insight_index_count(index);assert(!insight_native_parse(index,parsed,absolute,"a\0b",3));assert(insight_index_count(index)==before);
  assert(insight_native_parse(index,parsed,absolute,"",0));assert(insight_index_count(index)==0);
  /* Publication transfers worker tags and rewrites owner pointers. A pinned
