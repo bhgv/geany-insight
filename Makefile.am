@@ -13,6 +13,8 @@ WIN32_BUILD_FILES = \
 	geany.exe.manifest
 
 EXTRA_DIST = \
+	LICENSE \
+	LICENSES.md \
 	autogen.sh \
 	scripts/gen-api-gtkdoc.py \
 	scripts/gen-signallist.sh \
@@ -116,6 +118,10 @@ EXTRA_DIST += \
 	insight/core/runtime.h \
 	insight/desktop/extensions.c \
 	insight/desktop/extensions.h \
+	insight/desktop/context_search.c \
+	insight/desktop/context_search.h \
+	insight/desktop/notebook_store.c \
+	insight/desktop/notebook_store.h \
 	insight/desktop/layout_state.c \
 	insight/desktop/layout_state.h \
 	insight/desktop/lookup_filter.c \
@@ -154,6 +160,8 @@ EXTRA_DIST += \
 	insight/tests/index_test.c \
 	insight/tests/native_bridge.py \
 	insight/tests/native_index_test.c \
+	insight/tests/context_search_test.c \
+	insight/tests/notebook_store_test.c \
 	insight/tests/layout_state_test.c \
 	insight/tests/lookup_filter_test.c \
 	insight/tests/occurrences_test.c \

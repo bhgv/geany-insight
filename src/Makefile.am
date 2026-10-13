@@ -221,6 +221,10 @@ libgeany_la_SOURCES += \
 	../insight/core/runtime.h \
 	../insight/desktop/index_cache.c \
 	../insight/desktop/index_cache.h \
+	../insight/desktop/context_search.c \
+	../insight/desktop/context_search.h \
+	../insight/desktop/notebook_store.c \
+	../insight/desktop/notebook_store.h \
 	../insight/desktop/layout_state.c \
 	../insight/desktop/layout_state.h \
 	../insight/desktop/lookup_filter.c \

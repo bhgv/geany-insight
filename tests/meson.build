@@ -403,3 +403,8 @@ test('Insight lookup filters', lookup_filter_test)
 
 layout_state_test = executable('test_insight_layout_state', '../insight/tests/layout_state_test.c', '../insight/desktop/layout_state.c', include_directories: include_directories('../insight/desktop'), dependencies: glib)
 test('Insight layout state', layout_state_test)
+
+context_search_test = executable('test_insight_context_search', '../insight/tests/context_search_test.c', '../insight/desktop/context_search.c', include_directories: include_directories('../insight/desktop'), dependencies: glib)
+test('Insight context search', context_search_test)
+notebook_store_test = executable('test_insight_notebook_store', '../insight/tests/notebook_store_test.c', '../insight/desktop/notebook_store.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)
+test('Insight notebook store', notebook_store_test)
