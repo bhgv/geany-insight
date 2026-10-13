@@ -4395,6 +4395,8 @@ static void fold_all(GeanyEditor *editor, gboolean want_fold)
 	if (editor == NULL || ! editor_prefs.folding)
 		return;
 
+	/* Explicit whole-document folding needs complete lexer fold levels. */
+	sci_colourise(editor->sci, 0, -1);
 	lines = sci_get_line_count(editor->sci);
 	first = sci_get_first_visible_line(editor->sci);
 
@@ -4821,10 +4823,12 @@ static gboolean editor_check_colourise(GeanyEditor *editor)
 		return FALSE;
 
 	doc->priv->colourise_needed = FALSE;
-	sci_colourise(editor->sci, 0, -1);
+	/* Lexers already invalidate styling when text, lexer or keyword lists
+	 * change. Let Scintilla's adaptive idle scheduler style the visible area
+	 * and remaining lines instead of forcing the entire file before drawing. */
+	SSM(editor->sci, SCI_SETIDLESTYLING, SC_IDLESTYLING_ALL, 0);
 
-	/* now that the current document is colourised, fold points are now accurate,
-	 * so force an update of the current function/tag. */
+	/* Refresh the current location; fold styling will complete incrementally. */
 	symbols_get_current_function(NULL, NULL);
 	ui_update_statusbar(NULL);
 
@@ -5022,6 +5026,7 @@ ScintillaObject *editor_create_widget(GeanyEditor *editor)
 	/* temporarily change editor to use the new sci widget */
 	old = editor->sci;
 	sci = create_new_sci(editor);
+	SSM(sci, SCI_SETIDLESTYLING, SC_IDLESTYLING_ALL, 0);
 	editor->sci = sci;
 
 	editor_set_indent(editor, iprefs->type, iprefs->width);

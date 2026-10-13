@@ -102,6 +102,7 @@ static gboolean step(gpointer data) {
   gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(overview_menu),FALSE); g_assert_false(gtk_widget_get_visible(gtk_widget_get_parent(GTK_WIDGET(map)))); gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(overview_menu),TRUE);
   event=gdk_event_new(GDK_SCROLL); event->scroll.window=g_object_ref(gtk_widget_get_window(GTK_WIDGET(map))); event->scroll.state=GDK_CONTROL_MASK; event->scroll.direction=GDK_SCROLL_UP; gtk_widget_event(GTK_WIDGET(map),event); gdk_event_free(event);
  } else if(phase==3) {
+  g_assert_cmpint(SSM(doc->editor->sci,SCI_GETIDLESTYLING,0,0),==,SC_IDLESTYLING_ALL);
   same_text(doc); g_assert_cmpint(SSM(map_for(doc),SCI_STYLEGETSIZEFRACTIONAL,STYLE_DEFAULT,0),>,initial_size);
   GtkWidget *keywords=find_named(window,"insight-search-keywords"),*variations=find_named(window,"insight-search-variations"),*scope=find_named(window,"insight-search-scope"),*query=find_named(window,"insight-project-query"); g_assert_nonnull(keywords); g_assert_nonnull(variations); g_assert_nonnull(scope); g_assert_nonnull(query); g_assert_false(gtk_widget_get_sensitive(variations));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(keywords),TRUE); g_assert_true(gtk_widget_get_sensitive(variations)); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(variations),TRUE); gtk_combo_box_set_active(GTK_COMBO_BOX(scope),2); gtk_entry_set_text(GTK_ENTRY(query),"save write"); g_signal_emit_by_name(query,"activate");
