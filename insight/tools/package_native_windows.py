@@ -19,6 +19,9 @@ def main():
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--strip', required=True)
     a = p.parse_args()
+    options = json.loads((a.build / 'meson-info/intro-buildoptions.json').read_text())
+    if not any(option['name'] == 'plugins' and option['value'] for option in options):
+        raise SystemExit('Native Windows delivery requires a build with -Dplugins=true')
     destination = a.out / 'geany-insight-0.8-native-windows-x64'
     if destination.exists():
         raise SystemExit('Output directory already exists: ' + str(destination))
@@ -26,8 +29,16 @@ def main():
     for name in ['bin', 'etc', 'lib', 'share']:
         if (a.runtime / name).exists():
             shutil.copytree(a.runtime / name, destination / name)
-    # The editor is our full build; no old editor plugin is included.
+    # Use plugins built against this editor, rather than the older runtime SDK.
     shutil.rmtree(destination / 'lib/geany', ignore_errors=True)
+    plugins = destination / 'lib/geany'
+    plugins.mkdir(parents=True)
+    for module in sorted((a.build / 'plugins').glob('*.dll')):
+        if module.name.startswith('demo'):
+            continue
+        target = plugins / module.name
+        shutil.copy2(module, target)
+        subprocess.run([a.strip, '--strip-unneeded', str(target)], check=True)
     for name in ['grep.exe', 'sort.exe']:
         (destination / 'bin' / name).unlink(missing_ok=True)
     for name in ['geany.exe', 'libgeany-0.dll']:

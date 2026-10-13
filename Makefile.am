@@ -222,4 +222,5 @@ EXTRA_DIST += \
 	insight/vendor/lua/lzio.c \
 	insight/vendor/lua/lzio.h \
 	insight/vendor/lua/onelua.c \
-	insight/docs/native-workbench.md
+	insight/docs/native-workbench.md \
+	insight/docs/source-insight-layout.md

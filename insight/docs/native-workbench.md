@@ -2,7 +2,7 @@
 
 Этапы 27–56 содержат 30 отдельных Git-коммитов. Начиная с этапа 33 интерфейс
 реализован в `src/insight-workbench.c` и линкуется в libgeany. Он создаётся
-libmain и работает при отключённых плагинах (`geany --no-plugins`). Native
+libmain и не зависит от загрузки плагинов. Plugin API Geany сохранён. Native
 изменения подключены к editor.c, document.c, callbacks.c и ui_utils.c.
 
 ## Интерфейс
@@ -19,14 +19,17 @@ source / Enter открывает контекст в основном реда�
 Back/Forward хранит до 64 ручных переходов. View → Context window скрывает
 панель независимо от Messages.
 
-Workspace — поиск символов по префиксу и outline текущего файла. Выбор строки
-показывает preview; двойной щелчок открывает определение. Project files ищет
-файлы по подстроке. Usages ищет целый идентификатор по одному файлу за idle с
+Слева File Symbols показывает теги текущего документа с поиском и сортировкой.
+Справа Project Symbols ищет фрагменты имён без учёта регистра; Project Files
+ищет фрагменты путей и сортирует имена/пути; Folders показывает дерево manifest.
+Выбор файла или символа показывает preview, двойной щелчок открывает исходник.
+Подробное соответствие руководству: [source-insight-layout.md](source-insight-layout.md).
+Usages ищет целый идентификатор по одному файлу за idle с
 отменой и опцией Current buffer only. SHA256 снимка защищает выделение
 совпадения от использования устаревших byte offsets. Поиск употреблений
 лексический: строки/комментарии включены, область видимости не разрешается.
 
-Первый запуск показывает Workspace и Context вместо Messages. Build скрыт;
+Первый запуск показывает File Symbols, правые проектные панели и Context. Build скрыт;
 сборка пользовательских проектов не входит в новые функции. Старый upstream
 код сборки остаётся в дереве. Интерфейс получает собственные Navigate и Scripts,
 а заголовок приложения — Geany Insight. Стили панели используют текущую GTK-тему.
@@ -59,7 +62,8 @@ Source folder выбирает корень без файла проекта и 
 
 `configdir/insight/workbench.conf` хранит splitter, Follow cursor, видимость
 и root; `lua-extension.conf` хранит автозагрузку Lua. Настройки native workbench
-отдельны от legacy plugin. Превью дисковых файлов требует UTF-8 без NUL;
+отдельны от legacy plugin. Дисковое превью использует Geany autodetection/BOM;
+после преобразования допускается до 2 МиБ текста без NUL;
 открытые документы используют уже преобразованный редактором UTF-8 буфер.
 
 ## Встроенный Lua
@@ -129,13 +133,14 @@ Copy location копирует адрес каретки в виде `file:line`
 перехода по строке, байтовые совпадения Usages проверяются без нормализации).
 
 Запуск `Start-Native-Insight.cmd` создаёт отдельный `profile` рядом с программой.
-Дополнения отключены при запуске: Context и Scripts являются частью редактора.
+Context и Scripts являются частью редактора. В новых сборках plugins=true:
+штатные плагины доступны через Plugin Manager, native workbench от них не зависит.
 `Run-Checks.cmd` запускает девять проверок ядра. Архив содержит GTK runtime,
 русские переводы, примеры Lua, документацию и Git bundle с полными исходниками.
 
 Для сборки используется Meson cross-file с MinGW-w64 C/C++/windres и Windows
 GTK3 SDK; `windres` должен использовать именно целевой GCC с `-E -xc -DRC_INVOKED`.
-Опции: `-Dplugins=false -Dsocket=true -Dvte=false -Dhtml-docs=disabled
+Опции: `-Dplugins=true -Dsocket=true -Dvte=false -Dhtml-docs=disabled
 -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false`, C/C++ link flags
 `-static-libgcc -static-libstdc++`. После `ninja` упаковка выполняется
 `insight/tools/package_native_windows.py --runtime GTK_RUNTIME --build MESON_BUILD
