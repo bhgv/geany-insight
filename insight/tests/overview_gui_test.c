@@ -11,7 +11,7 @@
 
 #undef SSM
 #define SSM(sci,msg,w,l) scintilla_send_message((sci),(msg),(w),(l))
-static guint phase,original_id; static gint initial_size; static gchar *test_directory,*test_project;
+static guint phase,original_id; static gint initial_size; static gchar *test_directory,*test_project,*bad_project,*second_project;
 static GtkWidget *window,*overview_menu;
 static GtkWidget *find_named(GtkWidget *root,const char *name) {
  if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;
@@ -31,12 +31,20 @@ static gboolean edit_membership(gpointer data) {
  return G_SOURCE_REMOVE;
 }
 static gboolean select_project(gpointer data) {
- (void)data; GList *windows=gtk_window_list_toplevels(); GtkWidget *dialog=NULL;
+ const gchar *target=GPOINTER_TO_INT(data)==2 ? second_project : (data ? bad_project : test_project); GList *windows=gtk_window_list_toplevels(); GtkWidget *dialog=NULL;
  for(GList *p=windows;p;p=p->next) if(GTK_IS_FILE_CHOOSER(p->data) && !g_strcmp0(gtk_window_get_title(GTK_WINDOW(p->data)),"Open Project")) dialog=p->data;
  g_list_free(windows); g_assert_nonnull(dialog);
  gchar *filename=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
- if(g_strcmp0(filename,test_project)) { g_assert_true(gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(dialog),test_project)); g_free(filename); return G_SOURCE_CONTINUE; }
+ if(g_strcmp0(filename,target)) { g_assert_true(gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(dialog),target)); g_free(filename); return G_SOURCE_CONTINUE; }
  g_free(filename); gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_ACCEPT); return G_SOURCE_REMOVE;
+}
+static gboolean dismiss_invalid(gpointer data) {
+ static gboolean rejected; (void)data; GList *windows=gtk_window_list_toplevels(); GtkWidget *message=NULL,*chooser=NULL;
+ for(GList *p=windows;p;p=p->next) { if(GTK_IS_MESSAGE_DIALOG(p->data)) message=p->data; else if(GTK_IS_FILE_CHOOSER(p->data)) chooser=p->data; }
+ g_list_free(windows);
+ if(message) { rejected=TRUE; gtk_dialog_response(GTK_DIALOG(message),GTK_RESPONSE_OK); return G_SOURCE_CONTINUE; }
+ if(rejected && chooser) { rejected=FALSE; gtk_dialog_response(GTK_DIALOG(chooser),GTK_RESPONSE_CANCEL); return G_SOURCE_REMOVE; }
+ return G_SOURCE_CONTINUE;
 }
 static void project_empty(void) { GtkWidget *view=find_named(window,"insight-project-files"),*symbols=find_named(window,"insight-project-symbols"); g_assert_nonnull(view); g_assert_nonnull(symbols); g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),NULL),==,0); g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(symbols)),NULL),==,0); }
 static ScintillaObject *map_for(GeanyDocument *doc) {
@@ -101,7 +109,19 @@ static gboolean step(gpointer data) {
   GtkWidget *close=ui_lookup_widget(window,"project_close1"),*open=ui_lookup_widget(window,"project_open1"); g_assert_true(GTK_IS_MENU_ITEM(close)); g_assert_true(GTK_IS_MENU_ITEM(open)); gtk_menu_item_activate(GTK_MENU_ITEM(close));  g_timeout_add(150,select_project,NULL); gtk_menu_item_activate(GTK_MENU_ITEM(open));
  } else if(phase==9) {
   g_assert_nonnull(strstr(gtk_window_get_title(GTK_WINDOW(window)),"GUI smoke")); project_empty(); document_set_text_changed(doc,FALSE);
-  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: syntax, independent read-only, edits, scrolling, toggling, keyword variations, Context links, project Apply/Cancel, menu Open Project, tab close\n"); return G_SOURCE_REMOVE;
+  g_timeout_add(150,dismiss_invalid,NULL); g_timeout_add(150,select_project,GINT_TO_POINTER(1)); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
+ } else if(phase==10) {
+  g_assert_nonnull(strstr(gtk_window_get_title(GTK_WINDOW(window)),"GUI smoke")); project_empty(); document_set_text_changed(doc,FALSE);
+  g_assert_true(g_file_set_contents(bad_project,"[project\nname=Broken\n",-1,NULL)); g_timeout_add(150,dismiss_invalid,NULL); g_timeout_add(150,select_project,GINT_TO_POINTER(1)); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
+ } else if(phase==11) {
+  g_assert_nonnull(strstr(gtk_window_get_title(GTK_WINDOW(window)),"GUI smoke")); project_empty(); document_set_text_changed(doc,FALSE);
+  g_timeout_add(150,select_project,GINT_TO_POINTER(2)); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
+ } else if(phase==12) {
+  g_assert_nonnull(strstr(gtk_window_get_title(GTK_WINDOW(window)),"GUI second")); GtkWidget *view=find_named(window,"insight-project-files"); g_assert_nonnull(view); g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),NULL),==,1); document_set_text_changed(doc,FALSE);
+  g_timeout_add(150,select_project,NULL); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
+ } else if(phase==13) {
+  g_assert_nonnull(strstr(gtk_window_get_title(GTK_WINDOW(window)),"GUI smoke")); project_empty(); document_set_text_changed(doc,FALSE);
+  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: syntax, independent read-only, edits, scrolling, toggling, keyword variations, Context links, project Apply/Cancel, menu Open Project, invalid/malformed project preserves session, UTF-8 paths, project switching, tab close\n"); return G_SOURCE_REMOVE;
  }
  phase++; return G_SOURCE_CONTINUE;
 }
@@ -109,8 +129,10 @@ int main(void) {
  if(!g_getenv("GEANY_RUN_GUI_TESTS") || (!g_getenv("DISPLAY") && !g_getenv("WAYLAND_DISPLAY"))) { g_print("Set GEANY_RUN_GUI_TESTS=1 and provide a display to run the real editor GUI smoke\n"); return 77; }
  gchar *cwd=g_get_current_dir(),*name=g_strdup_printf("overview-gui-profile-%u",g_random_int()),*profile=g_build_filename(cwd,name,NULL); g_free(cwd); g_free(name); g_assert_cmpint(g_mkdir_with_parents(profile,0700),==,0);
  gchar *config=g_build_filename(profile,"geany.conf",NULL); g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\nuse_native_dialogs=false\n",-1,NULL)); g_free(config);
- test_directory=g_build_filename(profile,"sources",NULL); g_assert_cmpint(g_mkdir_with_parents(test_directory,0700),==,0); test_project=g_build_filename(profile,"fixture.geany",NULL); g_assert_true(g_file_set_contents(test_project,"[project]\nname=GUI smoke\nbase_path=sources\n",-1,NULL));
+ test_directory=g_build_filename(profile,"исходники с пробелом",NULL); g_assert_cmpint(g_mkdir_with_parents(test_directory,0700),==,0); test_project=g_build_filename(profile,"проект тест.geany",NULL); g_assert_true(g_file_set_contents(test_project,"[project]\nname=GUI smoke\nbase_path=исходники с пробелом\n",-1,NULL));
+ second_project=g_build_filename(profile,"второй проект.geany",NULL); g_assert_true(g_file_set_contents(second_project,"[project]\nname=GUI second\nbase_path=исходники с пробелом\n",-1,NULL));
+ bad_project=g_build_filename(profile,"invalid.geany",NULL); g_assert_true(g_file_set_contents(bad_project,"[other]\nname=Not a project\n",-1,NULL));
  gchar *argv[]={"overview-gui-smoke","--new-instance","--no-session","--config",profile,test_project,NULL}; g_timeout_add(700,step,NULL); g_timeout_add_seconds(20,timeout_fail,NULL);
  g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);
- gint result=main_lib(6,argv); g_free(test_project); g_free(test_directory); g_free(profile); return result;
+ gint result=main_lib(6,argv); g_free(second_project); g_free(bad_project); g_free(test_project); g_free(test_directory); g_free(profile); return result;
 }

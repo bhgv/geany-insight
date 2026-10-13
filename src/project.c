@@ -328,9 +328,18 @@ static void run_open_dialog(GtkFileChooser *dialog)
 		}
 		geany_debug("Project open: chooser selection resolved");
 
-		if (app->project && !project_close(FALSE)) {}
-		/* try to load the config */
-		else if (! project_load_file_with_session(filename))
+		/* Validate before closing the active project: a bad selection must not
+		 * discard the user's current project and document session. */
+		GKeyFile *candidate = g_key_file_new();
+		gboolean valid = g_key_file_load_from_file(candidate, filename, G_KEY_FILE_NONE, NULL)
+			&& g_key_file_has_group(candidate, "project");
+		g_key_file_free(candidate);
+		if (valid && app->project && !project_close(FALSE))
+		{
+			g_free(filename);
+			break;
+		}
+		if (!valid || !project_load_file_with_session(filename))
 		{
 			gchar *utf8_filename = utils_get_utf8_from_locale(filename);
 
@@ -1103,7 +1112,8 @@ static gboolean load_config(const gchar *filename)
 	g_return_val_if_fail(app->project == NULL && filename != NULL, FALSE);
 
 	config = g_key_file_new();
-	if (! g_key_file_load_from_file(config, filename, G_KEY_FILE_NONE, NULL))
+	if (! g_key_file_load_from_file(config, filename, G_KEY_FILE_NONE, NULL) ||
+		!g_key_file_has_group(config, "project"))
 	{
 		g_key_file_free(config);
 		return FALSE;
