@@ -14,6 +14,7 @@
 static guint phase,original_id; static gint initial_size; static gchar *test_directory,*test_project,*bad_project,*second_project;
 static GtkWidget *window,*overview_menu;
 static gboolean definition_cancel_checked;
+static gboolean selection_stress; static gint64 heartbeat_previous,heartbeat_max_gap;
 static guint preview_heartbeats; static gint large_last; static guint heartbeat_source;
 static GtkWidget *find_named(GtkWidget *root,const char *name) {
  if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;
@@ -67,7 +68,7 @@ static void screenshot(void) {
  for(gint y=0;y<h;y++) for(gint x=0;x<w;x++) g_string_append_len(ppm,(const gchar *)pixels+y*stride+x*channels,3);
  g_file_set_contents("overview-gui-smoke.ppm",ppm->str,ppm->len,NULL); g_string_free(ppm,TRUE); g_object_unref(picture);
 }
-static gboolean preview_heartbeat(gpointer data) { (void)data; preview_heartbeats++; return G_SOURCE_CONTINUE; }
+static gboolean preview_heartbeat(gpointer data) { (void)data; gint64 now=g_get_monotonic_time(); if(heartbeat_previous) heartbeat_max_gap=MAX(heartbeat_max_gap,now-heartbeat_previous); heartbeat_previous=now; preview_heartbeats++; return G_SOURCE_CONTINUE; }
 static gboolean move_back_before_definition(gpointer data) {
  (void)data; GeanyDocument *doc=document_get_current(); gchar *text=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1); gchar *name=strstr(text,"return worker_first"); g_assert_nonnull(name); sci_set_current_position(doc->editor->sci,(gint)(name-text)+9,FALSE); g_free(text); return G_SOURCE_REMOVE;
 }
@@ -158,7 +159,10 @@ static gboolean step(gpointer data) {
   GString *large=g_string_sized_new(1400000); for(guint i=0;i<100000;i++) g_string_append(large,"function_0();\n"); large_last=(gint)large->len-14; gchar *directory=g_path_get_dirname(test_project),*filename=g_build_filename(directory,"large-preview.c",NULL); g_free(directory); g_assert_true(g_file_set_contents(filename,large->str,large->len,NULL)); g_string_free(large,TRUE);
   GtkWidget *view=find_named(window,"insight-project-files"); GtkListStore *model=GTK_LIST_STORE(gtk_tree_view_get_model(GTK_TREE_VIEW(view))); GtkTreeIter iter; gtk_list_store_append(model,&iter); gtk_list_store_set(model,&iter,0,"large-preview.c",1,filename,-1); GtkTreePath *path=gtk_tree_model_get_path(GTK_TREE_MODEL(model),&iter); heartbeat_source=g_timeout_add(5,preview_heartbeat,NULL); gtk_tree_view_set_cursor(GTK_TREE_VIEW(view),path,NULL,FALSE); gtk_tree_path_free(path); g_free(filename);
  } else if(phase==17) {
-  ScintillaObject *preview=SCINTILLA(find_named(window,"insight-context-code")); g_assert_cmpint(sci_get_length(preview),==,1400000); if(!SSM(preview,SCI_INDICATORVALUEAT,31,large_last)) return G_SOURCE_CONTINUE; g_assert_cmpuint(preview_heartbeats,>,1); g_source_remove(heartbeat_source); heartbeat_source=0;
+  ScintillaObject *preview=SCINTILLA(find_named(window,"insight-context-code")); g_assert_cmpint(sci_get_length(preview),==,1400000); if(!SSM(preview,SCI_INDICATORVALUEAT,31,large_last)) return G_SOURCE_CONTINUE; g_assert_cmpuint(preview_heartbeats,>,1);
+  if(!selection_stress) { selection_stress=TRUE; GtkWidget *page=find_named(window,"insight-context"),*book=gtk_widget_get_parent(page); gtk_notebook_set_current_page(GTK_NOTEBOOK(book),gtk_notebook_page_num(GTK_NOTEBOOK(book),page)); SSM(preview,SCI_SETSEL,0,10); gtk_widget_queue_draw(GTK_WIDGET(preview)); return G_SOURCE_CONTINUE; }
+  if(!SSM(preview,SCI_INDICATORVALUEAT,30,9999*14)) return G_SOURCE_CONTINUE;
+  g_assert_cmpint(heartbeat_max_gap,<,500000); g_print("Large preview/10000 highlights: max UI heartbeat gap %.1f ms\n",heartbeat_max_gap/1000.0); g_source_remove(heartbeat_source); heartbeat_source=0;
   GtkWidget *page=gtk_widget_get_parent(GTK_WIDGET(preview)); while(page && !GTK_IS_NOTEBOOK(gtk_widget_get_parent(page))) page=gtk_widget_get_parent(page); g_assert_nonnull(page); GtkWidget *notebook=gtk_widget_get_parent(page); g_assert_true(GTK_IS_NOTEBOOK(notebook)); g_assert_cmpstr(gtk_notebook_get_tab_label_text(GTK_NOTEBOOK(notebook),page),==,"Context");
   gchar *directory=g_path_get_dirname(test_project),*filename=g_build_filename(directory,"double-click-large.txt",NULL); g_free(directory); gchar *large=g_malloc0(2200001); memset(large,'x',2200000); g_assert_true(g_file_set_contents(filename,large,2200000,NULL)); g_free(large);
   GtkWidget *view=find_named(window,"insight-project-files"); GtkListStore *model=GTK_LIST_STORE(gtk_tree_view_get_model(GTK_TREE_VIEW(view))); GtkTreeIter iter; gtk_list_store_append(model,&iter); gtk_list_store_set(model,&iter,0,"double-click-large.txt",1,filename,-1); GtkTreePath *path=gtk_tree_model_get_path(GTK_TREE_MODEL(model),&iter); gtk_tree_view_row_activated(GTK_TREE_VIEW(view),path,gtk_tree_view_get_column(GTK_TREE_VIEW(view),0)); gtk_tree_path_free(path); g_assert_cmpstr(document_get_current()->file_name,==,filename); g_assert_cmpint(sci_get_length(document_get_current()->editor->sci),==,2200000); g_free(filename);
@@ -171,7 +175,9 @@ static gboolean step(gpointer data) {
  } else if(phase==21) {
   ScintillaObject *preview=SCINTILLA(find_named(window,"insight-context-code")); if(sci_get_current_line(preview)!=1) return G_SOURCE_CONTINUE;
   GtkWidget *mode=find_named(window,"insight-relation-mode"),*query=find_named(window,"insight-relation-query"); gtk_combo_box_set_active(GTK_COMBO_BOX(mode),1); gtk_entry_set_text(GTK_ENTRY(query),"worker_first"); g_signal_emit_by_name(query,"activate"); gtk_entry_set_text(GTK_ENTRY(query),"worker_second"); g_signal_emit_by_name(query,"activate");
+  GtkWidget *symbols=find_named(window,"insight-symbol-query"); gtk_entry_set_text(GTK_ENTRY(symbols),"worker_first"); gtk_entry_set_text(GTK_ENTRY(symbols),"worker_second");
  } else if(phase==22) {
+  GtkWidget *symbol_view=find_named(window,"insight-project-symbols"); GtkTreeModel *symbol_model=gtk_tree_view_get_model(GTK_TREE_VIEW(symbol_view)); if(gtk_tree_model_iter_n_children(symbol_model,NULL)!=1) return G_SOURCE_CONTINUE; GtkTreeIter selected_symbol; g_assert_true(gtk_tree_model_get_iter_first(symbol_model,&selected_symbol)); gchar *symbol_name=NULL; gtk_tree_model_get(symbol_model,&selected_symbol,0,&symbol_name,-1); g_assert_cmpstr(symbol_name,==,"worker_second"); g_free(symbol_name);
   GtkWidget *view=find_named(window,"insight-relations"); GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view)); if(gtk_tree_model_iter_n_children(model,NULL)!=1) return G_SOURCE_CONTINUE; GtkTreeIter iter; g_assert_true(gtk_tree_model_get_iter_first(model,&iter)); gchar *name=NULL; gtk_tree_model_get(model,&iter,7,&name,-1); g_assert_cmpstr(name,==,"worker_second"); g_free(name);
   /* A zero-tag unsaved buffer must hide old disk symbols in the project view. */
   sci_set_text(doc->editor->sci,"/* no definitions remain */\n"); document_set_text_changed(doc,FALSE);
@@ -180,7 +186,7 @@ static gboolean step(gpointer data) {
   /* Quit while both a scan and a search are queued. */
   GtkWidget *reindex=find_button(window,"Reindex"); if(reindex) gtk_button_clicked(GTK_BUTTON(reindex));
   GtkWidget *query=find_named(window,"insight-project-query"); gtk_entry_set_text(GTK_ENTRY(query),"worker_second"); g_signal_emit_by_name(query,"activate");
-  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: editor icons, syntax, independent read-only, edits, scrolling, toggling, keyword variations, saved query history, preview-only result navigation, exact hit opening, result columns, stale result rejection, Context links, project Apply/Cancel, menu Open Project, invalid/malformed project preserves session, UTF-8 paths, project switching, responsive 1.4 MiB file selection, Context notebook tab, double-click opens >2 MiB file, delayed and cancelled word/selection definition lookup, latest-request symbol relations, zero-tag overlay, shutdown with queued work, tab close\n"); return G_SOURCE_REMOVE;
+  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: editor icons, syntax, independent read-only, edits, scrolling, toggling, keyword variations, saved query history, preview-only result navigation, exact hit opening, result columns, stale result rejection, Context links, project Apply/Cancel, menu Open Project, invalid/malformed project preserves session, UTF-8 paths, project switching, responsive 1.4 MiB preview with 10000 batched highlights, asynchronous symbol filtering, Context notebook tab, double-click opens >2 MiB file, delayed and cancelled word/selection definition lookup, latest-request symbol relations, zero-tag overlay, shutdown with queued work, tab close\n"); return G_SOURCE_REMOVE;
  }
  phase++; return G_SOURCE_CONTINUE;
 }

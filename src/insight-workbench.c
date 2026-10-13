@@ -80,7 +80,7 @@ typedef struct {
  GHashTable *preview_names; gsize preview_names_position; guint preview_links_idle; gchar *preview_links_text; gint preview_links_position;
  guint editor_follow_id; gint editor_follow_position,editor_follow_anchor;
  gchar *follow_word; guint follow_doc; gulong follow_line;
- guint refresh,source_id; gboolean context_visible,index_dirty,scan_failed;
+ guint refresh,source_id,panel_idle; gboolean context_visible,index_dirty,scan_failed;
  gulong event_handlers[4];
  gulong project_handlers[3]; gchar *geany_root; gboolean workspace_from_project;
  gchar *prefs_path;
@@ -88,7 +88,7 @@ typedef struct {
  GtkWidget *lua_menu,*lua_commands,*lua_item,*palette_item;
  GtkAccelGroup *lua_accels,*navigation_accels;
  GtkCssProvider *css; GtkWidget *context_toggle;
- gboolean alive; guint64 scan_generation,usage_generation,definition_generation; guint definition_timer; GCancellable *scan_worker,*search_worker,*definition_worker,*snapshot_worker,*cache_worker; guint64 index_generation,index_version; gint64 publish_due;
+ gboolean alive; guint64 scan_generation,usage_generation,definition_generation; guint definition_timer; GCancellable *scan_worker,*search_worker,*definition_worker,*snapshot_worker,*cache_worker,*preview_worker; guint64 preview_generation; guint64 index_generation,index_version; gint64 publish_due;
  InsightIndex *base,*index;
  InsightProjectFiles *membership; gchar *membership_project; gboolean membership_valid;
  GPtrArray *frames,*files,*scan_files,*scan_trees; GHashTable *scan_seen; guint scan_file_position,scan_tree_position; gchar *root,*cache_path; guint scan,parsed,skipped;
@@ -108,6 +108,7 @@ static GtkWidget *sort_selector(GtkListStore *);
 static void stop_usage(void);
 static void invalidate_search_context(void);
 static void stop_definition(void);
+static void stop_file_preview(void);
 static void queue_definition(gboolean);
 static void mark_index_dirty(void);
 static void native_commands_rebuild(void);
@@ -151,20 +152,65 @@ static void decorate_match(ScintillaObject *sci,gsize begin,gsize end) {
   if(end>begin && end<=(gsize)sci_get_length(sci)) SSM(sci,SCI_INDICATORFILLRANGE,begin,end-begin);
  }
 }
-static void decorate_selection(ScintillaObject *sci) {
- gint length=sci_get_length(sci),begin=(gint)SSM(sci,SCI_GETSELECTIONSTART,0,0),end=(gint)SSM(sci,SCI_GETSELECTIONEND,0,0);
+typedef struct {
+ guint timer,apply; guint64 generation,text_version,requested_version;
+ gint begin,end,length; gboolean alive,highlighted;
+ GCancellable *cancel; InsightSearchMatch *matches; gsize count,position;
+} SelectionState;
+typedef struct { GWeakRef sci; gchar *text,*query; InsightSearchMatch *matches; gsize count; guint64 generation; } SelectionJob;
+static void selection_stop(SelectionState *s) {
+ s->generation++;
+ if(s->timer) { g_source_remove(s->timer); s->timer=0; }
+ if(s->apply) { g_source_remove(s->apply); s->apply=0; }
+ if(s->cancel) { g_cancellable_cancel(s->cancel); g_clear_object(&s->cancel); }
+ g_clear_pointer(&s->matches,g_free); s->count=s->position=0;
+}
+static void selection_state_free(gpointer data) { SelectionState *s=data; selection_stop(s); g_free(s); }
+static void selection_destroy(GtkWidget *widget,gpointer data) { (void)widget; SelectionState *s=data; s->alive=FALSE; selection_stop(s); }
+static void selection_modified(ScintillaObject *sci,gint message,SCNotification *n,gpointer data) {
+ (void)sci; (void)message; SelectionState *s=data;
+ if(n->nmhdr.code==SCN_MODIFIED && (n->modificationType&(SC_MOD_INSERTTEXT|SC_MOD_DELETETEXT))) { s->text_version++; selection_stop(s); }
+}
+static SelectionState *selection_state(ScintillaObject *sci) {
+ SelectionState *s=g_object_get_data(G_OBJECT(sci),"insight-selection-worker");
+ if(!s) { s=g_new0(SelectionState,1); s->alive=TRUE; s->begin=s->end=-1; g_object_set_data_full(G_OBJECT(sci),"insight-selection-worker",s,selection_state_free); g_signal_connect(sci,"sci-notify",G_CALLBACK(selection_modified),s); g_signal_connect(sci,"destroy",G_CALLBACK(selection_destroy),s); }
+ return s;
+}
+static gboolean selection_apply(gpointer data) {
+ ScintillaObject *sci=data; SelectionState *s=selection_state(sci); gint64 deadline=g_get_monotonic_time()+3000;
+ if(!s->alive) { s->apply=0; return G_SOURCE_REMOVE; }
  SSM(sci,SCI_SETINDICATORCURRENT,INSIGHT_SAME_TEXT,0);
- if(length<0 || length>2*1024*1024 || end<=begin || end-begin>1024) { SSM(sci,SCI_INDICATORCLEARRANGE,0,MAX(0,length)); g_object_set_data(G_OBJECT(sci),"insight-selection-state",NULL); return; }
- gchar *text=sci_get_contents(sci,length+1),*query=g_strndup(text+begin,(gsize)(end-begin));
- gchar *digest=g_compute_checksum_for_data(G_CHECKSUM_SHA256,(const guchar *)text,(gsize)length),*state=g_strdup_printf("%s:%d:%d",digest,begin,end); g_free(digest);
- if(g_strcmp0(state,g_object_get_data(G_OBJECT(sci),"insight-selection-state"))) {
-  decorate_setup(sci); SSM(sci,SCI_SETINDICATORCURRENT,INSIGHT_SAME_TEXT,0); SSM(sci,SCI_INDICATORCLEARRANGE,0,length);
-  InsightSearchMatch matches[10000]; gsize total=0;
-  if(insight_context_collect(text,(gsize)length,query,INSIGHT_SEARCH_CASE,matches,G_N_ELEMENTS(matches),&total,NULL))
-   for(gsize i=0;i<MIN(total,G_N_ELEMENTS(matches));i++) SSM(sci,SCI_INDICATORFILLRANGE,matches[i].start,matches[i].end-matches[i].start);
-  g_object_set_data_full(G_OBJECT(sci),"insight-selection-state",state,g_free); state=NULL;
+ while(s->position<s->count) { InsightSearchMatch *hit=&s->matches[s->position++]; SSM(sci,SCI_INDICATORFILLRANGE,hit->start,hit->end-hit->start); s->highlighted=TRUE; if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE; }
+ s->apply=0; g_clear_pointer(&s->matches,g_free); return G_SOURCE_REMOVE;
+}
+static void selection_job_free(gpointer data) { SelectionJob *j=data; g_weak_ref_clear(&j->sci); g_free(j->text); g_free(j->query); g_free(j->matches); g_free(j); }
+static void selection_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
+ (void)source; SelectionJob *j=data; j->matches=g_new(InsightSearchMatch,10000); gsize total=0;
+ if(!g_cancellable_is_cancelled(cancel) && insight_context_collect(j->text,strlen(j->text),j->query,INSIGHT_SEARCH_CASE,j->matches,10000,&total,NULL)) j->count=MIN(total,10000);
+ g_task_return_boolean(task,TRUE);
+}
+static void selection_job_done(GObject *source,GAsyncResult *result,gpointer data) {
+ (void)source; (void)data; GTask *task=G_TASK(result); SelectionJob *j=g_task_get_task_data(task); gboolean ok=g_task_propagate_boolean(task,NULL); ScintillaObject *sci=g_weak_ref_get(&j->sci); if(!sci) return;
+ SelectionState *s=selection_state(sci);
+ if(ok && s->alive && s->generation==j->generation) {
+  g_clear_object(&s->cancel); s->matches=j->matches; j->matches=NULL; s->count=j->count; s->position=0;
+  s->apply=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,selection_apply,g_object_ref(sci),g_object_unref);
  }
- g_free(state); g_free(query); g_free(text);
+ g_object_unref(sci);
+}
+static gboolean selection_timeout(gpointer data) {
+ ScintillaObject *sci=data; SelectionState *s=selection_state(sci); s->timer=0;
+ if(!s->alive) return G_SOURCE_REMOVE;
+ SelectionJob *j=g_new0(SelectionJob,1); g_weak_ref_init(&j->sci,sci); j->generation=s->generation; j->text=sci_get_contents(sci,s->length+1); j->query=g_strndup(j->text+s->begin,(gsize)(s->end-s->begin));
+ s->cancel=g_cancellable_new(); GTask *task=g_task_new(NULL,s->cancel,selection_job_done,NULL); g_task_set_task_data(task,j,selection_job_free); g_task_run_in_thread(task,selection_job_run); g_object_unref(task); return G_SOURCE_REMOVE;
+}
+static void decorate_selection(ScintillaObject *sci) {
+ SelectionState *s=selection_state(sci); gint length=sci_get_length(sci),begin=(gint)SSM(sci,SCI_GETSELECTIONSTART,0,0),end=(gint)SSM(sci,SCI_GETSELECTIONEND,0,0);
+ if(!s->alive || (s->length==length && s->begin==begin && s->end==end && s->requested_version==s->text_version)) return;
+ selection_stop(s); s->length=length; s->begin=begin; s->end=end; s->requested_version=s->text_version;
+ if(s->highlighted) { SSM(sci,SCI_SETINDICATORCURRENT,INSIGHT_SAME_TEXT,0); SSM(sci,SCI_INDICATORCLEARRANGE,0,MAX(0,length)); s->highlighted=FALSE; }
+ if(length<0 || length>2*1024*1024 || begin<0 || end>length || end<=begin || end-begin>1024) return;
+ decorate_setup(sci); s->timer=g_timeout_add_full(G_PRIORITY_DEFAULT,150,selection_timeout,g_object_ref(sci),g_object_unref);
 }
 static void preview_mark_symbol(const char *name) {
  if(!name || !*name) return;
@@ -214,7 +260,7 @@ static void render_source(const char *text,GeanyFiletype *filetype,gulong line) 
  wb.preview_filetype=filetype;
  highlighting_set_styles(wb.preview,filetype ? filetype : filetypes[GEANY_FILETYPES_NONE]);
  sci_set_readonly(wb.preview,FALSE); sci_set_text(wb.preview,text);
- SSM(wb.preview,SCI_COLOURISE,0,-1);
+ /* Scintilla styles the visible range on demand; avoid a whole-file pass. */
  sci_set_line_numbers(wb.preview,TRUE);
  SSM(wb.preview,SCI_SETCARETLINEVISIBLE,TRUE,0);
  SSM(wb.preview,SCI_EMPTYUNDOBUFFER,0,0); sci_set_readonly(wb.preview,TRUE);
@@ -295,10 +341,10 @@ static gboolean preview_motion(GtkWidget *widget,GdkEventMotion *event,gpointer 
 }
 static void preview_notify(ScintillaObject *sci,gint message,SCNotification *notification,gpointer data) {
  (void)message; (void)data;
- if(notification->nmhdr.code==SCN_UPDATEUI && (notification->updated&SC_UPDATE_SELECTION)) decorate_selection(sci);
+ if(notification->nmhdr.code==SCN_UPDATEUI || notification->nmhdr.code==SCN_PAINTED) decorate_selection(sci);
 }
 static void stop_scan(void) {
- stop_definition();
+ stop_definition(); stop_file_preview();
  wb.scan_generation++; if(wb.cache_worker) { g_cancellable_cancel(wb.cache_worker); g_clear_object(&wb.cache_worker); } if(wb.scan_worker) { g_cancellable_cancel(wb.scan_worker); g_clear_object(&wb.scan_worker); if(wb.alive && !wb.base) wb.base=insight_index_ref(wb.index); }
  if(wb.scan) { g_source_remove(wb.scan); wb.scan=0; }
  if(wb.frames) g_ptr_array_set_size(wb.frames,0);
@@ -526,7 +572,36 @@ static void reveal_context(void) {
  if(!wb.box || !wb.context_visible) return;
  if(gtk_widget_get_parent(wb.box)==main_widgets.message_window_notebook) { msgwin_show_hide(TRUE); gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.message_window_notebook),wb.box)); }
 }
+typedef struct { gchar *path,*text,*digest; guint id; gint encoding,length; guint64 epoch,generation,text_version; } FilePreviewJob;
+static void request_file_preview(const char *);
+static void stop_file_preview(void) { wb.preview_generation++; if(wb.preview_worker) { g_cancellable_cancel(wb.preview_worker); g_clear_object(&wb.preview_worker); } }
+static void file_preview_free(gpointer data) { FilePreviewJob *j=data; g_free(j->path); g_free(j->text); g_free(j->digest); g_free(j); }
+static void file_preview_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
+ (void)source; FilePreviewJob *j=data;
+ if(!j->id && !g_cancellable_is_cancelled(cancel)) j->text=read_disk_source_full(j->path,TRUE,j->encoding,cancel);
+ if(j->text && !g_cancellable_is_cancelled(cancel) && g_utf8_validate(j->text,-1,NULL) && (!j->id || !memchr(j->text,0,(gsize)j->length))) j->digest=source_digest(j->text);
+ g_task_return_boolean(task,TRUE);
+}
+static void file_preview_done(GObject *source,GAsyncResult *result,gpointer data) {
+ (void)source; (void)data; GTask *task=G_TASK(result); FilePreviewJob *j=g_task_get_task_data(task); gboolean ok=g_task_propagate_boolean(task,NULL);
+ if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.preview_generation) return;
+ g_clear_object(&wb.preview_worker); if(!ok) return;
+ GeanyDocument *doc=document_find_by_filename(j->path);
+ if((doc && (doc->id!=j->id || selection_state(doc->editor->sci)->text_version!=j->text_version)) || (!doc && j->id)) { request_file_preview(j->path); return; }
+ if(!j->digest) { render_source("",NULL,1); gtk_label_set_text(GTK_LABEL(wb.title),"Context unavailable: requires a decodable text source up to 2 MiB"); g_clear_pointer(&wb.source_path,g_free); wb.source_id=0; wb.source_line=0; navigation_state(); return; }
+ if(wb.source_line) remember_location(wb.source_path,wb.source_id,(gulong)sci_get_current_line(wb.preview)+1);
+ render_source(j->text,doc ? doc->file_type : filetypes_detect_from_extension(j->path),1);
+ g_free(wb.source_digest); wb.source_digest=g_strdup(j->digest); g_free(wb.source_path); wb.source_path=g_strdup(j->path); wb.source_id=doc ? doc->id : 0; wb.source_line=1;
+ gchar *label=g_strdup_printf("Context — %s:1",j->path); gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label); remember_location(wb.source_path,wb.source_id,1); navigation_state();
+}
+static void request_file_preview(const char *path) {
+ stop_file_preview(); FilePreviewJob *j=g_new0(FilePreviewJob,1); j->path=g_strdup(path); j->encoding=file_prefs.default_open_encoding; j->epoch=workbench_epoch; j->generation=wb.preview_generation;
+ GeanyDocument *doc=document_find_by_filename(path);
+ if(doc) { j->id=doc->id; j->text_version=selection_state(doc->editor->sci)->text_version; j->length=sci_get_length(doc->editor->sci); if(j->length>=0 && j->length<=2*1024*1024) j->text=sci_get_contents(doc->editor->sci,j->length+1); }
+ wb.preview_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.preview_worker,file_preview_done,NULL); g_task_set_task_data(task,j,file_preview_free); g_task_run_in_thread(task,file_preview_run); g_object_unref(task);
+}
 static gboolean show_location(const char *path,guint id,gulong line,gboolean remember) {
+ stop_file_preview();
  if(wb.context_toggle && !wb.context_visible) gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.context_toggle),TRUE);
  GeanyDocument *doc=id ? document_find_by_id(id) : (path ? document_find_by_filename(path) : NULL);
  char *text=NULL; GeanyFiletype *ft=NULL;
@@ -569,16 +644,50 @@ static InsightLookupFilter *entry_filter(GtkWidget *entry,gboolean files) {
  gtk_entry_set_icon_tooltip_text(GTK_ENTRY(entry),GTK_ENTRY_ICON_SECONDARY,error ? error->message : NULL);
  g_clear_error(&error); return filter;
 }
-static void fill_symbol_list(GtkListStore *store,GtkWidget *entry,const char *path,guint limit) {
- refresh_index(); gtk_list_store_clear(store); InsightLookupFilter *filter=entry_filter(entry,FALSE); if(!filter) return; guint shown=0;
- size_t total=insight_index_query(wb.index,"",FALSE,NULL,NULL,path,0,NULL,0);
- const InsightSymbol **found=g_new(const InsightSymbol *,total);
- insight_index_query(wb.index,"",FALSE,NULL,NULL,path,0,found,total);
- for(size_t i=0;i<total && shown<limit;i++) {
-  if(!insight_lookup_filter_match(filter,found[i]->name,found[i]->scope,found[i]->path,found[i]->kind)) continue;
-  GtkTreeIter iter; gtk_list_store_append(store,&iter); gtk_list_store_set(store,&iter,SYMBOL_NAME,found[i]->name,SYMBOL_SCOPE,found[i]->scope,SYMBOL_PATH,found[i]->path,SYMBOL_LINE,(gulong)found[i]->line,SYMBOL_KIND,found[i]->kind,-1); shown++;
+typedef struct { guint64 generation; GCancellable *cancel; guint apply; InsightIndex *index; const InsightSymbol **rows; guint count,position; } SymbolListState;
+typedef struct { GWeakRef store; InsightIndex *index; gchar *query,*path; const InsightSymbol **rows; guint count,limit; guint64 generation,epoch; } SymbolListJob;
+static void symbol_list_stop(SymbolListState *s) {
+ s->generation++; if(s->cancel) { g_cancellable_cancel(s->cancel); g_clear_object(&s->cancel); }
+ if(s->apply) { g_source_remove(s->apply); s->apply=0; }
+ retire_index(s->index); s->index=NULL; g_clear_pointer(&s->rows,g_free); s->count=s->position=0;
+}
+static void symbol_list_state_free(gpointer data) { SymbolListState *s=data; symbol_list_stop(s); g_free(s); }
+static SymbolListState *symbol_list_state(GtkListStore *store) {
+ SymbolListState *s=g_object_get_data(G_OBJECT(store),"insight-symbol-worker"); if(!s) { s=g_new0(SymbolListState,1); g_object_set_data_full(G_OBJECT(store),"insight-symbol-worker",s,symbol_list_state_free); } return s;
+}
+static gboolean symbol_list_apply(gpointer data) {
+ GtkListStore *store=data; SymbolListState *s=symbol_list_state(store); gint64 deadline=g_get_monotonic_time()+3000;
+ if(!wb.alive) { s->apply=0; return G_SOURCE_REMOVE; }
+ while(s->position<s->count) {
+  const InsightSymbol *tag=s->rows[s->position++]; GtkTreeIter iter; gtk_list_store_append(store,&iter); gtk_list_store_set(store,&iter,SYMBOL_NAME,tag->name,SYMBOL_SCOPE,tag->scope,SYMBOL_PATH,tag->path,SYMBOL_LINE,(gulong)tag->line,SYMBOL_KIND,tag->kind,-1);
+  if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
  }
- g_free(found); insight_lookup_filter_free(filter);
+ s->apply=0; retire_index(s->index); s->index=NULL; g_clear_pointer(&s->rows,g_free); return G_SOURCE_REMOVE;
+}
+static void symbol_list_job_free(gpointer data) { SymbolListJob *j=data; g_weak_ref_clear(&j->store); retire_index(j->index); g_free(j->query); g_free(j->path); g_free(j->rows); g_free(j); }
+static void symbol_list_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
+ (void)source; SymbolListJob *j=data; InsightLookupFilter *filter=insight_lookup_filter_new(j->query,FALSE,NULL); j->rows=g_new(const InsightSymbol *,j->limit);
+ if(filter) for(gsize n=0;n<insight_index_count(j->index) && j->count<j->limit;n++) {
+  if(g_cancellable_is_cancelled(cancel)) break;
+  const InsightSymbol *tag=insight_index_at(j->index,n); if(j->path && g_strcmp0(j->path,tag->path)) continue;
+  if(insight_lookup_filter_match(filter,tag->name,tag->scope,tag->path,tag->kind)) j->rows[j->count++]=tag;
+ }
+ insight_lookup_filter_free(filter); g_task_return_boolean(task,TRUE);
+}
+static void symbol_list_job_done(GObject *source,GAsyncResult *result,gpointer data) {
+ (void)source; (void)data; GTask *task=G_TASK(result); SymbolListJob *j=g_task_get_task_data(task); gboolean ok=g_task_propagate_boolean(task,NULL); GtkListStore *store=g_weak_ref_get(&j->store); if(!store) return;
+ SymbolListState *s=symbol_list_state(store);
+ if(ok && wb.alive && j->epoch==workbench_epoch && j->generation==s->generation) {
+  g_clear_object(&s->cancel); s->index=insight_index_ref(j->index); s->rows=j->rows; j->rows=NULL; s->count=j->count; s->position=0;
+  s->apply=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,symbol_list_apply,g_object_ref(store),g_object_unref);
+ }
+ g_object_unref(store);
+}
+static void fill_symbol_list(GtkListStore *store,GtkWidget *entry,const char *path,guint limit) {
+ refresh_index(); SymbolListState *s=symbol_list_state(store); symbol_list_stop(s); gtk_list_store_clear(store);
+ InsightLookupFilter *filter=entry_filter(entry,FALSE); if(!filter) return; insight_lookup_filter_free(filter);
+ SymbolListJob *j=g_new0(SymbolListJob,1); g_weak_ref_init(&j->store,store); j->index=insight_index_ref(wb.index); j->query=g_strdup(gtk_entry_get_text(GTK_ENTRY(entry))); j->path=g_strdup(path); j->limit=limit; j->generation=s->generation; j->epoch=workbench_epoch;
+ s->cancel=g_cancellable_new(); GTask *task=g_task_new(NULL,s->cancel,symbol_list_job_done,NULL); g_task_set_task_data(task,j,symbol_list_job_free); g_task_run_in_thread(task,symbol_list_job_run); g_object_unref(task);
 }
 static void browser_filter(GtkEditable *entry,gpointer data) {
  (void)entry; (void)data; if(!wb.symbols) return;
@@ -631,7 +740,7 @@ static void files_filter(GtkEditable *entry,gpointer data) {
 static void file_selected(GtkTreeSelection *selection,gpointer data) {
  (void)data; GtkTreeIter iter; GtkTreeModel *model;
  if(!wb.preview || !gtk_tree_selection_get_selected(selection,&model,&iter)) return;
- gchar *path; gtk_tree_model_get(model,&iter,1,&path,-1); reveal_context(); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); show_location(path,0,1,TRUE); g_free(path);
+ gchar *path; gtk_tree_model_get(model,&iter,1,&path,-1); reveal_context(); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); request_file_preview(path); g_free(path);
 }
 static void file_sort(GtkComboBox *combo,gpointer data) {
  (void)data; gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(wb.file_store),gtk_combo_box_get_active(combo)==1 ? 1 : 0,GTK_SORT_ASCENDING);
@@ -895,7 +1004,7 @@ static void create_usage_browser(void) {
  gtk_widget_show_all(box);
 }
 static void create_browser(void) {
- wb.browser=gtk_box_new(GTK_ORIENTATION_VERTICAL,4); wb.symbol_entry=gtk_search_entry_new();
+ wb.browser=gtk_box_new(GTK_ORIENTATION_VERTICAL,4); wb.symbol_entry=gtk_search_entry_new(); gtk_widget_set_name(wb.symbol_entry,"insight-symbol-query");
  gtk_entry_set_placeholder_text(GTK_ENTRY(wb.symbol_entry),"Find project symbol…");
  wb.symbols=gtk_list_store_new(SYMBOL_COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG,G_TYPE_STRING);
  wb.symbol_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(wb.symbols)); gtk_widget_set_name(wb.symbol_view,"insight-project-symbols");
@@ -973,7 +1082,7 @@ static GtkTreeIter *tree_directory(GHashTable *nodes,const char *path,const char
  gtk_tree_store_set(wb.project_tree,iter,0,name,1,path,2,TRUE,-1); g_hash_table_insert(nodes,g_strdup(path),iter); g_free(name); g_free(parent); return iter;
 }
 static void tree_refresh(void) {
- if(!wb.project_tree) return;
+ if(!wb.project_tree || !gtk_widget_get_mapped(wb.tree_view)) return;
  gtk_tree_store_clear(wb.project_tree);
  GHashTable *nodes=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free); gchar *root=wb.root ? utils_get_utf8_from_locale(wb.root) : g_strdup("");
  for(guint i=0;i<wb.files->len && i<10000;i++) { const char *path=g_ptr_array_index(wb.files,i); gchar *parent=g_path_get_dirname(path),*name=g_path_get_basename(path);
@@ -1182,7 +1291,7 @@ static void category_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewCo
  browser_activated(view,path,NULL,NULL);
 }
 static void categories_filter(GtkEditable *entry,gpointer data) {
- (void)entry; (void)data; if(!wb.categories) return;
+ (void)entry; (void)data; if(!wb.categories || !gtk_widget_get_mapped(wb.category_view)) return;
  refresh_index(); gtk_tree_store_clear(wb.categories);
  size_t count=insight_index_count(wb.index); const InsightSymbol **symbols=g_new(const InsightSymbol *,count);
  insight_index_query(wb.index,"",FALSE,NULL,NULL,NULL,0,symbols,count);
@@ -1200,6 +1309,12 @@ static void categories_filter(GtkEditable *entry,gpointer data) {
   g_free(key); GtkTreeIter row; gtk_tree_store_append(wb.categories,&row,parent); gtk_tree_store_set(wb.categories,&row,SYMBOL_NAME,symbol->name,SYMBOL_SCOPE,symbol->scope,SYMBOL_PATH,symbol->path,SYMBOL_LINE,(gulong)symbol->line,SYMBOL_KIND,symbol->kind,-1); shown++;
  }
  g_hash_table_destroy(groups); insight_lookup_filter_free(filter); g_free(symbols);
+}
+static gboolean refresh_visible_project_panel(gpointer data) {
+ (void)data; wb.panel_idle=0; if(!wb.alive) return G_SOURCE_REMOVE; categories_filter(NULL,NULL); tree_refresh(); return G_SOURCE_REMOVE;
+}
+static void project_panel_changed(GtkNotebook *book,GtkWidget *page,guint number,gpointer data) {
+ (void)book; (void)page; (void)number; (void)data; if(!wb.panel_idle) wb.panel_idle=g_idle_add(refresh_visible_project_panel,NULL);
 }
 static void create_categories(void) {
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,3); wb.category_entry=gtk_search_entry_new(); gtk_entry_set_placeholder_text(GTK_ENTRY(wb.category_entry),"Find symbol category members…");
@@ -1269,9 +1384,9 @@ static gboolean refresh_now(gpointer data) {
  GeanyDocument *active=document_get_current(); gboolean dirty=wb.index_dirty;
  if(active) { decorate_selection(active->editor->sci); gsize a=(gsize)SSM(active->editor->sci,SCI_GETSELECTIONSTART,0,0),b=(gsize)SSM(active->editor->sci,SCI_GETSELECTIONEND,0,0); if(b>a) decorate_match(active->editor->sci,a,b); else decorate_match(active->editor->sci,0,0); }
  if(wb.preview) decorate_selection(wb.preview);
- if(dirty || wb.local_doc_id!=(active ? active->id : 0)) local_filter(NULL,NULL);
- if(dirty) { browser_filter(NULL,NULL); categories_filter(NULL,NULL); }
- if(dirty) preview_links();
+ /* Project models are refreshed when a completed snapshot is published,
+  * rather than repeatedly while the same snapshot is still being built. */
+ if(wb.local_doc_id!=(active ? active->id : 0)) local_filter(NULL,NULL);
  relation_update_from_editor(dirty);
  if(!wb.preview || !wb.context_visible || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow))) return G_SOURCE_REMOVE;
  GeanyDocument *doc=document_get_current();
@@ -2221,7 +2336,7 @@ void insight_workbench_index_changed(void) { stop_definition(); wb.follow_doc=0;
 static gboolean remote_workspace(const char *path) { gboolean previous=wb.workspace_from_project; wb.workspace_from_project=FALSE; if(start_scan(path)) return TRUE; wb.workspace_from_project=previous; return FALSE; }
 static void follow_changed(GtkToggleButton *button,gpointer data) {
  (void)data;
- if(gtk_toggle_button_get_active(button)) { wb.follow_doc=0; queue_definition(TRUE); insight_workbench_refresh(); }
+ if(gtk_toggle_button_get_active(button)) { stop_file_preview(); wb.follow_doc=0; queue_definition(TRUE); insight_workbench_refresh(); }
  else { stop_definition(); if(wb.refresh) { g_source_remove(wb.refresh); wb.refresh=0; } }
 }
 static void wrap_changed(GtkToggleButton *button,gpointer data) {
@@ -2248,7 +2363,7 @@ void insight_workbench_init(void) {
  wb.cache_path=g_build_filename(app->configdir,"insight","workspace.idx",NULL); restore_index_cache();
  wb.definitions=g_ptr_array_new_with_free_func(location_free);
  wb.history=g_ptr_array_new_with_free_func(location_free); wb.history_position=-1;
- wb.project_notebook=gtk_notebook_new(); gtk_notebook_set_scrollable(GTK_NOTEBOOK(wb.project_notebook),TRUE);
+ wb.project_notebook=gtk_notebook_new(); g_signal_connect(wb.project_notebook,"switch-page",G_CALLBACK(project_panel_changed),NULL); gtk_notebook_set_scrollable(GTK_NOTEBOOK(wb.project_notebook),TRUE);
  create_browser(); create_files_browser(); create_project_tree(); create_usage_browser(); create_categories(); create_file_types(); create_notes(); create_local_browser();
  wb.pane=gtk_paned_new(GTK_ORIENTATION_VERTICAL);
  wb.box=gtk_box_new(GTK_ORIENTATION_VERTICAL,2);
@@ -2341,7 +2456,7 @@ static void remove_group_accelerators(GtkWidget *widget,GtkAccelGroup *group) {
  g_list_free(closures);
 }
 void insight_workbench_finalize(void) {
- wb.alive=FALSE; stop_definition(); mark_index_dirty();
+ wb.alive=FALSE; stop_definition(); stop_file_preview(); mark_index_dirty();
  insight_remote_ui_finalize();
  save_search_settings(); save_workbench_settings(); dock_all_panels(); dock_project(NULL,NULL);
  for(guint i=0;i<wb.host_count;i++) g_free(wb.hosts[i].label);
@@ -2353,6 +2468,8 @@ void insight_workbench_finalize(void) {
  if(wb.css) { gtk_style_context_remove_provider_for_screen(gdk_screen_get_default(),GTK_STYLE_PROVIDER(wb.css)); g_object_unref(wb.css); }
  insight_extensions_free(wb.extensions);
  if(wb.refresh) g_source_remove(wb.refresh);
+ if(wb.panel_idle) g_source_remove(wb.panel_idle);
+ if(wb.symbols) symbol_list_stop(symbol_list_state(wb.symbols));
  g_free(wb.prefs_path);
  stop_usage(); g_ptr_array_free(wb.usage_paths,TRUE);
  g_free(wb.search_state_path); g_ptr_array_free(wb.search_files,TRUE); g_ptr_array_free(wb.search_history,TRUE); g_object_unref(wb.search_matches);

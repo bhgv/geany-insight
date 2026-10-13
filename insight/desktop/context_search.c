@@ -4,7 +4,7 @@
 static GRegex *compile_query(const char *query,guint flags,GError **error) {
  gchar *pattern=flags&INSIGHT_SEARCH_REGEX ? g_strdup(query) : g_regex_escape_string(query,-1);
  if(flags&INSIGHT_SEARCH_WORD) { gchar *bounded=g_strconcat("(?<![\\p{L}\\p{N}\\p{M}_])(?:",pattern,")(?![\\p{L}\\p{N}\\p{M}_])",NULL); g_free(pattern); pattern=bounded; }
- GRegex *regex=g_regex_new(pattern,G_REGEX_MULTILINE|((flags&INSIGHT_SEARCH_CASE) ? 0 : G_REGEX_CASELESS),0,error); g_free(pattern); return regex;
+ GRegex *regex=g_regex_new(pattern,G_REGEX_OPTIMIZE|G_REGEX_MULTILINE|((flags&INSIGHT_SEARCH_CASE) ? 0 : G_REGEX_CASELESS),0,error); g_free(pattern); return regex;
 }
 gboolean insight_context_collect(const char *text,gsize size,const char *query,guint flags,InsightSearchMatch *out,gsize capacity,gsize *total,GError **error) {
  if(total) *total=0;

@@ -47,7 +47,7 @@ static gboolean overview_sync(gpointer data) {
   /* Independent text and lexer: setting read-only on a shared Scintilla
    * document would also make the user's main editor read-only. */
   if(o->filetype!=doc->file_type) { o->filetype=doc->file_type; highlighting_set_styles(o->map,doc->file_type ? doc->file_type : filetypes[GEANY_FILETYPES_NONE]); }
-  sci_set_readonly(o->map,FALSE); SSM(o->map,SCI_SETUNDOCOLLECTION,FALSE,0); sci_set_text(o->map,text); SSM(o->map,SCI_COLOURISE,0,-1); SSM(o->map,SCI_EMPTYUNDOBUFFER,0,0); sci_set_readonly(o->map,TRUE);
+  sci_set_readonly(o->map,FALSE); SSM(o->map,SCI_SETUNDOCOLLECTION,FALSE,0); sci_set_text(o->map,text); SSM(o->map,SCI_EMPTYUNDOBUFFER,0,0); sci_set_readonly(o->map,TRUE);
   SSM(o->map,SCI_SETFIRSTVISIBLELINE,old_top,0); g_free(text); o->dirty=FALSE; o->style_dirty=TRUE;
  }
  if(o->style_dirty || o->last_scale!=scale) { copy_styles(o,source); o->style_dirty=FALSE; o->last_scale=scale; }
