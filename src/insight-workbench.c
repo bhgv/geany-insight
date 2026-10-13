@@ -947,9 +947,9 @@ static gchar *reference_snippet(const char *text,gsize at) {
  if(g_utf8_strlen(line,-1)>180) { gchar *shortened=g_utf8_substring(line,0,180); g_free(line); line=g_strconcat(shortened,"…",NULL); g_free(shortened); }
  return line;
 }
-typedef struct { gchar *path,*query,*text,*digest; InsightOccurrence *found; gsize total; guint id,flags,context,capacity; gint mode,encoding; InsightCodeDialect dialect; gboolean keywords,code,have_dialect,valid; guint64 generation,epoch; } SearchJob;
+typedef struct { gchar *path,*query,*text,*digest; InsightOccurrence *found; GPtrArray *snippets; gulong *columns; gsize total,apply_position; guint id,flags,context,capacity; gint mode,encoding; InsightCodeDialect dialect; gboolean keywords,code,have_dialect,valid; guint64 generation,epoch; } SearchJob;
 static gboolean usage_step(gpointer);
-static void search_job_free(gpointer data) { SearchJob *j=data; g_free(j->path); g_free(j->query); g_free(j->text); g_free(j->digest); g_free(j->found); g_free(j); }
+static void search_job_free(gpointer data) { SearchJob *j=data; g_free(j->path); g_free(j->query); g_free(j->text); g_free(j->digest); g_free(j->found); g_clear_pointer(&j->snippets,g_ptr_array_unref); g_free(j->columns); g_free(j); }
 static void search_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
  (void)source; SearchJob *j=data;
  if(!j->text && j->path && !g_cancellable_is_cancelled(cancel)) j->text=read_disk_source_full(j->path,TRUE,j->encoding,cancel);
@@ -962,23 +962,36 @@ static void search_job_run(GTask *task,gpointer source,gpointer data,GCancellabl
    if(j->valid) for(gsize n=0;n<MIN(j->total,j->capacity);n++) j->found[n]=(InsightOccurrence){matches[n].start,matches[n].end,matches[n].line,matches[n].column};
    g_free(matches);
   } else j->valid=insight_occurrences_find(text,strlen(text),j->query,strlen(j->query),0,j->found,j->capacity,&j->total);
-  if(j->valid) j->digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,j->text,-1);
+  if(j->valid) {
+   j->digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,j->text,-1);
+   gsize count=MIN(j->total,j->capacity); j->snippets=g_ptr_array_new_with_free_func(g_free); j->columns=g_new(gulong,count);
+   for(gsize n=0;n<count && !g_cancellable_is_cancelled(cancel);n++) {
+    InsightOccurrence *hit=&j->found[n]; g_ptr_array_add(j->snippets,reference_snippet(j->text,hit->start));
+    j->columns[n]=(gulong)g_utf8_strlen(j->text+hit->start-hit->column,(gssize)hit->column)+1;
+   }
+   if(g_cancellable_is_cancelled(cancel)) j->valid=FALSE;
+  }
  }
  g_free(mask); g_task_return_boolean(task,TRUE);
+}
+static gboolean search_results_apply(gpointer data) {
+ GTask *task=data; SearchJob *j=g_task_get_task_data(task);
+ if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.usage_generation) return G_SOURCE_REMOVE;
+ gint64 deadline=g_get_monotonic_time()+3000;
+ while(j->apply_position<MIN(j->total,j->capacity)) {
+  gsize n=j->apply_position++; InsightOccurrence *hit=&j->found[n]; GtkTreeIter iter; gtk_list_store_append(wb.usage_target,&iter);
+  gtk_list_store_set(wb.usage_target,&iter,USAGE_DISPLAY,j->path ? j->path : "untitled",USAGE_PATH,j->path,USAGE_LINE,hit->line,USAGE_COLUMN,j->columns[n],USAGE_START,(gulong)hit->start,USAGE_END,(gulong)hit->end,USAGE_ID,j->id,USAGE_DIGEST,j->digest,USAGE_SYMBOL,j->query,USAGE_SNIPPET,(gchar *)g_ptr_array_index(j->snippets,n),-1); wb.usage_shown++;
+  if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
+ }
+ gchar *label=g_strdup_printf("Searching… %u results • %u/%u files",wb.usage_shown,wb.usage_position,wb.usage_paths->len); set_usage_status(label); g_free(label);
+ wb.usage_idle=g_idle_add(usage_step,NULL); return G_SOURCE_REMOVE;
 }
 static void search_job_done(GObject *source,GAsyncResult *result,gpointer data) {
  (void)source; (void)data; GTask *task=G_TASK(result); SearchJob *j=g_task_get_task_data(task); gboolean ok=g_task_propagate_boolean(task,NULL);
  if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.usage_generation) return;
  g_clear_object(&wb.search_worker);
- if(ok && j->valid) {
-  for(gsize n=0;n<MIN(j->total,j->capacity);n++) {
-   InsightOccurrence *hit=&j->found[n]; GtkTreeIter iter; gtk_list_store_append(wb.usage_target,&iter);
-   gchar *snippet=reference_snippet(j->text,hit->start);
-   gtk_list_store_set(wb.usage_target,&iter,USAGE_DISPLAY,j->path ? j->path : "untitled",USAGE_PATH,j->path,USAGE_LINE,hit->line,USAGE_COLUMN,(gulong)g_utf8_strlen(j->text+hit->start-hit->column,(gssize)hit->column)+1,USAGE_START,(gulong)hit->start,USAGE_END,(gulong)hit->end,USAGE_ID,j->id,USAGE_DIGEST,j->digest,USAGE_SYMBOL,j->query,USAGE_SNIPPET,snippet,-1); g_free(snippet); wb.usage_shown++;
-  }
- } else wb.usage_skipped++;
- gchar *label=g_strdup_printf("Searching… %u results • %u/%u files",wb.usage_shown,wb.usage_position,wb.usage_paths->len); set_usage_status(label); g_free(label);
- wb.usage_idle=g_idle_add(usage_step,NULL);
+ if(ok && j->valid) wb.usage_idle=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,search_results_apply,g_object_ref(task),g_object_unref);
+ else { wb.usage_skipped++; wb.usage_idle=g_idle_add(usage_step,NULL); }
 }
 static gboolean usage_step(gpointer data) {
  (void)data;
@@ -997,13 +1010,37 @@ static gboolean search_path_matches(const char *path) {
  for(guint i=0;patterns[i];i++) { gchar *pattern=g_utf8_casefold(g_strstrip(patterns[i]),-1); if(*pattern && g_pattern_match_simple(pattern,folded)) matched=TRUE; g_free(pattern); }
  g_free(folded); g_free(name); g_strfreev(patterns); return matched;
 }
-typedef struct { InsightIndex *index; gchar *query; const InsightSymbol *found[2000]; gsize total; gint mode; guint64 epoch,generation,index_version; } RelationJob;
+typedef struct { InsightIndex *index; gchar *query; const InsightSymbol *found[2000]; gsize total,apply_position; GPtrArray *descriptions; gboolean clearing; gint mode; guint64 epoch,generation,index_version; } RelationJob;
 static void usage_start(GtkWidget *,gpointer);
-static void relation_job_free(gpointer data) { RelationJob *j=data; retire_index(j->index); g_free(j->query); g_free(j); }
+static void relation_job_free(gpointer data) { RelationJob *j=data; retire_index(j->index); g_free(j->query); g_clear_pointer(&j->descriptions,g_ptr_array_unref); g_free(j); }
 static void relation_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
  (void)source; RelationJob *j=data; j->total=SIZE_MAX;
  if(!g_cancellable_is_cancelled(cancel)) j->total=insight_relation_query(j->index,j->query,j->mode==1 ? INSIGHT_RELATION_DEFINITIONS : (j->mode==2 ? INSIGHT_RELATION_MEMBERS : (j->mode==4 ? INSIGHT_RELATION_BASES : INSIGHT_RELATION_DERIVED)),0,j->found,G_N_ELEMENTS(j->found));
- g_task_return_boolean(task,TRUE);
+ j->descriptions=g_ptr_array_new_with_free_func(g_free);
+ if(j->total!=SIZE_MAX) for(gsize n=0;n<MIN(j->total,G_N_ELEMENTS(j->found)) && !g_cancellable_is_cancelled(cancel);n++) {
+  const InsightSymbol *tag=j->found[n]; g_ptr_array_add(j->descriptions,g_strdup_printf("%s • %s %s%s • %s • bases: %s",tag->kind,tag->type,tag->name,tag->signature,tag->scope,tag->inheritance));
+ }
+ g_task_return_boolean(task,!g_cancellable_is_cancelled(cancel));
+}
+static gboolean relation_results_apply(gpointer data) {
+ GTask *task=data; RelationJob *j=g_task_get_task_data(task);
+ if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.usage_generation) return G_SOURCE_REMOVE;
+ if(j->index_version!=wb.index_version) { wb.usage_idle=0; usage_start(NULL,NULL); return G_SOURCE_REMOVE; }
+ gint64 deadline=g_get_monotonic_time()+3000;
+ if(j->clearing) {
+  GtkTreeIter iter;
+  while(gtk_tree_model_get_iter_first(GTK_TREE_MODEL(wb.matches),&iter)) {
+   gtk_list_store_remove(wb.matches,&iter); if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
+  }
+  j->clearing=FALSE;
+ }
+ while(j->apply_position<MIN(j->total,G_N_ELEMENTS(j->found))) {
+  gsize n=j->apply_position++; const InsightSymbol *tag=j->found[n]; GtkTreeIter iter; gtk_list_store_append(wb.matches,&iter);
+  gtk_list_store_set(wb.matches,&iter,USAGE_DISPLAY,tag->path,USAGE_PATH,tag->path,USAGE_LINE,tag->line,USAGE_SYMBOL,tag->name,USAGE_SNIPPET,(gchar *)g_ptr_array_index(j->descriptions,n),-1);
+  if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
+ }
+ gchar *label=g_strdup_printf("%zu tag-based %s%s",j->total,j->mode==1 ? "definitions/declarations" : (j->mode==2 ? "direct members" : (j->mode==4 ? "base definitions" : "derived types")),j->total>2000 ? " • showing first 2000" : ""); set_usage_status(label); g_free(label);
+ wb.usage_idle=0; return G_SOURCE_REMOVE;
 }
 static void relation_job_done(GObject *source,GAsyncResult *result,gpointer data) {
  (void)source; (void)data; GTask *task=G_TASK(result); RelationJob *j=g_task_get_task_data(task); gboolean ok=g_task_propagate_boolean(task,NULL);
@@ -1012,11 +1049,7 @@ static void relation_job_done(GObject *source,GAsyncResult *result,gpointer data
  if(!ok) return;
  if(j->index_version!=wb.index_version) { usage_start(NULL,NULL); return; }
  if(j->total==SIZE_MAX) { set_usage_status("Enter a symbol name (or qualified owner for Members)"); return; }
- for(gsize n=0;n<MIN(j->total,G_N_ELEMENTS(j->found));n++) {
-  const InsightSymbol *tag=j->found[n]; GtkTreeIter iter; gtk_list_store_append(wb.matches,&iter); gchar *description=g_strdup_printf("%s • %s %s%s • %s • bases: %s",tag->kind,tag->type,tag->name,tag->signature,tag->scope,tag->inheritance);
-  gtk_list_store_set(wb.matches,&iter,USAGE_DISPLAY,tag->path,USAGE_PATH,tag->path,USAGE_LINE,tag->line,USAGE_SYMBOL,tag->name,USAGE_SNIPPET,description,-1); g_free(description);
- }
- gchar *label=g_strdup_printf("%zu tag-based %s%s",j->total,j->mode==1 ? "definitions/declarations" : (j->mode==2 ? "direct members" : (j->mode==4 ? "base definitions" : "derived types")),j->total>2000 ? " • showing first 2000" : ""); set_usage_status(label); g_free(label);
+ j->clearing=TRUE; wb.usage_idle=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,relation_results_apply,g_object_ref(task),g_object_unref);
 }
 static void usage_start(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; stop_usage();
@@ -1025,7 +1058,7 @@ static void usage_start(GtkWidget *widget,gpointer data) {
  gint mode=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode)); wb.usage_mode=mode;
  wb.usage_target=mode==3 ? wb.search_matches : wb.matches;
  if(mode==1 || mode==2 || mode==4 || mode==5) {
-  gtk_list_store_clear(wb.matches); refresh_index(); RelationJob *j=g_new0(RelationJob,1); j->index=insight_index_ref(wb.index); j->query=g_strdup(query); j->mode=mode; j->epoch=workbench_epoch; j->generation=wb.usage_generation; j->index_version=wb.index_version;
+  refresh_index(); RelationJob *j=g_new0(RelationJob,1); j->index=insight_index_ref(wb.index); j->query=g_strdup(query); j->mode=mode; j->epoch=workbench_epoch; j->generation=wb.usage_generation; j->index_version=wb.index_version;
   wb.search_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.search_worker,relation_job_done,NULL); g_task_set_task_data(task,j,relation_job_free); g_task_run_in_thread(task,relation_job_run); g_object_unref(task); set_usage_status("Searching symbol relations…"); return;
  }
  wb.usage_flags=(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.project_case)) ? INSIGHT_SEARCH_CASE : 0)|(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.project_word)) ? INSIGHT_SEARCH_WORD : 0)|(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.project_regex)) ? INSIGHT_SEARCH_REGEX : 0);
