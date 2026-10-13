@@ -187,7 +187,7 @@ static gboolean selection_apply(gpointer data) {
 static void selection_job_free(gpointer data) { SelectionJob *j=data; g_weak_ref_clear(&j->sci); g_free(j->text); g_free(j->query); g_free(j->matches); g_free(j); }
 static void selection_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
  (void)source; SelectionJob *j=data; j->matches=g_new(InsightSearchMatch,10000); gsize total=0;
- if(!g_cancellable_is_cancelled(cancel) && insight_context_collect(j->text,strlen(j->text),j->query,INSIGHT_SEARCH_CASE,j->matches,10000,&total,NULL)) j->count=MIN(total,10000);
+ if(!g_cancellable_is_cancelled(cancel) && insight_context_collect(j->text,strlen(j->text),j->query,INSIGHT_SEARCH_CASE|INSIGHT_SEARCH_WORD,j->matches,10000,&total,NULL)) j->count=MIN(total,10000);
  g_task_return_boolean(task,TRUE);
 }
 static void selection_job_done(GObject *source,GAsyncResult *result,gpointer data) {

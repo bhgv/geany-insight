@@ -12,6 +12,10 @@ int main(void) {
  gsize a,b; gboolean w; GError *e=NULL; g_assert_false(insight_context_find("a",1,"[",0,TRUE,INSIGHT_SEARCH_REGEX,&a,&b,&w,&e)); g_assert_nonnull(e); g_clear_error(&e);
  g_assert_false(insight_context_find("a",1,"missing",0,TRUE,0,&a,&b,&w,NULL));
  InsightSearchMatch matches[4]; gsize count=0;
+ const char *exact="parser Parser parserDefinition subparsersDefault parser _parser parser1";
+ g_assert_true(insight_context_collect(exact,strlen(exact),"parser",INSIGHT_SEARCH_CASE|INSIGHT_SEARCH_WORD,matches,4,&count,&e));
+ g_assert_cmpuint(count,==,2); g_assert_cmpuint(matches[0].start,==,0); g_assert_cmpuint(matches[1].start,==,49);
+
  g_assert_true(insight_context_collect("x\r\nx\rx\nx",8,"x",0,matches,2,&count,&e)); g_assert_no_error(e);g_assert_cmpuint(count,==,4);g_assert_cmpuint(matches[1].start,==,3);g_assert_cmpuint(matches[1].line,==,2);g_assert_cmpuint(matches[1].column,==,0);
  g_assert_true(insight_context_collect("а\nб",5,"^",INSIGHT_SEARCH_REGEX,matches,4,&count,&e));g_assert_cmpuint(count,==,2);g_assert_cmpuint(matches[1].start,==,3);g_assert_cmpuint(matches[1].end,==,3);g_assert_cmpuint(matches[1].line,==,2);
  g_assert_true(insight_context_collect("foo food FOO",12,"foo",INSIGHT_SEARCH_WORD,matches,4,&count,&e));g_assert_cmpuint(count,==,2);

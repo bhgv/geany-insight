@@ -214,6 +214,12 @@ static gboolean step(gpointer data) {
   gchar *directory=g_path_get_dirname(test_project),*path=g_build_filename(directory,"tag-close-reopen.c",NULL); g_free(directory); g_assert_true(g_file_set_contents(path,"int retained_original(void) { return 1; }\n",-1,NULL)); GeanyDocument *temporary=document_open_file(path,FALSE,NULL,NULL); g_assert_nonnull(temporary); g_assert_nonnull(temporary->tm_file); g_assert_cmpuint(temporary->tm_file->tags_array->len,==,0); sci_set_text(temporary->editor->sci,"int stale_edit(void) { return 2; }\n"); document_set_text_changed(temporary,FALSE); guint retired_id=temporary->id; g_assert_true(document_close(temporary)); temporary=document_open_file(path,FALSE,NULL,NULL); g_assert_nonnull(temporary); g_assert_cmpuint(temporary->id,!=,retired_id); g_free(path);
  } else if(phase==27) {
   g_assert_nonnull(doc->tm_file); gboolean original=FALSE; for(guint n=0;n<doc->tm_file->tags_array->len;n++) { TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,n); g_assert_cmpstr(tag->name,!=,"stale_edit"); if(!strcmp(tag->name,"retained_original")) original=TRUE; } g_assert_true(original);
+  sci_set_text(doc->editor->sci,"parser Parser parserDefinition subparsersDefault parser _parser parser1"); SSM(doc->editor->sci,SCI_SETSEL,0,6); document_set_text_changed(doc,FALSE);
+ } else if(phase==28) {
+  if(!SSM(doc->editor->sci,SCI_INDICATORVALUEAT,30,49)) return G_SOURCE_CONTINUE;
+  g_assert_cmpint(SSM(doc->editor->sci,SCI_INDICATORVALUEAT,30,0),>,0);
+  const gint rejected[]={7,14,34,57,64};
+  for(guint n=0;n<G_N_ELEMENTS(rejected);n++) g_assert_cmpint(SSM(doc->editor->sci,SCI_INDICATORVALUEAT,30,rejected[n]),==,0);
   /* Quit while both a scan and a search are queued. */
   GtkWidget *reindex=find_button(window,"Reindex"); if(reindex) gtk_button_clicked(GTK_BUTTON(reindex));
   GtkWidget *query=find_named(window,"insight-project-query"); gtk_entry_set_text(GTK_ENTRY(query),"worker_second"); g_signal_emit_by_name(query,"activate");
