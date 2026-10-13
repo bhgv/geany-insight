@@ -222,7 +222,10 @@ static int symbols(lua_State *L) {
  if(count>(size_t)limit) count=(size_t)limit;
  lua_createtable(L,(int)count,0);
  for(size_t n=0;n<count;n++) {
-  lua_createtable(L,0,5);
+  lua_createtable(L,0,8);
+  lua_pushstring(L,found[n]->signature); lua_setfield(L,-2,"signature");
+  lua_pushstring(L,found[n]->type); lua_setfield(L,-2,"type");
+  lua_pushstring(L,found[n]->inheritance); lua_setfield(L,-2,"inheritance");
   lua_pushstring(L,found[n]->name); lua_setfield(L,-2,"name");
   lua_pushstring(L,found[n]->path); lua_setfield(L,-2,"path");
   lua_pushstring(L,found[n]->scope); lua_setfield(L,-2,"scope");

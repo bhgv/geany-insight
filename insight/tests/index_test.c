@@ -5,8 +5,8 @@
 #include <string.h>
 int main(void) {
  InsightIndex *i=insight_index_new(); assert(i);
- InsightSymbol a[]={ {"foo",NULL,"A","function",10},{"foobar",NULL,NULL,NULL,20} };
- InsightSymbol b[]={ {"foo",NULL,"B","function",3} };
+ InsightSymbol a[]={ {"foo",NULL,"A","function",10,NULL,NULL,NULL},{"foobar",NULL,NULL,NULL,20,NULL,NULL,NULL} };
+ InsightSymbol b[]={ {"foo",NULL,"B","function",3,NULL,NULL,NULL} };
  assert(insight_index_update(i,"a.cpp",a,2));
  assert(insight_index_update(i,"b.cpp",b,1));
  assert(insight_index_file_count(i)==2);
@@ -25,10 +25,10 @@ int main(void) {
  assert(insight_index_query(i,"foo",0,NULL,NULL,"a.cpp",1,out,5)==2 && !strcmp(out[0]->name,"foobar"));
  assert(insight_index_query(i,"foo",1,"B","function","a.cpp",0,out,5)==0);
  assert(insight_index_query(i,"foo",0,NULL,NULL,NULL,20,out,5)==3);
- InsightSymbol bad[]={ {NULL,NULL,NULL,NULL,1} };
+ InsightSymbol bad[]={ {NULL,NULL,NULL,NULL,1,NULL,NULL,NULL} };
  assert(!insight_index_update(i,"a.cpp",bad,1));
  assert(insight_index_count(i)==3);
- char name[]="new"; InsightSymbol c[]={ {name,NULL,NULL,NULL,8} };
+ char name[]="new"; InsightSymbol c[]={ {name,NULL,NULL,NULL,8,NULL,NULL,NULL} };
  assert(insight_index_update(i,"a.cpp",c,1)); name[0]='X';
  assert(insight_index_find(i,"foo",1,out,5)==1 && out[0]->line==3);
  assert(insight_index_find(i,"new",1,out,5)==1);
@@ -46,7 +46,7 @@ int main(void) {
   for(unsigned k=0;k<number;k++) {
    unsigned name=(step+k)%8; model[file][name]=1;
    snprintf(names[k],sizeof names[k],"symbol-%u",name);
-   batch[k]=(InsightSymbol){names[k],NULL,NULL,NULL,k+1};
+   batch[k]=(InsightSymbol){names[k],NULL,NULL,NULL,k+1,NULL,NULL,NULL};
   }
   assert(insight_index_update(i,path,batch,number));
   for(unsigned name=0;name<8;name++) {

@@ -30,7 +30,7 @@ static int import_tags(InsightIndex *index,TMSourceFile *file,const char *path) 
   TMTag *tag=g_ptr_array_index(file->tags_array,j);
   if(!tag->name || !*tag->name || !tag->line) continue;
   kinds[used][0]=tag->kind_letter;
-  symbols[used]=(InsightSymbol){tag->name,path,tag->scope,kinds[used],tag->line}; used++;
+  symbols[used]=(InsightSymbol){tag->name,path,tag->scope,kinds[used],tag->line,tag->arglist,tag->var_type,tag->inheritance}; used++;
  }
  int ok=insight_index_update(index,path,symbols,used);
  g_free(kinds); g_free(symbols); return ok;

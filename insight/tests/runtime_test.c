@@ -33,10 +33,10 @@ int main(void) {
  assert(run("editor.replace_selection('ok')",error)==0);
  assert(strcmp(result,"ok")==0);
  InsightIndex *index=insight_index_new(); assert(index);
- InsightSymbol symbols[]={ {"foo",NULL,"namespace","f",42} };
+ InsightSymbol symbols[]={ {"foo",NULL,"namespace","f",42,"(int value)","int",""} };
  assert(insight_index_update(index,"project/a.cpp",symbols,1));
  InsightHost host={.context=NULL,.text=text,.selection=selection,.replace_selection=replace,.index=index};
- const char *script="local info=project.stats(); assert(info.symbols==1 and info.files_with_symbols==1); local s,total=project.symbols('fo'); assert(total==1 and #s==1); assert(s[1].name=='foo' and s[1].line==42 and s[1].path=='project/a.cpp'); local e,n=project.symbols('fo',true); assert(#e==0 and n==0)";
+ const char *script="local info=project.stats(); assert(info.symbols==1 and info.files_with_symbols==1); local s,total=project.symbols('fo'); assert(total==1 and #s==1); assert(s[1].name=='foo' and s[1].line==42 and s[1].path=='project/a.cpp' and s[1].signature=='(int value)' and s[1].type=='int' and s[1].inheritance==''); local e,n=project.symbols('fo',true); assert(#e==0 and n==0)";
  assert(insight_run(&host,script,strlen(script),error,sizeof error)==0);
  const char *file_query="local f,n=project.files('project/'); assert(n==1 and f[1]=='project/a.cpp'); local e,t=project.files('',1,1); assert(t==1 and #e==0)";
  assert(insight_run(&host,file_query,strlen(file_query),error,sizeof error)==0);

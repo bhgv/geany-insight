@@ -9,7 +9,7 @@ int main(int argc,char **argv) {
  g_assert_nonnull(g_mkdtemp(directory));
  gchar *path=g_build_filename(directory,"project.idx",NULL);
  InsightIndex *disk=insight_index_new(); g_assert_nonnull(disk);
- InsightSymbol a[]={ {"saved",NULL,"Scope","f",10} };
+ InsightSymbol a[]={ {"saved",NULL,"Scope","f",10,NULL,NULL,NULL} };
  g_assert(insight_index_update(disk,"/project/a.cpp",a,1));
  GError *error=NULL;
  g_assert(insight_cache_save(path,disk,"/project",&error)); g_assert_no_error(error);
@@ -19,7 +19,7 @@ int main(int argc,char **argv) {
  insight_index_free(loaded);
  /* Live document overlay never changes the separately stored disk snapshot. */
  InsightIndex *live=insight_index_clone(disk); g_assert_nonnull(live);
- InsightSymbol edit[]={ {"unsaved",NULL,NULL,NULL,20} };
+ InsightSymbol edit[]={ {"unsaved",NULL,NULL,NULL,20,NULL,NULL,NULL} };
  g_assert(insight_index_update(live,"/project/a.cpp",edit,1));
  loaded=insight_cache_load(path,&root,&error); g_assert_no_error(error);
  g_assert_cmpuint(insight_index_find(loaded,"unsaved",1,NULL,0),==,0);

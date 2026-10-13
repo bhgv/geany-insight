@@ -11,6 +11,7 @@ static char *copy(const char *s) {
 static void release(InsightSymbol *s) {
  free((void *)s->name); free((void *)s->path);
  free((void *)s->scope); free((void *)s->kind);
+ free((void *)s->signature); free((void *)s->type); free((void *)s->inheritance);
 }
 static int compare(const void *a,const void *b) {
  const InsightSymbol *x=a,*y=b; int r=strcmp(x->name,y->name);
@@ -18,6 +19,9 @@ static int compare(const void *a,const void *b) {
  if(!r) r=(x->line>y->line)-(x->line<y->line);
  if(!r) r=strcmp(x->scope,y->scope);
  if(!r) r=strcmp(x->kind,y->kind);
+ if(!r) r=strcmp(x->signature,y->signature);
+ if(!r) r=strcmp(x->type,y->type);
+ if(!r) r=strcmp(x->inheritance,y->inheritance);
  return r;
 }
 InsightIndex *insight_index_new(void) { return calloc(1,sizeof(InsightIndex)); }
@@ -59,7 +63,10 @@ int insight_index_update(InsightIndex *i,const char *path,const InsightSymbol *s
   next[n].name=copy(s[n].name); next[n].path=copy(path);
   next[n].scope=copy(s[n].scope ? s[n].scope : "");
   next[n].kind=copy(s[n].kind ? s[n].kind : ""); next[n].line=s[n].line;
-  if(!next[n].name || !next[n].path || !next[n].scope || !next[n].kind) goto failure;
+  next[n].signature=copy(s[n].signature ? s[n].signature : "");
+  next[n].type=copy(s[n].type ? s[n].type : "");
+  next[n].inheritance=copy(s[n].inheritance ? s[n].inheritance : "");
+  if(!next[n].name || !next[n].path || !next[n].scope || !next[n].kind || !next[n].signature || !next[n].type || !next[n].inheritance) goto failure;
  }
  size_t pos=count;
  for(size_t n=0;n<i->count;n++) {
@@ -111,8 +118,11 @@ InsightIndex *insight_index_clone(const InsightIndex *source) {
   next->items[n].path=copy(source->items[n].path);
   next->items[n].scope=copy(source->items[n].scope);
   next->items[n].kind=copy(source->items[n].kind);
+  next->items[n].signature=copy(source->items[n].signature);
+  next->items[n].type=copy(source->items[n].type);
+  next->items[n].inheritance=copy(source->items[n].inheritance);
   next->items[n].line=source->items[n].line;
-  if(!next->items[n].name || !next->items[n].path || !next->items[n].scope || !next->items[n].kind) {
+  if(!next->items[n].name || !next->items[n].path || !next->items[n].scope || !next->items[n].kind || !next->items[n].signature || !next->items[n].type || !next->items[n].inheritance) {
    insight_index_free(next); return NULL;
   }
  }
@@ -120,7 +130,7 @@ InsightIndex *insight_index_clone(const InsightIndex *source) {
 }
 #define SNAPSHOT_FIELDS_LIMIT 65536u
 #define SNAPSHOT_SYMBOLS_LIMIT 250000u
-static const unsigned char magic[8]={'G','I','S','I','D','X',0,1};
+static const unsigned char magic[8]={'G','I','S','I','D','X',0,2};
 static uint32_t checksum(const unsigned char *s,size_t length) {
  uint32_t crc=UINT32_MAX;
  for(size_t n=0;n<length;n++) {
@@ -155,7 +165,8 @@ int insight_index_serialize(const InsightIndex *i,const char *root,unsigned char
   if(total>INSIGHT_INDEX_SNAPSHOT_LIMIT-8) return 0;
   total+=8;
   if(!field_size(s->name,&total) || !field_size(s->path,&total) ||
-   !field_size(s->scope,&total) || !field_size(s->kind,&total)) return 0;
+   !field_size(s->scope,&total) || !field_size(s->kind,&total) ||
+   !field_size(s->signature,&total) || !field_size(s->type,&total) || !field_size(s->inheritance,&total)) return 0;
  }
  unsigned char *buffer=malloc(total); if(!buffer) return 0;
  unsigned char *cursor=buffer; memcpy(cursor,magic,8); cursor+=8;
@@ -164,6 +175,7 @@ int insight_index_serialize(const InsightIndex *i,const char *root,unsigned char
   const InsightSymbol *s=&i->items[n]; put64(&cursor,(uint64_t)s->line);
   put_string(&cursor,s->name); put_string(&cursor,s->path);
   put_string(&cursor,s->scope); put_string(&cursor,s->kind);
+  put_string(&cursor,s->signature); put_string(&cursor,s->type); put_string(&cursor,s->inheritance);
  }
  put32(&cursor,checksum(buffer,total-4));
  *data=buffer; *length=total; return 1;
@@ -187,13 +199,13 @@ static char *get_string(const unsigned char **cursor,const unsigned char *end) {
 }
 InsightIndex *insight_index_deserialize(const unsigned char *data,size_t length,char **root) {
  if(root) *root=NULL;
- if(!data || !root || length<20 || length>INSIGHT_INDEX_SNAPSHOT_LIMIT || memcmp(data,magic,8)) return NULL;
+ if(!data || !root || length<20 || length>INSIGHT_INDEX_SNAPSHOT_LIMIT || memcmp(data,magic,7) || (data[7]!=1 && data[7]!=2)) return NULL;
  if(checksum(data,length-4)!=get32(data+length-4)) return NULL;
  uint32_t count=get32(data+8);
  if(count>SNAPSHOT_SYMBOLS_LIMIT) return NULL;
  const unsigned char *cursor=data+12,*end=data+length-4;
  char *path=get_string(&cursor,end); if(!path) return NULL;
- if(count>(size_t)(end-cursor)/26) { free(path); return NULL; }
+ if(count>(size_t)(end-cursor)/(data[7]==1 ? 26u : 38u)) { free(path); return NULL; }
  InsightIndex *i=insight_index_new(); if(!i) { free(path); return NULL; }
  i->items=count ? calloc(count,sizeof *i->items) : NULL;
  if(count && !i->items) { free(path); insight_index_free(i); return NULL; }
@@ -205,7 +217,10 @@ InsightIndex *insight_index_deserialize(const unsigned char *data,size_t length,
   InsightSymbol *s=&i->items[n]; s->line=(unsigned long)line;
   s->name=get_string(&cursor,end); s->path=get_string(&cursor,end);
   s->scope=get_string(&cursor,end); s->kind=get_string(&cursor,end);
-  if(!s->name || !*s->name || !s->path || !*s->path || !s->scope || !s->kind) goto failure;
+  s->signature=data[7]==2 ? get_string(&cursor,end) : copy("");
+  s->type=data[7]==2 ? get_string(&cursor,end) : copy("");
+  s->inheritance=data[7]==2 ? get_string(&cursor,end) : copy("");
+  if(!s->name || !*s->name || !s->path || !*s->path || !s->scope || !s->kind || !s->signature || !s->type || !s->inheritance) goto failure;
  }
  if(cursor!=end) goto failure;
  if(count>1) qsort(i->items,count,sizeof *i->items,compare);

@@ -8,5 +8,8 @@
 /* Copy native tag data into the owning UTF-8 index. NULL/empty tags clear path.
  * Reject >250k total symbols without changing the previous file snapshot. */
 gboolean insight_native_import(InsightIndex *,TMSourceFile *,const char *);
+/* Parse validated UTF-8 source and import produced tags. The legacy parser
+ * return value is not a reliable success indicator for nonempty buffers. */
+gboolean insight_native_parse(InsightIndex *,TMSourceFile *,const char *,const char *,gsize);
 guint insight_native_definition_rank(const InsightSymbol *,const char *);
 #endif

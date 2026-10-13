@@ -191,7 +191,7 @@ static void restore_index_cache(void) {
  gboolean valid=root && g_path_is_absolute(root); const InsightSymbol *page[256]; size_t total=insight_index_count(index);
  for(size_t offset=0;valid && offset<total;offset+=256) {
   insight_index_query(index,"",FALSE,NULL,NULL,NULL,offset,page,256);
-  for(size_t i=0;i<256 && offset+i<total;i++) if(!g_utf8_validate(page[i]->name,-1,NULL) || !g_utf8_validate(page[i]->path,-1,NULL) || !g_utf8_validate(page[i]->scope,-1,NULL) || !g_utf8_validate(page[i]->kind,-1,NULL) || !g_path_is_absolute(page[i]->path)) { valid=FALSE; break; }
+  for(size_t i=0;i<256 && offset+i<total;i++) if(!g_utf8_validate(page[i]->name,-1,NULL) || !g_utf8_validate(page[i]->path,-1,NULL) || !g_utf8_validate(page[i]->scope,-1,NULL) || !g_utf8_validate(page[i]->kind,-1,NULL) || !g_utf8_validate(page[i]->signature,-1,NULL) || !g_utf8_validate(page[i]->type,-1,NULL) || !g_utf8_validate(page[i]->inheritance,-1,NULL) || !g_path_is_absolute(page[i]->path)) { valid=FALSE; break; }
  }
  if(!valid) { insight_index_free(index); free(root); ui_set_statusbar(TRUE,"Workspace cache contains invalid paths or text"); return; }
  insight_index_free(wb.base); wb.base=index; wb.root=g_strdup(root); free(root);
@@ -234,7 +234,7 @@ static gboolean scan_step(gpointer data) {
   if(file) {
    file->lang=ft->lang;
    gchar *decoded=read_disk_source(utf8,TRUE);
-   if(decoded && tm_source_file_parse(file,(guchar *)decoded,strlen(decoded),TRUE) && insight_native_import(wb.base,file,utf8)) wb.index_dirty=TRUE;
+   if(decoded && insight_native_parse(wb.base,file,utf8,decoded,strlen(decoded))) wb.index_dirty=TRUE;
    else { wb.scan_failed=TRUE; wb.skipped++; }
    g_free(decoded); tm_source_file_free(file);
   } else { wb.scan_failed=TRUE; wb.skipped++; }
@@ -271,7 +271,7 @@ static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word,
   for(guint j=0;j<wb.definitions->len;j++) { Location *old=g_ptr_array_index(wb.definitions,j); if(old->line==tag->line && !g_strcmp0(old->path,tag->path)) { duplicate=TRUE; break; } }
   if(duplicate) continue;
   Location *location=g_new0(Location,1); location->path=g_strdup(tag->path); location->line=tag->line;
-  gchar *label=g_strdup_printf("%s • %s — %s:%lu",word,tag->scope,tag->path,tag->line);
+  gchar *label=g_strdup_printf("%s %s%s • %s — %s:%lu",tag->type,word,tag->signature,tag->scope,tag->path,tag->line);
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.choices),label); g_free(label);
   if(!chosen || insight_native_definition_rank(tag,preferred)>insight_native_definition_rank(chosen,preferred)) { chosen=tag; selected=(gint)wb.definitions->len; }
   g_ptr_array_add(wb.definitions,location);
@@ -513,14 +513,14 @@ static void usage_start(GtkWidget *widget,gpointer data) {
  wb.usage_code_only=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_code)); gtk_list_store_clear(wb.matches);
  const char *query=gtk_entry_get_text(GTK_ENTRY(wb.usage_entry)); size_t total;
  gint mode=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode)); wb.usage_mode=mode;
- if(mode==1 || mode==2) {
+ if(mode==1 || mode==2 || mode==4 || mode==5) {
   gtk_list_store_clear(wb.matches); refresh_index(); const InsightSymbol *found[2000];
-  total=insight_relation_query(wb.index,query,mode==1 ? INSIGHT_RELATION_DEFINITIONS : INSIGHT_RELATION_MEMBERS,0,found,G_N_ELEMENTS(found));
+  total=insight_relation_query(wb.index,query,mode==1 ? INSIGHT_RELATION_DEFINITIONS : (mode==2 ? INSIGHT_RELATION_MEMBERS : (mode==4 ? INSIGHT_RELATION_BASES : INSIGHT_RELATION_DERIVED)),0,found,G_N_ELEMENTS(found));
   if(total==SIZE_MAX) { gtk_label_set_text(GTK_LABEL(wb.usage_status),"Enter a symbol name (or qualified owner for Members)"); return; }
-  for(size_t i=0;i<MIN(total,G_N_ELEMENTS(found));i++) { const InsightSymbol *tag=found[i]; GtkTreeIter iter; gtk_list_store_append(wb.matches,&iter); gchar *description=g_strdup_printf("%s • %s",tag->kind,tag->scope);
+  for(size_t i=0;i<MIN(total,G_N_ELEMENTS(found));i++) { const InsightSymbol *tag=found[i]; GtkTreeIter iter; gtk_list_store_append(wb.matches,&iter); gchar *description=g_strdup_printf("%s • %s %s%s • %s • bases: %s",tag->kind,tag->type,tag->name,tag->signature,tag->scope,tag->inheritance);
    gtk_list_store_set(wb.matches,&iter,USAGE_DISPLAY,tag->path,USAGE_PATH,tag->path,USAGE_LINE,tag->line,USAGE_SYMBOL,tag->name,USAGE_SNIPPET,description,-1); g_free(description);
   }
-  gchar *label=g_strdup_printf("%zu tag-based %s%s",total,mode==1 ? "definitions/declarations" : "direct members",total>2000 ? " • showing first 2000" : ""); gtk_label_set_text(GTK_LABEL(wb.usage_status),label); g_free(label); return;
+  gchar *label=g_strdup_printf("%zu tag-based %s%s",total,mode==1 ? "definitions/declarations" : (mode==2 ? "direct members" : (mode==4 ? "base definitions" : "derived types")),total>2000 ? " • showing first 2000" : ""); gtk_label_set_text(GTK_LABEL(wb.usage_status),label); g_free(label); return;
  }
  wb.usage_flags=(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.project_case)) ? INSIGHT_SEARCH_CASE : 0)|(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.project_word)) ? INSIGHT_SEARCH_WORD : 0)|(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.project_regex)) ? INSIGHT_SEARCH_REGEX : 0);
  GError *query_error=NULL;
@@ -575,7 +575,20 @@ static void relation_controls(GtkWidget *widget,gpointer data) {
 static void relation_update_from_editor(gboolean dirty) {
  if(!wb.relation_follow || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_follow))) return;
  GeanyDocument *doc=document_get_current(); gchar word[1025]={0};
- if(doc) editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);
+ if(doc) {
+  editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);
+  refresh_index();
+  if(!*word || !insight_index_find(wb.index,word,TRUE,NULL,0)) {
+   gulong line=(gulong)sci_get_current_line(doc->editor->sci)+1;TMTag *selected=NULL;guint best=0;
+   if(doc->tm_file && doc->tm_file->tags_array) for(guint i=0;i<doc->tm_file->tags_array->len;i++) {
+    TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,i);
+    if(!tag || tag->line!=line || !tag->name || !g_utf8_validate(tag->name,-1,NULL) || strlen(tag->name)>=sizeof word) continue;
+    guint rank=(tag->kind_letter && strchr("fmcsi",tag->kind_letter)) ? 2 : 1;
+    if(!selected || rank>best) { selected=tag;best=rank; }
+   }
+   if(selected) g_strlcpy(word,selected->name,sizeof word);
+  }
+ }
  gint mode=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode));
  if(!dirty && !wb.relation_dirty && mode==wb.relation_last_mode && !g_strcmp0(word,wb.relation_word)) return;
  wb.relation_dirty=FALSE; wb.relation_last_mode=mode; g_free(wb.relation_word); wb.relation_word=g_strdup(word);
@@ -591,7 +604,7 @@ static void create_usage_browser(void) {
  wb.usage_code=gtk_check_button_new_with_label("References: code only");
  wb.relation_follow=gtk_check_button_new_with_label("Follow symbol in editor");
  wb.relation_mode=gtk_combo_box_text_new();
- const char *modes[]={"References (lexical)","Definitions / declarations","Direct members (tags)","Text search (project)"};
+ const char *modes[]={"References (lexical)","Definitions / declarations","Direct members (tags)","Text search (project)","Base types (tags)","Derived types (tags)"};
  for(guint i=0;i<G_N_ELEMENTS(modes);i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.relation_mode),modes[i]);
  gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),0);
  GtkWidget *search=gtk_button_new_with_label("Search"),*cancel=gtk_button_new_with_label("Stop");
@@ -1440,7 +1453,7 @@ static void restore_workbench_settings(void) {
   gint project_flags=g_key_file_get_integer(settings,"workbench","project-search-flags",NULL),editor_flags=g_key_file_get_integer(settings,"workbench","editor-search-flags",NULL);
   if(project_flags>=0 && project_flags<=7) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_case),project_flags&INSIGHT_SEARCH_CASE); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_word),project_flags&INSIGHT_SEARCH_WORD); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_regex),project_flags&INSIGHT_SEARCH_REGEX); }
   if(editor_flags>=0 && editor_flags<=7) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.editor_case),editor_flags&INSIGHT_SEARCH_CASE); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.editor_word),editor_flags&INSIGHT_SEARCH_WORD); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.editor_regex),editor_flags&INSIGHT_SEARCH_REGEX); }
-  gint relation=g_key_file_get_integer(settings,"workbench","relation-mode",NULL); if(relation>=0 && relation<4) gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),relation);
+  gint relation=g_key_file_get_integer(settings,"workbench","relation-mode",NULL); if(relation>=0 && relation<6) gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),relation);
   if(g_key_file_has_key(settings,"workbench","relation-follow",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_follow),g_key_file_get_boolean(settings,"workbench","relation-follow",NULL));
   if(g_key_file_has_key(settings,"workbench","references-code-only",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.usage_code),g_key_file_get_boolean(settings,"workbench","references-code-only",NULL));
   gint tab=g_key_file_get_integer(settings,"workbench","project-tab",NULL); if(tab>=0 && tab<8) gtk_notebook_set_current_page(GTK_NOTEBOOK(wb.project_notebook),tab);

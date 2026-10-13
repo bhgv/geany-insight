@@ -5,13 +5,14 @@
 typedef struct {
  const char *name, *path, *scope, *kind;
  unsigned long line; /* one-based */
+ const char *signature,*type,*inheritance; /* optional on input; owned UTF-8-compatible strings in index */
 } InsightSymbol;
 typedef struct InsightIndex InsightIndex;
 InsightIndex *insight_index_new(void);
 void insight_index_free(InsightIndex *);
 InsightIndex *insight_index_clone(const InsightIndex *);
 #define INSIGHT_INDEX_SNAPSHOT_LIMIT (64u * 1024u * 1024u)
-/* Versioned, endian-independent snapshot with CRC32 corruption detection.
+/* Version 2 (reads version 1), endian-independent snapshot with CRC32 corruption detection.
  * Root is metadata only; decoding never accesses paths from the snapshot.
  * Serialized bytes/root are malloc-owned; caller frees them. On failure,
  * output pointers are NULL and length is zero. Max 250k symbols, 64 KiB/field. */
