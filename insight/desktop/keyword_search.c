@@ -15,6 +15,32 @@ static gint node(Parser *p,guint kind,gint a,gint b) {
  gint index=(gint)p->count++; p->nodes[index]=(Node){.kind=kind,.left=a,.right=b}; return index;
 }
 static gint expression(Parser *);
+static gboolean vowel(char c) { return strchr("aeiou",g_ascii_tolower(c))!=NULL; }
+static void add_form(GPtrArray *forms,const char *stem,const char *suffix,gboolean upper) {
+ gchar *ending=upper ? g_ascii_strup(suffix,-1) : g_strdup(suffix),*form=g_strconcat(stem,ending,NULL); g_free(ending);
+ if(!g_ptr_array_find_with_equal_func(forms,form,(GEqualFunc)g_str_equal,NULL)) g_ptr_array_add(forms,form); else g_free(form);
+}
+static gint form_order(gconstpointer a,gconstpointer b) { const char *x=*(const char *const *)a,*y=*(const char *const *)b; gsize nx=strlen(x),ny=strlen(y); return nx==ny ? strcmp(x,y) : (nx>ny ? -1 : 1); }
+/* Regular English endings for base keywords, not a dictionary stemmer. Keep
+ * phrases, regex and non-ASCII identifiers literal. Prefer the longest form
+ * so a whole inflection is highlighted rather than its shorter base prefix. */
+static gchar *variation_pattern(const char *word) {
+ gsize n=strlen(word); if(n<2 || n>128) return NULL; gboolean upper=TRUE; guint vowel_groups=0;
+ for(gsize i=0;i<n;i++) { if(!g_ascii_isalpha(word[i])) return NULL; if(g_ascii_islower(word[i])) upper=FALSE; if(vowel(word[i]) && (!i || !vowel(word[i-1]))) vowel_groups++; }
+ gchar *lower=g_ascii_strdown(word,-1); GPtrArray *forms=g_ptr_array_new_with_free_func(g_free); add_form(forms,word,"",upper);
+ if(lower[n-1]=='y' && !vowel(lower[n-2])) { gchar *stem=g_strndup(word,n-1); add_form(forms,stem,"ies",upper); add_form(forms,stem,"ied",upper); add_form(forms,word,"ing",upper); g_free(stem); }
+ else {
+  gboolean es=lower[n-1]=='s' || lower[n-1]=='x' || lower[n-1]=='z' || g_str_has_suffix(lower,"ch") || g_str_has_suffix(lower,"sh"); add_form(forms,word,es ? "es" : "s",upper);
+  if(lower[n-1]=='e' && lower[n-2]!='e' && !g_str_has_suffix(lower,"ie")) { gchar *stem=g_strndup(word,n-1); add_form(forms,word,"d",upper); add_form(forms,stem,"ing",upper); g_free(stem); }
+  else if(g_str_has_suffix(lower,"ie")) { gchar *stem=g_strndup(word,n-2); add_form(forms,word,"d",upper); add_form(forms,stem,"ying",upper); g_free(stem); }
+  else {
+   gboolean doubled=n>=3 && vowel_groups==1 && !vowel(lower[n-1]) && !strchr("wxy",lower[n-1]) && vowel(lower[n-2]) && !vowel(lower[n-3]);
+   gchar *stem=doubled ? g_strdup_printf("%s%c",word,word[n-1]) : g_strdup(word); add_form(forms,stem,"ed",upper); add_form(forms,stem,"ing",upper); g_free(stem);
+  }
+ }
+ g_ptr_array_sort(forms,form_order); GString *pattern=g_string_new("(?:"); for(guint i=0;i<forms->len;i++) { if(i) g_string_append_c(pattern,'|'); g_string_append(pattern,g_ptr_array_index(forms,i)); } g_string_append_c(pattern,')');
+ g_free(lower); g_ptr_array_free(forms,TRUE); return g_string_free(pattern,FALSE);
+}
 static gint atom(Parser *p) {
  space(p);
  if(++p->depth>16) { p->failed=TRUE; p->depth--; return -1; }
@@ -36,7 +62,7 @@ static gint atom(Parser *p) {
   if(quoted) { if(*p->cursor=='"') p->cursor++; else p->failed=TRUE; }
   if(!term->len || term->len>1024 || ++p->terms>32) p->failed=TRUE;
   result=node(p,TERM,-1,-1);
-  if(result>=0) { p->nodes[result].text=g_string_free(term,FALSE); p->nodes[result].flags=flags; p->nodes[result].term=p->terms-1; } else g_string_free(term,TRUE);
+  if(result>=0) { p->nodes[result].text=g_string_free(term,FALSE); if((p->flags&INSIGHT_KEYWORD_VARIATIONS) && !(flags&INSIGHT_SEARCH_REGEX)) { gchar *pattern=variation_pattern(p->nodes[result].text); if(pattern) { g_free(p->nodes[result].text); p->nodes[result].text=pattern; flags|=INSIGHT_SEARCH_REGEX; } } p->nodes[result].flags=flags; p->nodes[result].term=p->terms-1; } else g_string_free(term,TRUE);
  }
  p->depth--; return result;
 }
@@ -66,7 +92,8 @@ static Proof evaluate(Parser *p,gint index,gboolean negated) {
 }
 static gint compare(gconstpointer a,gconstpointer b) { const InsightSearchMatch *x=a,*y=b; if(x->start!=y->start) return x->start<y->start ? -1 : 1; return x->end==y->end ? 0 : (x->end<y->end ? -1 : 1); }
 gboolean insight_keyword_collect(const char *text,gsize size,const char *query,guint flags,guint context,InsightSearchMatch *out,gsize capacity,gsize *total,GError **error) {
- if(!text || !query || !total || (capacity && !out) || size>2u*1024u*1024u || context>50 || strlen(query)>4096 || !g_utf8_validate(text,(gssize)size,NULL) || memchr(text,0,size) || !g_utf8_validate(query,-1,NULL)) {
+ if(total) *total=0;
+ if(!text || !query || !total || flags>15 || (capacity && !out) || size>2u*1024u*1024u || context>50 || strlen(query)>4096 || !g_utf8_validate(text,(gssize)size,NULL) || memchr(text,0,size) || !g_utf8_validate(query,-1,NULL)) {
   g_set_error_literal(error,G_KEY_FILE_ERROR,G_KEY_FILE_ERROR_INVALID_VALUE,"Invalid keyword search input"); return FALSE;
  }
  *total=0; Parser p={.cursor=query,.flags=flags}; gint root=expression(&p); space(&p); gboolean ok=!p.failed && !*p.cursor && root>=0;

@@ -33,6 +33,20 @@ int main(void) {
   g_assert_cmpint(count(text,"NOT NOT alpha",INSIGHT_SEARCH_WORD,0)>0,==,a);
   g_free(text);
  }
+ guint variants=INSIGHT_KEYWORD_VARIATIONS|INSIGHT_SEARCH_WORD;
+ g_assert_cmpuint(count("open opens opened opening opener","open",variants,0),==,4);
+ g_assert_cmpuint(count("save saves saved saving saver","save",variants,0),==,4);
+ g_assert_cmpuint(count("copy copies copied copying copycat","copy",variants,0),==,4);
+ g_assert_cmpuint(count("stop stops stopped stopping stopgap","stop",variants,0),==,4);
+ g_assert_cmpuint(count("fix fixes fixed fixing fixup","fix",variants,0),==,4);
+ g_assert_cmpuint(count("tie ties tied tying tieing","tie",variants,0),==,4);
+ g_assert_cmpuint(count("saving writing","save write",variants,0),==,2);
+ g_assert_cmpuint(count("saving","read OR NOT save",variants,0),==,0);
+ g_assert_cmpuint(count("SAVE SAVES SAVED SAVING save saved","=SAVE",variants,0),==,4);
+ g_assert_cmpuint(count("сохранить сохранение","сохранить",variants,0),==,1);
+ g_assert_cmpuint(count("save write saving writing","\"save write\"",variants,0),==,1);
+ g_assert_cmpuint(count("saving save","?\"save\"",variants,0),==,1);
+ InsightSearchMatch expanded[8]; gsize expanded_total=0; g_assert_true(insight_keyword_collect("SaveRemote SavedRemote SavingRemote",strlen("SaveRemote SavedRemote SavingRemote"),"save",INSIGHT_KEYWORD_VARIATIONS,0,expanded,8,&expanded_total,NULL)); g_assert_cmpuint(expanded_total,==,3); g_assert_cmpuint(expanded[0].end-expanded[0].start,==,4); g_assert_cmpuint(expanded[1].end-expanded[1].start,==,5); g_assert_cmpuint(expanded[2].end-expanded[2].start,==,6);
  const char *bad[]={"","cat AND","(cat OR dog","\"unterminated","?\"[\"","cat)"};
  for(guint i=0;i<G_N_ELEMENTS(bad);i++) { GError *error=NULL; gsize total=0; g_assert_false(insight_keyword_collect("x",1,bad[i],0,0,NULL,0,&total,&error)); g_assert_nonnull(error); g_clear_error(&error); }
  InsightSearchMatch match; gsize total=0; g_assert_true(insight_keyword_collect("cat cat",7,"cat OR cat",0,0,&match,1,&total,NULL)); g_assert_cmpuint(total,==,2); g_assert_cmpuint(match.start,==,0);

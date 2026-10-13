@@ -17,6 +17,7 @@ gboolean insight_search_state_save(const InsightSearchState *s,const char *path,
  GKeyFile *key=g_key_file_new();
  g_key_file_set_integer(key,"search","version",1); g_key_file_set_string(key,"search","query",s->query); g_key_file_set_string(key,"search","mask",s->mask);
  g_key_file_set_integer(key,"search","flags",(gint)s->flags); g_key_file_set_integer(key,"search","scope",(gint)s->scope); g_key_file_set_integer(key,"search","context",(gint)s->context); g_key_file_set_boolean(key,"search","keywords",s->keywords);
+ g_key_file_set_boolean(key,"search","variations",s->variations);
  g_key_file_set_string_list(key,"search","files",(const gchar *const *)s->files->pdata,s->files->len);
  gsize length; gchar *data=g_key_file_to_data(key,&length,NULL); g_key_file_unref(key); gboolean ok=FALSE;
  if(length>8u*1024u*1024u) g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Search settings exceed 8 MiB");
@@ -41,6 +42,7 @@ InsightSearchState *insight_search_state_load(const char *path,GError **error) {
   if(ok) { s->scope=(guint)g_key_file_get_integer(key,"search","scope",&e); ok=!e; }
   if(ok) { s->context=(guint)g_key_file_get_integer(key,"search","context",&e); ok=!e; }
   if(ok) { s->keywords=g_key_file_get_boolean(key,"search","keywords",&e); ok=!e; }
+  if(ok && g_key_file_has_key(key,"search","variations",NULL)) { s->variations=g_key_file_get_boolean(key,"search","variations",&e); ok=!e; }
   if(ok) { gsize count=0; gchar **paths=g_key_file_get_string_list(key,"search","files",&count,&e); if(!e && count<=10000) for(gsize i=0;i<count;i++) g_ptr_array_add(s->files,g_strdup(paths[i])); else if(!e) g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Too many selected search files"); g_strfreev(paths); ok=!e; }
   if(e) g_propagate_error(error,e);
  }

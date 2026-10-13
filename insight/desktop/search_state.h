@@ -5,7 +5,7 @@
 typedef struct {
  gchar *query,*mask;
  guint flags,scope,context;
- gboolean keywords;
+ gboolean keywords,variations;
  GPtrArray *files;
 } InsightSearchState;
 InsightSearchState *insight_search_state_new(void);

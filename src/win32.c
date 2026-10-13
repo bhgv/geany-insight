@@ -77,77 +77,39 @@ gint win32_check_write_permission(const gchar *dir)
 }
 
 
-static FILE *open_std_handle(DWORD handle, const char *mode)
+/* Keep inherited file/pipe handles intact: diagnostic launchers redirect them.
+ * FILE objects must never be copied between streams (or CRT instances). */
+static gboolean redirected_handle(DWORD id)
 {
-	HANDLE lStdHandle;
-	int hConHandle;
-	FILE *fp;
-
-	lStdHandle = GetStdHandle(handle);
-	if (lStdHandle == INVALID_HANDLE_VALUE)
-	{
-		gchar *err = g_win32_error_message(GetLastError());
-		g_warning("GetStdHandle(%ld) failed: %s", (long)handle, err);
-		g_free(err);
-		return NULL;
-	}
-	hConHandle = _open_osfhandle((intptr_t)lStdHandle, _O_TEXT);
-	if (hConHandle == -1)
-	{
-		gchar *err = g_win32_error_message(GetLastError());
-		g_warning("_open_osfhandle(handle(%ld), _O_TEXT) failed: %s", (long)handle, err);
-		g_free(err);
-		return NULL;
-	}
-	fp = _fdopen(hConHandle, mode);
-	if (! fp)
-	{
-		gchar *err = g_win32_error_message(GetLastError());
-		g_warning("_fdopen(%d, \"%s\") failed: %s", hConHandle, mode, err);
-		g_free(err);
-		return NULL;
-	}
-	if (setvbuf(fp, NULL, _IONBF, 0) != 0)
-	{
-		gchar *err = g_win32_error_message(GetLastError());
-		g_warning("setvbuf(%p, NULL, _IONBF, 0) failed: %s", fp, err);
-		g_free(err);
-		fclose(fp);
-		return NULL;
-	}
-
-	return fp;
+	HANDLE handle = GetStdHandle(id);
+	DWORD type = GetFileType(handle);
+	return handle != NULL && handle != INVALID_HANDLE_VALUE &&
+		(type == FILE_TYPE_DISK || type == FILE_TYPE_PIPE);
 }
 
 
 static void debug_setup_console(void)
 {
-	static const WORD MAX_CONSOLE_LINES = 500;
-	CONSOLE_SCREEN_BUFFER_INFO coninfo;
-	FILE	*fp;
+	gboolean redirected_out = redirected_handle(STD_OUTPUT_HANDLE);
+	gboolean redirected_err = redirected_handle(STD_ERROR_HANDLE);
+	gboolean redirected_in = redirected_handle(STD_INPUT_HANDLE);
 
-	/* allocate a console for this app */
+	if (redirected_out && redirected_err)
+	{
+		setvbuf(stdout, NULL, _IONBF, 0);
+		setvbuf(stderr, NULL, _IONBF, 0);
+		return;
+	}
+	/* A terminal may already be attached. Only reconnect non-redirected streams. */
 	AllocConsole();
-
-	/* set the screen buffer to be big enough to let us scroll text */
-	GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &coninfo);
-	coninfo.dwSize.Y = MAX_CONSOLE_LINES;
-	SetConsoleScreenBufferSize(GetStdHandle(STD_OUTPUT_HANDLE), coninfo.dwSize);
-
-	/* redirect unbuffered STDOUT to the console */
-	fp = open_std_handle(STD_OUTPUT_HANDLE, "w");
-	if (fp)
-		*stdout = *fp;
-
-	/* redirect unbuffered STDERR to the console */
-	fp = open_std_handle(STD_ERROR_HANDLE, "w");
-	if (fp)
-		*stderr = *fp;
-
-	/* redirect unbuffered STDIN to the console */
-	fp = open_std_handle(STD_INPUT_HANDLE, "r");
-	if (fp)
-		*stdin = *fp;
+	if (!redirected_out)
+		freopen("CONOUT$", "w", stdout);
+	if (!redirected_err)
+		freopen("CONOUT$", "w", stderr);
+	if (!redirected_in)
+		freopen("CONIN$", "r", stdin);
+	setvbuf(stdout, NULL, _IONBF, 0);
+	setvbuf(stderr, NULL, _IONBF, 0);
 }
 
 

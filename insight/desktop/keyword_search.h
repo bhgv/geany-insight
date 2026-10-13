@@ -2,6 +2,7 @@
 #ifndef INSIGHT_KEYWORD_SEARCH_H
 #define INSIGHT_KEYWORD_SEARCH_H
 #include "context_search.h"
+enum { INSIGHT_KEYWORD_VARIATIONS=8 };
 /* Boolean keywords: implicit/explicit AND, OR, NOT/-/!, parentheses,
  * quoted phrases, =case-sensitive terms and ?"regular expressions".
  * Context is the maximum distance between matching start lines, 0..50. */
