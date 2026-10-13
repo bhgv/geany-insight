@@ -13,6 +13,7 @@
 #define SSM(sci,msg,w,l) scintilla_send_message((sci),(msg),(w),(l))
 static guint phase,original_id; static gint initial_size; static gchar *test_directory,*test_project,*bad_project,*second_project;
 static GtkWidget *window,*overview_menu;
+static gboolean definition_cancel_checked;
 static guint preview_heartbeats; static gint large_last; static guint heartbeat_source;
 static GtkWidget *find_named(GtkWidget *root,const char *name) {
  if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;
@@ -67,7 +68,13 @@ static void screenshot(void) {
  g_file_set_contents("overview-gui-smoke.ppm",ppm->str,ppm->len,NULL); g_string_free(ppm,TRUE); g_object_unref(picture);
 }
 static gboolean preview_heartbeat(gpointer data) { (void)data; preview_heartbeats++; return G_SOURCE_CONTINUE; }
-static gboolean timeout_fail(gpointer data) { (void)data; g_error("Overview GUI smoke timed out"); return G_SOURCE_REMOVE; }
+static gboolean move_back_before_definition(gpointer data) {
+ (void)data; GeanyDocument *doc=document_get_current(); gchar *text=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1); gchar *name=strstr(text,"return worker_first"); g_assert_nonnull(name); sci_set_current_position(doc->editor->sci,(gint)(name-text)+9,FALSE); g_free(text); return G_SOURCE_REMOVE;
+}
+static gboolean check_cancelled_definition(gpointer data) {
+ (void)data; ScintillaObject *preview=SCINTILLA(find_named(window,"insight-context-code")); g_assert_cmpint(sci_get_current_line(preview),==,0); definition_cancel_checked=TRUE; return G_SOURCE_REMOVE;
+}
+static gboolean timeout_fail(gpointer data) { (void)data; g_error("Overview GUI smoke timed out in phase %u",phase); return G_SOURCE_REMOVE; }
 static gboolean step(gpointer data) {
  (void)data; GeanyDocument *doc=document_get_current(); g_assert_nonnull(doc);
  if(phase==0) {
@@ -138,8 +145,10 @@ static gboolean step(gpointer data) {
   g_assert_true(g_file_set_contents(bad_project,"[project\nname=Broken\n",-1,NULL)); g_timeout_add(150,dismiss_invalid,NULL); g_timeout_add(150,select_project,GINT_TO_POINTER(1)); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
  } else if(phase==13) {
   g_assert_nonnull(strstr(gtk_window_get_title(GTK_WINDOW(window)),"GUI smoke")); project_empty(); document_set_text_changed(doc,FALSE);
+  GtkWidget *query=find_named(window,"insight-project-query"); gtk_entry_set_text(GTK_ENTRY(query),"function_"); g_signal_emit_by_name(query,"activate");
   g_timeout_add(150,select_project,GINT_TO_POINTER(2)); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
  } else if(phase==14) {
+  GtkWidget *old_results=find_named(window,"insight-search-results"); g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(old_results)),NULL),==,0);
   g_assert_nonnull(strstr(gtk_window_get_title(GTK_WINDOW(window)),"GUI second")); GtkWidget *view=find_named(window,"insight-project-files"); g_assert_nonnull(view); g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),NULL),==,1); document_set_text_changed(doc,FALSE);
   g_timeout_add(150,select_project,NULL); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
  } else if(phase==15) {
@@ -156,13 +165,26 @@ static gboolean step(gpointer data) {
  } else if(phase==18) {
   gchar *filename=g_build_filename(test_directory,"overview-smoke.c",NULL); GeanyDocument *target=document_open_file(filename,FALSE,NULL,NULL); g_free(filename); g_assert_nonnull(target); gtk_widget_grab_focus(GTK_WIDGET(target->editor->sci)); const gchar *source="int worker_first(void) { return 1; }\nint worker_second(void) { return 2; }\nint caller(void) { return worker_first() + worker_second(); }\n"; sci_set_text(target->editor->sci,source); sci_set_current_position(target->editor->sci,(gint)(strstr(source,"return worker_first")-source)+9,FALSE); document_set_text_changed(target,FALSE);
  } else if(phase==19) {
-  ScintillaObject *preview=SCINTILLA(find_named(window,"insight-context-code")); if(sci_get_current_line(preview)!=0 || !SSM(preview,SCI_INDICATORVALUEAT,28,4)) return G_SOURCE_CONTINUE; gchar *source=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1); gint position=(gint)(strstr(source,"+ worker_second")-source)+4; sci_set_current_position(doc->editor->sci,position,FALSE); g_free(source);
+  ScintillaObject *preview=SCINTILLA(find_named(window,"insight-context-code")); if(sci_get_current_line(preview)!=0 || !SSM(preview,SCI_INDICATORVALUEAT,28,4)) return G_SOURCE_CONTINUE; gchar *source=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1); gint position=(gint)(strstr(source,"+ worker_second")-source)+4; sci_set_current_position(doc->editor->sci,position,FALSE); g_free(source); g_timeout_add(150,move_back_before_definition,NULL); g_timeout_add(450,check_cancelled_definition,NULL);
  } else if(phase==20) {
+  ScintillaObject *preview=SCINTILLA(find_named(window,"insight-context-code")); g_assert_true(definition_cancel_checked); g_assert_cmpint(sci_get_current_line(preview),==,0); gchar *text=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1); gchar *name=strstr(text,"+ worker_second"); g_assert_nonnull(name); gint begin=(gint)(name-text)+2; SSM(doc->editor->sci,SCI_SETSEL,begin,begin+(gint)strlen("worker_second")); g_free(text);
+ } else if(phase==21) {
   ScintillaObject *preview=SCINTILLA(find_named(window,"insight-context-code")); if(sci_get_current_line(preview)!=1) return G_SOURCE_CONTINUE;
-  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: editor icons, syntax, independent read-only, edits, scrolling, toggling, keyword variations, saved query history, preview-only result navigation, exact hit opening, result columns, stale result rejection, Context links, project Apply/Cancel, menu Open Project, invalid/malformed project preserves session, UTF-8 paths, project switching, responsive 1.4 MiB file selection, Context notebook tab, double-click opens >2 MiB file, delayed worker definition lookup, tab close\n"); return G_SOURCE_REMOVE;
+  GtkWidget *mode=find_named(window,"insight-relation-mode"),*query=find_named(window,"insight-relation-query"); gtk_combo_box_set_active(GTK_COMBO_BOX(mode),1); gtk_entry_set_text(GTK_ENTRY(query),"worker_first"); g_signal_emit_by_name(query,"activate"); gtk_entry_set_text(GTK_ENTRY(query),"worker_second"); g_signal_emit_by_name(query,"activate");
+ } else if(phase==22) {
+  GtkWidget *view=find_named(window,"insight-relations"); GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view)); if(gtk_tree_model_iter_n_children(model,NULL)!=1) return G_SOURCE_CONTINUE; GtkTreeIter iter; g_assert_true(gtk_tree_model_get_iter_first(model,&iter)); gchar *name=NULL; gtk_tree_model_get(model,&iter,7,&name,-1); g_assert_cmpstr(name,==,"worker_second"); g_free(name);
+  /* A zero-tag unsaved buffer must hide old disk symbols in the project view. */
+  sci_set_text(doc->editor->sci,"/* no definitions remain */\n"); document_set_text_changed(doc,FALSE);
+ } else if(phase==23) {
+  GtkWidget *view=find_named(window,"insight-project-symbols"); GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view)); if(gtk_tree_model_iter_n_children(model,NULL)!=0) return G_SOURCE_CONTINUE;
+  /* Quit while both a scan and a search are queued. */
+  GtkWidget *reindex=find_button(window,"Reindex"); if(reindex) gtk_button_clicked(GTK_BUTTON(reindex));
+  GtkWidget *query=find_named(window,"insight-project-query"); gtk_entry_set_text(GTK_ENTRY(query),"worker_second"); g_signal_emit_by_name(query,"activate");
+  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: editor icons, syntax, independent read-only, edits, scrolling, toggling, keyword variations, saved query history, preview-only result navigation, exact hit opening, result columns, stale result rejection, Context links, project Apply/Cancel, menu Open Project, invalid/malformed project preserves session, UTF-8 paths, project switching, responsive 1.4 MiB file selection, Context notebook tab, double-click opens >2 MiB file, delayed and cancelled word/selection definition lookup, latest-request symbol relations, zero-tag overlay, shutdown with queued work, tab close\n"); return G_SOURCE_REMOVE;
  }
  phase++; return G_SOURCE_CONTINUE;
 }
+static gboolean finish_shutdown_drain(gpointer loop) { g_main_loop_quit(loop); return G_SOURCE_REMOVE; }
 int main(void) {
  if(!g_getenv("GEANY_RUN_GUI_TESTS") || (!g_getenv("DISPLAY") && !g_getenv("WAYLAND_DISPLAY"))) { g_print("Set GEANY_RUN_GUI_TESTS=1 and provide a display to run the real editor GUI smoke\n"); return 77; }
  gchar *cwd=g_get_current_dir(),*name=g_strdup_printf("overview-gui-profile-%u",g_random_int()),*profile=g_build_filename(cwd,name,NULL); g_free(cwd); g_free(name); g_assert_cmpint(g_mkdir_with_parents(profile,0700),==,0);
@@ -172,5 +194,8 @@ int main(void) {
  bad_project=g_build_filename(profile,"invalid.geany",NULL); g_assert_true(g_file_set_contents(bad_project,"[other]\nname=Not a project\n",-1,NULL));
  gchar *argv[]={"overview-gui-smoke","--new-instance","--no-session","--config",profile,test_project,NULL}; g_timeout_add(700,step,NULL); g_timeout_add_seconds(30,timeout_fail,NULL);
  g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);
- gint result=main_lib(6,argv); g_free(second_project); g_free(bad_project); g_free(test_project); g_free(test_directory); g_free(profile); return result;
+ gint result=main_lib(6,argv);
+ /* Deliver late worker completions after workbench/GTK teardown. */
+ GMainLoop *drain=g_main_loop_new(NULL,FALSE); g_timeout_add(300,finish_shutdown_drain,drain); g_main_loop_run(drain); g_main_loop_unref(drain);
+ g_free(second_project); g_free(bad_project); g_free(test_project); g_free(test_directory); g_free(profile); return result;
 }

@@ -1114,8 +1114,10 @@ static gboolean on_editor_notify(G_GNUC_UNUSED GObject *object, GeanyEditor *edi
 			on_update_ui(editor, nt);
 			if (doc == document_get_current())
 			{
+				/* Indicator/style changes also set SC_UPDATE_CONTENT.
+				 * Real edits are handled through SCN_MODIFIED below. */
 				if (nt->updated & (SC_UPDATE_CONTENT | SC_UPDATE_SELECTION))
-					insight_workbench_editor_updated((nt->updated & SC_UPDATE_CONTENT) != 0);
+					insight_workbench_editor_updated(FALSE);
 			}
 			break;
 
@@ -1155,6 +1157,8 @@ static gboolean on_editor_notify(G_GNUC_UNUSED GObject *object, GeanyEditor *edi
 			if (nt->modificationType & (SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT))
 			{
 				document_update_tag_list_in_idle(doc);
+				if (doc == document_get_current())
+					insight_workbench_editor_updated(TRUE);
 			}
 			break;
 

@@ -6,5 +6,7 @@
 /* Uses local-file replacement via GIO; errors preserve the previous cache.
  * Returned index/root are caller-owned; root uses malloc/free. */
 gboolean insight_cache_save(const char *,const InsightIndex *,const char *,GError **);
+/* Cancellation before/after serialization and during atomic replacement. */
+gboolean insight_cache_save_cancellable(const char *,const InsightIndex *,const char *,GCancellable *,GError **);
 InsightIndex *insight_cache_load(const char *,char **,GError **);
 #endif

@@ -17,6 +17,12 @@ int main(int argc,char **argv) {
  g_assert_no_error(error); g_assert_nonnull(loaded); g_assert_cmpstr(root,==,"/project"); free(root);
  const InsightSymbol *out[1]; g_assert_cmpuint(insight_index_find(loaded,"saved",1,out,1),==,1);
  insight_index_free(loaded);
+ /* Pre-cancelled writes must preserve the existing snapshot byte-for-byte. */
+ gchar *saved_bytes=NULL,*after_bytes=NULL; gsize saved_size=0,after_size=0;
+ g_assert_true(g_file_get_contents(path,&saved_bytes,&saved_size,&error)); g_assert_no_error(error);
+ GCancellable *cancel=g_cancellable_new(); g_cancellable_cancel(cancel);
+ g_assert_false(insight_cache_save_cancellable(path,disk,"/replacement",cancel,&error)); g_assert_error(error,G_IO_ERROR,G_IO_ERROR_CANCELLED); g_clear_error(&error); g_object_unref(cancel);
+ g_assert_true(g_file_get_contents(path,&after_bytes,&after_size,&error)); g_assert_no_error(error); g_assert_cmpmem(saved_bytes,saved_size,after_bytes,after_size); g_free(saved_bytes); g_free(after_bytes);
  /* Live document overlay never changes the separately stored disk snapshot. */
  InsightIndex *live=insight_index_clone(disk); g_assert_nonnull(live);
  InsightSymbol edit[]={ {"unsaved",NULL,NULL,NULL,20,NULL,NULL,NULL} };
