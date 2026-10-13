@@ -1,6 +1,7 @@
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
 cd /d "%~dp0"
+set "PATH=%~dp0bin;%PATH%"
 if not exist "%~dp0profile" mkdir "%~dp0profile"
 "%~dp0bin\geany.exe" --new-instance --config "%~dp0profile" %*
 set "INSIGHT_RESULT=%ERRORLEVEL%"

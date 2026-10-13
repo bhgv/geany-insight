@@ -884,6 +884,9 @@ insight_lua_sources = [
  'insight/vendor/lua/lzio.c',
 ]
 insight_native = static_library('insight_native',
+ 'insight/desktop/keyword_search.c',
+ 'insight/desktop/remote_io.c',
+ 'insight/desktop/remote_credentials.c',
  'insight/core/index.c', 'insight/core/document.c', 'insight/core/occurrences.c', 'insight/desktop/index_cache.c',
  'src/insight-index.c', 'insight/core/runtime.c', 'insight/core/context.c', 'insight/desktop/extensions.c', 'insight/desktop/lookup_filter.c', 'insight/desktop/layout_state.c', 'insight/desktop/context_search.c', 'insight/desktop/notebook_store.c', 'insight/desktop/workspace_watch.c', 'insight/desktop/source_mask.c', 'insight/desktop/relation_query.c', insight_lua_sources,
  c_args: geany_cflags,
@@ -928,6 +931,8 @@ libgeany = shared_library('geany',
 	'src/log.h',
 	'src/libmain.c',
 	'src/insight-workbench.c',
+	'src/insight-remote.c',
+	'src/insight-remote.h',
 	'src/insight-workbench.h',
 	'src/main.h',
 	'src/geany.h',
@@ -1004,6 +1009,7 @@ executable('geany',
 )
 
 i18n = import('i18n')
+executable('geany-insight-askpass', 'src/insight-askpass.c', 'insight/desktop/remote_credentials.c', dependencies: deps, install: true, win_subsystem: 'windows')
 
 desktop_file = 'geany.desktop'
 desktop_output_file = i18n.merge_file(

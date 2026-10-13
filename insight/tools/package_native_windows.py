@@ -20,6 +20,7 @@ def main():
     p.add_argument('--name', help='Archive and directory name (default includes Git revision)')
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--strip', required=True)
+    p.add_argument('--openssh', type=Path, help='Extracted official OpenSSH-Win64 client directory')
     a = p.parse_args()
     options = json.loads((a.build / 'meson-info/intro-buildoptions.json').read_text())
     if not any(option['name'] == 'plugins' and option['value'] for option in options):
@@ -49,10 +50,15 @@ def main():
         shutil.copy2(module, target)
         subprocess.run([a.strip, '--strip-unneeded', str(target)], check=True)
     # Preserve grep/sort supplied by the runtime for existing Geany commands.
-    for name in ['geany.exe', 'libgeany-0.dll']:
+    for name in ['geany.exe', 'libgeany-0.dll', 'geany-insight-askpass.exe']:
         target = destination / 'bin' / name
         shutil.copy2(a.build / name, target)
         subprocess.run([a.strip, '--strip-unneeded', str(target)], check=True)
+    if a.openssh:
+        for name in ['ssh.exe', 'sftp.exe', 'ssh-keygen.exe', 'ssh-keyscan.exe', 'ssh-add.exe', 'ssh-pkcs11-helper.exe', 'ssh-sk-helper.exe', 'libcrypto.dll']:
+            shutil.copy2(a.openssh / name, destination / 'bin' / name)
+        for name in ['LICENSE.txt', 'NOTICE.txt']:
+            shutil.copy2(a.openssh / name, destination / ('OpenSSH-' + name))
     shutil.copytree(ROOT / 'data', destination / 'data', ignore=shutil.ignore_patterns('*.in', 'Makefile*', 'meson.build'))
     shutil.copy2(a.build / 'data/filetypes.python', destination / 'data/filedefs/filetypes.python')
     shutil.copy2(ROOT / 'COPYING', destination / 'data/GPL-2')
@@ -100,7 +106,11 @@ def main():
         'Geany Insight ' + revision[:8] + ' — Windows x64, проверочная сборка\n\n'
         'Распакуйте весь ZIP в каталог с правом записи. Запуск: Start-Native-Insight.cmd.\n'
         'Настройки хранятся в profile рядом с редактором. Context и Lua встроены в редактор.\n'
-        'Navigate: workspace, files, usages, F12. Ctrl+click в Context: переход по определениям.\n'
+        'Context: подчёркнутые имена открываются обычным кликом; F12 и Ctrl+click также работают.\n'
+        'Search Results: проект, открытые/выбранные файлы, папка, Keywords/Boolean и Regex.\n'
+        'SSH Terminal: удалённые файлы, папки, проекты, Save password и Auto upload on save.\n'
+        'Пароли сохраняются открытым текстом в конфиге проекта только при включённой опции.\n'
+        'SSH shell использует ввод строк; полноэкранные терминальные программы не эмулируются.\n'
         'Scripts > Load: examples/workbench.lua. Run-Checks.cmd запускает все включённые проверки.\n'
         'Сборка и таблицы импортов проверены; запуск GUI на Windows здесь не проверен.\n'
         'Документация и ограничения: insight-docs/native-workbench.md.\n', encoding='utf-8-sig')

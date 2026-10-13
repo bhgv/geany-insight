@@ -38,3 +38,41 @@ gboolean insight_bookmark_resolve(const InsightNote *note,const char *text,gsize
  for(gsize i=0;i<=size;i++) if(i==size || text[i]=='\n') { gsize end=i; if(end>start && text[end-1]=='\r') end--; if(end-start==anchor && !memcmp(text+start,note->text,anchor)) { if(current==note->line) { *line=current; return TRUE; } found=current; count++; } start=i+1; current++; }
  if(count!=1) { *ambiguous=count>1; return FALSE; } *line=found; return TRUE;
 }
+static gboolean notes_copy_kind(InsightNotes *out,const InsightNotes *source,InsightNoteKind kind,GError **error) {
+ for(guint i=0;i<source->items->len;i++) {
+  const InsightNote *note=g_ptr_array_index(source->items,i);
+  if(kind && note->kind!=kind) continue;
+  if(insight_notes_get(out,note->kind,note->name)) {
+   g_set_error(error,G_IO_ERROR,G_IO_ERROR_EXISTS,"A note named '%s' already exists; rename it before importing",note->name); return FALSE;
+  }
+  if(!insight_notes_set(out,note->kind,note->name,note->path,note->line,note->text,error)) return FALSE;
+ }
+ return TRUE;
+}
+InsightNotes *insight_notes_select(const InsightNotes *source,InsightNoteKind kind,GError **error) {
+ if(!source || (kind!=INSIGHT_BOOKMARK && kind!=INSIGHT_CLIP)) {
+  g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid note selection"); return NULL;
+ }
+ InsightNotes *out=insight_notes_new();
+ if(!notes_copy_kind(out,source,kind,error)) { insight_notes_free(out); return NULL; }
+ return out;
+}
+InsightNotes *insight_notes_merge(const InsightNotes *current,const InsightNotes *incoming,InsightNoteKind kind,GError **error) {
+ if(!current || !incoming || (kind!=INSIGHT_BOOKMARK && kind!=INSIGHT_CLIP)) {
+  g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid note import"); return NULL;
+ }
+ InsightNotes *out=insight_notes_new();
+ if(!notes_copy_kind(out,current,0,error) || !notes_copy_kind(out,incoming,kind,error)) { insight_notes_free(out); return NULL; }
+ if(out->items->len==current->items->len) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"The file contains no notes for this panel"); insight_notes_free(out); return NULL; }
+ return out;
+}
+InsightNotes *insight_notes_rename(const InsightNotes *current,InsightNoteKind kind,const char *old_name,const char *new_name,GError **error) {
+ const InsightNote *note=insight_notes_get(current,kind,old_name);
+ if(!note || !new_name) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid note rename"); return NULL; }
+ if(strcmp(old_name,new_name) && insight_notes_get(current,kind,new_name)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_EXISTS,"A note with this name already exists"); return NULL; }
+ InsightNotes *out=insight_notes_new();
+ if(!notes_copy_kind(out,current,0,error)) { insight_notes_free(out); return NULL; }
+ insight_notes_remove(out,kind,old_name);
+ if(!insight_notes_set(out,kind,new_name,note->path,note->line,note->text,error)) { insight_notes_free(out); return NULL; }
+ return out;
+}
