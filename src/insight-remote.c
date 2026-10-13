@@ -36,6 +36,10 @@ static void status(const char *message) { if(remote_ui.closing) return; gtk_labe
 static gchar *credentials_target(const InsightRemote *r) { gchar *identity=g_strdup_printf("%s:%u:%s",r->host,r->port,r->user),*hash=g_compute_checksum_for_string(G_CHECKSUM_SHA256,identity,-1); g_free(identity); return hash; }
 static GSubprocessLauncher *launcher(RemoteRoot *root,gchar **auth) {
  GSubprocessLauncher *spawn=g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_STDIN_PIPE|G_SUBPROCESS_FLAGS_STDOUT_PIPE|G_SUBPROCESS_FLAGS_STDERR_MERGE);
+#ifdef G_OS_WIN32
+ gchar *installation=win32_get_installation_dir(),*client_bin=g_build_filename(installation,"bin",NULL),*search_path=g_strconcat(client_bin,";",g_getenv("PATH") ? g_getenv("PATH") : "",NULL);
+ g_subprocess_launcher_setenv(spawn,"PATH",search_path,TRUE); g_free(search_path); g_free(client_bin); g_free(installation);
+#endif
  gchar *helper=g_find_program_in_path("geany-insight-askpass");
 #ifdef G_OS_WIN32
  if(!helper) { gchar *prefix=win32_get_installation_dir(); helper=g_build_filename(prefix,"bin","geany-insight-askpass.exe",NULL); g_free(prefix); if(!g_file_test(helper,G_FILE_TEST_IS_EXECUTABLE)) g_clear_pointer(&helper,g_free); }
