@@ -694,13 +694,23 @@ static InsightLookupFilter *entry_filter(GtkWidget *entry,gboolean files) {
 }
 typedef struct { gchar *name,*path; } FileListRow;
 static void file_list_row_free(gpointer data) { FileListRow *r=data; g_free(r->name); g_free(r->path); g_free(r); }
-typedef struct { guint64 generation; GCancellable *cancel; guint apply; InsightIndex *index; const InsightSymbol **rows; GPtrArray *files; gchar *local_path; guint count,position; gboolean clearing,local; } SymbolListState;
+typedef struct { guint64 generation; GCancellable *cancel; guint apply; InsightIndex *index; const InsightSymbol **rows; GPtrArray *files; gchar *local_path; guint count,position; gboolean local,collecting,iter_valid; GtkTreeIter iter; GHashTable *existing; } SymbolListState;
 typedef struct { GWeakRef store; InsightIndex *index; gchar *query,*path; const InsightSymbol **rows; GPtrArray *paths,*files,*tags; guint count,limit; guint64 generation,epoch; gboolean local; } SymbolListJob;
 static GtkWidget *symbol_list_view(GtkListStore *store) { return store==wb.file_store ? wb.file_view : (store==wb.local_symbols ? wb.local_view : wb.symbol_view); }
+static void symbol_iter_queue_free(gpointer data) { GQueue *q=data; g_queue_free_full(q,g_free); }
+static gchar *symbol_row_key(GtkTreeModel *model,GtkTreeIter *iter,gboolean files) {
+ gchar *name=NULL,*path=NULL,*scope=NULL,*kind=NULL; gulong line=0;
+ if(files) gtk_tree_model_get(model,iter,0,&name,1,&path,-1);
+ else gtk_tree_model_get(model,iter,SYMBOL_NAME,&name,SYMBOL_SCOPE,&scope,SYMBOL_PATH,&path,SYMBOL_LINE,&line,SYMBOL_KIND,&kind,-1);
+ /* Length-prefixed fields avoid collisions for paths containing separators. */
+ GString *key=g_string_new(NULL); const gchar *fields[]={name,path,scope,kind};
+ for(guint i=0;i<G_N_ELEMENTS(fields);i++) { const gchar *v=fields[i] ? fields[i] : ""; g_string_append_printf(key,"%" G_GSIZE_FORMAT ":%s",strlen(v),v); }
+ g_string_append_printf(key,":%lu",line); g_free(name); g_free(path); g_free(scope); g_free(kind); return g_string_free(key,FALSE);
+}
 static void symbol_list_stop(SymbolListState *s) {
  s->generation++; if(s->cancel) { g_cancellable_cancel(s->cancel); g_clear_object(&s->cancel); }
  if(s->apply) { g_source_remove(s->apply); s->apply=0; }
- retire_index(s->index); s->index=NULL; g_clear_pointer(&s->rows,g_free); g_clear_pointer(&s->files,g_ptr_array_unref); g_clear_pointer(&s->local_path,g_free); s->count=s->position=0;
+ retire_index(s->index); s->index=NULL; g_clear_pointer(&s->rows,g_free); g_clear_pointer(&s->files,g_ptr_array_unref); g_clear_pointer(&s->local_path,g_free); s->count=s->position=0; g_clear_pointer(&s->existing,g_hash_table_destroy); s->collecting=s->iter_valid=FALSE;
 }
 static void symbol_list_state_free(gpointer data) { SymbolListState *s=data; symbol_list_stop(s); g_free(s); }
 static SymbolListState *symbol_list_state(GtkListStore *store) {
@@ -709,16 +719,45 @@ static SymbolListState *symbol_list_state(GtkListStore *store) {
 static gboolean symbol_list_apply(gpointer data) {
  GtkListStore *store=data; SymbolListState *s=symbol_list_state(store); gint64 deadline=g_get_monotonic_time()+3000;
  if(!wb.alive) { s->apply=0; return G_SOURCE_REMOVE; }
- if(s->clearing) {
-  GtkTreeIter iter; while(gtk_tree_model_get_iter_first(GTK_TREE_MODEL(store),&iter)) { gtk_list_store_remove(store,&iter); if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE; }
-  s->clearing=FALSE; GtkWidget *view=symbol_list_view(store); if(view) gtk_widget_set_sensitive(view,TRUE);
+ if(s->collecting) {
+  while(s->iter_valid) {
+   gchar *key=symbol_row_key(GTK_TREE_MODEL(store),&s->iter,s->files!=NULL);
+   GQueue *q=g_hash_table_lookup(s->existing,key);
+   if(!q) { q=g_queue_new(); g_hash_table_insert(s->existing,key,q); } else g_free(key);
+   GtkTreeIter *copy=g_new(GtkTreeIter,1); *copy=s->iter; g_queue_push_tail(q,copy);
+   s->iter_valid=gtk_tree_model_iter_next(GTK_TREE_MODEL(store),&s->iter);
+   if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
+  }
+  s->collecting=FALSE;
  }
  while(s->position<s->count) {
-  guint n=s->position++; GtkTreeIter iter; gtk_list_store_append(store,&iter);
-  if(s->files) { FileListRow *r=g_ptr_array_index(s->files,n); gtk_list_store_set(store,&iter,0,r->name,1,r->path,-1); }
-  else { const InsightSymbol *tag=s->rows[n]; gtk_list_store_set(store,&iter,SYMBOL_NAME,tag->name,SYMBOL_SCOPE,tag->scope,SYMBOL_PATH,s->local ? s->local_path : tag->path,SYMBOL_LINE,(gulong)tag->line,SYMBOL_KIND,tag->kind,-1); }
+  guint n=s->position++; GtkTreeIter iter;
+  /* Build the same key without inserting a temporary row into the model. */
+  const InsightSymbol *tag=s->files ? NULL : s->rows[n];
+  FileListRow *file=s->files ? g_ptr_array_index(s->files,n) : NULL;
+  const gchar *fields[]={file ? file->name : tag->name,file ? file->path : (s->local ? s->local_path : tag->path),tag ? tag->scope : NULL,tag ? tag->kind : NULL};
+  GString *key=g_string_new(NULL);
+  for(guint k=0;k<G_N_ELEMENTS(fields);k++) { const gchar *v=fields[k] ? fields[k] : ""; g_string_append_printf(key,"%" G_GSIZE_FORMAT ":%s",strlen(v),v); }
+  g_string_append_printf(key,":%lu",tag ? tag->line : 0);
+  GQueue *q=g_hash_table_lookup(s->existing,key->str); GtkTreeIter *old=q ? g_queue_pop_head(q) : NULL;
+  if(old) { g_free(old); } /* Equal rows retain their iter, selection and contents. */
+  else {
+   gtk_list_store_append(store,&iter);
+   if(file) gtk_list_store_set(store,&iter,0,file->name,1,file->path,-1);
+   else gtk_list_store_set(store,&iter,SYMBOL_NAME,tag->name,SYMBOL_SCOPE,tag->scope,SYMBOL_PATH,s->local ? s->local_path : tag->path,SYMBOL_LINE,(gulong)tag->line,SYMBOL_KIND,tag->kind,-1);
+  }
+  g_string_free(key,TRUE);
   if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
  }
+ /* Delete only obsolete rows. The iter remains valid when the model is sorted. */
+ GHashTableIter pending; gpointer value; g_hash_table_iter_init(&pending,s->existing);
+ while(g_hash_table_iter_next(&pending,NULL,&value)) {
+  GQueue *q=value; GtkTreeIter *old;
+  while((old=g_queue_pop_head(q))) { gtk_list_store_remove(store,old); g_free(old); if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE; }
+  g_hash_table_iter_remove(&pending);
+ }
+ g_clear_pointer(&s->existing,g_hash_table_destroy);
+ GtkWidget *view=symbol_list_view(store); if(view) gtk_widget_set_sensitive(view,TRUE);
  s->apply=0; retire_index(s->index); s->index=NULL; g_clear_pointer(&s->rows,g_free); g_clear_pointer(&s->files,g_ptr_array_unref); return G_SOURCE_REMOVE;
 }
 static void symbol_list_job_free(gpointer data) { SymbolListJob *j=data; g_weak_ref_clear(&j->store); retire_index(j->index); g_free(j->query); g_free(j->path); g_free(j->rows); g_clear_pointer(&j->paths,g_ptr_array_unref); g_clear_pointer(&j->files,g_ptr_array_unref); g_clear_pointer(&j->tags,g_ptr_array_unref); g_free(j); }
@@ -748,15 +787,22 @@ static void symbol_list_job_done(GObject *source,GAsyncResult *result,gpointer d
  if(wb.alive && j->epoch==workbench_epoch && j->generation==s->generation) {
   g_clear_object(&s->cancel);
   if(ok) { s->index=insight_index_ref(j->index); s->rows=j->rows; j->rows=NULL; s->files=j->files; j->files=NULL; s->count=j->count; s->position=0; s->local=j->local; s->local_path=g_strdup(j->path); }
-  else ui_set_statusbar(TRUE,"Symbol snapshot unavailable or exceeds its limit");
+  else { if(j->paths) s->files=g_ptr_array_new_with_free_func(file_list_row_free); ui_set_statusbar(TRUE,"Symbol snapshot unavailable or exceeds its limit"); }
+  s->existing=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,symbol_iter_queue_free);
+  s->collecting=TRUE; s->iter_valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(store),&s->iter);
+  GtkWidget *view=symbol_list_view(store); if(view) gtk_widget_set_sensitive(view,FALSE);
   if(!s->apply) s->apply=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,symbol_list_apply,g_object_ref(store),g_object_unref);
  }
  g_object_unref(store);
 }
 static SymbolListJob *symbol_list_begin(GtkListStore *store,GtkWidget *entry,guint limit,gboolean files) {
- SymbolListState *s=symbol_list_state(store); symbol_list_stop(s); s->clearing=TRUE; GtkWidget *view=symbol_list_view(store); if(view) gtk_widget_set_sensitive(view,FALSE);
- s->apply=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,symbol_list_apply,g_object_ref(store),g_object_unref);
- InsightLookupFilter *filter=entry_filter(entry,files); if(!filter) return NULL; insight_lookup_filter_free(filter);
+ SymbolListState *s=symbol_list_state(store); symbol_list_stop(s); GtkWidget *view=symbol_list_view(store); if(view) gtk_widget_set_sensitive(view,TRUE);
+ InsightLookupFilter *filter=entry_filter(entry,files); if(!filter) {
+  s->files=files ? g_ptr_array_new_with_free_func(file_list_row_free) : NULL;
+  s->existing=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,symbol_iter_queue_free); s->collecting=TRUE;
+  s->iter_valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(store),&s->iter);
+  s->apply=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,symbol_list_apply,g_object_ref(store),g_object_unref); return NULL;
+ } insight_lookup_filter_free(filter);
  SymbolListJob *j=g_new0(SymbolListJob,1); g_weak_ref_init(&j->store,store); j->query=g_strdup(gtk_entry_get_text(GTK_ENTRY(entry))); j->limit=limit; j->generation=s->generation; j->epoch=workbench_epoch; return j;
 }
 static void symbol_list_launch(GtkListStore *store,SymbolListJob *j) {
