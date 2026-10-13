@@ -59,6 +59,13 @@ int main(void) {
    assert(insight_index_find(i,query,1,NULL,0)==expected);
   }
  }
+ /* Borrowed input survives replacement/deletion; sorting must compare every field. */
+ InsightIndex *merge=insight_index_new(); InsightSymbol left[]={ {"same",NULL,"z","function",4,"(z)","int","Base"}, {"alpha",NULL,"","function",1,NULL,NULL,NULL}, {"same",NULL,"a","function",4,"(x)","int","Base"} };
+ InsightSymbol right[]={ {"zeta",NULL,"","function",7,NULL,NULL,NULL}, {"same",NULL,"","function",2,NULL,NULL,NULL}, {"beta",NULL,"","function",3,NULL,NULL,NULL} };
+ assert(insight_index_update(merge,"a.c",left,3)); assert(insight_index_update(merge,"b.c",right,3));
+ assert(!strcmp(insight_index_at(merge,0)->name,"alpha")); assert(!strcmp(insight_index_at(merge,1)->name,"beta")); assert(!strcmp(insight_index_at(merge,2)->scope,"a")); assert(!strcmp(insight_index_at(merge,3)->scope,"z")); assert(!strcmp(insight_index_at(merge,4)->path,"b.c"));
+ const InsightSymbol *borrowed=insight_index_at(merge,2); assert(insight_index_update(merge,borrowed->path,borrowed,1)); assert(insight_index_count(merge)==4); assert(insight_index_find(merge,"same",1,out,5)==2); assert(!strcmp(out[0]->scope,"a"));
+ borrowed=insight_index_at(merge,0); assert(insight_index_update(merge,borrowed->path,NULL,0)); assert(insight_index_count(merge)==1); assert(!strcmp(insight_index_at(merge,0)->path,"a.c")); insight_index_free(merge);
  /* Full-size snapshot traversal must use ordinal access, not repeated queries. */
  InsightIndex *large=insight_index_new(); size_t count=250000; InsightSymbol *rows=calloc(count,sizeof *rows); assert(large && rows);
  for(size_t n=0;n<count;n++) rows[n]=(InsightSymbol){"large_symbol",NULL,NULL,"function",n+1,NULL,NULL,NULL};

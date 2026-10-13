@@ -57,29 +57,35 @@ int insight_index_update(InsightIndex *i,const char *path,const InsightSymbol *s
  for(size_t n=0;n<i->count;n++) if(strcmp(i->items[n].path,path)) keep++;
  if(count>SIZE_MAX-keep || keep+count>SIZE_MAX/sizeof(InsightSymbol)) return 0;
  size_t total=keep+count;
+ /* The input path and symbols may be borrowed from this index. */
+ char *owned_path=copy(path); if(!owned_path) return 0;
  InsightSymbol *next=total ? calloc(total,sizeof *next) : NULL;
- if(total && !next) return 0;
+ InsightSymbol *incoming=count ? calloc(count,sizeof *incoming) : NULL;
+ if((total && !next) || (count && !incoming)) { free(next); free(incoming); free(owned_path); return 0; }
  for(size_t n=0;n<count;n++) {
   if(!s[n].name || !*s[n].name || !s[n].line) goto failure;
-  next[n].name=copy(s[n].name); next[n].path=copy(path);
-  next[n].scope=copy(s[n].scope ? s[n].scope : "");
-  next[n].kind=copy(s[n].kind ? s[n].kind : ""); next[n].line=s[n].line;
-  next[n].signature=copy(s[n].signature ? s[n].signature : "");
-  next[n].type=copy(s[n].type ? s[n].type : "");
-  next[n].inheritance=copy(s[n].inheritance ? s[n].inheritance : "");
-  if(!next[n].name || !next[n].path || !next[n].scope || !next[n].kind || !next[n].signature || !next[n].type || !next[n].inheritance) goto failure;
+  incoming[n].name=copy(s[n].name); incoming[n].path=copy(owned_path);
+  incoming[n].scope=copy(s[n].scope ? s[n].scope : "");
+  incoming[n].kind=copy(s[n].kind ? s[n].kind : ""); incoming[n].line=s[n].line;
+  incoming[n].signature=copy(s[n].signature ? s[n].signature : "");
+  incoming[n].type=copy(s[n].type ? s[n].type : "");
+  incoming[n].inheritance=copy(s[n].inheritance ? s[n].inheritance : "");
+  if(!incoming[n].name || !incoming[n].path || !incoming[n].scope || !incoming[n].kind || !incoming[n].signature || !incoming[n].type || !incoming[n].inheritance) goto failure;
  }
- size_t pos=count;
- for(size_t n=0;n<i->count;n++) {
-  if(strcmp(i->items[n].path,path)) next[pos++]=i->items[n];
-  else release(&i->items[n]);
+ if(count>1) qsort(incoming,count,sizeof *incoming,compare);
+ /* The retained old sequence is already sorted. Sort only this file's batch,
+  * then merge it in O(N+K), rather than sorting the whole workspace again. */
+ size_t old=0,fresh=0,pos=0;
+ while(old<i->count || fresh<count) {
+  while(old<i->count && !strcmp(i->items[old].path,owned_path)) release(&i->items[old++]);
+  if(fresh<count && (old==i->count || compare(&incoming[fresh],&i->items[old])<=0)) next[pos++]=incoming[fresh++];
+  else if(old<i->count) next[pos++]=i->items[old++];
  }
- free(i->items); i->items=next; i->count=total;
- if(total>1) qsort(next,total,sizeof *next,compare);
+ free(incoming); free(owned_path); free(i->items); i->items=next; i->count=total;
  return 1;
 failure:
- for(size_t n=0;n<count;n++) release(&next[n]);
- free(next); return 0;
+ for(size_t n=0;n<count;n++) release(&incoming[n]);
+ free(incoming); free(next); free(owned_path); return 0;
 }
 size_t insight_index_query(const InsightIndex *i,const char *query,int exact,const char *scope,const char *kind,const char *path,size_t offset,
  const InsightSymbol **out,size_t capacity) {
