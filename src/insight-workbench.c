@@ -30,6 +30,7 @@
 #include "../insight/core/runtime.h"
 #include "../insight/desktop/extensions.h"
 #include "../insight/desktop/lookup_filter.h"
+#include "../insight/desktop/layout_state.h"
 
 typedef struct { gchar *path; GDir *dir; } ScanFrame;
 static void frame_free(gpointer data) { ScanFrame *p=data; if(p->dir) g_dir_close(p->dir); g_free(p->path); g_free(p); }
@@ -42,6 +43,7 @@ typedef struct {
  GtkListStore *local_symbols; GtkTreeStore *project_tree,*categories,*file_types;
  GtkWidget *category_entry,*category_view,*types_view,*float_window,*project_toggle,*local_toggle;
  gint float_x,float_y,float_width,float_height; gboolean restore_float;
+ InsightLayout layouts[4];
  guint local_doc_id;
  GeanyFiletype *preview_filetype;
  GtkListStore *file_store,*matches;
@@ -72,6 +74,7 @@ static void file_types_refresh(void);
 static GtkWidget *sort_selector(GtkListStore *);
 static void stop_usage(void);
 static void native_commands_rebuild(void);
+static void save_workbench_settings(void);
 static gchar *source_digest(const char *text) {
  /* Geany can remove a UTF-8 BOM and normalize CRLF while opening a file.
   * Compare logical source content; navigation here uses line numbers. */
@@ -939,12 +942,41 @@ static void float_project(GtkMenuItem *item,gpointer data) {
  gtk_window_set_default_size(GTK_WINDOW(wb.float_window),wb.float_width>=300 ? wb.float_width : 440,wb.float_height>=200 ? wb.float_height : 620);
  g_object_ref(wb.project_notebook); gtk_container_remove(GTK_CONTAINER(wb.right_pane),wb.project_notebook); gtk_container_add(GTK_CONTAINER(wb.float_window),wb.project_notebook); g_object_unref(wb.project_notebook);
  g_signal_connect(wb.float_window,"delete-event",G_CALLBACK(float_closed),NULL); gtk_widget_show_all(wb.float_window);
- if(wb.float_width>=300) gtk_window_move(GTK_WINDOW(wb.float_window),wb.float_x,wb.float_y);
+ if(wb.float_width>=300) {
+  GdkMonitor *monitor=gdk_display_get_monitor_at_point(gdk_display_get_default(),wb.float_x,wb.float_y);
+  if(monitor) { GdkRectangle area; gdk_monitor_get_workarea(monitor,&area); wb.float_width=MIN(wb.float_width,MAX(300,area.width)); wb.float_height=MIN(wb.float_height,MAX(200,area.height)); wb.float_x=CLAMP(wb.float_x,area.x,area.x+MAX(0,area.width-wb.float_width)); wb.float_y=CLAMP(wb.float_y,area.y,area.y+MAX(0,area.height-wb.float_height)); gtk_window_resize(GTK_WINDOW(wb.float_window),wb.float_width,wb.float_height); }
+  gtk_window_move(GTK_WINDOW(wb.float_window),wb.float_x,wb.float_y);
+ }
 }
+static void set_panel_visibility(gboolean left,gboolean project,gboolean context) {
+ gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.local_toggle),left); local_visible(GTK_CHECK_MENU_ITEM(wb.local_toggle),NULL);
+ gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.project_toggle),project); project_visible(GTK_CHECK_MENU_ITEM(wb.project_toggle),NULL);
+ gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.context_toggle),context); context_visible(GTK_CHECK_MENU_ITEM(wb.context_toggle),NULL);
+}
+static void save_layout(GtkMenuItem *item,gpointer data) {
+ (void)item; guint slot=GPOINTER_TO_UINT(data); if(slot>=4) return;
+ if(wb.float_window) { gtk_window_get_position(GTK_WINDOW(wb.float_window),&wb.float_x,&wb.float_y); gtk_window_get_size(GTK_WINDOW(wb.float_window),&wb.float_width,&wb.float_height); }
+ InsightLayout record={.valid=TRUE}; gint *v=record.values;
+ v[IL_LEFT]=ui_prefs.sidebar_visible; v[IL_PROJECT]=gtk_widget_get_visible(wb.project_notebook); v[IL_CONTEXT]=wb.context_visible;
+ v[IL_FOLLOW]=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow)); v[IL_WRAP]=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.wrap)); v[IL_FLOAT]=wb.float_window!=NULL;
+ v[IL_LEFT_SPLIT]=gtk_paned_get_position(GTK_PANED(ui_lookup_widget(main_widgets.window,"hpaned1"))); v[IL_RIGHT_SPLIT]=gtk_paned_get_position(GTK_PANED(wb.right_pane)); v[IL_CONTEXT_SPLIT]=gtk_paned_get_position(GTK_PANED(wb.pane)); v[IL_TAB]=gtk_notebook_get_current_page(GTK_NOTEBOOK(wb.project_notebook));
+ v[IL_X]=CLAMP(wb.float_x,-30000,30000); v[IL_Y]=CLAMP(wb.float_y,-30000,30000); v[IL_WIDTH]=wb.float_width>=300 ? MIN(wb.float_width,4000) : 440; v[IL_HEIGHT]=wb.float_height>=200 ? MIN(wb.float_height,4000) : 620;
+ if(!insight_layout_valid(&record)) { ui_set_statusbar(TRUE,"Layout cannot be saved: invalid panel geometry"); return; }
+ wb.layouts[slot]=record; ui_set_statusbar(TRUE,"Layout %c stored",'A'+(gint)slot); save_workbench_settings();
+}
+static void reset_layouts(GtkMenuItem *item,gpointer data) { (void)item; (void)data; memset(wb.layouts,0,sizeof wb.layouts); ui_set_statusbar(TRUE,"Saved layouts reset; A–D now use presets"); save_workbench_settings(); }
 static void apply_layout(GtkMenuItem *item,gpointer data) {
- (void)item; gint layout=GPOINTER_TO_INT(data); dock_project(NULL,NULL);
- gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.local_toggle),layout!=1); gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.project_toggle),layout!=1);
- gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.context_toggle),layout!=1);
+ (void)item; gint layout=GPOINTER_TO_INT(data); if(layout<0 || layout>=4) return;
+ dock_project(NULL,NULL);
+ if(insight_layout_valid(&wb.layouts[layout])) {
+  const gint *v=wb.layouts[layout].values;
+  wb.float_x=v[IL_X]; wb.float_y=v[IL_Y]; wb.float_width=v[IL_WIDTH]; wb.float_height=v[IL_HEIGHT];
+  gtk_paned_set_position(GTK_PANED(ui_lookup_widget(main_widgets.window,"hpaned1")),v[IL_LEFT_SPLIT]); gtk_paned_set_position(GTK_PANED(wb.right_pane),v[IL_RIGHT_SPLIT]); gtk_paned_set_position(GTK_PANED(wb.pane),v[IL_CONTEXT_SPLIT]);
+  gtk_notebook_set_current_page(GTK_NOTEBOOK(wb.project_notebook),v[IL_TAB]); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),v[IL_FOLLOW]); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.wrap),v[IL_WRAP]);
+  if(v[IL_FLOAT]) float_project(NULL,NULL);
+  set_panel_visibility(v[IL_LEFT],v[IL_PROJECT],v[IL_CONTEXT]); return;
+ }
+ set_panel_visibility(layout!=1,layout!=1,layout!=1);
  gtk_paned_set_position(GTK_PANED(wb.pane),layout==2 ? 330 : 500); gtk_paned_set_position(GTK_PANED(wb.right_pane),layout==2 ? 650 : 850);
  gtk_paned_set_position(GTK_PANED(ui_lookup_widget(main_widgets.window,"hpaned1")),layout==3 ? 360 : 240);
  if(layout==3) float_project(NULL,NULL);
@@ -963,8 +995,11 @@ static void panel_menu(GtkWidget *view_menu) {
  g_signal_connect(project,"toggled",G_CALLBACK(project_visible),NULL); g_signal_connect(local,"toggled",G_CALLBACK(local_visible),NULL); gtk_container_add(GTK_CONTAINER(menu),project); gtk_container_add(GTK_CONTAINER(menu),local);
  GtkWidget *floating=gtk_menu_item_new_with_label("Float Project Window"),*docking=gtk_menu_item_new_with_label("Dock Project Window"); g_signal_connect(floating,"activate",G_CALLBACK(float_project),NULL); g_signal_connect(docking,"activate",G_CALLBACK(dock_project),NULL); gtk_container_add(GTK_CONTAINER(menu),floating); gtk_container_add(GTK_CONTAINER(menu),docking);
  GtkWidget *layouts=gtk_menu_item_new_with_label("Layouts"),*layout_menu=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(layouts),layout_menu); gtk_container_add(GTK_CONTAINER(view_menu),layouts);
- const char *names[]={"A — Browse","B — Edit","C — Context","D — Floating Project"};
+ const char *names[]={"Load layout A","Load layout B","Load layout C","Load layout D"};
  for(guint i=0;i<4;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(names[i]); g_signal_connect(entry,"activate",G_CALLBACK(apply_layout),GINT_TO_POINTER(i)); gtk_container_add(GTK_CONTAINER(layout_menu),entry); }
+ GtkWidget *save=gtk_menu_item_new_with_label("Save current layout"),*save_menu=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(save),save_menu); gtk_container_add(GTK_CONTAINER(layout_menu),save);
+ const char *slots[]={"Save as A","Save as B","Save as C","Save as D"}; for(guint i=0;i<4;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(slots[i]); g_signal_connect(entry,"activate",G_CALLBACK(save_layout),GUINT_TO_POINTER(i)); gtk_container_add(GTK_CONTAINER(save_menu),entry); }
+ GtkWidget *reset=gtk_menu_item_new_with_label("Reset saved layouts to presets"); g_signal_connect(reset,"activate",G_CALLBACK(reset_layouts),NULL); gtk_container_add(GTK_CONTAINER(layout_menu),reset);
  g_signal_connect(menu,"show",G_CALLBACK(panel_menu_sync),NULL); gtk_widget_show_all(item); gtk_widget_show_all(layouts);
 }
 static void create_workbench_menus(void) {
@@ -1004,6 +1039,7 @@ static void create_workbench_menus(void) {
 static void save_workbench_settings(void) {
  if(!wb.prefs_path || !wb.pane) return;
  GKeyFile *settings=g_key_file_new();
+ for(guint i=0;i<4;i++) { gchar group[16]; g_snprintf(group,sizeof group,"layout-%c",'A'+i); insight_layout_write(settings,group,&wb.layouts[i]); }
  g_key_file_set_integer(settings,"workbench","version",1);
  g_key_file_set_boolean(settings,"workbench","project-visible",gtk_widget_get_visible(wb.project_notebook));
  g_key_file_set_boolean(settings,"workbench","floating",wb.float_window!=NULL);
@@ -1024,13 +1060,14 @@ static void save_workbench_settings(void) {
   GFile *file=g_file_new_for_path(wb.prefs_path); GError *error=NULL;
   if(!g_file_replace_contents(file,text,length,NULL,FALSE,G_FILE_CREATE_PRIVATE,NULL,NULL,&error)) { ui_set_statusbar(TRUE,"Workbench settings not saved: %s",error->message); g_clear_error(&error); }
   g_object_unref(file);
- }
+ } else ui_set_statusbar(TRUE,"Workbench settings directory could not be created");
  g_free(directory); g_free(text); g_key_file_free(settings);
 }
 static void restore_workbench_settings(void) {
  gchar *prefs_utf8=utils_get_utf8_from_locale(wb.prefs_path); char *text=read_disk_source(prefs_utf8,FALSE); g_free(prefs_utf8); if(!text) return;
  GKeyFile *settings=g_key_file_new();
  if(strlen(text)<=32768 && g_key_file_load_from_data(settings,text,-1,G_KEY_FILE_NONE,NULL) && g_key_file_get_integer(settings,"workbench","version",NULL)==1) {
+  for(guint i=0;i<4;i++) { gchar group[16]; g_snprintf(group,sizeof group,"layout-%c",'A'+i); insight_layout_read(settings,group,&wb.layouts[i]); }
   wb.restore_float=g_key_file_get_boolean(settings,"workbench","floating",NULL);
   wb.float_x=CLAMP(g_key_file_get_integer(settings,"workbench","float-x",NULL),-30000,30000); wb.float_y=CLAMP(g_key_file_get_integer(settings,"workbench","float-y",NULL),-30000,30000);
   gint fw=g_key_file_get_integer(settings,"workbench","float-width",NULL),fh=g_key_file_get_integer(settings,"workbench","float-height",NULL);
@@ -1077,7 +1114,7 @@ static void create_browse_toolbar(void) {
  gtk_toolbar_set_icon_size(toolbar,GTK_ICON_SIZE_SMALL_TOOLBAR); gtk_widget_show_all(GTK_WIDGET(toolbar));
  gtk_toolbar_insert(toolbar,gtk_separator_tool_item_new(),-1);
  const char *layouts[]={"A","B","C","D"};
- const char *tips[]={"Layout A — Browse","Layout B — Edit","Layout C — Context","Layout D — Floating Project"};
+ const char *tips[]={"Load layout A","Load layout B","Load layout C","Load layout D"};
  for(guint i=0;i<4;i++) { GtkToolItem *item=gtk_tool_button_new(gtk_label_new(layouts[i]),tips[i]); gtk_widget_set_tooltip_text(GTK_WIDGET(item),tips[i]); g_signal_connect(item,"clicked",G_CALLBACK(apply_layout),GINT_TO_POINTER(i)); gtk_toolbar_insert(toolbar,item,-1); }
  gtk_widget_show_all(GTK_WIDGET(toolbar));
 }

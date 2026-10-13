@@ -400,3 +400,6 @@ lookup_filter_test = executable('test_insight_lookup_filter',
  '../insight/tests/lookup_filter_test.c', '../insight/desktop/lookup_filter.c',
  include_directories: include_directories('../insight/desktop'), dependencies: glib)
 test('Insight lookup filters', lookup_filter_test)
+
+layout_state_test = executable('test_insight_layout_state', '../insight/tests/layout_state_test.c', '../insight/desktop/layout_state.c', include_directories: include_directories('../insight/desktop'), dependencies: glib)
+test('Insight layout state', layout_state_test)
