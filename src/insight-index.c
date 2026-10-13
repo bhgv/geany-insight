@@ -26,6 +26,24 @@ guint insight_native_definition_rank(const InsightSymbol *symbol,const char *pat
  return (!g_strcmp0(symbol->path,path) ? 4u : 0u) + (!strcmp(symbol->kind,"f") ? 8u : 0u);
 }
 
+gint insight_native_definition_rank_at(const InsightSymbol *symbol,const char *path,const char *scope,gulong line) {
+ if(!strcmp(symbol->kind,"l") || !strcmp(symbol->kind,"z")) {
+  if(g_strcmp0(symbol->path,path) || !scope || !*scope || g_strcmp0(symbol->scope,scope) || symbol->line>line) return -1;
+  return 10000+(gint)MIN(symbol->line,(gulong)G_MAXINT-10000ul);
+ }
+ return (gint)insight_native_definition_rank(symbol,path);
+}
+gchar *insight_native_function_scope(const InsightIndex *index,const char *path,gulong line) {
+ const InsightSymbol *nearest=NULL;
+ for(gsize n=0;n<insight_index_count(index);n++) {
+  const InsightSymbol *tag=insight_index_at(index,n);
+  if(g_strcmp0(tag->path,path) || tag->line>line || (strcmp(tag->kind,"f") && (strcmp(tag->kind,"m") || !tag->signature || !*tag->signature))) continue;
+  if(!nearest || tag->line>nearest->line) nearest=tag;
+ }
+ if(!nearest) return NULL;
+ return *nearest->scope ? g_strconcat(nearest->scope,"::",nearest->name,NULL) : g_strdup(nearest->name);
+}
+
 gboolean insight_native_parse(InsightIndex *index,TMSourceFile *file,const char *path,const char *text,gsize length) {
  if(!index || !file || !file->file_name || file->lang<0 || (guint)file->lang>=tm_ctags_get_lang_count() || !path || !*path || !g_utf8_validate(path,-1,NULL) || length>2u*1024u*1024u || (length && (!text || memchr(text,0,length) || !g_utf8_validate(text,(gssize)length,NULL)))) return FALSE;
  /* tm_source_file_parse currently fills tags but returns FALSE for nonempty

@@ -30,6 +30,13 @@ int main(void) {
  assert(insight_native_definition_rank(found[0],"/project/b.cpp")==8);
  InsightSymbol prototype={"foo","/project/a.cpp","Scope","p",1,NULL,NULL,NULL};
  assert(insight_native_definition_rank(&prototype,"/project/a.cpp")<insight_native_definition_rank(found[0],"/project/b.cpp"));
+ InsightSymbol local={"column","/project/a.cpp","current_function","l",223,"","vString *",""};
+ InsightSymbol foreign={"column","/project/a.cpp","other_function","z",121,"","vString *",""};
+ assert(insight_native_definition_rank_at(&local,"/project/a.cpp","current_function",225)>12);
+ assert(insight_native_definition_rank_at(&foreign,"/project/a.cpp","current_function",225)<0);
+ assert(insight_native_definition_rank_at(&local,"/project/b.cpp","current_function",225)<0);
+ assert(insight_native_definition_rank_at(&local,"/project/a.cpp","current_function",200)<0);
+ assert(insight_native_definition_rank_at(&local,"/project/a.cpp",NULL,225)<0);
  assert(!insight_native_import(index,&source,"\xff")); assert(insight_index_count(index)==1);
  GPtrArray huge={.pdata=NULL,.len=250001}; source.tags_array=&huge;
  assert(!insight_native_import(index,&source,"/project/a.cpp")); assert(insight_index_count(index)==1);
@@ -44,6 +51,12 @@ int main(void) {
  index=insight_index_new();assert(insight_native_parse(index,parsed,absolute,code,strlen(code)));
  assert(insight_index_find(index,"parsed_function",1,found,2)==1);assert(strstr(found[0]->signature,"value") && strstr(found[0]->type,"int"));
  assert(insight_index_find(index,"Widget",1,found,2)==1 && strstr(found[0]->inheritance,"Base"));
+ const char *scope_code="void unrelated(int column) { (void)column; }\nvoid current(void) {\n int column = 1;\n (void)column;\n}\n";
+ assert(insight_native_parse(index,parsed,absolute,scope_code,strlen(scope_code)));
+ assert(insight_index_find(index,"column",1,found,2)==2);
+ gchar *current_scope=insight_native_function_scope(index,absolute,4); assert(current_scope && !strcmp(current_scope,"current"));
+ guint eligible=0; for(guint n=0;n<2;n++) if(insight_native_definition_rank_at(found[n],absolute,current_scope,4)>=0) { eligible++; assert(found[n]->line==3); assert(!strcmp(found[n]->kind,"l")); }
+ assert(eligible==1); g_free(current_scope);
  size_t before=insight_index_count(index);assert(!insight_native_parse(index,parsed,absolute,"a\0b",3));assert(insight_index_count(index)==before);
  assert(insight_native_parse(index,parsed,absolute,"",0));assert(insight_index_count(index)==0);
  /* Publication transfers worker tags and rewrites owner pointers. A pinned

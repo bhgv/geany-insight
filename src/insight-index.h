@@ -11,5 +11,9 @@ gboolean insight_native_import(InsightIndex *,TMSourceFile *,const char *);
 /* Parse validated UTF-8 source and import produced tags. The legacy parser
  * return value is not a reliable success indicator for nonempty buffers. */
 gboolean insight_native_parse(InsightIndex *,TMSourceFile *,const char *,const char *,gsize);
+/* Local/parameter tags are eligible only in the same file and function,
+ * at or before the reference. Negative means outside the reference scope. */
+gint insight_native_definition_rank_at(const InsightSymbol *,const char *,const char *,gulong);
+gchar *insight_native_function_scope(const InsightIndex *,const char *,gulong);
 guint insight_native_definition_rank(const InsightSymbol *,const char *);
 #endif
