@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $env:PATH = (Join-Path $PSScriptRoot 'bin') + ';' + $env:PATH
+$env:GSETTINGS_SCHEMA_DIR = Join-Path $PSScriptRoot 'share\glib-2.0\schemas'
 $profile = Join-Path $PSScriptRoot 'profile'
 New-Item -ItemType Directory -Force -Path $profile | Out-Null
 $env:GDK_PIXBUF_MODULEDIR = Join-Path $PSScriptRoot 'lib\gdk-pixbuf-2.0\2.10.0\loaders'

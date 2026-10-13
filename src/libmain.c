@@ -592,6 +592,7 @@ static void parse_command_line_options(gint *argc, gchar ***argv)
 	}
 
 #ifdef G_OS_WIN32
+	win32_init_runtime();
 	win32_init_debug_code();
 #endif
 

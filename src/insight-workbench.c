@@ -1883,6 +1883,7 @@ static void focus_search_results(GtkWidget *widget,gpointer data) {
 }
 static gboolean search_result_key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
  (void)data;
+ if((event->state & gtk_accelerator_get_default_mod_mask())==GDK_MOD1_MASK && (event->keyval==GDK_KEY_Up || event->keyval==GDK_KEY_Down)) { search_result_move(widget,GINT_TO_POINTER(event->keyval==GDK_KEY_Up ? -2 : 2)); return TRUE; }
  if((event->state & gtk_accelerator_get_default_mod_mask())!=GDK_CONTROL_MASK || (event->keyval!=GDK_KEY_l && event->keyval!=GDK_KEY_L)) return FALSE;
  GtkTreeSelection *selection=gtk_tree_view_get_selection(GTK_TREE_VIEW(widget)); GtkTreeModel *model; GtkTreeIter iter;
  if(gtk_tree_selection_get_selected(selection,&model,&iter)) { GtkTreePath *path=gtk_tree_model_get_path(model,&iter); usage_activated(GTK_TREE_VIEW(widget),path,NULL,NULL); gtk_tree_path_free(path); }
@@ -1901,11 +1902,11 @@ static void search_choose_files(GtkWidget *widget,gpointer data) {
  gtk_widget_destroy(dialog);
 }
 static void search_result_move(GtkWidget *widget,gpointer data) {
- (void)widget; gint step=GPOINTER_TO_INT(data),count=gtk_tree_model_iter_n_children(GTK_TREE_MODEL(wb.search_matches),NULL); if(!count) return;
+ (void)widget; gint direction=GPOINTER_TO_INT(data),step=direction<0 ? -1 : 1,count=gtk_tree_model_iter_n_children(GTK_TREE_MODEL(wb.search_matches),NULL); gboolean open=direction==-1 || direction==1; if(!count) return;
  GtkTreeSelection *selection=gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.search_view)); GtkTreeModel *model; GtkTreeIter iter; gint index=step<0 ? count : -1;
  if(gtk_tree_selection_get_selected(selection,&model,&iter)) { GtkTreePath *path=gtk_tree_model_get_path(model,&iter); index=gtk_tree_path_get_indices(path)[0]; gtk_tree_path_free(path); }
  index=(index+step+count)%count; GtkTreePath *path=gtk_tree_path_new_from_indices(index,-1);
- gtk_tree_view_set_cursor(GTK_TREE_VIEW(wb.search_view),path,NULL,FALSE); gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(wb.search_view),path,NULL,TRUE,0.5f,0); usage_activated(GTK_TREE_VIEW(wb.search_view),path,NULL,NULL); gtk_tree_path_free(path);
+ gtk_tree_view_set_cursor(GTK_TREE_VIEW(wb.search_view),path,NULL,FALSE); gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(wb.search_view),path,NULL,TRUE,0.5f,0); if(open) usage_activated(GTK_TREE_VIEW(wb.search_view),path,NULL,NULL); else usage_selected(selection,NULL); gtk_tree_path_free(path);
 }
 static void search_copy_results(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; GString *text=g_string_new(NULL); GtkTreeIter iter; GtkTreeModel *model=GTK_TREE_MODEL(wb.search_matches);
@@ -1924,8 +1925,8 @@ static void create_search_results(void) {
  gtk_box_pack_start(GTK_BOX(wb.search_page),row,FALSE,FALSE,0); GtkWidget *controls=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);
  const char *buttons[]={"Files…","Folder…","Search","Stop","Previous","Next","Copy results"};
  for(guint i=0;i<G_N_ELEMENTS(buttons);i++) { GtkWidget *button=gtk_button_new_with_label(buttons[i]); gtk_box_pack_start(GTK_BOX(controls),button,FALSE,FALSE,0); GCallback cb=i<2 ? G_CALLBACK(search_choose_files) : (i==2 ? G_CALLBACK(project_text_search) : (i==3 ? G_CALLBACK(usage_cancel) : (i<6 ? G_CALLBACK(search_result_move) : G_CALLBACK(search_copy_results)))); g_signal_connect(button,"clicked",cb,GINT_TO_POINTER(i==1 ? 1 : (i==4 ? -1 : 1))); }
- gtk_box_pack_start(GTK_BOX(wb.search_page),controls,FALSE,FALSE,0); wb.search_status=gtk_label_new("Search results — select to preview; Enter/double click opens the match"); gtk_label_set_xalign(GTK_LABEL(wb.search_status),0); gtk_box_pack_start(GTK_BOX(wb.search_page),wb.search_status,FALSE,FALSE,0);
- wb.search_matches=gtk_list_store_new(USAGE_COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG,G_TYPE_ULONG,G_TYPE_ULONG,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING); wb.search_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(wb.search_matches)); gtk_widget_set_name(wb.search_view,"insight-search-results");
+ gtk_box_pack_start(GTK_BOX(wb.search_page),controls,FALSE,FALSE,0); wb.search_status=gtk_label_new("Search results — Alt+Up/Down previews; Enter/double click opens the match"); gtk_label_set_xalign(GTK_LABEL(wb.search_status),0); gtk_box_pack_start(GTK_BOX(wb.search_page),wb.search_status,FALSE,FALSE,0);
+ wb.search_matches=gtk_list_store_new(USAGE_COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG,G_TYPE_ULONG,G_TYPE_ULONG,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING); wb.search_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(wb.search_matches)); gtk_widget_set_name(wb.search_view,"insight-search-results"); gtk_widget_set_tooltip_text(wb.search_view,"Alt+Up/Down: browse matches in Context without moving the editor; Enter/double click or Ctrl+L: open the selected match; Shift+F8/F9: previous/next match");
  const char *labels[]={"File","Line","Source"}; const gint columns[]={USAGE_DISPLAY,USAGE_LINE,USAGE_SNIPPET};
  for(guint i=0;i<3;i++) { GtkCellRenderer *cell=gtk_cell_renderer_text_new(); g_object_set(cell,"ellipsize",PANGO_ELLIPSIZE_END,NULL); GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(labels[i],cell,"text",columns[i],NULL); gtk_tree_view_column_set_sort_column_id(column,columns[i]); gtk_tree_view_column_set_resizable(column,TRUE); gtk_tree_view_column_set_sizing(column,GTK_TREE_VIEW_COLUMN_FIXED); gtk_tree_view_column_set_fixed_width(column,i==0 ? 260 : (i==1 ? 70 : 450)); gtk_tree_view_column_set_expand(column,i==2); gtk_tree_view_append_column(GTK_TREE_VIEW(wb.search_view),column); }
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),wb.search_view); gtk_box_pack_start(GTK_BOX(wb.search_page),scroll,TRUE,TRUE,0);

@@ -91,6 +91,9 @@ static gboolean step(gpointer data) {
  } else if(phase==4) {
   GtkWidget *view=find_named(window,"insight-search-results"),*preview=find_named(window,"insight-context-code"),*query=find_named(window,"insight-project-query"); g_assert_nonnull(view); g_assert_nonnull(preview); GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view)); g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,2);
   GtkTreeIter iter; g_assert_true(gtk_tree_model_get_iter_first(model,&iter)); gulong start,end; gtk_tree_model_get(model,&iter,3,&start,4,&end,-1); g_assert_cmpuint(end-start,==,6); GtkTreePath *path=gtk_tree_path_new_from_indices(0,-1); gtk_tree_view_set_cursor(GTK_TREE_VIEW(view),path,NULL,FALSE); gtk_tree_path_free(path); g_assert_cmpint(SSM(SCINTILLA(preview),SCI_INDICATORVALUEAT,28,start),>,0); g_assert_cmpint(SSM(SCINTILLA(preview),SCI_INDICATORVALUEAT,29,start),>,0);
+  gint before=sci_get_current_position(doc->editor->sci),anchor=SSM(doc->editor->sci,SCI_GETANCHOR,0,0);
+  GdkEvent *browse=gdk_event_new(GDK_KEY_PRESS); browse->key.window=g_object_ref(gtk_widget_get_window(view)); browse->key.state=GDK_MOD1_MASK; browse->key.keyval=GDK_KEY_Down; gtk_widget_event(view,browse); gdk_event_free(browse);
+  g_assert_true(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),NULL,&iter)); GtkTreePath *selected=gtk_tree_model_get_path(model,&iter); g_assert_cmpint(gtk_tree_path_get_indices(selected)[0],==,1); gtk_tree_path_free(selected); gtk_tree_model_get(model,&iter,3,&start,4,&end,-1); g_assert_cmpuint(end-start,==,7); g_assert_cmpint(SSM(SCINTILLA(preview),SCI_INDICATORVALUEAT,29,start),>,0); g_assert_cmpint(sci_get_current_position(doc->editor->sci),==,before); g_assert_cmpint(SSM(doc->editor->sci,SCI_GETANCHOR,0,0),==,anchor);
   gtk_entry_set_text(GTK_ENTRY(query),"("); g_signal_emit_by_name(query,"activate"); g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,2);
   ScintillaObject *context=SCINTILLA(preview); gchar *text=sci_get_contents(context,sci_get_length(context)+1),*name=strstr(text,"function_0"); g_assert_nonnull(name); gint position=(gint)(name-text); g_free(text); g_assert_cmpint(SSM(context,SCI_INDICATORVALUEAT,31,position),>,0); g_assert_cmpint(SSM(context,SCI_GETMARGINWIDTHN,0,0),>,0);
   gdouble x=(gdouble)SSM(context,SCI_POINTXFROMPOSITION,0,position)+1,y=(gdouble)SSM(context,SCI_POINTYFROMPOSITION,0,position)+1;
@@ -121,7 +124,7 @@ static gboolean step(gpointer data) {
   g_timeout_add(150,select_project,NULL); gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));
  } else if(phase==13) {
   g_assert_nonnull(strstr(gtk_window_get_title(GTK_WINDOW(window)),"GUI smoke")); project_empty(); document_set_text_changed(doc,FALSE);
-  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: syntax, independent read-only, edits, scrolling, toggling, keyword variations, Context links, project Apply/Cancel, menu Open Project, invalid/malformed project preserves session, UTF-8 paths, project switching, tab close\n"); return G_SOURCE_REMOVE;
+  GtkWidget *quit=ui_lookup_widget(window,"menu_quit1"); g_assert_true(GTK_IS_MENU_ITEM(quit)); gtk_menu_item_activate(GTK_MENU_ITEM(quit)); g_print("Overview GUI smoke passed: syntax, independent read-only, edits, scrolling, toggling, keyword variations, preview-only result navigation, Context links, project Apply/Cancel, menu Open Project, invalid/malformed project preserves session, UTF-8 paths, project switching, tab close\n"); return G_SOURCE_REMOVE;
  }
  phase++; return G_SOURCE_CONTINUE;
 }

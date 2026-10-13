@@ -113,6 +113,20 @@ static void debug_setup_console(void)
 }
 
 
+/* Also support launching bin/geany.exe directly from a relocated ZIP. */
+void win32_init_runtime(void)
+{
+	gchar *root = win32_get_installation_dir();
+	gchar *schemas = g_build_filename(root, "share", "glib-2.0", "schemas", NULL);
+	gchar *compiled = g_build_filename(schemas, "gschemas.compiled", NULL);
+	if (g_file_test(compiled, G_FILE_TEST_IS_REGULAR))
+		g_setenv("GSETTINGS_SCHEMA_DIR", schemas, TRUE);
+	g_free(compiled);
+	g_free(schemas);
+	g_free(root);
+}
+
+
 void win32_init_debug_code(void)
 {
 	if (app->debug_mode)

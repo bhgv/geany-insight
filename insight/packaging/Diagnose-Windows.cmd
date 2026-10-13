@@ -14,6 +14,7 @@ ver >> "%INSIGHT_LOG%" 2>&1
 if not exist "%INSIGHT_ROOT%bin\geany.exe" goto missing
 if not exist "%INSIGHT_ROOT%bin\libgeany-0.dll" goto missing
 if not exist "%INSIGHT_ROOT%data\geany.glade" goto missing
+if not exist "%INSIGHT_ROOT%share\glib-2.0\schemas\gschemas.compiled" goto missing
 >> "%INSIGHT_LOG%" echo [1] Loading editor and runtime with --version
 "%INSIGHT_ROOT%bin\geany.exe" --version >> "%INSIGHT_LOG%" 2>&1
 set "INSIGHT_RESULT=%ERRORLEVEL%"
@@ -21,6 +22,7 @@ set "INSIGHT_RESULT=%ERRORLEVEL%"
 if not "%INSIGHT_RESULT%"=="0" goto done
 if not exist "%INSIGHT_ROOT%profile" mkdir "%INSIGHT_ROOT%profile" >> "%INSIGHT_LOG%" 2>&1
 if not exist "%INSIGHT_ROOT%profile" goto missing
+set "GSETTINGS_SCHEMA_DIR=%INSIGHT_ROOT%share\glib-2.0\schemas"
 set "GDK_PIXBUF_MODULEDIR=%INSIGHT_ROOT%lib\gdk-pixbuf-2.0\2.10.0\loaders"
 set "GDK_PIXBUF_MODULE_FILE=%INSIGHT_ROOT%profile\pixbuf-loaders.cache"
 if exist "%INSIGHT_ROOT%bin\gdk-pixbuf-query-loaders.exe" "%INSIGHT_ROOT%bin\gdk-pixbuf-query-loaders.exe" > "%GDK_PIXBUF_MODULE_FILE%" 2>> "%INSIGHT_LOG%"
@@ -30,7 +32,7 @@ set "INSIGHT_RESULT=%ERRORLEVEL%"
 >> "%INSIGHT_LOG%" echo GUI exit code: %INSIGHT_RESULT%
 goto done
 :missing
->> "%INSIGHT_LOG%" echo Required EXE, DLL, data or writable profile is missing. Extract the complete ZIP first.
+>> "%INSIGHT_LOG%" echo Required EXE, DLL, data, GSettings database or writable profile is missing. Extract the complete ZIP first.
 set "INSIGHT_RESULT=1"
 :done
 type "%INSIGHT_LOG%"

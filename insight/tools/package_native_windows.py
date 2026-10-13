@@ -20,6 +20,7 @@ def main():
     p.add_argument('--name', help='Archive and directory name (default includes Git revision)')
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--strip', required=True)
+    p.add_argument('--schema-compiler', type=Path, help='Host glib-compile-schemas; compiles the portable GTK schema database')
     p.add_argument('--openssh', type=Path, help='Extracted official OpenSSH-Win64 client directory')
     a = p.parse_args()
     options = json.loads((a.build / 'meson-info/intro-buildoptions.json').read_text())
@@ -39,6 +40,12 @@ def main():
     for name in ['bin', 'etc', 'lib', 'share']:
         if (a.runtime / name).exists():
             shutil.copytree(a.runtime / name, destination / name)
+    schemas = destination / 'share/glib-2.0/schemas'
+    if a.schema_compiler:
+        subprocess.run([str(a.schema_compiler), '--strict', str(schemas)], check=True)
+    compiled = schemas / 'gschemas.compiled'
+    if not compiled.is_file() or compiled.stat().st_size < 8:
+        raise SystemExit('GTK GSettings database missing; supply --schema-compiler or a compiled runtime')
     # Use plugins built against this editor, rather than the older runtime SDK.
     shutil.rmtree(destination / 'lib/geany', ignore_errors=True)
     plugins = destination / 'lib/geany'
