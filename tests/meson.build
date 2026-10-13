@@ -422,3 +422,5 @@ remote_io_test = executable('test_insight_remote_io', '../insight/tests/remote_i
 test('Insight remote IO', remote_io_test)
 search_state_test = executable('test_insight_search_state', '../insight/tests/search_state_test.c', '../insight/desktop/search_state.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)
 test('Insight search state', search_state_test)
+project_files_test = executable('test_insight_project_files', '../insight/tests/project_files_test.c', '../insight/desktop/project_files.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)
+test('Insight project membership', project_files_test)
