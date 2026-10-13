@@ -2603,6 +2603,26 @@ gint document_replace_all(GeanyDocument *doc, const gchar *find_text, const gcha
  *
  * @param doc The document.
  */
+/* Attach an empty TagManager source without parsing the editor buffer. */
+static void document_ensure_tag_source(GeanyDocument *doc)
+{
+	/* create a new TM file if there isn't one yet */
+	if (! doc->tm_file)
+	{
+		gchar *locale_filename = utils_get_locale_from_utf8(doc->file_name);
+		const gchar *name;
+
+		/* lookup the name rather than using filetype name to support custom filetypes */
+		name = tm_source_file_get_lang_name(doc->file_type->lang);
+		doc->tm_file = tm_source_file_new(locale_filename, name);
+		g_free(locale_filename);
+
+		if (doc->tm_file)
+			tm_workspace_add_source_file_noupdate(doc->tm_file);
+	}
+
+}
+
 void document_update_tags(GeanyDocument *doc)
 {
 	document_tags_cancel(doc);
@@ -2623,20 +2643,7 @@ void document_update_tags(GeanyDocument *doc)
 		return;
 	}
 
-	/* create a new TM file if there isn't one yet */
-	if (! doc->tm_file)
-	{
-		gchar *locale_filename = utils_get_locale_from_utf8(doc->file_name);
-		const gchar *name;
-
-		/* lookup the name rather than using filetype name to support custom filetypes */
-		name = tm_source_file_get_lang_name(doc->file_type->lang);
-		doc->tm_file = tm_source_file_new(locale_filename, name);
-		g_free(locale_filename);
-
-		if (doc->tm_file)
-			tm_workspace_add_source_file_noupdate(doc->tm_file);
-	}
+	document_ensure_tag_source(doc);
 
 	/* early out if there's no tm source file and we couldn't create one */
 	if (doc->tm_file == NULL)
@@ -2738,7 +2745,10 @@ static void document_tags_job_done(GObject *source,GAsyncResult *result,gpointer
  sidebar_update_tag_list(doc,TRUE); document_highlight_tags(doc); insight_workbench_index_changed();
 }
 static void document_update_tags_async(GeanyDocument *doc) {
- if(!DOC_VALID(doc) || !doc->tm_file || !doc->file_type || !filetype_has_tags(doc->file_type)) { document_update_tags(doc); return; }
+ if(!DOC_VALID(doc)) return;
+ if(!doc->file_name || !doc->file_type || !filetype_has_tags(doc->file_type)) { document_update_tags(doc); return; }
+ document_ensure_tag_source(doc);
+ if(!doc->tm_file) { document_update_tags(doc); return; }
  document_tags_cancel(doc); DocumentTagsJob *j=g_new0(DocumentTagsJob,1); j->document=doc->id; j->generation=doc->priv->tag_parse_generation; j->epoch=document_tags_epoch; j->lang=doc->tm_file->lang; j->path=g_strdup(doc->tm_file->file_name); j->language=g_strdup(tm_source_file_get_lang_name(j->lang));
  j->length=sci_get_length(doc->editor->sci); j->text=g_malloc(j->length+1); if(j->length) memcpy(j->text,(const void *)SSM(doc->editor->sci,SCI_GETCHARACTERPOINTER,0,0),j->length); j->text[j->length]=0;
  doc->priv->tag_parse_cancel=g_cancellable_new(); GTask *task=g_task_new(NULL,doc->priv->tag_parse_cancel,document_tags_job_done,NULL); g_task_set_task_data(task,j,document_tags_job_free); g_task_run_in_thread(task,document_tags_job_run); g_object_unref(task);
@@ -2810,7 +2820,9 @@ static void document_load_config(GeanyDocument *doc, GeanyFiletype *type,
 			doc->priv->symbol_list_sort_mode = type->priv->symbol_list_sort_mode;
 	}
 
-	document_update_tags(doc);
+	/* Do not wait for Ctags during opening, reload or filetype changes.
+	 * Explicit document_update_tags() remains synchronous for callers. */
+	document_update_tags_async(doc);
 }
 
 
