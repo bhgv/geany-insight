@@ -80,7 +80,7 @@ typedef struct {
  GHashTable *preview_names; gsize preview_names_position; guint preview_links_idle; gchar *preview_links_text; gint preview_links_position;
  guint editor_follow_id; gint editor_follow_position,editor_follow_anchor;
  gchar *follow_word; guint follow_doc; gulong follow_line;
- guint refresh,source_id,panel_idle,index_event_idle; GHashTable *index_event_paths; gboolean context_visible,index_dirty,scan_failed;
+ guint refresh,source_id,panel_idle,index_event_idle; GHashTable *index_event_paths,*index_event_names; gboolean context_visible,index_dirty,scan_failed;
  gulong event_handlers[4];
  gulong project_handlers[3]; gchar *geany_root; gboolean workspace_from_project;
  gchar *prefs_path;
@@ -110,6 +110,7 @@ static void invalidate_search_context(void);
 static void stop_definition(void);
 static void stop_file_preview(void);
 static void queue_definition(gboolean);
+static gchar *cursor_query(GeanyDocument *);
 static void mark_index_dirty(void);
 static void native_commands_rebuild(void);
 static void save_workbench_settings(void);
@@ -271,10 +272,12 @@ static void render_source(const char *text,GeanyFiletype *filetype,gulong line) 
  SSM(wb.preview,SCI_VERTICALCENTRECARET,0,0);
 }
 static void refresh_index(void);
-typedef struct { InsightIndex *base,*overlay,*result,*previous; GPtrArray *paths; GHashTable *changed; guint64 epoch,generation; gboolean valid; } SnapshotJob;
+typedef struct { InsightIndex *base,*overlay,*result,*previous; GPtrArray *paths; GHashTable *changed,*names,*all_names; guint64 epoch,generation; gboolean valid; } SnapshotJob;
 static void retire_index_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) { (void)source; (void)cancel; insight_index_free(data); g_task_return_boolean(task,TRUE); }
 static void retire_index(InsightIndex *index) { if(!index) return; GTask *task=g_task_new(NULL,NULL,NULL,NULL); g_task_set_task_data(task,index,NULL); g_task_run_in_thread(task,retire_index_run); g_object_unref(task); }
-static void snapshot_job_free(gpointer data) { SnapshotJob *j=data; retire_index(j->base); retire_index(j->overlay); retire_index(j->result); retire_index(j->previous); if(j->changed) g_hash_table_destroy(j->changed); g_ptr_array_free(j->paths,TRUE); g_free(j); }
+static void retire_names_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) { (void)source; (void)cancel; g_hash_table_unref(data); g_task_return_boolean(task,TRUE); }
+static void retire_names(GHashTable *names) { if(!names) return; GTask *task=g_task_new(NULL,NULL,NULL,NULL); g_task_set_task_data(task,names,NULL); g_task_run_in_thread(task,retire_names_run); g_object_unref(task); }
+static void snapshot_job_free(gpointer data) { SnapshotJob *j=data; retire_index(j->base); retire_index(j->overlay); retire_index(j->result); retire_index(j->previous); retire_names(j->changed); retire_names(j->names); retire_names(j->all_names); g_ptr_array_free(j->paths,TRUE); g_free(j); }
 static void mark_index_dirty(void) { wb.index_generation++; wb.index_dirty=TRUE; if(wb.snapshot_worker) { g_cancellable_cancel(wb.snapshot_worker); g_clear_object(&wb.snapshot_worker); } }
 /* Worker-owned per-file fingerprints: publication reports only files whose
  * symbol records actually changed, including removals and empty overlays. */
@@ -295,28 +298,54 @@ static void index_collect_changes(SnapshotJob *j) {
  GHashTableIter it; gpointer path,value; g_hash_table_iter_init(&it,next);
  while(g_hash_table_iter_next(&it,&path,&value)) { GChecksum *before=g_hash_table_lookup(old,path); if(!before || strcmp(g_checksum_get_string(before),g_checksum_get_string(value))) g_hash_table_add(j->changed,g_strdup(path)); }
  g_hash_table_iter_init(&it,old); while(g_hash_table_iter_next(&it,&path,&value)) if(!g_hash_table_contains(next,path)) g_hash_table_add(j->changed,g_strdup(path));
+ j->names=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
+ j->all_names=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
+ const InsightIndex *snapshots[]={j->previous,j->result};
+ for(guint k=0;k<G_N_ELEMENTS(snapshots);k++) for(gsize n=0;n<insight_index_count(snapshots[k]);n++) {
+  const InsightSymbol *tag=insight_index_at(snapshots[k],n);
+  if(k==1 && !g_hash_table_contains(j->all_names,tag->name)) g_hash_table_add(j->all_names,g_strdup(tag->name));
+  if(g_hash_table_contains(j->changed,tag->path)) g_hash_table_add(j->names,g_strdup(tag->name));
+ }
  g_hash_table_destroy(old); g_hash_table_destroy(next);
 }
 /* Coalesced change event. Consumers read the latest published snapshot;
  * a local-file view is not invalidated by changes to another file. */
 static gboolean index_event_dispatch(gpointer data) {
  (void)data; wb.index_event_idle=0; if(!wb.alive) return G_SOURCE_REMOVE;
- GHashTable *paths=wb.index_event_paths; wb.index_event_paths=NULL;
+ GHashTable *paths=wb.index_event_paths,*names=wb.index_event_names; wb.index_event_paths=wb.index_event_names=NULL;
  if(paths && g_hash_table_size(paths)) {
   browser_filter(NULL,NULL); categories_filter(NULL,NULL);
   GeanyDocument *doc=document_get_current();
   if(doc && doc->file_name && g_hash_table_contains(paths,doc->file_name)) local_filter(NULL,NULL);
-  g_clear_pointer(&wb.preview_names,g_hash_table_destroy); wb.preview_names_position=0; wb.preview_links_position=0; preview_links();
-  wb.relation_dirty=TRUE; wb.follow_doc=0; insight_workbench_refresh();
+  wb.preview_links_position=0; preview_links();
+  /* Definitions depend on the queried name, not every project file.
+   * Owner/inheritance queries retain broader invalidation until their
+   * dependency sets are recorded explicitly. */
+  gint mode=wb.relation_mode ? gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode)) : -1;
+  const gchar *relation=wb.usage_entry ? gtk_entry_get_text(GTK_ENTRY(wb.usage_entry)) : NULL;
+  while(relation && g_str_has_prefix(relation,"::")) relation+=2;
+  if(mode!=1 || (relation && names && g_hash_table_contains(names,relation))) wb.relation_dirty=TRUE;
+  gchar *query=doc ? cursor_query(doc) : NULL;
+  gboolean definition_changed=(doc && doc->file_name && g_hash_table_contains(paths,doc->file_name)) || (query && names && g_hash_table_contains(names,query));
+  g_free(query);
+  if(definition_changed) { wb.follow_doc=0; queue_definition(TRUE); }
+  if(wb.relation_dirty || definition_changed) insight_workbench_refresh();
  }
- if(paths) g_hash_table_destroy(paths);
+ retire_names(paths);
+ retire_names(names);
  return G_SOURCE_REMOVE;
 }
-static void index_event_publish(GHashTable *changed) {
+static void index_event_publish(GHashTable *changed,GHashTable *names) {
  if(!changed || !g_hash_table_size(changed)) return;
- if(!wb.index_event_paths) wb.index_event_paths=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
- GHashTableIter it; gpointer path; g_hash_table_iter_init(&it,changed);
- while(g_hash_table_iter_next(&it,&path,NULL)) g_hash_table_add(wb.index_event_paths,g_strdup(path));
+ /* The common single publication transfers references in constant time.
+  * Only overlapping queued events need to merge their dependency sets. */
+ GHashTableIter it; gpointer key;
+ if(!wb.index_event_paths) wb.index_event_paths=g_hash_table_ref(changed);
+ else { g_hash_table_iter_init(&it,changed); while(g_hash_table_iter_next(&it,&key,NULL)) g_hash_table_add(wb.index_event_paths,g_strdup(key)); }
+ if(names) {
+  if(!wb.index_event_names) wb.index_event_names=g_hash_table_ref(names);
+  else { g_hash_table_iter_init(&it,names); while(g_hash_table_iter_next(&it,&key,NULL)) g_hash_table_add(wb.index_event_names,g_strdup(key)); }
+ }
  if(!wb.index_event_idle) wb.index_event_idle=g_idle_add(index_event_dispatch,NULL);
 }
 static void snapshot_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
@@ -337,10 +366,11 @@ static void snapshot_job_done(GObject *source,GAsyncResult *result,gpointer data
  if(!ok) { ui_set_statusbar(TRUE,"Index snapshot could not be rebuilt; previous snapshot retained"); return; }
  /* No symbol changes: keep the existing version and borrowed GUI pointers. */
  if(!g_hash_table_size(j->changed)) return;
- /* Cached link names borrow the old index: release before retiring it. */
+ /* Stop decoration before atomically replacing its owned name snapshot. */
  if(wb.preview_links_idle) { g_source_remove(wb.preview_links_idle); wb.preview_links_idle=0; }
- g_clear_pointer(&wb.preview_names,g_hash_table_destroy); retire_index(wb.index); wb.index=j->result; j->result=NULL; wb.index_version++;
- index_event_publish(j->changed);
+ retire_names(wb.preview_names); wb.preview_names=j->all_names; j->all_names=NULL;
+ retire_index(wb.index); wb.index=j->result; j->result=NULL; wb.index_version++; wb.preview_names_position=insight_index_count(wb.index);
+ index_event_publish(j->changed,j->names);
 }
 static void refresh_index(void) {
  if(!wb.alive || wb.scan_worker || wb.snapshot_worker || !wb.base || !wb.index_dirty) return;
@@ -351,11 +381,11 @@ static void refresh_index(void) {
 }
 static gboolean preview_links_step(gpointer data) {
  (void)data; gint64 deadline=g_get_monotonic_time()+6000;
- if(!wb.preview_names) wb.preview_names=g_hash_table_new(g_str_hash,g_str_equal);
+ if(!wb.preview_names) wb.preview_names=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
  gsize count=insight_index_count(wb.index);
  while(wb.preview_names_position<count) {
   const InsightSymbol *symbol=insight_index_at(wb.index,wb.preview_names_position++);
-  if(symbol) g_hash_table_add(wb.preview_names,(gpointer)symbol->name);
+  if(symbol && !g_hash_table_contains(wb.preview_names,symbol->name)) g_hash_table_add(wb.preview_names,g_strdup(symbol->name));
   if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
  }
  SSM(wb.preview,SCI_SETINDICATORCURRENT,INSIGHT_LINK,0);
@@ -2583,6 +2613,7 @@ void insight_workbench_finalize(void) {
  if(wb.panel_idle) g_source_remove(wb.panel_idle);
  if(wb.index_event_idle) g_source_remove(wb.index_event_idle);
  g_clear_pointer(&wb.index_event_paths,g_hash_table_destroy);
+ g_clear_pointer(&wb.index_event_names,g_hash_table_destroy);
  if(wb.symbols) symbol_list_stop(symbol_list_state(wb.symbols));
  if(wb.file_store) symbol_list_stop(symbol_list_state(wb.file_store));
  if(wb.local_symbols) symbol_list_stop(symbol_list_state(wb.local_symbols));
