@@ -74,7 +74,7 @@ typedef struct {
  gint usage_mode; guint usage_flags;
  GtkWidget *project_query,*project_case,*project_word,*project_regex,*editor_query,*editor_case,*editor_word,*editor_regex,*project_search_row,*editor_search_row;
  gchar *editor_find_query,*editor_find_digest; gsize editor_find_begin,editor_find_end; guint editor_find_id,editor_find_flags; GtkWidget *search_toolbars_toggle;
- GPtrArray *usage_paths; gchar *usage_name; guint usage_idle,usage_position,usage_shown,usage_skipped;
+ GPtrArray *usage_paths; gchar *usage_name; guint usage_idle,usage_position,usage_shown,usage_skipped; GHashTable *usage_existing; GtkTreeIter usage_iter; gboolean usage_collecting,usage_iter_valid;
  GtkListStore *symbols;
  ScintillaObject *preview;
  GHashTable *preview_names; gsize preview_names_position; guint preview_links_idle; gchar *preview_links_text; gint preview_links_position;
@@ -915,6 +915,7 @@ static void create_files_browser(void) {
 }
 enum { USAGE_DISPLAY,USAGE_PATH,USAGE_LINE,USAGE_START,USAGE_END,USAGE_ID,USAGE_DIGEST,USAGE_SYMBOL,USAGE_SNIPPET,USAGE_COLUMN,USAGE_COLUMNS };
 static void stop_usage(void) {
+ g_clear_pointer(&wb.usage_existing,g_hash_table_destroy); wb.usage_collecting=FALSE;
  wb.usage_generation++; if(wb.search_worker) { g_cancellable_cancel(wb.search_worker); g_clear_object(&wb.search_worker); }
  if(wb.usage_idle) { g_source_remove(wb.usage_idle); wb.usage_idle=0; }
  if(wb.usage_paths) g_ptr_array_set_size(wb.usage_paths,0);
@@ -974,13 +975,29 @@ static void search_job_run(GTask *task,gpointer source,gpointer data,GCancellabl
  }
  g_free(mask); g_task_return_boolean(task,TRUE);
 }
+static gchar *search_row_key(const gchar *display,const gchar *path,const gchar *name,const gchar *snippet,const gchar *digest,gulong line,gulong start,gulong end,guint id,gulong column) {
+ GString *key=g_string_new(NULL); const gchar *fields[]={display,path,name,snippet,digest};
+ for(guint n=0;n<G_N_ELEMENTS(fields);n++) {
+  if(fields[n]) g_string_append_printf(key,"%" G_GSIZE_FORMAT ":%s",strlen(fields[n]),fields[n]); else g_string_append(key,"-1:");
+ }
+ g_string_append_printf(key,":%lu:%lu:%lu:%u:%lu",line,start,end,id,column); return g_string_free(key,FALSE);
+}
+static gchar *search_existing_key(GtkTreeModel *model,GtkTreeIter *iter) {
+ gchar *display=NULL,*path=NULL,*name=NULL,*snippet=NULL,*digest=NULL; gulong line=0,start=0,end=0,column=0; guint id=0;
+ gtk_tree_model_get(model,iter,USAGE_DISPLAY,&display,USAGE_PATH,&path,USAGE_SYMBOL,&name,USAGE_SNIPPET,&snippet,USAGE_DIGEST,&digest,USAGE_LINE,&line,USAGE_START,&start,USAGE_END,&end,USAGE_ID,&id,USAGE_COLUMN,&column,-1);
+ gchar *key=search_row_key(display,path,name,snippet,digest,line,start,end,id,column);
+ g_free(display); g_free(path); g_free(name); g_free(snippet); g_free(digest); return key;
+}
 static gboolean search_results_apply(gpointer data) {
  GTask *task=data; SearchJob *j=g_task_get_task_data(task);
  if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.usage_generation) return G_SOURCE_REMOVE;
  gint64 deadline=g_get_monotonic_time()+3000;
  while(j->apply_position<MIN(j->total,j->capacity)) {
-  gsize n=j->apply_position++; InsightOccurrence *hit=&j->found[n]; GtkTreeIter iter; gtk_list_store_append(wb.usage_target,&iter);
-  gtk_list_store_set(wb.usage_target,&iter,USAGE_DISPLAY,j->path ? j->path : "untitled",USAGE_PATH,j->path,USAGE_LINE,hit->line,USAGE_COLUMN,j->columns[n],USAGE_START,(gulong)hit->start,USAGE_END,(gulong)hit->end,USAGE_ID,j->id,USAGE_DIGEST,j->digest,USAGE_SYMBOL,j->query,USAGE_SNIPPET,(gchar *)g_ptr_array_index(j->snippets,n),-1); wb.usage_shown++;
+  gsize n=j->apply_position++; InsightOccurrence *hit=&j->found[n]; GtkTreeIter iter;
+  gchar *key=search_row_key(j->path ? j->path : "untitled",j->path,j->query,g_ptr_array_index(j->snippets,n),j->digest,hit->line,hit->start,hit->end,j->id,j->columns[n]);
+  GQueue *q=g_hash_table_lookup(wb.usage_existing,key); GtkTreeIter *old=q ? g_queue_pop_head(q) : NULL; g_free(key);
+  if(old) g_free(old);
+  else { gtk_list_store_append(wb.usage_target,&iter); gtk_list_store_set(wb.usage_target,&iter,USAGE_DISPLAY,j->path ? j->path : "untitled",USAGE_PATH,j->path,USAGE_LINE,hit->line,USAGE_COLUMN,j->columns[n],USAGE_START,(gulong)hit->start,USAGE_END,(gulong)hit->end,USAGE_ID,j->id,USAGE_DIGEST,j->digest,USAGE_SYMBOL,j->query,USAGE_SNIPPET,(gchar *)g_ptr_array_index(j->snippets,n),-1); } wb.usage_shown++;
   if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
  }
  gchar *label=g_strdup_printf("Searching… %u results • %u/%u files",wb.usage_shown,wb.usage_position,wb.usage_paths->len); set_usage_status(label); g_free(label);
@@ -994,8 +1011,25 @@ static void search_job_done(GObject *source,GAsyncResult *result,gpointer data) 
  else { wb.usage_skipped++; wb.usage_idle=g_idle_add(usage_step,NULL); }
 }
 static gboolean usage_step(gpointer data) {
- (void)data;
+ (void)data; gint64 deadline=g_get_monotonic_time()+3000;
+ if(wb.usage_collecting) {
+  while(wb.usage_iter_valid) {
+   gchar *key=search_existing_key(GTK_TREE_MODEL(wb.usage_target),&wb.usage_iter); GQueue *q=g_hash_table_lookup(wb.usage_existing,key);
+   if(!q) { q=g_queue_new(); g_hash_table_insert(wb.usage_existing,key,q); } else g_free(key);
+   GtkTreeIter *copy=g_new(GtkTreeIter,1); *copy=wb.usage_iter; g_queue_push_tail(q,copy);
+   wb.usage_iter_valid=gtk_tree_model_iter_next(GTK_TREE_MODEL(wb.usage_target),&wb.usage_iter);
+   if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
+  }
+  wb.usage_collecting=FALSE;
+ }
  if(wb.usage_position>=wb.usage_paths->len || wb.usage_shown>=2000) {
+  GHashTableIter pending; gpointer value; g_hash_table_iter_init(&pending,wb.usage_existing);
+  while(g_hash_table_iter_next(&pending,NULL,&value)) {
+   GQueue *q=value; GtkTreeIter *old;
+   while((old=g_queue_pop_head(q))) { gtk_list_store_remove(wb.usage_target,old); g_free(old); if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE; }
+   g_hash_table_iter_remove(&pending);
+  }
+  g_clear_pointer(&wb.usage_existing,g_hash_table_destroy);
   wb.usage_idle=0; gchar *label=g_strdup_printf("%u results • %u files scanned • %u skipped%s",wb.usage_shown,wb.usage_position,wb.usage_skipped,wb.usage_shown>=2000 ? " • result limit reached" : ""); set_usage_status(label); g_free(label); return G_SOURCE_REMOVE;
  }
  Location *location=g_ptr_array_index(wb.usage_paths,wb.usage_position++); GeanyDocument *doc=location->id ? document_find_by_id(location->id) : document_find_by_filename(location->path);
@@ -1095,7 +1129,8 @@ static void usage_start(GtkWidget *widget,gpointer data) {
  if(wb.usage_keywords && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.search_variations))) wb.usage_flags|=INSIGHT_KEYWORD_VARIATIONS;
  if(mode==3 && !(wb.usage_keywords ? insight_keyword_collect("",0,query,wb.usage_flags,wb.usage_context,NULL,0,&total,&query_error) : insight_context_collect("",0,query,wb.usage_flags,NULL,0,&total,&query_error))) { set_usage_status(query_error ? query_error->message : "Invalid text search query"); g_clear_error(&query_error); return; }
  if(mode!=3 && !insight_occurrences_find("",0,query,strlen(query),0,NULL,0,&total)) { set_usage_status("Enter one UTF-8 identifier"); return; }
- gtk_list_store_clear(wb.usage_target);
+ wb.usage_existing=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,symbol_iter_queue_free); wb.usage_collecting=TRUE;
+ wb.usage_iter_valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(wb.usage_target),&wb.usage_iter);
  if(mode==3) { gtk_entry_set_text(GTK_ENTRY(wb.project_query),query); insight_search_history_record(wb.search_history,query); save_search_settings(); focus_search_results(NULL,NULL); }
  wb.usage_name=g_strdup(query); wb.usage_position=wb.usage_shown=wb.usage_skipped=0;
  GHashTable *seen=g_hash_table_new(g_str_hash,g_str_equal);
@@ -2437,7 +2472,7 @@ static void create_search_results(void) {
  gtk_box_pack_start(GTK_BOX(wb.search_page),row,FALSE,FALSE,0); GtkWidget *controls=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);
  const char *buttons[]={"Files…","Folder…","Search","Stop","Previous","Next","Copy results"};
  for(guint i=0;i<G_N_ELEMENTS(buttons);i++) { GtkWidget *button=gtk_button_new_with_label(buttons[i]); gtk_box_pack_start(GTK_BOX(controls),button,FALSE,FALSE,0); GCallback cb=i<2 ? G_CALLBACK(search_choose_files) : (i==2 ? G_CALLBACK(project_text_search) : (i==3 ? G_CALLBACK(usage_cancel) : (i<6 ? G_CALLBACK(search_result_move) : G_CALLBACK(search_copy_results)))); g_signal_connect(button,"clicked",cb,GINT_TO_POINTER(i==1 ? 1 : (i==4 ? -1 : 1))); }
- gtk_box_pack_start(GTK_BOX(wb.search_page),controls,FALSE,FALSE,0); wb.search_status=gtk_label_new("Search results — Alt+Up/Down previews; Enter/double click opens the match"); gtk_label_set_xalign(GTK_LABEL(wb.search_status),0); gtk_box_pack_start(GTK_BOX(wb.search_page),wb.search_status,FALSE,FALSE,0);
+ gtk_box_pack_start(GTK_BOX(wb.search_page),controls,FALSE,FALSE,0); wb.search_status=gtk_label_new("Search results — Alt+Up/Down previews; Enter/double click opens the match"); gtk_widget_set_name(wb.search_status,"insight-search-status"); gtk_label_set_xalign(GTK_LABEL(wb.search_status),0); gtk_box_pack_start(GTK_BOX(wb.search_page),wb.search_status,FALSE,FALSE,0);
  wb.search_matches=gtk_list_store_new(USAGE_COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG,G_TYPE_ULONG,G_TYPE_ULONG,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG); wb.search_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(wb.search_matches)); gtk_widget_set_name(wb.search_view,"insight-search-results"); gtk_widget_set_tooltip_text(wb.search_view,"Alt+Up/Down: browse matches in Context without moving the editor; Enter/double click or Ctrl+L: open the selected match; Shift+F8/F9: previous/next match");
  const char *labels[]={"File","Line","Column","Source"}; const gint columns[]={USAGE_DISPLAY,USAGE_LINE,USAGE_COLUMN,USAGE_SNIPPET};
  for(guint i=0;i<3;i++) { GtkCellRenderer *cell=gtk_cell_renderer_text_new(); g_object_set(cell,"ellipsize",PANGO_ELLIPSIZE_END,NULL); GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(labels[i],cell,"text",columns[i],NULL); gtk_tree_view_column_set_sort_column_id(column,columns[i]); gtk_tree_view_column_set_resizable(column,TRUE); gtk_tree_view_column_set_sizing(column,GTK_TREE_VIEW_COLUMN_FIXED); gtk_tree_view_column_set_fixed_width(column,i==0 ? 260 : (i<3 ? 70 : 450)); gtk_tree_view_column_set_expand(column,i==3); gtk_tree_view_append_column(GTK_TREE_VIEW(wb.search_view),column); }

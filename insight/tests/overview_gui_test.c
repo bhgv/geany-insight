@@ -16,7 +16,7 @@ static GtkWidget *window,*overview_menu;
 static gboolean definition_cancel_checked;
 static gboolean selection_stress; static gint64 heartbeat_previous,heartbeat_max_gap;
 static guint preview_heartbeats; static gint large_last; static guint heartbeat_source;
-static GtkTreeRowReference *retained_file_row,*retained_relation_row;
+static GtkTreeRowReference *retained_file_row,*retained_relation_row,*retained_search_row;
 static GtkWidget *find_named(GtkWidget *root,const char *name) {
  if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;
  if(GTK_IS_CONTAINER(root)) { GList *children=gtk_container_get_children(GTK_CONTAINER(root)); GtkWidget *found=NULL; for(GList *p=children;p && !found;p=p->next) found=find_named(p->data,name); g_list_free(children); if(found) return found; }
@@ -107,6 +107,13 @@ static gboolean step(gpointer data) {
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(keywords),TRUE); g_assert_true(gtk_widget_get_sensitive(variations)); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(variations),TRUE); gtk_combo_box_set_active(GTK_COMBO_BOX(scope),2); gtk_entry_set_text(GTK_ENTRY(query),"save write"); g_signal_emit_by_name(query,"activate");
  } else if(phase==4) {
   GtkWidget *view=find_named(window,"insight-search-results"),*preview=find_named(window,"insight-context-code"); g_assert_nonnull(view); g_assert_nonnull(preview); GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view)); g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,2);
+  if(!retained_search_row) {
+   GtkTreeIter first; g_assert_true(gtk_tree_model_get_iter_first(model,&first)); GtkTreePath *keep=gtk_tree_model_get_path(model,&first);
+   retained_search_row=gtk_tree_row_reference_new(model,keep); gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),keep); gtk_tree_path_free(keep);
+   GtkWidget *query=find_named(window,"insight-project-query"); g_signal_emit_by_name(query,"activate"); return G_SOURCE_CONTINUE;
+  }
+  GtkWidget *status=find_named(window,"insight-search-status"); if(!g_str_has_prefix(gtk_label_get_text(GTK_LABEL(status)),"2 results")) return G_SOURCE_CONTINUE;
+  g_assert_true(gtk_tree_row_reference_valid(retained_search_row)); GtkTreeIter retained; g_assert_true(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),NULL,&retained)); gtk_tree_row_reference_free(retained_search_row); retained_search_row=NULL;
   GtkTreeIter iter; g_assert_true(gtk_tree_model_get_iter_first(model,&iter)); gulong start,end; gtk_tree_model_get(model,&iter,3,&start,4,&end,-1); g_assert_cmpuint(end-start,==,6); GtkTreePath *path=gtk_tree_path_new_from_indices(0,-1); gtk_tree_view_set_cursor(GTK_TREE_VIEW(view),path,NULL,FALSE); gtk_tree_path_free(path); g_assert_cmpint(SSM(SCINTILLA(preview),SCI_INDICATORVALUEAT,28,start),>,0); g_assert_cmpint(SSM(SCINTILLA(preview),SCI_INDICATORVALUEAT,29,start),>,0);
   gint before=sci_get_current_position(doc->editor->sci),anchor=SSM(doc->editor->sci,SCI_GETANCHOR,0,0);
   GdkEvent *browse=gdk_event_new(GDK_KEY_PRESS); browse->key.window=g_object_ref(gtk_widget_get_window(view)); browse->key.state=GDK_MOD1_MASK; browse->key.keyval=GDK_KEY_Down; gtk_widget_event(view,browse); gdk_event_free(browse);
