@@ -8,6 +8,7 @@
 #include "document.h"
 #include "editor.h"
 #include "filetypes.h"
+#include "projectprivate.h"
 #include "encodingsprivate.h"
 #include "highlighting.h"
 #include "sciwrappers.h"
@@ -53,6 +54,7 @@ typedef struct {
  ScintillaObject *preview;
  guint refresh,source_id; gboolean context_visible,index_dirty,scan_failed;
  gulong event_handlers[4];
+ gulong project_handlers[3]; gchar *geany_root; gboolean workspace_from_project;
  gchar *prefs_path;
  InsightExtensions *extensions; gboolean lua_running;
  GtkWidget *lua_menu,*lua_commands,*lua_item,*palette_item;
@@ -193,6 +195,7 @@ static gboolean scan_step(gpointer data) {
    tm_source_file_free(file);
   } else { wb.scan_failed=TRUE; wb.skipped++; }
  }
+ if(wb.parsed && wb.parsed%25==0) { files_filter(NULL,NULL); gchar *status=g_strdup_printf("Workspace: indexing… %u files",wb.parsed); ui_set_statusbar(TRUE,"%s",status); g_free(status); }
  g_free(utf8); g_free(path); return G_SOURCE_CONTINUE;
 }
 static gboolean start_scan(const char *root) {
@@ -205,7 +208,7 @@ static gboolean start_scan(const char *root) {
 static void choose_root(GtkButton *button,gpointer data) {
  (void)button; (void)data;
  GtkWidget *dialog=gtk_file_chooser_dialog_new("Open source workspace",GTK_WINDOW(main_widgets.window),GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,"Cancel",GTK_RESPONSE_CANCEL,"Open",GTK_RESPONSE_ACCEPT,NULL);
- if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) { gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog)); if(!start_scan(path)) ui_set_statusbar(TRUE,"Cannot index source folder"); g_free(path); }
+ if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) { gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog)); if(!start_scan(path)) ui_set_statusbar(TRUE,"Cannot index source folder"); else wb.workspace_from_project=FALSE; g_free(path); }
  gtk_widget_destroy(dialog);
 }
 static void cancel_scan(GtkButton *button,gpointer data) { (void)button; (void)data; stop_scan(); refresh_index(); browser_filter(NULL,NULL); files_filter(NULL,NULL); tree_refresh(); file_types_refresh(); categories_filter(NULL,NULL); local_filter(NULL,NULL); insight_workbench_refresh(); ui_set_statusbar(TRUE,"Workspace scan cancelled; partial index retained"); }
@@ -876,6 +879,24 @@ static void native_document_event(GObject *object,GeanyDocument *doc,gpointer da
  wb.lua_running=FALSE; g_free(h.scratch); insight_index_free(snapshot); if(result) ui_set_statusbar(TRUE,"Lua event: %s",error);
  if(!strcmp(data,"document_close")) wb.index_dirty=TRUE;
 }
+static void native_project_update(GObject *object,GKeyFile *config,gpointer data) {
+ (void)object; (void)config; if(!wb.preview || !app->project) return;
+ gchar *utf8=project_get_base_path(); if(!utf8) return;
+ gchar *native=utils_get_locale_from_utf8(utf8),*root=g_canonicalize_filename(native,NULL); g_free(native); g_free(utf8);
+ gboolean changed=GPOINTER_TO_INT(data) || g_strcmp0(root,wb.geany_root);
+ if(changed) {
+  if(start_scan(root)) { g_free(wb.geany_root); wb.geany_root=g_strdup(root); wb.workspace_from_project=TRUE; browser_filter(NULL,NULL); files_filter(NULL,NULL); tree_refresh(); categories_filter(NULL,NULL); file_types_refresh(); gtk_widget_show(wb.project_notebook); gtk_notebook_set_current_page(GTK_NOTEBOOK(wb.project_notebook),0); }
+  else ui_set_statusbar(TRUE,"Project source folder cannot be indexed: %s",root);
+ }
+ g_free(root);
+}
+static void native_project_close(GObject *object,gpointer data) {
+ (void)object; (void)data; g_clear_pointer(&wb.geany_root,g_free);
+ if(!wb.workspace_from_project) return;
+ wb.workspace_from_project=FALSE; stop_scan(); insight_index_free(wb.base); wb.base=insight_index_new(); wb.index_dirty=TRUE; g_ptr_array_set_size(wb.files,0); g_clear_pointer(&wb.root,g_free);
+ if(wb.cache_path) g_unlink(wb.cache_path);
+ refresh_index(); browser_filter(NULL,NULL); files_filter(NULL,NULL); tree_refresh(); categories_filter(NULL,NULL); file_types_refresh(); insight_workbench_refresh();
+}
 static void create_native_lua(void) {
  gchar *settings=g_build_filename(app->configdir,"insight","lua-extension.conf",NULL);
  wb.extensions=insight_extensions_new(settings); g_free(settings); GError *error=NULL;
@@ -1242,12 +1263,18 @@ void insight_workbench_init(void) {
  const char *events[]={"document_open","document_save","document_activate","document_close"};
  for(guint i=0;i<4;i++) wb.event_handlers[i]=g_signal_connect_after(geany_object,signals[i],G_CALLBACK(native_document_event),(gpointer)events[i]);
  create_workbench_menus(); arrange_main_menus(); create_browse_toolbar();
+ wb.project_handlers[0]=g_signal_connect_after(geany_object,"project-open",G_CALLBACK(native_project_update),GINT_TO_POINTER(1));
+ wb.project_handlers[1]=g_signal_connect_after(geany_object,"project-save",G_CALLBACK(native_project_update),NULL);
+ wb.project_handlers[2]=g_signal_connect_after(geany_object,"project-close",G_CALLBACK(native_project_close),NULL);
+ native_project_update(NULL,NULL,GINT_TO_POINTER(1));
  if(wb.restore_float) { gboolean visible=gtk_widget_get_visible(wb.project_notebook); float_project(NULL,NULL); gtk_widget_set_visible(wb.project_notebook,visible); gtk_widget_set_visible(wb.float_window,visible); }
  ui_sidebar_show_hide();
  insight_workbench_refresh();
 }
 void insight_workbench_finalize(void) {
  save_workbench_settings(); dock_project(NULL,NULL);
+ for(guint i=0;i<3;i++) if(wb.project_handlers[i]) g_signal_handler_disconnect(geany_object,wb.project_handlers[i]);
+ g_free(wb.geany_root);
  for(guint i=0;i<4;i++) if(wb.event_handlers[i]) g_signal_handler_disconnect(geany_object,wb.event_handlers[i]);
  if(wb.lua_accels) { gtk_window_remove_accel_group(GTK_WINDOW(main_widgets.window),wb.lua_accels); g_object_unref(wb.lua_accels); }
  if(wb.navigation_accels) { gtk_window_remove_accel_group(GTK_WINDOW(main_widgets.window),wb.navigation_accels); g_object_unref(wb.navigation_accels); }
