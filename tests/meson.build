@@ -408,3 +408,6 @@ context_search_test = executable('test_insight_context_search', '../insight/test
 test('Insight context search', context_search_test)
 notebook_store_test = executable('test_insight_notebook_store', '../insight/tests/notebook_store_test.c', '../insight/desktop/notebook_store.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)
 test('Insight notebook store', notebook_store_test)
+
+workspace_watch_test = executable('test_insight_workspace_watch', '../insight/tests/workspace_watch_test.c', '../insight/desktop/workspace_watch.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)
+test('Insight workspace watcher', workspace_watch_test)

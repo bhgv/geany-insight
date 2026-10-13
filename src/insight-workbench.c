@@ -34,6 +34,7 @@
 #include "../insight/desktop/layout_state.h"
 #include "../insight/desktop/context_search.h"
 #include "../insight/desktop/notebook_store.h"
+#include "../insight/desktop/workspace_watch.h"
 
 typedef struct { gchar *path; GDir *dir; } ScanFrame;
 static void frame_free(gpointer data) { ScanFrame *p=data; if(p->dir) g_dir_close(p->dir); g_free(p->path); g_free(p); }
@@ -52,6 +53,7 @@ typedef struct {
  gchar *find_last_query,*find_last_digest; gsize find_last_begin,find_last_end;
  InsightNotes *notes; gchar *notes_path;
  GtkWidget *marks_entry,*marks_view,*clips_entry,*clips_view; GtkListStore *marks_store,*clips_store;
+ InsightWorkspaceWatch *watch; guint watch_idle; gboolean watch_changed,watch_incomplete;
  guint local_doc_id;
  GeanyFiletype *preview_filetype;
  GtkListStore *file_store,*matches;
@@ -88,6 +90,8 @@ static void dock_all_panels(void);
 static void detach_panel(guint);
 static void focus_widget_panel(GtkWidget *);
 static void select_project_tab(gint);
+static gboolean start_scan(const char *);
+static void workspace_changed(gpointer);
 static gchar *source_digest(const char *text) {
  /* Geany can remove a UTF-8 BOM and normalize CRLF while opening a file.
   * Compare logical source content; navigation here uses line numbers. */
@@ -151,6 +155,20 @@ static void stop_scan(void) {
  if(wb.scan) { g_source_remove(wb.scan); wb.scan=0; }
  if(wb.frames) g_ptr_array_set_size(wb.frames,0);
 }
+static gboolean rescan_changed(gpointer data) {
+ (void)data; wb.watch_idle=0; workspace_changed(NULL); return G_SOURCE_REMOVE;
+}
+static void workspace_changed(gpointer data) {
+ (void)data;
+ if(!wb.root) return;
+ if(wb.scan) { wb.watch_changed=TRUE; return; }
+ if(!start_scan(wb.root)) ui_set_statusbar(TRUE,"Workspace changed but source folder is unavailable; previous index retained");
+}
+static void watch_directory(const char *path) {
+ GError *error=NULL;
+ if(!insight_workspace_watch_add(wb.watch,path,&error)) wb.watch_incomplete=TRUE;
+ g_clear_error(&error);
+}
 static void save_index_cache(void) {
  if(!wb.root || !wb.cache_path) return;
  gchar *directory=g_path_get_dirname(wb.cache_path); GError *error=NULL;
@@ -180,8 +198,10 @@ static gboolean scan_step(gpointer data) {
  if(!wb.frames->len || wb.parsed>=10000) {
   wb.scan=0; g_ptr_array_set_size(wb.frames,0); refresh_index();
   if(wb.parsed<10000 && !wb.scan_failed) save_index_cache();
-  ui_set_statusbar(TRUE,"Workspace: %u files, %zu symbols, %u skipped%s",wb.parsed,insight_index_count(wb.index),wb.skipped,wb.parsed>=10000 ? "; file limit reached" : "");
-  browser_filter(NULL,NULL); files_filter(NULL,NULL); tree_refresh(); file_types_refresh(); categories_filter(NULL,NULL); local_filter(NULL,NULL); insight_workbench_refresh(); return G_SOURCE_REMOVE;
+  ui_set_statusbar(TRUE,"Workspace: %u files, %zu symbols, %u skipped%s",wb.parsed,insight_index_count(wb.index),wb.skipped,wb.parsed>=10000 ? "; file limit reached" : (wb.watch_incomplete ? "; directory monitoring incomplete" : ""));
+  browser_filter(NULL,NULL); files_filter(NULL,NULL); tree_refresh(); file_types_refresh(); categories_filter(NULL,NULL); local_filter(NULL,NULL); insight_workbench_refresh();
+  if(wb.watch_changed && !wb.watch_idle) { wb.watch_changed=FALSE; wb.watch_idle=g_timeout_add(2000,rescan_changed,NULL); }
+  return G_SOURCE_REMOVE;
  }
  ScanFrame *frame=g_ptr_array_index(wb.frames,wb.frames->len-1); const char *name=g_dir_read_name(frame->dir);
  if(!name) { g_ptr_array_remove_index(wb.frames,wb.frames->len-1); return G_SOURCE_CONTINUE; }
@@ -189,8 +209,11 @@ static gboolean scan_step(gpointer data) {
  gchar *path=g_build_filename(frame->path,name,NULL); GStatBuf st;
  if(g_lstat(path,&st)) { wb.scan_failed=TRUE; wb.skipped++; g_free(path); return G_SOURCE_CONTINUE; }
  if(S_ISDIR(st.st_mode)) {
+  gchar *profile=g_canonicalize_filename(app->configdir,NULL);
+  gboolean own_profile=!g_strcmp0(path,profile); g_free(profile);
+  if(own_profile) { g_free(path); return G_SOURCE_CONTINUE; }
   GDir *dir=wb.frames->len<64 ? g_dir_open(path,0,NULL) : NULL;
-  if(dir) { ScanFrame *next=g_new0(ScanFrame,1); next->path=path; next->dir=dir; g_ptr_array_add(wb.frames,next); }
+  if(dir) { watch_directory(path); ScanFrame *next=g_new0(ScanFrame,1); next->path=path; next->dir=dir; g_ptr_array_add(wb.frames,next); }
   else { wb.scan_failed=TRUE; wb.skipped++; g_free(path); }
   return G_SOURCE_CONTINUE;
  }
@@ -212,7 +235,10 @@ static gboolean scan_step(gpointer data) {
 static gboolean start_scan(const char *root) {
  gchar *owned=g_strdup(root); GDir *dir=g_dir_open(owned,0,NULL); InsightIndex *next=insight_index_new();
  if(!dir || !next) { if(dir) g_dir_close(dir); insight_index_free(next); g_free(owned); return FALSE; }
- stop_scan(); insight_index_free(wb.base); wb.base=next; g_free(wb.root); wb.root=g_strdup(owned);
+ stop_scan();
+ if(wb.watch_idle) { g_source_remove(wb.watch_idle); wb.watch_idle=0; }
+ insight_workspace_watch_clear(wb.watch); wb.watch_changed=FALSE; wb.watch_incomplete=FALSE; watch_directory(owned);
+ insight_index_free(wb.base); wb.base=next; g_free(wb.root); wb.root=g_strdup(owned);
  g_ptr_array_set_size(wb.files,0); ScanFrame *frame=g_new0(ScanFrame,1); frame->path=owned; frame->dir=dir; g_ptr_array_add(wb.frames,frame);
  wb.parsed=wb.skipped=0; wb.index_dirty=TRUE; wb.scan_failed=FALSE; wb.scan=g_idle_add(scan_step,NULL); ui_set_statusbar(TRUE,"Workspace: indexing source folder…"); return TRUE;
 }
@@ -222,7 +248,7 @@ static void choose_root(GtkButton *button,gpointer data) {
  if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) { gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog)); if(!start_scan(path)) ui_set_statusbar(TRUE,"Cannot index source folder"); else wb.workspace_from_project=FALSE; g_free(path); }
  gtk_widget_destroy(dialog);
 }
-static void cancel_scan(GtkButton *button,gpointer data) { (void)button; (void)data; stop_scan(); refresh_index(); browser_filter(NULL,NULL); files_filter(NULL,NULL); tree_refresh(); file_types_refresh(); categories_filter(NULL,NULL); local_filter(NULL,NULL); insight_workbench_refresh(); ui_set_statusbar(TRUE,"Workspace scan cancelled; partial index retained"); }
+static void cancel_scan(GtkButton *button,gpointer data) { (void)button; (void)data; stop_scan(); insight_workspace_watch_clear(wb.watch); wb.watch_changed=FALSE; if(wb.watch_idle) { g_source_remove(wb.watch_idle); wb.watch_idle=0; } refresh_index(); browser_filter(NULL,NULL); files_filter(NULL,NULL); tree_refresh(); file_types_refresh(); categories_filter(NULL,NULL); local_filter(NULL,NULL); insight_workbench_refresh(); ui_set_statusbar(TRUE,"Workspace scan cancelled; partial index retained"); }
 static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word,const char *preferred) {
  if(!wb.definitions) return NULL;
  if(!preferred && doc) preferred=doc->file_name;
@@ -1035,7 +1061,7 @@ static void native_project_update(GObject *object,GKeyFile *config,gpointer data
 static void native_project_close(GObject *object,gpointer data) {
  (void)object; (void)data; g_clear_pointer(&wb.geany_root,g_free);
  if(!wb.workspace_from_project) return;
- wb.workspace_from_project=FALSE; stop_scan(); insight_index_free(wb.base); wb.base=insight_index_new(); wb.index_dirty=TRUE; g_ptr_array_set_size(wb.files,0); g_clear_pointer(&wb.root,g_free);
+ wb.workspace_from_project=FALSE; stop_scan(); insight_workspace_watch_clear(wb.watch); wb.watch_changed=FALSE; if(wb.watch_idle) { g_source_remove(wb.watch_idle); wb.watch_idle=0; } insight_index_free(wb.base); wb.base=insight_index_new(); wb.index_dirty=TRUE; g_ptr_array_set_size(wb.files,0); g_clear_pointer(&wb.root,g_free);
  if(wb.cache_path) g_unlink(wb.cache_path);
  refresh_index(); browser_filter(NULL,NULL); files_filter(NULL,NULL); tree_refresh(); categories_filter(NULL,NULL); file_types_refresh(); insight_workbench_refresh();
 }
@@ -1392,6 +1418,7 @@ void insight_workbench_init(void) {
  gtk_container_child_get(GTK_CONTAINER(parent),existing,"position",&position,NULL);
  wb.usage_paths=g_ptr_array_new_with_free_func(location_free);
  wb.context_visible=TRUE; wb.prefs_path=g_build_filename(app->configdir,"insight","workbench.conf",NULL);
+ wb.watch=insight_workspace_watch_new(1500,workspace_changed,NULL);
  wb.frames=g_ptr_array_new_with_free_func(frame_free); wb.files=g_ptr_array_new_with_free_func(g_free);
  wb.base=insight_index_new(); wb.index=insight_index_new(); wb.index_dirty=TRUE;
  wb.cache_path=g_build_filename(app->configdir,"insight","workspace.idx",NULL); restore_index_cache();
@@ -1473,6 +1500,7 @@ void insight_workbench_init(void) {
  native_project_update(NULL,NULL,GINT_TO_POINTER(1));
  if(wb.restore_float) { gboolean visible=gtk_widget_get_visible(wb.project_notebook); float_project(NULL,NULL); gtk_widget_set_visible(wb.project_notebook,visible); gtk_widget_set_visible(wb.float_window,visible); }
  for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].restore) { detach_panel(i); gtk_widget_set_visible(wb.hosts[i].window,wb.hosts[i].visible); }
+ if(wb.root && !wb.scan) start_scan(wb.root);
  ui_sidebar_show_hide();
  insight_workbench_refresh();
 }
@@ -1489,6 +1517,8 @@ void insight_workbench_finalize(void) {
  if(wb.refresh) g_source_remove(wb.refresh);
  g_free(wb.prefs_path);
  stop_usage(); g_ptr_array_free(wb.usage_paths,TRUE);
+ if(wb.watch_idle) g_source_remove(wb.watch_idle);
+ insight_workspace_watch_free(wb.watch);
  stop_scan(); g_ptr_array_free(wb.frames,TRUE); g_ptr_array_free(wb.files,TRUE); g_free(wb.root); g_free(wb.cache_path);
  g_free(wb.source_path); g_free(wb.source_digest); g_free(wb.find_last_query); g_free(wb.find_last_digest);
  insight_index_free(wb.base); insight_index_free(wb.index);

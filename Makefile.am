@@ -122,6 +122,8 @@ EXTRA_DIST += \
 	insight/desktop/context_search.h \
 	insight/desktop/notebook_store.c \
 	insight/desktop/notebook_store.h \
+	insight/desktop/workspace_watch.c \
+	insight/desktop/workspace_watch.h \
 	insight/desktop/layout_state.c \
 	insight/desktop/layout_state.h \
 	insight/desktop/lookup_filter.c \
@@ -162,6 +164,7 @@ EXTRA_DIST += \
 	insight/tests/native_index_test.c \
 	insight/tests/context_search_test.c \
 	insight/tests/notebook_store_test.c \
+	insight/tests/workspace_watch_test.c \
 	insight/tests/layout_state_test.c \
 	insight/tests/lookup_filter_test.c \
 	insight/tests/occurrences_test.c \

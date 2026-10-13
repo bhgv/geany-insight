@@ -225,6 +225,8 @@ libgeany_la_SOURCES += \
 	../insight/desktop/context_search.h \
 	../insight/desktop/notebook_store.c \
 	../insight/desktop/notebook_store.h \
+	../insight/desktop/workspace_watch.c \
+	../insight/desktop/workspace_watch.h \
 	../insight/desktop/layout_state.c \
 	../insight/desktop/layout_state.h \
 	../insight/desktop/lookup_filter.c \
