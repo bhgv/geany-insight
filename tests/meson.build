@@ -420,3 +420,5 @@ keyword_search_test = executable('test_insight_keyword_search', '../insight/test
 test('Insight keyword search', keyword_search_test)
 remote_io_test = executable('test_insight_remote_io', '../insight/tests/remote_io_test.c', '../insight/desktop/remote_io.c', '../insight/desktop/remote_credentials.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)
 test('Insight remote IO', remote_io_test)
+search_state_test = executable('test_insight_search_state', '../insight/tests/search_state_test.c', '../insight/desktop/search_state.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)
+test('Insight search state', search_state_test)
