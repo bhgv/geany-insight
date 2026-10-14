@@ -29,6 +29,7 @@ jobs:
             mingw-w64-ucrt-x86_64-python
             mingw-w64-ucrt-x86_64-python-docutils
             gettext
+            patch
             git
             unzip
             zip
@@ -66,7 +67,7 @@ jobs:
               b'set "PATH=%~dp0bin;%PATH%"\r\n'
               b'"%~dp0bin\\geany.exe" -c "%~dp0profile" %*\r\n')
           PY
-          ./portable/bin/geany.exe --version
+          env PATH="$(pwd)/portable/bin:/c/Windows/System32:/c/Windows" ./portable/bin/geany.exe --version
           objdump -f portable/bin/geany.exe | tee portable/ARCHITECTURE.txt
           grep -q 'pei-x86-64' portable/ARCHITECTURE.txt
           (cd portable && zip -qr ../geany-insight-windows-x64-check.zip .)
