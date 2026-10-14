@@ -208,9 +208,12 @@ libgeany_la_SOURCES += \
 	insight-workbench.c \
 	insight-diff.c \
 	insight-diff.h \
+	insight-relation-graph.c \
+	insight-relation-graph.h \
 	../insight/core/diff.c \
 	../insight/core/structure_select.c \
 	../insight/core/structure_select.h \
+	../insight/core/relation_graph_layout.h \
 	../insight/core/diff.h \
 	insight-workbench.h \
 	insight-index.c \

@@ -429,3 +429,9 @@ test('Insight overview GUI', overview_gui_test, timeout: 30)
 
 structure_select_test = executable('test_insight_structure_select', '../insight/tests/structure_select_test.c', '../insight/core/structure_select.c', c_args: ['-UNDEBUG'])
 test('Insight structural selection', structure_select_test)
+
+relation_graph_layout_test = executable('test_insight_relation_graph_layout', '../insight/tests/relation_graph_layout_test.c', c_args: ['-UNDEBUG'])
+test('Insight relation graph geometry', relation_graph_layout_test)
+
+relation_graph_gui_test = executable('test_insight_relation_graph_gui', '../insight/tests/relation_graph_gui_test.c', '../src/insight-relation-graph.c', dependencies: deps)
+test('Insight relation graph GUI', relation_graph_gui_test, timeout: 30)

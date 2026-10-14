@@ -13,3 +13,11 @@ Toolbar icons are original Cairo drawings with blue accents and theme-colored ou
 Result filtering matches symbol, file and source text using Unicode case folding. It does not rerun the project search. Column sorting remains available. Definitions and Call sites buttons query the selected result, disable editor tracking and clear the display filter. Definition queries show all indexed candidates instead of guessing an overload. Single click still previews, and double click opens the result location.
 
 The Back arrow restores the previous drill-down query, relation mode, display filter and buffer/code options. Up to 32 drill-down steps are kept for this editor session; editor tracking stays off while browsing this history.
+
+## Graph view
+
+Enable Graph view in Relations. This shows the existing filtered and sorted result model as a one-level graph under the current query. Horizontal/Vertical controls change layout; zoom ranges from 50% to 200%. The first 128 visible results are drawn; the footer reports the full count and the table remains available for all results. The view choice is saved with workbench settings. Layout and zoom are session-local.
+
+Click a node for Context; double click or Enter opens its location in the editor. Arrow keys, Home and End select and scroll to result nodes. Definitions, Call sites, Back and the result filter use the same selection in either view. Nodes show symbol and file:line; blue borders and connectors are original Cairo drawings using the GTK theme text color.
+
+This is an initial graph of search results, not a recursively expanded semantic call tree. Links represent the active relation query, not proven runtime call edges. Existing lexical/tag limitations apply.

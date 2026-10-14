@@ -17,7 +17,7 @@ def compile_one(source):
     return str(obj)
 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
     objects=list(pool.map(compile_one,sources))
-for name in ['runtime','index','document','snapshot','commands','editor_api','events','context','occurrences','structure_select']:
+for name in ['runtime','index','document','snapshot','commands','editor_api','events','context','occurrences','structure_select','relation_graph_layout']:
     output=build/(name+'_test')
     subprocess.run(common+[str(root/'tests'/(name+'_test.c')),*objects,'-lm','-o',str(output)],check=True)
     subprocess.run([str(output)],check=True)
