@@ -20,4 +20,6 @@ void insight_symbol_view_load_more(GtkTreeView *);
 void insight_symbol_view_columns_reset(GtkTreeView *);
 void insight_symbol_view_columns_write(GtkTreeView *,GKeyFile *,const gchar *);
 void insight_symbol_view_columns_read(GtkTreeView *,GKeyFile *,const gchar *);
+void insight_symbol_view_columns_configure(GtkTreeView *,const gint *,guint);
+GtkWidget *insight_symbol_view_columns_menu(GtkTreeView *);
 #endif

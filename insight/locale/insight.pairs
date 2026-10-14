@@ -674,3 +674,27 @@ The caret symbol is outside the loaded outline or hidden by a filter|||Симв�
 Reset symbol columns|||Восстановить колонки символов
 Remember current symbol filter|||Запомнить текущий фильтр символов
 Symbol filter history: 16 valid queries, up to 256 bytes each|||История фильтров символов: 16 допустимых запросов, до 256 байт каждый
+Close the quoted field filter|||Закройте кавычки фильтра поля
+Selected value is too long for a lookup filter|||Выбранное значение слишком длинное для фильтра
+Copy qualified symbol name|||Копировать полное имя символа
+Copy source file path|||Копировать путь исходного файла
+Copy source line number|||Копировать номер строки исходника
+Filter by this symbol name|||Фильтровать по этому имени символа
+Filter by this scope|||Фильтровать по этой области видимости
+Filter by this source file|||Фильтровать по этому исходному файлу
+Clear symbol query|||Очистить запрос символов
+Expand selected symbol group|||Развернуть выбранную группу символов
+Collapse selected symbol group|||Свернуть выбранную группу символов
+Invert symbol type selection|||Инвертировать выбор типов символов
+Visible symbol columns|||Видимые колонки символов
+Copy file name|||Копировать имя файла
+Copy full file path|||Копировать полный путь файла
+Filter by this file|||Фильтровать по этому файлу
+Clear file query|||Очистить запрос файлов
+Reset file columns|||Восстановить колонки файлов
+Visible file columns|||Видимые колонки файлов
+Remember current file filter|||Запомнить текущий фильтр файлов
+File filter history: 16 valid queries, up to 256 bytes each|||История фильтров файлов: 16 допустимых запросов, до 256 байт каждый
+Files: %u|||Файлы: %u
+Files: %u+|||Файлы: %u+
+Loaded matching files; + means more remain beyond the 10000-file list limit|||Загруженные совпадающие файлы; + означает оставшиеся совпадения сверх лимита списка в 10000 файлов

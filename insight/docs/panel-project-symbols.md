@@ -55,7 +55,7 @@ Tutorial: choose source line for a file outline, then toggle the arrow to inspec
 
 Drag the boundary between column headers to resize a column. Drag a header horizontally to move its column; click it to sort. Long values are abbreviated with an ellipsis, and the list can scroll horizontally. The file and project outlines independently save column widths and order when the workbench settings are saved. Grouping, filtering and loading more preserve this layout.
 
-Reset symbol columns in the outline context menu restores the original column order and widths for this panel. It keeps the current query, type filters, grouping and sort order. Older settings without a layout use the defaults; invalid saved layouts are ignored.
+Reset symbol columns in the outline context menu restores the original column order, widths and visibility for this panel. It keeps the current query, type filters, grouping and sort order. Older settings without a layout use the defaults; invalid saved layouts are ignored.
 
 Tutorial: widen Symbol and move Line before it in File Symbols. In Project Symbols move File beside Symbol and widen it. Restart to restore each layout, or reset just one panel through its context menu.
 
@@ -67,3 +67,14 @@ The recent-history icon next to the name field opens this panel's saved queries.
 Choosing a query replaces only the name filter and focuses it. It resets the loaded portion through the usual query refresh, while retaining type categories, grouping, column layout and sorting; it does not activate a result. Queries remain literal when changing the UI language. File and project histories are independent and saved in workbench.conf. Clear history clears only this panel's history, retaining its current filter. Startup restores the history without applying the last query.
 
 Tutorial: filter for a function family, open history and remember it. Try another name, then choose the saved family from history. The list updates while the editor stays in place; press Enter only when you want to open a result.
+
+
+## More outline commands
+
+The context menu can copy the qualified name (using the source parser's scope separator), full source path or one-based line number. Path commands require a saved source file. A group header cannot supply a definition's path, line or qualified name.
+
+Filter by this symbol name creates a whole-name quoted query. Filter by this scope uses `scope:"Demo::Widget"`; Filter by this source file uses `file:"src/my file.cpp"`. These whole-field comparisons are case-insensitive and accept spaces inside the quoted value. Quotes inside the value remain literal; the final quote closes the field. An empty scope (`scope:""`) selects global declarations. Clear symbol query clears the text without changing the type mask. These actions change the list without opening an editor location.
+
+Expand/Collapse selected symbol group acts on the selected header or the containing group of a selected leaf. Invert symbol type selection exchanges checked and unchecked categories. Visible symbol columns opens independent column checkboxes; Symbol always remains visible. Visibility is retained together with widths/order, and Reset symbol columns shows every column again.
+
+Tutorial: right-click a class member, copy its qualified name, then filter by its scope. Clear the query and invert the type selection to inspect the other categories. Hide an unnecessary column, collapse a selected group and reopen it without collapsing the others.

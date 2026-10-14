@@ -75,3 +75,12 @@ Both symbol outlines support resizing and reordering headers, fixed widths and e
 ### Symbol query history (2026-10-14)
 
 Both outlines provide an icon-only recent-query menu, explicit Remember and recording on Enter. Each independently persists 16 distinct valid queries up to 256 UTF-8 bytes. Choosing a query changes only the filter without activating a result; clearing history preserves the current filter. Query literals are excluded from UI translation. Native GUI tests verify restore, MRU bounds, invalid queries, both recording paths, non-navigating selection, RU commands and independent clear/write.
+
+
+### Twenty outline and file-list improvements (2026-10-14)
+
+Exact quoted path/scope queries, qualified-name/path/line clipboard commands, selected-symbol filters, query clearing, individual group controls, category inversion and persistent column visibility extend both symbol outlines. Qualified names use the active native parser when the source is open.
+
+Project Files now has a non-navigating right-click menu, scoped keyboard commands, two-way synchronized sorting, independent column layout/visibility, saved preferences, file-aware query history and matching-file counters. Document events refresh after lifecycle changes; formatted counters update on UI language changes.
+
+Backend lookup tests and a native C++ GUI scenario cover the new commands and settings. Seven existing GUI suites cover menus, columns, history, paging, pane sizing, overview/navigation and localization. Updated offline RU/EN tutorials explain all controls; project enumeration and list limits remain explicit.

@@ -16,6 +16,13 @@ int main(void) {
  check("*src/*.cpp",TRUE,"a.cpp","","root/src/a.cpp","",TRUE);
  check("src test",TRUE,"test.cpp","","src/test.cpp","",TRUE);
  check("тест",FALSE,"ТЕСТ","","a.c","f",TRUE);
+ check("file:\"src/my file.cpp\"",FALSE,"f","A","src/my file.cpp","f",TRUE);
+ check("file:\"src/my file.cpp\"",FALSE,"f","A","src/my file.cpp.backup","f",FALSE);
+ check("scope:\"A::B C\"",FALSE,"f","A::B C","a.cpp","m",TRUE);
+ check("scope:\"A::B C\"",FALSE,"f","A::B C::D","a.cpp","m",FALSE);
+ check("scope:\"\"",FALSE,"f","","a.cpp","f",TRUE);
+ check("file:\"src/a\"b.cpp\"",TRUE,"","","src/a\"b.cpp","",TRUE);
+ g_assert_null(insight_lookup_filter_new("file:\"unfinished",FALSE,NULL));
  GError *error=NULL; InsightLookupFilter *f=insight_lookup_filter_new("?[",FALSE,&error); g_assert_null(f); g_assert_nonnull(error); g_clear_error(&error);
  g_assert_null(insight_lookup_filter_new("\xff",FALSE,NULL));
  g_print("Lookup filters passed\n"); return 0;

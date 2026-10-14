@@ -9,5 +9,6 @@ void insight_workbench_bookmarks_changed(void);
 void insight_workbench_editor_updated(gboolean);
 void insight_workbench_index_changed(void);
 void insight_workbench_languages_changed(void);
+void insight_workbench_locale_changed(void);
 gboolean insight_workbench_goto_definition(void);
 #endif

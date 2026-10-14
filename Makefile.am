@@ -281,3 +281,5 @@ EXTRA_DIST += insight/tests/symbol_locate_gui_test.c
 EXTRA_DIST += insight/tests/symbol_columns_gui_test.c
 
 EXTRA_DIST += insight/tests/symbol_history_gui_test.c
+
+EXTRA_DIST += insight/tests/workbench_twenty_gui_test.c
