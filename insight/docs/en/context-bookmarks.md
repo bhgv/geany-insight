@@ -26,3 +26,21 @@ and hover messages. Hover messages show the line number, source text, change sta
 and bookmark state. These options persist across restarts. Only marks within the
 visible miniature are drawn. Marks in the main editor's left margin have their own
 setting.
+
+### Function boundaries in the overview
+
+**Overview Options…** provides **Show current function boundary** and
+**Show all function boundaries**. The function containing the entire caret or
+selection is outlined in purple; other functions use grey outlines. The current
+outline disappears outside a function body. Hover messages include the function
+name and its scope when supplied by the parser.
+
+Outlines combine parser definitions with lexical body matching. C, C++, C#, Java,
+JavaScript and TypeScript brace-bodied definitions are supported. Prototypes,
+incomplete bodies and expression-only definitions receive no outline. Braces in
+comments and strings are excluded. These are lexical boundaries, without semantic
+handling of templates or preprocessing.
+
+Computation runs in the background for files up to 2 MiB. Editing removes old
+outlines until the symbols are refreshed. Further edits or closing the file reject
+obsolete results. Both display options persist across restarts.

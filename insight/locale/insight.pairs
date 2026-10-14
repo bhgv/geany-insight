@@ -571,3 +571,6 @@ Next unsaved change|||Следующее несохранённое измене
 No next unsaved change|||Следующих несохранённых изменений нет
 No previous unsaved change|||Предыдущих несохранённых изменений нет
 Change navigation supports files up to 2 MiB|||Переходы по изменениям поддерживают файлы до 2 МиБ
+Show current function boundary|||Показывать границы текущей функции
+Show all function boundaries|||Показывать границы всех функций
+Function: %s|||Функция: %s

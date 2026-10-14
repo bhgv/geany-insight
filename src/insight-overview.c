@@ -12,13 +12,20 @@
 #include "sciwrappers.h"
 #include "ui_utils.h"
 #include "navqueue.h"
+#include "tagmanager/tm_tag.h"
+#include "../insight/desktop/source_mask.h"
+#include "../insight/core/structure_select.h"
+#include <gio/gio.h>
 #include <string.h>
+typedef struct { gsize begin,end; gint first,last; gchar *name; } FunctionRange;
 typedef struct {
  guint id,timer; GtkWidget *pane,*host,*shade; ScintillaObject *map;
  gboolean dirty,style_dirty,dragging,positioned; GeanyFiletype *filetype; gint last_top,last_line,last_scale,drag_offset; gdouble drag_y;
+ guint64 functions_generation; gboolean functions_dirty; GCancellable *functions_cancel; GPtrArray *functions;
 } Overview;
 static GList *overviews;
 static gboolean enabled=TRUE,show_selection=TRUE,show_viewport=TRUE;
+static gboolean show_function=TRUE,show_all_functions=FALSE;
 static gboolean show_bookmarks=TRUE,show_changes=TRUE,show_saved=TRUE,show_tips=TRUE;
 #define MODIFIED_MARKS ((1u<<SC_MARKNUM_HISTORY_MODIFIED)|(1u<<SC_MARKNUM_HISTORY_REVERTED_TO_MODIFIED))
 #define SAVED_MARKS (1u<<SC_MARKNUM_HISTORY_SAVED)
@@ -26,6 +33,56 @@ static gint scale=10,width=100;
 static GeanyDocument *owner(Overview *o) { return document_find_by_id(o->id); }
 static gint first_document_line(ScintillaObject *sci) { return (gint)SSM(sci,SCI_DOCLINEFROMVISIBLE,SSM(sci,SCI_GETFIRSTVISIBLELINE,0,0),0); }
 static gint last_document_line(ScintillaObject *sci) { gint first=(gint)SSM(sci,SCI_GETFIRSTVISIBLELINE,0,0),last=(gint)SSM(sci,SCI_VISIBLEFROMDOCLINE,MAX(0,sci_get_line_count(sci)-1),0); return (gint)SSM(sci,SCI_DOCLINEFROMVISIBLE,MIN(last,first+MAX(1,SSM(sci,SCI_LINESONSCREEN,0,0))-1),0); }
+static void queue_sync(Overview *);
+static void function_range_free(gpointer data) { FunctionRange *range=data; g_free(range->name); g_free(range); }
+static void functions_invalidate(Overview *o) {
+ o->functions_generation++; if(o->functions_cancel) g_cancellable_cancel(o->functions_cancel); g_clear_object(&o->functions_cancel); g_clear_pointer(&o->functions,g_ptr_array_unref);
+}
+void insight_overview_tags_changed(GeanyDocument *doc) {
+ if(!doc) return;
+ for(GList *p=overviews;p;p=p->next) { Overview *o=p->data; if(o->id==doc->id) { functions_invalidate(o); o->functions_dirty=TRUE; queue_sync(o); } }
+}
+typedef struct { GWeakRef pane; guint id; guint64 generation; gchar *text; InsightCodeDialect dialect; GPtrArray *ranges; } FunctionJob;
+static void function_job_free(gpointer data) { FunctionJob *j=data; g_weak_ref_clear(&j->pane); g_free(j->text); g_ptr_array_unref(j->ranges); g_free(j); }
+static void functions_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
+ (void)source; FunctionJob *j=data; gsize length=strlen(j->text); gchar *mask=insight_source_code_mask(j->text,length,j->dialect,NULL);
+ if(mask) for(guint i=0;i<j->ranges->len && !g_cancellable_is_cancelled(cancel);i++) {
+  FunctionRange *r=g_ptr_array_index(j->ranges,i); size_t finish=0;
+  if(insight_function_extent(mask,length,r->begin,&finish)==1) { r->end=finish; r->last=r->first; for(gsize n=r->begin;n+1<finish;n++) if(j->text[n]=='\n') r->last++; }
+ }
+ g_free(mask); g_task_return_boolean(task,!g_cancellable_is_cancelled(cancel));
+}
+static void functions_done(GObject *source,GAsyncResult *result,gpointer data) {
+ (void)source; (void)data; GTask *task=G_TASK(result); FunctionJob *j=g_task_get_task_data(task); gboolean ok=g_task_propagate_boolean(task,NULL);
+ GtkWidget *pane=g_weak_ref_get(&j->pane); if(!pane) return; Overview *o=g_object_get_data(G_OBJECT(pane),"insight-overview");
+ if(o && documents_array && o->id==j->id && owner(o) && o->functions_generation==j->generation) {
+  g_clear_object(&o->functions_cancel); if(ok) { o->functions=g_ptr_array_ref(j->ranges); gtk_widget_queue_draw(o->shade); }
+ }
+ g_object_unref(pane);
+}
+static void functions_start(Overview *o,GeanyDocument *doc) {
+ if(!o->functions_dirty || o->functions_cancel) return;
+ o->functions_dirty=FALSE;
+ if(!show_function && !show_all_functions && !show_tips) { o->functions_dirty=TRUE; return; }
+ const char *name=doc->file_type ? doc->file_type->name : ""; InsightCodeDialect dialect;
+ if(!strcmp(name,"JavaScript") || !strcmp(name,"TypeScript")) dialect=INSIGHT_CODE_JS;
+ else if(!strcmp(name,"C") || !strcmp(name,"C++") || !strcmp(name,"C#") || !strcmp(name,"Java")) dialect=INSIGHT_CODE_C;
+ else return;
+ if(!doc->tm_file || !doc->tm_file->tags_array) return;
+ ScintillaObject *sci=doc->editor->sci; gint length=sci_get_length(sci); if(length<0 || length>2*1024*1024) return;
+ FunctionJob *j=g_new0(FunctionJob,1); g_weak_ref_init(&j->pane,o->pane); j->id=o->id; j->generation=o->functions_generation; j->dialect=dialect; j->ranges=g_ptr_array_new_with_free_func(function_range_free); j->text=sci_get_contents(sci,length+1);
+ gint lines=sci_get_line_count(sci);
+ for(guint i=0;i<doc->tm_file->tags_array->len;i++) {
+  TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,i); if(!tag->line || tag->line>(gulong)lines || !(tag->type&(tm_tag_function_t|tm_tag_method_t))) continue;
+  FunctionRange *r=g_new0(FunctionRange,1); r->first=(gint)tag->line-1; r->begin=(gsize)sci_get_position_from_line(sci,r->first); r->name=tag->scope && *tag->scope ? g_strconcat(tag->scope,"::",tag->name,NULL) : g_strdup(tag->name); g_ptr_array_add(j->ranges,r);
+ }
+ o->functions_cancel=g_cancellable_new(); GTask *task=g_task_new(NULL,o->functions_cancel,functions_done,NULL); g_task_set_task_data(task,j,function_job_free); g_task_run_in_thread(task,functions_run); g_object_unref(task);
+}
+static FunctionRange *function_at(Overview *o,gsize begin,gsize end) {
+ FunctionRange *best=NULL; if(!o->functions) return NULL;
+ for(guint i=0;i<o->functions->len;i++) { FunctionRange *r=g_ptr_array_index(o->functions,i); if(r->end && r->begin<=begin && begin<r->end && end<=r->end && (!best || r->end-r->begin<best->end-best->begin)) best=r; }
+ return best;
+}
 static gboolean shade_draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
  Overview *o=data; GeanyDocument *doc=owner(o); if(!doc || !enabled) return FALSE; ScintillaObject *source=doc->editor->sci;
  gint length=sci_get_length(o->map); if(length<0 || length>2*1024*1024) return FALSE;
@@ -33,6 +90,15 @@ static gboolean shade_draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
  gint row_height=MAX(1,SSM(o->map,SCI_TEXTHEIGHT,0,0)),w=gtk_widget_get_allocated_width(widget);
  if(show_viewport) { gdouble top=(first-map_first)*row_height,bottom=(last+1-map_first)*row_height; cairo_set_source_rgba(cr,0.2,0.45,0.9,0.18); cairo_rectangle(cr,0,top,w,MAX(row_height,bottom-top)); cairo_fill(cr); cairo_set_source_rgba(cr,0.15,0.3,0.65,0.85); cairo_set_line_width(cr,1); cairo_rectangle(cr,0.5,top+0.5,MAX(0,w-1),MAX(1,bottom-top-1)); cairo_stroke(cr); }
  if(show_selection) { gint begin=(gint)SSM(source,SCI_GETSELECTIONSTART,0,0),end=(gint)SSM(source,SCI_GETSELECTIONEND,0,0); if(end>begin && end<=length) { gint a=sci_get_line_from_position(o->map,begin),b=sci_get_line_from_position(o->map,end-1); gdouble top=(a-map_first)*row_height; cairo_set_source_rgba(cr,1,0.85,0,0.32); cairo_rectangle(cr,0,top,w,MAX(row_height,(b-a+1)*row_height)); cairo_fill(cr); } }
+ if(o->functions && (show_function || show_all_functions)) {
+  FunctionRange *current=function_at(o,(gsize)sci_get_selection_start(source),(gsize)sci_get_selection_end(source));
+  gint map_last=map_first+gtk_widget_get_allocated_height(widget)/row_height+1;
+  for(guint i=0;i<o->functions->len;i++) {
+   FunctionRange *r=g_ptr_array_index(o->functions,i); if(!r->end || r->last<map_first || r->first>map_last || (!show_all_functions && (!show_function || r!=current))) continue;
+   gboolean active=show_function && r==current; cairo_set_source_rgba(cr,active ? 0.55 : 0.4,active ? 0.2 : 0.45,active ? 0.85 : 0.5,active ? 0.95 : 0.5); cairo_set_line_width(cr,active ? 2 : 1);
+   cairo_rectangle(cr,10.5,(r->first-map_first)*row_height+0.5,MAX(1,w-19),MAX(1,(r->last-r->first+1)*row_height-1)); cairo_stroke(cr);
+  }
+ }
  /* Query only visible rows. Marker positions follow edits, undo and redo in
   * the source document; the read-only miniature never owns editor markers. */
  gint map_last=MIN(sci_get_line_count(source)-1,map_first+gtk_widget_get_allocated_height(widget)/row_height+1);
@@ -67,6 +133,7 @@ static gboolean overview_sync(gpointer data) {
   sci_set_readonly(o->map,FALSE); SSM(o->map,SCI_SETUNDOCOLLECTION,FALSE,0); sci_set_text(o->map,text); SSM(o->map,SCI_EMPTYUNDOBUFFER,0,0); sci_set_readonly(o->map,TRUE);
   SSM(o->map,SCI_SETFIRSTVISIBLELINE,old_top,0); g_free(text); o->dirty=FALSE; o->style_dirty=TRUE;
  }
+ functions_start(o,doc);
  if(o->style_dirty || o->last_scale!=scale) { copy_styles(o,source); o->style_dirty=FALSE; o->last_scale=scale; }
  gint top=first_document_line(source),line=sci_get_current_line(source);
  if(!o->dragging && (top!=o->last_top || line!=o->last_line)) { gint rows=MAX(1,SSM(o->map,SCI_LINESONSCREEN,0,0)),visible=MAX(1,last_document_line(source)-top+1); gint start=MAX(0,top-MAX(0,rows-visible)/2); SSM(o->map,SCI_SETFIRSTVISIBLELINE,start,0); }
@@ -75,7 +142,7 @@ static gboolean overview_sync(gpointer data) {
 static void queue_sync(Overview *o) { if(!o->timer) o->timer=g_timeout_add(80,overview_sync,o); }
 static void source_notify(ScintillaObject *source,gint message,SCNotification *n,GtkWidget *pane) {
  (void)source; (void)message; Overview *o=g_object_get_data(G_OBJECT(pane),"insight-overview"); if(!o) return;
- if(n->nmhdr.code==SCN_MODIFIED && (n->modificationType&(SC_MOD_INSERTTEXT|SC_MOD_DELETETEXT))) { o->dirty=TRUE; if(o->timer) { g_source_remove(o->timer); o->timer=0; } }
+ if(n->nmhdr.code==SCN_MODIFIED && (n->modificationType&(SC_MOD_INSERTTEXT|SC_MOD_DELETETEXT))) { o->dirty=TRUE; functions_invalidate(o); o->functions_dirty=FALSE; if(o->timer) { g_source_remove(o->timer); o->timer=0; } }
  if(n->nmhdr.code==SCN_MODIFIED && (n->modificationType&SC_MOD_CHANGESTYLE)) o->style_dirty=TRUE;
  if(n->nmhdr.code==SCN_ZOOM) o->last_scale=-1;
  if(n->nmhdr.code==SCN_UPDATEUI || n->nmhdr.code==SCN_MODIFIED || n->nmhdr.code==SCN_PAINTED || n->nmhdr.code==SCN_ZOOM || n->nmhdr.code==SCN_SAVEPOINTREACHED || n->nmhdr.code==SCN_SAVEPOINTLEFT) queue_sync(o);
@@ -91,10 +158,11 @@ static void overview_options(GtkWidget *widget,gpointer data) {
  GtkWidget *percent=gtk_spin_button_new_with_range(5,100,5),*size=gtk_spin_button_new_with_range(40,400,10),*selection=gtk_check_button_new_with_label("Show active selection"),*viewport=gtk_check_button_new_with_label("Show visible area");
  gtk_spin_button_set_value(GTK_SPIN_BUTTON(percent),scale); gtk_spin_button_set_value(GTK_SPIN_BUTTON(size),width); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(selection),show_selection); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(viewport),show_viewport);
  gtk_box_pack_start(GTK_BOX(box),gtk_label_new("Text scaling %"),FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(box),percent,FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(box),gtk_label_new("Overview width"),FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(box),size,FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(box),selection,FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(box),viewport,FALSE,FALSE,3); GtkWidget *bookmarks=gtk_check_button_new_with_label("Show bookmarks"),*changes=gtk_check_button_new_with_label("Show change marks"),*saved=gtk_check_button_new_with_label("Show saved changes"),*tips=gtk_check_button_new_with_label("Enable hover messages");
- GtkWidget *checks[]={bookmarks,changes,saved,tips}; gboolean values[]={show_bookmarks,show_changes,show_saved,show_tips}; const char *names[]={"insight-overview-bookmarks","insight-overview-changes","insight-overview-saved","insight-overview-tips"};
+ GtkWidget *function=gtk_check_button_new_with_label("Show current function boundary"),*all_functions=gtk_check_button_new_with_label("Show all function boundaries");
+ GtkWidget *checks[]={bookmarks,changes,saved,tips,function,all_functions}; gboolean values[]={show_bookmarks,show_changes,show_saved,show_tips,show_function,show_all_functions}; const char *names[]={"insight-overview-bookmarks","insight-overview-changes","insight-overview-saved","insight-overview-tips","insight-overview-function","insight-overview-all-functions"};
  for(guint i=0;i<G_N_ELEMENTS(checks);i++) { gtk_widget_set_name(checks[i],names[i]); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(checks[i]),values[i]); gtk_box_pack_start(GTK_BOX(box),checks[i],FALSE,FALSE,3); }
  gtk_widget_show_all(dialog);
- if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_APPLY) { scale=gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(percent)); width=gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(size)); show_selection=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(selection)); show_viewport=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(viewport)); show_bookmarks=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bookmarks)); show_changes=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(changes)); show_saved=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(saved)); show_tips=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(tips)); for(GList *p=overviews;p;p=p->next) { Overview *view=p->data; view->last_scale=-1; gtk_paned_set_position(GTK_PANED(view->pane),MAX(1,gtk_widget_get_allocated_width(view->pane)-width)); queue_sync(view); } }
+ if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_APPLY) { scale=gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(percent)); width=gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(size)); show_selection=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(selection)); show_viewport=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(viewport)); show_bookmarks=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bookmarks)); show_changes=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(changes)); show_saved=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(saved)); show_tips=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(tips)); show_function=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(function)); show_all_functions=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(all_functions)); for(GList *p=overviews;p;p=p->next) { Overview *view=p->data; view->last_scale=-1; gtk_paned_set_position(GTK_PANED(view->pane),MAX(1,gtk_widget_get_allocated_width(view->pane)-width)); queue_sync(view); } }
  gtk_widget_destroy(dialog);
 }
 static void change_navigation(GtkMenuItem *item,gpointer data) {
@@ -139,14 +207,15 @@ static gboolean map_tooltip(GtkWidget *widget,gint x,gint y,gboolean keyboard,Gt
  (void)widget; (void)x; if(keyboard || !show_tips) return FALSE; Overview *o=data; GeanyDocument *doc=owner(o); if(!doc) return FALSE; gint line=MIN(line_at(o,y),MAX(0,sci_get_line_count(doc->editor->sci)-1)); gchar *text=sci_get_line(doc->editor->sci,line);
  if(!text || !g_utf8_validate(text,-1,NULL)) { g_free(text); return FALSE; } gchar *shortened=g_utf8_substring(text,0,MIN(180,g_utf8_strlen(text,-1))),*label=g_strdup_printf("Line %d: %s",line+1,shortened); guint marks=(guint)SSM(doc->editor->sci,SCI_MARKERGET,line,0);
  const char *status=(marks&MODIFIED_MARKS) ? insight_tr("Unsaved change") : (marks&SAVED_MARKS) ? insight_tr("Saved change") : "";
- gchar *detail=g_strdup_printf("%s%s%s%s%s",label,*status ? "\n" : "",status,(marks&2) ? "\n" : "",(marks&2) ? insight_tr("Bookmark") : ""); gtk_tooltip_set_text(tooltip,detail); g_free(detail); g_free(label); g_free(shortened); g_free(text); return TRUE;
+ gchar *detail=g_strdup_printf("%s%s%s%s%s",label,*status ? "\n" : "",status,(marks&2) ? "\n" : "",(marks&2) ? insight_tr("Bookmark") : ""); FunctionRange *function=function_at(o,(gsize)sci_get_position_from_line(doc->editor->sci,line),(gsize)sci_get_position_from_line(doc->editor->sci,line));
+ if(function) { gchar *function_label=g_strdup_printf("Function: %s",function->name),*with_function=g_strconcat(detail,"\n",function_label,NULL); g_free(function_label); g_free(detail); detail=with_function; } gtk_tooltip_set_text(tooltip,detail); g_free(detail); g_free(label); g_free(shortened); g_free(text); return TRUE;
 }
 static void pane_position(GObject *object,GParamSpec *spec,gpointer data) { (void)spec; Overview *o=data; gint total=gtk_widget_get_allocated_width(GTK_WIDGET(object)); if(o->positioned && enabled && gtk_widget_get_mapped(o->host) && total>400) width=CLAMP(total-gtk_paned_get_position(GTK_PANED(object)),40,400); }
 static void pane_allocated(GtkWidget *widget,GtkAllocation *allocation,gpointer data) { Overview *o=data; if(!o->positioned && allocation->width>width+100) { gtk_paned_set_position(GTK_PANED(widget),allocation->width-width); o->positioned=TRUE; } }
-static void overview_free(gpointer data) { Overview *o=data; if(o->timer) g_source_remove(o->timer); overviews=g_list_remove(overviews,o); g_free(o); }
+static void overview_free(gpointer data) { Overview *o=data; if(o->timer) g_source_remove(o->timer); functions_invalidate(o); overviews=g_list_remove(overviews,o); g_free(o); }
 static void host_mapped(GtkWidget *widget,gpointer data) { (void)widget; Overview *o=data; o->last_top=-1; queue_sync(o); }
 GtkWidget *insight_overview_wrap(GeanyDocument *doc) {
- Overview *o=g_new0(Overview,1); o->id=doc->id; o->dirty=TRUE; o->last_top=o->last_line=o->last_scale=-1;
+ Overview *o=g_new0(Overview,1); o->id=doc->id; o->dirty=TRUE; o->functions_dirty=TRUE; o->last_top=o->last_line=o->last_scale=-1;
  o->pane=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL); o->host=gtk_overlay_new(); o->map=SCINTILLA(scintilla_new()); o->shade=gtk_drawing_area_new(); gtk_widget_set_name(o->shade,"insight-overview-markers");
  gtk_widget_set_direction(GTK_WIDGET(o->map),GTK_TEXT_DIR_LTR); gtk_widget_set_can_focus(GTK_WIDGET(o->map),FALSE); sci_set_codepage(o->map,SC_CP_UTF8); sci_use_popup(o->map,FALSE); sci_set_readonly(o->map,TRUE); SSM(o->map,SCI_SETHSCROLLBAR,FALSE,0); SSM(o->map,SCI_SETVSCROLLBAR,FALSE,0); SSM(o->map,SCI_SETWRAPMODE,SC_WRAP_NONE,0); SSM(o->map,SCI_SETCARETWIDTH,0,0); SSM(o->map,SCI_SETCURSOR,SC_CURSORARROW,0);
  for(guint i=0;i<5;i++) SSM(o->map,SCI_SETMARGINWIDTHN,i,0);
@@ -164,9 +233,9 @@ void insight_overview_read(GKeyFile *key) {
  value=g_key_file_get_integer(key,"workbench","overview-width",NULL); if(value>=40 && value<=400) width=value;
  if(g_key_file_has_key(key,"workbench","overview-selection",NULL)) show_selection=g_key_file_get_boolean(key,"workbench","overview-selection",NULL);
  if(g_key_file_has_key(key,"workbench","overview-viewport",NULL)) show_viewport=g_key_file_get_boolean(key,"workbench","overview-viewport",NULL);
- const char *keys[]={"overview-bookmarks","overview-changes","overview-saved","overview-tips"}; gboolean *values[]={&show_bookmarks,&show_changes,&show_saved,&show_tips};
+ const char *keys[]={"overview-bookmarks","overview-changes","overview-saved","overview-tips","overview-function","overview-all-functions"}; gboolean *values[]={&show_bookmarks,&show_changes,&show_saved,&show_tips,&show_function,&show_all_functions};
  for(guint i=0;i<G_N_ELEMENTS(keys);i++) if(g_key_file_has_key(key,"workbench",keys[i],NULL)) *values[i]=g_key_file_get_boolean(key,"workbench",keys[i],NULL);
  for(GList *p=overviews;p;p=p->next) { Overview *o=p->data; gtk_widget_set_size_request(o->host,40,-1); o->last_scale=-1; }
  insight_overview_set_visible(enabled);
 }
-void insight_overview_write(GKeyFile *key) { g_key_file_set_boolean(key,"workbench","overview-visible",enabled); g_key_file_set_integer(key,"workbench","overview-scale",scale); g_key_file_set_integer(key,"workbench","overview-width",width); g_key_file_set_boolean(key,"workbench","overview-selection",show_selection); g_key_file_set_boolean(key,"workbench","overview-viewport",show_viewport); g_key_file_set_boolean(key,"workbench","overview-bookmarks",show_bookmarks); g_key_file_set_boolean(key,"workbench","overview-changes",show_changes); g_key_file_set_boolean(key,"workbench","overview-saved",show_saved); g_key_file_set_boolean(key,"workbench","overview-tips",show_tips); }
+void insight_overview_write(GKeyFile *key) { g_key_file_set_boolean(key,"workbench","overview-visible",enabled); g_key_file_set_integer(key,"workbench","overview-scale",scale); g_key_file_set_integer(key,"workbench","overview-width",width); g_key_file_set_boolean(key,"workbench","overview-selection",show_selection); g_key_file_set_boolean(key,"workbench","overview-viewport",show_viewport); g_key_file_set_boolean(key,"workbench","overview-bookmarks",show_bookmarks); g_key_file_set_boolean(key,"workbench","overview-changes",show_changes); g_key_file_set_boolean(key,"workbench","overview-saved",show_saved); g_key_file_set_boolean(key,"workbench","overview-tips",show_tips); g_key_file_set_boolean(key,"workbench","overview-function",show_function); g_key_file_set_boolean(key,"workbench","overview-all-functions",show_all_functions); }
