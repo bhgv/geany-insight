@@ -1,2 +1,1 @@
-Windows x64 check requested for the File Types and Symbol Categories block, 2026-10-15.
-Build the commit containing this marker, including the new native grouped browser GUI regression target and offline RU/EN guides.
+Build Windows x64 portable: transitive inheritance, nested symbol scopes, manual Relations snapshot refresh.

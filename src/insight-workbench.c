@@ -321,6 +321,7 @@ static void render_source(const char *text,GeanyFiletype *filetype,gulong line) 
  SSM(wb.preview,SCI_VERTICALCENTRECARET,0,0);
 }
 static void refresh_index(void);
+static void usage_start(GtkWidget *,gpointer);
 typedef struct { InsightIndex *base,*overlay,*result,*previous; GPtrArray *paths; GHashTable *changed,*names,*all_names; guint64 epoch,generation; gboolean valid; } SnapshotJob;
 static void retire_index_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) { (void)source; (void)cancel; insight_index_free(data); g_task_return_boolean(task,TRUE); }
 static void retire_index(InsightIndex *index) { if(!index) return; GTask *task=g_task_new(NULL,NULL,NULL,NULL); g_task_set_task_data(task,index,NULL); g_task_run_in_thread(task,retire_index_run); g_object_unref(task); }
@@ -379,6 +380,10 @@ static gboolean index_event_dispatch(gpointer data) {
   g_free(query);
   if(definition_changed) { wb.follow_doc=0; queue_definition(TRUE); }
   if(wb.relation_dirty || definition_changed) insight_workbench_refresh();
+  /* A manual tag query may have completed against the previous snapshot
+   * while the asynchronous document overlay was still being published. */
+  if(wb.relation_dirty && relation && *relation && (mode==1 || mode==2 || mode==4 || mode==5) &&
+     !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_follow))) { wb.relation_dirty=FALSE;usage_start(NULL,NULL); }
  }
  retire_names(paths);
  retire_names(names);
@@ -1655,6 +1660,7 @@ static void create_browser(void) {
  gtk_box_pack_start(GTK_BOX(wb.browser),symbol_query_controls(wb.symbol_entry,FALSE),FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(wb.browser),scroll,TRUE,TRUE,0);
  gtk_box_pack_start(GTK_BOX(wb.browser),sort_selector(wb.symbols),FALSE,FALSE,0);
  GtkWidget *group=insight_symbol_view_attach(GTK_TREE_VIEW(wb.symbol_view),wb.symbols,NULL); gtk_widget_set_name(group,"insight-project-group-types"); gtk_box_pack_start(GTK_BOX(wb.browser),group,FALSE,FALSE,0);
+ GtkWidget *scopes=insight_symbol_view_scopes_control(GTK_TREE_VIEW(wb.symbol_view));gtk_widget_set_name(scopes,"insight-project-scope-hierarchy");gtk_box_pack_start(GTK_BOX(wb.browser),scopes,FALSE,FALSE,0);
  GtkWidget *types=insight_symbol_view_types_control(GTK_TREE_VIEW(wb.symbol_view)); gtk_widget_set_name(types,"insight-project-type-filters"); gtk_box_pack_start(GTK_BOX(wb.browser),types,FALSE,FALSE,0); insight_symbol_view_more_loader(GTK_TREE_VIEW(wb.symbol_view),G_CALLBACK(symbols_load_more),500);
  GtkWidget *info=gtk_button_new_with_label("Symbol Info…");g_signal_connect(info,"clicked",G_CALLBACK(browser_symbol_info),wb.symbol_view);gtk_box_pack_start(GTK_BOX(wb.browser),info,FALSE,FALSE,0);
  gtk_notebook_append_page(GTK_NOTEBOOK(wb.project_notebook),wb.browser,gtk_label_new("Project Symbols"));
@@ -1730,6 +1736,7 @@ static void create_local_browser(void) {
  gtk_box_pack_start(GTK_BOX(box),wb.local_label,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),symbol_query_controls(wb.local_entry,TRUE),FALSE,FALSE,0);
  gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0); gtk_box_pack_start(GTK_BOX(box),sort_selector(wb.local_symbols),FALSE,FALSE,0);
  GtkWidget *group=insight_symbol_view_attach(GTK_TREE_VIEW(wb.local_view),wb.local_symbols,NULL); gtk_widget_set_name(group,"insight-local-group-types"); gtk_box_pack_start(GTK_BOX(box),group,FALSE,FALSE,0);
+ GtkWidget *scopes=insight_symbol_view_scopes_control(GTK_TREE_VIEW(wb.local_view));gtk_widget_set_name(scopes,"insight-local-scope-hierarchy");gtk_box_pack_start(GTK_BOX(box),scopes,FALSE,FALSE,0);
  GtkWidget *types=insight_symbol_view_types_control(GTK_TREE_VIEW(wb.local_view)); gtk_widget_set_name(types,"insight-local-type-filters"); gtk_box_pack_start(GTK_BOX(box),types,FALSE,FALSE,0); insight_symbol_view_more_loader(GTK_TREE_VIEW(wb.local_view),G_CALLBACK(symbols_load_more),2000);
  GtkWidget *locate=gtk_button_new();gtk_widget_set_name(locate,"insight-local-locate");gtk_button_set_image(GTK_BUTTON(locate),insight_command_icon("find-location-symbolic"));gtk_widget_set_tooltip_text(locate,"Locate symbol at caret");g_signal_connect(locate,"clicked",G_CALLBACK(symbols_locate),NULL);gtk_box_pack_start(GTK_BOX(types),locate,FALSE,FALSE,0);
  GtkWidget *info=gtk_button_new_with_label("Symbol Info…");g_signal_connect(info,"clicked",G_CALLBACK(browser_symbol_info),wb.local_view);gtk_box_pack_start(GTK_BOX(box),info,FALSE,FALSE,0);
@@ -3506,6 +3513,7 @@ static void save_workbench_settings(void) {
  g_key_file_set_integer(settings,"workbench","split",gtk_paned_get_position(GTK_PANED(wb.pane)));
  g_key_file_set_boolean(settings,"workbench","follow",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow)));
  g_key_file_set_boolean(settings,"workbench","visible",wb.context_visible);
+ g_key_file_set_boolean(settings,"workbench","file-symbols-scopes",insight_symbol_view_scopes(GTK_TREE_VIEW(wb.local_view)));g_key_file_set_boolean(settings,"workbench","project-symbols-scopes",insight_symbol_view_scopes(GTK_TREE_VIEW(wb.symbol_view)));
  g_key_file_set_boolean(settings,"workbench","file-symbols-grouped",insight_symbol_view_grouped(GTK_TREE_VIEW(wb.local_view))); g_key_file_set_boolean(settings,"workbench","project-symbols-grouped",insight_symbol_view_grouped(GTK_TREE_VIEW(wb.symbol_view)));
  g_key_file_set_integer(settings,"workbench","file-symbol-types",insight_symbol_view_types_mask(GTK_TREE_VIEW(wb.local_view))); g_key_file_set_integer(settings,"workbench","project-symbol-types",insight_symbol_view_types_mask(GTK_TREE_VIEW(wb.symbol_view)));
  g_key_file_set_integer(settings,"workbench","right-split",gtk_paned_get_position(GTK_PANED(wb.right_pane)));
@@ -3545,6 +3553,7 @@ static void restore_workbench_settings(void) {
   symbol_sort_read(settings,wb.local_symbols,"file-symbols");symbol_sort_read(settings,wb.symbols,"project-symbols");
   if(g_key_file_has_key(settings,"workbench","file-symbol-types",NULL)) insight_symbol_view_set_types(GTK_TREE_VIEW(wb.local_view),(guint)g_key_file_get_integer(settings,"workbench","file-symbol-types",NULL));
   if(g_key_file_has_key(settings,"workbench","project-symbol-types",NULL)) insight_symbol_view_set_types(GTK_TREE_VIEW(wb.symbol_view),(guint)g_key_file_get_integer(settings,"workbench","project-symbol-types",NULL));
+  insight_symbol_view_set_scopes(GTK_TREE_VIEW(wb.local_view),g_key_file_get_boolean(settings,"workbench","file-symbols-scopes",NULL));insight_symbol_view_set_scopes(GTK_TREE_VIEW(wb.symbol_view),g_key_file_get_boolean(settings,"workbench","project-symbols-scopes",NULL));
   insight_symbol_view_set_grouped(GTK_TREE_VIEW(wb.local_view),g_key_file_get_boolean(settings,"workbench","file-symbols-grouped",NULL)); insight_symbol_view_set_grouped(GTK_TREE_VIEW(wb.symbol_view),g_key_file_get_boolean(settings,"workbench","project-symbols-grouped",NULL));
   for(guint i=0;i<4;i++) { gchar group[16]; g_snprintf(group,sizeof group,"layout-%c",'A'+i); insight_layout_read(settings,group,&wb.layouts[i]); }
   for(guint i=0;i<10;i++) { PanelHost *host=&wb.hosts[i]; gchar group[32]; g_snprintf(group,sizeof group,"panel-%u",i); GError *error=NULL; gint version=g_key_file_get_integer(settings,group,"version",&error);

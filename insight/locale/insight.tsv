@@ -736,3 +736,4 @@ Use path fragments, glob, ?regex or ~fuzzy; empty groups are hidden	Фрагме
 File / type	Файл / тип
 Symbol / category	Символ / категория
 Include indirect inheritance (tags)	Включать косвенное наследование (теги)
+Scope hierarchy	Иерархия областей видимости

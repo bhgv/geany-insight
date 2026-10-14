@@ -498,3 +498,6 @@ test('Insight grouped File Types and Categories GUI', grouped_project_gui_test, 
 
 relation_transitive_gui_test = executable('test_insight_relation_transitive_gui', '../insight/tests/relation_transitive_gui_test.c', dependencies: test_deps)
 test('Insight transitive Relations GUI', relation_transitive_gui_test, timeout: 45)
+
+symbol_scopes_gui_test = executable('test_insight_symbol_scopes_gui', '../insight/tests/symbol_scopes_gui_test.c', dependencies: test_deps)
+test('Insight scope hierarchy GUI', symbol_scopes_gui_test, timeout: 45)

@@ -78,3 +78,9 @@ Filter by this symbol name creates a whole-name quoted query. Filter by this sco
 Expand/Collapse selected symbol group acts on the selected header or the containing group of a selected leaf. Invert symbol type selection exchanges checked and unchecked categories. Visible symbol columns opens independent column checkboxes; Symbol always remains visible. Visibility is retained together with widths/order, and Reset symbol columns shows every column again.
 
 Tutorial: right-click a class member, copy its qualified name, then filter by its scope. Clear the query and invert the type selection to inspect the other categories. Hide an unnecessary column, collapse a selected group and reopen it without collapsing the others.
+
+## Scope hierarchy
+
+Enable **Scope hierarchy** for nested namespace/module/class branches from the native parser's scope. The delimiter follows the file's effective language (C++ `::`, Python `.`). Filtering retains matching symbols' ancestors. The option composes with type grouping, sorting and paging, and is saved independently for File and Project Symbols. Nested expansion and selected symbols survive refresh without editor navigation.
+
+Scope branches are structural headers without a source line; definition/member rows can be opened. This reflects indexed scopes, not semantic owner, alias or inheritance resolution. Scope splitting is bounded to 64 parts.

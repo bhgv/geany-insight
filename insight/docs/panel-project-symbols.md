@@ -78,3 +78,9 @@ Filter by this symbol name creates a whole-name quoted query. Filter by this sco
 Expand/Collapse selected symbol group acts on the selected header or the containing group of a selected leaf. Invert symbol type selection exchanges checked and unchecked categories. Visible symbol columns opens independent column checkboxes; Symbol always remains visible. Visibility is retained together with widths/order, and Reset symbol columns shows every column again.
 
 Tutorial: right-click a class member, copy its qualified name, then filter by its scope. Clear the query and invert the type selection to inspect the other categories. Hide an unnecessary column, collapse a selected group and reopen it without collapsing the others.
+
+## Иерархия областей видимости
+
+Переключатель «Иерархия областей видимости» создаёт вложенные ветки namespace/module/class по scope нативного парсера. Для C++ используются `::`, для Python — `.`; разделитель выбирается по действующему языку файла. Фильтрация сохраняет предков подходящих символов. Опция работает совместно с группировкой по типам, сортировкой и дозагрузкой; File и Project сохраняют её независимо. Вложенные ветки сохраняют раскрытие при обновлении, выбранный символ восстанавливается без перехода редактора.
+
+Ветки scope — структурные заголовки, без исходной строки; открыть можно строки определений/членов. Они отражают индексированные scope, а не семантическое разрешение владельцев, aliases или наследования. Глубина разбора разделителя ограничена 64 частями.

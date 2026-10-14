@@ -989,3 +989,9 @@ index_update теперь сортирует только партию ново�
 ## Transitive indexed inheritance
 
 Relations now offers persisted indirect inheritance in Members/Bases/Derived, namespace-aware unambiguous resolution, cyclic/diamond traversal protection and depth 32. Language eligibility precedes edge resolution. Back preserves the option; status reports omitted ambiguity and truncated rows/depth. Core tests cover qualification, global bases, inheritance chains, cycles, pagination, ambiguity and eligibility; a native GUI test covers the three modes and persisted checkbox. Alias/overload/access-control semantics and expandable graph edges remain open.
+
+## Native symbol scope hierarchy
+
+File and Project Symbols now have independent persisted Scope hierarchy controls. Native language delimiters produce nested namespace/class scope branches, combined with type groups, filters, paging and sorting. Expansion/selection restoration now traverses all group levels. Semantic owner resolution remains open. Native GUI regression covers C++ namespaces/classes, Python nested classes, filters, type-group combinations and independent persistence.
+
+Regression also exposed a manual Relations/snapshot publication race: queries could finish against the previous index and remain empty when Follow was off. Index-change dispatch now reruns affected manual tag queries after publication. The targeted Relations/scope GUI tests passed three consecutive runs each after the fix; ten other symbol/workbench GUI regressions passed.
