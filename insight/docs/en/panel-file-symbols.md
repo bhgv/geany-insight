@@ -49,3 +49,12 @@ Tutorial: open a large file, retain only functions, find the counter ending in +
 The sort selector offers name, source line, symbol type, scope and file path. The adjacent arrow button toggles descending order; its label appears in a tooltip. Clicking a column header also changes the order and updates these controls, including grouped and filtered views. File and project outlines save their sort field and direction independently in workbench.conf.
 
 Tutorial: choose source line for a file outline, then toggle the arrow to inspect declarations from the end of the file. Choose scope or file path in Project Symbols to gather related entries. Sorting leaves the editor and Context in place.
+
+
+## Locate the caret symbol
+
+The target icon beside the type controls and Locate symbol at caret in the outline context menu reveal the current declaration. For supported brace languages in buffers up to 2 MiB, the command first looks for the containing indexed function; otherwise it selects the nearest indexed declaration starting at or before the caret line. It does not infer indentation-based function boundaries.
+
+The command expands a collapsed group and centers the matching row without opening a source location or updating Context. If there is no earlier declaration, or the matching row is hidden by the name/type filter or outside the loaded portion, a status message explains the result. Filters and loaded portions stay as selected; refine the query or load more and retry. The command waits for the current file outline to finish updating.
+
+Tutorial: place the caret inside a C function, collapse its outline group and press the target button. The function row is revealed while the editor remains at the same position. Filter for a different name and repeat: the filter stays intact and the status bar explains why the current function cannot be shown.

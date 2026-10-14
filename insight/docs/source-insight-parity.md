@@ -60,3 +60,8 @@ Both outlines expose an icon-only Load more button and the matching context-menu
 ### Persistent symbol sorting (2026-10-14)
 
 File and project outlines offer name, source line, kind, scope and file path, with an icon-only descending toggle. Header sorting synchronizes the controls in flat and grouped views. Each outline independently saves its field and direction, with compatible defaults for older settings. Native GUI tests verify restore/write, header synchronization, query rebuilds, RU tooltips and unchanged editor position.
+
+
+### Locate caret declaration in File Symbols (2026-10-14)
+
+An icon-only target button and local outline menu action select and reveal the caret declaration without updating Context or navigating the editor. Supported brace languages prefer the containing indexed function in buffers up to 2 MiB; other cases use the nearest preceding indexed declaration. Hidden/unloaded results report a status message without clearing filters or increasing the loaded portion. Native GUI covers both commands, group expansion, boundary/fallback cases, hidden results and RU labels.

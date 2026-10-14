@@ -146,7 +146,7 @@ static void workspace_changed(gpointer);
 static void create_search_toolbars(void);
 static guint text_search_flags(GtkWidget *,GtkWidget *,GtkWidget *);
 static char *read_disk_source(const char *,gboolean);
-enum { SP_OPEN,SP_INFO,SP_REFERENCES,SP_NAME,SP_LOCATION,SP_ONLY,SP_HIDE,SP_ALL,SP_GROUP,SP_EXPAND,SP_COLLAPSE,SP_HELP,SP_MORE,SP_COUNT };
+enum { SP_OPEN,SP_INFO,SP_REFERENCES,SP_NAME,SP_LOCATION,SP_ONLY,SP_HIDE,SP_ALL,SP_GROUP,SP_EXPAND,SP_COLLAPSE,SP_HELP,SP_MORE,SP_LOCATE,SP_COUNT };
 static void symbol_action(GtkTreeView *,guint);
 static void browser_symbol_info(GtkWidget *,gpointer);
 static gboolean symbol_popup_key(GtkWidget *,gpointer);
@@ -1444,6 +1444,27 @@ static void browser_symbol_info(GtkWidget *widget,gpointer data) {
  if(name) info_show_query(name,path,line);
  g_free(name);g_free(path);
 }
+typedef struct { const TMTag *tag; GtkTreePath *path; } SymbolLocate;
+static gboolean symbol_locate_row(GtkTreeModel *model,GtkTreePath *path,GtkTreeIter *iter,gpointer data) {
+ SymbolLocate *target=data;gchar *name=NULL;gulong line=0;gtk_tree_model_get(model,iter,SYMBOL_NAME,&name,SYMBOL_LINE,&line,-1);
+ gboolean match=line==target->tag->line && !g_strcmp0(name,target->tag->name);g_free(name);if(match) target->path=gtk_tree_path_copy(path);return match;
+}
+static void symbols_locate(GtkWidget *button,gpointer data) {
+ (void)button;(void)data;GeanyDocument *doc=document_get_current();
+ if(!doc || !wb.local_view || !gtk_widget_get_sensitive(wb.local_view) || doc->id!=wb.local_doc_id) { ui_set_statusbar(TRUE,"File symbols are still updating");return; }
+ TMTag *tag=relation_enclosing_function(doc);
+ if(!tag && doc->tm_file && doc->tm_file->tags_array) {
+  gulong line=(gulong)sci_get_current_line(doc->editor->sci)+1;
+  for(guint i=0;i<doc->tm_file->tags_array->len;i++) { TMTag *candidate=g_ptr_array_index(doc->tm_file->tags_array,i);if(candidate && candidate->line && candidate->line<=line && (!tag || candidate->line>tag->line)) tag=candidate; }
+ }
+ if(!tag) { ui_set_statusbar(TRUE,"No indexed declaration at or before the caret");return; }
+ SymbolLocate target={.tag=tag};gtk_tree_model_foreach(gtk_tree_view_get_model(GTK_TREE_VIEW(wb.local_view)),symbol_locate_row,&target);
+ if(!target.path) { ui_set_statusbar(TRUE,"The caret symbol is outside the loaded outline or hidden by a filter");return; }
+ GtkTreeSelection *selection=gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.local_view));guint signal=g_signal_lookup("changed",GTK_TYPE_TREE_SELECTION);
+ g_signal_handlers_block_matched(selection,G_SIGNAL_MATCH_ID,signal,0,NULL,NULL,NULL);
+ gtk_tree_view_expand_to_path(GTK_TREE_VIEW(wb.local_view),target.path);gtk_tree_view_set_cursor(GTK_TREE_VIEW(wb.local_view),target.path,NULL,FALSE);gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(wb.local_view),target.path,NULL,TRUE,0.5,0);
+ g_signal_handlers_unblock_matched(selection,G_SIGNAL_MATCH_ID,signal,0,NULL,NULL,NULL);gtk_tree_path_free(target.path);
+}
 static void symbols_load_more(GtkWidget *button,gpointer data) {
  (void)button;GtkWidget *view=data;if(!gtk_widget_get_sensitive(view)) return;
  if(view==wb.local_view) { wb.local_symbol_limit=MIN(250000u,wb.local_symbol_limit+2000u);local_filter(NULL,NULL); }
@@ -1467,6 +1488,7 @@ static void symbol_action(GtkTreeView *view,guint action) {
  case SP_EXPAND: gtk_tree_view_expand_all(view); break;
  case SP_COLLAPSE: gtk_tree_view_collapse_all(view); break;
  case SP_MORE: insight_symbol_view_load_more(view); break;
+ case SP_LOCATE: if(GTK_WIDGET(view)==wb.local_view) symbols_locate(NULL,NULL); break;
  case SP_HELP: insight_help_show(NULL,GTK_WIDGET(view)==wb.local_view ? "panel-file-symbols.md" : "panel-project-symbols.md"); break;
  default: break;
  }
@@ -1477,14 +1499,14 @@ static GtkWidget *symbol_menu(GtkTreeView *view) {
  GtkWidget *menu=g_object_get_data(G_OBJECT(view),"insight-symbol-popup");
  if(!menu) {
   menu=gtk_menu_new(); gtk_widget_set_name(menu,"insight-symbol-popup"); gtk_menu_attach_to_widget(GTK_MENU(menu),GTK_WIDGET(view),NULL); g_object_set_data_full(G_OBJECT(view),"insight-symbol-popup",g_object_ref_sink(menu),g_object_unref);
-  const gchar *labels[]={"Open definition","Symbol Info…","Find references to this symbol","Copy symbol name","Copy source location","Show only this category","Hide this category","Show all symbol types","Group by symbol type","Expand all symbol groups","Collapse all symbol groups","Help for this panel","Load more symbols"};
-  const gchar *icons[]={"go-jump","dialog-information","relations","edit-copy","edit-copy","view-filter-symbolic","view-filter-symbolic","view-list-symbolic","view-list-symbolic","list-add","list-remove","panel-help","list-add-symbolic"};
+  const gchar *labels[]={"Open definition","Symbol Info…","Find references to this symbol","Copy symbol name","Copy source location","Show only this category","Hide this category","Show all symbol types","Group by symbol type","Expand all symbol groups","Collapse all symbol groups","Help for this panel","Load more symbols","Locate symbol at caret"};
+  const gchar *icons[]={"go-jump","dialog-information","relations","edit-copy","edit-copy","view-filter-symbolic","view-filter-symbolic","view-list-symbolic","view-list-symbolic","list-add","list-remove","panel-help","list-add-symbolic","find-location-symbolic"};
   for(guint i=0;i<SP_COUNT;i++) {
    if(i==SP_ONLY || i==SP_GROUP || i==SP_HELP) gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());
    GtkWidget *item;
    if(i==SP_GROUP) { item=gtk_check_menu_item_new_with_label(labels[i]); GtkWidget *label=gtk_bin_get_child(GTK_BIN(item)),*box=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6); g_object_ref(label); gtk_container_remove(GTK_CONTAINER(item),label); gtk_box_pack_start(GTK_BOX(box),insight_command_icon(icons[i]),FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),label,TRUE,TRUE,0); g_object_unref(label); gtk_container_add(GTK_CONTAINER(item),box); g_object_set_data(G_OBJECT(item),"insight-icon-added",GINT_TO_POINTER(1)); }
    else { item=gtk_image_menu_item_new_with_label(labels[i]); gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(item),insight_command_icon(icons[i])); gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(item),TRUE); }
-   gchar *key=g_strdup_printf("insight-symbol-command-%u",i); gtk_widget_set_name(item,key); g_object_set_data(G_OBJECT(menu),key,item); g_free(key); g_object_set_data(G_OBJECT(item),"insight-symbol-action",GUINT_TO_POINTER(i)); g_signal_connect_object(item,i==SP_GROUP ? "toggled" : "activate",G_CALLBACK(symbol_menu_action),view,0); if(i==SP_MORE) { GList *children=gtk_container_get_children(GTK_CONTAINER(menu));gint position=(gint)g_list_length(children)-2;g_list_free(children);gtk_menu_shell_insert(GTK_MENU_SHELL(menu),item,position); }else gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);
+   gchar *key=g_strdup_printf("insight-symbol-command-%u",i); gtk_widget_set_name(item,key); g_object_set_data(G_OBJECT(menu),key,item); g_free(key); g_object_set_data(G_OBJECT(item),"insight-symbol-action",GUINT_TO_POINTER(i)); g_signal_connect_object(item,i==SP_GROUP ? "toggled" : "activate",G_CALLBACK(symbol_menu_action),view,0); if(i==SP_MORE || i==SP_LOCATE) { GList *children=gtk_container_get_children(GTK_CONTAINER(menu));gint position=(gint)g_list_length(children)-2;g_list_free(children);gtk_menu_shell_insert(GTK_MENU_SHELL(menu),item,position); }else gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);
   }
  }
  GtkTreeModel *model=gtk_tree_view_get_model(view); GtkTreeIter iter; gboolean selected=gtk_tree_selection_get_selected(gtk_tree_view_get_selection(view),NULL,&iter); gchar *path=NULL;gulong line=0;
@@ -1496,6 +1518,7 @@ static GtkWidget *symbol_menu(GtkTreeView *view) {
   if(i==SP_LOCATION) enabled &= line && path && path[0]!='@';
   if(i==SP_EXPAND || i==SP_COLLAPSE) enabled &= grouped;
   if(i==SP_MORE) enabled &= insight_symbol_view_has_more(view);
+  if(i==SP_LOCATE) { enabled &= GTK_WIDGET(view)==wb.local_view;gtk_widget_set_no_show_all(item,GTK_WIDGET(view)!=wb.local_view);gtk_widget_set_visible(item,GTK_WIDGET(view)==wb.local_view); }
   if(i==SP_HELP) enabled=TRUE;
   gtk_widget_set_sensitive(item,enabled); if(i==SP_GROUP) gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item),grouped);
  }
@@ -1603,6 +1626,7 @@ static void create_local_browser(void) {
  gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0); gtk_box_pack_start(GTK_BOX(box),sort_selector(wb.local_symbols),FALSE,FALSE,0);
  GtkWidget *group=insight_symbol_view_attach(GTK_TREE_VIEW(wb.local_view),wb.local_symbols,NULL); gtk_widget_set_name(group,"insight-local-group-types"); gtk_box_pack_start(GTK_BOX(box),group,FALSE,FALSE,0);
  GtkWidget *types=insight_symbol_view_types_control(GTK_TREE_VIEW(wb.local_view)); gtk_widget_set_name(types,"insight-local-type-filters"); gtk_box_pack_start(GTK_BOX(box),types,FALSE,FALSE,0); insight_symbol_view_more_loader(GTK_TREE_VIEW(wb.local_view),G_CALLBACK(symbols_load_more),2000);
+ GtkWidget *locate=gtk_button_new();gtk_widget_set_name(locate,"insight-local-locate");gtk_button_set_image(GTK_BUTTON(locate),insight_command_icon("find-location-symbolic"));gtk_widget_set_tooltip_text(locate,"Locate symbol at caret");g_signal_connect(locate,"clicked",G_CALLBACK(symbols_locate),NULL);gtk_box_pack_start(GTK_BOX(types),locate,FALSE,FALSE,0);
  GtkWidget *info=gtk_button_new_with_label("Symbol Info…");g_signal_connect(info,"clicked",G_CALLBACK(browser_symbol_info),wb.local_view);gtk_box_pack_start(GTK_BOX(box),info,FALSE,FALSE,0);
  gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),box,gtk_label_new("File Symbols"));
  gtk_notebook_set_show_tabs(GTK_NOTEBOOK(main_widgets.sidebar_notebook),TRUE);
