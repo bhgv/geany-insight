@@ -2,6 +2,7 @@
 #include "geany.h"
 #include "insight-i18n.h"
 #include "insight-help.h"
+#include "insight-window-list.h"
 #include "main.h"
 #include "ui_utils.h"
 #include <locale.h>
@@ -63,7 +64,7 @@ static void select_language(GtkCheckMenuItem *item,gpointer data) {
  textdomain(GETTEXT_PACKAGE);
 #endif
  GKeyFile *key=g_key_file_new();g_key_file_set_string(key,"interface","language",mode);gchar *contents=g_key_file_to_data(key,NULL,NULL),*directory=g_path_get_dirname(settings);GError *error=NULL;if(g_mkdir_with_parents(directory,0700) || !g_file_set_contents(settings,contents,-1,&error)) ui_set_statusbar(TRUE,"Cannot save interface language: %s",error ? error->message : "Cannot create directory");g_clear_error(&error);g_free(directory);g_free(contents);g_key_file_free(key);
- GList *windows=gtk_window_list_toplevels();for(GList *p=windows;p;p=p->next) insight_i18n_apply(p->data);g_list_free(windows);if(main_widgets.editor_menu) insight_i18n_apply(main_widgets.editor_menu);insight_help_locale_changed();
+ GList *windows=gtk_window_list_toplevels();for(GList *p=windows;p;p=p->next) insight_i18n_apply(p->data);g_list_free(windows);if(main_widgets.editor_menu) insight_i18n_apply(main_widgets.editor_menu);insight_help_locale_changed();insight_window_list_locale_changed();
 }
 void insight_i18n_menu(GtkWidget *options) {
  GtkWidget *item=gtk_menu_item_new_with_label("Interface language"),*menu=gtk_menu_new();gtk_widget_set_name(item,"insight-interface-language");gtk_menu_item_set_submenu(GTK_MENU_ITEM(item),menu);gtk_menu_shell_append(GTK_MENU_SHELL(options),item);const gchar *ids[]={"auto","ru","en"},*labels[]={"Automatic (system locale)","Русский","English"};GSList *group=NULL;

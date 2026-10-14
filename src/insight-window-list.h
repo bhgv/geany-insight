@@ -7,5 +7,6 @@ void insight_window_list_init(InsightWindowPreview);
 void insight_window_list_show(GtkWidget *,gpointer);
 void insight_window_list_document_event(guint,const gchar *);
 void insight_window_list_editor_updated(void);
+void insight_window_list_locale_changed(void);
 void insight_window_list_finalize(void);
 #endif

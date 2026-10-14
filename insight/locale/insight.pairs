@@ -599,3 +599,5 @@ This template is not available for the current language profile|||Этот ша�
 Unknown clip|||Неизвестный фрагмент
 Invalid template languages (up to 32 profile names)|||Некорректные языки шаблона (до 32 имён профилей)
 Duplicate template language|||Повторяющийся язык шаблона
+Window List settings: %s|||Настройки списка окон: %s
+Cannot create Window List settings directory|||Не удалось создать каталог настроек списка окон
