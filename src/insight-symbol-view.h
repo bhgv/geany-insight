@@ -13,4 +13,8 @@ guint insight_symbol_view_types_mask(GtkTreeView *);
 void insight_symbol_view_set_types(GtkTreeView *,guint);
 void insight_symbol_view_loading(GtkTreeView *,gboolean);
 void insight_symbol_view_filter_selected(GtkTreeView *,gboolean);
+void insight_symbol_view_more_loader(GtkTreeView *,GCallback,guint);
+void insight_symbol_view_page_state(GtkTreeView *,gboolean);
+gboolean insight_symbol_view_has_more(GtkTreeView *);
+void insight_symbol_view_load_more(GtkTreeView *);
 #endif

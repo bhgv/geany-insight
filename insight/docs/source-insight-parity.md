@@ -44,9 +44,14 @@ File Symbols and Project Symbols share language-aware Ctags kind colors/icons an
 
 ### Symbol type filters (2026-10-14)
 
-The funnel menu in both symbol panels selects visible categories independently. Show all / Hide all, per-language kind mapping, name-query intersection, grouped and flat views, visible/loaded counters and saved masks are covered by native GUI tests. Type filtering affects the loaded outline rather than index contents; existing name-query row limits remain in effect.
+The funnel menu in both symbol panels selects visible categories independently. Show all / Hide all, per-language kind mapping, name-query intersection, grouped and flat views, visible/loaded counters and saved masks are covered by native GUI tests. Type filtering affects the loaded outline rather than index contents; initial name-query portions are 2000 file / 500 project rows, with explicit incremental loading.
 
 
 ### Symbol outline context menus and keyboard (2026-10-14)
 
 Both outlines provide right-click and keyboard menus, definition/Info/reference actions, copy name/location, selected-category filtering and group controls. Keyboard commands are routed before Geany’s global shortcuts when a symbol list has focus. Down/Enter from a filter reveal the first leaf in collapsed groups and ignore stale rows during loading. GUI tests cover both outlines, clipboard, preview independence and live RU image-menu labels.
+
+
+### Incremental symbol outlines (2026-10-14)
+
+Both outlines expose an icon-only Load more button and the matching context-menu action. A plus in the visible/loaded counter marks additional query matches. Each request adds 2000 file or 500 project rows without navigating the editor; new queries and scope changes reset the portion. Type filters apply to loaded rows, while name queries scan the available index (maximum 250000 symbols). Native GUI tests cover a function beyond both initial portions, grouping, cancellation, query resets and live RU tooltips.

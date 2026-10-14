@@ -272,3 +272,4 @@ EXTRA_DIST += insight/tests/snippet_test.c insight/tests/snippet_gui_test.c
 EXTRA_DIST += insight/tests/panels_gui_test.c
 EXTRA_DIST += insight/tests/symbol_types_gui_test.c
 EXTRA_DIST += insight/tests/symbol_menu_gui_test.c
+EXTRA_DIST += insight/tests/symbol_paging_gui_test.c

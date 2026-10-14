@@ -24,8 +24,8 @@ static guint filter_category(guint type) {
  return OTHER;
 }
 typedef struct {
- GtkTreeView *view; GtkListStore *source; GtkWidget *toggle,*types,*menu,*status,*checks[FILTER_COUNT]; GeanyFiletype *fallback;
- guint mask,shown; gboolean setting,loading;
+ GtkTreeView *view; GtkListStore *source; GtkWidget *toggle,*types,*menu,*status,*more,*checks[FILTER_COUNT]; GeanyFiletype *fallback;
+ guint mask,shown,more_step; gboolean setting,loading,has_more;
  guint timer,idle; GtkTreeStore *pending; GHashTable *groups; GtkTreeIter iter; gboolean valid,grouped,sorting;
 } Symbols;
 static GList *views;
@@ -96,6 +96,7 @@ static gboolean restore_choice(GtkTreeModel *model,GtkTreePath *path,GtkTreeIter
  if(match) gtk_tree_selection_select_iter(choice->selection,iter);
  g_free(name); g_free(file); return match;
 }
+static void page_button(Symbols *s) { if(s->more) { if(s->more_step) { gchar *tip=insight_i18n_printf("Load the next %u symbols",s->more_step);gtk_widget_set_tooltip_text(s->more,tip);g_free(tip); } gtk_widget_set_visible(s->more,s->has_more); gtk_widget_set_sensitive(s->more,gtk_widget_get_sensitive(GTK_WIDGET(s->view))); } }
 static void publish(Symbols *s,GtkTreeModel *model) {
  GtkTreeSelection *selection=gtk_tree_view_get_selection(s->view); GtkTreeModel *old=gtk_tree_view_get_model(s->view); GtkTreeIter iter; Choice choice={.selection=selection};
  if(gtk_tree_selection_get_selected(selection,NULL,&iter)) gtk_tree_model_get(old,&iter,NAME,&choice.name,PATH,&choice.path,LINE,&choice.line,-1);
@@ -105,12 +106,12 @@ static void publish(Symbols *s,GtkTreeModel *model) {
  gtk_tree_view_set_model(s->view,model);
  if(GTK_IS_TREE_STORE(model)) for(gboolean valid=gtk_tree_model_get_iter_first(model,&iter);valid;valid=gtk_tree_model_iter_next(model,&iter)) { gchar *kind=NULL; gtk_tree_model_get(model,&iter,KIND,&kind,-1); if(!kind || !g_hash_table_contains(collapsed,kind)) { GtkTreePath *path=gtk_tree_model_get_path(model,&iter); gtk_tree_view_expand_row(s->view,path,FALSE); gtk_tree_path_free(path); } g_free(kind); }
  if(choice.line) gtk_tree_model_foreach(model,restore_choice,&choice);
- g_signal_handlers_unblock_matched(selection,G_SIGNAL_MATCH_ID,signal,0,NULL,NULL,NULL); g_hash_table_unref(collapsed); g_free(choice.name); g_free(choice.path); gtk_widget_set_sensitive(GTK_WIDGET(s->view),!s->loading);
+ g_signal_handlers_unblock_matched(selection,G_SIGNAL_MATCH_ID,signal,0,NULL,NULL,NULL); g_hash_table_unref(collapsed); g_free(choice.name); g_free(choice.path); gtk_widget_set_sensitive(GTK_WIDGET(s->view),!s->loading); page_button(s);
 }
 static void status(Symbols *s) {
  if(!s->status) return;
  guint total=gtk_tree_model_iter_n_children(GTK_TREE_MODEL(s->source),NULL);
- gchar *text=insight_i18n_printf("Symbols: %u / %u",s->grouped || s->mask!=ALL_TYPES ? s->shown : total,total);
+ gchar *text=insight_i18n_printf(s->has_more ? "Symbols: %u / %u+" : "Symbols: %u / %u",s->grouped || s->mask!=ALL_TYPES ? s->shown : total,total);
  gtk_label_set_text(GTK_LABEL(s->status),text); g_free(text);
 }
 static void queue(Symbols *s);
@@ -142,7 +143,7 @@ static gboolean begin(gpointer data) {
  s->shown=0;
  s->pending=gtk_tree_store_new(COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG,G_TYPE_STRING); s->groups=g_hash_table_new_full(g_direct_hash,g_direct_equal,NULL,g_free); s->valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(s->source),&s->iter); s->idle=g_idle_add(apply,s); return G_SOURCE_REMOVE;
 }
-static void queue(Symbols *s) { if(!s) return; cancel(s); if(s->grouped || s->mask!=ALL_TYPES) gtk_widget_set_sensitive(GTK_WIDGET(s->view),FALSE); s->timer=g_timeout_add(100,begin,s); }
+static void queue(Symbols *s) { if(!s) return; cancel(s); if(s->grouped || s->mask!=ALL_TYPES) gtk_widget_set_sensitive(GTK_WIDGET(s->view),FALSE); s->timer=g_timeout_add(100,begin,s); page_button(s); }
 static void row_changed(GtkTreeModel *model,GtkTreePath *path,GtkTreeIter *iter,gpointer data) { (void)model; (void)path; (void)iter; queue(g_object_get_data(G_OBJECT(data),"insight-symbol-view")); }
 static void row_deleted(GtkTreeModel *model,GtkTreePath *path,gpointer data) { (void)model; (void)path; queue(g_object_get_data(G_OBJECT(data),"insight-symbol-view")); }
 static void reordered(GtkTreeModel *model,GtkTreePath *path,GtkTreeIter *iter,gint *order,gpointer data) { (void)model; (void)path; (void)iter; (void)order; queue(g_object_get_data(G_OBJECT(data),"insight-symbol-view")); }
@@ -184,14 +185,15 @@ GtkWidget *insight_symbol_view_types_control(GtkTreeView *view) {
  for(guint i=0;i<2;i++) { GtkWidget *item=gtk_image_menu_item_new_with_label(commands[i]); gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(item),gtk_image_new_from_icon_name(i ? "edit-clear-symbolic" : "view-list-symbolic",GTK_ICON_SIZE_MENU)); gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(item),TRUE); g_object_set_data(G_OBJECT(item),"insight-symbol-mask",GUINT_TO_POINTER(i ? 0 : ALL_TYPES)); g_signal_connect_object(item,"activate",G_CALLBACK(filter_all),view,0); gtk_menu_shell_append(GTK_MENU_SHELL(menu),item); }
  gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());
  for(guint i=0;i<FILTER_COUNT;i++) { GtkWidget *item=gtk_check_menu_item_new_with_label(filter_names[i]); GtkWidget *label=gtk_bin_get_child(GTK_BIN(item)),*content=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6); g_object_ref(label); gtk_container_remove(GTK_CONTAINER(item),label); gtk_box_pack_start(GTK_BOX(content),gtk_image_new_from_icon_name(filter_icons[i],GTK_ICON_SIZE_MENU),FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(content),label,TRUE,TRUE,0); g_object_unref(label); gtk_container_add(GTK_CONTAINER(item),content); g_object_set_data(G_OBJECT(item),"insight-icon-added",GINT_TO_POINTER(1)); gchar *name=g_strdup_printf("insight-symbol-type-%u",i); gtk_widget_set_name(item,name); g_free(name); s->checks[i]=item; gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item),(s->mask&(1u<<i))!=0); g_signal_connect_object(item,"toggled",G_CALLBACK(filter_changed),view,0); gtk_menu_shell_append(GTK_MENU_SHELL(menu),item); }
- gtk_widget_show_all(menu); gtk_box_pack_start(GTK_BOX(box),button,FALSE,FALSE,0); s->status=gtk_label_new(""); gtk_label_set_xalign(GTK_LABEL(s->status),0); gtk_widget_set_tooltip_text(s->status,"Visible symbols / symbols matching the name filter; type filtering keeps the index unchanged"); gtk_box_pack_start(GTK_BOX(box),s->status,TRUE,TRUE,0); status(s); return box;
+ gtk_widget_show_all(menu); gtk_box_pack_start(GTK_BOX(box),button,FALSE,FALSE,0); s->status=gtk_label_new(""); gtk_label_set_xalign(GTK_LABEL(s->status),0); gtk_widget_set_tooltip_text(s->status,"Visible / loaded symbols; + means more query matches remain"); gtk_box_pack_start(GTK_BOX(box),s->status,TRUE,TRUE,0);
+ s->more=gtk_button_new_from_icon_name("list-add-symbolic",GTK_ICON_SIZE_MENU); gtk_widget_set_name(s->more,"insight-symbol-more"); gtk_button_set_relief(GTK_BUTTON(s->more),GTK_RELIEF_NONE); gtk_widget_set_tooltip_text(s->more,"Load more symbols"); gtk_widget_show_all(s->more); gtk_widget_set_no_show_all(s->more,TRUE); gtk_box_pack_end(GTK_BOX(box),s->more,FALSE,FALSE,0); page_button(s); status(s); return box;
 }
 
 void insight_symbol_view_loading(GtkTreeView *view,gboolean loading) {
  Symbols *s=g_object_get_data(G_OBJECT(view),"insight-symbol-view"); if(!s) return;
  s->loading=loading;
  gboolean deriving=(s->timer || s->idle) && (s->grouped || s->mask!=ALL_TYPES);
- gtk_widget_set_sensitive(GTK_WIDGET(view),!loading && !deriving);
+ gtk_widget_set_sensitive(GTK_WIDGET(view),!loading && !deriving); page_button(s);
 }
 
 void insight_symbol_view_filter_selected(GtkTreeView *view,gboolean only) {
@@ -200,3 +202,11 @@ void insight_symbol_view_filter_selected(GtkTreeView *view,gboolean only) {
  gchar *path=NULL,*kind=NULL;gtk_tree_model_get(model,&iter,PATH,&path,KIND,&kind,-1);
  guint bit=1u<<filter_category(type_for(s,path,kind));g_free(path);g_free(kind);insight_symbol_view_set_types(view,only ? bit : s->mask&~bit);
 }
+
+void insight_symbol_view_more_loader(GtkTreeView *view,GCallback callback,guint step) {
+ Symbols *s=g_object_get_data(G_OBJECT(view),"insight-symbol-view");if(!s || !s->more) return;
+ s->more_step=step;page_button(s);g_signal_connect_object(s->more,"clicked",callback,view,0);
+}
+void insight_symbol_view_page_state(GtkTreeView *view,gboolean more) { Symbols *s=g_object_get_data(G_OBJECT(view),"insight-symbol-view");if(s) { s->has_more=more;page_button(s);status(s); } }
+gboolean insight_symbol_view_has_more(GtkTreeView *view) { Symbols *s=g_object_get_data(G_OBJECT(view),"insight-symbol-view");return s && s->has_more; }
+void insight_symbol_view_load_more(GtkTreeView *view) { Symbols *s=g_object_get_data(G_OBJECT(view),"insight-symbol-view");if(s && s->more && s->has_more && gtk_widget_get_sensitive(s->more) && !s->loading) gtk_button_clicked(GTK_BUTTON(s->more)); }

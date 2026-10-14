@@ -75,7 +75,8 @@ typedef struct {
  GHashTable *bookmark_handles;GtkWidget *bookmark_window,*bookmark_search;GtkListStore *bookmark_list;guint bookmark_sync_timer;gboolean bookmark_syncing;
  GtkWidget *marks_entry,*marks_view,*clips_entry,*clips_view,*clips_all; gchar *clips_language; GtkListStore *marks_store,*clips_store;
  InsightWorkspaceWatch *watch; guint watch_idle; gboolean watch_changed,watch_incomplete;
- guint local_doc_id; gulong symbol_key_signal;
+ guint local_doc_id,local_symbol_limit,project_symbol_limit; gulong symbol_key_signal;
+ gchar *project_page_root,*project_page_profile;
  GeanyFiletype *preview_filetype;
  GtkListStore *file_store,*matches;
  GtkListStore *search_matches,*usage_target;
@@ -145,7 +146,7 @@ static void workspace_changed(gpointer);
 static void create_search_toolbars(void);
 static guint text_search_flags(GtkWidget *,GtkWidget *,GtkWidget *);
 static char *read_disk_source(const char *,gboolean);
-enum { SP_OPEN,SP_INFO,SP_REFERENCES,SP_NAME,SP_LOCATION,SP_ONLY,SP_HIDE,SP_ALL,SP_GROUP,SP_EXPAND,SP_COLLAPSE,SP_HELP,SP_COUNT };
+enum { SP_OPEN,SP_INFO,SP_REFERENCES,SP_NAME,SP_LOCATION,SP_ONLY,SP_HIDE,SP_ALL,SP_GROUP,SP_EXPAND,SP_COLLAPSE,SP_HELP,SP_MORE,SP_COUNT };
 static void symbol_action(GtkTreeView *,guint);
 static void browser_symbol_info(GtkWidget *,gpointer);
 static gboolean symbol_popup_key(GtkWidget *,gpointer);
@@ -801,8 +802,8 @@ static InsightLookupFilter *entry_filter(GtkWidget *entry,gboolean files) {
 }
 typedef struct { gchar *name,*path; } FileListRow;
 static void file_list_row_free(gpointer data) { FileListRow *r=data; g_free(r->name); g_free(r->path); g_free(r); }
-typedef struct { guint64 generation; GCancellable *cancel; guint apply; InsightIndex *index; const InsightSymbol **rows; GPtrArray *files; gchar *local_path; guint count,position; gboolean local,collecting,iter_valid; GtkTreeIter iter; GHashTable *existing; } SymbolListState;
-typedef struct { GWeakRef store; InsightIndex *index; gchar *query,*path; const InsightSymbol **rows; GPtrArray *paths,*files,*tags; guint count,limit; guint64 generation,epoch; gboolean local;InsightLanguageFilter *language; } SymbolListJob;
+typedef struct { guint64 generation; GCancellable *cancel; guint apply; InsightIndex *index; const InsightSymbol **rows; GPtrArray *files; gchar *local_path; guint count,position; gboolean local,collecting,iter_valid,has_more; GtkTreeIter iter; GHashTable *existing; } SymbolListState;
+typedef struct { GWeakRef store; InsightIndex *index; gchar *query,*path; const InsightSymbol **rows; GPtrArray *paths,*files,*tags; guint count,limit; guint64 generation,epoch; gboolean local,has_more;InsightLanguageFilter *language; } SymbolListJob;
 static GtkWidget *symbol_list_view(GtkListStore *store) { return store==wb.file_store ? wb.file_view : (store==wb.local_symbols ? wb.local_view : wb.symbol_view); }
 static void symbol_iter_queue_free(gpointer data) { GQueue *q=data; g_queue_free_full(q,g_free); }
 static gchar *symbol_row_key(GtkTreeModel *model,GtkTreeIter *iter,gboolean files) {
@@ -864,7 +865,7 @@ static gboolean symbol_list_apply(gpointer data) {
   g_hash_table_iter_remove(&pending);
  }
  g_clear_pointer(&s->existing,g_hash_table_destroy);
- GtkWidget *view=symbol_list_view(store); if(view) { gtk_widget_set_sensitive(view,TRUE); insight_symbol_view_loading(GTK_TREE_VIEW(view),FALSE); }
+ GtkWidget *view=symbol_list_view(store); if(view) { insight_symbol_view_page_state(GTK_TREE_VIEW(view),s->has_more); gtk_widget_set_sensitive(view,TRUE); insight_symbol_view_loading(GTK_TREE_VIEW(view),FALSE); }
  s->apply=0; retire_index(s->index); s->index=NULL; g_clear_pointer(&s->rows,g_free); g_clear_pointer(&s->files,g_ptr_array_unref); return G_SOURCE_REMOVE;
 }
 static void symbol_list_job_free(gpointer data) { SymbolListJob *j=data;insight_language_filter_free(j->language); g_weak_ref_clear(&j->store); retire_index(j->index); g_free(j->query); g_free(j->path); g_free(j->rows); g_clear_pointer(&j->paths,g_ptr_array_unref); g_clear_pointer(&j->files,g_ptr_array_unref); g_clear_pointer(&j->tags,g_ptr_array_unref); g_free(j); }
@@ -880,10 +881,10 @@ static void symbol_list_job_run(GTask *task,gpointer source,gpointer data,GCance
  } else {
   if(j->local && !g_cancellable_is_cancelled(cancel)) { j->index=insight_index_new(); TMSourceFile captured={.tags_array=j->tags}; if(!insight_native_import(j->index,&captured,j->path ? j->path : "@untitled")) { insight_lookup_filter_free(filter); g_task_return_boolean(task,FALSE); return; } }
   j->rows=g_new(const InsightSymbol *,j->limit);
-  if(filter) for(gsize n=0;n<insight_index_count(j->index) && j->count<j->limit;n++) {
+  if(filter) for(gsize n=0;n<insight_index_count(j->index);n++) {
    if(g_cancellable_is_cancelled(cancel)) break;
    const InsightSymbol *tag=insight_index_at(j->index,n);if(!insight_language_filter_match(j->language,tag->path)) continue; if(j->path && g_strcmp0(j->path,tag->path)) continue;
-   if(insight_lookup_filter_match(filter,tag->name,tag->scope,tag->path,tag->kind)) j->rows[j->count++]=tag;
+   if(insight_lookup_filter_match(filter,tag->name,tag->scope,tag->path,tag->kind)) { if(j->count==j->limit) { j->has_more=TRUE;break; } j->rows[j->count++]=tag; }
   }
  }
  insight_lookup_filter_free(filter); g_task_return_boolean(task,TRUE);
@@ -892,7 +893,7 @@ static void symbol_list_job_done(GObject *source,GAsyncResult *result,gpointer d
  (void)source; (void)data; GTask *task=G_TASK(result); SymbolListJob *j=g_task_get_task_data(task); gboolean ok=g_task_propagate_boolean(task,NULL); GtkListStore *store=g_weak_ref_get(&j->store); if(!store) return;
  SymbolListState *s=symbol_list_state(store);
  if(wb.alive && j->epoch==workbench_epoch && j->generation==s->generation) {
-  g_clear_object(&s->cancel);
+  g_clear_object(&s->cancel); s->has_more=ok && j->has_more;
   if(ok) { s->index=insight_index_ref(j->index); s->rows=j->rows; j->rows=NULL; s->files=j->files; j->files=NULL; s->count=j->count; s->position=0; s->local=j->local; s->local_path=g_strdup(j->path); }
   else { if(j->paths) s->files=g_ptr_array_new_with_free_func(file_list_row_free); ui_set_statusbar(TRUE,"Symbol snapshot unavailable or exceeds its limit"); }
   s->existing=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,symbol_iter_queue_free);
@@ -905,6 +906,7 @@ static void symbol_list_job_done(GObject *source,GAsyncResult *result,gpointer d
 static SymbolListJob *symbol_list_begin(GtkListStore *store,GtkWidget *entry,guint limit,gboolean files) {
  SymbolListState *s=symbol_list_state(store); symbol_list_stop(s); GtkWidget *view=symbol_list_view(store); if(view) { gtk_widget_set_sensitive(view,TRUE); insight_symbol_view_loading(GTK_TREE_VIEW(view),FALSE); }
  InsightLookupFilter *filter=entry_filter(entry,files); if(!filter) {
+  s->has_more=FALSE;
   if(view) { gtk_widget_set_sensitive(view,FALSE); insight_symbol_view_loading(GTK_TREE_VIEW(view),TRUE); }
   s->files=files ? g_ptr_array_new_with_free_func(file_list_row_free) : NULL;
   s->existing=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,symbol_iter_queue_free); s->collecting=TRUE;
@@ -922,8 +924,11 @@ static void fill_symbol_list(GtkListStore *store,GtkWidget *entry,const char *pa
  j->index=insight_index_ref(wb.index); j->path=g_strdup(path); symbol_list_launch(store,j);
 }
 static void browser_filter(GtkEditable *entry,gpointer data) {
- (void)entry; (void)data; if(!wb.symbols) return;
- fill_symbol_list(wb.symbols,wb.symbol_entry,NULL,500);
+ (void)data; if(!wb.symbols) return;
+ GeanyDocument *doc=document_get_current();gchar *profile=doc ? insight_languages_profile_name(doc->editor->sci,doc->file_name,doc->file_type) : g_strdup("");
+ if(entry || !wb.project_symbol_limit || g_strcmp0(wb.project_page_root,wb.root) || g_strcmp0(wb.project_page_profile,profile)) wb.project_symbol_limit=500;
+ g_free(wb.project_page_root);wb.project_page_root=g_strdup(wb.root);g_free(wb.project_page_profile);wb.project_page_profile=profile;
+ fill_symbol_list(wb.symbols,wb.symbol_entry,NULL,wb.project_symbol_limit);
 }
 static void browser_selected(GtkTreeSelection *selection,gpointer data) {
  (void)data; if(!wb.preview) return;
@@ -1439,6 +1444,11 @@ static void browser_symbol_info(GtkWidget *widget,gpointer data) {
  if(name) info_show_query(name,path,line);
  g_free(name);g_free(path);
 }
+static void symbols_load_more(GtkWidget *button,gpointer data) {
+ (void)button;GtkWidget *view=data;if(!gtk_widget_get_sensitive(view)) return;
+ if(view==wb.local_view) { wb.local_symbol_limit=MIN(250000u,wb.local_symbol_limit+2000u);local_filter(NULL,NULL); }
+ else if(view==wb.symbol_view) { wb.project_symbol_limit=MIN(250000u,wb.project_symbol_limit+500u);browser_filter(NULL,NULL); }
+}
 static void symbol_action(GtkTreeView *view,guint action) {
  if(action!=SP_HELP && !gtk_widget_get_sensitive(GTK_WIDGET(view))) return;
  GtkTreeModel *model=gtk_tree_view_get_model(view); GtkTreeIter iter;
@@ -1456,6 +1466,7 @@ static void symbol_action(GtkTreeView *view,guint action) {
  case SP_ALL: insight_symbol_view_set_types(view,G_MAXUINT); break;
  case SP_EXPAND: gtk_tree_view_expand_all(view); break;
  case SP_COLLAPSE: gtk_tree_view_collapse_all(view); break;
+ case SP_MORE: insight_symbol_view_load_more(view); break;
  case SP_HELP: insight_help_show(NULL,GTK_WIDGET(view)==wb.local_view ? "panel-file-symbols.md" : "panel-project-symbols.md"); break;
  default: break;
  }
@@ -1466,14 +1477,14 @@ static GtkWidget *symbol_menu(GtkTreeView *view) {
  GtkWidget *menu=g_object_get_data(G_OBJECT(view),"insight-symbol-popup");
  if(!menu) {
   menu=gtk_menu_new(); gtk_widget_set_name(menu,"insight-symbol-popup"); gtk_menu_attach_to_widget(GTK_MENU(menu),GTK_WIDGET(view),NULL); g_object_set_data_full(G_OBJECT(view),"insight-symbol-popup",g_object_ref_sink(menu),g_object_unref);
-  const gchar *labels[]={"Open definition","Symbol Info…","Find references to this symbol","Copy symbol name","Copy source location","Show only this category","Hide this category","Show all symbol types","Group by symbol type","Expand all symbol groups","Collapse all symbol groups","Help for this panel"};
-  const gchar *icons[]={"go-jump","dialog-information","relations","edit-copy","edit-copy","view-filter-symbolic","view-filter-symbolic","view-list-symbolic","view-list-symbolic","list-add","list-remove","panel-help"};
+  const gchar *labels[]={"Open definition","Symbol Info…","Find references to this symbol","Copy symbol name","Copy source location","Show only this category","Hide this category","Show all symbol types","Group by symbol type","Expand all symbol groups","Collapse all symbol groups","Help for this panel","Load more symbols"};
+  const gchar *icons[]={"go-jump","dialog-information","relations","edit-copy","edit-copy","view-filter-symbolic","view-filter-symbolic","view-list-symbolic","view-list-symbolic","list-add","list-remove","panel-help","list-add-symbolic"};
   for(guint i=0;i<SP_COUNT;i++) {
    if(i==SP_ONLY || i==SP_GROUP || i==SP_HELP) gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());
    GtkWidget *item;
    if(i==SP_GROUP) { item=gtk_check_menu_item_new_with_label(labels[i]); GtkWidget *label=gtk_bin_get_child(GTK_BIN(item)),*box=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6); g_object_ref(label); gtk_container_remove(GTK_CONTAINER(item),label); gtk_box_pack_start(GTK_BOX(box),insight_command_icon(icons[i]),FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),label,TRUE,TRUE,0); g_object_unref(label); gtk_container_add(GTK_CONTAINER(item),box); g_object_set_data(G_OBJECT(item),"insight-icon-added",GINT_TO_POINTER(1)); }
    else { item=gtk_image_menu_item_new_with_label(labels[i]); gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(item),insight_command_icon(icons[i])); gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(item),TRUE); }
-   gchar *key=g_strdup_printf("insight-symbol-command-%u",i); gtk_widget_set_name(item,key); g_object_set_data(G_OBJECT(menu),key,item); g_free(key); g_object_set_data(G_OBJECT(item),"insight-symbol-action",GUINT_TO_POINTER(i)); g_signal_connect_object(item,i==SP_GROUP ? "toggled" : "activate",G_CALLBACK(symbol_menu_action),view,0); gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);
+   gchar *key=g_strdup_printf("insight-symbol-command-%u",i); gtk_widget_set_name(item,key); g_object_set_data(G_OBJECT(menu),key,item); g_free(key); g_object_set_data(G_OBJECT(item),"insight-symbol-action",GUINT_TO_POINTER(i)); g_signal_connect_object(item,i==SP_GROUP ? "toggled" : "activate",G_CALLBACK(symbol_menu_action),view,0); if(i==SP_MORE) { GList *children=gtk_container_get_children(GTK_CONTAINER(menu));gint position=(gint)g_list_length(children)-2;g_list_free(children);gtk_menu_shell_insert(GTK_MENU_SHELL(menu),item,position); }else gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);
   }
  }
  GtkTreeModel *model=gtk_tree_view_get_model(view); GtkTreeIter iter; gboolean selected=gtk_tree_selection_get_selected(gtk_tree_view_get_selection(view),NULL,&iter); gchar *path=NULL;gulong line=0;
@@ -1484,6 +1495,7 @@ static GtkWidget *symbol_menu(GtkTreeView *view) {
   if(i==SP_NAME || i==SP_ONLY || i==SP_HIDE) enabled &= selected;
   if(i==SP_LOCATION) enabled &= line && path && path[0]!='@';
   if(i==SP_EXPAND || i==SP_COLLAPSE) enabled &= grouped;
+  if(i==SP_MORE) enabled &= insight_symbol_view_has_more(view);
   if(i==SP_HELP) enabled=TRUE;
   gtk_widget_set_sensitive(item,enabled); if(i==SP_GROUP) gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item),grouped);
  }
@@ -1516,7 +1528,7 @@ static void create_browser(void) {
  gtk_box_pack_start(GTK_BOX(wb.browser),wb.symbol_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(wb.browser),scroll,TRUE,TRUE,0);
  gtk_box_pack_start(GTK_BOX(wb.browser),sort_selector(wb.symbols),FALSE,FALSE,0);
  GtkWidget *group=insight_symbol_view_attach(GTK_TREE_VIEW(wb.symbol_view),wb.symbols,NULL); gtk_widget_set_name(group,"insight-project-group-types"); gtk_box_pack_start(GTK_BOX(wb.browser),group,FALSE,FALSE,0);
- GtkWidget *types=insight_symbol_view_types_control(GTK_TREE_VIEW(wb.symbol_view)); gtk_widget_set_name(types,"insight-project-type-filters"); gtk_box_pack_start(GTK_BOX(wb.browser),types,FALSE,FALSE,0);
+ GtkWidget *types=insight_symbol_view_types_control(GTK_TREE_VIEW(wb.symbol_view)); gtk_widget_set_name(types,"insight-project-type-filters"); gtk_box_pack_start(GTK_BOX(wb.browser),types,FALSE,FALSE,0); insight_symbol_view_more_loader(GTK_TREE_VIEW(wb.symbol_view),G_CALLBACK(symbols_load_more),500);
  GtkWidget *info=gtk_button_new_with_label("Symbol Info…");g_signal_connect(info,"clicked",G_CALLBACK(browser_symbol_info),wb.symbol_view);gtk_box_pack_start(GTK_BOX(wb.browser),info,FALSE,FALSE,0);
  gtk_notebook_append_page(GTK_NOTEBOOK(wb.project_notebook),wb.browser,gtk_label_new("Project Symbols"));
  g_signal_connect(wb.symbol_entry,"changed",G_CALLBACK(browser_filter),NULL);
@@ -1528,10 +1540,12 @@ static void create_browser(void) {
  gtk_widget_show_all(wb.browser); browser_filter(NULL,NULL);
 }
 static void local_filter(GtkEditable *entry,gpointer data) {
- (void)entry; (void)data; if(!wb.local_symbols) return; GeanyDocument *doc=document_get_current(); wb.local_doc_id=doc ? doc->id : 0;
+ (void)data; if(!wb.local_symbols) return; GeanyDocument *doc=document_get_current();
+ if(entry || !wb.local_symbol_limit || wb.local_doc_id!=(doc ? doc->id : 0)) wb.local_symbol_limit=2000;
+ wb.local_doc_id=doc ? doc->id : 0;
  gtk_label_set_text(GTK_LABEL(wb.local_label),doc && doc->file_name ? doc->file_name : "Current file symbols");
  insight_symbol_view_filetype(GTK_TREE_VIEW(wb.local_view),doc ? doc->file_type : NULL);
- SymbolListJob *j=symbol_list_begin(wb.local_symbols,wb.local_entry,2000,FALSE); if(!j) return; j->local=TRUE; j->path=g_strdup(doc ? doc->file_name : NULL); j->tags=g_ptr_array_new_with_free_func((GDestroyNotify)tm_tag_unref);
+ SymbolListJob *j=symbol_list_begin(wb.local_symbols,wb.local_entry,wb.local_symbol_limit,FALSE); if(!j) return; j->local=TRUE; j->path=g_strdup(doc ? doc->file_name : NULL); j->tags=g_ptr_array_new_with_free_func((GDestroyNotify)tm_tag_unref);
  /* Tags are immutable after publication and their reference count is atomic.
   * Capture references, not GTK or a mutable TMSourceFile, for the worker. */
  if(doc && doc->tm_file && doc->tm_file->tags_array) for(guint n=0;n<doc->tm_file->tags_array->len;n++) { TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,n); if(tag) g_ptr_array_add(j->tags,tm_tag_ref(tag)); }
@@ -1558,7 +1572,7 @@ static void create_local_browser(void) {
  gtk_box_pack_start(GTK_BOX(box),wb.local_label,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.local_entry,FALSE,FALSE,0);
  gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0); gtk_box_pack_start(GTK_BOX(box),sort_selector(wb.local_symbols),FALSE,FALSE,0);
  GtkWidget *group=insight_symbol_view_attach(GTK_TREE_VIEW(wb.local_view),wb.local_symbols,NULL); gtk_widget_set_name(group,"insight-local-group-types"); gtk_box_pack_start(GTK_BOX(box),group,FALSE,FALSE,0);
- GtkWidget *types=insight_symbol_view_types_control(GTK_TREE_VIEW(wb.local_view)); gtk_widget_set_name(types,"insight-local-type-filters"); gtk_box_pack_start(GTK_BOX(box),types,FALSE,FALSE,0);
+ GtkWidget *types=insight_symbol_view_types_control(GTK_TREE_VIEW(wb.local_view)); gtk_widget_set_name(types,"insight-local-type-filters"); gtk_box_pack_start(GTK_BOX(box),types,FALSE,FALSE,0); insight_symbol_view_more_loader(GTK_TREE_VIEW(wb.local_view),G_CALLBACK(symbols_load_more),2000);
  GtkWidget *info=gtk_button_new_with_label("Symbol Info…");g_signal_connect(info,"clicked",G_CALLBACK(browser_symbol_info),wb.local_view);gtk_box_pack_start(GTK_BOX(box),info,FALSE,FALSE,0);
  gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),box,gtk_label_new("File Symbols"));
  gtk_notebook_set_show_tabs(GTK_NOTEBOOK(main_widgets.sidebar_notebook),TRUE);
@@ -3513,7 +3527,7 @@ void insight_workbench_finalize(void) {
  if(wb.symbols) symbol_list_stop(symbol_list_state(wb.symbols));
  if(wb.file_store) symbol_list_stop(symbol_list_state(wb.file_store));
  if(wb.local_symbols) symbol_list_stop(symbol_list_state(wb.local_symbols));
- g_free(wb.prefs_path);
+ g_free(wb.prefs_path);g_free(wb.project_page_root);g_free(wb.project_page_profile);
  stop_usage(); g_ptr_array_free(wb.usage_paths,TRUE);
  g_free(wb.search_state_path); g_ptr_array_free(wb.search_files,TRUE); g_ptr_array_free(wb.search_history,TRUE); g_object_unref(wb.search_matches);
  if(wb.watch_idle) g_source_remove(wb.watch_idle);
