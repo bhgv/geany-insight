@@ -1311,6 +1311,9 @@ static void relation_selected_query(GtkWidget *widget,gpointer data) {
  gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),GPOINTER_TO_INT(data));wb.relation_setting=FALSE;
  g_free(name);relation_controls(NULL,NULL);
 }
+static void relation_graph_query(gint mode,gpointer data) {
+ (void)data;relation_selected_query(NULL,GINT_TO_POINTER(mode));
+}
 static void relation_graph_toggle(GtkToggleButton *button,gpointer data) {
  (void)data;gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),gtk_toggle_button_get_active(button) ? "graph" : "list");
 }
@@ -1354,7 +1357,7 @@ static void create_usage_browser(void) {
  g_signal_connect(wb.relation_filter_entry,"changed",G_CALLBACK(relation_filter_changed),NULL);
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),wb.usage_view);
  wb.relation_stack=gtk_stack_new();gtk_stack_add_named(GTK_STACK(wb.relation_stack),scroll,"list");
- wb.relation_graph=insight_relation_graph_new(GTK_TREE_VIEW(wb.usage_view),GTK_ENTRY(wb.usage_entry),USAGE_SYMBOL,USAGE_DISPLAY,USAGE_LINE);gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_graph,"graph");gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"list");
+ wb.relation_graph=insight_relation_graph_new(GTK_TREE_VIEW(wb.usage_view),GTK_ENTRY(wb.usage_entry),USAGE_SYMBOL,USAGE_DISPLAY,USAGE_LINE);insight_relation_graph_set_query_handler(wb.relation_graph,relation_graph_query,NULL);gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_graph,"graph");gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"list");
  wb.relation_graph_toggle=gtk_check_button_new_with_label("Graph view");gtk_box_pack_start(GTK_BOX(controls),wb.relation_graph_toggle,FALSE,FALSE,0);g_signal_connect(wb.relation_graph_toggle,"toggled",G_CALLBACK(relation_graph_toggle),NULL);
  gtk_box_pack_start(GTK_BOX(box),wb.usage_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_mode,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_follow,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_enclosing,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_code,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_buffer,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),controls,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_status,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_filter_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),drill,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_stack,TRUE,TRUE,0);
  gtk_notebook_append_page(GTK_NOTEBOOK(wb.project_notebook),box,gtk_label_new("Relations"));

@@ -8,6 +8,7 @@
 typedef struct {
  GtkWidget *canvas,*direction,*zoom,*status,*scroll;GtkTreeView *tree;GtkEntry *query;GtkTreeModel *model;
  gint name,file,line;gboolean vertical;gdouble scale;
+ GtkWidget *menu;InsightRelationGraphQuery query_handler;gpointer query_data;
 } RelationGraph;
 static void update(RelationGraph *g) {
  gint total=gtk_tree_model_iter_n_children(g->model,NULL),count=MIN(total,INSIGHT_GRAPH_LIMIT);
@@ -86,11 +87,28 @@ static void save_image(GtkWidget *widget,gpointer data) {
  }
  gtk_widget_destroy(dialog);cairo_surface_destroy(surface);g_object_unref(status_label);
 }
+static void query_action(GtkWidget *item,gpointer data) {
+ RelationGraph *g=data;if(g->query_handler) g->query_handler(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item),"relation-mode")),g->query_data);
+}
+static void open_node(GtkWidget *item,gpointer data) {
+ (void)item;RelationGraph *g=data;GtkTreeModel *model;GtkTreeIter iter;
+ if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(g->tree),&model,&iter)) { GtkTreePath *path=gtk_tree_model_get_path(model,&iter);gtk_tree_view_row_activated(g->tree,path,gtk_tree_view_get_column(g->tree,0));gtk_tree_path_free(path); }
+}
+static GtkWidget *node_menu(RelationGraph *g) {
+ if(g->menu) return g->menu;
+ g->menu=gtk_menu_new();g_object_ref_sink(g->menu);
+ GtkWidget *open=gtk_menu_item_new_with_label("Open in editor");gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),open);g_signal_connect(open,"activate",G_CALLBACK(open_node),g);
+ const gchar *labels[]={"Definitions","Call sites","References","Direct members","Base types","Derived types"};const gint modes[]={1,7,0,2,4,5};
+ for(guint i=0;i<G_N_ELEMENTS(modes);i++) { GtkWidget *item=gtk_menu_item_new_with_label(labels[i]);g_object_set_data(G_OBJECT(item),"relation-mode",GINT_TO_POINTER(modes[i]));gtk_widget_set_sensitive(item,g->query_handler!=NULL);gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),item);g_signal_connect(item,"activate",G_CALLBACK(query_action),g); }
+ gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),gtk_separator_menu_item_new());
+ GtkWidget *copy=gtk_menu_item_new_with_label("Copy graph image"),*save=gtk_menu_item_new_with_label("Save graph PNG…");gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),copy);gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),save);g_signal_connect(copy,"activate",G_CALLBACK(copy_image),g);g_signal_connect(save,"activate",G_CALLBACK(save_image),g);gtk_widget_show_all(g->menu);return g->menu;
+}
 static gboolean click(GtkWidget *widget,GdkEventButton *event,gpointer data) {
- (void)widget;RelationGraph *g=data;if(event->button!=1 || (event->type!=GDK_BUTTON_PRESS && event->type!=GDK_2BUTTON_PRESS)) return FALSE;
+ (void)widget;RelationGraph *g=data;if((event->button!=1 && event->button!=3) || (event->type!=GDK_BUTTON_PRESS && event->type!=GDK_2BUTTON_PRESS)) return FALSE;
  gint row=insight_graph_hit(event->x/g->scale,event->y/g->scale,gtk_tree_model_iter_n_children(g->model,NULL),g->vertical);if(row<0) return FALSE;
  gtk_widget_grab_focus(g->canvas);GtkTreePath *path=gtk_tree_path_new_from_indices(row,-1);gtk_tree_view_set_cursor(g->tree,path,NULL,FALSE);
- if(event->type==GDK_2BUTTON_PRESS) gtk_tree_view_row_activated(g->tree,path,gtk_tree_view_get_column(g->tree,0));
+ if(event->button==3) gtk_menu_popup_at_pointer(GTK_MENU(node_menu(g)),(GdkEvent *)event);
+ else if(event->type==GDK_2BUTTON_PRESS) gtk_tree_view_row_activated(g->tree,path,gtk_tree_view_get_column(g->tree,0));
  gtk_tree_path_free(path);gtk_widget_queue_draw(g->canvas);return TRUE;
 }
 static void reveal(RelationGraph *g,gint row) {
@@ -107,6 +125,20 @@ static gboolean key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
  gint count=MIN(gtk_tree_model_iter_n_children(g->model,NULL),INSIGHT_GRAPH_LIMIT);if(!count) return FALSE;
  GtkTreeModel *model;GtkTreeIter iter;gint row=-1;
  if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(g->tree),&model,&iter)) { GtkTreePath *path=gtk_tree_model_get_path(model,&iter);if(gtk_tree_path_get_depth(path)==1) row=gtk_tree_path_get_indices(path)[0];gtk_tree_path_free(path); }
+ if(row>=0 && row<count && g->query_handler) {
+  gint mode=-1;
+  if(event->keyval==GDK_KEY_d || event->keyval==GDK_KEY_D) mode=1;
+  else if(event->keyval==GDK_KEY_c || event->keyval==GDK_KEY_C) mode=7;
+  else if(event->keyval==GDK_KEY_r || event->keyval==GDK_KEY_R) mode=0;
+  if(mode>=0) { g->query_handler(mode,g->query_data);return TRUE; }
+ }
+ if(event->keyval==GDK_KEY_Menu || (event->keyval==GDK_KEY_F10 && (event->state&GDK_SHIFT_MASK))) {
+  if(row>=0 && row<count && gtk_widget_get_window(g->canvas)) {
+   InsightGraphRect r=insight_graph_rect(row,g->vertical);GdkRectangle anchor={(gint)(r.x*g->scale),(gint)(r.y*g->scale),(gint)(r.width*g->scale),(gint)(r.height*g->scale)};
+   gtk_menu_popup_at_rect(GTK_MENU(node_menu(g)),gtk_widget_get_window(g->canvas),&anchor,GDK_GRAVITY_SOUTH_WEST,GDK_GRAVITY_NORTH_WEST,(GdkEvent *)event);
+  }
+  return TRUE;
+ }
  if(event->keyval==GDK_KEY_Return || event->keyval==GDK_KEY_KP_Enter) {
   if(row>=0 && row<count) { GtkTreePath *path=gtk_tree_path_new_from_indices(row,-1);gtk_tree_view_row_activated(g->tree,path,gtk_tree_view_get_column(g->tree,0));gtk_tree_path_free(path); }return TRUE;
  }
@@ -118,6 +150,7 @@ static gboolean key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
 static void selection_changed(GtkTreeSelection *selection,gpointer data) { (void)selection;RelationGraph *g=data;gtk_widget_queue_draw(g->canvas); }
 static void destroy(GtkWidget *widget,gpointer data) {
  g_object_set_data(G_OBJECT(widget),"insight-graph",NULL);RelationGraph *g=data;g_signal_handlers_disconnect_by_data(g->model,g);g_signal_handlers_disconnect_by_data(g->query,g);g_signal_handlers_disconnect_by_data(gtk_tree_view_get_selection(g->tree),g);
+ if(g->menu) { gtk_widget_destroy(g->menu);g_object_unref(g->menu); }
  g_object_unref(g->tree);g_object_unref(g->model);g_object_unref(g->query);g_free(g);
 }
 GtkWidget *insight_relation_graph_new(GtkTreeView *tree,GtkEntry *query,gint name,gint file,gint line) {
@@ -142,4 +175,11 @@ void insight_relation_graph_get_options(GtkWidget *widget,gboolean *vertical,gin
 void insight_relation_graph_set_options(GtkWidget *widget,gboolean vertical,gint zoom) {
  RelationGraph *g=g_object_get_data(G_OBJECT(widget),"insight-graph");if(!g) return;
  gtk_combo_box_set_active(GTK_COMBO_BOX(g->direction),vertical ? 1 : 0);gtk_spin_button_set_value(GTK_SPIN_BUTTON(g->zoom),CLAMP(zoom,50,200));
+}
+
+void insight_relation_graph_set_query_handler(GtkWidget *widget,InsightRelationGraphQuery handler,gpointer data) {
+ RelationGraph *g=g_object_get_data(G_OBJECT(widget),"insight-graph");if(!g) return;
+ /* Rebuild a cached menu if the embedding application replaces its handler. */
+ if(g->menu) { gtk_widget_destroy(g->menu);g_object_unref(g->menu);g->menu=NULL; }
+ g->query_handler=handler;g->query_data=data;
 }

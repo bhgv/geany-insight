@@ -7,4 +7,6 @@
 GtkWidget *insight_relation_graph_new(GtkTreeView *,GtkEntry *,gint,gint,gint);
 void insight_relation_graph_get_options(GtkWidget *,gboolean *,gint *);
 void insight_relation_graph_set_options(GtkWidget *,gboolean,gint);
+typedef void (*InsightRelationGraphQuery)(gint,gpointer);
+void insight_relation_graph_set_query_handler(GtkWidget *,InsightRelationGraphQuery,gpointer);
 #endif

@@ -2,6 +2,8 @@
 #include "../../src/insight-relation-graph.h"
 #include <string.h>
 static guint activations;
+static gint query_mode=-1;
+static void request_query(gint mode,gpointer data) { g_assert_true(data==&query_mode);query_mode=mode; }
 static gboolean visible(GtkTreeModel *model,GtkTreeIter *iter,gpointer data) {
  (void)data;gchar *name;gtk_tree_model_get(model,iter,0,&name,-1);gboolean result=name && strcmp(name,"hidden")!=0;g_free(name);return result;
 }
@@ -33,12 +35,17 @@ int main(int argc,char **argv) {
  gboolean vertical=FALSE;gint zoom=0;insight_relation_graph_set_options(graph,TRUE,500);insight_relation_graph_get_options(graph,&vertical,&zoom);g_assert_true(vertical);g_assert_cmpint(zoom,==,200);insight_relation_graph_set_options(graph,FALSE,100);
  g_signal_connect(tree,"row-activated",G_CALLBACK(activated),NULL);gtk_widget_show_all(window);
  for(guint i=0;i<100 && gtk_events_pending();i++) gtk_main_iteration();
+ insight_relation_graph_set_query_handler(graph,request_query,&query_mode);
  GtkWidget *canvas=find_canvas(graph);g_assert_nonnull(canvas);gboolean handled=FALSE;
  GdkEventButton button={0};button.type=GDK_BUTTON_PRESS;button.button=1;button.x=268;button.y=28;
  g_signal_emit_by_name(canvas,"button-press-event",&button,&handled);g_assert_true(handled);selected_is(GTK_TREE_VIEW(tree),"alpha");
  button.type=GDK_2BUTTON_PRESS;button.y=92;g_signal_emit_by_name(canvas,"button-press-event",&button,&handled);selected_is(GTK_TREE_VIEW(tree),"zeta");g_assert_cmpuint(activations,==,1);
  GdkEventKey key={0};key.type=GDK_KEY_PRESS;key.keyval=GDK_KEY_Home;g_signal_emit_by_name(canvas,"key-press-event",&key,&handled);selected_is(GTK_TREE_VIEW(tree),"alpha");
  key.keyval=GDK_KEY_Return;g_signal_emit_by_name(canvas,"key-press-event",&key,&handled);g_assert_cmpuint(activations,==,2);
+ key.keyval=GDK_KEY_d;g_signal_emit_by_name(canvas,"key-press-event",&key,&handled);g_assert_true(handled);g_assert_cmpint(query_mode,==,1);
+ key.keyval=GDK_KEY_c;g_signal_emit_by_name(canvas,"key-press-event",&key,&handled);g_assert_cmpint(query_mode,==,7);
+ key.keyval=GDK_KEY_r;g_signal_emit_by_name(canvas,"key-press-event",&key,&handled);g_assert_cmpint(query_mode,==,0);
+ insight_relation_graph_set_query_handler(graph,NULL,NULL);key.keyval=GDK_KEY_d;g_signal_emit_by_name(canvas,"key-press-event",&key,&handled);g_assert_false(handled);
  gtk_list_store_clear(source);gtk_entry_set_text(GTK_ENTRY(query),"changed");
  gtk_widget_destroy(graph);gtk_entry_set_text(GTK_ENTRY(query),"after destruction");gtk_list_store_append(source,&iter);gtk_list_store_set(source,&iter,0,"late",1,"late.c",2,(gulong)1,-1);
  gtk_widget_destroy(window);g_object_unref(sort);g_object_unref(filter);g_object_unref(source);
