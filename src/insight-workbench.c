@@ -4,6 +4,7 @@
 #endif
 #include "geany.h"
 #include "insight-workbench.h"
+#include "insight-diff.h"
 #include "insight-overview.h"
 #include "ui_utils.h"
 #include "document.h"
@@ -2609,6 +2610,9 @@ static void copy_location(GtkButton *button,gpointer data) {
  gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),address,-1); g_free(address);
  ui_set_statusbar(TRUE,"Context file:line copied");
 }
+static void show_diff(GtkWidget *widget,gpointer data) {
+ (void)widget; (void)data; insight_diff_show(main_widgets.window);
+}
 void insight_workbench_init(void) {
  wb.alive=TRUE; workbench_epoch++;
  GtkWidget *existing=ui_lookup_widget(main_widgets.window,"vpaned1");
@@ -2654,6 +2658,9 @@ void insight_workbench_init(void) {
  wb.wrap=gtk_check_button_new_with_label("Wrap");
  g_signal_connect(wb.wrap,"toggled",G_CALLBACK(wrap_changed),NULL);
  gtk_box_pack_end(GTK_BOX(header),wb.wrap,FALSE,FALSE,2);
+ GtkWidget *diff_button=gtk_button_new_with_label("Diff / Merge…");
+ g_signal_connect(diff_button,"clicked",G_CALLBACK(show_diff),NULL);
+ gtk_box_pack_end(GTK_BOX(header),diff_button,FALSE,FALSE,2);
  GtkWidget *copy=gtk_button_new_with_label("Copy location");
  gtk_widget_set_tooltip_text(copy,"Copy the preview caret address as file:line");
  g_signal_connect(copy,"clicked",G_CALLBACK(copy_location),NULL);

@@ -206,6 +206,10 @@ install-exec-hook: fix-ubuntu-libdir
 AM_CPPFLAGS += -I$(top_srcdir)/insight/core -I$(top_srcdir)/insight/vendor/lua
 libgeany_la_SOURCES += \
 	insight-workbench.c \
+	insight-diff.c \
+	insight-diff.h \
+	../insight/core/diff.c \
+	../insight/core/diff.h \
 	insight-workbench.h \
 	insight-index.c \
 	insight-index.h \
