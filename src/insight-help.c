@@ -29,12 +29,14 @@ static gboolean icon_draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
  if(g_str_has_prefix(id,"layout-")) { cairo_rectangle(cr,1,2,14,12);cairo_stroke(cr);cairo_set_source_rgb(cr,.2,.55,.85);if(id[7]=='a' || id[7]=='d') cairo_rectangle(cr,2,3,4,10);if(id[7]=='b') cairo_rectangle(cr,2,10,12,3);if(id[7]=='c' || id[7]=='d') cairo_rectangle(cr,10,3,4,10);cairo_fill(cr); }
  else if(!strcmp(id,"media")) { cairo_arc(cr,8,8,6,0,2*G_PI);cairo_move_to(cr,2,8);cairo_line_to(cr,14,8);cairo_move_to(cr,8,2);cairo_curve_to(cr,3,6,3,10,8,14);cairo_curve_to(cr,13,10,13,6,8,2);cairo_stroke(cr); }
  else if(!strcmp(id,"diff")) { cairo_rectangle(cr,1,2,5,12);cairo_rectangle(cr,10,2,5,12);cairo_stroke(cr);cairo_set_source_rgb(cr,.2,.55,.85);cairo_move_to(cr,4,5);cairo_line_to(cr,12,5);cairo_move_to(cr,9,3);cairo_line_to(cr,12,5);cairo_line_to(cr,9,7);cairo_move_to(cr,12,11);cairo_line_to(cr,4,11);cairo_stroke(cr); }
+ else if(!strcmp(id,"snippets")) { cairo_rectangle(cr,2,1,12,14); cairo_stroke(cr); cairo_set_source_rgb(cr,.2,.55,.85); cairo_move_to(cr,6,5); cairo_line_to(cr,3,8); cairo_line_to(cr,6,11); cairo_move_to(cr,10,5); cairo_line_to(cr,13,8); cairo_line_to(cr,10,11); cairo_stroke(cr); }
  else if(!strcmp(id,"relations")) { cairo_move_to(cr,4,8);cairo_line_to(cr,9,8);cairo_move_to(cr,9,3);cairo_line_to(cr,9,13);cairo_move_to(cr,9,3);cairo_line_to(cr,13,3);cairo_move_to(cr,9,13);cairo_line_to(cr,13,13);cairo_stroke(cr);cairo_set_source_rgb(cr,.2,.55,.85);cairo_rectangle(cr,1,6,4,4);cairo_rectangle(cr,12,1,3,4);cairo_rectangle(cr,12,11,3,4);cairo_fill(cr); }
  else { cairo_move_to(cr,8,3);cairo_curve_to(cr,4,0,1,2,1,3);cairo_line_to(cr,1,13);cairo_curve_to(cr,4,11,6,12,8,14);cairo_curve_to(cr,10,12,12,11,15,13);cairo_line_to(cr,15,3);cairo_curve_to(cr,12,1,10,1,8,3);cairo_line_to(cr,8,14);cairo_stroke(cr);cairo_set_source_rgb(cr,.2,.55,.85);if(!strcmp(id,"tutorial")) { cairo_move_to(cr,10,5);cairo_line_to(cr,14,8);cairo_line_to(cr,10,11);cairo_close_path(cr); }else if(!strcmp(id,"bookmarks")) { cairo_move_to(cr,10,1);cairo_line_to(cr,13,1);cairo_line_to(cr,13,8);cairo_line_to(cr,11.5,6.5);cairo_line_to(cr,10,8);cairo_close_path(cr); }else { cairo_rectangle(cr,3,5,3,1);cairo_rectangle(cr,3,8,3,1);cairo_rectangle(cr,10,5,3,1);cairo_rectangle(cr,10,8,3,1); }cairo_fill(cr); }
  return FALSE;
 }
 GtkWidget *insight_command_icon(const gchar *command) {
- if(g_str_has_prefix(command,"layout-") || !strcmp(command,"media") || !strcmp(command,"manual") || !strcmp(command,"tutorial") || !strcmp(command,"bookmarks") || !strcmp(command,"diff") || !strcmp(command,"relations")) { GtkWidget *icon=gtk_drawing_area_new();gtk_widget_set_size_request(icon,16,16);g_object_set_data_full(G_OBJECT(icon),"insight-icon-name",g_strdup(command),g_free);g_signal_connect(icon,"draw",G_CALLBACK(icon_draw),g_object_get_data(G_OBJECT(icon),"insight-icon-name"));return icon; }
+ if(!strcmp(command,"snippets")) { GtkWidget *image=gtk_image_new(); cairo_surface_t *surface=cairo_image_surface_create(CAIRO_FORMAT_ARGB32,16,16); cairo_t *cr=cairo_create(surface); icon_draw(image,cr,(gpointer)command); cairo_destroy(cr); gtk_image_set_from_surface(GTK_IMAGE(image),surface); cairo_surface_destroy(surface); g_object_set_data_full(G_OBJECT(image),"insight-icon-name",g_strdup(command),g_free); return image; }
+ if(g_str_has_prefix(command,"layout-") || !strcmp(command,"media") || !strcmp(command,"manual") || !strcmp(command,"tutorial") || !strcmp(command,"bookmarks") || !strcmp(command,"diff") || !strcmp(command,"snippets") || !strcmp(command,"relations")) { GtkWidget *icon=gtk_drawing_area_new();gtk_widget_set_size_request(icon,16,16);g_object_set_data_full(G_OBJECT(icon),"insight-icon-name",g_strdup(command),g_free);g_signal_connect(icon,"draw",G_CALLBACK(icon_draw),g_object_get_data(G_OBJECT(icon),"insight-icon-name"));return icon; }
  return gtk_image_new_from_icon_name(command,GTK_ICON_SIZE_MENU);
 }
 static const gchar *command_icon(const gchar *label) {
@@ -42,6 +44,7 @@ static const gchar *command_icon(const gchar *label) {
  const gchar *layout=strstr(label,"layout ");if(layout) { switch(layout[7]) { case 'A':return "layout-a";case 'B':return "layout-b";case 'C':return "layout-c";case 'D':return "layout-d";default:break; } }
  if(strstr(label,"Markdown")) return "text-x-generic";
  if(strstr(label,"Diff") || strstr(label,"Merge")) return "diff";
+ if(strstr(label,"Code templates") || strstr(label,"code template")) return "snippets";
  if(strstr(label,"Tutorial") || strstr(label,"тутори") || strstr(label,"урок")) return "tutorial";
  if(strstr(label,"Documentation") || strstr(label,"справ") || strstr(label,"Manual")) return "manual";
  if(strstr(label,"Bookmark") || strstr(label,"заклад")) return "bookmarks";
@@ -70,7 +73,7 @@ static const gchar *command_icon(const gchar *label) {
 static void menu_icon_space(GtkMenuItem *item,gint *size,gpointer data) { (void)item;(void)data;*size=MAX(*size,40); }
 static gboolean menu_icon_draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
  const gchar *id=data;cairo_save(cr);cairo_translate(cr,23,(gtk_widget_get_allocated_height(widget)-16)/2);
- if(g_str_has_prefix(id,"layout-") || !strcmp(id,"media") || !strcmp(id,"manual") || !strcmp(id,"tutorial") || !strcmp(id,"bookmarks") || !strcmp(id,"diff") || !strcmp(id,"relations")) icon_draw(widget,cr,data);
+ if(g_str_has_prefix(id,"layout-") || !strcmp(id,"media") || !strcmp(id,"manual") || !strcmp(id,"tutorial") || !strcmp(id,"bookmarks") || !strcmp(id,"diff") || !strcmp(id,"snippets") || !strcmp(id,"relations")) icon_draw(widget,cr,data);
  else { GdkPixbuf *pixbuf=gtk_icon_theme_load_icon(gtk_icon_theme_get_default(),id,16,GTK_ICON_LOOKUP_USE_BUILTIN,NULL);if(pixbuf) { gdk_cairo_set_source_pixbuf(cr,pixbuf,0,0);cairo_paint(cr);g_object_unref(pixbuf); } }
  cairo_restore(cr);return FALSE;
 }

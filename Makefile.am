@@ -267,3 +267,5 @@ insightlocaledir = $(pkgdatadir)/insight/locale
 dist_insightlocale_DATA = insight/locale/native.tsv insight/locale/insight.tsv
 EXTRA_DIST += insight/locale/insight.pairs insight/tools/build_i18n.py insight/tests/languages_gui_test.c insight/tests/overview_markers_gui_test.c insight/tests/overview_functions_gui_test.c \
 	insight/tests/i18n_gui_test.c
+
+EXTRA_DIST += insight/tests/snippet_test.c insight/tests/snippet_gui_test.c

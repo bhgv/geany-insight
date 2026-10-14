@@ -575,3 +575,20 @@ Change navigation supports files up to 2 MiB	Переходы по измене�
 Show current function boundary	Показывать границы текущей функции
 Show all function boundaries	Показывать границы всех функций
 Function: %s	Функция: %s
+Template insertion requires a single normal selection	Вставка шаблона требует одного обычного выделения
+Template parameters	Параметры шаблона
+Source changed while entering template parameters; insert again	Исходник изменился во время ввода параметров шаблона; повторите вставку
+Template: %s	Шаблон: %s
+New code template	Новый шаблон кода
+Template name	Имя шаблона
+Variables: $date$, $time$, $file$, $filename$, $project$, $selection$, $cursor$. Custom: $name$. Literal dollar: $$.	Переменные: $date$, $time$, $file$, $filename$, $project$, $selection$, $cursor$. Свои: $name$. Знак доллара: $$.
+A clip with this name already exists	Фрагмент с таким именем уже существует
+Insert as code template — expand variables	Вставить как шаблон кода — подставить переменные
+Code templates / Clips…	Шаблоны кода / фрагменты…
+Code templates / Clips	Шаблоны кода / фрагменты
+Invalid snippet text (UTF-8, up to 64 KiB)	Некорректный текст шаблона (UTF-8, до 64 КиБ)
+Snippet variable limit reached (64)	Достигнут предел переменных шаблона (64)
+Expanded snippet exceeds 256 KiB	Развёрнутый шаблон превышает 256 КиБ
+Invalid snippet output options	Некорректные параметры вывода шаблона
+Missing or invalid snippet variable	Переменная шаблона отсутствует или некорректна
+Invalid note name, source location or text	Некорректное имя, положение в исходнике или текст заметки

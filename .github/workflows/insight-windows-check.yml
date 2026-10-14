@@ -36,6 +36,10 @@ jobs:
         run: |
           cc -std=c99 -Wall -Wextra -Werror -UNDEBUG insight/core/structure_select.c insight/tests/structure_select_test.c -o structural-selection-test.exe
           ./structural-selection-test.exe
+      - name: Test code template expansion
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -UNDEBUG insight/desktop/snippet.c insight/tests/snippet_test.c -Iinsight/desktop $(pkg-config --cflags --libs gio-2.0) -o code-template-test.exe
+          ./code-template-test.exe
       - name: Test relation graph geometry
         run: |
           cc -std=c99 -Wall -Wextra -Werror -UNDEBUG insight/tests/relation_graph_layout_test.c -o relation-graph-test.exe

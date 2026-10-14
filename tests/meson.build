@@ -456,3 +456,9 @@ test('Insight overview markers GUI', overview_markers_gui_test, timeout: 30)
 
 overview_functions_gui_test = executable('test_insight_overview_functions_gui', '../insight/tests/overview_functions_gui_test.c', dependencies: test_deps)
 test('Insight overview function boundaries GUI', overview_functions_gui_test, timeout: 30)
+
+snippet_test = executable('test_insight_snippet', '../insight/tests/snippet_test.c', '../insight/desktop/snippet.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)
+test('Insight code templates', snippet_test)
+
+snippet_gui_test = executable('test_insight_snippet_gui', '../insight/tests/snippet_gui_test.c', dependencies: test_deps)
+test('Insight code templates GUI', snippet_gui_test, timeout: 30)

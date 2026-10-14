@@ -87,3 +87,5 @@ Follow the [first Lua extension](scripting.md). It wraps a selection, appears in
 ## 10. Configure a language
 
 Right-click the editor → File language / profile… or Options → Language profiles…. Set a profile name, base parser, own/compatible extensions and optional forced binding. Fonts and CSS configures keyword/comment fonts and colors. Apply saves and reindexes; Reset file binding restores automatic detection. See [profiles](languages.md).
+
+For a code template example and its variables, see [Bookmarks and code templates](context-bookmarks.md#code-templates).

@@ -44,3 +44,45 @@ handling of templates or preprocessing.
 Computation runs in the background for files up to 2 MiB. Editing removes old
 outlines until the symbols are refreshed. Further edits or closing the file reject
 obsolete results. Both display options persist across restarts.
+
+## Code templates
+
+**Tools → Code templates / Clips…**, or the page with blue angle brackets on the
+main toolbar, opens Clips. Buttons use icons with action names in tooltips.
+
+1. Click **New code template**, enter a name and body, and save.
+2. Select the clip and optionally select text in the editor.
+3. Click **Insert as code template — expand variables** (page with brackets).
+4. Enter custom parameter values and click **Insert**.
+
+Example:
+
+```c
+// $date$ — $filename$
+void $name$(void)
+{
+    $selection$$cursor$
+}
+```
+
+`$date$` is the local `YYYY-MM-DD` date; `$time$` is `HH:MM:SS`; `$file$` is the full
+path; `$filename$` is the basename; `$project$` is the project name; `$selection$`
+is the selected text; `$cursor$` marks the final caret position. File variables are
+empty for unnamed buffers; the project variable is empty without a project.
+Other `$identifier$` variables are prompted once, with repeated occurrences sharing
+a value. Names are case-sensitive ASCII identifiers starting with a letter or `_`.
+`$$` produces a literal dollar; `$$date$$` inserts the literal text `$date$`.
+
+Values are not expanded recursively, so selected source containing `$name$` retains
+it literally. The first `$cursor$` sets the caret; subsequent markers are removed.
+Without a marker the caret moves to the end. Insertion replaces one normal selection,
+preserves the file's line endings and forms one Undo action; Redo restores the inserted
+text. Cancel leaves the file unchanged. If the source, selection, line-ending mode or
+active file changes during the dialog, insertion is rejected and must be repeated.
+
+Ordinary **Paste** and double-clicking Clips insert literal text. Templates share
+`config/insight/notes.conf` with Clips and use its existing edit, rename, import and
+export buttons. Creating a duplicate name is rejected. Limits are 64 KiB per template
+or value, 64 distinct variables and 256 KiB expanded output; the notes database holds
+up to 64 entries. Per-language template restrictions and completion integration are
+not yet implemented.
