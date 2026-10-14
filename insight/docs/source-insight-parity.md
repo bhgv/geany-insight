@@ -9,7 +9,7 @@
 | --- | --- | --- |
 | File Symbols слева | Поиск, сортировка, общие цвета/значки, группировка и фильтр типов, счётчики, Context; проверен GUI Linux | Семантическая иерархия scope |
 | Project Files справа | Manifest, поиск, сортировка, Context; диалог добавления/удаления файлов и деревьев, Remove all, исключения, DnD, импорт/экспорт списка | Автоматическое слежение за Master File List и подробная GUI-проверка |
-| Project Folders | Дерево, раскрытие/сворачивание, навигация | Управление виртуальными группами |
+| Project Folders | Дерево manifest, фильтр/нечёткий поиск с папками-предками, счётчик, меню/клавиатура, копирование путей, Locate/Follow текущего файла, ветки; проверен GUI Linux | Просмотр неиндексированных файлов диска и виртуальные группы |
 | Project Symbols | Теги Geany, поиск, сортировка, цвета/значки, группировка и фильтр типов, независимые настройки | Семантическое разрешение типов и перегрузок |
 | Context снизу | Цветной Scintilla, номера строк, центрирование, подчёркнутые ссылки с курсором-пальцем и обычным кликом, история, поиск | Подробная проверка GUI на целевых ОС |
 | Relation Window | Определения/объявления, прямые члены scope, прямые Base/Derived по тегам, лексические ссылки, Calls текущей функции и Call sites проекта, Follow symbol / enclosing function, граф одного уровня с масштабом и двумя ориентациями | Семантические вызовы/вызывающие функции, разрешение типов/aliases, раскрываемые деревья связей |
@@ -84,3 +84,8 @@ Exact quoted path/scope queries, qualified-name/path/line clipboard commands, se
 Project Files now has a non-navigating right-click menu, scoped keyboard commands, two-way synchronized sorting, independent column layout/visibility, saved preferences, file-aware query history and matching-file counters. Document events refresh after lifecycle changes; formatted counters update on UI language changes.
 
 Backend lookup tests and a native C++ GUI scenario cover the new commands and settings. Seven existing GUI suites cover menus, columns, history, paging, pane sizing, overview/navigation and localization. Updated offline RU/EN tutorials explain all controls; project enumeration and list limits remain explicit.
+
+
+### Ten Project Folders improvements (2026-10-15)
+
+The manifest tree now supports shared path filters including fuzzy subsequences, ancestor retention, counters, non-navigating context menus, keyboard commands, full and project-relative clipboard paths, explicit file opening, Locate current file, persistent Follow current file, and selected/all branch controls. Tree refresh preserves selected source and expanded directory identities; invalid regex preserves the last valid tree. The tree remains limited to the first 10000 manifest files rather than arbitrary disk contents. Offline RU/EN controls and a tutorial document the behavior.

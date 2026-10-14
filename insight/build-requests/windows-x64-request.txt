@@ -1,0 +1,3 @@
+Windows x64 portable build explicitly requested on 2026-10-15.
+Build the main commit containing this request after the ten Project Folders improvements and fuzzy search.
+Include native editor, GTK runtime, offline RU/EN help, REVISION.txt, architecture and portable smoke checks.

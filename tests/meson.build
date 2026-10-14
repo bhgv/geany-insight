@@ -489,3 +489,6 @@ test('Insight symbol filter history GUI', symbol_history_gui_test, timeout: 40)
 
 workbench_twenty_gui_test = executable('test_insight_workbench_twenty_gui', '../insight/tests/workbench_twenty_gui_test.c', dependencies: test_deps)
 test('Insight twenty workbench improvements GUI', workbench_twenty_gui_test, timeout: 60)
+
+project_folders_gui_test = executable('test_insight_project_folders_gui', '../insight/tests/project_folders_gui_test.c', dependencies: test_deps)
+test('Insight ten Project Folders improvements GUI', project_folders_gui_test, timeout: 60)

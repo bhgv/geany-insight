@@ -53,4 +53,4 @@ GEANY_RUN_GUI_TESTS=1 meson test -C build-editor \
 
 Windows GUI validation needs a Windows session. Linux GUI success or a compiled Windows PE alone does not validate Windows GUI behavior. Results belong to a specific commit, not a previously downloaded archive.
 
-The Windows workflow remains manual (`workflow_dispatch`) to avoid ordinary-main-commit build notifications. It builds the native editor, packages GTK, checks diff/structural selection/graph layout, runs `geany --version` without SDK PATH and includes REVISION.txt.
+The Windows workflow runs manually (`workflow_dispatch`) or on an explicitly requested change to `insight/build-requests/windows-x64-request.txt` in main. Ordinary commits do not trigger it. It builds the native editor, bundles GTK, tests diff/structural selection/templates/search/filtering/graph layout, runs `geany --version` without SDK PATH and includes REVISION.txt.

@@ -698,3 +698,23 @@ File filter history: 16 valid queries, up to 256 bytes each	История фи�
 Files: %u	Файлы: %u
 Files: %u+	Файлы: %u+
 Loaded matching files; + means more remain beyond the 10000-file list limit	Загруженные совпадающие файлы; + означает оставшиеся совпадения сверх лимита списка в 10000 файлов
+Folder files: %u / %u	Файлы дерева: %u / %u
+Current file has no project path	У текущего файла нет пути в проекте
+Current file is outside the project tree or hidden by its filter	Текущий файл отсутствует в дереве проекта или скрыт фильтром
+Filter project paths: fragments, glob, ?regex or ~fuzzy; ancestors stay visible	Фильтр путей: фрагменты, glob, ?regex или ~нечёткий; папки-предки остаются видимыми
+Open project file	Открыть файл проекта
+Copy full folder/file path	Копировать полный путь папки/файла
+Copy project-relative path	Копировать путь относительно проекта
+Locate current file in folders	Найти текущий файл в дереве папок
+Expand selected folder branch	Раскрыть выбранную ветку папок
+Collapse selected folder branch	Свернуть выбранную ветку папок
+Expand all folders	Раскрыть все папки
+Collapse all folders	Свернуть все папки
+Clear folder filter	Очистить фильтр папок
+Panel help	Справка панели
+Follow current file	Следовать за текущим файлом
+Filter project folders/files…	Фильтр папок/файлов проекта…
+Use ~term for fuzzy search (characters in order); @~path and scope=~owner filter fields	Используйте ~условие для нечёткого поиска по порядку символов; @~путь и scope=~область фильтруют поля
+Use ~term for fuzzy search when Regex is off	Используйте ~условие для нечёткого поиска при выключенном Regex
+Use ~term for fuzzy search when Regex is off; characters match in order within a line	Используйте ~условие при выключенном Regex; символы совпадают по порядку в пределах строки
+Implicit AND, OR, NOT/!, parentheses, ~fuzzy, =case, ?"regex"; word fragments unless Word is enabled	Неявный AND, OR, NOT/!, скобки, ~нечёткий, =регистр, ?"regex"; фрагменты слов, если Word выключен

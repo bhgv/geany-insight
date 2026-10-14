@@ -1,5 +1,8 @@
 name: Insight Windows x64 check
 on:
+  push:
+    branches: [main]
+    paths: [insight/build-requests/windows-x64-request.txt]
   workflow_dispatch:
 permissions:
   contents: read
@@ -44,6 +47,14 @@ jobs:
         run: |
           cc -std=c99 -Wall -Wextra -Werror -UNDEBUG insight/tests/relation_graph_layout_test.c -o relation-graph-test.exe
           ./relation-graph-test.exe
+      - name: Test search and lookup filters
+        run: |
+          for name in lookup_filter context_search keyword_search; do
+            extra=""
+            if [ "$name" = keyword_search ]; then extra="insight/desktop/context_search.c"; fi
+            cc -std=c99 -Wall -Wextra -Werror -UNDEBUG "insight/tests/${name}_test.c" "insight/desktop/${name}.c" $extra -Iinsight/desktop $(pkg-config --cflags --libs glib-2.0) -o "${name}-test.exe"
+            "./${name}-test.exe"
+          done
       - name: Build native editor including internal merge window
         run: |
           meson setup _build --prefix="$(pwd)/portable" --libdir=lib \

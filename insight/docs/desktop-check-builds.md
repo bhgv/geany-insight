@@ -51,4 +51,4 @@ GEANY_RUN_GUI_TESTS=1 meson test -C build-editor \
 
 На Windows исполнение и проверку GUI выполняйте в Windows-сессии. Успешная Linux GUI-проверка или факт компиляции Windows PE не подтверждают работу Windows GUI сами по себе. Результаты относятся к конкретному коммиту, а не к ранее скачанному архиву.
 
-Windows workflow остаётся ручным (`workflow_dispatch`), чтобы обычные коммиты в main не вызывали сборочные уведомления. Его сценарий включает native-сборку, упаковку GTK, проверку ядра diff/структурного выделения/геометрии графа, `geany --version` без SDK в PATH и `REVISION.txt`.
+Windows workflow запускается вручную (`workflow_dispatch`) или явным изменением файла `insight/build-requests/windows-x64-request.txt` в main по запросу проверочной сборки. Обычные коммиты без этого файла не запускают сборку. Его сценарий включает native-сборку, упаковку GTK, проверку ядра diff/структурного выделения/геометрии графа, `geany --version` без SDK в PATH и `REVISION.txt`.
