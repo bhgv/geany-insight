@@ -36,7 +36,7 @@ static void changed(GObject *object,GParamSpec *spec,gpointer data) { (void)data
 static void watch(GObject *object) { if(g_object_get_data(object,"insight-i18n-watched")) return;g_object_set_data(object,"insight-i18n-watched",GINT_TO_POINTER(1));g_signal_connect(object,"notify",G_CALLBACK(changed),NULL); }
 static void translate_widget(GtkWidget *widget,gpointer data) {
  (void)data;if(excluded(widget)) return;watch(G_OBJECT(widget));property(G_OBJECT(widget),"tooltip-text");
- if(GTK_IS_LABEL(widget) || GTK_IS_BUTTON(widget) || GTK_IS_TOOL_BUTTON(widget)) property(G_OBJECT(widget),"label");
+ if(GTK_IS_LABEL(widget) || GTK_IS_BUTTON(widget) || GTK_IS_TOOL_BUTTON(widget) || GTK_IS_IMAGE_MENU_ITEM(widget)) property(G_OBJECT(widget),"label");
  if(GTK_IS_WINDOW(widget)) property(G_OBJECT(widget),"title");
  if(GTK_IS_ENTRY(widget)) property(G_OBJECT(widget),"placeholder-text");
  if(GTK_IS_TREE_VIEW(widget)) { GList *columns=gtk_tree_view_get_columns(GTK_TREE_VIEW(widget));for(GList *p=columns;p;p=p->next) { watch(p->data);property(p->data,"title"); }g_list_free(columns); }

@@ -183,7 +183,7 @@ GtkWidget *insight_symbol_view_types_control(GtkTreeView *view) {
  const gchar *commands[]={"Show all symbol types","Hide all symbol types"};
  for(guint i=0;i<2;i++) { GtkWidget *item=gtk_image_menu_item_new_with_label(commands[i]); gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(item),gtk_image_new_from_icon_name(i ? "edit-clear-symbolic" : "view-list-symbolic",GTK_ICON_SIZE_MENU)); gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(item),TRUE); g_object_set_data(G_OBJECT(item),"insight-symbol-mask",GUINT_TO_POINTER(i ? 0 : ALL_TYPES)); g_signal_connect_object(item,"activate",G_CALLBACK(filter_all),view,0); gtk_menu_shell_append(GTK_MENU_SHELL(menu),item); }
  gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());
- for(guint i=0;i<FILTER_COUNT;i++) { GtkWidget *item=gtk_check_menu_item_new_with_label(filter_names[i]); GtkWidget *label=gtk_bin_get_child(GTK_BIN(item)),*content=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6); g_object_ref(label); gtk_container_remove(GTK_CONTAINER(item),label); gtk_box_pack_start(GTK_BOX(content),gtk_image_new_from_icon_name(filter_icons[i],GTK_ICON_SIZE_MENU),FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(content),label,TRUE,TRUE,0); g_object_unref(label); gtk_container_add(GTK_CONTAINER(item),content); gchar *name=g_strdup_printf("insight-symbol-type-%u",i); gtk_widget_set_name(item,name); g_free(name); s->checks[i]=item; gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item),(s->mask&(1u<<i))!=0); g_signal_connect_object(item,"toggled",G_CALLBACK(filter_changed),view,0); gtk_menu_shell_append(GTK_MENU_SHELL(menu),item); }
+ for(guint i=0;i<FILTER_COUNT;i++) { GtkWidget *item=gtk_check_menu_item_new_with_label(filter_names[i]); GtkWidget *label=gtk_bin_get_child(GTK_BIN(item)),*content=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6); g_object_ref(label); gtk_container_remove(GTK_CONTAINER(item),label); gtk_box_pack_start(GTK_BOX(content),gtk_image_new_from_icon_name(filter_icons[i],GTK_ICON_SIZE_MENU),FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(content),label,TRUE,TRUE,0); g_object_unref(label); gtk_container_add(GTK_CONTAINER(item),content); g_object_set_data(G_OBJECT(item),"insight-icon-added",GINT_TO_POINTER(1)); gchar *name=g_strdup_printf("insight-symbol-type-%u",i); gtk_widget_set_name(item,name); g_free(name); s->checks[i]=item; gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item),(s->mask&(1u<<i))!=0); g_signal_connect_object(item,"toggled",G_CALLBACK(filter_changed),view,0); gtk_menu_shell_append(GTK_MENU_SHELL(menu),item); }
  gtk_widget_show_all(menu); gtk_box_pack_start(GTK_BOX(box),button,FALSE,FALSE,0); s->status=gtk_label_new(""); gtk_label_set_xalign(GTK_LABEL(s->status),0); gtk_widget_set_tooltip_text(s->status,"Visible symbols / symbols matching the name filter; type filtering keeps the index unchanged"); gtk_box_pack_start(GTK_BOX(box),s->status,TRUE,TRUE,0); status(s); return box;
 }
 
@@ -192,4 +192,11 @@ void insight_symbol_view_loading(GtkTreeView *view,gboolean loading) {
  s->loading=loading;
  gboolean deriving=(s->timer || s->idle) && (s->grouped || s->mask!=ALL_TYPES);
  gtk_widget_set_sensitive(GTK_WIDGET(view),!loading && !deriving);
+}
+
+void insight_symbol_view_filter_selected(GtkTreeView *view,gboolean only) {
+ Symbols *s=g_object_get_data(G_OBJECT(view),"insight-symbol-view");if(!s) return;
+ GtkTreeModel *model=gtk_tree_view_get_model(view);GtkTreeIter iter;if(!gtk_tree_selection_get_selected(gtk_tree_view_get_selection(view),NULL,&iter)) return;
+ gchar *path=NULL,*kind=NULL;gtk_tree_model_get(model,&iter,PATH,&path,KIND,&kind,-1);
+ guint bit=1u<<filter_category(type_for(s,path,kind));g_free(path);g_free(kind);insight_symbol_view_set_types(view,only ? bit : s->mask&~bit);
 }

@@ -12,4 +12,5 @@ GtkWidget *insight_symbol_view_types_control(GtkTreeView *);
 guint insight_symbol_view_types_mask(GtkTreeView *);
 void insight_symbol_view_set_types(GtkTreeView *,guint);
 void insight_symbol_view_loading(GtkTreeView *,gboolean);
+void insight_symbol_view_filter_selected(GtkTreeView *,gboolean);
 #endif

@@ -468,3 +468,6 @@ test('Insight panel resizing, symbol types and contextual help GUI', panels_gui_
 
 symbol_types_gui_test = executable('test_insight_symbol_types_gui', '../insight/tests/symbol_types_gui_test.c', dependencies: test_deps)
 test('Insight symbol type filtering GUI', symbol_types_gui_test, timeout: 40)
+
+symbol_menu_gui_test = executable('test_insight_symbol_menu_gui', '../insight/tests/symbol_menu_gui_test.c', dependencies: test_deps)
+test('Insight symbol context menus and keyboard GUI', symbol_menu_gui_test, timeout: 45)

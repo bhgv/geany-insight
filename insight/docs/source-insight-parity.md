@@ -45,3 +45,8 @@ File Symbols and Project Symbols share language-aware Ctags kind colors/icons an
 ### Symbol type filters (2026-10-14)
 
 The funnel menu in both symbol panels selects visible categories independently. Show all / Hide all, per-language kind mapping, name-query intersection, grouped and flat views, visible/loaded counters and saved masks are covered by native GUI tests. Type filtering affects the loaded outline rather than index contents; existing name-query row limits remain in effect.
+
+
+### Symbol outline context menus and keyboard (2026-10-14)
+
+Both outlines provide right-click and keyboard menus, definition/Info/reference actions, copy name/location, selected-category filtering and group controls. Keyboard commands are routed before Geany’s global shortcuts when a symbol list has focus. Down/Enter from a filter reveal the first leaf in collapsed groups and ignore stale rows during loading. GUI tests cover both outlines, clipboard, preview independence and live RU image-menu labels.

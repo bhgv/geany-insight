@@ -650,3 +650,12 @@ Show all symbol types|||Показать все типы символов
 Hide all symbol types|||Скрыть все типы символов
 Symbols: %u / %u|||Символы: %u / %u
 Visible symbols / symbols matching the name filter; type filtering keeps the index unchanged|||Видимые символы / символы по фильтру имён; фильтр типов не меняет индекс
+Open definition|||Открыть определение
+Find references to this symbol|||Найти ссылки на этот символ
+Copy symbol name|||Копировать имя символа
+Copy source location|||Копировать расположение в исходнике
+Show only this category|||Показать только эту категорию
+Hide this category|||Скрыть эту категорию
+Expand all symbol groups|||Развернуть все группы символов
+Collapse all symbol groups|||Свернуть все группы символов
+Help for this panel|||Справка об этой панели

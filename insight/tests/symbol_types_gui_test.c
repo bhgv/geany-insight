@@ -49,7 +49,7 @@ static gboolean step(gpointer data) {
   g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,1);g_assert_false(row(model,"SampleClass",&it));gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-ru")),TRUE);phase++;
  } else {
   if(!text(named(window,"insight-local-type-filters"),"Символы: 1 / 3")) return G_SOURCE_CONTINUE;
-  g_assert_true(text(menu,"Функции / методы"));g_print("Symbol types GUI passed: persisted independent file/project masks, icon-only controls, show/hide all, native C field filtering, name-query intersection and counters, preview-only selection, Python method mapping, live RU and saved masks\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+  g_assert_true(text(menu,"Функции / методы"));GList *commands=gtk_container_get_children(GTK_CONTAINER(menu));g_assert_cmpstr(gtk_menu_item_get_label(GTK_MENU_ITEM(commands->data)),==,"Показать все типы символов");g_list_free(commands);g_print("Symbol types GUI passed: persisted independent file/project masks, icon-only controls, show/hide all, native C field filtering, name-query intersection and counters, preview-only selection, Python method mapping, live RU and saved masks\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }return G_SOURCE_CONTINUE;
 }
 int main(void) {
