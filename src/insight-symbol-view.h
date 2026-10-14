@@ -3,6 +3,10 @@
 #define INSIGHT_SYMBOL_VIEW_H
 #include <gtk/gtk.h>
 #include "filetypes.h"
+guint insight_symbol_kind_type(const gchar *,const gchar *,GeanyFiletype *);
+const gchar *insight_symbol_type_name(guint,gboolean);
+const gchar *insight_symbol_type_icon(guint);
+void insight_symbol_tree_format(GtkTreeView *);
 GtkWidget *insight_symbol_view_attach(GtkTreeView *,GtkListStore *,GeanyFiletype *);
 void insight_symbol_view_filetype(GtkTreeView *,GeanyFiletype *);
 gboolean insight_symbol_view_grouped(GtkTreeView *);

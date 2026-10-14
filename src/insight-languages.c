@@ -48,7 +48,7 @@ static Language *for_path(const gchar *path) {
  for(guint n=0;languages && n<languages->len;n++) { Language *p=g_ptr_array_index(languages,n);if(extensions_match(p->extensions,path)) { g_hash_table_insert(path_cache,canonical,p);return p; } }g_hash_table_insert(path_cache,canonical,NULL);return NULL;
 }
 static Language *for_editor(ScintillaObject *sci,const gchar *path,GeanyFiletype *ft) {
- const gchar *forced=g_object_get_data(G_OBJECT(sci),"insight-language-binding");Language *p=by_name(forced);if(p) return p;
+ const gchar *forced=sci ? g_object_get_data(G_OBJECT(sci),"insight-language-binding") : NULL;Language *p=by_name(forced);if(p) return p;
  p=for_path(path);if(p) return p;
  if(!path) return by_name(ft ? ft->name : NULL);
  return NULL;

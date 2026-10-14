@@ -718,3 +718,20 @@ Use ~term for fuzzy search (characters in order); @~path and scope=~owner filter
 Use ~term for fuzzy search when Regex is off	Используйте ~условие для нечёткого поиска при выключенном Regex
 Use ~term for fuzzy search when Regex is off; characters match in order within a line	Используйте ~условие при выключенном Regex; символы совпадают по порядку в пределах строки
 Implicit AND, OR, NOT/!, parentheses, ~fuzzy, =case, ?"regex"; word fragments unless Word is enabled	Неявный AND, OR, NOT/!, скобки, ~нечёткий, =регистр, ?"regex"; фрагменты слов, если Word выключен
+Category symbols: %u / %u	Символы категорий: %u / %u
+Type files: %u / %u	Файлы типов: %u / %u
+Open selected source	Открыть выбранный исходник
+Copy selected name	Копировать выбранное имя
+Copy source path	Копировать путь исходника
+Filter to selected item	Фильтр по выбранной записи
+Clear panel filter	Очистить фильтр панели
+Expand selected branch	Раскрыть выбранную ветку
+Collapse selected branch	Свернуть выбранную ветку
+Expand all groups	Раскрыть все группы
+Collapse all groups	Свернуть все группы
+Reset panel columns	Сбросить колонки панели
+Load more category symbols	Загрузить ещё символы категорий
+Filter files by path…	Фильтр файлов по пути…
+Use path fragments, glob, ?regex or ~fuzzy; empty groups are hidden	Фрагменты пути, glob, ?regex или ~нечёткий; пустые группы скрываются
+File / type	Файл / тип
+Symbol / category	Символ / категория

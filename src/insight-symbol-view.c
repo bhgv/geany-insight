@@ -4,6 +4,7 @@
 #include "insight-i18n.h"
 #include "document.h"
 #include "filetypes.h"
+#include "insight-languages.h"
 #include "tagmanager/tm_parser.h"
 #include <string.h>
 enum { NAME,SCOPE,PATH,LINE,KIND,COLUMNS };
@@ -29,12 +30,16 @@ typedef struct {
  guint timer,idle; GtkTreeStore *pending; GHashTable *groups; GtkTreeIter iter; gboolean valid,grouped,sorting;
 } Symbols;
 static GList *views;
-static guint type_for(Symbols *s,const gchar *path,const gchar *kind) {
+guint insight_symbol_kind_type(const gchar *path,const gchar *kind,GeanyFiletype *fallback) {
  if(kind && g_str_has_prefix(kind,"@type:")) return (guint)g_ascii_strtoull(kind+6,NULL,10);
- GeanyFiletype *ft=path && *path && path[0]!='@' ? filetypes_detect_from_extension(path) : s->fallback;
- return ft && ft->lang>=0 && kind && *kind ? tm_parser_get_tag_type(*kind,ft->lang) : tm_tag_undef_t;
+ GeanyDocument *doc=path && *path && path[0]!='@' ? document_find_by_filename(path) : NULL;
+ GeanyFiletype *ft=doc ? doc->file_type : (path && *path && path[0]!='@' ? insight_languages_detect(path) : fallback);
+ if(!ft && path && *path && path[0]!='@') ft=filetypes_detect_from_extension(path);
+ gint lang=doc && doc->tm_file ? doc->tm_file->lang : (ft ? ft->lang : -1);
+ return lang>=0 && kind && *kind ? tm_parser_get_tag_type(*kind,lang) : tm_tag_undef_t;
 }
-static const gchar *type_name(guint type,gboolean plural) {
+static guint type_for(Symbols *s,const gchar *path,const gchar *kind) { return insight_symbol_kind_type(path,kind,s->fallback); }
+const gchar *insight_symbol_type_name(guint type,gboolean plural) {
  const gchar *one="Other symbol",*many="Other symbols";
  if(type&tm_tag_class_t) { one="Class"; many="Classes"; }
  else if(type&tm_tag_interface_t) { one="Interface"; many="Interfaces"; }
@@ -55,7 +60,7 @@ static const gchar *type_name(guint type,gboolean plural) {
  else if(type&tm_tag_include_t) { one="Include"; many="Includes"; }
  return insight_tr(plural ? many : one);
 }
-static const gchar *type_icon(guint type) {
+const gchar *insight_symbol_type_icon(guint type) {
  if(type&(tm_tag_function_t|tm_tag_method_t|tm_tag_prototype_t)) return "classviewer-method";
  if(type&(tm_tag_class_t|tm_tag_interface_t)) return "classviewer-class";
  if(type&(tm_tag_struct_t|tm_tag_union_t|tm_tag_enum_t|tm_tag_typedef_t)) return "classviewer-struct";
@@ -67,11 +72,11 @@ static const gchar *type_icon(guint type) {
 }
 static void cell(GtkTreeViewColumn *column,GtkCellRenderer *renderer,GtkTreeModel *model,GtkTreeIter *iter,gpointer data) {
  Symbols *s=data; gchar *path=NULL,*kind=NULL; gulong line=0; gtk_tree_model_get(model,iter,PATH,&path,KIND,&kind,LINE,&line,-1); guint type=type_for(s,path,kind); gboolean group=!line;
- if(GTK_IS_CELL_RENDERER_PIXBUF(renderer)) g_object_set(renderer,"icon-name",type_icon(type),NULL);
+ if(GTK_IS_CELL_RENDERER_PIXBUF(renderer)) g_object_set(renderer,"icon-name",insight_symbol_type_icon(type),NULL);
  else {
   gint field=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(column),"insight-symbol-field"));
   if(field==LINE) { gchar *text=line ? g_strdup_printf("%lu",line) : g_strdup(""); g_object_set(renderer,"text",text,NULL); g_free(text); }
-  if(field==KIND) { gchar *text=group ? g_strdup("") : g_strdup_printf("%s (%s)",type_name(type,FALSE),kind ? kind : ""); g_object_set(renderer,"text",text,NULL); g_free(text); }
+  if(field==KIND) { gchar *text=group ? g_strdup("") : g_strdup_printf("%s (%s)",insight_symbol_type_name(type,FALSE),kind ? kind : ""); g_object_set(renderer,"text",text,NULL); g_free(text); }
   GdkRGBA foreground; gtk_style_context_get_color(gtk_widget_get_style_context(GTK_WIDGET(s->view)),GTK_STATE_FLAG_NORMAL,&foreground); gboolean dark=(foreground.red+foreground.green+foreground.blue)>1.8;
   const gchar *color=dark ? "#bac4d0" : "#586575";
   if(type&(tm_tag_function_t|tm_tag_method_t|tm_tag_prototype_t)) color=dark ? "#82b5ff" : "#285da8";
@@ -85,6 +90,15 @@ static void cell(GtkTreeViewColumn *column,GtkCellRenderer *renderer,GtkTreeMode
   g_object_set(renderer,"foreground",color,"foreground-set",!selected,"weight",group ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL,NULL);
  }
  g_free(path); g_free(kind);
+}
+void insight_symbol_tree_format(GtkTreeView *view) {
+ GList *columns=gtk_tree_view_get_columns(view);
+ for(GList *p=columns;p;p=p->next) {
+  GtkTreeViewColumn *column=p->data; gint field=gtk_tree_view_column_get_sort_column_id(column); g_object_set_data(G_OBJECT(column),"insight-symbol-field",GINT_TO_POINTER(field));
+  if(field==NAME) { GtkCellRenderer *icon=gtk_cell_renderer_pixbuf_new(); gtk_tree_view_column_pack_start(column,icon,FALSE); gtk_cell_layout_reorder(GTK_CELL_LAYOUT(column),icon,0); }
+  GList *cells=gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(column));
+  for(GList *r=cells;r;r=r->next) { Symbols *s=g_new0(Symbols,1); s->view=view; gtk_tree_view_column_set_cell_data_func(column,r->data,cell,s,g_free); } g_list_free(cells);
+ } g_list_free(columns);
 }
 static void cancel(Symbols *s) {
  if(s->timer) { g_source_remove(s->timer); s->timer=0; } if(s->idle) { g_source_remove(s->idle); s->idle=0; }
@@ -127,7 +141,7 @@ static gboolean apply(gpointer data) {
    GtkTreeIter *parent=NULL;
    if(s->grouped) {
     parent=g_hash_table_lookup(s->groups,GUINT_TO_POINTER(type+1));
-    if(!parent) { parent=g_new(GtkTreeIter,1); gtk_tree_store_append(s->pending,parent,NULL); gchar *group=g_strdup_printf("@type:%u",type); gtk_tree_store_set(s->pending,parent,NAME,type_name(type,TRUE),KIND,group,-1); g_free(group); g_hash_table_insert(s->groups,GUINT_TO_POINTER(type+1),parent); }
+    if(!parent) { parent=g_new(GtkTreeIter,1); gtk_tree_store_append(s->pending,parent,NULL); gchar *group=g_strdup_printf("@type:%u",type); gtk_tree_store_set(s->pending,parent,NAME,insight_symbol_type_name(type,TRUE),KIND,group,-1); g_free(group); g_hash_table_insert(s->groups,GUINT_TO_POINTER(type+1),parent); }
    }
    GtkTreeIter child; gtk_tree_store_append(s->pending,&child,parent); gtk_tree_store_set(s->pending,&child,NAME,name,SCOPE,scope,PATH,path,LINE,line,KIND,kind,-1); s->shown++;
   }
