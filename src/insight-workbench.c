@@ -3078,6 +3078,7 @@ static void create_browse_toolbar(void) {
  for(guint i=0;i<3;i++) { GtkToolItem *button=gtk_tool_button_new(insight_command_icon(search_icons[i]),NULL);gtk_widget_set_tooltip_text(GTK_WIDGET(button),search_tips[i]);gtk_widget_set_name(GTK_WIDGET(button),i==0 ? "insight-find-tool" : (i==1 ? "insight-replace-tool" : "insight-project-search-tool"));g_signal_connect(button,"clicked",i<2 ? G_CALLBACK(search_native_command) : G_CALLBACK(search_scope_command),i<2 ? (gpointer)(i ? "replace1" : "find1") : GINT_TO_POINTER(0));add_insight_tool(toolbar,button,-1); }
  const gchar *help_icons[]={"manual","tutorial"};const gchar *help_tips[]={"Geany Insight — documentation","Geany Insight — tutorials"};
  for(guint i=0;i<2;i++) { GtkToolItem *button=gtk_tool_button_new(insight_command_icon(help_icons[i]),NULL);gtk_widget_set_name(GTK_WIDGET(button),i ? "insight-tutorial-tool" : "insight-help-tool");gtk_widget_set_tooltip_text(GTK_WIDGET(button),help_tips[i]);g_signal_connect(button,"clicked",G_CALLBACK(insight_help_show),(gpointer)(i ? "tutorials.md" : "guide.md"));add_insight_tool(toolbar,button,-1); }
+ GtkToolItem *preview=gtk_tool_button_new(insight_command_icon("text-x-generic"),NULL);gtk_widget_set_name(GTK_WIDGET(preview),"insight-markup-preview-tool");gtk_widget_set_tooltip_text(GTK_WIDGET(preview),"Preview current Markdown / RST — including unsaved edits");g_signal_connect(preview,"clicked",G_CALLBACK(insight_markup_preview),NULL);add_insight_tool(toolbar,preview,-1);
  add_insight_tool(toolbar,gtk_separator_tool_item_new(),-1);
  const char *layouts[]={"layout-a","layout-b","layout-c","layout-d"};
  const char *tips[]={"Load layout A","Load layout B","Load layout C","Load layout D"};
@@ -3085,9 +3086,9 @@ static void create_browse_toolbar(void) {
  gtk_widget_show_all(GTK_WIDGET(toolbar));
 }
 static void create_help_menu(void) {
- GtkWidget *menu=ui_lookup_widget(main_widgets.window,"menu_help1_menu");const gchar *labels[]={"Geany Insight — Documentation…","Geany Insight — Tutorials…","Lua scripting guide…","Markdown / reStructuredText viewer…"};
- const gchar *topics[]={"guide.md","tutorials.md","scripting.md",NULL};
- for(guint i=0;i<4;i++) { GtkWidget *item=gtk_menu_item_new_with_label(labels[i]);gtk_widget_set_name(item,i==0 ? "insight-help-command" : (i==1 ? "insight-tutorial-command" : "insight-guide-command"));gtk_menu_shell_insert(GTK_MENU_SHELL(menu),item,i);g_signal_connect(item,"activate",i==3 ? G_CALLBACK(insight_markup_open) : G_CALLBACK(insight_help_show),(gpointer)topics[i]);gtk_widget_show(item); }
+ GtkWidget *menu=ui_lookup_widget(main_widgets.window,"menu_help1_menu");const gchar *labels[]={"Geany Insight — Documentation…","Geany Insight — Tutorials…","Lua scripting guide…","Markdown / reStructuredText viewer…","Preview current Markdown / RST…"};
+ const gchar *topics[]={"guide.md","tutorials.md","scripting.md",NULL,NULL};
+ for(guint i=0;i<5;i++) { GtkWidget *item=gtk_menu_item_new_with_label(labels[i]);gtk_widget_set_name(item,i==0 ? "insight-help-command" : (i==1 ? "insight-tutorial-command" : (i==4 ? "insight-markup-preview-command" : "insight-guide-command")));gtk_menu_shell_insert(GTK_MENU_SHELL(menu),item,i);g_signal_connect(item,"activate",i==3 ? G_CALLBACK(insight_markup_open) : (i==4 ? G_CALLBACK(insight_markup_preview) : G_CALLBACK(insight_help_show)),(gpointer)topics[i]);gtk_widget_show(item); }
 }
 static void window_list_preview(guint id) {
  GeanyDocument *doc=document_find_by_id(id);if(!doc || !wb.preview) return;

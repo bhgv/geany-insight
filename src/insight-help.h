@@ -6,6 +6,7 @@
 GtkWidget *insight_command_icon(const gchar *command);
 void insight_help_show(GtkWidget *widget,gpointer topic);
 void insight_markup_open_path(const gchar *path);
+void insight_markup_preview(GtkWidget *widget,gpointer data);
 void insight_markup_open(GtkWidget *widget,gpointer data);
 void insight_menu_icons(GtkWidget *menu);
 #endif
