@@ -1,3 +1,4 @@
+#include "insight-languages.h"
 /*
  *      highlighting.c - this file is part of Geany, a fast and lightweight IDE
  *
@@ -63,6 +64,7 @@ typedef struct
 {
 	gsize			count;		/* number of styles */
 	GeanyLexerStyle	*styling;		/* array of styles, NULL if not used or uninitialised */
+	const HLStyle *mapping;gsize mapping_count;
 	gchar			**keywords;
 	gchar			*wordchars;	/* NULL used for style sets with no styles */
 	gchar			**property_keys;
@@ -862,6 +864,7 @@ static void styleset_from_mapping(ScintillaObject *sci, guint ft_id, guint lexer
 	gsize i;
 
 	g_assert(ft_id != GEANY_FILETYPES_NONE);
+ style_sets[ft_id].mapping=styles;style_sets[ft_id].mapping_count=n_styles;
 
 	/* lexer */
 	sci_set_lexer(sci, lexer);
@@ -1182,6 +1185,7 @@ void highlighting_set_styles(ScintillaObject *sci, GeanyFiletype *ft)
 			val++;
 		}
 	}
+ for(guint n=0;documents_array && n<documents_array->len;n++) { GeanyDocument *doc=g_ptr_array_index(documents_array,n);if(doc->is_valid && doc->editor && doc->editor->sci==sci) { insight_languages_apply(sci,doc->file_name,ft);break; } }
 }
 
 
@@ -2066,5 +2070,20 @@ gboolean highlighting_is_primary_keyword(GeanyFiletype *ft, const gchar *word)
  if(!ft || !word || !*word || !style_sets || !style_sets[ft->id].keywords || !style_sets[ft->id].keywords[0]) return FALSE;
  const gchar *at=style_sets[ft->id].keywords[0];gsize length=strlen(word);
  while(*at) { while(g_ascii_isspace(*at)) at++;const gchar *begin=at;while(*at && !g_ascii_isspace(*at)) at++;if((gsize)(at-begin)==length && !memcmp(begin,word,length)) return TRUE; }
+ return FALSE;
+}
+
+const gchar *highlighting_primary_keywords(GeanyFiletype *ft) { return ft && style_sets && style_sets[ft->id].keywords && style_sets[ft->id].keywords[0] ? style_sets[ft->id].keywords[0] : ""; }
+
+gboolean highlighting_style_category(GeanyFiletype *ft,gint style,const gchar *category) {
+ if(!ft || !style_sets) return FALSE;
+ StyleSet *set=&style_sets[ft->id];const gchar *name=NULL;
+ for(gsize n=0;n<set->mapping_count;n++) if(set->mapping[n].style==(guint)style) { name=set->mapping[n].name;break; }
+ if(!name) return FALSE;
+ if(!strcmp(category,".keyword")) return !strcmp(name,"word") || !strcmp(name,"keyword") || !strcmp(name,"keywords") || !strcmp(name,"cpuinstruction") || !strcmp(name,"mathinstruction") || !strcmp(name,"extinstruction") || g_str_has_prefix(name,"keyword");
+ if(!strcmp(category,".type")) return !strcmp(name,"word2") || strstr(name,"type")!=NULL;
+ if(!strcmp(category,".number")) return strstr(name,"number")!=NULL || !strcmp(name,"digit");
+ if(!strcmp(category,".operator")) return strstr(name,"operator")!=NULL;
+ if(!strcmp(category,".preprocessor")) return strstr(name,"preprocessor")!=NULL || !strcmp(name,"directive");
  return FALSE;
 }

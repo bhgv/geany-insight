@@ -250,7 +250,7 @@ EXTRA_DIST += \
 	insight/docs/source-insight-layout.md
 
 insightdocdir = $(pkgdatadir)/insight/docs
-insightdoc_DATA = insight/docs/desktop-check-builds.md insight/docs/guide.md insight/docs/tutorials.md insight/docs/scripting.md insight/docs/markup-viewer.rst insight/docs/lua-api.md insight/docs/internal-diff.md insight/docs/context-bookmarks.md insight/docs/relations-calls.md insight/docs/window-list.md insight/docs/symbol-info.md
+insightdoc_DATA = insight/docs/languages.md insight/docs/desktop-check-builds.md insight/docs/guide.md insight/docs/tutorials.md insight/docs/scripting.md insight/docs/markup-viewer.rst insight/docs/lua-api.md insight/docs/internal-diff.md insight/docs/context-bookmarks.md insight/docs/relations-calls.md insight/docs/window-list.md insight/docs/symbol-info.md
 EXTRA_DIST += $(insightdoc_DATA)
 
 EXTRA_DIST += insight/tests/help_search_gui_test.c
@@ -258,3 +258,11 @@ EXTRA_DIST += insight/tests/help_search_gui_test.c
 insightexampledir = $(pkgdatadir)/insight/examples
 insightexample_DATA = insight/examples/workbench.lua
 EXTRA_DIST += $(insightexample_DATA)
+
+insightdocendir = $(pkgdatadir)/insight/docs/en
+insightdocrudir = $(pkgdatadir)/insight/docs/ru
+dist_insightdocen_DATA = $(addprefix insight/docs/en/,$(notdir $(insightdoc_DATA)))
+dist_insightdocru_DATA = $(addprefix insight/docs/ru/,$(notdir $(insightdoc_DATA)))
+insightlocaledir = $(pkgdatadir)/insight/locale
+dist_insightlocale_DATA = insight/locale/native.tsv insight/locale/insight.tsv
+EXTRA_DIST += insight/locale/insight.pairs insight/tools/build_i18n.py insight/tests/languages_gui_test.c insight/tests/i18n_gui_test.c

@@ -1,3 +1,5 @@
+#define INSIGHT_LOCALIZE_FORMATS
+#include "insight-i18n.h"
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "insight-diff.h"
 #include "../insight/core/diff.h"

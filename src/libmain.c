@@ -1,3 +1,5 @@
+#include "insight-i18n.h"
+#include "insight-languages.h"
 /*
  *      libmain.c - this file is part of Geany, a fast and lightweight IDE
  *
@@ -1153,7 +1155,7 @@ gint main_lib(gint argc, gchar **argv)
 	g_free(utf8_configdir);
 
 	/* create the object so Geany signals can be connected in init() functions */
-	geany_object = geany_object_new();
+	geany_object = geany_object_new();insight_i18n_init();
 
 	/* inits */
 	main_init();
@@ -1229,6 +1231,8 @@ gint main_lib(gint argc, gchar **argv)
 	/* create the custom command menu after the keybindings have been loaded to have the proper
 	 * accelerator shown for the menu items */
 	tools_create_insert_custom_command_menu_items();
+
+	insight_languages_init();
 
 	/* load any command line files or session files */
 	main_status.opening_session_files++;

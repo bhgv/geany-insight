@@ -444,3 +444,9 @@ test('Insight Help and on-demand Search GUI', help_search_gui_test, timeout: 45)
 
 context_links_gui_test = executable('test_insight_context_links_gui', '../insight/tests/context_links_gui_test.c', dependencies: test_deps)
 test('Insight language-aware Context links GUI', context_links_gui_test, timeout: 45)
+
+languages_gui_test = executable('test_insight_languages_gui', '../insight/tests/languages_gui_test.c', dependencies: test_deps)
+test('Insight language profiles GUI', languages_gui_test, timeout: 45)
+
+i18n_gui_test = executable('test_insight_i18n_gui', '../insight/tests/i18n_gui_test.c', dependencies: test_deps)
+test('Insight Russian and English interface GUI', i18n_gui_test, timeout: 45)

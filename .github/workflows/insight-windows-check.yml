@@ -68,6 +68,9 @@ jobs:
           cp insight/docs/internal-diff.md portable/INTERNAL-DIFF.md
           mkdir -p portable/data/insight/docs
           cp insight/docs/*.md insight/docs/*.rst portable/data/insight/docs/
+          cp -r insight/docs/en insight/docs/ru portable/data/insight/docs/
+          mkdir -p portable/data/insight/locale
+          cp insight/locale/*.tsv portable/data/insight/locale/
           git rev-parse HEAD > portable/REVISION.txt
           python - <<'PY'
           from pathlib import Path
@@ -79,7 +82,7 @@ jobs:
               b'set "GDK_PIXBUF_MODULEDIR=%~dp0lib\\gdk-pixbuf-2.0\\2.10.0\\loaders"\r\n'
               b'set "GDK_PIXBUF_MODULE_FILE=%~dp0lib\\gdk-pixbuf-2.0\\2.10.0\\loaders.cache"\r\n'
               b'"%~dp0bin\\gdk-pixbuf-query-loaders.exe" --update-cache\r\n'
-              b'"%~dp0bin\\geany.exe" -c "%~dp0profile" %*\r\n')
+              b'"%~dp0bin\\geany.exe" -c "%~dp0config" %*\r\n')
           PY
           objdump -f portable/bin/geany.exe | tee portable/ARCHITECTURE.txt
           grep -q 'pei-x86-64' portable/ARCHITECTURE.txt

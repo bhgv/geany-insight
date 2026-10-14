@@ -938,6 +938,10 @@ libgeany = shared_library('geany',
 	'src/insight-relation-graph.c',
 	'src/insight-relation-graph.h',
 	'src/insight-help.c',
+ 'src/insight-languages.c',
+ 'src/insight-i18n.c',
+ 'src/insight-i18n.h',
+ 'src/insight-languages.h',
 	'src/insight-help.h',
 	'src/insight-window-list.c',
 	'src/insight-window-list.h',
@@ -1077,7 +1081,7 @@ endif
 
 # Portable, offline Insight guides consumed by the built-in markup viewer.
 install_data(
-  'insight/docs/guide.md', 'insight/docs/tutorials.md',
+  'insight/docs/guide.md', 'insight/docs/tutorials.md', 'insight/docs/languages.md',
   'insight/docs/scripting.md', 'insight/docs/markup-viewer.rst',
   'insight/docs/lua-api.md', 'insight/docs/internal-diff.md',
   'insight/docs/desktop-check-builds.md',
@@ -1086,3 +1090,7 @@ install_data(
   install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 
 install_data('insight/examples/workbench.lua', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'examples')
+
+install_subdir('insight/locale', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight')
+install_subdir('insight/docs/en', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
+install_subdir('insight/docs/ru', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')

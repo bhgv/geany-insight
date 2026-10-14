@@ -1367,6 +1367,7 @@ static void menu_reorder_child(GtkMenu *menu, GtkWidget *child, gint position)
 static void add_recent_file_menu_item(const gchar *utf8_filename, GeanyRecentFiles *grf, GtkWidget *menu)
 {
 	GtkWidget *child = gtk_menu_item_new_with_label(utf8_filename);
+ g_object_set_data(G_OBJECT(child),"insight-no-i18n",GINT_TO_POINTER(1));
 
 	gtk_widget_show(child);
 	if (menu != grf->toolbar)

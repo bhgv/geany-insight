@@ -1,3 +1,4 @@
+#include "insight-languages.h"
 /*
  *      filetypes.c - this file is part of Geany, a fast and lightweight IDE
  *
@@ -562,6 +563,7 @@ static GeanyFiletype *detect_filetype_conf_file(const gchar *utf8_filename)
  * Returns: non-NULL */
 GeanyFiletype *filetypes_detect_from_extension(const gchar *utf8_filename)
 {
+ GeanyFiletype *profile=insight_languages_detect(utf8_filename);if(profile) return profile;
 	gchar *base_filename;
 	GeanyFiletype *ft;
 	guint plen = 0;
@@ -731,6 +733,8 @@ static GeanyFiletype *filetypes_detect_from_file_internal(const gchar *utf8_file
 	GRegex			*ft_regex;
 	GMatchInfo		*match;
 	GError			*regex_error = NULL;
+
+	ft=insight_languages_detect(utf8_filename);if(ft) return ft;
 
 	/* try to find a shebang and if found use it prior to the filename extension
 	 * also checks for <?xml */

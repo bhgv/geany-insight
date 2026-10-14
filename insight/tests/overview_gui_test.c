@@ -224,14 +224,11 @@ static gboolean step(gpointer data) {
   GtkWidget *file_query=find_named(window,"insight-file-query"); gtk_entry_set_text(GTK_ENTRY(file_query),"not-indexed");
   GtkWidget *reindex=find_button(window,"Reindex"); g_assert_nonnull(reindex); gtk_button_clicked(GTK_BUTTON(reindex));
  } else if(phase==29) {
-  GtkWidget *view=find_named(window,"insight-project-files"); GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view)); if(gtk_tree_model_iter_n_children(model,NULL)!=1) return G_SOURCE_CONTINUE;
-  GtkTreeIter iter; g_assert_true(gtk_tree_model_get_iter_first(model,&iter)); gchar *name=NULL; gtk_tree_model_get(model,&iter,0,&name,-1); g_assert_cmpstr(name,==,"not-indexed.unknown"); g_free(name);
-  GtkTreePath *keep=gtk_tree_model_get_path(model,&iter); retained_file_row=gtk_tree_row_reference_new(model,keep); gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),keep); gtk_tree_path_free(keep);
+  GtkWidget *view=find_named(window,"insight-project-files");if(!gtk_widget_get_sensitive(view)) return G_SOURCE_CONTINUE;
+  g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),NULL),==,0); /* Unknown extension is excluded by the active language profile. */
   GtkWidget *reindex=find_button(window,"Reindex"); gtk_button_clicked(GTK_BUTTON(reindex));
  } else if(phase==30) {
-  GtkWidget *view=find_named(window,"insight-project-files"); g_assert_true(gtk_tree_row_reference_valid(retained_file_row));
-  g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),NULL),==,1);
-  gtk_tree_row_reference_free(retained_file_row); retained_file_row=NULL;
+  GtkWidget *view=find_named(window,"insight-project-files");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),NULL),==,0);
   /* Quit while both a scan and a search are queued. */
   GtkWidget *reindex=find_button(window,"Reindex"); if(reindex) gtk_button_clicked(GTK_BUTTON(reindex));
   GtkWidget *query=find_named(window,"insight-project-query"); gtk_entry_set_text(GTK_ENTRY(query),"worker_second"); g_signal_emit_by_name(query,"activate");

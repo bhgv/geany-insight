@@ -1,0 +1,1359 @@
+# Native Geany English/Russian UI, derived from po/ru.po (GPL-2.0-or-later)
+\n<i>Other plugins depend on this. Disable them first to allow deactivation.</i>\n	\n<i>Этот модуль нужен для работы других. Отключите сначала зависимые модули.</i>\n
+ (new instance)	 (новый экземпляр)
+"%s" was not found.	Не удалось найти "%s".
+"Smart" home key	"Умная" клавиша "Home"
+%d file saved.	%d файл сохранён.
+%d files saved.	%d файла сохранены.
+%d, %e, %f, %p, %l are substituted in command and directory fields, see manual for details.	Шаблоны для подстановки в команду и рабочий каталог: %d, %e, %f, %p и %l, смотрите руководство для более детальной информации.
+%dL	%dL
+%s\n\nThe file on disk may now be truncated!	%s\n\nФайл на диске может быть усечён!
+%s %s -- %s (in directory: %s)	%s %s -- %s (в каталоге: %s)
+%s (in directory: %s)	%s (в каталоге: %s)
+%s Properties	Свойства %s
+%s commands	Команды для языка: %s
+%s: replaced %d occurrence of "%s" with "%s".	%s: произведена %d замена "%s" на "%s".
+%s: replaced %d occurrences of "%s" with "%s".	%s: произведено %d замены "%s" на "%s".
+(built on or after %s)	(собрано %s или позднее)
+(only inside Geany)	(только внутри Geany)
+(with BOM)	(с BOM)
+(without BOM)	(без BOM)
+, read-only	, только чтение
+--- Separator ---	--- Разделитель ---
+<b>Auto-close quotes and brackets</b>	<b>Автозавершение кавычек и скобок</b>
+<b>Change History</b>	<b>История изменений</b>
+<b>Commands</b>	<b>Команды</b>
+<b>Completions</b>	<b>Автозавершение</b>
+<b>Display</b>	<b>Отображение</b>
+<b>Editor tabs</b>	<b>Вкладки редактора текста</b>
+<b>Encodings</b>	<b>Кодировки</b>
+<b>Features</b>	<b>Особые функции</b>
+<b>Fonts</b>	<b>Шрифты</b>
+<b>Icon size</b>	<b>Размер иконок</b>
+<b>Icon style</b>	<b>Стиль панели инструментов</b>
+<b>Indentation</b>	<b>Отступы</b>
+<b>Keyboard shortcuts</b>	<b>Сочетания клавиш</b>
+<b>Long line marker</b>	<b>Маркер длинной строки</b>
+<b>Message window</b>	<b>Окно сообщений</b>
+<b>Miscellaneous</b>	<b>Разное</b>
+<b>New files</b>	<b>Новые файлы</b>
+<b>Page %d of %d</b>	<b>Страница %d из %d</b>
+<b>Paths</b>	<b>Пути</b>
+<b>Printing</b>	<b>Печать</b>
+<b>Projects</b>	<b>Проекты</b>
+<b>Saving files</b>	<b>Сохранение файлов</b>
+<b>Search</b>	<b>Поиск</b>
+<b>Shutdown</b>	<b>Завершение работы</b>
+<b>Sidebar</b>	<b>Боковая панель</b>
+<b>Startup</b>	<b>Запуск</b>
+<b>Tab positions</b>	<b>Положение вкладок</b>
+<b>Template data</b>	<b>Данные шаблонов</b>
+<b>Terminal</b>	<b>Терминал</b>
+<b>Tool paths</b>	<b>Пути утилит</b>
+<b>Toolbar</b>	<b>Панель инструментов</b>
+<b>Various preferences</b>	<b>Разные опции</b>
+<b>Virtual spaces</b>	<b>Виртуальные пробелы</b>
+<i>Warning: read the manual before changing these preferences.</i>	<i>Предупреждение: прочтите руководство перед изменением этих параметров.</i>
+<i>Warning: these settings are overridden by the current project. See <b>Project->Properties</b>.</i>	<i>Внимание: эти настройки переопределены в текущем проекте. Загляните в <b>Проект->Свойства</b>.</i>
+A fast and lightweight IDE	Быстрая и легковесная среда разработки
+A fast and lightweight IDE using GTK+	Быстрая и легковесная среда разработки, использующая GTK+
+A fast and lightweight IDE.	Быстрая и легковесная среда разработки.
+A quoted Windows program name must be entirely inside the quotes	Экранированная команда Windows должна быть полностью заключена в кавычки
+A string which is added when toggling a line comment in a source file, it is used to mark the comment as toggled.	Строка, которая будет добавлена в начале комментария. При переключении режима комментирования строк она используется для пометки комментариев как переключенных.
+A terminal emulator command (%c is substituted with the Geany run script filename)	Команда эмулятора терминала (вместо %c будет подставлено имя файла скрипта запуска Geany)
+About Geany	О Geany
+Accessed:	Последний доступ:
+Action	Действие
+Active	Активный
+Add a little header to every page containing the page number, the filename and the current date (see below). It takes 3 lines of the page.	Добавлять небольшой заголовок в начало каждой страницы с указанием номера страницы, имени файла и текущей даты (см. ниже). Это занимает 3 строки.
+Add line numbers to the printed page	Добавлять номера строк на печатаемой странице
+Add page numbers at the bottom of each page. It takes 2 lines of the page.	Добавлять номера страниц. Это займёт 2 строки внизу каждой страницы.
+Adds a file browser tab to the sidebar.	Добавить просмотр файлов на боковую панель.
+All Source	Все файлы исходного кода
+All files	Все типы
+All: search all files in the directory\nProject: use file patterns defined in the project settings\nCustom: specify file patterns manually	Все: искать среди всех файлов в каталоге\nПроект: использовать шаблоны имён файлов, заданные в настройках проекта\nУказать: указать шаблоны имён файлов вручную
+Allows the VTE to receive keyboard shortcuts (apart from focus commands)	Позволяет терминалу получать сочетания горячих клавиш (кроме команд фокуса)
+Always	Всегда
+Always show virtual spaces beyond the end of lines	Всегда показывать виртуальные пробелы после окончания строк
+Always wrap search	Всегда искать с начала файла
+Always wrap search around the document	Всегда начинать поиск с начала документа
+An error occurred or file information could not be retrieved (e.g. from a new file).	Произошла ошибка или информация о файле не может быть получена (например, это новый файл).
+An error occurred while converting the file from UTF-8 in "%s". The file remains unsaved.	Произошла ошибка при переводе файла из UTF-8 в "%s". Файл остался несохранённым.
+Anchors	Якоря
+Any unsaved changes will be lost.	Все несохранённые изменения будут потеряны.
+Appearance	Появление
+Appendix	Приложение
+Apply the default indentation settings to all documents	Использовать ширину отступа по умолчанию во всех документах
+Arabic	Арабская
+Architectures	Архитектуры
+Are you sure to replace in the whole session?	Заменить во всей сессии?
+Are you sure you want to reload '%s'?	Вы уверены, что хотите заново загрузить '%s'?
+Are you sure you want to reload all files?	Вы уверены, что хотите заново загрузить все файлы?
+Armenian	Армянская
+Arrow characters	Символы стрелок
+Articles	Статьи
+As _HTML...	В _HTML...
+As _LaTeX...	В _LaTeX...
+Assembly	Сборка
+Assign Keybinding	Сочетания клавиш
+Auto Save	Автоматическое сохранение
+Auto save _interval:	_Интервал автоматического сохранения:
+Auto-close curly bracket when typing an opening one	Автозавершение фигурных скобок при вводе открывающей
+Auto-close double quote when typing an opening one	Автозавершение двойных кавычек при вводе открывающей
+Auto-close parenthesis when typing an opening one	Автозавершение скобок при вводе открывающей
+Auto-close single quote when typing an opening one	Автоматически закрывать одинарную кавычку при вводе открывающей
+Auto-close square-bracket when typing an opening one	Автозавершение квадратных скобок при вводе открывающей
+Auto-focus widgets (focus follows mouse)	Автоматический фокус для виджетов (фокус следует за мышью)
+Auto-indent _mode:	Тип _авто-отступа:
+Autocomplete all words in document	Автозавершение всех слов в документе
+Autocomplete symbols	Автозавершение имён
+Automatic completion of known symbols in open files (function names, global variables, ...)	Автоматическое завершение известных имён объектов в открытых файлах (имена функций, глобальные переменные и т.д.)
+Automatic continuation of multi-line comments	Автоматическое продолжение многострочных комментариев
+Autosave: Saved %d file automatically.	Автоматическое сохранение: Автоматически сохранён %d файл.
+Autosave: Saved %d files automatically.	Автоматическое сохранение: Автоматически сохранено %d файла.
+Available Items	Доступные элементы
+Background	Фон
+Background color:	Цвет фона:
+Backup Copy	Резервная копия
+Backup Copy: Directory could not be created (%s).	Резервная копия: Каталог не может быть создан (%s).
+Backup Copy: File could not be read (%s).	Резервная копия: Файл "%s" недоступен для чтения.
+Backup Copy: File could not be saved (%s).	Резервная копия: Файл "%s" недоступен для записи.
+Backup directory does not exist or is not writable.	Каталог для резервных копий не существует или недоступен для записи.
+Bad regex for filetype %s: %s	Плохое регулярное выражение для типа файлов %s: %s
+Bad regex: %s	Неверное регулярное выражение: %s
+Baltic	Балтийская
+Base GType:	Базовый GType:
+Base class:	Базовый класс:
+Base directory of all files that make up the project. This can be a new path, or an existing directory tree. You can use paths relative to the project filename.	Путь к каталогу, содержащему файлы, составляющие проект. Это может быть как новый каталог, так и уже существующий. Вы можете использовать относительные пути (относительно имени проекта).
+Base header:	Базовый заголовок:
+Base path:	Путь к каталогу:
+Base source:	Базовый класс:
+Basic	Базовый
+Be verbose	Выводить подробности
+Beep on errors or when compilation has finished	Сигнал при ошибках или по окончании сборки
+Bibitem	Bibitem
+Blocks	Блоки
+Book Chapters	Главы книги
+Books & Conference Proceedings	Сборники книг и конференций
+Bottom	Внизу
+Browser:	Браузер:
+Build	Сборка
+Build Targets	Цели
+Build options	Опции сборки
+Build the current file	Собрать текущий файл
+Build the current file with Make and the default target	Собрать данный файл, используя утилиту Make и цель сборки по умолчанию
+Build the current file with Make and the specified target	Собрать текущий файл, используя утилиту Make и указанную цель
+C Standard Library	Стандартная библиотека C
+C++ (C Standard Library)	C++ (Стандартная библиотека C)
+C++ STL	С++ STL
+C++ Standard Library	Cтандартная библиотека C++
+COLUMN	COLUMN
+CR	CR
+CRLF	CRLF
+C_ase sensitive	С _учётом регистра
+C_hange	_Изменить
+C_lose All	_Закрыть все
+C_onfiguration Files	_Файлы настроек
+C_opy	_Копировать
+C_reate	С_оздать
+Calls the View->Toggle All Additional Widgets command	Вызывает команду Вид->Показать/скрыть все панели
+Cannot execute build command "%s": %s. Check the Terminal setting in Preferences	Не удаётся выполнить команду сборки "%s": %s. Проверьте параметры терминала в настройках.
+Cannot execute context action command "%s": %s. %s	Не удалось выполнить команду контекстного действия "%s": %s. %s
+Cannot execute custom command "%s": %s. Check the path setting in Custom Commands.	Не удалось выполнить пользовательскую команду "%s": %s. Проверьте правильность пути в пользовательских командах.
+Cannot execute grep tool "%s": %s. Check the path setting in Preferences.	Не удаётся запустить утилиту grep "%s": %s. Проверьте правильность пути в настройках.
+Cannot execute print command "%s": %s. Check the path setting in Preferences.	Не удаётся выполнить команду печати "%s": %s. Проверьте правильность пути в настройках.
+Cannot execute template command "%s". Hint: incorrect paths in the command are a common cause of errors. Error: %s.	Не удаётся выполнить команду "%s". Подсказка: Часто возможной причиной являются неправильные пути. Ошибка: %s
+Cannot save read-only document '%s'!	Не удалось сохранить документ '%s', доступный только для чтения!
+Celtic	Кельтская
+Central European	Центральноевропейская
+Change _Color Scheme...	_Цветовые схемы...
+Change _Font...	Выбрать _шрифт...
+Change the directory to the base directory of the currently opened project	Изменить путь на каталог текущего открытого проекта
+Changed:	Изменён:
+Changes detected, reloading all will lose any changes and history.	Обнаружены изменения. Повторная загрузка всех файлов приведёт к потере изменений и истории.
+Chapter	Глава
+Chapters	Главы
+Character	Символ
+Characters to be visible on the tab label of the file.	Символы, которые должны быть видны на подписи вкладки файла.
+Characters to type for autocompletion:	Минимальное количество символов для автозавершения:
+Characters:	Символов:
+Check the path setting in Filetype configuration.	Проверьте правильность пути в настройках типов файлов.
+Check the path setting in Preferences.	Проверьте правильность пути в настройках.
+Chinese Simplified	Китайская упрощенная
+Chinese Traditional	Китайская традиционная
+Choose Project Base Path	Выберите путь к каталогу проекта:
+Choose Project Filename	Выберите имя файла проекта
+Choose Terminal Font	Выберите шрифт терминала
+Choose a special character from the list below and double click on it or use the button to insert it at the current cursor position.	Выберите специальный символ из списка ниже и дважды щелкните на нём или используйте кнопку для того, чтобы вставить символ на текущую позицию курсора.
+Choose font	Выбрать шрифт
+Choose more build actions	Другие команды сборки
+Choose which plugins to load:	При запуске загружать следующие модули:
+Cl_ear	О_чистить
+Class	Класс
+Class Builder	Генератор классов
+Classes	Классы
+Classes / Roles	Классы
+Classic Mac (CR)	Классический Мac (CR)
+Click to set menu item label	Щёлкните для указания метки элемента меню
+Clipboard	Буфер обмена
+Close	Закрыть
+Close All	_Закрыть все
+Close Documents to the _Right	Закрыть все с_права
+Close Ot_her Documents	Закрыть ост_альные
+Close _dialog	Закрыть _диалог
+Close all	Закрыть все
+Close all open files	Закрыть все открытые файлы
+Close the current file	Закрыть текущий файл
+Co_mmands	Ко_манды
+Code folding	Сворачивание блоков кода
+Color Chooser	Выбор цвета
+Color Schemes	Цветовые схемы
+Color:	Цвет:
+Column:	Столбец:
+Command	Команда
+Command:	Команда:
+Comment line(s)	Закомментировать строки
+Comment toggle marker:	Маркер переключения комментариев:
+Company name	Имя компании:
+Company:	Компания:
+Compilation failed.	Сборка завершилась с ошибкой.
+Compilation finished successfully.	Сборка прошла успешно.
+Compile	Скомпилировать
+Compile the current file	Скомпилировать текущий файл
+Compile the current file with Make	Скомпилировать текущий файл, используя утилиту Make
+Compiler	Компилятор
+Complete snippet	Завершить фрагмент кода
+Complete word	Завершить слово
+Completion list height:	Количество строк в списке завершения:
+Completions	Автозавершение
+Components	Компоненты
+Conference Papers	Страницы конференций
+Configuration directory could not be created (%s).	Каталог настроек не может быть создан (%s).
+Configuration directory could not be created (%s).\nThere could be some problems using Geany without a configuration directory.\nStart Geany anyway?	Папка настроек не может быть создана (%s).\nМогут возникнуть некоторые проблемы при использовании Geany без папки настроек.\nЗапустить Geany в любом случае?
+Configuration files reloaded.	Файлы настроек загружены заново.
+Configure Plugins	Настроить модули
+Confirm exit	Подтверждение выхода
+Constants	Константы
+Constructor type:	Тип конструктора:
+Conte_xt Action	_Контекстное действие
+Context Action	Контекстное действие
+Context action command. The currently selected word can be used with %s. It can appear anywhere in the given command and will be replaced before execution.	Команда для контекстного действия. Текущее выделенное слово можно подставлять с помощью %s. Его можно вставлять в любом месте указанной команды, и подстановка будет выполнена до её выполнения.
+Context action:	Контекстное действие:
+Continue automatically multi-line comments in languages like C, C++ and Java when a new line is entered inside such a comment	Автоматически продолжать многострочные комментарии в таких языках, как C, C++ и Java, когда в таком комментарии введена новая строка.
+Contributors	Участники
+Convert and Set to CR (Classic _Mac)	Заменить окончания строк на CR (классический _Mac)
+Convert and Set to _CR/LF (Windows)	Заменить окончания строк на _CR/LF (Windows)
+Convert and Set to _LF (Unix)	Заменить окончания строк на _LF (Unix)
+Copies	Копии
+Copy	Копировать
+Copy _All	_Копировать все
+Copy the current selection	Скопировать выделенное
+Copyright (c) 2005\nThe Geany contributors	Copyright (c) 2005\nУчастники проекта Geany
+Could not execute configured external command '%s' (%s).	Не удалось выполнить внешнюю команду '%s' (%s).
+Could not find file '%s' - trying the current document path.	Не удалось найти файл '%s' - пробую использовать путь текущего документа.
+Could not find file '%s'.	Не удалось найти файл '%s'.
+Could not load tags file '%s'.	Не удалось загрузить файл тегов '%s'.
+Could not open directory (%s)	Не удалось открыть каталог (%s)
+Could not open file %s (%s)	Не удалось открыть файл %s (%s)
+Could not open file %s (File not found)	Не удалось открыть файл %s (файл не найден)
+Create C++ Class	Создать класс С++
+Create Cla_ss	Создать _класс
+Create Class	Создать класс
+Create GTK+ Class	Создать класс GTK+
+Create PHP Class	Создать класс PHP
+Create a new file	Создать новый файл
+Create a new file for each command-line filename that doesn't exist	Создавать новые документы из командной строки, если файл не существует
+Create a new file from a template	Создать _новый файл из шаблона
+Create constructor	Создать конструктор
+Create destructor	Создать деструктор
+Create the project's base path directory?	Создать каталог проекта?
+Creates source files for new class types.	Создает файлы исходного кода для новых типов классов.
+Credits	Авторы
+Cu_t Current Line(s)	_Вырезать строки
+Curly brackets { }	Фигурные скобки { }
+Current chars	Текущие символы
+Cursor blinks	Мигающий курсор
+Custom	Указать
+Custom Date Format	Свой формат даты
+Custom Targets	Свой текст
+Custom date format (see https://docs.gtk.org/glib/method.DateTime.format.html):	Введите свой формат даты и времени. Список доступных спецификаторов преобразования см. на сайте https://docs.gtk.org/glib/method.DateTime.format.html.
+Customize Toolbar	Настроить панель инструментов
+Cut	Вырезать
+Cut the current selection	Вырезать выделенное
+Cyrillic	Кириллица
+Cyrillic/Russian	Кириллица/Русская
+Cyrillic/Ukrainian	Кириллица/Украинская
+DIR	DIR
+D_ocuments Only	Только д_окументы
+D_uplicate Line or Selection	_Дублировать строку
+Data	Данные
+Date & time:	Дата и время:
+Date format string could not be converted (possibly too long).	Не удалось сконвертировать строку формата даты (вероятно, она слишком длинная)
+Date format:	Формат даты:
+Date/_Time format for backup files (see https://docs.gtk.org/glib/method.DateTime.format.html):	Формат даты/_времени для файлов резервных копий (список доступных спецификаторов преобразования см. на сайте https://docs.gtk.org/glib/method.DateTime.format.html):
+Date:	Дата:
+Debug Messages	Отладочные сообщения
+Debug _Messages	Отладочные _сообщения
+Decrease indent	Уменьшить отступ
+Decrease indent by one space	Уменьшить отступ на один пробел
+Decrease indentation	Уменьшить отступ
+Default	По умолчанию
+Default _filetype to use for untitled documents:	_Тип файла по умолчанию для новых файлов:
+Default encoding (existing non-Unicode files):	Кодировка по умолчанию (для файлов с кодировкой, отличной от Unicode):
+Default encoding (new files):	Кодировка по умолчанию (для новых файлов):
+Default end of line characters:	Символы конца строки по умолчанию:
+Default sorting mode:	Сортировка по умолчанию:
+Default symbol sorting mode	Режим сортировки символов по умолчанию
+Defines	Определения
+Defines whether to use the platform-native file dialogs or the GTK default dialogs	Определяет, использовать ли диалоги Windows или использовать стандартные диалоги библиотеки GTK.
+Definition of "%s" not found.	Определение "%s" не найдено.
+Delete the current selection	Удалить выделенное
+Delete to beginning of line	Удалить до начала строки
+Delete to line end	Удалить до конца строки
+Detect from file	Распознать по содержимому
+Detect type from file	Распознать тип по содержимому файла
+Detect width from file	Распознать ширину по содержимому файла
+Developer:	Разработчик:
+Developers	Разработчики
+Did not send document %s to the printing subsystem.	Документ %s не был отправлен на печать.
+Directory _levels to include in the backup destination:	Уровень _вложенности каталогов для резервных копий:
+Directory not changed because the terminal may contain some input (press Ctrl+C or Enter to clear it).	Каталог не изменён, так как терминал может содержать незавершённую команду (нажмите Ctrl+C или Enter, чтобы очистить терминал).
+Disable Drag and Drop	Отключить Drag&Drop
+Disable drag and drop completely in the editor window so you can't drag and drop any selections within or outside of the editor window	Отключить Drag&Drop в окне редактора, перетаскивание выделенного в окно и из окна редактора станет невозможным
+Disable menu shortcut key (F10 by default)	Отключить горячую клавишу для меню (по умолчанию F10)
+Disable this option to keep the dialog open	Отключите эту опцию, чтобы оставить диалог открытым
+Disabled	Отключено
+Discard history	Сброс истории
+Disk check timeout:	Период проверки диска:
+Display	Отображение
+Display height in rows for the autocompletion list	Количество строк, отображаемых в списке автозавершения.
+Display:	Отображение:
+Displayed Items	Отображаемые элементы
+Divisions	Подразделения
+Do not show virtual spaces	Не показывать виртуальные пробелы
+Do you really want to quit?	Вы действительно хотите выйти?
+Do you want to close it before proceeding?	Закрыть его перед продолжением?
+Do you want to reload it?	Вы действительно хотите загрузить его заново?
+Do you want to save it before closing?	Сохранить файл перед закрытием?
+Do you want to save it?	Вы действительно хотите загрузить его заново?
+Document	Документ
+Document %s was sent to the printing subsystem.	Документ %s отправлен на печать.
+Document Setup	Параметры документа
+Document successfully exported as '%s'.	Документ успешно экспортирован как '%s'.
+Documents	Документы
+Don't load auto completion data (see documentation)	Не загружать данные для автозавершения (см. документацию)
+Don't load plugins	Не загружать модули
+Don't load terminal support	Не загружать поддержку терминала
+Don't load the previous session's files	Не загружать файлы предыдущей сессии
+Don't open files in a running instance, force opening a new instance	Не открывать файлы в запущенной копии программы, а принудительно запускать новую
+Don't preprocess C/C++ files when generating tags file	Не использовать препроцессор для файлов C/C++ при создании файла тэгов
+Don't show message window at startup	Не показывать окно сообщений при запуске
+Don't use run script	Не использовать скрипт для запуска
+Don't use the simple run script which is usually used to display the exit status of the executed program	Не использовать простой скрипт, который обычно используется для отображения кода завершения выполненной программы
+Double quotes " "	Двойные кавычки " "
+Double-clicking hides all additional widgets	Двойной щелчок скрывает все дополнительные окна
+Drop rest of word on completion	Отбрасывать окончания слов при завершении
+E_ncoding:	_Кодировка:
+E_xtra options:	Дополнительные _опции:
+East Asian	Восточная _Азия
+East European	_Восточноевропейская
+East _Asian	Восто_чноазиатская
+Editor	Редактор
+Editor:	Редактор:
+Email address of the developer	Адрес электронной почты разработчика
+Enable newline to strip the trailing spaces on the previous line	Убирать пробелы в конце строки при переходе на новую строку
+Enable plugin support	Включить поддержку модулей
+Enable save when losing _focus	Сохранять при потере _фокуса
+Enabled	Включено
+Encoding:	Кодировка:
+Ensure consistent line endings	Следить за единообразием переносов строк
+Ensure new line at file end	Следить за наличием новой строки в конце файла
+Ensures that at the end of the file is a new line	Следить за тем, что в конце файла находится новая строка
+Ensures that newline characters always get converted before saving, avoiding mixed line endings in the same file	Символы новой строки перед сохранением всегда будут преобразовываться в единый формат, что позволяет избежать смешивания разных типов символов конца строки в одном файле
+Enter Tab Width	Ширина табуляции:
+Enter custom text to append to the command "%s":	Введите здесь свои опции, весь введенный текст передаётся команде.
+Enter the amount of spaces which should be replaced by a tab character.	Количество пробелов, которые будут заменены символом табуляции.
+Enter the line you want to go to:	Введите строку, на которую нужно перейти:
+Enter tool paths below. Tools you do not need can be left blank.	Введите пути к утилитам. Для ненужных утилит пути можно не указывать.
+Entities	Сущности
+Enums	Перечисления
+Environment	Окружение
+Error	Ошибка
+Error message: %s\nThe error occurred at "%s" (line: %d, column: %d).	Текст ошибки: %s\nОшибка возникла в "%s" (строка: %d, столбец: %d).
+Error message: %s.	Текст ошибки: %s.
+Error regular expression:	Регулярное выражение, являющееся признаком ошибки:
+Error renaming file.	Ошибка при переименовании.
+Error saving file (%s).	Ошибка при сохранении файла (%s).
+Error saving file.	Ошибка при сохранении файла.
+Example:\nCFLAGS=`pkg-config gtk+-2.0 --cflags` %s -g gtk2.c.tags /usr/include/gtk-2.0/gtk/gtk.h\n	Пример:\nCFLAGS=`pkg-config gtk+-2.0 --cflags` %s -g gtk2.c.tags /usr/include/gtk-2.0/gtk/gtk.h\n
+Execute commands	Выполнить команды
+Execute programs in the VTE	Выполнять программы в терминале
+Execute:	Выполнить:
+Explicitly defines a filetype for the file, if it would not be detected by filename extension.\nNote if you choose multiple files, they will all be opened with the chosen filetype.	Ручная установка типа открываемого файла, если файл не будет распознан по его расширению.\nЗаметьте: если вы выбрали несколько файлов, они будут открыты с выбранным типом файла.
+Explicitly defines an encoding for the file, if it would not be detected. This is useful when you know that the encoding of a file cannot be detected correctly by Geany.\nNote if you choose multiple files, they will all be opened with the chosen encoding.	Ручная установка кодировки открываемого файла, если автоматическое распознавание не сработает. Это удобно, когда вы знаете, что Geany некорректно определяет кодировку файла. Заметьте: если вы выбрали несколько файлов, они все будут открыты в выбранной кодировке.
+Export	Экспорт
+Export File	Экспортировать файл
+Exports the current file into different formats.	Экспортировать текущий файл в различные форматы.
+Extern Variables	Внешние переменные
+External open command:	Внешняя команда для открытия файла:
+Extra plugin path:	Дополнительный путь для модулей:
+FILE	FILE
+Failed to change to the working directory	Не удалось сменить рабочий каталог
+Failed to close file '%s': fclose() failed: %s	Не удалось закрыть файл '%s': ошибка в fclose(): %s
+Failed to convert template file "%s" to UTF-8: %s	Не удалось преобразовать шаблон "%s" в UTF-8
+Failed to create tags file, perhaps because no symbols were found.\n	Не удалось создать файл тегов, возможно, не было найдено ни одного символа.\n
+Failed to execute "%s" (start-script could not be created: %s)	Не удалось выполнить "%s" (скрипт запуска не может быть создан: %s)
+Failed to load file "%s" as %s: %s.	Не удалось открыть URI "%s": %s
+Failed to load file "%s": %s.	Не удалось открыть URI "%s": %s
+Failed to load one or more session files.	Не удалось загрузить один или несколько файлов сессии.
+Failed to open file '%s' for writing: fopen() failed: %s	Не удалось открыть файл '%s' для записи: ошибка в fopen(): %s
+Failed to spawn the configured browser command. Please enter a valid command or leave it empty in order to spawn the system default browser.	Не удалось выполнить заданную в конфигурации команду вызова браузера. Введите правильную команду или оставьте пустым, чтобы вызвать системный браузер по умолчанию.
+Failed to write file '%s': fwrite() failed: %s	Не удалось выполнить запись в файл '%s': ошибка в fwrite(): %s
+Features	Возможности
+Fields	Поля
+File	Файл
+File "%s" was not found on disk!	Файл "%s" не найден на диске!
+File %s closed.	Файл %s закрыт.
+File %s opened (%d%s).	Файл %s открыт (%d%s).
+File %s printed.	Файл %s напечатан.
+File %s reloaded.	Файл %s загружен заново.
+File %s saved.	Файл %s сохранён.
+File '%s' could not be written (%s).	Файл '%s' недоступен для записи (%s).
+File Browser	Просмотр файлов
+File _patterns:	_Шаблоны файлов:
+File not executed because the terminal may contain some input (press Ctrl+C or Enter to clear it).	Файл не выполнен, так как терминал может содержать незавершённую команду (нажмите Ctrl+C или Enter, чтобы очистить терминал).
+File tabs will be placed on the left of the notebook	Новые закладки будут располагаться слева от блокнота
+File tabs will be placed on the right of the notebook	Новые закладки будут располагаться справа от блокнота
+Filename already exists!	Файл с таким именем уже существует!
+Filename:	Имя файла:
+Files	Файлы
+Filter the document list using the entered text. Separate multiple filters with a space.	Фильтровать список символов по введённому тексту. Фильтры должны быть разделены пробелом.
+Filter the symbol list using the entered text. Separate multiple filters with a space.	Фильтровать список символов по введённому тексту. Фильтры должны быть разделены пробелом.
+Filter your files with the usual wildcards. Separate multiple patterns with a space.	Фильтровать файлы по указанному шаблону (обычный wildcard). Шаблоны разделяются пробелами.
+Filter:	Фильтр:
+Find	Найти
+Find Document Usage	Статистика документа
+Find Next	Найти следующее
+Find Next _Selection	Найти _следующее выделение
+Find Pre_vious Selection	Найти _предыдущее выделенное
+Find Previous	Найти предыдущее
+Find Usage	Найти использование
+Find _Document Usage	Найти использования в _документе
+Find _Next	Найти _следующее
+Find _Previous	Найти _предыдущее
+Find _Usage	_Найти использования
+Find in F_iles...	Найти в _файлах...
+Find in Files	Найти в файлах
+Find the entered text in the current file	Найти введённый текст в текущем файле
+Focus	Фокус
+Focus File List	Фокус на список файлов
+Focus Path Entry	Фокус на ввод пути
+Fold all	Свернуть все
+Fold or unfold all children of a fold point. By pressing the Shift key while clicking on a fold symbol the contrary behavior is used.	Сворачивать или разворачивать все вложенные элементы. При нажатой клавише Shift поведение будет противоположным.
+Fold/unfold all children of a fold point	Сворачивать/разворачивать все вложенные элементы
+Follow path of the current file	Устанавливать путь вслед за текущим файлом
+Follow the path of the current file	Следовать пути текущего файла
+Font updated (%s).	Шрифт обновлён (%s).
+Font:	Шрифт:
+Foreground color:	Цвет текста:
+Format	Формат
+Forward declaration "%s" not found.	Предварительное объявление "%s" не найдено.
+Found %d match for "%s".	Найдено %d совпадение для "%s".
+Found %d matches for "%s".	Найдено %d совпадения для "%s".
+Full_screen	На весь _экран
+Fullscreen	На весь экран
+Functions	Функции
+Functions / Procedures	Функции / Процедуры
+Functions / Subroutines	Функции / Процедуры
+Functions / Tasks	Функции / Задачи
+Geany	Geany
+Geany cannot start!	Geany не может запуститься!
+Geany looks by default in the global installation path and in the configuration directory. The path entered here will be searched additionally for plugins. Leave blank to disable.	Geany по умолчанию ищет модули в каталоге установки и каталоге конфигурации. По пути указанному здесь будет осуществлён дополнительный поиск модулей. Оставьте пустым, чтобы отключить.
+Geany needs to move your old configuration directory before starting.	Перед запуском Geany необходимо переместить ваш старый каталог с настройками.
+Geany tags file (*.*.tags)	Файлы тегов Geany (*.*.tags)
+Geany tried to access the Unix Domain socket of another instance running as another user.\nThis is a fatal error and Geany will now quit.	Попытка соединения с сокетом копии Geany, запущенной от имени другого пользователя.\nДальнейшее продолжение работы невозможно.
+General	Общее
+Generate global tags file (see documentation)	Создать глобальный файл тегов (смотрите документацию)
+Georgian	Грузинская
+Gives the focus automatically to widgets below the mouse cursor. Works for the main editor widget, the scribble, the toolbar search and goto line fields and the VTE.	Автоматически передавать фокус виджету под курсором мыши. Работает для главного окна редактора, заметок, поиска на панели инструментов, полей перехода к строке и терминала.
+Global	Глобально
+Go to	Перейти
+Go to End of Display Line	К концу текущей строки
+Go to End of Line	Перейти к концу строки
+Go to Line	Перейти на строку
+Go to Ne_xt Marker	Перейти к с_ледующему маркеру
+Go to Next Word Part	Перейти к концу слова
+Go to Pre_vious Marker	Перейти к п_редыдущему маркеру
+Go to Previous Word Part	Перейти к началу слова
+Go to Start of Display Line	Перейти к началу текущей строки
+Go to Start of Line	Перейти к началу строки
+Go to Symbol Decl_aration	Перейти к о_бъявлению символа
+Go to Symbol Declaration	Перейти к объявлению символа
+Go to Symbol Defini_tion	Перейти к _определению символа
+Go to Symbol Definition	Перейти к определению символа
+Go to matching brace	Перейти к парной скобке
+Goto Field	Перейти к полю
+Greek	Греческая
+Greek characters	Греческие символы
+Grep:	Утилита grep:
+Group	Группа
+Group:	Группа:
+H1 Headings	Заголовок (H1)
+H2 Headings	Заголовок (H2)
+H3 Headings	Заголовок (H3)
+HTML (name)	HTML (имя)
+HTML Characters	Символы HTML
+HTML characters	Символы HTML
+H_ide Sidebar	_Скрыть боковую панель
+Header file:	Файл заголовка:
+Hebrew	Иврит
+Hebrew Visual	Иврит (Визуальный)
+Help	Справка
+Here you can change keyboard shortcuts for various actions. Select one and press the Change button to enter a new shortcut, or double click on an action to edit the string representation of the shortcut directly.	Здесь вы можете изменять сочетания клавиш для различных действий. Достаточно дважды щёлкнуть левой кнопкой мыши на действии или выбрать одно действие и нажать кнопку "Изменить", чтобы создать новое сочетание. Также вы можете редактировать строку сочетания напрямую.
+Hide file extensions:	Скрыть расширения файлов:
+Hide the Find dialog	Скрыть диалоговое окно поиска
+Hide the Find dialog after clicking Find Next/Previous	Скрывать окно поиска после нажатия "Найти следующее/предыдущее".
+Home	Домой
+How often to check for changes to document files on disk, in seconds. Zero disables checking.	Периодичность проверки на изменение файлов на диске (в секундах). Нулевое значение отключает проверку.
+ID	ID
+ID Selectors	Идентификаторы
+INS	ВСТ
+IPC socket could not be created, see Help->Debug Messages for details.	IPC-сокет не может быть создан, подробнее смотрите Справка->Отладочные сообщения.
+ISO 8859-1 characters	Символы ISO 8859-1
+ISO C99	ISO C99
+I_nsert	_Вставить
+I_nsert Comments	Вставить комм_ентарии
+Images _and text	Иконки _и текст
+Implementations	Реализации
+Implements:	Наследование:
+Imports	Импорт
+In Se_lection	В в_ыделенном
+In Sessi_on	В с_ессии
+In_dent Type	Т_ип отступа
+Increase indent	Увеличить отступ
+Increase indent by one space	Увеличить отступ на один пробел
+Increase indentation	Увеличить отступ
+Indent Widt_h	_Ширина отступа
+Indentation	Отступы
+Independent commands	Независимые команды
+Indexes	Индексы
+Info	Информация
+Information	Информация
+Inheritance	Наследование
+Initial version:	Стартовая версия:
+Initials of the developer name	Инициалы имени разработчика
+Initials:	Инициалы:
+Insert	Вставить
+Insert Alternative _White Space	Вставить переменный _пробел
+Insert Dat_e	Вставить _дату
+Insert File _Header	Вставить _заголовок файла
+Insert Mu_ltiline Comment	Вставить _многострочный комментарий
+Insert New Line After Current	Вставить новую строку после текущей
+Insert New Line Before Current	Вставить новую строку перед текущей
+Insert Special HTML Characters	Вставить специальные символы HTML
+Insert _BSD License Notice	Вставить уведомление _BSD
+Insert _ChangeLog Entry	_Вставить описание изменений
+Insert _Function Description	Вставить _описание функции
+Insert _GPL Notice	Вставить уведомление _GPL
+Insert date	Вставить дату
+Insert line numbers before each line in the exported document	Вставлять номера строк в начале каждой строки экспортируемого документа
+Insert matching closing tag for XML/HTML	Вставлять соответствующие закрывающие теги для XML/HTML
+Inserts HTML character entities like '&amp;'.	Вставляет символы HTML как "&amp;".
+Instances	Наследование
+Instant Save After Creation	Немедленное сохранение
+Instant Save filename could not be generated (%s).	Не удалось создать файл немедленного сохранения (%s).
+Instantsave directory does not exist or is not writable.	Каталог для немедленного сохранения не существует или недоступен для записи.
+Integrated Development Environment	Интегрированная среда разработки
+Interface	Интерфейс
+Interfaces	Интерфейсы
+Invalid command: %s	Неверная команда: %s
+Invalid directory for Find in Files.	Для поиска в файлах указан недопустимый каталог.
+Invalid working directory "%s"	Некорректный рабочий каталог "%s"
+Invert all colors, by default using white text on a black background	Инвертировать все цвета, по умолчанию использовать белый текст на черном фоне
+Invert syntax highlighting colors	Инвертировать цвета подсветки синтаксиса
+Invert the sense of matching, to select non-matching lines	Инвертировать смысл соответствия, для выбора не совпадающих с шаблоном строк
+Is abstract	Абстрактный
+Is singleton	Одиночка (singleton)
+Japanese	Японская
+Jump to the entered line number	Перейти на введённый номер строки
+Keybindings	Сочетания клавиш
+Keyboard Shortcuts	Сочетания клавиш
+Keyboard _Shortcuts	Сочетания _клавиш
+Keys	Клавиши
+Korean	Корейская
+LF	LF
+LINE	LINE
+Label	Метка
+Labels	Метки
+Left	Слева
+Level 4 sections	Разделы 4 уровня
+Level 5 sections	Разделы 5 уровня
+License	Лицензия
+License text could not be found, please visit http://www.gnu.org/licenses/gpl-2.0.txt to view it online.	Текст лицензии не найден; пожалуйста, посетите http://www.gnu.org/licenses/gpl-2.0.txt, чтобы ознакомиться с ним.
+Line	Строка
+Line _Breaking	Перенос _строк
+Line breaking column:	Обрезать текст по столбцу:
+Line wrapping	Перенос строк
+Lines visible _around the cursor:	Строки, видимые _вблизи курсора:
+Lines:	Строк:
+Load Ta_gs File...	Загрузить файл с те_гами...
+Load Tags File	Загрузить файл тегов
+Load files from the last session	Загрузить файлы из последней сессии
+Load virtual terminal support	Загружать виртуальный терминал
+Loaded %s tags file '%s'.	Загружено файл с тэгами %s '%s'.
+Location:	Размещение:
+MOD	МОД
+M_ove Line(s) Down	Переместить строку(и) в_низ
+Macros	Макросы
+Mail address:	Электронная почта:
+Make Custom _Target...	Собрать заданную _цель...
+Make _Object	Собрать _объектный файл
+Make all	Собрать все
+Make custom target	Собрать указанную цель
+Make object	Собрать объектный файл
+Mark all matches in the current document	Выделить все совпадения в текущем документе
+Marks spaces with dots and tabs with arrows	Помечать пробелы точками, а табуляции стрелками.
+Match braces	Совмещать скобки
+Match from s_tart of word	Совпадение с _начала слова
+Match only a _whole word	Совпадение только _всего слова
+Mathematical characters	Математические символы
+Max. symbol name suggestions:	Максимальное количество предложений для имени объекта:
+Maximum number of entries to display in the autocompletion list	Максимальное количество предлагаемых вариантов в списке автозавершения
+Members	Члены
+Message window:	Окно сообщений:
+Messages	Сообщения
+Methods	Методы
+Middle Eastern	_Средний Восток
+Minimal delay (in milliseconds) between two automatic updates of the symbol list. Note that a too short delay may have performance impact, especially with large files. A delay of 0 disables real-time updates.	Минимальная задержка (в миллисекундах) между двумя автоматическими обновлениями списка символов. Обратите внимание, что слишком маленькая задержка может сказаться на производительности, особенно в больших файлах. Значение 0 запрещает обновление в реальном времени.
+Miscellaneous	Прочее
+Miscellaneous characters	Прочие символы
+Modified:	Модифицирован:
+Module	Модуль
+Modules	Модули
+Move cursor in snippet	Перемещать курсор в фрагменте
+Move document first	Переместить документ в начало
+Move document last	Переместить документ в конец
+Move document left	Переместить документ влево
+Move document right	Переместить документ вправо
+Move it now?	Переместить это?
+Move line(s) down	Переместить строки вниз
+Move line(s) up	Переместить строки вверх
+Move the current documents into the new project's session?	Переместить открытые документы в сессию нового проекта?
+Name	Имя
+Name:	Имя:
+Namespace	Пространство имён
+Namespaces	Пространства имён
+Navigate back a location	Вернуться на шаг назад
+Navigate forward a location	Перейти на шаг вперёд
+New	Новый
+New (with _Template)	Создать из _шаблона
+New Project	Новый проект
+New file "%s" opened.	Открыт новый файл "%s".
+New from Folder	Новый из папки
+New from _Folder...	Новый из _папки…
+Newline strips trailing spaces	Новая строка убирает лишние пробелы
+Next Me_ssage	_Следующее сообщение
+Next Message	Следующее сообщение
+Next error	Следующая ошибка
+Next to current	За текущей
+No context action set.	Контекстное действие не задано.
+No custom commands defined.	Пользовательские команды не определены.
+No filetype	Тип файла не определён
+No matches found for "%s".	Совпадений для "%s" не найдено.
+No matches found.	Совпадений не найдено.
+No more build errors.	Ошибок сборки больше нет.
+No more message items.	Сообщений больше нет.
+No plugins available.	Нет доступных модулей.
+No symbols found	Символы не найдены
+No text to find.	Нет текста для поиска.
+None	Пустой
+Nordic	Скандинавская
+Note: Item 2 opens a dialog and appends the response to the command.	Примечание: для команды 2 будет открыт диалог, позволяющий ввести дополнительные параметры.
+Note: To apply these settings to all currently open documents, use <i>Project->Apply Default Indentation</i>.	Замечание: Чтобы применить эти настройки ко всем документам, используйте <i>Проект->Использовать ширину отступа по умолчанию</i>.
+Notebook tab	Вкладка
+Notebook tabs	Вкладки
+OVR	ЗАМ
+Only for rectangular selections	Только для выделения столбцом
+Only show virtual spaces beyond the end of lines when drawing a rectangular selection	Показывать виртуальные пробелы только после окончания строк при выделении столбцом
+Open	Открыть
+Open File	Открыть файл
+Open Project	Открыть проект
+Open Selected F_ile	Открыть _выбранный файл
+Open _Externally	Открыть во _внешней программе
+Open a color chooser dialog, to interactively pick colors from a palette	Открыть диалог выбора цвета, позволяющий выбирать цвет из палитры
+Open a recent file	Предыдущие файлы
+Open all FILES in read-only mode (see documentation)	Открыть все файлы в режиме "только чтение" (см. документацию)
+Open an existing file	Открыть существующий файл
+Open in New _Window	Открыть в новом _окне
+Open in _Geany	Открыть в _Geany
+Open new documents from the command-line	Открывать новые документы из командной строки
+Open selected file	Открыть выбранный файл
+Opens at startup the files from the last session	Открывать файлы из последнего сеанса работы при загрузке программы
+Opens the file in read-only mode. If you choose more than one file to open, all files will be opened read-only.	Открытие файла в режиме "только чтение". Если выбрать более чем один файл для открытия, все выбранные файлы будут открыты в режиме "только чтение".
+Options	Опции
+Other	Другое
+Other options to pass to Grep	Прочие параметры для передачи утилите grep
+Other:	Прочие:
+Override Geany keybindings	Переопределить сочетания клавиш Geany
+Override that keybinding?	Переопределить это сочетание?
+Overwrite?	Перезаписать?
+Owner:	Владелец:
+P_lugin Preferences	Настройки _модулей
+Pack the toolbar to the main menu to save vertical space	Поместить панель инструментов в основное меню для увеличения вертикального пространства
+Package	Пакет
+Packages	Пакеты
+Packages / Modules	Пакеты
+Page %d of %d	Страница %d из %d
+Page Set_up	_Параметры страницы
+Paginating	Разбивка на страницы
+Paragraph	Абзац
+Parenthesis ( )	Скобки ( )
+Part	Часть
+Parts	Части
+Passing data and executing custom command: %s	Передаются данные и выполняется пользовательская команда: %s
+Paste	Вставить
+Paste the contents of the clipboard	Вставить содержимое буфера обмена
+Path (and possibly additional arguments) to your favorite browser	Путь (и, возможно, дополнительные аргументы) к вашему любимому браузеру
+Path of the file representing the project and storing its settings. It should normally have the "%s" extension.	Путь до файла, в котором хранится проект и его параметры. Обычно он имеет расширение "%s".
+Path to start in when opening or saving files. Must be an absolute path.	Начальный каталог для открытия и сохранения файлов. Путь должен быть абсолютным. Оставьте пустым, чтобы использовать текущий рабочий каталог.
+Path to start in when opening project files	Начальный каталог для открытия файлов проекта
+Perform regular expression matching on the whole buffer at once rather than line by line, allowing matches to span multiple lines. In this mode, newline characters are part of the input and can be captured as normal characters by the pattern.	Регулярное выражение будет обрабатывать весь буфер за раз, а не строку за строкой, что позволяет захватывать сразу несколько строк одним регулярным выражением. В этом режиме символы новой строки становятся частью входных данных и могут соответствовать шаблону как обычные символы.
+Permissions:	Права:
+Persistent Untitled Documents	Печать документа
+Persistent untitled document directory does not exist or is not writable.	Каталог для немедленного сохранения не существует или недоступен для записи.
+Placement of new file tabs:	Расположение новых вкладок:
+Please set a print command in the preferences dialog first.	Пожалуйста, сначала укажите команду для печати в диалоге настроек.
+Please set the filetype for the current file before using this function.	Пожалуйста, установите тип файла для текущего документа перед использованием этой функции.
+Plugin	Модуль
+Plugin configuration directory could not be created.	Каталог настроек модулей не может быть создан.
+Plugins	Модули
+Ports	Импорт
+Position:	Позиция:
+Pr_evious Message	_Предыдущее сообщение
+Preference_s	_Настройки
+Preferences	Настройки
+Press the combination of the keys you want to use for "%s".	Укажите сочетание клавиш для "%s"
+Pressing tab/shift-tab indents/unindents instead of inserting a tab character	Нажатие Tab/Shift+Tab увеличивает/уменьшает отступ вместо того, чтобы вставить символ табуляции
+Previous Message	Предыдущее сообщение
+Previous Translators	Предыдущие переводчики
+Previous error	Предыдущая ошибка
+Print	Печать
+Print Geany's installation prefix	Вывести инсталляционный префикс Geany
+Print document	Печать документа
+Print internal filetype names	Выводить внутренние имена типов файлов
+Print line numbers	Показывать номера строк
+Print only the basename (without the path) of the printed file	Печатать только имя файла, опуская путь к нему
+Print page header	Печатать заголовки страниц
+Print page numbers	Печатать номера страниц
+Printing	Печать
+Printing of %s failed (%s).	Печать %s завершилась с ошибкой (%s).
+Prints a vertical line in the editor window at the given cursor position (see below)	Отображать вертикальную линию в окне редактора на заданной позиции (см. ниже).
+Procedures	Процедуры
+Process could not be stopped (%s).	Процесс не может быть остановлен (%s).
+Process failed (%s)	Процесс дал сбой (%s)
+Process failed, no working directory	Ошибка: не указан рабочий каталог
+Processes / Blocks / Components	Процессы / Блоки / Компоненты
+Program	Программа
+Program not found	Программа не найдена
+Programs	Программы
+Project	Проект
+Project "%s" closed.	Проект "%s" закрыт.
+Project "%s" created.	Проект "%s" создан.
+Project "%s" opened.	Проект "%s" открыт.
+Project "%s" saved.	Проект "%s" сохранён.
+Project Properties	Свойства проекта
+Project base directory could not be created (%s).	Каталог для проекта не может быть создан (%s).
+Project file "%s" could not be loaded.	Файл проекта "%s" не может быть загружен.
+Project file could not be written	Не удалось выполнить запись в файл проекта
+Project file could not be written (%s).	Не удалось выполнить запись в файл проекта (%s).
+Project files	Файлы проекта
+Project files:	Файлы проекта:
+Project name	Название проекта
+Projects	Проект
+Properties	Свойства
+Proxy plugin '%s' extension '%s' starts with a dot. Please fix your proxy plugin.	Для плагина '%s' расширение '%s' начинается с точки. Пожалуйста, исправьте это.
+Punctuation characters	Знаки препинания
+Question	Вопрос
+Quit	Выход
+Quit Geany	Выйти из Geany
+RO 	ТЧ
+R_eload As	За_грузить заново как
+R_ename	Переи_меновать
+Range:	Интервал:
+Re-open last closed tab	Открыть последнюю закрытую вкладку
+Re_place All	З_аменить все
+Read _Only	Только _чтение
+Read-only:	Только чтение:
+Read:	Чтение:
+Recent _Files	Недавние _файлы
+Recent files list length:	Длина списка недавних файлов:
+Redo	Повторить
+Redo the last modification	Повторить последнее изменение
+Refresh	Обновить
+Regions	Области
+Reload all files	Обновить все файлы
+Reload file	Обновить файл
+Reload symbol list	Обновить список символов
+Reload the current file from disk	Заново загрузить текущий файл с диска
+Remove Error Indicators	Убрать индикаторы ошибок
+Remove Error _Indicators	Убрать индикаторы о_шибок
+Remove Markers	Удалить маркеры
+Remove Markers and Error Indicators	Убрать маркеры и индикаторы ошибок
+Remove _Markers	Удалить _маркеры
+Removes all messages from the status bar. The messages are still displayed in the status messages window.	Удалить все сообщения из строки состояния. Сообщения по-прежнему отображаются в окне сообщений о состоянии.
+Removes trailing spaces and tabs at the end of lines	Убирать лишние пробелы и табуляции в конце строк
+Renders the font size of the document together with the current zoom level	Устанавливает размер шрифта для отображения документа в соответствии с текущим масштабом
+Replace	Заменить
+Replace & Fi_nd	Заменить _и Найти
+Replace Tabs with S_paces	_Заменить табуляции пробелами
+Replace \\\\, \\t, \\n, \\r and \\uXXXX (Unicode characters) with the corresponding control characters	Заменять \\\\, \\t, \\n, \\r и \\uXXXX (символы Unicode) соответствующими управляющими символами
+Replace all matches found in the currently selected text	Заменить все совпадения в выделенном тексте
+Replace spaces with tabs	Заменить пробелы табуляциями
+Replace special characters	Заменить специальные символы
+Replace tabs with space	Заменить табуляции пробелами
+Replace text in the current document	Замена текста в текущем документе
+Replace wit_h:	Заменить _на:
+Replaced %u matches in %u documents.	Произведено %u замен(ы) в %u документе(ах).
+Replaces all tabs in document with spaces	Заменить пробелами все табуляции в документе.
+Report a _Bug...	Соо_бщить об ошибке...
+Report bugs to https://github.com/geany/geany/issues.	Сообщения об ошибках отправляйте на https://github.com/geany/geany/issues.
+Reset	Сбросить
+Resources	Базовый класс:
+Return a list of open documents in a running Geany instance	Вернуть список открытых документов в запущенной копии Geany
+Right	Справа
+Romanian	Румынская
+Run	Запустить
+Run Targets	Цели
+Run or view the current file	Запустить или посмотреть текущий файл
+Run programs in VTE instead of opening a terminal emulation window. Please note, programs executed in VTE cannot be stopped	Запускать программы в терминале вместо того, чтобы открывать отдельное окно. Внимание: программы, выполняемые в терминале, нельзя остановить.
+SE & SW Asian	_Юго-восточная и юго-западная Азия
+SP	ПРБ
+S_elect Current Line(s)	Выделить _текущую строку(и)
+S_mart Line Indent	Использовать "_умный" отступ
+S_ystem default	Системные _настройки
+Sa_ve All	Сохранить _все
+Sa_ve all open files	Со_хранить все открытые файлы
+Save	Сохранить
+Save Actions	Действия по сохранению
+Save All	Сохранить _все
+Save File	Сохранить файл
+Save _As...	Сохранить _как...
+Save all	Сохранить все
+Save all open files	Сохранить все открытые файлы
+Save as	Сохранить как
+Save only current open _file	Сохранить только текущий открытый _файл
+Save the current file	Сохранить текущий файл
+Save the file and rename it	Сохранить и переименовать файл.
+Save window position	Сохранять позицию окна
+Save window size	Сохранять размер окна
+Saves the window position and restores it at the start	Сохранять позицию окна и восстанавливать её при следующем запуске
+Saves the window size and restores it at the start	Сохранять размер окна и восстанавливать его при следующем запуске
+Scribble	Заметки
+Scroll down the view by one line	Прокрутить вниз на одну строку
+Scroll on keystroke	Прокрутка по нажатию на клавиши
+Scroll on output	Прокрутка по мере вывода
+Scroll to current line	Прокрутить до текущей строки
+Scroll up the view by one line	Прокрутить наверх на одну строку
+Scrollback lines:	Прокручиваемые строки:
+Se_lect Current Paragraph	Выделить _абзац
+Search	Поиск
+Search Field	Найти поле
+Search _backwards	Поиск _в обратном направлении
+Search completed with %d match.	Поиск завершён, найдено %d совпадений.
+Search completed with %d matches.	Поиск завершён, найдено %d совпадение.
+Search failed.	Не удалось выполнить поиск.
+Searching...	Идёт поиск...
+Sect1	Секция1
+Sect2	Секция2
+Sect3	Секция3
+Section	Раздел
+Section Level 1	Раздел уровень 1
+Section Level 2	Раздел уровень 2
+Section Level 3	Раздел уровень 3
+Section Level 4	Раздел уровень 4
+Section Level 5	Раздел уровень 5
+Sections	Разделы
+See grep's manual page for more information	См. справку grep для более подробной информации.
+Select	Выбрать
+Select All	Выбрать все
+Select Browser	Выберите браузер
+Select Directory	Выбрать каталог
+Select File	Выбрать файл
+Select Folder	Выбрать каталог
+Select Project Base Path	Выберите путь к каталогу проекта
+Select current word	Выбрать слово
+Select items to be displayed on the toolbar. Items can be reordered by drag and drop.	Выбор элементов, отображаемых на панели инструментов. Элементы можно упорядочивать путём перетаскивания.
+Select to next word part	Выделить до окончания слова
+Select to previous word part	Выделить до начала слова
+Send to Custom Command 1	Передать пользовательской команде 1
+Send to Custom Command 2	Передать пользовательской команде 2
+Send to Custom Command 3	Передать пользовательской команде 3
+Send to Custom Command 4	Передать пользовательской команде 4
+Send to Custom Command 5	Передать пользовательской команде 5
+Send to Custom Command 6	Передать пользовательской команде 6
+Send to Custom Command 7	Передать пользовательской команде 7
+Send to Custom Command 8	Передать пользовательской команде 8
+Send to Custom Command 9	Передать пользовательской команде 9
+Separator	Разделитель
+Set Build Commands	Установить пользовательские команды
+Set Custom Commands	Установить пользовательские команды
+Set File_type	_Установить тип файла
+Set Line E_ndings	Установить _окончания строк
+Set _Encoding	Установить _кодировку
+Set encoding:	Кодировка:
+Set filetype:	Тип файла:
+Set initial column number to COLUMN for the first opened file (useful in conjunction with --line)	Задать начальный номер столбца COLUMN для первого открытого файла (полезно в сочетании с --line)
+Set initial line number to LINE for the first opened file	Установить начальный номер строки LINE для первого открытого файла
+Set limit on visible characters in tab label.	Установить ограничение на количество видимых символов подписи вкладки.
+Set menu item label	Метка элемента меню
+Set path from document	Установить путь из документа
+Set the information to be used in templates. See the documentation for details.	Введите информацию для использования в шаблонах. Подробности смотрите в документации.
+Sets the background color of the text in the terminal widget	Устанавливает цвет фона для окна терминала
+Sets the color of the long line marker	Установить цвет маркера длинной строки
+Sets the default encoding for newly created files	Устанавливает кодировку по умолчанию для создаваемых файлов
+Sets the default encoding for opening existing non-Unicode files	Устанавливает кодировку по умолчанию для открытия существующих файлов с кодировкой, отличной от Unicode
+Sets the editor font	Установить шрифт для редактора текста
+Sets the font for the message window	Установить шрифт для окна сообщений
+Sets the font for the symbol list	Установить шрифт для списка тегов
+Sets the font for the terminal widget	Устанавливает шрифт для окна терминала
+Sets the foreground color of the text in the terminal widget	Устанавливает цвет текста для окна терминала
+Sets the path to the shell which should be started inside the terminal emulation	Устанавливает путь к оболочке, которая должна быть запущена в терминале
+Setting %s indentation mode for %s.	Установлен режим отступа "%s" для %s.
+Setting indentation width to %d for %s.	Установлена ширина отступа %d для %s.
+Settings	Настройки
+Shell:	Оболочка:
+Shortcut	Сокращение
+Show Color Chooser	Показать выбор цвета
+Show Indentation _Guides	Отображать линии _отступов
+Show Line _Endings	Отображать _завершение строк
+Show Message _Window	_Показывать окно сообщений
+Show S_ymbol List	Показать список _символов
+Show Side_bar	Показывать _боковую панель
+Show White S_pace	Отображать _пробелы
+Show _Document List	Показать список _документов
+Show _Hidden Files	Показать _скрытые файлы
+Show _Line Numbers	Отображать _номера строк
+Show _Markers Margin	Отображать _поле для маркеров
+Show _Paths	Показать _пути
+Show _Toolbar	Показывать панель _инструментов
+Show _Tree	Показать _дерево
+Show _hidden files	Показывать скр_ытые файлы
+Show as underline indicators	Отображать в виде индикаторов подчёркивания
+Show calltip	Показывать подсказки
+Show close buttons	Показывать кнопки закрытия
+Show documents list	Показывать список документов
+Show editor tabs	Показывать вкладки редактора текста
+Show hidden files	Показать скрытые файлы
+Show in markers margin	Отступ для маркера строк
+Show indentation guides	Показывать индикаторы отступа
+Show line endings	Показывать окончания строк
+Show line numbers	Показывать _номера строк
+Show markers margin	Отступ для _маркера строк
+Show only non-default line endings	Показывать только окончания строк не по умолчанию
+Show sidebar	Показывать боковую панель
+Show status bar	Показывать строку состояния
+Show symbol list	Отображать список символов
+Show t_oolbar	Показывать панель _инструментов
+Show the current document	Показать текущий документ
+Show the preferences dialog	Показать диалог настроек
+Show version and exit	Показать версию программы и выйти
+Show white space	Показывать пробелы
+Shows a confirmation dialog on exit	При закрытии показывать диалог подтверждения выхода
+Shows a small cross button in the file tabs to easily close files when clicking on it (requires restart of Geany)	Показывать маленькие кнопки с крестиком, на вкладках, рядом с названиями файлов, чтобы можно было легко закрывать их одним щелчком (потребуется перезапуск программы)
+Shows line ending characters only when they differ from the file default line ending character	Показывает символы окончания строки, только если они отличаются от символа окончания строки файла по умолчанию
+Shows or hides the Line Number margin	Включить или выключить отображение номеров строк в редакторе
+Shows or hides the small margin right of the line numbers, which is used to mark lines	Показывает или прячет отступ для маркера, справа от номеров строк. Маркером можно отмечать определенные строки.
+Shows small dotted lines to help you to use the right indentation	Показывать пунктирные линии, чтобы проще было выбрать нужные отступы
+Shows the line ending character	Отображать символ окончания строки
+Side by Side	По вертикали
+Sidebar:	Боковая панель:
+Single quotes ' '	Одинарные кавычки ' '
+Singletons	Синглтоны
+Size:	Размер:
+Snippet completion	Автозавершение фрагментов кода
+Some of the many contributors (for a more detailed list, see the file %s):	Некоторые из многих участников проекта (более детальный список в файле %s):
+Sort by _Appearance	Сортировать по _появлению
+Sort by _Name	Сортировать по _имени
+Source file:	Файл исходного кода:
+South European	Южноевропейская
+Space separated list of file patterns (e.g. *.c *.h)	Список шаблонов файлов, разделённых пробелами (например, *.c *.h)
+Space separated list of file patterns used for the Find in Files dialog (e.g. *.c *.h)	Список шаблонов поиска, разделённых пробелами (например, *.c *.h), используемых для поиска в диалоге файлов
+Spaces	Пробелы
+Special Characters	Специальные символы
+Specifies the history in lines, which you can scroll back in the terminal widget	Устанавливает количество строк, которые можно прокрутить назад в окне терминала
+Specifies the number of files which are stored in the Recent files list	Количество файлов, сохраняемых в списке недавно открытых файлов.
+Specify a format for the date and time stamp which is added to the page header on each page. For a list of available conversion specifiers see https://docs.gtk.org/glib/method.DateTime.format.html.	Укажите формат для отображения даты и времени для добавления на печатаемые страницы. Список доступных спецификаторов преобразования см. на сайте https://docs.gtk.org/glib/method.DateTime.format.html.
+Specify a format for the {datetime} wildcard. For a list of available conversion specifiers see https://docs.gtk.org/glib/method.DateTime.format.html.	Укажите формат для группового символа {datetime}. Список доступных спецификаторов преобразования см. на сайте https://docs.gtk.org/glib/method.DateTime.format.html.
+Specify a format for the {date} wildcard. For a list of available conversion specifiers see https://docs.gtk.org/glib/method.DateTime.format.html.	Укажите формат для группового символа {date}. Список доступных спецификаторов преобразования см. на сайте https://docs.gtk.org/glib/method.DateTime.format.html.
+Specify a format for the {year} wildcard. For a list of available conversion specifiers see https://docs.gtk.org/glib/method.DateTime.format.html.	Укажите формат для группового символа {year}. Список доступных спецификаторов преобразования см. на сайте https://docs.gtk.org/glib/method.DateTime.format.html.
+Split Window	Разделить окно
+Splits the editor view into two windows.	Разделяет окно редактирования на два отдельных окна.
+Square brackets [ ]	Угловые скобки [ ]
+Startup	Запуск
+Startup path:	Рабочий каталог при запуске:
+Status	Статус
+Status messages	Дежурные сообщения
+Steps	Шаги
+Stop scrolling at last line	Останавливать прокрутку на последней строке
+Store project file inside the project base directory	Хранить файл проекта внутри основного каталога проекта
+Strings	Строки
+Strip trailing spaces and tabs	Убирать лишние пробелы и табуляции
+Structs	Структуры
+Structures	Структуры
+Subroutines	Функции / Процедуры
+Subsection	Подраздел
+Subsections	Подразделы
+Subsubsection	Субподраздел
+Subsubsections	Подподразделы
+Subtitle	без имени
+Suppress snippet completion	Подавлять автозавершение фрагментов кода
+Suppress status messages in the status bar	Подавлять вывод дежурных сообщений в строке состояния
+Switch to Compiler	Переключиться на компилятор
+Switch to Document	Перейти к документу
+Switch to Editor	Перейти к редактору
+Switch to Message Window	Показывать окно сообщений
+Switch to Messages	Перейти к сообщениям
+Switch to Scribble	Перейти к заметкам
+Switch to Search Bar	Перейти к поиску
+Switch to Sidebar	Перейти к боковой панели
+Switch to Sidebar Document List	Перейти к списку документов
+Switch to Sidebar Symbol List	Перейти к списку тегов
+Switch to VTE	Переключиться в терминал
+Switch to last used document	Перейти на последний документ
+Switch to last used document after closing a tab	Перейти на последний документ, с которым шла работа, после закрытия вкладки
+Switch to left document	Перейти на документ слева
+Switch to right document	Перейти на документ справа
+Switch to status message list at new message	Перейти к сообщениям статуса при появлении новых
+Switch to the status message tab (in the notebook window at the bottom) if a new status message arrives	Переключать на закладку "Статус" (в служебной области снизу), если там появилось новое сообщение
+Symbol list update frequency:	Частота обновления списка символов:
+Symbol list:	Список символов:
+Symbols	Символы
+System _default	_По умолчанию
+System default	Системные по умолчанию
+T/S	ТАБ/ПРБ
+TAB	ТАБ
+T_abs and Spaces	_Табуляции и пробелы
+T_abs and spaces	_Табуляция и пробелы
+T_oggle Case of Selection	Переключить _регистр выделенного текста
+Tab _key indents	Отступ при помощи _клавиши Tab
+Tab label length:	Длина подписи вкладки:
+Tables	Таблицы
+Tabs	Табуляция
+Tabs and Spaces	Табуляции и пробелы
+Targets	Цели
+Tasks	Задачи
+Technical characters	Технические символы
+Templates	Шаблоны
+Terminal	Терминал
+Terminal:	Терминал:
+Text ended before matching quote was found	Текст команды завершился до того, как была найдена парная кавычка
+Text was empty (or contained only whitespace)	Текст команды пуст (или содержит только пробелы)
+Text;Editor;	Текст;Редактор;
+Thai	Тайская
+The '%s' project is open.	Проект '%s' открыт.
+The Geany developer team	Команда разработчиков Geany
+The amount of characters which are necessary to show the symbol autocompletion list	Количество символов, которые необходимо ввести, чтобы было показан список вариантов для автозавершения.
+The background color of characters after the given cursor position (see below) changed to the color set below, (this is recommended if you use proportional fonts)	Цвет фона символов после заданной позиции (см. ниже) меняется на цвет, который установлен ниже (рекомендуется, если вы используете пропорциональные шрифты).
+The buffer's previous state is stored in the history and undoing restores it. You can disable this by discarding the history upon reload. This message will not be displayed again but your choice can be changed in the various preferences.	Предыдущее состояние буфера находится в истории и отмена действия восстанавливает его. Вы можете отключить данное поведение, выполняя сброс истории при перезагрузке. Данное сообщение не будет отображаться повторно, но ваш выбор может быть изменён в настройках "Разное".
+The combination '%s' is already used for "%s".	Комбинация клавиш "%s" уже используется для "%s".
+The command to execute when using "Open with". You can use %f and %d wildcards.\n%f will be replaced with the filename including full path\n%d will be replaced with the path name of the selected file without the filename	Команда для выполнения по действию "Открыть в". Можно использовать обозначения %f и %d.\n%f будет заменено на имя файла, включая полный путь к нему.\n%d будет заменено только на путь, без имени файла.
+The current filetype overrides the default style.	Текущий тип файла переопределяет стандартный стиль.
+The document has been closed.	Документ закрыт.
+The executed custom command exited with an unsuccessful exit code.	Выполненная команда пользователя завершилась с ошибкой.
+The executed custom command returned an error. Your selection was not changed. Error message: %s	Выполнение команды пользователя завершилось с ошибкой. Изменений сделано не было. Текст сообщения об ошибке: %s
+The file "%s" could not be opened properly and has been truncated. This can occur if the file contains a NULL byte. Be aware that saving it can cause data loss.\nThe file was set to read-only.	Файл "%s" не удалось открыть правильно, и он был усечён. Это может случиться, если в файле находится нулевой байт. Внимание: сохранение файла может привести к потере данных.\nФайл открыт в режиме "только чтение".
+The file "%s" will be printed with the following command:\n\n%s	Файл "%s" будет напечатан при помощи следующей команды:\n\n%s
+The file '%s' already exists. Do you want to overwrite it?	Файл '%s' уже существует. Перезаписать?
+The file '%s' is not saved.	Файл "%s" не сохранён.
+The file '%s' on the disk is more recent than the current buffer.	Файл '%s' на диске более новый, чем в текущем буфере.
+The file has been reloaded.	Файл был загружен заново.
+The following keyboard shortcuts are configurable:	Можно настроить следующие сочетания клавиш:
+The long line marker is a thin vertical line in the editor, it helps to mark long lines, or as a hint to break the line. Set this value to a value greater than 0 to specify the column where it should appear.	Маркер длинной строки - это вертикальная тонкая линия в редакторе. Помогает отмечать длинные строки или является сигналом для перехода на следующую строку. Установите число, большее нуля, для указания номера столбца, где следует отображать этот маркер.
+The name of the developer	Имя разработчика:
+The path "%s" does not exist.	Каталог "%s" не существует.
+The plugin "%s" is not binary compatible with this release of Geany - please recompile it.	Модуль "%s" несовместим с этой версией Geany - пожалуйста, скомпилируйте его заново.
+The specified project name is too long (max. %d characters).	Указанное имя проекта слишком длинное (максимум %d символов).
+The specified project name is too short.	Указанное имя проекта слишком короткое.
+The width in chars of a single indent	Ширина в символах для отображения одного отступа
+Theses	Диссертации
+This is Geany %s.	Это Geany %s.
+This may cause color schemes to display incorrectly.	Это может вызвать неправильное отображение цветовых схем.
+This operation will modify all open files which contain the text to replace.	Эта операция изменит все открытые файлы, содержащие заменяемый текст.
+This option disables the keybinding to popup the menu bar (default is F10). Disabling it can be useful if you use, for example, Midnight Commander within the VTE.	Эта опция отключает горячую клавишу для вызова меню (обычно F10). Это может пригодиться, например, если вы используете Midnight Commander в окне терминала.
+This plugin provides different actions related to saving of files.	Данный модуль предлагает различные действия для сохранения файлов.
+Title	без имени
+Toggle All Additional Widgets	Показать/скрыть все дополнительные элементы
+Toggle All _Additional Widgets	Показать/скрыть _все панели
+Toggle Line breaking	Переключить перенос строк
+Toggle Line wrapping	Переключить режим переноса строк
+Toggle Messages Window	Показать/скрыть окно сообщений
+Toggle Sidebar	Показать/скрыть боковую панель
+Toggle current fold	Свернуть/развернуть текущий блок
+Toggle line commentation	Переключить комментирование строк
+Toggle marker	Переключить маркер
+Toggle plugin status	Переключить статус модуля
+Toggle the documents list on and off	Включить/выключить отображение списка документов
+Toggle the symbol list on and off	Переключить отображение списка символов
+Too many items selected!	Выбрано слишком много объектов!
+Toolbar	Панель инструментов
+Tools	Инструменты
+Top	Вверху
+Top and Bottom	По горизонтали
+Traits	Типажи
+Translators	Переводчики
+Triggers	Триггеры
+Try to resave the file?	Попытаться сохранить файл заново?
+Turkish	Турецкая
+Type Selectors	Типы
+Type a defined short character sequence and complete it to a more complex string using a single keypress	Введите определенную короткую последовательность символов и дополните её до более сложной строки одним нажатием клавиши
+Type constructors	Конструкторы типов
+Type here what you want, use it as a notice/scratch board	Здесь можно писать что угодно. Используйте это поле для заметок и быстрых записей.
+Type:	Тип:
+Typedefs	Типы
+Typedefs / Enums	Типы / Перечисления
+Types	Типы
+U_ncomment Line(s)	_Раскомментировать
+Uncomment line(s)	Раскомментировать строки
+Undo	Отменить
+Undo history will be lost.	Вся история изменений будет потеряна.
+Undo the last modification	Отменить последнее изменение
+Unfold all	Развернуть все
+Unicode	Юникод
+Unix (LF)	Unix (LF)
+Unknown error executing child process	Неизвестная ошибка при запуске дочернего процесса
+Unknown filetype extension for "%s".\n	Неизвестное расширение имени файла для "%s".\n
+Unknowns	Неизвестные
+Unpublished	Неопубликованное
+Untitled Document Save	Статистика документа
+Untitled document %s is not saved.	Файл "%s" не сохранён.
+Untitled document save _interval:	_Интервал автоматического сохранения:
+Up	Вверх
+Usage: %s -g <Tags File> <File list>\n\n	Использование: %s -g <файл тэгов> <список файлов>\n\n
+Use FILE as the dynamically-linked VTE library	Использовать FILE в качестве динамически подключаемой библиотеки VTE
+Use Perl-like regular expressions. For detailed information about using regular expressions, please refer to the manual.	Использовать Perl-совместимые регулярные выражения. Для более подробной информации по использованию регулярных выражений см. документацию.
+Use _escape sequences	Escape-_последовательности
+Use alternate configuration directory DIR	Использовать DIR как альтернативный каталог для файлов конфигурации
+Use an external command for printing	Использовать внешнюю команду для печати
+Use current word under the cursor when opening the Find, Find in Files or Replace dialog and there is no selection	Использовать слово, находящееся под курсором, при открытии диалогов "Найти", "Найти в файлах" или "Заменить", если нет выделенного фрагмента
+Use global settings	Использовать глобальные настройки
+Use indicators to show compile errors	Использовать индикаторы для показа ошибок при сборке
+Use multi-line matchin_g	_Многострочный поиск
+Use native GTK printing	Использовать стандартный механизм печати GTK
+Use one tab per indent	Использовать один символ табуляции при отступе
+Use platform-native file dialogs	Использовать диалоги Windows
+Use socket filename FILE for communication with a running Geany instance	Использовать файл сокета FILE для соединения с запущенной копией Geany
+Use spaces if the total indent is less than the tab width, otherwise use both	Использовать пробелы, если общий отступ меньше ширины символа табуляции, в противном случае использовать пробелы и табуляции
+Use spaces when inserting indentation	Использовать пробелы при отступе
+Use the basename of the printed file	Использовать только имя текущего файла
+Use the current file's directory for Find in Files	Использовать каталог текущего файла для "Найти в файлах"
+Use the current word under the cursor for Find dialogs	Использовать слово под курсором для диалогов поиска
+Use the project's base directory	Использовать каталог проекта
+Using GTK+ v%u.%u.%u and GLib v%u.%u.%u runtime libraries	Использует GTK+ v%u.%u.%u and GLib v%u.%u.%u runtime библиотеки
+Value	Значение
+Variable	Переменные
+Variables	Переменные
+Variables / Signals / Ports	Переменные / Сигналы / Порты
+Various	Разное
+Version number, which a new file initially has	Номер версии, которую изначально имеет новый файл
+Version:\t%s\nAuthor(s):\t%s\nFilename:\t%s	Версия:\t%s\nАвтор(ы):\t%s\nИмя файла:\t%s
+Vietnamese	Вьетнамская
+View	Вид
+Views	Отображения
+Warning	Предупреждение
+Warning: non-standard hard tab width: %d != 8!	Внимание: нестандартная ширина табуляции: %d != 8
+West European	_Западноевропейская
+Western	Латиница
+When "smart" home is enabled, the HOME key will move the caret to the first non-blank character of the line, unless it is already there, it moves to the very beginning of the line. When this feature is disabled, the HOME key always moves the caret to the start of the current line, regardless of its current position.	При использовании "умной" клавиши Home по её нажатию курсор будет перемещаться к первому непробельному символу в строке. Если же курсор уже находится там, то он переместится к самому началу строки. Без этой функции клавиша Home всегда переносит курсор в самое начало строки.
+When enabled, a project file is stored by default inside the project base directory when creating new projects instead of one directory above the base directory. You can still change the path of the project file in the New Project dialog.	Если включено, при создании нового проекта файл проекта будет хранится внутри главного каталога проектов, а не на один каталог выше базового каталога. У вас остается возможность изменения пути к проектному файлу в диалоге "Новый проект" ("Проект"->"Новый").
+Whether the virtual terminal emulation (VTE) should be loaded at startup, disable it if you do not need it	Должна ли при запуске программы загружаться библиотека для эмуляции виртуального терминала. Отключите, если вам это не требуется.
+Whether to beep if an error occurred or when the compilation process has finished	Подавать ли звуковой сигнал при возникновении ошибки и при окончании компиляции
+Whether to blink the cursor	Должен ли курсор мигать
+Whether to detect the indentation type from file contents when a file is opened	Определять ли тип отступов по содержимому открываемого файла
+Whether to detect the indentation width from file contents when a file is opened	Определять ли тип отступов по содержимому открываемого файла
+Whether to execute "cd $path" when you switch between opened files	Выполнять ли "cd $path", когда вы переключаетесь между открытыми файлами
+Whether to place file tabs next to the current tab rather than at the edges of the notebook	Помещать новую вкладку редактора текста сразу за текущей, а не в конце
+Whether to scroll to the bottom if a key was pressed	Осуществлять ли прокрутку вниз, если была нажата клавиша
+Whether to scroll to the bottom when output is generated	Прокручивать ли вниз, если что-то было выведено
+Whether to show the status bar at the bottom of the main window	Установить, показывать ли строку состояния внизу главного окна
+Whether to stop scrolling one page past the last line of a document	Останавливает прокрутку на последней строке документа
+Whether to use indicators (a squiggly underline) to highlight the lines where the compiler found a warning or an error	Использовать ли индикаторы (волнистое подчеркивание) для выделения строк, где компилятор обнаружил предупреждение или ошибку
+Wi_ki	Wi_ki
+Windows (CRLF)	Windows (CRLF)
+With the cursor in the indentation, pressing backspace unindents instead of deleting one character	Когда курсор находится на отступе, нажатие backspace уменьшает отступ, а не удаляет один символ
+Without encoding	Без кодировки
+Word Count	Подсчёт слов
+Word part completion	Автозавершение фрагментов кода
+Words	Слов:
+Words:	Слов:
+Working directory	Рабочий каталог
+Wrap search and find again?	Перейти в начало и возобновить поиск?
+Wrap the line at the window border and continue it on the next line. Note: line wrapping has a high performance cost for large documents so should be disabled on slow machines.	Переносить длинные строки при достижении края окна, продолжая их с новой строки. Примечание: динамический перенос строк является ресурсоёмким процессом при работе с большими документами, поэтому на слабых машинах следует его отключать.
+Write:	Запись:
+XML/HTML tag auto-closing	Автозакрытие тегов XML/HTML
+Year:	Год:
+You can send the current selection to any of these commands and the output of the command replaces the current selection.	Вы можете передать текущее выделение любой из этих команд, и её вывод заменит текущее выделение.
+You have specified an invalid project filename.	Недопустимое имя проекта.
+Your configuration directory has been successfully moved from "%s" to "%s".	Ваш каталог с настройками успешно перемещён из "%s" в "%s".
+Your old configuration directory "%s" could not be moved to "%s" (%s). Please move manually the directory to the new location.	Ваш каталог с настройками "%s" не может быть перемещён в "%s" (%s). Пожалуйста, переместите каталог с настройками вручную.
+Zoom In	Увеличить
+Zoom Out	Уменьшить
+Zoom Reset	Обычный размер
+Zoom in the text	Увеличить текст
+Zoom out the text	Уменьшить текст
+[FILES...]	[ФАЙЛЫ...]
+_1	_1
+_2	_2
+_3	_3
+_4	_4
+_5	_5
+_6	_6
+_7	_7
+_8	_8
+_Allow	_Позволять
+_Append toolbar to the menu	_Добавить панель инструментов в меню
+_Apply Default Indentation	При_менить отступы по умолчанию
+_Auto-indentation	_Автоматический отступ
+_Auto-replace Special Characters	_Автоматически заменять специальные символы
+_Backspace key unindents	Клавиша _Backspace уменьшает отступ
+_Base path:	_Путь к каталогу:
+_Build	_Сборка
+_C++ Class...	Класс _C++...
+_Clone	_Клонировать
+_Close	_Закрыть
+_Collapse All	_Свернуть все
+_Color Chooser	_Выбор цвета
+_Comment Line(s)	За_комментировать
+_Compile	_Скомпилировать
+_Copy Current Line(s)	_Копировать строки
+_Decrease Indent	У_меньшить отступ
+_Delete Current Line(s)	_Удалить строки
+_Description:	Описани_е:
+_Detect from Content	_Распознать по содержимому файла
+_Directory to save backup files in:	_Каталог для сохранения резервных копий:
+_Directory to save files in (leave empty to use the default: %s):	_Каталог для сохранения файлов (оставьте пустым для использования стандартного каталога: %s):
+_Directory to save persistent untitled documents in:	_Каталог для сохранения резервных копий:
+_Directory:	_Каталог:
+_Document	_Документ
+_Don't save	_Не сохранять
+_Don't save (discard)	_Не сохранять
+_Donate...	Сделать _пожертвование...
+_East European	_Восточноевропейская
+_Edit	_Правка
+_Enable	_Включить
+_Execute	_Выполнить
+_Expand All	_Развернуть все
+_Export	_Экспорт
+_File	_Файл
+_Filetype Configuration	Настройка типов _файлов
+_Find All	_Найти все
+_Find in Files...	_Найти в файлах...
+_Find...	_Найти...
+_Fold All	_Свернуть все
+_Format	_Форматирование
+_GTK+ Class...	Класс _GTK+...
+_Go to Line...	Перейти на с_троку...
+_Group by Type	_Группировать по типу
+_HTML Replacement	Замена в _HTML
+_Help	Спр_авка
+_Hide Message Window	_Скрыть окно сообщений
+_Hide Toolbar	_Скрыть панель инструментов
+_Images only	Только и_конки
+_In Document	В _документе
+_Increase Indent	У_величить отступ
+_Insert	_Вставить
+_Insert "include <...>"	Встав_ить "include <...>"
+_Insert Special HTML Characters...	Вставить _специальные символы HTML...
+_Insert line numbers	_Добавлять номера строк
+_Invert search results	_Инвертировать результаты поиска
+_Join Lines	_Объединить строки
+_Large icons	_Большие
+_Line Wrapping	Динамический _перенос строк
+_Make	_Собрать
+_Make All	Собрать _всё
+_Mark	_Пометить
+_Mark All	_Пометить все
+_Middle Eastern	_Средневосточная
+_More	_Ещё
+_More Options	_Больше настроек
+_Move Line(s) Up	Переместить строку(и) вв_ерх
+_Name:	_Имя:
+_New...	_Новый...
+_Next	_Следующее
+_Next Error	Сл_едующая ошибка
+_Open...	_Открыть...
+_Override	_Переопределить
+_Overwrite	_Перезаписать
+_PHP Class...	Класс _PHP...
+_Plugin Manager	_Менеджер модулей
+_Previous	_Предыдущее
+_Previous Error	_Предыдущая ошибка
+_Print status message if files have been automatically saved	_Выводить дежурное сообщение при автоматическом сохранении файлов
+_Print...	_Печать...
+_Project	Про_ект
+_Recent Projects	_Последние проекты
+_Recurse in subfolders	_Рекурсивно в подкаталогах
+_Reflow Lines/Block	Пере_форматировать строки/блок
+_Reload	_Загрузить заново
+_Reload Configuration	_Обновить настройки
+_Replace	_Заменить
+_Replace Characters in Selection	_Заменить символы в выделении
+_Replace Spaces with Tabs...	Заменить пробелы _табуляциями...
+_Replace...	_Заменить...
+_Restart Terminal	_Перезапуск терминала
+_SE & SW Asian	Юговосточная и Югозападная _Азия
+_Search	П_оиск
+_Search for:	_Искать:
+_Send Selection to	О_тправить выделенное в
+_Send Selection to Terminal	_Отправить выделенное в терминал
+_Set Build Commands	_Установить команды сборки
+_Set Custom Date Format	_Установить формат даты
+_Set Path From Document	_Установить путь из документа
+_Side by Side	По _вертикали
+_Small icons	_Маленькие
+_Spaces	_Пробелы
+_Split Window	_Разделить окно
+_Strip Trailing Spaces	Удалить _лишние пробелы в конце строк
+_Tabs	_Табуляция
+_Text only	Только _текст
+_Toggle Line Commentation	_Переключить комментарий
+_Toolbar Preferences	Свойства панели _инструментов
+_Tools	_Инструменты
+_Top and Bottom	По _горизонтали
+_Transpose Current Line	П_ереставить строку
+_Unfold All	_Развернуть все
+_Unicode	_Юникод
+_Unsplit	_Отменить разделение
+_Use Custom Date Format	_Использовать свой формат даты
+_Use current zoom level	_Использовать текущий уровень увеличения
+_Use regular expressions	_Использовать регулярные выражения
+_Very small icons	_Очень маленькие
+_View	_Вид
+_Website	Са_йт проекта
+_West European	_Западноевропейская
+_Width:	_Ширина:
+_Word Count	_Количество слов
+_Write Unicode BOM	Использоват_ь Unicode BOM
+all	все
+built on %s with 	(собрано %s или позднее)
+custom	указать
+dd.mm.yyyy	дд.мм.гггг
+dd.mm.yyyy hh:mm:ss	дд.мм.гггг чч:мм:сс
+developer	разработчик
+failed to substitute %%%c: document has no path	не удалось заменить %%p, нет активного проекта
+invalid VTE library "%s": missing symbol "%s"	неправильная библиотека VTE "%s": отсутствует идентификатор "%s"
+invisible	невидимый
+line: %l / %L\t col: %c\t sel: %s\t %w      %t      %mEOL: %M      encoding: %e      filetype: %f      scope: %S	строка: %l / %L\t столбец: %c\t выделено: %s\t %w      %t      %mEOL: %M      кодировка: %e      тип файла: %f      область действия: %S
+maintainer	ведущий разработчик
+milliseconds	сек
+mm.dd.yyyy	мм.дд.гггг
+mm.dd.yyyy hh:mm:ss	мм.дд.гггг чч:мм:сс
+project	проект
+projects	проекты
+seconds	сек
+selection	выделение
+translation maintainer	ведущий переводчик
+unknown	неизвестно
+untitled	без имени
+whole document	весь документ
+yyyy/mm/dd	гггг/мм/дд
+yyyy/mm/dd hh:mm:ss	гггг/мм/дддд чч:мм:сс

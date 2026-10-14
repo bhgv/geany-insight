@@ -1,3 +1,7 @@
+#ifdef GEANY_PRIVATE
+#define INSIGHT_LOCALIZE_FORMATS
+#include "insight-i18n.h"
+#endif
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #ifdef HAVE_CONFIG_H
 #include "config.h"

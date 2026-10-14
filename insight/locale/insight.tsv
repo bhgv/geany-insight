@@ -1,0 +1,563 @@
+# Insight English/Russian UI; SPDX-License-Identifier: GPL-2.0-or-later
+Options	Параметры
+_Options	_Параметры
+_Navigate	_Навигация
+_Window	_Окно
+Search / Replace	Поиск/замена
+_Search / Replace	_Поиск/замена
+Interface language	Язык интерфейса
+Automatic (system locale)	Автоматически (системная локаль)
+Language profiles…	Профили языков…
+Language profiles and file binding	Профили языков и привязка файла
+File language / profile…	Язык файла / профиль…
+Profile	Профиль
+Language name	Название языка
+Base parser / lexer	Базовый парсер / лексер
+Own extensions (case sensitive)	Свои расширения (с учётом регистра)
+Compatible extensions	Совместимые расширения
+Force this profile for the current file (persist for named files)	Принудительно назначить профиль текущему файлу (сохранить для именованного файла)
+Predefined words	Предопределённые слова
+Primary keyword override (empty keeps Geany defaults)	Первичный набор ключевых слов (пустой — настройки Geany)
+Fonts and CSS	Шрифты и CSS
+Current Geany theme + CSS overrides	Текущая тема Geany + переопределения CSS
+Light preset	Светлый набор
+Dark preset	Тёмный набор
+Bold	Жирный
+Italic	Курсив
+Add CSS rule	Добавить правило CSS
+Reset file binding	Сбросить привязку файла
+Reload profiles	Перечитать профили
+Changes apply to open documents and the workspace index.	Изменения применяются к открытым документам и индексу рабочей папки.
+Applied. Profiles reloaded; workspace reindex requested.	Применено. Профили перечитаны; запрошена переиндексация рабочей папки.
+Separate extensions with semicolons: c;C;cpp;cxx;h;hpp;hxx;h++	Разделяйте расширения точкой с запятой: c;C;cpp;cxx;h;hpp;hxx;h++
+Enter a safe language name and select a parser	Введите допустимое имя языка и выберите парсер
+Another profile already has this name	Профиль с таким именем уже существует
+Cannot apply settings	Не удалось применить настройки
+Cannot create language folder	Не удалось создать папку языка
+Cannot rename profile folder (destination may exist)	Не удалось переименовать папку профиля (папка назначения, возможно, уже существует)
+Extension %s already belongs to profile %s	Расширение %s уже принадлежит профилю %s
+Cannot save language binding: %s	Не удалось сохранить привязку языка: %s
+Cannot seed language %s: %s	Не удалось заполнить профиль %s: %s
+Language profile %s ignored: invalid parser, name or CSS	Профиль языка %s пропущен: неверный парсер, имя или CSS
+Definitions:	Определения:
+Indexed definitions compatible with the source language	Индексированные определения, совместимые с языком исходника
+Context	Контекст
+Context window	Окно контекста
+Context — integrated source navigation	Контекст — встроенная навигация по исходникам
+Context — %s:%lu	Контекст — %s:%lu
+Context — %s:%lu%s	Контекст — %s:%lu%s
+Context — %s:1	Контекст — %s:1
+Context — no active source	Контекст — нет активного исходника
+Context — no indexed definition: %s • %s:%lu	Контекст — определение не индексировано: %s • %s:%lu
+Context unavailable: requires a decodable text source up to 2 MiB	Контекст недоступен: требуется читаемый текстовый исходник до 2 МиБ
+Context source changed; refresh the preview before opening	Исходник контекста изменился; обновите предпросмотр перед открытием
+Context source is unavailable or changed; refresh the index	Исходник контекста недоступен или изменён; обновите индекс
+Context has no valid source location	В контексте нет допустимого места исходника
+Context has no saved file location	В контексте нет сохранённого пути файла
+Context file:line copied	Адрес файл:строка скопирован из контекста
+Context back	Назад в контексте
+Context forward	Вперёд в контексте
+Previous Context location	Предыдущее место контекста
+Next Context location	Следующее место контекста
+Single click / F12: definition in Context; double click / Enter: open this line in editor	Один клик / F12: определение в контексте; двойной клик / Enter: открыть строку в редакторе
+Follow cursor	Следить за курсором
+Follow symbol in editor	Следить за символом в редакторе
+Track enclosing function	Следить за текущей функцией
+Open in editor	Открыть в редакторе
+Open the preview caret line in the editor (Enter)	Открыть строку курсора предпросмотра в редакторе (Enter)
+Copy the preview caret address as file:line	Скопировать адрес курсора предпросмотра как файл:строка
+Copy location	Скопировать адрес
+Find in Context…	Найти в контексте…
+Find on this page (Ctrl+F)…	Найти на странице (Ctrl+F)…
+Find in file (Ctrl+F)	Найти в файле (Ctrl+F)
+Replace in file (Ctrl+H)	Заменить в файле (Ctrl+H)
+Next match (F3 / Enter)	Следующее совпадение (F3 / Enter)
+Previous match (Shift+F3)	Предыдущее совпадение (Shift+F3)
+Close find (Escape)	Закрыть поиск (Escape)
+Close search panel (Escape)	Закрыть панель поиска (Escape)
+Close search results	Закрыть результаты поиска
+No matches	Нет совпадений
+No match	Нет совпадения
+Match	Совпадение
+Wrapped	С начала
+Case	Регистр
+Word	Слово
+Regex	Регулярное выражение
+Find: match	Поиск: совпадение
+Find: wrapped	Поиск: с начала
+Find: %s	Поиск: %s
+Search project:	Поиск в проекте:
+Find:	Найти:
+Quick find in file…	Быстрый поиск в файле…
+Search project…	Поиск в проекте…
+Search project	Поиск в проекте
+Search open documents…	Поиск в открытых документах…
+Search open documents	Поиск в открытых документах
+Search folder…	Поиск в папке…
+Search folder	Поиск в папке
+Search a folder	Поиск в папке
+Search selected files…	Поиск в выбранных файлах…
+Search selected files	Поиск в выбранных файлах
+Search project / folder / open files	Поиск в проекте / папке / открытых файлах
+Search results	Результаты поиска
+Search Results	Результаты поиска
+Search results — Alt+Up/Down previews; Enter/double click opens the match	Результаты поиска — Alt+Up/Down: предпросмотр; Enter/двойной клик: открыть совпадение
+Search using a regular expression	Искать по регулярному выражению
+Searching… %u results • %u/%u files	Поиск… %u результатов • %u/%u файлов
+Searching symbol relations…	Поиск связей символов…
+Search cancelled; partial results retained	Поиск отменён; частичные результаты сохранены
+Project files	Файлы проекта
+Project Files	Файлы проекта
+Open documents	Открытые документы
+Current document	Текущий документ
+Chosen files / folder	Выбранные файлы / папка
+Current buffer only	Только текущий буфер
+Match case	Учитывать регистр
+Whole word	Слово целиком
+Word variations	Варианты слова
+Keywords / Boolean	Ключевые слова / логические условия
+Maximum keyword distance in lines (0 = same line)	Максимальное расстояние между словами в строках (0 — одна строка)
+File masks: *.c;*.h;*.py	Маски файлов: *.c;*.h;*.py
+In Keywords mode use ?"pattern" for regular expressions	В режиме ключевых слов используйте ?"шаблон" для регулярных выражений
+Implicit AND, OR, NOT/!, parentheses, =case, ?"regex"; word fragments unless Word is enabled	Неявное И, OR, NOT/!, скобки, =case, ?"regex"; фрагменты слов, если не включено «Слово целиком»
+Regular English endings: open/opens/opened/opening, save/saving; base keywords only, not a dictionary stemmer	Обычные английские окончания: open/opens/opened/opening, save/saving; без словарной морфологии
+Copy results	Скопировать результаты
+Clear history	Очистить историю
+History is empty	История пуста
+Last 32 valid search queries; choosing a query retains the current scope and options	Последние 32 допустимых запроса; выбор сохраняет область поиска и параметры
+Next search result	Следующий результат поиска
+Previous search result	Предыдущий результат поиска
+Next page	Следующая страница
+Previous page	Предыдущая страница
+Reload document	Обновить документ
+Page headings — jump to a section	Оглавление страницы — перейти к разделу
+Heading anchor not found	Якорь заголовка не найден
+Editor buffer snapshot — Reload reads unsaved text; relative media uses the file folder (working directory for untitled)	Снимок буфера редактора — обновление читает несохранённый текст; медиа ищутся в папке файла (рабочем каталоге для нового документа)
+Preview unavailable: source closed, invalid UTF-8, or larger than 8 MiB	Предпросмотр недоступен: источник закрыт, неверный UTF-8 или размер больше 8 МиБ
+Preview current Markdown / RST…	Предпросмотр текущего Markdown / RST…
+Preview current Markdown / RST — including unsaved edits	Предпросмотр текущего Markdown / RST — включая несохранённые правки
+Markdown / reStructuredText viewer…	Просмотр Markdown / reStructuredText…
+Open Markdown / reStructuredText	Открыть Markdown / reStructuredText
+Open Markdown / reStructuredText…	Открыть Markdown / reStructuredText…
+Multimedia view — render in browser, including video	Мультимедийный просмотр — открыть в браузере, включая видео
+▶ Video — open multimedia view	▶ Видео — открыть мультимедийный просмотр
+Play videos in the browser media view; codec support depends on the browser	Воспроизведение видео в браузере; поддержка кодеков зависит от браузера
+Geany Insight — Documentation…	Geany Insight — Документация…
+Geany Insight — Tutorials…	Geany Insight — Учебные материалы…
+Geany Insight — documentation	Geany Insight — документация
+Geany Insight — tutorials	Geany Insight — учебные материалы
+Lua scripting guide…	Руководство по скриптованию Lua…
+Image: %s — %s	Изображение: %s — %s
+local file missing, unsupported format or image exceeds preview limits	локальный файл отсутствует, формат не поддерживается или превышены ограничения предпросмотра
+All files	Все файлы
+Bookmarks	Закладки
+Bookmark name or filter…	Имя закладки или фильтр…
+Bookmarks — all files and lines	Закладки — все файлы и строки
+Filter bookmarks…	Фильтр закладок…
+Bookmark: %s	Закладка: %s
+Bookmark not persisted: %s	Закладка не сохранена: %s
+Bookmark source is unavailable or its line is ambiguous	Исходник закладки недоступен или строка неоднозначна
+Save the file before adding a persistent bookmark	Сохраните файл перед добавлением постоянной закладки
+Add/update	Добавить/обновить
+Go to	Перейти
+Clips	Фрагменты
+Clip name or filter…	Имя фрагмента или фильтр…
+Copy selection	Скопировать выделение
+Cut selection	Вырезать выделение
+Edit clip	Изменить фрагмент
+Clip: %s	Фрагмент: %s
+Clip — %s	Фрагмент — %s
+Clip selection exceeds 64 KiB	Выделение фрагмента превышает 64 КиБ
+Clips cannot contain NUL bytes	Фрагменты не могут содержать нулевые байты
+Select a clip and a writable source document	Выберите фрагмент и доступный для записи документ
+Select source text to copy into a clip	Выделите текст для копирования во фрагмент
+Rename note	Переименовать запись
+Rename: %s	Переименование: %s
+Rename…	Переименовать…
+Select a note to rename	Выберите запись для переименования
+Note renamed	Запись переименована
+Import notes	Импортировать записи
+Export notes	Экспортировать записи
+Import…	Импортировать…
+Export…	Экспортировать…
+Insight notes (*.conf)	Записи Insight (*.conf)
+Notes imported; existing notes preserved	Записи импортированы; существующие записи сохранены
+Notes exported	Записи экспортированы
+Notes ignored: %s	Записи пропущены: %s
+Notes not saved: %s	Записи не сохранены: %s
+Notes %s: %s	Записи %s: %s
+Notes directory could not be created	Не удалось создать каталог записей
+Diff / Merge	Сравнение / Сведение
+Diff / Merge…	Сравнение / Сведение…
+Diff / Merge — internal comparison and merging	Сравнение / Сведение — встроенное сравнение и сведение
+Diff / Merge — unsaved result	Сравнение / Сведение — несохранённый результат
+Left (read only)	Слева (только чтение)
+Right (read only)	Справа (только чтение)
+Result (editable)	Результат (редактируемый)
+Compare	Сравнить
+Take Left	Принять слева
+Take Right	Принять справа
+Save result…	Сохранить результат…
+Save merge result	Сохранить результат сведения
+Result saved.	Результат сохранён.
+Discard unsaved merge result?	Отбросить несохранённый результат сведения?
+Choose two UTF-8 files and press Compare.	Выберите два файла UTF-8 и нажмите «Сравнить».
+Choose two existing files before launching KDiff3.	Перед запуском KDiff3 выберите два существующих файла.
+Choose source file	Выбрать исходный файл
+First version supports UTF-8 text files up to 1 MiB, without NUL bytes.	Первая версия поддерживает текст UTF-8 до 1 МиБ без нулевых байтов.
+Too many changed lines for the initial diff engine (4 million LCS cells).	Слишком много изменённых строк для начального движка сравнения (4 миллиона ячеек LCS).
+Cannot allocate comparison.	Не удалось выделить память для сравнения.
+External KDiff3 (optional)	Внешний KDiff3 (необязательно)
+KDiff3 is not installed. Internal comparison and merge remain available.	KDiff3 не установлен. Встроенное сравнение и сведение доступны.
+File Symbols	Символы файла
+File Symbols Window	Окно символов файла
+Current file symbols	Символы текущего файла
+Current file outline	Структура текущего файла
+Project Symbols	Символы проекта
+Project symbols	Символы проекта
+Project Window	Окно проекта
+Geany Insight — Project	Geany Insight — Проект
+File Types	Типы файлов
+Folders	Папки
+Symbol Categories	Категории символов
+Activate File Symbols	Открыть символы файла
+Activate File Types	Открыть типы файлов
+Activate Folders	Открыть папки
+Activate Symbol Categories	Открыть категории символов
+Expand File Types	Развернуть типы файлов
+Expand Folders	Развернуть папки
+Expand Symbol Categories	Развернуть категории символов
+Collapse File Types	Свернуть типы файлов
+Collapse Folders	Свернуть папки
+Collapse Symbol Categories	Свернуть категории символов
+Dock Project Window	Закрепить окно проекта
+Float Project Window	Отделить окно проекта
+Float individual panel	Отделить панель
+Dock all individual panels	Закрепить все панели
+Save current layout	Сохранить текущую компоновку
+Load layout A	Загрузить компоновку A
+Load layout B	Загрузить компоновку B
+Load layout C	Загрузить компоновку C
+Load layout D	Загрузить компоновку D
+Save as A	Сохранить как A
+Save as B	Сохранить как B
+Save as C	Сохранить как C
+Save as D	Сохранить как D
+Reset saved layouts to presets	Сбросить компоновки к начальным
+Layout %c stored	Компоновка %c сохранена
+Layout cannot be saved: invalid panel geometry	Компоновка не сохранена: неверная геометрия панели
+Saved layouts reset; A–D now use presets	Компоновки сброшены; A–D используют начальные наборы
+Overview	Обзор
+Overview Options	Параметры обзора
+Overview Options…	Параметры обзора…
+Overview width	Ширина обзора
+Text scaling %	Масштаб текста, %
+Show visible area	Показывать видимую область
+Show active selection	Показывать активное выделение
+Overview supports files up to 2 MiB	Обзор поддерживает файлы до 2 МиБ
+Find project symbol…	Найти символ проекта…
+Find workspace file…	Найти файл рабочей папки…
+Find symbol category members…	Найти элементы категории символов…
+Find symbol…	Найти символ…
+Find file…	Найти файл…
+Find file	Найти файл
+Find usages…	Найти использования…
+Go to definition	Перейти к определению
+Definition not found: %s	Определение не найдено: %s
+Known definition not found	Известное определение не найдено
+Definition source unavailable or exceeds 2 MiB	Исходник определения недоступен или превышает 2 МиБ
+Definitions / declarations	Определения / объявления
+Reindex workspace	Переиндексировать рабочую папку
+Open source workspace	Открыть рабочую папку исходников
+Source folder…	Папка исходников…
+Cancel scan	Отменить индексацию
+Workspace: indexing source folder…	Рабочая папка: индексирование исходников…
+Workspace: indexing… %u files	Рабочая папка: индексирование… %u файлов
+Workspace: %u files, %zu symbols, %u skipped%s	Рабочая папка: %u файлов, %zu символов, %u пропущено%s
+Workspace scan cancelled; partial index retained	Индексация отменена; частичный индекс сохранён
+Workspace changed; run the search again	Рабочая папка изменилась; повторите поиск
+Workspace changed but source folder is unavailable; previous index retained	Рабочая папка изменилась, но недоступна; предыдущий индекс сохранён
+Cannot index source folder	Не удалось индексировать папку исходников
+Index snapshot could not be rebuilt; previous snapshot retained	Не удалось обновить снимок индекса; предыдущий снимок сохранён
+Workspace cache ignored: %s	Кэш рабочей папки пропущен: %s
+Workspace cache not saved: %s	Кэш рабочей папки не сохранён: %s
+Workspace cache contains invalid paths or text	Кэш содержит неверные пути или текст
+Unable to create index cache directory	Не удалось создать каталог кэша индекса
+Choose a readable source folder first	Сначала выберите доступную для чтения папку исходников
+Add and Remove Project Files	Добавление и удаление файлов проекта
+Add and Remove Project Files…	Добавить и удалить файлы проекта…
+Add project files	Добавить файлы проекта
+Add files…	Добавить файлы…
+Add tree…	Добавить дерево…
+Add source tree	Добавить дерево исходников
+Add from list…	Добавить из списка…
+Add from file list	Добавить из списка файлов
+Export file list…	Экспортировать список файлов…
+Export project file list	Экспортировать список файлов проекта
+Remove selected	Удалить выбранные
+Remove all	Удалить все
+Remove from project	Удалить из проекта
+Remove tree…	Удалить дерево…
+Remove source tree from project	Удалить дерево исходников из проекта
+Files are removed from the project only. Added folders are indexed after Apply.	Файлы удаляются только из проекта. Добавленные папки индексируются после применения.
+Automatically include known source files under the project base folder	Автоматически включать известные исходники из базовой папки проекта
+Project folders	Папки проекта
+Filter project paths…	Фильтр путей проекта…
+Exclude masks: *.generated.c;vendor/* (case sensitive)	Маски исключения: *.generated.c;vendor/* (с учётом регистра)
+Folder (indexed on Apply)	Папка (индексируется после применения)
+Folder…	Папка…
+Files…	Файлы…
+Browse…	Обзор…
+Open a Geany project before changing its files	Перед изменением файлов откройте проект Geany
+Open a Geany project before dropping project files	Перед перетаскиванием файлов откройте проект Geany
+Project files changed; run the search again	Файлы проекта изменились; повторите поиск
+Project files not changed: %s	Файлы проекта не изменены: %s
+Project configuration exceeds 8 MiB	Конфигурация проекта превышает 8 МиБ
+Project membership could not be restored: %s	Не удалось восстановить состав проекта: %s
+Project source folder cannot be indexed: %s	Не удалось индексировать исходники проекта: %s
+Project list not imported: %s	Список проекта не импортирован: %s
+Cannot save project membership: %s	Не удалось сохранить состав проекта: %s
+Cannot add dropped project files: %s	Не удалось добавить перетащенные файлы проекта: %s
+Cannot add project path: %s	Не удалось добавить путь проекта: %s
+Cannot remove project path: %s	Не удалось удалить путь проекта: %s
+Cannot remove project tree: %s	Не удалось удалить дерево проекта: %s
+Cannot export project list: %s	Не удалось экспортировать список проекта: %s
+File list exceeds 10000 entries	Список файлов превышает 10000 записей
+File list must be decodable text, at most 2 MiB	Список файлов должен быть читаемым текстом до 2 МиБ
+Sort: file name	Сортировать по имени файла
+Sort: full path	Сортировать по полному пути
+Sort: name	Сортировать по имени
+Sort: source line	Сортировать по строке исходника
+Sort: symbol type	Сортировать по типу символа
+Column sort	Сортировка столбца
+Most recently used	Недавно использованные
+Source / kind • scope	Исходник / тип • область видимости
+Symbol kind: %s	Тип символа: %s
+Symbol Info	Сведения о символе
+Symbol Info…	Сведения о символе…
+Symbol Name…	Имя символа…
+Symbol or qualified name…	Символ или полное имя…
+Symbol or qualified owner…	Символ или полное имя владельца…
+Enter a symbol or qualified name	Введите символ или полное имя
+Enter a symbol name (or qualified owner for Members)	Введите имя символа (или полное имя владельца для членов)
+No indexed definitions; try a qualified name or reindex the workspace	Нет индексированных определений; уточните полное имя или переиндексируйте рабочую папку
+Showing first 512 candidates; narrow the qualified symbol name	Показаны первые 512 кандидатов; уточните полное имя символа
+Jump to displayed definition (Ctrl+Enter)	Перейти к показанному определению (Ctrl+Enter)
+Copy details	Скопировать сведения
+Source changed or unavailable; Refresh before jumping	Исходник изменён или недоступен; обновите перед переходом
+Source unavailable, larger than 2 MiB, or tag line out of range	Исходник недоступен, больше 2 МиБ или строка тега вне диапазона
+Window List	Список окон
+Window List…	Список окон…
+Filter open files, paths or nearest symbol…	Фильтр открытых файлов, путей или ближайшего символа…
+Refresh open file list	Обновить список открытых файлов
+Close file	Закрыть файл
+Leave file open	Оставить файл открытым
+File left open in an editor buffer	Файл оставлен в буфере редактора
+Nearest symbol	Ближайший символ
+Read only	Только чтение
+Modified • Read only	Изменён • Только чтение
+Relation Window	Окно связей
+Relations	Связи
+Relation Window — calls, call sites, members and inheritance	Окно связей — вызовы, места вызова, члены и наследование
+Relations — no selected identifier	Связи — идентификатор не выбран
+Relation query	Запрос связей
+Back to the previous relation query	Вернуться к предыдущему запросу связей
+References (lexical)	Использования (лексические)
+References: code only	Использования: только код
+Call sites	Места вызова
+Call sites (project, lexical)	Места вызова (проект, лексические)
+Calls (current function, lexical)	Вызовы (текущая функция, лексические)
+Calls currently requires a brace language and a current buffer up to 2 MiB	Вызовы требуют языка с фигурными скобками и буфера до 2 МиБ
+Base types	Базовые типы
+Base types (tags)	Базовые типы (теги)
+Derived types	Производные типы
+Derived types (tags)	Производные типы (теги)
+Direct members	Прямые члены
+Direct members (tags)	Прямые члены (теги)
+Enter a symbol for Relations	Введите символ для поиска связей
+Enter one UTF-8 identifier	Введите один идентификатор UTF-8
+Filter results: symbol, file or source…	Фильтр результатов: символ, файл или исходник…
+Comments and strings included; no semantic scope resolution	Комментарии и строки включены; без семантического разрешения области видимости
+Graph view	Граф
+Graph zoom (%)	Масштаб графа (%)
+Copy graph image	Скопировать изображение графа
+Copy image	Скопировать изображение
+Save graph PNG…	Сохранить граф в PNG…
+Save PNG…	Сохранить PNG…
+Save relation graph	Сохранить граф связей
+PNG image	Изображение PNG
+Graph image saved	Изображение графа сохранено
+Graph image copied to clipboard	Изображение графа скопировано в буфер обмена
+Graph image could not be allocated	Не удалось выделить память для изображения графа
+Image is too large. Reduce zoom or filter the results before exporting.	Изображение слишком велико. Уменьшите масштаб или отфильтруйте результаты перед экспортом.
+No visible results	Нет видимых результатов
+Select a relation row first	Сначала выберите строку связей
+Select a symbol first	Сначала выберите символ
+Search call sites for the selected result	Найти места вызова выбранного результата
+Show definitions for the selected result; choose among overloads	Показать определения выбранного результата; выбрать перегрузку
+Source changed after search; run the usage search again	Исходник изменился после поиска; повторите поиск использований
+Symbol query could not be completed	Не удалось выполнить запрос символов
+Symbol snapshot unavailable or exceeds its limit	Снимок символов недоступен или превышает ограничение
+Symbol index snapshot could not be created	Не удалось создать снимок индекса символов
+Structural selection	Структурное выделение
+Select enclosing block / expand	Выделить окружающий блок / расширить
+Select matching brackets	Выделить парные скобки
+Select line	Выделить строку
+Select Function	Выделить функцию
+Function Up	Предыдущая функция
+Function Down	Следующая функция
+No active document	Нет активного документа
+No larger enclosing block	Нет большего окружающего блока
+No complete brace-bodied function	Нет полной функции с телом в фигурных скобках
+No complete enclosing brace-bodied function	Нет полной окружающей функции с телом в фигурных скобках
+No function symbols in this document	В документе нет символов функций
+No parsed function definitions	Нет распознанных определений функций
+No next function definition	Нет следующего определения функции
+No previous function definition	Нет предыдущего определения функции
+Several definitions: place the caret inside the desired function	Несколько определений: поместите курсор внутрь нужной функции
+Function definition not found in the current buffer	Определение функции не найдено в текущем буфере
+Function navigation supports files up to 2 MiB	Навигация по функциям поддерживает файлы до 2 МиБ
+Structural selection supports files up to 2 MiB	Структурное выделение поддерживает файлы до 2 МиБ
+Structural selection requires a single normal selection	Структурное выделение требует одного обычного выделения
+Structural selection could not be computed	Не удалось вычислить структурное выделение
+Structural selection: this language has no lexical mask yet	Структурное выделение: для этого языка пока нет лексической маски
+Structural selection: %s	Структурное выделение: %s
+Select Function currently supports brace-bodied functions in files up to 2 MiB	Выделение функции поддерживает тела с фигурными скобками в файлах до 2 МиБ
+Select Function requires a single normal selection	Выделение функции требует одного обычного выделения
+Select Function: source could not be masked	Выделение функции: не удалось построить маску исходника
+Place the caret on or immediately after a code bracket	Поместите курсор на скобку кода или сразу после неё
+Lua scripting	Скриптование Lua
+Lua command palette	Палитра команд Lua
+Command palette…	Палитра команд…
+Load extension…	Загрузить расширение…
+Load Lua extension	Загрузить расширение Lua
+Reload saved extension	Перезагрузить сохранённое расширение
+Unload extension	Выгрузить расширение
+Run script…	Выполнить скрипт…
+Run Lua script	Выполнить скрипт Lua
+Lua command already running	Команда Lua уже выполняется
+Lua: unable to snapshot the project index	Lua: не удалось получить снимок индекса проекта
+Lua event: %s	Событие Lua: %s
+Lua startup: %s	Запуск Lua: %s
+Lua: %s	Lua: %s
+Toolbar search supports documents up to 2 MiB; use Geany Find for larger files	Поиск панели поддерживает документы до 2 МиБ; для больших файлов используйте поиск Geany
+Invalid text search query	Неверный запрос текстового поиска
+Cannot restore search settings: %s	Не удалось восстановить настройки поиска: %s
+Cannot save search settings: %s	Не удалось сохранить настройки поиска: %s
+Workbench settings directory could not be created	Не удалось создать каталог настроек рабочего пространства
+Workbench settings not saved: %s	Настройки рабочего пространства не сохранены: %s
+(limit)	(предел)
+ (limit)	 (предел)
+ (limit reached)	 (достигнут предел)
+ • definition line changed; reindex	 • строка определения изменилась; переиндексируйте
+ • result limit reached	 • достигнут предел результатов
+ • showing first 2000	 • показаны первые 2000
+; directory monitoring incomplete	; наблюдение за каталогами неполное
+; file limit reached	; достигнут предел файлов
+base definitions	базовые определения
+derived types	производные типы
+direct members	прямые члены
+not stored	не сохранено
+runtime unavailable	среда выполнения недоступна
+unable to load extension	не удалось загрузить расширение
+cannot create settings directory	не удалось создать каталог настроек
+cannot save configuration	не удалось сохранить конфигурацию
+write failed	ошибка записи
+invalid line	неверная строка
+invalid path	неверный путь
+invalid rules	неверные правила
+invalid settings	неверные настройки
+invalid snapshot	неверный снимок
+invalid text	неверный текст
+Current source is read-only	Текущий исходник доступен только для чтения
+Open source	Открыть исходник
+Text search (project)	Текстовый поиск (проект)
+no match	нет совпадения
+Parameters / Constants	Параметры / Константы
+Signals	Сигналы
+Structs / Unions / Enums	Структуры / Объединения / Перечисления
+Grammars	Грамматики
+Rules / Tokens	Правила / Токены
+Subdirs	Подкаталоги
+Benchmark Targets	Цели тестирования производительности
+Tests	Тесты
+Mixins	Примеси
+Placeholders	Подстановки
+Providers	Поставщики
+Outputs	Выходы
+Data contains NULs	Данные содержат нулевые байты
+Data contains NULs or the encoding is not supported	Данные содержат нулевые байты или кодировка не поддерживается
+Data contains NULs or is not valid UTF-8	Данные содержат нулевые байты или неверный UTF-8
+Not configurable on Windows (the system default browser is used).	Не настраивается в Windows (используется системный браузер).
+Unknown placeholder "%%%c" in "%s"	Неизвестная подстановка "%%%c" в "%s"
+no project active, %%p is substituted as %%d	нет активного проекта, %%p заменяется на %%d
+Untitled document file %s was deleted	Файл безымянного документа %s удалён
+Persistent untitled document directory not found	Каталог сохраняемых безымянных документов не найден
+Empty untitled document file %s was deleted	Пустой файл безымянного документа %s удалён
+<i>The plugin will not delete the files created in this directory.</i>	<i>Плагин не удаляет файлы, созданные в этом каталоге.</i>
+Unsupported CSS selector/property. Use editor, .keyword/.comment/.string/.number/.operator/.type/.preprocessor or .style-N; fonts and colors only; font-size must be 4–96pt.	Неподдерживаемый селектор/свойство CSS. Используйте editor, .keyword/.comment/.string/.number/.operator/.type/.preprocessor или .style-N; только шрифты и цвета, размер 4–96pt.
+Activate	Активировать
+Add	Добавить
+Apply	Применить
+Bookmark	Закладка
+Call	Вызов
+Cancel	Отмена
+Choose	Выбрать
+Column	Столбец
+Commands	Команды
+Continue	Продолжить
+Definitions	Определения
+Delete	Удалить
+Diff	Сравнение
+Differences	Различия
+Discard	Отбросить
+Disconnect	Отключить
+Documentation	Документация
+Down	Вниз
+Edit	Изменить
+History	История
+Horizontal	Горизонтально
+Import	Импорт
+Jump	Перейти
+Kind	Тип
+Layouts	Компоновки
+Lines	Строки
+Load	Загрузить
+Manual	Руководство
+Merge	Сведение
+Modified	Изменён
+Next	Далее
+Panels	Панели
+Path	Путь
+Previous	Назад
+References	Использования
+Reindex	Переиндексировать
+Relation	Связь
+Reload	Обновить
+Rename	Переименовать
+Saved	Сохранён
+Scope	Область видимости
+Script	Скрипт
+Scripts	Скрипты
+Send	Отправить
+Source	Исходник
+State	Состояние
+Stop	Остановить
+Symbol	Символ
+Tutorial	Учебные материалы
+Type	Тип
+Unload	Выгрузить
+Vertical	Вертикально
+Wrap	Перенос
+%d candidates • tag-based information • source snapshot	%d кандидатов • сведения по тегам • снимок исходника
+%d of %d results • click: Context • double click: editor	%d из %d результатов • клик: контекст • двойной клик: редактор
+%u files chosen (up to 10000; hidden folders and files over 2 MiB skipped)	Выбрано %u файлов (до 10000; скрытые папки и файлы больше 2 МиБ пропущены)
+%u lexical call sites%s • current function; overloads and types are not resolved	%u лексических мест вызова%s • текущая функция; перегрузки и типы не разрешаются
+%u of %u open files • double click / Enter: activate	%u из %u открытых файлов • двойной клик / Enter: активировать
+%u results • %u files scanned • %u skipped%s	%u результатов • %u файлов просмотрено • %u пропущено%s
+%zu differences. Result starts with Left; select a block and take Left or Right, or edit the result.	%zu различий. Результат начинается с левой версии; выберите блок и примите левую/правую сторону либо измените результат.
+%zu tag-based %s%s	%zu по тегам: %s%s
+%zu: Left line %d / Right line %d	%zu: строка слева %d / строка справа %d
+Cannot save interface language: %s	Не удалось сохранить язык интерфейса: %s
+Line %d: %s	Строка %d: %s
+%s • %s %s%s • %s • bases: %s	%s • %s %s%s • %s • базовые: %s

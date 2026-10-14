@@ -1,3 +1,5 @@
+#define INSIGHT_LOCALIZE_FORMATS
+#include "insight-i18n.h"
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -36,6 +38,7 @@ GtkWidget *insight_command_icon(const gchar *command) {
  return gtk_image_new_from_icon_name(command,GTK_ICON_SIZE_MENU);
 }
 static const gchar *command_icon(const gchar *label) {
+ label=insight_i18n_english(label);
  const gchar *layout=strstr(label,"layout ");if(layout) { switch(layout[7]) { case 'A':return "layout-a";case 'B':return "layout-b";case 'C':return "layout-c";case 'D':return "layout-d";default:break; } }
  if(strstr(label,"Markdown")) return "text-x-generic";
  if(strstr(label,"Diff") || strstr(label,"Merge")) return "diff";
@@ -196,7 +199,7 @@ static void add_media(Help *h,GString *html,const gchar *target,const gchar *cap
  gchar *path=resolve(target,base),*uri=uri_for(target,base),*escaped=g_markup_escape_text(uri,-1),*alt=g_markup_escape_text(caption,-1);
  if(video_file(target)) {
   g_string_append_printf(html,"<figure><video controls preload=\"metadata\" src=\"%s\"></video><figcaption>%s</figcaption></figure>",escaped,alt);
-  GtkWidget *button=gtk_button_new_with_label("▶ Video — open multimedia view");gtk_widget_set_tooltip_text(button,"Play videos in the browser media view; codec support depends on the browser");g_signal_connect(button,"clicked",G_CALLBACK(media_view),h);gtk_box_pack_start(GTK_BOX(h->body),button,FALSE,FALSE,0);add_label(h,alt,FALSE);
+  GtkWidget *button=gtk_button_new_with_label(insight_tr("▶ Video — open multimedia view"));gtk_widget_set_tooltip_text(button,insight_tr("Play videos in the browser media view; codec support depends on the browser"));g_signal_connect(button,"clicked",G_CALLBACK(media_view),h);gtk_box_pack_start(GTK_BOX(h->body),button,FALSE,FALSE,0);add_label(h,alt,FALSE);
  } else {
   g_string_append_printf(html,"<figure><img src=\"%s\" alt=\"%s\"><figcaption>%s</figcaption></figure>",escaped,alt,alt);
   gint width=0,height=0;GStatBuf st;GError *error=NULL;GdkPixbufAnimation *animation=NULL;
@@ -271,11 +274,11 @@ static Help *ensure_help(void) {
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,6),*bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,5);gtk_container_add(GTK_CONTAINER(h->window),box);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);
  const gchar *icons[]={"go-previous","go-next","folder-open","view-refresh","media"};const gchar *tips[]={"Previous page","Next page","Open Markdown / reStructuredText…","Reload document","Multimedia view — render in browser, including video"};
  for(guint i=0;i<5;i++) { GtkWidget *button=gtk_button_new();gtk_button_set_image(GTK_BUTTON(button),insight_command_icon(icons[i]));gtk_widget_set_tooltip_text(button,tips[i]);if(i==3) gtk_widget_set_name(button,"insight-help-reload");gtk_box_pack_start(GTK_BOX(bar),button,FALSE,FALSE,0);if(i<2) { if(i) h->forward=button;else h->back=button;g_signal_connect(button,"clicked",G_CALLBACK(history),GINT_TO_POINTER(i ? 1 : -1)); }else g_signal_connect(button,"clicked",i==2 ? G_CALLBACK(insight_markup_open) : (i==3 ? G_CALLBACK(refresh) : G_CALLBACK(media_view)),h); }
- h->toc=gtk_combo_box_text_new();gtk_widget_set_name(h->toc,"insight-help-toc");gtk_widget_set_tooltip_text(h->toc,"Page headings — jump to a section");gtk_widget_set_hexpand(h->toc,TRUE);gtk_box_pack_start(GTK_BOX(bar),h->toc,TRUE,TRUE,0);g_signal_connect(h->toc,"changed",G_CALLBACK(toc_changed),h);
+ h->toc=gtk_combo_box_text_new();gtk_widget_set_name(h->toc,"insight-help-toc");g_object_set_data(G_OBJECT(h->toc),"insight-no-i18n",GINT_TO_POINTER(1));gtk_widget_set_tooltip_text(h->toc,insight_tr("Page headings — jump to a section"));gtk_widget_set_hexpand(h->toc,TRUE);gtk_box_pack_start(GTK_BOX(bar),h->toc,TRUE,TRUE,0);g_signal_connect(h->toc,"changed",G_CALLBACK(toc_changed),h);
  h->find_row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,5);gtk_widget_set_name(h->find_row,"insight-help-find-row");h->find_entry=gtk_search_entry_new();gtk_widget_set_name(h->find_entry,"insight-help-find");gtk_entry_set_placeholder_text(GTK_ENTRY(h->find_entry),"Find on this page (Ctrl+F)…");gtk_entry_set_max_length(GTK_ENTRY(h->find_entry),256);gtk_widget_set_hexpand(h->find_entry,TRUE);gtk_box_pack_start(GTK_BOX(h->find_row),h->find_entry,TRUE,TRUE,0);h->find_status=gtk_label_new("");gtk_widget_set_name(h->find_status,"insight-help-find-status");gtk_box_pack_start(GTK_BOX(h->find_row),h->find_status,FALSE,FALSE,0);
  for(guint i=0;i<3;i++) { GtkWidget *button=gtk_button_new_from_icon_name(i==0 ? "go-previous" : (i==1 ? "go-next" : "window-close"),GTK_ICON_SIZE_BUTTON);gtk_widget_set_tooltip_text(button,i==0 ? "Previous match (Shift+F3)" : (i==1 ? "Next match (F3 / Enter)" : "Close find (Escape)"));gtk_box_pack_start(GTK_BOX(h->find_row),button,FALSE,FALSE,0);g_signal_connect(button,"clicked",i==2 ? G_CALLBACK(find_close) : G_CALLBACK(find_step),i==2 ? (gpointer)h : GINT_TO_POINTER(i==0 ? -1 : 1)); }
  gtk_box_pack_start(GTK_BOX(box),h->find_row,FALSE,FALSE,0);g_signal_connect(h->find_entry,"changed",G_CALLBACK(find_changed),h);g_signal_connect(h->find_entry,"activate",G_CALLBACK(find_step),GINT_TO_POINTER(1));g_signal_connect(h->window,"key-press-event",G_CALLBACK(help_key),h);
- GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);h->scroll=scroll;h->body=gtk_box_new(GTK_ORIENTATION_VERTICAL,4);gtk_widget_set_margin_start(h->body,20);gtk_widget_set_margin_end(h->body,20);gtk_widget_set_margin_top(h->body,16);gtk_container_add(GTK_CONTAINER(scroll),h->body);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);h->status=gtk_label_new("");gtk_label_set_ellipsize(GTK_LABEL(h->status),PANGO_ELLIPSIZE_MIDDLE);gtk_box_pack_start(GTK_BOX(box),h->status,FALSE,FALSE,3);g_signal_connect(h->window,"destroy",G_CALLBACK(destroy),h);gtk_widget_show_all(h->window);gtk_widget_set_no_show_all(h->find_row,TRUE);gtk_widget_hide(h->find_row);return h;
+ GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);h->scroll=scroll;h->body=gtk_box_new(GTK_ORIENTATION_VERTICAL,4);g_object_set_data(G_OBJECT(h->body),"insight-no-i18n",GINT_TO_POINTER(1));gtk_widget_set_margin_start(h->body,20);gtk_widget_set_margin_end(h->body,20);gtk_widget_set_margin_top(h->body,16);gtk_container_add(GTK_CONTAINER(scroll),h->body);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);h->status=gtk_label_new("");gtk_label_set_ellipsize(GTK_LABEL(h->status),PANGO_ELLIPSIZE_MIDDLE);gtk_box_pack_start(GTK_BOX(box),h->status,FALSE,FALSE,3);g_signal_connect(h->window,"destroy",G_CALLBACK(destroy),h);gtk_widget_show_all(h->window);gtk_widget_set_no_show_all(h->find_row,TRUE);gtk_widget_hide(h->find_row);return h;
 }
 GEANY_API_SYMBOL
 void insight_markup_open_path(const gchar *path) {
@@ -286,7 +289,7 @@ void insight_markup_preview(GtkWidget *widget,gpointer data) {
  (void)widget;(void)data;GeanyDocument *doc=document_get_current();if(!doc) return;gchar *key=g_strdup_printf("@editor:%u",doc->id);insight_markup_open_path(key);g_free(key);
 }
 void insight_help_show(GtkWidget *widget,gpointer topic) {
- (void)widget;const gchar *name=topic ? topic : "guide.md";gchar *path=g_build_filename(app->docdir,"insight",name,NULL);
+ (void)widget;const gchar *name=topic ? topic : "guide.md";gchar *path=g_build_filename(app->datadir,"insight","docs",insight_i18n_language(),name,NULL);
  if(!g_file_test(path,G_FILE_TEST_IS_REGULAR)) { g_free(path);path=g_build_filename(app->datadir,"insight","docs",name,NULL); }
  insight_markup_open_path(path);g_free(path);
 }
@@ -294,3 +297,6 @@ void insight_markup_open(GtkWidget *widget,gpointer data) {
  (void)widget;(void)data;GtkWidget *dialog=gtk_file_chooser_dialog_new("Open Markdown / reStructuredText",GTK_WINDOW(main_widgets.window),GTK_FILE_CHOOSER_ACTION_OPEN,"Cancel",GTK_RESPONSE_CANCEL,"Open",GTK_RESPONSE_ACCEPT,NULL);GtkFileFilter *filter=gtk_file_filter_new();gtk_file_filter_set_name(filter,"Markdown / reStructuredText (*.md, *.rst, *.rest)");gtk_file_filter_add_pattern(filter,"*.md");gtk_file_filter_add_pattern(filter,"*.markdown");gtk_file_filter_add_pattern(filter,"*.rst");gtk_file_filter_add_pattern(filter,"*.rest");gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog),filter);GtkFileFilter *all=gtk_file_filter_new();gtk_file_filter_set_name(all,"All files");gtk_file_filter_add_pattern(all,"*");gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog),all);
  if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) { gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));insight_markup_open_path(path);g_free(path); }gtk_widget_destroy(dialog);
 }
+
+static void localize_media(GtkWidget *widget,gpointer data) { (void)data;if(GTK_IS_BUTTON(widget)) { const gchar *label=gtk_button_get_label(GTK_BUTTON(widget));if(label && (!strcmp(label,"▶ Video — open multimedia view") || !strcmp(label,"▶ Видео — открыть мультимедийный просмотр"))) { gtk_button_set_label(GTK_BUTTON(widget),insight_tr("▶ Video — open multimedia view"));gtk_widget_set_tooltip_text(widget,insight_tr("Play videos in the browser media view; codec support depends on the browser")); } }if(GTK_IS_CONTAINER(widget)) gtk_container_foreach(GTK_CONTAINER(widget),localize_media,NULL); }
+void insight_help_locale_changed(void) { if(!help || !help->path) return;localize_media(help->body,NULL);gchar *base=g_build_filename(app->datadir,"insight","docs",NULL);if(g_str_has_prefix(help->path,base) && help->key && !g_str_has_prefix(help->key,"@editor:")) { gchar *topic=g_path_get_basename(help->path);insight_help_show(NULL,topic);g_free(topic); }g_free(base); }
