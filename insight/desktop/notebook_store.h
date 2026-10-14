@@ -3,11 +3,13 @@
 #define INSIGHT_NOTEBOOK_STORE_H
 #include <glib.h>
 typedef enum { INSIGHT_BOOKMARK=1,INSIGHT_CLIP=2 } InsightNoteKind;
-typedef struct { gchar *name,*path,*text; guint64 line; InsightNoteKind kind; } InsightNote;
+typedef struct { gchar *name,*path,*text; gchar **languages; guint64 line; InsightNoteKind kind; } InsightNote;
 typedef struct { GPtrArray *items; } InsightNotes;
 InsightNotes *insight_notes_new(void);
 void insight_notes_free(InsightNotes *);
 gboolean insight_notes_set(InsightNotes *,InsightNoteKind,const char *,const char *,guint64,const char *,GError **);
+gboolean insight_notes_set_languages(InsightNotes *,const char *,const gchar *const *,GError **);
+gboolean insight_note_matches_language(const InsightNote *,const gchar *);
 gboolean insight_notes_remove(InsightNotes *,InsightNoteKind,const char *);
 const InsightNote *insight_notes_get(const InsightNotes *,InsightNoteKind,const char *);
 gboolean insight_notes_save(const InsightNotes *,const char *,GError **);

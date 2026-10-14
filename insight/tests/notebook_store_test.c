@@ -44,6 +44,18 @@ int main(void) {
  copy=insight_notes_rename(n,INSIGHT_BOOKMARK,"entry","переход",&e); g_assert_no_error(e);
  g_assert_cmpstr(insight_notes_get(copy,INSIGHT_BOOKMARK,"переход")->path,==,"/tmp/source.c"); g_assert_cmpuint(insight_notes_get(copy,INSIGHT_BOOKMARK,"переход")->line,==,2);
  g_assert_cmpstr(insight_notes_get(copy,INSIGHT_BOOKMARK,"переход")->text,==,"call();"); g_assert_nonnull(insight_notes_get(copy,INSIGHT_CLIP,"entry")); insight_notes_free(copy);
+ /* Language metadata survives every storage operation, including legacy loads. */
+ const gchar *langs[]={"C","C++",NULL};
+ g_assert_true(insight_notes_set_languages(n,"entry",langs,&e));
+ const InsightNote *clip=insight_notes_get(n,INSIGHT_CLIP,"entry");
+ g_assert_true(insight_note_matches_language(clip,"C")); g_assert_true(insight_note_matches_language(clip,"C++")); g_assert_false(insight_note_matches_language(clip,"Python"));
+ const gchar *bad_langs[]={"C","C",NULL}; g_assert_false(insight_notes_set_languages(n,"entry",bad_langs,&e)); g_assert_error(e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA); g_clear_error(&e); g_assert_true(insight_note_matches_language(clip,"C++"));
+ g_assert_true(insight_notes_set(n,INSIGHT_CLIP,"entry",NULL,0,"edited",&e)); clip=insight_notes_get(n,INSIGHT_CLIP,"entry"); g_assert_false(insight_note_matches_language(clip,"Python"));
+ g_assert_true(insight_notes_save(n,file,&e)); copy=insight_notes_load(file,&e); g_assert_no_error(e); g_assert_false(insight_note_matches_language(insight_notes_get(copy,INSIGHT_CLIP,"entry"),"Python")); insight_notes_free(copy);
+ copy=insight_notes_rename(n,INSIGHT_CLIP,"entry","renamed language clip",&e); g_assert_no_error(e); g_assert_true(insight_note_matches_language(insight_notes_get(copy,INSIGHT_CLIP,"renamed language clip"),"C++")); insight_notes_free(copy);
+ copy=insight_notes_select(n,INSIGHT_CLIP,&e); g_assert_no_error(e); InsightNotes *empty=insight_notes_new(),*merged=insight_notes_merge(empty,copy,INSIGHT_CLIP,&e); g_assert_no_error(e); g_assert_false(insight_note_matches_language(insight_notes_get(merged,INSIGHT_CLIP,"entry"),"Sh")); insight_notes_free(merged); insight_notes_free(empty); insight_notes_free(copy);
+ g_assert_true(insight_notes_set_languages(n,"entry",NULL,&e)); g_assert_true(insight_note_matches_language(insight_notes_get(n,INSIGHT_CLIP,"entry"),NULL));
+ g_assert_true(g_file_set_contents(file,"[notes]\nversion=1\ncount=1\n[note-0]\nkind=2\nname=legacy\npath=\nline=0\ntext=plain\n",-1,&e)); copy=insight_notes_load(file,&e); g_assert_no_error(e); g_assert_true(insight_note_matches_language(insight_notes_get(copy,INSIGHT_CLIP,"legacy"),"Python")); insight_notes_free(copy);
  const char invalid[]="[notes]\nversion=1\ncount=0\n\0unexpected";
  g_assert_true(g_file_set_contents(file,invalid,sizeof invalid-1,&e)); copy=insight_notes_load(file,&e); g_assert_null(copy); g_assert_error(e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA); g_clear_error(&e);
  insight_notes_free(incoming); insight_notes_free(destination); insight_notes_free(clips);

@@ -592,3 +592,11 @@ Expanded snippet exceeds 256 KiB	Развёрнутый шаблон превы�
 Invalid snippet output options	Некорректные параметры вывода шаблона
 Missing or invalid snippet variable	Переменная шаблона отсутствует или некорректна
 Invalid note name, source location or text	Некорректное имя, положение в исходнике или текст заметки
+Allowed	Разрешён
+Language profile	Профиль языка
+Allowed language profiles — no selection means all languages	Разрешённые профили языка — без выбора доступны все языки
+Show all languages	Показывать все языки
+This template is not available for the current language profile	Этот шаблон недоступен для текущего профиля языка
+Unknown clip	Неизвестный фрагмент
+Invalid template languages (up to 32 profile names)	Некорректные языки шаблона (до 32 имён профилей)
+Duplicate template language	Повторяющийся язык шаблона

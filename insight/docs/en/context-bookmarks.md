@@ -84,5 +84,24 @@ Ordinary **Paste** and double-clicking Clips insert literal text. Templates shar
 `config/insight/notes.conf` with Clips and use its existing edit, rename, import and
 export buttons. Creating a duplicate name is rejected. Limits are 64 KiB per template
 or value, 64 distinct variables and 256 KiB expanded output; the notes database holds
-up to 64 entries. Per-language template restrictions and completion integration are
-not yet implemented.
+up to 64 entries. Completion integration is not yet implemented.
+
+### Language-specific templates
+
+**New code template** and **Edit clip** include an **Allowed language profiles**
+list. Check one or more profiles, such as C and C++; leave all unchecked to allow
+any language. Template insertion checks the file's active profile, including a
+forced assignment from the editor menu. Profiles are matched by name, independently
+of file extensions and the compatibility settings used for definition searches.
+A template can name up to 32 profiles.
+
+Clips hides templates for other languages when switching files. **Show all languages**
+reveals them for editing and management but does not allow template expansion in an
+incompatible profile. Ordinary literal Clips insertion remains available in this mode.
+Bindings survive text edits, rename, import and export. Existing Clips without bindings
+continue to work in every language. After renaming or deleting a profile, show all
+languages and update the checks in Edit clip. Saved unknown profiles remain listed.
+
+Bindings use the optional `languages` list in each clip's section of
+`config/insight/notes.conf`. It follows standard GKeyFile list syntax, for example
+`languages=C;C++;`. An empty or absent list means all languages.

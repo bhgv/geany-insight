@@ -72,7 +72,7 @@ typedef struct {
  gchar *find_last_query,*find_last_digest; gsize find_last_begin,find_last_end; guint find_last_flags;
  InsightNotes *notes; gchar *notes_path;
  GHashTable *bookmark_handles;GtkWidget *bookmark_window,*bookmark_search;GtkListStore *bookmark_list;guint bookmark_sync_timer;gboolean bookmark_syncing;
- GtkWidget *marks_entry,*marks_view,*clips_entry,*clips_view; GtkListStore *marks_store,*clips_store;
+ GtkWidget *marks_entry,*marks_view,*clips_entry,*clips_view,*clips_all; gchar *clips_language; GtkListStore *marks_store,*clips_store;
  InsightWorkspaceWatch *watch; guint watch_idle; gboolean watch_changed,watch_incomplete;
  guint local_doc_id;
  GeanyFiletype *preview_filetype;
@@ -1550,6 +1550,9 @@ static gboolean notes_save(void) {
  g_clear_error(&error); g_free(directory); return saved;
 }
 typedef struct { guint doc;gint handle; } BookmarkHandle;
+static gchar *selected_note(InsightNoteKind);
+static void note_selected(GtkTreeSelection *,gpointer);
+static gchar *clip_current_language(void) { GeanyDocument *doc=document_get_current(); return doc ? insight_languages_profile_name(doc->editor->sci,doc->file_name,doc->file_type) : g_strdup(""); }
 static void notes_filter(GtkEditable *,gpointer);
 static void bookmark_list_reload(GtkWidget *,gpointer);
 static gchar *bookmark_line_text(ScintillaObject *sci,gint line) {
@@ -1689,12 +1692,16 @@ static void show_bookmarks(GtkWidget *widget,gpointer data) {
 static void notes_filter(GtkEditable *entry,gpointer data) {
  (void)entry; InsightNoteKind kind=(InsightNoteKind)GPOINTER_TO_INT(data); GtkListStore *store=kind==INSIGHT_BOOKMARK ? wb.marks_store : wb.clips_store; GtkWidget *field=kind==INSIGHT_BOOKMARK ? wb.marks_entry : wb.clips_entry;
  if(!store) return;
+ gchar *selected=kind==INSIGHT_CLIP ? selected_note(kind) : NULL,*language=kind==INSIGHT_CLIP ? clip_current_language() : NULL;
+ GtkTreeSelection *selection=kind==INSIGHT_CLIP ? gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.clips_view)) : NULL;
+ if(selection) g_signal_handlers_block_by_func(selection,note_selected,GINT_TO_POINTER(kind));
  gtk_list_store_clear(store); gchar *needle=g_utf8_casefold(gtk_entry_get_text(GTK_ENTRY(field)),-1);
- for(guint i=0;i<wb.notes->items->len;i++) { InsightNote *note=g_ptr_array_index(wb.notes->items,i); if(note->kind!=kind) continue;
+ for(guint i=0;i<wb.notes->items->len;i++) { InsightNote *note=g_ptr_array_index(wb.notes->items,i); if(note->kind!=kind || (kind==INSIGHT_CLIP && !(wb.clips_all && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.clips_all))) && !insight_note_matches_language(note,language))) continue;
   gchar *line=g_strdup_printf("%"G_GUINT64_FORMAT,note->line),*search=g_strconcat(note->name," ",note->path," ",line,NULL),*folded=g_utf8_casefold(search,-1); gboolean match=strstr(folded,needle)!=NULL; g_free(line); g_free(search); g_free(folded); if(!match) continue;
-  GtkTreeIter iter; gtk_list_store_append(store,&iter); gtk_list_store_set(store,&iter,0,note->name,1,note->path,2,(gulong)note->line,3,note->text,-1);
+  GtkTreeIter iter; gtk_list_store_append(store,&iter); gtk_list_store_set(store,&iter,0,note->name,1,note->path,2,(gulong)note->line,3,note->text,-1); if(selection && !g_strcmp0(selected,note->name)) gtk_tree_selection_select_iter(selection,&iter);
  }
- g_free(needle);
+ if(selection) g_signal_handlers_unblock_by_func(selection,note_selected,GINT_TO_POINTER(kind));
+ if(kind==INSIGHT_CLIP) { g_free(wb.clips_language); wb.clips_language=language; } else g_free(language); g_free(selected); g_free(needle);
 }
 static gchar *selected_note(InsightNoteKind kind) {
  GtkWidget *view=kind==INSIGHT_BOOKMARK ? wb.marks_view : wb.clips_view; GtkTreeModel *model; GtkTreeIter iter;
@@ -1755,8 +1762,10 @@ static void clip_template(GtkWidget *widget,gpointer data) {
  ScintillaObject *sci=doc->editor->sci;
  if(sci_get_selection_mode(sci)!=SC_SEL_STREAM || SSM(sci,SCI_GETSELECTIONS,0,0)!=1) { g_free(name); ui_set_statusbar(TRUE,"Template insertion requires a single normal selection"); return; }
  if(sci_get_selected_text_length2(sci)>65536) { g_free(name); ui_set_statusbar(TRUE,"Clip selection exceeds 64 KiB"); return; }
- gchar *body=g_strdup(note->text),*selection=sci_get_selection_contents(sci); g_free(name); GError *error=NULL;
- if(!selection || strlen(selection)!=sci_get_selected_text_length2(sci)) { g_free(selection); g_free(body); ui_set_statusbar(TRUE,"Clips cannot contain NUL bytes"); return; }
+ gchar *language=clip_current_language(); gboolean compatible=insight_note_matches_language(note,language); g_free(language);
+ if(!compatible) { g_free(name); ui_set_statusbar(TRUE,"This template is not available for the current language profile"); return; }
+ gchar **allowed_languages=g_strdupv(note->languages); gchar *body=g_strdup(note->text),*selection=sci_get_selection_contents(sci); g_free(name); GError *error=NULL;
+ if(!selection || strlen(selection)!=sci_get_selected_text_length2(sci)) { g_free(selection); g_free(body); g_strfreev(allowed_languages); ui_set_statusbar(TRUE,"Clips cannot contain NUL bytes"); return; }
  guint id=doc->id; guint64 version=selection_state(sci)->text_version; gint begin=sci_get_selection_start(sci),end=sci_get_selection_end(sci),eol_mode=sci_get_eol_mode(sci);
  GHashTable *values=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free); GDateTime *now=g_date_time_new_now_local();
  g_hash_table_insert(values,g_strdup("date"),g_date_time_format(now,"%Y-%m-%d")); g_hash_table_insert(values,g_strdup("time"),g_date_time_format(now,"%H:%M:%S")); g_date_time_unref(now);
@@ -1775,24 +1784,46 @@ static void clip_template(GtkWidget *widget,gpointer data) {
  }
  if(accepted) {
   doc=document_find_by_id(id);
-  if(!doc || doc!=document_get_current() || selection_state(doc->editor->sci)->text_version!=version || sci_get_selection_start(doc->editor->sci)!=begin || sci_get_selection_end(doc->editor->sci)!=end || sci_get_selection_mode(doc->editor->sci)!=SC_SEL_STREAM || SSM(doc->editor->sci,SCI_GETSELECTIONS,0,0)!=1 || SSM(doc->editor->sci,SCI_GETREADONLY,0,0) || sci_get_eol_mode(doc->editor->sci)!=eol_mode) ui_set_statusbar(TRUE,"Source changed while entering template parameters; insert again");
+  gchar *current_language=clip_current_language(); InsightNote allowed_snapshot={.languages=allowed_languages}; gboolean language_allowed=insight_note_matches_language(&allowed_snapshot,current_language); g_free(current_language);
+  if(!language_allowed) ui_set_statusbar(TRUE,"This template is not available for the current language profile");
+  else if(!doc || doc!=document_get_current() || selection_state(doc->editor->sci)->text_version!=version || sci_get_selection_start(doc->editor->sci)!=begin || sci_get_selection_end(doc->editor->sci)!=end || sci_get_selection_mode(doc->editor->sci)!=SC_SEL_STREAM || SSM(doc->editor->sci,SCI_GETSELECTIONS,0,0)!=1 || SSM(doc->editor->sci,SCI_GETREADONLY,0,0) || sci_get_eol_mode(doc->editor->sci)!=eol_mode) ui_set_statusbar(TRUE,"Source changed while entering template parameters; insert again");
   else { gsize cursor=0; gchar *text=insight_snippet_expand(body,values,eol_mode==SC_EOL_CRLF ? "\r\n" : (eol_mode==SC_EOL_CR ? "\r" : "\n"),&cursor,&error);
    if(text) { sci=doc->editor->sci; sci_start_undo_action(sci); sci_replace_sel(sci,text); sci_set_current_position(sci,begin+(gint)cursor,FALSE); sci_end_undo_action(sci); document_grab_focus(doc); g_free(text); }
   }
  }
  if(error) ui_set_statusbar(TRUE,"Template: %s",insight_tr(error->message));
- g_clear_error(&error); g_clear_pointer(&variables,g_ptr_array_unref); g_ptr_array_unref(entries); g_hash_table_unref(values); g_free(body);
+ g_clear_error(&error); g_clear_pointer(&variables,g_ptr_array_unref); g_ptr_array_unref(entries); g_hash_table_unref(values); g_strfreev(allowed_languages); g_free(body);
+}
+static void template_language_toggled(GtkCellRendererToggle *renderer,gchar *path,gpointer data) {
+ (void)renderer; GtkListStore *store=data; GtkTreeIter iter; if(gtk_tree_model_get_iter_from_string(GTK_TREE_MODEL(store),&iter,path)) { gboolean active=FALSE; gtk_tree_model_get(GTK_TREE_MODEL(store),&iter,0,&active,-1); gtk_list_store_set(store,&iter,0,!active,-1); }
+}
+static GtkWidget *template_language_editor(GtkWidget *box,const InsightNote *note) {
+ GtkListStore *store=gtk_list_store_new(2,G_TYPE_BOOLEAN,G_TYPE_STRING); GtkWidget *view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(store)); gtk_widget_set_name(view,"insight-template-languages");
+ GtkCellRenderer *toggle=gtk_cell_renderer_toggle_new(); g_signal_connect_object(toggle,"toggled",G_CALLBACK(template_language_toggled),store,0); gtk_tree_view_append_column(GTK_TREE_VIEW(view),gtk_tree_view_column_new_with_attributes("Allowed",toggle,"active",0,NULL)); gtk_tree_view_append_column(GTK_TREE_VIEW(view),gtk_tree_view_column_new_with_attributes("Language profile",gtk_cell_renderer_text_new(),"text",1,NULL));
+ gchar **names=insight_languages_names(); GHashTable *seen=g_hash_table_new(g_str_hash,g_str_equal);
+ for(guint pass=0;pass<2;pass++) { gchar **list=pass ? (note ? note->languages : NULL) : names;
+  for(guint i=0;list && list[i];i++) { if(g_hash_table_contains(seen,list[i])) continue; gboolean active=FALSE; for(guint k=0;note && note->languages && note->languages[k];k++) if(!strcmp(note->languages[k],list[i])) active=TRUE;
+   GtkTreeIter iter; gtk_list_store_append(store,&iter); gtk_list_store_set(store,&iter,0,active,1,list[i],-1); g_hash_table_add(seen,list[i]);
+  }
+ }
+ g_hash_table_unref(seen); g_strfreev(names); g_object_unref(store); GtkWidget *label=gtk_label_new("Allowed language profiles — no selection means all languages"),*scroll=gtk_scrolled_window_new(NULL,NULL); gtk_label_set_line_wrap(GTK_LABEL(label),TRUE); gtk_box_pack_start(GTK_BOX(box),label,FALSE,FALSE,4); gtk_widget_set_size_request(scroll,-1,120); gtk_container_add(GTK_CONTAINER(scroll),view); gtk_box_pack_start(GTK_BOX(box),scroll,FALSE,TRUE,0); return view;
+}
+static gchar **template_language_values(GtkWidget *view) {
+ GPtrArray *values=g_ptr_array_new(); GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view)); GtkTreeIter iter;
+ for(gboolean valid=gtk_tree_model_get_iter_first(model,&iter);valid;valid=gtk_tree_model_iter_next(model,&iter)) { gboolean active=FALSE; gchar *name=NULL; gtk_tree_model_get(model,&iter,0,&active,1,&name,-1); if(active) g_ptr_array_add(values,name); else g_free(name); }
+ g_ptr_array_add(values,NULL); return (gchar **)g_ptr_array_free(values,FALSE);
 }
 static gboolean notes_commit(InsightNotes *,InsightNoteKind);
 static void clip_new_template(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; GtkWidget *dialog=gtk_dialog_new_with_buttons("New code template",GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Cancel",GTK_RESPONSE_CANCEL,"Save",GTK_RESPONSE_ACCEPT,NULL),*box=gtk_dialog_get_content_area(GTK_DIALOG(dialog)),*name=gtk_entry_new(),*view=gtk_text_view_new(),*scroll=gtk_scrolled_window_new(NULL,NULL);
- gtk_widget_set_name(name,"insight-template-name"); gtk_widget_set_name(view,"insight-template-body"); gtk_entry_set_max_length(GTK_ENTRY(name),256); gtk_entry_set_placeholder_text(GTK_ENTRY(name),"Template name"); gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)),"// $date$ — $filename$\n$selection$$cursor$",-1); gtk_container_add(GTK_CONTAINER(scroll),view); gtk_widget_set_size_request(scroll,600,300); gtk_box_pack_start(GTK_BOX(box),name,FALSE,FALSE,6); gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0); GtkWidget *hint=gtk_label_new("Variables: $date$, $time$, $file$, $filename$, $project$, $selection$, $cursor$. Custom: $name$. Literal dollar: $$."); gtk_label_set_line_wrap(GTK_LABEL(hint),TRUE); gtk_label_set_max_width_chars(GTK_LABEL(hint),70); gtk_box_pack_start(GTK_BOX(box),hint,FALSE,FALSE,6); gtk_widget_show_all(dialog);
+ gtk_widget_set_name(name,"insight-template-name"); gtk_widget_set_name(view,"insight-template-body"); gtk_entry_set_max_length(GTK_ENTRY(name),256); gtk_entry_set_placeholder_text(GTK_ENTRY(name),"Template name"); gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)),"// $date$ — $filename$\n$selection$$cursor$",-1); gtk_container_add(GTK_CONTAINER(scroll),view); gtk_widget_set_size_request(scroll,600,300); gtk_box_pack_start(GTK_BOX(box),name,FALSE,FALSE,6); gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0); GtkWidget *hint=gtk_label_new("Variables: $date$, $time$, $file$, $filename$, $project$, $selection$, $cursor$. Custom: $name$. Literal dollar: $$."); gtk_label_set_line_wrap(GTK_LABEL(hint),TRUE); gtk_label_set_max_width_chars(GTK_LABEL(hint),70); gtk_box_pack_start(GTK_BOX(box),hint,FALSE,FALSE,6); GtkWidget *languages=template_language_editor(box,NULL); gtk_widget_show_all(dialog);
  if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) {
   GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)); GtkTextIter a,b; gtk_text_buffer_get_bounds(buffer,&a,&b); gchar *text=gtk_text_buffer_get_text(buffer,&a,&b,FALSE); const gchar *key=gtk_entry_get_text(GTK_ENTRY(name)); GError *error=NULL;
   if(insight_notes_get(wb.notes,INSIGHT_CLIP,key)) ui_set_statusbar(TRUE,"A clip with this name already exists");
   else { InsightNotes *added=insight_notes_new();
-   if(insight_notes_set(added,INSIGHT_CLIP,key,NULL,0,text,&error)) { InsightNotes *candidate=insight_notes_merge(wb.notes,added,INSIGHT_CLIP,&error); if(candidate) notes_commit(candidate,INSIGHT_CLIP); }
-   insight_notes_free(added);
+   gchar **allowed=template_language_values(languages);
+   if(insight_notes_set(added,INSIGHT_CLIP,key,NULL,0,text,&error) && insight_notes_set_languages(added,key,(const gchar *const *)allowed,&error)) { InsightNotes *candidate=insight_notes_merge(wb.notes,added,INSIGHT_CLIP,&error); if(candidate) notes_commit(candidate,INSIGHT_CLIP); }
+   g_strfreev(allowed); insight_notes_free(added);
   }
   if(error) ui_set_statusbar(TRUE,"Template: %s",insight_tr(error->message));
   g_clear_error(&error); g_free(text);
@@ -1802,9 +1833,12 @@ static void clip_new_template(GtkWidget *widget,gpointer data) {
 static void clip_edit(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; gchar *name=selected_note(INSIGHT_CLIP); const InsightNote *note=name ? insight_notes_get(wb.notes,INSIGHT_CLIP,name) : NULL; if(!note) { g_free(name); return; }
  GtkWidget *dialog=gtk_dialog_new_with_buttons("Edit clip",GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Cancel",GTK_RESPONSE_CANCEL,"Save",GTK_RESPONSE_ACCEPT,NULL),*view=gtk_text_view_new(),*scroll=gtk_scrolled_window_new(NULL,NULL);
- gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)),note->text,-1); gtk_container_add(GTK_CONTAINER(scroll),view); gtk_widget_set_size_request(scroll,600,350); gtk_container_add(GTK_CONTAINER(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),scroll); gtk_widget_show_all(dialog);
+ gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)),note->text,-1); gtk_container_add(GTK_CONTAINER(scroll),view); gtk_widget_set_size_request(scroll,600,350); gtk_container_add(GTK_CONTAINER(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),scroll); GtkWidget *languages=template_language_editor(gtk_dialog_get_content_area(GTK_DIALOG(dialog)),note); gtk_widget_show_all(dialog);
  if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) { GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)); GtkTextIter a,b; gtk_text_buffer_get_bounds(buffer,&a,&b); gchar *text=gtk_text_buffer_get_text(buffer,&a,&b,FALSE); GError *error=NULL;
-  if(insight_notes_set(wb.notes,INSIGHT_CLIP,name,NULL,0,text,&error)) { notes_filter(NULL,GINT_TO_POINTER(INSIGHT_CLIP)); notes_save(); } else ui_set_statusbar(TRUE,"Clip: %s",error ? error->message : "not stored"); g_clear_error(&error); g_free(text); }
+  InsightNotes *candidate=insight_notes_rename(wb.notes,INSIGHT_CLIP,name,name,&error); gchar **allowed=template_language_values(languages);
+  if(candidate) { if(insight_notes_set(candidate,INSIGHT_CLIP,name,NULL,0,text,&error) && insight_notes_set_languages(candidate,name,(const gchar *const *)allowed,&error)) notes_commit(candidate,INSIGHT_CLIP); else insight_notes_free(candidate); }
+  if(error) ui_set_statusbar(TRUE,"Clip: %s",insight_tr(error->message));
+  g_strfreev(allowed); g_clear_error(&error); g_free(text); }
  gtk_widget_destroy(dialog); g_free(name);
 }
 static void note_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) {
@@ -1876,6 +1910,7 @@ static void create_note_panel(InsightNoteKind kind) {
  GtkWidget *transfer=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,2);
  GtkWidget *rename=gtk_button_new_with_label("Rename…"); gtk_box_pack_start(GTK_BOX(transfer),rename,FALSE,FALSE,0); g_signal_connect(rename,"clicked",G_CALLBACK(note_rename),GINT_TO_POINTER(kind));
  for(guint i=0;i<2;i++) { GtkWidget *button=gtk_button_new_with_label(i ? "Export…" : "Import…"); gtk_box_pack_start(GTK_BOX(transfer),button,FALSE,FALSE,0); g_signal_connect(button,"clicked",G_CALLBACK(notes_transfer),GINT_TO_POINTER((gint)kind|(i ? 256 : 0))); }
+ if(kind==INSIGHT_CLIP) { wb.clips_all=gtk_check_button_new_with_label("Show all languages"); gtk_widget_set_name(wb.clips_all,"insight-clips-all-languages"); gtk_box_pack_start(GTK_BOX(box),wb.clips_all,FALSE,FALSE,0); g_signal_connect(wb.clips_all,"toggled",G_CALLBACK(notes_filter),GINT_TO_POINTER(INSIGHT_CLIP)); }
  gtk_box_pack_start(GTK_BOX(box),transfer,FALSE,FALSE,0); gtk_box_reorder_child(GTK_BOX(box),transfer,2);
  gtk_notebook_append_page(GTK_NOTEBOOK(wb.project_notebook),box,gtk_label_new(kind==INSIGHT_BOOKMARK ? "Bookmarks" : "Clips")); g_signal_connect(field,"changed",G_CALLBACK(notes_filter),GINT_TO_POINTER(kind)); g_signal_connect(field,"key-press-event",G_CALLBACK(browser_key),NULL); g_signal_connect(view,"key-press-event",G_CALLBACK(browser_key),NULL);
  if(kind==INSIGHT_BOOKMARK) g_signal_connect(field,"activate",G_CALLBACK(bookmark_go),NULL);
@@ -1995,6 +2030,7 @@ static void queue_definition(gboolean force) {
 static gboolean refresh_now(gpointer data) {
  (void)data; wb.refresh=0;
  GeanyDocument *active=document_get_current(); gboolean dirty=wb.index_dirty;
+ if(wb.clips_store) { gchar *language=clip_current_language(); if(g_strcmp0(language,wb.clips_language)) notes_filter(NULL,GINT_TO_POINTER(INSIGHT_CLIP)); g_free(language); }
  if(active) { decorate_selection(active->editor->sci); gsize a=(gsize)SSM(active->editor->sci,SCI_GETSELECTIONSTART,0,0),b=(gsize)SSM(active->editor->sci,SCI_GETSELECTIONEND,0,0); if(b>a) decorate_match(active->editor->sci,a,b); else decorate_match(active->editor->sci,0,0); }
  if(wb.preview) decorate_selection(wb.preview);
  /* Project models are refreshed when a completed snapshot is published,
@@ -3393,7 +3429,7 @@ void insight_workbench_finalize(void) {
  if(wb.file_types) g_object_unref(wb.file_types);
  if(wb.marks_store) g_object_unref(wb.marks_store);
  if(wb.clips_store) g_object_unref(wb.clips_store);
- insight_notes_free(wb.notes); g_free(wb.notes_path);
+ insight_notes_free(wb.notes); g_free(wb.notes_path); g_free(wb.clips_language);
  if(wb.file_store) g_object_unref(wb.file_store);
  if(wb.relation_history) g_ptr_array_unref(wb.relation_history);
  if(wb.matches) g_object_unref(wb.matches);

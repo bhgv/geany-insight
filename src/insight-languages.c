@@ -53,6 +53,14 @@ static Language *for_editor(ScintillaObject *sci,const gchar *path,GeanyFiletype
  if(!path) return by_name(ft ? ft->name : NULL);
  return NULL;
 }
+gchar **insight_languages_names(void) {
+ guint count=languages ? languages->len : 0; gchar **names=g_new0(gchar *,count+1);
+ for(guint i=0;i<count;i++) names[i]=g_strdup(((Language *)g_ptr_array_index(languages,i))->name);
+ return names;
+}
+gchar *insight_languages_profile_name(ScintillaObject *sci,const gchar *path,GeanyFiletype *ft) {
+ Language *profile=for_editor(sci,path,ft); return g_strdup(profile ? profile->name : (ft ? ft->name : ""));
+}
 struct InsightLanguageFilter { gchar *extensions,*compatible;GPtrArray *own,*excluded;gboolean unrestricted; };
 InsightLanguageFilter *insight_language_filter_new(const gchar *from,GeanyFiletype *ft) {
  InsightLanguageFilter *filter=g_new0(InsightLanguageFilter,1);Language *p=for_path(from);if(!p && !from) { GeanyDocument *doc=document_get_current();p=doc ? for_editor(doc->editor->sci,from,ft) : by_name(ft ? ft->name : NULL); }filter->unrestricted=!p;filter->own=g_ptr_array_new_with_free_func(g_free);filter->excluded=g_ptr_array_new_with_free_func(g_free);filter->extensions=g_strdup(p ? p->extensions : "");filter->compatible=g_strdup(p ? p->compatible : "");

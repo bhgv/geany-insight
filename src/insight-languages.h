@@ -7,6 +7,8 @@ typedef struct InsightLanguageFilter InsightLanguageFilter;
 InsightLanguageFilter *insight_language_filter_new(const gchar *,GeanyFiletype *);
 gboolean insight_language_filter_match(const InsightLanguageFilter *,const gchar *);
 void insight_language_filter_free(InsightLanguageFilter *);
+gchar **insight_languages_names(void);
+gchar *insight_languages_profile_name(ScintillaObject *,const gchar *,GeanyFiletype *);
 void insight_languages_init(void);
 void insight_languages_finalize(void);
 GeanyFiletype *insight_languages_detect(const gchar *path);
