@@ -209,6 +209,8 @@ libgeany_la_SOURCES += \
 	insight-diff.c \
 	insight-diff.h \
 	../insight/core/diff.c \
+	../insight/core/structure_select.c \
+	../insight/core/structure_select.h \
 	../insight/core/diff.h \
 	insight-workbench.h \
 	insight-index.c \

@@ -32,6 +32,10 @@ jobs:
             rsync
       - name: Test internal diff core
         run: python insight/tests/diff_test.py
+      - name: Test structural selection
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -UNDEBUG insight/core/structure_select.c insight/tests/structure_select_test.c -o structural-selection-test.exe
+          ./structural-selection-test.exe
       - name: Build native editor including internal merge window
         run: |
           meson setup _build --prefix="$(pwd)/portable" --libdir=lib \
@@ -52,6 +56,8 @@ jobs:
         run: |
           mkdir -p portable/examples
           cp -r insight/examples/diff-merge portable/examples/
+          cp insight/examples/structural-selection.c portable/examples/
+          cp insight/docs/structural-selection.md portable/STRUCTURAL-SELECTION.md
           python insight/tools/bundle_windows_dependencies.py --package portable --sdk "$(cygpath -w /ucrt64)"
           cp COPYING portable/
           cp insight/docs/internal-diff.md portable/INTERNAL-DIFF.md

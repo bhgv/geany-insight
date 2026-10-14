@@ -426,3 +426,6 @@ project_files_test = executable('test_insight_project_files', '../insight/tests/
 test('Insight project membership', project_files_test)
 overview_gui_test = executable('test_overview_gui', '../insight/tests/overview_gui_test.c', dependencies: test_deps)
 test('Insight overview GUI', overview_gui_test, timeout: 30)
+
+structure_select_test = executable('test_insight_structure_select', '../insight/tests/structure_select_test.c', '../insight/core/structure_select.c', c_args: ['-UNDEBUG'])
+test('Insight structural selection', structure_select_test)

@@ -32,6 +32,7 @@
 #include "keybindings.h"
 #include "../insight/core/context.h"
 #include "../insight/core/runtime.h"
+#include "../insight/core/structure_select.h"
 #include "../insight/desktop/extensions.h"
 #include "../insight/desktop/lookup_filter.h"
 #include "../insight/desktop/layout_state.h"
@@ -2244,6 +2245,41 @@ static void panel_menu(GtkWidget *view_menu) {
  g_signal_connect(menu,"show",G_CALLBACK(panel_menu_sync),NULL); gtk_widget_show_all(item); gtk_widget_show_all(layouts);
 }
 static void overview_visible(GtkCheckMenuItem *item,gpointer data) { (void)data; insight_overview_set_visible(gtk_check_menu_item_get_active(item)); }
+static void structural_selection(GtkMenuItem *item,gpointer data) {
+ (void)item; GeanyDocument *doc=document_get_current(); if(!doc) return;
+ gint mode=GPOINTER_TO_INT(data); ScintillaObject *sci=doc->editor->sci;
+ if(mode==2) { document_grab_focus(doc); keybindings_send_command(GEANY_KEY_GROUP_SELECT,GEANY_KEYS_SELECT_LINE); return; }
+ if(sci_get_selection_mode(sci)!=SC_SEL_STREAM || SSM(sci,SCI_GETSELECTIONS,0,0)>1) {
+  ui_set_statusbar(TRUE,"Structural selection requires a single normal selection"); return;
+ }
+ gint length=sci_get_length(sci);
+ if(length>2*1024*1024) { ui_set_statusbar(TRUE,"Structural selection supports files up to 2 MiB"); return; }
+ InsightCodeDialect dialect;
+ if(!source_dialect(doc->file_type,&dialect)) { ui_set_statusbar(TRUE,"Structural selection: this language has no lexical mask yet"); return; }
+ gchar *text=sci_get_contents(sci,length+1); GError *error=NULL;
+ gchar *mask=insight_source_code_mask(text,(gsize)length,dialect,&error); g_free(text);
+ if(!mask) { ui_set_statusbar(TRUE,"Structural selection: %s",error ? error->message : "invalid text"); g_clear_error(&error); return; }
+ size_t first=0,last=0;
+ int found=mode==0 ? insight_select_block(mask,(size_t)length,(size_t)sci_get_selection_start(sci),(size_t)sci_get_selection_end(sci),&first,&last) :
+  insight_select_match(mask,(size_t)length,(size_t)sci_get_current_position(sci),&first,&last);
+ g_free(mask);
+ if(found==1) { sci_set_selection(sci,(gint)first,(gint)last); SSM(sci,SCI_SCROLLCARET,0,0); document_grab_focus(doc); }
+ else ui_set_statusbar(TRUE,found<0 ? "Structural selection could not be computed" : (mode==0 ? "No larger enclosing block" : "Place the caret on or immediately after a code bracket"));
+}
+static void create_structural_selection_menu(void) {
+ GtkWidget *edit=ui_lookup_widget(main_widgets.window,"edit1_menu");
+ GtkWidget *item=gtk_menu_item_new_with_label("Structural selection"),*menu=gtk_menu_new();
+ gtk_menu_item_set_submenu(GTK_MENU_ITEM(item),menu); gtk_menu_shell_append(GTK_MENU_SHELL(edit),item);
+ const char *labels[]={"Select enclosing block / expand","Select matching brackets","Select line"};
+ const char *keys[]={"<Primary><Alt>b","<Primary><Alt>m","<Primary><Alt>l"};
+ for(guint i=0;i<3;i++) {
+  GtkWidget *entry=gtk_menu_item_new_with_label(labels[i]); gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry);
+  g_signal_connect(entry,"activate",G_CALLBACK(structural_selection),GINT_TO_POINTER((gint)i));
+  guint key; GdkModifierType modifiers; gtk_accelerator_parse(keys[i],&key,&modifiers);
+  gtk_widget_add_accelerator(entry,"activate",wb.navigation_accels,key,modifiers,GTK_ACCEL_VISIBLE);
+ }
+ gtk_widget_show_all(item);
+}
 static void create_workbench_menus(void) {
  GtkWidget *overview=gtk_check_menu_item_new_with_label("Overview"); gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(overview),insight_overview_get_visible()); g_signal_connect(overview,"toggled",G_CALLBACK(overview_visible),NULL); gtk_container_add(GTK_CONTAINER(ui_lookup_widget(main_widgets.window,"menu_view1_menu")),overview); gtk_widget_show(overview);
  GtkWidget *project_menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(ui_lookup_widget(main_widgets.window,"menu_project1"))),*manage=gtk_menu_item_new_with_label("Add and Remove Project Files…"); gtk_container_add(GTK_CONTAINER(project_menu),manage); g_signal_connect(manage,"activate",G_CALLBACK(manage_project_files),NULL); gtk_widget_show(manage);
@@ -2251,6 +2287,7 @@ static void create_workbench_menus(void) {
  gtk_menu_item_set_submenu(GTK_MENU_ITEM(navigate),menu); gtk_menu_shell_insert(GTK_MENU_SHELL(menubar),navigate,4);
  g_object_set_data(G_OBJECT(main_widgets.window),"insight-navigate",navigate);
  wb.navigation_accels=gtk_accel_group_new(); gtk_window_add_accel_group(GTK_WINDOW(main_widgets.window),wb.navigation_accels);
+ create_structural_selection_menu();
  const char *names[]={"Go to definition","Find symbol…","Find file…","Find usages…","Context back","Context forward"};
  const char *shortcuts[]={"F12","<Primary><Alt>s","<Primary><Alt>o","<Primary><Alt>r","<Primary><Alt>Left","<Primary><Alt>Right"};
  for(int i=0;i<6;i++) {
