@@ -17,6 +17,7 @@ static gpointer parse_in_worker(gpointer data) {
  insight_index_free(index); insight_index_free(job->shared); return NULL;
 }
 int main(void) {
+ assert(insight_native_language_compatible(TM_PARSER_C,TM_PARSER_CPP));assert(insight_native_language_compatible(TM_PARSER_CPP,TM_PARSER_ASM));assert(!insight_native_language_compatible(TM_PARSER_C,TM_PARSER_VHDL));assert(!insight_native_language_compatible(TM_PARSER_CPP,TM_PARSER_SH));assert(!insight_native_language_compatible(TM_PARSER_NONE,TM_PARSER_NONE));assert(insight_native_language_compatible(TM_PARSER_PYTHON,TM_PARSER_PYTHON));
  InsightIndex *index=insight_index_new(); assert(index);
  char name[]="foo",args[]="(int value)"; TMTag function={.name=name,.scope="Scope",.line=7,.kind_letter='f',.arglist=args,.var_type="int",.inheritance="Base"};
  TMTag invalid={.name="\xff",.line=3,.kind_letter='v'};
@@ -37,6 +38,7 @@ int main(void) {
  assert(insight_native_definition_rank_at(&local,"/project/b.cpp","current_function",225)<0);
  assert(insight_native_definition_rank_at(&local,"/project/a.cpp","current_function",200)<0);
  assert(insight_native_definition_rank_at(&local,"/project/a.cpp",NULL,225)<0);
+ InsightSymbol assembly_label={"entry","/project/native.S","","l",1,"","",""};assert(insight_native_definition_rank_at(&assembly_label,"/project/main.cpp",NULL,1)>=0);
  assert(!insight_native_import(index,&source,"\xff")); assert(insight_index_count(index)==1);
  GPtrArray huge={.pdata=NULL,.len=250001}; source.tags_array=&huge;
  assert(!insight_native_import(index,&source,"/project/a.cpp")); assert(insight_index_count(index)==1);

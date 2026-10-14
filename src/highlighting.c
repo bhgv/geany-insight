@@ -2059,3 +2059,12 @@ gboolean highlighting_is_code_style(gint lexer, gint style)
 	return !(highlighting_is_comment_style(lexer, style) ||
 		highlighting_is_string_style(lexer, style));
 }
+
+/* The configured primary set contains language keywords, not user typedefs. */
+gboolean highlighting_is_primary_keyword(GeanyFiletype *ft, const gchar *word)
+{
+ if(!ft || !word || !*word || !style_sets || !style_sets[ft->id].keywords || !style_sets[ft->id].keywords[0]) return FALSE;
+ const gchar *at=style_sets[ft->id].keywords[0];gsize length=strlen(word);
+ while(*at) { while(g_ascii_isspace(*at)) at++;const gchar *begin=at;while(*at && !g_ascii_isspace(*at)) at++;if((gsize)(at-begin)==length && !memcmp(begin,word,length)) return TRUE; }
+ return FALSE;
+}

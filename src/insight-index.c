@@ -27,7 +27,9 @@ guint insight_native_definition_rank(const InsightSymbol *symbol,const char *pat
 }
 
 gint insight_native_definition_rank_at(const InsightSymbol *symbol,const char *path,const char *scope,gulong line) {
- if(!strcmp(symbol->kind,"l") || !strcmp(symbol->kind,"z")) {
+ const gchar *extension=strrchr(symbol->path,'.');
+ gboolean assembly=extension && (!g_ascii_strcasecmp(extension,".asm") || !g_ascii_strcasecmp(extension,".s") || !g_ascii_strcasecmp(extension,".sx") || !g_ascii_strcasecmp(extension,".asm51") || !g_ascii_strcasecmp(extension,".a51"));
+ if((!strcmp(symbol->kind,"l") && !assembly) || !strcmp(symbol->kind,"z")) {
   if(g_strcmp0(symbol->path,path) || !scope || !*scope || g_strcmp0(symbol->scope,scope) || symbol->line>line) return -1;
   return 10000+(gint)MIN(symbol->line,(gulong)G_MAXINT-10000ul);
  }
@@ -95,4 +97,13 @@ gboolean insight_native_parse(InsightIndex *index,TMSourceFile *file,const char 
   * sources. Use the actual tag array, not that obsolete retry result. */
  tm_source_file_parse(file,(guchar *)text,length,TRUE);
  return insight_native_import(index,file,path);
+}
+
+/* C/C++ headers and assembly share native symbols. Other parser languages
+ * must match; an unknown language never authorizes a cross-file jump. */
+gboolean insight_native_language_compatible(TMParserType from,TMParserType to) {
+ if(from<0 || to<0) return FALSE;
+ gboolean native_from=from==TM_PARSER_C || from==TM_PARSER_CPP || from==TM_PARSER_ASM || from==TM_PARSER_CUDA;
+ gboolean native_to=to==TM_PARSER_C || to==TM_PARSER_CPP || to==TM_PARSER_ASM || to==TM_PARSER_CUDA;
+ return from==to || (native_from && native_to);
 }

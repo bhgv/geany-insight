@@ -13,6 +13,7 @@ gboolean insight_native_import(InsightIndex *,TMSourceFile *,const char *);
 gboolean insight_native_parse(InsightIndex *,TMSourceFile *,const char *,const char *,gsize);
 /* Local/parameter tags are eligible only in the same file and function,
  * at or before the reference. Negative means outside the reference scope. */
+gboolean insight_native_language_compatible(TMParserType,TMParserType);
 gint insight_native_definition_rank_at(const InsightSymbol *,const char *,const char *,gulong);
 gchar *insight_native_function_scope(const InsightIndex *,const char *,gulong);
 gchar *insight_native_member_owner(const InsightIndex *,const char *,const char *,gulong,const char *,gsize,gboolean *);

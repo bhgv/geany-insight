@@ -441,3 +441,6 @@ test('Insight Symbol Info and Window List GUI', symbol_info_gui_test, timeout: 5
 
 help_search_gui_test = executable('test_insight_help_search_gui', '../insight/tests/help_search_gui_test.c', dependencies: test_deps)
 test('Insight Help and on-demand Search GUI', help_search_gui_test, timeout: 45)
+
+context_links_gui_test = executable('test_insight_context_links_gui', '../insight/tests/context_links_gui_test.c', dependencies: test_deps)
+test('Insight language-aware Context links GUI', context_links_gui_test, timeout: 45)
