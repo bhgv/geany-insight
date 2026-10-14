@@ -4,7 +4,7 @@
 #include "context_search.h"
 enum { INSIGHT_KEYWORD_VARIATIONS=8 };
 /* Boolean keywords: implicit/explicit AND, OR, NOT/-/!, parentheses,
- * quoted phrases, =case-sensitive terms and ?"regular expressions".
+ * quoted phrases, ~fuzzy subsequences, =case-sensitive terms and ?"regular expressions".
  * Context is the maximum distance between matching start lines, 0..50. */
 gboolean insight_keyword_collect(const char *,gsize,const char *,guint,guint,InsightSearchMatch *,gsize,gsize *,GError **);
 #endif

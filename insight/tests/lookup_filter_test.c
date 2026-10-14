@@ -4,6 +4,14 @@ static void check(const char *q,gboolean files,const char *name,const char *scop
  GError *error=NULL; InsightLookupFilter *f=insight_lookup_filter_new(q,files,&error); g_assert_no_error(error); g_assert_nonnull(f); g_assert_cmpint(insight_lookup_filter_match(f,name,scope,path,kind),==,expected); insight_lookup_filter_free(f);
 }
 int main(void) {
+ check("~wod",FALSE,"WriteOpenDoc","","a.c","f",TRUE);
+ check("~dwo",FALSE,"WriteOpenDoc","","a.c","f",FALSE);
+ check("~тст",FALSE,"Текст","","a.c","f",TRUE);
+ check("~",FALSE,"Write","","a.c","f",FALSE);
+ check("scope=~wd @~sc ~wod(",FALSE,"WriteOpenDoc","Widget","src/code.c","f",TRUE);
+ check("~sac",TRUE,"a.c","","src/a.c","",TRUE);
+ check("~s*c",TRUE,"a.c","","src/a.c","",FALSE);
+ check("~aa",FALSE,"a","","a.c","f",FALSE);
  check("doc write",FALSE,"WriteOpenDoc","","a.c","f",TRUE);
  check("doc read",FALSE,"WriteOpenDoc","","a.c","f",FALSE);
  check("\"write\"",FALSE,"Write","","a.c","f",TRUE);

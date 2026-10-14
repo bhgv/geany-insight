@@ -8,6 +8,8 @@ static gsize count(const char *text,const char *query,guint flags,guint context)
  return total;
 }
 int main(void) {
+ g_assert_cmpuint(count("WriteOpenDoc error\nWriteOpenDoc clean","~wod NOT error",0,0),==,1);
+ g_assert_cmpuint(count("Текст","~тст",INSIGHT_KEYWORD_VARIATIONS,0),==,1);
  g_assert_cmpuint(count("OpenDoc SaveRemote\nerror\nSaveRemote\nOpenDoc\n","doc remote !error",0,0),==,2);
  g_assert_cmpuint(count("cat\ndog\n","cat dog",0,0),==,0);
  g_assert_cmpuint(count("cat\ndog\n","cat dog",0,1),==,2);

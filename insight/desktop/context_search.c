@@ -2,7 +2,17 @@
 #include "context_search.h"
 #include <string.h>
 static GRegex *compile_query(const char *query,guint flags,GError **error) {
- gchar *pattern=flags&INSIGHT_SEARCH_REGEX ? g_strdup(query) : g_regex_escape_string(query,-1);
+ gchar *pattern;
+ if(!(flags&INSIGHT_SEARCH_REGEX) && query[0]=='~') {
+  if(!query[1]) { g_set_error_literal(error,G_REGEX_ERROR,G_REGEX_ERROR_COMPILE,"Fuzzy search needs a nonempty query"); return NULL; }
+  GString *fuzzy=g_string_new(NULL);
+  for(const char *c=query+1;*c;c=g_utf8_next_char(c)) {
+   if(c!=query+1) g_string_append(fuzzy,"[^\\r\\n]*?");
+   gchar *escaped=g_regex_escape_string(c,(gint)(g_utf8_next_char(c)-c));
+   g_string_append(fuzzy,escaped); g_free(escaped);
+  }
+  pattern=g_string_free(fuzzy,FALSE);
+ } else pattern=flags&INSIGHT_SEARCH_REGEX ? g_strdup(query) : g_regex_escape_string(query,-1);
  if(flags&INSIGHT_SEARCH_WORD) { gchar *bounded=g_strconcat("(?<![\\p{L}\\p{N}\\p{M}_])(?:",pattern,")(?![\\p{L}\\p{N}\\p{M}_])",NULL); g_free(pattern); pattern=bounded; }
  GRegex *regex=g_regex_new(pattern,G_REGEX_OPTIMIZE|G_REGEX_MULTILINE|((flags&INSIGHT_SEARCH_CASE) ? 0 : G_REGEX_CASELESS),0,error); g_free(pattern); return regex;
 }

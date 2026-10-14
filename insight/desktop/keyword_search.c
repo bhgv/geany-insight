@@ -62,7 +62,7 @@ static gint atom(Parser *p) {
   if(quoted) { if(*p->cursor=='"') p->cursor++; else p->failed=TRUE; }
   if(!term->len || term->len>1024 || ++p->terms>32) p->failed=TRUE;
   result=node(p,TERM,-1,-1);
-  if(result>=0) { p->nodes[result].text=g_string_free(term,FALSE); if((p->flags&INSIGHT_KEYWORD_VARIATIONS) && !(flags&INSIGHT_SEARCH_REGEX)) { gchar *pattern=variation_pattern(p->nodes[result].text); if(pattern) { g_free(p->nodes[result].text); p->nodes[result].text=pattern; flags|=INSIGHT_SEARCH_REGEX; } } p->nodes[result].flags=flags; p->nodes[result].term=p->terms-1; } else g_string_free(term,TRUE);
+  if(result>=0) { p->nodes[result].text=g_string_free(term,FALSE); if((p->flags&INSIGHT_KEYWORD_VARIATIONS) && !(flags&INSIGHT_SEARCH_REGEX) && p->nodes[result].text[0]!='~') { gchar *pattern=variation_pattern(p->nodes[result].text); if(pattern) { g_free(p->nodes[result].text); p->nodes[result].text=pattern; flags|=INSIGHT_SEARCH_REGEX; } } p->nodes[result].flags=flags; p->nodes[result].term=p->terms-1; } else g_string_free(term,TRUE);
  }
  p->depth--; return result;
 }
