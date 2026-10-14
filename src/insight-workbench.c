@@ -72,7 +72,7 @@ typedef struct {
  GtkListStore *search_matches,*usage_target;
  GtkWidget *search_view,*search_status,*search_page,*search_scope,*search_mask,*search_keywords,*search_variations,*search_context;
  gchar *search_state_path; GPtrArray *search_files,*search_history; gboolean usage_keywords; guint usage_context;
- GtkWidget *usage_entry,*usage_status,*usage_buffer,*usage_view,*usage_code,*relation_mode,*relation_follow;
+ GtkWidget *usage_entry,*usage_status,*usage_buffer,*usage_view,*usage_code,*relation_mode,*relation_follow,*relation_enclosing;
  gchar *relation_word; gint relation_last_mode; gboolean relation_dirty,usage_code_only,relation_setting;
  gint usage_mode; guint usage_flags;
  GtkWidget *project_query,*project_case,*project_word,*project_regex,*editor_query,*editor_case,*editor_word,*editor_regex,*project_search_row,*editor_search_row;
@@ -970,6 +970,44 @@ static gchar *reference_snippet(const char *text,gsize at) {
  if(g_utf8_strlen(line,-1)>180) { gchar *shortened=g_utf8_substring(line,0,180); g_free(line); line=g_strconcat(shortened,"…",NULL); g_free(shortened); }
  return line;
 }
+static TMTag *relation_enclosing_function(GeanyDocument *doc) {
+ if(!doc || !doc->tm_file || !doc->tm_file->tags_array || sci_get_length(doc->editor->sci)>2*1024*1024) return NULL;
+ InsightCodeDialect dialect;if(!source_dialect(doc->file_type,&dialect) || dialect==INSIGHT_CODE_PYTHON || dialect==INSIGHT_CODE_LUA) return NULL;
+ gint length=sci_get_length(doc->editor->sci);gchar *text=sci_get_contents(doc->editor->sci,length+1),*mask=insight_source_code_mask(text,length,dialect,NULL);g_free(text);if(!mask) return NULL;
+ size_t caret=(size_t)sci_get_current_position(doc->editor->sci),best=SIZE_MAX;TMTag *selected=NULL;
+ for(guint i=0;i<doc->tm_file->tags_array->len;i++) {
+  TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,i);
+  if(!tag || !(tag->type&(tm_tag_function_t|tm_tag_method_t)) || !tag->line || tag->line>(gulong)sci_get_line_count(doc->editor->sci)) continue;
+  size_t start=(size_t)sci_get_position_from_line(doc->editor->sci,tag->line-1),end=0;
+  if(start<=caret && insight_function_extent(mask,length,start,&end)==1 && caret<end && end-start<best) { selected=tag;best=end-start; }
+ }
+ g_free(mask);return selected;
+}
+static void relation_calls(const char *query) {
+ gtk_list_store_clear(wb.matches);GeanyDocument *doc=document_get_current();InsightCodeDialect dialect;
+ if(!doc || sci_get_length(doc->editor->sci)>2*1024*1024 || !source_dialect(doc->file_type,&dialect) || dialect==INSIGHT_CODE_PYTHON || dialect==INSIGHT_CODE_LUA) { set_usage_status("Calls currently requires a brace language and a current buffer up to 2 MiB");return; }
+ document_update_tags(doc);if(!doc->tm_file || !doc->tm_file->tags_array) { set_usage_status("No parsed function definitions");return; }
+ TMTag *chosen=NULL;guint count=0;
+ for(guint i=0;i<doc->tm_file->tags_array->len;i++) {
+  TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,i);
+  if(tag && (tag->type&(tm_tag_function_t|tm_tag_method_t)) && tag->name && !strcmp(tag->name,query)) { chosen=tag;count++; }
+ }
+ if(count>1) { TMTag *current=relation_enclosing_function(doc);if(current && !strcmp(current->name,query)) chosen=current;else { set_usage_status("Several definitions: place the caret inside the desired function");return; } }
+ if(!chosen || !chosen->line || chosen->line>(gulong)sci_get_line_count(doc->editor->sci)) { set_usage_status("Function definition not found in the current buffer");return; }
+ gint length=sci_get_length(doc->editor->sci);gchar *text=sci_get_contents(doc->editor->sci,length+1),*mask=insight_source_code_mask(text,length,dialect,NULL);
+ size_t start=(size_t)sci_get_position_from_line(doc->editor->sci,chosen->line-1),end=0,body=0;
+ if(mask && insight_function_extent(mask,length,start,&end)==1) {
+  for(size_t i=start;i<end;i++) if(mask[i]=='{') { size_t a,b;if(insight_select_match(mask,length,i,&a,&b)==1 && b==end) { body=i+1;break; } }
+ }
+ if(!body) { set_usage_status("No complete brace-bodied function");g_free(mask);g_free(text);return; }
+ gchar *digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,text,-1);size_t cursor=body,a=0,b=0;guint shown=0;
+ while(shown<512 && insight_next_call(mask,end-1,&cursor,&a,&b)==1) {
+  gchar *name=g_strndup(text+a,b-a),*snippet=reference_snippet(text,a);GtkTreeIter iter;gint line=sci_get_line_from_position(doc->editor->sci,(gint)a);
+  gtk_list_store_append(wb.matches,&iter);gtk_list_store_set(wb.matches,&iter,USAGE_DISPLAY,doc->file_name ? doc->file_name : "untitled",USAGE_PATH,doc->file_name,USAGE_LINE,(gulong)line+1,USAGE_START,(gulong)a,USAGE_END,(gulong)b,USAGE_ID,doc->id,USAGE_DIGEST,digest,USAGE_SYMBOL,name,USAGE_SNIPPET,snippet,-1);
+  g_free(name);g_free(snippet);shown++;
+ }
+ gchar *status=g_strdup_printf("%u lexical call sites%s • current function; overloads and types are not resolved",shown,shown==512 ? " (limit reached)" : "");set_usage_status(status);g_free(status);g_free(digest);g_free(mask);g_free(text);
+}
 typedef struct { gchar *path,*query,*text,*digest; InsightOccurrence *found; GPtrArray *snippets; gulong *columns; gsize total,apply_position; guint id,flags,context,capacity; gint mode,encoding; InsightCodeDialect dialect; gboolean keywords,code,have_dialect,valid; guint64 generation,epoch; } SearchJob;
 static gboolean usage_step(gpointer);
 static void search_job_free(gpointer data) { SearchJob *j=data; g_free(j->path); g_free(j->query); g_free(j->text); g_free(j->digest); g_free(j->found); g_clear_pointer(&j->snippets,g_ptr_array_unref); g_free(j->columns); g_free(j); }
@@ -985,6 +1023,11 @@ static void search_job_run(GTask *task,gpointer source,gpointer data,GCancellabl
    if(j->valid) for(gsize n=0;n<MIN(j->total,j->capacity);n++) j->found[n]=(InsightOccurrence){matches[n].start,matches[n].end,matches[n].line,matches[n].column};
    g_free(matches);
   } else j->valid=insight_occurrences_find(text,strlen(text),j->query,strlen(j->query),0,j->found,j->capacity,&j->total);
+  if(j->valid && j->mode==7) {
+   gsize kept=0;size_t text_length=strlen(text);for(gsize n=0;n<MIN(j->total,j->capacity);n++) { size_t cursor=j->found[n].start,a=0,b=0;
+    if(insight_next_call(text,text_length,&cursor,&a,&b)==1 && a==j->found[n].start && b==j->found[n].end) j->found[kept++]=j->found[n];
+   } j->total=kept;
+  }
   if(j->valid) {
    j->digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,j->text,-1);
    gsize count=MIN(j->total,j->capacity); j->snippets=g_ptr_array_new_with_free_func(g_free); j->columns=g_new(gulong,count);
@@ -1057,7 +1100,7 @@ static gboolean usage_step(gpointer data) {
  Location *location=g_ptr_array_index(wb.usage_paths,wb.usage_position++); GeanyDocument *doc=location->id ? document_find_by_id(location->id) : document_find_by_filename(location->path);
  SearchJob *j=g_new0(SearchJob,1); j->path=g_strdup(location->path); j->query=g_strdup(wb.usage_name); j->id=doc ? doc->id : 0; j->mode=wb.usage_mode; j->flags=wb.usage_flags; j->keywords=wb.usage_keywords; j->context=wb.usage_context; j->capacity=2000-wb.usage_shown; j->encoding=file_prefs.default_open_encoding; j->generation=wb.usage_generation; j->epoch=workbench_epoch;
  if(doc) { gint length=sci_get_length(doc->editor->sci); if(length>=0 && length<=2*1024*1024) { j->text=sci_get_contents(doc->editor->sci,length+1); if(j->text && (!g_utf8_validate(j->text,length,NULL) || memchr(j->text,0,length))) g_clear_pointer(&j->text,g_free); } }
- j->code=j->mode==0 && wb.usage_code_only; GeanyFiletype *ft=doc ? doc->file_type : (j->path ? filetypes_detect_from_extension(j->path) : NULL); j->have_dialect=source_dialect(ft,&j->dialect);
+ j->code=(j->mode==0 && wb.usage_code_only) || j->mode==7; GeanyFiletype *ft=doc ? doc->file_type : (j->path ? filetypes_detect_from_extension(j->path) : NULL); j->have_dialect=source_dialect(ft,&j->dialect);
  wb.search_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.search_worker,search_job_done,NULL); g_task_set_task_data(task,j,search_job_free); g_task_run_in_thread(task,search_job_run); g_object_unref(task); wb.usage_idle=0; return G_SOURCE_REMOVE;
 }
 static gboolean search_path_matches(const char *path) {
@@ -1141,6 +1184,7 @@ static void usage_start(GtkWidget *widget,gpointer data) {
  const char *query=gtk_entry_get_text(GTK_ENTRY(wb.usage_entry)); size_t total;
  gint mode=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode)); wb.usage_mode=mode;
  wb.usage_target=mode==3 ? wb.search_matches : wb.matches;
+ if(mode==6) { relation_calls(query);return; }
  if(mode==1 || mode==2 || mode==4 || mode==5) {
   refresh_index(); RelationJob *j=g_new0(RelationJob,1); j->index=insight_index_ref(wb.index); j->query=g_strdup(query); j->mode=mode; j->epoch=workbench_epoch; j->generation=wb.usage_generation; j->index_version=wb.index_version;
   wb.search_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.search_worker,relation_job_done,NULL); g_task_set_task_data(task,j,relation_job_free); g_task_run_in_thread(task,relation_job_run); g_object_unref(task); set_usage_status("Searching symbol relations…"); return;
@@ -1197,7 +1241,7 @@ static void usage_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColum
 static void relation_controls(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; if(wb.relation_setting) return; wb.relation_dirty=TRUE; stop_usage();
  gboolean references=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode))==0;
- gtk_widget_set_sensitive(wb.usage_code,references); gtk_widget_set_sensitive(wb.usage_buffer,references || gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode))==3);
+ gtk_widget_set_sensitive(wb.usage_code,references); gtk_widget_set_sensitive(wb.usage_buffer,references || gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode))==3 || gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode))==7);
  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_follow))) insight_workbench_refresh();
  else if(*gtk_entry_get_text(GTK_ENTRY(wb.usage_entry))) usage_start(NULL,NULL);
  else { gtk_list_store_clear(wb.matches); set_usage_status("Enter a symbol for Relations"); }
@@ -1207,9 +1251,11 @@ static void relation_update_from_editor(gboolean dirty) {
  if(!wb.relation_follow || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_follow))) return;
  GeanyDocument *doc=document_get_current(); gchar word[1025]={0};
  if(doc) {
-  editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);
   refresh_index();
-  if(!*word) {
+  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_enclosing))) {
+   TMTag *tag=relation_enclosing_function(doc);if(tag && tag->name) g_strlcpy(word,tag->name,sizeof word);
+  } else editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);
+  if(!*word && !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_enclosing))) {
    gulong line=(gulong)sci_get_current_line(doc->editor->sci)+1;TMTag *selected=NULL;guint best=0;
    if(doc->tm_file && doc->tm_file->tags_array) for(guint i=0;i<doc->tm_file->tags_array->len;i++) {
     TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,i);
@@ -1234,8 +1280,9 @@ static void create_usage_browser(void) {
  wb.usage_buffer=gtk_check_button_new_with_label("Current buffer only");
  wb.usage_code=gtk_check_button_new_with_label("References: code only");
  wb.relation_follow=gtk_check_button_new_with_label("Follow symbol in editor");
+ wb.relation_enclosing=gtk_check_button_new_with_label("Track enclosing function");
  wb.relation_mode=gtk_combo_box_text_new(); gtk_widget_set_name(wb.relation_mode,"insight-relation-mode");
- const char *modes[]={"References (lexical)","Definitions / declarations","Direct members (tags)","Text search (project)","Base types (tags)","Derived types (tags)"};
+ const char *modes[]={"References (lexical)","Definitions / declarations","Direct members (tags)","Text search (project)","Base types (tags)","Derived types (tags)","Calls (current function, lexical)","Call sites (project, lexical)"};
  for(guint i=0;i<G_N_ELEMENTS(modes);i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.relation_mode),modes[i]);
  gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),0);
  GtkWidget *search=gtk_button_new_with_label("Search"),*cancel=gtk_button_new_with_label("Stop");
@@ -1255,7 +1302,7 @@ static void create_usage_browser(void) {
  }
  gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(wb.usage_view),USAGE_SNIPPET);
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),wb.usage_view);
- gtk_box_pack_start(GTK_BOX(box),wb.usage_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_mode,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_follow,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_code,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_buffer,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),controls,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_status,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
+ gtk_box_pack_start(GTK_BOX(box),wb.usage_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_mode,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_follow,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_enclosing,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_code,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_buffer,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),controls,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_status,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
  gtk_notebook_append_page(GTK_NOTEBOOK(wb.project_notebook),box,gtk_label_new("Relations"));
  g_signal_connect(search,"clicked",G_CALLBACK(usage_start),NULL); g_signal_connect(cancel,"clicked",G_CALLBACK(usage_cancel),NULL); g_signal_connect(wb.usage_entry,"activate",G_CALLBACK(usage_start),NULL);
  g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.usage_view)),"changed",G_CALLBACK(usage_selected),NULL); g_signal_connect(wb.usage_view,"row-activated",G_CALLBACK(usage_activated),NULL);
@@ -1263,6 +1310,7 @@ static void create_usage_browser(void) {
  g_signal_connect(wb.usage_view,"key-press-event",G_CALLBACK(browser_key),NULL);
  g_signal_connect(wb.relation_mode,"changed",G_CALLBACK(relation_controls),NULL);
  g_signal_connect(wb.relation_follow,"toggled",G_CALLBACK(relation_controls),NULL);
+ g_signal_connect(wb.relation_enclosing,"toggled",G_CALLBACK(relation_controls),NULL);
  g_signal_connect(wb.usage_code,"toggled",G_CALLBACK(relation_controls),NULL);
  g_signal_connect(wb.usage_buffer,"toggled",G_CALLBACK(relation_controls),NULL);
  gtk_widget_show_all(box);
@@ -2560,6 +2608,7 @@ static void save_workbench_settings(void) {
  g_key_file_set_integer(settings,"workbench","project-search-flags",text_search_flags(wb.project_case,wb.project_word,wb.project_regex));
  g_key_file_set_integer(settings,"workbench","editor-search-flags",text_search_flags(wb.editor_case,wb.editor_word,wb.editor_regex));
  g_key_file_set_integer(settings,"workbench","relation-mode",gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode)));
+ g_key_file_set_boolean(settings,"workbench","relation-enclosing",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_enclosing)));
  g_key_file_set_boolean(settings,"workbench","relation-follow",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_follow)));
  g_key_file_set_boolean(settings,"workbench","references-code-only",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_code)));
  g_key_file_set_boolean(settings,"workbench","usage-buffer",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_buffer)));
@@ -2598,7 +2647,8 @@ static void restore_workbench_settings(void) {
   gint project_flags=g_key_file_get_integer(settings,"workbench","project-search-flags",NULL),editor_flags=g_key_file_get_integer(settings,"workbench","editor-search-flags",NULL);
   if(project_flags>=0 && project_flags<=7) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_case),project_flags&INSIGHT_SEARCH_CASE); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_word),project_flags&INSIGHT_SEARCH_WORD); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_regex),project_flags&INSIGHT_SEARCH_REGEX); }
   if(editor_flags>=0 && editor_flags<=7) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.editor_case),editor_flags&INSIGHT_SEARCH_CASE); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.editor_word),editor_flags&INSIGHT_SEARCH_WORD); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.editor_regex),editor_flags&INSIGHT_SEARCH_REGEX); }
-  gint relation=g_key_file_get_integer(settings,"workbench","relation-mode",NULL); if(relation>=0 && relation<6) gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),relation);
+  gint relation=g_key_file_get_integer(settings,"workbench","relation-mode",NULL); if(relation>=0 && relation<8) gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),relation);
+  if(g_key_file_has_key(settings,"workbench","relation-enclosing",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_enclosing),g_key_file_get_boolean(settings,"workbench","relation-enclosing",NULL));
   if(g_key_file_has_key(settings,"workbench","relation-follow",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_follow),g_key_file_get_boolean(settings,"workbench","relation-follow",NULL));
   if(g_key_file_has_key(settings,"workbench","references-code-only",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.usage_code),g_key_file_get_boolean(settings,"workbench","references-code-only",NULL));
   gint tab=g_key_file_get_integer(settings,"workbench","project-tab",NULL); if(tab>=0 && tab<8) gtk_notebook_set_current_page(GTK_NOTEBOOK(wb.project_notebook),tab);
@@ -2793,6 +2843,12 @@ static void create_search_toolbars(void) {
  GtkWidget *visible=gtk_check_menu_item_new_with_label("Search toolbars"); wb.search_toolbars_toggle=visible; gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(visible),TRUE); g_signal_connect(visible,"toggled",G_CALLBACK(search_toolbars_visible),NULL); gtk_container_add(GTK_CONTAINER(ui_lookup_widget(main_widgets.window,"menu_view1_menu")),visible); gtk_widget_show(visible);
  create_search_results();
 }
+static gboolean relation_icon_draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
+ (void)data;GdkRGBA color;gtk_style_context_get_color(gtk_widget_get_style_context(widget),gtk_widget_get_state_flags(widget),&color);gdk_cairo_set_source_rgba(cr,&color);cairo_set_line_width(cr,1.3);
+ cairo_move_to(cr,4,8);cairo_line_to(cr,9,8);cairo_move_to(cr,9,3);cairo_line_to(cr,9,13);cairo_move_to(cr,9,3);cairo_line_to(cr,13,3);cairo_move_to(cr,9,13);cairo_line_to(cr,13,13);cairo_stroke(cr);
+ cairo_set_source_rgb(cr,0.19,0.50,0.82);cairo_rectangle(cr,1,6,4,4);cairo_rectangle(cr,12,1,3,4);cairo_rectangle(cr,12,11,3,4);cairo_fill(cr);return FALSE;
+}
+static void toolbar_relations(GtkToolButton *button,gpointer data) { (void)button;focus_relations(NULL,data); }
 static void create_browse_toolbar(void) {
  GtkToolbar *toolbar=GTK_TOOLBAR(main_widgets.toolbar);
  gtk_toolbar_insert(toolbar,gtk_separator_tool_item_new(),0);
@@ -2810,6 +2866,9 @@ static void create_browse_toolbar(void) {
  gtk_toolbar_set_icon_size(toolbar,GTK_ICON_SIZE_SMALL_TOOLBAR); gtk_widget_show_all(GTK_WIDGET(toolbar));
  GtkWidget *book_icon=gtk_drawing_area_new();gtk_widget_set_size_request(book_icon,16,16);g_signal_connect(book_icon,"draw",G_CALLBACK(bookmark_icon_draw),NULL);
  GtkToolItem *book=gtk_tool_button_new(book_icon,"Bookmarks");gtk_widget_set_tooltip_text(GTK_WIDGET(book),"All bookmarks — click to open file and line");g_signal_connect(book,"clicked",G_CALLBACK(show_bookmarks),NULL);gtk_toolbar_insert(toolbar,book,-1);
+ GtkWidget *relations_icon=gtk_drawing_area_new();gtk_widget_set_size_request(relations_icon,16,16);g_signal_connect(relations_icon,"draw",G_CALLBACK(relation_icon_draw),NULL);
+ GtkToolItem *relations=gtk_tool_button_new(relations_icon,"Relations");gtk_widget_set_tooltip_text(GTK_WIDGET(relations),"Relation Window — calls, call sites, members and inheritance");g_signal_connect(relations,"clicked",G_CALLBACK(toolbar_relations),NULL);gtk_toolbar_insert(toolbar,relations,-1);
+ GtkToolItem *diff=gtk_tool_button_new(NULL,"Diff / Merge");gtk_tool_button_set_icon_name(GTK_TOOL_BUTTON(diff),"document-properties");gtk_widget_set_tooltip_text(GTK_WIDGET(diff),"Internal Diff / Merge");g_signal_connect(diff,"clicked",G_CALLBACK(show_diff),NULL);gtk_toolbar_insert(toolbar,diff,-1);
  gtk_toolbar_insert(toolbar,gtk_separator_tool_item_new(),-1);
  const char *layouts[]={"A","B","C","D"};
  const char *tips[]={"Load layout A","Load layout B","Load layout C","Load layout D"};

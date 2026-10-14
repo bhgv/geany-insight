@@ -8,7 +8,22 @@ static void block(const char *s,size_t begin,size_t end,size_t a,size_t z) {
  assert(insight_select_block(s,strlen(s),begin,end,&first,&last)==1);
  assert(first==a && last==z);
 }
+static void calls_test(void) {
+ const char *s="if (ready()) obj.send (x); sizeof (x); foo\n(bar());";
+ size_t cursor=0,a=0,b=0;const char *names[]={"ready","send","foo","bar"};
+ for(size_t i=0;i<4;i++) { assert(insight_next_call(s,strlen(s),&cursor,&a,&b)==1);assert(b-a==strlen(names[i]));assert(!memcmp(s+a,names[i],b-a)); }
+ assert(insight_next_call(s,strlen(s),&cursor,&a,&b)==0);
+ assert(insight_next_call(s,strlen(s),NULL,&a,&b)==-1);
+ s="MACRO(x); café(); f(); f();";cursor=0;
+ const char *extra[]={"MACRO","café","f","f"};
+ for(size_t i=0;i<4;i++) { assert(insight_next_call(s,strlen(s),&cursor,&a,&b)==1);assert(b-a==strlen(extra[i]));assert(!memcmp(s+a,extra[i],b-a)); }
+ assert(insight_next_call(s,strlen(s),&cursor,&a,&b)==0);
+ s="      hidden        visible (x)";cursor=0;
+ assert(insight_next_call(s,strlen(s),&cursor,&a,&b)==1);assert(b-a==7 && !memcmp(s+a,"visible",7));
+ cursor=strlen(s)+1;assert(insight_next_call(s,strlen(s),&cursor,&a,&b)==-1);
+}
 int main(void) {
+ calls_test();
  block("{ f(a[2]); }",6,6,5,8);
  block("{ f(a[2]); }",5,8,3,9);
  block("{ f(a[2]); }",3,9,0,12);

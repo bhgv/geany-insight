@@ -2,6 +2,7 @@
 #include "structure_select.h"
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 static int opener(char c) { return c=='(' || c=='[' || c=='{'; }
 static int closer(char c) { return c==')' || c==']' || c=='}'; }
 static int matches(char a,char b) { return (a=='(' && b==')') || (a=='[' && b==']') || (a=='{' && b=='}'); }
@@ -93,4 +94,26 @@ int insight_neighbor_position(const size_t *positions,size_t count,size_t curren
  }
  if(found) *next=best;
  return found;
+}
+
+static int call_identifier(unsigned char c) {
+ return (c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_' || c=='$' || c>=128;
+}
+int insight_next_call(const char *mask,size_t length,size_t *cursor,size_t *first,size_t *last) {
+ static const char *keywords[]={"if","for","while","switch","catch","sizeof","alignof","decltype","typeof","return","static_assert","synchronized","with"};
+ if(!mask || !cursor || !first || !last || *cursor>length) return -1;
+ size_t i=*cursor;
+ while(i<length) {
+  if(!call_identifier((unsigned char)mask[i])) { i++;continue; }
+  size_t begin=i++;
+  while(i<length && (call_identifier((unsigned char)mask[i]) || (mask[i]>='0' && mask[i]<='9'))) i++;
+  size_t end=i,j=i;
+  while(j<length && (mask[j]==' ' || mask[j]=='\t' || mask[j]=='\r' || mask[j]=='\n')) j++;
+  if(j==length || mask[j]!='(') continue;
+  int skip=0;
+  for(size_t k=0;k<sizeof keywords/sizeof keywords[0];k++) if(strlen(keywords[k])==end-begin && !memcmp(mask+begin,keywords[k],end-begin)) { skip=1;break; }
+  if(skip) continue;
+  *cursor=i;*first=begin;*last=end;return 1;
+ }
+ *cursor=length;return 0;
 }

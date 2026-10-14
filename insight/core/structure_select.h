@@ -13,4 +13,7 @@ int insight_select_match(const char *,size_t,size_t,size_t *,size_t *);
 int insight_function_extent(const char *,size_t,size_t,size_t *);
 /* Find the closest strictly preceding/following position; input may be unsorted. */
 int insight_neighbor_position(const size_t *,size_t,size_t,int,size_t *);
+/* Lexical identifier followed by optional whitespace and an opening parenthesis.
+ * Skips control keywords; preserves offsets in the supplied code mask. */
+int insight_next_call(const char *,size_t,size_t *,size_t *,size_t *);
 #endif
