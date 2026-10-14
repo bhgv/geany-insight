@@ -149,7 +149,7 @@ static gboolean key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
 }
 static void selection_changed(GtkTreeSelection *selection,gpointer data) { (void)selection;RelationGraph *g=data;gtk_widget_queue_draw(g->canvas); }
 static void destroy(GtkWidget *widget,gpointer data) {
- g_object_set_data(G_OBJECT(widget),"insight-graph",NULL);RelationGraph *g=data;g_signal_handlers_disconnect_by_data(g->model,g);g_signal_handlers_disconnect_by_data(g->query,g);g_signal_handlers_disconnect_by_data(gtk_tree_view_get_selection(g->tree),g);
+ g_object_set_data(G_OBJECT(widget),"insight-graph",NULL);RelationGraph *g=data;g_signal_handlers_disconnect_by_data(g->model,g);g_signal_handlers_disconnect_by_data(g->query,g);GtkTreeSelection *selection=gtk_tree_view_get_selection(g->tree);if(selection) g_signal_handlers_disconnect_by_data(selection,g);
  if(g->menu) { gtk_widget_destroy(g->menu);g_object_unref(g->menu); }
  g_object_unref(g->tree);g_object_unref(g->model);g_object_unref(g->query);g_free(g);
 }

@@ -435,3 +435,6 @@ test('Insight relation graph geometry', relation_graph_layout_test)
 
 relation_graph_gui_test = executable('test_insight_relation_graph_gui', '../insight/tests/relation_graph_gui_test.c', '../src/insight-relation-graph.c', dependencies: deps)
 test('Insight relation graph GUI', relation_graph_gui_test, timeout: 30)
+
+symbol_info_gui_test = executable('test_insight_symbol_info_gui', '../insight/tests/symbol_info_gui_test.c', dependencies: test_deps)
+test('Insight Symbol Info and Window List GUI', symbol_info_gui_test, timeout: 50)
