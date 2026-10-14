@@ -56,4 +56,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert lib.insight_diff_compute(huge, b'b\n' * 2100, ctypes.byref(diff)) == -2
     assert diff.count == 0 and not diff.hunks
     check('a\n' * 10000, 'a\n' * 9999 + 'b\n', 1)
+    if os.name == 'nt':
+        import _ctypes
+        _ctypes.FreeLibrary(lib._handle)  # Windows locks loaded DLLs during cleanup.
 print('Diff core: edge cases, 3000 randomized reconstructions, work limit and common-edge trimming passed.')
