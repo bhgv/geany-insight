@@ -150,10 +150,35 @@ static void reordered(GtkTreeModel *model,GtkTreePath *path,GtkTreeIter *iter,gi
 static void toggled(GtkToggleButton *toggle,gpointer data) { Symbols *s=g_object_get_data(G_OBJECT(data),"insight-symbol-view"); if(!s) return; s->grouped=gtk_toggle_button_get_active(toggle); cancel(s); if(!s->grouped && s->mask==ALL_TYPES) publish(s,GTK_TREE_MODEL(s->source));
  queue(s); }
 static void freed(gpointer data) { Symbols *s=data; cancel(s); views=g_list_remove(views,s); g_object_unref(s->source); g_free(s); }
+static const gint column_widths[]={220,160,260,70,70};
+void insight_symbol_view_columns_reset(GtkTreeView *view) {
+ GList *columns=gtk_tree_view_get_columns(view);GtkTreeViewColumn *previous=NULL;
+ for(guint i=1;i<=g_list_length(columns);i++) for(GList *p=columns;p;p=p->next) {
+  GtkTreeViewColumn *column=p->data;if(GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(column),"insight-symbol-column-position"))!=i) continue;
+  gint field=gtk_tree_view_column_get_sort_column_id(column);if(field>=0 && field<COLUMNS) gtk_tree_view_column_set_fixed_width(column,column_widths[field]);
+  gtk_tree_view_move_column_after(view,column,previous);previous=column;break;
+ }
+ g_list_free(columns);
+}
+void insight_symbol_view_columns_write(GtkTreeView *view,GKeyFile *settings,const gchar *prefix) {
+ GList *columns=gtk_tree_view_get_columns(view);gint order[COLUMNS],widths[COLUMNS];guint count=0;
+ for(GList *p=columns;p && count<COLUMNS;p=p->next,count++) { GtkTreeViewColumn *column=p->data;order[count]=gtk_tree_view_column_get_sort_column_id(column);widths[count]=CLAMP(gtk_tree_view_column_get_fixed_width(column),32,2000); }
+ gchar *key=g_strconcat(prefix,"-column-order",NULL);g_key_file_set_integer_list(settings,"workbench",key,order,count);g_free(key);
+ key=g_strconcat(prefix,"-column-widths",NULL);g_key_file_set_integer_list(settings,"workbench",key,widths,count);g_free(key);g_list_free(columns);
+}
+void insight_symbol_view_columns_read(GtkTreeView *view,GKeyFile *settings,const gchar *prefix) {
+ gchar *key=g_strconcat(prefix,"-column-order",NULL);gsize count=0,size=0;gint *order=g_key_file_get_integer_list(settings,"workbench",key,&count,NULL);g_free(key);
+ key=g_strconcat(prefix,"-column-widths",NULL);gint *widths=g_key_file_get_integer_list(settings,"workbench",key,&size,NULL);g_free(key);
+ GList *columns=gtk_tree_view_get_columns(view);guint expected=0,seen=0;gboolean valid=order && widths && count==size && count==g_list_length(columns) && count<=COLUMNS;
+ for(GList *p=columns;p;p=p->next) { gint field=gtk_tree_view_column_get_sort_column_id(p->data);if(field<0 || field>=COLUMNS) valid=FALSE;else expected|=1u<<field; }
+ if(valid) for(gsize i=0;i<count;i++) { if(order[i]<0 || order[i]>=COLUMNS || (seen&(1u<<order[i])) || widths[i]<32 || widths[i]>2000) { valid=FALSE;break; }seen|=1u<<order[i]; }
+ if(valid && seen==expected) { GtkTreeViewColumn *previous=NULL;for(gsize i=0;i<count;i++) for(GList *p=columns;p;p=p->next) { GtkTreeViewColumn *column=p->data;if(gtk_tree_view_column_get_sort_column_id(column)!=order[i]) continue;gtk_tree_view_column_set_fixed_width(column,widths[i]);gtk_tree_view_move_column_after(view,column,previous);previous=column;break; } }
+ g_list_free(columns);g_free(order);g_free(widths);
+}
 GtkWidget *insight_symbol_view_attach(GtkTreeView *view,GtkListStore *source,GeanyFiletype *fallback) {
  Symbols *s=g_new0(Symbols,1); s->view=view; s->source=g_object_ref(source); s->fallback=fallback; s->mask=ALL_TYPES; s->toggle=gtk_check_button_new_with_label("Group by symbol type"); g_object_set_data_full(G_OBJECT(view),"insight-symbol-view",s,freed); g_signal_connect_object(s->toggle,"toggled",G_CALLBACK(toggled),view,0);
- GList *columns=gtk_tree_view_get_columns(view);
- for(GList *p=columns;p;p=p->next) { GtkTreeViewColumn *column=p->data; gint field=gtk_tree_view_column_get_sort_column_id(column); g_object_set_data(G_OBJECT(column),"insight-symbol-field",GINT_TO_POINTER(field)); GList *cells=gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(column)); for(GList *c=cells;c;c=c->next) gtk_tree_view_column_set_cell_data_func(column,c->data,cell,s,NULL); g_list_free(cells); if(field==NAME) { GtkCellRenderer *icon=gtk_cell_renderer_pixbuf_new(); gtk_tree_view_column_pack_start(column,icon,FALSE); gtk_cell_layout_reorder(GTK_CELL_LAYOUT(column),icon,0); gtk_tree_view_column_set_cell_data_func(column,icon,cell,s,NULL); } }
+ GList *columns=gtk_tree_view_get_columns(view);guint position=0;
+ for(GList *p=columns;p;p=p->next) { GtkTreeViewColumn *column=p->data; gint field=gtk_tree_view_column_get_sort_column_id(column); g_object_set_data(G_OBJECT(column),"insight-symbol-field",GINT_TO_POINTER(field)); g_object_set_data(G_OBJECT(column),"insight-symbol-column-position",GUINT_TO_POINTER(++position)); gtk_tree_view_column_set_resizable(column,TRUE);gtk_tree_view_column_set_reorderable(column,TRUE);gtk_tree_view_column_set_sizing(column,GTK_TREE_VIEW_COLUMN_FIXED);if(field>=0 && field<COLUMNS) gtk_tree_view_column_set_fixed_width(column,column_widths[field]); GList *cells=gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(column)); for(GList *c=cells;c;c=c->next) { if(GTK_IS_CELL_RENDERER_TEXT(c->data)) g_object_set(c->data,"ellipsize",PANGO_ELLIPSIZE_END,NULL);gtk_tree_view_column_set_cell_data_func(column,c->data,cell,s,NULL); } g_list_free(cells); if(field==NAME) { GtkCellRenderer *icon=gtk_cell_renderer_pixbuf_new(); gtk_tree_view_column_pack_start(column,icon,FALSE); gtk_cell_layout_reorder(GTK_CELL_LAYOUT(column),icon,0); gtk_tree_view_column_set_cell_data_func(column,icon,cell,s,NULL); } }
  g_list_free(columns); g_signal_connect_object(source,"row-changed",G_CALLBACK(row_changed),view,0); g_signal_connect_object(source,"row-inserted",G_CALLBACK(row_changed),view,0); g_signal_connect_object(source,"row-deleted",G_CALLBACK(row_deleted),view,0); g_signal_connect_object(source,"rows-reordered",G_CALLBACK(reordered),view,0); views=g_list_prepend(views,s); return s->toggle;
 }
 void insight_symbol_view_filetype(GtkTreeView *view,GeanyFiletype *ft) { Symbols *s=g_object_get_data(G_OBJECT(view),"insight-symbol-view"); if(s && s->fallback!=ft) { s->fallback=ft; queue(s); gtk_widget_queue_draw(GTK_WIDGET(view)); } }

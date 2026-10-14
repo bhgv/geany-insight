@@ -17,4 +17,7 @@ void insight_symbol_view_more_loader(GtkTreeView *,GCallback,guint);
 void insight_symbol_view_page_state(GtkTreeView *,gboolean);
 gboolean insight_symbol_view_has_more(GtkTreeView *);
 void insight_symbol_view_load_more(GtkTreeView *);
+void insight_symbol_view_columns_reset(GtkTreeView *);
+void insight_symbol_view_columns_write(GtkTreeView *,GKeyFile *,const gchar *);
+void insight_symbol_view_columns_read(GtkTreeView *,GKeyFile *,const gchar *);
 #endif

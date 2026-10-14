@@ -58,3 +58,12 @@ The target icon beside the type controls and Locate symbol at caret in the outli
 The command expands a collapsed group and centers the matching row without opening a source location or updating Context. If there is no earlier declaration, or the matching row is hidden by the name/type filter or outside the loaded portion, a status message explains the result. Filters and loaded portions stay as selected; refine the query or load more and retry. The command waits for the current file outline to finish updating.
 
 Tutorial: place the caret inside a C function, collapse its outline group and press the target button. The function row is revealed while the editor remains at the same position. Filter for a different name and repeat: the filter stays intact and the status bar explains why the current function cannot be shown.
+
+
+## Column layout
+
+Drag the boundary between column headers to resize a column. Drag a header horizontally to move its column; click it to sort. Long values are abbreviated with an ellipsis, and the list can scroll horizontally. The file and project outlines independently save column widths and order when the workbench settings are saved. Grouping, filtering and loading more preserve this layout.
+
+Reset symbol columns in the outline context menu restores the original column order and widths for this panel. It keeps the current query, type filters, grouping and sort order. Older settings without a layout use the defaults; invalid saved layouts are ignored.
+
+Tutorial: widen Symbol and move Line before it in File Symbols. In Project Symbols move File beside Symbol and widen it. Restart to restore each layout, or reset just one panel through its context menu.

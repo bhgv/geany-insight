@@ -49,3 +49,12 @@ Tutorial: open a large file, retain only functions, find the counter ending in +
 The sort selector offers name, source line, symbol type, scope and file path. The adjacent arrow button toggles descending order; its label appears in a tooltip. Clicking a column header also changes the order and updates these controls, including grouped and filtered views. File and project outlines save their sort field and direction independently in workbench.conf.
 
 Tutorial: choose source line for a file outline, then toggle the arrow to inspect declarations from the end of the file. Choose scope or file path in Project Symbols to gather related entries. Sorting leaves the editor and Context in place.
+
+
+## Column layout
+
+Drag the boundary between column headers to resize a column. Drag a header horizontally to move its column; click it to sort. Long values are abbreviated with an ellipsis, and the list can scroll horizontally. The file and project outlines independently save column widths and order when the workbench settings are saved. Grouping, filtering and loading more preserve this layout.
+
+Reset symbol columns in the outline context menu restores the original column order and widths for this panel. It keeps the current query, type filters, grouping and sort order. Older settings without a layout use the defaults; invalid saved layouts are ignored.
+
+Tutorial: widen Symbol and move Line before it in File Symbols. In Project Symbols move File beside Symbol and widen it. Restart to restore each layout, or reset just one panel through its context menu.

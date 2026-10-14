@@ -480,3 +480,6 @@ test('Insight symbol sorting GUI', symbol_sort_gui_test, timeout: 40)
 
 symbol_locate_gui_test = executable('test_insight_symbol_locate_gui', '../insight/tests/symbol_locate_gui_test.c', dependencies: test_deps)
 test('Insight locate caret symbol GUI', symbol_locate_gui_test, timeout: 40)
+
+symbol_columns_gui_test = executable('test_insight_symbol_columns_gui', '../insight/tests/symbol_columns_gui_test.c', dependencies: test_deps)
+test('Insight symbol column layouts GUI', symbol_columns_gui_test, timeout: 40)

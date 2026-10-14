@@ -277,3 +277,5 @@ EXTRA_DIST += insight/tests/symbol_paging_gui_test.c
 EXTRA_DIST += insight/tests/symbol_sort_gui_test.c
 
 EXTRA_DIST += insight/tests/symbol_locate_gui_test.c
+
+EXTRA_DIST += insight/tests/symbol_columns_gui_test.c

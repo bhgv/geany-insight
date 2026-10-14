@@ -671,3 +671,4 @@ Locate symbol at caret	Найти символ у курсора
 File symbols are still updating	Список символов файла ещё обновляется
 No indexed declaration at or before the caret	У курсора или перед ним нет индексированного объявления
 The caret symbol is outside the loaded outline or hidden by a filter	Символ у курсора не загружен в список или скрыт фильтром
+Reset symbol columns	Восстановить колонки символов
