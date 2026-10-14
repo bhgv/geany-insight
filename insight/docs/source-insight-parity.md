@@ -70,3 +70,8 @@ An icon-only target button and local outline menu action select and reveal the c
 ### Persistent symbol column layouts (2026-10-14)
 
 Both symbol outlines support resizing and reordering headers, fixed widths and ellipsized values with horizontal scrolling. Each panel saves its complete column layout independently. Validated restore ignores incomplete or duplicate layouts; Reset symbol columns affects only that panel's widths and order, preserving query, type filters and sorting. Native GUI covers restore/write, invalid settings, grouping/query rebuilds, reset and RU labels.
+
+
+### Symbol query history (2026-10-14)
+
+Both outlines provide an icon-only recent-query menu, explicit Remember and recording on Enter. Each independently persists 16 distinct valid queries up to 256 UTF-8 bytes. Choosing a query changes only the filter without activating a result; clearing history preserves the current filter. Query literals are excluded from UI translation. Native GUI tests verify restore, MRU bounds, invalid queries, both recording paths, non-navigating selection, RU commands and independent clear/write.

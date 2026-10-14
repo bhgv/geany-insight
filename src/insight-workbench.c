@@ -955,8 +955,46 @@ static void browser_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewCol
  else return;
  open_context(NULL,NULL);
 }
+static gboolean symbol_query_valid(const gchar *query) {
+ if(!query || !*query || strlen(query)>256 || !g_utf8_validate(query,-1,NULL)) return FALSE;
+ gchar *trimmed=g_strdup(query);g_strstrip(trimmed);gboolean empty=!*trimmed;g_free(trimmed);if(empty) return FALSE;
+ InsightLookupFilter *filter=insight_lookup_filter_new(query,FALSE,NULL);if(!filter) return FALSE;insight_lookup_filter_free(filter);return TRUE;
+}
+static void symbol_history_record(GtkWidget *entry) {
+ GPtrArray *history=g_object_get_data(G_OBJECT(entry),"insight-symbol-history");const gchar *query=gtk_entry_get_text(GTK_ENTRY(entry));if(!history || !symbol_query_valid(query)) return;
+ insight_search_history_record(history,query);if(history->len>16) g_ptr_array_set_size(history,16);save_workbench_settings();
+}
+static void symbol_history_remember(GtkMenuItem *item,gpointer data) { (void)item;symbol_history_record(GTK_WIDGET(data)); }
+static void symbol_history_pick(GtkMenuItem *item,gpointer data) {
+ GtkWidget *entry=data;const gchar *query=g_object_get_data(G_OBJECT(item),"query");gtk_entry_set_text(GTK_ENTRY(entry),query);gtk_widget_grab_focus(entry);
+}
+static void symbol_history_clear(GtkMenuItem *item,gpointer data) {
+ (void)item;GPtrArray *history=g_object_get_data(G_OBJECT(data),"insight-symbol-history");g_ptr_array_set_size(history,0);save_workbench_settings();
+}
+static GtkWidget *symbol_history_item(const gchar *label,const gchar *icon) {
+ GtkWidget *item=gtk_image_menu_item_new_with_label(label);gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(item),insight_command_icon(icon));gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(item),TRUE);return item;
+}
+static void symbol_history_show(GtkWidget *menu,gpointer data) {
+ GtkWidget *entry=data;GPtrArray *history=g_object_get_data(G_OBJECT(entry),"insight-symbol-history");GList *children=gtk_container_get_children(GTK_CONTAINER(menu));for(GList *p=children;p;p=p->next) gtk_widget_destroy(p->data);g_list_free(children);
+ GtkWidget *remember=symbol_history_item("Remember current symbol filter","document-save-symbolic");gtk_widget_set_name(remember,"insight-symbol-history-remember");gtk_widget_set_sensitive(remember,symbol_query_valid(gtk_entry_get_text(GTK_ENTRY(entry))));g_signal_connect_object(remember,"activate",G_CALLBACK(symbol_history_remember),entry,0);gtk_menu_shell_append(GTK_MENU_SHELL(menu),remember);gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());
+ for(guint i=0;i<history->len;i++) { const gchar *query=g_ptr_array_index(history,i);gchar *label=g_utf8_substring(query,0,MIN((glong)64,g_utf8_strlen(query,-1)));GtkWidget *item=symbol_history_item(label,"edit-find");g_free(label);gchar *name=g_strdup_printf("insight-symbol-history-%u",i);gtk_widget_set_name(item,name);g_free(name);g_object_set_data(G_OBJECT(item),"insight-no-i18n",GINT_TO_POINTER(1));gtk_widget_set_tooltip_text(item,query);g_object_set_data_full(G_OBJECT(item),"query",g_strdup(query),g_free);g_signal_connect_object(item,"activate",G_CALLBACK(symbol_history_pick),entry,0);gtk_menu_shell_append(GTK_MENU_SHELL(menu),item); }
+ GtkWidget *clear=symbol_history_item(history->len ? "Clear history" : "History is empty","edit-clear");gtk_widget_set_name(clear,"insight-symbol-history-clear");gtk_widget_set_sensitive(clear,history->len>0);g_signal_connect_object(clear,"activate",G_CALLBACK(symbol_history_clear),entry,0);if(history->len) gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());gtk_menu_shell_append(GTK_MENU_SHELL(menu),clear);insight_i18n_apply(menu);gtk_widget_show_all(menu);
+}
+static GtkWidget *symbol_query_controls(GtkWidget *entry,gboolean local) {
+ GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3),*button=gtk_menu_button_new(),*menu=gtk_menu_new();g_object_set_data_full(G_OBJECT(entry),"insight-symbol-history",g_ptr_array_new_with_free_func(g_free),(GDestroyNotify)g_ptr_array_unref);
+ gtk_widget_set_name(button,local ? "insight-local-query-history" : "insight-project-query-history");gtk_button_set_image(GTK_BUTTON(button),insight_command_icon("document-open-recent"));gtk_widget_set_tooltip_text(button,"Symbol filter history: 16 valid queries, up to 256 bytes each");gtk_button_set_relief(GTK_BUTTON(button),GTK_RELIEF_NONE);gtk_menu_button_set_popup(GTK_MENU_BUTTON(button),menu);g_signal_connect_object(menu,"show",G_CALLBACK(symbol_history_show),entry,0);
+ gtk_box_pack_start(GTK_BOX(row),entry,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(row),button,FALSE,FALSE,0);return row;
+}
+static void symbol_history_write(GKeyFile *settings,GtkWidget *entry,const gchar *prefix) {
+ GPtrArray *history=g_object_get_data(G_OBJECT(entry),"insight-symbol-history");gchar *key=g_strconcat(prefix,"-query-history",NULL);g_key_file_set_string_list(settings,"workbench",key,(const gchar *const *)history->pdata,history->len);g_free(key);
+}
+static void symbol_history_read(GKeyFile *settings,GtkWidget *entry,const gchar *prefix) {
+ gchar *key=g_strconcat(prefix,"-query-history",NULL);gsize count=0;gchar **queries=g_key_file_get_string_list(settings,"workbench",key,&count,NULL);g_free(key);GPtrArray *history=g_object_get_data(G_OBJECT(entry),"insight-symbol-history");
+ if(queries && count<=16) for(gsize i=count;i>0;i--) if(symbol_query_valid(queries[i-1])) insight_search_history_record(history,queries[i-1]);
+ g_strfreev(queries);
+}
 static void browser_entry_activate(GtkEntry *entry,gpointer data) {
- (void)data; GtkTreeView *view=GTK_TREE_VIEW(GTK_WIDGET(entry)==wb.local_entry ? wb.local_view : (GTK_WIDGET(entry)==wb.symbol_entry ? wb.symbol_view : wb.file_view));
+ (void)data;if(GTK_WIDGET(entry)==wb.local_entry || GTK_WIDGET(entry)==wb.symbol_entry) symbol_history_record(GTK_WIDGET(entry)); GtkTreeView *view=GTK_TREE_VIEW(GTK_WIDGET(entry)==wb.local_entry ? wb.local_view : (GTK_WIDGET(entry)==wb.symbol_entry ? wb.symbol_view : wb.file_view));
  if(!gtk_widget_get_sensitive(GTK_WIDGET(view))) return;
  GtkTreeModel *model=gtk_tree_view_get_model(view); GtkTreeIter iter;
  if(gtk_tree_model_get_iter_first(model,&iter)) { GtkTreeIter child; while(gtk_tree_model_iter_children(model,&child,&iter)) iter=child; GtkTreePath *path=gtk_tree_model_get_path(model,&iter); gtk_tree_view_expand_to_path(view,path); browser_activated(view,path,NULL,NULL); gtk_tree_path_free(path); }
@@ -1549,7 +1587,7 @@ static void create_browser(void) {
  gtk_widget_set_no_show_all(wb.outline,TRUE);
  g_signal_connect(wb.outline,"toggled",G_CALLBACK(outline_changed),NULL);
  gtk_box_pack_start(GTK_BOX(wb.browser),wb.outline,FALSE,FALSE,0);
- gtk_box_pack_start(GTK_BOX(wb.browser),wb.symbol_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(wb.browser),scroll,TRUE,TRUE,0);
+ gtk_box_pack_start(GTK_BOX(wb.browser),symbol_query_controls(wb.symbol_entry,FALSE),FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(wb.browser),scroll,TRUE,TRUE,0);
  gtk_box_pack_start(GTK_BOX(wb.browser),sort_selector(wb.symbols),FALSE,FALSE,0);
  GtkWidget *group=insight_symbol_view_attach(GTK_TREE_VIEW(wb.symbol_view),wb.symbols,NULL); gtk_widget_set_name(group,"insight-project-group-types"); gtk_box_pack_start(GTK_BOX(wb.browser),group,FALSE,FALSE,0);
  GtkWidget *types=insight_symbol_view_types_control(GTK_TREE_VIEW(wb.symbol_view)); gtk_widget_set_name(types,"insight-project-type-filters"); gtk_box_pack_start(GTK_BOX(wb.browser),types,FALSE,FALSE,0); insight_symbol_view_more_loader(GTK_TREE_VIEW(wb.symbol_view),G_CALLBACK(symbols_load_more),500);
@@ -1623,7 +1661,7 @@ static void create_local_browser(void) {
  gint columns[]={SYMBOL_NAME,SYMBOL_LINE,SYMBOL_KIND}; const char *labels[]={"Symbol","Line","Type"};
  for(guint i=0;i<3;i++) { GtkTreeViewColumn *c=gtk_tree_view_column_new_with_attributes(labels[i],gtk_cell_renderer_text_new(),"text",columns[i],NULL); gtk_tree_view_column_set_sort_column_id(c,columns[i]); gtk_tree_view_append_column(GTK_TREE_VIEW(wb.local_view),c); }
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),wb.local_view);
- gtk_box_pack_start(GTK_BOX(box),wb.local_label,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.local_entry,FALSE,FALSE,0);
+ gtk_box_pack_start(GTK_BOX(box),wb.local_label,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),symbol_query_controls(wb.local_entry,TRUE),FALSE,FALSE,0);
  gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0); gtk_box_pack_start(GTK_BOX(box),sort_selector(wb.local_symbols),FALSE,FALSE,0);
  GtkWidget *group=insight_symbol_view_attach(GTK_TREE_VIEW(wb.local_view),wb.local_symbols,NULL); gtk_widget_set_name(group,"insight-local-group-types"); gtk_box_pack_start(GTK_BOX(box),group,FALSE,FALSE,0);
  GtkWidget *types=insight_symbol_view_types_control(GTK_TREE_VIEW(wb.local_view)); gtk_widget_set_name(types,"insight-local-type-filters"); gtk_box_pack_start(GTK_BOX(box),types,FALSE,FALSE,0); insight_symbol_view_more_loader(GTK_TREE_VIEW(wb.local_view),G_CALLBACK(symbols_load_more),2000);
@@ -3078,6 +3116,7 @@ static void save_workbench_settings(void) {
  if(!wb.prefs_path || !wb.pane) return;
  GKeyFile *settings=g_key_file_new();
  insight_overview_write(settings);
+ symbol_history_write(settings,wb.local_entry,"file-symbols");symbol_history_write(settings,wb.symbol_entry,"project-symbols");
  insight_symbol_view_columns_write(GTK_TREE_VIEW(wb.local_view),settings,"file-symbols");insight_symbol_view_columns_write(GTK_TREE_VIEW(wb.symbol_view),settings,"project-symbols");
  symbol_sort_write(settings,wb.local_symbols,"file-symbols");symbol_sort_write(settings,wb.symbols,"project-symbols");
  for(guint i=0;i<4;i++) { gchar group[16]; g_snprintf(group,sizeof group,"layout-%c",'A'+i); insight_layout_write(settings,group,&wb.layouts[i]); }
@@ -3123,6 +3162,7 @@ static void restore_workbench_settings(void) {
  GKeyFile *settings=g_key_file_new();
  if(strlen(text)<=32768 && g_key_file_load_from_data(settings,text,-1,G_KEY_FILE_NONE,NULL) && g_key_file_get_integer(settings,"workbench","version",NULL)==1) {
   insight_overview_read(settings);
+  symbol_history_read(settings,wb.local_entry,"file-symbols");symbol_history_read(settings,wb.symbol_entry,"project-symbols");
   insight_symbol_view_columns_read(GTK_TREE_VIEW(wb.local_view),settings,"file-symbols");insight_symbol_view_columns_read(GTK_TREE_VIEW(wb.symbol_view),settings,"project-symbols");
   symbol_sort_read(settings,wb.local_symbols,"file-symbols");symbol_sort_read(settings,wb.symbols,"project-symbols");
   if(g_key_file_has_key(settings,"workbench","file-symbol-types",NULL)) insight_symbol_view_set_types(GTK_TREE_VIEW(wb.local_view),(guint)g_key_file_get_integer(settings,"workbench","file-symbol-types",NULL));

@@ -67,3 +67,12 @@ Drag the boundary between column headers to resize a column. Drag a header horiz
 Reset symbol columns in the outline context menu restores the original column order and widths for this panel. It keeps the current query, type filters, grouping and sort order. Older settings without a layout use the defaults; invalid saved layouts are ignored.
 
 Tutorial: widen Symbol and move Line before it in File Symbols. In Project Symbols move File beside Symbol and widen it. Restart to restore each layout, or reset just one panel through its context menu.
+
+
+## Filter history
+
+The recent-history icon next to the name field opens this panel's saved queries. Remember current symbol filter explicitly records the current query; Enter also records a valid query before performing the usual result activation. Typing alone does not add partial queries. Empty/whitespace-only or malformed queries are excluded, and the history accepts queries up to 256 UTF-8 bytes. Each panel retains its 16 most recently remembered distinct queries.
+
+Choosing a query replaces only the name filter and focuses it. It resets the loaded portion through the usual query refresh, while retaining type categories, grouping, column layout and sorting; it does not activate a result. Queries remain literal when changing the UI language. File and project histories are independent and saved in workbench.conf. Clear history clears only this panel's history, retaining its current filter. Startup restores the history without applying the last query.
+
+Tutorial: filter for a function family, open history and remember it. Try another name, then choose the saved family from history. The list updates while the editor stays in place; press Enter only when you want to open a result.

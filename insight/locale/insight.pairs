@@ -672,3 +672,5 @@ File symbols are still updating|||Список символов файла ещ�
 No indexed declaration at or before the caret|||У курсора или перед ним нет индексированного объявления
 The caret symbol is outside the loaded outline or hidden by a filter|||Символ у курсора не загружен в список или скрыт фильтром
 Reset symbol columns|||Восстановить колонки символов
+Remember current symbol filter|||Запомнить текущий фильтр символов
+Symbol filter history: 16 valid queries, up to 256 bytes each|||История фильтров символов: 16 допустимых запросов, до 256 байт каждый
