@@ -601,3 +601,42 @@ Invalid template languages (up to 32 profile names)|||Некорректные �
 Duplicate template language|||Повторяющийся язык шаблона
 Window List settings: %s|||Настройки списка окон: %s
 Cannot create Window List settings directory|||Не удалось создать каталог настроек списка окон
+Group by symbol type|||Группировать по типу символа
+Help for this panel — controls and tutorial|||Справка панели — элементы управления и туториал
+Select a symbol, not a type group|||Выберите символ, а не группу типов
+Other symbol|||Другой символ
+Other symbols|||Другие символы
+Class|||Класс
+Classes|||Классы
+Interface|||Интерфейс
+Interfaces|||Интерфейсы
+Structure|||Структура
+Structures|||Структуры
+Union|||Объединение
+Unions|||Объединения
+Enumeration|||Перечисление
+Enumerations|||Перечисления
+Enumerator|||Элемент перечисления
+Enumerators|||Элементы перечислений
+Type alias|||Псевдоним типа
+Type aliases|||Псевдонимы типов
+Function|||Функция
+Functions|||Функции
+Method|||Метод
+Methods|||Методы
+Prototype|||Прототип
+Prototypes|||Прототипы
+Macro|||Макрос
+Macros|||Макросы
+Member|||Поле
+Members|||Поля
+Local variable|||Локальная переменная
+Local variables|||Локальные переменные
+External variable|||Внешняя переменная
+External variables|||Внешние переменные
+Variable|||Переменная
+Variables|||Переменные
+Namespace / module|||Пространство имён / модуль
+Namespaces / modules|||Пространства имён / модули
+Include|||Включение
+Includes|||Включения

@@ -6,6 +6,7 @@
 #endif
 #include "geany.h"
 #include "insight-overview.h"
+#include "insight-help.h"
 #include "editor.h"
 #include "highlighting.h"
 #include "filetypes.h"
@@ -219,7 +220,7 @@ GtkWidget *insight_overview_wrap(GeanyDocument *doc) {
  o->pane=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL); o->host=gtk_overlay_new(); o->map=SCINTILLA(scintilla_new()); o->shade=gtk_drawing_area_new(); gtk_widget_set_name(o->shade,"insight-overview-markers");
  gtk_widget_set_direction(GTK_WIDGET(o->map),GTK_TEXT_DIR_LTR); gtk_widget_set_can_focus(GTK_WIDGET(o->map),FALSE); sci_set_codepage(o->map,SC_CP_UTF8); sci_use_popup(o->map,FALSE); sci_set_readonly(o->map,TRUE); SSM(o->map,SCI_SETHSCROLLBAR,FALSE,0); SSM(o->map,SCI_SETVSCROLLBAR,FALSE,0); SSM(o->map,SCI_SETWRAPMODE,SC_WRAP_NONE,0); SSM(o->map,SCI_SETCARETWIDTH,0,0); SSM(o->map,SCI_SETCURSOR,SC_CURSORARROW,0);
  for(guint i=0;i<5;i++) SSM(o->map,SCI_SETMARGINWIDTHN,i,0);
- gtk_drag_dest_unset(GTK_WIDGET(o->map)); gtk_container_add(GTK_CONTAINER(o->host),GTK_WIDGET(o->map)); gtk_overlay_add_overlay(GTK_OVERLAY(o->host),o->shade); gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(o->host),o->shade,TRUE); gtk_widget_set_size_request(o->host,40,-1);
+ gtk_drag_dest_unset(GTK_WIDGET(o->map)); gtk_container_add(GTK_CONTAINER(o->host),GTK_WIDGET(o->map)); gtk_overlay_add_overlay(GTK_OVERLAY(o->host),o->shade); gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(o->host),o->shade,TRUE); GtkWidget *help=insight_panel_help_button("panel-overview.md"); gtk_widget_set_halign(help,GTK_ALIGN_END); gtk_widget_set_valign(help,GTK_ALIGN_START); gtk_overlay_add_overlay(GTK_OVERLAY(o->host),help); gtk_widget_show_all(help); gtk_widget_set_size_request(o->host,40,-1);
  gtk_paned_pack1(GTK_PANED(o->pane),GTK_WIDGET(doc->editor->sci),TRUE,FALSE); gtk_paned_pack2(GTK_PANED(o->pane),o->host,FALSE,FALSE); gtk_widget_set_no_show_all(o->host,TRUE);
  g_object_set_data_full(G_OBJECT(o->pane),"insight-overview",o,overview_free); g_signal_connect_object(doc->editor->sci,"sci-notify",G_CALLBACK(source_notify),o->pane,0); g_signal_connect(o->shade,"draw",G_CALLBACK(shade_draw),o); g_signal_connect(o->host,"map",G_CALLBACK(host_mapped),o); g_signal_connect(o->pane,"notify::position",G_CALLBACK(pane_position),o); g_signal_connect(o->pane,"size-allocate",G_CALLBACK(pane_allocated),o);
  gtk_widget_add_events(GTK_WIDGET(o->map),GDK_BUTTON_PRESS_MASK|GDK_BUTTON_RELEASE_MASK|GDK_POINTER_MOTION_MASK|GDK_SCROLL_MASK|GDK_SMOOTH_SCROLL_MASK); g_signal_connect(o->map,"button-press-event",G_CALLBACK(map_button),o); g_signal_connect(o->map,"button-release-event",G_CALLBACK(map_release),o); g_signal_connect(o->map,"motion-notify-event",G_CALLBACK(map_motion),o); g_signal_connect(o->map,"scroll-event",G_CALLBACK(map_scroll),o); gtk_widget_set_has_tooltip(GTK_WIDGET(o->map),TRUE); g_signal_connect(o->map,"query-tooltip",G_CALLBACK(map_tooltip),o);

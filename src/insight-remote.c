@@ -4,6 +4,7 @@
 #endif
 #include "geany.h"
 #include "insight-remote.h"
+#include "insight-help.h"
 #include "document.h"
 #include "project.h"
 #include "ui_utils.h"
@@ -274,7 +275,7 @@ void insight_remote_ui_init(gboolean (*workspace)(const char *)) {
  GtkWidget *shell=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3); const char *shell_labels[]={"Connect shell","Disconnect","Forget saved password"}; for(guint i=0;i<3;i++) { GtkWidget *button=gtk_button_new_with_label(shell_labels[i]); gtk_box_pack_start(GTK_BOX(shell),button,FALSE,FALSE,0); g_signal_connect(button,"clicked",i==0 ? G_CALLBACK(shell_connect) : (i==1 ? G_CALLBACK(shell_disconnect) : G_CALLBACK(forget_password)),NULL); } remote_ui.status=gtk_label_new("SSH/SFTP — OpenSSH config, key/agent or password; line-oriented remote shell"); gtk_label_set_ellipsize(GTK_LABEL(remote_ui.status),PANGO_ELLIPSIZE_END); gtk_box_pack_start(GTK_BOX(shell),remote_ui.status,TRUE,TRUE,0); gtk_box_pack_start(GTK_BOX(remote_ui.page),shell,FALSE,FALSE,0);
  remote_ui.output=gtk_text_view_new(); gtk_text_view_set_editable(GTK_TEXT_VIEW(remote_ui.output),FALSE); gtk_text_view_set_monospace(GTK_TEXT_VIEW(remote_ui.output),TRUE); GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),remote_ui.output); gtk_box_pack_start(GTK_BOX(remote_ui.page),scroll,TRUE,TRUE,0);
  GtkWidget *input=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3); remote_ui.input=gtk_entry_new(); gtk_entry_set_placeholder_text(GTK_ENTRY(remote_ui.input),"SSH shell input — Enter sends a line, Ctrl+C interrupts"); gtk_box_pack_start(GTK_BOX(input),remote_ui.input,TRUE,TRUE,0); GtkWidget *send=gtk_button_new_with_label("Send"),*interrupt=gtk_button_new_with_label("Ctrl+C"); gtk_box_pack_start(GTK_BOX(input),send,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(input),interrupt,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(remote_ui.page),input,FALSE,FALSE,0); g_signal_connect(send,"clicked",G_CALLBACK(shell_send),NULL); g_signal_connect(interrupt,"clicked",G_CALLBACK(shell_send),GINT_TO_POINTER(1)); g_signal_connect(remote_ui.input,"activate",G_CALLBACK(shell_send),NULL); g_signal_connect(remote_ui.input,"key-press-event",G_CALLBACK(shell_key),NULL);
- gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),remote_ui.page,gtk_label_new("SSH Terminal")); gtk_widget_show_all(remote_ui.page);
+ insight_panel_help_attach(remote_ui.page,"panel-ssh.md"); gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),remote_ui.page,gtk_label_new("SSH Terminal")); gtk_widget_show_all(remote_ui.page);
  GKeyFile *profile=g_key_file_new(); g_key_file_load_from_file(profile,remote_ui.config,G_KEY_FILE_NONE,NULL); profile_load(profile); g_key_file_unref(profile);
  g_signal_connect(remote_ui.automatic,"toggled",G_CALLBACK(profile_toggle),NULL); g_signal_connect(remote_ui.save_password,"toggled",G_CALLBACK(profile_toggle),NULL);
  remote_ui.signals[0]=g_signal_connect_after(geany_object,"document-save",G_CALLBACK(saved_document),NULL); remote_ui.signals[1]=g_signal_connect_after(geany_object,"project-save",G_CALLBACK(project_changed),GINT_TO_POINTER(1)); remote_ui.signals[2]=g_signal_connect_after(geany_object,"project-open",G_CALLBACK(project_changed),NULL); remote_ui.signals[3]=g_signal_connect_after(geany_object,"project-close",G_CALLBACK(project_closed),NULL);

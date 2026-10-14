@@ -29,13 +29,14 @@ static gboolean icon_draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
  if(g_str_has_prefix(id,"layout-")) { cairo_rectangle(cr,1,2,14,12);cairo_stroke(cr);cairo_set_source_rgb(cr,.2,.55,.85);if(id[7]=='a' || id[7]=='d') cairo_rectangle(cr,2,3,4,10);if(id[7]=='b') cairo_rectangle(cr,2,10,12,3);if(id[7]=='c' || id[7]=='d') cairo_rectangle(cr,10,3,4,10);cairo_fill(cr); }
  else if(!strcmp(id,"media")) { cairo_arc(cr,8,8,6,0,2*G_PI);cairo_move_to(cr,2,8);cairo_line_to(cr,14,8);cairo_move_to(cr,8,2);cairo_curve_to(cr,3,6,3,10,8,14);cairo_curve_to(cr,13,10,13,6,8,2);cairo_stroke(cr); }
  else if(!strcmp(id,"diff")) { cairo_rectangle(cr,1,2,5,12);cairo_rectangle(cr,10,2,5,12);cairo_stroke(cr);cairo_set_source_rgb(cr,.2,.55,.85);cairo_move_to(cr,4,5);cairo_line_to(cr,12,5);cairo_move_to(cr,9,3);cairo_line_to(cr,12,5);cairo_line_to(cr,9,7);cairo_move_to(cr,12,11);cairo_line_to(cr,4,11);cairo_stroke(cr); }
+ else if(!strcmp(id,"panel-help")) { cairo_set_source_rgb(cr,.2,.55,.85); cairo_arc(cr,8,8,7,0,2*G_PI); cairo_stroke(cr); cairo_select_font_face(cr,"Sans",CAIRO_FONT_SLANT_NORMAL,CAIRO_FONT_WEIGHT_BOLD); cairo_set_font_size(cr,12); cairo_move_to(cr,4.5,12); cairo_show_text(cr,"?"); }
  else if(!strcmp(id,"snippets")) { cairo_rectangle(cr,2,1,12,14); cairo_stroke(cr); cairo_set_source_rgb(cr,.2,.55,.85); cairo_move_to(cr,6,5); cairo_line_to(cr,3,8); cairo_line_to(cr,6,11); cairo_move_to(cr,10,5); cairo_line_to(cr,13,8); cairo_line_to(cr,10,11); cairo_stroke(cr); }
  else if(!strcmp(id,"relations")) { cairo_move_to(cr,4,8);cairo_line_to(cr,9,8);cairo_move_to(cr,9,3);cairo_line_to(cr,9,13);cairo_move_to(cr,9,3);cairo_line_to(cr,13,3);cairo_move_to(cr,9,13);cairo_line_to(cr,13,13);cairo_stroke(cr);cairo_set_source_rgb(cr,.2,.55,.85);cairo_rectangle(cr,1,6,4,4);cairo_rectangle(cr,12,1,3,4);cairo_rectangle(cr,12,11,3,4);cairo_fill(cr); }
  else { cairo_move_to(cr,8,3);cairo_curve_to(cr,4,0,1,2,1,3);cairo_line_to(cr,1,13);cairo_curve_to(cr,4,11,6,12,8,14);cairo_curve_to(cr,10,12,12,11,15,13);cairo_line_to(cr,15,3);cairo_curve_to(cr,12,1,10,1,8,3);cairo_line_to(cr,8,14);cairo_stroke(cr);cairo_set_source_rgb(cr,.2,.55,.85);if(!strcmp(id,"tutorial")) { cairo_move_to(cr,10,5);cairo_line_to(cr,14,8);cairo_line_to(cr,10,11);cairo_close_path(cr); }else if(!strcmp(id,"bookmarks")) { cairo_move_to(cr,10,1);cairo_line_to(cr,13,1);cairo_line_to(cr,13,8);cairo_line_to(cr,11.5,6.5);cairo_line_to(cr,10,8);cairo_close_path(cr); }else { cairo_rectangle(cr,3,5,3,1);cairo_rectangle(cr,3,8,3,1);cairo_rectangle(cr,10,5,3,1);cairo_rectangle(cr,10,8,3,1); }cairo_fill(cr); }
  return FALSE;
 }
 GtkWidget *insight_command_icon(const gchar *command) {
- if(!strcmp(command,"snippets")) { GtkWidget *image=gtk_image_new(); cairo_surface_t *surface=cairo_image_surface_create(CAIRO_FORMAT_ARGB32,16,16); cairo_t *cr=cairo_create(surface); icon_draw(image,cr,(gpointer)command); cairo_destroy(cr); gtk_image_set_from_surface(GTK_IMAGE(image),surface); cairo_surface_destroy(surface); g_object_set_data_full(G_OBJECT(image),"insight-icon-name",g_strdup(command),g_free); return image; }
+ if(!strcmp(command,"snippets") || !strcmp(command,"panel-help")) { GtkWidget *image=gtk_image_new(); cairo_surface_t *surface=cairo_image_surface_create(CAIRO_FORMAT_ARGB32,16,16); cairo_t *cr=cairo_create(surface); icon_draw(image,cr,(gpointer)command); cairo_destroy(cr); gtk_image_set_from_surface(GTK_IMAGE(image),surface); cairo_surface_destroy(surface); g_object_set_data_full(G_OBJECT(image),"insight-icon-name",g_strdup(command),g_free); return image; }
  if(g_str_has_prefix(command,"layout-") || !strcmp(command,"media") || !strcmp(command,"manual") || !strcmp(command,"tutorial") || !strcmp(command,"bookmarks") || !strcmp(command,"diff") || !strcmp(command,"snippets") || !strcmp(command,"relations")) { GtkWidget *icon=gtk_drawing_area_new();gtk_widget_set_size_request(icon,16,16);g_object_set_data_full(G_OBJECT(icon),"insight-icon-name",g_strdup(command),g_free);g_signal_connect(icon,"draw",G_CALLBACK(icon_draw),g_object_get_data(G_OBJECT(icon),"insight-icon-name"));return icon; }
  return gtk_image_new_from_icon_name(command,GTK_ICON_SIZE_MENU);
 }
@@ -274,7 +275,7 @@ static void destroy(GtkWidget *widget,gpointer data) { Help *h=data;disconnect_h
 static Help *ensure_help(void) {
  if(help) return help;
  Help *h=g_new0(Help,1);help=h;h->match=-1;h->matches=g_ptr_array_new_with_free_func(free_match);h->headings=g_ptr_array_new();h->history=g_ptr_array_new_with_free_func(g_free);h->temporary=g_ptr_array_new_with_free_func(g_free);h->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(h->window,"insight-help-viewer");gtk_window_set_default_size(GTK_WINDOW(h->window),900,700);gtk_window_set_transient_for(GTK_WINDOW(h->window),GTK_WINDOW(main_widgets.window));gtk_window_set_destroy_with_parent(GTK_WINDOW(h->window),TRUE);
- GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,6),*bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,5);gtk_container_add(GTK_CONTAINER(h->window),box);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);
+ GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,6),*bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,5);gtk_container_add(GTK_CONTAINER(h->window),box);insight_panel_help_attach(box,"markup-viewer.rst");gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);
  const gchar *icons[]={"go-previous","go-next","folder-open","view-refresh","media"};const gchar *tips[]={"Previous page","Next page","Open Markdown / reStructuredText…","Reload document","Multimedia view — render in browser, including video"};
  for(guint i=0;i<5;i++) { GtkWidget *button=gtk_button_new();gtk_button_set_image(GTK_BUTTON(button),insight_command_icon(icons[i]));gtk_widget_set_tooltip_text(button,tips[i]);if(i==3) gtk_widget_set_name(button,"insight-help-reload");gtk_box_pack_start(GTK_BOX(bar),button,FALSE,FALSE,0);if(i<2) { if(i) h->forward=button;else h->back=button;g_signal_connect(button,"clicked",G_CALLBACK(history),GINT_TO_POINTER(i ? 1 : -1)); }else g_signal_connect(button,"clicked",i==2 ? G_CALLBACK(insight_markup_open) : (i==3 ? G_CALLBACK(refresh) : G_CALLBACK(media_view)),h); }
  h->toc=gtk_combo_box_text_new();gtk_widget_set_name(h->toc,"insight-help-toc");g_object_set_data(G_OBJECT(h->toc),"insight-no-i18n",GINT_TO_POINTER(1));gtk_widget_set_tooltip_text(h->toc,insight_tr("Page headings — jump to a section"));gtk_widget_set_hexpand(h->toc,TRUE);gtk_box_pack_start(GTK_BOX(bar),h->toc,TRUE,TRUE,0);g_signal_connect(h->toc,"changed",G_CALLBACK(toc_changed),h);
@@ -290,6 +291,34 @@ void insight_markup_open_path(const gchar *path) {
 GEANY_API_SYMBOL
 void insight_markup_preview(GtkWidget *widget,gpointer data) {
  (void)widget;(void)data;GeanyDocument *doc=document_get_current();if(!doc) return;gchar *key=g_strdup_printf("@editor:%u",doc->id);insight_markup_open_path(key);g_free(key);
+}
+GtkWidget *insight_panel_help_button(const gchar *topic) {
+ GtkWidget *button=gtk_button_new(); gtk_widget_set_name(button,"insight-panel-help"); gtk_button_set_image(GTK_BUTTON(button),insight_command_icon("panel-help")); gtk_button_set_relief(GTK_BUTTON(button),GTK_RELIEF_NONE); gtk_widget_set_tooltip_text(button,"Help for this panel — controls and tutorial"); gtk_widget_set_size_request(button,22,22); g_object_set_data_full(G_OBJECT(button),"insight-help-topic",g_strdup(topic),g_free); g_signal_connect(button,"clicked",G_CALLBACK(insight_help_show),g_object_get_data(G_OBJECT(button),"insight-help-topic")); return button;
+}
+void insight_panel_help_attach(GtkWidget *panel,const gchar *topic) {
+ if(!GTK_IS_BOX(panel) || g_object_get_data(G_OBJECT(panel),"insight-panel-help-attached")) return;
+ GtkWidget *header=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0),*button=insight_panel_help_button(topic); gtk_widget_set_name(header,"insight-panel-help-header"); gtk_box_pack_end(GTK_BOX(header),button,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(panel),header,FALSE,FALSE,0); gtk_box_reorder_child(GTK_BOX(panel),header,0); g_object_set_data_full(G_OBJECT(panel),"insight-help-topic",g_strdup(topic),g_free); g_object_set_data(G_OBJECT(panel),"insight-panel-help-attached",GINT_TO_POINTER(1)); gtk_widget_show_all(header);
+}
+static const gchar *native_panel_topic(GtkNotebook *book,GtkWidget *page) {
+ const gchar *explicit_topic=g_object_get_data(G_OBJECT(page),"insight-help-topic"); if(explicit_topic) return explicit_topic;
+ const gchar *fallback=g_object_get_data(G_OBJECT(book),"insight-panel-help-default"); if(!g_strcmp0(fallback,"panel-editor.md")) return fallback;
+ const gchar *label=gtk_notebook_get_tab_label_text(book,page); label=label ? insight_i18n_english(label) : "";
+ if(!strcmp(label,"Symbols")) return "panel-native-symbols.md";
+ if(!strcmp(label,"Documents")) return "panel-documents.md";
+ if(!strcmp(label,"Status")) return "panel-status.md";
+ if(!strcmp(label,"Compiler")) return "panel-compiler.md";
+ if(!strcmp(label,"Messages")) return "panel-messages.md";
+ if(!strcmp(label,"Scribble")) return "panel-scratchpad.md";
+ if(!strcmp(label,"Terminal")) return "panel-terminal.md";
+ return g_object_get_data(G_OBJECT(book),"insight-panel-help-default");
+}
+static void notebook_help_click(GtkWidget *widget,gpointer data) {
+ (void)widget; GtkNotebook *book=GTK_NOTEBOOK(data); GtkWidget *page=gtk_notebook_get_nth_page(book,gtk_notebook_get_current_page(book)); if(page) insight_help_show(NULL,(gpointer)native_panel_topic(book,page));
+}
+static void notebook_help_page(GtkNotebook *book,GtkWidget *page,guint number,gpointer data) { (void)book; (void)number; gtk_widget_set_visible(data,!g_object_get_data(G_OBJECT(page),"insight-panel-help-attached")); }
+void insight_panel_help_notebook(GtkNotebook *book,const gchar *fallback) {
+ if(g_object_get_data(G_OBJECT(book),"insight-panel-help-default")) return;
+ g_object_set_data_full(G_OBJECT(book),"insight-panel-help-default",g_strdup(fallback),g_free); GtkWidget *button=gtk_button_new(); gtk_widget_set_name(button,"insight-notebook-help"); gtk_button_set_image(GTK_BUTTON(button),insight_command_icon("panel-help")); gtk_button_set_relief(GTK_BUTTON(button),GTK_RELIEF_NONE); gtk_widget_set_tooltip_text(button,"Help for this panel — controls and tutorial"); gtk_widget_set_no_show_all(button,TRUE); gtk_widget_show(gtk_button_get_image(GTK_BUTTON(button))); gtk_notebook_set_action_widget(book,button,GTK_PACK_END); g_signal_connect_object(button,"clicked",G_CALLBACK(notebook_help_click),book,0); g_signal_connect_object(book,"switch-page",G_CALLBACK(notebook_help_page),button,0); GtkWidget *page=gtk_notebook_get_nth_page(book,gtk_notebook_get_current_page(book)); if(page) notebook_help_page(book,page,0,button);
 }
 void insight_help_show(GtkWidget *widget,gpointer topic) {
  (void)widget;const gchar *name=topic ? topic : "guide.md";gchar *path=g_build_filename(app->datadir,"insight","docs",insight_i18n_language(),name,NULL);

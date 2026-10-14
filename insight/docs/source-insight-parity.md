@@ -35,3 +35,8 @@ Code only является лексической маской, а не AST/LSP.
 APK создаётся только по явному запросу, только ARM64.
 
 Documentation is bundled offline as Markdown/reStructuredText with a GTK viewer, GIF animation and a browser multimedia view for HTML5 video. Help/menu and main toolbar expose the guides and tutorials with matching command icons. Text search panels/results open on demand through Поиск/замена; standard Ctrl+F/Ctrl+H retain native Find/Replace. Native GUI tests cover these commands; embedded video decoding is not provided.
+
+
+### Symbol type presentation and panel help (2026-10-14)
+
+File Symbols and Project Symbols share language-aware Ctags kind colors/icons and optional type groups. Grouping is incremental and preserves selection/collapsed groups. Project controls can scroll horizontally when the right pane is narrowed. Each panel has a small question icon opening its own offline RU/EN controls reference and tutorial; native notebook panels use the notebook corner. Diff/Merge is on the main toolbar and Tools menu.

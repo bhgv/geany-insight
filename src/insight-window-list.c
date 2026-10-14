@@ -1,5 +1,6 @@
 #define INSIGHT_LOCALIZE_FORMATS
 #include "insight-i18n.h"
+#include "insight-help.h"
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -160,6 +161,7 @@ void insight_window_list_show(GtkWidget *widget,gpointer data) {
  if(list.window) { refresh(NULL,NULL);gtk_widget_show(list.window);gtk_window_present(GTK_WINDOW(list.window));gtk_widget_grab_focus(list.search);return; }
  list.window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_window_set_title(GTK_WINDOW(list.window),"Window List");gtk_widget_set_name(list.window,"insight-window-list-window");restore_geometry();gtk_window_set_transient_for(GTK_WINDOW(list.window),GTK_WINDOW(main_widgets.window));gtk_window_set_destroy_with_parent(GTK_WINDOW(list.window),TRUE);
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,5),*bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4),*scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_set_border_width(GTK_CONTAINER(box),8);gtk_container_add(GTK_CONTAINER(list.window),box);
+ insight_panel_help_attach(box,"window-list.md");
  list.search=gtk_search_entry_new();gtk_entry_set_max_length(GTK_ENTRY(list.search),512);gtk_entry_set_text(GTK_ENTRY(list.search),list.filter ? list.filter : "");gtk_entry_set_placeholder_text(GTK_ENTRY(list.search),"Filter open files, paths or nearest symbol…");gtk_widget_set_name(list.search,"insight-window-filter");gtk_box_pack_start(GTK_BOX(box),list.search,FALSE,FALSE,0);
  list.model=gtk_list_store_new(COLUMNS,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_INT,G_TYPE_STRING,G_TYPE_UINT64,G_TYPE_STRING);list.view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(list.model));gtk_widget_set_name(list.view,"insight-window-list");
  const gchar *titles[]={"Active","File","State","Lines","Nearest symbol","Path"};const gint fields[]={ACTIVE,NAME,STATE,LINES,SYMBOL,PATH};

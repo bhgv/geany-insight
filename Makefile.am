@@ -250,7 +250,7 @@ EXTRA_DIST += \
 	insight/docs/source-insight-layout.md
 
 insightdocdir = $(pkgdatadir)/insight/docs
-insightdoc_DATA = insight/docs/languages.md insight/docs/desktop-check-builds.md insight/docs/guide.md insight/docs/tutorials.md insight/docs/scripting.md insight/docs/markup-viewer.rst insight/docs/lua-api.md insight/docs/internal-diff.md insight/docs/context-bookmarks.md insight/docs/relations-calls.md insight/docs/window-list.md insight/docs/symbol-info.md
+insightdoc_DATA = insight/docs/panel-find-file.md insight/docs/panel-project-files.md insight/docs/panel-project-symbols.md insight/docs/panel-project-folders.md insight/docs/panel-relations.md insight/docs/panel-categories.md insight/docs/panel-file-types.md insight/docs/panel-bookmarks.md insight/docs/panel-clips.md insight/docs/panel-file-symbols.md insight/docs/panel-context.md insight/docs/panel-search-results.md insight/docs/panel-native-symbols.md insight/docs/panel-documents.md insight/docs/panel-status.md insight/docs/panel-compiler.md insight/docs/panel-messages.md insight/docs/panel-scratchpad.md insight/docs/panel-terminal.md insight/docs/panel-editor.md insight/docs/panel-ssh.md insight/docs/panel-overview.md insight/docs/panel-diff-input.md insight/docs/panel-merge-result.md insight/docs/languages.md insight/docs/desktop-check-builds.md insight/docs/guide.md insight/docs/tutorials.md insight/docs/scripting.md insight/docs/markup-viewer.rst insight/docs/lua-api.md insight/docs/internal-diff.md insight/docs/context-bookmarks.md insight/docs/relations-calls.md insight/docs/window-list.md insight/docs/symbol-info.md
 EXTRA_DIST += $(insightdoc_DATA)
 
 EXTRA_DIST += insight/tests/help_search_gui_test.c
@@ -269,3 +269,4 @@ EXTRA_DIST += insight/locale/insight.pairs insight/tools/build_i18n.py insight/t
 	insight/tests/i18n_gui_test.c
 
 EXTRA_DIST += insight/tests/snippet_test.c insight/tests/snippet_gui_test.c
+EXTRA_DIST += insight/tests/panels_gui_test.c

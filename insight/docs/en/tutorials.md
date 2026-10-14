@@ -89,3 +89,10 @@ Follow the [first Lua extension](scripting.md). It wraps a selection, appears in
 Right-click the editor → File language / profile… or Options → Language profiles…. Set a profile name, base parser, own/compatible extensions and optional forced binding. Fonts and CSS configures keyword/comment fonts and colors. Apply saves and reindexes; Reset file binding restores automatic detection. See [profiles](languages.md).
 
 For a code template example and its variables, see [Bookmarks and code templates](context-bookmarks.md#code-templates).
+
+
+## Panel help
+
+Click ? at the panel’s upper right. Symbol grouping and colors: [File Symbols](panel-file-symbols.md), [Project Symbols](panel-project-symbols.md).
+
+Drag the project panel’s left boundary right to narrow it. Open Diff/Merge from the main toolbar or Tools. [Merge tutorial](panel-merge-result.md).
