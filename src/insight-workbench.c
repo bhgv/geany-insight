@@ -6,6 +6,7 @@
 #include "insight-workbench.h"
 #include "insight-diff.h"
 #include "insight-relation-graph.h"
+#include "insight-window-list.h"
 #include "insight-overview.h"
 #include "ui_utils.h"
 #include "document.h"
@@ -2016,6 +2017,7 @@ static gboolean preview_button(GtkWidget *widget,GdkEventButton *event,gpointer 
  return TRUE;
 }
 void insight_workbench_editor_updated(gboolean content) {
+ insight_window_list_editor_updated();
  GeanyDocument *doc=document_get_current(); if(!wb.preview || !doc) return;
  if(content && wb.bookmark_handles && !wb.bookmark_sync_timer) wb.bookmark_sync_timer=g_timeout_add(350,bookmark_sync_idle,NULL);
  gint position=sci_get_current_position(doc->editor->sci),anchor=(gint)SSM(doc->editor->sci,SCI_GETANCHOR,0,0);
@@ -2175,7 +2177,7 @@ static void native_commands_rebuild(void) {
  gtk_widget_show_all(wb.lua_commands);
 }
 static void native_document_event(GObject *object,GeanyDocument *doc,gpointer data) {
- (void)object; if(!strcmp(data,"document_close") || !strcmp(data,"document_save")) insight_workbench_bookmarks_changed();
+ (void)object;insight_window_list_document_event(doc ? doc->id : 0,data); if(!strcmp(data,"document_close") || !strcmp(data,"document_save")) insight_workbench_bookmarks_changed();
  if(!strcmp(data,"document_open") || !strcmp(data,"document_activate")) bookmark_restore_document(doc);
  if(strcmp(data,"document_activate")) mark_index_dirty();
  insight_workbench_refresh();
@@ -2939,12 +2941,18 @@ static void create_browse_toolbar(void) {
  for(guint i=0;i<4;i++) { GtkToolItem *item=gtk_tool_button_new(gtk_label_new(layouts[i]),tips[i]); gtk_widget_set_tooltip_text(GTK_WIDGET(item),tips[i]); g_signal_connect(item,"clicked",G_CALLBACK(apply_layout),GINT_TO_POINTER(i)); gtk_toolbar_insert(toolbar,item,-1); }
  gtk_widget_show_all(GTK_WIDGET(toolbar));
 }
+static void window_list_preview(guint id) {
+ GeanyDocument *doc=document_find_by_id(id);if(!doc || !wb.preview) return;
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE);show_location(doc->file_name,doc->id,sci_get_current_line(doc->editor->sci)+1,TRUE);
+}
 static void window_activate(GtkMenuItem *item,gpointer data) {
  (void)item; GeanyDocument *doc=document_find_by_id(GPOINTER_TO_UINT(data));
  if(doc) { gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.notebook),document_get_notebook_page(doc)); document_grab_focus(doc); }
 }
 static void window_menu_refresh(GtkWidget *menu,gpointer data) {
  (void)data; GList *items=gtk_container_get_children(GTK_CONTAINER(menu)); for(GList *p=items;p;p=p->next) gtk_widget_destroy(p->data); g_list_free(items);
+ GtkWidget *windows=gtk_menu_item_new_with_label("Window List…");g_signal_connect(windows,"activate",G_CALLBACK(insight_window_list_show),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),windows);gtk_widget_show(windows);
+ GtkWidget *separator=gtk_separator_menu_item_new();gtk_menu_shell_append(GTK_MENU_SHELL(menu),separator);gtk_widget_show(separator);
  for(guint i=0;i<documents_array->len;i++) {
   GeanyDocument *doc=g_ptr_array_index(documents_array,i); if(!doc->is_valid) continue;
   GtkWidget *item=gtk_check_menu_item_new_with_label(doc->file_name ? doc->file_name : "untitled");
@@ -2988,7 +2996,7 @@ static void show_diff(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; insight_diff_show(main_widgets.window);
 }
 void insight_workbench_init(void) {
- wb.alive=TRUE; workbench_epoch++;
+ wb.alive=TRUE; workbench_epoch++;insight_window_list_init(window_list_preview);
  GtkWidget *existing=ui_lookup_widget(main_widgets.window,"vpaned1");
  GtkWidget *parent=gtk_widget_get_parent(existing); gint position=0;
  gtk_container_child_get(GTK_CONTAINER(parent),existing,"position",&position,NULL);
@@ -3097,6 +3105,7 @@ static void remove_group_accelerators(GtkWidget *widget,GtkAccelGroup *group) {
  g_list_free(closures);
 }
 void insight_workbench_finalize(void) {
+ insight_window_list_finalize();
  insight_workbench_bookmarks_changed();
  if(wb.bookmark_sync_timer) { g_source_remove(wb.bookmark_sync_timer);wb.bookmark_sync_timer=0; }
  if(wb.bookmark_window) gtk_widget_destroy(wb.bookmark_window);

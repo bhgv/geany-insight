@@ -210,6 +210,8 @@ libgeany_la_SOURCES += \
 	insight-diff.h \
 	insight-relation-graph.c \
 	insight-relation-graph.h \
+	insight-window-list.c \
+	insight-window-list.h \
 	../insight/core/diff.c \
 	../insight/core/structure_select.c \
 	../insight/core/structure_select.h \
