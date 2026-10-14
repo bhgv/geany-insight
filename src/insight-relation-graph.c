@@ -49,6 +49,43 @@ static gboolean draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
  if(selected_path) gtk_tree_path_free(selected_path);
  cairo_restore(cr);return FALSE;
 }
+static cairo_surface_t *image(RelationGraph *g) {
+ int width=0,height=0;
+ if(!insight_graph_image_size(gtk_tree_model_iter_n_children(g->model,NULL),g->vertical,g->scale,&width,&height)) { gtk_label_set_text(GTK_LABEL(g->status),"Image is too large. Reduce zoom or filter the results before exporting.");return NULL; }
+ cairo_surface_t *surface=cairo_image_surface_create(CAIRO_FORMAT_ARGB32,width,height);
+ if(cairo_surface_status(surface)!=CAIRO_STATUS_SUCCESS) { gtk_label_set_text(GTK_LABEL(g->status),cairo_status_to_string(cairo_surface_status(surface)));cairo_surface_destroy(surface);return NULL; }
+ cairo_t *cr=cairo_create(surface);GdkRGBA fg;gtk_style_context_get_color(gtk_widget_get_style_context(g->canvas),GTK_STATE_FLAG_NORMAL,&fg);
+ double background=fg.red+fg.green+fg.blue>1.5 ? 0.12 : 1.0;cairo_set_source_rgb(cr,background,background,background);cairo_paint(cr);draw(g->canvas,cr,g);
+ cairo_status_t status=cairo_status(cr);cairo_destroy(cr);
+ if(status!=CAIRO_STATUS_SUCCESS) { gtk_label_set_text(GTK_LABEL(g->status),cairo_status_to_string(status));cairo_surface_destroy(surface);return NULL; }
+ return surface;
+}
+static void copy_image(GtkWidget *widget,gpointer data) {
+ (void)widget;RelationGraph *g=data;cairo_surface_t *surface=image(g);if(!surface) return;
+ GdkPixbuf *pixbuf=gdk_pixbuf_get_from_surface(surface,0,0,cairo_image_surface_get_width(surface),cairo_image_surface_get_height(surface));cairo_surface_destroy(surface);
+ if(pixbuf) { gtk_clipboard_set_image(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),pixbuf);g_object_unref(pixbuf);gtk_label_set_text(GTK_LABEL(g->status),"Graph image copied to clipboard"); }
+ else gtk_label_set_text(GTK_LABEL(g->status),"Graph image could not be allocated");
+}
+static cairo_status_t png_chunk(void *closure,const unsigned char *bytes,unsigned int length) {
+ g_byte_array_append(closure,bytes,length);return CAIRO_STATUS_SUCCESS;
+}
+static void save_image(GtkWidget *widget,gpointer data) {
+ (void)widget;RelationGraph *g=data;cairo_surface_t *surface=image(g);if(!surface) return;
+ GtkWidget *status_label=g_object_ref(g->status);GtkWidget *parent=gtk_widget_get_toplevel(g->canvas);
+ GtkWidget *dialog=gtk_file_chooser_dialog_new("Save relation graph",GTK_IS_WINDOW(parent) ? GTK_WINDOW(parent) : NULL,GTK_FILE_CHOOSER_ACTION_SAVE,"Cancel",GTK_RESPONSE_CANCEL,"Save",GTK_RESPONSE_ACCEPT,NULL);
+ gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog),TRUE);gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog),TRUE);gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog),"relations.png");
+ GtkFileFilter *filter=gtk_file_filter_new();gtk_file_filter_set_name(filter,"PNG image");gtk_file_filter_add_pattern(filter,"*.png");gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog),filter);
+ if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) {
+  gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));GByteArray *png=g_byte_array_new();GError *error=NULL;cairo_status_t status=cairo_surface_write_to_png_stream(surface,png_chunk,png);
+  gboolean saved=status==CAIRO_STATUS_SUCCESS && path && g_file_set_contents(path,(const gchar *)png->data,png->len,&error);g_byte_array_unref(png);
+  /* The rendered surface is a snapshot: model updates while the chooser is
+   * open do not change the exported image. */
+  if(saved) gtk_label_set_text(GTK_LABEL(status_label),"Graph image saved");
+  else { GtkWidget *message=gtk_message_dialog_new(GTK_WINDOW(dialog),GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_ERROR,GTK_BUTTONS_CLOSE,"%s",error ? error->message : cairo_status_to_string(status));gtk_dialog_run(GTK_DIALOG(message));gtk_widget_destroy(message); }
+  g_clear_error(&error);g_free(path);
+ }
+ gtk_widget_destroy(dialog);cairo_surface_destroy(surface);g_object_unref(status_label);
+}
 static gboolean click(GtkWidget *widget,GdkEventButton *event,gpointer data) {
  (void)widget;RelationGraph *g=data;if(event->button!=1 || (event->type!=GDK_BUTTON_PRESS && event->type!=GDK_2BUTTON_PRESS)) return FALSE;
  gint row=insight_graph_hit(event->x/g->scale,event->y/g->scale,gtk_tree_model_iter_n_children(g->model,NULL),g->vertical);if(row<0) return FALSE;
@@ -65,7 +102,8 @@ static void reveal(RelationGraph *g,gint row) {
  }
 }
 static gboolean key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
- (void)widget;RelationGraph *g=data;if(event->state&(GDK_CONTROL_MASK|GDK_MOD1_MASK)) return FALSE;
+ (void)widget;RelationGraph *g=data;if((event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_c || event->keyval==GDK_KEY_C)) { copy_image(NULL,g);return TRUE; }
+ if(event->state&(GDK_CONTROL_MASK|GDK_MOD1_MASK)) return FALSE;
  gint count=MIN(gtk_tree_model_iter_n_children(g->model,NULL),INSIGHT_GRAPH_LIMIT);if(!count) return FALSE;
  GtkTreeModel *model;GtkTreeIter iter;gint row=-1;
  if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(g->tree),&model,&iter)) { GtkTreePath *path=gtk_tree_model_get_path(model,&iter);if(gtk_tree_path_get_depth(path)==1) row=gtk_tree_path_get_indices(path)[0];gtk_tree_path_free(path); }
@@ -79,7 +117,7 @@ static gboolean key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
 }
 static void selection_changed(GtkTreeSelection *selection,gpointer data) { (void)selection;RelationGraph *g=data;gtk_widget_queue_draw(g->canvas); }
 static void destroy(GtkWidget *widget,gpointer data) {
- (void)widget;RelationGraph *g=data;g_signal_handlers_disconnect_by_data(g->model,g);g_signal_handlers_disconnect_by_data(g->query,g);g_signal_handlers_disconnect_by_data(gtk_tree_view_get_selection(g->tree),g);
+ g_object_set_data(G_OBJECT(widget),"insight-graph",NULL);RelationGraph *g=data;g_signal_handlers_disconnect_by_data(g->model,g);g_signal_handlers_disconnect_by_data(g->query,g);g_signal_handlers_disconnect_by_data(gtk_tree_view_get_selection(g->tree),g);
  g_object_unref(g->tree);g_object_unref(g->model);g_object_unref(g->query);g_free(g);
 }
 GtkWidget *insight_relation_graph_new(GtkTreeView *tree,GtkEntry *query,gint name,gint file,gint line) {
@@ -92,5 +130,16 @@ GtkWidget *insight_relation_graph_new(GtkTreeView *tree,GtkEntry *query,gint nam
  g->status=gtk_label_new("");gtk_label_set_line_wrap(GTK_LABEL(g->status),TRUE);gtk_box_pack_start(GTK_BOX(box),g->status,FALSE,FALSE,0);
  g_signal_connect(g->canvas,"draw",G_CALLBACK(draw),g);g_signal_connect(g->canvas,"button-press-event",G_CALLBACK(click),g);g_signal_connect(g->canvas,"key-press-event",G_CALLBACK(key),g);g_signal_connect(g->direction,"changed",G_CALLBACK(controls),g);g_signal_connect(g->zoom,"value-changed",G_CALLBACK(controls),g);
  const gchar *signals[]={"row-inserted","row-deleted","row-changed","rows-reordered"};for(guint i=0;i<G_N_ELEMENTS(signals);i++) g_signal_connect_swapped(g->model,signals[i],G_CALLBACK(update),g);
- g_signal_connect_swapped(query,"changed",G_CALLBACK(update),g);g_signal_connect(gtk_tree_view_get_selection(tree),"changed",G_CALLBACK(selection_changed),g);g_signal_connect(box,"destroy",G_CALLBACK(destroy),g);update(g);return box;
+ g_signal_connect_swapped(query,"changed",G_CALLBACK(update),g);g_signal_connect(gtk_tree_view_get_selection(tree),"changed",G_CALLBACK(selection_changed),g);g_signal_connect(box,"destroy",G_CALLBACK(destroy),g);g_object_set_data(G_OBJECT(box),"insight-graph",g);
+ GtkWidget *copy=gtk_button_new_with_label("Copy image"),*save=gtk_button_new_with_label("Save PNG…");gtk_box_pack_start(GTK_BOX(bar),copy,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(bar),save,FALSE,FALSE,0);g_signal_connect(copy,"clicked",G_CALLBACK(copy_image),g);g_signal_connect(save,"clicked",G_CALLBACK(save_image),g);update(g);return box;
+}
+
+void insight_relation_graph_get_options(GtkWidget *widget,gboolean *vertical,gint *zoom) {
+ RelationGraph *g=g_object_get_data(G_OBJECT(widget),"insight-graph");if(!g) return;
+ if(vertical) *vertical=g->vertical;
+ if(zoom) *zoom=(gint)(g->scale*100);
+}
+void insight_relation_graph_set_options(GtkWidget *widget,gboolean vertical,gint zoom) {
+ RelationGraph *g=g_object_get_data(G_OBJECT(widget),"insight-graph");if(!g) return;
+ gtk_combo_box_set_active(GTK_COMBO_BOX(g->direction),vertical ? 1 : 0);gtk_spin_button_set_value(GTK_SPIN_BUTTON(g->zoom),CLAMP(zoom,50,200));
 }

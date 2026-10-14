@@ -30,6 +30,7 @@ int main(int argc,char **argv) {
  gtk_container_add(GTK_CONTAINER(window),box);gtk_box_pack_start(GTK_BOX(box),query,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),tree,FALSE,FALSE,0);
  gtk_tree_view_append_column(GTK_TREE_VIEW(tree),gtk_tree_view_column_new_with_attributes("Symbol",gtk_cell_renderer_text_new(),"text",0,NULL));
  GtkWidget *graph=insight_relation_graph_new(GTK_TREE_VIEW(tree),GTK_ENTRY(query),0,1,2);gtk_box_pack_start(GTK_BOX(box),graph,TRUE,TRUE,0);
+ gboolean vertical=FALSE;gint zoom=0;insight_relation_graph_set_options(graph,TRUE,500);insight_relation_graph_get_options(graph,&vertical,&zoom);g_assert_true(vertical);g_assert_cmpint(zoom,==,200);insight_relation_graph_set_options(graph,FALSE,100);
  g_signal_connect(tree,"row-activated",G_CALLBACK(activated),NULL);gtk_widget_show_all(window);
  for(guint i=0;i<100 && gtk_events_pending();i++) gtk_main_iteration();
  GtkWidget *canvas=find_canvas(graph);g_assert_nonnull(canvas);gboolean handled=FALSE;

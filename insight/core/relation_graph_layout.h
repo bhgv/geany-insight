@@ -15,4 +15,13 @@ static inline int insight_graph_hit(double x,double y,int count,int vertical) {
  for(int i=0;i<count;i++) { InsightGraphRect r=insight_graph_rect(i,vertical);if(x>=r.x && x<r.x+r.width && y>=r.y && y<r.y+r.height) return i; }
  return -1;
 }
+/* Bound exported raster allocation before creating a Cairo surface. */
+static inline int insight_graph_image_size(int count,int vertical,double scale,int *width,int *height) {
+ if(!width || !height || count<0 || !(scale>=0.5 && scale<=2.0)) return 0;
+ if(count>INSIGHT_GRAPH_LIMIT) count=INSIGHT_GRAPH_LIMIT;
+ InsightGraphRect r=insight_graph_rect(count ? count-1 : -1,vertical);
+ int w=(int)((r.x+r.width+16)*scale+0.999),h=(int)((r.y+r.height+16)*scale+0.999);
+ if(w>16384 || h>16384 || (double)w*h>32000000) return 0;
+ *width=w;*height=h;return 1;
+}
 #endif
