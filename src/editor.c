@@ -5258,12 +5258,19 @@ void editor_apply_update_prefs(GeanyEditor *editor)
 
 	/* Change history */
 	guint change_history_mask;
-	change_history_mask = SC_CHANGE_HISTORY_DISABLED;
+	/* Keep revision data for Overview and change navigation even when the
+	 * editor margin is hidden. Undo/redo and save points are tracked by Scintilla. */
+	change_history_mask = SC_CHANGE_HISTORY_ENABLED|SC_CHANGE_HISTORY_MARKERS;
 	if (editor_prefs.change_history_markers)
 		change_history_mask |= SC_CHANGE_HISTORY_ENABLED|SC_CHANGE_HISTORY_MARKERS;
 	if (editor_prefs.change_history_indicators)
 		change_history_mask |= SC_CHANGE_HISTORY_ENABLED|SC_CHANGE_HISTORY_INDICATORS;
 	SSM(sci, SCI_SETCHANGEHISTORY, change_history_mask, 0);
+	const guint history_markers = (1u << SC_MARKNUM_HISTORY_REVERTED_TO_ORIGIN) |
+		(1u << SC_MARKNUM_HISTORY_SAVED) | (1u << SC_MARKNUM_HISTORY_MODIFIED) |
+		(1u << SC_MARKNUM_HISTORY_REVERTED_TO_MODIFIED);
+	SSM(sci, SCI_SETMARGINMASKN, 0, (~SC_MASK_FOLDERS) &
+		(editor_prefs.change_history_markers ? ~0u : ~history_markers));
 
 	/* caret Y policy */
 	caret_y_policy = CARET_EVEN;

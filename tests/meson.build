@@ -450,3 +450,6 @@ test('Insight language profiles GUI', languages_gui_test, timeout: 45)
 
 i18n_gui_test = executable('test_insight_i18n_gui', '../insight/tests/i18n_gui_test.c', dependencies: test_deps)
 test('Insight Russian and English interface GUI', i18n_gui_test, timeout: 45)
+
+overview_markers_gui_test = executable('test_insight_overview_markers_gui', '../insight/tests/overview_markers_gui_test.c', dependencies: test_deps)
+test('Insight overview markers GUI', overview_markers_gui_test, timeout: 30)

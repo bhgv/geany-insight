@@ -560,3 +560,14 @@ Wrap|||Перенос
 Cannot save interface language: %s|||Не удалось сохранить язык интерфейса: %s
 Line %d: %s|||Строка %d: %s
 %s • %s %s%s • %s • bases: %s|||%s • %s %s%s • %s • базовые: %s
+Show bookmarks|||Показывать закладки
+Show change marks|||Показывать отметки изменений
+Show saved changes|||Показывать сохранённые изменения
+Enable hover messages|||Подсказки при наведении
+Unsaved change|||Несохранённое изменение
+Saved change|||Сохранённое изменение
+Previous unsaved change|||Предыдущее несохранённое изменение
+Next unsaved change|||Следующее несохранённое изменение
+No next unsaved change|||Следующих несохранённых изменений нет
+No previous unsaved change|||Предыдущих несохранённых изменений нет
+Change navigation supports files up to 2 MiB|||Переходы по изменениям поддерживают файлы до 2 МиБ

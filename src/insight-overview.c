@@ -11,6 +11,7 @@
 #include "filetypes.h"
 #include "sciwrappers.h"
 #include "ui_utils.h"
+#include "navqueue.h"
 #include <string.h>
 typedef struct {
  guint id,timer; GtkWidget *pane,*host,*shade; ScintillaObject *map;
@@ -18,6 +19,9 @@ typedef struct {
 } Overview;
 static GList *overviews;
 static gboolean enabled=TRUE,show_selection=TRUE,show_viewport=TRUE;
+static gboolean show_bookmarks=TRUE,show_changes=TRUE,show_saved=TRUE,show_tips=TRUE;
+#define MODIFIED_MARKS ((1u<<SC_MARKNUM_HISTORY_MODIFIED)|(1u<<SC_MARKNUM_HISTORY_REVERTED_TO_MODIFIED))
+#define SAVED_MARKS (1u<<SC_MARKNUM_HISTORY_SAVED)
 static gint scale=10,width=100;
 static GeanyDocument *owner(Overview *o) { return document_find_by_id(o->id); }
 static gint first_document_line(ScintillaObject *sci) { return (gint)SSM(sci,SCI_DOCLINEFROMVISIBLE,SSM(sci,SCI_GETFIRSTVISIBLELINE,0,0),0); }
@@ -29,6 +33,17 @@ static gboolean shade_draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
  gint row_height=MAX(1,SSM(o->map,SCI_TEXTHEIGHT,0,0)),w=gtk_widget_get_allocated_width(widget);
  if(show_viewport) { gdouble top=(first-map_first)*row_height,bottom=(last+1-map_first)*row_height; cairo_set_source_rgba(cr,0.2,0.45,0.9,0.18); cairo_rectangle(cr,0,top,w,MAX(row_height,bottom-top)); cairo_fill(cr); cairo_set_source_rgba(cr,0.15,0.3,0.65,0.85); cairo_set_line_width(cr,1); cairo_rectangle(cr,0.5,top+0.5,MAX(0,w-1),MAX(1,bottom-top-1)); cairo_stroke(cr); }
  if(show_selection) { gint begin=(gint)SSM(source,SCI_GETSELECTIONSTART,0,0),end=(gint)SSM(source,SCI_GETSELECTIONEND,0,0); if(end>begin && end<=length) { gint a=sci_get_line_from_position(o->map,begin),b=sci_get_line_from_position(o->map,end-1); gdouble top=(a-map_first)*row_height; cairo_set_source_rgba(cr,1,0.85,0,0.32); cairo_rectangle(cr,0,top,w,MAX(row_height,(b-a+1)*row_height)); cairo_fill(cr); } }
+ /* Query only visible rows. Marker positions follow edits, undo and redo in
+  * the source document; the read-only miniature never owns editor markers. */
+ gint map_last=MIN(sci_get_line_count(source)-1,map_first+gtk_widget_get_allocated_height(widget)/row_height+1);
+ for(gint line=map_first;line<=map_last;line++) {
+  guint marks=(guint)SSM(source,SCI_MARKERGET,line,0); gdouble y=(line-map_first)*row_height;
+  if(show_changes && ((marks&MODIFIED_MARKS) || (show_saved && (marks&SAVED_MARKS)))) {
+   if(marks&MODIFIED_MARKS) cairo_set_source_rgb(cr,0.95,0.58,0.08); else cairo_set_source_rgb(cr,0.2,0.65,0.3);
+   cairo_rectangle(cr,MAX(0,w-5),y,5,MAX(2,row_height)); cairo_fill(cr);
+  }
+  if(show_bookmarks && (marks&2)) { cairo_set_source_rgb(cr,0.12,0.42,0.95); cairo_arc(cr,5,y+row_height/2.0,3,0,2*G_PI); cairo_fill(cr); }
+ }
  return FALSE;
 }
 static void copy_styles(Overview *o,ScintillaObject *source) {
@@ -63,7 +78,7 @@ static void source_notify(ScintillaObject *source,gint message,SCNotification *n
  if(n->nmhdr.code==SCN_MODIFIED && (n->modificationType&(SC_MOD_INSERTTEXT|SC_MOD_DELETETEXT))) { o->dirty=TRUE; if(o->timer) { g_source_remove(o->timer); o->timer=0; } }
  if(n->nmhdr.code==SCN_MODIFIED && (n->modificationType&SC_MOD_CHANGESTYLE)) o->style_dirty=TRUE;
  if(n->nmhdr.code==SCN_ZOOM) o->last_scale=-1;
- if(n->nmhdr.code==SCN_UPDATEUI || n->nmhdr.code==SCN_MODIFIED || n->nmhdr.code==SCN_PAINTED || n->nmhdr.code==SCN_ZOOM) queue_sync(o);
+ if(n->nmhdr.code==SCN_UPDATEUI || n->nmhdr.code==SCN_MODIFIED || n->nmhdr.code==SCN_PAINTED || n->nmhdr.code==SCN_ZOOM || n->nmhdr.code==SCN_SAVEPOINTREACHED || n->nmhdr.code==SCN_SAVEPOINTLEFT) queue_sync(o);
 }
 static gint line_at(Overview *o,gdouble y) { return MAX(0,first_document_line(o->map)+(gint)(MAX(0,y)/MAX(1,SSM(o->map,SCI_TEXTHEIGHT,0,0)))); }
 static void drag_scroll(Overview *o,gdouble y) {
@@ -75,13 +90,39 @@ static void overview_options(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; GtkWidget *dialog=gtk_dialog_new_with_buttons("Overview Options",GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL,"Cancel",GTK_RESPONSE_CANCEL,"Apply",GTK_RESPONSE_APPLY,NULL),*box=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
  GtkWidget *percent=gtk_spin_button_new_with_range(5,100,5),*size=gtk_spin_button_new_with_range(40,400,10),*selection=gtk_check_button_new_with_label("Show active selection"),*viewport=gtk_check_button_new_with_label("Show visible area");
  gtk_spin_button_set_value(GTK_SPIN_BUTTON(percent),scale); gtk_spin_button_set_value(GTK_SPIN_BUTTON(size),width); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(selection),show_selection); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(viewport),show_viewport);
- gtk_box_pack_start(GTK_BOX(box),gtk_label_new("Text scaling %"),FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(box),percent,FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(box),gtk_label_new("Overview width"),FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(box),size,FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(box),selection,FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(box),viewport,FALSE,FALSE,3); gtk_widget_show_all(dialog);
- if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_APPLY) { scale=gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(percent)); width=gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(size)); show_selection=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(selection)); show_viewport=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(viewport)); for(GList *p=overviews;p;p=p->next) { Overview *view=p->data; view->last_scale=-1; gtk_paned_set_position(GTK_PANED(view->pane),MAX(1,gtk_widget_get_allocated_width(view->pane)-width)); queue_sync(view); } }
+ gtk_box_pack_start(GTK_BOX(box),gtk_label_new("Text scaling %"),FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(box),percent,FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(box),gtk_label_new("Overview width"),FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(box),size,FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(box),selection,FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(box),viewport,FALSE,FALSE,3); GtkWidget *bookmarks=gtk_check_button_new_with_label("Show bookmarks"),*changes=gtk_check_button_new_with_label("Show change marks"),*saved=gtk_check_button_new_with_label("Show saved changes"),*tips=gtk_check_button_new_with_label("Enable hover messages");
+ GtkWidget *checks[]={bookmarks,changes,saved,tips}; gboolean values[]={show_bookmarks,show_changes,show_saved,show_tips}; const char *names[]={"insight-overview-bookmarks","insight-overview-changes","insight-overview-saved","insight-overview-tips"};
+ for(guint i=0;i<G_N_ELEMENTS(checks);i++) { gtk_widget_set_name(checks[i],names[i]); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(checks[i]),values[i]); gtk_box_pack_start(GTK_BOX(box),checks[i],FALSE,FALSE,3); }
+ gtk_widget_show_all(dialog);
+ if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_APPLY) { scale=gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(percent)); width=gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(size)); show_selection=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(selection)); show_viewport=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(viewport)); show_bookmarks=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bookmarks)); show_changes=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(changes)); show_saved=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(saved)); show_tips=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(tips)); for(GList *p=overviews;p;p=p->next) { Overview *view=p->data; view->last_scale=-1; gtk_paned_set_position(GTK_PANED(view->pane),MAX(1,gtk_widget_get_allocated_width(view->pane)-width)); queue_sync(view); } }
  gtk_widget_destroy(dialog);
+}
+static void change_navigation(GtkMenuItem *item,gpointer data) {
+ (void)item; GeanyDocument *doc=document_get_current(); if(!doc) return; ScintillaObject *sci=doc->editor->sci;
+ if(sci_get_length(sci)>2*1024*1024) { ui_set_statusbar(TRUE,"Change navigation supports files up to 2 MiB"); return; }
+ gint direction=GPOINTER_TO_INT(data),count=sci_get_line_count(sci),start=sci_get_current_line(sci);
+ /* Skip the current contiguous change block, then find the next block. */
+ gint line=start; while(line>=0 && line<count && ((guint)SSM(sci,SCI_MARKERGET,line,0)&MODIFIED_MARKS)) line+=direction;
+ if(line==start) line+=direction;
+ for(;line>=0 && line<count;line+=direction) if((guint)SSM(sci,SCI_MARKERGET,line,0)&MODIFIED_MARKS) {
+  while(line>0 && ((guint)SSM(sci,SCI_MARKERGET,line-1,0)&MODIFIED_MARKS)) line--;
+  navqueue_goto_line(doc,doc,line+1); document_grab_focus(doc); return;
+ }
+ ui_set_statusbar(TRUE,direction>0 ? "No next unsaved change" : "No previous unsaved change");
+}
+static GtkWidget *change_item(const char *label,const char *name,const char *icon,gint direction) {
+ GtkWidget *item=gtk_image_menu_item_new_with_label(label); gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(item),gtk_image_new_from_icon_name(icon,GTK_ICON_SIZE_MENU)); gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(item),TRUE); gtk_widget_set_name(item,name); g_signal_connect(item,"activate",G_CALLBACK(change_navigation),GINT_TO_POINTER(direction)); return item;
+}
+void insight_overview_install_commands(void) {
+ GtkWidget *edit=ui_lookup_widget(main_widgets.window,"edit1_menu"); GtkAccelGroup *accels=gtk_accel_group_new(); gtk_window_add_accel_group(GTK_WINDOW(main_widgets.window),accels);
+ GtkWidget *previous=change_item("Previous unsaved change","insight-previous-change","go-up",-1),*next=change_item("Next unsaved change","insight-next-change","go-down",1);
+ gtk_menu_shell_append(GTK_MENU_SHELL(edit),gtk_separator_menu_item_new()); gtk_menu_shell_append(GTK_MENU_SHELL(edit),previous); gtk_menu_shell_append(GTK_MENU_SHELL(edit),next);
+ gtk_widget_add_accelerator(previous,"activate",accels,GDK_KEY_KP_Subtract,GDK_MOD1_MASK,GTK_ACCEL_VISIBLE); gtk_widget_add_accelerator(next,"activate",accels,GDK_KEY_KP_Add,GDK_MOD1_MASK,GTK_ACCEL_VISIBLE); g_object_unref(accels); gtk_widget_show_all(edit);
 }
 static gboolean map_button(GtkWidget *widget,GdkEventButton *event,gpointer data) {
  Overview *o=data;
- if(event->button==3) { GtkWidget *menu=gtk_menu_new(),*options=gtk_menu_item_new_with_label("Overview Options…"); gtk_container_add(GTK_CONTAINER(menu),options); g_signal_connect_object(options,"activate",G_CALLBACK(overview_options),o->pane,0); g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu); gtk_widget_show_all(menu); gtk_menu_popup_at_pointer(GTK_MENU(menu),(GdkEvent *)event); return TRUE; }
+ if(event->button==3) { GtkWidget *menu=gtk_menu_new(),*options=gtk_image_menu_item_new_with_label("Overview Options…"); gtk_menu_attach_to_widget(GTK_MENU(menu),widget,NULL); gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(options),gtk_image_new_from_icon_name("preferences-system",GTK_ICON_SIZE_MENU)); gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(options),TRUE); gtk_widget_set_name(options,"insight-overview-options"); gtk_menu_shell_append(GTK_MENU_SHELL(menu),options);
+ gtk_menu_shell_append(GTK_MENU_SHELL(menu),change_item("Previous unsaved change","insight-overview-previous-change","go-up",-1)); gtk_menu_shell_append(GTK_MENU_SHELL(menu),change_item("Next unsaved change","insight-overview-next-change","go-down",1)); g_signal_connect_object(options,"activate",G_CALLBACK(overview_options),o->pane,0); g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu); gtk_widget_show_all(menu); gtk_menu_popup_at_pointer(GTK_MENU(menu),(GdkEvent *)event); return TRUE; }
  if(event->button==1) { GeanyDocument *doc=owner(o); if(doc) { gint first=first_document_line(doc->editor->sci),last=last_document_line(doc->editor->sci),line=line_at(o,event->y); o->drag_offset=line>=first && line<=last ? line-first : MAX(0,(last-first)/2); o->dragging=TRUE; o->drag_y=event->y; gtk_grab_add(widget); drag_scroll(o,event->y); } }
  return TRUE;
 }
@@ -95,8 +136,10 @@ static gboolean map_scroll(GtkWidget *widget,GdkEventScroll *event,gpointer data
  return TRUE;
 }
 static gboolean map_tooltip(GtkWidget *widget,gint x,gint y,gboolean keyboard,GtkTooltip *tooltip,gpointer data) {
- (void)widget; (void)x; if(keyboard) return FALSE; Overview *o=data; GeanyDocument *doc=owner(o); if(!doc) return FALSE; gint line=MIN(line_at(o,y),MAX(0,sci_get_line_count(doc->editor->sci)-1)); gchar *text=sci_get_line(doc->editor->sci,line);
- if(!text || !g_utf8_validate(text,-1,NULL)) { g_free(text); return FALSE; } gchar *shortened=g_utf8_substring(text,0,MIN(180,g_utf8_strlen(text,-1))),*label=g_strdup_printf("Line %d: %s",line+1,shortened); gtk_tooltip_set_text(tooltip,label); g_free(label); g_free(shortened); g_free(text); return TRUE;
+ (void)widget; (void)x; if(keyboard || !show_tips) return FALSE; Overview *o=data; GeanyDocument *doc=owner(o); if(!doc) return FALSE; gint line=MIN(line_at(o,y),MAX(0,sci_get_line_count(doc->editor->sci)-1)); gchar *text=sci_get_line(doc->editor->sci,line);
+ if(!text || !g_utf8_validate(text,-1,NULL)) { g_free(text); return FALSE; } gchar *shortened=g_utf8_substring(text,0,MIN(180,g_utf8_strlen(text,-1))),*label=g_strdup_printf("Line %d: %s",line+1,shortened); guint marks=(guint)SSM(doc->editor->sci,SCI_MARKERGET,line,0);
+ const char *status=(marks&MODIFIED_MARKS) ? insight_tr("Unsaved change") : (marks&SAVED_MARKS) ? insight_tr("Saved change") : "";
+ gchar *detail=g_strdup_printf("%s%s%s%s%s",label,*status ? "\n" : "",status,(marks&2) ? "\n" : "",(marks&2) ? insight_tr("Bookmark") : ""); gtk_tooltip_set_text(tooltip,detail); g_free(detail); g_free(label); g_free(shortened); g_free(text); return TRUE;
 }
 static void pane_position(GObject *object,GParamSpec *spec,gpointer data) { (void)spec; Overview *o=data; gint total=gtk_widget_get_allocated_width(GTK_WIDGET(object)); if(o->positioned && enabled && gtk_widget_get_mapped(o->host) && total>400) width=CLAMP(total-gtk_paned_get_position(GTK_PANED(object)),40,400); }
 static void pane_allocated(GtkWidget *widget,GtkAllocation *allocation,gpointer data) { Overview *o=data; if(!o->positioned && allocation->width>width+100) { gtk_paned_set_position(GTK_PANED(widget),allocation->width-width); o->positioned=TRUE; } }
@@ -104,7 +147,7 @@ static void overview_free(gpointer data) { Overview *o=data; if(o->timer) g_sour
 static void host_mapped(GtkWidget *widget,gpointer data) { (void)widget; Overview *o=data; o->last_top=-1; queue_sync(o); }
 GtkWidget *insight_overview_wrap(GeanyDocument *doc) {
  Overview *o=g_new0(Overview,1); o->id=doc->id; o->dirty=TRUE; o->last_top=o->last_line=o->last_scale=-1;
- o->pane=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL); o->host=gtk_overlay_new(); o->map=SCINTILLA(scintilla_new()); o->shade=gtk_drawing_area_new();
+ o->pane=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL); o->host=gtk_overlay_new(); o->map=SCINTILLA(scintilla_new()); o->shade=gtk_drawing_area_new(); gtk_widget_set_name(o->shade,"insight-overview-markers");
  gtk_widget_set_direction(GTK_WIDGET(o->map),GTK_TEXT_DIR_LTR); gtk_widget_set_can_focus(GTK_WIDGET(o->map),FALSE); sci_set_codepage(o->map,SC_CP_UTF8); sci_use_popup(o->map,FALSE); sci_set_readonly(o->map,TRUE); SSM(o->map,SCI_SETHSCROLLBAR,FALSE,0); SSM(o->map,SCI_SETVSCROLLBAR,FALSE,0); SSM(o->map,SCI_SETWRAPMODE,SC_WRAP_NONE,0); SSM(o->map,SCI_SETCARETWIDTH,0,0); SSM(o->map,SCI_SETCURSOR,SC_CURSORARROW,0);
  for(guint i=0;i<5;i++) SSM(o->map,SCI_SETMARGINWIDTHN,i,0);
  gtk_drag_dest_unset(GTK_WIDGET(o->map)); gtk_container_add(GTK_CONTAINER(o->host),GTK_WIDGET(o->map)); gtk_overlay_add_overlay(GTK_OVERLAY(o->host),o->shade); gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(o->host),o->shade,TRUE); gtk_widget_set_size_request(o->host,40,-1);
@@ -121,7 +164,9 @@ void insight_overview_read(GKeyFile *key) {
  value=g_key_file_get_integer(key,"workbench","overview-width",NULL); if(value>=40 && value<=400) width=value;
  if(g_key_file_has_key(key,"workbench","overview-selection",NULL)) show_selection=g_key_file_get_boolean(key,"workbench","overview-selection",NULL);
  if(g_key_file_has_key(key,"workbench","overview-viewport",NULL)) show_viewport=g_key_file_get_boolean(key,"workbench","overview-viewport",NULL);
+ const char *keys[]={"overview-bookmarks","overview-changes","overview-saved","overview-tips"}; gboolean *values[]={&show_bookmarks,&show_changes,&show_saved,&show_tips};
+ for(guint i=0;i<G_N_ELEMENTS(keys);i++) if(g_key_file_has_key(key,"workbench",keys[i],NULL)) *values[i]=g_key_file_get_boolean(key,"workbench",keys[i],NULL);
  for(GList *p=overviews;p;p=p->next) { Overview *o=p->data; gtk_widget_set_size_request(o->host,40,-1); o->last_scale=-1; }
  insight_overview_set_visible(enabled);
 }
-void insight_overview_write(GKeyFile *key) { g_key_file_set_boolean(key,"workbench","overview-visible",enabled); g_key_file_set_integer(key,"workbench","overview-scale",scale); g_key_file_set_integer(key,"workbench","overview-width",width); g_key_file_set_boolean(key,"workbench","overview-selection",show_selection); g_key_file_set_boolean(key,"workbench","overview-viewport",show_viewport); }
+void insight_overview_write(GKeyFile *key) { g_key_file_set_boolean(key,"workbench","overview-visible",enabled); g_key_file_set_integer(key,"workbench","overview-scale",scale); g_key_file_set_integer(key,"workbench","overview-width",width); g_key_file_set_boolean(key,"workbench","overview-selection",show_selection); g_key_file_set_boolean(key,"workbench","overview-viewport",show_viewport); g_key_file_set_boolean(key,"workbench","overview-bookmarks",show_bookmarks); g_key_file_set_boolean(key,"workbench","overview-changes",show_changes); g_key_file_set_boolean(key,"workbench","overview-saved",show_saved); g_key_file_set_boolean(key,"workbench","overview-tips",show_tips); }
