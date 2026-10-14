@@ -985,3 +985,7 @@ index_update теперь сортирует только партию ново�
 - Первые 5000 совпадений, по 5000 через Load more; запрос проверяет весь индекс, новая строка запроса сбрасывает порцию. Info/References работают с выбранным символом категории. RU/EN обновляют заголовки/счётчики и сохраняют строку; справка и уроки обновлены.
 - Проверка: native Meson сборка и 10 GUI-наборов проходят. Новый сценарий с 6000+ C++ символами, Python и собственным профилем проверяет классификацию, прямые члены класса, дозагрузку, фильтры/ошибку regex, clipboard, правый клик без навигации, Info/References, клавиатурное открытие, RU, восстановление/сброс колонок и независимые настройки.
 - Добавлена явная карта завершения полного переноса. Открытые обязательные пункты не скрываются за статусом прототипов.
+
+## Transitive indexed inheritance
+
+Relations now offers persisted indirect inheritance in Members/Bases/Derived, namespace-aware unambiguous resolution, cyclic/diamond traversal protection and depth 32. Language eligibility precedes edge resolution. Back preserves the option; status reports omitted ambiguity and truncated rows/depth. Core tests cover qualification, global bases, inheritance chains, cycles, pagination, ambiguity and eligibility; a native GUI test covers the three modes and persisted checkbox. Alias/overload/access-control semantics and expandable graph edges remain open.

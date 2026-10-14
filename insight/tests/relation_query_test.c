@@ -2,6 +2,8 @@
 #include "relation_query.h"
 #include <glib.h>
 #include <stdint.h>
+#include <string.h>
+static int exclude_middle(const InsightSymbol *symbol,void *data) { (void)data;return strcmp(symbol->name,"Middle")!=0; }
 int main(void) {
  InsightIndex *index=insight_index_new();
  InsightSymbol tags[]={
@@ -38,5 +40,43 @@ int main(void) {
  g_assert_cmpuint(insight_relation_query(index,"ns::Derived",INSIGHT_RELATION_BASES,1,out,1),==,2);
  g_assert_cmpuint(insight_relation_query(index,"NestedChild",INSIGHT_RELATION_BASES,0,out,8),==,1);g_assert_cmpstr(out[0]->name,==,"Nested");
  g_assert_cmpuint(insight_relation_query(index,"::ns::Base",INSIGHT_RELATION_DERIVED,0,out,8),==,1);
+ InsightSymbol chain[]={
+  {"Root",NULL,"n","c",1,"","",""},
+  {"Middle",NULL,"n","c",2,"","","Root"},
+  {"End",NULL,"n","c",3,"","","Middle"},
+  {"root_member",NULL,"n::Root","m",4,"","",""},
+  {"middle_member",NULL,"n::Middle","m",5,"","",""},
+  {"end_member",NULL,"n::End","m",6,"","",""},
+  {"Root",NULL,"other","c",7,"","",""},
+  {"LoopA",NULL,"n","c",8,"","","LoopB"},
+  {"LoopB",NULL,"n","c",9,"","","LoopA"},
+  {"Global",NULL,"","c",10,"","",""},
+  {"Global",NULL,"n","c",11,"","",""},
+  {"GlobalChild",NULL,"n","c",12,"","","::Global"}
+ };
+ g_assert_true(insight_index_update(index,"/src/chain.cpp",chain,G_N_ELEMENTS(chain)));
+ int limited=0,ambiguous=0;
+ g_assert_cmpuint(insight_relation_query_transitive(index,"n::End",INSIGHT_RELATION_BASES,32,NULL,NULL,0,out,8,&limited,&ambiguous),==,2);
+ g_assert_false(limited);g_assert_false(ambiguous);
+ g_assert_cmpuint(insight_relation_query_transitive(index,"n.End",INSIGHT_RELATION_MEMBERS,32,NULL,NULL,0,out,8,NULL,NULL),==,3);
+ g_assert_cmpuint(insight_relation_query_transitive(index,"n::Root",INSIGHT_RELATION_DERIVED,32,NULL,NULL,0,out,8,NULL,NULL),==,2);
+ g_assert_cmpuint(insight_relation_query_transitive(index,"n::End",INSIGHT_RELATION_BASES,1,NULL,NULL,0,out,8,&limited,NULL),==,1);g_assert_true(limited);
+ g_assert_cmpuint(insight_relation_query_transitive(index,"Root",INSIGHT_RELATION_BASES,32,NULL,NULL,0,out,8,NULL,&ambiguous),==,0);g_assert_true(ambiguous);
+ g_assert_cmpuint(insight_relation_query_transitive(index,"n::LoopA",INSIGHT_RELATION_BASES,32,NULL,NULL,0,out,8,&limited,NULL),==,1);g_assert_false(limited);
+ g_assert_cmpuint(insight_relation_query_transitive(index,"n::GlobalChild",INSIGHT_RELATION_BASES,32,NULL,NULL,0,out,8,NULL,NULL),==,1);g_assert_cmpstr(out[0]->scope,==,"");
+ g_assert_cmpuint(insight_relation_query_transitive(index,"n::End",INSIGHT_RELATION_MEMBERS,32,NULL,NULL,2,out,1,NULL,NULL),==,3);
+ g_assert_cmpuint(insight_relation_query_transitive(index,"n::End",INSIGHT_RELATION_BASES,32,exclude_middle,NULL,0,out,8,NULL,NULL),==,0);
+ InsightSymbol diamond[]={
+  {"A",NULL,"diamond","c",1,"","",""},
+  {"B",NULL,"diamond","c",2,"","","A"},
+  {"C",NULL,"diamond","c",3,"","","A"},
+  {"D",NULL,"diamond","c",4,"","","B, C"},
+  {"common",NULL,"diamond.A","m",5,"","",""}
+ };
+ g_assert_true(insight_index_update(index,"/src/diamond.cpp",diamond,G_N_ELEMENTS(diamond)));
+ g_assert_cmpuint(insight_relation_query_transitive(index,"diamond.D",INSIGHT_RELATION_BASES,32,NULL,NULL,0,out,8,NULL,NULL),==,3);
+ g_assert_cmpuint(insight_relation_query_transitive(index,"diamond.D",INSIGHT_RELATION_MEMBERS,32,NULL,NULL,0,out,8,NULL,NULL),==,1);g_assert_cmpstr(out[0]->name,==,"common");
+ g_assert_cmpuint(insight_relation_query_transitive(index,"diamond.A",INSIGHT_RELATION_DERIVED,32,NULL,NULL,0,out,8,NULL,NULL),==,3);
+ g_assert_cmpuint(insight_relation_query_transitive(index,"n::End",INSIGHT_RELATION_BASES,33,NULL,NULL,0,out,8,NULL,NULL),==,SIZE_MAX);
  insight_index_free(index);g_print("Relation query checks passed\n");return 0;
 }

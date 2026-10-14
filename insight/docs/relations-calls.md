@@ -12,7 +12,7 @@ Toolbar icons are original Cairo drawings with blue accents and theme-colored ou
 
 Result filtering matches symbol, file and source text using Unicode case folding. It does not rerun the project search. Column sorting remains available. Definitions and Call sites buttons query the selected result, disable editor tracking and clear the display filter. Definition queries show all indexed candidates instead of guessing an overload. Single click still previews, and double click opens the result location.
 
-The Back arrow restores the previous drill-down query, relation mode, display filter and buffer/code options. Up to 32 drill-down steps are kept for this editor session; editor tracking stays off while browsing this history.
+The Back arrow restores the previous drill-down query, relation mode, display filter and buffer/code/indirect-inheritance options. Up to 32 drill-down steps are kept for this editor session; editor tracking stays off while browsing this history.
 
 ## Graph view
 
@@ -25,3 +25,11 @@ This is an initial graph of search results, not a recursively expanded semantic 
 Copy image (or Ctrl+C with graph focus) copies the complete currently drawn graph to the clipboard. Save PNG… exports a snapshot taken before the file chooser opens, using the same renderer, scale, selection and model order. Unicode paths use GLib file I/O. Existing files require the usual overwrite confirmation. Images larger than 16384 pixels on either axis or 32 million pixels total are rejected before allocating a raster; reduce zoom or filter the results. Export includes the first 128 results shown by the graph, not the remaining table rows.
 
 Right-click a graph result node for Open in editor, Definitions, Call sites, References, Direct members, Base types or Derived types. The graph-focused shortcuts D/C/R query definitions/call sites/references for the selected node; Ctrl+C still copies the graph image. Menu or Shift+F10 opens the node menu. These actions use the existing drill-down history and turn editor tracking off. They replace the query with results for the selected node; they do not add recursive branches to the current drawing.
+
+## Indexed inheritance chains
+
+In Members, Base types and Derived types, enable **Include indirect inheritance (tags)** to traverse indexed inheritance chains. Members then includes direct members and members in reachable base scopes, retaining overloads and shadowed names. Turn it off for the existing direct query. The checkbox is saved and included in drill-down Back history.
+
+The traversal resolves C++ `::` and dot-scoped names, searches declaring namespaces from inner to outer, and respects an explicit global `::` base. It uses the active language profile before constructing links. Bare root names are accepted only when unique; duplicate indexed class declarations or ambiguous base names are omitted instead of guessed. Cycles and diamond inheritance do not duplicate results. Only indexed definitions are returned; unknown bases and aliases are not inferred.
+
+Depth is limited to 32 edges; the status reports a depth limit or ambiguity. The table shows at most 2000 eligible results and reports truncation. Filtering/sorting and the existing graph remain available; the graph still displays a single layer of result nodes rather than the inheritance edges. This implements tag-based transitivity, not compiler-level alias, access-control, overload or type inference.

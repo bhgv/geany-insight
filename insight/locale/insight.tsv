@@ -735,3 +735,4 @@ Filter files by path…	Фильтр файлов по пути…
 Use path fragments, glob, ?regex or ~fuzzy; empty groups are hidden	Фрагменты пути, glob, ?regex или ~нечёткий; пустые группы скрываются
 File / type	Файл / тип
 Symbol / category	Символ / категория
+Include indirect inheritance (tags)	Включать косвенное наследование (теги)

@@ -495,3 +495,6 @@ test('Insight ten Project Folders improvements GUI', project_folders_gui_test, t
 
 grouped_project_gui_test = executable('test_insight_grouped_project_gui', '../insight/tests/grouped_project_gui_test.c', dependencies: test_deps)
 test('Insight grouped File Types and Categories GUI', grouped_project_gui_test, timeout: 80)
+
+relation_transitive_gui_test = executable('test_insight_relation_transitive_gui', '../insight/tests/relation_transitive_gui_test.c', dependencies: test_deps)
+test('Insight transitive Relations GUI', relation_transitive_gui_test, timeout: 45)
