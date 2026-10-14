@@ -7,10 +7,10 @@
 
 | Область | Текущее состояние | Незакрытый объём |
 | --- | --- | --- |
-| File Symbols слева | Поиск, сортировка, выбор и Context | Проверка GUI и детали оформления |
+| File Symbols слева | Поиск, сортировка, общие цвета/значки, группировка и фильтр типов, счётчики, Context; проверен GUI Linux | Семантическая иерархия scope |
 | Project Files справа | Manifest, поиск, сортировка, Context; диалог добавления/удаления файлов и деревьев, Remove all, исключения, DnD, импорт/экспорт списка | Автоматическое слежение за Master File List и подробная GUI-проверка |
 | Project Folders | Дерево, раскрытие/сворачивание, навигация | Управление виртуальными группами |
-| Project Symbols | Теги Geany, поиск и сортировка | Семантическое разрешение типов и перегрузок |
+| Project Symbols | Теги Geany, поиск, сортировка, цвета/значки, группировка и фильтр типов, независимые настройки | Семантическое разрешение типов и перегрузок |
 | Context снизу | Цветной Scintilla, номера строк, центрирование, подчёркнутые ссылки с курсором-пальцем и обычным кликом, история, поиск | Подробная проверка GUI на целевых ОС |
 | Relation Window | Определения/объявления, прямые члены scope, прямые Base/Derived по тегам, лексические ссылки, Calls текущей функции и Call sites проекта, Follow symbol / enclosing function, граф одного уровня с масштабом и двумя ориентациями | Семантические вызовы/вызывающие функции, разрешение типов/aliases, раскрываемые деревья связей |
 | Overview Scroller | Цветная миниатюра файла, видимая область/выделение, прокрутка мышью и колесом, масштаб/ширина, сохранение параметров, отметки закладок и изменённых/сохранённых строк, переходы по блокам правок, текущая/все функции с фоновыми лексическими границами; проверен GUI Linux | Вложенные блоки, языки с границами по отступам и семантические диапазоны |
@@ -40,3 +40,8 @@ Documentation is bundled offline as Markdown/reStructuredText with a GTK viewer,
 ### Symbol type presentation and panel help (2026-10-14)
 
 File Symbols and Project Symbols share language-aware Ctags kind colors/icons and optional type groups. Grouping is incremental and preserves selection/collapsed groups. Project controls can scroll horizontally when the right pane is narrowed. Each panel has a small question icon opening its own offline RU/EN controls reference and tutorial; native notebook panels use the notebook corner. Diff/Merge is on the main toolbar and Tools menu.
+
+
+### Symbol type filters (2026-10-14)
+
+The funnel menu in both symbol panels selects visible categories independently. Show all / Hide all, per-language kind mapping, name-query intersection, grouped and flat views, visible/loaded counters and saved masks are covered by native GUI tests. Type filtering affects the loaded outline rather than index contents; existing name-query row limits remain in effect.

@@ -8,4 +8,8 @@ void insight_symbol_view_filetype(GtkTreeView *,GeanyFiletype *);
 gboolean insight_symbol_view_grouped(GtkTreeView *);
 void insight_symbol_view_set_grouped(GtkTreeView *,gboolean);
 void insight_symbol_views_locale_changed(void);
+GtkWidget *insight_symbol_view_types_control(GtkTreeView *);
+guint insight_symbol_view_types_mask(GtkTreeView *);
+void insight_symbol_view_set_types(GtkTreeView *,guint);
+void insight_symbol_view_loading(GtkTreeView *,gboolean);
 #endif

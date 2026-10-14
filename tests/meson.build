@@ -465,3 +465,6 @@ test('Insight code templates GUI', snippet_gui_test, timeout: 30)
 
 panels_gui_test = executable('test_insight_panels_gui', '../insight/tests/panels_gui_test.c', dependencies: test_deps)
 test('Insight panel resizing, symbol types and contextual help GUI', panels_gui_test, timeout: 40)
+
+symbol_types_gui_test = executable('test_insight_symbol_types_gui', '../insight/tests/symbol_types_gui_test.c', dependencies: test_deps)
+test('Insight symbol type filtering GUI', symbol_types_gui_test, timeout: 40)

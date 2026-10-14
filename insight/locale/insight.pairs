@@ -640,3 +640,13 @@ Namespace / module|||Пространство имён / модуль
 Namespaces / modules|||Пространства имён / модули
 Include|||Включение
 Includes|||Включения
+Functions / methods|||Функции / методы
+Types / structures|||Типы / структуры
+Enum constants|||Константы перечислений
+Members / fields|||Члены / поля
+Namespaces / includes|||Пространства имён / включения
+Visible symbol types — choose which categories to show|||Видимые типы символов — выберите категории для отображения
+Show all symbol types|||Показать все типы символов
+Hide all symbol types|||Скрыть все типы символов
+Symbols: %u / %u|||Символы: %u / %u
+Visible symbols / symbols matching the name filter; type filtering keeps the index unchanged|||Видимые символы / символы по фильтру имён; фильтр типов не меняет индекс

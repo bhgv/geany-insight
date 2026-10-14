@@ -851,7 +851,7 @@ static gboolean symbol_list_apply(gpointer data) {
   g_hash_table_iter_remove(&pending);
  }
  g_clear_pointer(&s->existing,g_hash_table_destroy);
- GtkWidget *view=symbol_list_view(store); if(view) gtk_widget_set_sensitive(view,TRUE);
+ GtkWidget *view=symbol_list_view(store); if(view) { gtk_widget_set_sensitive(view,TRUE); insight_symbol_view_loading(GTK_TREE_VIEW(view),FALSE); }
  s->apply=0; retire_index(s->index); s->index=NULL; g_clear_pointer(&s->rows,g_free); g_clear_pointer(&s->files,g_ptr_array_unref); return G_SOURCE_REMOVE;
 }
 static void symbol_list_job_free(gpointer data) { SymbolListJob *j=data;insight_language_filter_free(j->language); g_weak_ref_clear(&j->store); retire_index(j->index); g_free(j->query); g_free(j->path); g_free(j->rows); g_clear_pointer(&j->paths,g_ptr_array_unref); g_clear_pointer(&j->files,g_ptr_array_unref); g_clear_pointer(&j->tags,g_ptr_array_unref); g_free(j); }
@@ -884,14 +884,15 @@ static void symbol_list_job_done(GObject *source,GAsyncResult *result,gpointer d
   else { if(j->paths) s->files=g_ptr_array_new_with_free_func(file_list_row_free); ui_set_statusbar(TRUE,"Symbol snapshot unavailable or exceeds its limit"); }
   s->existing=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,symbol_iter_queue_free);
   s->collecting=TRUE; s->iter_valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(store),&s->iter);
-  GtkWidget *view=symbol_list_view(store); if(view) gtk_widget_set_sensitive(view,FALSE);
+  GtkWidget *view=symbol_list_view(store); if(view) { gtk_widget_set_sensitive(view,FALSE); insight_symbol_view_loading(GTK_TREE_VIEW(view),TRUE); }
   if(!s->apply) s->apply=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,symbol_list_apply,g_object_ref(store),g_object_unref);
  }
  g_object_unref(store);
 }
 static SymbolListJob *symbol_list_begin(GtkListStore *store,GtkWidget *entry,guint limit,gboolean files) {
- SymbolListState *s=symbol_list_state(store); symbol_list_stop(s); GtkWidget *view=symbol_list_view(store); if(view) gtk_widget_set_sensitive(view,TRUE);
+ SymbolListState *s=symbol_list_state(store); symbol_list_stop(s); GtkWidget *view=symbol_list_view(store); if(view) { gtk_widget_set_sensitive(view,TRUE); insight_symbol_view_loading(GTK_TREE_VIEW(view),FALSE); }
  InsightLookupFilter *filter=entry_filter(entry,files); if(!filter) {
+  if(view) { gtk_widget_set_sensitive(view,FALSE); insight_symbol_view_loading(GTK_TREE_VIEW(view),TRUE); }
   s->files=files ? g_ptr_array_new_with_free_func(file_list_row_free) : NULL;
   s->existing=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,symbol_iter_queue_free); s->collecting=TRUE;
   s->iter_valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(store),&s->iter);
@@ -900,6 +901,7 @@ static SymbolListJob *symbol_list_begin(GtkListStore *store,GtkWidget *entry,gui
  SymbolListJob *j=g_new0(SymbolListJob,1); g_weak_ref_init(&j->store,store); j->query=g_strdup(gtk_entry_get_text(GTK_ENTRY(entry))); j->limit=limit; j->generation=s->generation; j->epoch=workbench_epoch;GeanyDocument *active=document_get_current();if(active && (store==wb.symbols || store==wb.file_store)) j->language=insight_language_filter_new(active->file_name,active->file_type); return j;
 }
 static void symbol_list_launch(GtkListStore *store,SymbolListJob *j) {
+ GtkWidget *view=symbol_list_view(store); if(view) { gtk_widget_set_sensitive(view,FALSE); insight_symbol_view_loading(GTK_TREE_VIEW(view),TRUE); }
  SymbolListState *s=symbol_list_state(store); s->cancel=g_cancellable_new(); GTask *task=g_task_new(NULL,s->cancel,symbol_list_job_done,NULL); g_task_set_task_data(task,j,symbol_list_job_free); g_task_run_in_thread(task,symbol_list_job_run); g_object_unref(task);
 }
 static void fill_symbol_list(GtkListStore *store,GtkWidget *entry,const char *path,guint limit) {
@@ -1441,6 +1443,7 @@ static void create_browser(void) {
  gtk_box_pack_start(GTK_BOX(wb.browser),wb.symbol_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(wb.browser),scroll,TRUE,TRUE,0);
  gtk_box_pack_start(GTK_BOX(wb.browser),sort_selector(wb.symbols),FALSE,FALSE,0);
  GtkWidget *group=insight_symbol_view_attach(GTK_TREE_VIEW(wb.symbol_view),wb.symbols,NULL); gtk_widget_set_name(group,"insight-project-group-types"); gtk_box_pack_start(GTK_BOX(wb.browser),group,FALSE,FALSE,0);
+ GtkWidget *types=insight_symbol_view_types_control(GTK_TREE_VIEW(wb.symbol_view)); gtk_widget_set_name(types,"insight-project-type-filters"); gtk_box_pack_start(GTK_BOX(wb.browser),types,FALSE,FALSE,0);
  GtkWidget *info=gtk_button_new_with_label("Symbol Info…");g_signal_connect(info,"clicked",G_CALLBACK(browser_symbol_info),wb.symbol_view);gtk_box_pack_start(GTK_BOX(wb.browser),info,FALSE,FALSE,0);
  gtk_notebook_append_page(GTK_NOTEBOOK(wb.project_notebook),wb.browser,gtk_label_new("Project Symbols"));
  g_signal_connect(wb.symbol_entry,"changed",G_CALLBACK(browser_filter),NULL);
@@ -1482,6 +1485,7 @@ static void create_local_browser(void) {
  gtk_box_pack_start(GTK_BOX(box),wb.local_label,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.local_entry,FALSE,FALSE,0);
  gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0); gtk_box_pack_start(GTK_BOX(box),sort_selector(wb.local_symbols),FALSE,FALSE,0);
  GtkWidget *group=insight_symbol_view_attach(GTK_TREE_VIEW(wb.local_view),wb.local_symbols,NULL); gtk_widget_set_name(group,"insight-local-group-types"); gtk_box_pack_start(GTK_BOX(box),group,FALSE,FALSE,0);
+ GtkWidget *types=insight_symbol_view_types_control(GTK_TREE_VIEW(wb.local_view)); gtk_widget_set_name(types,"insight-local-type-filters"); gtk_box_pack_start(GTK_BOX(box),types,FALSE,FALSE,0);
  GtkWidget *info=gtk_button_new_with_label("Symbol Info…");g_signal_connect(info,"clicked",G_CALLBACK(browser_symbol_info),wb.local_view);gtk_box_pack_start(GTK_BOX(box),info,FALSE,FALSE,0);
  gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),box,gtk_label_new("File Symbols"));
  gtk_notebook_set_show_tabs(GTK_NOTEBOOK(main_widgets.sidebar_notebook),TRUE);
@@ -2946,6 +2950,7 @@ static void save_workbench_settings(void) {
  g_key_file_set_boolean(settings,"workbench","follow",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow)));
  g_key_file_set_boolean(settings,"workbench","visible",wb.context_visible);
  g_key_file_set_boolean(settings,"workbench","file-symbols-grouped",insight_symbol_view_grouped(GTK_TREE_VIEW(wb.local_view))); g_key_file_set_boolean(settings,"workbench","project-symbols-grouped",insight_symbol_view_grouped(GTK_TREE_VIEW(wb.symbol_view)));
+ g_key_file_set_integer(settings,"workbench","file-symbol-types",insight_symbol_view_types_mask(GTK_TREE_VIEW(wb.local_view))); g_key_file_set_integer(settings,"workbench","project-symbol-types",insight_symbol_view_types_mask(GTK_TREE_VIEW(wb.symbol_view)));
  g_key_file_set_integer(settings,"workbench","right-split",gtk_paned_get_position(GTK_PANED(wb.right_pane)));
  g_key_file_set_integer(settings,"workbench","project-tab",project_tab_identity());
  g_key_file_set_integer(settings,"workbench","project-search-flags",text_search_flags(wb.project_case,wb.project_word,wb.project_regex));
@@ -2974,6 +2979,8 @@ static void restore_workbench_settings(void) {
  GKeyFile *settings=g_key_file_new();
  if(strlen(text)<=32768 && g_key_file_load_from_data(settings,text,-1,G_KEY_FILE_NONE,NULL) && g_key_file_get_integer(settings,"workbench","version",NULL)==1) {
   insight_overview_read(settings);
+  if(g_key_file_has_key(settings,"workbench","file-symbol-types",NULL)) insight_symbol_view_set_types(GTK_TREE_VIEW(wb.local_view),(guint)g_key_file_get_integer(settings,"workbench","file-symbol-types",NULL));
+  if(g_key_file_has_key(settings,"workbench","project-symbol-types",NULL)) insight_symbol_view_set_types(GTK_TREE_VIEW(wb.symbol_view),(guint)g_key_file_get_integer(settings,"workbench","project-symbol-types",NULL));
   insight_symbol_view_set_grouped(GTK_TREE_VIEW(wb.local_view),g_key_file_get_boolean(settings,"workbench","file-symbols-grouped",NULL)); insight_symbol_view_set_grouped(GTK_TREE_VIEW(wb.symbol_view),g_key_file_get_boolean(settings,"workbench","project-symbols-grouped",NULL));
   for(guint i=0;i<4;i++) { gchar group[16]; g_snprintf(group,sizeof group,"layout-%c",'A'+i); insight_layout_read(settings,group,&wb.layouts[i]); }
   for(guint i=0;i<10;i++) { PanelHost *host=&wb.hosts[i]; gchar group[32]; g_snprintf(group,sizeof group,"panel-%u",i); GError *error=NULL; gint version=g_key_file_get_integer(settings,group,"version",&error);
