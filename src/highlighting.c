@@ -670,10 +670,10 @@ static void styleset_common(ScintillaObject *sci, guint ft_id)
 	SSM(sci, SCI_MARKERSETALPHA, 0, common_style_set.styling[GCS_MARKER_TRANSLUCENCY].foreground);
 
 	/* 1 -> user marker */
-	SSM(sci, SCI_MARKERDEFINE, 1, SC_MARK_PLUS);
-	SSM(sci, SCI_MARKERSETFORE, 1, invert(common_style_set.styling[GCS_MARKER_MARK].foreground));
-	SSM(sci, SCI_MARKERSETBACK, 1, invert(common_style_set.styling[GCS_MARKER_MARK].background));
-	SSM(sci, SCI_MARKERSETALPHA, 1, common_style_set.styling[GCS_MARKER_TRANSLUCENCY].background);
+	SSM(sci, SCI_MARKERDEFINE, 1, SC_MARK_CIRCLE);
+	SSM(sci, SCI_MARKERSETFORE, 1, 0xa05e16);
+	SSM(sci, SCI_MARKERSETBACK, 1, 0xd08030);
+	SSM(sci, SCI_MARKERSETALPHA, 1, 255);
 
 	/* 2 -> folding marker, other folding settings */
 	SSM(sci, SCI_SETMARGINTYPEN, 2, SC_MARGIN_SYMBOL);

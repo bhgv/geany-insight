@@ -1,3 +1,5 @@
+Open the internal comparison window from **Tools → Diff / Merge…**. The Context panel also has a Diff / Merge button.
+
 # Internal Diff / Merge (initial version)
 
 Open **Diff / Merge…** in the Context header. Choose Left and Right files and press

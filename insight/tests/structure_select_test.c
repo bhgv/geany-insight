@@ -45,6 +45,23 @@ int main(void) {
    assert(insight_select_match(text,2*depth+1,2*depth-i,&a,&z)==1 && a==i && z==2*depth+1-i);
   }
  }
+ const char *function="int f(int x) { if(x) { return x; } return 0; }\nint g();";
+ assert(insight_function_extent(function,strlen(function),0,&z)==1 && function[z-1]=='}' && function[z]=='\n');
+ assert(insight_function_extent("int f();",8,0,&z)==0);
+ const char *constructor="C::C() : a{1}, b(2) { body(); }";
+ assert(insight_function_extent(constructor,strlen(constructor),0,&z)==1 && z==strlen(constructor));
+ const char *requires="void f() requires requires { check(); } { body(); }";
+ assert(insight_function_extent(requires,strlen(requires),0,&z)==1 && z==strlen(requires));
+ const char *expression="int f() => new X { 1 };";
+ assert(insight_function_extent(expression,strlen(expression),0,&z)==0);
+ assert(insight_function_extent("int f() {",9,0,&z)==0);
+ const size_t positions[]={50,10,50,30};
+ assert(insight_neighbor_position(positions,4,20,1,&z)==1 && z==30);
+ assert(insight_neighbor_position(positions,4,20,-1,&z)==1 && z==10);
+ assert(insight_neighbor_position(positions,4,50,-1,&z)==1 && z==30);
+ assert(insight_neighbor_position(positions,4,50,1,&z)==0);
+ assert(insight_neighbor_position(NULL,0,0,1,&z)==0);
+ assert(insight_neighbor_position(positions,4,0,0,&z)==-1);
  puts("Structural selection: nested expansion, matching, UTF-8 offsets and malformed input passed.");
  return 0;
 }

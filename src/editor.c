@@ -308,6 +308,16 @@ static gboolean on_editor_button_press_event(GtkWidget *widget, GdkEventButton *
 
 	if (event->button == 1)
 	{
+        if (event->type == GDK_2BUTTON_PRESS) {
+            gint left = (gint) SSM(editor->sci, SCI_GETMARGINWIDTHN, 0, 0);
+            gint numbers = (gint) SSM(editor->sci, SCI_GETMARGINWIDTHN, 1, 0);
+            if (numbers > 0 && event->x >= left && event->x < left + numbers) {
+                gint position = (gint) SSM(editor->sci, SCI_POSITIONFROMPOINT, 0, (sptr_t) event->y);
+                if (position >= 0) sci_toggle_marker_at_line(editor->sci, sci_get_line_from_position(editor->sci, position), 1);
+                return TRUE;
+            }
+        }
+
 		guint state = keybindings_get_modifiers(event->state);
 
 		if (event->type == GDK_BUTTON_PRESS && editor_prefs.disable_dnd)
@@ -494,7 +504,7 @@ void editor_toggle_fold(GeanyEditor *editor, gint line, gint modifiers)
 static void on_margin_click(GeanyEditor *editor, SCNotification *nt)
 {
 	/* left click to marker margin marks the line */
-	if (nt->margin == 1)
+	if (nt->margin == 0)
 	{
 		gint line = sci_get_line_from_position(editor->sci, nt->position);
 

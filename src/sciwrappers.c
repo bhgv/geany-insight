@@ -39,6 +39,7 @@
 
 #include "editor.h"
 #include "utils.h"
+#include "insight-workbench.h"
 
 #include <string.h>
 
@@ -99,6 +100,8 @@ sptr_t sci_send_message_internal (const gchar *file, guint line, ScintillaObject
 /* line numbers visibility */
 void sci_set_line_numbers(ScintillaObject *sci, gboolean set)
 {
+	SSM(sci, SCI_SETMARGINTYPEN, 1, SC_MARGIN_NUMBER);
+	SSM(sci, SCI_SETMARGINMASKN, 1, 0);
 	if (set)
 	{
 		gchar tmp_str[15];
@@ -111,12 +114,12 @@ void sci_set_line_numbers(ScintillaObject *sci, gboolean set)
 
 		g_snprintf(tmp_str, 15, "_%d", len);
 		width = sci_text_width(sci, STYLE_LINENUMBER, tmp_str);
-		SSM(sci, SCI_SETMARGINWIDTHN, 0, width);
-		SSM(sci, SCI_SETMARGINSENSITIVEN, 0, FALSE); /* use default behaviour */
+		SSM(sci, SCI_SETMARGINWIDTHN, 1, width);
+		SSM(sci, SCI_SETMARGINSENSITIVEN, 1, FALSE); /* use default behaviour */
 	}
 	else
 	{
-		SSM(sci, SCI_SETMARGINWIDTHN, 0, 0);
+		SSM(sci, SCI_SETMARGINWIDTHN, 1, 0);
 	}
 }
 
@@ -207,17 +210,19 @@ static gint margin_width_from_line_height(ScintillaObject *sci, gdouble ratio, g
 /* symbol margin visibility */
 void sci_set_symbol_margin(ScintillaObject *sci, gboolean set)
 {
+	SSM(sci, SCI_SETMARGINTYPEN, 0, SC_MARGIN_SYMBOL);
+	SSM(sci, SCI_SETMARGINMASKN, 0, ~SC_MASK_FOLDERS);
 	if (set)
 	{
 		const gint width = margin_width_from_line_height(sci, 0.88, 16);
 
-		SSM(sci, SCI_SETMARGINWIDTHN, 1, width);
-		SSM(sci, SCI_SETMARGINSENSITIVEN, 1, TRUE);
+		SSM(sci, SCI_SETMARGINWIDTHN, 0, width);
+		SSM(sci, SCI_SETMARGINSENSITIVEN, 0, TRUE);
 	}
 	else
 	{
-		SSM(sci, SCI_SETMARGINWIDTHN, 1, 0);
-		SSM(sci, SCI_SETMARGINSENSITIVEN, 1, FALSE);
+		SSM(sci, SCI_SETMARGINWIDTHN, 0, 0);
+		SSM(sci, SCI_SETMARGINSENSITIVEN, 0, FALSE);
 	}
 }
 
@@ -455,6 +460,7 @@ void sci_toggle_marker_at_line(ScintillaObject *sci, gint line, gint marker)
 		sci_set_marker_at_line(sci, line, marker);
 	else
 		sci_delete_marker_at_line(sci, line, marker);
+	if (marker == 1) insight_workbench_bookmarks_changed();
 }
 
 

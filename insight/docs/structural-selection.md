@@ -29,3 +29,5 @@ JavaScript/TypeScript, Python, Lua и Sh; файлы UTF-8 до 2 MiB. Для Py
 
 Проверка ядра: `python3 insight/tests/run.py`. Тест также включён в CMake,
 Meson и ручную Windows-сборку. Автоматический запуск Actions остаётся выключенным.
+
+Select Function (Ctrl+Alt+F) selects from the parser definition line through the closing body brace in supported brace languages. It does not include earlier return-type or annotation lines. Function Up/Down (Ctrl+Alt+PageUp/PageDown) navigate parsed definitions.
