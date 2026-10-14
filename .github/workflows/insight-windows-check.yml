@@ -1,9 +1,5 @@
 name: Insight Windows x64 check
 on:
-  push:
-    branches: [main, insight/internal-diff-merge]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
