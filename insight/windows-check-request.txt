@@ -1,1 +1,3 @@
-Requested Windows x64 check of Context, bookmarks, Tools diff and function navigation.
+Windows x64 test requested: language profiles, Russian/English interface and help
+Feature commit: cfbd66dbefc105472a81ba33048e2fd1dd109830
+2026-10-14T13:07:23.952Z
