@@ -53,6 +53,8 @@ jobs:
           if [ -d _gtk/etc ]; then rsync -a _gtk/etc/ portable/etc/; fi
       - name: Prepare portable check package
         run: |
+          mkdir -p portable/examples
+          cp -r insight/examples/diff-merge portable/examples/
           cp COPYING portable/
           cp insight/docs/internal-diff.md portable/INTERNAL-DIFF.md
           git rev-parse HEAD > portable/REVISION.txt

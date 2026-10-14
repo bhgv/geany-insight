@@ -9,7 +9,7 @@ typedef struct {
  GtkListStore *list; GtkWidget *hunk_view; GtkTextBuffer *output; GtkTreeSelection *selection;
  gchar *sources[2],*loaded_paths[2],*saved;
  InsightDiff diff; GtkTextMark **marks;
- GPtrArray *history; guint position; gboolean changing;
+ GPtrArray *history; guint position; gboolean changing,user_action,pending;
 } Merge;
 static GtkTextBuffer *result(Merge *m) { return m->output; }
 static gchar *contents(GtkTextBuffer *b) {
@@ -37,7 +37,16 @@ static void record(Merge *m) {
  }
  state(m);
 }
-static void changed(GtkTextBuffer *buffer,gpointer data) { (void)buffer;Merge *m=data;if(!m->changing) record(m); }
+static void changed(GtkTextBuffer *buffer,gpointer data) {
+ (void)buffer;Merge *m=data;
+ if(m->changing) return;
+ if(m->user_action) m->pending=TRUE;else record(m);
+}
+static void action_begin(GtkTextBuffer *buffer,gpointer data) { (void)buffer;((Merge*)data)->user_action=TRUE; }
+static void action_end(GtkTextBuffer *buffer,gpointer data) {
+ (void)buffer;Merge *m=data;m->user_action=FALSE;
+ if(m->pending) { m->pending=FALSE;if(!m->changing) record(m); }
+}
 static void restore(Merge *m,guint position) {
  Snapshot *s=g_ptr_array_index(m->history,position);m->changing=TRUE;
  gtk_text_buffer_set_text(result(m),s->text,-1);
@@ -106,6 +115,9 @@ static void take(GtkWidget *w,gpointer data) {
  int side=w==m->take[1];InsightDiffHunk *h=&m->diff.hunks[id];
  size_t begin=side?h->b_begin:h->a_begin,end=side?h->b_end:h->a_end;
  GtkTextIter a,z;gtk_text_buffer_get_iter_at_mark(result(m),&a,m->marks[2*id]);gtk_text_buffer_get_iter_at_mark(result(m),&z,m->marks[2*id+1]);
+ gchar *current=gtk_text_buffer_get_text(result(m),&a,&z,TRUE);
+ gboolean same=strlen(current)==end-begin && !memcmp(current,m->sources[side]+begin,end-begin);g_free(current);
+ if(same) return;
  m->changing=TRUE;gtk_text_buffer_begin_user_action(result(m));
  gtk_text_buffer_delete(result(m),&a,&z);gtk_text_buffer_insert(result(m),&a,m->sources[side]+begin,(gint)(end-begin));
  gtk_text_buffer_end_user_action(result(m));m->changing=FALSE;record(m);selection(NULL,m);
@@ -216,6 +228,8 @@ void insight_diff_show(GtkWidget *parent) {
  }
  m->output=g_object_ref(gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[2])));
  m->status=gtk_label_new("Choose two UTF-8 files and press Compare.");gtk_label_set_xalign(GTK_LABEL(m->status),0);gtk_label_set_line_wrap(GTK_LABEL(m->status),TRUE);gtk_box_pack_start(GTK_BOX(box),m->status,FALSE,FALSE,0);
+ g_signal_connect(result(m),"begin-user-action",G_CALLBACK(action_begin),m);
+ g_signal_connect(result(m),"end-user-action",G_CALLBACK(action_end),m);
  g_signal_connect(result(m),"changed",G_CALLBACK(changed),m);g_signal_connect(m->window,"key-press-event",G_CALLBACK(key),m);
  g_signal_connect(m->window,"delete-event",G_CALLBACK(closing),m);g_signal_connect(m->window,"destroy",G_CALLBACK(destroyed),m);
  record(m);selection(NULL,m);gtk_widget_show_all(m->window);
