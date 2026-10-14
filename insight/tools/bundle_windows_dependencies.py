@@ -15,7 +15,7 @@ package = args.package.resolve()
 sdk = args.sdk.resolve()
 sdk_bin = {p.name.lower(): p for p in (sdk / 'bin').glob('*.dll')}
 system = Path(os.environ['SystemRoot']) / 'System32'
-system_dlls = {p.name.lower() for p in system.glob('*.dll')}
+system_dlls = {p.name.lower() for p in system.iterdir() if p.is_file()}  # Includes WINSPOOL.DRV.
 
 # Keep the GTK bundle layout/data, but use the binaries that we linked against.
 for target in package.rglob('*'):
