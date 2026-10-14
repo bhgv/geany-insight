@@ -663,3 +663,7 @@ Load more symbols|||Загрузить ещё символы
 Load the next %u symbols|||Загрузить следующие %u символов
 Symbols: %u / %u+|||Символы: %u / %u+
 Visible / loaded symbols; + means more query matches remain|||Видимые / загруженные символы; + означает дополнительные совпадения по запросу
+
+Sort: scope|||Сортировка: область видимости
+Sort: file path|||Сортировка: путь файла
+Descending order|||По убыванию

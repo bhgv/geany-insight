@@ -474,3 +474,6 @@ test('Insight symbol context menus and keyboard GUI', symbol_menu_gui_test, time
 
 symbol_paging_gui_test = executable('test_insight_symbol_paging_gui', '../insight/tests/symbol_paging_gui_test.c', dependencies: test_deps)
 test('Insight symbol outline pagination GUI', symbol_paging_gui_test, timeout: 50)
+
+symbol_sort_gui_test = executable('test_insight_symbol_sort_gui', '../insight/tests/symbol_sort_gui_test.c', dependencies: test_deps)
+test('Insight symbol sorting GUI', symbol_sort_gui_test, timeout: 40)

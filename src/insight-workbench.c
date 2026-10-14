@@ -1551,14 +1551,44 @@ static void local_filter(GtkEditable *entry,gpointer data) {
  if(doc && doc->tm_file && doc->tm_file->tags_array) for(guint n=0;n<doc->tm_file->tags_array->len;n++) { TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,n); if(tag) g_ptr_array_add(j->tags,tm_tag_ref(tag)); }
  symbol_list_launch(wb.local_symbols,j);
 }
-static void symbol_sort(GtkComboBox *combo,gpointer data) {
- GtkTreeSortable *model=GTK_TREE_SORTABLE(data); gint mode=gtk_combo_box_get_active(combo);
- gtk_tree_sortable_set_sort_column_id(model,mode==1 ? SYMBOL_LINE : (mode==2 ? SYMBOL_KIND : SYMBOL_NAME),GTK_SORT_ASCENDING);
+typedef struct { GtkTreeSortable *model; GtkWidget *field,*direction; gboolean syncing; } SymbolSort;
+static const gint symbol_sort_fields[]={SYMBOL_NAME,SYMBOL_LINE,SYMBOL_KIND,SYMBOL_SCOPE,SYMBOL_PATH};
+static void symbol_sort_sync(GtkTreeSortable *model,gpointer data) {
+ SymbolSort *s=g_object_get_data(G_OBJECT(data),"insight-symbol-sort-state");gint field=-1;GtkSortType direction;
+ if(!s || !gtk_tree_sortable_get_sort_column_id(model,&field,&direction)) return;
+ s->syncing=TRUE;
+ for(guint i=0;i<G_N_ELEMENTS(symbol_sort_fields);i++) if(symbol_sort_fields[i]==field) gtk_combo_box_set_active(GTK_COMBO_BOX(s->field),i);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(s->direction),direction==GTK_SORT_DESCENDING);
+ gtk_button_set_image(GTK_BUTTON(s->direction),gtk_image_new_from_icon_name(direction==GTK_SORT_DESCENDING ? "view-sort-descending" : "view-sort-ascending",GTK_ICON_SIZE_MENU));
+ s->syncing=FALSE;
+}
+static void symbol_sort_changed(GtkWidget *widget,gpointer data) {
+ (void)widget;SymbolSort *s=data;if(s->syncing) return;gint mode=gtk_combo_box_get_active(GTK_COMBO_BOX(s->field));
+ if(mode>=0 && mode<(gint)G_N_ELEMENTS(symbol_sort_fields)) gtk_tree_sortable_set_sort_column_id(s->model,symbol_sort_fields[mode],gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(s->direction)) ? GTK_SORT_DESCENDING : GTK_SORT_ASCENDING);
 }
 static GtkWidget *sort_selector(GtkListStore *model) {
- GtkWidget *sort=gtk_combo_box_text_new(); const char *labels[]={"Sort: name","Sort: source line","Sort: symbol type"};
- for(guint i=0;i<3;i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(sort),labels[i]);
- g_signal_connect(sort,"changed",G_CALLBACK(symbol_sort),model); gtk_combo_box_set_active(GTK_COMBO_BOX(sort),0); return sort;
+ GtkWidget *box=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);SymbolSort *s=g_new0(SymbolSort,1);s->model=GTK_TREE_SORTABLE(model);s->field=gtk_combo_box_text_new();s->direction=gtk_toggle_button_new();
+ gtk_widget_set_name(box,model==wb.local_symbols ? "insight-local-sort" : "insight-project-sort");
+ gtk_widget_set_name(s->field,"insight-symbol-sort-field");gtk_widget_set_name(s->direction,"insight-symbol-sort-descending");
+ const char *labels[]={"Sort: name","Sort: source line","Sort: symbol type","Sort: scope","Sort: file path"};
+ for(guint i=0;i<G_N_ELEMENTS(labels);i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(s->field),labels[i]);
+ gtk_widget_set_tooltip_text(s->direction,"Descending order");gtk_button_set_relief(GTK_BUTTON(s->direction),GTK_RELIEF_NONE);
+ gtk_box_pack_start(GTK_BOX(box),s->field,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(box),s->direction,FALSE,FALSE,0);
+ g_object_set_data_full(G_OBJECT(box),"insight-symbol-sort-state",s,g_free);
+ g_signal_connect(s->field,"changed",G_CALLBACK(symbol_sort_changed),s);g_signal_connect(s->direction,"toggled",G_CALLBACK(symbol_sort_changed),s);
+ g_signal_connect_object(model,"sort-column-changed",G_CALLBACK(symbol_sort_sync),box,0);
+ gtk_combo_box_set_active(GTK_COMBO_BOX(s->field),0);return box;
+}
+static void symbol_sort_write(GKeyFile *settings,GtkListStore *model,const gchar *prefix) {
+ gint column=-1;GtkSortType direction;if(!gtk_tree_sortable_get_sort_column_id(GTK_TREE_SORTABLE(model),&column,&direction)) return;
+ gchar *key=g_strconcat(prefix,"-sort-column",NULL);g_key_file_set_integer(settings,"workbench",key,column);g_free(key);
+ key=g_strconcat(prefix,"-sort-descending",NULL);g_key_file_set_boolean(settings,"workbench",key,direction==GTK_SORT_DESCENDING);g_free(key);
+}
+static void symbol_sort_read(GKeyFile *settings,GtkListStore *model,const gchar *prefix) {
+ gchar *key=g_strconcat(prefix,"-sort-column",NULL);GError *error=NULL;gint column=g_key_file_get_integer(settings,"workbench",key,&error);g_free(key);
+ if(error || column<0 || column>=SYMBOL_COLUMNS) { g_clear_error(&error);return; }
+ key=g_strconcat(prefix,"-sort-descending",NULL);gboolean descending=g_key_file_get_boolean(settings,"workbench",key,NULL);g_free(key);
+ gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(model),column,descending ? GTK_SORT_DESCENDING : GTK_SORT_ASCENDING);
 }
 static void create_local_browser(void) {
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,3); wb.local_label=gtk_label_new("Current file symbols");
@@ -3023,6 +3053,7 @@ static void save_workbench_settings(void) {
  if(!wb.prefs_path || !wb.pane) return;
  GKeyFile *settings=g_key_file_new();
  insight_overview_write(settings);
+ symbol_sort_write(settings,wb.local_symbols,"file-symbols");symbol_sort_write(settings,wb.symbols,"project-symbols");
  for(guint i=0;i<4;i++) { gchar group[16]; g_snprintf(group,sizeof group,"layout-%c",'A'+i); insight_layout_write(settings,group,&wb.layouts[i]); }
  g_key_file_set_integer(settings,"workbench","version",1);
  for(guint i=0;i<wb.host_count;i++) { PanelHost *host=&wb.hosts[i]; gchar group[32]; g_snprintf(group,sizeof group,"panel-%u",i); if(host->window) { gtk_window_get_position(GTK_WINDOW(host->window),&host->x,&host->y); gtk_window_get_size(GTK_WINDOW(host->window),&host->width,&host->height); host->visible=gtk_widget_get_visible(host->window); }
@@ -3066,6 +3097,7 @@ static void restore_workbench_settings(void) {
  GKeyFile *settings=g_key_file_new();
  if(strlen(text)<=32768 && g_key_file_load_from_data(settings,text,-1,G_KEY_FILE_NONE,NULL) && g_key_file_get_integer(settings,"workbench","version",NULL)==1) {
   insight_overview_read(settings);
+  symbol_sort_read(settings,wb.local_symbols,"file-symbols");symbol_sort_read(settings,wb.symbols,"project-symbols");
   if(g_key_file_has_key(settings,"workbench","file-symbol-types",NULL)) insight_symbol_view_set_types(GTK_TREE_VIEW(wb.local_view),(guint)g_key_file_get_integer(settings,"workbench","file-symbol-types",NULL));
   if(g_key_file_has_key(settings,"workbench","project-symbol-types",NULL)) insight_symbol_view_set_types(GTK_TREE_VIEW(wb.symbol_view),(guint)g_key_file_get_integer(settings,"workbench","project-symbol-types",NULL));
   insight_symbol_view_set_grouped(GTK_TREE_VIEW(wb.local_view),g_key_file_get_boolean(settings,"workbench","file-symbols-grouped",NULL)); insight_symbol_view_set_grouped(GTK_TREE_VIEW(wb.symbol_view),g_key_file_get_boolean(settings,"workbench","project-symbols-grouped",NULL));

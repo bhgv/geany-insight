@@ -42,3 +42,10 @@ A + after the total counter means additional name-matching symbols remain. The +
 The type filter applies to loaded rows. If a category is still empty, load another portion or refine the name: name search examines the entire available index. A new query resets the portion size; changing the file resets its outline, and changing the project or language profile resets the project outline. Loading runs in the background and leaves the editor in place. The index ceiling remains 250000 symbols.
 
 Tutorial: open a large file, retain only functions, find the counter ending in + and load another portion. A function beyond the initial portion can then appear. To find a known name quickly, enter it in the filter instead of repeatedly loading portions.
+
+
+## Sorting the outline
+
+The sort selector offers name, source line, symbol type, scope and file path. The adjacent arrow button toggles descending order; its label appears in a tooltip. Clicking a column header also changes the order and updates these controls, including grouped and filtered views. File and project outlines save their sort field and direction independently in workbench.conf.
+
+Tutorial: choose source line for a file outline, then toggle the arrow to inspect declarations from the end of the file. Choose scope or file path in Project Symbols to gather related entries. Sorting leaves the editor and Context in place.
