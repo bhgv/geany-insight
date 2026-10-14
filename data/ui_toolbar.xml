@@ -34,8 +34,6 @@ at https://www.geany.org/manual/current/index.html#customizing-the-toolbar.
 		<separator/>
 		<toolitem action='Color' />
 		<separator/>
-		<toolitem action='SearchEntry' />
-		<toolitem action='Search' />
 		<separator/>
 		<toolitem action='GotoEntry' />
 		<toolitem action='Goto' />

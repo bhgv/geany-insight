@@ -60,11 +60,14 @@ jobs:
         run: |
           mkdir -p portable/examples
           cp -r insight/examples/diff-merge portable/examples/
+          cp insight/examples/*.lua portable/examples/
           cp insight/examples/structural-selection.c portable/examples/
           cp insight/docs/structural-selection.md portable/STRUCTURAL-SELECTION.md
           python insight/tools/bundle_windows_dependencies.py --package portable --sdk "$(cygpath -w /ucrt64)"
           cp COPYING portable/
           cp insight/docs/internal-diff.md portable/INTERNAL-DIFF.md
+          mkdir -p portable/data/insight/docs
+          cp insight/docs/*.md insight/docs/*.rst portable/data/insight/docs/
           git rev-parse HEAD > portable/REVISION.txt
           python - <<'PY'
           from pathlib import Path

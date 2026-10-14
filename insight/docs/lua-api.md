@@ -6,8 +6,8 @@ has возвращает false для операций над документо
 
 ## Команды и горячие клавиши
 
-Одноразовые скрипты запускаются через Tools → Insight: Run Lua script… в новом
-Lua-состоянии. Расширение загружается через Insight: Lua commands → Load extension…:
+Одноразовые скрипты запускаются через Scripts → Run script… в новом
+Lua-состоянии. Расширение загружается через Scripts → Load extension…:
 
 ```lua
 commands.register("selection.wrap", "Wrap selection", function()
@@ -34,7 +34,7 @@ ID: 1–63 ASCII-символа, сначала латинская буква, �
 файл, Unload extension отключает автозагрузку. Выгрузка плагина не стирает выбор.
 Во время исполнения команды заменить/перезагрузить расширение нельзя.
 
-Настройки: <configdir>/plugins/insight/extension.conf, версия формата 1, путь в base64
+Настройки встроенного host: <configdir>/insight/lua-extension.conf; для отдельного плагина — <configdir>/plugins/insight/extension.conf. Версия формата 1, путь в base64
 (кодировка, не шифрование). До 32 KiB настроек, 16 KiB пути, 256 KiB Lua-файла.
 Принимаются обычные локальные файлы. Автозагрузка только регистрирует функции:
 editor/project недоступны при загрузке. Несколько модулей пока не поддерживаются.

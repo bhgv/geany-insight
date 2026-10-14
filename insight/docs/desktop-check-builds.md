@@ -1,82 +1,54 @@
-# Проверочные сборки x64
+# Проверочные сборки Geany Insight
 
-Windows: распаковать ZIP в доступный для записи каталог; запустить
-`Start-Insight.cmd`. Комплект включает официальный Geany 2.1 x64 и наш
-собранный `lib/geany/insight_lua.dll`, GTK и зависимости из установщика Geany.
-В компактном Windows-комплекте оставлены русские переводы; английский интерфейс встроен.
-Отладочные символы нашего модуля и проверок удалены для уменьшения архива.
-Это переносной проверочный комплект, не новый установщик и не подписанный
-релиз Insight. Требуется Windows x64 и Windows PowerShell.
+## Текущий native-комплект Windows x64
 
-Linux: распаковать tar.gz; запустить `./start-insight.sh`. Редактор собран
-из текущего дерева Geany 2.2 development; модуль находится в
-`lib/geany/insight_lua.so`. Требуются glibc 2.38 или новее, системные
-GTK3 >= 3.24 / GLib >= 2.80 и их зависимости (целевое окружение Ubuntu 24.04 x64).
-GTK не включён в Linux-архив.
+Распакуйте весь архив в каталог и запустите `Start-Insight.cmd`. Launcher использует `bin/geany.exe`, GTK и зависимости из этого же комплекта и создаёт отдельный `profile`. Обычная установка MSYS2 для запуска не требуется. Проверяйте `REVISION.txt`: в нём записан коммит, из которого собран именно этот архив.
 
-В обоих комплектах создаётся отдельный каталог `profile` рядом со скриптом.
-Существующие пользовательские настройки Geany не изменяются. При переносе
-уже использованного комплекта путь плагина в старом профиле может устареть:
-снова включите Insight Lua через Tools > Plugin Manager.
+Современная native-сборка содержит сам изменённый редактор: Context, панели, Lua, Diff / Merge и справка встроены в него. Для меню Scripts включать отдельный Insight Lua plugin не требуется. Ранние комплекты на основе официального Geany 2.1 и `insight_lua.dll` относятся к другой, плагинной схеме; их инструкции и набор возможностей не следует переносить на новую сборку.
 
-## Ручная проверка
+Справка устанавливается в `data/insight/docs` в Windows-комплекте. Кнопки документации/уроков и Help открывают локальные файлы без сети. GIF использует включённые GdkPixbuf loaders; launcher обновляет их cache для фактического пути комплекта. Для HTML5-видео мультимедийный просмотр вызывает системный браузер.
 
-1. В Tools > Plugin Manager убедиться, что Insight Lua включён.
-2. Открыть исходник с несколькими употреблениями `foo`, например
-   `int foo; int foo_bar; void test() { foo = 1; }`.
-3. Через Tools > Insight: Load Lua extension загрузить
-   `examples/check_document.lua`.
-4. Открыть палитру Primary+Shift+P, выбрать Insight: Check document.
-   В статусе появится число совпадений `foo`; первое будет выделено.
-5. Изменить исходник без сохранения и повторить команду: число обновится.
-6. Проверить индексацию каталога и переходы через Project navigation.
-7. Запустить `Run-Checks.cmd` на Windows или `./run-checks.sh` на Linux:
-   восемь проверок ядра должны завершиться успешно.
+## Ручная проверка интерфейса
 
-## Повторная сборка
+1. Откройте Help → Geany Insight — Documentation… и Tutorials…; повторите открытие кнопками книжек.
+2. Убедитесь, что при запуске текстовые панели поиска скрыты. Ctrl+F и Ctrl+H открывают поиск и замену, кнопки панели вызывают те же функции.
+3. Поиск/замена → Search project… показывает запрос и результаты; Search folder… предлагает папку. Крестик закрывает панель, Escape закрывает строку запроса.
+4. Откройте исходник проекта. Один клик в Context меняет только предпросмотр; двойной открывает файл/строку в редакторе.
+5. Двойной клик по номеру строки ставит или снимает синюю закладку. Книжка с закладкой показывает общий список.
+6. Tools → Diff / Merge… запускает встроенное окно без установленного KDiff3. Проверьте Take Left/Right, ручную правку, Undo/Redo и Save result.
+7. Scripts → Load extension… загружает собственное расширение из [урока](scripting.md). Проверьте вызов команды и Undo.
+8. Откройте свой Markdown/RST с изображением и GIF. Video / Multimedia view должен открыть HTML-страницу с видеоплеером в браузере, если его кодеки поддерживают входной файл.
 
-Linux-редактор:
+## Сборка из исходников
+
+Нужны C/C++, Meson/Ninja, pkg-config, GTK3/GLib development packages и gettext. Для Windows используйте MSYS2 UCRT64 с GTK3.
 
 ```sh
-meson setup build-editor --prefix=/opt/geany-insight --libdir=lib \
+meson setup build-editor --prefix="$PWD/install" --libdir=lib \
   -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled \
-  -Dgtkdoc=false -Dvte=false -Dc_args=-DINSIGHT_RELOCATABLE \
-  -Dcpp_args=-DINSIGHT_RELOCATABLE
+  -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
 meson compile -C build-editor
-DESTDIR="$PWD/stage" meson install -C build-editor
+meson install -C build-editor
 ```
 
-Флаг `INSIGHT_RELOCATABLE` включает чтение абсолютного
-`GEANY_INSIGHT_PREFIX` для ресурсов; его устанавливает launcher.
-Без флага стандартный механизм путей Geany сохраняется.
+Markdown/RST Insight устанавливается независимо от `html-docs`: этот флаг относится к стандартному руководству Geany. Для переносного Linux-комплекта флаг `-DINSIGHT_RELOCATABLE` в c_args/cpp_args включает чтение абсолютного `GEANY_INSIGHT_PREFIX`, который задаёт launcher. GTK не обязательно включать в такой Linux-комплект; тогда он должен быть установлен в целевой системе.
 
-Сборка модуля и проверок с явным SDK:
+Проверки ядра:
 
 ```sh
-python3 insight/tools/build_desktop_checks.py --platform linux \
-  --geany-prefix stage/opt/geany-insight --gtk-prefix /usr \
-  --gtk-libdir /usr/lib/x86_64-linux-gnu \
-  --geany-library stage/opt/geany-insight/lib/libgeany.so --out build-checks
+python3 insight/tests/run.py
+python3 insight/tests/diff_test.py
 ```
 
-Для Windows: `--platform windows`, `--cc x86_64-w64-mingw32-gcc`,
-Windows Geany SDK и GTK3 SDK, `--gtk-libdir <gtk>/lib`, а в
-`--geany-library` передать import library для `libgeany-0.dll`. Если в
-комплекте Geany нет `.dll.a`, её можно получить `dlltool` из списка экспортов
-DLL. Использованные версии и результаты проверок находятся в BUILD-INFO.json
-готового комплекта. Сборщик проверок не загружает зависимости и не запускает
-Windows `.exe` на Linux.
+GUI-тесты запускаются в настоящей графической сессии или подготовленном виртуальном дисплее. Они возвращают skip без `GEANY_RUN_GUI_TESTS=1` и DISPLAY/WAYLAND_DISPLAY. Сначала установите редактор и ресурсы указанным prefix.
 
-Исходники Insight и редактора включены в Git bundle в каталоге source.
-Windows-комплект также содержит исходники Geany 2.1 и сведения о зависимостях
-официального комплекта.
+```sh
+GEANY_RUN_GUI_TESTS=1 meson test -C build-editor \
+  'Insight Help and on-demand Search GUI' \
+  'Insight Symbol Info and Window List GUI' \
+  'Insight relation graph GUI'
+```
 
-## Проверено для этой сборки
+На Windows исполнение и проверку GUI выполняйте в Windows-сессии. Успешная Linux GUI-проверка или факт компиляции Windows PE не подтверждают работу Windows GUI сами по себе. Результаты относятся к конкретному коммиту, а не к ранее скачанному архиву.
 
-Linux: восемь проверок ядра, восемь примеров штатных парсеров, запуск
-`geany --version` и загрузка модуля динамическим загрузчиком проходят.
-GUI-сценарий не проверен: подключение к виртуальному дисплею в среде сборки
-недоступно. Windows: модуль и восемь проверок собраны для PE x64; все именованные
-импорты модуля разрешаются в фактически включённых DLL. Выполнение Windows-кода
-не подтверждено; Wine падает при инициализации до запуска теста. Проверки нужно
-запустить на Windows через Run-Checks.cmd. Android APK не собирался.
+Windows workflow остаётся ручным (`workflow_dispatch`), чтобы обычные коммиты в main не вызывали сборочные уведомления. Его сценарий включает native-сборку, упаковку GTK, проверку ядра diff/структурного выделения/геометрии графа, `geany --version` без SDK в PATH и `REVISION.txt`.

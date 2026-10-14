@@ -937,6 +937,8 @@ libgeany = shared_library('geany',
 	'src/insight-diff.h',
 	'src/insight-relation-graph.c',
 	'src/insight-relation-graph.h',
+	'src/insight-help.c',
+	'src/insight-help.h',
 	'src/insight-window-list.c',
 	'src/insight-window-list.h',
 	'insight/core/diff.c',
@@ -1072,3 +1074,15 @@ if host_machine.system() == 'windows'
 	endforeach
 	install_data(misc, install_dir: prefix, rename: misc_rename)
 endif
+
+# Portable, offline Insight guides consumed by the built-in markup viewer.
+install_data(
+  'insight/docs/guide.md', 'insight/docs/tutorials.md',
+  'insight/docs/scripting.md', 'insight/docs/markup-viewer.rst',
+  'insight/docs/lua-api.md', 'insight/docs/internal-diff.md',
+  'insight/docs/desktop-check-builds.md',
+  'insight/docs/context-bookmarks.md', 'insight/docs/relations-calls.md',
+  'insight/docs/window-list.md', 'insight/docs/symbol-info.md',
+  install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
+
+install_data('insight/examples/workbench.lua', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'examples')

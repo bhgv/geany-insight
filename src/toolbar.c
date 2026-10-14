@@ -106,8 +106,6 @@ static const gchar *toolbar_markup =
 	"<separator/>"
 	"<toolitem action='Color'/>"
 	"<separator/>"
-	"<toolitem action='SearchEntry'/>"
-	"<toolitem action='Search'/>"
 	"<separator/>"
 	"<toolitem action='GotoEntry'/>"
 	"<toolitem action='Goto'/>"
@@ -532,7 +530,8 @@ void toolbar_finalize(void)
 	g_object_unref(uim);
 	g_object_unref(group);
 
-	g_slist_free(plugin_items);
+	/* Late widget destruction still calls toolbar_item_destroy_cb(). */
+	g_clear_pointer(&plugin_items, g_slist_free);
 }
 
 

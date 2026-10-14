@@ -248,3 +248,13 @@ EXTRA_DIST += \
 	insight/vendor/lua/onelua.c \
 	insight/docs/native-workbench.md \
 	insight/docs/source-insight-layout.md
+
+insightdocdir = $(pkgdatadir)/insight/docs
+insightdoc_DATA = insight/docs/desktop-check-builds.md insight/docs/guide.md insight/docs/tutorials.md insight/docs/scripting.md insight/docs/markup-viewer.rst insight/docs/lua-api.md insight/docs/internal-diff.md insight/docs/context-bookmarks.md insight/docs/relations-calls.md insight/docs/window-list.md insight/docs/symbol-info.md
+EXTRA_DIST += $(insightdoc_DATA)
+
+EXTRA_DIST += insight/tests/help_search_gui_test.c
+
+insightexampledir = $(pkgdatadir)/insight/examples
+insightexample_DATA = insight/examples/workbench.lua
+EXTRA_DIST += $(insightexample_DATA)

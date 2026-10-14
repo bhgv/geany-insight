@@ -32,3 +32,5 @@ Code only является лексической маской, а не AST/LSP.
 Парсеры Geany продолжают определять поддержку синтаксисов и символов.
 Сборка пользовательских проектов исключена из целей по указанию пользователя.
 APK создаётся только по явному запросу, только ARM64.
+
+Documentation is bundled offline as Markdown/reStructuredText with a GTK viewer, GIF animation and a browser multimedia view for HTML5 video. Help/menu and main toolbar expose the guides and tutorials with matching command icons. Text search panels/results open on demand through Поиск/замена; standard Ctrl+F/Ctrl+H retain native Find/Replace. Native GUI tests cover these commands; embedded video decoding is not provided.

@@ -438,3 +438,6 @@ test('Insight relation graph GUI', relation_graph_gui_test, timeout: 30)
 
 symbol_info_gui_test = executable('test_insight_symbol_info_gui', '../insight/tests/symbol_info_gui_test.c', dependencies: test_deps)
 test('Insight Symbol Info and Window List GUI', symbol_info_gui_test, timeout: 50)
+
+help_search_gui_test = executable('test_insight_help_search_gui', '../insight/tests/help_search_gui_test.c', dependencies: test_deps)
+test('Insight Help and on-demand Search GUI', help_search_gui_test, timeout: 45)

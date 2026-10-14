@@ -424,7 +424,7 @@ void on_toolbutton_search_clicked(GtkAction *action, gpointer user_data)
 	gboolean result;
 	GtkWidget *entry = toolbar_get_widget_child_by_name("SearchEntry");
 
-	if (entry != NULL)
+	if (entry != NULL && gtk_widget_is_visible(entry))
 	{
 		const gchar *text = gtk_entry_get_text(GTK_ENTRY(entry));
 
