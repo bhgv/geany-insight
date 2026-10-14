@@ -1,0 +1,3 @@
+Requested Windows x64 check build for offline help, tutorials, markup/media viewer and on-demand search.
+Feature commit: b0a7127e16cfaf1bb6af61e7cadfcaab690d7ecc
+User request: 2026-10-14.

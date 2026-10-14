@@ -1,6 +1,9 @@
 name: Insight Windows x64 check
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['insight/build-requests/windows-x64-help-20261014.txt']
 permissions:
   contents: read
 concurrency:
