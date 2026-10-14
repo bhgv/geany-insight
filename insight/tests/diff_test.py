@@ -2,6 +2,7 @@
 """Build the dependency-free diff core and verify exact block reconstruction."""
 import ctypes
 import pathlib
+import os
 import random
 import subprocess
 import tempfile
@@ -13,8 +14,8 @@ class Diff(ctypes.Structure):
     _fields_ = [('hunks', ctypes.POINTER(Hunk)), ('count', ctypes.c_size_t)]
 
 with tempfile.TemporaryDirectory() as tmp:
-    libpath = pathlib.Path(tmp) / 'diff.so'
-    subprocess.run(['cc', '-std=c99', '-Wall', '-Wextra', '-Werror', '-shared', '-fPIC',
+    libpath = pathlib.Path(tmp) / ('diff.dll' if os.name == 'nt' else 'diff.so')
+    subprocess.run(['cc', '-std=c99', '-Wall', '-Wextra', '-Werror', '-shared', *([] if os.name == 'nt' else ['-fPIC']),
                     str(root / 'insight/core/diff.c'), '-o', str(libpath)], check=True)
     lib = ctypes.CDLL(str(libpath))
     lib.insight_diff_compute.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.POINTER(Diff)]

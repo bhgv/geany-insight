@@ -1,0 +1,77 @@
+name: Insight Windows x64 check
+on:
+  push:
+    branches: [main, insight/internal-diff-merge]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: insight-win64-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-meson
+            mingw-w64-ucrt-x86_64-gtk3
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-python-docutils
+            gettext
+            git
+            unzip
+            zip
+            rsync
+      - name: Test internal diff core
+        run: python insight/tests/diff_test.py
+      - name: Build native editor including internal merge window
+        run: |
+          meson setup _build --prefix="$(pwd)/portable" --libdir=lib \
+            -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled \
+            -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled \
+            -Dc_args=-DINSIGHT_RELOCATABLE -Dcpp_args=-DINSIGHT_RELOCATABLE
+          meson compile -C _build
+          meson install -C _build
+      - name: Bundle GTK runtime
+        run: |
+          mkdir -p _gtk
+          (cd _gtk && bash ../scripts/gtk-bundle-from-msys2.sh -3 --ucrt64)
+          rsync -a _gtk/bin/ portable/bin/
+          rsync -a _gtk/lib/ portable/lib/
+          rsync -a _gtk/share/ portable/share/
+          if [ -d _gtk/etc ]; then rsync -a _gtk/etc/ portable/etc/; fi
+      - name: Prepare portable check package
+        run: |
+          cp COPYING portable/
+          cp insight/docs/internal-diff.md portable/INTERNAL-DIFF.md
+          git rev-parse HEAD > portable/REVISION.txt
+          python - <<'PY'
+          from pathlib import Path
+          Path('portable/Start-Insight.cmd').write_bytes(
+              b'@echo off\r\nsetlocal\r\n'
+              b'set "GEANY_INSIGHT_PREFIX=%~dp0"\r\n'
+              b'set "PATH=%~dp0bin;%PATH%"\r\n'
+              b'"%~dp0bin\\geany.exe" -c "%~dp0profile" %*\r\n')
+          PY
+          ./portable/bin/geany.exe --version
+          objdump -f portable/bin/geany.exe | tee portable/ARCHITECTURE.txt
+          grep -q 'pei-x86-64' portable/ARCHITECTURE.txt
+          (cd portable && zip -qr ../geany-insight-windows-x64-check.zip .)
+      - name: Upload Windows x64 portable build
+        uses: actions/upload-artifact@v4
+        with:
+          name: geany-insight-windows-x64-check
+          path: geany-insight-windows-x64-check.zip
+          if-no-files-found: error
+          retention-days: 14
