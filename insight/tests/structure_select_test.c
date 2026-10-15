@@ -20,6 +20,11 @@ static void calls_test(void) {
  assert(insight_next_call(s,strlen(s),&cursor,&a,&b)==0);
  s="      hidden        visible (x)";cursor=0;
  assert(insight_next_call(s,strlen(s),&cursor,&a,&b)==1);assert(b-a==7 && !memcmp(s+a,"visible",7));
+ s="123fake(); 0xdead(); 9suffix(); 变量(); 😀real(); e\xcc\x81(); $legacy();";cursor=0;
+ const char *unicode[]={"变量","real","e\xcc\x81","$legacy"};
+ for(size_t i=0;i<4;i++) { assert(insight_next_call(s,strlen(s),&cursor,&a,&b)==1);assert(b-a==strlen(unicode[i]) && !memcmp(s+a,unicode[i],b-a)); }
+ assert(insight_next_call(s,strlen(s),&cursor,&a,&b)==0);
+ s="whole(); next();";cursor=2;assert(insight_next_call(s,strlen(s),&cursor,&a,&b)==1 && a==9 && b==13);
  cursor=strlen(s)+1;assert(insight_next_call(s,strlen(s),&cursor,&a,&b)==-1);
 }
 int main(void) {

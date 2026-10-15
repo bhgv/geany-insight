@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "structure_select.h"
+#include "identifier.h"
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -96,17 +97,19 @@ int insight_neighbor_position(const size_t *positions,size_t count,size_t curren
  return found;
 }
 
-static int call_identifier(unsigned char c) {
- return (c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_' || c=='$' || c>=128;
-}
+static unsigned call_flags(uint32_t code) { return code=='$' ? 3 : insight_identifier_flags(code); }
 int insight_next_call(const char *mask,size_t length,size_t *cursor,size_t *first,size_t *last) {
  static const char *keywords[]={"if","for","while","switch","catch","sizeof","alignof","decltype","typeof","return","static_assert","synchronized","with"};
  if(!mask || !cursor || !first || !last || *cursor>length) return -1;
  size_t i=*cursor;
  while(i<length) {
-  if(!call_identifier((unsigned char)mask[i])) { i++;continue; }
-  size_t begin=i++;
-  while(i<length && (call_identifier((unsigned char)mask[i]) || (mask[i]>='0' && mask[i]<='9'))) i++;
+  uint32_t code=0;size_t width=insight_identifier_decode(mask,length,i,&code);unsigned flags=call_flags(code);
+  if(!width || !(flags&2)) { i+=width ? width : 1;continue; }
+  size_t begin=i;int valid=(flags&1)!=0;
+  if(i) { size_t previous=insight_identifier_previous(mask,i);uint32_t before=0;size_t n=insight_identifier_decode(mask,length,previous,&before);if(n && previous+n==i && (call_flags(before)&2)) valid=0; }
+  i+=width;
+  while(i<length) { width=insight_identifier_decode(mask,length,i,&code);if(!width || !(call_flags(code)&2)) break;i+=width; }
+  if(!valid) continue;
   size_t end=i,j=i;
   while(j<length && (mask[j]==' ' || mask[j]=='\t' || mask[j]=='\r' || mask[j]=='\n')) j++;
   if(j==length || mask[j]!='(') continue;
