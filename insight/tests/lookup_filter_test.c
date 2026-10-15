@@ -33,5 +33,17 @@ int main(void) {
  g_assert_null(insight_lookup_filter_new("file:\"unfinished",FALSE,NULL));
  GError *error=NULL; InsightLookupFilter *f=insight_lookup_filter_new("?[",FALSE,&error); g_assert_null(f); g_assert_nonnull(error); g_clear_error(&error);
  g_assert_null(insight_lookup_filter_new("\xff",FALSE,NULL));
+ g_assert_true(insight_lookup_text_match("Write Open Document","~wod"));
+ g_assert_false(insight_lookup_text_match("Write Open Document","~dwo"));
+ g_assert_true(insight_lookup_text_match("ТЕКСТ файла","~тстф"));
+ g_assert_true(insight_lookup_text_match("x? * y","? *"));
+ g_assert_false(insight_lookup_text_match("x? other * y","? *"));
+ g_assert_true(insight_lookup_text_match("Write Open Document","open doc"));
+ g_assert_false(insight_lookup_text_match("Write Open Document","doc open"));
+ g_assert_false(insight_lookup_text_match("Write","~"));
+ g_assert_false(insight_lookup_text_match("a","~aa"));
+ g_assert_true(insight_lookup_text_match("",""));
+ g_assert_false(insight_lookup_text_match("valid","\xff"));
+ g_assert_false(insight_lookup_text_match("\xff",""));
  g_print("Lookup filters passed\n"); return 0;
 }

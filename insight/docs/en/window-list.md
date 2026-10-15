@@ -22,3 +22,5 @@ sizes, widths or sort values use defaults; malformed column permutations are ign
 Preferences are stored atomically in `config/insight/window-list.conf`. The MRU order
 of individual buffers remains specific to the current editor session. Changing the
 interface language refreshes the displayed file-state labels and status message.
+
+Prefix the filter with `~` for Unicode subsequence matching (`~hlpr` finds `helper`). Ordinary text keeps literal case-insensitive substring matching; the selected query persists when reopening the list.

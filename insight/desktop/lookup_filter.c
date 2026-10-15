@@ -27,6 +27,12 @@ static gboolean fuzzy_match(const char *hay,const char *term) {
  }
  return !*term;
 }
+gboolean insight_lookup_text_match(const char *text,const char *query) {
+ if(!text || !query || !g_utf8_validate(text,-1,NULL) || !g_utf8_validate(query,-1,NULL)) return FALSE;
+ gchar *hay=g_utf8_casefold(text,-1),*term=g_utf8_casefold(query,-1);
+ gboolean match=term[0]=='~' ? fuzzy_match(hay,term+1) : strstr(hay,term)!=NULL;
+ g_free(hay);g_free(term);return match;
+}
 gboolean insight_lookup_filter_match(const InsightLookupFilter *f,const char *name,const char *scope,const char *path,const char *kind) {
  if(!f) return FALSE;
  if(f->functions && (!kind || !(kind[0]=='f' || kind[0]=='p' || kind[0]=='m') || kind[1])) return FALSE;

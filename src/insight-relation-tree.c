@@ -3,6 +3,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "geany.h"
 #include "insight-relation-tree.h"
+#include "../insight/desktop/lookup_filter.h"
 #include "insight-languages.h"
 #include "insight-symbol-view.h"
 #include "tagmanager/tm_tag.h"
@@ -33,8 +34,8 @@ static gboolean visible(GtkTreeModel *model,GtkTreeIter *iter,gpointer data) {
  RelationTree *tree=data;if(!tree->needle || !*tree->needle) return TRUE;
  GtkTreeIter parent;if(!gtk_tree_model_iter_parent(model,&parent,iter)) return TRUE;
  gchar *name=NULL,*path=NULL,*snippet=NULL;gtk_tree_model_get(model,iter,NAME,&name,PATH,&path,SNIPPET,&snippet,-1);
- gchar *raw=g_strjoin(" ",name ? name : "",path ? path : "",snippet ? snippet : "",NULL),*folded=g_utf8_casefold(raw,-1);gboolean match=strstr(folded,tree->needle)!=NULL;
- g_free(raw);g_free(folded);g_free(name);g_free(path);g_free(snippet);
+ gchar *raw=g_strjoin(" ",name ? name : "",path ? path : "",snippet ? snippet : "",NULL);gboolean match=insight_lookup_text_match(raw,tree->needle);
+ g_free(raw);g_free(name);g_free(path);g_free(snippet);
  if(!match) { GtkTreeIter child;for(gboolean valid=gtk_tree_model_iter_children(model,&child,iter);valid && !match;valid=gtk_tree_model_iter_next(model,&child)) match=visible(model,&child,data); }
  return match;
 }
@@ -125,7 +126,7 @@ void insight_relation_tree_query(GtkWidget *box,InsightIndex *index,const gchar 
  GtkTreePath *path=gtk_tree_path_new_from_indices(0,-1);gtk_tree_view_expand_row(tree->view,path,FALSE);gtk_tree_path_free(path);gtk_widget_set_sensitive(GTK_WIDGET(tree->view),TRUE);status(tree,NULL);
 }
 static gboolean restore_filtered(GtkTreeModel *model,GtkTreePath *path,GtkTreeIter *iter,gpointer data) { (void)model;(void)path;restore_branch(data,iter);return FALSE; }
-void insight_relation_tree_filter(GtkWidget *box,const gchar *query) { RelationTree *tree=g_object_get_data(G_OBJECT(box),"insight-relation-tree");if(!tree) return;g_free(tree->needle);tree->needle=g_utf8_casefold(query ? query : "",-1);gtk_tree_model_filter_refilter(tree->filter);gtk_tree_model_foreach(GTK_TREE_MODEL(tree->store),restore_filtered,tree); }
+void insight_relation_tree_filter(GtkWidget *box,const gchar *query) { RelationTree *tree=g_object_get_data(G_OBJECT(box),"insight-relation-tree");if(!tree) return;g_free(tree->needle);tree->needle=g_strdup(query ? query : "");gtk_tree_model_filter_refilter(tree->filter);gtk_tree_model_foreach(GTK_TREE_MODEL(tree->store),restore_filtered,tree); }
 
 static gboolean reset_loading(GtkTreeModel *model,GtkTreePath *path,GtkTreeIter *iter,gpointer data) {
  (void)path;RelationTree *tree=data;gint state=LOADED;gtk_tree_model_get(model,iter,STATE,&state,-1);

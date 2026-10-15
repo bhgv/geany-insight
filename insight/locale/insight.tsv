@@ -778,3 +778,4 @@ Wait for master file list synchronization before applying membership	Дожди�
 Master file list changed; reload before applying membership	Master File List изменился; перечитайте его перед применением состава
 Project membership was not committed; master file list restored	Состав проекта не сохранён; Master File List восстановлен
 Master file list changed since its snapshot	Master File List изменился после создания снимка
+Prefix with ~ for fuzzy subsequence matching	Начните с ~ для нечёткого поиска по подпоследовательности

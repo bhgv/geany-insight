@@ -13,3 +13,5 @@ Put the caret in a function. Select Calls. Inspect a result, navigate to its tar
 The ? button at the upper right opens this page. Help follows the interface language selected in Options.
 
 More: [relations-calls.md](relations-calls.md).
+
+Start a list filter with `~` for case-insensitive Unicode subsequence matching: `~srd` finds `Shared`. Ordinary queries keep literal substring matching, including spaces and punctuation. A bare `~` matches nothing.

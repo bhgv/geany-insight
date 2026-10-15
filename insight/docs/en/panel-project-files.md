@@ -40,3 +40,5 @@ Manual Add/Remove/Remove all updates the MFL before publishing project membershi
 The format is UTF-8 (optional BOM), one literal path per line, with LF or CRLF. Existing directories are recognized; a trailing `/` preserves a missing directory entry. Blank lines are ignored. Limits are 2 MiB, 10000 distinct entries, and a bounded manual directory scan (64 levels, 4096 directories, 100000 entries); generated/hidden directories and symlinks are not followed by that scan. Invalid/missing lists retain the last accepted project. Path Variables and quoted/comment syntax are not expanded. The MFL must differ from the project configuration file. Directory monitoring retains its existing 1024-monitor bound; a manual source rescan is available when monitoring is incomplete.
 
 Reference behavior: [Source Insight 4 Master File List](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Using_a_Master_File_List.htm).
+
+Start a list filter with `~` for case-insensitive Unicode subsequence matching: `~srd` finds `Shared`. Ordinary queries keep literal substring matching, including spaces and punctuation. A bare `~` matches nothing.

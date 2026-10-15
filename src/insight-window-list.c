@@ -7,6 +7,7 @@
 #endif
 #include "geany.h"
 #include "insight-window-list.h"
+#include "../insight/desktop/lookup_filter.h"
 #include "document.h"
 #include "editor.h"
 #include "main.h"
@@ -101,18 +102,18 @@ static gchar *nearest_symbol(GeanyDocument *doc) {
 static void refresh(GtkWidget *widget,gpointer data) {
  (void)widget;(void)data;if(!list.window || list.refreshing) return;
  GeanyDocument *selected=selected_document(),*current=document_get_current();guint chosen=selected ? selected->id : (current ? current->id : 0);
- list.refreshing=TRUE;gchar *needle=g_utf8_casefold(gtk_entry_get_text(GTK_ENTRY(list.search)),-1);gtk_list_store_clear(list.model);guint shown=0,total=0;
+ list.refreshing=TRUE;const gchar *query=gtk_entry_get_text(GTK_ENTRY(list.search));gtk_list_store_clear(list.model);guint shown=0,total=0;
  for(guint i=0;i<documents_array->len;i++) {
   GeanyDocument *doc=g_ptr_array_index(documents_array,i);if(!doc->is_valid) continue;total++;
   gchar *name=doc->file_name ? g_path_get_basename(doc->file_name) : g_strdup_printf("untitled-%u",doc->id),*path=g_strdup(doc->file_name ? doc->file_name : ""),*symbol=nearest_symbol(doc);
-  gchar *all=g_strjoin("\n",name,path,symbol,NULL),*folded=g_utf8_casefold(all,-1);g_free(all);
-  if(!*needle || strstr(folded,needle)) {
+  gchar *all=g_strjoin("\n",name,path,symbol,NULL);
+  if(insight_lookup_text_match(all,query)) {
    guint64 *recent=g_hash_table_lookup(list.recent,GUINT_TO_POINTER(doc->id));GtkTreeIter iter;gtk_list_store_append(list.model,&iter);
    gtk_list_store_set(list.model,&iter,ID,doc->id,NAME,name,PATH,path,STATE,insight_tr(doc->changed ? (doc->readonly ? "Modified • Read only" : "Modified") : (doc->readonly ? "Read only" : "Saved")),LINES,sci_get_line_count(doc->editor->sci),SYMBOL,symbol,RECENT,recent ? *recent : 0,ACTIVE,doc==current ? "●" : "",-1);shown++;
   }
-  g_free(folded);g_free(name);g_free(path);g_free(symbol);
+  g_free(all);g_free(name);g_free(path);g_free(symbol);
  }
- g_free(needle);GtkTreeIter iter;gboolean valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(list.model),&iter),matched=FALSE;
+ GtkTreeIter iter;gboolean valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(list.model),&iter),matched=FALSE;
  while(valid) { guint id=0;gtk_tree_model_get(GTK_TREE_MODEL(list.model),&iter,ID,&id,-1);if(id==chosen) { gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(list.view)),&iter);matched=TRUE;break; }valid=gtk_tree_model_iter_next(GTK_TREE_MODEL(list.model),&iter); }
  if(!matched && gtk_tree_model_get_iter_first(GTK_TREE_MODEL(list.model),&iter)) gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(list.view)),&iter);
  gchar *status=g_strdup_printf("%u of %u open files • double click / Enter: activate",shown,total);gtk_label_set_text(GTK_LABEL(list.status),status);g_free(status);
@@ -162,7 +163,7 @@ void insight_window_list_show(GtkWidget *widget,gpointer data) {
  list.window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_window_set_title(GTK_WINDOW(list.window),"Window List");gtk_widget_set_name(list.window,"insight-window-list-window");restore_geometry();gtk_window_set_transient_for(GTK_WINDOW(list.window),GTK_WINDOW(main_widgets.window));gtk_window_set_destroy_with_parent(GTK_WINDOW(list.window),TRUE);
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,5),*bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4),*scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_set_border_width(GTK_CONTAINER(box),8);gtk_container_add(GTK_CONTAINER(list.window),box);
  insight_panel_help_attach(box,"window-list.md");
- list.search=gtk_search_entry_new();gtk_entry_set_max_length(GTK_ENTRY(list.search),512);gtk_entry_set_text(GTK_ENTRY(list.search),list.filter ? list.filter : "");gtk_entry_set_placeholder_text(GTK_ENTRY(list.search),"Filter open files, paths or nearest symbol…");gtk_widget_set_name(list.search,"insight-window-filter");gtk_box_pack_start(GTK_BOX(box),list.search,FALSE,FALSE,0);
+ list.search=gtk_search_entry_new();gtk_widget_set_tooltip_text(list.search,"Prefix with ~ for fuzzy subsequence matching");gtk_entry_set_max_length(GTK_ENTRY(list.search),512);gtk_entry_set_text(GTK_ENTRY(list.search),list.filter ? list.filter : "");gtk_entry_set_placeholder_text(GTK_ENTRY(list.search),"Filter open files, paths or nearest symbol…");gtk_widget_set_name(list.search,"insight-window-filter");gtk_box_pack_start(GTK_BOX(box),list.search,FALSE,FALSE,0);
  list.model=gtk_list_store_new(COLUMNS,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_INT,G_TYPE_STRING,G_TYPE_UINT64,G_TYPE_STRING);list.view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(list.model));gtk_widget_set_name(list.view,"insight-window-list");
  const gchar *titles[]={"Active","File","State","Lines","Nearest symbol","Path"};const gint fields[]={ACTIVE,NAME,STATE,LINES,SYMBOL,PATH};
  for(guint position=0;position<G_N_ELEMENTS(fields);position++) { guint i=(guint)list.order[position]; GtkCellRenderer *cell=gtk_cell_renderer_text_new();g_object_set(cell,"ellipsize",PANGO_ELLIPSIZE_END,NULL);GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(titles[i],cell,"text",fields[i],NULL);gtk_tree_view_column_set_sort_column_id(column,fields[i]);gtk_tree_view_column_set_resizable(column,TRUE);gtk_tree_view_column_set_sizing(column,GTK_TREE_VIEW_COLUMN_FIXED);gtk_tree_view_column_set_fixed_width(column,list.widths[i]);gtk_tree_view_column_set_reorderable(column,TRUE);g_object_set_data(G_OBJECT(column),"insight-list-column",GUINT_TO_POINTER(i+1));gtk_tree_view_append_column(GTK_TREE_VIEW(list.view),column); }

@@ -1,1 +1,1 @@
-Build Windows x64: inherited member navigation, nominal field chains and expanded native Context/F12/Follow GUI regressions.
+Build Windows x64: remaining fuzzy list filters, inherited member chains, Window List GUI and deterministic paused-snapshot MFL write checks.
