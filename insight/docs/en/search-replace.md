@@ -75,7 +75,7 @@ needed. Compact Insight searches already search the whole source with multiline
 anchors: `^`/`$` address each line, while dot still excludes newline unless `(?s)`
 is used. A negated set such as `[^x]` can consume a newline; use `[^x\r\n]` to
 keep it on one line. Case/Word switches still apply to compact regex queries.
-Invalid patterns report an error. Regex is a text language, not a Python/C++
+In native Find/Replace regex mode, Whole word and Word start are not applied; express boundaries explicitly with `\b` or lookarounds. Invalid patterns report an error. Regex is a text language, not a Python/C++
 parser; a broad expression can also match comments, strings and unrelated names.
 
 ## Replacement text

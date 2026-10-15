@@ -13,6 +13,7 @@ static gboolean step(gpointer data) {
  GtkWidget *window=gtk_widget_get_toplevel(GTK_WIDGET(document_get_current()->editor->sci));GtkWidget *panes[]={ui_lookup_widget(window,"hpaned1"),named(window,"insight-project-split"),ui_lookup_widget(window,"vpaned1")};
  if(!phase) { phase++;return G_SOURCE_CONTINUE; }
  if(phase==1) {
+  if(!restore) { GtkWidget *context=named(window,"insight-context");g_assert_true(gtk_widget_get_mapped(context));GtkWidget *book=gtk_widget_get_parent(context);g_assert_true(gtk_notebook_get_nth_page(GTK_NOTEBOOK(book),gtk_notebook_get_current_page(GTK_NOTEBOOK(book)))==context); }
   if(restore) { GKeyFile *key=g_key_file_new();g_assert_true(g_key_file_load_from_file(key,expected_path,G_KEY_FILE_NONE,NULL));for(guint i=0;i<3;i++) { gchar *name=g_strdup_printf("p%u",i);g_assert_cmpint(abs(gtk_paned_get_position(GTK_PANED(panes[i]))-g_key_file_get_integer(key,"positions",name,NULL)),<=,2);g_free(name); }g_key_file_unref(key); }
   else { g_assert_cmpint(abs(gtk_paned_get_position(GTK_PANED(panes[0]))-100),<=,5);g_assert_cmpint(abs(gtk_widget_get_allocated_width(panes[1])-gtk_paned_get_position(GTK_PANED(panes[1]))-100),<=,8);g_assert_cmpint(abs(gtk_paned_get_position(GTK_PANED(panes[2]))-gtk_widget_get_allocated_height(panes[2])*3/4),<=,8); }
   for(guint i=0;i<3;i++) { gtk_paned_set_position(GTK_PANED(panes[i]),16); }phase++;return G_SOURCE_CONTINUE;

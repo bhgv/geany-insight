@@ -1383,3 +1383,19 @@ operators, multiline/Unicode/escaping, capture replacement syntax and examples,
 English variations, grep dialect differences, result navigation and limits.
 Guide/tutorial/search/Context pages link to the reference; Meson/Autotools and
 Windows packaging include it.
+
+
+### First visible Context and bounded candidate width
+
+Visual inspection found that the old first-run menu initializer still hid the
+message notebook, despite the corrected splitter position. It no longer does so;
+a fresh visible message host selects Context before the first Follow result and
+the old 280px sidebar override is now 100px. An explicitly hidden message host is
+retained. The two-process geometry fixture additionally requires the fresh Context
+page to be selected and mapped. Candidate renderers cap both preferred and maximum
+text width at 24 characters with ellipsis, preventing long paths from expanding
+the main window when the hidden list is opened. Python tools GUI checks the
+combo's preferred width. Geometry/restart, Python Context/tools and panel sizing/
+help GUI suites pass after these changes. The search reference now explicitly
+distinguishes native regex's unsupported Whole word/Word start switches from
+compact regex boundaries.
