@@ -110,7 +110,7 @@ general data-flow type inference remain open.
 A receiver assigned exactly once as `obj = LocalClass(...)` can use that indexed
 same-file class for field navigation. Arguments may span lines. The whole
 right-hand side must be that one call; competing bindings, reassignment,
-parameter rebinding, factory functions, constructor aliases/imports, chained or
+parameter rebinding, factory functions, arbitrary constructor aliases, chained or
 compound expressions are not inferred. This is a nominal source rule, not
 execution of `__new__` or flow analysis. Results belong to the source/index
 snapshot; changing the constructor expression invalidates the preview cache even
@@ -138,3 +138,5 @@ one imported package root. Lookup uses the longest explicitly imported module
 prefix; an unimported submodule is never assumed loaded. Attribute prefixes are
 bounded to 16 components and must identify indexed classes rather than arbitrary
 objects.
+
+Imported class instances support simple variable/parameter annotations, one constructor assignment and direct `Alias().field` / `mod.Class().field` calls. An imported type resolves only against its module file; similarly named classes elsewhere do not supply fields. Parameter annotations resolve outside the function body. Imported factory return types and complex annotations remain unsupported.

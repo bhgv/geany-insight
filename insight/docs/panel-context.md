@@ -144,3 +144,5 @@ Python создал значение или атрибут во время ис�
 импортированный префикс; неимпортированный подмодуль не считается загруженным.
 Префикс атрибутов ограничен 16 компонентами и должен обозначать классы,
 а не произвольные объекты.
+
+Imported class instances support simple variable/parameter annotations, one constructor assignment and direct `Alias().field` / `mod.Class().field` calls. An imported type resolves only against its module file; similarly named classes elsewhere do not supply fields. Parameter annotations resolve outside the function body. Imported factory return types and complex annotations remain unsupported.

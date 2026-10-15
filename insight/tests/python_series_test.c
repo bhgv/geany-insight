@@ -45,4 +45,11 @@ static void dotted_imports(void) {
  import_hit(&f,"nested.provider.exported()","exported",provider,"exported");import_hit(&f,"nested.provider.External.field","field",provider,"field");import_hit(&f,"lib.External.field","field",provider,"field");import_hit(&f,"nested.other.exported()","exported",other,"exported");import_hit(&f,"nested.unimported.exported()","exported",NULL,NULL);
  g_free(provider);g_free(other);g_free(directory);clear(&f);
 }
-int main(void) { tm_get_workspace();annotations();receivers();call_results();dotted_imports();tm_workspace_free();puts("Python navigation series: all checks passed");return 0; }
+static void imported_instances(void) {
+ Fixture f=fixture("from nested.provider import External as Alias\nimport nested.provider as lib\ntyped: Alias\ntyped.field\nqualified: lib.External\nqualified.field\ncreated = Alias()\ncreated.field\nqualified_created = lib.External()\nqualified_created.field\nAlias().field\nlib.External().field\ndef parameter(obj: Alias):\n    Alias = 1\n    return obj.field\n");
+ gchar *directory=g_path_get_dirname(f.path),*provider=g_build_filename(directory,"nested","provider.py",NULL),*other=g_build_filename(directory,"other.py",NULL);
+ InsightSymbol tags[]={{"External",provider,"","c",1,"","",""},{"field",provider,"External","v",2,"","int",""}};assert(insight_index_update(f.index,provider,tags,2));InsightSymbol duplicate[]={{"External",other,"","c",1,"","",""},{"field",other,"External","v",2,"","int",""}};assert(insight_index_update(f.index,other,duplicate,2));insight_native_python_bindings_free(f.source.python);f.source.python=insight_native_python_bindings_new(f.index,f.path,&f.source);
+ const gchar *cases[]={"typed.field","qualified.field","created.field","qualified_created.field","Alias().field","lib.External().field","return obj.field"};for(guint n=0;n<G_N_ELEMENTS(cases);n++) import_hit(&f,cases[n],"field",provider,"field");
+ g_free(directory);g_free(provider);g_free(other);clear(&f);
+}
+int main(void) { tm_get_workspace();annotations();receivers();call_results();dotted_imports();imported_instances();tm_workspace_free();puts("Python navigation series: all checks passed");return 0; }

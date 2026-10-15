@@ -420,28 +420,56 @@ typedef struct { const gchar *path;InsightTypeEligible eligible;void *data; } Py
 static int python_import_eligible(const InsightSymbol *tag,void *data) {
  PythonImportFilter *filter=data;return !g_strcmp0(tag->path,filter->path) && (!filter->eligible || filter->eligible(tag,filter->data));
 }
+static gchar *python_constructor_expression(const InsightIndex *index,const gchar *path,const InsightSymbol *variable,const InsightNativeSource *source) {
+ if(strcmp(variable->kind,"l") && strcmp(variable->kind,"v")) return NULL;
+ guint bindings=0;for(gsize i=0;i<insight_index_count(index);i++) { const InsightSymbol *tag=insight_index_at(index,i);if(!g_strcmp0(tag->path,path) && !strcmp(tag->scope,variable->scope) && !strcmp(tag->name,variable->name)) bindings++; }if(bindings!=1) return NULL;
+ gsize at=0;gulong line=1;while(at<source->length && line<variable->line) if(source->mask[at++]=='\n') line++;if(line!=variable->line) return NULL;
+ const gchar *mask=source->mask;python_space(mask,source->length,&at,FALSE);gsize size=strlen(variable->name);if(at+size>source->length || memcmp(mask+at,variable->name,size)) return NULL;at+=size;python_space(mask,source->length,&at,FALSE);if(at==source->length || mask[at++]!='=') return NULL;
+ python_space(mask,source->length,&at,FALSE);gchar *name=python_import_name(mask,source->length,&at,TRUE,FALSE);if(!name) return NULL;python_space(mask,source->length,&at,FALSE);
+ gsize open=0,after=0;if(at==source->length || mask[at]!='(' || insight_select_match(mask,source->length,at,&open,&after)!=1 || open!=at) { g_free(name);return NULL; }
+ at=after;while(at<source->length && (mask[at]==' ' || mask[at]=='\t')) at++;if(at<source->length && mask[at]!='\n' && mask[at]!='\r') g_clear_pointer(&name,g_free);return name;
+}
+static gboolean python_implicit_parameter(const InsightIndex *index,const InsightSymbol *parameter,InsightNativePythonBindings *bindings) {
+ if(strcmp(parameter->kind,"z")) return FALSE;gchar *scope=python_scope_name(parameter->scope);gboolean implicit=FALSE;
+ if(!g_hash_table_contains(bindings->static_methods,scope)) for(gsize i=0;i<insight_index_count(index);i++) { const InsightSymbol *tag=insight_index_at(index,i);if(strcmp(tag->path,parameter->path) || strcmp(tag->kind,"m")) continue;gchar *full=python_symbol_scope(tag);gboolean same=!strcmp(scope,full);g_free(full);if(!same) continue;const gchar *first=tag->signature;while(*first && (*first=='(' || g_ascii_isspace(*first))) first++;gsize size=strlen(parameter->name);implicit=!strncmp(first,parameter->name,size) && !ident(first[size]);break; }
+ g_free(scope);return implicit;
+}
 gsize insight_native_python_import_query(const InsightIndex *index,const gchar *path,const gchar *scope,const InsightNativeSource *source,gsize position,const gchar *word,InsightTypeEligible eligible,void *data,const InsightSymbol **out,gsize capacity,gboolean *imported) {
  *imported=FALSE;if(!index || !source || !source->mask || position>source->length || !word || !*word || (capacity && !out)) return 0;
  InsightNativePythonBindings *owned=NULL,*bindings=source->python;if(!bindings) bindings=owned=insight_native_python_bindings_new(index,path,source);
  if(!bindings->valid) { *imported=TRUE;insight_native_python_bindings_free(owned);return 0; }
  const gchar *mask=source->mask;gsize at=position;while(at && ident(mask[at-1])) at--;while(at && (mask[at-1]==' ' || mask[at-1]=='\t')) at--;
- GPtrArray *parts=g_ptr_array_new_with_free_func(g_free);
- while(at && mask[at-1]=='.') {
-  at--;while(at && (mask[at-1]==' ' || mask[at-1]=='\t')) at--;gsize end=at;while(at && ident(mask[at-1])) at--;
-  if(at==end || parts->len==16) { g_ptr_array_unref(parts);insight_native_python_bindings_free(owned);return 0; }
-  g_ptr_array_add(parts,g_strndup(mask+at,end-at));while(at && (mask[at-1]==' ' || mask[at-1]=='\t')) at--;
+ GPtrArray *parts=g_ptr_array_new_with_free_func(g_free);gboolean called=FALSE,nominal_receiver=FALSE;gchar *type_scope=NULL;const gchar *lookup_scope=scope;
+ if(at && mask[at-1]=='.') {
+  at--;while(at && (mask[at-1]==' ' || mask[at-1]=='\t')) at--;
+  if(at && mask[at-1]==')') { gsize open=0,after=0;if(insight_select_match(mask,at,at-1,&open,&after)!=1) { g_ptr_array_unref(parts);insight_native_python_bindings_free(owned);return 0; }at=open;called=nominal_receiver=TRUE;while(at && (mask[at-1]==' ' || mask[at-1]=='\t')) at--; }
+  while(TRUE) {
+   gsize end=at;while(at && ident(mask[at-1])) at--;if(at==end || parts->len==16) { g_ptr_array_unref(parts);insight_native_python_bindings_free(owned);return 0; }g_ptr_array_add(parts,g_strndup(mask+at,end-at));while(at && (mask[at-1]==' ' || mask[at-1]=='\t')) at--;if(!at || mask[at-1]!='.') break;at--;while(at && (mask[at-1]==' ' || mask[at-1]=='\t')) at--;
+  }
  }
  if(parts->len && at && (mask[at-1]==')' || mask[at-1]==']')) { g_ptr_array_unref(parts);insight_native_python_bindings_free(owned);return 0; }
  gboolean member=parts->len>0;const gchar *local=member ? g_ptr_array_index(parts,parts->len-1) : word;
- if(!g_hash_table_contains(bindings->import_names,local)) { g_ptr_array_unref(parts);insight_native_python_bindings_free(owned);return 0; }
- gchar *module=NULL,*attributes=NULL;
  InsightNativeSource cached=*source;cached.python=bindings;
- gchar *binding=insight_native_python_binding_scope(index,path,scope,local,&cached),*target=NULL;gsize count=0;
+ if(member && !called && g_hash_table_size(bindings->import_names)) {
+  const InsightSymbol *variable=python_visible_symbol(index,path,scope,local,&cached,eligible,data);
+  if(variable && (!strcmp(variable->kind,"z") || !strcmp(variable->kind,"l") || !strcmp(variable->kind,"v")) && !python_implicit_parameter(index,variable,bindings)) {
+   gchar *type=*variable->type ? g_strdup(variable->type) : python_constructor_expression(index,path,variable,source);
+   if(type) {
+    g_strstrip(type);gsize size=strlen(type);if(size>=2 && (type[0]=='\'' || type[0]=='"') && type[size-1]==type[0]) { memmove(type,type+1,size-2);type[size-2]=0; }
+    gsize end=0;gchar *name=python_import_name(type,strlen(type),&end,TRUE,FALSE);
+    if(name && end==strlen(type)) { type_scope=python_scope_name(variable->scope);if(!strcmp(variable->kind,"z")) { gchar *parent=g_strrstr(type_scope,"::");if(parent) *parent=0;else *type_scope=0; }lookup_scope=type_scope;g_ptr_array_remove_index(parts,parts->len-1);gchar **tokens=g_strsplit(name,".",17);guint count=g_strv_length(tokens);for(gint i=(gint)count-1;i>=0;i--) g_ptr_array_add(parts,g_strdup(tokens[i]));g_strfreev(tokens);local=g_ptr_array_index(parts,parts->len-1);nominal_receiver=TRUE; }
+    g_free(name);g_free(type);
+   }
+  }
+ }
+ if(!g_hash_table_contains(bindings->import_names,local)) { g_free(type_scope);g_ptr_array_unref(parts);insight_native_python_bindings_free(owned);return 0; }
+ gchar *module=NULL,*attributes=NULL;
+ gchar *binding=insight_native_python_binding_scope(index,path,lookup_scope,local,&cached),*target=NULL;gsize count=0;
  GHashTable *imports=binding ? g_hash_table_lookup(bindings->imports,binding) : NULL;PythonImport *item=imports ? g_hash_table_lookup(imports,local) : NULL;
  /* A global/nonlocal declaration may redirect an import written in the
   * current suite. It must not accidentally reuse a different module alias. */
  if(binding) {
-  gchar *walk=python_scope_name(scope);guint depth=0;
+  gchar *walk=python_scope_name(lookup_scope);guint depth=0;
   while(*walk && strcmp(walk,binding)) {
    if(++depth>128) { *imported=TRUE;g_free(walk);goto done; }
    GHashTable *local_imports=g_hash_table_lookup(bindings->imports,walk);PythonImport *candidate=local_imports ? g_hash_table_lookup(local_imports,local) : NULL;
@@ -467,12 +495,12 @@ gsize insight_native_python_import_query(const InsightIndex *index,const gchar *
  if(!*cached_module) goto done;
  target=g_strdup(cached_module);
  const gchar *name=member && !*item->name ? word : item->name;if(!*name) goto done;
- if(member && (*item->name || *attributes)) {
+ if(member && (*item->name || *attributes || nominal_receiver)) {
   gchar *raw=*item->name ? (*attributes ? g_strconcat(item->name,".",attributes,NULL) : g_strdup(item->name)) : g_strdup(attributes),*owner=python_scope_name(raw);g_free(raw);
   gboolean klass=FALSE;for(gsize i=0;i<insight_index_count(index);i++) { const InsightSymbol *tag=insight_index_at(index,i);if(strcmp(tag->path,target) || strcmp(tag->kind,"c")) continue;gchar *full=python_symbol_scope(tag);klass=!strcmp(full,owner);g_free(full);if(klass) break; }
   if(klass) { PythonImportFilter filter={target,eligible,data};count=insight_member_query(index,owner,word,target,python_import_eligible,&filter,out,capacity,NULL,NULL); }
   g_free(owner);
  }else for(gsize i=0;i<insight_index_count(index);i++) { const InsightSymbol *tag=insight_index_at(index,i);if(strcmp(tag->path,target) || *tag->scope || strcmp(tag->name,name) || (eligible && !eligible(tag,data)) || !strcmp(tag->kind,"I") || !strcmp(tag->kind,"i") || !strcmp(tag->kind,"Y")) continue;if(count<capacity) out[count]=tag;count++; }
 done:
- g_free(target);g_free(binding);g_free(module);g_free(attributes);g_ptr_array_unref(parts);insight_native_python_bindings_free(owned);return count;
+ g_free(target);g_free(binding);g_free(type_scope);g_free(module);g_free(attributes);g_ptr_array_unref(parts);insight_native_python_bindings_free(owned);return count;
 }
