@@ -569,3 +569,7 @@ test('Insight symbol preview and editor navigation GUI', symbol_navigation_gui_t
 
 project_bookmarks_gui_test = executable('test_insight_project_bookmarks_gui', '../insight/tests/project_bookmarks_gui_test.c', dependencies: test_deps)
 test('Insight project bookmark stores GUI', project_bookmarks_gui_test, timeout: 55)
+
+reference_regions_gui_test = executable('test_insight_reference_regions_gui', '../insight/tests/reference_regions_gui_test.c', dependencies: test_deps)
+test('Insight reference comment regions GUI', reference_regions_gui_test, timeout: 45)
+test('Insight reference comment regions restore GUI', reference_regions_gui_test, timeout: 45, env: ['GEANY_TEST_REFERENCE_RESTORE=1'])

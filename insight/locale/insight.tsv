@@ -840,3 +840,7 @@ Bookmark store changed; try the operation again	Хранилище заклад�
 Unsaved bookmarks remain in memory; export them before reloading	Несохранённые закладки остались в памяти; экспортируйте их перед перечитыванием
 Project bookmarks ignored: %s	Закладки проекта не загружены: %s
 Project bookmark store contains non-bookmark notes	В хранилище закладок проекта обнаружены записи другого типа
+References: all text	Ссылки: весь текст
+References: skip comments	Ссылки: пропускать комментарии
+References: comments only	Ссылки: только комментарии
+Lexical comment regions; skip comments retains strings, code only excludes both. Unknown languages are skipped in filtered modes.	Лексические области: пропуск комментариев сохраняет строки, «только код» исключает и строки. Неизвестные языки в этих режимах пропускаются.

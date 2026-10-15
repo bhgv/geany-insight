@@ -140,3 +140,20 @@ be searched again before a stale hit can be opened. Insight compact source searc
 is limited to 2 MiB per source and 1024 UTF-8 bytes per query; results and project
 scans have additional bounds reported in the UI. Context only searches the loaded
 preview, not the entire project. [Context controls](panel-context.md).
+
+## Reference search regions
+
+In **References**, choose **all text**, **skip comments** or **comments only**.
+Skip comments keeps string literals: searching `target` finds it in `"target"`
+but not in `// target`. Comments only reverses that choice and ignores strings.
+**References: code only** excludes both comments and strings; enabling it resets
+the comment selector, and choosing a comment filter turns Code only off.
+
+These are lexical filters for C/C++, JavaScript, Python, Lua and Shell. Python
+triple-quoted strings/docstrings remain strings. Unsupported languages are skipped
+in filtered modes; use All text to search them. These filters do not evaluate
+preprocessor conditions or distinguish unrelated symbols with the same name.
+They apply to References, not project text search or replacement. Call sites keep
+their existing code-only behavior. Back restores the reference filter; the chosen
+filter is saved for the next session. Selecting a result previews the original
+source in Context at its original position.
