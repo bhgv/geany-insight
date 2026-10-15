@@ -173,6 +173,19 @@ static void python_imports_test(void) {
  position=strstr(code,"relative_task()")-code;assert(insight_native_python_import_query(index,path,NULL,&source,position,"relative_task",NULL,NULL,&hit,1,&imported)==1 && imported && !strcmp(hit->path,module));
  g_free(duplicate);insight_native_python_bindings_free(source.python);g_free(mask);insight_index_free(index);tm_source_file_free(file);tm_source_file_free(target);tm_source_file_free(other);g_unlink(path);g_unlink(module);g_unlink(unrelated);g_rmdir(directory);g_free(path);g_free(module);g_free(unrelated);g_free(directory);
 }
+static void python_instance_fields_test(void) {
+ const gchar *code="class Alpha:\n    def __init__(self):\n        self.field = 1\n        self.typed: int = 2\n        self.callback = lambda: 1\n        self.chain.ignored = 3\n    def method(self):\n        return self.field\n    @classmethod\n    def setup(cls):\n        cls.shared = 4\nclass Beta:\n    def __init__(self):\n        self.field = 2\n    def method(self):\n        return self.field\ndef fake(self):\n    self.unowned = 1\nclass Odd:\n    def method(other, self):\n        self.not_first = 1\n        other.unconventional = 2\nclass Static:\n    field = 9\n    @staticmethod\n    def method(self):\n        self.not_owned = 3\n        return self.field\n";
+ gchar filename[]="python-fields-XXXXXX";gint fd=g_mkstemp(filename);assert(fd>=0);g_close(fd,NULL);gchar *path=g_canonicalize_filename(filename,NULL);TMSourceFile *file=tm_source_file_new(path,"Python");InsightIndex *index=insight_index_new();assert(insight_native_parse(index,file,path,code,strlen(code)));
+ const InsightSymbol *tags[8];assert(insight_index_find(index,"field",1,tags,8)==3);assert(!strcmp(tags[0]->kind,"v") && !strcmp(tags[1]->kind,"v") && !strcmp(tags[2]->kind,"v"));
+ assert(insight_index_find(index,"typed",1,tags,8)==1 && !strcmp(tags[0]->scope,"Alpha") && !strcmp(tags[0]->type,"int"));
+ assert(insight_index_find(index,"callback",1,tags,8)==1 && !strcmp(tags[0]->scope,"Alpha") && !strcmp(tags[0]->kind,"v"));
+ assert(insight_index_find(index,"shared",1,tags,8)==1 && !strcmp(tags[0]->scope,"Alpha"));
+ assert(!insight_index_find(index,"ignored",1,tags,8));assert(!insight_index_find(index,"unowned",1,tags,8));assert(!insight_index_find(index,"not_first",1,tags,8));assert(!insight_index_find(index,"unconventional",1,tags,8));assert(!insight_index_find(index,"not_owned",1,tags,8));
+ gchar *mask=insight_source_code_mask(code,strlen(code),INSIGHT_CODE_PYTHON,NULL);InsightNativeSource source={code,mask,strlen(code),NULL};
+ const gchar *probe=code;for(guint n=0;n<2;n++) { probe=strstr(probe,"return self.field");assert(probe);gsize position=probe-code+12;gchar *scope=insight_native_python_scope(index,path,&source,position);gboolean member=FALSE;gchar *owner=insight_native_python_owner(index,path,scope,100,&source,position,&member,NULL,NULL);assert(member && !g_strcmp0(owner,n ? "Beta" : "Alpha"));assert(insight_member_query(index,owner,"field",path,NULL,NULL,tags,8,NULL,NULL)==1 && tags[0]->line==(n ? 14 : 3));g_free(owner);g_free(scope);probe++; }
+ gsize position=strstr(strstr(code,"class Static"),"self.field")-code+5;gchar *scope=insight_native_python_scope(index,path,&source,position);gboolean member=FALSE;gchar *owner=insight_native_python_owner(index,path,scope,100,&source,position,&member,NULL,NULL);assert(member && !owner);g_free(scope);
+ g_free(mask);insight_index_free(index);tm_source_file_free(file);g_unlink(filename);g_free(path);
+}
 int main(void) {
  assert(insight_native_language_compatible(TM_PARSER_C,TM_PARSER_CPP));assert(insight_native_language_compatible(TM_PARSER_CPP,TM_PARSER_ASM));assert(!insight_native_language_compatible(TM_PARSER_C,TM_PARSER_VHDL));assert(!insight_native_language_compatible(TM_PARSER_CPP,TM_PARSER_SH));assert(!insight_native_language_compatible(TM_PARSER_NONE,TM_PARSER_NONE));assert(insight_native_language_compatible(TM_PARSER_PYTHON,TM_PARSER_PYTHON));
  InsightIndex *index=insight_index_new(); assert(index);
@@ -205,7 +218,7 @@ int main(void) {
  assert(insight_native_import(index,&source,"/project/a.cpp") && insight_index_count(index)==0);
  assert(insight_native_import(index,NULL,"/project/a.cpp"));
  g_ptr_array_free(tags,TRUE); insight_index_free(index);
- tm_get_workspace();python_navigation_test();python_declarations_test();python_imports_test();
+ tm_get_workspace();python_navigation_test();python_declarations_test();python_imports_test();python_instance_fields_test();
  const char *code="class Base {};\nclass Widget : public Base {\npublic: int run(int value) { return value; }\n};\nint parsed_function(int value) { return value; }\n";
  char filename[]="native-parser-test-XXXXXX"; gint descriptor=g_mkstemp(filename); assert(descriptor>=0); g_close(descriptor,NULL);
  char *absolute=g_canonicalize_filename(filename,NULL); TMSourceFile *parsed=tm_source_file_new(absolute,"C++"); assert(parsed && parsed->lang>=0);

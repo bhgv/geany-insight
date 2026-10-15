@@ -207,6 +207,7 @@ typedef struct {
 
 struct pythonNestingLevelUserData {
 	int indentation;
+	bool staticMethod;
 };
 #define PY_NL(nl) ((struct pythonNestingLevelUserData *) nestingLevelGetUserData (nl))
 
@@ -296,7 +297,7 @@ static int makeClassTag (const tokenInfo *const token,
 		initPythonEntry (&e, token, PYTHON_CLASS_KIND);
 
 		e.extensionFields.inheritance = inheritance ? vStringValue (inheritance) : "";
-		if (decorators && vStringLength (decorators) > 0)
+		if (decorators && vStringLength (decorators) > 0 && PythonFields[F_DECORATORS].enabled)
 		{
 			attachParserField (&e, PythonFields[F_DECORATORS].ftype,
 			                   vStringValue (decorators));
@@ -320,7 +321,7 @@ static int makeFunctionTag (const tokenInfo *const token,
 
 		if (arglist)
 			e.extensionFields.signature = vStringValue (arglist);
-		if (decorators && vStringLength (decorators) > 0)
+		if (decorators && vStringLength (decorators) > 0 && PythonFields[F_DECORATORS].enabled)
 		{
 			attachParserField (&e, PythonFields[F_DECORATORS].ftype,
 			                   vStringValue (decorators));
@@ -1205,6 +1206,18 @@ static bool parseClassOrDef (tokenInfo *const token,
 
 	lv = nestingLevelsPush (PythonNestingLevels, corkIndex);
 	PY_NL (lv)->indentation = token->indent;
+	PY_NL (lv)->staticMethod = false;
+	if (decorators)
+	{
+		const char *p = vStringValue (decorators);
+		while ((p = strstr (p, "staticmethod")) != NULL)
+		{
+			const char *begin = vStringValue (decorators);
+			if ((p == begin || p[-1] == ',') && (p[12] == '\0' || p[12] == ','))
+				PY_NL (lv)->staticMethod = true;
+			p += 12;
+		}
+	}
 
 	deleteToken (name);
 	vStringDelete (arglist);
@@ -1536,6 +1549,43 @@ static void parseSimpleNamespace (tokenInfo *const token, int namespaceIndex)
 	TRACE_LEAVE();
 }
 
+/* A conventional first receiver in a direct class method may declare an
+	* instance/class field. Arbitrary dotted assignments are not declarations. */
+static int instanceFieldClass (const tokenInfo *receiver)
+{
+	const char *name = vStringValue (receiver->string);
+	if (strcmp (name, "self") != 0 && strcmp (name, "cls") != 0)
+		return CORK_NIL;
+	NestingLevel *level = nestingLevelsGetCurrent (PythonNestingLevels);
+	tagEntryInfo *method = getEntryOfNestingLevel (level);
+	if (!method || method->kindIndex != PYTHON_METHOD_KIND || PY_NL (level)->staticMethod)
+		return CORK_NIL;
+	int owner = method->extensionFields.scopeIndex;
+	tagEntryInfo *klass = getEntryInCorkQueue (owner);
+	const char *first = method->extensionFields.signature;
+	if (!klass || klass->kindIndex != PYTHON_CLASS_KIND || !first)
+		return CORK_NIL;
+	while (*first && (*first == '(' || isspace ((unsigned char)*first)))
+		first++;
+	size_t length = strlen (name);
+	return strncmp (first, name, length) == 0 && !isIdentifierChar ((unsigned char)first[length]) ? owner : CORK_NIL;
+}
+
+static int makeVariableTag (const tokenInfo *token, pythonKind kind, int instanceClass)
+{
+	if (instanceClass == CORK_NIL)
+		return makeSimplePythonTag (token, kind);
+	if (!PythonKinds[PYTHON_VARIABLE_KIND].enabled)
+		return CORK_NIL;
+	tagEntryInfo entry;
+	initPythonEntry (&entry, token, PYTHON_VARIABLE_KIND);
+	entry.extensionFields.scopeIndex = instanceClass;
+	accessType access = accessFromIdentifier (token->string, PYTHON_VARIABLE_KIND, PYTHON_CLASS_KIND);
+	entry.extensionFields.access = PythonAccesses[access];
+	entry.isFileScope = access == ACCESS_PRIVATE;
+	return makeTagEntry (&entry);
+}
+
 static bool parseVariable (tokenInfo *const token, const pythonKind kind)
 {
 	TRACE_ENTER();
@@ -1544,6 +1594,7 @@ static bool parseVariable (tokenInfo *const token, const pythonKind kind)
 	 * an assignation to it */
 	tokenInfo *nameTokens[8] = { NULL };
 	vString   *nameTypes [ARRAY_SIZE (nameTokens)] = { NULL };
+ int instanceClasses [ARRAY_SIZE (nameTokens)] = { CORK_NIL };
 	unsigned int nameCount = 0;
 	vString *type = vStringNew();
 
@@ -1555,25 +1606,32 @@ static bool parseVariable (tokenInfo *const token, const pythonKind kind)
 		tokenInfo *name = newToken ();
 		copyToken (name, token);
 
+		int instanceClass = CORK_NIL;
 		readToken (token);
 		if (token->type == '.')
 		{
-			/* FIXME: what to do with dotted names?  We currently ignore them
-			 *        as we need to do something not to break the whole
-			 *        declaration, but the expected behavior is questionable */
-			deleteToken (name);
-			name = NULL;
-
-			do
+			instanceClass = instanceFieldClass (name);
+			readToken (token);
+			if (instanceClass != CORK_NIL && token->type == TOKEN_IDENTIFIER)
 			{
+				copyToken (name, token);
 				readToken (token);
 			}
-			while (token->type == TOKEN_IDENTIFIER ||
-			       token->type == '.');
+			else
+				instanceClass = CORK_NIL;
+			if (instanceClass == CORK_NIL || token->type == '.')
+			{
+				deleteToken (name);
+				name = NULL;
+				instanceClass = CORK_NIL;
+				while (token->type == TOKEN_IDENTIFIER || token->type == '.')
+					readToken (token);
+			}
 		}
 
 		i = nameCount++;
 		nameTokens[i] = name;
+		instanceClasses[i] = instanceClass;
 
 		/* (parse and) skip annotations.  we need not to be too permissive because we
 		 * aren't yet sure we're actually parsing a variable. */
@@ -1664,7 +1722,7 @@ static bool parseVariable (tokenInfo *const token, const pythonKind kind)
 					 *    anonFuncNNN	input.py	/^id_t: Callable[[int], int] = lambda var: var$/;"	function \
 					 *                          extras:anonymous
 					 */
-					int vindex = makeSimplePythonTag (nameToken, kind);
+					int vindex = makeVariableTag (nameToken, kind, instanceClasses[i-1]);
 					vStringClear (anon->string);
 					anonGenerate (anon->string, "anonFunc", PYTHON_FUNCTION_KIND);
 					int findex = makeFunctionTag (anon, arglist, NULL);
@@ -1688,6 +1746,8 @@ static bool parseVariable (tokenInfo *const token, const pythonKind kind)
 					if (anon)
 						deleteToken (anon);
 				}
+				else if (instanceClasses[i-1] != CORK_NIL)
+					makeVariableTag (nameToken, kind, instanceClasses[i-1]);
 				else
 					makeFunctionTag (nameToken, arglist, NULL);
 				vStringDelete (arglist);
@@ -1696,10 +1756,10 @@ static bool parseVariable (tokenInfo *const token, const pythonKind kind)
 			{
 				TRACE_PRINT("name: %s", vStringValue(nameToken->string));
 				bool isAtSN = isAtSimpleNamespace(token);
-				int index = makeSimplePythonTag (nameToken,
+				int index = makeVariableTag (nameToken,
 												 ((kind != PYTHON_LOCAL_VARIABLE_KIND) && isAtSN)
 												 ? PYTHON_NAMESPACE_KIND
-												 : kind);
+												 : kind, instanceClasses[i-1]);
 				if (isAtSN)
 					parseSimpleNamespace(token, index);
 				tagEntryInfo *e = getEntryInCorkQueue (index);
@@ -1727,7 +1787,7 @@ static bool parseVariable (tokenInfo *const token, const pythonKind kind)
 		for (; i < nameCount; i++)
 		{
 			if (nameTokens[i])
-				makeSimplePythonTag (nameTokens[i], kind);
+				makeVariableTag (nameTokens[i], kind, instanceClasses[i]);
 		}
 	}
 
@@ -1871,8 +1931,7 @@ static void findPythonTags (void)
 			if (!isTypeStatement)
 				readNext = parseVariable (token, kind);
 		}
-		else if (token->type == '@' && atStatementStart &&
-		         PythonFields[F_DECORATORS].enabled)
+		else if (token->type == '@' && atStatementStart)
 		{
 			/* collect decorators */
 			readQualifiedName (token);
@@ -1890,8 +1949,7 @@ static void findPythonTags (void)
 		 * token.  decorator collection takes care of skipping the possible
 		 * argument list, so we should never hit here parsing a decorator */
 		if (iterationTokenType != TOKEN_INDENT &&
-		    iterationTokenType != '@' &&
-		    PythonFields[F_DECORATORS].enabled)
+		    iterationTokenType != '@')
 		{
 			vStringClear (decorators);
 		}

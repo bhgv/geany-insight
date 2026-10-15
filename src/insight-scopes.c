@@ -152,7 +152,7 @@ static gboolean python_within(const gchar *scope,const gchar *outer) {
 /* A declaration affects its complete suite, including earlier references. */
 typedef struct { gchar *module,*name;gboolean ambiguous; } PythonImport;
 static void python_import_free(gpointer data) { PythonImport *item=data;g_free(item->module);g_free(item->name);g_free(item); }
-struct InsightNativePythonBindings { GHashTable *scopes,*imports,*import_names,*modules;gboolean valid; };
+struct InsightNativePythonBindings { GHashTable *scopes,*imports,*import_names,*modules,*static_methods;gboolean valid; };
 static void python_space(const gchar *mask,gsize length,gsize *at,gboolean multiline) {
  while(*at<length) {
   if(mask[*at]==' ' || mask[*at]=='\t' || (multiline && (mask[*at]=='\n' || mask[*at]=='\r'))) { (*at)++;continue; }
@@ -203,7 +203,21 @@ done:
 }
 void insight_native_python_bindings_free(InsightNativePythonBindings *bindings) {
  if(!bindings) return;
- g_hash_table_unref(bindings->scopes);g_hash_table_unref(bindings->imports);g_hash_table_unref(bindings->import_names);g_hash_table_unref(bindings->modules);g_free(bindings);
+ g_hash_table_unref(bindings->scopes);g_hash_table_unref(bindings->imports);g_hash_table_unref(bindings->import_names);g_hash_table_unref(bindings->modules);g_hash_table_unref(bindings->static_methods);g_free(bindings);
+}
+static gboolean python_static_before(const gchar *mask,gsize position) {
+ while(position && mask[position-1]!='\n') position--;
+ for(guint lines=0;position && lines<128;lines++) {
+  gsize end=position-1,first=end;while(first && mask[first-1]!='\n') first--;position=first;
+  while(first<end && g_ascii_isspace(mask[first])) first++;
+  while(end>first && g_ascii_isspace(mask[end-1])) end--;
+  if(first==end) continue;
+  if(mask[first]!='@') break;
+  first++;
+  while(first<end && (mask[first]==' ' || mask[first]=='\t')) first++;
+  if(word_is(mask,first,end,"staticmethod")) return TRUE;
+ }
+ return FALSE;
 }
 InsightNativePythonBindings *insight_native_python_bindings_new(const InsightIndex *index,const gchar *path,const InsightNativeSource *source) {
  InsightNativePythonBindings *bindings=g_new0(InsightNativePythonBindings,1);
@@ -211,11 +225,17 @@ InsightNativePythonBindings *insight_native_python_bindings_new(const InsightInd
  bindings->imports=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,(GDestroyNotify)g_hash_table_unref);
  bindings->import_names=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
  bindings->modules=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);
+ bindings->static_methods=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
  if(!index || !source || !source->text || !source->mask || source->length>2u*1024u*1024u) return bindings;
  const gchar *mask=source->mask;gsize work=0;guint count=0,names=0;
  for(gsize at=0;at<source->length;) {
   if(!ident(mask[at])) { at++;continue; }
   gsize first=at;while(at<source->length && ident(mask[at])) at++;
+  if(word_is(mask,first,at,"def") && python_static_before(mask,first)) {
+   if(source->length>32u*1024u*1024u-work) return bindings;
+   work+=source->length;
+   gboolean valid=FALSE;gchar *method=python_scope_at(index,path,source,first,&valid);if(!valid) { g_free(method);return bindings; }if(method) g_hash_table_add(bindings->static_methods,method);
+  }
   guint mode=word_is(mask,first,at,"global") ? 1 : word_is(mask,first,at,"nonlocal") ? 2 : 0;
   gsize before=first;while(before && (mask[before-1]==' ' || mask[before-1]=='\t')) before--;
   gboolean boundary=!before || mask[before-1]=='\n' || mask[before-1]=='\r' || mask[before-1]==';' || mask[before-1]==':';
@@ -290,7 +310,8 @@ gchar *insight_native_python_owner(const InsightIndex *index,const gchar *path,c
  /* Select the visible binding before interpreting a conventional receiver. A
   * closure may capture self, but a nearer parameter/local must hide it. Python
   * local assignments bind the whole function, even before their source line. */
- gchar *lookup=insight_native_python_binding_scope(index,path,scope,receiver,source);if(!lookup) { g_free(receiver);return NULL; }
+ InsightNativePythonBindings *owned=NULL,*bindings=source->python;if(!bindings) bindings=owned=insight_native_python_bindings_new(index,path,source);InsightNativeSource cached=*source;cached.python=bindings;
+ gchar *lookup=insight_native_python_binding_scope(index,path,scope,receiver,&cached);if(!lookup) { insight_native_python_bindings_free(owned);g_free(receiver);return NULL; }
  const InsightSymbol *best=NULL;gint best_rank=-1;
  for(gsize i=0;i<insight_index_count(index);i++) { const InsightSymbol *tag=insight_index_at(index,i);if(strcmp(tag->name,receiver) || (eligible && !eligible(tag,data))) continue;gint rank=insight_native_python_rank(index,tag,path,lookup,line);if(rank>best_rank) { best=tag;best_rank=rank; } }
  if(best && !strcmp(best->kind,"z") && (!strcmp(receiver,"self") || !strcmp(receiver,"cls"))) {
@@ -299,7 +320,7 @@ gchar *insight_native_python_owner(const InsightIndex *index,const gchar *path,c
    const InsightSymbol *tag=insight_index_at(index,i);if(g_strcmp0(tag->path,path) || (strcmp(tag->kind,"m") && strcmp(tag->kind,"f")) || !*tag->scope || (eligible && !eligible(tag,data))) continue;
    gchar *name=python_symbol_scope(tag);gboolean same=!strcmp(name,binding);g_free(name);if(!same) continue;
    const gchar *first=tag->signature;while(*first && (*first=='(' || g_ascii_isspace(*first))) first++;gsize n=strlen(receiver);
-   if(!strncmp(first,receiver,n) && !ident(first[n])) {
+   if(!g_hash_table_contains(bindings->static_methods,binding) && !strncmp(first,receiver,n) && !ident(first[n])) {
     /* A nested ordinary function with a parameter named self is not a method. */
     for(gsize j=0;j<insight_index_count(index);j++) { const InsightSymbol *klass=insight_index_at(index,j);if(strcmp(klass->kind,"c") || g_strcmp0(klass->path,path) || (eligible && !eligible(klass,data))) continue;gchar *class_name=python_symbol_scope(klass),*parent=python_scope_name(tag->scope);if(!strcmp(class_name,parent)) owner=g_strdup(parent);g_free(parent);g_free(class_name);if(owner) break; }
    }
@@ -310,7 +331,7 @@ gchar *insight_native_python_owner(const InsightIndex *index,const gchar *path,c
  /* A visible annotated variable or a directly named class is nominal. */
  if(!owner && best && !strcmp(best->kind,"c")) owner=python_symbol_scope(best);
  else if(!owner && best && *best->type) { InsightTypeResult resolved=insight_type_resolve(index,best->type,best->scope,path,eligible,data);owner=resolved.owner;resolved.owner=NULL;insight_type_result_clear(&resolved); }
- g_free(lookup);g_free(receiver);return owner;
+ insight_native_python_bindings_free(owned);g_free(lookup);g_free(receiver);return owner;
 }
 
 /* Explicit imports never authorize searching every file for a bare name. */

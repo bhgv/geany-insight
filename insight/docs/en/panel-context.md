@@ -98,3 +98,13 @@ and general type inference are not evaluated. Dotted imports without an alias
 resolved. An unrelated name in another Python file is not an
 import. An unknown receiver does not fall back to a random same-name field.
 Comments and strings do not become links.
+
+Simple assignments to `self.field` or `cls.field` in a direct class method now
+create indexed field definitions in that class, including an annotation when
+present (`self.field: Type = value`). The receiver must be that method's first
+conventional `self`/`cls` parameter. Arbitrary objects, chained attribute writes,
+unconventional receiver names and ordinary nested functions do not create guessed
+class fields. Plain `@staticmethod` is recognized even when decorator metadata
+output is disabled: it neither declares fields through its parameter nor treats
+that parameter as an implicit instance receiver. Other decorator semantics and
+unannotated constructor-assignment type inference remain open.

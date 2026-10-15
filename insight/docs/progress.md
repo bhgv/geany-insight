@@ -1491,3 +1491,34 @@ Validation: strict C99 -Wall -Wextra -Werror compilation of the shared Python
 resolver passes. The complete editor/test target set compiles; the native index
 and six targeted GUIs pass: explicit imports, Python Context, C-family links,
 scoped C++ aliases, scope hierarchy and Overview.
+
+
+## Python instance field declarations and plain staticmethod barriers
+
+The Python parser previously discarded every dotted assignment, including the
+ordinary self.field = value declarations in __init__. It now emits class-owned
+variable tags for direct self/cls field writes in a direct class method whose
+first conventional parameter matches the receiver. Annotation metadata survives,
+and lambda-valued fields stay variable fields rather than becoming guessed
+methods. Arbitrary dotted objects, chains, non-first receivers, ordinary nested
+functions and unconventional receiver names remain unguessed. Access metadata
+uses the owning class rather than incorrectly marking every field function-local.
+
+Decorator collection now runs independently of decorator metadata output, while
+field output still honors that setting. A plain staticmethod decorator suppresses
+implicit field declarations. Source binding caches record the same plain decorator
+for Context, preventing its first self parameter from resolving to an unrelated
+field of the containing class. Other decorator transformations, constructor type
+inference, annotation-only and chained assignments remain open. Startup already
+reindexes restored workspaces, so cached files receive the new field declarations.
+
+New native regressions cover two classes with the same field name, annotated and
+lambda-valued fields, cls writes, rejected chains/arbitrary receivers and static
+methods. The real Python Context GUI verifies F12 and Follow to instance writes
+and no implicit receiver jump from a staticmethod. All 19 existing Python/Cython
+parser fixtures pass without changing expected outputs. Windows remains deferred.
+
+Validation: the complete editor/test target set compiles. Strict C99
+-Wall -Wextra -Werror compilation of the shared resolver passes. The native
+index and five targeted GUIs pass: Python Context, imports/live updates,
+Python/Lua boundaries, C-family links and scoped C++ aliases.
