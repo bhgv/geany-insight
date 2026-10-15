@@ -7,22 +7,22 @@
 
 | Область | Текущее состояние | Незакрытый объём |
 | --- | --- | --- |
-| File Symbols слева | Поиск, сортировка, общие цвета/значки, группировка и фильтр типов, счётчики, Context; проверен GUI Linux | Семантическая иерархия scope |
+| File Symbols слева | Поиск, сортировка, общие цвета/значки, группировка и фильтр типов, счётчики, Context, вложенные tag scope по языку; проверен GUI Linux | Семантические владельцы scope |
 | Project Files справа | Manifest, поиск, сортировка, Context; диалог добавления/удаления файлов и деревьев, Remove all, исключения, DnD, импорт/экспорт списка | Автоматическое слежение за Master File List и подробная GUI-проверка |
 | Project Folders | Дерево manifest, фильтр/нечёткий поиск с папками-предками, счётчик, меню/клавиатура, копирование путей, Locate/Follow текущего файла, ветки; проверен GUI Linux | Просмотр неиндексированных файлов диска и виртуальные группы |
-| Project Symbols | Теги Geany, поиск, сортировка, цвета/значки, группировка и фильтр типов, независимые настройки | Семантическое разрешение типов и перегрузок |
+| Project Symbols | Теги Geany, поиск, сортировка, цвета/значки, группировка, вложенные tag scope и фильтр типов, независимые настройки | Семантическое разрешение типов и перегрузок |
 | Symbol Categories | Языковые типы/цвета/значки, вложенные scope, прямые члены однозначных классов, фильтр, дозагрузка, счётчик, меню/клавиатура/Info/References, колонки | Семантическое наследование, aliases и неоднозначные владельцы |
 | File Types | Профили открытых и закрытых файлов, фильтр путей, счётчик, меню/клавиатура, независимые колонки/сортировка | Детальная сверка всех File Type Options с Source Insight |
 | Context снизу | Цветной Scintilla, номера строк, центрирование, подчёркнутые ссылки с курсором-пальцем и обычным кликом, история, поиск | Подробная проверка GUI на целевых ОС |
-| Relation Window | Определения/объявления, прямые члены scope, прямые Base/Derived по тегам, лексические ссылки, Calls текущей функции и Call sites проекта, Follow symbol / enclosing function, граф одного уровня с масштабом и двумя ориентациями | Семантические вызовы/вызывающие функции, разрешение типов/aliases, раскрываемые деревья связей |
+| Relation Window | Определения/объявления, прямые члены scope, прямые/транзитивные Base/Derived и наследуемые члены по однозначным тегам, лексические ссылки, Calls текущей функции и Call sites проекта, Follow symbol / enclosing function, граф одного уровня с масштабом и двумя ориентациями | Семантические вызовы/вызывающие функции, разрешение типов/aliases, раскрываемые деревья связей |
 | Overview Scroller | Цветная миниатюра файла, видимая область/выделение, прокрутка мышью и колесом, масштаб/ширина, сохранение параметров, отметки закладок и изменённых/сохранённых строк, переходы по блокам правок, текущая/все функции с фоновыми лексическими границами; проверен GUI Linux | Вложенные блоки, языки с границами по отступам и семантические диапазоны |
 | Панели | Десять отдельных float/dock и сохранение геометрии | Произвольное перетаскивание и snap-to-edge |
 | Symbol Info | Отдельное окно: кандидаты, сведения тегов, цветной исходник, Jump с проверкой снимка, References, Leave file open и копирование | Метрики, вывод типов и GUI-проверка |
 | Window List | Немодальный список открытых буферов, поиск, MRU/имя/путь, ближайший символ, Context, Activate/Save/Close, сохранение геометрии/фильтра/сортировки/колонок; проверен GUI Linux | Docking |
 | Раскладки A–D | Пользовательские снимки и восстановление | Детальная сверка всех параметров окон |
-| Bookmarks / Clips | Постоянное хранилище, навигация, вставка и редактирование Clips, переименование, импорт/экспорт выбранной панели | Переносимые пути; движущиеся маркеры, синяя метка и немодальный список реализованы |
+| Bookmarks / Clips | Постоянное хранилище, навигация, вставка и редактирование Clips, переименование, импорт/экспорт выбранной панели, относительные пути проекта при переносе закладок; движущиеся маркеры | Автоматическая релокация глобальных закладок |
 | Шаблоны кода | Clips: создание, ввод пользовательских переменных, дата/файл/проект/выделение/курсор, языковые профили/фильтр списка, один Undo/Redo, импорт/экспорт, общие значки меню/панели | Отдельные базы проекта, автодополнение и редактирование placeholder после вставки |
-| Структурное выделение | Меню Edit, расширение по вложенным скобкам, Select Match, Select Line, Select Function и Function Up/Down; строки и комментарии исключаются лексической маской | Выделение полного символа/функции, блоки отступов, семантические границы, GUI-проверка |
+| Структурное выделение | Меню Edit, расширение по вложенным скобкам, Select Match, Select Line, Select Function, блоки Python/Lua и Function Up/Down; проверен native GUI, строки и комментарии исключаются лексической маской | Семантические границы; дополнительные языки за пределами brace/Python/Lua |
 | Поиск и изменение | Geany Find/Replace, Unicode/regex, Boolean Keywords с контекстом строк, выбор области/масок, сохранение параметров и выбранных путей, отдельная Search Results с Shift+F8/F9, жёлтые совпадения с красной рамкой, подсветка похожего выделения | Морфологические вариации слов, семантическое переименование и комплексные рефакторинги |
 | SSH (расширение) | OpenSSH/SFTP, shell с вводом строк, кэш файлов/папок/.geany проектов, переносимые пароли в конфиге по опции, отдельная автоотправка после Save | Полная VT/PTY эмуляция терминала, live refresh удалённой папки, разрешение конфликтов удалённых правок |
 | Lua | Встроенный runtime, команды, события, API редактора и проекта | Расширение API для всех новых панелей |
@@ -66,7 +66,7 @@ File and project outlines offer name, source line, kind, scope and file path, wi
 
 ### Locate caret declaration in File Symbols (2026-10-14)
 
-An icon-only target button and local outline menu action select and reveal the caret declaration without updating Context or navigating the editor. Supported brace languages prefer the containing indexed function in buffers up to 2 MiB; other cases use the nearest preceding indexed declaration. Hidden/unloaded results report a status message without clearing filters or increasing the loaded portion. Native GUI covers both commands, group expansion, boundary/fallback cases, hidden results and RU labels.
+An icon-only target button and local outline menu action select and reveal the caret declaration without updating Context or navigating the editor. Supported brace/Python/Lua languages prefer the containing indexed function in buffers up to 2 MiB; other cases use the nearest preceding indexed declaration. Hidden/unloaded results report a status message without clearing filters or increasing the loaded portion. Native GUI covers both commands, group expansion, boundary/fallback cases, hidden results and RU labels.
 
 
 ### Persistent symbol column layouts (2026-10-14)
@@ -91,3 +91,7 @@ Backend lookup tests and a native C++ GUI scenario cover the new commands and se
 ### Ten Project Folders improvements (2026-10-15)
 
 The manifest tree now supports shared path filters including fuzzy subsequences, ancestor retention, counters, non-navigating context menus, keyboard commands, full and project-relative clipboard paths, explicit file opening, Locate current file, persistent Follow current file, and selected/all branch controls. Tree refresh preserves selected source and expanded directory identities; invalid regex preserves the last valid tree. The tree remains limited to the first 10000 manifest files rather than arbitrary disk contents. Offline RU/EN controls and a tutorial document the behavior.
+
+### Inheritance, scope hierarchy and non-brace functions (2026-10-15)
+
+Relations supports indexed transitive Bases/Derived/inherited Members with namespace resolution, eligibility filtering, ambiguity omission, cycles/diamonds and depth limits. Both symbol outlines independently support nested parser scope branches and restore nested expansion/selection. Python/Lua function ranges and suite expansion now drive Select Function, lexical Calls, function tracking and Overview. Native GUI and standalone core tests cover these paths; semantic aliases/overloads/owners and expandable relation edges remain open.

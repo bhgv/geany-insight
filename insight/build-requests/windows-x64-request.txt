@@ -1,1 +1,1 @@
-Build Windows x64 portable: Python/Lua function extents, block expansion, Calls and Overview.
+Build Windows x64 portable: all current Source Insight migration work including portable bookmark transfer.

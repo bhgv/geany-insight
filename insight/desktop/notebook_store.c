@@ -29,26 +29,53 @@ gboolean insight_note_matches_language(const InsightNote *note,const gchar *prof
  for(guint i=0;note->languages[i];i++) if(!strcmp(note->languages[i],profile)) return TRUE;
  return FALSE;
 }
-gboolean insight_notes_save(const InsightNotes *n,const char *path,GError **error) {
- if(!n || !path) return FALSE;
- GKeyFile *key=g_key_file_new(); g_key_file_set_integer(key,"notes","version",1); g_key_file_set_integer(key,"notes","count",(gint)n->items->len);
- for(guint i=0;i<n->items->len;i++) { InsightNote *note=g_ptr_array_index(n->items,i); gchar group[32]; g_snprintf(group,sizeof group,"note-%u",i); g_key_file_set_integer(key,group,"kind",note->kind); g_key_file_set_string(key,group,"name",note->name); g_key_file_set_string(key,group,"path",note->path); g_key_file_set_uint64(key,group,"line",note->line); g_key_file_set_string(key,group,"text",note->text); if(note->kind==INSIGHT_CLIP && note->languages && note->languages[0]) g_key_file_set_string_list(key,group,"languages",(const gchar *const *)note->languages,g_strv_length(note->languages)); }
+gboolean insight_notes_save_portable(const InsightNotes *n,const char *path,const char *root,GError **error) {
+ if(!n || !path || (root && (!g_path_is_absolute(root) || !g_utf8_validate(root,-1,NULL)))) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid notes file or project root");return FALSE; }
+ GKeyFile *key=g_key_file_new(); g_key_file_set_integer(key,"notes","version",root ? 2 : 1); g_key_file_set_integer(key,"notes","count",(gint)n->items->len);
+ for(guint i=0;i<n->items->len;i++) {
+  InsightNote *note=g_ptr_array_index(n->items,i);gchar group[32];g_snprintf(group,sizeof group,"note-%u",i);
+  gchar *relative=NULL;
+  if(root && note->kind==INSIGHT_BOOKMARK) { GFile *base=g_file_new_for_path(root),*file=g_file_new_for_path(note->path);relative=g_file_get_relative_path(base,file);g_object_unref(base);g_object_unref(file); }
+  if(relative) for(gchar *c=relative;*c;c++) if(G_IS_DIR_SEPARATOR(*c)) *c='/';
+  if(relative && (strchr(relative,':') || strchr(relative,'\\'))) g_clear_pointer(&relative,g_free);
+  g_key_file_set_integer(key,group,"kind",note->kind);g_key_file_set_string(key,group,"name",note->name);
+  g_key_file_set_string(key,group,"path",relative ? relative : note->path);
+  if(root) g_key_file_set_boolean(key,group,"project-relative",relative!=NULL);
+  g_key_file_set_uint64(key,group,"line",note->line);g_key_file_set_string(key,group,"text",note->text);
+  if(note->kind==INSIGHT_CLIP && note->languages && note->languages[0]) g_key_file_set_string_list(key,group,"languages",(const gchar *const *)note->languages,g_strv_length(note->languages));
+  g_free(relative);
+ }
  gsize length; gchar *data=g_key_file_to_data(key,&length,NULL); g_key_file_unref(key); GFile *file=g_file_new_for_path(path);
  gboolean ok=length<=8u*1024u*1024u && g_file_replace_contents(file,data,length,NULL,FALSE,G_FILE_CREATE_PRIVATE,NULL,NULL,error); g_object_unref(file); g_free(data); return ok;
 }
-InsightNotes *insight_notes_load(const char *path,GError **error) {
+gboolean insight_notes_save(const InsightNotes *n,const char *path,GError **error) { return insight_notes_save_portable(n,path,NULL,error); }
+static gchar *portable_path(const char *root,const char *relative) {
+ if(!root || !g_path_is_absolute(root) || !g_utf8_validate(root,-1,NULL) || !relative || !*relative || strlen(relative)>16384 || g_path_is_absolute(relative) || strchr(relative,':') || strchr(relative,'\\')) return NULL;
+ gchar **parts=g_strsplit(relative,"/",-1);gboolean valid=TRUE;
+ for(guint i=0;parts[i];i++) if(!*parts[i] || !strcmp(parts[i],".") || !strcmp(parts[i],"..")) valid=FALSE;
+ g_strfreev(parts);if(!valid) return NULL;
+ GFile *base=g_file_new_for_path(root),*file=g_file_resolve_relative_path(base,relative);gchar *path=g_file_get_path(file);
+ if(!g_file_has_prefix(file,base)) g_clear_pointer(&path,g_free);
+ g_object_unref(file);g_object_unref(base);return path;
+}
+InsightNotes *insight_notes_load_portable(const char *path,const char *root,GError **error) {
  GFile *file=g_file_new_for_path(path); GFileInputStream *stream=g_file_read(file,NULL,error); g_object_unref(file); if(!stream) return NULL;
  GString *data=g_string_new(NULL); char buffer[16384]; gboolean ok=TRUE;
  for(;;) { gssize got=g_input_stream_read(G_INPUT_STREAM(stream),buffer,sizeof buffer,NULL,error); if(got<0) { ok=FALSE; break; } if(!got) break; if(data->len+(gsize)got>8u*1024u*1024u) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Notes file exceeds size limit"); ok=FALSE; break; } g_string_append_len(data,buffer,got); }
  g_object_unref(stream); GKeyFile *key=g_key_file_new(); InsightNotes *notes=insight_notes_new();
  if(ok) ok=!memchr(data->str,0,data->len) && g_utf8_validate(data->str,(gssize)data->len,NULL) && g_key_file_load_from_data(key,data->str,data->len,G_KEY_FILE_NONE,error);
- if(ok) { GError *e=NULL; gint version=g_key_file_get_integer(key,"notes","version",&e),count=-1; if(!e) count=g_key_file_get_integer(key,"notes","count",&e); ok=!e && version==1 && count>=0 && count<=64; g_clear_error(&e);
-  for(gint i=0;ok && i<count;i++) { gchar group[32]; g_snprintf(group,sizeof group,"note-%d",i); gchar *name=g_key_file_get_string(key,group,"name",NULL),*p=g_key_file_get_string(key,group,"path",NULL),*text=g_key_file_get_string(key,group,"text",NULL); gint kind=g_key_file_get_integer(key,group,"kind",&e); guint64 line=0; if(!e) line=g_key_file_get_uint64(key,group,"line",&e); ok=!e && (kind!=INSIGHT_CLIP || (line==0 && p && !*p)) && name && p && text && !insight_notes_get(notes,(InsightNoteKind)kind,name) && insight_notes_set(notes,(InsightNoteKind)kind,name,p,line,text,error); if(ok && g_key_file_has_key(key,group,"languages",NULL)) { gsize size=0; gchar **langs=g_key_file_get_string_list(key,group,"languages",&size,&e); ok=!e && ((kind==INSIGHT_CLIP && insight_notes_set_languages(notes,name,(const gchar *const *)langs,error)) || (kind==INSIGHT_BOOKMARK && !size)); g_strfreev(langs); }
+ if(ok) { GError *e=NULL; gint version=g_key_file_get_integer(key,"notes","version",&e),count=-1; if(!e) count=g_key_file_get_integer(key,"notes","count",&e); ok=!e && (version==1 || version==2) && count>=0 && count<=64; g_clear_error(&e);
+  for(gint i=0;ok && i<count;i++) { gchar group[32]; g_snprintf(group,sizeof group,"note-%d",i); gchar *name=g_key_file_get_string(key,group,"name",NULL),*p=g_key_file_get_string(key,group,"path",NULL),*text=g_key_file_get_string(key,group,"text",NULL); gint kind=g_key_file_get_integer(key,group,"kind",&e); guint64 line=0; if(!e) line=g_key_file_get_uint64(key,group,"line",&e); gboolean relative=FALSE;
+   if(version==2 && !e) relative=g_key_file_get_boolean(key,group,"project-relative",&e);
+   if(!e && relative) { gchar *resolved=kind==INSIGHT_BOOKMARK ? portable_path(root,p) : NULL;g_free(p);p=resolved;if(!p) g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Relative bookmarks require a project root and a safe project path"); }
+   if(e && error && !*error) *error=g_error_copy(e);
+   ok=!e && (kind!=INSIGHT_CLIP || (line==0 && p && !*p)) && name && p && text && !insight_notes_get(notes,(InsightNoteKind)kind,name) && insight_notes_set(notes,(InsightNoteKind)kind,name,p,line,text,error); if(ok && g_key_file_has_key(key,group,"languages",NULL)) { gsize size=0; gchar **langs=g_key_file_get_string_list(key,group,"languages",&size,&e); ok=!e && ((kind==INSIGHT_CLIP && insight_notes_set_languages(notes,name,(const gchar *const *)langs,error)) || (kind==INSIGHT_BOOKMARK && !size)); g_strfreev(langs); }
    g_free(name); g_free(p); g_free(text); g_clear_error(&e); }
  }
  g_key_file_unref(key); g_string_free(data,TRUE);
  if(!ok) { if(!error || !*error) g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid notes snapshot"); insight_notes_free(notes); return NULL; } return notes;
 }
+InsightNotes *insight_notes_load(const char *path,GError **error) { return insight_notes_load_portable(path,NULL,error); }
 gboolean insight_bookmark_resolve(const InsightNote *note,const char *text,gsize size,guint64 *line,gboolean *ambiguous) {
  if(!note || note->kind!=INSIGHT_BOOKMARK || !text || size>2u*1024u*1024u || !line || !ambiguous || !g_utf8_validate(text,(gssize)size,NULL) || memchr(text,0,size)) return FALSE;
  guint64 current=1,found=0,count=0; *ambiguous=FALSE; gsize start=0,anchor=strlen(note->text);

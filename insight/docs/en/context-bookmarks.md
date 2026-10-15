@@ -105,3 +105,7 @@ languages and update the checks in Edit clip. Saved unknown profiles remain list
 Bindings use the optional `languages` list in each clip's section of
 `config/insight/notes.conf`. It follows standard GKeyFile list syntax, for example
 `languages=C;C++;`. An empty or absent list means all languages.
+
+## Moving a project
+
+When a project/workspace root is selected, bookmark export writes files inside that root as relative paths (notes format v2). Open/select the destination root before importing into a moved copy of the project. Files outside the root keep absolute paths. Import requires a root for relative bookmarks, rejects traversal paths, and preserves existing notes by rejecting name collisions. Legacy v1 snapshots still import; ordinary saved notes and clip exports remain v1. Clips contain text/language bindings rather than source paths. Project file membership already stores project-local paths relatively.

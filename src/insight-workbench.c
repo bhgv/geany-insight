@@ -2418,9 +2418,9 @@ static void notes_transfer(GtkWidget *widget,gpointer data) {
  filter=gtk_file_filter_new(); gtk_file_filter_set_name(filter,"All files"); gtk_file_filter_add_pattern(filter,"*"); gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog),filter);
  if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) {
   gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog)); GError *error=NULL; InsightNotes *snapshot=NULL; gboolean ok=FALSE;
-  if(exporting) { snapshot=insight_notes_select(wb.notes,kind,&error); if(snapshot) ok=insight_notes_save(snapshot,path,&error); }
+  if(exporting) { snapshot=insight_notes_select(wb.notes,kind,&error); if(snapshot) { gchar *root=kind==INSIGHT_BOOKMARK && wb.root ? utils_get_utf8_from_locale(wb.root) : NULL;ok=insight_notes_save_portable(snapshot,path,root,&error);g_free(root); } }
   else {
-   snapshot=insight_notes_load(path,&error);
+   gchar *root=wb.root ? utils_get_utf8_from_locale(wb.root) : NULL;snapshot=insight_notes_load_portable(path,root,&error);g_free(root);
    if(snapshot) {
     InsightNotes *merged=insight_notes_merge(wb.notes,snapshot,kind,&error);
     if(merged) ok=notes_commit(merged,kind);

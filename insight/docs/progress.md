@@ -999,3 +999,7 @@ Regression also exposed a manual Relations/snapshot publication race: queries co
 ## Python and Lua function/block extents
 
 Shared core range calculation supports Python async/multiline/indented/nested functions and Lua nested function/if/for/while/do/repeat/end/until. Select Function, editor tracking, lexical Calls and Overview use it; expanding block selection includes Python/Lua suites and existing bracket expressions. Native GUI verifies smallest definition selection, block expansion, masked literal calls, function-bounded calls and rendered Overview boundaries in both languages. Standalone core tests cover CRLF/tabs, multiline continuation, nested expansion and unfinished bodies. Other language syntaxes and semantic call resolution remain open.
+
+## Portable bookmark transfer
+
+Bookmark export under an active project/workspace root now uses relative paths for contained source files (v2 notes snapshot). Import resolves them against the destination root; external files remain absolute. Traversal/drive/UNC components and missing roots are rejected before merging. Legacy v1, ordinary note saves and clip exports remain compatible. Core tests verify Unicode rebasing, unchanged inputs/external paths, clips and malformed paths. Automatic relocation of the global bookmark database is not claimed.
