@@ -1,1 +1,1 @@
-Build Windows x64: nearest qualified prefix, no outer fallback after bound owner, reopened namespaces, bounded alias probe work, globally qualified C++ variable declarations; 56 C/C++/header parser fixtures and 18 GUI scenarios.
+Build Windows x64: explicit MSYS2 bash for 57 parser fixtures (56 C/C++/headers plus correctly supplied processing-order inputs), qualified type-prefix/global-variable fixes, strict core and 18 native GUI scenarios.

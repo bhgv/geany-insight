@@ -83,7 +83,23 @@ jobs:
             -Dc_args=-DINSIGHT_RELOCATABLE -Dcpp_args=-DINSIGHT_RELOCATABLE
           meson compile -C _build
           meson install -C _build
-          meson test -C _build --no-rebuild --num-processes 4 --print-errorlogs 'ctags/*.cpp.tags' 'ctags/*.h.tags' 'ctags/*.c.tags'
+          # Meson's shebang lookup can select System32/bash.exe (WSL).
+          # Invoke the already active MSYS2 shell explicitly for parser fixtures.
+          set -e
+          export top_srcdir="$(pwd)"
+          export top_builddir="$(pwd)/_build"
+          parser_count=0
+          for result in tests/ctags/*.{cpp,h,c}.tags; do
+            printf 'Parser fixture: %s\n' "$result"
+            if [ "$result" = tests/ctags/process_order.c.tags ]; then
+              /usr/bin/bash tests/ctags/runner.sh "$(pwd)/_build/geany.exe" --result "$result" tests/ctags/process_order_1.h tests/ctags/process_order_2.h
+            else
+              /usr/bin/bash tests/ctags/runner.sh "$(pwd)/_build/geany.exe" "$result"
+            fi
+            parser_count=$((parser_count + 1))
+          done
+          test "$parser_count" -gt 0
+          printf 'C/C++ parser fixtures passed: %s\n' "$parser_count"
       - name: Test native Windows GUI migration paths
         run: |
           set -e
