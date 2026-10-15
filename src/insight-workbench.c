@@ -1026,8 +1026,17 @@ static void symbol_history_read(GKeyFile *settings,GtkWidget *entry,const gchar 
  if(queries && count<=16) for(gsize i=count;i>0;i--) if(symbol_query_valid(queries[i-1],entry==wb.file_entry)) insight_search_history_record(history,queries[i-1]);
  g_strfreev(queries);
 }
+static gboolean file_browse_command(GtkEntry *entry) {
+ const gchar *query=gtk_entry_get_text(entry);if(!wb.disk_browser || (strcmp(query,".") && strcmp(query,"..") && strcmp(query,"**"))) return FALSE;
+ gboolean project=!strcmp(query,"**"),up=!strcmp(query,".."),already=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.folder_mode))==1;
+ gtk_entry_set_text(entry,"");
+ if(project) { gtk_combo_box_set_active(GTK_COMBO_BOX(wb.folder_mode),0);focus_widget_panel(wb.file_entry);return TRUE; }
+ gchar *root=wb.root ? utils_get_utf8_from_locale(wb.root) : g_get_current_dir(),*path=up ? g_path_get_dirname(root) : g_strdup(root);
+ gtk_combo_box_set_active(GTK_COMBO_BOX(wb.folder_mode),1);if(up || already) insight_disk_browser_set_root(wb.disk_browser,path);g_free(path);g_free(root);
+ focus_widget_panel(wb.disk_browser);gtk_widget_child_focus(wb.disk_browser,GTK_DIR_TAB_FORWARD);return TRUE;
+}
 static void browser_entry_activate(GtkEntry *entry,gpointer data) {
- (void)data;if(GTK_WIDGET(entry)==wb.local_entry || GTK_WIDGET(entry)==wb.symbol_entry || GTK_WIDGET(entry)==wb.file_entry) symbol_history_record(GTK_WIDGET(entry)); GtkTreeView *view=GTK_TREE_VIEW(GTK_WIDGET(entry)==wb.local_entry ? wb.local_view : (GTK_WIDGET(entry)==wb.symbol_entry ? wb.symbol_view : wb.file_view));
+ (void)data;if(GTK_WIDGET(entry)==wb.file_entry && file_browse_command(entry)) return;if(GTK_WIDGET(entry)==wb.local_entry || GTK_WIDGET(entry)==wb.symbol_entry || GTK_WIDGET(entry)==wb.file_entry) symbol_history_record(GTK_WIDGET(entry)); GtkTreeView *view=GTK_TREE_VIEW(GTK_WIDGET(entry)==wb.local_entry ? wb.local_view : (GTK_WIDGET(entry)==wb.symbol_entry ? wb.symbol_view : wb.file_view));
  if(!gtk_widget_get_sensitive(GTK_WIDGET(view))) return;
  GtkTreeModel *model=gtk_tree_view_get_model(view); GtkTreeIter iter;
  if(gtk_tree_model_get_iter_first(model,&iter)) { GtkTreeIter child; while(gtk_tree_model_iter_children(model,&child,&iter)) iter=child; GtkTreePath *path=gtk_tree_model_get_path(model,&iter); gtk_tree_view_expand_to_path(view,path); browser_activated(view,path,NULL,NULL); gtk_tree_path_free(path); }
@@ -1945,7 +1954,7 @@ static void disk_file_open(const gchar *path,gboolean activate,gpointer data) {
 }
 static void folder_mode_changed(GtkComboBox *combo,gpointer data) {
  (void)data;gboolean disk=gtk_combo_box_get_active(combo)==1;gtk_stack_set_visible_child_name(GTK_STACK(wb.folder_stack),disk ? "disk" : "project");
- if(disk) { gchar *root=wb.root ? utils_get_utf8_from_locale(wb.root) : g_get_current_dir();insight_disk_browser_set_root(wb.disk_browser,root);g_free(root); }
+ if(disk) { gchar *root=wb.root ? utils_get_utf8_from_locale(wb.root) : g_get_current_dir();insight_disk_browser_set_root(wb.disk_browser,root);g_free(root); }else insight_disk_browser_cancel(wb.disk_browser);
 }
 static void create_project_tree(void) {
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,3),*row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);

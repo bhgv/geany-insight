@@ -1,1 +1,1 @@
-Build Windows x64: background unindexed disk browser, Unicode preview/open, membership isolation, filters, hidden files, limits and cancellation GUI.
+Build Windows x64: Project Files dot/parent/project-only input commands and cancellation when leaving disk browsing, with native GUI regressions.

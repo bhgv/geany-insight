@@ -16,7 +16,7 @@ typedef struct { gchar *name,*path;gboolean directory,link; } DiskEntry;
 typedef struct {
  GtkWidget *box,*path,*query,*view,*status,*hidden;GtkListStore *store;GtkTreeModelFilter *model;
  InsightLookupFilter *filter;GCancellable *cancel;guint64 generation;gboolean alive,setting;
- gchar *root,*failure;guint count;gboolean loading,limited;InsightDiskOpen open;gpointer data;
+ gchar *root,*failure;guint count;gboolean loading,limited,cancelled;InsightDiskOpen open;gpointer data;
 } DiskBrowser;
 typedef struct { GWeakRef box;guint64 generation;gchar *root;gboolean hidden,limited; } DiskJob;
 static void entry_free(gpointer data) { DiskEntry *e=data;g_free(e->name);g_free(e->path);g_free(e); }
@@ -49,7 +49,11 @@ static gboolean visible(GtkTreeModel *model,GtkTreeIter *iter,gpointer data) {
  gboolean match=directory || insight_lookup_filter_match(b->filter,NULL,NULL,path,NULL);g_free(path);return match;
 }
 static void status(DiskBrowser *b) {
- gchar *label=b->loading ? g_strdup(insight_tr("Reading directory…")) : (b->failure ? insight_i18n_printf("Cannot browse directory: %s",b->failure) : insight_i18n_printf("Disk entries: %u%s",b->count,b->limited ? insight_tr(" (directory limit reached)") : ""));gtk_label_set_text(GTK_LABEL(b->status),label);g_free(label);
+ gchar *label=b->cancelled ? g_strdup(insight_tr("Directory read cancelled")) : (b->loading ? g_strdup(insight_tr("Reading directory…")) : (b->failure ? insight_i18n_printf("Cannot browse directory: %s",b->failure) : insight_i18n_printf("Disk entries: %u%s",b->count,b->limited ? insight_tr(" (directory limit reached)") : "")));gtk_label_set_text(GTK_LABEL(b->status),label);g_free(label);
+}
+void insight_disk_browser_cancel(GtkWidget *box) {
+ DiskBrowser *b=g_object_get_data(G_OBJECT(box),"insight-disk-browser");if(!b || !b->alive || !b->cancel) return;
+ b->generation++;g_cancellable_cancel(b->cancel);g_clear_object(&b->cancel);b->loading=FALSE;b->cancelled=TRUE;status(b);
 }
 void insight_disk_browser_locale_changed(GtkWidget *box) { DiskBrowser *b=g_object_get_data(G_OBJECT(box),"insight-disk-browser");if(!b || !b->alive) return;if(b->root) status(b);gtk_widget_queue_draw(b->view); }
 static void read_done(GObject *source,GAsyncResult *result,gpointer data) {
@@ -59,7 +63,7 @@ static void read_done(GObject *source,GAsyncResult *result,gpointer data) {
   g_clear_object(&b->cancel);b->setting=TRUE;gtk_list_store_clear(b->store);
   if(entries) for(guint i=0;i<entries->len;i++) { DiskEntry *e=g_ptr_array_index(entries,i);GtkTreeIter iter;gtk_list_store_append(b->store,&iter);gtk_list_store_set(b->store,&iter,NAME,e->name,PATH,e->path,DIRECTORY,e->directory,LINK,e->link,-1); }
   b->setting=FALSE;
-  b->loading=FALSE;b->count=entries ? entries->len : 0;b->limited=j->limited;g_free(b->failure);b->failure=error ? g_strdup(error->message) : NULL;status(b);
+  b->loading=FALSE;b->cancelled=FALSE;b->count=entries ? entries->len : 0;b->limited=j->limited;g_free(b->failure);b->failure=error ? g_strdup(error->message) : NULL;status(b);
  }
  if(box) g_object_unref(box);
  if(entries) g_ptr_array_unref(entries);
@@ -68,7 +72,7 @@ static void read_done(GObject *source,GAsyncResult *result,gpointer data) {
 static void load(DiskBrowser *b,const gchar *path) {
  if(!b->alive || !path || !*path || !g_utf8_validate(path,-1,NULL) || strlen(path)>16384) return;
  gchar *root=g_canonicalize_filename(path,b->root);b->generation++;if(b->cancel) g_cancellable_cancel(b->cancel);g_clear_object(&b->cancel);b->cancel=g_cancellable_new();
- g_free(b->root);b->root=root;gtk_entry_set_text(GTK_ENTRY(b->path),root);b->setting=TRUE;gtk_list_store_clear(b->store);b->setting=FALSE;b->loading=TRUE;g_clear_pointer(&b->failure,g_free);status(b);
+ g_free(b->root);b->root=root;gtk_entry_set_text(GTK_ENTRY(b->path),root);b->setting=TRUE;gtk_list_store_clear(b->store);b->setting=FALSE;b->loading=TRUE;b->cancelled=FALSE;g_clear_pointer(&b->failure,g_free);status(b);
  DiskJob *j=g_new0(DiskJob,1);g_weak_ref_init(&j->box,b->box);j->generation=b->generation;j->root=g_strdup(root);j->hidden=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(b->hidden));
  GTask *task=g_task_new(NULL,b->cancel,read_done,NULL);g_task_set_task_data(task,j,job_free);g_task_run_in_thread(task,read_directory);g_object_unref(task);
 }

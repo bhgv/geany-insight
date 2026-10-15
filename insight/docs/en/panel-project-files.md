@@ -42,3 +42,7 @@ The format is UTF-8 (optional BOM), one literal path per line, with LF or CRLF. 
 Reference behavior: [Source Insight 4 Master File List](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Using_a_Master_File_List.htm).
 
 Start a list filter with `~` for case-insensitive Unicode subsequence matching: `~srd` finds `Shared`. Ordinary queries keep literal substring matching, including spaces and punctuation. A bare `~` matches nothing.
+
+## Disk-browsing input commands
+
+In the Project Files query, type `.` and press Enter to open the workspace directory in Folders → Browse disk. `..` opens its parent. Type `**` and press Enter to clear the project-file filter and focus Project Files again; this command does not open the first file. These reserved commands are not added to filter history. Other query/Enter behavior remains unchanged. The disk browser still provides its own path entry, Up, file filter and navigation. Switching back to the project folder view cancels an unfinished disk read.
