@@ -1,1 +1,1 @@
-Build Windows x64: remaining fuzzy list filters, inherited member chains, Window List GUI and deterministic paused-snapshot MFL write checks.
+Build Windows x64: Symbol Info function sizes, snapshot-scoped nominal aliases, stable candidate refresh and C/Python/Lua RU/EN GUI coverage.

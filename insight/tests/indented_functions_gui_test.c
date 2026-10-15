@@ -19,16 +19,21 @@ static guint alpha(GeanyDocument *doc,gint line) {
  if(y<0 || y>=gtk_widget_get_allocated_height(shade)) return 0;
  cairo_surface_t *surface=cairo_image_surface_create(CAIRO_FORMAT_ARGB32,gtk_widget_get_allocated_width(shade),gtk_widget_get_allocated_height(shade));cairo_t *cr=cairo_create(surface);gtk_widget_draw(shade,cr);cairo_destroy(cr);cairo_surface_flush(surface);guint32 pixel=*(guint32 *)(cairo_image_surface_get_data(surface)+y*cairo_image_surface_get_stride(surface)+40);cairo_surface_destroy(surface);return pixel>>24;
 }
+static void info_size(const gchar *name,guint lines) {
+ GtkWidget *command=named(window,"insight-symbol-info-command");g_assert_nonnull(command);gtk_menu_item_activate(GTK_MENU_ITEM(command));
+ GList *windows=gtk_window_list_toplevels();GtkWidget *info=NULL;for(GList *p=windows;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-symbol-info-window")) info=p->data;g_list_free(windows);g_assert_nonnull(info);
+ GtkWidget *query=named(info,"insight-symbol-info-query");gtk_entry_set_text(GTK_ENTRY(query),name);g_signal_emit_by_name(query,"activate");GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(named(info,"insight-symbol-info-details")));GtkTextIter first,last;gtk_text_buffer_get_bounds(buffer,&first,&last);gchar *text=gtk_text_buffer_get_text(buffer,&first,&last,FALSE),*expected=g_strdup_printf("Function size (lines): %u",lines);g_assert_nonnull(strstr(text,expected));g_free(text);g_free(expected);gtk_widget_destroy(info);
+}
 static gboolean step(gpointer data) {
  (void)data;GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;if(!window) window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));
  if(!phase) { gtk_window_resize(GTK_WINDOW(window),1100,800);document_open_file(python,FALSE,NULL,NULL);phase++;return G_SOURCE_CONTINUE; }
  if(!relations) relations=named(window,"insight-relations");
- if(phase==1) { select_at(doc,5);selected(doc,4,5);gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-select-enclosing-block")));selected(doc,0,6);phase++; }
+ if(phase==1) { info_size("outer",7);info_size("inner",2);select_at(doc,5);selected(doc,4,5);gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-select-enclosing-block")));selected(doc,0,6);phase++; }
  else if(phase==2) { select_at(doc,6);selected(doc,0,6);sci_set_current_position(doc->editor->sci,sci_get_position_from_line(doc->editor->sci,6)+6,FALSE);phase++; }
  else if(phase==3) { if(alpha(doc,6)<200) return G_SOURCE_CONTINUE;g_assert_cmpuint(alpha(doc,8),==,0);calls("inner");phase++; }
  else if(phase==4) { if(!has("nested")) return G_SOURCE_CONTINUE;g_assert_false(has("invoke"));calls("outer");phase++; }
  else if(phase==5) { if(!has("invoke") || !has("nested")) return G_SOURCE_CONTINUE;g_assert_false(has("ignored"));g_assert_false(has("outside"));document_open_file(lua,FALSE,NULL,NULL);phase++; }
- else if(phase==6) { select_at(doc,3);selected(doc,0,7);sci_set_current_position(doc->editor->sci,sci_get_position_from_line(doc->editor->sci,3)+6,FALSE);gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-select-enclosing-block")));selected(doc,3,3);gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-select-enclosing-block")));selected(doc,2,5);sci_set_current_position(doc->editor->sci,sci_get_position_from_line(doc->editor->sci,3)+6,FALSE);calls("outer");phase++; }
+ else if(phase==6) { info_size("outer",8);select_at(doc,3);selected(doc,0,7);sci_set_current_position(doc->editor->sci,sci_get_position_from_line(doc->editor->sci,3)+6,FALSE);gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-select-enclosing-block")));selected(doc,3,3);gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-select-enclosing-block")));selected(doc,2,5);sci_set_current_position(doc->editor->sci,sci_get_position_from_line(doc->editor->sci,3)+6,FALSE);calls("outer");phase++; }
  else if(phase==7) { if(!has("invoke") || !has("nested")) return G_SOURCE_CONTINUE;g_assert_false(has("ignored"));g_assert_false(has("outside"));if(alpha(doc,3)<200) return G_SOURCE_CONTINUE;g_assert_cmpuint(alpha(doc,8),==,0);phase++; }
  else { g_print("Python/Lua native GUI: smallest function selection, multiline def, nested Lua blocks, masked strings, lexical Calls and Overview boundaries passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE; }
  return G_SOURCE_CONTINUE;

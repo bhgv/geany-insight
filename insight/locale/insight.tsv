@@ -779,3 +779,5 @@ Master file list changed; reload before applying membership	Master File List и�
 Project membership was not committed; master file list restored	Состав проекта не сохранён; Master File List восстановлен
 Master file list changed since its snapshot	Master File List изменился после создания снимка
 Prefix with ~ for fuzzy subsequence matching	Начните с ~ для нечёткого поиска по подпоследовательности
+\nNominal type: %s (alias hops: %u)	\nНоминальный тип: %s (переходов alias: %u)
+\nFunction size (lines): %lu (range %lu-%lu; lexical body)	\nРазмер функции (строк): %lu (диапазон %lu-%lu; лексические границы)
