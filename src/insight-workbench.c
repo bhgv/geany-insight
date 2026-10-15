@@ -77,9 +77,9 @@ typedef struct {
  InsightLayout layouts[4]; PanelHost hosts[10]; guint host_count; GtkWidget *panel_commands;
  GtkWidget *find_entry,*find_case,*find_word,*find_regex,*find_status;
  gchar *find_last_query,*find_last_digest; gsize find_last_begin,find_last_end; guint find_last_flags;
- InsightNotes *notes; gchar *notes_path;
+ InsightNotes *notes,*project_notes; gchar *notes_path,*project_notes_path;gboolean clips_project,clips_prefer_project,clips_scope_setting,project_notes_valid;guint64 clips_generation;guint template_doc;gint template_begin,template_end;guint64 template_generation,template_version;gchar *template_prefix;gboolean template_pending;
  GHashTable *bookmark_handles;GtkWidget *bookmark_window,*bookmark_search;GtkListStore *bookmark_list;guint bookmark_sync_timer;gboolean bookmark_syncing;
- GtkWidget *marks_entry,*marks_view,*clips_entry,*clips_view,*clips_all; gchar *clips_language; GtkListStore *marks_store,*clips_store;
+ GtkWidget *marks_entry,*marks_view,*clips_entry,*clips_view,*clips_all,*clips_scope; gchar *clips_language; GtkListStore *marks_store,*clips_store;
  InsightWorkspaceWatch *watch; guint watch_idle; gboolean watch_changed,watch_incomplete;
  guint local_doc_id,local_symbol_limit,project_symbol_limit,file_event_idle; gulong symbol_key_signal;
  gchar *project_page_root,*project_page_profile;
@@ -2114,12 +2114,26 @@ static void create_file_types(void) {
  grouped_attach(p,box); GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),p->view); gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0); gtk_notebook_append_page(GTK_NOTEBOOK(wb.project_notebook),box,gtk_label_new("File Types"));
  g_signal_connect(p->view,"row-activated",G_CALLBACK(tree_activated),NULL); gtk_widget_show_all(box); file_types_refresh();
 }
-static gboolean notes_save(void) {
- gchar *directory=g_path_get_dirname(wb.notes_path); GError *error=NULL; gboolean saved=FALSE;
+static InsightNotes *notes_for(InsightNoteKind kind) { return kind==INSIGHT_CLIP && wb.clips_project ? wb.project_notes : wb.notes; }
+static gboolean notes_scope_current(InsightNoteKind kind,guint64 generation) {
+ if(kind!=INSIGHT_CLIP || (generation==wb.clips_generation && (!wb.clips_project || (wb.project_notes_valid && wb.project_notes_path)))) return TRUE;
+ ui_set_statusbar(TRUE,"Template store changed; try the operation again");return FALSE;
+}
+static gboolean notes_save_kind(InsightNoteKind kind) {
+ gboolean project=kind==INSIGHT_CLIP && wb.clips_project;const gchar *path=project ? wb.project_notes_path : wb.notes_path;
+ if(!path || (project && !wb.project_notes_valid)) { ui_set_statusbar(TRUE,"Open a project with a valid template store first");return FALSE; }
+ gchar *directory=g_path_get_dirname(path); GError *error=NULL; gboolean saved=FALSE;
  if(g_mkdir_with_parents(directory,0700)) ui_set_statusbar(TRUE,"Notes directory could not be created");
- else { saved=insight_notes_save(wb.notes,wb.notes_path,&error); if(!saved) ui_set_statusbar(TRUE,"Notes not saved: %s",error ? error->message : "write failed"); }
+ else { saved=insight_notes_save(notes_for(kind),path,&error); if(!saved) ui_set_statusbar(TRUE,"Notes not saved: %s",error ? error->message : "write failed"); }
  g_clear_error(&error); g_free(directory); return saved;
 }
+static gboolean notes_save(void) { return notes_save_kind(INSIGHT_BOOKMARK); }
+static InsightNotes *notes_clone(InsightNoteKind kind,GError **error) {
+ InsightNotes *source=notes_for(kind),*out=insight_notes_new();
+ for(guint i=0;i<source->items->len;i++) { InsightNote *note=g_ptr_array_index(source->items,i);if(!insight_notes_set(out,note->kind,note->name,note->path,note->line,note->text,error) || (note->kind==INSIGHT_CLIP && !insight_notes_set_languages(out,note->name,(const gchar *const *)note->languages,error))) { insight_notes_free(out);return NULL; } }
+ return out;
+}
+static gboolean notes_commit(InsightNotes *,InsightNoteKind);
 typedef struct { guint doc;gint handle; } BookmarkHandle;
 static gchar *selected_note(InsightNoteKind);
 static void note_selected(GtkTreeSelection *,gpointer);
@@ -2268,13 +2282,32 @@ static void notes_filter(GtkEditable *entry,gpointer data) {
  GtkTreeSelection *selection=kind==INSIGHT_CLIP ? gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.clips_view)) : NULL;
  if(selection) g_signal_handlers_block_by_func(selection,note_selected,GINT_TO_POINTER(kind));
  gtk_list_store_clear(store); gchar *needle=g_utf8_casefold(gtk_entry_get_text(GTK_ENTRY(field)),-1);
- for(guint i=0;i<wb.notes->items->len;i++) { InsightNote *note=g_ptr_array_index(wb.notes->items,i); if(note->kind!=kind || (kind==INSIGHT_CLIP && !(wb.clips_all && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.clips_all))) && !insight_note_matches_language(note,language))) continue;
+ InsightNotes *source=notes_for(kind);
+ for(guint i=0;i<source->items->len;i++) { InsightNote *note=g_ptr_array_index(source->items,i); if(note->kind!=kind || (kind==INSIGHT_CLIP && !(wb.clips_all && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.clips_all))) && !insight_note_matches_language(note,language))) continue;
   gchar *line=g_strdup_printf("%"G_GUINT64_FORMAT,note->line),*search=g_strconcat(note->name," ",note->path," ",line,NULL),*folded=g_utf8_casefold(search,-1); gboolean match=strstr(folded,needle)!=NULL; g_free(line); g_free(search); g_free(folded); if(!match) continue;
   GtkTreeIter iter; gtk_list_store_append(store,&iter); gtk_list_store_set(store,&iter,0,note->name,1,note->path,2,(gulong)note->line,3,note->text,-1); if(selection && !g_strcmp0(selected,note->name)) gtk_tree_selection_select_iter(selection,&iter);
  }
  if(selection) g_signal_handlers_unblock_by_func(selection,note_selected,GINT_TO_POINTER(kind));
  if(kind==INSIGHT_CLIP) { g_free(wb.clips_language); wb.clips_language=language; } else g_free(language); g_free(selected); g_free(needle);
 }
+static void clips_scope_changed(GtkComboBox *combo,gpointer data) {
+ (void)data;gboolean project=gtk_combo_box_get_active(combo)==1;
+ if(project && (!wb.project_notes_path || !wb.project_notes_valid)) { ui_set_statusbar(TRUE,"Open a project with a valid template store first");gtk_combo_box_set_active(combo,0);return; }
+ if(!wb.clips_scope_setting) wb.clips_prefer_project=project;
+ if(project==wb.clips_project) return;
+ wb.clips_project=project;wb.clips_generation++;gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.clips_view)));notes_filter(NULL,GINT_TO_POINTER(INSIGHT_CLIP));
+}
+static void clips_project_load(const gchar *project,gboolean force) {
+ if(!wb.project_notes) return;
+ gchar *native=project ? utils_get_locale_from_utf8(project) : NULL,*path=native ? g_strconcat(native,".templates.conf",NULL) : NULL;g_free(native);
+ if(!force && !g_strcmp0(path,wb.project_notes_path)) { g_free(path);return; }
+ wb.clips_generation++;insight_notes_free(wb.project_notes);wb.project_notes=insight_notes_new();g_free(wb.project_notes_path);wb.project_notes_path=path;wb.project_notes_valid=path!=NULL;
+ if(path && g_file_test(path,G_FILE_TEST_EXISTS)) { GError *error=NULL;InsightNotes *loaded=insight_notes_load(path,&error),*clips=loaded ? insight_notes_select(loaded,INSIGHT_CLIP,&error) : NULL;insight_notes_free(loaded);if(clips) { insight_notes_free(wb.project_notes);wb.project_notes=clips; }else { wb.project_notes_valid=FALSE;ui_set_statusbar(TRUE,"Project templates ignored: %s",error ? error->message : "invalid snapshot"); }g_clear_error(&error); }
+ gtk_widget_set_tooltip_text(wb.clips_scope,path ? path : "Open a project to use project templates");
+ wb.clips_scope_setting=TRUE;gtk_combo_box_set_active(GTK_COMBO_BOX(wb.clips_scope),wb.clips_prefer_project && wb.project_notes_valid ? 1 : 0);wb.clips_scope_setting=FALSE;
+ gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.clips_view)));notes_filter(NULL,GINT_TO_POINTER(INSIGHT_CLIP));
+}
+static void clips_project_reload(GtkButton *button,gpointer data) { (void)button;(void)data;clips_project_load(app->project ? app->project->file_name : NULL,TRUE); }
 static gchar *selected_note(InsightNoteKind kind) {
  GtkWidget *view=kind==INSIGHT_BOOKMARK ? wb.marks_view : wb.clips_view; GtkTreeModel *model; GtkTreeIter iter;
  if(!gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),&model,&iter)) return NULL;
@@ -2282,7 +2315,7 @@ static gchar *selected_note(InsightNoteKind kind) {
 }
 static void note_selected(GtkTreeSelection *selection,gpointer data) {
  (void)selection; InsightNoteKind kind=(InsightNoteKind)GPOINTER_TO_INT(data); gchar *name=selected_note(kind); if(!name || !wb.preview) { g_free(name); return; }
- const InsightNote *note=insight_notes_get(wb.notes,kind,name);
+ const InsightNote *note=insight_notes_get(notes_for(kind),kind,name);
  if(note && kind==INSIGHT_BOOKMARK) bookmark_open_note(note);
  else if(note) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.context_toggle),TRUE); GeanyDocument *doc=document_get_current(); render_source(note->text,doc ? doc->file_type : NULL,1); g_clear_pointer(&wb.source_path,g_free); g_clear_pointer(&wb.source_digest,g_free); wb.source_id=0; wb.source_line=0; navigation_state(); gchar *label=g_strdup_printf("Clip — %s",note->name); gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label); }
  g_free(name);
@@ -2302,7 +2335,8 @@ static void note_delete(GtkWidget *widget,gpointer data) {
   if(doc) { gint line=(gint)SSM(doc->editor->sci,SCI_MARKERLINEFROMHANDLE,handle->handle,0);if(line>=0) SSM(doc->editor->sci,SCI_MARKERDELETE,line,1); }
   g_hash_table_remove(wb.bookmark_handles,name);
  }
- if(name && insight_notes_remove(wb.notes,kind,name)) { notes_filter(NULL,data);notes_save(); }
+ if(name && kind==INSIGHT_CLIP) { GError *error=NULL;InsightNotes *candidate=notes_clone(kind,&error);if(candidate) { insight_notes_remove(candidate,kind,name);notes_commit(candidate,kind); }if(error) ui_set_statusbar(TRUE,"Clip: %s",error->message);g_clear_error(&error); }
+ else if(name && insight_notes_remove(wb.notes,kind,name)) { notes_filter(NULL,data);notes_save(); }
  g_free(name);if(kind==INSIGHT_BOOKMARK) insight_workbench_bookmarks_changed();
 }
 static void bookmark_go(GtkWidget *widget,gpointer data) {
@@ -2318,25 +2352,28 @@ static void clip_capture(GtkWidget *widget,gpointer data) {
  if(text && strlen(text)!=selected_length) { g_free(text); ui_set_statusbar(TRUE,"Clips cannot contain NUL bytes"); return; }
  if(!text || !*text) { g_free(text); ui_set_statusbar(TRUE,"Select source text to copy into a clip"); return; }
  const char *input=gtk_entry_get_text(GTK_ENTRY(wb.clips_entry)); gchar *name=*input ? g_strdup(input) : g_strdup_printf("Clip-%"G_GINT64_FORMAT,g_get_real_time()); GError *error=NULL;
- if(insight_notes_set(wb.notes,INSIGHT_CLIP,name,NULL,0,text,&error)) { gboolean saved=notes_save(); if(cut && saved) { sci_start_undo_action(doc->editor->sci); sci_replace_sel(doc->editor->sci,""); sci_end_undo_action(doc->editor->sci); } notes_filter(NULL,GINT_TO_POINTER(INSIGHT_CLIP)); }
- else ui_set_statusbar(TRUE,"Clip: %s",error ? error->message : "not stored");
+ InsightNotes *candidate=notes_clone(INSIGHT_CLIP,&error);gboolean saved=FALSE;
+ if(candidate) { if(insight_notes_set(candidate,INSIGHT_CLIP,name,NULL,0,text,&error)) saved=notes_commit(candidate,INSIGHT_CLIP);else insight_notes_free(candidate); }
+ if(cut && saved) { sci_start_undo_action(doc->editor->sci); sci_replace_sel(doc->editor->sci,""); sci_end_undo_action(doc->editor->sci); }
+ if(error) ui_set_statusbar(TRUE,"Clip: %s",error->message);
  g_clear_error(&error); g_free(text); g_free(name);
 }
 static void clip_paste(GtkWidget *widget,gpointer data) {
- (void)widget; (void)data; gchar *name=selected_note(INSIGHT_CLIP); const InsightNote *note=name ? insight_notes_get(wb.notes,INSIGHT_CLIP,name) : NULL; GeanyDocument *doc=document_get_current();
+ (void)widget; (void)data; gchar *name=selected_note(INSIGHT_CLIP); const InsightNote *note=name ? insight_notes_get(notes_for(INSIGHT_CLIP),INSIGHT_CLIP,name) : NULL; GeanyDocument *doc=document_get_current();
  if(note && doc && !SSM(doc->editor->sci,SCI_GETREADONLY,0,0)) { sci_start_undo_action(doc->editor->sci); sci_replace_sel(doc->editor->sci,note->text); sci_end_undo_action(doc->editor->sci); document_grab_focus(doc); }
  else ui_set_statusbar(TRUE,"Select a clip and a writable source document");
  g_free(name);
 }
-static void clip_template(GtkWidget *widget,gpointer data) {
- (void)widget; (void)data; GeanyDocument *doc=document_get_current(); gchar *name=selected_note(INSIGHT_CLIP); const InsightNote *note=name ? insight_notes_get(wb.notes,INSIGHT_CLIP,name) : NULL;
- if(!doc || !note || SSM(doc->editor->sci,SCI_GETREADONLY,0,0)) { g_free(name); ui_set_statusbar(TRUE,"Select a clip and a writable source document"); return; }
+static void clip_insert_template(const InsightNote *note) {
+ guint64 generation=wb.clips_generation;
+ GeanyDocument *doc=document_get_current();
+ if(!doc || !note || SSM(doc->editor->sci,SCI_GETREADONLY,0,0)) { ui_set_statusbar(TRUE,"Select a clip and a writable source document"); return; }
  ScintillaObject *sci=doc->editor->sci;
- if(sci_get_selection_mode(sci)!=SC_SEL_STREAM || SSM(sci,SCI_GETSELECTIONS,0,0)!=1) { g_free(name); ui_set_statusbar(TRUE,"Template insertion requires a single normal selection"); return; }
- if(sci_get_selected_text_length2(sci)>65536) { g_free(name); ui_set_statusbar(TRUE,"Clip selection exceeds 64 KiB"); return; }
+ if(sci_get_selection_mode(sci)!=SC_SEL_STREAM || SSM(sci,SCI_GETSELECTIONS,0,0)!=1) { ui_set_statusbar(TRUE,"Template insertion requires a single normal selection"); return; }
+ if(sci_get_selected_text_length2(sci)>65536) { ui_set_statusbar(TRUE,"Clip selection exceeds 64 KiB"); return; }
  gchar *language=clip_current_language(); gboolean compatible=insight_note_matches_language(note,language); g_free(language);
- if(!compatible) { g_free(name); ui_set_statusbar(TRUE,"This template is not available for the current language profile"); return; }
- gchar **allowed_languages=g_strdupv(note->languages); gchar *body=g_strdup(note->text),*selection=sci_get_selection_contents(sci); g_free(name); GError *error=NULL;
+ if(!compatible) { ui_set_statusbar(TRUE,"This template is not available for the current language profile"); return; }
+ gchar **allowed_languages=g_strdupv(note->languages); gchar *body=g_strdup(note->text),*selection=sci_get_selection_contents(sci); GError *error=NULL;
  if(!selection || strlen(selection)!=sci_get_selected_text_length2(sci)) { g_free(selection); g_free(body); g_strfreev(allowed_languages); ui_set_statusbar(TRUE,"Clips cannot contain NUL bytes"); return; }
  guint id=doc->id; guint64 version=selection_state(sci)->text_version; gint begin=sci_get_selection_start(sci),end=sci_get_selection_end(sci),eol_mode=sci_get_eol_mode(sci);
  GHashTable *values=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free); GDateTime *now=g_date_time_new_now_local();
@@ -2354,7 +2391,7 @@ static void clip_template(GtkWidget *widget,gpointer data) {
    keep_fields=accepted && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(editable));gtk_widget_destroy(dialog);
   }
  }
- if(accepted) {
+ if(accepted && notes_scope_current(INSIGHT_CLIP,generation)) {
   doc=document_find_by_id(id);
   gchar *current_language=clip_current_language(); InsightNote allowed_snapshot={.languages=allowed_languages}; gboolean language_allowed=insight_note_matches_language(&allowed_snapshot,current_language); g_free(current_language);
   if(!language_allowed) ui_set_statusbar(TRUE,"This template is not available for the current language profile");
@@ -2368,6 +2405,33 @@ static void clip_template(GtkWidget *widget,gpointer data) {
  }
  if(error) ui_set_statusbar(TRUE,"Template: %s",insight_tr(error->message));
  g_clear_error(&error); g_clear_pointer(&variables,g_ptr_array_unref); g_ptr_array_unref(entries); g_hash_table_unref(values); g_strfreev(allowed_languages); g_free(body);
+}
+static void clip_template(GtkWidget *widget,gpointer data) {
+ (void)widget;(void)data;gchar *name=selected_note(INSIGHT_CLIP);const InsightNote *note=name ? insight_notes_get(notes_for(INSIGHT_CLIP),INSIGHT_CLIP,name) : NULL;clip_insert_template(note);g_free(name);
+}
+void insight_workbench_template_selected(GeanyEditor *editor,const gchar *name) {
+ if(!wb.template_pending || !editor) return;
+ wb.template_pending=FALSE;GeanyDocument *doc=document_get_current();ScintillaObject *sci=editor->sci;
+ if(!doc || doc->editor!=editor || doc->id!=wb.template_doc || wb.template_generation!=wb.clips_generation || selection_state(sci)->text_version!=wb.template_version || sci_get_current_position(sci)!=wb.template_end || sci_get_selection_start(sci)!=wb.template_end || sci_get_selection_end(sci)!=wb.template_end || SSM(sci,SCI_GETREADONLY,0,0)) return;
+ gchar *prefix=sci_get_contents_range(sci,wb.template_begin,wb.template_end);gboolean unchanged=!g_strcmp0(prefix,wb.template_prefix);g_free(prefix);if(!unchanged || !name || !g_str_has_prefix(name,wb.template_prefix)) return;
+ const InsightNote *note=insight_notes_get(notes_for(INSIGHT_CLIP),INSIGHT_CLIP,name);gchar *language=clip_current_language();gboolean eligible=insight_note_matches_language(note,language);g_free(language);if(!eligible) return;
+ gint before=wb.template_end;guint id=doc->id;guint64 version=wb.template_version;
+ SSM(sci,SCI_SETSEL,wb.template_begin,wb.template_end);clip_insert_template(note);
+ doc=document_find_by_id(id);if(doc && doc==document_get_current() && selection_state(doc->editor->sci)->text_version==version) sci_set_current_position(doc->editor->sci,before,FALSE);
+}
+gboolean insight_workbench_complete_template(GeanyEditor *editor,gint position) {
+ if(!wb.alive || !wb.notes || !editor) return FALSE;
+ GeanyDocument *doc=document_get_current();ScintillaObject *sci=editor->sci;
+ if(!doc || doc->editor!=editor || SSM(sci,SCI_GETREADONLY,0,0) || sci_get_selection_start(sci)!=position || sci_get_selection_end(sci)!=position || SSM(sci,SCI_GETSELECTIONS,0,0)!=1 || position<1) return FALSE;
+ gint begin=(gint)SSM(sci,SCI_WORDSTARTPOSITION,position,TRUE);if(position-begin<1 || position-begin>256 || SSM(sci,SCI_WORDENDPOSITION,position,TRUE)>position) return FALSE;
+ gchar *prefix=sci_get_contents_range(sci,begin,position);if(!prefix || !g_utf8_validate(prefix,-1,NULL)) { g_free(prefix);return FALSE; }
+ GString *names=g_string_new(NULL);const InsightNote *exact=NULL;gchar *language=clip_current_language();InsightNotes *notes=notes_for(INSIGHT_CLIP);
+ for(guint i=0;i<notes->items->len;i++) { InsightNote *note=g_ptr_array_index(notes->items,i);if(note->kind!=INSIGHT_CLIP || !g_str_has_prefix(note->name,prefix) || strpbrk(note->name,"\n\r\t") || !insight_note_matches_language(note,language)) continue;if(names->len) g_string_append_c(names,'\n');g_string_append(names,note->name);if(!strcmp(note->name,prefix)) exact=note; }
+ g_free(language);if(!names->len) { g_string_free(names,TRUE);g_free(prefix);return FALSE; }
+ wb.template_pending=TRUE;wb.template_doc=doc->id;wb.template_begin=begin;wb.template_end=position;wb.template_version=selection_state(sci)->text_version;wb.template_generation=wb.clips_generation;g_free(wb.template_prefix);wb.template_prefix=prefix;
+ if(exact) insight_workbench_template_selected(editor,exact->name);
+ else { gint separator=(gint)SSM(sci,SCI_AUTOCGETSEPARATOR,0,0);SSM(sci,SCI_AUTOCSETSEPARATOR,'\n',0);SSM(sci,SCI_USERLISTSHOW,INSIGHT_TEMPLATE_COMPLETION_LIST,(sptr_t)names->str);SSM(sci,SCI_AUTOCSETSEPARATOR,separator,0); }
+ g_string_free(names,TRUE);return TRUE;
 }
 static void template_language_toggled(GtkCellRendererToggle *renderer,gchar *path,gpointer data) {
  (void)renderer; GtkListStore *store=data; GtkTreeIter iter; if(gtk_tree_model_get_iter_from_string(GTK_TREE_MODEL(store),&iter,path)) { gboolean active=FALSE; gtk_tree_model_get(GTK_TREE_MODEL(store),&iter,0,&active,-1); gtk_list_store_set(store,&iter,0,!active,-1); }
@@ -2390,14 +2454,15 @@ static gchar **template_language_values(GtkWidget *view) {
 }
 static gboolean notes_commit(InsightNotes *,InsightNoteKind);
 static void clip_new_template(GtkWidget *widget,gpointer data) {
+ guint64 generation=wb.clips_generation;
  (void)widget; (void)data; GtkWidget *dialog=gtk_dialog_new_with_buttons("New code template",GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Cancel",GTK_RESPONSE_CANCEL,"Save",GTK_RESPONSE_ACCEPT,NULL),*box=gtk_dialog_get_content_area(GTK_DIALOG(dialog)),*name=gtk_entry_new(),*view=gtk_text_view_new(),*scroll=gtk_scrolled_window_new(NULL,NULL);
  gtk_widget_set_name(name,"insight-template-name"); gtk_widget_set_name(view,"insight-template-body"); gtk_entry_set_max_length(GTK_ENTRY(name),256); gtk_entry_set_placeholder_text(GTK_ENTRY(name),"Template name"); gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)),"// $date$ — $filename$\n$selection$$cursor$",-1); gtk_container_add(GTK_CONTAINER(scroll),view); gtk_widget_set_size_request(scroll,600,300); gtk_box_pack_start(GTK_BOX(box),name,FALSE,FALSE,6); gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0); GtkWidget *hint=gtk_label_new("Variables: $date$, $time$, $file$, $filename$, $project$, $selection$, $cursor$. Custom: $name$. Literal dollar: $$."); gtk_label_set_line_wrap(GTK_LABEL(hint),TRUE); gtk_label_set_max_width_chars(GTK_LABEL(hint),70); gtk_box_pack_start(GTK_BOX(box),hint,FALSE,FALSE,6); GtkWidget *languages=template_language_editor(box,NULL); gtk_widget_show_all(dialog);
- if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) {
+ if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT && notes_scope_current(INSIGHT_CLIP,generation)) {
   GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)); GtkTextIter a,b; gtk_text_buffer_get_bounds(buffer,&a,&b); gchar *text=gtk_text_buffer_get_text(buffer,&a,&b,FALSE); const gchar *key=gtk_entry_get_text(GTK_ENTRY(name)); GError *error=NULL;
-  if(insight_notes_get(wb.notes,INSIGHT_CLIP,key)) ui_set_statusbar(TRUE,"A clip with this name already exists");
+  if(insight_notes_get(notes_for(INSIGHT_CLIP),INSIGHT_CLIP,key)) ui_set_statusbar(TRUE,"A clip with this name already exists");
   else { InsightNotes *added=insight_notes_new();
    gchar **allowed=template_language_values(languages);
-   if(insight_notes_set(added,INSIGHT_CLIP,key,NULL,0,text,&error) && insight_notes_set_languages(added,key,(const gchar *const *)allowed,&error)) { InsightNotes *candidate=insight_notes_merge(wb.notes,added,INSIGHT_CLIP,&error); if(candidate) notes_commit(candidate,INSIGHT_CLIP); }
+   if(insight_notes_set(added,INSIGHT_CLIP,key,NULL,0,text,&error) && insight_notes_set_languages(added,key,(const gchar *const *)allowed,&error)) { InsightNotes *candidate=insight_notes_merge(notes_for(INSIGHT_CLIP),added,INSIGHT_CLIP,&error); if(candidate) notes_commit(candidate,INSIGHT_CLIP); }
    g_strfreev(allowed); insight_notes_free(added);
   }
   if(error) ui_set_statusbar(TRUE,"Template: %s",insight_tr(error->message));
@@ -2406,11 +2471,12 @@ static void clip_new_template(GtkWidget *widget,gpointer data) {
  gtk_widget_destroy(dialog);
 }
 static void clip_edit(GtkWidget *widget,gpointer data) {
- (void)widget; (void)data; gchar *name=selected_note(INSIGHT_CLIP); const InsightNote *note=name ? insight_notes_get(wb.notes,INSIGHT_CLIP,name) : NULL; if(!note) { g_free(name); return; }
+ guint64 generation=wb.clips_generation;
+ (void)widget; (void)data; gchar *name=selected_note(INSIGHT_CLIP); const InsightNote *note=name ? insight_notes_get(notes_for(INSIGHT_CLIP),INSIGHT_CLIP,name) : NULL; if(!note) { g_free(name); return; }
  GtkWidget *dialog=gtk_dialog_new_with_buttons("Edit clip",GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Cancel",GTK_RESPONSE_CANCEL,"Save",GTK_RESPONSE_ACCEPT,NULL),*view=gtk_text_view_new(),*scroll=gtk_scrolled_window_new(NULL,NULL);
  gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)),note->text,-1); gtk_container_add(GTK_CONTAINER(scroll),view); gtk_widget_set_size_request(scroll,600,350); gtk_container_add(GTK_CONTAINER(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),scroll); GtkWidget *languages=template_language_editor(gtk_dialog_get_content_area(GTK_DIALOG(dialog)),note); gtk_widget_show_all(dialog);
- if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) { GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)); GtkTextIter a,b; gtk_text_buffer_get_bounds(buffer,&a,&b); gchar *text=gtk_text_buffer_get_text(buffer,&a,&b,FALSE); GError *error=NULL;
-  InsightNotes *candidate=insight_notes_rename(wb.notes,INSIGHT_CLIP,name,name,&error); gchar **allowed=template_language_values(languages);
+ if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT && notes_scope_current(INSIGHT_CLIP,generation)) { GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)); GtkTextIter a,b; gtk_text_buffer_get_bounds(buffer,&a,&b); gchar *text=gtk_text_buffer_get_text(buffer,&a,&b,FALSE); GError *error=NULL;
+  InsightNotes *candidate=insight_notes_rename(notes_for(INSIGHT_CLIP),INSIGHT_CLIP,name,name,&error); gchar **allowed=template_language_values(languages);
   if(candidate) { if(insight_notes_set(candidate,INSIGHT_CLIP,name,NULL,0,text,&error) && insight_notes_set_languages(candidate,name,(const gchar *const *)allowed,&error)) notes_commit(candidate,INSIGHT_CLIP); else insight_notes_free(candidate); }
   if(error) ui_set_statusbar(TRUE,"Clip: %s",insight_tr(error->message));
   g_strfreev(allowed); g_clear_error(&error); g_free(text); }
@@ -2423,19 +2489,20 @@ static void note_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn
 /* Commit a prepared snapshot before refreshing the panel. On write failure the
  * previous in-memory notes and selection remain available. Consumes candidate. */
 static gboolean notes_commit(InsightNotes *candidate,InsightNoteKind kind) {
- InsightNotes *previous=wb.notes; wb.notes=candidate;
- if(!notes_save()) { wb.notes=previous; insight_notes_free(candidate); return FALSE; }
+ InsightNotes **slot=kind==INSIGHT_CLIP && wb.clips_project ? &wb.project_notes : &wb.notes;InsightNotes *previous=*slot;*slot=candidate;
+ if(!notes_save_kind(kind)) { *slot=previous; insight_notes_free(candidate); return FALSE; }
  insight_notes_free(previous);
- for(guint i=0;i<documents_array->len;i++) bookmark_restore_document(g_ptr_array_index(documents_array,i));
- notes_filter(NULL,GINT_TO_POINTER(kind));bookmark_list_reload(NULL,NULL);return TRUE;
+ if(kind==INSIGHT_BOOKMARK) { for(guint i=0;i<documents_array->len;i++) bookmark_restore_document(g_ptr_array_index(documents_array,i));bookmark_list_reload(NULL,NULL); }
+ notes_filter(NULL,GINT_TO_POINTER(kind));return TRUE;
 }
 static void note_rename(GtkWidget *widget,gpointer data) {
  (void)widget; InsightNoteKind kind=(InsightNoteKind)GPOINTER_TO_INT(data); gchar *name=selected_note(kind);
  if(!name) { ui_set_statusbar(TRUE,"Select a note to rename"); return; }
+ guint64 generation=wb.clips_generation;
  GtkWidget *dialog=gtk_dialog_new_with_buttons("Rename note",GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Cancel",GTK_RESPONSE_CANCEL,"Rename",GTK_RESPONSE_ACCEPT,NULL),*entry=gtk_entry_new();
  gtk_entry_set_text(GTK_ENTRY(entry),name); gtk_entry_set_activates_default(GTK_ENTRY(entry),TRUE); gtk_dialog_set_default_response(GTK_DIALOG(dialog),GTK_RESPONSE_ACCEPT); gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),entry,FALSE,FALSE,8); gtk_widget_show(entry);
- if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) {
-  GError *error=NULL; InsightNotes *candidate=insight_notes_rename(wb.notes,kind,name,gtk_entry_get_text(GTK_ENTRY(entry)),&error);
+ if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT && notes_scope_current(kind,generation)) {
+  GError *error=NULL; InsightNotes *candidate=insight_notes_rename(notes_for(kind),kind,name,gtk_entry_get_text(GTK_ENTRY(entry)),&error);
   if(candidate) { if(notes_commit(candidate,kind)) ui_set_statusbar(TRUE,"Note renamed"); }
   else ui_set_statusbar(TRUE,"Rename: %s",error ? error->message : "failed");
   g_clear_error(&error);
@@ -2445,19 +2512,20 @@ static void note_rename(GtkWidget *widget,gpointer data) {
 static void notes_transfer(GtkWidget *widget,gpointer data) {
  (void)widget; gint action=GPOINTER_TO_INT(data); gboolean exporting=(action&256)!=0;
  InsightNoteKind kind=(InsightNoteKind)(action&255);
+ guint64 generation=wb.clips_generation;
  GtkWidget *dialog=gtk_file_chooser_dialog_new(exporting ? "Export notes" : "Import notes",GTK_WINDOW(main_widgets.window),
   exporting ? GTK_FILE_CHOOSER_ACTION_SAVE : GTK_FILE_CHOOSER_ACTION_OPEN,"Cancel",GTK_RESPONSE_CANCEL,
   exporting ? "Export" : "Import",GTK_RESPONSE_ACCEPT,NULL);
  if(exporting) { gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog),TRUE); gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog),kind==INSIGHT_BOOKMARK ? "bookmarks.conf" : "clips.conf"); }
  GtkFileFilter *filter=gtk_file_filter_new(); gtk_file_filter_set_name(filter,"Insight notes (*.conf)"); gtk_file_filter_add_pattern(filter,"*.conf"); gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog),filter);
  filter=gtk_file_filter_new(); gtk_file_filter_set_name(filter,"All files"); gtk_file_filter_add_pattern(filter,"*"); gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog),filter);
- if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) {
+ if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT && notes_scope_current(kind,generation)) {
   gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog)); GError *error=NULL; InsightNotes *snapshot=NULL; gboolean ok=FALSE;
-  if(exporting) { snapshot=insight_notes_select(wb.notes,kind,&error); if(snapshot) { gchar *root=kind==INSIGHT_BOOKMARK && wb.root ? utils_get_utf8_from_locale(wb.root) : NULL;ok=insight_notes_save_portable(snapshot,path,root,&error);g_free(root); } }
+  if(exporting) { snapshot=insight_notes_select(notes_for(kind),kind,&error); if(snapshot) { gchar *root=kind==INSIGHT_BOOKMARK && wb.root ? utils_get_utf8_from_locale(wb.root) : NULL;ok=insight_notes_save_portable(snapshot,path,root,&error);g_free(root); } }
   else {
    gchar *root=wb.root ? utils_get_utf8_from_locale(wb.root) : NULL;snapshot=insight_notes_load_portable(path,root,&error);g_free(root);
    if(snapshot) {
-    InsightNotes *merged=insight_notes_merge(wb.notes,snapshot,kind,&error);
+    InsightNotes *merged=insight_notes_merge(notes_for(kind),snapshot,kind,&error);
     if(merged) ok=notes_commit(merged,kind);
    }
   }
@@ -2485,6 +2553,7 @@ static void create_note_panel(InsightNoteKind kind) {
  GtkWidget *transfer=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,2);
  GtkWidget *rename=gtk_button_new_with_label("Rename…"); gtk_box_pack_start(GTK_BOX(transfer),rename,FALSE,FALSE,0); g_signal_connect(rename,"clicked",G_CALLBACK(note_rename),GINT_TO_POINTER(kind));
  for(guint i=0;i<2;i++) { GtkWidget *button=gtk_button_new_with_label(i ? "Export…" : "Import…"); gtk_box_pack_start(GTK_BOX(transfer),button,FALSE,FALSE,0); g_signal_connect(button,"clicked",G_CALLBACK(notes_transfer),GINT_TO_POINTER((gint)kind|(i ? 256 : 0))); }
+ if(kind==INSIGHT_CLIP) { GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3),*reload=gtk_button_new_from_icon_name("view-refresh",GTK_ICON_SIZE_SMALL_TOOLBAR);wb.clips_scope=gtk_combo_box_text_new();gtk_widget_set_name(wb.clips_scope,"insight-clips-store");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.clips_scope),"Global templates");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.clips_scope),"Project templates");gtk_combo_box_set_active(GTK_COMBO_BOX(wb.clips_scope),0);gtk_widget_set_name(reload,"insight-reload-project-templates");gtk_widget_set_tooltip_text(reload,"Reload project templates");gtk_box_pack_start(GTK_BOX(row),wb.clips_scope,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(row),reload,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),row,FALSE,FALSE,0);g_signal_connect(wb.clips_scope,"changed",G_CALLBACK(clips_scope_changed),NULL);g_signal_connect(reload,"clicked",G_CALLBACK(clips_project_reload),NULL); }
  if(kind==INSIGHT_CLIP) { wb.clips_all=gtk_check_button_new_with_label("Show all languages"); gtk_widget_set_name(wb.clips_all,"insight-clips-all-languages"); gtk_box_pack_start(GTK_BOX(box),wb.clips_all,FALSE,FALSE,0); g_signal_connect(wb.clips_all,"toggled",G_CALLBACK(notes_filter),GINT_TO_POINTER(INSIGHT_CLIP)); }
  gtk_box_pack_start(GTK_BOX(box),transfer,FALSE,FALSE,0); gtk_box_reorder_child(GTK_BOX(box),transfer,2);
  gtk_notebook_append_page(GTK_NOTEBOOK(wb.project_notebook),box,gtk_label_new(kind==INSIGHT_BOOKMARK ? "Bookmarks" : "Clips")); g_signal_connect(field,"changed",G_CALLBACK(notes_filter),GINT_TO_POINTER(kind)); g_signal_connect(field,"key-press-event",G_CALLBACK(browser_key),NULL); g_signal_connect(view,"key-press-event",G_CALLBACK(browser_key),NULL);
@@ -2493,9 +2562,9 @@ static void create_note_panel(InsightNoteKind kind) {
 }
 static void create_notes(void) {
  wb.bookmark_handles=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);
- wb.notes_path=g_build_filename(app->configdir,"insight","notes.conf",NULL); wb.notes=insight_notes_new();
+ wb.notes_path=g_build_filename(app->configdir,"insight","notes.conf",NULL); wb.notes=insight_notes_new();wb.project_notes=insight_notes_new();
  if(g_file_test(wb.notes_path,G_FILE_TEST_EXISTS)) { GError *error=NULL; InsightNotes *loaded=insight_notes_load(wb.notes_path,&error); if(loaded) { insight_notes_free(wb.notes); wb.notes=loaded; } else ui_set_statusbar(TRUE,"Notes ignored: %s",error ? error->message : "invalid snapshot"); g_clear_error(&error); }
- create_note_panel(INSIGHT_BOOKMARK); create_note_panel(INSIGHT_CLIP);
+ create_note_panel(INSIGHT_BOOKMARK); create_note_panel(INSIGHT_CLIP);clips_project_load(app->project ? app->project->file_name : NULL,FALSE);
  for(guint i=0;i<documents_array->len;i++) bookmark_restore_document(g_ptr_array_index(documents_array,i));
 }
 static void category_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) {
@@ -2939,6 +3008,7 @@ static void native_project_update(GObject *object,GKeyFile *config,gpointer data
  gchar *native=utils_get_locale_from_utf8(utf8),*root=g_canonicalize_filename(native,NULL); g_free(native);
  gboolean changed=GPOINTER_TO_INT(data) || g_strcmp0(root,wb.geany_root) || g_strcmp0(wb.membership_project,app->project->file_name);
  if(changed) {
+  clips_project_load(app->project->file_name,FALSE);
   invalidate_search_context();
   GKeyFile *loaded=NULL; GError *error=NULL;
   if(!config) { loaded=g_key_file_new(); gchar *filename=utils_get_locale_from_utf8(app->project->file_name); if(!g_key_file_load_from_file(loaded,filename,G_KEY_FILE_NONE,&error) && g_error_matches(error,G_FILE_ERROR,G_FILE_ERROR_NOENT)) g_clear_error(&error); g_free(filename); config=loaded; }
@@ -3072,6 +3142,7 @@ static void project_files_drop(GtkWidget *widget,GdkDragContext *context,gint x,
  gtk_drag_finish(context,ok,FALSE,time);
 }
 static void native_project_close(GObject *object,gpointer data) {
+ clips_project_load(NULL,FALSE);
  (void)object; (void)data; g_clear_pointer(&wb.geany_root,g_free); g_clear_pointer(&wb.membership_project,g_free); wb.membership_valid=FALSE;
  if(!wb.workspace_from_project) return;
  wb.workspace_from_project=FALSE; invalidate_search_context(); stop_scan(); insight_workspace_watch_clear(wb.watch); wb.watch_changed=FALSE; if(wb.watch_idle) { g_source_remove(wb.watch_idle); wb.watch_idle=0; } retire_index(wb.base); wb.base=insight_index_new(); mark_index_dirty(); g_ptr_array_set_size(wb.files,0); g_clear_pointer(&wb.root,g_free);
@@ -3531,6 +3602,7 @@ static void save_workbench_settings(void) {
  GKeyFile *settings=g_key_file_new();
  insight_overview_write(settings);
  grouped_write(&wb.type_panel,settings); grouped_write(&wb.category_panel,settings);
+ g_key_file_set_boolean(settings,"workbench","project-templates",wb.clips_prefer_project);
  g_key_file_set_boolean(settings,"workbench","folder-follow-current-file",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.tree_follow)));
  symbol_sort_write(settings,wb.file_store,"project-files");insight_symbol_view_columns_write(GTK_TREE_VIEW(wb.file_view),settings,"project-files");symbol_history_write(settings,wb.file_entry,"project-files");
  symbol_history_write(settings,wb.local_entry,"file-symbols");symbol_history_write(settings,wb.symbol_entry,"project-symbols");
@@ -3598,6 +3670,7 @@ static void restore_workbench_settings(void) {
    if(error || version!=1 || host->width<300 || host->width>4000 || host->height<200 || host->height>4000 || host->x < -30000 || host->x>30000 || host->y < -30000 || host->y>30000) host->restore=FALSE;
    g_clear_error(&error);
   }
+  wb.clips_prefer_project=g_key_file_get_boolean(settings,"workbench","project-templates",NULL);clips_project_load(app->project ? app->project->file_name : NULL,TRUE);
   wb.restore_float=g_key_file_get_boolean(settings,"workbench","floating",NULL);
   wb.float_x=CLAMP(g_key_file_get_integer(settings,"workbench","float-x",NULL),-30000,30000); wb.float_y=CLAMP(g_key_file_get_integer(settings,"workbench","float-y",NULL),-30000,30000);
   gint fw=g_key_file_get_integer(settings,"workbench","float-width",NULL),fh=g_key_file_get_integer(settings,"workbench","float-height",NULL);
@@ -4072,7 +4145,7 @@ void insight_workbench_finalize(void) {
  if(wb.file_types) g_object_unref(wb.file_types);
  if(wb.marks_store) g_object_unref(wb.marks_store);
  if(wb.clips_store) g_object_unref(wb.clips_store);
- insight_notes_free(wb.notes); g_free(wb.notes_path); g_free(wb.clips_language);
+ insight_notes_free(wb.notes);insight_notes_free(wb.project_notes);g_free(wb.project_notes_path);g_free(wb.template_prefix); g_free(wb.notes_path); g_free(wb.clips_language);
  if(wb.file_store) g_object_unref(wb.file_store);
  if(wb.relation_history) g_ptr_array_unref(wb.relation_history);
  if(wb.matches) g_object_unref(wb.matches);

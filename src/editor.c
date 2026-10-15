@@ -1182,6 +1182,8 @@ static gboolean on_editor_notify(G_GNUC_UNUSED GObject *object, GeanyEditor *edi
 			{
 				sci_add_text(sci, nt->text);
 			}
+			else if (nt->listType == INSIGHT_TEMPLATE_COMPLETION_LIST)
+				insight_workbench_template_selected(editor, nt->text);
 			break;
 
 		case SCN_AUTOCSELECTION:
@@ -2723,7 +2725,7 @@ gboolean editor_complete_snippet(GeanyEditor *editor, gint pos)
 		if (result)
 			sci_cancel(sci);	/* cancel any autocompletion list, etc */
 	}
-	return result;
+	return result || insight_workbench_complete_template(editor, pos);
 }
 
 

@@ -522,3 +522,6 @@ test('Insight scoped type alias Context GUI', type_alias_gui_test, timeout: 45)
 
 template_fields_gui_test = executable('test_insight_template_fields_gui', '../insight/tests/template_fields_gui_test.c', dependencies: test_deps)
 test('Insight editable template fields GUI', template_fields_gui_test, timeout: 35)
+
+project_templates_gui_test = executable('test_insight_project_templates_gui', '../insight/tests/project_templates_gui_test.c', dependencies: test_deps)
+test('Insight project template stores GUI', project_templates_gui_test, timeout: 45)

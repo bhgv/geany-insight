@@ -755,3 +755,10 @@ Relation query could not be computed	Не удалось вычислить св
 Relation tree loading cancelled	Загрузка дерева связей отменена
 Keep template fields editable (Tab / Shift+Tab)	Редактировать поля после вставки (Tab / Shift+Tab)
 Editable template field limit reached (1024)	Достигнут предел редактируемых полей шаблона (1024)
+Global templates	Общие шаблоны
+Project templates	Шаблоны проекта
+Reload project templates	Перечитать шаблоны проекта
+Open a project to use project templates	Откройте проект для использования его шаблонов
+Template store changed; try the operation again	База шаблонов изменилась; повторите операцию
+Open a project with a valid template store first	Сначала откройте проект с исправной базой шаблонов
+Project templates ignored: %s	Шаблоны проекта пропущены: %s
