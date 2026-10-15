@@ -1662,3 +1662,32 @@ closes immediately, then externally shifts/reopens again. Native tests cover
 ambiguity, scopes, stale duplicate text, bounds, legacy storage, CR lines and all
 metadata transfer paths. Strict C99 notebook/workbench builds and the Linux
 editor/test targets pass. Windows remains deferred.
+
+
+## Guide-driven syntax formatting modes (2026-10-15)
+
+References: Source Insight 4 User Guide, Mono Font View and Syntax Formatting.
+View / Mono Font View is a temporary global override with a configurable font,
+retaining syntax colors and suppressing token font/size/emphasis/case changes.
+Options / Syntax Formatting saves independent enabled, color-only and grayscale
+modes plus the mono font. Mono mode overrides those settings, resets on restart,
+and restores their combination when switched off. Apply is failure-atomic;
+Cancel discards edits, and invalid settings are rejected as one snapshot.
+
+A weakly tracked per-Scintilla raw-style snapshot separates the profile/theme
+from display overrides. Theme/profile/base-font rebuilds restore and invalidate
+that snapshot before recomputation; newly opened buffers and colored previews
+inherit the active display mode. Disabling an override restores exact raw
+attributes. UI-only gutter/brace styles and navigation/search indicators remain
+separate. Colors are retained or converted to grayscale as selected; no profile
+CSS/theme or source bytes are rewritten.
+
+Four GUI scenarios cover toggle/restore, all mode combinations, Mono precedence,
+cancel, persistent color-only, transient mono reset, invalid fonts/settings,
+style reload while mono is active, new buffers, Context, unchanged selection and
+Undo, and Russian command labels. Existing language-profile, RU/EN interface,
+Python Context, anchored bookmark, pane-geometry and on-demand Help GUIs pass.
+Full Linux targets and strict C99 formatting-module compilation pass. Offline
+RU/EN help and future Windows test registration are included; no Windows build
+request marker was touched. Parent-style hierarchies and SI configuration import
+are still distinct outstanding work, not claimed by these display modes.

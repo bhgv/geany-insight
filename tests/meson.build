@@ -558,3 +558,8 @@ python_series_gui_test = executable('test_insight_python_series_gui', '../insigh
 test('Insight Python navigation series GUI', python_series_gui_test, timeout: 100)
 bookmark_anchors_gui_test = executable('test_insight_bookmark_anchors_gui', '../insight/tests/bookmark_anchors_gui_test.c', dependencies: test_deps)
 test('Insight symbol anchored bookmarks GUI', bookmark_anchors_gui_test, timeout: 55)
+formatting_gui_test = executable('test_insight_formatting_gui', '../insight/tests/formatting_gui_test.c', dependencies: test_deps)
+test('Insight syntax formatting GUI', formatting_gui_test, timeout: 50)
+test('Insight syntax formatting restore GUI', formatting_gui_test, timeout: 50, env: ['GEANY_TEST_FORMATTING_RESTORE=1'])
+test('Insight syntax formatting invalid configuration GUI', formatting_gui_test, timeout: 50, env: ['GEANY_TEST_FORMATTING_INVALID=1'])
+test('Insight syntax formatting Russian GUI', formatting_gui_test, timeout: 50, env: ['GEANY_TEST_FORMATTING_RUSSIAN=1'])

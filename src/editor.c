@@ -1,4 +1,5 @@
 #include "insight-languages.h"
+#include "insight-formatting.h"
 /*
  *      editor.c - this file is part of Geany, a fast and lightweight IDE
  *
@@ -4674,6 +4675,7 @@ void editor_set_font(GeanyEditor *editor, const gchar *font)
 {
 	g_return_if_fail(editor);
 
+	insight_formatting_begin(editor->sci);
 	set_font(editor->sci, font);
  insight_languages_apply(editor->sci,editor->document->file_name,editor->document->file_type);
 	update_margins(editor->sci);

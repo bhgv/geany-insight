@@ -1,4 +1,5 @@
 #include "insight-languages.h"
+#include "insight-formatting.h"
 /*
  *      highlighting.c - this file is part of Geany, a fast and lightweight IDE
  *
@@ -1096,6 +1097,7 @@ void highlighting_init_styles(guint filetype_idx, GKeyFile *config, GKeyFile *co
 GEANY_API_SYMBOL
 void highlighting_set_styles(ScintillaObject *sci, GeanyFiletype *ft)
 {
+ insight_formatting_begin(sci);
 	guint lexer_id = get_lexer_filetype(ft);
 
 	filetypes_load_config(ft->id, FALSE);	/* load filetypes.ext */
@@ -1186,6 +1188,7 @@ void highlighting_set_styles(ScintillaObject *sci, GeanyFiletype *ft)
 		}
 	}
  for(guint n=0;documents_array && n<documents_array->len;n++) { GeanyDocument *doc=g_ptr_array_index(documents_array,n);if(doc->is_valid && doc->editor && doc->editor->sci==sci) { insight_languages_apply(sci,doc->file_name,ft);break; } }
+ insight_formatting_apply(sci);
 }
 
 

@@ -222,6 +222,8 @@ libgeany_la_SOURCES += \
 	insight-relation-graph.h \
 	insight-help.c \
 	insight-languages.c \
+	insight-formatting.c \
+	insight-formatting.h \
 	insight-i18n.c \
 	insight-i18n.h \
 	insight-languages.h \

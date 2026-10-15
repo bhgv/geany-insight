@@ -814,3 +814,14 @@ Open	Открыть
 Copy full path	Копировать полный путь
 Copy filename	Копировать имя файла
 Refresh	Обновить
+
+Mono Font View	Моноширинный режим
+Syntax Formatting…	Синтаксическое оформление…
+Syntax Formatting	Синтаксическое оформление
+Use syntax formatting	Использовать синтаксическое оформление
+Use only color formatting	Использовать только цветовое оформление
+Use no color formatting (monochrome)	Не использовать цветовое оформление (оттенки серого)
+Mono Font View font	Шрифт моноширинного режима
+Mono Font View temporarily overrides these options. Text and undo history are unchanged.	Моноширинный режим временно переопределяет эти настройки. Текст и история отмены сохраняются.
+Choose a font between 4 and 96 points	Выберите шрифт размером от 4 до 96 пунктов
+Cannot save syntax formatting options	Не удалось сохранить настройки синтаксического оформления

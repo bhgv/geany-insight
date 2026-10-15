@@ -30,3 +30,5 @@ Profiles occupy `languages/<language name>/` under Geany's configuration directo
 At first launch, absent standard profiles are populated from current Geany extensions, keywords, colors and emphasis, plus the editor's main font. C/C++/ASM receive initial compatible extensions. Existing language.conf/CSS files are retained. User profiles take precedence over seeded defaults; conflicting own extensions between two user profiles require correction.
 
 Edit these files manually if desired. **Reload profiles** rereads them. **Apply** saves the dialog, reloads profiles, updates open documents and requests workspace reindexing. Invalid parsers/CSS exclude a profile from loading. Profile changes do not modify or save source text.
+
+Display overrides are separate from profile CSS: [Syntax Formatting](syntax-formatting.md) describes Mono Font View, color-only, grayscale and plain text modes.
