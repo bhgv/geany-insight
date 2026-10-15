@@ -22,5 +22,13 @@ int main(void) {
  }
  assert(!insight_graph_image_size(-1,0,1,&width,&height));assert(!insight_graph_image_size(1,0,0,&width,&height));assert(!insight_graph_image_size(1,0,1,0,&height));
  assert(!insight_graph_image_size(128,1,2,&width,&height));assert(insight_graph_image_size(128,1,0.5,&width,&height));
+ for(int vertical=0;vertical<2;vertical++) for(int depth=0;depth<=32;depth++) {
+  InsightGraphRect tree=insight_graph_tree_rect(3,depth,vertical),flat=insight_graph_rect(3,vertical);
+  assert(tree.x==flat.x+(vertical ? 0 : depth*240));assert(tree.y==flat.y+(vertical ? depth*80 : 0));
+  assert(tree.width==200 && tree.height==48);
+  assert(insight_graph_extent_image_size(tree,0.5,&width,&height));
+ }
+ assert(!insight_graph_extent_image_size((InsightGraphRect){-1,0,200,48},1,&width,&height));
+ assert(!insight_graph_extent_image_size((InsightGraphRect){0,0,1e30,48},1,&width,&height));
  puts("Graph layout: orientations, zoom, gaps, bounds and node limit passed");return 0;
 }

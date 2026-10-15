@@ -89,7 +89,7 @@ typedef struct {
  gchar *search_state_path; GPtrArray *search_files,*search_history; gboolean usage_keywords; guint usage_context;
  GtkWidget *usage_entry,*usage_status,*usage_buffer,*usage_view,*usage_code,*relation_transitive,*relation_mode,*relation_follow,*relation_enclosing,*relation_filter_entry;
  GtkTreeModelFilter *relation_filter;
- GtkWidget *relation_tree,*relation_tree_toggle,*relation_back,*relation_stack,*relation_graph_toggle,*relation_graph;GPtrArray *relation_history;
+ GtkWidget *relation_tree,*relation_tree_toggle,*relation_back,*relation_stack,*relation_graph_toggle,*relation_graph,*relation_tree_graph;GPtrArray *relation_history;
  gchar *relation_word; gint relation_last_mode; gboolean relation_dirty,usage_code_only,relation_setting;
  gint usage_mode; guint usage_flags;
  GtkWidget *project_query,*project_case,*project_word,*project_regex,*editor_query,*editor_case,*editor_word,*editor_regex,*project_search_row,*editor_search_row;
@@ -1463,7 +1463,7 @@ static void relation_back(GtkWidget *widget,gpointer data) {
 }
 static void relation_selected_query(GtkWidget *widget,gpointer data) {
  (void)widget;GtkTreeModel *model;GtkTreeIter iter;
- gboolean tree_view=!strcmp(gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack)),"tree");GtkTreeView *view=tree_view ? insight_relation_tree_view(wb.relation_tree) : GTK_TREE_VIEW(wb.usage_view);
+ gboolean tree_view=g_str_has_prefix(gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack)),"tree");GtkTreeView *view=tree_view ? insight_relation_tree_view(wb.relation_tree) : GTK_TREE_VIEW(wb.usage_view);
  if(!gtk_tree_selection_get_selected(gtk_tree_view_get_selection(view),&model,&iter)) { ui_set_statusbar(TRUE,"Select a relation row first");return; }
  gchar *name=NULL;gulong line=0;gtk_tree_model_get(model,&iter,USAGE_SYMBOL,&name,USAGE_LINE,&line,-1);if(tree_view && !line) { g_free(name);return; }
  if(!name || !*name) { g_free(name);return; }
@@ -1489,11 +1489,14 @@ static void relation_view_update(void) {
  if(!wb.relation_tree_toggle || !wb.relation_stack) return;
  gint mode=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode));gboolean supported=mode==2 || mode==4 || mode==5;
  gtk_widget_set_sensitive(wb.relation_tree_toggle,supported);gboolean tree=supported && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_tree_toggle));
- gtk_widget_set_sensitive(wb.relation_graph_toggle,!tree);
- gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),tree ? "tree" : (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_graph_toggle)) ? "graph" : "list"));
+ const gchar *old=gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack));gboolean graph=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_graph_toggle));
+ if(old && wb.relation_tree_graph && (!strcmp(old,"treegraph") || !strcmp(old,"graph"))) {
+  gboolean vertical=FALSE;gint zoom=100;gboolean old_tree=!strcmp(old,"treegraph");insight_relation_graph_get_options(old_tree ? wb.relation_tree_graph : wb.relation_graph,&vertical,&zoom);insight_relation_graph_set_options(old_tree ? wb.relation_graph : wb.relation_tree_graph,vertical,zoom);
+ }
+ gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),tree ? (graph ? "treegraph" : "tree") : (graph ? "graph" : "list"));
 }
 static void relation_graph_toggle(GtkToggleButton *button,gpointer data) { (void)button;(void)data;relation_view_update(); }
-static void relation_tree_toggle(GtkToggleButton *button,gpointer data) { (void)data;if(gtk_toggle_button_get_active(button) && wb.relation_graph_toggle) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_graph_toggle),FALSE);relation_view_update();if(!wb.relation_setting && gtk_toggle_button_get_active(button) && *gtk_entry_get_text(GTK_ENTRY(wb.usage_entry))) usage_start(NULL,NULL); }
+static void relation_tree_toggle(GtkToggleButton *button,gpointer data) { (void)data;relation_view_update();if(!wb.relation_setting && gtk_toggle_button_get_active(button) && *gtk_entry_get_text(GTK_ENTRY(wb.usage_entry))) usage_start(NULL,NULL); }
 static void create_usage_browser(void) {
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,4),*controls=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,2);
  wb.usage_entry=gtk_search_entry_new(); gtk_widget_set_name(wb.usage_entry,"insight-relation-query"); gtk_entry_set_placeholder_text(GTK_ENTRY(wb.usage_entry),"Symbol or qualified owner…");
@@ -1540,7 +1543,8 @@ static void create_usage_browser(void) {
  GtkTreeView *tree_view=insight_relation_tree_view(wb.relation_tree);g_signal_connect(gtk_tree_view_get_selection(tree_view),"changed",G_CALLBACK(relation_tree_selected),NULL);g_signal_connect(tree_view,"row-activated",G_CALLBACK(relation_tree_activated),NULL);
  wb.relation_tree_toggle=gtk_check_button_new_with_label("Expandable relation tree");gtk_widget_set_name(wb.relation_tree_toggle,"insight-relation-tree-toggle");gtk_widget_set_sensitive(wb.relation_tree_toggle,FALSE);gtk_box_pack_start(GTK_BOX(controls),wb.relation_tree_toggle,FALSE,FALSE,0);g_signal_connect(wb.relation_tree_toggle,"toggled",G_CALLBACK(relation_tree_toggle),NULL);
  wb.relation_graph=insight_relation_graph_new(GTK_TREE_VIEW(wb.usage_view),GTK_ENTRY(wb.usage_entry),USAGE_SYMBOL,USAGE_DISPLAY,USAGE_LINE);insight_relation_graph_set_query_handler(wb.relation_graph,relation_graph_query,NULL);gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_graph,"graph");gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"list");
- wb.relation_graph_toggle=gtk_check_button_new_with_label("Graph view");gtk_box_pack_start(GTK_BOX(controls),wb.relation_graph_toggle,FALSE,FALSE,0);g_signal_connect(wb.relation_graph_toggle,"toggled",G_CALLBACK(relation_graph_toggle),NULL);
+ wb.relation_tree_graph=insight_relation_graph_new_tree(tree_view,GTK_ENTRY(wb.usage_entry),USAGE_SYMBOL,USAGE_DISPLAY,USAGE_LINE);insight_relation_graph_set_query_handler(wb.relation_tree_graph,relation_graph_query,NULL);gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_tree_graph,"treegraph");
+ wb.relation_graph_toggle=gtk_check_button_new_with_label("Graph view");gtk_widget_set_name(wb.relation_graph_toggle,"insight-relation-graph-toggle");gtk_box_pack_start(GTK_BOX(controls),wb.relation_graph_toggle,FALSE,FALSE,0);g_signal_connect(wb.relation_graph_toggle,"toggled",G_CALLBACK(relation_graph_toggle),NULL);
  gtk_box_pack_start(GTK_BOX(box),wb.usage_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_mode,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_transitive,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_follow,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_enclosing,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_code,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_buffer,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),controls,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_status,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_filter_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),drill,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_stack,TRUE,TRUE,0);
  gtk_notebook_append_page(GTK_NOTEBOOK(wb.project_notebook),box,gtk_label_new("Relations"));
  g_signal_connect(search,"clicked",G_CALLBACK(usage_start),NULL); g_signal_connect(cancel,"clicked",G_CALLBACK(usage_cancel),NULL); g_signal_connect(wb.usage_entry,"activate",G_CALLBACK(usage_start),NULL);
@@ -3547,7 +3551,7 @@ static void save_workbench_settings(void) {
  g_key_file_set_integer(settings,"workbench","editor-search-flags",text_search_flags(wb.editor_case,wb.editor_word,wb.editor_regex));
  g_key_file_set_boolean(settings,"workbench","relation-transitive",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_transitive)));
  g_key_file_set_integer(settings,"workbench","relation-mode",gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode)));
- gboolean graph_vertical=FALSE;gint graph_zoom=100;insight_relation_graph_get_options(wb.relation_graph,&graph_vertical,&graph_zoom);
+ gboolean graph_vertical=FALSE;gint graph_zoom=100;insight_relation_graph_get_options(!strcmp(gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack)),"treegraph") ? wb.relation_tree_graph : wb.relation_graph,&graph_vertical,&graph_zoom);
  g_key_file_set_boolean(settings,"workbench","graph-vertical",graph_vertical);g_key_file_set_integer(settings,"workbench","graph-zoom",graph_zoom);
  g_key_file_set_boolean(settings,"workbench","relation-tree",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_tree_toggle)));
  g_key_file_set_boolean(settings,"workbench","relation-graph",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_graph_toggle)));
@@ -3603,6 +3607,7 @@ static void restore_workbench_settings(void) {
   if(g_key_file_has_key(settings,"workbench","relation-transitive",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_transitive),g_key_file_get_boolean(settings,"workbench","relation-transitive",NULL));
   gint relation=g_key_file_get_integer(settings,"workbench","relation-mode",NULL); if(relation>=0 && relation<8) gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),relation);
   insight_relation_graph_set_options(wb.relation_graph,g_key_file_get_boolean(settings,"workbench","graph-vertical",NULL),g_key_file_has_key(settings,"workbench","graph-zoom",NULL) ? g_key_file_get_integer(settings,"workbench","graph-zoom",NULL) : 100);
+  insight_relation_graph_set_options(wb.relation_tree_graph,g_key_file_get_boolean(settings,"workbench","graph-vertical",NULL),g_key_file_has_key(settings,"workbench","graph-zoom",NULL) ? g_key_file_get_integer(settings,"workbench","graph-zoom",NULL) : 100);
   if(g_key_file_has_key(settings,"workbench","relation-tree",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_tree_toggle),g_key_file_get_boolean(settings,"workbench","relation-tree",NULL));
   if(g_key_file_has_key(settings,"workbench","relation-graph",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_graph_toggle),g_key_file_get_boolean(settings,"workbench","relation-graph",NULL));
   if(g_key_file_has_key(settings,"workbench","relation-enclosing",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_enclosing),g_key_file_get_boolean(settings,"workbench","relation-enclosing",NULL));

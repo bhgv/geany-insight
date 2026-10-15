@@ -87,7 +87,7 @@ static void branch_done(GObject *source,GAsyncResult *result,gpointer data) {
  g_object_unref(box);
 }
 static void expanded(GtkTreeView *view,GtkTreeIter *filtered,GtkTreePath *path,gpointer data) {
- (void)view;(void)path;RelationTree *tree=data;if(tree->setting || !tree->index) return;
+ (void)view;(void)path;RelationTree *tree=data;if(tree->setting || !tree->index || !tree->box) return;
  GtkTreeIter iter;gtk_tree_model_filter_convert_iter_to_child_iter(tree->filter,&iter,filtered);gchar *key=NULL,*owner=NULL;gint state=LOADED;gtk_tree_model_get(GTK_TREE_MODEL(tree->store),&iter,KEY,&key,OWNER,&owner,STATE,&state,-1);
  if(key) { if(g_hash_table_size(tree->expanded)>=4096) g_hash_table_remove_all(tree->expanded);g_hash_table_add(tree->expanded,g_strdup(key)); }
  if(state==UNLOADED && owner && *owner) {
@@ -96,6 +96,7 @@ static void expanded(GtkTreeView *view,GtkTreeIter *filtered,GtkTreePath *path,g
   GtkTreePath *child_path=gtk_tree_model_get_path(GTK_TREE_MODEL(tree->store),&iter);job->row=gtk_tree_row_reference_new(GTK_TREE_MODEL(tree->store),child_path);gtk_tree_path_free(child_path);
   GTask *task=g_task_new(NULL,tree->cancel,branch_done,NULL);g_task_set_task_data(task,job,branch_free);g_task_run_in_thread(task,branch_run);g_object_unref(task);
  }
+ if(state==LOADED) { GtkTreeIter child;for(gboolean valid=gtk_tree_model_iter_children(GTK_TREE_MODEL(tree->store),&child,&iter);valid;valid=gtk_tree_model_iter_next(GTK_TREE_MODEL(tree->store),&child)) restore_branch(tree,&child); }
  g_free(key);g_free(owner);
 }
 static void collapsed(GtkTreeView *view,GtkTreeIter *filtered,GtkTreePath *path,gpointer data) { (void)view;(void)path;RelationTree *tree=data;if(tree->setting) return;gchar *key=NULL;gtk_tree_model_get(GTK_TREE_MODEL(tree->filter),filtered,KEY,&key,-1);if(key) g_hash_table_remove(tree->expanded,key);g_free(key); }
@@ -103,6 +104,7 @@ static void freed(gpointer data) { RelationTree *tree=data;g_cancellable_cancel(
 static void line_cell(GtkTreeViewColumn *column,GtkCellRenderer *renderer,GtkTreeModel *model,GtkTreeIter *iter,gpointer data) {
  (void)column;(void)data;gulong line=0;gtk_tree_model_get(model,iter,LINE,&line,-1);gchar *text=line ? g_strdup_printf("%lu",line) : g_strdup("");g_object_set(renderer,"text",text,NULL);g_free(text);
 }
+static void box_destroyed(GtkWidget *box,gpointer data) { RelationTree *tree=data;g_object_set_data(G_OBJECT(box),"insight-relation-tree",NULL);tree->box=NULL;tree->generation++;g_cancellable_cancel(tree->cancel); }
 GtkWidget *insight_relation_tree_new(void) {
  RelationTree *tree=g_new0(RelationTree,1);tree->box=gtk_box_new(GTK_ORIENTATION_VERTICAL,2);tree->cancel=g_cancellable_new();tree->expanded=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
  tree->store=gtk_tree_store_new(COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG,G_TYPE_ULONG,G_TYPE_ULONG,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG,G_TYPE_STRING,G_TYPE_INT,G_TYPE_STRING);
@@ -112,7 +114,7 @@ GtkWidget *insight_relation_tree_new(void) {
  for(guint i=0;i<G_N_ELEMENTS(fields);i++) { GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(insight_tr(titles[i]),gtk_cell_renderer_text_new(),"text",fields[i],NULL);gtk_tree_view_column_set_resizable(column,TRUE);if(fields[i]==LINE) { GList *cells=gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(column));if(cells) gtk_tree_view_column_set_cell_data_func(column,cells->data,line_cell,NULL,NULL);g_list_free(cells); }gtk_tree_view_append_column(tree->view,column); }
  gtk_tree_view_set_tooltip_column(tree->view,SNIPPET);GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),GTK_WIDGET(tree->view));gtk_box_pack_start(GTK_BOX(tree->box),scroll,TRUE,TRUE,0);
  tree->status=gtk_label_new(NULL);gtk_widget_set_name(tree->status,"insight-relation-tree-status");gtk_label_set_line_wrap(GTK_LABEL(tree->status),TRUE);gtk_box_pack_start(GTK_BOX(tree->box),tree->status,FALSE,FALSE,0);
- g_signal_connect(tree->view,"row-expanded",G_CALLBACK(expanded),tree);g_signal_connect(tree->view,"row-collapsed",G_CALLBACK(collapsed),tree);g_object_set_data_full(G_OBJECT(tree->box),"insight-relation-tree",tree,freed);status(tree,NULL);return tree->box;
+ g_signal_connect(tree->view,"row-expanded",G_CALLBACK(expanded),tree);g_signal_connect(tree->view,"row-collapsed",G_CALLBACK(collapsed),tree);g_object_set_data(G_OBJECT(tree->box),"insight-relation-tree",tree);g_object_set_data_full(G_OBJECT(tree->view),"insight-relation-tree",tree,freed);g_signal_connect(tree->box,"destroy",G_CALLBACK(box_destroyed),tree);status(tree,NULL);return tree->box;
 }
 GtkTreeView *insight_relation_tree_view(GtkWidget *box) { RelationTree *tree=g_object_get_data(G_OBJECT(box),"insight-relation-tree");return tree ? tree->view : NULL; }
 void insight_relation_tree_query(GtkWidget *box,InsightIndex *index,const gchar *owner,InsightRelationMode mode,const gchar *source,GeanyFiletype *ft) {

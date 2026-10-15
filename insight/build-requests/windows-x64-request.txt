@@ -1,1 +1,1 @@
-Build Windows x64: expandable indexed relation outline and main-menu baseline GUI checks.
+Build Windows x64: shared expandable relation graph and graphical branch/export regressions.

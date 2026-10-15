@@ -5,6 +5,9 @@
 /* Shares the tree's filtered/sorted model and selection. Double click activates
  * the tree row. All callbacks and model references are released on destruction. */
 GtkWidget *insight_relation_graph_new(GtkTreeView *,GtkEntry *,gint,gint,gint);
+/* Hierarchical model: row 0 is the virtual query root; visible source nodes
+ * are collected below expanded ancestors. Shares lazy expansion with tree. */
+GtkWidget *insight_relation_graph_new_tree(GtkTreeView *,GtkEntry *,gint,gint,gint);
 void insight_relation_graph_get_options(GtkWidget *,gboolean *,gint *);
 void insight_relation_graph_set_options(GtkWidget *,gboolean,gint);
 typedef void (*InsightRelationGraphQuery)(gint,gpointer);

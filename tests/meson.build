@@ -510,3 +510,6 @@ test('Insight expandable Relations tree GUI', relation_tree_gui_test, timeout: 5
 
 menu_alignment_gui_test = executable('test_insight_menu_alignment_gui', '../insight/tests/menu_alignment_gui_test.c', dependencies: test_deps)
 test('Insight main menu baseline alignment GUI', menu_alignment_gui_test, timeout: 30)
+
+relation_tree_graph_gui_test = executable('test_insight_relation_tree_graph_gui', '../insight/tests/relation_tree_graph_gui_test.c', '../src/insight-relation-graph.c', dependencies: deps)
+test('Insight expandable relation graph GUI', relation_tree_graph_gui_test, timeout: 30)

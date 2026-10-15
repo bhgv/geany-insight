@@ -1019,3 +1019,11 @@ A separate lazy outline loads immediate Bases/Derived/direct Members per class, 
 Main-menu geometry is now checked across EN/RU/EN using actual Pango baselines, with CR/LF rejection. The test passed with both installed translation catalogs converted to CRLF. Windows CI includes this check and the relation outline GUI test. The prior Windows run after the CRLF fix passed all four migration GUI tests and produced the dbb2037 x64 portable archive.
 
 The combined run passed 40/41 checks; the legacy 31-stage Overview smoke hit its 30-second outer timeout (its own failure timer was 35 seconds, and normal runs take about 28 seconds). Its outer/internal limits are now ordered 50/45 seconds, phase diagnostics are logged, and scenario timers are removed before the intentional post-shutdown worker drain. Existing <500 ms UI-heartbeat assertions are unchanged. Overview, the new relation outline and menu alignment each passed two consecutive native GUI runs after this harness fix.
+
+## Shared expandable relation graph
+
+The indexed outline now has a shared hierarchical Cairo graph with actual parent connectors, edge toggle controls, keyboard branch actions, root collapse, ancestor-aware visible node collection and the same lazy worker model/history/filter. Orientation and zoom remain shared/persistent across graph modes; export uses hierarchy extents with bounded raster allocation. Source selection stays separate from expansion. The outline context is owned by its retained view so graph/model references remain valid during teardown; branch callbacks still use weak box/generation guards.
+
+Standalone GTK tests verify nested hit paths, collapse/expand, zoom, horizontal/vertical parent connector pixels in clipboard images and destruction. Native GUI verifies lazy graphical expansion, no editor movement on toggle, clipboard hierarchy size, active graph preferences, and shutdown with queued branch work. The old flat graph/geometry and menu tests pass. Windows CI now includes both standalone graph GUI regressions too. Semantic Calls/References remain open.
+
+All six targeted graph/outline/inheritance/menu tests passed after integration, including persistence after leaving graph mode. Windows d7fa298 also completed successfully with the six app GUI checks, including actual main-menu baseline alignment.

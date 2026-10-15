@@ -16,11 +16,11 @@ The Back arrow restores the previous drill-down query, relation mode, display fi
 
 ## Graph view
 
-Enable Graph view in Relations. This shows the existing filtered and sorted result model as a one-level graph under the current query. Horizontal/Vertical controls change layout; zoom ranges from 50% to 200%. The first 128 visible results are drawn; the footer reports the full count and the table remains available for all results. The view choice is saved with workbench settings. Layout and zoom are also saved with workbench settings.
+Without Expandable relation tree, enable Graph view in Relations. This shows the existing filtered and sorted result model as a one-level graph under the current query. Horizontal/Vertical controls change layout; zoom ranges from 50% to 200%. The first 128 visible results are drawn; the footer reports the full count and the table remains available for all results. The view choice is saved with workbench settings. Layout and zoom are also saved with workbench settings.
 
 Click a node for Context; double click or Enter opens its location in the editor. Arrow keys, Home and End select and scroll to result nodes. Definitions, Call sites, Back and the result filter use the same selection in either view. Nodes show symbol and file:line; blue borders and connectors are original Cairo drawings using the GTK theme text color.
 
-This is an initial graph of search results, not a recursively expanded semantic call tree. Links represent the active relation query, not proven runtime call edges. Existing lexical/tag limitations apply.
+This flat mode is a graph of search results, not a recursively expanded semantic call tree. Links represent the active relation query, not proven runtime call edges. Existing lexical/tag limitations apply.
 
 Copy image (or Ctrl+C with graph focus) copies the complete currently drawn graph to the clipboard. Save PNG… exports a snapshot taken before the file chooser opens, using the same renderer, scale, selection and model order. Unicode paths use GLib file I/O. Existing files require the usual overwrite confirmation. Images larger than 16384 pixels on either axis or 32 million pixels total are rejected before allocating a raster; reduce zoom or filter the results. Export includes the first 128 results shown by the graph, not the remaining table rows.
 
@@ -40,4 +40,10 @@ Enable **Expandable relation tree** in Members, Base types or Derived types. Exp
 
 The shared result filter retains ancestors of matching loaded nodes; it does not search unloaded descendants. Clearing it restores cached expansion. Expansion itself does not navigate the editor; selecting a source row previews Context, and double-click opens that row. Structural roots/notices do not change Context or open a stale location. Stop cancels branch loading and retains loaded rows. The tree option is persisted; expanded paths are kept for this editor session.
 
-Cycles remain visible as stopped leaf nodes. Limits are 32 relation edges, 200 results per branch and 2000 source/root nodes overall; notices explain truncation and ambiguity. Only unambiguous indexed class relationships are traversed. The existing Graph view remains a separate single-layer result graph; recursive call/reference branches and expandable graphical edges are still outstanding.
+Cycles remain visible as stopped leaf nodes. Limits are 32 relation edges, 200 results per branch and 2000 source/root nodes overall; notices explain truncation and ambiguity. Only unambiguous indexed class relationships are traversed. Enable Graph view together with Expandable relation tree to draw these indexed branches. Recursive call/reference branches are still outstanding.
+
+## Expandable indexed graph
+
+With both **Expandable relation tree** and **Graph view** enabled, the graph draws the same expanded outline, with each connector attached to its actual parent. The +/− control at the right edge (horizontal) or bottom edge (vertical) loads/collapses that node; the query root has the same control. Right/+ and Left/− expand/collapse the selected branch; Up/Down and Home/End select visible source nodes. Enter opens the selected source row. Expansion does not select or navigate a new source location.
+
+Collapsing retains loaded children and cached descendant expansion. Switching back to the outline preserves the same branches, selection, filtering and Back history. Flat and hierarchical graph modes share saved orientation/zoom preferences, including after leaving Graph view. Copy image/Ctrl+C and Save PNG render the full currently drawn hierarchy, with the existing 128 visible-source-node and raster allocation bounds. Structural notice rows are omitted from the drawing. Existing indexed/lexical limitations still apply; this does not introduce semantic call edges.
