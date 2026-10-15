@@ -165,7 +165,13 @@ static InsightTypeResult resolve_symbol(Resolve *job,const InsightSymbol *symbol
  if(job->alias_work>=ALIAS_LIMIT) { result.status=INSIGHT_TYPE_LIMIT;return result; }
  job->aliases++;job->alias_work++;g_hash_table_add(job->active,(gpointer)symbol);
  gboolean absolute=FALSE;gchar *target=insight_type_name(symbol->type,&absolute);
- if(target) result=resolve_name(job,target,symbol->scope,symbol->path,absolute,depth+1);
+ if(target) {
+  /* Alias-template parameters belong to the alias itself, while ordinary
+   * target names still resolve in its enclosing declaration context. */
+  gboolean dependent=FALSE;
+  if(!absolute) { const gchar *end=strstr(target,"::");gchar *head=end ? g_strndup(target,end-target) : g_strdup(target),*owner=symbol_name(symbol),*qualified=g_strconcat(owner,"::",head,NULL);dependent=hidden_nested(job,qualified,head);g_free(qualified);g_free(owner);g_free(head); }
+  if(!dependent) result=resolve_name(job,target,symbol->scope,symbol->path,absolute,depth+1);
+ }
  else result.status=*symbol->type ? INSIGHT_TYPE_INVALID : INSIGHT_TYPE_UNKNOWN;
  g_free(target);g_hash_table_remove(job->active,symbol);return result;
 }

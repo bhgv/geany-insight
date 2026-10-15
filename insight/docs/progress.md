@@ -1267,3 +1267,9 @@ A new native parsing regression reproduced template<class T> receivers resolving
 Context candidate arrays borrow index symbols. They are now cleared synchronously before retiring a published snapshot, closing the interval before coalesced decoration refresh. The targeted language-aware links and scoped Context/F12/Follow GUI tests pass.
 
 The full native suite passes 52/52 with GUI enabled and no skips. All 57 C/C++/header parser fixtures pass, with only the two explicit template-parameter golden additions.
+
+## Alias-template declaration barriers
+
+A further native regression reproduced template<class T> using Alias = T resolving Alias<int> receivers to an unrelated global T. Alias targets now check their own declaration scope for a hidden first component before resolving ordinary names in the enclosing declaration context. Dependent qualified targets decline too. Explicit ::T targets and ordinary aliases retain their previous declaration-context behavior. Strict C99 core tests and native parser checks pass; Context cases check absent dependent-alias links and a working explicitly global alias receiver. Template substitution remains open.
+
+The alias-template extension passes all 52 native tests with GUI enabled and no skips, including the new Context regression.

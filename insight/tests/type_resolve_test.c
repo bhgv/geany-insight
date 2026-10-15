@@ -52,8 +52,17 @@ static void qualified_precedence(void) {
  InsightTypeResult capped=insight_type_resolve(index,"Pick::Nested","N::WorkDerived::method","/qualified.cpp",NULL,NULL);g_assert_cmpint(capped.status,==,INSIGHT_TYPE_LIMIT);g_assert_cmpuint(capped.aliases,==,0);insight_type_result_clear(&capped);
  insight_index_free(index);
 }
+static void dependent_aliases(void) {
+ InsightIndex *index=insight_index_new();InsightSymbol tags[]={
+  {"T",NULL,"","s",1,"","",""},{"Dependent",NULL,"","t",2,"","T",""},{"T",NULL,"Dependent","Z",2,"","class",""},
+  {"Qualified",NULL,"","t",3,"","T::Nested",""},{"T",NULL,"Qualified","Z",3,"","class",""},
+  {"Concrete",NULL,"","t",4,"","::T",""},{"T",NULL,"Concrete","Z",4,"","class",""},{"Ordinary",NULL,"","t",5,"","T",""}
+ };g_assert_true(insight_index_update(index,"/alias.cpp",tags,G_N_ELEMENTS(tags)));
+ const gchar *names[]={"Dependent<int>","Qualified<int>"};for(guint i=0;i<G_N_ELEMENTS(names);i++) { InsightTypeResult r=insight_type_resolve(index,names[i],"","/alias.cpp",NULL,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_UNKNOWN);g_assert_null(r.owner);insight_type_result_clear(&r); }
+ resolved(index,"Concrete<int>","","/alias.cpp","T",1);resolved(index,"Ordinary","","/alias.cpp","T",1);insight_index_free(index);
+}
 int main(void) {
- inherited_types();qualified_precedence();
+ inherited_types();qualified_precedence();dependent_aliases();
  name_is("const struct N::Box<int, Pair<long, short>>::Nested * const &","N::Box::Nested",FALSE);
  name_is("volatile ::Global *","Global",TRUE);name_is("N :: Foo [10][2]","N::Foo",FALSE);name_is("Module.Class","Module::Class",FALSE);
  const char *invalid[]={"","Foo Bar","Foo<int","Foo>","Foo[2","Foo (*)(int)","decltype(value)","A:::B","A::","Foo;Bar"};
