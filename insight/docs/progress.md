@@ -1007,3 +1007,7 @@ Bookmark export under an active project/workspace root now uses relative paths f
 ## Combined regression checkpoint
 
 All 39 Insight tests passed in the native Linux build with GUI tests enabled and no skips. Windows CI additionally runs the four new native GUI executables from the installed portable bin directory, so resource lookup uses the real package layout. Those Windows GUI results must pass before declaring the corresponding Windows paths verified.
+
+## Windows GUI catalog fix
+
+The first Windows GUI run reached the RU category stage and exposed a CRLF catalog bug: a trailing carriage return was retained in translated labels. Catalog loading now removes only the physical line-ending CR before escape decoding. Native grouped GUI passed with an installed catalog deliberately converted to CRLF; Windows GUI checks remain required.

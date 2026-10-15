@@ -17,7 +17,7 @@
 static GMutex catalog_mutex;static GHashTable *ru,*english;static gchar *mode,*settings;static gboolean russian,busy,system_russian;static gulong show_hook;
 static void read_catalog(const gchar *path) {
  gchar *text=NULL;if(!g_file_get_contents(path,&text,NULL,NULL)) return;gchar **lines=g_strsplit(text,"\n",-1);
- for(guint n=0;lines[n];n++) { if(lines[n][0]=='#') continue;gchar *tab=strchr(lines[n],'\t');if(!tab) continue;*tab=0;gchar *en=g_strcompress(lines[n]),*translated=g_strcompress(tab+1);if(*en && *translated) { g_hash_table_replace(ru,g_strdup(en),g_strdup(translated));if(!g_hash_table_contains(english,translated)) g_hash_table_insert(english,g_strdup(translated),g_strdup(en)); }g_free(en);g_free(translated); }g_strfreev(lines);g_free(text);
+ for(guint n=0;lines[n];n++) { gsize length=strlen(lines[n]);if(length && lines[n][length-1]=='\r') lines[n][length-1]=0;if(lines[n][0]=='#') continue;gchar *tab=strchr(lines[n],'\t');if(!tab) continue;*tab=0;gchar *en=g_strcompress(lines[n]),*translated=g_strcompress(tab+1);if(*en && *translated) { g_hash_table_replace(ru,g_strdup(en),g_strdup(translated));if(!g_hash_table_contains(english,translated)) g_hash_table_insert(english,g_strdup(translated),g_strdup(en)); }g_free(en);g_free(translated); }g_strfreev(lines);g_free(text);
 }
 const gchar *insight_i18n_english(const gchar *text) { if(!text) return NULL;const gchar *original=english ? g_hash_table_lookup(english,text) : NULL;return original ? original : text; }
 const gchar *insight_tr(const gchar *text) { if(!text) return NULL;const gchar *original=insight_i18n_english(text);const gchar *translated=g_atomic_int_get(&russian) && ru ? g_hash_table_lookup(ru,original) : NULL;return translated ? translated : original; }
