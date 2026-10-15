@@ -143,3 +143,12 @@ Imported class instances support simple variable/parameter annotations, one cons
 Navigation caches belong to one immutable source/path/index snapshot. Edits and index publications refresh Follow. Constructor lookup rechecks the current symbol eligibility filter even when a result was cached; an earlier filtered miss cannot hide a later eligible class. Reusing a cache with a different source or changed index declines the lookup.
 
 Lexical identifier lookup and whole-name occurrence searches use Unicode 15.0 XID start/continue boundaries. NBSP, emoji and punctuation separate names; combining marks may continue a valid name. Byte offsets/columns are preserved. Names are compared exactly, without Unicode normalization. This is lexical matching, not language-specific semantic analysis.
+
+Python annotations resolve in their declaration environment. A parameter's type
+uses the environment outside its function body, so a body-local variable with
+the same name does not change it. Same-file nested class paths such as
+`Holder.Inner`, including quoted annotations, are supported up to 16 components.
+Competing bindings and complex annotations decline rather than selecting an
+arbitrary field. Eligibility filters cannot reopen a hidden outer binding.
+A function's return annotation describes `make().field`, never `make.field`:
+the latter is a function object, whose dynamic attributes are not inferred.

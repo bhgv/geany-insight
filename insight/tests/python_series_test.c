@@ -31,8 +31,8 @@ static void receivers(void) {
  const InsightSymbol *tag;assert(!insight_index_find(f.index,"wrong",1,&tag,1));clear(&f);
 }
 static void call_results(void) {
- Fixture f=fixture("class Result:\n    field: int\ndef make() -> Result:\n    return Result()\ndef unknown():\n    return Result()\nasync def asynchronous() -> Result:\n    return Result()\nResult().field\nmake().field\nunknown().field\nasynchronous().field\ndef shadow(Result):\n    return Result().field # shadow_call\n");
- owner(&f,"Result().field\n","Result");owner(&f,"make().field","Result");owner(&f,"unknown().field",NULL);owner(&f,"asynchronous().field",NULL);owner(&f,"Result().field # shadow_call",NULL);clear(&f);
+ Fixture f=fixture("class Result:\n    field: int\ndef make() -> Result:\n    return Result()\ndef unknown():\n    return Result()\nasync def asynchronous() -> Result:\n    return Result()\nResult().field\nmake().field\nunknown().field\nasynchronous().field\nmake.field\ndef shadow(Result):\n    return Result().field # shadow_call\n");
+ owner(&f,"Result().field\n","Result");owner(&f,"make().field","Result");owner(&f,"make.field",NULL);owner(&f,"unknown().field",NULL);owner(&f,"asynchronous().field",NULL);owner(&f,"Result().field # shadow_call",NULL);clear(&f);
 }
 static void import_hit(Fixture *f,const gchar *expression,const gchar *word,const gchar *expected_path,const gchar *expected_name) {
  const gchar *hit=strstr(f->code,expression),*token=g_strrstr(expression,word);assert(hit && token);gsize position=hit-f->code+(token-expression);gchar *scope=insight_native_python_scope(f->index,f->path,&f->source,position);const InsightSymbol *hits[8];gboolean imported=FALSE;gsize count=insight_native_python_import_query(f->index,f->path,scope,&f->source,position,word,NULL,NULL,hits,8,&imported);if(count!=(expected_name ? 1u : 0u)) g_printerr("import %s count=%zu imported=%d\n",expression,count,imported);assert(imported && count==(expected_name ? 1u : 0u));if(count) assert(!strcmp(hits[0]->path,expected_path) && !strcmp(hits[0]->name,expected_name));g_free(scope);
@@ -76,4 +76,16 @@ static void cache_snapshot(void) {
  owner(&f,"obj.field",NULL);
  insight_native_python_bindings_free(f.source.python);f.source.python=insight_native_python_bindings_new(f.index,f.path,&f.source);owner(&f,"obj.field","A");clear(&f);
 }
-int main(void) { tm_get_workspace();annotations();receivers();call_results();dotted_imports();imported_instances();cache_policy();cache_snapshot();tm_workspace_free();puts("Python navigation series: all checks passed");return 0; }
+static void annotation_contexts(void) {
+ Fixture f=fixture("class Nominal:\n    field: int\nclass Alternative:\n    field: int\ndef shadow():\n    Nominal = 1\n    obj: Nominal\n    return obj.field # shadowed_annotation\ndef parameter(obj: Nominal):\n    Nominal = 1\n    return obj.field # parameter_annotation\ndef complex_type(obj: list[Nominal]):\n    return obj.field # complex_annotation\ndef ambiguous():\n    obj: Nominal\n    obj: Alternative\n    return obj.field # competing_annotations\ndef nested():\n    class Local:\n        field: int\n    obj: Local\n    return obj.field # nested_annotation\n");
+ owner(&f,"obj.field # shadowed_annotation",NULL);owner(&f,"obj.field # parameter_annotation","Nominal");owner(&f,"obj.field # complex_annotation",NULL);owner(&f,"obj.field # competing_annotations",NULL);owner(&f,"obj.field # nested_annotation","nested::Local");clear(&f);
+ f=fixture("class Holder:\n    class Inner:\n        field: int\nqualified: Holder.Inner\nqualified.field\nquoted: \"Holder.Inner\"\nquoted.field\n");owner(&f,"qualified.field","Holder::Inner");owner(&f,"quoted.field","Holder::Inner");clear(&f);
+}
+static int reject_local_class(const InsightSymbol *symbol,void *data) { (void)data;return strcmp(symbol->kind,"c") || strcmp(symbol->scope,"nested"); }
+static void annotation_eligibility(void) {
+ Fixture f=fixture("class A:\n    field: int\ndef nested():\n    class A:\n        field: int\n    obj: A\n    obj.field\n    A().field\n");
+ const gchar *expressions[]={"obj.field","A().field"};
+ for(guint n=0;n<G_N_ELEMENTS(expressions);n++) { gsize position=strstr(f.code,expressions[n])-f.code+strlen(expressions[n])-5;gboolean member=FALSE;gchar *result=insight_native_python_owner(f.index,f.path,"nested",100,&f.source,position,&member,reject_local_class,NULL);assert(member && !result); }
+ clear(&f);
+}
+int main(void) { tm_get_workspace();annotations();receivers();call_results();dotted_imports();imported_instances();cache_policy();cache_snapshot();annotation_contexts();annotation_eligibility();tm_workspace_free();puts("Python navigation series: all checks passed");return 0; }

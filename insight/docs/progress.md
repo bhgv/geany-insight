@@ -1611,3 +1611,31 @@ entries with Python's independent Unicode 15.0 database. All pass. A generator
 for the pinned table and the portable runner are included in source distributions.
 Workspace maintenance removed the previous GTK SDK, so this series makes no
 GUI/editor-build claim. Windows x64 was not rebuilt, as requested.
+
+
+## Python declaration-context annotations and restored GUI checks (2026-10-15)
+
+The Linux GTK SDK and virtual display were restored after workspace maintenance,
+and the full editor/test targets build again. A native reproduction showed that
+`def f(obj: Nominal)` lost field navigation when `Nominal` was rebound inside the
+body. Parameter annotations now use the outer declaration environment. Python
+annotations no longer go through the C/C++ type-expression resolver: simple
+same-file class paths, including quoted nested classes, resolve lexically with
+16-component and 4096-candidate bounds. Complex annotations and competing
+bindings decline. Symbol eligibility is applied after choosing the nearest
+lexical binding, preventing fallback to a hidden outer class.
+
+A separate native reproduction showed `make.field` incorrectly inheriting the
+return annotation of `make() -> Result`. Return annotations now apply only to
+call results; an uncalled function object supplies no inferred instance fields.
+
+Native regressions cover parameter-body shadowing, local shadowing, contradictory
+annotations, unsupported generic annotations, nested local classes, quoted/dotted
+same-file classes, filtered inner classes and uncalled functions. The restored
+series GUI exercises 27 cases through both F12 and Follow. Seven GUI suites pass
+(Context, explicit imports, the series, pane geometry, on-demand Help/Search,
+C-family Context links and scoped C++ aliases); the three Python suites pass
+again after the final non-call fix. Nineteen Python/Cython parser fixtures and
+four native suites pass. Full Linux target compilation, strict C99
+-Wall -Wextra -Werror resolver compilation and git diff --check pass.
+Windows x64 remains deferred; no build-request marker was changed.

@@ -354,8 +354,29 @@ static const InsightSymbol *python_visible_symbol(const InsightIndex *index,cons
  gchar *binding=insight_native_python_binding_scope(index,path,scope,name,source);if(!binding) return NULL;
  const InsightSymbol *best=NULL;gint rank=-1;gboolean ambiguous=FALSE;
  const InsightSymbol *matches[4096];gsize count=insight_index_find(index,name,1,matches,G_N_ELEMENTS(matches));if(count>G_N_ELEMENTS(matches)) { g_free(binding);return NULL; }
- for(gsize i=0;i<count;i++) { const InsightSymbol *tag=matches[i];if(eligible && !eligible(tag,data)) continue;gint candidate=insight_native_python_rank(index,tag,path,binding,G_MAXULONG);if(candidate>rank) { best=tag;rank=candidate;ambiguous=FALSE; }else if(candidate>=0 && candidate==rank) ambiguous=TRUE; }
- g_free(binding);return ambiguous ? NULL : best;
+ for(gsize i=0;i<count;i++) { const InsightSymbol *tag=matches[i];gint candidate=insight_native_python_rank(index,tag,path,binding,G_MAXULONG);if(candidate>rank) { best=tag;rank=candidate;ambiguous=FALSE; }else if(candidate>=0 && candidate==rank) ambiguous=TRUE; }
+ g_free(binding);return ambiguous || (best && eligible && !eligible(best,data)) ? NULL : best;
+}
+/* An annotation is a nominal class path in its declaration environment, not
+ * a C/C++ type expression and not a name looked up in the callable body. */
+static gchar *python_annotation_owner(const InsightIndex *index,const gchar *path,const gchar *type,const gchar *scope,const InsightNativeSource *source,InsightTypeEligible eligible,void *data) {
+ gchar *text=g_strdup(type);g_strstrip(text);gsize size=strlen(text);
+ if(size>=2 && (text[0]=='\'' || text[0]=='"') && text[size-1]==text[0]) { memmove(text,text+1,size-2);text[size-2]=0; }
+ gsize end=0;gchar *name=python_import_name(text,strlen(text),&end,TRUE,FALSE);gchar *owner=NULL;
+ if(!name || end!=strlen(text)) goto done;
+ gchar **parts=g_strsplit(name,".",17);guint count=g_strv_length(parts);
+ if(count>16) { g_strfreev(parts);goto done; }
+ const InsightSymbol *klass=python_visible_symbol(index,path,scope,parts[0],source,eligible,data);
+ if(klass && !strcmp(klass->kind,"c")) owner=python_symbol_scope(klass);
+ for(guint n=1;owner && n<count;n++) {
+  const InsightSymbol *matches[4096],*child=NULL;gsize found=insight_index_find(index,parts[n],1,matches,G_N_ELEMENTS(matches));gboolean conflict=found>G_N_ELEMENTS(matches);
+  for(gsize i=0;!conflict && i<found;i++) { const InsightSymbol *tag=matches[i];if(strcmp(tag->path,path)) continue;gchar *parent=python_scope_name(tag->scope);gboolean same=!strcmp(parent,owner);g_free(parent);if(!same) continue;if(child) conflict=TRUE;else child=tag; }
+  g_clear_pointer(&owner,g_free);
+  if(!conflict && child && !strcmp(child->kind,"c") && (!eligible || eligible(child,data))) owner=python_symbol_scope(child);
+ }
+ g_strfreev(parts);
+done:
+ g_free(name);g_free(text);return owner;
 }
 static gboolean python_async_callable(const InsightSymbol *callable,const InsightNativeSource *source) {
  gsize at=0;gulong line=1;while(at<source->length && line<callable->line) if(source->mask[at++]=='\n') line++;
@@ -366,17 +387,13 @@ static gchar *python_call_owner(const InsightIndex *index,const gchar *path,cons
  gsize open=0,after=0;if(insight_select_match(source->mask,close+1,close,&open,&after)!=1 || after!=close+1) return NULL;
  gsize end=open;while(end && (source->mask[end-1]==' ' || source->mask[end-1]=='\t')) end--;gsize first=end;while(first && ident(source->mask[first-1])) first--;if(first==end) return NULL;
  gsize prefix=first;while(prefix && (source->mask[prefix-1]==' ' || source->mask[prefix-1]=='\t')) prefix--;if(prefix && strchr(".)]",source->mask[prefix-1])) return NULL;
- gchar *name=g_strndup(source->mask+first,end-first),*owner=NULL;const InsightSymbol *callable=python_visible_symbol(index,path,scope,name,source,eligible,data);g_free(name);
+ gchar *name=g_strndup(source->mask+first,end-first);const InsightSymbol *callable=python_visible_symbol(index,path,scope,name,source,eligible,data);g_free(name);
  if(callable && !strcmp(callable->kind,"c")) return python_symbol_scope(callable);
  if(!callable || (strcmp(callable->kind,"f") && strcmp(callable->kind,"m")) || python_async_callable(callable,source)) return NULL;
- gchar *type=g_strdup(callable->type);g_strstrip(type);gsize size=strlen(type);
- if(size>=2 && (type[0]=='\'' || type[0]=='"') && type[size-1]==type[0]) { memmove(type,type+1,size-2);type[size-2]=0; }
- gsize at=0;gchar *nominal=python_import_name(type,strlen(type),&at,FALSE,FALSE);
- if(nominal && at==strlen(type)) { const InsightSymbol *klass=python_visible_symbol(index,path,callable->scope,nominal,source,eligible,data);if(klass && !strcmp(klass->kind,"c")) owner=python_symbol_scope(klass); }
- g_free(nominal);g_free(type);return owner;
+ return python_annotation_owner(index,path,callable->type,callable->scope,source,eligible,data);
 }
 gchar *insight_native_python_owner(const InsightIndex *index,const gchar *path,const gchar *scope,gulong line,const InsightNativeSource *source,gsize position,gboolean *member,InsightTypeEligible eligible,void *data) {
- *member=FALSE;if(!source || !source->text || !source->mask || position>source->length) return NULL;
+ (void)line;*member=FALSE;if(!source || !source->text || !source->mask || position>source->length) return NULL;
  const gchar *mask=source->mask;gsize at=position;while(at && ident(mask[at-1])) at--;while(at && g_ascii_isspace(mask[at-1])) at--;if(!at || mask[at-1]!='.') return NULL;
  *member=TRUE;at--;while(at && g_ascii_isspace(mask[at-1])) at--;if(at && mask[at-1]==')') return python_call_owner(index,path,scope,source,at-1,eligible,data);gsize end=at;while(at && ident(mask[at-1])) at--;if(at==end) return NULL;
  /* Chained/indexed/call expressions require a richer resolver. */
@@ -387,8 +404,7 @@ gchar *insight_native_python_owner(const InsightIndex *index,const gchar *path,c
   * local assignments bind the whole function, even before their source line. */
  InsightNativePythonBindings *owned=NULL,*bindings=source->python;if(!bindings) bindings=owned=insight_native_python_bindings_new(index,path,source);InsightNativeSource cached=*source;cached.python=bindings;
  gchar *lookup=insight_native_python_binding_scope(index,path,scope,receiver,&cached);if(!lookup) { insight_native_python_bindings_free(owned);g_free(receiver);return NULL; }
- const InsightSymbol *best=NULL;gint best_rank=-1;
- for(gsize i=0;i<insight_index_count(index);i++) { const InsightSymbol *tag=insight_index_at(index,i);if(strcmp(tag->name,receiver) || (eligible && !eligible(tag,data))) continue;gint rank=insight_native_python_rank(index,tag,path,lookup,line);if(rank>best_rank) { best=tag;best_rank=rank; } }
+ const InsightSymbol *best=python_visible_symbol(index,path,lookup,receiver,&cached,eligible,data);
  if(best && !strcmp(best->kind,"z")) {
   gchar *binding=python_scope_name(best->scope);
   for(gsize i=0;i<insight_index_count(index);i++) {
@@ -405,7 +421,11 @@ gchar *insight_native_python_owner(const InsightIndex *index,const gchar *path,c
  }
  /* A visible annotated variable or a directly named class is nominal. */
  if(!owner && best && !strcmp(best->kind,"c")) owner=python_symbol_scope(best);
- else if(!owner && best && *best->type) { InsightTypeResult resolved=insight_type_resolve(index,best->type,best->scope,path,eligible,data);owner=resolved.owner;resolved.owner=NULL;insight_type_result_clear(&resolved); }
+ else if(!owner && best && *best->type && (!strcmp(best->kind,"z") || !strcmp(best->kind,"l") || !strcmp(best->kind,"v"))) {
+  gchar *context=python_scope_name(best->scope);
+  if(!strcmp(best->kind,"z")) { gchar *parent=g_strrstr(context,"::");if(parent) *parent=0;else *context=0; }
+  owner=python_annotation_owner(index,path,best->type,context,&cached,eligible,data);g_free(context);
+ }
  if(!owner && best && !*best->type) owner=python_constructor_owner(index,path,best,&cached,bindings,eligible,data);
  insight_native_python_bindings_free(owned);g_free(lookup);g_free(receiver);return owner;
 }
