@@ -163,3 +163,14 @@ bookmarks. Symbol anchors and project-relative paths use the existing serializer
 Native GUI covers selected/all exports, selection changes during the chooser,
 batch-delete write failure, clips preservation and menu sensitivity. XML exchange
 remains unsupported.
+
+### Bookmark field commands and confirmation (2026-10-16)
+
+The Bookmark Window field now resolves exact/unique partial names and one-based
+line numbers, with numeric bookmark names taking precedence. Ambiguous names and
+invalid numbers leave the editor and store unchanged. Delete all includes hidden
+marks and always confirms; selected deletion has a persistent confirmation switch.
+Both use transactional writes and store-generation guards. GUI covers cancel,
+reload during confirmation, failed-write rollback, hidden marks, retained clips,
+name/line priority and restoration of the preference. Bookmark Options persistence
+and close-file policies remain open, as does XML exchange.

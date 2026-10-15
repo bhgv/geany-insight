@@ -79,3 +79,22 @@ Export captures the selected records before the file dialog opens, including
 symbol anchors and portable paths. A project/store change while the dialog is
 open cancels the export. Clips keep their existing whole-panel export behavior.
 The format is Geany Insight notes (`.conf`), not Source Insight XML.
+
+## Bookmark field commands and deletion confirmation
+
+Press Enter in the field to open an exact bookmark name. A unique partial name
+also opens its bookmark; several matching names ask you to choose a row instead.
+A decimal number goes to that one-based line in the current editor; an existing
+bookmark with that exact numeric name takes precedence. Zero and out-of-range
+numbers report an error without creating a bookmark. An unmatched nonnumeric
+name creates a mark at the current editor position. The empty field keeps the
+automatic A/B/… naming behavior. List Enter continues to use the selected row.
+
+The list menu offers **Delete all bookmarks…**, including marks hidden by the
+filter. It always asks for confirmation, with Cancel as the default. Only marks
+in the active store are removed; clips and source files remain. **Confirm bookmark
+deletion** in the same menu also enables confirmation for Delete/Ctrl+X on selected
+rows. The option is saved between sessions and defaults off for existing profiles.
+Cancel, store reload/project switch during confirmation, or a write failure leaves
+the intended deletion unapplied. The full Source Insight Bookmark Options dialog
+(including persistence and close-file policies) is not implemented by this switch.

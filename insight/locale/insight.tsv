@@ -850,3 +850,11 @@ Select all bookmarks	Выбрать все закладки
 Clear bookmark selection	Снять выделение закладок
 Delete selected bookmarks	Удалить выбранные закладки
 Select bookmarks to export	Выберите закладки для экспорта
+Delete all bookmarks…	Удалить все закладки…
+Confirm bookmark deletion	Подтверждать удаление закладок
+Delete all bookmarks?	Удалить все закладки?
+Delete selected bookmarks?	Удалить выбранные закладки?
+Delete bookmarks	Удаление закладок
+Bookmarks to delete: %u. Source files and clips are kept.	Закладок для удаления: %u. Исходные файлы и шаблоны сохраняются.
+Bookmark line number is outside the current file	Номер строки вне текущего файла
+Several bookmarks match; select one in the list	Найдено несколько закладок; выберите одну в списке
