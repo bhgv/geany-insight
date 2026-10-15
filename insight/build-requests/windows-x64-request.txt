@@ -1,3 +1,3 @@
-Windows x64 portable trial explicitly requested 2026-10-15 23:09 Europe/Moscow.
-Source: 9541b8947a9d577ae81aa5afc2533b1d0b3f6ec3
-Include separate native parser declaration database, hidden parameters, nested fields, bold project symbols and relative file paths; selection previews Context, double-click/Enter/Space activate editor with yellow/red one-pixel highlight.
+Windows x64 trial rebuild explicitly requested 2026-10-15.
+Source: parser declaration symbol lists and preview/editor activation.
+Update panel regression to inspect the declaration source separately from the filtered GtkTreeStore presentation and await asynchronous flat regroup.
