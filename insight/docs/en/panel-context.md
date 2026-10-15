@@ -63,7 +63,15 @@ nearer parameter or local assignment shadows it. A local assignment also hides
 an outer receiver before the assignment line. An ordinary nested function's
 first parameter is not automatically a class receiver. Directly named classes and indexed annotated
 receivers are supported. Preview links, F12 and asynchronous Follow share these
-rules.
+rules. `global name` restricts lookup to the same module; `nonlocal name` selects
+an enclosing function binding and excludes module and intervening class members.
+These declarations affect their complete suite. Local names also bind the whole
+function, so navigation can point to a later assignment rather than an unrelated
+outer definition. An unresolved `nonlocal` has no fallback to a module variable.
+Declaration parsing supports comma lists, semicolons and explicit line
+continuations, ignores strings/comments, and declines malformed/conflicting
+statements or exceeded bounds (64 declarations, 4096 names, 32 MiB scan budget).
+The declaration cache is invalidated with the source/index snapshot.
 
 This is bounded lexical resolution, not Python execution. Dynamic attributes,
 arbitrary chains/call results, the import/alias graph, decorators and general type

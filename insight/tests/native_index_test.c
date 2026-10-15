@@ -24,7 +24,7 @@ static void python_navigation_test(void) {
  const gchar *code="value = 99\nclass Alpha:\n    value = 1\n    def method(self, arg: int):\n        local = arg\n        def inner():\n            return local\n        return self.value + local\nclass Beta:\n    value = 2\n    def method(self):\n        return self.value\nvalue += 1\nprint()\nAlpha.value\n";
  gchar filename[]="python-native-XXXXXX";gint fd=g_mkstemp(filename);assert(fd>=0);g_close(fd,NULL);gchar *path=g_canonicalize_filename(filename,NULL);
  TMSourceFile *file=tm_source_file_new(path,"Python");InsightIndex *index=insight_index_new();assert(insight_native_parse(index,file,path,code,strlen(code)));
- gchar *mask=insight_source_code_mask(code,strlen(code),INSIGHT_CODE_PYTHON,NULL);InsightNativeSource source={code,mask,strlen(code)};
+ gchar *mask=insight_source_code_mask(code,strlen(code),INSIGHT_CODE_PYTHON,NULL);InsightNativeSource source={code,mask,strlen(code),NULL};
  gsize pos=strstr(code,"self.value +")-code+5;gchar *scope=insight_native_python_scope(index,path,&source,pos);assert(!g_strcmp0(scope,"Alpha::method"));gboolean member=FALSE;
  gchar *owner=insight_native_python_owner(index,path,scope,8,&source,pos,&member,NULL,NULL);assert(member && !g_strcmp0(owner,"Alpha"));const InsightSymbol *field=NULL;assert(insight_member_query(index,owner,"value",path,NULL,NULL,&field,1,NULL,NULL)==1 && field->line==3);g_free(owner);
  const InsightSymbol *tags[8];gsize count=insight_index_find(index,"value",1,tags,8);assert(count==3);
@@ -37,7 +37,7 @@ static void python_navigation_test(void) {
  g_free(mask);
  const gchar *closures="class Alpha:\n    value = 1\n    def method(self):\n        def nested():\n            return self.value\n        def shadow(self):\n            return self.value\n        def rebound():\n            self = object()\n            return self.value\n        def forward():\n            return self.value\n            self = object()\n        return nested()\n    @classmethod\n    def factory(cls):\n        def nested_class():\n            return cls.value\n        return nested_class()\ndef outer():\n    def fake(self):\n        return self.value\n";
  assert(insight_native_parse(index,file,path,closures,strlen(closures)));
- mask=insight_source_code_mask(closures,strlen(closures),INSIGHT_CODE_PYTHON,NULL);source=(InsightNativeSource){closures,mask,strlen(closures)};
+ mask=insight_source_code_mask(closures,strlen(closures),INSIGHT_CODE_PYTHON,NULL);source=(InsightNativeSource){closures,mask,strlen(closures),NULL};
  const gchar *probe=closures;
  for(guint n=0;n<5;n++) {
   probe=strstr(probe,"self.value");assert(probe);pos=probe-closures+5;
@@ -49,6 +49,72 @@ static void python_navigation_test(void) {
  pos=strstr(closures,"cls.value")-closures+4;scope=insight_native_python_scope(index,path,&source,pos);
  owner=insight_native_python_owner(index,path,scope,1,&source,pos,&member,NULL,NULL);assert(member && !g_strcmp0(owner,"Alpha"));g_free(scope);g_free(owner);
  g_free(mask);insight_index_free(index);tm_source_file_free(file);g_unlink(filename);g_free(path);
+}
+static void python_declarations_test(void) {
+ const gchar *code=
+  "value = 99\n"
+  "def outer():\n"
+  "    value = 1\n"
+  "    def module():\n"
+  "        global value\n"
+  "        value = 3\n"
+  "        return value # module\n"
+  "    def captured():\n"
+  "        nonlocal value\n"
+  "        value = 4\n"
+  "        return value # captured\n"
+  "    def bridge():\n"
+  "        global value\n"
+  "        def child():\n"
+  "            return value # inherited_global\n"
+  "    def local():\n"
+  "        value = 7\n"
+  "        def child():\n"
+  "            return value # closure\n"
+  "    def forward():\n"
+  "        return value # forward\n"
+  "        value = 8\n"
+  "    def invalid():\n"
+  "        nonlocal missing\n"
+  "        return missing # invalid\n"
+  "    def misleading():\n"
+  "        text = 'global value' # nonlocal value\n"
+  "        return value # unaffected\n"
+  "class Alpha:\n"
+  "    value = 2\n"
+  "    def method(self):\n"
+  "        def captured():\n"
+  "            nonlocal self\n"
+  "            return self.value # receiver_nonlocal\n"
+  "        def module():\n"
+  "            global self\n"
+  "            return self.value # receiver_global\n";
+ gchar filename[]="python-declarations-XXXXXX";gint fd=g_mkstemp(filename);assert(fd>=0);g_close(fd,NULL);gchar *path=g_canonicalize_filename(filename,NULL);
+ TMSourceFile *file=tm_source_file_new(path,"Python");InsightIndex *index=insight_index_new();assert(insight_native_parse(index,file,path,code,strlen(code)));
+ gchar *mask=insight_source_code_mask(code,strlen(code),INSIGHT_CODE_PYTHON,NULL);InsightNativeSource source={code,mask,strlen(code),NULL};source.python=insight_native_python_bindings_new(index,path,&source);
+ const struct { const gchar *needle,*word,*expected; } cases[]={
+  {"value # module","value",""},{"value # captured","value","outer"},
+  {"value # inherited_global","value",""},{"value # closure","value","outer::local"},
+  {"value # forward","value","outer::forward"},{"missing # invalid","missing",NULL},
+  {"value # unaffected","value","outer"}
+ };
+ for(guint n=0;n<G_N_ELEMENTS(cases);n++) {
+  gsize position=strstr(code,cases[n].needle)-code;gchar *scope=insight_native_python_scope(index,path,&source,position);
+  gchar *binding=insight_native_python_binding_scope(index,path,scope,cases[n].word,&source);assert(!g_strcmp0(binding,cases[n].expected));
+  if(binding) { const InsightSymbol *tags[16],*best=NULL;gint rank=-1;gsize count=insight_index_find(index,cases[n].word,1,tags,16);assert(count<=16);
+   for(gsize i=0;i<count;i++) { gint candidate=insight_native_python_rank(index,tags[i],path,binding,1);if(candidate>rank) { best=tags[i];rank=candidate; } }
+   assert(best);gchar *expected=g_strdup(cases[n].expected);for(gchar *p=expected;*p;p++) if(*p==':' && p[1]==':') { *p='.';memmove(p+1,p+2,strlen(p+2)+1); }assert(!strcmp(best->scope,expected));g_free(expected);
+  }
+  g_free(binding);g_free(scope);
+ }
+ for(guint n=0;n<2;n++) { const gchar *needle=n ? "self.value # receiver_global" : "self.value # receiver_nonlocal";gsize position=strstr(code,needle)-code+5;gchar *scope=insight_native_python_scope(index,path,&source,position);gboolean member=FALSE;gchar *owner=insight_native_python_owner(index,path,scope,100,&source,position,&member,NULL,NULL);assert(member && !g_strcmp0(owner,n ? NULL : "Alpha"));g_free(scope);g_free(owner); }
+ insight_native_python_bindings_free(source.python);g_free(mask);
+ const gchar *invalid[]={"nonlocal value\n", "global value\nnonlocal value\n", "global value,\n", "global value = 1\n"};
+ for(guint n=0;n<G_N_ELEMENTS(invalid);n++) { const gchar *text=invalid[n];mask=insight_source_code_mask(text,strlen(text),INSIGHT_CODE_PYTHON,NULL);source=(InsightNativeSource){text,mask,strlen(text),NULL};assert(!insight_native_python_binding_scope(index,path,NULL,"value",&source));g_free(mask); }
+ GString *many=g_string_new(NULL);for(guint n=0;n<65;n++) g_string_append(many,"global value\n");mask=insight_source_code_mask(many->str,many->len,INSIGHT_CODE_PYTHON,NULL);source=(InsightNativeSource){many->str,mask,many->len,NULL};assert(!insight_native_python_binding_scope(index,path,NULL,"value",&source));g_free(mask);g_string_free(many,TRUE);
+ const gchar *continued="global value, \\" "\n" "sibling; global other\n";
+ mask=insight_source_code_mask(continued,strlen(continued),INSIGHT_CODE_PYTHON,NULL);source=(InsightNativeSource){continued,mask,strlen(continued),NULL};gchar *binding=insight_native_python_binding_scope(index,path,NULL,"value",&source);assert(binding && !*binding);g_free(binding);g_free(mask);
+ insight_index_free(index);tm_source_file_free(file);g_unlink(filename);g_free(path);
 }
 int main(void) {
  assert(insight_native_language_compatible(TM_PARSER_C,TM_PARSER_CPP));assert(insight_native_language_compatible(TM_PARSER_CPP,TM_PARSER_ASM));assert(!insight_native_language_compatible(TM_PARSER_C,TM_PARSER_VHDL));assert(!insight_native_language_compatible(TM_PARSER_CPP,TM_PARSER_SH));assert(!insight_native_language_compatible(TM_PARSER_NONE,TM_PARSER_NONE));assert(insight_native_language_compatible(TM_PARSER_PYTHON,TM_PARSER_PYTHON));
@@ -82,7 +148,7 @@ int main(void) {
  assert(insight_native_import(index,&source,"/project/a.cpp") && insight_index_count(index)==0);
  assert(insight_native_import(index,NULL,"/project/a.cpp"));
  g_ptr_array_free(tags,TRUE); insight_index_free(index);
- tm_get_workspace();python_navigation_test();
+ tm_get_workspace();python_navigation_test();python_declarations_test();
  const char *code="class Base {};\nclass Widget : public Base {\npublic: int run(int value) { return value; }\n};\nint parsed_function(int value) { return value; }\n";
  char filename[]="native-parser-test-XXXXXX"; gint descriptor=g_mkstemp(filename); assert(descriptor>=0); g_close(descriptor,NULL);
  char *absolute=g_canonicalize_filename(filename,NULL); TMSourceFile *parsed=tm_source_file_new(absolute,"C++"); assert(parsed && parsed->lang>=0);
@@ -122,7 +188,7 @@ int main(void) {
  assert(insight_native_parse(index,parsed,absolute,inherited_types,strlen(inherited_types)));assert(insight_index_find(index,"marker",1,NULL,0)==1);
  owner_is(index,absolute,"InheritedTypes::use","p->seal","InheritedTypes::Base::Item");owner_is(index,absolute,"InheritedTypes::use","q->seal","InheritedTypes::Base::Item");owner_is(index,absolute,"InheritedTypes::use","make()->seal","InheritedTypes::Base::Item");owner_is(index,absolute,"InheritedTypes::bad","r->seal",NULL);owner_is(index,absolute,"InheritedTypes::Derived::method","r->seal","InheritedTypes::Base::Item");owner_is(index,absolute,"InheritedTypes::Derived::qualified","s->seal","InheritedTypes::Base::Item");owner_is(index,absolute,"InheritedTypes::Derived::qualified","global_pick->seal","Pick::Nested");owner_is(index,absolute,"statements","local_pick.seal","Pick::Nested");owner_is(index,absolute,"statements","local_pointer->seal","Pick::Nested");owner_is(index,absolute,"statements","holder.cell.seal","Pick::Nested");
  const gchar *same_line="struct Alpha { int field; }; struct Beta { int field; };\nint left(Alpha *p) { return p->field; } int right(Beta *p) { return p->field; }\n";
- assert(insight_native_parse(index,parsed,absolute,same_line,strlen(same_line)));InsightNativeSource scope_source={same_line,NULL,strlen(same_line)};InsightNativeScopes *scopes=insight_native_scopes_new(index,absolute,&scope_source);assert(scopes);
+ assert(insight_native_parse(index,parsed,absolute,same_line,strlen(same_line)));InsightNativeSource scope_source={same_line,NULL,strlen(same_line),NULL};InsightNativeScopes *scopes=insight_native_scopes_new(index,absolute,&scope_source);assert(scopes);
  const gchar *scope_refs[]={strstr(same_line,"p->field"),g_strrstr(same_line,"p->field")},*scope_names[]={"left","right"},*scope_owners[]={"Alpha","Beta"};
  for(guint si=0;si<2;si++) { gchar *actual_scope=insight_native_scopes_at(scopes,2,scope_refs[si]-same_line+3,NULL);assert(!g_strcmp0(actual_scope,scope_names[si]));owner_is(index,absolute,actual_scope,"p->field",scope_owners[si]);g_free(actual_scope); }
  assert(!insight_native_scopes_at(scopes,2,strlen(same_line)+1,NULL));insight_native_scopes_free(scopes);

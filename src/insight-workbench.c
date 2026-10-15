@@ -103,6 +103,7 @@ typedef struct {
  GtkListStore *symbols;
  ScintillaObject *preview;
  GHashTable *preview_python_scopes;guint64 preview_python_version;
+ InsightNativePythonBindings *preview_python_bindings;guint64 preview_python_binding_version;
  InsightNativeScopes *preview_scopes;gchar *preview_scopes_path;guint64 preview_scopes_version;gboolean preview_scopes_ready;
  GHashTable *preview_names,*preview_candidates; gsize preview_names_position; guint preview_links_idle; gchar *preview_links_text,*preview_code_mask;gsize preview_links_length;gboolean preview_calls,preview_python; gint preview_links_position,preview_styled_position;
  guint editor_follow_id; gint editor_follow_position,editor_follow_anchor;
@@ -462,18 +463,26 @@ static gboolean definition_code(ScintillaObject *sci,gint position) {
  return !highlighting_is_comment_style(lexer,style) && !highlighting_is_string_style(lexer,style);
 }
 static void preview_scopes_clear(void) {
- g_clear_pointer(&wb.preview_python_scopes,g_hash_table_unref);g_clear_pointer(&wb.preview_scopes,insight_native_scopes_free);g_clear_pointer(&wb.preview_scopes_path,g_free);wb.preview_scopes_ready=FALSE;
+ g_clear_pointer(&wb.preview_python_bindings,insight_native_python_bindings_free);g_clear_pointer(&wb.preview_python_scopes,g_hash_table_unref);g_clear_pointer(&wb.preview_scopes,insight_native_scopes_free);g_clear_pointer(&wb.preview_scopes_path,g_free);wb.preview_scopes_ready=FALSE;
+}
+static InsightNativeSource preview_python_source(void) {
+ InsightNativeSource source={wb.preview_links_text,wb.preview_code_mask,wb.preview_links_length,NULL};
+ if(!wb.preview_python_bindings || wb.preview_python_binding_version!=wb.index_version) {
+  g_clear_pointer(&wb.preview_python_bindings,insight_native_python_bindings_free);
+  wb.preview_python_bindings=insight_native_python_bindings_new(wb.index,wb.source_path,&source);wb.preview_python_binding_version=wb.index_version;
+ }
+ source.python=wb.preview_python_bindings;return source;
 }
 static gchar *preview_function_scope(gulong line,gint position,gboolean *uncertain) {
  *uncertain=FALSE;
  if(python_language(wb.preview_filetype)) {
   if(!wb.preview_python_scopes || wb.preview_python_version!=wb.index_version) { g_clear_pointer(&wb.preview_python_scopes,g_hash_table_unref);wb.preview_python_scopes=g_hash_table_new_full(g_direct_hash,g_direct_equal,NULL,g_free);wb.preview_python_version=wb.index_version; }
   gpointer cached=NULL;if(g_hash_table_lookup_extended(wb.preview_python_scopes,GUINT_TO_POINTER((guint)line),NULL,&cached)) return *(gchar *)cached ? g_strdup(cached) : NULL;
-  InsightNativeSource source={wb.preview_links_text,wb.preview_code_mask,wb.preview_links_length};gchar *scope=insight_native_python_scope(wb.index,wb.source_path,&source,(gsize)position);g_hash_table_insert(wb.preview_python_scopes,GUINT_TO_POINTER((guint)line),g_strdup(scope ? scope : ""));return scope;
+  InsightNativeSource source={wb.preview_links_text,wb.preview_code_mask,wb.preview_links_length,NULL};gchar *scope=insight_native_python_scope(wb.index,wb.source_path,&source,(gsize)position);g_hash_table_insert(wb.preview_python_scopes,GUINT_TO_POINTER((guint)line),g_strdup(scope ? scope : ""));return scope;
  }
  if(!member_calls_language(wb.preview_filetype)) return insight_native_function_scope(wb.index,wb.source_path,line);
  if(!wb.preview_scopes_ready || wb.preview_scopes_version!=wb.index_version || g_strcmp0(wb.preview_scopes_path,wb.source_path)) {
-  preview_scopes_clear();InsightNativeSource source={wb.preview_links_text,wb.preview_code_mask,wb.preview_links_length};wb.preview_scopes=insight_native_scopes_new(wb.index,wb.source_path,&source);wb.preview_scopes_path=g_strdup(wb.source_path);wb.preview_scopes_version=wb.index_version;wb.preview_scopes_ready=TRUE;
+  preview_scopes_clear();InsightNativeSource source={wb.preview_links_text,wb.preview_code_mask,wb.preview_links_length,NULL};wb.preview_scopes=insight_native_scopes_new(wb.index,wb.source_path,&source);wb.preview_scopes_path=g_strdup(wb.source_path);wb.preview_scopes_version=wb.index_version;wb.preview_scopes_ready=TRUE;
  }
  return insight_native_scopes_at(wb.preview_scopes,line,(gsize)position,uncertain);
 }
@@ -489,8 +498,12 @@ static gboolean preview_resolvable(const gchar *word,gint position) {
  gulong line=(gulong)SSM(wb.preview,SCI_LINEFROMPOSITION,position,0)+1;
  gboolean uncertain_scope=FALSE;gchar *scope=(scoped || qualified || python_language(wb.preview_filetype)) ? preview_function_scope(line,position,&uncertain_scope) : NULL,*owner=NULL;
  if(uncertain_scope) { g_free(scope);return FALSE; }
- if(qualified) { member=TRUE;if(wb.preview_links_text) { InsightNativeSource reference={wb.preview_links_text,wb.preview_code_mask,wb.preview_links_length};ScopeLanguage language={wb.source_path,wb.preview_filetype};owner=python_language(wb.preview_filetype) ? insight_native_python_owner(wb.index,wb.source_path,scope,line,&reference,position,&member,scope_language_eligible,&language) : insight_native_member_owner_source_filtered(wb.index,wb.source_path,scope,line,&reference,position,&member,member_calls_language(wb.preview_filetype) && wb.preview_code_mask!=NULL,scope_language_eligible,&language); } }
+ if(qualified) { member=TRUE;if(wb.preview_links_text) { InsightNativeSource reference={wb.preview_links_text,wb.preview_code_mask,wb.preview_links_length,NULL};if(python_language(wb.preview_filetype)) reference=preview_python_source();ScopeLanguage language={wb.source_path,wb.preview_filetype};owner=python_language(wb.preview_filetype) ? insight_native_python_owner(wb.index,wb.source_path,scope,line,&reference,position,&member,scope_language_eligible,&language) : insight_native_member_owner_source_filtered(wb.index,wb.source_path,scope,line,&reference,position,&member,member_calls_language(wb.preview_filetype) && wb.preview_code_mask!=NULL,scope_language_eligible,&language); } }
  gboolean found=FALSE;
+ if(!member && python_language(wb.preview_filetype)) {
+  InsightNativeSource text=preview_python_source();gchar *binding=insight_native_python_binding_scope(wb.index,wb.source_path,scope,word,&text);g_free(scope);scope=binding;
+  if(!scope) { g_free(owner);return FALSE; }
+ }
  if(member) { ScopeLanguage language={wb.source_path,wb.preview_filetype};const InsightSymbol *hit;found=insight_member_query(wb.index,owner,word,wb.source_path,scope_language_eligible,&language,&hit,1,NULL,NULL)>0; }
  else for(guint i=0;i<tags->len;i++) { const InsightSymbol *tag=g_ptr_array_index(tags,i);if((python_language(wb.preview_filetype) ? insight_native_python_rank(wb.index,tag,wb.source_path,scope,line) : insight_native_definition_rank_at(tag,wb.source_path,scope,line))>=0) { found=TRUE;break; } }
  g_free(scope);g_free(owner);return found;
@@ -743,13 +756,16 @@ static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word,
  ScopeLanguage language={preferred,reference_type};gchar *owner=NULL;
  if(python) {
   const gchar *bytes=cached ? wb.preview_links_text : reference;gsize length=cached ? wb.preview_links_length : reference_length;
-  mask=bytes ? insight_source_code_mask(bytes,length,INSIGHT_CODE_PYTHON,NULL) : NULL;InsightNativeSource text={bytes,mask,length};
+  mask=bytes ? insight_source_code_mask(bytes,length,INSIGHT_CODE_PYTHON,NULL) : NULL;InsightNativeSource text={bytes,mask,length,NULL};
+  text.python=cached ? preview_python_source().python : insight_native_python_bindings_new(wb.index,preferred,&text);
   scope=insight_native_python_scope(wb.index,preferred,&text,reference_position);owner=insight_native_python_owner(wb.index,preferred,scope,reference_line,&text,reference_position,&member,scope_language_eligible,&language);
+  if(!member) { gchar *binding=insight_native_python_binding_scope(wb.index,preferred,scope,word,&text);g_free(scope);scope=binding;if(!scope) valid_word=FALSE; }
+  if(!cached) insight_native_python_bindings_free(text.python);
  } else if(cached) {
-  scope=preview_function_scope(reference_line,reference_position,&uncertain_scope);InsightNativeSource text={wb.preview_links_text,wb.preview_code_mask,wb.preview_links_length};
+  scope=preview_function_scope(reference_line,reference_position,&uncertain_scope);InsightNativeSource text={wb.preview_links_text,wb.preview_code_mask,wb.preview_links_length,NULL};
   if(!uncertain_scope) owner=insight_native_member_owner_source_filtered(wb.index,preferred,scope,reference_line,&text,reference_position,&member,calls && wb.preview_code_mask!=NULL,scope_language_eligible,&language);
  } else if(calls && reference && valid_word) {
-  mask=insight_source_code_mask(reference,reference_length,INSIGHT_CODE_C,NULL);InsightNativeSource text={reference,mask,reference_length};InsightNativeScopes *scopes=insight_native_scopes_new(wb.index,preferred,&text);scope=insight_native_scopes_at(scopes,reference_line,(gsize)reference_position,&uncertain_scope);
+  mask=insight_source_code_mask(reference,reference_length,INSIGHT_CODE_C,NULL);InsightNativeSource text={reference,mask,reference_length,NULL};InsightNativeScopes *scopes=insight_native_scopes_new(wb.index,preferred,&text);scope=insight_native_scopes_at(scopes,reference_line,(gsize)reference_position,&uncertain_scope);
   if(!uncertain_scope) { owner=insight_native_member_owner_source_filtered(wb.index,preferred,scope,reference_line,&text,reference_position,&member,mask!=NULL,scope_language_eligible,&language); }insight_native_scopes_free(scopes);
  } else {
   scope=insight_native_function_scope(wb.index,preferred,reference_line);owner=insight_native_member_owner_calls_filtered(wb.index,preferred,scope,reference_line,reference,reference_position-reference_begin,&member,calls,scope_language_eligible,&language);
@@ -2729,9 +2745,11 @@ static void definition_job_run(GTask *task,gpointer source,gpointer data,GCancel
   j->count=insight_relation_query(j->index,j->query,INSIGHT_RELATION_DEFINITIONS,0,j->matches,G_N_ELEMENTS(j->matches)); if(j->count==SIZE_MAX) j->count=0; j->count=MIN(j->count,G_N_ELEMENTS(j->matches));
   gchar *scope=NULL,*mask=NULL;gboolean member=FALSE,uncertain_scope=FALSE;gchar *owner=NULL;
   if(j->python && j->text) {
-   gsize length=strlen(j->text);mask=insight_source_code_mask(j->text,length,INSIGHT_CODE_PYTHON,NULL);InsightNativeSource text={j->text,mask,length};scope=insight_native_python_scope(j->index,j->preferred,&text,j->position);owner=insight_native_python_owner(j->index,j->preferred,scope,j->line,&text,j->position,&member,relation_eligible,j->language);
+   gsize length=strlen(j->text);mask=insight_source_code_mask(j->text,length,INSIGHT_CODE_PYTHON,NULL);InsightNativeSource text={j->text,mask,length,NULL};text.python=insight_native_python_bindings_new(j->index,j->preferred,&text);scope=insight_native_python_scope(j->index,j->preferred,&text,j->position);owner=insight_native_python_owner(j->index,j->preferred,scope,j->line,&text,j->position,&member,relation_eligible,j->language);
+   if(!member) { gchar *binding=insight_native_python_binding_scope(j->index,j->preferred,scope,j->query,&text);g_free(scope);scope=binding;uncertain_scope=scope==NULL; }
+   insight_native_python_bindings_free(text.python);
   } else if(j->nominal_calls && j->text) {
-   gsize length=strlen(j->text);mask=insight_source_code_mask(j->text,length,INSIGHT_CODE_C,NULL);InsightNativeSource text={j->text,mask,length};InsightNativeScopes *scopes=insight_native_scopes_new(j->index,j->preferred,&text);scope=insight_native_scopes_at(scopes,j->line,(gsize)j->position,&uncertain_scope);
+   gsize length=strlen(j->text);mask=insight_source_code_mask(j->text,length,INSIGHT_CODE_C,NULL);InsightNativeSource text={j->text,mask,length,NULL};InsightNativeScopes *scopes=insight_native_scopes_new(j->index,j->preferred,&text);scope=insight_native_scopes_at(scopes,j->line,(gsize)j->position,&uncertain_scope);
    if(!uncertain_scope) { owner=insight_native_member_owner_source_filtered(j->index,j->preferred,scope,j->line,&text,j->position,&member,mask!=NULL,relation_eligible,j->language); }insight_native_scopes_free(scopes);
   } else { scope=insight_native_function_scope(j->index,j->preferred,j->line);owner=insight_native_member_owner_calls_filtered(j->index,j->preferred,scope,j->line,j->text,j->position,&member,j->nominal_calls,relation_eligible,j->language); }
   g_free(mask);if(uncertain_scope) j->count=0;gsize eligible=0;

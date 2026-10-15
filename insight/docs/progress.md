@@ -1420,3 +1420,34 @@ Python/Lua function boundaries and scoped C++ type/alias Context) pass on Linux.
 RU/EN Context help describes the supported rules. Dynamic typing, global/nonlocal
 declarations, decorators and the import/alias graph still need semantic work.
 Windows x64 is deliberately not rebuilt pending the user's next request.
+
+
+## Python global/nonlocal bindings shared by Context navigation
+
+Source-aware lookup now follows global and nonlocal declarations through the
+lexical scope chain. Global targets only the current module; nonlocal requires
+an enclosing function binding, skips intervening class members and declines
+when no binding exists. An ancestor's global declaration also applies to a free
+name captured by its nested function. A nearer ordinary local still wins. Local
+and parameter tags bind the whole Python function, including references before
+the assignment. The parser's spurious local tags for assignments following
+global/nonlocal no longer override the declared binding.
+
+Declaration parsing handles comma lists, semicolons and explicit continuations
+with masked strings/comments. Invalid/conflicting declarations or exceeded
+bounds decline instead of guessing. Limits are 64 statements, 4096 names and
+32 MiB source traversal for suite classification. The preview shares a parsed
+declaration map across all links and invalidates it with its source/index
+generation; synchronous F12 and background Follow use the same resolver.
+The optional cache is borrowed by source records and released by its owner.
+
+Native regressions exercise module, closure, inherited-global, forward-local,
+missing-nonlocal, receiver global/nonlocal, masked text, syntax conflicts,
+statement limits and continuations. Real Python Context tests cover F12 and
+Follow to distinct module/enclosing variables and no fallback for an invalid
+nonlocal. Dynamic reassignment types, decorators, imports and runtime semantics
+remain open. Windows x64 rebuild remains deferred at the user's request.
+
+Validation: the native index regression and four GUI suites pass on Linux:
+Python Context, Python/Lua boundaries, scope hierarchy and scoped C++ alias
+Context. The complete editor/test target set compiles successfully.

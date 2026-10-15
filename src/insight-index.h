@@ -30,8 +30,11 @@ gchar *insight_native_member_owner_filtered(const InsightIndex *,const char *,co
  * retaining nominal field/qualified-name navigation. No extension guessing. */
 /* Full lexical source from byte zero. mask, when supplied, has identical byte
  * offsets/length and replaces C-family comments/strings with spaces. Borrowed
- * for the duration of this call. A missing mask is computed lazily once. */
-typedef struct { const gchar *text,*mask;gsize length; } InsightNativeSource;
+ * for the duration of this call. A missing mask is computed lazily once.
+ * python is an optional borrowed declaration cache built for exactly this
+ * source, path and immutable index generation; invalidate it on any change. */
+typedef struct InsightNativePythonBindings InsightNativePythonBindings;
+typedef struct { const gchar *text,*mask;gsize length;InsightNativePythonBindings *python; } InsightNativeSource;
 /* C-family scope cache for distinct functions sharing a parser line. The
  * immutable index is retained; source bytes/mask are borrowed until free.
  * Unambiguous lines preserve legacy scope lookup. Ambiguous groups use bounded
@@ -49,6 +52,11 @@ gboolean insight_native_member_matches(const InsightSymbol *,const char *);
 /* Python navigation uses completed indentation suites and lexical visibility.
  * Dynamic receivers/import inference is deliberately not guessed. */
 gchar *insight_native_python_scope(const InsightIndex *,const gchar *,const InsightNativeSource *,gsize);
+/* Source-aware lexical binding, including global/nonlocal. NULL declines
+ * invalid/excessive declarations; an allocated empty string means module scope. */
+InsightNativePythonBindings *insight_native_python_bindings_new(const InsightIndex *,const gchar *,const InsightNativeSource *);
+void insight_native_python_bindings_free(InsightNativePythonBindings *);
+gchar *insight_native_python_binding_scope(const InsightIndex *,const gchar *,const gchar *,const gchar *,const InsightNativeSource *);
 gint insight_native_python_rank(const InsightIndex *,const InsightSymbol *,const gchar *,const gchar *,gulong);
 gchar *insight_native_python_owner(const InsightIndex *,const gchar *,const gchar *,gulong,const InsightNativeSource *,gsize,gboolean *,InsightTypeEligible,void *);
 guint insight_native_definition_rank(const InsightSymbol *,const char *);

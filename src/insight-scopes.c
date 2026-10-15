@@ -125,33 +125,98 @@ static gchar *python_scope_name(const gchar *name) {
 static gchar *python_symbol_scope(const InsightSymbol *tag) {
  gchar *outer=python_scope_name(tag->scope),*name=*outer ? g_strconcat(outer,"::",tag->name,NULL) : g_strdup(tag->name);g_free(outer);return name;
 }
-gchar *insight_native_python_scope(const InsightIndex *index,const gchar *path,const InsightNativeSource *source,gsize position) {
+static gchar *python_scope_at(const InsightIndex *index,const gchar *path,const InsightNativeSource *source,gsize position,gboolean *valid) {
+ *valid=FALSE;
  if(!index || !source || !source->text || !source->mask || source->length>2u*1024u*1024u || position>source->length) return NULL;
- GArray *lines=g_array_new(FALSE,FALSE,sizeof(gsize));gsize offset=0;g_array_append_val(lines,offset);
+ *valid=TRUE;GArray *lines=g_array_new(FALSE,FALSE,sizeof(gsize));gsize offset=0;g_array_append_val(lines,offset);
  for(gsize i=0;i<source->length;i++) if(source->text[i]=='\n') { offset=i+1;g_array_append_val(lines,offset); }
  gchar *scope=NULL;gsize smallest=G_MAXSIZE,work=0;guint visits=0;
  for(gsize i=0;i<insight_index_count(index);i++) {
   const InsightSymbol *tag=insight_index_at(index,i);if(g_strcmp0(tag->path,path) || !tag->line || tag->line>lines->len || (strcmp(tag->kind,"f") && strcmp(tag->kind,"m") && strcmp(tag->kind,"c"))) continue;
-  if(++visits>10000) { g_clear_pointer(&scope,g_free);break; }
+  if(++visits>10000) { *valid=FALSE;g_clear_pointer(&scope,g_free);break; }
   gsize start=g_array_index(lines,gsize,tag->line-1),body=0,end=0;if(start>position) continue;
   if(insight_suite_range(source->text,source->mask,source->length,start,INSIGHT_FUNCTION_PYTHON,&body,&end)==1) {
-   if(end-start>8u*1024u*1024u-work) { g_clear_pointer(&scope,g_free);break; }work+=end-start;
+   if(end-start>8u*1024u*1024u-work) { *valid=FALSE;g_clear_pointer(&scope,g_free);break; }work+=end-start;
    if(position<end && end-start<smallest) { smallest=end-start;g_free(scope);scope=python_symbol_scope(tag); }
   }
  }
  g_array_unref(lines);return scope;
 }
+gchar *insight_native_python_scope(const InsightIndex *index,const gchar *path,const InsightNativeSource *source,gsize position) {
+ gboolean valid;return python_scope_at(index,path,source,position,&valid);
+}
 static gboolean python_within(const gchar *scope,const gchar *outer) {
  gsize size=strlen(outer);return !size || !strcmp(scope,outer) || (g_str_has_prefix(scope,outer) && g_str_has_prefix(scope+size,"::"));
 }
+/* A declaration affects its complete suite, including earlier references. */
+struct InsightNativePythonBindings { GHashTable *scopes;gboolean valid; };
+void insight_native_python_bindings_free(InsightNativePythonBindings *bindings) {
+ if(!bindings) return;g_hash_table_unref(bindings->scopes);g_free(bindings);
+}
+InsightNativePythonBindings *insight_native_python_bindings_new(const InsightIndex *index,const gchar *path,const InsightNativeSource *source) {
+ InsightNativePythonBindings *bindings=g_new0(InsightNativePythonBindings,1);
+ bindings->scopes=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,(GDestroyNotify)g_hash_table_unref);
+ if(!index || !source || !source->text || !source->mask || source->length>2u*1024u*1024u) return bindings;
+ const gchar *mask=source->mask;gsize work=0;guint count=0,names=0;
+ for(gsize at=0;at<source->length;) {
+  if(!ident(mask[at])) { at++;continue; }
+  gsize first=at;while(at<source->length && ident(mask[at])) at++;
+  guint mode=word_is(mask,first,at,"global") ? 1 : word_is(mask,first,at,"nonlocal") ? 2 : 0;
+  if(!mode) continue;
+  if(++count>64 || source->length>32u*1024u*1024u-work) return bindings;
+  work+=source->length;gboolean valid_scope=FALSE;gchar *scope=python_scope_at(index,path,source,first,&valid_scope);if(!valid_scope) { g_free(scope);return bindings; }if(!scope) scope=g_strdup("");
+  if(!*scope && mode==2) { g_free(scope);return bindings; }
+  GHashTable *declarations=g_hash_table_lookup(bindings->scopes,scope);
+  if(!declarations) { declarations=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);g_hash_table_insert(bindings->scopes,scope,declarations); }else g_free(scope);
+  gboolean expect_name=TRUE;
+  while(at<source->length && mask[at]!=';' && mask[at]!='\n' && mask[at]!='\r') {
+   if(mask[at]==' ' || mask[at]=='\t') { at++;continue; }
+   if(mask[at]=='\\' && at+1<source->length && (mask[at+1]=='\n' || mask[at+1]=='\r')) { at+=2;if(at<source->length && mask[at-1]=='\r' && mask[at]=='\n') at++;continue; }
+   if(expect_name && ident(mask[at]) && !g_ascii_isdigit(mask[at])) {
+    gsize name=at;while(at<source->length && ident(mask[at])) at++;if(++names>4096 || at-name>1024) return bindings;
+    gchar *word=g_strndup(mask+name,at-name);guint previous=GPOINTER_TO_UINT(g_hash_table_lookup(declarations,word));
+    if(previous && previous!=mode) { g_free(word);return bindings; }
+    g_hash_table_replace(declarations,word,GUINT_TO_POINTER(mode));expect_name=FALSE;
+   }
+   else if(!expect_name && mask[at]==',') { at++;expect_name=TRUE; }
+   else return bindings;
+  }
+  if(expect_name) return bindings;
+ }
+ bindings->valid=TRUE;return bindings;
+}
+gchar *insight_native_python_binding_scope(const InsightIndex *index,const gchar *path,const gchar *scope,const gchar *word,const InsightNativeSource *source) {
+ if(!index || !word || !*word) return NULL;
+ InsightNativePythonBindings *owned=NULL,*bindings=source ? source->python : NULL;
+ if(!bindings) bindings=owned=insight_native_python_bindings_new(index,path,source);
+ if(!bindings->valid) { insight_native_python_bindings_free(owned);return NULL; }
+ gchar *current=python_scope_name(scope);gboolean nonlocal=FALSE,initial=TRUE;
+ while(*current) {
+  gboolean class_scope=FALSE,bound=FALSE;
+  for(gsize i=0;i<insight_index_count(index);i++) { const InsightSymbol *tag=insight_index_at(index,i);if(g_strcmp0(tag->path,path)) continue;
+   if(!strcmp(tag->kind,"c")) { gchar *name=python_symbol_scope(tag);if(!strcmp(name,current)) class_scope=TRUE;g_free(name); }
+   if(!strcmp(tag->name,word)) { gchar *owner=python_scope_name(tag->scope);if(!strcmp(owner,current)) bound=TRUE;g_free(owner); }
+  }
+  if(initial || !class_scope) {
+   GHashTable *declarations=g_hash_table_lookup(bindings->scopes,current);guint mode=declarations ? GPOINTER_TO_UINT(g_hash_table_lookup(declarations,word)) : 0;
+   if(mode==1) { if(nonlocal) { g_free(current);current=NULL; }else *current=0;break; }
+   if(mode==2) nonlocal=TRUE;
+   else if(bound) break;
+  }
+  gchar *parent=g_strrstr(current,"::");if(parent) *parent=0;else *current=0;initial=FALSE;
+ }
+ if(current && !*current && nonlocal) g_clear_pointer(&current,g_free);
+ insight_native_python_bindings_free(owned);return current;
+}
 gint insight_native_python_rank(const InsightIndex *index,const InsightSymbol *tag,const gchar *path,const gchar *scope,gulong line) {
+ (void)line; /* Python locals bind their complete function suite. */
  /* Unqualified project-wide names are not Python imports. */
  if(g_strcmp0(tag->path,path)) return -1;
  gchar *owner=python_scope_name(tag->scope),*current=python_scope_name(scope);gint rank=-1;
  if(python_within(current,owner)) {
   gboolean class_scope=FALSE;
   for(gsize i=0;*owner && i<insight_index_count(index);i++) { const InsightSymbol *candidate=insight_index_at(index,i);if(strcmp(candidate->kind,"c") || g_strcmp0(candidate->path,path)) continue;gchar *name=python_symbol_scope(candidate);class_scope=!strcmp(owner,name);g_free(name);if(class_scope) break; }
-  if((!class_scope || !strcmp(current,owner)) && ((!strcmp(tag->kind,"l") || !strcmp(tag->kind,"z")) ? tag->line<=line : TRUE)) rank=100+(gint)strlen(owner)*16+(!strcmp(tag->kind,"l") ? 4 : 0);
+  if((!class_scope || !strcmp(current,owner))) rank=100+(gint)strlen(owner)*16+(!strcmp(tag->kind,"l") ? 4 : 0);
  }
  g_free(owner);g_free(current);return rank;
 }
@@ -165,8 +230,9 @@ gchar *insight_native_python_owner(const InsightIndex *index,const gchar *path,c
  /* Select the visible binding before interpreting a conventional receiver. A
   * closure may capture self, but a nearer parameter/local must hide it. Python
   * local assignments bind the whole function, even before their source line. */
+ gchar *lookup=insight_native_python_binding_scope(index,path,scope,receiver,source);if(!lookup) { g_free(receiver);return NULL; }
  const InsightSymbol *best=NULL;gint best_rank=-1;
- for(gsize i=0;i<insight_index_count(index);i++) { const InsightSymbol *tag=insight_index_at(index,i);if(strcmp(tag->name,receiver) || (eligible && !eligible(tag,data))) continue;gint rank=insight_native_python_rank(index,tag,path,scope,(!strcmp(tag->kind,"l") || !strcmp(tag->kind,"z")) ? G_MAXULONG : line);if(rank>best_rank) { best=tag;best_rank=rank; } }
+ for(gsize i=0;i<insight_index_count(index);i++) { const InsightSymbol *tag=insight_index_at(index,i);if(strcmp(tag->name,receiver) || (eligible && !eligible(tag,data))) continue;gint rank=insight_native_python_rank(index,tag,path,lookup,line);if(rank>best_rank) { best=tag;best_rank=rank; } }
  if(best && !strcmp(best->kind,"z") && (!strcmp(receiver,"self") || !strcmp(receiver,"cls"))) {
   gchar *binding=python_scope_name(best->scope);
   for(gsize i=0;i<insight_index_count(index);i++) {
@@ -184,5 +250,5 @@ gchar *insight_native_python_owner(const InsightIndex *index,const gchar *path,c
  /* A visible annotated variable or a directly named class is nominal. */
  if(!owner && best && !strcmp(best->kind,"c")) owner=python_symbol_scope(best);
  else if(!owner && best && *best->type) { InsightTypeResult resolved=insight_type_resolve(index,best->type,best->scope,path,eligible,data);owner=resolved.owner;resolved.owner=NULL;insight_type_result_clear(&resolved); }
- g_free(receiver);return owner;
+ g_free(lookup);g_free(receiver);return owner;
 }
