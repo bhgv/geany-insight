@@ -100,7 +100,7 @@ typedef struct {
  GPtrArray *usage_paths; gchar *usage_name; guint usage_idle,usage_position,usage_shown,usage_skipped; GHashTable *usage_existing; GtkTreeIter usage_iter; gboolean usage_collecting,usage_iter_valid;
  GtkListStore *symbols;
  ScintillaObject *preview;
- GHashTable *preview_names,*preview_candidates; gsize preview_names_position; guint preview_links_idle; gchar *preview_links_text; gint preview_links_position,preview_styled_position;
+ GHashTable *preview_names,*preview_candidates; gsize preview_names_position; guint preview_links_idle; gchar *preview_links_text,*preview_code_mask;gsize preview_links_length;gboolean preview_calls; gint preview_links_position,preview_styled_position;
  guint editor_follow_id; gint editor_follow_position,editor_follow_anchor;
  gchar *follow_word; guint follow_doc; gulong follow_line;
  guint preview_click_timer;
@@ -443,6 +443,7 @@ static gboolean definition_language(const gchar *source,GeanyFiletype *from,cons
 }
 typedef struct { const gchar *path;GeanyFiletype *type; } ScopeLanguage;
 static int scope_language_eligible(const InsightSymbol *symbol,void *data) { ScopeLanguage *scope=data;return definition_language(scope->path,scope->type,symbol->path); }
+static gboolean member_calls_language(GeanyFiletype *type) { return type && (type->lang==TM_PARSER_C || type->lang==TM_PARSER_CPP || type->lang==TM_PARSER_CUDA); }
 static gboolean definition_keyword(GeanyFiletype *ft,const gchar *word) {
  if(ft && (ft->lang==TM_PARSER_C || ft->lang==TM_PARSER_CPP || ft->lang==TM_PARSER_CUDA) && (!strcmp(word,"false") || !strcmp(word,"true") || !strcmp(word,"nullptr"))) return TRUE;
  return highlighting_is_primary_keyword(ft,word);
@@ -454,12 +455,15 @@ static gboolean definition_code(ScintillaObject *sci,gint position) {
 static gboolean preview_resolvable(const gchar *word,gint position) {
  if(insight_languages_keyword(wb.preview,word) || definition_keyword(wb.preview_filetype,word) || !definition_code(wb.preview,position)) return FALSE;
  GPtrArray *tags=g_hash_table_lookup(wb.preview_candidates,word);if(!tags) return FALSE;
- gboolean scoped=FALSE,member=FALSE;gint at=position;while(at>0 && g_ascii_isspace(sci_get_char_at(wb.preview,at-1))) at--;
- gboolean qualified=at>0 && (sci_get_char_at(wb.preview,at-1)=='.' || (at>1 && ((sci_get_char_at(wb.preview,at-2)=='-' && sci_get_char_at(wb.preview,at-1)=='>') || (sci_get_char_at(wb.preview,at-2)==':' && sci_get_char_at(wb.preview,at-1)==':'))));
+ const gchar *lexical=member_calls_language(wb.preview_filetype) ? wb.preview_code_mask : NULL;
+ if(lexical && position>=0 && (gsize)position<wb.preview_links_length && lexical[position]!=wb.preview_links_text[position]) return FALSE;
+ gboolean scoped=FALSE,member=FALSE;gint at=position;while(at>0 && g_ascii_isspace(lexical ? lexical[at-1] : sci_get_char_at(wb.preview,at-1))) at--;
+ gchar before=at>0 ? (lexical ? lexical[at-1] : sci_get_char_at(wb.preview,at-1)) : 0,previous=at>1 ? (lexical ? lexical[at-2] : sci_get_char_at(wb.preview,at-2)) : 0;
+ gboolean qualified=before=='.' || (at>1 && ((previous=='-' && before=='>') || (previous==':' && before==':')));
  for(guint i=0;i<tags->len;i++) { const InsightSymbol *tag=g_ptr_array_index(tags,i);if(!strcmp(tag->kind,"l") || !strcmp(tag->kind,"z")) scoped=TRUE; }
  gulong line=(gulong)SSM(wb.preview,SCI_LINEFROMPOSITION,position,0)+1;
  gchar *scope=(scoped || qualified) ? insight_native_function_scope(wb.index,wb.source_path,line) : NULL,*owner=NULL;
- if(qualified) { gint begin=MAX(0,position-4096);gchar *reference=sci_get_contents_range(wb.preview,begin,position);ScopeLanguage language={wb.source_path,wb.preview_filetype};owner=insight_native_member_owner_filtered(wb.index,wb.source_path,scope,line,reference,position-begin,&member,scope_language_eligible,&language);g_free(reference); }
+ if(qualified) { member=TRUE;if(wb.preview_links_text) { InsightNativeSource reference={wb.preview_links_text,wb.preview_code_mask,wb.preview_links_length};ScopeLanguage language={wb.source_path,wb.preview_filetype};owner=insight_native_member_owner_source_filtered(wb.index,wb.source_path,scope,line,&reference,position,&member,member_calls_language(wb.preview_filetype) && wb.preview_code_mask!=NULL,scope_language_eligible,&language); } }
  gboolean found=FALSE;
  if(member) { ScopeLanguage language={wb.source_path,wb.preview_filetype};const InsightSymbol *hit;found=insight_member_query(wb.index,owner,word,wb.source_path,scope_language_eligible,&language,&hit,1,NULL,NULL)>0; }
  else for(guint i=0;i<tags->len;i++) { const InsightSymbol *tag=g_ptr_array_index(tags,i);if(insight_native_definition_rank_at(tag,wb.source_path,scope,line)>=0) { found=TRUE;break; } }
@@ -478,7 +482,7 @@ static gboolean preview_links_step(gpointer data) {
   if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
  }
  SSM(wb.preview,SCI_SETINDICATORCURRENT,INSIGHT_LINK,0);
- gint length=(gint)strlen(wb.preview_links_text);
+ gint length=(gint)wb.preview_links_length;
  while(wb.preview_links_position<length) {
   gint position=wb.preview_links_position;if(position>=wb.preview_styled_position) { wb.preview_styled_position=MIN(length,position+16384);SSM(wb.preview,SCI_COLOURISE,position,wb.preview_styled_position); }gint end=(gint)SSM(wb.preview,SCI_WORDENDPOSITION,position,TRUE);
   if(end<=position) wb.preview_links_position=(gint)SSM(wb.preview,SCI_POSITIONAFTER,position,0);
@@ -490,16 +494,18 @@ static gboolean preview_links_step(gpointer data) {
   if(wb.preview_links_position<=position) wb.preview_links_position=position+1;
   if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
  }
- wb.preview_links_idle=0; g_clear_pointer(&wb.preview_links_text,g_free); return G_SOURCE_REMOVE;
+ wb.preview_links_idle=0; return G_SOURCE_REMOVE;
 }
 static void preview_links(void) {
  if(!wb.preview) return;
  if(wb.preview_links_idle) { g_source_remove(wb.preview_links_idle); wb.preview_links_idle=0; }
- g_clear_pointer(&wb.preview_links_text,g_free); refresh_index();
+ refresh_index();
  g_clear_pointer(&wb.preview_candidates,g_hash_table_destroy);wb.preview_candidates=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,(GDestroyNotify)g_ptr_array_unref);wb.preview_names_position=0;
  SSM(wb.preview,SCI_INDICSETSTYLE,INSIGHT_LINK,INDIC_PLAIN); SSM(wb.preview,SCI_INDICSETFORE,INSIGHT_LINK,0xcc5500);
  SSM(wb.preview,SCI_SETINDICATORCURRENT,INSIGHT_LINK,0); SSM(wb.preview,SCI_INDICATORCLEARRANGE,0,sci_get_length(wb.preview));
- wb.preview_links_text=sci_get_contents(wb.preview,sci_get_length(wb.preview)+1); wb.preview_links_position=0;wb.preview_styled_position=0;
+ gchar *text=sci_get_contents(wb.preview,sci_get_length(wb.preview)+1);gboolean calls=member_calls_language(wb.preview_filetype);
+ if(!wb.preview_links_text || strcmp(wb.preview_links_text,text) || calls!=wb.preview_calls) { g_clear_pointer(&wb.preview_code_mask,g_free);if(calls) wb.preview_code_mask=insight_source_code_mask(text,strlen(text),INSIGHT_CODE_C,NULL); }
+ g_free(wb.preview_links_text);wb.preview_links_text=text;wb.preview_links_length=strlen(text);wb.preview_calls=calls; wb.preview_links_position=0;wb.preview_styled_position=0;
  wb.preview_links_idle=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,preview_links_step,NULL,NULL);
 }
 static gboolean preview_motion(GtkWidget *widget,GdkEventMotion *event,gpointer data) {
@@ -699,13 +705,18 @@ static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word,
  if(!preferred && doc) preferred=doc->file_name;
  refresh_index();
  GeanyFiletype *reference_type=reference_sci==wb.preview ? wb.preview_filetype : (doc ? doc->file_type : NULL);
- gboolean valid_word=word && *word && !definition_keyword(reference_type,word) && !insight_languages_keyword(reference_sci,word) && (!reference_sci || definition_code(reference_sci,reference_position));
+ gboolean valid_word=word && *word && !definition_keyword(reference_type,word) && !insight_languages_keyword(reference_sci,word) && (!reference_sci || (sci_get_length(reference_sci)<=2*1024*1024 && definition_code(reference_sci,reference_position)));
  wb.populating=TRUE; g_ptr_array_set_size(wb.definitions,0); gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(wb.choices));
  const InsightSymbol *found[256],*chosen=NULL;
  gchar *scope=insight_native_function_scope(wb.index,preferred,reference_line);
- gint reference_begin=MAX(0,reference_position-4096);
- gchar *reference=reference_sci ? sci_get_contents_range(reference_sci,reference_begin,reference_position) : NULL; gboolean member=FALSE;
- ScopeLanguage language={preferred,reference_type};gchar *owner=insight_native_member_owner_filtered(wb.index,preferred,scope,reference_line,reference,reference_position-reference_begin,&member,scope_language_eligible,&language); g_free(reference);
+ gboolean cached=reference_sci==wb.preview && wb.preview_links_text && reference_position>=0 && (gsize)reference_position<=wb.preview_links_length;
+ gboolean calls=member_calls_language(reference_type) && reference_sci && sci_get_length(reference_sci)<=2*1024*1024;gint reference_begin=calls ? 0 : MAX(0,reference_position-4096);
+ gchar *reference=!cached && reference_sci ? sci_get_contents_range(reference_sci,reference_begin,reference_position) : NULL; gboolean member=FALSE;
+ if(reference && (!g_utf8_validate(reference,reference_position-reference_begin,NULL) || memchr(reference,0,(gsize)(reference_position-reference_begin)))) valid_word=FALSE;
+ ScopeLanguage language={preferred,reference_type};gchar *owner;
+ if(cached) { InsightNativeSource text={wb.preview_links_text,wb.preview_code_mask,wb.preview_links_length};owner=insight_native_member_owner_source_filtered(wb.index,preferred,scope,reference_line,&text,reference_position,&member,calls && wb.preview_code_mask!=NULL,scope_language_eligible,&language); }
+ else owner=insight_native_member_owner_calls_filtered(wb.index,preferred,scope,reference_line,reference,reference_position-reference_begin,&member,calls,scope_language_eligible,&language);
+ g_free(reference);
  size_t count=valid_word ? (member ? insight_member_query(wb.index,owner,word,preferred,scope_language_eligible,&language,found,256,NULL,NULL) : insight_index_find(wb.index,word,TRUE,found,256)) : 0; gint selected=0;
  for(size_t i=0;i<count && i<256;i++) {
   const InsightSymbol *tag=found[i]; if(!definition_language(preferred,reference_type,tag->path)) continue; if(insight_native_definition_rank_at(tag,preferred,scope,reference_line)<0) continue; gboolean duplicate=FALSE;
@@ -2656,7 +2667,7 @@ static void create_categories(void) {
  grouped_attach(p,box); GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),p->view); gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0); gtk_notebook_append_page(GTK_NOTEBOOK(wb.project_notebook),box,gtk_label_new("Categories"));
  g_signal_connect(p->view,"row-activated",G_CALLBACK(category_activated),NULL); gtk_widget_show_all(box); categories_filter(NULL,NULL);
 }
-typedef struct { InsightIndex *index; gchar *query,*preferred,*path,*text,*digest; const InsightSymbol *matches[256]; gsize count; gint chosen,position,anchor,encoding; guint document; gulong line; GHashTable *allowed_paths;InsightLanguageFilter *language;gboolean valid_word; guint64 generation,epoch,index_version; } DefinitionJob;
+typedef struct { InsightIndex *index; gchar *query,*preferred,*path,*text,*digest; const InsightSymbol *matches[256]; gsize count; gint chosen,position,anchor,encoding; guint document; gulong line; GHashTable *allowed_paths;InsightLanguageFilter *language;gboolean valid_word,nominal_calls; guint64 generation,epoch,index_version; } DefinitionJob;
 static gchar *cursor_query(GeanyDocument *doc) {
  gint a=(gint)SSM(doc->editor->sci,SCI_GETSELECTIONSTART,0,0),b=(gint)SSM(doc->editor->sci,SCI_GETSELECTIONEND,0,0);
  if(b>a && b-a<=1024) { gchar *query=sci_get_selection_contents(doc->editor->sci); return g_strstrip(query); }
@@ -2672,7 +2683,7 @@ static void definition_job_run(GTask *task,gpointer source,gpointer data,GCancel
  if(j->valid_word && *j->query && !g_cancellable_is_cancelled(cancel)) {
   j->count=insight_relation_query(j->index,j->query,INSIGHT_RELATION_DEFINITIONS,0,j->matches,G_N_ELEMENTS(j->matches)); if(j->count==SIZE_MAX) j->count=0; j->count=MIN(j->count,G_N_ELEMENTS(j->matches));
   gchar *scope=insight_native_function_scope(j->index,j->preferred,j->line); gboolean member=FALSE;
-  gchar *owner=insight_native_member_owner_filtered(j->index,j->preferred,scope,j->line,j->text,j->position,&member,relation_eligible,j->language); gsize eligible=0;
+  gchar *owner=insight_native_member_owner_calls_filtered(j->index,j->preferred,scope,j->line,j->text,j->position,&member,j->nominal_calls,relation_eligible,j->language); gsize eligible=0;
   if(member) j->count=MIN(insight_member_query(j->index,owner,j->query,j->preferred,relation_eligible,j->language,j->matches,G_N_ELEMENTS(j->matches),NULL,NULL),G_N_ELEMENTS(j->matches));
   for(gsize n=0;n<j->count;n++) if(g_hash_table_contains(j->allowed_paths,j->matches[n]->path) && insight_native_definition_rank_at(j->matches[n],j->preferred,scope,j->line)>=0) j->matches[eligible++]=j->matches[n];
   j->count=eligible;
@@ -2706,11 +2717,12 @@ static gboolean definition_timeout(gpointer data) {
  (void)data; wb.definition_timer=0; if(!wb.alive || !wb.preview || !wb.context_visible || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow))) return G_SOURCE_REMOVE;
  GeanyDocument *doc=document_get_current(); if(!doc) return G_SOURCE_REMOVE; refresh_index();
  DefinitionJob *j=g_new0(DefinitionJob,1); j->index=insight_index_ref(wb.index); j->query=cursor_query(doc); j->preferred=g_strdup(doc->file_name); j->document=doc->id; j->position=sci_get_current_position(doc->editor->sci); j->anchor=(gint)SSM(doc->editor->sci,SCI_GETANCHOR,0,0); j->line=(gulong)sci_get_current_line(doc->editor->sci)+1; j->encoding=file_prefs.default_open_encoding; j->generation=wb.definition_generation; j->epoch=workbench_epoch; j->index_version=wb.index_version;
- j->language=insight_language_filter_new(doc->file_name,doc->file_type);
+ j->language=insight_language_filter_new(doc->file_name,doc->file_type);j->nominal_calls=member_calls_language(doc->file_type);
  j->valid_word=!definition_keyword(doc->file_type,j->query) && !insight_languages_keyword(doc->editor->sci,j->query) && definition_code(doc->editor->sci,j->position);
  j->allowed_paths=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);const InsightSymbol *candidates[4096];gsize candidates_count=insight_index_find(j->index,j->query,TRUE,candidates,G_N_ELEMENTS(candidates));
  for(gsize n=0;n<MIN(candidates_count,G_N_ELEMENTS(candidates));n++) if(definition_language(doc->file_name,doc->file_type,candidates[n]->path)) g_hash_table_add(j->allowed_paths,g_strdup(candidates[n]->path));
- gint length=sci_get_length(doc->editor->sci); if(length>=0 && length<=2*1024*1024) j->text=sci_get_contents(doc->editor->sci,length+1);
+ gint length=sci_get_length(doc->editor->sci); if(length>=0 && length<=2*1024*1024) { j->text=sci_get_contents(doc->editor->sci,length+1);if(!g_utf8_validate(j->text,length,NULL) || memchr(j->text,0,(gsize)length)) g_clear_pointer(&j->text,g_free); }
+ if(!j->text) j->valid_word=FALSE;
  wb.definition_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.definition_worker,definition_job_done,NULL); g_task_set_task_data(task,j,definition_job_free); g_task_run_in_thread(task,definition_job_run); g_object_unref(task); return G_SOURCE_REMOVE;
 }
 static void queue_definition(gboolean force) {
@@ -4215,7 +4227,7 @@ void insight_workbench_finalize(void) {
  g_free(wb.follow_word); g_free(wb.relation_word);
  g_free(wb.source_path); g_free(wb.source_digest); g_free(wb.find_last_query); g_free(wb.find_last_digest);
  if(wb.preview_links_idle) { g_source_remove(wb.preview_links_idle); wb.preview_links_idle=0; }
- g_clear_pointer(&wb.preview_links_text,g_free); g_clear_pointer(&wb.preview_names,g_hash_table_destroy);g_clear_pointer(&wb.preview_candidates,g_hash_table_destroy);
+ g_clear_pointer(&wb.preview_links_text,g_free);g_clear_pointer(&wb.preview_code_mask,g_free); g_clear_pointer(&wb.preview_names,g_hash_table_destroy);g_clear_pointer(&wb.preview_candidates,g_hash_table_destroy);
  insight_index_free(wb.base); insight_index_free(wb.index);
  if(wb.symbols) g_object_unref(wb.symbols);
  if(wb.local_symbols) g_object_unref(wb.local_symbols);

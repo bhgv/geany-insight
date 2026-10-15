@@ -85,7 +85,7 @@ int main(void) {
  owner_is(index,absolute,"A::use","global_obj->value","A::Cell");owner_is(index,absolute,"A::use","B :: global_obj->value","B::Cell");
  owner_is(index,absolute,"A::use","A :: Second :: value","A::Cell");owner_is(index,absolute,"A::Box::method","this->field","A::Box");owner_is(index,absolute,"take","p->item","Holder");
  owner_is(index,absolute,"take","unresolved().field",NULL);owner_is(index,absolute,"take","object.member->value",NULL);
- const char *chain_code="namespace Chain {\nstruct Cell { int value; };\nstruct Base { Cell *child; };\nstruct Derived : Base { static Cell *shared; void method() {} };\nusing Alias = Derived;\nDerived *global;\nvoid use(Derived *p) {}\n}\n";
+ const char *chain_code="namespace Chain {\nstruct Cell { int value; };\nstruct Other { int value; };\nusing Result = Cell;\nstruct Base { Cell *child; Cell *get(); };\nstruct Derived : Base { using Result = Other; Result *declared(); static Cell *shared; Cell *make(); Cell *make(int); static Cell *create(); Other *mixed(int); Cell *mixed(const char*); void method() {} };\nusing Alias = Derived;\nDerived *global;\nCell *factory(); Cell *factory(int);\nusing CellAlias = Cell; CellAlias *alias_factory();\nDerived *make_derived(); Other *get(); Other *fake_call(); Cell *shadow();\nvoid use(Derived *p, int shadow) {}\n}\n";
  assert(insight_native_parse(index,parsed,absolute,chain_code,strlen(chain_code)));
  owner_is(index,absolute,"Chain::use","p->child->value","Chain::Cell");
  owner_is(index,absolute,"Chain::Derived::method","this->child->value","Chain::Cell");
@@ -93,6 +93,32 @@ int main(void) {
  owner_is(index,absolute,"Chain::use","Chain::Alias::shared->value","Chain::Cell");
  owner_is(index,absolute,"Chain::use","p->child[0].value",NULL);
  owner_is(index,absolute,"Chain::use","p->method()->value",NULL);
+ owner_is(index,absolute,"Chain::use","factory()->value","Chain::Cell");
+ owner=insight_native_member_owner_calls_filtered(index,absolute,"Chain::use",100000,"factory()->value",16,&is_member,FALSE,NULL,NULL);assert(is_member && !owner);owner=insight_native_member_owner_calls_filtered(index,absolute,"Chain::use",100000,"p->child->value",15,&is_member,FALSE,NULL,NULL);assert(is_member && owner && !strcmp(owner,"Chain::Cell"));g_free(owner);
+ owner_is(index,absolute,"Chain::use","Chain::factory(1)->value","Chain::Cell");
+ owner_is(index,absolute,"Chain::use","alias_factory(\"(\")->value","Chain::Cell");
+ owner_is(index,absolute,"Chain::use","factory(/* ) ( */)->value","Chain::Cell");
+ owner_is(index,absolute,"Chain::use","p /* obj */ -> /* method */ get /* args */ () /* result */ ->value","Chain::Cell");
+ owner_is(index,absolute,"Chain::use","p-> // method\n get()->value","Chain::Cell");
+ owner_is(index,absolute,"Chain::use","Chain /* namespace */ :: Alias :: create()->value","Chain::Cell");
+ const gchar *noncode="\"factory()->value\"";owner=insight_native_member_owner(index,absolute,"Chain::use",100000,noncode,strlen(noncode)-1,&is_member);assert(is_member && !owner);noncode="/* value */";owner=insight_native_member_owner(index,absolute,"Chain::use",100000,noncode,8,&is_member);assert(is_member && !owner);
+
+ owner_is(index,absolute,"Chain::use","make_derived()->child->value","Chain::Cell");
+ owner_is(index,absolute,"Chain::use","p->get()->value","Chain::Cell");
+ owner_is(index,absolute,"Chain::use","p->declared()->value","Chain::Other");
+ owner_is(index,absolute,"Chain::use","p->make(1)->value","Chain::Cell");
+ owner_is(index,absolute,"Chain::Derived::method","this->get()->value","Chain::Cell");
+ owner_is(index,absolute,"Chain::Derived::method","get()->value","Chain::Cell");
+ owner_is(index,absolute,"Chain::use","get()->value","Chain::Other");
+ owner_is(index,absolute,"Chain::use","Chain::Alias::create()->value","Chain::Cell");
+ owner_is(index,absolute,"Chain::use","p->mixed(1)->value",NULL);
+ owner_is(index,absolute,"Chain::use","shadow()->value",NULL);
+ owner_is(index,absolute,"Chain::use","factory(\"broken)->value",NULL);
+ owner_is(index,absolute,"Chain::use","factory([)])->value",NULL);
+ owner_is(index,absolute,"Chain::use","(*factory)()->value",NULL);
+ owner_is(index,absolute,"Chain::use","factory<int>()->value",NULL);
+ InsightSymbol macro[]={ {"make",NULL,"","d",1,"(x)","",""},{"factory",NULL,"","d",2,"()","",""} };assert(insight_index_update(index,"/macros.h",macro,G_N_ELEMENTS(macro)));owner_is(index,absolute,"Chain::use","p->make(1)->value",NULL);owner_is(index,absolute,"Chain::use","factory()->value",NULL);assert(insight_index_update(index,"/macros.h",NULL,0));
+ GString *long_call=g_string_new("factory(");for(guint i=0;i<5000;i++) g_string_append_c(long_call,' ');g_string_append(long_call,")->value");owner_is(index,absolute,"Chain::use",long_call->str,NULL);g_string_assign(long_call,"factory(");for(guint i=0;i<300;i++) g_string_append_c(long_call,'(');g_string_append_c(long_call,'0');for(guint i=0;i<300;i++) g_string_append_c(long_call,')');g_string_append(long_call,")->value");owner_is(index,absolute,"Chain::use",long_call->str,NULL);g_string_assign(long_call,"factory(/* ");for(guint i=0;i<5000;i++) g_string_append_c(long_call,' ');g_string_append(long_call," fake_call( */)->value");owner_is(index,absolute,"Chain::use",long_call->str,NULL);g_string_free(long_call,TRUE);
  const InsightSymbol *member_hits[4];assert(insight_member_query(index,"Chain::Derived","child",absolute,NULL,NULL,member_hits,4,NULL,NULL)==1);assert(!strcmp(member_hits[0]->scope,"Chain::Base"));
  InsightIndex *crowded=insight_index_new();InsightSymbol current_types[]={
   {"Cell",NULL,"N","s",1,"","",""},{"p",NULL,"N::use","z",10,"","Cell *",""}
@@ -101,9 +127,9 @@ int main(void) {
  assert(insight_index_update(crowded,"/a-noise.cpp",noise,G_N_ELEMENTS(noise)));for(guint i=0;i<600;i++) g_free(noise_scopes[i]);
  owner_is(crowded,"/z-current.cpp","N::use","p->value","N::Cell");insight_index_free(crowded);
  InsightIndex *mixed=insight_index_new();InsightSymbol c_type={"Cell",NULL,"","s",1,"","",""},py_type={"Cell",NULL,"","c",1,"","",""};
- InsightSymbol main_aliases[]={{"Alias",NULL,"","t",1,"","Cell",""},{"p",NULL,"use","z",2,"","Alias *",""}};
- assert(insight_index_update(mixed,"/types.h",&c_type,1));assert(insight_index_update(mixed,"/types.py",&py_type,1));assert(insight_index_update(mixed,"/main.cpp",main_aliases,2));
- owner_is(mixed,"/main.cpp","use","p->value",NULL);owner=insight_native_member_owner_filtered(mixed,"/main.cpp","use",10,"p->value",8,&is_member,cpp_only,NULL);assert(is_member && owner && !strcmp(owner,"Cell"));g_free(owner);insight_index_free(mixed);
+ InsightSymbol main_aliases[]={{"Alias",NULL,"","t",1,"","Cell",""},{"p",NULL,"use","z",2,"","Alias *",""},{"factory",NULL,"","p",3,"()","Alias *",""}};
+ assert(insight_index_update(mixed,"/types.h",&c_type,1));assert(insight_index_update(mixed,"/types.py",&py_type,1));assert(insight_index_update(mixed,"/main.cpp",main_aliases,3));
+ owner_is(mixed,"/main.cpp","use","p->value",NULL);owner=insight_native_member_owner_filtered(mixed,"/main.cpp","use",10,"p->value",8,&is_member,cpp_only,NULL);assert(is_member && owner && !strcmp(owner,"Cell"));g_free(owner);owner_is(mixed,"/main.cpp","use","factory()->value",NULL);owner=insight_native_member_owner_filtered(mixed,"/main.cpp","use",10,"factory()->value",16,&is_member,cpp_only,NULL);assert(is_member && owner && !strcmp(owner,"Cell"));g_free(owner);insight_index_free(mixed);
  size_t before=insight_index_count(index);assert(!insight_native_parse(index,parsed,absolute,"a\0b",3));assert(insight_index_count(index)==before);
  assert(insight_native_parse(index,parsed,absolute,"",0));assert(insight_index_count(index)==0);
  /* Publication transfers worker tags and rewrites owner pointers. A pinned

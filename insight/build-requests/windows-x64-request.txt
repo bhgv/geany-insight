@@ -1,1 +1,1 @@
-Build Windows x64: persistent disk-browser directory/filter/mode/hidden entries and column options, guarded settings restore with native RU/EN GUI.
+Build Windows x64: nominal function/method result receivers with inheritance, declaration-scope aliases, parser-profile guards and cached full-source lexical context; long-comment and ambiguous-overload native GUI regressions.

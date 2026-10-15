@@ -3,6 +3,7 @@
 #include "tagmanager/tm_ctags.h"
 #include "../insight/desktop/type_resolve.h"
 #include "../insight/desktop/relation_query.h"
+#include "../insight/desktop/source_mask.h"
 #include <string.h>
 gboolean insight_native_import(InsightIndex *index,TMSourceFile *file,const char *path) {
  if(!index || !path || !*path || !g_utf8_validate(path,-1,NULL)) return FALSE;
@@ -92,8 +93,89 @@ static gchar *receiver_owner(const InsightIndex *index,const gchar *path,const g
  if(!best || ambiguous) return NULL;
  InsightTypeResult result=insight_type_resolve(index,best->type,best->scope,best->path,eligible,data);return result.owner;
 }
-static gchar *member_owner_depth(const InsightIndex *index,const char *path,const char *scope,gulong line,const char *text,gsize position,gboolean *member,InsightTypeEligible eligible,void *data,guint depth) {
- *member=FALSE;if(!index || !text || position>strlen(text) || depth>32) return NULL;
+static gboolean callable_symbol(const InsightSymbol *symbol) { return !strcmp(symbol->kind,"f") || !strcmp(symbol->kind,"p") || (!strcmp(symbol->kind,"m") && *symbol->signature); }
+static gboolean call_name_available(const InsightIndex *index,const gchar *name,InsightTypeEligible eligible,void *data) {
+ guint count=0;for(gsize i=receiver_start(index,name,NULL);i<insight_index_count(index);i++) { const InsightSymbol *symbol=insight_index_at(index,i);if(strcmp(symbol->name,name)) break;if(++count>4096) return FALSE;if(!strcmp(symbol->kind,"d") && (!eligible || eligible(symbol,data))) return FALSE; }return TRUE;
+}
+static gchar *call_result_owner(const InsightIndex *index,const InsightSymbol **symbols,gsize count,InsightTypeEligible eligible,void *data) {
+ if(!count || count>256) return NULL;
+ gchar *owner=NULL;
+ for(gsize i=0;i<count;i++) {
+  const InsightSymbol *symbol=symbols[i];if(!callable_symbol(symbol) || !*symbol->type) { g_free(owner);return NULL; }
+  InsightTypeResult type=insight_type_resolve(index,symbol->type,symbol->scope,symbol->path,eligible,data);
+  if(type.status!=INSIGHT_TYPE_FOUND || (owner && strcmp(owner,type.owner))) { insight_type_result_clear(&type);g_free(owner);return NULL; }
+  if(!owner) owner=g_strdup(type.owner);
+  insight_type_result_clear(&type);
+ }
+ return owner;
+}
+static gchar *function_receiver_owner(const InsightIndex *index,const gchar *path,const gchar *scope,gulong line,const gchar *name,const gchar *explicit_scope,gboolean explicit_global,InsightTypeEligible eligible,void *data) {
+ gsize total=insight_index_count(index),start=receiver_start(index,name,NULL);guint scanned=0;
+ /* A local callable object/function pointer can hide a global function. Its
+  * invocation result is not inferred from the object's nominal type. */
+ for(gsize i=start;i<total;i++) {
+  const InsightSymbol *symbol=insight_index_at(index,i);if(strcmp(symbol->name,name)) break;if(++scanned>4096) return NULL;
+  if(!strcmp(symbol->kind,"d") && (!eligible || eligible(symbol,data))) return NULL;
+  if(!explicit_scope && (!strcmp(symbol->kind,"l") || !strcmp(symbol->kind,"z")) && (!eligible || eligible(symbol,data)) && insight_native_definition_rank_at(symbol,path,scope,line)>=0) return NULL;
+ }
+ const InsightSymbol *found[256];
+ if(!explicit_scope) {
+  gchar *context=normalized_scope(scope),*tail=g_strrstr(context,"::");if(tail) *tail=0;else *context=0;
+  while(*context) {
+   InsightTypeResult type=insight_type_resolve(index,context,"",path,eligible,data);
+   if(type.status==INSIGHT_TYPE_FOUND && (!strcmp(type.symbol->kind,"c") || !strcmp(type.symbol->kind,"s") || !strcmp(type.symbol->kind,"i") || !strcmp(type.symbol->kind,"u") || !strcmp(type.symbol->kind,"class") || !strcmp(type.symbol->kind,"struct") || !strcmp(type.symbol->kind,"interface") || !strcmp(type.symbol->kind,"union"))) {
+    int limited=0,ambiguous=0;gsize count=insight_member_query(index,type.owner,name,path,eligible,data,found,G_N_ELEMENTS(found),&limited,&ambiguous);insight_type_result_clear(&type);
+    if(limited || ambiguous) { g_free(context);return NULL; }
+    if(count) { g_free(context);return call_result_owner(index,found,count,eligible,data); }
+    break;
+   }
+   gboolean invalid=(type.status!=INSIGHT_TYPE_UNKNOWN && type.status!=INSIGHT_TYPE_FOUND) || (type.status==INSIGHT_TYPE_UNKNOWN && type.aliases);insight_type_result_clear(&type);if(invalid) { g_free(context);return NULL; }
+   tail=g_strrstr(context,"::");if(tail) *tail=0;else *context=0;
+  }
+  g_free(context);
+ }
+ gchar *context=normalized_scope(scope);gsize count=0;guint best_depth=0;gboolean blocked=FALSE;
+ for(gsize i=start;i<total;i++) {
+  const InsightSymbol *symbol=insight_index_at(index,i);if(strcmp(symbol->name,name)) break;if(eligible && !eligible(symbol,data)) continue;
+  gboolean callable=callable_symbol(symbol),variable=!callable && (!strcmp(symbol->kind,"v") || !strcmp(symbol->kind,"x") || !strcmp(symbol->kind,"m") || !strcmp(symbol->kind,"l") || !strcmp(symbol->kind,"z") || !strcmp(symbol->kind,"e") || !strcmp(symbol->kind,"t") || !strcmp(symbol->kind,"c") || !strcmp(symbol->kind,"s") || !strcmp(symbol->kind,"u") || !strcmp(symbol->kind,"g") || !strcmp(symbol->kind,"n") || !strcmp(symbol->kind,"i"));if(!callable && !variable) continue;
+  if((!strcmp(symbol->kind,"l") || !strcmp(symbol->kind,"z")) && insight_native_definition_rank_at(symbol,path,scope,line)<0) continue;
+  gchar *owner=normalized_scope(symbol->scope);gboolean visible=explicit_scope ? !strcmp(owner,explicit_scope) : scope_contains(context,owner);
+  if(explicit_scope && !explicit_global && !visible && *explicit_scope) { gchar *suffix=g_strconcat("::",explicit_scope,NULL);if(g_str_has_suffix(owner,suffix)) { gsize prefix=strlen(owner)-strlen(suffix);gchar saved=owner[prefix];owner[prefix]=0;visible=scope_contains(context,owner);owner[prefix]=saved; }g_free(suffix); }
+  if(visible) {
+   guint depth=*owner ? 1 : 0;for(const gchar *p=owner;*p;p++) if(p[0]==':' && p[1]==':') { depth++;p++; }
+   if(!count && !blocked) best_depth=depth;
+   if(depth>best_depth) { best_depth=depth;count=0;blocked=FALSE; }
+   if(depth==best_depth) { if(variable) blocked=TRUE;else { if(count==G_N_ELEMENTS(found)) { g_free(owner);g_free(context);return NULL; }found[count++]=symbol; } }
+  }
+  g_free(owner);
+ }
+ g_free(context);return blocked ? NULL : call_result_owner(index,found,count,eligible,data);
+}
+/* Decode only a bounded C-family call suffix. Argument text is not used for
+ * overload selection. A lexical mask protects brackets in strings/comments. */
+typedef struct { const gchar *text,*mask;gsize length;gchar *owned_mask; } ReceiverSource;
+static gboolean receiver_call_start(ReceiverSource *source,gsize end,gsize *open) {
+ if(!end || end>source->length) return FALSE;
+ if(!source->mask) { source->owned_mask=insight_source_code_mask(source->text,source->length,INSIGHT_CODE_C,NULL);source->mask=source->owned_mask; }
+ const gchar *mask=source->mask;if(!mask || mask[end-1]!=')') return FALSE;
+ gsize begin=end>4096 ? end-4096 : 0;gchar stack[256];guint depth=0;
+ for(gsize at=end;at>begin;at--) {
+  gchar c=mask[at-1];if(c==')' || c==']' || c=='}') { if(depth==G_N_ELEMENTS(stack)) break;stack[depth++]=c==')' ? '(' : (c==']' ? '[' : '{'); }
+  else if(c=='(' || c=='[' || c=='{') { if(!depth || stack[depth-1]!=c) break;if(!--depth) { if(c=='(') { *open=at-1;return TRUE; }break; } }
+ }
+ return FALSE;
+}
+static gchar *member_owner_depth(const InsightIndex *index,const char *path,const char *scope,gulong line,ReceiverSource *source,gsize position,gboolean *member,InsightTypeEligible eligible,void *data,gboolean calls,guint depth) {
+ const gchar *text=source->text;*member=FALSE;if(!index || !text || position>source->length || depth>32) return NULL;
+ gsize raw=position;while(raw && identifier_byte(text[raw-1])) raw--;while(raw && g_ascii_isspace(text[raw-1])) raw--;
+ *member=raw && (text[raw-1]=='.' || (raw>=2 && ((text[raw-2]=='-' && text[raw-1]=='>') || (text[raw-2]==':' && text[raw-1]==':'))));
+ if(calls) {
+  if(!source->mask) { source->owned_mask=insight_source_code_mask(source->text,source->length,INSIGHT_CODE_C,NULL);source->mask=source->owned_mask; }
+  if(!source->mask) { *member=TRUE;return NULL; }
+  gsize word=position;if(word>=source->length || !identifier_byte(text[word])) { if(word && identifier_byte(text[word-1])) word--;else word=source->length; }
+  if(word<source->length && source->mask[word]!=text[word]) { *member=TRUE;return NULL; }
+  text=source->mask;
+ }
  gsize at=position;while(at && identifier_byte(text[at-1])) at--;while(at && g_ascii_isspace(text[at-1])) at--;
  if(at>=2 && text[at-2]==':' && text[at-1]==':') {
   *member=TRUE;at-=2;while(at && g_ascii_isspace(text[at-1])) at--;gsize end=at;guint templates=0;
@@ -112,14 +194,18 @@ static gchar *member_owner_depth(const InsightIndex *index,const char *path,cons
   gchar *owner=result.status==INSIGHT_TYPE_UNKNOWN && !result.aliases ? insight_type_name(qualified,NULL) : NULL;g_free(qualified);insight_type_result_clear(&result);return owner;
  }
  if(at>=2 && text[at-2]=='-' && text[at-1]=='>') at-=2;else if(at && text[at-1]=='.') at--;else return NULL;
- *member=TRUE;while(at && g_ascii_isspace(text[at-1])) at--;gsize end=at;while(at && identifier_byte(text[at-1])) at--;if(end==at) return NULL;
+ *member=TRUE;while(at && g_ascii_isspace(text[at-1])) at--;gboolean call=at && text[at-1]==')';
+ if(call) { gsize open=0;if(!calls || !receiver_call_start(source,at,&open)) return NULL;at=open;while(at && g_ascii_isspace(text[at-1])) at--; }
+ gsize end=at;while(at && identifier_byte(text[at-1])) at--;if(end==at) return NULL;
  gchar *receiver=g_strndup(text+at,end-at),*explicit_scope=NULL;gboolean explicit_global=FALSE;
+ if(call && !call_name_available(index,receiver,eligible,data)) { g_free(receiver);return NULL; }
  gsize prefix=at;while(prefix && g_ascii_isspace(text[prefix-1])) prefix--;
  if(prefix && (text[prefix-1]=='.' || (prefix>=2 && ((text[prefix-2]=='-' && text[prefix-1]=='>') || (text[prefix-2]==':' && text[prefix-1]==':'))))) {
-  gboolean nested=FALSE;gchar *parent=member_owner_depth(index,path,scope,line,text,end,&nested,eligible,data,depth+1),*result=NULL;
+  gboolean nested=FALSE;gchar *parent=member_owner_depth(index,path,scope,line,source,end,&nested,eligible,data,calls,depth+1),*result=NULL;
   if(parent) {
    const InsightSymbol *fields[256];size_t count=insight_member_query(index,parent,receiver,path,eligible,data,fields,G_N_ELEMENTS(fields),NULL,NULL);
-   gboolean valid=count>0 && count<=G_N_ELEMENTS(fields);
+   if(call) result=call_result_owner(index,fields,count,eligible,data);
+   gboolean valid=!call && count>0 && count<=G_N_ELEMENTS(fields);
    for(size_t i=0;valid && i<count;i++) {
     const InsightSymbol *field=fields[i];
     if((strcmp(field->kind,"m") && strcmp(field->kind,"v")) || *field->signature || !*field->type) { valid=FALSE;break; }
@@ -128,7 +214,7 @@ static gchar *member_owner_depth(const InsightIndex *index,const char *path,cons
     else if(!result) result=g_strdup(type.owner);
     insight_type_result_clear(&type);
    }
-   if(!valid) g_clear_pointer(&result,g_free);
+   if(!call && !valid) g_clear_pointer(&result,g_free);
   }
   g_free(parent);
   /* Namespace variables may have no explicit namespace tag. Retain the
@@ -145,14 +231,18 @@ static gchar *member_owner_depth(const InsightIndex *index,const char *path,cons
   gchar *raw=g_strndup(text+start,stop-start);if(!*raw) { explicit_scope=g_strdup("");explicit_global=TRUE; }else explicit_scope=insight_type_name(raw,&explicit_global);g_free(raw);
   if(!explicit_scope) { g_free(receiver);return NULL; }
  }
- if(!strcmp(receiver,"this") && !explicit_scope) {
+ if(!call && !strcmp(receiver,"this") && !explicit_scope) {
   gchar *owner=normalized_scope(scope);gchar *last=g_strrstr(owner,"::");if(last) *last=0;else *owner=0;
   while(*owner) { InsightTypeResult result=insight_type_resolve(index,owner,NULL,path,eligible,data);if(result.status==INSIGHT_TYPE_FOUND) { g_free(receiver);g_free(owner);return result.owner; }insight_type_result_clear(&result);last=g_strrstr(owner,"::");if(last) *last=0;else *owner=0; }
   g_free(receiver);g_free(owner);return NULL;
  }
- gchar *owner=receiver_owner(index,path,scope,line,receiver,explicit_scope,explicit_global,eligible,data);g_free(receiver);g_free(explicit_scope);return owner;
+ gchar *owner=call ? function_receiver_owner(index,path,scope,line,receiver,explicit_scope,explicit_global,eligible,data) : receiver_owner(index,path,scope,line,receiver,explicit_scope,explicit_global,eligible,data);g_free(receiver);g_free(explicit_scope);return owner;
 }
-gchar *insight_native_member_owner_filtered(const InsightIndex *index,const char *path,const char *scope,gulong line,const char *text,gsize position,gboolean *member,InsightTypeEligible eligible,void *data) { return member_owner_depth(index,path,scope,line,text,position,member,eligible,data,0); }
+gchar *insight_native_member_owner_source_filtered(const InsightIndex *index,const char *path,const char *scope,gulong line,const InsightNativeSource *text,gsize position,gboolean *member,gboolean calls,InsightTypeEligible eligible,void *data) {
+ if(!text) { *member=FALSE;return NULL; }ReceiverSource source={text->text,text->mask,text->length,NULL};gchar *owner=member_owner_depth(index,path,scope,line,&source,position,member,eligible,data,calls,0);g_free(source.owned_mask);return owner;
+}
+gchar *insight_native_member_owner_calls_filtered(const InsightIndex *index,const char *path,const char *scope,gulong line,const char *text,gsize position,gboolean *member,gboolean calls,InsightTypeEligible eligible,void *data) { InsightNativeSource source={text,NULL,text ? strlen(text) : 0};return insight_native_member_owner_source_filtered(index,path,scope,line,&source,position,member,calls,eligible,data); }
+gchar *insight_native_member_owner_filtered(const InsightIndex *index,const char *path,const char *scope,gulong line,const char *text,gsize position,gboolean *member,InsightTypeEligible eligible,void *data) { return insight_native_member_owner_calls_filtered(index,path,scope,line,text,position,member,TRUE,eligible,data); }
 gchar *insight_native_member_owner(const InsightIndex *index,const char *path,const char *scope,gulong line,const char *text,gsize position,gboolean *member) { return insight_native_member_owner_filtered(index,path,scope,line,text,position,member,NULL,NULL); }
 gboolean insight_native_member_matches(const InsightSymbol *symbol,const char *owner) {
  if(!owner || !symbol->scope || !strcmp(symbol->kind,"l") || !strcmp(symbol->kind,"z")) return FALSE;
