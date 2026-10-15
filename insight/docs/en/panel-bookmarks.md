@@ -58,5 +58,24 @@ edits; ambiguous or missing source text does not trigger a guessed jump.
 
 A project change during a modal operation prevents writing into the new store.
 Failed add/delete/rename operations retain the old list and editor markers.
-Source Insight XML import and selected-row-only export remain unimplemented;
-import/export uses the native format and exports the list.
+Source Insight XML import remains unimplemented; import/export uses the native format.
+
+## Select, save and delete several bookmarks
+
+Use Ctrl+click for separate rows and Shift+click for a range. Ctrl+A selects
+all visible rows. Delete or Ctrl+X deletes all selected bookmarks in one saved
+transaction; a write failure preserves the list, selection and editor markers.
+Filtering or refreshing keeps selected names that remain visible.
+
+**Export selected…** and Ctrl+S save only the selected rows. Nothing is exported
+without a selection. Right-click or Menu/Shift+F10 opens commands with icons for
+navigation, rename, batch delete, import, selected export, **Export all bookmarks…**,
+Select all and Clear selection. Export all includes bookmarks hidden by the filter;
+Ctrl+A selects only visible rows. Rename requires exactly one row. Enter opens the
+selected cursor row when several rows are selected. Right-clicking an already
+selected row preserves the group and does not navigate the editor.
+
+Export captures the selected records before the file dialog opens, including
+symbol anchors and portable paths. A project/store change while the dialog is
+open cancels the export. Clips keep their existing whole-panel export behavior.
+The format is Geany Insight notes (`.conf`), not Source Insight XML.

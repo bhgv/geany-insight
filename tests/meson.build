@@ -573,3 +573,6 @@ test('Insight project bookmark stores GUI', project_bookmarks_gui_test, timeout:
 reference_regions_gui_test = executable('test_insight_reference_regions_gui', '../insight/tests/reference_regions_gui_test.c', dependencies: test_deps)
 test('Insight reference comment regions GUI', reference_regions_gui_test, timeout: 45)
 test('Insight reference comment regions restore GUI', reference_regions_gui_test, timeout: 45, env: ['GEANY_TEST_REFERENCE_RESTORE=1'])
+
+bookmark_selection_gui_test = executable('test_insight_bookmark_selection_gui', '../insight/tests/bookmark_selection_gui_test.c', dependencies: test_deps)
+test('Insight bookmark multiple selection GUI', bookmark_selection_gui_test, timeout: 45)

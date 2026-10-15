@@ -56,5 +56,25 @@ edits; ambiguous or missing source text does not trigger a guessed jump.
 
 A project change during a modal operation prevents writing into the new store.
 Failed add/delete/rename operations retain the old list and editor markers.
-Source Insight XML import and selected-row-only export remain unimplemented;
-import/export uses the native format and exports the list.
+Source Insight XML import remains unimplemented; import/export uses the native format.
+
+## Выбор, сохранение и удаление нескольких закладок
+
+Ctrl+щелчок выбирает отдельные строки, Shift+щелчок — диапазон. Ctrl+A выбирает
+все видимые строки. Delete или Ctrl+X удаляет выбранные закладки одной записью:
+при ошибке записи сохраняются список, выделение и маркеры редактора. Фильтрация
+и обновление сохраняют выбранные имена, которые остаются видимыми.
+
+**Экспортировать выбранные…** и Ctrl+S сохраняют только выбранные строки.
+Без выделения экспорт не начинается. Правый щелчок или Menu/Shift+F10 открывает
+меню со значками: переход, переименование, пакетное удаление, импорт, экспорт
+выбранных, **Экспортировать все закладки…**, выбор всех и снятие выделения.
+Экспорт всех включает закладки, скрытые фильтром; Ctrl+A выбирает только видимые.
+Переименование требует одной строки. При множественном выборе Enter открывает
+выбранную строку с курсором. Правый щелчок по уже выбранной строке сохраняет
+группу и не переводит редактор в другое место.
+
+Экспорт фиксирует выбранные записи до открытия диалога, включая символьные
+привязки и переносимые пути. Смена проекта/хранилища в открытом диалоге отменяет
+экспорт. Clips по-прежнему экспортирует всю панель. Используется собственный
+формат Geany Insight (`.conf`), а не XML Source Insight.

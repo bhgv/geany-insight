@@ -2305,6 +2305,7 @@ static InsightNotes *notes_clone(InsightNoteKind kind,GError **error) {
 static gboolean notes_commit(InsightNotes *,InsightNoteKind);
 typedef struct { guint doc;gint handle; } BookmarkHandle;
 static gchar *selected_note(InsightNoteKind);
+static GPtrArray *selected_notes(InsightNoteKind);
 static void note_selected(GtkTreeSelection *,gpointer);
 static gchar *clip_current_language(void) { GeanyDocument *doc=document_get_current(); return doc ? insight_languages_profile_name(doc->editor->sci,doc->file_name,doc->file_type) : g_strdup(""); }
 static void notes_filter(GtkEditable *,gpointer);
@@ -2515,17 +2516,18 @@ static void bookmarks_project_reload(GtkButton *button,gpointer data) { (void)bu
 static void notes_filter(GtkEditable *entry,gpointer data) {
  (void)entry; InsightNoteKind kind=(InsightNoteKind)GPOINTER_TO_INT(data); GtkListStore *store=kind==INSIGHT_BOOKMARK ? wb.marks_store : wb.clips_store; GtkWidget *field=kind==INSIGHT_BOOKMARK ? wb.marks_entry : wb.clips_entry;
  if(!store) return;
- gchar *selected=kind==INSIGHT_CLIP ? selected_note(kind) : NULL,*language=kind==INSIGHT_CLIP ? clip_current_language() : NULL;
- GtkTreeSelection *selection=kind==INSIGHT_CLIP ? gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.clips_view)) : NULL;
+ GPtrArray *selected=selected_notes(kind);gchar *language=kind==INSIGHT_CLIP ? clip_current_language() : NULL;GHashTable *wanted=g_hash_table_new(g_str_hash,g_str_equal);
+ for(guint i=0;i<selected->len;i++) g_hash_table_add(wanted,g_ptr_array_index(selected,i));
+ GtkTreeSelection *selection=gtk_tree_view_get_selection(GTK_TREE_VIEW(kind==INSIGHT_CLIP ? wb.clips_view : wb.marks_view));
  if(selection) g_signal_handlers_block_by_func(selection,note_selected,GINT_TO_POINTER(kind));
  gtk_list_store_clear(store); const gchar *query=gtk_entry_get_text(GTK_ENTRY(field));
  InsightNotes *source=notes_for(kind);
  for(guint i=0;i<source->items->len;i++) { InsightNote *note=g_ptr_array_index(source->items,i); if(note->kind!=kind || (kind==INSIGHT_CLIP && !(wb.clips_all && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.clips_all))) && !insight_note_matches_language(note,language))) continue;
   gchar *line=g_strdup_printf("%"G_GUINT64_FORMAT,note->line),*search=g_strconcat(note->name," ",note->path," ",line," ",note->anchor ? note->anchor->name : "",NULL); gboolean match=insight_lookup_text_match(search,query); g_free(line); g_free(search); if(!match) continue;
-  GtkTreeIter iter; gtk_list_store_append(store,&iter); gtk_list_store_set(store,&iter,0,note->name,1,note->path,2,(gulong)note->line,3,note->text,4,note->anchor ? note->anchor->name : "",-1); if(selection && !g_strcmp0(selected,note->name)) gtk_tree_selection_select_iter(selection,&iter);
+  GtkTreeIter iter; gtk_list_store_append(store,&iter); gtk_list_store_set(store,&iter,0,note->name,1,note->path,2,(gulong)note->line,3,note->text,4,note->anchor ? note->anchor->name : "",-1); if(g_hash_table_contains(wanted,note->name)) gtk_tree_selection_select_iter(selection,&iter);
  }
  if(selection) g_signal_handlers_unblock_by_func(selection,note_selected,GINT_TO_POINTER(kind));
- if(kind==INSIGHT_CLIP) { g_free(wb.clips_language); wb.clips_language=language; } else g_free(language); g_free(selected);
+ if(kind==INSIGHT_CLIP) { g_free(wb.clips_language); wb.clips_language=language; } else g_free(language);g_hash_table_unref(wanted);g_ptr_array_unref(selected);
 }
 static void clips_scope_changed(GtkComboBox *combo,gpointer data) {
  (void)data;gboolean project=gtk_combo_box_get_active(combo)==1;
@@ -2545,10 +2547,21 @@ static void clips_project_load(const gchar *project,gboolean force) {
  gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.clips_view)));notes_filter(NULL,GINT_TO_POINTER(INSIGHT_CLIP));
 }
 static void clips_project_reload(GtkButton *button,gpointer data) { (void)button;(void)data;clips_project_load(app->project ? app->project->file_name : NULL,TRUE); }
+static GPtrArray *selected_notes(InsightNoteKind kind) {
+ GtkWidget *view=kind==INSIGHT_BOOKMARK ? wb.marks_view : wb.clips_view;GtkTreeModel *model=NULL;
+ GList *rows=gtk_tree_selection_get_selected_rows(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),&model);GPtrArray *names=g_ptr_array_new_with_free_func(g_free);
+ for(GList *p=rows;p;p=p->next) { GtkTreeIter iter;if(gtk_tree_model_get_iter(model,&iter,p->data)) { gchar *name=NULL;gtk_tree_model_get(model,&iter,0,&name,-1);g_ptr_array_add(names,name); } }
+ g_list_free_full(rows,(GDestroyNotify)gtk_tree_path_free);return names;
+}
 static gchar *selected_note(InsightNoteKind kind) {
- GtkWidget *view=kind==INSIGHT_BOOKMARK ? wb.marks_view : wb.clips_view; GtkTreeModel *model; GtkTreeIter iter;
- if(!gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),&model,&iter)) return NULL;
- gchar *name; gtk_tree_model_get(model,&iter,0,&name,-1); return name;
+ GPtrArray *names=selected_notes(kind);gchar *name=names->len==1 ? g_strdup(g_ptr_array_index(names,0)) : NULL;g_ptr_array_unref(names);return name;
+}
+static gchar *bookmark_cursor_note(void) {
+ GtkTreePath *path=NULL;GtkTreeIter iter;gchar *name=NULL;gtk_tree_view_get_cursor(GTK_TREE_VIEW(wb.marks_view),&path,NULL);
+ GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(wb.marks_view));
+ if(path && gtk_tree_selection_path_is_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.marks_view)),path) && gtk_tree_model_get_iter(model,&iter,path)) gtk_tree_model_get(model,&iter,0,&name,-1);
+ if(path) gtk_tree_path_free(path);
+ return name;
 }
 static void note_selected(GtkTreeSelection *selection,gpointer data) {
  (void)selection; InsightNoteKind kind=(InsightNoteKind)GPOINTER_TO_INT(data); gchar *name=selected_note(kind); if(!name || !wb.preview) { g_free(name); return; }
@@ -2567,11 +2580,15 @@ static void bookmark_add(GtkWidget *widget,gpointer data) {
  g_clear_error(&error);g_free(name);g_free(text);
 }
 static void note_delete(GtkWidget *widget,gpointer data) {
- (void)widget;InsightNoteKind kind=(InsightNoteKind)GPOINTER_TO_INT(data);if(kind==INSIGHT_BOOKMARK && !bookmarks_writable()) return;gchar *name=selected_note(kind);
- if(name) { GError *error=NULL;InsightNotes *candidate=notes_clone(kind,&error);if(candidate) { insight_notes_remove(candidate,kind,name);notes_commit(candidate,kind); }if(error) ui_set_statusbar(TRUE,"Note: %s",error->message);g_clear_error(&error); }g_free(name);
+ (void)widget;InsightNoteKind kind=(InsightNoteKind)GPOINTER_TO_INT(data);if(kind==INSIGHT_BOOKMARK && !bookmarks_writable()) return;
+ GPtrArray *names=selected_notes(kind);if(names->len) { GError *error=NULL;InsightNotes *candidate=notes_clone(kind,&error);
+  if(candidate) { for(guint i=0;i<names->len;i++) insight_notes_remove(candidate,kind,g_ptr_array_index(names,i));notes_commit(candidate,kind); }
+  if(error) ui_set_statusbar(TRUE,"Note: %s",error->message);
+  g_clear_error(&error);
+ }g_ptr_array_unref(names);
 }
 static void bookmark_go(GtkWidget *widget,gpointer data) {
- (void)data;if(widget==wb.marks_entry && !*gtk_entry_get_text(GTK_ENTRY(wb.marks_entry))) { bookmark_add(NULL,NULL);return; } gchar *name=selected_note(INSIGHT_BOOKMARK); if(!name) { const char *query=gtk_entry_get_text(GTK_ENTRY(wb.marks_entry)); if(insight_notes_get(notes_for(INSIGHT_BOOKMARK),INSIGHT_BOOKMARK,query)) name=g_strdup(query); }
+ (void)data;if(widget==wb.marks_entry && !*gtk_entry_get_text(GTK_ENTRY(wb.marks_entry))) { bookmark_add(NULL,NULL);return; } gchar *name=selected_note(INSIGHT_BOOKMARK);if(!name) name=bookmark_cursor_note();if(!name && gtk_tree_selection_count_selected_rows(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.marks_view)))>1) return; if(!name) { const char *query=gtk_entry_get_text(GTK_ENTRY(wb.marks_entry)); if(insight_notes_get(notes_for(INSIGHT_BOOKMARK),INSIGHT_BOOKMARK,query)) name=g_strdup(query); }
  if(name) { bookmark_open_note(insight_notes_get(notes_for(INSIGHT_BOOKMARK),INSIGHT_BOOKMARK,name)); g_free(name); } else bookmark_add(NULL,NULL);
 }
 static void clip_capture(GtkWidget *widget,gpointer data) {
@@ -2714,7 +2731,7 @@ static void clip_edit(GtkWidget *widget,gpointer data) {
  gtk_widget_destroy(dialog); g_free(name);
 }
 static void note_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) {
- (void)column; InsightNoteKind kind=(InsightNoteKind)GPOINTER_TO_INT(data); gtk_tree_selection_select_path(gtk_tree_view_get_selection(view),path);
+ (void)column; InsightNoteKind kind=(InsightNoteKind)GPOINTER_TO_INT(data); gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(view));gtk_tree_view_set_cursor(view,path,NULL,FALSE);
  if(kind==INSIGHT_BOOKMARK) bookmark_go(NULL,NULL); else clip_paste(NULL,NULL);
 }
 /* Commit a prepared snapshot before refreshing the panel. On write failure the
@@ -2744,7 +2761,16 @@ static void note_rename(GtkWidget *widget,gpointer data) {
 static void notes_transfer(GtkWidget *widget,gpointer data) {
  (void)widget; gint action=GPOINTER_TO_INT(data); gboolean exporting=(action&256)!=0;
  InsightNoteKind kind=(InsightNoteKind)(action&255);
- guint64 generation=notes_generation(kind);
+ guint64 generation=notes_generation(kind);GError *prepare_error=NULL;InsightNotes *prepared=exporting ? insight_notes_select(notes_for(kind),kind,&prepare_error) : NULL;
+ if(exporting && prepared && kind==INSIGHT_BOOKMARK && !(action&512)) {
+  GPtrArray *names=selected_notes(kind);GHashTable *wanted=g_hash_table_new(g_str_hash,g_str_equal);
+  for(guint i=0;i<names->len;i++) g_hash_table_add(wanted,g_ptr_array_index(names,i));
+  for(guint i=prepared->items->len;i>0;i--) { InsightNote *note=g_ptr_array_index(prepared->items,i-1);if(!g_hash_table_contains(wanted,note->name)) insight_notes_remove(prepared,kind,note->name); }
+  g_hash_table_unref(wanted);g_ptr_array_unref(names);
+  if(!prepared->items->len) { insight_notes_free(prepared);ui_set_statusbar(TRUE,"Select bookmarks to export");return; }
+ }
+ if(exporting && !prepared) { ui_set_statusbar(TRUE,"Notes export: %s",prepare_error ? prepare_error->message : "failed");g_clear_error(&prepare_error);return; }
+ gchar *export_root=kind==INSIGHT_BOOKMARK && wb.marks_project ? g_strdup(wb.project_marks_root) : kind==INSIGHT_BOOKMARK && wb.root ? utils_get_utf8_from_locale(wb.root) : NULL;
  GtkWidget *dialog=gtk_file_chooser_dialog_new(exporting ? "Export notes" : "Import notes",GTK_WINDOW(main_widgets.window),
   exporting ? GTK_FILE_CHOOSER_ACTION_SAVE : GTK_FILE_CHOOSER_ACTION_OPEN,"Cancel",GTK_RESPONSE_CANCEL,
   exporting ? "Export" : "Import",GTK_RESPONSE_ACCEPT,NULL);
@@ -2753,7 +2779,7 @@ static void notes_transfer(GtkWidget *widget,gpointer data) {
  filter=gtk_file_filter_new(); gtk_file_filter_set_name(filter,"All files"); gtk_file_filter_add_pattern(filter,"*"); gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog),filter);
  if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT && notes_scope_current(kind,generation)) {
   gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog)); GError *error=NULL; InsightNotes *snapshot=NULL; gboolean ok=FALSE;
-  if(exporting) { snapshot=insight_notes_select(notes_for(kind),kind,&error); if(snapshot) { gchar *root=kind==INSIGHT_BOOKMARK && wb.marks_project ? g_strdup(wb.project_marks_root) : kind==INSIGHT_BOOKMARK && wb.root ? utils_get_utf8_from_locale(wb.root) : NULL;ok=insight_notes_save_portable(snapshot,path,root,&error);g_free(root); } }
+  if(exporting) { snapshot=prepared;prepared=NULL;ok=insight_notes_save_portable(snapshot,path,export_root,&error); }
   else {
    gchar *root=kind==INSIGHT_BOOKMARK && wb.marks_project ? g_strdup(wb.project_marks_root) : wb.root ? utils_get_utf8_from_locale(wb.root) : NULL;snapshot=insight_notes_load_portable(path,root,&error);g_free(root);
    if(snapshot) {
@@ -2765,10 +2791,44 @@ static void notes_transfer(GtkWidget *widget,gpointer data) {
   else if(error) ui_set_statusbar(TRUE,"Notes %s: %s",exporting ? "export" : "import",error->message);
   insight_notes_free(snapshot); g_clear_error(&error); g_free(path);
  }
- gtk_widget_destroy(dialog);
+ gtk_widget_destroy(dialog);insight_notes_free(prepared);g_free(export_root);
+}
+static void bookmark_menu_action(GtkMenuItem *item,gpointer data) {
+ (void)item;guint action=GPOINTER_TO_UINT(data);
+ if(action==0) bookmark_go(NULL,NULL);
+ else if(action==1) note_rename(NULL,GINT_TO_POINTER(INSIGHT_BOOKMARK));
+ else if(action==2) note_delete(NULL,GINT_TO_POINTER(INSIGHT_BOOKMARK));
+ else if(action==3 || action==4 || action==5) notes_transfer(NULL,GINT_TO_POINTER(INSIGHT_BOOKMARK|(action==3 ? 256 : action==4 ? 768 : 0)));
+ else if(action==6) gtk_tree_selection_select_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.marks_view)));
+ else gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.marks_view)));
+}
+static GtkWidget *bookmark_menu(void) {
+ GtkWidget *menu=g_object_get_data(G_OBJECT(wb.marks_view),"insight-bookmark-popup");
+ const gchar *labels[]={"Go to","Rename…","Delete selected bookmarks","Export selected…","Export all bookmarks…","Import…","Select all bookmarks","Clear bookmark selection"};
+ const gchar *icons[]={"go-jump","document-edit","edit-delete","document-save","document-save-as","document-open","edit-select-all","edit-clear"};
+ if(!menu) { menu=gtk_menu_new();gtk_menu_attach_to_widget(GTK_MENU(menu),wb.marks_view,NULL);g_object_set_data_full(G_OBJECT(wb.marks_view),"insight-bookmark-popup",g_object_ref_sink(menu),g_object_unref);
+  for(guint i=0;i<G_N_ELEMENTS(labels);i++) { GtkWidget *item=symbol_history_item(labels[i],icons[i]);gchar *name=g_strdup_printf("insight-bookmark-command-%u",i);gtk_widget_set_name(item,name);g_object_set_data(G_OBJECT(menu),name,item);g_free(name);gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(bookmark_menu_action),GUINT_TO_POINTER(i)); }
+ }
+ gint count=gtk_tree_selection_count_selected_rows(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.marks_view)));
+ for(guint i=0;i<G_N_ELEMENTS(labels);i++) { gchar *name=g_strdup_printf("insight-bookmark-command-%u",i);GtkWidget *item=g_object_get_data(G_OBJECT(menu),name);g_free(name);gtk_widget_set_sensitive(item,i<2 ? count==1 : i==2 || i==3 || i==7 ? count>0 : TRUE); }
+ insight_i18n_apply(menu);gtk_widget_show_all(menu);return menu;
+}
+static gboolean bookmark_popup_key(GtkWidget *widget,gpointer data) {
+ (void)data;GdkEvent *event=gtk_get_current_event();gtk_menu_popup_at_widget(GTK_MENU(bookmark_menu()),widget,GDK_GRAVITY_SOUTH_WEST,GDK_GRAVITY_NORTH_WEST,event);if(event) gdk_event_free(event);return TRUE;
+}
+static gboolean bookmark_popup_button(GtkWidget *widget,GdkEventButton *event,gpointer data) {
+ (void)data;if(event->type!=GDK_BUTTON_PRESS || event->button!=3) return FALSE;GtkTreeSelection *selection=gtk_tree_view_get_selection(GTK_TREE_VIEW(widget));GtkTreePath *path=NULL;
+ g_signal_handlers_block_by_func(selection,note_selected,GINT_TO_POINTER(INSIGHT_BOOKMARK));
+ if(gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget),(gint)event->x,(gint)event->y,&path,NULL,NULL,NULL)) { if(!gtk_tree_selection_path_is_selected(selection,path)) { gtk_tree_selection_unselect_all(selection);gtk_tree_view_set_cursor(GTK_TREE_VIEW(widget),path,NULL,FALSE); }gtk_tree_path_free(path); }
+ g_signal_handlers_unblock_by_func(selection,note_selected,GINT_TO_POINTER(INSIGHT_BOOKMARK));gtk_widget_grab_focus(widget);gtk_menu_popup_at_pointer(GTK_MENU(bookmark_menu()),(GdkEvent *)event);return TRUE;
 }
 static gboolean bookmark_key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
  (void)data;guint modifiers=event->state&gtk_accelerator_get_default_mod_mask(),key=gdk_keyval_to_lower(event->keyval);
+ if(widget==wb.marks_view) {
+  if((key==GDK_KEY_Menu && !modifiers) || (key==GDK_KEY_F10 && modifiers==GDK_SHIFT_MASK)) return bookmark_popup_key(widget,NULL);
+  if(key==GDK_KEY_a && modifiers==GEANY_PRIMARY_MOD_MASK) { gtk_tree_selection_select_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(widget)));return TRUE; }
+  if(key==GDK_KEY_Delete && !modifiers) { note_delete(NULL,GINT_TO_POINTER(INSIGHT_BOOKMARK));return TRUE; }
+ }
  if(modifiers==GEANY_PRIMARY_MOD_MASK) {
   if(key==GDK_KEY_n) { bookmark_add(NULL,NULL);return TRUE; }
   if(key==GDK_KEY_x) { note_delete(NULL,GINT_TO_POINTER(INSIGHT_BOOKMARK));return TRUE; }
@@ -2786,7 +2846,7 @@ static void create_note_panel(InsightNoteKind kind) {
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,3),*field=gtk_search_entry_new(),*controls=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,2); GtkListStore *store=gtk_list_store_new(5,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG,G_TYPE_STRING,G_TYPE_STRING); GtkWidget *view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
  if(kind==INSIGHT_BOOKMARK) { GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);wb.marks_scope=gtk_label_new("Global bookmarks (no project)");gtk_widget_set_name(wb.marks_scope,"insight-bookmark-scope");gtk_label_set_ellipsize(GTK_LABEL(wb.marks_scope),PANGO_ELLIPSIZE_MIDDLE);gtk_label_set_xalign(GTK_LABEL(wb.marks_scope),0);wb.marks_reload=gtk_button_new_with_label("Reload bookmarks");gtk_widget_set_name(wb.marks_reload,"insight-reload-project-bookmarks");g_signal_connect(wb.marks_reload,"clicked",G_CALLBACK(bookmarks_project_reload),NULL);gtk_box_pack_start(GTK_BOX(row),wb.marks_scope,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(row),wb.marks_reload,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),row,FALSE,FALSE,0);gtk_widget_set_name(view,"insight-bookmarks");gtk_widget_set_name(field,"insight-bookmarks-query");wb.marks_entry=field; wb.marks_store=store; wb.marks_view=view; } else { wb.clips_entry=field; wb.clips_store=store; wb.clips_view=view; gtk_widget_set_name(view,"insight-clips"); gtk_widget_set_name(field,"insight-clips-query"); }
  gtk_widget_set_tooltip_text(field,"Prefix with ~ for fuzzy subsequence matching");gtk_entry_set_placeholder_text(GTK_ENTRY(field),kind==INSIGHT_BOOKMARK ? "Bookmark name or filter…" : "Clip name or filter…"); gtk_tree_view_append_column(GTK_TREE_VIEW(view),gtk_tree_view_column_new_with_attributes("Name",gtk_cell_renderer_text_new(),"text",0,NULL));
- if(kind==INSIGHT_BOOKMARK) { GtkCellRenderer *file=gtk_cell_renderer_text_new();GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes("File",file,NULL);gtk_tree_view_column_set_cell_data_func(column,file,bookmark_file_cell,NULL,NULL);gtk_tree_view_append_column(GTK_TREE_VIEW(view),column);gtk_tree_view_append_column(GTK_TREE_VIEW(view),gtk_tree_view_column_new_with_attributes("Symbol",gtk_cell_renderer_text_new(),"text",4,NULL)); gtk_tree_view_append_column(GTK_TREE_VIEW(view),gtk_tree_view_column_new_with_attributes("Line",gtk_cell_renderer_text_new(),"text",2,NULL)); gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(view),1); }
+ if(kind==INSIGHT_BOOKMARK) { gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),GTK_SELECTION_MULTIPLE);GtkCellRenderer *file=gtk_cell_renderer_text_new();GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes("File",file,NULL);gtk_tree_view_column_set_cell_data_func(column,file,bookmark_file_cell,NULL,NULL);gtk_tree_view_append_column(GTK_TREE_VIEW(view),column);gtk_tree_view_append_column(GTK_TREE_VIEW(view),gtk_tree_view_column_new_with_attributes("Symbol",gtk_cell_renderer_text_new(),"text",4,NULL)); gtk_tree_view_append_column(GTK_TREE_VIEW(view),gtk_tree_view_column_new_with_attributes("Line",gtk_cell_renderer_text_new(),"text",2,NULL)); gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(view),1); }
  gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(store),0,GTK_SORT_ASCENDING); GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),view);
  gtk_box_pack_start(GTK_BOX(box),field,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),controls,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
  const char *marks[]={"Add/update","Go to","Delete"},*clips[]={"Copy selection","Cut selection","Paste","Edit","Delete"}; guint count=kind==INSIGHT_BOOKMARK ? 3 : 5;
@@ -2799,12 +2859,12 @@ static void create_note_panel(InsightNoteKind kind) {
  if(kind==INSIGHT_CLIP) { GtkWidget *create=gtk_button_new_from_icon_name("document-new",GTK_ICON_SIZE_SMALL_TOOLBAR),*insert=gtk_button_new(); gtk_button_set_image(GTK_BUTTON(insert),insight_command_icon("snippets")); gtk_widget_set_name(create,"insight-new-template"); gtk_widget_set_name(insert,"insight-insert-template"); gtk_widget_set_tooltip_text(create,"New code template"); gtk_widget_set_tooltip_text(insert,"Insert as code template — expand variables"); gtk_box_pack_start(GTK_BOX(controls),create,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(controls),insert,FALSE,FALSE,0); g_signal_connect(create,"clicked",G_CALLBACK(clip_new_template),NULL); g_signal_connect(insert,"clicked",G_CALLBACK(clip_template),NULL); }
  GtkWidget *transfer=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,2);
  GtkWidget *rename=gtk_button_new_with_label("Rename…"); gtk_box_pack_start(GTK_BOX(transfer),rename,FALSE,FALSE,0); g_signal_connect(rename,"clicked",G_CALLBACK(note_rename),GINT_TO_POINTER(kind));
- for(guint i=0;i<2;i++) { GtkWidget *button=gtk_button_new_with_label(i ? "Export…" : "Import…"); gtk_box_pack_start(GTK_BOX(transfer),button,FALSE,FALSE,0); g_signal_connect(button,"clicked",G_CALLBACK(notes_transfer),GINT_TO_POINTER((gint)kind|(i ? 256 : 0))); }
+ for(guint i=0;i<2;i++) { GtkWidget *button=gtk_button_new_with_label(i && kind==INSIGHT_BOOKMARK ? "Export selected…" : i ? "Export…" : "Import…"); gtk_box_pack_start(GTK_BOX(transfer),button,FALSE,FALSE,0); g_signal_connect(button,"clicked",G_CALLBACK(notes_transfer),GINT_TO_POINTER((gint)kind|(i ? 256 : 0))); }
  if(kind==INSIGHT_CLIP) { GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3),*reload=gtk_button_new_from_icon_name("view-refresh",GTK_ICON_SIZE_SMALL_TOOLBAR);wb.clips_scope=gtk_combo_box_text_new();gtk_widget_set_name(wb.clips_scope,"insight-clips-store");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.clips_scope),"Global templates");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.clips_scope),"Project templates");gtk_combo_box_set_active(GTK_COMBO_BOX(wb.clips_scope),0);gtk_widget_set_name(reload,"insight-reload-project-templates");gtk_widget_set_tooltip_text(reload,"Reload project templates");gtk_box_pack_start(GTK_BOX(row),wb.clips_scope,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(row),reload,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),row,FALSE,FALSE,0);g_signal_connect(wb.clips_scope,"changed",G_CALLBACK(clips_scope_changed),NULL);g_signal_connect(reload,"clicked",G_CALLBACK(clips_project_reload),NULL); }
  if(kind==INSIGHT_CLIP) { wb.clips_all=gtk_check_button_new_with_label("Show all languages"); gtk_widget_set_name(wb.clips_all,"insight-clips-all-languages"); gtk_box_pack_start(GTK_BOX(box),wb.clips_all,FALSE,FALSE,0); g_signal_connect(wb.clips_all,"toggled",G_CALLBACK(notes_filter),GINT_TO_POINTER(INSIGHT_CLIP)); }
  gtk_box_pack_start(GTK_BOX(box),transfer,FALSE,FALSE,0); gtk_box_reorder_child(GTK_BOX(box),transfer,2);
  gtk_notebook_append_page(GTK_NOTEBOOK(wb.project_notebook),box,gtk_label_new(kind==INSIGHT_BOOKMARK ? "Bookmarks" : "Clips")); g_signal_connect(field,"changed",G_CALLBACK(notes_filter),GINT_TO_POINTER(kind)); g_signal_connect(field,"key-press-event",kind==INSIGHT_BOOKMARK ? G_CALLBACK(bookmark_key) : G_CALLBACK(browser_key),NULL); g_signal_connect(view,"key-press-event",kind==INSIGHT_BOOKMARK ? G_CALLBACK(bookmark_key) : G_CALLBACK(browser_key),NULL);
- if(kind==INSIGHT_BOOKMARK) g_signal_connect(field,"activate",G_CALLBACK(bookmark_go),NULL);
+ if(kind==INSIGHT_BOOKMARK) { g_signal_connect(field,"activate",G_CALLBACK(bookmark_go),NULL);g_signal_connect(view,"popup-menu",G_CALLBACK(bookmark_popup_key),NULL);g_signal_connect(view,"button-press-event",G_CALLBACK(bookmark_popup_button),NULL); }
  g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),"changed",G_CALLBACK(note_selected),GINT_TO_POINTER(kind)); g_signal_connect(view,"row-activated",G_CALLBACK(note_activated),GINT_TO_POINTER(kind)); gtk_widget_show_all(box); notes_filter(NULL,GINT_TO_POINTER(kind));
 }
 static void create_notes(void) {

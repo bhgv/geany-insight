@@ -20,7 +20,7 @@
 | Symbol Info | Отдельное окно: кандидаты, сведения тегов, цветной исходник, Jump с проверкой снимка, References, Leave file open и копирование, размер завершённых функций, nominal-типы aliases из снимка, устойчивый Refresh и RU/EN GUI | Размеры не-функциональных символов и типы произвольных выражений; сложность не подтверждена как требование команды Symbol Info |
 | Window List | Немодальный список открытых буферов, поиск, MRU/имя/путь, ближайший символ, Context, Activate/Save/Close, сохранение геометрии/фильтра/сортировки/колонок; закрепление в sidebar и видимость/docking/геометрия в A–D, миграция раскладок; проверен GUI Linux | Перетаскивание, snap-to-edge |
 | Раскладки A–D | Пользовательские снимки и восстановление | Детальная сверка всех параметров окон |
-| Bookmarks / Clips | Постоянное хранилище, навигация, вставка и редактирование Clips, переименование, импорт/экспорт выбранной панели, относительные пути проекта при переносе закладок; движущиеся маркеры и смещение от функции/класса с native/GUI-проверкой | Независимое хранилище закладок каждого проекта; перенос при переименовании самого символа |
+| Bookmarks / Clips | Постоянное хранилище, навигация, вставка и редактирование Clips, переименование, импорт/экспорт выбранной панели, относительные пути проекта при переносе закладок; движущиеся маркеры и смещение от функции/класса с native/GUI-проверкой | XML Source Insight; перенос при переименовании самого символа |
 | Шаблоны кода | Clips: создание, ввод пользовательских переменных, дата/файл/проект/выделение/курсор, языковые профили/фильтр списка, отдельные project stores, completion и редактируемые placeholders, один Undo/Redo, импорт/экспорт, общие значки меню/панели | Полная совместимость переменных/синтаксиса шаблонов Source Insight |
 | Структурное выделение | Меню Edit, расширение по вложенным скобкам, Select Match, Select Line, Select Function, блоки Python/Lua и Function Up/Down; проверен native GUI, строки и комментарии исключаются лексической маской | Семантические границы; дополнительные языки за пределами brace/Python/Lua |
 | Поиск и изменение | Geany Find/Replace, Unicode/regex, Boolean Keywords с контекстом строк, выбор области/масок, сохранение параметров и выбранных путей, отдельная Search Results с Shift+F8/F9, жёлтые совпадения с красной рамкой, подсветка похожего выделения | Словарные формы за пределами регулярных английских окончаний, семантическое переименование и комплексные рефакторинги |
@@ -106,7 +106,7 @@ https://www.sourceinsight.com/doc/v4/userguide/index.html . Старые зап�
 
 | Раздел руководства | Проверяемое требование | Статус/остающаяся работа |
 | --- | --- | --- |
-| [Bookmark Storage](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Bookmark_Storage.htm) | Позиция относительно объявления функции/класса; устойчивость к внешним правкам | Реализовано: имя/scope/вид + смещение, актуальный снимок тегов, перенос/import/rename; native и GUI. Отдельные проектные хранилища реализованы и проверены GUI; XML-совместимость и экспорт выделенных строк остаются открытыми |
+| [Bookmark Storage](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Bookmark_Storage.htm) | Позиция относительно объявления функции/класса; устойчивость к внешним правкам | Реализовано: имя/scope/вид + смещение, актуальный снимок тегов, перенос/import/rename; native и GUI. Отдельные проектные хранилища реализованы и проверены GUI; Выбор нескольких строк, экспорт выбранных и пакетное удаление реализованы с GUI-проверкой; XML-совместимость остаётся открытой |
 | [Style Properties](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Style_Properties.htm) | Иерархия стилей, наследование, собственные стили и сохранение | Geany themes + профильный CSS покрывают часть настроек. Родительские SI-стили и импорт SI-конфигурации не перенесены; точные пользовательские RGB/шрифты нельзя установить из описания опций |
 | [Controlling Syntax Formatting](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Controlling_Syntax_Formatting.htm) | Временный Mono Font View; отдельный color-only режим | Реализованы Mono Font View, color-only, grayscale и отключение оформления; 4 GUI-сценария, RU/EN, восстановление raw-стилей и настроек |
 | [Predefined Path Variables](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Predefined_Path_Variables.htm) | Именованные пути в настройках и командах | Подмножество уже работает в Master File List. Все контексты и все predefined names ещё не покрыты |
@@ -152,5 +152,14 @@ A native GUI scenario covers two projects with the same bookmark name, project
 switch/close/reopen, stale modal rename, global data preservation, corrupt-file
 repair, failed-write rollback, relative paths after moving a project, automatic
 letter names, Ctrl+N/Ctrl+X and containing-symbol display. Existing anchor and
-project-template GUI scenarios pass. XML interchange and selected-only export
-remain gaps; file naming intentionally follows Geany Insight's own format.
+project-template GUI scenarios pass. XML interchange remains a gap; file naming intentionally follows Geany Insight's own format.
+
+### Bookmark selection and export (2026-10-16)
+
+The Bookmark Window supports multiple selection, visible-row Select all,
+transactional batch delete and a non-navigating icon menu. Selected export freezes
+records before the file chooser opens; Export all explicitly includes filtered-out
+bookmarks. Symbol anchors and project-relative paths use the existing serializer.
+Native GUI covers selected/all exports, selection changes during the chooser,
+batch-delete write failure, clips preservation and menu sensitivity. XML exchange
+remains unsupported.

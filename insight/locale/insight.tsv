@@ -844,3 +844,9 @@ References: all text	Ссылки: весь текст
 References: skip comments	Ссылки: пропускать комментарии
 References: comments only	Ссылки: только комментарии
 Lexical comment regions; skip comments retains strings, code only excludes both. Unknown languages are skipped in filtered modes.	Лексические области: пропуск комментариев сохраняет строки, «только код» исключает и строки. Неизвестные языки в этих режимах пропускаются.
+Export selected…	Экспортировать выбранные…
+Export all bookmarks…	Экспортировать все закладки…
+Select all bookmarks	Выбрать все закладки
+Clear bookmark selection	Снять выделение закладок
+Delete selected bookmarks	Удалить выбранные закладки
+Select bookmarks to export	Выберите закладки для экспорта

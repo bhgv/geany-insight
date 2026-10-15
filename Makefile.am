@@ -298,6 +298,7 @@ EXTRA_DIST += insight/tests/disk_browser_gui_test.c
 
 EXTRA_DIST += insight/tests/symbol_navigation_gui_test.c
 
-EXTRA_DIST += insight/tests/project_bookmarks_gui_test.c
+EXTRA_DIST += insight/tests/bookmark_selection_gui_test.c \
+	insight/tests/project_bookmarks_gui_test.c
 
 EXTRA_DIST += insight/tests/reference_regions_gui_test.c
