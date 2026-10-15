@@ -18,7 +18,8 @@ static const gchar *code=
  "namespace Chain {\nstruct Leaf { int end; };\nstruct Base { Leaf *child; int inherited; Leaf *get(); };\nstruct Derived : Base { static Leaf *shared; static Leaf *create(); Leaf *same(); Leaf *same(int); int method() { return this->child->end; } };\nusing Alias = Derived;\nDerived *global;\nLeaf *factory();\nint use(Derived *p) { return p->inherited + p->child->end + Chain::global->child->end + Alias::shared->end + factory()->end + p->get()->end + p->same(1)->end + Alias::create()->end + p /* obj */ ->get/* args */() /* result */ ->end; }\nstruct Other { Leaf *child; int end; };\nLeaf *mixed(int); Other *mixed(const char*);\nint bad_result() { return mixed(1)->end + mixed(1)-> /* reject */ end; }\nstruct Ambiguous : Base, Other {};\nint blocked(Ambiguous *p) { return p->child->end; }\nint good_tail() { return factory()->end; }\n}\n"
  "namespace Nested {\nstruct Owner { struct Cell { int stamp; }; using Own = Cell; };\nusing Alias = Owner;\nAlias::Cell *factory();\nint use(Alias::Cell *p, Alias::Own *q) { return p->stamp + q->stamp + factory()->stamp; }\n}\n"
  "namespace Short = Nested;\nnamespace Shorter = Short;\nShorter::Alias::Own *external;\nint use_short() { return external->stamp + Shorter::factory()->stamp; }\n"
- "struct Own { long seal; };\nnamespace Pick { struct Nested { long seal; }; }\nnamespace Pick { int marker; }\n::Pick::Nested *global_pick;\nnamespace InheritedTypes {\nstruct Base { struct Item { int seal; }; using Own = Item; struct Pick { using Nested = Item; }; };\nusing BaseAlias = Base;\nstruct Derived : BaseAlias {\n int method(Own *r) { return r->seal; }\n int qualified(Pick::Nested *s) { return s->seal; }\n int absolute() { return global_pick->seal; }\n};\nusing Alias = Derived;\nAlias::Own *inherited_factory();\nint use(Derived::Item *p, Alias::Own *q) { return p->seal + q->seal + inherited_factory()->seal; }\n}\n"
+ "struct Own { long seal; };\nnamespace Pick { struct Nested { long seal; }; }\nnamespace Pick { int marker; }\n::Pick::Nested *global_pick;\nnamespace InheritedTypes {\nstruct Base { struct Item { int seal; }; using Own = Item; struct Pick { using Nested = Item; }; };\nusing BaseAlias = Base;\nstruct Derived : BaseAlias {\n int method(Own *r) { return r->seal; } int qualified(Pick::Nested *s) { return s->seal; }\n int absolute() { return global_pick->seal; }\n};\nusing Alias = Derived;\nAlias::Own *inherited_factory();\nint use(Derived::Item *p, Alias::Own *q) { return p->seal + q->seal + inherited_factory()->seal; }\n}\n"
+ "struct WrongGlobal { int value; }; WrongGlobal *ambiguous_b;\nstruct SameA { int f(A::Cell *ambiguous_a) { return ambiguous_a->value; } }; struct SameB { int f(B::Cell *ambiguous_b) { return ambiguous_b->value; } };\n"
  "using LoopA = LoopB;\nusing LoopB = LoopA;\nint bad(LoopA *p) { return p->value; }\n";
 static gchar *custom_code;
 static const struct { const char *reference,*declaration,*owner;guint occurrence; } cases[]={
@@ -69,6 +70,7 @@ static gboolean step(gpointer data) {
   gint bad=strstr(code,"int bad")-code;bad=strstr(code+bad,"p->value")-code+4;g_assert_cmpint(SSM(preview,SCI_INDICATORVALUEAT,31,bad),==,0);
   gint clash=strstr(code,"int blocked")-code;clash=strstr(code+clash,"p->child->end")-code+11;g_assert_cmpint(SSM(preview,SCI_INDICATORVALUEAT,31,clash),==,0);
   gint result=strstr(code,"mixed(1)->end")-code+10;g_assert_cmpint(SSM(preview,SCI_INDICATORVALUEAT,31,result),==,0);gint commented=strstr(code,"/* reject */ end")-code+strlen("/* reject */ ");g_assert_cmpint(SSM(preview,SCI_INDICATORVALUEAT,31,commented),==,0);
+  gint uncertain=strstr(code,"ambiguous_b->value")-code+strlen("ambiguous_b->");g_assert_cmpint(SSM(preview,SCI_INDICATORVALUEAT,31,uncertain),==,0);
   /* Exercise the asynchronous editor-follow definition path too. */
   item=10;sci_set_current_position(source->editor->sci,reference(),FALSE);phase++;return G_SOURCE_CONTINUE;
  }
@@ -79,7 +81,11 @@ static gboolean step(gpointer data) {
  if(phase==4) {
   GtkWidget *choices=named(window,"insight-context-definitions");gchar *label=gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(choices));gboolean correct=label && strstr(label,"Chain::Leaf");g_free(label);if(!correct) return G_SOURCE_CONTINUE;
   g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(choices)),NULL),==,1);
-  open_source("calls.custom",custom_code,"C++");source=document_get_current();sci_set_current_position(source->editor->sci,strstr(custom_code,"->mark")-custom_code+3,FALSE);phase++;return G_SOURCE_CONTINUE;
+  for(item=0;item<G_N_ELEMENTS(cases);item++) { if(!strcmp(cases[item].reference,"s->seal")) break; }g_assert_cmpuint(item,<,G_N_ELEMENTS(cases));sci_set_current_position(source->editor->sci,reference(),FALSE);phase=9;return G_SOURCE_CONTINUE;
+ }
+ if(phase==9) {
+  GtkWidget *choices=named(window,"insight-context-definitions");gchar *label=gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(choices));gboolean correct=label && strstr(label,"InheritedTypes::Base::Item");g_free(label);if(!correct) return G_SOURCE_CONTINUE;g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(choices)),NULL),==,1);
+  open_source("calls.custom",custom_code,"C++");source=document_get_current();sci_set_current_position(source->editor->sci,strstr(custom_code,"->mark")-custom_code+3,FALSE);phase=5;return G_SOURCE_CONTINUE;
  }
  if(phase==5) {
   GtkWidget *choices=named(window,"insight-context-definitions");gchar *label=gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(choices));gboolean correct=label && strstr(label,"ProfileCell");g_free(label);if(!correct) return G_SOURCE_CONTINUE;

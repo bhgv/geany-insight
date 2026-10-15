@@ -890,7 +890,7 @@ insight_native = static_library('insight_native',
  'insight/desktop/search_state.c',
 	'insight/desktop/project_files.c', 'insight/desktop/master_list.c', 'insight/desktop/master_sync.c',
  'insight/core/index.c', 'insight/core/document.c', 'insight/core/occurrences.c', 'insight/desktop/index_cache.c',
- 'src/insight-index.c', 'insight/core/runtime.c', 'insight/core/context.c', 'insight/desktop/extensions.c', 'insight/desktop/lookup_filter.c', 'insight/desktop/layout_state.c', 'insight/desktop/context_search.c', 'insight/desktop/notebook_store.c', 'insight/desktop/snippet.c', 'insight/desktop/workspace_watch.c', 'insight/desktop/source_mask.c', 'insight/desktop/relation_query.c', 'insight/desktop/type_resolve.c', insight_lua_sources,
+ 'src/insight-index.c', 'src/insight-scopes.c', 'insight/core/runtime.c', 'insight/core/context.c', 'insight/desktop/extensions.c', 'insight/desktop/lookup_filter.c', 'insight/desktop/layout_state.c', 'insight/desktop/context_search.c', 'insight/desktop/notebook_store.c', 'insight/desktop/snippet.c', 'insight/desktop/workspace_watch.c', 'insight/desktop/source_mask.c', 'insight/desktop/relation_query.c', 'insight/desktop/type_resolve.c', insight_lua_sources,
  c_args: geany_cflags,
  include_directories: include_directories('insight/core', 'insight/vendor/lua'),
  dependencies: deps + [cc.find_library('m', required: false)])

@@ -32,6 +32,17 @@ gchar *insight_native_member_owner_filtered(const InsightIndex *,const char *,co
  * offsets/length and replaces C-family comments/strings with spaces. Borrowed
  * for the duration of this call. A missing mask is computed lazily once. */
 typedef struct { const gchar *text,*mask;gsize length; } InsightNativeSource;
+/* C-family scope cache for distinct functions sharing a parser line. The
+ * immutable index is retained; source bytes/mask are borrowed until free.
+ * Unambiguous lines preserve legacy scope lookup. Ambiguous groups use bounded
+ * complete brace ranges, declining unsupported or conflicting declarations.
+ * An uncertain result must suppress outer/global fallback at the call site.
+ * Cache instances are private to a caller/thread and borrow source until free. */
+typedef struct InsightNativeScopes InsightNativeScopes;
+InsightNativeScopes *insight_native_scopes_new(InsightIndex *,const gchar *,const InsightNativeSource *);
+gchar *insight_native_scopes_at(InsightNativeScopes *,gulong,gsize,gboolean *);
+void insight_native_scopes_free(InsightNativeScopes *);
+
 gchar *insight_native_member_owner_source_filtered(const InsightIndex *,const char *,const char *,gulong,const InsightNativeSource *,gsize,gboolean *,gboolean,InsightTypeEligible,void *);
 gchar *insight_native_member_owner_calls_filtered(const InsightIndex *,const char *,const char *,gulong,const char *,gsize,gboolean *,gboolean,InsightTypeEligible,void *);
 gboolean insight_native_member_matches(const InsightSymbol *,const char *);

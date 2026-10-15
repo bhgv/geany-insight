@@ -1,1 +1,1 @@
-Build Windows x64: normalize CRLF tag record terminators before decoding, compare golden fixture line endings without hiding content differences; printer LF/CRLF regression, 57 parser cases, strict core and 18 GUI scenarios.
+Build Windows x64: positional C-family same-line function scope for Context/F12/Follow; conservative ambiguity/incomplete-body guards; native scope backend, 57 parser fixtures and 18 GUI scenarios.

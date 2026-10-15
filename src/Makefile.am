@@ -235,6 +235,7 @@ libgeany_la_SOURCES += \
 	../insight/core/diff.h \
 	insight-workbench.h \
 	insight-index.c \
+	insight-scopes.c \
 	insight-index.h \
 	../insight/core/context.c \
 	../insight/core/context.h \

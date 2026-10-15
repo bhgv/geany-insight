@@ -393,10 +393,11 @@ test('encodings', executable('test_encodings', 'test_encodings.c', dependencies:
 
 # Native Insight backend tests: no display or plugin required.
 insight_index_test = executable('test_insight_native_index',
- '../insight/tests/native_index_test.c', link_with: insight_native,
+ '../insight/tests/native_index_test.c', '../insight/core/structure_select.c', link_with: insight_native,
  include_directories: include_directories('../insight/core'),
  c_args: geany_cflags + ['-UNDEBUG'], dependencies: deps + [dep_tagmanager, dep_ctags])
 test('Insight native index', insight_index_test)
+test('Insight tag printer record endings', find_program('python3'), args: files('../insight/tests/print_tags_test.py'))
 lookup_filter_test = executable('test_insight_lookup_filter',
  '../insight/tests/lookup_filter_test.c', '../insight/desktop/lookup_filter.c',
  include_directories: include_directories('../insight/desktop'), dependencies: glib)

@@ -108,6 +108,8 @@ jobs:
           done
           test "$parser_count" -gt 0
           printf 'C/C++ parser fixtures passed: %s\n' "$parser_count"
+      - name: Test native index and lexical scope backend
+        run: ./_build/tests/test_insight_native_index.exe
       - name: Test native Windows GUI migration paths
         run: |
           set -e
