@@ -13,5 +13,7 @@ void insight_disk_browser_current_file(GtkWidget *,const gchar *,gboolean);
 gboolean insight_disk_browser_read(GtkWidget *,GKeyFile *);
 void insight_disk_browser_write(GtkWidget *,GKeyFile *);
 void insight_disk_browser_cancel(GtkWidget *);
+/* Stop callbacks and outstanding reads/writes before workbench teardown. */
+void insight_disk_browser_shutdown(GtkWidget *);
 void insight_disk_browser_locale_changed(GtkWidget *);
 #endif

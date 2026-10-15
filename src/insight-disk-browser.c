@@ -15,9 +15,9 @@
 enum { NAME,PATH,DIRECTORY,LINK,COLUMNS };
 typedef struct { gchar *name,*path;gboolean directory,link; } DiskEntry;
 typedef struct {
- GtkWidget *box,*path,*query,*view,*status,*hidden,*follow,*kind_toggle;GtkTreeViewColumn *name_column,*kind_column;GtkListStore *store;GtkTreeModelFilter *model;
- InsightLookupFilter *filter;GCancellable *cancel;guint64 generation;gboolean alive,setting;
- gchar *root,*failure,*valid_query,*current_file;guint count;gboolean loading,limited,cancelled,active;InsightDiskOpen open;gpointer data;
+ GtkWidget *box,*path,*query,*view,*status,*hidden,*follow,*kind_toggle,*create;GtkTreeViewColumn *name_column,*kind_column;GtkListStore *store;GtkTreeModelFilter *model;
+ InsightLookupFilter *filter;GCancellable *cancel,*mutation;guint64 generation;gboolean alive,setting;
+ gchar *root,*failure,*valid_query,*current_file;guint count;gboolean loading,limited,cancelled,active,creating,mutation_error;InsightDiskOpen open;gpointer data;
 } DiskBrowser;
 typedef struct { GWeakRef box;guint64 generation;gchar *root,*current_name;gboolean hidden,limited; } DiskJob;
 static void entry_free(gpointer data) { DiskEntry *e=data;g_free(e->name);g_free(e->path);g_free(e); }
@@ -62,7 +62,7 @@ static gboolean visible(GtkTreeModel *model,GtkTreeIter *iter,gpointer data) {
  gboolean match=directory || (following(b) && same_path(path,b->current_file)) || insight_lookup_filter_match(b->filter,NULL,NULL,path,NULL);g_free(path);return match;
 }
 static void status(DiskBrowser *b) {
- gchar *label=b->cancelled ? g_strdup(insight_tr("Directory read cancelled")) : (b->loading ? g_strdup(insight_tr("Reading directory…")) : (b->failure ? insight_i18n_printf("Cannot browse directory: %s",b->failure) : insight_i18n_printf("Disk entries: %u%s",b->count,b->limited ? insight_tr(" (directory limit reached)") : "")));gtk_label_set_text(GTK_LABEL(b->status),label);g_free(label);
+ gchar *label=b->creating ? g_strdup(insight_tr("Creating folder…")) : (b->cancelled ? g_strdup(insight_tr("Directory read cancelled")) : (b->loading ? g_strdup(insight_tr("Reading directory…")) : (b->failure ? insight_i18n_printf(b->mutation_error ? "Cannot create folder: %s" : "Cannot browse directory: %s",b->failure) : insight_i18n_printf("Disk entries: %u%s",b->count,b->limited ? insight_tr(" (directory limit reached)") : ""))));gtk_label_set_text(GTK_LABEL(b->status),label);g_free(label);
 }
 void insight_disk_browser_cancel(GtkWidget *box) {
  DiskBrowser *b=g_object_get_data(G_OBJECT(box),"insight-disk-browser");if(!b || !b->alive || !b->cancel) return;
@@ -76,7 +76,7 @@ static void read_done(GObject *source,GAsyncResult *result,gpointer data) {
   g_clear_object(&b->cancel);b->setting=TRUE;gtk_list_store_clear(b->store);
   if(entries) for(guint i=0;i<entries->len;i++) { DiskEntry *e=g_ptr_array_index(entries,i);GtkTreeIter iter;gtk_list_store_append(b->store,&iter);gtk_list_store_set(b->store,&iter,NAME,e->name,PATH,e->path,DIRECTORY,e->directory,LINK,e->link,-1); }
   b->setting=FALSE;
-  b->loading=FALSE;b->cancelled=FALSE;b->count=entries ? entries->len : 0;b->limited=j->limited;g_free(b->failure);b->failure=error ? g_strdup(error->message) : NULL;status(b);
+  b->loading=FALSE;b->cancelled=FALSE;b->mutation_error=FALSE;b->count=entries ? entries->len : 0;b->limited=j->limited;g_free(b->failure);b->failure=error ? g_strdup(error->message) : NULL;status(b);
   select_current(b);
  }
  if(box) g_object_unref(box);
@@ -86,7 +86,7 @@ static void read_done(GObject *source,GAsyncResult *result,gpointer data) {
 static void load(DiskBrowser *b,const gchar *path) {
  if(!b->alive || !path || !*path || !g_utf8_validate(path,-1,NULL) || strlen(path)>16384) return;
  gchar *root=g_canonicalize_filename(path,b->root);b->generation++;if(b->cancel) g_cancellable_cancel(b->cancel);g_clear_object(&b->cancel);b->cancel=g_cancellable_new();
- g_free(b->root);b->root=root;gtk_entry_set_text(GTK_ENTRY(b->path),root);b->setting=TRUE;gtk_list_store_clear(b->store);b->setting=FALSE;b->loading=TRUE;b->cancelled=FALSE;g_clear_pointer(&b->failure,g_free);status(b);
+ g_free(b->root);b->root=root;gtk_entry_set_text(GTK_ENTRY(b->path),root);gtk_widget_set_sensitive(b->create,!b->creating);b->setting=TRUE;gtk_list_store_clear(b->store);b->setting=FALSE;b->loading=TRUE;b->cancelled=FALSE;b->mutation_error=FALSE;g_clear_pointer(&b->failure,g_free);status(b);
  DiskJob *j=g_new0(DiskJob,1);g_weak_ref_init(&j->box,b->box);j->generation=b->generation;j->root=g_strdup(root);j->hidden=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(b->hidden));
  if(following(b)) { gchar *parent=g_path_get_dirname(b->current_file);if(same_path(parent,root)) j->current_name=g_path_get_basename(b->current_file);g_free(parent); }
  GTask *task=g_task_new(NULL,b->cancel,read_done,NULL);g_task_set_task_data(task,j,job_free);g_task_run_in_thread(task,read_directory);g_object_unref(task);
@@ -106,6 +106,29 @@ static void follow_changed(GtkToggleButton *button,gpointer data) {
  (void)button;DiskBrowser *b=data;if(b->setting) return;
  if(following(b)) { if(b->loading) insight_disk_browser_cancel(b->box);gchar *path=g_strdup(b->current_file);insight_disk_browser_current_file(b->box,path,b->active);g_free(path); }
  else { gtk_tree_model_filter_refilter(b->model);if(b->active && b->root) { gchar *root=g_strdup(b->root);load(b,root);g_free(root); } }
+}
+typedef struct { GWeakRef box;gchar *root;guint64 generation; } CreateJob;
+static void create_done(GObject *source,GAsyncResult *result,gpointer data) {
+ CreateJob *job=data;GError *error=NULL;gboolean created=g_file_make_directory_finish(G_FILE(source),result,&error);GtkWidget *box=g_weak_ref_get(&job->box);DiskBrowser *b=box ? g_object_get_data(G_OBJECT(box),"insight-disk-browser") : NULL;
+ if(b && b->alive) {
+  b->creating=FALSE;g_clear_object(&b->mutation);gtk_widget_set_sensitive(b->create,b->root!=NULL);
+  if(created && b->active && same_path(b->root,job->root)) load(b,job->root);
+  else if(!created && b->generation==job->generation) { g_free(b->failure);b->failure=g_strdup(error ? error->message : "Cannot create folder");b->mutation_error=TRUE;b->cancelled=FALSE;status(b); }
+  else status(b);
+ }
+ if(box) g_object_unref(box);
+ g_clear_error(&error);g_weak_ref_clear(&job->box);g_free(job->root);g_free(job);
+}
+static void create_folder(GtkButton *button,gpointer data) {
+ (void)button;DiskBrowser *b=data;if(!b->alive || !b->root || b->creating) return;g_object_ref(b->box);gchar *root=g_strdup(b->root);guint64 generation=b->generation;GtkWidget *parent=gtk_widget_get_toplevel(b->box);
+ GtkWidget *dialog=gtk_dialog_new_with_buttons("New folder…",GTK_IS_WINDOW(parent) ? GTK_WINDOW(parent) : NULL,GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Cancel",GTK_RESPONSE_CANCEL,"Create",GTK_RESPONSE_ACCEPT,NULL);gtk_widget_set_name(dialog,"insight-disk-create-dialog");GtkWidget *content=gtk_dialog_get_content_area(GTK_DIALOG(dialog)),*directory=gtk_label_new(root),*entry=gtk_entry_new(),*failure=gtk_label_new("");gtk_widget_set_name(entry,"insight-disk-create-name");gtk_widget_set_name(failure,"insight-disk-create-error");gtk_entry_set_max_length(GTK_ENTRY(entry),255);gtk_entry_set_activates_default(GTK_ENTRY(entry),TRUE);gtk_dialog_set_default_response(GTK_DIALOG(dialog),GTK_RESPONSE_ACCEPT);gtk_entry_set_placeholder_text(GTK_ENTRY(entry),"Folder name");gtk_label_set_ellipsize(GTK_LABEL(directory),PANGO_ELLIPSIZE_MIDDLE);gtk_label_set_max_width_chars(GTK_LABEL(directory),60);gtk_widget_set_tooltip_text(directory,root);gtk_label_set_line_wrap(GTK_LABEL(failure),TRUE);gtk_box_pack_start(GTK_BOX(content),directory,FALSE,FALSE,4);gtk_box_pack_start(GTK_BOX(content),entry,FALSE,FALSE,4);gtk_box_pack_start(GTK_BOX(content),failure,FALSE,FALSE,4);insight_i18n_apply(dialog);gtk_widget_show_all(dialog);gtk_widget_hide(failure);gtk_widget_grab_focus(entry);
+ while(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT && b->alive) {
+  const gchar *name=gtk_entry_get_text(GTK_ENTRY(entry));
+  if(!*name || !strcmp(name,".") || !strcmp(name,"..") || strlen(name)>255 || strpbrk(name,"/\\\r\n") || !g_utf8_validate(name,-1,NULL) || strlen(root)+strlen(name)+2>16384) { gtk_label_set_text(GTK_LABEL(failure),insight_tr("Enter one folder name, without path separators"));gtk_widget_show(failure);continue; }
+  if(b->generation!=generation || !same_path(root,b->root)) { gtk_label_set_text(GTK_LABEL(failure),insight_tr("Directory changed; reopen New folder"));gtk_widget_show(failure);gtk_dialog_set_response_sensitive(GTK_DIALOG(dialog),GTK_RESPONSE_ACCEPT,FALSE);continue; }
+  insight_disk_browser_cancel(b->box);b->generation++;b->creating=TRUE;b->cancelled=FALSE;b->mutation_error=FALSE;g_clear_pointer(&b->failure,g_free);gtk_widget_set_sensitive(b->create,FALSE);status(b);b->mutation=g_cancellable_new();CreateJob *job=g_new0(CreateJob,1);g_weak_ref_init(&job->box,b->box);job->root=g_strdup(root);job->generation=b->generation;gchar *path=g_build_filename(root,name,NULL);GFile *file=g_file_new_for_path(path);g_file_make_directory_async(file,G_PRIORITY_DEFAULT,b->mutation,create_done,job);g_object_unref(file);g_free(path);break;
+ }
+ gtk_widget_destroy(dialog);g_free(root);g_object_unref(b->box);
 }
 static void refresh(GtkWidget *widget,gpointer data) { (void)widget;DiskBrowser *b=data;if(b->setting) return;gchar *path=g_strdup(gtk_entry_get_text(GTK_ENTRY(b->path)));load(b,path);g_free(path); }
 static void parent(GtkWidget *widget,gpointer data) { (void)widget;DiskBrowser *b=data;if(b->root) { gchar *path=g_path_get_dirname(b->root);load(b,path);g_free(path); } }
@@ -132,8 +155,9 @@ static gboolean key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
  if(mods==GEANY_PRIMARY_MOD_MASK && (event->keyval==GDK_KEY_l || event->keyval==GDK_KEY_f)) { gtk_widget_grab_focus(event->keyval==GDK_KEY_l ? b->path : b->query);return TRUE; }
  return FALSE;
 }
-static void destroyed(GtkWidget *widget,gpointer data) { (void)widget;DiskBrowser *b=data;b->alive=FALSE;b->generation++;b->open=NULL;if(b->cancel) g_cancellable_cancel(b->cancel); }
-static void freed(gpointer data) { DiskBrowser *b=data;g_clear_object(&b->cancel);insight_lookup_filter_free(b->filter);g_object_unref(b->model);g_object_unref(b->store);g_free(b->root);g_free(b->failure);g_free(b->valid_query);g_free(b->current_file);g_free(b); }
+static void destroyed(GtkWidget *widget,gpointer data) { (void)widget;DiskBrowser *b=data;b->alive=FALSE;b->generation++;b->open=NULL;if(b->cancel) g_cancellable_cancel(b->cancel);if(b->mutation) g_cancellable_cancel(b->mutation); }
+void insight_disk_browser_shutdown(GtkWidget *box) { if(!box) return;DiskBrowser *b=g_object_get_data(G_OBJECT(box),"insight-disk-browser");if(b && b->alive) destroyed(box,b); }
+static void freed(gpointer data) { DiskBrowser *b=data;g_clear_object(&b->cancel);g_clear_object(&b->mutation);insight_lookup_filter_free(b->filter);g_object_unref(b->model);g_object_unref(b->store);g_free(b->root);g_free(b->failure);g_free(b->valid_query);g_free(b->current_file);g_free(b); }
 static void kind_toggled(GtkCheckMenuItem *item,gpointer data) { DiskBrowser *b=data;gtk_tree_view_column_set_visible(b->kind_column,gtk_check_menu_item_get_active(item)); }
 void insight_disk_browser_write(GtkWidget *box,GKeyFile *settings) {
  DiskBrowser *b=g_object_get_data(G_OBJECT(box),"insight-disk-browser");if(!b || !settings) return;const gchar *group="disk-browser";
@@ -166,7 +190,7 @@ GtkWidget *insight_disk_browser_new(InsightDiskOpen open,gpointer data) {
  GtkTreeViewColumn *columns[]={b->name_column,b->kind_column};for(guint i=0;i<2;i++) { gtk_tree_view_column_set_sizing(columns[i],GTK_TREE_VIEW_COLUMN_FIXED);gtk_tree_view_column_set_fixed_width(columns[i],i ? 90 : 240);gtk_tree_view_column_set_resizable(columns[i],TRUE);gtk_tree_view_column_set_reorderable(columns[i],TRUE); }
  GtkWidget *menu=gtk_menu_new(),*choose=gtk_menu_button_new();gtk_button_set_label(GTK_BUTTON(choose),"Columns");gtk_widget_set_name(choose,"insight-disk-columns");b->kind_toggle=gtk_check_menu_item_new_with_label("Kind");gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(b->kind_toggle),TRUE);gtk_menu_shell_append(GTK_MENU_SHELL(menu),b->kind_toggle);gtk_menu_button_set_popup(GTK_MENU_BUTTON(choose),menu);gtk_box_pack_start(GTK_BOX(row),choose,FALSE,FALSE,0);g_signal_connect(b->kind_toggle,"toggled",G_CALLBACK(kind_toggled),b);g_signal_connect_swapped(menu,"show",G_CALLBACK(insight_i18n_apply),menu);gtk_widget_show_all(menu);
 
- GtkWidget *appearance=insight_list_style_button(b->view);gtk_widget_set_name(appearance,"insight-disk-appearance");gtk_box_pack_start(GTK_BOX(b->box),appearance,FALSE,FALSE,0);
+ GtkWidget *appearance_row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3),*appearance=insight_list_style_button(b->view);gtk_widget_set_name(appearance,"insight-disk-appearance");gtk_box_pack_start(GTK_BOX(appearance_row),appearance,TRUE,TRUE,0);b->create=gtk_button_new_with_label("New folder…");gtk_widget_set_name(b->create,"insight-disk-create");gtk_widget_set_sensitive(b->create,FALSE);gtk_box_pack_start(GTK_BOX(appearance_row),b->create,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(b->box),appearance_row,FALSE,FALSE,0);g_signal_connect(b->create,"clicked",G_CALLBACK(create_folder),b);
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),b->view);gtk_box_pack_start(GTK_BOX(b->box),scroll,TRUE,TRUE,0);b->status=gtk_label_new("Choose a disk directory");gtk_widget_set_name(b->status,"insight-disk-status");gtk_label_set_line_wrap(GTK_LABEL(b->status),TRUE);gtk_box_pack_start(GTK_BOX(b->box),b->status,FALSE,FALSE,0);
  g_signal_connect(up,"clicked",G_CALLBACK(parent),b);g_signal_connect(go,"clicked",G_CALLBACK(refresh),b);g_signal_connect(b->path,"activate",G_CALLBACK(refresh),b);g_signal_connect(b->hidden,"toggled",G_CALLBACK(refresh),b);g_signal_connect(b->query,"changed",G_CALLBACK(filter_changed),b);g_signal_connect(b->view,"row-activated",G_CALLBACK(activated),b);g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(b->view)),"changed",G_CALLBACK(selected),b);g_signal_connect(b->box,"key-press-event",G_CALLBACK(key),b);filter_changed(GTK_EDITABLE(b->query),b);return b->box;
 }

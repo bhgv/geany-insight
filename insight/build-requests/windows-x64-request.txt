@@ -1,1 +1,1 @@
-Build Windows x64: C++ namespace-alias target import and independent Folder Browser fonts/colors, complete Pango face attributes, theme defaults, validation, Apply/Cancel and native RU/EN GUI regressions.
+Build Windows x64: asynchronous disk-folder creation with Unicode names, no-overwrite/path/stale-dialog guards, unchanged membership, pending creation shutdown and native GUI regressions.

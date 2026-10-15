@@ -802,3 +802,10 @@ Font	Шрифт
 Text color	Цвет текста
 Background color	Цвет фона
 Choose a font size from 4 to 96 points	Выберите размер шрифта от 4 до 96 пунктов
+New folder…	Новая папка…
+Folder name	Имя папки
+Create	Создать
+Creating folder…	Создание папки…
+Cannot create folder: %s	Не удалось создать папку: %s
+Enter one folder name, without path separators	Введите одно имя папки без разделителей пути
+Directory changed; reopen New folder	Каталог изменился; откройте создание папки заново
