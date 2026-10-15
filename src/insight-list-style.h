@@ -5,6 +5,7 @@
 /* Per-tree-view fonts/colors, theme defaults until explicitly enabled. The view owns state;
  * the returned button follows its lifetime. Dialog Cancel leaves it untouched. */
 GtkWidget *insight_list_style_button(GtkWidget *);
+GtkWidget *insight_list_style_menu_item(GtkWidget *);
 void insight_list_style_read(GtkWidget *,GKeyFile *,const gchar *);
 void insight_list_style_write(GtkWidget *,GKeyFile *,const gchar *);
 #endif

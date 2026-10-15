@@ -1,1 +1,1 @@
-Build Windows x64: asynchronous disk-folder creation with Unicode names, no-overwrite/path/stale-dialog guards, unchanged membership, pending creation shutdown and native GUI regressions.
+Build Windows x64: Browse disk context menu, guarded right-click, keyboard/programmatic popup, Unicode path/name clipboard, preview/open/folder/up actions and native RU GUI coverage.

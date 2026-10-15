@@ -809,3 +809,8 @@ Creating folder…	Создание папки…
 Cannot create folder: %s	Не удалось создать папку: %s
 Enter one folder name, without path separators	Введите одно имя папки без разделителей пути
 Directory changed; reopen New folder	Каталог изменился; откройте создание папки заново
+Preview in Context	Предпросмотр в Context
+Open	Открыть
+Copy full path	Копировать полный путь
+Copy filename	Копировать имя файла
+Refresh	Обновить

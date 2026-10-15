@@ -47,6 +47,7 @@ static void dialog(GtkWidget *view) {
  gtk_widget_destroy(window);g_object_unref(view);
 }
 GtkWidget *insight_list_style_button(GtkWidget *view) { get(view);GtkWidget *button=gtk_button_new_with_label("Font & Color…");g_signal_connect_object(button,"clicked",G_CALLBACK(dialog),view,G_CONNECT_SWAPPED);return button; }
+GtkWidget *insight_list_style_menu_item(GtkWidget *view) { get(view);GtkWidget *item=gtk_menu_item_new_with_label("Font & Color…");g_signal_connect_object(item,"activate",G_CALLBACK(dialog),view,G_CONNECT_SWAPPED);return item; }
 void insight_list_style_write(GtkWidget *view,GKeyFile *settings,const gchar *group) {
  ListStyle *style=get(view);g_key_file_set_integer(settings,group,"version",1);g_key_file_set_boolean(settings,group,"enabled",style->enabled);g_key_file_set_string(settings,group,"font",style->font);g_key_file_set_string(settings,group,"foreground",style->foreground);g_key_file_set_string(settings,group,"background",style->background);
 }
