@@ -33,8 +33,27 @@ static void inherited_types(void) {
  gchar *deep=g_strconcat(previous,"::Nested",NULL);InsightTypeResult limited=insight_type_resolve(index,deep,"N","/inherited.cpp",NULL,NULL);g_assert_cmpint(limited.status,==,INSIGHT_TYPE_LIMIT);insight_type_result_clear(&limited);g_free(deep);g_free(previous);
  insight_index_free(index);
 }
+static void qualified_precedence(void) {
+ InsightIndex *index=insight_index_new();InsightSymbol tags[]={
+  {"Pick",NULL,"","n",1,"","",""},{"Nested",NULL,"Pick","s",2,"","",""},
+  {"Base",NULL,"N","s",3,"","",""},{"Pick",NULL,"N::Base","s",4,"","",""},{"Nested",NULL,"N::Base::Pick","s",5,"","",""},{"Derived",NULL,"N","s",6,"","","Base"},
+  {"Other",NULL,"N","s",7,"","",""},{"Nested",NULL,"N::Other","s",8,"","",""},{"Pick",NULL,"N::Derived::special","t",9,"","Other",""},
+  {"EmptyBase",NULL,"N","s",10,"","",""},{"Pick",NULL,"N::EmptyBase","s",11,"","",""},{"EmptyDerived",NULL,"N","s",12,"","","EmptyBase"},
+  {"Ambiguous",NULL,"N","s",13,"","","Base,EmptyBase"},{"Hider",NULL,"N","s",14,"","","Base"},{"Pick",NULL,"N::Hider","m",15,"","int",""},{"Pick",NULL,"N::Derived::value","z",16,"","int",""}
+ };g_assert_true(insight_index_update(index,"/qualified.cpp",tags,G_N_ELEMENTS(tags)));
+ resolved(index,"Pick::Nested","N::Derived::method","/qualified.cpp","N::Base::Pick::Nested",0);resolved(index,"::Pick::Nested","N::Derived::method","/qualified.cpp","Pick::Nested",0);resolved(index,"Pick::Nested","N::Derived::special","/qualified.cpp","N::Other::Nested",1);
+ const gchar *scopes[]={"N::EmptyDerived::method","N::Ambiguous::method","N::Hider::method","N::Derived::value"};const InsightTypeStatus states[]={INSIGHT_TYPE_UNKNOWN,INSIGHT_TYPE_AMBIGUOUS,INSIGHT_TYPE_UNKNOWN,INSIGHT_TYPE_UNKNOWN};for(guint i=0;i<G_N_ELEMENTS(scopes);i++) { InsightTypeResult r=insight_type_resolve(index,"Pick::Nested",scopes[i],"/qualified.cpp",NULL,NULL);g_assert_cmpint(r.status,==,states[i]);g_assert_null(r.owner);insight_type_result_clear(&r); }
+ InsightSymbol reopen={"Pick",NULL,"","n",20,"","",""};g_assert_true(insight_index_update(index,"/namespace-one.h",&reopen,1));g_assert_true(insight_index_update(index,"/namespace-two.h",&reopen,1));resolved(index,"::Pick::Nested","N::Derived","/consumer.cpp","Pick::Nested",0);
+ InsightSymbol collision={"Pick",NULL,"","c",22,"","",""};g_assert_true(insight_index_update(index,"/namespace-conflict.h",&collision,1));InsightTypeResult mixed=insight_type_resolve(index,"::Pick::Nested","","/consumer.cpp",NULL,NULL);g_assert_cmpint(mixed.status,==,INSIGHT_TYPE_AMBIGUOUS);insight_type_result_clear(&mixed);g_assert_true(insight_index_update(index,"/namespace-conflict.h",NULL,0));
+ InsightSymbol ns={"N",NULL,"","n",21,"","",""};g_assert_true(insight_index_update(index,"/namespace-n-one.h",&ns,1));g_assert_true(insight_index_update(index,"/namespace-n-two.h",&ns,1));resolved(index,"N::Base::Pick::Nested","","/consumer.cpp","N::Base::Pick::Nested",0);
+ InsightSymbol work[35];gchar *names[33];GString *bases=g_string_new(NULL);work[0]=(InsightSymbol){"WorkEmpty",NULL,"N","s",30,"","",""};
+ for(guint i=0;i<33;i++) { names[i]=g_strdup_printf("WorkAlias%u",i);work[i+1]=(InsightSymbol){names[i],NULL,"N","t",40+i,"","WorkEmpty",""};if(i) g_string_append_c(bases,',');g_string_append(bases,names[i]); }
+ work[34]=(InsightSymbol){"WorkDerived",NULL,"N","s",80,"","",bases->str};g_assert_true(insight_index_update(index,"/work.h",work,G_N_ELEMENTS(work)));for(guint i=0;i<33;i++) g_free(names[i]);g_string_free(bases,TRUE);
+ InsightTypeResult capped=insight_type_resolve(index,"Pick::Nested","N::WorkDerived::method","/qualified.cpp",NULL,NULL);g_assert_cmpint(capped.status,==,INSIGHT_TYPE_LIMIT);g_assert_cmpuint(capped.aliases,==,0);insight_type_result_clear(&capped);
+ insight_index_free(index);
+}
 int main(void) {
- inherited_types();
+ inherited_types();qualified_precedence();
  name_is("const struct N::Box<int, Pair<long, short>>::Nested * const &","N::Box::Nested",FALSE);
  name_is("volatile ::Global *","Global",TRUE);name_is("N :: Foo [10][2]","N::Foo",FALSE);name_is("Module.Class","Module::Class",FALSE);
  const char *invalid[]={"","Foo Bar","Foo<int","Foo>","Foo[2","Foo (*)(int)","decltype(value)","A:::B","A::","Foo;Bar"};

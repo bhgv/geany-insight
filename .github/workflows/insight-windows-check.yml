@@ -83,6 +83,7 @@ jobs:
             -Dc_args=-DINSIGHT_RELOCATABLE -Dcpp_args=-DINSIGHT_RELOCATABLE
           meson compile -C _build
           meson install -C _build
+          meson test -C _build --no-rebuild --num-processes 4 --print-errorlogs 'ctags/*.cpp.tags' 'ctags/*.h.tags' 'ctags/*.c.tags'
       - name: Test native Windows GUI migration paths
         run: |
           set -e

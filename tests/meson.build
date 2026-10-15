@@ -361,6 +361,7 @@ ctags_tests = [
 	'ctags/ui5.controller.js.tags',
 	'ctags/union.f.tags',
 	'ctags/value.f.tags',
+	'ctags/global-qualified-vars.cpp.tags',
 	'ctags/var-and-return-type.cpp.tags',
 	'ctags/vhdl-component.vhd.tags',
 	'ctags/vhdl-local.vhd.tags',

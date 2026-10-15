@@ -146,7 +146,13 @@ bool cxxParserExtractVariableDeclarations(CXXTokenChain * pChain,unsigned int uF
 
 	CXX_DEBUG_ASSERT(t,"There should be an initial token here");
 
-	if(!cxxTokenTypeIsOneOf(t,CXXTokenTypeIdentifier | CXXTokenTypeKeyword))
+	/* A C++ type-id can begin with a global qualification. Keep the token
+	 * in the chain so the recorded type retains its leading ::. */
+	bool bGlobalType = cxxParserCurrentLanguageIsCPP() &&
+		cxxTokenTypeIs(t,CXXTokenTypeMultipleColons) && t->pNext &&
+		cxxTokenTypeIs(t->pNext,CXXTokenTypeIdentifier);
+	if(!cxxTokenTypeIsOneOf(t,CXXTokenTypeIdentifier | CXXTokenTypeKeyword) &&
+		!bGlobalType)
 	{
 		CXX_DEBUG_LEAVE_TEXT("Statement does not start with identifier or keyword");
 		return false;

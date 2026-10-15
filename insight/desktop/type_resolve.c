@@ -53,13 +53,16 @@ static gboolean type_symbol(const InsightSymbol *s) {
 }
 static gchar *symbol_name(const InsightSymbol *symbol) { gchar *scope=canonical_scope(symbol->scope),*name=*scope ? g_strconcat(scope,"::",symbol->name,NULL) : g_strdup(symbol->name);g_free(scope);return name; }
 static const InsightSymbol *pick(const InsightSymbol **candidates,gsize count,const gchar *name,const gchar *path,InsightTypeEligible eligible,void *data,gboolean *exists,gboolean *ambiguous) {
- const InsightSymbol *only=NULL,*local=NULL;guint total=0,local_count=0;
+ const InsightSymbol *only=NULL,*local=NULL;guint total=0,local_count=0;gboolean all_namespaces=TRUE,any_namespace=FALSE;
  for(gsize i=0;i<count;i++) {
   const InsightSymbol *symbol=candidates[i];if(!type_symbol(symbol) || (eligible && !eligible(symbol,data))) continue;
   gchar *full=symbol_name(symbol);gboolean match=!strcmp(full,name);g_free(full);if(!match) continue;
+  gboolean namespace_symbol=!strcmp(symbol->kind,"n") || !strcmp(symbol->kind,"namespace");all_namespaces&=namespace_symbol;any_namespace|=namespace_symbol;
   only=symbol;total++;if(path && !strcmp(path,symbol->path)) { local=symbol;local_count++; }
  }
  *exists=total!=0;
+ if(total>1 && any_namespace && !all_namespaces) { *ambiguous=TRUE;return NULL; }
+ if(total && all_namespaces) return local ? local : only;
  if(local_count==1) return local;
  if(total==1) return only;
  if(total) *ambiguous=TRUE;
@@ -77,7 +80,7 @@ static const InsightSymbol *lookup(const InsightIndex *index,const gchar *name,c
  }
  g_free(context);g_free(candidates);return result;
 }
-typedef struct { const InsightIndex *index;InsightTypeEligible eligible;void *data;GHashTable *active,*owners;guint aliases,visits; } Resolve;
+typedef struct { const InsightIndex *index;InsightTypeEligible eligible;void *data;GHashTable *active,*owners;guint aliases,alias_work,visits; } Resolve;
 static InsightTypeResult resolve_name(Resolve *,const gchar *,const gchar *,const gchar *,gboolean,guint);
 static GPtrArray *inheritance_names(const gchar *text,InsightTypeStatus *status) {
  GPtrArray *names=g_ptr_array_new_with_free_func(g_free);if(!text || !*text) return names;
@@ -112,11 +115,12 @@ static gboolean hidden_nested(Resolve *job,const gchar *qualified,const gchar *n
  for(gsize i=0;i<count && !hidden;i++) { const InsightSymbol *row=rows[i];if(type_symbol(row) || (job->eligible && !job->eligible(row,job->data))) continue;gchar *full=symbol_name(row);hidden=!strcmp(full,qualified);g_free(full); }
  g_free(rows);return hidden;
 }
-static const InsightSymbol *nested_type(Resolve *job,const InsightSymbol *owner,const gchar *name,guint depth,InsightTypeStatus *status,gboolean *uncertain) {
+static const InsightSymbol *nested_type(Resolve *job,const InsightSymbol *owner,const gchar *name,guint depth,InsightTypeStatus *status,gboolean *uncertain,const gchar *preferred_path) {
  *status=INSIGHT_TYPE_UNKNOWN;*uncertain=FALSE;
  if(depth>64 || ++job->visits>4096) { *status=INSIGHT_TYPE_LIMIT;*uncertain=TRUE;return NULL; }
  gchar *scope=symbol_name(owner),*qualified=g_strconcat(scope,"::",name,NULL);g_free(scope);
- const InsightSymbol *direct=lookup(job->index,qualified,"",owner->path,TRUE,job->eligible,job->data,status);
+ gboolean namespace_owner=!strcmp(owner->kind,"n") || !strcmp(owner->kind,"namespace");
+ const InsightSymbol *direct=lookup(job->index,qualified,"",namespace_owner && preferred_path ? preferred_path : owner->path,TRUE,job->eligible,job->data,status);
  gboolean hidden=!direct && *status==INSIGHT_TYPE_UNKNOWN && hidden_nested(job,qualified,name);g_free(qualified);
  if(direct) return direct;
  if(hidden || *status!=INSIGHT_TYPE_UNKNOWN) { *uncertain=TRUE;return NULL; }
@@ -125,57 +129,73 @@ static const InsightSymbol *nested_type(Resolve *job,const InsightSymbol *owner,
  GPtrArray *bases=inheritance_names(owner->inheritance,status);if(!bases) { *uncertain=TRUE;return NULL; }
  g_hash_table_add(job->owners,(gpointer)owner);const InsightSymbol *found=NULL;
  for(guint i=0;i<bases->len;i++) {
-  const gchar *base=g_ptr_array_index(bases,i);gboolean global=g_str_has_prefix(base,"::");
+  guint before_aliases=job->aliases;const gchar *base=g_ptr_array_index(bases,i);gboolean global=g_str_has_prefix(base,"::");
   InsightTypeResult resolved=resolve_name(job,global ? base+2 : base,owner->scope,owner->path,global,depth+1);
   if(resolved.status!=INSIGHT_TYPE_FOUND || !record_type(resolved.symbol)) { *status=resolved.status==INSIGHT_TYPE_FOUND ? INSIGHT_TYPE_INVALID : resolved.status;*uncertain=TRUE;insight_type_result_clear(&resolved);found=NULL;break; }
-  InsightTypeStatus branch_status;gboolean branch_uncertain=FALSE;const InsightSymbol *hit=nested_type(job,resolved.symbol,name,depth+1,&branch_status,&branch_uncertain);insight_type_result_clear(&resolved);
+  InsightTypeStatus branch_status;gboolean branch_uncertain=FALSE;const InsightSymbol *hit=nested_type(job,resolved.symbol,name,depth+1,&branch_status,&branch_uncertain,NULL);insight_type_result_clear(&resolved);
   if(branch_uncertain) { *status=branch_status;*uncertain=TRUE;found=NULL;break; }
   if(hit && found && hit!=found) { *status=INSIGHT_TYPE_AMBIGUOUS;*uncertain=TRUE;found=NULL;break; }
-  if(hit) found=hit;
+  if(hit) found=hit;else job->aliases=before_aliases;
  }
  g_hash_table_remove(job->owners,owner);g_ptr_array_unref(bases);return found;
 }
-static const InsightSymbol *lexical_type(Resolve *job,const gchar *name,const gchar *scope,const gchar *path,gboolean global,guint depth,InsightTypeStatus *status) {
- gchar *context=global ? g_strdup("") : canonical_scope(scope);const InsightSymbol *symbol=NULL;
+static const InsightSymbol *lexical_type(Resolve *job,const gchar *name,const gchar *scope,const gchar *path,gboolean global,guint depth,InsightTypeStatus *status,gboolean *blocked) {
+ gchar *context=global ? g_strdup("") : canonical_scope(scope);const InsightSymbol *symbol=NULL;*blocked=FALSE;
  for(guint level=0;;level++) {
-  if(depth+level>64) { *status=INSIGHT_TYPE_LIMIT;break; }
+  if(depth+level>64) { *status=INSIGHT_TYPE_LIMIT;*blocked=TRUE;break; }
   gchar *qualified=*context ? g_strconcat(context,"::",name,NULL) : g_strdup(name);
-  symbol=lookup(job->index,qualified,"",path,TRUE,job->eligible,job->data,status);g_free(qualified);
-  if(symbol || *status!=INSIGHT_TYPE_UNKNOWN) break;
+  symbol=lookup(job->index,qualified,"",path,TRUE,job->eligible,job->data,status);
+  gboolean hidden=!symbol && *status==INSIGHT_TYPE_UNKNOWN && hidden_nested(job,qualified,name);g_free(qualified);
+  if(symbol) break;
+  if(hidden || *status!=INSIGHT_TYPE_UNKNOWN) { *blocked=TRUE;break; }
   if(*context) {
    InsightTypeStatus owner_status=INSIGHT_TYPE_UNKNOWN;const InsightSymbol *owner=lookup(job->index,context,"",path,TRUE,job->eligible,job->data,&owner_status);
-   if(owner_status!=INSIGHT_TYPE_UNKNOWN) { *status=owner_status;break; }
-   if(owner && !alias_symbol(owner)) { gboolean uncertain=FALSE;symbol=nested_type(job,owner,name,depth+level+1,status,&uncertain);if(symbol || uncertain) break; }
+   if(owner_status!=INSIGHT_TYPE_UNKNOWN) { *status=owner_status;*blocked=TRUE;break; }
+   if(owner && !alias_symbol(owner)) { guint before_aliases=job->aliases;gboolean uncertain=FALSE;symbol=nested_type(job,owner,name,depth+level+1,status,&uncertain,path);if(!symbol) job->aliases=before_aliases;if(symbol || uncertain) { *blocked=uncertain;break; } }
   }
   gchar *last=g_strrstr(context,"::");if(last) *last=0;else if(*context) *context=0;else break;
  }
  g_free(context);return symbol;
 }
-static InsightTypeResult resolve_name(Resolve *job,const gchar *name,const gchar *scope,const gchar *path,gboolean global,guint depth) {
+static InsightTypeResult resolve_symbol(Resolve *job,const InsightSymbol *symbol,guint depth) {
  InsightTypeResult result={.status=INSIGHT_TYPE_UNKNOWN};
  if(depth>64) { result.status=INSIGHT_TYPE_LIMIT;return result; }
- const InsightSymbol *symbol=strstr(name,"::") ? lookup(job->index,name,scope,path,global,job->eligible,job->data,&result.status) : lexical_type(job,name,scope,path,global,depth,&result.status);
- if(!symbol && result.status==INSIGHT_TYPE_UNKNOWN) {
-  /* A nested owner can itself be an alias. Resolve that owner in the use-site
-   * context, then look up only the canonical owner's direct nested name. */
-  const gchar *separator=g_strrstr(name,"::");
-  if(separator) {
-   gchar *prefix=g_strndup(name,separator-name);InsightTypeResult owner=resolve_name(job,prefix,scope,path,global,depth+1);g_free(prefix);
-   if(owner.status==INSIGHT_TYPE_FOUND) {
-    gboolean uncertain=FALSE;symbol=nested_type(job,owner.symbol,separator+2,depth+1,&result.status,&uncertain);
-   }else result.status=owner.status;
-   insight_type_result_clear(&owner);
-  }
- }
- if(!symbol) return result;
  if(!alias_symbol(symbol)) { result.status=INSIGHT_TYPE_FOUND;result.owner=symbol_name(symbol);result.symbol=symbol;return result; }
  if(g_hash_table_contains(job->active,symbol)) { result.status=INSIGHT_TYPE_CYCLE;return result; }
- if(job->aliases>=ALIAS_LIMIT) { result.status=INSIGHT_TYPE_LIMIT;return result; }
- job->aliases++;g_hash_table_add(job->active,(gpointer)symbol);
+ if(job->alias_work>=ALIAS_LIMIT) { result.status=INSIGHT_TYPE_LIMIT;return result; }
+ job->aliases++;job->alias_work++;g_hash_table_add(job->active,(gpointer)symbol);
  gboolean absolute=FALSE;gchar *target=insight_type_name(symbol->type,&absolute);
  if(target) result=resolve_name(job,target,symbol->scope,symbol->path,absolute,depth+1);
  else result.status=*symbol->type ? INSIGHT_TYPE_INVALID : INSIGHT_TYPE_UNKNOWN;
  g_free(target);g_hash_table_remove(job->active,symbol);return result;
+}
+static InsightTypeResult resolve_nested_name(Resolve *job,const InsightSymbol *owner,const gchar *name,const gchar *path,guint depth) {
+ InsightTypeResult result={.status=INSIGHT_TYPE_UNKNOWN};if(depth>64) { result.status=INSIGHT_TYPE_LIMIT;return result; }
+ const gchar *separator=strstr(name,"::");gchar *part=separator ? g_strndup(name,separator-name) : g_strdup(name);gboolean uncertain=FALSE;
+ const InsightSymbol *symbol=nested_type(job,owner,part,depth,&result.status,&uncertain,path);g_free(part);if(!symbol) return result;
+ result=resolve_symbol(job,symbol,depth);
+ if(separator && result.status==INSIGHT_TYPE_FOUND) { InsightTypeResult next=resolve_nested_name(job,result.symbol,separator+2,path,depth+1);insight_type_result_clear(&result);result=next; }
+ return result;
+}
+static InsightTypeResult resolve_name(Resolve *job,const gchar *name,const gchar *scope,const gchar *path,gboolean global,guint depth) {
+ InsightTypeResult result={.status=INSIGHT_TYPE_UNKNOWN};if(depth>64) { result.status=INSIGHT_TYPE_LIMIT;return result; }
+ const gchar *first=strstr(name,"::");gboolean blocked=FALSE;
+ if(first) {
+  /* Select the nearest first component before looking for its members. A
+   * missing member cannot reopen lookup in a different outer owner. */
+  gchar *head=g_strndup(name,first-name);const InsightSymbol *prefix=lexical_type(job,head,scope,path,global,depth,&result.status,&blocked);g_free(head);
+  if(prefix) { InsightTypeResult owner=resolve_symbol(job,prefix,depth+1);if(owner.status==INSIGHT_TYPE_FOUND) { result=resolve_nested_name(job,owner.symbol,first+2,path,depth+1);insight_type_result_clear(&owner);return result; }return owner; }
+  if(blocked || result.status!=INSIGHT_TYPE_UNKNOWN) return result;
+ }
+ const InsightSymbol *symbol=first ? lookup(job->index,name,scope,path,global,job->eligible,job->data,&result.status) : lexical_type(job,name,scope,path,global,depth,&result.status,&blocked);
+ if(!symbol && first && result.status==INSIGHT_TYPE_UNKNOWN) {
+  /* Partial snapshots may record qualified scopes without separate namespace
+   * rows. Retain exact nominal lookup only when no visible head bound it. */
+  const gchar *separator=g_strrstr(name,"::");gchar *prefix=g_strndup(name,separator-name);InsightTypeResult owner=resolve_name(job,prefix,scope,path,global,depth+1);g_free(prefix);
+  if(owner.status==INSIGHT_TYPE_FOUND) { result=resolve_nested_name(job,owner.symbol,separator+2,path,depth+1);insight_type_result_clear(&owner);return result; }
+  result.status=owner.status;insight_type_result_clear(&owner);
+ }
+ return symbol ? resolve_symbol(job,symbol,depth) : result;
 }
 InsightTypeResult insight_type_resolve(const InsightIndex *index,const gchar *type,const gchar *scope,const gchar *path,InsightTypeEligible eligible,void *data) {
  InsightTypeResult result={.status=INSIGHT_TYPE_INVALID};gboolean global=FALSE;gchar *name=insight_type_name(type,&global);

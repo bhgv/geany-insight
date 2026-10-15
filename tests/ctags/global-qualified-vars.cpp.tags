@@ -1,0 +1,20 @@
+GlobalTypeÃ256÷0
+namespace:  GlobalType
+LocalÃ256÷0
+namespace:  Local
+ValueÃ2048ŒGlobalType÷0
+struct:     GlobalType :: Value
+ValueÃ2048ŒLocal÷0
+struct:     Local :: Value
+absolute_valueÃ16384ŒLocal÷0œ::GlobalType::Value
+variable:   ::GlobalType::Value Local :: absolute_value
+counterÃ16384ŒGlobalType÷0œint
+variable:   int GlobalType :: counter
+global_pointerÃ16384÷0œ::GlobalType::Value *
+variable:   ::GlobalType::Value * global_pointer
+global_valueÃ16384÷0œ::GlobalType::Value
+variable:   ::GlobalType::Value global_value
+pingÃ1024Õ()ŒGlobalType÷0œvoid
+prototype:  void GlobalType :: ping()
+useÃ16Õ()ŒLocal÷0œvoid
+function:   void Local :: use()

@@ -364,6 +364,7 @@ test_sources = \
 	ui5.controller.js				\
 	union.f							\
 	value.f							\
+	global-qualified-vars.cpp \
 	var-and-return-type.cpp			\
 	vhdl-component.vhd				\
 	vhdl-local.vhd					\

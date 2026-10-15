@@ -1,1 +1,1 @@
-Build Windows x64: lexical class/base type lookup before outer scopes, inherited aliases over conflicting global types, direct/local hiding and guarded fallback, native parser and Context/F12 regression; 18 GUI scenarios.
+Build Windows x64: nearest qualified prefix, no outer fallback after bound owner, reopened namespaces, bounded alias probe work, globally qualified C++ variable declarations; 56 C/C++/header parser fixtures and 18 GUI scenarios.
