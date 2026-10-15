@@ -794,3 +794,4 @@ Disk entries: %u%s	Элементов на диске: %u%s
  (directory limit reached)	 (достигнут предел каталога)
 Filter loaded files: fragments, glob, ?regex or ~fuzzy; folders stay visible	Фильтр прочитанных файлов: фрагменты, маска, ?regex или ~fuzzy; каталоги остаются видимыми
 Directory read cancelled	Чтение каталога отменено
+Columns	Колонки

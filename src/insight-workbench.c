@@ -1028,11 +1028,11 @@ static void symbol_history_read(GKeyFile *settings,GtkWidget *entry,const gchar 
 }
 static gboolean file_browse_command(GtkEntry *entry) {
  const gchar *query=gtk_entry_get_text(entry);if(!wb.disk_browser || (strcmp(query,".") && strcmp(query,"..") && strcmp(query,"**"))) return FALSE;
- gboolean project=!strcmp(query,"**"),up=!strcmp(query,".."),already=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.folder_mode))==1;
+ gboolean project=!strcmp(query,"**"),up=!strcmp(query,"..");
  gtk_entry_set_text(entry,"");
  if(project) { gtk_combo_box_set_active(GTK_COMBO_BOX(wb.folder_mode),0);focus_widget_panel(wb.file_entry);return TRUE; }
  gchar *root=wb.root ? utils_get_utf8_from_locale(wb.root) : g_get_current_dir(),*path=up ? g_path_get_dirname(root) : g_strdup(root);
- gtk_combo_box_set_active(GTK_COMBO_BOX(wb.folder_mode),1);if(up || already) insight_disk_browser_set_root(wb.disk_browser,path);g_free(path);g_free(root);
+ gtk_combo_box_set_active(GTK_COMBO_BOX(wb.folder_mode),1);insight_disk_browser_set_root(wb.disk_browser,path);g_free(path);g_free(root);
  focus_widget_panel(wb.disk_browser);gtk_widget_child_focus(wb.disk_browser,GTK_DIR_TAB_FORWARD);return TRUE;
 }
 static void browser_entry_activate(GtkEntry *entry,gpointer data) {
@@ -1954,7 +1954,7 @@ static void disk_file_open(const gchar *path,gboolean activate,gpointer data) {
 }
 static void folder_mode_changed(GtkComboBox *combo,gpointer data) {
  (void)data;gboolean disk=gtk_combo_box_get_active(combo)==1;gtk_stack_set_visible_child_name(GTK_STACK(wb.folder_stack),disk ? "disk" : "project");
- if(disk) { gchar *root=wb.root ? utils_get_utf8_from_locale(wb.root) : g_get_current_dir();insight_disk_browser_set_root(wb.disk_browser,root);g_free(root); }else insight_disk_browser_cancel(wb.disk_browser);
+ if(disk) { gchar *root=wb.root ? utils_get_utf8_from_locale(wb.root) : g_get_current_dir();insight_disk_browser_resume(wb.disk_browser,root);g_free(root); }else insight_disk_browser_cancel(wb.disk_browser);
 }
 static void create_project_tree(void) {
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,3),*row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);
@@ -3681,6 +3681,7 @@ static void save_workbench_settings(void) {
  grouped_write(&wb.type_panel,settings); grouped_write(&wb.category_panel,settings);
  g_key_file_set_boolean(settings,"workbench","project-templates",wb.clips_prefer_project);
  g_key_file_set_boolean(settings,"workbench","folder-follow-current-file",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.tree_follow)));
+ insight_disk_browser_write(wb.disk_browser,settings);g_key_file_set_integer(settings,"workbench","folder-view-mode",gtk_combo_box_get_active(GTK_COMBO_BOX(wb.folder_mode)));
  symbol_sort_write(settings,wb.file_store,"project-files");insight_symbol_view_columns_write(GTK_TREE_VIEW(wb.file_view),settings,"project-files");symbol_history_write(settings,wb.file_entry,"project-files");
  symbol_history_write(settings,wb.local_entry,"file-symbols");symbol_history_write(settings,wb.symbol_entry,"project-symbols");
  insight_symbol_view_columns_write(GTK_TREE_VIEW(wb.local_view),settings,"file-symbols");insight_symbol_view_columns_write(GTK_TREE_VIEW(wb.symbol_view),settings,"project-symbols");
@@ -3733,6 +3734,7 @@ static void restore_workbench_settings(void) {
   insight_overview_read(settings);
  grouped_read(&wb.type_panel,settings); grouped_read(&wb.category_panel,settings);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.tree_follow),g_key_file_get_boolean(settings,"workbench","folder-follow-current-file",NULL));
+ gboolean disk_saved=insight_disk_browser_read(wb.disk_browser,settings);if(disk_saved && g_key_file_get_integer(settings,"workbench","folder-view-mode",NULL)==1) gtk_combo_box_set_active(GTK_COMBO_BOX(wb.folder_mode),1);
  symbol_sort_read(settings,wb.file_store,"project-files");insight_symbol_view_columns_read(GTK_TREE_VIEW(wb.file_view),settings,"project-files");symbol_history_read(settings,wb.file_entry,"project-files");
   symbol_history_read(settings,wb.local_entry,"file-symbols");symbol_history_read(settings,wb.symbol_entry,"project-symbols");
   insight_symbol_view_columns_read(GTK_TREE_VIEW(wb.local_view),settings,"file-symbols");insight_symbol_view_columns_read(GTK_TREE_VIEW(wb.symbol_view),settings,"project-symbols");

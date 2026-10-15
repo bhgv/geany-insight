@@ -1,1 +1,1 @@
-Build Windows x64: Project Files dot/parent/project-only input commands and cancellation when leaving disk browsing, with native GUI regressions.
+Build Windows x64: persistent disk-browser directory/filter/mode/hidden entries and column options, guarded settings restore with native RU/EN GUI.

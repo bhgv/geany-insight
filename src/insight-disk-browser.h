@@ -6,6 +6,9 @@
 typedef void (*InsightDiskOpen)(const gchar *,gboolean,gpointer);
 GtkWidget *insight_disk_browser_new(InsightDiskOpen,gpointer);
 void insight_disk_browser_set_root(GtkWidget *,const gchar *);
+void insight_disk_browser_resume(GtkWidget *,const gchar *);
+gboolean insight_disk_browser_read(GtkWidget *,GKeyFile *);
+void insight_disk_browser_write(GtkWidget *,GKeyFile *);
 void insight_disk_browser_cancel(GtkWidget *);
 void insight_disk_browser_locale_changed(GtkWidget *);
 #endif
