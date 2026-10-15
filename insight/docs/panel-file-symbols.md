@@ -93,3 +93,5 @@ Tutorial: right-click a class member, copy its qualified name, then filter by it
 Переключатель «Иерархия областей видимости» создаёт вложенные ветки namespace/module/class по scope нативного парсера. Для C++ используются `::`, для Python — `.`; разделитель выбирается по действующему языку файла. Фильтрация сохраняет предков подходящих символов. Опция работает совместно с группировкой по типам, сортировкой и дозагрузкой; File и Project сохраняют её независимо. Вложенные ветки сохраняют раскрытие при обновлении, выбранный символ восстанавливается без перехода редактора.
 
 Ветки scope — структурные заголовки, без исходной строки; открыть можно строки определений/членов. Они отражают индексированные scope, а не семантическое разрешение владельцев, aliases или наследования. Глубина разбора разделителя ограничена 64 частями.
+
+The panel belongs to the left side of the source editor. Symbol names are bold. Clicking selects a row and moves the editor caret to its declaration; Up/Down move the selection while keeping focus in the list. Enter/double-click focuses the editor. Context remains a separate lower preview.

@@ -93,3 +93,5 @@ Tutorial: right-click a class member, copy its qualified name, then filter by it
 Enable **Scope hierarchy** for nested namespace/module/class branches from the native parser's scope. The delimiter follows the file's effective language (C++ `::`, Python `.`). Filtering retains matching symbols' ancestors. The option composes with type grouping, sorting and paging, and is saved independently for File and Project Symbols. Nested expansion and selected symbols survive refresh without editor navigation.
 
 Scope branches are structural headers without a source line; definition/member rows can be opened. This reflects indexed scopes, not semantic owner, alias or inheritance resolution. Scope splitting is bounded to 64 parts.
+
+The panel belongs to the left side of the source editor. Symbol names are bold. Clicking selects a row and moves the editor caret to its declaration; Up/Down move the selection while keeping focus in the list. Enter/double-click focuses the editor. Context remains a separate lower preview.

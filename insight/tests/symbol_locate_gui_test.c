@@ -22,7 +22,14 @@ static gboolean step(gpointer data) {
  GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));GtkTreeIter it;
  if(phase==1) {
   if(!row(model,"beta",&it)) return G_SOURCE_CONTINUE;
-  g_assert_null(gtk_button_get_label(GTK_BUTTON(button)));g_assert_true(GTK_IS_IMAGE(gtk_button_get_image(GTK_BUTTON(button))));gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),&it);phase++;
+  g_assert_null(gtk_button_get_label(GTK_BUTTON(button)));g_assert_true(GTK_IS_IMAGE(gtk_button_get_image(GTK_BUTTON(button))));GtkTreePath *cursor=gtk_tree_model_get_path(model,&it);gtk_tree_view_set_cursor(GTK_TREE_VIEW(view),cursor,NULL,FALSE);gtk_tree_path_free(cursor);
+  g_assert_cmpint(sci_get_current_line(doc->editor->sci),==,6);
+  g_assert_true(gtk_widget_is_ancestor(view,ui_lookup_widget(window,"hpaned1")));
+  g_assert_false(gtk_widget_is_ancestor(view,named(window,"insight-context-code")));
+  GtkTreeViewColumn *column=gtk_tree_view_get_column(GTK_TREE_VIEW(view),0);gtk_tree_view_column_cell_set_cell_data(column,model,&it,FALSE,FALSE);GList *cells=gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(column));
+  for(GList *c=cells;c;c=c->next) if(GTK_IS_CELL_RENDERER_TEXT(c->data)) { gint weight=0;g_object_get(c->data,"weight",&weight,NULL);g_assert_cmpint(weight,==,PANGO_WEIGHT_BOLD); }g_list_free(cells);
+  gtk_widget_grab_focus(view);gboolean handled=FALSE;g_signal_emit_by_name(view,"move-cursor",GTK_MOVEMENT_DISPLAY_LINES,-1,&handled);selected("alpha");g_assert_true(gtk_widget_has_focus(view));g_assert_cmpint(sci_get_current_line(doc->editor->sci),==,1);
+  g_signal_emit_by_name(view,"move-cursor",GTK_MOVEMENT_DISPLAY_LINES,1,&handled);selected("beta");g_assert_cmpint(sci_get_current_line(doc->editor->sci),==,6);phase++;
  } else if(phase==2) {
   preview_line=sci_get_current_line(SCINTILLA(named(window,"insight-context-code")));locate(doc,3,"alpha");locate(doc,5,"alpha");locate(doc,7,"last_variable");locate(doc,0,"last_variable");
   GtkWidget *menu=popup(view),*command=g_object_get_data(G_OBJECT(menu),"insight-symbol-command-13");g_assert_true(gtk_widget_get_visible(command));g_assert_true(gtk_widget_get_sensitive(command));sci_set_current_position(doc->editor->sci,sci_get_position_from_line(doc->editor->sci,6),FALSE);gtk_menu_item_activate(GTK_MENU_ITEM(command));selected("beta");g_assert_cmpint(sci_get_current_line(SCINTILLA(named(window,"insight-context-code"))),==,preview_line);

@@ -72,3 +72,5 @@ The expression is saved separately as `master-file-expression` alongside the res
 окружения оболочки нужно перезапустить редактор. Отдельный редактор
 пользовательских переменных и остальные специальные каталоги Source Insight
 пока не реализованы; строки внутри самого MFL сохраняют буквальные пути.
+
+File, Directory, Size and Path columns show the name, containing directory, byte size and full path. Size sorts numerically; unavailable files have a blank size. Metadata is read in the background when the list refreshes.

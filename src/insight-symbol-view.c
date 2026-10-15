@@ -88,7 +88,7 @@ static void cell(GtkTreeViewColumn *column,GtkCellRenderer *renderer,GtkTreeMode
   else if(type&(tm_tag_namespace_t|tm_tag_package_t)) color=dark ? "#b8d88a" : "#567e23";
   else if(type&(tm_tag_variable_t|tm_tag_externvar_t|tm_tag_local_var_t|tm_tag_member_t|tm_tag_field_t)) color=dark ? "#8fd4aa" : "#247649";
   GtkTreePath *row=gtk_tree_model_get_path(model,iter); gboolean selected=gtk_tree_selection_path_is_selected(gtk_tree_view_get_selection(s->view),row); gtk_tree_path_free(row);
-  g_object_set(renderer,"foreground",color,"foreground-set",!selected,"weight",group ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL,NULL);
+  g_object_set(renderer,"foreground",color,"foreground-set",!selected,"weight",(group || (field==NAME && g_object_get_data(G_OBJECT(s->view),"insight-bold-symbol-names"))) ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL,NULL);
  }
  g_free(path); g_free(kind);
 }
@@ -108,7 +108,7 @@ static void cancel(Symbols *s) {
 typedef struct { gchar *name,*path,*kind; gulong line; GtkTreeSelection *selection; } Choice;
 static gboolean restore_choice(GtkTreeModel *model,GtkTreePath *path,GtkTreeIter *iter,gpointer data) {
  Choice *choice=data; gchar *name=NULL,*file=NULL,*kind=NULL; gulong line=0; gtk_tree_model_get(model,iter,NAME,&name,PATH,&file,LINE,&line,KIND,&kind,-1); gboolean match=choice->line ? line==choice->line && !g_strcmp0(name,choice->name) && !g_strcmp0(file,choice->path) : !line && choice->kind && !g_strcmp0(kind,choice->kind);
- if(match) { GtkWidget *view=GTK_WIDGET(gtk_tree_selection_get_tree_view(choice->selection));gtk_tree_view_expand_to_path(GTK_TREE_VIEW(view),path);gtk_tree_selection_select_iter(choice->selection,iter); }
+ if(match) { GtkWidget *view=GTK_WIDGET(gtk_tree_selection_get_tree_view(choice->selection));gtk_tree_view_expand_to_path(GTK_TREE_VIEW(view),path);gtk_tree_view_set_cursor(GTK_TREE_VIEW(view),path,NULL,FALSE); }
  g_free(name); g_free(file);g_free(kind); return match;
 }
 static void page_button(Symbols *s) { if(s->more) { if(s->more_step) { gchar *tip=insight_i18n_printf("Load the next %u symbols",s->more_step);gtk_widget_set_tooltip_text(s->more,tip);g_free(tip); } gtk_widget_set_visible(s->more,s->has_more); gtk_widget_set_sensitive(s->more,gtk_widget_get_sensitive(GTK_WIDGET(s->view))); } }
