@@ -93,9 +93,7 @@ open buffer is reflected. Module paths are cached only for that index snapshot.
 
 This is bounded lexical resolution, not Python execution. Dynamic attributes,
 arbitrary chains/call results, wildcard imports, re-export chains, decorators
-and general type inference are not evaluated. Dotted imports without an alias
-(`import pkg.mod`) and implicit `sys.path`/package execution rules are not
-resolved. An unrelated name in another Python file is not an
+and general type inference are not evaluated. Implicit `sys.path`/package execution rules are not resolved. An unrelated name in another Python file is not an
 import. An unknown receiver does not fall back to a random same-name field.
 Comments and strings do not become links.
 
@@ -133,3 +131,10 @@ callee has one visible same-file definition and a simple indexed class return
 annotation. Return annotations resolve in the declaration context, not caller
 locals. Unknown results, async functions, complex/union types and arbitrary
 method/call chains are not inferred. No argument typing or execution occurs.
+
+Dotted module imports support `pkg.mod.function`, `pkg.mod.Class.field` and
+`alias.Class.field`, including indexed nested classes. Several modules may share
+one imported package root. Lookup uses the longest explicitly imported module
+prefix; an unimported submodule is never assumed loaded. Attribute prefixes are
+bounded to 16 components and must identify indexed classes rather than arbitrary
+objects.
