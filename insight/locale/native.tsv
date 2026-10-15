@@ -1369,3 +1369,7 @@ Master file list or its expanded file set changed; reload before applying member
 Invalid master file list expression	Некорректное выражение пути к MFL
 Unknown or unavailable master file list path variable	Неизвестная или недоступная переменная пути к MFL
 Path variables: %PROJECT_SOURCE_DIR%, %PROJECT_DATA_DIR%, %PROJECT_NAME%, %TEMP_DIR% and environment names; use %% for a literal percent sign	Переменные пути: %PROJECT_SOURCE_DIR%, %PROJECT_DATA_DIR%, %PROJECT_NAME%, %TEMP_DIR% и имена переменных окружения; %% означает буквальный знак процента
+Follow cursor — update Context from the editor caret	Следовать за кареткой — обновлять Context по каретке редактора
+Wrap long lines in Context	Переносить длинные строки в Context
+Show or hide Context search (Ctrl+F)	Показать или скрыть поиск в Context (Ctrl+F)
+Show or hide indexed definition candidates	Показать или скрыть список определений

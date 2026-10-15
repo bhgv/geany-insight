@@ -117,3 +117,65 @@ gchar *insight_native_scopes_at(InsightNativeScopes *cache,gulong line,gsize pos
  }
  if(best && !ambiguous) { if(uncertain) *uncertain=FALSE;return g_strdup(best->scope); }return NULL;
 }
+
+/* Python parser scopes use dots; native owner queries use ::. */
+static gchar *python_scope_name(const gchar *name) {
+ GString *out=g_string_new(NULL);for(const gchar *p=name ? name : "";*p;p++) { if(*p=='.') g_string_append(out,"::");else g_string_append_c(out,*p); }return g_string_free(out,FALSE);
+}
+static gchar *python_symbol_scope(const InsightSymbol *tag) {
+ gchar *outer=python_scope_name(tag->scope),*name=*outer ? g_strconcat(outer,"::",tag->name,NULL) : g_strdup(tag->name);g_free(outer);return name;
+}
+gchar *insight_native_python_scope(const InsightIndex *index,const gchar *path,const InsightNativeSource *source,gsize position) {
+ if(!index || !source || !source->text || !source->mask || source->length>2u*1024u*1024u || position>source->length) return NULL;
+ GArray *lines=g_array_new(FALSE,FALSE,sizeof(gsize));gsize offset=0;g_array_append_val(lines,offset);
+ for(gsize i=0;i<source->length;i++) if(source->text[i]=='\n') { offset=i+1;g_array_append_val(lines,offset); }
+ gchar *scope=NULL;gsize smallest=G_MAXSIZE,work=0;guint visits=0;
+ for(gsize i=0;i<insight_index_count(index);i++) {
+  const InsightSymbol *tag=insight_index_at(index,i);if(g_strcmp0(tag->path,path) || !tag->line || tag->line>lines->len || (strcmp(tag->kind,"f") && strcmp(tag->kind,"m") && strcmp(tag->kind,"c"))) continue;
+  if(++visits>10000) { g_clear_pointer(&scope,g_free);break; }
+  gsize start=g_array_index(lines,gsize,tag->line-1),body=0,end=0;if(start>position) continue;
+  if(insight_suite_range(source->text,source->mask,source->length,start,INSIGHT_FUNCTION_PYTHON,&body,&end)==1) {
+   if(end-start>8u*1024u*1024u-work) { g_clear_pointer(&scope,g_free);break; }work+=end-start;
+   if(position<end && end-start<smallest) { smallest=end-start;g_free(scope);scope=python_symbol_scope(tag); }
+  }
+ }
+ g_array_unref(lines);return scope;
+}
+static gboolean python_within(const gchar *scope,const gchar *outer) {
+ gsize size=strlen(outer);return !size || !strcmp(scope,outer) || (g_str_has_prefix(scope,outer) && g_str_has_prefix(scope+size,"::"));
+}
+gint insight_native_python_rank(const InsightIndex *index,const InsightSymbol *tag,const gchar *path,const gchar *scope,gulong line) {
+ /* Unqualified project-wide names are not Python imports. */
+ if(g_strcmp0(tag->path,path)) return -1;
+ gchar *owner=python_scope_name(tag->scope),*current=python_scope_name(scope);gint rank=-1;
+ if(python_within(current,owner)) {
+  gboolean class_scope=FALSE;
+  for(gsize i=0;*owner && i<insight_index_count(index);i++) { const InsightSymbol *candidate=insight_index_at(index,i);if(strcmp(candidate->kind,"c") || g_strcmp0(candidate->path,path)) continue;gchar *name=python_symbol_scope(candidate);class_scope=!strcmp(owner,name);g_free(name);if(class_scope) break; }
+  if((!class_scope || !strcmp(current,owner)) && ((!strcmp(tag->kind,"l") || !strcmp(tag->kind,"z")) ? tag->line<=line : TRUE)) rank=100+(gint)strlen(owner)*16+(!strcmp(tag->kind,"l") ? 4 : 0);
+ }
+ g_free(owner);g_free(current);return rank;
+}
+gchar *insight_native_python_owner(const InsightIndex *index,const gchar *path,const gchar *scope,gulong line,const InsightNativeSource *source,gsize position,gboolean *member,InsightTypeEligible eligible,void *data) {
+ *member=FALSE;if(!source || !source->text || !source->mask || position>source->length) return NULL;
+ const gchar *mask=source->mask;gsize at=position;while(at && ident(mask[at-1])) at--;while(at && g_ascii_isspace(mask[at-1])) at--;if(!at || mask[at-1]!='.') return NULL;
+ *member=TRUE;at--;while(at && g_ascii_isspace(mask[at-1])) at--;gsize end=at;while(at && ident(mask[at-1])) at--;if(at==end) return NULL;
+ /* Chained/indexed/call expressions require a richer resolver. */
+ gsize prefix=at;while(prefix && (mask[prefix-1]==' ' || mask[prefix-1]=='\t')) prefix--;if(prefix && (mask[prefix-1]=='.' || mask[prefix-1]==')' || mask[prefix-1]==']')) return NULL;
+ gchar *receiver=g_strndup(mask+at,end-at),*current=python_scope_name(scope),*owner=NULL;
+ if(!strcmp(receiver,"self") || !strcmp(receiver,"cls")) {
+  for(gsize i=0;i<insight_index_count(index);i++) {
+   const InsightSymbol *tag=insight_index_at(index,i);if(g_strcmp0(tag->path,path) || (strcmp(tag->kind,"m") && strcmp(tag->kind,"f")) || !*tag->scope || (eligible && !eligible(tag,data))) continue;
+   gchar *name=python_symbol_scope(tag);gboolean same=!strcmp(name,current);g_free(name);if(!same) continue;
+   const gchar *first=tag->signature;while(*first && (*first=='(' || g_ascii_isspace(*first))) first++;gsize n=strlen(receiver);
+   if(!strncmp(first,receiver,n) && !ident(first[n])) owner=python_scope_name(tag->scope);
+   break;
+  }
+ } else {
+  /* A visible annotated variable or a directly named class is nominal. */
+  const InsightSymbol *best=NULL;gint best_rank=-1;
+  for(gsize i=0;i<insight_index_count(index);i++) { const InsightSymbol *tag=insight_index_at(index,i);if(strcmp(tag->name,receiver) || (eligible && !eligible(tag,data))) continue;gint rank=insight_native_python_rank(index,tag,path,scope,line);if(rank>best_rank) { best=tag;best_rank=rank; } }
+  if(best && !strcmp(best->kind,"c")) owner=python_symbol_scope(best);
+  else if(best && *best->type) { InsightTypeResult resolved=insight_type_resolve(index,best->type,best->scope,path,eligible,data);owner=resolved.owner;resolved.owner=NULL;insight_type_result_clear(&resolved); }
+ }
+ g_free(receiver);g_free(current);return owner;
+}

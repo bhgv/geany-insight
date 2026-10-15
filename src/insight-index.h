@@ -46,5 +46,10 @@ void insight_native_scopes_free(InsightNativeScopes *);
 gchar *insight_native_member_owner_source_filtered(const InsightIndex *,const char *,const char *,gulong,const InsightNativeSource *,gsize,gboolean *,gboolean,InsightTypeEligible,void *);
 gchar *insight_native_member_owner_calls_filtered(const InsightIndex *,const char *,const char *,gulong,const char *,gsize,gboolean *,gboolean,InsightTypeEligible,void *);
 gboolean insight_native_member_matches(const InsightSymbol *,const char *);
+/* Python navigation uses completed indentation suites and lexical visibility.
+ * Dynamic receivers/import inference is deliberately not guessed. */
+gchar *insight_native_python_scope(const InsightIndex *,const gchar *,const InsightNativeSource *,gsize);
+gint insight_native_python_rank(const InsightIndex *,const InsightSymbol *,const gchar *,const gchar *,gulong);
+gchar *insight_native_python_owner(const InsightIndex *,const gchar *,const gchar *,gulong,const InsightNativeSource *,gsize,gboolean *,InsightTypeEligible,void *);
 guint insight_native_definition_rank(const InsightSymbol *,const char *);
 #endif

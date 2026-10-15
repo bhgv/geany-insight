@@ -540,3 +540,8 @@ test('Insight master file list project GUI', master_list_gui_test, timeout: 55)
 
 disk_browser_gui_test = executable('test_insight_disk_browser_gui', '../insight/tests/disk_browser_gui_test.c', dependencies: test_deps)
 test('Insight unindexed disk browser GUI', disk_browser_gui_test, timeout: 45)
+
+python_context_gui_test = executable('test_insight_python_context_gui', '../insight/tests/python_context_gui_test.c', dependencies: test_deps)
+test('Insight Python Context and tools GUI', python_context_gui_test, timeout: 45)
+panel_geometry_gui_test = executable('test_insight_panel_geometry_gui', '../insight/tests/panel_geometry_gui_test.c', dependencies: test_deps)
+test('Insight initial and restored panel geometry GUI', panel_geometry_gui_test, timeout: 65)

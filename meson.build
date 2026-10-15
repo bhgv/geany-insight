@@ -1104,7 +1104,7 @@ install_data(
   'insight/docs/panel-bookmarks.md',
   'insight/docs/panel-clips.md',
   'insight/docs/panel-file-symbols.md',
-  'insight/docs/panel-context.md',
+  'insight/docs/panel-context.md', 'insight/docs/search-replace.md',
   'insight/docs/panel-search-results.md',
   'insight/docs/panel-native-symbols.md',
   'insight/docs/panel-documents.md',

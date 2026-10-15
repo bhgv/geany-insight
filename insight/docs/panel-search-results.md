@@ -13,3 +13,6 @@ Open project search, enter a name and run it. Select a match to preview it and d
 The ? button at the upper right opens this page. Help follows the interface language selected in Options.
 
 More: [tutorials.md](tutorials.md).
+
+
+Полная справка: [Режимы поиска/замены и языки запросов](search-replace.md).

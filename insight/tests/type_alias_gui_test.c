@@ -84,7 +84,7 @@ static gboolean step(gpointer data) {
  }
  if(phase==3) {
   /* F12 disabled Follow, so explicitly resume it through its visible control. */
-  GList *queue=g_list_append(NULL,window);GtkWidget *follow=NULL;while(queue) { GtkWidget *w=queue->data;queue=g_list_delete_link(queue,queue);if(GTK_IS_CHECK_BUTTON(w) && !g_strcmp0(gtk_button_get_label(GTK_BUTTON(w)),"Follow cursor")) { follow=w;break; }if(GTK_IS_CONTAINER(w)) queue=g_list_concat(queue,gtk_container_get_children(GTK_CONTAINER(w))); }g_list_free(queue);g_assert_nonnull(follow);follow_button=follow;gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(follow),TRUE);phase++;return G_SOURCE_CONTINUE;
+  GList *queue=g_list_append(NULL,window);GtkWidget *follow=NULL;while(queue) { GtkWidget *w=queue->data;queue=g_list_delete_link(queue,queue);if(GTK_IS_TOGGLE_BUTTON(w) && !g_strcmp0(gtk_widget_get_name(w),"insight-context-follow")) { follow=w;break; }if(GTK_IS_CONTAINER(w)) queue=g_list_concat(queue,gtk_container_get_children(GTK_CONTAINER(w))); }g_list_free(queue);g_assert_nonnull(follow);follow_button=follow;gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(follow),TRUE);phase++;return G_SOURCE_CONTINUE;
  }
  if(phase==4) {
   GtkWidget *choices=named(window,"insight-context-definitions");gchar *label=gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(choices));gboolean correct=label && strstr(label,"Chain::Leaf");g_free(label);if(!correct) return G_SOURCE_CONTINUE;

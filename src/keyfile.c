@@ -1185,10 +1185,8 @@ static void load_ui_session(GKeyFile *config)
 		ui_prefs.geometry[3] = MAX(-1, geo[3]);
 		ui_prefs.geometry[4] = geo[4] != 0;
 	}
-	hpan_position = utils_get_setting_integer(config, PACKAGE, "treeview_position", 230);
-	vpan_position = utils_get_setting_integer(config, PACKAGE, "msgwindow_position", (geo) ?
-				(GEANY_MSGWIN_HEIGHT + geo[3] - 440) :
-				(GEANY_MSGWIN_HEIGHT + GEANY_WINDOW_DEFAULT_HEIGHT - 440));
+	hpan_position = utils_get_setting_integer(config, PACKAGE, "treeview_position", 100);
+	vpan_position = utils_get_setting_integer(config, PACKAGE, "msgwindow_position", -1);
 
 	g_free(geo);
 }
@@ -1420,6 +1418,14 @@ void configuration_open_default_session(void)
 
 /* set some settings which are already read from the config file, but need other things, like the
  * realisation of the main window */
+static void initial_context_size(GtkWidget *pane, GtkAllocation *allocation, gpointer data)
+{
+ (void)data;
+ if (allocation->height < 200) return;
+ gtk_paned_set_position(GTK_PANED(pane), allocation->height * 3 / 4);
+ g_signal_handlers_disconnect_by_func(pane, initial_context_size, NULL);
+}
+
 void configuration_apply_settings(void)
 {
 	if (scribble_text)
@@ -1438,7 +1444,10 @@ void configuration_apply_settings(void)
 	if (prefs.save_winpos)
 	{
 		gtk_paned_set_position(GTK_PANED(ui_lookup_widget(main_widgets.window, "hpaned1")), hpan_position);
-		gtk_paned_set_position(GTK_PANED(ui_lookup_widget(main_widgets.window, "vpaned1")), vpan_position);
+		if (vpan_position >= 0)
+			gtk_paned_set_position(GTK_PANED(ui_lookup_widget(main_widgets.window, "vpaned1")), vpan_position);
+		else
+			g_signal_connect(ui_lookup_widget(main_widgets.window, "vpaned1"), "size-allocate", G_CALLBACK(initial_context_size), NULL);
 	}
 
 	/* set fullscreen after initial draw so that returning to normal view is the right size.

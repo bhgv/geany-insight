@@ -23,3 +23,47 @@ Explicit qualified nested types can be inherited: `Derived::Nested`, an alias-qu
 C++ variables whose declaration starts with global `::` qualification are indexed with that prefix retained in the recorded type. Namespace-scope, member and local declaration parsing use the same rule; qualified calls or assignments are not converted into variable declarations.
 
 Nominal function-result lookup respects the callable’s own template parameters: a dependent `T` does not select an unrelated global class. Explicit `::T` and ordinary results use declaration context; value parameters and body-local aliases do not change the result type. Template argument deduction and overload selection remain unsupported.
+
+
+Full reference: [Search and replacement modes and query languages](search-replace.md).
+
+## Compact right-hand Context tools
+
+Search and definition candidates start hidden. Icon-only commands form a vertical
+rail to the right of the source; hover for each command's full name. The rail
+scrolls when the preview is short.
+
+| Icon | Action |
+| --- | --- |
+| Left / right arrow | Previous / next Context history location |
+| Open document | Open the preview caret line in the editor; also Enter |
+| Magnifier | Show/hide preview search; Ctrl+F in Context opens and focuses it |
+| List | Show/hide indexed definition candidates; selection changes Context only |
+| Target | Toggle Follow: track the main editor caret |
+| Justified lines | Toggle wrapping of long preview lines |
+| Copy | Copy the preview caret address as `file:line` |
+| Question mark | Open this help page |
+
+Hiding search/candidates preserves their query/model and the editor position.
+Press again to reveal them. F3/Shift+F3 repeats search. Enter in source opens its
+line; F12 follows a definition inside Context. Double-click opens the editor.
+
+On first launch both side areas open about 100 logical pixels and Context uses
+approximately one quarter of the working height. Drag splitters down to a narrow
+strip; subsequent launches restore the last positions.
+
+## Checked Python navigation
+
+Function/class scopes use indentation ranges from the captured source, including
+nested functions and return to an outer scope after a nested suite ends. Locals
+and parameters from sibling functions are excluded; visible closure names remain
+available. A method's first `self`/`cls` parameter selects its indexed class, not
+another class's same-name field. Directly named classes and indexed annotated
+receivers are supported. Preview links, F12 and asynchronous Follow share these
+rules.
+
+This is bounded lexical resolution, not Python execution. Dynamic attributes,
+arbitrary chains/call results, the import/alias graph, decorators and general type
+inference are not evaluated. An unrelated name in another Python file is not an
+import. An unknown receiver does not fall back to a random same-name field.
+Comments and strings do not become links.

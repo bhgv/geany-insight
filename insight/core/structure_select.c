@@ -203,6 +203,9 @@ static int function_range_impl(const char *text,const char *mask,size_t length,s
 int insight_function_range(const char *text,const char *mask,size_t length,size_t declaration,InsightFunctionStyle style,size_t *body,size_t *last) {
  return function_range_impl(text,mask,length,declaration,style,body,last,0);
 }
+int insight_suite_range(const char *text,const char *mask,size_t length,size_t declaration,InsightFunctionStyle style,size_t *body,size_t *last) {
+ return function_range_impl(text,mask,length,declaration,style,body,last,1);
+}
 int insight_select_suite(const char *text,const char *mask,size_t length,size_t begin,size_t end,InsightFunctionStyle style,size_t *first,size_t *last) {
  if(!text || !mask || !first || !last || begin>end || end>length || style<INSIGHT_FUNCTION_BRACES || style>INSIGHT_FUNCTION_LUA) return -1;
  if(style==INSIGHT_FUNCTION_BRACES) return insight_select_block(mask,length,begin,end,first,last);

@@ -1,1 +1,1 @@
-Build Windows x64: align C-family Symbol Info callable metadata with declaration-aware Context resolution; GUI checks dependent/global/ordinary template results plus A-D Window List restore, strict core/native backend, 57 parser fixtures and 18 GUI scenarios.
+Build Windows x64: compact icon-only Context rail and hidden search/definition controls; first-run 100px sides and quarter-height Context with full restart restoration; Python lexical scopes/self fields/locals/classes/F12/Follow and new GUI regressions; RU/EN search-replace reference and current MFL path variables.

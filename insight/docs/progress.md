@@ -1328,3 +1328,58 @@ GUI both pass. All 11 portable core fixtures passed before the change. Windows
 specific mappings have fixture assertions but were not executed in this Linux
 environment; Windows validation and the full Source Insight completion list
 remain open.
+
+
+## Compact Context, first-run panel geometry and Python scopes
+
+First-run left/right panels open about 100 logical pixels and the real message/
+Context splitter uses three quarters of its working height for the editor. Native
+configuration restores later splitter positions; a full two-process GUI fixture
+checks fresh defaults, movement down to a narrow strip and restart restoration.
+A 16-pixel guard avoids GTK notebook allocation failures when collapsing panels.
+A-D layouts now capture/restore the actual message splitter rather than the
+unused single-child workbench wrapper. Existing saved right widths still pass
+the panel regression.
+
+Context keeps only its title above the source. Search and definition candidates
+start hidden and toggle independently through a scrollable right-hand icon rail.
+History, open, Follow, wrap, copy and help also use that rail. Full command names
+are tooltips, including RU translations; Ctrl+F reveals search, F3 repeats it,
+and hiding controls retains their content. RU/EN Context help describes every
+icon.
+
+Python scope selection now uses complete indentation suites from a held source
+mask, including class/function nesting and returning to outer/module scope after
+a nested suite ends. Scope names normalize parser dots; same-file locals,
+parameters and closure names are ranked in their visible lexical scopes, while
+class members are not treated as unqualified names inside methods. A conventional
+first self/cls parameter selects its declaring class. Direct class receivers and
+indexed annotated variables are supported. Other project files are not silently
+treated as Python imports. Dynamic typing/attributes, arbitrary receiver chains,
+call results, decorators and import/alias graph resolution remain unsupported.
+Ranges are limited to 2 MiB source, 10000 indexed suites and 8 MiB accumulated
+suite ranges; preview scope results are cached by line and index generation.
+The receiver-prefix scan stops at a newline, avoiding rejection of Class.field
+after a call on the previous line.
+
+Link filling reselects its own Scintilla indicator after reentrant styling/
+selection updates. Explicit F12 resolves synchronously even while link decoration
+is pending; mouse clicks still require a decorated link. Preview publication
+rebuilds path-dependent decorations even for identical text in another source.
+Programmatic updates of temporarily disabled symbol/file lists no longer disable
+Context Follow or initiate unrelated previews.
+
+New native parser and real GUI regressions cover distinct self fields, module
+variables, closure locals, parameters, named functions/classes, direct class
+fields, F12 without waiting for decoration, asynchronous Follow, hidden control
+toggles and tooltips. Native/backend checks pass, as do the Python GUI, C-family
+language links, scoped C++ Context, two-process geometry, panel sizing/help, RU/EN,
+Help/Search and Overview GUI suites. Windows CI includes both new GUI scenarios.
+
+The new bundled RU/EN search-replace reference separates native Find/Replace,
+compact file/Context/project search, Boolean keywords, fuzzy subsequences, lookup
+filters and glob masks. It documents matching/selection/session modes, regex
+operators, multiline/Unicode/escaping, capture replacement syntax and examples,
+English variations, grep dialect differences, result navigation and limits.
+Guide/tutorial/search/Context pages link to the reference; Meson/Autotools and
+Windows packaging include it.

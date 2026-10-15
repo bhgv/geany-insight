@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "../../src/insight-index.h"
 #include "../desktop/relation_query.h"
+#include "../desktop/source_mask.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -19,6 +20,22 @@ static gpointer parse_in_worker(gpointer data) {
 }
 static int cpp_only(const InsightSymbol *symbol,void *data) { (void)data;return !g_str_has_suffix(symbol->path,".py"); }
 static void owner_is(const InsightIndex *index,const char *path,const char *scope,const char *expression,const char *expected) { gboolean member=FALSE;gchar *owner=insight_native_member_owner(index,path,scope,100000,expression,strlen(expression),&member);assert(member);assert(!g_strcmp0(owner,expected));g_free(owner); }
+static void python_navigation_test(void) {
+ const gchar *code="value = 99\nclass Alpha:\n    value = 1\n    def method(self, arg: int):\n        local = arg\n        def inner():\n            return local\n        return self.value + local\nclass Beta:\n    value = 2\n    def method(self):\n        return self.value\nvalue += 1\nprint()\nAlpha.value\n";
+ gchar filename[]="python-native-XXXXXX";gint fd=g_mkstemp(filename);assert(fd>=0);g_close(fd,NULL);gchar *path=g_canonicalize_filename(filename,NULL);
+ TMSourceFile *file=tm_source_file_new(path,"Python");InsightIndex *index=insight_index_new();assert(insight_native_parse(index,file,path,code,strlen(code)));
+ gchar *mask=insight_source_code_mask(code,strlen(code),INSIGHT_CODE_PYTHON,NULL);InsightNativeSource source={code,mask,strlen(code)};
+ gsize pos=strstr(code,"self.value +")-code+5;gchar *scope=insight_native_python_scope(index,path,&source,pos);assert(!g_strcmp0(scope,"Alpha::method"));gboolean member=FALSE;
+ gchar *owner=insight_native_python_owner(index,path,scope,8,&source,pos,&member,NULL,NULL);assert(member && !g_strcmp0(owner,"Alpha"));const InsightSymbol *field=NULL;assert(insight_member_query(index,owner,"value",path,NULL,NULL,&field,1,NULL,NULL)==1 && field->line==3);g_free(owner);
+ const InsightSymbol *tags[8];gsize count=insight_index_find(index,"value",1,tags,8);assert(count==3);
+ for(gsize i=0;i<count;i++) assert((insight_native_python_rank(index,tags[i],path,scope,8)>=0)==(!*tags[i]->scope));
+ count=insight_index_find(index,"local",1,tags,8);assert(count==1);assert(insight_native_python_rank(index,tags[0],path,scope,8)>=0);g_free(scope);
+ pos=strstr(code,"return local")-code+7;scope=insight_native_python_scope(index,path,&source,pos);assert(!g_strcmp0(scope,"Alpha::method::inner"));assert(insight_native_python_rank(index,tags[0],path,scope,7)>=0);g_free(scope);
+ pos=strstr(code,"value +=")-code;scope=insight_native_python_scope(index,path,&source,pos);assert(scope==NULL);assert(insight_native_python_rank(index,tags[0],path,scope,13)<0);
+ pos=strstr(code,"Alpha.value")-code+6;owner=insight_native_python_owner(index,path,NULL,15,&source,pos,&member,NULL,NULL);assert(member && !g_strcmp0(owner,"Alpha"));g_free(owner);
+ count=insight_index_find(index,"method",1,tags,8);assert(count==2);for(gsize i=0;i<count;i++) assert(insight_native_python_rank(index,tags[i],path,NULL,13)<0);
+ g_free(mask);insight_index_free(index);tm_source_file_free(file);g_unlink(filename);g_free(path);
+}
 int main(void) {
  assert(insight_native_language_compatible(TM_PARSER_C,TM_PARSER_CPP));assert(insight_native_language_compatible(TM_PARSER_CPP,TM_PARSER_ASM));assert(!insight_native_language_compatible(TM_PARSER_C,TM_PARSER_VHDL));assert(!insight_native_language_compatible(TM_PARSER_CPP,TM_PARSER_SH));assert(!insight_native_language_compatible(TM_PARSER_NONE,TM_PARSER_NONE));assert(insight_native_language_compatible(TM_PARSER_PYTHON,TM_PARSER_PYTHON));
  InsightIndex *index=insight_index_new(); assert(index);
@@ -51,7 +68,7 @@ int main(void) {
  assert(insight_native_import(index,&source,"/project/a.cpp") && insight_index_count(index)==0);
  assert(insight_native_import(index,NULL,"/project/a.cpp"));
  g_ptr_array_free(tags,TRUE); insight_index_free(index);
- tm_get_workspace();
+ tm_get_workspace();python_navigation_test();
  const char *code="class Base {};\nclass Widget : public Base {\npublic: int run(int value) { return value; }\n};\nint parsed_function(int value) { return value; }\n";
  char filename[]="native-parser-test-XXXXXX"; gint descriptor=g_mkstemp(filename); assert(descriptor>=0); g_close(descriptor,NULL);
  char *absolute=g_canonicalize_filename(filename,NULL); TMSourceFile *parsed=tm_source_file_new(absolute,"C++"); assert(parsed && parsed->lang>=0);

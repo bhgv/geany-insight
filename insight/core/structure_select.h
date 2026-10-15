@@ -16,6 +16,7 @@ int insight_function_extent(const char *,size_t,size_t,size_t *);
  * Lua balances block keywords. Unfinished bodies return 0. */
 typedef enum { INSIGHT_FUNCTION_BRACES,INSIGHT_FUNCTION_PYTHON,INSIGHT_FUNCTION_LUA } InsightFunctionStyle;
 int insight_function_range(const char *,const char *,size_t,size_t,InsightFunctionStyle,size_t *,size_t *);
+int insight_suite_range(const char *,const char *,size_t,size_t,InsightFunctionStyle,size_t *,size_t *);
 int insight_select_suite(const char *,const char *,size_t,size_t,size_t,InsightFunctionStyle,size_t *,size_t *);
 /* Find the closest strictly preceding/following position; input may be unsorted. */
 int insight_neighbor_position(const size_t *,size_t,size_t,int,size_t *);

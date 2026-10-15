@@ -71,3 +71,6 @@ Help is UTF-8 Markdown and reStructuredText. The compact viewer renders headings
 Check a downloaded archive's REVISION.txt. A commit does not update an already unpacked build. [Running, checking and building](desktop-check-builds.md).
 
 Options → Language profiles… and editor right click → File language / profile… configure recognition, compatible extensions, words, colors and fonts. [Profiles and CSS](languages.md).
+
+
+Full reference: [Search and replacement modes and query languages](search-replace.md).
