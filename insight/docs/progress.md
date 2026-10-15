@@ -1003,3 +1003,7 @@ Shared core range calculation supports Python async/multiline/indented/nested fu
 ## Portable bookmark transfer
 
 Bookmark export under an active project/workspace root now uses relative paths for contained source files (v2 notes snapshot). Import resolves them against the destination root; external files remain absolute. Traversal/drive/UNC components and missing roots are rejected before merging. Legacy v1, ordinary note saves and clip exports remain compatible. Core tests verify Unicode rebasing, unchanged inputs/external paths, clips and malformed paths. Automatic relocation of the global bookmark database is not claimed.
+
+## Combined regression checkpoint
+
+All 39 Insight tests passed in the native Linux build with GUI tests enabled and no skips. Windows CI additionally runs the four new native GUI executables from the installed portable bin directory, so resource lookup uses the real package layout. Those Windows GUI results must pass before declaring the corresponding Windows paths verified.

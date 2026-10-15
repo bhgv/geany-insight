@@ -1,1 +1,1 @@
-Build Windows x64 portable: all current Source Insight migration work including portable bookmark transfer.
+Build and run Windows x64 portable native GUI regressions for current Source Insight migration.
