@@ -1365,3 +1365,7 @@ Master file list wildcards require a literal directory and a filename pattern up
 Master file list wildcard scan exceeds 100000 entries	Обход масок MFL превышает 100000 записей
 Master file list exceeds 256 wildcard patterns	MFL содержит более 256 масок имён
 Master file list or its expanded file set changed; reload before applying membership	MFL или набор подходящих файлов изменился; перечитайте его перед применением состава
+
+Invalid master file list expression	Некорректное выражение пути к MFL
+Unknown or unavailable master file list path variable	Неизвестная или недоступная переменная пути к MFL
+Project path variables: %PROJECT_SOURCE_DIR%, %PROJECT_DATA_DIR%, %PROJECT_NAME%; use %% for a literal percent sign	Переменные проекта: %PROJECT_SOURCE_DIR%, %PROJECT_DATA_DIR%, %PROJECT_NAME%; %% означает буквальный знак процента
