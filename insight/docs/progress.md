@@ -1784,3 +1784,21 @@ Final font validation: all 11 focused Linux checks passed with only raw installe
 TTFs. Two additional visual-theme GUI runs passed with (1) gzip bytes named
 `.ttf` and (2) original raw bytes named `.ttf.gz`, confirming signature-based
 loading rather than suffix-based decoding. Both retained the bundled family.
+
+
+### Bookmark Options dialog and panel-local Ctrl+Q
+
+Added the panel button/list-menu command and a single options dialog for manual
+delete confirmation and delete-on-file-close. Apply atomically saves only these
+preferences while preserving other settings; Cancel and failed writes leave
+live values unchanged. Popup checks resynchronize after dialog changes without
+triggering activation. Font & Color and local help are available from the dialog.
+Ctrl+Q is scoped to bookmark list/entry focus through the existing key hook.
+The separate session-preservation switch remains open; no persistence behavior
+has changed. Linux GUI checks cover Cancel, Apply, rollback, immediate disk
+values, retained appearance/notes/caret, nested Font & Color Cancel and RU labels.
+
+Validation: six focused Linux GUI checks passed (all three bookmark-option
+restoration modes, project stores, symbol anchors and CSS themes). Both modified
+C sources compiled with warnings treated as errors. Reference behavior:
+https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Bookmark_Options.htm

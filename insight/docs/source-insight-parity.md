@@ -208,3 +208,9 @@ Installed original Windows fonts and UI Verdana are preferred through CSS stacks
 proprietary font files are not distributed. Linux GUI is verified; Windows remains
 deferred. The uploaded export lacks a base editor point size (12pt is the editable
 conversion baseline), and the styles-only theme retains current backgrounds.
+
+
+Bookmark Options now has a panel button, list-menu command and panel-local
+Ctrl+Q dialog, including confirmation/close-file flags, Font & Color and help.
+Apply saves both flags atomically and preserves unrelated settings; failed writes
+and Cancel leave them unchanged. The session-preservation option remains open.

@@ -96,8 +96,8 @@ in the active store are removed; clips and source files remain. **Confirm bookma
 deletion** in the same menu also enables confirmation for Delete/Ctrl+X on selected
 rows. The option is saved between sessions and defaults off for existing profiles.
 Cancel, store reload/project switch during confirmation, or a write failure leaves
-the intended deletion unapplied. The full Source Insight Bookmark Options dialog
-(including persistence and close-file policies) is not implemented by this switch.
+the intended deletion unapplied. The close-file policy and options dialog are described below. The separate
+Source Insight persistence policy remains unimplemented.
 
 ## Panel font and colors
 
@@ -118,3 +118,17 @@ and Clips. Manual deletion confirmation does not apply to this automatic action.
 Cancelling an unsaved-file close leaves bookmarks intact. A failed store write
 retains the old list in memory so reopening can restore its marks. Normal exit
 with a saved session does not clear bookmarks.
+
+## Bookmark Options dialog
+
+The Bookmark Options… panel button and list-menu command open one dialog.
+Ctrl+Q opens it while the bookmark entry or list has focus; elsewhere the normal
+Geany shortcut remains available. Apply commits both deletion options together
+and saves them immediately. Cancel keeps the previous values. A write failure
+keeps the dialog open and leaves active options unchanged.
+
+Font & Color… opens its own appearance dialog with independent Apply/Cancel;
+cancelling Bookmark Options does not undo appearance already applied there.
+The help button opens this page. Source Insight's separate Preserve bookmarks
+between sessions option remains unimplemented: bookmarks still persist across
+sessions.

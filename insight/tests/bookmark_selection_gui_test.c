@@ -106,8 +106,47 @@ static void command_checks(GeanyDocument *doc) {
  gtk_entry_set_text(GTK_ENTRY(query),"");select_name("CoreOne");GtkWidget *m=menu();gtk_menu_item_activate(GTK_MENU_ITEM(command(m,9)));g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(command(m,9))));g_idle_add(confirm,GINT_TO_POINTER(0));gtk_button_clicked(GTK_BUTTON(button(page,"Delete")));g_assert_cmpuint(total_notes(),==,5);
  g_idle_add(confirm,GINT_TO_POINTER(1));gtk_button_clicked(GTK_BUTTON(button(page,"Delete")));g_assert_cmpuint(total_notes(),==,4);gtk_entry_set_text(GTK_ENTRY(query),"absent");delete_all(1);g_assert_cmpuint(total_notes(),==,1);gtk_entry_set_text(GTK_ENTRY(query),"");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),NULL),==,0);
 }
+static gboolean options_confirm,options_close,options_apply,options_fail,options_font;
+static GtkWidget *options_dialog(void) {
+ GList *windows=gtk_window_list_toplevels();GtkWidget *dialog=NULL;
+ for(GList *p=windows;p && !dialog;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-bookmark-options")) dialog=p->data;
+ g_list_free(windows);g_assert_nonnull(dialog);return dialog;
+}
+static gboolean options_failed(gpointer data) {
+ (void)data;GtkWidget *dialog=options_dialog();g_assert_true(*gtk_label_get_text(GTK_LABEL(named(dialog,"insight-bookmark-options-status")))!=0);gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_CANCEL);return G_SOURCE_REMOVE;
+}
+static gboolean options_response(gpointer data) {
+ (void)data;GtkWidget *dialog=options_dialog();g_assert_cmpstr(gtk_window_get_title(GTK_WINDOW(dialog)),==,gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-ru"))) ? "Параметры закладок" : "Bookmark Options");g_assert_nonnull(named(dialog,"insight-bookmark-options-font"));
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dialog,"insight-bookmark-options-confirm")),options_confirm);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dialog,"insight-bookmark-options-close")),options_close);
+ if(options_font) { appearance_action=0;g_timeout_add(50,appearance_response,NULL);gtk_button_clicked(GTK_BUTTON(named(dialog,"insight-bookmark-options-font"))); }
+ if(options_fail) g_timeout_add(50,options_failed,NULL);
+ gtk_dialog_response(GTK_DIALOG(dialog),options_apply ? GTK_RESPONSE_APPLY : GTK_RESPONSE_CANCEL);return G_SOURCE_REMOVE;
+}
+static void options_open(gboolean keyboard) {
+ g_print("Options open keyboard=%d apply=%d fail=%d\n",keyboard,options_apply,options_fail);g_timeout_add(50,options_response,NULL);
+ if(keyboard) { gtk_widget_grab_focus(query);GdkEventKey event={0};event.type=GDK_KEY_PRESS;event.window=gtk_widget_get_window(window);event.keyval=GDK_KEY_q;event.state=GDK_CONTROL_MASK;gboolean handled=FALSE;g_signal_emit_by_name(query,"key-press-event",&event,&handled);g_assert_true(handled); }
+ else gtk_menu_item_activate(GTK_MENU_ITEM(command(menu(),11)));
+}
+static void options_check_state(gboolean a,gboolean b) {
+ GtkWidget *m=menu();g_assert_cmpint(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(command(m,9))),==,a);g_assert_cmpint(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(command(m,10))),==,b);
+}
+static void options_checks(void) {
+ gboolean a=gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(command(menu(),9))),b=gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(command(menu(),10)));
+ gchar *folder=g_path_get_dirname(store),*prefs=g_build_filename(folder,"workbench.conf",NULL),*backup=g_strconcat(prefs,".backup",NULL);g_free(folder);
+ guint notes=total_notes();gint cursor=sci_get_current_position(document_get_current()->editor->sci);
+ options_confirm=!a;options_close=!b;options_font=TRUE;options_apply=FALSE;options_open(TRUE);options_check_state(a,b);options_font=FALSE;
+ options_apply=TRUE;options_open(FALSE);options_check_state(!a,!b);
+ GKeyFile *key=g_key_file_new();g_assert_true(g_key_file_load_from_file(key,prefs,G_KEY_FILE_NONE,NULL));g_assert_cmpint(g_key_file_get_boolean(key,"workbench","confirm-bookmark-delete",NULL),==,!a);g_assert_cmpint(g_key_file_get_boolean(key,"workbench","delete-bookmarks-on-close",NULL),==,!b);gchar *font=g_key_file_get_string(key,"bookmarks-style","font",NULL);g_assert_cmpstr(font,==,"Monospace 11");g_free(font);g_key_file_unref(key);
+ g_assert_cmpint(g_rename(prefs,backup),==,0);g_assert_cmpint(g_mkdir(prefs,0700),==,0);
+ options_confirm=a;options_close=b;options_fail=TRUE;options_open(FALSE);options_check_state(!a,!b);options_fail=FALSE;
+ g_assert_cmpint(g_rmdir(prefs),==,0);g_assert_cmpint(g_rename(backup,prefs),==,0);options_open(FALSE);options_check_state(a,b);
+ g_assert_cmpuint(total_notes(),==,notes);g_assert_cmpint(sci_get_current_position(document_get_current()->editor->sci),==,cursor);
+ g_free(backup);g_free(prefs);
+}
 static gboolean tick(gpointer data) { (void)data;if(phase++) return G_SOURCE_REMOVE;GeanyDocument *doc=document_open_file(source,FALSE,NULL,NULL);g_assert_nonnull(doc);window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));view=named(window,"insight-bookmarks");query=named(window,"insight-bookmarks-query");page=gtk_widget_get_parent(query);GtkWidget *child=page,*notebook=gtk_widget_get_parent(child);while(notebook && !GTK_IS_NOTEBOOK(notebook)) { child=notebook;notebook=gtk_widget_get_parent(child); }g_assert_nonnull(notebook);gtk_notebook_set_current_page(GTK_NOTEBOOK(notebook),gtk_notebook_page_num(GTK_NOTEBOOK(notebook),child));
  GtkWidget *initial=menu();g_assert_cmpint(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(command(initial,9))),==,g_getenv("GEANY_TEST_BOOKMARK_CONFIRM_RESTORE")!=NULL);if(g_getenv("GEANY_TEST_BOOKMARK_CONFIRM_RESTORE")) gtk_menu_item_activate(GTK_MENU_ITEM(command(initial,9)));
+ options_checks();
  g_assert_cmpint(gtk_tree_selection_get_mode(selection()),==,GTK_SELECTION_MULTIPLE);select_name("A");select_name("C");gtk_entry_set_text(GTK_ENTRY(query),"function");g_assert_cmpint(gtk_tree_selection_count_selected_rows(selection()),==,2);gtk_entry_set_text(GTK_ENTRY(query),"");g_assert_cmpint(gtk_tree_selection_count_selected_rows(selection()),==,2);GtkWidget *m=menu();g_assert_false(gtk_widget_get_sensitive(command(m,1)));g_assert_true(gtk_widget_get_sensitive(command(m,3)));
  export_selected(output,TRUE);disk(output,"AC",2);g_assert_cmpint(gtk_tree_selection_count_selected_rows(selection()),==,1);
  gtk_tree_selection_unselect_all(selection());select_name("A");select_name("B");gchar *backup=g_strconcat(store,".backup",NULL);g_assert_cmpint(g_rename(store,backup),==,0);g_assert_cmpint(g_mkdir(store,0700),==,0);gtk_button_clicked(GTK_BUTTON(button(page,"Delete")));g_assert_cmpint(gtk_tree_selection_count_selected_rows(selection()),==,2);g_assert_cmpint(g_rmdir(store),==,0);g_assert_cmpint(g_rename(backup,store),==,0);g_free(backup);
@@ -116,7 +155,9 @@ static gboolean tick(gpointer data) { (void)data;if(phase++) return G_SOURCE_REM
  gtk_entry_set_text(GTK_ENTRY(query),"absent");m=menu();g_assert_false(gtk_widget_get_sensitive(command(m,3)));destination=source;change_selection=FALSE;picks=0;g_timeout_add(100,pick,NULL);gchar *all=g_strconcat(output,".all.conf",NULL);destination=all;gtk_menu_item_activate(GTK_MENU_ITEM(command(m,4)));disk(all,"C",1);g_free(all);
  gtk_entry_set_text(GTK_ENTRY(query),"");m=menu();gtk_menu_item_activate(GTK_MENU_ITEM(command(m,6)));g_assert_cmpint(gtk_tree_selection_count_selected_rows(selection()),==,1);gtk_menu_item_activate(GTK_MENU_ITEM(command(m,7)));g_assert_cmpint(gtk_tree_selection_count_selected_rows(selection()),==,0);gtk_button_clicked(GTK_BUTTON(button(page,"Export selected…")));
  select_name("C");appearance_checks(doc);gtk_tree_selection_unselect_all(selection());close_file_checks();command_checks(doc);gtk_entry_set_text(GTK_ENTRY(query),"ExitKeep");gtk_button_clicked(GTK_BUTTON(button(page,"Add/update")));gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-ru")),TRUE);m=menu();g_assert_cmpstr(gtk_menu_item_get_label(GTK_MENU_ITEM(command(m,3))),==,"Экспортировать выбранные…");g_assert_cmpstr(gtk_menu_item_get_label(GTK_MENU_ITEM(command(m,8))),==,"Удалить все закладки…");g_assert_cmpstr(gtk_menu_item_get_label(GTK_MENU_ITEM(named(m,"insight-bookmark-appearance"))),==,"Шрифт и цвет…");g_assert_cmpstr(gtk_menu_item_get_label(GTK_MENU_ITEM(command(m,10))),==,"Удалять закладки при закрытии файла");
- g_print("Bookmark selection GUI passed: multi-selection, frozen selected export with anchors, export all ignores filters, atomic batch delete rollback, global clips retained, menu sensitivity, selection commands and persistent bookmark appearance\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE; }
+ g_assert_cmpstr(gtk_menu_item_get_label(GTK_MENU_ITEM(command(m,11))),==,"Параметры закладок…");
+ options_apply=FALSE;options_open(FALSE);
+ g_print("Bookmark selection GUI passed: transactional options, Ctrl+Q, multi-selection, frozen selected export with anchors, export all ignores filters, atomic batch delete rollback, global clips retained, menu sensitivity, selection commands and persistent bookmark appearance\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE; }
 static gboolean timeout(gpointer data) { (void)data;g_error("Bookmark selection timeout");return G_SOURCE_REMOVE; }
 int main(void) { if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;gchar *dir=g_dir_make_tmp("bookmark-selection-XXXXXX",NULL),*profile=g_build_filename(dir,"profile",NULL),*folder=g_build_filename(profile,"insight",NULL),*config=g_build_filename(profile,"geany.conf",NULL);g_mkdir_with_parents(folder,0700);source=g_build_filename(dir,"source.c",NULL);store=g_build_filename(folder,"notes.conf",NULL);output=g_build_filename(dir,"selected.conf",NULL);g_file_set_contents(source,"int function(void) {\nreturn 1;\n}\n",-1,NULL);g_file_set_contents(config,"[geany]\nconfirm_exit=false\nuse_native_dialogs=false\n",-1,NULL);GKeyFile *k=g_key_file_new();g_key_file_set_integer(k,"notes","version",1);g_key_file_set_integer(k,"notes","count",4);
  for(guint i=0;i<4;i++) { gchar *group=g_strdup_printf("note-%u",i),name[2]={(char)('A'+i),0};g_key_file_set_integer(k,group,"kind",i==3 ? 2 : 1);g_key_file_set_string(k,group,"name",name);g_key_file_set_string(k,group,"path",i==3 ? "" : source);g_key_file_set_integer(k,group,"line",i==3 ? 0 : 2);g_key_file_set_string(k,group,"text",i==3 ? "clip" : "return 1;");if(i!=3) { g_key_file_set_string(k,group,"anchor-name","function");g_key_file_set_string(k,group,"anchor-scope","");g_key_file_set_integer(k,group,"anchor-kind",1);g_key_file_set_uint64(k,group,"anchor-offset",1); }g_free(group); }

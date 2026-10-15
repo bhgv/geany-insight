@@ -705,3 +705,9 @@ Visual theme|||Визуальная тема
 Current Geany theme|||Текущая тема Geany
 Select a theme|||Выберите тему
 Themes use editable CSS in styles/<name>. Local panel appearance overrides the theme.|||Темы можно изменять в styles/<имя>. Настройки оформления отдельных панелей имеют приоритет.
+
+Bookmark Options|||Параметры закладок
+Bookmark Options…|||Параметры закладок…
+Bookmark Options (Ctrl+Q in Bookmarks)|||Параметры закладок (Ctrl+Q в панели закладок)
+Workbench settings are invalid or too large|||Настройки интерфейса повреждены или слишком велики
+Workbench settings not saved|||Настройки интерфейса не сохранены
