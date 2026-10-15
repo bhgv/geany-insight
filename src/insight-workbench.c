@@ -3485,7 +3485,9 @@ static void info_choice(GtkComboBox *combo,gpointer data) {
  g_free(info->preferred);info->preferred=g_strdup(info->path);info->preferred_line=info->line;g_free(info->preferred_candidate);info->preferred_candidate=info_candidate_identity(info->path,info->line,info->name,kind,scope,signature);
  GeanyFiletype *filetype=NULL;gchar *text=info_source(info->path,&filetype);ScintillaObject *code=SCINTILLA(info->code);
  if(info->index && *type) {
-  ScopeLanguage language={info->path,filetype};InsightTypeResult resolved=insight_type_resolve(info->index,type,scope,info->path,scope_language_eligible,&language);
+  ScopeLanguage language={info->path,filetype};InsightSymbol declaration={info->name,info->path,scope,kind,info->line,signature,type,inheritance};
+  gboolean callable=!strcmp(kind,"f") || !strcmp(kind,"p") || (!strcmp(kind,"m") && *signature);
+  InsightTypeResult resolved=callable && member_calls_language(filetype) ? insight_type_resolve_return(info->index,&declaration,scope_language_eligible,&language) : insight_type_resolve(info->index,type,scope,info->path,scope_language_eligible,&language);
   if(resolved.status==INSIGHT_TYPE_FOUND) { gchar *line=insight_i18n_printf("\nNominal type: %s (alias hops: %u)",resolved.owner,resolved.aliases);g_string_append(description,line);g_free(line); }
   insight_type_result_clear(&resolved);
  }

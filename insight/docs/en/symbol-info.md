@@ -15,3 +15,5 @@ Leave file open loads the displayed file into a normal editor buffer without clo
 Validation: native Linux editor build and the real-editor GUI test passed: metadata/source, UTF-8 paths, opening a closed project source in the background, untitled buffer parsing/Jump, stale-snapshot rejection, Window List preview-only selection/activation/filtering, cancellation of native Save/Close and normal shutdown. Windows CI includes this scenario.
 
 Size behavior follows [Symbol Info in the Source Insight guide](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Symbol_Info.htm), with explicit lexical limits.
+
+C/C++ callable result metadata uses the same resolver as Context: a dependent template parameter does not select a global class, while explicit `::T` and ordinary results retain their nominal type. Template argument deduction remains open.

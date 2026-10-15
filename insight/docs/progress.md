@@ -1289,3 +1289,9 @@ A native parser regression reproduced template<class T> T *dependent_result(T*) 
 Strict C99 core tests cover dependent/qualified targets, explicit global results, value-parameter/body-local hiding, same-name parameters in another file and invalid input. Native parsing reproduces and verifies the fix. The real Context fixture checks absent dependent-result member links, working explicit global/ordinary result links, F12, and asynchronous Follow from a no-result dependent call back to the explicit global type. Its targeted GUI run passes.
 
 The function-template result extension passes all 52 native tests with GUI enabled and no skips.
+
+## Symbol Info callable result consistency
+
+A real Symbol Info regression reproduced a dependent function-template result being displayed as the unrelated global nominal type T even after Context had been fixed. C-family function/prototype/method metadata now uses the same declaration-aware callable-result resolver as member navigation; fields and other languages keep their previous nominal lookup. The GUI regression fails before the change, then checks that a dependent result has no misleading nominal owner while explicit ::T and ordinary T results retain the correct metadata. It closes its temporary source before continuing the existing Window List/layout tests. The targeted native GUI passes.
+
+The full native run passed 51 tests, including the expanded Symbol Info and Context regressions, but Overview timed out in its existing phase-19 async definition case. An isolated rerun passed in 28.30 seconds. Its pending-definition diagnostics now also report Follow and editor focus so a recurrence can distinguish a lost Follow state from an empty resolution result. No timeout increase or skipped check was introduced; the intermittent Overview timing issue is not claimed fully resolved.

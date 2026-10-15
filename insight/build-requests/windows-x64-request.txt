@@ -1,1 +1,1 @@
-Build Windows x64: declaration-aware nominal callable results reject dependent template names, preserve explicit global types and ordinary value parameters; strict core/native and Context F12/Follow regression, 57 parser fixtures and 18 GUI scenarios.
+Build Windows x64: align C-family Symbol Info callable metadata with declaration-aware Context resolution; GUI checks dependent/global/ordinary template results plus A-D Window List restore, strict core/native backend, 57 parser fixtures and 18 GUI scenarios.

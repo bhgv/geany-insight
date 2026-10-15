@@ -11,3 +11,5 @@ Source preview supports the existing decoder and 2 MiB text limit. This initial 
 Leave file open loads the displayed file into a normal editor buffer without closing the information window. It restores the previously active editor buffer when that buffer still exists and positions a newly loaded buffer at the displayed definition. The button is disabled for already-open sources. The same snapshot checks protect loading/jumping; newly opened files appear in Window List. Ctrl+Enter jumps and Ctrl+R refreshes while the popup has focus.
 
 Validation: native Linux editor build and the real-editor GUI test passed: metadata/source, UTF-8 paths, opening a closed project source in the background, untitled buffer parsing/Jump, stale-snapshot rejection, Window List preview-only selection/activation/filtering, cancellation of native Save/Close and normal shutdown. Windows GUI validation remains separate.
+
+Для результатов функций C/C++ nominal-тип использует тот же resolver, что и Context: зависимый параметр шаблона не выбирает глобальный класс; явный `::T` и обычные результаты сохраняются. Выведение аргументов шаблонов остаётся открытым.
