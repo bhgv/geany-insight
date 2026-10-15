@@ -13,3 +13,5 @@ Scroll a long file, add a bookmark and find its marker in Overview. Click the de
 The ? button at the upper right opens this page. Help follows the interface language selected in Options.
 
 More: [panel-editor.md](panel-editor.md).
+
+Границы функций также поддерживают Python по отступам (async/многострочные определения, вложенные функции) и Lua по вложенным блокам end/until. Текущей считается наименьшая содержащая курсор функция нативного парсера; комментарии и строки маскируются. Тот же расчёт используется в Select Function и lexical Calls.

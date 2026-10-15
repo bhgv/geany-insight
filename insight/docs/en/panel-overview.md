@@ -13,3 +13,5 @@ Scroll a long file, add a bookmark and find its marker in Overview. Click the de
 The ? button at the upper right opens this page. Help follows the interface language selected in Options.
 
 More: [panel-editor.md](panel-editor.md).
+
+Function boundaries also support Python indentation (including async/multiline definitions and nested functions) and Lua nested end/until blocks. Current-function tracking chooses the smallest containing parsed function; comments/strings are masked. The same ranges drive Select Function and lexical Calls.

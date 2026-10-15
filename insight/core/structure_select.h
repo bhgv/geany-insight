@@ -11,6 +11,12 @@ int insight_select_match(const char *,size_t,size_t,size_t *,size_t *);
 /* C-like brace-bodied function extent; prototypes and expression bodies return 0.
  * declaration is the parser's definition-line offset, not a semantic AST range. */
 int insight_function_extent(const char *,size_t,size_t,size_t *);
+/* Function range from a parser definition line. Text and lexical mask must
+ * retain identical byte offsets. Python uses indentation (tabs: 8 columns);
+ * Lua balances block keywords. Unfinished bodies return 0. */
+typedef enum { INSIGHT_FUNCTION_BRACES,INSIGHT_FUNCTION_PYTHON,INSIGHT_FUNCTION_LUA } InsightFunctionStyle;
+int insight_function_range(const char *,const char *,size_t,size_t,InsightFunctionStyle,size_t *,size_t *);
+int insight_select_suite(const char *,const char *,size_t,size_t,size_t,InsightFunctionStyle,size_t *,size_t *);
 /* Find the closest strictly preceding/following position; input may be unsorted. */
 int insight_neighbor_position(const size_t *,size_t,size_t,int,size_t *);
 /* Lexical identifier followed by optional whitespace and an opening parenthesis.

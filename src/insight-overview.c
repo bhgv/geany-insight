@@ -48,8 +48,9 @@ static void function_job_free(gpointer data) { FunctionJob *j=data; g_weak_ref_c
 static void functions_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
  (void)source; FunctionJob *j=data; gsize length=strlen(j->text); gchar *mask=insight_source_code_mask(j->text,length,j->dialect,NULL);
  if(mask) for(guint i=0;i<j->ranges->len && !g_cancellable_is_cancelled(cancel);i++) {
-  FunctionRange *r=g_ptr_array_index(j->ranges,i); size_t finish=0;
-  if(insight_function_extent(mask,length,r->begin,&finish)==1) { r->end=finish; r->last=r->first; for(gsize n=r->begin;n+1<finish;n++) if(j->text[n]=='\n') r->last++; }
+  FunctionRange *r=g_ptr_array_index(j->ranges,i); size_t finish=0,body=0;
+  InsightFunctionStyle style=j->dialect==INSIGHT_CODE_PYTHON ? INSIGHT_FUNCTION_PYTHON : (j->dialect==INSIGHT_CODE_LUA ? INSIGHT_FUNCTION_LUA : INSIGHT_FUNCTION_BRACES);
+  if(insight_function_range(j->text,mask,length,r->begin,style,&body,&finish)==1) { r->end=finish; r->last=r->first; for(gsize n=r->begin;n+1<finish;n++) if(j->text[n]=='\n') r->last++; }
  }
  g_free(mask); g_task_return_boolean(task,!g_cancellable_is_cancelled(cancel));
 }
@@ -66,7 +67,9 @@ static void functions_start(Overview *o,GeanyDocument *doc) {
  o->functions_dirty=FALSE;
  if(!show_function && !show_all_functions && !show_tips) { o->functions_dirty=TRUE; return; }
  const char *name=doc->file_type ? doc->file_type->name : ""; InsightCodeDialect dialect;
- if(!strcmp(name,"JavaScript") || !strcmp(name,"TypeScript")) dialect=INSIGHT_CODE_JS;
+ if(!strcmp(name,"Python")) dialect=INSIGHT_CODE_PYTHON;
+ else if(!strcmp(name,"Lua")) dialect=INSIGHT_CODE_LUA;
+ else if(!strcmp(name,"JavaScript") || !strcmp(name,"TypeScript")) dialect=INSIGHT_CODE_JS;
  else if(!strcmp(name,"C") || !strcmp(name,"C++") || !strcmp(name,"C#") || !strcmp(name,"Java")) dialect=INSIGHT_CODE_C;
  else return;
  if(!doc->tm_file || !doc->tm_file->tags_array) return;

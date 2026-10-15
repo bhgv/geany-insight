@@ -501,3 +501,6 @@ test('Insight transitive Relations GUI', relation_transitive_gui_test, timeout: 
 
 symbol_scopes_gui_test = executable('test_insight_symbol_scopes_gui', '../insight/tests/symbol_scopes_gui_test.c', dependencies: test_deps)
 test('Insight scope hierarchy GUI', symbol_scopes_gui_test, timeout: 45)
+
+indented_functions_gui_test = executable('test_insight_indented_functions_gui', '../insight/tests/indented_functions_gui_test.c', dependencies: test_deps)
+test('Insight Python and Lua function boundaries GUI', indented_functions_gui_test, timeout: 45)

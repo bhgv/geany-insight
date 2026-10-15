@@ -17,7 +17,7 @@ Ctrl+- для масштаба, сохраняются. Команды не ме
 Для блоков и пар используется существующая лексическая маска: скобки в
 комментариях и строках не участвуют в поиске. Поддержаны C/C++, C#, Java,
 JavaScript/TypeScript, Python, Lua и Sh; файлы UTF-8 до 2 MiB. Для Python/Lua
-это пары скобок, а не блоки отступов или `end`. Ограничения маски остаются:
+Ctrl+Alt+B также выбирает вложенные блоки отступов или `end`/`until`; повтор расширяет выделение к родительскому блоку. Ctrl+Alt+M остаётся командой пар скобок. Ограничения маски остаются:
 нет AST, разрешения препроцессора, JS regex literals или интерполяции строк.
 Несогласованные скобки не соединяются искусственно; при отсутствии внешнего
 блока выделение сохраняется. Прямоугольное и множественное выделение отклоняются.
@@ -30,4 +30,6 @@ JavaScript/TypeScript, Python, Lua и Sh; файлы UTF-8 до 2 MiB. Для Py
 Проверка ядра: `python3 insight/tests/run.py`. Тест также включён в CMake,
 Meson и ручную Windows-сборку. Автоматический запуск Actions остаётся выключенным.
 
-Select Function (Ctrl+Alt+F) selects from the parser definition line through the closing body brace in supported brace languages. It does not include earlier return-type or annotation lines. Function Up/Down (Ctrl+Alt+PageUp/PageDown) navigate parsed definitions.
+Select Function (Ctrl+Alt+F) selects from the parser definition line through the closing body brace, Python suite end, or Lua function `end`. It does not include earlier return-type or annotation lines. Function Up/Down (Ctrl+Alt+PageUp/PageDown) navigate parsed definitions.
+
+Python supports async/multiline definitions, nested suites, continuation brackets, tabs (8-column indentation) and CRLF. Lua balances nested function/if/for/while/do/repeat blocks; masked comments and strings do not contribute keywords. Function selection chooses the smallest containing parsed definition. Function tracking, lexical Calls and Overview use the same ranges. Unsupported languages and unfinished delimiter bodies retain a no-range result; this is lexical structure, not compiler syntax/type validation. Decorators preceding the parser definition line are not included.

@@ -737,3 +737,7 @@ File / type	Файл / тип
 Symbol / category	Символ / категория
 Include indirect inheritance (tags)	Включать косвенное наследование (теги)
 Scope hierarchy	Иерархия областей видимости
+Calls requires a supported function language and a current buffer up to 2 MiB	Вызовы требуют поддерживаемый язык функций и текущий буфер до 2 MiB
+No complete function body	Нет полного тела функции
+No complete enclosing function body	Нет полной окружающей функции
+Select Function supports parsed brace, Python and Lua functions in files up to 2 MiB	Выделение функции поддерживает скобочные языки, Python и Lua в файлах до 2 MiB

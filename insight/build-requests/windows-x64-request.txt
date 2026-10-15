@@ -1,1 +1,1 @@
-Build Windows x64 portable: transitive inheritance, nested symbol scopes, manual Relations snapshot refresh.
+Build Windows x64 portable: Python/Lua function extents, block expansion, Calls and Overview.

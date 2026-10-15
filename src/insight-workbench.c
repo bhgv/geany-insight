@@ -1110,6 +1110,9 @@ static gboolean source_dialect(GeanyFiletype *ft,InsightCodeDialect *out) {
  else return FALSE;
  return TRUE;
 }
+static InsightFunctionStyle function_style(InsightCodeDialect dialect) {
+ return dialect==INSIGHT_CODE_PYTHON ? INSIGHT_FUNCTION_PYTHON : (dialect==INSIGHT_CODE_LUA ? INSIGHT_FUNCTION_LUA : INSIGHT_FUNCTION_BRACES);
+}
 static gchar *reference_snippet(const char *text,gsize at) {
  gsize begin=at,end=at;
  while(begin && at-begin<320 && text[begin-1]!='\n' && text[begin-1]!='\r') begin--;
@@ -1122,20 +1125,20 @@ static gchar *reference_snippet(const char *text,gsize at) {
 }
 static TMTag *relation_enclosing_function(GeanyDocument *doc) {
  if(!doc || !doc->tm_file || !doc->tm_file->tags_array || sci_get_length(doc->editor->sci)>2*1024*1024) return NULL;
- InsightCodeDialect dialect;if(!source_dialect(doc->file_type,&dialect) || dialect==INSIGHT_CODE_PYTHON || dialect==INSIGHT_CODE_LUA) return NULL;
- gint length=sci_get_length(doc->editor->sci);gchar *text=sci_get_contents(doc->editor->sci,length+1),*mask=insight_source_code_mask(text,length,dialect,NULL);g_free(text);if(!mask) return NULL;
+ InsightCodeDialect dialect;if(!source_dialect(doc->file_type,&dialect)) return NULL;
+ gint length=sci_get_length(doc->editor->sci);gchar *text=sci_get_contents(doc->editor->sci,length+1),*mask=insight_source_code_mask(text,length,dialect,NULL);if(!mask) { g_free(text);return NULL; }
  size_t caret=(size_t)sci_get_current_position(doc->editor->sci),best=SIZE_MAX;TMTag *selected=NULL;
  for(guint i=0;i<doc->tm_file->tags_array->len;i++) {
   TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,i);
   if(!tag || !(tag->type&(tm_tag_function_t|tm_tag_method_t)) || !tag->line || tag->line>(gulong)sci_get_line_count(doc->editor->sci)) continue;
-  size_t start=(size_t)sci_get_position_from_line(doc->editor->sci,tag->line-1),end=0;
-  if(start<=caret && insight_function_extent(mask,length,start,&end)==1 && caret<end && end-start<best) { selected=tag;best=end-start; }
+  size_t start=(size_t)sci_get_position_from_line(doc->editor->sci,tag->line-1),end=0,body=0;
+  if(start<=caret && insight_function_range(text,mask,length,start,function_style(dialect),&body,&end)==1 && caret<end && end-start<best) { selected=tag;best=end-start; }
  }
- g_free(mask);return selected;
+ g_free(mask);g_free(text);return selected;
 }
 static void relation_calls(const char *query) {
  gtk_list_store_clear(wb.matches);GeanyDocument *doc=document_get_current();InsightCodeDialect dialect;
- if(!doc || sci_get_length(doc->editor->sci)>2*1024*1024 || !source_dialect(doc->file_type,&dialect) || dialect==INSIGHT_CODE_PYTHON || dialect==INSIGHT_CODE_LUA) { set_usage_status("Calls currently requires a brace language and a current buffer up to 2 MiB");return; }
+ if(!doc || sci_get_length(doc->editor->sci)>2*1024*1024 || !source_dialect(doc->file_type,&dialect)) { set_usage_status("Calls requires a supported function language and a current buffer up to 2 MiB");return; }
  document_update_tags(doc);if(!doc->tm_file || !doc->tm_file->tags_array) { set_usage_status("No parsed function definitions");return; }
  TMTag *chosen=NULL;guint count=0;
  for(guint i=0;i<doc->tm_file->tags_array->len;i++) {
@@ -1146,12 +1149,9 @@ static void relation_calls(const char *query) {
  if(!chosen || !chosen->line || chosen->line>(gulong)sci_get_line_count(doc->editor->sci)) { set_usage_status("Function definition not found in the current buffer");return; }
  gint length=sci_get_length(doc->editor->sci);gchar *text=sci_get_contents(doc->editor->sci,length+1),*mask=insight_source_code_mask(text,length,dialect,NULL);
  size_t start=(size_t)sci_get_position_from_line(doc->editor->sci,chosen->line-1),end=0,body=0;
- if(mask && insight_function_extent(mask,length,start,&end)==1) {
-  for(size_t i=start;i<end;i++) if(mask[i]=='{') { size_t a,b;if(insight_select_match(mask,length,i,&a,&b)==1 && b==end) { body=i+1;break; } }
- }
- if(!body) { set_usage_status("No complete brace-bodied function");g_free(mask);g_free(text);return; }
+ if(!mask || insight_function_range(text,mask,length,start,function_style(dialect),&body,&end)!=1) { set_usage_status("No complete function body");g_free(mask);g_free(text);return; }
  gchar *digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,text,-1);size_t cursor=body,a=0,b=0;guint shown=0;
- while(shown<512 && insight_next_call(mask,end-1,&cursor,&a,&b)==1) {
+ while(shown<512 && insight_next_call(mask,end,&cursor,&a,&b)==1) {
   gchar *name=g_strndup(text+a,b-a),*snippet=reference_snippet(text,a);GtkTreeIter iter;gint line=sci_get_line_from_position(doc->editor->sci,(gint)a);
   gtk_list_store_append(wb.matches,&iter);gtk_list_store_set(wb.matches,&iter,USAGE_DISPLAY,doc->file_name ? doc->file_name : "untitled",USAGE_PATH,doc->file_name,USAGE_LINE,(gulong)line+1,USAGE_START,(gulong)a,USAGE_END,(gulong)b,USAGE_ID,doc->id,USAGE_DIGEST,digest,USAGE_SYMBOL,name,USAGE_SNIPPET,snippet,-1);
   g_free(name);g_free(snippet);shown++;
@@ -3376,12 +3376,12 @@ static void structural_selection(GtkMenuItem *item,gpointer data) {
  InsightCodeDialect dialect;
  if(!source_dialect(doc->file_type,&dialect)) { ui_set_statusbar(TRUE,"Structural selection: this language has no lexical mask yet"); return; }
  gchar *text=sci_get_contents(sci,length+1); GError *error=NULL;
- gchar *mask=insight_source_code_mask(text,(gsize)length,dialect,&error); g_free(text);
- if(!mask) { ui_set_statusbar(TRUE,"Structural selection: %s",error ? error->message : "invalid text"); g_clear_error(&error); return; }
+ gchar *mask=insight_source_code_mask(text,(gsize)length,dialect,&error);
+ if(!mask) { g_free(text);ui_set_statusbar(TRUE,"Structural selection: %s",error ? error->message : "invalid text"); g_clear_error(&error); return; }
  size_t first=0,last=0;
- int found=mode==0 ? insight_select_block(mask,(size_t)length,(size_t)sci_get_selection_start(sci),(size_t)sci_get_selection_end(sci),&first,&last) :
+ int found=mode==0 ? insight_select_suite(text,mask,(size_t)length,(size_t)sci_get_selection_start(sci),(size_t)sci_get_selection_end(sci),function_style(dialect),&first,&last) :
   insight_select_match(mask,(size_t)length,(size_t)sci_get_current_position(sci),&first,&last);
- g_free(mask);
+ g_free(mask);g_free(text);
  if(found==1) { sci_set_selection(sci,(gint)first,(gint)last); SSM(sci,SCI_SCROLLCARET,0,0); document_grab_focus(doc); }
  else ui_set_statusbar(TRUE,found<0 ? "Structural selection could not be computed" : (mode==0 ? "No larger enclosing block" : "Place the caret on or immediately after a code bracket"));
 }
@@ -3401,22 +3401,22 @@ static void function_navigation(GtkMenuItem *item,gpointer data) {
 static void select_function(GtkMenuItem *item,gpointer data) {
  (void)item;(void)data;GeanyDocument *doc=document_get_current();if(!doc) return;
  ScintillaObject *sci=doc->editor->sci;gint length=sci_get_length(sci);InsightCodeDialect dialect;
- if(length>2*1024*1024 || !source_dialect(doc->file_type,&dialect) || dialect==INSIGHT_CODE_PYTHON || dialect==INSIGHT_CODE_LUA) { ui_set_statusbar(TRUE,"Select Function currently supports brace-bodied functions in files up to 2 MiB");return; }
+ if(length>2*1024*1024 || !source_dialect(doc->file_type,&dialect)) { ui_set_statusbar(TRUE,"Select Function supports parsed brace, Python and Lua functions in files up to 2 MiB");return; }
  if(sci_get_selection_mode(sci)!=SC_SEL_STREAM || SSM(sci,SCI_GETSELECTIONS,0,0)>1) { ui_set_statusbar(TRUE,"Select Function requires a single normal selection");return; }
  document_update_tags(doc);if(!doc->tm_file || !doc->tm_file->tags_array) { ui_set_statusbar(TRUE,"No function symbols in this document");return; }
- gchar *text=sci_get_contents(sci,length+1),*mask=insight_source_code_mask(text,(gsize)length,dialect,NULL);g_free(text);
- if(!mask) { ui_set_statusbar(TRUE,"Select Function: source could not be masked");return; }
+ gchar *text=sci_get_contents(sci,length+1),*mask=insight_source_code_mask(text,(gsize)length,dialect,NULL);
+ if(!mask) { g_free(text);ui_set_statusbar(TRUE,"Select Function: source could not be masked");return; }
  size_t begin=(size_t)sci_get_selection_start(sci),end=(size_t)sci_get_selection_end(sci),best=SIZE_MAX,first=0,last=0;
  gint lines=sci_get_line_count(sci);
  for(guint i=0;i<doc->tm_file->tags_array->len;i++) {
   TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,i);if(!function_tag(tag) || tag->line>(gulong)lines) continue;
-  size_t start=(size_t)sci_get_position_from_line(sci,(gint)tag->line-1),finish=0;
+  size_t start=(size_t)sci_get_position_from_line(sci,(gint)tag->line-1),finish=0,body=0;
   if(start>begin) continue;
-  if(insight_function_extent(mask,(size_t)length,start,&finish)==1 && end<=finish && (begin!=end || begin<finish) && finish-start<best) { best=finish-start;first=start;last=finish; }
+  if(insight_function_range(text,mask,(size_t)length,start,function_style(dialect),&body,&finish)==1 && end<=finish && (begin!=end || begin<finish) && finish-start<best) { best=finish-start;first=start;last=finish; }
  }
- g_free(mask);
+ g_free(mask);g_free(text);
  if(best!=SIZE_MAX) { sci_set_selection(sci,(gint)first,(gint)last);SSM(sci,SCI_SCROLLCARET,0,0);document_grab_focus(doc); }
- else ui_set_statusbar(TRUE,"No complete enclosing brace-bodied function");
+ else ui_set_statusbar(TRUE,"No complete enclosing function body");
 }
 static void create_structural_selection_menu(void) {
  GtkWidget *edit=ui_lookup_widget(main_widgets.window,"edit1_menu");
@@ -3425,12 +3425,12 @@ static void create_structural_selection_menu(void) {
  const char *labels[]={"Select enclosing block / expand","Select matching brackets","Select line"};
  const char *keys[]={"<Primary><Alt>b","<Primary><Alt>m","<Primary><Alt>l"};
  for(guint i=0;i<3;i++) {
-  GtkWidget *entry=gtk_menu_item_new_with_label(labels[i]); gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry);
+  GtkWidget *entry=gtk_menu_item_new_with_label(labels[i]);if(i==0) gtk_widget_set_name(entry,"insight-select-enclosing-block"); gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry);
   g_signal_connect(entry,"activate",G_CALLBACK(structural_selection),GINT_TO_POINTER((gint)i));
   guint key; GdkModifierType modifiers; gtk_accelerator_parse(keys[i],&key,&modifiers);
   gtk_widget_add_accelerator(entry,"activate",wb.navigation_accels,key,modifiers,GTK_ACCEL_VISIBLE);
  }
- GtkWidget *function=gtk_menu_item_new_with_label("Select Function");gtk_menu_shell_append(GTK_MENU_SHELL(menu),function);
+ GtkWidget *function=gtk_menu_item_new_with_label("Select Function");gtk_widget_set_name(function,"insight-select-function");gtk_menu_shell_append(GTK_MENU_SHELL(menu),function);
  g_signal_connect(function,"activate",G_CALLBACK(select_function),NULL);
  gtk_widget_add_accelerator(function,"activate",wb.navigation_accels,GDK_KEY_f,GEANY_PRIMARY_MOD_MASK|GDK_MOD1_MASK,GTK_ACCEL_VISIBLE);
  gtk_widget_show_all(item);
