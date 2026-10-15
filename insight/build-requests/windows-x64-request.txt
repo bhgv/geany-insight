@@ -1,1 +1,1 @@
-Build Windows x64: scoped alias Relations and editable template fields with native GUI regressions.
+Build Windows x64: exercise editable template fields with explicit CRLF output on both platforms.
