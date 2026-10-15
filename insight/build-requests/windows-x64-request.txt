@@ -1,1 +1,1 @@
-Build Windows x64: project-isolated template stores, exact/prefix completion and expanded parameter/field GUI regressions.
+Build Windows x64: background Master File List snapshots, guarded two-way synchronization and native project GUI regressions.

@@ -67,6 +67,12 @@ jobs:
         run: |
           cc -std=c99 -Wall -Wextra -Werror -UNDEBUG insight/tests/type_resolve_test.c insight/desktop/type_resolve.c insight/core/index.c -Iinsight/desktop $(pkg-config --cflags --libs glib-2.0) -o type-resolve-test.exe
           ./type-resolve-test.exe
+      - name: Test master file list snapshots and background sync
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -UNDEBUG insight/tests/master_list_test.c insight/desktop/master_list.c insight/desktop/project_files.c -Iinsight/desktop $(pkg-config --cflags --libs gio-2.0) -o master-list-test.exe
+          ./master-list-test.exe
+          cc -std=c99 -Wall -Wextra -Werror -UNDEBUG insight/tests/master_sync_test.c insight/desktop/master_sync.c insight/desktop/master_list.c insight/desktop/project_files.c -Iinsight/desktop $(pkg-config --cflags --libs gio-2.0) -o master-sync-test.exe
+          ./master-sync-test.exe
       - name: Build native editor including internal merge window
         run: |
           meson setup _build --prefix="$(pwd)/portable" --libdir=lib \
@@ -80,7 +86,7 @@ jobs:
           set -e
           mkdir -p _win-gui
           trap 'rm -f portable/bin/test_insight_*_gui.exe' EXIT
-          for name in menu_alignment grouped_project relation_transitive symbol_scopes indented_functions relation_tree relation_graph relation_tree_graph type_alias context_links snippet template_fields project_templates; do
+          for name in menu_alignment grouped_project relation_transitive symbol_scopes indented_functions relation_tree relation_graph relation_tree_graph type_alias context_links snippet template_fields project_templates master_list; do
             cp "_build/tests/test_insight_${name}_gui.exe" portable/bin/
             (cd _win-gui && GEANY_RUN_GUI_TESTS=1 DISPLAY=win32 GDK_BACKEND=win32 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 "../portable/bin/test_insight_${name}_gui.exe")
           done

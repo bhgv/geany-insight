@@ -525,3 +525,12 @@ test('Insight editable template fields GUI', template_fields_gui_test, timeout: 
 
 project_templates_gui_test = executable('test_insight_project_templates_gui', '../insight/tests/project_templates_gui_test.c', dependencies: test_deps)
 test('Insight project template stores GUI', project_templates_gui_test, timeout: 45)
+
+master_list_test = executable('test_insight_master_list', '../insight/tests/master_list_test.c', '../insight/desktop/master_list.c', '../insight/desktop/project_files.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)
+test('Insight master file list snapshots', master_list_test)
+
+master_sync_test = executable('test_insight_master_sync', '../insight/tests/master_sync_test.c', '../insight/desktop/master_sync.c', '../insight/desktop/master_list.c', '../insight/desktop/project_files.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)
+test('Insight background master file list synchronization', master_sync_test)
+
+master_list_gui_test = executable('test_insight_master_list_gui', '../insight/tests/master_list_gui_test.c', dependencies: test_deps)
+test('Insight master file list project GUI', master_list_gui_test, timeout: 55)

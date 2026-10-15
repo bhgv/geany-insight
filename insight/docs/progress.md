@@ -1059,3 +1059,13 @@ The editor Complete snippet command first tries Geany snippets, then exact/prefi
 The first Windows field run passed all earlier GUI suites and failed only because its test assumed LF for a new Windows buffer. The field fixture now explicitly requests CRLF and validates normalized output on both platforms (618504e); that retry is pending.
 
 All 46 native Insight tests passed with GUI enabled and no skips after project-store preference persistence and completion integration.
+
+## Master File List synchronization
+
+An optional existing UTF-8 Master File List is bound through project membership settings and persisted relative to the source root. A GTask service polls it in the background, applies additions/removals through the existing project configuration/index publication, preserves masks/exclusion overlays and rejects stale generations, malformed lists and overlapping project/configuration paths. Manual membership writes flatten eligible directories/exclusions, use digest plus ETag guards, and only publish after project persistence; refusal/stale teardown triggers guarded byte-for-byte rollback. External edits prevent writeback and rollback. Dirty open MFL buffers and stale membership dialogs reject manual apply. Explicit Open/Synchronize commands and save-triggered checks are available; Cancel indexing pauses background MFL work until explicitly resumed.
+
+Backend tests cover BOM/CRLF/Unicode, duplicates, root rebasing, limits, masks, cancellation and conflicting revisions. Service tests cover additions/removals, error throttling, guarded writeback, exact rollback, external edits during rollback, self-file rejection, pause/resume, supersession and free during a committing callback. Native GUI covers file/symbol updates, masks, malformed preservation, manual writeback, external reintroduction after a removal, stale modal rejection, dirty-buffer protection, list open/save and detach. All 49 native Insight tests passed in the combined run; four targeted project/MFL checks passed after additional guards, and the service guards pass with -Wall -Wextra -Werror. Windows CI now includes both MFL core/service tests and the native GUI scenario.
+
+MFL format/scan limits and directory flattening are explicit in offline RU/EN help. Path Variables/quoted/comment expansion remain outside this completed bounded block. Windows a9000ec completed successfully with all 13 GUI migrations, including project template stores and editor completion; its ZIP revision, x64 PE machine and SHA256 were verified.
+
+After pause/resume, rollback-conflict, self-file, dirty-buffer and teardown guards, the five targeted membership/Overview/MFL tests all passed; the full earlier 49-test run remains green.

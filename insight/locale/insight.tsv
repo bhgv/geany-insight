@@ -762,3 +762,19 @@ Open a project to use project templates	Откройте проект для и�
 Template store changed; try the operation again	База шаблонов изменилась; повторите операцию
 Open a project with a valid template store first	Сначала откройте проект с исправной базой шаблонов
 Project templates ignored: %s	Шаблоны проекта пропущены: %s
+Master file list (optional; existing UTF-8 file)	Master File List (необязательно; существующий UTF-8 файл)
+Choose master file list	Выбрать Master File List
+Synchronize Master File List	Синхронизировать Master File List
+Open Project Master File List	Открыть Master File List проекта
+Choose a master file list in Add and Remove Project Files first	Сначала выберите Master File List в окне добавления/удаления файлов
+Synchronizing master file list…	Синхронизация Master File List…
+Loading master file list…	Загрузка Master File List…
+Saving master file list…	Сохранение Master File List…
+Master file list: %s	Master File List: %s
+Save or reload the open master file list before changing project membership	Сохраните или перечитайте открытый Master File List перед изменением состава проекта
+Project files changed while the dialog was open; reopen it before applying	Состав проекта изменился, пока диалог был открыт; откройте его заново
+Master file list must differ from project configuration	Master File List не должен совпадать с файлом настроек проекта
+Wait for master file list synchronization before applying membership	Дождитесь синхронизации Master File List перед применением состава
+Master file list changed; reload before applying membership	Master File List изменился; перечитайте его перед применением состава
+Project membership was not committed; master file list restored	Состав проекта не сохранён; Master File List восстановлен
+Master file list changed since its snapshot	Master File List изменился после создания снимка

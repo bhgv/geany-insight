@@ -20,12 +20,12 @@ static gboolean below(const char *path,const char *tree) {
  g_free(p); g_free(t); return result;
 }
 InsightProjectFiles *insight_project_files_new(void) {
- InsightProjectFiles *s=g_new0(InsightProjectFiles,1); s->automatic=TRUE; s->masks=g_strdup("");
+ InsightProjectFiles *s=g_new0(InsightProjectFiles,1); s->automatic=TRUE; s->masks=g_strdup("");s->master_file=g_strdup("");
  s->files=g_ptr_array_new_with_free_func(g_free); s->trees=g_ptr_array_new_with_free_func(g_free); s->excluded_files=g_ptr_array_new_with_free_func(g_free); s->excluded_trees=g_ptr_array_new_with_free_func(g_free); return s;
 }
-void insight_project_files_free(InsightProjectFiles *s) { if(!s) return; g_free(s->masks); g_ptr_array_free(s->files,TRUE); g_ptr_array_free(s->trees,TRUE); g_ptr_array_free(s->excluded_files,TRUE); g_ptr_array_free(s->excluded_trees,TRUE); g_free(s); }
+void insight_project_files_free(InsightProjectFiles *s) { if(!s) return; g_free(s->masks);g_free(s->master_file); g_ptr_array_free(s->files,TRUE); g_ptr_array_free(s->trees,TRUE); g_ptr_array_free(s->excluded_files,TRUE); g_ptr_array_free(s->excluded_trees,TRUE); g_free(s); }
 InsightProjectFiles *insight_project_files_clone(const InsightProjectFiles *s) {
- InsightProjectFiles *copy=insight_project_files_new(); copy->automatic=s->automatic; g_free(copy->masks); copy->masks=g_strdup(s->masks);
+ InsightProjectFiles *copy=insight_project_files_new(); copy->automatic=s->automatic; g_free(copy->masks); copy->masks=g_strdup(s->masks);g_free(copy->master_file);copy->master_file=g_strdup(s->master_file);
  GPtrArray *from[]={s->files,s->trees,s->excluded_files,s->excluded_trees},*to[]={copy->files,copy->trees,copy->excluded_files,copy->excluded_trees};
  for(guint i=0;i<4;i++) for(guint j=0;j<from[i]->len;j++) g_ptr_array_add(to[i],g_strdup(g_ptr_array_index(from[i],j)));
  return copy;
@@ -62,6 +62,7 @@ gboolean insight_project_files_contains(const InsightProjectFiles *s,const char 
 }
 static gboolean valid(const InsightProjectFiles *s,GError **error) {
  if(!s || !s->masks || strlen(s->masks)>4096 || !g_utf8_validate(s->masks,-1,NULL)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid project exclusion masks"); return FALSE; }
+ if(!s->master_file || strlen(s->master_file)>16384 || !g_utf8_validate(s->master_file,-1,NULL) || strpbrk(s->master_file,"\r\n") || (*s->master_file && !g_path_is_absolute(s->master_file))) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid master file list path");return FALSE; }
  GPtrArray *arrays[]={s->files,s->trees,s->excluded_files,s->excluded_trees};
  for(guint i=0;i<4;i++) { if(!arrays[i] || arrays[i]->len>10000) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Too many project membership rules"); return FALSE; }
   for(guint j=0;j<arrays[i]->len;j++) { gchar *p=canonical(g_ptr_array_index(arrays[i],j)); if(!p) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid project membership path"); return FALSE; } g_free(p); }
@@ -73,6 +74,7 @@ gboolean insight_project_files_write(const InsightProjectFiles *s,GKeyFile *conf
  if(!valid(s,error)) { g_free(r); return FALSE; }
  g_key_file_set_integer(config,GROUP,"version",1); g_key_file_set_boolean(config,GROUP,"automatic",s->automatic); g_key_file_set_string(config,GROUP,"exclude-masks",s->masks);
  GPtrArray *arrays[]={s->files,s->trees,s->excluded_files,s->excluded_trees}; const char *names[]={"files","trees","excluded-files","excluded-trees"}; GFile *base=g_file_new_for_path(r);
+ if(*s->master_file) { GFile *master=g_file_new_for_path(s->master_file);gchar *relative=g_file_get_relative_path(base,master);if(relative) for(gchar *p=relative;*p;p++) if(G_IS_DIR_SEPARATOR(*p)) *p='/';g_key_file_set_string(config,GROUP,"master-file",relative ? relative : s->master_file);g_free(relative);g_object_unref(master); }else g_key_file_remove_key(config,GROUP,"master-file",NULL);
  for(guint i=0;i<4;i++) { GPtrArray *encoded=g_ptr_array_new_with_free_func(g_free);
   for(guint j=0;j<arrays[i]->len;j++) { const char *path=g_ptr_array_index(arrays[i],j); GFile *file=g_file_new_for_path(path); gchar *relative=g_file_get_relative_path(base,file); if(relative) for(gchar *c=relative;*c;c++) if(G_IS_DIR_SEPARATOR(*c)) *c='/'; g_ptr_array_add(encoded,relative ? relative : (same(path,r) ? g_strdup(".") : g_strdup(path))); g_object_unref(file); }
   g_key_file_set_string_list(config,GROUP,names[i],(const gchar *const *)encoded->pdata,encoded->len); g_ptr_array_free(encoded,TRUE);
@@ -94,5 +96,6 @@ InsightProjectFiles *insight_project_files_read(GKeyFile *config,const char *roo
   }
   g_strfreev(paths);
  }
+ if(!e && g_key_file_has_key(config,GROUP,"master-file",NULL)) { gchar *value=g_key_file_get_string(config,GROUP,"master-file",&e);if(value) { if(strlen(value)>16384 || strpbrk(value,"\r\n")) g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid stored master file list path");else if(*value) { g_free(s->master_file);s->master_file=g_canonicalize_filename(value,r); }g_free(value); } }
  g_free(r); if(!e) valid(s,&e); if(e) { g_propagate_error(error,e); insight_project_files_free(s); return NULL; } return s;
 }

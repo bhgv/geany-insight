@@ -4,7 +4,7 @@
 #include <gio/gio.h>
 typedef struct {
  gboolean automatic;
- gchar *masks;
+ gchar *masks,*master_file;
  GPtrArray *files,*trees,*excluded_files,*excluded_trees;
 } InsightProjectFiles;
 InsightProjectFiles *insight_project_files_new(void);
