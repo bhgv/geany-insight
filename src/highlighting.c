@@ -1098,6 +1098,7 @@ GEANY_API_SYMBOL
 void highlighting_set_styles(ScintillaObject *sci, GeanyFiletype *ft)
 {
  insight_formatting_begin(sci);
+ g_object_set_data(G_OBJECT(sci),"insight-theme-filetype",ft);
 	guint lexer_id = get_lexer_filetype(ft);
 
 	filetypes_load_config(ft->id, FALSE);	/* load filetypes.ext */

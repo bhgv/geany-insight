@@ -1,0 +1,17 @@
+/* GTK3 panel CSS. Local Font & Color overrides have higher priority. */
+.insight-visual-theme treeview.view:not(:selected) { color: #000000; background-color: #ccd3c7; font-family: "Segoe UI", "Verdana", "Noto Sans", sans-serif; font-size: 9pt; }
+#insight-local-symbols:not(:selected) { color: #000000; background-color: #ccd3c7; font-family: "Segoe UI", "Verdana", "Noto Sans", sans-serif; font-size: 9pt; }
+#insight-clips:not(:selected) { color: #000000; background-color: #ccd3c7; font-family: "Segoe UI", "Verdana", "Noto Sans", sans-serif; font-size: 9pt; }
+#insight-bookmarks:not(:selected) { color: #000000; background-color: #ccd3c7; font-family: "Segoe UI", "Verdana", "Noto Sans", sans-serif; font-size: 9pt; }
+#insight-project-symbols:not(:selected) { color: #000000; background-color: #ccd3c7; font-family: "Segoe UI", "Verdana", "Noto Sans", sans-serif; font-size: 9pt; }
+#insight-project-files:not(:selected) { color: #000000; background-color: #ccd3c7; font-family: "Segoe UI", "Verdana", "Noto Sans", sans-serif; font-size: 9pt; }
+#insight-file-types:not(:selected) { color: #000000; background-color: #ccd3c7; font-family: "Segoe UI", "Verdana", "Noto Sans", sans-serif; font-size: 9pt; }
+#insight-symbol-categories:not(:selected) { color: #000000; background-color: #ccd3c7; font-family: "Segoe UI", "Verdana", "Noto Sans", sans-serif; font-size: 9pt; }
+#insight-project-folders:not(:selected), #insight-disk-files:not(:selected) { color: #000000; background-color: #ccd3c7; font-family: "Segoe UI", "Verdana", "Noto Sans", sans-serif; font-size: 9pt; }
+#insight-window-list:not(:selected) { color: #000000; background-color: #ccd3c7; font-family: "Segoe UI", "Verdana", "Noto Sans", sans-serif; font-size: 9pt; }
+#insight-relations:not(:selected) { color: #000000; background-color: #ccd3c7; font-family: "Segoe UI", "Verdana", "Noto Sans", sans-serif; font-size: 9pt; }
+.insight-visual-theme { background-color: #99a88e; color: #002000; }
+.insight-visual-theme toolbar { background-color: #99a88e; color: #002000; }
+.insight-visual-theme menubar { background-color: #99a88e; color: #002000; }
+.insight-visual-theme notebook > header { background-color: #99a88e; color: #002000; }
+.insight-visual-theme statusbar { background-color: #99a88e; color: #002000; }

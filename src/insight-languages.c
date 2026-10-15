@@ -4,6 +4,7 @@
 #include "geany.h"
 #include "insight-languages.h"
 #include "insight-formatting.h"
+#include "insight-themes.h"
 #include "insight-index.h"
 #include "insight-workbench.h"
 #include "document.h"
@@ -150,8 +151,8 @@ static void load_languages(void) {
   }g_key_file_free(key);g_free(folder);g_free(config);g_free(style);
  }g_dir_close(dir);g_ptr_array_sort(languages,compare_languages);
 }
-void insight_languages_init(void) { if(!root) root=g_build_filename(app->configdir,"languages",NULL);load_languages();seed_languages();load_languages();insight_formatting_init();if(!save_handler) save_handler=g_signal_connect(geany_object,"document-save",G_CALLBACK(binding_saved),NULL); }
-void insight_languages_finalize(void) { insight_formatting_finalize(); if(save_handler) { g_signal_handler_disconnect(geany_object,save_handler);save_handler=0; }g_clear_pointer(&path_cache,g_hash_table_destroy);g_clear_pointer(&languages,g_ptr_array_unref);g_clear_pointer(&root,g_free); }
+void insight_languages_init(void) { if(!root) root=g_build_filename(app->configdir,"languages",NULL);load_languages();seed_languages();load_languages();insight_formatting_init();insight_themes_init();if(!save_handler) save_handler=g_signal_connect(geany_object,"document-save",G_CALLBACK(binding_saved),NULL); }
+void insight_languages_finalize(void) { insight_formatting_finalize();insight_themes_finalize(); if(save_handler) { g_signal_handler_disconnect(geany_object,save_handler);save_handler=0; }g_clear_pointer(&path_cache,g_hash_table_destroy);g_clear_pointer(&languages,g_ptr_array_unref);g_clear_pointer(&root,g_free); }
 typedef struct { GtkWidget *dialog,*choice,*name,*parser,*extensions,*compatible,*words,*css,*theme,*bind,*category,*font,*bold,*italic,*color,*status;guint document;gchar *original;gboolean filling; } LanguageDialog;
 static GtkWidget *field(GtkGrid *grid,gint row,const gchar *label,const gchar *name) { GtkWidget *entry=gtk_entry_new(),*title=gtk_label_new(label);gtk_widget_set_halign(title,GTK_ALIGN_START);gtk_widget_set_name(entry,name);gtk_grid_attach(grid,title,0,row,1,1);gtk_grid_attach(grid,entry,1,row,1,1);gtk_widget_set_hexpand(entry,TRUE);return entry; }
 static gchar *text_value(GtkWidget *view) { GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));GtkTextIter a,b;gtk_text_buffer_get_bounds(buffer,&a,&b);return gtk_text_buffer_get_text(buffer,&a,&b,FALSE); }

@@ -938,6 +938,7 @@ libgeany = shared_library('geany',
 	'src/insight-relation-tree.c',
 	'src/insight-disk-browser.c',
 	'src/insight-disk-browser.h',
+	'src/insight-themes.c', 'src/insight-themes.h',
 	'src/insight-list-style.c',
 	'src/insight-list-style.h',
 	'src/insight-template-fields.c',
@@ -1127,3 +1128,6 @@ install_data('insight/examples/workbench.lua', install_dir: cdata.get('GEANY_DAT
 install_subdir('insight/locale', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight')
 install_subdir('insight/docs/en', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 install_subdir('insight/docs/ru', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
+
+install_subdir('styles', install_dir: cdata.get('GEANY_DATA_DIR'))
+install_subdir('fonts', install_dir: cdata.get('GEANY_DATA_DIR'))

@@ -35,6 +35,9 @@ uninstall-local:
 
 # manually install some files under another name
 install-data-local:
+	$(mkinstalldirs) "$(DESTDIR)$(pkgdatadir)"
+	cp -R "$(srcdir)/styles" "$(DESTDIR)$(pkgdatadir)/"
+	cp -R "$(srcdir)/fonts" "$(DESTDIR)$(pkgdatadir)/"
 	$(mkinstalldirs) $(DESTDIR)$(pkgdatadir)
 	$(INSTALL_DATA) $(srcdir)/COPYING $(DESTDIR)$(pkgdatadir)/GPL-2
 if MINGW
@@ -48,6 +51,7 @@ if MINGW
 endif
 
 dist-hook:
+	cp -R "$(srcdir)/styles" "$(srcdir)/fonts" "$(distdir)/"
 	@if test -d "$(top_srcdir)/.git"; then \
 		echo '  GEN    ChangeLog'; \
 		( cd "$(top_srcdir)" && \
@@ -302,3 +306,5 @@ EXTRA_DIST += insight/tests/bookmark_selection_gui_test.c \
 	insight/tests/project_bookmarks_gui_test.c
 
 EXTRA_DIST += insight/tests/reference_regions_gui_test.c
+
+EXTRA_DIST += insight/tools/import_source_insight_themes.py insight/tests/themes_gui_test.c insight/tests/theme_assets_test.py

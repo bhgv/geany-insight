@@ -1734,3 +1734,53 @@ runs additionally verify unsaved-close cancellation, failed-write navigation
 recovery and saved-session exit preservation. git diff --check passes. Windows
 x64 remains deferred. XML interchange and the separate session-preservation
 option are not implemented by this change.
+
+
+## User-supplied CSS themes and bundled fonts (2026-10-16)
+
+The supplied default.themes.xml is preserved under styles/source. A deterministic
+converter creates all 15 named directories with editor.css and panels.css.
+ParentStyle inheritance is flattened and original attributes remain in comments;
+semantic .si-* rules are preserved for future classification. Runtime supports
+font/color overlays for generic lexer categories and line numbers. SI-specific
+shadow/tracking/fixed-white-space/keep-with-next attributes are not applied;
+dotted underlines become solid. Missing base editor size uses editable 12pt.
+
+Options / Visual theme selects/reloads a theme and saves its identity. Shipped
+styles can be overridden by configuration/styles/<name>. Parsing, panel CSS and
+settings writes complete before the active snapshot changes. Invalid CSS and
+failed settings writes retain the old view; Current Geany theme restores the
+raw profile snapshot. Existing formatting records update editor, Context and
+new buffers without modifying text/Undo. Explicit panel Font & Color wins over
+the global provider. Search/navigation indicators and GTK selection colors remain
+independent. The styles-only SI entry keeps the old backgrounds.
+
+Noto Sans (regular/italic) and Noto Sans Mono variable TTFs are included with OFL
+licenses, source URLs and SHA-256 hashes. Process-private registration uses
+Fontconfig/PangoFc on Linux and AddFontResourceExW on Windows. UI font stacks
+include installed Verdana; original Microsoft font files are not redistributed.
+The asset test independently reads real cmap tables to verify all Russian
+letters, Ё/ё and №. Theme/font folders are installed by Meson, included in
+Autotools source/install targets and copied by native Windows packaging.
+
+Validation: complete Linux editor/test targets build. The new theme module,
+formatting module and GUI scenario compile with -Wall -Wextra -Werror. All 11
+selected tests pass: three new theme GUIs (all themes/Context/new buffer/mono,
+startup restore, explicit panel overrides), font/theme assets, four formatting
+GUIs, language profiles, C-family Context links and bookmarks/options. Tests
+include Cancel, malformed CSS, failed-save rollback, exact style restoration,
+unchanged text/Undo/selection, RU menu and bundled-family selection. Windows
+GUI/build remains deferred; no Windows request marker was modified.
+
+
+Font storage follows the user's final preference: three complete uncompressed
+TTFs (6,080,144 bytes), retaining all scripts, variation axes and metadata.
+Optional gzip input remains supported, detected by its binary signature rather
+than its extension. Raw fonts are used directly; compressed input is decoded
+into bounded process-private temporary TTFs, removed at normal shutdown.
+The asset test verifies original SHA-256 hashes and Cyrillic coverage.
+
+Final font validation: all 11 focused Linux checks passed with only raw installed
+TTFs. Two additional visual-theme GUI runs passed with (1) gzip bytes named
+`.ttf` and (2) original raw bytes named `.ttf.gz`, confirming signature-based
+loading rather than suffix-based decoding. Both retained the bundled family.

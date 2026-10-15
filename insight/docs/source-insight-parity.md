@@ -190,3 +190,21 @@ other files/Clips are preserved. Normal session exit preserves marks. Additional
 GUI assertions cover off/on, hidden marks, failure/reopen recovery and preference
 restore. The separate Preserve bookmarks between sessions option and Source
 Insight XML interchange remain open.
+
+### CSS visual themes and bundled Cyrillic fonts (2026-10-16)
+
+The supplied SI 4.00.0078 default.themes.xml now produces 15 named styles folders,
+with editable editor.css and panels.css and a reproducible converter. ParentStyle
+chains are expanded; all exported semantic styles and unsupported attributes are
+retained in CSS. Runtime applies generic lexer categories and line-number styles,
+not the full semantic declaration/reference taxonomy. Panel/window CSS uses
+native GTK; explicit panel appearance wins. Theme selection is persistent and
+failure-atomic; disabling it restores original language-profile attributes.
+Mono/Syntax Formatting, Context and new buffers retain their existing behavior.
+
+Bundled Noto Sans/Mono files include OFL licenses, source URLs and hashes and are
+registered privately. Russian alphabet, Ё/ё and № are checked in the real cmaps.
+Installed original Windows fonts and UI Verdana are preferred through CSS stacks;
+proprietary font files are not distributed. Linux GUI is verified; Windows remains
+deferred. The uploaded export lacks a base editor point size (12pt is the editable
+conversion baseline), and the styles-only theme retains current backgrounds.

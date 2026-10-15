@@ -1,0 +1,20 @@
+[
+  {
+    "file": "NotoSans/NotoSans-Italic.ttf",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/notosans/NotoSans-Italic%5Bwdth,wght%5D.ttf",
+    "sha256": "58e6e0ebd1931b29a365aa2d3e2ee9a9e831a3af7cf3ad1462d4e72154f0b291",
+    "license": "OFL-1.1"
+  },
+  {
+    "file": "NotoSans/NotoSans.ttf",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/notosans/NotoSans%5Bwdth,wght%5D.ttf",
+    "sha256": "bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d",
+    "license": "OFL-1.1"
+  },
+  {
+    "file": "NotoSansMono/NotoSansMono.ttf",
+    "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/notosansmono/NotoSansMono%5Bwdth,wght%5D.ttf",
+    "sha256": "2cb2adb378a8f574213e23df697050b83c54c27df465a2015552740b2769a081",
+    "license": "OFL-1.1"
+  }
+]

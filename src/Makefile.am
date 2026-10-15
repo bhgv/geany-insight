@@ -333,3 +333,5 @@ libgeany_la_SOURCES += \
 	../insight/vendor/lua/lzio.c \
 	../insight/vendor/lua/lzio.h
 libgeany_la_LIBADD += -lm
+
+libgeany_la_SOURCES += insight-themes.c insight-themes.h

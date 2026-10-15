@@ -700,3 +700,8 @@ Files: %u+|||Файлы: %u+
 Loaded matching files; + means more remain beyond the 10000-file list limit|||Загруженные совпадающие файлы; + означает оставшиеся совпадения сверх лимита списка в 10000 файлов
 
 Delete bookmarks when file closes|||Удалять закладки при закрытии файла
+Visual theme…|||Визуальная тема…
+Visual theme|||Визуальная тема
+Current Geany theme|||Текущая тема Geany
+Select a theme|||Выберите тему
+Themes use editable CSS in styles/<name>. Local panel appearance overrides the theme.|||Темы можно изменять в styles/<имя>. Настройки оформления отдельных панелей имеют приоритет.

@@ -23,3 +23,22 @@ or navigation indicators remain separate. New buffers and theme/profile/font
 reloads use the active mode. Disabling a mode restores the underlying styles;
 profile CSS and theme files are not rewritten. This does not implement the full
 Source Insight parent-style hierarchy or import its proprietary style files.
+
+## Визуальные темы Source Insight
+
+«Параметры → Визуальная тема…» предлагает 15 наборов из предоставленного
+`default.themes.xml`. Они хранятся отдельно в `styles/<имя>/editor.css` и
+`panels.css`; менять CSS можно вручную. «Применить» сохраняет выбор. «Отмена»
+оставляет текущий вид. «Текущая тема Geany» возвращает прежние стили профилей.
+Тема применяется к открытым и новым редакторам, Context и спискам панелей.
+Ручная настройка «Шрифт и цвет» отдельной панели имеет приоритет. Моноширинный
+режим и переключатели синтаксического оформления продолжают работать поверх темы.
+
+В `fonts` приложены Noto Sans и Noto Sans Mono с открытыми лицензиями и русскими
+буквами, включая Ё/ё и №. Установленные оригинальные шрифты Windows и Verdana
+можно использовать без копирования в комплект. Иерархия ParentStyle раскрыта;
+все исходные семантические стили сохранены в CSS, но пока применяются только
+категории лексера. Полная классификация объявлений/ссылок Source Insight этим
+не реализована. Подробности и ограничения: `styles/README.md`, `fonts/README.md`
+в исходниках. Новые пользовательские темы размещаются в `styles` каталога
+настроек редактора и обнаруживаются при запуске.

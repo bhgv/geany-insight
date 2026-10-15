@@ -3,6 +3,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "geany.h"
 #include "insight-formatting.h"
+#include "insight-themes.h"
 #include "insight-help.h"
 #include "main.h"
 #include "ui_utils.h"
@@ -23,13 +24,27 @@ static void widget_destroyed(GtkWidget *widget,gpointer data) {
 static void set_style(Record *r,gint i,const Style *s) {
  SEND(r->sci,SCI_STYLESETFONT,i,(sptr_t)s->font);SEND(r->sci,SCI_STYLESETSIZEFRACTIONAL,i,s->size);SEND(r->sci,SCI_STYLESETWEIGHT,i,s->weight);SEND(r->sci,SCI_STYLESETITALIC,i,s->italic);SEND(r->sci,SCI_STYLESETUNDERLINE,i,s->underline);SEND(r->sci,SCI_STYLESETCASE,i,s->letter_case);SEND(r->sci,SCI_STYLESETFORE,i,s->fore);SEND(r->sci,SCI_STYLESETBACK,i,s->back);
 }
-static void restore(Record *r) { if(r->valid) for(gint i=0;i<=STYLE_MAX;i++) if(syntax_style(i)) set_style(r,i,&r->styles[i]); }
+static void restore(Record *r) { if(r->valid) for(gint i=0;i<=STYLE_MAX;i++) if(syntax_style(i) || i==STYLE_LINENUMBER) set_style(r,i,&r->styles[i]); }
 static gint grayscale(gint color) { gint y=(77*(color&255)+150*((color>>8)&255)+29*((color>>16)&255)+128)>>8;return y|(y<<8)|(y<<16); }
+static Style themed(Record *r,gint i) {
+ Style out=r->styles[i];InsightThemeStyle theme=insight_themes_style(r->sci,i);
+ if(theme.mask&IT_FONT) out.font=theme.font;
+ if(theme.mask&IT_SIZE) out.size=theme.size;
+ if(theme.mask&IT_SCALE) out.size=CLAMP((theme.size ? theme.size : r->styles[STYLE_DEFAULT].size)*theme.scale/100,400,9600);
+ if(theme.mask&IT_WEIGHT) out.weight=theme.weight;
+ if(theme.mask&IT_ITALIC) out.italic=theme.italic;
+ if(theme.mask&IT_UNDERLINE) out.underline=theme.underline;
+ if(theme.mask&IT_FORE) out.fore=theme.fore;
+ if(theme.mask&IT_BACK) out.back=theme.back;
+ return out;
+}
 static void render(Record *r) {
  if(!r->valid) return;
  PangoFontDescription *font=mono ? pango_font_description_from_string(settings.font) : NULL;
- for(gint i=0;i<=STYLE_MAX;i++) if(syntax_style(i)) {
-  Style style=r->styles[i];const Style *base=&r->styles[STYLE_DEFAULT];
+ Style themed_base=themed(r,STYLE_DEFAULT);
+ for(gint i=0;i<=STYLE_MAX;i++) if(syntax_style(i) || i==STYLE_LINENUMBER) {
+  Style style=themed(r,i);const Style *base=&themed_base;
+  if(!syntax_style(i)) { set_style(r,i,&style);continue; }
   if(mono || settings.color_only || !settings.enabled) { style.font=mono ? (gchar *)pango_font_description_get_family(font) : base->font;style.size=mono ? (gint)(100.0*pango_font_description_get_size(font)/PANGO_SCALE+0.5) : base->size;style.weight=mono ? (gint)pango_font_description_get_weight(font) : base->weight;style.italic=mono ? pango_font_description_get_style(font)!=PANGO_STYLE_NORMAL : base->italic;style.underline=mono ? FALSE : base->underline;style.letter_case=SC_CASE_MIXED; }
   /* Mono Font View overrides the other formatting options, retaining colors. */
   if(!mono && (!settings.enabled || settings.monochrome)) { style.fore=settings.enabled && settings.monochrome ? grayscale(base->fore) : base->fore;style.back=settings.enabled && settings.monochrome ? grayscale(base->back) : base->back; }
@@ -58,6 +73,7 @@ static gboolean font_valid(const gchar *font) {
  PangoFontDescription *p=pango_font_description_from_string(font);gint size=pango_font_description_get_size(p);gboolean ok=pango_font_description_get_family(p) && size>=4*PANGO_SCALE && size<=96*PANGO_SCALE && !pango_font_description_get_size_is_absolute(p);pango_font_description_free(p);return ok;
 }
 static void refresh(void) { GHashTableIter it;gpointer value;g_hash_table_iter_init(&it,records);while(g_hash_table_iter_next(&it,NULL,&value)) render(value); }
+void insight_formatting_refresh(void) { if(initialized) refresh(); }
 static gboolean save(const Settings *s,GError **error) {
  GKeyFile *key=g_key_file_new();g_key_file_set_integer(key,"formatting","version",1);g_key_file_set_boolean(key,"formatting","enabled",s->enabled);g_key_file_set_boolean(key,"formatting","color-only",s->color_only);g_key_file_set_boolean(key,"formatting","monochrome",s->monochrome);g_key_file_set_string(key,"formatting","mono-font",s->font);gsize length=0;gchar *text=g_key_file_to_data(key,&length,NULL),*directory=g_path_get_dirname(config);gboolean ok=g_mkdir_with_parents(directory,0700)==0 && g_file_set_contents(config,text,length,error);if(!ok && (!error || !*error)) g_set_error_literal(error,G_FILE_ERROR,G_FILE_ERROR_FAILED,"Cannot save syntax formatting options");g_free(directory);g_free(text);g_key_file_unref(key);return ok;
 }

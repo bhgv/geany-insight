@@ -1,0 +1,276 @@
+/* Generated from Source Insight 4.00.0078; editable CSS. */
+editor { font-family: "Consolas", "Noto Sans Mono", monospace; font-size: 12pt; font-weight: normal; font-style: normal; text-decoration-line: none; color: #ebebeb; background-color: #302d25; }
+.keyword { color: #008000; }
+.comment { color: #beb7ff; }
+.string { color: #ffffff; background-color: #75684d; }
+.number { color: #ff4646; font-family: "Consolas", "Noto Sans Mono", monospace; }
+.operator { color: #00b700; }
+.type { color: #00ea00; }
+.preprocessor { color: #00ff00; font-weight: bold; }
+.line-number { color: #c0c0c0; font-family: "Consolas", "Noto Sans Mono", monospace; }
+/* Source attributes: {"Name": "Default Text"} */
+.si-default-text {  }
+/* Source attributes: {"Name": "Number", "FontName": "Consolas", "FontPitchFamily": "1", "FontCharset": "0", "ParentStyle": "Ref to Const"} */
+.si-number { color: #ff4646; font-family: "Consolas", "Noto Sans Mono", monospace; }
+/* Source attributes: {"Name": "Operator", "TextColor": "#00b700"} */
+.si-operator { color: #00b700; }
+/* Source attributes: {"Name": "Delimiter", "KeepWithNextLine": "1", "TextColor": "#feebab"} */
+.si-delimiter { color: #feebab; }
+/* Source attributes: {"Name": "Comment", "TextColor": "#beb7ff"} */
+.si-comment { color: #beb7ff; }
+/* Source attributes: {"Name": "String", "FixedWhiteSpace": "0", "TextColor": "#ffffff", "BackColor": "#75684d"} */
+.si-string { color: #ffffff; background-color: #75684d; }
+/* Source attributes: {"Name": "Keyword", "TextColor": "#008000"} */
+.si-keyword { color: #008000; }
+/* Source attributes: {"Name": "Control", "Bold": "1"} */
+.si-control { font-weight: bold; }
+/* Source attributes: {"Name": "Special", "Bold": "1", "Italic": "1"} */
+.si-special { font-weight: bold; font-style: italic; }
+/* Source attributes: {"Name": "Boolean", "TextColor": "#ff6fff"} */
+.si-boolean { color: #ff6fff; }
+/* Source attributes: {"Name": "Debug", "TextColor": "#ff0000", "Italic": "1", "Underline": "Dotted"} */
+.si-debug { color: #ff0000; font-style: italic; text-decoration-line: underline; }
+/* Source attributes: {"Name": "Null Value", "TextColor": "#ff0000", "ParentStyle": "Ref to Const"} */
+.si-null-value { color: #ff0000; }
+/* Source attributes: {"Name": "System", "ParentStyle": "Reference"} */
+.si-system { color: #00ea00; }
+/* Source attributes: {"Name": "Declaration", "Bold": "1", "TextColor": "#00ff00"} */
+.si-declaration { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Ref To Local", "TextColor": "#00b3b3", "ParentStyle": "Reference"} */
+.si-ref-to-local { color: #00b3b3; }
+/* Source attributes: {"Name": "Reference", "TextColor": "#00ea00"} */
+.si-reference { color: #00ea00; }
+/* Source attributes: {"Name": "Directive", "ParentStyle": "Control"} */
+.si-directive { font-weight: bold; }
+/* Source attributes: {"Name": "Line Number", "TextColor": "#c0c0c0", "FontName": "Consolas", "FontPitchFamily": "1", "FontCharset": "0"} */
+.si-line-number { color: #c0c0c0; font-family: "Consolas", "Noto Sans Mono", monospace; }
+/* Source attributes: {"Name": "Highlight", "TextColor": "#000000", "BackColor": "#ffff00", "Bold": "1"} */
+.si-highlight { color: #000000; background-color: #ffff00; font-weight: bold; }
+/* Source attributes: {"Name": "Symbol Characters", "FontName": "Microsoft Sans Serif", "FontPitchFamily": "0", "FontCharset": "0", "ParentStyle": "Operator"} */
+.si-symbol-characters { color: #00b700; font-family: "Microsoft Sans Serif", "Verdana", "Noto Sans", sans-serif; }
+/* Source attributes: {"Name": "Declare Template Parameter", "Underline": "Single", "ParentStyle": "Declaration"} */
+.si-declare-template-parameter { color: #00ff00; font-weight: bold; text-decoration-line: underline; }
+/* Source attributes: {"Name": "Ref to Parameter", "Bold": "1", "Underline": "Dotted", "ParentStyle": "Ref To Local"} */
+.si-ref-to-parameter { color: #00b3b3; font-weight: bold; text-decoration-line: underline; }
+/* Source attributes: {"Name": "Declare Template", "ParentStyle": "Declare Function"} */
+.si-declare-template { color: #ffffff; font-weight: bold; font-size: 140%; }
+/* Source attributes: {"Name": "Declare Package", "ParentStyle": "Declaration"} */
+.si-declare-package { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Ref to Template", "ParentStyle": "Reference"} */
+.si-ref-to-template { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to Package", "ParentStyle": "Reference"} */
+.si-ref-to-package { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to Template Parameter", "Underline": "Single", "Bold": "1", "ParentStyle": "Reference"} */
+.si-ref-to-template-parameter { color: #00ea00; font-weight: bold; text-decoration-line: underline; }
+/* Source attributes: {"Name": "Selection", "TextColor": "#ffffff", "BackColor": "#509e9e"} */
+.si-selection { color: #ffffff; background-color: #509e9e; }
+/* Source attributes: {"Name": "Declare Namespace", "ParentStyle": "Declaration"} */
+.si-declare-namespace { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Ref to Namespace", "ParentStyle": "Reference"} */
+.si-ref-to-namespace { color: #00ea00; }
+/* Source attributes: {"Name": "Declare Local", "ParentStyle": "Declaration"} */
+.si-declare-local { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Declare Member", "ParentStyle": "Declaration"} */
+.si-declare-member { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Declare Method", "CharSpacing": "10", "ParentStyle": "Declare Function"} */
+.si-declare-method { color: #ffffff; font-weight: bold; font-size: 140%; }
+/* Source attributes: {"Name": "Declare Method Inline", "ParentStyle": "Declare Function"} */
+.si-declare-method-inline { color: #ffffff; font-weight: bold; font-size: 140%; }
+/* Source attributes: {"Name": "Declare Function", "Scale": "140", "KeepWithNextLine": "1", "TextColor": "#ffffff", "ParentStyle": "Declaration"} */
+.si-declare-function { color: #ffffff; font-weight: bold; font-size: 140%; }
+/* Source attributes: {"Name": "Declare Macro", "ParentStyle": "Declaration"} */
+.si-declare-macro { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Declare Struct", "Scale": "140", "KeepWithNextLine": "1", "TextColor": "#ffff00", "ParentStyle": "Declaration"} */
+.si-declare-struct { color: #ffff00; font-weight: bold; font-size: 140%; }
+/* Source attributes: {"Name": "Declare Union", "ParentStyle": "Declare Struct"} */
+.si-declare-union { color: #ffff00; font-weight: bold; font-size: 140%; }
+/* Source attributes: {"Name": "Declare Typedef", "ParentStyle": "Declare Struct"} */
+.si-declare-typedef { color: #ffff00; font-weight: bold; font-size: 140%; }
+/* Source attributes: {"Name": "Declare Class", "Scale": "120", "ParentStyle": "Declare Struct"} */
+.si-declare-class { color: #ffff00; font-weight: bold; font-size: 120%; }
+/* Source attributes: {"Name": "Declare Var", "ParentStyle": "Declaration"} */
+.si-declare-var { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Declare Constant", "ParentStyle": "Declaration"} */
+.si-declare-constant { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Declare Enum", "ParentStyle": "Declare Struct"} */
+.si-declare-enum { color: #ffff00; font-weight: bold; font-size: 140%; }
+/* Source attributes: {"Name": "Declare Enum Const", "ParentStyle": "Declaration"} */
+.si-declare-enum-const { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Declare Edit Macro", "ParentStyle": "Declare Function"} */
+.si-declare-edit-macro { color: #ffffff; font-weight: bold; font-size: 140%; }
+/* Source attributes: {"Name": "Declare Prototype", "ParentStyle": "Declare Function"} */
+.si-declare-prototype { color: #ffffff; font-weight: bold; font-size: 140%; }
+/* Source attributes: {"Name": "Preprocessor", "ParentStyle": "Declaration"} */
+.si-preprocessor { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Search Result Heading", "Bold": "1", "Underline": "Single", "ParentStyle": "Declaration"} */
+.si-search-result-heading { color: #00ff00; font-weight: bold; text-decoration-line: underline; }
+/* Source attributes: {"Name": "Label", "TextColor": "#ff0000", "Scale": "110", "Underline": "Single", "ParentStyle": "Declaration"} */
+.si-label { color: #ff0000; font-weight: bold; text-decoration-line: underline; font-size: 110%; }
+/* Source attributes: {"Name": "Declare Interface", "ParentStyle": "Declare Class"} */
+.si-declare-interface { color: #ffff00; font-weight: bold; font-size: 120%; }
+/* Source attributes: {"Name": "Declare Resource", "ParentStyle": "Declaration"} */
+.si-declare-resource { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "File", "ParentStyle": "Declaration"} */
+.si-file { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Declare Custom Tag", "ParentStyle": "Declaration"} */
+.si-declare-custom-tag { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Ref to Func", "Bold": "1", "ParentStyle": "Reference"} */
+.si-ref-to-func { color: #00ea00; font-weight: bold; }
+/* Source attributes: {"Name": "Ref to Macro", "ParentStyle": "Ref to Func"} */
+.si-ref-to-macro { color: #00ea00; font-weight: bold; }
+/* Source attributes: {"Name": "Ref to Struct", "ParentStyle": "Reference"} */
+.si-ref-to-struct { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to Union", "ParentStyle": "Ref to Struct"} */
+.si-ref-to-union { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to Typedef", "ParentStyle": "Ref to Struct"} */
+.si-ref-to-typedef { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to Global Var", "Bold": "1", "Italic": "1", "TextColor": "#ff48ff", "ParentStyle": "Reference"} */
+.si-ref-to-global-var { color: #ff48ff; font-weight: bold; font-style: italic; }
+/* Source attributes: {"Name": "Ref to Const", "TextColor": "#ff4646", "ParentStyle": "Reference"} */
+.si-ref-to-const { color: #ff4646; }
+/* Source attributes: {"Name": "Ref to Enum", "ParentStyle": "Reference"} */
+.si-ref-to-enum { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to Custom", "ParentStyle": "Reference"} */
+.si-ref-to-custom { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to EdMacro", "ParentStyle": "Reference"} */
+.si-ref-to-edmacro { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to Class", "ParentStyle": "Ref to Struct"} */
+.si-ref-to-class { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to Method", "Italic": "1", "ParentStyle": "Ref to Func"} */
+.si-ref-to-method { color: #00ea00; font-weight: bold; font-style: italic; }
+/* Source attributes: {"Name": "Ref to EnumConst", "ParentStyle": "Ref to Const"} */
+.si-ref-to-enumconst { color: #ff4646; }
+/* Source attributes: {"Name": "Ref to Proto", "ParentStyle": "Ref to Func"} */
+.si-ref-to-proto { color: #00ea00; font-weight: bold; }
+/* Source attributes: {"Name": "Ref to Preproc", "ParentStyle": "Reference"} */
+.si-ref-to-preproc { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to Search", "ParentStyle": "Reference"} */
+.si-ref-to-search { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to Label", "ParentStyle": "Reference"} */
+.si-ref-to-label { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to Member", "Italic": "1", "ParentStyle": "Reference"} */
+.si-ref-to-member { color: #00ea00; font-style: italic; }
+/* Source attributes: {"Name": "Ref to Interface", "ParentStyle": "Ref to Class"} */
+.si-ref-to-interface { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to Resource", "ParentStyle": "Reference"} */
+.si-ref-to-resource { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to File", "ParentStyle": "Reference"} */
+.si-ref-to-file { color: #00ea00; }
+/* Source attributes: {"Name": "Comment Heading 1", "Bold": "1", "Scale": "150", "Underline": "Thick", "FontName": "Arial", "FontPitchFamily": "2", "FontCharset": "0", "ParentStyle": "Comment"} */
+.si-comment-heading-1 { color: #beb7ff; font-family: "Arial", "Verdana", "Noto Sans", sans-serif; font-weight: bold; text-decoration-line: underline; font-size: 150%; }
+/* Source attributes: {"Name": "Comment Heading 2", "Bold": "1", "Scale": "130", "Underline": "Single", "FontName": "Arial", "FontPitchFamily": "2", "FontCharset": "0", "ParentStyle": "Comment"} */
+.si-comment-heading-2 { color: #beb7ff; font-family: "Arial", "Verdana", "Noto Sans", sans-serif; font-weight: bold; text-decoration-line: underline; font-size: 130%; }
+/* Source attributes: {"Name": "Comment Heading 3", "Bold": "1", "Scale": "120", "FontName": "Arial", "FontPitchFamily": "2", "FontCharset": "0", "ParentStyle": "Comment"} */
+.si-comment-heading-3 { color: #beb7ff; font-family: "Arial", "Verdana", "Noto Sans", sans-serif; font-weight: bold; font-size: 120%; }
+/* Source attributes: {"Name": "Comment Heading 4", "Bold": "1", "FontName": "Arial", "FontPitchFamily": "2", "FontCharset": "0", "ParentStyle": "Comment"} */
+.si-comment-heading-4 { color: #beb7ff; font-family: "Arial", "Verdana", "Noto Sans", sans-serif; font-weight: bold; }
+/* Source attributes: {"Name": "Comment Right", "Italic": "1", "ParentStyle": "Comment"} */
+.si-comment-right { color: #beb7ff; font-style: italic; }
+/* Source attributes: {"Name": "Ref to Base Class", "ParentStyle": "Reference"} */
+.si-ref-to-base-class { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to Inline Type", "ParentStyle": "Reference"} */
+.si-ref-to-inline-type { color: #00ea00; }
+/* Source attributes: {"Name": "Inactive Code", "TextColor": "#808080"} */
+.si-inactive-code { color: #808080; }
+/* Source attributes: {"Name": "Declare Parameter", "Underline": "Single", "ParentStyle": "Declaration"} */
+.si-declare-parameter { color: #00ff00; font-weight: bold; text-decoration-line: underline; }
+/* Source attributes: {"Name": "Auto Annotations", "Scale": "90", "TextColor": "#808080", "ParentStyle": "Comment"} */
+.si-auto-annotations { color: #808080; font-size: 90%; }
+/* Source attributes: {"Name": "HTML or XML Element"} */
+.si-html-or-xml-element {  }
+/* Source attributes: {"Name": "HTML Title", "TextColor": "#ff0000", "Bold": "1", "Scale": "130", "Underline": "Single"} */
+.si-html-title { color: #ff0000; font-weight: bold; text-decoration-line: underline; font-size: 130%; }
+/* Source attributes: {"Name": "Perl POD"} */
+.si-perl-pod {  }
+/* Source attributes: {"Name": "Perl End Script"} */
+.si-perl-end-script {  }
+/* Source attributes: {"Name": "Declare Method Prototype", "ParentStyle": "Declare Method"} */
+.si-declare-method-prototype { color: #ffffff; font-weight: bold; font-size: 140%; }
+/* Source attributes: {"Name": "Ref to Method Prototype", "ParentStyle": "Ref to Method"} */
+.si-ref-to-method-prototype { color: #00ea00; font-weight: bold; font-style: italic; }
+/* Source attributes: {"Name": "Comment To Do", "Scale": "120", "Bold": "1", "TextColor": "#000000", "BackColor": "#ffff00", "FontName": "Arial", "FontPitchFamily": "2", "FontCharset": "0", "ParentStyle": "Comment"} */
+.si-comment-to-do { color: #000000; background-color: #ffff00; font-family: "Arial", "Verdana", "Noto Sans", sans-serif; font-weight: bold; font-size: 120%; }
+/* Source attributes: {"Name": "Ref to IDL Module", "ParentStyle": "Reference"} */
+.si-ref-to-idl-module { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to IDL Library", "ParentStyle": "Reference"} */
+.si-ref-to-idl-library { color: #00ea00; }
+/* Source attributes: {"Name": "Declare IDL Module", "Scale": "150", "ShadowColor": "#c0c0c0", "KeepWithNextLine": "1", "ParentStyle": "Declaration"} */
+.si-declare-idl-module { color: #00ff00; font-weight: bold; font-size: 150%; }
+/* Source attributes: {"Name": "Declare IDL Library", "Scale": "150", "ShadowColor": "#c0c0c0", "KeepWithNextLine": "1", "ParentStyle": "Declaration"} */
+.si-declare-idl-library { color: #00ff00; font-weight: bold; font-size: 150%; }
+/* Source attributes: {"Name": "Comment Single Line", "ParentStyle": "Comment"} */
+.si-comment-single-line { color: #beb7ff; }
+/* Source attributes: {"Name": "Comment Multi Line", "ParentStyle": "Comment"} */
+.si-comment-multi-line { color: #beb7ff; }
+/* Source attributes: {"Name": "Parentheses", "ParentStyle": "Delimiter"} */
+.si-parentheses { color: #feebab; }
+/* Source attributes: {"Name": "HTML Body Text", "FixedWhiteSpace": "0"} */
+.si-html-body-text {  }
+/* Source attributes: {"Name": "HTML Tag", "TextColor": "#008000", "Bold": "1"} */
+.si-html-tag { color: #008000; font-weight: bold; }
+/* Source attributes: {"Name": "Standard Property", "ParentStyle": "Ref to Member"} */
+.si-standard-property { color: #00ea00; font-style: italic; }
+/* Source attributes: {"Name": "Standard Function", "ParentStyle": "Ref to Func"} */
+.si-standard-function { color: #00ea00; font-weight: bold; }
+/* Source attributes: {"Name": "Standard Object", "ParentStyle": "Ref to Class"} */
+.si-standard-object { color: #00ea00; }
+/* Source attributes: {"Name": "Declare CSS Selector", "Scale": "120", "ParentStyle": "Declaration"} */
+.si-declare-css-selector { color: #00ff00; font-weight: bold; font-size: 120%; }
+/* Source attributes: {"Name": "Declare C# Property", "ParentStyle": "Declaration"} */
+.si-declare-c-property { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Ref to C# Property", "ParentStyle": "Reference"} */
+.si-ref-to-c-property { color: #00ea00; }
+/* Source attributes: {"Name": "Mono Font View", "FontName": "Consolas", "FontPitchFamily": "1", "FontCharset": "0"} */
+.si-mono-font-view { font-family: "Consolas", "Noto Sans Mono", monospace; }
+/* Source attributes: {"Name": "Declare C# Event", "ParentStyle": "Declaration"} */
+.si-declare-c-event { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Declare C# Indexer", "ParentStyle": "Declaration"} */
+.si-declare-c-indexer { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Ref to C# Event", "ParentStyle": "Reference"} */
+.si-ref-to-c-event { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to C# Indexer", "ParentStyle": "Reference"} */
+.si-ref-to-c-indexer { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to Alias", "ParentStyle": "Reference"} */
+.si-ref-to-alias { color: #00ea00; }
+/* Source attributes: {"Name": "Declare Alias", "ParentStyle": "Declaration"} */
+.si-declare-alias { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "CDATA Section", "TextColor": "#808080"} */
+.si-cdata-section { color: #808080; }
+/* Source attributes: {"Name": "Declare Type Parameter", "Underline": "Single", "ParentStyle": "Declaration"} */
+.si-declare-type-parameter { color: #00ff00; font-weight: bold; text-decoration-line: underline; }
+/* Source attributes: {"Name": "Ref to Type Parameter", "Underline": "Single", "Bold": "1", "ParentStyle": "Reference"} */
+.si-ref-to-type-parameter { color: #00ea00; font-weight: bold; text-decoration-line: underline; }
+/* Source attributes: {"Name": "Snippet Input Field", "TextColor": "#000000", "BackColor": "#a0e1ff", "Bold": "1"} */
+.si-snippet-input-field { color: #000000; background-color: #a0e1ff; font-weight: bold; }
+/* Source attributes: {"Name": "Register", "TextColor": "#008000", "Bold": "1"} */
+.si-register { color: #008000; font-weight: bold; }
+/* Source attributes: {"Name": "Python Doc String", "Italic": "1", "FixedWhiteSpace": "0", "ParentStyle": "Comment"} */
+.si-python-doc-string { color: #beb7ff; font-style: italic; }
+/* Source attributes: {"Name": "Instruction", "ParentStyle": "Control"} */
+.si-instruction { font-weight: bold; }
+/* Source attributes: {"Name": "Reference Highlight", "TextColor": "#000000", "BackColor": "#aae1ff"} */
+.si-reference-highlight { color: #000000; background-color: #aae1ff; }
+/* Source attributes: {"Name": "Declare VHDL Entity", "Scale": "140", "ShadowColor": "#c0c0c0", "KeepWithNextLine": "1", "ParentStyle": "Declaration"} */
+.si-declare-vhdl-entity { color: #00ff00; font-weight: bold; font-size: 140%; }
+/* Source attributes: {"Name": "Declare VHDL Architecture", "Scale": "140", "ShadowColor": "#c0c0c0", "KeepWithNextLine": "1", "ParentStyle": "Declaration"} */
+.si-declare-vhdl-architecture { color: #00ff00; font-weight: bold; font-size: 140%; }
+/* Source attributes: {"Name": "Declare VHDL Component", "ShadowColor": "#c0c0c0", "KeepWithNextLine": "1", "ParentStyle": "Declaration"} */
+.si-declare-vhdl-component { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Declare VHDL Process", "ParentStyle": "Declaration"} */
+.si-declare-vhdl-process { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Declare VHDL Config", "ShadowColor": "#c0c0c0", "KeepWithNextLine": "1", "ParentStyle": "Declaration"} */
+.si-declare-vhdl-config { color: #00ff00; font-weight: bold; }
+/* Source attributes: {"Name": "Ref to VHDL Entity", "ParentStyle": "Reference"} */
+.si-ref-to-vhdl-entity { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to VHDL Architecture", "ParentStyle": "Reference"} */
+.si-ref-to-vhdl-architecture { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to VHDL Component", "ParentStyle": "Reference"} */
+.si-ref-to-vhdl-component { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to VHDL Process", "ParentStyle": "Reference"} */
+.si-ref-to-vhdl-process { color: #00ea00; }
+/* Source attributes: {"Name": "Ref to VHDL Config", "ParentStyle": "Reference"} */
+.si-ref-to-vhdl-config { color: #00ea00; }
+/* Source attributes: {"Name": "HTML Tag Excerpt"} */
+.si-html-tag-excerpt {  }
+/* Source attributes: {"Name": "new comment"} */
+.si-new-comment {  }

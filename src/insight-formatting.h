@@ -5,6 +5,7 @@
 #include "Scintilla.h"
 #include "ScintillaWidget.h"
 void insight_formatting_init(void);
+void insight_formatting_refresh(void);
 void insight_formatting_finalize(void);
 /* Call begin before changing the underlying theme/profile fonts. Apply captures
  * that raw result once, then renders reversible display overrides only. */

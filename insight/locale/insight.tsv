@@ -859,3 +859,8 @@ Bookmarks to delete: %u. Source files and clips are kept.	Закладок дл�
 Bookmark line number is outside the current file	Номер строки вне текущего файла
 Several bookmarks match; select one in the list	Найдено несколько закладок; выберите одну в списке
 Delete bookmarks when file closes	Удалять закладки при закрытии файла
+Visual theme…	Визуальная тема…
+Visual theme	Визуальная тема
+Current Geany theme	Текущая тема Geany
+Select a theme	Выберите тему
+Themes use editable CSS in styles/<name>. Local panel appearance overrides the theme.	Темы можно изменять в styles/<имя>. Настройки оформления отдельных панелей имеют приоритет.

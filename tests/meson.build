@@ -579,3 +579,9 @@ test('Insight bookmark multiple selection GUI', bookmark_selection_gui_test, tim
 test('Insight bookmark deletion confirmation restore GUI', bookmark_selection_gui_test, timeout: 45, env: ['GEANY_TEST_BOOKMARK_CONFIRM_RESTORE=1'])
 
 test('Insight bookmark close-file option restore GUI', bookmark_selection_gui_test, timeout: 45, env: ['GEANY_TEST_BOOKMARK_CLOSE_RESTORE=1'])
+
+themes_gui_test = executable('test_insight_themes_gui', '../insight/tests/themes_gui_test.c', dependencies: test_deps)
+test('Insight CSS visual themes GUI', themes_gui_test, timeout: 50)
+test('Insight CSS visual theme restore GUI', themes_gui_test, timeout: 50, env: ['GEANY_TEST_THEME_RESTORE=1'])
+test('Insight CSS theme panel override GUI', themes_gui_test, timeout: 50, env: ['GEANY_TEST_THEME_PANEL=1'])
+test('Insight CSS theme and Cyrillic font assets', find_program('python3'), args: [meson.project_source_root() / 'insight/tests/theme_assets_test.py'])

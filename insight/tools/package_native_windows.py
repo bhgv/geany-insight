@@ -95,6 +95,8 @@ def main():
     shutil.copytree(ROOT / 'data', destination / 'data', ignore=shutil.ignore_patterns('*.in', 'Makefile*', 'meson.build'))
     shutil.copy2(a.build / 'data/filetypes.python', destination / 'data/filedefs/filetypes.python')
     shutil.copy2(ROOT / 'COPYING', destination / 'data/GPL-2')
+    shutil.copytree(ROOT / 'styles', destination / 'data/styles')
+    shutil.copytree(ROOT / 'fonts', destination / 'data/fonts')
     # Keep Russian and English (built into the program), reducing download size.
     locales = destination / 'share/locale'
     if locales.exists():
