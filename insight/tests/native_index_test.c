@@ -41,6 +41,8 @@ int main(void) {
  assert(insight_native_definition_rank_at(&local,"/project/b.cpp","current_function",225)<0);
  assert(insight_native_definition_rank_at(&local,"/project/a.cpp","current_function",200)<0);
  assert(insight_native_definition_rank_at(&local,"/project/a.cpp",NULL,225)<0);
+ InsightSymbol tparam={"T","/project/a.cpp","Box","Z",2,"","class",""};
+ assert(insight_native_definition_rank_at(&tparam,"/project/a.cpp","Box::method",4)>12);assert(insight_native_definition_rank_at(&tparam,"/project/a.cpp","Boxed::method",4)<0);assert(insight_native_definition_rank_at(&tparam,"/project/b.cpp","Box::method",4)<0);assert(insight_native_definition_rank_at(&tparam,"/project/a.cpp","Box::method",1)<0);
  InsightSymbol assembly_label={"entry","/project/native.S","","l",1,"","",""};assert(insight_native_definition_rank_at(&assembly_label,"/project/main.cpp",NULL,1)>=0);
  assert(!insight_native_import(index,&source,"\xff")); assert(insight_index_count(index)==1);
  GPtrArray huge={.pdata=NULL,.len=250001}; source.tags_array=&huge;
@@ -98,6 +100,9 @@ int main(void) {
  assert(insight_native_parse(index,parsed,absolute,homonyms,strlen(homonyms)));scope_source=(InsightNativeSource){homonyms,NULL,strlen(homonyms)};scopes=insight_native_scopes_new(index,absolute,&scope_source);assert(scopes);unknown_scope=FALSE;assert(!insight_native_scopes_at(scopes,2,strstr(homonyms,"q->field")-homonyms+3,&unknown_scope));assert(unknown_scope);insight_native_scopes_free(scopes);
  const gchar *overloaded="struct Alpha { int field; }; struct Beta { int field; };\nint same(Alpha *p) { return p->field; } int same(Beta *q) { return q->field; }\n";
  assert(insight_native_parse(index,parsed,absolute,overloaded,strlen(overloaded)));scope_source=(InsightNativeSource){overloaded,NULL,strlen(overloaded)};scopes=insight_native_scopes_new(index,absolute,&scope_source);assert(scopes);unknown_scope=FALSE;assert(!insight_native_scopes_at(scopes,2,strstr(overloaded,"q->field")-overloaded+3,&unknown_scope));assert(unknown_scope);insight_native_scopes_free(scopes);
+ const gchar *dependent_types="struct T { int field; };\nT *ordinary;\ntemplate<class T> struct Box { T *item; void method(T *p) {} };\ntemplate<class T> void dependent(T *p) {}\nvoid nondependent(T *p) {}\n";
+ assert(insight_native_parse(index,parsed,absolute,dependent_types,strlen(dependent_types)));
+ owner_is(index,absolute,"Box::method","p->field",NULL);owner_is(index,absolute,"dependent","p->field",NULL);owner_is(index,absolute,"nondependent","p->field","T");owner_is(index,absolute,NULL,"ordinary->field","T");
  const char *chain_code="namespace Chain {\nstruct Cell { int value; };\nstruct Other { int value; };\nusing Result = Cell;\nstruct Base { Cell *child; Cell *get(); };\nstruct Derived : Base { using Result = Other; Result *declared(); static Cell *shared; Cell *make(); Cell *make(int); static Cell *create(); Other *mixed(int); Cell *mixed(const char*); void method() {} };\nusing Alias = Derived;\nDerived *global;\nCell *factory(); Cell *factory(int);\nusing CellAlias = Cell; CellAlias *alias_factory();\nDerived *make_derived(); Other *get(); Other *fake_call(); Cell *shadow();\nvoid use(Derived *p, int shadow) {}\n}\nnamespace ChainNS = Chain;\nnamespace ChainNS2 = ChainNS;\nChainNS2::Derived *ns_global;\nvoid ns_use(ChainNS2::Alias *p) {}\nnamespace AliasOuter { namespace Inner = ::Chain; Inner::Derived *obj; void use() {} }\n";
  assert(insight_native_parse(index,parsed,absolute,chain_code,strlen(chain_code)));
  owner_is(index,absolute,"AliasOuter::use","obj->child->value","Chain::Cell");

@@ -104,7 +104,7 @@ static TMParserMapEntry map_CPP[] = {
 	{'A', tm_tag_typedef_t},    // namespace alias
 	{'N', tm_tag_undef_t},      // name
 	{'U', tm_tag_undef_t},      // using
-	{'Z', tm_tag_undef_t},      // tparam
+	{'Z', tm_tag_other_t},      // tparam
 	{'M', tm_tag_undef_t},      // module
 	{'P', tm_tag_undef_t},      // partition
 };

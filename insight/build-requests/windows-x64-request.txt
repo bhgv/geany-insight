@@ -1,1 +1,1 @@
-Build Windows x64: positional C-family same-line function scope for Context/F12/Follow; conservative ambiguity/incomplete-body guards; native scope backend, 57 parser fixtures and 18 GUI scenarios.
+Build Windows x64: retain C++ template parameter barriers against false global type binding, constrain definition scope/path/line, retire Context candidate pointers before index replacement; 57 parser fixtures, native backend and 18 GUI scenarios.

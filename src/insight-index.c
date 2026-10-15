@@ -31,6 +31,11 @@ guint insight_native_definition_rank(const InsightSymbol *symbol,const char *pat
 }
 
 gint insight_native_definition_rank_at(const InsightSymbol *symbol,const char *path,const char *scope,gulong line) {
+ if(!strcmp(symbol->kind,"Z")) {
+  gsize length=strlen(symbol->scope);
+  if(g_strcmp0(symbol->path,path) || !scope || !length || symbol->line>line || strncmp(scope,symbol->scope,length) || (scope[length] && !g_str_has_prefix(scope+length,"::"))) return -1;
+  return 10000+(gint)MIN(symbol->line,(gulong)G_MAXINT-10000ul);
+ }
  const gchar *extension=strrchr(symbol->path,'.');
  gboolean assembly=extension && (!g_ascii_strcasecmp(extension,".asm") || !g_ascii_strcasecmp(extension,".s") || !g_ascii_strcasecmp(extension,".sx") || !g_ascii_strcasecmp(extension,".asm51") || !g_ascii_strcasecmp(extension,".a51"));
  if((!strcmp(symbol->kind,"l") && !assembly) || !strcmp(symbol->kind,"z")) {

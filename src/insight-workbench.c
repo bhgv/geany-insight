@@ -431,6 +431,9 @@ static void snapshot_job_done(GObject *source,GAsyncResult *result,gpointer data
  if(!g_hash_table_size(j->changed)) return;
  /* Stop decoration before atomically replacing its owned name snapshot. */
  if(wb.preview_links_idle) { g_source_remove(wb.preview_links_idle); wb.preview_links_idle=0; }
+ /* Candidate arrays borrow symbols from the current index. Drop them before
+  * retirement, including the gap before the coalesced decoration refresh. */
+ if(wb.preview_candidates) g_hash_table_remove_all(wb.preview_candidates);
  retire_names(wb.preview_names); wb.preview_names=j->all_names; j->all_names=NULL;
  retire_index(wb.index); wb.index=j->result; j->result=NULL; wb.index_version++; wb.preview_names_position=insight_index_count(wb.index);
  index_event_publish(j->changed,j->names);
