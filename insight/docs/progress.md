@@ -1249,3 +1249,7 @@ The direct glob also includes the existing processing-order case, which requires
 ## Windows parser harness comparison dependency
 
 The 8b88d24 job reached the parser harness through MSYS2 and generated the first fixture successfully, then reported diff: command not found. The new test stage had omitted its diffutils package dependency. MSYS2 setup now explicitly installs diffutils, and a tool preflight checks diff/sed/cp/mktemp/python3 before compilation. The parser checks themselves and expected output stay intact. The locally exercised 57-case loop remains the validation for the shell commands; another Windows request verifies the repaired runner environment.
+
+## Windows tag-record line endings
+
+The 34309b3 job started the parser fixtures correctly and exposed CRLF tag-record handling in scripts/print-tags.py: its binary reader included the final carriage return in the last field, causing decoded prototype/type output to differ. Input record CRLF is now normalized to LF before field decoding; the fixture diff also ignores a trailing CR at line boundaries so checkout newline conversion does not change comparisons. Actual tag field/content differences remain strict. A dedicated Python regression first failed on the old printer, then verifies identical LF/CRLF decoded bytes and that a real type change still changes output. Windows runs it before compilation. The same 57-case native loop is rerun locally; the editor/parser implementation is unchanged by this harness repair.

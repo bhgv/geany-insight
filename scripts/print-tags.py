@@ -89,7 +89,8 @@ def get_next_part(inp, pos, first):
 	return part, kind, pos
 
 
-inp = sys.stdin.buffer.read()
+# Native Windows tag writers use CRLF records; CR is not part of the last field.
+inp = sys.stdin.buffer.read().replace(b'\r\n', b'\n')
 
 tag = {}
 pos = 0

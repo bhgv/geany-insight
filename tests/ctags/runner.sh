@@ -40,4 +40,4 @@ outfile="$TMPDIR/test.${source##*.}.out"
 
 "$GEANY" -c "$CONFDIR" -P -g "$tagfile" "$source" "$@" || exit 1
 cat "$tagfile" | "$PRINTER" > "$outfile" || exit 3
-diff -u "$result" "$outfile" || exit 2
+diff --strip-trailing-cr -u "$result" "$outfile" || exit 2

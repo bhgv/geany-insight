@@ -39,6 +39,8 @@ jobs:
           for tool in diff sed cp mktemp python3; do
             command -v "$tool" > /dev/null || exit 1
           done
+      - name: Test tag printer record endings
+        run: python insight/tests/print_tags_test.py
       - name: Test internal diff core
         run: python insight/tests/diff_test.py
       - name: Test structural selection
