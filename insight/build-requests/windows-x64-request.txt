@@ -1,1 +1,1 @@
-Build Windows x64: qualified inherited nested types and aliases, base declaration context, diamonds/direct hiding/ambiguity/cycles/bounds, native parsed receivers and Context/F12; add strict project path-variable tests; 18 GUI scenarios.
+Build Windows x64: lexical class/base type lookup before outer scopes, inherited aliases over conflicting global types, direct/local hiding and guarded fallback, native parser and Context/F12 regression; 18 GUI scenarios.

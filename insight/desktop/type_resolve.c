@@ -135,10 +135,26 @@ static const InsightSymbol *nested_type(Resolve *job,const InsightSymbol *owner,
  }
  g_hash_table_remove(job->owners,owner);g_ptr_array_unref(bases);return found;
 }
+static const InsightSymbol *lexical_type(Resolve *job,const gchar *name,const gchar *scope,const gchar *path,gboolean global,guint depth,InsightTypeStatus *status) {
+ gchar *context=global ? g_strdup("") : canonical_scope(scope);const InsightSymbol *symbol=NULL;
+ for(guint level=0;;level++) {
+  if(depth+level>64) { *status=INSIGHT_TYPE_LIMIT;break; }
+  gchar *qualified=*context ? g_strconcat(context,"::",name,NULL) : g_strdup(name);
+  symbol=lookup(job->index,qualified,"",path,TRUE,job->eligible,job->data,status);g_free(qualified);
+  if(symbol || *status!=INSIGHT_TYPE_UNKNOWN) break;
+  if(*context) {
+   InsightTypeStatus owner_status=INSIGHT_TYPE_UNKNOWN;const InsightSymbol *owner=lookup(job->index,context,"",path,TRUE,job->eligible,job->data,&owner_status);
+   if(owner_status!=INSIGHT_TYPE_UNKNOWN) { *status=owner_status;break; }
+   if(owner && !alias_symbol(owner)) { gboolean uncertain=FALSE;symbol=nested_type(job,owner,name,depth+level+1,status,&uncertain);if(symbol || uncertain) break; }
+  }
+  gchar *last=g_strrstr(context,"::");if(last) *last=0;else if(*context) *context=0;else break;
+ }
+ g_free(context);return symbol;
+}
 static InsightTypeResult resolve_name(Resolve *job,const gchar *name,const gchar *scope,const gchar *path,gboolean global,guint depth) {
  InsightTypeResult result={.status=INSIGHT_TYPE_UNKNOWN};
  if(depth>64) { result.status=INSIGHT_TYPE_LIMIT;return result; }
- const InsightSymbol *symbol=lookup(job->index,name,scope,path,global,job->eligible,job->data,&result.status);
+ const InsightSymbol *symbol=strstr(name,"::") ? lookup(job->index,name,scope,path,global,job->eligible,job->data,&result.status) : lexical_type(job,name,scope,path,global,depth,&result.status);
  if(!symbol && result.status==INSIGHT_TYPE_UNKNOWN) {
   /* A nested owner can itself be an alias. Resolve that owner in the use-site
    * context, then look up only the canonical owner's direct nested name. */

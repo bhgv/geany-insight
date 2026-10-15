@@ -17,6 +17,12 @@ static void inherited_types(void) {
   {"Hider",NULL,"N","s",17,"","","Base"}, {"Nested",NULL,"N::Hider","m",18,"","int",""}, {"Mixed",NULL,"N","s",19,"","","Hider,Base"},
   {"Malformed",NULL,"N","s",20,"","","Base<"}
  };g_assert_true(insight_index_update(index,"/inherited.cpp",tags,G_N_ELEMENTS(tags)));
+ InsightSymbol extra[]={ {"Empty",NULL,"N","s",201,"","",""},{"NoNested",NULL,"N","s",202,"","","Empty"},{"Nested",NULL,"N::Derived::special","t",203,"","Other::Nested",""} };g_assert_true(insight_index_update(index,"/lexical.h",extra,G_N_ELEMENTS(extra)));
+ InsightSymbol global={"Nested",NULL,"","s",200,"","",""};g_assert_true(insight_index_update(index,"/global.h",&global,1));
+ resolved(index,"Nested","N::Derived::method","/inherited.cpp","N::Base::Nested",1);
+ resolved(index,"Nested","N::Direct::method","/inherited.cpp","N::Direct::Nested",0);
+ resolved(index,"Nested","N::NoNested::method","/inherited.cpp","Nested",0);resolved(index,"Nested","N::Derived::special","/inherited.cpp","N::Other::Nested",1);
+ InsightTypeResult blocked=insight_type_resolve(index,"Nested","N::Hider::method","/inherited.cpp",NULL,NULL);g_assert_cmpint(blocked.status,==,INSIGHT_TYPE_UNKNOWN);insight_type_result_clear(&blocked);blocked=insight_type_resolve(index,"Nested","N::MissingBase::method","/inherited.cpp",NULL,NULL);g_assert_cmpint(blocked.status,==,INSIGHT_TYPE_UNKNOWN);insight_type_result_clear(&blocked);
  resolved(index,"Derived::Nested","N","/inherited.cpp","N::Base::Nested",1);resolved(index,"Alias::Nested","N","/inherited.cpp","N::Base::Nested",2);resolved(index,"Diamond::Nested","N","/inherited.cpp","N::Base::Nested",0);resolved(index,"Direct::Nested","N","/inherited.cpp","N::Direct::Nested",0);
  const gchar *missing[]={"Ambiguous::Nested","MissingBase::Nested","CycleA::Nested","Hider::Nested","Mixed::Nested","Malformed::Nested"};const InsightTypeStatus states[]={INSIGHT_TYPE_AMBIGUOUS,INSIGHT_TYPE_UNKNOWN,INSIGHT_TYPE_CYCLE,INSIGHT_TYPE_UNKNOWN,INSIGHT_TYPE_UNKNOWN,INSIGHT_TYPE_INVALID};
  for(guint i=0;i<G_N_ELEMENTS(missing);i++) { InsightTypeResult r=insight_type_resolve(index,missing[i],"N","/inherited.cpp",NULL,NULL);g_assert_cmpint(r.status,==,states[i]);g_assert_null(r.owner);insight_type_result_clear(&r); }

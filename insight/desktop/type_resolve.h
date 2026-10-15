@@ -16,8 +16,9 @@ gchar *insight_type_name(const gchar *,gboolean *);
  * may expand aliases and find explicit qualified inherited nested types.
  * Direct nested declarations hide bases; distinct declarations, unresolved
  * bases and non-type hiding decline. Inheritance work is bounded to 4096
- * visited owners and 256 bases per owner. Unqualified inherited type lookup
- * in a lexical class scope and template instantiation remain unsupported.
+ * visited owners and 256 bases per owner. Unqualified names search class
+ * bases before enclosing scopes; lexical walking also shares the depth bound.
+ * Qualified-prefix hiding and template instantiation remain unsupported.
  * Total alias expansions are bounded to 32, recursion to
  * 64. Only active expansions form a cycle (an owner alias may be reused).
  * owner is owned; symbol is borrowed from the caller-owned index snapshot. */
