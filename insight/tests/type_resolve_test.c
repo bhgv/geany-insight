@@ -3,6 +3,7 @@
 #include <string.h>
 static void name_is(const char *raw,const char *expected,gboolean global) { gboolean absolute=FALSE;gchar *name=insight_type_name(raw,&absolute);g_assert_cmpstr(name,==,expected);g_assert_cmpint(absolute,==,global);g_free(name); }
 static void resolved(InsightIndex *index,const char *raw,const char *scope,const char *path,const char *owner,guint aliases) { InsightTypeResult r=insight_type_resolve(index,raw,scope,path,NULL,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_FOUND);g_assert_cmpstr(r.owner,==,owner);g_assert_nonnull(r.symbol);g_assert_cmpuint(r.aliases,==,aliases);insight_type_result_clear(&r); }
+static int exclude_nested(const InsightSymbol *symbol,void *data) { (void)data;return strcmp(symbol->path,"/nested.h")!=0; }
 static int exclude_header(const InsightSymbol *symbol,void *data) { (void)data;return strcmp(symbol->path,"/header.h")!=0; }
 int main(void) {
  name_is("const struct N::Box<int, Pair<long, short>>::Nested * const &","N::Box::Nested",FALSE);
@@ -27,6 +28,25 @@ int main(void) {
  resolved(index,"A","N::function","/main.cpp","N::Foo",2);resolved(index,"Other::A","N::function","/main.cpp","Foo",1);
  resolved(index,"Foo","N::Box::method","/main.cpp","N::Foo",0);resolved(index,"::Foo","N::function","/main.cpp","Foo",0);
  resolved(index,"GlobalAlias","N","/main.cpp","Foo",1);resolved(index,"N::Box<int>::Nested","Other","/main.cpp","N::Box::Nested",0);
+ InsightSymbol nested[]={
+  {"BoxAlias",NULL,"N","t",14,"","Box",""},
+  {"SecondAlias",NULL,"N","t",15,"","BoxAlias",""},
+  {"NamespaceAlias",NULL,"","t",16,"","N",""},
+  {"N",NULL,"","n",17,"","",""},
+  {"NestedAlias",NULL,"N::Box","t",18,"","Nested",""},
+  {"Cross",NULL,"N::Box","t",19,"","N::BoxAlias::Nested",""},
+  {"Recursive",NULL,"N","t",20,"","Recursive::Nested",""}
+ };g_assert_true(insight_index_update(index,"/nested.h",nested,G_N_ELEMENTS(nested)));
+ resolved(index,"BoxAlias::Nested","N::function","/main.cpp","N::Box::Nested",1);
+ resolved(index,"SecondAlias::NestedAlias","N","/main.cpp","N::Box::Nested",3);
+ resolved(index,"NamespaceAlias::BoxAlias::Nested","","/main.cpp","N::Box::Nested",2);
+ resolved(index,"BoxAlias::Cross","N","/main.cpp","N::Box::Nested",3);
+ InsightTypeResult nested_result=insight_type_resolve(index,"Recursive::Nested","N","/main.cpp",NULL,NULL);g_assert_cmpint(nested_result.status,==,INSIGHT_TYPE_CYCLE);insight_type_result_clear(&nested_result);
+ InsightTypeResult missing=insight_type_resolve(index,"BoxAlias::Missing","N","/main.cpp",NULL,NULL);g_assert_cmpint(missing.status,==,INSIGHT_TYPE_UNKNOWN);g_assert_cmpuint(missing.aliases,==,1);insight_type_result_clear(&missing);
+ missing=insight_type_resolve(index,"BoxAlias::Nested","N","/main.cpp",exclude_nested,NULL);g_assert_cmpint(missing.status,==,INSIGHT_TYPE_UNKNOWN);insight_type_result_clear(&missing);
+ InsightSymbol conflict={"BoxAlias",NULL,"N","t",1,"","::Foo",""};g_assert_true(insight_index_update(index,"/conflict.h",&conflict,1));
+ missing=insight_type_resolve(index,"BoxAlias::Nested","N","/unrelated.cpp",NULL,NULL);g_assert_cmpint(missing.status,==,INSIGHT_TYPE_AMBIGUOUS);insight_type_result_clear(&missing);g_assert_true(insight_index_update(index,"/conflict.h",NULL,0));
+ GString *deep=g_string_new("Unknown");for(guint i=0;i<80;i++) g_string_append(deep,"::Nested");missing=insight_type_resolve(index,deep->str,"N","/main.cpp",NULL,NULL);g_assert_cmpint(missing.status,==,INSIGHT_TYPE_LIMIT);insight_type_result_clear(&missing);g_string_free(deep,TRUE);
  InsightTypeResult r=insight_type_resolve(index,"LoopA","N","/main.cpp",NULL,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_CYCLE);insight_type_result_clear(&r);
  r=insight_type_resolve(index,"C","N","/main.cpp",NULL,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_UNKNOWN);insight_type_result_clear(&r);
  r=insight_type_resolve(index,"Bad","N","/main.cpp",NULL,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_INVALID);insight_type_result_clear(&r);

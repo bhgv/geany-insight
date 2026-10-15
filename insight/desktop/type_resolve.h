@@ -12,7 +12,9 @@ typedef struct { InsightTypeStatus status;gchar *owner;const InsightSymbol *symb
 gchar *insight_type_name(const gchar *,gboolean *);
 /* Resolve lexical scopes from inner to outer. Same-file declarations may
  * disambiguate a scope; otherwise duplicates are not guessed. Alias targets
- * are resolved in the alias declaration's scope/file, with cycle/depth guards.
+ * are resolved in the alias declaration's scope/file. Qualified nested owners
+ * may expand aliases; total alias expansions are bounded to 32, recursion to
+ * 64. Only active expansions form a cycle (an owner alias may be reused).
  * owner is owned; symbol is borrowed from the caller-owned index snapshot. */
 InsightTypeResult insight_type_resolve(const InsightIndex *,const gchar *,const gchar *,const gchar *,InsightTypeEligible,void *);
 void insight_type_result_clear(InsightTypeResult *);

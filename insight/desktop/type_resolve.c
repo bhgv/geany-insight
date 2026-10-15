@@ -77,19 +77,39 @@ static const InsightSymbol *lookup(const InsightIndex *index,const gchar *name,c
  }
  g_free(context);g_free(candidates);return result;
 }
+typedef struct { const InsightIndex *index;InsightTypeEligible eligible;void *data;GHashTable *active;guint aliases; } Resolve;
+static InsightTypeResult resolve_name(Resolve *job,const gchar *name,const gchar *scope,const gchar *path,gboolean global,guint depth) {
+ InsightTypeResult result={.status=INSIGHT_TYPE_UNKNOWN};
+ if(depth>64) { result.status=INSIGHT_TYPE_LIMIT;return result; }
+ const InsightSymbol *symbol=lookup(job->index,name,scope,path,global,job->eligible,job->data,&result.status);
+ if(!symbol && result.status==INSIGHT_TYPE_UNKNOWN) {
+  /* A nested owner can itself be an alias. Resolve that owner in the use-site
+   * context, then look up only the canonical owner's direct nested name. */
+  const gchar *separator=g_strrstr(name,"::");
+  if(separator) {
+   gchar *prefix=g_strndup(name,separator-name);InsightTypeResult owner=resolve_name(job,prefix,scope,path,global,depth+1);g_free(prefix);
+   if(owner.status==INSIGHT_TYPE_FOUND) {
+    gchar *qualified=g_strconcat(owner.owner,"::",separator+2,NULL);
+    symbol=lookup(job->index,qualified,"",owner.symbol->path,TRUE,job->eligible,job->data,&result.status);g_free(qualified);
+   }else result.status=owner.status;
+   insight_type_result_clear(&owner);
+  }
+ }
+ if(!symbol) return result;
+ if(!alias_symbol(symbol)) { result.status=INSIGHT_TYPE_FOUND;result.owner=symbol_name(symbol);result.symbol=symbol;return result; }
+ if(g_hash_table_contains(job->active,symbol)) { result.status=INSIGHT_TYPE_CYCLE;return result; }
+ if(job->aliases>=ALIAS_LIMIT) { result.status=INSIGHT_TYPE_LIMIT;return result; }
+ job->aliases++;g_hash_table_add(job->active,(gpointer)symbol);
+ gboolean absolute=FALSE;gchar *target=insight_type_name(symbol->type,&absolute);
+ if(target) result=resolve_name(job,target,symbol->scope,symbol->path,absolute,depth+1);
+ else result.status=*symbol->type ? INSIGHT_TYPE_INVALID : INSIGHT_TYPE_UNKNOWN;
+ g_free(target);g_hash_table_remove(job->active,symbol);return result;
+}
 InsightTypeResult insight_type_resolve(const InsightIndex *index,const gchar *type,const gchar *scope,const gchar *path,InsightTypeEligible eligible,void *data) {
  InsightTypeResult result={.status=INSIGHT_TYPE_INVALID};gboolean global=FALSE;gchar *name=insight_type_name(type,&global);
  if(!index || !name || (scope && (!g_utf8_validate(scope,-1,NULL) || strlen(scope)>65536))) { g_free(name);return result; }
- gchar *context=g_strdup(scope ? scope : ""),*preferred=g_strdup(path);GHashTable *visited=g_hash_table_new(g_direct_hash,g_direct_equal);
- for(;;) {
-  result.status=INSIGHT_TYPE_UNKNOWN;const InsightSymbol *symbol=lookup(index,name,context,preferred,global,eligible,data,&result.status);if(!symbol) break;
-  if(!alias_symbol(symbol)) { result.status=INSIGHT_TYPE_FOUND;result.owner=symbol_name(symbol);result.symbol=symbol;break; }
-  if(g_hash_table_contains(visited,symbol)) { result.status=INSIGHT_TYPE_CYCLE;break; }
-  if(result.aliases>=ALIAS_LIMIT) { result.status=INSIGHT_TYPE_LIMIT;break; }
-  g_hash_table_add(visited,(gpointer)symbol);result.aliases++;
-  gchar *next=insight_type_name(symbol->type,&global);if(!next) { result.status=*symbol->type ? INSIGHT_TYPE_INVALID : INSIGHT_TYPE_UNKNOWN;break; }
-  g_free(name);name=next;g_free(context);context=g_strdup(symbol->scope);g_free(preferred);preferred=g_strdup(symbol->path);
- }
- g_hash_table_unref(visited);g_free(name);g_free(context);g_free(preferred);return result;
+ Resolve job={index,eligible,data,g_hash_table_new(g_direct_hash,g_direct_equal),0};
+ result=resolve_name(&job,name,scope,path,global,0);result.aliases=job.aliases;
+ g_hash_table_unref(job.active);g_free(name);return result;
 }
 void insight_type_result_clear(InsightTypeResult *result) { if(!result) return;g_free(result->owner);memset(result,0,sizeof *result);result->status=INSIGHT_TYPE_UNKNOWN; }
