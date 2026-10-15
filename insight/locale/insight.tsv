@@ -795,3 +795,10 @@ Disk entries: %u%s	Элементов на диске: %u%s
 Filter loaded files: fragments, glob, ?regex or ~fuzzy; folders stay visible	Фильтр прочитанных файлов: фрагменты, маска, ?regex или ~fuzzy; каталоги остаются видимыми
 Directory read cancelled	Чтение каталога отменено
 Columns	Колонки
+
+Font & Color…	Шрифт и цвет…
+Use custom appearance	Использовать свои настройки оформления
+Font	Шрифт
+Text color	Цвет текста
+Background color	Цвет фона
+Choose a font size from 4 to 96 points	Выберите размер шрифта от 4 до 96 пунктов

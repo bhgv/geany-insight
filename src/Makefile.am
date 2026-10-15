@@ -215,6 +215,8 @@ libgeany_la_SOURCES += \
 	insight-relation-tree.c \
 	insight-disk-browser.c \
 	insight-disk-browser.h \
+	insight-list-style.c \
+	insight-list-style.h \
 	insight-relation-tree.h \
 	insight-relation-graph.c \
 	insight-relation-graph.h \
