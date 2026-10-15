@@ -58,7 +58,10 @@ Function/class scopes use indentation ranges from the captured source, including
 nested functions and return to an outer scope after a nested suite ends. Locals
 and parameters from sibling functions are excluded; visible closure names remain
 available. A method's first `self`/`cls` parameter selects its indexed class, not
-another class's same-name field. Directly named classes and indexed annotated
+another class's same-name field. Nested closures retain that receiver unless a
+nearer parameter or local assignment shadows it. A local assignment also hides
+an outer receiver before the assignment line. An ordinary nested function's
+first parameter is not automatically a class receiver. Directly named classes and indexed annotated
 receivers are supported. Preview links, F12 and asynchronous Follow share these
 rules.
 

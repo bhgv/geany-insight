@@ -34,6 +34,20 @@ static void python_navigation_test(void) {
  pos=strstr(code,"value +=")-code;scope=insight_native_python_scope(index,path,&source,pos);assert(scope==NULL);assert(insight_native_python_rank(index,tags[0],path,scope,13)<0);
  pos=strstr(code,"Alpha.value")-code+6;owner=insight_native_python_owner(index,path,NULL,15,&source,pos,&member,NULL,NULL);assert(member && !g_strcmp0(owner,"Alpha"));g_free(owner);
  count=insight_index_find(index,"method",1,tags,8);assert(count==2);for(gsize i=0;i<count;i++) assert(insight_native_python_rank(index,tags[i],path,NULL,13)<0);
+ g_free(mask);
+ const gchar *closures="class Alpha:\n    value = 1\n    def method(self):\n        def nested():\n            return self.value\n        def shadow(self):\n            return self.value\n        def rebound():\n            self = object()\n            return self.value\n        def forward():\n            return self.value\n            self = object()\n        return nested()\n    @classmethod\n    def factory(cls):\n        def nested_class():\n            return cls.value\n        return nested_class()\ndef outer():\n    def fake(self):\n        return self.value\n";
+ assert(insight_native_parse(index,file,path,closures,strlen(closures)));
+ mask=insight_source_code_mask(closures,strlen(closures),INSIGHT_CODE_PYTHON,NULL);source=(InsightNativeSource){closures,mask,strlen(closures)};
+ const gchar *probe=closures;
+ for(guint n=0;n<5;n++) {
+  probe=strstr(probe,"self.value");assert(probe);pos=probe-closures+5;
+  scope=insight_native_python_scope(index,path,&source,pos);
+  owner=insight_native_python_owner(index,path,scope,1,&source,pos,&member,NULL,NULL);
+  assert(member);assert(!g_strcmp0(owner,n==0 ? "Alpha" : NULL));
+  g_free(owner);g_free(scope);probe++;
+ }
+ pos=strstr(closures,"cls.value")-closures+4;scope=insight_native_python_scope(index,path,&source,pos);
+ owner=insight_native_python_owner(index,path,scope,1,&source,pos,&member,NULL,NULL);assert(member && !g_strcmp0(owner,"Alpha"));g_free(scope);g_free(owner);
  g_free(mask);insight_index_free(index);tm_source_file_free(file);g_unlink(filename);g_free(path);
 }
 int main(void) {

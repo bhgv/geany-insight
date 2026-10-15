@@ -161,21 +161,28 @@ gchar *insight_native_python_owner(const InsightIndex *index,const gchar *path,c
  *member=TRUE;at--;while(at && g_ascii_isspace(mask[at-1])) at--;gsize end=at;while(at && ident(mask[at-1])) at--;if(at==end) return NULL;
  /* Chained/indexed/call expressions require a richer resolver. */
  gsize prefix=at;while(prefix && (mask[prefix-1]==' ' || mask[prefix-1]=='\t')) prefix--;if(prefix && (mask[prefix-1]=='.' || mask[prefix-1]==')' || mask[prefix-1]==']')) return NULL;
- gchar *receiver=g_strndup(mask+at,end-at),*current=python_scope_name(scope),*owner=NULL;
- if(!strcmp(receiver,"self") || !strcmp(receiver,"cls")) {
+ gchar *receiver=g_strndup(mask+at,end-at),*owner=NULL;
+ /* Select the visible binding before interpreting a conventional receiver. A
+  * closure may capture self, but a nearer parameter/local must hide it. Python
+  * local assignments bind the whole function, even before their source line. */
+ const InsightSymbol *best=NULL;gint best_rank=-1;
+ for(gsize i=0;i<insight_index_count(index);i++) { const InsightSymbol *tag=insight_index_at(index,i);if(strcmp(tag->name,receiver) || (eligible && !eligible(tag,data))) continue;gint rank=insight_native_python_rank(index,tag,path,scope,(!strcmp(tag->kind,"l") || !strcmp(tag->kind,"z")) ? G_MAXULONG : line);if(rank>best_rank) { best=tag;best_rank=rank; } }
+ if(best && !strcmp(best->kind,"z") && (!strcmp(receiver,"self") || !strcmp(receiver,"cls"))) {
+  gchar *binding=python_scope_name(best->scope);
   for(gsize i=0;i<insight_index_count(index);i++) {
    const InsightSymbol *tag=insight_index_at(index,i);if(g_strcmp0(tag->path,path) || (strcmp(tag->kind,"m") && strcmp(tag->kind,"f")) || !*tag->scope || (eligible && !eligible(tag,data))) continue;
-   gchar *name=python_symbol_scope(tag);gboolean same=!strcmp(name,current);g_free(name);if(!same) continue;
+   gchar *name=python_symbol_scope(tag);gboolean same=!strcmp(name,binding);g_free(name);if(!same) continue;
    const gchar *first=tag->signature;while(*first && (*first=='(' || g_ascii_isspace(*first))) first++;gsize n=strlen(receiver);
-   if(!strncmp(first,receiver,n) && !ident(first[n])) owner=python_scope_name(tag->scope);
+   if(!strncmp(first,receiver,n) && !ident(first[n])) {
+    /* A nested ordinary function with a parameter named self is not a method. */
+    for(gsize j=0;j<insight_index_count(index);j++) { const InsightSymbol *klass=insight_index_at(index,j);if(strcmp(klass->kind,"c") || g_strcmp0(klass->path,path) || (eligible && !eligible(klass,data))) continue;gchar *class_name=python_symbol_scope(klass),*parent=python_scope_name(tag->scope);if(!strcmp(class_name,parent)) owner=g_strdup(parent);g_free(parent);g_free(class_name);if(owner) break; }
+   }
    break;
   }
- } else {
-  /* A visible annotated variable or a directly named class is nominal. */
-  const InsightSymbol *best=NULL;gint best_rank=-1;
-  for(gsize i=0;i<insight_index_count(index);i++) { const InsightSymbol *tag=insight_index_at(index,i);if(strcmp(tag->name,receiver) || (eligible && !eligible(tag,data))) continue;gint rank=insight_native_python_rank(index,tag,path,scope,line);if(rank>best_rank) { best=tag;best_rank=rank; } }
-  if(best && !strcmp(best->kind,"c")) owner=python_symbol_scope(best);
-  else if(best && *best->type) { InsightTypeResult resolved=insight_type_resolve(index,best->type,best->scope,path,eligible,data);owner=resolved.owner;resolved.owner=NULL;insight_type_result_clear(&resolved); }
+  g_free(binding);
  }
- g_free(receiver);g_free(current);return owner;
+ /* A visible annotated variable or a directly named class is nominal. */
+ if(!owner && best && !strcmp(best->kind,"c")) owner=python_symbol_scope(best);
+ else if(!owner && best && *best->type) { InsightTypeResult resolved=insight_type_resolve(index,best->type,best->scope,path,eligible,data);owner=resolved.owner;resolved.owner=NULL;insight_type_result_clear(&resolved); }
+ g_free(receiver);return owner;
 }

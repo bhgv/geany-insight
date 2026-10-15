@@ -1399,3 +1399,24 @@ combo's preferred width. Geometry/restart, Python Context/tools and panel sizing
 help GUI suites pass after these changes. The search reference now explicitly
 distinguishes native regex's unsupported Whole word/Word start switches from
 compact regex boundaries.
+
+
+## Python closure receivers and shadow barriers
+
+Context receiver lookup now first selects the visible lexical binding. Nested
+functions capture a method's conventional first self/cls parameter and resolve
+its fields against the declaring indexed class. A nearer parameter or local
+assignment blocks that capture; local assignments bind the whole function even
+before their source line. An ordinary nested function taking self is not assumed
+to belong to its enclosing function as if that function were a class. Direct
+classes and nominal annotated receivers retain their existing paths.
+
+Native parser regressions cover self closures, cls closures, parameter shadows,
+local rebinding, assignments after the use, and ordinary nested functions. The
+real Python Context GUI checks F12 for the closure and absent jumps for all four
+shadow/non-method cases, plus asynchronous Follow into the closure field.
+The native index regression and all three targeted GUIs (Python Context,
+Python/Lua function boundaries and scoped C++ type/alias Context) pass on Linux.
+RU/EN Context help describes the supported rules. Dynamic typing, global/nonlocal
+declarations, decorators and the import/alias graph still need semantic work.
+Windows x64 is deliberately not rebuilt pending the user's next request.
