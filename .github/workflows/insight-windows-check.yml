@@ -28,11 +28,17 @@ jobs:
             mingw-w64-ucrt-x86_64-python
             mingw-w64-ucrt-x86_64-python-docutils
             gettext
+            diffutils
             patch
             git
             unzip
             zip
             rsync
+      - name: Check parser fixture tools
+        run: |
+          for tool in diff sed cp mktemp python3; do
+            command -v "$tool" > /dev/null || exit 1
+          done
       - name: Test internal diff core
         run: python insight/tests/diff_test.py
       - name: Test structural selection

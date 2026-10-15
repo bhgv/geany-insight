@@ -1,1 +1,1 @@
-Build Windows x64: explicit MSYS2 bash for 57 parser fixtures (56 C/C++/headers plus correctly supplied processing-order inputs), qualified type-prefix/global-variable fixes, strict core and 18 native GUI scenarios.
+Build Windows x64: install explicit diffutils dependency and preflight parser harness tools before compilation; run 57 parser fixtures, strict core and 18 native GUI scenarios with qualified-type/global-variable fixes.
