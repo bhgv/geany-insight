@@ -69,6 +69,8 @@ jobs:
           ./type-resolve-test.exe
       - name: Test master file list snapshots and background sync
         run: |
+          cc -std=c99 -Wall -Wextra -Werror -UNDEBUG insight/tests/project_files_test.c insight/desktop/project_files.c -Iinsight/desktop $(pkg-config --cflags --libs gio-2.0) -o project-files-test.exe
+          ./project-files-test.exe
           cc -std=c99 -Wall -Wextra -Werror -UNDEBUG insight/tests/master_list_test.c insight/desktop/master_list.c insight/desktop/project_files.c -Iinsight/desktop $(pkg-config --cflags --libs gio-2.0) -o master-list-test.exe
           ./master-list-test.exe
           cc -std=c99 -Wall -Wextra -Werror -UNDEBUG insight/tests/master_sync_test.c insight/desktop/master_sync.c insight/desktop/master_list.c insight/desktop/project_files.c -Iinsight/desktop $(pkg-config --cflags --libs gio-2.0) -o master-sync-test.exe

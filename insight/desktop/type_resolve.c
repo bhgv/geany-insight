@@ -77,7 +77,64 @@ static const InsightSymbol *lookup(const InsightIndex *index,const gchar *name,c
  }
  g_free(context);g_free(candidates);return result;
 }
-typedef struct { const InsightIndex *index;InsightTypeEligible eligible;void *data;GHashTable *active;guint aliases; } Resolve;
+typedef struct { const InsightIndex *index;InsightTypeEligible eligible;void *data;GHashTable *active,*owners;guint aliases,visits; } Resolve;
+static InsightTypeResult resolve_name(Resolve *,const gchar *,const gchar *,const gchar *,gboolean,guint);
+static GPtrArray *inheritance_names(const gchar *text,InsightTypeStatus *status) {
+ GPtrArray *names=g_ptr_array_new_with_free_func(g_free);if(!text || !*text) return names;
+ if(strlen(text)>65536 || !g_utf8_validate(text,-1,NULL)) { *status=INSIGHT_TYPE_INVALID;goto fail; }
+ const gchar *start=text;gchar stack[64];guint depth=0;
+ for(const gchar *p=text;;p++) {
+  if(*p=='<' || *p=='(' || *p=='[') { if(depth==sizeof stack) { *status=INSIGHT_TYPE_LIMIT;goto fail; }stack[depth++]=*p; }
+  else if(*p=='>' || *p==')' || *p==']') { gchar expected=*p=='>' ? '<' : (*p==')' ? '(' : '[');if(!depth || stack[--depth]!=expected) { *status=INSIGHT_TYPE_INVALID;goto fail; } }
+  if(!*p || (*p==',' && !depth)) {
+   if(!*p && depth) { *status=INSIGHT_TYPE_INVALID;goto fail; }
+   gchar *part=g_strndup(start,p-start);g_strstrip(part);const gchar *base=part;
+   for(;;) { while(g_ascii_isspace(*base)) base++;const gchar *end=base;while(g_ascii_isalpha(*end)) end++;gsize size=end-base;
+    if(g_ascii_isspace(*end) && ((size==6 && !memcmp(base,"public",6)) || (size==7 && !memcmp(base,"private",7)) || (size==9 && !memcmp(base,"protected",9)) || (size==7 && !memcmp(base,"virtual",7)))) base=end;else break;
+   }
+   gboolean global=FALSE;gchar *name=insight_type_name(base,&global);g_free(part);
+   if(!name) { *status=INSIGHT_TYPE_INVALID;goto fail; }
+   if(global) { gchar *absolute=g_strconcat("::",name,NULL);g_free(name);name=absolute; }g_ptr_array_add(names,name);
+   if(names->len>256) { *status=INSIGHT_TYPE_LIMIT;goto fail; }
+   if(!*p) break;
+   start=p+1;
+  }
+ }
+ return names;
+ fail:g_ptr_array_unref(names);return NULL;
+}
+static gboolean record_type(const InsightSymbol *symbol) {
+ const gchar *kind=symbol->kind;return !strcmp(kind,"c") || !strcmp(kind,"s") || !strcmp(kind,"i") || !strcmp(kind,"class") || !strcmp(kind,"struct") || !strcmp(kind,"interface");
+}
+static gboolean hidden_nested(Resolve *job,const gchar *qualified,const gchar *name) {
+ gsize count=insight_index_find(job->index,name,TRUE,NULL,0);if(count>CANDIDATE_LIMIT) return TRUE;
+ const InsightSymbol **rows=g_new(const InsightSymbol *,count);insight_index_find(job->index,name,TRUE,rows,count);gboolean hidden=FALSE;
+ for(gsize i=0;i<count && !hidden;i++) { const InsightSymbol *row=rows[i];if(type_symbol(row) || (job->eligible && !job->eligible(row,job->data))) continue;gchar *full=symbol_name(row);hidden=!strcmp(full,qualified);g_free(full); }
+ g_free(rows);return hidden;
+}
+static const InsightSymbol *nested_type(Resolve *job,const InsightSymbol *owner,const gchar *name,guint depth,InsightTypeStatus *status,gboolean *uncertain) {
+ *status=INSIGHT_TYPE_UNKNOWN;*uncertain=FALSE;
+ if(depth>64 || ++job->visits>4096) { *status=INSIGHT_TYPE_LIMIT;*uncertain=TRUE;return NULL; }
+ gchar *scope=symbol_name(owner),*qualified=g_strconcat(scope,"::",name,NULL);g_free(scope);
+ const InsightSymbol *direct=lookup(job->index,qualified,"",owner->path,TRUE,job->eligible,job->data,status);
+ gboolean hidden=!direct && *status==INSIGHT_TYPE_UNKNOWN && hidden_nested(job,qualified,name);g_free(qualified);
+ if(direct) return direct;
+ if(hidden || *status!=INSIGHT_TYPE_UNKNOWN) { *uncertain=TRUE;return NULL; }
+ if(!record_type(owner) || !owner->inheritance || !*owner->inheritance) return NULL;
+ if(g_hash_table_contains(job->owners,owner)) { *status=INSIGHT_TYPE_CYCLE;*uncertain=TRUE;return NULL; }
+ GPtrArray *bases=inheritance_names(owner->inheritance,status);if(!bases) { *uncertain=TRUE;return NULL; }
+ g_hash_table_add(job->owners,(gpointer)owner);const InsightSymbol *found=NULL;
+ for(guint i=0;i<bases->len;i++) {
+  const gchar *base=g_ptr_array_index(bases,i);gboolean global=g_str_has_prefix(base,"::");
+  InsightTypeResult resolved=resolve_name(job,global ? base+2 : base,owner->scope,owner->path,global,depth+1);
+  if(resolved.status!=INSIGHT_TYPE_FOUND || !record_type(resolved.symbol)) { *status=resolved.status==INSIGHT_TYPE_FOUND ? INSIGHT_TYPE_INVALID : resolved.status;*uncertain=TRUE;insight_type_result_clear(&resolved);found=NULL;break; }
+  InsightTypeStatus branch_status;gboolean branch_uncertain=FALSE;const InsightSymbol *hit=nested_type(job,resolved.symbol,name,depth+1,&branch_status,&branch_uncertain);insight_type_result_clear(&resolved);
+  if(branch_uncertain) { *status=branch_status;*uncertain=TRUE;found=NULL;break; }
+  if(hit && found && hit!=found) { *status=INSIGHT_TYPE_AMBIGUOUS;*uncertain=TRUE;found=NULL;break; }
+  if(hit) found=hit;
+ }
+ g_hash_table_remove(job->owners,owner);g_ptr_array_unref(bases);return found;
+}
 static InsightTypeResult resolve_name(Resolve *job,const gchar *name,const gchar *scope,const gchar *path,gboolean global,guint depth) {
  InsightTypeResult result={.status=INSIGHT_TYPE_UNKNOWN};
  if(depth>64) { result.status=INSIGHT_TYPE_LIMIT;return result; }
@@ -89,8 +146,7 @@ static InsightTypeResult resolve_name(Resolve *job,const gchar *name,const gchar
   if(separator) {
    gchar *prefix=g_strndup(name,separator-name);InsightTypeResult owner=resolve_name(job,prefix,scope,path,global,depth+1);g_free(prefix);
    if(owner.status==INSIGHT_TYPE_FOUND) {
-    gchar *qualified=g_strconcat(owner.owner,"::",separator+2,NULL);
-    symbol=lookup(job->index,qualified,"",owner.symbol->path,TRUE,job->eligible,job->data,&result.status);g_free(qualified);
+    gboolean uncertain=FALSE;symbol=nested_type(job,owner.symbol,separator+2,depth+1,&result.status,&uncertain);
    }else result.status=owner.status;
    insight_type_result_clear(&owner);
   }
@@ -108,8 +164,8 @@ static InsightTypeResult resolve_name(Resolve *job,const gchar *name,const gchar
 InsightTypeResult insight_type_resolve(const InsightIndex *index,const gchar *type,const gchar *scope,const gchar *path,InsightTypeEligible eligible,void *data) {
  InsightTypeResult result={.status=INSIGHT_TYPE_INVALID};gboolean global=FALSE;gchar *name=insight_type_name(type,&global);
  if(!index || !name || (scope && (!g_utf8_validate(scope,-1,NULL) || strlen(scope)>65536))) { g_free(name);return result; }
- Resolve job={index,eligible,data,g_hash_table_new(g_direct_hash,g_direct_equal),0};
+ Resolve job={.index=index,.eligible=eligible,.data=data,.active=g_hash_table_new(g_direct_hash,g_direct_equal),.owners=g_hash_table_new(g_direct_hash,g_direct_equal)};
  result=resolve_name(&job,name,scope,path,global,0);result.aliases=job.aliases;
- g_hash_table_unref(job.active);g_free(name);return result;
+ g_hash_table_unref(job.active);g_hash_table_unref(job.owners);g_free(name);return result;
 }
 void insight_type_result_clear(InsightTypeResult *result) { if(!result) return;g_free(result->owner);memset(result,0,sizeof *result);result->status=INSIGHT_TYPE_UNKNOWN; }

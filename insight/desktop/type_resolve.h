@@ -13,7 +13,12 @@ gchar *insight_type_name(const gchar *,gboolean *);
 /* Resolve lexical scopes from inner to outer. Same-file declarations may
  * disambiguate a scope; otherwise duplicates are not guessed. Alias targets
  * are resolved in the alias declaration's scope/file. Qualified nested owners
- * may expand aliases; total alias expansions are bounded to 32, recursion to
+ * may expand aliases and find explicit qualified inherited nested types.
+ * Direct nested declarations hide bases; distinct declarations, unresolved
+ * bases and non-type hiding decline. Inheritance work is bounded to 4096
+ * visited owners and 256 bases per owner. Unqualified inherited type lookup
+ * in a lexical class scope and template instantiation remain unsupported.
+ * Total alias expansions are bounded to 32, recursion to
  * 64. Only active expansions form a cycle (an owner alias may be reused).
  * owner is owned; symbol is borrowed from the caller-owned index snapshot. */
 InsightTypeResult insight_type_resolve(const InsightIndex *,const gchar *,const gchar *,const gchar *,InsightTypeEligible,void *);

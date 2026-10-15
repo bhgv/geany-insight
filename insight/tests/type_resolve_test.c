@@ -5,7 +5,30 @@ static void name_is(const char *raw,const char *expected,gboolean global) { gboo
 static void resolved(InsightIndex *index,const char *raw,const char *scope,const char *path,const char *owner,guint aliases) { InsightTypeResult r=insight_type_resolve(index,raw,scope,path,NULL,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_FOUND);g_assert_cmpstr(r.owner,==,owner);g_assert_nonnull(r.symbol);g_assert_cmpuint(r.aliases,==,aliases);insight_type_result_clear(&r); }
 static int exclude_nested(const InsightSymbol *symbol,void *data) { (void)data;return strcmp(symbol->path,"/nested.h")!=0; }
 static int exclude_header(const InsightSymbol *symbol,void *data) { (void)data;return strcmp(symbol->path,"/header.h")!=0; }
+static int exclude_base(const InsightSymbol *symbol,void *data) { (void)data;return strcmp(symbol->name,"Base")!=0; }
+static void inherited_types(void) {
+ InsightIndex *index=insight_index_new();InsightSymbol tags[]={
+  {"Base",NULL,"N","s",1,"","",""}, {"Nested",NULL,"N::Base","s",2,"","",""},
+  {"BaseAlias",NULL,"N","t",3,"","Base",""}, {"Derived",NULL,"N","s",4,"","","public virtual BaseAlias"}, {"Alias",NULL,"N","t",5,"","Derived",""},
+  {"Left",NULL,"N","s",6,"","","Base"}, {"Right",NULL,"N","s",7,"","","::N::Base"}, {"Diamond",NULL,"N","s",8,"","","Left,Right"},
+  {"Other",NULL,"N","s",9,"","",""}, {"Nested",NULL,"N::Other","s",10,"","",""}, {"Ambiguous",NULL,"N","s",11,"","","Base,Other"},
+  {"Direct",NULL,"N","s",12,"","","Missing"}, {"Nested",NULL,"N::Direct","s",13,"","",""},
+  {"MissingBase",NULL,"N","s",14,"","","Base,Missing"}, {"CycleA",NULL,"N","s",15,"","","CycleB"}, {"CycleB",NULL,"N","s",16,"","","CycleA"},
+  {"Hider",NULL,"N","s",17,"","","Base"}, {"Nested",NULL,"N::Hider","m",18,"","int",""}, {"Mixed",NULL,"N","s",19,"","","Hider,Base"},
+  {"Malformed",NULL,"N","s",20,"","","Base<"}
+ };g_assert_true(insight_index_update(index,"/inherited.cpp",tags,G_N_ELEMENTS(tags)));
+ resolved(index,"Derived::Nested","N","/inherited.cpp","N::Base::Nested",1);resolved(index,"Alias::Nested","N","/inherited.cpp","N::Base::Nested",2);resolved(index,"Diamond::Nested","N","/inherited.cpp","N::Base::Nested",0);resolved(index,"Direct::Nested","N","/inherited.cpp","N::Direct::Nested",0);
+ const gchar *missing[]={"Ambiguous::Nested","MissingBase::Nested","CycleA::Nested","Hider::Nested","Mixed::Nested","Malformed::Nested"};const InsightTypeStatus states[]={INSIGHT_TYPE_AMBIGUOUS,INSIGHT_TYPE_UNKNOWN,INSIGHT_TYPE_CYCLE,INSIGHT_TYPE_UNKNOWN,INSIGHT_TYPE_UNKNOWN,INSIGHT_TYPE_INVALID};
+ for(guint i=0;i<G_N_ELEMENTS(missing);i++) { InsightTypeResult r=insight_type_resolve(index,missing[i],"N","/inherited.cpp",NULL,NULL);g_assert_cmpint(r.status,==,states[i]);g_assert_null(r.owner);insight_type_result_clear(&r); }
+ InsightTypeResult filtered=insight_type_resolve(index,"Derived::Nested","N","/inherited.cpp",exclude_base,NULL);g_assert_cmpint(filtered.status,==,INSIGHT_TYPE_UNKNOWN);insight_type_result_clear(&filtered);
+ for(guint i=0;i<13;i++) { gchar *bases=i ? g_strdup_printf("WideL%u,WideR%u",i-1,i-1) : g_strdup("Base");gchar *left=g_strdup_printf("WideL%u",i),*right=g_strdup_printf("WideR%u",i),*path=g_strdup_printf("/wide%u.h",i);InsightSymbol rows[]={{left,NULL,"N","s",30+i,"","",bases},{right,NULL,"N","s",60+i,"","",bases}};g_assert_true(insight_index_update(index,path,rows,2));g_free(bases);g_free(left);g_free(right);g_free(path); }
+ filtered=insight_type_resolve(index,"WideL12::Nested","N","/inherited.cpp",NULL,NULL);g_assert_cmpint(filtered.status,==,INSIGHT_TYPE_LIMIT);insight_type_result_clear(&filtered);
+ gchar *previous=g_strdup("Base");for(guint i=0;i<80;i++) { gchar *name=g_strdup_printf("Deep%u",i);InsightSymbol row={name,NULL,"N","s",100+i,"","",previous};gchar *path=g_strdup_printf("/deep%u.h",i);g_assert_true(insight_index_update(index,path,&row,1));g_free(path);g_free(previous);previous=name; }
+ gchar *deep=g_strconcat(previous,"::Nested",NULL);InsightTypeResult limited=insight_type_resolve(index,deep,"N","/inherited.cpp",NULL,NULL);g_assert_cmpint(limited.status,==,INSIGHT_TYPE_LIMIT);insight_type_result_clear(&limited);g_free(deep);g_free(previous);
+ insight_index_free(index);
+}
 int main(void) {
+ inherited_types();
  name_is("const struct N::Box<int, Pair<long, short>>::Nested * const &","N::Box::Nested",FALSE);
  name_is("volatile ::Global *","Global",TRUE);name_is("N :: Foo [10][2]","N::Foo",FALSE);name_is("Module.Class","Module::Class",FALSE);
  const char *invalid[]={"","Foo Bar","Foo<int","Foo>","Foo[2","Foo (*)(int)","decltype(value)","A:::B","A::","Foo;Bar"};
