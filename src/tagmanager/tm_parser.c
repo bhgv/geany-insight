@@ -101,7 +101,7 @@ static TMParserMapEntry map_CPP[] = {
 	COMMON_C
 	{'c', tm_tag_class_t},      // class
 	{'n', tm_tag_namespace_t},  // namespace
-	{'A', tm_tag_undef_t},      // alias
+	{'A', tm_tag_typedef_t},    // namespace alias
 	{'N', tm_tag_undef_t},      // name
 	{'U', tm_tag_undef_t},      // using
 	{'Z', tm_tag_undef_t},      // tparam

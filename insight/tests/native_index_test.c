@@ -85,8 +85,13 @@ int main(void) {
  owner_is(index,absolute,"A::use","global_obj->value","A::Cell");owner_is(index,absolute,"A::use","B :: global_obj->value","B::Cell");
  owner_is(index,absolute,"A::use","A :: Second :: value","A::Cell");owner_is(index,absolute,"A::Box::method","this->field","A::Box");owner_is(index,absolute,"take","p->item","Holder");
  owner_is(index,absolute,"take","unresolved().field",NULL);owner_is(index,absolute,"take","object.member->value",NULL);
- const char *chain_code="namespace Chain {\nstruct Cell { int value; };\nstruct Other { int value; };\nusing Result = Cell;\nstruct Base { Cell *child; Cell *get(); };\nstruct Derived : Base { using Result = Other; Result *declared(); static Cell *shared; Cell *make(); Cell *make(int); static Cell *create(); Other *mixed(int); Cell *mixed(const char*); void method() {} };\nusing Alias = Derived;\nDerived *global;\nCell *factory(); Cell *factory(int);\nusing CellAlias = Cell; CellAlias *alias_factory();\nDerived *make_derived(); Other *get(); Other *fake_call(); Cell *shadow();\nvoid use(Derived *p, int shadow) {}\n}\n";
+ const char *chain_code="namespace Chain {\nstruct Cell { int value; };\nstruct Other { int value; };\nusing Result = Cell;\nstruct Base { Cell *child; Cell *get(); };\nstruct Derived : Base { using Result = Other; Result *declared(); static Cell *shared; Cell *make(); Cell *make(int); static Cell *create(); Other *mixed(int); Cell *mixed(const char*); void method() {} };\nusing Alias = Derived;\nDerived *global;\nCell *factory(); Cell *factory(int);\nusing CellAlias = Cell; CellAlias *alias_factory();\nDerived *make_derived(); Other *get(); Other *fake_call(); Cell *shadow();\nvoid use(Derived *p, int shadow) {}\n}\nnamespace ChainNS = Chain;\nnamespace ChainNS2 = ChainNS;\nChainNS2::Derived *ns_global;\nvoid ns_use(ChainNS2::Alias *p) {}\nnamespace AliasOuter { namespace Inner = ::Chain; Inner::Derived *obj; void use() {} }\n";
  assert(insight_native_parse(index,parsed,absolute,chain_code,strlen(chain_code)));
+ owner_is(index,absolute,"AliasOuter::use","obj->child->value","Chain::Cell");
+ owner_is(index,absolute,"ns_use","ns_global->child->value","Chain::Cell");
+ owner_is(index,absolute,"ns_use","p->get()->value","Chain::Cell");
+ owner_is(index,absolute,"ns_use","ChainNS2::factory()->value","Chain::Cell");
+ owner_is(index,absolute,"ns_use","ChainNS2::Alias::create()->value","Chain::Cell");
  owner_is(index,absolute,"Chain::use","p->child->value","Chain::Cell");
  owner_is(index,absolute,"Chain::Derived::method","this->child->value","Chain::Cell");
  owner_is(index,absolute,"Chain::use","Chain::global->child->value","Chain::Cell");

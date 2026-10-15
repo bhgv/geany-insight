@@ -16,6 +16,7 @@ gboolean insight_native_import(InsightIndex *index,TMSourceFile *file,const char
   if(!tag || !tag->name || !*tag->name || !tag->line || !g_utf8_validate(tag->name,-1,NULL)) continue;
   const char *scope=tag->scope && g_utf8_validate(tag->scope,-1,NULL) ? tag->scope : "";
   kinds[used][0]=tag->kind_letter;
+  if(file->lang==TM_PARSER_CPP && tag->kind_letter=='A') kinds[used][0]='t';
   const char *signature=tag->arglist && g_utf8_validate(tag->arglist,-1,NULL) ? tag->arglist : "";
   const char *type=tag->var_type && g_utf8_validate(tag->var_type,-1,NULL) ? tag->var_type : "";
   const char *inheritance=tag->inheritance && g_utf8_validate(tag->inheritance,-1,NULL) ? tag->inheritance : "";

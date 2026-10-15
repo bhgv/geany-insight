@@ -17,6 +17,7 @@ static const gchar *code=
  "template<class T> struct Holder { int entry; };\nusing IntHolder = Holder<int>;\nint take(IntHolder *p) { return p->entry; }\n"
  "namespace Chain {\nstruct Leaf { int end; };\nstruct Base { Leaf *child; int inherited; Leaf *get(); };\nstruct Derived : Base { static Leaf *shared; static Leaf *create(); Leaf *same(); Leaf *same(int); int method() { return this->child->end; } };\nusing Alias = Derived;\nDerived *global;\nLeaf *factory();\nint use(Derived *p) { return p->inherited + p->child->end + Chain::global->child->end + Alias::shared->end + factory()->end + p->get()->end + p->same(1)->end + Alias::create()->end + p /* obj */ ->get/* args */() /* result */ ->end; }\nstruct Other { Leaf *child; int end; };\nLeaf *mixed(int); Other *mixed(const char*);\nint bad_result() { return mixed(1)->end + mixed(1)-> /* reject */ end; }\nstruct Ambiguous : Base, Other {};\nint blocked(Ambiguous *p) { return p->child->end; }\nint good_tail() { return factory()->end; }\n}\n"
  "namespace Nested {\nstruct Owner { struct Cell { int stamp; }; using Own = Cell; };\nusing Alias = Owner;\nAlias::Cell *factory();\nint use(Alias::Cell *p, Alias::Own *q) { return p->stamp + q->stamp + factory()->stamp; }\n}\n"
+ "namespace Short = Nested;\nnamespace Shorter = Short;\nShorter::Alias::Own *external;\nint use_short() { return external->stamp + Shorter::factory()->stamp; }\n"
  "using LoopA = LoopB;\nusing LoopB = LoopA;\nint bad(LoopA *p) { return p->value; }\n";
 static gchar *custom_code;
 static const struct { const char *reference,*declaration,*owner;guint occurrence; } cases[]={
@@ -36,7 +37,9 @@ static const struct { const char *reference,*declaration,*owner;guint occurrence
  {"p /* obj */ ->get/* args */() /* result */ ->end","struct Leaf { int end;","Chain::Leaf",0},
  {"p->stamp","struct Owner { struct Cell { int stamp;","Nested::Owner::Cell",0},
  {"q->stamp","struct Owner { struct Cell { int stamp;","Nested::Owner::Cell",0},
- {"factory()->stamp","struct Owner { struct Cell { int stamp;","Nested::Owner::Cell",0}
+ {"factory()->stamp","struct Owner { struct Cell { int stamp;","Nested::Owner::Cell",0},
+ {"external->stamp","struct Owner { struct Cell { int stamp;","Nested::Owner::Cell",0},
+ {"Shorter::factory()->stamp","struct Owner { struct Cell { int stamp;","Nested::Owner::Cell",0}
 };
 static GtkWidget *named(GtkWidget *root,const gchar *name) { if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;if(GTK_IS_CONTAINER(root)) { GList *children=gtk_container_get_children(GTK_CONTAINER(root));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL; }
 static void open_source(const gchar *name,const gchar *text,const gchar *type) { gchar *path=g_build_filename(directory,name,NULL);g_assert_true(g_file_set_contents(path,text,-1,NULL));g_assert_nonnull(document_open_file(path,FALSE,filetypes_lookup_by_name(type),NULL));g_free(path); }

@@ -156,6 +156,18 @@ static gboolean init_tag(TMTag *tag, TMSourceFile *file, const tagEntryInfo *tag
 		tag->inheritance = g_strdup(tag_entry->extensionFields.inheritance);
 	if (tag_entry->extensionFields.typeRef[1] != NULL)
 		tag->var_type = g_strdup(tag_entry->extensionFields.typeRef[1]);
+	/* C++ namespace aliases record their target in the parser's name field,
+	 * rather than typeref. Keep the parser-owned bytes in our tag snapshot. */
+	if (lang == TM_PARSER_CPP && kind_letter == 'A')
+	{
+		fieldType field = getFieldTypeForNameAndLanguage("name", lang);
+		const char *target = getParserFieldValueForType(tag_entry, field);
+		if (target)
+		{
+			g_free(tag->var_type);
+			tag->var_type = g_strdup(target);
+		}
+	}
 	if (tag_entry->extensionFields.access != NULL)
 		tag->access = tm_source_file_get_tag_access(tag_entry->extensionFields.access);
 	if (tag_entry->extensionFields.implementation != NULL)
