@@ -2,8 +2,11 @@
 #ifndef INSIGHT_MASTER_LIST_H
 #define INSIGHT_MASTER_LIST_H
 #include "project_files.h"
-typedef struct { GPtrArray *files,*trees;gchar *etag,*digest,*text; } InsightMasterList;
+typedef struct { GPtrArray *files,*trees;gchar *etag,*digest,*text,*membership_digest; } InsightMasterList;
 /* Plain UTF-8/BOM/CRLF file lists, one path per line, relative to root.
+ * Filename * and ? masks enumerate regular direct children, without following
+ * child symlinks. At most 256 masks / 100000 visited entries / 1024 bytes
+ * per filename mask; wildcard directory components are unsupported.
  * Directory suffix / preserves nonexistent directory entries. Existing
  * directories are recognized too. Limits: 2 MiB, 10000 unique entries.
  * Lines beginning with ; are comments; use ./;name for literal names.
@@ -11,6 +14,8 @@ typedef struct { GPtrArray *files,*trees;gchar *etag,*digest,*text; } InsightMas
 InsightMasterList *insight_master_list_parse(const gchar *,gsize,const gchar *,GError **);
 InsightMasterList *insight_master_list_read(const gchar *,const gchar *,GCancellable *,GError **);
 void insight_master_list_free(InsightMasterList *);
+/* Refresh after changing the owned file/tree arrays; order-independent. */
+void insight_master_list_rehash(InsightMasterList *);
 gchar *insight_master_list_render(const InsightMasterList *,const gchar *,GError **);
 /* Compare content digest before replacement, then let GIO check its ETag.
  * Digest guards coarse timestamp filesystems. NULL guards explicitly allow

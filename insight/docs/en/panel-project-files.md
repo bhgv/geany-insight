@@ -46,3 +46,11 @@ Start a list filter with `~` for case-insensitive Unicode subsequence matching: 
 ## Disk-browsing input commands
 
 In the Project Files query, type `.` and press Enter to open the workspace directory in Folders → Browse disk. `..` opens its parent. Type `**` and press Enter to clear the project-file filter and focus Project Files again; this command does not open the first file. These reserved commands are not added to filter history. Other query/Enter behavior remains unchanged. The disk browser still provides its own path entry, Up, file filter and navigation. Switching back to the project folder view cancels an unfinished disk read.
+
+### Filename masks in MFL
+
+Use `src/*.c` or `tw?.c` to include matching regular files directly in a literal directory. `*` and `?` match names; matching is case folded on Windows and case sensitive on other hosts. Child directories and symlinks are not expanded. An existing literal path takes precedence over mask interpretation. Empty matches are valid. Bracket expressions, wildcard directory components, Path Variables and quoted paths are not supported.
+
+Mask enumeration runs in the synchronization worker with cancellation. Limits per snapshot are 256 masks, 1024 bytes per filename mask, 100000 visited directory entries and the existing 10000 distinct included paths. Errors or limits retain the previous accepted project. Files appearing/disappearing under a mask update membership even when the MFL itself has not changed. A manual write declines a changed expansion rather than replacing a newer file set; successful manual writes flatten masks into explicit paths. Normal filesystem changes during a directory scan are reconciled by later synchronization; this is not an atomic filesystem snapshot.
+
+Directory entries currently retain this port's recursive membership rules. Source Insight's shallow directory expansion restricted to known file types remains an open compatibility item.

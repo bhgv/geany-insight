@@ -1,1 +1,1 @@
-Build Windows x64: Source Insight MFL semicolon comments, literal leading-semicolon path round-trip, exact commented rollback, background sync and native project GUI; includes dockable Window List; 18 GUI scenarios.
+Build Windows x64: bounded cancellable MFL filename masks, dynamic expansion fingerprint, create/delete without MFL edits, stale expansion write guard, explicit writeback, native project reindexing; Window List direct Escape/Enter; 18 GUI scenarios.

@@ -1360,3 +1360,8 @@ yyyy/mm/dd hh:mm:ss	гггг/мм/дддд чч:мм:сс
 
 Dock in sidebar	Закрепить в боковой панели
 Hide Window List	Скрыть список окон
+
+Master file list wildcards require a literal directory and a filename pattern up to 1024 bytes	Маски MFL требуют обычный каталог и шаблон имени не длиннее 1024 байт
+Master file list wildcard scan exceeds 100000 entries	Обход масок MFL превышает 100000 записей
+Master file list exceeds 256 wildcard patterns	MFL содержит более 256 масок имён
+Master file list or its expanded file set changed; reload before applying membership	MFL или набор подходящих файлов изменился; перечитайте его перед применением состава
