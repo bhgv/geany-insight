@@ -177,6 +177,7 @@ EXTRA_DIST += \
 	insight/tests/print_tags_test.py \
 	insight/tests/context_search_test.c \
 	insight/tests/notebook_store_test.c \
+	insight/tests/bookmark_anchors_gui_test.c \
 	insight/tests/workspace_watch_test.c \
 	insight/tests/source_mask_test.c \
 	insight/tests/relation_query_test.c \

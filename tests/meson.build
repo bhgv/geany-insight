@@ -556,3 +556,5 @@ python_series_test = executable('test_insight_python_series',
 test('Insight Python navigation series', python_series_test)
 python_series_gui_test = executable('test_insight_python_series_gui', '../insight/tests/python_series_gui_test.c', dependencies: test_deps)
 test('Insight Python navigation series GUI', python_series_gui_test, timeout: 100)
+bookmark_anchors_gui_test = executable('test_insight_bookmark_anchors_gui', '../insight/tests/bookmark_anchors_gui_test.c', dependencies: test_deps)
+test('Insight symbol anchored bookmarks GUI', bookmark_anchors_gui_test, timeout: 55)

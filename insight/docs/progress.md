@@ -1639,3 +1639,26 @@ again after the final non-call fix. Nineteen Python/Cython parser fixtures and
 four native suites pass. Full Linux target compilation, strict C99
 -Wall -Wextra -Werror resolver compilation and git diff --check pass.
 Windows x64 remains deferred; no build-request marker was changed.
+
+
+## Guide-driven bookmark symbol anchors (2026-10-15)
+
+Reference: Source Insight 4 User Guide, Concepts / Bookmark Storage. Persistent
+bookmarks now carry an optional exact function/class identity (name, parser
+scope, kind) plus a nonnegative line offset. Metadata is additive to v1/v2 notes
+and survives rename, select/merge, and portable project-relative export. Loading
+rejects partial/invalid metadata atomically. Duplicate symbol identities decline;
+missing symbols use unique text fallback without trusting the old line number.
+CR, LF and CRLF source lines are supported. This is offset relocation, not a
+semantic edit merge inside a changed function.
+
+The editor tracks which tag generation a document represents, retries restore
+when background parsing finishes, captures fresh anchors as live markers move,
+and refreshes pending tags on explicit navigation/closing of bookmarked buffers
+up to 2 MiB. An end-to-end GUI creates the mark through Add/update, closes the
+file, rewrites it externally so an unrelated duplicate occupies the old line,
+reopens and navigates to the correct function-relative line, inserts locally and
+closes immediately, then externally shifts/reopens again. Native tests cover
+ambiguity, scopes, stale duplicate text, bounds, legacy storage, CR lines and all
+metadata transfer paths. Strict C99 notebook/workbench builds and the Linux
+editor/test targets pass. Windows remains deferred.

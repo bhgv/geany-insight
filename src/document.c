@@ -2663,6 +2663,7 @@ void document_update_tags(GeanyDocument *doc)
 	len = sci_get_length(doc->editor->sci);
 	buffer_ptr = (guchar *) SSM(doc->editor->sci, SCI_GETCHARACTERPOINTER, 0, 0);
 	tm_workspace_update_source_file_buffer(doc->tm_file, buffer_ptr, len);
+	doc->priv->tag_snapshot_generation=doc->priv->tag_parse_generation;
 
 	sidebar_update_tag_list(doc, TRUE);
 	insight_overview_tags_changed(doc);
@@ -2746,6 +2747,7 @@ static void document_tags_job_done(GObject *source,GAsyncResult *result,gpointer
  g_clear_object(&doc->priv->tag_parse_cancel);
  if(!ok || !doc->tm_file || doc->tm_file->lang!=j->lang || g_strcmp0(doc->tm_file->file_name,j->path)) return;
  tm_workspace_publish_source_file_tags(doc->tm_file,j->parsed);
+ doc->priv->tag_snapshot_generation=doc->priv->tag_parse_generation;
  sidebar_update_tag_list(doc,TRUE); insight_overview_tags_changed(doc); document_highlight_tags(doc); insight_workbench_index_changed();
 }
 static void document_update_tags_async(GeanyDocument *doc) {

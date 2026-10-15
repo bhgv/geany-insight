@@ -2,7 +2,32 @@
 #include <glib.h>
 #include <gio/gio.h>
 #include <glib/gstdio.h>
+static void symbol_anchors(void) {
+ GError *error=NULL;InsightNotes *notes=insight_notes_new();gchar *path=g_build_filename(g_get_tmp_dir(),"anchor.c",NULL);
+ g_assert_true(insight_notes_set(notes,INSIGHT_BOOKMARK,"symbol",path,5," return;",&error));
+ InsightBookmarkSymbol original[]={{"first","",INSIGHT_BOOKMARK_FUNCTION,1},{"target","",INSIGHT_BOOKMARK_FUNCTION,4}};
+ g_assert_true(insight_notes_capture_anchor(notes,"symbol",original,2,&error));const InsightNote *note=insight_notes_get(notes,INSIGHT_BOOKMARK,"symbol");g_assert_nonnull(note->anchor);g_assert_cmpstr(note->anchor->name,==,"target");g_assert_cmpuint(note->anchor->offset,==,1);
+ const gchar *changed="header\nfirst()\n}\ngap\n return;\ngap\ntarget()\n return;\n}";
+ InsightBookmarkSymbol moved[]={{"first","",INSIGHT_BOOKMARK_FUNCTION,2},{"target","",INSIGHT_BOOKMARK_FUNCTION,7}};guint64 line=0;gboolean ambiguous=FALSE;
+ g_assert_true(insight_bookmark_resolve_symbols(note,changed,strlen(changed),moved,2,&line,&ambiguous));g_assert_cmpuint(line,==,8);
+ g_assert_false(insight_bookmark_resolve_symbols(note,changed,strlen(changed),NULL,0,&line,&ambiguous));g_assert_true(ambiguous); /* No stale line-5 preference. */
+ InsightBookmarkSymbol duplicate[]={{"target","",INSIGHT_BOOKMARK_FUNCTION,2},{"target","",INSIGHT_BOOKMARK_FUNCTION,7}};
+ g_assert_false(insight_bookmark_resolve_symbols(note,changed,strlen(changed),duplicate,2,&line,&ambiguous));g_assert_true(ambiguous);
+ const gchar *unique="x\r return;";g_assert_true(insight_bookmark_resolve_symbols(note,unique,strlen(unique),NULL,0,&line,&ambiguous));g_assert_cmpuint(line,==,2);
+ gchar *cr=g_strdup(changed);for(gchar *p=cr;*p;p++) if(*p=='\n') *p='\r';g_assert_true(insight_bookmark_resolve_symbols(note,cr,strlen(cr),moved,2,&line,&ambiguous));g_assert_cmpuint(line,==,8);g_free(cr);
+ InsightBookmarkSymbol scoped[]={{"target","other",INSIGHT_BOOKMARK_FUNCTION,2},{"target","",INSIGHT_BOOKMARK_FUNCTION,7}};g_assert_true(insight_bookmark_resolve_symbols(note,changed,strlen(changed),scoped,2,&line,&ambiguous));g_assert_cmpuint(line,==,8);
+ g_assert_false(insight_bookmark_resolve_symbols(note,"x\ny",3,moved,2,&line,&ambiguous));g_assert_cmpuint(line,==,0);
+ gchar *file=g_strdup_printf("anchor-notes-%u.conf",g_random_int());g_assert_true(insight_notes_save(notes,file,&error));InsightNotes *copy=insight_notes_load(file,&error);g_assert_no_error(error);g_assert_cmpstr(insight_notes_get(copy,INSIGHT_BOOKMARK,"symbol")->anchor->name,==,"target");insight_notes_free(copy);
+ copy=insight_notes_rename(notes,INSIGHT_BOOKMARK,"symbol","renamed",&error);g_assert_no_error(error);g_assert_cmpuint(insight_notes_get(copy,INSIGHT_BOOKMARK,"renamed")->anchor->offset,==,1);insight_notes_free(copy);
+ copy=insight_notes_select(notes,INSIGHT_BOOKMARK,&error);g_assert_nonnull(insight_notes_get(copy,INSIGHT_BOOKMARK,"symbol")->anchor);InsightNotes *empty=insight_notes_new(),*merged=insight_notes_merge(empty,copy,INSIGHT_BOOKMARK,&error);g_assert_no_error(error);g_assert_nonnull(insight_notes_get(merged,INSIGHT_BOOKMARK,"symbol")->anchor);insight_notes_free(empty);insight_notes_free(merged);insight_notes_free(copy);
+ gchar *root=g_path_get_dirname(path);g_assert_true(insight_notes_save_portable(notes,file,root,&error));copy=insight_notes_load_portable(file,root,&error);g_assert_no_error(error);g_assert_cmpstr(insight_notes_get(copy,INSIGHT_BOOKMARK,"symbol")->anchor->name,==,"target");insight_notes_free(copy);g_free(root);
+ const gchar *bad[]={"anchor-name=target\n","anchor-name=target\nanchor-scope=\nanchor-kind=3\nanchor-offset=1\n","anchor-name=target\nanchor-scope=\nanchor-kind=1\nanchor-offset=2147483647\n"};
+ for(guint i=0;i<G_N_ELEMENTS(bad);i++) { gchar *text=g_strdup_printf("[notes]\nversion=1\ncount=1\n[note-0]\nkind=1\nname=x\npath=%s\nline=5\ntext= return;\n%s",path,bad[i]);g_assert_true(g_file_set_contents(file,text,-1,&error));g_free(text);copy=insight_notes_load(file,&error);g_assert_null(copy);g_assert_nonnull(error);g_clear_error(&error); }
+ duplicate[1].line=2;g_assert_true(insight_notes_capture_anchor(notes,"symbol",duplicate,2,&error));g_assert_null(insight_notes_get(notes,INSIGHT_BOOKMARK,"symbol")->anchor);
+ g_remove(file);g_free(file);g_free(path);insight_notes_free(notes);
+}
 int main(void) {
+ symbol_anchors();
  InsightNotes *n=insight_notes_new(); GError *e=NULL;
  gchar *source_path=g_build_filename(g_get_tmp_dir(),"source.c",NULL),*other_path=g_build_filename(g_get_tmp_dir(),"other.c",NULL),*external_path=g_build_filename(g_get_tmp_dir(),"external.c",NULL);
  g_assert_true(insight_notes_set(n,INSIGHT_BOOKMARK,"entry",source_path,2,"call();",&e));

@@ -3,11 +3,20 @@
 #define INSIGHT_NOTEBOOK_STORE_H
 #include <glib.h>
 typedef enum { INSIGHT_BOOKMARK=1,INSIGHT_CLIP=2 } InsightNoteKind;
-typedef struct { gchar *name,*path,*text; gchar **languages; guint64 line; InsightNoteKind kind; } InsightNote;
+enum { INSIGHT_BOOKMARK_FUNCTION=1,INSIGHT_BOOKMARK_CLASS=2 };
+typedef struct { const gchar *name,*scope;guint kind;guint64 line; } InsightBookmarkSymbol;
+typedef struct { gchar *name,*scope;guint kind;guint64 offset; } InsightBookmarkAnchor;
+typedef struct { gchar *name,*path,*text;gchar **languages;guint64 line;InsightNoteKind kind;InsightBookmarkAnchor *anchor; } InsightNote;
 typedef struct { GPtrArray *items; } InsightNotes;
 InsightNotes *insight_notes_new(void);
 void insight_notes_free(InsightNotes *);
 gboolean insight_notes_set(InsightNotes *,InsightNoteKind,const char *,const char *,guint64,const char *,GError **);
+/* Optional symbol metadata is additive to legacy v1/v2 notes. A NULL anchor
+ * clears metadata. Capture chooses one nearest preceding function/class;
+ * resolve requires one exact name/scope/kind in the current file snapshot. */
+gboolean insight_notes_set_anchor(InsightNotes *,const gchar *,const InsightBookmarkAnchor *,GError **);
+gboolean insight_notes_capture_anchor(InsightNotes *,const gchar *,const InsightBookmarkSymbol *,gsize,GError **);
+gboolean insight_bookmark_resolve_symbols(const InsightNote *,const gchar *,gsize,const InsightBookmarkSymbol *,gsize,guint64 *,gboolean *);
 gboolean insight_notes_set_languages(InsightNotes *,const char *,const gchar *const *,GError **);
 gboolean insight_note_matches_language(const InsightNote *,const gchar *);
 gboolean insight_notes_remove(InsightNotes *,InsightNoteKind,const char *);

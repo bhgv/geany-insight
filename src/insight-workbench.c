@@ -2231,7 +2231,7 @@ static gboolean notes_save_kind(InsightNoteKind kind) {
 static gboolean notes_save(void) { return notes_save_kind(INSIGHT_BOOKMARK); }
 static InsightNotes *notes_clone(InsightNoteKind kind,GError **error) {
  InsightNotes *source=notes_for(kind),*out=insight_notes_new();
- for(guint i=0;i<source->items->len;i++) { InsightNote *note=g_ptr_array_index(source->items,i);if(!insight_notes_set(out,note->kind,note->name,note->path,note->line,note->text,error) || (note->kind==INSIGHT_CLIP && !insight_notes_set_languages(out,note->name,(const gchar *const *)note->languages,error))) { insight_notes_free(out);return NULL; } }
+ for(guint i=0;i<source->items->len;i++) { InsightNote *note=g_ptr_array_index(source->items,i);if(!insight_notes_set(out,note->kind,note->name,note->path,note->line,note->text,error) || (note->kind==INSIGHT_CLIP && !insight_notes_set_languages(out,note->name,(const gchar *const *)note->languages,error))) { insight_notes_free(out);return NULL; }if(note->anchor && !insight_notes_set_anchor(out,note->name,note->anchor,error)) { insight_notes_free(out);return NULL; } }
  return out;
 }
 static gboolean notes_commit(InsightNotes *,InsightNoteKind);
@@ -2246,9 +2246,35 @@ static gchar *bookmark_line_text(ScintillaObject *sci,gint line) {
  while(n && (text[n-1]=='\r' || text[n-1]=='\n')) text[--n]=0;
  return text;
 }
+static gboolean bookmark_tags_ready(GeanyDocument *doc) {
+ return doc->priv && (!doc->file_type || doc->file_type->lang==TM_PARSER_NONE || doc->priv->tag_snapshot_generation==doc->priv->tag_parse_generation);
+}
+static void bookmark_prepare_tags(GeanyDocument *doc) {
+ if(!doc || !doc->is_valid || sci_get_length(doc->editor->sci)>2*1024*1024 || bookmark_tags_ready(doc)) return;
+ if(doc->priv->tag_list_update_source) { g_source_remove(doc->priv->tag_list_update_source);doc->priv->tag_list_update_source=0; }
+ document_update_tags(doc);
+}
+static GArray *bookmark_symbols(GeanyDocument *doc) {
+ if(!bookmark_tags_ready(doc)) return NULL;
+ if(doc->tm_file && doc->tm_file->tags_array && doc->tm_file->tags_array->len>250000) return NULL;
+ GArray *symbols=g_array_new(FALSE,FALSE,sizeof(InsightBookmarkSymbol));
+ if(doc->tm_file && doc->tm_file->tags_array && doc->tm_file->tags_array->len<=250000) for(guint i=0;i<doc->tm_file->tags_array->len;i++) {
+  TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,i);guint kind=tag->type&(tm_tag_function_t|tm_tag_method_t) ? INSIGHT_BOOKMARK_FUNCTION : tag->type&(tm_tag_class_t|tm_tag_struct_t|tm_tag_interface_t) ? INSIGHT_BOOKMARK_CLASS : 0;
+  if(kind && tag->name && tag->line) { InsightBookmarkSymbol symbol={tag->name,tag->scope ? tag->scope : "",kind,tag->line};g_array_append_val(symbols,symbol); }
+ }
+ return symbols;
+}
+static gboolean bookmark_capture_symbol(const gchar *name,GArray *symbols) {
+ if(!symbols) return FALSE;
+ const InsightNote *note=insight_notes_get(wb.notes,INSIGHT_BOOKMARK,name);if(!note) return FALSE;
+ InsightBookmarkAnchor previous={note->anchor ? g_strdup(note->anchor->name) : NULL,note->anchor ? g_strdup(note->anchor->scope) : NULL,note->anchor ? note->anchor->kind : 0,note->anchor ? note->anchor->offset : 0};
+ insight_notes_capture_anchor(wb.notes,name,(const InsightBookmarkSymbol *)symbols->data,symbols->len,NULL);note=insight_notes_get(wb.notes,INSIGHT_BOOKMARK,name);
+ gboolean changed=g_strcmp0(previous.name,note->anchor ? note->anchor->name : NULL) || g_strcmp0(previous.scope,note->anchor ? note->anchor->scope : NULL) || previous.kind!=(note->anchor ? note->anchor->kind : 0) || previous.offset!=(note->anchor ? note->anchor->offset : 0);
+ g_free(previous.name);g_free(previous.scope);return changed;
+}
 static void bookmark_restore_document(GeanyDocument *doc) {
  if(!doc || !doc->is_valid || !doc->file_name || !wb.notes || !wb.bookmark_handles || sci_get_length(doc->editor->sci)>2*1024*1024) return;
- gchar *text=NULL;
+ gchar *text=NULL;GArray *symbols=bookmark_symbols(doc);
  for(guint i=0;i<wb.notes->items->len;i++) {
   InsightNote *note=g_ptr_array_index(wb.notes->items,i);
   if(note->kind!=INSIGHT_BOOKMARK || g_strcmp0(note->path,doc->file_name)) continue;
@@ -2256,15 +2282,15 @@ static void bookmark_restore_document(GeanyDocument *doc) {
   if(handle && handle->doc==doc->id) continue;
   if(!text) text=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1);
   guint64 line=0;gboolean ambiguous=FALSE;
-  if(!insight_bookmark_resolve(note,text,strlen(text),&line,&ambiguous) || !line || line>(guint64)sci_get_line_count(doc->editor->sci)) continue;
+  if((note->anchor && !symbols) || !insight_bookmark_resolve_symbols(note,text,strlen(text),symbols ? (const InsightBookmarkSymbol *)symbols->data : NULL,symbols ? symbols->len : 0,&line,&ambiguous) || !line || line>(guint64)sci_get_line_count(doc->editor->sci)) continue;
   handle=g_new0(BookmarkHandle,1);handle->doc=doc->id;handle->handle=(gint)SSM(doc->editor->sci,SCI_MARKERADD,(uptr_t)(line-1),1);
   g_hash_table_replace(wb.bookmark_handles,g_strdup(note->name),handle);
  }
- g_free(text);
+ g_free(text);if(symbols) g_array_unref(symbols);
 }
 static gboolean bookmark_capture_document(GeanyDocument *doc) {
  if(!doc || !doc->is_valid || !doc->file_name) return FALSE;
- gboolean changed=FALSE;GHashTable *covered=g_hash_table_new(g_direct_hash,g_direct_equal);
+ GArray *symbols=bookmark_symbols(doc);gboolean changed=FALSE;GHashTable *covered=g_hash_table_new(g_direct_hash,g_direct_equal);
  for(gint i=(gint)wb.notes->items->len-1;i>=0;i--) {
   InsightNote *note=g_ptr_array_index(wb.notes->items,(guint)i);
   if(note->kind!=INSIGHT_BOOKMARK || g_strcmp0(note->path,doc->file_name)) continue;
@@ -2279,23 +2305,23 @@ static gboolean bookmark_capture_document(GeanyDocument *doc) {
   if(strlen(text)<=65536 && (note->line!=(guint64)line+1 || g_strcmp0(note->text,text))) {
    note->line=(guint64)line+1;g_free(note->text);note->text=g_strdup(text);changed=TRUE;
   }
-  g_free(text);
+  g_free(text);changed=bookmark_capture_symbol(note->name,symbols) || changed;
  }
  for(gint line=(gint)SSM(doc->editor->sci,SCI_MARKERNEXT,0,2);line>=0;line=(gint)SSM(doc->editor->sci,SCI_MARKERNEXT,line+1,2)) {
   if(g_hash_table_contains(covered,GINT_TO_POINTER(line+1))) continue;
   gchar *text=bookmark_line_text(doc->editor->sci,line),*name=g_strdup_printf("LineBookmark-%u-%d-%"G_GINT64_FORMAT,doc->id,line,g_get_real_time());GError *error=NULL;
   if(insight_notes_set(wb.notes,INSIGHT_BOOKMARK,name,doc->file_name,(guint64)line+1,text,&error)) {
    BookmarkHandle *handle=g_new0(BookmarkHandle,1);handle->doc=doc->id;handle->handle=(gint)SSM(doc->editor->sci,SCI_MARKERADD,line,1);
-   g_hash_table_replace(wb.bookmark_handles,g_strdup(name),handle);changed=TRUE;
+   g_hash_table_replace(wb.bookmark_handles,g_strdup(name),handle);bookmark_capture_symbol(name,symbols);changed=TRUE;
   } else ui_set_statusbar(TRUE,"Bookmark not persisted: %s",error ? error->message : "invalid line");
   g_clear_error(&error);g_free(name);g_free(text);
  }
- g_hash_table_destroy(covered);return changed;
+ g_hash_table_destroy(covered);if(symbols) g_array_unref(symbols);return changed;
 }
 void insight_workbench_bookmarks_changed(void) {
  if(!wb.alive || !wb.notes || !wb.bookmark_handles || wb.bookmark_syncing) return;
  wb.bookmark_syncing=TRUE;gboolean changed=FALSE;
- for(guint i=0;i<documents_array->len;i++) changed=bookmark_capture_document(g_ptr_array_index(documents_array,i)) || changed;
+ for(guint i=0;i<documents_array->len;i++) { GeanyDocument *doc=g_ptr_array_index(documents_array,i);bookmark_restore_document(doc);changed=bookmark_capture_document(doc) || changed; }
  if(changed) { notes_save();notes_filter(NULL,GINT_TO_POINTER(INSIGHT_BOOKMARK)); }
  bookmark_list_reload(NULL,NULL);wb.bookmark_syncing=FALSE;
 }
@@ -2310,9 +2336,10 @@ static gboolean bookmark_open_note(const InsightNote *note) {
  note=insight_notes_get(wb.notes,INSIGHT_BOOKMARK,name);BookmarkHandle *handle=g_hash_table_lookup(wb.bookmark_handles,name);g_free(name);
  gint line=handle && handle->doc==doc->id ? (gint)SSM(doc->editor->sci,SCI_MARKERLINEFROMHANDLE,handle->handle,0) : -1;
  if(line<0 && note && sci_get_length(doc->editor->sci)<=2*1024*1024) {
+  bookmark_prepare_tags(doc);GArray *symbols=bookmark_symbols(doc);
   gchar *text=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1);guint64 resolved=0;gboolean ambiguous=FALSE;
-  if(insight_bookmark_resolve(note,text,strlen(text),&resolved,&ambiguous)) line=(gint)resolved-1;
-  g_free(text);
+  if(insight_bookmark_resolve_symbols(note,text,strlen(text),symbols ? (const InsightBookmarkSymbol *)symbols->data : NULL,symbols ? symbols->len : 0,&resolved,&ambiguous)) line=(gint)resolved-1;
+  g_free(text);if(symbols) g_array_unref(symbols);
  }
  if(line<0) { ui_set_statusbar(TRUE,"Bookmark source is unavailable or its line is ambiguous");return FALSE; }
  navqueue_goto_line(old,doc,line+1);SSM(doc->editor->sci,SCI_VERTICALCENTRECARET,0,0);document_grab_focus(doc);return TRUE;
@@ -2424,7 +2451,8 @@ static void bookmark_add(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; GeanyDocument *doc=document_get_current(); if(!doc || !doc->file_name) { ui_set_statusbar(TRUE,"Save the file before adding a persistent bookmark"); return; }
  gint line=sci_get_current_line(doc->editor->sci); gchar *anchor=sci_get_line(doc->editor->sci,line); gsize n=strlen(anchor); while(n && (anchor[n-1]=='\r' || anchor[n-1]=='\n')) anchor[--n]=0;
  const char *input=gtk_entry_get_text(GTK_ENTRY(wb.marks_entry)); gchar *name=*input ? g_strdup(input) : g_strdup_printf("Bookmark-%"G_GINT64_FORMAT,g_get_real_time()); GError *error=NULL;
- if(insight_notes_set(wb.notes,INSIGHT_BOOKMARK,name,doc->file_name,(guint64)line+1,anchor,&error)) { bookmark_restore_document(doc); notes_filter(NULL,GINT_TO_POINTER(INSIGHT_BOOKMARK)); notes_save(); }
+ bookmark_prepare_tags(doc);
+ if(insight_notes_set(wb.notes,INSIGHT_BOOKMARK,name,doc->file_name,(guint64)line+1,anchor,&error)) { GArray *symbols=bookmark_symbols(doc);bookmark_capture_symbol(name,symbols);if(symbols) g_array_unref(symbols);bookmark_restore_document(doc); notes_filter(NULL,GINT_TO_POINTER(INSIGHT_BOOKMARK)); notes_save(); }
  else ui_set_statusbar(TRUE,"Bookmark: %s",error ? error->message : "not stored");
  g_clear_error(&error); g_free(anchor); g_free(name);insight_workbench_bookmarks_changed();
 }
@@ -2474,7 +2502,7 @@ static void clip_insert_template(const InsightNote *note) {
  gchar *language=clip_current_language(); gboolean compatible=insight_note_matches_language(note,language); g_free(language);
  if(!compatible) { ui_set_statusbar(TRUE,"This template is not available for the current language profile"); return; }
  gchar **allowed_languages=g_strdupv(note->languages); gchar *body=g_strdup(note->text),*selection=sci_get_selection_contents(sci); GError *error=NULL;
- if(!selection || strlen(selection)!=sci_get_selected_text_length2(sci)) { g_free(selection); g_free(body); g_strfreev(allowed_languages); ui_set_statusbar(TRUE,"Clips cannot contain NUL bytes"); return; }
+ if(!selection || strlen(selection)!=(gsize)sci_get_selected_text_length2(sci)) { g_free(selection); g_free(body); g_strfreev(allowed_languages); ui_set_statusbar(TRUE,"Clips cannot contain NUL bytes"); return; }
  guint id=doc->id; guint64 version=selection_state(sci)->text_version; gint begin=sci_get_selection_start(sci),end=sci_get_selection_end(sci),eol_mode=sci_get_eol_mode(sci);
  GHashTable *values=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free); GDateTime *now=g_date_time_new_now_local();
  g_hash_table_insert(values,g_strdup("date"),g_date_time_format(now,"%Y-%m-%d")); g_hash_table_insert(values,g_strdup("time"),g_date_time_format(now,"%H:%M:%S")); g_date_time_unref(now);
@@ -3099,7 +3127,9 @@ static void native_commands_rebuild(void) {
 }
 static gboolean file_event_refresh(gpointer data) { (void)data;wb.file_event_idle=0;if(wb.alive) { files_filter(NULL,NULL); tree_refresh(); file_types_refresh(); categories_filter(NULL,NULL);disk_current_file(); }return G_SOURCE_REMOVE; }
 static void native_document_event(GObject *object,GeanyDocument *doc,gpointer data) {
- (void)object;insight_window_list_document_event(doc ? doc->id : 0,data); if(!strcmp(data,"document_close") || !strcmp(data,"document_save")) insight_workbench_bookmarks_changed();
+ (void)object;
+ if(!strcmp(data,"document_close") && doc && doc->is_valid && doc->file_name && wb.notes) for(guint i=0;i<wb.notes->items->len;i++) { const InsightNote *note=g_ptr_array_index(wb.notes->items,i);if(note->kind==INSIGHT_BOOKMARK && !g_strcmp0(note->path,doc->file_name)) { bookmark_prepare_tags(doc);break; } }
+ insight_window_list_document_event(doc ? doc->id : 0,data); if(!strcmp(data,"document_close") || !strcmp(data,"document_save")) insight_workbench_bookmarks_changed();
  if(!strcmp(data,"document_open") || !strcmp(data,"document_activate")) bookmark_restore_document(doc);
  if(wb.alive && !wb.file_event_idle) wb.file_event_idle=g_idle_add(file_event_refresh,NULL);
  if(!strcmp(data,"document_save") && doc && doc->file_name && wb.membership && !g_strcmp0(doc->file_name,wb.membership->master_file)) insight_master_sync_poll(wb.master_sync);
@@ -4167,7 +4197,7 @@ static void arrange_main_menus(void) {
   g_object_ref(item); gtk_container_remove(GTK_CONTAINER(bar),item); gtk_menu_shell_insert(GTK_MENU_SHELL(bar),item,(gint)i); g_object_unref(item);
  }
 }
-void insight_workbench_index_changed(void) { stop_definition(); wb.follow_doc=0; mark_index_dirty(); insight_workbench_refresh(); }
+void insight_workbench_index_changed(void) { if(wb.alive && wb.bookmark_handles && !wb.bookmark_sync_timer) wb.bookmark_sync_timer=g_idle_add(bookmark_sync_idle,NULL);stop_definition(); wb.follow_doc=0; mark_index_dirty(); insight_workbench_refresh(); }
 static gboolean remote_workspace(const char *path) { gboolean previous=wb.workspace_from_project; wb.workspace_from_project=FALSE; if(start_scan(path)) return TRUE; wb.workspace_from_project=previous; return FALSE; }
 static void follow_changed(GtkToggleButton *button,gpointer data) {
  (void)data;

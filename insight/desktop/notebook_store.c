@@ -2,7 +2,8 @@
 #include "notebook_store.h"
 #include <gio/gio.h>
 #include <string.h>
-static void note_free(gpointer data) { InsightNote *n=data; g_free(n->name); g_free(n->path); g_free(n->text); g_strfreev(n->languages); g_free(n); }
+static void anchor_free(InsightBookmarkAnchor *a) { if(a) { g_free(a->name);g_free(a->scope);g_free(a); } }
+static void note_free(gpointer data) { InsightNote *n=data; g_free(n->name); g_free(n->path); g_free(n->text); g_strfreev(n->languages);anchor_free(n->anchor);g_free(n); }
 InsightNotes *insight_notes_new(void) { InsightNotes *n=g_new0(InsightNotes,1); n->items=g_ptr_array_new_with_free_func(note_free); return n; }
 void insight_notes_free(InsightNotes *n) { if(n) { g_ptr_array_free(n->items,TRUE); g_free(n); } }
 const InsightNote *insight_notes_get(const InsightNotes *n,InsightNoteKind kind,const char *name) { if(!n || !name) return NULL; for(guint i=0;i<n->items->len;i++) { InsightNote *note=g_ptr_array_index(n->items,i); if(note->kind==kind && !strcmp(note->name,name)) return note; } return NULL; }
@@ -13,6 +14,27 @@ gboolean insight_notes_set(InsightNotes *n,InsightNoteKind kind,const char *name
  const InsightNote *old=insight_notes_get(n,kind,name);
  InsightNote *note=g_new0(InsightNote,1); note->languages=old ? g_strdupv(old->languages) : NULL; note->kind=kind; note->name=g_strdup(name); note->path=g_strdup(kind==INSIGHT_BOOKMARK ? path : ""); note->line=kind==INSIGHT_BOOKMARK ? line : 0; note->text=g_strdup(text);
  insight_notes_remove(n,kind,name); g_ptr_array_add(n->items,note); return TRUE;
+}
+static gboolean symbol_valid(const gchar *name,const gchar *scope,guint kind) {
+ return name && *name && strlen(name)<=1024 && g_utf8_validate(name,-1,NULL) && !strpbrk(name,"\r\n") && scope && strlen(scope)<=4096 && g_utf8_validate(scope,-1,NULL) && !strpbrk(scope,"\r\n") && (kind==INSIGHT_BOOKMARK_FUNCTION || kind==INSIGHT_BOOKMARK_CLASS);
+}
+gboolean insight_notes_set_anchor(InsightNotes *notes,const gchar *name,const InsightBookmarkAnchor *anchor,GError **error) {
+ InsightNote *note=(InsightNote *)insight_notes_get(notes,INSIGHT_BOOKMARK,name);
+ if(!note || (anchor && (!symbol_valid(anchor->name,anchor->scope,anchor->kind) || anchor->offset>2147483646))) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid bookmark symbol anchor");return FALSE; }
+ InsightBookmarkAnchor *copy=NULL;
+ if(anchor) { copy=g_new0(InsightBookmarkAnchor,1);copy->name=g_strdup(anchor->name);copy->scope=g_strdup(anchor->scope);copy->kind=anchor->kind;copy->offset=anchor->offset; }
+ anchor_free(note->anchor);note->anchor=copy;return TRUE;
+}
+gboolean insight_notes_capture_anchor(InsightNotes *notes,const gchar *name,const InsightBookmarkSymbol *symbols,gsize count,GError **error) {
+ const InsightNote *note=insight_notes_get(notes,INSIGHT_BOOKMARK,name);
+ if(!note || (count && !symbols) || count>250000) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid bookmark symbol snapshot");return FALSE; }
+ const InsightBookmarkSymbol *best=NULL;gboolean ambiguous=FALSE;
+ for(gsize i=0;i<count;i++) {
+  const InsightBookmarkSymbol *s=&symbols[i];if(!s->line || s->line>note->line || !symbol_valid(s->name,s->scope,s->kind)) continue;
+  if(!best || s->line>best->line) { best=s;ambiguous=FALSE; }else if(s->line==best->line) ambiguous=TRUE;
+ }
+ InsightBookmarkAnchor anchor={best ? (gchar *)best->name : NULL,best ? (gchar *)best->scope : NULL,best ? best->kind : 0,best ? note->line-best->line : 0};
+ return insight_notes_set_anchor(notes,name,best && !ambiguous ? &anchor : NULL,error);
 }
 gboolean insight_notes_set_languages(InsightNotes *notes,const char *name,const gchar *const *languages,GError **error) {
  InsightNote *note=(InsightNote *)insight_notes_get(notes,INSIGHT_CLIP,name); if(!note) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Unknown clip"); return FALSE; }
@@ -42,6 +64,7 @@ gboolean insight_notes_save_portable(const InsightNotes *n,const char *path,cons
   g_key_file_set_string(key,group,"path",relative ? relative : note->path);
   if(root) g_key_file_set_boolean(key,group,"project-relative",relative!=NULL);
   g_key_file_set_uint64(key,group,"line",note->line);g_key_file_set_string(key,group,"text",note->text);
+  if(note->anchor) { g_key_file_set_string(key,group,"anchor-name",note->anchor->name);g_key_file_set_string(key,group,"anchor-scope",note->anchor->scope);g_key_file_set_integer(key,group,"anchor-kind",note->anchor->kind);g_key_file_set_uint64(key,group,"anchor-offset",note->anchor->offset); }
   if(note->kind==INSIGHT_CLIP && note->languages && note->languages[0]) g_key_file_set_string_list(key,group,"languages",(const gchar *const *)note->languages,g_strv_length(note->languages));
   g_free(relative);
  }
@@ -70,17 +93,43 @@ InsightNotes *insight_notes_load_portable(const char *path,const char *root,GErr
    if(!e && relative) { gchar *resolved=kind==INSIGHT_BOOKMARK ? portable_path(root,p) : NULL;g_free(p);p=resolved;if(!p) g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Relative bookmarks require a project root and a safe project path"); }
    if(e && error && !*error) *error=g_error_copy(e);
    ok=!e && (kind!=INSIGHT_CLIP || (line==0 && p && !*p)) && name && p && text && !insight_notes_get(notes,(InsightNoteKind)kind,name) && insight_notes_set(notes,(InsightNoteKind)kind,name,p,line,text,error); if(ok && g_key_file_has_key(key,group,"languages",NULL)) { gsize size=0; gchar **langs=g_key_file_get_string_list(key,group,"languages",&size,&e); ok=!e && ((kind==INSIGHT_CLIP && insight_notes_set_languages(notes,name,(const gchar *const *)langs,error)) || (kind==INSIGHT_BOOKMARK && !size)); g_strfreev(langs); }
+   gboolean has_anchor=FALSE;const gchar *keys[]={"anchor-name","anchor-scope","anchor-kind","anchor-offset"};for(guint k=0;k<G_N_ELEMENTS(keys);k++) has_anchor=has_anchor || g_key_file_has_key(key,group,keys[k],NULL);
+   if(ok && has_anchor) {
+    InsightBookmarkAnchor anchor={0};anchor.name=g_key_file_get_string(key,group,"anchor-name",&e);if(!e) anchor.scope=g_key_file_get_string(key,group,"anchor-scope",&e);if(!e) anchor.kind=(guint)g_key_file_get_integer(key,group,"anchor-kind",&e);if(!e) anchor.offset=g_key_file_get_uint64(key,group,"anchor-offset",&e);
+    ok=!e && kind==INSIGHT_BOOKMARK && insight_notes_set_anchor(notes,name,&anchor,error);g_free(anchor.name);g_free(anchor.scope);
+   }
    g_free(name); g_free(p); g_free(text); g_clear_error(&e); }
  }
  g_key_file_unref(key); g_string_free(data,TRUE);
  if(!ok) { if(!error || !*error) g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid notes snapshot"); insight_notes_free(notes); return NULL; } return notes;
 }
 InsightNotes *insight_notes_load(const char *path,GError **error) { return insight_notes_load_portable(path,NULL,error); }
+static gsize bookmark_next_line(const gchar *text,gsize size,gsize at,gsize *end) {
+ while(at<size && text[at]!='\r' && text[at]!='\n') at++;
+ *end=at;
+ if(at<size) { gchar c=text[at++];if(c=='\r' && at<size && text[at]=='\n') at++; }return at;
+}
 gboolean insight_bookmark_resolve(const InsightNote *note,const char *text,gsize size,guint64 *line,gboolean *ambiguous) {
+ if(line) *line=0;
+ if(ambiguous) *ambiguous=FALSE;
  if(!note || note->kind!=INSIGHT_BOOKMARK || !text || size>2u*1024u*1024u || !line || !ambiguous || !g_utf8_validate(text,(gssize)size,NULL) || memchr(text,0,size)) return FALSE;
- guint64 current=1,found=0,count=0; *ambiguous=FALSE; gsize start=0,anchor=strlen(note->text);
- for(gsize i=0;i<=size;i++) if(i==size || text[i]=='\n') { gsize end=i; if(end>start && text[end-1]=='\r') end--; if(end-start==anchor && !memcmp(text+start,note->text,anchor)) { if(current==note->line) { *line=current; return TRUE; } found=current; count++; } start=i+1; current++; }
- if(count!=1) { *ambiguous=count>1; return FALSE; } *line=found; return TRUE;
+ guint64 current=1,found=0,count=0;gsize start=0,anchor=strlen(note->text);
+ for(;;) { gsize end=0,next=bookmark_next_line(text,size,start,&end);if(end-start==anchor && !memcmp(text+start,note->text,anchor)) { if(current==note->line) { *line=current;return TRUE; }found=current;count++; }if(end==size) break;start=next;current++; }
+ if(count!=1) { *ambiguous=count>1;return FALSE; }*line=found;return TRUE;
+}
+gboolean insight_bookmark_resolve_symbols(const InsightNote *note,const gchar *text,gsize size,const InsightBookmarkSymbol *symbols,gsize count,guint64 *line,gboolean *ambiguous) {
+ if(line) *line=0;
+ if(ambiguous) *ambiguous=FALSE;
+ if(!note || note->kind!=INSIGHT_BOOKMARK || (count && !symbols) || count>250000 || !line || !ambiguous || !text || size>2u*1024u*1024u || !g_utf8_validate(text,(gssize)size,NULL) || memchr(text,0,size)) return FALSE;
+ if(!note->anchor) return insight_bookmark_resolve(note,text,size,line,ambiguous);
+ const InsightBookmarkAnchor *a=note->anchor;const InsightBookmarkSymbol *found=NULL;
+ for(gsize i=0;i<count;i++) { const InsightBookmarkSymbol *s=&symbols[i];if(!s->line || s->kind!=a->kind || g_strcmp0(s->name,a->name) || g_strcmp0(s->scope,a->scope)) continue;if(found) { *ambiguous=TRUE;return FALSE; }found=s; }
+ if(found) {
+  guint64 lines=1;for(gsize at=0;at<size;) { gsize end=0,next=bookmark_next_line(text,size,at,&end);if(end<size) lines++;at=next; }
+  if(found->line>lines || a->offset>lines-found->line) return FALSE;
+  *line=found->line+a->offset;return TRUE;
+ }
+ InsightNote fallback=*note;fallback.line=0;return insight_bookmark_resolve(&fallback,text,size,line,ambiguous);
 }
 static gboolean notes_copy_kind(InsightNotes *out,const InsightNotes *source,InsightNoteKind kind,GError **error) {
  for(guint i=0;i<source->items->len;i++) {
@@ -90,6 +139,7 @@ static gboolean notes_copy_kind(InsightNotes *out,const InsightNotes *source,Ins
    g_set_error(error,G_IO_ERROR,G_IO_ERROR_EXISTS,"A note named '%s' already exists; rename it before importing",note->name); return FALSE;
   }
   if(!insight_notes_set(out,note->kind,note->name,note->path,note->line,note->text,error)) return FALSE;
+  if(note->anchor && !insight_notes_set_anchor(out,note->name,note->anchor,error)) return FALSE;
   if(note->kind==INSIGHT_CLIP && !insight_notes_set_languages(out,note->name,(const gchar *const *)note->languages,error)) return FALSE;
  }
  return TRUE;
@@ -119,6 +169,7 @@ InsightNotes *insight_notes_rename(const InsightNotes *current,InsightNoteKind k
  if(!notes_copy_kind(out,current,0,error)) { insight_notes_free(out); return NULL; }
  insight_notes_remove(out,kind,old_name);
  if(!insight_notes_set(out,kind,new_name,note->path,note->line,note->text,error)) { insight_notes_free(out); return NULL; }
+ if(note->anchor && !insight_notes_set_anchor(out,new_name,note->anchor,error)) { insight_notes_free(out);return NULL; }
  if(kind==INSIGHT_CLIP && !insight_notes_set_languages(out,new_name,(const gchar *const *)note->languages,error)) { insight_notes_free(out); return NULL; }
  return out;
 }

@@ -108,6 +108,7 @@ typedef struct GeanyDocumentPrivate
 	guint			 tag_list_update_source;
 	GCancellable *tag_parse_cancel;
 	guint64 tag_parse_generation;
+	guint64 tag_snapshot_generation; /* generation represented by tm_file tags */
 	/* Whether it's temporarily protected (read-only and saving needs confirmation). Does
 	 * not imply doc->readonly as writable files can be protected */
 	gint			 protected;
