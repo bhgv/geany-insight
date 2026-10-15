@@ -100,9 +100,8 @@ Comments and strings do not become links.
 Simple assignments to `self.field` or `cls.field` in a direct class method now
 create indexed field definitions in that class, including an annotation when
 present (`self.field: Type = value`). The receiver must be that method's first
-conventional `self`/`cls` parameter. Arbitrary objects, chained attribute writes,
-unconventional receiver names and ordinary nested functions do not create guessed
-class fields. Plain `@staticmethod` is recognized even when decorator metadata
+formal parameter, with any identifier. Arbitrary objects, chained attribute writes
+and ordinary nested functions do not create guessed class fields. Plain `@staticmethod` is recognized even when decorator metadata
 output is disabled: it neither declares fields through its parameter nor treats
 that parameter as an implicit instance receiver. Other decorator semantics and
 general data-flow type inference remain open.
@@ -140,3 +139,5 @@ bounded to 16 components and must identify indexed classes rather than arbitrary
 objects.
 
 Imported class instances support simple variable/parameter annotations, one constructor assignment and direct `Alias().field` / `mod.Class().field` calls. An imported type resolves only against its module file; similarly named classes elsewhere do not supply fields. Parameter annotations resolve outside the function body. Imported factory return types and complex annotations remain unsupported.
+
+Navigation caches belong to one immutable source/path/index snapshot. Edits and index publications refresh Follow. Constructor lookup rechecks the current symbol eligibility filter even when a result was cached; an earlier filtered miss cannot hide a later eligible class. Reusing a cache with a different source or changed index declines the lookup.

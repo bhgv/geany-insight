@@ -763,8 +763,8 @@ static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word,
  ScopeLanguage language={preferred,reference_type};gchar *owner=NULL;
  if(python) {
   const gchar *bytes=cached ? wb.preview_links_text : reference;gsize length=cached ? wb.preview_links_length : reference_length;
-  mask=bytes ? insight_source_code_mask(bytes,length,INSIGHT_CODE_PYTHON,NULL) : NULL;InsightNativeSource text={bytes,mask,length,NULL};
-  text.python=cached ? preview_python_source().python : insight_native_python_bindings_new(wb.index,preferred,&text);
+  mask=!cached && bytes ? insight_source_code_mask(bytes,length,INSIGHT_CODE_PYTHON,NULL) : NULL;InsightNativeSource text={bytes,mask,length,NULL};
+  if(cached) text=preview_python_source();else text.python=insight_native_python_bindings_new(wb.index,preferred,&text);
   scope=insight_native_python_scope(wb.index,preferred,&text,reference_position);
   import_count=insight_native_python_import_query(wb.index,preferred,scope,&text,reference_position,word,scope_language_eligible,&language,found,G_N_ELEMENTS(found),&imported);
   if(!imported) owner=insight_native_python_owner(wb.index,preferred,scope,reference_line,&text,reference_position,&member,scope_language_eligible,&language);

@@ -2,6 +2,7 @@
 #ifndef INSIGHT_INDEX_H
 #define INSIGHT_INDEX_H
 #include <stddef.h>
+#include <stdint.h>
 typedef struct {
  const char *name, *path, *scope, *kind;
  unsigned long line; /* one-based */
@@ -23,6 +24,8 @@ InsightIndex *insight_index_clone(const InsightIndex *);
  * output pointers are NULL and length is zero. Max 250k symbols, 64 KiB/field. */
 int insight_index_serialize(const InsightIndex *,const char *root,unsigned char **data,size_t *length);
 InsightIndex *insight_index_deserialize(const unsigned char *,size_t,char **root);
+/* Runtime mutation generation; not part of the serialized snapshot. */
+uint64_t insight_index_revision(const InsightIndex *);
 size_t insight_index_count(const InsightIndex *);
 /* O(1) sorted ordinal access; borrowed until mutation, NULL out of range. */
 const InsightSymbol *insight_index_at(const InsightIndex *,size_t);

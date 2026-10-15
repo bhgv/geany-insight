@@ -52,4 +52,28 @@ static void imported_instances(void) {
  const gchar *cases[]={"typed.field","qualified.field","created.field","qualified_created.field","Alias().field","lib.External().field","return obj.field"};for(guint n=0;n<G_N_ELEMENTS(cases);n++) import_hit(&f,cases[n],"field",provider,"field");
  g_free(directory);g_free(provider);g_free(other);clear(&f);
 }
-int main(void) { tm_get_workspace();annotations();receivers();call_results();dotted_imports();imported_instances();tm_workspace_free();puts("Python navigation series: all checks passed");return 0; }
+static int class_policy(const InsightSymbol *symbol,void *data) { return *(gboolean *)data || strcmp(symbol->kind,"c"); }
+static void cache_policy(void) {
+ Fixture f=fixture("class A:\n    field: int\nobj = A()\nobj.field\n");
+ gsize position=strstr(f.code,"obj.field")-f.code+4;gboolean member=FALSE,allowed=TRUE;
+ gchar *result=insight_native_python_owner(f.index,f.path,"",100,&f.source,position,&member,class_policy,&allowed);assert(member && !g_strcmp0(result,"A"));g_free(result);
+ allowed=FALSE;result=insight_native_python_owner(f.index,f.path,"",100,&f.source,position,&member,class_policy,&allowed);assert(member && !result);
+ insight_native_python_bindings_free(f.source.python);f.source.python=insight_native_python_bindings_new(f.index,f.path,&f.source);
+ result=insight_native_python_owner(f.index,f.path,"",100,&f.source,position,&member,class_policy,&allowed);assert(!result);
+ allowed=TRUE;result=insight_native_python_owner(f.index,f.path,"",100,&f.source,position,&member,class_policy,&allowed);assert(!g_strcmp0(result,"A"));g_free(result);clear(&f);
+}
+static void cache_snapshot(void) {
+ Fixture f=fixture("class A:\n    field: int\nobj = A()\nobj.field\n");
+ owner(&f,"obj.field","A");
+ InsightNativeSource other=f.source;gchar *copy=g_strdup(f.code);other.text=copy;gboolean member=FALSE;
+ gsize position=strstr(f.code,"obj.field")-f.code+4;
+ gchar *result=insight_native_python_owner(f.index,f.path,"",100,&other,position,&member,NULL,NULL);assert(member && !result);g_free(copy);
+ result=insight_native_python_binding_scope(f.index,"different.py","","obj",&f.source);assert(!result);
+ const InsightSymbol *hits[1];gboolean imported=FALSE;
+ assert(!insight_native_python_import_query(f.index,"different.py","",&f.source,position,"field",NULL,NULL,hits,1,&imported) && imported);
+ uint64_t revision=insight_index_revision(f.index);assert(!insight_index_update(f.index,NULL,NULL,1));assert(insight_index_revision(f.index)==revision);
+ InsightSymbol extra={"Other","other.py","","c",1,"","",""};assert(insight_index_update(f.index,"other.py",&extra,1));assert(insight_index_revision(f.index)==revision+1);
+ owner(&f,"obj.field",NULL);
+ insight_native_python_bindings_free(f.source.python);f.source.python=insight_native_python_bindings_new(f.index,f.path,&f.source);owner(&f,"obj.field","A");clear(&f);
+}
+int main(void) { tm_get_workspace();annotations();receivers();call_results();dotted_imports();imported_instances();cache_policy();cache_snapshot();tm_workspace_free();puts("Python navigation series: all checks passed");return 0; }

@@ -32,8 +32,9 @@ gchar *insight_native_member_owner_filtered(const InsightIndex *,const char *,co
  * offsets/length and replaces C-family comments/strings with spaces. Borrowed
  * for the duration of this call. A missing mask is computed lazily once.
  * python is an optional borrowed declaration cache built for exactly this
- * source, path, immutable index generation and eligibility policy; invalidate
- * it on any change. */
+ * source and path. The cache retains its index snapshot and rejects changed
+ * index generations or source identities. Source bytes/mask must stay immutable
+ * until free; rebuild on edits. Eligibility is evaluated for each query. */
 typedef struct InsightNativePythonBindings InsightNativePythonBindings;
 typedef struct { const gchar *text,*mask;gsize length;InsightNativePythonBindings *python; } InsightNativeSource;
 /* C-family scope cache for distinct functions sharing a parser line. The

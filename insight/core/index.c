@@ -7,7 +7,7 @@
 #ifdef _MSC_VER
 #include <intrin.h>
 #endif
-struct InsightIndex { InsightSymbol *items; size_t count; unsigned int refs; };
+struct InsightIndex { InsightSymbol *items; size_t count; unsigned int refs; uint64_t revision; };
 static unsigned int ref_add(unsigned int *refs,int change) {
 #ifdef _MSC_VER
  return change>0 ? (unsigned int)_InterlockedIncrement((volatile long *)refs) : (unsigned int)_InterlockedDecrement((volatile long *)refs);
@@ -49,6 +49,7 @@ void insight_index_free(InsightIndex *i) {
  for(size_t n=0;n<i->count;n++) release(&i->items[n]);
  free(i->items); free(i);
 }
+uint64_t insight_index_revision(const InsightIndex *i) { return i ? i->revision : 0; }
 size_t insight_index_count(const InsightIndex *i) { return i ? i->count : 0; }
 const InsightSymbol *insight_index_at(const InsightIndex *i,size_t n) { return i && n<i->count ? &i->items[n] : NULL; }
 static int compare_paths(const void *a,const void *b) { return strcmp(*(const char *const *)a,*(const char *const *)b); }
@@ -100,7 +101,7 @@ int insight_index_update(InsightIndex *i,const char *path,const InsightSymbol *s
   if(fresh<count && (old==i->count || compare(&incoming[fresh],&i->items[old])<=0)) next[pos++]=incoming[fresh++];
   else if(old<i->count) next[pos++]=i->items[old++];
  }
- free(incoming); free(owned_path); free(i->items); i->items=next; i->count=total;
+ free(incoming); free(owned_path); free(i->items); i->items=next; i->count=total; i->revision++;
  return 1;
 failure:
  for(size_t n=0;n<count;n++) release(&incoming[n]);

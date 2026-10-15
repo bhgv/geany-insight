@@ -1546,3 +1546,41 @@ class field without manually moving the cursor. Windows remains deferred.
 Validation: the complete editor/test target set compiles, and strict C99
 -Wall -Wextra -Werror compilation passes. Native index and the Python Context,
 explicit imports/live updates, scoped C++ alias and C-family link GUIs pass.
+
+
+## Python Context: requested 30-step series (2026-10-15)
+
+The checklist in `python-navigation-30.md` records six implementation blocks,
+each with reproduction, implementation, native coverage, real F12/Follow GUI
+coverage and documentation/main publication. This is 30 work steps, not 30
+independent features.
+
+The series adds annotation-only declarations; positional direct-method receivers
+and known staticmethod decorator stacks; direct constructor and simple annotated
+same-file factory results; explicitly imported dotted module/class paths; and
+fields of imported classes selected by simple variable/parameter annotations,
+single constructor assignments or direct constructor calls. Imported classes are
+restricted to the selected module file. Parameter annotations resolve outside the
+function body. Earlier limits on unconventional first receiver names and explicit
+imported constructor aliases are superseded by these rules.
+
+The final block reproduces constructor cache dependence on a mutable eligibility
+filter in both directions. Cached nominal class selection is now independent of
+that filter and eligibility is rechecked on every query. Python caches retain the
+index snapshot, record its runtime mutation revision, and reject a different
+source/mask/path/index. Source bytes remain immutable during cache lifetime;
+normal editing rebuilds snapshots. F12 now reuses the cached snapshot's original
+mask rather than combining it with a freshly allocated mask. Runtime revisions
+do not change the index snapshot file format. Type expansion keeps the existing
+16-component bound; exact-name lookup avoids a full index scan in callable/type
+selection.
+
+Dynamic Python execution, general flow inference, imported factory return types,
+complex/union annotations and arbitrary decorator semantics remain outside this
+bounded lexical resolver. Windows x64 was not rebuilt, as requested.
+
+Validation: full Linux editor/test compilation and strict C99 resolver compilation
+with -Wall -Wextra -Werror pass. The final combined run passes all 46 selected
+tests: 20 native/core tests, 19 Python/Cython parser fixtures and seven GUI tests.
+The series GUI exercises 21 cases with both F12 and Follow. Existing live-edit
+GUI regressions verify constructor RHS and imported-definition updates.

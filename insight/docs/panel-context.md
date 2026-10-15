@@ -105,10 +105,9 @@ as task`, `import models as mod` с обращением `mod.work`, импор�
 
 Простые присваивания `self.field = ...` и `cls.field = ...` в непосредственном
 методе класса создают в индексе определения его полей. Аннотация сохраняется:
-`self.field: Type = value`. Получатель должен быть первым обычным параметром
-`self`/`cls` этого метода. Произвольные объекты, цепочки атрибутов, нестандартные
-имена получателя и обычные вложенные функции не создают предполагаемых полей
-класса. Обычный `@staticmethod` распознаётся даже при выключенном выводе
+`self.field: Type = value`. Получатель должен быть первым формальным параметром
+этого метода; имя параметра может быть любым. Произвольные объекты, цепочки
+атрибутов и обычные вложенные функции не создают предполагаемых полей класса. Обычный `@staticmethod` распознаётся даже при выключенном выводе
 метаданных декораторов: его параметр не считается неявным экземпляром и не
 объявляет поля класса. Остальная семантика декораторов и общее выведение типов по потоку исполнения
 пока не реализованы.
@@ -117,7 +116,7 @@ as task`, `import models as mod` с обращением `mod.work`, импор�
 этот индексированный класс из того же файла для переходов к полям. Аргументы
 могут занимать несколько строк, но правая часть должна состоять из одного вызова.
 Повторные присваивания, конкурирующие привязки, переприсваивание параметра,
-фабрики, псевдонимы/импорты конструкторов и составные выражения не выводятся.
+фабрики, произвольные псевдонимы конструкторов и составные выражения не выводятся.
 Это номинальное правило по исходнику, без выполнения `__new__` и анализа потока.
 Результат привязан к снимку текста и индекса: изменение конструктора обновляет
 Context даже при прежних именах и строках объявлений.
@@ -146,3 +145,5 @@ Python создал значение или атрибут во время ис�
 а не произвольные объекты.
 
 Imported class instances support simple variable/parameter annotations, one constructor assignment and direct `Alias().field` / `mod.Class().field` calls. An imported type resolves only against its module file; similarly named classes elsewhere do not supply fields. Parameter annotations resolve outside the function body. Imported factory return types and complex annotations remain unsupported.
+
+Navigation caches belong to one immutable source/path/index snapshot. Edits and index publications refresh Follow. Constructor lookup rechecks the current symbol eligibility filter even when a result was cached; an earlier filtered miss cannot hide a later eligible class. Reusing a cache with a different source or changed index declines the lookup.
