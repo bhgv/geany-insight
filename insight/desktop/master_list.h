@@ -6,6 +6,7 @@ typedef struct { GPtrArray *files,*trees;gchar *etag,*digest,*text; } InsightMas
 /* Plain UTF-8/BOM/CRLF file lists, one path per line, relative to root.
  * Directory suffix / preserves nonexistent directory entries. Existing
  * directories are recognized too. Limits: 2 MiB, 10000 unique entries.
+ * Lines beginning with ; are comments; use ./;name for literal names.
  * Paths outside root remain explicit; no path variables are expanded. */
 InsightMasterList *insight_master_list_parse(const gchar *,gsize,const gchar *,GError **);
 InsightMasterList *insight_master_list_read(const gchar *,const gchar *,GCancellable *,GError **);

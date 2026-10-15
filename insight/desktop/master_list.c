@@ -22,7 +22,7 @@ InsightMasterList *insight_master_list_parse(const gchar *text,gsize length,cons
  if(!root_valid(root) || !text || length>TEXT_LIMIT || memchr(text,0,length) || !g_utf8_validate(text,(gssize)length,NULL)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Master file list must be UTF-8 text up to 2 MiB with an absolute root");return NULL; }
  InsightMasterList *list=list_new();list->digest=g_compute_checksum_for_data(G_CHECKSUM_SHA256,(const guchar *)text,length);GHashTable *seen=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);gchar *copy=g_strndup(text,length);const gchar *start=g_str_has_prefix(copy,"\xEF\xBB\xBF") ? copy+3 : copy;gchar **lines=g_strsplit(start,"\n",-1);gboolean valid=TRUE;
  for(guint i=0;lines[i];i++) {
-  gchar *line=lines[i];gsize size=strlen(line);if(size && line[size-1]=='\r') line[--size]=0;if(!size) continue;
+  gchar *line=lines[i];gsize size=strlen(line);if(size && line[size-1]=='\r') line[--size]=0;if(!size || line[0]==';') continue;
   if(size>16384 || strchr(line,'\r') || (g_ascii_isalpha(line[0]) && line[1]==':' && (line[2]=='/' || line[2]=='\\') && !g_path_is_absolute(line)) || (g_str_has_prefix(line,"\\\\") && !g_path_is_absolute(line))) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Unsupported master file list path");valid=FALSE;break; }
   gboolean tree=G_IS_DIR_SEPARATOR(line[size-1]);gchar *path=g_canonicalize_filename(line,root);if(strlen(path)>16384) { g_free(path);g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Master file list path exceeds 16384 bytes");valid=FALSE;break; }tree|=g_file_test(path,G_FILE_TEST_IS_DIR);valid=add_path(list,seen,path,tree,error);g_free(path);if(!valid) break;
  }
@@ -45,6 +45,7 @@ gchar *insight_master_list_render(const InsightMasterList *list,const gchar *roo
  for(guint kind=0;kind<2 && valid;kind++) { GPtrArray *paths=kind ? list->trees : list->files;for(guint i=0;i<paths->len;i++) {
   const gchar *path=g_ptr_array_index(paths,i);if(!path || !g_path_is_absolute(path) || strlen(path)>16384 || strpbrk(path,"\r\n") || !g_utf8_validate(path,-1,NULL)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid master file list path");valid=FALSE;break; }
   gchar *normalized=g_canonicalize_filename(path,NULL),*key=path_key(normalized);if(g_hash_table_contains(seen,key)) { g_free(key);g_free(normalized);continue; }g_hash_table_add(seen,key);GFile *file=g_file_new_for_path(normalized);gchar *relative=g_file_get_relative_path(base,file);if(!relative && g_file_equal(base,file)) relative=g_strdup(".");gchar *line=relative ? relative : g_strdup(normalized);for(gchar *p=line;*p;p++) if(G_IS_DIR_SEPARATOR(*p)) *p='/';
+  if(line[0]==';') { gchar *literal=g_strconcat("./",line,NULL);g_free(line);line=literal; }
   if(kind && !g_str_has_suffix(line,"/")) { gchar *directory=g_strconcat(line,"/",NULL);g_free(line);line=directory; }g_ptr_array_add(lines,line);g_object_unref(file);g_free(normalized);
  } }
  g_ptr_array_sort(lines,compare_lines);GString *text=g_string_new(NULL);for(guint i=0;valid && i<lines->len;i++) { g_string_append_printf(text,"%s\n",(gchar *)g_ptr_array_index(lines,i));if(text->len>TEXT_LIMIT) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Master file list exceeds 2 MiB");valid=FALSE; } }

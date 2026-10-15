@@ -1185,3 +1185,11 @@ Window List can move between its floating window and a sidebar tab using Dock in
 The native Symbol Info/Window List fixture now docks and undocks the actual view, verifies unchanged editor activation and filter/sort, hides/reopens through Escape and the menu, destroys/recreates a docked host and checks Russian/English controls. A synthetic key initially lacked its GdkWindow; correcting the fixture event removed the critical, and the complete docking fixture passes. Windows 71c7c43 passed all 18 preceding scenarios; its revision, SHA256 and x64 PE were verified and its portable archive delivered.
 
 The complete native suite passed 51/51 with GUI enabled and no skips. The final targeted fixture also switches away from the docked tab, changes a buffer state and verifies immediate refresh on return; content mapping refreshes a list that was intentionally not updated while hidden.
+
+## Source Insight MFL comments
+
+The official Using a Master File List format defines lines beginning with a semicolon as comments. The old parser counted a real Source Insight BOM/CRLF header as four extra file paths; the new regression reproduced 7 files instead of 3. Such lines are now skipped without trimming valid path whitespace. Canonical rendering prefixes literal leading-semicolon relative paths with ./, including directory entries, so legitimate names still round-trip. The original snapshot remains intact for guarded byte-for-byte rollback; normal manual writeback regenerates path lines. Path Variables, wildcard expansion and quoted paths remain outside this block.
+
+Core coverage checks Unicode headers, BOM/CRLF, literal semicolon files/directories, a leading-space literal, semantic round-trip and original-text restoration. The background synchronization fixture includes commented snapshots in its successful write, rejected apply/rollback, external conflict and shutdown paths. The real project GUI loads an external commented MFL before verifying membership and symbol reindexing.
+
+Both affected core/synchronization tests and the real MFL project GUI pass; the standalone parser suite also passes with C99 -Wall -Wextra -Werror. The preceding Window List block passed the complete 51-test native suite and its final map-refresh GUI check.

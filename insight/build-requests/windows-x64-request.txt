@@ -1,1 +1,1 @@
-Build Windows x64: dock Window List in sidebar, preserve floating geometry/filter/sort/columns, hide/reopen, recreate docked host, refresh on tab return, RU/EN; keep 18 native GUI scenarios.
+Build Windows x64: Source Insight MFL semicolon comments, literal leading-semicolon path round-trip, exact commented rollback, background sync and native project GUI; includes dockable Window List; 18 GUI scenarios.
