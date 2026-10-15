@@ -44,12 +44,15 @@ with tempfile.TemporaryDirectory() as tmp:
     for a, b, n in [('', '', 0), ('a\n', 'a\n', 0), ('', 'a\n', 1),
                     ('a\n', '', 1), ('a', 'a\n', 1), ('a\r\n', 'a\n', 1),
                     ('a\nb\nc\nd\n', 'a\nx\nc\ny\n', 2),
-                    ('привет\nмир', 'привет\nземля\n', 1)]:
+                    ('привет\nмир', 'привет\nземля\n', 1),
+                    ('a\rb\rc\rd\r', 'a\rx\rc\ry\r', 2),
+                    ('a\rb\r\nc\nd', 'a\rx\r\nc\ny', 2),
+                    ('a\r', 'a\r\n', 1), ('\r\r', '\r', 1)]:
         check(a, b, n)
     rng = random.Random(413)
     for _ in range(3000):
         def text():
-            return ''.join(rng.choice(['a\n', 'b\n', '\n', 'я\r\n']) for _ in range(rng.randrange(30))) + rng.choice(['', 'tail'])
+            return ''.join(rng.choice(['a\n', 'b\n', '\n', 'я\r\n', 'c\r', '\r', 'd\n\r']) for _ in range(rng.randrange(30))) + rng.choice(['', 'tail'])
         check(text(), text())
     huge = ('a\n' * 2100).encode()
     diff = Diff()

@@ -2,16 +2,20 @@
 #include "diff.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 typedef struct { const char *text; size_t *offsets, count; } Lines;
+static size_t next_line(const char *text,size_t length,size_t at) {
+ while(at<length && text[at]!='\r' && text[at]!='\n') at++;
+ if(at<length) { char c=text[at++];if(c=='\r' && at<length && text[at]=='\n') at++; }
+ return at;
+}
 static int split(const char *text, Lines *out) {
- size_t n=0, len=strlen(text);
- out->text=text;
- for(size_t i=0;i<len;i++) if(text[i]=='\n') n++;
- if(len && text[len-1]!='\n') n++;
- out->offsets=malloc((n+1)*sizeof(size_t)); if(!out->offsets) return -1;
- out->count=n; out->offsets[0]=0; n=0;
- for(size_t i=0;i<len;i++) if(text[i]=='\n') out->offsets[++n]=i+1;
- if(len && text[len-1]!='\n') out->offsets[++n]=len;
+ size_t n=0,len=strlen(text);out->text=text;
+ for(size_t at=0;at<len;at=next_line(text,len,at)) n++;
+ if(n>=SIZE_MAX/sizeof(size_t)) return -1;
+ out->offsets=malloc((n+1)*sizeof(size_t));if(!out->offsets) return -1;
+ out->count=n;out->offsets[0]=0;n=0;
+ for(size_t at=0;at<len;) { at=next_line(text,len,at);out->offsets[++n]=at; }
  return 0;
 }
 static int equal(const Lines *a,size_t i,const Lines *b,size_t j) {
