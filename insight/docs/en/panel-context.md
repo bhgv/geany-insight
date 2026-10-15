@@ -70,11 +70,31 @@ function, so navigation can point to a later assignment rather than an unrelated
 outer definition. An unresolved `nonlocal` has no fallback to a module variable.
 Declaration parsing supports comma lists, semicolons and explicit line
 continuations, ignores strings/comments, and declines malformed/conflicting
-statements or exceeded bounds (64 declarations, 4096 names, 32 MiB scan budget).
+statements or exceeded bounds (64 binding statements including imports, 4096 declaration names,
+32 MiB scan budget).
 The declaration cache is invalidated with the source/index snapshot.
 
+Explicit imports resolve against indexed modules: `from models import work as
+task`, `import models as mod` with `mod.work`, and imported classes such as
+`from models import Thing as Alias` with `Alias.field`. Nested local imports and
+`global`/`nonlocal` binding rules are respected. Module lookup requires a unique
+indexed `models.py` or `models/__init__.py` suffix; an explicit relative module
+such as `.models` uses the source directory (further leading dots climb parents).
+No module is executed or automatically added to the index. Ambiguous module
+paths, conflicting aliases and missing targets produce no unrelated fallback.
+Local assignments/parameters shadow imports; assignment order and runtime types
+are not inferred. Lists, aliases, parenthesized lists and explicit continuations
+are parsed, with at most 256 imported names per statement.
+
+F12, links and Follow share this lookup. The destination highlights the real
+symbol name even when the source uses an alias. Python index publications refresh
+Follow even with an unchanged caret, so an imported definition moving in another
+open buffer is reflected. Module paths are cached only for that index snapshot.
+
 This is bounded lexical resolution, not Python execution. Dynamic attributes,
-arbitrary chains/call results, the import/alias graph, decorators and general type
-inference are not evaluated. An unrelated name in another Python file is not an
+arbitrary chains/call results, wildcard imports, re-export chains, decorators
+and general type inference are not evaluated. Dotted imports without an alias
+(`import pkg.mod`) and implicit `sys.path`/package execution rules are not
+resolved. An unrelated name in another Python file is not an
 import. An unknown receiver does not fall back to a random same-name field.
 Comments and strings do not become links.

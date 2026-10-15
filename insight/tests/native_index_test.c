@@ -116,6 +116,63 @@ static void python_declarations_test(void) {
  mask=insight_source_code_mask(continued,strlen(continued),INSIGHT_CODE_PYTHON,NULL);source=(InsightNativeSource){continued,mask,strlen(continued),NULL};gchar *binding=insight_native_python_binding_scope(index,path,NULL,"value",&source);assert(binding && !*binding);g_free(binding);g_free(mask);
  insight_index_free(index);tm_source_file_free(file);g_unlink(filename);g_free(path);
 }
+static void python_imports_test(void) {
+ const gchar *code=
+  "import models as mod\n"
+  "from models import (Thing as Alias, work as task,)\n"
+  "from .models import work as relative_task\n"
+  "from absent import work as missing_task\n"
+  "mod.work()\n"
+  "task()\n"
+  "relative_task()\n"
+  "Alias.field\n"
+  "missing_task()\n"
+  "def nested():\n"
+  "    from models import work as inner\n"
+  "    return inner()\n"
+  "def shadow(task):\n"
+  "    return task()\n"
+  "def generator():\n"
+  "    yield from mod\n"
+  "def chained():\n"
+  "    raise Error() from cause\n"
+  "def redirected():\n"
+  "    global task\n"
+  "    from other import work as task\n"
+  "    return task() # redirected\n"
+  "from models import work as conflict\n"
+  "from other import work as conflict\n"
+  "conflict()\n"
+  "def rebound():\n"
+  "    task = 7\n"
+  "    return task() # rebound\n";
+ gchar template[]="python-imports-XXXXXX";assert(g_mkdtemp(template));gchar *directory=g_canonicalize_filename(template,NULL),*path=g_build_filename(directory,"client.py",NULL),*module=g_build_filename(directory,"models.py",NULL),*unrelated=g_build_filename(directory,"other.py",NULL);
+ assert(g_file_set_contents(path,code,-1,NULL));assert(g_file_set_contents(module,"",0,NULL));assert(g_file_set_contents(unrelated,"",0,NULL));
+ TMSourceFile *file=tm_source_file_new(path,"Python"),*target=tm_source_file_new(module,"Python"),*other=tm_source_file_new(unrelated,"Python");InsightIndex *index=insight_index_new();
+ const gchar *definitions="class Thing:\n    field = 1\ndef work():\n    return 1\n";assert(insight_native_parse(index,target,module,definitions,strlen(definitions)));assert(insight_native_parse(index,other,unrelated,definitions,strlen(definitions)));assert(insight_native_parse(index,file,path,code,strlen(code)));
+ gchar *mask=insight_source_code_mask(code,strlen(code),INSIGHT_CODE_PYTHON,NULL);InsightNativeSource source={code,mask,strlen(code),NULL};source.python=insight_native_python_bindings_new(index,path,&source);
+ const struct { const gchar *needle,*word,*name;gboolean imported; } cases[]={
+  {"mod.work()","work","work",TRUE},{"task()","task","work",TRUE},
+  {"relative_task()","relative_task","work",TRUE},{"Alias.field","field","field",TRUE},
+  {"missing_task()","missing_task",NULL,TRUE},{"return inner()","inner","work",TRUE},
+  {"return task()","task",NULL,FALSE},{"conflict()","conflict",NULL,TRUE},
+  {"task() # rebound","task",NULL,FALSE}
+ };
+ for(guint n=0;n<G_N_ELEMENTS(cases);n++) {
+  const gchar *needle=strstr(code,cases[n].needle);assert(needle);const gchar *word=strstr(needle,cases[n].word);assert(word);gsize position=word-code;
+  gchar *scope=insight_native_python_scope(index,path,&source,position);const InsightSymbol *hits[8];gboolean imported=FALSE;
+  gsize count=insight_native_python_import_query(index,path,scope,&source,position,cases[n].word,NULL,NULL,hits,8,&imported);
+  assert(imported==cases[n].imported);assert(count==(cases[n].name ? 1 : 0));if(count) assert(!strcmp(hits[0]->path,module) && !strcmp(hits[0]->name,cases[n].name));g_free(scope);
+ }
+ { gsize position=strstr(code,"task() # redirected")-code;gchar *scope=insight_native_python_scope(index,path,&source,position);const InsightSymbol *hit;gboolean imported=FALSE;assert(insight_native_python_import_query(index,path,scope,&source,position,"task",NULL,NULL,&hit,1,&imported)==1 && imported && !strcmp(hit->path,unrelated));g_free(scope); }
+ /* A second indexed module with the same import path makes the target unknown. */
+ gchar *duplicate=g_build_filename(directory,"elsewhere","models.py",NULL);InsightSymbol duplicated={"work",duplicate,"","f",1,"()","",""};assert(insight_index_update(index,duplicate,&duplicated,1));
+ insight_native_python_bindings_free(source.python);source.python=insight_native_python_bindings_new(index,path,&source);
+ const InsightSymbol *hit;gboolean imported=FALSE;gsize position=strstr(code,"task()")-code;assert(!insight_native_python_import_query(index,path,NULL,&source,position,"task",NULL,NULL,&hit,1,&imported) && imported);
+ /* Explicit relative imports remain tied to their own package directory. */
+ position=strstr(code,"relative_task()")-code;assert(insight_native_python_import_query(index,path,NULL,&source,position,"relative_task",NULL,NULL,&hit,1,&imported)==1 && imported && !strcmp(hit->path,module));
+ g_free(duplicate);insight_native_python_bindings_free(source.python);g_free(mask);insight_index_free(index);tm_source_file_free(file);tm_source_file_free(target);tm_source_file_free(other);g_unlink(path);g_unlink(module);g_unlink(unrelated);g_rmdir(directory);g_free(path);g_free(module);g_free(unrelated);g_free(directory);
+}
 int main(void) {
  assert(insight_native_language_compatible(TM_PARSER_C,TM_PARSER_CPP));assert(insight_native_language_compatible(TM_PARSER_CPP,TM_PARSER_ASM));assert(!insight_native_language_compatible(TM_PARSER_C,TM_PARSER_VHDL));assert(!insight_native_language_compatible(TM_PARSER_CPP,TM_PARSER_SH));assert(!insight_native_language_compatible(TM_PARSER_NONE,TM_PARSER_NONE));assert(insight_native_language_compatible(TM_PARSER_PYTHON,TM_PARSER_PYTHON));
  InsightIndex *index=insight_index_new(); assert(index);
@@ -148,7 +205,7 @@ int main(void) {
  assert(insight_native_import(index,&source,"/project/a.cpp") && insight_index_count(index)==0);
  assert(insight_native_import(index,NULL,"/project/a.cpp"));
  g_ptr_array_free(tags,TRUE); insight_index_free(index);
- tm_get_workspace();python_navigation_test();python_declarations_test();
+ tm_get_workspace();python_navigation_test();python_declarations_test();python_imports_test();
  const char *code="class Base {};\nclass Widget : public Base {\npublic: int run(int value) { return value; }\n};\nint parsed_function(int value) { return value; }\n";
  char filename[]="native-parser-test-XXXXXX"; gint descriptor=g_mkstemp(filename); assert(descriptor>=0); g_close(descriptor,NULL);
  char *absolute=g_canonicalize_filename(filename,NULL); TMSourceFile *parsed=tm_source_file_new(absolute,"C++"); assert(parsed && parsed->lang>=0);

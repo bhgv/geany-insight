@@ -545,3 +545,6 @@ python_context_gui_test = executable('test_insight_python_context_gui', '../insi
 test('Insight Python Context and tools GUI', python_context_gui_test, timeout: 45)
 panel_geometry_gui_test = executable('test_insight_panel_geometry_gui', '../insight/tests/panel_geometry_gui_test.c', dependencies: test_deps)
 test('Insight initial and restored panel geometry GUI', panel_geometry_gui_test, timeout: 65)
+
+python_imports_gui_test = executable('test_insight_python_imports_gui', '../insight/tests/python_imports_gui_test.c', dependencies: test_deps)
+test('Insight explicit Python import navigation GUI', python_imports_gui_test, timeout: 45)

@@ -167,6 +167,7 @@ EXTRA_DIST += \
 	insight/tests/index_test.c \
 	insight/tests/native_bridge.py \
 	insight/tests/native_index_test.c \
+	insight/tests/python_imports_gui_test.c \
 	insight/tests/print_tags_test.py \
 	insight/tests/context_search_test.c \
 	insight/tests/notebook_store_test.c \

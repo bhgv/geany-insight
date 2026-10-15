@@ -57,6 +57,9 @@ gchar *insight_native_python_scope(const InsightIndex *,const gchar *,const Insi
 InsightNativePythonBindings *insight_native_python_bindings_new(const InsightIndex *,const gchar *,const InsightNativeSource *);
 void insight_native_python_bindings_free(InsightNativePythonBindings *);
 gchar *insight_native_python_binding_scope(const InsightIndex *,const gchar *,const gchar *,const gchar *,const InsightNativeSource *);
+/* Resolve explicit source imports only to one indexed module path. imported
+ * suppresses ordinary fallback even when that module is absent or ambiguous. */
+gsize insight_native_python_import_query(const InsightIndex *,const gchar *,const gchar *,const InsightNativeSource *,gsize,const gchar *,InsightTypeEligible,void *,const InsightSymbol **,gsize,gboolean *);
 gint insight_native_python_rank(const InsightIndex *,const InsightSymbol *,const gchar *,const gchar *,gulong);
 gchar *insight_native_python_owner(const InsightIndex *,const gchar *,const gchar *,gulong,const InsightNativeSource *,gsize,gboolean *,InsightTypeEligible,void *);
 guint insight_native_definition_rank(const InsightSymbol *,const char *);

@@ -1451,3 +1451,43 @@ remain open. Windows x64 rebuild remains deferred at the user's request.
 Validation: the native index regression and four GUI suites pass on Linux:
 Python Context, Python/Lua boundaries, scope hierarchy and scoped C++ alias
 Context. The complete editor/test target set compiles successfully.
+
+
+## Explicit Python imports, aliases and live Context refresh
+
+The source binding cache now parses explicit imports alongside global/nonlocal.
+It handles import module [as alias], from module import symbol [as alias], comma
+lists, parenthesized from-lists and explicit continuations. Nested imports and
+imports redirected by global/nonlocal use their lexical binding. Strings,
+comments, yield-from and raise-from are not mistaken for import statements.
+Conflicting aliases decline; ordinary parameters/assignments shadow imports.
+The shared bound is 64 binding statements with at most 256 imported names per
+statement, within the existing bounded source/suite work.
+
+Absolute module lookup requires a unique indexed .py or package/__init__.py
+suffix. Relative imports use a source-relative lexical path. Paths are cached
+only for one source/index snapshot, and no modules are executed or implicitly
+indexed. Missing/ambiguous modules and unknown exported symbols do not trigger
+project-wide name fallback. Explicit imported classes support nominal member
+lookup constrained to the target module. Wildcards, re-exports, dotted module
+imports without aliases, arbitrary attribute chains, sys.path/runtime loading,
+execution order and dynamic type inference remain open.
+
+Preview links, synchronous F12 and asynchronous Follow use the same import query.
+Alias destinations select the resolved name rather than the source alias, and
+selector rows display that name. Python Follow invalidates on index publications
+until a precise import dependency graph is tracked; this fixes stale Context
+when an imported definition moves while the caret remains on its alias.
+
+Native parser regressions include distinct same-name definitions in another
+module, aliases, class fields, relative paths, local imports/shadows, conflicting
+aliases, globally redirected imports, missing modules and duplicate absolute
+module paths. A new real GUI verifies links/F12/Follow across three open files,
+resolved-name selection, missing-module decline, local shadows and live source
+line movement without moving the source caret. It is included in Meson, source
+distribution and the deferred Windows GUI scenario list. Windows was not rebuilt.
+
+Validation: strict C99 -Wall -Wextra -Werror compilation of the shared Python
+resolver passes. The complete editor/test target set compiles; the native index
+and six targeted GUIs pass: explicit imports, Python Context, C-family links,
+scoped C++ aliases, scope hierarchy and Overview.

@@ -128,6 +128,7 @@ typedef struct {
 static Workbench wb;
 static guint64 workbench_epoch;
 static void open_context(GtkButton *,gpointer);
+static gboolean python_language(GeanyFiletype *);
 static void show_diff(GtkWidget *,gpointer);
 static void browser_filter(GtkEditable *,gpointer);
 static void files_filter(GtkEditable *,gpointer);
@@ -381,13 +382,14 @@ static gboolean index_event_dispatch(gpointer data) {
   wb.preview_links_position=0; preview_links();
   /* Definitions depend on the queried name, not every project file.
    * Owner/inheritance queries retain broader invalidation until their
-   * dependency sets are recorded explicitly. */
+   * dependency sets are recorded explicitly. Python aliases likewise require
+   * broad invalidation until imported-module dependencies are recorded. */
   gint mode=wb.relation_mode ? gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode)) : -1;
   const gchar *relation=wb.usage_entry ? gtk_entry_get_text(GTK_ENTRY(wb.usage_entry)) : NULL;
   while(relation && g_str_has_prefix(relation,"::")) relation+=2;
   if(mode!=1 || (relation && names && g_hash_table_contains(names,relation))) wb.relation_dirty=TRUE;
   gchar *query=doc ? cursor_query(doc) : NULL;
-  gboolean definition_changed=(doc && doc->file_name && g_hash_table_contains(paths,doc->file_name)) || (query && names && g_hash_table_contains(names,query));
+  gboolean definition_changed=(doc && doc->file_name && g_hash_table_contains(paths,doc->file_name)) || (query && names && g_hash_table_contains(names,query)) || (doc && python_language(doc->file_type));
   g_free(query);
   if(definition_changed) { wb.follow_doc=0; queue_definition(TRUE); }
   if(wb.relation_dirty || definition_changed) insight_workbench_refresh();
@@ -488,16 +490,21 @@ static gchar *preview_function_scope(gulong line,gint position,gboolean *uncerta
 }
 static gboolean preview_resolvable(const gchar *word,gint position) {
  if(insight_languages_keyword(wb.preview,word) || definition_keyword(wb.preview_filetype,word) || !definition_code(wb.preview,position)) return FALSE;
- GPtrArray *tags=g_hash_table_lookup(wb.preview_candidates,word);if(!tags) return FALSE;
+ GPtrArray *tags=g_hash_table_lookup(wb.preview_candidates,word);if(!tags && !python_language(wb.preview_filetype)) return FALSE;
  const gchar *lexical=member_calls_language(wb.preview_filetype) ? wb.preview_code_mask : NULL;
  if(lexical && position>=0 && (gsize)position<wb.preview_links_length && lexical[position]!=wb.preview_links_text[position]) return FALSE;
  gboolean scoped=FALSE,member=FALSE;gint at=position;while(at>0 && g_ascii_isspace(lexical ? lexical[at-1] : sci_get_char_at(wb.preview,at-1))) at--;
  gchar before=at>0 ? (lexical ? lexical[at-1] : sci_get_char_at(wb.preview,at-1)) : 0,previous=at>1 ? (lexical ? lexical[at-2] : sci_get_char_at(wb.preview,at-2)) : 0;
  gboolean qualified=before=='.' || (at>1 && ((previous=='-' && before=='>') || (previous==':' && before==':')));
- for(guint i=0;i<tags->len;i++) { const InsightSymbol *tag=g_ptr_array_index(tags,i);if(!strcmp(tag->kind,"l") || !strcmp(tag->kind,"z")) scoped=TRUE; }
+ for(guint i=0;tags && i<tags->len;i++) { const InsightSymbol *tag=g_ptr_array_index(tags,i);if(!strcmp(tag->kind,"l") || !strcmp(tag->kind,"z")) scoped=TRUE; }
  gulong line=(gulong)SSM(wb.preview,SCI_LINEFROMPOSITION,position,0)+1;
  gboolean uncertain_scope=FALSE;gchar *scope=(scoped || qualified || python_language(wb.preview_filetype)) ? preview_function_scope(line,position,&uncertain_scope) : NULL,*owner=NULL;
  if(uncertain_scope) { g_free(scope);return FALSE; }
+ if(python_language(wb.preview_filetype)) {
+  InsightNativeSource text=preview_python_source();gboolean imported=FALSE;const InsightSymbol *hit;ScopeLanguage language={wb.source_path,wb.preview_filetype};
+  gsize count=insight_native_python_import_query(wb.index,wb.source_path,scope,&text,position,word,scope_language_eligible,&language,&hit,1,&imported);
+  if(imported || !tags) { g_free(scope);return count>0; }
+ }
  if(qualified) { member=TRUE;if(wb.preview_links_text) { InsightNativeSource reference={wb.preview_links_text,wb.preview_code_mask,wb.preview_links_length,NULL};if(python_language(wb.preview_filetype)) reference=preview_python_source();ScopeLanguage language={wb.source_path,wb.preview_filetype};owner=python_language(wb.preview_filetype) ? insight_native_python_owner(wb.index,wb.source_path,scope,line,&reference,position,&member,scope_language_eligible,&language) : insight_native_member_owner_source_filtered(wb.index,wb.source_path,scope,line,&reference,position,&member,member_calls_language(wb.preview_filetype) && wb.preview_code_mask!=NULL,scope_language_eligible,&language); } }
  gboolean found=FALSE;
  if(!member && python_language(wb.preview_filetype)) {
@@ -746,7 +753,7 @@ static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word,
  GeanyFiletype *reference_type=reference_sci==wb.preview ? wb.preview_filetype : (doc ? doc->file_type : NULL);
  gboolean valid_word=word && *word && !definition_keyword(reference_type,word) && !insight_languages_keyword(reference_sci,word) && (!reference_sci || (sci_get_length(reference_sci)<=2*1024*1024 && definition_code(reference_sci,reference_position)));
  wb.populating=TRUE; g_ptr_array_set_size(wb.definitions,0); gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(wb.choices));
- const InsightSymbol *found[256],*chosen=NULL;
+ const InsightSymbol *found[256],*chosen=NULL;gboolean imported=FALSE;gsize import_count=0;
  gchar *scope=NULL,*mask=NULL;gboolean uncertain_scope=FALSE;
  gboolean cached=reference_sci==wb.preview && wb.preview_links_text && reference_position>=0 && (gsize)reference_position<=wb.preview_links_length;
  gboolean python=python_language(reference_type);gboolean calls=member_calls_language(reference_type) && reference_sci && sci_get_length(reference_sci)<=2*1024*1024;gint reference_begin=(calls || python) ? 0 : MAX(0,reference_position-4096);
@@ -758,8 +765,10 @@ static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word,
   const gchar *bytes=cached ? wb.preview_links_text : reference;gsize length=cached ? wb.preview_links_length : reference_length;
   mask=bytes ? insight_source_code_mask(bytes,length,INSIGHT_CODE_PYTHON,NULL) : NULL;InsightNativeSource text={bytes,mask,length,NULL};
   text.python=cached ? preview_python_source().python : insight_native_python_bindings_new(wb.index,preferred,&text);
-  scope=insight_native_python_scope(wb.index,preferred,&text,reference_position);owner=insight_native_python_owner(wb.index,preferred,scope,reference_line,&text,reference_position,&member,scope_language_eligible,&language);
-  if(!member) { gchar *binding=insight_native_python_binding_scope(wb.index,preferred,scope,word,&text);g_free(scope);scope=binding;if(!scope) valid_word=FALSE; }
+  scope=insight_native_python_scope(wb.index,preferred,&text,reference_position);
+  import_count=insight_native_python_import_query(wb.index,preferred,scope,&text,reference_position,word,scope_language_eligible,&language,found,G_N_ELEMENTS(found),&imported);
+  if(!imported) owner=insight_native_python_owner(wb.index,preferred,scope,reference_line,&text,reference_position,&member,scope_language_eligible,&language);
+  if(!member && !imported) { gchar *binding=insight_native_python_binding_scope(wb.index,preferred,scope,word,&text);g_free(scope);scope=binding;if(!scope) valid_word=FALSE; }
   if(!cached) insight_native_python_bindings_free(text.python);
  } else if(cached) {
   scope=preview_function_scope(reference_line,reference_position,&uncertain_scope);InsightNativeSource text={wb.preview_links_text,wb.preview_code_mask,wb.preview_links_length,NULL};
@@ -771,15 +780,15 @@ static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word,
   scope=insight_native_function_scope(wb.index,preferred,reference_line);owner=insight_native_member_owner_calls_filtered(wb.index,preferred,scope,reference_line,reference,reference_position-reference_begin,&member,calls,scope_language_eligible,&language);
  }
  if(uncertain_scope) { valid_word=FALSE; }g_free(mask);g_free(reference);
- size_t count=valid_word ? (member ? insight_member_query(wb.index,owner,word,preferred,scope_language_eligible,&language,found,256,NULL,NULL) : insight_index_find(wb.index,word,TRUE,found,256)) : 0; gint selected=0;
+ size_t count=valid_word ? (imported ? import_count : member ? insight_member_query(wb.index,owner,word,preferred,scope_language_eligible,&language,found,256,NULL,NULL) : insight_index_find(wb.index,word,TRUE,found,256)) : 0; gint selected=0;
  for(size_t i=0;i<count && i<256;i++) {
-  const InsightSymbol *tag=found[i]; if(!definition_language(preferred,reference_type,tag->path)) continue; if((python && !member ? insight_native_python_rank(wb.index,tag,preferred,scope,reference_line) : insight_native_definition_rank_at(tag,preferred,scope,reference_line))<0) continue; gboolean duplicate=FALSE;
+  const InsightSymbol *tag=found[i]; if(!definition_language(preferred,reference_type,tag->path)) continue; if((python && !member && !imported ? insight_native_python_rank(wb.index,tag,preferred,scope,reference_line) : insight_native_definition_rank_at(tag,preferred,scope,reference_line))<0) continue; gboolean duplicate=FALSE;
   for(guint j=0;j<wb.definitions->len;j++) { Location *old=g_ptr_array_index(wb.definitions,j); if(old->line==tag->line && !g_strcmp0(old->path,tag->path)) { duplicate=TRUE; break; } }
   if(duplicate) continue;
   Location *location=g_new0(Location,1); location->path=g_strdup(tag->path); location->line=tag->line;
-  gchar *label=g_strdup_printf("%s %s%s • %s — %s:%lu",tag->type,word,tag->signature,tag->scope,tag->path,tag->line);
+  gchar *label=g_strdup_printf("%s %s%s • %s — %s:%lu",tag->type,tag->name,tag->signature,tag->scope,tag->path,tag->line);
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.choices),label); g_free(label);
-  if(!chosen || (python && !member ? insight_native_python_rank(wb.index,tag,preferred,scope,reference_line) : insight_native_definition_rank_at(tag,preferred,scope,reference_line))>(python && !member ? insight_native_python_rank(wb.index,chosen,preferred,scope,reference_line) : insight_native_definition_rank_at(chosen,preferred,scope,reference_line))) { chosen=tag; selected=(gint)wb.definitions->len; }
+  if(!chosen || (python && !member && !imported ? insight_native_python_rank(wb.index,tag,preferred,scope,reference_line) : insight_native_definition_rank_at(tag,preferred,scope,reference_line))>(python && !member && !imported ? insight_native_python_rank(wb.index,chosen,preferred,scope,reference_line) : insight_native_definition_rank_at(chosen,preferred,scope,reference_line))) { chosen=tag; selected=(gint)wb.definitions->len; }
   g_ptr_array_add(wb.definitions,location);
  }
  gtk_combo_box_set_active(GTK_COMBO_BOX(wb.choices),wb.definitions->len ? selected : -1);
@@ -2743,10 +2752,12 @@ static void definition_job_run(GTask *task,gpointer source,gpointer data,GCancel
  (void)source; DefinitionJob *j=data;
  if(j->valid_word && *j->query && !g_cancellable_is_cancelled(cancel)) {
   j->count=insight_relation_query(j->index,j->query,INSIGHT_RELATION_DEFINITIONS,0,j->matches,G_N_ELEMENTS(j->matches)); if(j->count==SIZE_MAX) j->count=0; j->count=MIN(j->count,G_N_ELEMENTS(j->matches));
-  gchar *scope=NULL,*mask=NULL;gboolean member=FALSE,uncertain_scope=FALSE;gchar *owner=NULL;
+  gchar *scope=NULL,*mask=NULL;gboolean member=FALSE,uncertain_scope=FALSE,imported=FALSE;gchar *owner=NULL;
   if(j->python && j->text) {
-   gsize length=strlen(j->text);mask=insight_source_code_mask(j->text,length,INSIGHT_CODE_PYTHON,NULL);InsightNativeSource text={j->text,mask,length,NULL};text.python=insight_native_python_bindings_new(j->index,j->preferred,&text);scope=insight_native_python_scope(j->index,j->preferred,&text,j->position);owner=insight_native_python_owner(j->index,j->preferred,scope,j->line,&text,j->position,&member,relation_eligible,j->language);
-   if(!member) { gchar *binding=insight_native_python_binding_scope(j->index,j->preferred,scope,j->query,&text);g_free(scope);scope=binding;uncertain_scope=scope==NULL; }
+   gsize length=strlen(j->text);mask=insight_source_code_mask(j->text,length,INSIGHT_CODE_PYTHON,NULL);InsightNativeSource text={j->text,mask,length,NULL};text.python=insight_native_python_bindings_new(j->index,j->preferred,&text);scope=insight_native_python_scope(j->index,j->preferred,&text,j->position);
+   gsize imported_count=MIN(insight_native_python_import_query(j->index,j->preferred,scope,&text,j->position,j->query,relation_eligible,j->language,j->matches,G_N_ELEMENTS(j->matches),&imported),G_N_ELEMENTS(j->matches));if(imported) j->count=imported_count;
+   if(!imported) owner=insight_native_python_owner(j->index,j->preferred,scope,j->line,&text,j->position,&member,relation_eligible,j->language);
+   if(!member && !imported) { gchar *binding=insight_native_python_binding_scope(j->index,j->preferred,scope,j->query,&text);g_free(scope);scope=binding;uncertain_scope=scope==NULL; }
    insight_native_python_bindings_free(text.python);
   } else if(j->nominal_calls && j->text) {
    gsize length=strlen(j->text);mask=insight_source_code_mask(j->text,length,INSIGHT_CODE_C,NULL);InsightNativeSource text={j->text,mask,length,NULL};InsightNativeScopes *scopes=insight_native_scopes_new(j->index,j->preferred,&text);scope=insight_native_scopes_at(scopes,j->line,(gsize)j->position,&uncertain_scope);
@@ -2754,9 +2765,9 @@ static void definition_job_run(GTask *task,gpointer source,gpointer data,GCancel
   } else { scope=insight_native_function_scope(j->index,j->preferred,j->line);owner=insight_native_member_owner_calls_filtered(j->index,j->preferred,scope,j->line,j->text,j->position,&member,j->nominal_calls,relation_eligible,j->language); }
   g_free(mask);if(uncertain_scope) j->count=0;gsize eligible=0;
   if(member) j->count=MIN(insight_member_query(j->index,owner,j->query,j->preferred,relation_eligible,j->language,j->matches,G_N_ELEMENTS(j->matches),NULL,NULL),G_N_ELEMENTS(j->matches));
-  for(gsize n=0;n<j->count;n++) if(g_hash_table_contains(j->allowed_paths,j->matches[n]->path) && (j->python && !member ? insight_native_python_rank(j->index,j->matches[n],j->preferred,scope,j->line) : insight_native_definition_rank_at(j->matches[n],j->preferred,scope,j->line))>=0) j->matches[eligible++]=j->matches[n];
+  for(gsize n=0;n<j->count;n++) if((imported || g_hash_table_contains(j->allowed_paths,j->matches[n]->path)) && (j->python && !member && !imported ? insight_native_python_rank(j->index,j->matches[n],j->preferred,scope,j->line) : insight_native_definition_rank_at(j->matches[n],j->preferred,scope,j->line))>=0) j->matches[eligible++]=j->matches[n];
   j->count=eligible;
-  for(gsize n=0;n<j->count;n++) if(n==0 || (j->python && !member ? insight_native_python_rank(j->index,j->matches[n],j->preferred,scope,j->line) : insight_native_definition_rank_at(j->matches[n],j->preferred,scope,j->line))>(j->python && !member ? insight_native_python_rank(j->index,j->matches[j->chosen],j->preferred,scope,j->line) : insight_native_definition_rank_at(j->matches[j->chosen],j->preferred,scope,j->line))) j->chosen=(gint)n;
+  for(gsize n=0;n<j->count;n++) if(n==0 || (j->python && !member && !imported ? insight_native_python_rank(j->index,j->matches[n],j->preferred,scope,j->line) : insight_native_definition_rank_at(j->matches[n],j->preferred,scope,j->line))>(j->python && !member && !imported ? insight_native_python_rank(j->index,j->matches[j->chosen],j->preferred,scope,j->line) : insight_native_definition_rank_at(j->matches[j->chosen],j->preferred,scope,j->line))) j->chosen=(gint)n;
   g_free(scope); g_free(owner);
   if(j->count) { const InsightSymbol *hit=j->matches[j->chosen]; j->path=g_strdup(hit->path); j->line=hit->line; }
  }
@@ -2778,7 +2789,7 @@ static void definition_job_done(GObject *source,GAsyncResult *result,gpointer da
  gtk_combo_box_set_active(GTK_COMBO_BOX(wb.choices),j->count ? j->chosen : -1); wb.populating=FALSE;
  GeanyFiletype *ft=doc ? doc->file_type : (j->path ? filetypes_detect_from_extension(j->path) : NULL); render_source(j->text,ft,j->line);insight_languages_apply(wb.preview,j->path,ft);
  g_free(wb.source_path); wb.source_path=g_strdup(j->path); wb.source_id=doc ? doc->id : 0; wb.source_line=j->line<=(gulong)sci_get_line_count(wb.preview) ? j->line : 0; g_free(wb.source_digest); wb.source_digest=g_strdup(j->digest);
- gchar *label=j->count ? g_strdup_printf("Context — %s:%lu",j->path ? j->path : "untitled",j->line) : g_strdup_printf("Context — no indexed definition: %s • %s:%lu",j->query,j->path ? j->path : "untitled",j->line); gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label); if(j->count) { gchar word[1025]={0}; editor_find_current_word_sciwc(current->editor,j->position,word,sizeof word); preview_mark_symbol(word); } navigation_state();
+ gchar *label=j->count ? g_strdup_printf("Context — %s:%lu",j->path ? j->path : "untitled",j->line) : g_strdup_printf("Context — no indexed definition: %s • %s:%lu",j->query,j->path ? j->path : "untitled",j->line); gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label); if(j->count) preview_mark_symbol(j->matches[j->chosen]->name); navigation_state();
  wb.follow_doc=j->document; wb.follow_line=(gulong)sci_get_current_line(current->editor->sci)+1; g_free(wb.follow_word); wb.follow_word=g_strdup(j->query);
  if(gtk_widget_has_focus(GTK_WIDGET(current->editor->sci)) && gtk_widget_get_parent(wb.box)==main_widgets.message_window_notebook) { msgwin_show_hide(TRUE); gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.message_window_notebook),wb.box)); }
 }
@@ -2857,10 +2868,10 @@ static gboolean preview_definition(gint position) {
  GeanyDocument *source=wb.source_id ? document_find_by_id(wb.source_id) : document_get_current();
  const InsightSymbol *definition=word_definition(source,word,wb.source_path,(gulong)sci_get_current_line(wb.preview)+1,wb.preview,position);
  if(definition) {
-  gchar *path=g_strdup(definition->path); gulong line=definition->line;
+  gchar *path=g_strdup(definition->path),*resolved_name=g_strdup(definition->name); gulong line=definition->line;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE);
-  if(show_location(path,0,line,TRUE)) preview_mark_symbol(word);
-  g_free(path);
+  if(show_location(path,0,line,TRUE)) preview_mark_symbol(resolved_name);
+  g_free(path);g_free(resolved_name);
  } else ui_set_statusbar(TRUE,"Definition not found: %s",word);
  return TRUE;
 }
