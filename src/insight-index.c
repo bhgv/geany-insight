@@ -108,7 +108,7 @@ static gchar *call_result_owner(const InsightIndex *index,const InsightSymbol **
  gchar *owner=NULL;
  for(gsize i=0;i<count;i++) {
   const InsightSymbol *symbol=symbols[i];if(!callable_symbol(symbol) || !*symbol->type) { g_free(owner);return NULL; }
-  InsightTypeResult type=insight_type_resolve(index,symbol->type,symbol->scope,symbol->path,eligible,data);
+  InsightTypeResult type=insight_type_resolve_return(index,symbol,eligible,data);
   if(type.status!=INSIGHT_TYPE_FOUND || (owner && strcmp(owner,type.owner))) { insight_type_result_clear(&type);g_free(owner);return NULL; }
   if(!owner) owner=g_strdup(type.owner);
   insight_type_result_clear(&type);

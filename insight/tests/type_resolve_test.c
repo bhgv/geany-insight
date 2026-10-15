@@ -61,8 +61,20 @@ static void dependent_aliases(void) {
  const gchar *names[]={"Dependent<int>","Qualified<int>"};for(guint i=0;i<G_N_ELEMENTS(names);i++) { InsightTypeResult r=insight_type_resolve(index,names[i],"","/alias.cpp",NULL,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_UNKNOWN);g_assert_null(r.owner);insight_type_result_clear(&r); }
  resolved(index,"Concrete<int>","","/alias.cpp","T",1);resolved(index,"Ordinary","","/alias.cpp","T",1);insight_index_free(index);
 }
+static void callable_returns(void) {
+ InsightIndex *index=insight_index_new();InsightSymbol tags[]={
+  {"T",NULL,"","s",1,"","",""},{"Nested",NULL,"T","s",1,"","",""},
+  {"T",NULL,"dependent_result","Z",2,"","class",""},{"T",NULL,"ordinary_result","z",3,"","int",""},
+  {"T",NULL,"body_local","t",4,"","int",""}
+ };g_assert_true(insight_index_update(index,"/returns.cpp",tags,G_N_ELEMENTS(tags)));
+ InsightSymbol fn={"dependent_result","/returns.cpp","","p",2,"(T*)","T *",""};InsightTypeResult r=insight_type_resolve_return(index,&fn,NULL,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_UNKNOWN);insight_type_result_clear(&r);
+ fn.type="T::Nested *";r=insight_type_resolve_return(index,&fn,NULL,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_UNKNOWN);insight_type_result_clear(&r);
+ fn.type="::T::Nested *";r=insight_type_resolve_return(index,&fn,NULL,NULL);g_assert_cmpstr(r.owner,==,"T::Nested");insight_type_result_clear(&r);
+ const gchar *names[]={"ordinary_result","body_local","dependent_result"};for(guint i=0;i<G_N_ELEMENTS(names);i++) { fn.name=names[i];fn.type="T *";fn.path=i==2 ? "/other.cpp" : "/returns.cpp";r=insight_type_resolve_return(index,&fn,NULL,NULL);g_assert_cmpstr(r.owner,==,"T");insight_type_result_clear(&r); }
+ r=insight_type_resolve_return(index,NULL,NULL,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_INVALID);insight_type_result_clear(&r);insight_index_free(index);
+}
 int main(void) {
- inherited_types();qualified_precedence();dependent_aliases();
+ inherited_types();qualified_precedence();dependent_aliases();callable_returns();
  name_is("const struct N::Box<int, Pair<long, short>>::Nested * const &","N::Box::Nested",FALSE);
  name_is("volatile ::Global *","Global",TRUE);name_is("N :: Foo [10][2]","N::Foo",FALSE);name_is("Module.Class","Module::Class",FALSE);
  const char *invalid[]={"","Foo Bar","Foo<int","Foo>","Foo[2","Foo (*)(int)","decltype(value)","A:::B","A::","Foo;Bar"};

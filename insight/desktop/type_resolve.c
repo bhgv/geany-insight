@@ -210,4 +210,19 @@ InsightTypeResult insight_type_resolve(const InsightIndex *index,const gchar *ty
  result=resolve_name(&job,name,scope,path,global,0);result.aliases=job.aliases;
  g_hash_table_unref(job.active);g_hash_table_unref(job.owners);g_free(name);return result;
 }
+InsightTypeResult insight_type_resolve_return(const InsightIndex *index,const InsightSymbol *declaration,InsightTypeEligible eligible,void *data) {
+ InsightTypeResult result={.status=INSIGHT_TYPE_INVALID};
+ if(!index || !declaration || !declaration->name || !declaration->scope || !declaration->path) return result;
+ gboolean global=FALSE;gchar *name=insight_type_name(declaration->type,&global);if(!name) return result;
+ if(eligible && !eligible(declaration,data)) { g_free(name);result.status=INSIGHT_TYPE_UNKNOWN;return result; }
+ if(!global) {
+  const gchar *end=strstr(name,"::");gchar *head=end ? g_strndup(name,end-name) : g_strdup(name);gsize count=insight_index_find(index,head,TRUE,NULL,0);
+  if(count>CANDIDATE_LIMIT) { g_free(head);g_free(name);result.status=INSIGHT_TYPE_LIMIT;return result; }
+  const InsightSymbol **rows=g_new(const InsightSymbol *,count);insight_index_find(index,head,TRUE,rows,count);g_free(head);gchar *owner=symbol_name(declaration);gboolean dependent=FALSE;
+  for(gsize i=0;i<count && !dependent;i++) { const InsightSymbol *row=rows[i];if(strcmp(row->kind,"Z") || strcmp(row->path,declaration->path) || (eligible && !eligible(row,data))) continue;gchar *scope=canonical_scope(row->scope);dependent=!strcmp(scope,owner);g_free(scope); }
+  g_free(owner);g_free(rows);
+  if(dependent) { g_free(name);result.status=INSIGHT_TYPE_UNKNOWN;return result; }
+ }
+ g_free(name);return insight_type_resolve(index,declaration->type,declaration->scope,declaration->path,eligible,data);
+}
 void insight_type_result_clear(InsightTypeResult *result) { if(!result) return;g_free(result->owner);memset(result,0,sizeof *result);result->status=INSIGHT_TYPE_UNKNOWN; }

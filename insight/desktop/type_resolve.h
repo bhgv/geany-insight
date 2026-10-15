@@ -27,5 +27,10 @@ gchar *insight_type_name(const gchar *,gboolean *);
  * is bounded to 64. Only active expansions form a cycle (an owner alias may be reused).
  * owner is owned; symbol is borrowed from the caller-owned index snapshot. */
 InsightTypeResult insight_type_resolve(const InsightIndex *,const gchar *,const gchar *,const gchar *,InsightTypeEligible,void *);
+/* Resolve a callable's nominal declared result in its declaration context.
+ * Its own C++ template parameters block unrelated global types; ordinary
+ * value parameters and body-local declarations do not hide the return type.
+ * This does not deduce template arguments or select an overload. */
+InsightTypeResult insight_type_resolve_return(const InsightIndex *,const InsightSymbol *,InsightTypeEligible,void *);
 void insight_type_result_clear(InsightTypeResult *);
 #endif

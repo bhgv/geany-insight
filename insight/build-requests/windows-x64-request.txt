@@ -1,1 +1,1 @@
-Build Windows x64: Window List state and floating geometry in saved A-D layouts, v1/v2 migration to v3, strict layout core tests and real docked/floating/hidden GUI restore; include dependent template/alias guards, positional scope, 57 parser fixtures and 18 GUI scenarios.
+Build Windows x64: declaration-aware nominal callable results reject dependent template names, preserve explicit global types and ordinary value parameters; strict core/native and Context F12/Follow regression, 57 parser fixtures and 18 GUI scenarios.

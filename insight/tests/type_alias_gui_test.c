@@ -22,6 +22,7 @@ static const gchar *code=
  "struct WrongGlobal { int value; }; WrongGlobal *ambiguous_b;\nstruct SameA { int f(A::Cell *ambiguous_a) { return ambiguous_a->value; } }; struct SameB { int f(B::Cell *ambiguous_b) { return ambiguous_b->value; } };\n"
  "struct T { int template_field; };\ntemplate<class T> struct DependentBox { T *item; int method(T *dependent_p) { return dependent_p->template_field; } };\ntemplate<class T> int dependent(T *dependent_q) { return dependent_q->template_field; }\nint concrete(T *concrete_p) { return concrete_p->template_field; }\n"
  "template<class T> using DependentAlias = T;\nDependentAlias<int> *dependent_alias;\ntemplate<class T> using ConcreteAlias = ::T;\nConcreteAlias<int> *concrete_alias;\nint alias_use() { return dependent_alias->template_field + concrete_alias->template_field; }\n"
+ "template<class T> T *dependent_return(T *p);\ntemplate<class T> ::T *global_return(T *p);\nT *ordinary_return(int T);\nint returns_use() { return dependent_return(0)->template_field + global_return(0)->template_field + ordinary_return(0)->template_field; }\n"
  "using LoopA = LoopB;\nusing LoopB = LoopA;\nint bad(LoopA *p) { return p->value; }\n";
 static gchar *custom_code;
 static const struct { const char *reference,*declaration,*owner;guint occurrence; } cases[]={
@@ -51,7 +52,9 @@ static const struct { const char *reference,*declaration,*owner;guint occurrence
  {"s->seal","struct Base { struct Item { int seal;","InheritedTypes::Base::Item",0},
  {"global_pick->seal","namespace Pick { struct Nested { long seal;","Pick::Nested",0},
  {"concrete_p->template_field","struct T { int template_field;","T",0},
- {"concrete_alias->template_field","struct T { int template_field;","T",0}
+ {"concrete_alias->template_field","struct T { int template_field;","T",0},
+ {"global_return(0)->template_field","struct T { int template_field;","T",0},
+ {"ordinary_return(0)->template_field","struct T { int template_field;","T",0}
 };
 static GtkWidget *named(GtkWidget *root,const gchar *name) { if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;if(GTK_IS_CONTAINER(root)) { GList *children=gtk_container_get_children(GTK_CONTAINER(root));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL; }
 static void open_source(const gchar *name,const gchar *text,const gchar *type) { gchar *path=g_build_filename(directory,name,NULL);g_assert_true(g_file_set_contents(path,text,-1,NULL));g_assert_nonnull(document_open_file(path,FALSE,filetypes_lookup_by_name(type),NULL));g_free(path); }
@@ -75,7 +78,7 @@ static gboolean step(gpointer data) {
   gint clash=strstr(code,"int blocked")-code;clash=strstr(code+clash,"p->child->end")-code+11;g_assert_cmpint(SSM(preview,SCI_INDICATORVALUEAT,31,clash),==,0);
   gint result=strstr(code,"mixed(1)->end")-code+10;g_assert_cmpint(SSM(preview,SCI_INDICATORVALUEAT,31,result),==,0);gint commented=strstr(code,"/* reject */ end")-code+strlen("/* reject */ ");g_assert_cmpint(SSM(preview,SCI_INDICATORVALUEAT,31,commented),==,0);
   gint uncertain=strstr(code,"ambiguous_b->value")-code+strlen("ambiguous_b->");g_assert_cmpint(SSM(preview,SCI_INDICATORVALUEAT,31,uncertain),==,0);
-  const gchar *dependent_refs[]={"dependent_p->template_field","dependent_q->template_field","dependent_alias->template_field"};for(guint di=0;di<G_N_ELEMENTS(dependent_refs);di++) { gint dep=strstr(code,dependent_refs[di])-code+strlen(dependent_refs[di])-2;g_assert_cmpint(SSM(preview,SCI_INDICATORVALUEAT,31,dep),==,0); }
+  const gchar *dependent_refs[]={"dependent_p->template_field","dependent_q->template_field","dependent_alias->template_field","dependent_return(0)->template_field"};for(guint di=0;di<G_N_ELEMENTS(dependent_refs);di++) { gint dep=strstr(code,dependent_refs[di])-code+strlen(dependent_refs[di])-2;g_assert_cmpint(SSM(preview,SCI_INDICATORVALUEAT,31,dep),==,0); }
   /* Exercise the asynchronous editor-follow definition path too. */
   item=10;sci_set_current_position(source->editor->sci,reference(),FALSE);phase++;return G_SOURCE_CONTINUE;
  }
@@ -90,6 +93,14 @@ static gboolean step(gpointer data) {
  }
  if(phase==9) {
   GtkWidget *choices=named(window,"insight-context-definitions");gchar *label=gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(choices));gboolean correct=label && strstr(label,"InheritedTypes::Base::Item");g_free(label);if(!correct) return G_SOURCE_CONTINUE;g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(choices)),NULL),==,1);
+  sci_set_current_position(source->editor->sci,strstr(code,"dependent_return(0)->template_field")-code+strlen("dependent_return(0)->")+2,FALSE);phase=10;return G_SOURCE_CONTINUE;
+ }
+ if(phase==10) {
+  GtkWidget *choices=named(window,"insight-context-definitions");if(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(choices)),NULL)!=0) return G_SOURCE_CONTINUE;
+  for(item=0;item<G_N_ELEMENTS(cases);item++) { if(!strcmp(cases[item].reference,"global_return(0)->template_field")) break; }g_assert_cmpuint(item,<,G_N_ELEMENTS(cases));sci_set_current_position(source->editor->sci,reference(),FALSE);phase=11;return G_SOURCE_CONTINUE;
+ }
+ if(phase==11) {
+  GtkWidget *choices=named(window,"insight-context-definitions");gchar *label=gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(choices));gboolean correct=label && strstr(label,"• T —");g_free(label);if(!correct) return G_SOURCE_CONTINUE;g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(choices)),NULL),==,1);
   open_source("calls.custom",custom_code,"C++");source=document_get_current();sci_set_current_position(source->editor->sci,strstr(custom_code,"->mark")-custom_code+3,FALSE);phase=5;return G_SOURCE_CONTINUE;
  }
  if(phase==5) {

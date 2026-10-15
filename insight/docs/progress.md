@@ -1281,3 +1281,11 @@ Saved layouts A–D now include Window List visibility, docked/floating state an
 Strict C99 layout tests cover v3 round-trip, v1/v2 migration, missing fields and invalid geometry/booleans. The native GUI saves docked, floating and hidden records, switches among A/B/C, verifies model/filter and active-document preservation, and checks written version/state keys. The targeted GUI passes. Drag/snap-to-edge and remaining layout options stay open.
 
 All 52 native tests pass with GUI enabled and no skips after saved Window List layout integration. Windows CI now includes the same strict layout migration core regression before compilation, plus the expanded Symbol Info/Window List GUI scenario.
+
+## Dependent function-template result types
+
+A native parser regression reproduced template<class T> T *dependent_result(T*) resolving dependent_result(0)->field against an unrelated global T. Callable results now use a nominal declaration resolver that checks the first type component against the callable's own C++ template parameters in its declaration file. Explicit global qualification bypasses that barrier. Ordinary value parameters and body-local aliases do not hide a return type that is looked up in the enclosing declaration context. No template argument deduction or overload selection is claimed.
+
+Strict C99 core tests cover dependent/qualified targets, explicit global results, value-parameter/body-local hiding, same-name parameters in another file and invalid input. Native parsing reproduces and verifies the fix. The real Context fixture checks absent dependent-result member links, working explicit global/ordinary result links, F12, and asynchronous Follow from a no-result dependent call back to the explicit global type. Its targeted GUI run passes.
+
+The function-template result extension passes all 52 native tests with GUI enabled and no skips.
