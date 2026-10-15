@@ -9,7 +9,9 @@ size_t insight_relation_query(const InsightIndex *,const char *,InsightRelationM
 /* Walk unambiguous indexed inheritance edges, with cycle protection and a
  * caller-selected depth bound (0..32; zero selects direct members). Members include direct and inherited
  * scopes, retaining overloads/shadowed names. Eligibility applies BEFORE
- * resolving edges. Missing bases and aliases are not inferred. */
+ * resolving edges. Indexed nominal typedef/using chains resolve in declaration
+ * context; unions/enums/namespaces also own direct Members. Missing bases,
+ * overloads and template instantiation are not inferred. */
 typedef int (*InsightRelationEligible)(const InsightSymbol *,void *);
 size_t insight_relation_query_transitive(const InsightIndex *,const char *,InsightRelationMode,
  unsigned,InsightRelationEligible,void *,size_t,const InsightSymbol **,size_t,int *,int *);

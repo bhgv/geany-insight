@@ -1271,7 +1271,7 @@ static void relation_job_run(GTask *task,gpointer source,gpointer data,GCancella
  (void)source; RelationJob *j=data; j->total=SIZE_MAX;
  InsightRelationMode mode=j->mode==1 ? INSIGHT_RELATION_DEFINITIONS : (j->mode==2 ? INSIGHT_RELATION_MEMBERS : (j->mode==4 ? INSIGHT_RELATION_BASES : INSIGHT_RELATION_DERIVED));
  if(!g_cancellable_is_cancelled(cancel)) {
-  if(j->transitive && mode!=INSIGHT_RELATION_DEFINITIONS) j->total=insight_relation_query_transitive(j->index,j->query,mode,32,relation_eligible,j->language,0,j->found,G_N_ELEMENTS(j->found),&j->depth_limited,&j->ambiguous);
+  if(mode!=INSIGHT_RELATION_DEFINITIONS) j->total=insight_relation_query_transitive(j->index,j->query,mode,j->transitive ? 32 : (mode==INSIGHT_RELATION_MEMBERS ? 0 : 1),relation_eligible,j->language,0,j->found,G_N_ELEMENTS(j->found),j->transitive ? &j->depth_limited : NULL,&j->ambiguous);
   else j->total=insight_relation_query(j->index,j->query,mode,0,j->found,G_N_ELEMENTS(j->found));
  }
  if(j->total!=SIZE_MAX) { gsize eligible=0;gsize original=j->total;j->limited=original>G_N_ELEMENTS(j->found);for(gsize n=0;n<MIN(original,G_N_ELEMENTS(j->found));n++) if(insight_language_filter_match(j->language,j->found[n]->path)) j->found[eligible++]=j->found[n];j->total=eligible; }

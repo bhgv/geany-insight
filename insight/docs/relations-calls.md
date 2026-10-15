@@ -28,11 +28,11 @@ Right-click a graph result node for Open in editor, Definitions, Call sites, Ref
 
 ## Indexed inheritance chains
 
-In Members, Base types and Derived types, enable **Include indirect inheritance (tags)** to traverse indexed inheritance chains. Members then includes direct members and members in reachable base scopes, retaining overloads and shadowed names. Turn it off for the existing direct query. The checkbox is saved and included in drill-down Back history.
+In Members, Base types and Derived types, enable **Include indirect inheritance (tags)** to traverse indexed inheritance chains. Members then includes direct members and members in reachable base scopes, retaining overloads and shadowed names. Turn it off for direct members or one inheritance edge, using the same scoped type lookup. The checkbox is saved and included in drill-down Back history.
 
-The traversal resolves C++ `::` and dot-scoped names, searches declaring namespaces from inner to outer, and respects an explicit global `::` base. It uses the active language profile before constructing links. Bare root names are accepted only when unique; duplicate indexed class declarations or ambiguous base names are omitted instead of guessed. Cycles and diamond inheritance do not duplicate results. Only indexed definitions are returned; unknown bases and aliases are not inferred.
+The traversal resolves C++ `::` and dot-scoped names, searches declaring namespaces from inner to outer, and respects an explicit global `::` base. It uses the active language profile before constructing links. Bare root names are accepted only when unique; duplicate indexed class declarations or ambiguous base names are omitted instead of guessed. Cycles and diamond inheritance do not duplicate results. Indexed nominal typedef/using chains resolve in the alias declaration scope and file, both as query roots and inheritance bases. Cyclic aliases decline with an ambiguity notice; unknown bases are omitted.
 
-Depth is limited to 32 edges; the status reports a depth limit or ambiguity. The table shows at most 2000 eligible results and reports truncation. Filtering/sorting and the existing graph remain available; the graph still displays a single layer of result nodes rather than the inheritance edges. This implements tag-based transitivity, not compiler-level alias, access-control, overload or type inference.
+Depth is limited to 32 edges; the status reports a depth limit or ambiguity. The table shows at most 2000 eligible results and reports truncation. Filtering/sorting and the existing graph remain available; the graph still displays a single layer of result nodes rather than the inheritance edges. This implements tag-based transitivity, not compiler-level access-control, overload, template instantiation or expression inference.
 
 ## Expandable indexed relation outline
 
@@ -47,3 +47,7 @@ Cycles remain visible as stopped leaf nodes. Limits are 32 relation edges, 200 r
 With both **Expandable relation tree** and **Graph view** enabled, the graph draws the same expanded outline, with each connector attached to its actual parent. The +/− control at the right edge (horizontal) or bottom edge (vertical) loads/collapses that node; the query root has the same control. Right/+ and Left/− expand/collapse the selected branch; Up/Down and Home/End select visible source nodes. Enter opens the selected source row. Expansion does not select or navigate a new source location.
 
 Collapsing retains loaded children and cached descendant expansion. Switching back to the outline preserves the same branches, selection, filtering and Back history. Flat and hierarchical graph modes share saved orientation/zoom preferences, including after leaving Graph view. Copy image/Ctrl+C and Save PNG render the full currently drawn hierarchy, with the existing 128 visible-source-node and raster allocation bounds. Structural notice rows are omitted from the drawing. Existing indexed/lexical limitations still apply; this does not introduce semantic call edges.
+
+## Scoped nominal aliases
+
+For example, if `N::Alias` refers to `N::Base` and `N::Child` inherits `Alias`, Bases for Child shows Base, Derived for Alias shows Child, and Members for Alias shows the Base scope. Nested typedef/using, union, enum and namespace rows can also be expanded in the Members outline and graph. Language eligibility is applied before resolving aliases. Lookup follows at most 32 aliases and refuses ambiguous targets or cycles; it does not instantiate template arguments or resolve overloads/includes.

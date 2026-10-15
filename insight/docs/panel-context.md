@@ -13,3 +13,5 @@ Select a symbol in a list. Click another resolved definition in Context: the edi
 The ? button at the upper right opens this page. Help follows the interface language selected in Options.
 
 More: [context-bookmarks.md](context-bookmarks.md).
+
+Member definition links and editor Follow resolve nominal C/C++ typedef/using chains in declaration scopes, including `this` and qualified namespace receivers. Ambiguous/cyclic types decline. Template argument substitution, overload selection and arbitrary chained expressions are not inferred.

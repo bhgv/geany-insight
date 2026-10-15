@@ -70,7 +70,7 @@ static void branch_done(GObject *source,GAsyncResult *result,gpointer data) {
   gchar *parent_key=NULL;gtk_tree_model_get(GTK_TREE_MODEL(tree->store),&parent,KEY,&parent_key,-1);
   for(size_t i=0;i<MIN(job->total,G_N_ELEMENTS(job->found)) && tree->nodes<TREE_LIMIT;i++) {
    const InsightSymbol *symbol=job->found[i];gchar *owner=symbol_owner(symbol),*key=g_strdup_printf("%s/%" G_GSIZE_FORMAT ":%s",parent_key,strlen(owner),owner);
-   gboolean repeated=cycle(tree,&parent,owner);guint type=insight_symbol_kind_type(symbol->path,symbol->kind,NULL);gboolean branch=(type&(tm_tag_class_t|tm_tag_struct_t|tm_tag_interface_t|tm_tag_union_t))!=0;
+   gboolean repeated=cycle(tree,&parent,owner);guint type=insight_symbol_kind_type(symbol->path,symbol->kind,NULL);gboolean branch=(type&(tm_tag_class_t|tm_tag_struct_t|tm_tag_interface_t|tm_tag_union_t|tm_tag_enum_t|tm_tag_namespace_t|tm_tag_typedef_t))!=0;
    gchar *description=g_strdup_printf("%s • %s%s%s",symbol->kind,symbol->scope,repeated ? " • " : "",repeated ? insight_tr("Cycle: branch stopped") : "");GtkTreeIter child;
    gtk_tree_store_append(tree->store,&child,&parent);gtk_tree_store_set(tree->store,&child,DISPLAY,symbol->path,PATH,symbol->path,LINE,symbol->line,NAME,symbol->name,SNIPPET,description,OWNER,owner,KEY,key,STATE,repeated ? CYCLE : UNLOADED,-1);tree->nodes++;
    if(branch && !repeated) { if(depth>=DEPTH_LIMIT) { gtk_tree_store_set(tree->store,&child,STATE,LOADED,-1);notice(tree,&child,"Relation tree depth limit reached"); }else notice(tree,&child,"Expand to load relations…"); }

@@ -61,7 +61,7 @@ jobs:
           ./notebook-store-test.exe
       - name: Test inheritance relation queries
         run: |
-          cc -std=c99 -Wall -Wextra -Werror -UNDEBUG insight/tests/relation_query_test.c insight/desktop/relation_query.c insight/core/index.c -Iinsight/desktop $(pkg-config --cflags --libs glib-2.0) -o relation-query-test.exe
+          cc -std=c99 -Wall -Wextra -Werror -UNDEBUG insight/tests/relation_query_test.c insight/desktop/relation_query.c insight/desktop/type_resolve.c insight/core/index.c -Iinsight/desktop $(pkg-config --cflags --libs glib-2.0) -o relation-query-test.exe
           ./relation-query-test.exe
       - name: Test scoped type and alias resolution
         run: |

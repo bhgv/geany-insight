@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "relation_query.h"
+#include "type_resolve.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,7 +15,7 @@ static int owns_scope(const char *scope,const char *owner) {
 }
 static gboolean class_symbol(const InsightSymbol *symbol) {
  const char *kind=symbol->kind;
- return !strcmp(kind,"c") || !strcmp(kind,"s") || !strcmp(kind,"i") || !strcmp(kind,"t") || !strcmp(kind,"class") || !strcmp(kind,"struct") || !strcmp(kind,"interface") || !strcmp(kind,"typedef");
+ return !strcmp(kind,"c") || !strcmp(kind,"s") || !strcmp(kind,"i") || !strcmp(kind,"t") || !strcmp(kind,"class") || !strcmp(kind,"struct") || !strcmp(kind,"interface") || !strcmp(kind,"typedef") || !strcmp(kind,"alias") || !strcmp(kind,"u") || !strcmp(kind,"g") || !strcmp(kind,"n") || !strcmp(kind,"union") || !strcmp(kind,"enum") || !strcmp(kind,"namespace");
 }
 static gboolean qualified_name(const InsightSymbol *symbol,const char *name) {
  while(g_str_has_prefix(name,"::")) name+=2;
@@ -24,17 +25,19 @@ static gboolean qualified_name(const InsightSymbol *symbol,const char *name) {
 }
 static void add_base(GHashTable *names,const char *start,gsize length,gboolean global) {
  gchar *part=g_strndup(start,length);g_strstrip(part);
- GString *plain=g_string_new(NULL);guint depth=0;
- for(const char *p=part;*p;p++) {
-  if(*p=='<' || *p=='[' || *p=='(') depth++;
-  else if((*p=='>' || *p==']' || *p==')') && depth) depth--;
-  else if(!depth) g_string_append_c(plain,*p);
+ /* Access specifiers precede nominal C++ bases; keep whitespace around ::
+  * and balanced template arguments intact for the common type normalizer. */
+ const gchar *base=part;
+ for(;;) {
+  while(g_ascii_isspace(*base)) base++;
+  const gchar *end=base;while(g_ascii_isalpha(*end)) end++;
+  gsize size=end-base;
+  if(g_ascii_isspace(*end) && ((size==6 && !memcmp(base,"public",6)) || (size==7 && !memcmp(base,"private",7)) || (size==9 && !memcmp(base,"protected",9)) || (size==7 && !memcmp(base,"virtual",7)))) base=end;
+  else break;
  }
- g_free(part);part=g_string_free(plain,FALSE);
- gchar **words=g_strsplit_set(part," \t\r\n",-1);const char *name=NULL;
- for(guint i=0;words[i];i++) if(*words[i]) name=words[i];
- if(name && !strchr(name,'=')) { while(!global && g_str_has_prefix(name,"::")) name+=2; if(*name) g_hash_table_add(names,g_strdup(name)); }
- g_strfreev(words);g_free(part);
+ gboolean absolute=FALSE;gchar *name=insight_type_name(base,&absolute);
+ if(name) { if(global && absolute) { gchar *full=g_strconcat("::",name,NULL);g_free(name);name=full; }g_hash_table_add(names,name); }
+ g_free(part);
 }
 static GHashTable *base_names_full(const char *inheritance,gboolean global) {
  GHashTable *names=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
@@ -105,7 +108,7 @@ static gchar *class_name(const InsightSymbol *s) {
  gchar *raw=*s->scope ? g_strconcat(s->scope,".",s->name,NULL) : g_strdup(s->name);
  gchar *name=canonical(raw);g_free(raw);return name;
 }
-typedef struct { const InsightSymbol *symbol; gchar *name; GPtrArray *bases,*derived; guint distance; gboolean ambiguous; } RelationClass;
+typedef struct { const InsightSymbol *symbol; gchar *name; GPtrArray *bases,*derived; guint distance; gboolean ambiguous,limited; } RelationClass;
 static void relation_class_free(gpointer data) {
  RelationClass *c=data;g_free(c->name);g_ptr_array_unref(c->bases);g_ptr_array_unref(c->derived);g_free(c);
 }
@@ -119,16 +122,12 @@ static RelationClass *unique_class(GPtrArray *values,gboolean *ambiguous) {
  if(values->len==1) return g_ptr_array_index(values,0);
  *ambiguous=TRUE;return NULL;
 }
-static RelationClass *resolve_base(GHashTable *names,const InsightSymbol *s,const gchar *base,gboolean *ambiguous) {
- gchar *name=canonical(base),*scope=canonical(s->scope);RelationClass *result=NULL;
- if(g_str_has_prefix(base,"::")) result=unique_class(g_hash_table_lookup(names,name),ambiguous);
- else for(;;) {
-  gchar *full=*scope ? g_strconcat(scope,".",name,NULL) : g_strdup(name);
-  GPtrArray *values=g_hash_table_lookup(names,full);g_free(full);
-  if(values) { result=unique_class(values,ambiguous);break; }
-  gchar *tail=strrchr(scope,'.');if(tail) *tail=0;else if(*scope) *scope=0;else break;
- }
- g_free(name);g_free(scope);return result;
+static RelationClass *resolve_type(const InsightIndex *index,GHashTable *symbols,const gchar *name,const gchar *scope,const gchar *path,InsightRelationEligible eligible,void *data,gboolean *ambiguous,gboolean *limited) {
+ InsightTypeResult type=insight_type_resolve(index,name,scope,path,eligible,data);
+ RelationClass *result=type.status==INSIGHT_TYPE_FOUND ? g_hash_table_lookup(symbols,type.symbol) : NULL;
+ *ambiguous|=type.status==INSIGHT_TYPE_AMBIGUOUS || type.status==INSIGHT_TYPE_CYCLE;
+ *limited|=type.status==INSIGHT_TYPE_LIMIT;
+ insight_type_result_clear(&type);return result;
 }
 size_t insight_relation_query_transitive(const InsightIndex *index,const char *owner,InsightRelationMode mode,
  unsigned max_depth,InsightRelationEligible eligible,void *data,size_t offset,const InsightSymbol **out,size_t capacity,
@@ -139,18 +138,19 @@ size_t insight_relation_query_transitive(const InsightIndex *index,const char *o
  GPtrArray *classes=g_ptr_array_new_with_free_func(relation_class_free);
  GHashTable *names=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,(GDestroyNotify)g_ptr_array_unref);
  GHashTable *short_names=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,(GDestroyNotify)g_ptr_array_unref);
+ GHashTable *symbols=g_hash_table_new(g_direct_hash,g_direct_equal);
  gboolean unclear=FALSE,truncated=FALSE;size_t count=insight_index_count(index),total=0;
  for(size_t i=0;i<count;i++) {
   const InsightSymbol *s=insight_index_at(index,i);
   if(!class_symbol(s) || (eligible && !eligible(s,data))) continue;
   RelationClass *c=g_new0(RelationClass,1);c->symbol=s;c->name=class_name(s);c->distance=G_MAXUINT;
-  c->bases=g_ptr_array_new();c->derived=g_ptr_array_new();g_ptr_array_add(classes,c);map_class(names,c->name,c);map_class(short_names,s->name,c);
+  c->bases=g_ptr_array_new();c->derived=g_ptr_array_new();g_ptr_array_add(classes,c);map_class(names,c->name,c);map_class(short_names,s->name,c);g_hash_table_insert(symbols,(gpointer)s,c);
  }
  for(guint i=0;i<classes->len;i++) {
   RelationClass *c=g_ptr_array_index(classes,i);GHashTable *bases=base_names_full(c->symbol->inheritance,TRUE);
   GHashTableIter iter;gpointer key;g_hash_table_iter_init(&iter,bases);
   while(g_hash_table_iter_next(&iter,&key,NULL)) {
-   RelationClass *base=resolve_base(names,c->symbol,key,&c->ambiguous);
+   RelationClass *base=resolve_type(index,symbols,key,c->symbol->scope,c->symbol->path,eligible,data,&c->ambiguous,&c->limited);
    if(base && !g_ptr_array_find(c->bases,base,NULL)) { g_ptr_array_add(c->bases,base);g_ptr_array_add(base->derived,c); }
   }
   g_hash_table_unref(bases);
@@ -158,10 +158,15 @@ size_t insight_relation_query_transitive(const InsightIndex *index,const char *o
  gchar *root_name=canonical(owner);
  GPtrArray *roots=g_hash_table_lookup(names,root_name);
  if(!roots && !strchr(root_name,'.')) roots=g_hash_table_lookup(short_names,root_name);
- RelationClass *root=unique_class(roots,&unclear);GQueue queue=G_QUEUE_INIT;
+ RelationClass *root=unique_class(roots,&unclear);
+ if(root) {
+  gchar *full=*root->symbol->scope ? g_strconcat(root->symbol->scope,"::",root->symbol->name,NULL) : g_strdup(root->symbol->name);
+  root=resolve_type(index,symbols,full,NULL,NULL,eligible,data,&unclear,&truncated);g_free(full);
+ }
+ GQueue queue=G_QUEUE_INIT;
  if(root) { root->distance=0;g_queue_push_tail(&queue,root); }
  while(!g_queue_is_empty(&queue)) {
-  RelationClass *c=g_queue_pop_head(&queue);unclear|=c->ambiguous;GPtrArray *edges=mode==INSIGHT_RELATION_DERIVED ? c->derived : c->bases;
+  RelationClass *c=g_queue_pop_head(&queue);unclear|=c->ambiguous;truncated|=c->limited;GPtrArray *edges=mode==INSIGHT_RELATION_DERIVED ? c->derived : c->bases;
   for(guint i=0;i<edges->len;i++) {
    RelationClass *next=g_ptr_array_index(edges,i);if(next->distance!=G_MAXUINT) continue;
    if(c->distance==max_depth) continue;
@@ -185,5 +190,5 @@ size_t insight_relation_query_transitive(const InsightIndex *index,const char *o
  }
  if(limited) *limited=truncated;
  if(ambiguous) *ambiguous=unclear;
- g_hash_table_unref(scopes);g_free(root_name);g_hash_table_unref(names);g_hash_table_unref(short_names);g_ptr_array_unref(classes);return total;
+ g_hash_table_unref(symbols);g_hash_table_unref(scopes);g_free(root_name);g_hash_table_unref(names);g_hash_table_unref(short_names);g_ptr_array_unref(classes);return total;
 }

@@ -414,7 +414,7 @@ test('Insight workspace watcher', workspace_watch_test)
 
 source_mask_test = executable('test_insight_source_mask', '../insight/tests/source_mask_test.c', '../insight/desktop/source_mask.c', '../insight/core/occurrences.c', '../insight/core/document.c', include_directories: include_directories('../insight/desktop'), dependencies: glib)
 test('Insight source mask', source_mask_test)
-relation_query_test = executable('test_insight_relation_query', '../insight/tests/relation_query_test.c', '../insight/desktop/relation_query.c', '../insight/core/index.c', include_directories: include_directories('../insight/desktop'), dependencies: glib)
+relation_query_test = executable('test_insight_relation_query', '../insight/tests/relation_query_test.c', '../insight/desktop/relation_query.c', '../insight/desktop/type_resolve.c', '../insight/core/index.c', include_directories: include_directories('../insight/desktop'), dependencies: glib)
 test('Insight relation query', relation_query_test)
 keyword_search_test = executable('test_insight_keyword_search', '../insight/tests/keyword_search_test.c', '../insight/desktop/keyword_search.c', '../insight/desktop/context_search.c', include_directories: include_directories('../insight/desktop'), dependencies: glib)
 test('Insight keyword search', keyword_search_test)

@@ -79,5 +79,33 @@ int main(void) {
  g_assert_cmpuint(insight_relation_query_transitive(index,"diamond.D",INSIGHT_RELATION_MEMBERS,32,NULL,NULL,0,out,8,NULL,NULL),==,1);g_assert_cmpstr(out[0]->name,==,"common");
  g_assert_cmpuint(insight_relation_query_transitive(index,"diamond.A",INSIGHT_RELATION_DERIVED,32,NULL,NULL,0,out,8,NULL,NULL),==,3);
  g_assert_cmpuint(insight_relation_query_transitive(index,"n::End",INSIGHT_RELATION_BASES,33,NULL,NULL,0,out,8,NULL,NULL),==,SIZE_MAX);
+ InsightSymbol aliases[]={
+  {"Core",NULL,"aliases","c",1,"","",""},
+  {"Value",NULL,"aliases::Core","m",2,"","int",""},
+  {"First",NULL,"aliases","t",3,"","Core",""},
+  {"Second",NULL,"aliases","t",4,"","First",""},
+  {"Child",NULL,"aliases","c",5,"","","public virtual Second"},
+  {"Leaf",NULL,"aliases","c",6,"","","Child"},
+  {"LoopOne",NULL,"aliases","t",7,"","LoopTwo",""},
+  {"LoopTwo",NULL,"aliases","t",8,"","LoopOne",""},
+  {"LoopChild",NULL,"aliases","c",9,"","","LoopOne"},
+  {"Qualified",NULL,"aliases","c",10,"","","public :: aliases :: Second <int>"},
+  {"Choice",NULL,"aliases","u",11,"","",""},
+  {"choice_member",NULL,"aliases::Choice","m",12,"","",""},
+  {"Color",NULL,"aliases","g",13,"","",""},
+  {"Red",NULL,"aliases::Color","e",14,"","",""},
+  {"space",NULL,"aliases","n",15,"","",""},
+  {"in_space",NULL,"aliases::space","v",16,"","",""}
+ };
+ g_assert_true(insight_index_update(index,"/src/aliases.cpp",aliases,G_N_ELEMENTS(aliases)));
+ g_assert_cmpuint(insight_relation_query_transitive(index,"aliases::Leaf",INSIGHT_RELATION_BASES,32,NULL,NULL,0,out,8,&limited,&ambiguous),==,2);g_assert_false(limited);g_assert_false(ambiguous);
+ g_assert_cmpuint(insight_relation_query_transitive(index,"aliases.Second",INSIGHT_RELATION_DERIVED,32,NULL,NULL,0,out,8,NULL,NULL),==,3);
+ g_assert_cmpuint(insight_relation_query_transitive(index,"aliases::Second",INSIGHT_RELATION_MEMBERS,0,NULL,NULL,0,out,8,NULL,NULL),==,1);g_assert_cmpstr(out[0]->name,==,"Value");
+ g_assert_cmpuint(insight_relation_query_transitive(index,"aliases::LoopChild",INSIGHT_RELATION_BASES,32,NULL,NULL,0,out,8,NULL,&ambiguous),==,0);g_assert_true(ambiguous);
+ g_assert_cmpuint(insight_relation_query_transitive(index,"aliases::LoopOne",INSIGHT_RELATION_MEMBERS,0,NULL,NULL,0,out,8,NULL,&ambiguous),==,0);g_assert_true(ambiguous);
+ g_assert_cmpuint(insight_relation_query_transitive(index,"aliases.Qualified",INSIGHT_RELATION_BASES,32,NULL,NULL,0,out,8,NULL,NULL),==,1);g_assert_cmpstr(out[0]->name,==,"Core");
+ g_assert_cmpuint(insight_relation_query_transitive(index,"aliases.Choice",INSIGHT_RELATION_MEMBERS,0,NULL,NULL,0,out,8,NULL,NULL),==,1);g_assert_cmpstr(out[0]->name,==,"choice_member");
+ g_assert_cmpuint(insight_relation_query_transitive(index,"aliases.Color",INSIGHT_RELATION_MEMBERS,0,NULL,NULL,0,out,8,NULL,NULL),==,1);g_assert_cmpstr(out[0]->name,==,"Red");
+ g_assert_cmpuint(insight_relation_query_transitive(index,"aliases.space",INSIGHT_RELATION_MEMBERS,0,NULL,NULL,0,out,8,NULL,NULL),==,1);g_assert_cmpstr(out[0]->name,==,"in_space");
  insight_index_free(index);g_print("Relation query checks passed\n");return 0;
 }
