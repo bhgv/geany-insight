@@ -23,3 +23,11 @@ Tree keys: Ctrl+F focuses the filter; Ctrl+C copies the full path; Ctrl+Shift+C 
 5. Collapse its branch and press Locate: the file becomes visible while the editor caret remains unchanged.
 
 The question icon opens this page. Help follows the interface language. See [guide.md](guide.md).
+
+## Browse unindexed disk files
+
+The selector above Folders switches between **Project files** and **Browse disk**. Disk browsing starts at the current workspace root each time it is selected. Edit the directory path and press Enter/Refresh, enter a directory by double-click/Enter, or use Up/Alt+Up. F5 refreshes; Ctrl+L focuses the directory path and Ctrl+F the filter (Primary instead of Ctrl on macOS).
+
+Each directory is read in a cancellable background task. Ordinary/unknown file extensions are included without changing membership or indexing rules. Click a file for Context preview; double-click/Enter opens it in the editor. Show hidden disk entries rereads the directory. Links are labelled and are not automatically traversed as directories. There are no move/delete operations here.
+
+The file filter accepts the existing fragments/glob/regex/~fuzzy syntax; directories stay visible for navigation. Invalid queries retain the last valid filter. Filtering applies to the loaded directory only, not a recursive disk search. At most 2048 eligible entries and 100000 enumerated entries are read per directory; the status explicitly reports truncation. Change to a narrower directory to inspect more. Switching paths, refreshing or closing discards superseded tasks. Disk mode does not add/remove files in the project. Virtual project groups remain separate work.

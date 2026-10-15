@@ -1,1 +1,1 @@
-Build Windows x64: Symbol Info function sizes, snapshot-scoped nominal aliases, stable candidate refresh and C/Python/Lua RU/EN GUI coverage.
+Build Windows x64: background unindexed disk browser, Unicode preview/open, membership isolation, filters, hidden files, limits and cancellation GUI.

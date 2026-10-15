@@ -1,0 +1,63 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+#include "geany.h"
+#include "document.h"
+#include "editor.h"
+#include "main.h"
+#include "sciwrappers.h"
+#include "ui_utils.h"
+#include <glib/gstdio.h>
+#include <string.h>
+static gboolean link_created;static GtkWidget *window,*view,*files;static gchar *root,*many;static guint phase,original,step_id,timeout_id;
+static GtkWidget *named(GtkWidget *w,const gchar *name) { if(!g_strcmp0(gtk_widget_get_name(w),name)) return w;if(GTK_IS_MENU_ITEM(w)) { GtkWidget *sub=gtk_menu_item_get_submenu(GTK_MENU_ITEM(w));if(sub) { GtkWidget *found=named(sub,name);if(found) return found; } }if(GTK_IS_CONTAINER(w)) { GList *children=gtk_container_get_children(GTK_CONTAINER(w));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL; }
+static GtkTreePath *row(const gchar *name) { GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));GtkTreeIter iter;for(gboolean valid=gtk_tree_model_get_iter_first(model,&iter);valid;valid=gtk_tree_model_iter_next(model,&iter)) { gchar *value=NULL;gtk_tree_model_get(model,&iter,0,&value,-1);gboolean match=!g_strcmp0(value,name);g_free(value);if(match) return gtk_tree_model_get_path(model,&iter); }return NULL; }
+static gboolean has(const gchar *name) { GtkTreePath *p=row(name);if(!p) return FALSE;gtk_tree_path_free(p);return TRUE; }
+static guint count(void) { return gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),NULL); }
+static void choose(const gchar *name,gboolean open) { GtkTreePath *p=row(name);g_assert_nonnull(p);gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),p);if(open) gtk_tree_view_row_activated(GTK_TREE_VIEW(view),p,gtk_tree_view_get_column(GTK_TREE_VIEW(view),0));gtk_tree_path_free(p); }
+static void manifest(void) { GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(files));g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,1);GtkTreeIter iter;g_assert_true(gtk_tree_model_get_iter_first(model,&iter));gchar *name=NULL;gtk_tree_model_get(model,&iter,0,&name,-1);g_assert_cmpstr(name,==,"indexed.c");g_free(name); }
+static void navigate(const gchar *path) { GtkWidget *entry=named(window,"insight-disk-root");gtk_entry_set_text(GTK_ENTRY(entry),path);g_signal_emit_by_name(entry,"activate"); }
+static gboolean step(gpointer data) {
+ (void)data;static guint previous=G_MAXUINT;if(previous!=phase) { g_printerr("Disk browser GUI phase %u\n",phase);previous=phase; }GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;
+ if(!window) { window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));view=named(window,"insight-disk-files");files=named(window,"insight-project-files");g_assert_nonnull(view); }
+ if(!phase) {
+  if(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(files)),NULL)!=1) return G_SOURCE_CONTINUE;
+  original=doc->id;GtkWidget *mode=named(window,"insight-folder-mode"),*child=mode;while(gtk_widget_get_parent(child) && !GTK_IS_NOTEBOOK(gtk_widget_get_parent(child))) child=gtk_widget_get_parent(child);GtkWidget *book=gtk_widget_get_parent(child);g_assert_true(GTK_IS_NOTEBOOK(book));gtk_notebook_set_current_page(GTK_NOTEBOOK(book),gtk_notebook_page_num(GTK_NOTEBOOK(book),child));gtk_combo_box_set_active(GTK_COMBO_BOX(mode),1);phase++;
+ } else if(phase==1) {
+  if(!has("unindexed-note.xyz") || !has("nested") || !has("заметка.xyz")) return G_SOURCE_CONTINUE;
+  manifest();if(link_created) { GtkTreePath *path=row("link-to-root");g_assert_nonnull(path);GtkTreeIter iter;GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));g_assert_true(gtk_tree_model_get_iter(model,&iter,path));gboolean directory=TRUE,link=FALSE;gtk_tree_model_get(model,&iter,2,&directory,3,&link,-1);g_assert_false(directory);g_assert_true(link);gtk_tree_path_free(path); }g_assert_false(has(".hidden-file"));GtkWidget *query=named(window,"insight-disk-query");gtk_entry_set_text(GTK_ENTRY(query),"~unnt");g_assert_true(has("unindexed-note.xyz"));g_assert_true(has("nested"));gtk_entry_set_text(GTK_ENTRY(query),"absent-disk-name");g_assert_false(has("indexed.c"));guint filtered=count();gtk_entry_set_text(GTK_ENTRY(query),"?[");g_assert_true(gtk_style_context_has_class(gtk_widget_get_style_context(query),"error"));g_assert_cmpuint(count(),==,filtered);gtk_entry_set_text(GTK_ENTRY(query),"");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(window,"insight-disk-hidden")),TRUE);phase++;
+ } else if(phase==2) {
+  if(!has(".hidden-file")) return G_SOURCE_CONTINUE;
+  choose("unindexed-note.xyz",FALSE);g_assert_cmpuint(document_get_current()->id,==,original);ScintillaObject *preview=SCINTILLA(named(window,"insight-context-code"));gchar *text=sci_get_contents(preview,sci_get_length(preview)+1);g_assert_nonnull(strstr(text,"unindexed preview marker"));g_free(text);choose("заметка.xyz",TRUE);phase++;
+ } else if(phase==3) {
+  if(!doc->file_name) return G_SOURCE_CONTINUE;
+  gchar *name=g_path_get_basename(doc->file_name);gboolean correct=!strcmp(name,"заметка.xyz");g_free(name);if(!correct) return G_SOURCE_CONTINUE;
+  manifest();choose("nested",TRUE);phase++;
+ } else if(phase==4) {
+  if(!has("outside.c")) return G_SOURCE_CONTINUE;
+  g_assert_false(has("indexed.c"));gtk_button_clicked(GTK_BUTTON(named(window,"insight-disk-up")));phase++;
+ } else if(phase==5) {
+  if(!has("unindexed-note.xyz")) return G_SOURCE_CONTINUE;
+  gchar *missing=g_build_filename(root,"no-such-directory",NULL);navigate(missing);g_free(missing);phase++;
+ } else if(phase==6) {
+  if(!strstr(gtk_label_get_text(GTK_LABEL(named(window,"insight-disk-status"))),"Cannot browse directory:")) return G_SOURCE_CONTINUE;
+  g_assert_cmpuint(count(),==,0);navigate(root);navigate(many);phase++;
+ } else if(phase==7) {
+  if(count()!=2048) return G_SOURCE_CONTINUE;
+  g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(named(window,"insight-disk-status"))),"limit reached"));gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-ru")),TRUE);g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(named(window,"insight-disk-status"))),"достигнут предел"));gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-en")),TRUE);g_assert_cmpuint(count(),==,2048);manifest();navigate(root);phase++;
+ } else if(phase==8) {
+  if(!has("unindexed-note.xyz")) return G_SOURCE_CONTINUE;
+  gtk_combo_box_set_active(GTK_COMBO_BOX(named(window,"insight-folder-mode")),0);manifest();gtk_combo_box_set_active(GTK_COMBO_BOX(named(window,"insight-folder-mode")),1);navigate(many);
+  g_print("Disk browser GUI: unindexed/Unicode files, preview without editor navigation, open without membership mutation, folder/up navigation, fuzzy/invalid filters, hidden files, limits, supersession and pending shutdown passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+ }
+ return G_SOURCE_CONTINUE;
+}
+static gboolean timeout(gpointer data) { (void)data;g_error("Disk browser GUI timeout phase %u",phase);return G_SOURCE_REMOVE; }
+static gboolean drained(gpointer data) { g_main_loop_quit(data);return G_SOURCE_REMOVE; }
+int main(void) {
+ if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;
+ gchar *cwd=g_get_current_dir(),*name=g_strdup_printf("disk-browser-%u",g_random_int());root=g_build_filename(cwd,name,NULL);gchar *profile=g_build_filename(root,"profile",NULL),*nested=g_build_filename(root,"nested",NULL),*project=g_build_filename(root,"test.geany",NULL),*config=g_build_filename(profile,"geany.conf",NULL);many=g_build_filename(root,"many",NULL);g_assert_cmpint(g_mkdir_with_parents(profile,0700),==,0);g_assert_cmpint(g_mkdir(nested,0700),==,0);g_assert_cmpint(g_mkdir(many,0700),==,0);
+ g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));g_assert_true(g_file_set_contents(project,"[project]\nname=Disk browser GUI\nbase_path=.\n[insight-project-files]\nversion=1\nautomatic=false\nexclude-masks=\nfiles=indexed.c;\ntrees=\nexcluded-files=\nexcluded-trees=\n",-1,NULL));
+ const gchar *paths[]={"indexed.c","unindexed-note.xyz","заметка.xyz",".hidden-file","nested/outside.c"},*texts[]={"int indexed;\n","unindexed preview marker\n","Unicode browser marker\n","hidden\n","int outside;\n"};for(guint i=0;i<G_N_ELEMENTS(paths);i++) { gchar *path=g_build_filename(root,paths[i],NULL);g_assert_true(g_file_set_contents(path,texts[i],-1,NULL));g_free(path); }
+ gchar *link=g_build_filename(root,"link-to-root",NULL);GFile *link_file=g_file_new_for_path(link);GError *error=NULL;link_created=g_file_make_symbolic_link(link_file,root,NULL,&error);g_clear_error(&error);g_object_unref(link_file);g_free(link);
+ for(guint i=0;i<2050;i++) { gchar *base=g_strdup_printf("item-%04u.bin",i),*path=g_build_filename(many,base,NULL);g_assert_true(g_file_set_contents(path,"",0,NULL));g_free(base);g_free(path); }
+ gchar *argv[]={"disk-browser-gui","--new-instance","--no-session","--config",profile,project,NULL};step_id=g_timeout_add(250,step,NULL);timeout_id=g_timeout_add_seconds(35,timeout,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);gint result=main_lib(6,argv);if(g_main_context_find_source_by_id(NULL,step_id)) g_source_remove(step_id);if(g_main_context_find_source_by_id(NULL,timeout_id)) g_source_remove(timeout_id);GMainLoop *drain=g_main_loop_new(NULL,FALSE);g_timeout_add(250,drained,drain);g_main_loop_run(drain);g_main_loop_unref(drain);g_free(cwd);g_free(name);g_free(root);g_free(many);g_free(profile);g_free(nested);g_free(project);g_free(config);return result;
+}

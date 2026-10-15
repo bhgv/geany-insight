@@ -213,6 +213,8 @@ libgeany_la_SOURCES += \
 	insight-template-fields.c \
 	insight-template-fields.h \
 	insight-relation-tree.c \
+	insight-disk-browser.c \
+	insight-disk-browser.h \
 	insight-relation-tree.h \
 	insight-relation-graph.c \
 	insight-relation-graph.h \

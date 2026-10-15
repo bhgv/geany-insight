@@ -781,3 +781,15 @@ Master file list changed since its snapshot	Master File List изменился 
 Prefix with ~ for fuzzy subsequence matching	Начните с ~ для нечёткого поиска по подпоследовательности
 \nNominal type: %s (alias hops: %u)	\nНоминальный тип: %s (переходов alias: %u)
 \nFunction size (lines): %lu (range %lu-%lu; lexical body)	\nРазмер функции (строк): %lu (диапазон %lu-%lu; лексические границы)
+Browse disk	Просмотр диска
+Up	Вверх
+Link	Ссылка
+Disk file or folder	Файл или каталог диска
+Filter disk files…	Фильтр файлов диска…
+Show hidden disk entries	Показывать скрытые файлы диска
+Choose a disk directory	Выберите каталог диска
+Reading directory…	Чтение каталога…
+Cannot browse directory: %s	Не удалось прочитать каталог: %s
+Disk entries: %u%s	Элементов на диске: %u%s
+ (directory limit reached)	 (достигнут предел каталога)
+Filter loaded files: fragments, glob, ?regex or ~fuzzy; folders stay visible	Фильтр прочитанных файлов: фрагменты, маска, ?regex или ~fuzzy; каталоги остаются видимыми

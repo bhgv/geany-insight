@@ -534,3 +534,6 @@ test('Insight background master file list synchronization', master_sync_test)
 
 master_list_gui_test = executable('test_insight_master_list_gui', '../insight/tests/master_list_gui_test.c', dependencies: test_deps)
 test('Insight master file list project GUI', master_list_gui_test, timeout: 55)
+
+disk_browser_gui_test = executable('test_insight_disk_browser_gui', '../insight/tests/disk_browser_gui_test.c', dependencies: test_deps)
+test('Insight unindexed disk browser GUI', disk_browser_gui_test, timeout: 45)
