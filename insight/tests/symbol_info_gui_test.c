@@ -36,6 +36,21 @@ static void show_info(GeanyDocument *doc,const gchar *word) {
  GtkWidget *command=named(window,"insight-symbol-info-command");g_assert_nonnull(command);gtk_menu_item_activate(GTK_MENU_ITEM(command));
 }
 static gchar *details(GtkWidget *info) { GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(named(info,"insight-symbol-info-details")));GtkTextIter first,last;gtk_text_buffer_get_bounds(buffer,&first,&last);return gtk_text_buffer_get_text(buffer,&first,&last,FALSE); }
+static void nominal_sizes(void) {
+ const gchar *code="struct MetricStruct {\n const char *value = \"}\";\n};\nclass MetricClass {\npublic:\n void method() {}\n};\nunion MetricUnion { int x; double y; };\nenum class MetricEnum {\n One, Two\n};\nnamespace MetricSpace {\n struct Item {};\n}\nclass ForwardOnly;\nstruct SameFirst {}; struct SameSecond {};\n";
+ GeanyDocument *doc=document_new_file(NULL,filetypes_lookup_by_name("C++"),code);g_assert_nonnull(doc);
+ const gchar *names[]={"MetricStruct","MetricClass","MetricUnion","MetricEnum","MetricSpace"};const guint sizes[]={3,4,1,3,3};
+ for(guint i=0;i<G_N_ELEMENTS(names);i++) {
+  show_info(doc,names[i]);GtkWidget *info=info_window();gchar *metadata=details(info),*expected=g_strdup_printf("Definition size (lines): %u",sizes[i]);g_test_message("%s",metadata);g_assert_nonnull(strstr(metadata,expected));g_free(expected);g_free(metadata);
+  if(!i) { gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-ru")),TRUE);click(info,"Обновить");metadata=details(info);g_assert_nonnull(strstr(metadata,"Размер определения (строк): 3"));g_free(metadata);gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-en")),TRUE);click(info,"Refresh"); }
+  g_assert_false(SSM(doc->editor->sci,SCI_CANUNDO,0,0));click(info,"Close");
+ }
+ gchar *unchanged=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1);g_assert_cmpstr(unchanged,==,code);g_free(unchanged);
+ const gchar *unknown[]={"ForwardOnly","SameSecond"};for(guint i=0;i<G_N_ELEMENTS(unknown);i++) { show_info(doc,unknown[i]);GtkWidget *info=info_window();gchar *metadata=details(info);g_assert_null(strstr(metadata,"Definition size (lines):"));g_free(metadata);click(info,"Close"); }
+ document_set_text_changed(doc,FALSE);g_assert_true(document_close(doc));
+ doc=document_new_file(NULL,filetypes_lookup_by_name("Java"),"public interface MetricInterface {\n void call();\n}\n");g_assert_nonnull(doc);show_info(doc,"MetricInterface");GtkWidget *java_info=info_window();gchar *java_metadata=details(java_info);g_test_message("%s",java_metadata);g_assert_nonnull(strstr(java_metadata,"Definition size (lines): 3"));g_free(java_metadata);click(java_info,"Close");document_set_text_changed(doc,FALSE);g_assert_true(document_close(doc));
+ doc=document_new_file(NULL,filetypes_lookup_by_name("Python"),"class MetricPython:\n    \"\"\"body\"\"\"\n    def method(self):\n        return 1\n\nnext_value = 2\n");g_assert_nonnull(doc);show_info(doc,"MetricPython");GtkWidget *info=info_window();gchar *metadata=details(info);g_test_message("%s",metadata);g_assert_nonnull(strstr(metadata,"Definition size (lines): 4"));g_free(metadata);click(info,"Close");document_set_text_changed(doc,FALSE);g_assert_true(document_close(doc));
+}
 static gboolean cancel_dialog(gpointer data) {
  (void)data;GList *windows=gtk_window_list_toplevels();GtkWidget *dialog=NULL;
  for(GList *p=windows;p;p=p->next) if(GTK_IS_MESSAGE_DIALOG(p->data) || GTK_IS_FILE_CHOOSER(p->data)) { dialog=p->data;break; }
@@ -61,6 +76,7 @@ static gboolean step(gpointer data) {
   if(found<0) return G_SOURCE_CONTINUE;
   g_assert_cmpint(declaration,>=,0);gtk_combo_box_set_active(choice,declaration);gchar *metadata=details(info);g_assert_null(strstr(metadata,"Function size (lines):"));g_free(metadata);gtk_combo_box_set_active(choice,found);click(info,"Refresh");metadata=details(info);g_assert_nonnull(strstr(metadata,external));g_assert_nonnull(strstr(metadata,"Function size (lines): 1"));g_free(metadata);g_assert_null(document_find_by_filename(external));click(info,"Leave file open");g_assert_nonnull(document_find_by_filename(external));g_assert_cmpuint(document_get_current()->id,==,primary_id);g_assert_false(gtk_widget_get_sensitive(button(info,"Leave file open")));gtk_entry_set_text(GTK_ENTRY(named(info,"insight-symbol-info-query")),"alias_object");click(info,"Refresh");metadata=details(info);g_assert_nonnull(strstr(metadata,"Nominal type: InfoCell (alias hops: 1)"));g_assert_null(strstr(metadata,"Function size (lines):"));g_free(metadata);click(info,"Close");phase++;
  } else if(phase==2) {
+  nominal_sizes();
   doc=document_new_file(NULL,filetypes_lookup_by_name("C"),"int ephemeral(int n) {\n return n + 1;\n}\n");g_assert_nonnull(doc);untitled_id=doc->id;show_info(doc,"ephemeral");
   GtkWidget *info=info_window();GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(named(info,"insight-symbol-info-details")));GtkTextIter first,last;gtk_text_buffer_get_bounds(buffer,&first,&last);gchar *text=gtk_text_buffer_get_text(buffer,&first,&last,FALSE);g_assert_nonnull(strstr(text,"untitled:"));g_assert_nonnull(strstr(text,"Function size (lines): 3"));g_free(text);g_assert_false(gtk_widget_get_sensitive(button(info,"Leave file open")));
   SSM(doc->editor->sci,SCI_APPENDTEXT,11,(sptr_t)"// changed\n");document_set_text_changed(doc,TRUE);gint position=sci_get_current_position(doc->editor->sci);click(info,"Jump");g_assert_true(gtk_widget_get_visible(info));g_assert_cmpint(sci_get_current_position(doc->editor->sci),==,position);g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(named(info,"insight-symbol-info-status"))),"Source changed"));

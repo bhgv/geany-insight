@@ -18,6 +18,13 @@ typedef enum { INSIGHT_FUNCTION_BRACES,INSIGHT_FUNCTION_PYTHON,INSIGHT_FUNCTION_
 int insight_function_range(const char *,const char *,size_t,size_t,InsightFunctionStyle,size_t *,size_t *);
 int insight_suite_range(const char *,const char *,size_t,size_t,InsightFunctionStyle,size_t *,size_t *);
 int insight_select_suite(const char *,const char *,size_t,size_t,size_t,InsightFunctionStyle,size_t *,size_t *);
+/* Conservative named class/struct/union/enum/namespace/interface definition.
+ * Starts at a parser declaration line, verifies keyword/name, and rejects
+ * forwards, aliases, earlier same-line definitions and incomplete bodies.
+ * Brace headers are bounded to 16 KiB / 128 groups / 64 template levels.
+ * Python supports class suites; Lua has no nominal declaration here.
+ * Returns 1/0/-1 as above; this is a lexical range, not a semantic AST. */
+int insight_nominal_range(const char *,const char *,size_t,size_t,const char *,const char *,InsightFunctionStyle,size_t *,size_t *);
 /* Find the closest strictly preceding/following position; input may be unsorted. */
 int insight_neighbor_position(const size_t *,size_t,size_t,int,size_t *);
 /* Lexical identifier followed by optional whitespace and an opening parenthesis.

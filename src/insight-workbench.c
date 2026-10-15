@@ -3897,6 +3897,15 @@ static void info_choice(GtkComboBox *combo,gpointer data) {
    }
    g_free(mask);
   }
+  guint tag_type=insight_symbol_kind_type(info->path,kind,filetype);
+  const gchar *nominal=tag_type&tm_tag_class_t ? "class" : tag_type&tm_tag_struct_t ? "struct" : tag_type&tm_tag_union_t ? "union" : tag_type&tm_tag_enum_t ? "enum" : tag_type&tm_tag_namespace_t ? "namespace" : tag_type&tm_tag_interface_t ? "interface" : NULL;
+  if(nominal && source_dialect(filetype,&dialect) && (dialect==INSIGHT_CODE_C || dialect==INSIGHT_CODE_PYTHON)) {
+   gsize length=strlen(text),start=(gsize)sci_get_position_from_line(code,info->line-1),body=0,end=0;gchar *mask=insight_source_code_mask(text,length,dialect,NULL);
+   if(mask && insight_nominal_range(text,mask,length,start,info->name,nominal,function_style(dialect),&body,&end)==1 && end>start) {
+    gulong last=(gulong)sci_get_line_from_position(code,(gint)end-1)+1;gchar *metrics=insight_i18n_printf("\nDefinition size (lines): %lu (range %lu-%lu; lexical body)",last-info->line+1,info->line,last);g_string_append(description,metrics);g_free(metrics);
+   }
+   g_free(mask);
+  }
   info->digest=source_digest(text);SSM(code,SCI_GOTOLINE,info->line-1,0);gtk_widget_set_sensitive(info->jump,TRUE);gtk_widget_set_sensitive(info->leave,info_document(info->path)==NULL && !g_str_has_prefix(info->path,"@buffer:"));
   gchar *status=g_strdup_printf("%d candidates • tag-based information • source snapshot",gtk_tree_model_iter_n_children(GTK_TREE_MODEL(info->model),NULL));gtk_label_set_text(GTK_LABEL(info->status),status);g_free(status);
   if(info->center) g_source_remove(info->center);

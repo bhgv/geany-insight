@@ -308,3 +308,4 @@ EXTRA_DIST += insight/tests/bookmark_selection_gui_test.c \
 EXTRA_DIST += insight/tests/reference_regions_gui_test.c
 
 EXTRA_DIST += insight/tools/import_source_insight_themes.py insight/tests/themes_gui_test.c insight/tests/theme_assets_test.py
+EXTRA_DIST += insight/tests/nominal_range_test.c

@@ -712,3 +712,4 @@ Bookmark Options (Ctrl+Q in Bookmarks)|||Параметры закладок (Ct
 Workbench settings are invalid or too large|||Настройки интерфейса повреждены или слишком велики
 Workbench settings not saved|||Настройки интерфейса не сохранены
 Preserve bookmarks between sessions|||Сохранять закладки между сеансами
+\nDefinition size (lines): %lu (range %lu-%lu; lexical body)|||\nРазмер определения (строк): %lu (диапазон %lu-%lu; лексические границы)

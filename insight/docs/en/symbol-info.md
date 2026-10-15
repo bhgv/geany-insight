@@ -17,3 +17,20 @@ Validation: native Linux editor build and the real-editor GUI test passed: metad
 Size behavior follows [Symbol Info in the Source Insight guide](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Symbol_Info.htm), with explicit lexical limits.
 
 C/C++ callable result metadata uses the same resolver as Context: a dependent template parameter does not select a global class, while explicit `::T` and ordinary results retain their nominal type. Template argument deduction remains open.
+
+## Named definition size
+
+Symbol Info also shows Definition size (lines) for complete named classes,
+structs, unions, enums, interfaces and namespaces in C/C++/C#/Java lexical
+buffers, and for Python class suites. The range starts at the parser's
+definition line and ends at the closing body delimiter or suite. Open unsaved
+and untitled buffers use their current text. Existing function-size display
+is unchanged. These are lexical source spans, not complexity measurements.
+
+The header must match both the symbol name and declaration kind. Forward
+declarations, namespace aliases, incomplete bodies, unknown header syntax and
+a later declaration on the same parser line keep size unknown. Supported
+headers include common modifiers, scoped enums, C++ template prefixes and
+base clauses; macros/attributes and specialized syntax may still decline.
+JavaScript/TypeScript nominal sizes are deferred because their lexical mask
+does not yet cover all regular-expression literals.

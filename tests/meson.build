@@ -590,3 +590,6 @@ test('Insight bookmark session option restore GUI', bookmark_selection_gui_test,
 test('Insight project bookmark session cleanup GUI', project_bookmarks_gui_test, timeout: 60, env: ['GEANY_TEST_BOOKMARK_PRESERVE_OFF=1'])
 test('Insight bookmark session external-change guard GUI', project_bookmarks_gui_test, timeout: 60, env: ['GEANY_TEST_BOOKMARK_PRESERVE_OFF=1', 'GEANY_TEST_BOOKMARK_PRESERVE_EXTERNAL=1'])
 test('Insight bookmark session failed-cleanup GUI', project_bookmarks_gui_test, timeout: 60, env: ['GEANY_TEST_BOOKMARK_PRESERVE_OFF=1', 'GEANY_TEST_BOOKMARK_PRESERVE_FAILURE=1'])
+
+nominal_range_test = executable('test_insight_nominal_range', '../insight/tests/nominal_range_test.c', '../insight/core/structure_select.c', '../insight/desktop/source_mask.c', dependencies: glib)
+test('Insight nominal definition ranges', nominal_range_test)

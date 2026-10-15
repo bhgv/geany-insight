@@ -1826,3 +1826,27 @@ https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Bookmark
 Final validation: 11 focused Linux checks passed (one core and ten GUI cases,
 including a fresh editor subprocess). All five modified C files also compiled
 with warnings treated as errors. No Windows build-request marker was changed.
+
+
+### Symbol Info size for named type/container definitions
+
+Added conservative lexical ranges for class/struct/union/enum/namespace/interface
+definitions and Python class suites. Symbol Info overlays the resulting line
+span on its retained source preview, including unsaved/untitled buffers. It
+checks the source keyword and exact name before measuring, rejects forward/alias/
+incomplete and later same-line declarations, and does not cross an initially
+blank parser line. Common modifiers, enum class, template prefixes, base lists
+and nested parentheses are supported with header/group/template bounds. JS/TS
+nominal sizes are intentionally deferred until regex masking is complete.
+
+Seven focused Linux checks passed: source masking, structural selection, nominal
+ranges, Symbol Info/Window List, type-alias Context and Python navigation core/GUI.
+After the final initial-line guard and Java interface fixture, the nominal core
+and Symbol Info GUI checks passed again. Tests include comments/strings, CRLF,
+nested/template headers, same-line owners, forwards, incomplete definitions,
+Python docstrings/suites, all C++ nominal kinds, Java interfaces, Russian labels,
+unchanged source text and Undo. Windows GUI remains deferred. Reference:
+https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Symbol_Info.htm
+
+All four changed/new C sources compiled with -Werror. Additional nominal-range
+fixtures cover Cyrillic identifiers; the focused core check passed.

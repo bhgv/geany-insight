@@ -17,7 +17,7 @@
 | Relation Window | Определения/объявления, прямые члены scope, прямые/транзитивные Base/Derived и наследуемые члены по однозначным тегам, лексические ссылки, Calls текущей функции и Call sites проекта, Follow symbol / enclosing function, граф одного уровня с масштабом и двумя ориентациями, ленивое tag-дерево и раскрываемый граф с историей веток и пределами, scoped nominal aliases корней/баз/членов | Семантические вызовы/вызывающие функции, полные типы/перегрузки и include semantics, многоуровневые вызовы/ссылки |
 | Overview Scroller | Цветная миниатюра файла, видимая область/выделение, прокрутка мышью и колесом, масштаб/ширина, сохранение параметров, отметки закладок и изменённых/сохранённых строк, переходы по блокам правок, текущая/все функции с фоновыми лексическими границами; проверен GUI Linux | Семантические диапазоны и дополнительные языки за пределами brace/Python/Lua |
 | Панели | Десять отдельных float/dock и сохранение геометрии | Произвольное перетаскивание и snap-to-edge |
-| Symbol Info | Отдельное окно: кандидаты, сведения тегов, цветной исходник, Jump с проверкой снимка, References, Leave file open и копирование, размер завершённых функций, nominal-типы aliases из снимка, устойчивый Refresh и RU/EN GUI | Размеры не-функциональных символов и типы произвольных выражений; сложность не подтверждена как требование команды Symbol Info |
+| Symbol Info | Отдельное окно: кандидаты, сведения тегов, цветной исходник, Jump с проверкой снимка, References, Leave file open и копирование, размер завершённых функций и именованных определений C-семейства/Python, nominal-типы aliases из снимка, устойчивый Refresh и RU/EN GUI | Размеры остальных символов/синтаксисов и типы произвольных выражений; сложность не подтверждена как требование команды Symbol Info |
 | Window List | Немодальный список открытых буферов, поиск, MRU/имя/путь, ближайший символ, Context, Activate/Save/Close, сохранение геометрии/фильтра/сортировки/колонок; закрепление в sidebar и видимость/docking/геометрия в A–D, миграция раскладок; проверен GUI Linux | Перетаскивание, snap-to-edge |
 | Раскладки A–D | Пользовательские снимки и восстановление | Детальная сверка всех параметров окон |
 | Bookmarks / Clips | Постоянное хранилище, навигация, вставка и редактирование Clips, переименование, импорт/экспорт выбранной панели, относительные пути проекта при переносе закладок; движущиеся маркеры и смещение от функции/класса с native/GUI-проверкой | XML Source Insight; перенос при переименовании самого символа |
@@ -111,7 +111,7 @@ https://www.sourceinsight.com/doc/v4/userguide/index.html . Старые зап�
 | [Controlling Syntax Formatting](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Controlling_Syntax_Formatting.htm) | Временный Mono Font View; отдельный color-only режим | Реализованы Mono Font View, color-only, grayscale и отключение оформления; 4 GUI-сценария, RU/EN, восстановление raw-стилей и настроек |
 | [Predefined Path Variables](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Predefined_Path_Variables.htm) | Именованные пути в настройках и командах | Подмножество уже работает в Master File List. Все контексты и все predefined names ещё не покрыты |
 | [Lookup References](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Lookup_References.htm) | Smart Reference Matching, inactive-code и comment-only фильтры | Доступны All text, Skip comments, Comments only и Code only; проверены точные позиции, история и сохранение настроек. Лексические фильтры C/C++, JS, Python, Lua, Shell. Семантическая идентичность всех ссылок и условия препроцессора ещё не перенесены |
-| [Symbol Info](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Symbol_Info.htm) | Сведения определения, исходник, размер при наличии, Jump/References/Leave open | Основные действия и размер функции проверены GUI; неизвестные типы и другие виды размеров остаются ограниченными |
+| [Symbol Info](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Symbol_Info.htm) | Сведения определения, исходник, размер при наличии, Jump/References/Leave open | Основные действия, размеры функций и именованных определений проверены GUI; неизвестные типы и остальные синтаксисы остаются ограниченными |
 | Макросы и команды | Совместимость с документированными SI макросами и полным каталогом команд | Lua — отдельное расширение, не совместимый интерпретатор ISL. Полная совместимость не заявляется |
 | Окна и платформы | Все виды окон, клавиатура, drag/dock, проверка ОС | Частичная реализация и Linux GUI; Windows x64 и APK не запускать без отдельного указания пользователя |
 
@@ -225,3 +225,16 @@ Clips and exports, checks content digests plus native etags, and retains stores
 on failed cleanup. Unvisited stores and crash recovery are outside cleanup.
 Core and Linux GUI checks cover toggling/rollback, project switches, cancelled
 exit, actual subprocess restart, external changes and failed cleanup.
+
+
+### Symbol Info named definition ranges (2026-10-16)
+
+Named class/struct/union/enum/namespace/interface bodies now show lexical line
+size in C-family buffers; Python classes use suite indentation. The source
+header must match name and kind on the parser line. Forwards, aliases, missing
+ends and later same-line declarations decline. Headers are bounded to 16 KiB,
+128 groups and 64 template levels. JavaScript/TypeScript nominal sizes remain
+deferred until their regex masking is complete. Core and native Linux GUI
+cover C++ kinds, Java interfaces, Python classes, RU/EN, unchanged source/Undo
+and stale/ambiguous declarations. Full expression types and AST metrics remain
+outside this change.

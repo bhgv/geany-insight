@@ -209,6 +209,58 @@ int insight_function_range(const char *text,const char *mask,size_t length,size_
 int insight_suite_range(const char *text,const char *mask,size_t length,size_t declaration,InsightFunctionStyle style,size_t *body,size_t *last) {
  return function_range_impl(text,mask,length,declaration,style,body,last,1);
 }
+static size_t nominal_space(const char *mask,size_t length,size_t at) { while(at<length && (horizontal(mask[at]) || mask[at]=='\n')) at++;return at; }
+static size_t nominal_word(const char *mask,size_t length,size_t at) { while(at<length && word_char((unsigned char)mask[at])) at++;return at; }
+int insight_nominal_range(const char *text,const char *mask,size_t length,size_t declaration,const char *name,const char *keyword,InsightFunctionStyle style,size_t *body,size_t *last) {
+ if(!text || !mask || !name || !*name || strlen(name)>1024 || !keyword || !body || !last || declaration>=length || length>2u*1024u*1024u || style<INSIGHT_FUNCTION_BRACES || style>INSIGHT_FUNCTION_LUA) return -1;
+ const char *kinds[]={"class","struct","union","enum","namespace","interface"};int known=0;
+ for(size_t k=0;k<sizeof kinds/sizeof kinds[0];k++) if(!strcmp(keyword,kinds[k])) known=1;
+ if(!known || style==INSIGHT_FUNCTION_LUA) return 0;
+ size_t limit=length-declaration>16384 ? declaration+16384 : length,at=declaration,groups=0;
+ while(at<limit && horizontal(mask[at])) at++;
+ if(style==INSIGHT_FUNCTION_BRACES) {
+  for(;;) {
+   if(at>=limit) return 0;
+   if(mask[at]=='[') { size_t first,end;if(++groups>128 || insight_select_match(mask,limit,at,&first,&end)!=1) return 0;at=nominal_space(mask,limit,end);continue; }
+   size_t end=nominal_word(mask,limit,at);if(word_is(mask,at,end,keyword)) { at=end;break; }
+   if(word_is(mask,at,end,"template")) {
+    at=nominal_space(mask,limit,end);if(at==limit || mask[at]!='<') return 0;unsigned depth=1;at++;
+    while(at<limit && depth) { if(mask[at]=='<') { if(++depth>64) return 0; }else if(mask[at]=='>') depth--;else if(mask[at]==';' || mask[at]=='{') return 0;else if(mask[at]=='(' || mask[at]=='[') { size_t first,finish;if(++groups>128 || insight_select_match(mask,limit,at,&first,&finish)!=1) return 0;at=finish;continue; }at++; }
+    if(depth) return 0;
+    at=nominal_space(mask,limit,at);continue;
+   }
+   const char *prefixes[]={"typedef","inline","export","default","public","protected","private","internal","abstract","sealed","static","partial","readonly","ref","unsafe","final","strictfp"};int prefix=0;
+   for(size_t k=0;k<sizeof prefixes/sizeof prefixes[0];k++) if(word_is(mask,at,end,prefixes[k])) prefix=1;
+   if(!prefix) return 0;
+   at=nominal_space(mask,limit,end);
+  }
+ }else {
+  if(strcmp(keyword,"class")) return 0;
+  size_t end=nominal_word(mask,limit,at);if(!word_is(mask,at,end,"class")) return 0;at=end;
+ }
+ at=nominal_space(mask,limit,at);
+ if(!strcmp(keyword,"enum")) { size_t end=nominal_word(mask,limit,at);if(word_is(mask,at,end,"class") || word_is(mask,at,end,"struct")) at=nominal_space(mask,limit,end); }
+ size_t begin=at,end=nominal_word(mask,limit,at);if(begin==end) return 0;
+ if(!strcmp(keyword,"namespace")) while(end+1<limit && mask[end]==':' && mask[end+1]==':') { begin=end+2;end=nominal_word(mask,limit,begin);if(begin==end) return 0; }
+ if(end-begin!=strlen(name) || memcmp(mask+begin,name,end-begin)) return 0;
+ if(style==INSIGHT_FUNCTION_PYTHON) return insight_suite_range(text,mask,length,declaration,style,body,last);
+ unsigned angle=0;int bases=0;
+ for(at=end;at<limit;) {
+  if(mask[at]=='=' || mask[at]==';' || mask[at]=='}') return 0;
+  if(mask[at]=='{') { size_t first,finish;if(insight_select_match(mask,length,at,&first,&finish)!=1) return 0;if(!angle) { *body=at+1;*last=finish;return 1; }if(++groups>128 || finish>limit) return 0;at=finish;continue; }
+  if(mask[at]=='(' || mask[at]=='[') { size_t first,finish;if(++groups>128 || insight_select_match(mask,limit,at,&first,&finish)!=1) return 0;at=finish;continue; }
+  if(mask[at]=='<') { if(++angle>64) return 0;at++;continue; }
+  if(mask[at]=='>') { if(!angle) return 0;angle--;at++;continue; }
+  if(mask[at]==':' && !angle) bases=1;
+  if(word_char((unsigned char)mask[at])) {
+   end=nominal_word(mask,limit,at);
+   if(!angle && !bases && !word_is(mask,at,end,"final")) { if(word_is(mask,at,end,"extends") || word_is(mask,at,end,"implements") || word_is(mask,at,end,"where")) bases=1;else return 0; }
+   at=end;continue;
+  }
+  at++;
+ }
+ return 0;
+}
 int insight_select_suite(const char *text,const char *mask,size_t length,size_t begin,size_t end,InsightFunctionStyle style,size_t *first,size_t *last) {
  if(!text || !mask || !first || !last || begin>end || end>length || style<INSIGHT_FUNCTION_BRACES || style>INSIGHT_FUNCTION_LUA) return -1;
  if(style==INSIGHT_FUNCTION_BRACES) return insight_select_block(mask,length,begin,end,first,last);
