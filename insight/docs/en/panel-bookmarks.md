@@ -32,3 +32,31 @@ merge and project-relative export. Capture uses current parser generations;
 explicit navigation/close can refresh a bookmarked buffer up to 2 MiB. Live
 markers still track ordinary editing. Arbitrary edits inside a function may
 change the meaning of its saved offset; this is not semantic change tracking.
+
+## Project store and keyboard
+
+Each project uses `<project file>.bookmarks.conf` beside its project file, with
+paths relative to the source root. With no project open, bookmarks use the global
+`insight/notes.conf`; global clips in that file remain independent. This is Geany
+Insight's own INI format, not Source Insight XML.
+
+The label identifies the active store. Reload bookmarks reads external changes
+without first overwriting the file. A damaged store blocks writes until repaired
+and reloaded. If moving bookmarks cannot be saved while changing projects, the
+old store stays in memory, is identified as unsaved and blocks editing. Export
+can preserve it. Reload refuses to discard unsaved data.
+
+Columns show name, file, containing symbol and line. Filtering also matches the
+symbol name. Symbol anchors retain function/class-relative offsets across source
+edits; ambiguous or missing source text does not trigger a guessed jump.
+
+- Enter in an empty field creates A, B, …, Z, A1, B1, … using an unused name.
+- Enter in the list or Go to activates the selected bookmark.
+- Ctrl+N adds a bookmark or updates the entered name.
+- Ctrl+X deletes the selected bookmark.
+- Ctrl+O / Ctrl+S open import / export.
+
+A project change during a modal operation prevents writing into the new store.
+Failed add/delete/rename operations retain the old list and editor markers.
+Source Insight XML import and selected-row-only export remain unimplemented;
+import/export uses the native format and exports the list.

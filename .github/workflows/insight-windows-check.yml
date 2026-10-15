@@ -121,7 +121,7 @@ jobs:
           set -e
           mkdir -p _win-gui
           trap 'rm -f portable/bin/test_insight_*_gui.exe' EXIT
-          for name in menu_alignment symbol_navigation symbol_locate grouped_project relation_transitive symbol_scopes indented_functions relation_tree relation_graph relation_tree_graph type_alias context_links python_context python_imports python_series panel_geometry snippet template_fields project_templates master_list symbol_info disk_browser bookmark_anchors formatting panels; do
+          for name in menu_alignment symbol_navigation symbol_locate grouped_project relation_transitive symbol_scopes indented_functions relation_tree relation_graph relation_tree_graph type_alias context_links python_context python_imports python_series panel_geometry snippet template_fields project_templates project_bookmarks master_list symbol_info disk_browser bookmark_anchors formatting panels; do
             cp "_build/tests/test_insight_${name}_gui.exe" portable/bin/
             (cd _win-gui && GEANY_RUN_GUI_TESTS=1 DISPLAY=win32 GDK_BACKEND=win32 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 "../portable/bin/test_insight_${name}_gui.exe")
             if [ "$name" = panels ]; then

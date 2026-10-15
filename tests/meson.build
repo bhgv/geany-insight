@@ -566,3 +566,6 @@ test('Insight syntax formatting Russian GUI', formatting_gui_test, timeout: 50, 
 
 symbol_navigation_gui_test = executable('test_insight_symbol_navigation_gui', '../insight/tests/symbol_navigation_gui_test.c', dependencies: test_deps)
 test('Insight symbol preview and editor navigation GUI', symbol_navigation_gui_test, timeout: 50)
+
+project_bookmarks_gui_test = executable('test_insight_project_bookmarks_gui', '../insight/tests/project_bookmarks_gui_test.c', dependencies: test_deps)
+test('Insight project bookmark stores GUI', project_bookmarks_gui_test, timeout: 55)

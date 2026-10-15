@@ -830,3 +830,13 @@ Size	Размер
 Sort: directory	Сортировка: каталог
 Sort: size	Сортировка: размер
 Project-relative file	Файл относительно проекта
+Global bookmarks (no project)	Общие закладки (проект не открыт)
+Project bookmarks: %s	Закладки проекта: %s
+Project bookmarks unavailable: %s	Закладки проекта недоступны: %s
+Previous bookmark store (unsaved)	Прежнее хранилище закладок (не сохранено)
+Reload bookmarks	Перечитать закладки
+Project bookmarks unavailable; repair or reload the store	Закладки проекта недоступны; исправьте или перечитайте хранилище
+Bookmark store changed; try the operation again	Хранилище закладок изменилось; повторите действие
+Unsaved bookmarks remain in memory; export them before reloading	Несохранённые закладки остались в памяти; экспортируйте их перед перечитыванием
+Project bookmarks ignored: %s	Закладки проекта не загружены: %s
+Project bookmark store contains non-bookmark notes	В хранилище закладок проекта обнаружены записи другого типа

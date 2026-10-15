@@ -106,7 +106,7 @@ https://www.sourceinsight.com/doc/v4/userguide/index.html . Старые зап�
 
 | Раздел руководства | Проверяемое требование | Статус/остающаяся работа |
 | --- | --- | --- |
-| [Bookmark Storage](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Bookmark_Storage.htm) | Позиция относительно объявления функции/класса; устойчивость к внешним правкам | Реализовано: имя/scope/вид + смещение, актуальный снимок тегов, перенос/import/rename; native и GUI. Отдельные хранилища каждого проекта ещё не перенесены |
+| [Bookmark Storage](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Bookmark_Storage.htm) | Позиция относительно объявления функции/класса; устойчивость к внешним правкам | Реализовано: имя/scope/вид + смещение, актуальный снимок тегов, перенос/import/rename; native и GUI. Отдельные проектные хранилища реализованы и проверены GUI; XML-совместимость и экспорт выделенных строк остаются открытыми |
 | [Style Properties](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Style_Properties.htm) | Иерархия стилей, наследование, собственные стили и сохранение | Geany themes + профильный CSS покрывают часть настроек. Родительские SI-стили и импорт SI-конфигурации не перенесены; точные пользовательские RGB/шрифты нельзя установить из описания опций |
 | [Controlling Syntax Formatting](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Controlling_Syntax_Formatting.htm) | Временный Mono Font View; отдельный color-only режим | Реализованы Mono Font View, color-only, grayscale и отключение оформления; 4 GUI-сценария, RU/EN, восстановление raw-стилей и настроек |
 | [Predefined Path Variables](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Predefined_Path_Variables.htm) | Именованные пути в настройках и командах | Подмножество уже работает в Master File List. Все контексты и все predefined names ещё не покрыты |
@@ -138,3 +138,19 @@ editor. Both destinations highlight the symbol yellow with a red one-pixel frame
 Native and GUI regressions cover database separation, overloads, nested union
 fields, relative paths, focus retention and activation independent of Context's
 caret. This does not claim a new parser implementation or full SI parser parity.
+
+### Project bookmark stores and controls (2026-10-15)
+
+Bookmarks now use a per-project portable sidecar and the legacy global store when
+no project is open. Scope generations guard modal rename/import/export. Store
+switches clear only registered markers, restore current-scope marks and preserve
+global clips. Corrupt input is kept intact; failed transactional mutations retain
+the old list and markers. Failed pending-edit saves retain the previous store in
+memory. Explicit reload does not silently overwrite external changes.
+
+A native GUI scenario covers two projects with the same bookmark name, project
+switch/close/reopen, stale modal rename, global data preservation, corrupt-file
+repair, failed-write rollback, relative paths after moving a project, automatic
+letter names, Ctrl+N/Ctrl+X and containing-symbol display. Existing anchor and
+project-template GUI scenarios pass. XML interchange and selected-only export
+remain gaps; file naming intentionally follows Geany Insight's own format.
