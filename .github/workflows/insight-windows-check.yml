@@ -71,6 +71,10 @@ jobs:
         run: |
           cc -std=c99 -Wall -Wextra -Werror -UNDEBUG insight/tests/relation_query_test.c insight/desktop/relation_query.c insight/desktop/type_resolve.c insight/core/index.c -Iinsight/desktop $(pkg-config --cflags --libs glib-2.0) -o relation-query-test.exe
           ./relation-query-test.exe
+      - name: Test saved panel layout migration
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -UNDEBUG insight/tests/layout_state_test.c insight/desktop/layout_state.c -Iinsight/desktop $(pkg-config --cflags --libs glib-2.0) -o layout-state-test.exe
+          ./layout-state-test.exe
       - name: Test scoped type and alias resolution
         run: |
           cc -std=c99 -Wall -Wextra -Werror -UNDEBUG insight/tests/type_resolve_test.c insight/desktop/type_resolve.c insight/core/index.c -Iinsight/desktop $(pkg-config --cflags --libs glib-2.0) -o type-resolve-test.exe

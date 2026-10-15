@@ -22,3 +22,7 @@ sizes, widths or sort values use defaults; malformed column permutations are ign
 Preferences are stored atomically in `config/insight/window-list.conf`. The MRU order
 of individual buffers remains specific to the current editor session. Changing the
 interface language refreshes the displayed file-state labels and status message.
+
+### Window List в раскладках A–D
+
+Save current layout сохраняет видимость Window List, закрепление в боковой панели и положение/размер/максимизацию плавающего окна. Load layout восстанавливает это состояние, сохраняя список, фильтр, сортировку и колонки. Скрытый список не открывается при загрузке раскладки. Формат раскладок v3 читает старые v1/v2; старые раскладки не меняют Window List. Координаты восстанавливаются в рабочей области доступного монитора. Перетаскивание и snap-to-edge ещё не реализованы.

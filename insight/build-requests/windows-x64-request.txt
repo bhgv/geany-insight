@@ -1,1 +1,1 @@
-Build Windows x64: guard dependent alias-template targets while preserving explicit global and ordinary aliases; C++ template parameter barriers, positional scope, native backend, strict core, 57 parser fixtures and 18 GUI scenarios.
+Build Windows x64: Window List state and floating geometry in saved A-D layouts, v1/v2 migration to v3, strict layout core tests and real docked/floating/hidden GUI restore; include dependent template/alias guards, positional scope, 57 parser fixtures and 18 GUI scenarios.

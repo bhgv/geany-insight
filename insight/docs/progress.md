@@ -1273,3 +1273,11 @@ The full native suite passes 52/52 with GUI enabled and no skips. All 57 C/C++/h
 A further native regression reproduced template<class T> using Alias = T resolving Alias<int> receivers to an unrelated global T. Alias targets now check their own declaration scope for a hidden first component before resolving ordinary names in the enclosing declaration context. Dependent qualified targets decline too. Explicit ::T targets and ordinary aliases retain their previous declaration-context behavior. Strict C99 core tests and native parser checks pass; Context cases check absent dependent-alias links and a working explicitly global alias receiver. Template substitution remains open.
 
 The alias-template extension passes all 52 native tests with GUI enabled and no skips, including the new Context regression.
+
+## Window List in saved panel layouts
+
+Saved layouts A–D now include Window List visibility, docked/floating state and floating geometry/maximization. Version 3 validates all new fields and reads version 1/2 records without changing Window List; presets likewise retain previous behavior. Applying a hidden record does not instantiate an unopened list. The same content/model remains in use when an existing list is moved, retaining filter/sort/columns. Floating restore fits the monitor work area instead of subsequently overriding the clamped size.
+
+Strict C99 layout tests cover v3 round-trip, v1/v2 migration, missing fields and invalid geometry/booleans. The native GUI saves docked, floating and hidden records, switches among A/B/C, verifies model/filter and active-document preservation, and checks written version/state keys. The targeted GUI passes. Drag/snap-to-edge and remaining layout options stay open.
+
+All 52 native tests pass with GUI enabled and no skips after saved Window List layout integration. Windows CI now includes the same strict layout migration core regression before compilation, plus the expanded Symbol Info/Window List GUI scenario.

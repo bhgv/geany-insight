@@ -15,6 +15,10 @@ int main(void) {
  r.values[IL_DETACHED]=513; r.values[IL_HOST_VISIBLE]=512; insight_layout_write(f,"layout-A",&r);
  g_assert_true(insight_layout_read(f,"layout-A",&out)); g_assert_cmpint(out.values[IL_HOST_VISIBLE],==,512);
  g_key_file_set_integer(f,"layout-A","host-visible",2); g_assert_false(insight_layout_read(f,"layout-A",&out));
+ insight_layout_write(f,"layout-A",&r);g_key_file_set_integer(f,"layout-A","version",2);g_assert_true(insight_layout_read(f,"layout-A",&out));g_assert_cmpint(out.values[IL_WL_SET],==,0);
+ r.values[IL_WL_SET]=1;r.values[IL_WL_VISIBLE]=1;r.values[IL_WL_DOCKED]=1;r.values[IL_WL_POSITIONED]=1;r.values[IL_WL_X]=-200;r.values[IL_WL_Y]=120;r.values[IL_WL_WIDTH]=850;r.values[IL_WL_HEIGHT]=430;insight_layout_write(f,"layout-A",&r);g_assert_true(insight_layout_read(f,"layout-A",&out));for(guint i=0;i<IL_FIELDS;i++) g_assert_cmpint(out.values[i],==,r.values[i]);
+ g_key_file_remove_key(f,"layout-A","window-list-width",NULL);g_assert_false(insight_layout_read(f,"layout-A",&out));insight_layout_write(f,"layout-A",&r);g_key_file_set_integer(f,"layout-A","window-list-height",0);g_assert_false(insight_layout_read(f,"layout-A",&out));
+ r.values[IL_WL_VISIBLE]=2;g_assert_false(insight_layout_valid(&r));r.values[IL_WL_VISIBLE]=1;
  r.values[IL_WIDTH]=0; g_assert_false(insight_layout_valid(&r)); insight_layout_write(f,"layout-A",&r); g_assert_false(g_key_file_has_group(f,"layout-A"));
  g_assert_false(insight_layout_read(f,"missing",&out)); g_key_file_unref(f); g_print("Layout state checks passed\n"); return 0;
 }

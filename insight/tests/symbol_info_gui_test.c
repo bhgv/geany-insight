@@ -102,7 +102,17 @@ static gboolean step(gpointer data) {
   GtkWidget *dock=named(window,"insight-window-list-dock"),*list=toplevel("Window List",TRUE);g_assert_nonnull(dock);g_assert_true(gtk_widget_get_mapped(dock));g_assert_false(gtk_widget_get_visible(list));
   g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(dock,"insight-window-filter"))),==,"~hlpr");g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(dock,"insight-window-list-dock-toggle"))));
   gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-ru")),TRUE);g_assert_cmpstr(gtk_button_get_label(GTK_BUTTON(named(dock,"insight-window-list-dock-toggle"))),==,"Закрепить в боковой панели");gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-en")),TRUE);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dock,"insight-window-list-dock-toggle")),FALSE);phase++;
+  gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-layout-save-0")));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dock,"insight-window-list-dock-toggle")),FALSE);gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-layout-save-1")));
+  GdkEvent *event=gdk_event_new(GDK_DELETE);gboolean handled=FALSE;g_signal_emit_by_name(list,"delete-event",event,&handled);gdk_event_free(event);g_assert_true(handled);gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-layout-save-2")));
+  gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-layout-load-0")));g_assert_true(gtk_widget_get_visible(dock));g_assert_false(gtk_widget_get_visible(list));
+  gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-layout-load-2")));g_assert_false(gtk_widget_get_visible(dock));g_assert_false(gtk_widget_get_visible(list));
+  gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-layout-load-1")));g_assert_false(gtk_widget_get_visible(dock));g_assert_true(gtk_widget_get_visible(list));g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(list,"insight-window-filter"))),==,"~hlpr");
+  gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-layout-load-0")));phase++;
+ } else if(phase==8) {
+  GtkWidget *dock=named(window,"insight-window-list-dock");g_assert_true(gtk_widget_get_mapped(dock));g_assert_cmpuint(document_get_current()->id,==,primary_id);
+  gchar *path=g_build_filename(profile,"insight","workbench.conf",NULL);GKeyFile *settings=g_key_file_new();g_assert_true(g_key_file_load_from_file(settings,path,G_KEY_FILE_NONE,NULL));g_free(path);
+  g_assert_cmpint(g_key_file_get_integer(settings,"layout-A","version",NULL),==,3);g_assert_true(g_key_file_get_boolean(settings,"layout-A","window-list-docked",NULL));g_assert_false(g_key_file_get_boolean(settings,"layout-B","window-list-docked",NULL));g_assert_false(g_key_file_get_boolean(settings,"layout-C","window-list-visible",NULL));g_key_file_unref(settings);phase++;
  } else {
   g_print("Real editor GUI: Symbol Info source/metadata, background open, snapshot guard, untitled Jump; Window List preview/activate, filtering and cancelled close/save, saved geometry/filter/sort/column widths/order and soft close/reopen passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }

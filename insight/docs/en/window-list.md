@@ -24,3 +24,7 @@ of individual buffers remains specific to the current editor session. Changing t
 interface language refreshes the displayed file-state labels and status message.
 
 Prefix the filter with `~` for Unicode subsequence matching (`~hlpr` finds `helper`). Ordinary text keeps literal case-insensitive substring matching; the selected query persists when reopening the list.
+
+### Window List in layouts A–D
+
+Save current layout stores Window List visibility, sidebar docking and floating position, size and maximization. Loading a layout restores this state while preserving the list, filter, sorting and columns. A hidden list stays hidden. Layout format v3 reads existing v1/v2 records; those older layouts leave Window List unchanged. Floating geometry is fitted to an available monitor work area. Dragging and snap-to-edge remain open.

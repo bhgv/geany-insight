@@ -68,7 +68,7 @@ static void restore_geometry(void) {
  gint width=list.width,height=list.height,x=list.x,y=list.y; GdkDisplay *display=gtk_widget_get_display(main_widgets.window); GdkMonitor *monitor=list.positioned ? gdk_display_get_monitor_at_point(display,x,y) : gdk_display_get_primary_monitor(display);
  if(!monitor && gdk_display_get_n_monitors(display)) monitor=gdk_display_get_monitor(display,0);
  if(monitor) { GdkRectangle area; gdk_monitor_get_workarea(monitor,&area); width=MIN(width,MAX(1,area.width)); height=MIN(height,MAX(1,area.height)); x=CLAMP(x,area.x,area.x+MAX(0,area.width-width)); y=CLAMP(y,area.y,area.y+MAX(0,area.height-height)); }
- gtk_window_set_default_size(GTK_WINDOW(list.window),width,height); if(list.positioned) gtk_window_move(GTK_WINDOW(list.window),x,y); if(list.maximized) gtk_window_maximize(GTK_WINDOW(list.window));
+ gtk_window_set_default_size(GTK_WINDOW(list.window),width,height); gtk_window_resize(GTK_WINDOW(list.window),width,height); if(list.positioned) gtk_window_move(GTK_WINDOW(list.window),x,y); if(list.maximized) gtk_window_maximize(GTK_WINDOW(list.window)); else gtk_window_unmaximize(GTK_WINDOW(list.window));
 }
 static GeanyDocument *selected_document(void) {
  if(!list.window || !list.view) return NULL;
@@ -176,7 +176,7 @@ static void dock_changed(GtkToggleButton *toggle,gpointer data) {
   gtk_widget_hide(list.window); gtk_widget_show_all(list.dock_page); ui_prefs.sidebar_visible=TRUE; ui_sidebar_show_hide();
   gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.sidebar_notebook),list.dock_page));
  } else {
-  if(list.dock_page) { gtk_widget_hide(list.dock_page); } restore_geometry(); gtk_window_resize(GTK_WINDOW(list.window),list.width,list.height); gtk_widget_show_all(list.window); gtk_window_present(GTK_WINDOW(list.window));
+  if(list.dock_page) { gtk_widget_hide(list.dock_page); } restore_geometry(); gtk_widget_show_all(list.window); gtk_window_present(GTK_WINDOW(list.window));
  }
  list.refreshing=FALSE; list.moving=FALSE; refresh(NULL,NULL); gtk_widget_grab_focus(list.search); settings_save();
 }
@@ -207,6 +207,21 @@ void insight_window_list_init(InsightWindowPreview preview) {
  settings_read();list.alive=TRUE;list.preview=preview;list.recent=g_hash_table_new_full(g_direct_hash,g_direct_equal,NULL,g_free);
  for(guint i=0;i<documents_array->len;i++) { GeanyDocument *doc=g_ptr_array_index(documents_array,i);if(doc->is_valid) visit(doc->id); }
  GeanyDocument *doc=document_get_current();if(doc) visit(doc->id);
+}
+void insight_window_list_layout_capture(InsightLayout *record) {
+ if(!record || !list.alive) return;
+ gint *v=record->values;v[IL_WL_SET]=TRUE;v[IL_WL_VISIBLE]=list.window && gtk_widget_get_visible(list.docked ? list.dock_page : list.window);v[IL_WL_DOCKED]=list.docked;v[IL_WL_POSITIONED]=list.positioned;v[IL_WL_MAXIMIZED]=list.maximized;
+ v[IL_WL_X]=list.x;v[IL_WL_Y]=list.y;v[IL_WL_WIDTH]=list.width;v[IL_WL_HEIGHT]=list.height;
+}
+void insight_window_list_layout_apply(const InsightLayout *record) {
+ if(!list.alive || !insight_layout_valid(record) || !record->values[IL_WL_SET]) return;
+ const gint *v=record->values;
+ if(list.window && list.docked!=v[IL_WL_DOCKED]) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(list.dock_toggle),v[IL_WL_DOCKED]);
+ list.moving=TRUE;list.docked=v[IL_WL_DOCKED];list.positioned=v[IL_WL_POSITIONED];list.maximized=v[IL_WL_MAXIMIZED];list.x=v[IL_WL_X];list.y=v[IL_WL_Y];list.width=v[IL_WL_WIDTH];list.height=v[IL_WL_HEIGHT];
+ if(list.window) restore_geometry();
+ list.moving=FALSE;
+ if(v[IL_WL_VISIBLE]) insight_window_list_show(NULL,NULL);else hide_list();
+ settings_save();
 }
 void insight_window_list_finalize(void) {
  settings_save();list.alive=FALSE;if(list.timer) { g_source_remove(list.timer);list.timer=0; }if(list.window) gtk_widget_destroy(list.window);g_clear_pointer(&list.recent,g_hash_table_destroy);g_free(list.settings);g_free(list.filter);memset(&list,0,sizeof list);
