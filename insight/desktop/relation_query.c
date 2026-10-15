@@ -192,3 +192,69 @@ size_t insight_relation_query_transitive(const InsightIndex *index,const char *o
  if(ambiguous) *ambiguous=unclear;
  g_hash_table_unref(symbols);g_hash_table_unref(scopes);g_free(root_name);g_hash_table_unref(names);g_hash_table_unref(short_names);g_ptr_array_unref(classes);return total;
 }
+
+/* Keep navigation per-name: building the entire relation graph for each linked
+ * token would make preview highlighting quadratic in the project size. */
+typedef struct {
+ const InsightIndex *index;const InsightSymbol **names;size_t count;
+ InsightRelationEligible eligible;void *data;GHashTable *active,*done,*owners;
+ gboolean limited,ambiguous;guint visits;
+} MemberLookup;
+static gchar *member_scope(const gchar *raw) {
+ GString *s=g_string_new(NULL);while(g_str_has_prefix(raw,"::")) raw+=2;
+ for(;*raw;raw++) { if(*raw=='.') g_string_append(s,"::");else g_string_append_c(s,*raw); }
+ return g_string_free(s,FALSE);
+}
+static void member_branch(MemberLookup *q,const gchar *owner,const gchar *path,guint depth) {
+ if(q->limited || q->ambiguous || g_hash_table_contains(q->done,owner)) return;
+ if(depth>32 || ++q->visits>4096) { q->limited=TRUE;return; }
+ if(g_hash_table_contains(q->active,owner)) { q->ambiguous=TRUE;return; }
+ gboolean direct=FALSE;
+ for(size_t i=0;i<q->count;i++) {
+  const InsightSymbol *s=q->names[i];if(!strcmp(s->kind,"l") || !strcmp(s->kind,"z") || (q->eligible && !q->eligible(s,q->data))) continue;
+  gchar *scope=member_scope(s->scope);if(!strcmp(scope,owner)) direct=TRUE;g_free(scope);
+ }
+ if(direct) { g_hash_table_add(q->owners,g_strdup(owner));g_hash_table_add(q->done,g_strdup(owner));return; }
+ InsightTypeResult type=insight_type_resolve(q->index,owner,"",path,q->eligible,q->data);
+ if(type.status==INSIGHT_TYPE_UNKNOWN && !type.aliases) { insight_type_result_clear(&type);return; }
+ if(type.status!=INSIGHT_TYPE_FOUND) { q->limited=type.status==INSIGHT_TYPE_LIMIT;q->ambiguous=!q->limited;insight_type_result_clear(&type);return; }
+ g_hash_table_add(q->active,g_strdup(owner));
+ GHashTable *bases=base_names_full(type.symbol->inheritance,TRUE);GHashTableIter it;gpointer name;
+ g_hash_table_iter_init(&it,bases);
+ while(g_hash_table_iter_next(&it,&name,NULL)) {
+  InsightTypeResult base=insight_type_resolve(q->index,name,type.symbol->scope,type.symbol->path,q->eligible,q->data);
+  if(base.status==INSIGHT_TYPE_FOUND) member_branch(q,base.owner,base.symbol->path,depth+1);
+  else { q->limited=base.status==INSIGHT_TYPE_LIMIT;q->ambiguous=!q->limited; }
+  insight_type_result_clear(&base);if(q->limited || q->ambiguous) break;
+ }
+ g_hash_table_unref(bases);g_hash_table_remove(q->active,owner);g_hash_table_add(q->done,g_strdup(owner));insight_type_result_clear(&type);
+}
+size_t insight_member_query(const InsightIndex *index,const char *owner,const char *name,const char *path,
+ InsightRelationEligible eligible,void *data,const InsightSymbol **out,size_t capacity,int *limited,int *ambiguous) {
+ if(limited) *limited=FALSE;
+ if(ambiguous) *ambiguous=FALSE;
+ if(!index || !owner || !name || !*name || strlen(owner)>4096 || (capacity && !out)) return 0;
+ const InsightSymbol **names=g_new(const InsightSymbol *,4096);size_t count=insight_index_find(index,name,1,names,4096);
+ if(count>4096) { if(limited) *limited=TRUE;g_free(names);return 0; }
+ if(!count) { g_free(names);return 0; }
+ MemberLookup q={index,names,count,eligible,data,NULL,NULL,NULL,FALSE,FALSE,0};
+ q.active=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);q.done=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);q.owners=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
+ gchar *canonical=member_scope(owner);
+ if(*owner) {
+  InsightTypeResult type=insight_type_resolve(index,owner,"",path,eligible,data);
+  if(type.status==INSIGHT_TYPE_FOUND) { g_free(canonical);canonical=g_strdup(type.owner); }
+  else if(type.status!=INSIGHT_TYPE_UNKNOWN || type.aliases) { q.limited=type.status==INSIGHT_TYPE_LIMIT;q.ambiguous=!q.limited; }
+  insight_type_result_clear(&type);
+ }
+ member_branch(&q,canonical,path,0);g_free(canonical);
+ if(g_hash_table_size(q.owners)>1) q.ambiguous=TRUE;
+ size_t total=0;
+ if(!q.limited && !q.ambiguous) for(size_t i=0;i<count;i++) {
+  const InsightSymbol *s=names[i];if(!strcmp(s->kind,"l") || !strcmp(s->kind,"z") || (eligible && !eligible(s,data))) continue;
+  gchar *scope=member_scope(s->scope);gboolean hit=g_hash_table_contains(q.owners,scope);g_free(scope);
+  if(hit) { if(total<capacity) out[total]=s;total++; }
+ }
+ if(limited) *limited=q.limited;
+ if(ambiguous) *ambiguous=q.ambiguous;
+ g_hash_table_unref(q.active);g_hash_table_unref(q.done);g_hash_table_unref(q.owners);g_free(names);return total;
+}

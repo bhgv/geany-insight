@@ -460,7 +460,8 @@ static gboolean preview_resolvable(const gchar *word,gint position) {
  gchar *scope=(scoped || qualified) ? insight_native_function_scope(wb.index,wb.source_path,line) : NULL,*owner=NULL;
  if(qualified) { gint begin=MAX(0,position-4096);gchar *reference=sci_get_contents_range(wb.preview,begin,position);ScopeLanguage language={wb.source_path,wb.preview_filetype};owner=insight_native_member_owner_filtered(wb.index,wb.source_path,scope,line,reference,position-begin,&member,scope_language_eligible,&language);g_free(reference); }
  gboolean found=FALSE;
- for(guint i=0;i<tags->len;i++) { const InsightSymbol *tag=g_ptr_array_index(tags,i);if(insight_native_definition_rank_at(tag,wb.source_path,scope,line)>=0 && (!member || insight_native_member_matches(tag,owner))) { found=TRUE;break; } }
+ if(member) { ScopeLanguage language={wb.source_path,wb.preview_filetype};const InsightSymbol *hit;found=insight_member_query(wb.index,owner,word,wb.source_path,scope_language_eligible,&language,&hit,1,NULL,NULL)>0; }
+ else for(guint i=0;i<tags->len;i++) { const InsightSymbol *tag=g_ptr_array_index(tags,i);if(insight_native_definition_rank_at(tag,wb.source_path,scope,line)>=0) { found=TRUE;break; } }
  g_free(scope);g_free(owner);return found;
 }
 static gboolean preview_links_step(gpointer data) {
@@ -704,9 +705,9 @@ static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word,
  gint reference_begin=MAX(0,reference_position-4096);
  gchar *reference=reference_sci ? sci_get_contents_range(reference_sci,reference_begin,reference_position) : NULL; gboolean member=FALSE;
  ScopeLanguage language={preferred,reference_type};gchar *owner=insight_native_member_owner_filtered(wb.index,preferred,scope,reference_line,reference,reference_position-reference_begin,&member,scope_language_eligible,&language); g_free(reference);
- size_t count=valid_word ? insight_index_find(wb.index,word,TRUE,found,256) : 0; gint selected=0;
+ size_t count=valid_word ? (member ? insight_member_query(wb.index,owner,word,preferred,scope_language_eligible,&language,found,256,NULL,NULL) : insight_index_find(wb.index,word,TRUE,found,256)) : 0; gint selected=0;
  for(size_t i=0;i<count && i<256;i++) {
-  const InsightSymbol *tag=found[i]; if(!definition_language(preferred,reference_type,tag->path)) continue; if(insight_native_definition_rank_at(tag,preferred,scope,reference_line)<0 || (member && !insight_native_member_matches(tag,owner))) continue; gboolean duplicate=FALSE;
+  const InsightSymbol *tag=found[i]; if(!definition_language(preferred,reference_type,tag->path)) continue; if(insight_native_definition_rank_at(tag,preferred,scope,reference_line)<0) continue; gboolean duplicate=FALSE;
   for(guint j=0;j<wb.definitions->len;j++) { Location *old=g_ptr_array_index(wb.definitions,j); if(old->line==tag->line && !g_strcmp0(old->path,tag->path)) { duplicate=TRUE; break; } }
   if(duplicate) continue;
   Location *location=g_new0(Location,1); location->path=g_strdup(tag->path); location->line=tag->line;
@@ -2655,7 +2656,8 @@ static void definition_job_run(GTask *task,gpointer source,gpointer data,GCancel
   j->count=insight_relation_query(j->index,j->query,INSIGHT_RELATION_DEFINITIONS,0,j->matches,G_N_ELEMENTS(j->matches)); if(j->count==SIZE_MAX) j->count=0; j->count=MIN(j->count,G_N_ELEMENTS(j->matches));
   gchar *scope=insight_native_function_scope(j->index,j->preferred,j->line); gboolean member=FALSE;
   gchar *owner=insight_native_member_owner_filtered(j->index,j->preferred,scope,j->line,j->text,j->position,&member,relation_eligible,j->language); gsize eligible=0;
-  for(gsize n=0;n<j->count;n++) if(g_hash_table_contains(j->allowed_paths,j->matches[n]->path) && insight_native_definition_rank_at(j->matches[n],j->preferred,scope,j->line)>=0 && (!member || insight_native_member_matches(j->matches[n],owner))) j->matches[eligible++]=j->matches[n];
+  if(member) j->count=MIN(insight_member_query(j->index,owner,j->query,j->preferred,relation_eligible,j->language,j->matches,G_N_ELEMENTS(j->matches),NULL,NULL),G_N_ELEMENTS(j->matches));
+  for(gsize n=0;n<j->count;n++) if(g_hash_table_contains(j->allowed_paths,j->matches[n]->path) && insight_native_definition_rank_at(j->matches[n],j->preferred,scope,j->line)>=0) j->matches[eligible++]=j->matches[n];
   j->count=eligible;
   for(gsize n=0;n<j->count;n++) if(n==0 || insight_native_definition_rank_at(j->matches[n],j->preferred,scope,j->line)>insight_native_definition_rank_at(j->matches[j->chosen],j->preferred,scope,j->line)) j->chosen=(gint)n;
   g_free(scope); g_free(owner);
@@ -2689,7 +2691,7 @@ static gboolean definition_timeout(gpointer data) {
  DefinitionJob *j=g_new0(DefinitionJob,1); j->index=insight_index_ref(wb.index); j->query=cursor_query(doc); j->preferred=g_strdup(doc->file_name); j->document=doc->id; j->position=sci_get_current_position(doc->editor->sci); j->anchor=(gint)SSM(doc->editor->sci,SCI_GETANCHOR,0,0); j->line=(gulong)sci_get_current_line(doc->editor->sci)+1; j->encoding=file_prefs.default_open_encoding; j->generation=wb.definition_generation; j->epoch=workbench_epoch; j->index_version=wb.index_version;
  j->language=insight_language_filter_new(doc->file_name,doc->file_type);
  j->valid_word=!definition_keyword(doc->file_type,j->query) && !insight_languages_keyword(doc->editor->sci,j->query) && definition_code(doc->editor->sci,j->position);
- j->allowed_paths=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);const InsightSymbol *candidates[256];gsize candidates_count=insight_index_find(j->index,j->query,TRUE,candidates,G_N_ELEMENTS(candidates));
+ j->allowed_paths=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);const InsightSymbol *candidates[4096];gsize candidates_count=insight_index_find(j->index,j->query,TRUE,candidates,G_N_ELEMENTS(candidates));
  for(gsize n=0;n<MIN(candidates_count,G_N_ELEMENTS(candidates));n++) if(definition_language(doc->file_name,doc->file_type,candidates[n]->path)) g_hash_table_add(j->allowed_paths,g_strdup(candidates[n]->path));
  gint length=sci_get_length(doc->editor->sci); if(length>=0 && length<=2*1024*1024) j->text=sci_get_contents(doc->editor->sci,length+1);
  wb.definition_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.definition_worker,definition_job_done,NULL); g_task_set_task_data(task,j,definition_job_free); g_task_run_in_thread(task,definition_job_run); g_object_unref(task); return G_SOURCE_REMOVE;

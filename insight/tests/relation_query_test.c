@@ -107,5 +107,38 @@ int main(void) {
  g_assert_cmpuint(insight_relation_query_transitive(index,"aliases.Choice",INSIGHT_RELATION_MEMBERS,0,NULL,NULL,0,out,8,NULL,NULL),==,1);g_assert_cmpstr(out[0]->name,==,"choice_member");
  g_assert_cmpuint(insight_relation_query_transitive(index,"aliases.Color",INSIGHT_RELATION_MEMBERS,0,NULL,NULL,0,out,8,NULL,NULL),==,1);g_assert_cmpstr(out[0]->name,==,"Red");
  g_assert_cmpuint(insight_relation_query_transitive(index,"aliases.space",INSIGHT_RELATION_MEMBERS,0,NULL,NULL,0,out,8,NULL,NULL),==,1);g_assert_cmpstr(out[0]->name,==,"in_space");
+ InsightSymbol members[]={
+  {"Root",NULL,"M","s",1,"","",""},
+  {"Left",NULL,"M","s",2,"","","Root"},
+  {"Right",NULL,"M","s",3,"","","Root"},
+  {"Diamond",NULL,"M","s",4,"","","Left, Right"},
+  {"Hidden",NULL,"M","s",5,"","","Root"},
+  {"Clash",NULL,"M","s",6,"","","Hidden, Right"},
+  {"Alias",NULL,"M","t",7,"","Diamond",""},
+  {"Loop",NULL,"M","s",8,"","","Loop"},
+  {"Missing",NULL,"M","s",9,"","","UnknownBase"},
+  {"field",NULL,"M::Root","m",10,"","int",""},
+  {"field",NULL,"M::Hidden","m",11,"","float",""},
+  {"run",NULL,"M::Root","f",12,"()","void",""},
+  {"run",NULL,"M::Root","f",13,"(int)","void",""},
+  {"value",NULL,"implicit::namespace","v",14,"","int",""},
+  {"global_member",NULL,"","v",15,"","int",""}
+ };g_assert_true(insight_index_update(index,"/members.cpp",members,G_N_ELEMENTS(members)));
+ g_assert_cmpuint(insight_member_query(index,"M::Alias","field","/members.cpp",NULL,NULL,out,8,&limited,&ambiguous),==,1);g_assert_false(limited);g_assert_false(ambiguous);g_assert_cmpstr(out[0]->scope,==,"M::Root");
+ g_assert_cmpuint(insight_member_query(index,"M::Hidden","field","/members.cpp",NULL,NULL,out,8,NULL,NULL),==,1);g_assert_cmpstr(out[0]->scope,==,"M::Hidden");
+ g_assert_cmpuint(insight_member_query(index,"M::Clash","field","/members.cpp",NULL,NULL,out,8,NULL,&ambiguous),==,0);g_assert_true(ambiguous);
+ g_assert_cmpuint(insight_member_query(index,"M::Diamond","run","/members.cpp",NULL,NULL,out,1,NULL,NULL),==,2);g_assert_cmpstr(out[0]->scope,==,"M::Root");
+ g_assert_cmpuint(insight_member_query(index,"M::Loop","field","/members.cpp",NULL,NULL,out,8,NULL,&ambiguous),==,0);g_assert_true(ambiguous);
+ g_assert_cmpuint(insight_member_query(index,"M::Missing","field","/members.cpp",NULL,NULL,out,8,NULL,&ambiguous),==,0);g_assert_true(ambiguous);
+ g_assert_cmpuint(insight_member_query(index,"implicit.namespace","value","/members.cpp",NULL,NULL,out,8,NULL,NULL),==,1);
+ g_assert_cmpuint(insight_member_query(index,"","global_member","/members.cpp",NULL,NULL,out,8,NULL,NULL),==,1);
+ InsightSymbol deep[35];gchar *deep_names[35],*deep_bases[35];
+ for(guint i=0;i<35;i++) { deep_names[i]=g_strdup_printf("Depth%02u",i);deep_bases[i]=i<34 ? g_strdup_printf("Depth%02u",i+1) : g_strdup("");deep[i]=(InsightSymbol){deep_names[i],NULL,"M","s",i+1,"","",deep_bases[i]}; }
+ g_assert_true(insight_index_update(index,"/deep.cpp",deep,G_N_ELEMENTS(deep)));for(guint i=0;i<35;i++) { g_free(deep_names[i]);g_free(deep_bases[i]); }
+ InsightSymbol deep_field={"deep_field",NULL,"M::Depth34","m",1,"","int",""};g_assert_true(insight_index_update(index,"/deep-field.cpp",&deep_field,1));
+ g_assert_cmpuint(insight_member_query(index,"M::Depth00","deep_field","/deep.cpp",NULL,NULL,out,8,&limited,NULL),==,0);g_assert_true(limited);
+ InsightSymbol *crowded=g_new0(InsightSymbol,4097);for(guint i=0;i<4097;i++) crowded[i]=(InsightSymbol){"common",NULL,"M::Root","m",i+1,"","int",""};
+ g_assert_true(insight_index_update(index,"/crowded.cpp",crowded,4097));g_free(crowded);
+ g_assert_cmpuint(insight_member_query(index,"M::Root","common","/members.cpp",NULL,NULL,out,8,&limited,NULL),==,0);g_assert_true(limited);
  insight_index_free(index);g_print("Relation query checks passed\n");return 0;
 }

@@ -15,4 +15,11 @@ size_t insight_relation_query(const InsightIndex *,const char *,InsightRelationM
 typedef int (*InsightRelationEligible)(const InsightSymbol *,void *);
 size_t insight_relation_query_transitive(const InsightIndex *,const char *,InsightRelationMode,
  unsigned,InsightRelationEligible,void *,size_t,const InsightSymbol **,size_t,int *,int *);
+/* Per-name nominal member lookup. Direct declarations hide inherited names on
+ * each branch; distinct declaring scopes are ambiguous and yield no hits.
+ * Results are borrowed, retaining overloads in one declaring scope. Unknown
+ * explicit namespaces may match direct declarations. Cycles, unresolved bases
+ * and bounds (32 levels, 4096 scopes/name candidates) decline safely. */
+size_t insight_member_query(const InsightIndex *,const char *,const char *,const char *,
+ InsightRelationEligible,void *,const InsightSymbol **,size_t,int *,int *);
 #endif

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "../../src/insight-index.h"
+#include "../desktop/relation_query.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -84,6 +85,15 @@ int main(void) {
  owner_is(index,absolute,"A::use","global_obj->value","A::Cell");owner_is(index,absolute,"A::use","B :: global_obj->value","B::Cell");
  owner_is(index,absolute,"A::use","A :: Second :: value","A::Cell");owner_is(index,absolute,"A::Box::method","this->field","A::Box");owner_is(index,absolute,"take","p->item","Holder");
  owner_is(index,absolute,"take","unresolved().field",NULL);owner_is(index,absolute,"take","object.member->value",NULL);
+ const char *chain_code="namespace Chain {\nstruct Cell { int value; };\nstruct Base { Cell *child; };\nstruct Derived : Base { static Cell *shared; void method() {} };\nusing Alias = Derived;\nDerived *global;\nvoid use(Derived *p) {}\n}\n";
+ assert(insight_native_parse(index,parsed,absolute,chain_code,strlen(chain_code)));
+ owner_is(index,absolute,"Chain::use","p->child->value","Chain::Cell");
+ owner_is(index,absolute,"Chain::Derived::method","this->child->value","Chain::Cell");
+ owner_is(index,absolute,"Chain::use","Chain::global->child->value","Chain::Cell");
+ owner_is(index,absolute,"Chain::use","Chain::Alias::shared->value","Chain::Cell");
+ owner_is(index,absolute,"Chain::use","p->child[0].value",NULL);
+ owner_is(index,absolute,"Chain::use","p->method()->value",NULL);
+ const InsightSymbol *member_hits[4];assert(insight_member_query(index,"Chain::Derived","child",absolute,NULL,NULL,member_hits,4,NULL,NULL)==1);assert(!strcmp(member_hits[0]->scope,"Chain::Base"));
  InsightIndex *crowded=insight_index_new();InsightSymbol current_types[]={
   {"Cell",NULL,"N","s",1,"","",""},{"p",NULL,"N::use","z",10,"","Cell *",""}
  };assert(insight_index_update(crowded,"/z-current.cpp",current_types,G_N_ELEMENTS(current_types)));

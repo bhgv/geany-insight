@@ -1069,3 +1069,11 @@ Backend tests cover BOM/CRLF/Unicode, duplicates, root rebasing, limits, masks, 
 MFL format/scan limits and directory flattening are explicit in offline RU/EN help. Path Variables/quoted/comment expansion remain outside this completed bounded block. Windows a9000ec completed successfully with all 13 GUI migrations, including project template stores and editor completion; its ZIP revision, x64 PE machine and SHA256 were verified.
 
 After pause/resume, rollback-conflict, self-file, dirty-buffer and teardown guards, the five targeted membership/Overview/MFL tests all passed; the full earlier 49-test run remains green.
+
+## Inherited member navigation and nominal receiver chains
+
+Context links, preview F12 and editor Follow now query the requested member before the global 256-result UI cap. The shared bounded lookup follows scoped alias-aware base edges, stops at declarations on each branch, retains overloads from one declaring scope and declines competing scopes, missing bases, cycles or bounds. Repeated paths to one declaring scope share a navigation target; this is declaration navigation, not C++ access/subobject/overload validation. Lookup scans at most 4096 same-name symbols and 4096 scopes, with a 32-edge inheritance bound rather than constructing the whole project graph for every preview token.
+
+Nominal typed field chains resolve recursively in each field declaration's scope/file, including inherited fields, this, namespace globals and alias-qualified static members. Function calls, indexing, differing candidate types and unsupported expression forms decline. The receiver recursion is bounded at 32. Final candidate language checks remain strict, and the asynchronous main-thread path eligibility snapshot now covers the bounded 4096-name slice.
+
+Core checks cover hiding, diamond target deduplication, ambiguity, overload retention, implicit/global namespaces, missing/cyclic bases and depth/candidate limits. Native C++ parser checks cover inherited fields and this/static/global chains with call/index rejection. The existing type-alias GUI now exercises these references through actual preview links/F12 plus asynchronous editor Follow and verifies ambiguous chains are inert. The standalone relation suite passes -std=c99 -Wall -Wextra -Werror; updated native/core checks pass.

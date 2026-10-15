@@ -2,6 +2,7 @@
 #include "insight-index.h"
 #include "tagmanager/tm_ctags.h"
 #include "../insight/desktop/type_resolve.h"
+#include "../insight/desktop/relation_query.h"
 #include <string.h>
 gboolean insight_native_import(InsightIndex *index,TMSourceFile *file,const char *path) {
  if(!index || !path || !*path || !g_utf8_validate(path,-1,NULL)) return FALSE;
@@ -91,8 +92,8 @@ static gchar *receiver_owner(const InsightIndex *index,const gchar *path,const g
  if(!best || ambiguous) return NULL;
  InsightTypeResult result=insight_type_resolve(index,best->type,best->scope,best->path,eligible,data);return result.owner;
 }
-gchar *insight_native_member_owner_filtered(const InsightIndex *index,const char *path,const char *scope,gulong line,const char *text,gsize position,gboolean *member,InsightTypeEligible eligible,void *data) {
- *member=FALSE;if(!index || !text || position>strlen(text)) return NULL;
+static gchar *member_owner_depth(const InsightIndex *index,const char *path,const char *scope,gulong line,const char *text,gsize position,gboolean *member,InsightTypeEligible eligible,void *data,guint depth) {
+ *member=FALSE;if(!index || !text || position>strlen(text) || depth>32) return NULL;
  gsize at=position;while(at && identifier_byte(text[at-1])) at--;while(at && g_ascii_isspace(text[at-1])) at--;
  if(at>=2 && text[at-2]==':' && text[at-1]==':') {
   *member=TRUE;at-=2;while(at && g_ascii_isspace(text[at-1])) at--;gsize end=at;guint templates=0;
@@ -114,7 +115,26 @@ gchar *insight_native_member_owner_filtered(const InsightIndex *index,const char
  *member=TRUE;while(at && g_ascii_isspace(text[at-1])) at--;gsize end=at;while(at && identifier_byte(text[at-1])) at--;if(end==at) return NULL;
  gchar *receiver=g_strndup(text+at,end-at),*explicit_scope=NULL;gboolean explicit_global=FALSE;
  gsize prefix=at;while(prefix && g_ascii_isspace(text[prefix-1])) prefix--;
- if(prefix && (text[prefix-1]=='.' || (prefix>=2 && text[prefix-2]=='-' && text[prefix-1]=='>'))) { g_free(receiver);return NULL; }
+ if(prefix && (text[prefix-1]=='.' || (prefix>=2 && ((text[prefix-2]=='-' && text[prefix-1]=='>') || (text[prefix-2]==':' && text[prefix-1]==':'))))) {
+  gboolean nested=FALSE;gchar *parent=member_owner_depth(index,path,scope,line,text,end,&nested,eligible,data,depth+1),*result=NULL;
+  if(parent) {
+   const InsightSymbol *fields[256];size_t count=insight_member_query(index,parent,receiver,path,eligible,data,fields,G_N_ELEMENTS(fields),NULL,NULL);
+   gboolean valid=count>0 && count<=G_N_ELEMENTS(fields);
+   for(size_t i=0;valid && i<count;i++) {
+    const InsightSymbol *field=fields[i];
+    if((strcmp(field->kind,"m") && strcmp(field->kind,"v")) || *field->signature || !*field->type) { valid=FALSE;break; }
+    InsightTypeResult type=insight_type_resolve(index,field->type,field->scope,field->path,eligible,data);
+    if(type.status!=INSIGHT_TYPE_FOUND || (result && strcmp(result,type.owner))) valid=FALSE;
+    else if(!result) result=g_strdup(type.owner);
+    insight_type_result_clear(&type);
+   }
+   if(!valid) g_clear_pointer(&result,g_free);
+  }
+  g_free(parent);
+  /* Namespace variables may have no explicit namespace tag. Retain the
+   * existing lexical global receiver lookup for that case. */
+  if(result || text[prefix-1]!=':') { g_free(receiver);return result; }
+ }
  if(prefix>=2 && text[prefix-2]==':' && text[prefix-1]==':') {
   gsize stop=prefix-2;while(stop && g_ascii_isspace(text[stop-1])) stop--;gsize start=stop;
   while(start) {
@@ -132,6 +152,7 @@ gchar *insight_native_member_owner_filtered(const InsightIndex *index,const char
  }
  gchar *owner=receiver_owner(index,path,scope,line,receiver,explicit_scope,explicit_global,eligible,data);g_free(receiver);g_free(explicit_scope);return owner;
 }
+gchar *insight_native_member_owner_filtered(const InsightIndex *index,const char *path,const char *scope,gulong line,const char *text,gsize position,gboolean *member,InsightTypeEligible eligible,void *data) { return member_owner_depth(index,path,scope,line,text,position,member,eligible,data,0); }
 gchar *insight_native_member_owner(const InsightIndex *index,const char *path,const char *scope,gulong line,const char *text,gsize position,gboolean *member) { return insight_native_member_owner_filtered(index,path,scope,line,text,position,member,NULL,NULL); }
 gboolean insight_native_member_matches(const InsightSymbol *symbol,const char *owner) {
  if(!owner || !symbol->scope || !strcmp(symbol->kind,"l") || !strcmp(symbol->kind,"z")) return FALSE;
