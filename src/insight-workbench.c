@@ -71,6 +71,7 @@ static void location_free(gpointer data) { Location *p=data; g_free(p->path); g_
 typedef struct {
  GtkWidget *pane,*box,*title,*follow,*choices,*browser,*symbol_entry,*symbol_view,*outline,*file_entry,*file_view;
  GtkWidget *back,*forward,*open,*wrap,*project_notebook,*right_pane;
+ gint initial_right_split;
  GtkWidget *local_entry,*local_view,*local_label,*tree_view,*file_status,*tree_entry,*tree_status,*tree_follow,*folder_mode,*folder_stack,*disk_browser;
  guint tree_filter_idle; gboolean tree_setting;
  GtkListStore *local_symbols; GtkTreeStore *project_tree,*categories,*file_types;
@@ -103,6 +104,7 @@ typedef struct {
  ScintillaObject *preview;
  GHashTable *preview_names,*preview_candidates; gsize preview_names_position; guint preview_links_idle; gchar *preview_links_text,*preview_code_mask;gsize preview_links_length;gboolean preview_calls; gint preview_links_position,preview_styled_position;
  guint editor_follow_id; gint editor_follow_position,editor_follow_anchor;
+ gboolean editor_follow_focused;
  gchar *follow_word; guint follow_doc; gulong follow_line;
  guint preview_click_timer;
  guint refresh,source_id,panel_idle,index_event_idle; GHashTable *index_event_paths,*index_event_names; gboolean context_visible,index_dirty,scan_failed;
@@ -2862,14 +2864,18 @@ static gboolean preview_button(GtkWidget *widget,GdkEventButton *event,gpointer 
  return TRUE;
 }
 void insight_workbench_editor_updated(gboolean content) {
+ if(!wb.alive) return;
  insight_window_list_editor_updated();
  GeanyDocument *doc=document_get_current(); if(!wb.preview || !doc) return;
  if(content && wb.bookmark_handles && !wb.bookmark_sync_timer) wb.bookmark_sync_timer=g_timeout_add(350,bookmark_sync_idle,NULL);
  gint position=sci_get_current_position(doc->editor->sci),anchor=(gint)SSM(doc->editor->sci,SCI_GETANCHOR,0,0);
- if(!content && wb.editor_follow_id==doc->id && wb.editor_follow_position==position && wb.editor_follow_anchor==anchor) return;
+ gboolean focused=gtk_widget_has_focus(GTK_WIDGET(doc->editor->sci));
+ /* An edit/caret update may arrive before focus-in. Do not cache that as an
+  * already-followed focused position. Unchanged focus-out keeps manual locks. */
+ if(!content && wb.editor_follow_id==doc->id && wb.editor_follow_position==position && wb.editor_follow_anchor==anchor && (!focused || wb.editor_follow_focused)) return;
  stop_definition(); wb.follow_doc=0;
- wb.editor_follow_id=doc->id; wb.editor_follow_position=position; wb.editor_follow_anchor=anchor;
- if(gtk_widget_has_focus(GTK_WIDGET(doc->editor->sci))) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),TRUE);
+ wb.editor_follow_id=doc->id; wb.editor_follow_position=position; wb.editor_follow_anchor=anchor;wb.editor_follow_focused=focused;
+ if(focused) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),TRUE);
  queue_definition(FALSE); insight_workbench_refresh();
 }
 void insight_workbench_refresh(void) {
@@ -3231,6 +3237,13 @@ static void focus_widget_panel(GtkWidget *widget) {
  if(page && GTK_IS_NOTEBOOK(gtk_widget_get_parent(page))) { gtk_widget_show(page);GtkWidget *book=gtk_widget_get_parent(page); gtk_widget_show(book); gtk_notebook_set_current_page(GTK_NOTEBOOK(book),gtk_notebook_page_num(GTK_NOTEBOOK(book),page)); }
  gtk_widget_grab_focus(widget);
 }
+static void project_split_allocated(GtkWidget *widget,GtkAllocation *allocation,gpointer data) {
+ (void)data;if(!wb.alive || wb.initial_right_split<0 || allocation->width<400) return;
+ gint minimum=0,maximum=0;g_object_get(widget,"min-position",&minimum,"max-position",&maximum,NULL);
+ if(wb.initial_right_split>maximum && maximum-minimum<120) return;
+ gint requested=wb.initial_right_split;wb.initial_right_split=-1;
+ if(requested>maximum) { gint project=CLAMP(allocation->width/3,120,450);gtk_paned_set_position(GTK_PANED(widget),CLAMP(allocation->width-project,minimum,maximum)); }
+}
 static void focus_templates(GtkWidget *widget,gpointer data) { (void)widget; (void)data; focus_widget_panel(wb.clips_entry); }
 static void focus_browser(GtkMenuItem *item,gpointer data) {
  (void)item; gint which=GPOINTER_TO_INT(data); GtkWidget *widget=which==1 ? wb.file_entry : (which==2 ? wb.usage_entry : wb.symbol_entry);
@@ -3371,6 +3384,7 @@ static void save_layout(GtkMenuItem *item,gpointer data) {
 static void reset_layouts(GtkMenuItem *item,gpointer data) { (void)item; (void)data; memset(wb.layouts,0,sizeof wb.layouts); ui_set_statusbar(TRUE,"Saved layouts reset; A–D now use presets"); save_workbench_settings(); }
 static void apply_layout(GtkMenuItem *item,gpointer data) {
  (void)item; gint layout=GPOINTER_TO_INT(data); if(layout<0 || layout>=4) return;
+ wb.initial_right_split=-1;
  dock_all_panels(); dock_project(NULL,NULL);
  if(insight_layout_valid(&wb.layouts[layout])) {
   const gint *v=wb.layouts[layout].values;
@@ -3780,7 +3794,7 @@ static void restore_workbench_settings(void) {
   gint split=g_key_file_get_integer(settings,"workbench","split",NULL); if(split>=150 && split<=10000) gtk_paned_set_position(GTK_PANED(wb.pane),split);
   if(g_key_file_has_key(settings,"workbench","follow",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),g_key_file_get_boolean(settings,"workbench","follow",NULL));
   if(g_key_file_has_key(settings,"workbench","visible",NULL)) wb.context_visible=g_key_file_get_boolean(settings,"workbench","visible",NULL);
-  gint right=g_key_file_get_integer(settings,"workbench","right-split",NULL); if(right>=200 && right<=10000) gtk_paned_set_position(GTK_PANED(wb.right_pane),right);
+  gint right=g_key_file_get_integer(settings,"workbench","right-split",NULL); if(right>=200 && right<=10000) { wb.initial_right_split=right;gtk_paned_set_position(GTK_PANED(wb.right_pane),right); }
   /* Search controls are opened explicitly; old persisted visibility is ignored. */
   gint project_flags=g_key_file_get_integer(settings,"workbench","project-search-flags",NULL),editor_flags=g_key_file_get_integer(settings,"workbench","editor-search-flags",NULL);
   if(project_flags>=0 && project_flags<=7) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_case),project_flags&INSIGHT_SEARCH_CASE); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_word),project_flags&INSIGHT_SEARCH_WORD); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_regex),project_flags&INSIGHT_SEARCH_REGEX); }
@@ -4163,11 +4177,12 @@ void insight_workbench_init(void) {
  gtk_widget_set_size_request(wb.box,-1,170);
  g_object_ref(existing); gtk_container_remove(GTK_CONTAINER(parent),existing);
  wb.right_pane=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
- gtk_paned_pack1(GTK_PANED(wb.right_pane),existing,TRUE,FALSE); g_object_unref(existing);
+ /* Wide editor/message controls must not collapse the Project pane. */
+ gtk_paned_pack1(GTK_PANED(wb.right_pane),existing,TRUE,TRUE); g_object_unref(existing);
  gtk_paned_pack2(GTK_PANED(wb.right_pane),wb.project_notebook,FALSE,TRUE);
  gtk_widget_set_size_request(wb.project_notebook,120,-1);
  gtk_widget_set_name(wb.right_pane,"insight-project-split"); gtk_widget_set_name(wb.project_notebook,"insight-project-notebook");
- gtk_paned_set_position(GTK_PANED(wb.right_pane),850);
+ wb.initial_right_split=850;g_signal_connect(wb.right_pane,"size-allocate",G_CALLBACK(project_split_allocated),NULL);gtk_paned_set_position(GTK_PANED(wb.right_pane),850);
  gtk_paned_pack1(GTK_PANED(wb.pane),wb.right_pane,TRUE,FALSE);
  gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),wb.box,gtk_label_new("Context")); gtk_widget_show_all(wb.box);
  gtk_box_pack_start(GTK_BOX(parent),wb.pane,TRUE,TRUE,0);

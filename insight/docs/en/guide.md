@@ -50,7 +50,7 @@ Edit → Structural selection expands to a block (**Ctrl+Alt+B**), selects match
 
 ## Panels and layouts
 
-View → Panels toggles File Symbols, Project Window and Relations and focuses panels. Layouts A/B/C/D load arrangements; Save current layout saves the selected preset. Float Project Window detaches the project; Dock Project Window restores it. Overview shows a file miniature and moves the visible region.
+View → Panels toggles File Symbols, Project Window and Relations and focuses panels. Layouts A/B/C/D load arrangements; Save current layout saves the selected preset. Float Project Window detaches the project; Dock Project Window restores it. Overview shows a file miniature and moves the visible region. The editor and Project sides can shrink independently. A restored Project divider beyond the available width is recovered once during initial layout so the Project panel stays reachable; valid positions, later manual resizing and explicitly selected layouts are preserved.
 
 Window → Window List… filters open buffers by name, path and nearest known symbol. Selection previews Context; Activate/Enter switches editors. Save and Close file use normal Geany dialogs and respect cancellation. [Window List](window-list.md).
 

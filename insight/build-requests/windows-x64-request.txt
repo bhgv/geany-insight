@@ -1,1 +1,1 @@
-Build Windows x64: Browse disk context menu, guarded right-click, keyboard/programmatic popup, Unicode path/name clipboard, preview/open/folder/up actions and native RU GUI coverage.
+Build Windows x64: restore offscreen Project divider without overriding valid positions, allow editor-side shrink, recover Follow after unfocused caret/edit then focus-in, preserve manual off; 18 native GUI scenarios.

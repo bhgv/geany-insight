@@ -1121,6 +1121,11 @@ static gboolean on_editor_notify(G_GNUC_UNUSED GObject *object, GeanyEditor *edi
 			on_margin_click(editor, nt);
 			break;
 
+		case SCN_FOCUSIN:
+			if (doc == document_get_current())
+				insight_workbench_editor_updated(FALSE);
+			break;
+
 		case SCN_UPDATEUI:
 			on_update_ui(editor, nt);
 			if (doc == document_get_current())

@@ -86,9 +86,12 @@ jobs:
           set -e
           mkdir -p _win-gui
           trap 'rm -f portable/bin/test_insight_*_gui.exe' EXIT
-          for name in menu_alignment grouped_project relation_transitive symbol_scopes indented_functions relation_tree relation_graph relation_tree_graph type_alias context_links snippet template_fields project_templates master_list symbol_info disk_browser; do
+          for name in menu_alignment grouped_project relation_transitive symbol_scopes indented_functions relation_tree relation_graph relation_tree_graph type_alias context_links snippet template_fields project_templates master_list symbol_info disk_browser panels; do
             cp "_build/tests/test_insight_${name}_gui.exe" portable/bin/
             (cd _win-gui && GEANY_RUN_GUI_TESTS=1 DISPLAY=win32 GDK_BACKEND=win32 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 "../portable/bin/test_insight_${name}_gui.exe")
+            if [ "$name" = panels ]; then
+              (cd _win-gui && GEANY_TEST_VALID_PROJECT_SPLIT=1 GEANY_RUN_GUI_TESTS=1 DISPLAY=win32 GDK_BACKEND=win32 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 "../portable/bin/test_insight_${name}_gui.exe")
+            fi
           done
       - name: Bundle GTK runtime
         run: |
