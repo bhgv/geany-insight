@@ -23,5 +23,15 @@ int main(void) {
  assert(a==0 && end==6 && first==1 && ts==3 && te==4);
  assert(!insight_context_range("a",1,3,1,&a,&end,&first,&ts,&te));
  assert(insight_context_range("a\n",2,2,0,&a,&end,&first,&ts,&te) && a==2 && end==2);
+ a=end=ts=te=99;first=99;
+ assert(!insight_context_range("a\nb",3,4,2,&a,&end,&first,&ts,&te));
+ assert(a==0 && end==0 && first==0 && ts==0 && te==0);
+ a=end=ts=te=99;first=99;
+ assert(!insight_context_range("a\0b",3,1,0,&a,&end,&first,&ts,&te));
+ assert(a==0 && end==0 && first==0 && ts==0 && te==0);
+ assert(!insight_context_range("\xff",1,1,0,&a,&end,&first,&ts,&te));
+ assert(insight_context_range("a\rb\r\nc\nd",8,3,1,&a,&end,&first,&ts,&te));
+ assert(a==2 && end==8 && first==2 && ts==5 && te==6);
+ assert(insight_context_range("",0,1,0,&a,&end,&first,&ts,&te) && a==0 && end==0 && first==1);
  puts("context: all checks passed"); return 0;
 }
