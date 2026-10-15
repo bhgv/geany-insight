@@ -1802,3 +1802,27 @@ Validation: six focused Linux GUI checks passed (all three bookmark-option
 restoration modes, project stores, symbol anchors and CSS themes). Both modified
 C sources compiled with warnings treated as errors. Reference behavior:
 https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Bookmark_Options.htm
+
+
+### Preserve bookmarks between sessions
+
+Added the third Source Insight Bookmark Options flag, default on when absent or
+invalid in old settings. Apply persists all three flags atomically. Disabled
+mode retains marks through project switches and cleans bookmarks from visited
+global/project stores only at successful normal process exit. Clips, language
+bindings, exports and source files remain. Unvisited stores are not scanned.
+The tracker captures snapshots before loads and from our successful writes;
+cleanup validates portable notes and uses digest/native-etag checked replacement.
+A core test exposed equal etags after rapid replacement, so SHA-256 comparison
+was added rather than relying solely on filesystem timestamps. Changed/invalid/
+unwritable stores are retained with a logged warning. Crashes bypass cleanup.
+
+Validation covers default persistence and off/on/Cancel/failed-save behavior,
+three visited stores, exact Clips/template preservation, export retention,
+unsaved-exit cancellation, a fresh GUI process reopening both projects, external
+changes and cleanup write failure. Windows GUI remains deferred. Reference:
+https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Bookmark_Options.htm
+
+Final validation: 11 focused Linux checks passed (one core and ten GUI cases,
+including a fresh editor subprocess). All five modified C files also compiled
+with warnings treated as errors. No Windows build-request marker was changed.

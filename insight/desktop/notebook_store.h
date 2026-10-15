@@ -27,6 +27,9 @@ InsightNotes *insight_notes_load(const char *,GError **);
  * Import resolves those paths against the supplied destination project root;
  * absolute external bookmarks and legacy v1 files are retained. Inputs stay
  * unchanged. Relative traversal/drive/UNC components are rejected. */
+/* Snapshot tokens combine SHA-256 and the filesystem etag. Caller frees tokens. */
+gchar *insight_notes_file_version(const gchar *,GError **);
+gboolean insight_notes_save_portable_checked(const InsightNotes *,const char *,const char *,const char *,gchar **,GError **);
 gboolean insight_notes_save_portable(const InsightNotes *,const char *,const char *,GError **);
 InsightNotes *insight_notes_load_portable(const char *,const char *,GError **);
 /* Return an owning snapshot; never modify either input. Import rejects name

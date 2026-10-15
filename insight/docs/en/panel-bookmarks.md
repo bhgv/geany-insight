@@ -96,8 +96,7 @@ in the active store are removed; clips and source files remain. **Confirm bookma
 deletion** in the same menu also enables confirmation for Delete/Ctrl+X on selected
 rows. The option is saved between sessions and defaults off for existing profiles.
 Cancel, store reload/project switch during confirmation, or a write failure leaves
-the intended deletion unapplied. The close-file policy and options dialog are described below. The separate
-Source Insight persistence policy remains unimplemented.
+the intended deletion unapplied. The close-file policy and options dialog are described below. The persistence policy is described below.
 
 ## Panel font and colors
 
@@ -129,6 +128,19 @@ keeps the dialog open and leaves active options unchanged.
 
 Font & Color… opens its own appearance dialog with independent Apply/Cancel;
 cancelling Bookmark Options does not undo appearance already applied there.
-The help button opens this page. Source Insight's separate Preserve bookmarks
-between sessions option remains unimplemented: bookmarks still persist across
-sessions.
+The help button opens this page. The session-preservation option is described below.
+
+## Preserve bookmarks between sessions
+
+This checkbox in Bookmark Options… defaults on, preserving existing profiles'
+behavior. When disabled with Apply, bookmarks remain available until exit,
+including after switching away from and reopening a project. Normal exit clears
+bookmarks from the global store and every project store used in this session.
+Cancelling exit does not clear them. Re-enable the option before exit to keep
+them. Delete bookmarks when file closes remains an independent policy.
+
+Clips, template language bindings, manual exports and source files are retained.
+Unopened projects are not scanned. Cleanup checks the captured content snapshot
+and file version before replacement. Externally changed, invalid or unwritable
+stores are retained and an error is logged. Cleanup does not run after a crash,
+so previously autosaved bookmarks may be restored after abnormal termination.

@@ -173,7 +173,7 @@ marks and always confirms; selected deletion has a persistent confirmation switc
 Both use transactional writes and store-generation guards. GUI covers cancel,
 reload during confirmation, failed-write rollback, hidden marks, retained clips,
 name/line priority and restoration of the preference. Bookmark Options persistence
-and close-file policies remain open, as does XML exchange.
+and close-file policies are described below; XML exchange remains open.
 
 ### Bookmark panel Font & Color (2026-10-16)
 
@@ -186,10 +186,10 @@ cancel, theme reset, all-column fonts, folder-style isolation, caret/selection
 stability, saved preferences and Russian menu labels. All three bookmark-option GUI invocations pass on Linux. Delete bookmarks when file closes is also available, defaulting off and saved
 independently. Accepted document-close events transactionally remove only the
 closing file's marks from the active store; write failures retain notes and
-other files/Clips are preserved. Normal session exit preserves marks. Additional
+other files/Clips are preserved. Normal session exit preserves marks by default. Additional
 GUI assertions cover off/on, hidden marks, failure/reopen recovery and preference
-restore. The separate Preserve bookmarks between sessions option and Source
-Insight XML interchange remain open.
+restore. The separate Preserve bookmarks between sessions option is described below;
+Source Insight XML interchange remains open.
 
 ### CSS visual themes and bundled Cyrillic fonts (2026-10-16)
 
@@ -212,5 +212,16 @@ conversion baseline), and the styles-only theme retains current backgrounds.
 
 Bookmark Options now has a panel button, list-menu command and panel-local
 Ctrl+Q dialog, including confirmation/close-file flags, Font & Color and help.
-Apply saves both flags atomically and preserves unrelated settings; failed writes
-and Cancel leave them unchanged. The session-preservation option remains open.
+Apply saves all three flags atomically and preserves unrelated settings; failed
+writes and Cancel leave them unchanged. Session preservation is described below.
+
+
+### Bookmark session preservation (2026-10-16)
+
+Preserve bookmarks between sessions is implemented in Bookmark Options, default
+on for existing profiles. Disabled mode retains marks throughout the process
+and cleans valid visited global/project stores at normal exit. It preserves
+Clips and exports, checks content digests plus native etags, and retains stores
+on failed cleanup. Unvisited stores and crash recovery are outside cleanup.
+Core and Linux GUI checks cover toggling/rollback, project switches, cancelled
+exit, actual subprocess restart, external changes and failed cleanup.

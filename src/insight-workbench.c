@@ -89,7 +89,7 @@ typedef struct {
  InsightLayout layouts[4]; PanelHost hosts[10]; guint host_count; GtkWidget *panel_commands;
  GtkWidget *find_entry,*find_case,*find_word,*find_regex,*find_status,*context_find_row,*context_definitions_row,*context_find_toggle;
  gchar *find_last_query,*find_last_digest; gsize find_last_begin,find_last_end; guint find_last_flags;
- InsightNotes *project_marks;gchar *project_marks_path,*project_marks_root;GtkWidget *marks_scope,*marks_reload;gboolean marks_project,marks_valid,marks_stale,marks_initialized,marks_save_failed,marks_confirm_delete,marks_delete_on_close;guint64 marks_generation;
+ InsightNotes *project_marks;gchar *project_marks_path,*project_marks_root;GtkWidget *marks_scope,*marks_reload;gboolean marks_project,marks_valid,marks_stale,marks_initialized,marks_save_failed,marks_confirm_delete,marks_delete_on_close,marks_preserve;GHashTable *marks_session_stores;guint64 marks_generation;
  InsightNotes *notes,*project_notes; gchar *notes_path,*project_notes_path;gboolean clips_project,clips_prefer_project,clips_scope_setting,project_notes_valid;guint64 clips_generation;guint template_doc;gint template_begin,template_end;guint64 template_generation,template_version;gchar *template_prefix;gboolean template_pending;
  GHashTable *bookmark_handles;GtkWidget *bookmark_window,*bookmark_search;GtkListStore *bookmark_list;guint bookmark_sync_timer;gboolean bookmark_syncing;
  GtkWidget *marks_entry,*marks_view,*clips_entry,*clips_view,*clips_all,*clips_scope; gchar *clips_language; GtkListStore *marks_store,*clips_store;
@@ -2289,14 +2289,34 @@ static gboolean notes_scope_current(InsightNoteKind kind,guint64 generation) {
  if(kind!=INSIGHT_CLIP || (generation==wb.clips_generation && (!wb.clips_project || (wb.project_notes_valid && wb.project_notes_path)))) return TRUE;
  ui_set_statusbar(TRUE,"Template store changed; try the operation again");return FALSE;
 }
+typedef struct { gchar *root,*etag; } BookmarkSessionStore;
+static void bookmark_session_store_free(gpointer data) { BookmarkSessionStore *store=data;g_free(store->root);g_free(store->etag);g_free(store); }
+/* Capture before loading, or use the digest/etag token from our atomic write. */
+static void bookmark_session_remember(const gchar *path,const gchar *root,const gchar *etag) {
+ if(!wb.marks_session_stores || !path) return;
+ gchar *captured=etag ? NULL : insight_notes_file_version(path,NULL);if(!etag) etag=captured;
+ if(etag) { BookmarkSessionStore *store=g_new0(BookmarkSessionStore,1);store->root=g_strdup(root);store->etag=g_strdup(etag);g_hash_table_replace(wb.marks_session_stores,g_strdup(path),store); }
+ g_free(captured);
+}
+static void bookmark_session_finish(void) {
+ if(wb.marks_preserve || !wb.marks_session_stores) return;
+ GHashTableIter iter;gpointer path,value;g_hash_table_iter_init(&iter,wb.marks_session_stores);
+ while(g_hash_table_iter_next(&iter,&path,&value)) {
+  BookmarkSessionStore *store=value;GError *error=NULL;
+  InsightNotes *notes=insight_notes_load_portable(path,store->root,&error),*clips=notes ? insight_notes_select(notes,INSIGHT_CLIP,&error) : NULL;
+  if(clips && clips->items->len!=notes->items->len) insight_notes_save_portable_checked(clips,path,store->root,store->etag,NULL,&error);
+  if(error) { g_warning("Bookmarks retained in %s at exit: %s",(gchar *)path,error->message);g_clear_error(&error); }
+  insight_notes_free(clips);insight_notes_free(notes);
+ }
+}
 static gboolean notes_save_kind(InsightNoteKind kind) {
  gboolean marks=kind==INSIGHT_BOOKMARK && wb.marks_project;gboolean project=kind==INSIGHT_CLIP && wb.clips_project;const gchar *path=marks ? wb.project_marks_path : project ? wb.project_notes_path : wb.notes_path;
  if(kind==INSIGHT_BOOKMARK && !bookmarks_writable()) return FALSE;
  if(!path || (project && !wb.project_notes_valid)) { ui_set_statusbar(TRUE,"Open a project with a valid template store first");return FALSE; }
- gchar *directory=g_path_get_dirname(path); GError *error=NULL; gboolean saved=FALSE;
+ gchar *directory=g_path_get_dirname(path); GError *error=NULL; gboolean saved=FALSE;gchar *etag=NULL;
  if(g_mkdir_with_parents(directory,0700)) ui_set_statusbar(TRUE,"Notes directory could not be created");
- else { saved=marks ? insight_notes_save_portable(notes_for(kind),path,wb.project_marks_root,&error) : insight_notes_save(notes_for(kind),path,&error); if(!saved) ui_set_statusbar(TRUE,"Notes not saved: %s",error ? error->message : "write failed"); }
- g_clear_error(&error);g_free(directory);if(kind==INSIGHT_BOOKMARK) wb.marks_save_failed=!saved;return saved;
+ else { saved=insight_notes_save_portable_checked(notes_for(kind),path,marks ? wb.project_marks_root : NULL,NULL,&etag,&error);if(saved && !project) bookmark_session_remember(path,marks ? wb.project_marks_root : NULL,etag); if(!saved) ui_set_statusbar(TRUE,"Notes not saved: %s",error ? error->message : "write failed"); }
+ g_clear_error(&error);g_free(etag);g_free(directory);if(kind==INSIGHT_BOOKMARK) wb.marks_save_failed=!saved;return saved;
 }
 static gboolean notes_save(void) { return notes_save_kind(INSIGHT_BOOKMARK); }
 static InsightNotes *notes_clone(InsightNoteKind kind,GError **error) {
@@ -2504,10 +2524,11 @@ static gboolean bookmarks_project_load(const gchar *project,const gchar *root,gb
  wb.marks_initialized=TRUE;wb.marks_generation++;wb.marks_project=project!=NULL;wb.marks_valid=path!=NULL && root && g_path_is_absolute(root);wb.marks_stale=FALSE;wb.marks_save_failed=FALSE;
  insight_notes_free(wb.project_marks);wb.project_marks=insight_notes_new();g_free(wb.project_marks_path);wb.project_marks_path=path;g_free(wb.project_marks_root);wb.project_marks_root=g_strdup(root);
  if(path && wb.marks_valid && g_file_test(path,G_FILE_TEST_EXISTS)) {
+  bookmark_session_remember(path,root,NULL);
   GError *error=NULL;InsightNotes *loaded=insight_notes_load_portable(path,root,&error),*marks=loaded ? insight_notes_select(loaded,INSIGHT_BOOKMARK,&error) : NULL;
   if(marks && marks->items->len!=loaded->items->len) { insight_notes_free(marks);marks=NULL;g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Project bookmark store contains non-bookmark notes"); }
   insight_notes_free(loaded);
-  if(marks) { insight_notes_free(wb.project_marks);wb.project_marks=marks; }else { wb.marks_valid=FALSE;ui_set_statusbar(TRUE,"Project bookmarks ignored: %s",error ? error->message : "invalid snapshot"); }g_clear_error(&error);
+  if(marks) { insight_notes_free(wb.project_marks);wb.project_marks=marks; }else { g_hash_table_remove(wb.marks_session_stores,path);wb.marks_valid=FALSE;ui_set_statusbar(TRUE,"Project bookmarks ignored: %s",error ? error->message : "invalid snapshot"); }g_clear_error(&error);
  }
  bookmark_scope_label();if(wb.marks_view) gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.marks_view)));
  notes_filter(NULL,GINT_TO_POINTER(INSIGHT_BOOKMARK));
@@ -2850,7 +2871,7 @@ static void notes_transfer(GtkWidget *widget,gpointer data) {
  gtk_widget_destroy(dialog);insight_notes_free(prepared);g_free(export_root);
 }
 /* Save only these options: keep layout and per-panel appearance intact. */
-static gboolean bookmark_options_save(gboolean confirm,gboolean close,GError **error) {
+static gboolean bookmark_options_save(gboolean confirm,gboolean close,gboolean preserve,GError **error) {
  GKeyFile *key=g_key_file_new();GStatBuf info;gboolean ok=TRUE;
  if(!g_stat(wb.prefs_path,&info)) {
   if(info.st_size>65536 || !g_key_file_load_from_file(key,wb.prefs_path,G_KEY_FILE_KEEP_COMMENTS,error)) ok=FALSE;
@@ -2861,6 +2882,7 @@ static gboolean bookmark_options_save(gboolean confirm,gboolean close,GError **e
   g_key_file_set_integer(key,"workbench","version",1);
   g_key_file_set_boolean(key,"workbench","confirm-bookmark-delete",confirm);
   g_key_file_set_boolean(key,"workbench","delete-bookmarks-on-close",close);
+  g_key_file_set_boolean(key,"workbench","preserve-bookmarks",preserve);
   gsize length=0;gchar *text=g_key_file_to_data(key,&length,NULL),*directory=g_path_get_dirname(wb.prefs_path);
   if(length>65536) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Workbench settings are invalid or too large");ok=FALSE; }
   else if(g_mkdir_with_parents(directory,0700)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_FAILED,"Workbench settings directory could not be created");ok=FALSE; }
@@ -2873,15 +2895,16 @@ static void bookmark_options(GtkWidget *widget,gpointer data) {
  (void)widget;(void)data;
  GtkWidget *dialog=gtk_dialog_new_with_buttons("Bookmark Options",GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Cancel",GTK_RESPONSE_CANCEL,"Apply",GTK_RESPONSE_APPLY,NULL);
  gtk_widget_set_name(dialog,"insight-bookmark-options");gtk_dialog_set_default_response(GTK_DIALOG(dialog),GTK_RESPONSE_CANCEL);
- GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(dialog)),*confirm=gtk_check_button_new_with_label("Confirm bookmark deletion"),*close=gtk_check_button_new_with_label("Delete bookmarks when file closes"),*font=insight_list_style_button(wb.marks_view),*help=insight_panel_help_button("panel-bookmarks.md"),*status=gtk_label_new("");
- gtk_widget_set_name(confirm,"insight-bookmark-options-confirm");gtk_widget_set_name(close,"insight-bookmark-options-close");gtk_widget_set_name(font,"insight-bookmark-options-font");gtk_widget_set_name(status,"insight-bookmark-options-status");
- gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(confirm),wb.marks_confirm_delete);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(close),wb.marks_delete_on_close);
- gtk_label_set_line_wrap(GTK_LABEL(status),TRUE);gtk_box_pack_start(GTK_BOX(box),confirm,FALSE,FALSE,6);gtk_box_pack_start(GTK_BOX(box),close,FALSE,FALSE,6);
+ GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(dialog)),*confirm=gtk_check_button_new_with_label("Confirm bookmark deletion"),*close=gtk_check_button_new_with_label("Delete bookmarks when file closes"),*preserve=gtk_check_button_new_with_label("Preserve bookmarks between sessions"),*font=insight_list_style_button(wb.marks_view),*help=insight_panel_help_button("panel-bookmarks.md"),*status=gtk_label_new("");
+ gtk_widget_set_name(preserve,"insight-bookmark-options-preserve");gtk_widget_set_name(confirm,"insight-bookmark-options-confirm");gtk_widget_set_name(close,"insight-bookmark-options-close");gtk_widget_set_name(font,"insight-bookmark-options-font");gtk_widget_set_name(status,"insight-bookmark-options-status");
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(preserve),wb.marks_preserve);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(confirm),wb.marks_confirm_delete);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(close),wb.marks_delete_on_close);
+ gtk_label_set_line_wrap(GTK_LABEL(status),TRUE);gtk_box_pack_start(GTK_BOX(box),preserve,FALSE,FALSE,6);gtk_box_pack_start(GTK_BOX(box),confirm,FALSE,FALSE,6);gtk_box_pack_start(GTK_BOX(box),close,FALSE,FALSE,6);
  GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6);gtk_box_pack_start(GTK_BOX(row),font,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(row),help,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),row,FALSE,FALSE,6);gtk_box_pack_start(GTK_BOX(box),status,FALSE,FALSE,6);
  insight_i18n_apply(dialog);gtk_widget_show_all(dialog);
  while(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_APPLY) {
   gboolean a=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(confirm)),b=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(close));GError *error=NULL;
-  if(bookmark_options_save(a,b,&error)) { wb.marks_confirm_delete=a;wb.marks_delete_on_close=b;break; }
+  gboolean c=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(preserve));
+  if(bookmark_options_save(a,b,c,&error)) { wb.marks_confirm_delete=a;wb.marks_delete_on_close=b;wb.marks_preserve=c;break; }
   gtk_label_set_text(GTK_LABEL(status),insight_tr(error ? error->message : "Workbench settings not saved"));g_clear_error(&error);
  }
  gtk_widget_destroy(dialog);
@@ -2971,8 +2994,9 @@ static void create_note_panel(InsightNoteKind kind) {
 }
 static void create_notes(void) {
  wb.bookmark_handles=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);
+ wb.marks_session_stores=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,bookmark_session_store_free);
  wb.notes_path=g_build_filename(app->configdir,"insight","notes.conf",NULL); wb.notes=insight_notes_new();wb.project_notes=insight_notes_new();wb.project_marks=insight_notes_new();
- if(g_file_test(wb.notes_path,G_FILE_TEST_EXISTS)) { GError *error=NULL; InsightNotes *loaded=insight_notes_load(wb.notes_path,&error); if(loaded) { insight_notes_free(wb.notes); wb.notes=loaded; } else ui_set_statusbar(TRUE,"Notes ignored: %s",error ? error->message : "invalid snapshot"); g_clear_error(&error); }
+ if(g_file_test(wb.notes_path,G_FILE_TEST_EXISTS)) { bookmark_session_remember(wb.notes_path,NULL,NULL);GError *error=NULL; InsightNotes *loaded=insight_notes_load(wb.notes_path,&error); if(loaded) { insight_notes_free(wb.notes); wb.notes=loaded; } else { g_hash_table_remove(wb.marks_session_stores,wb.notes_path);ui_set_statusbar(TRUE,"Notes ignored: %s",error ? error->message : "invalid snapshot"); } g_clear_error(&error); }
  create_note_panel(INSIGHT_BOOKMARK); create_note_panel(INSIGHT_CLIP);gchar *marks_root=app->project ? project_get_base_path() : NULL;bookmarks_project_load(app->project ? app->project->file_name : NULL,marks_root,TRUE);g_free(marks_root);clips_project_load(app->project ? app->project->file_name : NULL,FALSE);
  for(guint i=0;i<documents_array->len;i++) bookmark_restore_document(g_ptr_array_index(documents_array,i));
 }
@@ -4145,6 +4169,7 @@ static void save_workbench_settings(void) {
  g_key_file_set_boolean(settings,"workbench","relation-follow",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_follow)));
  g_key_file_set_boolean(settings,"workbench","confirm-bookmark-delete",wb.marks_confirm_delete);
  g_key_file_set_boolean(settings,"workbench","delete-bookmarks-on-close",wb.marks_delete_on_close);
+ g_key_file_set_boolean(settings,"workbench","preserve-bookmarks",wb.marks_preserve);
  g_key_file_set_integer(settings,"workbench","references-comment-mode",gtk_combo_box_get_active(GTK_COMBO_BOX(wb.usage_comments)));
  g_key_file_set_boolean(settings,"workbench","references-code-only",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_code)));
  g_key_file_set_boolean(settings,"workbench","usage-buffer",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_buffer)));
@@ -4209,6 +4234,7 @@ static void restore_workbench_settings(void) {
   if(g_key_file_has_key(settings,"workbench","references-code-only",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.usage_code),g_key_file_get_boolean(settings,"workbench","references-code-only",NULL));
   wb.marks_confirm_delete=g_key_file_get_boolean(settings,"workbench","confirm-bookmark-delete",NULL);
   wb.marks_delete_on_close=g_key_file_get_boolean(settings,"workbench","delete-bookmarks-on-close",NULL);
+  if(g_key_file_has_key(settings,"workbench","preserve-bookmarks",NULL)) { GError *error=NULL;gboolean preserve=g_key_file_get_boolean(settings,"workbench","preserve-bookmarks",&error);if(!error) wb.marks_preserve=preserve;g_clear_error(&error); }
   gint comments=g_key_file_get_integer(settings,"workbench","references-comment-mode",NULL);if(comments>=0 && comments<=2 && !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_code))) gtk_combo_box_set_active(GTK_COMBO_BOX(wb.usage_comments),comments);
   gint tab=g_key_file_get_integer(settings,"workbench","project-tab",NULL); if(tab>=0 && tab<8) gtk_notebook_set_current_page(GTK_NOTEBOOK(wb.project_notebook),tab);
   if(g_key_file_has_key(settings,"workbench","usage-buffer",NULL)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.usage_buffer),g_key_file_get_boolean(settings,"workbench","usage-buffer",NULL));
@@ -4520,7 +4546,7 @@ static void context_icon(GtkWidget *button,const gchar *icon,const gchar *tip,co
  gtk_button_set_always_show_image(GTK_BUTTON(button),TRUE);gtk_button_set_relief(GTK_BUTTON(button),GTK_RELIEF_NONE);gtk_widget_set_tooltip_text(button,tip);gtk_widget_set_name(button,name);
 }
 void insight_workbench_init(void) {
- wb.alive=TRUE; workbench_epoch++; wb.symbol_key_signal=g_signal_connect(geany_object,"key-press",G_CALLBACK(symbol_key_global),NULL);insight_window_list_init(window_list_preview);
+ wb.alive=TRUE;wb.marks_preserve=TRUE; workbench_epoch++; wb.symbol_key_signal=g_signal_connect(geany_object,"key-press",G_CALLBACK(symbol_key_global),NULL);insight_window_list_init(window_list_preview);
  GtkWidget *existing=ui_lookup_widget(main_widgets.window,"vpaned1");
  GtkWidget *parent=gtk_widget_get_parent(existing); gint position=0;
  gtk_container_child_get(GTK_CONTAINER(parent),existing,"position",&position,NULL);
@@ -4652,7 +4678,7 @@ void insight_workbench_finalize(void) {
  g_clear_pointer(&wb.bookmark_handles,g_hash_table_destroy);
  wb.alive=FALSE;if(wb.type_panel.timer) { g_source_remove(wb.type_panel.timer);wb.type_panel.timer=0; }if(wb.category_panel.timer) { g_source_remove(wb.category_panel.timer);wb.category_panel.timer=0; }if(wb.tree_filter_idle) { g_source_remove(wb.tree_filter_idle);wb.tree_filter_idle=0; }if(wb.file_event_idle) { g_source_remove(wb.file_event_idle);wb.file_event_idle=0; } if(wb.preview_click_timer) { g_source_remove(wb.preview_click_timer);wb.preview_click_timer=0; } stop_definition(); stop_file_preview(); mark_index_dirty();
  insight_remote_ui_finalize();
- save_search_settings(); save_workbench_settings(); dock_all_panels(); dock_project(NULL,NULL);
+ save_search_settings(); save_workbench_settings();bookmark_session_finish(); dock_all_panels(); dock_project(NULL,NULL);
  insight_disk_browser_shutdown(wb.disk_browser);
  for(guint i=0;i<wb.host_count;i++) g_free(wb.hosts[i].label);
  for(guint i=0;i<3;i++) if(wb.project_handlers[i]) g_signal_handler_disconnect(geany_object,wb.project_handlers[i]);
@@ -4689,7 +4715,7 @@ void insight_workbench_finalize(void) {
  if(wb.file_types) g_object_unref(wb.file_types);
  if(wb.marks_store) g_object_unref(wb.marks_store);
  if(wb.clips_store) g_object_unref(wb.clips_store);
- insight_notes_free(wb.project_marks);g_free(wb.project_marks_path);g_free(wb.project_marks_root);insight_notes_free(wb.notes);insight_notes_free(wb.project_notes);g_free(wb.project_notes_path);g_free(wb.template_prefix); g_free(wb.notes_path); g_free(wb.clips_language);
+ g_clear_pointer(&wb.marks_session_stores,g_hash_table_destroy);insight_notes_free(wb.project_marks);g_free(wb.project_marks_path);g_free(wb.project_marks_root);insight_notes_free(wb.notes);insight_notes_free(wb.project_notes);g_free(wb.project_notes_path);g_free(wb.template_prefix); g_free(wb.notes_path); g_free(wb.clips_language);
  if(wb.file_store) g_object_unref(wb.file_store);
  if(wb.relation_history) g_ptr_array_unref(wb.relation_history);
  if(wb.matches) g_object_unref(wb.matches);

@@ -585,3 +585,8 @@ test('Insight CSS visual themes GUI', themes_gui_test, timeout: 50)
 test('Insight CSS visual theme restore GUI', themes_gui_test, timeout: 50, env: ['GEANY_TEST_THEME_RESTORE=1'])
 test('Insight CSS theme panel override GUI', themes_gui_test, timeout: 50, env: ['GEANY_TEST_THEME_PANEL=1'])
 test('Insight CSS theme and Cyrillic font assets', find_program('python3'), args: [meson.project_source_root() / 'insight/tests/theme_assets_test.py'])
+
+test('Insight bookmark session option restore GUI', bookmark_selection_gui_test, timeout: 45, env: ['GEANY_TEST_BOOKMARK_PRESERVE_RESTORE=1'])
+test('Insight project bookmark session cleanup GUI', project_bookmarks_gui_test, timeout: 60, env: ['GEANY_TEST_BOOKMARK_PRESERVE_OFF=1'])
+test('Insight bookmark session external-change guard GUI', project_bookmarks_gui_test, timeout: 60, env: ['GEANY_TEST_BOOKMARK_PRESERVE_OFF=1', 'GEANY_TEST_BOOKMARK_PRESERVE_EXTERNAL=1'])
+test('Insight bookmark session failed-cleanup GUI', project_bookmarks_gui_test, timeout: 60, env: ['GEANY_TEST_BOOKMARK_PRESERVE_OFF=1', 'GEANY_TEST_BOOKMARK_PRESERVE_FAILURE=1'])

@@ -26,7 +26,23 @@ static void symbol_anchors(void) {
  duplicate[1].line=2;g_assert_true(insight_notes_capture_anchor(notes,"symbol",duplicate,2,&error));g_assert_null(insight_notes_get(notes,INSIGHT_BOOKMARK,"symbol")->anchor);
  g_remove(file);g_free(file);g_free(path);insight_notes_free(notes);
 }
+static void checked_replacement(void) {
+ GError *error=NULL;gchar *dir=g_dir_make_tmp("notes-etag-XXXXXX",&error),*file=g_build_filename(dir,"notes.conf",NULL),*source=g_build_filename(dir,"source.c",NULL),*etag=NULL;
+ g_assert_no_error(error);InsightNotes *notes=insight_notes_new();
+ g_assert_true(insight_notes_set(notes,INSIGHT_BOOKMARK,"mark",source,1,"code",&error));g_assert_true(insight_notes_set(notes,INSIGHT_CLIP,"clip",NULL,0,"текст ${field}",&error));
+ const gchar *languages[]={"C","Python",NULL};g_assert_true(insight_notes_set_languages(notes,"clip",languages,&error));
+ g_assert_true(insight_notes_save_portable_checked(notes,file,NULL,NULL,&etag,&error));g_assert_nonnull(etag);
+ InsightNotes *clips=insight_notes_select(notes,INSIGHT_CLIP,&error);g_assert_nonnull(clips);
+ g_assert_true(g_file_set_contents(file,"changed externally; retain this",-1,&error));
+ g_assert_false(insight_notes_save_portable_checked(clips,file,NULL,etag,NULL,&error));g_assert_error(error,G_IO_ERROR,G_IO_ERROR_WRONG_ETAG);g_clear_error(&error);
+ gchar *text=NULL;g_assert_true(g_file_get_contents(file,&text,NULL,&error));g_assert_cmpstr(text,==,"changed externally; retain this");g_free(text);g_free(etag);etag=NULL;
+ g_assert_true(insight_notes_save_portable_checked(notes,file,dir,NULL,&etag,&error));g_assert_nonnull(etag);
+ g_assert_true(insight_notes_save_portable_checked(clips,file,dir,etag,NULL,&error));
+ InsightNotes *loaded=insight_notes_load_portable(file,dir,&error);g_assert_no_error(error);g_assert_cmpuint(loaded->items->len,==,1);const InsightNote *clip=insight_notes_get(loaded,INSIGHT_CLIP,"clip");g_assert_nonnull(clip);g_assert_cmpstr(clip->text,==,"текст ${field}");g_assert_cmpstr(clip->languages[0],==,"C");g_assert_cmpstr(clip->languages[1],==,"Python");
+ insight_notes_free(loaded);insight_notes_free(clips);insight_notes_free(notes);g_free(etag);g_remove(file);g_rmdir(dir);g_free(source);g_free(file);g_free(dir);
+}
 int main(void) {
+ checked_replacement();
  symbol_anchors();
  InsightNotes *n=insight_notes_new(); GError *e=NULL;
  gchar *source_path=g_build_filename(g_get_tmp_dir(),"source.c",NULL),*other_path=g_build_filename(g_get_tmp_dir(),"other.c",NULL),*external_path=g_build_filename(g_get_tmp_dir(),"external.c",NULL);

@@ -51,8 +51,25 @@ gboolean insight_note_matches_language(const InsightNote *note,const gchar *prof
  for(guint i=0;note->languages[i];i++) if(!strcmp(note->languages[i],profile)) return TRUE;
  return FALSE;
 }
-gboolean insight_notes_save_portable(const InsightNotes *n,const char *path,const char *root,GError **error) {
+static gchar *notes_version(const gchar *digest,const gchar *etag) { return g_strdup_printf("sha256:%s:%s",digest,etag ? etag : ""); }
+gchar *insight_notes_file_version(const gchar *path,GError **error) {
+ if(!path || !*path) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid notes path");return NULL; }
+ GFile *file=g_file_new_for_path(path);GFileInputStream *stream=g_file_read(file,NULL,error);g_object_unref(file);if(!stream) return NULL;
+ GChecksum *sum=g_checksum_new(G_CHECKSUM_SHA256);guchar buffer[16384];gsize total=0;gboolean ok=TRUE;
+ for(;;) { gssize count=g_input_stream_read(G_INPUT_STREAM(stream),buffer,sizeof buffer,NULL,error);if(count<0) { ok=FALSE;break; }if(!count) break;total+=(gsize)count;if(total>8u*1024u*1024u) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Notes file exceeds size limit");ok=FALSE;break; }g_checksum_update(sum,buffer,(gsize)count); }
+ GFileInfo *info=ok ? g_file_input_stream_query_info(stream,G_FILE_ATTRIBUTE_ETAG_VALUE,NULL,NULL) : NULL;gchar *version=ok ? notes_version(g_checksum_get_string(sum),info ? g_file_info_get_etag(info) : NULL) : NULL;
+ g_clear_object(&info);g_checksum_free(sum);g_object_unref(stream);return version;
+}
+gboolean insight_notes_save_portable_checked(const InsightNotes *n,const char *path,const char *root,const char *etag,gchar **new_etag,GError **error) {
+ if(new_etag) *new_etag=NULL;
  if(!n || !path || (root && (!g_path_is_absolute(root) || !g_utf8_validate(root,-1,NULL)))) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid notes file or project root");return FALSE; }
+ const gchar *native_etag=NULL;
+ if(etag) {
+  gchar *current=insight_notes_file_version(path,error);if(!current) return FALSE;
+  gboolean matches=g_str_has_prefix(etag,"sha256:") && strlen(etag)>=72 && etag[71]==':' && !strncmp(etag,current,72) && (!etag[72] || !strcmp(etag+72,current+72));g_free(current);
+  if(!matches || !g_str_has_prefix(etag,"sha256:") || strlen(etag)<72 || etag[71]!=':') { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_WRONG_ETAG,"Notes changed since the session snapshot");return FALSE; }
+  native_etag=etag[72] ? etag+72 : NULL;
+ }
  GKeyFile *key=g_key_file_new(); g_key_file_set_integer(key,"notes","version",root ? 2 : 1); g_key_file_set_integer(key,"notes","count",(gint)n->items->len);
  for(guint i=0;i<n->items->len;i++) {
   InsightNote *note=g_ptr_array_index(n->items,i);gchar group[32];g_snprintf(group,sizeof group,"note-%u",i);
@@ -69,8 +86,11 @@ gboolean insight_notes_save_portable(const InsightNotes *n,const char *path,cons
   g_free(relative);
  }
  gsize length; gchar *data=g_key_file_to_data(key,&length,NULL); g_key_file_unref(key); GFile *file=g_file_new_for_path(path);
- gboolean ok=length<=8u*1024u*1024u && g_file_replace_contents(file,data,length,NULL,FALSE,G_FILE_CREATE_PRIVATE,NULL,NULL,error); g_object_unref(file); g_free(data); return ok;
+ gchar *written_etag=NULL;gboolean ok=length<=8u*1024u*1024u && g_file_replace_contents(file,data,length,native_etag,FALSE,G_FILE_CREATE_PRIVATE,&written_etag,NULL,error);
+ if(ok && new_etag) { gchar *digest=g_compute_checksum_for_data(G_CHECKSUM_SHA256,(const guchar *)data,length);*new_etag=notes_version(digest,written_etag);g_free(digest); }
+ g_free(written_etag);g_object_unref(file); g_free(data); return ok;
 }
+gboolean insight_notes_save_portable(const InsightNotes *n,const char *path,const char *root,GError **error) { return insight_notes_save_portable_checked(n,path,root,NULL,NULL,error); }
 gboolean insight_notes_save(const InsightNotes *n,const char *path,GError **error) { return insight_notes_save_portable(n,path,NULL,error); }
 static gchar *portable_path(const char *root,const char *relative) {
  if(!root || !g_path_is_absolute(root) || !g_utf8_validate(root,-1,NULL) || !relative || !*relative || strlen(relative)>16384 || g_path_is_absolute(relative) || strchr(relative,':') || strchr(relative,'\\')) return NULL;
