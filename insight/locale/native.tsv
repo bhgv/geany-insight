@@ -1368,4 +1368,4 @@ Master file list or its expanded file set changed; reload before applying member
 
 Invalid master file list expression	Некорректное выражение пути к MFL
 Unknown or unavailable master file list path variable	Неизвестная или недоступная переменная пути к MFL
-Project path variables: %PROJECT_SOURCE_DIR%, %PROJECT_DATA_DIR%, %PROJECT_NAME%; use %% for a literal percent sign	Переменные проекта: %PROJECT_SOURCE_DIR%, %PROJECT_DATA_DIR%, %PROJECT_NAME%; %% означает буквальный знак процента
+Path variables: %PROJECT_SOURCE_DIR%, %PROJECT_DATA_DIR%, %PROJECT_NAME%, %TEMP_DIR% and environment names; use %% for a literal percent sign	Переменные пути: %PROJECT_SOURCE_DIR%, %PROJECT_DATA_DIR%, %PROJECT_NAME%, %TEMP_DIR% и имена переменных окружения; %% означает буквальный знак процента

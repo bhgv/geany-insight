@@ -33,27 +33,62 @@ InsightProjectFiles *insight_project_files_clone(const InsightProjectFiles *s) {
 gchar *insight_project_files_escape_master(const gchar *path) {
  gchar **parts=g_strsplit(path,"%",-1);gchar *text=g_strjoinv("%%",parts);g_strfreev(parts);return text;
 }
+/* Resolve against one environment snapshot, never recursively. Case collisions
+ * with different values are ambiguous on Unix rather than order-dependent. */
+static gchar *master_environment(gchar **environment,const gchar *name) {
+ gchar *result=NULL;
+ for(guint i=0;environment[i];i++) {
+  const gchar *equal=strchr(environment[i],'=');
+  if(!equal || (gsize)(equal-environment[i])!=strlen(name) || g_ascii_strncasecmp(environment[i],name,equal-environment[i])) continue;
+  if(result && strcmp(result,equal+1)) { g_free(result);return NULL; }
+  if(!result) result=g_strdup(equal+1);
+ }
+ return result;
+}
+static gchar *master_variable(const gchar *name,const gchar *base,const gchar *project,gchar **environment) {
+ if(!g_ascii_strcasecmp(name,"PROJECT_SOURCE_DIR")) return g_strdup(base);
+ if(!g_ascii_strcasecmp(name,"PROJECT_DATA_DIR") || !g_ascii_strcasecmp(name,"PROJECT_NAME")) {
+  if(!project || strlen(project)>16384 || !g_path_is_absolute(project) || !g_utf8_validate(project,-1,NULL) || strpbrk(project,"\r\n")) return NULL;
+  if(!g_ascii_strcasecmp(name,"PROJECT_DATA_DIR")) return g_path_get_dirname(project);
+  gchar *value=g_path_get_basename(project),*dot=strrchr(value,'.');if(dot && dot!=value) *dot=0;return value;
+ }
+ if(!g_ascii_strcasecmp(name,"TEMP_DIR")) return g_strdup(g_get_tmp_dir());
+ if(!g_ascii_strcasecmp(name,"DESKTOP_DIR")) return g_strdup(g_get_user_special_dir(G_USER_DIRECTORY_DESKTOP));
+ if(!g_ascii_strcasecmp(name,"MYDOCUMENTS_DIR")) return g_strdup(g_get_user_special_dir(G_USER_DIRECTORY_DOCUMENTS));
+#ifdef G_OS_WIN32
+ if(!g_ascii_strcasecmp(name,"APPDATA_DIR")) return master_environment(environment,"APPDATA");
+ if(!g_ascii_strcasecmp(name,"LOCAL_APPDATA_DIR")) return master_environment(environment,"LOCALAPPDATA");
+ if(!g_ascii_strcasecmp(name,"PROGRAMFILES_DIR")) return master_environment(environment,"ProgramFiles");
+ if(!g_ascii_strcasecmp(name,"PROGRAMFILESX86_DIR")) return master_environment(environment,"ProgramFiles(x86)");
+ if(!g_ascii_strcasecmp(name,"WINDOWS_DIR")) return master_environment(environment,"SystemRoot");
+#else
+ if(!g_ascii_strcasecmp(name,"APPDATA_DIR")) return g_strdup(g_get_user_config_dir());
+ if(!g_ascii_strcasecmp(name,"LOCAL_APPDATA_DIR")) return g_strdup(g_get_user_data_dir());
+#endif
+ /* Unimplemented predefined names must not accidentally bind an environment
+  * value with different semantics. */
+ static const gchar *reserved[]={"PROGRAM_DIR","PROGRAMFILES_DIR","PROGRAMFILESX86_DIR","WINDOWS_DIR","SHARED_DOCUMENTS_DIR","SOURCEINSIGHT_USER_DIR"};
+ for(guint i=0;i<G_N_ELEMENTS(reserved);i++) if(!g_ascii_strcasecmp(name,reserved[i])) return NULL;
+ return master_environment(environment,name);
+}
 gboolean insight_project_files_set_master(InsightProjectFiles *s,const gchar *input,const gchar *root,const gchar *project,GError **error) {
  gchar *base=canonical(root);
  if(!s || !base || !input || strlen(input)>16384 || !g_utf8_validate(input,-1,NULL) || strpbrk(input,"\r\n")) { g_free(base);g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid master file list expression");return FALSE; }
+ gchar **environment=g_get_environ();
  GString *expanded=g_string_new(NULL);gboolean valid=TRUE,variable=FALSE;guint tokens=0;
  for(const gchar *p=input;*p && valid;) {
   if(*p!='%') { g_string_append_c(expanded,*p++);continue; }
   if(p[1]=='%') { g_string_append_c(expanded,'%');p+=2;variable=TRUE;continue; }
   const gchar *end=strchr(p+1,'%');if(!end || end-p>65 || ++tokens>32) { valid=FALSE;break; }
-  gchar *name=g_strndup(p+1,end-p-1),*owned=NULL;const gchar *value=NULL;
-  if(!g_ascii_strcasecmp(name,"PROJECT_SOURCE_DIR")) value=base;
-  else if(project && strlen(project)<=16384 && g_path_is_absolute(project) && g_utf8_validate(project,-1,NULL) && !strpbrk(project,"\r\n")) {
-   if(!g_ascii_strcasecmp(name,"PROJECT_DATA_DIR")) value=owned=g_path_get_dirname(project);
-   else if(!g_ascii_strcasecmp(name,"PROJECT_NAME")) { owned=g_path_get_basename(project);gchar *dot=strrchr(owned,'.');if(dot && dot!=owned) *dot=0;value=owned; }
-  }
-  if(!value || !*value || expanded->len+strlen(value)>16384) valid=FALSE;else { g_string_append(expanded,value);variable=TRUE; }
-  g_free(owned);g_free(name);p=end+1;
+  gchar *name=g_strndup(p+1,end-p-1),*value=master_variable(name,base,project,environment);
+  if(!value || !*value || strlen(value)>16384 || !g_utf8_validate(value,-1,NULL) || strpbrk(value,"\r\n") || expanded->len+strlen(value)>16384) valid=FALSE;
+  else { g_string_append(expanded,value);variable=TRUE; }
+  g_free(value);g_free(name);p=end+1;
  }
  gchar *path=valid && expanded->len ? g_canonicalize_filename(expanded->str,base) : g_strdup("");
  if(!valid || strlen(path)>16384) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Unknown or unavailable master file list path variable");valid=FALSE; }
  if(valid) { gchar *expression=g_strdup(variable ? input : "");g_free(s->master_file);s->master_file=path;path=NULL;g_free(s->master_expression);s->master_expression=expression; }
- g_free(path);g_string_free(expanded,TRUE);g_free(base);return valid;
+ g_free(path);g_string_free(expanded,TRUE);g_strfreev(environment);g_free(base);return valid;
 }
 static void remove_path(GPtrArray *paths,const char *path,gboolean tree) {
  for(guint i=paths->len;i>0;i--) if(tree ? below(g_ptr_array_index(paths,i-1),path) : same(g_ptr_array_index(paths,i-1),path)) g_ptr_array_remove_index(paths,i-1);

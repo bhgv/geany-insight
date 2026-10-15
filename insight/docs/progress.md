@@ -1295,3 +1295,36 @@ The function-template result extension passes all 52 native tests with GUI enabl
 A real Symbol Info regression reproduced a dependent function-template result being displayed as the unrelated global nominal type T even after Context had been fixed. C-family function/prototype/method metadata now uses the same declaration-aware callable-result resolver as member navigation; fields and other languages keep their previous nominal lookup. The GUI regression fails before the change, then checks that a dependent result has no misleading nominal owner while explicit ::T and ordinary T results retain the correct metadata. It closes its temporary source before continuing the existing Window List/layout tests. The targeted native GUI passes.
 
 The full native run passed 51 tests, including the expanded Symbol Info and Context regressions, but Overview timed out in its existing phase-19 async definition case. An isolated rerun passed in 28.30 seconds. Its pending-definition diagnostics now also report Follow and editor focus so a recurrence can distinguish a lost Follow state from an empty resolution result. No timeout increase or skipped check was introduced; the intermittent Overview timing issue is not claimed fully resolved.
+
+
+## MFL binding environment and system path variables
+
+The MFL binding now resolves case-insensitive environment names from one captured
+process-environment snapshot, after reserved project/system names. TEMP_DIR,
+DESKTOP_DIR, MYDOCUMENTS_DIR and the two APPDATA names use available platform
+directories; Windows also maps ProgramFiles/ProgramFiles(x86)/SystemRoot. Unix
+APPDATA/LOCAL_APPDATA use GLib configuration/data directories. Unimplemented
+predefined names stay unavailable rather than silently binding unrelated
+environment values. No shell execution or recursive substitution is involved.
+Values must be nonempty bounded UTF-8 without line breaks. Conflicting Unix
+environment names differing only in case decline; identical values are accepted.
+Persisted expressions re-resolve on project load, retaining legacy literal paths
+and unchanged binding on errors. A dedicated user-variable editor, remaining
+predefined directories, other settings and MFL entry syntax remain open.
+
+The new environment-binding fixture fails on the previous implementation and
+passes after the change. It covers case-insensitive lookup, Unicode, persisted
+expression re-evaluation, literal inserted percent syntax, unavailable/empty/
+invalid/oversized values, case collisions on Unix, and TEMP_DIR. Existing project
+relocation and percent-escaping checks remain in place.
+
+Validation: the editor and all native test executables compile successfully.
+The strict C99 -Wall -Wextra -Werror membership fixture, all five MFL snapshot
+cases and the background synchronization fixture pass. The real MFL project
+GUI now applies an environment expression, checks its persisted spelling and
+retains the existing project-variable validation, manual writes, stale modal
+rejection, open/save and detach assertions. That GUI and the RU/EN interface
+GUI both pass. All 11 portable core fixtures passed before the change. Windows
+specific mappings have fixture assertions but were not executed in this Linux
+environment; Windows validation and the full Source Insight completion list
+remain open.

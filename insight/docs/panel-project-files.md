@@ -53,6 +53,22 @@ Directory entries currently retain this port's recursive membership rules. Sourc
 
 The Master file list field accepts `%PROJECT_SOURCE_DIR%` (the project source root), `%PROJECT_DATA_DIR%` (the directory containing the `.geany` project file), and `%PROJECT_NAME%` (that file's basename without its final extension). Names are case insensitive. For example, `%PROJECT_SOURCE_DIR%/master.txt` follows a moved source tree; `%PROJECT_DATA_DIR%/%PROJECT_NAME%.txt` follows the project configuration and its name.
 
-Expansion is one pass, with at most 32 substitutions and 16384 bytes for the expression/result. Unknown/unavailable variables or malformed expressions show an error and disable Apply, leaving the candidate binding unchanged. This field uses `%%` for a literal percent sign; Browse escapes literal filenames automatically. Resolution itself performs no filesystem I/O. System/user-defined path variables and expansion in other settings remain open.
+Expansion is one pass, with at most 32 substitutions and 16384 bytes for the expression/result. Unknown/unavailable variables or malformed expressions show an error and disable Apply, leaving the candidate binding unchanged. This field uses `%%` for a literal percent sign; Browse escapes literal filenames automatically. Resolution does not inspect the candidate MFL or execute shell commands; GLib may read platform folder configuration. Available system/environment variables are listed below. A dedicated user-variable editor, remaining predefined directories and expansion in other settings remain open.
 
 The expression is saved separately as `master-file-expression` alongside the resolved, preferably relative `master-file` value in the existing version-1 project membership settings. It is re-evaluated when loading the project. Legacy settings without the expression key retain their literal interpretation, including percent characters. Disabling the MFL removes both keys. Variable values are inserted as literal path text and are not recursively expanded.
+
+### Системные каталоги и окружение в пути MFL
+
+Поле пути MFL раскрывает имена переменных окружения без учёта регистра и
+`%TEMP_DIR%`, `%DESKTOP_DIR%`, `%MYDOCUMENTS_DIR%`, `%APPDATA_DIR%`,
+`%LOCAL_APPDATA_DIR%`. В Windows также доступны `%PROGRAMFILES_DIR%`,
+`%PROGRAMFILESX86_DIR%`, `%WINDOWS_DIR%` из соответствующих переменных процесса.
+В Unix APPDATA/LOCAL_APPDATA означают каталоги конфигурации/данных GLib.
+Недоступные специальные каталоги, пустые значения, некорректный UTF-8,
+переносы строк и различные значения одноимённых переменных с разным регистром
+отклоняются без изменения прежнего пути. Окружение фиксируется на одну
+операцию; подставленные значения повторно не раскрываются. Выражение
+сохраняется и вычисляется заново при загрузке проекта. Для получения нового
+окружения оболочки нужно перезапустить редактор. Отдельный редактор
+пользовательских переменных и остальные специальные каталоги Source Insight
+пока не реализованы; строки внутри самого MFL сохраняют буквальные пути.
