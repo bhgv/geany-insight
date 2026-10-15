@@ -22,5 +22,13 @@ int main(void) {
  assert(!insight_occurrences_find("foo",3,"\xff",1,0,out,8,&total));
  assert(!insight_occurrences_find("foo",3,"foo",3,0,NULL,1,&total));
  assert(!insight_occurrences_find("foo",3,"foo",3,0,out,8,NULL));
+ const char *unicode="foo😀foo\xc2\xa0" "foo foo_foo foo\xcc\x81";
+ assert(insight_occurrences_find(unicode,strlen(unicode),"foo",3,0,out,8,&total) && total==3);
+ assert(out[0].start==0 && out[1].start==7 && out[2].start==12);
+ assert(insight_occurrences_find(unicode,strlen(unicode),"foo",3,1,out,1,&total) && total==3 && out[0].start==7);
+ assert(!insight_occurrences_find("😀",4,"😀",4,0,out,8,&total) && total==0);
+ assert(!insight_occurrences_find("\xcc\x81",2,"\xcc\x81",2,0,out,8,&total));
+ assert(insight_occurrences_find("e\xcc\x81 e",5,"e\xcc\x81",3,0,out,8,&total) && total==1);
+ assert(insight_occurrences_find("变量 变量_x",strlen("变量 变量_x"),"变量",6,0,out,8,&total) && total==1);
  puts("occurrences: all checks passed"); return 0;
 }
