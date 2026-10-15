@@ -212,10 +212,14 @@ static gboolean python_static_before(const gchar *mask,gsize position) {
   while(first<end && g_ascii_isspace(mask[first])) first++;
   while(end>first && g_ascii_isspace(mask[end-1])) end--;
   if(first==end) continue;
+  if(mask[first]!='@' && end>first && mask[end-1]==')') {
+   gsize open=0,after=0;if(insight_select_match(mask,end,end-1,&open,&after)!=1) break;
+   first=open;while(first && mask[first-1]!='\n') first--;position=first;while(first<open && g_ascii_isspace(mask[first])) first++;
+  }
   if(mask[first]!='@') break;
   first++;
   while(first<end && (mask[first]==' ' || mask[first]=='\t')) first++;
-  if(word_is(mask,first,end,"staticmethod")) return TRUE;
+  if(word_is(mask,first,end,"staticmethod") || word_is(mask,first,end,"builtins.staticmethod")) return TRUE;
  }
  return FALSE;
 }
@@ -348,7 +352,7 @@ gchar *insight_native_python_owner(const InsightIndex *index,const gchar *path,c
  gchar *lookup=insight_native_python_binding_scope(index,path,scope,receiver,&cached);if(!lookup) { insight_native_python_bindings_free(owned);g_free(receiver);return NULL; }
  const InsightSymbol *best=NULL;gint best_rank=-1;
  for(gsize i=0;i<insight_index_count(index);i++) { const InsightSymbol *tag=insight_index_at(index,i);if(strcmp(tag->name,receiver) || (eligible && !eligible(tag,data))) continue;gint rank=insight_native_python_rank(index,tag,path,lookup,line);if(rank>best_rank) { best=tag;best_rank=rank; } }
- if(best && !strcmp(best->kind,"z") && (!strcmp(receiver,"self") || !strcmp(receiver,"cls"))) {
+ if(best && !strcmp(best->kind,"z")) {
   gchar *binding=python_scope_name(best->scope);
   for(gsize i=0;i<insight_index_count(index);i++) {
    const InsightSymbol *tag=insight_index_at(index,i);if(g_strcmp0(tag->path,path) || (strcmp(tag->kind,"m") && strcmp(tag->kind,"f")) || !*tag->scope || (eligible && !eligible(tag,data))) continue;

@@ -1213,7 +1213,7 @@ static bool parseClassOrDef (tokenInfo *const token,
 		while ((p = strstr (p, "staticmethod")) != NULL)
 		{
 			const char *begin = vStringValue (decorators);
-			if ((p == begin || p[-1] == ',') && (p[12] == '\0' || p[12] == ','))
+			if ((p == begin || p[-1] == ',' || (p-begin >= 9 && !strncmp (p-9, "builtins.", 9) && (p-9 == begin || p[-10] == ','))) && (p[12] == '\0' || p[12] == ','))
 				PY_NL (lv)->staticMethod = true;
 			p += 12;
 		}
@@ -1554,8 +1554,6 @@ static void parseSimpleNamespace (tokenInfo *const token, int namespaceIndex)
 static int instanceFieldClass (const tokenInfo *receiver)
 {
 	const char *name = vStringValue (receiver->string);
-	if (strcmp (name, "self") != 0 && strcmp (name, "cls") != 0)
-		return CORK_NIL;
 	NestingLevel *level = nestingLevelsGetCurrent (PythonNestingLevels);
 	tagEntryInfo *method = getEntryOfNestingLevel (level);
 	if (!method || method->kindIndex != PYTHON_METHOD_KIND || PY_NL (level)->staticMethod)

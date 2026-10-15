@@ -121,3 +121,9 @@ when indexed names and declaration lines stay the same.
 Annotation-only declarations (`name: Type`, class fields and `self.field: Type`)
 are indexed too. They supply a declaration/type for navigation without implying
 that Python created a runtime value or attribute.
+
+The first formal parameter of a direct method may have any identifier (for
+example `me`); its position and declaring class determine the receiver. Known
+`builtins.staticmethod` and plain `staticmethod` suppress it, including stacks
+containing multiline decorator calls. Arbitrary decorator transformations remain
+unsupported.

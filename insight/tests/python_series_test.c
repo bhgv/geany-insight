@@ -25,4 +25,9 @@ static void annotations(void) {
  Fixture f=fixture("class Model:\n    field: int\n    def setup(self):\n        self.typed: int\n    def run(self):\n        local: Model\n        return local.field + self.typed\nmodule: Model\nmodule.field\n");
  declaration(&f,"field","Model","int");declaration(&f,"typed","Model","int");declaration(&f,"local","Model.run","Model");declaration(&f,"module","","Model");owner(&f,"local.field","Model");owner(&f,"self.typed","Model");owner(&f,"module.field","Model");clear(&f);
 }
-int main(void) { tm_get_workspace();annotations();tm_workspace_free();puts("Python navigation series: all checks passed");return 0; }
+static void receivers(void) {
+ Fixture f=fixture("import builtins\nclass Named:\n    field: int\n    def setup(me):\n        me.extra: int = 1\n    def run(me):\n        return me.field\n    @builtins.staticmethod\n    def static(self):\n        self.wrong = 2\n        return self.field # qualified_static\n    @staticmethod\n    @identity(\n        1,\n    )\n    def stacked(self):\n        return self.field # stacked_static\ndef plain(me):\n    return me.field # plain\n");
+ declaration(&f,"extra","Named","int");owner(&f,"me.field\n","Named");owner(&f,"self.field # qualified_static",NULL);owner(&f,"self.field # stacked_static",NULL);owner(&f,"me.field # plain",NULL);
+ const InsightSymbol *tag;assert(!insight_index_find(f.index,"wrong",1,&tag,1));clear(&f);
+}
+int main(void) { tm_get_workspace();annotations();receivers();tm_workspace_free();puts("Python navigation series: all checks passed");return 0; }
