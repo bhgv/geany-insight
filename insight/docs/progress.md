@@ -1584,3 +1584,30 @@ with -Wall -Wextra -Werror pass. The final combined run passes all 46 selected
 tests: 20 native/core tests, 19 Python/Cython parser fixtures and seven GUI tests.
 The series GUI exercises 21 cases with both F12 and Follow. Existing live-edit
 GUI regressions verify constructor RHS and imported-definition updates.
+
+
+## Second requested 30-step series: Context, occurrences and Diff/Merge
+
+See `context-search-30.md`: six blocks of reproduction, implementation,
+regression coverage, compatibility checks and docs/main publication. Unicode
+15.0 XID boundaries replace the assumption that every non-ASCII byte belongs to
+an identifier in lexical caret lookup, whole-name occurrences and call candidate
+scanning. Exact bytes and byte columns remain unchanged; no normalization or
+language-specific semantic equivalence is claimed. The call scanner also skips
+numeric-token suffixes and partial tokens at a supplied cursor; its legacy `$`
+extension remains available. Context range failures reset all outputs and reject
+invalid UTF-8/NUL without partial coordinates.
+
+Diff now splits CR, LF and CRLF with exact endings retained. After common-edge
+trimming, one-sided changes produce one hunk without an LCS table; identical
+inputs allocate no hunk array. Two-sided matrix limits remain in force, and hunk
+storage follows the smaller side rather than the sum. The UI's 1 MiB input limit
+is unchanged; large one-sided regression inputs exercise the core API only.
+
+Validation: `python3 insight/tests/portable_core_checks.py` builds the portable
+core with strict C99 warnings, runs 11 native test executables, Diff edge cases
+and 3000 seeded random reconstructions, and compares all 1,114,112 Unicode table
+entries with Python's independent Unicode 15.0 database. All pass. A generator
+for the pinned table and the portable runner are included in source distributions.
+Workspace maintenance removed the previous GTK SDK, so this series makes no
+GUI/editor-build claim. Windows x64 was not rebuilt, as requested.

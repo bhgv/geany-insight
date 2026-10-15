@@ -33,3 +33,5 @@ block list; the list describes the original sources, not a new diff of the resul
 Core validation: `python3 insight/tests/diff_test.py` (C99 compiler required).
 Native GUI builds include the module in both Meson and Autotools. GTK development
 headers are needed to compile and exercise the window.
+
+The line engine recognizes CR, LF and CRLF while retaining their exact bytes. Nonadjacent changes in CR-only sources remain separate blocks. A pure insertion/deletion after trimming shared edges needs one block and no LCS matrix; two-sided comparisons retain the four-million-cell work limit. The UI source-size limit is unchanged.

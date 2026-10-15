@@ -59,6 +59,11 @@ with tempfile.TemporaryDirectory() as tmp:
     assert lib.insight_diff_compute(huge, b'b\n' * 2100, ctypes.byref(diff)) == -2
     assert diff.count == 0 and not diff.hunks
     check('a\n' * 10000, 'a\n' * 9999 + 'b\n', 1)
+    # One-sided changes have a known exact answer; no LCS work is needed.
+    check('', '\n' * 4000001, 1)
+    check('\r' * 4000001, '', 1)
+    check('head\ntail\n', 'head\n' + 'new\r\n' * 10000 + 'tail\n', 1)
+    check('head\n' + 'old\r' * 10000 + 'tail\n', 'head\ntail\n', 1)
     if os.name == 'nt':
         import _ctypes
         _ctypes.FreeLibrary(lib._handle)  # Windows locks loaded DLLs during cleanup.

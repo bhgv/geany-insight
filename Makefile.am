@@ -142,6 +142,8 @@ EXTRA_DIST += \
 	insight/docs/desktop-check-builds.md \
 	insight/docs/lua-api.md \
 	insight/docs/progress.md \
+	insight/docs/context-search-30.md \
+	insight/tests/portable_core_checks.py \
 	insight/docs/source-insight-parity.md \
 	insight/examples/check_document.lua \
 	insight/examples/commands.lua \

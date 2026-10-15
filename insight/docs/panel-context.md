@@ -147,3 +147,5 @@ Python создал значение или атрибут во время ис�
 Imported class instances support simple variable/parameter annotations, one constructor assignment and direct `Alias().field` / `mod.Class().field` calls. An imported type resolves only against its module file; similarly named classes elsewhere do not supply fields. Parameter annotations resolve outside the function body. Imported factory return types and complex annotations remain unsupported.
 
 Navigation caches belong to one immutable source/path/index snapshot. Edits and index publications refresh Follow. Constructor lookup rechecks the current symbol eligibility filter even when a result was cached; an earlier filtered miss cannot hide a later eligible class. Reusing a cache with a different source or changed index declines the lookup.
+
+Lexical identifier lookup and whole-name occurrence searches use Unicode 15.0 XID start/continue boundaries. NBSP, emoji and punctuation separate names; combining marks may continue a valid name. Byte offsets/columns are preserved. Names are compared exactly, without Unicode normalization. This is lexical matching, not language-specific semantic analysis.

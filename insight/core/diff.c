@@ -32,9 +32,18 @@ int insight_diff_compute(const char *a,const char *b,InsightDiff *out) {
  while(start<xe && start<ye && equal(&x,start,&y,start)) start++;
  while(xe>start && ye>start && equal(&x,xe-1,&y,ye-1)) { xe--; ye--; }
  size_t nx=xe-start,ny=ye-start,width=ny+1;
+ /* After common-edge trimming, an empty side is one exact edit. */
+ if(!nx || !ny) {
+  if(nx || ny) {
+   out->hunks=malloc(sizeof *out->hunks);if(!out->hunks) goto done;
+   out->hunks[0]=(InsightDiffHunk){x.offsets[start],x.offsets[xe],y.offsets[start],y.offsets[ye]};out->count=1;
+  }
+  status=0;goto done;
+ }
  if(nx+1>4000000/width) { status=-2; goto done; }
  table=calloc((nx+1)*width,sizeof(unsigned));
- out->hunks=malloc((nx+ny+1)*sizeof(InsightDiffHunk));
+ /* Every separation consumes an equal line from both sides. */
+ out->hunks=malloc(((nx<ny ? nx : ny)+1)*sizeof(InsightDiffHunk));
  if(!table || !out->hunks) goto done;
  for(size_t i=nx;i-->0;) for(size_t j=ny;j-->0;)
   table[i*width+j]=equal(&x,start+i,&y,start+j) ? 1+table[(i+1)*width+j+1] :

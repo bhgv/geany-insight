@@ -7,6 +7,8 @@ typedef struct { InsightDiffHunk *hunks; size_t count; } InsightDiff;
 /* Byte offsets; CR, LF and CRLF delimit lines; exact endings and final-newline
  * differences are retained.
  * Returns 0 on success, -1 on allocation failure, -2 on work limit exceeded.
+ * Pure insertion/deletion after common-edge trimming uses one hunk and no
+ * LCS table. The work limit still applies to two-sided comparisons.
  * Inputs must be NUL-terminated text without embedded NULs. */
 int insight_diff_compute(const char *a, const char *b, InsightDiff *out);
 void insight_diff_clear(InsightDiff *diff);
