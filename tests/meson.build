@@ -548,3 +548,11 @@ test('Insight initial and restored panel geometry GUI', panel_geometry_gui_test,
 
 python_imports_gui_test = executable('test_insight_python_imports_gui', '../insight/tests/python_imports_gui_test.c', dependencies: test_deps)
 test('Insight explicit Python import navigation GUI', python_imports_gui_test, timeout: 45)
+
+python_series_test = executable('test_insight_python_series',
+ '../insight/tests/python_series_test.c', '../insight/core/structure_select.c', link_with: insight_native,
+ include_directories: include_directories('../insight/core'),
+ c_args: geany_cflags + ['-UNDEBUG'], dependencies: deps + [dep_tagmanager, dep_ctags])
+test('Insight Python navigation series', python_series_test)
+python_series_gui_test = executable('test_insight_python_series_gui', '../insight/tests/python_series_gui_test.c', dependencies: test_deps)
+test('Insight Python navigation series GUI', python_series_gui_test, timeout: 100)

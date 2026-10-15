@@ -117,3 +117,7 @@ compound expressions are not inferred. This is a nominal source rule, not
 execution of `__new__` or flow analysis. Results belong to the source/index
 snapshot; changing the constructor expression invalidates the preview cache even
 when indexed names and declaration lines stay the same.
+
+Annotation-only declarations (`name: Type`, class fields and `self.field: Type`)
+are indexed too. They supply a declaration/type for navigation without implying
+that Python created a runtime value or attribute.

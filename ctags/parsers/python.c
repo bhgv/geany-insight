@@ -1594,7 +1594,7 @@ static bool parseVariable (tokenInfo *const token, const pythonKind kind)
 	 * an assignation to it */
 	tokenInfo *nameTokens[8] = { NULL };
 	vString   *nameTypes [ARRAY_SIZE (nameTokens)] = { NULL };
- int instanceClasses [ARRAY_SIZE (nameTokens)] = { CORK_NIL };
+	int instanceClasses [ARRAY_SIZE (nameTokens)] = { CORK_NIL };
 	unsigned int nameCount = 0;
 	vString *type = vStringNew();
 
@@ -1788,6 +1788,19 @@ static bool parseVariable (tokenInfo *const token, const pythonKind kind)
 		{
 			if (nameTokens[i])
 				makeVariableTag (nameTokens[i], kind, instanceClasses[i]);
+		}
+	}
+
+	else if (nameCount == 1 && nameTokens[0] && nameTypes[0] &&
+	         (token->type == TOKEN_INDENT || token->type == TOKEN_EOF || token->type == ';'))
+	{
+		int index = makeVariableTag (nameTokens[0], kind, instanceClasses[0]);
+		tagEntryInfo *entry = getEntryInCorkQueue (index);
+		if (entry)
+		{
+			entry->extensionFields.typeRef[0] = eStrdup ("typename");
+			entry->extensionFields.typeRef[1] = vStringDeleteUnwrap (nameTypes[0]);
+			nameTypes[0] = NULL;
 		}
 	}
 
