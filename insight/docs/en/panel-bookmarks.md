@@ -98,3 +98,23 @@ rows. The option is saved between sessions and defaults off for existing profile
 Cancel, store reload/project switch during confirmation, or a write failure leaves
 the intended deletion unapplied. The full Source Insight Bookmark Options dialog
 (including persistence and close-file policies) is not implemented by this switch.
+
+## Panel font and colors
+
+Choose Font & Color… from the bookmark list menu (right-click or Menu / Shift+F10).
+Enable Use custom appearance, choose a font from 4 to 96 points and text/background
+colors, then Apply. Cancel keeps the previous appearance. Disable custom appearance
+to use the current theme; the custom values remain available for re-enabling.
+The setting affects every column of the Bookmarks panel, survives restarts and is
+independent of Project Folders and Browse disk. Selection colors follow the theme.
+It does not change the separate editor bookmark list opened by the book button.
+
+## Delete bookmarks when a file closes
+
+Enable Delete bookmarks when file closes in the panel menu. It is off by default
+and remembered between launches. Closing a file removes all its bookmarks from
+the active store, including filtered-out rows, and retains other files' marks
+and Clips. Manual deletion confirmation does not apply to this automatic action.
+Cancelling an unsaved-file close leaves bookmarks intact. A failed store write
+retains the old list in memory so reopening can restore its marks. Normal exit
+with a saved session does not clear bookmarks.

@@ -698,3 +698,5 @@ File filter history: 16 valid queries, up to 256 bytes each|||История ф�
 Files: %u|||Файлы: %u
 Files: %u+|||Файлы: %u+
 Loaded matching files; + means more remain beyond the 10000-file list limit|||Загруженные совпадающие файлы; + означает оставшиеся совпадения сверх лимита списка в 10000 файлов
+
+Delete bookmarks when file closes|||Удалять закладки при закрытии файла

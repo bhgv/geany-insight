@@ -577,3 +577,5 @@ test('Insight reference comment regions restore GUI', reference_regions_gui_test
 bookmark_selection_gui_test = executable('test_insight_bookmark_selection_gui', '../insight/tests/bookmark_selection_gui_test.c', dependencies: test_deps)
 test('Insight bookmark multiple selection GUI', bookmark_selection_gui_test, timeout: 45)
 test('Insight bookmark deletion confirmation restore GUI', bookmark_selection_gui_test, timeout: 45, env: ['GEANY_TEST_BOOKMARK_CONFIRM_RESTORE=1'])
+
+test('Insight bookmark close-file option restore GUI', bookmark_selection_gui_test, timeout: 45, env: ['GEANY_TEST_BOOKMARK_CLOSE_RESTORE=1'])

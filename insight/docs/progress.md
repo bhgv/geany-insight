@@ -1691,3 +1691,46 @@ Full Linux targets and strict C99 formatting-module compilation pass. Offline
 RU/EN help and future Windows test registration are included; no Windows build
 request marker was touched. Parent-style hierarchies and SI configuration import
 are still distinct outstanding work, not claimed by these display modes.
+
+
+## Guide-driven Bookmark close-file policy and panel appearance (2026-10-16)
+
+Reference: https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Bookmark_Options.htm
+
+The Bookmarks panel context menu now opens the existing shared Font & Color
+editor. Its style is saved separately as bookmarks-style in workbench.conf and
+restored after panel creation. Reuse retains the existing font validation,
+failure-atomic Apply, Cancel, theme reset and theme selection colors. Existing
+menu action indexes and note storage are unchanged; this concerns the panel,
+not the separate editor bookmark-list window. RU/EN panel help describes scope.
+
+The existing bookmark selection GUI scenario has regression assertions for
+startup restore, Cancel, Apply, theme reset/re-enable, every column's font,
+independence from Project Folders, caret/selection stability, persisted font and
+Russian menu text. The Linux GTK development environment was prepared locally and these checks
+pass. No Windows build-request marker was changed.
+
+
+Delete bookmarks when file closes is a persisted, default-off panel menu option.
+It runs after the accepted document-close event's bookmark capture and uses the
+existing transactional notes commit. Only the closing path in the active store
+is removed; Clips, other files and inactive stores are retained. A successful
+commit also clears native bookmark markers on the closing buffer to prevent
+recapture. Failed writes keep the old snapshot. Manual deletion confirmation
+is intentionally bypassed for this explicitly enabled automatic policy. The
+editor emits document-close only after accepting the unsaved-file prompt;
+the quitting guard keeps ordinary saved-session exit from deleting marks.
+
+The existing GUI adds off/on/hidden-file marks, multi-mark deletion, failed-write
+rollback with reopen/retry and RU label checks. A third Meson invocation checks
+restoration of the close-file option. Windows request markers remain unchanged.
+
+
+Validation: the complete Linux editor/test target set builds. Six targeted GUI
+scenarios pass: bookmark selection/options, deletion-confirmation restore,
+close-file option restore, project bookmark stores (including close-file store
+isolation), anchored bookmarks and Browse disk appearance. The three options
+runs additionally verify unsaved-close cancellation, failed-write navigation
+recovery and saved-session exit preservation. git diff --check passes. Windows
+x64 remains deferred. XML interchange and the separate session-preservation
+option are not implemented by this change.

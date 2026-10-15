@@ -858,3 +858,4 @@ Delete bookmarks	Удаление закладок
 Bookmarks to delete: %u. Source files and clips are kept.	Закладок для удаления: %u. Исходные файлы и шаблоны сохраняются.
 Bookmark line number is outside the current file	Номер строки вне текущего файла
 Several bookmarks match; select one in the list	Найдено несколько закладок; выберите одну в списке
+Delete bookmarks when file closes	Удалять закладки при закрытии файла

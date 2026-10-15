@@ -174,3 +174,19 @@ Both use transactional writes and store-generation guards. GUI covers cancel,
 reload during confirmation, failed-write rollback, hidden marks, retained clips,
 name/line priority and restoration of the preference. Bookmark Options persistence
 and close-file policies remain open, as does XML exchange.
+
+### Bookmark panel Font & Color (2026-10-16)
+
+The Bookmarks panel menu now exposes the shared Font & Color dialog, as described
+in Source Insight's Bookmark Options. Fonts and foreground/background colors use
+an independent persisted style group; theme reset retains the custom values and
+Cancel leaves the style unchanged. The separate editor bookmark-list window is
+unchanged. The existing selection GUI scenario now includes restore, apply,
+cancel, theme reset, all-column fonts, folder-style isolation, caret/selection
+stability, saved preferences and Russian menu labels. All three bookmark-option GUI invocations pass on Linux. Delete bookmarks when file closes is also available, defaulting off and saved
+independently. Accepted document-close events transactionally remove only the
+closing file's marks from the active store; write failures retain notes and
+other files/Clips are preserved. Normal session exit preserves marks. Additional
+GUI assertions cover off/on, hidden marks, failure/reopen recovery and preference
+restore. The separate Preserve bookmarks between sessions option and Source
+Insight XML interchange remain open.
