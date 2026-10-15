@@ -108,6 +108,8 @@ EXTRA_DIST += \
 	insight/android/settings.gradle \
 	insight/core/context.c \
 	insight/core/context.h \
+	insight/core/identifier.h \
+	insight/tools/build_identifier_table.py \
 	insight/core/document.c \
 	insight/core/document.h \
 	insight/core/index.c \
