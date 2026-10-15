@@ -22,7 +22,7 @@ enum { ID,NAME,PATH,STATE,LINES,SYMBOL,RECENT,ACTIVE,COLUMNS };
 static struct {
  gboolean alive,refreshing,press_previewed,sort_syncing;GtkWidget *window,*search,*view,*sort,*activate,*save,*close,*status;GtkListStore *model;
  GHashTable *recent;guint64 serial;guint timer;InsightWindowPreview preview;
- gchar *settings,*filter; gint x,y,width,height,column,direction,widths[6],order[6]; gboolean positioned,maximized;
+ gchar *settings,*filter; gint x,y,width,height,column,direction,widths[6],order[6]; gboolean positioned,maximized,docked,moving; GtkWidget *content,*dock_page,*dock_toggle;
 } list;
 static gint bounded_integer(GKeyFile *key,const gchar *name,gint low,gint high,gint fallback) {
  GError *error=NULL; gint value=g_key_file_get_integer(key,"window-list",name,&error); gboolean valid=!error && value>=low && value<=high; g_clear_error(&error); return valid ? value : fallback;
@@ -33,6 +33,7 @@ static void settings_read(void) {
  list.settings=g_build_filename(app->configdir,"insight","window-list.conf",NULL); GKeyFile *key=g_key_file_new();
  if(g_key_file_load_from_file(key,list.settings,G_KEY_FILE_NONE,NULL) && bounded_integer(key,"version",1,1,0)==1) {
   list.width=bounded_integer(key,"width",400,4000,850); list.height=bounded_integer(key,"height",220,3000,430); list.x=bounded_integer(key,"x",-30000,30000,0); list.y=bounded_integer(key,"y",-30000,30000,0); list.positioned=g_key_file_get_boolean(key,"window-list","positioned",NULL); list.maximized=g_key_file_get_boolean(key,"window-list","maximized",NULL);
+  list.docked=g_key_file_get_boolean(key,"window-list","docked",NULL);
   list.column=bounded_integer(key,"sort-column",NAME,ACTIVE,RECENT); list.direction=bounded_integer(key,"sort-direction",GTK_SORT_ASCENDING,GTK_SORT_DESCENDING,GTK_SORT_DESCENDING);
   gchar *filter=g_key_file_get_string(key,"window-list","filter",NULL); if(filter && strlen(filter)<=2048 && g_utf8_validate(filter,-1,NULL)) { g_free(list.filter); list.filter=filter; } else g_free(filter);
   gsize count=0; gint *sizes=g_key_file_get_integer_list(key,"window-list","column-widths",&count,NULL); if(sizes && count==6) for(guint i=0;i<6;i++) if(sizes[i]>=32 && sizes[i]<=2000) list.widths[i]=sizes[i]; g_free(sizes);
@@ -50,7 +51,7 @@ static void settings_capture(void) {
 static void settings_save(void) {
  if(!list.settings) return;
  settings_capture(); GKeyFile *key=g_key_file_new(); const gchar *group="window-list";
- g_key_file_set_integer(key,group,"version",1); g_key_file_set_integer(key,group,"width",list.width); g_key_file_set_integer(key,group,"height",list.height); g_key_file_set_integer(key,group,"x",list.x); g_key_file_set_integer(key,group,"y",list.y); g_key_file_set_boolean(key,group,"positioned",list.positioned); g_key_file_set_boolean(key,group,"maximized",list.maximized); g_key_file_set_integer(key,group,"sort-column",list.column); g_key_file_set_integer(key,group,"sort-direction",list.direction); g_key_file_set_string(key,group,"filter",list.filter ? list.filter : ""); g_key_file_set_integer_list(key,group,"column-widths",list.widths,6); g_key_file_set_integer_list(key,group,"column-order",list.order,6);
+ g_key_file_set_boolean(key,group,"docked",list.docked); g_key_file_set_integer(key,group,"version",1); g_key_file_set_integer(key,group,"width",list.width); g_key_file_set_integer(key,group,"height",list.height); g_key_file_set_integer(key,group,"x",list.x); g_key_file_set_integer(key,group,"y",list.y); g_key_file_set_boolean(key,group,"positioned",list.positioned); g_key_file_set_boolean(key,group,"maximized",list.maximized); g_key_file_set_integer(key,group,"sort-column",list.column); g_key_file_set_integer(key,group,"sort-direction",list.direction); g_key_file_set_string(key,group,"filter",list.filter ? list.filter : ""); g_key_file_set_integer_list(key,group,"column-widths",list.widths,6); g_key_file_set_integer_list(key,group,"column-order",list.order,6);
  gsize size=0; gchar *text=g_key_file_to_data(key,&size,NULL),*directory=g_path_get_dirname(list.settings); GError *error=NULL;
  if(!g_mkdir_with_parents(directory,0700)) { GFile *file=g_file_new_for_path(list.settings); g_file_replace_contents(file,text,size,NULL,FALSE,G_FILE_CREATE_PRIVATE,NULL,NULL,&error); g_object_unref(file); }
  else g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_FAILED,"Cannot create Window List settings directory");
@@ -58,10 +59,11 @@ static void settings_save(void) {
  g_clear_error(&error); g_free(directory); g_free(text); g_key_file_unref(key);
 }
 static gboolean configured(GtkWidget *widget,GdkEventConfigure *event,gpointer data) {
- (void)data; GdkWindow *window=gtk_widget_get_window(widget); if(window && !(gdk_window_get_state(window)&(GDK_WINDOW_STATE_MAXIMIZED|GDK_WINDOW_STATE_FULLSCREEN|GDK_WINDOW_STATE_ICONIFIED))) { list.width=CLAMP(event->width,400,4000); list.height=CLAMP(event->height,220,3000); gtk_window_get_position(GTK_WINDOW(widget),&list.x,&list.y); list.positioned=TRUE; } return FALSE;
+ (void)data; if(list.docked || list.moving) return FALSE; GdkWindow *window=gtk_widget_get_window(widget); if(window && !(gdk_window_get_state(window)&(GDK_WINDOW_STATE_MAXIMIZED|GDK_WINDOW_STATE_FULLSCREEN|GDK_WINDOW_STATE_ICONIFIED))) { list.width=CLAMP(event->width,400,4000); list.height=CLAMP(event->height,220,3000); gtk_window_get_position(GTK_WINDOW(widget),&list.x,&list.y); list.positioned=TRUE; } return FALSE;
 }
-static gboolean window_state(GtkWidget *widget,GdkEventWindowState *event,gpointer data) { (void)widget; (void)data; list.maximized=(event->new_window_state&GDK_WINDOW_STATE_MAXIMIZED)!=0; return FALSE; }
-static gboolean close_window(GtkWidget *widget,GdkEvent *event,gpointer data) { (void)event; (void)data; settings_save(); gtk_widget_hide(widget); return TRUE; }
+static gboolean window_state(GtkWidget *widget,GdkEventWindowState *event,gpointer data) { (void)widget; (void)data; if(!list.docked && !list.moving) list.maximized=(event->new_window_state&GDK_WINDOW_STATE_MAXIMIZED)!=0; return FALSE; }
+static void hide_list(void) { settings_save(); if(list.docked && list.dock_page) gtk_widget_hide(list.dock_page); else if(list.window) gtk_widget_hide(list.window); }
+static gboolean close_window(GtkWidget *widget,GdkEvent *event,gpointer data) { (void)widget; (void)event; (void)data; hide_list(); return TRUE; }
 static void restore_geometry(void) {
  gint width=list.width,height=list.height,x=list.x,y=list.y; GdkDisplay *display=gtk_widget_get_display(main_widgets.window); GdkMonitor *monitor=list.positioned ? gdk_display_get_monitor_at_point(display,x,y) : gdk_display_get_primary_monitor(display);
  if(!monitor && gdk_display_get_n_monitors(display)) monitor=gdk_display_get_monitor(display,0);
@@ -75,7 +77,7 @@ static GeanyDocument *selected_document(void) {
  return id ? document_find_by_id(id) : NULL;
 }
 static void selection_changed(GtkTreeSelection *selection,gpointer data) {
- (void)selection;(void)data;if(!list.window) return;
+ (void)selection;(void)data;if(!list.alive || list.moving || !list.view) return;
  GeanyDocument *doc=selected_document();gtk_widget_set_sensitive(list.activate,doc!=NULL);gtk_widget_set_sensitive(list.close,doc!=NULL);gtk_widget_set_sensitive(list.save,doc && !doc->readonly);
  if(doc && !list.refreshing && list.preview) { list.preview(doc->id);list.press_previewed=TRUE; }
 }
@@ -120,8 +122,8 @@ static void refresh(GtkWidget *widget,gpointer data) {
  selection_changed(NULL,NULL);list.refreshing=FALSE;
 }
 void insight_window_list_locale_changed(void) { if(list.alive && list.window) refresh(NULL,NULL); }
-static gboolean refresh_idle(gpointer data) { (void)data;list.timer=0;if(list.window && gtk_widget_get_visible(list.window)) refresh(NULL,NULL);return G_SOURCE_REMOVE; }
-void insight_window_list_editor_updated(void) { if(list.alive && list.window && gtk_widget_get_visible(list.window) && !list.timer) list.timer=g_timeout_add(150,refresh_idle,NULL); }
+static gboolean refresh_idle(gpointer data) { (void)data;list.timer=0;if(list.content && gtk_widget_get_mapped(list.content)) refresh(NULL,NULL);return G_SOURCE_REMOVE; }
+void insight_window_list_editor_updated(void) { if(list.alive && list.content && gtk_widget_get_mapped(list.content) && !list.timer) list.timer=g_timeout_add(150,refresh_idle,NULL); }
 static void visit(guint id) {
  if(!id) return;
  guint64 *serial=g_new(guint64,1);*serial=++list.serial;g_hash_table_replace(list.recent,GUINT_TO_POINTER(id),serial);
@@ -141,8 +143,8 @@ static void action(GtkWidget *widget,gpointer data) {
 }
 static void activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) { (void)view;(void)path;(void)column;(void)data;action(NULL,NULL); }
 static gboolean key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
- (void)widget;(void)data;if(!list.window) return FALSE;if(event->keyval==GDK_KEY_Escape) { settings_save(); gtk_widget_hide(list.window);return TRUE; }
- if((event->keyval==GDK_KEY_Return || event->keyval==GDK_KEY_KP_Enter) && (gtk_window_get_focus(GTK_WINDOW(list.window))==list.search || gtk_window_get_focus(GTK_WINDOW(list.window))==list.view)) { action(NULL,NULL);return TRUE; }
+ (void)widget;(void)data;if(!list.window) return FALSE;if(event->keyval==GDK_KEY_Escape) { hide_list();return TRUE; }
+ if((event->keyval==GDK_KEY_Return || event->keyval==GDK_KEY_KP_Enter) && (gtk_window_get_focus(GTK_WINDOW(gtk_widget_get_toplevel(list.content)))==list.search || gtk_window_get_focus(GTK_WINDOW(gtk_widget_get_toplevel(list.content)))==list.view)) { action(NULL,NULL);return TRUE; }
  return FALSE;
 }
 static void sort_changed(GtkComboBox *combo,gpointer data) {
@@ -153,16 +155,41 @@ static void sort_column_changed(GtkTreeSortable *model,gpointer data) {
  gint preset=column==RECENT && direction==GTK_SORT_DESCENDING ? 0 : (column==NAME && direction==GTK_SORT_ASCENDING ? 1 : (column==PATH && direction==GTK_SORT_ASCENDING ? 2 : 3));
  list.sort_syncing=TRUE;gtk_combo_box_set_active(GTK_COMBO_BOX(list.sort),preset);list.sort_syncing=FALSE;
 }
+static void dock_close(GtkWidget *widget,gpointer data) { (void)widget; (void)data; hide_list(); }
+static void dock_changed(GtkToggleButton *toggle,gpointer data) {
+ (void)data; if(!list.alive || list.moving || !list.content) return;
+ gboolean docked=gtk_toggle_button_get_active(toggle);
+ list.moving=TRUE; list.refreshing=TRUE;
+ if(docked && !list.dock_page) {
+  list.dock_page=gtk_scrolled_window_new(NULL,NULL); gtk_widget_set_name(list.dock_page,"insight-window-list-dock");
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(list.dock_page),GTK_POLICY_AUTOMATIC,GTK_POLICY_NEVER);
+  GtkWidget *tab=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3),*label=gtk_label_new("Window List"),*close=gtk_button_new_from_icon_name("window-close",GTK_ICON_SIZE_MENU);
+  gtk_button_set_relief(GTK_BUTTON(close),GTK_RELIEF_NONE); gtk_widget_set_tooltip_text(close,"Hide Window List");
+  gtk_box_pack_start(GTK_BOX(tab),label,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(tab),close,FALSE,FALSE,0); gtk_widget_show_all(tab);
+  gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),list.dock_page,tab); g_signal_connect(close,"clicked",G_CALLBACK(dock_close),NULL);
+ }
+ g_object_ref(list.content); GtkWidget *parent=gtk_widget_get_parent(list.content); if(parent) gtk_container_remove(GTK_CONTAINER(parent),list.content);
+ /* GtkScrolledWindow adds a viewport for the non-scrollable content box. */
+ if(!docked && list.dock_page) { GtkWidget *child=gtk_bin_get_child(GTK_BIN(list.dock_page)); if(child) gtk_widget_destroy(child); }
+ list.docked=docked; gtk_container_add(GTK_CONTAINER(docked ? list.dock_page : list.window),list.content); g_object_unref(list.content);
+ if(docked) {
+  gtk_widget_hide(list.window); gtk_widget_show_all(list.dock_page); ui_prefs.sidebar_visible=TRUE; ui_sidebar_show_hide();
+  gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.sidebar_notebook),list.dock_page));
+ } else {
+  if(list.dock_page) { gtk_widget_hide(list.dock_page); } restore_geometry(); gtk_window_resize(GTK_WINDOW(list.window),list.width,list.height); gtk_widget_show_all(list.window); gtk_window_present(GTK_WINDOW(list.window));
+ }
+ list.refreshing=FALSE; list.moving=FALSE; refresh(NULL,NULL); gtk_widget_grab_focus(list.search); settings_save();
+}
 static void destroyed(GtkWidget *widget,gpointer data) {
- (void)widget;(void)data;settings_save();if(list.timer) { g_source_remove(list.timer);list.timer=0; }
- list.window=list.search=list.view=list.sort=list.activate=list.save=list.close=list.status=NULL;g_clear_object(&list.model);
+ (void)widget;(void)data;settings_save();list.moving=TRUE;if(list.dock_page) { gtk_widget_destroy(list.dock_page); list.dock_page=NULL; } list.content=list.dock_toggle=NULL;if(list.timer) { g_source_remove(list.timer);list.timer=0; }
+ list.window=list.search=list.view=list.sort=list.activate=list.save=list.close=list.status=NULL;g_clear_object(&list.model);list.moving=FALSE;
 }
 void insight_window_list_show(GtkWidget *widget,gpointer data) {
  (void)widget;(void)data;if(!list.alive) return;
- if(list.window) { refresh(NULL,NULL);gtk_widget_show(list.window);gtk_window_present(GTK_WINDOW(list.window));gtk_widget_grab_focus(list.search);return; }
+ if(list.window) { refresh(NULL,NULL); if(list.docked) { gtk_widget_show_all(list.dock_page); ui_prefs.sidebar_visible=TRUE; ui_sidebar_show_hide(); gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.sidebar_notebook),list.dock_page)); } else { gtk_widget_show(list.window);gtk_window_present(GTK_WINDOW(list.window)); } gtk_widget_grab_focus(list.search);return; }
  list.window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_window_set_title(GTK_WINDOW(list.window),"Window List");gtk_widget_set_name(list.window,"insight-window-list-window");restore_geometry();gtk_window_set_transient_for(GTK_WINDOW(list.window),GTK_WINDOW(main_widgets.window));gtk_window_set_destroy_with_parent(GTK_WINDOW(list.window),TRUE);
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,5),*bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4),*scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_set_border_width(GTK_CONTAINER(box),8);gtk_container_add(GTK_CONTAINER(list.window),box);
- insight_panel_help_attach(box,"window-list.md");
+ list.content=box; g_signal_connect(box,"map",G_CALLBACK(refresh),NULL); g_signal_connect(box,"key-press-event",G_CALLBACK(key),NULL); insight_panel_help_attach(box,"window-list.md");
  list.search=gtk_search_entry_new();gtk_widget_set_tooltip_text(list.search,"Prefix with ~ for fuzzy subsequence matching");gtk_entry_set_max_length(GTK_ENTRY(list.search),512);gtk_entry_set_text(GTK_ENTRY(list.search),list.filter ? list.filter : "");gtk_entry_set_placeholder_text(GTK_ENTRY(list.search),"Filter open files, paths or nearest symbol…");gtk_widget_set_name(list.search,"insight-window-filter");gtk_box_pack_start(GTK_BOX(box),list.search,FALSE,FALSE,0);
  list.model=gtk_list_store_new(COLUMNS,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_INT,G_TYPE_STRING,G_TYPE_UINT64,G_TYPE_STRING);list.view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(list.model));gtk_widget_set_name(list.view,"insight-window-list");
  const gchar *titles[]={"Active","File","State","Lines","Nearest symbol","Path"};const gint fields[]={ACTIVE,NAME,STATE,LINES,SYMBOL,PATH};
@@ -171,9 +198,10 @@ void insight_window_list_show(GtkWidget *widget,gpointer data) {
  list.sort=gtk_combo_box_text_new();gtk_widget_set_name(list.sort,"insight-window-sort");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(list.sort),"Most recently used");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(list.sort),"Name");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(list.sort),"Path");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(list.sort),"Column sort");gtk_combo_box_set_active(GTK_COMBO_BOX(list.sort),0);gtk_box_pack_start(GTK_BOX(bar),list.sort,FALSE,FALSE,0);
  list.activate=gtk_button_new_with_label("Activate");list.save=gtk_button_new_with_label("Save");list.close=gtk_button_new_with_label("Close file");GtkWidget *reload=gtk_button_new_from_icon_name("view-refresh",GTK_ICON_SIZE_BUTTON);gtk_widget_set_tooltip_text(reload,"Refresh open file list");
  GtkWidget *buttons[]={list.activate,list.save,list.close};for(guint i=0;i<G_N_ELEMENTS(buttons);i++) { gtk_box_pack_start(GTK_BOX(bar),buttons[i],FALSE,FALSE,0);g_signal_connect(buttons[i],"clicked",G_CALLBACK(action),GINT_TO_POINTER(i)); }
+ list.dock_toggle=gtk_check_button_new_with_label("Dock in sidebar"); gtk_widget_set_name(list.dock_toggle,"insight-window-list-dock-toggle"); gtk_box_pack_start(GTK_BOX(box),list.dock_toggle,FALSE,FALSE,0); g_signal_connect(list.dock_toggle,"toggled",G_CALLBACK(dock_changed),NULL);
  gtk_box_pack_start(GTK_BOX(bar),reload,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);list.status=gtk_label_new("");gtk_box_pack_start(GTK_BOX(box),list.status,FALSE,FALSE,0);
  g_signal_connect(list.search,"changed",G_CALLBACK(refresh),NULL);g_signal_connect(list.sort,"changed",G_CALLBACK(sort_changed),NULL);g_signal_connect(list.model,"sort-column-changed",G_CALLBACK(sort_column_changed),NULL);g_signal_connect(reload,"clicked",G_CALLBACK(refresh),NULL);g_signal_connect(list.view,"row-activated",G_CALLBACK(activated),NULL);g_signal_connect(list.view,"button-press-event",G_CALLBACK(button_press),NULL);g_signal_connect(list.view,"button-release-event",G_CALLBACK(button_release),NULL);g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(list.view)),"changed",G_CALLBACK(selection_changed),NULL);g_signal_connect(list.window,"key-press-event",G_CALLBACK(key),NULL);g_signal_connect(list.window,"configure-event",G_CALLBACK(configured),NULL);g_signal_connect(list.window,"window-state-event",G_CALLBACK(window_state),NULL);g_signal_connect(list.window,"delete-event",G_CALLBACK(close_window),NULL);g_signal_connect(list.window,"destroy",G_CALLBACK(destroyed),NULL);
- gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(list.model),list.column,(GtkSortType)list.direction);refresh(NULL,NULL);gtk_widget_show_all(list.window);gtk_widget_grab_focus(list.search);
+ gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(list.model),list.column,(GtkSortType)list.direction);refresh(NULL,NULL);gtk_widget_show_all(list.window);gtk_widget_grab_focus(list.search); if(list.docked) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(list.dock_toggle),TRUE);
 }
 void insight_window_list_init(InsightWindowPreview preview) {
  settings_read();list.alive=TRUE;list.preview=preview;list.recent=g_hash_table_new_full(g_direct_hash,g_direct_equal,NULL,g_free);
@@ -181,5 +209,5 @@ void insight_window_list_init(InsightWindowPreview preview) {
  GeanyDocument *doc=document_get_current();if(doc) visit(doc->id);
 }
 void insight_window_list_finalize(void) {
- list.alive=FALSE;if(list.timer) { g_source_remove(list.timer);list.timer=0; }if(list.window) gtk_widget_destroy(list.window);g_clear_pointer(&list.recent,g_hash_table_destroy);g_free(list.settings);g_free(list.filter);memset(&list,0,sizeof list);
+ settings_save();list.alive=FALSE;if(list.timer) { g_source_remove(list.timer);list.timer=0; }if(list.window) gtk_widget_destroy(list.window);g_clear_pointer(&list.recent,g_hash_table_destroy);g_free(list.settings);g_free(list.filter);memset(&list,0,sizeof list);
 }

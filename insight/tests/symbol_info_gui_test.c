@@ -83,7 +83,28 @@ static gboolean step(gpointer data) {
   GtkTreeViewColumn *file=gtk_tree_view_get_column(GTK_TREE_VIEW(view),2); g_assert_cmpint(gtk_tree_view_column_get_fixed_width(file),==,210);
   GdkEvent *event=gdk_event_new(GDK_DELETE); gboolean handled=FALSE; g_signal_emit_by_name(list,"delete-event",event,&handled); gdk_event_free(event); g_assert_true(handled); g_assert_false(gtk_widget_get_visible(list)); gtk_menu_item_activate(GTK_MENU_ITEM(command)); g_assert_true(gtk_widget_get_visible(list));
   GtkWidget *ru=named(window,"insight-interface-ru"),*en=named(window,"insight-interface-en"); g_assert_nonnull(ru); g_assert_nonnull(en); gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(ru),TRUE); GtkTreeIter first_row; GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view)); g_assert_true(gtk_tree_model_get_iter_first(model,&first_row)); gchar *state=NULL; gtk_tree_model_get(model,&first_row,3,&state,-1); g_assert_cmpstr(state,==,"Сохранён"); g_free(state); g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(list,"insight-window-filter"))),==,"~hlpr"); gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(en),TRUE); g_assert_true(gtk_tree_model_get_iter_first(model,&first_row)); gtk_tree_model_get(model,&first_row,3,&state,-1); g_assert_cmpstr(state,==,"Saved"); g_free(state);
-  document_set_text_changed(document_find_by_id(untitled_id),FALSE); phase++;
+  document_set_text_changed(document_find_by_id(untitled_id),FALSE);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(list,"insight-window-list-dock-toggle")),TRUE); phase++;
+ } else if(phase==5) {
+  GtkWidget *dock=named(window,"insight-window-list-dock"),*list=toplevel("Window List",TRUE);g_assert_nonnull(dock);g_assert_true(gtk_widget_get_mapped(dock));g_assert_false(gtk_widget_get_visible(list));
+  GtkWidget *view=named(dock,"insight-window-list"),*search=named(dock,"insight-window-filter");g_assert_nonnull(view);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(search)),==,"~hlpr");
+  gint sort=-1;GtkSortType direction;gtk_tree_sortable_get_sort_column_id(GTK_TREE_SORTABLE(gtk_tree_view_get_model(GTK_TREE_VIEW(view))),&sort,&direction);g_assert_cmpint(sort,==,1);g_assert_cmpint(direction,==,GTK_SORT_DESCENDING);
+  g_assert_cmpuint(document_get_current()->id,==,primary_id);
+  GtkNotebook *sidebar=GTK_NOTEBOOK(gtk_widget_get_ancestor(dock,GTK_TYPE_NOTEBOOK));g_assert_nonnull(sidebar);gint dock_index=gtk_notebook_page_num(sidebar,dock);gtk_notebook_set_current_page(sidebar,0);document_set_text_changed(document_find_by_id(primary_id),TRUE);gtk_notebook_set_current_page(sidebar,dock_index);
+  GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));GtkTreeIter iter;g_assert_true(gtk_tree_model_get_iter_first(model,&iter));gchar *state=NULL;gtk_tree_model_get(model,&iter,3,&state,-1);g_assert_cmpstr(state,==,"Modified");g_free(state);document_set_text_changed(document_find_by_id(primary_id),FALSE);
+  GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);event->key.window=g_object_ref(gtk_widget_get_window(search));event->key.keyval=GDK_KEY_Escape;gboolean handled=FALSE;g_signal_emit_by_name(search,"key-press-event",event,&handled);gdk_event_free(event);
+  /* GTK signal emission does not propagate keys through parents; exercise the content handler. */
+  if(!handled) { event=gdk_event_new(GDK_KEY_PRESS);event->key.window=g_object_ref(gtk_widget_get_window(search));event->key.keyval=GDK_KEY_Escape;g_signal_emit_by_name(gtk_widget_get_parent(search),"key-press-event",event,&handled);gdk_event_free(event); }
+  g_assert_true(handled);g_assert_false(gtk_widget_get_visible(dock));gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-window-list-command")));g_assert_true(gtk_widget_get_visible(dock));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dock,"insight-window-list-dock-toggle")),FALSE);g_assert_true(gtk_widget_get_visible(list));g_assert_false(gtk_widget_get_visible(dock));g_assert_true(named(list,"insight-window-list")==view);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(list,"insight-window-filter"))),==,"~hlpr");phase++;
+ } else if(phase==6) {
+  GtkWidget *list=toplevel("Window List",TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(list,"insight-window-list-dock-toggle")),TRUE);gtk_widget_destroy(list);
+  gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-window-list-command")));phase++;
+ } else if(phase==7) {
+  GtkWidget *dock=named(window,"insight-window-list-dock"),*list=toplevel("Window List",TRUE);g_assert_nonnull(dock);g_assert_true(gtk_widget_get_mapped(dock));g_assert_false(gtk_widget_get_visible(list));
+  g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(dock,"insight-window-filter"))),==,"~hlpr");g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(dock,"insight-window-list-dock-toggle"))));
+  gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-ru")),TRUE);g_assert_cmpstr(gtk_button_get_label(GTK_BUTTON(named(dock,"insight-window-list-dock-toggle"))),==,"Закрепить в боковой панели");gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-en")),TRUE);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dock,"insight-window-list-dock-toggle")),FALSE);phase++;
  } else {
   g_print("Real editor GUI: Symbol Info source/metadata, background open, snapshot guard, untitled Jump; Window List preview/activate, filtering and cancelled close/save, saved geometry/filter/sort/column widths/order and soft close/reopen passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }

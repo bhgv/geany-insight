@@ -1,1 +1,1 @@
-Build Windows x64: restore offscreen Project divider without overriding valid positions, allow editor-side shrink, recover Follow after unfocused caret/edit then focus-in, preserve manual off; 18 native GUI scenarios.
+Build Windows x64: dock Window List in sidebar, preserve floating geometry/filter/sort/columns, hide/reopen, recreate docked host, refresh on tab return, RU/EN; keep 18 native GUI scenarios.

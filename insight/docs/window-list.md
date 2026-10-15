@@ -6,7 +6,7 @@ The search matches names, full paths and nearest parsed symbols using Unicode ca
 
 Single selection/click previews the buffer at its retained caret in Context; the editor stays on its current document. Double click, Enter from the search/list, or Activate switches the editor to the selected buffer while preserving its caret. Save uses Geany's native save/Save As handling. Close file uses its native unsaved-change prompt, so cancelling keeps the buffer open. Actions resolve stable document IDs at execution time.
 
-The list refreshes after document events and editor updates while visible, keeps the selected document when possible, and uses coalesced updates. Escape hides the window; reopening preserves the search and sort. The window close button also hides it. The nearest-symbol column uses existing parser tags, not a proven enclosing semantic scope. Arbitrary docking is not implemented yet.
+The list refreshes after document events and editor updates while visible, keeps the selected document when possible, and uses coalesced updates. Escape hides the window; reopening preserves the search and sort. The window close button also hides it. The nearest-symbol column uses existing parser tags, not a proven enclosing semantic scope. Use Dock in sidebar to move the same list into a sidebar tab. Clear it to return to the floating window. Escape or the tab close button hides only the list; Window → Window List… reveals it again. The mode is saved, and the list opens in that mode when requested after restarting. General edge dragging, snapping and Window List integration into A–D layouts remain open.
 
 ## Saved window settings
 
