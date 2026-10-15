@@ -107,4 +107,13 @@ unconventional receiver names and ordinary nested functions do not create guesse
 class fields. Plain `@staticmethod` is recognized even when decorator metadata
 output is disabled: it neither declares fields through its parameter nor treats
 that parameter as an implicit instance receiver. Other decorator semantics and
-unannotated constructor-assignment type inference remain open.
+general data-flow type inference remain open.
+
+A receiver assigned exactly once as `obj = LocalClass(...)` can use that indexed
+same-file class for field navigation. Arguments may span lines. The whole
+right-hand side must be that one call; competing bindings, reassignment,
+parameter rebinding, factory functions, constructor aliases/imports, chained or
+compound expressions are not inferred. This is a nominal source rule, not
+execution of `__new__` or flow analysis. Results belong to the source/index
+snapshot; changing the constructor expression invalidates the preview cache even
+when indexed names and declaration lines stay the same.

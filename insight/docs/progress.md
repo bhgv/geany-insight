@@ -1522,3 +1522,27 @@ Validation: the complete editor/test target set compiles. Strict C99
 -Wall -Wextra -Werror compilation of the shared resolver passes. The native
 index and five targeted GUIs pass: Python Context, imports/live updates,
 Python/Lua boundaries, C-family links and scoped C++ aliases.
+
+
+## Bounded Python constructor-assignment receivers
+
+A single simple assignment of the form obj = LocalClass(...) now supplies a
+nominal same-file receiver class for Context fields. The indexed class must be
+the unique visible lexical binding of the constructor name, and the variable
+must have exactly one indexed binding in its suite. Multiline call arguments
+are accepted; compound expressions, factory calls, imported/aliased constructors,
+reassignments, parameter rebinding and non-call names decline. No execution of
+__new__, argument typing, cross-file nominal selection or flow analysis is claimed.
+Results are cached for the same source/index snapshot and eligibility policy.
+
+Native regressions cover module/local assignments, multiline arguments, shadowed
+class names, factories, duplicate assignments, compound expressions, parameters,
+imports and non-call assignments, including repeated cached queries. The Python
+Context GUI follows and jumps from a constructed object to its indexed instance
+field, rejects a reassigned receiver, then edits only the constructor RHS while
+leaving indexed names/lines unchanged and verifies Follow switches to the other
+class field without manually moving the cursor. Windows remains deferred.
+
+Validation: the complete editor/test target set compiles, and strict C99
+-Wall -Wextra -Werror compilation passes. Native index and the Python Context,
+explicit imports/live updates, scoped C++ alias and C-family link GUIs pass.

@@ -186,6 +186,17 @@ static void python_instance_fields_test(void) {
  gsize position=strstr(strstr(code,"class Static"),"self.field")-code+5;gchar *scope=insight_native_python_scope(index,path,&source,position);gboolean member=FALSE;gchar *owner=insight_native_python_owner(index,path,scope,100,&source,position,&member,NULL,NULL);assert(member && !owner);g_free(scope);
  g_free(mask);insight_index_free(index);tm_source_file_free(file);g_unlink(filename);g_free(path);
 }
+static void python_constructor_test(void) {
+ const gchar *code="class Alpha:\n    field = 1\nclass Beta:\n    field = 2\nobj = Alpha()\nobj.field # module\ndef positive():\n    local = Alpha(\n        1,\n    )\n    return local.field # local\ndef shadow(Alpha):\n    hidden = Alpha()\n    return hidden.field # shadow\ndef factory():\n    return Alpha()\nmade = factory()\nmade.field # factory\nrebound = Alpha()\nrebound = Beta()\nrebound.field # rebound\ncompound = Alpha() or Beta()\ncompound.field # compound\ndef parameter(param):\n    param = Alpha()\n    return param.field # parameter\nfrom another import Alpha as Alias\naliased = Alias()\naliased.field # imported\nclass Odd:\n    pass\nnot_call = Alpha\nnot_call.field # not_call\n";
+ gchar filename[]="python-constructors-XXXXXX";gint fd=g_mkstemp(filename);assert(fd>=0);g_close(fd,NULL);gchar *path=g_canonicalize_filename(filename,NULL);TMSourceFile *file=tm_source_file_new(path,"Python");InsightIndex *index=insight_index_new();assert(insight_native_parse(index,file,path,code,strlen(code)));
+ gchar *mask=insight_source_code_mask(code,strlen(code),INSIGHT_CODE_PYTHON,NULL);InsightNativeSource source={code,mask,strlen(code),NULL};source.python=insight_native_python_bindings_new(index,path,&source);
+ const gchar *cases[]={"obj.field # module","local.field # local","hidden.field # shadow","made.field # factory","rebound.field # rebound","compound.field # compound","param.field # parameter","aliased.field # imported","not_call.field # not_call"};
+ for(guint n=0;n<G_N_ELEMENTS(cases);n++) { const gchar *needle=strstr(code,cases[n]);assert(needle);gsize position=strchr(needle,'.')-code+1;gchar *scope=insight_native_python_scope(index,path,&source,position);gboolean member=FALSE;gchar *owner=insight_native_python_owner(index,path,scope,100,&source,position,&member,NULL,NULL);assert(member && !g_strcmp0(owner,n<2 ? "Alpha" : NULL));g_free(scope);g_free(owner);
+  /* Repeating a query checks the per-snapshot constructor cache as well. */
+  scope=insight_native_python_scope(index,path,&source,position);owner=insight_native_python_owner(index,path,scope,100,&source,position,&member,NULL,NULL);assert(member && !g_strcmp0(owner,n<2 ? "Alpha" : NULL));g_free(scope);g_free(owner);
+ }
+ insight_native_python_bindings_free(source.python);g_free(mask);insight_index_free(index);tm_source_file_free(file);g_unlink(filename);g_free(path);
+}
 int main(void) {
  assert(insight_native_language_compatible(TM_PARSER_C,TM_PARSER_CPP));assert(insight_native_language_compatible(TM_PARSER_CPP,TM_PARSER_ASM));assert(!insight_native_language_compatible(TM_PARSER_C,TM_PARSER_VHDL));assert(!insight_native_language_compatible(TM_PARSER_CPP,TM_PARSER_SH));assert(!insight_native_language_compatible(TM_PARSER_NONE,TM_PARSER_NONE));assert(insight_native_language_compatible(TM_PARSER_PYTHON,TM_PARSER_PYTHON));
  InsightIndex *index=insight_index_new(); assert(index);
@@ -218,7 +229,7 @@ int main(void) {
  assert(insight_native_import(index,&source,"/project/a.cpp") && insight_index_count(index)==0);
  assert(insight_native_import(index,NULL,"/project/a.cpp"));
  g_ptr_array_free(tags,TRUE); insight_index_free(index);
- tm_get_workspace();python_navigation_test();python_declarations_test();python_imports_test();python_instance_fields_test();
+ tm_get_workspace();python_navigation_test();python_declarations_test();python_imports_test();python_instance_fields_test();python_constructor_test();
  const char *code="class Base {};\nclass Widget : public Base {\npublic: int run(int value) { return value; }\n};\nint parsed_function(int value) { return value; }\n";
  char filename[]="native-parser-test-XXXXXX"; gint descriptor=g_mkstemp(filename); assert(descriptor>=0); g_close(descriptor,NULL);
  char *absolute=g_canonicalize_filename(filename,NULL); TMSourceFile *parsed=tm_source_file_new(absolute,"C++"); assert(parsed && parsed->lang>=0);

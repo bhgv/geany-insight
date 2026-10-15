@@ -152,7 +152,7 @@ static gboolean python_within(const gchar *scope,const gchar *outer) {
 /* A declaration affects its complete suite, including earlier references. */
 typedef struct { gchar *module,*name;gboolean ambiguous; } PythonImport;
 static void python_import_free(gpointer data) { PythonImport *item=data;g_free(item->module);g_free(item->name);g_free(item); }
-struct InsightNativePythonBindings { GHashTable *scopes,*imports,*import_names,*modules,*static_methods;gboolean valid; };
+struct InsightNativePythonBindings { GHashTable *scopes,*imports,*import_names,*modules,*static_methods,*constructors;gboolean valid; };
 static void python_space(const gchar *mask,gsize length,gsize *at,gboolean multiline) {
  while(*at<length) {
   if(mask[*at]==' ' || mask[*at]=='\t' || (multiline && (mask[*at]=='\n' || mask[*at]=='\r'))) { (*at)++;continue; }
@@ -203,7 +203,7 @@ done:
 }
 void insight_native_python_bindings_free(InsightNativePythonBindings *bindings) {
  if(!bindings) return;
- g_hash_table_unref(bindings->scopes);g_hash_table_unref(bindings->imports);g_hash_table_unref(bindings->import_names);g_hash_table_unref(bindings->modules);g_hash_table_unref(bindings->static_methods);g_free(bindings);
+ g_hash_table_unref(bindings->scopes);g_hash_table_unref(bindings->imports);g_hash_table_unref(bindings->import_names);g_hash_table_unref(bindings->modules);g_hash_table_unref(bindings->static_methods);g_hash_table_unref(bindings->constructors);g_free(bindings);
 }
 static gboolean python_static_before(const gchar *mask,gsize position) {
  while(position && mask[position-1]!='\n') position--;
@@ -226,6 +226,7 @@ InsightNativePythonBindings *insight_native_python_bindings_new(const InsightInd
  bindings->import_names=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
  bindings->modules=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);
  bindings->static_methods=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
+ bindings->constructors=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);
  if(!index || !source || !source->text || !source->mask || source->length>2u*1024u*1024u) return bindings;
  const gchar *mask=source->mask;gsize work=0;guint count=0,names=0;
  for(gsize at=0;at<source->length;) {
@@ -300,6 +301,39 @@ gint insight_native_python_rank(const InsightIndex *index,const InsightSymbol *t
  }
  g_free(owner);g_free(current);return rank;
 }
+/* Infer only a single simple assignment to a directly indexed local class.
+ * Competing bindings, aliases, factory functions and compound expressions
+ * require type/flow analysis and deliberately have no guessed owner. */
+static gchar *python_constructor_owner(const InsightIndex *index,const gchar *path,const InsightSymbol *variable,const InsightNativeSource *source,InsightNativePythonBindings *bindings,InsightTypeEligible eligible,void *data) {
+ if(strcmp(variable->kind,"l") && strcmp(variable->kind,"v")) return NULL;
+ gchar *key=g_strconcat(variable->scope,"\037",variable->name,NULL);const gchar *cached=g_hash_table_lookup(bindings->constructors,key);
+ if(cached) { gchar *owner=*cached ? g_strdup(cached) : NULL;g_free(key);return owner; }
+ gchar *owner=NULL,*constructor=NULL,*lookup=NULL,*scope=python_scope_name(variable->scope);gsize at=0;gulong line=1;guint assignments=0;
+ for(gsize i=0;i<insight_index_count(index);i++) { const InsightSymbol *tag=insight_index_at(index,i);if(!g_strcmp0(tag->path,path) && !strcmp(tag->scope,variable->scope) && !strcmp(tag->name,variable->name)) assignments++; }
+ if(assignments!=1 || !variable->line) goto done;
+ while(at<source->length && line<variable->line) if(source->mask[at++]=='\n') line++;
+ if(line!=variable->line) goto done;
+ const gchar *mask=source->mask;while(at<source->length && (mask[at]==' ' || mask[at]=='\t')) at++;gsize name_size=strlen(variable->name);
+ if(at+name_size>source->length || memcmp(mask+at,variable->name,name_size) || (at+name_size<source->length && ident(mask[at+name_size]))) goto done;
+ at+=name_size;while(at<source->length && (mask[at]==' ' || mask[at]=='\t')) at++;
+ if(at==source->length || mask[at++]!='=' || (at<source->length && mask[at]=='=')) goto done;
+ python_space(mask,source->length,&at,FALSE);constructor=python_import_name(mask,source->length,&at,FALSE,FALSE);if(!constructor) goto done;
+ python_space(mask,source->length,&at,FALSE);if(at==source->length || mask[at]!='(') goto done;
+ gsize open=0,after=0;if(insight_select_match(mask,source->length,at,&open,&after)!=1 || open!=at) goto done;
+ at=after;while(at<source->length && (mask[at]==' ' || mask[at]=='\t')) at++;
+ if(at<source->length && mask[at]!='\n' && mask[at]!='\r') goto done;
+ lookup=insight_native_python_binding_scope(index,path,scope,constructor,source);if(!lookup) goto done;
+ /* A source import has its own module path semantics; do not reinterpret it
+  * as a same-name class in this file or elsewhere in the project. */
+ GHashTable *imports=g_hash_table_lookup(bindings->imports,lookup);if(imports && g_hash_table_contains(imports,constructor)) goto done;
+ const InsightSymbol *klass=NULL;gint rank=-1;gboolean ambiguous=FALSE;
+ for(gsize i=0;i<insight_index_count(index);i++) { const InsightSymbol *tag=insight_index_at(index,i);if(strcmp(tag->name,constructor) || (eligible && !eligible(tag,data))) continue;gint candidate=insight_native_python_rank(index,tag,path,lookup,variable->line);
+  if(candidate>rank) { klass=tag;rank=candidate;ambiguous=FALSE; }else if(candidate>=0 && candidate==rank) ambiguous=TRUE;
+ }
+ if(klass && !ambiguous && !strcmp(klass->kind,"c")) owner=python_symbol_scope(klass);
+done:
+ g_hash_table_insert(bindings->constructors,key,g_strdup(owner ? owner : ""));g_free(scope);g_free(lookup);g_free(constructor);return owner;
+}
 gchar *insight_native_python_owner(const InsightIndex *index,const gchar *path,const gchar *scope,gulong line,const InsightNativeSource *source,gsize position,gboolean *member,InsightTypeEligible eligible,void *data) {
  *member=FALSE;if(!source || !source->text || !source->mask || position>source->length) return NULL;
  const gchar *mask=source->mask;gsize at=position;while(at && ident(mask[at-1])) at--;while(at && g_ascii_isspace(mask[at-1])) at--;if(!at || mask[at-1]!='.') return NULL;
@@ -331,6 +365,7 @@ gchar *insight_native_python_owner(const InsightIndex *index,const gchar *path,c
  /* A visible annotated variable or a directly named class is nominal. */
  if(!owner && best && !strcmp(best->kind,"c")) owner=python_symbol_scope(best);
  else if(!owner && best && *best->type) { InsightTypeResult resolved=insight_type_resolve(index,best->type,best->scope,path,eligible,data);owner=resolved.owner;resolved.owner=NULL;insight_type_result_clear(&resolved); }
+ if(!owner && best && !*best->type) owner=python_constructor_owner(index,path,best,&cached,bindings,eligible,data);
  insight_native_python_bindings_free(owned);g_free(lookup);g_free(receiver);return owner;
 }
 
