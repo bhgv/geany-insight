@@ -1,1 +1,1 @@
-Rebuild Windows x64 and native GUI regressions after CRLF localization catalog fix.
+Build Windows x64: expandable indexed relation outline and main-menu baseline GUI checks.

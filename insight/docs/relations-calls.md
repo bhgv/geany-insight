@@ -33,3 +33,11 @@ In Members, Base types and Derived types, enable **Include indirect inheritance 
 The traversal resolves C++ `::` and dot-scoped names, searches declaring namespaces from inner to outer, and respects an explicit global `::` base. It uses the active language profile before constructing links. Bare root names are accepted only when unique; duplicate indexed class declarations or ambiguous base names are omitted instead of guessed. Cycles and diamond inheritance do not duplicate results. Only indexed definitions are returned; unknown bases and aliases are not inferred.
 
 Depth is limited to 32 edges; the status reports a depth limit or ambiguity. The table shows at most 2000 eligible results and reports truncation. Filtering/sorting and the existing graph remain available; the graph still displays a single layer of result nodes rather than the inheritance edges. This implements tag-based transitivity, not compiler-level alias, access-control, overload or type inference.
+
+## Expandable indexed relation outline
+
+Enable **Expandable relation tree** in Members, Base types or Derived types. Expanding a class node loads its immediate indexed relations in a worker; collapsing retains its loaded children. Contains/Members branches show direct scopes only, so inherited fields are not attached to the wrong owner. Definitions/Call sites and Back work from the selected source row; Back restores the tree option and previously expanded branch paths for this session.
+
+The shared result filter retains ancestors of matching loaded nodes; it does not search unloaded descendants. Clearing it restores cached expansion. Expansion itself does not navigate the editor; selecting a source row previews Context, and double-click opens that row. Structural roots/notices do not change Context or open a stale location. Stop cancels branch loading and retains loaded rows. The tree option is persisted; expanded paths are kept for this editor session.
+
+Cycles remain visible as stopped leaf nodes. Limits are 32 relation edges, 200 results per branch and 2000 source/root nodes overall; notices explain truncation and ambiguity. Only unambiguous indexed class relationships are traversed. The existing Graph view remains a separate single-layer result graph; recursive call/reference branches and expandable graphical edges are still outstanding.

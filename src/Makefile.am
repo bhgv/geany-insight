@@ -210,6 +210,8 @@ libgeany_la_SOURCES += \
 	insight-symbol-view.h \
 	insight-diff.c \
 	insight-diff.h \
+	insight-relation-tree.c \
+	insight-relation-tree.h \
 	insight-relation-graph.c \
 	insight-relation-graph.h \
 	insight-help.c \

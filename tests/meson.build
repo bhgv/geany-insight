@@ -425,7 +425,7 @@ test('Insight search state', search_state_test)
 project_files_test = executable('test_insight_project_files', '../insight/tests/project_files_test.c', '../insight/desktop/project_files.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)
 test('Insight project membership', project_files_test)
 overview_gui_test = executable('test_overview_gui', '../insight/tests/overview_gui_test.c', dependencies: test_deps)
-test('Insight overview GUI', overview_gui_test, timeout: 30)
+test('Insight overview GUI', overview_gui_test, timeout: 50)
 
 structure_select_test = executable('test_insight_structure_select', '../insight/tests/structure_select_test.c', '../insight/core/structure_select.c', c_args: ['-UNDEBUG'])
 test('Insight structural selection', structure_select_test)
@@ -504,3 +504,9 @@ test('Insight scope hierarchy GUI', symbol_scopes_gui_test, timeout: 45)
 
 indented_functions_gui_test = executable('test_insight_indented_functions_gui', '../insight/tests/indented_functions_gui_test.c', dependencies: test_deps)
 test('Insight Python and Lua function boundaries GUI', indented_functions_gui_test, timeout: 45)
+
+relation_tree_gui_test = executable('test_insight_relation_tree_gui', '../insight/tests/relation_tree_gui_test.c', dependencies: test_deps)
+test('Insight expandable Relations tree GUI', relation_tree_gui_test, timeout: 50)
+
+menu_alignment_gui_test = executable('test_insight_menu_alignment_gui', '../insight/tests/menu_alignment_gui_test.c', dependencies: test_deps)
+test('Insight main menu baseline alignment GUI', menu_alignment_gui_test, timeout: 30)

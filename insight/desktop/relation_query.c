@@ -135,7 +135,7 @@ size_t insight_relation_query_transitive(const InsightIndex *index,const char *o
  int *limited,int *ambiguous) {
  if(limited) *limited=0;
  if(ambiguous) *ambiguous=0;
- if(!index || !owner || !*owner || strlen(owner)>1024 || !max_depth || max_depth>32 || mode<INSIGHT_RELATION_MEMBERS || mode>INSIGHT_RELATION_DERIVED || (capacity && !out)) return SIZE_MAX;
+ if(!index || !owner || !*owner || strlen(owner)>1024 || max_depth>32 || mode<INSIGHT_RELATION_MEMBERS || mode>INSIGHT_RELATION_DERIVED || (capacity && !out)) return SIZE_MAX;
  GPtrArray *classes=g_ptr_array_new_with_free_func(relation_class_free);
  GHashTable *names=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,(GDestroyNotify)g_ptr_array_unref);
  GHashTable *short_names=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,(GDestroyNotify)g_ptr_array_unref);

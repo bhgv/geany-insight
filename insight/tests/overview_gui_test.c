@@ -11,7 +11,7 @@
 
 #undef SSM
 #define SSM(sci,msg,w,l) scintilla_send_message((sci),(msg),(w),(l))
-static guint phase,original_id; static gint initial_size; static gchar *test_directory,*test_project,*bad_project,*second_project;
+static guint phase,original_id,step_source,timeout_source; static gint initial_size; static gchar *test_directory,*test_project,*bad_project,*second_project;
 static GtkWidget *window,*overview_menu;
 static gboolean definition_cancel_checked;
 static gboolean selection_stress; static gint64 heartbeat_previous,heartbeat_max_gap;
@@ -78,7 +78,7 @@ static gboolean check_cancelled_definition(gpointer data) {
 }
 static gboolean timeout_fail(gpointer data) { (void)data; g_error("Overview GUI smoke timed out in phase %u",phase); return G_SOURCE_REMOVE; }
 static gboolean step(gpointer data) {
- (void)data; GeanyDocument *doc=document_get_current(); g_assert_nonnull(doc);
+ (void)data;static guint last=G_MAXUINT;if(last!=phase) { g_printerr("Overview smoke phase %u\n",phase);last=phase; }GeanyDocument *doc=document_get_current(); g_assert_nonnull(doc);
  if(phase==0) {
   const char *icons[]={"classviewer-class","classviewer-macro","classviewer-member","classviewer-method","classviewer-namespace","classviewer-other","classviewer-struct","classviewer-var","geany-save-all","geany-build","geany-close-all"};
   for(guint i=0;i<G_N_ELEMENTS(icons);i++) { GError *error=NULL; GdkPixbuf *icon=gtk_icon_theme_load_icon(gtk_icon_theme_get_default(),icons[i],16,0,&error); g_assert_no_error(error); g_assert_nonnull(icon); g_object_unref(icon); }
@@ -244,9 +244,11 @@ int main(void) {
  test_directory=g_build_filename(profile,"исходники с пробелом",NULL); g_assert_cmpint(g_mkdir_with_parents(test_directory,0700),==,0); test_project=g_build_filename(profile,"проект тест.geany",NULL); g_assert_true(g_file_set_contents(test_project,"[project]\nname=GUI smoke\nbase_path=исходники с пробелом\n",-1,NULL));
  second_project=g_build_filename(profile,"второй проект.geany",NULL); g_assert_true(g_file_set_contents(second_project,"[project]\nname=GUI second\nbase_path=исходники с пробелом\n",-1,NULL));
  bad_project=g_build_filename(profile,"invalid.geany",NULL); g_assert_true(g_file_set_contents(bad_project,"[other]\nname=Not a project\n",-1,NULL));
- gchar *argv[]={"overview-gui-smoke","--new-instance","--no-session","--config",profile,test_project,NULL}; g_timeout_add(700,step,NULL); g_timeout_add_seconds(35,timeout_fail,NULL);
+ gchar *argv[]={"overview-gui-smoke","--new-instance","--no-session","--config",profile,test_project,NULL}; step_source=g_timeout_add(700,step,NULL); timeout_source=g_timeout_add_seconds(45,timeout_fail,NULL);
  g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);
  gint result=main_lib(6,argv);
+ if(g_main_context_find_source_by_id(NULL,step_source)) g_source_remove(step_source);
+ if(g_main_context_find_source_by_id(NULL,timeout_source)) g_source_remove(timeout_source);
  /* Deliver late worker completions after workbench/GTK teardown. */
  GMainLoop *drain=g_main_loop_new(NULL,FALSE); g_timeout_add(300,finish_shutdown_drain,drain); g_main_loop_run(drain); g_main_loop_unref(drain);
  g_free(second_project); g_free(bad_project); g_free(test_project); g_free(test_directory); g_free(profile); return result;

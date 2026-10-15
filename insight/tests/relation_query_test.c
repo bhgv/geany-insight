@@ -58,6 +58,7 @@ int main(void) {
  int limited=0,ambiguous=0;
  g_assert_cmpuint(insight_relation_query_transitive(index,"n::End",INSIGHT_RELATION_BASES,32,NULL,NULL,0,out,8,&limited,&ambiguous),==,2);
  g_assert_false(limited);g_assert_false(ambiguous);
+ g_assert_cmpuint(insight_relation_query_transitive(index,"n.End",INSIGHT_RELATION_MEMBERS,0,NULL,NULL,0,out,8,NULL,NULL),==,1);g_assert_cmpstr(out[0]->name,==,"end_member");
  g_assert_cmpuint(insight_relation_query_transitive(index,"n.End",INSIGHT_RELATION_MEMBERS,32,NULL,NULL,0,out,8,NULL,NULL),==,3);
  g_assert_cmpuint(insight_relation_query_transitive(index,"n::Root",INSIGHT_RELATION_DERIVED,32,NULL,NULL,0,out,8,NULL,NULL),==,2);
  g_assert_cmpuint(insight_relation_query_transitive(index,"n::End",INSIGHT_RELATION_BASES,1,NULL,NULL,0,out,8,&limited,NULL),==,1);g_assert_true(limited);

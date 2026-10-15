@@ -1011,3 +1011,11 @@ All 39 Insight tests passed in the native Linux build with GUI tests enabled and
 ## Windows GUI catalog fix
 
 The first Windows GUI run reached the RU category stage and exposed a CRLF catalog bug: a trailing carriage return was retained in translated labels. Catalog loading now removes only the physical line-ending CR before escape decoding. Native grouped GUI passed with an installed catalog deliberately converted to CRLF; Windows GUI checks remain required.
+
+## Expandable indexed Relations and menu alignment regression
+
+A separate lazy outline loads immediate Bases/Derived/direct Members per class, with immutable index jobs, cancellation/generation guards, row references, cycle leaves, depth/branch/node limits, ancestor-preserving filtering and session expansion restoration across drill-down Back. Structural rows are guarded from stale editor navigation. The option persists; existing graph results remain separate. Native GUI covers multilevel modes, direct-scope ownership, cycles, filtering/clear, Back and limits at 200 children/32 edges.
+
+Main-menu geometry is now checked across EN/RU/EN using actual Pango baselines, with CR/LF rejection. The test passed with both installed translation catalogs converted to CRLF. Windows CI includes this check and the relation outline GUI test. The prior Windows run after the CRLF fix passed all four migration GUI tests and produced the dbb2037 x64 portable archive.
+
+The combined run passed 40/41 checks; the legacy 31-stage Overview smoke hit its 30-second outer timeout (its own failure timer was 35 seconds, and normal runs take about 28 seconds). Its outer/internal limits are now ordered 50/45 seconds, phase diagnostics are logged, and scenario timers are removed before the intentional post-shutdown worker drain. Existing <500 ms UI-heartbeat assertions are unchanged. Overview, the new relation outline and menu alignment each passed two consecutive native GUI runs after this harness fix.

@@ -741,3 +741,15 @@ Calls requires a supported function language and a current buffer up to 2 MiB	В
 No complete function body	Нет полного тела функции
 No complete enclosing function body	Нет полной окружающей функции
 Select Function supports parsed brace, Python and Lua functions in files up to 2 MiB	Выделение функции поддерживает скобочные языки, Python и Lua в файлах до 2 MiB
+Expandable relation tree	Раскрываемое дерево связей
+Relation tree: %u / %u nodes	Дерево связей: %u / %u узлов
+Expand to load relations…	Раскрыть для загрузки связей…
+Loading relations…	Загрузка связей…
+Cycle: branch stopped	Цикл: ветка остановлена
+Relation tree depth limit reached	Достигнут предел глубины дерева связей
+Relation tree node limit reached	Достигнут предел узлов дерева связей
+Branch result limit reached (200)	Достигнут предел результатов ветки (200)
+Ambiguous class names omitted	Неоднозначные имена классов пропущены
+No indexed relations	Нет индексированных связей
+Relation query could not be computed	Не удалось вычислить связи
+Relation tree loading cancelled	Загрузка дерева связей отменена
