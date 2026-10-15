@@ -38,6 +38,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include "insight-index.h"
+#include "insight-template-fields.h"
 #include "geanyobject.h"
 #include "keybindings.h"
 #include "../insight/core/context.h"
@@ -2342,15 +2343,15 @@ static void clip_template(GtkWidget *widget,gpointer data) {
  g_hash_table_insert(values,g_strdup("date"),g_date_time_format(now,"%Y-%m-%d")); g_hash_table_insert(values,g_strdup("time"),g_date_time_format(now,"%H:%M:%S")); g_date_time_unref(now);
  g_hash_table_insert(values,g_strdup("file"),g_strdup(doc->file_name ? doc->file_name : "")); g_hash_table_insert(values,g_strdup("filename"),doc->file_name ? g_path_get_basename(doc->file_name) : g_strdup(""));
  g_hash_table_insert(values,g_strdup("project"),g_strdup(app->project && app->project->name ? app->project->name : "")); g_hash_table_insert(values,g_strdup("selection"),selection);
- GPtrArray *variables=insight_snippet_variables(body,&error); gboolean accepted=variables!=NULL; GtkWidget *dialog=NULL; GPtrArray *entries=g_ptr_array_new();
+ GPtrArray *variables=insight_snippet_variables(body,&error); gboolean accepted=variables!=NULL,keep_fields=FALSE; GtkWidget *dialog=NULL,*editable=NULL; GPtrArray *entries=g_ptr_array_new();
  if(variables) {
   for(guint i=0;i<variables->len;i++) { const gchar *variable=g_ptr_array_index(variables,i); if(g_hash_table_contains(values,variable)) continue;
    if(!dialog) { dialog=gtk_dialog_new_with_buttons("Template parameters",GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Cancel",GTK_RESPONSE_CANCEL,"Insert",GTK_RESPONSE_ACCEPT,NULL); gtk_window_set_default_size(GTK_WINDOW(dialog),500,350); GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL),*grid=gtk_grid_new(); gtk_grid_set_row_spacing(GTK_GRID(grid),6); gtk_grid_set_column_spacing(GTK_GRID(grid),12); gtk_container_set_border_width(GTK_CONTAINER(grid),12); gtk_container_add(GTK_CONTAINER(scroll),grid); gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),scroll,TRUE,TRUE,0); g_object_set_data(G_OBJECT(dialog),"grid",grid); }
    GtkWidget *grid=g_object_get_data(G_OBJECT(dialog),"grid"),*label=gtk_label_new(variable),*entry=gtk_entry_new(); g_object_set_data(G_OBJECT(label),"insight-no-i18n",GINT_TO_POINTER(1)); gchar *widget_name=g_strconcat("insight-template-variable-",variable,NULL); gtk_widget_set_name(entry,widget_name); g_free(widget_name); gtk_entry_set_max_length(GTK_ENTRY(entry),65536); gtk_entry_set_activates_default(GTK_ENTRY(entry),TRUE); gtk_widget_set_hexpand(entry,TRUE); g_object_set_data_full(G_OBJECT(entry),"variable",g_strdup(variable),g_free); gtk_grid_attach(GTK_GRID(grid),label,0,(gint)entries->len,1,1); gtk_grid_attach(GTK_GRID(grid),entry,1,(gint)entries->len,1,1); g_ptr_array_add(entries,entry);
   }
-  if(dialog) { gtk_dialog_set_default_response(GTK_DIALOG(dialog),GTK_RESPONSE_ACCEPT); gtk_widget_show_all(dialog); gtk_widget_grab_focus(g_ptr_array_index(entries,0)); accepted=gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT;
+  if(dialog) { editable=gtk_check_button_new_with_label("Keep template fields editable (Tab / Shift+Tab)");gtk_widget_set_name(editable,"insight-template-editable-fields");gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),editable,FALSE,FALSE,6);gtk_dialog_set_default_response(GTK_DIALOG(dialog),GTK_RESPONSE_ACCEPT); gtk_widget_show_all(dialog); gtk_widget_grab_focus(g_ptr_array_index(entries,0)); accepted=gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT;
    if(accepted) for(guint i=0;i<entries->len;i++) { GtkWidget *entry=g_ptr_array_index(entries,i); g_hash_table_insert(values,g_strdup(g_object_get_data(G_OBJECT(entry),"variable")),g_strdup(gtk_entry_get_text(GTK_ENTRY(entry)))); }
-   gtk_widget_destroy(dialog);
+   keep_fields=accepted && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(editable));gtk_widget_destroy(dialog);
   }
  }
  if(accepted) {
@@ -2358,8 +2359,11 @@ static void clip_template(GtkWidget *widget,gpointer data) {
   gchar *current_language=clip_current_language(); InsightNote allowed_snapshot={.languages=allowed_languages}; gboolean language_allowed=insight_note_matches_language(&allowed_snapshot,current_language); g_free(current_language);
   if(!language_allowed) ui_set_statusbar(TRUE,"This template is not available for the current language profile");
   else if(!doc || doc!=document_get_current() || selection_state(doc->editor->sci)->text_version!=version || sci_get_selection_start(doc->editor->sci)!=begin || sci_get_selection_end(doc->editor->sci)!=end || sci_get_selection_mode(doc->editor->sci)!=SC_SEL_STREAM || SSM(doc->editor->sci,SCI_GETSELECTIONS,0,0)!=1 || SSM(doc->editor->sci,SCI_GETREADONLY,0,0) || sci_get_eol_mode(doc->editor->sci)!=eol_mode) ui_set_statusbar(TRUE,"Source changed while entering template parameters; insert again");
-  else { gsize cursor=0; gchar *text=insight_snippet_expand(body,values,eol_mode==SC_EOL_CRLF ? "\r\n" : (eol_mode==SC_EOL_CR ? "\r" : "\n"),&cursor,&error);
-   if(text) { sci=doc->editor->sci; sci_start_undo_action(sci); sci_replace_sel(sci,text); sci_set_current_position(sci,begin+(gint)cursor,FALSE); sci_end_undo_action(sci); document_grab_focus(doc); g_free(text); }
+  else { gsize cursor=0;GArray *fields=NULL;GHashTable *editable_names=g_hash_table_new(g_str_hash,g_str_equal);
+   if(keep_fields) for(guint i=0;i<variables->len;i++) { const gchar *variable=g_ptr_array_index(variables,i);if(strcmp(variable,"date") && strcmp(variable,"time") && strcmp(variable,"file") && strcmp(variable,"filename") && strcmp(variable,"project") && strcmp(variable,"selection")) g_hash_table_add(editable_names,(gpointer)variable); }
+   gchar *text=insight_snippet_expand_fields(body,values,eol_mode==SC_EOL_CRLF ? "\r\n" : (eol_mode==SC_EOL_CR ? "\r" : "\n"),editable_names,&cursor,&fields,&error);g_hash_table_unref(editable_names);
+   if(text) { sci=doc->editor->sci;insight_template_fields_begin(sci,NULL,0,0); sci_start_undo_action(sci); sci_replace_sel(sci,text); sci_set_current_position(sci,begin+(gint)cursor,FALSE); sci_end_undo_action(sci);if(keep_fields) insight_template_fields_begin(sci,fields,(gsize)begin,cursor); document_grab_focus(doc); g_free(text); }
+   g_clear_pointer(&fields,g_array_unref);
   }
  }
  if(error) ui_set_statusbar(TRUE,"Template: %s",insight_tr(error->message));

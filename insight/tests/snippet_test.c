@@ -12,9 +12,14 @@ static void expansion(void) {
  GPtrArray *variables=insight_snippet_variables("$name$ $$escape$$ $cursor$ $name$ $second$ $9bad$ end$",&error); g_assert_no_error(error); g_assert_cmpuint(variables->len,==,2); g_assert_cmpstr(g_ptr_array_index(variables,0),==,"name"); g_assert_cmpstr(g_ptr_array_index(variables,1),==,"second"); g_ptr_array_unref(variables);
  g_hash_table_unref(values);
 }
+static void fields(void) {
+ GHashTable *values=g_hash_table_new(g_str_hash,g_str_equal),*editable=g_hash_table_new(g_str_hash,g_str_equal);g_hash_table_insert(values,"name","имя\n");g_hash_table_insert(values,"empty","");g_hash_table_insert(values,"file","a.c");g_hash_table_add(editable,"name");g_hash_table_add(editable,"empty");gsize cursor=999;GArray *ranges=NULL;GError *error=NULL;
+ gchar *text=insight_snippet_expand_fields("$file$:$name$$empty$/$name$$cursor$",values,"\r\n",editable,&cursor,&ranges,&error);g_assert_no_error(error);g_assert_cmpstr(text,==,"a.c:имя\r\n/имя\r\n");g_assert_cmpuint(ranges->len,==,3);InsightSnippetField a=g_array_index(ranges,InsightSnippetField,0),b=g_array_index(ranges,InsightSnippetField,1),c=g_array_index(ranges,InsightSnippetField,2);g_assert_cmpuint(a.start,==,4);g_assert_cmpuint(a.end,==,12);g_assert_cmpuint(b.start,==,12);g_assert_cmpuint(b.end,==,12);g_assert_cmpuint(c.start,==,13);g_assert_cmpuint(c.end,==,21);g_assert_cmpuint(cursor,==,21);g_free(text);g_array_unref(ranges);
+ GString *many=g_string_new(NULL);for(guint i=0;i<1025;i++) g_string_append(many,"$empty$");ranges=NULL;cursor=999;text=insight_snippet_expand_fields(many->str,values,"\n",editable,&cursor,&ranges,&error);g_assert_null(text);g_assert_null(ranges);g_assert_cmpuint(cursor,==,999);g_assert_error(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE);g_clear_error(&error);g_string_free(many,TRUE);g_hash_table_unref(editable);g_hash_table_unref(values);
+}
 static void limits(void) {
  GError *error=NULL; GString *input=g_string_new(NULL); for(guint i=0;i<65;i++) g_string_append_printf(input,"$variable%u$",i); GPtrArray *vars=insight_snippet_variables(input->str,&error); g_assert_null(vars); g_assert_error(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE); g_clear_error(&error); g_string_free(input,TRUE);
  gchar *large=g_strnfill(65536,'x'); GHashTable *values=g_hash_table_new(g_str_hash,g_str_equal); g_hash_table_insert(values,"x",large); gsize cursor=99;
  gchar *out=insight_snippet_expand("$x$$x$$x$$x$$x$",values,"\n",&cursor,&error); g_assert_null(out); g_assert_error(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE); g_clear_error(&error); g_assert_cmpuint(cursor,==,99); g_hash_table_unref(values); g_free(large);
 }
-int main(int argc,char **argv) { g_test_init(&argc,&argv,NULL); g_test_add_func("/snippet/expansion",expansion); g_test_add_func("/snippet/limits",limits); return g_test_run(); }
+int main(int argc,char **argv) { g_test_init(&argc,&argv,NULL); g_test_add_func("/snippet/expansion",expansion); g_test_add_func("/snippet/limits",limits); g_test_add_func("/snippet/fields",fields); return g_test_run(); }

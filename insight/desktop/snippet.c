@@ -31,9 +31,10 @@ static gboolean append_normalized(GString *out,const gchar *text,gsize length,co
  }
  return TRUE;
 }
-gchar *insight_snippet_expand(const gchar *text,GHashTable *values,const gchar *eol,gsize *cursor,GError **error) {
+gchar *insight_snippet_expand_fields(const gchar *text,GHashTable *values,const gchar *eol,GHashTable *editable,gsize *cursor,GArray **fields,GError **error) {
  if(!valid_template(text,error)) return NULL;
  if(!cursor || !eol || (strcmp(eol,"\n") && strcmp(eol,"\r\n") && strcmp(eol,"\r"))) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid snippet output options"); return NULL; }
+ GArray *ranges=g_array_new(FALSE,FALSE,sizeof(InsightSnippetField));
  GString *out=g_string_new(NULL); gboolean have_cursor=FALSE; gsize at=0;
  for(gsize i=0;text[i];) {
   if(text[i]=='$' && text[i+1]=='$') { if(!append_normalized(out,"$",1,eol,error)) goto fail; i+=2; continue; }
@@ -43,13 +44,19 @@ gchar *insight_snippet_expand(const gchar *text,GHashTable *values,const gchar *
    if(!strcmp(name,"cursor")) { if(!have_cursor) { at=out->len; have_cursor=TRUE; } g_free(name); continue; }
    const gchar *value=values ? g_hash_table_lookup(values,name) : NULL;
    if(!value || strlen(value)>65536 || !g_utf8_validate(value,-1,NULL)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Missing or invalid snippet variable"); g_free(name); goto fail; }
-   g_free(name); if(!append_normalized(out,value,strlen(value),eol,error)) goto fail;
+   gboolean field=fields && editable && g_hash_table_contains(editable,name);g_free(name);gsize start=out->len;
+   if(!append_normalized(out,value,strlen(value),eol,error)) goto fail;
+   if(field) { if(ranges->len>=1024) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Editable template field limit reached (1024)");goto fail; }InsightSnippetField range={start,out->len};g_array_append_val(ranges,range); }
   } else {
    gsize start=i++; while(text[i] && text[i]!='$') i++;
    if(!append_normalized(out,text+start,i-start,eol,error)) goto fail;
   }
  }
- *cursor=have_cursor ? at : out->len; return g_string_free(out,FALSE);
+ *cursor=have_cursor ? at : out->len;if(fields) *fields=ranges;else g_array_unref(ranges);return g_string_free(out,FALSE);
 fail:
- g_string_free(out,TRUE); return NULL;
+ g_array_unref(ranges);g_string_free(out,TRUE); return NULL;
+}
+
+gchar *insight_snippet_expand(const gchar *text,GHashTable *values,const gchar *eol,gsize *cursor,GError **error) {
+ return insight_snippet_expand_fields(text,values,eol,NULL,cursor,NULL,error);
 }

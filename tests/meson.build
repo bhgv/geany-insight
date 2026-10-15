@@ -519,3 +519,6 @@ test('Insight scoped type and alias resolution', type_resolve_test)
 
 type_alias_gui_test = executable('test_insight_type_alias_gui', '../insight/tests/type_alias_gui_test.c', dependencies: test_deps)
 test('Insight scoped type alias Context GUI', type_alias_gui_test, timeout: 45)
+
+template_fields_gui_test = executable('test_insight_template_fields_gui', '../insight/tests/template_fields_gui_test.c', dependencies: test_deps)
+test('Insight editable template fields GUI', template_fields_gui_test, timeout: 35)

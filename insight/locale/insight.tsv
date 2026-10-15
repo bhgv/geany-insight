@@ -753,3 +753,5 @@ Ambiguous class names omitted	Неоднозначные имена классо
 No indexed relations	Нет индексированных связей
 Relation query could not be computed	Не удалось вычислить связи
 Relation tree loading cancelled	Загрузка дерева связей отменена
+Keep template fields editable (Tab / Shift+Tab)	Редактировать поля после вставки (Tab / Shift+Tab)
+Editable template field limit reached (1024)	Достигнут предел редактируемых полей шаблона (1024)

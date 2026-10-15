@@ -1,1 +1,1 @@
-Build Windows x64: scoped nominal type and alias-aware member definitions with Context GUI regressions.
+Build Windows x64: scoped alias Relations and editable template fields with native GUI regressions.
