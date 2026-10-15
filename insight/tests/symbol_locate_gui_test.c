@@ -22,7 +22,7 @@ static gboolean step(gpointer data) {
  GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));GtkTreeIter it;
  if(phase==1) {
   if(!row(model,"beta",&it)) return G_SOURCE_CONTINUE;
-  g_assert_null(gtk_button_get_label(GTK_BUTTON(button)));g_assert_true(GTK_IS_IMAGE(gtk_button_get_image(GTK_BUTTON(button))));GtkTreePath *cursor=gtk_tree_model_get_path(model,&it);gtk_tree_view_set_cursor(GTK_TREE_VIEW(view),cursor,NULL,FALSE);gtk_tree_path_free(cursor);
+  g_assert_null(gtk_button_get_label(GTK_BUTTON(button)));g_assert_true(GTK_IS_IMAGE(gtk_button_get_image(GTK_BUTTON(button))));gtk_widget_grab_focus(view);GtkTreePath *cursor=gtk_tree_model_get_path(model,&it);gtk_tree_view_set_cursor(GTK_TREE_VIEW(view),cursor,NULL,FALSE);gtk_tree_path_free(cursor);
   g_assert_cmpint(sci_get_current_line(doc->editor->sci),==,6);
   g_assert_true(gtk_widget_is_ancestor(view,ui_lookup_widget(window,"hpaned1")));
   g_assert_false(gtk_widget_is_ancestor(view,named(window,"insight-context-code")));

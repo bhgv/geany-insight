@@ -1,3 +1,2 @@
-Windows x64 build explicitly requested 2026-10-15 21:33 Europe/Moscow.
-Source main: 68129b5c24b9a7a289e2521f2885234b4af0308a
-Include editor File Symbols keyboard selection and bold names, project file directory/byte-size columns, syntax formatting modes, Python navigation fixes and symbol-relative bookmarks.
+Windows x64 rebuild explicitly requested 2026-10-15.
+Fix automatic File Symbols selection stealing the editor caret; only a focused outline navigates. Include keyboard/bold GUI regression on Windows.

@@ -1045,7 +1045,7 @@ static void browser_selected(GtkTreeSelection *selection,gpointer data) {
  if(!line) { g_free(path); g_free(name); return; }
  if(gtk_tree_selection_get_tree_view(selection)==GTK_TREE_VIEW(wb.local_view)) {
   GeanyDocument *doc=document_get_current();
-  if(doc && doc->id==wb.local_doc_id) { SSM(doc->editor->sci,SCI_ENSUREVISIBLE,line-1,0); SSM(doc->editor->sci,SCI_GOTOLINE,line-1,0); }
+  if(doc && doc->id==wb.local_doc_id && gtk_widget_has_focus(wb.local_view)) { SSM(doc->editor->sci,SCI_ENSUREVISIBLE,line-1,0); SSM(doc->editor->sci,SCI_GOTOLINE,line-1,0); }
   g_free(path); g_free(name); return;
  }
  reveal_context(); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); if(show_location(path,0,line,TRUE)) preview_mark_symbol(name); g_free(path); g_free(name);
