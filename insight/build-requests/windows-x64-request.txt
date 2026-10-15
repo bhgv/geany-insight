@@ -1,1 +1,1 @@
-Build Windows x64: exercise editable template fields with explicit CRLF output on both platforms.
+Build Windows x64: project-isolated template stores, exact/prefix completion and expanded parameter/field GUI regressions.
