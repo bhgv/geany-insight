@@ -1,1 +1,1 @@
-Build Windows x64: nominal function/method result receivers with inheritance, declaration-scope aliases, parser-profile guards and cached full-source lexical context; long-comment and ambiguous-overload native GUI regressions.
+Build Windows x64: alias-qualified nested nominal types and persisted disk-browser Follow current file, with filtered/hidden/truncated entry selection, inactive-mode suspension and native RU/EN GUI regressions.

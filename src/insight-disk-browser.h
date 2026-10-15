@@ -7,6 +7,9 @@ typedef void (*InsightDiskOpen)(const gchar *,gboolean,gpointer);
 GtkWidget *insight_disk_browser_new(InsightDiskOpen,gpointer);
 void insight_disk_browser_set_root(GtkWidget *,const gchar *);
 void insight_disk_browser_resume(GtkWidget *,const gchar *);
+/* Remember the editor file; follow it only while disk mode is active and its
+ * persisted Follow option is enabled. Selection never invokes open callbacks. */
+void insight_disk_browser_current_file(GtkWidget *,const gchar *,gboolean);
 gboolean insight_disk_browser_read(GtkWidget *,GKeyFile *);
 void insight_disk_browser_write(GtkWidget *,GKeyFile *);
 void insight_disk_browser_cancel(GtkWidget *);

@@ -1963,9 +1963,15 @@ static void folder_mapped(GtkWidget *widget,gpointer data) { (void)widget; (void
 static void disk_file_open(const gchar *path,gboolean activate,gpointer data) {
  (void)data;if(!wb.alive) return;gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE);if(show_location(path,0,1,TRUE) && activate) open_context(NULL,NULL);
 }
+static void disk_current_file(void) {
+ if(!wb.alive || !wb.disk_browser || !wb.folder_mode) return;
+ GeanyDocument *doc=document_get_current();
+ insight_disk_browser_current_file(wb.disk_browser,doc && doc->is_valid ? doc->file_name : NULL,gtk_combo_box_get_active(GTK_COMBO_BOX(wb.folder_mode))==1);
+}
 static void folder_mode_changed(GtkComboBox *combo,gpointer data) {
  (void)data;gboolean disk=gtk_combo_box_get_active(combo)==1;gtk_stack_set_visible_child_name(GTK_STACK(wb.folder_stack),disk ? "disk" : "project");
  if(disk) { gchar *root=wb.root ? utils_get_utf8_from_locale(wb.root) : g_get_current_dir();insight_disk_browser_resume(wb.disk_browser,root);g_free(root); }else insight_disk_browser_cancel(wb.disk_browser);
+ disk_current_file();
 }
 static void create_project_tree(void) {
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,3),*row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);
@@ -3013,7 +3019,7 @@ static void native_commands_rebuild(void) {
  }
  gtk_widget_show_all(wb.lua_commands);
 }
-static gboolean file_event_refresh(gpointer data) { (void)data;wb.file_event_idle=0;if(wb.alive) { files_filter(NULL,NULL); tree_refresh(); file_types_refresh(); categories_filter(NULL,NULL); }return G_SOURCE_REMOVE; }
+static gboolean file_event_refresh(gpointer data) { (void)data;wb.file_event_idle=0;if(wb.alive) { files_filter(NULL,NULL); tree_refresh(); file_types_refresh(); categories_filter(NULL,NULL);disk_current_file(); }return G_SOURCE_REMOVE; }
 static void native_document_event(GObject *object,GeanyDocument *doc,gpointer data) {
  (void)object;insight_window_list_document_event(doc ? doc->id : 0,data); if(!strcmp(data,"document_close") || !strcmp(data,"document_save")) insight_workbench_bookmarks_changed();
  if(!strcmp(data,"document_open") || !strcmp(data,"document_activate")) bookmark_restore_document(doc);
