@@ -16,6 +16,8 @@ static gpointer parse_in_worker(gpointer data) {
  }
  insight_index_free(index); insight_index_free(job->shared); return NULL;
 }
+static int cpp_only(const InsightSymbol *symbol,void *data) { (void)data;return !g_str_has_suffix(symbol->path,".py"); }
+static void owner_is(const InsightIndex *index,const char *path,const char *scope,const char *expression,const char *expected) { gboolean member=FALSE;gchar *owner=insight_native_member_owner(index,path,scope,100000,expression,strlen(expression),&member);assert(member);assert(!g_strcmp0(owner,expected));g_free(owner); }
 int main(void) {
  assert(insight_native_language_compatible(TM_PARSER_C,TM_PARSER_CPP));assert(insight_native_language_compatible(TM_PARSER_CPP,TM_PARSER_ASM));assert(!insight_native_language_compatible(TM_PARSER_C,TM_PARSER_VHDL));assert(!insight_native_language_compatible(TM_PARSER_CPP,TM_PARSER_SH));assert(!insight_native_language_compatible(TM_PARSER_NONE,TM_PARSER_NONE));assert(insight_native_language_compatible(TM_PARSER_PYTHON,TM_PARSER_PYTHON));
  InsightIndex *index=insight_index_new(); assert(index);
@@ -76,6 +78,22 @@ int main(void) {
  assert(eligible==1); g_free(owner);
  owner=insight_native_member_owner(index,absolute,"caller",3,"outer::inner::min",16,&is_member); assert(is_member && !strcmp(owner,"outer::inner")); g_free(owner);
  owner=insight_native_member_owner(index,absolute,"caller",3,"::min",5,&is_member); assert(is_member && owner && !*owner); g_free(owner);
+ const char *aliases_code="namespace A {\nstruct Cell { int value; };\nusing First = Cell;\ntypedef First Second;\nSecond *global_obj;\nvoid use(Second *p) { (void)p->value; }\nstruct Box { int field; void method() { (void)this->field; } };\n}\nnamespace B {\nstruct Cell { int value; };\nusing First = Cell;\nFirst *global_obj;\nvoid use(First *p) { (void)p->value; }\n}\ntemplate<typename T> struct Holder { T item; };\nusing IntHolder = Holder<int>;\nvoid take(IntHolder *p) { (void)p->item; }\n";
+ assert(insight_native_parse(index,parsed,absolute,aliases_code,strlen(aliases_code)));
+ owner_is(index,absolute,"A::use","p->value","A::Cell");owner_is(index,absolute,"B::use","p->value","B::Cell");
+ owner_is(index,absolute,"A::use","global_obj->value","A::Cell");owner_is(index,absolute,"A::use","B :: global_obj->value","B::Cell");
+ owner_is(index,absolute,"A::use","A :: Second :: value","A::Cell");owner_is(index,absolute,"A::Box::method","this->field","A::Box");owner_is(index,absolute,"take","p->item","Holder");
+ owner_is(index,absolute,"take","unresolved().field",NULL);owner_is(index,absolute,"take","object.member->value",NULL);
+ InsightIndex *crowded=insight_index_new();InsightSymbol current_types[]={
+  {"Cell",NULL,"N","s",1,"","",""},{"p",NULL,"N::use","z",10,"","Cell *",""}
+ };assert(insight_index_update(crowded,"/z-current.cpp",current_types,G_N_ELEMENTS(current_types)));
+ InsightSymbol noise[600];gchar *noise_scopes[600];for(guint i=0;i<600;i++) { noise_scopes[i]=g_strdup_printf("noise_%u",i);noise[i]=(InsightSymbol){"p",NULL,noise_scopes[i],"z",1,"","Other *",""}; }
+ assert(insight_index_update(crowded,"/a-noise.cpp",noise,G_N_ELEMENTS(noise)));for(guint i=0;i<600;i++) g_free(noise_scopes[i]);
+ owner_is(crowded,"/z-current.cpp","N::use","p->value","N::Cell");insight_index_free(crowded);
+ InsightIndex *mixed=insight_index_new();InsightSymbol c_type={"Cell",NULL,"","s",1,"","",""},py_type={"Cell",NULL,"","c",1,"","",""};
+ InsightSymbol main_aliases[]={{"Alias",NULL,"","t",1,"","Cell",""},{"p",NULL,"use","z",2,"","Alias *",""}};
+ assert(insight_index_update(mixed,"/types.h",&c_type,1));assert(insight_index_update(mixed,"/types.py",&py_type,1));assert(insight_index_update(mixed,"/main.cpp",main_aliases,2));
+ owner_is(mixed,"/main.cpp","use","p->value",NULL);owner=insight_native_member_owner_filtered(mixed,"/main.cpp","use",10,"p->value",8,&is_member,cpp_only,NULL);assert(is_member && owner && !strcmp(owner,"Cell"));g_free(owner);insight_index_free(mixed);
  size_t before=insight_index_count(index);assert(!insight_native_parse(index,parsed,absolute,"a\0b",3));assert(insight_index_count(index)==before);
  assert(insight_native_parse(index,parsed,absolute,"",0));assert(insight_index_count(index)==0);
  /* Publication transfers worker tags and rewrites owner pointers. A pinned

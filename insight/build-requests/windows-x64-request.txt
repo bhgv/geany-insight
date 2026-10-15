@@ -1,1 +1,1 @@
-Build Windows x64: shared expandable relation graph and graphical branch/export regressions.
+Build Windows x64: scoped nominal type and alias-aware member definitions with Context GUI regressions.

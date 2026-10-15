@@ -1,0 +1,45 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+#include "type_resolve.h"
+#include <string.h>
+static void name_is(const char *raw,const char *expected,gboolean global) { gboolean absolute=FALSE;gchar *name=insight_type_name(raw,&absolute);g_assert_cmpstr(name,==,expected);g_assert_cmpint(absolute,==,global);g_free(name); }
+static void resolved(InsightIndex *index,const char *raw,const char *scope,const char *path,const char *owner,guint aliases) { InsightTypeResult r=insight_type_resolve(index,raw,scope,path,NULL,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_FOUND);g_assert_cmpstr(r.owner,==,owner);g_assert_nonnull(r.symbol);g_assert_cmpuint(r.aliases,==,aliases);insight_type_result_clear(&r); }
+static int exclude_header(const InsightSymbol *symbol,void *data) { (void)data;return strcmp(symbol->path,"/header.h")!=0; }
+int main(void) {
+ name_is("const struct N::Box<int, Pair<long, short>>::Nested * const &","N::Box::Nested",FALSE);
+ name_is("volatile ::Global *","Global",TRUE);name_is("N :: Foo [10][2]","N::Foo",FALSE);name_is("Module.Class","Module::Class",FALSE);
+ const char *invalid[]={"","Foo Bar","Foo<int","Foo>","Foo[2","Foo (*)(int)","decltype(value)","A:::B","A::","Foo;Bar"};
+ for(guint i=0;i<G_N_ELEMENTS(invalid);i++) { gchar *name=insight_type_name(invalid[i],NULL);g_assert_null(name); }
+ InsightIndex *index=insight_index_new();InsightSymbol tags[]={
+  {"Foo",NULL,"","s",1,"","",""},
+  {"Foo",NULL,"N","c",2,"","",""},
+  {"Foo",NULL,"Other","c",3,"","",""},
+  {"A",NULL,"N","t",4,"","B *",""},
+  {"B",NULL,"N","t",5,"","Foo const *",""},
+  {"A",NULL,"Other","t",6,"","::Foo",""},
+  {"GlobalAlias",NULL,"N","t",7,"","::Foo",""},
+  {"LoopA",NULL,"N","t",8,"","LoopB",""},
+  {"LoopB",NULL,"N","t",9,"","LoopA",""},
+  {"C",NULL,"N","t",10,"","NoSuchType",""},
+  {"Box",NULL,"N","c",11,"","",""},
+  {"Nested",NULL,"N::Box","c",12,"","",""},
+  {"Bad",NULL,"N","t",13,"","void (*)(int)",""}
+ };g_assert_true(insight_index_update(index,"/main.cpp",tags,G_N_ELEMENTS(tags)));
+ resolved(index,"A","N::function","/main.cpp","N::Foo",2);resolved(index,"Other::A","N::function","/main.cpp","Foo",1);
+ resolved(index,"Foo","N::Box::method","/main.cpp","N::Foo",0);resolved(index,"::Foo","N::function","/main.cpp","Foo",0);
+ resolved(index,"GlobalAlias","N","/main.cpp","Foo",1);resolved(index,"N::Box<int>::Nested","Other","/main.cpp","N::Box::Nested",0);
+ InsightTypeResult r=insight_type_resolve(index,"LoopA","N","/main.cpp",NULL,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_CYCLE);insight_type_result_clear(&r);
+ r=insight_type_resolve(index,"C","N","/main.cpp",NULL,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_UNKNOWN);insight_type_result_clear(&r);
+ r=insight_type_resolve(index,"Bad","N","/main.cpp",NULL,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_INVALID);insight_type_result_clear(&r);
+ InsightSymbol duplicate={"Foo",NULL,"N","c",1,"","",""};g_assert_true(insight_index_update(index,"/other.cpp",&duplicate,1));
+ resolved(index,"N::Foo","","/main.cpp","N::Foo",0);
+ r=insight_type_resolve(index,"N::Foo","","/unrelated.cpp",NULL,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_AMBIGUOUS);insight_type_result_clear(&r);
+ InsightSymbol alias={"External",NULL,"","t",1,"","N::Foo",""};g_assert_true(insight_index_update(index,"/header.h",&alias,1));
+ r=insight_type_resolve(index,"External","","/main.cpp",NULL,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_AMBIGUOUS);insight_type_result_clear(&r);
+ r=insight_type_resolve(index,"External","","/main.cpp",exclude_header,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_UNKNOWN);insight_type_result_clear(&r);
+ /* Alias lookup context follows its declaration, not the use-site namespace. */
+ g_assert_true(insight_index_update(index,"/other.cpp",NULL,0));resolved(index,"External","Other::function","/main.cpp","N::Foo",1);
+ InsightSymbol chain[34];gchar *names[34],*targets[34];for(guint i=0;i<34;i++) { names[i]=g_strdup_printf("Link%02u",i);targets[i]=i<33 ? g_strdup_printf("Link%02u",i+1) : g_strdup("::Foo");chain[i]=(InsightSymbol){names[i],NULL,"chain","t",i+1,"",targets[i],""}; }
+ g_assert_true(insight_index_update(index,"/chain.h",chain,G_N_ELEMENTS(chain)));for(guint i=0;i<34;i++) { g_free(names[i]);g_free(targets[i]); }
+ r=insight_type_resolve(index,"Link00","chain","/main.cpp",NULL,NULL);g_assert_cmpint(r.status,==,INSIGHT_TYPE_LIMIT);g_assert_cmpuint(r.aliases,==,32);insight_type_result_clear(&r);
+ insight_index_free(index);g_print("Type resolution: nominal normalization, lexical namespaces, alias declaration context, ambiguity, eligibility, cycles and limits passed\n");return 0;
+}

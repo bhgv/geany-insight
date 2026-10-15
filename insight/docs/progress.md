@@ -1027,3 +1027,11 @@ The indexed outline now has a shared hierarchical Cairo graph with actual parent
 Standalone GTK tests verify nested hit paths, collapse/expand, zoom, horizontal/vertical parent connector pixels in clipboard images and destruction. Native GUI verifies lazy graphical expansion, no editor movement on toggle, clipboard hierarchy size, active graph preferences, and shutdown with queued branch work. The old flat graph/geometry and menu tests pass. Windows CI now includes both standalone graph GUI regressions too. Semantic Calls/References remain open.
 
 All six targeted graph/outline/inheritance/menu tests passed after integration, including persistence after leaving graph mode. Windows d7fa298 also completed successfully with the six app GUI checks, including actual main-menu baseline alignment.
+
+## Scoped nominal types and alias-aware member definitions
+
+Type lookup now walks lexical namespace/class scopes and follows typedef/using chains in each alias declaration's file and scope. Ambiguous matches, cycles, unsupported expressions, and bounded candidate/depth overflow decline instead of selecting an unrelated short name. Nominal cv/pointer/reference/array/template spelling is normalized; this does not instantiate templates, resolve overloads, infer arbitrary expressions or provide include/ODR semantics.
+
+Member definitions in Context/F12 and asynchronous editor Follow use that resolver with a source-language snapshot. Local receiver lookup searches the current-file name slice before project globals (including projects with over 512 duplicate parameter names), globals respect namespace ancestry, and this receivers use enclosing owners. Unsupported chained/call/index receivers decline. Core and native parser tests cover real C++ aliases, scope conflicts, ambiguity, declaration context, loops, limits, language eligibility and crowded receivers. Native GUI verifies namespace-specific aliases, this, nominal template aliases, cycle rejection, preview F12 and asynchronous Follow; the existing language-aware Context GUI also passes. Windows CI now runs the resolver core and both Context GUI checks.
+
+Windows e73c2b0 completed successfully, including the expandable graph and menu alignment GUI regressions.

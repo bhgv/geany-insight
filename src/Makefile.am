@@ -252,6 +252,8 @@ libgeany_la_SOURCES += \
 	../insight/desktop/workspace_watch.h \
 	../insight/desktop/source_mask.c \
 	../insight/desktop/source_mask.h \
+	../insight/desktop/type_resolve.c \
+	../insight/desktop/type_resolve.h \
 	../insight/desktop/relation_query.c \
 	../insight/desktop/relation_query.h \
 	../insight/desktop/layout_state.c \

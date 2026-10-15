@@ -513,3 +513,9 @@ test('Insight main menu baseline alignment GUI', menu_alignment_gui_test, timeou
 
 relation_tree_graph_gui_test = executable('test_insight_relation_tree_graph_gui', '../insight/tests/relation_tree_graph_gui_test.c', '../src/insight-relation-graph.c', dependencies: deps)
 test('Insight expandable relation graph GUI', relation_tree_graph_gui_test, timeout: 30)
+
+type_resolve_test = executable('test_insight_type_resolve', '../insight/tests/type_resolve_test.c', '../insight/desktop/type_resolve.c', '../insight/core/index.c', include_directories: include_directories('../insight/desktop'), dependencies: glib)
+test('Insight scoped type and alias resolution', type_resolve_test)
+
+type_alias_gui_test = executable('test_insight_type_alias_gui', '../insight/tests/type_alias_gui_test.c', dependencies: test_deps)
+test('Insight scoped type alias Context GUI', type_alias_gui_test, timeout: 45)

@@ -5,6 +5,7 @@
 #include "tagmanager/tm_source_file.h"
 #include "tagmanager/tm_tag.h"
 #include "../insight/core/index.h"
+#include "../insight/desktop/type_resolve.h"
 /* Copy native tag data into the owning UTF-8 index. NULL/empty tags clear path.
  * Reject >250k total symbols without changing the previous file snapshot. */
 gboolean insight_native_import(InsightIndex *,TMSourceFile *,const char *);
@@ -17,6 +18,7 @@ gboolean insight_native_language_compatible(TMParserType,TMParserType);
 gint insight_native_definition_rank_at(const InsightSymbol *,const char *,const char *,gulong);
 gchar *insight_native_function_scope(const InsightIndex *,const char *,gulong);
 gchar *insight_native_member_owner(const InsightIndex *,const char *,const char *,gulong,const char *,gsize,gboolean *);
+gchar *insight_native_member_owner_filtered(const InsightIndex *,const char *,const char *,gulong,const char *,gsize,gboolean *,InsightTypeEligible,void *);
 gboolean insight_native_member_matches(const InsightSymbol *,const char *);
 guint insight_native_definition_rank(const InsightSymbol *,const char *);
 #endif
