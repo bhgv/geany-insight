@@ -30,4 +30,8 @@ static void receivers(void) {
  declaration(&f,"extra","Named","int");owner(&f,"me.field\n","Named");owner(&f,"self.field # qualified_static",NULL);owner(&f,"self.field # stacked_static",NULL);owner(&f,"me.field # plain",NULL);
  const InsightSymbol *tag;assert(!insight_index_find(f.index,"wrong",1,&tag,1));clear(&f);
 }
-int main(void) { tm_get_workspace();annotations();receivers();tm_workspace_free();puts("Python navigation series: all checks passed");return 0; }
+static void call_results(void) {
+ Fixture f=fixture("class Result:\n    field: int\ndef make() -> Result:\n    return Result()\ndef unknown():\n    return Result()\nasync def asynchronous() -> Result:\n    return Result()\nResult().field\nmake().field\nunknown().field\nasynchronous().field\ndef shadow(Result):\n    return Result().field # shadow_call\n");
+ owner(&f,"Result().field\n","Result");owner(&f,"make().field","Result");owner(&f,"unknown().field",NULL);owner(&f,"asynchronous().field",NULL);owner(&f,"Result().field # shadow_call",NULL);clear(&f);
+}
+int main(void) { tm_get_workspace();annotations();receivers();call_results();tm_workspace_free();puts("Python navigation series: all checks passed");return 0; }

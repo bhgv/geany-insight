@@ -127,3 +127,9 @@ example `me`); its position and declaring class determine the receiver. Known
 `builtins.staticmethod` and plain `staticmethod` suppress it, including stacks
 containing multiline decorator calls. Arbitrary decorator transformations remain
 unsupported.
+
+Direct `LocalClass(...).field` and `factory(...).field` are supported when the
+callee has one visible same-file definition and a simple indexed class return
+annotation. Return annotations resolve in the declaration context, not caller
+locals. Unknown results, async functions, complex/union types and arbitrary
+method/call chains are not inferred. No argument typing or execution occurs.

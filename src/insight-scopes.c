@@ -338,10 +338,34 @@ static gchar *python_constructor_owner(const InsightIndex *index,const gchar *pa
 done:
  g_hash_table_insert(bindings->constructors,key,g_strdup(owner ? owner : ""));g_free(scope);g_free(lookup);g_free(constructor);return owner;
 }
+static const InsightSymbol *python_visible_symbol(const InsightIndex *index,const gchar *path,const gchar *scope,const gchar *name,const InsightNativeSource *source,InsightTypeEligible eligible,void *data) {
+ gchar *binding=insight_native_python_binding_scope(index,path,scope,name,source);if(!binding) return NULL;
+ const InsightSymbol *best=NULL;gint rank=-1;gboolean ambiguous=FALSE;
+ for(gsize i=0;i<insight_index_count(index);i++) { const InsightSymbol *tag=insight_index_at(index,i);if(strcmp(tag->name,name) || (eligible && !eligible(tag,data))) continue;gint candidate=insight_native_python_rank(index,tag,path,binding,G_MAXULONG);if(candidate>rank) { best=tag;rank=candidate;ambiguous=FALSE; }else if(candidate>=0 && candidate==rank) ambiguous=TRUE; }
+ g_free(binding);return ambiguous ? NULL : best;
+}
+static gboolean python_async_callable(const InsightSymbol *callable,const InsightNativeSource *source) {
+ gsize at=0;gulong line=1;while(at<source->length && line<callable->line) if(source->mask[at++]=='\n') line++;
+ while(at<source->length && (source->mask[at]==' ' || source->mask[at]=='\t')) at++;
+ return at+5<=source->length && !memcmp(source->mask+at,"async",5) && (at+5==source->length || !ident(source->mask[at+5]));
+}
+static gchar *python_call_owner(const InsightIndex *index,const gchar *path,const gchar *scope,const InsightNativeSource *source,gsize close,InsightTypeEligible eligible,void *data) {
+ gsize open=0,after=0;if(insight_select_match(source->mask,close+1,close,&open,&after)!=1 || after!=close+1) return NULL;
+ gsize end=open;while(end && (source->mask[end-1]==' ' || source->mask[end-1]=='\t')) end--;gsize first=end;while(first && ident(source->mask[first-1])) first--;if(first==end) return NULL;
+ gsize prefix=first;while(prefix && (source->mask[prefix-1]==' ' || source->mask[prefix-1]=='\t')) prefix--;if(prefix && strchr(".)]",source->mask[prefix-1])) return NULL;
+ gchar *name=g_strndup(source->mask+first,end-first),*owner=NULL;const InsightSymbol *callable=python_visible_symbol(index,path,scope,name,source,eligible,data);g_free(name);
+ if(callable && !strcmp(callable->kind,"c")) return python_symbol_scope(callable);
+ if(!callable || (strcmp(callable->kind,"f") && strcmp(callable->kind,"m")) || python_async_callable(callable,source)) return NULL;
+ gchar *type=g_strdup(callable->type);g_strstrip(type);gsize size=strlen(type);
+ if(size>=2 && (type[0]=='\'' || type[0]=='"') && type[size-1]==type[0]) { memmove(type,type+1,size-2);type[size-2]=0; }
+ gsize at=0;gchar *nominal=python_import_name(type,strlen(type),&at,FALSE,FALSE);
+ if(nominal && at==strlen(type)) { const InsightSymbol *klass=python_visible_symbol(index,path,callable->scope,nominal,source,eligible,data);if(klass && !strcmp(klass->kind,"c")) owner=python_symbol_scope(klass); }
+ g_free(nominal);g_free(type);return owner;
+}
 gchar *insight_native_python_owner(const InsightIndex *index,const gchar *path,const gchar *scope,gulong line,const InsightNativeSource *source,gsize position,gboolean *member,InsightTypeEligible eligible,void *data) {
  *member=FALSE;if(!source || !source->text || !source->mask || position>source->length) return NULL;
  const gchar *mask=source->mask;gsize at=position;while(at && ident(mask[at-1])) at--;while(at && g_ascii_isspace(mask[at-1])) at--;if(!at || mask[at-1]!='.') return NULL;
- *member=TRUE;at--;while(at && g_ascii_isspace(mask[at-1])) at--;gsize end=at;while(at && ident(mask[at-1])) at--;if(at==end) return NULL;
+ *member=TRUE;at--;while(at && g_ascii_isspace(mask[at-1])) at--;if(at && mask[at-1]==')') return python_call_owner(index,path,scope,source,at-1,eligible,data);gsize end=at;while(at && ident(mask[at-1])) at--;if(at==end) return NULL;
  /* Chained/indexed/call expressions require a richer resolver. */
  gsize prefix=at;while(prefix && (mask[prefix-1]==' ' || mask[prefix-1]=='\t')) prefix--;if(prefix && (mask[prefix-1]=='.' || mask[prefix-1]==')' || mask[prefix-1]==']')) return NULL;
  gchar *receiver=g_strndup(mask+at,end-at),*owner=NULL;
