@@ -295,3 +295,5 @@ EXTRA_DIST += insight/tests/symbol_history_gui_test.c
 EXTRA_DIST += insight/tests/workbench_twenty_gui_test.c
 
 EXTRA_DIST += insight/tests/disk_browser_gui_test.c
+
+EXTRA_DIST += insight/tests/symbol_navigation_gui_test.c

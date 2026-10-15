@@ -26,6 +26,18 @@ gboolean insight_native_import(InsightIndex *index,TMSourceFile *file,const char
  gboolean ok=insight_index_count(index)-old+used<=250000 && insight_index_update(index,path,symbols,used);
  g_free(kinds); g_free(symbols); return ok;
 }
+gboolean insight_native_outline_import(InsightIndex *index,TMSourceFile *file,const char *path) {
+ if(!index || !path || !*path || !g_utf8_validate(path,-1,NULL)) return FALSE;
+ guint count=file && file->tags_array ? file->tags_array->len : 0,used=0;if(count>250000) return FALSE;
+ InsightSymbol *symbols=g_new0(InsightSymbol,count);GPtrArray *kinds=g_ptr_array_new_with_free_func(g_free);
+ for(guint n=0;n<count;n++) { TMTag *tag=g_ptr_array_index(file->tags_array,n);
+  if(!tag || !tag->name || !*tag->name || !tag->line || !g_utf8_validate(tag->name,-1,NULL) || tag->type==tm_tag_undef_t || (tag->type==tm_tag_local_var_t && tag->kind_letter=='z')) continue;
+  gchar *kind=g_strdup_printf("@decl:%u:%c",tag->type,tag->kind_letter ? tag->kind_letter : '?');g_ptr_array_add(kinds,kind);
+  const char *scope=tag->scope && g_utf8_validate(tag->scope,-1,NULL) ? tag->scope : "",*args=tag->arglist && g_utf8_validate(tag->arglist,-1,NULL) ? tag->arglist : "",*type=tag->var_type && g_utf8_validate(tag->var_type,-1,NULL) ? tag->var_type : "",*bases=tag->inheritance && g_utf8_validate(tag->inheritance,-1,NULL) ? tag->inheritance : "";
+  symbols[used++]=(InsightSymbol){tag->name,path,scope,kind,tag->line,args,type,bases};
+ }
+ gsize old=insight_index_query(index,"",FALSE,NULL,NULL,path,0,NULL,0);gboolean ok=insight_index_count(index)-old+used<=250000 && insight_index_update(index,path,symbols,used);g_ptr_array_unref(kinds);g_free(symbols);return ok;
+}
 guint insight_native_definition_rank(const InsightSymbol *symbol,const char *path) {
  return (!g_strcmp0(symbol->path,path) ? 4u : 0u) + (!strcmp(symbol->kind,"f") ? 8u : 0u);
 }

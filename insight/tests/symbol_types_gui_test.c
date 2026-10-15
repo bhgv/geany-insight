@@ -13,7 +13,7 @@ static GtkWidget *named(GtkWidget *root,const gchar *name) {
  if(GTK_IS_MENU_ITEM(root)) { GtkWidget *sub=gtk_menu_item_get_submenu(GTK_MENU_ITEM(root));if(sub) { GtkWidget *found=named(sub,name);if(found) return found; } }
  if(GTK_IS_CONTAINER(root)) { GList *children=gtk_container_get_children(GTK_CONTAINER(root));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL;
 }
-static gboolean row(GtkTreeModel *m,const gchar *name,GtkTreeIter *result) { GtkTreeIter it;for(gboolean v=gtk_tree_model_get_iter_first(m,&it);v;v=gtk_tree_model_iter_next(m,&it)) { gchar *n=NULL;gtk_tree_model_get(m,&it,0,&n,-1);gboolean match=!g_strcmp0(n,name);g_free(n);if(match) { *result=it;return TRUE; } }return FALSE; }
+static gboolean row(GtkTreeModel *m,const gchar *name,GtkTreeIter *result) { GtkTreeIter it;for(gboolean v=gtk_tree_model_get_iter_first(m,&it);v;v=gtk_tree_model_iter_next(m,&it)) { gchar *n=NULL;gtk_tree_model_get(m,&it,0,&n,-1);gboolean match=!g_strcmp0(n,name);g_free(n);if(match) { *result=it;return TRUE; } GtkTreeIter child;if(gtk_tree_model_iter_children(m,&child,&it)) do { gchar *child_name=NULL;gtk_tree_model_get(m,&child,0,&child_name,-1);gboolean child_match=!g_strcmp0(child_name,name);g_free(child_name);if(child_match) { *result=child;return TRUE; } }while(gtk_tree_model_iter_next(m,&child)); }return FALSE; }
 static gboolean text(GtkWidget *root,const gchar *value) { if(GTK_IS_LABEL(root) && strstr(gtk_label_get_text(GTK_LABEL(root)),value)) return TRUE;if(GTK_IS_CONTAINER(root)) { GList *c=gtk_container_get_children(GTK_CONTAINER(root));gboolean found=FALSE;for(GList *p=c;p && !found;p=p->next) found=text(p->data,value);g_list_free(c);return found; }return FALSE; }
 static GtkWidget *types(GtkWidget *panel) { GtkWidget *button=named(panel,"insight-symbol-types");g_assert_true(GTK_IS_MENU_BUTTON(button));g_assert_null(gtk_button_get_label(GTK_BUTTON(button)));g_assert_true(GTK_IS_IMAGE(gtk_button_get_image(GTK_BUTTON(button))));return GTK_WIDGET(gtk_menu_button_get_popup(GTK_MENU_BUTTON(button))); }
 static void all(gboolean show) { GList *items=gtk_container_get_children(GTK_CONTAINER(menu));gtk_menu_item_activate(GTK_MENU_ITEM(g_list_nth_data(items,show ? 0 : 1)));g_list_free(items); }
@@ -30,7 +30,7 @@ static gboolean step(gpointer data) {
   GtkWidget *project_menu=types(named(window,"insight-project-type-filters"));g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(named(project_menu,"insight-symbol-type-1"))));g_assert_false(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(named(project_menu,"insight-symbol-type-0"))));all(TRUE);phase++;
  } else if(phase==2) {
   if(!row(model,"sample_member",&it)) return G_SOURCE_CONTINUE;
-  g_assert_true(GTK_IS_LIST_STORE(model));g_assert_true(row(model,"sample_variable",&it));g_assert_true(row(model,"SampleStruct",&it));all(FALSE);phase++;
+  g_assert_true(GTK_IS_TREE_STORE(model));g_assert_true(row(model,"sample_variable",&it));g_assert_true(row(model,"SampleStruct",&it));all(FALSE);phase++;
  } else if(phase==3) {
   GtkTreeModel *pm=gtk_tree_view_get_model(GTK_TREE_VIEW(project));GtkTreeIter structure;if(!gtk_widget_get_sensitive(project) || !row(pm,"Structures",&structure)) return G_SOURCE_CONTINUE;g_assert_true(GTK_IS_TREE_STORE(pm));g_assert_cmpint(gtk_tree_model_iter_n_children(pm,NULL),==,1);g_assert_cmpint(gtk_tree_model_iter_n_children(pm,&structure),==,1);
   g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,0);g_assert_true(text(named(window,"insight-local-type-filters"),"Symbols: 0 /"));category(5,TRUE);phase++;
@@ -42,13 +42,13 @@ static gboolean step(gpointer data) {
   g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,0);gtk_entry_set_text(GTK_ENTRY(named(window,"insight-local-query")),"");document_open_file(py_path,FALSE,NULL,NULL);phase++;
  } else if(phase==6) {
   if(!doc->tm_file || !doc->tm_file->tags_array) return G_SOURCE_CONTINUE;
-  gboolean method=FALSE;for(guint i=0;i<doc->tm_file->tags_array->len;i++) { TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,i);if(!strcmp(tag->name,"sample_method")) method=TRUE; }if(!method || !text(named(window,"insight-local-type-filters"),"Symbols: 0 / 3")) return G_SOURCE_CONTINUE;
+  gboolean method=FALSE;for(guint i=0;i<doc->tm_file->tags_array->len;i++) { TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,i);if(!strcmp(tag->name,"sample_method")) method=TRUE; }if(!method || !text(named(window,"insight-local-type-filters"),"Symbols: 0 / 2")) return G_SOURCE_CONTINUE;
   g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,0);category(0,TRUE);phase++;
  } else if(phase==7) {
   if(!row(model,"sample_method",&it)) return G_SOURCE_CONTINUE;
   g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,1);g_assert_false(row(model,"SampleClass",&it));gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-ru")),TRUE);phase++;
  } else {
-  if(!text(named(window,"insight-local-type-filters"),"Символы: 1 / 3")) return G_SOURCE_CONTINUE;
+  if(!text(named(window,"insight-local-type-filters"),"Символы: 1 / 2")) return G_SOURCE_CONTINUE;
   g_assert_true(text(menu,"Функции / методы"));GList *commands=gtk_container_get_children(GTK_CONTAINER(menu));g_assert_cmpstr(gtk_menu_item_get_label(GTK_MENU_ITEM(commands->data)),==,"Показать все типы символов");g_list_free(commands);g_print("Symbol types GUI passed: persisted independent file/project masks, icon-only controls, show/hide all, native C field filtering, name-query intersection and counters, preview-only selection, Python method mapping, live RU and saved masks\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }return G_SOURCE_CONTINUE;
 }

@@ -563,3 +563,6 @@ test('Insight syntax formatting GUI', formatting_gui_test, timeout: 50)
 test('Insight syntax formatting restore GUI', formatting_gui_test, timeout: 50, env: ['GEANY_TEST_FORMATTING_RESTORE=1'])
 test('Insight syntax formatting invalid configuration GUI', formatting_gui_test, timeout: 50, env: ['GEANY_TEST_FORMATTING_INVALID=1'])
 test('Insight syntax formatting Russian GUI', formatting_gui_test, timeout: 50, env: ['GEANY_TEST_FORMATTING_RUSSIAN=1'])
+
+symbol_navigation_gui_test = executable('test_insight_symbol_navigation_gui', '../insight/tests/symbol_navigation_gui_test.c', dependencies: test_deps)
+test('Insight symbol preview and editor navigation GUI', symbol_navigation_gui_test, timeout: 50)

@@ -119,3 +119,22 @@ https://www.sourceinsight.com/doc/v4/userguide/index.html . Старые зап�
 Руководство описывает назначение настройки шрифта, но не содержит экспорт
 конкретной пользовательской таблицы стилей. Отсутствующий импорт/дисплейный
 режим отмечается здесь как пробел, а не подменяется похожим оформлением.
+
+### Symbol lists: parser declarations and activation (2026-10-15)
+
+File and Project Symbols now use an independent declaration database captured
+from native Geany/ctags TMTag snapshots, including the parser's actual type and
+scope. Navigation keeps its separate parameters/local bindings. Undefined parser
+internals and parameter records are omitted from display; local definitions are
+opt-in. Source-line order nests actual owning declarations and retains overloaded
+functions. Project paths display relative to the source root.
+
+[Symbol Window Options](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Symbol_Window_Options.htm)
+documents optional members/local definitions. [Project Symbol List](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Project_Symbol_List_Window.htm)
+documents preview tracking; [Project Settings](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Project_Settings.htm)
+defines relative source paths. User-confirmed interaction: selection/arrows preview
+in Context; double-click, Enter and Space activate the selected declaration in the
+editor. Both destinations highlight the symbol yellow with a red one-pixel frame.
+Native and GUI regressions cover database separation, overloads, nested union
+fields, relative paths, focus retention and activation independent of Context's
+caret. This does not claim a new parser implementation or full SI parser parity.
