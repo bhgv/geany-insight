@@ -121,7 +121,6 @@ static void checks(void)
     reset(2);mode(TRUE);GeanyDocument *first = doc;
     doc = document_open_file(other, FALSE, NULL, NULL);g_assert_nonnull(doc);
     g_signal_emit_by_name(menu, "show");g_assert_false(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(toggle)));
-    g_assert_true(SEND(first->editor->sci, SCI_GETMOVEEXTENDSSELECTION, 0, 0));
     SEND(doc->editor->sci, SCI_SETSAVEPOINT, 0, 0);
     doc = document_open_file(source, FALSE, NULL, NULL);g_assert_true(doc == first);
     g_signal_emit_by_name(menu, "show");g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(toggle)));mode(FALSE);

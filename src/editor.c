@@ -1137,6 +1137,7 @@ static gboolean on_editor_notify(G_GNUC_UNUSED GObject *object, GeanyEditor *edi
 	GeanyDocument *doc = editor->document;
 	insight_completion_notify(editor,nt);
 	insight_paste_notify(editor,nt);
+	insight_navigation_notify(editor,nt);
 	switch (nt->nmhdr.code)
 	{
 		case SCN_SAVEPOINTLEFT:
@@ -5122,6 +5123,7 @@ ScintillaObject *editor_create_widget(GeanyEditor *editor)
 	old = editor->sci;
 	sci = create_new_sci(editor);
 	insight_filetype_pairs_attach(sci);
+	insight_navigation_attach(sci);
 	g_signal_connect(sci,"key-press-event",G_CALLBACK(filetype_return_key),editor);
 	SSM(sci, SCI_SETIDLESTYLING, SC_IDLESTYLING_ALL, 0);
 	editor->sci = sci;

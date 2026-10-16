@@ -372,6 +372,8 @@ static gboolean step(gpointer data)
     }
     else if (phase == 15)
     {
+        /* Clipboard processing runs asynchronously, after the large-buffer guards. */
+        if (sci_get_length(doc->editor->sci) == (gint)strlen("left \n")) return G_SOURCE_CONTINUE;
         text_is("RIGHTleft \n");undo();text_is("left \n");undo();text_is("left RIGHT\n");
         keybindings_send_command(GEANY_KEY_GROUP_EDITOR, GEANY_KEYS_EDITOR_REDO);
         keybindings_send_command(GEANY_KEY_GROUP_EDITOR, GEANY_KEYS_EDITOR_REDO);text_is("RIGHTleft \n");
@@ -382,6 +384,7 @@ static gboolean step(gpointer data)
     }
     else if (phase == 16)
     {
+        if (sci_get_length(doc->editor->sci) == (gint)strlen("    target();\n")) return G_SOURCE_CONTINUE;
         text_is("    x();\n    target();\n");undo();text_is("    target();\n");
         undo();text_is("  x();\n    target();\n");
         g_print("Native line clipboard: repeated Copy Line, keyboard/menu, CRLF/Unicode, left/right cuts, readonly/copy, empty/size/binary guards and Cut Selection or Paste with Undo/Redo passed\n");

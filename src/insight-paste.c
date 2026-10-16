@@ -142,7 +142,14 @@ static void clipboard_ready(GtkClipboard *clipboard, const gchar *text, gpointer
     if (unchanged && !insight_paste_text(r->sci, text))
         SEND(r->sci, SCI_PASTE, 0, 0);
     else if (!unchanged)
+    {
+        if (g_getenv("GEANY_PASTE_DEBUG"))
+            g_printerr("paste cancelled: id=%u/%u generation=%"G_GUINT64_FORMAT"/%"G_GUINT64_FORMAT" anchor=%d/%ld caret=%d/%d eligible=%d\n",
+                r->id, doc ? doc->id : 0, r->generation, state(r->sci)->generation,
+                r->anchor, (long)SEND(r->sci, SCI_GETANCHOR, 0, 0), r->caret,
+                sci_get_current_position(r->sci), eligible(r->sci));
         ui_set_statusbar(FALSE, "Paste cancelled: destination changed while reading the clipboard.");
+    }
     g_object_unref(r->sci);
     g_free(r);
 }

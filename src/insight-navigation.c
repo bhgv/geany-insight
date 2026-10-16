@@ -2,11 +2,22 @@
 #include "geany.h"
 #include "insight-navigation.h"
 #include "document.h"
+#include "geanyobject.h"
 #include "sciwrappers.h"
 #include "ui_utils.h"
 #include <gdk/gdkkeysyms.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 static GtkWidget *extend_item;
+#define MODE "insight-navigation-extend-mode"
+static gboolean requested(ScintillaObject *sci)
+{
+    return GPOINTER_TO_INT(g_object_get_data(G_OBJECT(sci), MODE));
+}
+static void set_mode(ScintillaObject *sci, gboolean active)
+{
+    g_object_set_data(G_OBJECT(sci), MODE, GINT_TO_POINTER(active));
+    SEND(sci, SCI_SETMOVEEXTENDSSELECTION, active, 0);
+}
 static GeanyDocument *for_sci(ScintillaObject *sci)
 {
     for (guint i = 0; documents_array && i < documents_array->len; i++)
@@ -23,18 +34,46 @@ static gboolean normal(ScintillaObject *sci)
         !SEND(sci, SCI_GETSELECTIONNCARETVIRTUALSPACE, 0, 0) &&
         !SEND(sci, SCI_GETSELECTIONNANCHORVIRTUALSPACE, 0, 0);
 }
+void insight_navigation_notify(GeanyEditor *editor, SCNotification *nt)
+{
+    ScintillaObject *sci = editor->sci;
+    if (nt->nmhdr.code == SCN_MODIFIED &&
+        (nt->modificationType & (SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT)))
+        set_mode(sci, FALSE);
+    else if (nt->nmhdr.code == SCN_UPDATEUI && requested(sci) &&
+        editor->document == document_get_current())
+    {
+        if (!normal(sci)) set_mode(sci, FALSE);
+        else if (!SEND(sci, SCI_GETMOVEEXTENDSSELECTION, 0, 0))
+            SEND(sci, SCI_SETMOVEEXTENDSSELECTION, TRUE, 0);
+    }
+}
+static gboolean mouse(GtkWidget *widget, GdkEventButton *event, gpointer data)
+{
+    (void)event;(void)data;set_mode(SCINTILLA(widget), FALSE);return FALSE;
+}
+void insight_navigation_attach(ScintillaObject *sci)
+{
+    g_signal_connect(sci, "button-press-event", G_CALLBACK(mouse), NULL);
+}
+static void activated(GObject *object, GeanyDocument *doc, gpointer data)
+{
+    (void)object;(void)data;
+    if (doc && doc->is_valid && normal(doc->editor->sci))
+        SEND(doc->editor->sci, SCI_SETMOVEEXTENDSSELECTION, requested(doc->editor->sci), 0);
+}
 static void select_to(ScintillaObject *sci, gint anchor, gint caret, gboolean mode)
 {
     gint length = sci_get_length(sci);
     SEND(sci, SCI_SETSEL, CLAMP(anchor, 0, length), CLAMP(caret, 0, length));
-    SEND(sci, SCI_SETMOVEEXTENDSSELECTION, mode, 0);
+    set_mode(sci, mode);
     SEND(sci, SCI_CHOOSECARETX, 0, 0);
     SEND(sci, SCI_ENSUREVISIBLE, sci_get_current_line(sci), 0);
     SEND(sci, SCI_SCROLLCARET, 0, 0);
 }
 gboolean insight_navigation_extend_to(ScintillaObject *sci, gint position)
 {
-    if (!normal(sci) || !SEND(sci, SCI_GETMOVEEXTENDSSELECTION, 0, 0)) return FALSE;
+    if (!normal(sci) || !requested(sci)) return FALSE;
     select_to(sci, SEND(sci, SCI_GETANCHOR, 0, 0), position, TRUE);
     return TRUE;
 }
@@ -48,7 +87,7 @@ static void toggle(GtkCheckMenuItem *item, gpointer data)
     GeanyDocument *doc = document_get_current();
     if (!doc || !normal(doc->editor->sci)) return;
     gboolean active = gtk_check_menu_item_get_active(item);
-    SEND(doc->editor->sci, SCI_SETMOVEEXTENDSSELECTION, active, 0);
+    set_mode(doc->editor->sci, active);
     ui_set_statusbar(FALSE, active ? "Extend Mode: ON" : "Extend Mode: OFF");
     gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));
 }
@@ -59,7 +98,7 @@ static void menu_show(GtkWidget *menu, gpointer data)
     gboolean ready = doc && normal(doc->editor->sci);
     g_signal_handlers_block_by_func(extend_item, toggle, NULL);
     gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(extend_item),
-        ready && SEND(doc->editor->sci, SCI_GETMOVEEXTENDSSELECTION, 0, 0));
+        ready && requested(doc->editor->sci));
     gtk_widget_set_sensitive(extend_item, ready);
     g_signal_handlers_unblock_by_func(extend_item, toggle, NULL);
 }
@@ -67,8 +106,8 @@ gboolean insight_navigation_key(GeanyEditor *editor, GdkEventKey *event)
 {
     if (event->keyval != GDK_KEY_Escape ||
         (event->state & gtk_accelerator_get_default_mod_mask()) ||
-        !SEND(editor->sci, SCI_GETMOVEEXTENDSSELECTION, 0, 0)) return FALSE;
-    SEND(editor->sci, SCI_SETMOVEEXTENDSSELECTION, FALSE, 0);
+        !requested(editor->sci)) return FALSE;
+    set_mode(editor->sci, FALSE);
     ui_set_statusbar(FALSE, "Extend Mode: OFF");
     return TRUE;
 }
@@ -100,14 +139,14 @@ static void command(GtkMenuItem *item, gpointer data)
     if (!doc || !normal(doc->editor->sci)) return;
     ScintillaObject *sci = doc->editor->sci;
     gint anchor = SEND(sci, SCI_GETANCHOR, 0, 0);
-    gboolean mode = SEND(sci, SCI_GETMOVEEXTENDSSELECTION, 0, 0);
+    gboolean mode = requested(sci);
     switch (GPOINTER_TO_INT(data))
     {
         case 0: if (sci_has_selection(sci)) select_to(sci, sci_get_selection_start(sci), sci_get_selection_start(sci), FALSE);break;
         case 1: if (sci_has_selection(sci)) select_to(sci, sci_get_selection_end(sci), sci_get_selection_end(sci), FALSE);break;
         case 2: blank_line(sci, -1);break;
         case 3: blank_line(sci, 1);break;
-        case 4: editor_select_word(doc->editor);SEND(sci, SCI_SETMOVEEXTENDSSELECTION, mode, 0);break;
+        case 4: editor_select_word(doc->editor);set_mode(sci, mode);break;
         case 5:
         {
             gint line = sci_get_current_line(sci), total = sci_get_line_count(sci);
@@ -145,5 +184,6 @@ void insight_navigation_menu(GtkWidget *menu)
         gtk_menu_shell_append(GTK_MENU_SHELL(sub), entry);
     }
     g_signal_connect(sub, "show", G_CALLBACK(menu_show), NULL);
+    g_signal_connect_object(geany_object, "document-activate", G_CALLBACK(activated), parent, G_CONNECT_AFTER);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), parent);gtk_widget_show_all(parent);
 }
