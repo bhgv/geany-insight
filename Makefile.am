@@ -313,3 +313,11 @@ EXTRA_DIST += insight/tools/import_source_insight_themes.py insight/tests/themes
 EXTRA_DIST += insight/tests/nominal_range_test.c
 
 EXTRA_DIST += insight/tests/file_patterns_test.c
+
+
+# Guarded Folder Browser file maintenance.
+EXTRA_DIST += \
+	insight/desktop/disk_operation.c \
+	insight/desktop/disk_operation.h \
+	insight/tests/disk_operation_test.c \
+	insight/tests/disk_operation_gui_test.c

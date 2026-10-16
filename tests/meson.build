@@ -601,3 +601,17 @@ test('Insight Project Files wildcard commands GUI', workbench_twenty_gui_test, t
 file_patterns_test = executable('test_insight_file_patterns', '../insight/tests/file_patterns_test.c', '../insight/desktop/file_patterns.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)
 test('Insight file type filename patterns', file_patterns_test)
 test('Insight file type filters GUI', languages_gui_test, timeout: 45, env: ['GEANY_TEST_FILE_PATTERNS=1'])
+
+
+
+disk_operation_test = executable('test_insight_disk_operation',
+ '../insight/tests/disk_operation_test.c', '../insight/desktop/disk_operation.c',
+ include_directories: include_directories('../insight/desktop'), dependencies: deps)
+test('Insight guarded disk operations', disk_operation_test)
+
+disk_operation_gui_test = executable('test_insight_disk_operation_gui',
+ '../insight/tests/disk_operation_gui_test.c', '../src/insight-disk-browser.c',
+ '../insight/desktop/disk_operation.c', '../insight/desktop/lookup_filter.c',
+ include_directories: [igeany, iscintilla, itagmanager, include_directories('..')],
+ c_args: geany_cflags, dependencies: deps)
+test('Insight isolated disk operation dialogs GUI', disk_operation_gui_test, timeout: 40)

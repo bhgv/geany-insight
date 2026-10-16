@@ -1373,3 +1373,19 @@ Follow cursor — update Context from the editor caret	Следовать за �
 Wrap long lines in Context	Переносить длинные строки в Context
 Show or hide Context search (Ctrl+F)	Показать или скрыть поиск в Context (Ctrl+F)
 Show or hide indexed definition candidates	Показать или скрыть список определений
+
+Rename…	Переименовать…
+Move to…	Переместить в…
+Move to Trash…	Переместить в корзину…
+Move to Trash	Переместить в корзину
+Changing disk entry…	Изменение файла или папки…
+Cannot change disk entry: %s	Не удалось изменить файл или папку: %s
+Send this entry to the system trash? Permanent deletion is never used.	Переместить выбранный объект в системную корзину? Безвозвратное удаление не используется.
+Existing destinations are never replaced. Stored project paths are not rewritten.	Существующие файлы и папки не заменяются. Сохранённые пути проекта не переписываются.
+Directory changed; reopen the operation	Каталог изменился; откройте операцию заново
+Refresh the directory before changing this entry	Обновите каталог перед изменением этого объекта
+Close documents in this entry before changing it	Перед изменением закройте документы этого файла или папки
+Enter a filename or an absolute destination path	Введите имя файла или абсолютный путь назначения
+The selected entry changed; refresh the directory	Выбранный объект изменился; обновите каталог
+Choose a different destination outside the source	Выберите другой путь назначения вне исходной папки
+Cannot change a filesystem root	Нельзя изменить корень файловой системы
