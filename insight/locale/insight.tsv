@@ -1059,3 +1059,14 @@ Text preview	Фрагмент текста
 Current / Saved	Текущее / Сохранено
 Current	Текущее
 History changed; reopen Result History.	История изменилась; откройте историю результата заново.
+Save a copy of Result…	Сохранить копию результата…
+Save Result selection…	Сохранить выделение результата…
+Save a copy of Result	Сохранить копию результата
+Save Result selection	Сохранить выделение результата
+Result changed; reopen the save command. Nothing written.	Результат изменился; откройте команду сохранения заново. Ничего не записано.
+Result copy saved; save state unchanged.	Копия записана; отметка сохранения результата не изменена.
+Result selection saved; save state unchanged.	Выделение записано; отметка сохранения результата не изменена.
+Choose a local destination filename.	Выберите имя локального файла назначения.
+Save the full merge result.	Сохранить полный результат слияния.
+Save a separate copy; keep the current result's saved or modified status.	Сохранить отдельную копию, сохранив признак изменённости результата.
+Save the exact selection; keep the current result's saved or modified status.	Сохранить точное выделение, сохранив признак изменённости результата.

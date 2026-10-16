@@ -153,8 +153,34 @@ static void history_test(void) {
  gtk_text_buffer_set_text(result(m),"",0);for(guint i=0;i<520;i++) gtk_text_buffer_insert_at_cursor(result(m),"x",1);g_assert_cmpuint(m->history->len,==,512);history_end(m,FALSE);g_assert_cmpint(gtk_text_buffer_get_char_count(result(m)),>,0);history_end(m,TRUE);g_assert_cmpint(gtk_text_buffer_get_char_count(result(m)),==,520);
  gboolean gone=FALSE;g_object_weak_ref(G_OBJECT(m->window),finalized,&gone);g_idle_add(close_options_parent,m->window);history_dialog(NULL,m);flush();g_assert_true(gone);
 }
+typedef struct { Merge *m;const gchar *path;gint response;gboolean mutate,destroy; } ExportResponse;
+static GtkWidget *save_dialog(void) {
+ GList *windows=gtk_window_list_toplevels();GtkWidget *dialog=NULL;
+ for(GList *p=windows;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-diff-save-dialog")) dialog=p->data;
+ g_list_free(windows);return dialog;
+}
+static gboolean export_respond(gpointer data) {
+ ExportResponse *action=data;GtkWidget *dialog=save_dialog();g_assert_nonnull(dialog);
+ if(action->destroy) { gtk_widget_destroy(action->m->window);return G_SOURCE_REMOVE; }
+ if(action->mutate) gtk_text_buffer_set_text(result(action->m),"changed while saving",-1);
+ const gchar *capture=g_getenv("INSIGHT_DIFF_EXPORT_CAPTURE");if(capture && !action->mutate && action->response==GTK_RESPONSE_ACCEPT && !g_strcmp0(gtk_window_get_title(GTK_WINDOW(dialog)),"Save a copy of Result")) { gint64 until=g_get_monotonic_time()+200000;while(g_get_monotonic_time()<until) { flush();g_usleep(1000); }GdkWindow *window=gtk_widget_get_window(dialog);GdkPixbuf *pixbuf=gdk_pixbuf_get_from_window(window,0,0,gdk_window_get_width(window),gdk_window_get_height(window));g_assert_nonnull(pixbuf);g_assert_true(gdk_pixbuf_save(pixbuf,capture,"jpeg",NULL,"quality","88",NULL));g_object_unref(pixbuf); }
+ gtk_dialog_response(GTK_DIALOG(dialog),action->response);return G_SOURCE_REMOVE;
+}
+static gboolean export_choose(gpointer data) {
+ ExportResponse *action=data;GtkWidget *dialog=save_dialog();g_assert_nonnull(dialog);gchar *folder=g_path_get_dirname(action->path),*name=g_path_get_basename(action->path);g_assert_true(gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog),folder));gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog),name);g_free(folder);g_free(name);g_timeout_add(250,export_respond,action);return G_SOURCE_REMOVE;
+}
+static void export_test(void) {
+ GError *error=NULL;gchar *folder=g_dir_make_tmp("insight-export-XXXXXX",&error);g_assert_no_error(error);gchar *path=g_build_filename(folder,"копия.txt",NULL);Merge *m=merge_new(NULL);GtkTextBuffer *b=result(m);const gchar *initial="first\r\nёж\r\nlast";gtk_text_buffer_set_text(b,initial,-1);guint history=m->history->len;gchar *saved=g_strdup(m->saved);
+ ExportResponse action={m,path,GTK_RESPONSE_ACCEPT,FALSE,FALSE};g_timeout_add(100,export_choose,&action);write_result(m,1);gchar *text=NULL;g_assert_true(g_file_get_contents(path,&text,NULL,&error));g_assert_no_error(error);g_assert_cmpstr(text,==,initial);g_free(text);g_assert_cmpstr(m->saved,==,saved);g_assert_cmpuint(m->history->len,==,history);g_remove(path);
+ GtkTextIter a,z;gtk_text_buffer_get_iter_at_line(b,&a,1);z=a;gtk_text_iter_forward_line(&z);gtk_text_buffer_select_range(b,&a,&z);InsightDiffOpen previous=source_opener;source_opener=source_opened;g_timeout_add(100,export_choose,&action);write_result(m,2);g_assert_true(g_file_get_contents(path,&text,NULL,&error));g_assert_cmpstr(text,==,"ёж\r\n");g_free(text);g_assert_cmpstr(editor_path,==,path);g_assert_cmpuint(editor_line,==,1);source_opener=previous;g_assert_cmpstr(m->saved,==,saved);g_remove(path);
+ gtk_text_buffer_get_start_iter(b,&a);gtk_text_buffer_place_cursor(b,&a);write_result(m,2);g_assert_null(save_dialog());m->busy=TRUE;write_result(m,1);g_assert_null(save_dialog());m->busy=FALSE;
+ action.response=GTK_RESPONSE_CANCEL;g_timeout_add(100,export_choose,&action);write_result(m,1);g_assert_false(g_file_test(path,G_FILE_TEST_EXISTS));
+ action.response=GTK_RESPONSE_ACCEPT;g_timeout_add(100,export_choose,&action);write_result(m,0);g_assert_cmpstr(m->saved,==,initial);g_assert_cmpuint(m->history->len,==,history);g_remove(path);
+ action.mutate=TRUE;g_timeout_add(100,export_choose,&action);write_result(m,1);g_assert_false(g_file_test(path,G_FILE_TEST_EXISTS));g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->status)),"Nothing written"));
+ action.mutate=FALSE;action.destroy=TRUE;gboolean gone=FALSE;g_object_weak_ref(G_OBJECT(m->window),finalized,&gone);g_timeout_add(100,export_choose,&action);write_result(m,1);flush();g_assert_true(gone);g_assert_false(g_file_test(path,G_FILE_TEST_EXISTS));g_free(saved);g_rmdir(folder);g_free(path);g_free(folder);
+}
 int main(int argc,char **argv) {
- gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();case_test();line_edit_test();history_test();insight_diff_set_source_opener(source_opened);
+ g_setenv("GSETTINGS_BACKEND","memory",TRUE);gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();case_test();line_edit_test();history_test();export_test();insight_diff_set_source_opener(source_opened);
  GError *error=NULL;gchar *dir=g_dir_make_tmp("insight-diff-XXXXXX",&error);g_assert_no_error(error);
  gchar *left=g_build_filename(dir,"left.txt",NULL),*right=g_build_filename(dir,"right.txt",NULL);
  const char *a="start\nleft\ncommon\nlast left\nend\n",*b="start\nright\ncommon\nlast right\nextra\nend\n";

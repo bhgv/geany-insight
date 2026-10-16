@@ -595,21 +595,23 @@ static void copy_difference(Merge *m,guint side) {
  InsightDiffHunk *h=&m->diff.hunks[id];gsize begin=side ? h->b_begin : h->a_begin,end=side ? h->b_end : h->a_end;
  gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),m->sources[side]+begin,(gint)(end-begin));
 }
+static void write_result(Merge *,guint);
 static void source_menu_action(GtkMenuItem *item,gpointer window) {
  Merge *m=g_object_get_data(G_OBJECT(window),"insight-diff-state");if(!m) return;
  gint side=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item),"side"));gint action=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item),"action"));
- if(action==0) edit_source(m,side);else if(action==1) copy_difference(m,side);else if(action==2) view_options(GTK_WIDGET(item),m);else if(action==3) focus_line(m,side);else if(side==2 && action<7) selection_case(m,action-4);else if(side==2 && action<11) edit_lines(m,action-7);else if(side==2 && action<13) history_end(m,action==12);else if(side==2) history_dialog(NULL,m);
+ if(action==0) edit_source(m,side);else if(action==1) copy_difference(m,side);else if(action==2) view_options(GTK_WIDGET(item),m);else if(action==3) focus_line(m,side);else if(side==2 && action<7) selection_case(m,action-4);else if(side==2 && action<11) edit_lines(m,action-7);else if(side==2 && action<13) history_end(m,action==12);else if(side==2 && action==13) history_dialog(NULL,m);else if(side==2) write_result(m,action-13);
 }
 static void view_menu_toggle(GtkCheckMenuItem *item,gpointer toggle) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle),gtk_check_menu_item_get_active(item)); }
 static void source_menu(GtkTextView *view,GtkWidget *menu,gpointer data) {
  Merge *m=data;guint side=GTK_WIDGET(view)==m->views[1] ? 1 : GTK_WIDGET(view)==m->views[0] ? 0 : 2;
  gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());
- const gchar *labels[]={"Edit File — Ctrl+E","Copy selected difference","File Compare Options…","Go to Line — Ctrl+G","Uppercase selection","Lowercase selection","Toggle selection case","Indent result lines","Outdent result lines","Tabs to spaces in result lines","Trim trailing spaces in result lines","Undo All retained changes","Redo All retained changes","Result History…"};
+ const gchar *labels[]={"Edit File — Ctrl+E","Copy selected difference","File Compare Options…","Go to Line — Ctrl+G","Uppercase selection","Lowercase selection","Toggle selection case","Indent result lines","Outdent result lines","Tabs to spaces in result lines","Trim trailing spaces in result lines","Undo All retained changes","Redo All retained changes","Result History…","Save a copy of Result…","Save Result selection…"};
  for(guint action=0;action<G_N_ELEMENTS(labels);action++) {
   if((side==2 && action<2) || (side!=2 && action>=4)) continue;
   GtkWidget *item=gtk_menu_item_new_with_label(labels[action]);g_object_set_data(G_OBJECT(item),"side",GUINT_TO_POINTER(side));g_object_set_data(G_OBJECT(item),"action",GUINT_TO_POINTER(action));gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect_object(item,"activate",G_CALLBACK(source_menu_action),m->window,0);
   if(action>=4) gtk_widget_set_sensitive(item,!m->busy && (action>=7 || gtk_text_buffer_get_has_selection(result(m))));
   if(action>=11) gtk_widget_set_sensitive(item,!m->busy && (action==11 ? m->position>0 : action==12 ? m->position+1<m->history->len : m->history->len>0));
+  if(action>=14) gtk_widget_set_sensitive(item,!m->busy && (action==14 || gtk_text_buffer_get_has_selection(result(m))));
   if(action<2) gtk_widget_set_sensitive(item,!m->busy && m->loaded_paths[side] && (action==0 ? source_opener!=NULL : selected(m)>=0));
  }
  GtkWidget *toggles[]={m->mono,m->numbers,m->list_toggle,m->wrap_toggle,m->vertical,m->overview};
@@ -751,17 +753,34 @@ static void compare(GtkWidget *w,gpointer data) {
 static void cancel_compare(GtkWidget *w,gpointer data) {
  (void)w;Merge *m=data;if(m->cancel) g_cancellable_cancel(m->cancel);
 }
-static void save(GtkWidget *w,gpointer data) {
- (void)w;Merge *m=data;GtkWidget *d=gtk_file_chooser_dialog_new("Save merge result",GTK_WINDOW(m->window),GTK_FILE_CHOOSER_ACTION_SAVE,"Cancel",GTK_RESPONSE_CANCEL,"Save",GTK_RESPONSE_ACCEPT,NULL);
- gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(d),TRUE);gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(d),"merged.txt");
- if(gtk_dialog_run(GTK_DIALOG(d))==GTK_RESPONSE_ACCEPT) {
-  gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(d)),*text=contents(result(m));GError *error=NULL;
-  if(g_file_set_contents(path,text,-1,&error)) { g_free(m->saved);m->saved=g_strdup(text);message(m,"Result saved.");state(m); }
-  else { message(m,error->message);g_clear_error(&error); }
-  g_free(path);g_free(text);
+/* Capture before the modal chooser; never write stale text after a nested loop. */
+static void write_result(Merge *m,guint mode) {
+ if(m->busy || m->changing || mode>2) return;
+ gchar *text=NULL;
+ if(mode==2) { GtkTextIter a,z;if(!gtk_text_buffer_get_selection_bounds(result(m),&a,&z)) { message(m,"Select result text first.");return; }text=gtk_text_buffer_get_text(result(m),&a,&z,TRUE); }
+ else text=contents(result(m));
+ GtkWidget *window=m->window;g_object_ref(window);guint64 serial=m->history_serial;
+ const gchar *titles[]={"Save merge result","Save a copy of Result","Save Result selection"};const gchar *names[]={"merged.txt","merged-copy.txt","selection.txt"};
+ GtkWidget *dialog=gtk_file_chooser_dialog_new(titles[mode],GTK_WINDOW(window),GTK_FILE_CHOOSER_ACTION_SAVE,"Cancel",GTK_RESPONSE_CANCEL,"Save",GTK_RESPONSE_ACCEPT,NULL);g_object_ref(dialog);gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog),TRUE);gtk_widget_set_name(dialog,"insight-diff-save-dialog");
+ const gchar *notes[]={"Save the full merge result.","Save a separate copy; keep the current result's saved or modified status.","Save the exact selection; keep the current result's saved or modified status."};GtkWidget *note=gtk_label_new(notes[mode]);gtk_label_set_line_wrap(GTK_LABEL(note),TRUE);gtk_label_set_xalign(GTK_LABEL(note),0);gtk_file_chooser_set_extra_widget(GTK_FILE_CHOOSER(dialog),note);gtk_widget_show(note);
+ gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog),TRUE);gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog),names[mode]);
+ gchar *open_path=NULL;gint response=gtk_dialog_run(GTK_DIALOG(dialog));m=g_object_get_data(G_OBJECT(window),"insight-diff-state");
+ if(response==GTK_RESPONSE_ACCEPT && m) {
+  if(m->busy || serial!=m->history_serial) message(m,"Result changed; reopen the save command. Nothing written.");
+  else {
+   gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));GError *error=NULL;
+   if(path && g_file_set_contents(path,text,-1,&error)) {
+    if(mode==0) { g_free(m->saved);m->saved=g_strdup(text);message(m,"Result saved.");state(m); }
+    else { message(m,mode==1 ? "Result copy saved; save state unchanged." : "Result selection saved; save state unchanged.");if(mode==2) open_path=g_strdup(path); }
+   } else { message(m,error ? error->message : "Choose a local destination filename.");g_clear_error(&error); }
+   g_free(path);
+  }
  }
- gtk_widget_destroy(d);
+ gtk_widget_destroy(dialog);g_object_unref(dialog);g_object_unref(window);g_free(text);
+ if(open_path && source_opener) source_opener(open_path,1);
+ g_free(open_path);
 }
+static void save(GtkWidget *w,gpointer data) { (void)w;write_result(data,0); }
 static void external(GtkWidget *w,gpointer data) {
  (void)w;Merge *m=data;gchar *program=g_find_program_in_path("kdiff3");
  if(!program) { message(m,"KDiff3 is not installed. Internal comparison and merge remain available.");return; }

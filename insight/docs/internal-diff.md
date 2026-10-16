@@ -232,3 +232,17 @@ The Result context menu provides **Uppercase selection**, **Lowercase selection*
 Result menu offers **Undo All retained changes** and **Redo All retained changes**, jumping to the earliest and latest available states. History is capped at 512 states and approximately 32 MiB of snapshots, retaining at least one state even if a single snapshot is larger. After eviction, the earliest available state can differ from the original result. A successful new comparison resets history; closing the window removes it. History is not saved in preferences. Saving result text retains available history. History browsing and undo are blocked during comparison.
 
 ![Production GTK history dialog, isolated test fixture](media/file-compare-history.jpg)
+
+### Saving a copy or the result selection
+
+Result menu provides **Save a copy of Result…** and **Save Result selection…**. The former writes the entire current result; the latter writes its exact selected text without adding a newline or BOM. Output is UTF-8 and preserves CR, LF and CRLF. A successfully exported selection opens in the main editor when source navigation is available. A copy does not open automatically.
+
+| Command | Updates result saved-text marker | Changes history |
+|---|---|---|
+| Save result… | Yes | No |
+| Save a copy of Result… | No | No |
+| Save Result selection… | No | No |
+
+Text is captured before the file chooser. If the result changes, a comparison starts or the parent window closes while choosing a destination, nothing is written. Cancel creates no file. GTK confirms overwrite of an existing destination. This exports to a file; appending to an open buffer is not implemented. Selection export requires selected result text. All three commands are blocked during comparison.
+
+![Production GTK copy-save dialog, isolated test fixture](media/file-compare-export.jpg)
