@@ -10,7 +10,8 @@
 enum { DC_ID,DC_PATH,DC_STATUS_TEXT,DC_LEFT,DC_RIGHT,DC_DETAIL,DC_STATUS,DC_PAIRED,DC_COLUMNS };
 typedef struct {
  GtkWidget *window,*paths[2],*controls,*scan,*cancel_button,*view,*filter_entry,*different,*status,*open,*previous,*next;
- GtkWidget *method,*recursive,*hidden,*space,*eol;
+ GtkWidget *method,*recursive,*hidden,*space,*eol,*include,*exclude,*status_filter;
+ GPtrArray *include_patterns,*exclude_patterns;
  GPtrArray *rows,*pending;GtkListStore *store,*building;GtkTreeModel *filtered;
  gchar *roots[2],*pending_roots[2];guint flags,pending_flags,publication,at;GCancellable *cancel;gboolean busy;
 } Directory;
@@ -29,9 +30,32 @@ static const gchar *entry_status(InsightDirectoryEntry *entry) {
  }
  return status_name(entry->status);
 }
+/* Compile on edits, never for every row. Match relative paths and basenames. */
+static GPtrArray *patterns(const gchar *text) {
+ GPtrArray *out=g_ptr_array_new_with_free_func((GDestroyNotify)g_pattern_spec_free);
+ gchar **parts=g_strsplit(text,";",-1);
+ for(guint i=0;parts[i];i++) { gchar *part=g_strstrip(parts[i]);if(*part) g_ptr_array_add(out,g_pattern_spec_new(part)); }
+ g_strfreev(parts);return out;
+}
+static gboolean matches(GPtrArray *specs,const gchar *path) {
+ gchar *base=g_path_get_basename(path);gboolean found=FALSE;
+ for(guint i=0;specs && i<specs->len && !found;i++) {
+  GPatternSpec *spec=g_ptr_array_index(specs,i);
+#if GLIB_CHECK_VERSION(2,70,0)
+  found=g_pattern_spec_match_string(spec,path) || g_pattern_spec_match_string(spec,base);
+#else
+  found=g_pattern_match_string(spec,path) || g_pattern_match_string(spec,base);
+#endif
+ }
+ g_free(base);return found;
+}
 static gboolean visible(GtkTreeModel *model,GtkTreeIter *iter,gpointer data) {
  Directory *d=data;gint status;gchar *path;gtk_tree_model_get(model,iter,DC_STATUS,&status,DC_PATH,&path,-1);
  gboolean show=!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->different)) || (status!=INSIGHT_DIR_SAME && status!=INSIGHT_DIR_FOLDER);
+ gint wanted=gtk_combo_box_get_active(GTK_COMBO_BOX(d->status_filter))-1;
+ if(show && wanted>=0) show=status==wanted;
+ if(show && d->include_patterns && d->include_patterns->len) show=matches(d->include_patterns,path);
+ if(show && d->exclude_patterns && d->exclude_patterns->len) show=!matches(d->exclude_patterns,path);
  const gchar *query=gtk_entry_get_text(GTK_ENTRY(d->filter_entry));
  if(show && *query) { gchar *a=g_utf8_casefold(path,-1),*b=g_utf8_casefold(query,-1);show=strstr(a,b)!=NULL;g_free(a);g_free(b); }
  g_free(path);return show;
@@ -58,6 +82,11 @@ static void summary(Directory *d) {
 static void refilter(GtkWidget *widget,gpointer data) {
  (void)widget;Directory *d=data;gtk_tree_model_filter_refilter(GTK_TREE_MODEL_FILTER(d->filtered));selection_changed(NULL,d);if(!d->busy) summary(d);
 }
+static void masks_changed(GtkWidget *widget,gpointer data) {
+ Directory *d=data;(void)widget;
+ g_clear_pointer(&d->include_patterns,g_ptr_array_unref);g_clear_pointer(&d->exclude_patterns,g_ptr_array_unref);
+ d->include_patterns=patterns(gtk_entry_get_text(GTK_ENTRY(d->include)));d->exclude_patterns=patterns(gtk_entry_get_text(GTK_ENTRY(d->exclude)));refilter(NULL,d);
+}
 static void busy(Directory *d,gboolean active) {
  d->busy=active;gtk_widget_set_sensitive(d->scan,!active);gtk_widget_set_sensitive(d->cancel_button,active);gtk_widget_set_sensitive(d->controls,!active);
  selection_changed(NULL,d);
@@ -72,6 +101,7 @@ static void destroyed(GtkWidget *widget,gpointer data) {
  if(d->cancel) g_cancellable_cancel(d->cancel);
  clear_pending(d);g_clear_object(&d->cancel);g_clear_pointer(&d->rows,g_ptr_array_unref);
  for(gint i=0;i<2;i++) g_free(d->roots[i]);
+ g_clear_pointer(&d->include_patterns,g_ptr_array_unref);g_clear_pointer(&d->exclude_patterns,g_ptr_array_unref);
  g_object_unref(d->store);g_object_unref(d->filtered);g_free(d);
 }
 static gchar *description(GFileInfo *info) {
@@ -238,12 +268,18 @@ static Directory *directory_new(GtkWidget *parent) {
  button(bar,"Copy visible list",G_CALLBACK(copy_list),d);
  d->scan=button(bar,"Scan / Refresh",G_CALLBACK(start),d);gtk_widget_set_name(d->scan,"insight-directory-scan");d->cancel_button=button(bar,"Cancel scan",G_CALLBACK(cancel_scan),d);d->open=button(bar,"Compare selected file",G_CALLBACK(open_pair),d);gtk_widget_set_name(d->open,"insight-directory-open");d->previous=button(bar,"Previous different file",G_CALLBACK(step),d);d->next=button(bar,"Next different file",G_CALLBACK(step),d);
  GtkWidget *filters=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),filters,FALSE,FALSE,0);d->filter_entry=gtk_search_entry_new();gtk_entry_set_placeholder_text(GTK_ENTRY(d->filter_entry),"Filter relative paths — Ctrl+F");gtk_box_pack_start(GTK_BOX(filters),d->filter_entry,TRUE,TRUE,0);d->different=check(filters,"Differences only",FALSE);button(filters,"Columns…",G_CALLBACK(show_columns),d);
+ GtkWidget *masks=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),masks,FALSE,FALSE,0);
+ gtk_box_pack_start(GTK_BOX(masks),gtk_label_new("Include masks"),FALSE,FALSE,0);d->include=gtk_entry_new();gtk_entry_set_placeholder_text(GTK_ENTRY(d->include),"*.c;*.h — empty includes all");gtk_entry_set_max_length(GTK_ENTRY(d->include),2048);gtk_box_pack_start(GTK_BOX(masks),d->include,TRUE,TRUE,0);
+ gtk_box_pack_start(GTK_BOX(masks),gtk_label_new("Exclude masks"),FALSE,FALSE,0);d->exclude=gtk_entry_new();gtk_entry_set_placeholder_text(GTK_ENTRY(d->exclude),"*.o;build/*");gtk_entry_set_max_length(GTK_ENTRY(d->exclude),2048);gtk_box_pack_start(GTK_BOX(masks),d->exclude,TRUE,TRUE,0);
+ d->status_filter=gtk_combo_box_text_new();gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(d->status_filter),"All statuses");for(gint i=0;i<8;i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(d->status_filter),status_name(i));gtk_combo_box_set_active(GTK_COMBO_BOX(d->status_filter),0);gtk_box_pack_start(GTK_BOX(masks),d->status_filter,FALSE,FALSE,0);
+ gtk_widget_set_tooltip_text(masks,"Case-sensitive glob masks separated by semicolons; * and ? match relative paths or filenames. Exclusions win. Filters do not reduce scan limits.");
  d->store=gtk_list_store_new(DC_COLUMNS,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_INT,G_TYPE_BOOLEAN);
  d->filtered=gtk_tree_model_filter_new(GTK_TREE_MODEL(d->store),NULL);gtk_tree_model_filter_set_visible_func(GTK_TREE_MODEL_FILTER(d->filtered),visible,d,NULL);GtkTreeModel *sorted=gtk_tree_model_sort_new_with_model(d->filtered);d->view=gtk_tree_view_new_with_model(sorted);gtk_widget_set_name(d->view,"insight-directory-files");g_object_unref(sorted);gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(d->view),DC_DETAIL);
  const gchar *labels[]={"Relative path","Status","Left — size / modified","Right — size / modified"};
  for(gint i=0;i<4;i++) { GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(labels[i],gtk_cell_renderer_text_new(),"text",DC_PATH+i,NULL);gtk_tree_view_column_set_resizable(column,TRUE);if(i<2) gtk_tree_view_column_set_sort_column_id(column,DC_PATH+i);gtk_tree_view_append_column(GTK_TREE_VIEW(d->view),column); }
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),d->view);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
  d->status=gtk_label_new("Choose two directories and scan. Results are a snapshot.");gtk_label_set_xalign(GTK_LABEL(d->status),0);gtk_label_set_line_wrap(GTK_LABEL(d->status),TRUE);gtk_box_pack_start(GTK_BOX(box),d->status,FALSE,FALSE,0);
+ g_signal_connect(d->include,"changed",G_CALLBACK(masks_changed),d);g_signal_connect(d->exclude,"changed",G_CALLBACK(masks_changed),d);g_signal_connect(d->status_filter,"changed",G_CALLBACK(refilter),d);
  g_signal_connect(d->filter_entry,"changed",G_CALLBACK(refilter),d);g_signal_connect(d->different,"toggled",G_CALLBACK(refilter),d);g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(d->view)),"changed",G_CALLBACK(selection_changed),d);
  g_signal_connect(d->method,"changed",G_CALLBACK(method_changed),d);method_changed(GTK_COMBO_BOX(d->method),d);
  g_signal_connect(d->view,"popup-menu",G_CALLBACK(popup),d);g_signal_connect(d->view,"button-press-event",G_CALLBACK(mouse),d);

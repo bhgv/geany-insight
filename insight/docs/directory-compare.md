@@ -108,3 +108,7 @@ and [Directory Compare Options](https://www.sourceinsight.com/doc/v4/userguide/M
 **Columns…** toggles Status, Left metadata and Right metadata for this window.
 Relative path stays visible. Hiding a sorted column keeps its sort order;
 Copy visible list still exports all four report fields for the visible rows.
+
+### File masks and status
+
+Use **Include masks** (`*.c;*.h`) and **Exclude masks** (`*.o;build/*`) to narrow the completed snapshot without rescanning. Masks are case-sensitive GLib globs: `*` matches any sequence, `?` one character; semicolons separate masks and surrounding spaces are trimmed. Each mask matches the relative path or basename. Empty inclusion means all entries; exclusions win. Folders are filtered by their own names. The status selector combines with path search and Differences only. Hidden rows still count toward scan limits. Clipboard export and difference navigation use the visible rows.

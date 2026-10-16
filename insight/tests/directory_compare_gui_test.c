@@ -42,6 +42,13 @@ int main(int argc,char **argv) {
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->different),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->space),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->eol),TRUE);start(NULL,d);wait_scan(d);
  gint sort_column;GtkSortType sort_order;g_assert_true(gtk_tree_sortable_get_sort_column_id(GTK_TREE_SORTABLE(gtk_tree_view_get_model(GTK_TREE_VIEW(d->view))),&sort_column,&sort_order));g_assert_cmpint(sort_column,==,DC_PATH);g_assert_cmpint(sort_order,==,GTK_SORT_DESCENDING);
  g_assert_true(select_path(d,"данные.txt"));g_assert_cmpint(selected_entry(d)->status,==,INSIGHT_DIR_SAME);open_pair(NULL,d);g_assert_cmpuint(opened_flags,==,3);
+ gtk_entry_set_text(GTK_ENTRY(d->include),"*.py; *.ini");g_assert_cmpint(gtk_tree_model_iter_n_children(d->filtered,NULL),==,2);
+ gtk_entry_set_text(GTK_ENTRY(d->exclude),"same.*");g_assert_cmpint(gtk_tree_model_iter_n_children(d->filtered,NULL),==,1);
+ gtk_combo_box_set_active(GTK_COMBO_BOX(d->status_filter),INSIGHT_DIR_SAME+1);g_assert_cmpint(gtk_tree_model_iter_n_children(d->filtered,NULL),==,0);
+ gtk_entry_set_text(GTK_ENTRY(d->exclude),"");g_assert_cmpint(gtk_tree_model_iter_n_children(d->filtered,NULL),==,1);
+ gtk_entry_set_text(GTK_ENTRY(d->include),"*.PY");g_assert_cmpint(gtk_tree_model_iter_n_children(d->filtered,NULL),==,0);
+ gtk_entry_set_text(GTK_ENTRY(d->include)," ; ; ");gtk_combo_box_set_active(GTK_COMBO_BOX(d->status_filter),0);g_assert_cmpint(gtk_tree_model_iter_n_children(d->filtered,NULL),==,5);
+ g_assert_true(select_path(d,"данные.txt"));
  GtkWidget *column_menu=columns_menu(d);GList *column_items=gtk_container_get_children(GTK_CONTAINER(column_menu));g_assert_cmpuint(g_list_length(column_items),==,4);
  g_assert_false(gtk_widget_get_sensitive(column_items->data));gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(g_list_nth_data(column_items,2)),FALSE);
  g_assert_false(gtk_tree_view_column_get_visible(gtk_tree_view_get_column(GTK_TREE_VIEW(d->view),2)));
