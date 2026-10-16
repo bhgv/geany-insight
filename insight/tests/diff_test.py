@@ -21,6 +21,9 @@ with tempfile.TemporaryDirectory() as tmp:
     lib.insight_diff_compute.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.POINTER(Diff)]
     lib.insight_diff_map_offset.argtypes = [ctypes.POINTER(Diff), ctypes.c_int, ctypes.c_size_t]
     lib.insight_diff_map_offset.restype = ctypes.c_size_t
+    lib.insight_diff_compute_options.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint, ctypes.POINTER(Diff)]
+    lib.insight_diff_map_line.argtypes = [ctypes.POINTER(Diff), ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
+    lib.insight_diff_map_line.restype = ctypes.c_size_t
     lib.insight_diff_clear.argtypes = [ctypes.POINTER(Diff)]
     def check(a, b, expected=None):
         a, b = a.encode(), b.encode()
@@ -80,7 +83,55 @@ with tempfile.TemporaryDirectory() as tmp:
     check('\r' * 4000001, '', 1)
     check('head\ntail\n', 'head\n' + 'new\r\n' * 10000 + 'tail\n', 1)
     check('head\n' + 'old\r' * 10000 + 'tail\n', 'head\ntail\n', 1)
+    def canonical(data, flags):
+        import re
+        if flags & 1:
+            data = data.translate(None, b' \t\v\f')
+        if flags & 2:
+            data = re.sub(b'\r\n|\r|\n', b'\n', data)
+        return data
+
+    def options_check(a, b, flags, expected=None):
+        a, b = a.encode(), b.encode()
+        diff = Diff()
+        assert lib.insight_diff_compute_options(a, b, flags, ctypes.byref(diff)) == 0
+        try:
+            if expected is not None:
+                assert diff.count == expected, (a, b, flags, diff.count)
+            pa = pb = 0
+            merged = bytearray()
+            for h in diff.hunks[:diff.count]:
+                assert canonical(a[pa:h.a_begin], flags) == canonical(b[pb:h.b_begin], flags)
+                merged.extend(a[pa:h.a_begin])
+                merged.extend(b[h.b_begin:h.b_end])
+                pa, pb = h.a_end, h.b_end
+            assert canonical(a[pa:], flags) == canonical(b[pb:], flags)
+            merged.extend(a[pa:])
+            assert canonical(bytes(merged), flags) == canonical(b, flags), (a, b, flags, bytes(merged), [(h.a_begin,h.a_end,h.b_begin,h.b_end) for h in diff.hunks[:diff.count]])
+            for side, source, target in [(0, a, b), (1, b, a)]:
+                import re
+                source_lines = len(re.findall(b'\r\n|\r|\n', source)) + bool(source and source[-1:] not in (b'\r', b'\n'))
+                target_lines = len(re.findall(b'\r\n|\r|\n', target)) + bool(target and target[-1:] not in (b'\r', b'\n'))
+                last = 0
+                for line in range(source_lines + 1):
+                    mapped = lib.insight_diff_map_line(ctypes.byref(diff), side, source, target, line)
+                    assert last <= mapped <= target_lines
+                    last = mapped
+        finally:
+            lib.insight_diff_clear(ctypes.byref(diff))
+
+    for flags in range(4):
+        options_check('a b\r\nя\r\n', 'ab\nя\n', flags, 0 if flags == 3 else 1)
+        options_check('ab', 'a b', flags, 0 if flags & 1 else 1)
+        options_check('a\r', 'a\n', flags, 0 if flags & 2 else 1)
+        options_check('a', 'a\n', flags, 1)
+        options_check('ab\n', 'a\nb\n', flags, 1)
+        for _ in range(500):
+            def option_text():
+                return ''.join(rng.choice(['a b\n', 'ab\r\n', '\tя\r', ' x \n', '\n']) for _ in range(rng.randrange(20)))
+            options_check(option_text(), option_text(), flags)
     if os.name == 'nt':
         import _ctypes
         _ctypes.FreeLibrary(lib._handle)  # Windows locks loaded DLLs during cleanup.
+print('Diff options: 2000 normalized reconstructions, logical line mapping and exact original hunk bytes passed.')
 print('Diff core: edge cases, 3000 randomized reconstructions, work limit and common-edge trimming passed.')

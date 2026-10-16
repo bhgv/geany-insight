@@ -9,7 +9,7 @@
 typedef struct { gchar *text; gint *positions; } Snapshot;
 typedef struct {
  GtkWidget *window,*paths[2],*views[3],*status,*undo,*redo,*take[2],*external;
- GtkWidget *previous,*next,*list_scroll,*sync; GtkAdjustment *adjustments[2]; gboolean scrolling;
+ GtkWidget *previous,*next,*list_scroll,*sync,*ignore_space,*ignore_eol; GtkAdjustment *adjustments[2]; gboolean scrolling;
  GtkListStore *list; GtkWidget *hunk_view; GtkTextBuffer *output; GtkTreeSelection *selection;
  gchar *sources[2],*loaded_paths[2],*saved;
  InsightDiff diff; GtkTextMark **marks;
@@ -124,11 +124,9 @@ static void sync_scroll(GtkAdjustment *adjustment,gpointer data) {
  GdkRectangle rect;GtkTextIter it;
  gtk_text_view_get_visible_rect(GTK_TEXT_VIEW(m->views[side]),&rect);
  gtk_text_view_get_line_at_y(GTK_TEXT_VIEW(m->views[side]),&it,rect.y,NULL);
- size_t offset=(size_t)(g_utf8_offset_to_pointer(m->sources[side],gtk_text_iter_get_offset(&it))-m->sources[side]);
- size_t mapped=insight_diff_map_offset(&m->diff,side,offset);
- /* Common spans share UTF-8 boundaries; changed blocks map to line starts. */
+ size_t line=insight_diff_map_line(&m->diff,side,m->sources[side],m->sources[1-side],(size_t)gtk_text_iter_get_line(&it));
  GtkTextBuffer *target=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[1-side]));
- gtk_text_buffer_get_iter_at_offset(target,&it,(gint)g_utf8_pointer_to_offset(m->sources[1-side],m->sources[1-side]+mapped));
+ gtk_text_buffer_get_iter_at_line(target,&it,(gint)line);
  m->scrolling=TRUE;
  gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(m->views[1-side]),&it,0,TRUE,0,0);
  m->scrolling=FALSE;
@@ -198,7 +196,9 @@ static void compare(GtkWidget *w,gpointer data) {
    message(m,"First version supports UTF-8 text files up to 1 MiB, without NUL bytes.");goto done;
   }
  }
- int rc=insight_diff_compute(text[0],text[1],&diff);
+ unsigned options=(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->ignore_space)) ? INSIGHT_DIFF_IGNORE_SPACE : 0) |
+  (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->ignore_eol)) ? INSIGHT_DIFF_IGNORE_EOL : 0);
+ int rc=insight_diff_compute_options(text[0],text[1],options,&diff);
  if(rc) { message(m,rc==-2 ? "Too many changed lines for the initial diff engine (4 million LCS cells)." : "Cannot allocate comparison.");goto done; }
  if(!discard(m)) goto done;
  m->changing=TRUE;m->scrolling=TRUE;clear_diff(m);m->diff=diff;diff=(InsightDiff){0};
@@ -278,6 +278,10 @@ static Merge *merge_new(GtkWidget *parent) {
  GtkWidget *list_toggle=gtk_check_button_new_with_label("Difference list");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(list_toggle),TRUE);gtk_box_pack_start(GTK_BOX(options),list_toggle,FALSE,FALSE,0);
  GtkWidget *wrap_toggle=gtk_check_button_new_with_label("Wrap lines");gtk_box_pack_start(GTK_BOX(options),wrap_toggle,FALSE,FALSE,0);
  m->sync=gtk_check_button_new_with_label("Scroll sources together");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->sync),TRUE);gtk_box_pack_start(GTK_BOX(options),m->sync,FALSE,FALSE,0);
+ GtkWidget *comparison=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),comparison,FALSE,FALSE,0);
+ m->ignore_space=gtk_check_button_new_with_label("Ignore spaces and tabs");gtk_box_pack_start(GTK_BOX(comparison),m->ignore_space,FALSE,FALSE,0);
+ m->ignore_eol=gtk_check_button_new_with_label("Ignore line ending style");gtk_box_pack_start(GTK_BOX(comparison),m->ignore_eol,FALSE,FALSE,0);
+ gtk_box_pack_start(GTK_BOX(comparison),gtk_label_new("Apply with Compare; ignored text stays from Left."),FALSE,FALSE,0);
  GtkWidget *panes=gtk_paned_new(GTK_ORIENTATION_VERTICAL);gtk_box_pack_start(GTK_BOX(box),panes,TRUE,TRUE,0);
  m->list=gtk_list_store_new(2,G_TYPE_INT,G_TYPE_STRING);m->hunk_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(m->list));
  gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(m->hunk_view),-1,"Differences",gtk_cell_renderer_text_new(),"text",1,NULL);

@@ -64,3 +64,23 @@ insertions/deletions and the LCS work limit. The production GTK window also pass
 strict compiler warnings and fatal GLib criticals; this is not a full editor run. Manual check: compare the supplied example, navigate
 both ends using buttons and shortcuts, hide the list, click each changed source,
 scroll past insertions with linking on/off, toggle wrapping, then take/undo/redo.
+
+## Comparison options
+
+**Ignore spaces and tabs** ignores ASCII horizontal whitespace (space, tab,
+vertical tab, form feed) within each logical line. It does not merge lines or
+ignore Unicode spaces. **Ignore line ending style** treats CR, LF and CRLF as
+the same terminator; a missing final terminator is still a difference. Press
+**Compare** to apply changed options. They do not change the loaded comparison
+until that command succeeds. The initial mode is exact.
+
+Hunks retain original byte ranges. The result starts from Left, so ignored
+changes outside a selected block keep Left's spelling/spacing/endings. Taking
+Right copies the original Right bytes of that block. When mixing CR-only and
+LF sources could fuse two lines into one CRLF, a neighbouring equal line is
+included in the block. Overlapping blocks are combined. Linked source scrolling
+uses logical lines, so differing whitespace byte widths do not shift navigation.
+
+Validation adds 2000 random normalized reconstructions in all four option
+combinations, monotonic line mapping and a GTK comparison of Cyrillic CRLF/LF
+sources. No semantic or language-aware whitespace comparison is claimed.

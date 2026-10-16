@@ -34,7 +34,13 @@ int main(int argc,char **argv) {
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle),FALSE);show_list(GTK_TOGGLE_BUTTON(toggle),m);
  g_assert_false(gtk_widget_get_visible(m->list_scroll));navigate(m,1);g_assert_cmpint(selected(m),==,1);
  gtk_tree_selection_unselect_all(m->selection);navigate(m,-1);g_assert_cmpint(selected(m),==,1);
- g_object_unref(toggle);gtk_widget_destroy(m->window);flush();
+ g_object_unref(toggle);
+ gtk_entry_set_text(GTK_ENTRY(m->paths[0]),left);gtk_entry_set_text(GTK_ENTRY(m->paths[1]),right);
+ g_assert_true(g_file_set_contents(left,"a b\r\nя\r\n",-1,&error));g_assert_no_error(error);
+ g_assert_true(g_file_set_contents(right,"ab\nя\n",-1,&error));g_assert_no_error(error);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->ignore_space),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->ignore_eol),TRUE);
+ compare(NULL,m);flush();g_assert_cmpuint(m->diff.count,==,0);assert_text(m,"a b\r\nя\r\n");
+ gtk_widget_destroy(m->window);flush();
  g_remove(left);g_remove(right);g_rmdir(dir);g_free(left);g_free(right);g_free(dir);
  g_print("Production Diff/Merge fixture: navigation, display, take and undo/redo passed.\n");return 0;
 }
