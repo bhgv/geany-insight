@@ -54,12 +54,18 @@ int main(int argc,char **argv) {
  g_assert_false(gtk_tree_view_column_get_visible(gtk_tree_view_get_column(GTK_TREE_VIEW(d->view),2)));
  gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(g_list_nth_data(column_items,2)),TRUE);g_list_free(column_items);gtk_widget_destroy(column_menu);
  GtkWidget *menu=context_menu(d);g_assert_nonnull(menu);gtk_widget_destroy(menu);
+ gtk_entry_set_text(GTK_ENTRY(d->include),"");
  const gchar *capture=g_getenv("INSIGHT_DIRECTORY_CAPTURE");
  if(capture) {
   gint64 until=g_get_monotonic_time()+200000;while(g_get_monotonic_time()<until) { flush();g_usleep(1000); }
   GdkWindow *window=gtk_widget_get_window(d->window);GdkPixbuf *pixels=gdk_pixbuf_get_from_window(window,0,0,gdk_window_get_width(window),gdk_window_get_height(window));g_assert_nonnull(pixels);
   g_assert_true(gdk_pixbuf_save(pixels,capture,"jpeg",&error,"quality","88",NULL));g_assert_no_error(error);g_object_unref(pixels);
  }
+ g_assert_true(select_path(d,"config.ini"));GtkWidget *path_action=gtk_menu_item_new();g_object_ref_sink(path_action);g_object_set_data(G_OBJECT(path_action),"side",GINT_TO_POINTER(0));
+ gtk_entry_set_text(GTK_ENTRY(d->paths[0]),empty);copy_absolute(path_action,d);clip=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));expected=g_build_filename(left,"config.ini",NULL);g_assert_cmpstr(clip,==,expected);g_free(clip);g_free(expected);gtk_entry_set_text(GTK_ENTRY(d->paths[0]),left);gtk_widget_destroy(path_action);g_object_unref(path_action);
+ gtk_entry_set_text(GTK_ENTRY(d->include),"*.ini");gtk_entry_set_text(GTK_ENTRY(d->exclude),"*.ini");gtk_entry_set_text(GTK_ENTRY(d->filter_entry),"missing");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->different),TRUE);gtk_combo_box_set_active(GTK_COMBO_BOX(d->status_filter),INSIGHT_DIR_ERROR+1);reset_filters(NULL,d);g_assert_cmpint(gtk_tree_model_iter_n_children(d->filtered,NULL),==,5);
+ swap_and_scan(NULL,d);wait_scan(d);g_assert_cmpstr(d->roots[0],==,right);g_assert_cmpstr(d->roots[1],==,left);g_assert_true(select_path(d,"old.lua"));g_assert_cmpint(selected_entry(d)->status,==,INSIGHT_DIR_RIGHT);
+ swap_and_scan(NULL,d);wait_scan(d);g_assert_cmpstr(d->roots[0],==,left);g_assert_cmpstr(d->roots[1],==,right);
  guint previous=d->rows->len;start(NULL,d);
  gint64 publication_deadline=g_get_monotonic_time()+10*G_TIME_SPAN_SECOND;
  while(d->busy && !d->publication && g_get_monotonic_time()<publication_deadline) { g_main_context_iteration(NULL,FALSE);g_usleep(1000); }

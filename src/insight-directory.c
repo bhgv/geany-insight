@@ -163,6 +163,15 @@ static void start(GtkWidget *widget,gpointer data) {
  d->cancel=g_cancellable_new();busy(d,TRUE);gtk_label_set_text(GTK_LABEL(d->status),"Scanning directories… Cancel keeps the previous result.");
  GTask *task=g_task_new(d->window,d->cancel,done,NULL);g_task_set_task_data(task,job,job_free);g_task_run_in_thread(task,worker);g_object_unref(task);
 }
+static void swap_and_scan(GtkWidget *widget,gpointer data) {
+ (void)widget;Directory *d=data;if(d->busy) return;
+ gchar *left=g_strdup(gtk_entry_get_text(GTK_ENTRY(d->paths[0])));
+ gtk_entry_set_text(GTK_ENTRY(d->paths[0]),gtk_entry_get_text(GTK_ENTRY(d->paths[1])));gtk_entry_set_text(GTK_ENTRY(d->paths[1]),left);g_free(left);start(NULL,d);
+}
+static void reset_filters(GtkWidget *widget,gpointer data) {
+ (void)widget;Directory *d=data;gtk_entry_set_text(GTK_ENTRY(d->filter_entry),"");gtk_entry_set_text(GTK_ENTRY(d->include),"");gtk_entry_set_text(GTK_ENTRY(d->exclude),"");
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->different),FALSE);gtk_combo_box_set_active(GTK_COMBO_BOX(d->status_filter),0);
+}
 static void cancel_scan(GtkWidget *widget,gpointer data) {
  (void)widget;Directory *d=data;if(d->cancel) g_cancellable_cancel(d->cancel);
  if(d->publication) { clear_pending(d);g_clear_object(&d->cancel);busy(d,FALSE);gtk_label_set_text(GTK_LABEL(d->status),"Directory comparison cancelled; previous result kept."); }
@@ -212,9 +221,16 @@ static void copy_path(GtkWidget *widget,gpointer data) {
  (void)widget;Directory *d=data;InsightDirectoryEntry *entry=selected_entry(d);if(!entry) return;
  gchar *path=g_filename_display_name(entry->relative);gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),path,-1);g_free(path);
 }
+static void copy_absolute(GtkWidget *widget,gpointer data) {
+ Directory *d=data;InsightDirectoryEntry *entry=selected_entry(d);gint side=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget),"side"));if(!entry || !entry->info[side] || !d->roots[side]) return;
+ gchar *path=g_build_filename(d->roots[side],entry->relative,NULL);GError *error=NULL;gchar *text=g_filename_to_utf8(path,-1,NULL,NULL,&error);
+ if(text) gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),text,-1);else gtk_label_set_text(GTK_LABEL(d->status),error->message);
+ g_clear_error(&error);g_free(text);g_free(path);
+}
 static GtkWidget *context_menu(Directory *d) {
  GtkWidget *menu=gtk_menu_new();const gchar *labels[]={"Compare selected file","Copy relative path","Copy visible list"};GCallback callbacks[]={G_CALLBACK(open_pair),G_CALLBACK(copy_path),G_CALLBACK(copy_list)};
  for(guint i=0;i<G_N_ELEMENTS(labels);i++) { GtkWidget *item=gtk_menu_item_new_with_label(labels[i]);gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",callbacks[i],d);gtk_widget_set_sensitive(item,i==0 ? !d->busy && paired(selected_entry(d)) : i==1 ? selected_entry(d)!=NULL : TRUE); }
+ for(gint side=0;side<2;side++) { GtkWidget *item=gtk_menu_item_new_with_label(side ? "Copy right full path" : "Copy left full path");gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_object_set_data(G_OBJECT(item),"side",GINT_TO_POINTER(side));g_signal_connect(item,"activate",G_CALLBACK(copy_absolute),d);InsightDirectoryEntry *entry=selected_entry(d);gtk_widget_set_sensitive(item,entry && entry->info[side]); }
  g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu);gtk_menu_attach_to_widget(GTK_MENU(menu),d->view,NULL);gtk_widget_show_all(menu);return menu;
 }
 static gboolean popup(GtkWidget *widget,gpointer data) { (void)widget;gtk_menu_popup_at_widget(GTK_MENU(context_menu(data)),((Directory*)data)->view,GDK_GRAVITY_SOUTH_WEST,GDK_GRAVITY_NORTH_WEST,NULL);return TRUE; }
@@ -262,6 +278,7 @@ static Directory *directory_new(GtkWidget *parent) {
  }
  GtkWidget *options=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(d->controls),options,FALSE,FALSE,0);
  d->method=gtk_combo_box_text_new();gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(d->method),"Compare contents");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(d->method),"Compare modification dates");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(d->method),"Compare sizes and dates");gtk_combo_box_set_active(GTK_COMBO_BOX(d->method),0);gtk_box_pack_start(GTK_BOX(options),d->method,FALSE,FALSE,0);
+ button(options,"Swap and scan",G_CALLBACK(swap_and_scan),d);
  d->recursive=check(options,"Include subdirectories",TRUE);d->hidden=check(options,"Include hidden entries",FALSE);
  GtkWidget *text_options=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(d->controls),text_options,FALSE,FALSE,0);d->space=check(text_options,"Ignore spaces and tabs",FALSE);d->eol=check(text_options,"Ignore line ending style",FALSE);
  GtkWidget *bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);
@@ -272,6 +289,7 @@ static Directory *directory_new(GtkWidget *parent) {
  gtk_box_pack_start(GTK_BOX(masks),gtk_label_new("Include masks"),FALSE,FALSE,0);d->include=gtk_entry_new();gtk_entry_set_placeholder_text(GTK_ENTRY(d->include),"*.c;*.h — empty includes all");gtk_entry_set_max_length(GTK_ENTRY(d->include),2048);gtk_box_pack_start(GTK_BOX(masks),d->include,TRUE,TRUE,0);
  gtk_box_pack_start(GTK_BOX(masks),gtk_label_new("Exclude masks"),FALSE,FALSE,0);d->exclude=gtk_entry_new();gtk_entry_set_placeholder_text(GTK_ENTRY(d->exclude),"*.o;build/*");gtk_entry_set_max_length(GTK_ENTRY(d->exclude),2048);gtk_box_pack_start(GTK_BOX(masks),d->exclude,TRUE,TRUE,0);
  d->status_filter=gtk_combo_box_text_new();gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(d->status_filter),"All statuses");for(gint i=0;i<8;i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(d->status_filter),status_name(i));gtk_combo_box_set_active(GTK_COMBO_BOX(d->status_filter),0);gtk_box_pack_start(GTK_BOX(masks),d->status_filter,FALSE,FALSE,0);
+ button(masks,"Reset filters",G_CALLBACK(reset_filters),d);
  gtk_widget_set_tooltip_text(masks,"Case-sensitive glob masks separated by semicolons; * and ? match relative paths or filenames. Exclusions win. Filters do not reduce scan limits.");
  d->store=gtk_list_store_new(DC_COLUMNS,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_INT,G_TYPE_BOOLEAN);
  d->filtered=gtk_tree_model_filter_new(GTK_TREE_MODEL(d->store),NULL);gtk_tree_model_filter_set_visible_func(GTK_TREE_MODEL_FILTER(d->filtered),visible,d,NULL);GtkTreeModel *sorted=gtk_tree_model_sort_new_with_model(d->filtered);d->view=gtk_tree_view_new_with_model(sorted);gtk_widget_set_name(d->view,"insight-directory-files");g_object_unref(sorted);gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(d->view),DC_DETAIL);

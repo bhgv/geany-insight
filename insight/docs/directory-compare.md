@@ -112,3 +112,5 @@ Copy visible list still exports all four report fields for the visible rows.
 ### File masks and status
 
 Use **Include masks** (`*.c;*.h`) and **Exclude masks** (`*.o;build/*`) to narrow the completed snapshot without rescanning. Masks are case-sensitive GLib globs: `*` matches any sequence, `?` one character; semicolons separate masks and surrounding spaces are trimmed. Each mask matches the relative path or basename. Empty inclusion means all entries; exclusions win. Folders are filtered by their own names. The status selector combines with path search and Differences only. Hidden rows still count toward scan limits. Clipboard export and difference navigation use the visible rows.
+
+**Swap and scan** exchanges the input paths and starts a fresh comparison. The previous snapshot remains usable if the scan fails or is cancelled. **Reset filters** clears search, masks, status and Differences only together. The row context menu copies either side’s full path from the completed snapshot; an absent side is disabled. Editing input paths does not change these clipboard targets.

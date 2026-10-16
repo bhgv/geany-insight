@@ -967,3 +967,13 @@ All Right	Все справа
 Take all difference blocks from Left — one Undo	Принять все блоки слева — одна отмена
 Take all difference blocks from Right — one Undo	Принять все блоки справа — одна отмена
 Block boundaries overlap or touch after edits; compare again before taking all blocks.	После правок границы блоков пересеклись или соприкоснулись; повторите сравнение перед массовым принятием.
+Include masks	Маски включения
+Exclude masks	Маски исключения
+All statuses	Все статусы
+*.c;*.h — empty includes all	*.c;*.h — пусто означает все
+*.o;build/*	*.o;build/*
+Reset filters	Сбросить фильтры
+Swap and scan	Поменять стороны и сравнить
+Copy right full path	Копировать полный путь справа
+Copy left full path	Копировать полный путь слева
+Case-sensitive glob masks separated by semicolons; * and ? match relative paths or filenames. Exclusions win. Filters do not reduce scan limits.	Маски с учётом регистра через точку с запятой; * и ? сопоставляются с относительным путём или именем. Исключения имеют приоритет. Фильтры не уменьшают лимиты сканирования.
