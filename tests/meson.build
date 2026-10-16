@@ -597,3 +597,7 @@ test('Insight nominal definition ranges', nominal_range_test)
 test('Insight typed nonrecursive MFL directories GUI', master_list_gui_test, timeout: 60, env: ['GEANY_TEST_MFL_DIRECTORIES=1'])
 
 test('Insight Project Files wildcard commands GUI', workbench_twenty_gui_test, timeout: 60, env: ['GEANY_TEST_FILE_WILDCARDS=1'])
+
+file_patterns_test = executable('test_insight_file_patterns', '../insight/tests/file_patterns_test.c', '../insight/desktop/file_patterns.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)
+test('Insight file type filename patterns', file_patterns_test)
+test('Insight file type filters GUI', languages_gui_test, timeout: 45, env: ['GEANY_TEST_FILE_PATTERNS=1'])

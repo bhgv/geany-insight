@@ -4,6 +4,7 @@
 #include "geany.h"
 #include "insight-languages.h"
 #include "../insight/desktop/master_list.h"
+#include "../insight/desktop/file_patterns.h"
 #include "insight-formatting.h"
 #include "insight-themes.h"
 #include "insight-index.h"
@@ -21,11 +22,11 @@
 #include <string.h>
 #include <stdlib.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
-typedef struct { gchar *name,*folder,*extensions,*compatible,*words,*css,*theme;GeanyFiletype *parser;gchar **files;gboolean seeded; } Language;
+typedef struct { gchar *name,*folder,*file_filters,*extensions,*compatible,*words,*css,*theme;GeanyFiletype *parser;gchar **files;gboolean seeded;InsightFilePatterns *patterns; } Language;
 static GPtrArray *languages;static GHashTable *path_cache;static gchar *root;static gboolean applying;static gulong save_handler;
 static void binding_saved(GObject *,GeanyDocument *,gpointer);
 static void seed_languages(void);
-static void free_language(gpointer data) { Language *p=data;g_free(p->name);g_free(p->folder);g_free(p->extensions);g_free(p->compatible);g_free(p->words);g_free(p->css);g_free(p->theme);g_strfreev(p->files);g_free(p); }
+static void free_language(gpointer data) { Language *p=data;g_free(p->name);g_free(p->folder);g_free(p->file_filters);insight_file_patterns_free(p->patterns);g_free(p->extensions);g_free(p->compatible);g_free(p->words);g_free(p->css);g_free(p->theme);g_strfreev(p->files);g_free(p); }
 static gchar *get(GKeyFile *key,const gchar *field) { gchar *s=g_key_file_get_string(key,"language",field,NULL);return s ? s : g_strdup(""); }
 static gboolean extensions_match(const gchar *list,const gchar *path) {
  if(!path) return FALSE;
@@ -41,6 +42,21 @@ static gboolean binding_path_equal(const gchar *a,const gchar *b) {
  return !strcmp(a,b);
 #endif
 }
+static gboolean native_pattern_match(const gchar *path,gboolean exact) {
+ gchar *base=g_path_get_basename(path);gboolean found=FALSE;
+#ifdef G_OS_WIN32
+ gchar *folded=g_utf8_casefold(base,-1);g_free(base);base=folded;
+#endif
+ for(guint n=0;filetypes_array && n<filetypes_array->len && !found;n++) { GeanyFiletype *ft=filetypes[n];if(ft->id==GEANY_FILETYPES_NONE) continue;for(guint k=0;ft->pattern && ft->pattern[k] && !found;k++) { const gchar *pattern=ft->pattern[k];if(!strcmp(pattern,"*") || (exact && strpbrk(pattern,"*?"))) continue;
+#ifdef G_OS_WIN32
+ gchar *folded_pattern=g_utf8_casefold(pattern,-1);pattern=folded_pattern;
+#endif
+ found=exact ? !strcmp(pattern,base) : g_pattern_match_simple(pattern,base);
+#ifdef G_OS_WIN32
+ g_free(folded_pattern);
+#endif
+ } }g_free(base);return found;
+}
 static Language *for_path(const gchar *path) {
  if(!path) return NULL;
  gchar *canonical=g_canonicalize_filename(path,NULL);Language *found=NULL;
@@ -48,7 +64,10 @@ static Language *for_path(const gchar *path) {
  gpointer cached=NULL;if(g_hash_table_lookup_extended(path_cache,canonical,NULL,&cached)) { g_free(canonical);return cached; }
  for(guint n=0;languages && n<languages->len && !found;n++) { Language *p=g_ptr_array_index(languages,n);for(guint k=0;p->files && p->files[k];k++) if(binding_path_equal(p->files[k],canonical)) { found=p;break; } }
  if(found) { g_hash_table_insert(path_cache,canonical,found);return found; }
- for(guint n=0;languages && n<languages->len;n++) { Language *p=g_ptr_array_index(languages,n);if(extensions_match(p->extensions,path)) { g_hash_table_insert(path_cache,canonical,p);return p; } }g_hash_table_insert(path_cache,canonical,NULL);return NULL;
+ for(guint n=0;languages && n<languages->len;n++) { Language *p=g_ptr_array_index(languages,n);if(insight_file_patterns_match(p->patterns,path,INSIGHT_FILE_PATTERN_EXACT)) { found=p;break; } }
+ if(!found && !native_pattern_match(path,TRUE)) for(guint n=0;languages && n<languages->len;n++) { Language *p=g_ptr_array_index(languages,n);if(extensions_match(p->extensions,path) || insight_file_patterns_match(p->patterns,path,INSIGHT_FILE_PATTERN_GLOB)) { found=p;break; } }
+ if(!found) for(guint n=0;languages && n<languages->len;n++) { Language *p=g_ptr_array_index(languages,n);if(insight_file_patterns_match(p->patterns,path,INSIGHT_FILE_PATTERN_DEFAULT)) { if(!native_pattern_match(path,FALSE)) found=p;break; } }
+ g_hash_table_insert(path_cache,canonical,found);return found;
 }
 static Language *for_editor(ScintillaObject *sci,const gchar *path,GeanyFiletype *ft) {
  const gchar *forced=sci ? g_object_get_data(G_OBJECT(sci),"insight-language-binding") : NULL;Language *p=by_name(forced);if(p) return p;
@@ -68,15 +87,15 @@ InsightMasterTypes *insight_languages_master_types(void) {
  GPtrArray *patterns=g_ptr_array_new(),*extensions=g_ptr_array_new(),*files=g_ptr_array_new();
  for(guint n=0;filetypes_array && n<filetypes_array->len;n++) { GeanyFiletype *ft=filetypes[n];if(ft->id==GEANY_FILETYPES_NONE) continue;for(guint k=0;ft->pattern && ft->pattern[k];k++) if(*ft->pattern[k]) g_ptr_array_add(patterns,g_strdup(ft->pattern[k])); }
  for(guint n=0;languages && n<languages->len;n++) {
-  Language *p=g_ptr_array_index(languages,n);gchar **tokens=g_strsplit_set(p->extensions,";, \t\r\n",-1);
+  Language *p=g_ptr_array_index(languages,n);gchar **names=insight_file_patterns_tokens(p->patterns);for(guint k=0;names && names[k];k++) g_ptr_array_add(patterns,g_strdup(names[k]));g_strfreev(names);gchar **tokens=g_strsplit_set(p->extensions,";, \t\r\n",-1);
   for(guint k=0;tokens[k];k++) { const gchar *t=tokens[k];while(*t=='*' || *t=='.') t++;if(*t) g_ptr_array_add(extensions,g_strdup(t)); }g_strfreev(tokens);
   for(guint k=0;p->files && p->files[k];k++) g_ptr_array_add(files,g_strdup(p->files[k]));
  }
  g_ptr_array_add(patterns,NULL);g_ptr_array_add(extensions,NULL);g_ptr_array_add(files,NULL);InsightMasterTypes *types=g_new0(InsightMasterTypes,1);types->patterns=(const gchar *const *)g_ptr_array_free(patterns,FALSE);types->extensions=(const gchar *const *)g_ptr_array_free(extensions,FALSE);types->files=(const gchar *const *)g_ptr_array_free(files,FALSE);return types;
 }
-struct InsightLanguageFilter { gchar *extensions,*compatible;GPtrArray *own,*excluded;gboolean unrestricted; };
+struct InsightLanguageFilter { gchar *extensions,*compatible;GPtrArray *own,*excluded;gboolean unrestricted;InsightFilePatterns *patterns; };
 InsightLanguageFilter *insight_language_filter_new(const gchar *from,GeanyFiletype *ft) {
- InsightLanguageFilter *filter=g_new0(InsightLanguageFilter,1);Language *p=for_path(from);if(!p && !from) { GeanyDocument *doc=document_get_current();p=doc ? for_editor(doc->editor->sci,from,ft) : by_name(ft ? ft->name : NULL); }filter->unrestricted=!p;filter->own=g_ptr_array_new_with_free_func(g_free);filter->excluded=g_ptr_array_new_with_free_func(g_free);filter->extensions=g_strdup(p ? p->extensions : "");filter->compatible=g_strdup(p ? p->compatible : "");
+ InsightLanguageFilter *filter=g_new0(InsightLanguageFilter,1);Language *p=for_path(from);if(!p && !from) { GeanyDocument *doc=document_get_current();p=doc ? for_editor(doc->editor->sci,from,ft) : by_name(ft ? ft->name : NULL); }filter->unrestricted=!p;filter->own=g_ptr_array_new_with_free_func(g_free);filter->excluded=g_ptr_array_new_with_free_func(g_free);filter->patterns=insight_file_patterns_new(p ? p->file_filters : "",NULL);filter->extensions=g_strdup(p ? p->extensions : "");filter->compatible=g_strdup(p ? p->compatible : "");
  if(p) for(guint n=0;n<languages->len;n++) { Language *other=g_ptr_array_index(languages,n);GPtrArray *paths=other==p ? filter->own : filter->excluded;for(guint k=0;other->files && other->files[k];k++) g_ptr_array_add(paths,g_strdup(other->files[k])); }
  return filter;
 }
@@ -87,13 +106,13 @@ gboolean insight_language_filter_match(const InsightLanguageFilter *filter,const
  for(guint n=0;n<filter->own->len;n++) if(binding_path_equal(g_ptr_array_index(filter->own,n),canonical)) own=TRUE;
  for(guint n=0;n<filter->excluded->len;n++) if(binding_path_equal(g_ptr_array_index(filter->excluded,n),canonical)) excluded=TRUE;
  g_free(canonical);
- return own || (!excluded && (extensions_match(filter->extensions,path) || extensions_match(filter->compatible,path)));
+ return own || (!excluded && (insight_file_patterns_match(filter->patterns,path,INSIGHT_FILE_PATTERN_ANY) || extensions_match(filter->extensions,path) || extensions_match(filter->compatible,path)));
 }
-void insight_language_filter_free(InsightLanguageFilter *filter) { if(!filter) return;g_free(filter->extensions);g_free(filter->compatible);g_ptr_array_free(filter->own,TRUE);g_ptr_array_free(filter->excluded,TRUE);g_free(filter); }
+void insight_language_filter_free(InsightLanguageFilter *filter) { if(!filter) return;insight_file_patterns_free(filter->patterns);g_free(filter->extensions);g_free(filter->compatible);g_ptr_array_free(filter->own,TRUE);g_ptr_array_free(filter->excluded,TRUE);g_free(filter); }
 GeanyFiletype *insight_languages_detect(const gchar *path) { Language *p=for_path(path);return p ? p->parser : NULL; }
 gboolean insight_languages_compatible(const gchar *from,GeanyFiletype *fallback,const gchar *to) {
  Language *p=for_path(from);if(!p && !from) { GeanyDocument *current=document_get_current();p=current ? for_editor(current->editor->sci,NULL,fallback) : by_name(fallback ? fallback->name : NULL); }
- if(p) { Language *target=for_path(to);if(target && target!=p) { gchar *canonical=to ? g_canonicalize_filename(to,NULL) : NULL;for(guint n=0;canonical && target->files && target->files[n];n++) if(binding_path_equal(target->files[n],canonical)) { g_free(canonical);return FALSE; }g_free(canonical); }return target==p || extensions_match(p->extensions,to) || extensions_match(p->compatible,to); }
+ if(p) { Language *target=for_path(to);if(target && target!=p) { gchar *canonical=to ? g_canonicalize_filename(to,NULL) : NULL;for(guint n=0;canonical && target->files && target->files[n];n++) if(binding_path_equal(target->files[n],canonical)) { g_free(canonical);return FALSE; }g_free(canonical); }return target==p || insight_file_patterns_match(p->patterns,to,INSIGHT_FILE_PATTERN_ANY) || extensions_match(p->extensions,to) || extensions_match(p->compatible,to); }
  GeanyDocument *d=to ? document_find_by_filename(to) : NULL;GeanyFiletype *ft=d ? d->file_type : (to ? filetypes_detect_from_extension(to) : NULL);
  return fallback && ft && insight_native_language_compatible(fallback->lang,ft->lang);
 }
@@ -157,14 +176,14 @@ static void load_languages(void) {
  if(languages) g_ptr_array_free(languages,TRUE);
  languages=g_ptr_array_new_with_free_func(free_language);GDir *dir=g_dir_open(root,0,NULL);if(!dir) return;const gchar *name;
  while((name=g_dir_read_name(dir))) { gchar *folder=g_build_filename(root,name,NULL),*config=g_build_filename(folder,"language.conf",NULL),*style=g_build_filename(folder,"style.css",NULL);GKeyFile *key=g_key_file_new();
-  if(g_key_file_load_from_file(key,config,G_KEY_FILE_NONE,NULL)) { Language *p=g_new0(Language,1);p->folder=g_strdup(folder);p->name=get(key,"name");gchar *parser=get(key,"parser");p->parser=filetypes_lookup_by_name(parser);g_free(parser);p->extensions=get(key,"extensions");p->compatible=get(key,"compatible-extensions");p->words=get(key,"keywords");p->theme=get(key,"theme");p->seeded=g_key_file_get_boolean(key,"language","seeded",NULL);p->files=g_key_file_get_string_list(key,"language","files",NULL,NULL);if(!g_file_get_contents(style,&p->css,NULL,NULL)) p->css=g_strdup("");GError *error=NULL;
-   if(p->parser && *p->name && css_valid(p->css,&error)) g_ptr_array_add(languages,p);else { g_warning("Language profile %s ignored: invalid parser, name or CSS",name);free_language(p); }g_clear_error(&error);
+  if(g_key_file_load_from_file(key,config,G_KEY_FILE_NONE,NULL)) { Language *p=g_new0(Language,1);p->folder=g_strdup(folder);p->name=get(key,"name");gchar *parser=get(key,"parser");p->parser=filetypes_lookup_by_name(parser);g_free(parser);p->file_filters=get(key,"file-filters");p->patterns=insight_file_patterns_new(p->file_filters,NULL);p->extensions=get(key,"extensions");p->compatible=get(key,"compatible-extensions");p->words=get(key,"keywords");p->theme=get(key,"theme");p->seeded=g_key_file_get_boolean(key,"language","seeded",NULL);p->files=g_key_file_get_string_list(key,"language","files",NULL,NULL);if(!g_file_get_contents(style,&p->css,NULL,NULL)) p->css=g_strdup("");GError *error=NULL;
+   if(p->patterns && p->parser && *p->name && css_valid(p->css,&error)) g_ptr_array_add(languages,p);else { g_warning("Language profile %s ignored: invalid parser, name or CSS",name);free_language(p); }g_clear_error(&error);
   }g_key_file_free(key);g_free(folder);g_free(config);g_free(style);
  }g_dir_close(dir);g_ptr_array_sort(languages,compare_languages);
 }
 void insight_languages_init(void) { if(!root) root=g_build_filename(app->configdir,"languages",NULL);load_languages();seed_languages();load_languages();insight_formatting_init();insight_themes_init();if(!save_handler) save_handler=g_signal_connect(geany_object,"document-save",G_CALLBACK(binding_saved),NULL); }
 void insight_languages_finalize(void) { insight_formatting_finalize();insight_themes_finalize(); if(save_handler) { g_signal_handler_disconnect(geany_object,save_handler);save_handler=0; }g_clear_pointer(&path_cache,g_hash_table_destroy);g_clear_pointer(&languages,g_ptr_array_unref);g_clear_pointer(&root,g_free); }
-typedef struct { GtkWidget *dialog,*choice,*name,*parser,*extensions,*compatible,*words,*css,*theme,*bind,*category,*font,*bold,*italic,*color,*status;guint document;gchar *original;gboolean filling; } LanguageDialog;
+typedef struct { GtkWidget *dialog,*choice,*name,*parser,*file_filters,*extensions,*compatible,*words,*css,*theme,*bind,*category,*font,*bold,*italic,*color,*status;guint document;gchar *original;gboolean filling; } LanguageDialog;
 static GtkWidget *field(GtkGrid *grid,gint row,const gchar *label,const gchar *name) { GtkWidget *entry=gtk_entry_new(),*title=gtk_label_new(label);gtk_widget_set_halign(title,GTK_ALIGN_START);gtk_widget_set_name(entry,name);gtk_grid_attach(grid,title,0,row,1,1);gtk_grid_attach(grid,entry,1,row,1,1);gtk_widget_set_hexpand(entry,TRUE);return entry; }
 static gchar *text_value(GtkWidget *view) { GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));GtkTextIter a,b;gtk_text_buffer_get_bounds(buffer,&a,&b);return gtk_text_buffer_get_text(buffer,&a,&b,FALSE); }
 static GtkWidget *text_editor(GtkWidget *box,const gchar *name) { GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL),*view=gtk_text_view_new();gtk_widget_set_name(view,name);gtk_text_view_set_monospace(GTK_TEXT_VIEW(view),TRUE);gtk_container_add(GTK_CONTAINER(scroll),view);gtk_widget_set_size_request(scroll,-1,180);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);return view; }
@@ -172,6 +191,7 @@ static gchar *default_extensions(GeanyFiletype *ft) { GString *out=g_string_new(
 static void choice_changed(GtkComboBox *choice,gpointer data) {
  LanguageDialog *d=data;if(d->filling || insight_i18n_is_applying()) return;const gchar *name=gtk_combo_box_get_active_id(choice);if(!name) return;Language *p=by_name(name);GeanyFiletype *ft=p ? p->parser : filetypes_lookup_by_name(name);if(!ft) return;d->filling=TRUE;g_free(d->original);d->original=p ? g_strdup(p->name) : NULL;
  gtk_entry_set_text(GTK_ENTRY(d->name),p ? p->name : ft->name);gtk_combo_box_set_active_id(GTK_COMBO_BOX(d->parser),ft->name);gchar *extensions=p ? g_strdup(p->extensions) : default_extensions(ft);gtk_entry_set_text(GTK_ENTRY(d->extensions),extensions);g_free(extensions);
+ gtk_entry_set_text(GTK_ENTRY(d->file_filters),p ? p->file_filters : "");
  gtk_entry_set_text(GTK_ENTRY(d->compatible),p ? p->compatible : ((ft->lang==TM_PARSER_C || ft->lang==TM_PARSER_CPP || ft->lang==TM_PARSER_CUDA) ? "c;c++;C;cpp;cxx;cc;h;hpp;hxx;h++;hh;asm;ASM;s;S;sx" : ""));
  gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(d->words)),p ? p->words : "",-1);gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(d->css)),p ? p->css : "",-1);gtk_combo_box_set_active_id(GTK_COMBO_BOX(d->theme),p && *p->theme ? p->theme : "current");d->filling=FALSE;
 }
@@ -189,7 +209,7 @@ static void append_font(GtkButton *button,gpointer data) {
  gchar *rule=g_strdup_printf("\n%s { font-family: \"%s\"; font-size: %spt; font-weight: %s; font-style: %s; color: #%02x%02x%02x; }\n",category,escaped,size,gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->bold)) ? "bold" : "normal",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->italic)) ? "italic" : "normal",(guint)(color.red*255),(guint)(color.green*255),(guint)(color.blue*255));GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(d->css));GtkTextIter end;gtk_text_buffer_get_end_iter(buffer,&end);gtk_text_buffer_insert(buffer,&end,rule,-1);g_free(rule);g_free(escaped);g_free(font);pango_font_description_free(desc);
 }
 static gboolean write_language(Language *p,GError **error) {
- if(g_mkdir_with_parents(p->folder,0700)) { g_set_error_literal(error,G_FILE_ERROR,G_FILE_ERROR_FAILED,"Cannot create language folder");return FALSE; }GKeyFile *key=g_key_file_new();g_key_file_set_string(key,"language","name",p->name);g_key_file_set_string(key,"language","parser",p->parser->name);g_key_file_set_string(key,"language","extensions",p->extensions);g_key_file_set_string(key,"language","compatible-extensions",p->compatible);g_key_file_set_string(key,"language","keywords",p->words);g_key_file_set_string(key,"language","theme",p->theme);g_key_file_set_boolean(key,"language","seeded",p->seeded);if(p->files) g_key_file_set_string_list(key,"language","files",(const gchar * const *)p->files,g_strv_length(p->files));gsize size;gchar *contents=g_key_file_to_data(key,&size,NULL),*config=g_build_filename(p->folder,"language.conf",NULL),*style=g_build_filename(p->folder,"style.css",NULL);gboolean ok=g_file_set_contents(style,p->css,-1,error) && g_file_set_contents(config,contents,size,error);g_free(contents);g_free(config);g_free(style);g_key_file_free(key);return ok;
+ if(g_mkdir_with_parents(p->folder,0700)) { g_set_error_literal(error,G_FILE_ERROR,G_FILE_ERROR_FAILED,"Cannot create language folder");return FALSE; }GKeyFile *key=g_key_file_new();g_key_file_set_string(key,"language","name",p->name);g_key_file_set_string(key,"language","parser",p->parser->name);g_key_file_set_string(key,"language","file-filters",p->file_filters ? p->file_filters : "");g_key_file_set_string(key,"language","extensions",p->extensions);g_key_file_set_string(key,"language","compatible-extensions",p->compatible);g_key_file_set_string(key,"language","keywords",p->words);g_key_file_set_string(key,"language","theme",p->theme);g_key_file_set_boolean(key,"language","seeded",p->seeded);if(p->files) g_key_file_set_string_list(key,"language","files",(const gchar * const *)p->files,g_strv_length(p->files));gsize size;gchar *contents=g_key_file_to_data(key,&size,NULL),*config=g_build_filename(p->folder,"language.conf",NULL),*style=g_build_filename(p->folder,"style.css",NULL);gboolean ok=g_file_set_contents(style,p->css,-1,error) && g_file_set_contents(config,contents,size,error);g_free(contents);g_free(config);g_free(style);g_key_file_free(key);return ok;
 }
 static void seed_languages(void) {
  /* Seed absent folders once. Existing profiles and hand-written CSS win. */
@@ -215,7 +235,8 @@ static gboolean reset_binding(GeanyDocument *doc,GError **error) {
 }
 static gboolean valid_name(const gchar *name) { return name && *name && strcmp(name,".") && strcmp(name,"..") && !strpbrk(name,"/\\:\n\r\t*?\"<>|") && name[strlen(name)-1]!='.' && name[strlen(name)-1]!=' '; }
 static gboolean save_dialog(LanguageDialog *d,GError **error) {
- Language p={0};p.name=g_strdup(gtk_entry_get_text(GTK_ENTRY(d->name)));g_strstrip(p.name);p.parser=filetypes_lookup_by_name(gtk_combo_box_get_active_id(GTK_COMBO_BOX(d->parser)));p.extensions=g_strdup(gtk_entry_get_text(GTK_ENTRY(d->extensions)));p.compatible=g_strdup(gtk_entry_get_text(GTK_ENTRY(d->compatible)));p.words=text_value(d->words);p.css=text_value(d->css);p.theme=g_strdup(gtk_combo_box_get_active_id(GTK_COMBO_BOX(d->theme)));
+ Language p={0};p.name=g_strdup(gtk_entry_get_text(GTK_ENTRY(d->name)));g_strstrip(p.name);p.parser=filetypes_lookup_by_name(gtk_combo_box_get_active_id(GTK_COMBO_BOX(d->parser)));p.file_filters=g_strdup(gtk_entry_get_text(GTK_ENTRY(d->file_filters)));p.patterns=insight_file_patterns_new(p.file_filters,error);p.extensions=g_strdup(gtk_entry_get_text(GTK_ENTRY(d->extensions)));p.compatible=g_strdup(gtk_entry_get_text(GTK_ENTRY(d->compatible)));p.words=text_value(d->words);p.css=text_value(d->css);p.theme=g_strdup(gtk_combo_box_get_active_id(GTK_COMBO_BOX(d->theme)));
+ if(!p.patterns) goto fail;
  if(!valid_name(p.name) || !p.parser) { g_set_error_literal(error,G_FILE_ERROR,G_FILE_ERROR_INVAL,"Enter a safe language name and select a parser");goto fail; }if(!css_valid(p.css,error)) goto fail;
  Language *old=by_name(d->original),*collision=by_name(p.name);if(collision && collision!=old) { g_set_error_literal(error,G_FILE_ERROR,G_FILE_ERROR_EXIST,"Another profile already has this name");goto fail; }
  gchar **extensions=g_strsplit_set(p.extensions,";, \t\r\n",-1);
@@ -230,16 +251,17 @@ static gboolean save_dialog(LanguageDialog *d,GError **error) {
  if(old && strcmp(old->name,p.name)) for(guint n=0;n<documents_array->len;n++) { GeanyDocument *buffer=g_ptr_array_index(documents_array,n);if(buffer->is_valid && !g_strcmp0(g_object_get_data(G_OBJECT(buffer->editor->sci),"insight-language-binding"),old->name)) g_object_set_data_full(G_OBJECT(buffer->editor->sci),"insight-language-binding",g_strdup(p.name),g_free); }
  load_languages();applying=TRUE;for(guint n=0;n<documents_array->len;n++) { GeanyDocument *buffer=g_ptr_array_index(documents_array,n);if(!buffer->is_valid) continue;Language *profile=for_editor(buffer->editor->sci,buffer->file_name,buffer->file_type);if(profile) document_set_filetype(buffer,profile->parser);document_reload_config(buffer); }applying=FALSE;
  for(guint n=0;n<documents_array->len;n++) { GeanyDocument *buffer=g_ptr_array_index(documents_array,n);if(buffer->is_valid) insight_languages_apply(buffer->editor->sci,buffer->file_name,buffer->file_type); }insight_workbench_languages_changed();
- g_free(d->original);d->original=g_strdup(p.name);refresh_choices(d,p.name);g_free(p.name);g_free(p.folder);g_free(p.extensions);g_free(p.compatible);g_free(p.words);g_free(p.css);g_free(p.theme);g_strfreev(p.files);return TRUE;
-fail: g_free(p.name);g_free(p.folder);g_free(p.extensions);g_free(p.compatible);g_free(p.words);g_free(p.css);g_free(p.theme);g_strfreev(p.files);return FALSE;
+ g_free(d->original);d->original=g_strdup(p.name);refresh_choices(d,p.name);g_free(p.name);g_free(p.folder);g_free(p.file_filters);insight_file_patterns_free(p.patterns);g_free(p.extensions);g_free(p.compatible);g_free(p.words);g_free(p.css);g_free(p.theme);g_strfreev(p.files);return TRUE;
+fail: g_free(p.name);g_free(p.folder);g_free(p.file_filters);insight_file_patterns_free(p.patterns);g_free(p.extensions);g_free(p.compatible);g_free(p.words);g_free(p.css);g_free(p.theme);g_strfreev(p.files);return FALSE;
 }
 void insight_languages_show(GtkWidget *widget,gpointer data) {
  (void)widget;LanguageDialog d={0};GeanyDocument *doc=document_get_current();d.document=doc ? doc->id : 0;d.dialog=gtk_dialog_new_with_buttons("Language profiles and file binding",GTK_WINDOW(main_widgets.window),GTK_DIALOG_DESTROY_WITH_PARENT,"Reset file binding",1001,"Reload profiles",1002,"Close",GTK_RESPONSE_CLOSE,"Apply",GTK_RESPONSE_APPLY,NULL);gtk_widget_set_name(d.dialog,"insight-language-dialog");gtk_window_set_default_size(GTK_WINDOW(d.dialog),760,650);GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(d.dialog)),*grid=gtk_grid_new();gtk_grid_set_row_spacing(GTK_GRID(grid),7);gtk_grid_set_column_spacing(GTK_GRID(grid),10);gtk_container_set_border_width(GTK_CONTAINER(grid),12);gtk_box_pack_start(GTK_BOX(box),grid,FALSE,FALSE,0);
  d.choice=gtk_combo_box_text_new();gtk_widget_set_name(d.choice,"insight-language-profile");d.parser=gtk_combo_box_text_new();gtk_widget_set_name(d.parser,"insight-language-parser");for(guint n=0;n<filetypes_array->len;n++) { GeanyFiletype *ft=filetypes[n];gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d.choice),ft->name,ft->name);gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d.parser),ft->name,ft->name); }for(guint n=0;languages && n<languages->len;n++) { Language *p=g_ptr_array_index(languages,n);if(!filetypes_lookup_by_name(p->name)) gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d.choice),p->name,p->name); }
  gtk_grid_attach(GTK_GRID(grid),gtk_label_new("Profile"),0,0,1,1);gtk_grid_attach(GTK_GRID(grid),d.choice,1,0,1,1);d.name=field(GTK_GRID(grid),1,"Language name","insight-language-name");gtk_grid_attach(GTK_GRID(grid),gtk_label_new("Base parser / lexer"),0,2,1,1);gtk_grid_attach(GTK_GRID(grid),d.parser,1,2,1,1);d.extensions=field(GTK_GRID(grid),3,"Own extensions (case sensitive)","insight-language-extensions");d.compatible=field(GTK_GRID(grid),4,"Compatible extensions","insight-language-compatible");gtk_widget_set_tooltip_text(d.extensions,"Separate extensions with semicolons: c;C;cpp;cxx;h;hpp;hxx;h++");d.bind=gtk_check_button_new_with_label("Force this profile for the current file (persist for named files)");gtk_widget_set_name(d.bind,"insight-language-force");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d.bind),data!=NULL);gtk_widget_set_sensitive(d.bind,doc!=NULL);gtk_grid_attach(GTK_GRID(grid),d.bind,0,5,2,1);
+ d.file_filters=field(GTK_GRID(grid),6,"File filters (names and wildcards)","insight-language-file-filters");gtk_entry_set_max_length(GTK_ENTRY(d.file_filters),4096);gtk_widget_set_tooltip_text(d.file_filters,"Names or * / ? masks, separated by spaces, commas or semicolons; no paths");
  GtkWidget *notebook=gtk_notebook_new(),*words_box=gtk_box_new(GTK_ORIENTATION_VERTICAL,6),*appearance=gtk_box_new(GTK_ORIENTATION_VERTICAL,6);gtk_box_pack_start(GTK_BOX(box),notebook,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(words_box),gtk_label_new("Primary keyword override (empty keeps Geany defaults)"),FALSE,FALSE,0);d.words=text_editor(words_box,"insight-language-keywords");gtk_notebook_append_page(GTK_NOTEBOOK(notebook),words_box,gtk_label_new("Predefined words"));
  d.theme=gtk_combo_box_text_new();gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d.theme),"current","Current Geany theme + CSS overrides");gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d.theme),"light","Light preset");gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d.theme),"dark","Dark preset");gtk_box_pack_start(GTK_BOX(appearance),d.theme,FALSE,FALSE,0);
- GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);d.category=gtk_combo_box_text_new();const gchar *categories[]={"editor",".keyword",".comment",".string",".number",".operator",".type",".preprocessor"};for(guint n=0;n<G_N_ELEMENTS(categories);n++) gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d.category),categories[n],categories[n]);gtk_combo_box_set_active(GTK_COMBO_BOX(d.category),0);d.font=gtk_font_button_new_with_font("Monospace 12");d.bold=gtk_check_button_new_with_label("Bold");d.italic=gtk_check_button_new_with_label("Italic");d.color=gtk_color_button_new();GtkWidget *add=gtk_button_new_with_label("Add CSS rule");GtkWidget *controls[]={d.category,d.font,d.bold,d.italic,d.color,add};for(guint n=0;n<G_N_ELEMENTS(controls);n++) gtk_box_pack_start(GTK_BOX(row),controls[n],FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(appearance),row,FALSE,FALSE,0);d.css=text_editor(appearance,"insight-language-css");gtk_notebook_append_page(GTK_NOTEBOOK(notebook),appearance,gtk_label_new("Fonts and CSS"));d.status=gtk_label_new("Changes apply to open documents and the workspace index.");gtk_label_set_line_wrap(GTK_LABEL(d.status),TRUE);gtk_box_pack_start(GTK_BOX(box),d.status,FALSE,FALSE,6);
+ GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);d.category=gtk_combo_box_text_new();const gchar *categories[]={"editor",".keyword",".comment",".string",".number",".operator",".type",".preprocessor"};for(guint n=0;n<G_N_ELEMENTS(categories);n++) gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d.category),categories[n],categories[n]);gtk_combo_box_set_active(GTK_COMBO_BOX(d.category),0);d.font=gtk_font_button_new_with_font("Monospace 12");d.bold=gtk_check_button_new_with_label("Bold");d.italic=gtk_check_button_new_with_label("Italic");d.color=gtk_color_button_new();GtkWidget *add=gtk_button_new_with_label("Add CSS rule");GtkWidget *controls[]={d.category,d.font,d.bold,d.italic,d.color,add};for(guint n=0;n<G_N_ELEMENTS(controls);n++) gtk_box_pack_start(GTK_BOX(row),controls[n],FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(appearance),row,FALSE,FALSE,0);d.css=text_editor(appearance,"insight-language-css");gtk_notebook_append_page(GTK_NOTEBOOK(notebook),appearance,gtk_label_new("Fonts and CSS"));d.status=gtk_label_new("Changes apply to open documents and the workspace index.");gtk_widget_set_name(d.status,"insight-language-status");gtk_label_set_line_wrap(GTK_LABEL(d.status),TRUE);gtk_box_pack_start(GTK_BOX(box),d.status,FALSE,FALSE,6);
  g_signal_connect(d.choice,"changed",G_CALLBACK(choice_changed),&d);g_signal_connect(d.theme,"changed",G_CALLBACK(theme_changed),&d);g_signal_connect(add,"clicked",G_CALLBACK(append_font),&d);Language *current=doc ? for_editor(doc->editor->sci,doc->file_name,doc->file_type) : NULL;gtk_combo_box_set_active_id(GTK_COMBO_BOX(d.choice),current ? current->name : (doc ? doc->file_type->name : "C++"));gtk_widget_show_all(d.dialog);
  gint response;while((response=gtk_dialog_run(GTK_DIALOG(d.dialog)))==GTK_RESPONSE_APPLY || response==1001 || response==1002) {
   GError *error=NULL;gboolean ok=FALSE;if(response==GTK_RESPONSE_APPLY) ok=save_dialog(&d,&error);else if(response==1001) ok=reset_binding(document_find_by_id(d.document),&error);else { load_languages();for(guint n=0;n<documents_array->len;n++) { GeanyDocument *buffer=g_ptr_array_index(documents_array,n);if(buffer->is_valid) { Language *p=for_editor(buffer->editor->sci,buffer->file_name,buffer->file_type);if(p) document_set_filetype(buffer,p->parser);document_reload_config(buffer); } }GeanyDocument *active=document_find_by_id(d.document);Language *profile=active ? for_editor(active->editor->sci,active->file_name,active->file_type) : NULL;refresh_choices(&d,profile ? profile->name : (active ? active->file_type->name : "C++"));insight_workbench_languages_changed();ok=TRUE; }

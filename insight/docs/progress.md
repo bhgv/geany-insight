@@ -1946,3 +1946,23 @@ regex/exact activation without modifying source. All five changed C sources
 compiled with -Werror. RU/EN help and the entry tooltip describe the commands.
 Windows GUI remains unverified; no Windows request marker changed. Reference:
 https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Project_File_List.htm
+
+
+### File Type filename filters
+
+Language profiles now accept file-filters alongside legacy case-sensitive
+extensions. A bounded UTF-8 core compiles literal basenames and */? masks, with
+Windows case folding. Explicit path bindings win, then exact profile/native
+names, then custom masks/extensions; lone * is a last resort after native types.
+Within a tier the existing custom-first/name ordering remains deterministic.
+Invalid filters are rejected before profile writes; legacy keys remain valid.
+Immutable language-eligibility and known-MFL snapshots include profile filters.
+
+Four Linux checks passed: pattern core, original language GUI, new filter GUI
+and typed MFL GUI (including Buildfile.test recognized solely by a custom mask).
+Tests cover exact-before-glob/default, native Makefile/known extensions, Unicode,
+path bindings, rename/reopen/reset, invalid input without a partial write and
+core limits. Five modified C sources compiled with -Werror. Windows GUI remains
+unverified. Include when adding to project and remaining File Type Options are
+open. Reference:
+https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/File_Type_Options.htm

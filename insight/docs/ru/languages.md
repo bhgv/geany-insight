@@ -32,3 +32,30 @@ editor { font-family: "Monospace"; font-size: 12pt; }
 Можно править файлы вручную. **Перечитать профили** перечитывает их; **Применить** сохраняет диалог, перечитывает профили, обновляет открытые документы и запускает переиндексацию рабочей папки. Неверный парсер или CSS исключает профиль из загрузки. Настройки не записывают и не меняют исходный текст открытых файлов.
 
 Режимы отображения отделены от CSS профиля: [Синтаксическое оформление](syntax-formatting.md) описывает моноширинный режим, только цвета, оттенки серого и обычный текст.
+
+## File Filter: имена и маски / filename filters
+
+`File filters` дополняет прежние расширения именами (`Buildfile`, `cmd.inc`) и
+масками (`*.inc`, `Т?ст.h`). Разделители: пробел, запятая, точка с запятой. Только
+имена, без каталогов/дисков/кавычек; до 4096 байт UTF-8, 256 фильтров по 255 байт.
+`?` соответствует одному символу Unicode. В Windows регистр не учитывается,
+на остальных платформах учитывается. Пустое новое поле сохраняет прежние
+расширения и настройки профиля.
+
+Приоритет: привязка к точному пути → точное имя профиля → штатное точное имя
+Geany → маски/расширения профилей → штатные типы → запасная одиночная `*`.
+При одинаковом уровне пользовательские профили идут перед исходными, затем
+используется порядок имён профилей. Для исключения из широкой маски задайте
+точное имя в нужном профиле. Изменение профилей очищает кэш распознавания.
+Маски участвуют в совместимых списках/поиске и снимке известных типов для MFL;
+явные привязки к пути сохраняют преимущество.
+
+The optional `file-filters` key supplements legacy extensions with basename
+filters. Explicit path bindings win, then exact profile/native filenames, then
+profile globs/extensions; bare `*` is a last resort after native types. Profiles
+within a tier retain deterministic custom-first/name order. The dialog validates
+before writing, so invalid filters leave the prior profile intact. Stored
+profiles without this key retain extension-based matching. Filters also enter
+language eligibility snapshots and known MFL types. Full Include when adding
+to project and remaining File Type Options are separate work.
+Reference: https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/File_Type_Options.htm

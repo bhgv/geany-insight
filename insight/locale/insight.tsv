@@ -882,3 +882,7 @@ Folder Browser Options…	Параметры просмотра папок…
 Folder Browser Options (Ctrl+Q)	Параметры просмотра папок (Ctrl+Q)
 Show Columns	Показывать колонки
 Enter applies filename masks without opening; * clears the filter	Enter применяет маску без открытия файла; * снимает фильтр
+File filters (names and wildcards)	Фильтры файлов (имена и маски)
+Names or * / ? masks, separated by spaces, commas or semicolons; no paths	Имена или маски * / ?, разделённые пробелами, запятыми или точками с запятой; без путей
+File filters must be UTF-8 text up to 4096 bytes	Фильтры файлов должны быть текстом UTF-8 до 4096 байт
+Use up to 256 filename filters, without paths or quotes (255 bytes each)	Допускается до 256 фильтров имён без путей и кавычек (по 255 байт)

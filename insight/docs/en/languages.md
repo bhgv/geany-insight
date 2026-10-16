@@ -32,3 +32,21 @@ At first launch, absent standard profiles are populated from current Geany exten
 Edit these files manually if desired. **Reload profiles** rereads them. **Apply** saves the dialog, reloads profiles, updates open documents and requests workspace reindexing. Invalid parsers/CSS exclude a profile from loading. Profile changes do not modify or save source text.
 
 Display overrides are separate from profile CSS: [Syntax Formatting](syntax-formatting.md) describes Mono Font View, color-only, grayscale and plain text modes.
+
+## Filename filters
+
+File filters supplements legacy extensions with literal basenames (`Buildfile`,
+`cmd.inc`) and masks (`*.inc`, `Т?ст.h`). Separate entries with spaces, commas or
+semicolons. Paths, drive prefixes and quotes are rejected. Limits: 4096 UTF-8
+bytes, 256 filters of 255 bytes each. `?` matches one Unicode character. Windows
+ignores case; other hosts preserve it. Empty filters retain existing extensions.
+
+Explicit path bindings win, then exact profile/native filenames, then profile
+globs/extensions; bare `*` is a last resort after native types. Within a tier,
+profiles retain deterministic custom-first/name order. For an exception to a
+broad mask, assign the literal filename to the desired profile. Reloading clears
+the recognition cache. Filters also enter language eligibility snapshots and
+known MFL types. Invalid input is rejected before writing; legacy profiles
+without `file-filters` keep extension-based matching. Include when adding to
+project and remaining File Type Options are separate work.
+Reference: https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/File_Type_Options.htm
