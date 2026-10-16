@@ -4183,7 +4183,7 @@ static void create_workbench_menus(void) {
 static void save_workbench_settings(void) {
  if(!wb.prefs_path || !wb.pane) return;
  GKeyFile *settings=g_key_file_new();
- insight_overview_write(settings);insight_directory_write(settings);
+ insight_overview_write(settings);insight_directory_write(settings);insight_diff_write(settings);
  grouped_write(&wb.type_panel,settings); grouped_write(&wb.category_panel,settings);
  g_key_file_set_boolean(settings,"workbench","project-templates",wb.clips_prefer_project);
  g_key_file_set_boolean(settings,"workbench","folder-follow-current-file",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.tree_follow)));
@@ -4248,7 +4248,7 @@ static void restore_workbench_settings(void) {
   insight_overview_read(settings);
  grouped_read(&wb.type_panel,settings); grouped_read(&wb.category_panel,settings);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.tree_follow),g_key_file_get_boolean(settings,"workbench","folder-follow-current-file",NULL));
- insight_directory_read(settings);
+ insight_directory_read(settings);insight_diff_read(settings);
  insight_list_style_read(wb.tree_view,settings,"project-folders-style");
  insight_list_style_read(wb.marks_view,settings,"bookmarks-style");
  gboolean disk_saved=insight_disk_browser_read(wb.disk_browser,settings);if(disk_saved && g_key_file_get_integer(settings,"workbench","folder-view-mode",NULL)==1) gtk_combo_box_set_active(GTK_COMBO_BOX(wb.folder_mode),1);

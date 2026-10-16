@@ -24,6 +24,33 @@ typedef struct {
  InsightDiff diff; GtkTextMark **marks;
  GPtrArray *history; guint position; gboolean changing,user_action,pending;
 } Merge;
+static GKeyFile *view_defaults;
+static GList *open_compares;
+static const gchar *view_group="file-compare";
+static const gchar *view_checks[]={"mono","numbers","list","wrap","sync","vertical","overview","ignore-space","ignore-eol"};
+static void view_controls(Merge *m,GtkWidget **controls) {
+ GtkWidget *items[]={m->mono,m->numbers,m->list_toggle,m->wrap_toggle,m->sync,m->vertical,m->overview,m->ignore_space,m->ignore_eol};for(guint i=0;i<G_N_ELEMENTS(items);i++) controls[i]=items[i];
+}
+static void view_copy(GKeyFile *from,GKeyFile *to) {
+ g_key_file_remove_group(to,view_group,NULL);const gchar *extra[]={"version","zoom","width","height"};
+ for(guint i=0;i<G_N_ELEMENTS(view_checks)+G_N_ELEMENTS(extra);i++) { const gchar *name=i<G_N_ELEMENTS(view_checks) ? view_checks[i] : extra[i-G_N_ELEMENTS(view_checks)];gchar *value=g_key_file_get_value(from,view_group,name,NULL);if(value && strlen(value)<=128) g_key_file_set_value(to,view_group,name,value);g_free(value); }
+}
+static void view_save(Merge *m,GKeyFile *settings) {
+ GtkWidget *controls[G_N_ELEMENTS(view_checks)];view_controls(m,controls);g_key_file_set_integer(settings,view_group,"version",1);
+ for(guint i=0;i<G_N_ELEMENTS(view_checks);i++) g_key_file_set_boolean(settings,view_group,view_checks[i],gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(controls[i])));
+ gint width,height;gtk_window_get_size(GTK_WINDOW(m->window),&width,&height);g_key_file_set_integer(settings,view_group,"width",CLAMP(width,640,4000));g_key_file_set_integer(settings,view_group,"height",CLAMP(height,400,2400));g_key_file_set_integer(settings,view_group,"zoom",gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->zoom)));
+}
+static gboolean view_integer(GKeyFile *settings,const gchar *name,gint low,gint high,gint *out) {
+ GError *error=NULL;gint value=g_key_file_get_integer(settings,view_group,name,&error);gboolean ok=!error && value>=low && value<=high;g_clear_error(&error);if(ok) *out=value;return ok;
+}
+static void view_restore(Merge *m,GKeyFile *settings) {
+ if(!settings || g_key_file_get_integer(settings,view_group,"version",NULL)!=1) return;
+ GtkWidget *controls[G_N_ELEMENTS(view_checks)];view_controls(m,controls);
+ for(guint i=0;i<G_N_ELEMENTS(view_checks);i++) { GError *error=NULL;gboolean value=g_key_file_get_boolean(settings,view_group,view_checks[i],&error);if(!error) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(controls[i]),value);g_clear_error(&error); }
+ gint value;if(view_integer(settings,"zoom",50,250,&value)) gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->zoom),value);gint width=1100,height=700;view_integer(settings,"width",640,4000,&width);view_integer(settings,"height",400,2400,&height);gtk_window_resize(GTK_WINDOW(m->window),width,height);
+}
+void insight_diff_read(GKeyFile *settings) { if(!view_defaults) view_defaults=g_key_file_new();view_copy(settings,view_defaults); }
+void insight_diff_write(GKeyFile *settings) { if(!view_defaults) view_defaults=g_key_file_new();if(open_compares) view_save(open_compares->data,view_defaults);view_copy(view_defaults,settings); }
 static GtkTextBuffer *result(Merge *m) { return m->output; }
 static gchar *contents(GtkTextBuffer *b) {
  GtkTextIter a,z; gtk_text_buffer_get_bounds(b,&a,&z); return gtk_text_buffer_get_text(b,&a,&z,TRUE);
@@ -240,6 +267,8 @@ static void clear_diff(Merge *m) {
 }
 static void destroyed(GtkWidget *w,gpointer data) {
  (void)w;Merge *m=data;
+ if(!view_defaults) view_defaults=g_key_file_new();
+ view_save(m,view_defaults);open_compares=g_list_remove(open_compares,m);
  g_object_set_data(G_OBJECT(m->window),"insight-diff-state",NULL);
  if(m->cancel) g_cancellable_cancel(m->cancel);
  g_clear_object(&m->cancel);
@@ -250,6 +279,7 @@ static void destroyed(GtkWidget *w,gpointer data) {
  g_free(m->marks);insight_diff_clear(&m->diff);g_ptr_array_free(m->history,TRUE);
  for(int i=0;i<2;i++) { g_free(m->sources[i]);g_free(m->loaded_paths[i]); }
  for(gint i=0;i<2;i++) { g_clear_pointer(&m->map_blocks[i],g_array_unref);g_clear_object(&m->maps[i]); }
+ GtkWidget *controls[G_N_ELEMENTS(view_checks)];view_controls(m,controls);for(guint i=0;i<G_N_ELEMENTS(view_checks);i++) g_object_unref(controls[i]);g_object_unref(m->zoom);
  g_clear_object(&m->font_css);g_free(m->saved);g_object_unref(m->list);g_free(m);
 }
 static gint selected(Merge *m) {
@@ -595,7 +625,8 @@ static Merge *merge_new(GtkWidget *parent) {
  g_signal_connect(m->numbers,"toggled",G_CALLBACK(number_toggle),m);number_toggle(NULL,m);
  g_object_set_data(G_OBJECT(m->window),"insight-diff-state",m);
  g_signal_connect(m->zoom,"value-changed",G_CALLBACK(display_changed),m);g_signal_connect(m->mono,"toggled",G_CALLBACK(display_changed),m);g_signal_connect(m->vertical,"toggled",G_CALLBACK(display_changed),m);g_signal_connect(m->overview,"toggled",G_CALLBACK(display_changed),m);
- record(m);selection(NULL,m);gtk_widget_show_all(m->window);display_changed(NULL,m);return m;
+ GtkWidget *controls[G_N_ELEMENTS(view_checks)];view_controls(m,controls);for(guint i=0;i<G_N_ELEMENTS(view_checks);i++) { g_object_ref(controls[i]);gchar *name=g_strconcat("insight-diff-",view_checks[i],NULL);gtk_widget_set_name(controls[i],name);g_free(name); }g_object_ref(m->zoom);
+ record(m);selection(NULL,m);gtk_widget_show_all(m->window);view_restore(m,view_defaults);display_changed(NULL,m);open_compares=g_list_prepend(open_compares,m);return m;
 }
 
 void insight_diff_show(GtkWidget *parent) { (void)merge_new(parent); }

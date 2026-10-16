@@ -26,7 +26,7 @@ static gchar *random_text(GRand *random) {
  guint count=g_rand_int_range(random,0,15);for(guint i=0;i<count;i++) g_string_append(text,lines[g_rand_int_range(random,0,G_N_ELEMENTS(lines))]);return g_string_free(text,FALSE);
 }
 static void random_batches(const gchar *left,const gchar *right) {
- Merge *m=merge_new(NULL);GRand *random=g_rand_new_with_seed(1093);GError *error=NULL;
+ Merge *m=merge_new(NULL);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->ignore_space),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->ignore_eol),FALSE);GRand *random=g_rand_new_with_seed(1093);GError *error=NULL;
  gtk_entry_set_text(GTK_ENTRY(m->paths[0]),left);gtk_entry_set_text(GTK_ENTRY(m->paths[1]),right);
  for(guint i=0;i<150;i++) {
   gchar *a=random_text(random),*b=random_text(random);g_assert_true(g_file_set_contents(left,a,-1,&error));g_assert_no_error(error);g_assert_true(g_file_set_contents(right,b,-1,&error));g_assert_no_error(error);
@@ -39,6 +39,7 @@ static GtkWidget *named(GtkWidget *widget,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(widget),name)) return widget;
  if(GTK_IS_CONTAINER(widget)) { GList *children=gtk_container_get_children(GTK_CONTAINER(widget));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL;
 }
+static gboolean close_options_parent(gpointer window) { gtk_widget_destroy(GTK_WIDGET(window));return G_SOURCE_REMOVE; }
 static gboolean options_response(gpointer data) {
  GList *windows=gtk_window_list_toplevels();GtkWidget *dialog=NULL;
  for(GList *p=windows;p && !dialog;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-diff-options")) dialog=p->data;
@@ -179,6 +180,10 @@ int main(int argc,char **argv) {
  gint64 until=g_get_monotonic_time()+10*G_TIME_SPAN_SECOND;
  while(!gone && g_get_monotonic_time()<until) { flush();g_usleep(1000); }
  g_assert_true(gone);flush();random_batches(left,right);
+ GKeyFile *prefs=g_key_file_new();Merge *custom=merge_new(NULL);gtk_spin_button_set_value(GTK_SPIN_BUTTON(custom->zoom),140);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(custom->overview),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(custom->vertical),FALSE);insight_diff_write(prefs);gtk_widget_destroy(custom->window);insight_diff_read(prefs);
+ custom=merge_new(NULL);g_assert_false(custom->busy);g_assert_null(custom->sources[0]);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(custom->zoom)),==,140);g_assert_true(gtk_widget_get_visible(custom->maps[0]));g_assert_false(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(custom->vertical)));gtk_widget_destroy(custom->window);
+ g_key_file_set_integer(prefs,view_group,"zoom",999);g_key_file_set_value(prefs,view_group,"numbers","broken");g_key_file_set_integer(prefs,view_group,"width",-1);insight_diff_read(prefs);custom=merge_new(NULL);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(custom->zoom)),==,100);g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(custom->numbers)));
+ gboolean options_closed=FALSE;g_object_weak_ref(G_OBJECT(custom->window),finalized,&options_closed);g_idle_add(close_options_parent,custom->window);view_options(NULL,custom);flush();g_assert_true(options_closed);g_assert_null(open_compares);g_key_file_unref(prefs);g_clear_pointer(&view_defaults,g_key_file_unref);
  g_remove(left);g_remove(right);g_rmdir(dir);g_free(left);g_free(right);g_free(dir);g_free(editor_path);
  g_print("Production Diff/Merge fixture: navigation, search, gutters, merge history, options, worker cancellation and close passed.\n");return 0;
 }
