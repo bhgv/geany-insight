@@ -103,6 +103,7 @@ void insight_languages_apply_editor(GeanyEditor *editor) {
  if(!options && !baseline) return;
  if(options) {
 
+  if(!options->allow_completion || !options->allow_snippets) SEND(sci,SCI_AUTOCCANCEL,0,0);
   InsightFiletypeOptions *copy=g_new(InsightFiletypeOptions,1);*copy=*options;g_object_set_data_full(G_OBJECT(sci),"insight-language-editing-active",copy,g_free);
   editor->auto_indent=options->auto_indent!=GEANY_AUTOINDENT_NONE;editor->line_breaking=options->hard_wrap;
   editor_set_indent(editor,(GeanyIndentType)options->indent_type,options->indent_type==GEANY_INDENT_TYPE_TABS ? options->tab_width : options->indent_width);editor_set_line_wrapping(editor,options->soft_wrap);

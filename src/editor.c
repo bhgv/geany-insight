@@ -194,6 +194,8 @@ static gboolean on_snippet_keybinding_activate(gchar *key)
 	if (!doc || !gtk_widget_has_focus(GTK_WIDGET(doc->editor->sci)))
 		return FALSE;
 
+	if (insight_languages_editing_options(doc->editor) && !insight_languages_editing_options(doc->editor)->allow_snippets)
+		return FALSE;
 	s = snippets_find_completion_by_name(doc->file_type->name, key);
 	if (!s) /* allow user to specify keybindings for "special" snippets */
 	{
@@ -863,7 +865,8 @@ static void on_char_added(GeanyEditor *editor, SCNotification *nt)
 		}
 		case '(':
 		{
-			auto_close_chars(sci, pos, nt->ch);
+			if (!insight_languages_editing_options(editor) || insight_languages_editing_options(editor)->typing_shortcuts)
+				auto_close_chars(sci, pos, nt->ch);
 			if (!plugin_extension_calltips_provided(editor->document, NULL))
 				/* show calltips */
 				editor_show_calltip(editor, --pos);
@@ -888,7 +891,8 @@ static void on_char_added(GeanyEditor *editor, SCNotification *nt)
 		case '"':
 		case '\'':
 		{
-			auto_close_chars(sci, pos, nt->ch);
+			if (!insight_languages_editing_options(editor) || insight_languages_editing_options(editor)->typing_shortcuts)
+				auto_close_chars(sci, pos, nt->ch);
 			break;
 		}
 		case '}':
@@ -905,7 +909,8 @@ static void on_char_added(GeanyEditor *editor, SCNotification *nt)
 			editor_start_auto_complete(editor, pos, FALSE);
 	}
 
-	plugin_extension_autocomplete_perform(editor->document, FALSE);
+	if (!insight_languages_editing_options(editor) || insight_languages_editing_options(editor)->allow_completion)
+		plugin_extension_autocomplete_perform(editor->document, FALSE);
 	plugin_extension_calltips_show(editor->document, FALSE);
 
 	check_line_breaking(editor, pos);
@@ -2299,7 +2304,8 @@ gboolean editor_start_auto_complete(GeanyEditor *editor, gint pos, gboolean forc
 	if (plugin_extension_autocomplete_provided(editor->document, NULL))
 		return FALSE;
 
-	if (! editor_prefs.auto_complete_symbols && ! force)
+	if ((! editor_prefs.auto_complete_symbols ||
+		(insight_languages_editing_options(editor) && !insight_languages_editing_options(editor)->allow_completion)) && ! force)
 		return FALSE;
 
 	/* If we are at the beginning of the document, we skip autocompletion as we can't determine the
@@ -2730,6 +2736,8 @@ gboolean editor_complete_snippet(GeanyEditor *editor, gint pos)
 
 	g_return_val_if_fail(editor != NULL, FALSE);
 
+	if (insight_languages_editing_options(editor) && !insight_languages_editing_options(editor)->allow_snippets)
+		return FALSE;
 	sci = editor->sci;
 	if (sci_has_selection(sci))
 		return FALSE;
@@ -2798,7 +2806,9 @@ static gboolean handle_xml(GeanyEditor *editor, gint pos, gchar ch)
 
 	/* If the user has turned us off, quit now.
 	 * This may make sense only in certain languages */
-	if (! editor_prefs.auto_close_xml_tags || (lexer != SCLEX_HTML && lexer != SCLEX_XML))
+	if (! editor_prefs.auto_close_xml_tags ||
+		(insight_languages_editing_options(editor) && !insight_languages_editing_options(editor)->typing_shortcuts) ||
+		(lexer != SCLEX_HTML && lexer != SCLEX_XML))
 		return FALSE;
 
 	/* return if we are inside any embedded script */
@@ -5062,6 +5072,23 @@ static ScintillaObject *create_new_sci(GeanyEditor *editor)
  * @since 0.15
  **/
 GEANY_API_SYMBOL
+/* Plain Enter may navigate without editing; modified keys and popup acceptance retain their commands. */
+static gboolean filetype_return_key(GtkWidget *widget, GdkEventKey *event, gpointer data)
+{
+ GeanyEditor *editor=data;
+ const InsightFiletypeOptions *options=insight_languages_editing_options(editor);
+ if (!options || options->enter_newline ||
+     (event->keyval!=GDK_KEY_Return && event->keyval!=GDK_KEY_KP_Enter) ||
+     (event->state & gtk_accelerator_get_default_mod_mask()) ||
+     SSM(SCINTILLA(widget),SCI_AUTOCACTIVE,0,0) ||
+     SSM(SCINTILLA(widget),SCI_GETSELECTIONS,0,0)!=1) return FALSE;
+ ScintillaObject *sci=SCINTILLA(widget);
+ gint line=sci_get_current_line(sci),last=sci_get_line_count(sci)-1;
+ sci_set_current_position(sci,sci_get_position_from_line(sci,MIN(line+1,last)),FALSE);
+ SSM(sci,SCI_SCROLLCARET,0,0);
+ return TRUE;
+}
+
 ScintillaObject *editor_create_widget(GeanyEditor *editor)
 {
 	const GeanyIndentPrefs *iprefs = get_default_indent_prefs();
@@ -5072,6 +5099,7 @@ ScintillaObject *editor_create_widget(GeanyEditor *editor)
 	/* temporarily change editor to use the new sci widget */
 	old = editor->sci;
 	sci = create_new_sci(editor);
+	g_signal_connect(sci,"key-press-event",G_CALLBACK(filetype_return_key),editor);
 	SSM(sci, SCI_SETIDLESTYLING, SC_IDLESTYLING_ALL, 0);
 	editor->sci = sci;
 

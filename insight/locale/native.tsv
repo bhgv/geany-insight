@@ -1466,3 +1466,7 @@ Visible tabs and spaces	Видимые табуляции и пробелы
 Visible line endings	Видимые окончания строк
 Show right margin	Показывать правую границу
 Editing options	Параметры редактирования
+Allow automatic symbol completion	Разрешить автоматическое дополнение символов
+Allow code snippet expansion	Разрешить раскрытие шаблонов кода
+Allow automatic closing brackets and quotes	Разрешить автозакрытие скобок и кавычек
+Enter inserts a new line	Enter вставляет новую строку

@@ -66,4 +66,16 @@ Set spaces, tabs or mixed indentation, tab width and indent step (1–32 columns
 
 Screen wrapping only changes display. Typing wrapping uses the margin column and inserts real newlines into subsequently typed text. Apply does not reformat existing text, move the caret or clear Undo. Overrides affect matching open and newly opened documents. Disabling restores the per-document indentation, wrapping and display settings captured before the override; this baseline is session-local. New global settings can be applied after disabling the override.
 
-The options are stored in the profile's `language.conf`, in versioned `[editing]` settings. Missing settings keep inheritance; invalid settings disable the entire override while retaining the parser/CSS profile. Close without Apply discards dialog edits. Existing Apply, profile reload and file binding commands still work. Printing, per-type completion/snippet switches and Include when adding to project remain separate work.
+The options are stored in the profile's `language.conf`, in versioned `[editing]` settings. Missing settings keep inheritance; invalid settings disable the entire override while retaining the parser/CSS profile. Close without Apply discards dialog edits. Existing Apply, profile reload and file binding commands still work. Printing and Include when adding to project remain separate work; typing permissions are described below.
+
+### Typing permissions per file type
+
+The Editing page also controls automatic symbol completion, code snippet expansion, automatic closing brackets/quotes (including XML tags), and Enter behavior. These settings share the explicit editing override switch. Old profiles default to allowing all four behaviors.
+
+Allowing completion or automatic closing does not turn on a globally disabled feature. Disallowing automatic completion leaves the explicit completion command available. The snippet permission controls Geany snippet expansion, snippet accelerator keys, and project template name completion; explicit insertion from the Clips panel stays available. Applying a restrictive profile closes an already visible completion popup.
+
+When **Enter inserts a new line** is off, plain Return/keypad Enter moves to the start of the next line without changing text or Undo. On the last line it moves to that line's start. Modified Enter, multiple selections, and acceptance of an active completion popup retain their normal behavior. This setting does not change Paste or explicit newline commands.
+
+![Typing permissions and inheritance](../media/filetype-typing.svg)
+
+Intelligent paste, printing, and Include when adding are separate remaining work. Existing bracket editing is reused; this does not claim every Source Insight paired-character shortcut.

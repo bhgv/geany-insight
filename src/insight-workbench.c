@@ -2732,7 +2732,7 @@ static void clip_template(GtkWidget *widget,gpointer data) {
 }
 void insight_workbench_template_selected(GeanyEditor *editor,const gchar *name) {
  if(!wb.template_pending || !editor) return;
- wb.template_pending=FALSE;GeanyDocument *doc=document_get_current();ScintillaObject *sci=editor->sci;
+ wb.template_pending=FALSE;const InsightFiletypeOptions *typing=insight_languages_editing_options(editor);if(typing && !typing->allow_snippets) return;GeanyDocument *doc=document_get_current();ScintillaObject *sci=editor->sci;
  if(!doc || doc->editor!=editor || doc->id!=wb.template_doc || wb.template_generation!=wb.clips_generation || selection_state(sci)->text_version!=wb.template_version || sci_get_current_position(sci)!=wb.template_end || sci_get_selection_start(sci)!=wb.template_end || sci_get_selection_end(sci)!=wb.template_end || SSM(sci,SCI_GETREADONLY,0,0)) return;
  gchar *prefix=sci_get_contents_range(sci,wb.template_begin,wb.template_end);gboolean unchanged=!g_strcmp0(prefix,wb.template_prefix);g_free(prefix);if(!unchanged || !name || !g_str_has_prefix(name,wb.template_prefix)) return;
  const InsightNote *note=insight_notes_get(notes_for(INSIGHT_CLIP),INSIGHT_CLIP,name);gchar *language=clip_current_language();gboolean eligible=insight_note_matches_language(note,language);g_free(language);if(!eligible) return;
@@ -2742,6 +2742,7 @@ void insight_workbench_template_selected(GeanyEditor *editor,const gchar *name) 
 }
 gboolean insight_workbench_complete_template(GeanyEditor *editor,gint position) {
  if(!wb.alive || !wb.notes || !editor) return FALSE;
+ const InsightFiletypeOptions *typing=insight_languages_editing_options(editor);if(typing && !typing->allow_snippets) return FALSE;
  GeanyDocument *doc=document_get_current();ScintillaObject *sci=editor->sci;
  if(!doc || doc->editor!=editor || SSM(sci,SCI_GETREADONLY,0,0) || sci_get_selection_start(sci)!=position || sci_get_selection_end(sci)!=position || SSM(sci,SCI_GETSELECTIONS,0,0)!=1 || position<1) return FALSE;
  gint begin=(gint)SSM(sci,SCI_WORDSTARTPOSITION,position,TRUE);if(position-begin<1 || position-begin>256 || SSM(sci,SCI_WORDENDPOSITION,position,TRUE)>position) return FALSE;

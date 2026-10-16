@@ -8,3 +8,5 @@
 Keep screenshots current when visible behavior changes. Favor small, useful illustrations over entire desktop captures. Check legibility and rendering in the built-in local help viewer on the chosen validation platform.
 
 - `filetype-editing.jpg`: real production file type editing page from its isolated GTK fixture. `filetype-editing.svg` explains mixed indentation and screen versus typing wraps.
+
+`filetype-typing.svg` explains typing permissions and inheritance. The updated `filetype-editing.jpg` captures the real extended GTK page in an isolated fixture.
