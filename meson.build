@@ -1098,7 +1098,7 @@ install_data(
   'insight/docs/context-bookmarks.md', 'insight/docs/relations-calls.md',
   'insight/docs/window-list.md', 'insight/docs/symbol-info.md',
   'insight/docs/panel-find-file.md',
-  'insight/docs/panel-project-files.md',
+  'insight/docs/panel-project-files.md', 'insight/docs/panel-project-git.md',
   'insight/docs/panel-project-symbols.md',
   'insight/docs/panel-project-folders.md',
   'insight/docs/panel-relations.md',
@@ -1126,6 +1126,7 @@ install_data(
 install_data('insight/examples/workbench.lua', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'examples')
 
 install_subdir('insight/locale', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight')
+install_subdir('insight/docs/media', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 install_subdir('insight/docs/en', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 install_subdir('insight/docs/ru', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 

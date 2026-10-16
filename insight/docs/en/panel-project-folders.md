@@ -1,5 +1,13 @@
 # Project Folders
 
+![Expanding a folder leaves the current file list unchanged](../media/folder-expansion.svg)
+
+1 — expand a branch to read its subfolders. 2 — the file list stays in `src/` until a folder is explicitly selected. This is an explanatory diagram.
+
+![Lazy GTK folder tree with an expanded Unicode branch](../media/folder-tree.jpg)
+
+Actual production tree from its isolated GTK check; the temporary path is test data. The arrows expand unvisited branches without opening files.
+
 A tree of indexed project files, built from the manifest rather than all disk contents. The first 10,000 manifest files are displayed.
 
 ## Controls

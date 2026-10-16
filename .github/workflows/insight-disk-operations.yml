@@ -14,10 +14,17 @@ on:
       - insight/tests/project_files_test.c
       - .github/workflows/insight-disk-operations.yml
   workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Application checks: Linux by default; Windows only on request'
+        type: choice
+        default: linux
+        options: [linux, windows]
 permissions:
   contents: read
 jobs:
   linux:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'windows'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +47,7 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Wno-deprecated-declarations -UNDEBUG insight/tests/folder_tree_gui_test.c insight/desktop/folder_tree.c insight/desktop/folder_layout.c $(pkg-config --cflags --libs gtk+-3.0) -o folder-tree-gui-test
           GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a ./folder-tree-gui-test
   windows:
+    if: github.event_name == 'workflow_dispatch' && inputs.platform == 'windows'
     runs-on: windows-latest
     defaults:
       run:

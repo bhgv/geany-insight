@@ -8,10 +8,17 @@ on:
       - insight/tests/git_project*_test.c
       - .github/workflows/insight-git-project.yml
   workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Application checks: Linux by default; Windows only on request'
+        type: choice
+        default: linux
+        options: [linux, windows]
 permissions:
   contents: read
 jobs:
   linux:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'windows'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +31,7 @@ jobs:
           cc -std=c99 -Wall -Wextra -Werror -Wno-deprecated-declarations -UNDEBUG -DGTK -DGEANY_PRIVATE insight/tests/git_project_gui_test.c insight/desktop/git_project.c -Isrc -Isrc/tagmanager -Iscintilla/include $(pkg-config --cflags --libs gtk+-3.0) -o /tmp/git-gui
           GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a /tmp/git-gui
   windows:
+    if: github.event_name == 'workflow_dispatch' && inputs.platform == 'windows'
     runs-on: windows-latest
     defaults:
       run:

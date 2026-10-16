@@ -1,5 +1,17 @@
 # Git projects
 
+![Git commit dialog with sorted files and checkboxes](../media/git-commit-dialog.jpg)
+
+Actual production GTK dialog from the isolated GUI check, with English sample data. The left checkboxes select commit contents; the editable proposal and confirmation are on the right.
+
+![Selected files enter the commit; the unchecked file stays outside](../media/git-selection.svg)
+
+1 — select changes. 2 — only checked paths enter the commit, including when other files were already staged.
+
+![Commit and Add to Git symbols](../media/git-actions.svg)
+
+Branch with a green check — Commit. File with a green plus — Add to Git.
+
 Project → Create Git Project initializes a folder or reuses a repository root. Create Project from Git clones a local repository or remote URL into a new destination. Installed Git supplies the user's configuration and credential helpers. These operations do not push.
 
 Git owns project membership. The project records `git_based=true` in `insight.geany`; opening and reindexing read tracked paths from the Git index. Ordinary projects retain their existing membership rules.
