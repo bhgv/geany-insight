@@ -1070,3 +1070,6 @@ Choose a local destination filename.	Выберите имя локальног�
 Save the full merge result.	Сохранить полный результат слияния.
 Save a separate copy; keep the current result's saved or modified status.	Сохранить отдельную копию, сохранив признак изменённости результата.
 Save the exact selection; keep the current result's saved or modified status.	Сохранить точное выделение, сохранив признак изменённости результата.
+Visible tabs and spaces	Видимые табуляции и пробелы
+Visible line endings	Видимые окончания строк
+· space   → tab   ¶ line ending	· пробел   → табуляция   ¶ окончание строки

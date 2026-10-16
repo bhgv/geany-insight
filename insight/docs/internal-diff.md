@@ -246,3 +246,9 @@ Result menu provides **Save a copy of Result…** and **Save Result selection…
 Text is captured before the file chooser. If the result changes, a comparison starts or the parent window closes while choosing a destination, nothing is written. Cancel creates no file. GTK confirms overwrite of an existing destination. This exports to a file; appending to an open buffer is not implemented. Selection export requires selected result text. All three commands are blocked during comparison.
 
 ![Production GTK copy-save dialog, isolated test fixture](media/file-compare-export.jpg)
+
+### Visible whitespace and line endings
+
+**Visible tabs and spaces** draws ASCII spaces as `·` and tabs as `→`. **Visible line endings** draws `¶` for CR, LF or a CRLF pair, with one marker per pair. These are overlays in all three panes. Marker glyphs do not enter searches, selections, clipboard text, exports or saved files and create no merge history.
+
+Both toggles are available in the toolbar, Options and context menus. Apply commits changes; Cancel keeps the previous settings. Values persist with comparison-window preferences. Drawing follows zoom and wrapping. Work is capped at 20000 characters from the visible starting position per draw; pathological long lines can omit some markers. This does not affect text or comparison results. The main-window capture above shows enabled markers.

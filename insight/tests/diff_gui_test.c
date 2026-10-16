@@ -46,6 +46,7 @@ static gboolean options_response(gpointer data) {
  for(GList *p=windows;p && !dialog;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-diff-options")) dialog=p->data;
  g_list_free(windows);g_assert_nonnull(dialog);
  gtk_spin_button_set_value(GTK_SPIN_BUTTON(named(dialog,"insight-diff-options-zoom")),130);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dialog,"insight-diff-options-1")),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dialog,"insight-diff-options-2")),FALSE);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dialog,"insight-diff-options-7")),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dialog,"insight-diff-options-8")),TRUE);
  const gchar *capture=g_getenv("INSIGHT_DIFF_OPTIONS_CAPTURE");
  if(capture && GPOINTER_TO_INT(data)==GTK_RESPONSE_APPLY) { gint64 until=g_get_monotonic_time()+200000;while(g_get_monotonic_time()<until) { flush();g_usleep(1000); }GdkWindow *window=gtk_widget_get_window(dialog);GdkPixbuf *image=gdk_pixbuf_get_from_window(window,0,0,gdk_window_get_width(window),gdk_window_get_height(window));g_assert_nonnull(image);g_assert_true(gdk_pixbuf_save(image,capture,"jpeg",NULL,"quality","88",NULL));g_object_unref(image); }
  gtk_dialog_response(GTK_DIALOG(dialog),GPOINTER_TO_INT(data));return G_SOURCE_REMOVE;
@@ -179,14 +180,26 @@ static void export_test(void) {
  action.mutate=TRUE;g_timeout_add(100,export_choose,&action);write_result(m,1);g_assert_false(g_file_test(path,G_FILE_TEST_EXISTS));g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->status)),"Nothing written"));
  action.mutate=FALSE;action.destroy=TRUE;gboolean gone=FALSE;g_object_weak_ref(G_OBJECT(m->window),finalized,&gone);g_timeout_add(100,export_choose,&action);write_result(m,1);flush();g_assert_true(gone);g_assert_false(g_file_test(path,G_FILE_TEST_EXISTS));g_free(saved);g_rmdir(folder);g_free(path);g_free(folder);
 }
+static GdkPixbuf *text_capture(GtkWidget *view) {
+ gint64 until=g_get_monotonic_time()+200000;while(g_get_monotonic_time()<until) { flush();g_usleep(1000); }
+ GdkWindow *window=gtk_text_view_get_window(GTK_TEXT_VIEW(view),GTK_TEXT_WINDOW_TEXT);GdkPixbuf *pixbuf=gdk_pixbuf_get_from_window(window,0,0,gdk_window_get_width(window),gdk_window_get_height(window));g_assert_nonnull(pixbuf);return pixbuf;
+}
+static void whitespace_test(void) {
+ Merge *m=merge_new(NULL);GtkTextBuffer *buffer=result(m);const gchar *text="я \t\r\nx\ry\n\n";gtk_text_buffer_set_text(buffer,text,-1);guint history=m->history->len;
+ GtkTextIter at;gtk_text_buffer_get_start_iter(buffer,&at);guint markers=0,endings=0;
+ while(!gtk_text_iter_is_end(&at)) { const gchar *symbol=whitespace_symbol(at,TRUE,TRUE);if(symbol) { markers++;if(!strcmp(symbol,"¶")) endings++; }g_assert_null(whitespace_symbol(at,FALSE,FALSE));gtk_text_iter_forward_char(&at); }
+ g_assert_cmpuint(markers,==,6);g_assert_cmpuint(endings,==,4);gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(m->views[2]),FALSE);
+ GdkPixbuf *plain=text_capture(m->views[2]);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->visible_space),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->visible_eol),TRUE);GdkPixbuf *marked=text_capture(m->views[2]);g_assert_cmpint(gdk_pixbuf_get_byte_length(plain),==,gdk_pixbuf_get_byte_length(marked));g_assert_true(memcmp(gdk_pixbuf_get_pixels(plain),gdk_pixbuf_get_pixels(marked),gdk_pixbuf_get_byte_length(plain))!=0);g_object_unref(plain);g_object_unref(marked);assert_text(m,text);g_assert_cmpuint(m->history->len,==,history);
+ GKeyFile *prefs=g_key_file_new();view_save(m,prefs);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->visible_space),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->visible_eol),FALSE);view_restore(m,prefs);g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->visible_space)));g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->visible_eol)));g_key_file_unref(prefs);gtk_widget_destroy(m->window);flush();
+}
 int main(int argc,char **argv) {
- g_setenv("GSETTINGS_BACKEND","memory",TRUE);gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();case_test();line_edit_test();history_test();export_test();insight_diff_set_source_opener(source_opened);
+ g_setenv("GSETTINGS_BACKEND","memory",TRUE);gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();case_test();line_edit_test();history_test();export_test();whitespace_test();insight_diff_set_source_opener(source_opened);
  GError *error=NULL;gchar *dir=g_dir_make_tmp("insight-diff-XXXXXX",&error);g_assert_no_error(error);
  gchar *left=g_build_filename(dir,"left.txt",NULL),*right=g_build_filename(dir,"right.txt",NULL);
  const char *a="start\nleft\ncommon\nlast left\nend\n",*b="start\nright\ncommon\nlast right\nextra\nend\n";
  g_assert_true(g_file_set_contents(left,a,-1,&error));g_assert_no_error(error);
  g_assert_true(g_file_set_contents(right,b,-1,&error));g_assert_no_error(error);
- Merge *m=merge_new(NULL);flush();g_assert_false(gtk_widget_get_sensitive(m->next));
+ Merge *m=merge_new(NULL);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->visible_space),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->visible_eol),FALSE);flush();g_assert_false(gtk_widget_get_sensitive(m->next));
  gtk_entry_set_text(GTK_ENTRY(m->paths[0]),left);gtk_entry_set_text(GTK_ENTRY(m->paths[1]),right);
  compare(NULL,m);wait_comparison(m);g_assert_cmpuint(m->diff.count,==,2);g_assert_cmpint(selected(m),==,0);
  g_assert_false(gtk_widget_get_sensitive(m->previous));g_assert_true(gtk_widget_get_sensitive(m->next));
@@ -228,8 +241,8 @@ int main(int argc,char **argv) {
  gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->zoom),300);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->zoom)),==,250);gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->zoom),100);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->vertical),FALSE);for(gint i=0;i<3;i++) { GtkPolicyType h,v;gtk_scrolled_window_get_policy(GTK_SCROLLED_WINDOW(m->scrollers[i]),&h,&v);g_assert_cmpint(v,==,GTK_POLICY_NEVER); }gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->vertical),TRUE);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->mono),FALSE);g_assert_false(gtk_text_view_get_monospace(GTK_TEXT_VIEW(m->views[0])));gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->mono),TRUE);
- g_idle_add(options_response,GINT_TO_POINTER(GTK_RESPONSE_CANCEL));view_options(NULL,m);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->zoom)),==,100);g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->numbers)));
- g_idle_add(options_response,GINT_TO_POINTER(GTK_RESPONSE_APPLY));view_options(NULL,m);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->zoom)),==,130);g_assert_false(gtk_widget_get_visible(m->list_scroll));g_assert_false(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->numbers)));g_assert_cmpuint(m->position,==,display_history);assert_text(m,a);
+ g_idle_add(options_response,GINT_TO_POINTER(GTK_RESPONSE_CANCEL));view_options(NULL,m);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->zoom)),==,100);g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->numbers)));g_assert_false(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->visible_space)));
+ g_idle_add(options_response,GINT_TO_POINTER(GTK_RESPONSE_APPLY));view_options(NULL,m);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->zoom)),==,130);g_assert_false(gtk_widget_get_visible(m->list_scroll));g_assert_false(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->numbers)));g_assert_cmpuint(m->position,==,display_history);g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->visible_space)));g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->visible_eol)));assert_text(m,a);
  gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->zoom),100);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->numbers),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->list_toggle),TRUE);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->overview),TRUE);gint64 map_deadline=g_get_monotonic_time()+200000;while(g_get_monotonic_time()<map_deadline) { flush();g_usleep(1000); }g_assert_cmpint(gtk_widget_get_allocated_height(m->maps[0]),>,20);for(gint i=0;i<2;i++) { g_assert_true(gtk_widget_get_visible(m->maps[i]));g_assert_cmpuint(m->map_blocks[i]->len,==,m->diff.count); }
  /* EOF changes in a long file must remain visible and clickable, rather
