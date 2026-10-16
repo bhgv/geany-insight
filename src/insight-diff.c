@@ -237,7 +237,7 @@ static void highlight(Merge *m,int side,size_t begin,size_t end) {
  gtk_text_buffer_apply_tag_by_name(b,"difference",&a,&z);
 }
 static void selection(GtkTreeSelection *s,gpointer data) {
- (void)s;Merge *m=data;gint id=selected(m);
+ (void)s;Merge *m=data;if(m->changing) return;gint id=selected(m);
  for(int side=0;side<2;side++) {
   gtk_widget_set_sensitive(m->take[side],!m->busy && id>=0);
   gtk_widget_set_sensitive(m->take_all[side],!m->busy && m->diff.count>0);

@@ -158,3 +158,8 @@ replacement refuses the operation and asks for a fresh comparison. No partial
 batch is applied. The production GTK fixture covers single-step undo, no-op,
 manual outside text, collapsed boundaries, shortcuts and 150 randomized exact
 batch reconstructions, including empty, UTF-8 and mixed-EOL sources.
+
+Repeated-comparison regression: list-selection signals are ignored while source
+text, marks and list rows are being replaced. This prevents old selection IDs
+from reading the new mark array before it is populated. The randomized batch
+fixture exercises 150 successive comparisons in the same production window.
