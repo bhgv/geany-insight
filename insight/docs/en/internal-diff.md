@@ -167,3 +167,5 @@ fixture exercises 150 successive comparisons in the same production window.
 ## Display options and scaling
 
 **Options… / Ctrl+Q** opens a single File Compare display dialog. Apply commits the controls together; Cancel preserves the current view. **Mono Font View**, **Vertical scrollbars** and **Scale (%)** affect all three panes. Scale is bounded to 50–250% of a 10-point base; Ctrl+mouse wheel changes it by ten points. Font changes also update the line-number gutters. Display changes preserve source bytes, the merge result and Undo history.
+
+**Overview** adds a narrow map beside each read-only source. Orange/green markers show its difference blocks and the selected block is blue. The outline indicates the viewport; with wrapped lines its physical proportions are approximate. Clicking a marker selects the block in the shared difference list; clicking elsewhere scrolls that source to the corresponding logical line. Linked scrolling remains controlled by Scroll sources together. Marker caches are built in one forward pass over each source, including CR/LF/CRLF and zero-length insertions.

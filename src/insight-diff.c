@@ -9,9 +9,11 @@
 #include <gio/gio.h>
 
 typedef struct { gchar *text; gint *positions; } Snapshot;
+typedef struct { guint begin,end; } MapBlock;
 typedef struct {
  GtkWidget *window,*paths[2],*views[3],*status,*undo,*redo,*take[2],*take_all[2],*external;
  GtkWidget *find_entry,*find_side,*find_case,*find_previous,*find_next,*find_status,*numbers;
+ GArray *map_blocks[2];guint map_lines[2];
  GtkWidget *scrollers[3],*maps[2],*zoom,*mono,*vertical,*overview,*list_toggle,*wrap_toggle;GtkCssProvider *font_css;
  GtkWidget *compare_button,*cancel_button,*save_button; GCancellable *cancel; gboolean busy;
  GtkWidget *previous,*next,*list_scroll,*sync,*ignore_space,*ignore_eol; GtkAdjustment *adjustments[2]; gboolean scrolling;
@@ -154,6 +156,41 @@ static gboolean draw_numbers(GtkWidget *widget,cairo_t *cr,gpointer data) {
  } while(TRUE);
  g_object_unref(layout);cairo_restore(cr);return FALSE;
 }
+static gint selected(Merge *m);
+static void map_redraw(Merge *m) { for(gint i=0;i<2;i++) if(m->maps[i]) gtk_widget_queue_draw(m->maps[i]); }
+static guint map_line(const gchar *text,gsize *offset,guint *line,gsize target) {
+ while(*offset<target) { gchar c=text[(*offset)++];if(c=='\r') { if(*offset<target && text[*offset]=='\n') (*offset)++;(*line)++; }else if(c=='\n') (*line)++; }
+ return *line;
+}
+static void map_build(Merge *m) {
+ for(gint side=0;side<2;side++) {
+  g_clear_pointer(&m->map_blocks[side],g_array_unref);m->map_blocks[side]=g_array_new(FALSE,FALSE,sizeof(MapBlock));gsize offset=0;guint line=0;
+  for(gsize i=0;i<m->diff.count;i++) { InsightDiffHunk *h=&m->diff.hunks[i];MapBlock block;block.begin=map_line(m->sources[side],&offset,&line,side ? h->b_begin : h->a_begin);block.end=map_line(m->sources[side],&offset,&line,side ? h->b_end : h->a_end);g_array_append_val(m->map_blocks[side],block); }
+  m->map_lines[side]=map_line(m->sources[side],&offset,&line,strlen(m->sources[side]))+1;
+ }
+ map_redraw(m);
+}
+static gboolean map_draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
+ Merge *m=data;gint side=widget==m->maps[1],width=gtk_widget_get_allocated_width(widget),height=gtk_widget_get_allocated_height(widget);gdouble total=MAX(m->map_lines[side],1);
+ cairo_set_source_rgb(cr,.94,.95,.97);cairo_paint(cr);
+ GArray *blocks=m->map_blocks[side];gint current=selected(m);
+ for(guint i=0;blocks && i<blocks->len;i++) { MapBlock b=g_array_index(blocks,MapBlock,i);gdouble y=b.begin/total*height,h=MAX(3.,(b.end-b.begin)/total*height);
+  if((gint)i==current) cairo_set_source_rgb(cr,.2,.38,.75);else if(side) cairo_set_source_rgb(cr,.3,.65,.4);else cairo_set_source_rgb(cr,.85,.5,.25);
+  cairo_rectangle(cr,3,y,MAX(1,width-6),h);cairo_fill(cr);
+ }
+ GtkAdjustment *a=m->adjustments[side];gdouble extent=gtk_adjustment_get_upper(a)-gtk_adjustment_get_lower(a);
+ if(extent>0) { gdouble y=(gtk_adjustment_get_value(a)-gtk_adjustment_get_lower(a))/extent*height,h=MAX(4.,gtk_adjustment_get_page_size(a)/extent*height);cairo_set_source_rgba(cr,.12,.2,.35,.7);cairo_set_line_width(cr,1.);cairo_rectangle(cr,.5,y+.5,MAX(1,width-1),MAX(1,MIN(h,height-y)-1));cairo_stroke(cr); }
+ return FALSE;
+}
+static gboolean map_click(GtkWidget *widget,GdkEventButton *event,gpointer data) {
+ Merge *m=data;if(event->button!=1 || m->busy || !m->sources[0]) return FALSE;gint side=widget==m->maps[1];gdouble height=MAX(gtk_widget_get_allocated_height(widget),1),total=MAX(m->map_lines[side],1),y=CLAMP(event->y,0.,height);
+ GArray *blocks=m->map_blocks[side];
+ for(guint i=0;blocks && i<blocks->len;i++) { MapBlock b=g_array_index(blocks,MapBlock,i);gdouble top=b.begin/total*height,end=MAX(top+3.,b.end/total*height);
+  if(y>=top-2 && y<=end+2) { GtkTreePath *path=gtk_tree_path_new_from_indices(i,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(m->hunk_view),path,NULL,FALSE);gtk_tree_path_free(path);map_redraw(m);return TRUE; }
+ }
+ GtkTextIter iter;GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]));gtk_text_buffer_get_iter_at_line(buffer,&iter,CLAMP((gint)(y/height*total),0,gtk_text_buffer_get_line_count(buffer)-1));gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(m->views[side]),&iter,0.,TRUE,0.,.5);return TRUE;
+}
+static void map_adjustment(GtkAdjustment *adjustment,gpointer data) { (void)adjustment;map_redraw(data); }
 static void display_changed(GtkWidget *widget,gpointer data) {
  (void)widget;Merge *m=data;gint zoom=gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->zoom));
  gchar size[G_ASCII_DTOSTR_BUF_SIZE];g_ascii_dtostr(size,sizeof size,10.0*zoom/100.0);gchar *css=g_strdup_printf("textview { font-size: %spt; }",size);gtk_css_provider_load_from_data(m->font_css,css,-1,NULL);g_free(css);
@@ -173,13 +210,13 @@ static gboolean zoom_scroll(GtkWidget *widget,GdkEventScroll *event,gpointer dat
 static void view_options(GtkWidget *widget,gpointer data) {
  (void)widget;Merge *m=data;GtkWidget *window=m->window;g_object_ref(window);
  GtkWidget *dialog=gtk_dialog_new_with_buttons("File Compare Options",GTK_WINDOW(window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Cancel",GTK_RESPONSE_CANCEL,"Apply",GTK_RESPONSE_APPLY,NULL);gtk_widget_set_name(dialog,"insight-diff-options");
- GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(dialog));gtk_container_set_border_width(GTK_CONTAINER(box),10);
+ g_object_ref(dialog);GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(dialog));gtk_container_set_border_width(GTK_CONTAINER(box),10);
  GtkWidget *sources[]={m->mono,m->numbers,m->list_toggle,m->wrap_toggle,m->sync,m->vertical,m->overview};GtkWidget *checks[G_N_ELEMENTS(sources)];
  for(guint i=0;i<G_N_ELEMENTS(sources);i++) { checks[i]=gtk_check_button_new_with_label(gtk_button_get_label(GTK_BUTTON(sources[i])));gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(checks[i]),gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(sources[i])));gtk_box_pack_start(GTK_BOX(box),checks[i],FALSE,FALSE,2);gchar *name=g_strdup_printf("insight-diff-options-%u",i);gtk_widget_set_name(checks[i],name);g_free(name); }
  GtkWidget *scale=gtk_spin_button_new_with_range(50,250,10);gtk_spin_button_set_value(GTK_SPIN_BUTTON(scale),gtk_spin_button_get_value(GTK_SPIN_BUTTON(m->zoom)));gtk_widget_set_name(scale,"insight-diff-options-zoom");gtk_box_pack_start(GTK_BOX(box),gtk_label_new("Scale (%)"),FALSE,FALSE,2);gtk_box_pack_start(GTK_BOX(box),scale,FALSE,FALSE,2);gtk_widget_show_all(dialog);
  gint response=gtk_dialog_run(GTK_DIALOG(dialog));m=g_object_get_data(G_OBJECT(window),"insight-diff-state");
  if(response==GTK_RESPONSE_APPLY && m) { for(guint i=0;i<G_N_ELEMENTS(sources);i++) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(sources[i]),gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(checks[i])));gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->zoom),gtk_spin_button_get_value(GTK_SPIN_BUTTON(scale))); }
- gtk_widget_destroy(dialog);g_object_unref(window);
+ gtk_widget_destroy(dialog);g_object_unref(dialog);g_object_unref(window);
 }
 static gboolean discard(Merge *m) {
  gchar *text=contents(result(m));gboolean dirty=g_strcmp0(text,m->saved)!=0;g_free(text);
@@ -205,6 +242,7 @@ static void destroyed(GtkWidget *w,gpointer data) {
  g_object_unref(m->output);g_object_unref(m->selection);
  g_free(m->marks);insight_diff_clear(&m->diff);g_ptr_array_free(m->history,TRUE);
  for(int i=0;i<2;i++) { g_free(m->sources[i]);g_free(m->loaded_paths[i]); }
+ for(gint i=0;i<2;i++) { g_clear_pointer(&m->map_blocks[i],g_array_unref);g_clear_object(&m->maps[i]); }
  g_clear_object(&m->font_css);g_free(m->saved);g_object_unref(m->list);g_free(m);
 }
 static gint selected(Merge *m) {
@@ -394,7 +432,7 @@ static void comparison_done(GObject *source,GAsyncResult *async,gpointer data) {
   GtkTreeIter it;gtk_list_store_append(m->list,&it);gtk_list_store_set(m->list,&it,0,(gint)i,1,label,-1);g_free(label);
   highlight(m,0,h->a_begin,h->a_end);highlight(m,1,h->b_begin,h->b_end);
  }
- m->changing=FALSE;m->scrolling=FALSE;record(m);selection(NULL,m);
+ map_build(m);m->changing=FALSE;m->scrolling=FALSE;record(m);selection(NULL,m);
  gchar *label=g_strdup_printf("%zu differences. Result starts with Left; select a block and take Left or Right, or edit the result.",m->diff.count);message(m,label);g_free(label);
  gtk_widget_set_sensitive(m->external,TRUE);
  if(m->diff.count) { GtkTreePath *p=gtk_tree_path_new_first();gtk_tree_view_set_cursor(GTK_TREE_VIEW(m->hunk_view),p,NULL,FALSE);gtk_tree_path_free(p); }
@@ -486,14 +524,16 @@ static Merge *merge_new(GtkWidget *parent) {
  m->list=gtk_list_store_new(2,G_TYPE_INT,G_TYPE_STRING);m->hunk_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(m->list));
  gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(m->hunk_view),-1,"Differences",gtk_cell_renderer_text_new(),"text",1,NULL);
  m->selection=g_object_ref(gtk_tree_view_get_selection(GTK_TREE_VIEW(m->hunk_view)));
- g_signal_connect(m->selection,"changed",G_CALLBACK(selection),m);
+ g_signal_connect(m->selection,"changed",G_CALLBACK(selection),m);g_signal_connect_swapped(m->selection,"changed",G_CALLBACK(map_redraw),m);
  m->list_scroll=scroll(m->hunk_view);gtk_widget_set_size_request(m->list_scroll,-1,110);gtk_paned_pack1(GTK_PANED(panes),m->list_scroll,FALSE,FALSE);
  GtkWidget *columns=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6);gtk_box_set_homogeneous(GTK_BOX(columns),TRUE);gtk_paned_pack2(GTK_PANED(panes),columns,TRUE,FALSE);
  for(int i=0;i<3;i++) {
   GtkWidget *column=gtk_box_new(GTK_ORIENTATION_VERTICAL,3);gtk_box_pack_start(GTK_BOX(columns),column,TRUE,TRUE,0);insight_panel_help_attach(column,i==2 ? "panel-merge-result.md" : "panel-diff-input.md");
   gtk_box_pack_start(GTK_BOX(column),gtk_label_new(i==0 ? "Left (read only)" : i==1 ? "Right (read only)" : "Result (editable)"),FALSE,FALSE,0);
   m->views[i]=gtk_text_view_new();gtk_widget_set_name(m->views[i],i==0 ? "insight-diff-left" : i==1 ? "insight-diff-right" : "insight-diff-result");gtk_text_view_set_monospace(GTK_TEXT_VIEW(m->views[i]),TRUE);gtk_text_view_set_editable(GTK_TEXT_VIEW(m->views[i]),i==2);
-  m->scrollers[i]=scroll(m->views[i]);gtk_box_pack_start(GTK_BOX(column),m->scrollers[i],TRUE,TRUE,0);
+  GtkWidget *body=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0);gtk_box_pack_start(GTK_BOX(column),body,TRUE,TRUE,0);m->scrollers[i]=scroll(m->views[i]);gtk_box_pack_start(GTK_BOX(body),m->scrollers[i],TRUE,TRUE,0);
+  if(i<2) { m->maps[i]=gtk_drawing_area_new();gtk_widget_set_size_request(m->maps[i],18,-1);gtk_widget_set_no_show_all(m->maps[i],TRUE);gtk_box_pack_start(GTK_BOX(body),m->maps[i],FALSE,FALSE,0);g_object_ref(m->maps[i]);gtk_widget_add_events(m->maps[i],GDK_BUTTON_PRESS_MASK);gtk_widget_set_tooltip_text(m->maps[i],"Overview: click a marker to select its difference; click elsewhere to scroll.");g_signal_connect(m->maps[i],"draw",G_CALLBACK(map_draw),m);g_signal_connect(m->maps[i],"button-press-event",G_CALLBACK(map_click),m); }
+
   gtk_style_context_add_provider(gtk_widget_get_style_context(m->views[i]),GTK_STYLE_PROVIDER(m->font_css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);gtk_widget_add_events(m->views[i],GDK_SCROLL_MASK|GDK_SMOOTH_SCROLL_MASK);g_signal_connect(m->views[i],"scroll-event",G_CALLBACK(zoom_scroll),m);
   g_signal_connect(m->views[i],"key-press-event",G_CALLBACK(key),m);
   g_signal_connect_after(m->views[i],"draw",G_CALLBACK(draw_numbers),m);
@@ -512,6 +552,7 @@ static Merge *merge_new(GtkWidget *parent) {
  g_signal_connect(result(m),"end-user-action",G_CALLBACK(action_end),m);
  g_signal_connect(result(m),"changed",G_CALLBACK(changed),m);g_signal_connect(m->window,"key-press-event",G_CALLBACK(key),m);
  g_signal_connect(m->window,"delete-event",G_CALLBACK(closing),m);g_signal_connect(m->window,"destroy",G_CALLBACK(destroyed),m);
+ for(gint i=0;i<2;i++) { g_signal_connect(m->adjustments[i],"value-changed",G_CALLBACK(map_adjustment),m);g_signal_connect(m->adjustments[i],"changed",G_CALLBACK(map_adjustment),m); }
  g_signal_connect(m->numbers,"toggled",G_CALLBACK(number_toggle),m);number_toggle(NULL,m);
  g_object_set_data(G_OBJECT(m->window),"insight-diff-state",m);
  g_signal_connect(m->zoom,"value-changed",G_CALLBACK(display_changed),m);g_signal_connect(m->mono,"toggled",G_CALLBACK(display_changed),m);g_signal_connect(m->vertical,"toggled",G_CALLBACK(display_changed),m);g_signal_connect(m->overview,"toggled",G_CALLBACK(display_changed),m);
