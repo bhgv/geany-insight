@@ -254,6 +254,8 @@ libgeany_la_SOURCES += \
 	../insight/core/runtime.h \
 	../insight/desktop/index_cache.c \
 	../insight/desktop/index_cache.h \
+	../insight/desktop/completion_settings.c ../insight/desktop/completion_settings.h \
+	../insight/desktop/completion_preferences.c ../insight/desktop/completion_preferences.h \
 	../insight/desktop/filetype_pairs.c \
 	../insight/desktop/filetype_pairs.h \
 	../insight/desktop/filetype_editing.c \

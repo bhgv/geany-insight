@@ -652,3 +652,8 @@ test('Insight native typing pairs GUI', filetype_pairs_native_gui_test, timeout:
 
 completion_native_gui_test = executable('test_insight_completion_native_gui', '../insight/tests/completion_native_gui_test.c', dependencies: test_deps)
 test('Insight detailed completion native GUI', completion_native_gui_test, timeout: 45)
+
+completion_settings_test = executable('test_insight_completion_settings', '../insight/tests/completion_settings_test.c', '../insight/desktop/completion_settings.c', dependencies: glib)
+test('Insight completion settings', completion_settings_test)
+completion_preferences_gui_test = executable('test_insight_completion_preferences_gui', '../insight/tests/completion_preferences_gui_test.c', '../insight/desktop/completion_preferences.c', '../insight/desktop/completion_settings.c', dependencies: deps)
+test('Insight completion preferences GUI', completion_preferences_gui_test, timeout: 30)

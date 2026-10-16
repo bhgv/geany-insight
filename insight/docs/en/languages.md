@@ -97,3 +97,25 @@ Nested pairs and UTF-8 edits before/inside them are tracked by byte position. Tr
 Keep typing to narrow the list; Backspace refreshes candidates and can broaden it again. Up/Down and PageUp/PageDown select rows, Enter/Tab insert the selected **name only**, and Escape closes without editing. Hover selects a row; a left click accepts it. The editor keeps keyboard focus. The popup appears beside the caret, moves above it near the bottom of the monitor, and closes on navigation, scrolling, focus loss, Undo/Redo or stale selection. Acceptance is one Undo action and observes the existing drop-rest-of-word setting.
 
 The switch is saved in `insight-completion.conf`; turning it off restores the classic list. File type permission and the global automatic-completion setting continue to gate automatic display; the explicit completion command remains available. Document-word, plugin-provided and snippet lists keep their existing interfaces. Candidate accuracy still depends on the existing parser; automatic insertion of function parameters and full Source Insight completion parity are separate work.
+
+### Completion options dialog
+
+Open **Options → Completion options…**. Cancel discards unapplied edits, Apply saves while leaving the dialog open, and OK saves and closes. The settings survive restart and the detailed-list menu switch updates the same file without erasing the other options.
+
+![Production completion preferences page in an isolated GTK fixture](../media/completion-options.jpg)
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| Detailed window | On | Rich symbol rows; off restores the classic list |
+| Tab accepts | On | Off returns Tab to its normal editor behavior; Enter still accepts |
+| Inside comments | Off | Allows automatic suggestions in comments, while global/per-file permissions still apply; strings remain excluded |
+| Insert parentheses | Off | Adds `()` for function/method/prototype candidates only |
+| Space after name | Off | Uses `name ()` when parentheses are added |
+| Show after characters | 0 | 0 inherits Geany; 1–12 overrides ordinary-prefix threshold |
+| Visible rows | 9 | 3–20 rows before scrolling |
+
+![Function insertion and existing arguments](../media/completion-insertion.svg)
+
+Parentheses are inserted only if no opening parenthesis follows the accepted name after spaces/tabs. Existing arguments and spacing are preserved. The caret is placed inside a new pair; acceptance is one Undo action. No arguments or types are synthesized from a declaration. Insertion into the middle of a word with its suffix retained suppresses new parentheses; uncertain long whitespace tails also suppress them. Tab acceptance and parentheses settings apply to the detailed symbol list; the threshold and comment permission also affect the classic symbol path. Member completion retains its existing context-specific triggers.
+
+Older `insight-completion.conf` files containing only `detailed` retain their behavior. Missing keys use defaults; malformed values reject the settings group and fall back to defaults. Unknown valid keys/groups are preserved when saving. A pending refresh is resolved before keyboard acceptance, so fast Backspace followed by Enter uses the updated prefix.

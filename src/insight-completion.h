@@ -2,6 +2,8 @@
 #ifndef INSIGHT_COMPLETION_H
 #define INSIGHT_COMPLETION_H
 #include "editor.h"
+gint insight_completion_min_chars(void);
+gboolean insight_completion_inside_comments(void);
 GtkWidget *insight_completion_view_new(GtkListStore *);
 gboolean insight_completion_show(GeanyEditor *,const GPtrArray *,gsize);
 gboolean insight_completion_key(GeanyEditor *,GdkEventKey *);

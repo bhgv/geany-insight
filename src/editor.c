@@ -2327,7 +2327,8 @@ gboolean editor_start_auto_complete(GeanyEditor *editor, gint pos, gboolean forc
 	style = sci_get_style_at(sci, pos - 2);
 
 	/* don't autocomplete in comments and strings */
-	if (!force && !highlighting_is_code_style(lexer, style))
+	if (!force && !highlighting_is_code_style(lexer, style) &&
+		!(insight_completion_inside_comments() && highlighting_is_comment_style(lexer, style)))
 		return FALSE;
 
 	ret = autocomplete_check_html(editor, style, pos);
@@ -2372,7 +2373,7 @@ gboolean editor_start_auto_complete(GeanyEditor *editor, gint pos, gboolean forc
 		{
 			/* force is set when called by keyboard shortcut, otherwise start at the
 			 * editor_prefs.symbolcompletion_min_chars'th char */
-			if (force || rootlen >= editor_prefs.symbolcompletion_min_chars)
+			if (force || rootlen >= insight_completion_min_chars())
 			{
 				/* complete tags, except if forcing when completion is already visible */
 				if (!(force && SSM(sci, SCI_AUTOCACTIVE, 0, 0)))
