@@ -668,3 +668,8 @@ test('Insight intelligent paste native GUI', intelligent_paste_gui_test, timeout
 
 navigation_native_gui_test = executable('test_insight_navigation_native_gui', '../insight/tests/navigation_native_gui_test.c', dependencies: test_deps)
 test('Insight selection navigation native GUI', navigation_native_gui_test, timeout: 40, is_parallel: false)
+
+# This fixture includes the production Diff/Merge window; no editor host is needed.
+diff_gui_test = executable('test_insight_diff_gui',
+ '../insight/tests/diff_gui_test.c', '../insight/core/diff.c', dependencies: deps)
+test('Insight isolated Diff Merge GUI', diff_gui_test, timeout: 45, is_parallel: false)

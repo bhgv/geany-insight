@@ -63,3 +63,16 @@ done:
  if(status) insight_diff_clear(out);
  return status;
 }
+
+size_t insight_diff_map_offset(const InsightDiff *diff, int side, size_t offset) {
+ size_t from=0,to=0;
+ for(size_t i=0;i<diff->count;i++) {
+  const InsightDiffHunk *h=&diff->hunks[i];
+  size_t a=side ? h->b_begin : h->a_begin,z=side ? h->b_end : h->a_end;
+  size_t b=side ? h->a_begin : h->b_begin,y=side ? h->a_end : h->b_end;
+  if(offset<a) return to+(offset-from);
+  if(offset<z) return b;
+  from=z;to=y;
+ }
+ return to+(offset-from);
+}

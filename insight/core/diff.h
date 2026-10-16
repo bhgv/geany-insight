@@ -11,5 +11,9 @@ typedef struct { InsightDiffHunk *hunks; size_t count; } InsightDiff;
  * LCS table. The work limit still applies to two-sided comparisons.
  * Inputs must be NUL-terminated text without embedded NULs. */
 int insight_diff_compute(const char *a, const char *b, InsightDiff *out);
+/* Map a valid source byte offset (side 0=left, 1=right) to the other source.
+ * Unchanged spans map exactly; changed spans map to the opposite block start.
+ * An insertion boundary maps after the inserted block. Sources must belong to diff. */
+size_t insight_diff_map_offset(const InsightDiff *diff, int side, size_t offset);
 void insight_diff_clear(InsightDiff *diff);
 #endif
