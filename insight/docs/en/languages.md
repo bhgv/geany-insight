@@ -87,3 +87,13 @@ With file type editing overrides and **Allow automatic closing brackets and quot
 ![Tracked pair editing](../media/typing-pairs.svg)
 
 Nested pairs and UTF-8 edits before/inside them are tracked by byte position. Tracking is transient, limited to 128 pairs per editor, and cleared by Undo/Redo or disabling the editing override/typing permission. Manual pairs are ordinary text. Read-only documents, selections, multiple carets, modified editing keys and active completion popups retain their normal behavior. Generated quotes are tracked, but surrounding pre-existing quoted strings and every Source Insight shortcut are not claimed. No XML-tag pair deletion is added.
+
+### Detailed completion window
+
+**Options → Detailed completion window** enables the detailed symbol popup (on by default). It uses the existing symbol-completion threshold and candidate search: set the threshold to 3 or 4 characters in Geany's completion preferences. Names, return/variable types, function parameter lists and scope are shown in colored text, with symbol icons and a kind label. The selected row uses theme selection colors; its declaration location is shown below and in a tooltip. Missing parser metadata is left blank.
+
+![Production completion view captured in an isolated GTK fixture](../media/completion-list.jpg)
+
+Keep typing to narrow the list; Backspace refreshes candidates and can broaden it again. Up/Down and PageUp/PageDown select rows, Enter/Tab insert the selected **name only**, and Escape closes without editing. Hover selects a row; a left click accepts it. The editor keeps keyboard focus. The popup appears beside the caret, moves above it near the bottom of the monitor, and closes on navigation, scrolling, focus loss, Undo/Redo or stale selection. Acceptance is one Undo action and observes the existing drop-rest-of-word setting.
+
+The switch is saved in `insight-completion.conf`; turning it off restores the classic list. File type permission and the global automatic-completion setting continue to gate automatic display; the explicit completion command remains available. Document-word, plugin-provided and snippet lists keep their existing interfaces. Candidate accuracy still depends on the existing parser; automatic insertion of function parameters and full Source Insight completion parity are separate work.

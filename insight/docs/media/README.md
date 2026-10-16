@@ -12,3 +12,5 @@ Keep screenshots current when visible behavior changes. Favor small, useful illu
 `filetype-typing.svg` explains typing permissions and inheritance. The updated `filetype-editing.jpg` captures the real extended GTK page in an isolated fixture.
 
 `typing-pairs.svg` shows generated-pair skip, empty-pair deletion and wrapping a matched block.
+
+`completion-list.jpg`: real production completion GtkTreeView captured in an isolated fixture with sample symbol metadata; not a full application screenshot.

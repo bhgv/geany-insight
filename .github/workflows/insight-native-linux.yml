@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
     paths:
+      - src/insight-completion.*
+      - insight/tests/completion*_test.c
       - src/editor.c
       - src/insight-languages.*
       - insight/desktop/filetype_*
@@ -45,4 +47,4 @@ jobs:
           meson install -C _native
       - name: Run native Folder Browser regressions
         run: |
-          GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a meson test -C _native --print-errorlogs 'Insight Folder Browser shape and ancestry' 'Insight guarded disk operations' 'Insight isolated disk operation dialogs GUI' 'Insight unindexed disk browser GUI' 'Insight Git project transactions' 'Insight Git project dialogs GUI' 'Insight native Git project GUI' 'Insight lazy folder tree GUI' 'Insight native lazy folder tree GUI' 'Insight file type editing settings' 'Insight file type editing page GUI' 'Insight native file type editing GUI' 'Insight native typing pairs GUI' 'Insight language profiles GUI' 'Insight file type filters GUI'
+          GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a meson test -C _native --print-errorlogs 'Insight Folder Browser shape and ancestry' 'Insight guarded disk operations' 'Insight isolated disk operation dialogs GUI' 'Insight unindexed disk browser GUI' 'Insight Git project transactions' 'Insight Git project dialogs GUI' 'Insight native Git project GUI' 'Insight lazy folder tree GUI' 'Insight native lazy folder tree GUI' 'Insight file type editing settings' 'Insight file type editing page GUI' 'Insight native file type editing GUI' 'Insight native typing pairs GUI' 'Insight detailed completion native GUI' 'Insight language profiles GUI' 'Insight file type filters GUI'

@@ -3,6 +3,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "geany.h"
 #include "insight-languages.h"
+#include "insight-completion.h"
 #include "../insight/desktop/master_list.h"
 #include "../insight/desktop/file_patterns.h"
 #include "../insight/desktop/filetype_editing.h"
@@ -99,7 +100,7 @@ void insight_languages_prepare_editor(GeanyEditor *editor) {
 }
 void insight_languages_apply_editor(GeanyEditor *editor) {
  if(!editor || !editor->sci || !editor->document) return;
- ScintillaObject *sci=editor->sci;const InsightFiletypeOptions *options=insight_languages_editing_options(editor);insight_languages_prepare_editor(editor);
+ insight_completion_cancel(editor);ScintillaObject *sci=editor->sci;const InsightFiletypeOptions *options=insight_languages_editing_options(editor);insight_languages_prepare_editor(editor);
  EditingBaseline *baseline=g_object_get_data(G_OBJECT(sci),"insight-language-editing-baseline");
  if(!options && !baseline) return;
  if(options) {

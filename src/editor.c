@@ -1,4 +1,5 @@
 #include "insight-languages.h"
+#include "insight-completion.h"
 #include "../insight/desktop/filetype_pairs.h"
 #include "insight-formatting.h"
 /*
@@ -49,6 +50,7 @@
 #include "highlighting.h"
 #include "insight-workbench.h"
 #include "insight-languages.h"
+#include "insight-completion.h"
 #include "../insight/desktop/filetype_pairs.h"
 #include "keybindings.h"
 #include "main.h"
@@ -635,8 +637,10 @@ static void check_line_breaking(GeanyEditor *editor, gint pos)
 }
 
 
-static void show_autocomplete(ScintillaObject *sci, gsize rootlen, GString *words)
+static void show_autocomplete(GeanyEditor *editor, gsize rootlen, GString *words)
 {
+ ScintillaObject *sci=editor->sci;
+ insight_completion_cancel(editor);
 	/* hide autocompletion if only option is already typed */
 	if (rootlen >= words->len ||
 		(words->str[rootlen] == '?' && rootlen >= words->len - 2))
@@ -656,6 +660,7 @@ static void show_tags_list(GeanyEditor *editor, const GPtrArray *tags, gsize roo
 	ScintillaObject *sci = editor->sci;
 
 	g_return_if_fail(tags);
+	if (insight_completion_show(editor,tags,rootlen)) return;
 
 	if (tags->len > 0)
 	{
@@ -686,7 +691,7 @@ static void show_tags_list(GeanyEditor *editor, const GPtrArray *tags, gsize roo
 				g_string_append(words, buf);
 			}
 		}
-		show_autocomplete(sci, rootlen, words);
+		show_autocomplete(editor, rootlen, words);
 		g_string_free(words, TRUE);
 	}
 }
@@ -1123,7 +1128,7 @@ static gboolean on_editor_notify(G_GNUC_UNUSED GObject *object, GeanyEditor *edi
 {
 	ScintillaObject *sci = editor->sci;
 	GeanyDocument *doc = editor->document;
-
+	insight_completion_notify(editor,nt);
 	switch (nt->nmhdr.code)
 	{
 		case SCN_SAVEPOINTLEFT:
@@ -2286,7 +2291,7 @@ static gboolean autocomplete_doc_word(GeanyEditor *editor, gchar *root, gsize ro
 
 	g_slist_free(words);
 
-	show_autocomplete(sci, rootlen, str);
+	show_autocomplete(editor, rootlen, str);
 	g_string_free(str, TRUE);
 	return TRUE;
 }
@@ -5074,11 +5079,11 @@ static ScintillaObject *create_new_sci(GeanyEditor *editor)
  *
  * @since 0.15
  **/
-GEANY_API_SYMBOL
 /* Plain Enter may navigate without editing; modified keys and popup acceptance retain their commands. */
 static gboolean filetype_return_key(GtkWidget *widget, GdkEventKey *event, gpointer data)
 {
  GeanyEditor *editor=data;
+ if(insight_completion_key(editor,event)) return TRUE;
  const InsightFiletypeOptions *options=insight_languages_editing_options(editor);
  guint character=gdk_keyval_to_unicode(event->keyval);
  gboolean surround=(character=='(' && (editor_prefs.autoclose_chars & GEANY_AC_PARENTHESIS)) || (character=='[' && (editor_prefs.autoclose_chars & GEANY_AC_SBRACKET)) || (character=='{' && (editor_prefs.autoclose_chars & GEANY_AC_CBRACKET));
@@ -5095,6 +5100,7 @@ static gboolean filetype_return_key(GtkWidget *widget, GdkEventKey *event, gpoin
  return TRUE;
 }
 
+GEANY_API_SYMBOL
 ScintillaObject *editor_create_widget(GeanyEditor *editor)
 {
 	const GeanyIndentPrefs *iprefs = get_default_indent_prefs();
