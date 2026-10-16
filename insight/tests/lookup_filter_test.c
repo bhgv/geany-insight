@@ -3,6 +3,7 @@
 static void check(const char *q,gboolean files,const char *name,const char *scope,const char *path,const char *kind,gboolean expected) {
  GError *error=NULL; InsightLookupFilter *f=insight_lookup_filter_new(q,files,&error); g_assert_no_error(error); g_assert_nonnull(f); g_assert_cmpint(insight_lookup_filter_match(f,name,scope,path,kind),==,expected); insight_lookup_filter_free(f);
 }
+static void wildcard(const char *query,gboolean files,gboolean expected) { InsightLookupFilter *f=insight_lookup_filter_new(query,files,NULL);g_assert_nonnull(f);g_assert_cmpint(insight_lookup_filter_has_wildcards(f),==,expected);insight_lookup_filter_free(f); }
 int main(void) {
  check("~wod",FALSE,"WriteOpenDoc","","a.c","f",TRUE);
  check("~dwo",FALSE,"WriteOpenDoc","","a.c","f",FALSE);
@@ -45,5 +46,13 @@ int main(void) {
  g_assert_true(insight_lookup_text_match("",""));
  g_assert_false(insight_lookup_text_match("valid","\xff"));
  g_assert_false(insight_lookup_text_match("\xff",""));
+ check("z.c?p",TRUE,NULL,NULL,"/root/deep/z.cpp",NULL,TRUE);
+ check("z.c?p",TRUE,NULL,NULL,"/root/deep/z.cxx",NULL,FALSE);
+ check("Т?ст.c",TRUE,NULL,NULL,"/root/inner/Тест.c",NULL,TRUE);
+ check("*.cpp*",TRUE,NULL,NULL,"/root/folder.cpp/notes.txt",NULL,FALSE);
+ check("*folder.cpp/*",TRUE,NULL,NULL,"/root/folder.cpp/notes.txt",NULL,TRUE);
+ check("@*.cpp*",TRUE,NULL,NULL,"/root/folder.cpp/notes.txt",NULL,TRUE);
+ check("scope=*.cpp*",TRUE,NULL,"folder.cpp/notes","/root/file.txt",NULL,TRUE);
+ wildcard("*.c",TRUE,TRUE);wildcard(" z.c?p ",TRUE,TRUE);wildcard("@*.cpp",TRUE,TRUE);wildcard("scope=*.c",TRUE,TRUE);wildcard("~s*c",TRUE,FALSE);wildcard("?foo.*",TRUE,FALSE);wildcard("file:\"/root/a*.c\"",TRUE,FALSE);wildcard("\"*.c\"",TRUE,FALSE);wildcard("plain",TRUE,FALSE);wildcard("*.c",FALSE,FALSE);g_assert_false(insight_lookup_filter_has_wildcards(NULL));
  g_print("Lookup filters passed\n"); return 0;
 }

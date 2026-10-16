@@ -1917,3 +1917,32 @@ It retains metadata/settings/fresh-process coverage. Four focused Linux GUI test
 passed (disk browser, Project Folders, themes and panel appearance); both modified
 C sources compiled with -Werror. Windows GUI remains unverified. Reference:
 https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Project_Folder_Browser_Options.htm
+
+
+### Project Files wildcard commands and legacy layout migration
+
+Enter on a valid file glob now retains the filtered list without opening a row,
+even when the asynchronous list is still updating. Bare * (with surrounding
+whitespace allowed) clears the query without entering history; ** keeps the
+existing project-mode command. Regex, exact and fuzzy terms are distinguished
+from actual glob terms by the shared filter API. Non-wildcard Enter retains
+normal activation. Filename-only globs now compare the basename, so z.c?p and
+Unicode ? masks work below any directory; explicit @path/separator-containing
+masks retain whole-field matching. Ancestor directory names no longer create
+false filename-mask matches. Existing language compatibility and limits remain.
+
+Regression testing exposed older two-column Project Files settings being ignored
+by the expanded four-column layout. Valid File/Path order, widths and visibility
+now migrate, appending Directory/Size at defaults. Other panels retain full-layout
+validation. Corrected default widths to index by model field, preserving the
+intended File/Directory/Size/Path widths. The old GUI fixture now checks four
+persisted widths after migration and reset.
+
+Five focused Linux checks passed: lookup filters, original twenty-workbench GUI,
+new Project Files wildcard-command GUI, disk browser and Project Folders. The new
+scenario covers Unicode and nested filenames, directory-name decoys, empty
+results, immediate Enter during updates, reset/history, supersession and normal
+regex/exact activation without modifying source. All five changed C sources
+compiled with -Werror. RU/EN help and the entry tooltip describe the commands.
+Windows GUI remains unverified; no Windows request marker changed. Reference:
+https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Project_File_List.htm

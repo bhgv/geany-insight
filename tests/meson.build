@@ -595,3 +595,5 @@ nominal_range_test = executable('test_insight_nominal_range', '../insight/tests/
 test('Insight nominal definition ranges', nominal_range_test)
 
 test('Insight typed nonrecursive MFL directories GUI', master_list_gui_test, timeout: 60, env: ['GEANY_TEST_MFL_DIRECTORIES=1'])
+
+test('Insight Project Files wildcard commands GUI', workbench_twenty_gui_test, timeout: 60, env: ['GEANY_TEST_FILE_WILDCARDS=1'])

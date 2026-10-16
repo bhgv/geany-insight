@@ -267,10 +267,14 @@ void insight_symbol_view_columns_read(GtkTreeView *view,GKeyFile *settings,const
  gchar *key=g_strconcat(prefix,"-column-order",NULL);gsize count=0,size=0;gint *order=g_key_file_get_integer_list(settings,"workbench",key,&count,NULL);g_free(key);
  key=g_strconcat(prefix,"-column-widths",NULL);gint *widths=g_key_file_get_integer_list(settings,"workbench",key,&size,NULL);g_free(key);
  key=g_strconcat(prefix,"-column-visible",NULL);gsize visible_count=0;gint *visible=g_key_file_get_integer_list(settings,"workbench",key,&visible_count,NULL);g_free(key);gboolean valid_visible=visible && visible_count==count;if(valid_visible) for(gsize i=0;i<count;i++) if(visible[i]!=0 && visible[i]!=1) valid_visible=FALSE;
- GList *columns=gtk_tree_view_get_columns(view);guint expected=0,seen=0;gboolean valid=order && widths && count==size && count==g_list_length(columns) && count<=COLUMNS;
+ GList *columns=gtk_tree_view_get_columns(view);guint expected=0,seen=0;gboolean legacy=!strcmp(prefix,"project-files") && count==2 && g_list_length(columns)==4;gboolean valid=order && widths && count==size && (count==g_list_length(columns) || legacy) && count<=COLUMNS;
  for(GList *p=columns;p;p=p->next) { gint field=gtk_tree_view_column_get_sort_column_id(p->data);if(field<0 || field>=COLUMNS) valid=FALSE;else expected|=1u<<field; }
  if(valid) for(gsize i=0;i<count;i++) { if(order[i]<0 || order[i]>=COLUMNS || (seen&(1u<<order[i])) || widths[i]<32 || widths[i]>2000) { valid=FALSE;break; }seen|=1u<<order[i]; }
- if(valid && seen==expected) { GtkTreeViewColumn *previous=NULL;for(gsize i=0;i<count;i++) for(GList *p=columns;p;p=p->next) { GtkTreeViewColumn *column=p->data;if(gtk_tree_view_column_get_sort_column_id(column)!=order[i]) continue;gtk_tree_view_column_set_fixed_width(column,widths[i]);if(valid_visible) gtk_tree_view_column_set_visible(column,order[i]==NAME || visible[i]);gtk_tree_view_move_column_after(view,column,previous);previous=column;break; } }
+ if(valid && (seen==expected || (legacy && seen==3 && expected==15))) { GtkTreeViewColumn *previous=NULL;for(gsize i=0;i<count;i++) for(GList *p=columns;p;p=p->next) { GtkTreeViewColumn *column=p->data;if(gtk_tree_view_column_get_sort_column_id(column)!=order[i]) continue;gtk_tree_view_column_set_fixed_width(column,widths[i]);if(valid_visible) gtk_tree_view_column_set_visible(column,order[i]==NAME || visible[i]);gtk_tree_view_move_column_after(view,column,previous);previous=column;break; }
+  /* The original two-column Project Files layout used IDs 0/1. Preserve both
+   * saved columns and append the new directory/size columns at their defaults. */
+  if(legacy) for(GList *p=columns;p;p=p->next) { GtkTreeViewColumn *column=p->data;gint field=gtk_tree_view_column_get_sort_column_id(column);if(!(seen&(1u<<field))) { gtk_tree_view_move_column_after(view,column,previous);previous=column; } }
+ }
  g_list_free(columns);g_free(order);g_free(widths);g_free(visible);
 }
 GtkWidget *insight_symbol_view_attach(GtkTreeView *view,GtkListStore *source,GeanyFiletype *fallback) {

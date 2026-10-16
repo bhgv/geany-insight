@@ -881,3 +881,4 @@ Folder Browser Options	Параметры просмотра папок
 Folder Browser Options…	Параметры просмотра папок…
 Folder Browser Options (Ctrl+Q)	Параметры просмотра папок (Ctrl+Q)
 Show Columns	Показывать колонки
+Enter applies filename masks without opening; * clears the filter	Enter применяет маску без открытия файла; * снимает фильтр

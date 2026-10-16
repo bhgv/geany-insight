@@ -1150,8 +1150,15 @@ static gboolean file_browse_command(GtkEntry *entry) {
  gtk_combo_box_set_active(GTK_COMBO_BOX(wb.folder_mode),1);insight_disk_browser_set_root(wb.disk_browser,path);g_free(path);g_free(root);
  focus_widget_panel(wb.disk_browser);gtk_widget_child_focus(wb.disk_browser,GTK_DIR_TAB_FORWARD);return TRUE;
 }
+static gboolean file_wildcard_command(GtkEntry *entry) {
+ const gchar *query=gtk_entry_get_text(entry);gchar *trimmed=g_strdup(query);g_strstrip(trimmed);gboolean clear=!strcmp(trimmed,"*");g_free(trimmed);
+ if(clear) { gtk_entry_set_text(entry,"");return TRUE; }
+ InsightLookupFilter *filter=insight_lookup_filter_new(query,TRUE,NULL);gboolean wildcard=insight_lookup_filter_has_wildcards(filter);insight_lookup_filter_free(filter);
+ if(wildcard) symbol_history_record(GTK_WIDGET(entry));
+ return wildcard;
+}
 static void browser_entry_activate(GtkEntry *entry,gpointer data) {
- (void)data;if(GTK_WIDGET(entry)==wb.file_entry && file_browse_command(entry)) return;if(GTK_WIDGET(entry)==wb.local_entry || GTK_WIDGET(entry)==wb.symbol_entry || GTK_WIDGET(entry)==wb.file_entry) symbol_history_record(GTK_WIDGET(entry)); GtkTreeView *view=GTK_TREE_VIEW(GTK_WIDGET(entry)==wb.local_entry ? wb.local_view : (GTK_WIDGET(entry)==wb.symbol_entry ? wb.symbol_view : wb.file_view));
+ (void)data;if(GTK_WIDGET(entry)==wb.file_entry && (file_browse_command(entry) || file_wildcard_command(entry))) return;if(GTK_WIDGET(entry)==wb.local_entry || GTK_WIDGET(entry)==wb.symbol_entry || GTK_WIDGET(entry)==wb.file_entry) symbol_history_record(GTK_WIDGET(entry)); GtkTreeView *view=GTK_TREE_VIEW(GTK_WIDGET(entry)==wb.local_entry ? wb.local_view : (GTK_WIDGET(entry)==wb.symbol_entry ? wb.symbol_view : wb.file_view));
  if(!gtk_widget_get_sensitive(GTK_WIDGET(view))) return;
  GtkTreeModel *model=gtk_tree_view_get_model(view); GtkTreeIter iter;
  if(gtk_tree_model_get_iter_first(model,&iter)) { GtkTreeIter child; while(gtk_tree_model_iter_children(model,&child,&iter)) iter=child; GtkTreePath *path=gtk_tree_model_get_path(model,&iter); gtk_tree_view_expand_to_path(view,path); browser_activated(view,path,NULL,NULL); gtk_tree_path_free(path); }
@@ -1202,12 +1209,12 @@ static void project_file_size(GtkTreeViewColumn *column,GtkCellRenderer *rendere
 }
 static void create_files_browser(void) {
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,4); wb.file_entry=gtk_search_entry_new(); gtk_widget_set_name(wb.file_entry,"insight-file-query");
- gtk_entry_set_placeholder_text(GTK_ENTRY(wb.file_entry),"Find workspace file…");
+ gtk_entry_set_placeholder_text(GTK_ENTRY(wb.file_entry),"Find workspace file…");gtk_widget_set_tooltip_text(wb.file_entry,"Enter applies filename masks without opening; * clears the filter");
  wb.file_store=gtk_list_store_new(5,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_UINT64,G_TYPE_BOOLEAN); wb.file_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(wb.file_store)); gtk_widget_set_name(wb.file_view,"insight-project-files");
  const gchar *file_labels[]={"File","Directory","Size"}; const gint file_fields[]={0,2,3};
  for(guint i=0;i<3;i++) { GtkCellRenderer *renderer=gtk_cell_renderer_text_new(); GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(file_labels[i],renderer,NULL); if(i==2) gtk_tree_view_column_set_cell_data_func(column,renderer,project_file_size,NULL,NULL); else gtk_tree_view_column_add_attribute(column,renderer,"text",file_fields[i]); gtk_tree_view_column_set_sort_column_id(column,file_fields[i]); gtk_tree_view_append_column(GTK_TREE_VIEW(wb.file_view),column); }
  GtkTreeViewColumn *full_path=gtk_tree_view_column_new_with_attributes("Path",gtk_cell_renderer_text_new(),"text",1,NULL);gtk_tree_view_column_set_sort_column_id(full_path,1);gtk_tree_view_append_column(GTK_TREE_VIEW(wb.file_view),full_path);
- const gint widths[]={220,260,90,300};insight_symbol_view_columns_configure(GTK_TREE_VIEW(wb.file_view),widths,G_N_ELEMENTS(widths));gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(wb.file_view),1);
+ const gint widths[]={220,300,260,90};insight_symbol_view_columns_configure(GTK_TREE_VIEW(wb.file_view),widths,G_N_ELEMENTS(widths));gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(wb.file_view),1);
  gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(wb.file_store),0,GTK_SORT_ASCENDING);
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),wb.file_view);
  gtk_box_pack_start(GTK_BOX(box),symbol_query_controls(wb.file_entry,FALSE),FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);

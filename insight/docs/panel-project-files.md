@@ -23,7 +23,7 @@ In the list, Ctrl+F focuses its query, Ctrl+C copies the basename, Ctrl+Shift+C 
 
 ## Sorting, columns and history
 
-Sort by basename or full path; the icon-only arrow toggles descending order. Header sorting updates the controls. Resize or reorder headers, and use Visible file columns to hide Path; File remains visible. Reset file columns restores order, widths and visibility, retaining the filter and sorting. Column layout, sorting and filter history are saved independently from the symbol panels. The recent-history button remembers or selects up to 16 valid file queries (256 UTF-8 bytes each), including filename globs. Enter remembers a valid query before normal activation; Clear history preserves the query.
+Sort by basename or full path; the icon-only arrow toggles descending order. Header sorting updates the controls. Resize or reorder headers, and use Visible file columns to hide Path; File remains visible. Reset file columns restores order, widths and visibility, retaining the filter and sorting. Column layout, sorting and filter history are saved independently from the symbol panels. The recent-history button remembers or selects up to 16 valid file queries (256 UTF-8 bytes each), including filename globs. Enter remembers a valid query; wildcard queries filter without opening a file, while other queries retain normal activation; Clear history preserves the query.
 
 The counter shows loaded matching files and a + if additional matches remain after the 10000-row outline cap; project enumeration also has its own limit. Narrow the query to examine another subset. The full path is available as a row tooltip. Open/save/close/activate events refresh the list after the document change completes. Language compatibility continues to restrict eligible files.
 
@@ -80,3 +80,25 @@ The expression is saved separately as `master-file-expression` alongside the res
 пока не реализованы; строки внутри самого MFL сохраняют буквальные пути.
 
 File, Directory, Size and Path columns show the name, containing directory, byte size and full path. Size sorts numerically; unavailable files have a blank size. Metadata is read in the background when the list refreshes.
+
+### Wildcard commands in Project Files
+
+Enter after a valid file-mask query (for example `z.c?p` or `*.c`) keeps the
+filtered list and does not open its first file, including while the background
+list refresh is pending. `*` followed by Enter clears the filter; this command
+is not added to query history. `**` retains the existing return-to-project
+command. Plain fragments, regex and exact quoted queries retain normal Enter
+activation. Masks that match nothing leave an empty list.
+
+A mask without path separators matches the basename, independently of containing
+directories. `Т?ст.c` therefore finds `inner/Тест.c`, while `*.cpp*` does not match
+`folder.cpp/notes.h`. Separator-containing masks and explicit `@path` terms
+continue to match the whole path; use `*folder.cpp/*` to select that directory's
+files. Other fragment/regex/exact/fuzzy semantics remain unchanged. Existing
+language compatibility and list limits still apply.
+
+Legacy two-column File/Path layouts preserve their saved relative order, widths
+and valid visibility when loading the expanded four-column list. Directory/Size
+are appended with defaults; malformed layouts retain defaults. Reset restores
+File/Directory/Size/Path with suitable widths.
+Reference: [Source Insight Project File List](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Project_File_List.htm).

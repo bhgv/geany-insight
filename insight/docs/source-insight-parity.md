@@ -240,3 +240,7 @@ and stale/ambiguous declarations. Full expression types and AST metrics remain
 outside this change.
 
 Folder Browser: добавлены File Size/File Date с фоновым чтением, сортировкой заголовками и сохранением настроек; Linux GUI и реальный перезапуск проверены. Единый Options дискового списка добавлен (колонки/Follow/скрытые/Font & Color, кнопка/меню/Ctrl+Q); адаптивная компоновка остаётся открытой.
+
+Project Files: Enter с маской фильтрует без открытия, `*` снимает фильтр;
+маски без пути сравниваются с именем. Старые File/Path раскладки мигрируют
+в четырёхколоночный список с сохранением настроек.

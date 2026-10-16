@@ -18,6 +18,11 @@ InsightLookupFilter *insight_lookup_filter_new(const char *query,gboolean files,
  else { gchar *folded=g_utf8_casefold(text,-1); f->terms=g_strsplit_set(folded," \t\r\n",-1); g_free(folded); }
  g_free(text); return f;
 }
+gboolean insight_lookup_filter_has_wildcards(const InsightLookupFilter *f) {
+ if(!f || !f->files) return FALSE;
+ for(guint i=0;f->terms && f->terms[i];i++) { const gchar *term=f->terms[i];if(*term=='@') term++;else if(g_str_has_prefix(term,"scope=")) term+=6;if(*term!='~' && strpbrk(term,"*?")) return TRUE; }
+ return FALSE;
+}
 /* Inputs have already been case-folded. Compare Unicode characters, not bytes. */
 static gboolean fuzzy_match(const char *hay,const char *term) {
  if(!*term) return FALSE;
@@ -46,7 +51,9 @@ gboolean insight_lookup_filter_match(const InsightLookupFilter *f,const char *na
   if(term[0]=='@') { hay=p; term++; }
   else if(g_str_has_prefix(term,"scope=")) { hay=s; term+=6; }
   if(term[0]=='~') { if(!fuzzy_match(hay,term+1)) { match=FALSE; break; } }
-  else if(f->files && (strchr(term,'*') || strchr(term,'?'))) { if(!g_pattern_match_simple(term,hay)) { match=FALSE; break; } }
+  else if(f->files && (strchr(term,'*') || strchr(term,'?'))) { /* A filename mask is independent of its containing directory. Explicit
+    * @path, scope= and separator-containing masks retain whole-field matching. */
+   gboolean field=f->terms[i][0]=='@' || g_str_has_prefix(f->terms[i],"scope=") || strpbrk(term,"/\\");gchar *base=field ? NULL : g_path_get_basename(hay);gboolean glob=g_pattern_match_simple(term,base ? base : hay);g_free(base);if(!glob) { match=FALSE; break; } }
   else if(!strstr(hay,term)) { match=FALSE; break; }
  }
  g_free(n); g_free(s); g_free(p); return match;
