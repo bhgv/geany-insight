@@ -39,13 +39,16 @@ static gchar *details(GtkWidget *info) { GtkTextBuffer *buffer=gtk_text_view_get
 static void nominal_sizes(void) {
  const gchar *code="struct MetricStruct {\n const char *value = \"}\";\n};\nclass MetricClass {\npublic:\n void method() {}\n};\nunion MetricUnion { int x; double y; };\nenum class MetricEnum {\n One, Two\n};\nnamespace MetricSpace {\n struct Item {};\n}\nclass ForwardOnly;\nstruct SameFirst {}; struct SameSecond {};\n";
  GeanyDocument *doc=document_new_file(NULL,filetypes_lookup_by_name("C++"),code);g_assert_nonnull(doc);
+ /* New documents adopt the platform EOL before Symbol Info is opened.
+  * Verify that the inspected document preserves its actual initialized bytes. */
+ gchar *initial=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1);
  const gchar *names[]={"MetricStruct","MetricClass","MetricUnion","MetricEnum","MetricSpace"};const guint sizes[]={3,4,1,3,3};
  for(guint i=0;i<G_N_ELEMENTS(names);i++) {
   show_info(doc,names[i]);GtkWidget *info=info_window();gchar *metadata=details(info),*expected=g_strdup_printf("Definition size (lines): %u",sizes[i]);g_test_message("%s",metadata);g_assert_nonnull(strstr(metadata,expected));g_free(expected);g_free(metadata);
   if(!i) { gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-ru")),TRUE);click(info,"Обновить");metadata=details(info);g_assert_nonnull(strstr(metadata,"Размер определения (строк): 3"));g_free(metadata);gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-en")),TRUE);click(info,"Refresh"); }
   g_assert_false(SSM(doc->editor->sci,SCI_CANUNDO,0,0));click(info,"Close");
  }
- gchar *unchanged=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1);g_assert_cmpstr(unchanged,==,code);g_free(unchanged);
+ gchar *unchanged=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1);g_assert_cmpstr(unchanged,==,initial);g_free(unchanged);g_free(initial);
  const gchar *unknown[]={"ForwardOnly","SameSecond"};for(guint i=0;i<G_N_ELEMENTS(unknown);i++) { show_info(doc,unknown[i]);GtkWidget *info=info_window();gchar *metadata=details(info);g_assert_null(strstr(metadata,"Definition size (lines):"));g_free(metadata);click(info,"Close"); }
  document_set_text_changed(doc,FALSE);g_assert_true(document_close(doc));
  doc=document_new_file(NULL,filetypes_lookup_by_name("Java"),"public interface MetricInterface {\n void call();\n}\n");g_assert_nonnull(doc);show_info(doc,"MetricInterface");GtkWidget *java_info=info_window();gchar *java_metadata=details(java_info);g_test_message("%s",java_metadata);g_assert_nonnull(strstr(java_metadata,"Definition size (lines): 3"));g_free(java_metadata);click(java_info,"Close");document_set_text_changed(doc,FALSE);g_assert_true(document_close(doc));
