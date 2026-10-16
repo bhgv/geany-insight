@@ -124,3 +124,7 @@ Use **Include masks** (`*.c;*.h`) and **Exclude masks** (`*.o;build/*`) to narro
 ### Remembered window options
 
 Closing a comparison remembers its input paths, comparison method, recursion/hidden/text/known-type options, search, masks, status, Differences only, visible columns, sort direction, window size and list appearance for newly opened windows. At editor exit the most recently opened comparison still alive supplies these defaults to `insight/workbench.conf`; otherwise the last closed window does. Existing windows keep independent controls. Restoring options never starts a scan and never restores result rows. Press Scan / Refresh to get a fresh snapshot. Invalid or unsupported saved values retain the normal defaults; the relative-path column always remains visible. Reset filters clears display filters only, leaving comparison options and appearance intact.
+
+The appearance dialog below is captured from the production GTK widgets in the isolated Linux fixture (editor host stubs).
+
+![Directory list appearance](media/directory-appearance.jpg)

@@ -402,3 +402,9 @@ pairs open independent File Compare windows using completed snapshot roots and
 flags. Snapshot publication is incremental. File copying/deletion, known-type
 filters, backups, path variables and persistent options remain open. See the
 illustrated RU/EN directory-compare guide for limits and verification scope.
+
+### Directory window options and appearance (2026-10-16)
+
+Directory Compare now snapshots native file-type filename patterns and language-profile extensions before worker content reads. Unknown files are omitted while directory rows, enumeration limits and cancellation remain intact. The shared Font & Color dialog supplies per-window custom fonts and foreground/background colors with Apply/Cancel. Window options, paths, filters, column visibility, sorting, size and appearance survive closing and editor restart through the workbench settings; restoring never scans automatically. Individual-file profile bindings are outside this name-based filter.
+
+Linux checks exercise known/empty/invalid definitions, recursive filtering, real appearance Apply/Cancel, persistence, multiple windows and malformed defaults. Native editor coverage verifies the real file-type provider, reopening without a scan and settings written at exit. Updated isolated production-widget JPEG captures and the snapshot SVG accompany the RU/EN guides.

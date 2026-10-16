@@ -4230,7 +4230,8 @@ static void save_workbench_settings(void) {
 static void restore_workbench_settings(void) {
  gchar *prefs_utf8=utils_get_utf8_from_locale(wb.prefs_path); char *text=read_disk_source(prefs_utf8,FALSE); g_free(prefs_utf8); if(!text) return;
  GKeyFile *settings=g_key_file_new();
- if(strlen(text)<=65536 && g_key_file_load_from_data(settings,text,-1,G_KEY_FILE_NONE,NULL) && g_key_file_get_integer(settings,"workbench","version",NULL)==1) {
+ /* Directory defaults can include two long UTF-8 paths and masks. */
+ if(strlen(text)<=262144 && g_key_file_load_from_data(settings,text,-1,G_KEY_FILE_NONE,NULL) && g_key_file_get_integer(settings,"workbench","version",NULL)==1) {
   insight_overview_read(settings);
  grouped_read(&wb.type_panel,settings); grouped_read(&wb.category_panel,settings);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.tree_follow),g_key_file_get_boolean(settings,"workbench","folder-follow-current-file",NULL));

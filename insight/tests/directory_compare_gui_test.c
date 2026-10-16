@@ -35,6 +35,8 @@ static gboolean appearance_response(gpointer data) {
  for(GList *p=windows;p && !dialog;p=p->next) if(!strcmp(gtk_widget_get_name(p->data),"insight-list-style-dialog")) dialog=p->data;
  g_list_free(windows);g_assert_nonnull(dialog);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dialog,"insight-list-style-enabled")),TRUE);gtk_font_chooser_set_font(GTK_FONT_CHOOSER(named(dialog,"insight-list-style-font")),"Monospace 12");
+ const gchar *capture=g_getenv("INSIGHT_DIRECTORY_APPEARANCE_CAPTURE");
+ if(capture && GPOINTER_TO_INT(data)==GTK_RESPONSE_APPLY) { gint64 until=g_get_monotonic_time()+200000;while(g_get_monotonic_time()<until) { flush();g_usleep(1000); }GdkWindow *window=gtk_widget_get_window(dialog);GdkPixbuf *pixels=gdk_pixbuf_get_from_window(window,0,0,gdk_window_get_width(window),gdk_window_get_height(window));g_assert_nonnull(pixels);g_assert_true(gdk_pixbuf_save(pixels,capture,"jpeg",NULL,"quality","88",NULL));g_object_unref(pixels); }
  gtk_dialog_response(GTK_DIALOG(dialog),GPOINTER_TO_INT(data));return G_SOURCE_REMOVE;
 }
 int main(int argc,char **argv) {
@@ -106,5 +108,5 @@ int main(int argc,char **argv) {
  g_key_file_unref(settings);g_key_file_unref(again);g_clear_pointer(&saved_options,g_key_file_unref);g_assert_null(open_windows);
  const gchar *names[]={"config.ini","same.py","old.lua","new.cpp","данные.txt",NULL};for(guint i=0;names[i];i++) for(guint side=0;side<2;side++) { gchar *path=g_build_filename(side ? right : left,names[i],NULL);if(g_file_test(path,G_FILE_TEST_EXISTS)) g_remove(path);g_free(path); }
  g_rmdir(left);g_rmdir(right);g_rmdir(empty);g_rmdir(root);g_free(left);g_free(right);g_free(empty);g_free(root);g_free(opened[0]);g_free(opened[1]);
- g_print("Directory production GUI: scan, filter, sort, pair routing, clipboard, cancellation, empty results and close passed.\n");return 0;
+ g_print("Directory production GUI: scan, filter, sort, pair routing, clipboard, cancellation, known types, appearance Apply/Cancel, option persistence, malformed settings and close passed.\n");return 0;
 }
