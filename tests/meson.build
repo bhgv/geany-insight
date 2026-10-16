@@ -665,3 +665,6 @@ intelligent_paste_test = executable('test_insight_intelligent_paste', '../insigh
 test('Insight intelligent paste transforms', intelligent_paste_test)
 intelligent_paste_gui_test = executable('test_insight_intelligent_paste_native_gui', '../insight/tests/intelligent_paste_native_gui_test.c', dependencies: test_deps)
 test('Insight intelligent paste native GUI', intelligent_paste_gui_test, timeout: 40, is_parallel: false)
+
+navigation_native_gui_test = executable('test_insight_navigation_native_gui', '../insight/tests/navigation_native_gui_test.c', dependencies: test_deps)
+test('Insight selection navigation native GUI', navigation_native_gui_test, timeout: 40, is_parallel: false)

@@ -368,3 +368,6 @@ dist_insightdocmedia_DATA += insight/docs/media/line-operations.svg
 dist_insightdocmedia_DATA += insight/docs/media/line-clipboard.svg
 
 dist_insightdocmedia_DATA += insight/docs/media/line-operations.jpg
+
+EXTRA_DIST += insight/tests/navigation_native_gui_test.c
+dist_insightdocmedia_DATA += insight/docs/media/selection-navigation.svg

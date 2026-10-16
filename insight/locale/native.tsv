@@ -1501,3 +1501,19 @@ Cut Line Right	Вырезать строку справа
 Cut Selection or Paste	Вырезать выделение или вставить
 Line clipboard operation exceeds 1 MiB.	Операция со строками превышает 1 МиБ.
 Line clipboard operation requires complete UTF-8 text without NUL bytes.	Операция со строками требует целого текста UTF-8 без NUL-байтов.
+Selection and navigation	Выделение и навигация
+Toggle Extend Mode	Режим расширения выделения
+Beginning of Selection	Начало выделения
+End of Selection	Конец выделения
+Blank Line Up	Предыдущая пустая строка
+Blank Line Down	Следующая пустая строка
+Select Word	Выделить слово
+Select Line	Выделить строку
+Select To End Of Line	Выделить до конца строки
+Select To Top Of File	Выделить до начала файла
+Select To End Of File	Выделить до конца файла
+Top of File	Начало файла
+Bottom of File	Конец файла
+Extend Mode: ON	Расширение выделения: включено
+Extend Mode: OFF	Расширение выделения: выключено
+Blank line search limit reached.	Достигнут предел поиска пустой строки.

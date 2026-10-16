@@ -26,3 +26,5 @@ Keep screenshots current when visible behavior changes. Favor small, useful illu
 `line-clipboard.svg` explains caret-based fragments, repeated whole-line copying and Cut Selection or Paste. It is a vector diagram.
 
 `line-operations.jpg`: real Line operations menu in the complete running Linux editor during its native GUI test, including Copy/Cut and Paste commands. JPEG capture is also retained as a CI artifact.
+
+`selection-navigation.svg` explains anchor-based Extend Mode versus ordinary movement. Native menu captures are produced by isolated-in-time full editor GUI tests.

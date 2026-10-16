@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="280" viewBox="0 0 720 280">
+<rect width="720" height="280" rx="10" fill="#f3f6fa"/>
+<g font-family="sans-serif" fill="#24364b"><text x="20" y="30" font-size="18" font-weight="bold">Selection and navigation</text>
+<rect x="20" y="50" width="327" height="130" rx="6" fill="#e0eafa"/><rect x="369" y="50" width="331" height="130" rx="6" fill="#dceee3"/>
+<text x="34" y="76" font-size="15">Extend Mode OFF</text><text x="383" y="76" font-size="15">Extend Mode ON</text>
+<g font-family="monospace" font-size="18"><text x="34" y="114">alpha beta gamma</text><text x="383" y="114">alpha beta gamma</text></g>
+<path d="M99 92v28m391-28v28" stroke="#b24d44" stroke-width="3"/>
+<rect x="491" y="93" width="120" height="26" fill="#8eafd6" fill-opacity=".45"/>
+<text x="34" y="151" font-size="13">Movement → a new caret position</text><text x="383" y="151" font-size="13">Movement → anchor stays, range grows</text>
+<text x="20" y="211" font-size="14">Native movement + Go To Line/position wrappers + blank-line jumps</text>
+<text x="20" y="238" font-size="13">Escape exits mode · Selection edges collapse · Read-only supported</text>
+<text x="20" y="262" font-size="12">State is per document and session · Selection commands never edit source text</text>
+</g></svg>

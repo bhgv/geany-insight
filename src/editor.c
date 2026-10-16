@@ -1,6 +1,7 @@
 #include "insight-languages.h"
 #include "insight-completion.h"
 #include "insight-paste.h"
+#include "insight-navigation.h"
 #include "../insight/desktop/filetype_pairs.h"
 #include "insight-formatting.h"
 /*
@@ -5092,6 +5093,7 @@ static gboolean filetype_return_key(GtkWidget *widget, GdkEventKey *event, gpoin
 {
  GeanyEditor *editor=data;
  if(insight_completion_key(editor,event)) return TRUE;
+ if(insight_navigation_key(editor,event)) return TRUE;
  const InsightFiletypeOptions *options=insight_languages_editing_options(editor);
  guint character=gdk_keyval_to_unicode(event->keyval);
  gboolean surround=(character=='(' && (editor_prefs.autoclose_chars & GEANY_AC_PARENTHESIS)) || (character=='[' && (editor_prefs.autoclose_chars & GEANY_AC_SBRACKET)) || (character=='{' && (editor_prefs.autoclose_chars & GEANY_AC_CBRACKET));

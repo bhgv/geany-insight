@@ -39,6 +39,7 @@
 
 #include "editor.h"
 #include "insight-paste.h"
+#include "insight-navigation.h"
 #include "utils.h"
 #include "insight-workbench.h"
 
@@ -566,7 +567,10 @@ GEANY_API_SYMBOL
 void sci_set_current_position(ScintillaObject *sci, gint position, gboolean scroll_to_caret)
 {
 	if (scroll_to_caret)
-		SSM(sci, SCI_GOTOPOS, (uptr_t) position, 0);
+	{
+		if (!insight_navigation_extend_to(sci, position))
+			SSM(sci, SCI_GOTOPOS, (uptr_t) position, 0);
+	}
 	else
 	{
 		SSM(sci, SCI_SETCURRENTPOS, (uptr_t) position, 0);
@@ -995,7 +999,8 @@ gboolean sci_has_selection(ScintillaObject *sci)
 void sci_goto_pos(ScintillaObject *sci, gint pos, gboolean unfold)
 {
 	if (unfold) SSM(sci, SCI_ENSUREVISIBLE, (uptr_t) SSM(sci, SCI_LINEFROMPOSITION, (uptr_t) pos, 0), 0);
-	SSM(sci, SCI_GOTOPOS, (uptr_t) pos, 0);
+	if (!insight_navigation_extend_to(sci, pos))
+		SSM(sci, SCI_GOTOPOS, (uptr_t) pos, 0);
 }
 
 
@@ -1099,7 +1104,10 @@ GEANY_API_SYMBOL
 void sci_goto_line(ScintillaObject *sci, gint line, gboolean unfold)
 {
 	if (unfold) SSM(sci, SCI_ENSUREVISIBLE, (uptr_t) line, 0);
-	SSM(sci, SCI_GOTOLINE, (uptr_t) line, 0);
+	gint pos = SSM(sci, SCI_POSITIONFROMLINE, line, 0);
+	if (pos < 0) pos = line < 0 ? 0 : sci_get_length(sci);
+	if (!insight_navigation_extend_to(sci, pos))
+		SSM(sci, SCI_GOTOLINE, (uptr_t) line, 0);
 }
 
 

@@ -175,3 +175,17 @@ Each cut is one Undo/Redo action; Copy Line and Copy Line Right do not edit text
 Clipboard line endings may be normalized by GTK/platform text transfer; this does not convert line endings in the source document.
 
 ![Line operations menu captured in the running Linux editor](../media/line-operations.jpg)
+
+### Selection and navigation, Extend Mode
+
+**Edit → Selection and navigation** adds **Toggle Extend Mode**, **Beginning/End of Selection**, **Blank Line Up/Down**, **Select Word**, **Select Line**, selections to line end / file start / file end, and Top/Bottom of File.
+
+With Extend Mode on, native Scintilla movement (arrows, words, Home/End, Page Up/Down) extends from the existing anchor. Geany navigation through `sci_goto_line`, `sci_goto_pos` and scrolling `sci_set_current_position` also retains the anchor. New blank-line and file-edge jumps honor the mode. Without it, jumps place a normal caret. **Escape** exits mode while retaining selected text; a visible completion popup gets first handling. Beginning/End of Selection collapse an extended selection to its edge and exit the mode; with only a caret they do nothing.
+
+![Anchor and extended selection](../media/selection-navigation.svg)
+
+Select Word uses the editor's current word rules. Select Line selects the current line with its EOL when present. Explicit Select To… commands retain the current anchor. Blank means empty or containing only spaces/tabs; search starts on the previous/next line and does not jump to a file edge when there is no match. A final empty line after EOL is included. Searches stop at 100000 lines or 4 MiB displacement without moving the caret.
+
+Mode belongs to each document's Scintilla widget and is not persisted. The menu check follows document switches. Text edits, mouse actions and other native operations that reset Scintilla's selection model can end the mode. External plugins sending raw `SCI_GOTOPOS/SCI_GOTOLINE`, and non-scrolling `sci_set_current_position`, retain their previous semantics; universal API interception is not claimed. No additional default keys are assigned to these commands; existing movement keys remain configured normally.
+
+Commands work in read-only, never edit source text or create Undo entries, and require a single normal selection without virtual space. Full Source Insight Select Block/Match, symbolic ranges, Extend Mode across every external/plugin jump, and mouse selection shortcuts remain separate porting items.
