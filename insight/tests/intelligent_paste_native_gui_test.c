@@ -13,7 +13,7 @@ static gchar *directory, *profile, *source, *denied;
 static GeanyDocument *doc;
 static guint phase;
 static gboolean restarted;
-static GtkWidget *option;
+static GtkWidget *option, *window;
 static const gchar *block = "    first();\n        second();\n";
 static const gchar *base = "void f() {\n    target();\n}\n";
 static GtkWidget *named(GtkWidget *w, const gchar *name)
@@ -47,7 +47,7 @@ static void reset(const gchar *text, gint caret)
     SEND(doc->editor->sci, SCI_SETTABWIDTH, 4, 0);
     SEND(doc->editor->sci, SCI_SETEOLMODE, SC_EOL_LF, 0);
     SEND(doc->editor->sci, SCI_EMPTYUNDOBUFFER, 0, 0);
-    document_grab_focus(doc);
+    gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));
 }
 static void paste(const gchar *text)
 {
@@ -62,7 +62,7 @@ static void finish(void)
 {
     SEND(doc->editor->sci, SCI_SETREADONLY, FALSE, 0);
     SEND(doc->editor->sci, SCI_SETSAVEPOINT, 0, 0);
-    gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(main_widgets.window, "menu_quit1")));
+    gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window, "menu_quit1")));
 }
 static gboolean step(gpointer data)
 {
@@ -72,7 +72,8 @@ static gboolean step(gpointer data)
     if (phase == 0)
     {
         doc = document_open_file(source, FALSE, NULL, NULL);g_assert_nonnull(doc);
-        option = named(main_widgets.window, "insight-intelligent-paste-option");g_assert_nonnull(option);
+        window = gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));
+        option = named(window, "insight-intelligent-paste-option");g_assert_nonnull(option);
         g_assert_cmpint(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(option)), ==, restarted);
         if (restarted) { finish();return G_SOURCE_REMOVE; }
         gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(option), TRUE);
@@ -147,17 +148,17 @@ static gboolean step(gpointer data)
         text_is("tar    x();\nget();\n");SEND(doc->editor->sci, SCI_SETSAVEPOINT, 0, 0);
         doc = document_open_file(source, FALSE, NULL, NULL);
         reset(block, 0);SEND(doc->editor->sci, SCI_SETSEL, 0, strlen(block));
-        GtkWidget *query = named(main_widgets.window, "insight-clips-query");g_assert_nonnull(query);
+        GtkWidget *query = named(window, "insight-clips-query");g_assert_nonnull(query);
         gtk_entry_set_text(GTK_ENTRY(query), "Paste fixture");
-        GtkWidget *copy = named(main_widgets.window, "insight-clip-copy");g_assert_nonnull(copy);
+        GtkWidget *copy = named(window, "insight-clip-copy");g_assert_nonnull(copy);
         gtk_button_clicked(GTK_BUTTON(copy));
         gtk_entry_set_text(GTK_ENTRY(query), "");
-        GtkWidget *view = named(main_widgets.window, "insight-clips");g_assert_nonnull(view);
+        GtkWidget *view = named(window, "insight-clips");g_assert_nonnull(view);
         GtkTreePath *path = gtk_tree_path_new_from_indices(0, -1);
         gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)), path);
         gtk_tree_path_free(path);
         reset(base, 18);
-        GtkWidget *clip_paste = named(main_widgets.window, "insight-clip-paste");g_assert_nonnull(clip_paste);
+        GtkWidget *clip_paste = named(window, "insight-clip-paste");g_assert_nonnull(clip_paste);
         gtk_button_clicked(GTK_BUTTON(clip_paste));
     }
     else if (phase == 12)
