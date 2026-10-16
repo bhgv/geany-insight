@@ -104,10 +104,27 @@ static void check_line_moves(void)
     line_action("drag-line-up");text_is("top\n    move\n");
     SEND(doc->editor->sci, SCI_SETSELECTIONMODE, SC_SEL_STREAM, 0);
 }
+static gchar *clipboard_lines(const gchar *text)
+{
+    if (!text) return NULL;
+    GString *result = g_string_new(NULL);
+    for (const gchar *p = text; *p; p++)
+    {
+        if (*p == '\r')
+        {
+            g_string_append_c(result, '\n');
+            if (p[1] == '\n') p++;
+        }
+        else g_string_append_c(result, *p);
+    }
+    return g_string_free(result, FALSE);
+}
 static void clipboard_is(const gchar *expected)
 {
     gchar *text = gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));
-    g_assert_cmpstr(text, ==, expected);g_free(text);
+    gchar *actual_lines = clipboard_lines(text), *expected_lines = clipboard_lines(expected);
+    g_assert_cmpstr(actual_lines, ==, expected_lines);
+    g_free(actual_lines);g_free(expected_lines);g_free(text);
 }
 static void clipboard_set(const gchar *text)
 {
@@ -209,8 +226,14 @@ static gboolean step(gpointer data)
             {
                 GtkWidget *parent = named(window, "insight-line-operations");g_assert_nonnull(parent);
                 GtkWidget *menu = gtk_menu_item_get_submenu(GTK_MENU_ITEM(parent));g_assert_nonnull(menu);
+                GdkEvent *event = gdk_event_new(GDK_BUTTON_PRESS);
+                event->button.window = g_object_ref(gtk_widget_get_window(GTK_WIDGET(doc->editor->sci)));
+                event->button.button = 3;event->button.time = GDK_CURRENT_TIME;
+                GdkSeat *seat = gdk_display_get_default_seat(gdk_display_get_default());
+                gdk_event_set_device(event, gdk_seat_get_pointer(seat));
                 gtk_menu_popup_at_widget(GTK_MENU(menu), GTK_WIDGET(doc->editor->sci),
-                    GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_WEST, NULL);
+                    GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_WEST, event);
+                gdk_event_free(event);
                 capture_started = TRUE;g_timeout_add(150, capture_menu, menu);
             }
             return G_SOURCE_CONTINUE;

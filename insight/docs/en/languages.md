@@ -171,3 +171,7 @@ These are line movement commands. Mouse drag/drop and post-paste selection prefe
 Existing **Copy/Cut Current Line(s)** and their configured keys (normally Ctrl+Shift+C / Ctrl+Shift+X) use these Copy Line/Cut Line behaviors in source editors. Copy Line expansion is based on the current full-line selection, so a manually selected whole-line block also grows on invocation. When first expanding a partial selection, an end at the next line start excludes that next line. Growth stops at EOF. A final line without EOL is copied without adding one.
 
 Each cut is one Undo/Redo action; Copy Line and Copy Line Right do not edit text or create Undo entries. Copy works in read-only; Cut/Paste do not. Empty fragments and a final empty line preserve the previous clipboard. Ranges are limited to 1 MiB and require complete UTF-8 without NUL bytes; rejection preserves text and clipboard. New menu commands require one normal selection without virtual space. Existing Geany commands retain native handling for other selection modes and non-document Scintilla widgets. Line fragment commands use the active caret even with an extended selection. No separate keys are assigned to the new fragment commands or Cut Selection or Paste in this series.
+
+Clipboard line endings may be normalized by GTK/platform text transfer; this does not convert line endings in the source document.
+
+![Line operations menu captured in the running Linux editor](../media/line-operations.jpg)

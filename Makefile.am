@@ -366,3 +366,5 @@ dist_insightdocmedia_DATA += insight/docs/media/intelligent-paste.svg
 dist_insightdocmedia_DATA += insight/docs/media/line-operations.svg
 
 dist_insightdocmedia_DATA += insight/docs/media/line-clipboard.svg
+
+dist_insightdocmedia_DATA += insight/docs/media/line-operations.jpg

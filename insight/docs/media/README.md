@@ -24,3 +24,5 @@ Keep screenshots current when visible behavior changes. Favor small, useful illu
 `line-operations.svg` is a compact diagram of the line commands and optional destination indentation; it is not an application screenshot.
 
 `line-clipboard.svg` explains caret-based fragments, repeated whole-line copying and Cut Selection or Paste. It is a vector diagram.
+
+`line-operations.jpg`: real Line operations menu in the complete running Linux editor during its native GUI test, including Copy/Cut and Paste commands. JPEG capture is also retained as a CI artifact.
