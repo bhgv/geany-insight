@@ -1,12 +1,15 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "geany.h"
 #include "main.h"
+#include "document.h"
+#include "editor.h"
 #include "ui_utils.h"
 #include <glib/gstdio.h>
 #include <string.h>
-static gchar *root,*profile,*left,*right,*source;static guint phase;static GtkWidget *directory,*merge;
+static gchar *root,*profile,*left,*right,*source;static guint phase;static GtkWidget *host,*directory,*merge;
 static GtkWidget *named(GtkWidget *widget,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(widget),name)) return widget;
+ if(GTK_IS_MENU_ITEM(widget)) { GtkWidget *sub=gtk_menu_item_get_submenu(GTK_MENU_ITEM(widget));GtkWidget *found=sub ? named(sub,name) : NULL;if(found) return found; }
  if(GTK_IS_CONTAINER(widget)) { GList *children=gtk_container_get_children(GTK_CONTAINER(widget));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL;
 }
 static GtkWidget *window_named(const gchar *name) {
@@ -17,8 +20,9 @@ static GtkWidget *window_named(const gchar *name) {
 static gboolean step(gpointer data) {
  (void)data;
  if(!phase) {
-  if(!main_widgets.tools_menu) return G_SOURCE_CONTINUE;
-  GtkWidget *item=named(main_widgets.tools_menu,"insight-directory-menu");if(!item) return G_SOURCE_CONTINUE;
+  GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;
+  host=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));
+  GtkWidget *item=named(host,"insight-directory-menu");if(!item) return G_SOURCE_CONTINUE;
   gtk_menu_item_activate(GTK_MENU_ITEM(item));directory=window_named("insight-directory-window");g_assert_nonnull(directory);
   gtk_entry_set_text(GTK_ENTRY(named(directory,"insight-directory-left")),left);gtk_entry_set_text(GTK_ENTRY(named(directory,"insight-directory-right")),right);
   gtk_button_clicked(GTK_BUTTON(named(directory,"insight-directory-scan")));phase++;return G_SOURCE_CONTINUE;
@@ -31,7 +35,7 @@ static gboolean step(gpointer data) {
  }
  if(!gtk_widget_get_sensitive(named(merge,"insight-diff-compare"))) return G_SOURCE_CONTINUE;
  GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(named(merge,"insight-diff-result")));GtkTextIter a,z;gtk_text_buffer_get_bounds(buffer,&a,&z);gchar *text=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);g_assert_cmpstr(text,==,"port = 3000\n");g_free(text);
- gtk_widget_destroy(merge);gtk_widget_destroy(directory);gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(main_widgets.window,"menu_quit1")));return G_SOURCE_REMOVE;
+ gtk_widget_destroy(merge);gtk_widget_destroy(directory);gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(host,"menu_quit1")));return G_SOURCE_REMOVE;
 }
 static gboolean timeout(gpointer data) { (void)data;g_error("Directory Compare native GUI timeout");return G_SOURCE_REMOVE; }
 int main(void) {
