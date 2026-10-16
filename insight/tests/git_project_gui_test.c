@@ -45,6 +45,19 @@ static gboolean respond_create(gpointer data)
  if(response->clone) gtk_entry_set_text(GTK_ENTRY(named(dialog,"insight-git-project-remote")),response->remote);
  gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_ACCEPT);return G_SOURCE_REMOVE;
 }
+static guint membership_responses;
+static gboolean respond_membership(gpointer data)
+{
+ (void)data;GList *windows=gtk_window_list_toplevels();GtkWidget *dialog=NULL;
+ for(GList *p=windows;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-git-membership")) dialog=p->data;
+ g_list_free(windows);if(!dialog || !gtk_widget_get_visible(dialog)) return G_SOURCE_CONTINUE;
+ GtkWidget *view=named(dialog,"insight-git-membership-files");g_assert_nonnull(view);GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));
+ if(!membership_responses++) { g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,1);GtkTreeIter iter;g_assert_true(gtk_tree_model_get_iter_first(model,&iter));gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),&iter);gtk_dialog_response(GTK_DIALOG(dialog),2);return G_SOURCE_CONTINUE; }
+ /* The nested progress window can dispatch this timer while the old list is
+  * still visible; wait until the production dialog has refreshed it. */
+ if(gtk_tree_model_iter_n_children(model,NULL)) return G_SOURCE_CONTINUE;
+ gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_CLOSE);return G_SOURCE_REMOVE;
+}
 static void run_git(const gchar *const *args) { GError *e=NULL;GBytes *b=insight_git_run(git_root,NULL,args,NULL,&e);g_assert_no_error(e);g_assert_nonnull(b);g_bytes_unref(b); }
 int main(int argc,char **argv)
 {
@@ -64,6 +77,7 @@ int main(int argc,char **argv)
  InsightProjectFiles *policy=insight_git_membership(&e);g_assert_no_error(e);g_assert_cmpuint(policy->files->len,==,1);g_ptr_array_unref(policy->files);g_free(policy);
  gchar *created=g_strconcat(root,"-created",NULL);CreateResponse creation={created,NULL,FALSE};g_timeout_add(10,respond_create,&creation);create_project(NULL,NULL);g_assert_nonnull(opened);GKeyFile *saved=g_key_file_new();g_assert_true(g_key_file_load_from_file(saved,opened,G_KEY_FILE_NONE,NULL));g_assert_true(g_key_file_get_boolean(saved,"project","git_based",NULL));g_key_file_unref(saved);
  gchar *cloned=g_strconcat(root,"-cloned",NULL);CreateResponse cloning={cloned,root,TRUE};g_timeout_add(10,respond_create,&cloning);create_project(NULL,GINT_TO_POINTER(1));g_assert_true(g_str_has_prefix(opened,cloned));saved=g_key_file_new();g_assert_true(g_key_file_load_from_file(saved,opened,G_KEY_FILE_NONE,NULL));g_assert_true(g_key_file_get_boolean(saved,"project","git_based",NULL));g_key_file_unref(saved);gchar *cloned_file=g_build_filename(cloned,"a.txt",NULL);g_assert_true(g_file_test(cloned_file,G_FILE_TEST_EXISTS));g_free(cloned_file);g_free(created);g_free(cloned);g_free(opened);
+ g_timeout_add(10,respond_membership,NULL);insight_git_manage(NULL,NULL);g_assert_true(g_file_test(a,G_FILE_TEST_EXISTS));GPtrArray *tracked=insight_git_files(root,NULL,&e);g_assert_no_error(e);g_assert_cmpuint(tracked->len,==,0);g_ptr_array_unref(tracked);
  insight_git_close();g_assert_false(insight_git_active());gtk_widget_destroy(main_widgets.window);gtk_widget_destroy(main_widgets.toolbar);g_object_unref(main_widgets.toolbar);gtk_widget_destroy(project);g_object_unref(project);gtk_widget_destroy(file);g_object_unref(file);g_ptr_array_unref(documents_array);g_key_file_unref(config);g_free(root);g_free(a);g_free(z);
  g_print("Production Git GUI: menu/toolbar, sorted checked files, proposal editing, cancel, selective commit and Git membership passed\n");return 0;
 }

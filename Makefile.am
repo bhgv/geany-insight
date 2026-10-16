@@ -331,4 +331,5 @@ EXTRA_DIST += \
  insight/desktop/git_project.c \
  insight/desktop/git_project.h \
  insight/tests/git_project_test.c \
- insight/tests/git_project_gui_test.c
+ insight/tests/git_project_gui_test.c \
+ insight/tests/git_native_gui_test.c

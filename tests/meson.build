@@ -630,3 +630,6 @@ git_project_gui_test = executable('test_insight_git_project_gui',
  include_directories: [igeany, iscintilla, itagmanager, include_directories('..')],
  c_args: geany_cflags, dependencies: deps)
 test('Insight Git project dialogs GUI', git_project_gui_test, timeout: 60)
+
+git_native_gui_test = executable('test_insight_git_native_gui', '../insight/tests/git_native_gui_test.c', dependencies: test_deps)
+test('Insight native Git project GUI', git_native_gui_test, timeout: 45)
