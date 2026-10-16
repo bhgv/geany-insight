@@ -100,6 +100,10 @@ int main(int argc,char **argv) {
  g_idle_add(options_response,GINT_TO_POINTER(GTK_RESPONSE_APPLY));view_options(NULL,m);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->zoom)),==,130);g_assert_false(gtk_widget_get_visible(m->list_scroll));g_assert_false(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->numbers)));g_assert_cmpuint(m->position,==,display_history);assert_text(m,a);
  gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->zoom),100);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->numbers),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->list_toggle),TRUE);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->overview),TRUE);gint64 map_deadline=g_get_monotonic_time()+200000;while(g_get_monotonic_time()<map_deadline) { flush();g_usleep(1000); }g_assert_cmpint(gtk_widget_get_allocated_height(m->maps[0]),>,20);for(gint i=0;i<2;i++) { g_assert_true(gtk_widget_get_visible(m->maps[i]));g_assert_cmpuint(m->map_blocks[i]->len,==,m->diff.count); }
+ /* EOF changes in a long file must remain visible and clickable, rather
+  * than having their minimum-height marker clipped below the overview. */
+ gdouble marker_top,marker_span;map_extent((MapBlock){999999,1000000},1000000,200,&marker_top,&marker_span);g_assert_cmpfloat(marker_top+marker_span,<=,200);g_assert_cmpfloat(marker_span,>=,3);
+ map_extent((MapBlock){1000000,1000000},1000001,200,&marker_top,&marker_span);g_assert_cmpfloat(marker_top+marker_span,<=,200);g_assert_cmpfloat(marker_span,>=,3);
  MapBlock marker=g_array_index(m->map_blocks[0],MapBlock,1);GdkEventButton map_event={0};map_event.button=1;map_event.y=(marker.begin+.2)/m->map_lines[0]*gtk_widget_get_allocated_height(m->maps[0]);g_assert_true(map_click(m->maps[0],&map_event,m));g_assert_cmpint(selected(m),==,1);navigate(m,-1);g_assert_cmpuint(m->position,==,display_history);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->overview),FALSE);g_assert_false(gtk_widget_get_visible(m->maps[0]));gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->overview),TRUE);
  const gchar *capture=g_getenv("INSIGHT_DIFF_CAPTURE");
