@@ -390,3 +390,5 @@ dist_insightdocmedia_DATA += insight/docs/media/directory-operation.jpg insight/
 dist_insightdocmedia_DATA += insight/docs/media/file-compare-history.jpg
 
 dist_insightdocmedia_DATA += insight/docs/media/file-compare-export.jpg
+
+dist_insightdocmedia_DATA += insight/docs/media/file-compare-search.jpg

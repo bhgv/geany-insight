@@ -252,3 +252,13 @@ Text is captured before the file chooser. If the result changes, a comparison st
 **Visible tabs and spaces** draws ASCII spaces as `·` and tabs as `→`. **Visible line endings** draws `¶` for CR, LF or a CRLF pair, with one marker per pair. These are overlays in all three panes. Marker glyphs do not enter searches, selections, clipboard text, exports or saved files and create no merge history.
 
 Both toggles are available in the toolbar, Options and context menus. Apply commits changes; Cancel keeps the previous settings. Values persist with comparison-window preferences. Drawing follows zoom and wrapping. Work is capped at 20000 characters from the visible starting position per draw; pathological long lines can omit some markers. This does not affect text or comparison results. The main-window capture above shows enabled markers.
+
+### Identifier search and match lists
+
+Every pane's context menu provides **Load Search String**, forward/backward identifier search and **Find all matches in pane**. Loading takes the identifier under the caret or the first identifier in the selection, targets that search pane and preserves the caret. Identifiers use Unicode letters/digits, combining marks and underscore, without language parsing. Words requiring more than 4096 characters of traversal are not loaded.
+
+Ctrl+F3 searches for the next identifier occurrence; Ctrl+Shift+F3 searches backward. Both enable **Whole words only** and honor current case/wrap options. **Find all…** searches the entire pane chosen in the search bar. Ctrl+Shift+F uses the focused pane or the search-bar pane when focus is in controls. This is local comparison-pane search.
+
+The list contains up to 5000 matches with one-based logical lines/columns and text excerpts, indicating when capped. **Go to match** or double-click selects the exact range; Close changes nothing. Text edits or a new comparison invalidate old positions, so stale navigation is rejected. Queries, lists and positions are not persisted. Commands do not edit text or merge history and are unavailable while comparison runs.
+
+![Production GTK match list, isolated test fixture](media/file-compare-search.jpg)

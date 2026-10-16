@@ -1073,3 +1073,13 @@ Save the exact selection; keep the current result's saved or modified status.	С
 Visible tabs and spaces	Видимые табуляции и пробелы
 Visible line endings	Видимые окончания строк
 · space   → tab   ¶ line ending	· пробел   → табуляция   ¶ окончание строки
+Load Search String	Загрузить строку поиска
+Search identifier forward — Ctrl+F3	Искать идентификатор вперёд — Ctrl+F3
+Search identifier backward — Ctrl+Shift+F3	Искать идентификатор назад — Ctrl+Shift+F3
+Find all matches in pane — Ctrl+Shift+F	Все совпадения в панели — Ctrl+Shift+F
+Find all…	Найти все…
+Pane Search Results	Результаты поиска в панели
+Go to match	Перейти к совпадению
+Matches: %u	Совпадений: %u
+Showing first %u matches (limit reached).	Показаны первые %u совпадений (достигнут предел).
+Text changed; run Find all again.	Текст изменился; запустите поиск всех совпадений заново.

@@ -192,8 +192,31 @@ static void whitespace_test(void) {
  GdkPixbuf *plain=text_capture(m->views[2]);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->visible_space),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->visible_eol),TRUE);GdkPixbuf *marked=text_capture(m->views[2]);g_assert_cmpint(gdk_pixbuf_get_byte_length(plain),==,gdk_pixbuf_get_byte_length(marked));g_assert_true(memcmp(gdk_pixbuf_get_pixels(plain),gdk_pixbuf_get_pixels(marked),gdk_pixbuf_get_byte_length(plain))!=0);g_object_unref(plain);g_object_unref(marked);assert_text(m,text);g_assert_cmpuint(m->history->len,==,history);
  GKeyFile *prefs=g_key_file_new();view_save(m,prefs);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->visible_space),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->visible_eol),FALSE);view_restore(m,prefs);g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->visible_space)));g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->visible_eol)));g_key_file_unref(prefs);gtk_widget_destroy(m->window);flush();
 }
+typedef struct { Merge *m;guint rows,index;gint response;gboolean mutate; } SearchResponse;
+static gboolean search_response(gpointer data) {
+ SearchResponse *action=data;GList *windows=gtk_window_list_toplevels();GtkWidget *dialog=NULL;
+ for(GList *p=windows;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-diff-search-results")) dialog=p->data;
+ g_list_free(windows);g_assert_nonnull(dialog);GtkWidget *tree=named(dialog,"insight-diff-search-results-list");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(tree)),NULL),==,action->rows);
+ if(action->rows) { GtkTreePath *path=gtk_tree_path_new_from_indices(action->index,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(tree),path,NULL,FALSE);gtk_tree_path_free(path); }
+ const gchar *capture=g_getenv("INSIGHT_DIFF_SEARCH_CAPTURE");if(capture && action->rows==3) { gint64 until=g_get_monotonic_time()+200000;while(g_get_monotonic_time()<until) { flush();g_usleep(1000); }GdkWindow *window=gtk_widget_get_window(dialog);GdkPixbuf *pixbuf=gdk_pixbuf_get_from_window(window,0,0,gdk_window_get_width(window),gdk_window_get_height(window));g_assert_nonnull(pixbuf);g_assert_true(gdk_pixbuf_save(pixbuf,capture,"jpeg",NULL,"quality","88",NULL));g_object_unref(pixbuf); }
+ if(action->mutate) gtk_text_buffer_set_text(result(action->m),"changed while searching",-1);
+ if(action->response==GTK_RESPONSE_APPLY && action->rows && !action->mutate) { GtkTreePath *path=gtk_tree_path_new_from_indices(action->index,-1);gtk_tree_view_row_activated(GTK_TREE_VIEW(tree),path,gtk_tree_view_get_column(GTK_TREE_VIEW(tree),0));gtk_tree_path_free(path); }else gtk_dialog_response(GTK_DIALOG(dialog),action->response);return G_SOURCE_REMOVE;
+}
+static void search_actions_test(void) {
+ Merge *m=merge_new(NULL);GtkTextBuffer *buffer=result(m);const gchar *initial="foo foobar foo\r\nяfoo foo\n";gtk_text_buffer_set_text(buffer,initial,-1);GtkTextIter a,z;
+ gtk_text_buffer_get_iter_at_offset(buffer,&a,1);gtk_text_buffer_place_cursor(buffer,&a);selection_search(m,2,0);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(m->find_entry)),==,"foo");g_assert_cmpint(gtk_text_iter_get_offset(&a),==,1);
+ selection_search(m,2,1);g_assert_true(gtk_text_buffer_get_selection_bounds(buffer,&a,&z));g_assert_cmpint(gtk_text_iter_get_offset(&a),==,11);selection_search(m,2,-1);gtk_text_buffer_get_selection_bounds(buffer,&a,&z);g_assert_cmpint(gtk_text_iter_get_offset(&a),==,0);
+ guint history=m->history->len;SearchResponse response={m,3,2,GTK_RESPONSE_CANCEL,FALSE};g_timeout_add(100,search_response,&response);find_all(m,2);g_assert_cmpuint(m->history->len,==,history);assert_text(m,initial);
+ response.response=GTK_RESPONSE_APPLY;g_timeout_add(100,search_response,&response);find_all(m,2);gtk_text_buffer_get_selection_bounds(buffer,&a,&z);g_assert_cmpint(gtk_text_iter_get_line(&a),==,1);g_assert_cmpint(gtk_text_iter_get_line_offset(&a),==,5);
+ response.rows=0;response.response=GTK_RESPONSE_CANCEL;gtk_entry_set_text(GTK_ENTRY(m->find_entry),"missing");g_timeout_add(100,search_response,&response);find_all(m,2);
+ gtk_entry_set_text(GTK_ENTRY(m->find_entry),"foo");response.rows=3;response.response=GTK_RESPONSE_APPLY;response.mutate=TRUE;g_timeout_add(100,search_response,&response);find_all(m,2);assert_text(m,"changed while searching");g_assert_false(gtk_text_buffer_get_has_selection(buffer));
+ gtk_text_buffer_set_text(buffer,"ёж_2 ёж_2",-1);gtk_text_buffer_get_start_iter(buffer,&a);gtk_text_buffer_place_cursor(buffer,&a);selection_search(m,2,1);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(m->find_entry)),==,"ёж_2");gtk_text_buffer_get_selection_bounds(buffer,&a,&z);g_assert_cmpint(gtk_text_iter_get_offset(&a),==,5);
+ gchar *long_word=g_strnfill(4097,'x');gtk_text_buffer_set_text(buffer,long_word,-1);g_free(long_word);gtk_text_buffer_get_start_iter(buffer,&a);gtk_text_buffer_place_cursor(buffer,&a);selection_search(m,2,0);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(m->find_entry)),==,"ёж_2");gtk_entry_set_text(GTK_ENTRY(m->find_entry),"foo");
+ GString *many=g_string_new(NULL);for(guint i=0;i<5100;i++) g_string_append(many,"foo\n");gtk_text_buffer_set_text(buffer,many->str,-1);g_string_free(many,TRUE);response.rows=5000;response.response=GTK_RESPONSE_CANCEL;response.mutate=FALSE;g_timeout_add(100,search_response,&response);find_all(m,2);
+ gboolean gone=FALSE;g_object_weak_ref(G_OBJECT(m->window),finalized,&gone);g_idle_add(close_options_parent,m->window);find_all(m,2);flush();g_assert_true(gone);
+}
 int main(int argc,char **argv) {
- g_setenv("GSETTINGS_BACKEND","memory",TRUE);gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();case_test();line_edit_test();history_test();export_test();whitespace_test();insight_diff_set_source_opener(source_opened);
+ g_setenv("GSETTINGS_BACKEND","memory",TRUE);gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();case_test();line_edit_test();history_test();export_test();whitespace_test();search_actions_test();insight_diff_set_source_opener(source_opened);
  GError *error=NULL;gchar *dir=g_dir_make_tmp("insight-diff-XXXXXX",&error);g_assert_no_error(error);
  gchar *left=g_build_filename(dir,"left.txt",NULL),*right=g_build_filename(dir,"right.txt",NULL);
  const char *a="start\nleft\ncommon\nlast left\nend\n",*b="start\nright\ncommon\nlast right\nextra\nend\n";

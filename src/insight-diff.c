@@ -180,6 +180,8 @@ static void go_line(GtkWidget *widget,gpointer data) {
  gchar *label=g_strdup_printf("Line %d of %d",line,gtk_text_buffer_get_line_count(buffer));gtk_label_set_text(GTK_LABEL(m->line_status),label);g_free(label);
 }
 static void line_begin(GtkWidget *widget,gpointer data) { Merge *m=data;gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->line_number),widget==g_object_get_data(G_OBJECT(m->window),"line-first") ? 1 : G_MAXINT);go_line(widget,m); }
+static void selection_search(Merge *,guint,gint);
+static void find_all(Merge *,guint);
 static gboolean key(GtkWidget *w,GdkEventKey *event,gpointer data) {
  (void)w;
  Merge *m=data;
@@ -190,6 +192,8 @@ static gboolean key(GtkWidget *w,GdkEventKey *event,gpointer data) {
  }
  if(event->keyval==GDK_KEY_Escape && w==m->line_number) { gtk_widget_grab_focus(m->views[focused_pane(m)]);return TRUE; }
  if((event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_h || event->keyval==GDK_KEY_H)) { gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),2);gtk_widget_grab_focus(m->replace_entry);gtk_editable_select_region(GTK_EDITABLE(m->replace_entry),0,-1);return TRUE; }
+ if((event->state&GDK_CONTROL_MASK) && event->keyval==GDK_KEY_F3) { selection_search(m,focused_pane(m),(event->state&GDK_SHIFT_MASK) ? -1 : 1);return TRUE; }
+ if((event->state&(GDK_CONTROL_MASK|GDK_SHIFT_MASK))==(GDK_CONTROL_MASK|GDK_SHIFT_MASK) && (event->keyval==GDK_KEY_f || event->keyval==GDK_KEY_F)) { GtkWidget *focus=gtk_window_get_focus(GTK_WINDOW(m->window));guint side=gtk_combo_box_get_active(GTK_COMBO_BOX(m->find_side));for(guint i=0;i<3;i++) if(focus==m->views[i]) side=i;find_all(m,side);return TRUE; }
  if(event->keyval==GDK_KEY_F3) { find_text(m,(event->state&GDK_SHIFT_MASK)!=0);return TRUE; }
  if((event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_f || event->keyval==GDK_KEY_F)) { focus_find(m);return TRUE; }
  if(event->keyval==GDK_KEY_Escape && w==m->find_entry) {
@@ -230,6 +234,42 @@ static gboolean search_match(GtkTextIter start,const gchar *query,GtkTextSearchF
  }
  return FALSE;
 }
+static void selection_search(Merge *m,guint side,gint direction) {
+ if(m->busy || side>2) return;
+ GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]));GtkTextIter a,z,limit;guint scanned=0;
+ gboolean selection=gtk_text_buffer_get_selection_bounds(buffer,&a,&limit);
+ if(selection) { while(gtk_text_iter_compare(&a,&limit)<0 && !identifier_char(gtk_text_iter_get_char(&a)) && scanned++<4096) gtk_text_iter_forward_char(&a);if(gtk_text_iter_compare(&a,&limit)>=0) return; }
+ else { gtk_text_buffer_get_iter_at_mark(buffer,&a,gtk_text_buffer_get_insert(buffer));if(!identifier_char(gtk_text_iter_get_char(&a))) { GtkTextIter before=a;if(!gtk_text_iter_backward_char(&before) || !identifier_char(gtk_text_iter_get_char(&before))) return;a=before; } }
+ if(scanned>=4096 || !identifier_char(gtk_text_iter_get_char(&a))) return;
+ z=a;
+ for(;;) { GtkTextIter before=a;if(!gtk_text_iter_backward_char(&before) || !identifier_char(gtk_text_iter_get_char(&before))) break;if(scanned++>=4096) return;a=before; }
+ while(!gtk_text_iter_is_end(&z) && identifier_char(gtk_text_iter_get_char(&z))) { if(scanned++>=4096) return;gtk_text_iter_forward_char(&z); }
+ gchar *query=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);gtk_entry_set_text(GTK_ENTRY(m->find_entry),query);g_free(query);gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),side);
+ if(direction) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->find_word),TRUE);gtk_text_buffer_select_range(buffer,&a,&z);find_text(m,direction<0);gtk_widget_grab_focus(m->views[side]); }
+}
+static void search_result_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer dialog) { (void)view;(void)path;(void)column;gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_APPLY); }
+static void find_all(Merge *m,guint side) {
+ if(m->busy || side>2) return;
+ const gchar *query=gtk_entry_get_text(GTK_ENTRY(m->find_entry));if(!*query) { gtk_label_set_text(GTK_LABEL(m->find_status),"Enter search text.");return; }
+ GtkWidget *window=m->window;g_object_ref(window);guint64 serial=m->history_serial;
+ GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]));GtkTextSearchFlags flags=GTK_TEXT_SEARCH_TEXT_ONLY;if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->find_case))) flags|=GTK_TEXT_SEARCH_CASE_INSENSITIVE;gboolean whole=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->find_word));
+ GtkListStore *model=gtk_list_store_new(5,G_TYPE_INT,G_TYPE_INT,G_TYPE_UINT,G_TYPE_UINT,G_TYPE_STRING);GtkTextIter start,a,z;gtk_text_buffer_get_start_iter(buffer,&start);guint count=0;gboolean truncated=FALSE;
+ while(search_match(start,query,flags,FALSE,whole,&a,&z)) {
+  if(count==5000) { truncated=TRUE;break; }
+  GtkTextIter begin=a,end=a;gtk_text_iter_set_line_offset(&begin,0);if(!gtk_text_iter_ends_line(&end)) gtk_text_iter_forward_to_line_end(&end);if(gtk_text_iter_get_offset(&end)-gtk_text_iter_get_offset(&begin)>120) { begin=a;end=a;gtk_text_iter_forward_chars(&end,120); }
+  gchar *excerpt=gtk_text_buffer_get_text(buffer,&begin,&end,TRUE);for(gchar *p=excerpt;*p;p++) if(*p=='\r'||*p=='\n'||*p=='\t') *p=' ';
+  GtkTreeIter iter;gtk_list_store_append(model,&iter);gtk_list_store_set(model,&iter,0,gtk_text_iter_get_offset(&a),1,gtk_text_iter_get_offset(&z),2,gtk_text_iter_get_line(&a)+1,3,gtk_text_iter_get_line_offset(&a)+1,4,excerpt,-1);g_free(excerpt);count++;start=z;
+ }
+ GtkWidget *dialog=gtk_dialog_new_with_buttons("Pane Search Results",GTK_WINDOW(window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Close",GTK_RESPONSE_CANCEL,"Go to match",GTK_RESPONSE_APPLY,NULL);g_object_ref(dialog);gtk_widget_set_name(dialog,"insight-diff-search-results");gtk_window_set_default_size(GTK_WINDOW(dialog),720,400);
+ GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(dialog));gchar *heading=g_strdup_printf("%s — %s",insight_tr(side==0 ? "Left" : side==1 ? "Right" : "Result"),query);GtkWidget *pattern=gtk_label_new(heading);g_free(heading);gtk_label_set_ellipsize(GTK_LABEL(pattern),PANGO_ELLIPSIZE_END);gtk_box_pack_start(GTK_BOX(box),pattern,FALSE,FALSE,4);gchar *summary=g_strdup_printf(truncated ? "Showing first %u matches (limit reached)." : "Matches: %u",count);gtk_box_pack_start(GTK_BOX(box),gtk_label_new(summary),FALSE,FALSE,4);g_free(summary);
+ GtkWidget *tree=gtk_tree_view_new_with_model(GTK_TREE_MODEL(model));g_object_unref(model);gtk_widget_set_name(tree,"insight-diff-search-results-list");g_signal_connect_object(tree,"row-activated",G_CALLBACK(search_result_activated),dialog,0);const gchar *titles[]={"Line","Column","Text preview"};for(guint i=0;i<3;i++) gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(tree),-1,titles[i],gtk_cell_renderer_text_new(),"text",i+2,NULL);
+ GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),tree);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,4);gtk_dialog_set_response_sensitive(GTK_DIALOG(dialog),GTK_RESPONSE_APPLY,count>0);GtkTreeSelection *selection=g_object_ref(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)));if(count) { GtkTreePath *path=gtk_tree_path_new_first();gtk_tree_view_set_cursor(GTK_TREE_VIEW(tree),path,NULL,FALSE);gtk_tree_path_free(path); }gtk_widget_show_all(dialog);
+ gint response=gtk_dialog_run(GTK_DIALOG(dialog));m=g_object_get_data(G_OBJECT(window),"insight-diff-state");
+ if(response==GTK_RESPONSE_APPLY && m && !m->busy && m->history_serial==serial) { GtkTreeModel *selected_model;GtkTreeIter iter;if(gtk_tree_selection_get_selected(selection,&selected_model,&iter)) { gint begin,end;gtk_tree_model_get(selected_model,&iter,0,&begin,1,&end,-1);buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]));gtk_text_buffer_get_iter_at_offset(buffer,&a,begin);gtk_text_buffer_get_iter_at_offset(buffer,&z,end);gtk_text_buffer_select_range(buffer,&a,&z);gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(m->views[side]),&a,0.1,TRUE,0,0.5);gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),side);gtk_widget_grab_focus(m->views[side]); } }
+ else if(response==GTK_RESPONSE_APPLY && m && m->history_serial!=serial) gtk_label_set_text(GTK_LABEL(m->find_status),"Text changed; run Find all again.");
+ gtk_widget_destroy(dialog);g_object_unref(selection);g_object_unref(dialog);g_object_unref(window);
+}
+static void find_all_clicked(GtkWidget *widget,gpointer data) { (void)widget;Merge *m=data;find_all(m,gtk_combo_box_get_active(GTK_COMBO_BOX(m->find_side))); }
 static void find_text(Merge *m,gboolean backwards) {
  const gchar *query=gtk_entry_get_text(GTK_ENTRY(m->find_entry));if(!*query) { gtk_label_set_text(GTK_LABEL(m->find_status),"Enter search text.");return; }
  int side=gtk_combo_box_get_active(GTK_COMBO_BOX(m->find_side));
@@ -627,19 +667,20 @@ static void write_result(Merge *,guint);
 static void source_menu_action(GtkMenuItem *item,gpointer window) {
  Merge *m=g_object_get_data(G_OBJECT(window),"insight-diff-state");if(!m) return;
  gint side=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item),"side"));gint action=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item),"action"));
- if(action==0) edit_source(m,side);else if(action==1) copy_difference(m,side);else if(action==2) view_options(GTK_WIDGET(item),m);else if(action==3) focus_line(m,side);else if(side==2 && action<7) selection_case(m,action-4);else if(side==2 && action<11) edit_lines(m,action-7);else if(side==2 && action<13) history_end(m,action==12);else if(side==2 && action==13) history_dialog(NULL,m);else if(side==2) write_result(m,action-13);
+ if(action>=16) { if(action==19) find_all(m,side);else selection_search(m,side,action==16 ? 0 : action==17 ? 1 : -1); }else if(action==0) edit_source(m,side);else if(action==1) copy_difference(m,side);else if(action==2) view_options(GTK_WIDGET(item),m);else if(action==3) focus_line(m,side);else if(side==2 && action<7) selection_case(m,action-4);else if(side==2 && action<11) edit_lines(m,action-7);else if(side==2 && action<13) history_end(m,action==12);else if(side==2 && action==13) history_dialog(NULL,m);else if(side==2) write_result(m,action-13);
 }
 static void view_menu_toggle(GtkCheckMenuItem *item,gpointer toggle) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle),gtk_check_menu_item_get_active(item)); }
 static void source_menu(GtkTextView *view,GtkWidget *menu,gpointer data) {
  Merge *m=data;guint side=GTK_WIDGET(view)==m->views[1] ? 1 : GTK_WIDGET(view)==m->views[0] ? 0 : 2;
  gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());
- const gchar *labels[]={"Edit File — Ctrl+E","Copy selected difference","File Compare Options…","Go to Line — Ctrl+G","Uppercase selection","Lowercase selection","Toggle selection case","Indent result lines","Outdent result lines","Tabs to spaces in result lines","Trim trailing spaces in result lines","Undo All retained changes","Redo All retained changes","Result History…","Save a copy of Result…","Save Result selection…"};
+ const gchar *labels[]={"Edit File — Ctrl+E","Copy selected difference","File Compare Options…","Go to Line — Ctrl+G","Uppercase selection","Lowercase selection","Toggle selection case","Indent result lines","Outdent result lines","Tabs to spaces in result lines","Trim trailing spaces in result lines","Undo All retained changes","Redo All retained changes","Result History…","Save a copy of Result…","Save Result selection…","Load Search String","Search identifier forward — Ctrl+F3","Search identifier backward — Ctrl+Shift+F3","Find all matches in pane — Ctrl+Shift+F"};
  for(guint action=0;action<G_N_ELEMENTS(labels);action++) {
-  if((side==2 && action<2) || (side!=2 && action>=4)) continue;
+  if((side==2 && action<2) || (side!=2 && action>=4 && action<16)) continue;
   GtkWidget *item=gtk_menu_item_new_with_label(labels[action]);g_object_set_data(G_OBJECT(item),"side",GUINT_TO_POINTER(side));g_object_set_data(G_OBJECT(item),"action",GUINT_TO_POINTER(action));gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect_object(item,"activate",G_CALLBACK(source_menu_action),m->window,0);
   if(action>=4) gtk_widget_set_sensitive(item,!m->busy && (action>=7 || gtk_text_buffer_get_has_selection(result(m))));
   if(action>=11) gtk_widget_set_sensitive(item,!m->busy && (action==11 ? m->position>0 : action==12 ? m->position+1<m->history->len : m->history->len>0));
   if(action>=14) gtk_widget_set_sensitive(item,!m->busy && (action==14 || gtk_text_buffer_get_has_selection(result(m))));
+  if(action>=16) gtk_widget_set_sensitive(item,!m->busy);
   if(action<2) gtk_widget_set_sensitive(item,!m->busy && m->loaded_paths[side] && (action==0 ? source_opener!=NULL : selected(m)>=0));
  }
  GtkWidget *toggles[]={m->mono,m->numbers,m->list_toggle,m->wrap_toggle,m->vertical,m->overview,m->visible_space,m->visible_eol};
@@ -872,6 +913,7 @@ static Merge *merge_new(GtkWidget *parent) {
  m->find_word=gtk_check_button_new_with_label("Whole words only");gtk_box_pack_start(GTK_BOX(find),m->find_word,FALSE,FALSE,0);
  m->find_wrap=gtk_check_button_new_with_label("Wrap around");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->find_wrap),TRUE);gtk_box_pack_start(GTK_BOX(find),m->find_wrap,FALSE,FALSE,0);
  m->find_previous=button(find,"Find previous",G_CALLBACK(find_clicked),m);m->find_next=button(find,"Find next",G_CALLBACK(find_clicked),m);
+ button(find,"Find all…",G_CALLBACK(find_all_clicked),m);
  m->find_status=gtk_label_new("");gtk_box_pack_start(GTK_BOX(find),m->find_status,FALSE,FALSE,0);
  g_signal_connect(m->find_entry,"activate",G_CALLBACK(find_activate),m);g_signal_connect(m->find_entry,"key-press-event",G_CALLBACK(key),m);
  GtkWidget *replace=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),replace,FALSE,FALSE,0);
