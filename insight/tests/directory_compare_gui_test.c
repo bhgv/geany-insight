@@ -6,6 +6,7 @@
 const gchar *insight_tr(const gchar *text) { return text; }
 gchar *insight_i18n_printf(const gchar *format,...) { va_list args;va_start(args,format);gchar *text=g_strdup_vprintf(format,args);va_end(args);return text; }
 void insight_panel_help_attach(GtkWidget *widget,const gchar *topic) { (void)widget;(void)topic; }
+static gchar **known_types(void) { const gchar *names[]={"*.ini","*.cpp",NULL};return g_strdupv((gchar **)names); }
 static gchar *opened[2];static guint opened_flags;
 void insight_diff_show_files(GtkWidget *parent,const gchar *left,const gchar *right,guint flags) { (void)parent;g_free(opened[0]);g_free(opened[1]);opened[0]=g_strdup(left);opened[1]=g_strdup(right);opened_flags=flags; }
 static void flush(void) { while(gtk_events_pending()) gtk_main_iteration(); }
@@ -29,6 +30,7 @@ int main(int argc,char **argv) {
  gchar *left=g_build_filename(root,"left",NULL),*right=g_build_filename(root,"right",NULL),*empty=g_build_filename(root,"empty",NULL);
  g_assert_cmpint(g_mkdir(left,0700),==,0);g_assert_cmpint(g_mkdir(right,0700),==,0);g_assert_cmpint(g_mkdir(empty,0700),==,0);
  put(left,"config.ini","port = 3000\n");put(right,"config.ini","port = 8080\n");put(left,"same.py","print('same')\n");put(right,"same.py","print('same')\n");put(left,"old.lua","old\n");put(right,"new.cpp","new\n");put(left,"данные.txt","я b\r\n");put(right,"данные.txt","яb\n");
+ insight_directory_set_types_provider(known_types);
  Directory *d=directory_new(NULL);flush();start(NULL,d);g_assert_false(d->busy);g_assert_false(gtk_widget_get_sensitive(d->open));
  gtk_entry_set_text(GTK_ENTRY(d->paths[0]),left);gtk_entry_set_text(GTK_ENTRY(d->paths[1]),right);start(NULL,d);wait_scan(d);
  g_assert_cmpuint(d->rows->len,==,5);g_assert_true(select_path(d,"config.ini"));g_assert_true(gtk_widget_get_sensitive(d->open));open_pair(NULL,d);g_assert_true(g_str_has_suffix(opened[0],"config.ini"));g_assert_cmpuint(opened_flags,==,0);
@@ -66,6 +68,8 @@ int main(int argc,char **argv) {
  gtk_entry_set_text(GTK_ENTRY(d->include),"*.ini");gtk_entry_set_text(GTK_ENTRY(d->exclude),"*.ini");gtk_entry_set_text(GTK_ENTRY(d->filter_entry),"missing");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->different),TRUE);gtk_combo_box_set_active(GTK_COMBO_BOX(d->status_filter),INSIGHT_DIR_ERROR+1);reset_filters(NULL,d);g_assert_cmpint(gtk_tree_model_iter_n_children(d->filtered,NULL),==,5);
  swap_and_scan(NULL,d);wait_scan(d);g_assert_cmpstr(d->roots[0],==,right);g_assert_cmpstr(d->roots[1],==,left);g_assert_true(select_path(d,"old.lua"));g_assert_cmpint(selected_entry(d)->status,==,INSIGHT_DIR_RIGHT);
  swap_and_scan(NULL,d);wait_scan(d);g_assert_cmpstr(d->roots[0],==,left);g_assert_cmpstr(d->roots[1],==,right);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->known),TRUE);start(NULL,d);wait_scan(d);g_assert_cmpuint(d->rows->len,==,2);g_assert_true(select_path(d,"config.ini"));g_assert_false(select_path(d,"same.py"));
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->known),FALSE);start(NULL,d);wait_scan(d);g_assert_cmpuint(d->rows->len,==,5);
  guint previous=d->rows->len;start(NULL,d);
  gint64 publication_deadline=g_get_monotonic_time()+10*G_TIME_SPAN_SECOND;
  while(d->busy && !d->publication && g_get_monotonic_time()<publication_deadline) { g_main_context_iteration(NULL,FALSE);g_usleep(1000); }

@@ -7,7 +7,7 @@ static void entry_free(gpointer data) {
  InsightDirectoryEntry *e=data;g_free(e->relative);g_clear_object(&e->info[0]);g_clear_object(&e->info[1]);g_free(e->detail);g_free(e);
 }
 InsightDirectoryOptions insight_directory_options(void) {
- InsightDirectoryOptions o={INSIGHT_DIR_CONTENT,TRUE,FALSE,0,20000,32,256u*1024*1024};return o;
+ InsightDirectoryOptions o={INSIGHT_DIR_CONTENT,TRUE,FALSE,0,20000,32,256u*1024*1024,NULL};return o;
 }
 static gboolean cancelled(GCancellable *cancel,GError **error) { return cancel && g_cancellable_set_error_if_cancelled(cancel,error); }
 static gboolean directory(GFile *file,GCancellable *cancel,GError **error) {
@@ -131,21 +131,59 @@ done:
  if(error) { entry->status=INSIGHT_DIR_ERROR;entry->detail=g_strdup(error->message);g_clear_error(&error); }
  for(gint side=0;side<2;side++) { g_clear_object(&streams[side]);g_clear_object(&files[side]);g_free(text[side]); }
 }
+static GPtrArray *known_compile(const gchar *const *patterns,GError **error) {
+ GPtrArray *specs=g_ptr_array_new_with_free_func((GDestroyNotify)g_pattern_spec_free);
+ for(guint i=0;patterns && patterns[i];i++) {
+  if(i>=8192 || strlen(patterns[i])>1024 || !g_utf8_validate(patterns[i],-1,NULL) || strpbrk(patterns[i],"\r\n")) {
+   g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid directory comparison file type snapshot.");g_ptr_array_unref(specs);return NULL;
+  }
+  gchar *text=g_strdup(patterns[i]);
+#ifdef G_OS_WIN32
+  gchar *folded=g_utf8_casefold(text,-1);g_free(text);text=folded;
+#endif
+  if(*text) g_ptr_array_add(specs,g_pattern_spec_new(text));
+  g_free(text);
+ }
+ return specs;
+}
+static gboolean known_entry(InsightDirectoryEntry *entry,GPtrArray *specs) {
+ for(gint side=0;side<2;side++) if(entry->info[side] && !g_file_info_get_is_symlink(entry->info[side]) && g_file_info_get_file_type(entry->info[side])==G_FILE_TYPE_DIRECTORY) return TRUE;
+ gchar *name=g_path_get_basename(entry->relative),*text=g_filename_to_utf8(name,-1,NULL,NULL,NULL);g_free(name);if(!text) return FALSE;
+#ifdef G_OS_WIN32
+ gchar *folded=g_utf8_casefold(text,-1);g_free(text);text=folded;
+#endif
+ gboolean found=FALSE;
+ for(guint i=0;i<specs->len && !found;i++) {
+#if GLIB_CHECK_VERSION(2,70,0)
+  found=g_pattern_spec_match_string(g_ptr_array_index(specs,i),text);
+#else
+  found=g_pattern_match_string(g_ptr_array_index(specs,i),text);
+#endif
+ }
+ g_free(text);return found;
+}
 GPtrArray *insight_directory_compare(const gchar *left,const gchar *right,const InsightDirectoryOptions *options,GCancellable *cancel,GError **error) {
  GPtrArray *rows=g_ptr_array_new_with_free_func(entry_free);GHashTable *map=g_hash_table_new(g_str_hash,g_str_equal);guint visited=0;gboolean ok=TRUE;GError *failure=NULL;
- if(options->method<INSIGHT_DIR_CONTENT || options->method>INSIGHT_DIR_SIZE_DATE) { g_set_error_literal(&failure,G_IO_ERROR,G_IO_ERROR_NOT_SUPPORTED,"Unknown directory comparison method.");ok=FALSE; }
+ GPtrArray *known=known_compile(options->known_patterns,&failure);if(!known) ok=FALSE;
+ if(ok && (options->method<INSIGHT_DIR_CONTENT || options->method>INSIGHT_DIR_SIZE_DATE)) { g_set_error_literal(&failure,G_IO_ERROR,G_IO_ERROR_NOT_SUPPORTED,"Unknown directory comparison method.");ok=FALSE; }
  for(gint side=0;side<2 && ok;side++) {
   GFile *root=g_file_new_for_path(side ? right : left);ok=scan(root,"",0,side,options,map,rows,&visited,cancel,&failure);g_object_unref(root);
  }
  g_hash_table_unref(map);
  if(ok) {
-  guint64 charged=0;g_ptr_array_sort(rows,compare_rows);
-  for(guint i=0;i<rows->len;i++) {
+  if(options->known_patterns) for(guint i=rows->len;i>0;i--) {
    if(cancelled(cancel,&failure)) { ok=FALSE;break; }
-   InsightDirectoryEntry *entry=g_ptr_array_index(rows,i);classify(entry,options);
+   if(!known_entry(g_ptr_array_index(rows,i-1),known)) g_ptr_array_remove_index_fast(rows,i-1);
+  }
+  guint64 charged=0;g_ptr_array_sort(rows,compare_rows);
+  for(guint i=0;ok && i<rows->len;i++) {
+   if(cancelled(cancel,&failure)) { ok=FALSE;break; }
+   InsightDirectoryEntry *entry=g_ptr_array_index(rows,i);
+   classify(entry,options);
    if(options->method==INSIGHT_DIR_CONTENT) content(entry,left,right,options,&charged,cancel);
   }
  }
+ if(known) g_ptr_array_unref(known);
  if(ok && cancelled(cancel,&failure)) ok=FALSE;
  if(!ok) { g_ptr_array_unref(rows);g_propagate_error(error,failure);return NULL; }return rows;
 }

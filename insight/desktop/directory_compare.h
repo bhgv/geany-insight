@@ -7,6 +7,9 @@ enum { INSIGHT_DIR_SAME,INSIGHT_DIR_DIFFERENT,INSIGHT_DIR_LEFT,INSIGHT_DIR_RIGHT
 typedef struct {
  gint method;gboolean recursive,hidden;guint text_flags;
  guint max_entries,max_depth;guint64 max_bytes;
+ /* Borrowed immutable UTF-8 filename globs; NULL disables filtering, empty
+  * vector accepts no files. Directory rows and traversal are retained. */
+ const gchar *const *known_patterns;
 } InsightDirectoryOptions;
 typedef struct {
  gchar *relative;GFileInfo *info[2];gint status;gchar *detail;

@@ -70,7 +70,7 @@ Copy visible list preserves the displayed sort/filter and produces UTF-8 TSV wit
 path, status and left/right metadata. Backslashes, tabs and line breaks inside
 fields are escaped as `\\`, `\t`, `\r`, `\n`. It is a human-readable report,
 not a lossless native-filename manifest. Snapshot rows are read-only. Copying or
-deleting files between directories, known-filetype filtering, path variables,
+deleting files between directories, path variables,
 backup comparison and persistent directory-window settings remain future work.
 
 ![Production Directory Compare window in an isolated Linux GTK fixture](../media/directory-compare.jpg)
@@ -114,3 +114,7 @@ Copy visible list still exports all four report fields for the visible rows.
 Use **Include masks** (`*.c;*.h`) and **Exclude masks** (`*.o;build/*`) to narrow the completed snapshot without rescanning. Masks are case-sensitive GLib globs: `*` matches any sequence, `?` one character; semicolons separate masks and surrounding spaces are trimmed. Each mask matches the relative path or basename. Empty inclusion means all entries; exclusions win. Folders are filtered by their own names. The status selector combines with path search and Differences only. Hidden rows still count toward scan limits. Clipboard export and difference navigation use the visible rows.
 
 **Swap and scan** exchanges the input paths and starts a fresh comparison. The previous snapshot remains usable if the scan fails or is cancelled. **Reset filters** clears search, masks, status and Differences only together. The row context menu copies either side’s full path from the completed snapshot; an absent side is disabled. Editing input paths does not change these clipboard targets.
+
+### Known file types
+
+**Show only known file types** takes a fresh snapshot of editor filename patterns and language-profile extensions on each scan. Unknown files are removed before content reads; real directory rows remain so traversal and type mismatches stay visible. Entry, visit and depth limits still apply to the complete enumeration. This recognizes names, not binary content: a broad pattern can include binary files. Unlike display masks, changing this option requires Scan / Refresh. Explicit individual-file profile bindings do not extend this filename filter.

@@ -7,16 +7,18 @@
 #include "../insight/desktop/directory_compare.h"
 #include "../insight/core/diff.h"
 #include <string.h>
+static InsightDirectoryTypes types_provider;
+void insight_directory_set_types_provider(InsightDirectoryTypes provider) { types_provider=provider; }
 enum { DC_ID,DC_PATH,DC_STATUS_TEXT,DC_LEFT,DC_RIGHT,DC_DETAIL,DC_STATUS,DC_PAIRED,DC_COLUMNS };
 typedef struct {
  GtkWidget *window,*paths[2],*controls,*scan,*cancel_button,*view,*filter_entry,*different,*status,*open,*previous,*next;
- GtkWidget *method,*recursive,*hidden,*space,*eol,*include,*exclude,*status_filter;
+ GtkWidget *known,*method,*recursive,*hidden,*space,*eol,*include,*exclude,*status_filter;
  GPtrArray *include_patterns,*exclude_patterns;
  GPtrArray *rows,*pending;GtkListStore *store,*building;GtkTreeModel *filtered;
  gchar *roots[2],*pending_roots[2];guint flags,pending_flags,publication,at;GCancellable *cancel;gboolean busy;
 } Directory;
-typedef struct { gchar *paths[2];InsightDirectoryOptions options;GPtrArray *rows; } DirectoryJob;
-static void job_free(gpointer data) { DirectoryJob *job=data;for(gint i=0;i<2;i++) g_free(job->paths[i]);if(job->rows) g_ptr_array_unref(job->rows);g_free(job); }
+typedef struct { gchar **known_patterns;gchar *paths[2];InsightDirectoryOptions options;GPtrArray *rows; } DirectoryJob;
+static void job_free(gpointer data) { DirectoryJob *job=data;g_strfreev(job->known_patterns);for(gint i=0;i<2;i++) g_free(job->paths[i]);if(job->rows) g_ptr_array_unref(job->rows);g_free(job); }
 static const gchar *status_name(gint status) {
  static const gchar *names[]={"Same","Different","Left only","Right only","Type mismatch","Skipped","Read error","Folder"};
  return status>=0 && status<(gint)G_N_ELEMENTS(names) ? names[status] : "Unknown";
@@ -158,6 +160,11 @@ static void start(GtkWidget *widget,gpointer data) {
   if(!native) { gtk_label_set_text(GTK_LABEL(d->status),error->message);g_clear_error(&error);job_free(job);return; }
   job->paths[i]=g_canonicalize_filename(native,NULL);g_free(native);
  }
+ if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->known))) {
+  job->known_patterns=types_provider ? types_provider() : NULL;
+  if(!job->known_patterns) { gtk_label_set_text(GTK_LABEL(d->status),"Known file type definitions are unavailable.");job_free(job);return; }
+  job->options.known_patterns=(const gchar *const *)job->known_patterns;
+ }
  job->options.method=gtk_combo_box_get_active(GTK_COMBO_BOX(d->method));job->options.recursive=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->recursive));job->options.hidden=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->hidden));
  job->options.text_flags=(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->space)) ? INSIGHT_DIFF_IGNORE_SPACE : 0) | (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->eol)) ? INSIGHT_DIFF_IGNORE_EOL : 0);
  d->cancel=g_cancellable_new();busy(d,TRUE);gtk_label_set_text(GTK_LABEL(d->status),"Scanning directories… Cancel keeps the previous result.");
@@ -280,6 +287,7 @@ static Directory *directory_new(GtkWidget *parent) {
  d->method=gtk_combo_box_text_new();gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(d->method),"Compare contents");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(d->method),"Compare modification dates");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(d->method),"Compare sizes and dates");gtk_combo_box_set_active(GTK_COMBO_BOX(d->method),0);gtk_box_pack_start(GTK_BOX(options),d->method,FALSE,FALSE,0);
  button(options,"Swap and scan",G_CALLBACK(swap_and_scan),d);
  d->recursive=check(options,"Include subdirectories",TRUE);d->hidden=check(options,"Include hidden entries",FALSE);
+ d->known=check(options,"Show only known file types",FALSE);gtk_widget_set_name(d->known,"insight-directory-known");gtk_widget_set_sensitive(d->known,types_provider!=NULL);
  GtkWidget *text_options=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(d->controls),text_options,FALSE,FALSE,0);d->space=check(text_options,"Ignore spaces and tabs",FALSE);d->eol=check(text_options,"Ignore line ending style",FALSE);
  GtkWidget *bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);
  button(bar,"Copy visible list",G_CALLBACK(copy_list),d);

@@ -16,6 +16,9 @@ int main(void) {
  GPtrArray *rows=insight_directory_compare(left,right,&o,NULL,&error);g_assert_no_error(error);g_assert_nonnull(rows);
  g_assert_cmpuint(rows->len,==,4);g_assert_cmpint(find(rows,"a.txt")->status,==,INSIGHT_DIR_LEFT);g_assert_cmpint(find(rows,"b.txt")->status,==,INSIGHT_DIR_RIGHT);
  gchar *child=g_build_filename("sub","child.txt",NULL);g_assert_nonnull(find(rows,child));g_assert_null(find(rows,".hidden"));g_ptr_array_unref(rows);
+ const gchar *known[]={"a.txt",NULL};o.known_patterns=known;rows=insight_directory_compare(left,right,&o,NULL,&error);g_assert_no_error(error);g_assert_nonnull(find(rows,"a.txt"));g_assert_nonnull(find(rows,"sub"));g_assert_null(find(rows,"b.txt"));g_assert_null(find(rows,child));g_ptr_array_unref(rows);
+ const gchar *none[]={NULL};o.known_patterns=none;rows=insight_directory_compare(left,right,&o,NULL,&error);g_assert_no_error(error);g_assert_cmpuint(rows->len,==,1);g_assert_cmpstr(((InsightDirectoryEntry*)g_ptr_array_index(rows,0))->relative,==,"sub");g_ptr_array_unref(rows);
+ const gchar *invalid[]={"bad\npattern",NULL};o.known_patterns=invalid;rows=insight_directory_compare(left,right,&o,NULL,&error);g_assert_null(rows);g_assert_error(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA);g_clear_error(&error);o.known_patterns=NULL;
  o.recursive=FALSE;o.hidden=TRUE;rows=insight_directory_compare(left,right,&o,NULL,&error);g_assert_no_error(error);g_assert_nonnull(find(rows,".hidden"));g_assert_null(find(rows,child));g_ptr_array_unref(rows);
  put(left,"a.txt","same text");put(right,"a.txt","same text");
  o=insight_directory_options();rows=insight_directory_compare(left,right,&o,NULL,&error);g_assert_no_error(error);g_assert_cmpint(find(rows,"a.txt")->status,==,INSIGHT_DIR_SAME);g_ptr_array_unref(rows);

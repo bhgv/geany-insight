@@ -144,6 +144,12 @@ static guint64 workbench_epoch;
 static void open_context(GtkButton *,gpointer);
 static gboolean python_language(GeanyFiletype *);
 static void show_diff(GtkWidget *,gpointer);
+static gchar **directory_known_types(void) {
+ InsightMasterTypes *types=insight_languages_master_types();GPtrArray *patterns=g_ptr_array_new_with_free_func(g_free);
+ for(guint i=0;types->patterns && types->patterns[i];i++) g_ptr_array_add(patterns,g_strdup(types->patterns[i]));
+ for(guint i=0;types->extensions && types->extensions[i];i++) g_ptr_array_add(patterns,g_strconcat("*.",types->extensions[i],NULL));
+ insight_master_types_free(types);g_ptr_array_add(patterns,NULL);return (gchar **)g_ptr_array_free(patterns,FALSE);
+}
 static void show_directory_compare(GtkWidget *widget,gpointer data) { (void)widget;(void)data;insight_directory_show(main_widgets.window); }
 static void browser_filter(GtkEditable *,gpointer);
 static void files_filter(GtkEditable *,gpointer);
@@ -4584,6 +4590,7 @@ static void context_icon(GtkWidget *button,const gchar *icon,const gchar *tip,co
  gtk_button_set_always_show_image(GTK_BUTTON(button),TRUE);gtk_button_set_relief(GTK_BUTTON(button),GTK_RELIEF_NONE);gtk_widget_set_tooltip_text(button,tip);gtk_widget_set_name(button,name);
 }
 void insight_workbench_init(void) {
+ insight_directory_set_types_provider(directory_known_types);
  wb.alive=TRUE;wb.marks_preserve=TRUE; workbench_epoch++; wb.symbol_key_signal=g_signal_connect(geany_object,"key-press",G_CALLBACK(symbol_key_global),NULL);insight_window_list_init(window_list_preview);
  GtkWidget *existing=ui_lookup_widget(main_widgets.window,"vpaned1");
  GtkWidget *parent=gtk_widget_get_parent(existing); gint position=0;
