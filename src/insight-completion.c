@@ -17,7 +17,9 @@ static gboolean enabled=TRUE,loaded;
 static gchar *config_path(void) { return g_build_filename(app->configdir,"insight-completion.conf",NULL); }
 static void load(void) { if(loaded) return;loaded=TRUE;GKeyFile *k=g_key_file_new();gchar *path=config_path();if(g_key_file_load_from_file(k,path,0,NULL) && g_key_file_has_key(k,"completion","detailed",NULL)) { GError *e=NULL;gboolean next=g_key_file_get_boolean(k,"completion","detailed",&e);if(!e) enabled=next;g_clear_error(&e); }g_key_file_unref(k);g_free(path); }
 static Completion *state(GeanyEditor *editor) { return editor ? g_object_get_data(G_OBJECT(editor->sci),KEY) : NULL; }
-static void hide(Completion *c) { if(!c) return;c->active=FALSE;if(c->idle) { g_source_remove(c->idle);c->idle=0; }gtk_widget_hide(c->window); }
+static void hide_at(Completion *c,const gchar *reason) { if(!c) return;if(c->active && g_getenv("GEANY_COMPLETION_DEBUG")) g_printerr("completion hide: %s start=%d end=%d idle=%u\n",reason,c->start,c->end,c->idle);c->active=FALSE;if(c->idle) { g_source_remove(c->idle);c->idle=0; }gtk_widget_hide(c->window); }
+
+#define hide(c) hide_at(c,__func__)
 void insight_completion_cancel(GeanyEditor *editor) { hide(state(editor)); }
 static void destroy(gpointer data) { Completion *c=data;if(c->idle) g_source_remove(c->idle);gtk_widget_destroy(c->window);g_object_unref(c->store);g_free(c->prefix);g_free(c); }
 static const gchar *kind(TMTagType type) {
@@ -105,6 +107,7 @@ static gboolean refresh(gpointer data) {
 }
 void insight_completion_notify(GeanyEditor *editor,SCNotification *nt) {
  Completion *c=state(editor);if(!c || !c->active || c->accepting) return;
+ if(g_getenv("GEANY_COMPLETION_DEBUG") && nt->nmhdr.code==SCN_UPDATEUI) g_printerr("completion update: flags=%d caret=%d end=%d idle=%u\n",nt->updated,sci_get_current_position(c->sci),c->end,c->idle);
  if(nt->nmhdr.code==SCN_MODIFIED && (nt->modificationType & (SC_MOD_INSERTTEXT|SC_MOD_DELETETEXT))) {
   if((nt->modificationType & (SC_PERFORMED_UNDO|SC_PERFORMED_REDO)) || nt->position<c->start || nt->position>c->end || nt->length>4096) { hide(c);return; }
   c->end+= (nt->modificationType & SC_MOD_INSERTTEXT) ? nt->length : -nt->length;if(!c->idle) c->idle=g_idle_add(refresh,c);
