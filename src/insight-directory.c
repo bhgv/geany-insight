@@ -19,6 +19,53 @@ typedef struct {
  gchar *roots[2],*pending_roots[2];guint flags,pending_flags,publication,at;GCancellable *cancel;gboolean busy;
 } Directory;
 typedef struct { gchar **known_patterns;gchar *paths[2];InsightDirectoryOptions options;GPtrArray *rows; } DirectoryJob;
+static GKeyFile *saved_options;
+static GList *open_windows;
+static const gchar *options_group="directory-compare",*style_group="directory-compare-style";
+static void copy_options(GKeyFile *from,GKeyFile *to) {
+ const gchar *groups[]={options_group,style_group};
+ for(guint i=0;i<G_N_ELEMENTS(groups);i++) {
+  g_key_file_remove_group(to,groups[i],NULL);gchar **keys=g_key_file_get_keys(from,groups[i],NULL,NULL);
+  for(guint n=0;keys && keys[n];n++) { gchar *value=g_key_file_get_value(from,groups[i],keys[n],NULL);if(value && strlen(value)<=65536) g_key_file_set_value(to,groups[i],keys[n],value);g_free(value); }g_strfreev(keys);
+ }
+}
+static void options_write(Directory *d,GKeyFile *key) {
+ const gchar *names[]={"left","right","search","include","exclude"};GtkWidget *entries[]={d->paths[0],d->paths[1],d->filter_entry,d->include,d->exclude};
+ g_key_file_set_integer(key,options_group,"version",1);
+ for(guint i=0;i<G_N_ELEMENTS(names);i++) g_key_file_set_string(key,options_group,names[i],gtk_entry_get_text(GTK_ENTRY(entries[i])));
+ const gchar *checks[]={"recursive","hidden","space","eol","known","different"};GtkWidget *toggles[]={d->recursive,d->hidden,d->space,d->eol,d->known,d->different};
+ for(guint i=0;i<G_N_ELEMENTS(checks);i++) g_key_file_set_boolean(key,options_group,checks[i],gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(toggles[i])));
+ g_key_file_set_integer(key,options_group,"method",gtk_combo_box_get_active(GTK_COMBO_BOX(d->method)));g_key_file_set_integer(key,options_group,"status",gtk_combo_box_get_active(GTK_COMBO_BOX(d->status_filter)));
+ gint width,height,column;GtkSortType order;gtk_window_get_size(GTK_WINDOW(d->window),&width,&height);g_key_file_set_integer(key,options_group,"width",CLAMP(width,640,4000));g_key_file_set_integer(key,options_group,"height",CLAMP(height,400,2400));
+ if(gtk_tree_sortable_get_sort_column_id(GTK_TREE_SORTABLE(gtk_tree_view_get_model(GTK_TREE_VIEW(d->view))),&column,&order)) { g_key_file_set_integer(key,options_group,"sort",column);g_key_file_set_integer(key,options_group,"order",order); }
+ else g_key_file_remove_key(key,options_group,"sort",NULL);
+ for(gint i=0;i<4;i++) { GtkTreeViewColumn *c=gtk_tree_view_get_column(GTK_TREE_VIEW(d->view),i);gchar *name=g_strdup_printf("column-%d",i);g_key_file_set_boolean(key,options_group,name,gtk_tree_view_column_get_visible(c));g_free(name); }
+ insight_list_style_write(d->view,key,style_group);
+}
+static gboolean option_integer(GKeyFile *key,const gchar *name,gint low,gint high,gint *out) {
+ GError *error=NULL;gint value=g_key_file_get_integer(key,options_group,name,&error);gboolean valid=!error && value>=low && value<=high;g_clear_error(&error);if(valid) *out=value;return valid;
+}
+static void options_read(Directory *d,GKeyFile *key) {
+ if(!key || g_key_file_get_integer(key,options_group,"version",NULL)!=1) return;
+ const gchar *names[]={"left","right","search","include","exclude"};GtkWidget *entries[]={d->paths[0],d->paths[1],d->filter_entry,d->include,d->exclude};
+ for(guint i=0;i<G_N_ELEMENTS(names);i++) { gchar *text=g_key_file_get_string(key,options_group,names[i],NULL);if(text && strlen(text)<=(i<2 ? 16384u : 2048u) && g_utf8_validate(text,-1,NULL)) gtk_entry_set_text(GTK_ENTRY(entries[i]),text);g_free(text); }
+ const gchar *checks[]={"recursive","hidden","space","eol","known","different"};GtkWidget *toggles[]={d->recursive,d->hidden,d->space,d->eol,d->known,d->different};
+ for(guint i=0;i<G_N_ELEMENTS(checks);i++) { GError *error=NULL;gboolean value=g_key_file_get_boolean(key,options_group,checks[i],&error);if(!error && (i!=4 || types_provider)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggles[i]),value);g_clear_error(&error); }
+ gint value;if(option_integer(key,"method",0,2,&value)) gtk_combo_box_set_active(GTK_COMBO_BOX(d->method),value);if(option_integer(key,"status",0,8,&value)) gtk_combo_box_set_active(GTK_COMBO_BOX(d->status_filter),value);
+ gint width=1100,height=650;option_integer(key,"width",640,4000,&width);option_integer(key,"height",400,2400,&height);gtk_window_set_default_size(GTK_WINDOW(d->window),width,height);
+ gint column,order;if(option_integer(key,"sort",DC_PATH,DC_STATUS_TEXT,&column) && option_integer(key,"order",GTK_SORT_ASCENDING,GTK_SORT_DESCENDING,&order)) gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(gtk_tree_view_get_model(GTK_TREE_VIEW(d->view))),column,order);
+ for(gint i=1;i<4;i++) { gchar *name=g_strdup_printf("column-%d",i);GError *error=NULL;gboolean show=g_key_file_get_boolean(key,options_group,name,&error);if(!error) gtk_tree_view_column_set_visible(gtk_tree_view_get_column(GTK_TREE_VIEW(d->view),i),show);g_clear_error(&error);g_free(name); }
+ insight_list_style_read(d->view,key,style_group);
+}
+void insight_directory_read(GKeyFile *settings) {
+ if(!saved_options) saved_options=g_key_file_new();
+ copy_options(settings,saved_options);
+}
+void insight_directory_write(GKeyFile *settings) {
+ if(!saved_options) saved_options=g_key_file_new();
+ if(open_windows) options_write(open_windows->data,saved_options);
+ copy_options(saved_options,settings);
+}
 static void job_free(gpointer data) { DirectoryJob *job=data;g_strfreev(job->known_patterns);for(gint i=0;i<2;i++) g_free(job->paths[i]);if(job->rows) g_ptr_array_unref(job->rows);g_free(job); }
 static const gchar *status_name(gint status) {
  static const gchar *names[]={"Same","Different","Left only","Right only","Type mismatch","Skipped","Read error","Folder"};
@@ -100,7 +147,10 @@ static void clear_pending(Directory *d) {
  for(gint i=0;i<2;i++) g_clear_pointer(&d->pending_roots[i],g_free);
 }
 static void destroyed(GtkWidget *widget,gpointer data) {
- Directory *d=data;g_object_set_data(G_OBJECT(widget),"insight-directory-state",NULL);
+ Directory *d=data;
+ if(!saved_options) saved_options=g_key_file_new();
+ options_write(d,saved_options);open_windows=g_list_remove(open_windows,d);
+ g_object_set_data(G_OBJECT(widget),"insight-directory-state",NULL);
  if(d->cancel) g_cancellable_cancel(d->cancel);
  clear_pending(d);g_clear_object(&d->cancel);g_clear_pointer(&d->rows,g_ptr_array_unref);
  for(gint i=0;i<2;i++) g_free(d->roots[i]);
@@ -311,6 +361,6 @@ static Directory *directory_new(GtkWidget *parent) {
  g_signal_connect(d->filter_entry,"changed",G_CALLBACK(refilter),d);g_signal_connect(d->different,"toggled",G_CALLBACK(refilter),d);g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(d->view)),"changed",G_CALLBACK(selection_changed),d);
  g_signal_connect(d->method,"changed",G_CALLBACK(method_changed),d);method_changed(GTK_COMBO_BOX(d->method),d);
  g_signal_connect(d->view,"popup-menu",G_CALLBACK(popup),d);g_signal_connect(d->view,"button-press-event",G_CALLBACK(mouse),d);
- g_signal_connect(d->view,"row-activated",G_CALLBACK(activated),d);g_signal_connect(d->view,"key-press-event",G_CALLBACK(key),d);g_signal_connect(d->window,"key-press-event",G_CALLBACK(key),d);g_signal_connect(d->window,"destroy",G_CALLBACK(destroyed),d);g_object_set_data(G_OBJECT(d->window),"insight-directory-state",d);busy(d,FALSE);gtk_widget_show_all(d->window);return d;
+ g_signal_connect(d->view,"row-activated",G_CALLBACK(activated),d);g_signal_connect(d->view,"key-press-event",G_CALLBACK(key),d);g_signal_connect(d->window,"key-press-event",G_CALLBACK(key),d);g_signal_connect(d->window,"destroy",G_CALLBACK(destroyed),d);g_object_set_data(G_OBJECT(d->window),"insight-directory-state",d);busy(d,FALSE);options_read(d,saved_options);open_windows=g_list_prepend(open_windows,d);gtk_widget_show_all(d->window);return d;
 }
 void insight_directory_show(GtkWidget *parent) { (void)directory_new(parent); }

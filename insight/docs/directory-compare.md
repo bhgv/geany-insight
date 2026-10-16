@@ -71,7 +71,7 @@ path, status and left/right metadata. Backslashes, tabs and line breaks inside
 fields are escaped as `\\`, `\t`, `\r`, `\n`. It is a human-readable report,
 not a lossless native-filename manifest. Snapshot rows are read-only. Copying or
 deleting files between directories, path variables,
-backup comparison and persistent directory-window settings remain future work.
+backup comparison remain future work.
 
 ![Production Directory Compare window in an isolated Linux GTK fixture](media/directory-compare.jpg)
 
@@ -120,3 +120,7 @@ Use **Include masks** (`*.c;*.h`) and **Exclude masks** (`*.o;build/*`) to narro
 **Show only known file types** takes a fresh snapshot of editor filename patterns and language-profile extensions on each scan. Unknown files are removed before content reads; real directory rows remain so traversal and type mismatches stay visible. Entry, visit and depth limits still apply to the complete enumeration. This recognizes names, not binary content: a broad pattern can include binary files. Unlike display masks, changing this option requires Scan / Refresh. Explicit individual-file profile bindings do not extend this filename filter.
 
 **Font & Color…** in the filter bar or row menu opens the shared list appearance dialog. Enable custom appearance to choose a font, text color and background; Apply commits the change and Cancel preserves the current style. Theme selection highlighting remains visible. Turn custom appearance off to restore the theme. Each open comparison has its own style.
+
+### Remembered window options
+
+Closing a comparison remembers its input paths, comparison method, recursion/hidden/text/known-type options, search, masks, status, Differences only, visible columns, sort direction, window size and list appearance for newly opened windows. At editor exit the most recently opened comparison still alive supplies these defaults to `insight/workbench.conf`; otherwise the last closed window does. Existing windows keep independent controls. Restoring options never starts a scan and never restores result rows. Press Scan / Refresh to get a fresh snapshot. Invalid or unsupported saved values retain the normal defaults; the relative-path column always remains visible. Reset filters clears display filters only, leaving comparison options and appearance intact.

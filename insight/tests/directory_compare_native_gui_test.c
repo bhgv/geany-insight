@@ -25,6 +25,7 @@ static gboolean step(gpointer data) {
   GtkWidget *item=named(host,"insight-directory-menu");if(!item) return G_SOURCE_CONTINUE;
   gtk_menu_item_activate(GTK_MENU_ITEM(item));directory=window_named("insight-directory-window");g_assert_nonnull(directory);
   gtk_entry_set_text(GTK_ENTRY(named(directory,"insight-directory-left")),left);gtk_entry_set_text(GTK_ENTRY(named(directory,"insight-directory-right")),right);
+  GtkWidget *known=named(directory,"insight-directory-known");g_assert_true(gtk_widget_get_sensitive(known));gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(known),TRUE);
   gtk_button_clicked(GTK_BUTTON(named(directory,"insight-directory-scan")));phase++;return G_SOURCE_CONTINUE;
  }
  if(phase==1) {
@@ -35,7 +36,9 @@ static gboolean step(gpointer data) {
  }
  if(!gtk_widget_get_sensitive(named(merge,"insight-diff-compare"))) return G_SOURCE_CONTINUE;
  GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(named(merge,"insight-diff-result")));GtkTextIter a,z;gtk_text_buffer_get_bounds(buffer,&a,&z);gchar *text=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);g_assert_cmpstr(text,==,"port = 3000\n");g_free(text);
- gtk_widget_destroy(merge);gtk_widget_destroy(directory);gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(host,"menu_quit1")));return G_SOURCE_REMOVE;
+ gtk_widget_destroy(merge);gtk_widget_destroy(directory);
+ gtk_menu_item_activate(GTK_MENU_ITEM(named(host,"insight-directory-menu")));directory=window_named("insight-directory-window");g_assert_nonnull(directory);g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(directory,"insight-directory-known"))));g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(directory,"insight-directory-left"))),==,left);g_assert_true(gtk_widget_get_sensitive(named(directory,"insight-directory-scan")));g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(named(directory,"insight-directory-files"))),NULL),==,0);
+ gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(host,"menu_quit1")));return G_SOURCE_REMOVE;
 }
 static gboolean timeout(gpointer data) { (void)data;g_error("Directory Compare native GUI timeout");return G_SOURCE_REMOVE; }
 int main(void) {
@@ -44,6 +47,8 @@ int main(void) {
  g_assert_cmpint(g_mkdir(profile,0700),==,0);g_assert_cmpint(g_mkdir(left,0700),==,0);g_assert_cmpint(g_mkdir(right,0700),==,0);
  source=g_build_filename(left,"config.ini",NULL);gchar *other=g_build_filename(right,"config.ini",NULL),*config=g_build_filename(profile,"geany.conf",NULL);
  g_assert_true(g_file_set_contents(source,"port = 3000\n",-1,NULL));g_assert_true(g_file_set_contents(other,"port = 8080\n",-1,NULL));g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));
+ gchar *unknown=g_build_filename(left,"payload.insight-unknown-binary-77",NULL);g_assert_true(g_file_set_contents(unknown,"a\0b",3,NULL));g_free(unknown);
  gchar *args[]={"directory-native","--new-instance","--no-session","--config",profile,source,NULL};g_timeout_add(250,step,NULL);g_timeout_add_seconds(30,timeout,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);
- gint result=main_lib(6,args);g_free(other);g_free(config);g_free(source);g_free(left);g_free(right);g_free(profile);g_free(root);return result;
+ gint result=main_lib(6,args);
+ GKeyFile *saved=g_key_file_new();gchar *prefs=g_build_filename(profile,"insight","workbench.conf",NULL);g_assert_true(g_key_file_load_from_file(saved,prefs,G_KEY_FILE_NONE,NULL));g_assert_cmpint(g_key_file_get_integer(saved,"directory-compare","version",NULL),==,1);g_assert_true(g_key_file_get_boolean(saved,"directory-compare","known",NULL));g_free(prefs);g_key_file_unref(saved);g_free(other);g_free(config);g_free(source);g_free(left);g_free(right);g_free(profile);g_free(root);return result;
 }
