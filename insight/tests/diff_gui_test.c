@@ -117,6 +117,11 @@ int main(int argc,char **argv) {
  guint beats=0;guint timer=g_timeout_add(1,heartbeat,&beats);compare(NULL,m);wait_comparison(m);g_source_remove(timer);
  g_assert_cmpuint(beats,>,0);g_assert_cmpuint(m->diff.count,==,1);assert_text(m,large_left->str);
  g_string_free(large_left,TRUE);g_string_free(large_right,TRUE);
+ insight_diff_show_files(NULL,left,right,3);GList *windows=gtk_window_list_toplevels();Merge *opened=NULL;
+ for(GList *p=windows;p;p=p->next) { Merge *candidate=g_object_get_data(G_OBJECT(p->data),"insight-diff-state");if(candidate && candidate!=m) opened=candidate; }
+ g_list_free(windows);g_assert_nonnull(opened);wait_comparison(opened);
+ g_assert_cmpstr(opened->loaded_paths[0],==,left);g_assert_cmpstr(opened->loaded_paths[1],==,right);
+ g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(opened->ignore_space)));gtk_widget_destroy(opened->window);flush();
  gboolean gone=FALSE;g_object_weak_ref(G_OBJECT(m->window),finalized,&gone);
  compare(NULL,m);gtk_widget_destroy(m->window);
  gint64 until=g_get_monotonic_time()+10*G_TIME_SPAN_SECOND;

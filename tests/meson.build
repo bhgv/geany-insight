@@ -681,3 +681,7 @@ test('Insight directory comparison snapshots', directory_compare_test, timeout: 
 directory_compare_gui_test = executable('test_insight_directory_compare_gui',
  '../insight/tests/directory_compare_gui_test.c', '../insight/desktop/directory_compare.c', dependencies: deps)
 test('Insight isolated Directory Compare GUI', directory_compare_gui_test, timeout: 45, is_parallel: false)
+
+directory_compare_native_gui_test = executable('test_insight_directory_compare_native_gui',
+ '../insight/tests/directory_compare_native_gui_test.c', dependencies: test_deps)
+test('Insight native Directory Compare routing GUI', directory_compare_native_gui_test, timeout: 45, is_parallel: false)
