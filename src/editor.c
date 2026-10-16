@@ -2163,6 +2163,7 @@ autocomplete_tags(GeanyEditor *editor, GeanyFiletype *ft, const gchar *root, gsi
 	tags = tm_workspace_find_prefix(root, doc->tm_file, current_line, current_scope,
 		editor_prefs.autocompletion_max_entries);
 	found = tags->len > 0;
+ if(g_getenv("GEANY_COMPLETION_DEBUG")) g_printerr("completion tags=%u root=%s\n",tags->len,root);
 	if (found)
 		show_tags_list(editor, tags, rootlen);
 	g_ptr_array_free(tags, TRUE);
@@ -2308,7 +2309,7 @@ gboolean editor_start_auto_complete(GeanyEditor *editor, gint pos, gboolean forc
 	GeanyFiletype *ft;
 
 	g_return_val_if_fail(editor != NULL, FALSE);
-
+ if(g_getenv("GEANY_COMPLETION_DEBUG")) g_printerr("completion start pos=%d auto=%d min=%d force=%d type=%s\n",pos,editor_prefs.auto_complete_symbols,editor_prefs.symbolcompletion_min_chars,force,editor->document->file_type->name);
 	if (plugin_extension_autocomplete_provided(editor->document, NULL))
 		return FALSE;
 
@@ -2328,8 +2329,7 @@ gboolean editor_start_auto_complete(GeanyEditor *editor, gint pos, gboolean forc
 	style = sci_get_style_at(sci, pos - 2);
 
 	/* don't autocomplete in comments and strings */
-	if (!force && !highlighting_is_code_style(lexer, style))
-		return FALSE;
+	if (!force && !highlighting_is_code_style(lexer, style)) { if(g_getenv("GEANY_COMPLETION_DEBUG")) g_printerr("completion suppressed style=%d lexer=%d\n",style,lexer);return FALSE; }
 
 	ret = autocomplete_check_html(editor, style, pos);
 
@@ -2343,7 +2343,7 @@ gboolean editor_start_auto_complete(GeanyEditor *editor, gint pos, gboolean forc
 	read_current_word(editor, pos, cword, sizeof(cword), wordchars, TRUE);
 	root = cword;
 	rootlen = strlen(root);
-
+ if(g_getenv("GEANY_COMPLETION_DEBUG")) g_printerr("completion root=%s length=%d style=%d\n",root,rootlen,style);
 	if (ret || force)
 	{
 		if (autocomplete_scope_shown)
