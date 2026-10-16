@@ -142,3 +142,5 @@ These are content operations: ownership, permissions, executable bits and timest
 The confirmation below is captured from the real production widgets in the isolated Linux GTK fixture, with editor-host callbacks supplied by the test.
 
 ![Confirm a directory file operation](../media/directory-operation.jpg)
+
+A successful refresh keeps the currently selected relative path and scrolls it into view, including when sort order changes. Selection is restored only if the row still exists and passes the current filters. A removed or filtered-out row is not replaced with an unrelated selection; cancelled and failed scans preserve the old model and selection.

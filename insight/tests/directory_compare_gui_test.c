@@ -70,7 +70,7 @@ int main(int argc,char **argv) {
  copy_list(NULL,d);gchar *clip=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));g_assert_nonnull(strstr(clip,"данные.txt"));g_assert_null(strstr(clip,"same.py"));g_free(clip);
  gtk_entry_set_text(GTK_ENTRY(d->filter_entry),"");g_assert_true(select_path(d,"old.lua"));g_assert_false(gtk_widget_get_sensitive(d->open));
  gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(d->view)));advance(d,1);g_assert_nonnull(selected_entry(d));
- gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->different),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->space),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->eol),TRUE);start(NULL,d);wait_scan(d);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->different),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->space),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->eol),TRUE);g_assert_true(select_path(d,"config.ini"));start(NULL,d);wait_scan(d);g_assert_nonnull(selected_entry(d));g_assert_cmpstr(selected_entry(d)->relative,==,"config.ini");
  gint sort_column;GtkSortType sort_order;g_assert_true(gtk_tree_sortable_get_sort_column_id(GTK_TREE_SORTABLE(gtk_tree_view_get_model(GTK_TREE_VIEW(d->view))),&sort_column,&sort_order));g_assert_cmpint(sort_column,==,DC_PATH);g_assert_cmpint(sort_order,==,GTK_SORT_DESCENDING);
  g_assert_true(select_path(d,"данные.txt"));g_assert_cmpint(selected_entry(d)->status,==,INSIGHT_DIR_SAME);open_pair(NULL,d);g_assert_cmpuint(opened_flags,==,3);
  gtk_entry_set_text(GTK_ENTRY(d->include),"*.py; *.ini");g_assert_cmpint(gtk_tree_model_iter_n_children(d->filtered,NULL),==,2);
@@ -107,7 +107,7 @@ int main(int argc,char **argv) {
  /* The successful operation may win the cancellation race; either result must
   * invalidate the snapshot and leave the UI usable. */
  expected_destination=copy_right;g_idle_add(operation_response,GINT_TO_POINTER(GTK_RESPONSE_ACCEPT));file_action(d->actions[0],d);cancel_scan(NULL,d);wait_scan(d);g_assert_true(d->stale);
- g_remove(copy_left);g_remove(copy_right);g_free(copy_left);g_free(copy_right);expected_destination=NULL;start(NULL,d);wait_scan(d);g_assert_cmpuint(d->rows->len,==,5);
+ g_remove(copy_left);g_remove(copy_right);g_free(copy_left);g_free(copy_right);expected_destination=NULL;start(NULL,d);wait_scan(d);g_assert_cmpuint(d->rows->len,==,5);g_assert_null(selected_entry(d));
  g_assert_true(select_path(d,"config.ini"));GtkWidget *path_action=gtk_menu_item_new();g_object_ref_sink(path_action);g_object_set_data(G_OBJECT(path_action),"side",GINT_TO_POINTER(0));
  gtk_entry_set_text(GTK_ENTRY(d->paths[0]),empty);copy_absolute(path_action,d);clip=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));expected=g_build_filename(left,"config.ini",NULL);g_assert_cmpstr(clip,==,expected);g_free(clip);g_free(expected);gtk_entry_set_text(GTK_ENTRY(d->paths[0]),left);gtk_widget_destroy(path_action);g_object_unref(path_action);
  gtk_entry_set_text(GTK_ENTRY(d->include),"*.ini");gtk_entry_set_text(GTK_ENTRY(d->exclude),"*.ini");gtk_entry_set_text(GTK_ENTRY(d->filter_entry),"missing");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->different),TRUE);gtk_combo_box_set_active(GTK_COMBO_BOX(d->status_filter),INSIGHT_DIR_ERROR+1);reset_filters(NULL,d);g_assert_cmpint(gtk_tree_model_iter_n_children(d->filtered,NULL),==,5);

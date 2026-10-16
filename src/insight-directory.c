@@ -185,6 +185,15 @@ static void install_model(Directory *d) {
  if(gtk_tree_sortable_get_sort_column_id(GTK_TREE_SORTABLE(gtk_tree_view_get_model(GTK_TREE_VIEW(d->view))),&column,&order)) gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(sorted),column,order);
  gtk_tree_view_set_model(GTK_TREE_VIEW(d->view),sorted);g_object_unref(sorted);g_object_unref(d->filtered);d->filtered=filtered;
 }
+static void restore_selection(Directory *d,const gchar *relative) {
+ if(!relative) return;
+ GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(d->view));GtkTreeIter iter;
+ for(gboolean valid=gtk_tree_model_get_iter_first(model,&iter);valid;valid=gtk_tree_model_iter_next(model,&iter)) {
+  guint id;gtk_tree_model_get(model,&iter,DC_ID,&id,-1);
+  InsightDirectoryEntry *entry=id<d->rows->len ? g_ptr_array_index(d->rows,id) : NULL;
+  if(entry && !strcmp(entry->relative,relative)) { GtkTreePath *path=gtk_tree_model_get_path(model,&iter);gtk_tree_view_set_cursor(GTK_TREE_VIEW(d->view),path,NULL,FALSE);gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(d->view),path,NULL,FALSE,0,0);gtk_tree_path_free(path);break; }
+ }
+}
 static gboolean publish(gpointer data) {
  Directory *d=data;gint64 until=g_get_monotonic_time()+3000;
  while(d->at<d->pending->len) {
@@ -196,10 +205,12 @@ static gboolean publish(gpointer data) {
  }
  if(d->at<d->pending->len) return G_SOURCE_CONTINUE;
  d->publication=0;
+ /* Read the old selected ID before replacing its backing snapshot. */
+ InsightDirectoryEntry *selected=selected_entry(d);gchar *relative=selected ? g_strdup(selected->relative) : NULL;
  if(d->rows) g_ptr_array_unref(d->rows);
  d->rows=d->pending;d->pending=NULL;g_object_unref(d->store);d->store=d->building;d->building=NULL;
  for(gint i=0;i<2;i++) { g_free(d->roots[i]);d->roots[i]=d->pending_roots[i];d->pending_roots[i]=NULL; }
- d->flags=d->pending_flags;d->stale=FALSE;install_model(d);g_clear_object(&d->cancel);busy(d,FALSE);summary(d);return G_SOURCE_REMOVE;
+ d->flags=d->pending_flags;d->stale=FALSE;install_model(d);restore_selection(d,relative);g_free(relative);g_clear_object(&d->cancel);busy(d,FALSE);summary(d);return G_SOURCE_REMOVE;
 }
 static void worker(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
  (void)source;DirectoryJob *job=data;GError *error=NULL;
