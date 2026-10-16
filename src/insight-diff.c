@@ -2,6 +2,7 @@
 #include "insight-i18n.h"
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "insight-diff.h"
+#include "insight-directory.h"
 #include "insight-help.h"
 #include "../insight/core/diff.h"
 #include <string.h>
@@ -377,6 +378,7 @@ static GtkWidget *button(GtkWidget *box,const gchar *label,GCallback callback,Me
 static GtkWidget *scroll(GtkWidget *child) {
  GtkWidget *w=gtk_scrolled_window_new(NULL,NULL);gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(w),GTK_POLICY_AUTOMATIC,GTK_POLICY_AUTOMATIC);gtk_container_add(GTK_CONTAINER(w),child);return w;
 }
+static void show_directory(GtkWidget *widget,gpointer data) { (void)widget;Merge *m=data;insight_directory_show(m->window); }
 static Merge *merge_new(GtkWidget *parent) {
  Merge *m=g_new0(Merge,1);m->history=g_ptr_array_new_with_free_func(snapshot_free);m->saved=g_strdup("");
  m->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_window_set_transient_for(GTK_WINDOW(m->window),GTK_WINDOW(parent));gtk_window_set_destroy_with_parent(GTK_WINDOW(m->window),TRUE);gtk_window_set_default_size(GTK_WINDOW(m->window),1100,700);
@@ -400,6 +402,7 @@ static Merge *merge_new(GtkWidget *parent) {
  m->ignore_space=gtk_check_button_new_with_label("Ignore spaces and tabs");gtk_box_pack_start(GTK_BOX(comparison),m->ignore_space,FALSE,FALSE,0);
  m->ignore_eol=gtk_check_button_new_with_label("Ignore line ending style");gtk_box_pack_start(GTK_BOX(comparison),m->ignore_eol,FALSE,FALSE,0);
  gtk_box_pack_start(GTK_BOX(comparison),gtk_label_new("Apply with Compare; ignored text stays from Left."),FALSE,FALSE,0);
+ button(comparison,"Compare directories…",G_CALLBACK(show_directory),m);
  m->numbers=gtk_check_button_new_with_label("Line numbers");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->numbers),TRUE);gtk_box_pack_start(GTK_BOX(options),m->numbers,FALSE,FALSE,0);
  GtkWidget *find=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),find,FALSE,FALSE,0);
  m->find_side=gtk_combo_box_text_new();gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->find_side),"Left");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->find_side),"Right");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->find_side),"Result");gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),0);gtk_box_pack_start(GTK_BOX(find),m->find_side,FALSE,FALSE,0);
@@ -443,3 +446,9 @@ static Merge *merge_new(GtkWidget *parent) {
 }
 
 void insight_diff_show(GtkWidget *parent) { (void)merge_new(parent); }
+
+void insight_diff_show_files(GtkWidget *parent,const gchar *left,const gchar *right,guint text_flags) {
+ Merge *m=merge_new(parent);gtk_entry_set_text(GTK_ENTRY(m->paths[0]),left);gtk_entry_set_text(GTK_ENTRY(m->paths[1]),right);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->ignore_space),(text_flags&INSIGHT_DIFF_IGNORE_SPACE)!=0);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->ignore_eol),(text_flags&INSIGHT_DIFF_IGNORE_EOL)!=0);compare(NULL,m);
+}

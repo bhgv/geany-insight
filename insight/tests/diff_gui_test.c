@@ -3,6 +3,7 @@
 #include <stdarg.h>
 #include <glib/gstdio.h>
 #include "../../src/insight-diff.c"
+void insight_directory_show(GtkWidget *parent) { (void)parent; }
 gchar *insight_i18n_printf(const gchar *format,...) {
  va_list args;va_start(args,format);gchar *s=g_strdup_vprintf(format,args);va_end(args);return s;
 }

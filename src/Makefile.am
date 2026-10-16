@@ -210,6 +210,10 @@ libgeany_la_SOURCES += \
 	insight-workbench.c \
 	insight-symbol-view.c \
 	insight-symbol-view.h \
+	insight-directory.c \
+	insight-directory.h \
+	../insight/desktop/directory_compare.c \
+	../insight/desktop/directory_compare.h \
 	insight-diff.c \
 	insight-diff.h \
 	insight-template-fields.c \
