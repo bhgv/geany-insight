@@ -207,7 +207,7 @@ static void paste_clip(const gchar *text)
     ScintillaObject *sci = doc->editor->sci;
     gchar *destination = sci_get_contents(sci, sci_get_length(sci) + 2);
     gint anchor = SEND(sci, SCI_GETANCHOR, 0, 0), caret = sci_get_current_position(sci);
-    gint eol = sci_get_eol_mode(sci);gboolean readonly = SEND(sci, SCI_GETREADONLY, 0, 0);
+    gint eol = SEND(sci, SCI_GETEOLMODE, 0, 0);gboolean readonly = SEND(sci, SCI_GETREADONLY, 0, 0);
     SEND(sci, SCI_SETREADONLY, FALSE, 0);reset(text, 0);
     SEND(sci, SCI_SETSEL, 0, strlen(text));
     GtkWidget *query = named(window, "insight-clips-query");g_assert_nonnull(query);
