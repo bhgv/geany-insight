@@ -61,6 +61,8 @@ GPtrArray *tm_workspace_find_prefix(const char *prefix,
 	TMSourceFile *current_file, guint current_line, const gchar *current_scope,
 	guint max_num);
 
+GPtrArray *tm_workspace_find_prefix_mode(const gchar *,TMSourceFile *,guint,const gchar *,guint,gboolean,gboolean *);
+
 GPtrArray *tm_workspace_find_scope_members (TMSourceFile *source_file, const char *name,
 	gboolean function, gboolean member, const gchar *current_scope, guint current_line, gboolean search_namespace);
 
@@ -89,3 +91,4 @@ void tm_workspace_dump(void);
 G_END_DECLS
 
 #endif /* TM_WORKSPACE_H */
+

@@ -25,6 +25,7 @@ tagmanager_include_HEADERS = \
 
 
 libtagmanager_la_SOURCES = \
+	tm_completion.c tm_completion.h \
 	tm_ctags.h \
 	tm_ctags.c \
 	tm_parser.h \
@@ -38,3 +39,4 @@ libtagmanager_la_SOURCES = \
 	tm_workspace.c
 
 libtagmanager_la_LIBADD = $(top_builddir)/ctags/libctags.la $(GTK_LIBS)
+

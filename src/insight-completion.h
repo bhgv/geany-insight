@@ -2,6 +2,8 @@
 #ifndef INSIGHT_COMPLETION_H
 #define INSIGHT_COMPLETION_H
 #include "editor.h"
+gboolean insight_completion_case_sensitive(void);
+void insight_completion_search_limited(GeanyEditor *,gboolean);
 gint insight_completion_min_chars(void);
 gboolean insight_completion_inside_comments(void);
 GtkWidget *insight_completion_view_new(GtkListStore *);

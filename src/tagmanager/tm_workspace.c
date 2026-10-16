@@ -1,3 +1,4 @@
+#include "tm_completion.h"
 /*
 *
 *   Copyright (c) 2001-2002, Biswapesh Chattopadhyay
@@ -973,6 +974,31 @@ GPtrArray *tm_workspace_find_prefix(const char *prefix,
 }
 
 
+/* Existing exact-case results are retained before bounded casefold expansion. */
+typedef struct { SortInfo sort;const gchar *prefix; } CompletionSort;
+static gint sort_completion_case(gconstpointer a,gconstpointer b,gpointer data) {
+ CompletionSort *s=data;const TMTag *left=*(TMTag *const *)a,*right=*(TMTag *const *)b;gboolean l=g_str_has_prefix(left->name,s->prefix),r=g_str_has_prefix(right->name,s->prefix);if(l!=r) return l ? -1 : 1;return sort_found_tags(a,b,&s->sort);
+}
+static void copy_casefold(GPtrArray *dst,const GPtrArray *source,CopyInfo *info,TMCompletionPrefix *prefix,GHashTable *seen,guint max_num,guint *visited,gboolean (*predicate)(TMTag *,CopyInfo *)) {
+ for(guint i=0;source && i<source->len && dst->len<max_num && *visited<100000;i++) {
+  (*visited)++;TMTag *tag=g_ptr_array_index((GPtrArray *)source,i);if(!predicate(tag,info) || !tm_workspace_is_autocomplete_tag(tag,info->file,info->line,info->scope) || !tm_completion_prefix_matches(prefix,tag->name) || g_hash_table_contains(seen,tag->name)) continue;
+  g_ptr_array_add(dst,tag);g_hash_table_add(seen,tag->name);
+ }
+}
+GPtrArray *tm_workspace_find_prefix_mode(const gchar *prefix,TMSourceFile *file,guint line,const gchar *scope,guint max_num,gboolean sensitive,gboolean *limited) {
+ if(limited) *limited=FALSE;
+ GPtrArray *tags=tm_workspace_find_prefix(prefix,file,line,scope,max_num);if(sensitive || !prefix || !*prefix || tags->len>=max_num) return tags;
+ TMCompletionPrefix *matcher=tm_completion_prefix_new(prefix,FALSE);if(!matcher) return tags;
+ GPtrArray *headers=NULL;GHashTable *includes=get_includes(file,&headers),*seen=g_hash_table_new(g_str_hash,g_str_equal);CopyInfo info={file,headers,includes,line,scope};guint visited=0;
+ for(guint i=0;i<tags->len;i++) { TMTag *tag=g_ptr_array_index(tags,i);g_hash_table_add(seen,tag->name); }
+ if(file) { copy_casefold(tags,file->tags_array,&info,matcher,seen,max_num,&visited,is_local_tag);copy_casefold(tags,file->tags_array,&info,matcher,seen,max_num,&visited,is_non_local_tag); }
+ for(guint i=0;headers && i<headers->len && tags->len<max_num && visited<100000;i++) { TMSourceFile *header=g_ptr_array_index(headers,i);copy_casefold(tags,header->tags_array,&info,matcher,seen,max_num,&visited,is_non_local_tag); }
+ GHashTableIter iter;gpointer key;g_hash_table_iter_init(&iter,includes);while(tags->len<max_num && visited<100000 && g_hash_table_iter_next(&iter,&key,NULL)) { TMSourceFile *included=key;copy_casefold(tags,included->tags_array,&info,matcher,seen,max_num,&visited,is_non_local_tag); }
+ copy_casefold(tags,theWorkspace->tags_array,&info,matcher,seen,max_num,&visited,is_workspace_tag);copy_casefold(tags,theWorkspace->global_tags,&info,matcher,seen,max_num,&visited,is_any_tag);
+ CompletionSort sort={{file,headers,includes,TRUE},prefix};g_ptr_array_sort_with_data(tags,sort_completion_case,&sort);if(limited) *limited=visited>=100000 && tags->len<max_num;
+ g_hash_table_unref(seen);g_hash_table_unref(includes);tm_completion_prefix_free(matcher);return tags;
+}
+
 static gboolean replace_with_char(gchar *haystack, const gchar *needle, char replacement)
 {
 	gchar *pos = strstr(haystack, needle);
@@ -1433,3 +1459,4 @@ void tm_workspace_dump(void)
 	}
 }
 #endif /* TM_DEBUG */
+

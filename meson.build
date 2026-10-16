@@ -763,7 +763,7 @@ tagmanager = static_library('tagmanager',
 	'src/tagmanager/tm_tag.h',
 	'src/tagmanager/tm_tag.c',
 	'src/tagmanager/tm_workspace.h',
-	'src/tagmanager/tm_workspace.c',
+	'src/tagmanager/tm_completion.c', 'src/tagmanager/tm_completion.h', 'src/tagmanager/tm_workspace.c',
 	c_args: geany_cflags + [ '-DG_LOG_DOMAIN="Tagmanager"' ],
 	dependencies: [dep_ctags, glib]
 )

@@ -16,3 +16,5 @@ Keep screenshots current when visible behavior changes. Favor small, useful illu
 `completion-list.jpg`: real production completion GtkTreeView captured in an isolated fixture with sample symbol metadata; not a full application screenshot.
 
 `completion-options.jpg` captures the production preferences page in an isolated GTK fixture. `completion-insertion.svg` shows optional parentheses and existing-argument preservation.
+
+`completion-case.svg` illustrates optional casefold lookup and preferred exact-case selection. `completion-options.jpg` now includes the case-sensitive option.

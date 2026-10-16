@@ -66,6 +66,7 @@
 #include "utils.h"
 
 #include "SciLexer.h"
+#include "tagmanager/tm_completion.h"
 
 #include <ctype.h>
 #include <string.h>
@@ -650,7 +651,9 @@ static void show_autocomplete(GeanyEditor *editor, gsize rootlen, GString *words
 	}
 	/* store whether a calltip is showing, so we can reshow it after autocompletion */
 	calltip.set = (gboolean) SSM(sci, SCI_CALLTIPACTIVE, 0, 0);
-	SSM(sci, SCI_AUTOCSETORDER, SC_ORDER_CUSTOM, 0);
+	SSM(sci, SCI_AUTOCSETIGNORECASE, !insight_completion_case_sensitive(), 0);
+ SSM(sci, SCI_AUTOCSETCASEINSENSITIVEBEHAVIOUR, SC_CASEINSENSITIVEBEHAVIOUR_RESPECTCASE, 0);
+ SSM(sci, SCI_AUTOCSETORDER, SC_ORDER_CUSTOM, 0);
 	SSM(sci, SCI_AUTOCSHOW, rootlen, (sptr_t) words->str);
 }
 
@@ -823,12 +826,14 @@ static gboolean autocomplete_scope(GeanyEditor *editor, const gchar *root, gsize
 		TMTag *tag;
 		guint i;
 
+		TMCompletionPrefix *matcher=tm_completion_prefix_new(root,insight_completion_case_sensitive());
 		foreach_ptr_array(tag, i, tags)
 		{
-			if (g_str_has_prefix(tag->name, root))
+			if (tm_completion_prefix_matches(matcher,tag->name))
 				g_ptr_array_add(filtered, tag);
 		}
 
+		tm_completion_prefix_free(matcher);
 		if (filtered->len > 0)
 		{
 			show_tags_list(editor, filtered, rootlen);
@@ -2160,11 +2165,13 @@ autocomplete_tags(GeanyEditor *editor, GeanyFiletype *ft, const gchar *root, gsi
 	symbols_get_current_function(doc, &current_scope);
 	current_line = sci_get_current_line(editor->sci) + 1;
 
-	tags = tm_workspace_find_prefix(root, doc->tm_file, current_line, current_scope,
-		editor_prefs.autocompletion_max_entries);
+	gboolean limited=FALSE;
+ tags = tm_workspace_find_prefix_mode(root, doc->tm_file, current_line, current_scope,
+		editor_prefs.autocompletion_max_entries,insight_completion_case_sensitive(),&limited);
 	found = tags->len > 0;
 	if (found)
 		show_tags_list(editor, tags, rootlen);
+ insight_completion_search_limited(editor,limited);
 	g_ptr_array_free(tags, TRUE);
 
 	return found;

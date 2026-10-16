@@ -15,13 +15,14 @@
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 #define KEY "insight-detailed-completion"
 enum { NAME,MARKUP,ICON,KIND,SCOPE,ORIGIN,IDENTITY,CALLABLE,COLUMNS };
-typedef struct { ScintillaObject *sci;GtkWidget *window,*view,*footer;GtkListStore *store;guint document,idle,focus_idle;gint start,end;gchar *prefix;gboolean active,accepting; } Completion;
+typedef struct { ScintillaObject *sci;GtkWidget *window,*view,*footer;GtkListStore *store;guint document,idle,focus_idle;gint start,end;gchar *prefix;gboolean active,accepting,limited; } Completion;
 static gboolean loaded;
 static InsightCompletionSettings settings;
 static GtkWidget *detail_item;
 static gboolean refresh(gpointer);
 static gchar *config_path(void) { return g_build_filename(app->configdir,"insight-completion.conf",NULL); }
 static void load(void) { if(loaded) return;loaded=TRUE;insight_completion_settings_default(&settings);GKeyFile *k=g_key_file_new();gchar *path=config_path();if(g_key_file_load_from_file(k,path,0,NULL)) { GError *error=NULL;if(!insight_completion_settings_read(&settings,k,&error)) g_warning("Invalid completion settings: %s",error->message);g_clear_error(&error); }g_key_file_unref(k);g_free(path); }
+gboolean insight_completion_case_sensitive(void) { load();return settings.case_sensitive; }
 gint insight_completion_min_chars(void) { load();return settings.min_chars ? settings.min_chars : editor_prefs.symbolcompletion_min_chars; }
 gboolean insight_completion_inside_comments(void) { load();return settings.inside_comments; }
 static Completion *state(GeanyEditor *editor) { return editor ? g_object_get_data(G_OBJECT(editor->sci),KEY) : NULL; }
@@ -42,7 +43,8 @@ static const gchar *kind(TMTagType type) {
  return "variable";
 }
 static gchar *selected(Completion *c,gint column) { GtkTreeIter iter;gchar *value=NULL;if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(c->view)),NULL,&iter)) gtk_tree_model_get(GTK_TREE_MODEL(c->store),&iter,column,&value,-1);return value; }
-static void selection(GtkTreeSelection *unused,gpointer data) { (void)unused;Completion *c=data;gchar *origin=selected(c,ORIGIN);gtk_label_set_text(GTK_LABEL(c->footer),origin ? origin : "");g_free(origin); }
+static void selection(GtkTreeSelection *unused,gpointer data) { (void)unused;Completion *c=data;gchar *origin=selected(c,ORIGIN);gchar *text=g_strdup_printf("%s%s",origin ? origin : "",c->limited ? " · Case-insensitive search limit reached" : "");gtk_label_set_text(GTK_LABEL(c->footer),text);g_free(text);g_free(origin); }
+void insight_completion_search_limited(GeanyEditor *editor,gboolean limited) { Completion *c=state(editor);if(c) { c->limited=limited;selection(NULL,c); } }
 static void position(Completion *c) {
  gint x=SEND(c->sci,SCI_POINTXFROMPOSITION,0,c->end),y=SEND(c->sci,SCI_POINTYFROMPOSITION,0,c->end),height=SEND(c->sci,SCI_TEXTHEIGHT,SEND(c->sci,SCI_LINEFROMPOSITION,c->end,0),0),ox,oy;
  GdkWindow *window=gtk_widget_get_window(GTK_WIDGET(c->sci));if(!window) return;gdk_window_get_origin(window,&ox,&oy);
@@ -95,15 +97,15 @@ static Completion *create(GeanyEditor *editor) {
 gboolean insight_completion_show(GeanyEditor *editor,const GPtrArray *tags,gsize rootlen) {
  load();if(!settings.detailed) return FALSE;Completion *c=create(editor);gchar *previous=c->active ? selected(c,IDENTITY) : NULL;
  c->end=sci_get_current_position(c->sci);c->start=c->end-(gint)rootlen;g_free(c->prefix);c->prefix=sci_get_contents_range(c->sci,c->start,c->end);gtk_list_store_clear(c->store);
- GdkRGBA foreground;gtk_style_context_get_color(gtk_widget_get_style_context(c->view),GTK_STATE_FLAG_NORMAL,&foreground);gboolean dark=(foreground.red+foreground.green+foreground.blue)>1.8;const gchar *blue=dark ? "#93c5fd" : "#1d4ed8",*green=dark ? "#86efac" : "#166534",*muted=dark ? "#d1d5db" : "#475569";GtkTreePath *chosen=NULL;guint count=0;
+ GdkRGBA foreground;gtk_style_context_get_color(gtk_widget_get_style_context(c->view),GTK_STATE_FLAG_NORMAL,&foreground);gboolean dark=(foreground.red+foreground.green+foreground.blue)>1.8;const gchar *blue=dark ? "#93c5fd" : "#1d4ed8",*green=dark ? "#86efac" : "#166534",*muted=dark ? "#d1d5db" : "#475569";GtkTreePath *chosen=NULL,*exact=NULL;gboolean chosen_exact=FALSE;guint count=0;
  for(guint i=0;i<tags->len && count<editor_prefs.autocompletion_max_entries;i++) {
   TMTag *tag=g_ptr_array_index((GPtrArray *)tags,i);if(!tag->name || !g_utf8_validate(tag->name,-1,NULL) || strpbrk(tag->name,"\n\r\t")) continue;
   const gchar *args=tag->arglist ? tag->arglist : "",*scope=tag->scope ? tag->scope : "",*vartype=tag->var_type ? tag->var_type : "";gchar *identity=g_strdup_printf("%s|%s|%s|%s|%lu",tag->name,args,scope,tag->file ? tag->file->file_name : "",tag->line);
   gchar *markup=g_markup_printf_escaped("<span foreground='%s'>%s</span> <span foreground='%s'><b>%s</b></span><span foreground='%s'>%s</span> <span foreground='%s'>%s</span>",muted,vartype,blue,tag->name,green,args,muted,scope);
   gchar *description=g_strdup_printf("%s %s %s",vartype,args,scope),*origin=g_strdup_printf("%s · %s%s%s:%lu",kind(tag->type),*scope ? scope : "global",tag->file ? " · " : "",tag->file ? tag->file->file_name : "",tag->line);guint icon_id=0;gint group=tm_parser_get_sidebar_group(tag->lang,tag->type);const gchar *icon_name="text-x-generic";if(group>=0 && tm_parser_get_sidebar_info(tag->lang,group,&icon_id)) icon_name=symbols_get_icon_name(icon_id);
-  GtkTreeIter iter;gtk_list_store_append(c->store,&iter);gtk_list_store_set(c->store,&iter,NAME,tag->name,MARKUP,markup,ICON,icon_name,KIND,kind(tag->type),SCOPE,description,ORIGIN,origin,IDENTITY,identity,CALLABLE,(tag->type & (tm_tag_function_t|tm_tag_prototype_t|tm_tag_method_t))!=0,-1);if(previous && !strcmp(previous,identity)) chosen=gtk_tree_model_get_path(GTK_TREE_MODEL(c->store),&iter);count++;g_free(markup);g_free(description);g_free(origin);g_free(identity);
+  GtkTreeIter iter;gtk_list_store_append(c->store,&iter);gtk_list_store_set(c->store,&iter,NAME,tag->name,MARKUP,markup,ICON,icon_name,KIND,kind(tag->type),SCOPE,description,ORIGIN,origin,IDENTITY,identity,CALLABLE,(tag->type & (tm_tag_function_t|tm_tag_prototype_t|tm_tag_method_t))!=0,-1);if(!exact && g_str_has_prefix(tag->name,c->prefix)) exact=gtk_tree_model_get_path(GTK_TREE_MODEL(c->store),&iter);if(previous && !strcmp(previous,identity)) { chosen=gtk_tree_model_get_path(GTK_TREE_MODEL(c->store),&iter);chosen_exact=g_str_has_prefix(tag->name,c->prefix); }count++;g_free(markup);g_free(description);g_free(origin);g_free(identity);
  }
- g_free(previous);if(!count) { hide(c);return TRUE; }c->active=TRUE;if(!chosen) chosen=gtk_tree_path_new_first();gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(c->view)),chosen);gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(c->view),chosen,NULL,FALSE,0,0);gtk_tree_path_free(chosen);SEND(c->sci,SCI_AUTOCCANCEL,0,0);SEND(c->sci,SCI_CALLTIPCANCEL,0,0);
+ g_free(previous);if(!settings.case_sensitive && exact && !chosen_exact) { if(chosen) gtk_tree_path_free(chosen);chosen=gtk_tree_path_copy(exact); }if(exact) gtk_tree_path_free(exact);c->limited=FALSE;if(!count) { hide(c);return TRUE; }c->active=TRUE;if(!chosen) chosen=gtk_tree_path_new_first();gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(c->view)),chosen);gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(c->view),chosen,NULL,FALSE,0,0);gtk_tree_path_free(chosen);SEND(c->sci,SCI_AUTOCCANCEL,0,0);SEND(c->sci,SCI_CALLTIPCANCEL,0,0);
  gtk_widget_set_size_request(c->view,620,MIN(count,(guint)settings.max_rows)*26);gtk_widget_show_all(c->window);position(c);return TRUE;
 }
 gboolean insight_completion_key(GeanyEditor *editor,GdkEventKey *event) {

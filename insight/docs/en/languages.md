@@ -119,3 +119,13 @@ Open **Options → Completion options…**. Cancel discards unapplied edits, App
 Parentheses are inserted only if no opening parenthesis follows the accepted name after spaces/tabs. Existing arguments and spacing are preserved. The caret is placed inside a new pair; acceptance is one Undo action. No arguments or types are synthesized from a declaration. Insertion into the middle of a word with its suffix retained suppresses new parentheses; uncertain long whitespace tails also suppress them. Tab acceptance and parentheses settings apply to the detailed symbol list; the threshold and comment permission also affect the classic symbol path. Member completion retains its existing context-specific triggers.
 
 Older `insight-completion.conf` files containing only `detailed` retain their behavior. Missing keys use defaults; malformed values reject the settings group and fall back to defaults. Unknown valid keys/groups are preserved when saving. A pending refresh is resolved before keyboard acceptance, so fast Backspace followed by Enter uses the updated prefix.
+
+### Case-sensitive symbol matching
+
+**Completion options → Case-sensitive symbol matching** is on by default, including when loading an older settings file. Turn it off to find symbols whose names start with the typed prefix regardless of case. This applies to the ordinary symbol query, member completion, the detailed list and the classic symbol list. Exact-case prefix matches are retained and preferred for initial selection; acceptance inserts the original identifier spelling. Further typing preserves the selected candidate when it remains appropriate to the typed case.
+
+![Case matching and preferred selection](../media/completion-case.svg)
+
+The matcher supports Unicode casefold (for example, `STRASS` can match `Straße`); it does not normalize different Unicode representations. Prefixes are limited to 512 UTF-8 bytes and candidate identifiers to 4096 bytes. Typed-word extraction and supported language metadata retain their existing language-specific behavior.
+
+Case-insensitive expansion examines at most 100000 tag entries, including repeated visibility passes. Existing exact-case candidates are kept first, and the normal maximum-entry setting still limits the result count. A partial expansion is marked **Case-insensitive search limit reached** in the detailed footer. Current-file locals, scope/line visibility, included files, workspace/global sources, language compatibility and name deduplication retain the existing lookup rules. The scan budget can omit additional matches in very large indexes. File name filters keep their own case rules. The choice is saved with the other completion settings and survives restart.

@@ -657,3 +657,6 @@ completion_settings_test = executable('test_insight_completion_settings', '../in
 test('Insight completion settings', completion_settings_test)
 completion_preferences_gui_test = executable('test_insight_completion_preferences_gui', '../insight/tests/completion_preferences_gui_test.c', '../insight/desktop/completion_preferences.c', '../insight/desktop/completion_settings.c', dependencies: deps)
 test('Insight completion preferences GUI', completion_preferences_gui_test, timeout: 30)
+
+completion_match_test = executable('test_insight_completion_match', '../insight/tests/completion_match_test.c', '../src/tagmanager/tm_completion.c', dependencies: glib)
+test('Insight completion case matching', completion_match_test)

@@ -339,7 +339,7 @@ EXTRA_DIST += insight/desktop/folder_tree.c insight/desktop/folder_tree.h
 EXTRA_DIST += insight/tests/folder_tree_gui_test.c insight/tests/folder_tree_native_gui_test.c
 
 insightdocmediadir = $(pkgdatadir)/insight/docs/media
-dist_insightdocmedia_DATA = insight/docs/media/completion-options.jpg insight/docs/media/completion-insertion.svg insight/docs/media/completion-list.jpg insight/docs/media/typing-pairs.svg insight/docs/media/filetype-typing.svg insight/docs/media/filetype-editing.jpg insight/docs/media/filetype-editing.svg insight/docs/media/git-commit-dialog.jpg insight/docs/media/folder-tree.jpg insight/docs/media/git-actions.svg insight/docs/media/git-selection.svg insight/docs/media/folder-expansion.svg
+dist_insightdocmedia_DATA = insight/docs/media/completion-case.svg insight/docs/media/completion-options.jpg insight/docs/media/completion-insertion.svg insight/docs/media/completion-list.jpg insight/docs/media/typing-pairs.svg insight/docs/media/filetype-typing.svg insight/docs/media/filetype-editing.jpg insight/docs/media/filetype-editing.svg insight/docs/media/git-commit-dialog.jpg insight/docs/media/folder-tree.jpg insight/docs/media/git-actions.svg insight/docs/media/git-selection.svg insight/docs/media/folder-expansion.svg
 EXTRA_DIST += AGENTS.md insight/docs/media/README.md
 
 EXTRA_DIST += insight/desktop/filetype_options.c insight/desktop/filetype_options.h
@@ -357,3 +357,5 @@ EXTRA_DIST += insight/tests/filetype_pairs_native_gui_test.c
 EXTRA_DIST += insight/tests/completion_native_gui_test.c
 
 EXTRA_DIST += insight/tests/completion_settings_test.c insight/tests/completion_preferences_gui_test.c
+
+EXTRA_DIST += insight/tests/completion_match_test.c
