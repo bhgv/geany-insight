@@ -1035,7 +1035,7 @@ static void auto_update_margin_width(GeanyEditor *editor)
 	if (editor->document->priv->line_count != next_linecount)
 	{
 		doc->priv->line_count = next_linecount;
-		sci_set_line_numbers(editor->sci, TRUE);
+		sci_set_line_numbers(editor->sci, insight_languages_margin_numbers(editor->sci, TRUE));
 	}
 }
 
@@ -1169,7 +1169,7 @@ static gboolean on_editor_notify(G_GNUC_UNUSED GObject *object, GeanyEditor *edi
 			break;
 
  		case SCN_MODIFIED:
-			if (editor_prefs.show_linenumber_margin && (nt->modificationType & (SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT)) && nt->linesAdded)
+			if (insight_languages_margin_numbers(editor->sci, editor_prefs.show_linenumber_margin) && (nt->modificationType & (SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT)) && nt->linesAdded)
 			{
 				/* automatically adjust Scintilla's line numbers margin width */
 				auto_update_margin_width(editor);
