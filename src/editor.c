@@ -1,4 +1,5 @@
 #include "insight-languages.h"
+#include "../insight/desktop/filetype_pairs.h"
 #include "insight-formatting.h"
 /*
  *      editor.c - this file is part of Geany, a fast and lightweight IDE
@@ -48,6 +49,7 @@
 #include "highlighting.h"
 #include "insight-workbench.h"
 #include "insight-languages.h"
+#include "../insight/desktop/filetype_pairs.h"
 #include "keybindings.h"
 #include "main.h"
 #include "navqueue.h"
@@ -1632,6 +1634,7 @@ static void auto_close_chars(ScintillaObject *sci, gint pos, gchar c)
 	if (closing_char != NULL)
 	{
 		sci_add_text(sci, closing_char);
+		insight_filetype_pairs_remember(sci,pos-1,pos);
 		sci_set_current_position(sci, pos, TRUE);
 	}
 }
@@ -5077,6 +5080,9 @@ static gboolean filetype_return_key(GtkWidget *widget, GdkEventKey *event, gpoin
 {
  GeanyEditor *editor=data;
  const InsightFiletypeOptions *options=insight_languages_editing_options(editor);
+ guint character=gdk_keyval_to_unicode(event->keyval);
+ gboolean surround=(character=='(' && (editor_prefs.autoclose_chars & GEANY_AC_PARENTHESIS)) || (character=='[' && (editor_prefs.autoclose_chars & GEANY_AC_SBRACKET)) || (character=='{' && (editor_prefs.autoclose_chars & GEANY_AC_CBRACKET));
+ if(options && options->typing_shortcuts && insight_filetype_pairs_key(SCINTILLA(widget),event->keyval,event->state,surround)) return TRUE;
  if (!options || options->enter_newline ||
      (event->keyval!=GDK_KEY_Return && event->keyval!=GDK_KEY_KP_Enter) ||
      (event->state & gtk_accelerator_get_default_mod_mask()) ||
@@ -5099,6 +5105,7 @@ ScintillaObject *editor_create_widget(GeanyEditor *editor)
 	/* temporarily change editor to use the new sci widget */
 	old = editor->sci;
 	sci = create_new_sci(editor);
+	insight_filetype_pairs_attach(sci);
 	g_signal_connect(sci,"key-press-event",G_CALLBACK(filetype_return_key),editor);
 	SSM(sci, SCI_SETIDLESTYLING, SC_IDLESTYLING_ALL, 0);
 	editor->sci = sci;

@@ -79,3 +79,11 @@ When **Enter inserts a new line** is off, plain Return/keypad Enter moves to the
 ![Typing permissions and inheritance](../media/filetype-typing.svg)
 
 Intelligent paste, printing, and Include when adding are separate remaining work. Existing bracket editing is reused; this does not claim every Source Insight paired-character shortcut.
+
+### Editing generated bracket and quote pairs
+
+With file type editing overrides and **Allow automatic closing brackets and quotes** enabled, typing the closing character at a generated `)`, `]`, `}`, single quote or double quote advances over it instead of inserting a duplicate. Backspace in an empty generated pair removes both characters in one Undo action. Typing `(`, `[` or `{` immediately before an existing matched block with the same opening character surrounds that block with a new pair, respecting the global automatic-closing permission.
+
+![Tracked pair editing](../media/typing-pairs.svg)
+
+Nested pairs and UTF-8 edits before/inside them are tracked by byte position. Tracking is transient, limited to 128 pairs per editor, and cleared by Undo/Redo or disabling the editing override/typing permission. Manual pairs are ordinary text. Read-only documents, selections, multiple carets, modified editing keys and active completion popups retain their normal behavior. Generated quotes are tracked, but surrounding pre-existing quoted strings and every Source Insight shortcut are not claimed. No XML-tag pair deletion is added.

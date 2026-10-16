@@ -10,3 +10,5 @@ Keep screenshots current when visible behavior changes. Favor small, useful illu
 - `filetype-editing.jpg`: real production file type editing page from its isolated GTK fixture. `filetype-editing.svg` explains mixed indentation and screen versus typing wraps.
 
 `filetype-typing.svg` explains typing permissions and inheritance. The updated `filetype-editing.jpg` captures the real extended GTK page in an isolated fixture.
+
+`typing-pairs.svg` shows generated-pair skip, empty-pair deletion and wrapping a matched block.

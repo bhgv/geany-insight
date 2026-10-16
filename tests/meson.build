@@ -646,3 +646,6 @@ filetype_editing_gui_test = executable('test_insight_filetype_editing_gui', '../
 test('Insight file type editing page GUI', filetype_editing_gui_test, timeout: 30)
 filetype_options_native_gui_test = executable('test_insight_filetype_options_native_gui', '../insight/tests/filetype_options_native_gui_test.c', dependencies: test_deps)
 test('Insight native file type editing GUI', filetype_options_native_gui_test, timeout: 60)
+
+filetype_pairs_native_gui_test = executable('test_insight_filetype_pairs_native_gui', '../insight/tests/filetype_pairs_native_gui_test.c', dependencies: test_deps)
+test('Insight native typing pairs GUI', filetype_pairs_native_gui_test, timeout: 40)

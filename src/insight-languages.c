@@ -6,6 +6,7 @@
 #include "../insight/desktop/master_list.h"
 #include "../insight/desktop/file_patterns.h"
 #include "../insight/desktop/filetype_editing.h"
+#include "../insight/desktop/filetype_pairs.h"
 #include "insight-formatting.h"
 #include "insight-themes.h"
 #include "insight-index.h"
@@ -103,6 +104,7 @@ void insight_languages_apply_editor(GeanyEditor *editor) {
  if(!options && !baseline) return;
  if(options) {
 
+  if(!options->typing_shortcuts) insight_filetype_pairs_clear(sci);
   if(!options->allow_completion || !options->allow_snippets) SEND(sci,SCI_AUTOCCANCEL,0,0);
   InsightFiletypeOptions *copy=g_new(InsightFiletypeOptions,1);*copy=*options;g_object_set_data_full(G_OBJECT(sci),"insight-language-editing-active",copy,g_free);
   editor->auto_indent=options->auto_indent!=GEANY_AUTOINDENT_NONE;editor->line_breaking=options->hard_wrap;
@@ -111,7 +113,7 @@ void insight_languages_apply_editor(GeanyEditor *editor) {
   SEND(sci,SCI_SETINDENTATIONGUIDES,options->indent_guides ? SC_IV_LOOKBOTH : SC_IV_NONE,0);
   sci_set_mark_long_lines(sci,options->right_margin ? 0 : 2,options->margin,editor_prefs.long_line_color);
  } else {
-  EditingBaseline old=*baseline;g_object_set_data(G_OBJECT(sci),"insight-language-editing-active",NULL);g_object_set_data(G_OBJECT(sci),"insight-language-editing-baseline",NULL);
+  insight_filetype_pairs_clear(sci);EditingBaseline old=*baseline;g_object_set_data(G_OBJECT(sci),"insight-language-editing-active",NULL);g_object_set_data(G_OBJECT(sci),"insight-language-editing-baseline",NULL);
   editor->auto_indent=old.automatic;editor->line_breaking=old.breaking;editor_set_indent(editor,old.type,old.width);editor_set_line_wrapping(editor,old.wrap);
   sci_set_line_numbers(sci,old.numbers);SEND(sci,SCI_SETVIEWWS,old.white_space,0);SEND(sci,SCI_SETVIEWEOL,old.eol,0);SEND(sci,SCI_SETINDENTATIONGUIDES,old.guides,0);SEND(sci,SCI_SETEDGEMODE,old.edge_mode,0);SEND(sci,SCI_SETEDGECOLUMN,old.edge_column,0);SEND(sci,SCI_SETEDGECOLOUR,old.edge_color,0);
  }
