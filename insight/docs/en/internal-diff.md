@@ -185,3 +185,9 @@ This dialog is captured from production GTK widgets in the isolated Linux fixtur
 Ctrl+F targets the focused pane and seeds the query from a single-line selection of up to 4096 characters. **Whole words only** uses identifier boundaries: Unicode letters, digits, combining marks and underscores belong to words. **Wrap around** allows one retry from the opposite end; disable it to stop at the file boundary. F3 and Shift+F3 search forward and backward. Search options apply to the current window and never modify result text or merge history. Regular expressions are not supported.
 
 ![Production comparison widget search, isolated GTK fixture](../media/file-compare.jpg)
+
+### Go to Line and pane switching
+
+Ctrl+G targets the focused pane and seeds its current caret line. Enter a logical line number and press Enter or **Go**. Numbers beyond EOF land on the last line; an empty buffer has line 1. **Select line text** selects content without its line ending. **First line** and **Last line** use the selected pane. Escape returns focus from the number field to that pane. Go to Line is also available in the text context menu.
+
+F6 cycles Left → Right → Result; Shift+F6 reverses the order. Search keeps its independent pane choice. Navigation preserves text, selected difference and merge history; Go to Line is blocked while comparison runs. Logical lines do not change when long lines wrap visually. The production-widget capture above includes the navigation bar.

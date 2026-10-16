@@ -1016,3 +1016,9 @@ File Compare Options…	Параметры сравнения файлов…
 Choose two source files before comparing.	Выберите два исходных файла перед сравнением.
 Whole words only	Только целые слова
 Wrap around	Поиск по кругу
+Go to Line — Ctrl+G	Перейти к строке — Ctrl+G
+Select line text	Выделить текст строки
+First line	Первая строка
+Last line	Последняя строка
+Line %d of %d	Строка %d из %d
+Logical line number; values beyond the end go to the last line.	Логический номер строки; значения за концом файла ведут к последней строке.

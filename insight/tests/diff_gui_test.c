@@ -67,8 +67,24 @@ static void search_options_test(void) {
  assert_text(m,"foobar foo_bar foo2 αfoo foó foo FOO");
  gtk_widget_destroy(m->window);flush();
 }
+static void line_navigation_test(void) {
+ Merge *m=merge_new(NULL);flush();GtkTextBuffer *b=result(m);GtkTextIter a,z;GdkEventKey event={0};
+ gtk_text_buffer_set_text(b,"one\r\nдва\rthree\n",-1);guint history=m->history->len;
+ gtk_widget_grab_focus(m->views[2]);event.state=GDK_CONTROL_MASK;event.keyval=GDK_KEY_g;
+ g_assert_true(key(m->views[2],&event,m));g_assert_true(gtk_widget_has_focus(m->line_number));g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(m->line_side)),==,2);
+ gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->line_number),2);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->line_select),TRUE);
+ go_line(NULL,m);g_assert_true(gtk_text_buffer_get_selection_bounds(b,&a,&z));gchar *text=gtk_text_buffer_get_text(b,&a,&z,TRUE);g_assert_cmpstr(text,==,"два");g_free(text);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->wrap_toggle),TRUE);gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->line_number),G_MAXINT);go_line(NULL,m);
+ gtk_text_buffer_get_iter_at_mark(b,&a,gtk_text_buffer_get_insert(b));g_assert_cmpint(gtk_text_iter_get_line(&a),==,3);g_assert_false(gtk_text_buffer_get_has_selection(b));
+ line_begin(g_object_get_data(G_OBJECT(m->window),"line-first"),m);gtk_text_buffer_get_selection_bounds(b,&a,&z);g_assert_cmpint(gtk_text_iter_get_line(&a),==,0);
+ event.state=0;event.keyval=GDK_KEY_F6;g_assert_true(key(m->views[2],&event,m));g_assert_true(gtk_widget_has_focus(m->views[0]));
+ event.state=GDK_SHIFT_MASK;g_assert_true(key(m->views[0],&event,m));g_assert_true(gtk_widget_has_focus(m->views[2]));
+ g_assert_cmpuint(m->history->len,==,history);assert_text(m,"one\r\nдва\rthree\n");
+ gtk_text_buffer_set_text(b,"",0);gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->line_number),100);go_line(NULL,m);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->line_number)),==,1);
+ gtk_widget_destroy(m->window);flush();
+}
 int main(int argc,char **argv) {
- gtk_init(&argc,&argv);search_options_test();insight_diff_set_source_opener(source_opened);
+ gtk_init(&argc,&argv);line_navigation_test();search_options_test();insight_diff_set_source_opener(source_opened);
  GError *error=NULL;gchar *dir=g_dir_make_tmp("insight-diff-XXXXXX",&error);g_assert_no_error(error);
  gchar *left=g_build_filename(dir,"left.txt",NULL),*right=g_build_filename(dir,"right.txt",NULL);
  const char *a="start\nleft\ncommon\nlast left\nend\n",*b="start\nright\ncommon\nlast right\nextra\nend\n";

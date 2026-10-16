@@ -15,6 +15,7 @@ typedef struct { guint begin,end; } MapBlock;
 typedef struct {
  GtkWidget *window,*paths[2],*views[3],*status,*undo,*redo,*take[2],*take_all[2],*external;
  GtkWidget *find_entry,*find_side,*find_case,*find_word,*find_wrap,*find_previous,*find_next,*find_status,*numbers;
+ GtkWidget *line_side,*line_number,*line_select,*line_status;
  GArray *map_blocks[2];guint map_lines[2];
  GtkWidget *scrollers[3],*maps[2],*zoom,*mono,*vertical,*overview,*list_toggle,*wrap_toggle;GtkCssProvider *font_css;
  GtkWidget *compare_button,*cancel_button,*save_button; GCancellable *cancel; gboolean busy;
@@ -114,9 +115,43 @@ static void focus_find(Merge *m) {
  }
  gtk_widget_grab_focus(m->find_entry);gtk_editable_select_region(GTK_EDITABLE(m->find_entry),0,-1);
 }
+static gint focused_pane(Merge *m) {
+ GtkWidget *focus=gtk_window_get_focus(GTK_WINDOW(m->window));
+ for(gint side=0;side<3;side++) if(focus==m->views[side]) return side;
+ return CLAMP(gtk_combo_box_get_active(GTK_COMBO_BOX(m->line_side)),0,2);
+}
+static void focus_line(Merge *m,gint side) {
+ GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]));GtkTextIter at;
+ gtk_text_buffer_get_iter_at_mark(buffer,&at,gtk_text_buffer_get_insert(buffer));
+ gtk_combo_box_set_active(GTK_COMBO_BOX(m->line_side),side);
+ gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->line_number),gtk_text_iter_get_line(&at)+1);
+ gtk_widget_grab_focus(m->line_number);gtk_editable_select_region(GTK_EDITABLE(m->line_number),0,-1);
+}
+static void go_line(GtkWidget *widget,gpointer data) {
+ (void)widget;Merge *m=data;if(m->busy) return;
+ gint side=CLAMP(gtk_combo_box_get_active(GTK_COMBO_BOX(m->line_side)),0,2);
+ GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]));GtkTextIter at,end;
+ gtk_spin_button_update(GTK_SPIN_BUTTON(m->line_number));
+ gint line=MIN(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->line_number)),gtk_text_buffer_get_line_count(buffer));
+ gtk_text_buffer_get_iter_at_line(buffer,&at,line-1);end=at;
+ if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->line_select))) {
+  if(!gtk_text_iter_ends_line(&end)) gtk_text_iter_forward_to_line_end(&end);
+  gtk_text_buffer_select_range(buffer,&at,&end);
+ } else gtk_text_buffer_place_cursor(buffer,&at);
+ gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->line_number),line);
+ gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(m->views[side]),&at,0.1,TRUE,0,0.5);gtk_widget_grab_focus(m->views[side]);
+ gchar *label=g_strdup_printf("Line %d of %d",line,gtk_text_buffer_get_line_count(buffer));gtk_label_set_text(GTK_LABEL(m->line_status),label);g_free(label);
+}
+static void line_begin(GtkWidget *widget,gpointer data) { Merge *m=data;gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->line_number),widget==g_object_get_data(G_OBJECT(m->window),"line-first") ? 1 : G_MAXINT);go_line(widget,m); }
 static gboolean key(GtkWidget *w,GdkEventKey *event,gpointer data) {
  (void)w;
  Merge *m=data;
+ if((event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_g || event->keyval==GDK_KEY_G)) { focus_line(m,focused_pane(m));return TRUE; }
+ if(event->keyval==GDK_KEY_F6 && !(event->state&(GDK_CONTROL_MASK|GDK_MOD1_MASK))) {
+  gint side=(focused_pane(m)+((event->state&GDK_SHIFT_MASK) ? 2 : 1))%3;
+  gtk_combo_box_set_active(GTK_COMBO_BOX(m->line_side),side);gtk_widget_grab_focus(m->views[side]);return TRUE;
+ }
+ if(event->keyval==GDK_KEY_Escape && w==m->line_number) { gtk_widget_grab_focus(m->views[focused_pane(m)]);return TRUE; }
  if(event->keyval==GDK_KEY_F3) { find_text(m,(event->state&GDK_SHIFT_MASK)!=0);return TRUE; }
  if((event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_f || event->keyval==GDK_KEY_F)) { focus_find(m);return TRUE; }
  if(event->keyval==GDK_KEY_Escape && w==m->find_entry) {
@@ -401,14 +436,14 @@ static void copy_difference(Merge *m,guint side) {
 static void source_menu_action(GtkMenuItem *item,gpointer window) {
  Merge *m=g_object_get_data(G_OBJECT(window),"insight-diff-state");if(!m) return;
  gint side=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item),"side"));gint action=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item),"action"));
- if(action==0) edit_source(m,side);else if(action==1) copy_difference(m,side);else view_options(GTK_WIDGET(item),m);
+ if(action==0) edit_source(m,side);else if(action==1) copy_difference(m,side);else if(action==2) view_options(GTK_WIDGET(item),m);else focus_line(m,side);
 }
 static void view_menu_toggle(GtkCheckMenuItem *item,gpointer toggle) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle),gtk_check_menu_item_get_active(item)); }
 static void source_menu(GtkTextView *view,GtkWidget *menu,gpointer data) {
  Merge *m=data;guint side=GTK_WIDGET(view)==m->views[1] ? 1 : GTK_WIDGET(view)==m->views[0] ? 0 : 2;
  gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());
- const gchar *labels[]={"Edit File — Ctrl+E","Copy selected difference","File Compare Options…"};
- for(guint action=0;action<3;action++) {
+ const gchar *labels[]={"Edit File — Ctrl+E","Copy selected difference","File Compare Options…","Go to Line — Ctrl+G"};
+ for(guint action=0;action<4;action++) {
   if(side==2 && action<2) continue;
   GtkWidget *item=gtk_menu_item_new_with_label(labels[action]);g_object_set_data(G_OBJECT(item),"side",GUINT_TO_POINTER(side));g_object_set_data(G_OBJECT(item),"action",GUINT_TO_POINTER(action));gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect_object(item,"activate",G_CALLBACK(source_menu_action),m->window,0);
   if(action<2) gtk_widget_set_sensitive(item,!m->busy && m->loaded_paths[side] && (action==0 ? source_opener!=NULL : selected(m)>=0));
@@ -619,6 +654,15 @@ static Merge *merge_new(GtkWidget *parent) {
  m->find_previous=button(find,"Find previous",G_CALLBACK(find_clicked),m);m->find_next=button(find,"Find next",G_CALLBACK(find_clicked),m);
  m->find_status=gtk_label_new("");gtk_box_pack_start(GTK_BOX(find),m->find_status,FALSE,FALSE,0);
  g_signal_connect(m->find_entry,"activate",G_CALLBACK(find_activate),m);g_signal_connect(m->find_entry,"key-press-event",G_CALLBACK(key),m);
+ GtkWidget *line=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),line,FALSE,FALSE,0);
+ gtk_box_pack_start(GTK_BOX(line),gtk_label_new("Go to Line — Ctrl+G"),FALSE,FALSE,0);
+ m->line_side=gtk_combo_box_text_new();for(guint i=0;i<3;i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->line_side),i==0 ? "Left" : i==1 ? "Right" : "Result");gtk_combo_box_set_active(GTK_COMBO_BOX(m->line_side),0);gtk_box_pack_start(GTK_BOX(line),m->line_side,FALSE,FALSE,0);
+ m->line_number=gtk_spin_button_new_with_range(1,G_MAXINT,1);gtk_entry_set_width_chars(GTK_ENTRY(m->line_number),10);gtk_widget_set_name(m->line_number,"insight-diff-line");gtk_box_pack_start(GTK_BOX(line),m->line_number,FALSE,FALSE,0);
+ m->line_select=gtk_check_button_new_with_label("Select line text");gtk_box_pack_start(GTK_BOX(line),m->line_select,FALSE,FALSE,0);
+ button(line,"Go",G_CALLBACK(go_line),m);GtkWidget *first=button(line,"First line",G_CALLBACK(line_begin),m);g_object_set_data(G_OBJECT(m->window),"line-first",first);button(line,"Last line",G_CALLBACK(line_begin),m);
+ m->line_status=gtk_label_new("");gtk_box_pack_start(GTK_BOX(line),m->line_status,FALSE,FALSE,0);
+ gtk_widget_set_tooltip_text(m->line_number,"Logical line number; values beyond the end go to the last line.");
+ g_signal_connect(m->line_number,"activate",G_CALLBACK(go_line),m);g_signal_connect(m->line_number,"key-press-event",G_CALLBACK(key),m);
  GtkWidget *panes=gtk_paned_new(GTK_ORIENTATION_VERTICAL);gtk_box_pack_start(GTK_BOX(box),panes,TRUE,TRUE,0);
  m->list=gtk_list_store_new(2,G_TYPE_INT,G_TYPE_STRING);m->hunk_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(m->list));
  gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(m->hunk_view),-1,"Differences",gtk_cell_renderer_text_new(),"text",1,NULL);
