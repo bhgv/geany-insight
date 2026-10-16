@@ -16,6 +16,7 @@ int main(void)
  const gchar *init[]={"init","--initial-branch=main",NULL};git(init);
  const gchar *name[]={"config","user.name","Insight Test",NULL},*email[]={"config","user.email","test@example.invalid",NULL};git(name);git(email);
  write_file("a.txt","first\n");write_file("b.txt","first\n");
+ const gchar *initial_stage[]={"add","--","b.txt",NULL};git(initial_stage);
  GPtrArray *rows=status();g_assert_cmpuint(rows->len,==,2);gchar *message=insight_git_message(rows);g_assert_nonnull(strstr(message,"2 added"));g_free(message);
  GPtrArray *chosen=g_ptr_array_new();g_ptr_array_add(chosen,find(rows,"a.txt"));commit(chosen,"Initial selected file");g_ptr_array_unref(chosen);g_ptr_array_unref(rows);
  const gchar *tree[]={"ls-tree","--name-only","HEAD",NULL};gchar *text=output(tree);g_assert_cmpstr(text,==,"a.txt\n");g_free(text);
@@ -42,5 +43,11 @@ int main(void)
  const gchar *head[]={"log","-1","--format=%s",NULL};text=output(head);g_assert_cmpstr(text,==,"Literal filename\n");g_free(text);
  /* External index locks are never removed or bypassed. */
  p=g_build_filename(root,".git","index.lock",NULL);g_assert_true(g_file_set_contents(p,"owner",-1,NULL));rows=status();chosen=g_ptr_array_new();g_ptr_array_add(chosen,find(rows,"b.txt"));g_assert_false(insight_git_commit(root,chosen,"Locked",&error));g_clear_error(&error);g_assert_true(g_file_test(p,G_FILE_TEST_EXISTS));g_unlink(p);g_free(p);g_ptr_array_unref(chosen);g_ptr_array_unref(rows);
- clean_tree(root);g_free(root);g_print("Git project: selective/unborn commits, staged isolation, cached removal, literal paths, stale review, hooks and locks passed\n");return 0;
+ write_file("Юникод [1].c","int unicode;\n");write_file(".gitignore","ignored.bin\n");write_file("ignored.bin","ignored\n");rows=status();
+ for(guint i=0;i<rows->len;i++) g_assert_cmpstr(((InsightGitChange *)g_ptr_array_index(rows,i))->path,!=,"ignored.bin");
+ chosen=g_ptr_array_new();g_ptr_array_add(chosen,find(rows,"Юникод [1].c"));commit(chosen,"Unicode filename");g_ptr_array_unref(chosen);g_ptr_array_unref(rows);
+#ifndef G_OS_WIN32
+ write_file("line\nbreak.c","int newline;\n");rows=status();chosen=g_ptr_array_new();g_ptr_array_add(chosen,find(rows,"line\nbreak.c"));commit(chosen,"Newline filename");g_ptr_array_unref(chosen);g_ptr_array_unref(rows);
+#endif
+ clean_tree(root);g_free(root);g_print("Git project: selective/unborn commits, staged isolation, cached removal, literal/Unicode paths, ignore rules, stale review, hooks and locks passed\n");return 0;
 }

@@ -93,7 +93,10 @@ static gboolean save_changed(void)
 }
 static const gchar *status_label(InsightGitChange *c)
 { if(c->x=='U' || c->y=='U' || (c->x=='A' && c->y=='A') || (c->x=='D' && c->y=='D')) return "Conflict";if(c->x=='?' || c->x=='A') return "Added";if(c->x=='D' || c->y=='D') return "Removed";return "Modified"; }
-typedef struct { GtkListStore *store;GtkWidget *message,*dialog,*count;GPtrArray *rows; } CommitDialog;
+typedef struct { GtkListStore *store;GtkWidget *message,*dialog,*count;GPtrArray *rows;gboolean message_edited,setting_message; } CommitDialog;
+static void suggest_message(GtkWidget *,gpointer);
+static void message_changed(GtkTextBuffer *buffer,gpointer data)
+{ (void)buffer;CommitDialog *d=data;if(!d->setting_message) d->message_edited=TRUE; }
 static GPtrArray *selected_rows(CommitDialog *d)
 {
  GPtrArray *rows=g_ptr_array_new();GtkTreeIter iter;gboolean valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(d->store),&iter);
@@ -103,11 +106,12 @@ static void selection_changed(CommitDialog *d)
 {
  GPtrArray *rows=selected_rows(d);gchar *text=g_strdup_printf("%u of %u files selected. Commit uses the listed disk changes.",rows->len,d->rows->len);gtk_label_set_text(GTK_LABEL(d->count),text);g_free(text);
  gtk_dialog_set_response_sensitive(GTK_DIALOG(d->dialog),GTK_RESPONSE_ACCEPT,rows->len>0);g_ptr_array_unref(rows);
+ if(!d->message_edited) suggest_message(NULL,d);
 }
 static void toggle_file(GtkCellRendererToggle *renderer,gchar *path,gpointer data)
 { (void)renderer;CommitDialog *d=data;GtkTreeIter iter;if(gtk_tree_model_get_iter_from_string(GTK_TREE_MODEL(d->store),&iter,path)) { gboolean value;gtk_tree_model_get(GTK_TREE_MODEL(d->store),&iter,0,&value,-1);gtk_list_store_set(d->store,&iter,0,!value,-1);selection_changed(d); } }
 static void suggest_message(GtkWidget *widget,gpointer data)
-{ (void)widget;CommitDialog *d=data;GPtrArray *rows=selected_rows(d);gchar *message=insight_git_message(rows);gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(d->message)),message,-1);g_free(message);g_ptr_array_unref(rows); }
+{ (void)widget;CommitDialog *d=data;GPtrArray *rows=selected_rows(d);gchar *message=insight_git_message(rows);d->setting_message=TRUE;gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(d->message)),message,-1);d->setting_message=FALSE;d->message_edited=FALSE;g_free(message);g_ptr_array_unref(rows); }
 static void commit_command(GtkWidget *widget,gpointer data)
 {
  (void)widget;(void)data;if(!require_project() || !save_changed()) return;
@@ -127,7 +131,7 @@ static void commit_command(GtkWidget *widget,gpointer data)
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),view);gtk_paned_pack1(GTK_PANED(paned),scroll,TRUE,FALSE);gtk_paned_set_position(GTK_PANED(paned),500);
  GtkWidget *right=gtk_box_new(GTK_ORIENTATION_VERTICAL,6),*suggest=gtk_button_new_with_label("Suggest message from selected files");gtk_box_pack_start(GTK_BOX(right),gtk_label_new("Commit message (editable)"),FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(right),suggest,FALSE,FALSE,0);g_signal_connect(suggest,"clicked",G_CALLBACK(suggest_message),&d);
  d.message=gtk_text_view_new();gtk_widget_set_name(d.message,"insight-git-commit-message");gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(d.message),GTK_WRAP_WORD_CHAR);scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),d.message);gtk_box_pack_start(GTK_BOX(right),scroll,TRUE,TRUE,0);gtk_paned_pack2(GTK_PANED(paned),right,TRUE,FALSE);
- selection_changed(&d);suggest_message(NULL,&d);gtk_widget_show_all(d.dialog);
+ g_signal_connect(gtk_text_view_get_buffer(GTK_TEXT_VIEW(d.message)),"changed",G_CALLBACK(message_changed),&d);selection_changed(&d);gtk_widget_show_all(d.dialog);
  while(gtk_dialog_run(GTK_DIALOG(d.dialog))==GTK_RESPONSE_ACCEPT) {
   GPtrArray *selected=selected_rows(&d);GtkTextIter first,last;GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(d.message));gtk_text_buffer_get_bounds(buffer,&first,&last);gchar *message=gtk_text_buffer_get_text(buffer,&first,&last,FALSE);g_strstrip(message);
   if(!*message || !selected->len) { show_error(GTK_WINDOW(d.dialog),"Select at least one file and enter a commit message.");g_free(message);g_ptr_array_unref(selected);continue; }
