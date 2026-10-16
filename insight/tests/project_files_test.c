@@ -79,6 +79,33 @@ static void environment_variables(const gchar *root,const gchar *moved) {
  if(old_project) g_setenv("PROJECT_DATA_DIR",old_project,TRUE);else g_unsetenv("PROJECT_DATA_DIR");g_free(old_project);
  insight_project_files_free(s);g_key_file_unref(key);
 }
+static void program_directory(const gchar *root,const gchar *moved) {
+#if defined(G_OS_WIN32) || defined(__linux__)
+ GError *error=NULL;InsightProjectFiles *s=insight_project_files_new();
+ gchar *old=g_strdup(g_getenv("PROGRAM_DIR"));
+ g_assert_true(g_setenv("PROGRAM_DIR",moved,TRUE));
+ g_assert_true(insight_project_files_set_master(s,"%program_dir%/master.txt",root,NULL,&error));
+ g_assert_no_error(error);g_assert_true(g_path_is_absolute(s->master_file));
+ gchar *resolved=g_strdup(s->master_file),*spoof=g_build_filename(moved,"master.txt",NULL);
+ g_assert_cmpstr(resolved,!=,spoof);g_free(spoof);
+#ifdef __linux__
+ gchar *executable=g_file_read_link("/proc/self/exe",&error);g_assert_no_error(error);
+ gchar *directory=g_path_get_dirname(executable),*expected=g_build_filename(directory,"master.txt",NULL);
+ g_assert_cmpstr(resolved,==,expected);g_free(expected);g_free(directory);g_free(executable);
+#endif
+ /* Changing the project root must not relocate the executable directory. */
+ g_assert_true(insight_project_files_set_master(s,s->master_expression,moved,NULL,&error));
+ g_assert_no_error(error);g_assert_cmpstr(s->master_file,==,resolved);
+ GKeyFile *key=g_key_file_new();g_assert_true(insight_project_files_write(s,key,root,&error));
+ InsightProjectFiles *copy=insight_project_files_read(key,moved,&error);g_assert_no_error(error);
+ g_assert_nonnull(copy);g_assert_cmpstr(copy->master_file,==,resolved);
+ g_assert_cmpstr(copy->master_expression,==,"%program_dir%/master.txt");
+ insight_project_files_free(copy);g_key_file_unref(key);insight_project_files_free(s);g_free(resolved);
+ if(old) g_setenv("PROGRAM_DIR",old,TRUE);else g_unsetenv("PROGRAM_DIR");g_free(old);
+#else
+ (void)root;(void)moved;
+#endif
+}
 int main(void) {
  gchar *cwd=g_get_current_dir(),*root=g_build_filename(cwd,"project",NULL),*other=g_build_filename(cwd,"external",NULL),*a=g_build_filename(root,"src","a.c",NULL),*b=g_build_filename(root,"src2","b.c",NULL),*tree=g_build_filename(root,"src",NULL),*child=g_build_filename(tree,"keep",NULL),*keep=g_build_filename(child,"k.c",NULL),*external=g_build_filename(other,"shared.h",NULL);
  InsightProjectFiles *s=insight_project_files_new(); GError *error=NULL;
@@ -105,6 +132,6 @@ int main(void) {
  gchar *before=g_key_file_to_data(config,NULL,NULL); g_free(s->masks); s->masks=g_strnfill(4097,'x'); g_assert_false(insight_project_files_write(s,config,root,&error)); g_assert_nonnull(error); g_clear_error(&error); gchar *after=g_key_file_to_data(config,NULL,NULL); g_assert_cmpstr(before,==,after); g_free(before); g_free(after);
  g_key_file_set_integer(config,"insight-project-files","version",2); g_assert_null(insight_project_files_read(config,root,&error)); g_assert_nonnull(error); g_clear_error(&error);
  g_key_file_set_integer(config,"insight-project-files","version",1); const gchar *invalid_paths[]={"bad\nname.c"}; g_key_file_set_string_list(config,"insight-project-files","files",invalid_paths,1); g_assert_null(insight_project_files_read(config,root,&error)); g_assert_nonnull(error); g_clear_error(&error);
- environment_variables(root,moved);master_variables(root,moved);insight_project_files_free(s); g_key_file_unref(config); g_free(cwd); g_free(root); g_free(other); g_free(a); g_free(b); g_free(tree); g_free(child); g_free(keep); g_free(external); g_free(moved); g_free(moved_a);
+ program_directory(root,moved);environment_variables(root,moved);master_variables(root,moved);insight_project_files_free(s); g_key_file_unref(config); g_free(cwd); g_free(root); g_free(other); g_free(a); g_free(b); g_free(tree); g_free(child); g_free(keep); g_free(external); g_free(moved); g_free(moved_a);
  g_print("Project membership checks passed\n"); return 0;
 }

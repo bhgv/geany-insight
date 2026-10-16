@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "project_files.h"
 #include <string.h>
+#ifdef G_OS_WIN32
+#include <windows.h>
+#endif
 #define GROUP "insight-project-files"
 static gchar *canonical(const char *path) {
  if(!path || !g_path_is_absolute(path) || strlen(path)>16384 || !g_utf8_validate(path,-1,NULL) || strchr(path,'\n') || strchr(path,'\r')) return NULL;
@@ -45,6 +48,21 @@ static gchar *master_environment(gchar **environment,const gchar *name) {
  }
  return result;
 }
+/* Resolve the executable itself: neither cwd, PATH nor PROGRAM_DIR from the
+ * environment identifies the running editor. Do not guess on other systems. */
+static gchar *master_program_directory(void) {
+ gchar *executable=NULL;
+#ifdef G_OS_WIN32
+ gunichar2 *buffer=g_new(gunichar2,32768);
+ DWORD length=GetModuleFileNameW(NULL,(WCHAR *)buffer,32768);
+ if(length && length<32768) executable=g_utf16_to_utf8(buffer,(glong)length,NULL,NULL,NULL);
+ g_free(buffer);
+#elif defined(__linux__)
+ executable=g_file_read_link("/proc/self/exe",NULL);
+#endif
+ if(!executable || !g_path_is_absolute(executable)) { g_free(executable);return NULL; }
+ gchar *directory=g_path_get_dirname(executable);g_free(executable);return directory;
+}
 static gchar *master_variable(const gchar *name,const gchar *base,const gchar *project,gchar **environment) {
  if(!g_ascii_strcasecmp(name,"PROJECT_SOURCE_DIR")) return g_strdup(base);
  if(!g_ascii_strcasecmp(name,"PROJECT_DATA_DIR") || !g_ascii_strcasecmp(name,"PROJECT_NAME")) {
@@ -52,6 +70,7 @@ static gchar *master_variable(const gchar *name,const gchar *base,const gchar *p
   if(!g_ascii_strcasecmp(name,"PROJECT_DATA_DIR")) return g_path_get_dirname(project);
   gchar *value=g_path_get_basename(project),*dot=strrchr(value,'.');if(dot && dot!=value) *dot=0;return value;
  }
+ if(!g_ascii_strcasecmp(name,"PROGRAM_DIR")) return master_program_directory();
  if(!g_ascii_strcasecmp(name,"TEMP_DIR")) return g_strdup(g_get_tmp_dir());
  if(!g_ascii_strcasecmp(name,"DESKTOP_DIR")) return g_strdup(g_get_user_special_dir(G_USER_DIRECTORY_DESKTOP));
  if(!g_ascii_strcasecmp(name,"MYDOCUMENTS_DIR")) return g_strdup(g_get_user_special_dir(G_USER_DIRECTORY_DOCUMENTS));
@@ -67,7 +86,7 @@ static gchar *master_variable(const gchar *name,const gchar *base,const gchar *p
 #endif
  /* Unimplemented predefined names must not accidentally bind an environment
   * value with different semantics. */
- static const gchar *reserved[]={"PROGRAM_DIR","PROGRAMFILES_DIR","PROGRAMFILESX86_DIR","WINDOWS_DIR","SHARED_DOCUMENTS_DIR","SOURCEINSIGHT_USER_DIR"};
+ static const gchar *reserved[]={"PROGRAMFILES_DIR","PROGRAMFILESX86_DIR","WINDOWS_DIR","SHARED_DOCUMENTS_DIR","SOURCEINSIGHT_USER_DIR"};
  for(guint i=0;i<G_N_ELEMENTS(reserved);i++) if(!g_ascii_strcasecmp(name,reserved[i])) return NULL;
  return master_environment(environment,name);
 }
