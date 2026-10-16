@@ -1389,3 +1389,8 @@ Enter a filename or an absolute destination path	Введите имя файл�
 The selected entry changed; refresh the directory	Выбранный объект изменился; обновите каталог
 Choose a different destination outside the source	Выберите другой путь назначения вне исходной папки
 Cannot change a filesystem root	Нельзя изменить корень файловой системы
+Disk folders	Папки на диске
+Layout based on window shape	Компоновка по форме окна
+Stack lists vertically	Расположить списки вертикально
+Folder Font & Color…	Шрифт и цвет папок…
+Open folder	Открыть папку

@@ -251,6 +251,8 @@ libgeany_la_SOURCES += \
 	../insight/core/runtime.h \
 	../insight/desktop/index_cache.c \
 	../insight/desktop/index_cache.h \
+	../insight/desktop/folder_layout.c \
+	../insight/desktop/folder_layout.h \
 	../insight/desktop/disk_operation.c \
 	../insight/desktop/disk_operation.h \
 	../insight/desktop/project_files.c \

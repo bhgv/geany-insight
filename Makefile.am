@@ -321,3 +321,8 @@ EXTRA_DIST += \
 	insight/desktop/disk_operation.h \
 	insight/tests/disk_operation_test.c \
 	insight/tests/disk_operation_gui_test.c
+
+EXTRA_DIST += \
+	insight/desktop/folder_layout.c \
+	insight/desktop/folder_layout.h \
+	insight/tests/folder_layout_test.c

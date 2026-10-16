@@ -57,7 +57,7 @@ to the loaded bounded directory snapshot; filters and Follow retain their usual
 behavior. Columns can be dragged/resized; names remain available. Unknown size/
 time values sort before known values ascending and after them descending.
 
-Adaptive layout remains separate work. Reference: [Source Insight Folder Browser Options](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Project_Folder_Browser_Options.htm).
+Adaptive and manual layouts are described below. Reference: [Source Insight Folder Browser Options](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Project_Folder_Browser_Options.htm).
 
 ### Folder Browser Options
 
@@ -84,4 +84,14 @@ Operations run in a background task and do not overwrite existing destinations. 
 
 Close any open editor documents at the source path or below a source folder first. A changed directory while the dialog is open requires reopening it. On completion the original directory refreshes only if it is still active; navigating elsewhere or closing the browser prevents stale UI updates. Cancellation during shutdown cannot undo a move or trash operation already completed by the filesystem.
 
-These commands change disk contents. They do not rewrite stored project membership paths, bookmarks or other references; update those paths separately after a rename/move. No recursive permanent-delete command is provided. This series does not complete adaptive Folder Browser layout or all Source Insight file-management behavior.
+These commands change disk contents. They do not rewrite stored project membership paths, bookmarks or other references; update those paths separately after a rename/move. No recursive permanent-delete command is provided. Other Source Insight file-management behavior remains separate work.
+
+### Folder navigation and layout based on window shape
+
+Browse disk now contains **Disk folders** and the existing entries list. The tree shows the current directory's ancestors and its loaded immediate subfolders. Select a folder to browse it; previously loaded sibling branches remain within the bounded cache. Refreshing a directory replaces its child branches. Unvisited directories are not recursively expandable: visit the directory first. Symbolic links are not traversed as directories.
+
+In **Folder Browser Options**, enable **Layout based on window shape** for side-by-side lists in a wide window and stacked lists in a tall or narrow window. A small size change near square does not switch orientation. Disable automatic layout to choose **Stack lists vertically** manually. Splitter positions are saved separately for each orientation. Apply publishes the changes; Cancel retains the previous settings. Older settings without these fields enable automatic layout.
+
+Right-click a folder or press Menu/Shift+F10 for Open folder, Copy full path/filename, Up, Refresh, appearance and options. Right-click alone does not navigate or invoke a file preview/open callback. **Folder Font & Color…** styles the disk navigation tree independently of the entries list and project tree, with separate persisted appearance settings. Appearance is applied in its own dialog.
+
+Follow selects the current document's directory without opening a file or moving the editor caret, including hidden directories and files excluded by the file filter. The file filter does not hide navigation folders. The tree uses the existing background directory snapshot and performs no additional scan; snapshot limits and truncation status still apply. Deep paths show at most the last 64 ancestors; the tree cache is bounded to 4096 rows.

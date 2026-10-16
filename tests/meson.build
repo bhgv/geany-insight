@@ -611,7 +611,12 @@ test('Insight guarded disk operations', disk_operation_test)
 
 disk_operation_gui_test = executable('test_insight_disk_operation_gui',
  '../insight/tests/disk_operation_gui_test.c', '../src/insight-disk-browser.c',
- '../insight/desktop/disk_operation.c', '../insight/desktop/lookup_filter.c',
+ '../insight/desktop/disk_operation.c', '../insight/desktop/folder_layout.c', '../insight/desktop/lookup_filter.c',
  include_directories: [igeany, iscintilla, itagmanager, include_directories('..')],
  c_args: geany_cflags, dependencies: deps)
 test('Insight isolated disk operation dialogs GUI', disk_operation_gui_test, timeout: 40)
+
+folder_layout_test = executable('test_insight_folder_layout',
+ '../insight/tests/folder_layout_test.c', '../insight/desktop/folder_layout.c',
+ include_directories: include_directories('../insight/desktop'), dependencies: glib)
+test('Insight Folder Browser shape and ancestry', folder_layout_test)
