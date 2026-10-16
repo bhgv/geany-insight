@@ -182,7 +182,7 @@ This dialog is captured from production GTK widgets in the isolated Linux fixtur
 
 ### Search in comparison panes
 
-Ctrl+F targets the focused pane and seeds the query from a single-line selection of up to 4096 characters. **Whole words only** uses identifier boundaries: Unicode letters, digits, combining marks and underscores belong to words. **Wrap around** allows one retry from the opposite end; disable it to stop at the file boundary. F3 and Shift+F3 search forward and backward. Search options apply to the current window and never modify result text or merge history. Regular expressions are not supported.
+Ctrl+F targets the focused pane and seeds the query from a single-line selection of up to 4096 characters. **Whole words only** uses identifier boundaries: Unicode letters, digits, combining marks and underscores belong to words. **Wrap around** allows one retry from the opposite end; disable it to stop at the file boundary. F3 and Shift+F3 search forward and backward. Search options apply to the current window and never modify result text or merge history. Perl-compatible regular expressions are available through the separate regex toggle; see the section below.
 
 ![Production comparison widget search, isolated GTK fixture](media/file-compare.jpg)
 
@@ -196,7 +196,7 @@ F6 cycles Left → Right → Result; Shift+F6 reverses the order. Search keeps i
 
 Ctrl+H targets search at Result and focuses the replacement field. Enter the old literal text in the search bar above and the new text in **Replace in Result**; an empty replacement deletes matches. Match case and whole-word options apply. **Result selection only** restricts edits to the current result selection; **One occurrence per line** uses the first match on each logical line. Otherwise the entire result is processed, independent of caret position or search wrap.
 
-**Preview count** recomputes actual changes without editing. **Replace all in Result** recomputes against current text and settings, then applies the batch as one Undo/Redo action. Identical text is skipped. A preflight limit of 100000 changes and 1 MiB result rejects the whole batch before edits if exceeded during calculation. Replacement is blocked during comparison. This is literal replacement; regex and source-file replacement are not implemented here. Search and replacement strings are not saved in preferences. The production GTK-widget capture above shows the replacement bar.
+**Preview count** recomputes actual changes without editing. **Replace all in Result** recomputes against current text and settings, then applies the batch as one Undo/Redo action. Identical text is skipped. A preflight limit of 100000 changes and 1 MiB result rejects the whole batch before edits if exceeded during calculation. Replacement is blocked during comparison. Regex replacement is available through the regex toggle described below. Source-file replacement is not implemented here. Search and replacement strings are not saved in preferences. The production GTK-widget capture above shows the replacement bar.
 
 ### Preserving and converting case
 
@@ -280,3 +280,28 @@ Selecting a match shows read-only context from the search snapshot below the lis
 ![Match inspection and guarded navigation](media/search-preview.svg)
 
 Reference: [Source Insight 4 Search Results Window](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Search_Results_Window.htm). This is an adaptation for local comparison panes. Editable search buffers, bidirectional source links and links that track arbitrary edits are separate work.
+
+### Regular expressions in comparison panes
+
+Enable **Regular expressions (Perl compatible)** to use the GTK/GLib Perl-compatible pattern engine for Find next/previous, F3/Shift+F3, Find all and replacement in Result. Literal mode remains the default for old settings. `^` and `$` recognize logical CR, LF and CRLF lines. **Dot matches line endings** enables dot-all for patterns such as `start.*end`; inline pattern flags can override these defaults. Match case and Whole words only continue to apply. Word boundaries use the comparison editor's Unicode identifier policy, including combining marks and underscore.
+
+The match list keeps exact Unicode positions, filtering, sorting, context preview, TSV copy and guarded navigation. Empty matches are positions: the caret moves there without a visible selection. Repeating search skips the same empty position and honors wrap. Empty matches inside a CRLF pair are omitted so anchors do not split that line ending. Ordinary non-empty patterns can explicitly match `\r` or `\n`. Load Search String, identifier search and Ctrl+F when it loads selected text switch back to literal mode.
+
+In regex mode the replacement field supports this bounded grammar:
+
+| Replacement | Meaning |
+| --- | --- |
+| `\0`, `\g<0>` | Entire match |
+| `\1` through `\99`, `\g<1>` | Numbered capture; use angle brackets before literal digits |
+| `\g<name>` | Named capture; an unmatched optional capture inserts nothing |
+| `\n`, `\r`, `\t`, `\\` | LF, CR, tab, literal backslash |
+
+Unknown groups, incomplete references and other escapes are rejected even if there are no matches. Octal/binary escapes and GLib case-conversion escapes are not supported; a digit after `\0` is rejected. **Preserve old case** applies after capture expansion. Selection-only restricts the edited ranges; matching still uses the complete pane snapshot, so lookbehind and anchors retain their original context. An empty replacement match exactly at the upper edge of a selected range is excluded. One occurrence per line, Preview count, no-op detection and a single Undo/Redo batch remain available. No source file is edited.
+
+Regex limits are 8192 UTF-8 bytes of pattern, 1 MiB of pane text and 100000 examined matches. Find all displays at most 5000 rows and reports truncation. The engine uses match/depth limits (100000 / 256), without JIT. A match cutting a UTF-8 character is rejected; capture expansion must also produce valid UTF-8. Expansion is capped at 1 MiB per match and 8 MiB total; the existing 1 MiB result limit still applies. These are resource guards rather than a wall-clock timeout. Errors leave text, caret and Undo history unchanged; details appear in the status tooltip. Only the regex and dot-all flags persist, not patterns or replacements.
+
+![Production regex match list, isolated GTK fixture](media/file-compare-regex.jpg)
+
+![Regex validation and atomic replacement](media/regex-replace.svg)
+
+References: [Source Insight Search](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Search.htm), [Replace](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Replace.htm), [Regular Expressions](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Regular_Expressions.htm). This implements the Perl-compatible choice in local comparison panes. The separate Source Insight regex dialect and confirmation of individual replacements remain open.

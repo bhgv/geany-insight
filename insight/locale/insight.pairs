@@ -727,3 +727,16 @@ File filters (names and wildcards)|||Фильтры файлов (имена и 
 Names or * / ? masks, separated by spaces, commas or semicolons; no paths|||Имена или маски * / ?, разделённые пробелами, запятыми или точками с запятой; без путей
 File filters must be UTF-8 text up to 4096 bytes|||Фильтры файлов должны быть текстом UTF-8 до 4096 байт
 Use up to 256 filename filters, without paths or quotes (255 bytes each)|||Допускается до 256 фильтров имён без путей и кавычек (по 255 байт)
+Regular expressions (Perl compatible)|||Регулярные выражения (Perl Compatible)
+Dot matches line endings|||Точка включает переводы строк
+Regular expression|||Регулярное выражение
+Replacement: \1, \g<name>, \n, \t, \\|||Замена: \1, \g<name>, \n, \t, \\
+Regular expression limit: 8192-byte pattern and 1 MiB text.|||Предел regex: шаблон 8192 байта, текст 1 МиБ.
+Invalid regular expression; hover for details.|||Ошибка regex; подробности во всплывающей подсказке.
+Invalid replacement escape or capture group.|||Недопустимая escape-последовательность или группа замены.
+Regular expression must match complete UTF-8 characters.|||Совпадение regex должно состоять из целых символов UTF-8.
+Regular expression match limit: 100000. Nothing changed.|||Предел совпадений regex: 100000. Изменений нет.
+Replacement expansion is invalid or exceeds 1 MiB. Nothing changed.|||Некорректное раскрытие замены или превышение 1 МиБ. Изменений нет.
+Replacement expansion limit: 8 MiB total. Nothing changed.|||Предел раскрытия замен: всего 8 МиБ. Изменений нет.
+Regular expression work limit or matching error. Nothing changed.|||Предел вычислений или ошибка сопоставления regex. Изменений нет.
+Uses search text, regex, case and whole-word options above; searches the entire result or its selection without wrapping.|||Использует запрос, regex, регистр и целые слова; ищет во всём результате или его выделении без циклического перехода.

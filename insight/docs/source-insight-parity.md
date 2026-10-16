@@ -468,3 +468,7 @@ Added Unicode case-insensitive excerpt filtering, numeric/text column sorting, p
 ### Comparison search inspection (2026-10-17)
 
 Local pane results now provide snapshot context with exact highlighting (4096 Unicode characters maximum), single-row TSV copy, filter/list focus and cyclic navigation through sorted visible matches. Ctrl+Enter retains stale-snapshot guards. This extends comparison-pane inspection; editable project search buffers and bidirectional, edit-tracking Source Links from the Source Insight guide remain open. See [controls and diagram](internal-diff.md#match-context-and-keyboard-inspection).
+
+### Perl-compatible comparison search and replacement (2026-10-17)
+
+Local comparison panes now support Perl-compatible regex search in both directions, dot-all, bounded match lists, zero-width positions and capture replacement in Result. Selection-only, one-per-line, preserved case, preflight limits and one Undo/Redo batch are shared with literal replacement. Patterns are bounded by match/depth/input limits; invalid patterns, capture expansions or result limits reject the entire edit. Literal identifier commands stay literal. The separate Source Insight regex dialect, per-occurrence confirmation and source-file replacement are not claimed. [Controls, production-widget JPEG and SVG](internal-diff.md#regular-expressions-in-comparison-panes).
