@@ -35,6 +35,7 @@
 - [x] Browse disk context menu: правый щелчок без preview/перехода, Menu/Shift+F10, явные preview/open, копирование Unicode-пути/имени, каталог без выбора, Up/Refresh, New folder/Font & Color, guards/RU/native GUI.
 - [x] Browse disk New folder: асинхронное создание дочернего каталога, UTF-8/границы имени, запрет обхода пути/перезаписи, guards смены каталога и закрытия, native GUI.
 - [x] Browse disk File Size/File Date: фоновый снимок метаданных, числовая сортировка заголовками, видимость/ширины/полный порядок, миграция настроек и реальный перезапуск GUI (Linux).
+- [x] Browse disk Folder Browser Options: единый диалог колонок/Follow/скрытых файлов, отдельный Font & Color, кнопка/меню/Ctrl+Q, Apply/Cancel и Linux GUI.
 - [ ] Остальные операции обслуживания файлов/каталогов (rename/move/delete) и полная сверка Folder Browser Options, включая адаптивную компоновку.
 - [ ] Виртуальные группы проекта (наличие аналога в руководстве Source Insight ещё требует подтверждения).
 - [x] Master File List: фоновая синхронизация, изменения/маски/исключения, обратная запись ручного состава, снимки/откат и core/service/native GUI. Ограничения формата/обхода описаны в справке.

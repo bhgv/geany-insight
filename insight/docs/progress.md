@@ -1900,3 +1900,20 @@ Both modified C sources compiled with -Werror. Windows GUI is not yet verified;
 the Windows build-request marker was not changed. Unified Folder Browser Options
 and adaptive layout remain open. Reference:
 https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Project_Folder_Browser_Options.htm
+
+
+### Unified disk Folder Browser Options
+
+Browse disk now has a Folder Browser Options dialog from its button, context
+menu and Ctrl+Q. It stages Kind/Size/Date visibility, Follow and hidden entries,
+publishing flags together on Apply and leaving them untouched on Cancel. The
+final Follow/hidden values request one refresh. Font & Color opens the independent
+existing appearance dialog; its own Apply is independent of outer cancellation.
+Project-tree settings remain separate; adaptive layout remains open.
+
+The extended disk GUI checks staged changes, Apply, Cancel, synchronized direct
+controls, keyboard/context access, Russian captions and nested appearance Cancel.
+It retains metadata/settings/fresh-process coverage. Four focused Linux GUI tests
+passed (disk browser, Project Folders, themes and panel appearance); both modified
+C sources compiled with -Werror. Windows GUI remains unverified. Reference:
+https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Project_Folder_Browser_Options.htm

@@ -39,5 +39,20 @@ to the loaded bounded directory snapshot; filters and Follow retain their usual
 behavior. Columns can be dragged/resized; names remain available. Unknown size/
 time values sort before known values ascending and after them descending.
 
-The unified Folder Browser Options dialog and adaptive layout remain separate
-work. Reference: [Source Insight Folder Browser Options](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Project_Folder_Browser_Options.htm).
+Adaptive layout remains separate work. Reference: [Source Insight Folder Browser Options](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Project_Folder_Browser_Options.htm).
+
+### Folder Browser Options
+
+In Browse disk, use **Folder Browser Options…**, its context-menu item or Ctrl+Q
+while focus is inside the disk browser. The dialog collects Kind, File Size,
+File Date, Follow current file and Show hidden disk entries. Apply publishes the
+checkbox choices together; Cancel leaves them unchanged. Follow/hidden changes
+request one refresh using the final settings, without changing project membership.
+Existing direct controls remain synchronized and all choices use their existing
+persistent settings.
+
+Font & Color opens the existing independent appearance dialog. Its own Apply
+commits appearance immediately; cancelling the outer options dialog does not
+undo a separately applied appearance. Cancelling the appearance dialog changes
+nothing. This dialog configures the disk list; project-tree Follow and appearance
+remain independent.

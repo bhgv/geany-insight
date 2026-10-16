@@ -13,7 +13,7 @@
 #include <string.h>
 #define DISK_LIMIT 2048u
 enum { NAME,PATH,DIRECTORY,LINK,SIZE,MODIFIED,COLUMNS };
-enum { DB_PREVIEW,DB_OPEN,DB_PATH,DB_NAME,DB_UP,DB_REFRESH,DB_CREATE,DB_STYLE,DB_ACTIONS };
+enum { DB_PREVIEW,DB_OPEN,DB_PATH,DB_NAME,DB_UP,DB_REFRESH,DB_CREATE,DB_STYLE,DB_OPTIONS,DB_ACTIONS };
 typedef struct { gchar *name,*path;gboolean directory,link;gint64 size,modified; } DiskEntry;
 typedef struct {
  GtkWidget *box,*path,*query,*view,*status,*hidden,*follow,*kind_toggle,*size_toggle,*date_toggle,*create,*popup,*actions[DB_ACTIONS];GtkTreeViewColumn *name_column,*kind_column,*size_column,*date_column;GtkListStore *store;GtkTreeModelFilter *model;
@@ -109,6 +109,20 @@ static void follow_changed(GtkToggleButton *button,gpointer data) {
  if(following(b)) { if(b->loading) insight_disk_browser_cancel(b->box);gchar *path=g_strdup(b->current_file);insight_disk_browser_current_file(b->box,path,b->active);g_free(path); }
  else { gtk_tree_model_filter_refilter(b->model);if(b->active && b->root) { gchar *root=g_strdup(b->root);load(b,root);g_free(root); } }
 }
+static void options(GtkWidget *widget,gpointer data) {
+ (void)widget;DiskBrowser *b=data;if(!b->alive) return;g_object_ref(b->box);GtkWidget *parent=gtk_widget_get_toplevel(b->box);
+ GtkWidget *dialog=gtk_dialog_new_with_buttons("Folder Browser Options",GTK_IS_WINDOW(parent) ? GTK_WINDOW(parent) : NULL,GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Cancel",GTK_RESPONSE_CANCEL,"Apply",GTK_RESPONSE_APPLY,NULL);gtk_widget_set_name(dialog,"insight-disk-options-dialog");GtkWidget *content=gtk_dialog_get_content_area(GTK_DIALOG(dialog));gtk_container_set_border_width(GTK_CONTAINER(content),8);
+ GtkWidget *columns=gtk_label_new("Show Columns");gtk_widget_set_halign(columns,GTK_ALIGN_START);gtk_box_pack_start(GTK_BOX(content),columns,FALSE,FALSE,3);
+ const gchar *labels[]={"Kind","File Size","File Date","Follow current file","Show hidden disk entries"};const gchar *names[]={"kind","size","date","follow","hidden"};GtkWidget *checks[5];GtkTreeViewColumn *views[]={b->kind_column,b->size_column,b->date_column};
+ for(guint i=0;i<5;i++) { checks[i]=gtk_check_button_new_with_label(labels[i]);gchar *name=g_strconcat("insight-disk-options-",names[i],NULL);gtk_widget_set_name(checks[i],name);g_free(name);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(checks[i]),i<3 ? gtk_tree_view_column_get_visible(views[i]) : gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(i==3 ? b->follow : b->hidden)));gtk_box_pack_start(GTK_BOX(content),checks[i],FALSE,FALSE,3); }
+ GtkWidget *appearance=insight_list_style_button(b->view);gtk_widget_set_name(appearance,"insight-disk-options-appearance");gtk_box_pack_start(GTK_BOX(content),appearance,FALSE,FALSE,3);insight_i18n_apply(dialog);gtk_widget_show_all(dialog);
+ if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_APPLY && b->alive) {
+  gboolean follow=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(checks[3])),hidden=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(checks[4]));gboolean reload=follow!=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(b->follow)) || hidden!=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(b->hidden));b->setting=TRUE;
+  GtkWidget *toggles[]={b->kind_toggle,b->size_toggle,b->date_toggle};for(guint i=0;i<3;i++) gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(toggles[i]),gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(checks[i])));gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(b->follow),follow);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(b->hidden),hidden);b->setting=FALSE;
+  if(reload) follow_changed(NULL,b);
+ }
+ gtk_widget_destroy(dialog);g_object_unref(b->box);
+}
 typedef struct { GWeakRef box;gchar *root;guint64 generation; } CreateJob;
 static void create_done(GObject *source,GAsyncResult *result,gpointer data) {
  CreateJob *job=data;GError *error=NULL;gboolean created=g_file_make_directory_finish(G_FILE(source),result,&error);GtkWidget *box=g_weak_ref_get(&job->box);DiskBrowser *b=box ? g_object_get_data(G_OBJECT(box),"insight-disk-browser") : NULL;
@@ -147,12 +161,13 @@ static void menu_action(GtkMenuItem *item,gpointer data) {
  else if(action==DB_UP) parent(NULL,b);
  else if(action==DB_REFRESH) refresh(NULL,b);
  else if(action==DB_CREATE) create_folder(NULL,b);
+ else if(action==DB_OPTIONS) options(NULL,b);
  g_free(path);
 }
 static GtkWidget *menu(DiskBrowser *b) {
  if(!b->popup) {
   b->popup=gtk_menu_new();g_object_ref_sink(b->popup);gtk_menu_attach_to_widget(GTK_MENU(b->popup),b->view,NULL);g_object_set_data(G_OBJECT(b->view),"insight-disk-popup",b->popup);
-  const gchar *labels[]={"Preview in Context","Open","Copy full path","Copy filename","Up","Refresh","New folder…","Font & Color…"};const gchar *names[]={"preview","open","copy-path","copy-name","up","refresh","create","appearance"};
+  const gchar *labels[]={"Preview in Context","Open","Copy full path","Copy filename","Up","Refresh","New folder…","Font & Color…","Folder Browser Options…"};const gchar *names[]={"preview","open","copy-path","copy-name","up","refresh","create","appearance","options"};
   for(guint i=0;i<DB_ACTIONS;i++) { if(i==DB_PATH || i==DB_UP || i==DB_CREATE) gtk_menu_shell_append(GTK_MENU_SHELL(b->popup),gtk_separator_menu_item_new());GtkWidget *item=i==DB_STYLE ? insight_list_style_menu_item(b->view) : gtk_menu_item_new_with_label(labels[i]);gchar *name=g_strconcat("insight-disk-menu-",names[i],NULL);gtk_widget_set_name(item,name);g_free(name);b->actions[i]=item;g_object_set_data(G_OBJECT(item),"insight-disk-action",GUINT_TO_POINTER(i));if(i!=DB_STYLE) g_signal_connect(item,"activate",G_CALLBACK(menu_action),b);gtk_menu_shell_append(GTK_MENU_SHELL(b->popup),item); }
  }
  gboolean directory=FALSE;gchar *path=selected_path(b,&directory);gtk_widget_set_sensitive(b->actions[DB_PREVIEW],path && !directory);gtk_widget_set_sensitive(b->actions[DB_OPEN],path!=NULL);gtk_widget_set_sensitive(b->actions[DB_PATH],path || b->root);gtk_widget_set_sensitive(b->actions[DB_NAME],path!=NULL);gtk_widget_set_sensitive(b->actions[DB_UP],b->root!=NULL);gtk_widget_set_sensitive(b->actions[DB_REFRESH],b->root!=NULL);gtk_widget_set_sensitive(b->actions[DB_CREATE],b->root && !b->creating);g_free(path);insight_i18n_apply(b->popup);gtk_widget_show_all(b->popup);return b->popup;
@@ -203,6 +218,7 @@ static void sort_clicked(GtkTreeViewColumn *column,gpointer data) {
 }
 static gboolean key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
  (void)widget;DiskBrowser *b=data;guint mods=event->state&gtk_accelerator_get_default_mod_mask();
+ if(mods==GEANY_PRIMARY_MOD_MASK && event->keyval==GDK_KEY_q) { options(NULL,b);return TRUE; }
  if(event->keyval==GDK_KEY_F5 && !mods) { refresh(NULL,b);return TRUE; }
  if(event->keyval==GDK_KEY_Up && mods==GDK_MOD1_MASK) { parent(NULL,b);return TRUE; }
  if(mods==GEANY_PRIMARY_MOD_MASK && (event->keyval==GDK_KEY_l || event->keyval==GDK_KEY_f)) { gtk_widget_grab_focus(event->keyval==GDK_KEY_l ? b->path : b->query);return TRUE; }
@@ -256,6 +272,7 @@ GtkWidget *insight_disk_browser_new(InsightDiskOpen open,gpointer data) {
  GtkWidget *menu=gtk_menu_new(),*choose=gtk_menu_button_new();gtk_button_set_label(GTK_BUTTON(choose),"Columns");gtk_widget_set_name(choose,"insight-disk-columns");b->kind_toggle=gtk_check_menu_item_new_with_label("Kind");gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(b->kind_toggle),TRUE);gtk_menu_shell_append(GTK_MENU_SHELL(menu),b->kind_toggle);gtk_menu_button_set_popup(GTK_MENU_BUTTON(choose),menu);gtk_box_pack_start(GTK_BOX(row),choose,FALSE,FALSE,0);g_signal_connect(b->kind_toggle,"toggled",G_CALLBACK(kind_toggled),b);
  b->size_toggle=gtk_check_menu_item_new_with_label("File Size");b->date_toggle=gtk_check_menu_item_new_with_label("File Date");gtk_widget_set_name(b->size_toggle,"insight-disk-show-size");gtk_widget_set_name(b->date_toggle,"insight-disk-show-date");GtkWidget *toggles[]={b->size_toggle,b->date_toggle};for(guint i=0;i<2;i++) { gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(toggles[i]),gtk_tree_view_column_get_visible(columns[i+2]));gtk_menu_shell_append(GTK_MENU_SHELL(menu),toggles[i]);g_signal_connect(toggles[i],"toggled",G_CALLBACK(metadata_toggled),columns[i+2]); }g_signal_connect_swapped(menu,"show",G_CALLBACK(insight_i18n_apply),menu);gtk_widget_show_all(menu);
 
+ GtkWidget *settings=gtk_button_new_with_label("Folder Browser Options…");gtk_widget_set_name(settings,"insight-disk-options");gtk_widget_set_tooltip_text(settings,"Folder Browser Options (Ctrl+Q)");gtk_box_pack_start(GTK_BOX(b->box),settings,FALSE,FALSE,0);g_signal_connect(settings,"clicked",G_CALLBACK(options),b);
  GtkWidget *appearance_row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3),*appearance=insight_list_style_button(b->view);gtk_widget_set_name(appearance,"insight-disk-appearance");gtk_box_pack_start(GTK_BOX(appearance_row),appearance,TRUE,TRUE,0);b->create=gtk_button_new_with_label("New folder…");gtk_widget_set_name(b->create,"insight-disk-create");gtk_widget_set_sensitive(b->create,FALSE);gtk_box_pack_start(GTK_BOX(appearance_row),b->create,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(b->box),appearance_row,FALSE,FALSE,0);g_signal_connect(b->create,"clicked",G_CALLBACK(create_folder),b);
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),b->view);gtk_box_pack_start(GTK_BOX(b->box),scroll,TRUE,TRUE,0);b->status=gtk_label_new("Choose a disk directory");gtk_widget_set_name(b->status,"insight-disk-status");gtk_label_set_line_wrap(GTK_LABEL(b->status),TRUE);gtk_box_pack_start(GTK_BOX(b->box),b->status,FALSE,FALSE,0);
  g_signal_connect(up,"clicked",G_CALLBACK(parent),b);g_signal_connect(go,"clicked",G_CALLBACK(refresh),b);g_signal_connect(b->path,"activate",G_CALLBACK(refresh),b);g_signal_connect(b->hidden,"toggled",G_CALLBACK(refresh),b);g_signal_connect(b->query,"changed",G_CALLBACK(filter_changed),b);g_signal_connect(b->view,"row-activated",G_CALLBACK(activated),b);g_signal_connect(b->view,"button-press-event",G_CALLBACK(popup_button),b);g_signal_connect(b->view,"popup-menu",G_CALLBACK(popup_key),b);g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(b->view)),"changed",G_CALLBACK(selected),b);g_signal_connect(b->box,"key-press-event",G_CALLBACK(key),b);filter_changed(GTK_EDITABLE(b->query),b);return b->box;

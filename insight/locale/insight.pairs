@@ -718,3 +718,7 @@ Master file list exceeds 256 directory/wildcard rules|||В Master File List бо
 Master file list directories must be real directories, not symbolic links|||Каталоги в Master File List должны быть обычными каталогами, а не символическими ссылками
 File Size|||Размер файла
 File Date|||Дата файла
+Folder Browser Options|||Параметры просмотра папок
+Folder Browser Options…|||Параметры просмотра папок…
+Folder Browser Options (Ctrl+Q)|||Параметры просмотра папок (Ctrl+Q)
+Show Columns|||Показывать колонки
