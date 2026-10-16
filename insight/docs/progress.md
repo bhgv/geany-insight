@@ -1874,3 +1874,29 @@ Reference: https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Using_
 
 All seven modified C sources compiled with -Werror. After adding slashless-directory
 and empty-type fixtures, the MFL snapshot suite passed again.
+
+
+### Folder Browser file size/date columns
+
+Browse disk now offers File Size and File Date in the Columns menu, initially
+hidden/visible respectively, following Source Insight's Folder Browser Options.
+The existing cancellable directory worker captures 64-bit sizes/modified seconds
+without following child links. Zero-byte files display zero; directory/link
+sizes and unavailable metadata display blank. Dates use local timezone with
+second precision. Refresh rereads metadata; no recursive size walk is added.
+
+Header clicks sort the backing list numerically for size/date, with synchronized
+indicators; GtkTreeModelFilter cannot use GTK's built-in sortable header handler.
+All four columns support sorting, resizing and reordering. Optional version-1
+settings preserve visibility, widths, full validated column order and sort state;
+old Kind-first settings migrate and malformed optional values retain defaults.
+
+The disk browser GUI verifies raw Unicode file metadata, formatted zero/date,
+blank directory/link sizes, real header clicks and indicators in both directions,
+invalid stored widths/order/booleans/sort, column toggles, persisted settings and
+restoration in a fresh editor subprocess. Four focused Linux GUI checks passed:
+disk browser, Project Folders, CSS visual themes and panel appearance override.
+Both modified C sources compiled with -Werror. Windows GUI is not yet verified;
+the Windows build-request marker was not changed. Unified Folder Browser Options
+and adaptive layout remain open. Reference:
+https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Project_Folder_Browser_Options.htm

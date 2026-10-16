@@ -23,3 +23,21 @@
 5. Сверните ветку и нажмите кнопку поиска текущего файла: строка снова станет видимой, каретка редактора останется на месте.
 
 Кнопка «?» открывает эту страницу. Язык справки следует настройке интерфейса. Подробнее: [guide.md](guide.md).
+
+### Disk file size and date
+
+File Date is initially visible and File Size hidden, following the Source Insight
+Folder Browser options. Dates show modification time in the local timezone as
+`YYYY-MM-DD HH:MM:SS`; sizes use human-readable units. A zero-byte file shows zero;
+folder/link sizes and unavailable metadata are blank. Metadata is captured in the
+existing cancellable directory worker with no target traversal or recursive size
+calculation. Refresh/F5 rereads it.
+
+Click a column header to sort ascending, then descending. Size/date sorting uses
+64-bit byte counts/timestamps, independent of formatted labels. Sorting applies
+to the loaded bounded directory snapshot; filters and Follow retain their usual
+behavior. Columns can be dragged/resized; names remain available. Unknown size/
+time values sort before known values ascending and after them descending.
+
+The unified Folder Browser Options dialog and adaptive layout remain separate
+work. Reference: [Source Insight Folder Browser Options](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Project_Folder_Browser_Options.htm).

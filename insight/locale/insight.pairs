@@ -716,3 +716,5 @@ Preserve bookmarks between sessions|||Сохранять закладки меж
 Invalid known file type snapshot for master file list|||Недопустимый снимок известных типов файлов для MFL
 Master file list exceeds 256 directory/wildcard rules|||В Master File List больше 256 правил каталогов/масок
 Master file list directories must be real directories, not symbolic links|||Каталоги в Master File List должны быть обычными каталогами, а не символическими ссылками
+File Size|||Размер файла
+File Date|||Дата файла

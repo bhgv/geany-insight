@@ -238,3 +238,5 @@ deferred until their regex masking is complete. Core and native Linux GUI
 cover C++ kinds, Java interfaces, Python classes, RU/EN, unchanged source/Undo
 and stale/ambiguous declarations. Full expression types and AST metrics remain
 outside this change.
+
+Folder Browser: добавлены File Size/File Date с фоновым чтением, сортировкой заголовками и сохранением настроек; Linux GUI и реальный перезапуск проверены. Единый Options и адаптивная компоновка остаются открытыми.

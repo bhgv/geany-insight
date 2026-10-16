@@ -32,7 +32,7 @@ Each directory is read in a cancellable background task. Ordinary/unknown file e
 
 The file filter accepts the existing fragments/glob/regex/~fuzzy syntax; directories stay visible for navigation. Invalid queries retain the last valid filter. Filtering applies to the loaded directory only, not a recursive disk search. At most 2048 eligible entries are retained and 100000 entries enumerated per directory; the status explicitly reports truncation. Change to a narrower directory to inspect more. Switching paths, refreshing or closing discards superseded tasks. Disk mode does not add/remove files in the project. Virtual project groups remain separate work.
 
-The directory, last valid query, hidden-entry choice and Project files/Browse disk mode persist in workbench settings. Invalid/relative stored roots and invalid filters are ignored; widths outside 32–2000 pixels and malformed booleans retain defaults. Columns can be resized/reordered, and **Columns → Kind** toggles the optional kind column; the filename column remains available. Widths, order and kind visibility persist too. An invalid filter shown at shutdown does not replace the last valid saved query. The explicit Project Files `.`/`..` commands always select the workspace root/parent even if another disk directory was saved.
+The directory, last valid query, hidden-entry choice and Project files/Browse disk mode persist in workbench settings. Invalid/relative stored roots and invalid filters are ignored; widths outside 32–2000 pixels and malformed booleans retain defaults. Columns can be resized/reordered, and **Columns → Kind / File Size / File Date** toggles the optional columns; the filename column remains available. Widths, full column order, visibility and sort direction persist too. Old settings retain their Kind-first layout; invalid new order/sort values are ignored. An invalid filter shown at shutdown does not replace the last valid saved query. The explicit Project Files `.`/`..` commands always select the workspace root/parent even if another disk directory was saved.
 
 **Follow current file** in Browse disk follows the active editor's directory and selects its entry without invoking preview/open or moving the editor caret. The option persists separately from project-tree Follow. The current entry remains visible through the file filter and hidden-entry setting without changing either setting. Within the 100000-entry scan bound it is retained even when the 2048-row list is truncated. Switching to Project files suspends disk reads; returning resumes Follow at the latest editor file. Disabling Follow removes its visibility exception through a normal refresh.
 
@@ -41,3 +41,21 @@ The directory, last valid query, hidden-entry choice and Project files/Browse di
 **New folder…** creates one child directory in the displayed disk directory. The dialog shows the parent path; enter a single UTF-8 name (up to 255 bytes), then Create. Empty names, `.`/`..`, path separators, line breaks and oversized paths are rejected. A changed directory requires reopening the dialog. Creation runs asynchronously, never replaces an existing entry and refreshes the same directory if it is still active. Errors are shown in the browser status. The operation does not edit project membership; automatic project discovery keeps its usual rules. Pending creation is cancelled during workbench shutdown or when the browser is destroyed; cancellation does not undo a directory already created. Rename/move/delete remain separate work.
 
 Right-click a disk row or press Menu/Shift+F10 for commands: Preview in Context, Open (or enter a folder), Copy full path, Copy filename, Up, Refresh, New folder and Font & Color. Right-click selection does not preview/open a file or move the editor. With no row selected, Copy full path copies the current directory; file-only commands are disabled. Folder preview is disabled, while Open navigates into the folder. Menu captions follow the interface language.
+
+### Disk file size and date
+
+File Date is initially visible and File Size hidden, following the Source Insight
+Folder Browser options. Dates show modification time in the local timezone as
+`YYYY-MM-DD HH:MM:SS`; sizes use human-readable units. A zero-byte file shows zero;
+folder/link sizes and unavailable metadata are blank. Metadata is captured in the
+existing cancellable directory worker with no target traversal or recursive size
+calculation. Refresh/F5 rereads it.
+
+Click a column header to sort ascending, then descending. Size/date sorting uses
+64-bit byte counts/timestamps, independent of formatted labels. Sorting applies
+to the loaded bounded directory snapshot; filters and Follow retain their usual
+behavior. Columns can be dragged/resized; names remain available. Unknown size/
+time values sort before known values ascending and after them descending.
+
+The unified Folder Browser Options dialog and adaptive layout remain separate
+work. Reference: [Source Insight Folder Browser Options](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Project_Folder_Browser_Options.htm).
