@@ -12,7 +12,7 @@
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 #define KEY "insight-detailed-completion"
 enum { NAME,MARKUP,ICON,KIND,SCOPE,ORIGIN,IDENTITY,COLUMNS };
-typedef struct { ScintillaObject *sci;GtkWidget *window,*view,*footer;GtkListStore *store;guint document,idle;gint start,end;gchar *prefix;gboolean active,accepting; } Completion;
+typedef struct { ScintillaObject *sci;GtkWidget *window,*view,*footer;GtkListStore *store;guint document,idle,focus_idle;gint start,end;gchar *prefix;gboolean active,accepting; } Completion;
 static gboolean enabled=TRUE,loaded;
 static gchar *config_path(void) { return g_build_filename(app->configdir,"insight-completion.conf",NULL); }
 static void load(void) { if(loaded) return;loaded=TRUE;GKeyFile *k=g_key_file_new();gchar *path=config_path();if(g_key_file_load_from_file(k,path,0,NULL) && g_key_file_has_key(k,"completion","detailed",NULL)) { GError *e=NULL;gboolean next=g_key_file_get_boolean(k,"completion","detailed",&e);if(!e) enabled=next;g_clear_error(&e); }g_key_file_unref(k);g_free(path); }
@@ -22,7 +22,7 @@ static void hide_at(Completion *c,const gchar *reason) { if(!c) return;if(c->act
 
 #define hide(c) hide_at(c,__func__)
 void insight_completion_cancel(GeanyEditor *editor) { hide(state(editor)); }
-static void destroy(gpointer data) { Completion *c=data;if(c->idle) g_source_remove(c->idle);gtk_widget_destroy(c->window);g_object_unref(c->store);g_free(c->prefix);g_free(c); }
+static void destroy(gpointer data) { Completion *c=data;if(c->focus_idle) g_source_remove(c->focus_idle);if(c->idle) g_source_remove(c->idle);gtk_widget_destroy(c->window);g_object_unref(c->store);g_free(c->prefix);g_free(c); }
 static const gchar *kind(TMTagType type) {
  if(type & (tm_tag_function_t|tm_tag_prototype_t|tm_tag_method_t)) return "function";
  if(type & (tm_tag_class_t|tm_tag_struct_t|tm_tag_interface_t|tm_tag_union_t|tm_tag_typedef_t)) return "type";
@@ -56,7 +56,12 @@ static gboolean button(GtkWidget *view,GdkEventButton *event,gpointer data) {
  Completion *c=data;if(event->button!=1) return TRUE;GtkTreePath *path=NULL;if(gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(view),event->x,event->y,&path,NULL,NULL,NULL)) { gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),path);gtk_tree_path_free(path);accept(c); }return TRUE;
 }
 static gboolean motion(GtkWidget *view,GdkEventMotion *event,gpointer data) { (void)data;GtkTreePath *path=NULL;if(gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(view),event->x,event->y,&path,NULL,NULL,NULL)) { gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),path);gtk_tree_path_free(path); }return FALSE; }
-static gboolean focus_out(GtkWidget *widget,GdkEventFocus *event,gpointer data) { (void)widget;(void)event;hide(data);return FALSE; }
+static gboolean check_focus(gpointer data) {
+ Completion *c=data;c->focus_idle=0;GtkWidget *owner=gtk_widget_get_toplevel(GTK_WIDGET(c->sci));
+ if(!GTK_IS_WINDOW(owner) || gtk_window_get_focus(GTK_WINDOW(owner))!=GTK_WIDGET(c->sci)) hide(c);
+ return G_SOURCE_REMOVE;
+}
+static gboolean focus_out(GtkWidget *widget,GdkEventFocus *event,gpointer data) { (void)widget;(void)event;Completion *c=data;if(!c->focus_idle) c->focus_idle=g_idle_add(check_focus,c);return FALSE; }
 static void render(GtkTreeViewColumn *column,GtkCellRenderer *renderer,GtkTreeModel *model,GtkTreeIter *iter,gpointer data) {
  (void)column;GtkWidget *view=data;gchar *markup=NULL;gtk_tree_model_get(model,iter,MARKUP,&markup,-1);
  GtkTreePath *path=gtk_tree_model_get_path(model,iter);gboolean chosen=gtk_tree_selection_path_is_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),path);gtk_tree_path_free(path);
@@ -70,7 +75,7 @@ GtkWidget *insight_completion_view_new(GtkListStore *store) {
 }
 static Completion *create(GeanyEditor *editor) {
  Completion *c=state(editor);if(c) return c;c=g_new0(Completion,1);c->sci=editor->sci;c->document=editor->document->id;
- c->window=gtk_window_new(GTK_WINDOW_POPUP);gtk_widget_set_name(c->window,"insight-completion-popup");gtk_window_set_accept_focus(GTK_WINDOW(c->window),FALSE);gtk_window_set_resizable(GTK_WINDOW(c->window),FALSE);gtk_window_set_type_hint(GTK_WINDOW(c->window),GDK_WINDOW_TYPE_HINT_COMBO);gtk_window_set_transient_for(GTK_WINDOW(c->window),GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(c->sci))));
+ c->window=gtk_window_new(GTK_WINDOW_POPUP);gtk_widget_set_name(c->window,"insight-completion-popup");gtk_window_set_accept_focus(GTK_WINDOW(c->window),FALSE);gtk_window_set_focus_on_map(GTK_WINDOW(c->window),FALSE);gtk_window_set_resizable(GTK_WINDOW(c->window),FALSE);gtk_window_set_type_hint(GTK_WINDOW(c->window),GDK_WINDOW_TYPE_HINT_COMBO);gtk_window_set_transient_for(GTK_WINDOW(c->window),GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(c->sci))));
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,3),*scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(c->window),box);gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),GTK_POLICY_AUTOMATIC,GTK_POLICY_AUTOMATIC);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
  c->store=gtk_list_store_new(COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING);c->view=insight_completion_view_new(c->store);gtk_container_add(GTK_CONTAINER(scroll),c->view);
  c->footer=gtk_label_new("");gtk_widget_set_name(c->footer,"insight-completion-details");gtk_label_set_xalign(GTK_LABEL(c->footer),0);gtk_label_set_ellipsize(GTK_LABEL(c->footer),PANGO_ELLIPSIZE_MIDDLE);gtk_box_pack_start(GTK_BOX(box),c->footer,FALSE,FALSE,3);gtk_widget_set_margin_start(box,4);gtk_widget_set_margin_end(box,4);
@@ -112,7 +117,8 @@ void insight_completion_notify(GeanyEditor *editor,SCNotification *nt) {
   if((nt->modificationType & (SC_PERFORMED_UNDO|SC_PERFORMED_REDO)) || nt->position<c->start || nt->position>c->end || nt->length>4096) { hide(c);return; }
   c->end+= (nt->modificationType & SC_MOD_INSERTTEXT) ? nt->length : -nt->length;if(!c->idle) c->idle=g_idle_add(refresh,c);
  } else if(nt->nmhdr.code==SCN_UPDATEUI && !c->idle && (nt->updated & SC_UPDATE_SELECTION) && sci_get_current_position(c->sci)!=c->end) hide(c);
- else if(nt->nmhdr.code==SCN_FOCUSOUT || (nt->nmhdr.code==SCN_UPDATEUI && (nt->updated & (SC_UPDATE_V_SCROLL|SC_UPDATE_H_SCROLL)))) hide(c);
+ else if(nt->nmhdr.code==SCN_FOCUSOUT) focus_out(NULL,NULL,c);
+ else if(nt->nmhdr.code==SCN_UPDATEUI && (nt->updated & (SC_UPDATE_V_SCROLL|SC_UPDATE_H_SCROLL))) hide(c);
 }
 static void toggle(GtkCheckMenuItem *item,gpointer data) {
  (void)data;gboolean next=gtk_check_menu_item_get_active(item);GKeyFile *k=g_key_file_new();g_key_file_set_boolean(k,"completion","detailed",next);gsize length;gchar *text=g_key_file_to_data(k,&length,NULL),*path=config_path();GError *error=NULL;
