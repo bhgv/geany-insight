@@ -262,3 +262,11 @@ Ctrl+F3 searches for the next identifier occurrence; Ctrl+Shift+F3 searches back
 The list contains up to 5000 matches with one-based logical lines/columns and text excerpts, indicating when capped. **Go to match** or double-click selects the exact range; Close changes nothing. Text edits or a new comparison invalidate old positions, so stale navigation is rejected. Queries, lists and positions are not persisted. Commands do not edit text or merge history and are unavailable while comparison runs.
 
 ![Production GTK match list, isolated test fixture](media/file-compare-search.jpg)
+
+### Filtering, formatting and copying search results
+
+**Filter displayed matches** applies a literal Unicode case-insensitive substring filter to the loaded excerpts, limited to 256 input characters. It filters the capped list of 5000 loaded matches rather than searching the entire file again. Column headers sort lines/columns numerically and excerpts by text. Navigation uses the selected row's range after filtering and sorting; hidden columns do not change stored ranges.
+
+Line, Column and Text preview checkboxes control table visibility and copied fields. **Copy source path** adds the completed comparison's source path to copied output, or the pane name for Result. **Copy visible matches** copies all visible rows in their current order using English TSV headers File/Line/Column/Text for enabled fields. Tabs, CR, LF and backslashes in fields are escaped as `\t`, `\r`, `\n`, `\\`. Excerpts are limited to 120 characters and already flatten line endings to spaces; copied excerpts are not full source text. No selected fields or output exceeding 4 MiB leaves the clipboard unchanged.
+
+**Edit source file** opens the selected source match at its line in the main editor. It is available only for loaded Left/Right sources, checks stale positions and writes no files. Use Go to match for Result. The four format flags persist with window preferences; filter, sort, query, paths and result rows are not persisted. The list capture above shows filtering, sorting and a hidden column.

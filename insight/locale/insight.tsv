@@ -1083,3 +1083,10 @@ Go to match	Перейти к совпадению
 Matches: %u	Совпадений: %u
 Showing first %u matches (limit reached).	Показаны первые %u совпадений (достигнут предел).
 Text changed; run Find all again.	Текст изменился; запустите поиск всех совпадений заново.
+Filter displayed matches	Фильтр показанных совпадений
+Copy visible matches	Копировать видимые совпадения
+Edit source file	Открыть исходный файл
+Visible matches: %u	Видимых совпадений: %u
+Copied visible matches: %u	Скопировано видимых совпадений: %u
+Select at least one output field.	Выберите хотя бы одно поле вывода.
+Copy limit: 4 MiB. Clipboard unchanged.	Предел копирования: 4 МиБ. Буфер обмена не изменён.
