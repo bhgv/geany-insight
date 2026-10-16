@@ -2163,6 +2163,7 @@ autocomplete_tags(GeanyEditor *editor, GeanyFiletype *ft, const gchar *root, gsi
 	tags = tm_workspace_find_prefix(root, doc->tm_file, current_line, current_scope,
 		editor_prefs.autocompletion_max_entries);
 	found = tags->len > 0;
+ if(g_getenv("GEANY_COMPLETION_DEBUG")) { g_printerr("query root=%s max=%u source=%u lang=%d results=%u\n",root,editor_prefs.autocompletion_max_entries,doc->tm_file ? doc->tm_file->tags_array->len : 0,doc->tm_file ? doc->tm_file->lang : -1,tags->len);if(doc->tm_file) for(guint n=0;n<doc->tm_file->tags_array->len;n++) { TMTag *t=g_ptr_array_index(doc->tm_file->tags_array,n);g_printerr("tag %s lang=%d type=%u local=%d owner=%d scope=%s\n",t->name,t->lang,t->type,t->local,t->file==doc->tm_file,t->scope ? t->scope : ""); } }
 	if (found)
 		show_tags_list(editor, tags, rootlen);
 	g_ptr_array_free(tags, TRUE);
