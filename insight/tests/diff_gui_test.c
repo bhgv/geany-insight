@@ -215,6 +215,7 @@ static void search_actions_test(void) {
  GString *many=g_string_new(NULL);for(guint i=0;i<5100;i++) g_string_append(many,"foo\n");gtk_text_buffer_set_text(buffer,many->str,-1);g_string_free(many,TRUE);response.rows=5000;response.response=GTK_RESPONSE_CANCEL;response.mutate=FALSE;g_timeout_add(100,search_response,&response);find_all(m,2);
  gboolean gone=FALSE;g_object_weak_ref(G_OBJECT(m->window),finalized,&gone);g_idle_add(close_options_parent,m->window);find_all(m,2);flush();g_assert_true(gone);
 }
+static void output_key(GtkWidget *,guint,guint);
 typedef struct { gboolean source; } OutputResponse;
 static gboolean output_response(gpointer data) {
  OutputResponse *action=data;GList *windows=gtk_window_list_toplevels();GtkWidget *dialog=NULL;
@@ -224,7 +225,7 @@ static gboolean output_response(gpointer data) {
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dialog,"insight-diff-search-field-1")),FALSE);gtk_button_clicked(GTK_BUTTON(copy));text=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));g_assert_cmpstr(text,==,"Line\n2\n1\n");g_free(text);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dialog,"insight-diff-search-field-1")),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dialog,"insight-diff-search-field-3")),TRUE);gtk_entry_set_text(GTK_ENTRY(filter),"missing");g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,0);g_assert_false(gtk_widget_get_sensitive(gtk_dialog_get_widget_for_response(GTK_DIALOG(dialog),GTK_RESPONSE_APPLY)));gtk_entry_set_text(GTK_ENTRY(filter),"ёж");GtkTreePath *path=gtk_tree_path_new_first();gtk_tree_view_set_cursor(GTK_TREE_VIEW(tree),path,NULL,FALSE);gtk_tree_path_free(path);
  const gchar *capture=g_getenv("INSIGHT_DIFF_SEARCH_CAPTURE");if(capture && !action->source) { gint64 until=g_get_monotonic_time()+200000;while(g_get_monotonic_time()<until) { flush();g_usleep(1000); }GdkWindow *window=gtk_widget_get_window(dialog);GdkPixbuf *pixbuf=gdk_pixbuf_get_from_window(window,0,0,gdk_window_get_width(window),gdk_window_get_height(window));g_assert_true(gdk_pixbuf_save(pixbuf,capture,"jpeg",NULL,"quality","88",NULL));g_object_unref(pixbuf); }
- gtk_dialog_response(GTK_DIALOG(dialog),action->source ? GTK_RESPONSE_YES : GTK_RESPONSE_APPLY);return G_SOURCE_REMOVE;
+ if(action->source) gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_YES);else output_key(dialog,GDK_KEY_l,GDK_CONTROL_MASK);return G_SOURCE_REMOVE;
 }
 static void output_key(GtkWidget *dialog,guint key,guint modifiers) {
  GdkEventKey event={0};event.type=GDK_KEY_PRESS;event.keyval=key;event.state=modifiers;gboolean handled=FALSE;g_signal_emit_by_name(dialog,"key-press-event",&event,&handled);g_assert_true(handled);

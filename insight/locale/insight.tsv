@@ -1093,3 +1093,4 @@ Copy limit: 4 MiB. Clipboard unchanged.	Предел копирования: 4 �
 Copy selected match	Копировать выбранное совпадение
 Copied selected matches: %u	Скопировано выбранных совпадений: %u
 Match context (search snapshot)	Контекст совпадения (снимок поиска)
+F3 / Shift+F3: select match — Ctrl+Enter / Ctrl+L: go to match	F3 / Shift+F3: выбор — Ctrl+Enter / Ctrl+L: переход
