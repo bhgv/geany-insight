@@ -6,6 +6,7 @@
 typedef struct { gchar *text; gint *positions; } Snapshot;
 typedef struct {
  GtkWidget *window,*paths[2],*views[3],*status,*undo,*redo,*take[2],*external;
+ GtkWidget *previous,*next,*list_scroll,*sync; GtkAdjustment *adjustments[2]; gboolean scrolling;
  GtkListStore *list; GtkWidget *hunk_view; GtkTextBuffer *output; GtkTreeSelection *selection;
  gchar *sources[2],*loaded_paths[2],*saved;
  InsightDiff diff; GtkTextMark **marks;
@@ -55,9 +56,13 @@ static void restore(Merge *m,guint position) {
 }
 static void undo(GtkWidget *w,gpointer data) { (void)w;Merge *m=data;if(m->position) restore(m,m->position-1); }
 static void redo(GtkWidget *w,gpointer data) { (void)w;Merge *m=data;if(m->position+1<m->history->len) restore(m,m->position+1); }
+static void navigate(Merge *m,gint direction);
 static gboolean key(GtkWidget *w,GdkEventKey *event,gpointer data) {
  (void)w;
  if(!(event->state&GDK_CONTROL_MASK)) return FALSE;
+ if(event->keyval==GDK_KEY_Up || event->keyval==GDK_KEY_Down) {
+  navigate(data,event->keyval==GDK_KEY_Up ? -1 : 1);return TRUE;
+ }
  if(event->keyval==GDK_KEY_z || event->keyval==GDK_KEY_Z) {
   if(event->state&GDK_SHIFT_MASK) redo(NULL,data);else undo(NULL,data);return TRUE;
  }
@@ -82,6 +87,7 @@ static void destroyed(GtkWidget *w,gpointer data) {
  (void)w;Merge *m=data;
  /* Child text widgets can already be destroyed here; their buffer owns the marks. */
  g_signal_handlers_disconnect_by_data(m->output,m);g_signal_handlers_disconnect_by_data(m->selection,m);
+ for(int i=0;i<2;i++) { g_signal_handlers_disconnect_by_data(m->adjustments[i],m);g_object_unref(m->adjustments[i]); }
  g_object_unref(m->output);g_object_unref(m->selection);
  g_free(m->marks);insight_diff_clear(&m->diff);g_ptr_array_free(m->history,TRUE);
  for(int i=0;i<2;i++) { g_free(m->sources[i]);g_free(m->loaded_paths[i]); }
@@ -92,6 +98,53 @@ static gint selected(Merge *m) {
  if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(m->hunk_view)),&model,&it)) gtk_tree_model_get(model,&it,0,&id,-1);
  return id;
 }
+static void navigate(Merge *m,gint direction) {
+ if(!m->diff.count) return;
+ gint id=selected(m);
+ id=id<0 ? (direction>0 ? 0 : (gint)m->diff.count-1) : id+direction;
+ if(id<0 || (size_t)id>=m->diff.count) return;
+ GtkTreePath *path=gtk_tree_path_new_from_indices(id,-1);
+ gtk_tree_view_set_cursor(GTK_TREE_VIEW(m->hunk_view),path,NULL,FALSE);
+ gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(m->hunk_view),path,NULL,FALSE,0,0);
+ gtk_tree_path_free(path);
+}
+static void step(GtkWidget *w,gpointer data) { Merge *m=data;navigate(m,w==m->next ? 1 : -1); }
+static void show_list(GtkToggleButton *w,gpointer data) { gtk_widget_set_visible(((Merge*)data)->list_scroll,gtk_toggle_button_get_active(w)); }
+static void wrap(GtkToggleButton *w,gpointer data) {
+ Merge *m=data;
+ for(int i=0;i<3;i++) gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(m->views[i]),gtk_toggle_button_get_active(w) ? GTK_WRAP_WORD_CHAR : GTK_WRAP_NONE);
+}
+static void sync_scroll(GtkAdjustment *adjustment,gpointer data) {
+ Merge *m=data;
+ if(m->scrolling || !m->sources[0] || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->sync))) return;
+ int side=adjustment==gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(m->views[1]));
+ GdkRectangle rect;GtkTextIter it;
+ gtk_text_view_get_visible_rect(GTK_TEXT_VIEW(m->views[side]),&rect);
+ gtk_text_view_get_line_at_y(GTK_TEXT_VIEW(m->views[side]),&it,rect.y,NULL);
+ size_t offset=(size_t)(g_utf8_offset_to_pointer(m->sources[side],gtk_text_iter_get_offset(&it))-m->sources[side]);
+ size_t mapped=insight_diff_map_offset(&m->diff,side,offset);
+ /* Common spans share UTF-8 boundaries; changed blocks map to line starts. */
+ GtkTextBuffer *target=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[1-side]));
+ gtk_text_buffer_get_iter_at_offset(target,&it,(gint)g_utf8_pointer_to_offset(m->sources[1-side],m->sources[1-side]+mapped));
+ m->scrolling=TRUE;
+ gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(m->views[1-side]),&it,0,TRUE,0,0);
+ m->scrolling=FALSE;
+}
+static gboolean pick_block(GtkWidget *w,GdkEventButton *event,gpointer data) {
+ Merge *m=data;if(event->button!=1 || !m->diff.count) return FALSE;
+ int side=w==m->views[1];gint x,y;GtkTextIter it;
+ gtk_text_view_window_to_buffer_coords(GTK_TEXT_VIEW(w),gtk_text_view_get_window_type(GTK_TEXT_VIEW(w),event->window),(gint)event->x,(gint)event->y,&x,&y);
+ gtk_text_view_get_iter_at_location(GTK_TEXT_VIEW(w),&it,x,y);
+ size_t offset=(size_t)(g_utf8_offset_to_pointer(m->sources[side],gtk_text_iter_get_offset(&it))-m->sources[side]);
+ for(size_t i=0;i<m->diff.count;i++) {
+  InsightDiffHunk *h=&m->diff.hunks[i];size_t a=side ? h->b_begin : h->a_begin,z=side ? h->b_end : h->a_end;
+  if(offset>=a && (offset<z || (a==z && offset==a))) {
+   GtkTreePath *path=gtk_tree_path_new_from_indices((gint)i,-1);
+   gtk_tree_view_set_cursor(GTK_TREE_VIEW(m->hunk_view),path,NULL,FALSE);gtk_tree_path_free(path);return TRUE;
+  }
+ }
+ return FALSE;
+}
 static gint chars(const gchar *s,size_t offset) { return (gint)g_utf8_pointer_to_offset(s,s+offset); }
 static void highlight(Merge *m,int side,size_t begin,size_t end) {
  GtkTextBuffer *b=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]));GtkTextIter a,z;
@@ -101,14 +154,19 @@ static void highlight(Merge *m,int side,size_t begin,size_t end) {
 static void selection(GtkTreeSelection *s,gpointer data) {
  (void)s;Merge *m=data;gint id=selected(m);
  for(int side=0;side<2;side++) gtk_widget_set_sensitive(m->take[side],id>=0);
+ gtk_widget_set_sensitive(m->previous,m->diff.count && id!=0);
+ gtk_widget_set_sensitive(m->next,m->diff.count && (id<0 || (size_t)(id+1)<m->diff.count));
  if(id<0 || (size_t)id>=m->diff.count) return;
  InsightDiffHunk *h=&m->diff.hunks[id];
+ m->scrolling=TRUE;
  for(int side=0;side<3;side++) {
   GtkTextBuffer *b=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]));GtkTextIter a,z;
   if(side==2) { gtk_text_buffer_get_iter_at_mark(b,&a,m->marks[2*id]);gtk_text_buffer_get_iter_at_mark(b,&z,m->marks[2*id+1]); }
   else { gtk_text_buffer_get_iter_at_offset(b,&a,chars(m->sources[side],side ? h->b_begin : h->a_begin));gtk_text_buffer_get_iter_at_offset(b,&z,chars(m->sources[side],side ? h->b_end : h->a_end)); }
   gtk_text_buffer_select_range(b,&a,&z);gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(m->views[side]),&a,0.1,TRUE,0.0,0.5);
  }
+ m->scrolling=FALSE;
+ gchar *label=g_strdup_printf("Difference %d of %zu",id+1,m->diff.count);message(m,label);g_free(label);
 }
 static void take(GtkWidget *w,gpointer data) {
  Merge *m=data;gint id=selected(m);if(id<0 || (size_t)id>=m->diff.count) return;
@@ -140,7 +198,7 @@ static void compare(GtkWidget *w,gpointer data) {
  int rc=insight_diff_compute(text[0],text[1],&diff);
  if(rc) { message(m,rc==-2 ? "Too many changed lines for the initial diff engine (4 million LCS cells)." : "Cannot allocate comparison.");goto done; }
  if(!discard(m)) goto done;
- m->changing=TRUE;clear_diff(m);m->diff=diff;diff=(InsightDiff){0};
+ m->changing=TRUE;m->scrolling=TRUE;clear_diff(m);m->diff=diff;diff=(InsightDiff){0};
  for(int i=0;i<2;i++) {
   g_free(m->sources[i]);m->sources[i]=text[i];text[i]=NULL;
   g_free(m->loaded_paths[i]);m->loaded_paths[i]=g_strdup(gtk_entry_get_text(GTK_ENTRY(m->paths[i])));
@@ -158,7 +216,7 @@ static void compare(GtkWidget *w,gpointer data) {
   GtkTreeIter it;gtk_list_store_append(m->list,&it);gtk_list_store_set(m->list,&it,0,(gint)i,1,label,-1);g_free(label);
   highlight(m,0,h->a_begin,h->a_end);highlight(m,1,h->b_begin,h->b_end);
  }
- m->changing=FALSE;record(m);
+ m->changing=FALSE;m->scrolling=FALSE;record(m);selection(NULL,m);
  gchar *label=g_strdup_printf("%zu differences. Result starts with Left; select a block and take Left or Right, or edit the result.",m->diff.count);message(m,label);g_free(label);
  gtk_widget_set_sensitive(m->external,TRUE);
  if(m->diff.count) { GtkTreePath *p=gtk_tree_path_new_first();gtk_tree_view_set_cursor(GTK_TREE_VIEW(m->hunk_view),p,NULL,FALSE);gtk_tree_path_free(p); }
@@ -212,20 +270,32 @@ void insight_diff_show(GtkWidget *parent) {
  button(bar,"Compare",G_CALLBACK(compare),m);m->take[0]=button(bar,"Take Left",G_CALLBACK(take),m);m->take[1]=button(bar,"Take Right",G_CALLBACK(take),m);
  m->undo=button(bar,"Undo",G_CALLBACK(undo),m);m->redo=button(bar,"Redo",G_CALLBACK(redo),m);button(bar,"Save result…",G_CALLBACK(save),m);
  m->external=button(bar,"External KDiff3 (optional)",G_CALLBACK(external),m);
+ GtkWidget *options=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),options,FALSE,FALSE,0);
+ m->previous=button(options,"Previous difference",G_CALLBACK(step),m);m->next=button(options,"Next difference",G_CALLBACK(step),m);
+ GtkWidget *list_toggle=gtk_check_button_new_with_label("Difference list");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(list_toggle),TRUE);gtk_box_pack_start(GTK_BOX(options),list_toggle,FALSE,FALSE,0);
+ GtkWidget *wrap_toggle=gtk_check_button_new_with_label("Wrap lines");gtk_box_pack_start(GTK_BOX(options),wrap_toggle,FALSE,FALSE,0);
+ m->sync=gtk_check_button_new_with_label("Scroll sources together");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->sync),TRUE);gtk_box_pack_start(GTK_BOX(options),m->sync,FALSE,FALSE,0);
  GtkWidget *panes=gtk_paned_new(GTK_ORIENTATION_VERTICAL);gtk_box_pack_start(GTK_BOX(box),panes,TRUE,TRUE,0);
  m->list=gtk_list_store_new(2,G_TYPE_INT,G_TYPE_STRING);m->hunk_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(m->list));
  gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(m->hunk_view),-1,"Differences",gtk_cell_renderer_text_new(),"text",1,NULL);
  m->selection=g_object_ref(gtk_tree_view_get_selection(GTK_TREE_VIEW(m->hunk_view)));
  g_signal_connect(m->selection,"changed",G_CALLBACK(selection),m);
- GtkWidget *list_scroll=scroll(m->hunk_view);gtk_widget_set_size_request(list_scroll,-1,110);gtk_paned_pack1(GTK_PANED(panes),list_scroll,FALSE,FALSE);
+ m->list_scroll=scroll(m->hunk_view);gtk_widget_set_size_request(m->list_scroll,-1,110);gtk_paned_pack1(GTK_PANED(panes),m->list_scroll,FALSE,FALSE);
  GtkWidget *columns=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6);gtk_box_set_homogeneous(GTK_BOX(columns),TRUE);gtk_paned_pack2(GTK_PANED(panes),columns,TRUE,FALSE);
  for(int i=0;i<3;i++) {
   GtkWidget *column=gtk_box_new(GTK_ORIENTATION_VERTICAL,3);gtk_box_pack_start(GTK_BOX(columns),column,TRUE,TRUE,0);
   gtk_box_pack_start(GTK_BOX(column),gtk_label_new(i==0 ? "Left (read only)" : i==1 ? "Right (read only)" : "Result (editable)"),FALSE,FALSE,0);
   m->views[i]=gtk_text_view_new();gtk_text_view_set_monospace(GTK_TEXT_VIEW(m->views[i]),TRUE);gtk_text_view_set_editable(GTK_TEXT_VIEW(m->views[i]),i==2);
   gtk_box_pack_start(GTK_BOX(column),scroll(m->views[i]),TRUE,TRUE,0);
+  g_signal_connect(m->views[i],"key-press-event",G_CALLBACK(key),m);
   if(i<2) gtk_text_buffer_create_tag(gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[i])),"difference","background",i ? "#d5f5d5" : "#ffe0d0",NULL);
  }
+ for(int i=0;i<2;i++) {
+  g_signal_connect(m->views[i],"button-press-event",G_CALLBACK(pick_block),m);
+  m->adjustments[i]=g_object_ref(gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(m->views[i])));
+  g_signal_connect(m->adjustments[i],"value-changed",G_CALLBACK(sync_scroll),m);
+ }
+ g_signal_connect(list_toggle,"toggled",G_CALLBACK(show_list),m);g_signal_connect(wrap_toggle,"toggled",G_CALLBACK(wrap),m);
  m->output=g_object_ref(gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[2])));
  m->status=gtk_label_new("Choose two UTF-8 files and press Compare.");gtk_label_set_xalign(GTK_LABEL(m->status),0);gtk_label_set_line_wrap(GTK_LABEL(m->status),TRUE);gtk_box_pack_start(GTK_BOX(box),m->status,FALSE,FALSE,0);
  g_signal_connect(result(m),"begin-user-action",G_CALLBACK(action_begin),m);

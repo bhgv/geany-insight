@@ -19,6 +19,8 @@ with tempfile.TemporaryDirectory() as tmp:
                     str(root / 'insight/core/diff.c'), '-o', str(libpath)], check=True)
     lib = ctypes.CDLL(str(libpath))
     lib.insight_diff_compute.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.POINTER(Diff)]
+    lib.insight_diff_map_offset.argtypes = [ctypes.POINTER(Diff), ctypes.c_int, ctypes.c_size_t]
+    lib.insight_diff_map_offset.restype = ctypes.c_size_t
     lib.insight_diff_clear.argtypes = [ctypes.POINTER(Diff)]
     def check(a, b, expected=None):
         a, b = a.encode(), b.encode()
@@ -27,6 +29,20 @@ with tempfile.TemporaryDirectory() as tmp:
         try:
             if expected is not None:
                 assert diff.count == expected
+            for side, source, target in [(0, a, b), (1, b, a)]:
+                previous = 0
+                for offset in range(len(source) + 1):
+                    mapped = lib.insight_diff_map_offset(ctypes.byref(diff), side, offset)
+                    assert previous <= mapped <= len(target)
+                    previous = mapped
+                    # UTF-8 boundaries must remain valid for GTK character offsets.
+                    if offset == len(source) or source[offset] & 0xc0 != 0x80:
+                        target[:mapped].decode('utf-8')
+                for h in diff.hunks[:diff.count]:
+                    start, end = (h.a_begin, h.a_end) if side == 0 else (h.b_begin, h.b_end)
+                    other_start = h.b_begin if side == 0 else h.a_begin
+                    if start < end:
+                        assert lib.insight_diff_map_offset(ctypes.byref(diff), side, start) == other_start
             pos_a = pos_b = 0
             reconstructed = bytearray()
             for h in diff.hunks[:diff.count]:

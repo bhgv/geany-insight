@@ -1,4 +1,4 @@
-# Internal Diff / Merge (initial version)
+# Internal Diff / Merge
 
 Open **Diff / Merge…** in the Context header. Choose Left and Right files and press
 **Compare**. The nonmodal window displays both read-only sources, highlights changed
@@ -24,10 +24,41 @@ Initial scope: two-way, line-based comparison and manual merge; UTF-8 text witho
 embedded NULs, up to 1 MiB per source. CRLF and final-newline differences are
 preserved. The dependency-free LCS engine trims common prefixes/suffixes and caps
 its matrix at 4 million cells. This is not yet three-way base-aware merge,
-automatic conflict resolution, intraline highlighting, or synchronized scrolling.
+automatic conflict resolution, intraline highlighting, or padding that visually aligns both source panes line for line.
 If a manual edit removes several block boundaries, compare again to rebuild the
 block list; the list describes the original sources, not a new diff of the result.
 
 Core validation: `python3 insight/tests/diff_test.py` (C99 compiler required).
 Native GUI builds include the module in both Meson and Autotools. GTK development
 headers are needed to compile and exercise the window.
+
+## File Compare navigation and display
+
+**Previous difference** / **Next difference** and **Ctrl+Up / Ctrl+Down** select
+and reveal a block in all three panes. Navigation stops at either end; buttons
+are disabled at the boundaries. With no selection, Next selects the first block
+and Previous selects the last. Clicking a changed source block also selects it.
+The status shows the selected difference number and total count.
+
+**Difference list** hides or shows the block list; navigation keeps working while
+it is hidden. **Wrap lines** applies word/character wrapping to all three panes.
+These display options last for the lifetime of the comparison window.
+
+**Scroll sources together** is enabled initially. It maps the top visible source
+line through the diff, so insertions/deletions do not accumulate a line offset.
+Inside a changed block it aligns to the start of the opposite block. Disable it
+for independent scrolling. The editable Result scrolls independently; selecting
+a difference still reveals its current marked range. This is position linking,
+not blank-line padding or pixel-perfect alignment of wrapped lines.
+
+Reference: [Source Insight File Compare](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/File_Compare.htm).
+The Source Insight commands copy directly between files; this implementation
+keeps Take Left/Right directed into the separate result buffer.
+
+Validation for this increment: core suite (9 tests), 3000 randomized diff
+reconstructions, bidirectional monotonic offset mapping, UTF-8 boundary checks,
+insertions/deletions and the LCS work limit. GTK compilation and interactive GUI
+validation require GTK3 development packages and a display, unavailable in the
+implementation environment. Manual check: compare the supplied example, navigate
+both ends using buttons and shortcuts, hide the list, click each changed source,
+scroll past insertions with linking on/off, toggle wrapping, then take/undo/redo.
