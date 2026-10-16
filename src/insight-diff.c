@@ -25,7 +25,7 @@ typedef struct {
  GtkListStore *list; GtkWidget *hunk_view; GtkTextBuffer *output; GtkTreeSelection *selection;
  gchar *sources[2],*loaded_paths[2],*saved;
  InsightDiff diff; GtkTextMark **marks;
- GPtrArray *history; guint position; gboolean changing,user_action,pending;
+ GPtrArray *history; guint position;guint64 history_serial; gboolean changing,user_action,pending;
 } Merge;
 static GKeyFile *view_defaults;
 static GList *open_compares;
@@ -68,15 +68,16 @@ static void state(Merge *m) {
  gtk_window_set_title(GTK_WINDOW(m->window),dirty ? "Diff / Merge — unsaved result" : "Diff / Merge");
 }
 static void record(Merge *m) {
+ m->history_serial++;
  while(m->history->len>m->position+1) g_ptr_array_remove_index(m->history,m->history->len-1);
  Snapshot *s=g_new0(Snapshot,1);s->text=contents(result(m));s->positions=g_new(gint,2*m->diff.count);
  for(size_t i=0;i<2*m->diff.count;i++) { GtkTextIter it;gtk_text_buffer_get_iter_at_mark(result(m),&it,m->marks[i]);s->positions[i]=gtk_text_iter_get_offset(&it); }
  g_ptr_array_add(m->history,s);m->position=m->history->len-1;
  /* Bound full-buffer history memory to roughly 32 MiB. */
  size_t bytes=0;
- for(guint i=0;i<m->history->len;i++) bytes+=strlen(((Snapshot*)g_ptr_array_index(m->history,i))->text)+2*m->diff.count*sizeof(gint);
- while(bytes>32*1024*1024 && m->history->len>1) {
-  Snapshot *first=g_ptr_array_index(m->history,0);bytes-=strlen(first->text)+2*m->diff.count*sizeof(gint);
+ for(guint i=0;i<m->history->len;i++) bytes+=sizeof(Snapshot)+strlen(((Snapshot*)g_ptr_array_index(m->history,i))->text)+1+2*m->diff.count*sizeof(gint);
+ while((bytes>32*1024*1024 || m->history->len>512) && m->history->len>1) {
+  Snapshot *first=g_ptr_array_index(m->history,0);bytes-=sizeof(Snapshot)+strlen(first->text)+1+2*m->diff.count*sizeof(gint);
   g_ptr_array_remove_index(m->history,0);m->position--;
  }
  state(m);
@@ -92,13 +93,45 @@ static void action_end(GtkTextBuffer *buffer,gpointer data) {
  if(m->pending) { m->pending=FALSE;if(!m->changing) record(m); }
 }
 static void restore(Merge *m,guint position) {
+ m->history_serial++;
  Snapshot *s=g_ptr_array_index(m->history,position);m->changing=TRUE;
  gtk_text_buffer_set_text(result(m),s->text,-1);
  for(size_t i=0;i<2*m->diff.count;i++) { GtkTextIter it;gtk_text_buffer_get_iter_at_offset(result(m),&it,s->positions[i]);gtk_text_buffer_move_mark(result(m),m->marks[i],&it); }
  m->position=position;m->changing=FALSE;state(m);
 }
-static void undo(GtkWidget *w,gpointer data) { (void)w;Merge *m=data;if(m->position) restore(m,m->position-1); }
-static void redo(GtkWidget *w,gpointer data) { (void)w;Merge *m=data;if(m->position+1<m->history->len) restore(m,m->position+1); }
+static void undo(GtkWidget *w,gpointer data) { (void)w;Merge *m=data;if(!m->busy && m->position) restore(m,m->position-1); }
+static void redo(GtkWidget *w,gpointer data) { (void)w;Merge *m=data;if(!m->busy && m->position+1<m->history->len) restore(m,m->position+1); }
+static void history_end(Merge *m,gboolean redo_all) {
+ if(!m->busy && m->history->len) { guint target=redo_all ? m->history->len-1 : 0;if(target!=m->position) restore(m,target); }
+}
+static void history_preview(GtkTreeSelection *selection,gpointer view) {
+ GtkTreeModel *model;GtkTreeIter iter;if(!gtk_tree_selection_get_selected(selection,&model,&iter)) return;
+ gchar *text=NULL;gtk_tree_model_get(model,&iter,4,&text,-1);gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)),text ? text : "",-1);g_free(text);
+}
+static void history_dialog(GtkWidget *widget,gpointer data) {
+ (void)widget;Merge *m=data;if(m->busy || !m->history->len) return;
+ GtkWidget *window=m->window;g_object_ref(window);guint64 serial=m->history_serial;
+ GtkWidget *dialog=gtk_dialog_new_with_buttons("Result History",GTK_WINDOW(window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Cancel",GTK_RESPONSE_CANCEL,"Restore selected state",GTK_RESPONSE_APPLY,NULL);g_object_ref(dialog);gtk_widget_set_name(dialog,"insight-diff-history");gtk_window_set_default_size(GTK_WINDOW(dialog),720,500);
+ GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(dialog));gtk_container_set_border_width(GTK_CONTAINER(box),8);
+ GtkWidget *note=gtk_label_new("Select a retained state to preview. Restore keeps later states available for Redo.");gtk_label_set_line_wrap(GTK_LABEL(note),TRUE);gtk_box_pack_start(GTK_BOX(box),note,FALSE,FALSE,4);
+ GtkListStore *model=gtk_list_store_new(5,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING);
+ for(guint i=0;i<m->history->len;i++) {
+  Snapshot *snapshot=g_ptr_array_index(m->history,i);gchar *number=g_strdup_printf("%u",i+1),*bytes=g_strdup_printf("%zu",strlen(snapshot->text));
+  const gchar *end=g_utf8_offset_to_pointer(snapshot->text,MIN((glong)80,g_utf8_strlen(snapshot->text,-1)));gchar *summary=g_strndup(snapshot->text,end-snapshot->text);for(gchar *p=summary;*p;p++) if(*p=='\r'||*p=='\n'||*p=='\t') *p=' ';
+  gboolean saved=!strcmp(snapshot->text,m->saved);const gchar *status=i==m->position ? (saved ? "Current / Saved" : "Current") : (saved ? "Saved" : "");
+  gchar *label=g_strconcat(number," — ",insight_tr(status),NULL);GtkTreeIter iter;gtk_list_store_append(model,&iter);gtk_list_store_set(model,&iter,0,i,1,label,2,bytes,3,summary,4,snapshot->text,-1);g_free(label);g_free(number);g_free(bytes);g_free(summary);
+ }
+ GtkWidget *tree=gtk_tree_view_new_with_model(GTK_TREE_MODEL(model));g_object_unref(model);gtk_widget_set_name(tree,"insight-diff-history-list");
+ const gchar *titles[]={"State","Bytes","Text preview"};for(guint i=0;i<3;i++) gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(tree),-1,titles[i],gtk_cell_renderer_text_new(),"text",i+1,NULL);
+ GtkWidget *list_scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(list_scroll),tree);gtk_box_pack_start(GTK_BOX(box),list_scroll,TRUE,TRUE,4);
+ GtkWidget *preview=gtk_text_view_new();gtk_text_view_set_editable(GTK_TEXT_VIEW(preview),FALSE);gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(preview),FALSE);gtk_text_view_set_monospace(GTK_TEXT_VIEW(preview),TRUE);gtk_widget_set_name(preview,"insight-diff-history-preview");
+ GtkWidget *preview_scroll=gtk_scrolled_window_new(NULL,NULL);gtk_widget_set_size_request(preview_scroll,-1,150);gtk_container_add(GTK_CONTAINER(preview_scroll),preview);gtk_box_pack_start(GTK_BOX(box),preview_scroll,TRUE,TRUE,4);
+ GtkTreeSelection *selection=g_object_ref(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)));g_signal_connect_object(selection,"changed",G_CALLBACK(history_preview),preview,0);GtkTreePath *path=gtk_tree_path_new_from_indices(m->position,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(tree),path,NULL,FALSE);gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(tree),path,NULL,FALSE,0,0);gtk_tree_path_free(path);gtk_widget_show_all(dialog);
+ gint response=gtk_dialog_run(GTK_DIALOG(dialog));m=g_object_get_data(G_OBJECT(window),"insight-diff-state");
+ if(response==GTK_RESPONSE_APPLY && m && !m->busy && serial==m->history_serial) { GtkTreeModel *selected_model;GtkTreeIter iter;if(gtk_tree_selection_get_selected(selection,&selected_model,&iter)) { guint index;gtk_tree_model_get(selected_model,&iter,0,&index,-1);if(index<m->history->len && index!=m->position) restore(m,index); } }
+ if(response==GTK_RESPONSE_APPLY && m && serial!=m->history_serial) gtk_label_set_text(GTK_LABEL(m->replace_status),"History changed; reopen Result History.");
+ gtk_widget_destroy(dialog);g_object_unref(selection);g_object_unref(dialog);g_object_unref(window);
+}
 static void navigate(Merge *m,gint direction);
 static void take(GtkWidget *,gpointer);
 static void take_all(GtkWidget *,gpointer);
@@ -565,17 +598,18 @@ static void copy_difference(Merge *m,guint side) {
 static void source_menu_action(GtkMenuItem *item,gpointer window) {
  Merge *m=g_object_get_data(G_OBJECT(window),"insight-diff-state");if(!m) return;
  gint side=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item),"side"));gint action=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item),"action"));
- if(action==0) edit_source(m,side);else if(action==1) copy_difference(m,side);else if(action==2) view_options(GTK_WIDGET(item),m);else if(action==3) focus_line(m,side);else if(side==2 && action<7) selection_case(m,action-4);else if(side==2) edit_lines(m,action-7);
+ if(action==0) edit_source(m,side);else if(action==1) copy_difference(m,side);else if(action==2) view_options(GTK_WIDGET(item),m);else if(action==3) focus_line(m,side);else if(side==2 && action<7) selection_case(m,action-4);else if(side==2 && action<11) edit_lines(m,action-7);else if(side==2 && action<13) history_end(m,action==12);else if(side==2) history_dialog(NULL,m);
 }
 static void view_menu_toggle(GtkCheckMenuItem *item,gpointer toggle) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle),gtk_check_menu_item_get_active(item)); }
 static void source_menu(GtkTextView *view,GtkWidget *menu,gpointer data) {
  Merge *m=data;guint side=GTK_WIDGET(view)==m->views[1] ? 1 : GTK_WIDGET(view)==m->views[0] ? 0 : 2;
  gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());
- const gchar *labels[]={"Edit File — Ctrl+E","Copy selected difference","File Compare Options…","Go to Line — Ctrl+G","Uppercase selection","Lowercase selection","Toggle selection case","Indent result lines","Outdent result lines","Tabs to spaces in result lines","Trim trailing spaces in result lines"};
+ const gchar *labels[]={"Edit File — Ctrl+E","Copy selected difference","File Compare Options…","Go to Line — Ctrl+G","Uppercase selection","Lowercase selection","Toggle selection case","Indent result lines","Outdent result lines","Tabs to spaces in result lines","Trim trailing spaces in result lines","Undo All retained changes","Redo All retained changes","Result History…"};
  for(guint action=0;action<G_N_ELEMENTS(labels);action++) {
   if((side==2 && action<2) || (side!=2 && action>=4)) continue;
   GtkWidget *item=gtk_menu_item_new_with_label(labels[action]);g_object_set_data(G_OBJECT(item),"side",GUINT_TO_POINTER(side));g_object_set_data(G_OBJECT(item),"action",GUINT_TO_POINTER(action));gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect_object(item,"activate",G_CALLBACK(source_menu_action),m->window,0);
   if(action>=4) gtk_widget_set_sensitive(item,!m->busy && (action>=7 || gtk_text_buffer_get_has_selection(result(m))));
+  if(action>=11) gtk_widget_set_sensitive(item,!m->busy && (action==11 ? m->position>0 : action==12 ? m->position+1<m->history->len : m->history->len>0));
   if(action<2) gtk_widget_set_sensitive(item,!m->busy && m->loaded_paths[side] && (action==0 ? source_opener!=NULL : selected(m)>=0));
  }
  GtkWidget *toggles[]={m->mono,m->numbers,m->list_toggle,m->wrap_toggle,m->vertical,m->overview};
@@ -780,6 +814,7 @@ static Merge *merge_new(GtkWidget *parent) {
  m->vertical=gtk_check_button_new_with_label("Vertical scrollbars");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->vertical),TRUE);gtk_box_pack_start(GTK_BOX(display),m->vertical,FALSE,FALSE,0);
  m->overview=gtk_check_button_new_with_label("Overview");gtk_box_pack_start(GTK_BOX(display),m->overview,FALSE,FALSE,0);
  gtk_box_pack_start(GTK_BOX(display),gtk_label_new("Scale (%)"),FALSE,FALSE,0);m->zoom=gtk_spin_button_new_with_range(50,250,10);gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->zoom),100);gtk_widget_set_name(m->zoom,"insight-diff-zoom");gtk_box_pack_start(GTK_BOX(display),m->zoom,FALSE,FALSE,0);GtkWidget *settings=button(display,"Options…",G_CALLBACK(view_options),m);gtk_widget_set_name(settings,"insight-diff-options-button");m->font_css=gtk_css_provider_new();
+ GtkWidget *history_button=button(display,"Result History…",G_CALLBACK(history_dialog),m);gtk_widget_set_name(history_button,"insight-diff-history-button");
  GtkWidget *find=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),find,FALSE,FALSE,0);
  m->find_side=gtk_combo_box_text_new();gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->find_side),"Left");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->find_side),"Right");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->find_side),"Result");gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),0);gtk_box_pack_start(GTK_BOX(find),m->find_side,FALSE,FALSE,0);
  m->find_entry=gtk_search_entry_new();gtk_widget_set_name(m->find_entry,"insight-diff-search");gtk_entry_set_placeholder_text(GTK_ENTRY(m->find_entry),"Find text — Ctrl+F, F3 / Shift+F3");gtk_box_pack_start(GTK_BOX(find),m->find_entry,TRUE,TRUE,0);

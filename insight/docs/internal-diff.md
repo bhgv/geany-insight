@@ -224,3 +224,11 @@ The Result context menu provides **Uppercase selection**, **Lowercase selection*
 | Trim trailing spaces in result lines | Removes trailing ASCII spaces and tabs |
 
 **Edit tab width** controls these operations: 1–16, default 4. Tab expansion counts each Unicode character as one logical column; this is not glyph-width measurement or a display tab setting. CR, LF and CRLF are preserved. Each operation is one Undo/Redo action; unchanged text creates no history. Preflight limits of 100000 individual changes and 1 MiB result reject the whole batch before editing if exceeded. Commands are blocked during comparison. Width belongs only to the current window.
+
+### Result history
+
+**Result History…** lists retained result snapshots. Selecting a row shows its full text in a read-only preview. The table includes UTF-8 byte count, a short excerpt and Current/Saved markers. Saved means the text equals the last saved result, not that every snapshot has a separate file. Before the first Save result, it marks the initial left-side result baseline. Cancel leaves the result unchanged. **Restore selected state** restores text and merge-block positions while keeping later states available through Redo. A new edit after going back discards the redo branch. If history changes while the dialog is open, its stale selection is not applied.
+
+Result menu offers **Undo All retained changes** and **Redo All retained changes**, jumping to the earliest and latest available states. History is capped at 512 states and approximately 32 MiB of snapshots, retaining at least one state even if a single snapshot is larger. After eviction, the earliest available state can differ from the original result. A successful new comparison resets history; closing the window removes it. History is not saved in preferences. Saving result text retains available history. History browsing and undo are blocked during comparison.
+
+![Production GTK history dialog, isolated test fixture](media/file-compare-history.jpg)

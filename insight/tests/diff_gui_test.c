@@ -3,6 +3,7 @@
 #include <stdarg.h>
 #include <glib/gstdio.h>
 #include "../../src/insight-diff.c"
+const gchar *insight_tr(const gchar *text) { return text; }
 void insight_directory_show(GtkWidget *parent) { (void)parent; }
 gchar *insight_i18n_printf(const gchar *format,...) {
  va_list args;va_start(args,format);gchar *s=g_strdup_vprintf(format,args);va_end(args);return s;
@@ -132,8 +133,28 @@ static void line_edit_test(void) {
  GString *large=g_string_new(NULL);for(guint i=0;i<70000;i++) { g_string_append_c(large,'\t');if(i%50==49) g_string_append_c(large,'\n'); }gtk_text_buffer_set_text(b,large->str,-1);gtk_text_buffer_get_bounds(b,&a,&z);gtk_text_buffer_select_range(b,&a,&z);gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->edit_tab_width),16);history=m->history->len;edit_lines(m,2);g_assert_cmpuint(m->history->len,==,history);g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->replace_status)),"Nothing changed"));g_assert_cmpint(gtk_text_buffer_get_char_count(b),==,71400);g_string_free(large,TRUE);
  gtk_widget_destroy(m->window);flush();
 }
+typedef struct { Merge *m;guint index;gint response;gboolean mutate; } HistoryResponse;
+static gboolean history_response(gpointer data) {
+ HistoryResponse *action=data;GList *windows=gtk_window_list_toplevels();GtkWidget *dialog=NULL;
+ for(GList *p=windows;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-diff-history")) dialog=p->data;
+ g_list_free(windows);g_assert_nonnull(dialog);
+ flush();GtkWidget *tree=named(dialog,"insight-diff-history-list");GtkTreePath *path=gtk_tree_path_new_from_indices(action->index,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(tree),path,NULL,FALSE);gtk_tree_path_free(path);flush();
+ GtkTextBuffer *preview=gtk_text_view_get_buffer(GTK_TEXT_VIEW(named(dialog,"insight-diff-history-preview")));gchar *text=contents(preview);g_assert_cmpstr(text,==,((Snapshot*)g_ptr_array_index(action->m->history,action->index))->text);g_free(text);
+ const gchar *capture=g_getenv("INSIGHT_DIFF_HISTORY_CAPTURE");if(capture && action->response==GTK_RESPONSE_CANCEL) { gint64 until=g_get_monotonic_time()+200000;while(g_get_monotonic_time()<until) { flush();g_usleep(1000); }GdkWindow *window=gtk_widget_get_window(dialog);GdkPixbuf *pixbuf=gdk_pixbuf_get_from_window(window,0,0,gdk_window_get_width(window),gdk_window_get_height(window));g_assert_nonnull(pixbuf);g_assert_true(gdk_pixbuf_save(pixbuf,capture,"jpeg",NULL,"quality","88",NULL));g_object_unref(pixbuf); }
+ if(action->mutate) gtk_text_buffer_set_text(result(action->m),"changed while open",-1);
+ gtk_dialog_response(GTK_DIALOG(dialog),action->response);return G_SOURCE_REMOVE;
+}
+static void history_test(void) {
+ Merge *m=merge_new(NULL);gtk_text_buffer_begin_user_action(result(m));gtk_text_buffer_set_text(result(m),"port = 3000\n",-1);gtk_text_buffer_end_user_action(result(m));gtk_text_buffer_begin_user_action(result(m));gtk_text_buffer_set_text(result(m),"port = 3333\n",-1);gtk_text_buffer_end_user_action(result(m));g_free(m->saved);m->saved=g_strdup("port = 3000\n");
+ guint count=m->history->len;HistoryResponse response={m,1,GTK_RESPONSE_CANCEL,FALSE};g_timeout_add(100,history_response,&response);history_dialog(NULL,m);assert_text(m,"port = 3333\n");
+ response.response=GTK_RESPONSE_APPLY;g_timeout_add(100,history_response,&response);history_dialog(NULL,m);assert_text(m,"port = 3000\n");g_assert_cmpuint(m->history->len,==,count);history_end(m,TRUE);assert_text(m,"port = 3333\n");history_end(m,FALSE);assert_text(m,"");
+ history_end(m,TRUE);response.mutate=TRUE;g_timeout_add(100,history_response,&response);history_dialog(NULL,m);assert_text(m,"changed while open");
+ m->busy=TRUE;guint position=m->position;undo(NULL,m);redo(NULL,m);history_end(m,FALSE);history_dialog(NULL,m);g_assert_cmpuint(m->position,==,position);m->busy=FALSE;
+ gtk_text_buffer_set_text(result(m),"",0);for(guint i=0;i<520;i++) gtk_text_buffer_insert_at_cursor(result(m),"x",1);g_assert_cmpuint(m->history->len,==,512);history_end(m,FALSE);g_assert_cmpint(gtk_text_buffer_get_char_count(result(m)),>,0);history_end(m,TRUE);g_assert_cmpint(gtk_text_buffer_get_char_count(result(m)),==,520);
+ gboolean gone=FALSE;g_object_weak_ref(G_OBJECT(m->window),finalized,&gone);g_idle_add(close_options_parent,m->window);history_dialog(NULL,m);flush();g_assert_true(gone);
+}
 int main(int argc,char **argv) {
- gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();case_test();line_edit_test();insight_diff_set_source_opener(source_opened);
+ gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();case_test();line_edit_test();history_test();insight_diff_set_source_opener(source_opened);
  GError *error=NULL;gchar *dir=g_dir_make_tmp("insight-diff-XXXXXX",&error);g_assert_no_error(error);
  gchar *left=g_build_filename(dir,"left.txt",NULL),*right=g_build_filename(dir,"right.txt",NULL);
  const char *a="start\nleft\ncommon\nlast left\nend\n",*b="start\nright\ncommon\nlast right\nextra\nend\n";
@@ -155,7 +176,7 @@ int main(int argc,char **argv) {
  gtk_entry_set_text(GTK_ENTRY(m->find_entry),"left");gtk_entry_set_text(GTK_ENTRY(m->replace_entry),"replacement");
  replace_result(m->replace_apply,m);g_assert_cmpuint(m->history->len,==,2);undo(NULL,m);assert_text(m,a);
  take(m->take[1],m);g_assert_cmpuint(m->history->len,==,2);undo(NULL,m);assert_text(m,a);redo(NULL,m);
- navigate(m,-1);take(m->take[1],m);assert_text(m,b);undo(NULL,m);undo(NULL,m);assert_text(m,a);
+ navigate(m,-1);take(m->take[1],m);assert_text(m,b);undo(NULL,m);undo(NULL,m);assert_text(m,a);history_end(m,TRUE);assert_text(m,b);history_end(m,FALSE);assert_text(m,a);
  gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),1);gtk_entry_set_text(GTK_ENTRY(m->find_entry),"RIGHT");
  GtkTextBuffer *right_buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[1]));GtkTextIter start,end;
  gtk_text_buffer_get_start_iter(right_buffer,&start);gtk_text_buffer_place_cursor(right_buffer,&start);

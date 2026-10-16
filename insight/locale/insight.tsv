@@ -1048,3 +1048,14 @@ Tabs to spaces in result lines	Табуляции в пробелы в стро�
 Trim trailing spaces in result lines	Удалить хвостовые пробелы строк результата
 Result lines edited.	Строки результата изменены.
 Line edit limit: 100000 changes and 1 MiB result. Nothing changed.	Предел правки строк: 100000 изменений и 1 МиБ результата. Изменений нет.
+Result History	История результата
+Result History…	История результата…
+Restore selected state	Восстановить выбранное состояние
+Undo All retained changes	Отменить все доступные изменения
+Redo All retained changes	Повторить все доступные изменения
+Select a retained state to preview. Restore keeps later states available for Redo.	Выберите состояние для предпросмотра. После восстановления последующие состояния доступны для повтора.
+Bytes	Байты
+Text preview	Фрагмент текста
+Current / Saved	Текущее / Сохранено
+Current	Текущее
+History changed; reopen Result History.	История изменилась; откройте историю результата заново.
