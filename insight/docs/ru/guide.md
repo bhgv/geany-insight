@@ -86,3 +86,7 @@ Geany Insight — редактор исходного кода с индексо
 
 
 Полная справка: [Режимы поиска/замены и языки запросов](search-replace.md).
+
+## Directory Compare
+
+[Сравнение каталогов / directory comparison](directory-compare.md): Tools → Directory Compare…

@@ -40,6 +40,7 @@ int main(int argc,char **argv) {
  gtk_entry_set_text(GTK_ENTRY(d->filter_entry),"");g_assert_true(select_path(d,"old.lua"));g_assert_false(gtk_widget_get_sensitive(d->open));
  gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(d->view)));advance(d,1);g_assert_nonnull(selected_entry(d));
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->different),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->space),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->eol),TRUE);start(NULL,d);wait_scan(d);
+ gint sort_column;GtkSortType sort_order;g_assert_true(gtk_tree_sortable_get_sort_column_id(GTK_TREE_SORTABLE(gtk_tree_view_get_model(GTK_TREE_VIEW(d->view))),&sort_column,&sort_order));g_assert_cmpint(sort_column,==,DC_PATH);g_assert_cmpint(sort_order,==,GTK_SORT_DESCENDING);
  g_assert_true(select_path(d,"данные.txt"));g_assert_cmpint(selected_entry(d)->status,==,INSIGHT_DIR_SAME);open_pair(NULL,d);g_assert_cmpuint(opened_flags,==,3);
  GtkWidget *menu=context_menu(d);g_assert_nonnull(menu);gtk_widget_destroy(menu);
  const gchar *capture=g_getenv("INSIGHT_DIRECTORY_CAPTURE");
@@ -48,7 +49,11 @@ int main(int argc,char **argv) {
   GdkWindow *window=gtk_widget_get_window(d->window);GdkPixbuf *pixels=gdk_pixbuf_get_from_window(window,0,0,gdk_window_get_width(window),gdk_window_get_height(window));g_assert_nonnull(pixels);
   g_assert_true(gdk_pixbuf_save(pixels,capture,"jpeg",&error,"quality","88",NULL));g_assert_no_error(error);g_object_unref(pixels);
  }
- guint previous=d->rows->len;start(NULL,d);cancel_scan(NULL,d);wait_scan(d);g_assert_cmpuint(d->rows->len,==,previous);
+ guint previous=d->rows->len;start(NULL,d);
+ gint64 publication_deadline=g_get_monotonic_time()+10*G_TIME_SPAN_SECOND;
+ while(d->busy && !d->publication && g_get_monotonic_time()<publication_deadline) { g_main_context_iteration(NULL,FALSE);g_usleep(1000); }
+ g_assert_cmpuint(d->publication,>,0);cancel_scan(NULL,d);g_assert_false(d->busy);g_assert_cmpuint(d->rows->len,==,previous);
+ start(NULL,d);cancel_scan(NULL,d);wait_scan(d);g_assert_cmpuint(d->rows->len,==,previous);
  gtk_entry_set_text(GTK_ENTRY(d->paths[1]),"/path/that/does/not/exist");start(NULL,d);wait_scan(d);g_assert_cmpuint(d->rows->len,==,previous);
  gtk_entry_set_text(GTK_ENTRY(d->paths[0]),empty);gtk_entry_set_text(GTK_ENTRY(d->paths[1]),empty);start(NULL,d);wait_scan(d);g_assert_cmpuint(d->rows->len,==,0);g_assert_cmpint(gtk_tree_model_iter_n_children(d->filtered,NULL),==,0);
  gboolean gone=FALSE;g_object_weak_ref(G_OBJECT(d->window),finalized,&gone);start(NULL,d);gtk_widget_destroy(d->window);

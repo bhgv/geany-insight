@@ -391,3 +391,14 @@ Linux checks use real production widgets in an isolated GTK/Xvfb fixture, not th
 full editor; screenshot and diagram are in the RU/EN internal-diff guides.
 Three-way merge, intraline differences, semantic whitespace handling and padded
 visual alignment remain outside this implementation.
+
+### Directory Compare (2026-10-16)
+
+Tools and File Compare scan two trees in a cancellable worker. Content, date and
+size/date modes; bounded binary or UTF-8 normalized comparison; hidden/recursive
+options; explicit folder/link/type/error/limit statuses; path/status sorting,
+Unicode filtering, differences-only, navigation and clipboard reports. Selected
+pairs open independent File Compare windows using completed snapshot roots and
+flags. Snapshot publication is incremental. File copying/deletion, known-type
+filters, backups, path variables and persistent options remain open. See the
+illustrated RU/EN directory-compare guide for limits and verification scope.

@@ -912,3 +912,52 @@ Text not found.	Текст не найден.
 Left	Слева
 Right	Справа
 Result	Результат
+Directory Compare	Сравнение каталогов
+Directory Compare…	Сравнение каталогов…
+Compare directories…	Сравнить каталоги…
+Left directory	Левый каталог
+Right directory	Правый каталог
+Compare contents	По содержимому
+Compare modification dates	По датам изменения
+Compare sizes and dates	По размерам и датам
+Include subdirectories	Включать подкаталоги
+Include hidden entries	Включать скрытые элементы
+Scan / Refresh	Сканировать / Обновить
+Compare selected file	Сравнить выбранный файл
+Previous different file	Предыдущий различающийся файл
+Next different file	Следующий различающийся файл
+Filter relative paths — Ctrl+F	Фильтр относительных путей — Ctrl+F
+Differences only	Только различия
+Relative path	Относительный путь
+Left — size / modified	Слева — размер / изменение
+Right — size / modified	Справа — размер / изменение
+Same	Одинаковые
+Different	Различаются
+Different — left newer	Различаются — слева новее
+Different — right newer	Различаются — справа новее
+Left only	Только слева
+Right only	Только справа
+Type mismatch	Разные типы
+Skipped	Пропущено
+Read error	Ошибка чтения
+Folder	Каталог
+Link (not followed)	Ссылка (без обхода)
+Special file	Специальный файл
+Copy relative path	Копировать относительный путь
+Copy visible list	Копировать видимый список
+Choose comparison directory	Выбор каталога сравнения
+Choose two directories and scan. Results are a snapshot.	Выберите два каталога и запустите сканирование. Результат — снимок.
+Scanning directories… Cancel keeps the previous result.	Сканирование каталогов… Отмена сохраняет прежний результат.
+Directory comparison cancelled; previous result kept.	Сравнение каталогов отменено; прежний результат сохранён.
+Choose two directory paths before scanning.	Перед сканированием выберите два пути каталогов.
+Choose directories that are not symbolic links.	Выберите каталоги, не являющиеся символическими ссылками.
+Directory comparison visit limit reached.	Достигнут лимит посещённых элементов.
+Directory comparison path limit reached.	Достигнут лимит длины пути.
+Directory comparison entry limit reached.	Достигнут лимит элементов сравнения.
+Directory comparison depth limit reached.	Достигнут лимит глубины сравнения.
+Content size or scan byte limit reached	Достигнут лимит размера содержимого или объёма сканирования
+Symbolic link or special file	Символическая ссылка или специальный файл
+Folder; inspect child rows	Каталог; проверяйте строки потомков
+Text options require UTF-8 without NUL bytes	Текстовые параметры требуют UTF-8 без байтов NUL
+File changed during directory comparison; rescan.	Файл изменился при сравнении каталогов; повторите обход.
+%u shown / %u entries — %u same, %u different, %u one-sided, %u type, %u skipped, %u errors, %u folders	Показано %u / %u — одинаковых %u, различий %u, односторонних %u, типов %u, пропущено %u, ошибок %u, каталогов %u

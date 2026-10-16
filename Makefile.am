@@ -383,3 +383,6 @@ EXTRA_DIST += insight/tests/diff_gui_test.c
 EXTRA_DIST += insight/desktop/directory_compare.c insight/desktop/directory_compare.h insight/tests/directory_compare_test.c
 EXTRA_DIST += insight/tests/directory_compare_gui_test.c
 EXTRA_DIST += insight/tests/directory_compare_native_gui_test.c
+
+insightdoc_DATA += insight/docs/directory-compare.md
+dist_insightdocmedia_DATA += insight/docs/media/directory-compare.jpg insight/docs/media/directory-compare.svg

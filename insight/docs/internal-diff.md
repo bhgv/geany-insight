@@ -141,3 +141,5 @@ not claimed. Linux CI now includes both the core and production-widget fixture.
 Gutters include the final empty editor line after a terminator. Saving is disabled
 while a new comparison is pending, so a save dialog cannot overlap replacement
 of the result. The GTK fixture verifies save-control sensitivity.
+
+[Directory Compare — compare directory trees and open a selected pair](directory-compare.md).

@@ -47,6 +47,7 @@ static gboolean paired(InsightDirectoryEntry *e) {
 }
 static void selection_changed(GtkTreeSelection *selection,gpointer data) {
  (void)selection;Directory *d=data;gtk_widget_set_sensitive(d->open,!d->busy && paired(selected_entry(d)));
+ gtk_widget_set_sensitive(d->previous,!d->busy && d->rows && d->rows->len);gtk_widget_set_sensitive(d->next,!d->busy && d->rows && d->rows->len);
 }
 static void summary(Directory *d) {
  guint counts[8]={0};if(d->rows) for(guint i=0;i<d->rows->len;i++) { InsightDirectoryEntry *e=g_ptr_array_index(d->rows,i);counts[e->status]++; }
@@ -84,7 +85,9 @@ static gchar *description(GFileInfo *info) {
 }
 static void install_model(Directory *d) {
  GtkTreeModel *filtered=gtk_tree_model_filter_new(GTK_TREE_MODEL(d->store),NULL);gtk_tree_model_filter_set_visible_func(GTK_TREE_MODEL_FILTER(filtered),visible,d,NULL);
- GtkTreeModel *sorted=gtk_tree_model_sort_new_with_model(filtered);gtk_tree_view_set_model(GTK_TREE_VIEW(d->view),sorted);g_object_unref(sorted);g_object_unref(d->filtered);d->filtered=filtered;
+ GtkTreeModel *sorted=gtk_tree_model_sort_new_with_model(filtered);gint column;GtkSortType order;
+ if(gtk_tree_sortable_get_sort_column_id(GTK_TREE_SORTABLE(gtk_tree_view_get_model(GTK_TREE_VIEW(d->view))),&column,&order)) gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(sorted),column,order);
+ gtk_tree_view_set_model(GTK_TREE_VIEW(d->view),sorted);g_object_unref(sorted);g_object_unref(d->filtered);d->filtered=filtered;
 }
 static gboolean publish(gpointer data) {
  Directory *d=data;gint64 until=g_get_monotonic_time()+3000;
@@ -120,7 +123,11 @@ static void start(GtkWidget *widget,gpointer data) {
  (void)widget;Directory *d=data;if(d->busy) return;
  if(!*gtk_entry_get_text(GTK_ENTRY(d->paths[0])) || !*gtk_entry_get_text(GTK_ENTRY(d->paths[1]))) { gtk_label_set_text(GTK_LABEL(d->status),"Choose two directory paths before scanning.");return; }
  DirectoryJob *job=g_new0(DirectoryJob,1);job->options=insight_directory_options();
- for(gint i=0;i<2;i++) job->paths[i]=g_canonicalize_filename(gtk_entry_get_text(GTK_ENTRY(d->paths[i])),NULL);
+ for(gint i=0;i<2;i++) {
+  GError *error=NULL;gchar *native=g_filename_from_utf8(gtk_entry_get_text(GTK_ENTRY(d->paths[i])),-1,NULL,NULL,&error);
+  if(!native) { gtk_label_set_text(GTK_LABEL(d->status),error->message);g_clear_error(&error);job_free(job);return; }
+  job->paths[i]=g_canonicalize_filename(native,NULL);g_free(native);
+ }
  job->options.method=gtk_combo_box_get_active(GTK_COMBO_BOX(d->method));job->options.recursive=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->recursive));job->options.hidden=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->hidden));
  job->options.text_flags=(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->space)) ? INSIGHT_DIFF_IGNORE_SPACE : 0) | (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->eol)) ? INSIGHT_DIFF_IGNORE_EOL : 0);
  d->cancel=g_cancellable_new();busy(d,TRUE);gtk_label_set_text(GTK_LABEL(d->status),"Scanning directories… Cancel keeps the previous result.");
@@ -133,7 +140,9 @@ static void cancel_scan(GtkWidget *widget,gpointer data) {
 static void choose(GtkWidget *widget,gpointer data) {
  Directory *d=data;gint side=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget),"side"));
  GtkWidget *dialog=gtk_file_chooser_dialog_new("Choose comparison directory",GTK_WINDOW(d->window),GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,"Cancel",GTK_RESPONSE_CANCEL,"Select",GTK_RESPONSE_ACCEPT,NULL);
- if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) { gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));gtk_entry_set_text(GTK_ENTRY(d->paths[side]),path);g_free(path); }
+ if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) { gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));GError *error=NULL;gchar *display=g_filename_to_utf8(path,-1,NULL,NULL,&error);
+  if(display) gtk_entry_set_text(GTK_ENTRY(d->paths[side]),display);else { gtk_label_set_text(GTK_LABEL(d->status),error->message);g_clear_error(&error); }
+  g_free(display);g_free(path); }
  gtk_widget_destroy(dialog);
 }
 static void open_pair(GtkWidget *widget,gpointer data) {

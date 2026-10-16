@@ -74,3 +74,7 @@ Options → Language profiles… and editor right click → File language / prof
 
 
 Full reference: [Search and replacement modes and query languages](search-replace.md).
+
+## Directory Compare
+
+[Сравнение каталогов / directory comparison](directory-compare.md): Tools → Directory Compare…
