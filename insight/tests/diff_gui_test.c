@@ -8,6 +8,8 @@ gchar *insight_i18n_printf(const gchar *format,...) {
  va_list args;va_start(args,format);gchar *s=g_strdup_vprintf(format,args);va_end(args);return s;
 }
 void insight_panel_help_attach(GtkWidget *widget,const gchar *topic) { (void)widget;(void)topic; }
+static gchar *editor_path;static guint editor_line;
+static void source_opened(const gchar *path,guint line) { g_free(editor_path);editor_path=g_strdup(path);editor_line=line; }
 static void flush(void) { while(gtk_events_pending()) gtk_main_iteration(); }
 static void wait_comparison(Merge *m) {
  gint64 until=g_get_monotonic_time()+10*G_TIME_SPAN_SECOND;
@@ -45,7 +47,7 @@ static gboolean options_response(gpointer data) {
  gtk_dialog_response(GTK_DIALOG(dialog),GPOINTER_TO_INT(data));return G_SOURCE_REMOVE;
 }
 int main(int argc,char **argv) {
- gtk_init(&argc,&argv);
+ gtk_init(&argc,&argv);insight_diff_set_source_opener(source_opened);
  GError *error=NULL;gchar *dir=g_dir_make_tmp("insight-diff-XXXXXX",&error);g_assert_no_error(error);
  gchar *left=g_build_filename(dir,"left.txt",NULL),*right=g_build_filename(dir,"right.txt",NULL);
  const char *a="start\nleft\ncommon\nlast left\nend\n",*b="start\nright\ncommon\nlast right\nextra\nend\n";
@@ -82,6 +84,9 @@ int main(int argc,char **argv) {
  for(int i=0;i<3;i++) g_assert_cmpint(gtk_text_view_get_border_window_size(GTK_TEXT_VIEW(m->views[i]),GTK_TEXT_WINDOW_LEFT),==,0);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->numbers),TRUE);flush();
  for(int i=0;i<3;i++) g_assert_cmpint(gtk_text_view_get_border_window_size(GTK_TEXT_VIEW(m->views[i]),GTK_TEXT_WINDOW_LEFT),>,0);
+ copy_difference(m,1);gchar *copied=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));g_assert_cmpstr(copied,==,"right\n");g_free(copied);
+ GtkWidget *popup=gtk_menu_new();source_menu(GTK_TEXT_VIEW(m->views[0]),popup,m);g_assert_nonnull(popup);gtk_widget_destroy(popup);
+ gtk_entry_set_text(GTK_ENTRY(m->paths[1]),"not-the-loaded-source");GtkTextIter source_line;gtk_text_buffer_get_iter_at_line(right_buffer,&source_line,2);gtk_text_buffer_place_cursor(right_buffer,&source_line);edit_source(m,1);g_assert_cmpstr(editor_path,==,right);g_assert_cmpuint(editor_line,==,3);gtk_entry_set_text(GTK_ENTRY(m->paths[1]),right);
  guint display_history=m->position;gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->zoom),120);flush();
  for(gint i=0;i<3;i++) { PangoFontDescription *font=NULL;gtk_style_context_get(gtk_widget_get_style_context(m->views[i]),GTK_STATE_FLAG_NORMAL,"font",&font,NULL);g_assert_cmpint(pango_font_description_get_size(font),==,12*PANGO_SCALE);pango_font_description_free(font); }
  GdkEventScroll wheel={0};wheel.state=GDK_CONTROL_MASK;wheel.direction=GDK_SCROLL_SMOOTH;wheel.delta_y=-1;g_assert_true(zoom_scroll(m->views[0],&wheel,m));g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->zoom)),==,130);wheel.state=0;g_assert_false(zoom_scroll(m->views[0],&wheel,m));
@@ -174,6 +179,6 @@ int main(int argc,char **argv) {
  gint64 until=g_get_monotonic_time()+10*G_TIME_SPAN_SECOND;
  while(!gone && g_get_monotonic_time()<until) { flush();g_usleep(1000); }
  g_assert_true(gone);flush();random_batches(left,right);
- g_remove(left);g_remove(right);g_rmdir(dir);g_free(left);g_free(right);g_free(dir);
+ g_remove(left);g_remove(right);g_rmdir(dir);g_free(left);g_free(right);g_free(dir);g_free(editor_path);
  g_print("Production Diff/Merge fixture: navigation, search, gutters, merge history, options, worker cancellation and close passed.\n");return 0;
 }

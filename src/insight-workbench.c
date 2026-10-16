@@ -144,6 +144,10 @@ static guint64 workbench_epoch;
 static void open_context(GtkButton *,gpointer);
 static gboolean python_language(GeanyFiletype *);
 static void show_diff(GtkWidget *,gpointer);
+static void diff_source_open(const gchar *path,guint line) {
+ GeanyDocument *previous=document_get_current(),*doc=document_open_file(path,FALSE,NULL,NULL);if(!doc) return;
+ navqueue_goto_line(previous,doc,CLAMP((gint)line,1,sci_get_line_count(doc->editor->sci)));document_grab_focus(doc);gtk_window_present(GTK_WINDOW(main_widgets.window));
+}
 static gboolean directory_path_open(const gchar *path) {
  gchar *real=utils_get_real_path(path);GFile *target=g_file_new_for_path(real ? real : path);g_free(real);gboolean found=FALSE;
  for(guint i=0;documents_array && i<documents_array->len && !found;i++) {
@@ -4601,6 +4605,7 @@ static void context_icon(GtkWidget *button,const gchar *icon,const gchar *tip,co
  gtk_button_set_always_show_image(GTK_BUTTON(button),TRUE);gtk_button_set_relief(GTK_BUTTON(button),GTK_RELIEF_NONE);gtk_widget_set_tooltip_text(button,tip);gtk_widget_set_name(button,name);
 }
 void insight_workbench_init(void) {
+ insight_diff_set_source_opener(diff_source_open);
  insight_directory_set_types_provider(directory_known_types);insight_directory_set_open_guard(directory_path_open);
  wb.alive=TRUE;wb.marks_preserve=TRUE; workbench_epoch++; wb.symbol_key_signal=g_signal_connect(geany_object,"key-press",G_CALLBACK(symbol_key_global),NULL);insight_window_list_init(window_list_preview);
  GtkWidget *existing=ui_lookup_widget(main_widgets.window,"vpaned1");
