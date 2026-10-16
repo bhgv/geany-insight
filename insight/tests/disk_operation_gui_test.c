@@ -51,12 +51,13 @@ static gboolean reject_then_cancel(gpointer data) {
 }
 static gboolean respond(gpointer data) {
  (void)data;GtkWidget *d=dialog();
+ g_assert_true(gtk_window_get_default_widget(GTK_WINDOW(d))==gtk_dialog_get_widget_for_response(GTK_DIALOG(d),GTK_RESPONSE_ACCEPT));
  if(destination) gtk_entry_set_text(GTK_ENTRY(named(d,"insight-disk-change-destination")),destination);
  if(response_mode==2) { gchar *other=g_build_filename(root,"folder",NULL);insight_disk_browser_set_root(browser,other);g_free(other); }
  if(response_mode) g_timeout_add(10,reject_then_cancel,NULL);
  gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_ACCEPT);return G_SOURCE_REMOVE;
 }
-static gboolean cancel_dialog(gpointer data) { (void)data;gtk_dialog_response(GTK_DIALOG(dialog()),GTK_RESPONSE_CANCEL);return G_SOURCE_REMOVE; }
+static gboolean cancel_dialog(gpointer data) { (void)data;GtkWidget *d=dialog();g_assert_true(gtk_window_get_default_widget(GTK_WINDOW(d))==gtk_dialog_get_widget_for_response(GTK_DIALOG(d),GTK_RESPONSE_CANCEL));gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_CANCEL);return G_SOURCE_REMOVE; }
 static void action(const gchar *name,const gchar *value,guint mode,gboolean cancel) {
  gboolean handled=FALSE;g_signal_emit_by_name(view,"popup-menu",&handled);g_assert_true(handled);GtkWidget *menu=g_object_get_data(G_OBJECT(view),"insight-disk-popup");g_assert_nonnull(menu);
  GtkWidget *item=named(menu,name);g_assert_nonnull(item);g_assert_true(gtk_widget_get_sensitive(item));destination=(gchar *)value;response_mode=mode;g_timeout_add(10,cancel ? cancel_dialog : respond,NULL);gtk_menu_item_activate(GTK_MENU_ITEM(item));gtk_menu_popdown(GTK_MENU(menu));

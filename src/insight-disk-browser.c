@@ -202,7 +202,7 @@ static void change_entry(DiskBrowser *b,guint action) {
  gchar *name=g_path_get_basename(j->source);gtk_entry_set_text(GTK_ENTRY(entry),action==DB_RENAME ? name : j->source);g_free(name);gtk_entry_set_max_length(GTK_ENTRY(entry),action==DB_RENAME ? 255 : 16384);gtk_entry_set_activates_default(GTK_ENTRY(entry),TRUE);
  gtk_box_pack_start(GTK_BOX(content),label,FALSE,FALSE,4);gtk_box_pack_start(GTK_BOX(content),entry,FALSE,FALSE,4);
  GtkWidget *notice=gtk_label_new(j->trash ? "Send this entry to the system trash? Permanent deletion is never used." : "Existing destinations are never replaced. Stored project paths are not rewritten.");gtk_label_set_line_wrap(GTK_LABEL(notice),TRUE);gtk_label_set_max_width_chars(GTK_LABEL(notice),60);gtk_box_pack_start(GTK_BOX(content),notice,FALSE,FALSE,4);gtk_box_pack_start(GTK_BOX(content),failure,FALSE,FALSE,4);
- gtk_dialog_set_default_response(GTK_DIALOG(dialog),GTK_RESPONSE_CANCEL);insight_i18n_apply(dialog);gtk_widget_show_all(dialog);gtk_widget_hide(failure);if(j->trash) gtk_widget_hide(entry);else gtk_widget_grab_focus(entry);
+ gtk_dialog_set_default_response(GTK_DIALOG(dialog),j->trash ? GTK_RESPONSE_CANCEL : GTK_RESPONSE_ACCEPT);insight_i18n_apply(dialog);gtk_widget_show_all(dialog);gtk_widget_hide(failure);if(j->trash) gtk_widget_hide(entry);else gtk_widget_grab_focus(entry);
  gboolean launched=FALSE;
  while(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT && b->alive) {
   const gchar *value=gtk_entry_get_text(GTK_ENTRY(entry));const gchar *problem=NULL;
