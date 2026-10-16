@@ -3,6 +3,16 @@
 #define INSIGHT_MASTER_LIST_H
 #include "project_files.h"
 typedef struct { GPtrArray *files,*trees;gchar *etag,*digest,*text,*membership_digest; } InsightMasterList;
+/* Immutable borrowed filename globs, literal extensions, and bound full paths.
+ * copy/free manage an owned snapshot; NULL uses the legacy recursive API. */
+typedef struct InsightMasterTypes { const gchar *const *patterns,*const *extensions,*const *files; } InsightMasterTypes;
+InsightMasterTypes *insight_master_types_copy(const InsightMasterTypes *);
+void insight_master_types_free(InsightMasterTypes *);
+/* Typed directory entries expand only regular direct children of known types.
+ * Explicit file entries and wildcard rules retain their existing semantics. */
+InsightMasterList *insight_master_list_parse_typed(const gchar *,gsize,const gchar *,const InsightMasterTypes *,GError **);
+InsightMasterList *insight_master_list_read_typed(const gchar *,const gchar *,const InsightMasterTypes *,GCancellable *,GError **);
+
 /* Plain UTF-8/BOM/CRLF file lists, one path per line, relative to root.
  * Filename * and ? masks enumerate regular direct children, without following
  * child symlinks. At most 256 masks / 100000 visited entries / 1024 bytes

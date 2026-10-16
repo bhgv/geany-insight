@@ -3,6 +3,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "geany.h"
 #include "insight-languages.h"
+#include "../insight/desktop/master_list.h"
 #include "insight-formatting.h"
 #include "insight-themes.h"
 #include "insight-index.h"
@@ -62,6 +63,16 @@ gchar **insight_languages_names(void) {
 }
 gchar *insight_languages_profile_name(ScintillaObject *sci,const gchar *path,GeanyFiletype *ft) {
  Language *profile=for_editor(sci,path,ft); return g_strdup(profile ? profile->name : (ft ? ft->name : ""));
+}
+InsightMasterTypes *insight_languages_master_types(void) {
+ GPtrArray *patterns=g_ptr_array_new(),*extensions=g_ptr_array_new(),*files=g_ptr_array_new();
+ for(guint n=0;filetypes_array && n<filetypes_array->len;n++) { GeanyFiletype *ft=filetypes[n];if(ft->id==GEANY_FILETYPES_NONE) continue;for(guint k=0;ft->pattern && ft->pattern[k];k++) if(*ft->pattern[k]) g_ptr_array_add(patterns,g_strdup(ft->pattern[k])); }
+ for(guint n=0;languages && n<languages->len;n++) {
+  Language *p=g_ptr_array_index(languages,n);gchar **tokens=g_strsplit_set(p->extensions,";, \t\r\n",-1);
+  for(guint k=0;tokens[k];k++) { const gchar *t=tokens[k];while(*t=='*' || *t=='.') t++;if(*t) g_ptr_array_add(extensions,g_strdup(t)); }g_strfreev(tokens);
+  for(guint k=0;p->files && p->files[k];k++) g_ptr_array_add(files,g_strdup(p->files[k]));
+ }
+ g_ptr_array_add(patterns,NULL);g_ptr_array_add(extensions,NULL);g_ptr_array_add(files,NULL);InsightMasterTypes *types=g_new0(InsightMasterTypes,1);types->patterns=(const gchar *const *)g_ptr_array_free(patterns,FALSE);types->extensions=(const gchar *const *)g_ptr_array_free(extensions,FALSE);types->files=(const gchar *const *)g_ptr_array_free(files,FALSE);return types;
 }
 struct InsightLanguageFilter { gchar *extensions,*compatible;GPtrArray *own,*excluded;gboolean unrestricted; };
 InsightLanguageFilter *insight_language_filter_new(const gchar *from,GeanyFiletype *ft) {

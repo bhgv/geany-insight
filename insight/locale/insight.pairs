@@ -713,3 +713,6 @@ Workbench settings are invalid or too large|||Настройки интерфе�
 Workbench settings not saved|||Настройки интерфейса не сохранены
 Preserve bookmarks between sessions|||Сохранять закладки между сеансами
 \nDefinition size (lines): %lu (range %lu-%lu; lexical body)|||\nРазмер определения (строк): %lu (диапазон %lu-%lu; лексические границы)
+Invalid known file type snapshot for master file list|||Недопустимый снимок известных типов файлов для MFL
+Master file list exceeds 256 directory/wildcard rules|||В Master File List больше 256 правил каталогов/масок
+Master file list directories must be real directories, not symbolic links|||Каталоги в Master File List должны быть обычными каталогами, а не символическими ссылками

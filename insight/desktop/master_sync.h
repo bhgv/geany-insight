@@ -8,6 +8,8 @@ typedef struct _InsightMasterSync InsightMasterSync;
 typedef gboolean (*InsightMasterApply)(const InsightProjectFiles *,gpointer);
 typedef void (*InsightMasterReport)(const GError *,gpointer);
 InsightMasterSync *insight_master_sync_new(guint,InsightMasterApply,InsightMasterReport,gpointer);
+/* Copies the immutable known-type snapshot and resynchronizes membership. */
+void insight_master_sync_set_types(InsightMasterSync *,const InsightMasterTypes *);
 void insight_master_sync_set(InsightMasterSync *,const gchar *,const gchar *,const InsightProjectFiles *);
 void insight_master_sync_poll(InsightMasterSync *);
 /* Pause background reads and cancel pending work; explicit poll/set/apply resumes. */

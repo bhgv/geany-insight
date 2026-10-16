@@ -593,3 +593,5 @@ test('Insight bookmark session failed-cleanup GUI', project_bookmarks_gui_test, 
 
 nominal_range_test = executable('test_insight_nominal_range', '../insight/tests/nominal_range_test.c', '../insight/core/structure_select.c', '../insight/desktop/source_mask.c', dependencies: glib)
 test('Insight nominal definition ranges', nominal_range_test)
+
+test('Insight typed nonrecursive MFL directories GUI', master_list_gui_test, timeout: 60, env: ['GEANY_TEST_MFL_DIRECTORIES=1'])

@@ -21,6 +21,35 @@ static gboolean edit_membership(gpointer data) { gint mode=GPOINTER_TO_INT(data)
  gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_APPLY);if(mode==3) g_timeout_add(100,cancel_membership,NULL);return G_SOURCE_REMOVE; }
 static void manage(gint mode) { GtkWidget *open=button(window,"Add and Remove Project Files…");g_assert_nonnull(open);g_timeout_add(100,edit_membership,GINT_TO_POINTER(mode));gtk_button_clicked(GTK_BUTTON(open)); }
 static gboolean drain_done(gpointer data) { g_main_loop_quit(data);return G_SOURCE_REMOVE; }
+/* Presence checks during removal must tolerate a not-yet-refreshed row whose
+ * disk file has already been deleted by this fixture. */
+static gboolean listed_name(const gchar *file) {
+ GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(files));GtkTreeIter iter;
+ for(gboolean valid=gtk_tree_model_get_iter_first(model,&iter);valid;valid=gtk_tree_model_iter_next(model,&iter)) { gchar *path=NULL;gtk_tree_model_get(model,&iter,1,&path,-1);gchar *base=path ? g_path_get_basename(path) : NULL;gboolean found=!g_strcmp0(base,file);g_free(base);g_free(path);if(found) return TRUE; }
+ return FALSE;
+}
+static gboolean typed_step(gpointer data) {
+ (void)data;GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;
+ if(!window) { window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));files=named(window,"insight-project-files");symbols=named(window,"insight-project-symbols");g_assert_nonnull(files); }
+ if(!phase) {
+  if(!has("one.c") || !has("custom.mflcustom") || !has("bound.unusual") || !has("Makefile")) return G_SOURCE_CONTINUE;
+  g_assert_false(has("unknown.blob"));g_assert_false(has("nested.c"));show_page(symbols);gtk_entry_set_text(GTK_ENTRY(named(window,"insight-symbol-query")),"typed_custom_symbol");phase++;
+ }else if(phase==1) {
+  GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(symbols));GtkTreeIter iter;if(gtk_tree_model_iter_n_children(model,NULL)!=1 || !gtk_tree_model_get_iter_first(model,&iter)) return G_SOURCE_CONTINUE;
+  gchar *name=NULL;gtk_tree_model_get(model,&iter,0,&name,-1);g_assert_cmpstr(name,==,"typed_custom_symbol");g_free(name);gchar *path=g_build_filename(directory,"typed","later.c",NULL);g_assert_true(g_file_set_contents(path,"int typed_later_symbol;\n",-1,NULL));g_free(path);phase++;
+ }else if(phase==2) {
+  if(!has("later.c")) return G_SOURCE_CONTINUE;
+  gchar *text=NULL;g_assert_true(g_file_get_contents(master,&text,NULL,NULL));g_assert_cmpstr(text,==,"typed/\n");g_free(text);gchar *path=g_build_filename(directory,"typed","one.c",NULL);g_assert_cmpint(g_unlink(path),==,0);g_free(path);phase++;
+ }else if(phase==3) {
+  if(listed_name("one.c")) return G_SOURCE_CONTINUE;
+  g_assert_false(has("nested.c"));g_assert_false(has("unknown.blob"));g_assert_true(g_file_set_contents(master,"typed/sub/nested.c\n",-1,NULL));phase++;
+ }else {
+  if(!has("nested.c") || has("later.c") || has("custom.mflcustom")) return G_SOURCE_CONTINUE;
+  GKeyFile *key=g_key_file_new();g_assert_true(g_key_file_load_from_file(key,project,G_KEY_FILE_NONE,NULL));gsize count=0;gchar **trees=g_key_file_get_string_list(key,"insight-project-files","trees",&count,NULL);g_assert_cmpuint(count,==,0);g_strfreev(trees);g_key_file_unref(key);
+  g_print("Typed MFL directories GUI: direct known types, custom profile/binding, Makefile, nested/unknown exclusion, live add/remove and explicit nested file passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+ }
+ return G_SOURCE_CONTINUE;
+}
 static gboolean step(gpointer data) {
  (void)data;static guint last=G_MAXUINT;if(last!=phase) { g_printerr("Master list GUI phase %u\n",phase);last=phase; }GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;
  if(!window) { window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));files=named(window,"insight-project-files");symbols=named(window,"insight-project-symbols");g_assert_nonnull(files); }
@@ -41,6 +70,13 @@ static gboolean timeout(gpointer data) { (void)data;g_error("Master list GUI tim
 int main(void) {
  if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;
  gchar *cwd=g_get_current_dir(),*name=g_strdup_printf("master-list-gui-%u",g_random_int());directory=g_build_filename(cwd,name,NULL);gchar *profile=g_build_filename(directory,"profile",NULL);g_assert_cmpint(g_mkdir_with_parents(profile,0700),==,0);gchar *config=g_build_filename(profile,"geany.conf",NULL);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\nuse_native_dialogs=false\n",-1,NULL));master=g_build_filename(directory,"master.txt",NULL);project=g_build_filename(directory,"test.geany",NULL);g_assert_true(g_file_set_contents(master,"one.c\nignored.tmp\n",-1,NULL));g_assert_true(g_file_set_contents(project,"[project]\nname=Master list GUI\nbase_path=.\n[insight-project-files]\nversion=1\nautomatic=false\nexclude-masks=*.tmp\nfiles=one.c;\ntrees=\nexcluded-files=\nexcluded-trees=\nmaster-file=master.txt\nmaster-file-expression=%PROJECT_SOURCE_DIR%/master.txt\n",-1,NULL));const gchar *files[]={"one.c","two.c","ignored.tmp"},*texts[]={"int one_symbol(void) { return 1; }\n","int two_symbol(void) { return 2; }\n","ignored"};for(guint i=0;i<3;i++) { gchar *path=g_build_filename(directory,files[i],NULL);g_assert_true(g_file_set_contents(path,texts[i],-1,NULL));g_free(path); }
+ if(g_getenv("GEANY_TEST_MFL_DIRECTORIES")) {
+  gchar *folder=g_build_filename(directory,"typed",NULL),*nested=g_build_filename(folder,"sub",NULL);g_assert_cmpint(g_mkdir_with_parents(nested,0700),==,0);
+  const gchar *names[]={"one.c","custom.mflcustom","bound.unusual","unknown.blob","Makefile"};const gchar *texts[]={"int typed_one_symbol;\n","int typed_custom_symbol;\n","int typed_bound_symbol;\n","opaque","all:\n\t@true\n"};
+  for(guint n=0;n<G_N_ELEMENTS(names);n++) { gchar *path=g_build_filename(folder,names[n],NULL);g_assert_true(g_file_set_contents(path,texts[n],-1,NULL));g_free(path); }
+  gchar *path=g_build_filename(nested,"nested.c",NULL);g_assert_true(g_file_set_contents(path,"int nested_symbol;\n",-1,NULL));g_free(path);g_assert_true(g_file_set_contents(master,"typed/\n",-1,NULL));
+  gchar *profile_dir=g_build_filename(profile,"languages","MFL Custom",NULL);g_assert_cmpint(g_mkdir_with_parents(profile_dir,0700),==,0);GKeyFile *key=g_key_file_new();g_key_file_set_string(key,"language","name","MFL Custom");g_key_file_set_string(key,"language","parser","C");g_key_file_set_string(key,"language","extensions","mflcustom");g_key_file_set_string(key,"language","theme","current");gchar *bound=g_build_filename(folder,"bound.unusual",NULL);const gchar *bound_files[]={bound};g_key_file_set_string_list(key,"language","files",bound_files,1);gchar *bytes=g_key_file_to_data(key,NULL,NULL),*config=g_build_filename(profile_dir,"language.conf",NULL);g_assert_true(g_file_set_contents(config,bytes,-1,NULL));g_free(config);g_free(bytes);g_key_file_unref(key);g_free(bound);g_free(profile_dir);g_free(nested);g_free(folder);
+ }
  g_assert_true(g_setenv("INSIGHT_GUI_MFL_ROOT_7B12",directory,TRUE));
- gchar *argv[]={"master-list-gui","--new-instance","--no-session","--config",profile,project,NULL};step_id=g_timeout_add(250,step,NULL);timeout_id=g_timeout_add_seconds(45,timeout,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);gint result=main_lib(6,argv);if(g_main_context_find_source_by_id(NULL,step_id)) g_source_remove(step_id);if(g_main_context_find_source_by_id(NULL,timeout_id)) g_source_remove(timeout_id);GMainLoop *drain=g_main_loop_new(NULL,FALSE);g_timeout_add(300,drain_done,drain);g_main_loop_run(drain);g_main_loop_unref(drain);g_free(cwd);g_free(name);g_free(directory);g_free(profile);g_free(config);g_free(master);g_free(project);return result;
+ gchar *argv[]={"master-list-gui","--new-instance","--no-session","--config",profile,project,NULL};step_id=g_timeout_add(250,g_getenv("GEANY_TEST_MFL_DIRECTORIES") ? typed_step : step,NULL);timeout_id=g_timeout_add_seconds(45,timeout,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);gint result=main_lib(6,argv);if(g_main_context_find_source_by_id(NULL,step_id)) g_source_remove(step_id);if(g_main_context_find_source_by_id(NULL,timeout_id)) g_source_remove(timeout_id);GMainLoop *drain=g_main_loop_new(NULL,FALSE);g_timeout_add(300,drain_done,drain);g_main_loop_run(drain);g_main_loop_unref(drain);g_free(cwd);g_free(name);g_free(directory);g_free(profile);g_free(config);g_free(master);g_free(project);return result;
 }

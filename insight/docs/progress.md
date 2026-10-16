@@ -1850,3 +1850,27 @@ https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Symbol_I
 
 All four changed/new C sources compiled with -Werror. Additional nominal-range
 fixtures cover Cyrillic identifiers; the focused core check passed.
+
+
+### Source Insight known-type MFL directories
+
+Editor MFL directory entries now expand only regular direct children matching
+known file types, without recursion. An immutable worker snapshot captures native
+Geany patterns (excluding None), custom language extensions and exact file
+bindings. Profile changes replace the snapshot and cancel stale jobs. Explicit
+files/masks retain their semantics; Add Tree remains recursive. Polling detects
+new/deleted files without rewriting MFL bytes; manual writes retain expansion
+conflict checks and canonical flattening. Missing directories, directory symlinks
+and bounded-rule/type/entry errors retain prior membership. Legacy untyped core
+API wrappers retain tree behavior; editor synchronization always supplies types.
+
+Six focused Linux checks passed: project membership, language-profile GUI, MFL
+snapshots, background synchronization, original MFL GUI and a new directory GUI
+scenario. Coverage includes Cyrillic filenames, native Makefile patterns, custom
+extensions, explicit bindings, omitted unknown/nested files, additions/removals,
+profile snapshot changes, stale-write rejection and unchanged MFL text. Windows
+GUI validation remains deferred; no Windows build-request marker changed.
+Reference: https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Using_a_Master_File_List.htm
+
+All seven modified C sources compiled with -Werror. After adding slashless-directory
+and empty-type fixtures, the MFL snapshot suite passed again.

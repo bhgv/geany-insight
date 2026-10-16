@@ -1,14 +1,14 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "master_sync.h"
 #include <string.h>
-struct _InsightMasterSync { GObject parent;gboolean alive,paused;guint timer,rollbacks;guint64 generation;GCancellable *worker;gchar *project,*root,*path,*digest,*etag,*last_error,*membership_digest;InsightProjectFiles *policy;InsightMasterApply apply;InsightMasterReport report;gpointer data; };
+struct _InsightMasterSync { GObject parent;gboolean alive,paused;guint timer,rollbacks;guint64 generation;GCancellable *worker;gchar *project,*root,*path,*digest,*etag,*last_error,*membership_digest;InsightProjectFiles *policy;InsightMasterTypes *types;InsightMasterApply apply;InsightMasterReport report;gpointer data; };
 typedef struct { GObjectClass parent; } InsightMasterSyncClass;
 G_DEFINE_TYPE(InsightMasterSync,insight_master_sync,G_TYPE_OBJECT)
 typedef enum { POLL,ATTACH,WRITE,ROLLBACK } Operation;
-typedef struct { Operation operation;guint64 generation;gchar *project,*root,*path,*digest,*etag,*after_digest,*after_etag,*membership_digest;InsightProjectFiles *policy;InsightMasterList *list,*before;GError *error;gboolean written; } SyncJob;
-static void job_free(gpointer data) { SyncJob *job=data;g_free(job->project);g_free(job->root);g_free(job->path);g_free(job->digest);g_free(job->membership_digest);g_free(job->etag);g_free(job->after_digest);g_free(job->after_etag);insight_project_files_free(job->policy);insight_master_list_free(job->list);insight_master_list_free(job->before);g_clear_error(&job->error);g_free(job); }
+typedef struct { Operation operation;guint64 generation;gchar *project,*root,*path,*digest,*etag,*after_digest,*after_etag,*membership_digest;InsightProjectFiles *policy;InsightMasterList *list,*before;InsightMasterTypes *types;GError *error;gboolean written; } SyncJob;
+static void job_free(gpointer data) { SyncJob *job=data;g_free(job->project);g_free(job->root);g_free(job->path);g_free(job->digest);g_free(job->membership_digest);g_free(job->etag);g_free(job->after_digest);g_free(job->after_etag);insight_project_files_free(job->policy);insight_master_types_free(job->types);insight_master_list_free(job->list);insight_master_list_free(job->before);g_clear_error(&job->error);g_free(job); }
 static void stop_worker(InsightMasterSync *sync) { sync->generation++;if(sync->worker) { g_cancellable_cancel(sync->worker);g_clear_object(&sync->worker); } }
-static void insight_master_sync_finalize(GObject *object) { InsightMasterSync *sync=(InsightMasterSync *)object;g_free(sync->project);g_free(sync->root);g_free(sync->path);g_free(sync->digest);g_free(sync->membership_digest);g_free(sync->etag);g_free(sync->last_error);insight_project_files_free(sync->policy);G_OBJECT_CLASS(insight_master_sync_parent_class)->finalize(object); }
+static void insight_master_sync_finalize(GObject *object) { InsightMasterSync *sync=(InsightMasterSync *)object;g_free(sync->project);g_free(sync->root);g_free(sync->path);g_free(sync->digest);g_free(sync->membership_digest);g_free(sync->etag);g_free(sync->last_error);insight_project_files_free(sync->policy);insight_master_types_free(sync->types);G_OBJECT_CLASS(insight_master_sync_parent_class)->finalize(object); }
 static void insight_master_sync_class_init(InsightMasterSyncClass *klass) { G_OBJECT_CLASS(klass)->finalize=insight_master_sync_finalize; }
 static void insight_master_sync_init(InsightMasterSync *sync) { sync->alive=TRUE; }
 static gboolean same_path(const gchar *one,const gchar *two) {
@@ -26,7 +26,7 @@ static void worker(GTask *task,gpointer object,gpointer data,GCancellable *cance
  (void)object;SyncJob *job=data;
  if(job->operation==ROLLBACK) { insight_master_list_restore(job->before,job->path,job->root,job->after_etag,job->after_digest,NULL,NULL,&job->error);g_task_return_boolean(task,job->error==NULL);return; }
  if(job->operation==WRITE) {
-  job->before=insight_master_list_read(job->path,job->root,cancel,&job->error);if(!job->before) goto done;
+  job->before=insight_master_list_read_typed(job->path,job->root,job->types,cancel,&job->error);if(!job->before) goto done;
   if(g_strcmp0(job->membership_digest,job->before->membership_digest) || g_strcmp0(job->digest,job->before->digest) || (job->etag && g_strcmp0(job->etag,job->before->etag))) { g_set_error_literal(&job->error,G_IO_ERROR,G_IO_ERROR_WRONG_ETAG,"Master file list or its expanded file set changed; reload before applying membership");goto done; }
   job->list=insight_master_list_collect(job->policy,job->root,cancel,&job->error);if(!job->list) goto done;
   /* A list never adds itself to the project through automatic enumeration. */
@@ -35,7 +35,7 @@ static void worker(GTask *task,gpointer object,gpointer data,GCancellable *cance
   gchar *text=insight_master_list_render(job->list,job->root,&job->error);if(!text) goto done;job->after_digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,text,-1);g_free(text);
   if(!insight_master_list_save(job->list,job->path,job->root,job->before->etag,job->before->digest,cancel,&job->after_etag,&job->error)) goto done;
   job->written=TRUE;InsightProjectFiles *policy=insight_master_list_policy(job->list,job->policy);g_ptr_array_set_size(policy->excluded_files,0);g_ptr_array_set_size(policy->excluded_trees,0);insight_project_files_free(job->policy);job->policy=policy;
- }else { job->list=insight_master_list_read(job->path,job->root,cancel,&job->error);if(job->list) { InsightProjectFiles *policy=insight_master_list_policy(job->list,job->policy);insight_project_files_free(job->policy);job->policy=policy; } }
+ }else { job->list=insight_master_list_read_typed(job->path,job->root,job->types,cancel,&job->error);if(job->list) { InsightProjectFiles *policy=insight_master_list_policy(job->list,job->policy);insight_project_files_free(job->policy);job->policy=policy; } }
  done:g_task_return_boolean(task,job->error==NULL);
 }
 static void done(GObject *,GAsyncResult *,gpointer);
@@ -57,8 +57,9 @@ static void done(GObject *object,GAsyncResult *result,gpointer data) {
  g_free(sync->membership_digest);sync->membership_digest=g_strdup(job->list->membership_digest);g_clear_pointer(&sync->last_error,g_free);g_free(sync->digest);sync->digest=g_strdup(job->written ? job->after_digest : job->list->digest);g_free(sync->etag);sync->etag=g_strdup(job->written ? job->after_etag : job->list->etag);
  if(changed) { insight_project_files_free(sync->policy);sync->policy=insight_project_files_clone(job->policy);g_free(sync->path);sync->path=g_strdup(job->policy->master_file); }
 }
-static SyncJob *prepare(InsightMasterSync *sync,Operation operation,const InsightProjectFiles *policy) { SyncJob *job=g_new0(SyncJob,1);job->generation=sync->generation;job->operation=operation;job->project=g_strdup(sync->project);job->root=g_strdup(sync->root);job->policy=insight_project_files_clone(policy);job->path=g_strdup(policy->master_file);job->membership_digest=g_strdup(sync->membership_digest);job->digest=g_strdup(sync->digest);job->etag=g_strdup(sync->etag);return job; }
+static SyncJob *prepare(InsightMasterSync *sync,Operation operation,const InsightProjectFiles *policy) { SyncJob *job=g_new0(SyncJob,1);job->generation=sync->generation;job->operation=operation;job->project=g_strdup(sync->project);job->root=g_strdup(sync->root);job->policy=insight_project_files_clone(policy);job->types=insight_master_types_copy(sync->types);job->path=g_strdup(policy->master_file);job->membership_digest=g_strdup(sync->membership_digest);job->digest=g_strdup(sync->digest);job->etag=g_strdup(sync->etag);return job; }
 static void request_read(InsightMasterSync *sync,gboolean explicit) { if(explicit && sync) sync->paused=FALSE;if(!sync || !sync->alive || sync->paused || sync->worker || sync->rollbacks || !sync->project || !sync->root || !sync->policy || !sync->path || !*sync->path) return;if(same_path(sync->path,sync->project)) { GError *error=g_error_new_literal(G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Master file list must differ from project configuration");report(sync,error);g_error_free(error);return; }launch(sync,prepare(sync,POLL,sync->policy),FALSE); }
+void insight_master_sync_set_types(InsightMasterSync *sync,const InsightMasterTypes *types) { if(!sync || !sync->alive) return;stop_worker(sync);insight_master_types_free(sync->types);sync->types=insight_master_types_copy(types);sync->paused=FALSE;request_read(sync,FALSE); }
 void insight_master_sync_poll(InsightMasterSync *sync) { request_read(sync,TRUE); }
 void insight_master_sync_pause(InsightMasterSync *sync) { if(sync && sync->alive) { sync->paused=TRUE;stop_worker(sync); } }
 static gboolean tick(gpointer data) { request_read(data,FALSE);return G_SOURCE_CONTINUE; }

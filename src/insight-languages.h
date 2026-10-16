@@ -4,6 +4,9 @@
 #include "filetypes.h"
 #include "ScintillaWidget.h"
 typedef struct InsightLanguageFilter InsightLanguageFilter;
+struct InsightMasterTypes;
+/* Owned immutable snapshot for background MFL directory expansion. */
+struct InsightMasterTypes *insight_languages_master_types(void);
 InsightLanguageFilter *insight_language_filter_new(const gchar *,GeanyFiletype *);
 gboolean insight_language_filter_match(const InsightLanguageFilter *,const gchar *);
 void insight_language_filter_free(InsightLanguageFilter *);
