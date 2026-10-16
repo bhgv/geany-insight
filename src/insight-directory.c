@@ -17,7 +17,7 @@ enum { DC_ID,DC_PATH,DC_STATUS_TEXT,DC_LEFT,DC_RIGHT,DC_DETAIL,DC_STATUS,DC_PAIR
 typedef struct {
  GtkWidget *window,*paths[2],*controls,*scan,*cancel_button,*view,*filter_entry,*different,*status,*open,*previous,*next;
  GtkWidget *actions[4];guint64 epoch;gboolean stale,operating;
- GtkWidget *known,*method,*recursive,*hidden,*space,*eol,*include,*exclude,*status_filter;
+ GtkWidget *confirm,*known,*method,*recursive,*hidden,*space,*eol,*include,*exclude,*status_filter;
  GPtrArray *include_patterns,*exclude_patterns;
  GPtrArray *rows,*pending;GtkListStore *store,*building;GtkTreeModel *filtered;
  gchar *roots[2],*pending_roots[2];guint flags,pending_flags,publication,at;GCancellable *cancel;gboolean busy;
@@ -37,7 +37,7 @@ static void options_write(Directory *d,GKeyFile *key) {
  const gchar *names[]={"left","right","search","include","exclude"};GtkWidget *entries[]={d->paths[0],d->paths[1],d->filter_entry,d->include,d->exclude};
  g_key_file_set_integer(key,options_group,"version",1);
  for(guint i=0;i<G_N_ELEMENTS(names);i++) g_key_file_set_string(key,options_group,names[i],gtk_entry_get_text(GTK_ENTRY(entries[i])));
- const gchar *checks[]={"recursive","hidden","space","eol","known","different"};GtkWidget *toggles[]={d->recursive,d->hidden,d->space,d->eol,d->known,d->different};
+ const gchar *checks[]={"recursive","hidden","space","eol","known","different","confirm"};GtkWidget *toggles[]={d->recursive,d->hidden,d->space,d->eol,d->known,d->different,d->confirm};
  for(guint i=0;i<G_N_ELEMENTS(checks);i++) g_key_file_set_boolean(key,options_group,checks[i],gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(toggles[i])));
  g_key_file_set_integer(key,options_group,"method",gtk_combo_box_get_active(GTK_COMBO_BOX(d->method)));g_key_file_set_integer(key,options_group,"status",gtk_combo_box_get_active(GTK_COMBO_BOX(d->status_filter)));
  gint width,height,column;GtkSortType order;gtk_window_get_size(GTK_WINDOW(d->window),&width,&height);g_key_file_set_integer(key,options_group,"width",CLAMP(width,640,4000));g_key_file_set_integer(key,options_group,"height",CLAMP(height,400,2400));
@@ -53,7 +53,7 @@ static void options_read(Directory *d,GKeyFile *key) {
  if(!key || g_key_file_get_integer(key,options_group,"version",NULL)!=1) return;
  const gchar *names[]={"left","right","search","include","exclude"};GtkWidget *entries[]={d->paths[0],d->paths[1],d->filter_entry,d->include,d->exclude};
  for(guint i=0;i<G_N_ELEMENTS(names);i++) { gchar *text=g_key_file_get_string(key,options_group,names[i],NULL);if(text && strlen(text)<=(i<2 ? 16384u : 2048u) && g_utf8_validate(text,-1,NULL)) gtk_entry_set_text(GTK_ENTRY(entries[i]),text);g_free(text); }
- const gchar *checks[]={"recursive","hidden","space","eol","known","different"};GtkWidget *toggles[]={d->recursive,d->hidden,d->space,d->eol,d->known,d->different};
+ const gchar *checks[]={"recursive","hidden","space","eol","known","different","confirm"};GtkWidget *toggles[]={d->recursive,d->hidden,d->space,d->eol,d->known,d->different,d->confirm};
  for(guint i=0;i<G_N_ELEMENTS(checks);i++) { GError *error=NULL;gboolean value=g_key_file_get_boolean(key,options_group,checks[i],&error);if(!error && (i!=4 || types_provider)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggles[i]),value);g_clear_error(&error); }
  gint value;if(option_integer(key,"method",0,2,&value)) gtk_combo_box_set_active(GTK_COMBO_BOX(d->method),value);if(option_integer(key,"status",0,8,&value)) gtk_combo_box_set_active(GTK_COMBO_BOX(d->status_filter),value);
  gint width=1100,height=650;option_integer(key,"width",640,4000,&width);option_integer(key,"height",400,2400,&height);gtk_window_set_default_size(GTK_WINDOW(d->window),width,height);
@@ -330,6 +330,8 @@ static void file_action(GtkWidget *widget,gpointer data) {
  guint side=action%2;gboolean trash=action>=INSIGHT_DIR_TRASH_L;gchar *source=g_build_filename(job->roots[side],job->relative,NULL),*destination=trash ? NULL : g_build_filename(job->roots[1-side],job->relative,NULL);
  if(open_guard(source) || (destination && open_guard(destination))) { gtk_label_set_text(GTK_LABEL(d->status),insight_tr("Close documents using either operation path before changing files."));file_job_free(job);g_free(source);g_free(destination);return; }
  GtkWidget *window=d->window;g_object_ref(window);
+ gint response=GTK_RESPONSE_ACCEPT;
+ if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->confirm))) {
  GtkWidget *dialog=gtk_dialog_new_with_buttons(trash ? "Move comparison file to Trash" : "Copy comparison file",GTK_WINDOW(window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Cancel",GTK_RESPONSE_CANCEL,trash ? "Move to Trash" : "Copy file",GTK_RESPONSE_ACCEPT,NULL);gtk_widget_set_name(dialog,"insight-directory-operation-dialog");
  GtkWidget *content=gtk_dialog_get_content_area(GTK_DIALOG(dialog));gtk_container_set_border_width(GTK_CONTAINER(content),10);
  gchar *a=g_filename_display_name(source),*b=destination ? g_filename_display_name(destination) : NULL;
@@ -338,7 +340,8 @@ static void file_action(GtkWidget *widget,gpointer data) {
  gtk_box_pack_start(GTK_BOX(content),gtk_label_new(insight_tr("Source file")),FALSE,FALSE,2);
  GtkWidget *from=gtk_label_new(a);gtk_label_set_selectable(GTK_LABEL(from),TRUE);gtk_label_set_line_wrap(GTK_LABEL(from),TRUE);gtk_label_set_max_width_chars(GTK_LABEL(from),90);gtk_widget_set_name(from,"insight-directory-operation-source");gtk_box_pack_start(GTK_BOX(content),from,FALSE,FALSE,4);
  if(b) { gtk_box_pack_start(GTK_BOX(content),gtk_label_new(insight_tr("Destination file")),FALSE,FALSE,2);GtkWidget *to=gtk_label_new(b);gtk_label_set_selectable(GTK_LABEL(to),TRUE);gtk_label_set_line_wrap(GTK_LABEL(to),TRUE);gtk_label_set_max_width_chars(GTK_LABEL(to),90);gtk_widget_set_name(to,"insight-directory-operation-destination");gtk_box_pack_start(GTK_BOX(content),to,FALSE,FALSE,4); }
- gtk_dialog_set_default_response(GTK_DIALOG(dialog),GTK_RESPONSE_CANCEL);insight_i18n_apply(dialog);gtk_widget_show_all(dialog);gint response=gtk_dialog_run(GTK_DIALOG(dialog));gtk_widget_destroy(dialog);g_free(a);g_free(b);
+ gtk_dialog_set_default_response(GTK_DIALOG(dialog),GTK_RESPONSE_CANCEL);insight_i18n_apply(dialog);gtk_widget_show_all(dialog);response=gtk_dialog_run(GTK_DIALOG(dialog));gtk_widget_destroy(dialog);g_free(a);g_free(b);
+ }
  d=g_object_get_data(G_OBJECT(window),"insight-directory-state");
  if(response==GTK_RESPONSE_ACCEPT && d) {
   if(d->busy || d->stale || d->epoch!=job->epoch) gtk_label_set_text(GTK_LABEL(d->status),insight_tr("Comparison changed; reopen the file operation."));
@@ -407,6 +410,7 @@ static Directory *directory_new(GtkWidget *parent) {
  d->recursive=check(options,"Include subdirectories",TRUE);d->hidden=check(options,"Include hidden entries",FALSE);
  d->known=check(options,"Show only known file types",FALSE);gtk_widget_set_name(d->known,"insight-directory-known");gtk_widget_set_sensitive(d->known,types_provider!=NULL);
  GtkWidget *text_options=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(d->controls),text_options,FALSE,FALSE,0);d->space=check(text_options,"Ignore spaces and tabs",FALSE);d->eol=check(text_options,"Ignore line ending style",FALSE);
+ d->confirm=check(text_options,"Confirm file operations",TRUE);gtk_widget_set_name(d->confirm,"insight-directory-confirm");gtk_widget_set_tooltip_text(d->confirm,"Confirm before copying or moving files to Trash.");
  GtkWidget *bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);
  button(bar,"Copy visible list",G_CALLBACK(copy_list),d);
  d->scan=button(bar,"Scan / Refresh",G_CALLBACK(start),d);gtk_widget_set_name(d->scan,"insight-directory-scan");d->cancel_button=button(bar,"Cancel scan",G_CALLBACK(cancel_scan),d);d->open=button(bar,"Compare selected file",G_CALLBACK(open_pair),d);gtk_widget_set_name(d->open,"insight-directory-open");d->previous=button(bar,"Previous different file",G_CALLBACK(step),d);d->next=button(bar,"Next different file",G_CALLBACK(step),d);

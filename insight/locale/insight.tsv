@@ -1004,3 +1004,5 @@ File operations require existing parent directories without symbolic links.	Дл
 Choose an identifiable regular file from a fresh directory comparison.	Выберите обычный файл с определимым идентификатором из свежего сравнения каталогов.
 The comparison sides refer to the same file.	Обе стороны сравнения указывают на один файл.
 Directory copy is limited to 64 MiB per file.	Копирование ограничено 64 МиБ на файл.
+Confirm file operations	Подтверждать файловые операции
+Confirm before copying or moving files to Trash.	Подтверждать копирование и перенос файлов в корзину.

@@ -131,7 +131,7 @@ The appearance dialog below is captured from the production GTK widgets in the i
 
 ### Copy and Trash from the completed snapshot
 
-Select a regular-file row and use **Copy left → right…**, **Copy right → left…**, **Trash left file…** or **Trash right file…** in the toolbar or context menu. A copy can create a missing file or replace an existing regular file. The confirmation shows the source and destination taken from the completed snapshot, even if the directory entry fields have been edited. Cancel is the default. Cancelling this dialog changes nothing.
+Select a regular-file row and use **Copy left → right…**, **Copy right → left…**, **Trash left file…** or **Trash right file…** in the toolbar or context menu. A copy can create a missing file or replace an existing regular file. With **Confirm file operations** enabled (the default), confirmation shows the source and destination taken from the completed snapshot, even if the directory entry fields have been edited. Cancel is the default. Cancelling this dialog changes nothing.
 
 Both operation paths must be closed in the editor, including unmodified buffers. The guard is checked again after confirmation. During the worker task this window is modal, the other actions are disabled, and **Cancel file operation** requests cancellation. Closing the window cancels its task. Cancellation cannot undo an atomic replacement that has already completed. After every attempt, including a failure or cancellation, the old list is marked stale and further file operations are disabled until a successful Scan / Refresh. Existing comparison rows are never presented as an updated filesystem result.
 
@@ -144,3 +144,5 @@ The confirmation below is captured from the real production widgets in the isola
 ![Confirm a directory file operation](media/directory-operation.jpg)
 
 A successful refresh keeps the currently selected relative path and scrolls it into view, including when sort order changes. Selection is restored only if the row still exists and passes the current filters. A removed or filtered-out row is not replaced with an unrelated selection; cancelled and failed scans preserve the old model and selection.
+
+**Confirm file operations** controls both copy and Trash prompts and is remembered with window options. Turning it off makes the toolbar/context-menu action start immediately; editor-buffer guards, identity/etag checks, cancellation and the mandatory refresh after an attempt still apply. Invalid saved confirmation values restore the enabled default.
