@@ -137,3 +137,7 @@ byte above the size limit. The same fixture passes UBSan with fatal GLib
 criticals. ASan reached the checks but its leak-scanning runtime could not finish
 because `/proc/task` is unavailable in this environment; a clean ASan result is
 not claimed. Linux CI now includes both the core and production-widget fixture.
+
+Gutters include the final empty editor line after a terminator. Saving is disabled
+while a new comparison is pending, so a save dialog cannot overlap replacement
+of the result. The GTK fixture verifies save-control sensitivity.

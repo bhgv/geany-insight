@@ -11,7 +11,7 @@ typedef struct { gchar *text; gint *positions; } Snapshot;
 typedef struct {
  GtkWidget *window,*paths[2],*views[3],*status,*undo,*redo,*take[2],*external;
  GtkWidget *find_entry,*find_side,*find_case,*find_previous,*find_next,*find_status,*numbers;
- GtkWidget *compare_button,*cancel_button; GCancellable *cancel; gboolean busy;
+ GtkWidget *compare_button,*cancel_button,*save_button; GCancellable *cancel; gboolean busy;
  GtkWidget *previous,*next,*list_scroll,*sync,*ignore_space,*ignore_eol; GtkAdjustment *adjustments[2]; gboolean scrolling;
  GtkListStore *list; GtkWidget *hunk_view; GtkTextBuffer *output; GtkTreeSelection *selection;
  gchar *sources[2],*loaded_paths[2],*saved;
@@ -139,7 +139,9 @@ static gboolean draw_numbers(GtkWidget *widget,cairo_t *cr,gpointer data) {
   gint text_width;pango_layout_get_pixel_size(layout,&text_width,NULL);
   gtk_text_view_buffer_to_window_coords(view,GTK_TEXT_WINDOW_LEFT,0,y,&x,&wy);
   cairo_move_to(cr,width-text_width-7,wy);pango_cairo_show_layout(cr,layout);
- } while(gtk_text_iter_forward_line(&it));
+  gint current=gtk_text_iter_get_line(&it);gtk_text_iter_forward_line(&it);
+  if(gtk_text_iter_get_line(&it)==current) break;
+ } while(TRUE);
  g_object_unref(layout);cairo_restore(cr);return FALSE;
 }
 static gboolean discard(Merge *m) {
@@ -295,7 +297,7 @@ failed:
  g_task_return_error(task,error);
 }
 static void busy(Merge *m,gboolean active) {
- m->busy=active;gtk_widget_set_sensitive(m->compare_button,!active);gtk_widget_set_sensitive(m->cancel_button,active);
+ m->busy=active;gtk_widget_set_sensitive(m->save_button,!active);gtk_widget_set_sensitive(m->compare_button,!active);gtk_widget_set_sensitive(m->cancel_button,active);
  gtk_widget_set_sensitive(m->views[2],!active);
  for(int i=0;i<2;i++) gtk_widget_set_sensitive(gtk_widget_get_parent(m->paths[i]),!active);
  gtk_widget_set_sensitive(m->ignore_space,!active);gtk_widget_set_sensitive(m->ignore_eol,!active);
@@ -387,7 +389,7 @@ static Merge *merge_new(GtkWidget *parent) {
  }
  GtkWidget *bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);
  m->compare_button=button(bar,"Compare",G_CALLBACK(compare),m);m->cancel_button=button(bar,"Cancel comparison",G_CALLBACK(cancel_compare),m);gtk_widget_set_sensitive(m->cancel_button,FALSE);m->take[0]=button(bar,"Take Left",G_CALLBACK(take),m);m->take[1]=button(bar,"Take Right",G_CALLBACK(take),m);
- m->undo=button(bar,"Undo",G_CALLBACK(undo),m);m->redo=button(bar,"Redo",G_CALLBACK(redo),m);button(bar,"Save result…",G_CALLBACK(save),m);
+ m->undo=button(bar,"Undo",G_CALLBACK(undo),m);m->redo=button(bar,"Redo",G_CALLBACK(redo),m);m->save_button=button(bar,"Save result…",G_CALLBACK(save),m);
  m->external=button(bar,"External KDiff3 (optional)",G_CALLBACK(external),m);
  GtkWidget *options=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),options,FALSE,FALSE,0);
  m->previous=button(options,"Previous difference",G_CALLBACK(step),m);m->next=button(options,"Next difference",G_CALLBACK(step),m);
