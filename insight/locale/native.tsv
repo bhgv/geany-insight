@@ -1517,3 +1517,8 @@ Bottom of File	Конец файла
 Extend Mode: ON	Расширение выделения: включено
 Extend Mode: OFF	Расширение выделения: выключено
 Blank line search limit reached.	Достигнут предел поиска пустой строки.
+After intelligent paste	После интеллектуальной вставки
+Cursor or selection after pasting whole lines with intelligent paste	Курсор или выделение после интеллектуальной вставки целых строк
+Cursor at end of pasted text	Курсор в конце вставленного текста
+Cursor at start of pasted text	Курсор в начале вставленного текста
+Select pasted text	Выделить вставленный текст

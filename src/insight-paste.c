@@ -11,6 +11,9 @@
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 #define STATE "insight-paste-generation"
 static gboolean loaded, enabled;
+/* Zero preserves the historical caret-after-paste behavior. */
+typedef enum { PASTE_END, PASTE_START, PASTE_SELECT, PASTE_POSITION_COUNT } PastePosition;
+static PastePosition paste_position;
 typedef struct { guint64 generation; } State;
 typedef struct {
     ScintillaObject *sci;
@@ -57,7 +60,12 @@ static void load(void)
     GKeyFile *key = g_key_file_new();
     gchar *path = config_path();
     if (g_key_file_load_from_file(key, path, 0, NULL))
+    {
         enabled = g_key_file_get_boolean(key, "typing", "intelligent-paste", NULL);
+        gint position = g_key_file_get_integer(key, "typing", "paste-position", NULL);
+        if (position >= 0 && position < PASTE_POSITION_COUNT)
+            paste_position = position;
+    }
     g_key_file_unref(key);
     g_free(path);
 }
@@ -125,6 +133,15 @@ gboolean insight_paste_text(ScintillaObject *sci, const gchar *text)
     sci_start_undo_action(sci);
     SEND(sci, SCI_SETSEL, start, end);
     sci_replace_sel(sci, insert);
+    /* The separator added at an unterminated EOF belongs to the old line,
+     * not to the pasted block. Byte offsets retain UTF-8 and CRLF boundaries. */
+    gint pasted_start = start + (final_line ? strlen(eol) : 0);
+    gint pasted_end = start + strlen(insert);
+    if (paste_position == PASTE_START)
+        SEND(sci, SCI_SETSEL, pasted_start, pasted_start);
+    else if (paste_position == PASTE_SELECT)
+        SEND(sci, SCI_SETSEL, pasted_start, pasted_end);
+    SEND(sci, SCI_SCROLLCARET, 0, 0);
     sci_end_undo_action(sci);
     g_free(body);
     g_free(insert);
@@ -198,6 +215,38 @@ static void toggle(GtkCheckMenuItem *item, gpointer data)
     g_free(path);
     g_key_file_unref(key);
 }
+static void position_toggled(GtkCheckMenuItem *item, gpointer data)
+{
+    if (!gtk_check_menu_item_get_active(item)) return;
+    PastePosition next = GPOINTER_TO_INT(data);
+    if (next == paste_position) return;
+    GKeyFile *key = g_key_file_new();
+    gchar *path = config_path();
+    g_key_file_load_from_file(key, path, 0, NULL);
+    g_key_file_set_integer(key, "typing", "paste-position", next);
+    gsize length;
+    gchar *text = g_key_file_to_data(key, &length, NULL);
+    GError *error = NULL;
+    if (g_file_set_contents(path, text, length, &error))
+        paste_position = next;
+    else
+    {
+        GSList *group = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(item));
+        /* Restore the previous radio choice without writing the setting again. */
+        for (GSList *p = group; p; p = p->next)
+            g_signal_handlers_block_by_func(p->data, position_toggled,
+                g_object_get_data(G_OBJECT(p->data), "paste-position"));
+        for (GSList *p = group; p; p = p->next)
+            gtk_check_menu_item_set_active(p->data,
+                GPOINTER_TO_INT(g_object_get_data(G_OBJECT(p->data), "paste-position")) == (gint)paste_position);
+        for (GSList *p = group; p; p = p->next)
+            g_signal_handlers_unblock_by_func(p->data, position_toggled,
+                g_object_get_data(G_OBJECT(p->data), "paste-position"));
+        ui_set_statusbar(TRUE, "Cannot save paste position: %s", error->message);
+        g_clear_error(&error);
+    }
+    g_free(text);g_free(path);g_key_file_unref(key);
+}
 void insight_paste_menu(GtkWidget *menu)
 {
     load();
@@ -207,6 +256,25 @@ void insight_paste_menu(GtkWidget *menu)
     gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), enabled);
     g_signal_connect(item, "toggled", G_CALLBACK(toggle), NULL);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+    GtkWidget *parent = gtk_menu_item_new_with_label("After intelligent paste");
+    gtk_widget_set_name(parent, "insight-paste-position");
+    gtk_widget_set_tooltip_text(parent, "Cursor or selection after pasting whole lines with intelligent paste");
+    GtkWidget *submenu = gtk_menu_new();
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(parent), submenu);
+    const gchar *labels[] = {"Cursor at end of pasted text", "Cursor at start of pasted text", "Select pasted text"};
+    GSList *group = NULL;
+    for (gint i = 0; i < PASTE_POSITION_COUNT; i++)
+    {
+        GtkWidget *choice = gtk_radio_menu_item_new_with_label(group, labels[i]);
+        group = gtk_radio_menu_item_get_group(GTK_RADIO_MENU_ITEM(choice));
+        gchar *name = g_strdup_printf("insight-paste-position-%d", i);
+        gtk_widget_set_name(choice, name);g_free(name);
+        g_object_set_data(G_OBJECT(choice), "paste-position", GINT_TO_POINTER(i));
+        gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(choice), i == (gint)paste_position);
+        g_signal_connect(choice, "toggled", G_CALLBACK(position_toggled), GINT_TO_POINTER(i));
+        gtk_menu_shell_append(GTK_MENU_SHELL(submenu), choice);
+    }
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), parent);
 }
 
 /* Move with Scintilla's native operation, retaining its line/marker handling.

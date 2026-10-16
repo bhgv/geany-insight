@@ -5,6 +5,7 @@
 #include "keybindings.h"
 #include "main.h"
 #include "sciwrappers.h"
+#include "insight-paste.h"
 #include "ui_utils.h"
 #include <glib/gstdio.h>
 #include <string.h>
@@ -190,6 +191,50 @@ static void check_line_clipboard(void)
     reset("\xff\n", 0);line_action("copy-line");
     reset("valid\n", 0);clipboard_is("unchanged");
 }
+static void position(gint value)
+{
+    gchar *id = g_strdup_printf("insight-paste-position-%d", value);
+    GtkWidget *item = named(window, id);g_assert_nonnull(item);g_free(id);
+    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), TRUE);
+    g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(item)));
+}
+static void selection_is(gint anchor, gint caret)
+{
+    g_assert_cmpint(SEND(doc->editor->sci, SCI_GETANCHOR, 0, 0), ==, anchor);
+    g_assert_cmpint(sci_get_current_position(doc->editor->sci), ==, caret);
+}
+static void check_paste_position(void)
+{
+    /* The same synchronous insertion is shared by clipboard, Paste Line and Clips. */
+    for (gint i = 0; i < 3; i++)
+    {
+        position(i);reset("  target();\n", 5);
+        g_assert_true(insight_paste_text(doc->editor->sci, "    Привет();\n"));
+        const gchar *insert = "  Привет();\n";
+        text_is("  Привет();\n  target();\n");
+        selection_is(i == 0 ? strlen(insert) : 0, i == 1 ? 0 : strlen(insert));
+        undo();text_is("  target();\n");g_assert_false(SEND(doc->editor->sci, SCI_CANUNDO, 0, 0));
+    }
+    position(2);reset("  old();", 8);SEND(doc->editor->sci, SCI_SETEOLMODE, SC_EOL_CRLF, 0);
+    g_assert_true(insight_paste_text(doc->editor->sci, " new();\n"));
+    text_is("  old();\r\n  new();\r\n");selection_is(10, strlen("  old();\r\n  new();\r\n"));
+    gchar *selected = sci_get_selection_contents(doc->editor->sci);
+    g_assert_cmpstr(selected, ==, "  new();\r\n");g_free(selected);undo();text_is("  old();");
+    position(1);reset("  old();\n  rest();\n", 0);SEND(doc->editor->sci, SCI_SETSEL, 9, 0);
+    g_assert_true(insight_paste_text(doc->editor->sci, " new();\n"));
+    text_is("  new();\n  rest();\n");selection_is(0, 0);undo();text_is("  old();\n  rest();\n");
+    position(2);reset("  target();\n", 5);
+    g_assert_false(insight_paste_text(doc->editor->sci, "fragment"));text_is("  target();\n");selection_is(5, 5);
+    SEND(doc->editor->sci, SCI_SETREADONLY, TRUE, 0);
+    g_assert_false(insight_paste_text(doc->editor->sci, "line\n"));text_is("  target();\n");
+    SEND(doc->editor->sci, SCI_SETREADONLY, FALSE, 0);
+    gchar *path = g_build_filename(profile, "insight-paste.conf", NULL);
+    GKeyFile *key = g_key_file_new();g_assert_true(g_key_file_load_from_file(key, path, 0, NULL));
+    g_assert_cmpint(g_key_file_get_integer(key, "typing", "paste-position", NULL), ==, 2);
+    g_assert_true(g_key_file_get_boolean(key, "typing", "intelligent-paste", NULL));
+    g_free(path);g_key_file_unref(key);
+    g_print("Post-paste position: three modes, UTF-8, CRLF, unterminated EOF separator, reverse replacement, single Undo, guards and persistence passed\n");
+}
 static void finish(void)
 {
     SEND(doc->editor->sci, SCI_SETREADONLY, FALSE, 0);
@@ -199,7 +244,8 @@ static void finish(void)
 static gboolean capture_menu(gpointer data)
 {
     GtkWidget *menu = data;
-    const gchar *path = g_getenv("GEANY_LINE_OPERATIONS_CAPTURE");
+    const gchar *path = g_object_get_data(G_OBJECT(menu), "capture-path");
+    if (!path) path = g_getenv("GEANY_LINE_OPERATIONS_CAPTURE");
     GdkWindow *surface = gtk_widget_get_window(menu);
     g_assert_nonnull(surface);
     GdkPixbuf *image = gdk_pixbuf_get_from_window(surface, 0, 0,
@@ -251,7 +297,13 @@ static gboolean step(gpointer data)
             }
             return G_SOURCE_CONTINUE;
         }
-        if (restarted) { finish();return G_SOURCE_REMOVE; }
+        if (restarted)
+        {
+            GtkWidget *choice = named(window, "insight-paste-position-2");g_assert_nonnull(choice);
+            g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(choice)));
+            reset("  x();\n", 3);g_assert_true(insight_paste_text(doc->editor->sci, " y();\n"));
+            selection_is(0, strlen("  y();\n"));finish();return G_SOURCE_REMOVE;
+        }
         gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(option), TRUE);
         reset(base, 18);paste(block);
     }
@@ -388,6 +440,49 @@ static gboolean step(gpointer data)
         text_is("    x();\n    target();\n");undo();text_is("    target();\n");
         undo();text_is("  x();\n    target();\n");
         g_print("Native line clipboard: repeated Copy Line, keyboard/menu, CRLF/Unicode, left/right cuts, readonly/copy, empty/size/binary guards and Cut Selection or Paste with Undo/Redo passed\n");
+        check_paste_position();
+        capture_done = TRUE;
+        const gchar *capture_path = g_getenv("GEANY_PASTE_POSITION_CAPTURE");
+        if (capture_path)
+        {
+            GtkWidget *parent = named(window, "insight-paste-position");g_assert_nonnull(parent);
+            GtkWidget *menu = gtk_menu_item_get_submenu(GTK_MENU_ITEM(parent));
+            g_object_set_data(G_OBJECT(menu), "capture-path", (gpointer)capture_path);
+            GdkEvent *event = gdk_event_new(GDK_BUTTON_PRESS);
+            event->button.window = g_object_ref(gtk_widget_get_window(GTK_WIDGET(doc->editor->sci)));
+            event->button.button = 3;event->button.time = GDK_CURRENT_TIME;
+            gdk_event_set_device(event, gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_display_get_default())));
+            gtk_menu_popup_at_widget(GTK_MENU(menu), GTK_WIDGET(doc->editor->sci),
+                GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_WEST, event);
+            gdk_event_free(event);capture_done = FALSE;g_timeout_add(150, capture_menu, menu);
+        }
+    }
+    else if (phase == 17)
+    {
+        if (!capture_done) return G_SOURCE_CONTINUE;
+        /* Exercise the asynchronous ordinary Paste path with the selected mode. */
+        reset("  target();\n", 4);paste(" x();\n");
+    }
+    else if (phase == 18)
+    {
+        if (sci_get_length(doc->editor->sci) == (gint)strlen("  target();\n")) return G_SOURCE_CONTINUE;
+        text_is("  x();\n  target();\n");selection_is(0, strlen("  x();\n"));
+        undo();text_is("  target();\n");
+        reset("  target();\n", 5);line_action("paste-line");
+    }
+    else if (phase == 19)
+    {
+        if (sci_get_length(doc->editor->sci) == (gint)strlen("  target();\n")) return G_SOURCE_CONTINUE;
+        text_is("  x();\n  target();\n");selection_is(0, strlen("  x();\n"));
+        undo();text_is("  target();\n");reset("  target();\n", 5);
+        GtkWidget *view = named(window, "insight-clips");g_assert_nonnull(view);
+        GtkTreePath *path = gtk_tree_path_new_from_indices(0, -1);
+        gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)), path);gtk_tree_path_free(path);
+        GtkWidget *button = named(window, "insight-clip-paste");g_assert_nonnull(button);gtk_button_clicked(GTK_BUTTON(button));
+        text_is("  first();\n      second();\n  target();\n");
+        selection_is(0, strlen("  first();\n      second();\n"));
+        undo();text_is("  target();\n");
+        g_print("Selected paste through ordinary clipboard, Paste Line and Clips passed\n");
         finish();return G_SOURCE_REMOVE;
     }
     phase++;return G_SOURCE_CONTINUE;

@@ -57,7 +57,7 @@ jobs:
           meson install -C _native
       - name: Run native Folder Browser regressions
         run: |
-          GEANY_PASTE_DEBUG=1 GEANY_NAVIGATION_CAPTURE="$PWD/selection-navigation.jpg" GEANY_LINE_OPERATIONS_CAPTURE="$PWD/line-operations.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a meson test -C _native --print-errorlogs 'Insight Folder Browser shape and ancestry' 'Insight guarded disk operations' 'Insight isolated disk operation dialogs GUI' 'Insight unindexed disk browser GUI' 'Insight Git project transactions' 'Insight Git project dialogs GUI' 'Insight native Git project GUI' 'Insight lazy folder tree GUI' 'Insight native lazy folder tree GUI' 'Insight file type editing settings' 'Insight file type editing page GUI' 'Insight native file type editing GUI' 'Insight native typing pairs GUI' 'Insight detailed completion native GUI' 'Insight completion case matching' 'Insight intelligent paste transforms' 'Insight intelligent paste native GUI' 'Insight selection navigation native GUI' 'Insight completion settings' 'Insight completion preferences GUI' 'Insight language profiles GUI' 'Insight file type filters GUI'
+          GEANY_PASTE_DEBUG=1 GEANY_PASTE_POSITION_CAPTURE="$PWD/paste-position.jpg" GEANY_NAVIGATION_CAPTURE="$PWD/selection-navigation.jpg" GEANY_LINE_OPERATIONS_CAPTURE="$PWD/line-operations.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a meson test -C _native --print-errorlogs 'Insight Folder Browser shape and ancestry' 'Insight guarded disk operations' 'Insight isolated disk operation dialogs GUI' 'Insight unindexed disk browser GUI' 'Insight Git project transactions' 'Insight Git project dialogs GUI' 'Insight native Git project GUI' 'Insight lazy folder tree GUI' 'Insight native lazy folder tree GUI' 'Insight file type editing settings' 'Insight file type editing page GUI' 'Insight native file type editing GUI' 'Insight native typing pairs GUI' 'Insight detailed completion native GUI' 'Insight completion case matching' 'Insight intelligent paste transforms' 'Insight intelligent paste native GUI' 'Insight selection navigation native GUI' 'Insight completion settings' 'Insight completion preferences GUI' 'Insight language profiles GUI' 'Insight file type filters GUI'
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -66,5 +66,6 @@ jobs:
           path: |
             line-operations.jpg
             selection-navigation.jpg
+            paste-position.jpg
           if-no-files-found: ignore
           retention-days: 7

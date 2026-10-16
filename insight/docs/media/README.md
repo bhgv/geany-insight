@@ -30,3 +30,5 @@ Keep screenshots current when visible behavior changes. Favor small, useful illu
 `selection-navigation.svg` explains anchor-based Extend Mode versus ordinary movement. Native menu captures are produced by isolated-in-time full editor GUI tests.
 
 `selection-navigation.jpg`: real Selection and navigation menu in the complete running Linux editor during its native GUI test. Shared-display captures run exclusively and reject occluded black output.
+
+`paste-position.svg` explains the three positions after intelligent whole-line insertion. It is a self-contained vector diagram, not an application screenshot.

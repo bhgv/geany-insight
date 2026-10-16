@@ -152,7 +152,7 @@ Drag Line Up/Down move the current line or all lines touched by a normal selecti
 
 Existing **Move line(s) up/down** and their configured keys (Alt+Page Up/Down by default) also use this mode. This series assigns no separate default keys to More or Paste Line. Each move, including five steps and reindentation, is one Undo/Redo action. In intelligent mode, selected blocks stay selected with their original direction; an unselected caret follows the line text, snapping to text start if originally inside changed indentation. Read-only is protected; new menu commands require a single normal selection without virtual space. Existing movement commands retain native handling for other selection modes.
 
-These are line movement commands. Mouse drag/drop and post-paste selection preferences remain separate open items. Indentation handling is not syntax-aware reformatting.
+These are line movement commands. Mouse drag/drop remains a separate open item; intelligent post-paste selection is described below. Indentation handling is not syntax-aware reformatting.
 
 ### Clipboard: whole lines and line fragments
 
@@ -191,3 +191,13 @@ Mode belongs to each document's Scintilla widget and is not persisted. The menu 
 Commands work in read-only, never edit source text or create Undo entries, and require a single normal selection without virtual space. Full Source Insight Select Block/Match, symbolic ranges, Extend Mode across every external/plugin jump, and mouse selection shortcuts remain separate porting items.
 
 ![Selection and navigation menu in the running Linux editor](../media/selection-navigation.jpg)
+
+### Selection after intelligent paste
+
+**Options → After intelligent paste** offers three persistent choices: **Cursor at end of pasted text** (default), **Cursor at start of pasted text**, and **Select pasted text**. The choice applies to successful intelligent whole-line insertion through ordinary Paste, Paste Line and Clips. A selected block can immediately be copied, moved or replaced.
+
+![Three post-paste positions](../media/paste-position.svg)
+
+Positions use the transformed block, including its destination indentation and EOLs. At an unterminated EOF, the separator added to the previous line is excluded from the selected block. Each insertion remains one Undo action. The setting is saved in `insight-paste.conf`; missing or out-of-range values use the default. Failed saves restore the previous menu choice and report an error.
+
+This series covers intelligent whole-line insertion only. Partial/native fallback, multiple/rectangular selections, file types forbidding intelligent paste and mouse drag/drop keep their existing behavior. A separate always-select override and general selection policy for native partial-text paste remain open Source Insight porting items.
