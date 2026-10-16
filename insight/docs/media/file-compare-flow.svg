@@ -13,6 +13,6 @@
   <text x="574" y="106" font-size="15">Selected blocks copy their</text><text x="574" y="130" font-size="15">original, unmodified bytes.</text>
   <path d="M246 111h36m-8-6 8 6-8 6M554 111h-36m8-6-8 6 8 6" fill="none" stroke="#516b89" stroke-width="2"/>
   <text x="24" y="194" font-size="15">Compare runs in a worker. Cancel keeps the previous comparison and history.</text>
-  <text x="24" y="217" font-size="14">Whitespace / EOL options affect matching; they do not rewrite the source files.</text>
+  <text x="24" y="217" font-size="14">View options persist. Overview navigates; Edit File opens the source caret line.</text>
  </g>
 </svg>

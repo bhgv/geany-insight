@@ -1006,3 +1006,11 @@ The comparison sides refer to the same file.	Обе стороны сравне�
 Directory copy is limited to 64 MiB per file.	Копирование ограничено 64 МиБ на файл.
 Confirm file operations	Подтверждать файловые операции
 Confirm before copying or moving files to Trash.	Подтверждать копирование и перенос файлов в корзину.
+File Compare Options	Параметры сравнения файлов
+Vertical scrollbars	Вертикальные полосы прокрутки
+Scale (%)	Масштаб (%)
+Overview: click a marker to select its difference; click elsewhere to scroll.	Обзор: щелчок по отметке выбирает различие, вне отметок — прокручивает источник.
+Edit File — Ctrl+E	Открыть в редакторе — Ctrl+E
+Copy selected difference	Копировать выбранное различие
+File Compare Options…	Параметры сравнения файлов…
+Choose two source files before comparing.	Выберите два исходных файла перед сравнением.

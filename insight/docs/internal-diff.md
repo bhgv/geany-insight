@@ -113,7 +113,7 @@ The difference list selection continues to identify the block used by Take.
 
 **Line numbers** toggles gutters in all three panes. Numbers follow logical lines,
 including CR, LF, CRLF and wrapped lines, and update after result edits. They are
-not inserted into text or copied selections. Display settings are per window.
+not inserted into text or copied selections. Display settings are independent per window and remembered as defaults.
 
 ![Production Diff/Merge window in an isolated GTK fixture](media/file-compare.jpg)
 
@@ -175,3 +175,7 @@ fixture exercises 150 successive comparisons in the same production window.
 Right-click either source for **Edit File — Ctrl+E** and **Copy selected difference**, plus the display toggles and Options. Edit File opens the completed comparison’s source in the editor at its caret line, reusing an existing document; editing the path fields does not reroute it. The live file can have changed since comparison. Clipboard copy uses the selected block’s original source bytes, including line endings, and leaves the result/history untouched. The editable result retains the normal GTK text menu. Source filenames are converted between UTF-8 entry text and native filenames and captured as absolute paths when Compare starts.
 
 Display defaults (mono font, numbers, list, wrap, linked scrolling, scrollbars, Overview and scale), text-comparison options and window size are remembered in the workbench configuration. New windows use the last closed defaults; at editor exit the most recently opened live window supplies them. Existing windows stay independent. Invalid values retain the standard defaults. Restoring these settings does not load sources, run a comparison or restore an unsaved result; filenames and merge history are not saved. A directory pair’s explicit comparison flags override saved text-comparison defaults.
+
+![File Compare display options](media/file-compare-options.jpg)
+
+This dialog is captured from production GTK widgets in the isolated Linux fixture, with editor-host help and translation stubs. The native editor test separately verifies Ctrl+Q, applying scale/Overview, Ctrl+E source-line navigation and workbench persistence. Syntax formatting and code nesting guides remain outside this GTK comparison-view implementation.

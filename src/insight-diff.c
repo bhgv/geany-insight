@@ -208,7 +208,7 @@ static gboolean map_draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
  Merge *m=data;gint side=widget==m->maps[1],width=gtk_widget_get_allocated_width(widget),height=gtk_widget_get_allocated_height(widget);gdouble total=MAX(m->map_lines[side],1);
  cairo_set_source_rgb(cr,.94,.95,.97);cairo_paint(cr);
  GArray *blocks=m->map_blocks[side];gint current=selected(m);
- for(guint i=0;blocks && i<blocks->len;i++) { MapBlock b=g_array_index(blocks,MapBlock,i);gdouble y=b.begin/total*height,h=MAX(3.,(b.end-b.begin)/total*height);
+ for(guint pass=0;pass<2;pass++) for(guint i=0;blocks && i<blocks->len;i++) { if(((gint)i==current)!=(pass==1)) continue;MapBlock b=g_array_index(blocks,MapBlock,i);gdouble y=b.begin/total*height,h=MAX(3.,(b.end-b.begin)/total*height);
   if((gint)i==current) cairo_set_source_rgb(cr,.2,.38,.75);else if(side) cairo_set_source_rgb(cr,.3,.65,.4);else cairo_set_source_rgb(cr,.85,.5,.25);
   cairo_rectangle(cr,3,y,MAX(1,width-6),h);cairo_fill(cr);
  }
@@ -218,10 +218,11 @@ static gboolean map_draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
 }
 static gboolean map_click(GtkWidget *widget,GdkEventButton *event,gpointer data) {
  Merge *m=data;if(event->button!=1 || m->busy || !m->sources[0]) return FALSE;gint side=widget==m->maps[1];gdouble height=MAX(gtk_widget_get_allocated_height(widget),1),total=MAX(m->map_lines[side],1),y=CLAMP(event->y,0.,height);
- GArray *blocks=m->map_blocks[side];
- for(guint i=0;blocks && i<blocks->len;i++) { MapBlock b=g_array_index(blocks,MapBlock,i);gdouble top=b.begin/total*height,end=MAX(top+3.,b.end/total*height);
-  if(y>=top-2 && y<=end+2) { GtkTreePath *path=gtk_tree_path_new_from_indices(i,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(m->hunk_view),path,NULL,FALSE);gtk_tree_path_free(path);map_redraw(m);return TRUE; }
+ GArray *blocks=m->map_blocks[side];gint best=-1;gdouble nearest=G_MAXDOUBLE;
+ for(guint i=0;blocks && i<blocks->len;i++) { MapBlock b=g_array_index(blocks,MapBlock,i);gdouble top=b.begin/total*height,end=MAX(top+3.,b.end/total*height),distance=ABS(y-(top+end)/2);
+  if(y>=top-2 && y<=end+2 && distance<nearest) { best=(gint)i;nearest=distance; }
  }
+ if(best>=0) { GtkTreePath *path=gtk_tree_path_new_from_indices(best,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(m->hunk_view),path,NULL,FALSE);gtk_tree_path_free(path);map_redraw(m);return TRUE; }
  GtkTextIter iter;GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]));gtk_text_buffer_get_iter_at_line(buffer,&iter,CLAMP((gint)(y/height*total),0,gtk_text_buffer_get_line_count(buffer)-1));gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(m->views[side]),&iter,0.,TRUE,0.,.5);return TRUE;
 }
 static void map_adjustment(GtkAdjustment *adjustment,gpointer data) { (void)adjustment;map_redraw(data); }
