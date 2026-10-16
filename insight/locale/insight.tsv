@@ -962,3 +962,8 @@ Text options require UTF-8 without NUL bytes	Текстовые параметр
 File changed during directory comparison; rescan.	Файл изменился при сравнении каталогов; повторите обход.
 %u shown / %u entries — %u same, %u different, %u one-sided, %u type, %u skipped, %u errors, %u folders	Показано %u / %u — одинаковых %u, различий %u, односторонних %u, типов %u, пропущено %u, ошибок %u, каталогов %u
 Columns…	Колонки…
+All Left	Все слева
+All Right	Все справа
+Take all difference blocks from Left — one Undo	Принять все блоки слева — одна отмена
+Take all difference blocks from Right — one Undo	Принять все блоки справа — одна отмена
+Block boundaries overlap or touch after edits; compare again before taking all blocks.	После правок границы блоков пересеклись или соприкоснулись; повторите сравнение перед массовым принятием.

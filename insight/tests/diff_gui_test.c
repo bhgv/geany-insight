@@ -19,6 +19,20 @@ static void finalized(gpointer data,GObject *object) { (void)object;*(gboolean*)
 static void assert_text(Merge *m,const char *expected) {
  gchar *s=contents(result(m));g_assert_cmpstr(s,==,expected);g_free(s);
 }
+static gchar *random_text(GRand *random) {
+ const gchar *lines[]={"a\n","b\r\n","\n","я\r","tail"};GString *text=g_string_new(NULL);
+ guint count=g_rand_int_range(random,0,15);for(guint i=0;i<count;i++) g_string_append(text,lines[g_rand_int_range(random,0,G_N_ELEMENTS(lines))]);return g_string_free(text,FALSE);
+}
+static void random_batches(const gchar *left,const gchar *right) {
+ Merge *m=merge_new(NULL);GRand *random=g_rand_new_with_seed(1093);GError *error=NULL;
+ gtk_entry_set_text(GTK_ENTRY(m->paths[0]),left);gtk_entry_set_text(GTK_ENTRY(m->paths[1]),right);
+ for(guint i=0;i<150;i++) {
+  gchar *a=random_text(random),*b=random_text(random);g_assert_true(g_file_set_contents(left,a,-1,&error));g_assert_no_error(error);g_assert_true(g_file_set_contents(right,b,-1,&error));g_assert_no_error(error);
+  compare(NULL,m);wait_comparison(m);assert_text(m,a);take_all(m->take_all[1],m);assert_text(m,b);undo(NULL,m);assert_text(m,a);
+  g_free(a);g_free(b);
+ }
+ g_rand_free(random);gtk_widget_destroy(m->window);flush();
+}
 int main(int argc,char **argv) {
  gtk_init(&argc,&argv);
  GError *error=NULL;gchar *dir=g_dir_make_tmp("insight-diff-XXXXXX",&error);g_assert_no_error(error);
@@ -66,6 +80,16 @@ int main(int argc,char **argv) {
   GdkPixbuf *pixels=gdk_pixbuf_get_from_window(window,0,0,gdk_window_get_width(window),gdk_window_get_height(window));g_assert_nonnull(pixels);
   g_assert_true(gdk_pixbuf_save(pixels,capture,"jpeg",&error,"quality","88",NULL));g_assert_no_error(error);g_object_unref(pixels);
  }
+ guint before_all=m->position;take_all(m->take_all[0],m);g_assert_cmpuint(m->position,==,before_all);
+ take_all(m->take_all[1],m);assert_text(m,b);g_assert_cmpuint(m->position,==,before_all+1);undo(NULL,m);assert_text(m,a);redo(NULL,m);assert_text(m,b);
+ take_all(m->take_all[0],m);assert_text(m,a);undo(NULL,m);assert_text(m,b);undo(NULL,m);assert_text(m,a);
+ event.state=GDK_MOD1_MASK|GDK_SHIFT_MASK;event.keyval=GDK_KEY_Right;g_assert_true(key(m->views[2],&event,m));assert_text(m,b);undo(NULL,m);assert_text(m,a);
+ /* Edits outside the blocks survive a batch. */
+ GtkTextIter insertion;gtk_text_buffer_get_end_iter(result(m),&insertion);gtk_text_buffer_insert(result(m),&insertion,"manual tail\n",-1);
+ take_all(m->take_all[1],m);gchar *with_tail=g_strconcat(b,"manual tail\n",NULL);assert_text(m,with_tail);g_free(with_tail);undo(NULL,m);undo(NULL,m);assert_text(m,a);
+ /* Collapsing boundaries must reject a batch without mutating text/history. */
+ GtkTextIter zero,last;gtk_text_buffer_get_bounds(result(m),&zero,&last);gtk_text_buffer_delete(result(m),&zero,&last);
+ guint collapsed=m->position;take_all(m->take_all[1],m);assert_text(m,"");g_assert_cmpuint(m->position,==,collapsed);g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->status)),"boundaries"));undo(NULL,m);assert_text(m,a);
  GtkWidget *toggle=gtk_check_button_new();g_object_ref_sink(toggle);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle),TRUE);wrap(GTK_TOGGLE_BUTTON(toggle),m);
  for(int i=0;i<3;i++) g_assert_cmpint(gtk_text_view_get_wrap_mode(GTK_TEXT_VIEW(m->views[i])),==,GTK_WRAP_WORD_CHAR);
@@ -126,7 +150,7 @@ int main(int argc,char **argv) {
  compare(NULL,m);gtk_widget_destroy(m->window);
  gint64 until=g_get_monotonic_time()+10*G_TIME_SPAN_SECOND;
  while(!gone && g_get_monotonic_time()<until) { flush();g_usleep(1000); }
- g_assert_true(gone);flush();
+ g_assert_true(gone);flush();random_batches(left,right);
  g_remove(left);g_remove(right);g_rmdir(dir);g_free(left);g_free(right);g_free(dir);
  g_print("Production Diff/Merge fixture: navigation, search, gutters, merge history, options, worker cancellation and close passed.\n");return 0;
 }

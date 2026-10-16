@@ -143,3 +143,18 @@ while a new comparison is pending, so a save dialog cannot overlap replacement
 of the result. The GTK fixture verifies save-control sensitivity.
 
 [Directory Compare — compare directory trees and open a selected pair](directory-compare.md).
+
+## Take all blocks
+
+**All Left / All Right** replaces every difference block in the separate result
+as one Undo action. Text manually edited outside the blocks is preserved. Taking
+an already matching side does not add history. Undo/Redo restores block marks
+with the text, and editing after Undo replaces the redo branch.
+
+**Alt+Left / Alt+Right** takes the selected Left/Right block. Add Shift to take
+all blocks. These shortcuts act inside the comparison window and write only
+the result buffer. If manual edits made block boundaries touch or overlap, batch
+replacement refuses the operation and asks for a fresh comparison. No partial
+batch is applied. The production GTK fixture covers single-step undo, no-op,
+manual outside text, collapsed boundaries, shortcuts and 150 randomized exact
+batch reconstructions, including empty, UTF-8 and mixed-EOL sources.

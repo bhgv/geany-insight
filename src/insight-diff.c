@@ -10,7 +10,7 @@
 
 typedef struct { gchar *text; gint *positions; } Snapshot;
 typedef struct {
- GtkWidget *window,*paths[2],*views[3],*status,*undo,*redo,*take[2],*external;
+ GtkWidget *window,*paths[2],*views[3],*status,*undo,*redo,*take[2],*take_all[2],*external;
  GtkWidget *find_entry,*find_side,*find_case,*find_previous,*find_next,*find_status,*numbers;
  GtkWidget *compare_button,*cancel_button,*save_button; GCancellable *cancel; gboolean busy;
  GtkWidget *previous,*next,*list_scroll,*sync,*ignore_space,*ignore_eol; GtkAdjustment *adjustments[2]; gboolean scrolling;
@@ -64,6 +64,8 @@ static void restore(Merge *m,guint position) {
 static void undo(GtkWidget *w,gpointer data) { (void)w;Merge *m=data;if(m->position) restore(m,m->position-1); }
 static void redo(GtkWidget *w,gpointer data) { (void)w;Merge *m=data;if(m->position+1<m->history->len) restore(m,m->position+1); }
 static void navigate(Merge *m,gint direction);
+static void take(GtkWidget *,gpointer);
+static void take_all(GtkWidget *,gpointer);
 static void find_text(Merge *m,gboolean backwards);
 static void focus_find(Merge *m) {
  GtkWidget *focus=gtk_window_get_focus(GTK_WINDOW(m->window));
@@ -79,6 +81,10 @@ static gboolean key(GtkWidget *w,GdkEventKey *event,gpointer data) {
   gtk_widget_grab_focus(m->views[gtk_combo_box_get_active(GTK_COMBO_BOX(m->find_side))]);return TRUE;
  }
  if(m->busy) return FALSE;
+ if((event->state&GDK_MOD1_MASK) && (event->keyval==GDK_KEY_Left || event->keyval==GDK_KEY_Right)) {
+  gint side=event->keyval==GDK_KEY_Right;
+  if(event->state&GDK_SHIFT_MASK) take_all(m->take_all[side],m);else take(m->take[side],m);return TRUE;
+ }
  if(!(event->state&GDK_CONTROL_MASK)) return FALSE;
  if(event->keyval==GDK_KEY_Up || event->keyval==GDK_KEY_Down) {
   navigate(data,event->keyval==GDK_KEY_Up ? -1 : 1);return TRUE;
@@ -232,7 +238,10 @@ static void highlight(Merge *m,int side,size_t begin,size_t end) {
 }
 static void selection(GtkTreeSelection *s,gpointer data) {
  (void)s;Merge *m=data;gint id=selected(m);
- for(int side=0;side<2;side++) gtk_widget_set_sensitive(m->take[side],!m->busy && id>=0);
+ for(int side=0;side<2;side++) {
+  gtk_widget_set_sensitive(m->take[side],!m->busy && id>=0);
+  gtk_widget_set_sensitive(m->take_all[side],!m->busy && m->diff.count>0);
+ }
  gtk_widget_set_sensitive(m->previous,m->diff.count && id!=0);
  gtk_widget_set_sensitive(m->next,m->diff.count && (id<0 || (size_t)(id+1)<m->diff.count));
  if(id<0 || (size_t)id>=m->diff.count) return;
@@ -258,6 +267,31 @@ static void take(GtkWidget *w,gpointer data) {
  m->changing=TRUE;gtk_text_buffer_begin_user_action(result(m));
  gtk_text_buffer_delete(result(m),&a,&z);gtk_text_buffer_insert(result(m),&a,m->sources[side]+begin,(gint)(end-begin));
  gtk_text_buffer_end_user_action(result(m));m->changing=FALSE;record(m);selection(NULL,m);
+}
+/* Snapshot every range before editing. Reverse replacement leaves earlier
+ * offsets stable; touching/collapsed boundaries after manual edits are rejected. */
+static void take_all(GtkWidget *widget,gpointer data) {
+ Merge *m=data;if(m->busy || !m->diff.count) return;
+ gint side=widget==m->take_all[1];gint *ranges=g_new(gint,2*m->diff.count);gboolean any=FALSE;
+ for(size_t i=0;i<m->diff.count;i++) {
+  GtkTextIter a,z;gtk_text_buffer_get_iter_at_mark(result(m),&a,m->marks[2*i]);gtk_text_buffer_get_iter_at_mark(result(m),&z,m->marks[2*i+1]);
+  ranges[2*i]=gtk_text_iter_get_offset(&a);ranges[2*i+1]=gtk_text_iter_get_offset(&z);
+  if(ranges[2*i]>ranges[2*i+1] || (i && ranges[2*i]<=ranges[2*i-1])) {
+   g_free(ranges);message(m,"Block boundaries overlap or touch after edits; compare again before taking all blocks.");return;
+  }
+  InsightDiffHunk *h=&m->diff.hunks[i];size_t begin=side ? h->b_begin : h->a_begin,end=side ? h->b_end : h->a_end;
+  gchar *text=gtk_text_buffer_get_text(result(m),&a,&z,TRUE);
+  if(strlen(text)!=end-begin || memcmp(text,m->sources[side]+begin,end-begin)) any=TRUE;
+  g_free(text);
+ }
+ if(!any) { g_free(ranges);return; }
+ m->changing=TRUE;gtk_text_buffer_begin_user_action(result(m));
+ for(size_t i=m->diff.count;i-->0;) {
+  InsightDiffHunk *h=&m->diff.hunks[i];size_t begin=side ? h->b_begin : h->a_begin,end=side ? h->b_end : h->a_end;
+  GtkTextIter a,z;gtk_text_buffer_get_iter_at_offset(result(m),&a,ranges[2*i]);gtk_text_buffer_get_iter_at_offset(result(m),&z,ranges[2*i+1]);
+  gtk_text_buffer_delete(result(m),&a,&z);gtk_text_buffer_insert(result(m),&a,m->sources[side]+begin,(gint)(end-begin));
+ }
+ gtk_text_buffer_end_user_action(result(m));m->changing=FALSE;g_free(ranges);record(m);selection(NULL,m);
 }
 static void choose(GtkWidget *w,gpointer data) {
  Merge *m=data;int side=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w),"side"));
@@ -391,6 +425,8 @@ static Merge *merge_new(GtkWidget *parent) {
  }
  GtkWidget *bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);
  m->compare_button=button(bar,"Compare",G_CALLBACK(compare),m);gtk_widget_set_name(m->compare_button,"insight-diff-compare");m->cancel_button=button(bar,"Cancel comparison",G_CALLBACK(cancel_compare),m);gtk_widget_set_sensitive(m->cancel_button,FALSE);m->take[0]=button(bar,"Take Left",G_CALLBACK(take),m);m->take[1]=button(bar,"Take Right",G_CALLBACK(take),m);
+ m->take_all[0]=button(bar,"All Left",G_CALLBACK(take_all),m);m->take_all[1]=button(bar,"All Right",G_CALLBACK(take_all),m);
+ gtk_widget_set_tooltip_text(m->take_all[0],"Take all difference blocks from Left — one Undo");gtk_widget_set_tooltip_text(m->take_all[1],"Take all difference blocks from Right — one Undo");
  m->undo=button(bar,"Undo",G_CALLBACK(undo),m);m->redo=button(bar,"Redo",G_CALLBACK(redo),m);m->save_button=button(bar,"Save result…",G_CALLBACK(save),m);
  m->external=button(bar,"External KDiff3 (optional)",G_CALLBACK(external),m);
  GtkWidget *options=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),options,FALSE,FALSE,0);
