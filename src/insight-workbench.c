@@ -13,6 +13,7 @@
 #include "insight-relation-graph.h"
 #include "insight-relation-tree.h"
 #include "insight-disk-browser.h"
+#include "insight-git.h"
 #include "insight-list-style.h"
 #include "insight-window-list.h"
 #include "insight-overview.h"
@@ -741,6 +742,11 @@ static gboolean scan_step(gpointer data) {
  scan_source_file(path,FALSE); g_free(path); return scan_continue();
 }
 static gboolean start_scan(const char *root) {
+ if(wb.workspace_from_project && insight_git_active()) {
+  stop_scan();GError *error=NULL;InsightProjectFiles *policy=insight_git_membership(&error);
+  if(!policy) { ui_set_statusbar(TRUE,"Cannot read Git project files: %s",error ? error->message : "Git is busy");g_clear_error(&error);return FALSE; }
+  insight_project_files_free(wb.membership);wb.membership=policy;
+ }
  gchar *owned=g_canonicalize_filename(root,NULL); GDir *dir=g_dir_open(owned,0,NULL); InsightIndex *next=insight_index_new();
  if(!dir || !next) { if(dir) g_dir_close(dir); insight_index_free(next); g_free(owned); return FALSE; }
  gboolean same_root=!g_strcmp0(wb.root,owned);
@@ -3472,7 +3478,8 @@ static void native_project_update(GObject *object,GKeyFile *config,gpointer data
   invalidate_search_context();
   GKeyFile *loaded=NULL; GError *error=NULL;
   if(!config) { loaded=g_key_file_new(); gchar *filename=utils_get_locale_from_utf8(app->project->file_name); if(!g_key_file_load_from_file(loaded,filename,G_KEY_FILE_NONE,&error) && g_error_matches(error,G_FILE_ERROR,G_FILE_ERROR_NOENT)) g_clear_error(&error); g_free(filename); config=loaded; }
-  InsightProjectFiles *policy=error ? NULL : insight_project_files_read_project(config,utf8,app->project->file_name,&error);
+  insight_git_bind(config,root);
+  InsightProjectFiles *policy=error ? NULL : (insight_git_active() ? insight_git_membership(&error) : insight_project_files_read_project(config,utf8,app->project->file_name,&error));
   wb.membership_valid=policy!=NULL;
   if(!policy) { policy=insight_project_files_new(); policy->automatic=FALSE; ui_set_statusbar(TRUE,"Project membership could not be restored: %s",error ? error->message : "invalid settings"); }
   insight_project_files_free(wb.membership); wb.membership=policy; g_free(wb.membership_project); wb.membership_project=g_strdup(app->project->file_name); g_clear_error(&error); if(loaded) { g_key_file_unref(loaded); config=NULL; }
@@ -3501,6 +3508,7 @@ static gboolean membership_store(const InsightProjectFiles *candidate) {
 static gboolean master_membership_applied(const InsightProjectFiles *policy,gpointer data) { (void)data;return wb.alive && membership_store(policy); }
 static void master_sync_report(const GError *error,gpointer data) { (void)data;if(wb.alive) ui_set_statusbar(TRUE,"Master file list: %s",insight_tr(error->message)); }
 static gboolean membership_apply(InsightProjectFiles *candidate) {
+ if(insight_git_active()) { ui_set_statusbar(TRUE,"Use Add to Git or Add and Remove Git Project Files for this project");return FALSE; }
  if(!app->project || !wb.workspace_from_project) { ui_set_statusbar(TRUE,"Open a Geany project before changing its files");return FALSE; }
  if(candidate->master_file && *candidate->master_file) {
   GeanyDocument *master=document_find_by_filename(candidate->master_file);if(master && master->changed) { ui_set_statusbar(TRUE,"Save or reload the open master file list before changing project membership");return FALSE; }
@@ -3593,6 +3601,7 @@ static void membership_dialog_remove(GtkWidget *widget,gpointer data) {
  membership_dialog_refresh(d);
 }
 static void manage_project_files(GtkWidget *widget,gpointer data) {
+ if(insight_git_active()) { insight_git_manage(widget,data);return; }
  (void)widget; (void)data; if(!app->project || !wb.workspace_from_project) { ui_set_statusbar(TRUE,"Open a Geany project before changing its files"); return; }
  MembershipDialog d={0};d.generation=wb.membership_generation; d.candidate=insight_project_files_clone(wb.membership); d.paths=g_ptr_array_new_with_free_func(g_free); d.trees=g_ptr_array_new_with_free_func(g_free); d.root=project_get_base_path();d.project_file=g_strdup(app->project->file_name);
  for(guint i=0;i<wb.files->len;i++) g_ptr_array_add(d.paths,g_strdup(g_ptr_array_index(wb.files,i)));
@@ -3625,6 +3634,7 @@ static void project_files_drop(GtkWidget *widget,GdkDragContext *context,gint x,
  gtk_drag_finish(context,ok,FALSE,time);
 }
 static void native_project_close(GObject *object,gpointer data) {
+ insight_git_close();
  wb.membership_generation++;insight_master_sync_set(wb.master_sync,NULL,NULL,NULL);
  bookmarks_project_load(NULL,NULL,FALSE);clips_project_load(NULL,FALSE);
  (void)object; (void)data; g_clear_pointer(&wb.geany_root,g_free); g_clear_pointer(&wb.membership_project,g_free); wb.membership_valid=FALSE;
@@ -4085,7 +4095,11 @@ static void create_structural_selection_menu(void) {
  gtk_widget_add_accelerator(function,"activate",wb.navigation_accels,GDK_KEY_f,GEANY_PRIMARY_MOD_MASK|GDK_MOD1_MASK,GTK_ACCEL_VISIBLE);
  gtk_widget_show_all(item);
 }
+static void git_project_refresh(GtkWidget *widget,gpointer data) {
+ (void)widget;(void)data;if(app->project) native_project_update(NULL,NULL,GINT_TO_POINTER(1));
+}
 static void create_workbench_menus(void) {
+ insight_git_install(G_CALLBACK(git_project_refresh));
  GtkWidget *overview=gtk_check_menu_item_new_with_label("Overview"); gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(overview),insight_overview_get_visible()); g_signal_connect(overview,"toggled",G_CALLBACK(overview_visible),NULL); gtk_container_add(GTK_CONTAINER(ui_lookup_widget(main_widgets.window,"menu_view1_menu")),overview); gtk_widget_show(overview);
  GtkWidget *project_menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(ui_lookup_widget(main_widgets.window,"menu_project1"))),*manage=gtk_menu_item_new_with_label("Add and Remove Project Files…"); gtk_container_add(GTK_CONTAINER(project_menu),manage); g_signal_connect(manage,"activate",G_CALLBACK(manage_project_files),NULL); gtk_widget_show(manage);
  const gchar *master_labels[]={"Synchronize Master File List","Open Project Master File List"};for(guint i=0;i<2;i++) { GtkWidget *command=gtk_menu_item_new_with_label(master_labels[i]);gtk_widget_set_name(command,i ? "insight-open-master-list" : "insight-sync-master-list");gtk_menu_shell_append(GTK_MENU_SHELL(project_menu),command);g_signal_connect(command,"activate",G_CALLBACK(project_master_command),GINT_TO_POINTER(i));gtk_widget_show(command); }
@@ -4462,6 +4476,7 @@ static void add_insight_tool(GtkToolbar *toolbar,GtkToolItem *item,gint position
  toolbar_item_ref(item);gtk_toolbar_insert(toolbar,item,position);
 }
 static void create_browse_toolbar(void) {
+ insight_git_toolbar();
  GtkToolbar *toolbar=GTK_TOOLBAR(main_widgets.toolbar);
  GtkWidget *search_field=toolbar_get_widget_by_name("SearchEntry");if(search_field) { gtk_widget_set_no_show_all(search_field,TRUE);gtk_widget_hide(search_field); }
  add_insight_tool(toolbar,gtk_separator_tool_item_new(),0);
@@ -4743,3 +4758,4 @@ void insight_workbench_finalize(void) {
 void insight_workbench_languages_changed(void) { if(!wb.alive) return;InsightMasterTypes *types=insight_languages_master_types();insight_master_sync_set_types(wb.master_sync,types);insight_master_types_free(types);stop_definition();wb.follow_doc=0;if(wb.root) { gchar *path=g_strdup(wb.root);start_scan(path);g_free(path); }else mark_index_dirty();stop_usage();browser_filter(NULL,NULL);files_filter(NULL,NULL);categories_filter(NULL,NULL);preview_links();insight_workbench_refresh(); }
 
 void insight_workbench_locale_changed(void) { if(!wb.alive) return;if(wb.disk_browser) insight_disk_browser_locale_changed(wb.disk_browser);if(wb.relation_tree) insight_relation_tree_locale_changed(wb.relation_tree);if(wb.type_panel.status) grouped_count(&wb.type_panel,wb.type_panel.shown,wb.type_panel.total);if(wb.category_panel.status) { grouped_count(&wb.category_panel,wb.category_panel.shown,wb.category_panel.total);categories_filter(NULL,NULL); }if(wb.tree_status) folder_count(GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(wb.tree_status),"insight-folder-count")),GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(wb.tree_status),"insight-folder-total")));if(wb.file_status) { gchar *text=insight_i18n_printf(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(wb.file_status),"insight-files-more")) ? "Files: %u+" : "Files: %u",GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(wb.file_status),"insight-files-count")));gtk_label_set_text(GTK_LABEL(wb.file_status),text);g_free(text); }}
+

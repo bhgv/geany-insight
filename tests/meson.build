@@ -620,3 +620,13 @@ folder_layout_test = executable('test_insight_folder_layout',
  '../insight/tests/folder_layout_test.c', '../insight/desktop/folder_layout.c',
  include_directories: include_directories('../insight/desktop'), dependencies: glib)
 test('Insight Folder Browser shape and ancestry', folder_layout_test)
+
+
+git_project_test = executable('test_insight_git_project',
+ '../insight/tests/git_project_test.c', '../insight/desktop/git_project.c', dependencies: deps)
+test('Insight Git project transactions', git_project_test, timeout: 60)
+git_project_gui_test = executable('test_insight_git_project_gui',
+ '../insight/tests/git_project_gui_test.c', '../insight/desktop/git_project.c',
+ include_directories: [igeany, iscintilla, itagmanager, include_directories('..')],
+ c_args: geany_cflags, dependencies: deps)
+test('Insight Git project dialogs GUI', git_project_gui_test, timeout: 60)

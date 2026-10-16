@@ -1394,3 +1394,41 @@ Layout based on window shape	Компоновка по форме окна
 Stack lists vertically	Расположить списки вертикально
 Folder Font & Color…	Шрифт и цвет папок…
 Open folder	Открыть папку
+
+Create Git Project…	Создать Git-проект…
+Create Project from Git…	Создать проект из Git…
+Commit changes…	Закоммитить изменения…
+Add to Git…	Добавить в Git…
+Commit project changes	Коммит изменений проекта
+Commit	Коммит
+Added	Добавлен
+Removed	Удалён
+Modified	Изменён
+Conflict	Конфликт
+Commit message (editable)	Сообщение коммита (можно редактировать)
+Suggest message from selected files	Предложить сообщение по выбранным файлам
+Add files to Git	Добавить файлы в Git
+Add to Git	Добавить в Git
+Add and Remove Git Project Files	Добавление и удаление файлов Git-проекта
+Tracked file	Файл в Git
+Git is the project file store. Removal stages a deletion; files stay on disk.	Git хранит состав проекта. Удаление подготавливает удаление из Git; файлы остаются на диске.
+Create Project from Git	Создать проект из Git
+Create Git Project	Создать Git-проект
+Repository folder (absolute path)	Папка репозитория (абсолютный путь)
+New destination folder (absolute path)	Новая папка назначения (абсолютный путь)
+Git URL or local repository path	Адрес Git или путь локального репозитория
+Cloning repository…	Клонирование репозитория…
+Working with Git…	Выполняется операция Git…
+Save modified project documents before reviewing the commit?	Сохранить изменённые документы проекта перед просмотром коммита?
+Save project documents	Сохранить документы проекта
+Review and commit selected project changes	Просмотреть и закоммитить выбранные изменения проекта
+Add project files to Git	Добавить файлы проекта в Git
+%u of %u files selected. Commit uses the listed disk changes.	Выбрано файлов: %u из %u. В коммит войдут показанные изменения на диске.
+Git: no changes to commit	Git: изменений для коммита нет
+Git: selected changes committed	Git: выбранные изменения закоммичены
+Open or create a Git-based project first.	Сначала откройте или создайте Git-проект.
+Select at least one file and enter a commit message.	Выберите хотя бы один файл и введите сообщение коммита.
+Git status changed. Reopen the commit dialog to review the current files.	Состояние Git изменилось. Откройте диалог коммита заново для просмотра актуальных файлов.
+All selected files must be inside the Git project.	Все выбранные файлы должны находиться внутри Git-проекта.
+Clone uses your installed Git and its credential helpers.	Клонирование использует установленный Git и его средства авторизации.
+An existing repository is reused; an ordinary folder is initialized.	Существующий репозиторий подключается; в обычной папке создаётся репозиторий.

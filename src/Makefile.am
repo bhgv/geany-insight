@@ -205,6 +205,8 @@ install-exec-hook: fix-ubuntu-libdir
 # Integrated Insight workbench and embedded Lua (no plugin needed).
 AM_CPPFLAGS += -I$(top_srcdir)/insight/core -I$(top_srcdir)/insight/vendor/lua
 libgeany_la_SOURCES += \
+	insight-git.c \
+	insight-git.h \
 	insight-workbench.c \
 	insight-symbol-view.c \
 	insight-symbol-view.h \
@@ -251,6 +253,8 @@ libgeany_la_SOURCES += \
 	../insight/core/runtime.h \
 	../insight/desktop/index_cache.c \
 	../insight/desktop/index_cache.h \
+	../insight/desktop/git_project.c \
+	../insight/desktop/git_project.h \
 	../insight/desktop/folder_layout.c \
 	../insight/desktop/folder_layout.h \
 	../insight/desktop/disk_operation.c \
