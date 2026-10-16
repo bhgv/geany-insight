@@ -1483,3 +1483,6 @@ Visible completion rows	Видимые строки дополнения
 Completion settings applied.	Настройки автодополнения применены.
 Function arguments are not generated. Existing parentheses are preserved.\nTab and function insertion options apply to the detailed symbol list.	Аргументы функций не генерируются. Готовые скобки сохраняются.\nПараметры Tab и вставки функций действуют для расширенного списка.
 Case-sensitive symbol matching	Учитывать регистр при дополнении символов
+Intelligent paste	Интеллектуальная вставка
+Allow intelligent paste	Разрешить интеллектуальную вставку
+Place whole lines above or below the current line and match its indentation	Вставлять целые строки над или под текущей строкой с её отступом

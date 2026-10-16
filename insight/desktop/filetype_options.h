@@ -4,7 +4,7 @@
 #include <glib.h>
 typedef struct {
  gboolean enabled,soft_wrap,hard_wrap,line_numbers,white_space,line_endings,indent_guides,right_margin;
- gboolean allow_completion,allow_snippets,typing_shortcuts,enter_newline;
+ gboolean allow_completion,allow_snippets,typing_shortcuts,enter_newline,allow_intelligent_paste;
  gint tab_width,indent_width,indent_type,auto_indent,margin;
 } InsightFiletypeOptions;
 void insight_filetype_options_default(InsightFiletypeOptions *);

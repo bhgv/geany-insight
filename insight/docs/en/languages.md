@@ -129,3 +129,15 @@ Older `insight-completion.conf` files containing only `detailed` retain their be
 The matcher supports Unicode casefold (for example, `STRASS` can match `Straße`); it does not normalize different Unicode representations. Prefixes are limited to 512 UTF-8 bytes and candidate identifiers to 4096 bytes. Typed-word extraction and supported language metadata retain their existing language-specific behavior.
 
 Case-insensitive expansion examines at most 100000 tag entries, including repeated visibility passes. Existing exact-case candidates are kept first, and the normal maximum-entry setting still limits the result count. A partial expansion is marked **Case-insensitive search limit reached** in the detailed footer. Current-file locals, scope/line visibility, included files, workspace/global sources, language compatibility and name deduplication retain the existing lookup rules. The scan budget can omit additional matches in very large indexes. File name filters keep their own case rules. The choice is saved with the other completion settings and survives restart.
+
+### Intelligent whole-line paste
+
+Enable **Options → Intelligent paste**. It defaults to off and persists in `insight-paste.conf`. An active File Type Options → Editing profile can disable it with **Allow intelligent paste**; older profiles allow it, and a disabled editing override inherits the global behavior.
+
+Ordinary Paste (menu or Ctrl+V) and Clips treat text ending in a newline as whole lines. A caret inside a line inserts the block above it; a caret at the end of a nonempty line inserts below it. A final line without an EOL receives a separating EOL. Complete line selections are replaced; partial selections keep native replacement behavior.
+
+The minimum shared indentation of nonblank lines is removed and the destination line indentation is added. Relative nesting remains, tabs are measured with the document tab width, and output uses destination tabs/spaces and LF/CRLF/CR. Blank lines have no added whitespace. This is text indentation handling, not syntax-aware reformatting. The complete insert is one Undo/Redo action.
+
+![Whole-line placement and relative indentation](../media/intelligent-paste.svg)
+
+Rectangular or multiple selections, virtual positions, partial text, invalid UTF-8 and bounded-work rejection keep ordinary paste. Transformation limits: 1 MiB input, 4 MiB output, 10000 lines, 4096 indentation columns, tab width 1–32. Pending clipboard reads validate the document, text generation, selection and caret; a changed destination cancels that pending paste. Read-only remains protected. Drag/drop, Drag Line Up/Down, a separate Paste Line command and post-paste selection options are not ported in this series. Dialog text fields retain their normal behavior.

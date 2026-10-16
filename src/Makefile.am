@@ -223,6 +223,7 @@ libgeany_la_SOURCES += \
 	insight-relation-graph.c \
 	insight-relation-graph.h \
 	insight-help.c \
+	insight-paste.c insight-paste.h \
 	insight-completion.c insight-completion.h \
 	insight-languages.c \
 	insight-formatting.c \
@@ -256,6 +257,8 @@ libgeany_la_SOURCES += \
 	../insight/desktop/index_cache.h \
 	../insight/desktop/completion_settings.c ../insight/desktop/completion_settings.h \
 	../insight/desktop/completion_preferences.c ../insight/desktop/completion_preferences.h \
+	../insight/desktop/intelligent_paste.c \
+	../insight/desktop/intelligent_paste.h \
 	../insight/desktop/filetype_pairs.c \
 	../insight/desktop/filetype_pairs.h \
 	../insight/desktop/filetype_editing.c \

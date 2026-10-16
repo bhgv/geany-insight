@@ -18,3 +18,5 @@ Keep screenshots current when visible behavior changes. Favor small, useful illu
 `completion-options.jpg` captures the production preferences page in an isolated GTK fixture. `completion-insertion.svg` shows optional parentheses and existing-argument preservation.
 
 `completion-case.svg` illustrates optional casefold lookup and preferred exact-case selection. `completion-options.jpg` now includes the case-sensitive option.
+
+`intelligent-paste.svg` shows whole-line placement, shared indentation and destination indentation. The updated `filetype-editing.jpg` includes Allow intelligent paste; it is a capture of the production GTK page in an isolated fixture.

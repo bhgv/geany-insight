@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="290" viewBox="0 0 720 290">
+<rect width="720" height="290" rx="10" fill="#f3f6fa"/>
+<g font-family="sans-serif" fill="#24364b"><text x="20" y="29" font-size="18" font-weight="bold">Intelligent paste · whole lines</text>
+<text x="20" y="57" font-size="13">Options → Intelligent paste + File Type Options → Allow intelligent paste</text>
+<rect x="20" y="76" width="285" height="119" rx="6" fill="#e0eafa"/>
+<text x="32" y="98" font-size="14">Clipboard: shared indent = 4 columns</text>
+<g font-family="monospace" font-size="14"><text x="64" y="128">first();</text><text x="96" y="152">second();</text></g>
+<path d="M318 132h57m-10-8 10 8-10 8" fill="none" stroke="#4672a3" stroke-width="3"/>
+<rect x="392" y="76" width="308" height="119" rx="6" fill="#dceddf"/>
+<text x="404" y="98" font-size="14">Destination: indent = 2 columns</text>
+<g font-family="monospace" font-size="14"><text x="420" y="128">first();</text><text x="452" y="152">second();</text><text x="420" y="176" fill="#627386">target();</text></g>
+<text x="20" y="222" font-size="14">Caret inside line → paste above · Caret at line end → paste below</text>
+<text x="20" y="246" font-size="14">Relative indentation + destination tabs/EOL · One Undo</text>
+<text x="20" y="270" font-size="12">Ordinary Paste and Clips · Partial text/selections keep native behavior</text>
+</g></svg>

@@ -660,3 +660,8 @@ test('Insight completion preferences GUI', completion_preferences_gui_test, time
 
 completion_match_test = executable('test_insight_completion_match', '../insight/tests/completion_match_test.c', '../src/tagmanager/tm_completion.c', dependencies: glib)
 test('Insight completion case matching', completion_match_test)
+
+intelligent_paste_test = executable('test_insight_intelligent_paste', '../insight/tests/intelligent_paste_test.c', '../insight/desktop/intelligent_paste.c', dependencies: glib)
+test('Insight intelligent paste transforms', intelligent_paste_test)
+intelligent_paste_gui_test = executable('test_insight_intelligent_paste_native_gui', '../insight/tests/intelligent_paste_native_gui_test.c', dependencies: test_deps)
+test('Insight intelligent paste native GUI', intelligent_paste_gui_test, timeout: 40)

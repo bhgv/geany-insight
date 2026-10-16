@@ -2,6 +2,7 @@
 #include "insight-i18n.h"
 #include "insight-languages.h"
 #include "insight-completion.h"
+#include "insight-paste.h"
 #include "insight-formatting.h"
 #include "insight-themes.h"
 /* SPDX-License-Identifier: GPL-2.0-or-later */
@@ -2682,7 +2683,7 @@ static void clip_capture(GtkWidget *widget,gpointer data) {
 }
 static void clip_paste(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; gchar *name=selected_note(INSIGHT_CLIP); const InsightNote *note=name ? insight_notes_get(notes_for(INSIGHT_CLIP),INSIGHT_CLIP,name) : NULL; GeanyDocument *doc=document_get_current();
- if(note && doc && !SSM(doc->editor->sci,SCI_GETREADONLY,0,0)) { sci_start_undo_action(doc->editor->sci); sci_replace_sel(doc->editor->sci,note->text); sci_end_undo_action(doc->editor->sci); document_grab_focus(doc); }
+ if(note && doc && !SSM(doc->editor->sci,SCI_GETREADONLY,0,0)) { if(!insight_paste_text(doc->editor->sci,note->text)) { sci_start_undo_action(doc->editor->sci); sci_replace_sel(doc->editor->sci,note->text); sci_end_undo_action(doc->editor->sci); } document_grab_focus(doc); }
  else ui_set_statusbar(TRUE,"Select a clip and a writable source document");
  g_free(name);
 }
@@ -2992,7 +2993,7 @@ static void create_note_panel(InsightNoteKind kind) {
  for(guint i=0;i<count;i++) { const char *icons[]={"edit-copy","edit-cut","edit-paste","document-edit","edit-delete"}; GtkWidget *button=kind==INSIGHT_BOOKMARK ? gtk_button_new_with_label(marks[i]) : gtk_button_new_from_icon_name(icons[i],GTK_ICON_SIZE_SMALL_TOOLBAR); gtk_widget_set_tooltip_text(button,kind==INSIGHT_BOOKMARK ? marks[i] : clips[i]); gtk_box_pack_start(GTK_BOX(controls),button,FALSE,FALSE,0);
   GCallback callback; gpointer argument=NULL;
   if(kind==INSIGHT_BOOKMARK) { callback=i==0 ? G_CALLBACK(bookmark_add) : (i==1 ? G_CALLBACK(bookmark_go) : G_CALLBACK(note_delete)); if(i==2) argument=GINT_TO_POINTER(kind); }
-  else { callback=i<2 ? G_CALLBACK(clip_capture) : (i==2 ? G_CALLBACK(clip_paste) : (i==3 ? G_CALLBACK(clip_edit) : G_CALLBACK(note_delete))); argument=i==1 ? GINT_TO_POINTER(1) : (i==4 ? GINT_TO_POINTER(kind) : NULL); }
+  else { const gchar *ids[]={"insight-clip-copy","insight-clip-cut","insight-clip-paste","insight-clip-edit","insight-clip-delete"};gtk_widget_set_name(button,ids[i]);callback=i<2 ? G_CALLBACK(clip_capture) : (i==2 ? G_CALLBACK(clip_paste) : (i==3 ? G_CALLBACK(clip_edit) : G_CALLBACK(note_delete))); argument=i==1 ? GINT_TO_POINTER(1) : (i==4 ? GINT_TO_POINTER(kind) : NULL); }
   g_signal_connect(button,"clicked",callback,argument);
  }
  if(kind==INSIGHT_CLIP) { GtkWidget *create=gtk_button_new_from_icon_name("document-new",GTK_ICON_SIZE_SMALL_TOOLBAR),*insert=gtk_button_new(); gtk_button_set_image(GTK_BUTTON(insert),insight_command_icon("snippets")); gtk_widget_set_name(create,"insight-new-template"); gtk_widget_set_name(insert,"insight-insert-template"); gtk_widget_set_tooltip_text(create,"New code template"); gtk_widget_set_tooltip_text(insert,"Insert as code template — expand variables"); gtk_box_pack_start(GTK_BOX(controls),create,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(controls),insert,FALSE,FALSE,0); g_signal_connect(create,"clicked",G_CALLBACK(clip_new_template),NULL); g_signal_connect(insert,"clicked",G_CALLBACK(clip_template),NULL); }
@@ -4537,7 +4538,7 @@ static void arrange_main_menus(void) {
  GtkWidget *bar=ui_lookup_widget(main_widgets.window,"menubar1"),*options=gtk_menu_item_new_with_mnemonic("_Options"),*menu=gtk_menu_new();
  gtk_menu_item_set_submenu(GTK_MENU_ITEM(options),menu); gtk_menu_shell_insert(GTK_MENU_SHELL(bar),options,4);
  GtkWidget *preferences=ui_lookup_widget(main_widgets.window,"preferences1");
- g_object_ref(preferences); gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(preferences)),preferences); gtk_container_add(GTK_CONTAINER(menu),preferences); g_object_unref(preferences); gtk_widget_set_name(menu,"insight-options-menu");insight_i18n_menu(menu);GtkWidget *languages_item=gtk_menu_item_new_with_label("Language profiles…");gtk_widget_set_name(languages_item,"insight-language-options");g_signal_connect(languages_item,"activate",G_CALLBACK(insight_languages_show),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),languages_item);GtkWidget *filetype_options=gtk_menu_item_new_with_label("File Type Options…");gtk_widget_set_name(filetype_options,"insight-filetype-options");g_signal_connect(filetype_options,"activate",G_CALLBACK(insight_languages_show),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),filetype_options);insight_formatting_menu(ui_lookup_widget(main_widgets.window,"menu_view1_menu"),menu);insight_themes_menu(menu);insight_completion_menu(menu);gtk_widget_show_all(options);
+ g_object_ref(preferences); gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(preferences)),preferences); gtk_container_add(GTK_CONTAINER(menu),preferences); g_object_unref(preferences); gtk_widget_set_name(menu,"insight-options-menu");insight_i18n_menu(menu);GtkWidget *languages_item=gtk_menu_item_new_with_label("Language profiles…");gtk_widget_set_name(languages_item,"insight-language-options");g_signal_connect(languages_item,"activate",G_CALLBACK(insight_languages_show),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),languages_item);GtkWidget *filetype_options=gtk_menu_item_new_with_label("File Type Options…");gtk_widget_set_name(filetype_options,"insight-filetype-options");g_signal_connect(filetype_options,"activate",G_CALLBACK(insight_languages_show),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),filetype_options);insight_formatting_menu(ui_lookup_widget(main_widgets.window,"menu_view1_menu"),menu);insight_themes_menu(menu);insight_completion_menu(menu);insight_paste_menu(menu);gtk_widget_show_all(options);
  GtkWidget *document_menu=ui_lookup_widget(main_widgets.window,"menu_document1");
  g_object_ref(document_menu); gtk_container_remove(GTK_CONTAINER(bar),document_menu); gtk_container_add(GTK_CONTAINER(menu),document_menu); g_object_unref(document_menu);
  GtkWidget *windows=gtk_menu_item_new_with_mnemonic("_Window"),*window_menu=gtk_menu_new();

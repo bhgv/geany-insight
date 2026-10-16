@@ -1,5 +1,6 @@
 #include "insight-languages.h"
 #include "insight-completion.h"
+#include "insight-paste.h"
 #include "../insight/desktop/filetype_pairs.h"
 #include "insight-formatting.h"
 /*
@@ -1134,6 +1135,7 @@ static gboolean on_editor_notify(G_GNUC_UNUSED GObject *object, GeanyEditor *edi
 	ScintillaObject *sci = editor->sci;
 	GeanyDocument *doc = editor->document;
 	insight_completion_notify(editor,nt);
+	insight_paste_notify(editor,nt);
 	switch (nt->nmhdr.code)
 	{
 		case SCN_SAVEPOINTLEFT:

@@ -38,6 +38,7 @@
 #include <Lexilla.h> /* ILexer5 */
 
 #include "editor.h"
+#include "insight-paste.h"
 #include "utils.h"
 #include "insight-workbench.h"
 
@@ -645,7 +646,8 @@ void sci_copy(ScintillaObject *sci)
 
 void sci_paste(ScintillaObject *sci)
 {
-	SSM(sci, SCI_PASTE, 0, 0);
+	if (!insight_paste_clipboard(sci))
+		SSM(sci, SCI_PASTE, 0, 0);
 }
 
 
@@ -1507,3 +1509,4 @@ gint sci_word_end_position(ScintillaObject *sci, gint position, gboolean onlyWor
 {
 	return SSM(sci, SCI_WORDENDPOSITION, position, onlyWordCharacters);
 }
+
