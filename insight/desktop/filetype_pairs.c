@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "filetype_pairs.h"
-#include "Scintilla.h"
 #include <gdk/gdkkeysyms.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 #define DATA "insight-filetype-pairs"

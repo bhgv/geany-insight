@@ -2,8 +2,8 @@
 #ifndef INSIGHT_FILETYPE_PAIRS_H
 #define INSIGHT_FILETYPE_PAIRS_H
 #include <gtk/gtk.h>
-#include "Scintilla.h"
-#include "ScintillaWidget.h"
+#include "../../scintilla/include/Scintilla.h"
+#include "../../scintilla/include/ScintillaWidget.h"
 /* Per-widget transient markers; offsets are UTF-8 byte positions. */
 void insight_filetype_pairs_attach(ScintillaObject *);
 void insight_filetype_pairs_remember(ScintillaObject *,gint,gint);
