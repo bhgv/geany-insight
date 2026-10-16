@@ -1446,3 +1446,23 @@ Too many folder reads; refresh to retry	Слишком много чтений �
 Folder tree limit reached; clear cached folders to continue	Достигнут предел дерева; очистите кэш папок для продолжения
 Folder read cancelled	Чтение папки отменено
 Folder read cancelled; expand or refresh to retry	Чтение отменено; раскройте или обновите для повтора
+
+File Type Options…	Параметры типа файла…
+Use file type editing options	Использовать параметры редактирования типа файла
+Disabled profiles inherit existing document settings. Apply does not reformat text.	Если флажок снят, сохраняются параметры документа. Применение не переформатирует текст.
+Indent using	Использовать для отступов
+Tab width	Ширина табуляции
+Indent width	Шаг отступа
+Auto indent	Автоотступ
+Margin column	Колонка границы текста
+Tabs and spaces	Табуляции и пробелы
+No auto indent	Без автоотступа
+Basic auto indent	Простой автоотступ
+Current characters	По текущим символам
+Matching braces	По парным скобкам
+Wrap long lines on screen	Переносить длинные строки на экране
+Wrap while typing (insert newlines)	Переносить при наборе (вставлять новые строки)
+Visible tabs and spaces	Видимые табуляции и пробелы
+Visible line endings	Видимые окончания строк
+Show right margin	Показывать правую границу
+Editing options	Параметры редактирования

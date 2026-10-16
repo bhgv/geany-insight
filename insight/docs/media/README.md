@@ -6,3 +6,5 @@
 - SVGs are explanatory diagrams or graphical symbols, not screenshots. They contain no scripts, external fonts or linked assets. Captions in the RU/EN guides explain the shared symbols.
 
 Keep screenshots current when visible behavior changes. Favor small, useful illustrations over entire desktop captures. Check legibility and rendering in the built-in local help viewer on the chosen validation platform.
+
+- `filetype-editing.jpg`: real production file type editing page from its isolated GTK fixture. `filetype-editing.svg` explains mixed indentation and screen versus typing wraps.

@@ -50,3 +50,20 @@ known MFL types. Invalid input is rejected before writing; legacy profiles
 without `file-filters` keep extension-based matching. Include when adding to
 project and remaining File Type Options are separate work.
 Reference: https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/File_Type_Options.htm
+
+
+## File Type Options: editing
+
+Open **Options → File Type Options…** or the editor context menu. The current file's resolved profile is selected. The **Editing options** tab has an explicit override switch; existing profiles inherit their document settings until it is enabled. File binding remains a separate choice.
+
+![Production editing options page](../media/filetype-editing.jpg)
+
+Actual production GTK page captured in its isolated GUI fixture, using English sample settings.
+
+![Independent indentation and two wrap modes](../media/filetype-editing.svg)
+
+Set spaces, tabs or mixed indentation, tab width and indent step (1–32 columns), one of four auto-indent modes, screen wrapping, typing wrapping, line numbers, whitespace, line endings, indentation guides and the right margin (20–500 columns). In tabs-only mode the indent step follows the tab width; mixed mode keeps them independent.
+
+Screen wrapping only changes display. Typing wrapping uses the margin column and inserts real newlines into subsequently typed text. Apply does not reformat existing text, move the caret or clear Undo. Overrides affect matching open and newly opened documents. Disabling restores the per-document indentation, wrapping and display settings captured before the override; this baseline is session-local. New global settings can be applied after disabling the override.
+
+The options are stored in the profile's `language.conf`, in versioned `[editing]` settings. Missing settings keep inheritance; invalid settings disable the entire override while retaining the parser/CSS profile. Close without Apply discards dialog edits. Existing Apply, profile reload and file binding commands still work. Printing, per-type completion/snippet switches and Include when adding to project remain separate work.

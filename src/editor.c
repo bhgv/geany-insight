@@ -457,7 +457,19 @@ const GeanyEditorPrefs *editor_get_prefs(GeanyEditor *editor)
 
 	eprefs = *dprefs;
 	eprefs.indentation = (GeanyIndentPrefs*)editor_get_indent_prefs(editor);
-	/* add other editor & document overrides as needed */
+ const InsightFiletypeOptions *options = insight_languages_editing_options(editor);
+ if (options) {
+  eprefs.line_break_column = options->margin;
+  eprefs.line_wrapping = options->soft_wrap;
+  eprefs.long_line_column = options->margin;
+  eprefs.long_line_enabled = options->right_margin;
+  eprefs.long_line_type = options->right_margin ? 0 : 2;
+  eprefs.show_linenumber_margin = options->line_numbers;
+  eprefs.show_white_space = options->white_space;
+  eprefs.show_line_endings = options->line_endings;
+  eprefs.show_indent_guide = options->indent_guides;
+ }
+
 	return &eprefs;
 }
 
@@ -579,11 +591,11 @@ static void check_line_breaking(GeanyEditor *editor, gint pos)
 	lstart = sci_get_position_from_line(sci, line);
 
 	/* use column instead of position which might be different with multibyte characters */
-	if (col < get_project_pref(line_break_column))
+	if (col < editor_get_prefs(editor)->line_break_column)
 		return;
 
 	/* look for the last space before line_break_column */
-	pos = sci_get_position_from_col(sci, line, get_project_pref(line_break_column));
+	pos = sci_get_position_from_col(sci, line, editor_get_prefs(editor)->line_break_column);
 
 	while (pos > lstart)
 	{
@@ -1092,7 +1104,7 @@ void editor_sci_notify_cb(G_GNUC_UNUSED GtkWidget *widget, G_GNUC_UNUSED gint sc
 /* recalculate margins width */
 static void update_margins(ScintillaObject *sci)
 {
-	sci_set_line_numbers(sci, editor_prefs.show_linenumber_margin);
+	sci_set_line_numbers(sci, insight_languages_margin_numbers(sci, editor_prefs.show_linenumber_margin));
 	sci_set_symbol_margin(sci, editor_prefs.show_markers_margin);
 	sci_set_folding_margin_visible(sci, editor_prefs.folding);
 }
@@ -1319,6 +1331,14 @@ editor_get_indent_prefs(GeanyEditor *editor)
 	iprefs = *dprefs;
 	iprefs.type = editor->indent_type;
 	iprefs.width = editor->indent_width;
+ const InsightFiletypeOptions *options = insight_languages_editing_options(editor);
+ if (options) {
+  iprefs.type = (GeanyIndentType)options->indent_type;
+  iprefs.width = options->indent_type == GEANY_INDENT_TYPE_TABS ? options->tab_width : options->indent_width;
+  iprefs.hard_tab_width = options->tab_width;
+  iprefs.auto_indent_mode = (GeanyAutoIndent)options->auto_indent;
+ }
+
 
 	/* if per-document auto-indent is enabled, but we don't have a global mode set,
 	 * just use basic auto-indenting */
@@ -4679,6 +4699,7 @@ void editor_set_font(GeanyEditor *editor, const gchar *font)
 	set_font(editor->sci, font);
  insight_languages_apply(editor->sci,editor->document->file_name,editor->document->file_type);
 	update_margins(editor->sci);
+ insight_languages_apply_editor(editor);
 	/* zoom to 100% to prevent confusion */
 	sci_zoom_off(editor->sci);
 }
@@ -4723,7 +4744,9 @@ void editor_set_indent(GeanyEditor *editor, GeanyIndentType type, gint width)
 {
 	const GeanyIndentPrefs *iprefs = editor_get_indent_prefs(editor);
 	ScintillaObject *sci = editor->sci;
-	gboolean use_tabs = type != GEANY_INDENT_TYPE_SPACES;
+ const InsightFiletypeOptions *options = insight_languages_editing_options(editor);
+ if (options) { type = (GeanyIndentType)options->indent_type; width = type == GEANY_INDENT_TYPE_TABS ? options->tab_width : options->indent_width; }
+ gboolean use_tabs = type != GEANY_INDENT_TYPE_SPACES;
 
 	editor->indent_type = type;
 	editor->indent_width = width;
@@ -4732,7 +4755,7 @@ void editor_set_indent(GeanyEditor *editor, GeanyIndentType type, gint width)
 	if (type == GEANY_INDENT_TYPE_BOTH)
 	{
 		sci_set_tab_width(sci, iprefs->hard_tab_width);
-		if (iprefs->hard_tab_width != 8)
+		if (iprefs->hard_tab_width != 8 && !options)
 		{
 			static gboolean warn = TRUE;
 			if (warn)
@@ -4744,6 +4767,7 @@ void editor_set_indent(GeanyEditor *editor, GeanyIndentType type, gint width)
 	else
 		sci_set_tab_width(sci, width);
 
+	if (options) sci_set_tab_width(sci, options->tab_width);
 	SSM(sci, SCI_SETINDENT, width, 0);
 
 	/* remove indent spaces on backspace, if using any spaces to indent */
@@ -5229,6 +5253,7 @@ void editor_apply_update_prefs(GeanyEditor *editor)
 		return;
 
 	sci = editor->sci;
+ insight_languages_prepare_editor(editor);
 
 	sci_set_mark_long_lines(sci, editor_get_long_line_type(),
 		editor_get_long_line_column(), editor_prefs.long_line_color);
@@ -5291,6 +5316,7 @@ void editor_apply_update_prefs(GeanyEditor *editor)
 	sci_set_scroll_stop_at_last_line(sci, editor_prefs.scroll_stop_at_last_line);
 
 	sci_set_scrollbar_mode(sci, editor_prefs.show_scrollbars);
+ insight_languages_apply_editor(editor);
 }
 
 
@@ -5441,3 +5467,4 @@ GEANY_API_SYMBOL
 GType editor_get_type (void);
 
 G_DEFINE_BOXED_TYPE(GeanyEditor, editor, copy_, free_);
+

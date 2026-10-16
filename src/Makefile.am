@@ -253,6 +253,10 @@ libgeany_la_SOURCES += \
 	../insight/core/runtime.h \
 	../insight/desktop/index_cache.c \
 	../insight/desktop/index_cache.h \
+	../insight/desktop/filetype_editing.c \
+	../insight/desktop/filetype_editing.h \
+	../insight/desktop/filetype_options.c \
+	../insight/desktop/filetype_options.h \
 	../insight/desktop/git_project.c \
 	../insight/desktop/git_project.h \
 	../insight/desktop/folder_tree.c \

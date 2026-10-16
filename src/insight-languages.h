@@ -2,6 +2,8 @@
 #ifndef INSIGHT_LANGUAGES_H
 #define INSIGHT_LANGUAGES_H
 #include "filetypes.h"
+#include "editor.h"
+#include "../insight/desktop/filetype_options.h"
 #include "ScintillaWidget.h"
 typedef struct InsightLanguageFilter InsightLanguageFilter;
 struct InsightMasterTypes;
@@ -18,6 +20,11 @@ GeanyFiletype *insight_languages_detect(const gchar *path);
 gboolean insight_languages_compatible(const gchar *from,GeanyFiletype *fallback,const gchar *to);
 gboolean insight_languages_search_path(const gchar *,GeanyFiletype *,const gchar *);
 gboolean insight_languages_keyword(ScintillaObject *,const gchar *);
+const InsightFiletypeOptions *insight_languages_editing_options(GeanyEditor *);
+void insight_languages_prepare_editor(GeanyEditor *);
+void insight_languages_apply_editor(GeanyEditor *);
+gboolean insight_languages_margin_numbers(ScintillaObject *,gboolean);
 void insight_languages_apply(ScintillaObject *,const gchar *,GeanyFiletype *);
 void insight_languages_show(GtkWidget *,gpointer);
 #endif
+
