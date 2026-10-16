@@ -189,3 +189,5 @@ Select Word uses the editor's current word rules. Select Line selects the curren
 Mode belongs to each document's Scintilla widget and is not persisted. The menu check follows document switches. Text edits and mouse clicks inside the editor end the mode; state is restored when a document is activated. External plugins sending raw `SCI_GOTOPOS/SCI_GOTOLINE`, and non-scrolling `sci_set_current_position`, retain their previous semantics; universal API interception is not claimed. No additional default keys are assigned to these commands; existing movement keys remain configured normally.
 
 Commands work in read-only, never edit source text or create Undo entries, and require a single normal selection without virtual space. Full Source Insight Select Block/Match, symbolic ranges, Extend Mode across every external/plugin jump, and mouse selection shortcuts remain separate porting items.
+
+![Selection and navigation menu in the running Linux editor](../media/selection-navigation.jpg)

@@ -28,3 +28,5 @@ Keep screenshots current when visible behavior changes. Favor small, useful illu
 `line-operations.jpg`: real Line operations menu in the complete running Linux editor during its native GUI test, including Copy/Cut and Paste commands. JPEG capture is also retained as a CI artifact.
 
 `selection-navigation.svg` explains anchor-based Extend Mode versus ordinary movement. Native menu captures are produced by isolated-in-time full editor GUI tests.
+
+`selection-navigation.jpg`: real Selection and navigation menu in the complete running Linux editor during its native GUI test. Shared-display captures run exclusively and reject occluded black output.
