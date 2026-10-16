@@ -6,7 +6,9 @@ on:
       - src/insight-disk-browser.*
       - insight/desktop/disk_operation.*
       - insight/desktop/folder_layout.*
+      - insight/desktop/folder_tree.*
       - insight/tests/folder_layout_test.c
+      - insight/tests/folder_tree*_test.c
       - insight/desktop/project_files.*
       - insight/tests/disk_operation*_test.c
       - insight/tests/project_files_test.c
@@ -33,8 +35,10 @@ jobs:
       - name: Compile and run isolated production Folder Browser
         run: |
           set -eu
-          cc -std=c99 -Wall -Wextra -Werror -Wno-deprecated-declarations -UNDEBUG -DGTK -DGEANY_PRIVATE insight/tests/disk_operation_gui_test.c src/insight-disk-browser.c insight/desktop/disk_operation.c insight/desktop/folder_layout.c insight/desktop/lookup_filter.c -Isrc -Isrc/tagmanager -Iscintilla/include $(pkg-config --cflags --libs gtk+-3.0) -o disk-operation-gui-test
+          cc -std=c99 -Wall -Wextra -Werror -Wno-deprecated-declarations -UNDEBUG -DGTK -DGEANY_PRIVATE insight/tests/disk_operation_gui_test.c src/insight-disk-browser.c insight/desktop/disk_operation.c insight/desktop/folder_layout.c insight/desktop/folder_tree.c insight/desktop/lookup_filter.c -Isrc -Isrc/tagmanager -Iscintilla/include $(pkg-config --cflags --libs gtk+-3.0) -o disk-operation-gui-test
           GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a ./disk-operation-gui-test
+          cc -std=c99 -Wall -Wextra -Werror -Wno-deprecated-declarations -UNDEBUG insight/tests/folder_tree_gui_test.c insight/desktop/folder_tree.c insight/desktop/folder_layout.c $(pkg-config --cflags --libs gtk+-3.0) -o folder-tree-gui-test
+          GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a ./folder-tree-gui-test
   windows:
     runs-on: windows-latest
     defaults:
@@ -59,5 +63,7 @@ jobs:
       - name: Compile and run isolated production Folder Browser
         run: |
           set -eu
-          cc -std=c99 -Wall -Wextra -Werror -Wno-deprecated-declarations -UNDEBUG -DGTK -DGEANY_PRIVATE insight/tests/disk_operation_gui_test.c src/insight-disk-browser.c insight/desktop/disk_operation.c insight/desktop/folder_layout.c insight/desktop/lookup_filter.c -Isrc -Isrc/tagmanager -Iscintilla/include $(pkg-config --cflags --libs gtk+-3.0) -o disk-operation-gui-test.exe
+          cc -std=c99 -Wall -Wextra -Werror -Wno-deprecated-declarations -UNDEBUG -DGTK -DGEANY_PRIVATE insight/tests/disk_operation_gui_test.c src/insight-disk-browser.c insight/desktop/disk_operation.c insight/desktop/folder_layout.c insight/desktop/folder_tree.c insight/desktop/lookup_filter.c -Isrc -Isrc/tagmanager -Iscintilla/include $(pkg-config --cflags --libs gtk+-3.0) -o disk-operation-gui-test.exe
           GEANY_RUN_GUI_TESTS=1 DISPLAY=win32 GDK_BACKEND=win32 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 ./disk-operation-gui-test.exe
+          cc -std=c99 -Wall -Wextra -Werror -Wno-deprecated-declarations -UNDEBUG insight/tests/folder_tree_gui_test.c insight/desktop/folder_tree.c insight/desktop/folder_layout.c $(pkg-config --cflags --libs gtk+-3.0) -o folder-tree-gui-test.exe
+          GEANY_RUN_GUI_TESTS=1 DISPLAY=win32 GDK_BACKEND=win32 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 ./folder-tree-gui-test.exe

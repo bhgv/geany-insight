@@ -11,7 +11,9 @@ on:
       - src/insight-disk-browser.*
       - insight/desktop/disk_operation.*
       - insight/desktop/folder_layout.*
+      - insight/desktop/folder_tree.*
       - insight/tests/folder_layout_test.c
+      - insight/tests/folder_tree*_test.c
       - insight/tests/disk_browser_gui_test.c
       - insight/desktop/project_files.*
       - insight/tests/disk_operation*_test.c
@@ -39,4 +41,4 @@ jobs:
           meson install -C _native
       - name: Run native Folder Browser regressions
         run: |
-          GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a meson test -C _native --print-errorlogs 'Insight Folder Browser shape and ancestry' 'Insight guarded disk operations' 'Insight isolated disk operation dialogs GUI' 'Insight unindexed disk browser GUI' 'Insight Git project transactions' 'Insight Git project dialogs GUI' 'Insight native Git project GUI'
+          GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a meson test -C _native --print-errorlogs 'Insight Folder Browser shape and ancestry' 'Insight guarded disk operations' 'Insight isolated disk operation dialogs GUI' 'Insight unindexed disk browser GUI' 'Insight Git project transactions' 'Insight Git project dialogs GUI' 'Insight native Git project GUI' 'Insight lazy folder tree GUI' 'Insight native lazy folder tree GUI'

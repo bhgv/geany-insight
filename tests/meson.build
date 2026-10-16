@@ -611,7 +611,7 @@ test('Insight guarded disk operations', disk_operation_test)
 
 disk_operation_gui_test = executable('test_insight_disk_operation_gui',
  '../insight/tests/disk_operation_gui_test.c', '../src/insight-disk-browser.c',
- '../insight/desktop/disk_operation.c', '../insight/desktop/folder_layout.c', '../insight/desktop/lookup_filter.c',
+ '../insight/desktop/disk_operation.c', '../insight/desktop/folder_layout.c', '../insight/desktop/folder_tree.c', '../insight/desktop/lookup_filter.c',
  include_directories: [igeany, iscintilla, itagmanager, include_directories('..')],
  c_args: geany_cflags, dependencies: deps)
 test('Insight isolated disk operation dialogs GUI', disk_operation_gui_test, timeout: 40)
@@ -633,3 +633,9 @@ test('Insight Git project dialogs GUI', git_project_gui_test, timeout: 60)
 
 git_native_gui_test = executable('test_insight_git_native_gui', '../insight/tests/git_native_gui_test.c', dependencies: test_deps)
 test('Insight native Git project GUI', git_native_gui_test, timeout: 45)
+
+folder_tree_gui_test = executable('test_insight_folder_tree_gui',
+ '../insight/tests/folder_tree_gui_test.c', '../insight/desktop/folder_tree.c', '../insight/desktop/folder_layout.c', dependencies: deps)
+test('Insight lazy folder tree GUI', folder_tree_gui_test, timeout: 45)
+folder_tree_native_gui_test = executable('test_insight_folder_tree_native_gui', '../insight/tests/folder_tree_native_gui_test.c', dependencies: test_deps)
+test('Insight native lazy folder tree GUI', folder_tree_native_gui_test, timeout: 45)

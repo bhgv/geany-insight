@@ -333,3 +333,7 @@ EXTRA_DIST += \
  insight/tests/git_project_test.c \
  insight/tests/git_project_gui_test.c \
  insight/tests/git_native_gui_test.c
+
+EXTRA_DIST += insight/desktop/folder_tree.c insight/desktop/folder_tree.h
+
+EXTRA_DIST += insight/tests/folder_tree_gui_test.c insight/tests/folder_tree_native_gui_test.c

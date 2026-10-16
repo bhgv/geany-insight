@@ -255,6 +255,8 @@ libgeany_la_SOURCES += \
 	../insight/desktop/index_cache.h \
 	../insight/desktop/git_project.c \
 	../insight/desktop/git_project.h \
+	../insight/desktop/folder_tree.c \
+	../insight/desktop/folder_tree.h \
 	../insight/desktop/folder_layout.c \
 	../insight/desktop/folder_layout.h \
 	../insight/desktop/disk_operation.c \

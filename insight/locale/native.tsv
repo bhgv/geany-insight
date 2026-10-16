@@ -1432,3 +1432,17 @@ Git status changed. Reopen the commit dialog to review the current files.	Сос
 All selected files must be inside the Git project.	Все выбранные файлы должны находиться внутри Git-проекта.
 Clone uses your installed Git and its credential helpers.	Клонирование использует установленный Git и его средства авторизации.
 An existing repository is reused; an ordinary folder is initialized.	Существующий репозиторий подключается; в обычной папке создаётся репозиторий.
+
+Expand folder	Раскрыть папку
+Collapse folder	Свернуть папку
+Refresh selected branch	Обновить выбранную ветку
+Read more subfolders…	Дочитать подпапки…
+Cancel folder read	Отменить чтение папки
+Clear cached folders	Очистить кэш папок
+Expand to read subfolders	Раскройте для чтения подпапок
+Reading subfolders…	Чтение подпапок…
+Cannot read subfolders; refresh to retry	Не удалось прочитать подпапки; обновите для повтора
+Too many folder reads; refresh to retry	Слишком много чтений папок; обновите для повтора
+Folder tree limit reached; clear cached folders to continue	Достигнут предел дерева; очистите кэш папок для продолжения
+Folder read cancelled	Чтение папки отменено
+Folder read cancelled; expand or refresh to retry	Чтение отменено; раскройте или обновите для повтора
