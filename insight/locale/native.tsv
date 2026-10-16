@@ -1486,3 +1486,10 @@ Case-sensitive symbol matching	Учитывать регистр при допо
 Intelligent paste	Интеллектуальная вставка
 Allow intelligent paste	Разрешить интеллектуальную вставку
 Place whole lines above or below the current line and match its indentation	Вставлять целые строки над или под текущей строкой с её отступом
+Line operations	Операции со строками
+Paste Line	Вставить в начало строки
+Drag Line Up	Переместить строки вверх
+Drag Line Down	Переместить строки вниз
+Drag Line Up More	Переместить строки выше
+Drag Line Down More	Переместить строки ниже
+Move up to five lines, stopping at the document boundary	Переместить до пяти строк, останавливаясь у границы документа

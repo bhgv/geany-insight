@@ -58,6 +58,52 @@ static void undo(void)
 {
     keybindings_send_command(GEANY_KEY_GROUP_EDITOR, GEANY_KEYS_EDITOR_UNDO);
 }
+static void line_action(const gchar *id)
+{
+    gchar *name = g_strconcat("insight-", id, NULL);
+    GtkWidget *item = named(window, name);g_assert_nonnull(item);
+    gtk_menu_item_activate(GTK_MENU_ITEM(item));g_free(name);
+}
+static void check_line_moves(void)
+{
+    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(option), FALSE);
+    reset("top\n    move();\n", 10);
+    keybindings_send_command(GEANY_KEY_GROUP_EDITOR, GEANY_KEYS_EDITOR_MOVELINEUP);
+    text_is("    move();\ntop\n");undo();text_is("top\n    move();\n");
+    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(option), TRUE);
+    reset("top\n    move();\n", 10);
+    keybindings_send_command(GEANY_KEY_GROUP_EDITOR, GEANY_KEYS_EDITOR_MOVELINEUP);
+    text_is("move();\ntop\n");g_assert_cmpint(sci_get_current_position(doc->editor->sci), ==, 2);
+    undo();text_is("top\n    move();\n");
+    keybindings_send_command(GEANY_KEY_GROUP_EDITOR, GEANY_KEYS_EDITOR_REDO);
+    text_is("move();\ntop\n");
+    const gchar *multi = "    a();\n        b();\n        bottom();\n";
+    reset(multi, 0);SEND(doc->editor->sci, SCI_SETSEL, strlen("    a();\n        b();\n"), 0);
+    line_action("drag-line-down");
+    text_is("        bottom();\n        a();\n            b();\n");
+    g_assert_cmpint(SEND(doc->editor->sci, SCI_GETANCHOR, 0, 0), >, sci_get_current_position(doc->editor->sci));
+    undo();text_is(multi);
+    const gchar *more = "head\n  one\n  two\n  three\n  four\n  five\n    move\n";
+    reset(more, strstr(more, "move") - more + 2);line_action("drag-line-up-more");
+    text_is("head\n  move\n  one\n  two\n  three\n  four\n  five\n");undo();text_is(more);
+    more = "    move\n  one\n  two\n  three\n  four\n  five\nend\n";
+    reset(more, 6);line_action("drag-line-down-more");
+    text_is("  one\n  two\n  three\n  four\n  five\n  move\nend\n");undo();text_is(more);
+    reset("top\n    last();", 10);line_action("drag-line-up");
+    text_is("last();\ntop");undo();text_is("top\n    last();");
+    reset("top\r\n\tПривет();\r\n", strlen("top\r\n\tПри"));
+    SEND(doc->editor->sci, SCI_SETEOLMODE, SC_EOL_CRLF, 0);
+    SEND(doc->editor->sci, SCI_SETUSETABS, TRUE, 0);
+    line_action("drag-line-up");text_is("Привет();\r\ntop\r\n");
+    g_assert_cmpint(sci_get_current_position(doc->editor->sci), ==, strlen("При"));
+    reset("only\n", 1);line_action("drag-line-up-more");text_is("only\n");
+    g_assert_false(SEND(doc->editor->sci, SCI_CANUNDO, 0, 0));
+    SEND(doc->editor->sci, SCI_SETREADONLY, TRUE, 0);line_action("drag-line-down");text_is("only\n");
+    SEND(doc->editor->sci, SCI_SETREADONLY, FALSE, 0);
+    reset("top\n    move\n", 5);SEND(doc->editor->sci, SCI_SETSELECTIONMODE, SC_SEL_RECTANGLE, 0);
+    line_action("drag-line-up");text_is("top\n    move\n");
+    SEND(doc->editor->sci, SCI_SETSELECTIONMODE, SC_SEL_STREAM, 0);
+}
 static void finish(void)
 {
     SEND(doc->editor->sci, SCI_SETREADONLY, FALSE, 0);
@@ -145,7 +191,11 @@ static gboolean step(gpointer data)
     }
     else if (phase == 11)
     {
-        text_is("tar    x();\nget();\n");SEND(doc->editor->sci, SCI_SETSAVEPOINT, 0, 0);
+        text_is("tar    x();\nget();\n");
+        reset("top\n    x();\n", 8);
+        keybindings_send_command(GEANY_KEY_GROUP_EDITOR, GEANY_KEYS_EDITOR_MOVELINEUP);
+        text_is("    x();\ntop\n");
+        SEND(doc->editor->sci, SCI_SETSAVEPOINT, 0, 0);
         doc = document_open_file(source, FALSE, NULL, NULL);
         reset(block, 0);SEND(doc->editor->sci, SCI_SETSEL, 0, strlen(block));
         GtkWidget *query = named(window, "insight-clips-query");g_assert_nonnull(query);
@@ -167,6 +217,24 @@ static gboolean step(gpointer data)
         gchar *disk = NULL;g_assert_true(g_file_get_contents(source, &disk, NULL, NULL));
         g_assert_cmpstr(disk, ==, base);g_free(disk);
         g_print("Native intelligent paste: above/below, final line, CRLF/tabs, Undo/Redo, partial/native fallback, selection, stale/read-only, file-type permission, Clips and restart passed\n");
+        check_line_moves();
+        gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(option), FALSE);
+        reset("    target();\n", 8);
+        gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), "X", -1);
+        line_action("paste-line");
+    }
+    else if (phase == 13)
+    {
+        text_is("X    target();\n");undo();text_is("    target();\n");
+        gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(option), TRUE);
+        reset("    target();\n", 8);
+        gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), block, -1);
+        line_action("paste-line");
+    }
+    else if (phase == 14)
+    {
+        text_is("    first();\n        second();\n    target();\n");undo();text_is("    target();\n");
+        g_print("Native line operations: Paste Line, menu/keyboard moves, five-line moves, selection direction, CRLF/Unicode, final line, Undo/Redo and guards passed\n");
         finish();return G_SOURCE_REMOVE;
     }
     phase++;return G_SOURCE_CONTINUE;

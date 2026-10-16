@@ -61,7 +61,7 @@ static void load(void)
     g_key_file_unref(key);
     g_free(path);
 }
-static gboolean eligible(ScintillaObject *sci)
+static gboolean allowed(ScintillaObject *sci)
 {
     load();
     GeanyDocument *doc = document_for_sci(sci);
@@ -71,6 +71,12 @@ static gboolean eligible(ScintillaObject *sci)
         return FALSE;
     const InsightFiletypeOptions *options = insight_languages_editing_options(doc->editor);
     if (options && !options->allow_intelligent_paste)
+        return FALSE;
+    return TRUE;
+}
+static gboolean eligible(ScintillaObject *sci)
+{
+    if (!allowed(sci))
         return FALSE;
     gint start = sci_get_selection_start(sci), end = sci_get_selection_end(sci);
     /* Partial selections retain native replacement semantics. */
@@ -194,4 +200,163 @@ void insight_paste_menu(GtkWidget *menu)
     gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), enabled);
     g_signal_connect(item, "toggled", G_CALLBACK(toggle), NULL);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+}
+
+/* Move with Scintilla's native operation, retaining its line/marker handling.
+ * Reindent only after bounded preparation, and keep the complete move in one Undo. */
+gboolean insight_paste_move_lines(ScintillaObject *sci, gint direction, guint count)
+{
+    if (!allowed(sci) || (direction != -1 && direction != 1) || !count || count > 5)
+        return FALSE;
+    gint start = sci_get_selection_start(sci), end = sci_get_selection_end(sci);
+    gint first = sci_get_line_from_position(sci, start);
+    gint last = sci_get_line_from_position(sci, end);
+    if (end > start && end == sci_get_position_from_line(sci, last))
+        last--;
+    guint lines = last - first + 1;
+    if (lines > 10000)
+        return FALSE;
+    gint total = sci_get_line_count(sci);
+    count = MIN(count, (guint)(direction < 0 ? first : total - last - 1));
+    if (!count)
+        return TRUE;
+    gint begin = sci_get_position_from_line(sci, first);
+    gint finish = last + 1 < total ? sci_get_position_from_line(sci, last + 1) : sci_get_length(sci);
+    if (finish <= begin || finish - begin > 1024 * 1024)
+        return FALSE;
+    gchar *original = sci_get_contents_range(sci, begin, finish);
+    const gchar *eol = sci_get_eol_mode(sci) == SC_EOL_CRLF ? "\r\n" :
+                      sci_get_eol_mode(sci) == SC_EOL_CR ? "\r" : "\n";
+    gsize length = strlen(original);
+    gchar *whole = length && (original[length-1] == '\r' || original[length-1] == '\n') ?
+                   g_strdup(original) : g_strconcat(original, eol, NULL);
+    g_free(original);
+    guint tab = SEND(sci, SCI_GETTABWIDTH, 0, 0);
+    guint target = SEND(sci, SCI_GETLINEINDENTATION,
+                        direction < 0 ? first - (gint)count : last + (gint)count, 0);
+    gchar *prepared = insight_paste_reindent(whole, target, tab,
+                                           SEND(sci, SCI_GETUSETABS, 0, 0), eol);
+    g_free(whole);
+    if (!prepared)
+        return FALSE;
+    GArray *indents = g_array_new(FALSE, FALSE, sizeof(guint));
+    const gchar *p = prepared;
+    while (*p)
+    {
+        guint columns = 0;
+        while (*p == ' ' || *p == '\t')
+        {
+            columns += *p == '\t' ? tab - columns % tab : 1;
+            p++;
+        }
+        g_array_append_val(indents, columns);
+        while (*p && *p != '\r' && *p != '\n') p++;
+        if (*p == '\r' && p[1] == '\n') p += 2;
+        else if (*p) p++;
+    }
+    g_free(prepared);
+    if (indents->len != lines)
+    {
+        g_array_free(indents, TRUE);
+        return FALSE;
+    }
+    gboolean selection = start != end;
+    gboolean forward = SEND(sci, SCI_GETANCHOR, 0, 0) <= sci_get_current_position(sci);
+    gint caret = sci_get_current_position(sci);
+    gint caret_line = sci_get_line_from_position(sci, caret);
+    gint body_offset = MAX(0, caret - SEND(sci, SCI_GETLINEINDENTPOSITION, caret_line, 0));
+    GeanyDocument *doc = document_for_sci(sci);
+    insight_completion_cancel(doc->editor);
+    SEND(sci, SCI_AUTOCCANCEL, 0, 0);
+    sci_start_undo_action(sci);
+    guint moved = 0;
+    for (; moved < count; moved++)
+    {
+        guint64 generation = state(sci)->generation;
+        SEND(sci, direction < 0 ? SCI_MOVESELECTEDLINESUP : SCI_MOVESELECTEDLINESDOWN, 0, 0);
+        if (state(sci)->generation == generation)
+            break;
+    }
+    /* Avoid guessing a destination if native movement stopped at a boundary. */
+    if (moved == count)
+    {
+        first += direction * (gint)moved;
+        for (guint i = 0; i < lines; i++)
+            SEND(sci, SCI_SETLINEINDENTATION, first + i, g_array_index(indents, guint, i));
+        if (selection)
+        {
+            gint a = sci_get_position_from_line(sci, first);
+            gint b = first + (gint)lines < sci_get_line_count(sci) ?
+                     sci_get_position_from_line(sci, first + lines) : sci_get_length(sci);
+            SEND(sci, SCI_SETSEL, forward ? a : b, forward ? b : a);
+        }
+        else
+        {
+            caret_line += direction * (gint)moved;
+            gint pos = MIN(SEND(sci, SCI_GETLINEENDPOSITION, caret_line, 0),
+                           SEND(sci, SCI_GETLINEINDENTPOSITION, caret_line, 0) + body_offset);
+            SEND(sci, SCI_SETSEL, pos, pos);
+        }
+    }
+    sci_end_undo_action(sci);
+    SEND(sci, SCI_SCROLLCARET, 0, 0);
+    g_array_free(indents, TRUE);
+    return TRUE;
+}
+static void line_command(GtkMenuItem *item, gpointer data)
+{
+    (void)item;
+    GeanyDocument *doc = document_get_current();
+    if (!doc || !doc->is_valid)
+        return;
+    ScintillaObject *sci = doc->editor->sci;
+    if (SEND(sci, SCI_GETREADONLY, 0, 0) || SEND(sci, SCI_GETSELECTIONS, 0, 0) != 1 ||
+        sci_get_selection_mode(sci) != SC_SEL_STREAM ||
+        SEND(sci, SCI_GETSELECTIONNCARETVIRTUALSPACE, 0, 0) ||
+        SEND(sci, SCI_GETSELECTIONNANCHORVIRTUALSPACE, 0, 0))
+        return;
+    gint command = GPOINTER_TO_INT(data);
+    if (!command)
+    {
+        gint line = sci_get_line_from_position(sci, sci_get_current_position(sci));
+        gint pos = sci_get_position_from_line(sci, line);
+        SEND(sci, SCI_SETSEL, pos, pos);
+        sci_paste(sci);
+    }
+    else
+    {
+        gint direction = command < 0 ? -1 : 1;
+        guint count = ABS(command);
+        if (!insight_paste_move_lines(sci, direction, count))
+        {
+            sci_start_undo_action(sci);
+            for (guint i = 0; i < count; i++)
+                SEND(sci, direction < 0 ? SCI_MOVESELECTEDLINESUP : SCI_MOVESELECTEDLINESDOWN, 0, 0);
+            sci_end_undo_action(sci);
+        }
+    }
+    gtk_widget_grab_focus(GTK_WIDGET(sci));
+}
+void insight_paste_line_menu(GtkWidget *menu)
+{
+    g_return_if_fail(GTK_IS_MENU_SHELL(menu));
+    GtkWidget *parent = gtk_menu_item_new_with_label("Line operations");
+    gtk_widget_set_name(parent, "insight-line-operations");
+    GtkWidget *sub = gtk_menu_new();
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(parent), sub);
+    const gchar *labels[] = {"Paste Line", "Drag Line Up", "Drag Line Down", "Drag Line Up More", "Drag Line Down More"};
+    const gchar *ids[] = {"paste-line", "drag-line-up", "drag-line-down", "drag-line-up-more", "drag-line-down-more"};
+    const gint commands[] = {0, -1, 1, -5, 5};
+    for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
+    {
+        GtkWidget *entry = gtk_menu_item_new_with_label(labels[i]);
+        gchar *name = g_strconcat("insight-", ids[i], NULL);
+        gtk_widget_set_name(entry, name);
+        g_free(name);
+        if (i > 2) gtk_widget_set_tooltip_text(entry, "Move up to five lines, stopping at the document boundary");
+        g_signal_connect(entry, "activate", G_CALLBACK(line_command), GINT_TO_POINTER(commands[i]));
+        gtk_menu_shell_append(GTK_MENU_SHELL(sub), entry);
+    }
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), parent);
+    gtk_widget_show_all(parent);
 }

@@ -141,3 +141,15 @@ The minimum shared indentation of nonblank lines is removed and the destination 
 ![Whole-line placement and relative indentation](../media/intelligent-paste.svg)
 
 Rectangular or multiple selections, virtual positions, partial text, invalid UTF-8 and bounded-work rejection keep ordinary paste. Transformation limits: 1 MiB input, 4 MiB output, 10000 lines, 4096 indentation columns, tab width 1–32. Pending clipboard reads validate the document, text generation, selection and caret; a changed destination cancels that pending paste. Read-only remains protected. Drag/drop, Drag Line Up/Down, a separate Paste Line command and post-paste selection options are not ported in this series. Dialog text fields retain their normal behavior.
+
+### Paste Line and line movement
+
+**Edit → Line operations** adds **Paste Line**, **Drag Line Up/Down**, and **Drag Line Up/Down More**. Paste Line clears a normal selection, places the caret at the beginning of its current line, and runs Paste. Partial text also inserts at line start; whole lines adopt the destination indentation when intelligent paste is enabled. The same pending-clipboard destination guards apply.
+
+Drag Line Up/Down move the current line or all lines touched by a normal selection. A selection ending at the next line start excludes that next line. **More** moves up to five lines and stops at the document boundary. With Options → Intelligent paste enabled and allowed by the file type, the block adopts the indentation of the last crossed line while retaining relative nesting. Without that permission, native movement keeps indentation. The existing bounded indentation rules apply; rejected transformations fall back to native movement.
+
+![Line commands and destination indentation](../media/line-operations.svg)
+
+Existing **Move line(s) up/down** and their configured keys (Alt+Page Up/Down by default) also use this mode. This series assigns no separate default keys to More or Paste Line. Each move, including five steps and reindentation, is one Undo/Redo action. In intelligent mode, selected blocks stay selected with their original direction; an unselected caret follows the line text, snapping to text start if originally inside changed indentation. Read-only is protected; new menu commands require a single normal selection without virtual space. Existing movement commands retain native handling for other selection modes.
+
+These are line movement commands. Mouse drag/drop and post-paste selection preferences remain separate open items. Indentation handling is not syntax-aware reformatting.

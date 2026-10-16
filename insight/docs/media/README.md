@@ -20,3 +20,5 @@ Keep screenshots current when visible behavior changes. Favor small, useful illu
 `completion-case.svg` illustrates optional casefold lookup and preferred exact-case selection. `completion-options.jpg` now includes the case-sensitive option.
 
 `intelligent-paste.svg` shows whole-line placement, shared indentation and destination indentation. The updated `filetype-editing.jpg` includes Allow intelligent paste; it is a capture of the production GTK page in an isolated fixture.
+
+`line-operations.svg` is a compact diagram of the line commands and optional destination indentation; it is not an application screenshot.

@@ -362,3 +362,5 @@ EXTRA_DIST += insight/tests/completion_match_test.c
 
 EXTRA_DIST += insight/desktop/intelligent_paste.c insight/desktop/intelligent_paste.h insight/tests/intelligent_paste_test.c insight/tests/intelligent_paste_native_gui_test.c
 dist_insightdocmedia_DATA += insight/docs/media/intelligent-paste.svg
+
+dist_insightdocmedia_DATA += insight/docs/media/line-operations.svg

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="300" viewBox="0 0 720 300">
+<rect width="720" height="300" rx="10" fill="#f3f6fa"/>
+<g font-family="sans-serif" fill="#24364b">
+<text x="20" y="30" font-size="18" font-weight="bold">Edit → Line operations</text>
+<rect x="20" y="48" width="245" height="168" rx="6" fill="#e1e9f5"/>
+<g font-size="14"><text x="34" y="73">Paste Line</text><text x="34" y="104">Drag Line Up / Down</text><text x="34" y="135">Drag Line Up / Down More</text></g>
+<text x="34" y="164" font-size="12">More = up to 5 lines</text><text x="34" y="191" font-size="12">Existing move keys still work</text>
+<rect x="288" y="48" width="412" height="168" rx="6" fill="#dceee3"/>
+<text x="303" y="74" font-size="14">Intelligent paste ON + file type allowed</text>
+<g font-family="monospace" font-size="14"><text x="320" y="105">top();</text><text x="352" y="129">move();</text><path d="M475 123v-24m-7 8 7-8 7 8" stroke="#47745a" stroke-width="2" fill="none"/><text x="520" y="105">move();</text><text x="520" y="129">top();</text></g>
+<text x="303" y="164" font-size="12">Moved block adopts destination indentation</text><text x="303" y="191" font-size="12">Relative nesting remains · One Undo / Redo</text>
+<text x="20" y="246" font-size="14">Paste Line: go to the current line start, then Paste</text>
+<text x="20" y="274" font-size="12">Read-only protected · More stops at boundaries · Mouse drag/drop remains separate</text>
+</g></svg>
