@@ -100,11 +100,12 @@ void insight_languages_prepare_editor(GeanyEditor *editor) {
 }
 void insight_languages_apply_editor(GeanyEditor *editor) {
  if(!editor || !editor->sci || !editor->document) return;
- insight_completion_cancel(editor);ScintillaObject *sci=editor->sci;const InsightFiletypeOptions *options=insight_languages_editing_options(editor);insight_languages_prepare_editor(editor);
+ ScintillaObject *sci=editor->sci;const InsightFiletypeOptions *options=insight_languages_editing_options(editor);insight_languages_prepare_editor(editor);
  EditingBaseline *baseline=g_object_get_data(G_OBJECT(sci),"insight-language-editing-baseline");
  if(!options && !baseline) return;
  if(options) {
 
+  if(!options->allow_completion) insight_completion_cancel(editor);
   if(!options->typing_shortcuts) insight_filetype_pairs_clear(sci);
   if(!options->allow_completion || !options->allow_snippets) SEND(sci,SCI_AUTOCCANCEL,0,0);
   InsightFiletypeOptions *copy=g_new(InsightFiletypeOptions,1);*copy=*options;g_object_set_data_full(G_OBJECT(sci),"insight-language-editing-active",copy,g_free);
