@@ -45,6 +45,8 @@ static gboolean options_response(gpointer data) {
  for(GList *p=windows;p && !dialog;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-diff-options")) dialog=p->data;
  g_list_free(windows);g_assert_nonnull(dialog);
  gtk_spin_button_set_value(GTK_SPIN_BUTTON(named(dialog,"insight-diff-options-zoom")),130);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dialog,"insight-diff-options-1")),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dialog,"insight-diff-options-2")),FALSE);
+ const gchar *capture=g_getenv("INSIGHT_DIFF_OPTIONS_CAPTURE");
+ if(capture && GPOINTER_TO_INT(data)==GTK_RESPONSE_APPLY) { gint64 until=g_get_monotonic_time()+200000;while(g_get_monotonic_time()<until) { flush();g_usleep(1000); }GdkWindow *window=gtk_widget_get_window(dialog);GdkPixbuf *image=gdk_pixbuf_get_from_window(window,0,0,gdk_window_get_width(window),gdk_window_get_height(window));g_assert_nonnull(image);g_assert_true(gdk_pixbuf_save(image,capture,"jpeg",NULL,"quality","88",NULL));g_object_unref(image); }
  gtk_dialog_response(GTK_DIALOG(dialog),GPOINTER_TO_INT(data));return G_SOURCE_REMOVE;
 }
 int main(int argc,char **argv) {

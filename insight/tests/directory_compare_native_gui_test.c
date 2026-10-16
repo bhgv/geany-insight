@@ -4,6 +4,7 @@
 #include "document.h"
 #include "editor.h"
 #include "ui_utils.h"
+#include "sciwrappers.h"
 #include <glib/gstdio.h>
 #include <string.h>
 static gchar *root,*profile,*left,*right,*source;static guint phase;static GtkWidget *host,*directory,*merge;
@@ -18,6 +19,9 @@ static GtkWidget *window_named(const gchar *name) {
  g_list_free(windows);return found;
 }
 static gboolean respond_file_dialog(gpointer data) {GtkWidget *dialog=window_named("insight-directory-operation-dialog");g_assert_nonnull(dialog);gtk_dialog_response(GTK_DIALOG(dialog),GPOINTER_TO_INT(data));return G_SOURCE_REMOVE;
+}
+static gboolean apply_compare_options(gpointer data) {
+ (void)data;GtkWidget *dialog=window_named("insight-diff-options");g_assert_nonnull(dialog);gtk_spin_button_set_value(GTK_SPIN_BUTTON(named(dialog,"insight-diff-options-zoom")),130);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dialog,"insight-diff-options-6")),TRUE);gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_APPLY);return G_SOURCE_REMOVE;
 }
 static gboolean step(gpointer data) {
  (void)data;
@@ -42,7 +46,9 @@ static gboolean step(gpointer data) {
  }
  if(phase==2) {
   if(!gtk_widget_get_sensitive(named(merge,"insight-diff-compare"))) return G_SOURCE_CONTINUE;
-  GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(named(merge,"insight-diff-result")));GtkTextIter a,z;gtk_text_buffer_get_bounds(buffer,&a,&z);gchar *text=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);g_assert_cmpstr(text,==,"port = 3000\n");g_free(text);gtk_widget_destroy(merge);
+  GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(named(merge,"insight-diff-result")));GtkTextIter a,z;gtk_text_buffer_get_bounds(buffer,&a,&z);gchar *text=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);g_assert_cmpstr(text,==,"port = 3000\n");g_free(text);
+  GdkEventKey shortcut={0};shortcut.type=GDK_KEY_PRESS;shortcut.state=GDK_CONTROL_MASK;shortcut.keyval=GDK_KEY_q;gboolean handled=FALSE;g_idle_add(apply_compare_options,NULL);g_signal_emit_by_name(merge,"key-press-event",&shortcut,&handled);g_assert_true(handled);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(named(merge,"insight-diff-zoom"))),==,130);g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(merge,"insight-diff-overview"))));
+  GtkWidget *right_view=named(merge,"insight-diff-right");GtkTextBuffer *right_buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(right_view));GtkTextIter line;gtk_text_buffer_get_iter_at_line(right_buffer,&line,1);gtk_text_buffer_place_cursor(right_buffer,&line);shortcut.keyval=GDK_KEY_e;handled=FALSE;g_signal_emit_by_name(right_view,"key-press-event",&shortcut,&handled);g_assert_true(handled);GeanyDocument *opened=document_get_current();g_assert_nonnull(opened);gchar *expected=g_build_filename(right,"config.ini",NULL);g_assert_cmpstr(opened->real_path,==,expected);g_free(expected);g_assert_cmpint(sci_get_current_line(opened->editor->sci),==,1);g_assert_false(opened->changed);gtk_widget_destroy(merge);
   gchar *copy=g_build_filename(left,"transfer.c",NULL);g_assert_true(g_file_set_contents(copy,"int transfer;\n",-1,NULL));g_free(copy);gtk_button_clicked(GTK_BUTTON(named(directory,"insight-directory-scan")));phase=3;return G_SOURCE_CONTINUE;
  }
  if(phase==3) {
@@ -66,5 +72,5 @@ int main(void) {
  gchar *unknown=g_build_filename(left,"payload.insight-unknown-binary-77",NULL);g_assert_true(g_file_set_contents(unknown,"a\0b",3,NULL));g_free(unknown);
  gchar *args[]={"directory-native","--new-instance","--no-session","--config",profile,source,NULL};g_timeout_add(250,step,NULL);g_timeout_add_seconds(30,timeout,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);
  gint result=main_lib(6,args);
- GKeyFile *saved=g_key_file_new();gchar *prefs=g_build_filename(profile,"insight","workbench.conf",NULL);g_assert_true(g_key_file_load_from_file(saved,prefs,G_KEY_FILE_NONE,NULL));g_assert_cmpint(g_key_file_get_integer(saved,"directory-compare","version",NULL),==,1);g_assert_true(g_key_file_get_boolean(saved,"directory-compare","known",NULL));g_assert_false(g_key_file_get_boolean(saved,"directory-compare","confirm",NULL));g_free(prefs);g_key_file_unref(saved);g_free(other);g_free(config);g_free(source);g_free(left);g_free(right);g_free(profile);g_free(root);return result;
+ GKeyFile *saved=g_key_file_new();gchar *prefs=g_build_filename(profile,"insight","workbench.conf",NULL);g_assert_true(g_key_file_load_from_file(saved,prefs,G_KEY_FILE_NONE,NULL));g_assert_cmpint(g_key_file_get_integer(saved,"directory-compare","version",NULL),==,1);g_assert_true(g_key_file_get_boolean(saved,"directory-compare","known",NULL));g_assert_false(g_key_file_get_boolean(saved,"directory-compare","confirm",NULL));g_assert_cmpint(g_key_file_get_integer(saved,"file-compare","zoom",NULL),==,130);g_assert_true(g_key_file_get_boolean(saved,"file-compare","overview",NULL));g_free(prefs);g_key_file_unref(saved);g_free(other);g_free(config);g_free(source);g_free(left);g_free(right);g_free(profile);g_free(root);return result;
 }
