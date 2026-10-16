@@ -179,3 +179,9 @@ Display defaults (mono font, numbers, list, wrap, linked scrolling, scrollbars, 
 ![File Compare display options](../media/file-compare-options.jpg)
 
 This dialog is captured from production GTK widgets in the isolated Linux fixture, with editor-host help and translation stubs. The native editor test separately verifies Ctrl+Q, applying scale/Overview, Ctrl+E source-line navigation and workbench persistence. Syntax formatting and code nesting guides remain outside this GTK comparison-view implementation.
+
+### Search in comparison panes
+
+Ctrl+F targets the focused pane and seeds the query from a single-line selection of up to 4096 characters. **Whole words only** uses identifier boundaries: Unicode letters, digits, combining marks and underscores belong to words. **Wrap around** allows one retry from the opposite end; disable it to stop at the file boundary. F3 and Shift+F3 search forward and backward. Search options apply to the current window and never modify result text or merge history. Regular expressions are not supported.
+
+![Production comparison widget search, isolated GTK fixture](../media/file-compare.jpg)

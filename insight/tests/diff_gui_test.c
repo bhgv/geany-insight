@@ -49,8 +49,26 @@ static gboolean options_response(gpointer data) {
  if(capture && GPOINTER_TO_INT(data)==GTK_RESPONSE_APPLY) { gint64 until=g_get_monotonic_time()+200000;while(g_get_monotonic_time()<until) { flush();g_usleep(1000); }GdkWindow *window=gtk_widget_get_window(dialog);GdkPixbuf *image=gdk_pixbuf_get_from_window(window,0,0,gdk_window_get_width(window),gdk_window_get_height(window));g_assert_nonnull(image);g_assert_true(gdk_pixbuf_save(image,capture,"jpeg",NULL,"quality","88",NULL));g_object_unref(image); }
  gtk_dialog_response(GTK_DIALOG(dialog),GPOINTER_TO_INT(data));return G_SOURCE_REMOVE;
 }
+static void search_options_test(void) {
+ Merge *m=merge_new(NULL);GtkTextBuffer *b=result(m);GtkTextIter a,z;
+ gtk_text_buffer_set_text(b,"foobar foo_bar foo2 αfoo foó foo FOO",-1);
+ gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),2);
+ gtk_entry_set_text(GTK_ENTRY(m->find_entry),"foo");
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->find_word),TRUE);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->find_wrap),FALSE);
+ gtk_text_buffer_get_start_iter(b,&a);gtk_text_buffer_place_cursor(b,&a);
+ find_text(m,FALSE);g_assert_true(gtk_text_buffer_get_selection_bounds(b,&a,&z));g_assert_cmpint(gtk_text_iter_get_offset(&a),==,30);
+ find_text(m,FALSE);g_assert_true(gtk_text_buffer_get_selection_bounds(b,&a,&z));g_assert_cmpint(gtk_text_iter_get_offset(&a),==,34);
+ find_text(m,FALSE);g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(m->find_status)),==,"Text not found.");
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->find_wrap),TRUE);find_text(m,FALSE);
+ g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->find_status)),"Wrapped"));
+ find_text(m,TRUE);g_assert_true(gtk_text_buffer_get_selection_bounds(b,&a,&z));g_assert_cmpint(gtk_text_iter_get_offset(&a),==,34);
+ gtk_widget_grab_focus(m->views[2]);focus_find(m);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(m->find_entry)),==,"FOO");
+ assert_text(m,"foobar foo_bar foo2 αfoo foó foo FOO");
+ gtk_widget_destroy(m->window);flush();
+}
 int main(int argc,char **argv) {
- gtk_init(&argc,&argv);insight_diff_set_source_opener(source_opened);
+ gtk_init(&argc,&argv);search_options_test();insight_diff_set_source_opener(source_opened);
  GError *error=NULL;gchar *dir=g_dir_make_tmp("insight-diff-XXXXXX",&error);g_assert_no_error(error);
  gchar *left=g_build_filename(dir,"left.txt",NULL),*right=g_build_filename(dir,"right.txt",NULL);
  const char *a="start\nleft\ncommon\nlast left\nend\n",*b="start\nright\ncommon\nlast right\nextra\nend\n";

@@ -1014,3 +1014,5 @@ Edit File — Ctrl+E	Открыть в редакторе — Ctrl+E
 Copy selected difference	Копировать выбранное различие
 File Compare Options…	Параметры сравнения файлов…
 Choose two source files before comparing.	Выберите два исходных файла перед сравнением.
+Whole words only	Только целые слова
+Wrap around	Поиск по кругу

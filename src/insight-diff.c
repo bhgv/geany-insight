@@ -14,7 +14,7 @@ typedef struct { gchar *text; gint *positions; } Snapshot;
 typedef struct { guint begin,end; } MapBlock;
 typedef struct {
  GtkWidget *window,*paths[2],*views[3],*status,*undo,*redo,*take[2],*take_all[2],*external;
- GtkWidget *find_entry,*find_side,*find_case,*find_previous,*find_next,*find_status,*numbers;
+ GtkWidget *find_entry,*find_side,*find_case,*find_word,*find_wrap,*find_previous,*find_next,*find_status,*numbers;
  GArray *map_blocks[2];guint map_lines[2];
  GtkWidget *scrollers[3],*maps[2],*zoom,*mono,*vertical,*overview,*list_toggle,*wrap_toggle;GtkCssProvider *font_css;
  GtkWidget *compare_button,*cancel_button,*save_button; GCancellable *cancel; gboolean busy;
@@ -103,7 +103,15 @@ static void view_options(GtkWidget *,gpointer);
 static void edit_source(Merge *,guint);
 static void focus_find(Merge *m) {
  GtkWidget *focus=gtk_window_get_focus(GTK_WINDOW(m->window));
- for(int i=0;i<3;i++) if(focus==m->views[i]) gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),i);
+ for(int i=0;i<3;i++) if(focus==m->views[i]) {
+  gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),i);
+  GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[i]));GtkTextIter a,z;
+  if(gtk_text_buffer_get_selection_bounds(buffer,&a,&z) && gtk_text_iter_get_offset(&z)-gtk_text_iter_get_offset(&a)<=4096) {
+   gchar *selection=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);
+   if(!strchr(selection,'\n') && !strchr(selection,'\r')) gtk_entry_set_text(GTK_ENTRY(m->find_entry),selection);
+   g_free(selection);
+  }
+ }
  gtk_widget_grab_focus(m->find_entry);gtk_editable_select_region(GTK_EDITABLE(m->find_entry),0,-1);
 }
 static gboolean key(GtkWidget *w,GdkEventKey *event,gpointer data) {
@@ -135,6 +143,20 @@ static gboolean key(GtkWidget *w,GdkEventKey *event,gpointer data) {
  return FALSE;
 }
 static void message(Merge *m,const gchar *text) { gtk_label_set_text(GTK_LABEL(m->status),text); }
+/* Identifier boundaries deliberately include underscores and Unicode marks. */
+static gboolean identifier_char(gunichar c) {
+ return c=='_' || g_unichar_isalnum(c) || g_unichar_ismark(c);
+}
+static gboolean search_match(GtkTextIter start,const gchar *query,GtkTextSearchFlags flags,
+ gboolean backwards,gboolean whole,GtkTextIter *a,GtkTextIter *z) {
+ while(backwards ? gtk_text_iter_backward_search(&start,query,flags,a,z,NULL) : gtk_text_iter_forward_search(&start,query,flags,a,z,NULL)) {
+  GtkTextIter before=*a;gboolean left=gtk_text_iter_backward_char(&before);
+  if(!whole || ((!left || !identifier_char(gtk_text_iter_get_char(&before))) &&
+     (gtk_text_iter_is_end(z) || !identifier_char(gtk_text_iter_get_char(z))))) return TRUE;
+  start=backwards ? *a : *z;
+ }
+ return FALSE;
+}
 static void find_text(Merge *m,gboolean backwards) {
  const gchar *query=gtk_entry_get_text(GTK_ENTRY(m->find_entry));if(!*query) { gtk_label_set_text(GTK_LABEL(m->find_status),"Enter search text.");return; }
  int side=gtk_combo_box_get_active(GTK_COMBO_BOX(m->find_side));
@@ -143,11 +165,12 @@ static void find_text(Merge *m,gboolean backwards) {
  else gtk_text_buffer_get_iter_at_mark(buffer,&start,gtk_text_buffer_get_insert(buffer));
  GtkTextSearchFlags flags=GTK_TEXT_SEARCH_TEXT_ONLY;
  if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->find_case))) flags|=GTK_TEXT_SEARCH_CASE_INSENSITIVE;
- gboolean found=backwards ? gtk_text_iter_backward_search(&start,query,flags,&a,&z,NULL) : gtk_text_iter_forward_search(&start,query,flags,&a,&z,NULL);
- gboolean wrapped=!found;
- if(!found) {
+ gboolean whole=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->find_word));
+ gboolean found=search_match(start,query,flags,backwards,whole,&a,&z);
+ gboolean wrapped=!found && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->find_wrap));
+ if(wrapped) {
   if(backwards) gtk_text_buffer_get_end_iter(buffer,&start);else gtk_text_buffer_get_start_iter(buffer,&start);
-  found=backwards ? gtk_text_iter_backward_search(&start,query,flags,&a,&z,NULL) : gtk_text_iter_forward_search(&start,query,flags,&a,&z,NULL);
+  found=search_match(start,query,flags,backwards,whole,&a,&z);
  }
  if(found) {
   gtk_text_buffer_select_range(buffer,&a,&z);gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(m->views[side]),&a,0.1,TRUE,0,0.5);
@@ -591,6 +614,8 @@ static Merge *merge_new(GtkWidget *parent) {
  m->find_side=gtk_combo_box_text_new();gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->find_side),"Left");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->find_side),"Right");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->find_side),"Result");gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),0);gtk_box_pack_start(GTK_BOX(find),m->find_side,FALSE,FALSE,0);
  m->find_entry=gtk_search_entry_new();gtk_entry_set_placeholder_text(GTK_ENTRY(m->find_entry),"Find text — Ctrl+F, F3 / Shift+F3");gtk_box_pack_start(GTK_BOX(find),m->find_entry,TRUE,TRUE,0);
  m->find_case=gtk_check_button_new_with_label("Match case");gtk_box_pack_start(GTK_BOX(find),m->find_case,FALSE,FALSE,0);
+ m->find_word=gtk_check_button_new_with_label("Whole words only");gtk_box_pack_start(GTK_BOX(find),m->find_word,FALSE,FALSE,0);
+ m->find_wrap=gtk_check_button_new_with_label("Wrap around");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->find_wrap),TRUE);gtk_box_pack_start(GTK_BOX(find),m->find_wrap,FALSE,FALSE,0);
  m->find_previous=button(find,"Find previous",G_CALLBACK(find_clicked),m);m->find_next=button(find,"Find next",G_CALLBACK(find_clicked),m);
  m->find_status=gtk_label_new("");gtk_box_pack_start(GTK_BOX(find),m->find_status,FALSE,FALSE,0);
  g_signal_connect(m->find_entry,"activate",G_CALLBACK(find_activate),m);g_signal_connect(m->find_entry,"key-press-event",G_CALLBACK(key),m);
