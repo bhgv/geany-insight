@@ -10,6 +10,6 @@
    <text x="33" y="174" fill="#855798">←</text><text x="70" y="174">legacy.lua</text><text x="360" y="174">Left only</text><text x="586" y="174">Review in the list</text>
   </g>
   <text x="24" y="219" font-size="16">Worker: enumerate → known types → compare · UI: filter → open pair</text>
-  <text x="24" y="244" font-size="14">Options and appearance are remembered. Restore never starts a scan.</text>
+  <text x="24" y="244" font-size="14">File action: confirm → worker → stale snapshot → successful refresh.</text>
  </g>
 </svg>

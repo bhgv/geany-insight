@@ -980,3 +980,27 @@ Case-sensitive glob masks separated by semicolons; * and ? match relative paths 
 Show only known file types	Только известные типы файлов
 Known file type definitions are unavailable.	Определения известных типов файлов недоступны.
 Invalid directory comparison file type snapshot.	Некорректный снимок типов файлов для сравнения каталогов.
+Copy left → right…	Копировать слева направо…
+Copy right → left…	Копировать справа налево…
+Trash left file…	Левый файл в корзину…
+Trash right file…	Правый файл в корзину…
+Snapshot may be stale; refresh before file operations.	Снимок мог устареть; обновите его перед файловыми операциями.
+File operation completed.	Операция над файлом завершена.
+File operation failed.	Операция над файлом не выполнена.
+Close documents using either operation path before changing files.	Перед операцией закройте документы, использующие любой из двух путей.
+Move comparison file to Trash	Перенести файл сравнения в корзину
+Copy comparison file	Копировать файл сравнения
+Copy file	Копировать файл
+Move this regular file to the system trash? Permanent deletion is never used.	Перенести этот обычный файл в системную корзину? Безвозвратное удаление не используется.
+Replace the existing destination with the source file bytes?	Заменить существующее назначение байтами файла-источника?
+Create the missing destination from the source file bytes?	Создать отсутствующее назначение из байтов файла-источника?
+Source file	Файл-источник
+Destination file	Файл назначения
+Comparison changed; reopen the file operation.	Сравнение изменилось; откройте операцию над файлом заново.
+Cancel file operation	Отменить операцию над файлом
+Changing comparison file…	Изменение файла сравнения…
+The selected file changed; refresh the directory comparison.	Выбранный файл изменился; обновите сравнение каталогов.
+File operations require existing parent directories without symbolic links.	Для операций нужны существующие родительские каталоги без символических ссылок.
+Choose an identifiable regular file from a fresh directory comparison.	Выберите обычный файл с определимым идентификатором из свежего сравнения каталогов.
+The comparison sides refer to the same file.	Обе стороны сравнения указывают на один файл.
+Directory copy is limited to 64 MiB per file.	Копирование ограничено 64 МиБ на файл.

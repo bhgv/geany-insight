@@ -69,9 +69,9 @@ The context menu also copies a relative display path or the **visible list**.
 Copy visible list preserves the displayed sort/filter and produces UTF-8 TSV with
 path, status and left/right metadata. Backslashes, tabs and line breaks inside
 fields are escaped as `\\`, `\t`, `\r`, `\n`. It is a human-readable report,
-not a lossless native-filename manifest. Snapshot rows are read-only. Copying or
-deleting files between directories, path variables,
-backup comparison remain future work.
+not a lossless native-filename manifest. The list remains a snapshot; regular-file
+copy and trash commands are described below. Path variables and backup comparison
+remain future work.
 
 ![Production Directory Compare window in an isolated Linux GTK fixture](media/directory-compare.jpg)
 
@@ -128,3 +128,17 @@ Closing a comparison remembers its input paths, comparison method, recursion/hid
 The appearance dialog below is captured from the production GTK widgets in the isolated Linux fixture (editor host stubs).
 
 ![Directory list appearance](media/directory-appearance.jpg)
+
+### Copy and Trash from the completed snapshot
+
+Select a regular-file row and use **Copy left → right…**, **Copy right → left…**, **Trash left file…** or **Trash right file…** in the toolbar or context menu. A copy can create a missing file or replace an existing regular file. The confirmation shows the source and destination taken from the completed snapshot, even if the directory entry fields have been edited. Cancel is the default. Cancelling this dialog changes nothing.
+
+Both operation paths must be closed in the editor, including unmodified buffers. The guard is checked again after confirmation. During the worker task this window is modal, the other actions are disabled, and **Cancel file operation** requests cancellation. Closing the window cancels its task. Cancellation cannot undo an atomic replacement that has already completed. After every attempt, including a failure or cancellation, the old list is marked stale and further file operations are disabled until a successful Scan / Refresh. Existing comparison rows are never presented as an updated filesystem result.
+
+Copying reads at most 64 MiB of exact source bytes, including binary data. Text normalization options do not alter the copied bytes. Source identity, etag, size and timestamps are rechecked before and after reading. An existing destination needs its original identity and etag; GIO conditional replacement prevents silently replacing a different snapshot version. A previously missing destination is staged in a private sibling temporary file and moved without overwrite or recursive fallback. Source and destination referring to the same file are rejected. Roots and parent components must remain real directories; missing parents are not created, and folder, symlink and special-file operations are unavailable. Parent checks and etags do not provide a filesystem lock.
+
+These are content operations: ownership, permissions, executable bits and timestamps are not copied. GIO private-file creation is requested for newly written/replaced content; there is no automatic backup or undo. Trash uses the system backend and never falls back to permanent deletion. If that backend refuses the operation, an error is shown and the source is retained.
+
+The confirmation below is captured from the real production widgets in the isolated Linux GTK fixture, with editor-host callbacks supplied by the test.
+
+![Confirm a directory file operation](media/directory-operation.jpg)
