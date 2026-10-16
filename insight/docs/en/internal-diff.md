@@ -270,3 +270,13 @@ The list contains up to 5000 matches with one-based logical lines/columns and te
 Line, Column and Text preview checkboxes control table visibility and copied fields. **Copy source path** adds the completed comparison's source path to copied output, or the pane name for Result. **Copy visible matches** copies all visible rows in their current order using English TSV headers File/Line/Column/Text for enabled fields. Tabs, CR, LF and backslashes in fields are escaped as `\t`, `\r`, `\n`, `\\`. Excerpts are limited to 120 characters and already flatten line endings to spaces; copied excerpts are not full source text. No selected fields or output exceeding 4 MiB leaves the clipboard unchanged.
 
 **Edit source file** opens the selected source match at its line in the main editor. It is available only for loaded Left/Right sources, checks stale positions and writes no files. Use Go to match for Result. The four format flags persist with window preferences; filter, sort, query, paths and result rows are not persisted. The list capture above shows filtering, sorting and a hidden column.
+
+### Match context and keyboard inspection
+
+Selecting a match shows read-only context from the search snapshot below the list, with the exact match highlighted. The preview includes up to two preceding lines and two following lines, capped at 4096 Unicode characters; very long lines or matches may be clipped. Selection, filtering and sorting do not move the comparison caret or change merge history. Empty selection clears the preview.
+
+**Copy selected match** copies one selected row using the same TSV fields and escaping as Copy visible matches. It is unavailable without a selected row. **Ctrl+F** focuses the result filter; **Down** from the filter selects the first visible row and focuses the list. **F3 / Shift+F3** cycle through visible rows in the current sort order, wrapping at the ends without leaving the dialog. **Ctrl+Enter / Ctrl+L** goes to the selected exact match. Preview text stays at the captured snapshot if the result changes while the dialog is open; stale navigation is rejected. Close leaves the comparison caret unchanged.
+
+![Match inspection and guarded navigation](../media/search-preview.svg)
+
+Reference: [Source Insight 4 Search Results Window](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Search_Results_Window.htm). This is an adaptation for local comparison panes. Editable search buffers, bidirectional source links and links that track arbitrary edits are separate work.

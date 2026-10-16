@@ -464,3 +464,7 @@ Added Load Search String, forward/backward identifier search (Ctrl+F3/Ctrl+Shift
 ### 2026-10-16 — search output format, filter, clipboard and source editing
 
 Added Unicode case-insensitive excerpt filtering, numeric/text column sorting, persistent output-field flags, visible-row TSV copy with escaped fields and a 4 MiB all-or-nothing limit. Four whitelisted booleans persist; query/filter/sort/results/paths do not. Edit source file routes the selected filtered/sorted match through the native opener using completed native source paths and one-based match lines. Both navigation modes retain stale-serial/busy guards. GTK/UBSan verifies filter/sort/copy order, hidden/no fields, empty-filter results, Unicode, TSV escaping, size rejection, exact navigation and preference round trip. Native Linux fixture filters/copies a right-side match, opens its source and verifies persisted field settings. Reference: [Search Results Options](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Search_Results_Options.htm).
+
+### Comparison search inspection (2026-10-17)
+
+Local pane results now provide snapshot context with exact highlighting (4096 Unicode characters maximum), single-row TSV copy, filter/list focus and cyclic navigation through sorted visible matches. Ctrl+Enter retains stale-snapshot guards. This extends comparison-pane inspection; editable project search buffers and bidirectional, edit-tracking Source Links from the Source Insight guide remain open. See [controls and diagram](internal-diff.md#match-context-and-keyboard-inspection).

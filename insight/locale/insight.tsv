@@ -1090,3 +1090,6 @@ Visible matches: %u	Видимых совпадений: %u
 Copied visible matches: %u	Скопировано видимых совпадений: %u
 Select at least one output field.	Выберите хотя бы одно поле вывода.
 Copy limit: 4 MiB. Clipboard unchanged.	Предел копирования: 4 МиБ. Буфер обмена не изменён.
+Copy selected match	Копировать выбранное совпадение
+Copied selected matches: %u	Скопировано выбранных совпадений: %u
+Match context (search snapshot)	Контекст совпадения (снимок поиска)

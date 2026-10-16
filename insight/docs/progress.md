@@ -1966,3 +1966,7 @@ core limits. Five modified C sources compiled with -Werror. Windows GUI remains
 unverified. Include when adding to project and remaining File Type Options are
 open. Reference:
 https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/File_Type_Options.htm
+
+## 2026-10-17 — comparison search inspection
+
+Added read-only snapshot context with exact match highlighting, selected-row TSV copy and result-dialog keyboard navigation (Ctrl+F, Down from filter, F3/Shift+F3, Ctrl+Enter). Context is bounded to 4096 Unicode characters and independent of the live result buffer. Stale navigation remains rejected. Extended the production-widget fixture for UTF-8/CRLF, current sorted/filtered rows, clipboard, empty selection, snapshot changes and pathological long lines. Added RU/EN controls and an installed SVG diagram. Validation results are recorded after the checks complete.

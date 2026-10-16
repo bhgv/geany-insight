@@ -226,6 +226,34 @@ static gboolean output_response(gpointer data) {
  const gchar *capture=g_getenv("INSIGHT_DIFF_SEARCH_CAPTURE");if(capture && !action->source) { gint64 until=g_get_monotonic_time()+200000;while(g_get_monotonic_time()<until) { flush();g_usleep(1000); }GdkWindow *window=gtk_widget_get_window(dialog);GdkPixbuf *pixbuf=gdk_pixbuf_get_from_window(window,0,0,gdk_window_get_width(window),gdk_window_get_height(window));g_assert_true(gdk_pixbuf_save(pixbuf,capture,"jpeg",NULL,"quality","88",NULL));g_object_unref(pixbuf); }
  gtk_dialog_response(GTK_DIALOG(dialog),action->source ? GTK_RESPONSE_YES : GTK_RESPONSE_APPLY);return G_SOURCE_REMOVE;
 }
+static void output_key(GtkWidget *dialog,guint key,guint modifiers) {
+ GdkEventKey event={0};event.type=GDK_KEY_PRESS;event.keyval=key;event.state=modifiers;gboolean handled=FALSE;g_signal_emit_by_name(dialog,"key-press-event",&event,&handled);g_assert_true(handled);
+}
+static guint output_line(GtkWidget *tree) {
+ GtkTreeIter iter;GtkTreeModel *model;g_assert_true(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)),&model,&iter));guint line;gtk_tree_model_get(model,&iter,2,&line,-1);return line;
+}
+static gboolean preview_response(gpointer data) {
+ Merge *m=data;GList *windows=gtk_window_list_toplevels();GtkWidget *dialog=NULL;for(GList *p=windows;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-diff-search-results")) dialog=p->data;g_list_free(windows);g_assert_nonnull(dialog);
+ GtkWidget *tree=named(dialog,"insight-diff-search-results-list"),*filter=named(dialog,"insight-diff-search-filter"),*view=named(dialog,"insight-diff-search-preview"),*copy=named(dialog,"insight-diff-search-copy-selected");
+ GtkTextBuffer *preview=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));g_assert_false(gtk_text_view_get_editable(GTK_TEXT_VIEW(view)));gchar *text=contents(preview);g_assert_cmpstr(text,==,"before\r\nfoo ёж\r\ncontext\nfoo other\n");g_free(text);
+ GtkTextIter it;gtk_text_buffer_get_iter_at_offset(preview,&it,8);g_assert_true(gtk_text_iter_has_tag(&it,gtk_text_tag_table_lookup(gtk_text_buffer_get_tag_table(preview),"match")));
+ output_key(dialog,GDK_KEY_F3,0);g_assert_cmpuint(output_line(tree),==,4);output_key(dialog,GDK_KEY_F3,0);g_assert_cmpuint(output_line(tree),==,2);output_key(dialog,GDK_KEY_F3,GDK_SHIFT_MASK);g_assert_cmpuint(output_line(tree),==,4);
+ gtk_button_clicked(GTK_BUTTON(copy));text=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));g_assert_cmpstr(text,==,"Line\tColumn\tText\n4\t1\tfoo other\n");g_free(text);
+ gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(gtk_tree_view_get_model(GTK_TREE_VIEW(tree))),2,GTK_SORT_DESCENDING);output_key(dialog,GDK_KEY_F3,0);g_assert_cmpuint(output_line(tree),==,2);output_key(dialog,GDK_KEY_F3,0);g_assert_cmpuint(output_line(tree),==,4);
+ GtkTextIter caret;gtk_text_buffer_get_iter_at_mark(result(m),&caret,gtk_text_buffer_get_insert(result(m)));g_assert_cmpint(gtk_text_iter_get_offset(&caret),==,0);
+ output_key(dialog,GDK_KEY_f,GDK_CONTROL_MASK);g_assert_true(gtk_window_get_focus(GTK_WINDOW(dialog))==filter);gtk_entry_set_text(GTK_ENTRY(filter),"missing");g_assert_false(gtk_widget_get_sensitive(copy));g_assert_cmpint(gtk_text_buffer_get_char_count(preview),==,0);output_key(dialog,GDK_KEY_F3,0);
+ gtk_entry_set_text(GTK_ENTRY(filter),"ёж");output_key(dialog,GDK_KEY_Down,0);g_assert_true(gtk_window_get_focus(GTK_WINDOW(dialog))==tree);g_assert_cmpuint(output_line(tree),==,2);
+ /* Snapshot preview survives edits while stale navigation remains rejected. */
+ gtk_text_buffer_set_text(result(m),"changed while searching",-1);output_key(dialog,GDK_KEY_F3,0);text=contents(preview);g_assert_nonnull(strstr(text,"foo ёж"));g_free(text);output_key(dialog,GDK_KEY_Return,GDK_CONTROL_MASK);return G_SOURCE_REMOVE;
+}
+static gboolean preview_limit_response(gpointer data) {
+ (void)data;GList *windows=gtk_window_list_toplevels();GtkWidget *dialog=NULL;for(GList *p=windows;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-diff-search-results")) dialog=p->data;g_list_free(windows);g_assert_nonnull(dialog);
+ GtkTextBuffer *preview=gtk_text_view_get_buffer(GTK_TEXT_VIEW(named(dialog,"insight-diff-search-preview")));g_assert_cmpint(gtk_text_buffer_get_char_count(preview),<=,4096);gchar *text=contents(preview);g_assert_nonnull(strstr(text,"foo"));g_free(text);gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_CANCEL);return G_SOURCE_REMOVE;
+}
+static void search_preview_test(void) {
+ Merge *m=merge_new(NULL);m->search_fields[0]=FALSE;for(guint i=1;i<4;i++) m->search_fields[i]=TRUE;gtk_text_buffer_set_text(result(m),"before\r\nfoo ёж\r\ncontext\nfoo other\nafter\n",-1);gtk_entry_set_text(GTK_ENTRY(m->find_entry),"foo");GtkTextIter caret;gtk_text_buffer_get_start_iter(result(m),&caret);gtk_text_buffer_place_cursor(result(m),&caret);g_timeout_add(100,preview_response,m);find_all(m,2);assert_text(m,"changed while searching");g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(m->find_status)),==,"Text changed; run Find all again.");
+ GString *long_line=g_string_new(NULL);for(guint i=0;i<10000;i++) g_string_append(long_line,"я");g_string_append(long_line,"foo");for(guint i=0;i<10000;i++) g_string_append(long_line,"я");gtk_text_buffer_set_text(result(m),long_line->str,-1);g_string_free(long_line,TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->find_word),FALSE);guint history=m->history->len;g_timeout_add(100,preview_limit_response,NULL);find_all(m,2);g_assert_cmpuint(m->history->len,==,history);gtk_widget_destroy(m->window);flush();
+}
 static void search_output_test(void) {
  GString *escaped=g_string_new(NULL);tsv_field(escaped,"a\tb\nc\\d\r");g_assert_cmpstr(escaped->str,==,"a\\tb\\nc\\\\d\\r");g_string_free(escaped,TRUE);
  InsightDiffOpen previous=source_opener;source_opener=source_opened;
@@ -241,7 +269,7 @@ static void output_limit_test(void) {
  Merge *m=merge_new(NULL);for(guint i=0;i<4;i++) m->search_fields[i]=TRUE;GString *text=g_string_new(NULL);for(guint i=0;i<5000;i++) g_string_append(text,"foo\n");gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[0])),text->str,-1);g_string_free(text,TRUE);m->loaded_paths[0]=g_strnfill(1024,'a');gtk_entry_set_text(GTK_ENTRY(m->find_entry),"foo");g_timeout_add(100,output_limit_response,NULL);find_all(m,0);gtk_widget_destroy(m->window);flush();
 }
 int main(int argc,char **argv) {
- g_setenv("GSETTINGS_BACKEND","memory",TRUE);gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();case_test();line_edit_test();history_test();export_test();whitespace_test();search_actions_test();search_output_test();output_limit_test();insight_diff_set_source_opener(source_opened);
+ g_setenv("GSETTINGS_BACKEND","memory",TRUE);gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();case_test();line_edit_test();history_test();export_test();whitespace_test();search_actions_test();search_output_test();search_preview_test();output_limit_test();insight_diff_set_source_opener(source_opened);
  GError *error=NULL;gchar *dir=g_dir_make_tmp("insight-diff-XXXXXX",&error);g_assert_no_error(error);
  gchar *left=g_build_filename(dir,"left.txt",NULL),*right=g_build_filename(dir,"right.txt",NULL);
  const char *a="start\nleft\ncommon\nlast left\nend\n",*b="start\nright\ncommon\nlast right\nextra\nend\n";
