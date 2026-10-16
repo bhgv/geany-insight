@@ -47,6 +47,7 @@
 #include "geanyobject.h"
 #include "highlighting.h"
 #include "insight-workbench.h"
+#include "insight-languages.h"
 #include "keybindings.h"
 #include "main.h"
 #include "navqueue.h"
