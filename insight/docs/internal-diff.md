@@ -163,3 +163,7 @@ Repeated-comparison regression: list-selection signals are ignored while source
 text, marks and list rows are being replaced. This prevents old selection IDs
 from reading the new mark array before it is populated. The randomized batch
 fixture exercises 150 successive comparisons in the same production window.
+
+## Display options and scaling
+
+**Options… / Ctrl+Q** opens a single File Compare display dialog. Apply commits the controls together; Cancel preserves the current view. **Mono Font View**, **Vertical scrollbars** and **Scale (%)** affect all three panes. Scale is bounded to 50–250% of a 10-point base; Ctrl+mouse wheel changes it by ten points. Font changes also update the line-number gutters. Display changes preserve source bytes, the merge result and Undo history.

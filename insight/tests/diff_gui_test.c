@@ -33,6 +33,17 @@ static void random_batches(const gchar *left,const gchar *right) {
  }
  g_rand_free(random);gtk_widget_destroy(m->window);flush();
 }
+static GtkWidget *named(GtkWidget *widget,const gchar *name) {
+ if(!g_strcmp0(gtk_widget_get_name(widget),name)) return widget;
+ if(GTK_IS_CONTAINER(widget)) { GList *children=gtk_container_get_children(GTK_CONTAINER(widget));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL;
+}
+static gboolean options_response(gpointer data) {
+ GList *windows=gtk_window_list_toplevels();GtkWidget *dialog=NULL;
+ for(GList *p=windows;p && !dialog;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-diff-options")) dialog=p->data;
+ g_list_free(windows);g_assert_nonnull(dialog);
+ gtk_spin_button_set_value(GTK_SPIN_BUTTON(named(dialog,"insight-diff-options-zoom")),130);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dialog,"insight-diff-options-1")),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dialog,"insight-diff-options-2")),FALSE);
+ gtk_dialog_response(GTK_DIALOG(dialog),GPOINTER_TO_INT(data));return G_SOURCE_REMOVE;
+}
 int main(int argc,char **argv) {
  gtk_init(&argc,&argv);
  GError *error=NULL;gchar *dir=g_dir_make_tmp("insight-diff-XXXXXX",&error);g_assert_no_error(error);
@@ -71,6 +82,15 @@ int main(int argc,char **argv) {
  for(int i=0;i<3;i++) g_assert_cmpint(gtk_text_view_get_border_window_size(GTK_TEXT_VIEW(m->views[i]),GTK_TEXT_WINDOW_LEFT),==,0);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->numbers),TRUE);flush();
  for(int i=0;i<3;i++) g_assert_cmpint(gtk_text_view_get_border_window_size(GTK_TEXT_VIEW(m->views[i]),GTK_TEXT_WINDOW_LEFT),>,0);
+ guint display_history=m->position;gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->zoom),120);flush();
+ for(gint i=0;i<3;i++) { PangoFontDescription *font=NULL;gtk_style_context_get(gtk_widget_get_style_context(m->views[i]),GTK_STATE_FLAG_NORMAL,"font",&font,NULL);g_assert_cmpint(pango_font_description_get_size(font),==,12*PANGO_SCALE);pango_font_description_free(font); }
+ GdkEventScroll wheel={0};wheel.state=GDK_CONTROL_MASK;wheel.direction=GDK_SCROLL_SMOOTH;wheel.delta_y=-1;g_assert_true(zoom_scroll(m->views[0],&wheel,m));g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->zoom)),==,130);wheel.state=0;g_assert_false(zoom_scroll(m->views[0],&wheel,m));
+ gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->zoom),300);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->zoom)),==,250);gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->zoom),100);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->vertical),FALSE);for(gint i=0;i<3;i++) { GtkPolicyType h,v;gtk_scrolled_window_get_policy(GTK_SCROLLED_WINDOW(m->scrollers[i]),&h,&v);g_assert_cmpint(v,==,GTK_POLICY_NEVER); }gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->vertical),TRUE);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->mono),FALSE);g_assert_false(gtk_text_view_get_monospace(GTK_TEXT_VIEW(m->views[0])));gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->mono),TRUE);
+ g_idle_add(options_response,GINT_TO_POINTER(GTK_RESPONSE_CANCEL));view_options(NULL,m);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->zoom)),==,100);g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->numbers)));
+ g_idle_add(options_response,GINT_TO_POINTER(GTK_RESPONSE_APPLY));view_options(NULL,m);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->zoom)),==,130);g_assert_false(gtk_widget_get_visible(m->list_scroll));g_assert_false(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->numbers)));g_assert_cmpuint(m->position,==,display_history);assert_text(m,a);
+ gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->zoom),100);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->numbers),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->list_toggle),TRUE);
  const gchar *capture=g_getenv("INSIGHT_DIFF_CAPTURE");
  if(capture) {
   gtk_entry_set_text(GTK_ENTRY(m->find_entry),"right");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->find_case),FALSE);
