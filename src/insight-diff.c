@@ -199,7 +199,7 @@ static guint map_line(const gchar *text,gsize *offset,guint *line,gsize target) 
 static void map_build(Merge *m) {
  for(gint side=0;side<2;side++) {
   g_clear_pointer(&m->map_blocks[side],g_array_unref);m->map_blocks[side]=g_array_new(FALSE,FALSE,sizeof(MapBlock));gsize offset=0;guint line=0;
-  for(gsize i=0;i<m->diff.count;i++) { InsightDiffHunk *h=&m->diff.hunks[i];MapBlock block;block.begin=map_line(m->sources[side],&offset,&line,side ? h->b_begin : h->a_begin);block.end=map_line(m->sources[side],&offset,&line,side ? h->b_end : h->a_end);g_array_append_val(m->map_blocks[side],block); }
+  for(gsize i=0;i<m->diff.count;i++) { InsightDiffHunk *h=&m->diff.hunks[i];MapBlock block;block.begin=map_line(m->sources[side],&offset,&line,side ? h->b_begin : h->a_begin);block.end=map_line(m->sources[side],&offset,&line,side ? h->b_end : h->a_end);gsize begin=side ? h->b_begin : h->a_begin,end=side ? h->b_end : h->a_end;if(end>begin && m->sources[side][end-1]!='\r' && m->sources[side][end-1]!='\n') block.end++;g_array_append_val(m->map_blocks[side],block); }
   m->map_lines[side]=map_line(m->sources[side],&offset,&line,strlen(m->sources[side]))+1;
  }
  map_redraw(m);

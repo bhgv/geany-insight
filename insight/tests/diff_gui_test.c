@@ -30,7 +30,7 @@ static void random_batches(const gchar *left,const gchar *right) {
  gtk_entry_set_text(GTK_ENTRY(m->paths[0]),left);gtk_entry_set_text(GTK_ENTRY(m->paths[1]),right);
  for(guint i=0;i<150;i++) {
   gchar *a=random_text(random),*b=random_text(random);g_assert_true(g_file_set_contents(left,a,-1,&error));g_assert_no_error(error);g_assert_true(g_file_set_contents(right,b,-1,&error));g_assert_no_error(error);
-  compare(NULL,m);wait_comparison(m);for(guint side=0;side<2;side++) g_assert_cmpuint(m->map_lines[side],==,(guint)gtk_text_buffer_get_line_count(gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]))));assert_text(m,a);take_all(m->take_all[1],m);assert_text(m,b);undo(NULL,m);assert_text(m,a);
+  compare(NULL,m);wait_comparison(m);for(guint side=0;side<2;side++) { g_assert_cmpuint(m->map_lines[side],==,(guint)gtk_text_buffer_get_line_count(gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]))));for(gsize k=0;k<m->diff.count;k++) { InsightDiffHunk *h=&m->diff.hunks[k];MapBlock block=g_array_index(m->map_blocks[side],MapBlock,k);if((side ? h->b_end>h->b_begin : h->a_end>h->a_begin)) g_assert_cmpuint(block.end,>,block.begin);g_assert_cmpuint(block.end,<=,m->map_lines[side]); } }assert_text(m,a);take_all(m->take_all[1],m);assert_text(m,b);undo(NULL,m);assert_text(m,a);
   g_free(a);g_free(b);
  }
  g_rand_free(random);gtk_widget_destroy(m->window);flush();
