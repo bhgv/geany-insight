@@ -31,6 +31,7 @@
 #endif
 
 #include "keybindings.h"
+#include "insight-paste.h"
 #include "insight-template-fields.h"
 
 #include "app.h"
@@ -1996,11 +1997,11 @@ static gboolean cb_func_clipboard_action(guint key_id)
 			on_paste1_activate(NULL, NULL);
 			break;
 		case GEANY_KEYS_CLIPBOARD_COPYLINE:
-			if (IS_SCINTILLA(focusw))
+			if (IS_SCINTILLA(focusw) && !insight_line_clipboard(SCINTILLA(focusw), INSIGHT_COPY_LINE))
 				sci_send_command(SCINTILLA(focusw), SCI_LINECOPY);
 			break;
 		case GEANY_KEYS_CLIPBOARD_CUTLINE:
-			if (IS_SCINTILLA(focusw))
+			if (IS_SCINTILLA(focusw) && !insight_line_clipboard(SCINTILLA(focusw), INSIGHT_CUT_LINE))
 				sci_send_command(SCINTILLA(focusw), SCI_LINECUT);
 			break;
 	}
@@ -2723,3 +2724,4 @@ void keybindings_free_group(GeanyKeyGroup *group)
 {
 	g_ptr_array_remove_fast(keybinding_groups, group);
 }
+

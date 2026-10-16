@@ -364,3 +364,5 @@ EXTRA_DIST += insight/desktop/intelligent_paste.c insight/desktop/intelligent_pa
 dist_insightdocmedia_DATA += insight/docs/media/intelligent-paste.svg
 
 dist_insightdocmedia_DATA += insight/docs/media/line-operations.svg
+
+dist_insightdocmedia_DATA += insight/docs/media/line-clipboard.svg

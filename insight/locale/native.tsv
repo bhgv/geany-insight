@@ -1493,3 +1493,11 @@ Drag Line Down	Переместить строки вниз
 Drag Line Up More	Переместить строки выше
 Drag Line Down More	Переместить строки ниже
 Move up to five lines, stopping at the document boundary	Переместить до пяти строк, останавливаясь у границы документа
+Copy Line	Копировать строки
+Cut Line	Вырезать текущую строку
+Copy Line Right	Копировать строку справа
+Cut Line Left	Вырезать строку слева
+Cut Line Right	Вырезать строку справа
+Cut Selection or Paste	Вырезать выделение или вставить
+Line clipboard operation exceeds 1 MiB.	Операция со строками превышает 1 МиБ.
+Line clipboard operation requires complete UTF-8 text without NUL bytes.	Операция со строками требует целого текста UTF-8 без NUL-байтов.

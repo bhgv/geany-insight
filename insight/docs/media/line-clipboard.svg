@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="300" viewBox="0 0 720 300">
+<rect width="720" height="300" rx="10" fill="#f3f6fa"/>
+<g font-family="sans-serif" fill="#24364b"><text x="20" y="30" font-size="18" font-weight="bold">Line clipboard commands</text>
+<rect x="20" y="50" width="680" height="85" rx="6" fill="#e3eaf4"/>
+<rect x="48" y="68" width="185" height="30" rx="3" fill="#c4d9f3"/><rect x="237" y="68" width="195" height="30" rx="3" fill="#bee2ca"/>
+<g font-family="monospace" font-size="16"><text x="62" y="89">prefix</text><text x="251" y="89">suffix</text><text x="445" y="89">CRLF</text></g>
+<path d="M235 63v40" stroke="#b24d44" stroke-width="3"/>
+<text x="48" y="121" font-size="12">Cut Line Left</text><text x="251" y="121" font-size="12">Copy / Cut Line Right</text><text x="445" y="121" font-size="12">EOL stays in the document</text>
+<rect x="20" y="152" width="325" height="92" rx="6" fill="#e0eafa"/>
+<text x="34" y="177" font-size="14">Copy Line → repeat → repeat</text><text x="34" y="205" font-size="13">1 line → 2 lines → 3 lines</text><text x="34" y="229" font-size="12">Whole-line selection grows downward</text>
+<rect x="365" y="152" width="335" height="92" rx="6" fill="#dceee3"/>
+<text x="379" y="177" font-size="14">Cut Selection or Paste</text><text x="379" y="205" font-size="13">Selection → Cut · Caret → Paste</text><text x="379" y="229" font-size="12">Same command · Normal Undo / Redo</text>
+<text x="20" y="277" font-size="12">Copy works in read-only · Empty ranges preserve clipboard · UTF-8 boundaries checked</text>
+</g></svg>

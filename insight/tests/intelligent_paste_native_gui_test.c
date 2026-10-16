@@ -12,7 +12,7 @@
 static gchar *directory, *profile, *source, *denied;
 static GeanyDocument *doc;
 static guint phase;
-static gboolean restarted;
+static gboolean restarted, capture_started, capture_done;
 static GtkWidget *option, *window;
 static const gchar *block = "    first();\n        second();\n";
 static const gchar *base = "void f() {\n    target();\n}\n";
@@ -104,11 +104,93 @@ static void check_line_moves(void)
     line_action("drag-line-up");text_is("top\n    move\n");
     SEND(doc->editor->sci, SCI_SETSELECTIONMODE, SC_SEL_STREAM, 0);
 }
+static void clipboard_is(const gchar *expected)
+{
+    gchar *text = gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));
+    g_assert_cmpstr(text, ==, expected);g_free(text);
+}
+static void clipboard_set(const gchar *text)
+{
+    gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), text, -1);
+}
+static void check_line_clipboard(void)
+{
+    const gchar *original = "one\r\ntwo\r\nthree";
+    reset(original, 2);
+    keybindings_send_command(GEANY_KEY_GROUP_CLIPBOARD, GEANY_KEYS_CLIPBOARD_COPYLINE);
+    clipboard_is("one\r\n");text_is(original);
+    g_assert_cmpint(sci_get_selection_start(doc->editor->sci), ==, 0);
+    g_assert_cmpint(sci_get_selection_end(doc->editor->sci), ==, 5);
+    line_action("copy-line");clipboard_is("one\r\ntwo\r\n");
+    line_action("copy-line");clipboard_is(original);
+    line_action("copy-line");clipboard_is(original);
+    g_assert_false(SEND(doc->editor->sci, SCI_CANUNDO, 0, 0));
+    reset("one\ntwo\nthree\n", 0);SEND(doc->editor->sci, SCI_SETSEL, 6, 1);
+    line_action("copy-line");clipboard_is("one\ntwo\n");
+    line_action("copy-line");clipboard_is("one\ntwo\nthree\n");
+    original = "αβ\tПривет();\r\nnext\r\n";
+    gint caret = strlen("αβ\tПри");
+    reset(original, caret);SEND(doc->editor->sci, SCI_SETSEL, 0, caret);
+    line_action("copy-line-right");clipboard_is("вет();");text_is(original);
+    g_assert_cmpint(SEND(doc->editor->sci, SCI_GETANCHOR, 0, 0), ==, 0);
+    g_assert_cmpint(sci_get_current_position(doc->editor->sci), ==, caret);
+    g_assert_false(SEND(doc->editor->sci, SCI_CANUNDO, 0, 0));
+    line_action("cut-line-right");clipboard_is("вет();");text_is("αβ\tПри\r\nnext\r\n");
+    undo();text_is(original);
+    keybindings_send_command(GEANY_KEY_GROUP_EDITOR, GEANY_KEYS_EDITOR_REDO);
+    text_is("αβ\tПри\r\nnext\r\n");
+    reset(original, caret);line_action("cut-line-left");clipboard_is("αβ\tПри");
+    text_is("вет();\r\nnext\r\n");undo();text_is(original);
+    reset("one\ntwo\nthree\n", 0);SEND(doc->editor->sci, SCI_SETSEL, 0, 5);
+    keybindings_send_command(GEANY_KEY_GROUP_CLIPBOARD, GEANY_KEYS_CLIPBOARD_CUTLINE);
+    clipboard_is("two\n");text_is("one\nthree\n");undo();text_is("one\ntwo\nthree\n");
+    reset("one\nlast", 6);line_action("cut-line");clipboard_is("last");text_is("one\n");
+    undo();text_is("one\nlast");
+    reset("a\n\nb", 2);line_action("cut-line");clipboard_is("\n");text_is("a\nb");undo();text_is("a\n\nb");
+    clipboard_set("unchanged");reset("abc\n", 0);line_action("cut-line-left");clipboard_is("unchanged");
+    SEND(doc->editor->sci, SCI_SETSEL, 3, 3);
+    line_action("copy-line-right");line_action("cut-line-right");clipboard_is("unchanged");text_is("abc\n");
+    reset("abc\n", 4);line_action("copy-line");clipboard_is("unchanged");
+    g_assert_false(SEND(doc->editor->sci, SCI_CANUNDO, 0, 0));
+    reset("abc\n", 1);SEND(doc->editor->sci, SCI_SETREADONLY, TRUE, 0);
+    line_action("cut-line");line_action("cut-line-left");line_action("cut-line-right");
+    line_action("cut-selection-or-paste");clipboard_is("unchanged");text_is("abc\n");
+    line_action("copy-line-right");clipboard_is("bc");
+    line_action("copy-line");clipboard_is("abc\n");text_is("abc\n");
+    SEND(doc->editor->sci, SCI_SETREADONLY, FALSE, 0);
+    reset("abc\n", 1);clipboard_set("unchanged");
+    SEND(doc->editor->sci, SCI_SETSELECTIONMODE, SC_SEL_RECTANGLE, 0);
+    line_action("cut-line");line_action("copy-line");clipboard_is("unchanged");text_is("abc\n");
+    SEND(doc->editor->sci, SCI_SETSELECTIONMODE, SC_SEL_STREAM, 0);
+    SEND(doc->editor->sci, SCI_ADDSELECTION, 3, 3);
+    line_action("copy-line-right");line_action("cut-line-right");clipboard_is("unchanged");text_is("abc\n");
+    gchar *large = g_strnfill(1024 * 1024 + 1, 'x');reset(large, 0);
+    line_action("copy-line-right");clipboard_is("unchanged");text_is(large);g_free(large);
+    g_assert_false(SEND(doc->editor->sci, SCI_CANUNDO, 0, 0));
+    reset("", 0);SEND(doc->editor->sci, SCI_ADDTEXT, 4, (sptr_t)"a\0b\n");
+    SEND(doc->editor->sci, SCI_SETSEL, 0, 0);line_action("copy-line");
+    g_assert_cmpint(sci_get_length(doc->editor->sci), ==, 4);
+    reset("\xff\n", 0);line_action("copy-line");
+    reset("valid\n", 0);clipboard_is("unchanged");
+}
 static void finish(void)
 {
     SEND(doc->editor->sci, SCI_SETREADONLY, FALSE, 0);
     SEND(doc->editor->sci, SCI_SETSAVEPOINT, 0, 0);
     gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window, "menu_quit1")));
+}
+static gboolean capture_menu(gpointer data)
+{
+    GtkWidget *menu = data;
+    const gchar *path = g_getenv("GEANY_LINE_OPERATIONS_CAPTURE");
+    GdkWindow *surface = gtk_widget_get_window(menu);
+    g_assert_nonnull(surface);
+    GdkPixbuf *image = gdk_pixbuf_get_from_window(surface, 0, 0,
+        gtk_widget_get_allocated_width(menu), gtk_widget_get_allocated_height(menu));
+    g_assert_nonnull(image);
+    g_assert_true(gdk_pixbuf_save(image, path, "jpeg", NULL, "quality", "82", NULL));
+    g_object_unref(image);gtk_menu_popdown(GTK_MENU(menu));
+    capture_done = TRUE;return G_SOURCE_REMOVE;
 }
 static gboolean step(gpointer data)
 {
@@ -121,6 +203,18 @@ static gboolean step(gpointer data)
         window = gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));
         option = named(window, "insight-intelligent-paste-option");g_assert_nonnull(option);
         g_assert_cmpint(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(option)), ==, restarted);
+        if (!restarted && g_getenv("GEANY_LINE_OPERATIONS_CAPTURE") && !capture_done)
+        {
+            if (!capture_started)
+            {
+                GtkWidget *parent = named(window, "insight-line-operations");g_assert_nonnull(parent);
+                GtkWidget *menu = gtk_menu_item_get_submenu(GTK_MENU_ITEM(parent));g_assert_nonnull(menu);
+                gtk_menu_popup_at_widget(GTK_MENU(menu), GTK_WIDGET(doc->editor->sci),
+                    GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_WEST, NULL);
+                capture_started = TRUE;g_timeout_add(150, capture_menu, menu);
+            }
+            return G_SOURCE_CONTINUE;
+        }
         if (restarted) { finish();return G_SOURCE_REMOVE; }
         gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(option), TRUE);
         reset(base, 18);paste(block);
@@ -235,6 +329,26 @@ static gboolean step(gpointer data)
     {
         text_is("    first();\n        second();\n    target();\n");undo();text_is("    target();\n");
         g_print("Native line operations: Paste Line, menu/keyboard moves, five-line moves, selection direction, CRLF/Unicode, final line, Undo/Redo and guards passed\n");
+        check_line_clipboard();
+        reset("left RIGHT\n", 0);SEND(doc->editor->sci, SCI_SETSEL, 5, 10);
+        line_action("cut-selection-or-paste");clipboard_is("RIGHT");text_is("left \n");
+        SEND(doc->editor->sci, SCI_SETSEL, 0, 0);line_action("cut-selection-or-paste");
+    }
+    else if (phase == 15)
+    {
+        text_is("RIGHTleft \n");undo();text_is("left \n");undo();text_is("left RIGHT\n");
+        keybindings_send_command(GEANY_KEY_GROUP_EDITOR, GEANY_KEYS_EDITOR_REDO);
+        keybindings_send_command(GEANY_KEY_GROUP_EDITOR, GEANY_KEYS_EDITOR_REDO);text_is("RIGHTleft \n");
+        reset("  x();\n    target();\n", 0);
+        SEND(doc->editor->sci, SCI_SETSEL, 0, strlen("  x();\n"));
+        line_action("cut-selection-or-paste");clipboard_is("  x();\n");text_is("    target();\n");
+        SEND(doc->editor->sci, SCI_SETSEL, 7, 7);line_action("cut-selection-or-paste");
+    }
+    else if (phase == 16)
+    {
+        text_is("    x();\n    target();\n");undo();text_is("    target();\n");
+        undo();text_is("  x();\n    target();\n");
+        g_print("Native line clipboard: repeated Copy Line, keyboard/menu, CRLF/Unicode, left/right cuts, readonly/copy, empty/size/binary guards and Cut Selection or Paste with Undo/Redo passed\n");
         finish();return G_SOURCE_REMOVE;
     }
     phase++;return G_SOURCE_CONTINUE;

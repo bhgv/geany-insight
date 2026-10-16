@@ -153,3 +153,21 @@ Drag Line Up/Down move the current line or all lines touched by a normal selecti
 Existing **Move line(s) up/down** and their configured keys (Alt+Page Up/Down by default) also use this mode. This series assigns no separate default keys to More or Paste Line. Each move, including five steps and reindentation, is one Undo/Redo action. In intelligent mode, selected blocks stay selected with their original direction; an unselected caret follows the line text, snapping to text start if originally inside changed indentation. Read-only is protected; new menu commands require a single normal selection without virtual space. Existing movement commands retain native handling for other selection modes.
 
 These are line movement commands. Mouse drag/drop and post-paste selection preferences remain separate open items. Indentation handling is not syntax-aware reformatting.
+
+### Clipboard: whole lines and line fragments
+
+**Edit → Line operations** adds these Source Insight commands:
+
+| Command | Behavior |
+| --- | --- |
+| Copy Line | Expands the selection to all touched whole lines and copies it. Repeating with an already whole-line selection adds the next line. |
+| Cut Line | Cuts the active caret's current line, including its EOL when present. Even a multiline selection cuts only that current line. |
+| Copy Line Right | Copies from the caret to the end of the line text, retaining the current selection. |
+| Cut Line Left / Right | Cuts from line start to the caret / from the caret to line end. The line ending stays. |
+| Cut Selection or Paste | Cuts an extended selection; with only a caret, runs Paste. Whole lines use intelligent paste when enabled. |
+
+![Copy and cut ranges](../media/line-clipboard.svg)
+
+Existing **Copy/Cut Current Line(s)** and their configured keys (normally Ctrl+Shift+C / Ctrl+Shift+X) use these Copy Line/Cut Line behaviors in source editors. Copy Line expansion is based on the current full-line selection, so a manually selected whole-line block also grows on invocation. When first expanding a partial selection, an end at the next line start excludes that next line. Growth stops at EOF. A final line without EOL is copied without adding one.
+
+Each cut is one Undo/Redo action; Copy Line and Copy Line Right do not edit text or create Undo entries. Copy works in read-only; Cut/Paste do not. Empty fragments and a final empty line preserve the previous clipboard. Ranges are limited to 1 MiB and require complete UTF-8 without NUL bytes; rejection preserves text and clipboard. New menu commands require one normal selection without virtual space. Existing Geany commands retain native handling for other selection modes and non-document Scintilla widgets. Line fragment commands use the active caret even with an extended selection. No separate keys are assigned to the new fragment commands or Cut Selection or Paste in this series.
