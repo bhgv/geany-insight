@@ -673,3 +673,7 @@ test('Insight selection navigation native GUI', navigation_native_gui_test, time
 diff_gui_test = executable('test_insight_diff_gui',
  '../insight/tests/diff_gui_test.c', '../insight/core/diff.c', dependencies: deps)
 test('Insight isolated Diff Merge GUI', diff_gui_test, timeout: 45, is_parallel: false)
+
+ directory_compare_test = executable('test_insight_directory_compare',
+ '../insight/tests/directory_compare_test.c', '../insight/desktop/directory_compare.c', dependencies: deps)
+test('Insight directory comparison snapshots', directory_compare_test, timeout: 45)
