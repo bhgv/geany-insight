@@ -13,6 +13,7 @@
 #include "geany.h"
 #include "insight-workbench.h"
 #include "insight-diff.h"
+#include "insight-directory.h"
 #include "insight-relation-graph.h"
 #include "insight-relation-tree.h"
 #include "insight-disk-browser.h"
@@ -143,6 +144,7 @@ static guint64 workbench_epoch;
 static void open_context(GtkButton *,gpointer);
 static gboolean python_language(GeanyFiletype *);
 static void show_diff(GtkWidget *,gpointer);
+static void show_directory_compare(GtkWidget *widget,gpointer data) { (void)widget;(void)data;insight_directory_show(main_widgets.window); }
 static void browser_filter(GtkEditable *,gpointer);
 static void files_filter(GtkEditable *,gpointer);
 static void local_filter(GtkEditable *,gpointer);
@@ -4111,6 +4113,7 @@ static void create_workbench_menus(void) {
  gtk_menu_item_set_submenu(GTK_MENU_ITEM(navigate),menu); gtk_menu_shell_insert(GTK_MENU_SHELL(menubar),navigate,4);
  g_object_set_data(G_OBJECT(main_widgets.window),"insight-navigate",navigate);
  GtkWidget *diff_item=gtk_menu_item_new_with_label("Diff / Merge…");gtk_widget_set_name(diff_item,"insight-diff-menu");gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),diff_item);g_signal_connect(diff_item,"activate",G_CALLBACK(show_diff),NULL);gtk_widget_show(diff_item);
+ GtkWidget *directory_item=gtk_menu_item_new_with_label("Directory Compare…");gtk_widget_set_name(directory_item,"insight-directory-menu");gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),directory_item);g_signal_connect(directory_item,"activate",G_CALLBACK(show_directory_compare),NULL);gtk_widget_show(directory_item);
  wb.navigation_accels=gtk_accel_group_new(); gtk_window_add_accel_group(GTK_WINDOW(main_widgets.window),wb.navigation_accels);
  GtkWidget *templates=gtk_image_menu_item_new_with_label("Code templates / Clips…"); gtk_widget_set_name(templates,"insight-templates-command"); gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(templates),insight_command_icon("snippets")); gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(templates),TRUE); gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu),templates); g_signal_connect(templates,"activate",G_CALLBACK(focus_templates),NULL); gtk_widget_show(templates);
  create_structural_selection_menu(); insight_overview_install_commands();

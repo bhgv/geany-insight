@@ -17,12 +17,21 @@ typedef struct {
 typedef struct { gchar *paths[2];InsightDirectoryOptions options;GPtrArray *rows; } DirectoryJob;
 static void job_free(gpointer data) { DirectoryJob *job=data;for(gint i=0;i<2;i++) g_free(job->paths[i]);if(job->rows) g_ptr_array_unref(job->rows);g_free(job); }
 static const gchar *status_name(gint status) {
- static const gchar *names[]={"Same","Different","Left only","Right only","Type mismatch","Skipped","Read error"};
+ static const gchar *names[]={"Same","Different","Left only","Right only","Type mismatch","Skipped","Read error","Folder"};
  return status>=0 && status<(gint)G_N_ELEMENTS(names) ? names[status] : "Unknown";
+}
+static const gchar *entry_status(InsightDirectoryEntry *entry) {
+ if(entry->status==INSIGHT_DIR_DIFFERENT && entry->info[0] && entry->info[1]) {
+  guint64 a=g_file_info_get_attribute_uint64(entry->info[0],G_FILE_ATTRIBUTE_TIME_MODIFIED),b=g_file_info_get_attribute_uint64(entry->info[1],G_FILE_ATTRIBUTE_TIME_MODIFIED);
+  guint32 au=g_file_info_get_attribute_uint32(entry->info[0],G_FILE_ATTRIBUTE_TIME_MODIFIED_USEC),bu=g_file_info_get_attribute_uint32(entry->info[1],G_FILE_ATTRIBUTE_TIME_MODIFIED_USEC);
+  if(a>b || (a==b && au>bu)) return "Different — left newer";
+  if(b>a || (a==b && bu>au)) return "Different — right newer";
+ }
+ return status_name(entry->status);
 }
 static gboolean visible(GtkTreeModel *model,GtkTreeIter *iter,gpointer data) {
  Directory *d=data;gint status;gchar *path;gtk_tree_model_get(model,iter,DC_STATUS,&status,DC_PATH,&path,-1);
- gboolean show=!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->different)) || status!=INSIGHT_DIR_SAME;
+ gboolean show=!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->different)) || (status!=INSIGHT_DIR_SAME && status!=INSIGHT_DIR_FOLDER);
  const gchar *query=gtk_entry_get_text(GTK_ENTRY(d->filter_entry));
  if(show && *query) { gchar *a=g_utf8_casefold(path,-1),*b=g_utf8_casefold(query,-1);show=strstr(a,b)!=NULL;g_free(a);g_free(b); }
  g_free(path);return show;
@@ -40,9 +49,9 @@ static void selection_changed(GtkTreeSelection *selection,gpointer data) {
  (void)selection;Directory *d=data;gtk_widget_set_sensitive(d->open,!d->busy && paired(selected_entry(d)));
 }
 static void summary(Directory *d) {
- guint counts[7]={0};if(d->rows) for(guint i=0;i<d->rows->len;i++) { InsightDirectoryEntry *e=g_ptr_array_index(d->rows,i);counts[e->status]++; }
+ guint counts[8]={0};if(d->rows) for(guint i=0;i<d->rows->len;i++) { InsightDirectoryEntry *e=g_ptr_array_index(d->rows,i);counts[e->status]++; }
  guint shown=(guint)gtk_tree_model_iter_n_children(d->filtered,NULL);
- gchar *label=g_strdup_printf("%u shown / %u entries — %u same, %u different, %u one-sided, %u type, %u skipped, %u errors",shown,d->rows ? d->rows->len : 0,counts[0],counts[1],counts[2]+counts[3],counts[4],counts[5],counts[6]);
+ gchar *label=g_strdup_printf("%u shown / %u entries — %u same, %u different, %u one-sided, %u type, %u skipped, %u errors, %u folders",shown,d->rows ? d->rows->len : 0,counts[0],counts[1],counts[2]+counts[3],counts[4],counts[5],counts[6],counts[7]);
  gtk_label_set_text(GTK_LABEL(d->status),label);g_free(label);
 }
 static void refilter(GtkWidget *widget,gpointer data) {
@@ -82,7 +91,7 @@ static gboolean publish(gpointer data) {
  while(d->at<d->pending->len) {
   InsightDirectoryEntry *e=g_ptr_array_index(d->pending,d->at);GtkTreeIter iter;
   gchar *path=g_filename_display_name(e->relative),*left=description(e->info[0]),*right=description(e->info[1]);
-  gtk_list_store_append(d->building,&iter);gtk_list_store_set(d->building,&iter,DC_ID,d->at,DC_PATH,path,DC_STATUS_TEXT,insight_tr(status_name(e->status)),DC_LEFT,left,DC_RIGHT,right,DC_DETAIL,e->detail ? insight_tr(e->detail) : "",DC_STATUS,e->status,DC_PAIRED,paired(e),-1);
+  gtk_list_store_append(d->building,&iter);gtk_list_store_set(d->building,&iter,DC_ID,d->at,DC_PATH,path,DC_STATUS_TEXT,insight_tr(entry_status(e)),DC_LEFT,left,DC_RIGHT,right,DC_DETAIL,e->detail ? insight_tr(e->detail) : "",DC_STATUS,e->status,DC_PAIRED,paired(e),-1);
   g_free(path);g_free(left);g_free(right);d->at++;
   if(g_get_monotonic_time()>=until) break;
  }
@@ -143,10 +152,43 @@ static void advance(Directory *d,gint direction) {
  if(!valid && gtk_tree_selection_count_selected_rows(selection)) return;
  do {
   gint status;gtk_tree_model_get(model,&iter,DC_STATUS,&status,-1);
-  if(status!=INSIGHT_DIR_SAME) { GtkTreePath *path=gtk_tree_model_get_path(model,&iter);gtk_tree_view_set_cursor(GTK_TREE_VIEW(d->view),path,NULL,FALSE);gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(d->view),path,NULL,FALSE,0,0);gtk_tree_path_free(path);return; }
+  if(status!=INSIGHT_DIR_SAME && status!=INSIGHT_DIR_FOLDER) { GtkTreePath *path=gtk_tree_model_get_path(model,&iter);gtk_tree_view_set_cursor(GTK_TREE_VIEW(d->view),path,NULL,FALSE);gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(d->view),path,NULL,FALSE,0,0);gtk_tree_path_free(path);return; }
  } while(direction>0 ? gtk_tree_model_iter_next(model,&iter) : gtk_tree_model_iter_previous(model,&iter));
 }
 static void step(GtkWidget *widget,gpointer data) { Directory *d=data;advance(d,widget==d->next ? 1 : -1); }
+static void append_field(GString *text,const gchar *field) {
+ for(const gchar *p=field;*p;p++) {
+  if(*p=='\t') g_string_append(text,"\\t");else if(*p=='\r') g_string_append(text,"\\r");
+  else if(*p=='\n') g_string_append(text,"\\n");else if(*p=='\\') g_string_append(text,"\\\\");else g_string_append_c(text,*p);
+ }
+}
+static void copy_list(GtkWidget *widget,gpointer data) {
+ (void)widget;Directory *d=data;GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(d->view));GtkTreeIter iter;GString *text=g_string_new("Relative path\tStatus\tLeft\tRight\n");
+ for(gboolean valid=gtk_tree_model_get_iter_first(model,&iter);valid;valid=gtk_tree_model_iter_next(model,&iter)) {
+  for(gint column=DC_PATH;column<=DC_RIGHT;column++) { gchar *value;gtk_tree_model_get(model,&iter,column,&value,-1);append_field(text,value);g_free(value);g_string_append_c(text,column==DC_RIGHT ? '\n' : '\t'); }
+ }
+ gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),text->str,(gint)text->len);g_string_free(text,TRUE);
+}
+static void copy_path(GtkWidget *widget,gpointer data) {
+ (void)widget;Directory *d=data;InsightDirectoryEntry *entry=selected_entry(d);if(!entry) return;
+ gchar *path=g_filename_display_name(entry->relative);gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),path,-1);g_free(path);
+}
+static GtkWidget *context_menu(Directory *d) {
+ GtkWidget *menu=gtk_menu_new();const gchar *labels[]={"Compare selected file","Copy relative path","Copy visible list"};GCallback callbacks[]={G_CALLBACK(open_pair),G_CALLBACK(copy_path),G_CALLBACK(copy_list)};
+ for(guint i=0;i<G_N_ELEMENTS(labels);i++) { GtkWidget *item=gtk_menu_item_new_with_label(labels[i]);gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",callbacks[i],d);gtk_widget_set_sensitive(item,i==0 ? !d->busy && paired(selected_entry(d)) : i==1 ? selected_entry(d)!=NULL : TRUE); }
+ g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu);gtk_menu_attach_to_widget(GTK_MENU(menu),d->view,NULL);gtk_widget_show_all(menu);return menu;
+}
+static gboolean popup(GtkWidget *widget,gpointer data) { (void)widget;gtk_menu_popup_at_widget(GTK_MENU(context_menu(data)),((Directory*)data)->view,GDK_GRAVITY_SOUTH_WEST,GDK_GRAVITY_NORTH_WEST,NULL);return TRUE; }
+static gboolean mouse(GtkWidget *widget,GdkEventButton *event,gpointer data) {
+ if(event->button!=3) return FALSE;
+ GtkTreePath *path=NULL;
+ if(gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget),(gint)event->x,(gint)event->y,&path,NULL,NULL,NULL)) { gtk_tree_view_set_cursor(GTK_TREE_VIEW(widget),path,NULL,FALSE);gtk_tree_path_free(path); }
+ gtk_menu_popup_at_pointer(GTK_MENU(context_menu(data)),(GdkEvent*)event);return TRUE;
+}
+static void method_changed(GtkComboBox *combo,gpointer data) {
+ Directory *d=data;gboolean text=gtk_combo_box_get_active(combo)==INSIGHT_DIR_CONTENT;
+ gtk_widget_set_sensitive(d->space,text);gtk_widget_set_sensitive(d->eol,text);
+}
 static gboolean key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
  Directory *d=data;if(event->keyval==GDK_KEY_F5) { start(NULL,d);return TRUE; }
  if((event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_Up || event->keyval==GDK_KEY_Down)) { advance(d,event->keyval==GDK_KEY_Up ? -1 : 1);return TRUE; }
@@ -173,15 +215,18 @@ static Directory *directory_new(GtkWidget *parent) {
  d->recursive=check(options,"Include subdirectories",TRUE);d->hidden=check(options,"Include hidden entries",FALSE);
  GtkWidget *text_options=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(d->controls),text_options,FALSE,FALSE,0);d->space=check(text_options,"Ignore spaces and tabs",FALSE);d->eol=check(text_options,"Ignore line ending style",FALSE);
  GtkWidget *bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);
+ button(bar,"Copy visible list",G_CALLBACK(copy_list),d);
  d->scan=button(bar,"Scan / Refresh",G_CALLBACK(start),d);d->cancel_button=button(bar,"Cancel scan",G_CALLBACK(cancel_scan),d);d->open=button(bar,"Compare selected file",G_CALLBACK(open_pair),d);d->previous=button(bar,"Previous different file",G_CALLBACK(step),d);d->next=button(bar,"Next different file",G_CALLBACK(step),d);
  GtkWidget *filters=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),filters,FALSE,FALSE,0);d->filter_entry=gtk_search_entry_new();gtk_entry_set_placeholder_text(GTK_ENTRY(d->filter_entry),"Filter relative paths — Ctrl+F");gtk_box_pack_start(GTK_BOX(filters),d->filter_entry,TRUE,TRUE,0);d->different=check(filters,"Differences only",FALSE);
  d->store=gtk_list_store_new(DC_COLUMNS,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_INT,G_TYPE_BOOLEAN);
  d->filtered=gtk_tree_model_filter_new(GTK_TREE_MODEL(d->store),NULL);gtk_tree_model_filter_set_visible_func(GTK_TREE_MODEL_FILTER(d->filtered),visible,d,NULL);GtkTreeModel *sorted=gtk_tree_model_sort_new_with_model(d->filtered);d->view=gtk_tree_view_new_with_model(sorted);g_object_unref(sorted);gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(d->view),DC_DETAIL);
  const gchar *labels[]={"Relative path","Status","Left — size / modified","Right — size / modified"};
- for(gint i=0;i<4;i++) { GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(labels[i],gtk_cell_renderer_text_new(),"text",DC_PATH+i,NULL);gtk_tree_view_column_set_resizable(column,TRUE);gtk_tree_view_column_set_sort_column_id(column,DC_PATH+i);gtk_tree_view_append_column(GTK_TREE_VIEW(d->view),column); }
+ for(gint i=0;i<4;i++) { GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(labels[i],gtk_cell_renderer_text_new(),"text",DC_PATH+i,NULL);gtk_tree_view_column_set_resizable(column,TRUE);if(i<2) gtk_tree_view_column_set_sort_column_id(column,DC_PATH+i);gtk_tree_view_append_column(GTK_TREE_VIEW(d->view),column); }
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),d->view);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
  d->status=gtk_label_new("Choose two directories and scan. Results are a snapshot.");gtk_label_set_xalign(GTK_LABEL(d->status),0);gtk_label_set_line_wrap(GTK_LABEL(d->status),TRUE);gtk_box_pack_start(GTK_BOX(box),d->status,FALSE,FALSE,0);
  g_signal_connect(d->filter_entry,"changed",G_CALLBACK(refilter),d);g_signal_connect(d->different,"toggled",G_CALLBACK(refilter),d);g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(d->view)),"changed",G_CALLBACK(selection_changed),d);
+ g_signal_connect(d->method,"changed",G_CALLBACK(method_changed),d);method_changed(GTK_COMBO_BOX(d->method),d);
+ g_signal_connect(d->view,"popup-menu",G_CALLBACK(popup),d);g_signal_connect(d->view,"button-press-event",G_CALLBACK(mouse),d);
  g_signal_connect(d->view,"row-activated",G_CALLBACK(activated),d);g_signal_connect(d->view,"key-press-event",G_CALLBACK(key),d);g_signal_connect(d->window,"key-press-event",G_CALLBACK(key),d);g_signal_connect(d->window,"destroy",G_CALLBACK(destroyed),d);g_object_set_data(G_OBJECT(d->window),"insight-directory-state",d);busy(d,FALSE);gtk_widget_show_all(d->window);return d;
 }
 void insight_directory_show(GtkWidget *parent) { (void)directory_new(parent); }

@@ -56,7 +56,7 @@ static void classify(InsightDirectoryEntry *entry,const InsightDirectoryOptions 
     (b && (g_file_info_get_is_symlink(b) || (g_file_info_get_file_type(b)!=G_FILE_TYPE_REGULAR && g_file_info_get_file_type(b)!=G_FILE_TYPE_DIRECTORY)))) { entry->status=INSIGHT_DIR_SKIPPED;entry->detail=g_strdup("Symbolic link or special file");return; }
  if(!a || !b) { entry->status=a ? INSIGHT_DIR_LEFT : INSIGHT_DIR_RIGHT;return; }
  if(g_file_info_get_file_type(a)!=g_file_info_get_file_type(b)) { entry->status=INSIGHT_DIR_TYPE;return; }
- if(g_file_info_get_file_type(a)==G_FILE_TYPE_DIRECTORY) { entry->status=INSIGHT_DIR_SAME;entry->detail=g_strdup("Folder; inspect child rows");return; }
+ if(g_file_info_get_file_type(a)==G_FILE_TYPE_DIRECTORY) { entry->status=INSIGHT_DIR_FOLDER;entry->detail=g_strdup("Folder; inspect child rows");return; }
  entry->status=same_time(a,b) && (options->method==INSIGHT_DIR_DATE || g_file_info_get_size(a)==g_file_info_get_size(b)) ? INSIGHT_DIR_SAME : INSIGHT_DIR_DIFFERENT;
 }
 static gboolean matches(GFileInfo *a,GFileInfo *b) {
