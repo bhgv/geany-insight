@@ -15,7 +15,8 @@ class Diff(ctypes.Structure):
 
 with tempfile.TemporaryDirectory() as tmp:
     libpath = pathlib.Path(tmp) / ('diff.dll' if os.name == 'nt' else 'diff.so')
-    subprocess.run(['cc', '-std=c99', '-Wall', '-Wextra', '-Werror', '-shared', *([] if os.name == 'nt' else ['-fPIC']),
+    sanitizer = os.environ.get('SANITIZE')
+    subprocess.run(['cc', *(['-fsanitize=' + sanitizer, '-fno-omit-frame-pointer'] if sanitizer else []), '-std=c99', '-Wall', '-Wextra', '-Werror', '-shared', *([] if os.name == 'nt' else ['-fPIC']),
                     str(root / 'insight/core/diff.c'), '-o', str(libpath)], check=True)
     lib = ctypes.CDLL(str(libpath))
     lib.insight_diff_compute.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.POINTER(Diff)]
@@ -122,6 +123,7 @@ with tempfile.TemporaryDirectory() as tmp:
         finally:
             lib.insight_diff_clear(ctypes.byref(diff))
 
+    options_check('я\rend\r', 'я\n\nend\n', 2, 1)  # Do not fuse a CR with an inserted LF.
     for flags in range(4):
         options_check('a b\r\nя\r\n', 'ab\nя\n', flags, 0 if flags == 3 else 1)
         options_check('ab', 'a b', flags, 0 if flags & 1 else 1)

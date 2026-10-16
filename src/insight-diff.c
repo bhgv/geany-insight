@@ -192,15 +192,18 @@ static void wrap(GtkToggleButton *w,gpointer data) {
 static void sync_scroll(GtkAdjustment *adjustment,gpointer data) {
  Merge *m=data;
  if(m->scrolling || !m->sources[0] || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->sync))) return;
- int side=adjustment==gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(m->views[1]));
+ m->scrolling=TRUE;
+ int side=adjustment==m->adjustments[1];
  GdkRectangle rect;GtkTextIter it;
  gtk_text_view_get_visible_rect(GTK_TEXT_VIEW(m->views[side]),&rect);
  gtk_text_view_get_line_at_y(GTK_TEXT_VIEW(m->views[side]),&it,rect.y,NULL);
  size_t line=insight_diff_map_line(&m->diff,side,m->sources[side],m->sources[1-side],(size_t)gtk_text_iter_get_line(&it));
  GtkTextBuffer *target=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[1-side]));
  gtk_text_buffer_get_iter_at_line(target,&it,(gint)line);
- m->scrolling=TRUE;
- gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(m->views[1-side]),&it,0,TRUE,0,0);
+ gint y,height;gtk_text_view_get_line_yrange(GTK_TEXT_VIEW(m->views[1-side]),&it,&y,&height);
+ /* Adjustment updates are synchronous: no deferred scroll callback can feed
+  * back into the source after the recursion guard has been released. */
+ gtk_adjustment_set_value(m->adjustments[1-side],y);
  m->scrolling=FALSE;
 }
 static gboolean pick_block(GtkWidget *w,GdkEventButton *event,gpointer data) {

@@ -377,3 +377,5 @@ dist_insightdocmedia_DATA += insight/docs/media/selection-navigation.jpg
 dist_insightdocmedia_DATA += insight/docs/media/paste-position.svg
 
 dist_insightdocmedia_DATA += insight/docs/media/file-compare.jpg insight/docs/media/file-compare-flow.svg
+
+EXTRA_DIST += insight/tests/diff_gui_test.c

@@ -130,3 +130,10 @@ For standalone checking, compile `insight/tests/diff_gui_test.c` together with
 `insight/core/diff.c` using GTK3 flags, then run under Xvfb. It uses production
 widgets with stubbed host help/translation functions. Windows/Android were not
 executed in this increment.
+
+The Linux fixture additionally checks linked scrolling past a 20-line insertion,
+independent scrolling after disabling the link, invalid UTF-8 and a source one
+byte above the size limit. The same fixture passes UBSan with fatal GLib
+criticals. ASan reached the checks but its leak-scanning runtime could not finish
+because `/proc/task` is unavailable in this environment; a clean ASan result is
+not claimed. Linux CI now includes both the core and production-widget fixture.

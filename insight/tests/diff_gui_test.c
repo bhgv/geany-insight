@@ -77,11 +77,38 @@ int main(int argc,char **argv) {
  g_assert_true(g_file_set_contents(right,"ab\nя\n",-1,&error));g_assert_no_error(error);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->ignore_space),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->ignore_eol),TRUE);
  compare(NULL,m);wait_comparison(m);g_assert_cmpuint(m->diff.count,==,0);assert_text(m,"a b\r\nя\r\n");
+ gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),2);gtk_entry_set_text(GTK_ENTRY(m->find_entry),"Я");
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->find_case),FALSE);find_text(m,FALSE);
+ g_assert_true(gtk_text_buffer_get_selection_bounds(result(m),&start,&end));
+ match=gtk_text_buffer_get_text(result(m),&start,&end,TRUE);g_assert_cmpstr(match,==,"я");g_free(match);
+ guint history=m->position;event.keyval=GDK_KEY_F3;event.state=GDK_SHIFT_MASK;g_assert_true(key(m->find_entry,&event,m));
+ g_assert_cmpuint(history,==,m->position);
  compare(NULL,m);g_assert_true(m->busy);cancel_compare(NULL,m);wait_comparison(m);
  assert_text(m,"a b\r\nя\r\n");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->status)),"cancel"));
  gtk_entry_set_text(GTK_ENTRY(m->paths[1]),dir);compare(NULL,m);wait_comparison(m);
  assert_text(m,"a b\r\nя\r\n");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->status)),"regular"));
  gtk_entry_set_text(GTK_ENTRY(m->paths[1]),right);
+ g_assert_true(g_file_set_contents(right,"\xff",1,&error));g_assert_no_error(error);compare(NULL,m);wait_comparison(m);
+ assert_text(m,"a b\r\nя\r\n");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->status)),"UTF-8"));
+ gchar *oversized=g_strnfill(1024*1024+1,'x');g_assert_true(g_file_set_contents(right,oversized,-1,&error));g_assert_no_error(error);g_free(oversized);
+ compare(NULL,m);g_assert_false(gtk_widget_get_sensitive(m->views[2]));wait_comparison(m);
+ assert_text(m,"a b\r\nя\r\n");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->status)),"1 MiB"));
+ GString *scroll_left=g_string_new(NULL),*scroll_right=g_string_new(NULL);
+ for(int i=0;i<300;i++) {
+  if(i==150) for(int j=0;j<20;j++) g_string_append(scroll_right,"inserted\n");
+  g_string_append_printf(scroll_left,"common %d\n",i);g_string_append_printf(scroll_right,"common %d\n",i);
+ }
+ g_assert_true(g_file_set_contents(left,scroll_left->str,scroll_left->len,&error));g_assert_no_error(error);
+ g_assert_true(g_file_set_contents(right,scroll_right->str,scroll_right->len,&error));g_assert_no_error(error);
+ compare(NULL,m);wait_comparison(m);g_string_free(scroll_left,TRUE);g_string_free(scroll_right,TRUE);
+ gtk_text_buffer_get_iter_at_line(gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[0])),&start,220);
+ gint scroll_y,line_height;gtk_text_view_get_line_yrange(GTK_TEXT_VIEW(m->views[0]),&start,&scroll_y,&line_height);
+ gtk_adjustment_set_value(m->adjustments[0],scroll_y);flush();
+ GdkRectangle visible;gtk_text_view_get_visible_rect(GTK_TEXT_VIEW(m->views[1]),&visible);
+ gtk_text_view_get_line_at_y(GTK_TEXT_VIEW(m->views[1]),&start,visible.y,NULL);g_assert_cmpint(gtk_text_iter_get_line(&start),==,240);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->sync),FALSE);gdouble independent=gtk_adjustment_get_value(m->adjustments[1]);
+ gtk_adjustment_set_value(m->adjustments[0],0);flush();g_assert_cmpfloat(gtk_adjustment_get_value(m->adjustments[1]),==,independent);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->sync),TRUE);
  GString *large_left=g_string_new(NULL),*large_right=g_string_new(NULL);
  for(int i=0;i<1998;i++) { g_string_append(large_left,"left line\n");g_string_append(large_right,"right line\n"); }
  g_assert_true(g_file_set_contents(left,large_left->str,large_left->len,&error));g_assert_no_error(error);
@@ -95,5 +122,5 @@ int main(int argc,char **argv) {
  while(!gone && g_get_monotonic_time()<until) { flush();g_usleep(1000); }
  g_assert_true(gone);flush();
  g_remove(left);g_remove(right);g_rmdir(dir);g_free(left);g_free(right);g_free(dir);
- g_print("Production Diff/Merge fixture: navigation, display, take and undo/redo passed.\n");return 0;
+ g_print("Production Diff/Merge fixture: navigation, search, gutters, merge history, options, worker cancellation and close passed.\n");return 0;
 }

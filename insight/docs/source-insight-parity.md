@@ -378,3 +378,16 @@ Copy разрешён в read-only, не меняет текст и Undo; Cut з
 Проверенный код: `657846b994f3a487f28857bc7aa3f7ce4a1d9c56`. [Полная Linux build/install и native GUI](https://github.com/bhgv/geany-insight/actions/runs/38901289242): 22 OK, 0 failures, 0 skipped. Новый native-сценарий проверяет кириллицу/CRLF, выделение слова/строки/диапазона, сворачивание к краям, пустые строки вверх/вниз/EOF и отсутствие совпадения, предел 4 MiB, обычные SCI-движения с anchor, goto-line и прокручивающий переход к позиции, Escape без удаления выделения, состояние/флажок при смене документов, read-only, отказ для прямоугольного/множественного выделения, неизменность текста/Undo и файла на диске. Прежние 21 проверки также прошли, включая clipboard/Clips/restart и ожидание асинхронной вставки после большого буфера.
 
 [JPEG нового меню](media/selection-navigation.jpg) получен из полного запущенного Linux-редактора в успешном native-сценарии; это не изолированный макет. Меню снимаются отдельно от других GUI-тестов на общем дисплее и проверяются на перекрытое чёрное изображение. Снимки доступны в artifact insight-editor-menus; JPEG и SVG добавлены в правила установки справки Meson и Autotools. Локально: строгая синтаксическая проверка нового модуля/теста, core существующих преобразований/профилей, SVG XML/GTK-декодирование, визуальная проверка SVG/JPEG и новые ссылки RU/EN. Windows/Android не запускались.
+
+### File Compare navigation, options and search (2026-10-16)
+
+Native Diff/Merge now includes Previous/Next with Ctrl+Up/Down, block picking,
+source scrolling mapped through logical lines, optional wrap/list/line gutters,
+per-pane literal Unicode search with Ctrl+F and F3/Shift+F3, and case matching.
+Comparison options ignore ASCII horizontal space and/or CR/LF/CRLF style while
+retaining original merge bytes and protecting CR/LF seams. Bounded source reads
+and cancellable LCS run in a worker; cancel/failure preserves result and history.
+Linux checks use real production widgets in an isolated GTK/Xvfb fixture, not the
+full editor; screenshot and diagram are in the RU/EN internal-diff guides.
+Three-way merge, intraline differences, semantic whitespace handling and padded
+visual alignment remain outside this implementation.
