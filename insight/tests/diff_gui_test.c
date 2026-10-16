@@ -117,8 +117,23 @@ static void case_test(void) {
  GString *large=g_string_new(NULL);for(guint i=0;i<180000;i++) { g_string_append(large,"ΐ");if(i%50==49) g_string_append_c(large,'\n'); }gtk_text_buffer_set_text(b,large->str,-1);gtk_text_buffer_get_bounds(b,&a,&z);gtk_text_buffer_select_range(b,&a,&z);history=m->history->len;selection_case(m,0);g_assert_cmpuint(m->history->len,==,history);g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->replace_status)),"Nothing changed"));g_assert_cmpint(gtk_text_buffer_get_char_count(b),==,183600);g_string_free(large,TRUE);
  gtk_widget_destroy(m->window);flush();
 }
+static void line_edit_test(void) {
+ Merge *m=merge_new(NULL);GtkTextBuffer *b=result(m);GtkTextIter a,z;
+ const gchar *initial="#define X\r\n  ёж\t x  \r\n\tline\t\nend  ";gtk_text_buffer_set_text(b,initial,-1);gtk_text_buffer_get_bounds(b,&a,&z);gtk_text_buffer_select_range(b,&a,&z);guint history=m->history->len;
+ edit_lines(m,0);assert_text(m,"#define X\r\n      ёж\t x  \r\n    \tline\t\n    end  ");g_assert_cmpuint(m->history->len,==,history+1);undo(NULL,m);assert_text(m,initial);
+ gtk_text_buffer_get_bounds(b,&a,&z);gtk_text_buffer_select_range(b,&a,&z);edit_lines(m,1);assert_text(m,"#define X\r\nёж\t x  \r\nline\t\nend  ");undo(NULL,m);
+ gtk_text_buffer_get_bounds(b,&a,&z);gtk_text_buffer_select_range(b,&a,&z);edit_lines(m,2);assert_text(m,"#define X\r\n  ёж     x  \r\n    line    \nend  ");undo(NULL,m);
+ gtk_text_buffer_get_bounds(b,&a,&z);gtk_text_buffer_select_range(b,&a,&z);edit_lines(m,3);assert_text(m,"#define X\r\n  ёж\t x\r\n\tline\nend");undo(NULL,m);
+ gtk_text_buffer_get_iter_at_line(b,&a,1);gtk_text_buffer_get_iter_at_line(b,&z,2);gtk_text_buffer_select_range(b,&a,&z);edit_lines(m,3);assert_text(m,"#define X\r\n  ёж\t x\r\n\tline\t\nend  ");undo(NULL,m);
+ gtk_text_buffer_get_iter_at_line(b,&a,3);gtk_text_buffer_place_cursor(b,&a);edit_lines(m,3);assert_text(m,"#define X\r\n  ёж\t x  \r\n\tline\t\nend");undo(NULL,m);
+ GtkWidget *button=named(m->window,"insight-diff-result-menu");GtkWidget *menu=GTK_WIDGET(gtk_menu_button_get_popup(GTK_MENU_BUTTON(button)));gtk_widget_show(menu);GList *items=gtk_container_get_children(GTK_CONTAINER(menu));g_assert_cmpint(g_list_length(items),>,4);g_list_free(items);gtk_widget_hide(menu);
+ m->busy=TRUE;edit_lines(m,0);assert_text(m,initial);m->busy=FALSE;
+ gtk_text_buffer_set_text(b,"",0);history=m->history->len;edit_lines(m,3);g_assert_cmpuint(m->history->len,==,history);
+ GString *large=g_string_new(NULL);for(guint i=0;i<70000;i++) { g_string_append_c(large,'\t');if(i%50==49) g_string_append_c(large,'\n'); }gtk_text_buffer_set_text(b,large->str,-1);gtk_text_buffer_get_bounds(b,&a,&z);gtk_text_buffer_select_range(b,&a,&z);gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->edit_tab_width),16);history=m->history->len;edit_lines(m,2);g_assert_cmpuint(m->history->len,==,history);g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->replace_status)),"Nothing changed"));g_assert_cmpint(gtk_text_buffer_get_char_count(b),==,71400);g_string_free(large,TRUE);
+ gtk_widget_destroy(m->window);flush();
+}
 int main(int argc,char **argv) {
- gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();case_test();insight_diff_set_source_opener(source_opened);
+ gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();case_test();line_edit_test();insight_diff_set_source_opener(source_opened);
  GError *error=NULL;gchar *dir=g_dir_make_tmp("insight-diff-XXXXXX",&error);g_assert_no_error(error);
  gchar *left=g_build_filename(dir,"left.txt",NULL),*right=g_build_filename(dir,"right.txt",NULL);
  const char *a="start\nleft\ncommon\nlast left\nend\n",*b="start\nright\ncommon\nlast right\nextra\nend\n";

@@ -1040,3 +1040,11 @@ Lowercase selection	Выделение в нижний регистр
 Toggle selection case	Обратить регистр выделения
 Case conversion limit: 1 MiB result. Nothing changed.	Предел преобразования регистра: 1 МиБ результата. Изменений нет.
 Selection case changed.	Регистр выделения изменён.
+Result menu	Меню результата
+Edit tab width	Ширина табуляции правки
+Indent result lines	Увеличить отступ строк результата
+Outdent result lines	Уменьшить отступ строк результата
+Tabs to spaces in result lines	Табуляции в пробелы в строках результата
+Trim trailing spaces in result lines	Удалить хвостовые пробелы строк результата
+Result lines edited.	Строки результата изменены.
+Line edit limit: 100000 changes and 1 MiB result. Nothing changed.	Предел правки строк: 100000 изменений и 1 МиБ результата. Изменений нет.

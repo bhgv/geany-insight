@@ -211,3 +211,16 @@ Ctrl+H targets search at Result and focuses the replacement field. Enter the old
 | `ЁЖ` | `straße` | `STRASSE` |
 
 The Result context menu provides **Uppercase selection**, **Lowercase selection** and **Toggle selection case**. They preserve line endings and select the converted text. Unicode conversion can change character count. Each operation is one Undo action; empty selections, unchanged text and comparison work produce no edits. Conversion is rejected in full if the result would exceed 1 MiB. Source-pane menus omit these editing commands.
+
+### Result line editing
+
+**Result menu** exposes the result commands, also available in its text context menu. Line commands affect selected logical lines, or the caret line without a selection. A selection ending at the start of the next line excludes that line. Indent skips empty lines and lines beginning with `#`.
+
+| Command | Behavior |
+|---|---|
+| Indent result lines | Inserts one tab-width of spaces |
+| Outdent result lines | Removes a leading tab or up to one tab-width of spaces |
+| Tabs to spaces in result lines | Expands tabs to the next tab-stop boundary |
+| Trim trailing spaces in result lines | Removes trailing ASCII spaces and tabs |
+
+**Edit tab width** controls these operations: 1–16, default 4. Tab expansion counts each Unicode character as one logical column; this is not glyph-width measurement or a display tab setting. CR, LF and CRLF are preserved. Each operation is one Undo/Redo action; unchanged text creates no history. Preflight limits of 100000 individual changes and 1 MiB result reject the whole batch before editing if exceeded. Commands are blocked during comparison. Width belongs only to the current window.
