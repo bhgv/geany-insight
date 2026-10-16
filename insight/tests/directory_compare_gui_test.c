@@ -8,6 +8,8 @@ const gchar *insight_tr(const gchar *text) { return text; }
 gchar *insight_i18n_printf(const gchar *format,...) { va_list args;va_start(args,format);gchar *text=g_strdup_vprintf(format,args);va_end(args);return text; }
 void insight_panel_help_attach(GtkWidget *widget,const gchar *topic) { (void)widget;(void)topic; }
 static gchar **known_types(void) { const gchar *names[]={"*.ini","*.cpp",NULL};return g_strdupv((gchar **)names); }
+static const gchar *blocked_path,*expected_destination,*block_after_confirmation;
+static gboolean operation_path_open(const gchar *path) { return !g_strcmp0(path,blocked_path); }
 static gchar *opened[2];static guint opened_flags;
 void insight_diff_show_files(GtkWidget *parent,const gchar *left,const gchar *right,guint flags) { (void)parent;g_free(opened[0]);g_free(opened[1]);opened[0]=g_strdup(left);opened[1]=g_strdup(right);opened_flags=flags; }
 static void flush(void) { while(gtk_events_pending()) gtk_main_iteration(); }
@@ -39,12 +41,25 @@ static gboolean appearance_response(gpointer data) {
  if(capture && GPOINTER_TO_INT(data)==GTK_RESPONSE_APPLY) { gint64 until=g_get_monotonic_time()+200000;while(g_get_monotonic_time()<until) { flush();g_usleep(1000); }GdkWindow *window=gtk_widget_get_window(dialog);GdkPixbuf *pixels=gdk_pixbuf_get_from_window(window,0,0,gdk_window_get_width(window),gdk_window_get_height(window));g_assert_nonnull(pixels);g_assert_true(gdk_pixbuf_save(pixels,capture,"jpeg",NULL,"quality","88",NULL));g_object_unref(pixels); }
  gtk_dialog_response(GTK_DIALOG(dialog),GPOINTER_TO_INT(data));return G_SOURCE_REMOVE;
 }
+static gboolean operation_response(gpointer data) {
+ GList *windows=gtk_window_list_toplevels();GtkWidget *dialog=NULL;
+ for(GList *p=windows;p && !dialog;p=p->next) if(!strcmp(gtk_widget_get_name(p->data),"insight-directory-operation-dialog")) dialog=p->data;
+ g_list_free(windows);g_assert_nonnull(dialog);
+ if(expected_destination) g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(named(dialog,"insight-directory-operation-destination"))),==,expected_destination);
+ const gchar *capture=g_getenv("INSIGHT_DIRECTORY_OPERATION_CAPTURE");static gboolean captured;
+ if(capture && !captured) { gint64 until=g_get_monotonic_time()+200000;while(g_get_monotonic_time()<until) { flush();g_usleep(1000); }GdkWindow *window=gtk_widget_get_window(dialog);GdkPixbuf *pixels=gdk_pixbuf_get_from_window(window,0,0,gdk_window_get_width(window),gdk_window_get_height(window));g_assert_nonnull(pixels);g_assert_true(gdk_pixbuf_save(pixels,capture,"jpeg",NULL,"quality","88",NULL));g_object_unref(pixels);captured=TRUE; }
+ if(block_after_confirmation) blocked_path=block_after_confirmation;
+ gtk_dialog_response(GTK_DIALOG(dialog),GPOINTER_TO_INT(data));return G_SOURCE_REMOVE;
+}
+static void run_action(Directory *d,guint action,gint response) {
+ g_idle_add(operation_response,GINT_TO_POINTER(response));file_action(d->actions[action],d);if(d->busy) { g_assert_true(gtk_window_get_modal(GTK_WINDOW(d->window)));wait_scan(d); }g_assert_false(gtk_window_get_modal(GTK_WINDOW(d->window)));
+}
 int main(int argc,char **argv) {
  gtk_init(&argc,&argv);GError *error=NULL;gchar *root=g_dir_make_tmp("insight-directory-gui-XXXXXX",&error);g_assert_no_error(error);
  gchar *left=g_build_filename(root,"left",NULL),*right=g_build_filename(root,"right",NULL),*empty=g_build_filename(root,"empty",NULL);
  g_assert_cmpint(g_mkdir(left,0700),==,0);g_assert_cmpint(g_mkdir(right,0700),==,0);g_assert_cmpint(g_mkdir(empty,0700),==,0);
  put(left,"config.ini","port = 3000\n");put(right,"config.ini","port = 8080\n");put(left,"same.py","print('same')\n");put(right,"same.py","print('same')\n");put(left,"old.lua","old\n");put(right,"new.cpp","new\n");put(left,"данные.txt","я b\r\n");put(right,"данные.txt","яb\n");
- insight_directory_set_types_provider(known_types);
+ insight_directory_set_types_provider(known_types);insight_directory_set_open_guard(operation_path_open);
  Directory *d=directory_new(NULL);flush();start(NULL,d);g_assert_false(d->busy);g_assert_false(gtk_widget_get_sensitive(d->open));
  gtk_entry_set_text(GTK_ENTRY(d->paths[0]),left);gtk_entry_set_text(GTK_ENTRY(d->paths[1]),right);start(NULL,d);wait_scan(d);
  g_assert_cmpuint(d->rows->len,==,5);g_assert_true(select_path(d,"config.ini"));g_assert_true(gtk_widget_get_sensitive(d->open));open_pair(NULL,d);g_assert_true(g_str_has_suffix(opened[0],"config.ini"));g_assert_cmpuint(opened_flags,==,0);
@@ -77,6 +92,22 @@ int main(int argc,char **argv) {
   GdkWindow *window=gtk_widget_get_window(d->window);GdkPixbuf *pixels=gdk_pixbuf_get_from_window(window,0,0,gdk_window_get_width(window),gdk_window_get_height(window));g_assert_nonnull(pixels);
   g_assert_true(gdk_pixbuf_save(pixels,capture,"jpeg",&error,"quality","88",NULL));g_assert_no_error(error);g_object_unref(pixels);
  }
+ put(left,"copy.dat","left only");start(NULL,d);wait_scan(d);g_assert_true(select_path(d,"copy.dat"));g_assert_true(gtk_widget_get_sensitive(d->actions[0]));g_assert_false(gtk_widget_get_sensitive(d->actions[1]));
+ gchar *copy_left=g_build_filename(left,"copy.dat",NULL),*copy_right=g_build_filename(right,"copy.dat",NULL);blocked_path=copy_left;file_action(d->actions[0],d);g_assert_false(d->busy);g_assert_false(g_file_test(copy_right,G_FILE_TEST_EXISTS));blocked_path=NULL;
+ expected_destination=copy_right;gtk_entry_set_text(GTK_ENTRY(d->paths[1]),empty);run_action(d,0,GTK_RESPONSE_CANCEL);g_assert_false(d->stale);g_assert_false(g_file_test(copy_right,G_FILE_TEST_EXISTS));
+ run_action(d,0,GTK_RESPONSE_ACCEPT);g_assert_true(d->stale);g_assert_false(gtk_widget_get_sensitive(d->actions[0]));gchar *bytes=NULL;g_assert_true(g_file_get_contents(copy_right,&bytes,NULL,NULL));g_assert_cmpstr(bytes,==,"left only");g_free(bytes);gtk_entry_set_text(GTK_ENTRY(d->paths[1]),right);
+ start(NULL,d);wait_scan(d);g_assert_false(d->stale);put(right,"copy.dat","right bytes");start(NULL,d);wait_scan(d);g_assert_true(select_path(d,"copy.dat"));expected_destination=copy_left;run_action(d,1,GTK_RESPONSE_ACCEPT);g_assert_true(g_file_get_contents(copy_left,&bytes,NULL,NULL));g_assert_cmpstr(bytes,==,"right bytes");g_free(bytes);
+ start(NULL,d);wait_scan(d);g_assert_true(select_path(d,"copy.dat"));put(right,"copy.dat","external destination change");expected_destination=copy_right;run_action(d,0,GTK_RESPONSE_ACCEPT);g_assert_true(d->stale);g_assert_true(g_file_get_contents(copy_right,&bytes,NULL,NULL));g_assert_cmpstr(bytes,==,"external destination change");g_free(bytes);
+ start(NULL,d);wait_scan(d);g_assert_true(select_path(d,"copy.dat"));expected_destination=NULL;run_action(d,INSIGHT_DIR_TRASH_L,GTK_RESPONSE_CANCEL);g_assert_false(d->stale);g_assert_true(g_file_test(copy_left,G_FILE_TEST_EXISTS));
+ expected_destination=copy_right;block_after_confirmation=copy_left;run_action(d,0,GTK_RESPONSE_ACCEPT);g_assert_false(d->stale);g_assert_false(d->busy);blocked_path=NULL;block_after_confirmation=NULL;
+ Directory *closing=directory_new(NULL);gtk_entry_set_text(GTK_ENTRY(closing->paths[0]),left);gtk_entry_set_text(GTK_ENTRY(closing->paths[1]),right);start(NULL,closing);wait_scan(closing);g_assert_true(select_path(closing,"copy.dat"));
+ gboolean operation_closed=FALSE;g_object_weak_ref(G_OBJECT(closing->window),finalized,&operation_closed);g_idle_add(operation_response,GINT_TO_POINTER(GTK_RESPONSE_ACCEPT));file_action(closing->actions[0],closing);gtk_widget_destroy(closing->window);
+ gint64 close_deadline=g_get_monotonic_time()+10*G_TIME_SPAN_SECOND;while(!operation_closed && g_get_monotonic_time()<close_deadline) { flush();g_usleep(1000); }g_assert_true(operation_closed);
+ start(NULL,d);wait_scan(d);g_assert_true(select_path(d,"copy.dat"));
+ /* The successful operation may win the cancellation race; either result must
+  * invalidate the snapshot and leave the UI usable. */
+ expected_destination=copy_right;g_idle_add(operation_response,GINT_TO_POINTER(GTK_RESPONSE_ACCEPT));file_action(d->actions[0],d);cancel_scan(NULL,d);wait_scan(d);g_assert_true(d->stale);
+ g_remove(copy_left);g_remove(copy_right);g_free(copy_left);g_free(copy_right);expected_destination=NULL;start(NULL,d);wait_scan(d);g_assert_cmpuint(d->rows->len,==,5);
  g_assert_true(select_path(d,"config.ini"));GtkWidget *path_action=gtk_menu_item_new();g_object_ref_sink(path_action);g_object_set_data(G_OBJECT(path_action),"side",GINT_TO_POINTER(0));
  gtk_entry_set_text(GTK_ENTRY(d->paths[0]),empty);copy_absolute(path_action,d);clip=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));expected=g_build_filename(left,"config.ini",NULL);g_assert_cmpstr(clip,==,expected);g_free(clip);g_free(expected);gtk_entry_set_text(GTK_ENTRY(d->paths[0]),left);gtk_widget_destroy(path_action);g_object_unref(path_action);
  gtk_entry_set_text(GTK_ENTRY(d->include),"*.ini");gtk_entry_set_text(GTK_ENTRY(d->exclude),"*.ini");gtk_entry_set_text(GTK_ENTRY(d->filter_entry),"missing");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->different),TRUE);gtk_combo_box_set_active(GTK_COMBO_BOX(d->status_filter),INSIGHT_DIR_ERROR+1);reset_filters(NULL,d);g_assert_cmpint(gtk_tree_model_iter_n_children(d->filtered,NULL),==,5);

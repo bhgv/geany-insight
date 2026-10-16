@@ -37,6 +37,12 @@ int main(void) {
  g_assert_false(insight_directory_operation(roots,"huge",info,0,NULL,&error));g_assert_error(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE);g_clear_error(&error);clear(info);g_assert_true(g_file_delete(file,NULL,&error));g_assert_no_error(error);g_object_unref(file);g_free(path);
  gchar *sub=g_build_filename(left,"sub",NULL);file=g_file_new_for_path(sub);
  if(g_file_make_symbolic_link(file,right,NULL,&error)) { info[0]=snapshot(left,"sub/a.bin");g_assert_nonnull(info[0]);g_assert_false(insight_directory_operation(roots,"sub/a.bin",info,0,NULL,&error));g_assert_error(error,G_IO_ERROR,G_IO_ERROR_NOT_DIRECTORY);g_clear_error(&error);clear(info);g_assert_true(g_file_delete(file,NULL,&error));g_assert_no_error(error); }else g_clear_error(&error);g_object_unref(file);g_free(sub);
+ for(guint side=0;side<2;side++) {
+  put(roots[side],"trash-fixture.txt","trash",5);info[side]=snapshot(roots[side],"trash-fixture.txt");gboolean trashed=insight_directory_operation(roots,"trash-fixture.txt",info,INSIGHT_DIR_TRASH_L+side,NULL,&error);gchar *fixture=g_build_filename(roots[side],"trash-fixture.txt",NULL);
+  if(trashed) { g_assert_no_error(error);g_assert_false(g_file_test(fixture,G_FILE_TEST_EXISTS)); }
+  else { g_assert_nonnull(error);g_clear_error(&error);contents(roots[side],"trash-fixture.txt","trash",5);g_remove(fixture); }
+  g_print("Directory trash side %u: %s\n",side,trashed ? "moved to system trash" : "refused without deleting source");g_free(fixture);clear(info);
+ }
  gchar *a=g_build_filename(left,"a.bin",NULL),*b=g_build_filename(right,"a.bin",NULL);g_remove(a);g_remove(b);g_free(a);g_free(b);g_rmdir(left);g_rmdir(right);g_rmdir(root);g_free(left);g_free(right);g_free(root);
  g_print("Directory operations: exact binary copy in both directions, conditional replacement, stale source/target, same file, cancellation, limits, traversal and parent symlinks passed.\n");return 0;
 }
