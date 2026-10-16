@@ -1022,3 +1022,15 @@ First line	Первая строка
 Last line	Последняя строка
 Line %d of %d	Строка %d из %d
 Logical line number; values beyond the end go to the last line.	Логический номер строки; значения за концом файла ведут к последней строке.
+Replace in Result — Ctrl+H	Замена в результате — Ctrl+H
+Replacement text (empty deletes matches)	Текст замены (пустое значение удаляет совпадения)
+Result selection only	Только выделение результата
+One occurrence per line	Одно совпадение на строку
+Preview count	Подсчитать
+Replace all in Result	Заменить всё в результате
+Select result text first.	Сначала выделите текст результата.
+Preview: %u replacements	Предпросмотр: замен — %u
+Replaced: %u	Заменено: %u
+No changes.	Нет изменений.
+Replacement limit: 100000 changes and 1 MiB result. Nothing changed.	Предел замены: 100000 изменений и 1 МиБ результата. Изменений нет.
+Uses search text, case and whole-word options above; searches the entire result or its selection without wrapping.	Использует текст поиска, регистр и целые слова; обрабатывает весь результат или его выделение без поиска по кругу.

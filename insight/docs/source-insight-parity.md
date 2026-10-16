@@ -432,3 +432,7 @@ Added whole-identifier matching, optional wrap-around and Ctrl+F selection seedi
 ### 2026-10-16 — comparison line navigation
 
 Added Ctrl+G logical-line navigation in all three panes, EOF clamping, optional line-content selection, first/last line buttons, source/result context-menu access, Escape focus return and F6/Shift+F6 pane cycling. Comparison work blocks the jump. Production GTK/UBSan checks cover empty buffers, CR/LF/CRLF, Unicode, trailing empty lines, wrap mode, focus and unchanged merge history. Native Linux editor fixture uses Ctrl+G before Ctrl+E and verifies the opened editor line. [Source Insight Go To Line](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Go_To_Line.htm).
+
+### 2026-10-16 — merge-result replacement
+
+Added literal replace-all with preview count, result selection scope, one occurrence per logical line, shared case/identifier options, Ctrl+H focus, deletion, bounded preflight and a single undoable batch preserving merge marks. Original sources stay read-only. No-op replacements do not create history. GTK/UBSan fixture covers Unicode, CRLF, selection, deletion, no-op, busy and size rejection; native Linux fixture replaces a port and restores it with Ctrl+Z. [Source Insight Replace](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Replace.htm).

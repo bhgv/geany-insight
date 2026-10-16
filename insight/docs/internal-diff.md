@@ -191,3 +191,9 @@ Ctrl+F targets the focused pane and seeds the query from a single-line selection
 Ctrl+G targets the focused pane and seeds its current caret line. Enter a logical line number and press Enter or **Go**. Numbers beyond EOF land on the last line; an empty buffer has line 1. **Select line text** selects content without its line ending. **First line** and **Last line** use the selected pane. Escape returns focus from the number field to that pane. Go to Line is also available in the text context menu.
 
 F6 cycles Left → Right → Result; Shift+F6 reverses the order. Search keeps its independent pane choice. Navigation preserves text, selected difference and merge history; Go to Line is blocked while comparison runs. Logical lines do not change when long lines wrap visually. The production-widget capture above includes the navigation bar.
+
+### Replace in the merge result
+
+Ctrl+H targets search at Result and focuses the replacement field. Enter the old literal text in the search bar above and the new text in **Replace in Result**; an empty replacement deletes matches. Match case and whole-word options apply. **Result selection only** restricts edits to the current result selection; **One occurrence per line** uses the first match on each logical line. Otherwise the entire result is processed, independent of caret position or search wrap.
+
+**Preview count** recomputes actual changes without editing. **Replace all in Result** recomputes against current text and settings, then applies the batch as one Undo/Redo action. Identical text is skipped. A preflight limit of 100000 changes and 1 MiB result rejects the whole batch before edits if exceeded during calculation. Replacement is blocked during comparison. This is literal replacement; regex, preserve-case and source-file replacement are not implemented here. Search and replacement strings are not saved in preferences. The production GTK-widget capture above shows the replacement bar.

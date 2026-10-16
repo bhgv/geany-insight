@@ -71,7 +71,7 @@ static void line_navigation_test(void) {
  Merge *m=merge_new(NULL);flush();GtkTextBuffer *b=result(m);GtkTextIter a,z;GdkEventKey event={0};
  gtk_text_buffer_set_text(b,"one\r\nдва\rthree\n",-1);guint history=m->history->len;
  gtk_widget_grab_focus(m->views[2]);event.state=GDK_CONTROL_MASK;event.keyval=GDK_KEY_g;
- g_assert_true(key(m->views[2],&event,m));g_assert_true(gtk_widget_has_focus(m->line_number));g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(m->line_side)),==,2);
+ g_assert_true(key(m->views[2],&event,m));g_assert_true(gtk_window_get_focus(GTK_WINDOW(m->window))==m->line_number);g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(m->line_side)),==,2);
  gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->line_number),2);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->line_select),TRUE);
  go_line(NULL,m);g_assert_true(gtk_text_buffer_get_selection_bounds(b,&a,&z));gchar *text=gtk_text_buffer_get_text(b,&a,&z,TRUE);g_assert_cmpstr(text,==,"два");g_free(text);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->wrap_toggle),TRUE);gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->line_number),G_MAXINT);go_line(NULL,m);
@@ -83,8 +83,24 @@ static void line_navigation_test(void) {
  gtk_text_buffer_set_text(b,"",0);gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->line_number),100);go_line(NULL,m);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->line_number)),==,1);
  gtk_widget_destroy(m->window);flush();
 }
+static void replace_test(void) {
+ Merge *m=merge_new(NULL);GtkTextBuffer *b=result(m);GtkTextIter a,z;
+ const gchar *initial="foo foo_bar FOO\r\nfoo foo\nяfoo foo";gtk_text_buffer_set_text(b,initial,-1);
+ gtk_entry_set_text(GTK_ENTRY(m->find_entry),"foo");gtk_entry_set_text(GTK_ENTRY(m->replace_entry),"ёж");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->find_word),TRUE);
+ guint history=m->history->len;replace_result(NULL,m);assert_text(m,initial);g_assert_cmpuint(m->history->len,==,history);g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(m->replace_status)),==,"Preview: 5 replacements");
+ replace_result(m->replace_apply,m);assert_text(m,"ёж foo_bar ёж\r\nёж ёж\nяfoo ёж");g_assert_cmpuint(m->history->len,==,history+1);undo(NULL,m);assert_text(m,initial);redo(NULL,m);undo(NULL,m);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->replace_once),TRUE);replace_result(m->replace_apply,m);assert_text(m,"ёж foo_bar FOO\r\nёж foo\nяfoo ёж");undo(NULL,m);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->replace_once),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->replace_selection),TRUE);
+ gtk_text_buffer_get_iter_at_line(b,&a,1);z=a;gtk_text_iter_forward_to_line_end(&z);gtk_text_buffer_select_range(b,&a,&z);
+ gtk_entry_set_text(GTK_ENTRY(m->replace_entry),"");replace_result(m->replace_apply,m);assert_text(m,"foo foo_bar FOO\r\n \nяfoo foo");undo(NULL,m);
+ gtk_text_buffer_get_start_iter(b,&a);gtk_text_buffer_place_cursor(b,&a);replace_result(m->replace_apply,m);assert_text(m,initial);g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(m->replace_status)),==,"Select result text first.");
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->replace_selection),FALSE);GString *many=g_string_new(NULL);for(guint i=0;i<100;i++) g_string_append(many,"foo ");gtk_text_buffer_set_text(b,many->str,-1);gchar *huge=g_strnfill(60000,'x');gtk_entry_set_text(GTK_ENTRY(m->replace_entry),huge);g_free(huge);replace_result(m->replace_apply,m);assert_text(m,many->str);g_string_free(many,TRUE);g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->replace_status)),"Nothing changed"));gtk_text_buffer_set_text(b,initial,-1);
+ gtk_entry_set_text(GTK_ENTRY(m->replace_entry),"foo");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->find_case),TRUE);history=m->history->len;replace_result(m->replace_apply,m);g_assert_cmpuint(m->history->len,==,history);assert_text(m,initial);
+ m->busy=TRUE;gtk_entry_set_text(GTK_ENTRY(m->replace_entry),"blocked");replace_result(m->replace_apply,m);assert_text(m,initial);m->busy=FALSE;
+ gtk_widget_destroy(m->window);flush();
+}
 int main(int argc,char **argv) {
- gtk_init(&argc,&argv);line_navigation_test();search_options_test();insight_diff_set_source_opener(source_opened);
+ gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();insight_diff_set_source_opener(source_opened);
  GError *error=NULL;gchar *dir=g_dir_make_tmp("insight-diff-XXXXXX",&error);g_assert_no_error(error);
  gchar *left=g_build_filename(dir,"left.txt",NULL),*right=g_build_filename(dir,"right.txt",NULL);
  const char *a="start\nleft\ncommon\nlast left\nend\n",*b="start\nright\ncommon\nlast right\nextra\nend\n";
@@ -103,6 +119,8 @@ int main(int argc,char **argv) {
  g_assert_true(pick_block(m->views[0],&mouse,m));g_assert_cmpint(selected(m),==,1);navigate(m,-1);
  GdkEventKey event={0};event.state=GDK_CONTROL_MASK;event.keyval=GDK_KEY_Down;
  g_assert_true(key(m->views[0],&event,m));g_assert_cmpint(selected(m),==,1);
+ gtk_entry_set_text(GTK_ENTRY(m->find_entry),"left");gtk_entry_set_text(GTK_ENTRY(m->replace_entry),"replacement");
+ replace_result(m->replace_apply,m);g_assert_cmpuint(m->history->len,==,2);undo(NULL,m);assert_text(m,a);
  take(m->take[1],m);g_assert_cmpuint(m->history->len,==,2);undo(NULL,m);assert_text(m,a);redo(NULL,m);
  navigate(m,-1);take(m->take[1],m);assert_text(m,b);undo(NULL,m);undo(NULL,m);assert_text(m,a);
  gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),1);gtk_entry_set_text(GTK_ENTRY(m->find_entry),"RIGHT");
