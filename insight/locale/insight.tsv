@@ -1034,3 +1034,9 @@ Replaced: %u	Заменено: %u
 No changes.	Нет изменений.
 Replacement limit: 100000 changes and 1 MiB result. Nothing changed.	Предел замены: 100000 изменений и 1 МиБ результата. Изменений нет.
 Uses search text, case and whole-word options above; searches the entire result or its selection without wrapping.	Использует текст поиска, регистр и целые слова; обрабатывает весь результат или его выделение без поиска по кругу.
+Preserve old case	Сохранять регистр совпадения
+Uppercase selection	Выделение в верхний регистр
+Lowercase selection	Выделение в нижний регистр
+Toggle selection case	Обратить регистр выделения
+Case conversion limit: 1 MiB result. Nothing changed.	Предел преобразования регистра: 1 МиБ результата. Изменений нет.
+Selection case changed.	Регистр выделения изменён.

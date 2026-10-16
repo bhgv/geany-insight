@@ -99,8 +99,26 @@ static void replace_test(void) {
  m->busy=TRUE;gtk_entry_set_text(GTK_ENTRY(m->replace_entry),"blocked");replace_result(m->replace_apply,m);assert_text(m,initial);m->busy=FALSE;
  gtk_widget_destroy(m->window);flush();
 }
+static void case_test(void) {
+ const gchar *old[]={"foo","FOO","Foo","fooBar","123","_ЁЖ","Ёж","ß"};
+ const gchar *expected[]={"ёж","ЁЖ","Ёж","ёЖ","ёЖ","ЁЖ","Ёж","ёж"};
+ for(guint i=0;i<G_N_ELEMENTS(old);i++) { gchar *text=preserve_case(old[i],"ёЖ");g_assert_cmpstr(text,==,expected[i]);g_free(text); }
+ gchar *text=preserve_case("FOO","straße");g_assert_cmpstr(text,==,"STRASSE");g_free(text);
+ Merge *m=merge_new(NULL);GtkTextBuffer *b=result(m);GtkTextIter a,z;
+ const gchar *initial="foo FOO Foo fooBar\r\nёж ЁЖ Ёж";gtk_text_buffer_set_text(b,initial,-1);
+ gtk_entry_set_text(GTK_ENTRY(m->find_entry),"foo");gtk_entry_set_text(GTK_ENTRY(m->replace_entry),"straße");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->find_word),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->replace_case),TRUE);
+ guint history=m->history->len;replace_result(NULL,m);g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(m->replace_status)),==,"Preview: 3 replacements");g_assert_cmpuint(m->history->len,==,history);
+ replace_result(m->replace_apply,m);assert_text(m,"straße STRASSE Straße fooBar\r\nёж ЁЖ Ёж");g_assert_cmpuint(m->history->len,==,history+1);undo(NULL,m);assert_text(m,initial);redo(NULL,m);undo(NULL,m);
+ gtk_text_buffer_set_text(b,"Straße ёЖ 42\r\n",-1);gtk_text_buffer_get_bounds(b,&a,&z);gtk_text_buffer_select_range(b,&a,&z);history=m->history->len;GtkWidget *menu=gtk_menu_new();g_object_ref_sink(menu);source_menu(GTK_TEXT_VIEW(m->views[2]),menu,m);GList *items=gtk_container_get_children(GTK_CONTAINER(menu));gboolean activated=FALSE;for(GList *p=items;p;p=p->next) if(GTK_IS_MENU_ITEM(p->data) && !g_strcmp0(gtk_menu_item_get_label(p->data),"Uppercase selection")) { gtk_menu_item_activate(p->data);activated=TRUE;break; }g_list_free(items);g_assert_true(activated);gtk_widget_destroy(menu);g_object_unref(menu);assert_text(m,"STRASSE ЁЖ 42\r\n");g_assert_true(gtk_text_buffer_get_has_selection(b));g_assert_cmpuint(m->history->len,==,history+1);undo(NULL,m);assert_text(m,"Straße ёЖ 42\r\n");
+ gtk_text_buffer_get_bounds(b,&a,&z);gtk_text_buffer_select_range(b,&a,&z);selection_case(m,1);assert_text(m,"straße ёж 42\r\n");undo(NULL,m);
+ gtk_text_buffer_get_bounds(b,&a,&z);gtk_text_buffer_select_range(b,&a,&z);selection_case(m,2);assert_text(m,"sTRASSE Ёж 42\r\n");undo(NULL,m);
+ gtk_text_buffer_get_start_iter(b,&a);gtk_text_buffer_place_cursor(b,&a);history=m->history->len;selection_case(m,0);g_assert_cmpuint(m->history->len,==,history);
+ gtk_text_buffer_get_bounds(b,&a,&z);gtk_text_buffer_select_range(b,&a,&z);m->busy=TRUE;selection_case(m,0);assert_text(m,"Straße ёЖ 42\r\n");m->busy=FALSE;
+ GString *large=g_string_new(NULL);for(guint i=0;i<180000;i++) { g_string_append(large,"ΐ");if(i%50==49) g_string_append_c(large,'\n'); }gtk_text_buffer_set_text(b,large->str,-1);gtk_text_buffer_get_bounds(b,&a,&z);gtk_text_buffer_select_range(b,&a,&z);history=m->history->len;selection_case(m,0);g_assert_cmpuint(m->history->len,==,history);g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->replace_status)),"Nothing changed"));g_assert_cmpint(gtk_text_buffer_get_char_count(b),==,183600);g_string_free(large,TRUE);
+ gtk_widget_destroy(m->window);flush();
+}
 int main(int argc,char **argv) {
- gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();insight_diff_set_source_opener(source_opened);
+ gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();case_test();insight_diff_set_source_opener(source_opened);
  GError *error=NULL;gchar *dir=g_dir_make_tmp("insight-diff-XXXXXX",&error);g_assert_no_error(error);
  gchar *left=g_build_filename(dir,"left.txt",NULL),*right=g_build_filename(dir,"right.txt",NULL);
  const char *a="start\nleft\ncommon\nlast left\nend\n",*b="start\nright\ncommon\nlast right\nextra\nend\n";

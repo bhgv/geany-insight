@@ -15,7 +15,7 @@ typedef struct { guint begin,end; } MapBlock;
 typedef struct {
  GtkWidget *window,*paths[2],*views[3],*status,*undo,*redo,*take[2],*take_all[2],*external;
  GtkWidget *find_entry,*find_side,*find_case,*find_word,*find_wrap,*find_previous,*find_next,*find_status,*numbers;
- GtkWidget *replace_entry,*replace_selection,*replace_once,*replace_status,*replace_apply;
+ GtkWidget *replace_entry,*replace_selection,*replace_once,*replace_case,*replace_status,*replace_apply;
  GtkWidget *line_side,*line_number,*line_select,*line_status;
  GArray *map_blocks[2];guint map_lines[2];
  GtkWidget *scrollers[3],*maps[2],*zoom,*mono,*vertical,*overview,*list_toggle,*wrap_toggle;GtkCssProvider *font_css;
@@ -217,7 +217,47 @@ static void find_text(Merge *m,gboolean backwards) {
 }
 static void find_clicked(GtkWidget *w,gpointer data) { Merge *m=data;find_text(m,w==m->find_previous); }
 static void find_activate(GtkEntry *entry,gpointer data) { (void)entry;find_text(data,FALSE); }
-typedef struct { gint begin,end; } ReplaceRange;
+/* Recognize uniform and initial-capital case; mixed identifiers stay literal. */
+static gchar *preserve_case(const gchar *old,const gchar *replacement) {
+ guint upper=0,lower=0,cased=0;gboolean initial=TRUE;
+ for(const gchar *p=old;*p;p=g_utf8_next_char(p)) {
+  gunichar c=g_utf8_get_char(p);gboolean up=g_unichar_isupper(c)||g_unichar_istitle(c),down=g_unichar_islower(c);
+  if(up || down) { if((cased==0 && !up) || (cased>0 && !down)) initial=FALSE;cased++;upper+=up;lower+=down; }
+ }
+ if(upper && !lower) return g_utf8_strup(replacement,-1);
+ if(lower && !upper) return g_utf8_strdown(replacement,-1);
+ if(initial && cased) {
+  gchar *low=g_utf8_strdown(replacement,-1);
+  for(gchar *p=low;*p;p=g_utf8_next_char(p)) if(g_unichar_islower(g_utf8_get_char(p)) || g_unichar_isupper(g_utf8_get_char(p))) {
+   gchar *next=g_utf8_next_char(p),*up=g_utf8_strup(p,next-p),*prefix=g_strndup(low,p-low),*text=g_strconcat(prefix,up,next,NULL);g_free(up);g_free(prefix);g_free(low);return text;
+  }
+  return low;
+ }
+ return g_strdup(replacement);
+}
+static gchar *toggle_case(const gchar *text) {
+ GString *out=g_string_new(NULL);
+ for(const gchar *p=text;*p;) { const gchar *next=g_utf8_next_char(p);gunichar c=g_utf8_get_char(p);
+  gchar *part=(g_unichar_isupper(c)||g_unichar_istitle(c)) ? g_utf8_strdown(p,next-p) : g_utf8_strup(p,next-p);g_string_append(out,part);g_free(part);p=next;
+ }
+ return g_string_free(out,FALSE);
+}
+static void selection_case(Merge *m,guint action) {
+ if(m->busy || m->changing) return;
+ GtkTextBuffer *buffer=result(m);GtkTextIter a,z;
+ if(!gtk_text_buffer_get_selection_bounds(buffer,&a,&z)) return;
+ gchar *old=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);
+ gchar *text=action==0 ? g_utf8_strup(old,-1) : action==1 ? g_utf8_strdown(old,-1) : toggle_case(old);
+ gchar *all=contents(buffer);guint64 bytes=strlen(all)-strlen(old)+strlen(text);g_free(all);
+ if(bytes>1024*1024) gtk_label_set_text(GTK_LABEL(m->replace_status),"Case conversion limit: 1 MiB result. Nothing changed.");
+ else if(strcmp(old,text)) {
+  gint begin=gtk_text_iter_get_offset(&a);gtk_text_buffer_begin_user_action(buffer);gtk_text_buffer_delete(buffer,&a,&z);gtk_text_buffer_insert(buffer,&a,text,-1);gtk_text_buffer_get_iter_at_offset(buffer,&z,begin);gtk_text_buffer_select_range(buffer,&z,&a);gtk_text_buffer_end_user_action(buffer);
+  gtk_label_set_text(GTK_LABEL(m->replace_status),"Selection case changed.");
+ }
+ g_free(text);g_free(old);
+}
+typedef struct { gint begin,end;gchar *text; } ReplaceRange;
+
 static void replace_result(GtkWidget *widget,gpointer data) {
  Merge *m=data;if(m->busy || m->changing) return;
  const gchar *query=gtk_entry_get_text(GTK_ENTRY(m->find_entry));
@@ -230,18 +270,20 @@ static void replace_result(GtkWidget *widget,gpointer data) {
  if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->find_case))) flags|=GTK_TEXT_SEARCH_CASE_INSENSITIVE;
  gboolean whole=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->find_word));
  gboolean once=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->replace_once));
- const gchar *replacement=gtk_entry_get_text(GTK_ENTRY(m->replace_entry));gsize replacement_bytes=strlen(replacement);
+ const gchar *replacement=gtk_entry_get_text(GTK_ENTRY(m->replace_entry));
+ gboolean keep_case=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->replace_case));
  gchar *original=contents(buffer);guint64 bytes=strlen(original);g_free(original);
  GArray *ranges=g_array_new(FALSE,FALSE,sizeof(ReplaceRange));gint last_line=-1;gboolean exceeded=FALSE;
  while(search_match(start,query,flags,FALSE,whole,&a,&z) && gtk_text_iter_compare(&z,&limit)<=0) {
   if(!once || gtk_text_iter_get_line(&a)!=last_line) {
    gchar *old=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);gsize old_bytes=strlen(old);
    /* A no-op must not create history or consume the bounded match budget. */
-   gboolean same=!strcmp(old,replacement);g_free(old);
+   gchar *text=keep_case ? preserve_case(old,replacement) : g_strdup(replacement);gsize replacement_bytes=strlen(text);
+   gboolean same=!strcmp(old,text);g_free(old);
    last_line=gtk_text_iter_get_line(&a);
-   if(!same) { ReplaceRange range={gtk_text_iter_get_offset(&a),gtk_text_iter_get_offset(&z)};g_array_append_val(ranges,range);bytes=bytes-old_bytes+replacement_bytes;
+   if(!same) { ReplaceRange range={gtk_text_iter_get_offset(&a),gtk_text_iter_get_offset(&z),text};g_array_append_val(ranges,range);bytes=bytes-old_bytes+replacement_bytes;
     if(ranges->len>100000 || bytes>1024*1024) { exceeded=TRUE;break; }
-   }
+   } else g_free(text);
   }
   start=z;
  }
@@ -250,10 +292,11 @@ static void replace_result(GtkWidget *widget,gpointer data) {
  else if(ranges->len) {
   gtk_text_buffer_begin_user_action(buffer);
   /* Reverse edits preserve offsets and tracked merge marks. */
-  for(guint i=ranges->len;i>0;i--) { ReplaceRange range=g_array_index(ranges,ReplaceRange,i-1);gtk_text_buffer_get_iter_at_offset(buffer,&a,range.begin);gtk_text_buffer_get_iter_at_offset(buffer,&z,range.end);gtk_text_buffer_delete(buffer,&a,&z);gtk_text_buffer_insert(buffer,&a,replacement,(gint)replacement_bytes); }
+  for(guint i=ranges->len;i>0;i--) { ReplaceRange range=g_array_index(ranges,ReplaceRange,i-1);gtk_text_buffer_get_iter_at_offset(buffer,&a,range.begin);gtk_text_buffer_get_iter_at_offset(buffer,&z,range.end);gtk_text_buffer_delete(buffer,&a,&z);gtk_text_buffer_insert(buffer,&a,range.text,-1); }
   gtk_text_buffer_end_user_action(buffer);
   gchar *label=g_strdup_printf("Replaced: %u",ranges->len);gtk_label_set_text(GTK_LABEL(m->replace_status),label);g_free(label);
  } else gtk_label_set_text(GTK_LABEL(m->replace_status),"No changes.");
+ for(guint i=0;i<ranges->len;i++) g_free(g_array_index(ranges,ReplaceRange,i).text);
  g_array_unref(ranges);
 }
 static void gutter_size(GtkTextBuffer *buffer,gpointer data) {
@@ -478,16 +521,17 @@ static void copy_difference(Merge *m,guint side) {
 static void source_menu_action(GtkMenuItem *item,gpointer window) {
  Merge *m=g_object_get_data(G_OBJECT(window),"insight-diff-state");if(!m) return;
  gint side=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item),"side"));gint action=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item),"action"));
- if(action==0) edit_source(m,side);else if(action==1) copy_difference(m,side);else if(action==2) view_options(GTK_WIDGET(item),m);else focus_line(m,side);
+ if(action==0) edit_source(m,side);else if(action==1) copy_difference(m,side);else if(action==2) view_options(GTK_WIDGET(item),m);else if(action==3) focus_line(m,side);else if(side==2) selection_case(m,action-4);
 }
 static void view_menu_toggle(GtkCheckMenuItem *item,gpointer toggle) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle),gtk_check_menu_item_get_active(item)); }
 static void source_menu(GtkTextView *view,GtkWidget *menu,gpointer data) {
  Merge *m=data;guint side=GTK_WIDGET(view)==m->views[1] ? 1 : GTK_WIDGET(view)==m->views[0] ? 0 : 2;
  gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());
- const gchar *labels[]={"Edit File — Ctrl+E","Copy selected difference","File Compare Options…","Go to Line — Ctrl+G"};
- for(guint action=0;action<4;action++) {
-  if(side==2 && action<2) continue;
+ const gchar *labels[]={"Edit File — Ctrl+E","Copy selected difference","File Compare Options…","Go to Line — Ctrl+G","Uppercase selection","Lowercase selection","Toggle selection case"};
+ for(guint action=0;action<G_N_ELEMENTS(labels);action++) {
+  if((side==2 && action<2) || (side!=2 && action>=4)) continue;
   GtkWidget *item=gtk_menu_item_new_with_label(labels[action]);g_object_set_data(G_OBJECT(item),"side",GUINT_TO_POINTER(side));g_object_set_data(G_OBJECT(item),"action",GUINT_TO_POINTER(action));gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect_object(item,"activate",G_CALLBACK(source_menu_action),m->window,0);
+  if(action>=4) gtk_widget_set_sensitive(item,!m->busy && gtk_text_buffer_get_has_selection(result(m)));
   if(action<2) gtk_widget_set_sensitive(item,!m->busy && m->loaded_paths[side] && (action==0 ? source_opener!=NULL : selected(m)>=0));
  }
  GtkWidget *toggles[]={m->mono,m->numbers,m->list_toggle,m->wrap_toggle,m->vertical,m->overview};
@@ -698,10 +742,12 @@ static Merge *merge_new(GtkWidget *parent) {
  g_signal_connect(m->find_entry,"activate",G_CALLBACK(find_activate),m);g_signal_connect(m->find_entry,"key-press-event",G_CALLBACK(key),m);
  GtkWidget *replace=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),replace,FALSE,FALSE,0);
  gtk_box_pack_start(GTK_BOX(replace),gtk_label_new("Replace in Result — Ctrl+H"),FALSE,FALSE,0);m->replace_entry=gtk_entry_new();gtk_widget_set_name(m->replace_entry,"insight-diff-replacement");gtk_entry_set_placeholder_text(GTK_ENTRY(m->replace_entry),"Replacement text (empty deletes matches)");gtk_box_pack_start(GTK_BOX(replace),m->replace_entry,TRUE,TRUE,0);
- m->replace_selection=gtk_check_button_new_with_label("Result selection only");gtk_box_pack_start(GTK_BOX(replace),m->replace_selection,FALSE,FALSE,0);
- m->replace_once=gtk_check_button_new_with_label("One occurrence per line");gtk_box_pack_start(GTK_BOX(replace),m->replace_once,FALSE,FALSE,0);
+ GtkWidget *replace_options=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),replace_options,FALSE,FALSE,0);
+ m->replace_selection=gtk_check_button_new_with_label("Result selection only");gtk_box_pack_start(GTK_BOX(replace_options),m->replace_selection,FALSE,FALSE,0);
+ m->replace_once=gtk_check_button_new_with_label("One occurrence per line");gtk_box_pack_start(GTK_BOX(replace_options),m->replace_once,FALSE,FALSE,0);
  button(replace,"Preview count",G_CALLBACK(replace_result),m);m->replace_apply=button(replace,"Replace all in Result",G_CALLBACK(replace_result),m);gtk_widget_set_name(m->replace_apply,"insight-diff-replace-all");
- m->replace_status=gtk_label_new("");gtk_box_pack_start(GTK_BOX(replace),m->replace_status,FALSE,FALSE,0);
+ m->replace_case=gtk_check_button_new_with_label("Preserve old case");gtk_box_pack_start(GTK_BOX(replace_options),m->replace_case,FALSE,FALSE,0);gtk_widget_set_name(m->replace_case,"insight-diff-preserve-case");
+ m->replace_status=gtk_label_new("");gtk_box_pack_start(GTK_BOX(replace_options),m->replace_status,FALSE,FALSE,0);
  gtk_widget_set_tooltip_text(replace,"Uses search text, case and whole-word options above; searches the entire result or its selection without wrapping.");
  GtkWidget *line=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),line,FALSE,FALSE,0);
  gtk_box_pack_start(GTK_BOX(line),gtk_label_new("Go to Line — Ctrl+G"),FALSE,FALSE,0);

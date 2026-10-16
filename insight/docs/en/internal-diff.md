@@ -196,4 +196,18 @@ F6 cycles Left → Right → Result; Shift+F6 reverses the order. Search keeps i
 
 Ctrl+H targets search at Result and focuses the replacement field. Enter the old literal text in the search bar above and the new text in **Replace in Result**; an empty replacement deletes matches. Match case and whole-word options apply. **Result selection only** restricts edits to the current result selection; **One occurrence per line** uses the first match on each logical line. Otherwise the entire result is processed, independent of caret position or search wrap.
 
-**Preview count** recomputes actual changes without editing. **Replace all in Result** recomputes against current text and settings, then applies the batch as one Undo/Redo action. Identical text is skipped. A preflight limit of 100000 changes and 1 MiB result rejects the whole batch before edits if exceeded during calculation. Replacement is blocked during comparison. This is literal replacement; regex, preserve-case and source-file replacement are not implemented here. Search and replacement strings are not saved in preferences. The production GTK-widget capture above shows the replacement bar.
+**Preview count** recomputes actual changes without editing. **Replace all in Result** recomputes against current text and settings, then applies the batch as one Undo/Redo action. Identical text is skipped. A preflight limit of 100000 changes and 1 MiB result rejects the whole batch before edits if exceeded during calculation. Replacement is blocked during comparison. This is literal replacement; regex and source-file replacement are not implemented here. Search and replacement strings are not saved in preferences. The production GTK-widget capture above shows the replacement bar.
+
+### Preserving and converting case
+
+**Preserve old case** computes replacement text separately for every match. Unicode cased letters determine the style; digits, punctuation and underscores do not. Mixed-case matches use the literal replacement. Initial-capital style lowercases the replacement and uppercases its first cased letter. Preview and size checks use actual converted strings, including expansions such as `ß → SS`. This option belongs to the current window and is not persisted.
+
+| Old match | Typed replacement | Result |
+|---|---|---|
+| `foo` | `bAr` | `bar` |
+| `FOO` | `bAr` | `BAR` |
+| `Foo` | `bAr` | `Bar` |
+| `fooBar` | `bAr` | `bAr` |
+| `ЁЖ` | `straße` | `STRASSE` |
+
+The Result context menu provides **Uppercase selection**, **Lowercase selection** and **Toggle selection case**. They preserve line endings and select the converted text. Unicode conversion can change character count. Each operation is one Undo action; empty selections, unchanged text and comparison work produce no edits. Conversion is rejected in full if the result would exceed 1 MiB. Source-pane menus omit these editing commands.
