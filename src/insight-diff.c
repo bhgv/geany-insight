@@ -5,10 +5,12 @@
 #include "insight-help.h"
 #include "../insight/core/diff.h"
 #include <string.h>
+#include <gio/gio.h>
 
 typedef struct { gchar *text; gint *positions; } Snapshot;
 typedef struct {
  GtkWidget *window,*paths[2],*views[3],*status,*undo,*redo,*take[2],*external;
+ GtkWidget *compare_button,*cancel_button; GCancellable *cancel; gboolean busy;
  GtkWidget *previous,*next,*list_scroll,*sync,*ignore_space,*ignore_eol; GtkAdjustment *adjustments[2]; gboolean scrolling;
  GtkListStore *list; GtkWidget *hunk_view; GtkTextBuffer *output; GtkTreeSelection *selection;
  gchar *sources[2],*loaded_paths[2],*saved;
@@ -21,8 +23,8 @@ static gchar *contents(GtkTextBuffer *b) {
 }
 static void snapshot_free(gpointer data) { Snapshot *s=data;g_free(s->text);g_free(s->positions);g_free(s); }
 static void state(Merge *m) {
- gtk_widget_set_sensitive(m->undo,m->position>0);
- gtk_widget_set_sensitive(m->redo,m->position+1<m->history->len);
+ gtk_widget_set_sensitive(m->undo,!m->busy && m->position>0);
+ gtk_widget_set_sensitive(m->redo,!m->busy && m->position+1<m->history->len);
  gchar *text=contents(result(m));
  gboolean dirty=g_strcmp0(text,m->saved)!=0;g_free(text);
  gtk_window_set_title(GTK_WINDOW(m->window),dirty ? "Diff / Merge — unsaved result" : "Diff / Merge");
@@ -62,6 +64,7 @@ static void redo(GtkWidget *w,gpointer data) { (void)w;Merge *m=data;if(m->posit
 static void navigate(Merge *m,gint direction);
 static gboolean key(GtkWidget *w,GdkEventKey *event,gpointer data) {
  (void)w;
+ if(((Merge*)data)->busy) return FALSE;
  if(!(event->state&GDK_CONTROL_MASK)) return FALSE;
  if(event->keyval==GDK_KEY_Up || event->keyval==GDK_KEY_Down) {
   navigate(data,event->keyval==GDK_KEY_Up ? -1 : 1);return TRUE;
@@ -88,6 +91,9 @@ static void clear_diff(Merge *m) {
 }
 static void destroyed(GtkWidget *w,gpointer data) {
  (void)w;Merge *m=data;
+ g_object_set_data(G_OBJECT(m->window),"insight-diff-state",NULL);
+ if(m->cancel) g_cancellable_cancel(m->cancel);
+ g_clear_object(&m->cancel);
  /* Child text widgets can already be destroyed here; their buffer owns the marks. */
  g_signal_handlers_disconnect_by_data(m->output,m);g_signal_handlers_disconnect_by_data(m->selection,m);
  for(int i=0;i<2;i++) { g_signal_handlers_disconnect_by_data(m->adjustments[i],m);g_object_unref(m->adjustments[i]); }
@@ -154,7 +160,7 @@ static void highlight(Merge *m,int side,size_t begin,size_t end) {
 }
 static void selection(GtkTreeSelection *s,gpointer data) {
  (void)s;Merge *m=data;gint id=selected(m);
- for(int side=0;side<2;side++) gtk_widget_set_sensitive(m->take[side],id>=0);
+ for(int side=0;side<2;side++) gtk_widget_set_sensitive(m->take[side],!m->busy && id>=0);
  gtk_widget_set_sensitive(m->previous,m->diff.count && id!=0);
  gtk_widget_set_sensitive(m->next,m->diff.count && (id<0 || (size_t)(id+1)<m->diff.count));
  if(id<0 || (size_t)id>=m->diff.count) return;
@@ -170,7 +176,7 @@ static void selection(GtkTreeSelection *s,gpointer data) {
  gchar *label=g_strdup_printf("Difference %d of %zu",id+1,m->diff.count);message(m,label);g_free(label);
 }
 static void take(GtkWidget *w,gpointer data) {
- Merge *m=data;gint id=selected(m);if(id<0 || (size_t)id>=m->diff.count) return;
+ Merge *m=data;gint id=selected(m);if(m->busy || id<0 || (size_t)id>=m->diff.count) return;
  int side=w==m->take[1];InsightDiffHunk *h=&m->diff.hunks[id];
  size_t begin=side?h->b_begin:h->a_begin,end=side?h->b_end:h->a_end;
  GtkTextIter a,z;gtk_text_buffer_get_iter_at_mark(result(m),&a,m->marks[2*id]);gtk_text_buffer_get_iter_at_mark(result(m),&z,m->marks[2*id+1]);
@@ -187,24 +193,57 @@ static void choose(GtkWidget *w,gpointer data) {
  if(gtk_dialog_run(GTK_DIALOG(d))==GTK_RESPONSE_ACCEPT) { gchar *p=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(d));gtk_entry_set_text(GTK_ENTRY(m->paths[side]),p);g_free(p); }
  gtk_widget_destroy(d);
 }
-static void compare(GtkWidget *w,gpointer data) {
- (void)w;Merge *m=data;gchar *text[2]={NULL,NULL};GError *error=NULL;InsightDiff diff={0};
+typedef struct { gchar *paths[2],*text[2]; unsigned options;InsightDiff diff; } Comparison;
+static void comparison_free(gpointer data) {
+ Comparison *job=data;for(int i=0;i<2;i++) { g_free(job->paths[i]);g_free(job->text[i]); }
+ insight_diff_clear(&job->diff);g_free(job);
+}
+static int comparison_cancelled(void *data) { return g_cancellable_is_cancelled(data); }
+static void comparison_worker(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
+ (void)source;Comparison *job=data;GError *error=NULL;
  for(int i=0;i<2;i++) {
-  gsize len=0;
-  if(!g_file_get_contents(gtk_entry_get_text(GTK_ENTRY(m->paths[i])),&text[i],&len,&error)) goto failed;
-  if(len>1024*1024 || memchr(text[i],0,len) || !g_utf8_validate(text[i],len,NULL)) {
-   message(m,"First version supports UTF-8 text files up to 1 MiB, without NUL bytes.");goto done;
+  GFile *file=g_file_new_for_path(job->paths[i]);
+  GFileInfo *info=g_file_query_info(file,G_FILE_ATTRIBUTE_STANDARD_TYPE,G_FILE_QUERY_INFO_NONE,cancel,&error);
+  if(!info) { g_object_unref(file);goto failed; }
+  gboolean regular=g_file_info_get_file_type(info)==G_FILE_TYPE_REGULAR;g_object_unref(info);
+  if(!regular) { g_object_unref(file);g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Choose regular UTF-8 text files.");goto failed; }
+  GFileInputStream *input=g_file_read(file,cancel,&error);g_object_unref(file);if(!input) goto failed;
+  const gsize limit=1024*1024;gsize len=0;job->text[i]=g_malloc(limit+2);
+  gboolean ok=g_input_stream_read_all(G_INPUT_STREAM(input),job->text[i],limit+1,&len,cancel,&error);
+  g_object_unref(input);if(!ok) goto failed;
+  if(len>limit || memchr(job->text[i],0,len) || !g_utf8_validate(job->text[i],len,NULL)) {
+   g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Supports UTF-8 text files up to 1 MiB, without NUL bytes.");goto failed;
   }
+  job->text[i][len]=0;
  }
- unsigned options=(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->ignore_space)) ? INSIGHT_DIFF_IGNORE_SPACE : 0) |
-  (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->ignore_eol)) ? INSIGHT_DIFF_IGNORE_EOL : 0);
- int rc=insight_diff_compute_options(text[0],text[1],options,&diff);
- if(rc) { message(m,rc==-2 ? "Too many changed lines for the initial diff engine (4 million LCS cells)." : "Cannot allocate comparison.");goto done; }
- if(!discard(m)) goto done;
- m->changing=TRUE;m->scrolling=TRUE;clear_diff(m);m->diff=diff;diff=(InsightDiff){0};
+ int rc=insight_diff_compute_cancellable(job->text[0],job->text[1],job->options,comparison_cancelled,cancel,&job->diff);
+ if(rc) {
+  g_set_error_literal(&error,G_IO_ERROR,rc==-3 ? G_IO_ERROR_CANCELLED : G_IO_ERROR_FAILED,
+   rc==-3 ? "Comparison cancelled." : rc==-2 ? "Too many changed lines (4 million LCS cells)." : "Cannot allocate comparison.");goto failed;
+ }
+ g_task_return_boolean(task,TRUE);return;
+failed:
+ g_task_return_error(task,error);
+}
+static void busy(Merge *m,gboolean active) {
+ m->busy=active;gtk_widget_set_sensitive(m->compare_button,!active);gtk_widget_set_sensitive(m->cancel_button,active);
+ gtk_widget_set_sensitive(m->views[2],!active);
+ for(int i=0;i<2;i++) gtk_widget_set_sensitive(gtk_widget_get_parent(m->paths[i]),!active);
+ gtk_widget_set_sensitive(m->ignore_space,!active);gtk_widget_set_sensitive(m->ignore_eol,!active);
+ state(m);selection(NULL,m);
+}
+static void comparison_done(GObject *source,GAsyncResult *async,gpointer data) {
+ (void)data;GTask *task=G_TASK(async);GError *error=NULL;
+ gboolean ok=g_task_propagate_boolean(task,&error);
+ Merge *m=g_object_get_data(source,"insight-diff-state");
+ if(!m) { g_clear_error(&error);return; }
+ g_clear_object(&m->cancel);busy(m,FALSE);
+ if(!ok) { message(m,error->message);g_clear_error(&error);return; }
+ Comparison *job=g_task_get_task_data(task);
+ m->changing=TRUE;m->scrolling=TRUE;clear_diff(m);m->diff=job->diff;job->diff=(InsightDiff){0};
  for(int i=0;i<2;i++) {
-  g_free(m->sources[i]);m->sources[i]=text[i];text[i]=NULL;
-  g_free(m->loaded_paths[i]);m->loaded_paths[i]=g_strdup(gtk_entry_get_text(GTK_ENTRY(m->paths[i])));
+  g_free(m->sources[i]);m->sources[i]=job->text[i];job->text[i]=NULL;
+  g_free(m->loaded_paths[i]);m->loaded_paths[i]=g_strdup(job->paths[i]);
   gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[i])),m->sources[i],-1);
  }
  gtk_text_buffer_set_text(result(m),m->sources[0],-1);g_free(m->saved);m->saved=g_strdup(m->sources[0]);
@@ -223,11 +262,19 @@ static void compare(GtkWidget *w,gpointer data) {
  gchar *label=g_strdup_printf("%zu differences. Result starts with Left; select a block and take Left or Right, or edit the result.",m->diff.count);message(m,label);g_free(label);
  gtk_widget_set_sensitive(m->external,TRUE);
  if(m->diff.count) { GtkTreePath *p=gtk_tree_path_new_first();gtk_tree_view_set_cursor(GTK_TREE_VIEW(m->hunk_view),p,NULL,FALSE);gtk_tree_path_free(p); }
- goto done;
-failed:
- message(m,error->message);g_clear_error(&error);
-done:
- g_free(text[0]);g_free(text[1]);insight_diff_clear(&diff);
+}
+static void compare(GtkWidget *w,gpointer data) {
+ (void)w;Merge *m=data;if(m->busy || !discard(m)) return;
+ Comparison *job=g_new0(Comparison,1);
+ for(int i=0;i<2;i++) job->paths[i]=g_strdup(gtk_entry_get_text(GTK_ENTRY(m->paths[i])));
+ job->options=(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->ignore_space)) ? INSIGHT_DIFF_IGNORE_SPACE : 0) |
+  (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->ignore_eol)) ? INSIGHT_DIFF_IGNORE_EOL : 0);
+ m->cancel=g_cancellable_new();busy(m,TRUE);message(m,"Comparing… Cancel keeps the previous result.");
+ GTask *task=g_task_new(m->window,m->cancel,comparison_done,NULL);
+ g_task_set_task_data(task,job,comparison_free);g_task_run_in_thread(task,comparison_worker);g_object_unref(task);
+}
+static void cancel_compare(GtkWidget *w,gpointer data) {
+ (void)w;Merge *m=data;if(m->cancel) g_cancellable_cancel(m->cancel);
 }
 static void save(GtkWidget *w,gpointer data) {
  (void)w;Merge *m=data;GtkWidget *d=gtk_file_chooser_dialog_new("Save merge result",GTK_WINDOW(m->window),GTK_FILE_CHOOSER_ACTION_SAVE,"Cancel",GTK_RESPONSE_CANCEL,"Save",GTK_RESPONSE_ACCEPT,NULL);
@@ -270,7 +317,7 @@ static Merge *merge_new(GtkWidget *parent) {
   GtkWidget *browse=button(row,"Browse…",G_CALLBACK(choose),m);g_object_set_data(G_OBJECT(browse),"side",GINT_TO_POINTER(i));
  }
  GtkWidget *bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);
- button(bar,"Compare",G_CALLBACK(compare),m);m->take[0]=button(bar,"Take Left",G_CALLBACK(take),m);m->take[1]=button(bar,"Take Right",G_CALLBACK(take),m);
+ m->compare_button=button(bar,"Compare",G_CALLBACK(compare),m);m->cancel_button=button(bar,"Cancel comparison",G_CALLBACK(cancel_compare),m);gtk_widget_set_sensitive(m->cancel_button,FALSE);m->take[0]=button(bar,"Take Left",G_CALLBACK(take),m);m->take[1]=button(bar,"Take Right",G_CALLBACK(take),m);
  m->undo=button(bar,"Undo",G_CALLBACK(undo),m);m->redo=button(bar,"Redo",G_CALLBACK(redo),m);button(bar,"Save result…",G_CALLBACK(save),m);
  m->external=button(bar,"External KDiff3 (optional)",G_CALLBACK(external),m);
  GtkWidget *options=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),options,FALSE,FALSE,0);
@@ -309,6 +356,7 @@ static Merge *merge_new(GtkWidget *parent) {
  g_signal_connect(result(m),"end-user-action",G_CALLBACK(action_end),m);
  g_signal_connect(result(m),"changed",G_CALLBACK(changed),m);g_signal_connect(m->window,"key-press-event",G_CALLBACK(key),m);
  g_signal_connect(m->window,"delete-event",G_CALLBACK(closing),m);g_signal_connect(m->window,"destroy",G_CALLBACK(destroyed),m);
+ g_object_set_data(G_OBJECT(m->window),"insight-diff-state",m);
  record(m);selection(NULL,m);gtk_widget_show_all(m->window);return m;
 }
 

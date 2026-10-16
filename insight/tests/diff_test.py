@@ -21,6 +21,8 @@ with tempfile.TemporaryDirectory() as tmp:
     lib.insight_diff_compute.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.POINTER(Diff)]
     lib.insight_diff_map_offset.argtypes = [ctypes.POINTER(Diff), ctypes.c_int, ctypes.c_size_t]
     lib.insight_diff_map_offset.restype = ctypes.c_size_t
+    Cancel = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p)
+    lib.insight_diff_compute_cancellable.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint, Cancel, ctypes.c_void_p, ctypes.POINTER(Diff)]
     lib.insight_diff_compute_options.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint, ctypes.POINTER(Diff)]
     lib.insight_diff_map_line.argtypes = [ctypes.POINTER(Diff), ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
     lib.insight_diff_map_line.restype = ctypes.c_size_t
@@ -130,6 +132,15 @@ with tempfile.TemporaryDirectory() as tmp:
             def option_text():
                 return ''.join(rng.choice(['a b\n', 'ab\r\n', '\tя\r', ' x \n', '\n']) for _ in range(rng.randrange(20)))
             options_check(option_text(), option_text(), flags)
+    for threshold in (1, 2, 3, 12, 800):
+        calls = [0]
+        @Cancel
+        def cancelled(_):
+            calls[0] += 1
+            return calls[0] >= threshold
+        diff = Diff()
+        assert lib.insight_diff_compute_cancellable(b'a\n' * 1000, b'b\n' * 1000, 0, cancelled, None, ctypes.byref(diff)) == -3
+        assert not diff.hunks and diff.count == 0
     if os.name == 'nt':
         import _ctypes
         _ctypes.FreeLibrary(lib._handle)  # Windows locks loaded DLLs during cleanup.

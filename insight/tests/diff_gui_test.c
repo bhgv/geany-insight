@@ -8,6 +8,12 @@ gchar *insight_i18n_printf(const gchar *format,...) {
 }
 void insight_panel_help_attach(GtkWidget *widget,const gchar *topic) { (void)widget;(void)topic; }
 static void flush(void) { while(gtk_events_pending()) gtk_main_iteration(); }
+static void wait_comparison(Merge *m) {
+ gint64 until=g_get_monotonic_time()+10*G_TIME_SPAN_SECOND;
+ while(m->busy && g_get_monotonic_time()<until) { flush();g_usleep(1000); }
+ g_assert_false(m->busy);flush();
+}
+static void finalized(gpointer data,GObject *object) { (void)object;*(gboolean*)data=TRUE; }
 static void assert_text(Merge *m,const char *expected) {
  gchar *s=contents(result(m));g_assert_cmpstr(s,==,expected);g_free(s);
 }
@@ -20,7 +26,7 @@ int main(int argc,char **argv) {
  g_assert_true(g_file_set_contents(right,b,-1,&error));g_assert_no_error(error);
  Merge *m=merge_new(NULL);flush();g_assert_false(gtk_widget_get_sensitive(m->next));
  gtk_entry_set_text(GTK_ENTRY(m->paths[0]),left);gtk_entry_set_text(GTK_ENTRY(m->paths[1]),right);
- compare(NULL,m);flush();g_assert_cmpuint(m->diff.count,==,2);g_assert_cmpint(selected(m),==,0);
+ compare(NULL,m);wait_comparison(m);g_assert_cmpuint(m->diff.count,==,2);g_assert_cmpint(selected(m),==,0);
  g_assert_false(gtk_widget_get_sensitive(m->previous));g_assert_true(gtk_widget_get_sensitive(m->next));
  step(m->next,m);g_assert_cmpint(selected(m),==,1);step(m->next,m);g_assert_cmpint(selected(m),==,1);
  g_assert_false(gtk_widget_get_sensitive(m->next));step(m->previous,m);g_assert_cmpint(selected(m),==,0);
@@ -39,8 +45,17 @@ int main(int argc,char **argv) {
  g_assert_true(g_file_set_contents(left,"a b\r\nя\r\n",-1,&error));g_assert_no_error(error);
  g_assert_true(g_file_set_contents(right,"ab\nя\n",-1,&error));g_assert_no_error(error);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->ignore_space),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->ignore_eol),TRUE);
- compare(NULL,m);flush();g_assert_cmpuint(m->diff.count,==,0);assert_text(m,"a b\r\nя\r\n");
- gtk_widget_destroy(m->window);flush();
+ compare(NULL,m);wait_comparison(m);g_assert_cmpuint(m->diff.count,==,0);assert_text(m,"a b\r\nя\r\n");
+ compare(NULL,m);g_assert_true(m->busy);cancel_compare(NULL,m);wait_comparison(m);
+ assert_text(m,"a b\r\nя\r\n");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->status)),"cancel"));
+ gtk_entry_set_text(GTK_ENTRY(m->paths[1]),dir);compare(NULL,m);wait_comparison(m);
+ assert_text(m,"a b\r\nя\r\n");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->status)),"regular"));
+ gtk_entry_set_text(GTK_ENTRY(m->paths[1]),right);
+ gboolean gone=FALSE;g_object_weak_ref(G_OBJECT(m->window),finalized,&gone);
+ compare(NULL,m);gtk_widget_destroy(m->window);
+ gint64 until=g_get_monotonic_time()+10*G_TIME_SPAN_SECOND;
+ while(!gone && g_get_monotonic_time()<until) { flush();g_usleep(1000); }
+ g_assert_true(gone);flush();
  g_remove(left);g_remove(right);g_rmdir(dir);g_free(left);g_free(right);g_free(dir);
  g_print("Production Diff/Merge fixture: navigation, display, take and undo/redo passed.\n");return 0;
 }

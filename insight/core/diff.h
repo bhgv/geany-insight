@@ -20,6 +20,11 @@ enum { INSIGHT_DIFF_IGNORE_SPACE=1u, INSIGHT_DIFF_IGNORE_EOL=2u };
  * final terminator still differs. Hunk offsets always refer to original bytes;
  * ignored differences are kept from Left in a merge result. */
 int insight_diff_compute_options(const char *a,const char *b,unsigned options,InsightDiff *out);
+typedef int (*InsightDiffCancel)(void *data);
+/* As above; cancellation is checked between phases and LCS rows. -3 means
+ * cancelled, with an empty result. callback must not mutate the inputs. */
+int insight_diff_compute_cancellable(const char *a,const char *b,unsigned options,
+ InsightDiffCancel cancelled,void *data,InsightDiff *out);
 /* Zero-based logical lines, including CR-only sources. Works with all options.
  * Byte mapping above is only valid for the exact (options=0) comparison. */
 size_t insight_diff_map_line(const InsightDiff *diff,int side,const char *source,const char *target,size_t line);

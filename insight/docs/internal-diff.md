@@ -84,3 +84,19 @@ uses logical lines, so differing whitespace byte widths do not shift navigation.
 Validation adds 2000 random normalized reconstructions in all four option
 combinations, monotonic line mapping and a GTK comparison of Cyrillic CRLF/LF
 sources. No semantic or language-aware whitespace comparison is claimed.
+
+## Cancellable comparison
+
+File reads, UTF-8 validation and LCS comparison run in a GTask worker. Reads are
+bounded to 1 MiB plus one detection byte per regular source file. **Cancel
+comparison** keeps the previous sources, result and undo history. A failed read,
+invalid UTF-8 or exceeded work limit also leaves them intact. While comparison is
+pending, source choices, comparison options and result editing are disabled.
+Closing the window cancels the worker; a late completion never accesses destroyed
+widgets. Cancellation is checked between phases and LCS rows, not within a
+single line comparison. Publishing source text, GTK tags and list rows still
+runs on the UI thread; this is not a guarantee of zero UI latency.
+
+The isolated production-widget fixture covers cancellation, rejected directory
+input and destroying a window with a pending comparison. Core tests cancel at
+several LCS phases and verify that no partial diff escapes.

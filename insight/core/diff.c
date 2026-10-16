@@ -69,14 +69,16 @@ static void safe_seams(InsightDiff *out,const Lines *a,const Lines *b) {
  out->count=count;
 }
 void insight_diff_clear(InsightDiff *diff) { free(diff->hunks); diff->hunks=NULL; diff->count=0; }
-int insight_diff_compute_options(const char *a,const char *b,unsigned options,InsightDiff *out) {
+int insight_diff_compute_cancellable(const char *a,const char *b,unsigned options,InsightDiffCancel cancelled,void *data,InsightDiff *out) {
  Lines x={0},y={0}; unsigned *table=NULL; int status=-1;
  out->hunks=NULL; out->count=0;
+ if(cancelled && cancelled(data)) { status=-3;goto done; }
  if(split(a,options,&x) || split(b,options,&y)) goto done;
  /* Trim common edges before allocating the quadratic LCS table. */
  size_t start=0,xe=x.count,ye=y.count;
  while(start<xe && start<ye && equal(&x,start,&y,start)) start++;
  while(xe>start && ye>start && equal(&x,xe-1,&y,ye-1)) { xe--; ye--; }
+ if(cancelled && cancelled(data)) { status=-3;goto done; }
  size_t nx=xe-start,ny=ye-start,width=ny+1;
  /* After common-edge trimming, an empty side is one exact edit. */
  if(!nx || !ny) {
@@ -91,11 +93,15 @@ int insight_diff_compute_options(const char *a,const char *b,unsigned options,In
  /* Every separation consumes an equal line from both sides. */
  out->hunks=malloc(((nx<ny ? nx : ny)+1)*sizeof(InsightDiffHunk));
  if(!table || !out->hunks) goto done;
- for(size_t i=nx;i-->0;) for(size_t j=ny;j-->0;)
+ for(size_t i=nx;i-->0;) {
+  if(cancelled && cancelled(data)) { status=-3;goto done; }
+  for(size_t j=ny;j-->0;)
   table[i*width+j]=equal(&x,start+i,&y,start+j) ? 1+table[(i+1)*width+j+1] :
    (table[(i+1)*width+j]>=table[i*width+j+1] ? table[(i+1)*width+j] : table[i*width+j+1]);
+ }
  size_t i=0,j=0;
  while(i<nx || j<ny) {
+  if(cancelled && cancelled(data)) { status=-3;goto done; }
   if(i<nx && j<ny && equal(&x,start+i,&y,start+j)) { i++;j++;continue; }
   size_t ib=i,jb=j;
   do {
@@ -124,6 +130,9 @@ size_t insight_diff_map_offset(const InsightDiff *diff, int side, size_t offset)
  return to+(offset-from);
 }
 
+int insight_diff_compute_options(const char *a,const char *b,unsigned options,InsightDiff *out) {
+ return insight_diff_compute_cancellable(a,b,options,NULL,NULL,out);
+}
 int insight_diff_compute(const char *a,const char *b,InsightDiff *out) {
  return insight_diff_compute_options(a,b,0,out);
 }
