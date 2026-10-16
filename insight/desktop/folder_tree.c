@@ -32,7 +32,12 @@ static void placeholder(FolderTree *t,GtkTreeIter *parent,const gchar *text)
  gtk_tree_path_free(row);t->setting=setting;
 }
 static void append(FolderTree *t,GtkTreeIter *parent,GtkTreeIter *iter,const gchar *name,const gchar *path)
-{ gtk_tree_store_append(t->store,iter,parent);gtk_tree_store_set(t->store,iter,INSIGHT_FOLDER_NAME,name,INSIGHT_FOLDER_PATH,path,INSIGHT_FOLDER_STATE,INSIGHT_FOLDER_UNKNOWN,INSIGHT_FOLDER_TOOLTIP,path,-1);placeholder(t,iter,"Expand to read subfolders"); }
+{
+ gtk_tree_store_append(t->store,iter,parent);gtk_tree_store_set(t->store,iter,INSIGHT_FOLDER_NAME,name,INSIGHT_FOLDER_PATH,path,INSIGHT_FOLDER_STATE,INSIGHT_FOLDER_UNKNOWN,INSIGHT_FOLDER_TOOLTIP,path,-1);placeholder(t,iter,"Expand to read subfolders");
+ /* A known descendant already gives an ancestor its expansion arrow. Do not
+  * display one redundant hint at every level of the current path. */
+ if(parent) { gint state;gtk_tree_model_get(GTK_TREE_MODEL(t->store),parent,INSIGHT_FOLDER_STATE,&state,-1);if(state==INSIGHT_FOLDER_UNKNOWN) placeholder(t,parent,NULL); }
+}
 static gint sort_rows(GtkTreeModel *model,GtkTreeIter *a,GtkTreeIter *b,gpointer data)
 { (void)data;gchar *ap,*bp,*an,*bn;gtk_tree_model_get(model,a,INSIGHT_FOLDER_PATH,&ap,INSIGHT_FOLDER_NAME,&an,-1);gtk_tree_model_get(model,b,INSIGHT_FOLDER_PATH,&bp,INSIGHT_FOLDER_NAME,&bn,-1);gint result=!ap!=!bp ? (ap ? -1 : 1) : g_utf8_collate(an ? an : "",bn ? bn : "");g_free(ap);g_free(bp);g_free(an);g_free(bn);return result; }
 static gint sort_entries(gconstpointer a,gconstpointer b) { return g_utf8_collate((*(FolderEntry *const *)a)->name,(*(FolderEntry *const *)b)->name); }
