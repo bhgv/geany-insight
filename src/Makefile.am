@@ -276,6 +276,8 @@ libgeany_la_SOURCES += \
 	../insight/desktop/folder_tree.h \
 	../insight/desktop/folder_layout.c \
 	../insight/desktop/folder_layout.h \
+	../insight/desktop/directory_operation.c \
+	../insight/desktop/directory_operation.h \
 	../insight/desktop/disk_operation.c \
 	../insight/desktop/disk_operation.h \
 	../insight/desktop/project_files.c \
