@@ -17,11 +17,21 @@ int main(void) {
  g_assert_cmpuint(rows->len,==,4);g_assert_cmpint(find(rows,"a.txt")->status,==,INSIGHT_DIR_LEFT);g_assert_cmpint(find(rows,"b.txt")->status,==,INSIGHT_DIR_RIGHT);
  gchar *child=g_build_filename("sub","child.txt",NULL);g_assert_nonnull(find(rows,child));g_assert_null(find(rows,".hidden"));g_ptr_array_unref(rows);
  o.recursive=FALSE;o.hidden=TRUE;rows=insight_directory_compare(left,right,&o,NULL,&error);g_assert_no_error(error);g_assert_nonnull(find(rows,".hidden"));g_assert_null(find(rows,child));g_ptr_array_unref(rows);
+ put(left,"a.txt","same text");put(right,"a.txt","same text");
+ o=insight_directory_options();rows=insight_directory_compare(left,right,&o,NULL,&error);g_assert_no_error(error);g_assert_cmpint(find(rows,"a.txt")->status,==,INSIGHT_DIR_SAME);g_ptr_array_unref(rows);
+ put(right,"a.txt","same size");rows=insight_directory_compare(left,right,&o,NULL,&error);g_assert_no_error(error);g_assert_cmpint(find(rows,"a.txt")->status,==,INSIGHT_DIR_DIFFERENT);g_ptr_array_unref(rows);
+ put(left,"a.txt","я b\r\nend\r");put(right,"a.txt","яb\nend\n");o.text_flags=3;
+ rows=insight_directory_compare(left,right,&o,NULL,&error);g_assert_no_error(error);g_assert_cmpint(find(rows,"a.txt")->status,==,INSIGHT_DIR_SAME);g_ptr_array_unref(rows);
+ put(right,"a.txt","яb\nend");rows=insight_directory_compare(left,right,&o,NULL,&error);g_assert_no_error(error);g_assert_cmpint(find(rows,"a.txt")->status,==,INSIGHT_DIR_DIFFERENT);g_ptr_array_unref(rows);
+ gchar *binary=g_build_filename(right,"a.txt",NULL);g_assert_true(g_file_set_contents(binary,"a\0b",3,&error));g_assert_no_error(error);
+ rows=insight_directory_compare(left,right,&o,NULL,&error);g_assert_no_error(error);g_assert_cmpint(find(rows,"a.txt")->status,==,INSIGHT_DIR_SKIPPED);g_ptr_array_unref(rows);g_free(binary);
+ o.text_flags=0;o.max_bytes=0;put(right,"a.txt","same size!!");put(left,"a.txt","same size!!");
+ rows=insight_directory_compare(left,right,&o,NULL,&error);g_assert_no_error(error);g_assert_cmpint(find(rows,"a.txt")->status,==,INSIGHT_DIR_SKIPPED);g_ptr_array_unref(rows);
  o.max_entries=1;rows=insight_directory_compare(left,right,&o,NULL,&error);g_assert_null(rows);g_assert_error(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE);g_clear_error(&error);
  GCancellable *cancel=g_cancellable_new();g_cancellable_cancel(cancel);o=insight_directory_options();o.method=INSIGHT_DIR_DATE;
  rows=insight_directory_compare(left,right,&o,cancel,&error);g_assert_null(rows);g_assert_error(error,G_IO_ERROR,G_IO_ERROR_CANCELLED);g_clear_error(&error);g_object_unref(cancel);
  gchar *p=g_build_filename(sub,"child.txt",NULL);g_remove(p);g_free(p);g_rmdir(sub);g_free(sub);
  const gchar *names[]={"a.txt",".hidden",NULL};for(guint i=0;names[i];i++) { p=g_build_filename(left,names[i],NULL);g_remove(p);g_free(p); }
- p=g_build_filename(right,"b.txt",NULL);g_remove(p);g_free(p);g_rmdir(left);g_rmdir(right);g_rmdir(root);g_free(left);g_free(right);g_free(root);g_free(child);
+ p=g_build_filename(right,"a.txt",NULL);g_remove(p);g_free(p);p=g_build_filename(right,"b.txt",NULL);g_remove(p);g_free(p);g_rmdir(left);g_rmdir(right);g_rmdir(root);g_free(left);g_free(right);g_free(root);g_free(child);
  g_print("Directory metadata: union, recursion, hidden, limits and cancellation passed.\n");return 0;
 }

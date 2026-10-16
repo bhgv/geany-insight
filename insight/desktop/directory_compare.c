@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "directory_compare.h"
 #include <string.h>
+#include "../core/diff.h"
 #define ATTRS "standard::name,standard::type,standard::is-symlink,standard::is-hidden,standard::size,time::modified,time::modified-usec,id::file,etag::value"
 static void entry_free(gpointer data) {
  InsightDirectoryEntry *e=data;g_free(e->relative);g_clear_object(&e->info[0]);g_clear_object(&e->info[1]);g_free(e->detail);g_free(e);
@@ -58,14 +59,93 @@ static void classify(InsightDirectoryEntry *entry,const InsightDirectoryOptions 
  if(g_file_info_get_file_type(a)==G_FILE_TYPE_DIRECTORY) { entry->status=INSIGHT_DIR_SAME;entry->detail=g_strdup("Folder; inspect child rows");return; }
  entry->status=same_time(a,b) && (options->method==INSIGHT_DIR_DATE || g_file_info_get_size(a)==g_file_info_get_size(b)) ? INSIGHT_DIR_SAME : INSIGHT_DIR_DIFFERENT;
 }
+static gboolean matches(GFileInfo *a,GFileInfo *b) {
+ return b && (!g_file_info_has_attribute(b,G_FILE_ATTRIBUTE_STANDARD_IS_SYMLINK) || !g_file_info_get_is_symlink(b)) && g_file_info_get_file_type(b)==G_FILE_TYPE_REGULAR &&
+  g_file_info_get_size(a)==g_file_info_get_size(b) && same_time(a,b) &&
+  !g_strcmp0(g_file_info_get_attribute_string(a,G_FILE_ATTRIBUTE_ID_FILE),g_file_info_get_attribute_string(b,G_FILE_ATTRIBUTE_ID_FILE)) &&
+  !g_strcmp0(g_file_info_get_etag(a),g_file_info_get_etag(b));
+}
+static gboolean recheck(GFile *file,GFileInfo *snapshot,GCancellable *cancel,GError **error) {
+ GFileInfo *current=g_file_query_info(file,ATTRS,G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,cancel,error);
+ if(!current) return FALSE;
+ gboolean ok=matches(snapshot,current);g_object_unref(current);
+ if(!ok) g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_BUSY,"File changed during directory comparison; rescan.");
+ return ok;
+}
+static gboolean normalized_equal(const gchar *a,const gchar *b,guint flags) {
+ while(TRUE) {
+  if(flags&INSIGHT_DIFF_IGNORE_SPACE) { while(*a && strchr(" \t\v\f",*a)) a++;while(*b && strchr(" \t\v\f",*b)) b++; }
+  gint x=(guchar)*a,y=(guchar)*b;
+  if(flags&INSIGHT_DIFF_IGNORE_EOL) { if(x=='\r') x='\n';if(y=='\r') y='\n'; }
+  if(x!=y) return FALSE;
+  if(!x) return TRUE;
+  if((flags&INSIGHT_DIFF_IGNORE_EOL) && *a=='\r' && a[1]=='\n') a++;
+  if((flags&INSIGHT_DIFF_IGNORE_EOL) && *b=='\r' && b[1]=='\n') b++;
+  a++;b++;
+ }
+}
+static void content(InsightDirectoryEntry *entry,const gchar *left,const gchar *right,const InsightDirectoryOptions *options,guint64 *charged,GCancellable *cancel) {
+ if(!entry->info[0] || !entry->info[1] || entry->status==INSIGHT_DIR_TYPE || entry->status==INSIGHT_DIR_SKIPPED ||
+    g_file_info_get_file_type(entry->info[0])!=G_FILE_TYPE_REGULAR) return;
+ goffset sizes[2]={g_file_info_get_size(entry->info[0]),g_file_info_get_size(entry->info[1])};
+ if(!options->text_flags && sizes[0]!=sizes[1]) { entry->status=INSIGHT_DIR_DIFFERENT;return; }
+ guint64 limit=options->text_flags ? 1024u*1024 : 64u*1024*1024;
+ if(sizes[0]<0 || sizes[1]<0 || (guint64)sizes[0]>limit || (guint64)sizes[1]>limit || *charged>options->max_bytes ||
+    (guint64)sizes[0]+(guint64)sizes[1]>options->max_bytes-*charged) {
+  entry->status=INSIGHT_DIR_SKIPPED;entry->detail=g_strdup("Content size or scan byte limit reached");return;
+ }
+ *charged+=(guint64)sizes[0]+(guint64)sizes[1];
+ GFile *files[2]={NULL,NULL};GFileInputStream *streams[2]={NULL,NULL};gchar *text[2]={NULL,NULL};GError *error=NULL;gboolean equal=TRUE;
+ for(gint side=0;side<2;side++) {
+  gchar *path=g_build_filename(side ? right : left,entry->relative,NULL);files[side]=g_file_new_for_path(path);g_free(path);
+  if(!recheck(files[side],entry->info[side],cancel,&error)) goto done;
+  streams[side]=g_file_read(files[side],cancel,&error);if(!streams[side]) goto done;
+  GFileInfo *opened=g_file_input_stream_query_info(streams[side],ATTRS,cancel,&error);
+  if(!opened) goto done;
+  gboolean valid=matches(entry->info[side],opened);g_object_unref(opened);
+  if(!valid) { g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_BUSY,"File changed during directory comparison; rescan.");goto done; }
+ }
+ if(options->text_flags) {
+  for(gint side=0;side<2;side++) {
+   gsize len=0;text[side]=g_malloc((gsize)sizes[side]+2);
+   if(!g_input_stream_read_all(G_INPUT_STREAM(streams[side]),text[side],(gsize)sizes[side]+1,&len,cancel,&error)) goto done;
+   if(len!=(gsize)sizes[side]) { g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_BUSY,"File changed during directory comparison; rescan.");goto done; }
+   if(memchr(text[side],0,len) || !g_utf8_validate(text[side],len,NULL)) { entry->status=INSIGHT_DIR_SKIPPED;entry->detail=g_strdup("Text options require UTF-8 without NUL bytes");goto done; }
+   text[side][len]=0;
+  }
+  equal=normalized_equal(text[0],text[1],options->text_flags);
+ } else {
+  gchar a[65536],b[65536];guint64 total=0;
+  while(TRUE) {
+   gsize na=0,nb=0,wanted=(gsize)MIN((guint64)sizeof a,(guint64)sizes[0]-total+1);
+   if(!g_input_stream_read_all(G_INPUT_STREAM(streams[0]),a,wanted,&na,cancel,&error) ||
+      !g_input_stream_read_all(G_INPUT_STREAM(streams[1]),b,wanted,&nb,cancel,&error)) goto done;
+   if(total+na>(guint64)sizes[0] || total+nb>(guint64)sizes[1]) { g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_BUSY,"File changed during directory comparison; rescan.");goto done; }
+   if(na!=nb || memcmp(a,b,na)) { equal=FALSE;break; }
+   total+=na;if(!na) break;
+  }
+ }
+ for(gint side=0;side<2;side++) if(!recheck(files[side],entry->info[side],cancel,&error)) goto done;
+ entry->status=equal ? INSIGHT_DIR_SAME : INSIGHT_DIR_DIFFERENT;
+done:
+ if(error) { entry->status=INSIGHT_DIR_ERROR;entry->detail=g_strdup(error->message);g_clear_error(&error); }
+ for(gint side=0;side<2;side++) { g_clear_object(&streams[side]);g_clear_object(&files[side]);g_free(text[side]); }
+}
 GPtrArray *insight_directory_compare(const gchar *left,const gchar *right,const InsightDirectoryOptions *options,GCancellable *cancel,GError **error) {
  GPtrArray *rows=g_ptr_array_new_with_free_func(entry_free);GHashTable *map=g_hash_table_new(g_str_hash,g_str_equal);guint visited=0;gboolean ok=TRUE;GError *failure=NULL;
- if(options->method<INSIGHT_DIR_DATE || options->method>INSIGHT_DIR_SIZE_DATE) { g_set_error_literal(&failure,G_IO_ERROR,G_IO_ERROR_NOT_SUPPORTED,"Unknown directory comparison method.");ok=FALSE; }
+ if(options->method<INSIGHT_DIR_CONTENT || options->method>INSIGHT_DIR_SIZE_DATE) { g_set_error_literal(&failure,G_IO_ERROR,G_IO_ERROR_NOT_SUPPORTED,"Unknown directory comparison method.");ok=FALSE; }
  for(gint side=0;side<2 && ok;side++) {
   GFile *root=g_file_new_for_path(side ? right : left);ok=scan(root,"",0,side,options,map,rows,&visited,cancel,&failure);g_object_unref(root);
  }
  g_hash_table_unref(map);
- if(ok) { g_ptr_array_sort(rows,compare_rows);for(guint i=0;i<rows->len;i++) classify(g_ptr_array_index(rows,i),options); }
+ if(ok) {
+  guint64 charged=0;g_ptr_array_sort(rows,compare_rows);
+  for(guint i=0;i<rows->len;i++) {
+   if(cancelled(cancel,&failure)) { ok=FALSE;break; }
+   InsightDirectoryEntry *entry=g_ptr_array_index(rows,i);classify(entry,options);
+   if(options->method==INSIGHT_DIR_CONTENT) content(entry,left,right,options,&charged,cancel);
+  }
+ }
  if(ok && cancelled(cancel,&failure)) ok=FALSE;
  if(!ok) { g_ptr_array_unref(rows);g_propagate_error(error,failure);return NULL; }return rows;
 }
