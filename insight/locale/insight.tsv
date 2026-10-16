@@ -961,3 +961,4 @@ Folder; inspect child rows	Каталог; проверяйте строки п�
 Text options require UTF-8 without NUL bytes	Текстовые параметры требуют UTF-8 без байтов NUL
 File changed during directory comparison; rescan.	Файл изменился при сравнении каталогов; повторите обход.
 %u shown / %u entries — %u same, %u different, %u one-sided, %u type, %u skipped, %u errors, %u folders	Показано %u / %u — одинаковых %u, различий %u, односторонних %u, типов %u, пропущено %u, ошибок %u, каталогов %u
+Columns…	Колонки…

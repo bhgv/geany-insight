@@ -104,3 +104,7 @@ Windows and Android have not been executed in this series.
 
 Reference: [Source Insight Directory Compare](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Directory_Compare.htm)
 and [Directory Compare Options](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Directory_Compare_Options.htm).
+
+**Columns…** toggles Status, Left metadata and Right metadata for this window.
+Relative path stays visible. Hiding a sorted column keeps its sort order;
+Copy visible list still exports all four report fields for the visible rows.

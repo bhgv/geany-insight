@@ -194,6 +194,17 @@ static gboolean mouse(GtkWidget *widget,GdkEventButton *event,gpointer data) {
  if(gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget),(gint)event->x,(gint)event->y,&path,NULL,NULL,NULL)) { gtk_tree_view_set_cursor(GTK_TREE_VIEW(widget),path,NULL,FALSE);gtk_tree_path_free(path); }
  gtk_menu_popup_at_pointer(GTK_MENU(context_menu(data)),(GdkEvent*)event);return TRUE;
 }
+static void column_toggled(GtkCheckMenuItem *item,gpointer column) { gtk_tree_view_column_set_visible(GTK_TREE_VIEW_COLUMN(column),gtk_check_menu_item_get_active(item)); }
+static GtkWidget *columns_menu(Directory *d) {
+ GtkWidget *menu=gtk_menu_new();GList *columns=gtk_tree_view_get_columns(GTK_TREE_VIEW(d->view));guint i=0;
+ for(GList *p=columns;p;p=p->next,i++) {
+  GtkTreeViewColumn *column=p->data;GtkWidget *item=gtk_check_menu_item_new_with_label(gtk_tree_view_column_get_title(column));
+  gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item),gtk_tree_view_column_get_visible(column));gtk_widget_set_sensitive(item,i!=0);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"toggled",G_CALLBACK(column_toggled),column);
+ }
+ g_list_free(columns);g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu);gtk_menu_attach_to_widget(GTK_MENU(menu),d->view,NULL);gtk_widget_show_all(menu);return menu;
+}
+static void show_columns(GtkWidget *widget,gpointer data) { gtk_menu_popup_at_widget(GTK_MENU(columns_menu(data)),widget,GDK_GRAVITY_SOUTH_WEST,GDK_GRAVITY_NORTH_WEST,NULL); }
 static void method_changed(GtkComboBox *combo,gpointer data) {
  Directory *d=data;gboolean text=gtk_combo_box_get_active(combo)==INSIGHT_DIR_CONTENT;
  gtk_widget_set_sensitive(d->space,text);gtk_widget_set_sensitive(d->eol,text);
@@ -226,7 +237,7 @@ static Directory *directory_new(GtkWidget *parent) {
  GtkWidget *bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);
  button(bar,"Copy visible list",G_CALLBACK(copy_list),d);
  d->scan=button(bar,"Scan / Refresh",G_CALLBACK(start),d);gtk_widget_set_name(d->scan,"insight-directory-scan");d->cancel_button=button(bar,"Cancel scan",G_CALLBACK(cancel_scan),d);d->open=button(bar,"Compare selected file",G_CALLBACK(open_pair),d);gtk_widget_set_name(d->open,"insight-directory-open");d->previous=button(bar,"Previous different file",G_CALLBACK(step),d);d->next=button(bar,"Next different file",G_CALLBACK(step),d);
- GtkWidget *filters=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),filters,FALSE,FALSE,0);d->filter_entry=gtk_search_entry_new();gtk_entry_set_placeholder_text(GTK_ENTRY(d->filter_entry),"Filter relative paths — Ctrl+F");gtk_box_pack_start(GTK_BOX(filters),d->filter_entry,TRUE,TRUE,0);d->different=check(filters,"Differences only",FALSE);
+ GtkWidget *filters=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),filters,FALSE,FALSE,0);d->filter_entry=gtk_search_entry_new();gtk_entry_set_placeholder_text(GTK_ENTRY(d->filter_entry),"Filter relative paths — Ctrl+F");gtk_box_pack_start(GTK_BOX(filters),d->filter_entry,TRUE,TRUE,0);d->different=check(filters,"Differences only",FALSE);button(filters,"Columns…",G_CALLBACK(show_columns),d);
  d->store=gtk_list_store_new(DC_COLUMNS,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_INT,G_TYPE_BOOLEAN);
  d->filtered=gtk_tree_model_filter_new(GTK_TREE_MODEL(d->store),NULL);gtk_tree_model_filter_set_visible_func(GTK_TREE_MODEL_FILTER(d->filtered),visible,d,NULL);GtkTreeModel *sorted=gtk_tree_model_sort_new_with_model(d->filtered);d->view=gtk_tree_view_new_with_model(sorted);gtk_widget_set_name(d->view,"insight-directory-files");g_object_unref(sorted);gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(d->view),DC_DETAIL);
  const gchar *labels[]={"Relative path","Status","Left — size / modified","Right — size / modified"};
