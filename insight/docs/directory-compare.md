@@ -118,3 +118,5 @@ Use **Include masks** (`*.c;*.h`) and **Exclude masks** (`*.o;build/*`) to narro
 ### Known file types
 
 **Show only known file types** takes a fresh snapshot of editor filename patterns and language-profile extensions on each scan. Unknown files are removed before content reads; real directory rows remain so traversal and type mismatches stay visible. Entry, visit and depth limits still apply to the complete enumeration. This recognizes names, not binary content: a broad pattern can include binary files. Unlike display masks, changing this option requires Scan / Refresh. Explicit individual-file profile bindings do not extend this filename filter.
+
+**Font & Color…** in the filter bar or row menu opens the shared list appearance dialog. Enable custom appearance to choose a font, text color and background; Apply commits the change and Cancel preserves the current style. Theme selection highlighting remains visible. Turn custom appearance off to restore the theme. Each open comparison has its own style.

@@ -3,6 +3,7 @@
 #include "insight-directory.h"
 #include "insight-diff.h"
 #include "insight-help.h"
+#include "insight-list-style.h"
 #include "insight-i18n.h"
 #include "../insight/desktop/directory_compare.h"
 #include "../insight/core/diff.h"
@@ -235,7 +236,7 @@ static void copy_absolute(GtkWidget *widget,gpointer data) {
  g_clear_error(&error);g_free(text);g_free(path);
 }
 static GtkWidget *context_menu(Directory *d) {
- GtkWidget *menu=gtk_menu_new();const gchar *labels[]={"Compare selected file","Copy relative path","Copy visible list"};GCallback callbacks[]={G_CALLBACK(open_pair),G_CALLBACK(copy_path),G_CALLBACK(copy_list)};
+ GtkWidget *menu=gtk_menu_new();gtk_menu_shell_append(GTK_MENU_SHELL(menu),insight_list_style_menu_item(d->view));const gchar *labels[]={"Compare selected file","Copy relative path","Copy visible list"};GCallback callbacks[]={G_CALLBACK(open_pair),G_CALLBACK(copy_path),G_CALLBACK(copy_list)};
  for(guint i=0;i<G_N_ELEMENTS(labels);i++) { GtkWidget *item=gtk_menu_item_new_with_label(labels[i]);gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",callbacks[i],d);gtk_widget_set_sensitive(item,i==0 ? !d->busy && paired(selected_entry(d)) : i==1 ? selected_entry(d)!=NULL : TRUE); }
  for(gint side=0;side<2;side++) { GtkWidget *item=gtk_menu_item_new_with_label(side ? "Copy right full path" : "Copy left full path");gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_object_set_data(G_OBJECT(item),"side",GINT_TO_POINTER(side));g_signal_connect(item,"activate",G_CALLBACK(copy_absolute),d);InsightDirectoryEntry *entry=selected_entry(d);gtk_widget_set_sensitive(item,entry && entry->info[side]); }
  g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu);gtk_menu_attach_to_widget(GTK_MENU(menu),d->view,NULL);gtk_widget_show_all(menu);return menu;
@@ -303,6 +304,7 @@ static Directory *directory_new(GtkWidget *parent) {
  d->filtered=gtk_tree_model_filter_new(GTK_TREE_MODEL(d->store),NULL);gtk_tree_model_filter_set_visible_func(GTK_TREE_MODEL_FILTER(d->filtered),visible,d,NULL);GtkTreeModel *sorted=gtk_tree_model_sort_new_with_model(d->filtered);d->view=gtk_tree_view_new_with_model(sorted);gtk_widget_set_name(d->view,"insight-directory-files");g_object_unref(sorted);gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(d->view),DC_DETAIL);
  const gchar *labels[]={"Relative path","Status","Left — size / modified","Right — size / modified"};
  for(gint i=0;i<4;i++) { GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(labels[i],gtk_cell_renderer_text_new(),"text",DC_PATH+i,NULL);gtk_tree_view_column_set_resizable(column,TRUE);if(i<2) gtk_tree_view_column_set_sort_column_id(column,DC_PATH+i);gtk_tree_view_append_column(GTK_TREE_VIEW(d->view),column); }
+ GtkWidget *appearance=insight_list_style_button(d->view);gtk_widget_set_name(appearance,"insight-directory-appearance");gtk_box_pack_start(GTK_BOX(filters),appearance,FALSE,FALSE,0);
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),d->view);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
  d->status=gtk_label_new("Choose two directories and scan. Results are a snapshot.");gtk_label_set_xalign(GTK_LABEL(d->status),0);gtk_label_set_line_wrap(GTK_LABEL(d->status),TRUE);gtk_box_pack_start(GTK_BOX(box),d->status,FALSE,FALSE,0);
  g_signal_connect(d->include,"changed",G_CALLBACK(masks_changed),d);g_signal_connect(d->exclude,"changed",G_CALLBACK(masks_changed),d);g_signal_connect(d->status_filter,"changed",G_CALLBACK(refilter),d);

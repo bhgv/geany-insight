@@ -679,7 +679,7 @@ test('Insight isolated Diff Merge GUI', diff_gui_test, timeout: 45, is_parallel:
 test('Insight directory comparison snapshots', directory_compare_test, timeout: 45)
 
 directory_compare_gui_test = executable('test_insight_directory_compare_gui',
- '../insight/tests/directory_compare_gui_test.c', '../insight/desktop/directory_compare.c', dependencies: deps)
+ '../insight/tests/directory_compare_gui_test.c', '../insight/desktop/directory_compare.c', '../src/insight-list-style.c', dependencies: deps)
 test('Insight isolated Directory Compare GUI', directory_compare_gui_test, timeout: 45, is_parallel: false)
 
 directory_compare_native_gui_test = executable('test_insight_directory_compare_native_gui',
