@@ -62,6 +62,8 @@ static void safe_seams(InsightDiff *out,const Lines *a,const Lines *b) {
   }
   if(count && (h.a_begin<=out->hunks[count-1].a_end || h.b_begin<=out->hunks[count-1].b_end)) {
    InsightDiffHunk *last=&out->hunks[count-1];
+   if(h.a_begin<last->a_begin) last->a_begin=h.a_begin;
+   if(h.b_begin<last->b_begin) last->b_begin=h.b_begin;
    if(h.a_end>last->a_end) last->a_end=h.a_end;
    if(h.b_end>last->b_end) last->b_end=h.b_end;
   } else out->hunks[count++]=h;

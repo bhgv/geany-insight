@@ -32,3 +32,5 @@ Keep screenshots current when visible behavior changes. Favor small, useful illu
 `selection-navigation.jpg`: real Selection and navigation menu in the complete running Linux editor during its native GUI test. Shared-display captures run exclusively and reject occluded black output.
 
 `paste-position.svg` explains the three positions after intelligent whole-line insertion. It is a self-contained vector diagram, not an application screenshot.
+
+`file-compare.jpg`: real production Diff/Merge window captured in an isolated Linux GTK/Xvfb fixture with synthetic test files; not the complete editor. `file-compare-flow.svg` explains block selection and exact-byte result editing.

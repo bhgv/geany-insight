@@ -10,6 +10,7 @@
 typedef struct { gchar *text; gint *positions; } Snapshot;
 typedef struct {
  GtkWidget *window,*paths[2],*views[3],*status,*undo,*redo,*take[2],*external;
+ GtkWidget *find_entry,*find_side,*find_case,*find_previous,*find_next,*find_status,*numbers;
  GtkWidget *compare_button,*cancel_button; GCancellable *cancel; gboolean busy;
  GtkWidget *previous,*next,*list_scroll,*sync,*ignore_space,*ignore_eol; GtkAdjustment *adjustments[2]; gboolean scrolling;
  GtkListStore *list; GtkWidget *hunk_view; GtkTextBuffer *output; GtkTreeSelection *selection;
@@ -62,9 +63,21 @@ static void restore(Merge *m,guint position) {
 static void undo(GtkWidget *w,gpointer data) { (void)w;Merge *m=data;if(m->position) restore(m,m->position-1); }
 static void redo(GtkWidget *w,gpointer data) { (void)w;Merge *m=data;if(m->position+1<m->history->len) restore(m,m->position+1); }
 static void navigate(Merge *m,gint direction);
+static void find_text(Merge *m,gboolean backwards);
+static void focus_find(Merge *m) {
+ GtkWidget *focus=gtk_window_get_focus(GTK_WINDOW(m->window));
+ for(int i=0;i<3;i++) if(focus==m->views[i]) gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),i);
+ gtk_widget_grab_focus(m->find_entry);gtk_editable_select_region(GTK_EDITABLE(m->find_entry),0,-1);
+}
 static gboolean key(GtkWidget *w,GdkEventKey *event,gpointer data) {
  (void)w;
- if(((Merge*)data)->busy) return FALSE;
+ Merge *m=data;
+ if(event->keyval==GDK_KEY_F3) { find_text(m,(event->state&GDK_SHIFT_MASK)!=0);return TRUE; }
+ if((event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_f || event->keyval==GDK_KEY_F)) { focus_find(m);return TRUE; }
+ if(event->keyval==GDK_KEY_Escape && w==m->find_entry) {
+  gtk_widget_grab_focus(m->views[gtk_combo_box_get_active(GTK_COMBO_BOX(m->find_side))]);return TRUE;
+ }
+ if(m->busy) return FALSE;
  if(!(event->state&GDK_CONTROL_MASK)) return FALSE;
  if(event->keyval==GDK_KEY_Up || event->keyval==GDK_KEY_Down) {
   navigate(data,event->keyval==GDK_KEY_Up ? -1 : 1);return TRUE;
@@ -76,6 +89,59 @@ static gboolean key(GtkWidget *w,GdkEventKey *event,gpointer data) {
  return FALSE;
 }
 static void message(Merge *m,const gchar *text) { gtk_label_set_text(GTK_LABEL(m->status),text); }
+static void find_text(Merge *m,gboolean backwards) {
+ const gchar *query=gtk_entry_get_text(GTK_ENTRY(m->find_entry));if(!*query) { gtk_label_set_text(GTK_LABEL(m->find_status),"Enter search text.");return; }
+ int side=gtk_combo_box_get_active(GTK_COMBO_BOX(m->find_side));
+ GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]));GtkTextIter a,z,start;
+ if(gtk_text_buffer_get_selection_bounds(buffer,&a,&z)) start=backwards ? a : z;
+ else gtk_text_buffer_get_iter_at_mark(buffer,&start,gtk_text_buffer_get_insert(buffer));
+ GtkTextSearchFlags flags=GTK_TEXT_SEARCH_TEXT_ONLY;
+ if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->find_case))) flags|=GTK_TEXT_SEARCH_CASE_INSENSITIVE;
+ gboolean found=backwards ? gtk_text_iter_backward_search(&start,query,flags,&a,&z,NULL) : gtk_text_iter_forward_search(&start,query,flags,&a,&z,NULL);
+ gboolean wrapped=!found;
+ if(!found) {
+  if(backwards) gtk_text_buffer_get_end_iter(buffer,&start);else gtk_text_buffer_get_start_iter(buffer,&start);
+  found=backwards ? gtk_text_iter_backward_search(&start,query,flags,&a,&z,NULL) : gtk_text_iter_forward_search(&start,query,flags,&a,&z,NULL);
+ }
+ if(found) {
+  gtk_text_buffer_select_range(buffer,&a,&z);gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(m->views[side]),&a,0.1,TRUE,0,0.5);
+  gchar *label=g_strdup_printf(wrapped ? "Wrapped: line %d" : "Found: line %d",gtk_text_iter_get_line(&a)+1);gtk_label_set_text(GTK_LABEL(m->find_status),label);g_free(label);
+ } else gtk_label_set_text(GTK_LABEL(m->find_status),"Text not found.");
+}
+static void find_clicked(GtkWidget *w,gpointer data) { Merge *m=data;find_text(m,w==m->find_previous); }
+static void find_activate(GtkEntry *entry,gpointer data) { (void)entry;find_text(data,FALSE); }
+static void gutter_size(GtkTextBuffer *buffer,gpointer data) {
+ Merge *m=data;gint lines=gtk_text_buffer_get_line_count(buffer),digits=1;
+ while(lines>=10) { digits++;lines/=10; }
+ for(int i=0;i<3;i++) if(gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[i]))==buffer) {
+  PangoLayout *layout=gtk_widget_create_pango_layout(m->views[i],"0");gint width;
+  pango_layout_get_pixel_size(layout,&width,NULL);g_object_unref(layout);
+  gtk_text_view_set_border_window_size(GTK_TEXT_VIEW(m->views[i]),GTK_TEXT_WINDOW_LEFT,
+   gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->numbers)) ? digits*width+14 : 0);
+  gtk_widget_queue_draw(m->views[i]);
+ }
+}
+static void number_toggle(GtkToggleButton *button,gpointer data) {
+ (void)button;Merge *m=data;for(int i=0;i<3;i++) gutter_size(gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[i])),m);
+}
+static gboolean draw_numbers(GtkWidget *widget,cairo_t *cr,gpointer data) {
+ Merge *m=data;if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->numbers))) return FALSE;
+ GtkTextView *view=GTK_TEXT_VIEW(widget);GdkWindow *window=gtk_text_view_get_window(view,GTK_TEXT_WINDOW_LEFT);
+ if(!window || !gtk_cairo_should_draw_window(cr,window)) return FALSE;
+ cairo_save(cr);gtk_cairo_transform_to_window(cr,widget,window);
+ GtkStyleContext *style=gtk_widget_get_style_context(widget);GdkRGBA color;gtk_style_context_get_color(style,gtk_style_context_get_state(style),&color);
+ gint width=gdk_window_get_width(window);gtk_render_background(style,cr,0,0,width,gdk_window_get_height(window));gdk_cairo_set_source_rgba(cr,&color);
+ GdkRectangle rect;GtkTextIter it;gtk_text_view_get_visible_rect(view,&rect);gtk_text_view_get_line_at_y(view,&it,rect.y,NULL);
+ PangoLayout *layout=gtk_widget_create_pango_layout(widget,NULL);
+ do {
+  gint y,height,x,wy;gtk_text_view_get_line_yrange(view,&it,&y,&height);if(y>rect.y+rect.height) break;
+  gchar label[32];g_snprintf(label,sizeof label,"%d",gtk_text_iter_get_line(&it)+1);pango_layout_set_text(layout,label,-1);
+  gint text_width;pango_layout_get_pixel_size(layout,&text_width,NULL);
+  gtk_text_view_buffer_to_window_coords(view,GTK_TEXT_WINDOW_LEFT,0,y,&x,&wy);
+  cairo_move_to(cr,width-text_width-7,wy);pango_cairo_show_layout(cr,layout);
+ } while(gtk_text_iter_forward_line(&it));
+ g_object_unref(layout);cairo_restore(cr);return FALSE;
+}
 static gboolean discard(Merge *m) {
  gchar *text=contents(result(m));gboolean dirty=g_strcmp0(text,m->saved)!=0;g_free(text);
  if(!dirty) return TRUE;
@@ -329,6 +395,14 @@ static Merge *merge_new(GtkWidget *parent) {
  m->ignore_space=gtk_check_button_new_with_label("Ignore spaces and tabs");gtk_box_pack_start(GTK_BOX(comparison),m->ignore_space,FALSE,FALSE,0);
  m->ignore_eol=gtk_check_button_new_with_label("Ignore line ending style");gtk_box_pack_start(GTK_BOX(comparison),m->ignore_eol,FALSE,FALSE,0);
  gtk_box_pack_start(GTK_BOX(comparison),gtk_label_new("Apply with Compare; ignored text stays from Left."),FALSE,FALSE,0);
+ m->numbers=gtk_check_button_new_with_label("Line numbers");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->numbers),TRUE);gtk_box_pack_start(GTK_BOX(options),m->numbers,FALSE,FALSE,0);
+ GtkWidget *find=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),find,FALSE,FALSE,0);
+ m->find_side=gtk_combo_box_text_new();gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->find_side),"Left");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->find_side),"Right");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->find_side),"Result");gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),0);gtk_box_pack_start(GTK_BOX(find),m->find_side,FALSE,FALSE,0);
+ m->find_entry=gtk_search_entry_new();gtk_entry_set_placeholder_text(GTK_ENTRY(m->find_entry),"Find text — Ctrl+F, F3 / Shift+F3");gtk_box_pack_start(GTK_BOX(find),m->find_entry,TRUE,TRUE,0);
+ m->find_case=gtk_check_button_new_with_label("Match case");gtk_box_pack_start(GTK_BOX(find),m->find_case,FALSE,FALSE,0);
+ m->find_previous=button(find,"Find previous",G_CALLBACK(find_clicked),m);m->find_next=button(find,"Find next",G_CALLBACK(find_clicked),m);
+ m->find_status=gtk_label_new("");gtk_box_pack_start(GTK_BOX(find),m->find_status,FALSE,FALSE,0);
+ g_signal_connect(m->find_entry,"activate",G_CALLBACK(find_activate),m);g_signal_connect(m->find_entry,"key-press-event",G_CALLBACK(key),m);
  GtkWidget *panes=gtk_paned_new(GTK_ORIENTATION_VERTICAL);gtk_box_pack_start(GTK_BOX(box),panes,TRUE,TRUE,0);
  m->list=gtk_list_store_new(2,G_TYPE_INT,G_TYPE_STRING);m->hunk_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(m->list));
  gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(m->hunk_view),-1,"Differences",gtk_cell_renderer_text_new(),"text",1,NULL);
@@ -342,7 +416,9 @@ static Merge *merge_new(GtkWidget *parent) {
   m->views[i]=gtk_text_view_new();gtk_text_view_set_monospace(GTK_TEXT_VIEW(m->views[i]),TRUE);gtk_text_view_set_editable(GTK_TEXT_VIEW(m->views[i]),i==2);
   gtk_box_pack_start(GTK_BOX(column),scroll(m->views[i]),TRUE,TRUE,0);
   g_signal_connect(m->views[i],"key-press-event",G_CALLBACK(key),m);
-  if(i<2) gtk_text_buffer_create_tag(gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[i])),"difference","background",i ? "#d5f5d5" : "#ffe0d0",NULL);
+  g_signal_connect_after(m->views[i],"draw",G_CALLBACK(draw_numbers),m);
+  g_signal_connect(gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[i])),"changed",G_CALLBACK(gutter_size),m);
+  if(i<2) gtk_text_buffer_create_tag(gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[i])),"difference","background",i ? "#d5f5d5" : "#ffe0d0","foreground","#202020",NULL);
  }
  for(int i=0;i<2;i++) {
   g_signal_connect(m->views[i],"button-press-event",G_CALLBACK(pick_block),m);
@@ -356,6 +432,7 @@ static Merge *merge_new(GtkWidget *parent) {
  g_signal_connect(result(m),"end-user-action",G_CALLBACK(action_end),m);
  g_signal_connect(result(m),"changed",G_CALLBACK(changed),m);g_signal_connect(m->window,"key-press-event",G_CALLBACK(key),m);
  g_signal_connect(m->window,"delete-event",G_CALLBACK(closing),m);g_signal_connect(m->window,"destroy",G_CALLBACK(destroyed),m);
+ g_signal_connect(m->numbers,"toggled",G_CALLBACK(number_toggle),m);number_toggle(NULL,m);
  g_object_set_data(G_OBJECT(m->window),"insight-diff-state",m);
  record(m);selection(NULL,m);gtk_widget_show_all(m->window);return m;
 }

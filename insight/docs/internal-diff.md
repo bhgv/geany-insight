@@ -100,3 +100,33 @@ runs on the UI thread; this is not a guarantee of zero UI latency.
 The isolated production-widget fixture covers cancellation, rejected directory
 input and destroying a window with a pending comparison. Core tests cancel at
 several LCS phases and verify that no partial diff escapes.
+
+## Find text and line numbers
+
+The search row selects **Left**, **Right** or **Result**. **Ctrl+F** targets the
+focused source/result pane and focuses the query. Enter or **F3** finds the next
+literal Unicode match; **Shift+F3** or **Find previous** searches backward.
+**Match case** controls case sensitivity. Search wraps at a boundary and reports
+that fact, or reports no match. Escape in the query returns focus to the selected
+pane. Search changes selection, not source text, result contents or merge history.
+The difference list selection continues to identify the block used by Take.
+
+**Line numbers** toggles gutters in all three panes. Numbers follow logical lines,
+including CR, LF, CRLF and wrapped lines, and update after result edits. They are
+not inserted into text or copied selections. Display settings are per window.
+
+![Production Diff/Merge window in an isolated GTK fixture](media/file-compare.jpg)
+
+The JPEG shows the real production window on Linux/Xvfb with synthetic test files;
+it is an isolated fixture, not a screenshot of the complete editor. The fixture
+also covers literal search, case sensitivity, wraparound, focus and gutter
+visibility. A near-four-million-cell comparison lets the main-loop timer run;
+this checks that calculation moved off the UI thread, not every possible latency.
+
+![Sources, selected block and independent result](media/file-compare-flow.svg)
+
+GTK fixture: Meson test **Insight isolated Diff Merge GUI** (requires a display).
+For standalone checking, compile `insight/tests/diff_gui_test.c` together with
+`insight/core/diff.c` using GTK3 flags, then run under Xvfb. It uses production
+widgets with stubbed host help/translation functions. Windows/Android were not
+executed in this increment.

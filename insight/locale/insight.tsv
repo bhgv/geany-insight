@@ -886,3 +886,29 @@ File filters (names and wildcards)	Фильтры файлов (имена и м
 Names or * / ? masks, separated by spaces, commas or semicolons; no paths	Имена или маски * / ?, разделённые пробелами, запятыми или точками с запятой; без путей
 File filters must be UTF-8 text up to 4096 bytes	Фильтры файлов должны быть текстом UTF-8 до 4096 байт
 Use up to 256 filename filters, without paths or quotes (255 bytes each)	Допускается до 256 фильтров имён без путей и кавычек (по 255 байт)
+Previous difference	Предыдущее различие
+Next difference	Следующее различие
+Difference list	Список различий
+Wrap lines	Перенос строк
+Scroll sources together	Связанная прокрутка исходников
+Line numbers	Номера строк
+Ignore spaces and tabs	Игнорировать пробелы и табуляцию
+Ignore line ending style	Игнорировать тип окончания строк
+Apply with Compare; ignored text stays from Left.	Применить кнопкой «Сравнить»; игнорируемый текст остаётся слева.
+Cancel comparison	Отменить сравнение
+Comparing… Cancel keeps the previous result.	Сравнение… Отмена сохраняет прежний результат.
+Comparison cancelled.	Сравнение отменено.
+Choose regular UTF-8 text files.	Выберите обычные текстовые UTF-8 файлы.
+Supports UTF-8 text files up to 1 MiB, without NUL bytes.	Поддерживаются UTF-8 файлы до 1 МиБ без байтов NUL.
+Too many changed lines (4 million LCS cells).	Слишком много изменённых строк (лимит LCS: 4 миллиона ячеек).
+Difference %d of %zu	Различие %d из %zu
+Find text — Ctrl+F, F3 / Shift+F3	Поиск текста — Ctrl+F, F3 / Shift+F3
+Find previous	Найти предыдущее
+Find next	Найти следующее
+Enter search text.	Введите текст для поиска.
+Wrapped: line %d	Переход через границу: строка %d
+Found: line %d	Найдено: строка %d
+Text not found.	Текст не найден.
+Left	Слева
+Right	Справа
+Result	Результат
