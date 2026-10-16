@@ -1,3 +1,4 @@
-Windows x64 trial rebuild explicitly requested 2026-10-15.
-Source: parser declaration symbol lists and preview/editor activation.
-Update panel regression to inspect the declaration source separately from the filtered GtkTreeStore presentation and await asynchronous flat regroup.
+Windows x64 portable trial explicitly requested 2026-10-17 (Europe/Moscow).
+Feature source: 1475c68303d6b847baa80802883e37b9e665af92.
+Include the current native editor, GTK runtime, RU/EN help, Diff/Merge regex search and capture replacement, and snapshot match inspection.
+Build the portable package, run existing Windows checks, verify x86-64 architecture and startup without the SDK on PATH, and record the exact build commit in REVISION.txt.
