@@ -205,6 +205,19 @@ static gboolean capture_menu(gpointer data)
     GdkPixbuf *image = gdk_pixbuf_get_from_window(surface, 0, 0,
         gtk_widget_get_allocated_width(menu), gtk_widget_get_allocated_height(menu));
     g_assert_nonnull(image);
+    /* A shared X display can produce an occluded black capture. This test runs
+     * exclusively; also reject an unusable image rather than publishing it. */
+    guint bright = 0;
+    gint width = gdk_pixbuf_get_width(image), height = gdk_pixbuf_get_height(image);
+    gint stride = gdk_pixbuf_get_rowstride(image), channels = gdk_pixbuf_get_n_channels(image);
+    guchar *pixels = gdk_pixbuf_get_pixels(image);
+    for (gint y = 0; y < height; y++)
+        for (gint x = 0; x < width; x++)
+        {
+            const guchar *pixel = pixels + y * stride + x * channels;
+            if ((guint)pixel[0] + pixel[1] + pixel[2] > 128 * 3) bright++;
+        }
+    g_assert_cmpuint(bright, >, (guint)(width * height / 2));
     g_assert_true(gdk_pixbuf_save(image, path, "jpeg", NULL, "quality", "82", NULL));
     g_object_unref(image);gtk_menu_popdown(GTK_MENU(menu));
     capture_done = TRUE;return G_SOURCE_REMOVE;
