@@ -55,13 +55,13 @@ static void position(Completion *c) {
 }
 static gboolean valid(Completion *c,GeanyDocument **document) {
  GeanyDocument *doc=document_find_by_id(c->document);if(!c->active || !doc || doc!=document_get_current() || doc->editor->sci!=c->sci || SEND(c->sci,SCI_GETREADONLY,0,0) || SEND(c->sci,SCI_GETSELECTIONS,0,0)!=1 || sci_has_selection(c->sci) || sci_get_current_position(c->sci)!=c->end || c->start<0 || c->end<c->start) return FALSE;
- gchar *now=sci_get_contents_range(c->sci,c->start,c->end);gboolean same=now && !g_strcmp0(now,c->prefix);g_free(now);if(document) *document=doc;return same;
+ gchar *now=c->start==c->end ? g_strdup("") : sci_get_contents_range(c->sci,c->start,c->end);gboolean same=now && !g_strcmp0(now,c->prefix);g_free(now);if(document) *document=doc;return same;
 }
 static void accept(Completion *c) {
  GeanyDocument *doc=NULL;if(!valid(c,&doc)) { hide(c);return; }gchar *name=selected(c,NAME);if(!name) return;
  gint word_end=SEND(c->sci,SCI_WORDENDPOSITION,c->end,TRUE),end=editor_prefs.completion_drops_rest_of_word ? word_end : c->end;
  GtkTreeIter iter;gboolean callable=FALSE;if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(c->view)),NULL,&iter)) gtk_tree_model_get(GTK_TREE_MODEL(c->store),&iter,CALLABLE,&callable,-1);
- gchar *right=sci_get_contents_range(c->sci,end,MIN((gint64)end+128,sci_get_length(c->sci)));if(strspn(right," \t")==128) callable=FALSE;gchar *suffix=insight_completion_settings_suffix(&settings,callable && end>=word_end,right),*text=g_strconcat(name,suffix,NULL);gint name_end=c->start+strlen(name),caret=c->start+strlen(text);if(*suffix) caret--;
+ gchar *right=end==sci_get_length(c->sci) ? g_strdup("") : sci_get_contents_range(c->sci,end,MIN((gint64)end+128,sci_get_length(c->sci)));if(strspn(right," \t")==128) callable=FALSE;gchar *suffix=insight_completion_settings_suffix(&settings,callable && end>=word_end,right),*text=g_strconcat(name,suffix,NULL);gint name_end=c->start+strlen(name),caret=c->start+strlen(text);if(*suffix) caret--;
  c->accepting=TRUE;hide(c);SEND(c->sci,SCI_BEGINUNDOACTION,0,0);SEND(c->sci,SCI_SETTARGETSTART,c->start,0);SEND(c->sci,SCI_SETTARGETEND,end,0);SEND(c->sci,SCI_REPLACETARGET,strlen(text),(sptr_t)text);sci_set_current_position(c->sci,caret,FALSE);if(*suffix) insight_filetype_pairs_remember(c->sci,name_end+strlen(suffix)-2,name_end+strlen(suffix)-1);SEND(c->sci,SCI_ENDUNDOACTION,0,0);c->accepting=FALSE;g_free(right);g_free(suffix);g_free(text);g_free(name);
 }
 static gboolean button(GtkWidget *view,GdkEventButton *event,gpointer data) {
@@ -96,7 +96,7 @@ static Completion *create(GeanyEditor *editor) {
 }
 gboolean insight_completion_show(GeanyEditor *editor,const GPtrArray *tags,gsize rootlen) {
  load();if(!settings.detailed) return FALSE;Completion *c=create(editor);gchar *previous=c->active ? selected(c,IDENTITY) : NULL;
- c->end=sci_get_current_position(c->sci);c->start=c->end-(gint)rootlen;g_free(c->prefix);c->prefix=sci_get_contents_range(c->sci,c->start,c->end);gtk_list_store_clear(c->store);
+ c->end=sci_get_current_position(c->sci);c->start=c->end-(gint)rootlen;g_free(c->prefix);c->prefix=c->start==c->end ? g_strdup("") : sci_get_contents_range(c->sci,c->start,c->end);gtk_list_store_clear(c->store);
  GdkRGBA foreground;gtk_style_context_get_color(gtk_widget_get_style_context(c->view),GTK_STATE_FLAG_NORMAL,&foreground);gboolean dark=(foreground.red+foreground.green+foreground.blue)>1.8;const gchar *blue=dark ? "#93c5fd" : "#1d4ed8",*green=dark ? "#86efac" : "#166534",*muted=dark ? "#d1d5db" : "#475569";GtkTreePath *chosen=NULL,*exact=NULL;gboolean chosen_exact=FALSE;guint count=0;
  for(guint i=0;i<tags->len && count<editor_prefs.autocompletion_max_entries;i++) {
   TMTag *tag=g_ptr_array_index((GPtrArray *)tags,i);if(!tag->name || !g_utf8_validate(tag->name,-1,NULL) || strpbrk(tag->name,"\n\r\t")) continue;
