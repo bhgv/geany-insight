@@ -262,3 +262,9 @@ Ctrl+F3 ищет следующее вхождение идентификато�
 ![Проверка regex и атомарная замена](../media/regex-replace.svg)
 
 Эталон: [Search](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Search.htm), [Replace](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Replace.htm), [Regular Expressions](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Regular_Expressions.htm). Реализован Perl-совместимый выбор для локальных панелей сравнения; отдельный диалект Source Insight и подтверждение каждой замены остаются открытыми.
+
+### Подтверждение замен в результате
+
+Включите **Confirm replacements** и нажмите **Replace all in Result**. Диалог показывает номер строки и столбца, найденный текст и раскрытую замену (до 2048 символов Unicode в каждом фрагменте). Команды: Replace — заменить, Skip — пропустить, Replace remaining — заменить оставшиеся. Решения накапливаются до конца просмотра; Cancel batch отменяет всю серию. Принятые замены образуют один шаг Undo/Redo. Preview count не открывает диалог. Работают обычный поиск и regex, выделение, сохранение регистра и предварительные ограничения. Флажок сохраняется; текст замены и решения — нет. Изменение результата или начало сравнения во время просмотра отклоняет серию. Закрытие родительского окна безопасно.
+
+![Replacement review flow](../media/confirm-replace.svg)

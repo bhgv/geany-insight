@@ -305,3 +305,9 @@ Regex limits are 8192 UTF-8 bytes of pattern, 1 MiB of pane text and 100000 exam
 ![Regex validation and atomic replacement](../media/regex-replace.svg)
 
 References: [Source Insight Search](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Search.htm), [Replace](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Replace.htm), [Regular Expressions](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Regular_Expressions.htm). This implements the Perl-compatible choice in local comparison panes. The separate Source Insight regex dialect and confirmation of individual replacements remain open.
+
+### Confirm replacements in Result
+
+Enable **Confirm replacements**, then use **Replace all in Result**. Each effective candidate shows its one-based line/column, matched text and expanded replacement (each preview capped at 2048 Unicode characters). Choose Replace, Skip, or Replace remaining. Decisions are staged; Cancel batch discards every decision. Approved changes apply together as one Undo/Redo action. Preview count never prompts. Literal and regex replacements share selection, case and preflight rules. The option persists; decisions and replacement text do not. If the result changes or a comparison starts during review, the batch is rejected. Closing the parent is safe.
+
+![Replacement review flow](../media/confirm-replace.svg)

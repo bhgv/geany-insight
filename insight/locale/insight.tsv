@@ -1107,3 +1107,10 @@ Replacement expansion is invalid or exceeds 1 MiB. Nothing changed.	Некорр
 Replacement expansion limit: 8 MiB total. Nothing changed.	Предел раскрытия замен: всего 8 МиБ. Изменений нет.
 Regular expression work limit or matching error. Nothing changed.	Предел вычислений или ошибка сопоставления regex. Изменений нет.
 Uses search text, regex, case and whole-word options above; searches the entire result or its selection without wrapping.	Использует запрос, regex, регистр и целые слова; ищет во всём результате или его выделении без циклического перехода.
+Confirm replacements	Подтверждать замены
+Cancel batch	Отменить серию
+Skip	Пропустить
+Replace remaining	Заменить оставшиеся
+Candidate %u of %u — line %d, column %d	Совпадение %u из %u — строка %d, столбец %d
+Matched text (up to 2048 characters):\n%s\n\nReplacement (up to 2048 characters):\n%s	Найденный текст (до 2048 символов):\n%s\n\nЗамена (до 2048 символов):\n%s
+Replacement batch cancelled or text changed. Nothing applied.	Серия отменена или текст изменился. Замены не применены.

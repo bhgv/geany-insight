@@ -15,7 +15,7 @@ typedef struct { guint begin,end; } MapBlock;
 typedef struct {
  GtkWidget *window,*paths[2],*views[3],*status,*undo,*redo,*take[2],*take_all[2],*external;
  GtkWidget *find_entry,*find_side,*find_case,*find_word,*find_wrap,*find_previous,*find_next,*find_status,*numbers,*find_regex,*find_dotall;
- GtkWidget *replace_entry,*replace_selection,*replace_once,*replace_case,*replace_status,*replace_apply;
+ GtkWidget *replace_entry,*replace_selection,*replace_once,*replace_case,*replace_status,*replace_apply,*replace_confirm;
  GtkWidget *edit_tab_width;
  GtkWidget *visible_space,*visible_eol;
  GtkWidget *line_side,*line_number,*line_select,*line_status;
@@ -33,9 +33,9 @@ typedef struct {
 static GKeyFile *view_defaults;
 static GList *open_compares;
 static const gchar *view_group="file-compare";
-static const gchar *view_checks[]={"mono","numbers","list","wrap","sync","vertical","overview","ignore-space","ignore-eol","visible-space","visible-eol","search-regex","search-dotall"};
+static const gchar *view_checks[]={"mono","numbers","list","wrap","sync","vertical","overview","ignore-space","ignore-eol","visible-space","visible-eol","search-regex","search-dotall","confirm-replacements"};
 static void view_controls(Merge *m,GtkWidget **controls) {
- GtkWidget *items[]={m->mono,m->numbers,m->list_toggle,m->wrap_toggle,m->sync,m->vertical,m->overview,m->ignore_space,m->ignore_eol,m->visible_space,m->visible_eol,m->find_regex,m->find_dotall};for(guint i=0;i<G_N_ELEMENTS(items);i++) controls[i]=items[i];
+ GtkWidget *items[]={m->mono,m->numbers,m->list_toggle,m->wrap_toggle,m->sync,m->vertical,m->overview,m->ignore_space,m->ignore_eol,m->visible_space,m->visible_eol,m->find_regex,m->find_dotall,m->replace_confirm};for(guint i=0;i<G_N_ELEMENTS(items);i++) controls[i]=items[i];
 }
 static void view_copy(GKeyFile *from,GKeyFile *to) {
  g_key_file_remove_group(to,view_group,NULL);const gchar *extra[]={"version","zoom","width","height","search-file","search-line","search-column","search-text"};
@@ -506,6 +506,30 @@ static void selection_case(Merge *m,guint action) {
 }
 typedef struct { gint begin,end;gchar *text; } ReplaceRange;
 
+/* Decisions are staged against one immutable revision; Cancel discards all. */
+static gboolean confirm_ranges(Merge *m,GArray *ranges) {
+ GtkWidget *window=m->window;g_object_ref(window);guint64 serial=m->history_serial;
+ GtkWidget *dialog=gtk_dialog_new_with_buttons("Confirm replacements",GTK_WINDOW(window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Cancel batch",GTK_RESPONSE_CANCEL,"Skip",GTK_RESPONSE_NO,"Replace",GTK_RESPONSE_YES,"Replace remaining",GTK_RESPONSE_APPLY,NULL);
+ g_object_ref(dialog);gtk_widget_set_name(dialog,"insight-diff-confirm-replace");gtk_window_set_default_size(GTK_WINDOW(dialog),680,360);
+ GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(dialog)),*label=gtk_label_new("");gtk_box_pack_start(GTK_BOX(box),label,FALSE,FALSE,8);
+ GtkWidget *view=gtk_text_view_new();gtk_text_view_set_editable(GTK_TEXT_VIEW(view),FALSE);gtk_text_view_set_monospace(GTK_TEXT_VIEW(view),TRUE);gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view),GTK_WRAP_WORD_CHAR);
+ GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),view);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,8);
+ gboolean ok=TRUE;guint candidate=0,total=ranges->len;
+ for(guint i=0;i<ranges->len;) {
+  ReplaceRange *range=&g_array_index(ranges,ReplaceRange,i);GtkTextIter a,z;gtk_text_buffer_get_iter_at_offset(result(m),&a,range->begin);gtk_text_buffer_get_iter_at_offset(result(m),&z,range->end);
+  gchar *old=gtk_text_buffer_get_text(result(m),&a,&z,TRUE),*old_preview=g_utf8_substring(old,0,MIN(g_utf8_strlen(old,-1),2048)),*new_preview=g_utf8_substring(range->text,0,MIN(g_utf8_strlen(range->text,-1),2048));
+  gchar *title=g_strdup_printf("Candidate %u of %u — line %d, column %d",++candidate,total,gtk_text_iter_get_line(&a)+1,gtk_text_iter_get_line_offset(&a)+1);gtk_label_set_text(GTK_LABEL(label),title);
+  gchar *preview=g_strdup_printf("Matched text (up to 2048 characters):\n%s\n\nReplacement (up to 2048 characters):\n%s",old_preview,new_preview);gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)),preview,-1);
+  g_free(title);g_free(preview);g_free(old);g_free(old_preview);g_free(new_preview);gtk_widget_show_all(dialog);
+  gint response=gtk_dialog_run(GTK_DIALOG(dialog));m=g_object_get_data(G_OBJECT(window),"insight-diff-state");
+  if(!m || m->busy || serial!=m->history_serial) { ok=FALSE;break; }
+  if(response==GTK_RESPONSE_APPLY) break;
+  if(response==GTK_RESPONSE_YES) i++;
+  else if(response==GTK_RESPONSE_NO) { g_free(range->text);g_array_remove_index(ranges,i); }
+  else { ok=FALSE;break; }
+ }
+ gtk_widget_destroy(dialog);g_object_unref(dialog);g_object_unref(window);return ok;
+}
 static gboolean line_range_add(GArray *ranges,gint begin,gint end,const gchar *text,guint64 removed,guint64 *bytes) {
  ReplaceRange range={begin,end,g_strdup(text)};g_array_append_val(ranges,range);*bytes=*bytes-removed+strlen(text);
  return ranges->len<=100000 && *bytes<=1024*1024;
@@ -587,12 +611,20 @@ static void replace_result(GtkWidget *widget,gpointer data) {
  if(exceeded) gtk_label_set_text(GTK_LABEL(m->replace_status),"Replacement limit: 100000 changes and 1 MiB result. Nothing changed.");
  else if(widget!=m->replace_apply) { gchar *label=g_strdup_printf("Preview: %u replacements",ranges->len);gtk_label_set_text(GTK_LABEL(m->replace_status),label);g_free(label); }
  else if(ranges->len) {
+  GtkWidget *window=m->window;g_object_ref(window);gboolean approved=TRUE;
+  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->replace_confirm))) approved=confirm_ranges(m,ranges);
+  m=g_object_get_data(G_OBJECT(window),"insight-diff-state");
+  if(!m) { g_object_unref(window);goto cleanup_replacements; }
+  g_object_unref(window);
+  if(!approved) { gtk_label_set_text(GTK_LABEL(m->replace_status),"Replacement batch cancelled or text changed. Nothing applied.");goto cleanup_replacements; }
+  if(!ranges->len) { gtk_label_set_text(GTK_LABEL(m->replace_status),"No changes.");goto cleanup_replacements; }
   gtk_text_buffer_begin_user_action(buffer);
   /* Reverse edits preserve offsets and tracked merge marks. */
   for(guint i=ranges->len;i>0;i--) { ReplaceRange range=g_array_index(ranges,ReplaceRange,i-1);gtk_text_buffer_get_iter_at_offset(buffer,&a,range.begin);gtk_text_buffer_get_iter_at_offset(buffer,&z,range.end);gtk_text_buffer_delete(buffer,&a,&z);gtk_text_buffer_insert(buffer,&a,range.text,-1); }
   gtk_text_buffer_end_user_action(buffer);
   gchar *label=g_strdup_printf("Replaced: %u",ranges->len);gtk_label_set_text(GTK_LABEL(m->replace_status),label);g_free(label);
  } else gtk_label_set_text(GTK_LABEL(m->replace_status),"No changes.");
+ cleanup_replacements:
  for(guint i=0;i<ranges->len;i++) g_free(g_array_index(ranges,ReplaceRange,i).text);
  g_array_unref(ranges);
 }
@@ -1107,6 +1139,7 @@ static Merge *merge_new(GtkWidget *parent) {
  m->replace_once=gtk_check_button_new_with_label("One occurrence per line");gtk_box_pack_start(GTK_BOX(replace_options),m->replace_once,FALSE,FALSE,0);
  button(replace,"Preview count",G_CALLBACK(replace_result),m);m->replace_apply=button(replace,"Replace all in Result",G_CALLBACK(replace_result),m);gtk_widget_set_name(m->replace_apply,"insight-diff-replace-all");
  m->replace_case=gtk_check_button_new_with_label("Preserve old case");gtk_box_pack_start(GTK_BOX(replace_options),m->replace_case,FALSE,FALSE,0);gtk_widget_set_name(m->replace_case,"insight-diff-preserve-case");
+ m->replace_confirm=gtk_check_button_new_with_label("Confirm replacements");gtk_widget_set_name(m->replace_confirm,"insight-diff-confirm-replacements");gtk_box_pack_start(GTK_BOX(replace_options),m->replace_confirm,FALSE,FALSE,0);
  m->replace_status=gtk_label_new("");gtk_box_pack_start(GTK_BOX(replace_options),m->replace_status,FALSE,FALSE,0);
  gtk_widget_set_tooltip_text(replace,"Uses search text, regex, case and whole-word options above; searches the entire result or its selection without wrapping.");
  GtkWidget *line=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),line,FALSE,FALSE,0);

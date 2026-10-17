@@ -85,6 +85,28 @@ static void line_navigation_test(void) {
  gtk_text_buffer_set_text(b,"",0);gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->line_number),100);go_line(NULL,m);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->line_number)),==,1);
  gtk_widget_destroy(m->window);flush();
 }
+typedef struct { Merge *m;guint step;guint mode; } ConfirmAction;
+static gboolean confirm_response(gpointer data) {
+ ConfirmAction *action=data;GList *windows=gtk_window_list_toplevels();GtkWidget *dialog=NULL;
+ for(GList *p=windows;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-diff-confirm-replace")) dialog=p->data;
+ g_list_free(windows);g_assert_nonnull(dialog);
+ if(action->mode==3) { gtk_widget_destroy(action->m->window);return G_SOURCE_REMOVE; }
+ if(action->mode==2) { gtk_text_buffer_set_text(result(action->m),"external change",-1);gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_YES);return G_SOURCE_REMOVE; }
+ gint response=action->step==0 ? GTK_RESPONSE_YES : action->step==1 ? GTK_RESPONSE_NO : action->mode==1 ? GTK_RESPONSE_CANCEL : GTK_RESPONSE_APPLY;
+ action->step++;gtk_dialog_response(GTK_DIALOG(dialog),response);return action->step<3 ? G_SOURCE_CONTINUE : G_SOURCE_REMOVE;
+}
+static void confirm_replace_test(void) {
+ for(guint mode=0;mode<4;mode++) {
+  Merge *m=merge_new(NULL);gtk_text_buffer_set_text(result(m),"foo foo foo foo",-1);gtk_entry_set_text(GTK_ENTRY(m->find_entry),"foo");gtk_entry_set_text(GTK_ENTRY(m->replace_entry),"bar");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->replace_confirm),TRUE);
+  guint history=m->position;ConfirmAction action={m,0,mode};g_timeout_add(5,confirm_response,&action);replace_result(m->replace_apply,m);
+  if(mode==3) continue;
+  if(mode==0) { assert_text(m,"bar foo bar bar");g_assert_cmpuint(m->position,==,history+1);undo(NULL,m);assert_text(m,"foo foo foo foo");redo(NULL,m);assert_text(m,"bar foo bar bar"); }
+  else if(mode==1) { assert_text(m,"foo foo foo foo");g_assert_cmpuint(m->position,==,history); }
+  else assert_text(m,"external change");
+  gtk_widget_destroy(m->window);
+ }
+ g_clear_pointer(&view_defaults,g_key_file_unref);
+}
 static void replace_test(void) {
  Merge *m=merge_new(NULL);GtkTextBuffer *b=result(m);GtkTextIter a,z;
  const gchar *initial="foo foo_bar FOO\r\nfoo foo\nяfoo foo";gtk_text_buffer_set_text(b,initial,-1);
@@ -316,7 +338,7 @@ static void regex_limits_test(void) {
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->find_regex),FALSE);gtk_widget_destroy(m->window);flush();
 }
 int main(int argc,char **argv) {
- g_setenv("GSETTINGS_BACKEND","memory",TRUE);gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();case_test();line_edit_test();history_test();export_test();whitespace_test();search_actions_test();search_output_test();search_preview_test();output_limit_test();regex_search_test();regex_replace_test();regex_limits_test();insight_diff_set_source_opener(source_opened);
+ g_setenv("GSETTINGS_BACKEND","memory",TRUE);gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();confirm_replace_test();case_test();line_edit_test();history_test();export_test();whitespace_test();search_actions_test();search_output_test();search_preview_test();output_limit_test();regex_search_test();regex_replace_test();regex_limits_test();insight_diff_set_source_opener(source_opened);
  GError *error=NULL;gchar *dir=g_dir_make_tmp("insight-diff-XXXXXX",&error);g_assert_no_error(error);
  gchar *left=g_build_filename(dir,"left.txt",NULL),*right=g_build_filename(dir,"right.txt",NULL);
  const char *a="start\nleft\ncommon\nlast left\nend\n",*b="start\nright\ncommon\nlast right\nextra\nend\n";
