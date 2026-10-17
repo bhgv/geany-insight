@@ -261,7 +261,7 @@ Ctrl+F3 ищет следующее вхождение идентификато�
 
 ![Проверка regex и атомарная замена](../media/regex-replace.svg)
 
-Эталон: [Search](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Search.htm), [Replace](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Replace.htm), [Regular Expressions](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Regular_Expressions.htm). Реализован Perl-совместимый выбор для локальных панелей сравнения; отдельный диалект Source Insight и подтверждение каждой замены остаются открытыми.
+Эталон: [Search](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Search.htm), [Replace](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Replace.htm), [Regular Expressions](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Regular_Expressions.htm). Реализован Perl-совместимый выбор для локальных панелей сравнения; отдельный диалект Source Insight остаётся открытым; подтверждение каждой замены описано ниже.
 
 ### Подтверждение замен в результате
 

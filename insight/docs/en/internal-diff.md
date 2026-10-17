@@ -304,7 +304,7 @@ Regex limits are 8192 UTF-8 bytes of pattern, 1 MiB of pane text and 100000 exam
 
 ![Regex validation and atomic replacement](../media/regex-replace.svg)
 
-References: [Source Insight Search](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Search.htm), [Replace](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Replace.htm), [Regular Expressions](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Regular_Expressions.htm). This implements the Perl-compatible choice in local comparison panes. The separate Source Insight regex dialect and confirmation of individual replacements remain open.
+References: [Source Insight Search](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Search.htm), [Replace](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Replace.htm), [Regular Expressions](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Regular_Expressions.htm). This implements the Perl-compatible choice in local comparison panes. The separate Source Insight regex dialect remains open; per-occurrence confirmation is described below.
 
 ### Confirm replacements in Result
 
