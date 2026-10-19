@@ -39,8 +39,8 @@ gboolean insight_context_collect(const char *text,gsize size,const char *query,g
  if(failure) { g_propagate_error(error,failure); return FALSE; }
  *total=count; return TRUE;
 }
-gboolean insight_context_find(const char *text,gsize size,const char *query,gsize from,gboolean forward,guint flags,gsize *begin,gsize *end,gboolean *wrapped,GError **error) {
- if(!text || !query || !begin || !end || !wrapped || size>2u*1024u*1024u || from>size || flags>7 || !g_utf8_validate(text,(gssize)size,NULL) || memchr(text,0,size) || !*query || strlen(query)>1024 || !g_utf8_validate(query,-1,NULL)) { g_set_error_literal(error,G_REGEX_ERROR,G_REGEX_ERROR_COMPILE,"Invalid source or search query"); return FALSE; }
+static gboolean context_find(const char *text,gsize size,const char *query,gsize from,gboolean forward,guint flags,gsize *begin,gsize *end,gboolean *wrapped,GError **error,gsize maximum) {
+ if(!text || !query || !begin || !end || !wrapped || size>maximum || from>size || flags>7 || !g_utf8_validate(text,(gssize)size,NULL) || memchr(text,0,size) || !*query || strlen(query)>1024 || !g_utf8_validate(query,-1,NULL)) { g_set_error_literal(error,G_REGEX_ERROR,G_REGEX_ERROR_COMPILE,"Invalid source or search query"); return FALSE; }
  GRegex *regex=compile_query(query,flags,error); if(!regex) return FALSE;
  GMatchInfo *matches=NULL; gboolean any=FALSE,selected=FALSE; gint first=0,first_end=0,last=0,last_end=0,chosen=0,chosen_end=0;
  g_regex_match_full(regex,text,(gssize)size,0,0,&matches,error);
@@ -57,4 +57,11 @@ gboolean insight_context_find(const char *text,gsize size,const char *query,gsiz
  if(!any) return FALSE;
  *wrapped=!selected; if(!selected) { chosen=forward ? first : last; chosen_end=forward ? first_end : last_end; }
  *begin=(gsize)chosen; *end=(gsize)chosen_end; return TRUE;
+}
+
+gboolean insight_context_find(const char *text,gsize size,const char *query,gsize from,gboolean forward,guint flags,gsize *begin,gsize *end,gboolean *wrapped,GError **error) {
+ return context_find(text,size,query,from,forward,flags,begin,end,wrapped,error,2u*1024u*1024u);
+}
+gboolean insight_context_find_file(const char *text,gsize size,const char *query,gsize from,gboolean forward,guint flags,gsize *begin,gsize *end,gboolean *wrapped,GError **error) {
+ return context_find(text,size,query,from,forward,flags,begin,end,wrapped,error,G_MAXINT);
 }

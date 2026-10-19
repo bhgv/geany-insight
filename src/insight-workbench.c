@@ -4367,8 +4367,14 @@ static void editor_search_sync(GtkWidget *widget,gpointer data) {
 static void editor_search_all(GtkButton *button,gpointer data) {
  (void)button;editor_search_sync(NULL,NULL);GeanyDocument *doc=document_get_current();if(!doc || !search_data.text || !*search_data.text) return;
  if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.editor_regex)) && search_data.text[0]=='~') { ui_set_statusbar(TRUE,"Find All and Mark use literal text or regular expressions; disable fuzzy matching first");return; }
- if(GPOINTER_TO_INT(data)==2) search_mark_all(doc,search_data.text,search_data.flags);
- else search_find_usage(search_data.text,search_data.original_text,search_data.flags,GPOINTER_TO_INT(data)==1);
+ gchar *pattern=g_strdup(search_data.text),*label=g_strdup(search_data.original_text);GeanyFindFlags flags=search_data.flags;
+ if(flags&GEANY_FIND_REGEXP) {
+  flags|=GEANY_FIND_MULTILINE;
+  if(flags&GEANY_FIND_WHOLEWORD) { gchar *bounded=g_strconcat("(?<![\\p{L}\\p{N}\\p{M}_])(?:",pattern,")(?![\\p{L}\\p{N}\\p{M}_])",NULL);g_free(pattern);pattern=bounded;flags&=~GEANY_FIND_WHOLEWORD; }
+ }
+ if(GPOINTER_TO_INT(data)==2) search_mark_all(doc,pattern,flags);
+ else search_find_usage(pattern,label,flags,GPOINTER_TO_INT(data)==1);
+ g_free(pattern);g_free(label);
 }
 gboolean insight_workbench_show_file_search(void) {
  if(!wb.alive || !wb.editor_query) return FALSE;
@@ -4390,20 +4396,20 @@ static void editor_text_search(GtkWidget *widget,gpointer data) {
  editor_search_sync(NULL,NULL);
  if(!doc) { ui_set_statusbar(TRUE,"No active document"); return; }
  gint length=sci_get_length(doc->editor->sci);
- if(length<0 || length>2*1024*1024) { ui_set_statusbar(TRUE,"File Search Bar supports documents up to 2 MiB"); return; }
+ if(length<0) { ui_set_statusbar(TRUE,"Cannot read the active document"); return; }
  gchar *text=sci_get_contents(doc->editor->sci,length+1),*digest=g_compute_checksum_for_data(G_CHECKSUM_SHA256,(const guchar *)text,(gsize)length);
  guint flags=text_search_flags(wb.editor_case,wb.editor_word,wb.editor_regex);
  const char *query=gtk_entry_get_text(GTK_ENTRY(wb.editor_query)); gsize begin,end,a=(gsize)SSM(doc->editor->sci,SCI_GETSELECTIONSTART,0,0),b=(gsize)SSM(doc->editor->sci,SCI_GETSELECTIONEND,0,0),from=GPOINTER_TO_INT(data)==2 ? a : (forward ? b : a); gboolean wrapped=FALSE;
  gboolean repeat=wb.editor_find_id==doc->id && wb.editor_find_flags==flags && !g_strcmp0(query,wb.editor_find_query) && !g_strcmp0(digest,wb.editor_find_digest) && a==wb.editor_find_begin && b==wb.editor_find_end;
  gboolean forced_wrap=FALSE;
  if(repeat && a==b) {
-  if(forward && wb.editor_find_match_end>b) from=wb.editor_find_match_end;
+  if(wb.editor_find_match_end>b) { if(forward) from=wb.editor_find_match_end; }
   else if((forward && b==(gsize)length) || (!forward && !a)) { forced_wrap=TRUE;from=forward ? 0 : length; }
   else from=(gsize)SSM(doc->editor->sci,forward ? SCI_POSITIONAFTER : SCI_POSITIONBEFORE,forward ? b : a,0);
  }
  if(forced_wrap && !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.editor_wrap))) { ui_set_statusbar(TRUE,"Find: no match before file boundary");g_free(text);g_free(digest);return; }
  GError *error=NULL;
- if(insight_context_find(text,(gsize)length,query,from,forward,flags,&begin,&end,&wrapped,&error)) {
+ if(insight_context_find_file(text,(gsize)length,query,from,forward,flags,&begin,&end,&wrapped,&error)) {
   wrapped|=forced_wrap;
   if(wrapped && !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.editor_wrap))) { ui_set_statusbar(TRUE,"Find: no match before file boundary");g_clear_error(&error);g_free(text);g_free(digest);return; }
   SSM(doc->editor->sci,SCI_SETSEL,begin,gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.editor_select)) ? end : begin); decorate_match(doc->editor->sci,begin,end); SSM(doc->editor->sci,SCI_VERTICALCENTRECARET,0,0);

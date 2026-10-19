@@ -9,4 +9,7 @@ typedef struct { gsize start,end; gulong line,column; } InsightSearchMatch;
  * UTF-8 byte offsets. Total includes matches beyond capacity. */
 gboolean insight_context_collect(const char *,gsize,const char *,guint,InsightSearchMatch *,gsize,gsize *,GError **);
 gboolean insight_context_find(const char *,gsize,const char *,gsize,gboolean,guint,gsize *,gsize *,gboolean *,GError **);
+/* Active editor documents use the native signed position range. Background
+ * collection and preview search retain their existing 2 MiB bounds. */
+gboolean insight_context_find_file(const char *,gsize,const char *,gsize,gboolean,guint,gsize *,gsize *,gboolean *,GError **);
 #endif

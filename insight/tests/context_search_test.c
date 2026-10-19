@@ -39,5 +39,9 @@ int main(void) {
  /* Dense matches previously caused repeated expensive UTF-8 validation. */
  GString *dense=g_string_sized_new(1400000); for(guint n=0;n<100000;n++) g_string_append(dense,"function_0();\n");
  g_assert_true(insight_context_collect(dense->str,dense->len,"function_0",INSIGHT_SEARCH_CASE|INSIGHT_SEARCH_WORD,matches,4,&count,&e)); g_assert_no_error(e); g_assert_cmpuint(count,==,100000); g_assert_cmpuint(matches[3].line,==,4); g_assert_cmpuint(matches[3].start,==,42); g_string_free(dense,TRUE);
+ gsize large_size=2u*1024u*1024u+32;gchar *large=g_strnfill(large_size,'x');memcpy(large+large_size-6,"needle",6);
+ g_assert_false(insight_context_find(large,large_size,"needle",0,TRUE,0,&a,&b,&w,&e));g_assert_nonnull(e);g_clear_error(&e);
+ g_assert_true(insight_context_find_file(large,large_size,"needle",0,TRUE,0,&a,&b,&w,&e));g_assert_no_error(e);g_assert_cmpuint(a,==,large_size-6);g_assert_cmpuint(b,==,large_size);g_assert_false(w);
+ g_assert_true(insight_context_find_file(large,large_size,"needle$",large_size,FALSE,INSIGHT_SEARCH_REGEX,&a,&b,&w,&e));g_assert_no_error(e);g_assert_cmpuint(a,==,large_size-6);g_assert_false(w);g_free(large);
  g_print("Context search checks passed\n"); return 0;
 }
