@@ -39,6 +39,7 @@
 #include "support.h"
 #include "symbols.h"
 #include "insight-symbol-view.h"
+#include "insight-workbench.h"
 #include "ui_utils.h"
 #include "utils.h"
 #include "keybindings.h"
@@ -1785,6 +1786,7 @@ void sidebar_focus_openfiles_tab(void)
 
 void sidebar_focus_symbols_tab(void)
 {
+ if(insight_workbench_focus_file_symbols()) return;
 	if (ui_prefs.sidebar_visible && interface_prefs.sidebar_symbol_visible)
 	{
 		GtkNotebook *notebook = GTK_NOTEBOOK(main_widgets.sidebar_notebook);
