@@ -692,9 +692,9 @@ directory_operation_test = executable('test_insight_directory_operation',
 test('Insight guarded directory file operations', directory_operation_test, timeout: 45)
 
 unified_workbench_gui_test = executable('test_insight_unified_workbench_gui', '../insight/tests/unified_workbench_gui_test.c', dependencies: test_deps)
-test('Insight unified file search and symbols GUI', unified_workbench_gui_test, timeout: 45)
+test('Insight unified file search and symbols GUI', unified_workbench_gui_test, timeout: 45, is_parallel: false)
 
 source_link_anchor_test = executable('test_insight_source_link_anchor', '../insight/tests/source_link_anchor_test.c', '../insight/desktop/source_link_anchor.c', include_directories: include_directories('../insight/desktop'), c_args: ['-UNDEBUG'])
 test('Insight source link edit anchors', source_link_anchor_test)
 source_links_native_gui_test = executable('test_insight_source_links_native_gui', '../insight/tests/source_links_native_gui_test.c', dependencies: test_deps)
-test('Insight native search source links GUI', source_links_native_gui_test, timeout: 45)
+test('Insight native search source links GUI', source_links_native_gui_test, timeout: 45, is_parallel: false)
