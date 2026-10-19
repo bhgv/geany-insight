@@ -1138,6 +1138,7 @@ static gboolean on_editor_notify(G_GNUC_UNUSED GObject *object, GeanyEditor *edi
 	insight_completion_notify(editor,nt);
 	insight_paste_notify(editor,nt);
 	insight_navigation_notify(editor,nt);
+	insight_workbench_source_link_notify(editor,nt);
 	switch (nt->nmhdr.code)
 	{
 		case SCN_SAVEPOINTLEFT:
@@ -5093,6 +5094,7 @@ static ScintillaObject *create_new_sci(GeanyEditor *editor)
 static gboolean filetype_return_key(GtkWidget *widget, GdkEventKey *event, gpointer data)
 {
  GeanyEditor *editor=data;
+ if(insight_workbench_source_link_key(event)) return TRUE;
  if(insight_completion_key(editor,event)) return TRUE;
  if(insight_navigation_key(editor,event)) return TRUE;
  const InsightFiletypeOptions *options=insight_languages_editing_options(editor);

@@ -408,3 +408,7 @@ dist_insightdocmedia_DATA += insight/docs/media/unified-file-tools.jpg
 
 insightdoc_DATA += insight/docs/search-command-dialogs.md
 dist_insightdocmedia_DATA += insight/docs/media/search-command-dialogs.svg
+
+insightdoc_DATA += insight/docs/source-links.md
+dist_insightdocmedia_DATA += insight/docs/media/source-links.svg
+EXTRA_DIST += insight/tests/source_link_anchor_test.c insight/tests/source_links_native_gui_test.c

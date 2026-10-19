@@ -16,3 +16,5 @@ More: [tutorials.md](tutorials.md).
 
 
 Полная справка: [Режимы поиска/замены и языки запросов](search-replace.md).
+
+[Source Links](source-links.md)

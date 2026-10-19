@@ -1167,3 +1167,13 @@ References are lexical whole identifiers; overload and type resolution is not im
 Search is read-only; touching project files is not implemented.	Поиск не изменяет файлы; обновление дат файлов пока не реализовано.
 Enter a query; Lookup Reference requires one UTF-8 identifier.	Введите запрос; поиск ссылок требует один идентификатор UTF-8.
 Lexical references; comment filters skip unsupported languages.\nKeyword fragments: turn Whole Words Only off.	Лексические ссылки; фильтры комментариев пропускают неподдерживаемые языки.\nДля фрагментов отключите «Только целые слова».
+Jump To Link	Перейти по ссылке
+Go To First Link	Первая ссылка
+Go To Previous Link	Предыдущая ссылка
+Go To Next Link	Следующая ссылка
+Go To Last Link	Последняя ссылка
+Source link line was deleted; run the search again	Строка ссылки удалена; повторите поиск
+Source link snapshot changed or is unavailable; run the search again	Снимок ссылки изменён или недоступен; повторите поиск
+Source link opened; Ctrl+L returns to the search result	Переход по ссылке выполнен; Ctrl+L возвращает к результату поиска
+Select a search result with a source link	Выберите результат поиска со ссылкой на исходник
+No source link on this editor line	На этой строке редактора нет ссылки на результат
