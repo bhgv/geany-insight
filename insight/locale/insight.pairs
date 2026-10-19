@@ -767,3 +767,36 @@ Find All in Open Documents|||Найти всё в открытых докуме�
 Mark all matches|||Отметить все совпадения
 Cannot read the active document|||Не удалось прочитать активный документ
 Find All and Mark use literal text or regular expressions; disable fuzzy matching first|||Для поиска всех совпадений и отметок используйте точный текст или регулярные выражения; отключите нечёткое сопоставление
+Search Project|||Поиск в проекте
+Lookup References|||Поиск ссылок
+Lookup References…|||Поиск ссылок…
+Find References To:|||Найти ссылки на:
+Find Keywords:|||Найти ключевые слова:
+Search In:|||Область поиска:
+All Project Files|||Все файлы проекта
+Chosen Files / Folder|||Выбранные файлы / папка
+Case Sensitive|||Учитывать регистр
+Whole Words Only|||Только целые слова
+Skip Inactive Code|||Пропускать неактивный код
+Comment regions:|||Область комментариев:
+All text|||Весь текст
+Skip Comments|||Пропускать комментарии
+Search Only Comments|||Только комментарии
+Comments only|||Только комментарии
+Code only|||Только код
+Code only (skip strings too)|||Только код (без строк)
+Smart Reference Matching|||Точное семантическое сопоставление
+Touch files and cause recompile|||Обновлять даты файлов для пересборки
+Search Method:|||Метод поиска:
+Simple String|||Обычный текст
+Regular Expression|||Регулярное выражение
+Keyword Expression|||Выражение ключевых слов
+Lookup Reference (lexical)|||Поиск ссылок (лексический)
+Find word variations|||Находить варианты окончаний
+Lines of Context:|||Расстояние в строках:
+File masks: *.c;*.h (empty = all)|||Маски файлов: *.c;*.h (пусто = все)
+Preprocessor condition evaluation is not implemented.|||Вычисление условий препроцессора пока не реализовано.
+References are lexical whole identifiers; overload and type resolution is not implemented.|||Ищутся целые идентификаторы; разрешение перегрузок и типов пока не реализовано.
+Search is read-only; touching project files is not implemented.|||Поиск не изменяет файлы; обновление дат файлов пока не реализовано.
+Enter a query; Lookup Reference requires one UTF-8 identifier.|||Введите запрос; поиск ссылок требует один идентификатор UTF-8.
+Lexical references; comment filters skip unsupported languages.\nKeyword fragments: turn Whole Words Only off.|||Лексические ссылки; фильтры комментариев пропускают неподдерживаемые языки.\nДля фрагментов отключите «Только целые слова».

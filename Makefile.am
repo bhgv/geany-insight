@@ -405,3 +405,6 @@ insightdoc_DATA += insight/docs/unified-file-tools.md
 dist_insightdocmedia_DATA += insight/docs/media/unified-file-tools.svg
 
 dist_insightdocmedia_DATA += insight/docs/media/unified-file-tools.jpg
+
+insightdoc_DATA += insight/docs/search-command-dialogs.md
+dist_insightdocmedia_DATA += insight/docs/media/search-command-dialogs.svg

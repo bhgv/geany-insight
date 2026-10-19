@@ -19,3 +19,5 @@
 Полный редактор Linux GTK, интеграционный профиль sample.cpp.
 
 ![Unified file tools](../media/unified-file-tools.jpg)
+
+[Search Project / Lookup References](search-command-dialogs.md)

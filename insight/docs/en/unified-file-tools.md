@@ -19,3 +19,5 @@ References: [File Search Bar Options](https://www.sourceinsight.com/doc/v4/userg
 Full Linux GTK editor, sample.cpp integration profile.
 
 ![Unified file tools](../media/unified-file-tools.jpg)
+
+[Search Project / Lookup References](search-command-dialogs.md)

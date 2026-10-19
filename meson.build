@@ -1099,7 +1099,7 @@ install_data(
   'insight/docs/desktop-check-builds.md',
   'insight/docs/context-bookmarks.md', 'insight/docs/relations-calls.md',
   'insight/docs/window-list.md', 'insight/docs/symbol-info.md',
-  'insight/docs/panel-find-file.md',
+  'insight/docs/panel-find-file.md', 'insight/docs/unified-file-tools.md', 'insight/docs/search-command-dialogs.md',
   'insight/docs/panel-project-files.md', 'insight/docs/panel-project-git.md',
   'insight/docs/panel-project-symbols.md',
   'insight/docs/panel-project-folders.md',
