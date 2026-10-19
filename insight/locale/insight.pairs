@@ -752,3 +752,13 @@ Whole Result|||Весь результат
 Current position to end|||От текущей позиции до конца
 Current position starts at the selection beginning or caret; replacement never wraps.|||От начала выделения или каретки; замена без циклического перехода.
 Uses search text, regex, case and whole-word options above; follows Replace scope without wrapping.|||Использует запрос, regex, регистр и целые слова; учитывает область замены без циклического перехода.
+File Search:|||Поиск в файле:
+Search Files…|||Поиск в файлах…
+Select text when found|||Выделять найденный текст
+Search while typing|||Искать при вводе
+Load word at cursor when buttons are pressed|||Загружать слово под курсором при нажатии кнопок
+Detailed symbols|||Подробные символы
+Structure|||Структура
+File Symbols is in a floating window|||Символы файла в отдельном окне
+Find: no match before file boundary|||Поиск: до границы файла совпадений нет
+File Search Bar supports documents up to 2 MiB|||Строка поиска поддерживает документы до 2 МиБ

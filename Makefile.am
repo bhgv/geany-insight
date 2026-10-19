@@ -400,3 +400,6 @@ dist_insightdocmedia_DATA += insight/docs/media/file-compare-regex.jpg insight/d
 dist_insightdocmedia_DATA += insight/docs/media/confirm-replace.svg
 
 dist_insightdocmedia_DATA += insight/docs/media/replace-scope.svg
+
+insightdoc_DATA += insight/docs/unified-file-tools.md
+dist_insightdocmedia_DATA += insight/docs/media/unified-file-tools.svg

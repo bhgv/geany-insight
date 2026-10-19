@@ -6,6 +6,8 @@ struct GeanyEditor;
 #define INSIGHT_TEMPLATE_COMPLETION_LIST 74
 gboolean insight_workbench_complete_template(struct GeanyEditor *,gint);
 void insight_workbench_template_selected(struct GeanyEditor *,const gchar *);
+gboolean insight_workbench_show_file_search(void);
+gboolean insight_workbench_file_find_again(gboolean);
 void insight_workbench_init(void);
 void insight_workbench_finalize(void);
 void insight_workbench_refresh(void);

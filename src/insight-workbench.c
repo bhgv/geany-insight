@@ -24,6 +24,9 @@
 #include "insight-help.h"
 #include "insight-symbol-view.h"
 #include "toolbar.h"
+#include "search.h"
+#include "sidebar.h"
+#include "symbols.h"
 #include "ui_utils.h"
 #include "document.h"
 #include "main.h"
@@ -111,8 +114,10 @@ typedef struct {
  GtkWidget *relation_tree,*relation_tree_toggle,*relation_back,*relation_stack,*relation_graph_toggle,*relation_graph,*relation_tree_graph;GPtrArray *relation_history;
  gchar *relation_word; gint relation_last_mode; gboolean relation_dirty,relation_setting,reference_setting;InsightSourceRegion usage_region;
  gint usage_mode; guint usage_flags;
+ GtkWidget *local_stack,*local_mode,*native_symbol_query;
+ GtkWidget *editor_wrap,*editor_select,*editor_incremental,*editor_load_word;gboolean editor_setting;
  GtkWidget *project_query,*project_case,*project_word,*project_regex,*editor_query,*editor_case,*editor_word,*editor_regex,*project_search_row,*editor_search_row;
- gchar *editor_find_query,*editor_find_digest; gsize editor_find_begin,editor_find_end; guint editor_find_id,editor_find_flags;
+ gchar *editor_find_query,*editor_find_digest; gsize editor_find_begin,editor_find_end,editor_find_match_end; guint editor_find_id,editor_find_flags;
  GPtrArray *usage_paths; gchar *usage_name; guint usage_idle,usage_position,usage_shown,usage_skipped; GHashTable *usage_existing; GtkTreeIter usage_iter; gboolean usage_collecting,usage_iter_valid;
  GtkListStore *symbols;
  ScintillaObject *preview;
@@ -1188,7 +1193,7 @@ static gboolean file_wildcard_command(GtkEntry *entry) {
  return wildcard;
 }
 static void browser_entry_activate(GtkEntry *entry,gpointer data) {
- (void)data;if(GTK_WIDGET(entry)==wb.file_entry && (file_browse_command(entry) || file_wildcard_command(entry))) return;if(GTK_WIDGET(entry)==wb.local_entry || GTK_WIDGET(entry)==wb.symbol_entry || GTK_WIDGET(entry)==wb.file_entry) symbol_history_record(GTK_WIDGET(entry)); GtkTreeView *view=GTK_TREE_VIEW(GTK_WIDGET(entry)==wb.local_entry ? wb.local_view : (GTK_WIDGET(entry)==wb.symbol_entry ? wb.symbol_view : wb.file_view));
+ (void)data;if(GTK_WIDGET(entry)==wb.local_entry && wb.local_mode && gtk_combo_box_get_active(GTK_COMBO_BOX(wb.local_mode))==0) { GtkWidget *tree=gtk_bin_get_child(GTK_BIN(ui_lookup_widget(main_widgets.window,"scrolledwindow2")));if(GTK_IS_TREE_VIEW(tree)) { GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(tree));GtkTreeIter iter;if(gtk_tree_model_get_iter_first(model,&iter)) { GtkTreeIter child;while(gtk_tree_model_iter_children(model,&child,&iter)) iter=child;GtkTreePath *path=gtk_tree_model_get_path(model,&iter);gtk_tree_view_set_cursor(GTK_TREE_VIEW(tree),path,NULL,FALSE);gtk_tree_path_free(path);gtk_widget_grab_focus(tree); } }return; }if(GTK_WIDGET(entry)==wb.file_entry && (file_browse_command(entry) || file_wildcard_command(entry))) return;if(GTK_WIDGET(entry)==wb.local_entry || GTK_WIDGET(entry)==wb.symbol_entry || GTK_WIDGET(entry)==wb.file_entry) symbol_history_record(GTK_WIDGET(entry)); GtkTreeView *view=GTK_TREE_VIEW(GTK_WIDGET(entry)==wb.local_entry ? wb.local_view : (GTK_WIDGET(entry)==wb.symbol_entry ? wb.symbol_view : wb.file_view));
  if(!gtk_widget_get_sensitive(GTK_WIDGET(view))) return;
  GtkTreeModel *model=gtk_tree_view_get_model(view); GtkTreeIter iter;
  if(gtk_tree_model_get_iter_first(model,&iter)) { GtkTreeIter child; while(gtk_tree_model_iter_children(model,&child,&iter)) iter=child; GtkTreePath *path=gtk_tree_model_get_path(model,&iter); gtk_tree_view_expand_to_path(view,path); browser_activated(view,path,NULL,NULL); gtk_tree_path_free(path); }
@@ -1889,8 +1894,18 @@ static void create_browser(void) {
  g_signal_connect(wb.symbol_view,"row-activated",G_CALLBACK(browser_activated),NULL);
  gtk_widget_show_all(wb.browser); browser_filter(NULL,NULL);
 }
+static void local_structure_query(GtkEditable *entry,gpointer data) {
+ (void)data;if(wb.local_mode && gtk_combo_box_get_active(GTK_COMBO_BOX(wb.local_mode))==0 && g_strcmp0(gtk_entry_get_text(GTK_ENTRY(entry)),gtk_entry_get_text(GTK_ENTRY(wb.local_entry)))) gtk_entry_set_text(GTK_ENTRY(wb.local_entry),gtk_entry_get_text(GTK_ENTRY(entry)));
+}
+static void local_mode_changed(GtkComboBox *combo,gpointer data) {
+ (void)data;gboolean details=gtk_combo_box_get_active(combo)==1;gtk_stack_set_visible_child_name(GTK_STACK(wb.local_stack),details ? "details" : "structure");local_filter(GTK_EDITABLE(wb.local_entry),NULL);
+}
+static void local_native_sort(GtkButton *button,gpointer data) {
+ (void)button;GeanyDocument *doc=document_get_current();if(doc) symbols_recreate_tag_list(doc,GPOINTER_TO_INT(data));
+}
 static void local_filter(GtkEditable *entry,gpointer data) {
  (void)data; if(!wb.local_symbols) return; GeanyDocument *doc=document_get_current();
+ if(wb.native_symbol_query && wb.local_mode && gtk_combo_box_get_active(GTK_COMBO_BOX(wb.local_mode))==0 && g_strcmp0(gtk_entry_get_text(GTK_ENTRY(wb.local_entry)),gtk_entry_get_text(GTK_ENTRY(wb.native_symbol_query)))) gtk_entry_set_text(GTK_ENTRY(wb.native_symbol_query),gtk_entry_get_text(GTK_ENTRY(wb.local_entry)));
  if(entry || !wb.local_symbol_limit || wb.local_doc_id!=(doc ? doc->id : 0)) wb.local_symbol_limit=2000;
  wb.local_doc_id=doc ? doc->id : 0;
  gtk_label_set_text(GTK_LABEL(wb.local_label),doc && doc->file_name ? doc->file_name : "Current file symbols");
@@ -1951,20 +1966,27 @@ static void create_local_browser(void) {
  for(guint i=0;i<3;i++) { GtkTreeViewColumn *c=gtk_tree_view_column_new_with_attributes(labels[i],gtk_cell_renderer_text_new(),"text",columns[i],NULL); gtk_tree_view_column_set_sort_column_id(c,columns[i]); gtk_tree_view_append_column(GTK_TREE_VIEW(wb.local_view),c); }
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),wb.local_view);
  gtk_box_pack_start(GTK_BOX(box),wb.local_label,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),symbol_query_controls(wb.local_entry,TRUE),FALSE,FALSE,0);
- gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0); gtk_box_pack_start(GTK_BOX(box),sort_selector(wb.local_symbols),FALSE,FALSE,0);
- GtkWidget *group=insight_symbol_view_attach(GTK_TREE_VIEW(wb.local_view),wb.local_symbols,NULL); gtk_widget_set_name(group,"insight-local-group-types"); gtk_box_pack_start(GTK_BOX(box),group,FALSE,FALSE,0);
- GtkWidget *scopes=insight_symbol_view_scopes_control(GTK_TREE_VIEW(wb.local_view));gtk_widget_set_name(scopes,"insight-local-scope-hierarchy");gtk_box_pack_start(GTK_BOX(box),scopes,FALSE,FALSE,0);
- GtkWidget *types=insight_symbol_view_types_control(GTK_TREE_VIEW(wb.local_view)); gtk_widget_set_name(types,"insight-local-type-filters"); gtk_box_pack_start(GTK_BOX(box),types,FALSE,FALSE,0); insight_symbol_view_more_loader(GTK_TREE_VIEW(wb.local_view),G_CALLBACK(symbols_load_more),2000);
+ GtkWidget *details=gtk_box_new(GTK_ORIENTATION_VERTICAL,3);gtk_box_pack_start(GTK_BOX(details),scroll,TRUE,TRUE,0); gtk_box_pack_start(GTK_BOX(details),sort_selector(wb.local_symbols),FALSE,FALSE,0);
+ GtkWidget *group=insight_symbol_view_attach(GTK_TREE_VIEW(wb.local_view),wb.local_symbols,NULL); gtk_widget_set_name(group,"insight-local-group-types"); gtk_box_pack_start(GTK_BOX(details),group,FALSE,FALSE,0);
+ GtkWidget *scopes=insight_symbol_view_scopes_control(GTK_TREE_VIEW(wb.local_view));gtk_widget_set_name(scopes,"insight-local-scope-hierarchy");gtk_box_pack_start(GTK_BOX(details),scopes,FALSE,FALSE,0);
+ GtkWidget *types=insight_symbol_view_types_control(GTK_TREE_VIEW(wb.local_view)); gtk_widget_set_name(types,"insight-local-type-filters"); gtk_box_pack_start(GTK_BOX(details),types,FALSE,FALSE,0); insight_symbol_view_more_loader(GTK_TREE_VIEW(wb.local_view),G_CALLBACK(symbols_load_more),2000);
  GtkWidget *locate=gtk_button_new();gtk_widget_set_name(locate,"insight-local-locate");gtk_button_set_image(GTK_BUTTON(locate),insight_command_icon("find-location-symbolic"));gtk_widget_set_tooltip_text(locate,"Locate symbol at caret");g_signal_connect(locate,"clicked",G_CALLBACK(symbols_locate),NULL);gtk_box_pack_start(GTK_BOX(types),locate,FALSE,FALSE,0);
- GtkWidget *info=gtk_button_new_with_label("Symbol Info…");g_signal_connect(info,"clicked",G_CALLBACK(browser_symbol_info),wb.local_view);gtk_box_pack_start(GTK_BOX(box),info,FALSE,FALSE,0);
- gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),box,gtk_label_new("File Symbols"));
+ GtkWidget *info=gtk_button_new_with_label("Symbol Info…");g_signal_connect(info,"clicked",G_CALLBACK(browser_symbol_info),wb.local_view);gtk_box_pack_start(GTK_BOX(details),info,FALSE,FALSE,0);
+ GtkWidget *home=gtk_notebook_get_nth_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),0),*native=ui_lookup_widget(main_widgets.window,"scrolledwindow2");
+ wb.native_symbol_query=ui_lookup_widget(main_widgets.window,"entry_tagfilter");gtk_widget_set_no_show_all(wb.native_symbol_query,TRUE);gtk_widget_hide(wb.native_symbol_query);
+ wb.local_mode=gtk_combo_box_text_new();gtk_widget_set_name(wb.local_mode,"insight-file-symbol-mode");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.local_mode),"Structure");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.local_mode),"Detailed symbols");gtk_combo_box_set_active(GTK_COMBO_BOX(wb.local_mode),0);gtk_box_pack_start(GTK_BOX(box),wb.local_mode,FALSE,FALSE,0);
+ wb.local_stack=gtk_stack_new();gtk_widget_set_name(wb.local_stack,"insight-file-symbol-stack");gtk_stack_set_homogeneous(GTK_STACK(wb.local_stack),FALSE);
+ GtkWidget *structure=gtk_box_new(GTK_ORIENTATION_VERTICAL,3);g_object_ref(native);gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(native)),native);gtk_box_pack_start(GTK_BOX(structure),native,TRUE,TRUE,0);g_object_unref(native);
+ GtkWidget *sortbar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);const gchar *sorts[]={"Name","Source order"};for(guint i=0;i<2;i++) { GtkWidget *sort=gtk_button_new_with_label(sorts[i]);gtk_box_pack_start(GTK_BOX(sortbar),sort,FALSE,FALSE,0);g_signal_connect(sort,"clicked",G_CALLBACK(local_native_sort),GINT_TO_POINTER(i ? SYMBOLS_SORT_BY_APPEARANCE : SYMBOLS_SORT_BY_NAME)); }gtk_box_pack_start(GTK_BOX(structure),sortbar,FALSE,FALSE,0);
+ gtk_stack_add_named(GTK_STACK(wb.local_stack),structure,"structure");gtk_stack_add_named(GTK_STACK(wb.local_stack),details,"details");gtk_box_pack_start(GTK_BOX(box),wb.local_stack,TRUE,TRUE,0);gtk_stack_set_visible_child_name(GTK_STACK(wb.local_stack),"structure");gtk_box_pack_start(GTK_BOX(home),box,TRUE,TRUE,0);gtk_notebook_set_tab_label_text(GTK_NOTEBOOK(main_widgets.sidebar_notebook),home,"File Symbols");
+ g_signal_connect(wb.local_mode,"changed",G_CALLBACK(local_mode_changed),NULL);g_signal_connect(wb.native_symbol_query,"changed",G_CALLBACK(local_structure_query),NULL);
  gtk_notebook_set_show_tabs(GTK_NOTEBOOK(main_widgets.sidebar_notebook),TRUE);
  g_signal_connect(wb.local_entry,"changed",G_CALLBACK(local_filter),NULL); g_signal_connect(wb.local_entry,"activate",G_CALLBACK(browser_entry_activate),NULL);
  g_signal_connect(wb.local_entry,"key-press-event",G_CALLBACK(browser_key),NULL); g_signal_connect(wb.local_view,"key-press-event",G_CALLBACK(browser_key),NULL); symbol_context_attach(wb.local_view);
  g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.local_view)),"changed",G_CALLBACK(browser_selected),NULL);
  g_signal_connect(wb.local_view,"row-activated",G_CALLBACK(browser_activated),NULL); gtk_widget_show_all(box);
  gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(wb.local_symbols),SYMBOL_LINE,GTK_SORT_ASCENDING);
- gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.sidebar_notebook),box)); local_filter(NULL,NULL);
+ gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),0); local_filter(NULL,NULL);
 }
 static gint folder_compare(GtkTreeModel *model,GtkTreeIter *a,GtkTreeIter *b,gpointer data) {
  (void)data; gchar *an,*bn; gboolean ad,bd; gtk_tree_model_get(model,a,0,&an,2,&ad,-1); gtk_tree_model_get(model,b,0,&bn,2,&bd,-1);
@@ -3263,7 +3285,8 @@ static void context_find(GtkWidget *widget,gpointer data) {
 static void create_context_find(void) {
  GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3); wb.context_find_row=row;gtk_widget_set_name(row,"insight-context-search-row"); wb.find_entry=gtk_search_entry_new(); gtk_entry_set_placeholder_text(GTK_ENTRY(wb.find_entry),"Find in Context…"); gtk_widget_set_tooltip_text(wb.find_entry,"Use ~term for fuzzy search when Regex is off");
  gtk_box_pack_start(GTK_BOX(row),wb.find_entry,TRUE,TRUE,0); GtkWidget *previous=gtk_button_new_with_label("Previous"),*next=gtk_button_new_with_label("Next");
- gtk_box_pack_start(GTK_BOX(row),previous,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(row),next,FALSE,FALSE,0);
+ gtk_widget_set_name(previous,"insight-file-search-previous");gtk_widget_set_name(next,"insight-file-search-next");gtk_button_set_image(GTK_BUTTON(next),gtk_image_new_from_icon_name("go-down",GTK_ICON_SIZE_MENU));gtk_button_set_image(GTK_BUTTON(previous),gtk_image_new_from_icon_name("go-up",GTK_ICON_SIZE_MENU));gtk_box_pack_start(GTK_BOX(row),next,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(row),previous,FALSE,FALSE,0);
+   GtkWidget *files=gtk_button_new_with_label("Search Files…");gtk_widget_set_name(files,"insight-file-search-files");gtk_box_pack_start(GTK_BOX(row),files,FALSE,FALSE,0);g_signal_connect(files,"clicked",G_CALLBACK(search_scope_command),GINT_TO_POINTER(0));
  wb.find_case=gtk_check_button_new_with_label("Case"); wb.find_word=gtk_check_button_new_with_label("Word"); wb.find_regex=gtk_check_button_new_with_label("Regex");
  gtk_box_pack_start(GTK_BOX(row),wb.find_case,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(row),wb.find_word,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(row),wb.find_regex,FALSE,FALSE,0);
  wb.find_status=gtk_label_new(""); gtk_label_set_ellipsize(GTK_LABEL(wb.find_status),PANGO_ELLIPSIZE_END); gtk_widget_set_size_request(wb.find_status,80,-1); gtk_box_pack_start(GTK_BOX(row),wb.find_status,FALSE,FALSE,0);
@@ -3763,6 +3786,7 @@ static void dock_panel(guint index) {
  GtkWidget *window=host->window; host->window=NULL; g_object_ref(host->page); gtk_container_remove(GTK_CONTAINER(window),host->page);
  if(host->pane) gtk_paned_pack2(GTK_PANED(host->home),host->page,FALSE,FALSE);
  else {
+  GtkWidget *placeholder=g_object_get_data(G_OBJECT(host->page),"insight-dock-placeholder");if(placeholder) { gtk_widget_destroy(placeholder);g_object_set_data(G_OBJECT(host->page),"insight-dock-placeholder",NULL); }
   gint position=0; for(gint n=0;n<gtk_notebook_get_n_pages(GTK_NOTEBOOK(host->home));n++) { GtkWidget *page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(host->home),n); guint order=(guint)n;
    for(guint j=0;j<wb.host_count;j++) if(wb.hosts[j].page==page && wb.hosts[j].home==host->home) { order=wb.hosts[j].order; break; }
    if(order<host->order) position++;
@@ -3780,6 +3804,7 @@ static void detach_panel(guint index) {
  host->window=gtk_window_new(GTK_WINDOW_TOPLEVEL); gchar *title=g_strdup_printf("Geany Insight — %s",host->label); gtk_window_set_title(GTK_WINDOW(host->window),title); g_free(title);
  gtk_window_set_transient_for(GTK_WINDOW(host->window),GTK_WINDOW(main_widgets.window)); gtk_window_set_default_size(GTK_WINDOW(host->window),host->width>=300 ? host->width : (host->pane ? 900 : 480),host->height>=200 ? host->height : 600);
  g_object_ref(host->page); gtk_container_remove(GTK_CONTAINER(host->home),host->page); gtk_container_add(GTK_CONTAINER(host->window),host->page); g_object_unref(host->page);
+ if(index==8) { GtkWidget *placeholder=gtk_label_new("File Symbols is in a floating window");gtk_notebook_insert_page(GTK_NOTEBOOK(host->home),placeholder,gtk_label_new("File Symbols"),0);g_object_set_data(G_OBJECT(host->page),"insight-dock-placeholder",placeholder);gtk_widget_show(placeholder); }
  if(wb.navigation_accels) gtk_window_add_accel_group(GTK_WINDOW(host->window),wb.navigation_accels);
  if(wb.lua_accels) gtk_window_add_accel_group(GTK_WINDOW(host->window),wb.lua_accels);
  g_signal_connect(host->window,"delete-event",G_CALLBACK(panel_closed),GUINT_TO_POINTER(index)); gtk_widget_show_all(host->window);
@@ -4325,20 +4350,56 @@ static void project_text_search(GtkWidget *widget,gpointer data) {
  wb.relation_setting=FALSE; relation_controls(NULL,NULL);
  focus_search_results(NULL,NULL);
 }
+static void editor_text_search(GtkWidget *,gpointer);
+static void editor_search_sync(GtkWidget *widget,gpointer data) {
+ (void)widget;(void)data;if(wb.editor_setting || !wb.editor_query) return;
+ g_free(search_data.text);g_free(search_data.original_text);search_data.text=g_strdup(gtk_entry_get_text(GTK_ENTRY(wb.editor_query)));search_data.original_text=g_strdup(search_data.text);
+ search_data.flags=(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.editor_case)) ? GEANY_FIND_MATCHCASE : 0)|(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.editor_word)) ? GEANY_FIND_WHOLEWORD : 0)|(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.editor_regex)) ? GEANY_FIND_REGEXP : 0);search_data.search_bar=FALSE;
+ if(GTK_IS_ENTRY(widget) && wb.editor_incremental && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.editor_incremental)) && *search_data.text) editor_text_search(NULL,NULL);
+}
+static void editor_search_all(GtkButton *button,gpointer data) {
+ (void)button;editor_search_sync(NULL,NULL);GeanyDocument *doc=document_get_current();if(!doc || !search_data.text || !*search_data.text) return;
+ if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.editor_regex)) && search_data.text[0]=='~') { ui_set_statusbar(TRUE,"Find All and Mark use literal text or regular expressions; disable fuzzy matching first");return; }
+ if(GPOINTER_TO_INT(data)==2) search_mark_all(doc,search_data.text,search_data.flags);
+ else search_find_usage(search_data.text,search_data.original_text,search_data.flags,GPOINTER_TO_INT(data)==1);
+}
+gboolean insight_workbench_show_file_search(void) {
+ if(!wb.alive || !wb.editor_query) return FALSE;
+ GeanyDocument *doc=document_get_current();gchar *selection=doc ? editor_get_default_selection(doc->editor,search_prefs.use_current_word,NULL) : NULL;
+ if(selection && !strchr(selection,'\n') && !strchr(selection,'\r')) gtk_entry_set_text(GTK_ENTRY(wb.editor_query),selection);g_free(selection);
+ gtk_widget_show(wb.editor_search_row);gtk_widget_grab_focus(wb.editor_query);gtk_editable_select_region(GTK_EDITABLE(wb.editor_query),0,-1);return TRUE;
+}
+gboolean insight_workbench_file_find_again(gboolean backwards) {
+ if(!wb.alive || !wb.editor_query) return FALSE;
+ if(search_data.text) {
+  wb.editor_setting=TRUE;gtk_entry_set_text(GTK_ENTRY(wb.editor_query),search_data.text);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.editor_case),!!(search_data.flags&GEANY_FIND_MATCHCASE));gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.editor_word),!!(search_data.flags&GEANY_FIND_WHOLEWORD));gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.editor_regex),!!(search_data.flags&GEANY_FIND_REGEXP));wb.editor_setting=FALSE;
+ }
+ editor_text_search(NULL,GINT_TO_POINTER(backwards ? -1 : 1));return TRUE;
+}
 static void editor_text_search(GtkWidget *widget,gpointer data) {
- (void)widget; gboolean forward=GPOINTER_TO_INT(data)!=-1; GeanyDocument *doc=document_get_current();
+ gboolean forward=GPOINTER_TO_INT(data)!=-1; GeanyDocument *doc=document_get_current();
+ if(GTK_IS_BUTTON(widget) && doc && wb.editor_load_word && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.editor_load_word))) { gchar *word=editor_get_default_selection(doc->editor,TRUE,NULL);if(word) { wb.editor_setting=TRUE;gtk_entry_set_text(GTK_ENTRY(wb.editor_query),word);wb.editor_setting=FALSE;g_free(word); } }
+ editor_search_sync(NULL,NULL);
  if(!doc) { ui_set_statusbar(TRUE,"No active document"); return; }
  gint length=sci_get_length(doc->editor->sci);
- if(length<0 || length>2*1024*1024) { ui_set_statusbar(TRUE,"Toolbar search supports documents up to 2 MiB; use Geany Find for larger files"); return; }
+ if(length<0 || length>2*1024*1024) { ui_set_statusbar(TRUE,"File Search Bar supports documents up to 2 MiB"); return; }
  gchar *text=sci_get_contents(doc->editor->sci,length+1),*digest=g_compute_checksum_for_data(G_CHECKSUM_SHA256,(const guchar *)text,(gsize)length);
  guint flags=text_search_flags(wb.editor_case,wb.editor_word,wb.editor_regex);
  const char *query=gtk_entry_get_text(GTK_ENTRY(wb.editor_query)); gsize begin,end,a=(gsize)SSM(doc->editor->sci,SCI_GETSELECTIONSTART,0,0),b=(gsize)SSM(doc->editor->sci,SCI_GETSELECTIONEND,0,0),from=forward ? b : a; gboolean wrapped=FALSE;
  gboolean repeat=wb.editor_find_id==doc->id && wb.editor_find_flags==flags && !g_strcmp0(query,wb.editor_find_query) && !g_strcmp0(digest,wb.editor_find_digest) && a==wb.editor_find_begin && b==wb.editor_find_end;
- if(repeat && a==b) from=forward ? (b<(gsize)length ? b+1 : 0) : (a ? a-1 : (gsize)length);
+ gboolean forced_wrap=FALSE;
+ if(repeat && a==b) {
+  if(forward && wb.editor_find_match_end>b) from=wb.editor_find_match_end;
+  else if((forward && b==(gsize)length) || (!forward && !a)) { forced_wrap=TRUE;from=forward ? 0 : length; }
+  else from=(gsize)SSM(doc->editor->sci,forward ? SCI_POSITIONAFTER : SCI_POSITIONBEFORE,forward ? b : a,0);
+ }
+ if(forced_wrap && !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.editor_wrap))) { ui_set_statusbar(TRUE,"Find: no match before file boundary");g_free(text);g_free(digest);return; }
  GError *error=NULL;
  if(insight_context_find(text,(gsize)length,query,from,forward,flags,&begin,&end,&wrapped,&error)) {
-  SSM(doc->editor->sci,SCI_SETSEL,begin,end); decorate_match(doc->editor->sci,begin,end); SSM(doc->editor->sci,SCI_VERTICALCENTRECARET,0,0);
-  g_free(wb.editor_find_query); g_free(wb.editor_find_digest); wb.editor_find_query=g_strdup(query); wb.editor_find_digest=g_strdup(digest); wb.editor_find_begin=begin; wb.editor_find_end=end; wb.editor_find_id=doc->id; wb.editor_find_flags=flags;
+  wrapped|=forced_wrap;
+  if(wrapped && !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.editor_wrap))) { ui_set_statusbar(TRUE,"Find: no match before file boundary");g_clear_error(&error);g_free(text);g_free(digest);return; }
+  SSM(doc->editor->sci,SCI_SETSEL,begin,gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.editor_select)) ? end : begin); decorate_match(doc->editor->sci,begin,end); SSM(doc->editor->sci,SCI_VERTICALCENTRECARET,0,0);
+  g_free(wb.editor_find_query); g_free(wb.editor_find_digest); wb.editor_find_query=g_strdup(query); wb.editor_find_digest=g_strdup(digest); wb.editor_find_begin=begin;wb.editor_find_match_end=end; wb.editor_find_end=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.editor_select)) ? end : begin; wb.editor_find_id=doc->id; wb.editor_find_flags=flags;
   ui_set_statusbar(TRUE,wrapped ? "Find: wrapped" : "Find: match"); insight_workbench_refresh();
  } else ui_set_statusbar(TRUE,"Find: %s",error ? error->message : "no match");
  g_clear_error(&error); g_free(text); g_free(digest);
@@ -4475,18 +4536,23 @@ static void create_search_toolbars(void) {
  for(guint i=0;i<2;i++) {
   GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3),*field=gtk_search_entry_new(),*sensitive=gtk_check_button_new_with_label("Match case"),*word=gtk_check_button_new_with_label("Whole word"),*regex=gtk_check_button_new_with_label("Regex");
   gtk_widget_set_tooltip_text(field,"Use ~term for fuzzy search when Regex is off; characters match in order within a line"); gtk_entry_set_max_length(GTK_ENTRY(field),1024); gtk_widget_set_hexpand(field,TRUE); gtk_widget_set_size_request(field,180,-1);
-  gtk_box_pack_start(GTK_BOX(row),gtk_label_new(i ? "Find:" : "Search project:"),FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(row),field,TRUE,TRUE,0);
+  gtk_box_pack_start(GTK_BOX(row),gtk_label_new(i ? "File Search:" : "Search project:"),FALSE,FALSE,3); gtk_box_pack_start(GTK_BOX(row),field,TRUE,TRUE,0);
   if(i) {
-   wb.editor_search_row=row; wb.editor_query=field; wb.editor_case=sensitive; wb.editor_word=word; wb.editor_regex=regex;
+   wb.editor_search_row=row; wb.editor_query=field;gtk_widget_set_name(field,"insight-file-search-query"); wb.editor_case=sensitive; wb.editor_word=word; wb.editor_regex=regex;
    GtkWidget *previous=gtk_button_new_with_label("Previous"),*next=gtk_button_new_with_label("Next");
-   gtk_box_pack_start(GTK_BOX(row),previous,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(row),next,FALSE,FALSE,0);
+   gtk_widget_set_name(previous,"insight-file-search-previous");gtk_widget_set_name(next,"insight-file-search-next");gtk_button_set_image(GTK_BUTTON(next),gtk_image_new_from_icon_name("go-down",GTK_ICON_SIZE_MENU));gtk_button_set_image(GTK_BUTTON(previous),gtk_image_new_from_icon_name("go-up",GTK_ICON_SIZE_MENU));gtk_box_pack_start(GTK_BOX(row),next,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(row),previous,FALSE,FALSE,0);
+   GtkWidget *files=gtk_button_new_with_label("Search Files…");gtk_widget_set_name(files,"insight-file-search-files");gtk_box_pack_start(GTK_BOX(row),files,FALSE,FALSE,0);g_signal_connect(files,"clicked",G_CALLBACK(search_scope_command),GINT_TO_POINTER(0));
    g_signal_connect(previous,"clicked",G_CALLBACK(editor_text_search),GINT_TO_POINTER(-1)); g_signal_connect(next,"clicked",G_CALLBACK(editor_text_search),NULL); g_signal_connect(field,"activate",G_CALLBACK(editor_text_search),NULL);
   } else {
    wb.project_search_row=row; wb.project_query=field; gtk_widget_set_name(field,"insight-project-query"); wb.project_case=sensitive; wb.project_word=word; wb.project_regex=regex;
    GtkWidget *history=gtk_button_new_with_label("History"); gtk_widget_set_name(history,"insight-search-history"); gtk_widget_set_tooltip_text(history,"Last 32 valid search queries; choosing a query retains the current scope and options"); gtk_box_pack_start(GTK_BOX(row),history,FALSE,FALSE,0); g_signal_connect(history,"clicked",G_CALLBACK(search_history_menu),NULL);
    GtkWidget *search=gtk_button_new_with_label("Search"); gtk_box_pack_start(GTK_BOX(row),search,FALSE,FALSE,0); g_signal_connect(search,"clicked",G_CALLBACK(project_text_search),NULL); g_signal_connect(field,"activate",G_CALLBACK(project_text_search),NULL);
   }
-  gtk_box_pack_start(GTK_BOX(row),sensitive,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(row),word,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(row),regex,FALSE,FALSE,0);
+  if(i) {
+   GtkWidget *options=gtk_menu_button_new();gtk_button_set_label(GTK_BUTTON(options),"Options");gtk_widget_set_name(options,"insight-file-search-options");GtkWidget *popover=gtk_popover_new(options),*checks=gtk_box_new(GTK_ORIENTATION_VERTICAL,4);gtk_container_set_border_width(GTK_CONTAINER(checks),8);gtk_container_add(GTK_CONTAINER(popover),checks);gtk_menu_button_set_popover(GTK_MENU_BUTTON(options),popover);gtk_box_pack_start(GTK_BOX(row),options,FALSE,FALSE,0);
+   wb.editor_wrap=gtk_check_button_new_with_label("Wrap around");wb.editor_select=gtk_check_button_new_with_label("Select text when found");wb.editor_incremental=gtk_check_button_new_with_label("Search while typing");wb.editor_load_word=gtk_check_button_new_with_label("Load word at cursor when buttons are pressed");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.editor_wrap),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.editor_select),TRUE);
+   GtkWidget *items[]={sensitive,word,regex,wb.editor_wrap,wb.editor_select,wb.editor_incremental,wb.editor_load_word};const gchar *names[]={"case","word","regex","wrap","select","incremental","load-word"};for(guint n=0;n<G_N_ELEMENTS(items);n++) { gtk_box_pack_start(GTK_BOX(n==0 || n==3 ? row : checks),items[n],FALSE,FALSE,0);gchar *name=g_strconcat("insight-file-search-",names[n],NULL);gtk_widget_set_name(items[n],name);g_free(name);if(n<3) g_signal_connect(items[n],"toggled",G_CALLBACK(editor_search_sync),NULL); }const gchar *actions[]={"Find All in Document","Find All in Open Documents","Mark all matches"};for(guint n=0;n<3;n++) { GtkWidget *action=gtk_button_new_with_label(actions[n]);gtk_box_pack_start(GTK_BOX(checks),action,FALSE,FALSE,0);g_signal_connect(action,"clicked",G_CALLBACK(editor_search_all),GINT_TO_POINTER(n)); }gtk_widget_show_all(checks);g_signal_connect(field,"changed",G_CALLBACK(editor_search_sync),NULL);
+  } else { gtk_box_pack_start(GTK_BOX(row),sensitive,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(row),word,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(row),regex,FALSE,FALSE,0); }
   gtk_box_pack_end(GTK_BOX(row),insight_panel_help_button(i ? "panel-find-file.md" : "panel-search-results.md"),FALSE,FALSE,0);
   GtkWidget *close=gtk_button_new_from_icon_name("window-close",GTK_ICON_SIZE_BUTTON);gtk_widget_set_tooltip_text(close,"Close search panel (Escape)");gtk_box_pack_end(GTK_BOX(row),close,FALSE,FALSE,0);g_signal_connect(close,"clicked",G_CALLBACK(search_panel_close),row);
   g_signal_connect(field,"key-press-event",G_CALLBACK(search_panel_key),row);gtk_box_pack_start(GTK_BOX(parent),row,FALSE,FALSE,0);gtk_box_reorder_child(GTK_BOX(parent),row,position+(gint)i);gtk_widget_set_name(row,i ? "insight-editor-search-panel" : "insight-project-search-panel");gtk_widget_show_all(row);gtk_widget_set_no_show_all(row,TRUE);gtk_widget_hide(row);

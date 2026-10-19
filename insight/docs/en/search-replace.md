@@ -157,3 +157,6 @@ They apply to References, not project text search or replacement. Call sites kee
 their existing code-only behavior. Back restores the reference filter; the chosen
 filter is saved for the next session. Selecting a result previews the original
 source in Context at its original position.
+
+
+See [the unified File Search and File Symbols interface](unified-file-tools.md).

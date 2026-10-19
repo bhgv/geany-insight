@@ -6,6 +6,7 @@
 guint insight_symbol_kind_type(const gchar *,const gchar *,GeanyFiletype *);
 const gchar *insight_symbol_type_name(guint,gboolean);
 const gchar *insight_symbol_type_icon(guint);
+GdkPixbuf *insight_symbol_type_badge(guint);
 void insight_symbol_tree_format(GtkTreeView *);
 GtkWidget *insight_symbol_view_attach(GtkTreeView *,GtkListStore *,GeanyFiletype *);
 GtkWidget *insight_symbol_view_scopes_control(GtkTreeView *);

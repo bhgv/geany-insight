@@ -38,6 +38,7 @@
 #include "stash.h"
 #include "support.h"
 #include "symbols.h"
+#include "insight-symbol-view.h"
 #include "ui_utils.h"
 #include "utils.h"
 #include "keybindings.h"
@@ -95,6 +96,14 @@ static void sidebar_tabs_show_hide(GtkNotebook *notebook, GtkWidget *child,
 
 
 /* the prepare_* functions are document-related, but I think they fit better here than in document.c */
+static void insight_tag_cell(GtkTreeViewColumn *column,GtkCellRenderer *renderer,GtkTreeModel *model,GtkTreeIter *iter,gpointer tree) {
+ (void)column;(void)tree;TMTag *tag=NULL;gtk_tree_model_get(model,iter,SYMBOLS_COLUMN_TAG,&tag,-1);
+ guint type=tag ? tag->type : 0;
+ if(GTK_IS_CELL_RENDERER_PIXBUF(renderer)) { GdkPixbuf *badge=insight_symbol_type_badge(type);g_object_set(renderer,"pixbuf",badge,NULL);g_clear_object(&badge); }
+ else g_object_set(renderer,"weight",!tag || (type&(tm_tag_class_t|tm_tag_struct_t|tm_tag_union_t|tm_tag_enum_t|tm_tag_typedef_t)) ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL,NULL);
+ if(tag) tm_tag_unref(tag);
+}
+
 static void prepare_taglist(GtkWidget *tree, GtkTreeStore *store)
 {
 	GtkCellRenderer *text_renderer, *icon_renderer;
@@ -114,7 +123,11 @@ static void prepare_taglist(GtkWidget *tree, GtkTreeStore *store)
   	g_object_set(text_renderer, "yalign", 0.5, NULL);
   	gtk_tree_view_column_set_title(column, _("Symbols"));
 
-	gtk_tree_view_append_column(GTK_TREE_VIEW(tree), column);
+	gtk_tree_view_column_set_cell_data_func(column,icon_renderer,insight_tag_cell,tree,NULL);
+ gtk_tree_view_column_set_cell_data_func(column,text_renderer,insight_tag_cell,tree,NULL);
+ gtk_widget_set_name(tree,"insight-file-structure");gtk_tree_view_set_enable_tree_lines(GTK_TREE_VIEW(tree),TRUE);
+ GtkCssProvider *style=gtk_css_provider_new();gtk_css_provider_load_from_data(style,"#insight-file-structure { background-color: #edf3f8; color: #182330; font-family: Tahoma, Sans; font-size: 9pt; } #insight-file-structure:selected { background-color: #316ac5; color: white; }",-1,NULL);gtk_style_context_add_provider(gtk_widget_get_style_context(tree),GTK_STYLE_PROVIDER(style),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);g_object_unref(style);
+ gtk_tree_view_append_column(GTK_TREE_VIEW(tree), column);
 	gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(tree), FALSE);
 
 	ui_widget_modify_font_from_string(tree, interface_prefs.tagbar_font);
@@ -183,8 +196,8 @@ void sidebar_update_tag_list(GeanyDocument *doc, gboolean update)
 	if (update && doc != NULL)
 		doc->priv->tag_tree_dirty = TRUE;
 
-	if (gtk_notebook_get_current_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook)) != TREEVIEW_SYMBOL)
-		return; /* don't bother updating symbol tree if we don't see it */
+	/* The shared File Symbols page may be floated or show its detailed mode.
+	 * Keep the native structure current in either case. */
 
 	/* changes the tree view to the given one, trying not to do useless changes */
 	#define CHANGE_TREE(new_child) \

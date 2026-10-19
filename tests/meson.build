@@ -690,3 +690,6 @@ test('Insight native Directory Compare routing GUI', directory_compare_native_gu
 directory_operation_test = executable('test_insight_directory_operation',
  '../insight/tests/directory_operation_test.c', '../insight/desktop/directory_operation.c', '../insight/desktop/disk_operation.c', dependencies: deps)
 test('Insight guarded directory file operations', directory_operation_test, timeout: 45)
+
+unified_workbench_gui_test = executable('test_insight_unified_workbench_gui', '../insight/tests/unified_workbench_gui_test.c', dependencies: test_deps)
+test('Insight unified file search and symbols GUI', unified_workbench_gui_test, timeout: 45)

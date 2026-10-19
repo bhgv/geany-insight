@@ -13,3 +13,6 @@
 Кнопка «?» справа вверху открывает эту страницу. Язык справки следует настройке интерфейса в Options.
 
 Подробнее: [panel-file-symbols.md](panel-file-symbols.md).
+
+
+See [the unified File Search and File Symbols interface](unified-file-tools.md).

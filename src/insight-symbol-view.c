@@ -62,6 +62,18 @@ const gchar *insight_symbol_type_name(guint type,gboolean plural) {
  else if(type&tm_tag_include_t) { one="Include"; many="Includes"; }
  return insight_tr(plural ? many : one);
 }
+/* Compact, deterministic square glyphs from the Symbol Window visual model. */
+GdkPixbuf *insight_symbol_type_badge(guint type) {
+ static GdkPixbuf *cache[FILTER_COUNT];guint category=filter_category(type);
+ if(!cache[category]) {
+  const gchar *letters[]={"F","T","E","e","#","m","v","l","N","?"};
+  cairo_surface_t *surface=cairo_image_surface_create(CAIRO_FORMAT_ARGB32,16,16);cairo_t *cr=cairo_create(surface);
+  cairo_set_source_rgba(cr,0,0,0,0);cairo_paint(cr);cairo_set_source_rgb(cr,0.18,0.34,0.53);cairo_rectangle(cr,2.5,2.5,11,11);cairo_fill(cr);
+  cairo_set_source_rgb(cr,0.78,0.90,0.98);cairo_rectangle(cr,3.5,3.5,9,9);cairo_fill(cr);
+  cairo_set_source_rgb(cr,category==TYPES ? 0.42 : 0.10,0.25,category==MACROS ? 0.12 : 0.55);cairo_select_font_face(cr,"Sans",CAIRO_FONT_SLANT_NORMAL,CAIRO_FONT_WEIGHT_BOLD);cairo_set_font_size(cr,9);cairo_move_to(cr,4,11);cairo_show_text(cr,letters[category]);cairo_destroy(cr);cache[category]=gdk_pixbuf_get_from_surface(surface,0,0,16,16);cairo_surface_destroy(surface);
+ }
+ return cache[category] ? g_object_ref(cache[category]) : NULL;
+}
 const gchar *insight_symbol_type_icon(guint type) {
  if(type&(tm_tag_function_t|tm_tag_method_t|tm_tag_prototype_t)) return "classviewer-method";
  if(type&(tm_tag_class_t|tm_tag_interface_t)) return "classviewer-class";
@@ -74,7 +86,7 @@ const gchar *insight_symbol_type_icon(guint type) {
 }
 static void cell(GtkTreeViewColumn *column,GtkCellRenderer *renderer,GtkTreeModel *model,GtkTreeIter *iter,gpointer data) {
  Symbols *s=data; gchar *path=NULL,*kind=NULL; gulong line=0; gtk_tree_model_get(model,iter,PATH,&path,KIND,&kind,LINE,&line,-1); guint type=type_for(s,path,kind); gboolean group=!line;
- if(GTK_IS_CELL_RENDERER_PIXBUF(renderer)) g_object_set(renderer,"icon-name",insight_symbol_type_icon(type),NULL);
+ if(GTK_IS_CELL_RENDERER_PIXBUF(renderer)) { GdkPixbuf *badge=insight_symbol_type_badge(type);g_object_set(renderer,"pixbuf",badge,NULL);g_clear_object(&badge); }
  else {
   gint field=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(column),"insight-symbol-field"));
   if(field==LINE) { gchar *text=line ? g_strdup_printf("%lu",line) : g_strdup(""); g_object_set(renderer,"text",text,NULL); g_free(text); }

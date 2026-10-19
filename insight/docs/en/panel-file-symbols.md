@@ -97,3 +97,6 @@ Scope branches are structural headers without a source line; definition/member r
 The panel belongs to the left side of the source editor. Symbol names are bold. Clicking and Up/Down preview the selected declaration in Context without moving the source editor or leaving the list. Enter, Space and double-click open the selected row in the editor. Both destinations highlight the symbol yellow with a red one-pixel frame.
 
 The list uses a separate declaration snapshot from the Geany/ctags language parser, not the navigation-resolution database. Function parameters and undefined parser internals are excluded. Local variables are opt-in in the type filter, including migration from older default settings. Source-line sorting nests fields below actual structure, union and class declarations and preserves overloads. The optional Scope hierarchy is a separate scope presentation.
+
+
+See [the unified File Search and File Symbols interface](unified-file-tools.md).

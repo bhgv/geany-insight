@@ -13,3 +13,6 @@ Select the Symbols tab, expand functions and select a definition to navigate.
 The ? button at the upper right opens this page. Help follows the interface language selected in Options.
 
 More: [panel-file-symbols.md](panel-file-symbols.md).
+
+
+See [the unified File Search and File Symbols interface](unified-file-tools.md).

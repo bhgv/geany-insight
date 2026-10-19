@@ -1,3 +1,4 @@
+#include "insight-workbench.h"
 /*
  *      search.c - this file is part of Geany, a fast and lightweight IDE
  *
@@ -574,6 +575,7 @@ static void set_dialog_position(GtkWidget *dialog, gint *position)
 
 void search_show_find_dialog(void)
 {
+	if (insight_workbench_show_file_search()) return;
 	GeanyDocument *doc = document_get_current();
 	gchar *sel = NULL;
 
@@ -2403,6 +2405,7 @@ guint search_replace_range(ScintillaObject *sci, struct Sci_TextToFind *ttf,
 
 void search_find_again(gboolean change_direction)
 {
+	if (insight_workbench_file_find_again(change_direction ? !search_data.backwards : search_data.backwards)) return;
 	GeanyDocument *doc = document_get_current();
 
 	g_return_if_fail(doc != NULL);
