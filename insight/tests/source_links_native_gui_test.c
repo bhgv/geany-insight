@@ -41,7 +41,7 @@ static gboolean step(gpointer data) {
   GtkTreeIter removed;GtkTreePath *path=gtk_tree_path_new_from_indices(1,-1);g_assert_true(gtk_tree_model_get_iter(model,&removed,path));gtk_list_store_remove(GTK_LIST_STORE(model),&removed);gtk_tree_path_free(path);
   command(1);doc=document_get_current();selected("needle");g_assert_cmpint(sci_get_current_line(doc->editor->sci),==,3);back_key();
   gint begin=sci_get_position_from_line(doc->editor->sci,3),end=sci_get_position_from_line(doc->editor->sci,4);SEND(doc->editor->sci,SCI_DELETERANGE,begin,end-begin);SEND(doc->editor->sci,SCI_SETSEL,0,0);activate(0);g_assert_cmpint(sci_get_current_position(doc->editor->sci),==,0);
-  SEND(doc->editor->sci,SCI_UNDO,0,0);activate(0);g_assert_cmpint(sci_get_current_position(doc->editor->sci),==,0);
+  SEND(doc->editor->sci,SCI_UNDO,0,0);SEND(doc->editor->sci,SCI_SETSEL,0,0);activate(0);g_assert_cmpint(sci_get_current_position(doc->editor->sci),==,0);
   gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(model),GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID,GTK_SORT_ASCENDING);search();phase++;return G_SOURCE_CONTINUE;
  }
  if(phase==2) {
