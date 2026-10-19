@@ -15,7 +15,7 @@ typedef struct { guint begin,end; } MapBlock;
 typedef struct {
  GtkWidget *window,*paths[2],*views[3],*status,*undo,*redo,*take[2],*take_all[2],*external;
  GtkWidget *find_entry,*find_side,*find_case,*find_word,*find_wrap,*find_previous,*find_next,*find_status,*numbers,*find_regex,*find_dotall;
- GtkWidget *replace_entry,*replace_selection,*replace_once,*replace_case,*replace_status,*replace_apply,*replace_confirm;
+ GtkWidget *replace_entry,*replace_scope,*replace_once,*replace_case,*replace_status,*replace_apply,*replace_confirm;
  GtkWidget *edit_tab_width;
  GtkWidget *visible_space,*visible_eol;
  GtkWidget *line_side,*line_number,*line_select,*line_status;
@@ -195,7 +195,7 @@ static gboolean key(GtkWidget *w,GdkEventKey *event,gpointer data) {
   gtk_combo_box_set_active(GTK_COMBO_BOX(m->line_side),side);gtk_widget_grab_focus(m->views[side]);return TRUE;
  }
  if(event->keyval==GDK_KEY_Escape && w==m->line_number) { gtk_widget_grab_focus(m->views[focused_pane(m)]);return TRUE; }
- if((event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_h || event->keyval==GDK_KEY_H)) { gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),2);gtk_widget_grab_focus(m->replace_entry);gtk_editable_select_region(GTK_EDITABLE(m->replace_entry),0,-1);return TRUE; }
+ if((event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_h || event->keyval==GDK_KEY_H)) { gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),2);gtk_combo_box_set_active(GTK_COMBO_BOX(m->replace_scope),gtk_text_buffer_get_has_selection(result(m)) ? 1 : 0);gtk_widget_grab_focus(m->replace_entry);gtk_editable_select_region(GTK_EDITABLE(m->replace_entry),0,-1);return TRUE; }
  if((event->state&GDK_CONTROL_MASK) && event->keyval==GDK_KEY_F3) { selection_search(m,focused_pane(m),(event->state&GDK_SHIFT_MASK) ? -1 : 1);return TRUE; }
  if((event->state&(GDK_CONTROL_MASK|GDK_SHIFT_MASK))==(GDK_CONTROL_MASK|GDK_SHIFT_MASK) && (event->keyval==GDK_KEY_f || event->keyval==GDK_KEY_F)) { GtkWidget *focus=gtk_window_get_focus(GTK_WINDOW(m->window));guint side=gtk_combo_box_get_active(GTK_COMBO_BOX(m->find_side));for(guint i=0;i<3;i++) if(focus==m->views[i]) side=i;find_all(m,side);return TRUE; }
  if(event->keyval==GDK_KEY_F3) { find_text(m,(event->state&GDK_SHIFT_MASK)!=0);return TRUE; }
@@ -577,10 +577,13 @@ static void replace_result(GtkWidget *widget,gpointer data) {
  Merge *m=data;if(m->busy || m->changing) return;
  const gchar *query=gtk_entry_get_text(GTK_ENTRY(m->find_entry));
  if(!*query) { gtk_label_set_text(GTK_LABEL(m->replace_status),"Enter search text.");return; }
- GtkTextBuffer *buffer=result(m);GtkTextIter start,limit,a,z;gboolean selection_only=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->replace_selection));
+ GtkTextBuffer *buffer=result(m);GtkTextIter start,limit,a,z;gint scope=gtk_combo_box_get_active(GTK_COMBO_BOX(m->replace_scope));gboolean selection_only=scope==1;
  if(selection_only) {
   if(!gtk_text_buffer_get_selection_bounds(buffer,&start,&limit)) { gtk_label_set_text(GTK_LABEL(m->replace_status),"Select result text first.");return; }
- } else gtk_text_buffer_get_bounds(buffer,&start,&limit);
+ } else {
+  gtk_text_buffer_get_bounds(buffer,&start,&limit);
+  if(scope==2) { if(gtk_text_buffer_get_selection_bounds(buffer,&a,&z)) start=a;else gtk_text_buffer_get_iter_at_mark(buffer,&start,gtk_text_buffer_get_insert(buffer)); }
+ }
  GtkTextSearchFlags flags=GTK_TEXT_SEARCH_TEXT_ONLY;
  if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->find_case))) flags|=GTK_TEXT_SEARCH_CASE_INSENSITIVE;
  gboolean whole=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->find_word));
@@ -1135,13 +1138,15 @@ static Merge *merge_new(GtkWidget *parent) {
  GtkWidget *replace=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),replace,FALSE,FALSE,0);
  gtk_box_pack_start(GTK_BOX(replace),gtk_label_new("Replace in Result — Ctrl+H"),FALSE,FALSE,0);m->replace_entry=gtk_entry_new();gtk_widget_set_name(m->replace_entry,"insight-diff-replacement");gtk_entry_set_placeholder_text(GTK_ENTRY(m->replace_entry),"Replacement text (empty deletes matches)");gtk_box_pack_start(GTK_BOX(replace),m->replace_entry,TRUE,TRUE,0);
  GtkWidget *replace_options=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),replace_options,FALSE,FALSE,0);
- m->replace_selection=gtk_check_button_new_with_label("Result selection only");gtk_box_pack_start(GTK_BOX(replace_options),m->replace_selection,FALSE,FALSE,0);
+ gtk_box_pack_start(GTK_BOX(replace_options),gtk_label_new("Replace scope"),FALSE,FALSE,0);
+ m->replace_scope=gtk_combo_box_text_new();gtk_widget_set_name(m->replace_scope,"insight-diff-replace-scope");const gchar *scopes[]={"Whole Result","Result selection only","Current position to end"};for(guint i=0;i<G_N_ELEMENTS(scopes);i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->replace_scope),scopes[i]);gtk_combo_box_set_active(GTK_COMBO_BOX(m->replace_scope),0);gtk_box_pack_start(GTK_BOX(replace_options),m->replace_scope,FALSE,FALSE,0);
+ gtk_widget_set_tooltip_text(m->replace_scope,"Current position starts at the selection beginning or caret; replacement never wraps.");
  m->replace_once=gtk_check_button_new_with_label("One occurrence per line");gtk_box_pack_start(GTK_BOX(replace_options),m->replace_once,FALSE,FALSE,0);
  button(replace,"Preview count",G_CALLBACK(replace_result),m);m->replace_apply=button(replace,"Replace all in Result",G_CALLBACK(replace_result),m);gtk_widget_set_name(m->replace_apply,"insight-diff-replace-all");
  m->replace_case=gtk_check_button_new_with_label("Preserve old case");gtk_box_pack_start(GTK_BOX(replace_options),m->replace_case,FALSE,FALSE,0);gtk_widget_set_name(m->replace_case,"insight-diff-preserve-case");
  m->replace_confirm=gtk_check_button_new_with_label("Confirm replacements");gtk_widget_set_name(m->replace_confirm,"insight-diff-confirm-replacements");gtk_box_pack_start(GTK_BOX(replace_options),m->replace_confirm,FALSE,FALSE,0);
  m->replace_status=gtk_label_new("");gtk_box_pack_start(GTK_BOX(replace_options),m->replace_status,FALSE,FALSE,0);
- gtk_widget_set_tooltip_text(replace,"Uses search text, regex, case and whole-word options above; searches the entire result or its selection without wrapping.");
+ gtk_widget_set_tooltip_text(replace,"Uses search text, regex, case and whole-word options above; follows Replace scope without wrapping.");
  GtkWidget *line=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),line,FALSE,FALSE,0);
  gtk_box_pack_start(GTK_BOX(line),gtk_label_new("Go to Line — Ctrl+G"),FALSE,FALSE,0);
  m->line_side=gtk_combo_box_text_new();for(guint i=0;i<3;i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->line_side),i==0 ? "Left" : i==1 ? "Right" : "Result");gtk_combo_box_set_active(GTK_COMBO_BOX(m->line_side),0);gtk_box_pack_start(GTK_BOX(line),m->line_side,FALSE,FALSE,0);

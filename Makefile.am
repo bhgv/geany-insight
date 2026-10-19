@@ -398,3 +398,5 @@ dist_insightdocmedia_DATA += insight/docs/media/search-preview.svg
 dist_insightdocmedia_DATA += insight/docs/media/file-compare-regex.jpg insight/docs/media/regex-replace.svg
 
 dist_insightdocmedia_DATA += insight/docs/media/confirm-replace.svg
+
+dist_insightdocmedia_DATA += insight/docs/media/replace-scope.svg

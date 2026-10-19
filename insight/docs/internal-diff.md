@@ -311,3 +311,11 @@ References: [Source Insight Search](https://www.sourceinsight.com/doc/v4/usergui
 Enable **Confirm replacements**, then use **Replace all in Result**. Each effective candidate shows its one-based line/column, matched text and expanded replacement (each preview capped at 2048 Unicode characters). Choose Replace, Skip, or Replace remaining. Decisions are staged; Cancel batch discards every decision. Approved changes apply together as one Undo/Redo action. Preview count never prompts. Literal and regex replacements share selection, case and preflight rules. The option persists; decisions and replacement text do not. If the result changes or a comparison starts during review, the batch is rejected. Closing the parent is safe.
 
 ![Replacement review flow](media/confirm-replace.svg)
+
+### Replacement scope
+
+**Replace scope** selects Whole Result, Result selection only, or Current position to end. The last choice starts at the lower selection boundary, regardless of selection direction; without a selection it starts at the Result caret. A caret inside a match excludes that match. It never wraps, even when Wrap around is enabled for Find. Preview count and confirmed replacements use the same bounds. Regex context still sees the complete result (for anchors/lookarounds); only complete matches inside the chosen scope are eligible. The existing full-result regex work/expansion preflight limits still apply. Empty regex matches at the end are allowed for whole/caret scope; selection scope excludes its upper boundary.
+
+**Ctrl+H** chooses selection scope when Result has a selection and Whole Result otherwise, then focuses the replacement field. To start at the current position, choose that scope explicitly after Ctrl+H. Scope starts as Whole Result for each new window and is not persisted. One occurrence per line means the first eligible occurrence after the scope start. Every accepted batch remains one Undo/Redo action.
+
+![Replacement scopes](media/replace-scope.svg)

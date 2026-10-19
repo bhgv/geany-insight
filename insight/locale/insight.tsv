@@ -1114,3 +1114,8 @@ Replace remaining	Заменить оставшиеся
 Candidate %u of %u — line %d, column %d	Совпадение %u из %u — строка %d, столбец %d
 Matched text (up to 2048 characters):\n%s\n\nReplacement (up to 2048 characters):\n%s	Найденный текст (до 2048 символов):\n%s\n\nЗамена (до 2048 символов):\n%s
 Replacement batch cancelled or text changed. Nothing applied.	Серия отменена или текст изменился. Замены не применены.
+Replace scope	Область замены
+Whole Result	Весь результат
+Current position to end	От текущей позиции до конца
+Current position starts at the selection beginning or caret; replacement never wraps.	От начала выделения или каретки; замена без циклического перехода.
+Uses search text, regex, case and whole-word options above; follows Replace scope without wrapping.	Использует запрос, regex, регистр и целые слова; учитывает область замены без циклического перехода.
