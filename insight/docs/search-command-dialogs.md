@@ -14,3 +14,7 @@ The Search menu commands share one dialog layout, with separate persistent setti
 Close also saves settings. Command histories remain independent. Unsaved documents are searched in memory without writing files. Existing engine bounds remain: 2 MiB per file, 10000 paths and 2000 results.
 
 Skip Inactive Code, Smart Reference Matching and Touch files are disabled with explanatory tooltips because they are not implemented. References do not resolve overloads or types. Bidirectional edit-tracking Source Links are not implemented. This is not full Source Insight parity.
+
+The chosen file/folder list is shared with Search Results; each command separately persists its query, history, scope, masks and options.
+
+[Linux validation: 29/29 tests](https://github.com/bhgv/geany-insight/actions/runs/39339470701)
