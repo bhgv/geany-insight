@@ -100,6 +100,16 @@ static void sidebar_tabs_show_hide(GtkNotebook *notebook, GtkWidget *child,
 static void insight_tag_cell(GtkTreeViewColumn *column,GtkCellRenderer *renderer,GtkTreeModel *model,GtkTreeIter *iter,gpointer tree) {
  (void)column;(void)tree;TMTag *tag=NULL;gtk_tree_model_get(model,iter,SYMBOLS_COLUMN_TAG,&tag,-1);
  guint type=tag ? tag->type : 0;
+ if(!tag) { gchar *name=NULL;gtk_tree_model_get(model,iter,SYMBOLS_COLUMN_NAME,&name,-1);
+  if(!g_strcmp0(name,_("Classes")) || !g_strcmp0(name,_("Interfaces"))) type=tm_tag_class_t;
+  else if(!g_strcmp0(name,_("Functions")) || !g_strcmp0(name,_("Methods"))) type=tm_tag_function_t;
+  else if(!g_strcmp0(name,_("Structs")) || !g_strcmp0(name,_("Unions"))) type=tm_tag_struct_t;
+  else if(!g_strcmp0(name,_("Macros"))) type=tm_tag_macro_t;
+  else if(!g_strcmp0(name,_("Variables"))) type=tm_tag_variable_t;
+  else if(!g_strcmp0(name,_("Namespaces"))) type=tm_tag_namespace_t;
+  else if(!g_strcmp0(name,_("Enumerations"))) type=tm_tag_enum_t;
+  g_free(name);
+ }
  if(GTK_IS_CELL_RENDERER_PIXBUF(renderer)) { GdkPixbuf *badge=insight_symbol_type_badge(type);g_object_set(renderer,"pixbuf",badge,NULL);g_clear_object(&badge); }
  else g_object_set(renderer,"weight",!tag || (type&(tm_tag_class_t|tm_tag_struct_t|tm_tag_union_t|tm_tag_enum_t|tm_tag_typedef_t)) ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL,NULL);
  if(tag) tm_tag_unref(tag);
