@@ -3285,8 +3285,7 @@ static void context_find(GtkWidget *widget,gpointer data) {
 static void create_context_find(void) {
  GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3); wb.context_find_row=row;gtk_widget_set_name(row,"insight-context-search-row"); wb.find_entry=gtk_search_entry_new(); gtk_entry_set_placeholder_text(GTK_ENTRY(wb.find_entry),"Find in Context…"); gtk_widget_set_tooltip_text(wb.find_entry,"Use ~term for fuzzy search when Regex is off");
  gtk_box_pack_start(GTK_BOX(row),wb.find_entry,TRUE,TRUE,0); GtkWidget *previous=gtk_button_new_with_label("Previous"),*next=gtk_button_new_with_label("Next");
- gtk_widget_set_name(previous,"insight-file-search-previous");gtk_widget_set_name(next,"insight-file-search-next");gtk_button_set_image(GTK_BUTTON(next),gtk_image_new_from_icon_name("go-down",GTK_ICON_SIZE_MENU));gtk_button_set_image(GTK_BUTTON(previous),gtk_image_new_from_icon_name("go-up",GTK_ICON_SIZE_MENU));gtk_box_pack_start(GTK_BOX(row),next,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(row),previous,FALSE,FALSE,0);
-   GtkWidget *files=gtk_button_new_with_label("Search Files…");gtk_widget_set_name(files,"insight-file-search-files");gtk_box_pack_start(GTK_BOX(row),files,FALSE,FALSE,0);g_signal_connect(files,"clicked",G_CALLBACK(search_scope_command),GINT_TO_POINTER(0));
+ gtk_box_pack_start(GTK_BOX(row),previous,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(row),next,FALSE,FALSE,0);
  wb.find_case=gtk_check_button_new_with_label("Case"); wb.find_word=gtk_check_button_new_with_label("Word"); wb.find_regex=gtk_check_button_new_with_label("Regex");
  gtk_box_pack_start(GTK_BOX(row),wb.find_case,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(row),wb.find_word,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(row),wb.find_regex,FALSE,FALSE,0);
  wb.find_status=gtk_label_new(""); gtk_label_set_ellipsize(GTK_LABEL(wb.find_status),PANGO_ELLIPSIZE_END); gtk_widget_set_size_request(wb.find_status,80,-1); gtk_box_pack_start(GTK_BOX(row),wb.find_status,FALSE,FALSE,0);
@@ -4366,7 +4365,8 @@ static void editor_search_all(GtkButton *button,gpointer data) {
 gboolean insight_workbench_show_file_search(void) {
  if(!wb.alive || !wb.editor_query) return FALSE;
  GeanyDocument *doc=document_get_current();gchar *selection=doc ? editor_get_default_selection(doc->editor,search_prefs.use_current_word,NULL) : NULL;
- if(selection && !strchr(selection,'\n') && !strchr(selection,'\r')) gtk_entry_set_text(GTK_ENTRY(wb.editor_query),selection);g_free(selection);
+ if(selection && !strchr(selection,'\n') && !strchr(selection,'\r')) { gtk_entry_set_text(GTK_ENTRY(wb.editor_query),selection); }
+ g_free(selection);
  gtk_widget_show(wb.editor_search_row);gtk_widget_grab_focus(wb.editor_query);gtk_editable_select_region(GTK_EDITABLE(wb.editor_query),0,-1);return TRUE;
 }
 gboolean insight_workbench_file_find_again(gboolean backwards) {
