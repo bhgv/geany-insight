@@ -1129,3 +1129,8 @@ Structure	Структура
 File Symbols is in a floating window	Символы файла в отдельном окне
 Find: no match before file boundary	Поиск: до границы файла совпадений нет
 File Search Bar supports documents up to 2 MiB	Строка поиска поддерживает документы до 2 МиБ
+Find All in Document	Найти всё в документе
+Find All in Open Documents	Найти всё в открытых документах
+Mark all matches	Отметить все совпадения
+Cannot read the active document	Не удалось прочитать активный документ
+Find All and Mark use literal text or regular expressions; disable fuzzy matching first	Для поиска всех совпадений и отметок используйте точный текст или регулярные выражения; отключите нечёткое сопоставление

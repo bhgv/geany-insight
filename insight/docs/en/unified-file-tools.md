@@ -13,3 +13,9 @@ There is one File Symbols tab, occupying the original native Symbols page. **Str
 ![Shared surfaces](../media/unified-file-tools.svg)
 
 References: [File Search Bar Options](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/File_Search_Bar_Options.htm), [Symbol Windows](https://www.sourceinsight.com/doc/v4/userguide/Manual/Window_Tour/Symbol_Windows.htm).
+
+## Verified editor capture
+
+Full Linux GTK editor, sample.cpp integration profile.
+
+![Unified file tools](../media/unified-file-tools.jpg)

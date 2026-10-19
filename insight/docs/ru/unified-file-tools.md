@@ -13,3 +13,9 @@
 ![Единые панели](../media/unified-file-tools.svg)
 
 Эталон: [File Search Bar Options](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/File_Search_Bar_Options.htm), [Symbol Windows](https://www.sourceinsight.com/doc/v4/userguide/Manual/Window_Tour/Symbol_Windows.htm).
+
+## Проверенный снимок редактора
+
+Полный редактор Linux GTK, интеграционный профиль sample.cpp.
+
+![Unified file tools](../media/unified-file-tools.jpg)
