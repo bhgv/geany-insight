@@ -94,7 +94,16 @@ InsightSearchLinks *insight_search_links_new(GtkTreeView *view,InsightSearchLink
  return s;
 }
 void insight_search_links_clear(InsightSearchLinks *s) {
- if(!s) return;s->last=NULL;g_ptr_array_set_size(s->links,0);s->digest_doc=0;g_clear_pointer(&s->digest,g_free);
+ if(!s) return;
+ /* Coordinates and digest must describe the same snapshot when anchors are
+  * released. Otherwise undo after closing Results could validate old text
+  * against offsets already shifted by a newer edit. */
+ prune(s);
+ for(guint i=0;i<s->links->len;i++) {
+  SearchLink *link=g_ptr_array_index(s->links,i);GeanyDocument *doc=document_find_by_id(link->doc);
+  if(doc && doc->is_valid) update_row(s,link,doc,TRUE);
+ }
+ s->last=NULL;g_ptr_array_set_size(s->links,0);s->digest_doc=0;g_clear_pointer(&s->digest,g_free);
  gtk_widget_queue_draw(GTK_WIDGET(s->view));
 }
 void insight_search_links_free(InsightSearchLinks *s) {
