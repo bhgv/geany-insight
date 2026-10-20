@@ -19,6 +19,7 @@ typedef struct { gchar *text;gsize length;guint64 generation;gboolean initialize
 typedef struct { guint document;ScintillaObject *sci;guint64 generation;gint anchor,caret; } Request;
 static gsize baseline_bytes;
 static gboolean initialized;
+static guint64 original_view_serial;
 static void baseline_free(gpointer data)
 {
     Baseline *base=data;if(base->text) baseline_bytes-=base->length;
@@ -160,7 +161,9 @@ void insight_revisions_original(void)
     GeanyDocument *source=document_get_current();if(!source) return;Baseline *base=baseline(source->editor->sci);
     if(!base->text) { ui_set_statusbar(TRUE,"%s",insight_tr("Original text unavailable: 8 MiB per document / 64 MiB total, valid UTF-8 required"));return; }
     gchar *text=g_strdup(base->text);GeanyFiletype *type=source->file_type;
-    GeanyDocument *view=document_new_file("Original Contents.txt",type,NULL);
+    gchar *base_name=source->file_name ? g_path_get_basename(source->file_name) : g_strdup(insight_tr("Untitled"));
+    gchar *name=g_strdup_printf("%s — %s (%" G_GUINT64_FORMAT ").txt",insight_tr("Original Contents"),base_name,++original_view_serial);g_free(base_name);
+    GeanyDocument *view=document_new_file(name,type,NULL);g_free(name);
     if(view)
     {
         ScintillaObject *sci=view->editor->sci;SEND(sci,SCI_SETUNDOCOLLECTION,FALSE,0);sci_set_text(sci,text);SEND(sci,SCI_SETUNDOCOLLECTION,TRUE,0);SEND(sci,SCI_EMPTYUNDOBUFFER,0,0);SEND(sci,SCI_SETSAVEPOINT,0,0);
@@ -170,6 +173,24 @@ void insight_revisions_original(void)
     g_free(text);
 }
 static void revisions_command(GtkMenuItem *item,gpointer data) { (void)item;if(GPOINTER_TO_INT(data)) insight_revisions_original();else insight_revisions_show(); }
+static void revisions_menu_show(GtkWidget *menu,gpointer data)
+{
+    (void)data;GeanyDocument *doc=document_get_current();
+    gboolean available=doc && doc->is_valid && baseline(doc->editor->sci)->text;
+    Request request={0};gboolean normal=available && capture_request(&request,FALSE);
+    GList *children=gtk_container_get_children(GTK_CONTAINER(menu));
+    for(GList *p=children;p;p=p->next)
+    {
+        GtkWidget *item=p->data;guint kind=GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(item),"insight-revision-kind"));
+        if(!kind) continue;
+        gtk_widget_set_sensitive(item,kind==1 ? normal : available);
+        guint key_id=kind==1 ? GEANY_KEYS_INSIGHT_RESTORELINES : GEANY_KEYS_INSIGHT_ORIGINALCONTENTS;
+        GeanyKeyBinding *key=keybindings_lookup_item(GEANY_KEY_GROUP_EDITOR,key_id);
+        GtkWidget *label=gtk_bin_get_child(GTK_BIN(item));
+        if(key && GTK_IS_ACCEL_LABEL(label)) gtk_accel_label_set_accel(GTK_ACCEL_LABEL(label),key->key,key->mods);
+    }
+    g_list_free(children);
+}
 void insight_revisions_init(GtkWidget *edit_menu)
 {
     if(initialized) return;
@@ -179,6 +200,14 @@ void insight_revisions_init(GtkWidget *edit_menu)
     for(guint i=0;documents_array && i<documents_array->len;i++) { GeanyDocument *doc=g_ptr_array_index(documents_array,i);if(doc->is_valid) capture_baseline(NULL,doc,NULL); }
     const gchar *labels[]={"Restore Lines…","Original Contents…"};const gchar *names[]={"insight-restore-lines","insight-original-contents"};
     const guint keys[]={GEANY_KEYS_INSIGHT_RESTORELINES,GEANY_KEYS_INSIGHT_ORIGINALCONTENTS};
-    for(guint i=0;i<2;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(labels[i]);gtk_widget_set_name(entry,names[i]);keybindings_attach_menu(GEANY_KEY_GROUP_EDITOR,keys[i],entry);g_signal_connect(entry,"activate",G_CALLBACK(revisions_command),GINT_TO_POINTER(i));gtk_menu_shell_append(GTK_MENU_SHELL(edit_menu),entry);gtk_widget_show(entry); }
+    for(guint i=0;i<2;i++) {
+        GtkWidget *entry=gtk_menu_item_new_with_label(labels[i]);gtk_widget_set_name(entry,names[i]);
+        g_object_set_data(G_OBJECT(entry),"insight-revision-kind",GUINT_TO_POINTER(i+1));
+        keybindings_attach_menu(GEANY_KEY_GROUP_EDITOR,keys[i],entry);g_signal_connect(entry,"activate",G_CALLBACK(revisions_command),GINT_TO_POINTER(i));gtk_menu_shell_append(GTK_MENU_SHELL(edit_menu),entry);gtk_widget_show(entry);
+        GtkWidget *popup=gtk_menu_item_new_with_label(labels[i]);gtk_widget_set_name(popup,i ? "insight-popup-original-contents" : "insight-popup-restore-lines");
+        g_object_set_data(G_OBJECT(popup),"insight-revision-kind",GUINT_TO_POINTER(i+1));g_signal_connect(popup,"activate",G_CALLBACK(revisions_command),GINT_TO_POINTER(i));gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.editor_menu),popup);gtk_widget_show(popup);
+    }
+    g_signal_connect(edit_menu,"show",G_CALLBACK(revisions_menu_show),NULL);
+    g_signal_connect(main_widgets.editor_menu,"show",G_CALLBACK(revisions_menu_show),NULL);
     GtkWidget *help=gtk_menu_item_new_with_label("Restore Lines Help");g_signal_connect(help,"activate",G_CALLBACK(insight_help_show),"restore-lines.md");gtk_menu_shell_append(GTK_MENU_SHELL(edit_menu),help);gtk_widget_show(help);
 }

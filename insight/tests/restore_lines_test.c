@@ -11,6 +11,24 @@ static void check(const char *a,const char *b,size_t anchor,size_t caret,const c
  else assert(!p.replacement);
  insight_restore_lines_clear(&p);assert(!p.replacement && !p.blocks);
 }
+static unsigned random_state=1729;
+static unsigned next_random(void) { random_state=random_state*1664525u+1013904223u;return random_state; }
+static void whole_document_properties(void)
+{
+ const char *parts[]={"same\n","α\r\n","β\r","x\n","tail","\n","\r\n"};
+ for(unsigned run=0;run<300;run++) {
+  char a[256]="",b[256]="";
+  for(unsigned i=0,n=next_random()%15;i<n;i++) strcat(a,parts[next_random()%7]);
+  for(unsigned i=0,n=next_random()%15;i<n;i++) strcat(b,parts[next_random()%7]);
+  InsightRestorePlan p={0};assert(insight_restore_lines_plan(a,b,strlen(b),0,&p)==0);
+  if(!p.blocks) assert(!strcmp(a,b));
+  else {
+   assert(p.current_begin<=p.current_end && p.current_end<=strlen(b));
+   char restored[512];memcpy(restored,b,p.current_begin);memcpy(restored+p.current_begin,p.replacement,p.length);strcpy(restored+p.current_begin+p.length,b+p.current_end);assert(!strcmp(restored,a));
+  }
+  insight_restore_lines_clear(&p);
+ }
+}
 int main(void)
 {
  check("one\ntwo\nthree\n","one\nTWO\nthree\n",4,4,"one\ntwo\nthree\n",1);
@@ -28,5 +46,11 @@ int main(void)
  check("a\nb\nc\n","a\nB\nC\n",2,3,"a\nb\nc\n",1); /* whole contiguous changed block */
  InsightRestorePlan p={0};assert(insight_restore_lines_plan("a\r\nb","a\r\nb",2,2,&p)==-4);assert(!p.replacement);assert(insight_restore_lines_plan("a","a",2,0,&p)==-4);
  char *large=malloc(INSIGHT_RESTORE_LIMIT+2);assert(large);memset(large,'x',INSIGHT_RESTORE_LIMIT+1);large[INSIGHT_RESTORE_LIMIT+1]=0;assert(insight_restore_lines_plan("",large,0,0,&p)==-2);free(large);
+ size_t half=INSIGHT_RESTORE_LIMIT/2;
+ char *a=malloc(half+7),*b=malloc(half+7);assert(a && b);
+ memset(a,'a',half);memcpy(a+half,"\nkeep\n",7);
+ memcpy(b,"keep\n",5);memset(b+5,'b',half);b[half+5]='\n';b[half+6]=0;
+ assert(insight_restore_lines_plan(a,b,0,0,&p)==-2);assert(!p.replacement);free(a);free(b);
+ whole_document_properties();
  puts("Restore Lines core: block selection, reverse ranges, insert/delete/EOF, whole blocks, UTF-8/mixed EOL, boundaries and limits passed");return 0;
 }

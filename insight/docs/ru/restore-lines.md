@@ -55,3 +55,14 @@ clipboard не меняются; копирование исходного бл�
 или восстановление снимков после перезапуска.
 
 Reference: [Source Insight Restore Lines](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Restore_Lines.htm).
+
+The ordinary editor right-click menu also exposes Restore Lines and Original
+Contents. Menu opening updates baseline/selection availability and displays current
+user-assigned shortcuts. Read-only sources retain preview/copy; unsupported
+selection modes disable Restore while allowing the original-text view.
+This entry is in the normal editor popup, not a dedicated revision-margin popup.
+
+Обычное контекстное меню редактора содержит восстановление и исходное содержимое.
+При открытии обновляются доступность и подписи пользовательских сочетаний клавиш.
+Для прямоугольного/множественного выделения восстановление недоступно, просмотр
+исходного текста остаётся доступным. Это обычное меню редактора.
