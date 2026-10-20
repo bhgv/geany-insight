@@ -5,6 +5,24 @@
 #include <glib/gstdio.h>
 #include <string.h>
 static guint pages;
+static GtkWidget *named(GtkWidget *root,const gchar *name) {
+ if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;
+ if(GTK_IS_CONTAINER(root)) { GList *children=gtk_container_get_children(GTK_CONTAINER(root));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL;
+}
+typedef struct { guint attempts,cancelled; } CancelDialog;
+static gboolean cancel_dialog(gpointer data) {
+ CancelDialog *state=data;state->attempts++;GList *windows=gtk_window_list_toplevels();
+ for(GList *p=windows;p;p=p->next) if(GTK_IS_DIALOG(p->data) && gtk_widget_get_visible(p->data)) { state->cancelled++;gtk_dialog_response(GTK_DIALOG(p->data),GTK_RESPONSE_CANCEL);g_list_free(windows);return G_SOURCE_REMOVE; }
+ g_list_free(windows);g_assert_cmpuint(state->attempts,<,100);return G_SOURCE_CONTINUE;
+}
+static void cancel_ui(void) {
+ GtkListStore *model=gtk_list_store_new(3,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG);GtkWidget *tree=gtk_tree_view_new_with_model(GTK_TREE_MODEL(model)),*query=gtk_entry_new();g_object_ref_sink(tree);g_object_ref_sink(query);
+ GtkWidget *window=gtk_window_new(GTK_WINDOW_TOPLEVEL),*graph=insight_relation_graph_new(GTK_TREE_VIEW(tree),GTK_ENTRY(query),0,1,2);gtk_container_add(GTK_CONTAINER(window),graph);gtk_widget_show_all(window);
+ GtkWidget *canvas=named(graph,"insight-relation-graph"),*button=named(graph,"insight-relation-graph-print");g_assert_nonnull(canvas);g_assert_nonnull(button);
+ CancelDialog state={0};g_timeout_add(50,cancel_dialog,&state);gtk_button_clicked(GTK_BUTTON(button));g_assert_cmpuint(state.cancelled,==,1);
+ state=(CancelDialog){0};g_timeout_add(50,cancel_dialog,&state);GdkEventKey event={0};event.type=GDK_KEY_PRESS;event.keyval=GDK_KEY_p;event.state=GDK_CONTROL_MASK;g_assert_true(insight_relation_graph_handle_key(canvas,&event));g_assert_cmpuint(state.cancelled,==,1);
+ gint zoom=0;insight_relation_graph_get_options(graph,NULL,&zoom);g_assert_cmpint(zoom,==,100);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(query)),==,"");gtk_widget_destroy(window);gtk_widget_destroy(tree);gtk_widget_destroy(query);g_object_unref(tree);g_object_unref(query);g_object_unref(model);
+}
 static void page_drawn(GtkPrintOperation *op,GtkPrintContext *context,gint page,gpointer data) {
  (void)op;(void)context;(void)data;g_assert_cmpint(page,==,(gint)pages);pages++;
 }
@@ -44,6 +62,6 @@ static void tree_snapshot(void) {
 }
 int main(int argc,char **argv) {
  if(!gtk_init_check(&argc,&argv)) return 77;g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);
- flat(FALSE,FALSE,5);flat(FALSE,FALSE,200);flat(TRUE,FALSE,29);flat(TRUE,TRUE,200);tree_snapshot();
+ cancel_ui();flat(FALSE,FALSE,5);flat(FALSE,FALSE,200);flat(TRUE,FALSE,29);flat(TRUE,TRUE,200);tree_snapshot();
  g_print("Graph printing GUI: vector PDF, custom layout tab, both orientations, zoom-independent pagination, immutable snapshot after widget destruction and collapsed branches passed\n");return 0;
 }
