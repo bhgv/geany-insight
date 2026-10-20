@@ -1026,3 +1026,11 @@ Select Word Left|||Выделить слово слева
 Select Word Right|||Выделить слово справа
 Select Line Up|||Выделить строку вверх
 Select Line Down|||Выделить строку вниз
+Word and character operations|||Операции со словами и символами
+Cut Word|||Вырезать слово справа
+Cut Word Left|||Вырезать слово слева
+Delete Line|||Удалить строку
+Delete Character|||Удалить символ
+Word Editing Help|||Справка по редактированию слов
+Text removal is limited to 1 MiB per command|||Удаление ограничено 1 МиБ за команду
+Text removal requires complete UTF-8 text without NUL bytes|||Удаление требует полного текста UTF-8 без нулевых байтов

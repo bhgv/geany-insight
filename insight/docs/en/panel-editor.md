@@ -47,3 +47,5 @@ Insert File and text export: [guide](file-text.md).
 [Calculation and file status / Вычисления и состояние файла](calculate.md) — bounded expression evaluation, calculator window, current-buffer statistics.
 
 [Window scrolling / Прокрутка окна](window-scrolling.md) — viewport commands preserve caret and selections.
+
+[Word and character operations / Операции со словами и символами](word-editing.md) — bounded native Cut Word/Left and clipboard-preserving Delete Line/Character.

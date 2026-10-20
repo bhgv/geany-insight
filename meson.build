@@ -1119,7 +1119,7 @@ install_data(
   'insight/docs/panel-messages.md',
   'insight/docs/panel-scratchpad.md',
   'insight/docs/panel-terminal.md',
-  'insight/docs/panel-editor.md', 'insight/docs/structural-selection.md', 'insight/docs/editor-history.md', 'insight/docs/insert-tools.md', 'insight/docs/file-text.md', 'insight/docs/renumber.md', 'insight/docs/paragraph-tools.md', 'insight/docs/line-insertion.md', 'insight/docs/text-boundaries.md', 'insight/docs/calculate.md', 'insight/docs/window-scrolling.md',
+  'insight/docs/panel-editor.md', 'insight/docs/structural-selection.md', 'insight/docs/editor-history.md', 'insight/docs/insert-tools.md', 'insight/docs/file-text.md', 'insight/docs/renumber.md', 'insight/docs/paragraph-tools.md', 'insight/docs/line-insertion.md', 'insight/docs/text-boundaries.md', 'insight/docs/calculate.md', 'insight/docs/window-scrolling.md', 'insight/docs/word-editing.md',
   'insight/docs/panel-ssh.md',
   'insight/docs/panel-overview.md',
   'insight/docs/panel-diff-input.md',

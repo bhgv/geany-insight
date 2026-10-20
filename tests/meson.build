@@ -772,3 +772,6 @@ test('Insight native file status reporting GUI', file_status_gui_test, timeout: 
 
 viewport_gui_test = executable('test_insight_viewport_gui', '../insight/tests/viewport_gui_test.c', dependencies: test_deps)
 test('Insight native viewport scrolling and window edges GUI', viewport_gui_test, timeout: 40, is_parallel: false)
+
+word_edit_gui_test = executable('test_insight_word_edit_gui', '../insight/tests/word_edit_gui_test.c', dependencies: test_deps)
+test('Insight native word cut and character line deletion GUI', word_edit_gui_test, timeout: 40, is_parallel: false)
