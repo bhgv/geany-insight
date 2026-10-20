@@ -11,6 +11,7 @@
 #include "sidebar.h"
 #include <glib/gstdio.h>
 #include <string.h>
+#include <gdk/gdkkeysyms.h>
 static GtkWidget *window;static gchar *path,*profile;static guint phase;
 static const gchar *source="// needle first\nclass Box { public: int value; int run() { return value; } };\nint main() { Box box; return box.run(); }\n// needle last\n";
 static GtkWidget *named(GtkWidget *root,const gchar *name) { if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;if(GTK_IS_MENU_ITEM(root)) { GtkWidget *submenu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(root));if(submenu) { GtkWidget *found=named(submenu,name);if(found) return found; } }if(GTK_IS_MENU_BUTTON(root)) { GtkWidget *popover=GTK_WIDGET(gtk_menu_button_get_popover(GTK_MENU_BUTTON(root)));if(popover) { GtkWidget *found=named(popover,name);if(found) return found; } }if(GTK_IS_CONTAINER(root)) { GList *children=gtk_container_get_children(GTK_CONTAINER(root));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL; }
@@ -29,6 +30,17 @@ static gboolean command_dialog_step(gpointer data) {
  gtk_dialog_response(GTK_DIALOG(dialog),dialog_visit<2 ? GTK_RESPONSE_ACCEPT : GTK_RESPONSE_CLOSE);return G_SOURCE_REMOVE;
 }
 static void invoke_command(guint visit) { dialog_visit=visit;g_timeout_add(150,command_dialog_step,NULL);gtk_menu_item_activate(GTK_MENU_ITEM(named(window,visit==1 || visit==3 ? "insight-lookup-references-command" : "insight-search-project-command"))); }
+static void graph_window_key(guint keyval) {
+ GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);event->key.window=g_object_ref(gtk_widget_get_window(window));event->key.keyval=keyval;event->key.state=GDK_CONTROL_MASK;gboolean handled=FALSE;g_signal_emit_by_name(window,"key-press-event",&event->key,&handled);g_assert_true(handled);gdk_event_free(event);
+}
+static void graph_shortcuts(GeanyDocument *doc) {
+ GtkWidget *canvas=named(window,"insight-relation-graph"),*zoom=named(window,"insight-relation-graph-zoom");g_assert_nonnull(canvas);g_assert_nonnull(zoom);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(window,"insight-relation-graph-toggle")),TRUE);
+ for(GtkWidget *child=canvas;child;child=gtk_widget_get_parent(child)) { GtkWidget *parent=gtk_widget_get_parent(child);if(parent && GTK_IS_NOTEBOOK(parent)) gtk_notebook_set_current_page(GTK_NOTEBOOK(parent),gtk_notebook_page_num(GTK_NOTEBOOK(parent),child));gtk_widget_show(child); }
+ gtk_spin_button_set_value(GTK_SPIN_BUTTON(zoom),100);gtk_widget_grab_focus(canvas);g_assert_true(gtk_widget_has_focus(canvas));gint editor_zoom=(gint)scintilla_send_message(doc->editor->sci,SCI_GETZOOM,0,0);
+ graph_window_key(GDK_KEY_minus);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(zoom)),==,90);g_assert_cmpint(scintilla_send_message(doc->editor->sci,SCI_GETZOOM,0,0),==,editor_zoom);
+ graph_window_key(GDK_KEY_0);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(zoom)),==,100);graph_window_key(GDK_KEY_plus);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(zoom)),==,110);g_assert_cmpint(scintilla_send_message(doc->editor->sci,SCI_GETZOOM,0,0),==,editor_zoom);
+ graph_window_key(GDK_KEY_c);GdkPixbuf *copy=gtk_clipboard_wait_for_image(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));g_assert_nonnull(copy);g_object_unref(copy);
+}
 static gboolean step(gpointer data) {
  (void)data;GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;if(!window) window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));
  if(!phase) { gtk_window_resize(GTK_WINDOW(window),1280,900);gtk_widget_hide(named(window,"insight-project-notebook"));document_open_file(path,FALSE,NULL,NULL);phase++;return G_SOURCE_CONTINUE; }
@@ -51,7 +63,7 @@ static gboolean step(gpointer data) {
  }
  if(phase==4 || phase==5) { GtkTreeModel *results=gtk_tree_view_get_model(GTK_TREE_VIEW(named(window,"insight-search-results")));if(gtk_tree_model_iter_n_children(results,NULL)!=2) return G_SOURCE_CONTINUE;GtkTreeIter first_iter;gulong first_line=0;gtk_tree_model_get_iter_first(results,&first_iter);gtk_tree_model_get(results,&first_iter,2,&first_line,-1);if(first_line!=(phase==4 ? 1 : 2)) return G_SOURCE_CONTINUE;if(phase==4) { phase++;invoke_command(1);return G_SOURCE_CONTINUE; }invoke_command(2);invoke_command(3);
   GtkTreePath *first=gtk_tree_path_new_from_indices(0,-1);gtk_tree_view_row_activated(GTK_TREE_VIEW(named(window,"insight-search-results")),first,gtk_tree_view_get_column(GTK_TREE_VIEW(named(window,"insight-search-results")),0));gtk_tree_path_free(first);g_assert_cmpint(sci_get_current_line(doc->editor->sci),==,1);
-  gchar *text=sci_get_contents(doc->editor->sci,-1);g_assert_cmpstr(text,==,source);g_free(text);g_assert_false(doc->changed);g_print("Unified File Search and File Symbols: native hierarchy, one page/query, F3 directions, wrap, caret-only, incremental, details mode, independent persistent search dialogs and result navigation passed.\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+  graph_shortcuts(doc);gchar *text=sci_get_contents(doc->editor->sci,-1);g_assert_cmpstr(text,==,source);g_free(text);g_assert_false(doc->changed);g_print("Unified File Search and File Symbols: native hierarchy, one page/query, F3 directions, wrap, caret-only, incremental, details mode, independent persistent search dialogs, result navigation and graph window shortcut routing passed.\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }return G_SOURCE_CONTINUE;
 }
 int main(void) {
