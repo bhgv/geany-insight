@@ -790,3 +790,6 @@ test('Insight original-line restoration plans', restore_lines_test)
 
 restore_lines_gui_test = executable('test_insight_restore_lines_gui', '../insight/tests/restore_lines_gui_test.c', dependencies: test_deps)
 test('Insight native original snapshots and Restore Lines GUI', restore_lines_gui_test, timeout: 50, is_parallel: false)
+
+original_changes_gui_test = executable('test_insight_original_changes_gui', '../insight/tests/original_changes_gui_test.c', dependencies: test_deps)
+test('Insight native original changes and Restore File GUI', original_changes_gui_test, timeout: 50, is_parallel: false)
