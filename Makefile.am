@@ -457,3 +457,7 @@ EXTRA_DIST += insight/tests/file_text_gui_test.c
 
 insightdoc_DATA += insight/docs/file-text.md
 dist_insightdocmedia_DATA += insight/docs/media/file-text-export.jpg insight/docs/media/file-text.svg
+
+EXTRA_DIST += insight/tests/renumber_test.c insight/tests/renumber_gui_test.c insight/desktop/renumber.h
+insightdoc_DATA += insight/docs/renumber.md
+dist_insightdocmedia_DATA += insight/docs/media/renumber.jpg insight/docs/media/renumber.svg

@@ -742,3 +742,8 @@ test('Insight bounded UTF-8 text transfer', text_transfer_test)
 
 file_text_gui_test = executable('test_insight_file_text_gui', '../insight/tests/file_text_gui_test.c', dependencies: test_deps)
 test('Insight native Insert File Save Selection Save Copy GUI', file_text_gui_test, timeout: 60, is_parallel: false)
+
+renumber_test = executable('test_insight_renumber', '../insight/tests/renumber_test.c', '../insight/desktop/renumber.c', include_directories: include_directories('../insight/desktop'), dependencies: deps, c_args: ['-UNDEBUG'])
+test('Insight bounded integer renumber', renumber_test)
+renumber_gui_test = executable('test_insight_renumber_gui', '../insight/tests/renumber_gui_test.c', dependencies: test_deps)
+test('Insight native Renumber GUI', renumber_gui_test, timeout: 40, is_parallel: false)

@@ -35,3 +35,5 @@ Selection History and Undo All / Redo All: [guide](editor-history.md).
 GUID/character insertion and clipboard viewer: [guide](insert-tools.md).
 
 Insert File and text export: [guide](file-text.md).
+
+[Renumber / Перенумерация](renumber.md) — integer sequences, offset and radix conversion.

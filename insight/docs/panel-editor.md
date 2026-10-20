@@ -35,3 +35,5 @@ Copy/Cut/Duplicate Symbol and exact selection duplication: [structural editing](
 Вставка GUID и символов, просмотр буфера обмена: [руководство](insert-tools.md).
 
 Вставка файла и экспорт текста: [руководство](file-text.md).
+
+[Renumber / Перенумерация](renumber.md) — integer sequences, offset and radix conversion.

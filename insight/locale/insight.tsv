@@ -1277,3 +1277,18 @@ The selected file changed; choose it again.	Выбранный файл изме
 The destination does not provide an etag for conditional replacement.	Назначение не предоставляет etag для условной замены.
 Choose a destination filename.	Выберите имя файла назначения.
 Choose a local filename.	Выберите локальное имя файла.
+Renumber…	Перенумерация…
+Renumber	Перенумерация
+Scope: whole document	Область: весь документ
+Scope: exact selection	Область: точное выделение
+Auto: ascend from first number	Авто: по возрастанию от первого числа
+Start at value	Начать со значения
+Offset existing numbers	Смещение существующих чисел
+Auto: preserve each number's radix	Авто: исходная система каждого числа
+Preview	Просмотр
+Press Preview to inspect the result before applying	Нажмите «Просмотр» для проверки результата перед применением
+%u integer tokens. Preview shows at most 8000 bytes.	Целых чисел: %u. Просмотр показывает не более 8000 байт.
+Renumber is limited to 8 MiB	Перенумерация ограничена 8 МиБ
+Renumber cancelled because the document or selection changed	Перенумерация отменена: документ или выделение изменились
+Renumber exceeds the signed 64-bit or 8 MiB limit	Перенумерация превышает диапазон знаковых 64-битных чисел или 8 МиБ
+Choose valid options and a signed 64-bit decimal, 0x hex or leading-zero octal value	Выберите параметры и знаковое 64-битное число: десятичное, 0x или восьмеричное с начальным нулём

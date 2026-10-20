@@ -35,3 +35,5 @@ Ctrl+F открывает поиск, Ctrl+H — замену. Двойной щ
 Вставка GUID и символов, просмотр буфера обмена: [руководство](insert-tools.md).
 
 Вставка файла и экспорт текста: [руководство](file-text.md).
+
+[Renumber / Перенумерация](renumber.md) — integer sequences, offset and radix conversion.
