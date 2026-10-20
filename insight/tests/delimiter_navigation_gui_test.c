@@ -86,8 +86,8 @@ static gboolean step(gpointer data) {
  reset(content,0,0);browser(10);position(0);
  reset(content,value+3,value);browser(12);position(inner);g_assert_cmpint(SEND(sci,SCI_GETANCHOR,0,0),==,value+6);
  reset(content,value,value);SEND(sci,SCI_SETREADONLY,1,0);browser(12);position(value+6);text_is(content);g_assert_false(SEND(sci,SCI_CANUNDO,0,0));
- const gchar *langs[]={"Python","Lua","JavaScript"};const gchar *samples[]={"call(') {', inner(value)) # ) }\n","call(') {', inner(value)) -- ) }\n","call(') {', inner(value)) // ) }\n"};
- for(guint i=0;i<3;i++) { gint at=strstr(samples[i],"value")-samples[i];reset(samples[i],at,at);document_set_filetype(source,filetypes_lookup_by_name(langs[i]));action("paren-left");position(at-1);action("paren-right");position(at+5);text_is(samples[i]); }
+ const gchar *langs[]={"Python","Lua","Javascript"};const gchar *samples[]={"call(') {', inner(value)) # ) }\n","call(') {', inner(value)) -- ) }\n","call(') {', inner(value)) // ) }\n"};
+ for(guint i=0;i<3;i++) { gint at=strstr(samples[i],"value")-samples[i];reset(samples[i],at,at);GeanyFiletype *type=filetypes_lookup_by_name(langs[i]);g_assert_nonnull(type);document_set_filetype(source,type);action("paren-left");position(at-1);action("paren-right");position(at+5);text_is(samples[i]); }
  reset(content,value,value);document_set_filetype(source,filetypes_lookup_by_name("None"));action("paren-left");position(value);action("browser");g_assert_null(dialog());
  reset(content,value,value);SEND(sci,SCI_SETSELECTIONMODE,SC_SEL_RECTANGLE,0);action("paren-left");position(value);action("browser");g_assert_null(dialog());
  reset(content,value,value);SEND(sci,SCI_ADDSELECTION,0,0);action("paren-left");position(value);action("browser");g_assert_null(dialog());

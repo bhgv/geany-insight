@@ -1473,7 +1473,7 @@ Pair	Пара
 Opening line:column	Открытие, строка:столбец
 Closing line:column	Закрытие, строка:столбец
 Delimiter navigation supports C/C++, C#, Java, JavaScript/TypeScript, Python and Lua	Переходы по скобкам поддерживают C/C++, C#, Java, JavaScript/TypeScript, Python и Lua
-Delimiter navigation requires valid UTF-8 without NUL, complete byte positions, at most 8 MiB and 4096 nested delimiters	Переходы по скобкам требуют корректный UTF-8 без NUL, целые позиции символов, не более 8 МиБ и 4096 вложенных скобок
+Delimiter navigation requires valid UTF-8 without NUL, complete byte positions, at most 2 MiB and 4096 nested delimiters	Переходы по скобкам требуют корректный UTF-8 без NUL, целые позиции символов, не более 2 МиБ и 4096 вложенных скобок
 Matched pairs enclosing the active caret, innermost first. Strings and comments are excluded. Refresh after text, caret or language changes.	Пары, охватывающие активный курсор, от внутренней к внешней. Строки и комментарии исключены. Обновите после изменения текста, курсора или языка.
 Showing %u of %u enclosing pairs	Показано %u из %u охватывающих пар
 Delimiter list expired; reopen it for the active document	Список скобок устарел; откройте его для активного документа

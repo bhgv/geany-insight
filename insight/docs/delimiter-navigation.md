@@ -36,10 +36,11 @@ Supported lexical masks: C/C++, C#, Java, JavaScript/TypeScript, Python and Lua.
 Quoted strings/comments are excluded using the existing lexical masker. This is
 not semantic parsing: preprocessing, language interpolation and malformed source
 can differ from a compiler. A mismatched closer discards pending enclosing pairs;
-unclosed pairs are not fabricated. Limits: 8 MiB complete UTF-8 without NUL, one
+unclosed pairs are not fabricated. Limits: 2 MiB complete UTF-8 without NUL, one
 normal selection without virtual positions, caret/anchor outside UTF-8 characters
 and CRLF pairs, at most 4096 pending nested delimiters for matched-pair operations.
-Brace scans need no pairing stack. Unsupported file types are rejected.
+The reusable pure core separately permits 8 MiB lexical masks; the native UI uses
+the existing masker’s 2 MiB bound. Brace scans need no pairing stack. Unsupported file types are rejected.
 
 **Правка → Выделение и навигация → Скобки и блоки** добавляет переходы к
 охватывающим круглым скобкам и предыдущей `{` / следующей `}`. Повтор на границе
@@ -51,7 +52,7 @@ Brace scans need no pairing stack. Unsupported file types are rejected.
 текста, с кнопками переходов и выделения пары. Обратное выделение сохраняет
 направление. После изменения текста, курсора или языка нужно явное обновление;
 другой или закрытый документ не используется. Первые 256 пар из общего числа,
-лимит вложенности 4096, UTF-8 без NUL до 8 МиБ. Прямоугольные/множественные
+лимит вложенности 4096, UTF-8 без NUL до 2 МиБ. Прямоугольные/множественные
 выделения, виртуальные позиции и неподдерживаемые языки отклоняются. Строки и
 комментарии исключаются лексически; семантический анализ не выполняется.
 

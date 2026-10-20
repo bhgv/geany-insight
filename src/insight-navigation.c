@@ -181,6 +181,7 @@ static void command(GtkMenuItem *item, gpointer data)
     }
     gtk_widget_grab_focus(GTK_WIDGET(sci));
 }
+#define DELIMITER_SOURCE_LIMIT (2u*1024u*1024u)
 typedef struct {
     guint document;guint64 generation;gint anchor,caret,length;InsightCodeDialect dialect;
     gchar *text,*mask;InsightDelimiter *pairs;size_t count;
@@ -196,7 +197,7 @@ static gboolean delimiter_dialect(GeanyDocument *doc,InsightCodeDialect *dialect
     const gchar *name=doc->file_type ? doc->file_type->name : "";
     if(!strcmp(name,"Python")) *dialect=INSIGHT_CODE_PYTHON;
     else if(!strcmp(name,"Lua")) *dialect=INSIGHT_CODE_LUA;
-    else if(!strcmp(name,"JavaScript") || !strcmp(name,"TypeScript")) *dialect=INSIGHT_CODE_JS;
+    else if(!strcmp(name,"Javascript") || !strcmp(name,"JavaScript") || !strcmp(name,"TypeScript")) *dialect=INSIGHT_CODE_JS;
     else if(!strcmp(name,"C") || !strcmp(name,"C++") || !strcmp(name,"C#") || !strcmp(name,"Java")) *dialect=INSIGHT_CODE_C;
     else return FALSE;
     return TRUE;
@@ -216,7 +217,7 @@ static gboolean delimiter_capture(DelimiterSnapshot *snapshot,gboolean pairs)
     if(!doc || !normal(doc->editor->sci)) return FALSE;
     if(!delimiter_dialect(doc,&snapshot->dialect)) { ui_set_statusbar(TRUE,"%s",insight_tr("Delimiter navigation supports C/C++, C#, Java, JavaScript/TypeScript, Python and Lua"));return FALSE; }
     ScintillaObject *sci=doc->editor->sci;snapshot->length=sci_get_length(sci);
-    if(snapshot->length<0 || (guint)snapshot->length>INSIGHT_DELIMITER_LIMIT) goto unavailable;
+    if(snapshot->length<0 || (guint)snapshot->length>DELIMITER_SOURCE_LIMIT) goto unavailable;
     snapshot->document=doc->id;snapshot->generation=*delimiter_generation(sci);snapshot->anchor=SEND(sci,SCI_GETANCHOR,0,0);snapshot->caret=sci_get_current_position(sci);
     snapshot->text=sci_get_contents(sci,-1);
     if(!snapshot->text || strlen(snapshot->text)!=(gsize)snapshot->length || !g_utf8_validate(snapshot->text,snapshot->length,NULL) ||
@@ -225,7 +226,7 @@ static gboolean delimiter_capture(DelimiterSnapshot *snapshot,gboolean pairs)
     if(!snapshot->mask || (pairs && insight_enclosing_delimiters(snapshot->mask,snapshot->length,snapshot->caret,&snapshot->pairs,&snapshot->count))) goto unavailable;
     return TRUE;
 unavailable:
-    ui_set_statusbar(TRUE,"%s",insight_tr("Delimiter navigation requires valid UTF-8 without NUL, complete byte positions, at most 8 MiB and 4096 nested delimiters"));delimiter_clear(snapshot);return FALSE;
+    ui_set_statusbar(TRUE,"%s",insight_tr("Delimiter navigation requires valid UTF-8 without NUL, complete byte positions, at most 2 MiB and 4096 nested delimiters"));delimiter_clear(snapshot);return FALSE;
 }
 static gboolean delimiter_valid(const DelimiterSnapshot *snapshot)
 {
@@ -315,7 +316,7 @@ static void delimiter_command(GtkMenuItem *item,gpointer data) { (void)item;insi
 static void delimiter_menu_show(GtkWidget *menu,gpointer data)
 {
     (void)data;GeanyDocument *doc=document_get_current();InsightCodeDialect dialect;
-    gboolean ready=doc && normal(doc->editor->sci) && delimiter_dialect(doc,&dialect) && (guint)sci_get_length(doc->editor->sci)<=INSIGHT_DELIMITER_LIMIT;
+    gboolean ready=doc && normal(doc->editor->sci) && delimiter_dialect(doc,&dialect) && (guint)sci_get_length(doc->editor->sci)<=DELIMITER_SOURCE_LIMIT;
     GList *children=gtk_container_get_children(GTK_CONTAINER(menu));for(GList *p=children;p;p=p->next) if(g_object_get_data(G_OBJECT(p->data),"insight-delimiter-command")) gtk_widget_set_sensitive(p->data,ready);g_list_free(children);
 }
 static void delimiter_menu(GtkWidget *menu)
