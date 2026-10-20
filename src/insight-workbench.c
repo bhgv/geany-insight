@@ -1684,7 +1684,9 @@ static void relation_history_show(GtkWidget *menu,gpointer data) {
  for(guint side=0;side<2;side++) {
   GtkWidget *heading=gtk_menu_item_new_with_label(headings[side]);gtk_widget_set_sensitive(heading,FALSE);gtk_menu_shell_append(GTK_MENU_SHELL(menu),heading);
   GPtrArray *stack=stacks[side];for(guint i=0;i<stack->len;i++) {
-   RelationVisit *visit=g_ptr_array_index(stack,stack->len-1-i);gchar *short_query=g_utf8_substring(visit->query,0,MIN((glong)64,g_utf8_strlen(visit->query,-1))),*label=g_strdup_printf("%u. %s",i+1,short_query);g_free(short_query);
+   RelationVisit *visit=g_ptr_array_index(stack,stack->len-1-i);GtkTreeModel *modes=gtk_combo_box_get_model(GTK_COMBO_BOX(wb.relation_mode));GtkTreeIter mode_iter;gchar *method=NULL;
+   if(gtk_tree_model_iter_nth_child(modes,&mode_iter,NULL,visit->mode)) gtk_tree_model_get(modes,&mode_iter,0,&method,-1);
+   gchar *short_query=g_utf8_substring(visit->query,0,MIN((glong)64,g_utf8_strlen(visit->query,-1))),*label=g_strdup_printf("%u. %s — %s",i+1,short_query,method ? method : "");g_free(short_query);g_free(method);
    GtkWidget *item=gtk_menu_item_new_with_label(label);g_free(label);gchar *name=g_strdup_printf("insight-relation-history-%s-%u",side ? "forward" : "back",i+1);gtk_widget_set_name(item,name);g_free(name);gtk_widget_set_tooltip_text(item,visit->query);g_object_set_data(G_OBJECT(item),"insight-no-i18n",GINT_TO_POINTER(1));g_object_set_data(G_OBJECT(item),"forward",GUINT_TO_POINTER(side));g_object_set_data(G_OBJECT(item),"distance",GUINT_TO_POINTER(i+1));g_signal_connect(item,"activate",G_CALLBACK(relation_history_pick),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);
   }
  }

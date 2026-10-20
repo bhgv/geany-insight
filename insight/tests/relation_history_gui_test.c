@@ -40,7 +40,7 @@ static gboolean tick(gpointer data) {
  }else if(phase==3) {
   if(!root_row()) return G_SOURCE_CONTINUE;check("Root",1,"",TRUE,TRUE,125);geometry(FALSE,75);toggle("insight-relation-graph-toggle",FALSE);gtk_entry_set_text(GTK_ENTRY(filter),"roo");click("insight-relation-definitions");phase++;
  }else if(phase==4) {
-  if(!root_row()) return G_SOURCE_CONTINUE;gtk_entry_set_text(GTK_ENTRY(filter),"Root");geometry(TRUE,150);click("insight-relation-back");check("Root",1,"roo",FALSE,FALSE,75);g_assert_true(gtk_widget_get_sensitive(named(window,"insight-relation-forward")));click("insight-relation-back");check("Child",4,"Root",TRUE,TRUE,125);phase++;
+  if(!root_row()) return G_SOURCE_CONTINUE;gtk_entry_set_text(GTK_ENTRY(filter),"Root");geometry(TRUE,150);click("insight-relation-back");check("Root",1,"roo",FALSE,FALSE,75);g_assert_true(gtk_widget_get_sensitive(named(window,"insight-relation-forward")));click("insight-relation-forward");check("Root",1,"Root",FALSE,TRUE,150);click("insight-relation-back");check("Root",1,"roo",FALSE,FALSE,75);click("insight-relation-back");check("Child",4,"Root",TRUE,TRUE,125);phase++;
  }else if(phase==5) {
   GtkWidget *menu=history_menu(),*item=named(menu,"insight-relation-history-forward-2");g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item));check("Root",1,"Root",FALSE,TRUE,150);g_assert_false(gtk_widget_get_sensitive(named(window,"insight-relation-forward")));click("insight-relation-back");check("Root",1,"roo",FALSE,FALSE,75);phase++;
  }else if(phase==6) {
