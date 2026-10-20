@@ -51,3 +51,5 @@ Insert File and text export: [guide](file-text.md).
 [Word and character operations / Операции со словами и символами](word-editing.md) — bounded native Cut Word/Left and clipboard-preserving Delete Line/Character.
 
 [Command and key references / Списки команд и клавиш](command-reference.md) — editable snapshots of current menus and registered keyboard bindings.
+
+[Restore Lines / Восстановление строк](restore-lines.md) — original snapshots, whole changed-block preview and one-step restoration.

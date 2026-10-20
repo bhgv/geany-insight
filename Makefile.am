@@ -490,3 +490,6 @@ insightdoc_DATA += insight/docs/command-reference.md
 dist_insightdocmedia_DATA += insight/docs/media/command-reference.svg
 
 dist_insightdocmedia_DATA += insight/docs/media/word-editing.jpg insight/docs/media/command-browser.jpg
+
+insightdoc_DATA += insight/docs/restore-lines.md
+dist_insightdocmedia_DATA += insight/docs/media/restore-lines.svg

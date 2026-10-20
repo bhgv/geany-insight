@@ -1413,3 +1413,21 @@ Available	Доступно
 Unavailable	Недоступно
 Command is no longer available; refreshed the list	Команда больше недоступна; список обновлён
 Go Back Toggle	Переключить последний переход
+Restore Lines…	Восстановить строки…
+Restore Lines	Восстановить строки
+Original Contents…	Исходное содержимое…
+Original Contents	Исходное содержимое
+Restore Lines Help	Справка по восстановлению строк
+Copy Original Block	Копировать исходный блок
+Original text unavailable: 8 MiB per document / 64 MiB total, valid UTF-8 required	Исходный текст недоступен: 8 МиБ на документ / 64 МиБ суммарно, требуется корректный UTF-8
+Restore Lines is limited to 8 MiB documents	Восстановление строк ограничено документами до 8 МиБ
+Restore Lines requires complete UTF-8 text without NUL bytes	Восстановление строк требует полного текста UTF-8 без нулевых байтов
+Restore Lines comparison exceeded its work or size limit	Сравнение для восстановления превысило предел объёма или сложности
+No original-line changes touch this selection	Выделенные строки не содержат изменений относительно исходного текста
+Restore complete changed blocks touching the selected lines. Review both ranges before restoring.	Восстанавливаются целые блоки изменений, затрагивающие выделенные строки. Проверьте оба диапазона перед применением.
+Changed blocks: %u	Блоков изменений: %u
+Original lines: %u–%u	Исходные строки: %u–%u
+Current lines: %u–%u	Текущие строки: %u–%u
+Preview: first 8 KiB per side. Saved files are unchanged. One Undo restores the previous edited text.	Предпросмотр: первые 8 КиБ с каждой стороны. Сохранённые файлы не меняются. Один Undo вернёт предыдущий отредактированный текст.
+Restore cancelled: the document, selection or permissions changed	Восстановление отменено: документ, выделение или права изменились
+Preview truncated; Restore uses the complete block	Предпросмотр сокращён; Restore использует полный блок

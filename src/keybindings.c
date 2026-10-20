@@ -33,6 +33,7 @@
 #include "keybindings.h"
 #include "insight-paste.h"
 #include "insight-command-list.h"
+#include "insight-revisions.h"
 #include "insight-template-fields.h"
 #include "insight-relation-graph.h"
 
@@ -310,12 +311,14 @@ static void add_kb(GeanyKeyGroup *group, gsize key_id,
 
 static void cb_func_insight(guint key_id)
 {
+    if (key_id == GEANY_KEYS_INSIGHT_ORIGINALCONTENTS) { insight_revisions_original();return; }
     if (key_id == GEANY_KEYS_INSIGHT_BACKTOGGLE) { navqueue_go_back_toggle();return; }
     if (key_id == GEANY_KEYS_INSIGHT_COMMANDBROWSER) { insight_command_browser_show();return; }
     GeanyDocument *doc = document_get_current();
     if (!doc || gtk_window_get_focus(GTK_WINDOW(main_widgets.window)) != GTK_WIDGET(doc->editor->sci)) return;
     switch (key_id)
     {
+        case GEANY_KEYS_INSIGHT_RESTORELINES: insight_revisions_show();break;
         case GEANY_KEYS_INSIGHT_CUTWORD: insight_paste_word_edit(0);break;
         case GEANY_KEYS_INSIGHT_CUTWORDLEFT: insight_paste_word_edit(1);break;
         case GEANY_KEYS_INSIGHT_DELETELINE: insight_paste_word_edit(2);break;
@@ -756,6 +759,10 @@ static void init_default_kb(void)
         0, 0, "insight_delete_line", _("Delete Line"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_DELETECHARACTER, cb_func_insight,
         0, 0, "insight_delete_character", _("Delete Character"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_RESTORELINES, cb_func_insight,
+        0, 0, "insight_restore_lines", _("Restore Lines"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_ORIGINALCONTENTS, cb_func_insight,
+        0, 0, "insight_original_contents", _("Original Contents"), NULL);
     group = keybindings_get_core_group(GEANY_KEY_GROUP_GOTO);
     add_kb(group, GEANY_KEYS_INSIGHT_BACKTOGGLE, cb_func_insight,
         0, 0, "insight_go_back_toggle", _("Go Back Toggle"), NULL);

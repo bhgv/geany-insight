@@ -787,3 +787,6 @@ test('Insight native Go Back Toggle GUI', back_toggle_gui_test, timeout: 40, is_
 
 restore_lines_test = executable('test_insight_restore_lines', '../insight/tests/restore_lines_test.c', '../insight/core/restore_lines.c', '../insight/core/diff.c', include_directories: include_directories('../insight/core'), c_args: ['-UNDEBUG'])
 test('Insight original-line restoration plans', restore_lines_test)
+
+restore_lines_gui_test = executable('test_insight_restore_lines_gui', '../insight/tests/restore_lines_gui_test.c', dependencies: test_deps)
+test('Insight native original snapshots and Restore Lines GUI', restore_lines_gui_test, timeout: 50, is_parallel: false)

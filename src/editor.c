@@ -2,6 +2,7 @@
 #include "insight-completion.h"
 #include "insight-paste.h"
 #include "insight-navigation.h"
+#include "insight-revisions.h"
 #include "../insight/desktop/filetype_pairs.h"
 #include "insight-formatting.h"
 /*
@@ -1144,6 +1145,7 @@ static gboolean on_editor_notify(G_GNUC_UNUSED GObject *object, GeanyEditor *edi
 	insight_completion_notify(editor,nt);
 	insight_paste_notify(editor,nt);
 	insight_navigation_notify(editor,nt);
+	insight_revisions_notify(editor,nt);
 	navqueue_notify(doc,nt);
 	insight_workbench_source_link_notify(editor,nt);
 	switch (nt->nmhdr.code)
