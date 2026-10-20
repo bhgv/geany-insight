@@ -438,3 +438,8 @@ EXTRA_DIST += insight/tests/panel_groups_gui_test.c
 dist_insightdocmedia_DATA += insight/docs/media/panel-groups.jpg insight/docs/media/panel-groups.svg
 EXTRA_DIST += insight/tests/editor_drag_gui_test.c
 dist_insightdocmedia_DATA += insight/docs/media/editor-drag.jpg insight/docs/media/editor-drag.svg
+EXTRA_DIST += insight/tests/duplicate_selection_gui_test.c
+EXTRA_DIST += insight/tests/symbol_edit_gui_test.c
+
+insightdoc_DATA += insight/docs/structural-selection.md
+dist_insightdocmedia_DATA += insight/docs/media/symbol-edit.jpg insight/docs/media/symbol-edit.svg

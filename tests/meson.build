@@ -721,3 +721,9 @@ test('Insight physical panel drag and restart GUI', panel_groups_gui_test, env: 
 
 editor_drag_gui_test = executable('test_insight_editor_drag_gui', '../insight/tests/editor_drag_gui_test.c', dependencies: test_deps)
 test('Insight native editor Ctrl drag copy and move', editor_drag_gui_test, timeout: 60, is_parallel: false)
+
+duplicate_selection_gui_test = executable('test_insight_duplicate_selection_gui', '../insight/tests/duplicate_selection_gui_test.c', dependencies: test_deps)
+test('Insight exact selection duplication GUI', duplicate_selection_gui_test, timeout: 30, is_parallel: false)
+
+symbol_edit_gui_test = executable('test_insight_symbol_edit_gui', '../insight/tests/symbol_edit_gui_test.c', dependencies: test_deps)
+test('Insight native symbol copy cut duplicate GUI', symbol_edit_gui_test, timeout: 40, is_parallel: false)

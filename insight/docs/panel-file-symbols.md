@@ -122,3 +122,5 @@ See [the unified File Search and File Symbols interface](unified-file-tools.md).
 Окно настоящего приложения Linux в автоматическом сценарии проверки:
 
 ![Panel controls](media/panel-windows.jpg)
+
+Copy/Cut/Duplicate Symbol and exact selection duplication: [structural editing](structural-selection.md).

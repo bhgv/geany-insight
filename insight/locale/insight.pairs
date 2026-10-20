@@ -859,3 +859,8 @@ Floating panel opacity: %d%%|||Непрозрачность плавающей �
 Group this floating panel|||Объединить эту плавающую панель
 Float this panel separately|||Открыть эту панель отдельным окном
 Drag this panel onto a project panel header|||Перетащите эту панель на заголовок проектной панели
+Copy Symbol|||Копировать символ
+Cut Symbol|||Вырезать символ
+Duplicate Symbol|||Дублировать символ
+Symbol editing requires a writable document|||Для изменения символа нужен документ с разрешённой записью
+Symbol operation requires a complete standalone brace, Python or Lua function (up to 1 MiB)|||Нужна полная отдельно расположенная функция со скобками, Python или Lua (до 1 МиБ)

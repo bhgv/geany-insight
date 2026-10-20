@@ -27,3 +27,5 @@ Open a file, find a name with Ctrl+F, set a bookmark and select a symbol in File
 The ? button at the upper right opens this page. Help follows the interface language selected in Options.
 
 More: [tutorials.md](tutorials.md).
+
+Function operations and exact selection duplication: [structural editing](structural-selection.md).

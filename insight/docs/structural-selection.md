@@ -33,3 +33,27 @@ Meson и ручную Windows-сборку. Автоматический зап�
 Select Function (Ctrl+Alt+F) selects from the parser definition line through the closing body brace, Python suite end, or Lua function `end`. It does not include earlier return-type or annotation lines. Function Up/Down (Ctrl+Alt+PageUp/PageDown) navigate parsed definitions.
 
 Python supports async/multiline definitions, nested suites, continuation brackets, tabs (8-column indentation) and CRLF. Lua balances nested function/if/for/while/do/repeat blocks; masked comments and strings do not contribute keywords. Function selection chooses the smallest containing parsed definition. Function tracking, lexical Calls and Overview use the same ranges. Unsupported languages and unfinished delimiter bodies retain a no-range result; this is lexical structure, not compiler syntax/type validation. Decorators preceding the parser definition line are not included.
+
+## Copy Symbol / Cut Symbol / Duplicate Symbol
+
+В **Edit → Structural selection** добавлены команды копирования, вырезания и дублирования целой функции. Они выбирают наименьшую завершённую функцию, содержащую курсор или всё выделение. Те же команды доступны в контекстном меню **File Symbols**: там обрабатывается выбранная строка панели, даже если курсор находится в другой функции. Project Symbols пока не предоставляет эти операции.
+
+| Команда | Результат |
+| --- | --- |
+| Copy Symbol | Текст полной функции попадает в обычный буфер обмена. Положение курсора и Undo не меняются; read-only разрешён. |
+| Cut Symbol | Функция удаляется и копируется в буфер обмена; одно Undo возвращает её. |
+| Duplicate Symbol | Копия вставляется сразу после функции и выделяется; буфер обмена не меняется. Одно Undo удаляет копию. Имя остаётся прежним. |
+
+Диапазон включает отступ на строке определения, тело, оставшийся комментарий на завершающей строке и её перевод строки. В конце файла без EOL перед копией добавляется один разделитель в формате документа (LF/CRLF/CR). Python выбирает вложенную функцию; Lua учитывает вложенные `if`/`end`. Предыдущие строки с декораторами, аннотациями или типом возврата не включаются.
+
+Поддержаны отдельно расположенные определения функций и методов в языках со скобками, Python и Lua. Это лексические границы с актуальными parser tags, а не AST: классы, переменные, прототипы, неполные тела и несколько определений на одной строке отклоняются. Документ ограничен 2 МиБ, функция — 1 МиБ; нужны корректный UTF-8 без NUL и одно обычное выделение без виртуальных позиций. Изменённая строка выбранного символа проверяется заново, устаревший пункт панели не вырезает соседний код. Изменения в read-only запрещены.
+
+![Три операции над функцией](media/symbol-edit.svg)
+
+Реальный редактор Linux после Duplicate Symbol из File Symbols: вставленная функция выделена, следующая функция сохранена.
+
+![Копия функции в редакторе](media/symbol-edit.jpg)
+
+## Точное дублирование выделения
+
+**Edit → Duplicate Line or Selection / Ctrl+D** дублирует именно выделенный фрагмент, включая части первой и последней строк, буквы, пробелы и переводы строк. Предварительное расширение многострочного выделения до полных строк больше не выполняется. Без выделения сохраняется дублирование текущей строки. Операция поддерживает обратное выделение и Undo/Redo; read-only запрещает изменение.

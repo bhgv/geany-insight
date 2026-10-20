@@ -603,3 +603,7 @@ docked header and successful automatic floating of that destination. A third
 process injects a broken session group link and verifies independent minimized
 windows, separate tray entries and Restore all. Linux native build, group GUI and
 strict UBSan layout validation pass; Windows/Android were not run for this series.
+
+### Exact Duplicate and guarded function text operations (2026-10-20)
+
+Ctrl+D duplicates exact partial multiline selections rather than expanding boundary lines. Copy Symbol, Cut Symbol and Duplicate Symbol are available under Edit → Structural selection and in File Symbols. Fresh parser names/lines and complete standalone brace/Python/Lua bodies are validated; read-only copy is allowed, cuts/duplicates use one Undo, and duplication preserves the clipboard. Limits, native screenshot and diagram: [structural editing](structural-selection.md). Native Linux GUI covers exact/reverse selections, Unicode, spaces, CRLF, line fallback, nested functions, EOF separators, stale outline targets, invalid ranges, read-only and Undo/Redo. The new symbol commands cover functions/methods, not arbitrary symbol kinds or project rows. References: [Duplicate](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Duplicate.htm), [Duplicate Symbol](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Duplicate_Symbol.htm).

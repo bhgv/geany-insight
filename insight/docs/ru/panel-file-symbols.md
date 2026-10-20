@@ -122,3 +122,5 @@ See [the unified File Search and File Symbols interface](unified-file-tools.md).
 Окно настоящего приложения Linux в автоматическом сценарии проверки:
 
 ![Panel controls](../media/panel-windows.jpg)
+
+Операции с функциями и точное дублирование выделения: [структурное редактирование](structural-selection.md).

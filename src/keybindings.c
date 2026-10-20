@@ -2124,12 +2124,9 @@ static gboolean cb_func_goto_action(guint key_id)
 
 static void duplicate_lines(GeanyEditor *editor)
 {
-	if (sci_get_lines_selected(editor->sci) > 1)
-	{	/* ignore extra_line because of selecting lines from the line number column */
-		editor_select_lines(editor, FALSE);
-		sci_selection_duplicate(editor->sci);
-	}
-	else if (sci_has_selection(editor->sci))
+	/* Duplicate precisely the selected bytes, including partial first/last
+	 * lines. An empty selection retains the familiar current-line action. */
+	if (sci_has_selection(editor->sci))
 		sci_selection_duplicate(editor->sci);
 	else
 		sci_line_duplicate(editor->sci);

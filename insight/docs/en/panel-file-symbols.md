@@ -122,3 +122,5 @@ whole Project Window group are outside this tray.
 Native Linux application captured during the automated panel scenario:
 
 ![Panel controls](../media/panel-windows.jpg)
+
+Function operations and exact selection duplication: [structural editing](structural-selection.md).
