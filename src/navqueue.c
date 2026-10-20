@@ -50,6 +50,8 @@ typedef struct
 static GQueue *navigation_queue;
 static guint nav_queue_pos;
 static guint64 navigation_serial;
+static struct { gboolean forward; guint64 serial; guint document; gint position; } back_toggle;
+
 #define HISTORY_LIMIT 512
 
 static GtkAction *navigation_buttons[2];
@@ -200,6 +202,7 @@ static gboolean goto_file_pos(const gchar *file, gint pos)
 
 void navqueue_go_back(void)
 {
+    back_toggle.forward = FALSE;
 	filepos *fprev;
 	GeanyDocument *doc = document_get_current();
 
@@ -240,6 +243,7 @@ void navqueue_go_back(void)
 
 void navqueue_go_forward(void)
 {
+    back_toggle.forward = FALSE;
 	filepos *fnext;
 
 	if (nav_queue_pos < 1 ||
@@ -264,6 +268,25 @@ void navqueue_go_forward(void)
 	adjust_buttons();
 }
 
+
+/* A toggle pair belongs to the exact history revision and current caret.
+ * Manual navigation, edits, queue pruning and a moved caret start a new pair. */
+void navqueue_go_back_toggle(void)
+{
+    GeanyDocument *doc = document_get_current();
+    if (!navigation_queue || !doc || !doc->file_name) return;
+    gboolean forward = back_toggle.forward && back_toggle.serial == navigation_serial &&
+        back_toggle.document == doc->id && back_toggle.position == sci_get_current_position(doc->editor->sci);
+    guint previous_document = doc->id;gint previous_position = sci_get_current_position(doc->editor->sci);
+    if (forward) navqueue_go_forward();else navqueue_go_back();
+    doc = document_get_current();
+    if (doc && (doc->id != previous_document || sci_get_current_position(doc->editor->sci) != previous_position))
+    {
+        back_toggle.forward = !forward;back_toggle.serial = navigation_serial;
+        back_toggle.document = doc->id;back_toggle.position = sci_get_current_position(doc->editor->sci);
+    }
+    else back_toggle.forward = FALSE;
+}
 
 static gint find_by_filename(gconstpointer a, gconstpointer b)
 {
@@ -363,6 +386,7 @@ void navqueue_show_history(void)
   guint id;gint pos,index;gtk_tree_model_get(GTK_TREE_MODEL(store),&iter,HISTORY_DOC,&id,HISTORY_POS,&pos,HISTORY_INDEX,&index,-1);
   GeanyDocument *doc=document_find_by_id(id);if(!doc) { serial=history_fill(store,GTK_TREE_VIEW(view));continue; }
   if(index>=0) nav_queue_pos=index;
+  navigation_serial++;back_toggle.forward=FALSE;
   editor_goto_pos(doc->editor,pos,TRUE);adjust_buttons();break;
  }
  gtk_widget_destroy(dialog);g_object_unref(store);g_object_unref(dialog);

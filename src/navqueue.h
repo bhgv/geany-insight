@@ -48,6 +48,8 @@ void navqueue_remove_file(const gchar *filename);
 
 void navqueue_go_back(void);
 
+void navqueue_go_back_toggle(void);
+
 void navqueue_go_forward(void);
 
 #endif /* GEANY_PRIVATE */

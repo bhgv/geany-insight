@@ -286,6 +286,7 @@ enum GeanyKeyBindingID
 	GEANY_KEYS_INSIGHT_DELETELINE,            /**< Insight keybinding. */
 	GEANY_KEYS_INSIGHT_DELETECHARACTER,       /**< Insight keybinding. */
 	GEANY_KEYS_INSIGHT_COMMANDBROWSER,        /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_BACKTOGGLE,            /**< Insight keybinding. */
 	GEANY_KEYS_COUNT	/* must not be used by plugins */
 };
 

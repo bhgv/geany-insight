@@ -781,3 +781,6 @@ test('Insight native command and key reference buffers GUI', command_list_gui_te
 
 command_browser_gui_test = executable('test_insight_command_browser_gui', '../insight/tests/command_browser_gui_test.c', dependencies: test_deps)
 test('Insight native searchable command browser GUI', command_browser_gui_test, timeout: 45, is_parallel: false)
+
+back_toggle_gui_test = executable('test_insight_back_toggle_gui', '../insight/tests/back_toggle_gui_test.c', dependencies: test_deps)
+test('Insight native Go Back Toggle GUI', back_toggle_gui_test, timeout: 40, is_parallel: false)

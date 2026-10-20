@@ -7,6 +7,7 @@
 #include "sciwrappers.h"
 #include "ui_utils.h"
 #include "navqueue.h"
+#include "keybindings.h"
 #include "insight-i18n.h"
 #include "insight-completion.h"
 #include "insight-help.h"
@@ -397,6 +398,7 @@ static void show_file_status(GtkMenuItem *item,gpointer data)
 }
 static void file_status_menu_show(GtkWidget *menu,gpointer data) { (void)menu;gtk_widget_set_sensitive(GTK_WIDGET(data),document_get_current()!=NULL); }
 
+static void back_toggle_command(GtkMenuItem *item,gpointer data) { (void)item;(void)data;navqueue_go_back_toggle(); }
 static void show_history(GtkMenuItem *item,gpointer data) { (void)item;(void)data;navqueue_show_history(); }
 void insight_navigation_menu(GtkWidget *menu)
 {
@@ -420,6 +422,9 @@ void insight_navigation_menu(GtkWidget *menu)
         g_signal_connect(entry, "activate", G_CALLBACK(command), GINT_TO_POINTER(i));
         gtk_menu_shell_append(GTK_MENU_SHELL(sub), entry);
     }
+    GtkWidget *back_toggle = gtk_menu_item_new_with_label("Go Back Toggle");gtk_widget_set_name(back_toggle,"insight-go-back-toggle");
+    keybindings_attach_menu(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_INSIGHT_BACKTOGGLE,back_toggle);
+    g_signal_connect(back_toggle,"activate",G_CALLBACK(back_toggle_command),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(sub),back_toggle);
     text_boundary_menu(sub);
     viewport_menu(sub);
     unit_selection_menu(sub);

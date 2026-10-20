@@ -310,6 +310,7 @@ static void add_kb(GeanyKeyGroup *group, gsize key_id,
 
 static void cb_func_insight(guint key_id)
 {
+    if (key_id == GEANY_KEYS_INSIGHT_BACKTOGGLE) { navqueue_go_back_toggle();return; }
     if (key_id == GEANY_KEYS_INSIGHT_COMMANDBROWSER) { insight_command_browser_show();return; }
     GeanyDocument *doc = document_get_current();
     if (!doc || gtk_window_get_focus(GTK_WINDOW(main_widgets.window)) != GTK_WIDGET(doc->editor->sci)) return;
@@ -755,6 +756,9 @@ static void init_default_kb(void)
         0, 0, "insight_delete_line", _("Delete Line"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_DELETECHARACTER, cb_func_insight,
         0, 0, "insight_delete_character", _("Delete Character"), NULL);
+    group = keybindings_get_core_group(GEANY_KEY_GROUP_GOTO);
+    add_kb(group, GEANY_KEYS_INSIGHT_BACKTOGGLE, cb_func_insight,
+        0, 0, "insight_go_back_toggle", _("Go Back Toggle"), NULL);
 }
 
 

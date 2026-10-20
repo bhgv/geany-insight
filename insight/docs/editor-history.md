@@ -27,3 +27,20 @@ Read-only и незакрытая группа Undo запрещают запу�
 ![Прогресс Undo All](media/bulk-undo.jpg)
 
 Эталон: [Selection History](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Selection_History.htm), [Undo All](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Undo_All.htm).
+
+## Go Back Toggle / Переключить последний переход
+
+Edit → Selection and navigation → Go Back Toggle alternates normal Back and
+Forward over the latest pair. A normal Back/Forward command, a different caret or
+active document, a text edit or a changed/pruned history starts a fresh Back pair.
+Failed boundary moves do not arm a toggle. Untitled buffers have no queue identity
+and do not start a pair. The existing open-file history, edit anchors and Extend
+Mode behavior remain in use. No bytes, clipboard or Undo are changed. A new
+unassigned Go to keybinding allows a user shortcut without replacing defaults.
+
+Повторная команда переключает две последние позиции через штатные Back/Forward.
+Ручной переход, смена курсора/документа или изменение истории начинает новую пару.
+На границе истории команда ничего не меняет. Новые несохранённые буферы без имени
+не создают пару. В настройках клавиш Go to можно назначить своё сочетание.
+
+Reference: [Go Back Toggle](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Go_Back_Toggle.htm).
