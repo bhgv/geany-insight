@@ -38,6 +38,12 @@ int main(void) {
  insight_layout_write(f,"layout-A",&r);g_key_file_set_integer(f,"layout-A","main-width",399);g_assert_false(insight_layout_read(f,"layout-A",&out));
  insight_layout_write(f,"layout-A",&r);g_key_file_set_integer(f,"layout-A","version",5);g_assert_true(insight_layout_read(f,"layout-A",&out));g_assert_false(out.main_window.set);
  r.main_window.height=20001;g_assert_false(insight_layout_valid(&r));r.main_window.height=800;
+ r.values[IL_TRANSPARENT_PANELS]=1;for(guint i=0;i<IL_PANEL_COUNT;i++) r.opacity[i]=40+(gint)i*5;
+ insight_layout_write(f,"layout-A",&r);g_assert_true(insight_layout_read(f,"layout-A",&out));g_assert_cmpint(out.values[IL_TRANSPARENT_PANELS],==,1);for(guint i=0;i<IL_PANEL_COUNT;i++) g_assert_cmpint(out.opacity[i],==,r.opacity[i]);
+ g_key_file_remove_key(f,"layout-A","panel-9-opacity",NULL);g_assert_false(insight_layout_read(f,"layout-A",&out));g_assert_false(out.valid);
+ insight_layout_write(f,"layout-A",&r);g_key_file_set_integer(f,"layout-A","panel-0-opacity",0);g_assert_false(insight_layout_read(f,"layout-A",&out));
+ insight_layout_write(f,"layout-A",&r);g_key_file_set_integer(f,"layout-A","version",6);g_assert_true(insight_layout_read(f,"layout-A",&out));g_assert_false(out.values[IL_TRANSPARENT_PANELS]);for(guint i=0;i<IL_PANEL_COUNT;i++) g_assert_cmpint(out.opacity[i],==,100);
+ r.opacity[0]=101;g_assert_false(insight_layout_valid(&r));r.opacity[0]=40;
  gchar *dir=g_dir_make_tmp("layout-files-XXXXXX",NULL),*path=g_build_filename(dir,"review.geany-layout",NULL);GError *error=NULL;
  g_assert_true(insight_layout_save_file(path,&r,&error));g_assert_no_error(error);g_assert_true(insight_layout_load_file(path,&out,&error));g_assert_no_error(error);g_assert_cmpint(out.panels[9].height,==,r.panels[9].height);
  r.panels[0].width=1;g_assert_false(insight_layout_save_file(path,&r,&error));g_clear_error(&error);r.panels[0].width=480;g_assert_true(insight_layout_load_file(path,&out,&error));g_assert_no_error(error);

@@ -4,15 +4,17 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
-static const char *keys[IL_FIELDS]={"left","project","context","follow","wrap","floating","left-split","right-split","context-split","tab","x","y","width","height","detached","host-visible","window-list-set","window-list-visible","window-list-docked","window-list-positioned","window-list-maximized","window-list-x","window-list-y","window-list-width","window-list-height","tab-tray-visible","host-minimized"};
-static gboolean boolean_field(guint i) { return i==IL_TRAY_VISIBLE || i<=IL_FLOAT || (i>=IL_WL_SET && i<=IL_WL_MAXIMIZED); }
+static const char *keys[IL_FIELDS]={"left","project","context","follow","wrap","floating","left-split","right-split","context-split","tab","x","y","width","height","detached","host-visible","window-list-set","window-list-visible","window-list-docked","window-list-positioned","window-list-maximized","window-list-x","window-list-y","window-list-width","window-list-height","tab-tray-visible","host-minimized","transparent-panels"};
+static gboolean boolean_field(guint i) { return i==IL_TRANSPARENT_PANELS || i==IL_TRAY_VISIBLE || i<=IL_FLOAT || (i>=IL_WL_SET && i<=IL_WL_MAXIMIZED); }
 gboolean insight_layout_valid(const InsightLayout *r) {
  if(!r || !r->valid) return FALSE;
+ if(r->values[IL_TRANSPARENT_PANELS]!=0 && r->values[IL_TRANSPARENT_PANELS]!=1) return FALSE;
  const InsightPanelLayout *main=&r->main_window;
  if((main->set!=FALSE && main->set!=TRUE) || (main->maximized!=FALSE && main->maximized!=TRUE)) return FALSE;
  if(main->set && (main->x < -30000 || main->x>30000 || main->y < -30000 || main->y>30000 || main->width<400 || main->width>20000 || main->height<220 || main->height>20000)) return FALSE;
  if((r->values[IL_TRAY_VISIBLE]!=0 && r->values[IL_TRAY_VISIBLE]!=1) || r->values[IL_HOST_MINIMIZED]<0 || (r->values[IL_HOST_MINIMIZED]&~r->values[IL_DETACHED]) || (r->values[IL_HOST_MINIMIZED]&r->values[IL_HOST_VISIBLE])) return FALSE;
  for(guint i=0;i<IL_PANEL_COUNT;i++) {
+  if(r->opacity[i]!=0 && (r->opacity[i]<40 || r->opacity[i]>100)) return FALSE;
   const InsightPanelLayout *p=&r->panels[i];
   if((p->set!=FALSE && p->set!=TRUE) || (p->maximized!=FALSE && p->maximized!=TRUE)) return FALSE;
   if(p->set && (p->x < -30000 || p->x>30000 || p->y < -30000 || p->y>30000 || p->width<300 || p->width>4000 || p->height<200 || p->height>4000)) return FALSE;
@@ -28,7 +30,7 @@ gboolean insight_layout_read(GKeyFile *file,const char *group,InsightLayout *out
  *out=(InsightLayout){0}; GError *error=NULL; gint version=g_key_file_get_integer(file,group,"version",&error);
  if(error || (version<1 || version>IL_FORMAT_VERSION)) { g_clear_error(&error); return FALSE; }
  InsightLayout next={.valid=TRUE};
- for(guint i=0;i<(version==1 ? IL_DETACHED : version==2 ? IL_WL_SET : version<5 ? IL_TRAY_VISIBLE : IL_FIELDS);i++) {
+ for(guint i=0;i<(version==1 ? IL_DETACHED : version==2 ? IL_WL_SET : version<5 ? IL_TRAY_VISIBLE : version<7 ? IL_TRANSPARENT_PANELS : IL_FIELDS);i++) {
   next.values[i]=boolean_field(i) ? g_key_file_get_boolean(file,group,keys[i],&error) : g_key_file_get_integer(file,group,keys[i],&error);
   if(error) { g_clear_error(&error); return FALSE; }
  }
@@ -44,6 +46,10 @@ gboolean insight_layout_read(GKeyFile *file,const char *group,InsightLayout *out
   for(guint j=0;j<G_N_ELEMENTS(fields);j++) { v[j]=j<2 ? g_key_file_get_boolean(file,group,fields[j],&error) : g_key_file_get_integer(file,group,fields[j],&error);if(error) { g_clear_error(&error);return FALSE; } }
   next.main_window=(InsightPanelLayout){v[0],v[1],v[2],v[3],v[4],v[5]};
  }
+ for(guint i=0;i<IL_PANEL_COUNT;i++) {
+  next.opacity[i]=100;
+  if(version>=7) { gchar name[40];g_snprintf(name,sizeof name,"panel-%u-opacity",i);next.opacity[i]=g_key_file_get_integer(file,group,name,&error);if(error || next.opacity[i]<40 || next.opacity[i]>100) { g_clear_error(&error);return FALSE; } }
+ }
  if(!insight_layout_valid(&next)) return FALSE;
  *out=next; return TRUE;
 }
@@ -56,6 +62,7 @@ void insight_layout_write(GKeyFile *file,const char *group,const InsightLayout *
  }
  for(guint i=0;i<IL_PANEL_COUNT;i++) {
   const InsightPanelLayout *p=&r->panels[i];gchar key[48];
+  g_snprintf(key,sizeof key,"panel-%u-opacity",i);g_key_file_set_integer(file,group,key,r->opacity[i] ? r->opacity[i] : 100);
   const gchar *fields[]={"set","maximized","x","y","width","height"};gint v[]={p->set,p->maximized,p->x,p->y,p->width,p->height};
   for(guint j=0;j<G_N_ELEMENTS(fields);j++) { g_snprintf(key,sizeof key,"panel-%u-%s",i,fields[j]);if(j<2) g_key_file_set_boolean(file,group,key,v[j]);else g_key_file_set_integer(file,group,key,v[j]); }
  }

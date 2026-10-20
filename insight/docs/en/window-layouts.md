@@ -43,7 +43,7 @@ unchanged. The native chooser confirms overwriting an existing file.
 This is Geany Insight's INI format, without source text or project paths; Source
 Insight XML is not imported. Files over 64 KiB, NUL bytes, missing fields and invalid
 values are rejected before any window changes. Errors appear in the status bar.
-Internal layout versions 1–5 remain readable with defaults for newer features.
+Internal layout versions 1–6 remain readable with defaults for newer features.
 
 ## Try it
 
@@ -70,3 +70,19 @@ bounds to the available monitor work area. Older layout formats leave the main
 window unchanged. Window-manager minimum sizes still apply.
 
 ![Main window state](../media/main-window-layout.svg)
+
+## Floating panel transparency
+
+View → Panels → Enable transparent panels enables the opacity control in each
+floating panel header. Click the brightness icon and adjust the slider from 40 to
+100 percent; its tooltip shows the current value. 100 percent is opaque. Docked
+panels hide this control. Disabling the option makes floating panels opaque while
+retaining their individual values. The option is disabled initially.
+
+The global switch and per-panel values are retained in sessions, slots A–D and
+layout files. Older layouts use opaque panels with the option disabled. The
+visible effect requires desktop compositing. Mouse input remains with the panel;
+Source Insight's background click-through behavior is not implemented.
+
+Linux checks include the GTK value and a changed screen pixel under Xvfb,
+Openbox and xcompmgr, as well as layout/session round trips.

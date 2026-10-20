@@ -1218,3 +1218,6 @@ Invalid or incomplete layout file	Неверный или неполный фа�
 Layout file exceeds 64 KiB or contains NUL bytes	Файл раскладки больше 64 КиБ или содержит нулевые байты
 Could not read layout file	Не удалось прочитать файл раскладки
 Window layouts and Tab Tray…	Раскладки окон и свёрнутые панели…
+Enable transparent panels	Включить прозрачность панелей
+Floating panel opacity	Непрозрачность плавающей панели
+Floating panel opacity: %d%%	Непрозрачность плавающей панели: %d%%

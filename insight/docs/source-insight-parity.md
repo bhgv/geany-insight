@@ -557,3 +557,16 @@ Maximized main-window loading waits for the native normal-window resize before
 reapplying maximization. The GUI regression specifically changes the intervening
 normal size and verifies that Restore returns to the saved size. Linux native
 build/GUI and strict UBSan layout tests passed.
+
+### Floating panel opacity (2026-10-20)
+
+View → Panels exposes Enable transparent panels and a per-floating-panel scale
+button (40–100 percent, with a live RU/EN value tooltip). Docking hides the control;
+disabling transparency applies full opacity without losing individual settings.
+Layout schema 7 and panel-session schema 4 retain the option/values; prior schemas
+migrate to disabled/opaque defaults. Invalid session opacity disables restoration
+and resets that host's display state. Native GUI covers global disable/enable,
+layout and restart persistence; an Xvfb/Openbox/xcompmgr run verifies an actual
+screen-pixel change. Compositing is required. Source Insight background input
+pass-through and its exact Preferences:Display location are not implemented.
+Reference: [Semi-transparent panels](https://www.sourceinsight.com/doc/v4/userguide/Manual/Window_Tour/Using_Semi-Transparent_Panel_Windows.htm).
