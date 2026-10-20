@@ -79,7 +79,7 @@ static gboolean step(gpointer data) {
  (void)data;source=document_get_current();if(!source) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));ScintillaObject *sci=source->editor->sci;gint second=strstr(content,"alpha\r")-content,last=strstr(content,"alpha ~")-content;
  reset(content,0,5);gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),"sentinel",-1);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(window,"insight-file-search-incremental")),TRUE);action("load");AT(0,5);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(window,"insight-file-search-query"))),==,"alpha");text_is(content);g_assert_false(SEND(sci,SCI_CANUNDO,0,0));
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(window,"insight-file-search-incremental")),FALSE);action("forward");AT(second,second+5);action("backward");AT(5,0);
- gtk_widget_grab_focus(GTK_WIDGET(sci));keybindings_send_command(GEANY_KEY_GROUP_SEARCH,GEANY_KEYS_INSIGHT_SELECTIONSEARCHFORWARD);AT(second,second+5);keybindings_send_command(GEANY_KEY_GROUP_SEARCH,GEANY_KEYS_GOTO_BACK);AT(5,0);
+ gtk_widget_grab_focus(GTK_WIDGET(sci));keybindings_send_command(GEANY_KEY_GROUP_SEARCH,GEANY_KEYS_INSIGHT_SELECTIONSEARCHFORWARD);AT(second,second+5);keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_GOTO_BACK);AT(0,0);
  reset(content,2,2);action("forward");AT(second,second+5);action("backward");AT(5,0);action("backward");AT(last+5,last);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(window,"insight-file-search-wrap")),FALSE);select_at(last,last+5);action("forward");AT(last,last+5);action("forward");AT(last,last+5);
  reset(content,0,5);action("load");gtk_widget_grab_focus(GTK_WIDGET(sci));keybindings_send_command(GEANY_KEY_GROUP_SEARCH,GEANY_KEYS_SEARCH_FINDNEXT);gint alphabet=strstr(content,"alphabet")-content;AT(alphabet,alphabet+5);
@@ -87,6 +87,7 @@ static gboolean step(gpointer data) {
  select_at(5,5);keybindings_send_command(GEANY_KEY_GROUP_SEARCH,GEANY_KEYS_SEARCH_FIND);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(window,"insight-file-search-query"))),==,"~a\\.b");
  gtk_widget_grab_focus(GTK_WIDGET(sci));keybindings_send_command(GEANY_KEY_GROUP_SEARCH,GEANY_KEYS_SEARCH_REPLACE);GtkWidget *replace=replace_dialog();g_assert_nonnull(replace);GtkWidget *find_combo=ui_lookup_widget(replace,"entry_find");g_assert_true(GTK_IS_COMBO_BOX(find_combo));g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(gtk_bin_get_child(GTK_BIN(find_combo)))),==,"~a.b");gtk_dialog_response(GTK_DIALOG(replace),GTK_RESPONSE_CANCEL);
 
+ gchar *long_word=g_strnfill(2000,'z'),*long_text=g_strconcat(long_word," ",long_word,NULL);reset(long_text,0,2000);action("load");g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(window,"insight-file-search-query"))),==,long_word);gtk_widget_grab_focus(GTK_WIDGET(sci));keybindings_send_command(GEANY_KEY_GROUP_SEARCH,GEANY_KEYS_SEARCH_FINDNEXT);AT(2001,4001);g_free(long_text);g_free(long_word);
  reset(content,5,0);action("load");AT(5,0);action("forward");AT(second,second+5);
  reset(content,0,0);action("load");AT(0,0);
  reset(content,6,6);action("forward");gint greek=strrchr(content,'\n')-content;(void)greek;gint greek_second=strstr(content,"ALPHA αβ")-content+6;AT(greek_second,greek_second+4);
@@ -105,6 +106,7 @@ static gboolean step(gpointer data) {
  reset("",0,0);SEND(sci,SCI_ADDTEXT,3,(sptr_t)"a\0b");select_at(0,1);action("all");g_assert_null(dialog());
  gchar *large=g_strnfill(4097,'x');reset(large,0,4097);action("load");action("all");g_assert_null(dialog());g_free(large);
  reset("a\nb",0,3);action("load");action("all");g_assert_null(dialog());
+ large=g_strnfill(8*1024*1024+1,'x');reset(large,0,1);g_free(large);action("load");action("all");g_assert_null(dialog());AT(0,1);
  GString *many=g_string_new(NULL);for(guint i=0;i<5010;i++) g_string_append(many,"x\n");reset(many->str,0,1);list(8);g_string_free(many,TRUE);
  reset(content,0,5);gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-ru")),TRUE);list(9);gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-en")),TRUE);
  GtkWidget *entry=gtk_entry_new();gtk_box_pack_start(GTK_BOX(ui_lookup_widget(window,"vbox1")),entry,FALSE,FALSE,0);gtk_widget_show(entry);gtk_widget_grab_focus(entry);keybindings_send_command(GEANY_KEY_GROUP_SEARCH,GEANY_KEYS_INSIGHT_SELECTIONSEARCHFORWARD);AT(0,5);gtk_widget_destroy(entry);

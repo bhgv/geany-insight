@@ -44,8 +44,8 @@ rows on the clipboard as tab-separated line/column/text, bounded to 1 MiB.
 
 Limits: valid UTF-8 without NUL, document up to 8 MiB, single-line nonempty pattern
 up to 4096 bytes, one normal selection without virtual positions or partial
-UTF-8/CRLF boundaries. Invalid nonempty selections never silently fall back to a
-word. Leading selected punctuation/whitespace scans at most 4096 characters for
+UTF-8/CRLF boundaries. Load and Find All reject invalid nonempty selections instead of silently falling
+back to a word. Leading selected punctuation/whitespace scans at most 4096 characters for
 word commands. The list contains the first 5000 nonoverlapping literal matches;
 its counter explicitly reports truncation, not a full total. No regular-expression,
 fuzzy, semantic reference, cross-document or persisted result-list behavior is

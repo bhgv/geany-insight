@@ -1100,7 +1100,6 @@ void search_show_find_in_files_dialog_full(const gchar *text, const gchar *dir)
 		gtk_widget_show_all(fif_dlg.dialog);
 		if (doc && !text)
 			sel = editor_get_default_selection(doc->editor, search_prefs.use_current_word, NULL);
-    if (insight_selection_search_owns_pattern()) { g_free(sel);sel=g_strdup(search_data.original_text); }
 	}
 	stash_group_display(fif_prefs, fif_dlg.dialog);
 
@@ -1108,7 +1107,6 @@ void search_show_find_in_files_dialog_full(const gchar *text, const gchar *dir)
 	{
 		if (doc && ! sel)
 			sel = editor_get_default_selection(doc->editor, search_prefs.use_current_word, NULL);
-    if (insight_selection_search_owns_pattern()) { g_free(sel);sel=g_strdup(search_data.original_text); }
 		text = sel;
 	}
 	entry = gtk_bin_get_child(GTK_BIN(fif_dlg.search_combo));
