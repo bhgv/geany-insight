@@ -118,9 +118,20 @@ static void go_match(GeanyDocument *doc,const QuickMatch *match,gboolean backwar
     SEND(sci,SCI_SETSEL,backwards ? match->end:match->begin,backwards ? match->begin:match->end);
     SEND(sci,SCI_CHOOSECARETX,0,0);SEND(sci,SCI_ENSUREVISIBLE,sci_get_line_from_position(sci,match->begin),0);SEND(sci,SCI_SCROLLCARET,0,0);gtk_widget_grab_focus(GTK_WIDGET(sci));
 }
+gboolean insight_selection_search_owns_pattern(void)
+{
+    return owned_pattern && !g_strcmp0(search_data.text,owned_pattern) && search_data.flags==owned_flags;
+}
+gboolean insight_selection_search_show_loaded(void)
+{
+    if(!document_get_current() || !insight_selection_search_owns_pattern()) return FALSE;
+    GtkWidget *entry=named(main_widgets.window,"insight-file-search-query"),*row=named(main_widgets.window,"insight-editor-search-panel");
+    if(!entry || !row) return FALSE;
+    gtk_widget_show(row);gtk_widget_grab_focus(entry);gtk_editable_select_region(GTK_EDITABLE(entry),0,-1);return TRUE;
+}
 gboolean insight_selection_search_find_again(gboolean change_direction)
 {
-    if(!owned_pattern || g_strcmp0(search_data.text,owned_pattern) || search_data.flags!=owned_flags) return FALSE;
+    if(!insight_selection_search_owns_pattern()) return FALSE;
     QuickSource source={0};if(!capture(&source)) return TRUE;
     gboolean backwards=change_direction ? !search_data.backwards:search_data.backwards;
     gint first=MIN(source.anchor,source.caret),last=MAX(source.anchor,source.caret);

@@ -576,6 +576,7 @@ static void set_dialog_position(GtkWidget *dialog, gint *position)
 
 void search_show_find_dialog(void)
 {
+    if (insight_selection_search_show_loaded()) return;
 	if (insight_workbench_show_file_search()) return;
 	GeanyDocument *doc = document_get_current();
 	gchar *sel = NULL;
@@ -583,6 +584,7 @@ void search_show_find_dialog(void)
 	g_return_if_fail(doc != NULL);
 
 	sel = editor_get_default_selection(doc->editor, search_prefs.use_current_word, NULL);
+    if (insight_selection_search_owns_pattern()) { g_free(sel);sel=g_strdup(search_data.original_text); }
 
 	if (find_dlg.dialog == NULL)
 	{
@@ -775,6 +777,7 @@ void search_show_replace_dialog(void)
 		return;
 
 	sel = editor_get_default_selection(doc->editor, search_prefs.use_current_word, NULL);
+    if (insight_selection_search_owns_pattern()) { g_free(sel);sel=g_strdup(search_data.original_text); }
 
 	if (replace_dlg.dialog == NULL)
 	{
@@ -1097,6 +1100,7 @@ void search_show_find_in_files_dialog_full(const gchar *text, const gchar *dir)
 		gtk_widget_show_all(fif_dlg.dialog);
 		if (doc && !text)
 			sel = editor_get_default_selection(doc->editor, search_prefs.use_current_word, NULL);
+    if (insight_selection_search_owns_pattern()) { g_free(sel);sel=g_strdup(search_data.original_text); }
 	}
 	stash_group_display(fif_prefs, fif_dlg.dialog);
 
@@ -1104,6 +1108,7 @@ void search_show_find_in_files_dialog_full(const gchar *text, const gchar *dir)
 	{
 		if (doc && ! sel)
 			sel = editor_get_default_selection(doc->editor, search_prefs.use_current_word, NULL);
+    if (insight_selection_search_owns_pattern()) { g_free(sel);sel=g_strdup(search_data.original_text); }
 		text = sel;
 	}
 	entry = gtk_bin_get_child(GTK_BIN(fif_dlg.search_combo));

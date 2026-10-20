@@ -72,6 +72,7 @@ static gboolean respond(gpointer data) {
  }
  return G_SOURCE_CONTINUE;
 }
+static GtkWidget *replace_dialog(void) { GList *windows=gtk_window_list_toplevels();GtkWidget *found=NULL;for(GList *p=windows;p;p=p->next) if(!g_strcmp0(gtk_window_get_title(GTK_WINDOW(p->data)),"Replace")) { found=p->data;break; }g_list_free(windows);return found; }
 static void list(guint which) { mode=which;tick=0;g_timeout_add(120,respond,NULL);action("all"); }
 static gboolean step(gpointer data) {
  (void)data;source=document_get_current();if(!source) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));ScintillaObject *sci=source->editor->sci;gint second=strstr(content,"alpha\r")-content,last=strstr(content,"alpha ~")-content;
@@ -82,6 +83,9 @@ static gboolean step(gpointer data) {
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(window,"insight-file-search-wrap")),FALSE);select_at(last,last+5);action("forward");AT(last,last+5);action("forward");AT(last,last+5);
  reset(content,0,5);action("load");gtk_widget_grab_focus(GTK_WIDGET(sci));keybindings_send_command(GEANY_KEY_GROUP_SEARCH,GEANY_KEYS_SEARCH_FINDNEXT);gint alphabet=strstr(content,"alphabet")-content;AT(alphabet,alphabet+5);
  reset("~a.b ~axb ~a.b",0,4);action("load");keybindings_send_command(GEANY_KEY_GROUP_SEARCH,GEANY_KEYS_SEARCH_FINDNEXT);AT(10,14);text_is("~a.b ~axb ~a.b");
+ select_at(5,5);keybindings_send_command(GEANY_KEY_GROUP_SEARCH,GEANY_KEYS_SEARCH_FIND);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(window,"insight-file-search-query"))),==,"~a\\.b");
+ gtk_widget_grab_focus(GTK_WIDGET(sci));keybindings_send_command(GEANY_KEY_GROUP_SEARCH,GEANY_KEYS_SEARCH_REPLACE);GtkWidget *replace=replace_dialog();g_assert_nonnull(replace);GtkWidget *find_combo=ui_lookup_widget(replace,"entry_find");g_assert_true(GTK_IS_COMBO_BOX(find_combo));g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(gtk_bin_get_child(GTK_BIN(find_combo)))),==,"~a.b");gtk_dialog_response(GTK_DIALOG(replace),GTK_RESPONSE_CANCEL);
+
  reset(content,5,0);action("load");AT(5,0);action("forward");AT(second,second+5);
  reset(content,0,0);action("load");AT(0,0);
  reset(content,6,6);action("forward");gint greek=strrchr(content,'\n')-content;(void)greek;gint greek_second=strstr(content,"ALPHA αβ")-content+6;AT(greek_second,greek_second+4);
