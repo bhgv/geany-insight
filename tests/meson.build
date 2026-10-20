@@ -802,3 +802,9 @@ test('Insight native delimiter navigation and enclosing pairs GUI', delimiter_na
 
 selection_search_gui_test = executable('test_insight_selection_search_gui', '../insight/tests/selection_search_gui_test.c', dependencies: test_deps)
 test('Insight native selection search and match list GUI', selection_search_gui_test, timeout: 50, is_parallel: false)
+
+repeat_typing_test = executable('test_insight_repeat_typing', '../insight/tests/repeat_typing_test.c', '../insight/core/repeat_typing.c', include_directories: include_directories('../insight/core'), c_args: ['-UNDEBUG'])
+test('Insight literal typing repetition plans', repeat_typing_test)
+
+typing_replay_gui_test = executable('test_insight_typing_replay_gui', '../insight/tests/typing_replay_gui_test.c', dependencies: test_deps)
+test('Insight native typing replay and history GUI', typing_replay_gui_test, timeout: 55, is_parallel: false)
