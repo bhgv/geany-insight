@@ -63,6 +63,9 @@ static gboolean step(gpointer data) {
  }
  if(phase==4 || phase==5) { GtkTreeModel *results=gtk_tree_view_get_model(GTK_TREE_VIEW(named(window,"insight-search-results")));if(gtk_tree_model_iter_n_children(results,NULL)!=2) return G_SOURCE_CONTINUE;GtkTreeIter first_iter;gulong first_line=0;gtk_tree_model_get_iter_first(results,&first_iter);gtk_tree_model_get(results,&first_iter,2,&first_line,-1);if(first_line!=(phase==4 ? 1 : 2)) return G_SOURCE_CONTINUE;if(phase==4) { phase++;invoke_command(1);return G_SOURCE_CONTINUE; }invoke_command(2);invoke_command(3);
   GtkTreePath *first=gtk_tree_path_new_from_indices(0,-1);gtk_tree_view_row_activated(GTK_TREE_VIEW(named(window,"insight-search-results")),first,gtk_tree_view_get_column(GTK_TREE_VIEW(named(window,"insight-search-results")),0));gtk_tree_path_free(first);g_assert_cmpint(sci_get_current_line(doc->editor->sci),==,1);
+  phase=6;return G_SOURCE_CONTINUE;
+ }
+ if(phase==6) {
   graph_shortcuts(doc);gchar *text=sci_get_contents(doc->editor->sci,-1);g_assert_cmpstr(text,==,source);g_free(text);g_assert_false(doc->changed);g_print("Unified File Search and File Symbols: native hierarchy, one page/query, F3 directions, wrap, caret-only, incremental, details mode, independent persistent search dialogs, result navigation and graph window shortcut routing passed.\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }return G_SOURCE_CONTINUE;
 }
