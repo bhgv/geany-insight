@@ -69,3 +69,13 @@ claimed for this window. Existing project/file search tools cover other scopes.
 References: [Load Search String](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Load_Search_String.htm),
 [Search Forward for Selection](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Search_Forward_for_Selection.htm),
 [Search Backward for Selection](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Search_Backward_for_Selection.htm).
+
+![Native Selection Matches dialog](media/selection-search.jpg)
+
+Actual production dialog from an isolated native Linux GUI fixture in the
+successful 52-test run, not a mockup. The example uses UTF-8/CRLF and demonstrates
+that exact-selection matching includes alphabet unless Whole word is enabled.
+
+Настоящее окно из изолированного нативного GUI-теста Linux, прошедшего в составе
+52 проверок; это не макет. Пример UTF-8/CRLF показывает буквальные совпадения внутри
+alphabet при отключённом параметре «Целое слово».
