@@ -104,11 +104,23 @@ rejected by layout loading; invalid session groups fall back to separate windows
 
 Grouping covers Project Files, Project Symbols, Folders, Relations, Symbol
 Categories, File Types, Bookmarks and Clips. File Symbols, Context, Window List
-and the whole Project Window group remain separate. This increment uses the group
-menu; dragging panels between windows is not yet provided.
+and the whole Project Window group remain separate. The group menu and header drag handle both support moving a panel between windows.
 
 Native Linux application captured during the group/restart scenario:
 
 ![Floating project panel group](../media/panel-groups.jpg)
 
 ![Group and separate](../media/panel-groups.svg)
+
+### Drag panels between windows
+
+Drag the grid handle at the left of a floating project panel's header onto another
+project panel header. The destination highlights while it can accept a panel. A
+docked destination floats automatically. Dragging moves the selected panel alone;
+other tabs stay in their original window. Native tab dragging reorders tabs inside
+a group. This action groups tabs; it does not snap a window to an arbitrary editor
+edge. Only the eight project panels and drags from this application are accepted.
+
+The optional Linux physical-pointer regression uses xdotool (`GEANY_TEST_DRAG=1`)
+to combine separate windows, add to a group and extract onto a docked destination,
+then checks persisted order/active tab and a complete restart.

@@ -76,7 +76,7 @@
 
 typedef struct { gchar *path; GDir *dir; } ScanFrame;
 static void frame_free(gpointer data) { ScanFrame *p=data; if(p->dir) g_dir_close(p->dir); g_free(p->path); g_free(p); }
-typedef struct { GtkWidget *page,*home,*window,*dock_button,*maximize_button,*minimize_button,*tray_button,*opacity_button,*group_button,*ungroup_item; gchar *label; guint order; gboolean pane,restore,visible,maximized,minimized; gint x,y,width,height,opacity,saved_group,saved_group_order,saved_group_active; } PanelHost;
+typedef struct { GtkWidget *page,*home,*window,*dock_button,*maximize_button,*minimize_button,*tray_button,*opacity_button,*group_button,*ungroup_item,*drag_handle,*drag_target; gchar *label; guint order; gboolean pane,restore,visible,maximized,minimized; gint x,y,width,height,opacity,saved_group,saved_group_order,saved_group_active; } PanelHost;
 typedef struct { GtkWidget *view,*entry,*status,*more; GtkTreeStore *store; gboolean symbols,setting; guint limit,shown,total,timer; } GroupedPanel;
 typedef struct { gchar *path; guint id; gulong line; } Location;
 static void location_free(gpointer data) { Location *p=data; g_free(p->path); g_free(p); }
@@ -3891,6 +3891,7 @@ static void panel_controls_update(PanelHost *host) {
  gtk_widget_set_sensitive(host->maximize_button,floating);
  if(host->minimize_button) gtk_widget_set_sensitive(host->minimize_button,floating);
  if(host->group_button) gtk_widget_set_visible(host->group_button,floating);
+ if(host->drag_handle) gtk_widget_set_visible(host->drag_handle,floating);
  if(host->ungroup_item) gtk_widget_set_sensitive(host->ungroup_item,floating && panel_window_count(host->window)>1);
  if(host->opacity_button) { gtk_widget_set_visible(host->opacity_button,floating && wb.transparent_panels);gchar *tip=insight_i18n_printf("Floating panel opacity: %d%%",host->opacity);gtk_widget_set_tooltip_text(host->opacity_button,tip);g_free(tip); }
  if(host->window) gtk_widget_set_opacity(host->window,wb.transparent_panels ? host->opacity/100.0 : 1.0);
@@ -4053,6 +4054,34 @@ static void panel_groups_apply(const InsightLayout *record) {
 }
 static void panel_group_command(GtkMenuItem *item,gpointer data) { (void)item;guint pair=GPOINTER_TO_UINT(data);panel_group_join(pair/16,pair%16); }
 static void panel_ungroup_command(GtkMenuItem *item,gpointer data) { (void)item;guint index=GPOINTER_TO_UINT(data);if(index>=8 || panel_window_count(wb.hosts[index].window)<2) return;dock_panel(index);detach_panel(index); }
+typedef struct { guint source,target;guint64 epoch; } PanelDrop;
+static gboolean panel_drop_apply(gpointer data) {
+ PanelDrop *drop=data;if(wb.alive && drop->epoch==workbench_epoch) panel_group_join(drop->source,drop->target);return G_SOURCE_REMOVE;
+}
+static void panel_drag_data(GtkWidget *widget,GdkDragContext *context,GtkSelectionData *selection,guint info,guint time,gpointer data) {
+ (void)widget;(void)context;(void)info;(void)time;guchar index=(guchar)GPOINTER_TO_UINT(data);
+ gtk_selection_data_set(selection,gdk_atom_intern_static_string("application/x-geany-insight-panel"),8,&index,1);
+}
+static void panel_drag_received(GtkWidget *widget,GdkDragContext *context,gint x,gint y,GtkSelectionData *selection,guint info,guint time,gpointer data) {
+ (void)widget;(void)x;(void)y;(void)info;guint target=GPOINTER_TO_UINT(data);const guchar *bytes=gtk_selection_data_get_data(selection);gboolean valid=FALSE;guint source=8;
+ if(wb.alive && target<8 && gtk_selection_data_get_length(selection)==1 && gtk_selection_data_get_format(selection)==8 && gtk_selection_data_get_data_type(selection)==gdk_atom_intern_static_string("application/x-geany-insight-panel") && bytes) {
+  source=bytes[0];valid=source<8 && source!=target && wb.hosts[source].window && gtk_drag_get_source_widget(context)==wb.hosts[source].drag_handle;
+ }
+ gtk_drag_finish(context,valid,FALSE,time);
+ if(valid) { PanelDrop *drop=g_new(PanelDrop,1);*drop=(PanelDrop){source,target,workbench_epoch};g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,panel_drop_apply,drop,g_free); }
+}
+static void panel_drag_attach(guint index,GtkWidget *header) {
+ if(index>=8) return;
+ PanelHost *host=&wb.hosts[index];GtkTargetEntry targets[]={{"application/x-geany-insight-panel",GTK_TARGET_SAME_APP,0}};
+ host->drag_handle=gtk_event_box_new();gtk_widget_set_name(host->drag_handle,"insight-panel-drag-handle");gtk_widget_set_no_show_all(host->drag_handle,TRUE);gtk_widget_set_size_request(host->drag_handle,22,22);gtk_widget_set_tooltip_text(host->drag_handle,"Drag this panel onto a project panel header");
+ GtkWidget *image=gtk_image_new_from_icon_name("view-grid-symbolic",GTK_ICON_SIZE_MENU);gtk_container_add(GTK_CONTAINER(host->drag_handle),image);gtk_widget_show(image);gtk_box_pack_start(GTK_BOX(header),host->drag_handle,FALSE,FALSE,0);
+ gtk_drag_source_set(host->drag_handle,GDK_BUTTON1_MASK,targets,G_N_ELEMENTS(targets),GDK_ACTION_MOVE);gtk_drag_source_set_icon_name(host->drag_handle,"tab-new-symbolic");g_signal_connect(host->drag_handle,"drag-data-get",G_CALLBACK(panel_drag_data),GUINT_TO_POINTER(index));
+ host->drag_target=gtk_event_box_new();gtk_event_box_set_visible_window(GTK_EVENT_BOX(host->drag_target),TRUE);gtk_widget_set_name(host->drag_target,"insight-panel-drag-target");
+ g_object_ref(header);gtk_container_remove(GTK_CONTAINER(host->page),header);gtk_container_add(GTK_CONTAINER(host->drag_target),header);g_object_unref(header);gtk_box_pack_start(GTK_BOX(host->page),host->drag_target,FALSE,FALSE,0);gtk_box_reorder_child(GTK_BOX(host->page),host->drag_target,0);
+ gtk_drag_dest_set(host->drag_target,GTK_DEST_DEFAULT_ALL,targets,G_N_ELEMENTS(targets),GDK_ACTION_MOVE);g_signal_connect(host->drag_target,"drag-data-received",G_CALLBACK(panel_drag_received),GUINT_TO_POINTER(index));
+ GtkCssProvider *style=gtk_css_provider_new();gtk_css_provider_load_from_data(style,"#insight-panel-drag-target:drop(active) { background-color: @theme_selected_bg_color; }",-1,NULL);gtk_style_context_add_provider(gtk_widget_get_style_context(host->drag_target),GTK_STYLE_PROVIDER(style),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);g_object_unref(style);
+ gtk_widget_show_all(host->drag_target);
+}
 static void panel_controls_attach(guint index) {
  PanelHost *host=&wb.hosts[index];GtkWidget *header=NULL;
  GList *children=gtk_container_get_children(GTK_CONTAINER(host->page));
@@ -4075,7 +4104,7 @@ static void panel_controls_attach(guint index) {
   for(guint target=0;target<8;target++) if(target!=index) { GtkWidget *item=gtk_menu_item_new_with_label(wb.hosts[target].label);gchar *name=g_strdup_printf("insight-panel-group-with-%u",target);gtk_widget_set_name(item,name);g_free(name);g_signal_connect(item,"activate",G_CALLBACK(panel_group_command),GUINT_TO_POINTER(index*16+target));gtk_menu_shell_append(GTK_MENU_SHELL(menu),item); }
   host->ungroup_item=gtk_menu_item_new_with_label("Float this panel separately");gtk_widget_set_name(host->ungroup_item,"insight-panel-ungroup");g_signal_connect(host->ungroup_item,"activate",G_CALLBACK(panel_ungroup_command),GUINT_TO_POINTER(index));gtk_menu_shell_append(GTK_MENU_SHELL(menu),host->ungroup_item);gtk_widget_show_all(menu);
  }
- panel_controls_update(host);gtk_widget_show_all(header);
+ panel_drag_attach(index,header);panel_controls_update(host);gtk_widget_show_all(header);
 }
 static void float_panel_command(GtkMenuItem *item,gpointer data) { (void)item; detach_panel(GPOINTER_TO_UINT(data)); }
 static void dock_panels_command(GtkMenuItem *item,gpointer data) { (void)item; (void)data; dock_all_panels(); }

@@ -716,3 +716,5 @@ test('Insight individual panel layout geometry and restart GUI', panel_state_gui
 
 panel_groups_gui_test = executable('test_insight_panel_groups_gui', '../insight/tests/panel_groups_gui_test.c', dependencies: test_deps)
 test('Insight floating panel groups and restart GUI', panel_groups_gui_test, timeout: 65, is_parallel: false)
+
+test('Insight physical panel drag and restart GUI', panel_groups_gui_test, env: ['GEANY_TEST_DRAG=1'], timeout: 65, is_parallel: false)

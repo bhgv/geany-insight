@@ -16,7 +16,7 @@
 | Context снизу | Цветной Scintilla, номера строк, центрирование, подчёркнутые ссылки с курсором-пальцем и обычным кликом, история, поиск | Подробная проверка GUI на целевых ОС |
 | Relation Window | Определения/объявления, прямые члены scope, прямые/транзитивные Base/Derived и наследуемые члены по однозначным тегам, лексические ссылки, Calls текущей функции и Call sites проекта, Follow symbol / enclosing function, граф одного уровня с масштабом и двумя ориентациями, ленивое tag-дерево и раскрываемый граф с историей веток и пределами, scoped nominal aliases корней/баз/членов | Семантические вызовы/вызывающие функции, полные типы/перегрузки и include semantics, многоуровневые вызовы/ссылки |
 | Overview Scroller | Цветная миниатюра файла, видимая область/выделение, прокрутка мышью и колесом, масштаб/ширина, сохранение параметров, отметки закладок и изменённых/сохранённых строк, переходы по блокам правок, текущая/все функции с фоновыми лексическими границами; проверен GUI Linux | Семантические диапазоны и дополнительные языки за пределами brace/Python/Lua |
-| Панели | Десять отдельных float/dock, кнопки управления окном, Tab Tray и сохранение геометрии/состояния | Произвольное перетаскивание и snap-to-edge |
+| Панели | Десять float/dock, кнопки управления, Tab Tray; восемь проектных панелей объединяются в группы с вкладками через меню и перенос заголовка; состав/порядок/активная вкладка сохраняются | Произвольное закрепление у границ и группы с File Symbols/Context/Window List |
 | Symbol Info | Отдельное окно: кандидаты, сведения тегов, цветной исходник, Jump с проверкой снимка, References, Leave file open и копирование, размер завершённых функций и именованных определений C-семейства/Python, nominal-типы aliases из снимка, устойчивый Refresh и RU/EN GUI | Размеры остальных символов/синтаксисов и типы произвольных выражений; сложность не подтверждена как требование команды Symbol Info |
 | Window List | Немодальный список открытых буферов, поиск, MRU/имя/путь, ближайший символ, Context, Activate/Save/Close, сохранение геометрии/фильтра/сортировки/колонок; закрепление в sidebar и видимость/docking/геометрия в A–D, миграция раскладок; проверен GUI Linux | Перетаскивание, snap-to-edge |
 | Раскладки A–D и файлы | Пользовательские снимки с геометрией десяти панелей, Tab Tray, Window List; сохранение/загрузка дополнительных файлов | Детальная сверка всех параметров окон |
@@ -586,3 +586,20 @@ three-panel join, extraction, partial dock, close, opacity/tray, order/active pa
 layout loading and full restart. File Symbols/Context/Window List are outside the
 initial group scope; cross-window dragging is not part of this increment.
 Reference: [Grouping Panel Windows](https://www.sourceinsight.com/doc/v4/userguide/Manual/Window_Tour/Grouping_Panel_Windows.htm).
+
+### Physical header drag between floating panel groups (2026-10-20)
+
+Floating project headers expose a grid drag handle. Drops on project headers use
+an application-only MIME target, validate source widget identity and payload, then
+apply the move after the GTK drag finishes. The target header highlights; docked
+targets float automatically and source-group siblings stay in place. Tabs are
+natively reorderable inside the notebook. A separate optional xdotool regression
+sends real press/motion/release events across two windows, into an existing group
+and onto a docked destination, then runs the group layout/restart assertions.
+Arbitrary edge docking and grouping nonproject panels remain outside this scope.
+
+The physical-pointer scenario also checks extraction from an existing group onto a
+docked header and successful automatic floating of that destination. A third
+process injects a broken session group link and verifies independent minimized
+windows, separate tray entries and Restore all. Linux native build, group GUI and
+strict UBSan layout validation pass; Windows/Android were not run for this series.
