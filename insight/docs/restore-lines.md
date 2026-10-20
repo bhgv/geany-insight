@@ -66,3 +66,15 @@ This entry is in the normal editor popup, not a dedicated revision-margin popup.
 При открытии обновляются доступность и подписи пользовательских сочетаний клавиш.
 Для прямоугольного/множественного выделения восстановление недоступно, просмотр
 исходного текста остаётся доступным. Это обычное меню редактора.
+
+Original Contents copies the decoded UTF-8 text; source encoding and BOM metadata are not copied.
+Исходное содержимое — декодированный текст UTF-8; метаданные исходной кодировки и BOM не копируются.
+
+![Native Restore Lines dialog / Окно восстановления строк](media/restore-lines.jpg)
+
+Real production dialog from an isolated native Linux GUI test fixture, captured
+in the successful 48-test run; this is not a mockup. The fixture deliberately uses
+a small UTF-8/CRLF example.
+
+Настоящее окно из изолированного нативного GUI-теста Linux, прошедшего в составе
+48 проверок; это не макет. Пример использует короткий текст UTF-8 с CRLF.
