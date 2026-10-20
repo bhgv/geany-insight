@@ -643,3 +643,7 @@ Edit → Calculation adds Calculate Selection and a multiline calculator with ex
 ### Viewport-only scrolling (2026-10-20)
 
 Six Window scrolling commands preserve all selections and caret, including read-only and unsupported editing selection modes. Display-row vertical steps support folded/wrapped text; horizontal steps use tab width × default-font space width. Native limits apply. No default shortcuts are reassigned. [RU/EN guide and SVG](window-scrolling.md). Native Linux regression added; execution pending.
+
+### Visible window edges (2026-10-20)
+
+Top/Bottom of Window maps visible display rows to logical line beginnings, including folds, EOF clamping and wrapped logical lines. Extend Mode preserves the anchor; one normal selection is required and read-only is permitted. Partly visible bottom rows are excluded; preferred columns are not retained. Regression added for reverse/Extend selections, fold mapping and unsupported selection guards; Linux execution pending.

@@ -15,3 +15,18 @@ No default shortcuts override Geany navigation or document switching.
 не меняются; команды доступны в режиме только чтения.
 
 Reference: [Source Insight scrolling commands](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Scrolling_Commands.htm).
+
+Top/Bottom of Window moves to the beginning of the first/last fully visible
+logical line (one line minimum), bounded to EOF. Folded display rows are mapped
+back to document lines. Wrapped rows target their logical line beginning, which
+can scroll the view to that beginning. Extend Mode retains the anchor. These two
+commands require one normal selection; read-only is allowed. A partially visible
+bottom row is excluded. No preferred visual column is retained.
+
+Верх/Низ окна перемещают курсор к началу первой/последней полностью видимой
+логической строки. Extend Mode сохраняет anchor. Свёрнутые строки учитываются;
+при переносе строки используется начало её логической строки. Эти два перехода
+требуют одного обычного выделения; режим только чтения допускается.
+
+References: [Top of Window](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Top_of_Window.htm),
+[Bottom of Window](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Bottom_of_Window.htm).

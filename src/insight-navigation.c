@@ -217,7 +217,20 @@ static void viewport_command(GtkMenuItem *item, gpointer data)
     if (!doc || !doc->is_valid) return;
     ScintillaObject *sci = doc->editor->sci;
     gint action = GPOINTER_TO_INT(data);
-    if (action < 4)
+    if (action >= 6)
+    {
+        if (!normal(sci)) return;
+        gint display = SEND(sci, SCI_GETFIRSTVISIBLELINE, 0, 0);
+        if (action == 7) display += MAX(1, SEND(sci, SCI_LINESONSCREEN, 0, 0)) - 1;
+        gint last = sci_get_line_count(sci) - 1;
+        gint final_display = SEND(sci, SCI_VISIBLEFROMDOCLINE, last, 0) +
+            MAX(1, SEND(sci, SCI_WRAPCOUNT, last, 0)) - 1;
+        gint line = SEND(sci, SCI_DOCLINEFROMVISIBLE, MIN(display, final_display), 0);
+        /* Wrapped rows share a logical line. Use its beginning consistently;
+         * never interpret a display-row number as a document-line number. */
+        move_to(sci, sci_get_position_from_line(sci, CLAMP(line, 0, last)));
+    }
+    else if (action < 4)
     {
         gint rows = action < 2 ? 1 : MAX(1, SEND(sci, SCI_LINESONSCREEN, 0, 0) / 2);
         SEND(sci, SCI_LINESCROLL, 0, action % 2 ? rows : -rows);
@@ -238,7 +251,8 @@ static void viewport_menu_show(GtkWidget *menu, gpointer data)
     GList *children = gtk_container_get_children(GTK_CONTAINER(menu));
     for (GList *p = children; p; p = p->next)
         if (g_object_get_data(G_OBJECT(p->data), "insight-viewport-command"))
-            gtk_widget_set_sensitive(p->data, doc && doc->is_valid);
+            gtk_widget_set_sensitive(p->data, doc && doc->is_valid &&
+                (!g_object_get_data(G_OBJECT(p->data), "insight-viewport-edge") || normal(doc->editor->sci)));
     g_list_free(children);
 }
 static void viewport_menu(GtkWidget *menu)
@@ -247,13 +261,15 @@ static void viewport_menu(GtkWidget *menu)
     GtkWidget *sub = gtk_menu_new();
     gtk_widget_set_name(parent, "insight-window-scrolling");
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(parent), sub);
-    const gchar *labels[] = {"Scroll Line Up", "Scroll Line Down", "Scroll Half Page Up", "Scroll Half Page Down", "Scroll Left", "Scroll Right"};
-    const gchar *ids[] = {"scroll-line-up", "scroll-line-down", "scroll-half-up", "scroll-half-down", "scroll-left", "scroll-right"};
+    const gchar *labels[] = {"Scroll Line Up", "Scroll Line Down", "Scroll Half Page Up", "Scroll Half Page Down", "Scroll Left", "Scroll Right", "Top of Window", "Bottom of Window"};
+    const gchar *ids[] = {"scroll-line-up", "scroll-line-down", "scroll-half-up", "scroll-half-down", "scroll-left", "scroll-right", "window-top", "window-bottom"};
     for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
     {
+        if (i == 6) gtk_menu_shell_append(GTK_MENU_SHELL(sub), gtk_separator_menu_item_new());
         GtkWidget *entry = gtk_menu_item_new_with_label(labels[i]);
         gchar *name = g_strconcat("insight-nav-", ids[i], NULL);
         gtk_widget_set_name(entry, name);g_free(name);
+        if (i >= 6) g_object_set_data(G_OBJECT(entry), "insight-viewport-edge", GINT_TO_POINTER(1));
         g_object_set_data(G_OBJECT(entry), "insight-viewport-command", GINT_TO_POINTER(1));
         g_signal_connect(entry, "activate", G_CALLBACK(viewport_command), GINT_TO_POINTER(i));
         gtk_menu_shell_append(GTK_MENU_SHELL(sub), entry);
