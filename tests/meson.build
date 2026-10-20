@@ -757,3 +757,8 @@ line_insert_test = executable('test_insight_line_insert', '../insight/tests/line
 test('Insight line insertion plans', line_insert_test)
 line_insert_gui_test = executable('test_insight_line_insert_gui', '../insight/tests/line_insert_gui_test.c', dependencies: test_deps)
 test('Insight native line insertion commands and preview GUI', line_insert_gui_test, timeout: 40, is_parallel: false)
+
+text_boundary_test = executable('test_insight_text_boundary', '../insight/tests/text_boundary_test.c', '../insight/desktop/text_boundary.c', include_directories: include_directories('../insight/desktop'), dependencies: deps, c_args: ['-UNDEBUG'])
+test('Insight smart line and sentence text boundaries', text_boundary_test)
+text_boundary_gui_test = executable('test_insight_text_boundary_gui', '../insight/tests/text_boundary_gui_test.c', dependencies: test_deps)
+test('Insight native smart edges sentence and word fragments GUI', text_boundary_gui_test, timeout: 40, is_parallel: false)

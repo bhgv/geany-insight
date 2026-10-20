@@ -957,3 +957,16 @@ Line insertion is limited to 8 MiB|||Вставка строк ограниче�
 Line insertion requires text without NUL bytes|||Вставка строк требует текст без байтов NUL
 Line insertion would exceed 8 MiB|||Вставка строки превысит 8 МиБ
 Line insertion requires UTF-8 up to 8 MiB and positions outside UTF-8 characters and CRLF pairs|||Вставка строк требует UTF-8 до 8 МиБ и позиций вне символов UTF-8 и пар CRLF
+Text boundaries|||Границы текста
+Text Boundaries Help|||Справка о границах текста
+Smart Beginning of Line|||Умное начало строки
+Smart End of Line|||Умный конец строки
+Select Sentence|||Выделить до точки
+Select To Smart Beginning of Line|||Выделить до умного начала строки
+Select To Smart End of Line|||Выделить до умного конца строки
+Word Fragment Left|||Фрагмент слова влево
+Word Fragment Right|||Фрагмент слова вправо
+Select Word Fragment Left|||Выделить фрагмент слова влево
+Select Word Fragment Right|||Выделить фрагмент слова вправо
+Text boundary commands are limited to 8 MiB|||Команды границ текста ограничены 8 МиБ
+Text boundaries require UTF-8 without NUL up to 8 MiB and a valid character/EOL position|||Границы текста требуют UTF-8 без NUL до 8 МиБ и корректной позиции символа/окончания строки

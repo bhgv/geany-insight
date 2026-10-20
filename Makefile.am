@@ -469,3 +469,7 @@ dist_insightdocmedia_DATA += insight/docs/media/paragraph-tools.jpg insight/docs
 EXTRA_DIST += insight/tests/line_insert_test.c insight/tests/line_insert_gui_test.c insight/desktop/line_insert.h
 insightdoc_DATA += insight/docs/line-insertion.md
 dist_insightdocmedia_DATA += insight/docs/media/line-insertion.jpg insight/docs/media/line-insertion.svg
+
+EXTRA_DIST += insight/tests/text_boundary_test.c insight/tests/text_boundary_gui_test.c insight/desktop/text_boundary.h
+insightdoc_DATA += insight/docs/text-boundaries.md
+dist_insightdocmedia_DATA += insight/docs/media/text-boundaries.jpg insight/docs/media/text-boundaries.svg

@@ -8,6 +8,8 @@
 #include "navqueue.h"
 #include "insight-i18n.h"
 #include "insight-completion.h"
+#include "insight-help.h"
+#include "../insight/desktop/text_boundary.h"
 #include "main.h"
 #include <gdk/gdkkeysyms.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
@@ -167,6 +169,44 @@ static void command(GtkMenuItem *item, gpointer data)
     }
     gtk_widget_grab_focus(GTK_WIDGET(sci));
 }
+/* Native word-part commands preserve Scintilla's identifier/UTF-8 rules;
+ * smart line edges use SI's additional line-to-file step. */
+static void text_boundary_command(GtkMenuItem *item,gpointer data)
+{
+ (void)item;GeanyDocument *doc=document_get_current();if(!doc || !normal(doc->editor->sci)) return;
+ ScintillaObject *sci=doc->editor->sci;gint action=GPOINTER_TO_INT(data);gboolean mode=requested(sci);
+ if(action>=5) {
+  gboolean left=action==5 || action==7,extend=mode || action>=7;
+  SEND(sci,left ? (extend ? SCI_WORDPARTLEFTEXTEND : SCI_WORDPARTLEFT) : (extend ? SCI_WORDPARTRIGHTEXTEND : SCI_WORDPARTRIGHT),0,0);set_mode(sci,mode);
+ } else {
+  gint length=sci_get_length(sci);if(length>8*1024*1024) { ui_set_statusbar(TRUE,"Text boundary commands are limited to 8 MiB");return; }
+  gchar *text=sci_get_contents(sci,-1);gint target=0,position=sci_get_current_position(sci);GError *error=NULL;
+  gint operation=action==0 || action==3 ? 0 : action==1 || action==4 ? 1 : 2;
+  gboolean found=insight_text_boundary(text,length,position,operation,&target,&error);g_free(text);
+  if(!found) { ui_set_statusbar(TRUE,"%s",insight_tr(error->message));g_clear_error(&error);return; }
+  if(action>=2) select_to(sci,SEND(sci,SCI_GETANCHOR,0,0),target,mode);else move_to(sci,target);
+ }
+ gtk_widget_grab_focus(GTK_WIDGET(sci));
+}
+static void text_boundary_menu_show(GtkWidget *menu,gpointer data)
+{
+ (void)data;GeanyDocument *doc=document_get_current();gboolean ready=doc && normal(doc->editor->sci);GList *children=gtk_container_get_children(GTK_CONTAINER(menu));
+ for(GList *p=children;p;p=p->next) if(g_object_get_data(G_OBJECT(p->data),"insight-boundary-command")) gtk_widget_set_sensitive(p->data,ready);
+ g_list_free(children);
+}
+static void text_boundary_menu(GtkWidget *menu)
+{
+ GtkWidget *parent=gtk_menu_item_new_with_label("Text boundaries"),*sub=gtk_menu_new();gtk_widget_set_name(parent,"insight-text-boundaries");gtk_menu_item_set_submenu(GTK_MENU_ITEM(parent),sub);
+ const gchar *labels[]={"Smart Beginning of Line","Smart End of Line","Select Sentence","Select To Smart Beginning of Line","Select To Smart End of Line","Word Fragment Left","Word Fragment Right","Select Word Fragment Left","Select Word Fragment Right"};
+ const gchar *ids[]={"smart-line-start","smart-line-end","select-sentence","select-smart-line-start","select-smart-line-end","fragment-left","fragment-right","select-fragment-left","select-fragment-right"};
+ for(guint i=0;i<G_N_ELEMENTS(labels);i++) {
+  if(i==2 || i==5) gtk_menu_shell_append(GTK_MENU_SHELL(sub),gtk_separator_menu_item_new());
+  GtkWidget *entry=gtk_menu_item_new_with_label(labels[i]);gchar *name=g_strconcat("insight-nav-",ids[i],NULL);gtk_widget_set_name(entry,name);g_free(name);g_object_set_data(G_OBJECT(entry),"insight-boundary-command",GINT_TO_POINTER(1));g_signal_connect(entry,"activate",G_CALLBACK(text_boundary_command),GINT_TO_POINTER(i));gtk_menu_shell_append(GTK_MENU_SHELL(sub),entry);
+ }
+ GtkWidget *help=gtk_menu_item_new_with_label("Text Boundaries Help");gtk_widget_set_name(help,"insight-text-boundaries-help");g_signal_connect(help,"activate",G_CALLBACK(insight_help_show),"text-boundaries.md");gtk_menu_shell_append(GTK_MENU_SHELL(sub),gtk_separator_menu_item_new());gtk_menu_shell_append(GTK_MENU_SHELL(sub),help);
+ g_signal_connect(sub,"show",G_CALLBACK(text_boundary_menu_show),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),parent);gtk_widget_show_all(parent);
+}
+
 typedef struct {
  guint document,source;
  ScintillaObject *sci;
@@ -255,6 +295,7 @@ void insight_navigation_menu(GtkWidget *menu)
         g_signal_connect(entry, "activate", G_CALLBACK(command), GINT_TO_POINTER(i));
         gtk_menu_shell_append(GTK_MENU_SHELL(sub), entry);
     }
+    text_boundary_menu(sub);
     GtkWidget *history=gtk_menu_item_new_with_label("Selection History…");gtk_widget_set_name(history,"insight-selection-history-command");g_signal_connect(history,"activate",G_CALLBACK(show_history),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(sub),gtk_separator_menu_item_new());gtk_menu_shell_append(GTK_MENU_SHELL(sub),history);
     g_signal_connect(sub, "show", G_CALLBACK(menu_show), NULL);
     g_signal_connect_object(geany_object, "document-activate", G_CALLBACK(activated), parent, G_CONNECT_AFTER);
