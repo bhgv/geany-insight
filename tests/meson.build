@@ -710,3 +710,6 @@ test('Insight native relation history GUI', relation_history_gui_test, timeout: 
 
 relation_nodes_gui_test = executable('test_insight_relation_nodes_gui', '../insight/tests/relation_nodes_gui_test.c', dependencies: test_deps)
 test('Insight native relation node removal GUI', relation_nodes_gui_test, timeout: 45, is_parallel: false)
+
+panel_state_gui_test = executable('test_insight_panel_state_gui', '../insight/tests/panel_state_gui_test.c', dependencies: test_deps)
+test('Insight individual panel layout geometry and restart GUI', panel_state_gui_test, timeout: 60)

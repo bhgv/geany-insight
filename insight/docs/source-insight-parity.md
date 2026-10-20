@@ -496,3 +496,13 @@ GTK development headers, Meson and Xvfb, so the GUI scenario and native compilat
 have not been executed here; no application screenshot is claimed.
 [Controls diagram](media/panel-controls.svg).
 Reference: [Panel Window Controls](https://www.sourceinsight.com/doc/v4/userguide/Manual/Window_Tour/Panel_Window_Controls.htm).
+
+### Individual panel geometry in layouts (2026-10-20)
+
+Layouts now store normal bounds and maximized state for each of the ten panel
+hosts. Session settings remember maximized state too. Native configure events
+update normal bounds only outside maximized/fullscreen/iconified states, so
+restoring a window does not replace its normal size with its maximized size.
+Layout schema 4 migrates schemas 1–3; missing or malformed new geometry rejects
+the complete layout. Panel settings schema 2 reads schema 1 as non-maximized.
+Core regression cases cover all ten hosts, old versions and invalid/missing fields.

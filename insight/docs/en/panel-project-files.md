@@ -97,7 +97,7 @@ Reference: [Source Insight Project File List](https://www.sourceinsight.com/doc/
 
 Header buttons provide **Float / Dock** and **Maximize / Restore**.
 Maximize is enabled for floating panels. Dock returns the panel to its home
-and selects its tab; native window close also docks it. Arbitrary docking
-locations and persistence of maximized state are not provided.
+and selects its tab; native window close also docks it. Panel geometry and maximized state are saved in layouts A–D. Arbitrary docking
+locations are not provided.
 
 ![Panel states](../media/panel-controls.svg)

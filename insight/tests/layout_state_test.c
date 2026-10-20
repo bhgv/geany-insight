@@ -19,6 +19,14 @@ int main(void) {
  r.values[IL_WL_SET]=1;r.values[IL_WL_VISIBLE]=1;r.values[IL_WL_DOCKED]=1;r.values[IL_WL_POSITIONED]=1;r.values[IL_WL_X]=-200;r.values[IL_WL_Y]=120;r.values[IL_WL_WIDTH]=850;r.values[IL_WL_HEIGHT]=430;insight_layout_write(f,"layout-A",&r);g_assert_true(insight_layout_read(f,"layout-A",&out));for(guint i=0;i<IL_FIELDS;i++) g_assert_cmpint(out.values[i],==,r.values[i]);
  g_key_file_remove_key(f,"layout-A","window-list-width",NULL);g_assert_false(insight_layout_read(f,"layout-A",&out));insight_layout_write(f,"layout-A",&r);g_key_file_set_integer(f,"layout-A","window-list-height",0);g_assert_false(insight_layout_read(f,"layout-A",&out));
  r.values[IL_WL_VISIBLE]=2;g_assert_false(insight_layout_valid(&r));r.values[IL_WL_VISIBLE]=1;
+ for(guint i=0;i<IL_PANEL_COUNT;i++) r.panels[i]=(InsightPanelLayout){TRUE,i%2,-200+(gint)i*10,80+(gint)i,480+(gint)i,600+(gint)i};
+ insight_layout_write(f,"layout-A",&r);g_assert_true(insight_layout_read(f,"layout-A",&out));
+ for(guint i=0;i<IL_PANEL_COUNT;i++) { g_assert_cmpint(out.panels[i].set,==,TRUE);g_assert_cmpint(out.panels[i].maximized,==,(gint)i%2);g_assert_cmpint(out.panels[i].x,==,r.panels[i].x);g_assert_cmpint(out.panels[i].width,==,r.panels[i].width);g_assert_cmpint(out.panels[i].height,==,r.panels[i].height); }
+ g_key_file_remove_key(f,"layout-A","panel-9-height",NULL);g_assert_false(insight_layout_read(f,"layout-A",&out));g_assert_false(out.valid);
+ insight_layout_write(f,"layout-A",&r);g_key_file_set_integer(f,"layout-A","panel-5-width",299);g_assert_false(insight_layout_read(f,"layout-A",&out));
+ insight_layout_write(f,"layout-A",&r);g_key_file_set_string(f,"layout-A","panel-5-maximized","bad");g_assert_false(insight_layout_read(f,"layout-A",&out));
+ insight_layout_write(f,"layout-A",&r);g_key_file_set_integer(f,"layout-A","version",3);g_assert_true(insight_layout_read(f,"layout-A",&out));for(guint i=0;i<IL_PANEL_COUNT;i++) g_assert_false(out.panels[i].set);
+ r.panels[0].width=4001;g_assert_false(insight_layout_valid(&r));r.panels[0].width=480;
  r.values[IL_WIDTH]=0; g_assert_false(insight_layout_valid(&r)); insight_layout_write(f,"layout-A",&r); g_assert_false(g_key_file_has_group(f,"layout-A"));
  g_assert_false(insight_layout_read(f,"missing",&out)); g_key_file_unref(f); g_print("Layout state checks passed\n"); return 0;
 }
