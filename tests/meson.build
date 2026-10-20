@@ -799,3 +799,6 @@ test('Insight delimiter navigation core', delimiter_navigation_test)
 
 delimiter_navigation_gui_test = executable('test_insight_delimiter_navigation_gui', '../insight/tests/delimiter_navigation_gui_test.c', dependencies: test_deps)
 test('Insight native delimiter navigation and enclosing pairs GUI', delimiter_navigation_gui_test, timeout: 50, is_parallel: false)
+
+selection_search_gui_test = executable('test_insight_selection_search_gui', '../insight/tests/selection_search_gui_test.c', dependencies: test_deps)
+test('Insight native selection search and match list GUI', selection_search_gui_test, timeout: 50, is_parallel: false)
