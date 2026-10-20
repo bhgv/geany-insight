@@ -49,3 +49,5 @@ Copy/Cut/Duplicate Symbol and exact selection duplication: [structural editing](
 [Window scrolling / Прокрутка окна](window-scrolling.md) — viewport commands preserve caret and selections.
 
 [Word and character operations / Операции со словами и символами](word-editing.md) — bounded native Cut Word/Left and clipboard-preserving Delete Line/Character.
+
+[Command and key references / Списки команд и клавиш](command-reference.md) — editable snapshots of current menus and registered keyboard bindings.

@@ -485,3 +485,6 @@ dist_insightdocmedia_DATA += insight/docs/media/window-scrolling.jpg
 
 insightdoc_DATA += insight/docs/word-editing.md
 dist_insightdocmedia_DATA += insight/docs/media/word-editing.svg
+
+insightdoc_DATA += insight/docs/command-reference.md
+dist_insightdocmedia_DATA += insight/docs/media/command-reference.svg

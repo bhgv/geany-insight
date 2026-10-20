@@ -1034,3 +1034,12 @@ Delete Character|||Удалить символ
 Word Editing Help|||Справка по редактированию слов
 Text removal is limited to 1 MiB per command|||Удаление ограничено 1 МиБ за команду
 Text removal requires complete UTF-8 text without NUL bytes|||Удаление требует полного текста UTF-8 без нулевых байтов
+Create Command List|||Создать список команд
+Create Key List|||Создать список клавиш
+Command Reference Help|||Справка по спискам команд
+Command List|||Список команд
+Key List|||Список клавиш
+Menu command|||Команда меню
+Shortcut|||Сочетание клавиш
+Unassigned|||Не назначено
+Command reference exceeds the 10000-item or 1 MiB limit|||Список команд превышает предел 10000 элементов или 1 МиБ
