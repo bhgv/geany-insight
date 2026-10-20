@@ -499,3 +499,4 @@ dist_insightdocmedia_DATA += insight/docs/media/original-changes.jpg insight/doc
 
 insightdoc_DATA += insight/docs/delimiter-navigation.md
 dist_insightdocmedia_DATA += insight/docs/media/delimiter-navigation.svg
+dist_insightdocmedia_DATA += insight/docs/media/delimiter-navigation.jpg

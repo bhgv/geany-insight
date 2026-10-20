@@ -60,3 +60,15 @@ References: [Paren Left](https://www.sourceinsight.com/doc/v4/userguide/Manual/C
 [Paren Right](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Paren_Right.htm),
 [Block Up](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Block_Up.htm),
 [Block Down](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Block_Down.htm).
+
+![Native enclosing-delimiter browser](media/delimiter-navigation.jpg)
+
+Actual production dialog from an isolated native Linux GUI fixture in the
+successful 51-test run, not a mockup. The example uses UTF-8 and CRLF; source
+excerpts remain literal and can contain quoted text/comments even though those
+regions are excluded from delimiter detection.
+
+Настоящее окно из изолированного нативного GUI-теста Linux, прошедшего в составе
+51 проверки; это не макет. Пример использует UTF-8 и CRLF. Фрагменты показывают
+буквальный исходный текст, включая строки и комментарии; их скобки исключаются
+только при поиске пар.
