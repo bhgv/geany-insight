@@ -37,3 +37,20 @@ References: [Cut Word](https://www.sourceinsight.com/doc/v4/userguide/Manual/Com
 [Cut Word Left](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Cut_Word_Left.htm),
 [Delete Line](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Delete_Line.htm),
 [Delete Character](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Delete_Character.htm).
+
+## Keyboard assignments / Назначения клавиш
+
+The native Preferences → Keybindings page now exposes **Cut Word / Cut Word Left**
+in Clipboard, **Delete Line / Delete Character** in Editor and **Command Browser**
+in Help. All five start unassigned. Normal user keyfile persistence, conflict
+handling and keyboard dispatch apply. Word/delete shortcuts only act while the
+current source editor has focus; search/other text fields are not redirected to
+source edits. Browser can be invoked from other main-window focus locations.
+Current assignments appear in menu accelerators, Key List and Command Browser.
+Existing keybinding IDs retain their values; new IDs are appended.
+
+Штатные настройки клавиш: Clipboard — Cut Word/Left, Editor — Delete Line/Character,
+Help — Command Browser. По умолчанию сочетания не назначены. Пользовательские
+назначения сохраняются обычным механизмом Geany. Сочетания удаления и вырезания
+действуют только при фокусе в текущем исходном редакторе, не меняя документ при
+вводе в строку поиска или другое поле. Назначения видны в новых списках и меню.

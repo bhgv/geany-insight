@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "geany.h"
 #include "document.h"
+#include "keybindings.h"
 #include "main.h"
 #include "sciwrappers.h"
 #include "ui_utils.h"
@@ -59,7 +60,7 @@ static gboolean drive(gpointer data)
 }
 static void open_browser(guint which)
 {
- scenario=which;tick=0;g_timeout_add(150,drive,NULL);gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-command-browser-command")));
+ scenario=which;tick=0;g_timeout_add(150,drive,NULL);if(which==1) keybindings_send_command(GEANY_KEY_GROUP_HELP,GEANY_KEYS_INSIGHT_COMMANDBROWSER);else gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-command-browser-command")));
 }
 static gboolean step(gpointer data)
 {

@@ -213,7 +213,8 @@ static gboolean browser_fill(Browser *browser)
     GPtrArray *commands = collect_commands();
     if (!commands) { gtk_label_set_text(GTK_LABEL(browser->status), insight_tr("Command reference exceeds the 10000-item or 1 MiB limit"));return FALSE; }
     gtk_list_store_clear(browser->store);
-    if (browser->commands) g_ptr_array_free(browser->commands, TRUE);browser->commands = commands;
+    if (browser->commands) g_ptr_array_free(browser->commands, TRUE);
+    browser->commands = commands;
     for (guint i = 0; i < commands->len; i++)
     {
         Command *command = g_ptr_array_index(commands, i);GtkTreeIter iter;GtkWidget *item = g_weak_ref_get(&command->widget);
@@ -273,7 +274,8 @@ static void show_browser(GtkMenuItem *menu_item, gpointer data)
         Command *command = selected_command(&browser);run = command ? g_weak_ref_get(&command->widget) : NULL;
         if (run) refresh_command_state(run);
         if (run && !gtk_menu_item_get_submenu(GTK_MENU_ITEM(run)) && command_available(run)) break;
-        if (run) g_object_unref(run);run = NULL;browser_fill(&browser);
+        if (run) g_object_unref(run);
+        run = NULL;browser_fill(&browser);
         gtk_label_set_text(GTK_LABEL(browser.status), insight_tr("Command is no longer available; refreshed the list"));
     }
     /* Disconnect before destroying widgets: selection teardown can emit changed. */
@@ -287,10 +289,13 @@ static void show_browser(GtkMenuItem *menu_item, gpointer data)
     else if (response == 201 || response == 202) create_reference(NULL, GINT_TO_POINTER(response == 202));
 }
 
+void insight_command_browser_show(void) { show_browser(NULL, NULL); }
+
 void insight_command_list_menu(void)
 {
     GtkWidget *menu = ui_lookup_widget(main_widgets.window, "menu_help1_menu");
     GtkWidget *browser = gtk_menu_item_new_with_label("Command Browser…");gtk_widget_set_name(browser, "insight-command-browser-command");
+    keybindings_attach_menu(GEANY_KEY_GROUP_HELP, GEANY_KEYS_INSIGHT_COMMANDBROWSER, browser);
     g_signal_connect(browser, "activate", G_CALLBACK(show_browser), NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu), browser);gtk_widget_show(browser);
     const gchar *labels[] = {"Create Command List", "Create Key List"};
     const gchar *ids[] = {"insight-create-command-list", "insight-create-key-list"};

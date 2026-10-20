@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "geany.h"
 #include "document.h"
+#include "keybindings.h"
+#include <gdk/gdkkeysyms.h>
 #include "main.h"
 #include "sciwrappers.h"
 #include "ui_utils.h"
@@ -33,13 +35,13 @@ static gboolean capture(gpointer data)
 static gboolean step(gpointer data)
 {
  (void)data;GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;sci=doc->editor->sci;window=gtk_widget_get_toplevel(GTK_WIDGET(sci));
- reset("αβ one\r\nlast",2,2);action("insight-cut-word");clipboard_is("β");roundtrip("αβ one\r\nlast","α one\r\nlast");
- reset("αβ one\r\nlast",4,4);action("insight-cut-word-left");clipboard_is("αβ");roundtrip("αβ one\r\nlast"," one\r\nlast");
+ reset("αβ one\r\nlast",2,2);gtk_widget_grab_focus(GTK_WIDGET(sci));GdkEventKey event={0};event.type=GDK_KEY_PRESS;event.keyval=GDK_KEY_F12;event.state=GDK_CONTROL_MASK|GDK_SHIFT_MASK;gboolean handled=FALSE;g_signal_emit_by_name(window,"key-press-event",&event,&handled);g_assert_true(handled);clipboard_is("β");roundtrip("αβ one\r\nlast","α one\r\nlast");
+ reset("αβ one\r\nlast",4,4);gtk_widget_grab_focus(GTK_WIDGET(sci));keybindings_send_command(GEANY_KEY_GROUP_CLIPBOARD,GEANY_KEYS_INSIGHT_CUTWORDLEFT);clipboard_is("αβ");roundtrip("αβ one\r\nlast"," one\r\nlast");
  reset("one  two",5,5);action("insight-cut-word-left");clipboard_is("  ");roundtrip("one  two","onetwo");
  reset("one two",0,5);action("insight-cut-word");clipboard_is("wo");roundtrip("one two","one t");
  reset("first\r\nsecond\r\nlast",12,1);action("insight-delete-line");clipboard_is("sentinel");roundtrip("first\r\nsecond\r\nlast","second\r\nlast");
- reset("one\r\nlast",6,6);action("insight-delete-line");clipboard_is("sentinel");roundtrip("one\r\nlast","one\r\n");
- reset("αβ\r\nlast",0,0);action("insight-delete-character");clipboard_is("sentinel");roundtrip("αβ\r\nlast","β\r\nlast");
+ reset("one\r\nlast",6,6);gtk_widget_grab_focus(GTK_WIDGET(sci));keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_DELETELINE);clipboard_is("sentinel");roundtrip("one\r\nlast","one\r\n");
+ reset("αβ\r\nlast",0,0);gtk_widget_grab_focus(GTK_WIDGET(sci));keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_DELETECHARACTER);clipboard_is("sentinel");roundtrip("αβ\r\nlast","β\r\nlast");
  reset("αβ\r\nlast",4,4);action("insight-delete-character");roundtrip("αβ\r\nlast","αβlast");clipboard_is("sentinel");
  reset("one two",7,4);action("insight-delete-character");roundtrip("one two","one ");clipboard_is("sentinel");
  reset("last",4,4);action("insight-delete-character");action("insight-cut-word");text_is("last");clipboard_is("sentinel");g_assert_false(SEND(sci,SCI_CANUNDO,0,0));
@@ -61,5 +63,5 @@ static gboolean timeout(gpointer data) { (void)data;g_error("Word editing timeou
 int main(void)
 {
  if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;
- gchar *directory=g_dir_make_tmp("word-edit-XXXXXX",NULL),*config=g_build_filename(directory,"geany.conf",NULL),*source=g_build_filename(directory,"source.txt",NULL);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));g_assert_true(g_file_set_contents(source,"word",-1,NULL));gchar *args[]={"word-edit-test","--new-instance","--no-session","--config",directory,source,NULL};g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);g_timeout_add(400,step,NULL);g_timeout_add_seconds(30,timeout,NULL);return main_lib(6,args);
+ gchar *directory=g_dir_make_tmp("word-edit-XXXXXX",NULL),*config=g_build_filename(directory,"geany.conf",NULL),*source=g_build_filename(directory,"source.txt",NULL);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));g_assert_true(g_file_set_contents(source,"word",-1,NULL));gchar *keys=g_build_filename(directory,"keybindings.conf",NULL);g_assert_true(g_file_set_contents(keys,"[Bindings]\ninsight_cut_word=<Control><Shift>F12\n",-1,NULL));g_free(keys);gchar *args[]={"word-edit-test","--new-instance","--no-session","--config",directory,source,NULL};g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);g_timeout_add(400,step,NULL);g_timeout_add_seconds(30,timeout,NULL);return main_lib(6,args);
 }

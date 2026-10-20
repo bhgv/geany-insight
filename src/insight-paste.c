@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "geany.h"
 #include "insight-paste.h"
+#include "keybindings.h"
 #include "insight-languages.h"
 #include "insight-completion.h"
 #include "insight-help.h"
@@ -572,13 +573,13 @@ static gboolean tools_insert(Request *request,const gchar *text)
  gtk_widget_grab_focus(GTK_WIDGET(request->sci));return TRUE;
 }
 /* Word edits use the editor's character classes, never temporary selections. */
-static void word_edit_command(GtkMenuItem *item, gpointer data)
+void insight_paste_word_edit(guint action)
 {
-    (void)item;
     Request request = {0};
     if (!tools_capture(&request)) return;
     ScintillaObject *sci = request.sci;
-    gint action = GPOINTER_TO_INT(data), length = sci_get_length(sci);
+    if (action > 3) return;
+    gint length = sci_get_length(sci);
     gint begin = request.caret, end = begin;
     if (action == 0)
         end = SEND(sci, SCI_WORDENDPOSITION, begin, FALSE);
@@ -616,6 +617,10 @@ static void word_edit_command(GtkMenuItem *item, gpointer data)
     SEND(sci, SCI_CHOOSECARETX, 0, 0);SEND(sci, SCI_SCROLLCARET, 0, 0);
     gtk_widget_grab_focus(GTK_WIDGET(sci));
 }
+static void word_edit_command(GtkMenuItem *item, gpointer data)
+{
+    (void)item;insight_paste_word_edit(GPOINTER_TO_UINT(data));
+}
 static void word_edit_show(GtkWidget *menu, gpointer data)
 {
     (void)data;Request request = {0};gboolean ready = tools_capture(&request);
@@ -630,9 +635,11 @@ static void word_edit_menu(GtkWidget *menu)
     gtk_widget_set_name(parent, "insight-word-editing");gtk_menu_item_set_submenu(GTK_MENU_ITEM(parent), sub);
     const gchar *labels[] = {"Cut Word", "Cut Word Left", "Delete Line", "Delete Character"};
     const gchar *ids[] = {"insight-cut-word", "insight-cut-word-left", "insight-delete-line", "insight-delete-character"};
+    const guint keys[] = {GEANY_KEYS_INSIGHT_CUTWORD, GEANY_KEYS_INSIGHT_CUTWORDLEFT, GEANY_KEYS_INSIGHT_DELETELINE, GEANY_KEYS_INSIGHT_DELETECHARACTER};
     for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
     {
         GtkWidget *entry = gtk_menu_item_new_with_label(labels[i]);gtk_widget_set_name(entry, ids[i]);
+        keybindings_attach_menu(i < 2 ? GEANY_KEY_GROUP_CLIPBOARD : GEANY_KEY_GROUP_EDITOR, keys[i], entry);
         g_object_set_data(G_OBJECT(entry), "insight-word-edit", GINT_TO_POINTER(1));
         g_signal_connect(entry, "activate", G_CALLBACK(word_edit_command), GINT_TO_POINTER(i));
         gtk_menu_shell_append(GTK_MENU_SHELL(sub), entry);

@@ -281,6 +281,11 @@ enum GeanyKeyBindingID
 												 * @since 2.0 (API 243) */
 	GEANY_KEYS_VIEW_TOGGLE_MENUBAR,				/**< Keybinding.
 												 * @since 2.2 (API 251) */
+	GEANY_KEYS_INSIGHT_CUTWORD,               /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_CUTWORDLEFT,           /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_DELETELINE,            /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_DELETECHARACTER,       /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_COMMANDBROWSER,        /**< Insight keybinding. */
 	GEANY_KEYS_COUNT	/* must not be used by plugins */
 };
 
@@ -308,6 +313,8 @@ extern GPtrArray *keybinding_groups;	/* array of GeanyKeyGroup pointers */
 
 
 void keybindings_init(void);
+
+void keybindings_attach_menu(guint group_id, guint key_id, GtkWidget *item);
 
 void keybindings_free(void);
 

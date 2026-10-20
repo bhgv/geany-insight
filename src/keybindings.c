@@ -32,6 +32,7 @@
 
 #include "keybindings.h"
 #include "insight-paste.h"
+#include "insight-command-list.h"
 #include "insight-template-fields.h"
 #include "insight-relation-graph.h"
 
@@ -306,6 +307,21 @@ static void add_kb(GeanyKeyGroup *group, gsize key_id,
 #define ADD_KB_GROUP(group_id, label, callback) \
 	add_kb_group(keybindings_get_core_group(group_id),\
 		keybindings_keyfile_group_name, label, callback, FALSE)
+
+static void cb_func_insight(guint key_id)
+{
+    if (key_id == GEANY_KEYS_INSIGHT_COMMANDBROWSER) { insight_command_browser_show();return; }
+    GeanyDocument *doc = document_get_current();
+    if (!doc || gtk_window_get_focus(GTK_WINDOW(main_widgets.window)) != GTK_WIDGET(doc->editor->sci)) return;
+    switch (key_id)
+    {
+        case GEANY_KEYS_INSIGHT_CUTWORD: insight_paste_word_edit(0);break;
+        case GEANY_KEYS_INSIGHT_CUTWORDLEFT: insight_paste_word_edit(1);break;
+        case GEANY_KEYS_INSIGHT_DELETELINE: insight_paste_word_edit(2);break;
+        case GEANY_KEYS_INSIGHT_DELETECHARACTER: insight_paste_word_edit(3);break;
+        default: break;
+    }
+}
 
 static void init_default_kb(void)
 {
@@ -727,6 +743,18 @@ static void init_default_kb(void)
 
 	add_kb(group, GEANY_KEYS_HELP_HELP, cb_func_menu_help,
 		GDK_KEY_F1, 0, "menu_help", _("Help"), "help1");
+    add_kb(group, GEANY_KEYS_INSIGHT_COMMANDBROWSER, cb_func_insight,
+        0, 0, "insight_command_browser", _("Command Browser"), NULL);
+    group = keybindings_get_core_group(GEANY_KEY_GROUP_CLIPBOARD);
+    add_kb(group, GEANY_KEYS_INSIGHT_CUTWORD, cb_func_insight,
+        0, 0, "insight_cut_word", _("Cut Word"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_CUTWORDLEFT, cb_func_insight,
+        0, 0, "insight_cut_word_left", _("Cut Word Left"), NULL);
+    group = keybindings_get_core_group(GEANY_KEY_GROUP_EDITOR);
+    add_kb(group, GEANY_KEYS_INSIGHT_DELETELINE, cb_func_insight,
+        0, 0, "insight_delete_line", _("Delete Line"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_DELETECHARACTER, cb_func_insight,
+        0, 0, "insight_delete_character", _("Delete Character"), NULL);
 }
 
 
@@ -841,6 +869,16 @@ static void apply_kb_accel(GeanyKeyGroup *group, GeanyKeyBinding *kb, gpointer u
 	}
 }
 
+
+/* Insight menus are created after the initial keyfile load. Attach only the
+ * new menu item instead of reloading/reapplying every native accelerator. */
+void keybindings_attach_menu(guint group_id, guint key_id, GtkWidget *item)
+{
+    GeanyKeyGroup *group = keybindings_get_core_group(group_id);
+    GeanyKeyBinding *key = keybindings_get_item(group, key_id);
+    g_return_if_fail(key && !key->menu_item && GTK_IS_MENU_ITEM(item));
+    key->menu_item = item;apply_kb_accel(group, key, NULL);
+}
 
 /** Reloads keybinding settings from configuration file.
  *
