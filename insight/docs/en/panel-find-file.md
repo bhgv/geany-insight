@@ -11,3 +11,5 @@ Find contains the query. Enter and Next find the next match; Previous finds the 
 Open Quick find in file, type a name and press Enter. Use Next and Previous to inspect occurrences. Enable Whole word to exclude longer names, then close the row with Escape.
 
 More: [Search results](panel-search-results.md).
+
+[Selection search commands and match list / Поиск выделения](selection-search.md).

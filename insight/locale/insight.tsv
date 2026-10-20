@@ -1480,3 +1480,22 @@ Delimiter list expired; reopen it for the active document	Список скоб�
 Delimiter list is stale; use Refresh before navigating	Список скобок устарел; обновите его перед переходом
 Delimiter navigation exceeded its size or nesting limit	Превышен предел размера или вложенности при переходе по скобкам
 No delimiter in this direction	В этом направлении скобок нет
+Selection search	Поиск по выделению
+Search Forward for Selection	Искать слово выделения вперёд
+Search Backward for Selection	Искать слово выделения назад
+Find All for Selection	Найти все совпадения выделения
+Find All for Selection…	Найти все совпадения выделения…
+Selection Search Help	Справка по поиску выделения
+Selection Matches	Совпадения выделения
+Copy List	Копировать список
+Selection search requires complete UTF-8 without NUL, normal positions and documents up to 8 MiB	Поиск выделения требует целый UTF-8 без NUL, обычные позиции и документы до 8 МиБ
+Use a nonempty single-line UTF-8 search pattern up to 4096 bytes	Введите непустую однострочную строку UTF-8 до 4096 байт
+Select single-line text or place the caret inside a word; maximum 4096 bytes	Выделите однострочный текст или поставьте курсор внутри слова; не более 4096 байт
+Selection loaded as the literal search pattern	Выделение загружено как буквальная строка поиска
+No other occurrence of this word	Других вхождений этого слова нет
+No other match for the loaded literal pattern	Других совпадений загруженной строки нет
+Options changed; use Refresh	Параметры изменены; обновите список
+Selection matches expired; reopen for the active document	Список совпадений устарел; откройте его для активного документа
+Selection matches are stale; use Refresh	Совпадения устарели; обновите список
+Matches: %u (limit reached)	Совпадений: %u (достигнут предел)
+Literal matches in the active document. Edit the pattern/options, then Refresh. Text changes require Refresh before Go To or Copy List.	Буквальные совпадения в активном документе. Измените строку и параметры, затем обновите список. После правки текста обновление обязательно перед переходом или копированием.
