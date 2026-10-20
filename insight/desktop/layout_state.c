@@ -23,7 +23,7 @@ gboolean insight_layout_valid(const InsightLayout *r) {
 gboolean insight_layout_read(GKeyFile *file,const char *group,InsightLayout *out) {
  if(!file || !group || !out) return FALSE;
  *out=(InsightLayout){0}; GError *error=NULL; gint version=g_key_file_get_integer(file,group,"version",&error);
- if(error || (version<1 || version>5)) { g_clear_error(&error); return FALSE; }
+ if(error || (version<1 || version>IL_FORMAT_VERSION)) { g_clear_error(&error); return FALSE; }
  InsightLayout next={.valid=TRUE};
  for(guint i=0;i<(version==1 ? IL_DETACHED : version==2 ? IL_WL_SET : version<5 ? IL_TRAY_VISIBLE : IL_FIELDS);i++) {
   next.values[i]=boolean_field(i) ? g_key_file_get_boolean(file,group,keys[i],&error) : g_key_file_get_integer(file,group,keys[i],&error);
@@ -42,7 +42,7 @@ gboolean insight_layout_read(GKeyFile *file,const char *group,InsightLayout *out
 void insight_layout_write(GKeyFile *file,const char *group,const InsightLayout *r) {
  if(!file || !group) return;
  g_key_file_remove_group(file,group,NULL); if(!insight_layout_valid(r)) return;
- g_key_file_set_integer(file,group,"version",5);
+ g_key_file_set_integer(file,group,"version",IL_FORMAT_VERSION);
  for(guint i=0;i<IL_FIELDS;i++) {
   if(boolean_field(i)) g_key_file_set_boolean(file,group,keys[i],r->values[i]); else g_key_file_set_integer(file,group,keys[i],r->values[i]);
  }

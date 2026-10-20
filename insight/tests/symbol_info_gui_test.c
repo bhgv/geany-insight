@@ -6,6 +6,7 @@
 #include "main.h"
 #include "sciwrappers.h"
 #include "ui_utils.h"
+#include "../desktop/layout_state.h"
 #include <glib/gstdio.h>
 #include <string.h>
 
@@ -135,7 +136,7 @@ static gboolean step(gpointer data) {
  } else if(phase==8) {
   GtkWidget *dock=named(window,"insight-window-list-dock");g_assert_true(gtk_widget_get_mapped(dock));g_assert_cmpuint(document_get_current()->id,==,primary_id);
   gchar *path=g_build_filename(profile,"insight","workbench.conf",NULL);GKeyFile *settings=g_key_file_new();g_assert_true(g_key_file_load_from_file(settings,path,G_KEY_FILE_NONE,NULL));g_free(path);
-  g_assert_cmpint(g_key_file_get_integer(settings,"layout-A","version",NULL),==,3);g_assert_true(g_key_file_get_boolean(settings,"layout-A","window-list-docked",NULL));g_assert_false(g_key_file_get_boolean(settings,"layout-B","window-list-docked",NULL));g_assert_false(g_key_file_get_boolean(settings,"layout-C","window-list-visible",NULL));g_key_file_unref(settings);phase++;
+  g_assert_cmpint(g_key_file_get_integer(settings,"layout-A","version",NULL),==,IL_FORMAT_VERSION);g_assert_true(g_key_file_get_boolean(settings,"layout-A","window-list-docked",NULL));g_assert_false(g_key_file_get_boolean(settings,"layout-B","window-list-docked",NULL));g_assert_false(g_key_file_get_boolean(settings,"layout-C","window-list-visible",NULL));g_key_file_unref(settings);phase++;
  } else {
   g_print("Real editor GUI: Symbol Info source/metadata, background open, snapshot guard, untitled Jump; Window List preview/activate, filtering and cancelled close/save, saved geometry/filter/sort/column widths/order and soft close/reopen passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }

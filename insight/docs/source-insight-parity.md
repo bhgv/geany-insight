@@ -16,10 +16,10 @@
 | Context снизу | Цветной Scintilla, номера строк, центрирование, подчёркнутые ссылки с курсором-пальцем и обычным кликом, история, поиск | Подробная проверка GUI на целевых ОС |
 | Relation Window | Определения/объявления, прямые члены scope, прямые/транзитивные Base/Derived и наследуемые члены по однозначным тегам, лексические ссылки, Calls текущей функции и Call sites проекта, Follow symbol / enclosing function, граф одного уровня с масштабом и двумя ориентациями, ленивое tag-дерево и раскрываемый граф с историей веток и пределами, scoped nominal aliases корней/баз/членов | Семантические вызовы/вызывающие функции, полные типы/перегрузки и include semantics, многоуровневые вызовы/ссылки |
 | Overview Scroller | Цветная миниатюра файла, видимая область/выделение, прокрутка мышью и колесом, масштаб/ширина, сохранение параметров, отметки закладок и изменённых/сохранённых строк, переходы по блокам правок, текущая/все функции с фоновыми лексическими границами; проверен GUI Linux | Семантические диапазоны и дополнительные языки за пределами brace/Python/Lua |
-| Панели | Десять отдельных float/dock и сохранение геометрии | Произвольное перетаскивание и snap-to-edge |
+| Панели | Десять отдельных float/dock, кнопки управления окном, Tab Tray и сохранение геометрии/состояния | Произвольное перетаскивание и snap-to-edge |
 | Symbol Info | Отдельное окно: кандидаты, сведения тегов, цветной исходник, Jump с проверкой снимка, References, Leave file open и копирование, размер завершённых функций и именованных определений C-семейства/Python, nominal-типы aliases из снимка, устойчивый Refresh и RU/EN GUI | Размеры остальных символов/синтаксисов и типы произвольных выражений; сложность не подтверждена как требование команды Symbol Info |
 | Window List | Немодальный список открытых буферов, поиск, MRU/имя/путь, ближайший символ, Context, Activate/Save/Close, сохранение геометрии/фильтра/сортировки/колонок; закрепление в sidebar и видимость/docking/геометрия в A–D, миграция раскладок; проверен GUI Linux | Перетаскивание, snap-to-edge |
-| Раскладки A–D | Пользовательские снимки и восстановление | Детальная сверка всех параметров окон |
+| Раскладки A–D и файлы | Пользовательские снимки с геометрией десяти панелей, Tab Tray, Window List; сохранение/загрузка дополнительных файлов | Детальная сверка всех параметров окон |
 | Bookmarks / Clips | Постоянное хранилище, навигация, вставка и редактирование Clips, переименование, импорт/экспорт выбранной панели, относительные пути проекта при переносе закладок; движущиеся маркеры и смещение от функции/класса с native/GUI-проверкой | XML Source Insight; перенос при переименовании самого символа |
 | Шаблоны кода | Clips: создание, ввод пользовательских переменных, дата/файл/проект/выделение/курсор, языковые профили/фильтр списка, отдельные project stores, completion и редактируемые placeholders, один Undo/Redo, импорт/экспорт, общие значки меню/панели | Полная совместимость переменных/синтаксиса шаблонов Source Insight |
 | Структурное выделение | Меню Edit, расширение по вложенным скобкам, Select Match, Select Line, Select Function, блоки Python/Lua и Function Up/Down; проверен native GUI, строки и комментарии исключаются лексической маской | Семантические границы; дополнительные языки за пределами brace/Python/Lua |
@@ -534,3 +534,11 @@ round trips, invalid-save preservation, missing/truncated/oversized/NUL input.
 Native Linux GUI covers the real chooser, a minimized-panel export/import and an
 invalid import leaving the current window intact.
 Reference: [Save Layout](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Save_Layout.htm).
+
+### Offline window-layout guide and regression checks (2026-10-20)
+
+Added a dedicated RU/EN guide with header control table, tray workflow, file format
+limits and actual production-window capture, linked from View → Layouts and the
+main guide and installed by Meson/Autotools. Expanded the native scenario with
+system iconification, chooser Cancel, live RU/EN tooltips and offline guide opening.
+Updated the existing Window List schema assertion to the shared current version.

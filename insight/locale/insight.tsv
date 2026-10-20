@@ -1217,3 +1217,4 @@ Layout loaded from file	Раскладка загружена из файла
 Invalid or incomplete layout file	Неверный или неполный файл раскладки
 Layout file exceeds 64 KiB or contains NUL bytes	Файл раскладки больше 64 КиБ или содержит нулевые байты
 Could not read layout file	Не удалось прочитать файл раскладки
+Window layouts and Tab Tray…	Раскладки окон и свёрнутые панели…

@@ -78,3 +78,5 @@ Full reference: [Search and replacement modes and query languages](search-replac
 ## Directory Compare
 
 [Сравнение каталогов / directory comparison](directory-compare.md): Tools → Directory Compare…
+
+[Window layouts and Tab Tray](window-layouts.md) — panel controls, saved arrangements and layout files.

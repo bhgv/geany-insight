@@ -4134,6 +4134,7 @@ static void panel_menu(GtkWidget *view_menu) {
  const char *slots[]={"Save as A","Save as B","Save as C","Save as D"}; for(guint i=0;i<4;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(slots[i]); gchar *id=g_strdup_printf("insight-layout-save-%u",i);gtk_widget_set_name(entry,id);g_free(id);g_signal_connect(entry,"activate",G_CALLBACK(save_layout),GUINT_TO_POINTER(i)); gtk_container_add(GTK_CONTAINER(save_menu),entry); }
  const gchar *file_labels[]={"Load layout from file…","Save layout to file…"},*file_ids[]={"insight-layout-import","insight-layout-export"};
  for(guint i=0;i<2;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(file_labels[i]);gtk_widget_set_name(entry,file_ids[i]);g_signal_connect(entry,"activate",G_CALLBACK(layout_file_command),GINT_TO_POINTER(i));gtk_container_add(GTK_CONTAINER(layout_menu),entry); }
+ GtkWidget *help=gtk_menu_item_new_with_label("Window layouts and Tab Tray…");gtk_widget_set_name(help,"insight-layout-help");g_signal_connect(help,"activate",G_CALLBACK(insight_help_show),"window-layouts.md");gtk_container_add(GTK_CONTAINER(layout_menu),help);
  GtkWidget *reset=gtk_menu_item_new_with_label("Reset saved layouts to presets"); g_signal_connect(reset,"activate",G_CALLBACK(reset_layouts),NULL); gtk_container_add(GTK_CONTAINER(layout_menu),reset);
  g_signal_connect(menu,"show",G_CALLBACK(panel_menu_sync),NULL); gtk_widget_show_all(item); gtk_widget_show_all(layouts);
 }

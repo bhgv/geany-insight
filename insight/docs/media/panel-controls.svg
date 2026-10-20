@@ -1,5 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="760" height="190" viewBox="0 0 760 190" role="img" aria-label="Panel controls: docked, floating and maximized">
-<rect width="760" height="190" fill="#f4f6fa"/>
-<g fill="#fff" stroke="#536781" stroke-width="2"><rect x="20" y="45" width="190" height="95" rx="8"/><rect x="285" y="45" width="190" height="95" rx="8"/><rect x="550" y="45" width="190" height="95" rx="8"/></g>
-<g fill="#182c48" font-family="sans-serif" font-size="17" text-anchor="middle"><text x="115" y="85">Docked</text><text x="380" y="85">Floating</text><text x="645" y="85">Maximized</text><text x="115" y="115">Home tab selected</text><text x="380" y="115">Separate window</text><text x="645" y="115">Native window state</text><text x="247" y="30">Float / Dock</text><text x="512" y="30">Maximize / Restore</text><text x="380" y="174">Close floating window → Dock</text></g>
-<g stroke="#536781" stroke-width="2" fill="none"><path d="M220 85h48m-8-6 8 6-8 6M485 85h48m-8-6 8 6-8 6"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="300" viewBox="0 0 760 300" role="img" aria-label="Panel transitions between docked, floating, maximized and Tab Tray">
+<rect width="760" height="300" fill="#f4f6fa"/>
+<g fill="#fff" stroke="#536781" stroke-width="2"><rect x="20" y="40" width="190" height="95" rx="8"/><rect x="285" y="40" width="190" height="95" rx="8"/><rect x="550" y="40" width="190" height="95" rx="8"/><rect x="285" y="210" width="190" height="70" rx="8"/></g>
+<g fill="#182c48" font-family="sans-serif" font-size="17" text-anchor="middle"><text x="115" y="80">Docked</text><text x="380" y="80">Floating</text><text x="645" y="80">Maximized</text><text x="115" y="110">Home tab selected</text><text x="380" y="110">Separate window</text><text x="645" y="110">Normal size retained</text><text x="247" y="25">Float / Dock</text><text x="512" y="25">Maximize / Restore</text><text x="380" y="240">Tab Tray</text><text x="380" y="265">Click label to restore</text><text x="535" y="180">Minimize / Restore</text><text x="144" y="240">Close window → Dock</text></g>
+<g stroke="#536781" stroke-width="2" fill="none"><path d="M220 85h48m-8-6 8 6-8 6M485 85h48m-8-6 8 6-8 6M380 145v55m-6-8 6 8 6-8"/></g>
+</svg>

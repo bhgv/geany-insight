@@ -90,3 +90,5 @@ Geany Insight — редактор исходного кода с индексо
 ## Directory Compare
 
 [Сравнение каталогов / directory comparison](directory-compare.md): Tools → Directory Compare…
+
+[Окна, раскладки и Tab Tray](window-layouts.md) — кнопки панелей, сохранение компоновки и файлы раскладок.
