@@ -263,6 +263,7 @@ libgeany_la_SOURCES += \
 	../insight/desktop/index_cache.h \
 	../insight/desktop/completion_settings.c ../insight/desktop/completion_settings.h \
 	../insight/desktop/completion_preferences.c ../insight/desktop/completion_preferences.h \
+	../insight/desktop/line_insert.c ../insight/desktop/line_insert.h \
 	../insight/desktop/paragraph.c ../insight/desktop/paragraph.h \
 	../insight/desktop/renumber.c ../insight/desktop/renumber.h \
 	../insight/desktop/text_transfer.c ../insight/desktop/text_transfer.h \

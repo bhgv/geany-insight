@@ -39,3 +39,5 @@ Copy/Cut/Duplicate Symbol and exact selection duplication: [structural editing](
 [Renumber / Перенумерация](renumber.md) — integer sequences, offset and radix conversion.
 
 [Paragraph and lines / Абзацы и строки](paragraph-tools.md) — Reform Paragraph, Join Lines, Preview.
+
+[Line insertion / Вставка строк](line-insertion.md) — above, below, split and stay, marked preview.

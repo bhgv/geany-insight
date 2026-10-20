@@ -752,3 +752,8 @@ paragraph_test = executable('test_insight_paragraph', '../insight/tests/paragrap
 test('Insight paragraph scope and transformations', paragraph_test)
 paragraph_gui_test = executable('test_insight_paragraph_gui', '../insight/tests/paragraph_gui_test.c', dependencies: test_deps)
 test('Insight native Paragraph and Lines GUI', paragraph_gui_test, timeout: 40, is_parallel: false)
+
+line_insert_test = executable('test_insight_line_insert', '../insight/tests/line_insert_test.c', '../insight/desktop/line_insert.c', include_directories: include_directories('../insight/desktop'), dependencies: deps, c_args: ['-UNDEBUG'])
+test('Insight line insertion plans', line_insert_test)
+line_insert_gui_test = executable('test_insight_line_insert_gui', '../insight/tests/line_insert_gui_test.c', dependencies: test_deps)
+test('Insight native line insertion commands and preview GUI', line_insert_gui_test, timeout: 40, is_parallel: false)

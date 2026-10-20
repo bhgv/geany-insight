@@ -39,3 +39,5 @@ Insert File and text export: [guide](file-text.md).
 [Renumber / Перенумерация](renumber.md) — integer sequences, offset and radix conversion.
 
 [Paragraph and lines / Абзацы и строки](paragraph-tools.md) — Reform Paragraph, Join Lines, Preview.
+
+[Line insertion / Вставка строк](line-insertion.md) — above, below, split and stay, marked preview.

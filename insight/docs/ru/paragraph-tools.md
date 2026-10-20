@@ -16,3 +16,5 @@
 Поддерживается одно обычное выделение. Режим чтения, прямоугольные/множественные выделения и виртуальные пробелы исключены. Ограничения: 8 МиБ на вход/выход, 500000 физических строк и пустая позиция EOF. Изменение текста/выделения, переключение вкладки или закрытие документа при открытом диалоге отменяет применение. Команды работают с обычным текстом, без специальной обработки кода, строк, комментариев и их префиксов.
 
 Источник: [Reform Paragraph](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Reform_Paragraph.htm), [Join Lines](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Join_Lines.htm).
+
+[Line insertion / Вставка строк](line-insertion.md) — above, below, split and stay, marked preview.

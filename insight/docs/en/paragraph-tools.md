@@ -16,3 +16,5 @@ Both operations use one Undo action and select the transformed range, retaining 
 Single ordinary selections only: read-only, column, multiple and virtual-space selections are excluded. Input/output are limited to 8 MiB and input to 500000 physical lines (plus an empty EOF position). A text/selection change, tab switch or closed target while the preview is open cancels Apply. These are plain-text operations: code, strings, comments and comment prefixes receive no language-aware handling.
 
 Reference: [Reform Paragraph](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Reform_Paragraph.htm), [Join Lines](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Join_Lines.htm).
+
+[Line insertion / Вставка строк](line-insertion.md) — above, below, split and stay, marked preview.

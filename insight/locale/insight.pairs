@@ -940,3 +940,20 @@ Paragraph tools are limited to 8 MiB|||Обработка абзацев огр�
 Paragraph result exceeds 8 MiB|||Результат обработки абзацев превышает 8 МиБ
 Paragraph tools support at most 500000 lines|||Обработка абзацев поддерживает не более 500000 строк
 Paragraph tools require UTF-8 up to 8 MiB, a margin of 1–1000 and tab width of 1–32|||Для обработки абзацев нужен UTF-8 до 8 МиБ, ширина 1–1000 и табуляция 1–32
+Insert Line|||Вставить строку выше
+Insert Line Before Next|||Вставить строку ниже
+Insert New Line|||Вставить перенос без перехода
+Line Insertion Preview…|||Предпросмотр вставки строк…
+Line insertion preview|||Предпросмотр вставки строк
+Copy the current line's indentation (temporary override)|||Копировать отступ текущей строки (временное изменение)
+Above/below use the active caret line. Split replaces the exact selection.|||Выше/ниже — строка активного конца выделения. Разрыв заменяет точное выделение.
+Preview marks: · space, ⇥ tab, ¶ line ending, │ resulting caret|||Обозначения: · пробел, ⇥ табуляция, ¶ окончание строки, │ будущий курсор
+Insert Line — above|||Вставить строку выше
+Insert Line Before Next — below|||Вставить строку ниже
+Insert New Line — split and stay|||Вставить перенос и остаться
+Replace bytes %d–%d; caret %d. Shown result bytes %d–%d.|||Замена байтов %d–%d; курсор %d. Показаны байты результата %d–%d.
+Line insertion cancelled because the document or selection changed|||Вставка строки отменена: документ или выделение изменились
+Line insertion is limited to 8 MiB|||Вставка строк ограничена 8 МиБ
+Line insertion requires text without NUL bytes|||Вставка строк требует текст без байтов NUL
+Line insertion would exceed 8 MiB|||Вставка строки превысит 8 МиБ
+Line insertion requires UTF-8 up to 8 MiB and positions outside UTF-8 characters and CRLF pairs|||Вставка строк требует UTF-8 до 8 МиБ и позиций вне символов UTF-8 и пар CRLF

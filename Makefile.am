@@ -465,3 +465,7 @@ dist_insightdocmedia_DATA += insight/docs/media/renumber.jpg insight/docs/media/
 EXTRA_DIST += insight/tests/paragraph_test.c insight/tests/paragraph_gui_test.c insight/desktop/paragraph.h
 insightdoc_DATA += insight/docs/paragraph-tools.md
 dist_insightdocmedia_DATA += insight/docs/media/paragraph-tools.jpg insight/docs/media/paragraph-tools.svg
+
+EXTRA_DIST += insight/tests/line_insert_test.c insight/tests/line_insert_gui_test.c insight/desktop/line_insert.h
+insightdoc_DATA += insight/docs/line-insertion.md
+dist_insightdocmedia_DATA += insight/docs/media/line-insertion.jpg insight/docs/media/line-insertion.svg
