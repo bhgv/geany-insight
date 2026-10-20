@@ -7,6 +7,8 @@ The caret, every selection, text, savepoint and Undo remain unchanged, including
 read-only buffers and rectangular/multiple selections. Native scroll limits apply.
 No default shortcuts override Geany navigation or document switching.
 
+![Production menu in an isolated native Linux GUI fixture](../media/window-scrolling.jpg)
+
 ![Viewport and selection](../media/window-scrolling.svg)
 
 Правка → Выделение и навигация → Прокрутка окна: строка вверх/вниз,

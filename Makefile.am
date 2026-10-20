@@ -480,3 +480,5 @@ dist_insightdocmedia_DATA += insight/docs/media/calculate.jpg insight/docs/media
 
 insightdoc_DATA += insight/docs/window-scrolling.md
 dist_insightdocmedia_DATA += insight/docs/media/window-scrolling.svg
+
+dist_insightdocmedia_DATA += insight/docs/media/window-scrolling.jpg
