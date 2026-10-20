@@ -31,7 +31,7 @@ static void export_pdf(GtkPrintOperation *op,guint expected,const gchar *present
  gtk_print_operation_set_export_filename(op,path);g_signal_connect(op,"draw-page",G_CALLBACK(page_drawn),NULL);pages=0;
  GtkPrintOperationResult result=gtk_print_operation_run(op,GTK_PRINT_OPERATION_ACTION_EXPORT,NULL,&error);g_assert_no_error(error);g_assert_cmpint(result,==,GTK_PRINT_OPERATION_RESULT_APPLY);g_assert_cmpuint(pages,==,expected);
  gchar *text=NULL,*stderr_text=NULL;gint status=0;gchar *args[]={"pdftotext","-layout",path,"-",NULL};
- g_assert_true(g_spawn_sync(NULL,args,NULL,G_SPAWN_SEARCH_PATH,NULL,NULL,&text,&stderr_text,&status,&error));g_assert_no_error(error);g_assert_cmpint(status,==,0);g_assert_nonnull(strstr(text,"Snapshot query"));g_assert_nonnull(strstr(text,present));if(absent) g_assert_null(strstr(text,absent));g_assert_null(strstr(text,"MUTATED"));
+ g_assert_true(g_spawn_sync(NULL,args,NULL,G_SPAWN_SEARCH_PATH,NULL,NULL,&text,&stderr_text,&status,&error));g_assert_no_error(error);g_assert_cmpint(status,==,0);g_assert_nonnull(strstr(text,"Snapshot query"));if(!strstr(text,present)) g_printerr("Missing [%s] in PDF text:\n%s\n",present,text);g_assert_nonnull(strstr(text,present));if(absent) g_assert_null(strstr(text,absent));g_assert_null(strstr(text,"MUTATED"));
  g_assert_cmpuint(strlen(text),>,50);g_free(text);g_free(stderr_text);g_remove(path);g_rmdir(folder);g_free(path);g_free(folder);
 }
 static void paper(GtkPrintOperation *op,gboolean landscape) {
@@ -39,6 +39,7 @@ static void paper(GtkPrintOperation *op,gboolean landscape) {
  gtk_page_setup_set_top_margin(setup,10,GTK_UNIT_MM);gtk_page_setup_set_bottom_margin(setup,10,GTK_UNIT_MM);gtk_page_setup_set_left_margin(setup,10,GTK_UNIT_MM);gtk_page_setup_set_right_margin(setup,10,GTK_UNIT_MM);gtk_print_operation_set_default_page_setup(op,setup);g_object_unref(setup);
 }
 static void flat(gboolean tiled,gboolean vertical,gint zoom) {
+ g_print("Printing: tiled=%d vertical=%d zoom=%d\n",tiled,vertical,zoom);
  GtkListStore *model=gtk_list_store_new(3,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG);GtkTreeIter iter;
  for(guint i=0;i<40;i++) { gchar *name=g_strdup_printf("caller_%02u",i);gtk_list_store_append(model,&iter);gtk_list_store_set(model,&iter,0,name,1,"example.c",2,(gulong)i+1,-1);g_free(name); }
  GtkWidget *tree=gtk_tree_view_new_with_model(GTK_TREE_MODEL(model)),*query=gtk_entry_new();g_object_ref_sink(tree);g_object_ref_sink(query);gtk_entry_set_text(GTK_ENTRY(query),"Snapshot query");
