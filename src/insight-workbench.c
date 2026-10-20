@@ -76,7 +76,7 @@
 
 typedef struct { gchar *path; GDir *dir; } ScanFrame;
 static void frame_free(gpointer data) { ScanFrame *p=data; if(p->dir) g_dir_close(p->dir); g_free(p->path); g_free(p); }
-typedef struct { GtkWidget *page,*home,*window,*dock_button,*maximize_button,*minimize_button,*tray_button,*opacity_button; gchar *label; guint order; gboolean pane,restore,visible,maximized,minimized; gint x,y,width,height,opacity; } PanelHost;
+typedef struct { GtkWidget *page,*home,*window,*dock_button,*maximize_button,*minimize_button,*tray_button,*opacity_button,*group_button,*ungroup_item; gchar *label; guint order; gboolean pane,restore,visible,maximized,minimized; gint x,y,width,height,opacity,saved_group,saved_group_order,saved_group_active; } PanelHost;
 typedef struct { GtkWidget *view,*entry,*status,*more; GtkTreeStore *store; gboolean symbols,setting; guint limit,shown,total,timer; } GroupedPanel;
 typedef struct { gchar *path; guint id; gulong line; } Location;
 static void location_free(gpointer data) { Location *p=data; g_free(p->path); g_free(p); }
@@ -95,7 +95,7 @@ typedef struct {
  GtkWidget *category_entry,*category_view,*types_view,*float_window,*project_toggle,*local_toggle;
  GroupedPanel category_panel,type_panel;
  gint float_x,float_y,float_width,float_height; gboolean restore_float;
- InsightLayout layouts[4]; InsightPanelLayout main_bounds,main_target;guint main_apply_source,main_apply_stage,main_apply_ticks;gulong main_geometry_handlers[2]; PanelHost hosts[10]; guint host_count; GtkWidget *panel_commands,*tray,*tray_buttons,*tray_toggle,*transparency_toggle; gboolean tray_enabled,transparent_panels;
+ InsightLayout layouts[4]; InsightPanelLayout main_bounds,main_target;guint main_apply_source,main_apply_stage,main_apply_ticks;gulong main_geometry_handlers[2]; PanelHost hosts[10]; guint host_count; GtkWidget *panel_commands,*tray,*tray_buttons,*tray_toggle,*transparency_toggle; gboolean tray_enabled,transparent_panels,panel_group_setting;
  GtkWidget *find_entry,*find_case,*find_word,*find_regex,*find_status,*context_find_row,*context_definitions_row,*context_find_toggle;
  gchar *find_last_query,*find_last_digest; gsize find_last_begin,find_last_end; guint find_last_flags;
  InsightNotes *project_marks;gchar *project_marks_path,*project_marks_root;GtkWidget *marks_scope,*marks_reload;gboolean marks_project,marks_valid,marks_stale,marks_initialized,marks_save_failed,marks_confirm_delete,marks_delete_on_close,marks_preserve;GHashTable *marks_session_stores;guint64 marks_generation;
@@ -3873,6 +3873,14 @@ static void float_project(GtkMenuItem *item,gpointer data) {
   gtk_window_move(GTK_WINDOW(wb.float_window),wb.float_x,wb.float_y);
  }
 }
+/* Floating groups share one window; page ownership always follows its parent. */
+static guint panel_window_owner(GtkWidget *window) {
+ for(guint i=0;i<wb.host_count;i++) if(window && wb.hosts[i].window==window) return i;
+ return wb.host_count;
+}
+static guint panel_window_count(GtkWidget *window) {
+ guint count=0;for(guint i=0;i<wb.host_count;i++) if(window && wb.hosts[i].window==window) count++;return count;
+}
 /* Keep controls on the page so they survive reparenting and layout restore. */
 static void panel_controls_update(PanelHost *host) {
  if(!host->dock_button) return;
@@ -3882,6 +3890,8 @@ static void panel_controls_update(PanelHost *host) {
  gtk_widget_set_tooltip_text(host->dock_button,insight_tr(floating ? "Dock this panel" : "Float this panel"));
  gtk_widget_set_sensitive(host->maximize_button,floating);
  if(host->minimize_button) gtk_widget_set_sensitive(host->minimize_button,floating);
+ if(host->group_button) gtk_widget_set_visible(host->group_button,floating);
+ if(host->ungroup_item) gtk_widget_set_sensitive(host->ungroup_item,floating && panel_window_count(host->window)>1);
  if(host->opacity_button) { gtk_widget_set_visible(host->opacity_button,floating && wb.transparent_panels);gchar *tip=insight_i18n_printf("Floating panel opacity: %d%%",host->opacity);gtk_widget_set_tooltip_text(host->opacity_button,tip);g_free(tip); }
  if(host->window) gtk_widget_set_opacity(host->window,wb.transparent_panels ? host->opacity/100.0 : 1.0);
  gtk_button_set_image(GTK_BUTTON(host->maximize_button),gtk_image_new_from_icon_name(maximized ? "view-restore-symbolic" : "view-fullscreen-symbolic",GTK_ICON_SIZE_MENU));
@@ -3894,19 +3904,27 @@ static void panel_geometry_capture(PanelHost *host) {
   gtk_window_get_position(GTK_WINDOW(host->window),&host->x,&host->y);gtk_window_get_size(GTK_WINDOW(host->window),&host->width,&host->height);
  }
 }
+static void panel_window_refresh(GtkWidget *window) {
+ if(!window) return;
+ GString *title=g_string_new("Geany Insight — ");guint count=0;
+ for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].window==window) { if(count++) g_string_append(title," / ");g_string_append(title,insight_tr(wb.hosts[i].label));panel_controls_update(&wb.hosts[i]); }
+ if(count) gtk_window_set_title(GTK_WINDOW(window),title->str);
+ g_string_free(title,TRUE);panel_tray_sync();
+}
 static gboolean panel_configured(GtkWidget *widget,GdkEventConfigure *event,gpointer data) {
- (void)event;PanelHost *host=&wb.hosts[GPOINTER_TO_UINT(data)];if(widget==host->window) panel_geometry_capture(host);return FALSE;
+ (void)event;(void)data;for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].window==widget) panel_geometry_capture(&wb.hosts[i]);return FALSE;
 }
 static gboolean panel_window_state(GtkWidget *widget,GdkEventWindowState *event,gpointer data) {
- PanelHost *host=&wb.hosts[GPOINTER_TO_UINT(data)];if(widget!=host->window) return FALSE;
- if(!host->minimized) host->maximized=(event->new_window_state&GDK_WINDOW_STATE_MAXIMIZED)!=0;
- panel_controls_update(host);if(event->new_window_state&GDK_WINDOW_STATE_ICONIFIED) panel_minimize(GPOINTER_TO_UINT(data));return FALSE;
+ (void)data;guint owner=panel_window_owner(widget);if(owner>=wb.host_count) return FALSE;
+ for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].window==widget) { if(!wb.hosts[i].minimized) wb.hosts[i].maximized=(event->new_window_state&GDK_WINDOW_STATE_MAXIMIZED)!=0;panel_controls_update(&wb.hosts[i]); }
+ if(event->new_window_state&GDK_WINDOW_STATE_ICONIFIED) panel_minimize(owner);
+ return FALSE;
 }
 static void dock_panel(guint index) {
  if(index>=wb.host_count) return;
  PanelHost *host=&wb.hosts[index]; if(!host->window) return;
  panel_geometry_capture(host); host->visible=gtk_widget_get_visible(host->window);
- GtkWidget *window=host->window; host->window=NULL;host->minimized=FALSE;panel_tray_sync(); g_object_ref(host->page); gtk_container_remove(GTK_CONTAINER(window),host->page);
+ GtkWidget *window=host->window; host->window=NULL;host->minimized=FALSE;panel_tray_sync(); g_object_ref(host->page); gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(host->page)),host->page);
  if(host->pane) gtk_paned_pack2(GTK_PANED(host->home),host->page,FALSE,FALSE);
  else {
   GtkWidget *placeholder=g_object_get_data(G_OBJECT(host->page),"insight-dock-placeholder");if(placeholder) { gtk_widget_destroy(placeholder);g_object_set_data(G_OBJECT(host->page),"insight-dock-placeholder",NULL); }
@@ -3916,7 +3934,7 @@ static void dock_panel(guint index) {
   }
   gtk_notebook_insert_page(GTK_NOTEBOOK(host->home),host->page,gtk_label_new(host->label),position);
  }
- g_object_unref(host->page); gtk_widget_show(host->page); gtk_widget_destroy(window);
+ g_object_unref(host->page); gtk_widget_show(host->page);if(!panel_window_count(window)) gtk_widget_destroy(window);else panel_window_refresh(window);
  panel_controls_update(host);
 }
 static void dock_all_panels(void) { for(guint i=0;i<wb.host_count;i++) dock_panel(i); }
@@ -3925,7 +3943,9 @@ static void dock_panel_selected(guint index) {
  PanelHost *host=&wb.hosts[index];
  if(!host->pane) gtk_notebook_set_current_page(GTK_NOTEBOOK(host->home),gtk_notebook_page_num(GTK_NOTEBOOK(host->home),host->page));
 }
-static gboolean panel_closed(GtkWidget *widget,GdkEvent *event,gpointer data) { (void)widget; (void)event; dock_panel_selected(GPOINTER_TO_UINT(data)); return TRUE; }
+static gboolean panel_closed(GtkWidget *widget,GdkEvent *event,gpointer data) {
+ (void)event;(void)data;for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].window==widget) dock_panel_selected(i);return TRUE;
+}
 static void detach_panel(guint index) {
  if(index>=wb.host_count) return;
  PanelHost *host=&wb.hosts[index]; if(host->window) { panel_restore(index); return; }
@@ -3947,24 +3967,25 @@ static void panel_restore_command(GtkButton *button,gpointer data) { (void)butto
 static void panel_restore(guint index) {
  if(index>=wb.host_count) return;
  PanelHost *host=&wb.hosts[index];if(!host->window) return;
- gboolean maximized=host->maximized;host->minimized=FALSE;gtk_window_deiconify(GTK_WINDOW(host->window));gtk_widget_show(host->window);if(maximized) gtk_window_maximize(GTK_WINDOW(host->window));gtk_window_present(GTK_WINDOW(host->window));panel_tray_sync();
+ gboolean maximized=host->maximized;for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].window==host->window) wb.hosts[i].minimized=FALSE;gtk_window_deiconify(GTK_WINDOW(host->window));gtk_widget_show(host->window);if(maximized) gtk_window_maximize(GTK_WINDOW(host->window));gtk_window_present(GTK_WINDOW(host->window));panel_tray_sync();
 }
 static void panel_minimize(guint index) {
  if(index>=wb.host_count) return;
  PanelHost *host=&wb.hosts[index];if(!host->window || host->minimized) return;
- panel_geometry_capture(host);host->minimized=TRUE;gtk_window_deiconify(GTK_WINDOW(host->window));gtk_widget_hide(host->window);panel_tray_sync();
+ for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].window==host->window) { panel_geometry_capture(&wb.hosts[i]);wb.hosts[i].minimized=TRUE; }
+ gtk_window_deiconify(GTK_WINDOW(host->window));gtk_widget_hide(host->window);panel_tray_sync();
 }
 static void panel_minimize_command(GtkButton *button,gpointer data) { (void)button;panel_minimize(GPOINTER_TO_UINT(data)); }
 static void panel_tray_sync(void) {
  if(!wb.tray) return;
  guint count=0;
  for(guint i=0;i<wb.host_count;i++) {
-  PanelHost *host=&wb.hosts[i];gboolean minimized=host->window && host->minimized;
+  PanelHost *host=&wb.hosts[i];gboolean minimized=host->window && host->minimized && panel_window_owner(host->window)==i;
   if(minimized && !host->tray_button) {
    host->tray_button=gtk_button_new_with_label(host->label);gchar *name=g_strdup_printf("insight-panel-tray-%u",i);gtk_widget_set_name(host->tray_button,name);g_free(name);
    gtk_widget_set_tooltip_text(host->tray_button,"Restore this floating panel");gtk_box_pack_start(GTK_BOX(wb.tray_buttons),host->tray_button,FALSE,FALSE,0);g_signal_connect(host->tray_button,"clicked",G_CALLBACK(panel_restore_command),GUINT_TO_POINTER(i));
   }
-  if(host->tray_button) gtk_widget_set_visible(host->tray_button,minimized);
+  if(host->tray_button) { guint members=panel_window_count(host->window);gchar *label=members>1 ? g_strdup_printf("%s +%u",insight_tr(host->label),members-1) : g_strdup(insight_tr(host->label));gtk_button_set_label(GTK_BUTTON(host->tray_button),label);g_free(label);gtk_widget_set_visible(host->tray_button,minimized); }
   if(minimized) count++;
  }
  gtk_widget_set_visible(wb.tray,wb.tray_enabled && count>0);
@@ -3989,11 +4010,49 @@ static void panel_toggle_maximized(GtkButton *button,gpointer data) {
  else gtk_window_maximize(GTK_WINDOW(host->window));
 }
 static void panel_opacity_changed(GtkScaleButton *button,gdouble value,gpointer data) {
- (void)button;PanelHost *host=&wb.hosts[GPOINTER_TO_UINT(data)];host->opacity=CLAMP((gint)(value+0.5),40,100);panel_controls_update(host);
+ (void)button;if(wb.panel_group_setting) return;PanelHost *host=&wb.hosts[GPOINTER_TO_UINT(data)];gint opacity=CLAMP((gint)(value+0.5),40,100);
+ wb.panel_group_setting=TRUE;
+ for(guint i=0;i<wb.host_count;i++) if(i==GPOINTER_TO_UINT(data) || (host->window && wb.hosts[i].window==host->window)) { wb.hosts[i].opacity=opacity;gtk_scale_button_set_value(GTK_SCALE_BUTTON(wb.hosts[i].opacity_button),opacity);panel_controls_update(&wb.hosts[i]); }
+ wb.panel_group_setting=FALSE;
 }
 static void panel_transparency_toggled(GtkCheckMenuItem *item,gpointer data) {
  (void)data;wb.transparent_panels=gtk_check_menu_item_get_active(item);for(guint i=0;i<wb.host_count;i++) panel_controls_update(&wb.hosts[i]);
 }
+static void panel_group_join(guint source,guint target) {
+ if(source>=8 || target>=8 || source==target) return;
+ PanelHost *from=&wb.hosts[source],*to=&wb.hosts[target];
+ if(!from->window) detach_panel(source);
+ if(!to->window) detach_panel(target);
+ if(!from->window || !to->window) return;
+ if(from->window==to->window) { GtkWidget *book=gtk_widget_get_parent(from->page);if(GTK_IS_NOTEBOOK(book)) gtk_notebook_set_current_page(GTK_NOTEBOOK(book),gtk_notebook_page_num(GTK_NOTEBOOK(book),from->page));return; }
+ GtkWidget *old=from->window,*window=to->window,*book=g_object_get_data(G_OBJECT(window),"insight-floating-group");
+ if(!book) {
+  book=gtk_notebook_new();gtk_widget_set_name(book,"insight-floating-group");gtk_notebook_set_scrollable(GTK_NOTEBOOK(book),TRUE);
+  g_object_ref(to->page);gtk_container_remove(GTK_CONTAINER(window),to->page);gtk_container_add(GTK_CONTAINER(window),book);gtk_notebook_append_page(GTK_NOTEBOOK(book),to->page,gtk_label_new(to->label));gtk_notebook_set_tab_reorderable(GTK_NOTEBOOK(book),to->page,TRUE);g_object_unref(to->page);g_object_set_data(G_OBJECT(window),"insight-floating-group",book);
+ }
+ g_object_ref(from->page);gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(from->page)),from->page);from->window=window;from->minimized=to->minimized;from->maximized=to->maximized;from->opacity=to->opacity;from->x=to->x;from->y=to->y;from->width=to->width;from->height=to->height;
+ gtk_notebook_append_page(GTK_NOTEBOOK(book),from->page,gtk_label_new(from->label));gtk_notebook_set_tab_reorderable(GTK_NOTEBOOK(book),from->page,TRUE);g_object_unref(from->page);gtk_notebook_set_current_page(GTK_NOTEBOOK(book),gtk_notebook_page_num(GTK_NOTEBOOK(book),from->page));
+ gtk_scale_button_set_value(GTK_SCALE_BUTTON(from->opacity_button),to->opacity);
+ if(!panel_window_count(old)) gtk_widget_destroy(old);else panel_window_refresh(old);
+ gtk_widget_show_all(book);panel_geometry_capture(from);panel_window_refresh(window);panel_restore(target);
+}
+static void panel_group_capture(guint index,InsightLayout *record) {
+ PanelHost *host=&wb.hosts[index];if(index>=8 || panel_window_count(host->window)<2) return;
+ GtkWidget *book=gtk_widget_get_parent(host->page);if(!GTK_IS_NOTEBOOK(book)) return;
+ record->groups[index]=(gint)panel_window_owner(host->window)+1;record->group_order[index]=gtk_notebook_page_num(GTK_NOTEBOOK(book),host->page);
+ GtkWidget *active=gtk_notebook_get_nth_page(GTK_NOTEBOOK(book),gtk_notebook_get_current_page(GTK_NOTEBOOK(book)));
+ for(guint i=0;i<8;i++) if(wb.hosts[i].page==active) record->group_active[index]=(gint)i+1;
+}
+static void panel_groups_apply(const InsightLayout *record) {
+ for(guint i=0;i<8;i++) if(record->groups[i] && record->groups[i]!=(gint)i+1) panel_group_join(i,(guint)record->groups[i]-1);
+ for(guint root=0;root<8;root++) if(record->groups[root]==(gint)root+1) {
+  GtkWidget *book=gtk_widget_get_parent(wb.hosts[root].page);
+  for(guint rank=0;rank<8;rank++) for(guint i=0;i<8;i++) if(record->groups[i]==(gint)root+1 && record->group_order[i]==(gint)rank) gtk_notebook_reorder_child(GTK_NOTEBOOK(book),wb.hosts[i].page,(gint)rank);
+  guint active=(guint)record->group_active[root]-1;gtk_notebook_set_current_page(GTK_NOTEBOOK(book),gtk_notebook_page_num(GTK_NOTEBOOK(book),wb.hosts[active].page));
+ }
+}
+static void panel_group_command(GtkMenuItem *item,gpointer data) { (void)item;guint pair=GPOINTER_TO_UINT(data);panel_group_join(pair/16,pair%16); }
+static void panel_ungroup_command(GtkMenuItem *item,gpointer data) { (void)item;guint index=GPOINTER_TO_UINT(data);if(index>=8 || panel_window_count(wb.hosts[index].window)<2) return;dock_panel(index);detach_panel(index); }
 static void panel_controls_attach(guint index) {
  PanelHost *host=&wb.hosts[index];GtkWidget *header=NULL;
  GList *children=gtk_container_get_children(GTK_CONTAINER(host->page));
@@ -4010,6 +4069,12 @@ static void panel_controls_attach(guint index) {
  g_signal_connect(host->minimize_button,"clicked",G_CALLBACK(panel_minimize_command),GUINT_TO_POINTER(index));
  g_signal_connect(host->dock_button,"clicked",G_CALLBACK(panel_toggle_docking),GUINT_TO_POINTER(index));
  g_signal_connect(host->maximize_button,"clicked",G_CALLBACK(panel_toggle_maximized),GUINT_TO_POINTER(index));
+ if(index<8) {
+  host->group_button=gtk_menu_button_new();gtk_widget_set_name(host->group_button,"insight-panel-group-button");gtk_widget_set_tooltip_text(host->group_button,"Group this floating panel");gtk_button_set_image(GTK_BUTTON(host->group_button),gtk_image_new_from_icon_name("tab-new-symbolic",GTK_ICON_SIZE_MENU));gtk_button_set_relief(GTK_BUTTON(host->group_button),GTK_RELIEF_NONE);gtk_widget_set_no_show_all(host->group_button,TRUE);gtk_box_pack_end(GTK_BOX(header),host->group_button,FALSE,FALSE,0);
+  GtkWidget *menu=gtk_menu_new();gtk_menu_button_set_popup(GTK_MENU_BUTTON(host->group_button),menu);
+  for(guint target=0;target<8;target++) if(target!=index) { GtkWidget *item=gtk_menu_item_new_with_label(wb.hosts[target].label);gchar *name=g_strdup_printf("insight-panel-group-with-%u",target);gtk_widget_set_name(item,name);g_free(name);g_signal_connect(item,"activate",G_CALLBACK(panel_group_command),GUINT_TO_POINTER(index*16+target));gtk_menu_shell_append(GTK_MENU_SHELL(menu),item); }
+  host->ungroup_item=gtk_menu_item_new_with_label("Float this panel separately");gtk_widget_set_name(host->ungroup_item,"insight-panel-ungroup");g_signal_connect(host->ungroup_item,"activate",G_CALLBACK(panel_ungroup_command),GUINT_TO_POINTER(index));gtk_menu_shell_append(GTK_MENU_SHELL(menu),host->ungroup_item);gtk_widget_show_all(menu);
+ }
  panel_controls_update(host);gtk_widget_show_all(header);
 }
 static void float_panel_command(GtkMenuItem *item,gpointer data) { (void)item; detach_panel(GPOINTER_TO_UINT(data)); }
@@ -4030,7 +4095,7 @@ static void register_panels(void) {
    g_object_ref(old); gtk_container_remove(GTK_CONTAINER(host->home),old); gtk_container_add(GTK_CONTAINER(scroll),old); g_object_unref(old);
    gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0); gtk_notebook_insert_page(GTK_NOTEBOOK(host->home),box,gtk_label_new(host->label),position);
    host->page=box; gtk_widget_show_all(box);
-  } if(i!=9) insight_panel_help_attach(host->page,topics[i]); panel_controls_attach(i); }
+  } if(i!=9) insight_panel_help_attach(host->page,topics[i]);g_object_set_data(G_OBJECT(host->page),"insight-panel-id",GUINT_TO_POINTER(i+1)); panel_controls_attach(i); }
  insight_panel_help_attach(wb.search_page,"panel-search-results.md");
  insight_panel_help_notebook(GTK_NOTEBOOK(main_widgets.sidebar_notebook),"panel-native-symbols.md"); insight_panel_help_notebook(GTK_NOTEBOOK(main_widgets.message_window_notebook),"panel-messages.md"); insight_panel_help_notebook(GTK_NOTEBOOK(main_widgets.notebook),"panel-editor.md");
  GtkWidget *floating=gtk_menu_item_new_with_label("Float individual panel"),*menu=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(floating),menu); gtk_container_add(GTK_CONTAINER(wb.panel_commands),floating);
@@ -4099,7 +4164,7 @@ static gboolean capture_layout(InsightLayout *out) {
  v[IL_X]=CLAMP(wb.float_x,-30000,30000); v[IL_Y]=CLAMP(wb.float_y,-30000,30000); v[IL_WIDTH]=wb.float_width>=300 ? MIN(wb.float_width,4000) : 440; v[IL_HEIGHT]=wb.float_height>=200 ? MIN(wb.float_height,4000) : 620;
  for(guint i=0;i<wb.host_count;i++) {
   PanelHost *host=&wb.hosts[i];panel_geometry_capture(host);
-  record.opacity[i]=host->opacity;record.panels[i]=(InsightPanelLayout){TRUE,host->maximized,CLAMP(host->x,-30000,30000),CLAMP(host->y,-30000,30000),host->width>=300 ? MIN(host->width,4000) : 480,host->height>=200 ? MIN(host->height,4000) : 600};
+  panel_group_capture(i,&record);record.opacity[i]=host->opacity;record.panels[i]=(InsightPanelLayout){TRUE,host->maximized,CLAMP(host->x,-30000,30000),CLAMP(host->y,-30000,30000),host->width>=300 ? MIN(host->width,4000) : 480,host->height>=200 ? MIN(host->height,4000) : 600};
  }
  insight_window_list_layout_capture(&record);
  if(!insight_layout_valid(&record)) return FALSE;
@@ -4124,6 +4189,7 @@ static void apply_layout_record(const InsightLayout *record) {
    if(p->set) { host->x=p->x;host->y=p->y;host->width=p->width;host->height=p->height;host->maximized=p->maximized; }
    if(v[IL_DETACHED]&(1<<i)) detach_panel(i);
   }
+  panel_groups_apply(record);
   gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.tray_toggle),v[IL_TRAY_VISIBLE]);
   for(guint i=0;i<wb.host_count;i++) if(v[IL_HOST_MINIMIZED]&(1<<i)) panel_minimize(i);
   insight_window_list_layout_apply(record);
@@ -4506,7 +4572,8 @@ static void save_workbench_settings(void) {
  g_key_file_set_boolean(settings,"workbench","transparent-panels",wb.transparent_panels);g_key_file_set_boolean(settings,"workbench","tab-tray-visible",wb.tray_enabled);
  g_key_file_set_integer(settings,"workbench","version",1);
  for(guint i=0;i<wb.host_count;i++) { PanelHost *host=&wb.hosts[i]; gchar group[32]; g_snprintf(group,sizeof group,"panel-%u",i); if(host->window) { panel_geometry_capture(host); host->visible=gtk_widget_get_visible(host->window); }
-  g_key_file_set_integer(settings,group,"version",4); g_key_file_set_integer(settings,group,"opacity",host->opacity); g_key_file_set_boolean(settings,group,"minimized",host->minimized); g_key_file_set_boolean(settings,group,"maximized",host->maximized); g_key_file_set_boolean(settings,group,"floating",host->window!=NULL); g_key_file_set_boolean(settings,group,"visible",host->visible); g_key_file_set_integer(settings,group,"x",host->x); g_key_file_set_integer(settings,group,"y",host->y); g_key_file_set_integer(settings,group,"width",host->width); g_key_file_set_integer(settings,group,"height",host->height);
+  InsightLayout grouping={0};panel_group_capture(i,&grouping);g_key_file_set_integer(settings,group,"group",grouping.groups[i]);g_key_file_set_integer(settings,group,"group-order",grouping.group_order[i]);g_key_file_set_integer(settings,group,"group-active",grouping.group_active[i]);
+  g_key_file_set_integer(settings,group,"version",5); g_key_file_set_integer(settings,group,"opacity",host->opacity); g_key_file_set_boolean(settings,group,"minimized",host->minimized); g_key_file_set_boolean(settings,group,"maximized",host->maximized); g_key_file_set_boolean(settings,group,"floating",host->window!=NULL); g_key_file_set_boolean(settings,group,"visible",host->visible); g_key_file_set_integer(settings,group,"x",host->x); g_key_file_set_integer(settings,group,"y",host->y); g_key_file_set_integer(settings,group,"width",host->width); g_key_file_set_integer(settings,group,"height",host->height);
  }
  g_key_file_set_boolean(settings,"workbench","project-visible",gtk_widget_get_visible(wb.project_notebook));
  g_key_file_set_boolean(settings,"workbench","floating",wb.float_window!=NULL);
@@ -4571,8 +4638,8 @@ static void restore_workbench_settings(void) {
   insight_symbol_view_set_grouped(GTK_TREE_VIEW(wb.local_view),g_key_file_get_boolean(settings,"workbench","file-symbols-grouped",NULL)); insight_symbol_view_set_grouped(GTK_TREE_VIEW(wb.symbol_view),g_key_file_get_boolean(settings,"workbench","project-symbols-grouped",NULL));
   for(guint i=0;i<4;i++) { gchar group[16]; g_snprintf(group,sizeof group,"layout-%c",'A'+i); insight_layout_read(settings,group,&wb.layouts[i]); }
   for(guint i=0;i<10;i++) { PanelHost *host=&wb.hosts[i]; gchar group[32]; g_snprintf(group,sizeof group,"panel-%u",i); GError *error=NULL; gint version=g_key_file_get_integer(settings,group,"version",&error);
-   if(!error && (version>=1 && version<=4)) { if(version>=4) host->opacity=g_key_file_get_integer(settings,group,"opacity",&error);if(!error && version>=3) host->minimized=g_key_file_get_boolean(settings,group,"minimized",&error); if(!error && version>=2) host->maximized=g_key_file_get_boolean(settings,group,"maximized",&error); if(!error) host->restore=g_key_file_get_boolean(settings,group,"floating",&error); if(!error) host->visible=g_key_file_get_boolean(settings,group,"visible",&error); if(!error) host->x=g_key_file_get_integer(settings,group,"x",&error); if(!error) host->y=g_key_file_get_integer(settings,group,"y",&error); if(!error) host->width=g_key_file_get_integer(settings,group,"width",&error); if(!error) host->height=g_key_file_get_integer(settings,group,"height",&error); }
-   if(error || (version<1 || version>4) || host->opacity<40 || host->opacity>100 || host->width<300 || host->width>4000 || host->height<200 || host->height>4000 || host->x < -30000 || host->x>30000 || host->y < -30000 || host->y>30000) { host->restore=FALSE;host->opacity=100;host->maximized=FALSE;host->minimized=FALSE; }
+   if(!error && (version>=1 && version<=5)) { if(version>=5) { host->saved_group=g_key_file_get_integer(settings,group,"group",&error);if(!error) host->saved_group_order=g_key_file_get_integer(settings,group,"group-order",&error);if(!error) host->saved_group_active=g_key_file_get_integer(settings,group,"group-active",&error); }if(!error && version>=4) host->opacity=g_key_file_get_integer(settings,group,"opacity",&error);if(!error && version>=3) host->minimized=g_key_file_get_boolean(settings,group,"minimized",&error); if(!error && version>=2) host->maximized=g_key_file_get_boolean(settings,group,"maximized",&error); if(!error) host->restore=g_key_file_get_boolean(settings,group,"floating",&error); if(!error) host->visible=g_key_file_get_boolean(settings,group,"visible",&error); if(!error) host->x=g_key_file_get_integer(settings,group,"x",&error); if(!error) host->y=g_key_file_get_integer(settings,group,"y",&error); if(!error) host->width=g_key_file_get_integer(settings,group,"width",&error); if(!error) host->height=g_key_file_get_integer(settings,group,"height",&error); }
+   if(error || (version<1 || version>5) || host->opacity<40 || host->opacity>100 || host->width<300 || host->width>4000 || host->height<200 || host->height>4000 || host->x < -30000 || host->x>30000 || host->y < -30000 || host->y>30000) { host->restore=FALSE;host->opacity=100;host->maximized=FALSE;host->minimized=FALSE;host->saved_group=0;host->saved_group_order=0;host->saved_group_active=0; }
    g_clear_error(&error);
   }
   wb.transparent_panels=g_key_file_get_boolean(settings,"workbench","transparent-panels",NULL);
@@ -5165,7 +5232,12 @@ void insight_workbench_init(void) {
  wb.project_handlers[2]=g_signal_connect_after(geany_object,"project-close",G_CALLBACK(native_project_close),NULL);
  native_project_update(NULL,NULL,GINT_TO_POINTER(1));
  if(wb.restore_float) { gboolean visible=gtk_widget_get_visible(wb.project_notebook); float_project(NULL,NULL); gtk_widget_set_visible(wb.project_notebook,visible); gtk_widget_set_visible(wb.float_window,visible); }
- for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].restore) { gboolean minimized=wb.hosts[i].minimized;wb.hosts[i].minimized=FALSE;detach_panel(i);if(minimized) panel_minimize(i);else gtk_widget_set_visible(wb.hosts[i].window,wb.hosts[i].visible); }
+ InsightLayout session_groups={0};
+ for(guint i=0;i<wb.host_count;i++) { PanelHost *host=&wb.hosts[i];session_groups.groups[i]=host->saved_group;session_groups.group_order[i]=host->saved_group_order;session_groups.group_active[i]=host->saved_group_active;session_groups.opacity[i]=host->opacity;if(host->restore) { session_groups.values[IL_DETACHED]|=1<<i;if(host->minimized) session_groups.values[IL_HOST_MINIMIZED]|=1<<i;else if(host->visible) session_groups.values[IL_HOST_VISIBLE]|=1<<i; } }
+ if(!insight_layout_groups_valid(&session_groups)) { memset(session_groups.groups,0,sizeof session_groups.groups);memset(session_groups.group_order,0,sizeof session_groups.group_order);memset(session_groups.group_active,0,sizeof session_groups.group_active); }
+ for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].restore) detach_panel(i);
+ panel_groups_apply(&session_groups);
+ for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].window) { if(session_groups.values[IL_HOST_MINIMIZED]&(1<<i)) panel_minimize(i);else gtk_widget_set_visible(wb.hosts[i].window,(session_groups.values[IL_HOST_VISIBLE]&(1<<i))!=0); }
  if(wb.root && !wb.scan) start_scan(wb.root);
  g_signal_connect(wb.right_pane,"notify::position",G_CALLBACK(panel_position_guard),NULL);g_signal_connect(ui_lookup_widget(main_widgets.window,"hpaned1"),"notify::position",G_CALLBACK(panel_position_guard),NULL);g_signal_connect(existing,"notify::position",G_CALLBACK(panel_position_guard),NULL);
  ui_sidebar_show_hide();
@@ -5242,7 +5314,7 @@ void insight_workbench_finalize(void) {
 
 void insight_workbench_languages_changed(void) { if(!wb.alive) return;InsightMasterTypes *types=insight_languages_master_types();insight_master_sync_set_types(wb.master_sync,types);insight_master_types_free(types);stop_definition();wb.follow_doc=0;if(wb.root) { gchar *path=g_strdup(wb.root);start_scan(path);g_free(path); }else mark_index_dirty();stop_usage();browser_filter(NULL,NULL);files_filter(NULL,NULL);categories_filter(NULL,NULL);preview_links();insight_workbench_refresh(); }
 
-void insight_workbench_locale_changed(void) { if(!wb.alive) return;for(guint i=0;i<wb.host_count;i++) panel_controls_update(&wb.hosts[i]);if(wb.disk_browser) insight_disk_browser_locale_changed(wb.disk_browser);if(wb.relation_tree) insight_relation_tree_locale_changed(wb.relation_tree);if(wb.type_panel.status) grouped_count(&wb.type_panel,wb.type_panel.shown,wb.type_panel.total);if(wb.category_panel.status) { grouped_count(&wb.category_panel,wb.category_panel.shown,wb.category_panel.total);categories_filter(NULL,NULL); }if(wb.tree_status) folder_count(GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(wb.tree_status),"insight-folder-count")),GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(wb.tree_status),"insight-folder-total")));if(wb.file_status) { gchar *text=insight_i18n_printf(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(wb.file_status),"insight-files-more")) ? "Files: %u+" : "Files: %u",GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(wb.file_status),"insight-files-count")));gtk_label_set_text(GTK_LABEL(wb.file_status),text);g_free(text); }}
+void insight_workbench_locale_changed(void) { if(!wb.alive) return;for(guint i=0;i<wb.host_count;i++) { panel_controls_update(&wb.hosts[i]);if(panel_window_owner(wb.hosts[i].window)==i) panel_window_refresh(wb.hosts[i].window); }if(wb.disk_browser) insight_disk_browser_locale_changed(wb.disk_browser);if(wb.relation_tree) insight_relation_tree_locale_changed(wb.relation_tree);if(wb.type_panel.status) grouped_count(&wb.type_panel,wb.type_panel.shown,wb.type_panel.total);if(wb.category_panel.status) { grouped_count(&wb.category_panel,wb.category_panel.shown,wb.category_panel.total);categories_filter(NULL,NULL); }if(wb.tree_status) folder_count(GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(wb.tree_status),"insight-folder-count")),GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(wb.tree_status),"insight-folder-total")));if(wb.file_status) { gchar *text=insight_i18n_printf(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(wb.file_status),"insight-files-more")) ? "Files: %u+" : "Files: %u",GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(wb.file_status),"insight-files-count")));gtk_label_set_text(GTK_LABEL(wb.file_status),text);g_free(text); }}
 
 
 gboolean insight_workbench_focus_file_symbols(void) {

@@ -570,3 +570,19 @@ layout and restart persistence; an Xvfb/Openbox/xcompmgr run verifies an actual
 screen-pixel change. Compositing is required. Source Insight background input
 pass-through and its exact Preferences:Display location are not implemented.
 Reference: [Semi-transparent panels](https://www.sourceinsight.com/doc/v4/userguide/Manual/Window_Tour/Using_Semi-Transparent_Panel_Windows.htm).
+
+### Tabbed floating project panel groups (2026-10-20)
+
+Eight project panel hosts can share a floating notebook. Header menus group a
+panel with another, including an automatically floated target, or extract one
+panel into a separate window. Dock extracts only that page; group close docks all
+remaining pages. Shared window callbacks synchronize geometry/maximize, opacity
+and minimized state; each minimized group has one Tab Tray entry. Reorderable tabs,
+active page and membership persist in layout schema 8 and session schema 5.
+Layout validation rejects nonproject/dangling/noncanonical groups, duplicate/gapped
+ranks, invalid active pages and inconsistent visibility/minimized/opacity state.
+Versions 1–7 remain readable without groups. Native Linux production GUI covers
+three-panel join, extraction, partial dock, close, opacity/tray, order/active page,
+layout loading and full restart. File Symbols/Context/Window List are outside the
+initial group scope; cross-window dragging is not part of this increment.
+Reference: [Grouping Panel Windows](https://www.sourceinsight.com/doc/v4/userguide/Manual/Window_Tour/Grouping_Panel_Windows.htm).

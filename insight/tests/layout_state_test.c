@@ -44,6 +44,16 @@ int main(void) {
  insight_layout_write(f,"layout-A",&r);g_key_file_set_integer(f,"layout-A","panel-0-opacity",0);g_assert_false(insight_layout_read(f,"layout-A",&out));
  insight_layout_write(f,"layout-A",&r);g_key_file_set_integer(f,"layout-A","version",6);g_assert_true(insight_layout_read(f,"layout-A",&out));g_assert_false(out.values[IL_TRANSPARENT_PANELS]);for(guint i=0;i<IL_PANEL_COUNT;i++) g_assert_cmpint(out.opacity[i],==,100);
  r.opacity[0]=101;g_assert_false(insight_layout_valid(&r));r.opacity[0]=40;
+ InsightLayout grouped=r;grouped.values[IL_DETACHED]|=7;for(guint i=0;i<3;i++) { grouped.groups[i]=1;grouped.group_order[i]=2-(gint)i;grouped.group_active[i]=2;grouped.opacity[i]=75; }
+ g_assert_true(insight_layout_valid(&grouped));insight_layout_write(f,"grouped",&grouped);g_assert_true(insight_layout_read(f,"grouped",&out));for(guint i=0;i<3;i++) { g_assert_cmpint(out.groups[i],==,1);g_assert_cmpint(out.group_order[i],==,2-(gint)i);g_assert_cmpint(out.group_active[i],==,2); }
+ grouped.group_order[1]=0;g_assert_false(insight_layout_valid(&grouped));grouped.group_order[1]=1;
+ grouped.group_active[1]=9;g_assert_false(insight_layout_valid(&grouped));grouped.group_active[1]=2;
+ grouped.values[IL_HOST_MINIMIZED]=1;g_assert_false(insight_layout_valid(&grouped));grouped.values[IL_HOST_MINIMIZED]=0;
+ grouped.opacity[1]=80;g_assert_false(insight_layout_valid(&grouped));grouped.opacity[1]=75;
+ grouped.groups[1]=2;g_assert_false(insight_layout_valid(&grouped));grouped.groups[1]=1;
+ grouped.groups[8]=1;g_assert_false(insight_layout_valid(&grouped));grouped.groups[8]=0;
+ insight_layout_write(f,"grouped",&grouped);g_key_file_remove_key(f,"grouped","panel-2-group-active",NULL);g_assert_false(insight_layout_read(f,"grouped",&out));g_assert_false(out.valid);
+ insight_layout_write(f,"grouped",&grouped);g_key_file_set_integer(f,"grouped","version",7);g_assert_true(insight_layout_read(f,"grouped",&out));for(guint i=0;i<IL_PANEL_COUNT;i++) g_assert_cmpint(out.groups[i],==,0);
  gchar *dir=g_dir_make_tmp("layout-files-XXXXXX",NULL),*path=g_build_filename(dir,"review.geany-layout",NULL);GError *error=NULL;
  g_assert_true(insight_layout_save_file(path,&r,&error));g_assert_no_error(error);g_assert_true(insight_layout_load_file(path,&out,&error));g_assert_no_error(error);g_assert_cmpint(out.panels[9].height,==,r.panels[9].height);
  r.panels[0].width=1;g_assert_false(insight_layout_save_file(path,&r,&error));g_clear_error(&error);r.panels[0].width=480;g_assert_true(insight_layout_load_file(path,&out,&error));g_assert_no_error(error);

@@ -43,7 +43,7 @@ unchanged. The native chooser confirms overwriting an existing file.
 This is Geany Insight's INI format, without source text or project paths; Source
 Insight XML is not imported. Files over 64 KiB, NUL bytes, missing fields and invalid
 values are rejected before any window changes. Errors appear in the status bar.
-Internal layout versions 1–6 remain readable with defaults for newer features.
+Internal layout versions 1–7 remain readable with defaults for newer features.
 
 ## Try it
 
@@ -57,7 +57,7 @@ Native Linux application captured during the automated build/restart scenario
 
 ![Panel controls](../media/panel-windows.jpg)
 
-Arbitrary edge dragging and free panel grouping are not implemented. The separate
+Arbitrary edge docking is not implemented. The eight project panels can be grouped as described below. The separate
 Window List and the whole floating Project Window group are outside these ten
 Tab Tray hosts. Linux was checked; Windows and Android were not run for this series.
 
@@ -86,3 +86,29 @@ Source Insight's background click-through behavior is not implemented.
 
 Linux checks include the GTK value and a changed screen pixel under Xvfb,
 Openbox and xcompmgr, as well as layout/session round trips.
+
+## Floating project panel groups
+
+Float a project panel and click the tab/group icon in its header. Choose another
+project panel to put both in one floating window with tabs; a docked target floats
+automatically. Add more panels in the same way. Move tabs within a group to change
+their order. Float this panel separately extracts only the selected panel to its
+own window. Dock returns only that panel to its home. Closing the group docks all
+remaining members without closing editor documents.
+
+Minimize, Maximize and opacity apply to the whole window. A minimized group has
+one Tab Tray button labeled with a panel name and the number of additional members.
+Layouts and session settings retain membership, tab order and active tab. Invalid
+group links, duplicate tab positions and inconsistent group visibility/opacity are
+rejected by layout loading; invalid session groups fall back to separate windows.
+
+Grouping covers Project Files, Project Symbols, Folders, Relations, Symbol
+Categories, File Types, Bookmarks and Clips. File Symbols, Context, Window List
+and the whole Project Window group remain separate. This increment uses the group
+menu; dragging panels between windows is not yet provided.
+
+Native Linux application captured during the group/restart scenario:
+
+![Floating project panel group](../media/panel-groups.jpg)
+
+![Group and separate](../media/panel-groups.svg)

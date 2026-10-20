@@ -6,8 +6,26 @@
 #include <string.h>
 static const char *keys[IL_FIELDS]={"left","project","context","follow","wrap","floating","left-split","right-split","context-split","tab","x","y","width","height","detached","host-visible","window-list-set","window-list-visible","window-list-docked","window-list-positioned","window-list-maximized","window-list-x","window-list-y","window-list-width","window-list-height","tab-tray-visible","host-minimized","transparent-panels"};
 static gboolean boolean_field(guint i) { return i==IL_TRANSPARENT_PANELS || i==IL_TRAY_VISIBLE || i<=IL_FLOAT || (i>=IL_WL_SET && i<=IL_WL_MAXIMIZED); }
+gboolean insight_layout_groups_valid(const InsightLayout *r) {
+ if(!r) return FALSE;
+ for(guint i=0;i<IL_PANEL_COUNT;i++) {
+  gint group=r->groups[i];if(group<0 || group>8 || (i>=8 && group)) return FALSE;
+  if(!group) { if(r->group_order[i] || r->group_active[i]) return FALSE;continue; }
+  guint root=(guint)group-1;if(root>i || r->groups[root]!=group || !(r->values[IL_DETACHED]&(1<<i))) return FALSE;
+  gint active=r->group_active[i];if(active<1 || active>8 || r->groups[active-1]!=group || r->group_active[root]!=active || r->group_order[i]<0 || r->group_order[i]>=8) return FALSE;
+  guint ranks=0,count=0;
+  for(guint j=0;j<8;j++) if(r->groups[j]==group) {
+   if(r->group_order[j]<0 || r->group_order[j]>=8 || (ranks&(1u<<r->group_order[j]))) return FALSE;
+   ranks|=1u<<r->group_order[j];count++;
+   if(((r->values[IL_HOST_VISIBLE]>>j)&1)!=((r->values[IL_HOST_VISIBLE]>>root)&1) || ((r->values[IL_HOST_MINIMIZED]>>j)&1)!=((r->values[IL_HOST_MINIMIZED]>>root)&1)) return FALSE;
+   if((r->opacity[j] ? r->opacity[j] : 100)!=(r->opacity[root] ? r->opacity[root] : 100)) return FALSE;
+  }
+  if(count<2 || ranks!=((1u<<count)-1)) return FALSE;
+ }
+ return TRUE;
+}
 gboolean insight_layout_valid(const InsightLayout *r) {
- if(!r || !r->valid) return FALSE;
+ if(!r || !r->valid || !insight_layout_groups_valid(r)) return FALSE;
  if(r->values[IL_TRANSPARENT_PANELS]!=0 && r->values[IL_TRANSPARENT_PANELS]!=1) return FALSE;
  const InsightPanelLayout *main=&r->main_window;
  if((main->set!=FALSE && main->set!=TRUE) || (main->maximized!=FALSE && main->maximized!=TRUE)) return FALSE;
@@ -50,6 +68,12 @@ gboolean insight_layout_read(GKeyFile *file,const char *group,InsightLayout *out
   next.opacity[i]=100;
   if(version>=7) { gchar name[40];g_snprintf(name,sizeof name,"panel-%u-opacity",i);next.opacity[i]=g_key_file_get_integer(file,group,name,&error);if(error || next.opacity[i]<40 || next.opacity[i]>100) { g_clear_error(&error);return FALSE; } }
  }
+ if(version>=8) for(guint i=0;i<IL_PANEL_COUNT;i++) {
+  gchar name[48];g_snprintf(name,sizeof name,"panel-%u-group",i);next.groups[i]=g_key_file_get_integer(file,group,name,&error);
+  if(!error) { g_snprintf(name,sizeof name,"panel-%u-group-order",i);next.group_order[i]=g_key_file_get_integer(file,group,name,&error); }
+  if(!error) { g_snprintf(name,sizeof name,"panel-%u-group-active",i);next.group_active[i]=g_key_file_get_integer(file,group,name,&error); }
+  if(error) { g_clear_error(&error);return FALSE; }
+ }
  if(!insight_layout_valid(&next)) return FALSE;
  *out=next; return TRUE;
 }
@@ -62,6 +86,9 @@ void insight_layout_write(GKeyFile *file,const char *group,const InsightLayout *
  }
  for(guint i=0;i<IL_PANEL_COUNT;i++) {
   const InsightPanelLayout *p=&r->panels[i];gchar key[48];
+  g_snprintf(key,sizeof key,"panel-%u-group",i);g_key_file_set_integer(file,group,key,r->groups[i]);
+  g_snprintf(key,sizeof key,"panel-%u-group-order",i);g_key_file_set_integer(file,group,key,r->group_order[i]);
+  g_snprintf(key,sizeof key,"panel-%u-group-active",i);g_key_file_set_integer(file,group,key,r->group_active[i]);
   g_snprintf(key,sizeof key,"panel-%u-opacity",i);g_key_file_set_integer(file,group,key,r->opacity[i] ? r->opacity[i] : 100);
   const gchar *fields[]={"set","maximized","x","y","width","height"};gint v[]={p->set,p->maximized,p->x,p->y,p->width,p->height};
   for(guint j=0;j<G_N_ELEMENTS(fields);j++) { g_snprintf(key,sizeof key,"panel-%u-%s",i,fields[j]);if(j<2) g_key_file_set_boolean(file,group,key,v[j]);else g_key_file_set_integer(file,group,key,v[j]); }

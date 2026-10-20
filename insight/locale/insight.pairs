@@ -856,3 +856,5 @@ Window layouts and Tab Tray…|||Раскладки окон и свёрнуты
 Enable transparent panels|||Включить прозрачность панелей
 Floating panel opacity|||Непрозрачность плавающей панели
 Floating panel opacity: %d%%|||Непрозрачность плавающей панели: %d%%
+Group this floating panel|||Объединить эту плавающую панель
+Float this panel separately|||Открыть эту панель отдельным окном
