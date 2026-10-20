@@ -2952,7 +2952,17 @@ gboolean ScintillaGTK::DragMotionThis(GdkDragContext *context,
 			// with no real effect but which creates undo actions.
 			preferredAction = static_cast<GdkDragAction>(0);
 		} else if (actions == actionCopyOrMove) {
-			preferredAction = GDK_ACTION_MOVE;
+			// GTK may suggest COPY even without modifiers. Read the drag
+			// device state so Ctrl selects copying and plain drag moves.
+			GdkModifierType modifiers = static_cast<GdkModifierType>(0);
+#if GTK_CHECK_VERSION(3,0,0)
+			GdkDevice *device = gdk_drag_context_get_device(context);
+			if (device)
+				gdk_device_get_state(device, gtk_widget_get_window(GTK_WIDGET(PWidget(wMain))), nullptr, &modifiers);
+#else
+			gdk_window_get_pointer(gtk_widget_get_window(GTK_WIDGET(PWidget(wMain))), nullptr, nullptr, &modifiers);
+#endif
+			preferredAction = (modifiers & GDK_CONTROL_MASK) ? GDK_ACTION_COPY : GDK_ACTION_MOVE;
 		}
 		gdk_drag_status(context, preferredAction, dragtime);
 	} catch (...) {

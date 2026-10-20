@@ -4913,16 +4913,14 @@ void Editor::ButtonDownWithModifiers(Point pt, unsigned int curTime, KeyMod modi
 			if (!shift) {
 				const ptrdiff_t selectionPart = SelectionFromPoint(pt);
 				if (selectionPart >= 0) {
-					if (multipleSelection && ctrl) {
+					if (multipleSelection && ctrl && (sel.Count() > 1)) {
 						// Deselect
-						if (sel.Count() > 1) {
-							DropSelection(selectionPart);
-							// Completed: don't want any more processing of this click
-							return;
-						}
-						// Switch to just the click position
-						SetSelection(newPos, newPos);
+						DropSelection(selectionPart);
+						// Completed: don't want any more processing of this click
+						return;
 					}
+					// Keep a single selection for Ctrl+drag copying. A click
+					// without dragging is collapsed on button release.
 					if (!sel.Range(selectionPart).Empty()) {
 						inDragDrop = DragDrop::initial;
 					}

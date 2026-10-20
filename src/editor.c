@@ -339,6 +339,12 @@ static gboolean on_editor_button_press_event(GtkWidget *widget, GdkEventButton *
 		}
 		if (event->type == GDK_BUTTON_PRESS && state == GEANY_PRIMARY_MOD_MASK)
 		{
+			/* Let Scintilla start Ctrl+drag when pressing inside the
+			 * existing selection; elsewhere Ctrl+click still navigates. */
+			if (!editor_prefs.disable_dnd &&
+				editor_info.click_pos >= sci_get_selection_start(editor->sci) &&
+				editor_info.click_pos < sci_get_selection_end(editor->sci))
+				return document_check_disk_status(doc, FALSE);
 			sci_set_current_position(editor->sci, editor_info.click_pos, FALSE);
 
 			if (!insight_workbench_goto_definition() && !symbols_goto_tag(doc, editor_info.click_pos, TRUE))
