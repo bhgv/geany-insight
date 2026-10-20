@@ -78,3 +78,49 @@ a small UTF-8/CRLF example.
 
 Настоящее окно из изолированного нативного GUI-теста Linux, прошедшего в составе
 48 проверок; это не макет. Пример использует короткий текст UTF-8 с CRLF.
+
+## Whole file and original changes / Весь файл и список изменений
+
+**Edit → Restore File…** previews the complete original/current buffers and restores
+all text captured when opening/creating the document, including edits already
+saved. The disk is unchanged. Cancel is a no-op; Restore is one Undo/Redo group.
+This does not reload the current disk file. It uses the same snapshot limits,
+normal-selection guard and stale-document/selection/permissions checks as Restore
+Lines. Full-file restoration does not require an exact diff or its work budget.
+
+**Go To Next Change / Go To Previous Change** compare exact physical lines with
+the opening snapshot, including saved edits and EOL differences. They move to the
+next strictly greater / previous strictly smaller block start relative to the
+active caret, without wrapping. Inside a block Previous returns to its start.
+Deleted blocks use their surviving boundary (including EOF). Existing selection
+collapses unless Extend Mode is enabled; read-only navigation is allowed. Normal
+navigation history records the jump for named documents. No syntax-aware or
+persisted revision marks are implied.
+
+**Original Changes…** lists block number, insertion/deletion/modification, original
+and current physical line ranges, and a 160-byte UTF-8-safe text excerpt. Empty
+sides show a deletion/insertion boundary. Go To or double-click selects the block;
+Restore Lines opens its normal confirmation, with complete touching-block semantics.
+Refresh recomputes only for the same active document. Changed text requires explicit
+Refresh before navigation; a switched or closed document cannot be targeted.
+Columns resize; first 2000 blocks are listed with shown/total counts. Navigation
+commands still inspect all blocks within the exact-diff work/size limits. Four
+new shortcuts are unassigned in native Preferences. The ordinary editor popup
+contains all four commands; unsupported selection modes disable them.
+
+**Восстановить файл…** показывает весь текущий и исходный текст. Подтверждение
+возвращает буфер к состоянию при открытии, даже после Save; диск не меняется.
+Один Undo возвращает прежние правки. Полное восстановление не требует diff.
+**Следующее/предыдущее изменение** переходят по началу точных блоков без зацикливания,
+включая границы удалённых строк и EOF; read-only разрешён, Extend Mode сохраняет
+выделение. **Изменения от исходного текста…** показывает тип, диапазоны и фрагмент
+текста. Переход выделяет блок; восстановление открывает отдельное подтверждение.
+После изменения текста требуется явное обновление. Список ограничен 2000 блоками,
+показывает их общее число и не переключается на другой документ автоматически.
+Снимки, UTF-8, размеры и режимы выделения ограничены как описано выше.
+
+![Original changes workflow](media/original-changes.svg)
+
+References: [Restore File](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Restore_File.htm),
+[Next Change](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Go_To_Next_Change.htm),
+[Previous Change](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Go_To_Previous_Change.htm).

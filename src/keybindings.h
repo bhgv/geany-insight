@@ -289,6 +289,10 @@ enum GeanyKeyBindingID
 	GEANY_KEYS_INSIGHT_BACKTOGGLE,            /**< Insight keybinding. */
 	GEANY_KEYS_INSIGHT_RESTORELINES,          /**< Insight keybinding. */
 	GEANY_KEYS_INSIGHT_ORIGINALCONTENTS,      /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_RESTOREFILE,           /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_NEXTCHANGE,            /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_PREVCHANGE,            /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_ORIGINALCHANGES,       /**< Insight keybinding. */
 	GEANY_KEYS_COUNT	/* must not be used by plugins */
 };
 

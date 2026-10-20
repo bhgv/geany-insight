@@ -1068,3 +1068,26 @@ Current lines: %u–%u|||Текущие строки: %u–%u
 Preview: first 8 KiB per side. Saved files are unchanged. One Undo restores the previous edited text.|||Предпросмотр: первые 8 КиБ с каждой стороны. Сохранённые файлы не меняются. Один Undo вернёт предыдущий отредактированный текст.
 Restore cancelled: the document, selection or permissions changed|||Восстановление отменено: документ, выделение или права изменились
 Preview truncated; Restore uses the complete block|||Предпросмотр сокращён; Restore использует полный блок
+Restore File|||Восстановить файл
+Restore File…|||Восстановить файл…
+Go To Next Change|||Перейти к следующему изменению
+Go To Previous Change|||Перейти к предыдущему изменению
+Original Changes|||Изменения от исходного текста
+Original Changes…|||Изменения от исходного текста…
+Restore the entire buffer to its original contents from opening, including changes already saved. The disk file is unchanged.|||Восстановить весь буфер к содержимому при открытии, включая сохранённые изменения. Файл на диске не меняется.
+Whole file restoration|||Восстановление всего файла
+Original changes unavailable: snapshot, UTF-8, size or comparison work limit|||Изменения недоступны: снимок, UTF-8, размер или предел работы сравнения
+No next original-text change|||Следующего изменения исходного текста нет
+No previous original-text change|||Предыдущего изменения исходного текста нет
+At line %u (empty)|||У строки %u (пусто)
+Changes since opening, including saved edits. Select a block; Restore Lines opens a separate confirmation. Refresh after editing.|||Изменения с открытия, включая сохранённые правки. Выберите блок; восстановление строк откроет отдельное подтверждение. После правки обновите список.
+Block|||Блок
+Change|||Изменение
+Original lines|||Исходные строки
+Current lines|||Текущие строки
+Text preview|||Предпросмотр текста
+Inserted|||Вставлено
+Deleted|||Удалено
+Showing %u of %u changed blocks|||Показано %u из %u блоков изменений
+Changes list expired; reopen it for the active document|||Список изменений устарел; откройте его для активного документа
+Changes list is stale; use Refresh before navigating|||Список изменений устарел; обновите перед переходом
