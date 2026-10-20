@@ -14,6 +14,7 @@ static guint mode,tick;
 static GtkWidget *named(GtkWidget *w,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(w),name)) return w;
  if(GTK_IS_MENU_ITEM(w)) { GtkWidget *menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(w));if(menu) { GtkWidget *f=named(menu,name);if(f) return f; } }
+ if(GTK_IS_MENU_BUTTON(w)) { GtkWidget *popover=GTK_WIDGET(gtk_menu_button_get_popover(GTK_MENU_BUTTON(w)));if(popover) { GtkWidget *found=named(popover,name);if(found) return found; } }
  if(GTK_IS_CONTAINER(w)) { GList *children=gtk_container_get_children(GTK_CONTAINER(w));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL;
 }
 static GtkWidget *dialog(void) { GList *windows=gtk_window_list_toplevels();GtkWidget *found=NULL;for(GList *p=windows;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-selection-matches-dialog")) { found=p->data;break; }g_list_free(windows);return found; }

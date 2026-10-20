@@ -85,6 +85,7 @@ static gchar *word_pattern(const QuickSource *source,gint *first,gint *last)
 static GtkWidget *named(GtkWidget *widget,const gchar *name)
 {
     if(!g_strcmp0(gtk_widget_get_name(widget),name)) return widget;
+    if(GTK_IS_MENU_BUTTON(widget)) { GtkWidget *popover=GTK_WIDGET(gtk_menu_button_get_popover(GTK_MENU_BUTTON(widget)));if(popover) { GtkWidget *found=named(popover,name);if(found) return found; } }
     if(GTK_IS_CONTAINER(widget)) { GList *children=gtk_container_get_children(GTK_CONTAINER(widget));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL;
 }
 static gboolean option(const gchar *name,gboolean fallback)
@@ -100,7 +101,7 @@ static void sync_pattern(const gchar *pattern,gboolean sensitive,gboolean word,g
     gboolean escaped=pattern[0]=='~';gchar *bar_pattern=escaped ? g_regex_escape_string(pattern,-1):g_strdup(pattern);
     const gchar *names[]={"insight-file-search-case","insight-file-search-word","insight-file-search-regex"};gboolean values[]={sensitive,word,escaped};
     for(guint i=0;i<3;i++) { GtkWidget *widget=named(main_widgets.window,names[i]);if(widget) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget),values[i]); }
-    GtkWidget *entry=named(main_widgets.window,"insight-file-search-query");if(entry) gtk_entry_set_text(GTK_ENTRY(entry),bar_pattern);g_free(bar_pattern);
+    GtkWidget *entry=named(main_widgets.window,"insight-file-search-query");if(entry) { gint maximum=gtk_entry_get_max_length(GTK_ENTRY(entry));if(maximum>0 && (gsize)maximum<strlen(bar_pattern)) gtk_entry_set_max_length(GTK_ENTRY(entry),strlen(bar_pattern));gtk_entry_set_text(GTK_ENTRY(entry),bar_pattern); }g_free(bar_pattern);
     search_insight_set_pattern(pattern,(sensitive ? GEANY_FIND_MATCHCASE:0)|(word ? GEANY_FIND_WHOLEWORD:0),backwards);
     g_free(owned_pattern);owned_pattern=g_strdup(pattern);owned_flags=search_data.flags;
     if(incremental) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(incremental),old);
