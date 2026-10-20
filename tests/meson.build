@@ -632,7 +632,7 @@ git_project_gui_test = executable('test_insight_git_project_gui',
 test('Insight Git project dialogs GUI', git_project_gui_test, timeout: 60)
 
 git_native_gui_test = executable('test_insight_git_native_gui', '../insight/tests/git_native_gui_test.c', dependencies: test_deps)
-test('Insight native Git project GUI', git_native_gui_test, timeout: 45)
+test('Insight native Git project GUI', git_native_gui_test, timeout: 45, is_parallel: false)
 
 folder_tree_gui_test = executable('test_insight_folder_tree_gui',
  '../insight/tests/folder_tree_gui_test.c', '../insight/desktop/folder_tree.c', '../insight/desktop/folder_layout.c', dependencies: deps)

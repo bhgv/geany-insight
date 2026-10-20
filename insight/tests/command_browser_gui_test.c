@@ -21,7 +21,7 @@ static GtkWidget *dialog(void)
 {
  GList *windows=gtk_window_list_toplevels();GtkWidget *found=NULL;for(GList *p=windows;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-command-browser")) { found=p->data;break; }g_list_free(windows);return found;
 }
-static void invoked(GtkMenuItem *item,gpointer data) { (void)item;(void)data;g_assert_true(document_get_current()==source);g_assert_true(gtk_widget_has_focus(GTK_WIDGET(source->editor->sci)));executed++; }
+static void invoked(GtkMenuItem *item,gpointer data) { (void)item;(void)data;g_assert_true(document_get_current()==source);g_assert_true(gtk_window_get_focus(GTK_WINDOW(window))==GTK_WIDGET(source->editor->sci));executed++; }
 static GtkWidget *add_item(const gchar *label)
 {
  GtkWidget *item=gtk_menu_item_new_with_label(label);gtk_widget_set_tooltip_text(item,"deterministic browser fixture target");g_signal_connect(item,"activate",G_CALLBACK(invoked),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(help_menu),item);gtk_widget_show(item);return item;

@@ -284,6 +284,7 @@ static void show_browser(GtkMenuItem *menu_item, gpointer data)
     gtk_widget_destroy(browser.dialog);g_object_unref(browser.dialog);
     g_object_unref(browser.sorted);g_object_unref(browser.filter);g_object_unref(browser.store);g_strfreev(browser.tokens);
     if (browser.commands) g_ptr_array_free(browser.commands, TRUE);
+    gtk_window_present(GTK_WINDOW(main_widgets.window));
     GeanyDocument *doc = document_get_current();if (doc) gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));
     if (run) { if (command_available(run)) gtk_menu_item_activate(GTK_MENU_ITEM(run));g_object_unref(run); }
     else if (response == 201 || response == 202) create_reference(NULL, GINT_TO_POINTER(response == 202));

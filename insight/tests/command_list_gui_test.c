@@ -26,7 +26,7 @@ static gboolean step(gpointer data)
 {
  (void)data;source=document_get_current();if(!source) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));
  SEND(source->editor->sci,SCI_SETSEL,4,1);gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),"preserved",-1);
- gchar *text=reference("insight-create-command-list","Command List.txt");g_assert_nonnull(strstr(text,"Cut Word"));g_assert_nonnull(strstr(text,"Create Key List"));g_assert_nonnull(strstr(text,"\t"));g_free(text);
+ gchar *text=reference("insight-create-command-list","Command List.txt");g_assert_nonnull(strstr(text,"Cut Word"));g_assert_nonnull(strstr(text,"Create Key List"));gchar *cut_shortcut=gtk_accelerator_get_label(GDK_KEY_F11,GDK_CONTROL_MASK|GDK_SHIFT_MASK);g_assert_nonnull(strstr(text,cut_shortcut));g_free(cut_shortcut);g_assert_nonnull(strstr(text,"\t"));g_free(text);
  gchar *shortcut=gtk_accelerator_get_label(GDK_KEY_F12,GDK_CONTROL_MASK|GDK_SHIFT_MASK);text=reference("insight-create-key-list","Keylist.txt");g_assert_nonnull(strstr(text,shortcut));g_assert_nonnull(strstr(text,"Unassigned"));g_free(text);g_free(shortcut);
  gchar *contents=sci_get_contents(source->editor->sci,-1);g_assert_cmpstr(contents,==,"source");g_free(contents);g_assert_false(SEND(source->editor->sci,SCI_CANUNDO,0,0));g_assert_false(source->changed);g_assert_cmpint(SEND(source->editor->sci,SCI_GETANCHOR,0,0),==,4);g_assert_cmpint(SEND(source->editor->sci,SCI_GETCURRENTPOS,0,0),==,1);
  gchar *clipboard=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));g_assert_cmpstr(clipboard,==,"preserved");g_free(clipboard);
@@ -38,7 +38,7 @@ static gboolean timeout(gpointer data) { (void)data;g_error("Command list timeou
 int main(void)
 {
  if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;
- directory=g_dir_make_tmp("command-list-XXXXXX",NULL);gchar *config=g_build_filename(directory,"geany.conf",NULL),*path=g_build_filename(directory,"source.txt",NULL);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));g_assert_true(g_file_set_contents(path,"source",-1,NULL));gchar *keys=g_build_filename(directory,"keybindings.conf",NULL);g_assert_true(g_file_set_contents(keys,"[Bindings]\nmenu_save=<Control><Shift>F12\n",-1,NULL));g_free(keys);
+ directory=g_dir_make_tmp("command-list-XXXXXX",NULL);gchar *config=g_build_filename(directory,"geany.conf",NULL),*path=g_build_filename(directory,"source.txt",NULL);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));g_assert_true(g_file_set_contents(path,"source",-1,NULL));gchar *keys=g_build_filename(directory,"keybindings.conf",NULL);g_assert_true(g_file_set_contents(keys,"[Bindings]\nmenu_save=<Control><Shift>F12\ninsight_cut_word=<Control><Shift>F11\n",-1,NULL));g_free(keys);
  for(guint i=0;i<2;i++) { gchar *name=g_build_filename(directory,i ? "Keylist.txt" : "Command List.txt",NULL);g_assert_true(g_file_set_contents(name,"existing file unchanged",-1,NULL));g_free(name); }g_assert_cmpint(g_chdir(directory),==,0);
  gchar *args[]={"command-list-test","--new-instance","--no-session","--config",directory,path,NULL};g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);g_timeout_add(400,step,NULL);g_timeout_add_seconds(30,timeout,NULL);return main_lib(6,args);
 }
