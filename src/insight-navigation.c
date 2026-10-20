@@ -207,6 +207,65 @@ static void text_boundary_menu(GtkWidget *menu)
  g_signal_connect(sub,"show",G_CALLBACK(text_boundary_menu_show),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),parent);gtk_widget_show_all(parent);
 }
 
+/* Viewport-only operations deliberately allow rectangular/multiple selections.
+ * SCI_LINESCROLL operates on display rows, including wrapped/folded text,
+ * without moving any selection or revealing the off-screen caret. */
+static void viewport_command(GtkMenuItem *item, gpointer data)
+{
+    (void)item;
+    GeanyDocument *doc = document_get_current();
+    if (!doc || !doc->is_valid) return;
+    ScintillaObject *sci = doc->editor->sci;
+    gint action = GPOINTER_TO_INT(data);
+    if (action < 4)
+    {
+        gint rows = action < 2 ? 1 : MAX(1, SEND(sci, SCI_LINESONSCREEN, 0, 0) / 2);
+        SEND(sci, SCI_LINESCROLL, 0, action % 2 ? rows : -rows);
+    }
+    else
+    {
+        gint64 step = (gint64)MAX(1, SEND(sci, SCI_GETTABWIDTH, 0, 0)) *
+            MAX(1, SEND(sci, SCI_TEXTWIDTH, STYLE_DEFAULT, (sptr_t)" "));
+        gint64 offset = SEND(sci, SCI_GETXOFFSET, 0, 0);
+        SEND(sci, SCI_SETXOFFSET, CLAMP(offset + (action == 4 ? -step : step), 0, G_MAXINT), 0);
+    }
+    gtk_widget_grab_focus(GTK_WIDGET(sci));
+}
+static void viewport_menu_show(GtkWidget *menu, gpointer data)
+{
+    (void)data;
+    GeanyDocument *doc = document_get_current();
+    GList *children = gtk_container_get_children(GTK_CONTAINER(menu));
+    for (GList *p = children; p; p = p->next)
+        if (g_object_get_data(G_OBJECT(p->data), "insight-viewport-command"))
+            gtk_widget_set_sensitive(p->data, doc && doc->is_valid);
+    g_list_free(children);
+}
+static void viewport_menu(GtkWidget *menu)
+{
+    GtkWidget *parent = gtk_menu_item_new_with_label("Window scrolling");
+    GtkWidget *sub = gtk_menu_new();
+    gtk_widget_set_name(parent, "insight-window-scrolling");
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(parent), sub);
+    const gchar *labels[] = {"Scroll Line Up", "Scroll Line Down", "Scroll Half Page Up", "Scroll Half Page Down", "Scroll Left", "Scroll Right"};
+    const gchar *ids[] = {"scroll-line-up", "scroll-line-down", "scroll-half-up", "scroll-half-down", "scroll-left", "scroll-right"};
+    for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
+    {
+        GtkWidget *entry = gtk_menu_item_new_with_label(labels[i]);
+        gchar *name = g_strconcat("insight-nav-", ids[i], NULL);
+        gtk_widget_set_name(entry, name);g_free(name);
+        g_object_set_data(G_OBJECT(entry), "insight-viewport-command", GINT_TO_POINTER(1));
+        g_signal_connect(entry, "activate", G_CALLBACK(viewport_command), GINT_TO_POINTER(i));
+        gtk_menu_shell_append(GTK_MENU_SHELL(sub), entry);
+    }
+    GtkWidget *help = gtk_menu_item_new_with_label("Window Scrolling Help");
+    g_signal_connect(help, "activate", G_CALLBACK(insight_help_show), "window-scrolling.md");
+    gtk_menu_shell_append(GTK_MENU_SHELL(sub), gtk_separator_menu_item_new());
+    gtk_menu_shell_append(GTK_MENU_SHELL(sub), help);
+    g_signal_connect(sub, "show", G_CALLBACK(viewport_menu_show), NULL);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), parent);gtk_widget_show_all(parent);
+}
+
 typedef struct {
  guint document,source;
  ScintillaObject *sci;
@@ -307,6 +366,7 @@ void insight_navigation_menu(GtkWidget *menu)
         gtk_menu_shell_append(GTK_MENU_SHELL(sub), entry);
     }
     text_boundary_menu(sub);
+    viewport_menu(sub);
     GtkWidget *history=gtk_menu_item_new_with_label("Selection History…");gtk_widget_set_name(history,"insight-selection-history-command");g_signal_connect(history,"activate",G_CALLBACK(show_history),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(sub),gtk_separator_menu_item_new());gtk_menu_shell_append(GTK_MENU_SHELL(sub),history);
     g_signal_connect(sub, "show", G_CALLBACK(menu_show), NULL);
     g_signal_connect_object(geany_object, "document-activate", G_CALLBACK(activated), parent, G_CONNECT_AFTER);

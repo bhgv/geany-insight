@@ -45,3 +45,5 @@ Copy/Cut/Duplicate Symbol and exact selection duplication: [structural editing](
 [Text boundaries / Границы текста](text-boundaries.md) — smart line/file edges, literal sentence selection and native word fragments.
 
 [Calculation and file status / Вычисления и состояние файла](calculate.md) — bounded expression evaluation, calculator window, current-buffer statistics.
+
+[Window scrolling / Прокрутка окна](window-scrolling.md) — viewport commands preserve caret and selections.

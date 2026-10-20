@@ -477,3 +477,6 @@ dist_insightdocmedia_DATA += insight/docs/media/text-boundaries.jpg insight/docs
 EXTRA_DIST += insight/tests/calculate_test.c insight/tests/calculate_gui_test.c insight/tests/file_status_gui_test.c insight/desktop/calculate.h
 insightdoc_DATA += insight/docs/calculate.md
 dist_insightdocmedia_DATA += insight/docs/media/calculate.jpg insight/docs/media/calculate.svg insight/docs/media/file-status.jpg
+
+insightdoc_DATA += insight/docs/window-scrolling.md
+dist_insightdocmedia_DATA += insight/docs/media/window-scrolling.svg

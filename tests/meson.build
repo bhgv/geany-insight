@@ -769,3 +769,6 @@ calculate_gui_test = executable('test_insight_calculate_gui', '../insight/tests/
 test('Insight native Calculate selection and calculator GUI', calculate_gui_test, timeout: 45, is_parallel: false)
 file_status_gui_test = executable('test_insight_file_status_gui', '../insight/tests/file_status_gui_test.c', dependencies: test_deps)
 test('Insight native file status reporting GUI', file_status_gui_test, timeout: 35, is_parallel: false)
+
+viewport_gui_test = executable('test_insight_viewport_gui', '../insight/tests/viewport_gui_test.c', dependencies: test_deps)
+test('Insight native viewport scrolling and window edges GUI', viewport_gui_test, timeout: 40, is_parallel: false)
