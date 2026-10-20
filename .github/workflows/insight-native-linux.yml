@@ -34,6 +34,8 @@ on:
       - insight/tests/source_links_native_gui_test.c
       - src/insight-navigation.*
       - insight/tests/navigation_native_gui_test.c
+      - insight/tests/text_boundary_gui_test.c
+      - insight/tests/viewport_gui_test.c
       - src/insight-paste.*
       - src/keybindings.c
       - src/sciwrappers.c
