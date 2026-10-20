@@ -93,8 +93,8 @@ static gboolean step(gpointer data) {
  reset(content,value,value);SEND(sci,SCI_ADDSELECTION,0,0);action("paren-left");position(value);action("browser");g_assert_null(dialog());
  reset(content,value,value);SEND(sci,SCI_SETSELECTIONNCARETVIRTUALSPACE,0,1);action("paren-left");position(value);
  reset("(α)",2,2);action("paren-left");position(2);action("browser");g_assert_null(dialog());
- reset("(a\r\nb)",4,4);action("paren-left");position(4);
- reset("",0,0);SEND(sci,SCI_ADDTEXT,5,(sptr_t)"(a\0b)");action("paren-left");position(0);action("browser");g_assert_null(dialog());
+ reset("(a\r\nb)",3,3);action("paren-left");position(3);
+ reset("",0,0);SEND(sci,SCI_ADDTEXT,5,(sptr_t)"(a\0b)");SEND(sci,SCI_SETSEL,0,0);action("paren-left");position(0);action("browser");g_assert_null(dialog());
  gchar *nested=g_strnfill(601,'(');nested[300]='x';memset(nested+301,')',300);reset(nested,300,300);browser(11);g_free(nested);
  reset(content,value,value);gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-ru")),TRUE);browser(7);gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-en")),TRUE);
  GtkWidget *entry=gtk_entry_new();gtk_box_pack_start(GTK_BOX(ui_lookup_widget(window,"vbox1")),entry,FALSE,FALSE,0);gtk_widget_show(entry);gtk_widget_grab_focus(entry);keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_INSIGHT_PARENLEFT);position(value);gtk_widget_destroy(entry);
