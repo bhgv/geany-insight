@@ -23,7 +23,8 @@ static void text_is(const gchar *expected) { gchar *text=sci_get_contents(source
 static void reset(const gchar *text,gint anchor,gint caret) {
  ScintillaObject *sci=source->editor->sci;source->readonly=FALSE;SEND(sci,SCI_SETREADONLY,0,0);SEND(sci,SCI_CLEARSELECTIONS,0,0);SEND(sci,SCI_SETSELECTIONMODE,SC_SEL_STREAM,0);SEND(sci,SCI_SETSELECTIONNCARETVIRTUALSPACE,0,0);SEND(sci,SCI_SETSELECTIONNANCHORVIRTUALSPACE,0,0);document_set_filetype(source,filetypes_lookup_by_name("C"));sci_set_text(sci,text);SEND(sci,SCI_SETSEL,anchor,caret);SEND(sci,SCI_EMPTYUNDOBUFFER,0,0);SEND(sci,SCI_SETSAVEPOINT,0,0);
 }
-static void position(gint expected) { g_assert_cmpint(sci_get_current_position(source->editor->sci),==,expected); }
+static void check_position(gint expected,guint line) { gint actual=sci_get_current_position(source->editor->sci);if(actual!=expected) g_error("Delimiter position at test line %u, mode %u: expected %d, got %d",line,mode,expected,actual); }
+#define position(expected) check_position((expected),__LINE__)
 static void row(GtkWidget *tree,gint index) { GtkTreePath *path=gtk_tree_path_new_from_indices(index,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(tree),path,NULL,FALSE);gtk_tree_path_free(path); }
 static gboolean respond(gpointer data) {
  (void)data;GtkWidget *d=dialog();if(!d) return G_SOURCE_CONTINUE;GtkWidget *tree=named(d,"insight-delimiter-list");g_assert_nonnull(tree);GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(tree));
@@ -90,7 +91,7 @@ static gboolean step(gpointer data) {
  for(guint i=0;i<3;i++) { gint at=strstr(samples[i],"value")-samples[i];reset(samples[i],at,at);GeanyFiletype *type=filetypes_lookup_by_name(langs[i]);g_assert_nonnull(type);document_set_filetype(source,type);action("paren-left");position(at-1);action("paren-right");position(at+5);text_is(samples[i]); }
  reset(content,value,value);document_set_filetype(source,filetypes_lookup_by_name("None"));action("paren-left");position(value);action("browser");g_assert_null(dialog());
  reset(content,value,value);SEND(sci,SCI_SETSELECTIONMODE,SC_SEL_RECTANGLE,0);action("paren-left");position(value);action("browser");g_assert_null(dialog());
- reset(content,value,value);SEND(sci,SCI_ADDSELECTION,0,0);action("paren-left");position(value);action("browser");g_assert_null(dialog());
+ reset(content,value,value);SEND(sci,SCI_ADDSELECTION,0,0);SEND(sci,SCI_SETMAINSELECTION,0,0);action("paren-left");position(value);action("browser");g_assert_null(dialog());
  reset(content,value,value);SEND(sci,SCI_SETSELECTIONNCARETVIRTUALSPACE,0,1);action("paren-left");position(value);
  reset("(α)",2,2);action("paren-left");position(2);action("browser");g_assert_null(dialog());
  reset("(a\r\nb)",3,3);action("paren-left");position(3);
