@@ -124,3 +124,18 @@ contains all four commands; unsupported selection modes disable them.
 References: [Restore File](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Restore_File.htm),
 [Next Change](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Go_To_Next_Change.htm),
 [Previous Change](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Go_To_Previous_Change.htm).
+
+These Edit commands compare with the opening snapshot. The existing View commands
+Next/Previous **unsaved** change continue to compare with the saved state.
+
+Команды Правки сравнивают с текстом при открытии; существующие команды Вида
+«следующее/предыдущее несохранённое изменение» сравнивают с сохранённым состоянием.
+
+![Original Changes native dialog](../media/original-changes.jpg)
+
+![Restore File native dialog](../media/restore-file.jpg)
+
+Both screenshots show actual production dialogs from an isolated native Linux
+fixture in the successful 49-test run, with a small UTF-8/CRLF example. They are
+not mockups. Оба снимка показывают настоящие окна из изолированного нативного
+GUI-теста Linux, прошедшего в составе 49 проверок; это не макеты.

@@ -495,3 +495,4 @@ insightdoc_DATA += insight/docs/restore-lines.md
 dist_insightdocmedia_DATA += insight/docs/media/restore-lines.svg insight/docs/media/restore-lines.jpg
 
 dist_insightdocmedia_DATA += insight/docs/media/original-changes.svg
+dist_insightdocmedia_DATA += insight/docs/media/original-changes.jpg insight/docs/media/restore-file.jpg
