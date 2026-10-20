@@ -6,6 +6,7 @@
 #include "sciwrappers.h"
 #include "ui_utils.h"
 #include <glib/gstdio.h>
+#include <gdk/gdkkeysyms.h>
 #include <string.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 static GtkWidget *window;

@@ -778,3 +778,6 @@ test('Insight native word cut and character line deletion GUI', word_edit_gui_te
 
 command_list_gui_test = executable('test_insight_command_list_gui', '../insight/tests/command_list_gui_test.c', dependencies: test_deps)
 test('Insight native command and key reference buffers GUI', command_list_gui_test, timeout: 40, is_parallel: false)
+
+command_browser_gui_test = executable('test_insight_command_browser_gui', '../insight/tests/command_browser_gui_test.c', dependencies: test_deps)
+test('Insight native searchable command browser GUI', command_browser_gui_test, timeout: 45, is_parallel: false)

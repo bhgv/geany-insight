@@ -33,3 +33,33 @@ Command List.txt: пути команд главного меню, зареги�
 
 References: [Create Command List](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Create_Command_List.htm),
 [Create Key List](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Create_Key_List.htm).
+
+## Command Browser / Поиск команд
+
+**Help → Command Browser…** opens a modal command finder over the same bounded
+main-menu snapshot. Space-separated search tokens match the full path, shortcut
+and tooltip with Unicode case folding; all tokens must match. Columns can be
+sorted/resized. The count shows visible/total commands. Refresh rebuilds names,
+shortcuts and availability; use it after changing the interface language.
+
+**Run**, Enter or double-click closes the browser and activates the selected
+native menu command. The editor receives focus first. The original menu ancestry,
+visibility and sensitivity are rechecked; menu show handlers refresh dynamic state
+before running. Destroyed, detached, hidden, disabled or now-nonleaf targets are
+rejected and the list is refreshed. References use weak widget handles and do not
+keep plugin menu commands alive. Normal native action behavior still applies.
+
+Create Command List / Create Key List close the browser and open the corresponding
+editable snapshot. Close/Escape leave the editor untouched. This finder is inspired
+by Source Insight's searchable command list and Run control in Key Assignments;
+it does not reassign shortcuts, record macros or enumerate popup-only commands.
+Use the native Preferences keyboard page to change existing bindings.
+
+**Справка → Поиск команд…**: поиск по словам в названии, пути меню, клавишах и
+описании. Все слова запроса должны присутствовать; регистр Unicode не учитывается.
+Столбцы сортируются. Refresh обновляет снимок. Run, Enter или двойной щелчок
+закрывают окно и запускают выбранную штатную команду после проверки её доступности.
+Удалённые и отсоединённые элементы меню не запускаются. Кнопки списков открывают
+новые редактируемые документы. Назначения клавиш этим окном не меняются.
+
+Reference: [Key Assignments: command search and Run](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Key_Assignments.htm).

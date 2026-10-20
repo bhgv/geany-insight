@@ -1406,3 +1406,9 @@ Menu command	Команда меню
 Shortcut	Сочетание клавиш
 Unassigned	Не назначено
 Command reference exceeds the 10000-item or 1 MiB limit	Список команд превышает предел 10000 элементов или 1 МиБ
+Command Browser…	Поиск команд…
+Command Browser	Поиск команд
+Search commands, menu paths and shortcuts	Поиск команд, путей меню и сочетаний клавиш
+Available	Доступно
+Unavailable	Недоступно
+Command is no longer available; refreshed the list	Команда больше недоступна; список обновлён
