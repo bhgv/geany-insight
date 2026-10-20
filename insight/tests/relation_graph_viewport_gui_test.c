@@ -11,7 +11,7 @@ static void key(GtkWidget *canvas,guint value,guint modifiers) { GdkEventKey eve
 static void press(GtkWidget *canvas) { GdkEventButton event={0};event.type=GDK_BUTTON_PRESS;event.button=2;event.x_root=100;event.y_root=100;gboolean handled=FALSE;g_signal_emit_by_name(canvas,"button-press-event",&event,&handled);g_assert_true(handled);g_assert_true(gtk_widget_has_grab(canvas)); }
 static void near(double actual,double expected) { g_assert_cmpfloat(fabs(actual-expected),<,2.0); }
 int main(int argc,char **argv) {
- if(!gtk_init_check(&argc,&argv)) return 77;
+ if(!gtk_init_check(&argc,&argv)) return 77;g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);
  GtkListStore *model=gtk_list_store_new(3,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG);GtkTreeIter iter;
  for(guint i=0;i<40;i++) { gchar *name=g_strdup_printf("caller_%u",i);gtk_list_store_append(model,&iter);gtk_list_store_set(model,&iter,0,name,1,"/example/Пример.c",2,(gulong)i+1,-1);g_free(name); }
  GtkWidget *window=gtk_window_new(GTK_WINDOW_TOPLEVEL),*tree=gtk_tree_view_new_with_model(GTK_TREE_MODEL(model)),*query=gtk_entry_new();g_object_ref_sink(tree);g_object_ref_sink(query);gtk_entry_set_text(GTK_ENTRY(query),"Target");
