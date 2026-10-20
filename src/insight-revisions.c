@@ -350,7 +350,7 @@ void insight_revisions_init(GtkWidget *edit_menu)
     g_signal_connect_after(geany_object,"document-open",G_CALLBACK(capture_baseline),NULL);
     g_signal_connect_after(geany_object,"document-new",G_CALLBACK(capture_baseline),NULL);
     for(guint i=0;documents_array && i<documents_array->len;i++) { GeanyDocument *doc=g_ptr_array_index(documents_array,i);if(doc->is_valid) capture_baseline(NULL,doc,NULL); }
-    const gchar *labels[]={"Restore Lines…","Original Contents…","Restore File…","Go To Next Change","Go To Previous Change","Original Changes…"};const gchar *names[]={"insight-restore-lines","insight-original-contents","insight-restore-file","insight-next-change","insight-prev-change","insight-original-changes"};
+    const gchar *labels[]={"Restore Lines…","Original Contents…","Restore File…","Go To Next Change","Go To Previous Change","Original Changes…"};const gchar *names[]={"insight-restore-lines","insight-original-contents","insight-restore-file","insight-next-original-change","insight-prev-original-change","insight-original-changes"};
     const guint keys[]={GEANY_KEYS_INSIGHT_RESTORELINES,GEANY_KEYS_INSIGHT_ORIGINALCONTENTS,GEANY_KEYS_INSIGHT_RESTOREFILE,GEANY_KEYS_INSIGHT_NEXTCHANGE,GEANY_KEYS_INSIGHT_PREVCHANGE,GEANY_KEYS_INSIGHT_ORIGINALCHANGES};
     for(guint i=0;i<G_N_ELEMENTS(keys);i++) {
         guint group=i==3 || i==4 ? GEANY_KEY_GROUP_GOTO : GEANY_KEY_GROUP_EDITOR;

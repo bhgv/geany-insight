@@ -72,9 +72,11 @@ static gboolean step(gpointer data) {
  (void)data;source=document_get_current();if(!source) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));popup=g_object_get_data(G_OBJECT(window),"insight-editor-menu");g_assert_nonnull(popup);
  ScintillaObject *sci=source->editor->sci;gint first=strstr(edited,"β")-edited,deleted=strstr(edited,"anchor")-edited,last=strstr(edited,"LAST")-edited;
  reset(edited,0);g_assert_true(document_save_file(source,TRUE));
- action("insight-next-change");position(first);action("insight-next-change");position(deleted);action("insight-next-change");position(last);action("insight-next-change");position(last);action("insight-prev-change");position(deleted);action("insight-prev-change");position(first);action("insight-prev-change");position(first);text_is(edited);g_assert_false(SEND(sci,SCI_CANUNDO,0,0));
- SEND(sci,SCI_SETSEL,0,strlen(edited));action("insight-prev-change");position(last);g_assert_cmpint(SEND(sci,SCI_GETANCHOR,0,0),==,last);
- SEND(sci,SCI_SETREADONLY,1,0);action("insight-popup-prev-change");position(deleted);text_is(edited);SEND(sci,SCI_SETREADONLY,0,0);
+ action("insight-next-original-change");position(first);action("insight-next-original-change");position(deleted);action("insight-next-original-change");position(last);action("insight-next-original-change");position(last);action("insight-prev-original-change");position(deleted);action("insight-prev-original-change");position(first);action("insight-prev-original-change");position(first);text_is(edited);g_assert_false(SEND(sci,SCI_CANUNDO,0,0));
+ SEND(sci,SCI_SETSEL,0,strlen(edited));action("insight-prev-original-change");position(last);g_assert_cmpint(SEND(sci,SCI_GETANCHOR,0,0),==,last);
+ SEND(sci,SCI_SETREADONLY,1,0);action("insight-popup-prev-original-change");position(deleted);text_is(edited);SEND(sci,SCI_SETREADONLY,0,0);
+ reset(edited,0);gtk_widget_grab_focus(GTK_WIDGET(sci));keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_INSIGHT_NEXTCHANGE);position(first);keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_INSIGHT_PREVCHANGE);position(first);
+ gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-extend-mode")),TRUE);action("insight-next-original-change");position(deleted);g_assert_cmpint(SEND(sci,SCI_GETANCHOR,0,0),==,first);gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-extend-mode")),FALSE);
  reset(edited,0);run(0,"insight-original-changes");position(deleted);g_assert_cmpint(SEND(sci,SCI_GETANCHOR,0,0),==,deleted);
  reset(edited,0);run(1,"insight-popup-original-changes");position(7);gchar *prefixed=g_strconcat("prefix\n",edited,NULL);text_is(prefixed);g_free(prefixed);
  reset(edited,0);run(2,"insight-original-changes");position(0);g_assert_false(SEND(sci,SCI_CANUNDO,0,0));
@@ -86,13 +88,15 @@ static gboolean step(gpointer data) {
  reset(edited,8);SEND(sci,SCI_SETREADONLY,1,0);run(13,"insight-restore-file");text_is(edited);g_assert_false(SEND(sci,SCI_CANUNDO,0,0));
  reset(edited,8);run(14,"insight-restore-file");text_is(edited);g_assert_false(SEND(sci,SCI_CANUNDO,0,0));
  reset(edited,8);run(15,"insight-restore-file");g_assert_true(document_close(other));text_is(edited);
- reset(edited,8);SEND(sci,SCI_SETSELECTIONMODE,SC_SEL_RECTANGLE,0);action("insight-next-change");action("insight-original-changes");action("insight-restore-file");g_assert_null(dialog("insight-original-changes-dialog"));g_assert_null(dialog("insight-restore-file-dialog"));position(8);
+ reset(edited,8);SEND(sci,SCI_SETSELECTIONMODE,SC_SEL_RECTANGLE,0);action("insight-next-original-change");action("insight-original-changes");action("insight-restore-file");g_assert_null(dialog("insight-original-changes-dialog"));g_assert_null(dialog("insight-restore-file-dialog"));position(8);
  reset(edited,8);SEND(sci,SCI_ADDSELECTION,0,0);action("insight-restore-file");g_assert_null(dialog("insight-restore-file-dialog"));
- reset(edited,8);SEND(sci,SCI_SETSELECTIONNCARETVIRTUALSPACE,0,1);action("insight-next-change");position(8);
- reset("α",1);action("insight-next-change");position(1);action("insight-original-changes");g_assert_null(dialog("insight-original-changes-dialog"));
+ reset(edited,8);SEND(sci,SCI_SETSELECTIONNCARETVIRTUALSPACE,0,1);action("insight-next-original-change");position(8);
+ reset("α",1);action("insight-next-original-change");position(1);action("insight-original-changes");g_assert_null(dialog("insight-original-changes-dialog"));
  reset(edited,8);g_timeout_add(150,lines_respond,NULL);run(5,"insight-original-changes");gchar *partial=g_strdup(edited);gchar *expected=g_strconcat("head\r\nα original\r\n",strstr(partial,"keep"),NULL);text_is(expected);g_free(partial);g_free(expected);SEND(sci,SCI_UNDO,0,0);text_is(edited);
  reset(edited,8);GtkWidget *entry=gtk_entry_new();gtk_box_pack_start(GTK_BOX(ui_lookup_widget(window,"vbox1")),entry,FALSE,FALSE,0);gtk_widget_show(entry);gtk_widget_grab_focus(entry);keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_RESTOREFILE);g_assert_null(dialog("insight-restore-file-dialog"));gtk_widget_destroy(entry);gtk_widget_grab_focus(GTK_WIDGET(sci));
  reset(edited,8);run(4,"insight-original-changes");source=document_open_file(path,FALSE,NULL,NULL);g_assert_nonnull(source);sci=source->editor->sci;reset(original,8);run(16,"insight-restore-file");source=document_open_file(path,FALSE,NULL,NULL);g_assert_nonnull(source);
+ GeanyDocument *old=source;GString *large_original=g_string_new(NULL),*large_current=g_string_new(NULL);for(guint i=0;i<2100;i++) { g_string_append(large_original,"a\n");g_string_append(large_current,"b\n"); }
+ source=document_new_file("work-limit.txt",NULL,large_original->str);reset(large_current->str,0);action("insight-original-changes");g_assert_null(dialog("insight-original-changes-dialog"));action("insight-next-original-change");position(0);run(17,"insight-restore-file");text_is(large_original->str);SEND(source->editor->sci,SCI_UNDO,0,0);text_is(large_current->str);document_set_text_changed(source,FALSE);g_assert_true(document_close(source));source=old;g_string_free(large_original,TRUE);g_string_free(large_current,TRUE);
  gchar *disk=NULL;g_assert_true(g_file_get_contents(path,&disk,NULL,NULL));g_assert_cmpstr(disk,==,edited);g_free(disk);
  g_print("Original Changes GUI: exact blocks, deletion anchors, navigation boundaries/read-only, list selection/stale refresh/closed/switched guards, whole-file restore Cancel/Undo/Redo/stale/readonly/selection/focus guards and unchanged saved disk passed\n");document_set_text_changed(source,FALSE);gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
 }
