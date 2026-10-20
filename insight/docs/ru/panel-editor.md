@@ -29,3 +29,5 @@ Ctrl+F открывает поиск, Ctrl+H — замену. Двойной щ
 Подробнее: [tutorials.md](tutorials.md).
 
 Операции с функциями и точное дублирование выделения: [структурное редактирование](structural-selection.md).
+
+История переходов и Undo All / Redo All: [руководство](editor-history.md).

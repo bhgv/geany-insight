@@ -29,3 +29,5 @@ The ? button at the upper right opens this page. Help follows the interface lang
 More: [tutorials.md](tutorials.md).
 
 Function operations and exact selection duplication: [structural editing](structural-selection.md).
+
+Selection History and Undo All / Redo All: [guide](editor-history.md).

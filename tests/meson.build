@@ -727,3 +727,9 @@ test('Insight exact selection duplication GUI', duplicate_selection_gui_test, ti
 
 symbol_edit_gui_test = executable('test_insight_symbol_edit_gui', '../insight/tests/symbol_edit_gui_test.c', dependencies: test_deps)
 test('Insight native symbol copy cut duplicate GUI', symbol_edit_gui_test, timeout: 40, is_parallel: false)
+
+selection_history_gui_test = executable('test_insight_selection_history_gui', '../insight/tests/selection_history_gui_test.c', dependencies: test_deps)
+test('Insight native Selection History and edit anchors GUI', selection_history_gui_test, timeout: 40, is_parallel: false)
+
+bulk_undo_gui_test = executable('test_insight_bulk_undo_gui', '../insight/tests/bulk_undo_gui_test.c', dependencies: test_deps)
+test('Insight native cancellable Undo All Redo All GUI', bulk_undo_gui_test, timeout: 40, is_parallel: false)

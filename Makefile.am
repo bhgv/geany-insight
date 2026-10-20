@@ -443,3 +443,8 @@ EXTRA_DIST += insight/tests/symbol_edit_gui_test.c
 
 insightdoc_DATA += insight/docs/structural-selection.md
 dist_insightdocmedia_DATA += insight/docs/media/symbol-edit.jpg insight/docs/media/symbol-edit.svg
+EXTRA_DIST += insight/tests/selection_history_gui_test.c
+EXTRA_DIST += insight/tests/bulk_undo_gui_test.c
+
+insightdoc_DATA += insight/docs/editor-history.md
+dist_insightdocmedia_DATA += insight/docs/media/selection-history.jpg insight/docs/media/bulk-undo.jpg insight/docs/media/edit-history.svg

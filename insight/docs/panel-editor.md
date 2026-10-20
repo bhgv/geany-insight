@@ -29,3 +29,5 @@ The ? button at the upper right opens this page. Help follows the interface lang
 More: [tutorials.md](tutorials.md).
 
 Copy/Cut/Duplicate Symbol and exact selection duplication: [structural editing](structural-selection.md).
+
+История переходов и Undo All / Redo All: [руководство](editor-history.md).

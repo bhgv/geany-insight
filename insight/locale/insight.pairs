@@ -864,3 +864,14 @@ Cut Symbol|||Вырезать символ
 Duplicate Symbol|||Дублировать символ
 Symbol editing requires a writable document|||Для изменения символа нужен документ с разрешённой записью
 Symbol operation requires a complete standalone brace, Python or Lua function (up to 1 MiB)|||Нужна полная отдельно расположенная функция со скобками, Python или Lua (до 1 МиБ)
+Selection History…|||История переходов…
+Selection History|||История переходов
+Go To|||Перейти
+Current|||Текущее
+Source line|||Строка исходника
+Recent navigation positions in open files. Double-click or Go To to restore a position.|||Недавние переходы в открытых файлах. Двойной щелчок или «Перейти» восстанавливает позицию.
+Navigation history changed; refreshed the list|||История переходов изменилась; список обновлён
+Undo All|||Отменить всё
+Redo All|||Повторить всё
+Processing retained edit history. Cancel keeps completed steps.|||Обработка истории правок. Отмена сохраняет выполненные шаги.
+Bulk Undo/Redo stopped because the document or history changed|||Массовая отмена/повтор остановлены: документ или история изменились

@@ -5,6 +5,10 @@
 #include "geanyobject.h"
 #include "sciwrappers.h"
 #include "ui_utils.h"
+#include "navqueue.h"
+#include "insight-i18n.h"
+#include "insight-completion.h"
+#include "main.h"
 #include <gdk/gdkkeysyms.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 static GtkWidget *extend_item;
@@ -163,6 +167,74 @@ static void command(GtkMenuItem *item, gpointer data)
     }
     gtk_widget_grab_focus(GTK_WIDGET(sci));
 }
+typedef struct {
+ guint document,source;
+ ScintillaObject *sci;
+ GtkWidget *dialog,*progress;
+ gboolean redo;
+ gint start,total,current;
+} BulkUndo;
+static gboolean bulk_undo_step(gpointer data)
+{
+ BulkUndo *job=data;GeanyDocument *doc=document_find_by_id(job->document);
+ if(!doc || doc!=document_get_current() || doc->editor->sci!=job->sci || doc->readonly ||
+    SEND(job->sci,SCI_GETREADONLY,0,0) || SEND(job->sci,SCI_GETUNDOCURRENT,0,0)!=job->current ||
+    SEND(job->sci,SCI_GETUNDOACTIONS,0,0)!=job->total || SEND(job->sci,SCI_GETUNDOSEQUENCE,0,0)) {
+  ui_set_statusbar(TRUE,"Bulk Undo/Redo stopped because the document or history changed");
+  job->source=0;gtk_dialog_response(GTK_DIALOG(job->dialog),GTK_RESPONSE_REJECT);return G_SOURCE_REMOVE;
+ }
+ for(guint i=0;i<32;i++) {
+  doc=document_find_by_id(job->document);
+  if(!doc || doc!=document_get_current() || doc->editor->sci!=job->sci || doc->readonly ||
+     SEND(job->sci,SCI_GETREADONLY,0,0) || SEND(job->sci,SCI_GETUNDOCURRENT,0,0)!=job->current ||
+     SEND(job->sci,SCI_GETUNDOACTIONS,0,0)!=job->total || SEND(job->sci,SCI_GETUNDOSEQUENCE,0,0)) {
+   ui_set_statusbar(TRUE,"Bulk Undo/Redo stopped because the document or history changed");
+   job->source=0;gtk_dialog_response(GTK_DIALOG(job->dialog),GTK_RESPONSE_REJECT);return G_SOURCE_REMOVE;
+  }
+  if(!SEND(job->sci,job->redo ? SCI_CANREDO : SCI_CANUNDO,0,0)) {
+   job->source=0;gtk_dialog_response(GTK_DIALOG(job->dialog),GTK_RESPONSE_ACCEPT);return G_SOURCE_REMOVE;
+  }
+  gint before=SEND(job->sci,SCI_GETUNDOCURRENT,0,0);
+  SEND(job->sci,job->redo ? SCI_REDO : SCI_UNDO,0,0);
+  doc=document_find_by_id(job->document);
+  if(!doc || doc->editor->sci!=job->sci) { job->source=0;gtk_dialog_response(GTK_DIALOG(job->dialog),GTK_RESPONSE_REJECT);return G_SOURCE_REMOVE; }
+  job->current=SEND(job->sci,SCI_GETUNDOCURRENT,0,0);
+  if(job->current==before || (job->redo ? job->current<before : job->current>before)) {
+   ui_set_statusbar(TRUE,"Bulk Undo/Redo stopped because the document or history changed");
+   job->source=0;gtk_dialog_response(GTK_DIALOG(job->dialog),GTK_RESPONSE_REJECT);return G_SOURCE_REMOVE;
+  }
+ }
+ gint distance=job->redo ? job->total-job->start : job->start;
+ gdouble fraction=distance ? (gdouble)ABS(job->current-job->start)/distance : 1;
+ gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(job->progress),CLAMP(fraction,0,1));return G_SOURCE_CONTINUE;
+}
+static void bulk_undo_command(GtkMenuItem *item,gpointer data)
+{
+ (void)item;GeanyDocument *doc=document_get_current();if(!doc || doc->readonly) return;
+ ScintillaObject *sci=doc->editor->sci;gboolean redo=GPOINTER_TO_INT(data);
+ if(SEND(sci,SCI_GETREADONLY,0,0) || SEND(sci,SCI_GETUNDOSEQUENCE,0,0) ||
+    !SEND(sci,redo ? SCI_CANREDO : SCI_CANUNDO,0,0)) return;
+ insight_completion_cancel(doc->editor);SEND(sci,SCI_AUTOCCANCEL,0,0);
+ /* Resolve the document id before using sci; do not prolong a destroyed
+  * Scintilla widget beyond its scrollbar lifetime. */
+ BulkUndo job={0};job.document=doc->id;job.sci=sci;job.redo=redo;
+ job.start=job.current=SEND(sci,SCI_GETUNDOCURRENT,0,0);job.total=SEND(sci,SCI_GETUNDOACTIONS,0,0);
+ job.dialog=gtk_dialog_new_with_buttons(insight_tr(redo ? "Redo All" : "Undo All"),GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,insight_tr("Cancel"),GTK_RESPONSE_CANCEL,NULL);
+ g_object_ref_sink(job.dialog);gtk_widget_set_name(job.dialog,"insight-bulk-undo");gtk_window_set_default_size(GTK_WINDOW(job.dialog),380,-1);
+ GtkWidget *label=gtk_label_new(insight_tr("Processing retained edit history. Cancel keeps completed steps."));gtk_label_set_line_wrap(GTK_LABEL(label),TRUE);
+ job.progress=gtk_progress_bar_new();gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(job.progress),TRUE);gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(job.dialog))),label,FALSE,FALSE,8);gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(job.dialog))),job.progress,FALSE,FALSE,8);
+ gtk_widget_show_all(job.dialog);job.source=g_idle_add(bulk_undo_step,&job);gtk_dialog_run(GTK_DIALOG(job.dialog));
+ if(job.source) g_source_remove(job.source);
+ gtk_widget_destroy(job.dialog);g_object_unref(job.dialog);
+ GeanyDocument *remaining=document_find_by_id(job.document);
+ if(remaining && remaining==document_get_current()) gtk_widget_grab_focus(GTK_WIDGET(sci));
+}
+static void bulk_undo_menu_show(GtkWidget *menu,gpointer data)
+{
+ (void)data;GeanyDocument *doc=document_get_current();gboolean ready=doc && !doc->readonly && !SEND(doc->editor->sci,SCI_GETREADONLY,0,0) && !SEND(doc->editor->sci,SCI_GETUNDOSEQUENCE,0,0);
+ for(guint i=0;i<2;i++) { GtkWidget *entry=g_object_get_data(G_OBJECT(menu),i ? "redo-all" : "undo-all");gtk_widget_set_sensitive(entry,ready && SEND(doc->editor->sci,i ? SCI_CANREDO : SCI_CANUNDO,0,0)); }
+}
+static void show_history(GtkMenuItem *item,gpointer data) { (void)item;(void)data;navqueue_show_history(); }
 void insight_navigation_menu(GtkWidget *menu)
 {
     GtkWidget *parent = gtk_menu_item_new_with_label("Selection and navigation");
@@ -183,7 +255,15 @@ void insight_navigation_menu(GtkWidget *menu)
         g_signal_connect(entry, "activate", G_CALLBACK(command), GINT_TO_POINTER(i));
         gtk_menu_shell_append(GTK_MENU_SHELL(sub), entry);
     }
+    GtkWidget *history=gtk_menu_item_new_with_label("Selection History…");gtk_widget_set_name(history,"insight-selection-history-command");g_signal_connect(history,"activate",G_CALLBACK(show_history),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(sub),gtk_separator_menu_item_new());gtk_menu_shell_append(GTK_MENU_SHELL(sub),history);
     g_signal_connect(sub, "show", G_CALLBACK(menu_show), NULL);
     g_signal_connect_object(geany_object, "document-activate", G_CALLBACK(activated), parent, G_CONNECT_AFTER);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), parent);gtk_widget_show_all(parent);
+    for(guint i=0;i<2;i++) {
+        GtkWidget *entry=gtk_menu_item_new_with_label(i ? "Redo All" : "Undo All");
+        gtk_widget_set_name(entry,i ? "insight-redo-all" : "insight-undo-all");
+        g_object_set_data(G_OBJECT(menu),i ? "redo-all" : "undo-all",entry);
+        g_signal_connect(entry,"activate",G_CALLBACK(bulk_undo_command),GINT_TO_POINTER(i));gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry);gtk_widget_show(entry);
+    }
+    g_signal_connect(menu,"show",G_CALLBACK(bulk_undo_menu_show),NULL);
 }
