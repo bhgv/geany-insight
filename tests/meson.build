@@ -762,3 +762,10 @@ text_boundary_test = executable('test_insight_text_boundary', '../insight/tests/
 test('Insight smart line and sentence text boundaries', text_boundary_test)
 text_boundary_gui_test = executable('test_insight_text_boundary_gui', '../insight/tests/text_boundary_gui_test.c', dependencies: test_deps)
 test('Insight native smart edges sentence and word fragments GUI', text_boundary_gui_test, timeout: 40, is_parallel: false)
+
+calculate_test = executable('test_insight_calculate', '../insight/tests/calculate_test.c', '../insight/desktop/calculate.c', include_directories: include_directories('../insight/desktop'), dependencies: deps + [cc.find_library('m', required: false)], c_args: ['-UNDEBUG'])
+test('Insight bounded expression calculation', calculate_test)
+calculate_gui_test = executable('test_insight_calculate_gui', '../insight/tests/calculate_gui_test.c', dependencies: test_deps)
+test('Insight native Calculate selection and calculator GUI', calculate_gui_test, timeout: 45, is_parallel: false)
+file_status_gui_test = executable('test_insight_file_status_gui', '../insight/tests/file_status_gui_test.c', dependencies: test_deps)
+test('Insight native file status reporting GUI', file_status_gui_test, timeout: 35, is_parallel: false)

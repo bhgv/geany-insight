@@ -473,3 +473,7 @@ dist_insightdocmedia_DATA += insight/docs/media/line-insertion.jpg insight/docs/
 EXTRA_DIST += insight/tests/text_boundary_test.c insight/tests/text_boundary_gui_test.c insight/desktop/text_boundary.h
 insightdoc_DATA += insight/docs/text-boundaries.md
 dist_insightdocmedia_DATA += insight/docs/media/text-boundaries.jpg insight/docs/media/text-boundaries.svg
+
+EXTRA_DIST += insight/tests/calculate_test.c insight/tests/calculate_gui_test.c insight/tests/file_status_gui_test.c insight/desktop/calculate.h
+insightdoc_DATA += insight/docs/calculate.md
+dist_insightdocmedia_DATA += insight/docs/media/calculate.jpg insight/docs/media/calculate.svg insight/docs/media/file-status.jpg

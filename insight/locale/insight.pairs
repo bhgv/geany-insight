@@ -970,3 +970,42 @@ Select Word Fragment Left|||Выделить фрагмент слова вле�
 Select Word Fragment Right|||Выделить фрагмент слова вправо
 Text boundary commands are limited to 8 MiB|||Команды границ текста ограничены 8 МиБ
 Text boundaries require UTF-8 without NUL up to 8 MiB and a valid character/EOL position|||Границы текста требуют UTF-8 без NUL до 8 МиБ и корректной позиции символа/окончания строки
+Calculation|||Вычисления
+Calculate Selection|||Вычислить выделение
+Calculator…|||Калькулятор…
+Calculator|||Калькулятор
+Calculate|||Вычислить
+Copy Result|||Копировать результат
+Insert Result|||Вставить результат
+Expression|||Выражение
+Result|||Результат
+Close|||Закрыть
+Select a UTF-8 expression of at most 4096 bytes without NUL|||Выделите выражение UTF-8 до 4096 байт без NUL
+Calculation insertion cancelled because the document or selection changed|||Вставка результата отменена: документ или выделение изменились
+Calculation error at byte %u: %s|||Ошибка вычисления в байте %u: %s
+Press Calculate to update the result|||Нажмите «Вычислить» для обновления результата
+Approximate double-precision result; large integers may be rounded|||Приближённый результат двойной точности; большие целые могут округляться
+Insert Result uses the selection or cursor where this window was opened.|||Результат вставляется в выделение или позицию курсора, где было открыто это окно.
+Read-only calculator: results can be calculated and copied.|||Калькулятор без вставки: можно вычислять и копировать результаты.
+Decimal/scientific numbers; + - * / % ^; parentheses; pi, e.\nabs sqrt floor ceil round sin cos tan log exp min max pow|||Десятичные числа и экспоненты; + - * / % ^; скобки; pi, e.\nabs sqrt floor ceil round sin cos tan log exp min max pow
+Result copied to clipboard|||Результат скопирован в буфер обмена
+Calculation requires UTF-8 up to 4096 bytes|||Для вычисления нужен UTF-8 до 4096 байт
+Calculation exceeds 2048 values/operators|||Превышено 2048 значений/операторов
+Calculation exceeds 64 nesting levels|||Превышено 64 уровня вложенности
+Calculation produced a non-finite result|||Получен бесконечный или неопределённый результат
+Expected a closing parenthesis|||Ожидается закрывающая скобка
+Expected an opening parenthesis|||Ожидается открывающая скобка
+Expected exponent digits|||Ожидаются цифры экспоненты
+Number is outside the supported floating-point range|||Число вне поддерживаемого диапазона
+Unknown function or constant|||Неизвестная функция или константа
+Expected two function arguments separated by a comma|||Ожидаются два аргумента функции через запятую
+Function domain or range error|||Ошибка области определения или диапазона функции
+Power domain or range error|||Ошибка области определения или диапазона степени
+Expected a number, function or parenthesis|||Ожидается число, функция или скобка
+Division or remainder by zero|||Деление или остаток от деления на ноль
+Unexpected text after the expression|||Лишний текст после выражения
+Show File Status|||Показать состояние файла
+%s — lines: %s, bytes: %s — %s — %s|||%s — строк: %s, байт: %s — %s — %s
+Untitled|||Без имени
+Read-only|||Только чтение
+Writable|||Доступен для записи

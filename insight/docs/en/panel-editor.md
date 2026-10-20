@@ -43,3 +43,5 @@ Insert File and text export: [guide](file-text.md).
 [Line insertion / Вставка строк](line-insertion.md) — above, below, split and stay, marked preview.
 
 [Text boundaries / Границы текста](text-boundaries.md) — smart line/file edges, literal sentence selection and native word fragments.
+
+[Calculation and file status / Вычисления и состояние файла](calculate.md) — bounded expression evaluation, calculator window, current-buffer statistics.

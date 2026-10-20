@@ -274,9 +274,20 @@ static void bulk_undo_menu_show(GtkWidget *menu,gpointer data)
  (void)data;GeanyDocument *doc=document_get_current();gboolean ready=doc && !doc->readonly && !SEND(doc->editor->sci,SCI_GETREADONLY,0,0) && !SEND(doc->editor->sci,SCI_GETUNDOSEQUENCE,0,0);
  for(guint i=0;i<2;i++) { GtkWidget *entry=g_object_get_data(G_OBJECT(menu),i ? "redo-all" : "undo-all");gtk_widget_set_sensitive(entry,ready && SEND(doc->editor->sci,i ? SCI_CANREDO : SCI_CANUNDO,0,0)); }
 }
+static void show_file_status(GtkMenuItem *item,gpointer data)
+{
+ (void)item;(void)data;GeanyDocument *doc=document_get_current();if(!doc) return;ScintillaObject *sci=doc->editor->sci;
+ gchar *name=doc->file_name ? g_path_get_basename(doc->file_name) : g_strdup(insight_tr("Untitled"));
+ gchar *lines=g_strdup_printf("%" G_GINT64_FORMAT,(gint64)SEND(sci,SCI_GETLINECOUNT,0,0)),*bytes=g_strdup_printf("%" G_GINT64_FORMAT,(gint64)SEND(sci,SCI_GETLENGTH,0,0));
+ gchar *status=insight_i18n_printf("%s — lines: %s, bytes: %s — %s — %s",name,lines,bytes,insight_tr(doc->changed || SEND(sci,SCI_GETMODIFY,0,0) ? "Modified" : "Saved"),insight_tr(doc->readonly || SEND(sci,SCI_GETREADONLY,0,0) ? "Read-only" : "Writable"));
+ ui_set_statusbar(TRUE,"%s",status);g_free(status);g_free(bytes);g_free(lines);g_free(name);
+}
+static void file_status_menu_show(GtkWidget *menu,gpointer data) { (void)menu;gtk_widget_set_sensitive(GTK_WIDGET(data),document_get_current()!=NULL); }
+
 static void show_history(GtkMenuItem *item,gpointer data) { (void)item;(void)data;navqueue_show_history(); }
 void insight_navigation_menu(GtkWidget *menu)
 {
+    GtkWidget *file_menu=ui_lookup_widget(main_widgets.window,"file1_menu"),*status=gtk_menu_item_new_with_label("Show File Status");gtk_widget_set_name(status,"insight-show-file-status");g_signal_connect(status,"activate",G_CALLBACK(show_file_status),NULL);GList *file_children=gtk_container_get_children(GTK_CONTAINER(file_menu));gint status_position=g_list_index(file_children,ui_lookup_widget(main_widgets.window,"properties1"));g_list_free(file_children);gtk_menu_shell_insert(GTK_MENU_SHELL(file_menu),status,status_position);g_signal_connect(file_menu,"show",G_CALLBACK(file_status_menu_show),status);gtk_widget_show(status);
     GtkWidget *parent = gtk_menu_item_new_with_label("Selection and navigation");
     gtk_widget_set_name(parent, "insight-selection-navigation");
     GtkWidget *sub = gtk_menu_new();gtk_menu_item_set_submenu(GTK_MENU_ITEM(parent), sub);
