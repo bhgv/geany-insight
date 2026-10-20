@@ -43,7 +43,7 @@ unchanged. The native chooser confirms overwriting an existing file.
 This is Geany Insight's INI format, without source text or project paths; Source
 Insight XML is not imported. Files over 64 KiB, NUL bytes, missing fields and invalid
 values are rejected before any window changes. Errors appear in the status bar.
-Internal layout versions 1–4 remain readable with defaults for newer features.
+Internal layout versions 1–5 remain readable with defaults for newer features.
 
 ## Try it
 
@@ -60,3 +60,13 @@ Native Linux application captured during the automated build/restart scenario
 Arbitrary edge dragging and free panel grouping are not implemented. The separate
 Window List and the whole floating Project Window group are outside these ten
 Tab Tray hosts. Linux was checked; Windows and Android were not run for this series.
+
+## Main editor window
+
+Layouts also capture the main window's normal size/position and maximized state.
+A maximized layout retains the previously observed normal bounds: Restore returns
+to those bounds instead of keeping the full-screen dimensions. Loading limits
+bounds to the available monitor work area. Older layout formats leave the main
+window unchanged. Window-manager minimum sizes still apply.
+
+![Main window state](../media/main-window-layout.svg)

@@ -34,7 +34,7 @@ static gboolean step(gpointer data) {
   window=gtk_widget_get_toplevel(GTK_WIDGET(document_get_current()->editor->sci));GtkWidget *book=named(window,"insight-project-notebook");g_assert_nonnull(book);
   if(restore) {
    GList *windows=gtk_window_list_toplevels();for(GList *p=windows;p && !page;p=p->next) if(p->data!=window) { GtkWidget *button=named(p->data,"insight-panel-toggle-dock");if(button) { floating=p->data;page=gtk_bin_get_child(GTK_BIN(floating)); } }g_list_free(windows);g_assert_nonnull(page);
-  } else { page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(book),0);click("insight-panel-toggle-dock");floating=gtk_widget_get_toplevel(page);gtk_window_resize(GTK_WINDOW(floating),520,430); }
+  } else { page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(book),0);click("insight-panel-toggle-dock");floating=gtk_widget_get_toplevel(page);gtk_window_resize(GTK_WINDOW(floating),520,430);gtk_window_resize(GTK_WINDOW(window),900,760); }
   return G_SOURCE_CONTINUE;
  }
  if(restore) {
@@ -49,12 +49,21 @@ static gboolean step(gpointer data) {
   GtkWidget *ru=named(window,"insight-interface-ru"),*en=named(window,"insight-interface-en");g_assert_nonnull(ru);g_assert_nonnull(en);
   gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(ru),TRUE);gchar *tip=gtk_widget_get_tooltip_text(named(page,"insight-panel-toggle-dock"));g_assert_cmpstr(tip,==,"Закрепить эту панель");g_free(tip);
   tip=gtk_widget_get_tooltip_text(named(page,"insight-panel-minimize"));g_assert_cmpstr(tip,==,"Свернуть панель в нижнюю полосу");g_free(tip);gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(en),TRUE);
-  command("insight-layout-save-0");gtk_window_resize(GTK_WINDOW(floating),710,550);phase++;break;
+  command("insight-layout-save-0");gtk_window_resize(GTK_WINDOW(floating),710,550);gtk_window_resize(GTK_WINDOW(window),1100,850);phase++;break;
  }
  case 1: command("insight-layout-load-0");floating=gtk_widget_get_toplevel(page);phase++;break;
  case 2: {
   gint width,height;gtk_window_get_size(GTK_WINDOW(floating),&width,&height);g_assert_cmpint(width,==,520);g_assert_cmpint(height,==,430);
-  click("insight-panel-minimize");phase=20;break;
+  gtk_window_get_size(GTK_WINDOW(window),&width,&height);g_assert_cmpint(width,==,900);g_assert_cmpint(height,==,760);
+  gtk_window_maximize(GTK_WINDOW(window));phase=30;break;
+ }
+ case 30: if(!gtk_window_is_maximized(GTK_WINDOW(window))) return G_SOURCE_CONTINUE;command("insight-layout-save-3");gtk_window_unmaximize(GTK_WINDOW(window));phase=31;break;
+ case 31: if(gtk_window_is_maximized(GTK_WINDOW(window))) return G_SOURCE_CONTINUE;gtk_window_resize(GTK_WINDOW(window),1050,820);phase=32;break;
+ case 32: command("insight-layout-load-3");floating=gtk_widget_get_toplevel(page);phase=33;break;
+ case 33: if(!gtk_window_is_maximized(GTK_WINDOW(window))) return G_SOURCE_CONTINUE;gtk_window_unmaximize(GTK_WINDOW(window));phase=34;break;
+ case 34: {
+  if(gtk_window_is_maximized(GTK_WINDOW(window))) return G_SOURCE_CONTINUE;
+  gint width,height;gtk_window_get_size(GTK_WINDOW(window),&width,&height);g_assert_cmpint(width,==,900);g_assert_cmpint(height,==,760);click("insight-panel-minimize");phase=20;break;
  }
  case 20: {
   GtkWidget *tray=named(window,"insight-panel-tab-tray"),*tab=named(window,"insight-panel-tray-0");g_assert_nonnull(tray);g_assert_nonnull(tab);g_assert_true(gtk_widget_get_visible(tray));g_assert_false(gtk_widget_get_visible(floating));
@@ -97,7 +106,7 @@ int main(int argc,char **argv) {
  if(argc==1) {
   gchar *directory=g_dir_make_tmp("panel-state-XXXXXX",NULL);g_assert_nonnull(directory);gchar *config=g_build_filename(directory,"geany.conf",NULL);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));
   for(guint i=0;i<2;i++) { gchar *child[]={argv[0],directory,i ? "restore" : "fresh",NULL};gint status;GError *error=NULL;g_assert_true(g_spawn_sync(NULL,child,NULL,0,NULL,NULL,NULL,NULL,&status,&error));g_assert_no_error(error);g_assert_true(g_spawn_check_wait_status(status,&error));g_assert_no_error(error); }
-  g_free(config);g_free(directory);g_print("Panel state GUI: layout geometry, maximize/restore, Tab Tray, native minimize, external layout files, Cancel, invalid import, reparenting and restart passed\n");return 0;
+  g_free(config);g_free(directory);g_print("Panel state GUI: main-window bounds/maximize/normal restore, layout geometry, maximize/restore, Tab Tray, native minimize, external layout files, Cancel, invalid import, reparenting and restart passed\n");return 0;
  }
  layout_path=g_build_filename(argv[1],"review.geany-layout",NULL);restore=!g_strcmp0(argv[2],"restore");gchar *args[]={"panel-state-gui","--new-instance","--no-session","--config",argv[1],NULL};g_timeout_add(400,step,NULL);g_timeout_add_seconds(40,timeout,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);return main_lib(5,args);
 }

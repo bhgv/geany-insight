@@ -95,7 +95,7 @@ typedef struct {
  GtkWidget *category_entry,*category_view,*types_view,*float_window,*project_toggle,*local_toggle;
  GroupedPanel category_panel,type_panel;
  gint float_x,float_y,float_width,float_height; gboolean restore_float;
- InsightLayout layouts[4]; PanelHost hosts[10]; guint host_count; GtkWidget *panel_commands,*tray,*tray_buttons,*tray_toggle; gboolean tray_enabled;
+ InsightLayout layouts[4]; InsightPanelLayout main_bounds,main_target;guint main_apply_source,main_apply_stage,main_apply_ticks;gulong main_geometry_handlers[2]; PanelHost hosts[10]; guint host_count; GtkWidget *panel_commands,*tray,*tray_buttons,*tray_toggle; gboolean tray_enabled;
  GtkWidget *find_entry,*find_case,*find_word,*find_regex,*find_status,*context_find_row,*context_definitions_row,*context_find_toggle;
  gchar *find_last_query,*find_last_digest; gsize find_last_begin,find_last_end; guint find_last_flags;
  InsightNotes *project_marks;gchar *project_marks_path,*project_marks_root;GtkWidget *marks_scope,*marks_reload;gboolean marks_project,marks_valid,marks_stale,marks_initialized,marks_save_failed,marks_confirm_delete,marks_delete_on_close,marks_preserve;GHashTable *marks_session_stores;guint64 marks_generation;
@@ -4042,9 +4042,45 @@ static void set_panel_visibility(gboolean left,gboolean project,gboolean context
  gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.project_toggle),project); project_visible(GTK_CHECK_MENU_ITEM(wb.project_toggle),NULL);
  gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.context_toggle),context); context_visible(GTK_CHECK_MENU_ITEM(wb.context_toggle),NULL);
 }
+static void main_geometry_capture(void) {
+ if(wb.main_apply_source) return;
+ GtkWindow *window=GTK_WINDOW(main_widgets.window);GdkWindow *native=gtk_widget_get_window(GTK_WIDGET(window));
+ if(native && !(gdk_window_get_state(native)&(GDK_WINDOW_STATE_MAXIMIZED|GDK_WINDOW_STATE_FULLSCREEN|GDK_WINDOW_STATE_ICONIFIED))) {
+  gint width,height;gtk_window_get_size(window,&width,&height);
+  if(width>=400 && height>=220) { gtk_window_get_position(window,&wb.main_bounds.x,&wb.main_bounds.y);wb.main_bounds.width=width;wb.main_bounds.height=height;wb.main_bounds.set=TRUE; }
+ }
+ wb.main_bounds.maximized=gtk_window_is_maximized(window);
+}
+static gboolean main_geometry_changed(GtkWidget *widget,GdkEvent *event,gpointer data) { (void)widget;(void)event;(void)data;main_geometry_capture();return FALSE; }
+/* Window managers apply maximize requests asynchronously. Resize the normal
+ * window first so a later Restore uses the saved bounds, not the previous layout. */
+static gboolean main_geometry_apply_step(gpointer data) {
+ (void)data;GtkWindow *window=GTK_WINDOW(main_widgets.window);InsightPanelLayout *target=&wb.main_target;
+ if(wb.main_apply_stage==1) {
+  if(gtk_window_is_maximized(window) && wb.main_apply_ticks++<40) return G_SOURCE_CONTINUE;
+  gtk_window_resize(window,target->width,target->height);gtk_window_move(window,target->x,target->y);wb.main_apply_stage=2;wb.main_apply_ticks=0;return G_SOURCE_CONTINUE;
+ }
+ gint width,height;gtk_window_get_size(window,&width,&height);GtkRequisition minimum;gtk_widget_get_preferred_size(GTK_WIDGET(window),&minimum,NULL);
+ if((width!=MAX(target->width,minimum.width) || height!=MAX(target->height,minimum.height)) && wb.main_apply_ticks++<20) return G_SOURCE_CONTINUE;
+ wb.main_apply_source=0;main_geometry_capture();wb.main_bounds.maximized=target->maximized;
+ if(target->maximized) gtk_window_maximize(window);
+ return G_SOURCE_REMOVE;
+}
+static void main_geometry_apply(const InsightPanelLayout *saved) {
+ if(!saved->set) return;
+ InsightPanelLayout next=*saved;GdkDisplay *display=gtk_widget_get_display(main_widgets.window);GdkMonitor *monitor=gdk_display_get_monitor_at_point(display,next.x,next.y);
+ if(!monitor && gdk_display_get_n_monitors(display)) monitor=gdk_display_get_monitor(display,0);
+ if(monitor) { GdkRectangle area;gdk_monitor_get_workarea(monitor,&area);next.width=MIN(next.width,MAX(1,area.width));next.height=MIN(next.height,MAX(1,area.height));next.x=CLAMP(next.x,area.x,area.x+MAX(0,area.width-next.width));next.y=CLAMP(next.y,area.y,area.y+MAX(0,area.height-next.height)); }
+ if(wb.main_apply_source) g_source_remove(wb.main_apply_source);
+ wb.main_bounds=next;wb.main_target=next;wb.main_apply_stage=1;wb.main_apply_ticks=0;
+ gtk_window_unmaximize(GTK_WINDOW(main_widgets.window));wb.main_apply_source=g_timeout_add(25,main_geometry_apply_step,NULL);
+}
 static gboolean capture_layout(InsightLayout *out) {
  if(wb.float_window) { gtk_window_get_position(GTK_WINDOW(wb.float_window),&wb.float_x,&wb.float_y); gtk_window_get_size(GTK_WINDOW(wb.float_window),&wb.float_width,&wb.float_height); }
- InsightLayout record={.valid=TRUE}; gint *v=record.values;
+ main_geometry_capture();InsightLayout record={.valid=TRUE};gint *v=record.values;
+ record.main_window=wb.main_bounds;
+ if(!record.main_window.set) { record.main_window.set=TRUE;record.main_window.width=900;record.main_window.height=700; }
+ record.main_window.x=CLAMP(record.main_window.x,-30000,30000);record.main_window.y=CLAMP(record.main_window.y,-30000,30000);
  v[IL_LEFT]=ui_prefs.sidebar_visible; v[IL_PROJECT]=gtk_widget_get_visible(wb.project_notebook); v[IL_CONTEXT]=wb.context_visible;
  v[IL_FOLLOW]=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow)); v[IL_WRAP]=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.wrap)); v[IL_FLOAT]=wb.float_window!=NULL;
  v[IL_LEFT_SPLIT]=gtk_paned_get_position(GTK_PANED(ui_lookup_widget(main_widgets.window,"hpaned1"))); v[IL_RIGHT_SPLIT]=gtk_paned_get_position(GTK_PANED(wb.right_pane)); v[IL_CONTEXT_SPLIT]=gtk_paned_get_position(GTK_PANED(ui_lookup_widget(main_widgets.window,"vpaned1"))); v[IL_TAB]=project_tab_identity(); v[IL_DETACHED]=(gint)detached_mask(); v[IL_HOST_VISIBLE]=(gint)visible_host_mask();
@@ -4065,7 +4101,7 @@ static void save_layout(GtkMenuItem *item,gpointer data) {
 }
 static void reset_layouts(GtkMenuItem *item,gpointer data) { (void)item; (void)data; memset(wb.layouts,0,sizeof wb.layouts); ui_set_statusbar(TRUE,"Saved layouts reset; A–D now use presets"); save_workbench_settings(); }
 static void apply_layout_record(const InsightLayout *record) {
- wb.initial_right_split=-1;dock_all_panels();dock_project(NULL,NULL);
+ wb.initial_right_split=-1;dock_all_panels();dock_project(NULL,NULL);main_geometry_apply(&record->main_window);
   const gint *v=record->values;
   wb.float_x=v[IL_X]; wb.float_y=v[IL_Y]; wb.float_width=v[IL_WIDTH]; wb.float_height=v[IL_HEIGHT];
   gtk_paned_set_position(GTK_PANED(ui_lookup_widget(main_widgets.window,"hpaned1")),v[IL_LEFT_SPLIT]); gtk_paned_set_position(GTK_PANED(wb.right_pane),v[IL_RIGHT_SPLIT]); gtk_paned_set_position(GTK_PANED(ui_lookup_widget(main_widgets.window,"vpaned1")),v[IL_CONTEXT_SPLIT]);
@@ -5006,6 +5042,8 @@ static void context_icon(GtkWidget *button,const gchar *icon,const gchar *tip,co
 void insight_workbench_init(void) {
  insight_diff_set_source_opener(diff_source_open);
  insight_directory_set_types_provider(directory_known_types);insight_directory_set_open_guard(directory_path_open);
+ wb.main_geometry_handlers[0]=g_signal_connect(main_widgets.window,"configure-event",G_CALLBACK(main_geometry_changed),NULL);
+ wb.main_geometry_handlers[1]=g_signal_connect(main_widgets.window,"window-state-event",G_CALLBACK(main_geometry_changed),NULL);
  wb.alive=TRUE;wb.tray_enabled=TRUE;wb.marks_preserve=TRUE; workbench_epoch++; wb.symbol_key_signal=g_signal_connect(geany_object,"key-press",G_CALLBACK(symbol_key_global),NULL);insight_window_list_init(window_list_preview);
  GtkWidget *existing=ui_lookup_widget(main_widgets.window,"vpaned1");
  GtkWidget *parent=gtk_widget_get_parent(existing); gint position=0;
@@ -5129,6 +5167,8 @@ static void remove_group_accelerators(GtkWidget *widget,GtkAccelGroup *group) {
  g_list_free(closures);
 }
 void insight_workbench_finalize(void) {
+ if(wb.main_apply_source) { g_source_remove(wb.main_apply_source);wb.main_apply_source=0; }
+ for(guint i=0;i<G_N_ELEMENTS(wb.main_geometry_handlers);i++) if(wb.main_geometry_handlers[i]) { g_signal_handler_disconnect(main_widgets.window,wb.main_geometry_handlers[i]);wb.main_geometry_handlers[i]=0; }
  if(wb.symbol_key_signal) { g_signal_handler_disconnect(geany_object,wb.symbol_key_signal); wb.symbol_key_signal=0; }
  if(symbol_info) gtk_widget_destroy(symbol_info->window);
  insight_window_list_finalize();

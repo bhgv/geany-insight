@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="210" viewBox="0 0 760 210" role="img" aria-label="A layout retains normal main-window bounds and maximized state separately">
+<rect width="760" height="210" fill="#f4f6fa"/>
+<g fill="white" stroke="#536781" stroke-width="2"><rect x="20" y="45" width="200" height="120" rx="8"/><rect x="280" y="25" width="200" height="160" rx="8"/><rect x="540" y="45" width="200" height="120" rx="8"/></g>
+<g fill="#182c48" font-family="sans-serif" text-anchor="middle" font-size="17"><text x="120" y="90">Normal window</text><text x="120" y="120">Position + size</text><text x="380" y="80">Saved layout</text><text x="380" y="110">Normal bounds</text><text x="380" y="140">Maximized state</text><text x="640" y="90">Restored window</text><text x="640" y="120">Monitor limits apply</text></g>
+<g fill="none" stroke="#536781" stroke-width="2"><path d="M230 105h40m-8-6 8 6-8 6M490 105h40m-8-6 8 6-8 6"/></g></svg>

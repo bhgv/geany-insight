@@ -542,3 +542,18 @@ limits and actual production-window capture, linked from View → Layouts and th
 main guide and installed by Meson/Autotools. Expanded the native scenario with
 system iconification, chooser Cancel, live RU/EN tooltips and offline guide opening.
 Updated the existing Window List schema assertion to the shared current version.
+
+### Main application geometry in layouts (2026-10-20)
+
+Layout schema 6 captures the main editor's normal rectangle and maximized state.
+Native configure/state events retain observed normal bounds outside maximized,
+fullscreen and iconified states. Loading limits the rectangle to a monitor work
+area; versions 1–5 leave main-window geometry unchanged. Invalid/missing main
+fields reject the complete record. Core tests cover migration and bounds; the
+native GUI exercises normal-size restore and maximizing/restoring a saved layout.
+Reference: [Load Layout](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Load_Layout.htm).
+
+Maximized main-window loading waits for the native normal-window resize before
+reapplying maximization. The GUI regression specifically changes the intervening
+normal size and verifies that Restore returns to the saved size. Linux native
+build/GUI and strict UBSan layout tests passed.
