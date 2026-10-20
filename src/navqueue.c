@@ -170,6 +170,16 @@ gboolean navqueue_goto_line(GeanyDocument *old_doc, GeanyDocument *new_doc, gint
 
 	pos = sci_get_position_from_line(new_doc->editor->sci, line - 1);
 	if (pos < 0) return FALSE;
+	return navqueue_goto_position(old_doc, new_doc, pos);
+}
+
+/* Internal byte-position counterpart; delimiter navigation must not record
+ * only a line start when its destination is in the middle of that line. */
+gboolean navqueue_goto_position(GeanyDocument *old_doc, GeanyDocument *new_doc, gint pos)
+{
+	g_return_val_if_fail(old_doc == NULL || old_doc->is_valid, FALSE);
+	g_return_val_if_fail(DOC_VALID(new_doc), FALSE);
+	g_return_val_if_fail(pos >= 0 && pos <= sci_get_length(new_doc->editor->sci), FALSE);
 
 	/* first add old file position */
 	if (old_doc != NULL && old_doc->file_name)

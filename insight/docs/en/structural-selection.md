@@ -25,3 +25,5 @@ Actual Linux editor after Duplicate Symbol from File Symbols: the new function i
 ## Exact selection duplication
 
 Edit → Duplicate Line or Selection / Ctrl+D duplicates exactly the selected letters, words, spaces or partial multiline text. Boundary lines are no longer expanded. With no selection the current line is duplicated. Reverse selections and Undo/Redo are supported; read-only buffers refuse changes.
+
+[Delimiter navigation and enclosing-pair browser / Переходы по скобкам](delimiter-navigation.md).

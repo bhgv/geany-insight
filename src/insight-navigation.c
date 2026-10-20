@@ -14,9 +14,15 @@
 #include "insight-help.h"
 #include "../insight/desktop/text_boundary.h"
 #include "main.h"
+#include "filetypes.h"
+#include "../insight/core/delimiter_navigation.h"
+#include "../insight/desktop/source_mask.h"
+#include <stdlib.h>
+#include <string.h>
 #include <gdk/gdkkeysyms.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 static GtkWidget *extend_item;
+static guint64 *delimiter_generation(ScintillaObject *sci);
 #define MODE "insight-navigation-extend-mode"
 static gboolean requested(ScintillaObject *sci)
 {
@@ -48,7 +54,10 @@ void insight_navigation_notify(GeanyEditor *editor, SCNotification *nt)
     ScintillaObject *sci = editor->sci;
     if (nt->nmhdr.code == SCN_MODIFIED &&
         (nt->modificationType & (SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT)))
+    {
+        (*delimiter_generation(sci))++;
         set_mode(sci, FALSE);
+    }
     else if (nt->nmhdr.code == SCN_UPDATEUI && requested(sci) &&
         editor->document == document_get_current())
     {
@@ -172,6 +181,159 @@ static void command(GtkMenuItem *item, gpointer data)
     }
     gtk_widget_grab_focus(GTK_WIDGET(sci));
 }
+typedef struct {
+    guint document;guint64 generation;gint anchor,caret,length;InsightCodeDialect dialect;
+    gchar *text,*mask;InsightDelimiter *pairs;size_t count;
+} DelimiterSnapshot;
+static guint64 *delimiter_generation(ScintillaObject *sci)
+{
+    guint64 *value=g_object_get_data(G_OBJECT(sci),"insight-delimiter-generation");
+    if(!value) { value=g_new0(guint64,1);g_object_set_data_full(G_OBJECT(sci),"insight-delimiter-generation",value,g_free); }
+    return value;
+}
+static gboolean delimiter_dialect(GeanyDocument *doc,InsightCodeDialect *dialect)
+{
+    const gchar *name=doc->file_type ? doc->file_type->name : "";
+    if(!strcmp(name,"Python")) *dialect=INSIGHT_CODE_PYTHON;
+    else if(!strcmp(name,"Lua")) *dialect=INSIGHT_CODE_LUA;
+    else if(!strcmp(name,"JavaScript") || !strcmp(name,"TypeScript")) *dialect=INSIGHT_CODE_JS;
+    else if(!strcmp(name,"C") || !strcmp(name,"C++") || !strcmp(name,"C#") || !strcmp(name,"Java")) *dialect=INSIGHT_CODE_C;
+    else return FALSE;
+    return TRUE;
+}
+static void delimiter_clear(DelimiterSnapshot *snapshot)
+{
+    g_free(snapshot->text);g_free(snapshot->mask);free(snapshot->pairs);memset(snapshot,0,sizeof *snapshot);
+}
+static gboolean delimiter_boundary(const gchar *text,gint length,gint pos)
+{
+    return pos>=0 && pos<=length && (pos==length || ((guchar)text[pos]&0xc0)!=0x80) &&
+        !(pos>0 && pos<length && text[pos-1]=='\r' && text[pos]=='\n');
+}
+static gboolean delimiter_capture(DelimiterSnapshot *snapshot,gboolean pairs)
+{
+    GeanyDocument *doc=document_get_current();
+    if(!doc || !normal(doc->editor->sci)) return FALSE;
+    if(!delimiter_dialect(doc,&snapshot->dialect)) { ui_set_statusbar(TRUE,"%s",insight_tr("Delimiter navigation supports C/C++, C#, Java, JavaScript/TypeScript, Python and Lua"));return FALSE; }
+    ScintillaObject *sci=doc->editor->sci;snapshot->length=sci_get_length(sci);
+    if(snapshot->length<0 || (guint)snapshot->length>INSIGHT_DELIMITER_LIMIT) goto unavailable;
+    snapshot->document=doc->id;snapshot->generation=*delimiter_generation(sci);snapshot->anchor=SEND(sci,SCI_GETANCHOR,0,0);snapshot->caret=sci_get_current_position(sci);
+    snapshot->text=sci_get_contents(sci,-1);
+    if(!snapshot->text || strlen(snapshot->text)!=(gsize)snapshot->length || !g_utf8_validate(snapshot->text,snapshot->length,NULL) ||
+       !delimiter_boundary(snapshot->text,snapshot->length,snapshot->anchor) || !delimiter_boundary(snapshot->text,snapshot->length,snapshot->caret)) goto unavailable;
+    snapshot->mask=insight_source_code_mask(snapshot->text,snapshot->length,snapshot->dialect,NULL);
+    if(!snapshot->mask || (pairs && insight_enclosing_delimiters(snapshot->mask,snapshot->length,snapshot->caret,&snapshot->pairs,&snapshot->count))) goto unavailable;
+    return TRUE;
+unavailable:
+    ui_set_statusbar(TRUE,"%s",insight_tr("Delimiter navigation requires valid UTF-8 without NUL, complete byte positions, at most 8 MiB and 4096 nested delimiters"));delimiter_clear(snapshot);return FALSE;
+}
+static gboolean delimiter_valid(const DelimiterSnapshot *snapshot)
+{
+    GeanyDocument *doc=document_find_by_id(snapshot->document);InsightCodeDialect dialect;
+    return doc && doc==document_get_current() && normal(doc->editor->sci) && delimiter_dialect(doc,&dialect) && dialect==snapshot->dialect &&
+        *delimiter_generation(doc->editor->sci)==snapshot->generation && SEND(doc->editor->sci,SCI_GETANCHOR,0,0)==snapshot->anchor && sci_get_current_position(doc->editor->sci)==snapshot->caret;
+}
+static void delimiter_move(ScintillaObject *sci,gint position,gboolean extend)
+{
+    GeanyDocument *doc=for_sci(sci);gboolean mode=requested(sci);gint anchor=SEND(sci,SCI_GETANCHOR,0,0);
+    navqueue_goto_position(doc,doc,position);
+    select_to(sci,extend || mode ? anchor:position,position,mode);gtk_widget_grab_focus(GTK_WIDGET(sci));
+}
+static void delimiter_row_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer dialog)
+{
+    (void)view;(void)path;(void)column;gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_ACCEPT);
+}
+static void delimiter_browser(void)
+{
+    DelimiterSnapshot snapshot={0};if(!delimiter_capture(&snapshot,TRUE)) return;
+    GtkWidget *dialog=gtk_dialog_new_with_buttons(insight_tr("Enclosing Delimiters"),GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,
+        insight_tr("Refresh"),201,insight_tr("Go To Opening"),202,insight_tr("Go To Closing"),203,insight_tr("Close"),GTK_RESPONSE_CLOSE,insight_tr("Select Pair"),GTK_RESPONSE_ACCEPT,NULL);
+    g_object_ref_sink(dialog);gtk_widget_set_name(dialog,"insight-delimiter-dialog");gtk_window_set_default_size(GTK_WINDOW(dialog),920,410);
+    GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(dialog)),*hint=gtk_label_new(insight_tr("Matched pairs enclosing the active caret, innermost first. Strings and comments are excluded. Refresh after text, caret or language changes."));
+    gtk_label_set_line_wrap(GTK_LABEL(hint),TRUE);gtk_box_pack_start(GTK_BOX(box),hint,FALSE,FALSE,6);
+    GtkWidget *count=gtk_label_new(NULL);gtk_widget_set_name(count,"insight-delimiter-count");gtk_box_pack_start(GTK_BOX(box),count,FALSE,FALSE,4);
+    GtkListStore *store=gtk_list_store_new(5,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING);
+    GtkWidget *tree=gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));gtk_widget_set_name(tree,"insight-delimiter-list");g_object_set_data(G_OBJECT(tree),"insight-no-i18n",GINT_TO_POINTER(1));
+    const gchar *titles[]={"Level","Pair","Opening line:column","Closing line:column","Text preview"};
+    for(guint i=0;i<5;i++) { GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(insight_tr(titles[i]),gtk_cell_renderer_text_new(),"text",i,NULL);gtk_tree_view_column_set_resizable(column,TRUE);gtk_tree_view_append_column(GTK_TREE_VIEW(tree),column); }
+    GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),tree);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,4);g_signal_connect(tree,"row-activated",G_CALLBACK(delimiter_row_activated),dialog);
+    gboolean refresh=TRUE,done=FALSE;guint selected=0;gint operation=0;
+    while(!done)
+    {
+        if(refresh)
+        {
+            gtk_list_store_clear(store);guint shown=MIN(snapshot.count,256u);ScintillaObject *sci=document_get_current()->editor->sci;
+            for(guint i=0;i<shown;i++)
+            {
+                InsightDelimiter *pair=&snapshot.pairs[i];gchar kind[]={snapshot.text[pair->begin],snapshot.text[pair->end-1],0};
+                gchar *opening=g_strdup_printf("%d:%d",sci_get_line_from_position(sci,pair->begin)+1,(gint)SEND(sci,SCI_GETCOLUMN,pair->begin,0)+1);
+                gchar *closing=g_strdup_printf("%d:%d",sci_get_line_from_position(sci,pair->end-1)+1,(gint)SEND(sci,SCI_GETCOLUMN,pair->end-1,0)+1);
+                gsize n=MIN(pair->end-pair->begin,96u);while(n && ((guchar)snapshot.text[pair->begin+n]&0xc0)==0x80) n--;
+                gchar *excerpt=g_strndup(snapshot.text+pair->begin,n);g_strdelimit(excerpt,"\r\n\t",' ');
+                GtkTreeIter iter;gtk_list_store_append(store,&iter);gtk_list_store_set(store,&iter,0,i+1,1,kind,2,opening,3,closing,4,excerpt,-1);g_free(opening);g_free(closing);g_free(excerpt);
+            }
+            gchar *label=insight_i18n_printf("Showing %u of %u enclosing pairs",shown,(guint)snapshot.count);gtk_label_set_text(GTK_LABEL(count),label);g_free(label);
+            GtkTreePath *path=gtk_tree_path_new_from_indices(0,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(tree),path,NULL,FALSE);gtk_tree_path_free(path);
+            gtk_dialog_set_response_sensitive(GTK_DIALOG(dialog),202,shown>0);gtk_dialog_set_response_sensitive(GTK_DIALOG(dialog),203,shown>0);gtk_dialog_set_response_sensitive(GTK_DIALOG(dialog),GTK_RESPONSE_ACCEPT,shown>0);refresh=FALSE;
+        }
+        gtk_widget_show_all(dialog);gint response=gtk_dialog_run(GTK_DIALOG(dialog));
+        if(response==201)
+        {
+            GeanyDocument *doc=document_get_current();if(!doc || doc->id!=snapshot.document) { ui_set_statusbar(TRUE,"%s",insight_tr("Delimiter list expired; reopen it for the active document"));break; }
+            delimiter_clear(&snapshot);if(!delimiter_capture(&snapshot,TRUE)) break;refresh=TRUE;continue;
+        }
+        if(response!=GTK_RESPONSE_ACCEPT && response!=202 && response!=203) break;
+        if(!delimiter_valid(&snapshot)) { ui_set_statusbar(TRUE,"%s",insight_tr("Delimiter list is stale; use Refresh before navigating"));continue; }
+        GtkTreeModel *model=NULL;GtkTreeIter iter;if(!gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)),&model,&iter)) continue;
+        gtk_tree_model_get(model,&iter,0,&selected,-1);if(!selected || selected>snapshot.count) continue;selected--;operation=response;done=TRUE;
+    }
+    gtk_widget_destroy(dialog);g_object_unref(dialog);g_object_unref(store);
+    if(done && delimiter_valid(&snapshot))
+    {
+        ScintillaObject *sci=document_get_current()->editor->sci;InsightDelimiter *pair=&snapshot.pairs[selected];
+        if(operation==GTK_RESPONSE_ACCEPT)
+        {
+            gboolean forward=snapshot.anchor<=snapshot.caret;
+            navqueue_goto_position(document_get_current(),document_get_current(),forward ? pair->end:pair->begin);
+            select_to(sci,forward ? pair->begin:pair->end,forward ? pair->end:pair->begin,requested(sci));gtk_widget_grab_focus(GTK_WIDGET(sci));
+        }
+        else delimiter_move(sci,operation==202 ? pair->begin:pair->end-1,FALSE);
+    }
+    delimiter_clear(&snapshot);
+}
+void insight_navigation_delimiter(guint action)
+{
+    if(action==8) { delimiter_browser();return; }
+    if(action>7) return;
+    DelimiterSnapshot snapshot={0};if(!delimiter_capture(&snapshot,FALSE)) return;
+    size_t position=0;int result=insight_delimiter_neighbor(snapshot.mask,snapshot.length,snapshot.caret,action%4,&position);
+    if(result==1) delimiter_move(document_get_current()->editor->sci,position,action>=4);
+    else ui_set_statusbar(result<0,"%s",insight_tr(result<0 ? "Delimiter navigation exceeded its size or nesting limit" : "No delimiter in this direction"));
+    delimiter_clear(&snapshot);
+}
+static void delimiter_command(GtkMenuItem *item,gpointer data) { (void)item;insight_navigation_delimiter(GPOINTER_TO_UINT(data)); }
+static void delimiter_menu_show(GtkWidget *menu,gpointer data)
+{
+    (void)data;GeanyDocument *doc=document_get_current();InsightCodeDialect dialect;
+    gboolean ready=doc && normal(doc->editor->sci) && delimiter_dialect(doc,&dialect) && (guint)sci_get_length(doc->editor->sci)<=INSIGHT_DELIMITER_LIMIT;
+    GList *children=gtk_container_get_children(GTK_CONTAINER(menu));for(GList *p=children;p;p=p->next) if(g_object_get_data(G_OBJECT(p->data),"insight-delimiter-command")) gtk_widget_set_sensitive(p->data,ready);g_list_free(children);
+}
+static void delimiter_menu(GtkWidget *menu)
+{
+    GtkWidget *parent=gtk_menu_item_new_with_label("Delimiters and blocks"),*sub=gtk_menu_new();gtk_widget_set_name(parent,"insight-delimiter-menu");gtk_menu_item_set_submenu(GTK_MENU_ITEM(parent),sub);
+    const gchar *labels[]={"Paren Left","Paren Right","Block Up","Block Down","Select To Paren Left","Select To Paren Right","Select To Block Up","Select To Block Down","Enclosing Delimiters…"};
+    const gchar *names[]={"paren-left","paren-right","block-up","block-down","select-paren-left","select-paren-right","select-block-up","select-block-down","browser"};
+    const guint keys[]={GEANY_KEYS_INSIGHT_PARENLEFT,GEANY_KEYS_INSIGHT_PARENRIGHT,GEANY_KEYS_INSIGHT_BLOCKUP,GEANY_KEYS_INSIGHT_BLOCKDOWN,GEANY_KEYS_INSIGHT_SELECTPARENLEFT,GEANY_KEYS_INSIGHT_SELECTPARENRIGHT,GEANY_KEYS_INSIGHT_SELECTBLOCKUP,GEANY_KEYS_INSIGHT_SELECTBLOCKDOWN,GEANY_KEYS_INSIGHT_DELIMITERBROWSER};
+    for(guint i=0;i<G_N_ELEMENTS(keys);i++)
+    {
+        if(i==4 || i==8) gtk_menu_shell_append(GTK_MENU_SHELL(sub),gtk_separator_menu_item_new());
+        GtkWidget *entry=gtk_menu_item_new_with_label(labels[i]);gchar *name=g_strconcat("insight-delimiter-",names[i],NULL);gtk_widget_set_name(entry,name);g_free(name);g_object_set_data(G_OBJECT(entry),"insight-delimiter-command",GINT_TO_POINTER(1));
+        keybindings_attach_menu(GEANY_KEY_GROUP_GOTO,keys[i],entry);g_signal_connect(entry,"activate",G_CALLBACK(delimiter_command),GUINT_TO_POINTER(i));gtk_menu_shell_append(GTK_MENU_SHELL(sub),entry);
+    }
+    GtkWidget *help=gtk_menu_item_new_with_label("Delimiter Navigation Help");g_signal_connect(help,"activate",G_CALLBACK(insight_help_show),"delimiter-navigation.md");gtk_menu_shell_append(GTK_MENU_SHELL(sub),help);
+    g_signal_connect(sub,"show",G_CALLBACK(delimiter_menu_show),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),parent);gtk_widget_show_all(parent);
+}
+
 /* Native word-part commands preserve Scintilla's identifier/UTF-8 rules;
  * smart line edges use SI's additional line-to-file step. */
 static void text_boundary_command(GtkMenuItem *item,gpointer data)
@@ -427,6 +589,7 @@ void insight_navigation_menu(GtkWidget *menu)
     GtkWidget *back_toggle = gtk_menu_item_new_with_label("Go Back Toggle");gtk_widget_set_name(back_toggle,"insight-go-back-toggle");
     keybindings_attach_menu(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_INSIGHT_BACKTOGGLE,back_toggle);
     g_signal_connect(back_toggle,"activate",G_CALLBACK(back_toggle_command),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(sub),back_toggle);
+    delimiter_menu(sub);
     text_boundary_menu(sub);
     viewport_menu(sub);
     unit_selection_menu(sub);

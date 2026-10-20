@@ -293,6 +293,15 @@ enum GeanyKeyBindingID
 	GEANY_KEYS_INSIGHT_NEXTCHANGE,            /**< Insight keybinding. */
 	GEANY_KEYS_INSIGHT_PREVCHANGE,            /**< Insight keybinding. */
 	GEANY_KEYS_INSIGHT_ORIGINALCHANGES,       /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_PARENLEFT, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_PARENRIGHT, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_BLOCKUP, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_BLOCKDOWN, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_SELECTPARENLEFT, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_SELECTPARENRIGHT, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_SELECTBLOCKUP, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_SELECTBLOCKDOWN, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_DELIMITERBROWSER, /**< Insight keybinding. */
 	GEANY_KEYS_COUNT	/* must not be used by plugins */
 };
 

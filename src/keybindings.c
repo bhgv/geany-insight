@@ -311,6 +311,7 @@ static void add_kb(GeanyKeyGroup *group, gsize key_id,
 
 static void cb_func_insight(guint key_id)
 {
+    if (key_id == GEANY_KEYS_INSIGHT_DELIMITERBROWSER) { insight_navigation_delimiter(8);return; }
     if (key_id == GEANY_KEYS_INSIGHT_ORIGINALCHANGES) { insight_revisions_changes();return; }
     if (key_id == GEANY_KEYS_INSIGHT_ORIGINALCONTENTS) { insight_revisions_original();return; }
     if (key_id == GEANY_KEYS_INSIGHT_BACKTOGGLE) { navqueue_go_back_toggle();return; }
@@ -319,6 +320,14 @@ static void cb_func_insight(guint key_id)
     if (!doc || gtk_window_get_focus(GTK_WINDOW(main_widgets.window)) != GTK_WIDGET(doc->editor->sci)) return;
     switch (key_id)
     {
+        case GEANY_KEYS_INSIGHT_PARENLEFT: insight_navigation_delimiter(0);break;
+        case GEANY_KEYS_INSIGHT_PARENRIGHT: insight_navigation_delimiter(1);break;
+        case GEANY_KEYS_INSIGHT_BLOCKUP: insight_navigation_delimiter(2);break;
+        case GEANY_KEYS_INSIGHT_BLOCKDOWN: insight_navigation_delimiter(3);break;
+        case GEANY_KEYS_INSIGHT_SELECTPARENLEFT: insight_navigation_delimiter(4);break;
+        case GEANY_KEYS_INSIGHT_SELECTPARENRIGHT: insight_navigation_delimiter(5);break;
+        case GEANY_KEYS_INSIGHT_SELECTBLOCKUP: insight_navigation_delimiter(6);break;
+        case GEANY_KEYS_INSIGHT_SELECTBLOCKDOWN: insight_navigation_delimiter(7);break;
         case GEANY_KEYS_INSIGHT_RESTOREFILE: insight_revisions_file();break;
         case GEANY_KEYS_INSIGHT_NEXTCHANGE: insight_revisions_change(TRUE);break;
         case GEANY_KEYS_INSIGHT_PREVCHANGE: insight_revisions_change(FALSE);break;
@@ -772,6 +781,24 @@ static void init_default_kb(void)
     add_kb(group, GEANY_KEYS_INSIGHT_ORIGINALCHANGES, cb_func_insight,
         0, 0, "insight_original_changes", _("Original Changes"), NULL);
     group = keybindings_get_core_group(GEANY_KEY_GROUP_GOTO);
+    add_kb(group, GEANY_KEYS_INSIGHT_PARENLEFT, cb_func_insight,
+        0, 0, "insight_parenleft", _("Paren Left"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_PARENRIGHT, cb_func_insight,
+        0, 0, "insight_parenright", _("Paren Right"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_BLOCKUP, cb_func_insight,
+        0, 0, "insight_blockup", _("Block Up"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_BLOCKDOWN, cb_func_insight,
+        0, 0, "insight_blockdown", _("Block Down"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_SELECTPARENLEFT, cb_func_insight,
+        0, 0, "insight_selectparenleft", _("Select To Paren Left"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_SELECTPARENRIGHT, cb_func_insight,
+        0, 0, "insight_selectparenright", _("Select To Paren Right"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_SELECTBLOCKUP, cb_func_insight,
+        0, 0, "insight_selectblockup", _("Select To Block Up"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_SELECTBLOCKDOWN, cb_func_insight,
+        0, 0, "insight_selectblockdown", _("Select To Block Down"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_DELIMITERBROWSER, cb_func_insight,
+        0, 0, "insight_delimiterbrowser", _("Enclosing Delimiters"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_NEXTCHANGE, cb_func_insight,
         0, 0, "insight_next_change", _("Go To Next Change"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_PREVCHANGE, cb_func_insight,

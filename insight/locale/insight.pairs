@@ -1091,3 +1091,30 @@ Deleted|||Удалено
 Showing %u of %u changed blocks|||Показано %u из %u блоков изменений
 Changes list expired; reopen it for the active document|||Список изменений устарел; откройте его для активного документа
 Changes list is stale; use Refresh before navigating|||Список изменений устарел; обновите перед переходом
+Delimiters and blocks|||Скобки и блоки
+Paren Left|||К открывающей круглой скобке
+Paren Right|||К закрывающей круглой скобке
+Block Up|||К предыдущей открывающей фигурной скобке
+Block Down|||К следующей закрывающей фигурной скобке
+Select To Paren Left|||Выделить до открывающей круглой скобки
+Select To Paren Right|||Выделить до закрывающей круглой скобки
+Select To Block Up|||Выделить до предыдущей открывающей фигурной скобки
+Select To Block Down|||Выделить до следующей закрывающей фигурной скобки
+Enclosing Delimiters|||Охватывающие скобки
+Enclosing Delimiters…|||Охватывающие скобки…
+Delimiter Navigation Help|||Справка по переходам между скобками
+Go To Opening|||К открывающей
+Go To Closing|||К закрывающей
+Select Pair|||Выделить пару
+Level|||Уровень
+Pair|||Пара
+Opening line:column|||Открытие, строка:столбец
+Closing line:column|||Закрытие, строка:столбец
+Delimiter navigation supports C/C++, C#, Java, JavaScript/TypeScript, Python and Lua|||Переходы по скобкам поддерживают C/C++, C#, Java, JavaScript/TypeScript, Python и Lua
+Delimiter navigation requires valid UTF-8 without NUL, complete byte positions, at most 8 MiB and 4096 nested delimiters|||Переходы по скобкам требуют корректный UTF-8 без NUL, целые позиции символов, не более 8 МиБ и 4096 вложенных скобок
+Matched pairs enclosing the active caret, innermost first. Strings and comments are excluded. Refresh after text, caret or language changes.|||Пары, охватывающие активный курсор, от внутренней к внешней. Строки и комментарии исключены. Обновите после изменения текста, курсора или языка.
+Showing %u of %u enclosing pairs|||Показано %u из %u охватывающих пар
+Delimiter list expired; reopen it for the active document|||Список скобок устарел; откройте его для активного документа
+Delimiter list is stale; use Refresh before navigating|||Список скобок устарел; обновите его перед переходом
+Delimiter navigation exceeded its size or nesting limit|||Превышен предел размера или вложенности при переходе по скобкам
+No delimiter in this direction|||В этом направлении скобок нет

@@ -38,6 +38,7 @@ gboolean navqueue_goto_line(GeanyDocument *old_doc, GeanyDocument *new_doc, gint
 
 #ifdef GEANY_PRIVATE
 
+gboolean navqueue_goto_position(GeanyDocument *, GeanyDocument *, gint position);
 void navqueue_show_history(void);
 void navqueue_notify(GeanyDocument *, struct SCNotification *);
 void navqueue_init(void);

@@ -57,3 +57,5 @@ Python supports async/multiline definitions, nested suites, continuation bracket
 ## Точное дублирование выделения
 
 **Edit → Duplicate Line or Selection / Ctrl+D** дублирует именно выделенный фрагмент, включая части первой и последней строк, буквы, пробелы и переводы строк. Предварительное расширение многострочного выделения до полных строк больше не выполняется. Без выделения сохраняется дублирование текущей строки. Операция поддерживает обратное выделение и Undo/Redo; read-only запрещает изменение.
+
+[Delimiter navigation and enclosing-pair browser / Переходы по скобкам](delimiter-navigation.md).

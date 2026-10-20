@@ -4,6 +4,7 @@
 #include "editor.h"
 void insight_navigation_menu(GtkWidget *);
 void insight_navigation_attach(ScintillaObject *);
+void insight_navigation_delimiter(guint action);
 void insight_navigation_notify(GeanyEditor *, SCNotification *);
 gboolean insight_navigation_key(GeanyEditor *, GdkEventKey *);
 /* Used only by navigation wrappers. FALSE preserves their native behavior. */

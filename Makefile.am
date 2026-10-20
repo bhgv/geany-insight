@@ -496,3 +496,6 @@ dist_insightdocmedia_DATA += insight/docs/media/restore-lines.svg insight/docs/m
 
 dist_insightdocmedia_DATA += insight/docs/media/original-changes.svg
 dist_insightdocmedia_DATA += insight/docs/media/original-changes.jpg insight/docs/media/restore-file.jpg
+
+insightdoc_DATA += insight/docs/delimiter-navigation.md
+dist_insightdocmedia_DATA += insight/docs/media/delimiter-navigation.svg
