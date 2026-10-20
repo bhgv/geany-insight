@@ -12,7 +12,7 @@
 static const gchar *original="head\r\nα original\r\nkeep\r\nlast\r\n";
 static const gchar *edited="head\r\nβ edited\r\nkeep\r\nLAST\r\n";
 static const gchar *partial="head\r\nα original\r\nkeep\r\nLAST\r\n";
-static GtkWidget *window;
+static GtkWidget *window,*popup;
 static GeanyDocument *source,*other;
 static gchar *path;
 static guint mode,tick;
@@ -26,7 +26,7 @@ static GtkWidget *dialog(void) {
  GList *windows=gtk_window_list_toplevels();GtkWidget *found=NULL;for(GList *p=windows;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-restore-lines-dialog")) { found=p->data;break; }g_list_free(windows);return found;
 }
 static void text_is(GeanyDocument *doc,const gchar *expected) { gchar *text=sci_get_contents(doc->editor->sci,-1);g_assert_cmpstr(text,==,expected);g_free(text); }
-static void action(const gchar *name) { GtkWidget *item=named(window,name);if(!item) item=named(main_widgets.editor_menu,name);g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item)); }
+static void action(const gchar *name) { GtkWidget *item=named(window,name);if(!item) item=named(popup,name);g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item)); }
 static void reset(const gchar *text,gint anchor,gint caret) {
  ScintillaObject *sci=source->editor->sci;source->readonly=FALSE;SEND(sci,SCI_SETREADONLY,0,0);SEND(sci,SCI_CLEARSELECTIONS,0,0);SEND(sci,SCI_SETSELECTIONMODE,SC_SEL_STREAM,0);SEND(sci,SCI_SETSELECTIONNCARETVIRTUALSPACE,0,0);SEND(sci,SCI_SETSELECTIONNANCHORVIRTUALSPACE,0,0);sci_set_text(sci,text);SEND(sci,SCI_SETSEL,anchor,caret);SEND(sci,SCI_EMPTYUNDOBUFFER,0,0);SEND(sci,SCI_SETSAVEPOINT,0,0);
 }
@@ -50,7 +50,7 @@ static void original_view(const gchar *expected) {
  guint id=source->id;static guint views;action(++views%2 ? "insight-popup-original-contents" : "insight-original-contents");GeanyDocument *view=document_get_current();g_assert_true(view->id!=id);g_assert_true(view->readonly);g_assert_true(SEND(view->editor->sci,SCI_GETREADONLY,0,0));g_assert_null(view->real_path);text_is(view,expected);g_assert_false(SEND(view->editor->sci,SCI_CANUNDO,0,0));g_assert_true(document_close(view));g_assert_true(document_get_current()==source);
 }
 static gboolean step(gpointer data) {
- (void)data;source=document_get_current();if(!source) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));
+ (void)data;source=document_get_current();if(!source) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));popup=g_object_get_data(G_OBJECT(window),"insight-editor-menu");g_assert_nonnull(popup);
  action("insight-original-contents");GeanyDocument *view_one=document_get_current();g_assert_true(view_one!=source);navqueue_goto_line(view_one,source,1);action("insight-original-contents");GeanyDocument *view_two=document_get_current();g_assert_cmpstr(view_one->file_name,!=,view_two->file_name);text_is(view_one,original);text_is(view_two,original);g_assert_true(document_close(view_two));g_assert_true(document_close(view_one));
  original_view(original);reset(edited,8,8);g_assert_true(document_save_file(source,TRUE));restore(0);text_is(source,partial);SEND(source->editor->sci,SCI_UNDO,0,0);text_is(source,edited);g_assert_false(SEND(source->editor->sci,SCI_CANUNDO,0,0));SEND(source->editor->sci,SCI_REDO,0,0);text_is(source,partial);
  gchar *disk=NULL;g_assert_true(g_file_get_contents(path,&disk,NULL,NULL));g_assert_cmpstr(disk,==,edited);g_free(disk);original_view(original);
@@ -61,7 +61,7 @@ static gboolean step(gpointer data) {
  reset(edited,8,8);restore(3);text_is(source,edited);g_assert_false(SEND(source->editor->sci,SCI_CANUNDO,0,0));
  reset(edited,8,8);SEND(source->editor->sci,SCI_SETREADONLY,1,0);restore(4);text_is(source,edited);g_assert_false(SEND(source->editor->sci,SCI_CANUNDO,0,0));
  reset(edited,8,8);restore(5);g_assert_true(document_get_current()==other);text_is(other,"other");text_is(source,edited);g_assert_true(document_close(other));
- reset(edited,8,8);SEND(source->editor->sci,SCI_SETSELECTIONMODE,SC_SEL_RECTANGLE,0);g_signal_emit_by_name(main_widgets.editor_menu,"show");g_assert_false(gtk_widget_get_sensitive(named(main_widgets.editor_menu,"insight-popup-restore-lines")));g_assert_true(gtk_widget_get_sensitive(named(main_widgets.editor_menu,"insight-popup-original-contents")));action("insight-restore-lines");g_assert_null(dialog());text_is(source,edited);
+ reset(edited,8,8);SEND(source->editor->sci,SCI_SETSELECTIONMODE,SC_SEL_RECTANGLE,0);g_signal_emit_by_name(popup,"show");g_assert_false(gtk_widget_get_sensitive(named(popup,"insight-popup-restore-lines")));g_assert_true(gtk_widget_get_sensitive(named(popup,"insight-popup-original-contents")));action("insight-restore-lines");g_assert_null(dialog());text_is(source,edited);
  reset(edited,8,8);SEND(source->editor->sci,SCI_ADDSELECTION,2,2);action("insight-restore-lines");g_assert_null(dialog());text_is(source,edited);
  reset(edited,8,8);SEND(source->editor->sci,SCI_SETSELECTIONNCARETVIRTUALSPACE,0,1);action("insight-restore-lines");g_assert_null(dialog());text_is(source,edited);
  reset("α",1,1);action("insight-restore-lines");g_assert_null(dialog());text_is(source,"α");
