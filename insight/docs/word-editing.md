@@ -54,3 +54,8 @@ Help — Command Browser. По умолчанию сочетания не наз
 назначения сохраняются обычным механизмом Geany. Сочетания удаления и вырезания
 действуют только при фокусе в текущем исходном редакторе, не меняя документ при
 вводе в строку поиска или другое поле. Назначения видны в новых списках и меню.
+
+![Production UI in an isolated native Linux fixture](media/word-editing.jpg)
+
+The displayed Cut Word shortcut is a fixture-specific user assignment; all five new actions default to unassigned.
+Показанное сочетание Cut Word назначено в тестовом профиле; по умолчанию новые команды не имеют сочетаний.

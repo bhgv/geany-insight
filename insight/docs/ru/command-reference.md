@@ -80,3 +80,8 @@ Help — Command Browser. По умолчанию сочетания не наз
 назначения сохраняются обычным механизмом Geany. Сочетания удаления и вырезания
 действуют только при фокусе в текущем исходном редакторе, не меняя документ при
 вводе в строку поиска или другое поле. Назначения видны в новых списках и меню.
+
+State reflects the current menu-widget snapshot; Run refreshes native menu state before dispatch.
+Столбец состояния — снимок свойств меню; перед Run штатное состояние меню проверяется заново.
+
+![Production UI in an isolated native Linux fixture](../media/command-browser.jpg)

@@ -488,3 +488,5 @@ dist_insightdocmedia_DATA += insight/docs/media/word-editing.svg
 
 insightdoc_DATA += insight/docs/command-reference.md
 dist_insightdocmedia_DATA += insight/docs/media/command-reference.svg
+
+dist_insightdocmedia_DATA += insight/docs/media/word-editing.jpg insight/docs/media/command-browser.jpg
