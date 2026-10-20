@@ -1201,3 +1201,7 @@ Remove selected node from view (Delete)	Убрать выбранный узел
 Restore nodes by refreshing the query (F5)	Восстановить узлы пересчётом запроса (F5)
 Node removed from view; refresh to restore	Узел убран из представления; обновите для восстановления
 Select a source node; query roots and notices cannot be removed	Выберите узел исходника; корень запроса и служебные строки защищены
+Dock this panel	Закрепить эту панель
+Float this panel	Открепить эту панель
+Restore panel size	Восстановить размер панели
+Maximize floating panel	Развернуть плавающую панель

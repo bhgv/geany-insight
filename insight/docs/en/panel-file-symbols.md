@@ -100,3 +100,12 @@ The list uses a separate declaration snapshot from the Geany/ctags language pars
 
 
 See [the unified File Search and File Symbols interface](unified-file-tools.md).
+
+## Panel window controls
+
+Header buttons provide **Float / Dock** and **Maximize / Restore**.
+Maximize is enabled for floating panels. Dock returns the panel to its home
+and selects its tab; native window close also docks it. Arbitrary docking
+locations and persistence of maximized state are not provided.
+
+![Panel states](../media/panel-controls.svg)

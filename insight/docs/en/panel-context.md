@@ -152,3 +152,12 @@ Competing bindings and complex annotations decline rather than selecting an
 arbitrary field. Eligibility filters cannot reopen a hidden outer binding.
 A function's return annotation describes `make().field`, never `make.field`:
 the latter is a function object, whose dynamic attributes are not inferred.
+
+## Panel window controls
+
+Header buttons provide **Float / Dock** and **Maximize / Restore**.
+Maximize is enabled for floating panels. Dock returns the panel to its home
+and selects its tab; native window close also docks it. Arbitrary docking
+locations and persistence of maximized state are not provided.
+
+![Panel states](../media/panel-controls.svg)

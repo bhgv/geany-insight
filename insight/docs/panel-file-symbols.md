@@ -100,3 +100,12 @@ The list uses a separate declaration snapshot from the Geany/ctags language pars
 
 
 See [the unified File Search and File Symbols interface](unified-file-tools.md).
+
+## Управление окном панели
+
+В заголовке: **Открепить / Закрепить** и **Развернуть / Восстановить**.
+Разворачивание доступно в плавающем окне. Закрепление возвращает панель
+на штатное место и выбирает вкладку; системное закрытие также закрепляет её.
+Произвольные места закрепления и сохранение развёрнутого состояния пока не поддерживаются.
+
+![Состояния панели](media/panel-controls.svg)

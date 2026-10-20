@@ -76,7 +76,7 @@
 
 typedef struct { gchar *path; GDir *dir; } ScanFrame;
 static void frame_free(gpointer data) { ScanFrame *p=data; if(p->dir) g_dir_close(p->dir); g_free(p->path); g_free(p); }
-typedef struct { GtkWidget *page,*home,*window; gchar *label; guint order; gboolean pane,restore,visible; gint x,y,width,height; } PanelHost;
+typedef struct { GtkWidget *page,*home,*window,*dock_button,*maximize_button; gchar *label; guint order; gboolean pane,restore,visible; gint x,y,width,height; } PanelHost;
 typedef struct { GtkWidget *view,*entry,*status,*more; GtkTreeStore *store; gboolean symbols,setting; guint limit,shown,total,timer; } GroupedPanel;
 typedef struct { gchar *path; guint id; gulong line; } Location;
 static void location_free(gpointer data) { Location *p=data; g_free(p->path); g_free(p); }
@@ -3870,6 +3870,20 @@ static void float_project(GtkMenuItem *item,gpointer data) {
   gtk_window_move(GTK_WINDOW(wb.float_window),wb.float_x,wb.float_y);
  }
 }
+/* Keep controls on the page so they survive reparenting and layout restore. */
+static void panel_controls_update(PanelHost *host) {
+ if(!host->dock_button) return;
+ gboolean floating=host->window!=NULL;
+ gboolean maximized=floating && gtk_window_is_maximized(GTK_WINDOW(host->window));
+ gtk_button_set_image(GTK_BUTTON(host->dock_button),gtk_image_new_from_icon_name(floating ? "view-restore-symbolic" : "window-new-symbolic",GTK_ICON_SIZE_MENU));
+ gtk_widget_set_tooltip_text(host->dock_button,insight_tr(floating ? "Dock this panel" : "Float this panel"));
+ gtk_widget_set_sensitive(host->maximize_button,floating);
+ gtk_button_set_image(GTK_BUTTON(host->maximize_button),gtk_image_new_from_icon_name(maximized ? "view-restore-symbolic" : "view-fullscreen-symbolic",GTK_ICON_SIZE_MENU));
+ gtk_widget_set_tooltip_text(host->maximize_button,insight_tr(maximized ? "Restore panel size" : "Maximize floating panel"));
+}
+static gboolean panel_window_state(GtkWidget *widget,GdkEventWindowState *event,gpointer data) {
+ (void)widget;(void)event;panel_controls_update(&wb.hosts[GPOINTER_TO_UINT(data)]);return FALSE;
+}
 static void dock_panel(guint index) {
  if(index>=wb.host_count) return;
  PanelHost *host=&wb.hosts[index]; if(!host->window) return;
@@ -3885,9 +3899,14 @@ static void dock_panel(guint index) {
   gtk_notebook_insert_page(GTK_NOTEBOOK(host->home),host->page,gtk_label_new(host->label),position);
  }
  g_object_unref(host->page); gtk_widget_show(host->page); gtk_widget_destroy(window);
+ panel_controls_update(host);
 }
 static void dock_all_panels(void) { for(guint i=0;i<wb.host_count;i++) dock_panel(i); }
-static gboolean panel_closed(GtkWidget *widget,GdkEvent *event,gpointer data) { (void)widget; (void)event; dock_panel(GPOINTER_TO_UINT(data)); return TRUE; }
+static void dock_panel_selected(guint index) {
+ dock_panel(index);if(index>=wb.host_count) return;PanelHost *host=&wb.hosts[index];
+ if(!host->pane) gtk_notebook_set_current_page(GTK_NOTEBOOK(host->home),gtk_notebook_page_num(GTK_NOTEBOOK(host->home),host->page));
+}
+static gboolean panel_closed(GtkWidget *widget,GdkEvent *event,gpointer data) { (void)widget; (void)event; dock_panel_selected(GPOINTER_TO_UINT(data)); return TRUE; }
 static void detach_panel(guint index) {
  if(index>=wb.host_count) return;
  PanelHost *host=&wb.hosts[index]; if(host->window) { gtk_window_present(GTK_WINDOW(host->window)); return; }
@@ -3898,8 +3917,33 @@ static void detach_panel(guint index) {
  if(index==8) { GtkWidget *placeholder=gtk_label_new("File Symbols is in a floating window");gtk_notebook_insert_page(GTK_NOTEBOOK(host->home),placeholder,gtk_label_new("File Symbols"),0);g_object_set_data(G_OBJECT(host->page),"insight-dock-placeholder",placeholder);gtk_widget_show(placeholder); }
  if(wb.navigation_accels) gtk_window_add_accel_group(GTK_WINDOW(host->window),wb.navigation_accels);
  if(wb.lua_accels) gtk_window_add_accel_group(GTK_WINDOW(host->window),wb.lua_accels);
- g_signal_connect(host->window,"delete-event",G_CALLBACK(panel_closed),GUINT_TO_POINTER(index)); gtk_widget_show_all(host->window);
+ g_signal_connect(host->window,"delete-event",G_CALLBACK(panel_closed),GUINT_TO_POINTER(index));
+ g_signal_connect(host->window,"window-state-event",G_CALLBACK(panel_window_state),GUINT_TO_POINTER(index));
+ panel_controls_update(host); gtk_widget_show_all(host->window);
  if(host->width>=300) { GdkMonitor *monitor=gdk_display_get_monitor_at_point(gdk_display_get_default(),host->x,host->y); if(monitor) { GdkRectangle area; gdk_monitor_get_workarea(monitor,&area); host->width=MIN(host->width,MAX(300,area.width)); host->height=MIN(host->height,MAX(200,area.height)); host->x=CLAMP(host->x,area.x,area.x+MAX(0,area.width-host->width)); host->y=CLAMP(host->y,area.y,area.y+MAX(0,area.height-host->height)); gtk_window_resize(GTK_WINDOW(host->window),host->width,host->height); } gtk_window_move(GTK_WINDOW(host->window),host->x,host->y); }
+}
+static void panel_toggle_docking(GtkButton *button,gpointer data) {
+ (void)button;guint index=GPOINTER_TO_UINT(data);
+ if(wb.hosts[index].window) dock_panel_selected(index);else detach_panel(index);
+}
+static void panel_toggle_maximized(GtkButton *button,gpointer data) {
+ (void)button;PanelHost *host=&wb.hosts[GPOINTER_TO_UINT(data)];if(!host->window) return;
+ if(gtk_window_is_maximized(GTK_WINDOW(host->window))) gtk_window_unmaximize(GTK_WINDOW(host->window));
+ else gtk_window_maximize(GTK_WINDOW(host->window));
+}
+static void panel_controls_attach(guint index) {
+ PanelHost *host=&wb.hosts[index];GtkWidget *header=NULL;
+ GList *children=gtk_container_get_children(GTK_CONTAINER(host->page));
+ for(GList *p=children;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-panel-help-header")) { header=p->data;break; }
+ g_list_free(children);
+ if(!header) { header=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0);gtk_widget_set_name(header,"insight-panel-controls-header");gtk_box_pack_start(GTK_BOX(host->page),header,FALSE,FALSE,0);gtk_box_reorder_child(GTK_BOX(host->page),header,0); }
+ host->dock_button=gtk_button_new();host->maximize_button=gtk_button_new();
+ GtkWidget *buttons[]={host->dock_button,host->maximize_button};
+ for(guint n=0;n<G_N_ELEMENTS(buttons);n++) { gtk_button_set_relief(GTK_BUTTON(buttons[n]),GTK_RELIEF_NONE);gtk_widget_set_size_request(buttons[n],22,22);gtk_box_pack_end(GTK_BOX(header),buttons[n],FALSE,FALSE,0); }
+ gtk_widget_set_name(host->dock_button,"insight-panel-toggle-dock");gtk_widget_set_name(host->maximize_button,"insight-panel-toggle-maximize");
+ g_signal_connect(host->dock_button,"clicked",G_CALLBACK(panel_toggle_docking),GUINT_TO_POINTER(index));
+ g_signal_connect(host->maximize_button,"clicked",G_CALLBACK(panel_toggle_maximized),GUINT_TO_POINTER(index));
+ panel_controls_update(host);gtk_widget_show_all(header);
 }
 static void float_panel_command(GtkMenuItem *item,gpointer data) { (void)item; detach_panel(GPOINTER_TO_UINT(data)); }
 static void dock_panels_command(GtkMenuItem *item,gpointer data) { (void)item; (void)data; dock_all_panels(); }
@@ -3918,7 +3962,7 @@ static void register_panels(void) {
    g_object_ref(old); gtk_container_remove(GTK_CONTAINER(host->home),old); gtk_container_add(GTK_CONTAINER(scroll),old); g_object_unref(old);
    gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0); gtk_notebook_insert_page(GTK_NOTEBOOK(host->home),box,gtk_label_new(host->label),position);
    host->page=box; gtk_widget_show_all(box);
-  } if(i!=9) insight_panel_help_attach(host->page,topics[i]); }
+  } if(i!=9) insight_panel_help_attach(host->page,topics[i]); panel_controls_attach(i); }
  insight_panel_help_attach(wb.search_page,"panel-search-results.md");
  insight_panel_help_notebook(GTK_NOTEBOOK(main_widgets.sidebar_notebook),"panel-native-symbols.md"); insight_panel_help_notebook(GTK_NOTEBOOK(main_widgets.message_window_notebook),"panel-messages.md"); insight_panel_help_notebook(GTK_NOTEBOOK(main_widgets.notebook),"panel-editor.md");
  GtkWidget *floating=gtk_menu_item_new_with_label("Float individual panel"),*menu=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(floating),menu); gtk_container_add(GTK_CONTAINER(wb.panel_commands),floating);

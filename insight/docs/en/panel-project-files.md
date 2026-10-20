@@ -92,3 +92,12 @@ and valid visibility when loading the expanded four-column list. Directory/Size
 are appended with defaults; malformed layouts retain defaults. Reset restores
 File/Directory/Size/Path with suitable widths.
 Reference: [Source Insight Project File List](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Project_File_List.htm).
+
+## Panel window controls
+
+Header buttons provide **Float / Dock** and **Maximize / Restore**.
+Maximize is enabled for floating panels. Dock returns the panel to its home
+and selects its tab; native window close also docks it. Arbitrary docking
+locations and persistence of maximized state are not provided.
+
+![Panel states](../media/panel-controls.svg)

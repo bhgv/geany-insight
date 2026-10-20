@@ -484,3 +484,15 @@ Added Whole Result / Selection / Current position to end scope selector, shared 
 ### 2026-10-19 — unified file search and file symbols
 
 Merged Ctrl+F/native repeat commands with the File Search Bar; compact Source Insight arrangement and options include wrap, selection, incremental search and button word loading. Merged native ctags structure and rich Insight list into one File Symbols page with one query and explicit modes. Native structure is default; custom square type badges, pale background, bold structural declarations and bottom sorting follow the official visual reference. Platform rendering and parser differences remain; pixel identity and unimplemented SI search dialect/context features are not claimed. [Guide](unified-file-tools.md).
+
+### 2026-10-20 — direct panel window controls
+
+Added Float/Dock and Maximize/Restore header buttons to the ten individual
+workbench panels, with RU/EN tooltips and native window-state synchronization.
+Docking selects the returned tab; system close retains docking behavior. Buttons
+survive reparenting. Maximized state is not persisted. Added production-panel GUI
+regression coverage for all ten hosts and repeated docking. This environment lacks
+GTK development headers, Meson and Xvfb, so the GUI scenario and native compilation
+have not been executed here; no application screenshot is claimed.
+[Controls diagram](media/panel-controls.svg).
+Reference: [Panel Window Controls](https://www.sourceinsight.com/doc/v4/userguide/Manual/Window_Tour/Panel_Window_Controls.htm).

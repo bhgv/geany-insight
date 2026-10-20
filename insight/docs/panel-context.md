@@ -158,3 +158,12 @@ Competing bindings and complex annotations decline rather than selecting an
 arbitrary field. Eligibility filters cannot reopen a hidden outer binding.
 A function's return annotation describes `make().field`, never `make.field`:
 the latter is a function object, whose dynamic attributes are not inferred.
+
+## Управление окном панели
+
+В заголовке: **Открепить / Закрепить** и **Развернуть / Восстановить**.
+Разворачивание доступно в плавающем окне. Закрепление возвращает панель
+на штатное место и выбирает вкладку; системное закрытие также закрепляет её.
+Произвольные места закрепления и сохранение развёрнутого состояния пока не поддерживаются.
+
+![Состояния панели](media/panel-controls.svg)

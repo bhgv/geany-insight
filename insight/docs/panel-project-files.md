@@ -102,3 +102,12 @@ and valid visibility when loading the expanded four-column list. Directory/Size
 are appended with defaults; malformed layouts retain defaults. Reset restores
 File/Directory/Size/Path with suitable widths.
 Reference: [Source Insight Project File List](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Project_File_List.htm).
+
+## Управление окном панели
+
+В заголовке: **Открепить / Закрепить** и **Развернуть / Восстановить**.
+Разворачивание доступно в плавающем окне. Закрепление возвращает панель
+на штатное место и выбирает вкладку; системное закрытие также закрепляет её.
+Произвольные места закрепления и сохранение развёрнутого состояния пока не поддерживаются.
+
+![Состояния панели](media/panel-controls.svg)
