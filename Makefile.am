@@ -452,3 +452,8 @@ EXTRA_DIST += insight/tests/insert_tools_gui_test.c
 
 insightdoc_DATA += insight/docs/insert-tools.md
 dist_insightdocmedia_DATA += insight/docs/media/clipboard-view.jpg insight/docs/media/insert-character.jpg insight/docs/media/insert-tools.svg
+EXTRA_DIST += insight/tests/text_transfer_test.c insight/desktop/text_transfer.h
+EXTRA_DIST += insight/tests/file_text_gui_test.c
+
+insightdoc_DATA += insight/docs/file-text.md
+dist_insightdocmedia_DATA += insight/docs/media/file-text-export.jpg insight/docs/media/file-text.svg

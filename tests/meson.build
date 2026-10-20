@@ -736,3 +736,9 @@ test('Insight native cancellable Undo All Redo All GUI', bulk_undo_gui_test, tim
 
 insert_tools_gui_test = executable('test_insight_insert_tools_gui', '../insight/tests/insert_tools_gui_test.c', dependencies: test_deps)
 test('Insight native GUID character and clipboard tools GUI', insert_tools_gui_test, timeout: 40, is_parallel: false)
+
+text_transfer_test = executable('test_insight_text_transfer', '../insight/tests/text_transfer_test.c', '../insight/desktop/text_transfer.c', include_directories: include_directories('../insight/desktop'), dependencies: deps, c_args: ['-UNDEBUG'])
+test('Insight bounded UTF-8 text transfer', text_transfer_test)
+
+file_text_gui_test = executable('test_insight_file_text_gui', '../insight/tests/file_text_gui_test.c', dependencies: test_deps)
+test('Insight native Insert File Save Selection Save Copy GUI', file_text_gui_test, timeout: 60, is_parallel: false)

@@ -33,3 +33,5 @@ Copy/Cut/Duplicate Symbol and exact selection duplication: [structural editing](
 История переходов и Undo All / Redo All: [руководство](editor-history.md).
 
 Вставка GUID и символов, просмотр буфера обмена: [руководство](insert-tools.md).
+
+Вставка файла и экспорт текста: [руководство](file-text.md).

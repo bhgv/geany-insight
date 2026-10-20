@@ -897,3 +897,19 @@ Clipboard text snapshot. Refresh to read again.|||Снимок текста бу
 Reading clipboard…|||Чтение буфера обмена…
 Radix|||Система счисления
 Character code|||Код символа
+Insert File…|||Вставить файл…
+Insert File|||Вставка файла
+Save Selection…|||Сохранить выделение…
+Save Selection|||Сохранить выделение
+Save a Copy…|||Сохранить копию…
+Save a Copy|||Сохранить копию
+Export UTF-8 text without changing the original document. Open destinations are protected.|||Экспорт текста UTF-8 без изменения исходного документа. Открытые назначения защищены.
+Export cancelled because the source document or selection changed|||Экспорт отменён: исходный документ или выделение изменились
+Close the destination document before exporting to this path|||Закройте документ назначения перед экспортом в этот путь
+Text transfer is limited to 8 MiB.|||Передача текста ограничена 8 МиБ.
+Text transfer requires UTF-8 without NUL bytes.|||Для передачи нужен UTF-8 без нулевых байтов.
+Choose a regular file, not a directory or symbolic link.|||Выберите обычный файл, а не каталог или символическую ссылку.
+The selected file changed; choose it again.|||Выбранный файл изменился; выберите его заново.
+The destination does not provide an etag for conditional replacement.|||Назначение не предоставляет etag для условной замены.
+Choose a destination filename.|||Выберите имя файла назначения.
+Choose a local filename.|||Выберите локальное имя файла.

@@ -9,6 +9,7 @@
 #include "main.h"
 #include "insight-i18n.h"
 #include "../insight/desktop/intelligent_paste.h"
+#include "../insight/desktop/text_transfer.h"
 #include <string.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 #define STATE "insight-paste-generation"
@@ -669,16 +670,82 @@ static void show_clipboard(GtkMenuItem *item,gpointer data)
  GtkWidget *refresh=gtk_button_new_with_label(insight_tr("Refresh")),*close=gtk_button_new_with_label(insight_tr("Close"));gtk_widget_set_name(refresh,"insight-clipboard-refresh");gtk_box_pack_end(GTK_BOX(bar),close,FALSE,FALSE,0);gtk_box_pack_end(GTK_BOX(bar),refresh,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);
  g_signal_connect(refresh,"clicked",G_CALLBACK(clipboard_refresh),view);g_signal_connect(close,"clicked",G_CALLBACK(clipboard_close),view);g_signal_connect(view->window,"destroy",G_CALLBACK(clipboard_destroy),view);gtk_widget_show_all(view->window);clipboard_refresh(NULL,view);
 }
+static gboolean file_request_valid(Request *request,gboolean selection)
+{
+ GeanyDocument *doc=document_find_by_id(request->id);
+ return doc && doc==document_get_current() && doc->editor->sci==request->sci && state(request->sci)->generation==request->generation &&
+  (!selection || (SEND(request->sci,SCI_GETSELECTIONS,0,0)==1 && sci_get_selection_mode(request->sci)==SC_SEL_STREAM &&
+   !SEND(request->sci,SCI_GETSELECTIONNCARETVIRTUALSPACE,0,0) && !SEND(request->sci,SCI_GETSELECTIONNANCHORVIRTUALSPACE,0,0) &&
+   SEND(request->sci,SCI_GETANCHOR,0,0)==request->anchor && sci_get_current_position(request->sci)==request->caret));
+}
+static gboolean destination_open(const gchar *path)
+{
+ gchar *utf8=g_filename_to_utf8(path,-1,NULL,NULL,NULL);if(!utf8) return TRUE;
+ gboolean opened=document_find_by_filename(utf8)!=NULL;g_free(utf8);if(opened) return TRUE;
+ GFile *destination=g_file_new_for_path(path);GFileInfo *target=g_file_query_info(destination,G_FILE_ATTRIBUTE_ID_FILE,G_FILE_QUERY_INFO_NONE,NULL,NULL);g_object_unref(destination);
+ const gchar *id=target ? g_file_info_get_attribute_string(target,G_FILE_ATTRIBUTE_ID_FILE) : NULL;
+ for(guint i=0;id && documents_array && i<documents_array->len && !opened;i++) {
+  GeanyDocument *doc=g_ptr_array_index(documents_array,i);if(!doc->is_valid || !doc->file_name) continue;
+  gchar *native=g_filename_from_utf8(doc->file_name,-1,NULL,NULL,NULL);if(!native) continue;
+  GFile *file=g_file_new_for_path(native);GFileInfo *info=g_file_query_info(file,G_FILE_ATTRIBUTE_ID_FILE,G_FILE_QUERY_INFO_NONE,NULL,NULL);g_free(native);g_object_unref(file);
+  if(info) { opened=!g_strcmp0(id,g_file_info_get_attribute_string(info,G_FILE_ATTRIBUTE_ID_FILE));g_object_unref(info); }
+ }
+ g_clear_object(&target);return opened;
+}
+static void insert_file(GtkMenuItem *item,gpointer data)
+{
+ (void)item;(void)data;Request request={0};if(!tools_capture(&request)) return;
+ GtkWidget *dialog=gtk_file_chooser_dialog_new(insight_tr("Insert File"),GTK_WINDOW(main_widgets.window),GTK_FILE_CHOOSER_ACTION_OPEN,insight_tr("Cancel"),GTK_RESPONSE_CANCEL,insight_tr("Insert"),GTK_RESPONSE_ACCEPT,NULL);
+ g_object_ref_sink(dialog);gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog),TRUE);gtk_widget_set_name(dialog,"insight-insert-file-dialog");gtk_file_chooser_set_local_only(GTK_FILE_CHOOSER(dialog),TRUE);
+ gchar *path=NULL;if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+ gtk_widget_destroy(dialog);g_object_unref(dialog);
+ if(path) {
+  GError *error=NULL;gsize length=0;gchar *text=insight_text_file_read(path,&length,&error);
+  if(!text) ui_set_statusbar(TRUE,"%s",error ? insight_tr(error->message) : insight_tr("Choose a local filename."));
+  else if(!tools_insert(&request,text)) ui_set_statusbar(TRUE,"Insertion cancelled because the document or selection changed");
+  g_clear_error(&error);g_free(text);g_free(path);
+ }
+}
+static void export_text(GtkMenuItem *item,gpointer data)
+{
+ (void)item;gboolean selection=GPOINTER_TO_INT(data);GeanyDocument *doc=document_get_current();if(!doc) return;
+ ScintillaObject *sci=doc->editor->sci;gint begin=selection ? sci_get_selection_start(sci) : 0,end=selection ? sci_get_selection_end(sci) : sci_get_length(sci);
+ if(selection && (begin==end || SEND(sci,SCI_GETSELECTIONS,0,0)!=1 || sci_get_selection_mode(sci)!=SC_SEL_STREAM || SEND(sci,SCI_GETSELECTIONNCARETVIRTUALSPACE,0,0) || SEND(sci,SCI_GETSELECTIONNANCHORVIRTUALSPACE,0,0))) return;
+ if(end-begin>INSIGHT_TEXT_TRANSFER_LIMIT) { ui_set_statusbar(TRUE,"Text transfer is limited to 8 MiB.");return; }
+ gchar *text=sci_get_contents_range(sci,begin,end);gsize length=end-begin;
+ if(strlen(text)!=length || !g_utf8_validate(text,length,NULL)) { ui_set_statusbar(TRUE,"Text transfer requires UTF-8 without NUL bytes.");g_free(text);return; }
+ Request request={0};request.id=doc->id;request.sci=sci;request.generation=state(sci)->generation;request.anchor=SEND(sci,SCI_GETANCHOR,0,0);request.caret=sci_get_current_position(sci);
+ GtkWidget *dialog=gtk_file_chooser_dialog_new(insight_tr(selection ? "Save Selection" : "Save a Copy"),GTK_WINDOW(main_widgets.window),GTK_FILE_CHOOSER_ACTION_SAVE,insight_tr("Cancel"),GTK_RESPONSE_CANCEL,insight_tr("Save"),GTK_RESPONSE_ACCEPT,NULL);
+ g_object_ref_sink(dialog);gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog),TRUE);gtk_widget_set_name(dialog,"insight-export-text-dialog");gtk_file_chooser_set_local_only(GTK_FILE_CHOOSER(dialog),TRUE);gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog),TRUE);gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog),selection ? "selection.txt" : "copy.txt");
+ GtkWidget *note=gtk_label_new(insight_tr("Export UTF-8 text without changing the original document. Open destinations are protected."));gtk_label_set_line_wrap(GTK_LABEL(note),TRUE);gtk_file_chooser_set_extra_widget(GTK_FILE_CHOOSER(dialog),note);gtk_widget_show(note);
+ gchar *path=NULL;if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));gtk_widget_destroy(dialog);g_object_unref(dialog);
+ if(path) {
+  GError *error=NULL;gboolean saved=FALSE;
+  if(!file_request_valid(&request,selection)) ui_set_statusbar(TRUE,"Export cancelled because the source document or selection changed");
+  else if(destination_open(path)) ui_set_statusbar(TRUE,"Close the destination document before exporting to this path");
+  else if(!(saved=insight_text_file_write(path,text,length,&error))) ui_set_statusbar(TRUE,"%s",error ? insight_tr(error->message) : insight_tr("Choose a local filename."));
+  if(saved) document_open_file(path,FALSE,NULL,"UTF-8");
+  g_clear_error(&error);g_free(path);
+ }
+ g_free(text);
+}
 static void tools_menu_show(GtkWidget *menu,gpointer data)
 {
  (void)data;Request request={0};gboolean ready=tools_capture(&request);
  gtk_widget_set_sensitive(g_object_get_data(G_OBJECT(menu),"guid"),ready);
  gtk_widget_set_sensitive(g_object_get_data(G_OBJECT(menu),"character"),ready);
+ gtk_widget_set_sensitive(g_object_get_data(G_OBJECT(menu),"insert-file"),ready);
+ GeanyDocument *doc=document_get_current();gboolean single=doc && SEND(doc->editor->sci,SCI_GETSELECTIONS,0,0)==1 && sci_get_selection_mode(doc->editor->sci)==SC_SEL_STREAM && sci_has_selection(doc->editor->sci) && !SEND(doc->editor->sci,SCI_GETSELECTIONNCARETVIRTUALSPACE,0,0) && !SEND(doc->editor->sci,SCI_GETSELECTIONNANCHORVIRTUALSPACE,0,0);
+ gtk_widget_set_sensitive(g_object_get_data(G_OBJECT(menu),"save-selection"),single);
+ gtk_widget_set_sensitive(g_object_get_data(G_OBJECT(menu),"save-copy"),doc!=NULL);
 }
 void insight_paste_tools_menu(GtkWidget *menu)
 {
  GtkWidget *parent=gtk_menu_item_new_with_label("Insert and clipboard"),*sub=gtk_menu_new();gtk_widget_set_name(parent,"insight-insert-tools");gtk_menu_item_set_submenu(GTK_MENU_ITEM(parent),sub);
  const gchar *labels[]={"Insert GUID","Insert ASCII / Unicode…","Show Clipboard"},*ids[]={"insight-insert-guid","insight-insert-character","insight-show-clipboard"};GCallback actions[]={G_CALLBACK(insert_guid),G_CALLBACK(insert_character),G_CALLBACK(show_clipboard)};
  for(guint i=0;i<G_N_ELEMENTS(labels);i++) { GtkWidget *entry=gtk_menu_item_new_with_label(labels[i]);gtk_widget_set_name(entry,ids[i]);if(i<2) g_object_set_data(G_OBJECT(sub),i ? "character" : "guid",entry);g_signal_connect(entry,"activate",actions[i],NULL);gtk_menu_shell_append(GTK_MENU_SHELL(sub),entry); }
+ gtk_menu_shell_append(GTK_MENU_SHELL(sub),gtk_separator_menu_item_new());
+ const gchar *file_labels[]={"Insert File…","Save Selection…","Save a Copy…"},*file_ids[]={"insight-insert-file","insight-save-selection","insight-save-copy"},*file_keys[]={"insert-file","save-selection","save-copy"};
+ for(guint i=0;i<3;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(file_labels[i]);gtk_widget_set_name(entry,file_ids[i]);g_object_set_data(G_OBJECT(sub),file_keys[i],entry);g_signal_connect(entry,"activate",i ? G_CALLBACK(export_text) : G_CALLBACK(insert_file),GINT_TO_POINTER(i==1));gtk_menu_shell_append(GTK_MENU_SHELL(sub),entry); }
  g_signal_connect(sub,"show",G_CALLBACK(tools_menu_show),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),parent);gtk_widget_show_all(parent);
 }

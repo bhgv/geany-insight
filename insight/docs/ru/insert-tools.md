@@ -31,3 +31,5 @@
 ![Ввод кода, проверка и один шаг Undo](../media/insert-tools.svg)
 
 Эталон: [Insert GUID](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Insert_GUID.htm), [Insert ASCII](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Insert_ASCII.htm), [Show Clipboard](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Show_Clipboard.htm). Поддержка Unicode расширяет команду ASCII.
+
+Вставка файла и экспорт текста: [руководство](file-text.md).
