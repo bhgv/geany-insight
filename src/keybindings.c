@@ -34,6 +34,7 @@
 #include "insight-paste.h"
 #include "insight-command-list.h"
 #include "insight-selection-search.h"
+#include "insight-typing.h"
 #include "insight-revisions.h"
 #include "insight-template-fields.h"
 #include "insight-relation-graph.h"
@@ -312,6 +313,9 @@ static void add_kb(GeanyKeyGroup *group, gsize key_id,
 
 static void cb_func_insight(guint key_id)
 {
+    if (key_id == GEANY_KEYS_INSIGHT_TYPINGHISTORY) { insight_typing_command(2);return; }
+    if (key_id == GEANY_KEYS_INSIGHT_REPEATPREVIEW) { insight_typing_command(1);return; }
+    if (key_id == GEANY_KEYS_INSIGHT_CLEARTYPING) { insight_typing_command(4);return; }
     if (key_id == GEANY_KEYS_INSIGHT_DELIMITERBROWSER) { insight_navigation_delimiter(8);return; }
     if (key_id == GEANY_KEYS_INSIGHT_ORIGINALCHANGES) { insight_revisions_changes();return; }
     if (key_id == GEANY_KEYS_INSIGHT_ORIGINALCONTENTS) { insight_revisions_original();return; }
@@ -321,6 +325,8 @@ static void cb_func_insight(guint key_id)
     if (!doc || gtk_window_get_focus(GTK_WINDOW(main_widgets.window)) != GTK_WIDGET(doc->editor->sci)) return;
     switch (key_id)
     {
+        case GEANY_KEYS_INSIGHT_REPEATTYPING: insight_typing_command(0);break;
+        case GEANY_KEYS_INSIGHT_SIMPLETAB: insight_typing_command(3);break;
         case GEANY_KEYS_INSIGHT_LOADSEARCHSTRING: insight_selection_search_command(0);break;
         case GEANY_KEYS_INSIGHT_SELECTIONSEARCHFORWARD: insight_selection_search_command(1);break;
         case GEANY_KEYS_INSIGHT_SELECTIONSEARCHBACKWARD: insight_selection_search_command(2);break;
@@ -781,6 +787,16 @@ static void init_default_kb(void)
         0, 0, "insight_restore_lines", _("Restore Lines"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_ORIGINALCONTENTS, cb_func_insight,
         0, 0, "insight_original_contents", _("Original Contents"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_REPEATTYPING, cb_func_insight,
+        0, 0, "insight_repeattyping", _("Repeat Typing"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_REPEATPREVIEW, cb_func_insight,
+        0, 0, "insight_repeatpreview", _("Repeat Typing Preview"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_TYPINGHISTORY, cb_func_insight,
+        0, 0, "insight_typinghistory", _("Typing History"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_SIMPLETAB, cb_func_insight,
+        0, 0, "insight_simpletab", _("Simple Tab"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_CLEARTYPING, cb_func_insight,
+        0, 0, "insight_cleartyping", _("Clear Typing History"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_RESTOREFILE, cb_func_insight,
         0, 0, "insight_restore_file", _("Restore File"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_ORIGINALCHANGES, cb_func_insight,

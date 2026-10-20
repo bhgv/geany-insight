@@ -504,3 +504,6 @@ dist_insightdocmedia_DATA += insight/docs/media/delimiter-navigation.jpg
 insightdoc_DATA += insight/docs/selection-search.md
 dist_insightdocmedia_DATA += insight/docs/media/selection-search.svg
 dist_insightdocmedia_DATA += insight/docs/media/selection-search.jpg
+
+insightdoc_DATA += insight/docs/typing-replay.md
+dist_insightdocmedia_DATA += insight/docs/media/typing-replay.svg

@@ -1139,3 +1139,25 @@ Selection matches are stale; use Refresh|||Совпадения устарели
 Matches: %u|||Совпадений: %u
 Matches: %u (limit reached)|||Совпадений: %u (достигнут предел)
 Literal matches in the active document. Edit the pattern/options, then Refresh. Text changes require Refresh before Go To or Copy List.|||Буквальные совпадения в активном документе. Измените строку и параметры, затем обновите список. После правки текста обновление обязательно перед переходом или копированием.
+Typing and replay|||Набор и повторение
+Repeat Typing|||Повторить набор
+Repeat Typing Preview|||Предпросмотр повторения набора
+Repeat Typing Preview…|||Предпросмотр повторения набора…
+Typing History|||История набора
+Typing History…|||История набора…
+Simple Tab|||Обычная табуляция
+Clear Typing History|||Очистить историю набора
+Typing Replay Help|||Справка по повторению набора
+Copy Text|||Копировать текст
+Repeat|||Повторить
+Repeat…|||Повторить…
+Clear History|||Очистить историю
+Fragment|||Фрагмент
+Repeat cancelled: the target, selection or permissions changed or are unsupported|||Повтор отменён: документ, выделение или права изменились либо не поддерживаются
+Repeat exceeded its text, count or document limit|||Превышен предел текста, числа повторов или размера документа
+No recorded typing fragment|||Записанных фрагментов набора нет
+Repeat a literal single-line typing fragment at the current selection. Clipboard, auto-indent and auto-pairs are not replayed. One Undo restores the target.|||Повторить буквальный однострочный фрагмент в текущем выделении. Clipboard, автоотступ и автоскобки не воспроизводятся. Один Undo возвращает прежний текст.
+%u repetitions · %u output bytes · preview up to 8 KiB|||Повторов: %u · байт результата: %u · предпросмотр до 8 КиБ
+Typing fragments: %u / 20 · memory only|||Фрагментов набора: %u / 20 · только в памяти
+Recent direct/committed typing fragments, newest first. Paste and programmatic edits are excluded. Select a fragment to preview repetition.|||Последние фрагменты прямого или подтверждённого набора, новые сверху. Вставка и программные правки исключены. Выберите фрагмент для предпросмотра повторения.
+Typing history changed; use Refresh|||История набора изменилась; обновите список

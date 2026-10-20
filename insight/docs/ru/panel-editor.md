@@ -53,3 +53,5 @@ Ctrl+F открывает поиск, Ctrl+H — замену. Двойной щ
 [Command and key references / Списки команд и клавиш](command-reference.md) — editable snapshots of current menus and registered keyboard bindings.
 
 [Restore Lines / Восстановление строк](restore-lines.md) — original snapshots, whole changed-block preview and one-step restoration.
+
+[Repeat Typing, history and Simple Tab / Повтор набора](typing-replay.md).

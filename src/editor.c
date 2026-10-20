@@ -2,6 +2,7 @@
 #include "insight-completion.h"
 #include "insight-paste.h"
 #include "insight-navigation.h"
+#include "insight-typing.h"
 #include "insight-revisions.h"
 #include "../insight/desktop/filetype_pairs.h"
 #include "insight-formatting.h"
@@ -1142,6 +1143,7 @@ static gboolean on_editor_notify(G_GNUC_UNUSED GObject *object, GeanyEditor *edi
 {
 	ScintillaObject *sci = editor->sci;
 	GeanyDocument *doc = editor->document;
+	insight_typing_notify(editor,nt);
 	insight_completion_notify(editor,nt);
 	insight_paste_notify(editor,nt);
 	insight_navigation_notify(editor,nt);

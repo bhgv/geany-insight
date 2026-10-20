@@ -306,6 +306,11 @@ enum GeanyKeyBindingID
 	GEANY_KEYS_INSIGHT_SELECTIONSEARCHFORWARD, /**< Insight keybinding. */
 	GEANY_KEYS_INSIGHT_SELECTIONSEARCHBACKWARD, /**< Insight keybinding. */
 	GEANY_KEYS_INSIGHT_SELECTIONMATCHES, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_REPEATTYPING, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_REPEATPREVIEW, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_TYPINGHISTORY, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_SIMPLETAB, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_CLEARTYPING, /**< Insight keybinding. */
 	GEANY_KEYS_COUNT	/* must not be used by plugins */
 };
 
