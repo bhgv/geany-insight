@@ -231,6 +231,7 @@ libgeany_la_SOURCES += \
 	insight-navigation.c insight-navigation.h \
 	insight-command-list.c insight-command-list.h \
 	insight-selection-search.c insight-selection-search.h \
+	insight-typing.c insight-typing.h \
 	insight-revisions.c insight-revisions.h \
 	insight-paste.c insight-paste.h \
 	insight-completion.c insight-completion.h \
@@ -245,6 +246,7 @@ libgeany_la_SOURCES += \
 	insight-window-list.h \
 	../insight/core/restore_lines.c ../insight/core/restore_lines.h \
 	../insight/core/diff.c \
+	../insight/core/repeat_typing.c ../insight/core/repeat_typing.h \
 	../insight/core/delimiter_navigation.c \
 	../insight/core/delimiter_navigation.h \
 	../insight/core/structure_select.c \
