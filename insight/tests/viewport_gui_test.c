@@ -22,6 +22,13 @@ static void selection(gint anchor,gint caret)
 {
  g_assert_cmpint(SEND(sci,SCI_GETANCHOR,0,0),==,anchor);g_assert_cmpint(SEND(sci,SCI_GETCURRENTPOS,0,0),==,caret);
 }
+static gboolean capture(gpointer data)
+{
+ GtkWidget *menu=data;GdkWindow *surface=gtk_widget_get_window(menu);g_assert_nonnull(surface);
+ GdkPixbuf *image=gdk_pixbuf_get_from_window(surface,0,0,gtk_widget_get_allocated_width(menu),gtk_widget_get_allocated_height(menu));g_assert_nonnull(image);
+ g_assert_true(gdk_pixbuf_save(image,g_getenv("GEANY_VIEWPORT_CAPTURE"),"jpeg",NULL,"quality","88",NULL));g_object_unref(image);gtk_menu_popdown(GTK_MENU(menu));
+ gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+}
 static gboolean wrapped_checks(gpointer data)
 {
  (void)data;
@@ -35,6 +42,12 @@ static gboolean wrapped_checks(gpointer data)
  SEND(sci,SCI_SETREADONLY,0,0);sci_set_text(sci,"");SEND(sci,SCI_EMPTYUNDOBUFFER,0,0);SEND(sci,SCI_SETSAVEPOINT,0,0);
  action("window-top");action("window-bottom");action("scroll-half-down");action("scroll-line-up");selection(0,0);g_assert_cmpint(SEND(sci,SCI_GETLENGTH,0,0),==,0);g_assert_false(SEND(sci,SCI_CANUNDO,0,0));g_assert_false(SEND(sci,SCI_GETMODIFY,0,0));
  g_print("Viewport wrapped-row mapping, horizontal wrap guard and empty-buffer EOF passed\n");
+ if(g_getenv("GEANY_VIEWPORT_CAPTURE")) {
+  GtkWidget *menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(named(window,"insight-window-scrolling")));
+  GdkEvent *event=gdk_event_new(GDK_BUTTON_PRESS);event->button.window=g_object_ref(gtk_widget_get_window(GTK_WIDGET(sci)));event->button.button=3;event->button.time=GDK_CURRENT_TIME;
+  gdk_event_set_device(event,gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_display_get_default())));
+  gtk_menu_popup_at_widget(GTK_MENU(menu),GTK_WIDGET(sci),GDK_GRAVITY_CENTER,GDK_GRAVITY_CENTER,event);gdk_event_free(event);g_timeout_add(200,capture,menu);return G_SOURCE_REMOVE;
+ }
  gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
 }
 static gboolean step(gpointer data)

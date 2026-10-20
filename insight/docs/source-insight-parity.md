@@ -651,3 +651,5 @@ Top/Bottom of Window maps visible display rows to logical line beginnings, inclu
 ### Explicit character, word and line selection (2026-10-20)
 
 Extend selection exposes six native Scintilla commands with fixed anchors, UTF-8/CRLF and native word/display-row semantics, preserving Extend Mode, text/savepoint/Undo and existing keyboard bindings. Read-only is supported; rectangle/multiple/virtual-space targets are excluded. Word Right goes to word end rather than next-word start. Native regression expanded; Linux execution pending. Horizontal viewport commands now explicitly ignore wrapped views. [Guide](text-boundaries.md).
+
+Initial viewport/visible-edge code `df5ee467259780f0123d72e4b7aad474b19b6670`: [full native Linux build/install and 41 tests passed](https://github.com/bhgv/geany-insight/actions/runs/39491644040), zero failures/skips. Portable core: all 11 executables passed locally. Expanded wrapping/empty-buffer/explicit selection checks and production-menu fixture capture are included in the next Linux run. Windows/Android were not run.
