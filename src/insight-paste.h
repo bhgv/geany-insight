@@ -2,6 +2,7 @@
 #ifndef INSIGHT_PASTE_H
 #define INSIGHT_PASTE_H
 #include "editor.h"
+void insight_paste_tools_menu(GtkWidget *menu);
 void insight_paste_menu(GtkWidget *menu);
 void insight_paste_line_menu(GtkWidget *menu);
 typedef enum {

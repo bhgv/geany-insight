@@ -733,3 +733,6 @@ test('Insight native Selection History and edit anchors GUI', selection_history_
 
 bulk_undo_gui_test = executable('test_insight_bulk_undo_gui', '../insight/tests/bulk_undo_gui_test.c', dependencies: test_deps)
 test('Insight native cancellable Undo All Redo All GUI', bulk_undo_gui_test, timeout: 40, is_parallel: false)
+
+insert_tools_gui_test = executable('test_insight_insert_tools_gui', '../insight/tests/insert_tools_gui_test.c', dependencies: test_deps)
+test('Insight native GUID character and clipboard tools GUI', insert_tools_gui_test, timeout: 40, is_parallel: false)

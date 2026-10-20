@@ -448,3 +448,7 @@ EXTRA_DIST += insight/tests/bulk_undo_gui_test.c
 
 insightdoc_DATA += insight/docs/editor-history.md
 dist_insightdocmedia_DATA += insight/docs/media/selection-history.jpg insight/docs/media/bulk-undo.jpg insight/docs/media/edit-history.svg
+EXTRA_DIST += insight/tests/insert_tools_gui_test.c
+
+insightdoc_DATA += insight/docs/insert-tools.md
+dist_insightdocmedia_DATA += insight/docs/media/clipboard-view.jpg insight/docs/media/insert-character.jpg insight/docs/media/insert-tools.svg

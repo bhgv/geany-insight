@@ -875,3 +875,25 @@ Undo All|||Отменить всё
 Redo All|||Повторить всё
 Processing retained edit history. Cancel keeps completed steps.|||Обработка истории правок. Отмена сохраняет выполненные шаги.
 Bulk Undo/Redo stopped because the document or history changed|||Массовая отмена/повтор остановлены: документ или история изменились
+Insert and clipboard|||Вставка и буфер обмена
+Insert GUID|||Вставить GUID
+Insert ASCII / Unicode…|||Вставить ASCII / Unicode…
+Insert ASCII / Unicode|||Вставка ASCII / Unicode
+Show Clipboard|||Показать буфер обмена
+Clipboard|||Буфер обмена
+Insert|||Вставить
+Auto|||Авто
+Decimal|||Десятичная
+Hexadecimal|||Шестнадцатеричная
+Octal|||Восьмеричная
+Binary|||Двоичная
+Enter a character code from U+0001 to U+10FFFF, excluding surrogates.|||Введите код от U+0001 до U+10FFFF, исключая суррогаты.
+Insertion cancelled because the document or selection changed|||Вставка отменена: документ или выделение изменились
+Clipboard has no text.|||В буфере обмена нет текста.
+Clipboard text exceeds the 256 KiB display limit.|||Текст буфера обмена превышает предел просмотра 256 КиБ.
+Clipboard text is not valid UTF-8.|||Текст буфера обмена не является корректным UTF-8.
+Clipboard text is empty.|||Текст буфера обмена пуст.
+Clipboard text snapshot. Refresh to read again.|||Снимок текста буфера обмена. Для повторного чтения нажмите «Обновить».
+Reading clipboard…|||Чтение буфера обмена…
+Radix|||Система счисления
+Character code|||Код символа

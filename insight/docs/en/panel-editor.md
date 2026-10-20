@@ -31,3 +31,5 @@ More: [tutorials.md](tutorials.md).
 Function operations and exact selection duplication: [structural editing](structural-selection.md).
 
 Selection History and Undo All / Redo All: [guide](editor-history.md).
+
+GUID/character insertion and clipboard viewer: [guide](insert-tools.md).

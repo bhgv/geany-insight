@@ -1119,7 +1119,7 @@ install_data(
   'insight/docs/panel-messages.md',
   'insight/docs/panel-scratchpad.md',
   'insight/docs/panel-terminal.md',
-  'insight/docs/panel-editor.md', 'insight/docs/structural-selection.md', 'insight/docs/editor-history.md',
+  'insight/docs/panel-editor.md', 'insight/docs/structural-selection.md', 'insight/docs/editor-history.md', 'insight/docs/insert-tools.md',
   'insight/docs/panel-ssh.md',
   'insight/docs/panel-overview.md',
   'insight/docs/panel-diff-input.md',

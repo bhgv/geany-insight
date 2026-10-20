@@ -6,6 +6,8 @@
 #include "document.h"
 #include "sciwrappers.h"
 #include "ui_utils.h"
+#include "main.h"
+#include "insight-i18n.h"
 #include "../insight/desktop/intelligent_paste.h"
 #include <string.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
@@ -541,4 +543,142 @@ void insight_paste_line_menu(GtkWidget *menu)
     }
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), parent);
     gtk_widget_show_all(parent);
+}
+
+/* Edit tools share the paste generation counter, but never retain a destroyed
+ * Scintilla widget: resolve the document id before checking the target. */
+static gboolean tools_capture(Request *request)
+{
+ GeanyDocument *doc=document_get_current();if(!doc || doc->readonly) return FALSE;
+ ScintillaObject *sci=doc->editor->sci;
+ if(SEND(sci,SCI_GETREADONLY,0,0) || SEND(sci,SCI_GETSELECTIONS,0,0)!=1 || sci_get_selection_mode(sci)!=SC_SEL_STREAM ||
+    SEND(sci,SCI_GETSELECTIONNCARETVIRTUALSPACE,0,0) || SEND(sci,SCI_GETSELECTIONNANCHORVIRTUALSPACE,0,0)) return FALSE;
+ request->sci=sci;request->id=doc->id;request->generation=state(sci)->generation;
+ request->anchor=SEND(sci,SCI_GETANCHOR,0,0);request->caret=sci_get_current_position(sci);return TRUE;
+}
+static gboolean tools_insert(Request *request,const gchar *text)
+{
+ GeanyDocument *doc=document_find_by_id(request->id);
+ if(!doc || doc!=document_get_current() || doc->editor->sci!=request->sci) return FALSE;
+ Request current={0};if(!tools_capture(&current) || current.generation!=request->generation || current.anchor!=request->anchor || current.caret!=request->caret) return FALSE;
+ insight_completion_cancel(doc->editor);SEND(request->sci,SCI_AUTOCCANCEL,0,0);
+ sci_start_undo_action(request->sci);sci_replace_sel(request->sci,text);sci_end_undo_action(request->sci);
+ gtk_widget_grab_focus(GTK_WIDGET(request->sci));return TRUE;
+}
+static void insert_guid(GtkMenuItem *item,gpointer data)
+{
+ (void)item;(void)data;Request request={0};if(!tools_capture(&request)) return;
+ gchar *guid=g_uuid_string_random();tools_insert(&request,guid);g_free(guid);
+}
+/* Unicode scalar values; no NUL (the editor's insertion API is NUL-terminated).
+ * Auto deliberately uses decimal for a plain leading zero, avoiding octal surprises. */
+static gboolean character_code(const gchar *input,guint radix,gunichar *result)
+{
+ gchar *text=g_strdup(input);g_strstrip(text);const gchar *p=text;guint base=radix;
+ if(!base) {
+  base=10;
+  if(g_ascii_strncasecmp(p,"U+",2)==0) { base=16;p+=2; }
+  else if(g_ascii_strncasecmp(p,"0x",2)==0) { base=16;p+=2; }
+  else if(g_ascii_strncasecmp(p,"0o",2)==0) { base=8;p+=2; }
+  else if(g_ascii_strncasecmp(p,"0b",2)==0) { base=2;p+=2; }
+ } else if((base==16 && (!g_ascii_strncasecmp(p,"0x",2) || !g_ascii_strncasecmp(p,"U+",2))) ||
+           (base==8 && !g_ascii_strncasecmp(p,"0o",2)) || (base==2 && !g_ascii_strncasecmp(p,"0b",2))) p+=2;
+ guint32 value=0;gboolean valid=*p!=0;
+ for(;valid && *p;p++) {
+  gint digit=g_ascii_xdigit_value(*p);
+  if(digit<0 || (guint)digit>=base || value>(0x10ffffu-(guint)digit)/base) valid=FALSE;
+  else value=value*base+digit;
+ }
+ valid=valid && value && g_unichar_validate(value);if(valid) *result=value;g_free(text);return valid;
+}
+typedef struct { GtkWidget *entry,*radix,*preview,*dialog; } CharacterDialog;
+static gboolean character_value(CharacterDialog *dialog,gunichar *value)
+{
+ const guint bases[]={0,10,16,8,2};gint index=gtk_combo_box_get_active(GTK_COMBO_BOX(dialog->radix));
+ return index>=0 && index<(gint)G_N_ELEMENTS(bases) && character_code(gtk_entry_get_text(GTK_ENTRY(dialog->entry)),bases[index],value);
+}
+static void character_changed(GtkWidget *widget,gpointer data)
+{
+ (void)widget;CharacterDialog *dialog=data;gunichar value;gboolean valid=character_value(dialog,&value);
+ gtk_dialog_set_response_sensitive(GTK_DIALOG(dialog->dialog),GTK_RESPONSE_ACCEPT,valid);
+ gchar *preview=NULL;
+ if(valid) { gchar utf8[7]={0};g_unichar_to_utf8(value,utf8);preview=g_unichar_isprint(value) ? g_strdup_printf("%s    U+%04X",utf8,value) : g_strdup_printf("U+%04X",value); }
+ gtk_label_set_text(GTK_LABEL(dialog->preview),preview ? preview : insight_tr("Enter a character code from U+0001 to U+10FFFF, excluding surrogates."));g_free(preview);
+}
+static void insert_character(GtkMenuItem *item,gpointer data)
+{
+ (void)item;(void)data;Request request={0};if(!tools_capture(&request)) return;
+ CharacterDialog dialog={0};dialog.dialog=gtk_dialog_new_with_buttons(insight_tr("Insert ASCII / Unicode"),GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,insight_tr("Cancel"),GTK_RESPONSE_CANCEL,insight_tr("Insert"),GTK_RESPONSE_ACCEPT,NULL);
+ g_object_ref_sink(dialog.dialog);gtk_widget_set_name(dialog.dialog,"insight-insert-character-dialog");gtk_window_set_default_size(GTK_WINDOW(dialog.dialog),480,-1);
+ GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(dialog.dialog));dialog.radix=gtk_combo_box_text_new();gtk_widget_set_name(dialog.radix,"insight-character-radix");const gchar *bases[]={"Auto","Decimal","Hexadecimal","Octal","Binary"};for(guint i=0;i<G_N_ELEMENTS(bases);i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(dialog.radix),insight_tr(bases[i]));gtk_combo_box_set_active(GTK_COMBO_BOX(dialog.radix),0);
+ dialog.entry=gtk_entry_new();gtk_widget_set_name(dialog.entry,"insight-character-code");gtk_entry_set_placeholder_text(GTK_ENTRY(dialog.entry),"65 / 0x41 / U+03B1 / 0o101 / 0b1000001");gtk_entry_set_max_length(GTK_ENTRY(dialog.entry),32);gtk_entry_set_activates_default(GTK_ENTRY(dialog.entry),TRUE);
+ dialog.preview=gtk_label_new("");gtk_widget_set_name(dialog.preview,"insight-character-preview");gtk_label_set_line_wrap(GTK_LABEL(dialog.preview),TRUE);
+ GtkWidget *grid=gtk_grid_new(),*radix_label=gtk_label_new(insight_tr("Radix")),*code_label=gtk_label_new(insight_tr("Character code"));gtk_grid_set_row_spacing(GTK_GRID(grid),8);gtk_grid_set_column_spacing(GTK_GRID(grid),8);gtk_container_set_border_width(GTK_CONTAINER(grid),8);gtk_label_set_xalign(GTK_LABEL(radix_label),0);gtk_label_set_xalign(GTK_LABEL(code_label),0);gtk_widget_set_hexpand(dialog.entry,TRUE);
+ gtk_grid_attach(GTK_GRID(grid),radix_label,0,0,1,1);gtk_grid_attach(GTK_GRID(grid),dialog.radix,1,0,1,1);gtk_grid_attach(GTK_GRID(grid),code_label,0,1,1,1);gtk_grid_attach(GTK_GRID(grid),dialog.entry,1,1,1,1);gtk_grid_attach(GTK_GRID(grid),dialog.preview,0,2,2,1);gtk_box_pack_start(GTK_BOX(box),grid,FALSE,FALSE,0);
+ g_signal_connect(dialog.entry,"changed",G_CALLBACK(character_changed),&dialog);g_signal_connect(dialog.radix,"changed",G_CALLBACK(character_changed),&dialog);
+ gtk_dialog_set_default_response(GTK_DIALOG(dialog.dialog),GTK_RESPONSE_ACCEPT);character_changed(NULL,&dialog);gtk_widget_show_all(dialog.dialog);gtk_widget_grab_focus(dialog.entry);
+ for(;;) {
+  if(gtk_dialog_run(GTK_DIALOG(dialog.dialog))!=GTK_RESPONSE_ACCEPT) break;
+  gunichar value;if(!character_value(&dialog,&value)) continue;
+  gchar utf8[7]={0};g_unichar_to_utf8(value,utf8);
+  if(!tools_insert(&request,utf8)) ui_set_statusbar(TRUE,"Insertion cancelled because the document or selection changed");
+  break;
+ }
+ gtk_widget_destroy(dialog.dialog);g_object_unref(dialog.dialog);
+}
+typedef struct { GtkWidget *window,*text,*status;guint refs;guint64 serial;gboolean closed; } ClipboardView;
+typedef struct { ClipboardView *view;guint64 serial; } ClipboardRead;
+static ClipboardView *clipboard_view;
+static void clipboard_unref(ClipboardView *view) { if(!--view->refs) g_free(view); }
+static void clipboard_received(GtkClipboard *clipboard,const gchar *text,gpointer data)
+{
+ (void)clipboard;ClipboardRead *read=data;ClipboardView *view=read->view;
+ if(!view->closed && read->serial==view->serial) {
+  const gchar *status=NULL;
+  if(!text) status=insight_tr("Clipboard has no text.");
+  else if(strlen(text)>256*1024) status=insight_tr("Clipboard text exceeds the 256 KiB display limit.");
+  else if(!g_utf8_validate(text,-1,NULL)) status=insight_tr("Clipboard text is not valid UTF-8.");
+  else if(!*text) status=insight_tr("Clipboard text is empty.");
+  gtk_label_set_text(GTK_LABEL(view->text),status ? "" : text);gtk_label_set_text(GTK_LABEL(view->status),status ? status : insight_tr("Clipboard text snapshot. Refresh to read again."));
+ }
+ clipboard_unref(view);g_free(read);
+}
+static void clipboard_refresh(GtkWidget *widget,gpointer data)
+{
+ (void)widget;ClipboardView *view=data;view->serial++;
+ gtk_label_set_text(GTK_LABEL(view->text),"");gtk_label_set_text(GTK_LABEL(view->status),insight_tr("Reading clipboard…"));
+ ClipboardRead *read=g_new(ClipboardRead,1);read->view=view;read->serial=view->serial;view->refs++;
+ gtk_clipboard_request_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),clipboard_received,read);
+}
+static void clipboard_destroy(GtkWidget *widget,gpointer data)
+{
+ (void)widget;ClipboardView *view=data;view->closed=TRUE;view->serial++;if(clipboard_view==view) clipboard_view=NULL;clipboard_unref(view);
+}
+static void clipboard_close(GtkWidget *widget,gpointer data) { (void)widget;gtk_widget_destroy(((ClipboardView*)data)->window); }
+static void show_clipboard(GtkMenuItem *item,gpointer data)
+{
+ (void)item;(void)data;
+ if(clipboard_view) { clipboard_refresh(NULL,clipboard_view);gtk_window_present(GTK_WINDOW(clipboard_view->window));return; }
+ ClipboardView *view=g_new0(ClipboardView,1);view->refs=1;clipboard_view=view;
+ view->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_window_set_title(GTK_WINDOW(view->window),insight_tr("Clipboard"));gtk_widget_set_name(view->window,"insight-clipboard-window");gtk_window_set_default_size(GTK_WINDOW(view->window),720,360);gtk_window_set_transient_for(GTK_WINDOW(view->window),GTK_WINDOW(main_widgets.window));gtk_window_set_destroy_with_parent(GTK_WINDOW(view->window),TRUE);
+ GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,6),*scroll=gtk_scrolled_window_new(NULL,NULL),*bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6);gtk_container_add(GTK_CONTAINER(view->window),box);
+ view->text=gtk_label_new("");gtk_widget_set_name(view->text,"insight-clipboard-text");g_object_set_data(G_OBJECT(view->text),"insight-no-i18n",GINT_TO_POINTER(1));gtk_label_set_xalign(GTK_LABEL(view->text),0);gtk_label_set_yalign(GTK_LABEL(view->text),0);gtk_label_set_selectable(GTK_LABEL(view->text),FALSE);
+ PangoAttrList *attributes=pango_attr_list_new();pango_attr_list_insert(attributes,pango_attr_family_new("monospace"));gtk_label_set_attributes(GTK_LABEL(view->text),attributes);pango_attr_list_unref(attributes);
+ gtk_container_add(GTK_CONTAINER(scroll),view->text);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
+ view->status=gtk_label_new("");gtk_widget_set_name(view->status,"insight-clipboard-status");gtk_label_set_line_wrap(GTK_LABEL(view->status),TRUE);gtk_box_pack_start(GTK_BOX(box),view->status,FALSE,FALSE,0);
+ GtkWidget *refresh=gtk_button_new_with_label(insight_tr("Refresh")),*close=gtk_button_new_with_label(insight_tr("Close"));gtk_widget_set_name(refresh,"insight-clipboard-refresh");gtk_box_pack_end(GTK_BOX(bar),close,FALSE,FALSE,0);gtk_box_pack_end(GTK_BOX(bar),refresh,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);
+ g_signal_connect(refresh,"clicked",G_CALLBACK(clipboard_refresh),view);g_signal_connect(close,"clicked",G_CALLBACK(clipboard_close),view);g_signal_connect(view->window,"destroy",G_CALLBACK(clipboard_destroy),view);gtk_widget_show_all(view->window);clipboard_refresh(NULL,view);
+}
+static void tools_menu_show(GtkWidget *menu,gpointer data)
+{
+ (void)data;Request request={0};gboolean ready=tools_capture(&request);
+ gtk_widget_set_sensitive(g_object_get_data(G_OBJECT(menu),"guid"),ready);
+ gtk_widget_set_sensitive(g_object_get_data(G_OBJECT(menu),"character"),ready);
+}
+void insight_paste_tools_menu(GtkWidget *menu)
+{
+ GtkWidget *parent=gtk_menu_item_new_with_label("Insert and clipboard"),*sub=gtk_menu_new();gtk_widget_set_name(parent,"insight-insert-tools");gtk_menu_item_set_submenu(GTK_MENU_ITEM(parent),sub);
+ const gchar *labels[]={"Insert GUID","Insert ASCII / Unicode…","Show Clipboard"},*ids[]={"insight-insert-guid","insight-insert-character","insight-show-clipboard"};GCallback actions[]={G_CALLBACK(insert_guid),G_CALLBACK(insert_character),G_CALLBACK(show_clipboard)};
+ for(guint i=0;i<G_N_ELEMENTS(labels);i++) { GtkWidget *entry=gtk_menu_item_new_with_label(labels[i]);gtk_widget_set_name(entry,ids[i]);if(i<2) g_object_set_data(G_OBJECT(sub),i ? "character" : "guid",entry);g_signal_connect(entry,"activate",actions[i],NULL);gtk_menu_shell_append(GTK_MENU_SHELL(sub),entry); }
+ g_signal_connect(sub,"show",G_CALLBACK(tools_menu_show),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),parent);gtk_widget_show_all(parent);
 }
