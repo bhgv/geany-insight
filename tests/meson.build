@@ -784,3 +784,6 @@ test('Insight native searchable command browser GUI', command_browser_gui_test, 
 
 back_toggle_gui_test = executable('test_insight_back_toggle_gui', '../insight/tests/back_toggle_gui_test.c', dependencies: test_deps)
 test('Insight native Go Back Toggle GUI', back_toggle_gui_test, timeout: 40, is_parallel: false)
+
+restore_lines_test = executable('test_insight_restore_lines', '../insight/tests/restore_lines_test.c', '../insight/core/restore_lines.c', '../insight/core/diff.c', include_directories: include_directories('../insight/core'), c_args: ['-UNDEBUG'])
+test('Insight original-line restoration plans', restore_lines_test)

@@ -241,6 +241,7 @@ libgeany_la_SOURCES += \
 	insight-help.h \
 	insight-window-list.c \
 	insight-window-list.h \
+	../insight/core/restore_lines.c ../insight/core/restore_lines.h \
 	../insight/core/diff.c \
 	../insight/core/structure_select.c \
 	../insight/core/structure_select.h \
