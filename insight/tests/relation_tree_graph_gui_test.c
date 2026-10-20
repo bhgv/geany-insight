@@ -7,7 +7,7 @@ static void click(GtkWidget *canvas,double x,double y) { GdkEventButton event={0
 static void key(GtkWidget *canvas,guint value,guint modifiers) { GdkEventKey event={0};event.type=GDK_KEY_PRESS;event.keyval=value;event.state=modifiers;gboolean handled=FALSE;g_signal_emit_by_name(canvas,"key-press-event",&event,&handled);g_assert_true(handled); }
 static void connector(GtkWidget *canvas,gint x,gint y) {
  key(canvas,GDK_KEY_c,GDK_CONTROL_MASK);GdkPixbuf *image=gtk_clipboard_wait_for_image(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));g_assert_nonnull(image);g_assert_cmpint(gdk_pixbuf_get_width(image),>,x);g_assert_cmpint(gdk_pixbuf_get_height(image),>,y);
- guchar *pixel=gdk_pixbuf_get_pixels(image)+y*gdk_pixbuf_get_rowstride(image)+x*gdk_pixbuf_get_n_channels(image);g_assert_cmpint(pixel[2]-pixel[0],>,20);g_object_unref(image);
+ guchar *pixel=gdk_pixbuf_get_pixels(image)+y*gdk_pixbuf_get_rowstride(image)+x*gdk_pixbuf_get_n_channels(image);g_assert_cmpint(pixel[0]-pixel[2],>,20);g_object_unref(image);
 }
 int main(int argc,char **argv) {
  if(!gtk_init_check(&argc,&argv)) return 77;

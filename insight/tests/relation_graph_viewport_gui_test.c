@@ -1,0 +1,37 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+#include "../../src/insight-relation-graph.h"
+#include "../core/relation_graph_layout.h"
+#include <math.h>
+#include <string.h>
+static guint activations;
+static GtkWidget *named(GtkWidget *root,const gchar *name) { if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;if(GTK_IS_CONTAINER(root)) { GList *children=gtk_container_get_children(GTK_CONTAINER(root));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL; }
+static void drain(void) { for(guint i=0;i<80;i++) { while(gtk_events_pending()) gtk_main_iteration();g_usleep(1000); } }
+static void activated(GtkTreeView *tree,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) { (void)tree;(void)path;(void)column;(void)data;activations++; }
+static void key(GtkWidget *canvas,guint value,guint modifiers) { GdkEventKey event={0};event.type=GDK_KEY_PRESS;event.keyval=value;event.state=modifiers;gboolean handled=FALSE;g_signal_emit_by_name(canvas,"key-press-event",&event,&handled);g_assert_true(handled); }
+static void press(GtkWidget *canvas) { GdkEventButton event={0};event.type=GDK_BUTTON_PRESS;event.button=2;event.x_root=100;event.y_root=100;gboolean handled=FALSE;g_signal_emit_by_name(canvas,"button-press-event",&event,&handled);g_assert_true(handled);g_assert_true(gtk_widget_has_grab(canvas)); }
+static void near(double actual,double expected) { g_assert_cmpfloat(fabs(actual-expected),<,2.0); }
+int main(int argc,char **argv) {
+ if(!gtk_init_check(&argc,&argv)) return 77;
+ GtkListStore *model=gtk_list_store_new(3,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG);GtkTreeIter iter;
+ for(guint i=0;i<40;i++) { gchar *name=g_strdup_printf("caller_%u",i);gtk_list_store_append(model,&iter);gtk_list_store_set(model,&iter,0,name,1,"/example/Пример.c",2,(gulong)i+1,-1);g_free(name); }
+ GtkWidget *window=gtk_window_new(GTK_WINDOW_TOPLEVEL),*tree=gtk_tree_view_new_with_model(GTK_TREE_MODEL(model)),*query=gtk_entry_new();g_object_ref_sink(tree);g_object_ref_sink(query);gtk_entry_set_text(GTK_ENTRY(query),"Target");
+ gtk_tree_view_append_column(GTK_TREE_VIEW(tree),gtk_tree_view_column_new_with_attributes("Symbol",gtk_cell_renderer_text_new(),"text",0,NULL));g_signal_connect(tree,"row-activated",G_CALLBACK(activated),NULL);
+ GtkWidget *graph=insight_relation_graph_new(GTK_TREE_VIEW(tree),GTK_ENTRY(query),0,1,2);gtk_container_add(GTK_CONTAINER(window),graph);gtk_window_set_default_size(GTK_WINDOW(window),900,420);gtk_widget_show_all(window);drain();
+ GtkWidget *canvas=named(graph,"insight-relation-graph"),*fit=named(graph,"insight-relation-graph-fit"),*center=named(graph,"insight-relation-graph-center"),*actual=named(graph,"insight-relation-graph-actual");g_assert_nonnull(canvas);g_assert_nonnull(fit);g_assert_nonnull(center);g_assert_nonnull(actual);
+ GtkWidget *scroll=gtk_widget_get_parent(canvas);while(scroll && !GTK_IS_SCROLLED_WINDOW(scroll)) scroll=gtk_widget_get_parent(scroll);g_assert_nonnull(scroll);
+ GtkAdjustment *h=gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(scroll)),*v=gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(scroll));g_assert_cmpfloat(gtk_adjustment_get_upper(v),>,gtk_adjustment_get_page_size(v));
+ gtk_adjustment_set_value(v,500);GdkEventScroll wheel={0};wheel.type=GDK_SCROLL;wheel.direction=GDK_SCROLL_UP;wheel.state=GDK_CONTROL_MASK;wheel.x=100+gtk_adjustment_get_value(h);wheel.y=120+gtk_adjustment_get_value(v);gboolean handled=FALSE;g_signal_emit_by_name(canvas,"scroll-event",&wheel,&handled);g_assert_true(handled);drain();
+ gint zoom=0;insight_relation_graph_get_options(graph,NULL,&zoom);g_assert_cmpint(zoom,==,110);near(gtk_adjustment_get_value(v),562);
+ wheel.state=0;handled=FALSE;g_signal_emit_by_name(canvas,"scroll-event",&wheel,&handled);g_assert_false(handled);key(canvas,GDK_KEY_0,GDK_CONTROL_MASK);drain();insight_relation_graph_get_options(graph,NULL,&zoom);g_assert_cmpint(zoom,==,100);
+ wheel.state=GDK_CONTROL_MASK;wheel.direction=GDK_SCROLL_SMOOTH;wheel.delta_y=-0.4;g_signal_emit_by_name(canvas,"scroll-event",&wheel,&handled);g_assert_true(handled);insight_relation_graph_get_options(graph,NULL,&zoom);g_assert_cmpint(zoom,==,100);wheel.delta_y=-0.7;g_signal_emit_by_name(canvas,"scroll-event",&wheel,&handled);insight_relation_graph_get_options(graph,NULL,&zoom);g_assert_cmpint(zoom,==,110);key(canvas,GDK_KEY_0,GDK_CONTROL_MASK);drain();
+ gtk_adjustment_set_value(v,500);press(canvas);GdkEventMotion motion={0};motion.type=GDK_MOTION_NOTIFY;motion.x_root=100;motion.y_root=40;g_signal_emit_by_name(canvas,"motion-notify-event",&motion,&handled);g_assert_true(handled);near(gtk_adjustment_get_value(v),560);
+ motion.y_root=5000;g_signal_emit_by_name(canvas,"motion-notify-event",&motion,&handled);near(gtk_adjustment_get_value(v),0);GdkEventButton release={0};release.type=GDK_BUTTON_RELEASE;release.button=2;g_signal_emit_by_name(canvas,"button-release-event",&release,&handled);g_assert_true(handled);g_assert_false(gtk_widget_has_grab(canvas));
+ press(canvas);key(canvas,GDK_KEY_Escape,0);g_assert_false(gtk_widget_has_grab(canvas));press(canvas);gtk_widget_hide(canvas);g_assert_false(gtk_widget_has_grab(canvas));gtk_widget_show(canvas);drain();
+ GtkTreePath *path=gtk_tree_path_new_from_indices(20,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(tree),path,NULL,FALSE);gtk_tree_path_free(path);gtk_button_clicked(GTK_BUTTON(center));drain();near(gtk_adjustment_get_value(v)+gtk_adjustment_get_page_size(v)/2,8+20*64+24);
+ gtk_button_clicked(GTK_BUTTON(fit));drain();insight_relation_graph_get_options(graph,NULL,&zoom);g_assert_cmpint(zoom,>=,5);g_assert_cmpint(zoom,<,50);near(gtk_adjustment_get_value(h),0);near(gtk_adjustment_get_value(v),0);g_assert_cmpfloat(gtk_adjustment_get_upper(v),<=,gtk_adjustment_get_page_size(v)+1);
+ gtk_button_clicked(GTK_BUTTON(actual));drain();insight_relation_graph_get_options(graph,NULL,&zoom);g_assert_cmpint(zoom,==,100);key(canvas,GDK_KEY_minus,GDK_CONTROL_MASK);insight_relation_graph_get_options(graph,NULL,&zoom);g_assert_cmpint(zoom,==,90);key(canvas,GDK_KEY_equal,GDK_CONTROL_MASK);insight_relation_graph_get_options(graph,NULL,&zoom);g_assert_cmpint(zoom,==,100);
+ insight_relation_graph_set_options(graph,FALSE,29);insight_relation_graph_get_options(graph,NULL,&zoom);g_assert_cmpint(zoom,==,29);insight_relation_graph_set_options(graph,FALSE,1);insight_relation_graph_get_options(graph,NULL,&zoom);g_assert_cmpint(zoom,==,5);gtk_button_clicked(GTK_BUTTON(actual));
+ key(canvas,GDK_KEY_c,GDK_CONTROL_MASK);GdkPixbuf *image=gtk_clipboard_wait_for_image(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));g_assert_nonnull(image);guchar *pixels=gdk_pixbuf_get_pixels(image);g_assert_cmpint(pixels[0],>,170);g_assert_cmpint(pixels[0],<,205);guchar *connector=pixels+32*gdk_pixbuf_get_rowstride(image)+228*gdk_pixbuf_get_n_channels(image);g_assert_cmpint(connector[0]-connector[2],>,40);g_object_unref(image);g_assert_cmpuint(activations,==,0);
+ press(canvas);gtk_widget_destroy(graph);g_assert_true(gtk_grab_get_current()!=canvas);gtk_entry_set_text(GTK_ENTRY(query),"after destruction");gtk_list_store_clear(model);gtk_widget_destroy(window);g_object_unref(tree);g_object_unref(query);g_object_unref(model);
+ g_print("Graph viewport GUI: anchored zoom, fit, center, pan/clamp/cancel/unmap, exact zoom persistence, classic export colors and safe destruction passed\n");return 0;
+}

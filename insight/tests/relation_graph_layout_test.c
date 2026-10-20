@@ -2,6 +2,7 @@
 #include "../core/relation_graph_layout.h"
 #include <assert.h>
 #include <stdio.h>
+#include <math.h>
 int main(void) {
  for(int vertical=0;vertical<2;vertical++) for(int i=0;i<INSIGHT_GRAPH_LIMIT;i++) {
   InsightGraphRect r=insight_graph_rect(i,vertical);
@@ -30,5 +31,22 @@ int main(void) {
  }
  assert(!insight_graph_extent_image_size((InsightGraphRect){-1,0,200,48},1,&width,&height));
  assert(!insight_graph_extent_image_size((InsightGraphRect){0,0,1e30,48},1,&width,&height));
+ InsightGraphRect fit={8,8,440,2560};
+ assert(insight_graph_fit_zoom(fit,800,400)==15);
+ assert(insight_graph_fit_zoom(fit,1,1)==5);
+ assert(insight_graph_fit_zoom(fit,100000,100000)==200);
+ assert(insight_graph_fit_zoom(fit,0,400)==100);
+ assert(insight_graph_fit_zoom((InsightGraphRect){0,0,INFINITY,INFINITY},INFINITY,INFINITY)==100);
+ assert(insight_graph_scroll_value(-4,1000,200)==0);
+ assert(insight_graph_scroll_value(900,1000,200)==800);
+ assert(insight_graph_scroll_value(5,100,200)==0);
+ for(int old=5;old<=200;old+=5) for(int zoom=5;zoom<=200;zoom+=5) {
+  double offset=insight_graph_zoom_scroll(500,120,old/100.0,zoom/100.0,1000000,300);
+  double expected=(500+120)/(old/100.0)*(zoom/100.0)-120;
+  if(expected<0) expected=0;
+  assert(fabs(offset-expected)<0.0001);
+ }
+ assert(insight_graph_image_size(128,0,0.05,&width,&height));
+ assert(!insight_graph_image_size(1,0,0.049,&width,&height));
  puts("Graph layout: orientations, zoom, gaps, bounds and node limit passed");return 0;
 }

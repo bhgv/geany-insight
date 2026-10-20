@@ -811,3 +811,6 @@ Source link snapshot changed or is unavailable; run the search again|||Сним�
 Source link opened; Ctrl+L returns to the search result|||Переход по ссылке выполнен; Ctrl+L возвращает к результату поиска
 Select a search result with a source link|||Выберите результат поиска со ссылкой на исходник
 No source link on this editor line|||На этой строке редактора нет ссылки на результат
+Fit graph (F)|||Вписать граф (F)
+Center selected node (Space)|||Центрировать выбранный узел (Пробел)
+Actual size (Ctrl+0)|||Масштаб 100% (Ctrl+0)

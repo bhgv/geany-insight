@@ -515,7 +515,7 @@ menu_alignment_gui_test = executable('test_insight_menu_alignment_gui', '../insi
 test('Insight main menu baseline alignment GUI', menu_alignment_gui_test, timeout: 30)
 
 relation_tree_graph_gui_test = executable('test_insight_relation_tree_graph_gui', '../insight/tests/relation_tree_graph_gui_test.c', '../src/insight-relation-graph.c', dependencies: deps)
-test('Insight expandable relation graph GUI', relation_tree_graph_gui_test, timeout: 30)
+test('Insight expandable relation graph GUI', relation_tree_graph_gui_test, timeout: 30, is_parallel: false)
 
 type_resolve_test = executable('test_insight_type_resolve', '../insight/tests/type_resolve_test.c', '../insight/desktop/type_resolve.c', '../insight/core/index.c', include_directories: include_directories('../insight/desktop'), dependencies: glib)
 test('Insight scoped type and alias resolution', type_resolve_test)
@@ -698,3 +698,6 @@ source_link_anchor_test = executable('test_insight_source_link_anchor', '../insi
 test('Insight source link edit anchors', source_link_anchor_test)
 source_links_native_gui_test = executable('test_insight_source_links_native_gui', '../insight/tests/source_links_native_gui_test.c', dependencies: test_deps)
 test('Insight native search source links GUI', source_links_native_gui_test, timeout: 45, is_parallel: false)
+
+relation_graph_viewport_gui_test = executable('test_insight_relation_graph_viewport_gui', '../insight/tests/relation_graph_viewport_gui_test.c', '../src/insight-relation-graph.c', dependencies: deps)
+test('Insight relation graph viewport GUI', relation_graph_viewport_gui_test, timeout: 30, is_parallel: false)

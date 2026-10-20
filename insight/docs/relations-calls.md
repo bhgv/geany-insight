@@ -16,9 +16,9 @@ The Back arrow restores the previous drill-down query, relation mode, display fi
 
 ## Graph view
 
-Without Expandable relation tree, enable Graph view in Relations. This shows the existing filtered and sorted result model as a one-level graph under the current query. Horizontal/Vertical controls change layout; zoom ranges from 50% to 200%. The first 128 visible results are drawn; the footer reports the full count and the table remains available for all results. The view choice is saved with workbench settings. Layout and zoom are also saved with workbench settings.
+Without Expandable relation tree, enable Graph view in Relations. This shows the existing filtered and sorted result model as a one-level graph under the current query. Horizontal/Vertical controls change layout; zoom ranges from 5% to 200%. The first 128 visible results are drawn; the footer reports the full count and the table remains available for all results. The view choice is saved with workbench settings. Layout and zoom are also saved with workbench settings.
 
-Click a node for Context; double click or Enter opens its location in the editor. Arrow keys, Home and End select and scroll to result nodes. Definitions, Call sites, Back and the result filter use the same selection in either view. Nodes show symbol and file:line; blue borders and connectors are original Cairo drawings using the GTK theme text color.
+Click a node for Context; double click or Enter opens its location in the editor. Arrow keys, Home and End select and scroll to result nodes. Definitions, Call sites, Back and the result filter use the same selection in either view. Nodes show symbol and file:line; cream cards, turquoise symbol badges, subtle shadows and red connectors are original Cairo drawings. Selected cards use blue with white text.
 
 This flat mode is a graph of search results, not a recursively expanded semantic call tree. Links represent the active relation query, not proven runtime call edges. Existing lexical/tag limitations apply.
 
@@ -51,3 +51,18 @@ Collapsing retains loaded children and cached descendant expansion. Switching ba
 ## Scoped nominal aliases
 
 For example, if `N::Alias` refers to `N::Base` and `N::Child` inherits `Alias`, Bases for Child shows Base, Derived for Alias shows Child, and Members for Alias shows the Base scope. Nested typedef/using, union, enum and namespace rows can also be expanded in the Members outline and graph. Language eligibility is applied before resolving aliases. Lookup follows at most 32 aliases and refuses ambiguous targets or cycles; it does not instantiate template arguments or resolve overloads/includes.
+
+## Graph viewport and navigation
+
+![Relation graph controls — explanatory diagram](media/relation-graph-navigation.svg)
+
+The cream cards, shadows, turquoise badges and red connectors follow the supplied Source Insight visual reference. Rendering is original Cairo code. The illustration above is an explanatory diagram, not an application screenshot.
+
+- **Fit graph / F** fits the currently drawn graph within the explicit 5–200% zoom bounds. At the 5% minimum, a sufficiently large graph still needs scrolling.
+- **Center selected node / Space** centers the visible selected node as far as canvas edges allow. Without a visible selection it shows the query root.
+- **Actual size / Ctrl+0** restores 100%. Ctrl+plus/minus zooms around the viewport center.
+- **Ctrl+wheel** zooms around the point beneath the pointer. An ordinary wheel retains normal GTK scrolling.
+- **Middle-button drag** pans without selecting or activating a node. Release, Escape, hiding the panel and destroying the widget release the grab.
+- Selecting a visible result in the shared table reveals its graph node. Hover shows the full symbol and file:line, even when a card label is ellipsized.
+
+Existing horizontal/vertical layouts, branch expansion, filtering and sorting retain their data and behavior. The exact zoom percentage is persisted, including Fit's result; resizing does not enable an ongoing auto-fit mode. Clipboard and PNG share the same palette and geometry, including 5% zoom, with the existing 16384-pixel axis and 32-million-pixel allocation limits. The graph still draws at most 128 visible source nodes. These gestures add no semantic call resolution or new relation branches.
