@@ -12,6 +12,7 @@
 #include "../insight/desktop/intelligent_paste.h"
 #include "../insight/desktop/text_transfer.h"
 #include "../insight/desktop/renumber.h"
+#include "../insight/desktop/paragraph.h"
 #include <string.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 #define STATE "insight-paste-generation"
@@ -731,6 +732,62 @@ static void export_text(GtkMenuItem *item,gpointer data)
  }
  g_free(text);
 }
+typedef struct { GtkWidget *mode,*margin,*preview,*status;const gchar *text,*eol;gint anchor,caret,tab,start,end; } ParagraphView;
+static gchar *paragraph_preview(ParagraphView *view)
+{
+ GError *error=NULL;gchar *result=insight_paragraph(view->text,view->anchor,view->caret,gtk_combo_box_get_active(GTK_COMBO_BOX(view->mode))==1,gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(view->margin)),view->tab,view->eol,&view->start,&view->end,&error);
+ gchar *status=result ? insight_i18n_printf("Scope: bytes %d–%d. Preview shows at most 8000 bytes.",view->start,view->end) : g_strdup(insight_tr(error->message));gtk_label_set_text(GTK_LABEL(view->status),status);g_free(status);g_clear_error(&error);
+ gsize length=result ? MIN(strlen(result),8000) : 0;while(length && !g_utf8_validate(result,length,NULL)) length--;
+ gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->preview)),result ? result : "",length);return result;
+}
+static void paragraph_changed(GtkWidget *widget,gpointer data)
+{
+ (void)widget;ParagraphView *view=data;gtk_widget_set_sensitive(view->margin,gtk_combo_box_get_active(GTK_COMBO_BOX(view->mode))==0);
+ gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->preview)),"",0);gtk_label_set_text(GTK_LABEL(view->status),"Press Preview to inspect the result before applying");
+}
+static gboolean paragraph_apply(Request *request,gint start,gint end,const gchar *source,const gchar *result)
+{
+ if(!file_request_valid(request,TRUE) || !tools_capture(&(Request){0})) { ui_set_statusbar(TRUE,"Paragraph operation cancelled because the document or selection changed");return FALSE; }
+ if(strlen(result)==(gsize)(end-start) && !strncmp(source+start,result,end-start)) return TRUE;
+ insight_completion_cancel(document_get_current()->editor);SEND(request->sci,SCI_AUTOCCANCEL,0,0);
+ sci_start_undo_action(request->sci);SEND(request->sci,SCI_SETTARGETRANGE,start,end);SEND(request->sci,SCI_REPLACETARGET,strlen(result),(sptr_t)result);
+ gint finish=start+strlen(result);SEND(request->sci,SCI_SETSEL,request->anchor>request->caret ? finish : start,request->anchor>request->caret ? start : finish);sci_end_undo_action(request->sci);gtk_widget_grab_focus(GTK_WIDGET(request->sci));return TRUE;
+}
+static void paragraph_command(GtkMenuItem *item,gpointer data)
+{
+ (void)item;Request request={0};if(!tools_capture(&request)) return;
+ if(sci_get_length(request.sci)>8*1024*1024) { ui_set_statusbar(TRUE,"Paragraph tools are limited to 8 MiB");return; }
+ GeanyEditor *editor=document_get_current()->editor;const InsightFiletypeOptions *options=insight_languages_editing_options(editor);const GeanyEditorPrefs *prefs=editor_get_prefs(editor);
+ gint margin=options ? options->margin : editor->line_breaking ? prefs->line_break_column : prefs->long_line_column;
+ gint tab=SEND(request.sci,SCI_GETTABWIDTH,0,0);gchar *text=sci_get_contents(request.sci,-1),*eol=g_strdup(editor_get_eol_char(editor));gint command=GPOINTER_TO_INT(data);
+ if(command<2) {
+  GError *error=NULL;gint start=0,end=0;gchar *result=insight_paragraph(text,request.anchor,request.caret,command==1,CLAMP(margin,1,1000),CLAMP(tab,1,32),eol,&start,&end,&error);
+  if(result) paragraph_apply(&request,start,end,text,result);else ui_set_statusbar(TRUE,"%s",insight_tr(error->message));g_clear_error(&error);g_free(result);g_free(text);g_free(eol);return;
+ }
+ GtkWidget *dialog=gtk_dialog_new_with_buttons("Paragraph and lines",GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Cancel",GTK_RESPONSE_CANCEL,"Preview",GTK_RESPONSE_HELP,"Apply",GTK_RESPONSE_APPLY,NULL);g_object_ref_sink(dialog);gtk_widget_set_name(dialog,"insight-paragraph-dialog");gtk_window_set_default_size(GTK_WINDOW(dialog),760,490);
+ GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(dialog));ParagraphView view={gtk_combo_box_text_new(),gtk_spin_button_new_with_range(1,1000,1),gtk_text_view_new(),gtk_label_new(""),text,eol,request.anchor,request.caret,CLAMP(tab,1,32),0,0};
+ gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view.mode),"Reform Paragraph");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view.mode),"Join Lines");gtk_combo_box_set_active(GTK_COMBO_BOX(view.mode),0);gtk_spin_button_set_value(GTK_SPIN_BUTTON(view.margin),CLAMP(margin,1,1000));
+ gtk_widget_set_name(view.mode,"insight-paragraph-mode");gtk_widget_set_name(view.margin,"insight-paragraph-margin");gtk_widget_set_name(view.preview,"insight-paragraph-preview");gtk_widget_set_name(view.status,"insight-paragraph-status");gtk_text_view_set_editable(GTK_TEXT_VIEW(view.preview),FALSE);gtk_text_view_set_monospace(GTK_TEXT_VIEW(view.preview),TRUE);g_object_set_data(G_OBJECT(view.preview),"insight-no-i18n",GINT_TO_POINTER(1));
+ GtkWidget *label=gtk_label_new("Margin in display columns (temporary; file type settings are unchanged)"),*scope=gtk_label_new("Reform: blank-delimited paragraphs. Join: intersected lines, or current + next line."),*scroll=gtk_scrolled_window_new(NULL,NULL);gtk_label_set_line_wrap(GTK_LABEL(scope),TRUE);gtk_label_set_line_wrap(GTK_LABEL(view.status),TRUE);gtk_container_add(GTK_CONTAINER(scroll),view.preview);
+ GtkWidget *items[]={scope,view.mode,label,view.margin,view.status};for(guint i=0;i<G_N_ELEMENTS(items);i++) gtk_box_pack_start(GTK_BOX(box),items[i],FALSE,FALSE,5);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,5);insight_panel_help_attach(box,"paragraph-tools.md");
+ g_signal_connect(view.mode,"changed",G_CALLBACK(paragraph_changed),&view);g_signal_connect(view.margin,"value-changed",G_CALLBACK(paragraph_changed),&view);paragraph_changed(NULL,&view);gtk_widget_show_all(dialog);
+ gint response;while((response=gtk_dialog_run(GTK_DIALOG(dialog)))==GTK_RESPONSE_HELP || response==GTK_RESPONSE_APPLY) {
+  gchar *result=paragraph_preview(&view);if(response==GTK_RESPONSE_APPLY && result) { paragraph_apply(&request,view.start,view.end,text,result);g_free(result);break; }g_free(result);
+ }
+ gtk_widget_destroy(dialog);g_object_unref(dialog);g_free(text);g_free(eol);
+}
+static void paragraph_menu_show(GtkWidget *menu,gpointer data)
+{
+ (void)data;gboolean ready=tools_capture(&(Request){0});GList *children=gtk_container_get_children(GTK_CONTAINER(menu));for(GList *p=children;p;p=p->next) gtk_widget_set_sensitive(p->data,ready);g_list_free(children);
+}
+static void paragraph_menu(GtkWidget *menu)
+{
+ GtkWidget *parent=gtk_menu_item_new_with_label("Paragraph and lines"),*sub=gtk_menu_new();gtk_widget_set_name(parent,"insight-paragraph-tools");gtk_menu_item_set_submenu(GTK_MENU_ITEM(parent),sub);
+ const gchar *labels[]={"Reform Paragraph","Join Lines","Paragraph Preview…"},*ids[]={"insight-reform-paragraph","insight-join-lines","insight-paragraph-preview-command"};
+ for(guint i=0;i<3;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(labels[i]);gtk_widget_set_name(entry,ids[i]);g_signal_connect(entry,"activate",G_CALLBACK(paragraph_command),GINT_TO_POINTER(i));gtk_menu_shell_append(GTK_MENU_SHELL(sub),entry); }
+ g_signal_connect(sub,"show",G_CALLBACK(paragraph_menu_show),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),parent);gtk_widget_show_all(parent);
+}
+
 typedef struct { GtkWidget *mode,*radix,*value,*preview,*status;const gchar *text; } RenumberView;
 static gchar *renumber_preview(RenumberView *view)
 {
@@ -805,6 +862,7 @@ static void tools_menu_show(GtkWidget *menu,gpointer data)
 }
 void insight_paste_tools_menu(GtkWidget *menu)
 {
+ paragraph_menu(menu);
  GtkWidget *parent=gtk_menu_item_new_with_label("Insert and clipboard"),*sub=gtk_menu_new();gtk_widget_set_name(parent,"insight-insert-tools");gtk_menu_item_set_submenu(GTK_MENU_ITEM(parent),sub);
  const gchar *labels[]={"Insert GUID","Insert ASCII / Unicode…","Show Clipboard"},*ids[]={"insight-insert-guid","insight-insert-character","insight-show-clipboard"};GCallback actions[]={G_CALLBACK(insert_guid),G_CALLBACK(insert_character),G_CALLBACK(show_clipboard)};
  for(guint i=0;i<G_N_ELEMENTS(labels);i++) { GtkWidget *entry=gtk_menu_item_new_with_label(labels[i]);gtk_widget_set_name(entry,ids[i]);if(i<2) g_object_set_data(G_OBJECT(sub),i ? "character" : "guid",entry);g_signal_connect(entry,"activate",actions[i],NULL);gtk_menu_shell_append(GTK_MENU_SHELL(sub),entry); }

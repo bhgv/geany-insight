@@ -747,3 +747,8 @@ renumber_test = executable('test_insight_renumber', '../insight/tests/renumber_t
 test('Insight bounded integer renumber', renumber_test)
 renumber_gui_test = executable('test_insight_renumber_gui', '../insight/tests/renumber_gui_test.c', dependencies: test_deps)
 test('Insight native Renumber GUI', renumber_gui_test, timeout: 40, is_parallel: false)
+
+paragraph_test = executable('test_insight_paragraph', '../insight/tests/paragraph_test.c', '../insight/desktop/paragraph.c', include_directories: include_directories('../insight/desktop'), dependencies: deps, c_args: ['-UNDEBUG'])
+test('Insight paragraph scope and transformations', paragraph_test)
+paragraph_gui_test = executable('test_insight_paragraph_gui', '../insight/tests/paragraph_gui_test.c', dependencies: test_deps)
+test('Insight native Paragraph and Lines GUI', paragraph_gui_test, timeout: 40, is_parallel: false)

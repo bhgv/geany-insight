@@ -928,3 +928,15 @@ Renumber is limited to 8 MiB|||Перенумерация ограничена 8
 Renumber cancelled because the document or selection changed|||Перенумерация отменена: документ или выделение изменились
 Renumber exceeds the signed 64-bit or 8 MiB limit|||Перенумерация превышает диапазон знаковых 64-битных чисел или 8 МиБ
 Choose valid options and a signed 64-bit decimal, 0x hex or leading-zero octal value|||Выберите параметры и знаковое 64-битное число: десятичное, 0x или восьмеричное с начальным нулём
+Paragraph and lines|||Абзацы и строки
+Reform Paragraph|||Переформатировать абзац
+Join Lines|||Объединить строки
+Paragraph Preview…|||Предпросмотр абзацев…
+Margin in display columns (temporary; file type settings are unchanged)|||Ширина в колонках (только для просмотра; настройки типа файла не меняются)
+Reform: blank-delimited paragraphs. Join: intersected lines, or current + next line.|||Форматирование: абзацы между пустыми строками. Объединение: выделенные строки или текущая со следующей.
+Scope: bytes %d–%d. Preview shows at most 8000 bytes.|||Область: байты %d–%d. Просмотр показывает не более 8000 байт.
+Paragraph operation cancelled because the document or selection changed|||Операция с абзацами отменена: документ или выделение изменились
+Paragraph tools are limited to 8 MiB|||Обработка абзацев ограничена 8 МиБ
+Paragraph result exceeds 8 MiB|||Результат обработки абзацев превышает 8 МиБ
+Paragraph tools support at most 500000 lines|||Обработка абзацев поддерживает не более 500000 строк
+Paragraph tools require UTF-8 up to 8 MiB, a margin of 1–1000 and tab width of 1–32|||Для обработки абзацев нужен UTF-8 до 8 МиБ, ширина 1–1000 и табуляция 1–32

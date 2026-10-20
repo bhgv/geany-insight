@@ -37,3 +37,5 @@ Ctrl+F открывает поиск, Ctrl+H — замену. Двойной щ
 Вставка файла и экспорт текста: [руководство](file-text.md).
 
 [Renumber / Перенумерация](renumber.md) — integer sequences, offset and radix conversion.
+
+[Paragraph and lines / Абзацы и строки](paragraph-tools.md) — Reform Paragraph, Join Lines, Preview.
