@@ -415,3 +415,6 @@ EXTRA_DIST += insight/tests/source_link_anchor_test.c insight/tests/source_links
 
 dist_insightdocmedia_DATA += insight/docs/media/relation-graph-navigation.svg
 EXTRA_DIST += insight/tests/relation_graph_viewport_gui_test.c
+
+EXTRA_DIST += insight/core/relation_graph_print.h insight/tests/relation_graph_print_gui_test.c
+dist_insightdocmedia_DATA += insight/docs/media/relation-graph-print.svg

@@ -66,3 +66,18 @@ The cream cards, shadows, turquoise badges and red connectors follow the supplie
 - Selecting a visible result in the shared table reveals its graph node. Hover shows the full symbol and file:line, even when a card label is ellipsized.
 
 Existing horizontal/vertical layouts, branch expansion, filtering and sorting retain their data and behavior. The exact zoom percentage is persisted, including Fit's result; resizing does not enable an ongoing auto-fit mode. Clipboard and PNG share the same palette and geometry, including 5% zoom, with the existing 16384-pixel axis and 32-million-pixel allocation limits. The graph still draws at most 128 visible source nodes. These gestures add no semantic call resolution or new relation branches.
+
+## Print the relation graph
+
+![Graph printing layouts](media/relation-graph-print.svg)
+
+Use the printer button, **Print graph…** on a node's context menu, or **Ctrl+P** while the graph canvas has focus. The system print dialog includes a **Graph layout** tab and paper/orientation settings:
+
+- **Fit graph on one page** keeps the complete visible graph on a single sheet, reducing it as needed. Small graphs are not enlarged.
+- **Tile at 100%** uses 96 logical graph pixels per inch and splits the graph across sheets, in row order from left to right. Each footer shows page count, tile column/row and the displayed/total result counts. Align the printable areas when joining sheets.
+
+The title uses the query at the time printing starts. Printing captures an immutable vector snapshot before opening the dialog: later indexing, selection changes or closing the graph cannot alter it. Output does not depend on the screen zoom or scroll position. Text remains searchable in PDF output from the system print backend.
+
+Only currently drawn nodes are printed (up to 128); collapsed branches and filtered-out results stay excluded. Expand the required branches first. Tiling is limited to 256 pages; if the selected paper/margins would exceed that limit or leave no room for the graph, printing is cancelled with an explanation in the graph status. Choose fit-to-page or a larger printable area. Cancelling the print dialog does not change the editor or graph options.
+
+This implements the graph printing capability described in the [Source Insight graph-view documentation](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Outline_and_Graph_Views.htm). Linux validation exports PDFs through GTK without a physical printer; physical printer drivers and other platforms were not tested.

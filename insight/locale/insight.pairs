@@ -814,3 +814,13 @@ No source link on this editor line|||На этой строке редактор
 Fit graph (F)|||Вписать граф (F)
 Center selected node (Space)|||Центрировать выбранный узел (Пробел)
 Actual size (Ctrl+0)|||Масштаб 100% (Ctrl+0)
+Print graph…|||Печать графа…
+Print graph (Ctrl+P)|||Печать графа (Ctrl+P)
+Graph layout|||Размещение графа
+Fit graph on one page|||Вписать граф в одну страницу
+Tile at 100% (96 logical pixels per inch)|||Разбить на листы в масштабе 100% (96 логических пикселей на дюйм)
+Prints the visible graph snapshot (up to 128 nodes). Expand branches before printing. Tiled output is limited to 256 pages.|||Печать видимого снимка графа (до 128 узлов). Раскройте ветви перед печатью. Разбиение ограничено 256 страницами.
+Graph print snapshot could not be created|||Не удалось создать снимок графа для печати
+Graph cannot fit the selected paper or exceeds 256 tiled pages. Choose Fit graph on one page or increase the printable area.|||Граф не помещается на выбранной бумаге или превышает 256 листов. Выберите вписывание в одну страницу или увеличьте печатную область.
+Graph sent to printer|||Граф отправлен на печать
+%d / %d • %d of %d results • column %d, row %d|||%d / %d • %d из %d результатов • столбец %d, строка %d

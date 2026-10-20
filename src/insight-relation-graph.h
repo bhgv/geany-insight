@@ -12,6 +12,10 @@ void insight_relation_graph_get_options(GtkWidget *,gboolean *,gint *);
 void insight_relation_graph_set_options(GtkWidget *,gboolean,gint);
 /* Main-window shortcut dispatch: only handles a focused graph canvas. */
 gboolean insight_relation_graph_handle_key(GtkWidget *,GdkEventKey *);
+/* A synchronous GTK print operation owning an immutable vector snapshot.
+ * Caller owns the operation. Setting "insight-graph-tiled" in its print
+ * settings selects 100% tiled output instead of the default fit-to-page. */
+GtkPrintOperation *insight_relation_graph_print_operation(GtkWidget *);
 typedef void (*InsightRelationGraphQuery)(gint,gpointer);
 void insight_relation_graph_set_query_handler(GtkWidget *,InsightRelationGraphQuery,gpointer);
 #endif

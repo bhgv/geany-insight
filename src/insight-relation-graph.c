@@ -9,6 +9,7 @@
 #include "insight-relation-graph.h"
 #include "../insight/core/relation_graph_layout.h"
 #include <pango/pangocairo.h>
+#include "../insight/core/relation_graph_print.h"
 typedef struct {
  GtkWidget *canvas,*direction,*zoom,*status,*scroll;GtkTreeView *tree;GtkEntry *query;GtkTreeModel *model;
  gint name,file,line,total;gboolean vertical,hierarchical,panning,pointer_select;double pan_x,pan_y,pan_h,pan_v,wheel_delta;gdouble scale;GPtrArray *paths;
@@ -158,6 +159,70 @@ static void save_image(GtkWidget *widget,gpointer data) {
  }
  gtk_widget_destroy(dialog);cairo_surface_destroy(surface);g_object_unref(status_label);
 }
+/* The recording surface owns the rendered vector commands. Printing never
+ * consults live widgets/model after the factory returns: nested GTK dialogs
+ * may dispatch index updates or even destroy the graph. */
+typedef struct {
+ cairo_surface_t *surface;gchar *title;double width,height;gint shown,total;
+ InsightGraphPrintPlan plan;gboolean invalid;
+} GraphPrint;
+static void print_free(gpointer data) { GraphPrint *p=data;cairo_surface_destroy(p->surface);g_free(p->title);g_free(p); }
+static void print_begin(GtkPrintOperation *op,GtkPrintContext *context,gpointer data) {
+ GraphPrint *p=data;GtkPrintSettings *settings=gtk_print_operation_get_print_settings(op);
+ gboolean tiled=settings && gtk_print_settings_get_bool(settings,"insight-graph-tiled");
+ p->invalid=!insight_graph_print_plan(p->width,p->height,gtk_print_context_get_width(context),gtk_print_context_get_height(context),tiled,&p->plan);
+ if(p->invalid) { gtk_print_operation_cancel(op);return; }
+ gtk_print_operation_set_n_pages(op,p->plan.pages);
+}
+static void print_text(GtkPrintContext *context,const gchar *text,double x,double y,double width) {
+ cairo_t *cr=gtk_print_context_get_cairo_context(context);PangoLayout *layout=gtk_print_context_create_pango_layout(context);PangoFontDescription *font=pango_font_description_from_string("Sans 9");
+ pango_layout_set_font_description(layout,font);pango_font_description_free(font);pango_layout_set_text(layout,text,-1);pango_layout_set_width(layout,(gint)(width*PANGO_SCALE));pango_layout_set_ellipsize(layout,PANGO_ELLIPSIZE_END);pango_layout_set_single_paragraph_mode(layout,TRUE);cairo_set_source_rgb(cr,0.1,0.1,0.1);cairo_move_to(cr,x,y);pango_cairo_show_layout(cr,layout);g_object_unref(layout);
+}
+static void print_page(GtkPrintOperation *op,GtkPrintContext *context,gint number,gpointer data) {
+ (void)op;GraphPrint *p=data;if(p->invalid || number<0 || number>=p->plan.pages) return;
+ cairo_t *cr=gtk_print_context_get_cairo_context(context);InsightGraphPrintPlan *plan=&p->plan;gint column=number%plan->columns,row=number/plan->columns;
+ print_text(context,p->title,0,0,plan->width);
+ gchar *footer=g_strdup_printf("%d / %d • %d of %d results • column %d, row %d",number+1,plan->pages,p->shown,p->total,column+1,row+1);
+ print_text(context,footer,0,INSIGHT_GRAPH_PRINT_HEADER+plan->height+6,plan->width);g_free(footer);
+ cairo_save(cr);cairo_rectangle(cr,0,INSIGHT_GRAPH_PRINT_HEADER,plan->width,plan->height);cairo_clip(cr);
+ double x=plan->pages==1 ? MAX(0,(plan->width-p->width*plan->scale)/2) : -column*plan->width;
+ double y=plan->pages==1 ? MAX(0,(plan->height-p->height*plan->scale)/2) : -row*plan->height;
+ cairo_translate(cr,x,INSIGHT_GRAPH_PRINT_HEADER+y);cairo_scale(cr,plan->scale,plan->scale);cairo_set_source_surface(cr,p->surface,0,0);cairo_paint(cr);cairo_restore(cr);
+}
+static GtkWidget *print_options(GtkPrintOperation *op,gpointer data) {
+ (void)data;GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,8),*combo=gtk_combo_box_text_new();
+ gtk_container_set_border_width(GTK_CONTAINER(box),12);gtk_box_pack_start(GTK_BOX(box),gtk_label_new("Graph layout"),FALSE,FALSE,0);
+ gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo),"Fit graph on one page");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo),"Tile at 100% (96 logical pixels per inch)");
+ GtkPrintSettings *settings=gtk_print_operation_get_print_settings(op);gtk_combo_box_set_active(GTK_COMBO_BOX(combo),settings && gtk_print_settings_get_bool(settings,"insight-graph-tiled") ? 1 : 0);gtk_box_pack_start(GTK_BOX(box),combo,FALSE,FALSE,0);g_object_set_data(G_OBJECT(box),"layout",combo);
+ GtkWidget *note=gtk_label_new("Prints the visible graph snapshot (up to 128 nodes). Expand branches before printing. Tiled output is limited to 256 pages.");gtk_label_set_line_wrap(GTK_LABEL(note),TRUE);gtk_label_set_max_width_chars(GTK_LABEL(note),52);gtk_box_pack_start(GTK_BOX(box),note,FALSE,FALSE,0);
+#ifdef GEANY_PRIVATE
+ insight_i18n_apply(box);
+#endif
+ gtk_widget_show_all(box);return box;
+}
+static void print_apply(GtkPrintOperation *op,GtkWidget *widget,gpointer data) {
+ (void)data;GtkPrintSettings *settings=gtk_print_operation_get_print_settings(op);if(settings) g_object_ref(settings);else settings=gtk_print_settings_new();
+ GtkWidget *combo=g_object_get_data(G_OBJECT(widget),"layout");gtk_print_settings_set_bool(settings,"insight-graph-tiled",gtk_combo_box_get_active(GTK_COMBO_BOX(combo))==1);gtk_print_operation_set_print_settings(op,settings);g_object_unref(settings);
+}
+GtkPrintOperation *insight_relation_graph_print_operation(GtkWidget *widget) {
+ RelationGraph *g=g_object_get_data(G_OBJECT(widget),"insight-graph");if(!g) return NULL;
+ InsightGraphRect r=extent(g);GraphPrint *p=g_new0(GraphPrint,1);p->width=r.x+r.width+16;p->height=r.y+r.height+16;p->shown=count_nodes(g);p->total=g->total;p->title=g_strdup(gtk_entry_get_text(g->query));
+ cairo_rectangle_t bounds={0,0,p->width,p->height};p->surface=cairo_recording_surface_create(CAIRO_CONTENT_COLOR_ALPHA,&bounds);cairo_t *cr=cairo_create(p->surface);
+ cairo_scale(cr,1/g->scale,1/g->scale);draw(g->canvas,cr,g);cairo_status_t status=cairo_status(cr);cairo_destroy(cr);
+ if(status!=CAIRO_STATUS_SUCCESS || cairo_surface_status(p->surface)!=CAIRO_STATUS_SUCCESS) { print_free(p);return NULL; }
+ GtkPrintOperation *op=gtk_print_operation_new();gtk_print_operation_set_unit(op,GTK_UNIT_POINTS);gtk_print_operation_set_job_name(op,*p->title ? p->title : "Relation graph");gtk_print_operation_set_custom_tab_label(op,"Graph layout");gtk_print_operation_set_embed_page_setup(op,TRUE);gtk_print_operation_set_allow_async(op,FALSE);
+ g_object_set_data_full(G_OBJECT(op),"insight-graph-print",p,print_free);g_signal_connect(op,"begin-print",G_CALLBACK(print_begin),p);g_signal_connect(op,"draw-page",G_CALLBACK(print_page),p);g_signal_connect(op,"create-custom-widget",G_CALLBACK(print_options),p);g_signal_connect(op,"custom-widget-apply",G_CALLBACK(print_apply),p);return op;
+}
+static void print_graph(GtkWidget *widget,gpointer data) {
+ (void)widget;RelationGraph *g=data;GtkWidget *box=gtk_widget_get_parent(g->scroll);GtkPrintOperation *op=insight_relation_graph_print_operation(box);
+ if(!op) { gtk_label_set_text(GTK_LABEL(g->status),"Graph print snapshot could not be created");return; }
+ GtkWidget *label=g_object_ref(g->status),*parent=gtk_widget_get_toplevel(g->canvas);GError *error=NULL;
+ GtkPrintOperationResult result=gtk_print_operation_run(op,GTK_PRINT_OPERATION_ACTION_PRINT_DIALOG,GTK_IS_WINDOW(parent) ? GTK_WINDOW(parent) : NULL,&error);GraphPrint *p=g_object_get_data(G_OBJECT(op),"insight-graph-print");
+ if(p->invalid) gtk_label_set_text(GTK_LABEL(label),"Graph cannot fit the selected paper or exceeds 256 tiled pages. Choose Fit graph on one page or increase the printable area.");
+ else if(error) gtk_label_set_text(GTK_LABEL(label),error->message);
+ else if(result==GTK_PRINT_OPERATION_RESULT_APPLY) gtk_label_set_text(GTK_LABEL(label),"Graph sent to printer");
+ g_clear_error(&error);g_object_unref(op);g_object_unref(label);
+}
 static void query_action(GtkWidget *item,gpointer data) {
  RelationGraph *g=data;if(g->query_handler) g->query_handler(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item),"relation-mode")),g->query_data);
 }
@@ -172,7 +237,7 @@ static GtkWidget *node_menu(RelationGraph *g) {
  const gchar *labels[]={"Definitions","Call sites","References","Direct members","Base types","Derived types"};const gint modes[]={1,7,0,2,4,5};
  for(guint i=0;i<G_N_ELEMENTS(modes);i++) { GtkWidget *item=gtk_menu_item_new_with_label(labels[i]);g_object_set_data(G_OBJECT(item),"relation-mode",GINT_TO_POINTER(modes[i]));gtk_widget_set_sensitive(item,g->query_handler!=NULL);gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),item);g_signal_connect(item,"activate",G_CALLBACK(query_action),g); }
  gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),gtk_separator_menu_item_new());
- GtkWidget *copy=gtk_menu_item_new_with_label("Copy graph image"),*save=gtk_menu_item_new_with_label("Save graph PNG…");gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),copy);gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),save);g_signal_connect(copy,"activate",G_CALLBACK(copy_image),g);g_signal_connect(save,"activate",G_CALLBACK(save_image),g);gtk_widget_show_all(g->menu);return g->menu;
+ GtkWidget *copy=gtk_menu_item_new_with_label("Copy graph image"),*save=gtk_menu_item_new_with_label("Save graph PNG…");gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),copy);gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),save);g_signal_connect(copy,"activate",G_CALLBACK(copy_image),g);g_signal_connect(save,"activate",G_CALLBACK(save_image),g);GtkWidget *print=gtk_menu_item_new_with_label("Print graph…");gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),print);g_signal_connect(print,"activate",G_CALLBACK(print_graph),g);gtk_widget_show_all(g->menu);return g->menu;
 }
 static void end_pan(RelationGraph *g) {
  if(!g->panning) return;g->panning=FALSE;if(gtk_widget_has_grab(g->canvas)) gtk_grab_remove(g->canvas);
@@ -229,6 +294,7 @@ static gboolean key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
  (void)widget;RelationGraph *g=data;
  if(event->keyval==GDK_KEY_Escape && g->panning) { end_pan(g);return TRUE; }
  if((event->state&GDK_CONTROL_MASK) && !(event->state&GDK_MOD1_MASK)) {
+  if(event->keyval==GDK_KEY_p || event->keyval==GDK_KEY_P) { print_graph(NULL,g);return TRUE; }
   if(event->keyval==GDK_KEY_0 || event->keyval==GDK_KEY_KP_0) { zoom_center(g,100);return TRUE; }
   if(event->keyval==GDK_KEY_plus || event->keyval==GDK_KEY_equal || event->keyval==GDK_KEY_KP_Add) { zoom_center(g,gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(g->zoom))+10);return TRUE; }
   if(event->keyval==GDK_KEY_minus || event->keyval==GDK_KEY_KP_Subtract) { zoom_center(g,gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(g->zoom))-10);return TRUE; }
@@ -298,7 +364,7 @@ static GtkWidget *graph_new(GtkTreeView *tree,GtkEntry *query,gint name,gint fil
  g_signal_connect_swapped(query,"changed",G_CALLBACK(update),g);g_signal_connect(gtk_tree_view_get_selection(tree),"changed",G_CALLBACK(selection_changed),g);g_signal_connect(box,"destroy",G_CALLBACK(destroy),g);g_object_set_data(G_OBJECT(box),"insight-graph",g);
  const gchar *icons[]={"zoom-fit-best","find-location","zoom-original"},*tips[]={"Fit graph (F)","Center selected node (Space)","Actual size (Ctrl+0)"},*names[]={"fit","center","actual"};GCallback actions[]={G_CALLBACK(fit_graph),G_CALLBACK(center_selection),G_CALLBACK(original_zoom)};
  for(guint i=0;i<3;i++) { GtkWidget *button=gtk_button_new_from_icon_name(icons[i],GTK_ICON_SIZE_MENU);gchar *name=g_strdup_printf("insight-relation-%sgraph-%s",hierarchical ? "tree-" : "",names[i]);gtk_widget_set_name(button,name);g_free(name);gtk_widget_set_tooltip_text(button,tips[i]);gtk_box_pack_start(GTK_BOX(bar),button,FALSE,FALSE,0);g_signal_connect(button,"clicked",actions[i],g); }
- GtkWidget *copy=gtk_button_new_with_label("Copy image"),*save=gtk_button_new_with_label("Save PNG…");gtk_box_pack_start(GTK_BOX(bar),copy,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(bar),save,FALSE,FALSE,0);g_signal_connect(copy,"clicked",G_CALLBACK(copy_image),g);g_signal_connect(save,"clicked",G_CALLBACK(save_image),g);update(g);return box;
+ GtkWidget *copy=gtk_button_new_with_label("Copy image"),*save=gtk_button_new_with_label("Save PNG…");gtk_box_pack_start(GTK_BOX(bar),copy,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(bar),save,FALSE,FALSE,0);g_signal_connect(copy,"clicked",G_CALLBACK(copy_image),g);g_signal_connect(save,"clicked",G_CALLBACK(save_image),g);GtkWidget *print=gtk_button_new_from_icon_name("document-print",GTK_ICON_SIZE_MENU);gtk_widget_set_name(print,hierarchical ? "insight-relation-tree-graph-print" : "insight-relation-graph-print");gtk_widget_set_tooltip_text(print,"Print graph (Ctrl+P)");gtk_box_pack_start(GTK_BOX(bar),print,FALSE,FALSE,0);g_signal_connect(print,"clicked",G_CALLBACK(print_graph),g);update(g);return box;
 }
 
 GtkWidget *insight_relation_graph_new(GtkTreeView *tree,GtkEntry *query,gint name,gint file,gint line) { return graph_new(tree,query,name,file,line,FALSE); }

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "../core/relation_graph_layout.h"
 #include <assert.h>
+#include "../core/relation_graph_print.h"
 #include <stdio.h>
 #include <math.h>
 int main(void) {
@@ -48,5 +49,24 @@ int main(void) {
  }
  assert(insight_graph_image_size(128,0,0.05,&width,&height));
  assert(!insight_graph_image_size(1,0,0.049,&width,&height));
+ InsightGraphPrintPlan plan;
+ assert(insight_graph_print_plan(464,2576,540,780,0,&plan));assert(plan.pages==1);assert(plan.scale>0 && plan.scale<0.75);
+ assert(plan.scale*2576<=plan.height && plan.scale*464<=plan.width);
+ assert(insight_graph_print_plan(464,2576,540,780,1,&plan));assert(plan.pages==3 && plan.columns==1 && plan.rows==3 && plan.scale==0.75);
+ assert(insight_graph_print_plan(1440,976,540,780,1,&plan));assert(plan.columns==2 && plan.rows==1 && plan.pages==2);
+ assert(insight_graph_print_plan(1440,1952,540,780,1,&plan));assert(plan.columns==2 && plan.rows==2 && plan.pages==4);
+ assert(insight_graph_print_plan(100,100,540,780,0,&plan));assert(plan.scale==0.75);
+ assert(!insight_graph_print_plan(100,100,540,48,0,&plan));assert(plan.pages==0);
+ assert(!insight_graph_print_plan(NAN,100,540,780,0,&plan));
+ assert(!insight_graph_print_plan(100,INFINITY,540,780,1,&plan));
+ assert(!insight_graph_print_plan(1000000,1000000,1,49,1,&plan));
+ assert(insight_graph_print_plan(1000000,1000000,1,49,0,&plan));assert(plan.pages==1);
+ for(int w=100;w<30000;w+=220) for(int h=100;h<10000;h+=640) {
+  assert(insight_graph_print_plan(w,h,540,780,0,&plan));assert(plan.pages==1 && plan.scale*w<=540.000001 && plan.scale*h<=732.000001);
+  if(insight_graph_print_plan(w,h,540,780,1,&plan)) {
+   assert(plan.pages==plan.columns*plan.rows && plan.pages<=256);assert(plan.columns*540>=w*0.75 && plan.rows*732>=h*0.75);
+   assert((plan.columns-1)*540<w*0.75 && (plan.rows-1)*732<h*0.75);
+  }
+ }
  puts("Graph layout: orientations, zoom, gaps, bounds and node limit passed");return 0;
 }

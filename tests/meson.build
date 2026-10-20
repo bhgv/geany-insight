@@ -701,3 +701,6 @@ test('Insight native search source links GUI', source_links_native_gui_test, tim
 
 relation_graph_viewport_gui_test = executable('test_insight_relation_graph_viewport_gui', '../insight/tests/relation_graph_viewport_gui_test.c', '../src/insight-relation-graph.c', dependencies: deps)
 test('Insight relation graph viewport GUI', relation_graph_viewport_gui_test, timeout: 30, is_parallel: false)
+
+relation_graph_print_gui_test = executable('test_insight_relation_graph_print_gui', '../insight/tests/relation_graph_print_gui_test.c', '../src/insight-relation-graph.c', dependencies: deps)
+test('Insight relation graph printing GUI', relation_graph_print_gui_test, timeout: 60, is_parallel: false)
