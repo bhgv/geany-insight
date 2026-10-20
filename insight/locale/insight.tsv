@@ -1190,3 +1190,8 @@ Graph print snapshot could not be created	Не удалось создать с�
 Graph cannot fit the selected paper or exceeds 256 tiled pages. Choose Fit graph on one page or increase the printable area.	Граф не помещается на выбранной бумаге или превышает 256 листов. Выберите вписывание в одну страницу или увеличьте печатную область.
 Graph sent to printer	Граф отправлен на печать
 %d / %d • %d of %d results • column %d, row %d	%d / %d • %d из %d результатов • столбец %d, строка %d
+Forward to the next relation query	Вперёд к следующему запросу связей
+Relation query history	История запросов связей
+Clear relation history	Очистить историю связей
+Back	Назад
+Forward	Вперёд

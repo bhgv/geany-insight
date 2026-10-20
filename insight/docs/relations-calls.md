@@ -12,7 +12,7 @@ Toolbar icons are original Cairo drawings with blue accents and theme-colored ou
 
 Result filtering matches symbol, file and source text using Unicode case folding. It does not rerun the project search. Column sorting remains available. Definitions and Call sites buttons query the selected result, disable editor tracking and clear the display filter. Definition queries show all indexed candidates instead of guessing an overload. Single click still previews, and double click opens the result location.
 
-The Back arrow restores the previous drill-down query, relation mode, display filter and buffer/code/indirect-inheritance options. Up to 32 drill-down steps are kept for this editor session; editor tracking stays off while browsing this history.
+Back and Forward restore drill-down visits and graph options. The history menu supports direct jumps and clearing; see Relation query history below.
 
 ## Graph view
 
@@ -81,3 +81,15 @@ The title uses the query at the time printing starts. Printing captures an immut
 Only currently drawn nodes are printed (up to 128); collapsed branches and filtered-out results stay excluded. Expand the required branches first. Tiling is limited to 256 pages; if the selected paper/margins would exceed that limit or leave no room for the graph, printing is cancelled with an explanation in the graph status. Choose fit-to-page or a larger printable area. Cancelling the print dialog does not change the editor or graph options.
 
 This implements the graph printing capability described in the [Source Insight graph-view documentation](https://www.sourceinsight.com/doc/v4/userguide/Manual/Concepts/Outline_and_Graph_Views.htm). Linux validation exports PDFs through GTK without a physical printer; physical printer drivers and other platforms were not tested.
+
+## Relation query history
+
+![Relation history controls](media/relation-history.svg)
+
+**Back** and **Forward** revisit drill-down roots reached through Definitions, Call sites or the graph's selected-node relation actions. **Relation query history** lists both directions; choosing a visit jumps directly to it without running searches for the intervening visits.
+
+Each visit captures the query, result filter, relation, buffer/comment/code options, indirect inheritance, tree/graph choice, orientation and exact zoom. Editor tracking stays off while browsing history. Tree branches retain the existing session expansion behavior; scroll position and row selection are not captured.
+
+Each direction keeps at most 32 visits in memory for this session. A new selected-result drill-down after Back discards the old Forward branch. **Clear relation history** clears both stacks while keeping the current query/results. History is not persisted across launches and does not record every cursor movement or manual query edit; editor location history is separate.
+
+Back/Forward root history is described in the [Source Insight release notes](https://www.sourceinsight.com/source-insight-version-4-0-0134/). This implementation extends result drill-down history, rather than claiming parity with every automatic tracking mode.

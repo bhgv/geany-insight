@@ -509,7 +509,7 @@ indented_functions_gui_test = executable('test_insight_indented_functions_gui', 
 test('Insight Python and Lua function boundaries GUI', indented_functions_gui_test, timeout: 45)
 
 relation_tree_gui_test = executable('test_insight_relation_tree_gui', '../insight/tests/relation_tree_gui_test.c', dependencies: test_deps)
-test('Insight expandable Relations tree GUI', relation_tree_gui_test, timeout: 50)
+test('Insight expandable Relations tree GUI', relation_tree_gui_test, timeout: 50, is_parallel: false)
 
 menu_alignment_gui_test = executable('test_insight_menu_alignment_gui', '../insight/tests/menu_alignment_gui_test.c', dependencies: test_deps)
 test('Insight main menu baseline alignment GUI', menu_alignment_gui_test, timeout: 30)
@@ -571,7 +571,7 @@ project_bookmarks_gui_test = executable('test_insight_project_bookmarks_gui', '.
 test('Insight project bookmark stores GUI', project_bookmarks_gui_test, timeout: 55)
 
 reference_regions_gui_test = executable('test_insight_reference_regions_gui', '../insight/tests/reference_regions_gui_test.c', dependencies: test_deps)
-test('Insight reference comment regions GUI', reference_regions_gui_test, timeout: 45)
+test('Insight reference comment regions GUI', reference_regions_gui_test, timeout: 45, is_parallel: false)
 test('Insight reference comment regions restore GUI', reference_regions_gui_test, timeout: 45, env: ['GEANY_TEST_REFERENCE_RESTORE=1'])
 
 bookmark_selection_gui_test = executable('test_insight_bookmark_selection_gui', '../insight/tests/bookmark_selection_gui_test.c', dependencies: test_deps)
@@ -704,3 +704,6 @@ test('Insight relation graph viewport GUI', relation_graph_viewport_gui_test, ti
 
 relation_graph_print_gui_test = executable('test_insight_relation_graph_print_gui', '../insight/tests/relation_graph_print_gui_test.c', '../src/insight-relation-graph.c', dependencies: deps)
 test('Insight relation graph printing GUI', relation_graph_print_gui_test, timeout: 60, is_parallel: false)
+
+relation_history_gui_test = executable('test_insight_relation_history_gui', '../insight/tests/relation_history_gui_test.c', dependencies: test_deps)
+test('Insight native relation history GUI', relation_history_gui_test, timeout: 45, is_parallel: false)
