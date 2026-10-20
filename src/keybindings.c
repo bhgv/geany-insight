@@ -33,6 +33,7 @@
 #include "keybindings.h"
 #include "insight-paste.h"
 #include "insight-command-list.h"
+#include "insight-selection-search.h"
 #include "insight-revisions.h"
 #include "insight-template-fields.h"
 #include "insight-relation-graph.h"
@@ -320,6 +321,10 @@ static void cb_func_insight(guint key_id)
     if (!doc || gtk_window_get_focus(GTK_WINDOW(main_widgets.window)) != GTK_WIDGET(doc->editor->sci)) return;
     switch (key_id)
     {
+        case GEANY_KEYS_INSIGHT_LOADSEARCHSTRING: insight_selection_search_command(0);break;
+        case GEANY_KEYS_INSIGHT_SELECTIONSEARCHFORWARD: insight_selection_search_command(1);break;
+        case GEANY_KEYS_INSIGHT_SELECTIONSEARCHBACKWARD: insight_selection_search_command(2);break;
+        case GEANY_KEYS_INSIGHT_SELECTIONMATCHES: insight_selection_search_command(3);break;
         case GEANY_KEYS_INSIGHT_PARENLEFT: insight_navigation_delimiter(0);break;
         case GEANY_KEYS_INSIGHT_PARENRIGHT: insight_navigation_delimiter(1);break;
         case GEANY_KEYS_INSIGHT_BLOCKUP: insight_navigation_delimiter(2);break;
@@ -780,6 +785,15 @@ static void init_default_kb(void)
         0, 0, "insight_restore_file", _("Restore File"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_ORIGINALCHANGES, cb_func_insight,
         0, 0, "insight_original_changes", _("Original Changes"), NULL);
+    group = keybindings_get_core_group(GEANY_KEY_GROUP_SEARCH);
+    add_kb(group, GEANY_KEYS_INSIGHT_LOADSEARCHSTRING, cb_func_insight,
+        0, 0, "insight_loadsearchstring", _("Load Search String"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_SELECTIONSEARCHFORWARD, cb_func_insight,
+        0, 0, "insight_selectionsearchforward", _("Search Forward for Selection"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_SELECTIONSEARCHBACKWARD, cb_func_insight,
+        0, 0, "insight_selectionsearchbackward", _("Search Backward for Selection"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_SELECTIONMATCHES, cb_func_insight,
+        0, 0, "insight_selectionmatches", _("Find All for Selection"), NULL);
     group = keybindings_get_core_group(GEANY_KEY_GROUP_GOTO);
     add_kb(group, GEANY_KEYS_INSIGHT_PARENLEFT, cb_func_insight,
         0, 0, "insight_parenleft", _("Paren Left"), NULL);

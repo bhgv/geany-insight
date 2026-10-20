@@ -110,6 +110,7 @@ extern GeanySearchData search_data;
 extern GeanySearchPrefs search_prefs;
 
 
+void search_insight_set_pattern(const gchar *, GeanyFindFlags, gboolean backwards);
 void search_init(void);
 
 void search_finalize(void);

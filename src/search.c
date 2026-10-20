@@ -29,6 +29,7 @@
 #endif
 
 #include "search.h"
+#include "insight-selection-search.h"
 
 #include "app.h"
 #include "dialogs.h"
@@ -2405,6 +2406,7 @@ guint search_replace_range(ScintillaObject *sci, struct Sci_TextToFind *ttf,
 
 void search_find_again(gboolean change_direction)
 {
+    if (insight_selection_search_find_again(change_direction)) return;
 	if (insight_workbench_file_find_again(change_direction ? !search_data.backwards : search_data.backwards)) return;
 	GeanyDocument *doc = document_get_current();
 
@@ -2423,4 +2425,17 @@ void search_find_again(gboolean change_direction)
 			ui_set_search_entry_background(
 				toolbar_get_widget_child_by_name("SearchEntry"), (result > -1));
 	}
+}
+
+/* Literal selection-search state shared with Find/Replace and F3. Do not run a
+ * search or change the current source selection while populating controls. */
+void search_insight_set_pattern(const gchar *pattern,GeanyFindFlags flags,gboolean backwards)
+{
+    setup_find_next(pattern);search_data.flags=flags;search_data.backwards=backwards;
+    settings.find_regexp=settings.find_regexp_multiline=settings.find_escape_sequences=FALSE;
+    settings.find_match_word_start=FALSE;settings.find_case_sensitive=!!(flags&GEANY_FIND_MATCHCASE);settings.find_match_whole_word=!!(flags&GEANY_FIND_WHOLEWORD);
+    settings.replace_regexp=settings.replace_regexp_multiline=settings.replace_escape_sequences=FALSE;
+    settings.replace_match_word_start=FALSE;settings.replace_case_sensitive=settings.find_case_sensitive;settings.replace_match_whole_word=settings.find_match_whole_word;settings.replace_search_backwards=backwards;
+    if(find_dlg.dialog) { stash_group_display(find_prefs,find_dlg.dialog);gtk_entry_set_text(GTK_ENTRY(find_dlg.entry),pattern); }
+    if(replace_dlg.dialog) { stash_group_display(replace_prefs,replace_dlg.dialog);gtk_entry_set_text(GTK_ENTRY(replace_dlg.find_entry),pattern); }
 }

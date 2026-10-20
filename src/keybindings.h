@@ -302,6 +302,10 @@ enum GeanyKeyBindingID
 	GEANY_KEYS_INSIGHT_SELECTBLOCKUP, /**< Insight keybinding. */
 	GEANY_KEYS_INSIGHT_SELECTBLOCKDOWN, /**< Insight keybinding. */
 	GEANY_KEYS_INSIGHT_DELIMITERBROWSER, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_LOADSEARCHSTRING, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_SELECTIONSEARCHFORWARD, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_SELECTIONSEARCHBACKWARD, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_SELECTIONMATCHES, /**< Insight keybinding. */
 	GEANY_KEYS_COUNT	/* must not be used by plugins */
 };
 

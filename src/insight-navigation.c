@@ -2,6 +2,7 @@
 #include "geany.h"
 #include "insight-navigation.h"
 #include "insight-command-list.h"
+#include "insight-selection-search.h"
 #include "insight-revisions.h"
 #include "document.h"
 #include "geanyobject.h"
@@ -51,6 +52,7 @@ static gboolean normal(ScintillaObject *sci)
 }
 void insight_navigation_notify(GeanyEditor *editor, SCNotification *nt)
 {
+    insight_selection_search_notify(editor,nt);
     ScintillaObject *sci = editor->sci;
     if (nt->nmhdr.code == SCN_MODIFIED &&
         (nt->modificationType & (SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT)))
@@ -567,6 +569,7 @@ static void show_history(GtkMenuItem *item,gpointer data) { (void)item;(void)dat
 void insight_navigation_menu(GtkWidget *menu)
 {
     insight_command_list_menu();
+    insight_selection_search_init();
     insight_revisions_init(menu);
     GtkWidget *file_menu=ui_lookup_widget(main_widgets.window,"file1_menu"),*status=gtk_menu_item_new_with_label("Show File Status");gtk_widget_set_name(status,"insight-show-file-status");g_signal_connect(status,"activate",G_CALLBACK(show_file_status),NULL);GList *file_children=gtk_container_get_children(GTK_CONTAINER(file_menu));gint status_position=g_list_index(file_children,ui_lookup_widget(main_widgets.window,"properties1"));g_list_free(file_children);gtk_menu_shell_insert(GTK_MENU_SHELL(file_menu),status,status_position);g_signal_connect(file_menu,"show",G_CALLBACK(file_status_menu_show),status);gtk_widget_show(status);
     GtkWidget *parent = gtk_menu_item_new_with_label("Selection and navigation");
