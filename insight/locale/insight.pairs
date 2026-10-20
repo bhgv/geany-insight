@@ -840,3 +840,15 @@ Dock this panel|||Закрепить эту панель
 Float this panel|||Открепить эту панель
 Restore panel size|||Восстановить размер панели
 Maximize floating panel|||Развернуть плавающую панель
+Tab Tray|||Панель свёрнутых окон
+Restore minimized panels|||Восстановить свёрнутые панели
+Restore this floating panel|||Восстановить эту плавающую панель
+Minimize panel to Tab Tray|||Свернуть панель в нижнюю полосу
+Save layout to file…|||Сохранить раскладку в файл…
+Load layout from file…|||Загрузить раскладку из файла…
+Geany Insight layouts|||Раскладки Geany Insight
+Layout saved to file|||Раскладка сохранена в файл
+Layout loaded from file|||Раскладка загружена из файла
+Invalid or incomplete layout file|||Неверный или неполный файл раскладки
+Layout file exceeds 64 KiB or contains NUL bytes|||Файл раскладки больше 64 КиБ или содержит нулевые байты
+Could not read layout file|||Не удалось прочитать файл раскладки

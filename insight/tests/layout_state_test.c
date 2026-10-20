@@ -1,5 +1,7 @@
 #include "layout_state.h"
 #include <glib.h>
+#include <glib/gstdio.h>
+#include <string.h>
 int main(void) {
  GKeyFile *f=g_key_file_new(); InsightLayout r={.valid=TRUE,.values={1,1,1,0,1,1,240,850,500,3,-100,50,440,620}},out;
  g_assert_true(insight_layout_valid(&r));
@@ -27,6 +29,16 @@ int main(void) {
  insight_layout_write(f,"layout-A",&r);g_key_file_set_string(f,"layout-A","panel-5-maximized","bad");g_assert_false(insight_layout_read(f,"layout-A",&out));
  insight_layout_write(f,"layout-A",&r);g_key_file_set_integer(f,"layout-A","version",3);g_assert_true(insight_layout_read(f,"layout-A",&out));for(guint i=0;i<IL_PANEL_COUNT;i++) g_assert_false(out.panels[i].set);
  r.panels[0].width=4001;g_assert_false(insight_layout_valid(&r));r.panels[0].width=480;
+ r.values[IL_TRAY_VISIBLE]=1;r.values[IL_HOST_MINIMIZED]=1;insight_layout_write(f,"layout-A",&r);g_assert_true(insight_layout_read(f,"layout-A",&out));g_assert_cmpint(out.values[IL_HOST_MINIMIZED],==,1);
+ r.values[IL_HOST_MINIMIZED]=512;g_assert_false(insight_layout_valid(&r));r.values[IL_HOST_MINIMIZED]=2;g_assert_false(insight_layout_valid(&r));r.values[IL_HOST_MINIMIZED]=1;
+ insight_layout_write(f,"layout-A",&r);g_key_file_set_integer(f,"layout-A","version",4);g_assert_true(insight_layout_read(f,"layout-A",&out));g_assert_cmpint(out.values[IL_TRAY_VISIBLE],==,1);g_assert_cmpint(out.values[IL_HOST_MINIMIZED],==,0);
+ r.values[IL_HOST_MINIMIZED]=0;
+ gchar *dir=g_dir_make_tmp("layout-files-XXXXXX",NULL),*path=g_build_filename(dir,"review.geany-layout",NULL);GError *error=NULL;
+ g_assert_true(insight_layout_save_file(path,&r,&error));g_assert_no_error(error);g_assert_true(insight_layout_load_file(path,&out,&error));g_assert_no_error(error);g_assert_cmpint(out.panels[9].height,==,r.panels[9].height);
+ r.panels[0].width=1;g_assert_false(insight_layout_save_file(path,&r,&error));g_clear_error(&error);r.panels[0].width=480;g_assert_true(insight_layout_load_file(path,&out,&error));g_assert_no_error(error);
+ g_assert_true(g_file_set_contents(path,"[layout]\nversion=5\n",-1,NULL));g_assert_false(insight_layout_load_file(path,&out,&error));g_assert_false(out.valid);g_clear_error(&error);
+ gchar *large=g_malloc0(65537);memset(large,'x',65537);g_assert_true(g_file_set_contents(path,large,65537,NULL));g_free(large);g_assert_false(insight_layout_load_file(path,&out,&error));g_clear_error(&error);
+ g_assert_true(g_file_set_contents(path,"[layout]\0x",10,NULL));g_assert_false(insight_layout_load_file(path,&out,&error));g_clear_error(&error);g_remove(path);g_assert_false(insight_layout_load_file(path,&out,&error));g_clear_error(&error);g_rmdir(dir);g_free(path);g_free(dir);
  r.values[IL_WIDTH]=0; g_assert_false(insight_layout_valid(&r)); insight_layout_write(f,"layout-A",&r); g_assert_false(g_key_file_has_group(f,"layout-A"));
  g_assert_false(insight_layout_read(f,"missing",&out)); g_key_file_unref(f); g_print("Layout state checks passed\n"); return 0;
 }

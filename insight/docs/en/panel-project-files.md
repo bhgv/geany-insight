@@ -101,3 +101,16 @@ and selects its tab; native window close also docks it. Panel geometry and maxim
 locations are not provided.
 
 ![Panel states](../media/panel-controls.svg)
+
+### Tab Tray
+
+The Minimize button places a floating panel in the bottom Tab Tray. Click its
+label to restore the window. View → Panels → Tab Tray toggles the strip; hiding
+the strip keeps its panels minimized. Restore minimized panels restores all ten
+managed hosts. The empty strip hides automatically. Layouts and session settings
+remember minimized panels and strip visibility. The separate Window List and the
+whole Project Window group are outside this tray.
+
+Native Linux application captured during the automated panel scenario:
+
+![Panel controls](../media/panel-windows.jpg)

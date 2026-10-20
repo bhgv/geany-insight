@@ -506,3 +506,31 @@ restoring a window does not replace its normal size with its maximized size.
 Layout schema 4 migrates schemas 1–3; missing or malformed new geometry rejects
 the complete layout. Panel settings schema 2 reads schema 1 as non-maximized.
 Core regression cases cover all ten hosts, old versions and invalid/missing fields.
+
+### Tab Tray for floating panels (2026-10-20)
+
+The ten panel hosts now expose Minimize to Tab Tray and bottom restore tabs.
+Native iconification is routed into the same tray; activation restores a minimized
+host. The strip can be hidden independently, and Restore minimized panels remains
+available from View → Panels. Session schema 3 and layout schema 5 retain minimized
+state and strip visibility; layout schemas 1–4 remain readable. Minimized masks
+must reference detached, nonvisible hosts. Window List and the grouped Project
+window are outside this increment. Reference: [Tab Tray](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Tab_Tray.htm).
+
+Linux native build and production GUI scenarios now pass for all ten hosts,
+maximized/normal geometry, layouts, Tab Tray and a complete process restart.
+The panel-state fixture also supplies the cropped production-window JPEG.
+Windows and Android were not executed for this series.
+
+### Additional layout files (2026-10-20)
+
+View → Layouts now saves/loads additional `.geany-layout` files independently of
+slots A–D, using the same full layout capture/apply path. The native chooser
+confirms overwrites. Loads read at most 64 KiB plus one sentinel byte, reject NUL,
+malformed/versioned fields and invalid geometry before touching the current UI.
+Files contain layout state, not source text or project paths, and use Geany
+Insight's INI format rather than Source Insight XML. Portable tests cover file
+round trips, invalid-save preservation, missing/truncated/oversized/NUL input.
+Native Linux GUI covers the real chooser, a minimized-panel export/import and an
+invalid import leaving the current window intact.
+Reference: [Save Layout](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Save_Layout.htm).

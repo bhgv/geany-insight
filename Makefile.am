@@ -428,3 +428,5 @@ dist_insightdocmedia_DATA += insight/docs/media/relation-node-removal.svg
 dist_insightdocmedia_DATA += insight/docs/media/panel-controls.svg
 
 EXTRA_DIST += insight/tests/panel_state_gui_test.c
+
+dist_insightdocmedia_DATA += insight/docs/media/panel-windows.jpg

@@ -5,7 +5,7 @@
 #include "main.h"
 #include "ui_utils.h"
 #include <glib/gstdio.h>
-static GtkWidget *window,*page,*floating;static guint phase;static gboolean restore;
+static GtkWidget *window,*page,*floating;static guint phase;static gboolean restore,restore_started;static gchar *layout_path;
 static GtkWidget *named(GtkWidget *w,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(w),name)) return w;
  if(GTK_IS_MENU_ITEM(w)) { GtkWidget *menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(w));if(menu) { GtkWidget *found=named(menu,name);if(found) return found; } }
@@ -13,16 +13,29 @@ static GtkWidget *named(GtkWidget *w,const gchar *name) {
 }
 static void click(const gchar *name) { GtkWidget *button=named(page,name);g_assert_nonnull(button);gtk_button_clicked(GTK_BUTTON(button)); }
 static void command(const gchar *name) { GtkWidget *item=named(window,name);g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item)); }
+static gboolean accept_file(gpointer data) { GtkWidget *dialog=data;gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_ACCEPT);g_object_unref(dialog);return G_SOURCE_REMOVE; }
+static gboolean choose_layout_file(gpointer data) {
+ gboolean save=GPOINTER_TO_INT(data)!=0;GList *windows=gtk_window_list_toplevels();GtkWidget *dialog=NULL;
+ for(GList *p=windows;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-layout-file-dialog")) { dialog=p->data;break; }
+ g_list_free(windows);if(!dialog) return G_SOURCE_CONTINUE;
+ if(save) { gchar *folder=g_path_get_dirname(layout_path),*name=g_path_get_basename(layout_path);gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog),folder);gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog),name);g_free(folder);g_free(name); }
+ else g_assert_true(gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(dialog),layout_path));
+ g_timeout_add(350,accept_file,g_object_ref(dialog));return G_SOURCE_REMOVE;
+}
+static void layout_file(gboolean save) { g_timeout_add(100,choose_layout_file,GINT_TO_POINTER(save));command(save ? "insight-layout-export" : "insight-layout-import"); }
 static gboolean step(gpointer data) {
  (void)data;if(!document_get_current()) return G_SOURCE_CONTINUE;
  if(!window) {
-  window=main_widgets.window;GtkWidget *book=named(window,"insight-project-notebook");g_assert_nonnull(book);
+  window=gtk_widget_get_toplevel(GTK_WIDGET(document_get_current()->editor->sci));GtkWidget *book=named(window,"insight-project-notebook");g_assert_nonnull(book);
   if(restore) {
    GList *windows=gtk_window_list_toplevels();for(GList *p=windows;p && !page;p=p->next) if(p->data!=window) { GtkWidget *button=named(p->data,"insight-panel-toggle-dock");if(button) { floating=p->data;page=gtk_bin_get_child(GTK_BIN(floating)); } }g_list_free(windows);g_assert_nonnull(page);
   } else { page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(book),0);click("insight-panel-toggle-dock");floating=gtk_widget_get_toplevel(page);gtk_window_resize(GTK_WINDOW(floating),520,430); }
   return G_SOURCE_CONTINUE;
  }
  if(restore) {
+  if(!restore_started) {
+   GtkWidget *tray_button=named(window,"insight-panel-tray-0");g_assert_nonnull(tray_button);g_assert_false(gtk_widget_get_visible(floating));gtk_button_clicked(GTK_BUTTON(tray_button));restore_started=TRUE;return G_SOURCE_CONTINUE;
+  }
   if(!gtk_window_is_maximized(GTK_WINDOW(floating))) return G_SOURCE_CONTINUE;
   click("insight-panel-toggle-maximize");restore=FALSE;phase=8;return G_SOURCE_CONTINUE;
  }
@@ -31,17 +44,25 @@ static gboolean step(gpointer data) {
  case 1: command("insight-layout-load-0");floating=gtk_widget_get_toplevel(page);phase++;break;
  case 2: {
   gint width,height;gtk_window_get_size(GTK_WINDOW(floating),&width,&height);g_assert_cmpint(width,==,520);g_assert_cmpint(height,==,430);
-  click("insight-panel-toggle-maximize");phase++;break;
+  click("insight-panel-minimize");phase=20;break;
+ }
+ case 20: {
+  GtkWidget *tray=named(window,"insight-panel-tab-tray"),*tab=named(window,"insight-panel-tray-0");g_assert_nonnull(tray);g_assert_nonnull(tab);g_assert_true(gtk_widget_get_visible(tray));g_assert_false(gtk_widget_get_visible(floating));
+  command("insight-panel-tab-tray-toggle");g_assert_false(gtk_widget_get_visible(tray));command("insight-panel-restore-all");g_assert_true(gtk_widget_get_visible(floating));command("insight-panel-tab-tray-toggle");
+  click("insight-panel-minimize");command("insight-layout-save-2");layout_file(TRUE);g_assert_true(g_file_test(layout_path,G_FILE_TEST_IS_REGULAR));click("insight-panel-toggle-dock");layout_file(FALSE);floating=gtk_widget_get_toplevel(page);phase=21;break;
+ }
+ case 21: {
+  GtkWidget *tray=named(window,"insight-panel-tab-tray"),*tab=named(window,"insight-panel-tray-0");g_assert_true(gtk_widget_get_visible(tray));g_assert_false(gtk_widget_get_visible(floating));g_assert_true(g_file_set_contents(layout_path,"[layout]\nversion=5\n",-1,NULL));layout_file(FALSE);g_assert_true(gtk_widget_get_toplevel(page)==floating);g_assert_false(gtk_widget_get_visible(floating));gtk_button_clicked(GTK_BUTTON(tab));g_assert_true(gtk_widget_get_visible(floating));g_assert_false(gtk_widget_get_visible(tray));click("insight-panel-toggle-maximize");phase=3;break;
  }
  case 3: if(!gtk_window_is_maximized(GTK_WINDOW(floating))) return G_SOURCE_CONTINUE;command("insight-layout-save-1");click("insight-panel-toggle-maximize");phase++;break;
  case 4: if(gtk_window_is_maximized(GTK_WINDOW(floating))) return G_SOURCE_CONTINUE;command("insight-layout-load-1");floating=gtk_widget_get_toplevel(page);phase++;break;
  case 5: if(!gtk_window_is_maximized(GTK_WINDOW(floating))) return G_SOURCE_CONTINUE;click("insight-panel-toggle-dock");phase++;break;
  case 6: click("insight-panel-toggle-dock");floating=gtk_widget_get_toplevel(page);phase++;break;
- case 7: if(!gtk_window_is_maximized(GTK_WINDOW(floating))) return G_SOURCE_CONTINUE;gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+ case 7: if(!gtk_window_is_maximized(GTK_WINDOW(floating))) return G_SOURCE_CONTINUE;click("insight-panel-minimize");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  case 8: {
   if(gtk_window_is_maximized(GTK_WINDOW(floating))) return G_SOURCE_CONTINUE;
   gint width,height;gtk_window_get_size(GTK_WINDOW(floating),&width,&height);g_assert_cmpint(width,==,520);g_assert_cmpint(height,==,430);
-  const gchar *capture=g_getenv("GEANY_PANEL_CAPTURE");if(capture) { GdkWindow *root=gdk_get_default_root_window();GdkPixbuf *image=gdk_pixbuf_get_from_window(root,0,0,gdk_window_get_width(root),gdk_window_get_height(root));g_assert_nonnull(image);GError *error=NULL;g_assert_true(gdk_pixbuf_save(image,capture,"jpeg",&error,"quality","88",NULL));g_assert_no_error(error);g_object_unref(image); }
+  const gchar *capture=g_getenv("GEANY_PANEL_CAPTURE");if(capture) { GdkWindow *root=gtk_widget_get_window(floating);GdkPixbuf *image=gdk_pixbuf_get_from_window(root,0,0,gdk_window_get_width(root),MIN(160,gdk_window_get_height(root)));g_assert_nonnull(image);GError *error=NULL;g_assert_true(gdk_pixbuf_save(image,capture,"jpeg",&error,"quality","88",NULL));g_assert_no_error(error);g_object_unref(image); }
   gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }
  default:g_assert_not_reached();
@@ -54,7 +75,7 @@ int main(int argc,char **argv) {
  if(argc==1) {
   gchar *directory=g_dir_make_tmp("panel-state-XXXXXX",NULL);g_assert_nonnull(directory);gchar *config=g_build_filename(directory,"geany.conf",NULL);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));
   for(guint i=0;i<2;i++) { gchar *child[]={argv[0],directory,i ? "restore" : "fresh",NULL};gint status;GError *error=NULL;g_assert_true(g_spawn_sync(NULL,child,NULL,0,NULL,NULL,NULL,NULL,&status,&error));g_assert_no_error(error);g_assert_true(g_spawn_check_wait_status(status,&error));g_assert_no_error(error); }
-  g_free(config);g_free(directory);g_print("Panel state GUI: layout geometry, maximize/restore, reparenting and restart passed\n");return 0;
+  g_free(config);g_free(directory);g_print("Panel state GUI: layout geometry, maximize/restore, Tab Tray, external layout files, invalid import, reparenting and restart passed\n");return 0;
  }
- restore=!g_strcmp0(argv[2],"restore");gchar *args[]={"panel-state-gui","--new-instance","--no-session","--config",argv[1],NULL};g_timeout_add(400,step,NULL);g_timeout_add_seconds(25,timeout,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);return main_lib(5,args);
+ layout_path=g_build_filename(argv[1],"review.geany-layout",NULL);restore=!g_strcmp0(argv[2],"restore");gchar *args[]={"panel-state-gui","--new-instance","--no-session","--config",argv[1],NULL};g_timeout_add(400,step,NULL);g_timeout_add_seconds(40,timeout,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);return main_lib(5,args);
 }
