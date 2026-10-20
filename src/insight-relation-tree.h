@@ -11,5 +11,7 @@ GtkTreeView *insight_relation_tree_view(GtkWidget *);
 void insight_relation_tree_query(GtkWidget *,InsightIndex *,const gchar *,InsightRelationMode,const gchar *,GeanyFiletype *);
 void insight_relation_tree_locale_changed(GtkWidget *);
 void insight_relation_tree_cancel(GtkWidget *);
+/* Removes one source branch from the display; never the query root/notices. */
+gboolean insight_relation_tree_remove_selected(GtkWidget *);
 void insight_relation_tree_filter(GtkWidget *,const gchar *);
 #endif

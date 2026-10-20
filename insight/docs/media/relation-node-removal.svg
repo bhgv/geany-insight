@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="300" viewBox="0 0 900 300">
+<rect width="900" height="300" fill="#f2f5f8"/>
+<g font-family="sans-serif" fill="#17324d"><text x="24" y="32" font-size="21" font-weight="bold">Relations: remove a displayed branch, restore with refresh</text><text x="24" y="57" font-size="13">Explanatory diagram · toolbar / context menu / Delete · source files and index stay unchanged</text></g>
+<g fill="none" stroke="#d45054" stroke-width="2"><path d="M75 124 V216 H115 M75 172 H115 M165 172 H214 V216 H246 M405 124 V216 H445 M735 124 V216 H775 M735 172 H775"/></g>
+<g fill="#fffdef" stroke="#798b9b"><rect x="40" y="92" width="110" height="34"/><rect x="115" y="154" width="100" height="34"/><rect x="115" y="199" width="100" height="34"/><rect x="246" y="199" width="80" height="34"/><rect x="370" y="92" width="110" height="34"/><rect x="445" y="199" width="100" height="34"/><rect x="700" y="92" width="110" height="34"/><rect x="775" y="154" width="100" height="34"/><rect x="775" y="199" width="100" height="34"/></g>
+<g font-family="sans-serif" font-size="13" fill="#17324d"><text x="55" y="114">Query root</text><text x="132" y="176">Branch A</text><text x="132" y="221">Branch B</text><text x="257" y="221">Child</text><text x="385" y="114">Query root</text><text x="462" y="221">Branch B</text><text x="715" y="114">Query root</text><text x="792" y="176">Branch A</text><text x="792" y="221">Branch B</text><text x="280" y="101">Remove A</text><text x="570" y="101">F5 / refresh</text></g>
+<g fill="none" stroke="#2374aa" stroke-width="3"><path d="M277 124 H344 L334 114 M344 124 L334 134 M565 124 H675 L665 114 M675 124 L665 134"/></g>
+<g stroke="#cb3d44" stroke-width="2"><path d="M113 150 L218 190 M218 150 L113 190"/></g>
+<text x="24" y="274" font-family="sans-serif" font-size="13" fill="#33495e">Shared table/graph model · protected query roots and notices · no persistent exclusions · editor tracking pauses on removal</text>
+</svg>

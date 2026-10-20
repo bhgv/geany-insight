@@ -421,3 +421,6 @@ dist_insightdocmedia_DATA += insight/docs/media/relation-graph-print.svg
 
 EXTRA_DIST += insight/tests/relation_history_gui_test.c
 dist_insightdocmedia_DATA += insight/docs/media/relation-history.svg
+
+EXTRA_DIST += insight/tests/relation_nodes_gui_test.c
+dist_insightdocmedia_DATA += insight/docs/media/relation-node-removal.svg

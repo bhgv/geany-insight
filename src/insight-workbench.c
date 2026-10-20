@@ -1704,6 +1704,48 @@ static void relation_selected_query(GtkWidget *widget,gpointer data) {
  gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),GPOINTER_TO_INT(data));wb.relation_setting=FALSE;
  g_free(name);relation_controls(NULL,NULL);
 }
+static gboolean relation_source_selected(GtkTreeView *view) {
+ GtkTreeModel *model;GtkTreeIter iter;gulong line=0;if(!gtk_tree_selection_get_selected(gtk_tree_view_get_selection(view),&model,&iter)) return FALSE;gtk_tree_model_get(model,&iter,USAGE_LINE,&line,-1);return line>0;
+}
+static void relation_node_action(gboolean restore,gpointer data) {
+ (void)data;if(restore) { usage_start(NULL,NULL);return; }
+ const gchar *shown=gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack));gboolean tree=shown && g_str_has_prefix(shown,"tree");GtkTreeView *view=tree ? insight_relation_tree_view(wb.relation_tree) : GTK_TREE_VIEW(wb.usage_view);
+ if(!relation_source_selected(view)) { set_usage_status("Select a source node; query roots and notices cannot be removed");return; }
+ wb.relation_setting=TRUE;gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_follow),FALSE);wb.relation_setting=FALSE;stop_usage();
+ gboolean removed=FALSE;
+ if(tree) removed=insight_relation_tree_remove_selected(wb.relation_tree);
+ else {
+  GtkTreeModel *model;GtkTreeIter iter;if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(view),&model,&iter)) {
+   /* Selection coordinates belong to the visible sorted/filtered model. */
+   while(GTK_IS_TREE_MODEL_SORT(model) || GTK_IS_TREE_MODEL_FILTER(model)) { GtkTreeIter child;
+    if(GTK_IS_TREE_MODEL_SORT(model)) { gtk_tree_model_sort_convert_iter_to_child_iter(GTK_TREE_MODEL_SORT(model),&child,&iter);model=gtk_tree_model_sort_get_model(GTK_TREE_MODEL_SORT(model)); }
+    else { gtk_tree_model_filter_convert_iter_to_child_iter(GTK_TREE_MODEL_FILTER(model),&child,&iter);model=gtk_tree_model_filter_get_model(GTK_TREE_MODEL_FILTER(model)); }iter=child;
+   }
+   if(model==GTK_TREE_MODEL(wb.matches)) { gtk_list_store_remove(wb.matches,&iter);removed=TRUE; }
+  }
+ }
+ if(removed) set_usage_status("Node removed from view; refresh to restore");
+}
+static void relation_node_button(GtkWidget *widget,gpointer data) { (void)widget;relation_node_action(GPOINTER_TO_INT(data),NULL); }
+static void relation_node_menu_free(gpointer data) { gtk_widget_destroy(GTK_WIDGET(data));g_object_unref(data); }
+static GtkWidget *relation_node_menu(GtkTreeView *view) {
+ GtkWidget *menu=g_object_get_data(G_OBJECT(view),"insight-node-menu");
+ if(!menu) {
+  menu=gtk_menu_new();g_object_ref_sink(menu);const gchar *labels[]={"Remove node from view","Restore nodes (refresh)"};
+  for(guint i=0;i<2;i++) { GtkWidget *item=gtk_menu_item_new_with_label(labels[i]);gtk_widget_set_name(item,i ? "insight-relation-node-restore-menu" : "insight-relation-node-remove-menu");gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(relation_node_button),GUINT_TO_POINTER(i)); }
+  g_object_set_data_full(G_OBJECT(view),"insight-node-menu",menu,relation_node_menu_free);
+ }
+ GList *items=gtk_container_get_children(GTK_CONTAINER(menu));gtk_widget_set_sensitive(items->data,relation_source_selected(view));g_list_free(items);insight_i18n_apply(menu);gtk_widget_show_all(menu);return menu;
+}
+static gboolean relation_node_key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
+ (void)data;if(!(event->state&(GDK_CONTROL_MASK|GDK_MOD1_MASK|GDK_SHIFT_MASK)) && (event->keyval==GDK_KEY_Delete || event->keyval==GDK_KEY_KP_Delete || event->keyval==GDK_KEY_F5)) { relation_node_action(event->keyval==GDK_KEY_F5,NULL);return TRUE; }
+ if(event->keyval==GDK_KEY_Menu || (event->keyval==GDK_KEY_F10 && (event->state&GDK_SHIFT_MASK))) { gtk_menu_popup_at_widget(GTK_MENU(relation_node_menu(GTK_TREE_VIEW(widget))),widget,GDK_GRAVITY_SOUTH_WEST,GDK_GRAVITY_NORTH_WEST,(GdkEvent *)event);return TRUE; }return FALSE;
+}
+static gboolean relation_node_popup(GtkWidget *widget,GdkEventButton *event,gpointer data) {
+ (void)data;if(event->type!=GDK_BUTTON_PRESS || event->button!=3) return FALSE;GtkTreePath *path=NULL;
+ if(gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget),(gint)event->x,(gint)event->y,&path,NULL,NULL,NULL)) { gtk_tree_view_set_cursor(GTK_TREE_VIEW(widget),path,NULL,FALSE);gtk_tree_path_free(path); }else gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(widget)));
+ gtk_widget_grab_focus(widget);gtk_menu_popup_at_pointer(GTK_MENU(relation_node_menu(GTK_TREE_VIEW(widget))),(GdkEvent *)event);return TRUE;
+}
 static void relation_graph_query(gint mode,gpointer data) {
  (void)data;relation_selected_query(NULL,GINT_TO_POINTER(mode));
 }
@@ -1774,6 +1816,8 @@ static void create_usage_browser(void) {
  wb.relation_history=g_ptr_array_new_with_free_func(relation_visit_free);wb.relation_future=g_ptr_array_new_with_free_func(relation_visit_free);wb.relation_back=gtk_button_new_from_icon_name("go-previous",GTK_ICON_SIZE_BUTTON);gtk_widget_set_name(wb.relation_back,"insight-relation-back");gtk_widget_set_tooltip_text(wb.relation_back,"Back to the previous relation query");gtk_widget_set_sensitive(wb.relation_back,FALSE);g_signal_connect(wb.relation_back,"clicked",G_CALLBACK(relation_back),NULL);gtk_box_pack_start(GTK_BOX(drill),wb.relation_back,FALSE,FALSE,0);
  wb.relation_forward=gtk_button_new_from_icon_name("go-next",GTK_ICON_SIZE_BUTTON);gtk_widget_set_name(wb.relation_forward,"insight-relation-forward");gtk_widget_set_tooltip_text(wb.relation_forward,"Forward to the next relation query");gtk_widget_set_sensitive(wb.relation_forward,FALSE);g_signal_connect(wb.relation_forward,"clicked",G_CALLBACK(relation_forward),NULL);gtk_box_pack_start(GTK_BOX(drill),wb.relation_forward,FALSE,FALSE,0);
  GtkWidget *history=gtk_menu_button_new(),*history_menu=gtk_menu_new();gtk_widget_set_name(history,"insight-relation-history");gtk_button_set_image(GTK_BUTTON(history),gtk_image_new_from_icon_name("document-open-recent",GTK_ICON_SIZE_BUTTON));gtk_widget_set_tooltip_text(history,"Relation query history");gtk_menu_button_set_popup(GTK_MENU_BUTTON(history),history_menu);g_signal_connect(history_menu,"show",G_CALLBACK(relation_history_show),NULL);gtk_box_pack_start(GTK_BOX(drill),history,FALSE,FALSE,0);
+ const gchar *node_icons[]={"list-remove","view-refresh"},*node_tips[]={"Remove selected node from view (Delete)","Restore nodes by refreshing the query (F5)"},*node_names[]={"insight-relation-node-remove","insight-relation-node-restore"};
+ for(guint i=0;i<2;i++) { GtkWidget *button=gtk_button_new_from_icon_name(node_icons[i],GTK_ICON_SIZE_BUTTON);gtk_widget_set_name(button,node_names[i]);gtk_widget_set_tooltip_text(button,node_tips[i]);gtk_box_pack_start(GTK_BOX(drill),button,FALSE,FALSE,0);g_signal_connect(button,"clicked",G_CALLBACK(relation_node_button),GUINT_TO_POINTER(i)); }
  gtk_box_pack_start(GTK_BOX(drill),definitions,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(drill),sites,TRUE,TRUE,0);
  g_signal_connect(definitions,"clicked",G_CALLBACK(relation_selected_query),GINT_TO_POINTER(1));g_signal_connect(sites,"clicked",G_CALLBACK(relation_selected_query),GINT_TO_POINTER(7));
  g_signal_connect(wb.relation_filter_entry,"changed",G_CALLBACK(relation_filter_changed),NULL);
@@ -1782,15 +1826,15 @@ static void create_usage_browser(void) {
  wb.relation_tree=insight_relation_tree_new();gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_tree,"tree");
  GtkTreeView *tree_view=insight_relation_tree_view(wb.relation_tree);g_signal_connect(gtk_tree_view_get_selection(tree_view),"changed",G_CALLBACK(relation_tree_selected),NULL);g_signal_connect(tree_view,"row-activated",G_CALLBACK(relation_tree_activated),NULL);
  wb.relation_tree_toggle=gtk_check_button_new_with_label("Expandable relation tree");gtk_widget_set_name(wb.relation_tree_toggle,"insight-relation-tree-toggle");gtk_widget_set_sensitive(wb.relation_tree_toggle,FALSE);gtk_box_pack_start(GTK_BOX(controls),wb.relation_tree_toggle,FALSE,FALSE,0);g_signal_connect(wb.relation_tree_toggle,"toggled",G_CALLBACK(relation_tree_toggle),NULL);
- wb.relation_graph=insight_relation_graph_new(GTK_TREE_VIEW(wb.usage_view),GTK_ENTRY(wb.usage_entry),USAGE_SYMBOL,USAGE_DISPLAY,USAGE_LINE);insight_relation_graph_set_query_handler(wb.relation_graph,relation_graph_query,NULL);gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_graph,"graph");gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"list");
- wb.relation_tree_graph=insight_relation_graph_new_tree(tree_view,GTK_ENTRY(wb.usage_entry),USAGE_SYMBOL,USAGE_DISPLAY,USAGE_LINE);insight_relation_graph_set_query_handler(wb.relation_tree_graph,relation_graph_query,NULL);gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_tree_graph,"treegraph");
+ wb.relation_graph=insight_relation_graph_new(GTK_TREE_VIEW(wb.usage_view),GTK_ENTRY(wb.usage_entry),USAGE_SYMBOL,USAGE_DISPLAY,USAGE_LINE);insight_relation_graph_set_query_handler(wb.relation_graph,relation_graph_query,NULL);insight_relation_graph_set_node_handler(wb.relation_graph,relation_node_action,NULL);gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_graph,"graph");gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"list");
+ wb.relation_tree_graph=insight_relation_graph_new_tree(tree_view,GTK_ENTRY(wb.usage_entry),USAGE_SYMBOL,USAGE_DISPLAY,USAGE_LINE);insight_relation_graph_set_query_handler(wb.relation_tree_graph,relation_graph_query,NULL);insight_relation_graph_set_node_handler(wb.relation_tree_graph,relation_node_action,NULL);gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_tree_graph,"treegraph");
  wb.relation_graph_toggle=gtk_check_button_new_with_label("Graph view");gtk_widget_set_name(wb.relation_graph_toggle,"insight-relation-graph-toggle");gtk_box_pack_start(GTK_BOX(controls),wb.relation_graph_toggle,FALSE,FALSE,0);g_signal_connect(wb.relation_graph_toggle,"toggled",G_CALLBACK(relation_graph_toggle),NULL);
  gtk_box_pack_start(GTK_BOX(box),wb.usage_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_mode,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_transitive,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_follow,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_enclosing,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_code,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),wb.usage_comments,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_buffer,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),controls,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_status,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_filter_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),drill,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_stack,TRUE,TRUE,0);
  gtk_notebook_append_page(GTK_NOTEBOOK(wb.project_notebook),box,gtk_label_new("Relations"));
  g_signal_connect(search,"clicked",G_CALLBACK(usage_start),NULL); g_signal_connect(cancel,"clicked",G_CALLBACK(usage_cancel),NULL); g_signal_connect(wb.usage_entry,"activate",G_CALLBACK(usage_start),NULL);
  g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.usage_view)),"changed",G_CALLBACK(usage_selected),NULL); g_signal_connect(wb.usage_view,"row-activated",G_CALLBACK(usage_activated),NULL);
  g_signal_connect(wb.usage_entry,"key-press-event",G_CALLBACK(browser_key),NULL);
- g_signal_connect(wb.usage_view,"key-press-event",G_CALLBACK(browser_key),NULL);
+ g_signal_connect(wb.usage_view,"key-press-event",G_CALLBACK(relation_node_key),NULL);g_signal_connect(wb.usage_view,"key-press-event",G_CALLBACK(browser_key),NULL);g_signal_connect(wb.usage_view,"button-press-event",G_CALLBACK(relation_node_popup),NULL);g_signal_connect(tree_view,"key-press-event",G_CALLBACK(relation_node_key),NULL);g_signal_connect(tree_view,"button-press-event",G_CALLBACK(relation_node_popup),NULL);
  g_signal_connect(wb.relation_transitive,"toggled",G_CALLBACK(relation_controls),NULL);
  g_signal_connect(wb.relation_mode,"changed",G_CALLBACK(relation_controls),NULL);
  g_signal_connect(wb.relation_follow,"toggled",G_CALLBACK(relation_controls),NULL);
@@ -1909,7 +1953,7 @@ static gboolean symbol_popup_button(GtkWidget *widget,GdkEventButton *event,gpoi
  if(gtk_tree_view_get_path_at_pos(view,(gint)event->x,(gint)event->y,&path,NULL,NULL,NULL)) { gtk_tree_view_set_cursor(view,path,NULL,FALSE);gtk_tree_path_free(path); }else gtk_tree_selection_unselect_all(selection);
  g_signal_handlers_unblock_matched(selection,G_SIGNAL_MATCH_ID,signal,0,NULL,NULL,NULL); gtk_widget_grab_focus(widget); gtk_menu_popup_at_pointer(GTK_MENU(symbol_menu(view)),(GdkEvent*)event); return TRUE;
 }
-static gboolean symbol_key_global(GObject *object,GdkEventKey *event,gpointer data) { (void)object; (void)data;if(!wb.alive) return FALSE;if(insight_workbench_source_link_key(event)) return TRUE;if(wb.marks_view && gtk_widget_has_focus(wb.marks_view)) return bookmark_key(wb.marks_view,event,NULL);if(wb.marks_entry && gtk_widget_has_focus(wb.marks_entry)) return bookmark_key(wb.marks_entry,event,NULL);if(wb.tree_view && gtk_widget_has_focus(wb.tree_view)) return folder_key(wb.tree_view,event,NULL);if(wb.tree_entry && gtk_widget_has_focus(wb.tree_entry)) return folder_key(wb.tree_entry,event,NULL);GroupedPanel *panels[]={&wb.type_panel,&wb.category_panel};for(guint i=0;i<G_N_ELEMENTS(panels);i++) { GroupedPanel *p=panels[i];if(p->view && gtk_widget_has_focus(p->view)) return grouped_key_press(p->view,event,p);if(p->entry && gtk_widget_has_focus(p->entry)) return grouped_key_press(p->entry,event,p); }GtkWidget *view=wb.local_view && gtk_widget_has_focus(wb.local_view) ? wb.local_view : (wb.symbol_view && gtk_widget_has_focus(wb.symbol_view) ? wb.symbol_view : (wb.file_view && gtk_widget_has_focus(wb.file_view) ? wb.file_view : NULL));return view ? browser_key(view,event,NULL) : FALSE; }
+static gboolean symbol_key_global(GObject *object,GdkEventKey *event,gpointer data) { (void)object; (void)data;if(!wb.alive) return FALSE;if(insight_workbench_source_link_key(event)) return TRUE;GtkWidget *relation_view=wb.usage_view && gtk_widget_has_focus(wb.usage_view) ? wb.usage_view : (wb.relation_tree && gtk_widget_has_focus(GTK_WIDGET(insight_relation_tree_view(wb.relation_tree))) ? GTK_WIDGET(insight_relation_tree_view(wb.relation_tree)) : NULL);if(relation_view && relation_node_key(relation_view,event,NULL)) return TRUE;if(wb.marks_view && gtk_widget_has_focus(wb.marks_view)) return bookmark_key(wb.marks_view,event,NULL);if(wb.marks_entry && gtk_widget_has_focus(wb.marks_entry)) return bookmark_key(wb.marks_entry,event,NULL);if(wb.tree_view && gtk_widget_has_focus(wb.tree_view)) return folder_key(wb.tree_view,event,NULL);if(wb.tree_entry && gtk_widget_has_focus(wb.tree_entry)) return folder_key(wb.tree_entry,event,NULL);GroupedPanel *panels[]={&wb.type_panel,&wb.category_panel};for(guint i=0;i<G_N_ELEMENTS(panels);i++) { GroupedPanel *p=panels[i];if(p->view && gtk_widget_has_focus(p->view)) return grouped_key_press(p->view,event,p);if(p->entry && gtk_widget_has_focus(p->entry)) return grouped_key_press(p->entry,event,p); }GtkWidget *view=wb.local_view && gtk_widget_has_focus(wb.local_view) ? wb.local_view : (wb.symbol_view && gtk_widget_has_focus(wb.symbol_view) ? wb.symbol_view : (wb.file_view && gtk_widget_has_focus(wb.file_view) ? wb.file_view : NULL));return view ? browser_key(view,event,NULL) : FALSE; }
 static void symbol_context_attach(GtkWidget *view) { g_signal_connect_after(view,"button-release-event",G_CALLBACK(browser_symbol_clicked),NULL); g_signal_connect(view,"button-press-event",G_CALLBACK(symbol_popup_button),NULL); g_signal_connect(view,"popup-menu",G_CALLBACK(symbol_popup_key),NULL); }
 static void create_browser(void) {
  wb.browser=gtk_box_new(GTK_ORIENTATION_VERTICAL,4); wb.symbol_entry=gtk_search_entry_new(); gtk_widget_set_name(wb.symbol_entry,"insight-symbol-query");

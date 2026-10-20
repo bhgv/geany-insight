@@ -1195,3 +1195,9 @@ Relation query history	История запросов связей
 Clear relation history	Очистить историю связей
 Back	Назад
 Forward	Вперёд
+Remove node from view	Убрать узел из представления
+Restore nodes (refresh)	Восстановить узлы (обновить)
+Remove selected node from view (Delete)	Убрать выбранный узел из представления (Delete)
+Restore nodes by refreshing the query (F5)	Восстановить узлы пересчётом запроса (F5)
+Node removed from view; refresh to restore	Узел убран из представления; обновите для восстановления
+Select a source node; query roots and notices cannot be removed	Выберите узел исходника; корень запроса и служебные строки защищены

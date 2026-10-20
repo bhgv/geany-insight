@@ -18,4 +18,7 @@ gboolean insight_relation_graph_handle_key(GtkWidget *,GdkEventKey *);
 GtkPrintOperation *insight_relation_graph_print_operation(GtkWidget *);
 typedef void (*InsightRelationGraphQuery)(gint,gpointer);
 void insight_relation_graph_set_query_handler(GtkWidget *,InsightRelationGraphQuery,gpointer);
+/* Display-only actions are implemented by the embedding workbench. */
+typedef void (*InsightRelationGraphNodeAction)(gboolean restore,gpointer);
+void insight_relation_graph_set_node_handler(GtkWidget *,InsightRelationGraphNodeAction,gpointer);
 #endif

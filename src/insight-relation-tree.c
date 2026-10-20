@@ -149,3 +149,18 @@ void insight_relation_tree_locale_changed(GtkWidget *box) {
  RelationTree *tree=g_object_get_data(G_OBJECT(box),"insight-relation-tree");if(!tree) return;
  gtk_tree_model_foreach(GTK_TREE_MODEL(tree->store),translate_notice,tree);status(tree,tree->detail);
 }
+
+static guint source_nodes(GtkTreeModel *model,GtkTreeIter *iter) {
+ gint state=NOTICE;gtk_tree_model_get(model,iter,STATE,&state,-1);guint count=state!=NOTICE;GtkTreeIter child;
+ for(gboolean valid=gtk_tree_model_iter_children(model,&child,iter);valid;valid=gtk_tree_model_iter_next(model,&child)) count+=source_nodes(model,&child);
+ return count;
+}
+gboolean insight_relation_tree_remove_selected(GtkWidget *box) {
+ RelationTree *tree=g_object_get_data(G_OBJECT(box),"insight-relation-tree");if(!tree) return FALSE;
+ GtkTreeModel *model=NULL;GtkTreeIter selected,iter;if(!gtk_tree_selection_get_selected(gtk_tree_view_get_selection(tree->view),&model,&selected)) return FALSE;
+ GtkTreePath *path=gtk_tree_model_get_path(model,&selected);gboolean root=gtk_tree_path_get_depth(path)<2;gtk_tree_path_free(path);gulong line=0;gtk_tree_model_get(model,&selected,LINE,&line,-1);if(root || !line) return FALSE;
+ gtk_tree_model_filter_convert_iter_to_child_iter(tree->filter,&iter,&selected);guint removed=source_nodes(GTK_TREE_MODEL(tree->store),&iter);
+ /* Pending worker row references below this branch become invalid and their
+  * completions are ignored. Unrelated branch work can finish normally. */
+ gtk_tree_store_remove(tree->store,&iter);tree->nodes=removed<tree->nodes ? tree->nodes-removed : 1;status(tree,"Node removed from view; refresh to restore");return TRUE;
+}

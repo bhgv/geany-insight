@@ -13,7 +13,7 @@
 typedef struct {
  GtkWidget *canvas,*direction,*zoom,*status,*scroll;GtkTreeView *tree;GtkEntry *query;GtkTreeModel *model;
  gint name,file,line,total;gboolean vertical,hierarchical,panning,pointer_select;double pan_x,pan_y,pan_h,pan_v,wheel_delta;gdouble scale;GPtrArray *paths;
- GtkWidget *menu;InsightRelationGraphQuery query_handler;gpointer query_data;
+ GtkWidget *menu;InsightRelationGraphQuery query_handler;gpointer query_data;InsightRelationGraphNodeAction node_handler;gpointer node_data;
 } RelationGraph;
 static gboolean collect_node(GtkTreeModel *model,GtkTreePath *path,GtkTreeIter *iter,gpointer data) {
  RelationGraph *g=data;if(gtk_tree_path_get_depth(path)<2) return FALSE;
@@ -247,6 +247,9 @@ static void open_node(GtkWidget *item,gpointer data) {
  (void)item;RelationGraph *g=data;GtkTreeModel *model;GtkTreeIter iter;
  if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(g->tree),&model,&iter)) { GtkTreePath *path=gtk_tree_model_get_path(model,&iter);gtk_tree_view_row_activated(g->tree,path,gtk_tree_view_get_column(g->tree,0));gtk_tree_path_free(path); }
 }
+static void node_action(GtkWidget *item,gpointer data) {
+ RelationGraph *g=data;if(g->node_handler) g->node_handler(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item),"restore")),g->node_data);
+}
 static GtkWidget *node_menu(RelationGraph *g) {
  if(g->menu) return g->menu;
  g->menu=gtk_menu_new();g_object_ref_sink(g->menu);
@@ -254,7 +257,9 @@ static GtkWidget *node_menu(RelationGraph *g) {
  const gchar *labels[]={"Definitions","Call sites","References","Direct members","Base types","Derived types"};const gint modes[]={1,7,0,2,4,5};
  for(guint i=0;i<G_N_ELEMENTS(modes);i++) { GtkWidget *item=gtk_menu_item_new_with_label(labels[i]);g_object_set_data(G_OBJECT(item),"relation-mode",GINT_TO_POINTER(modes[i]));gtk_widget_set_sensitive(item,g->query_handler!=NULL);gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),item);g_signal_connect(item,"activate",G_CALLBACK(query_action),g); }
  gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),gtk_separator_menu_item_new());
- GtkWidget *copy=gtk_menu_item_new_with_label("Copy graph image"),*save=gtk_menu_item_new_with_label("Save graph PNG…");gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),copy);gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),save);g_signal_connect(copy,"activate",G_CALLBACK(copy_image),g);g_signal_connect(save,"activate",G_CALLBACK(save_image),g);GtkWidget *print=gtk_menu_item_new_with_label("Print graph…");gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),print);g_signal_connect(print,"activate",G_CALLBACK(print_graph),g);gtk_widget_show_all(g->menu);return g->menu;
+ GtkWidget *copy=gtk_menu_item_new_with_label("Copy graph image"),*save=gtk_menu_item_new_with_label("Save graph PNG…");gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),copy);gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),save);g_signal_connect(copy,"activate",G_CALLBACK(copy_image),g);g_signal_connect(save,"activate",G_CALLBACK(save_image),g);GtkWidget *print=gtk_menu_item_new_with_label("Print graph…");gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),print);g_signal_connect(print,"activate",G_CALLBACK(print_graph),g);gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),gtk_separator_menu_item_new());
+ const gchar *node_labels[]={"Remove node from view","Restore nodes (refresh)"};for(guint i=0;i<2;i++) { GtkWidget *item=gtk_menu_item_new_with_label(node_labels[i]);gtk_widget_set_sensitive(item,g->node_handler!=NULL);g_object_set_data(G_OBJECT(item),"restore",GUINT_TO_POINTER(i));g_signal_connect(item,"activate",G_CALLBACK(node_action),g);gtk_menu_shell_append(GTK_MENU_SHELL(g->menu),item); }
+ gtk_widget_show_all(g->menu);return g->menu;
 }
 static void end_pan(RelationGraph *g) {
  if(!g->panning) return;g->panning=FALSE;if(gtk_widget_has_grab(g->canvas)) gtk_grab_remove(g->canvas);
@@ -309,6 +314,7 @@ static void reveal(RelationGraph *g,gint row) {
 }
 static gboolean key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
  (void)widget;RelationGraph *g=data;
+ if(g->node_handler && !(event->state&(GDK_CONTROL_MASK|GDK_MOD1_MASK|GDK_SHIFT_MASK)) && (event->keyval==GDK_KEY_Delete || event->keyval==GDK_KEY_KP_Delete || event->keyval==GDK_KEY_F5)) { g->node_handler(event->keyval==GDK_KEY_F5,g->node_data);return TRUE; }
  if(event->keyval==GDK_KEY_Escape && g->panning) { end_pan(g);return TRUE; }
  if((event->state&GDK_CONTROL_MASK) && !(event->state&GDK_MOD1_MASK)) {
   if(event->keyval==GDK_KEY_p || event->keyval==GDK_KEY_P) { print_graph(NULL,g);return TRUE; }
@@ -401,4 +407,10 @@ void insight_relation_graph_set_query_handler(GtkWidget *widget,InsightRelationG
  /* Rebuild a cached menu if the embedding application replaces its handler. */
  if(g->menu) { gtk_widget_destroy(g->menu);g_object_unref(g->menu);g->menu=NULL; }
  g->query_handler=handler;g->query_data=data;
+}
+
+void insight_relation_graph_set_node_handler(GtkWidget *widget,InsightRelationGraphNodeAction handler,gpointer data) {
+ RelationGraph *g=g_object_get_data(G_OBJECT(widget),"insight-graph");if(!g) return;
+ if(g->menu) { gtk_widget_destroy(g->menu);g_object_unref(g->menu);g->menu=NULL; }
+ g->node_handler=handler;g->node_data=data;
 }

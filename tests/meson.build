@@ -707,3 +707,6 @@ test('Insight relation graph printing GUI', relation_graph_print_gui_test, timeo
 
 relation_history_gui_test = executable('test_insight_relation_history_gui', '../insight/tests/relation_history_gui_test.c', dependencies: test_deps)
 test('Insight native relation history GUI', relation_history_gui_test, timeout: 45, is_parallel: false)
+
+relation_nodes_gui_test = executable('test_insight_relation_nodes_gui', '../insight/tests/relation_nodes_gui_test.c', dependencies: test_deps)
+test('Insight native relation node removal GUI', relation_nodes_gui_test, timeout: 45, is_parallel: false)

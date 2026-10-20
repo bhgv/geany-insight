@@ -71,3 +71,13 @@ Each visit captures the query, result filter, relation, buffer/comment/code opti
 Each direction keeps at most 32 visits in memory for this session. A new selected-result drill-down after Back discards the old Forward branch. **Clear relation history** clears both stacks while keeping the current query/results. History is not persisted across launches and does not record every cursor movement or manual query edit; editor location history is separate.
 
 Back/Forward root history is described in the [Source Insight release notes](https://www.sourceinsight.com/source-insight-version-4-0-0134/). This implementation extends result drill-down history, rather than claiming parity with every automatic tracking mode.
+
+## Remove nodes from the view
+
+![Remove and restore relation nodes](../media/relation-node-removal.svg)
+
+**Remove node from view** is available on the toolbar, the table/outline and graph context menus, and **Delete** with Relations focus. In the expandable tree it removes the whole selected branch, including loaded descendants. The table and its graph share one model; filtering and sorting do not change which source row is removed.
+
+Query roots and notice/loading/limit rows are protected. Removal does not modify files, the index, editor text or query history. It stops the current result search and turns editor symbol tracking off so the next cursor update cannot immediately recreate the node. Pending loads below a removed branch are discarded when their row references become invalid.
+
+**Restore nodes (refresh)** or **F5** reruns the current query with the same filters/options, so removed nodes can reappear after recalculation. Exclusions are not persisted across queries or launches. Collapsing/reopening an already loaded branch alone does not recalculate it. The display-only removal behavior follows the [Source Insight release description](https://www.sourceinsight.com/source-insight-version-4-0-0134/); restoration here uses an explicit query refresh.
