@@ -793,3 +793,9 @@ test('Insight native original snapshots and Restore Lines GUI', restore_lines_gu
 
 original_changes_gui_test = executable('test_insight_original_changes_gui', '../insight/tests/original_changes_gui_test.c', dependencies: test_deps)
 test('Insight native original changes and Restore File GUI', original_changes_gui_test, timeout: 50, is_parallel: false)
+
+delimiter_navigation_test = executable('test_insight_delimiter_navigation', '../insight/tests/delimiter_navigation_test.c', '../insight/core/delimiter_navigation.c', include_directories: include_directories('../insight/core'), c_args: ['-UNDEBUG'])
+test('Insight delimiter navigation core', delimiter_navigation_test)
+
+delimiter_navigation_gui_test = executable('test_insight_delimiter_navigation_gui', '../insight/tests/delimiter_navigation_gui_test.c', dependencies: test_deps)
+test('Insight native delimiter navigation and enclosing pairs GUI', delimiter_navigation_gui_test, timeout: 50, is_parallel: false)

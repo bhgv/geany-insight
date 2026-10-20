@@ -244,6 +244,8 @@ libgeany_la_SOURCES += \
 	insight-window-list.h \
 	../insight/core/restore_lines.c ../insight/core/restore_lines.h \
 	../insight/core/diff.c \
+	../insight/core/delimiter_navigation.c \
+	../insight/core/delimiter_navigation.h \
 	../insight/core/structure_select.c \
 	../insight/core/structure_select.h \
 	../insight/core/relation_graph_layout.h \
