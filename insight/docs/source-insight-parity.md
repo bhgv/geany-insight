@@ -647,3 +647,7 @@ Six Window scrolling commands preserve all selections and caret, including read-
 ### Visible window edges (2026-10-20)
 
 Top/Bottom of Window maps visible display rows to logical line beginnings, including folds, EOF clamping and wrapped logical lines. Extend Mode preserves the anchor; one normal selection is required and read-only is permitted. Partly visible bottom rows are excluded; preferred columns are not retained. Regression added for reverse/Extend selections, fold mapping and unsupported selection guards; Linux execution pending.
+
+### Explicit character, word and line selection (2026-10-20)
+
+Extend selection exposes six native Scintilla commands with fixed anchors, UTF-8/CRLF and native word/display-row semantics, preserving Extend Mode, text/savepoint/Undo and existing keyboard bindings. Read-only is supported; rectangle/multiple/virtual-space targets are excluded. Word Right goes to word end rather than next-word start. Native regression expanded; Linux execution pending. Horizontal viewport commands now explicitly ignore wrapped views. [Guide](text-boundaries.md).

@@ -1382,3 +1382,10 @@ Scroll Right	Прокрутить вправо
 Window Scrolling Help	Справка по прокрутке окна
 Top of Window	Верх окна
 Bottom of Window	Низ окна
+Extend selection	Расширить выделение
+Select Char Left	Выделить символ слева
+Select Char Right	Выделить символ справа
+Select Word Left	Выделить слово слева
+Select Word Right	Выделить слово справа
+Select Line Up	Выделить строку вверх
+Select Line Down	Выделить строку вниз

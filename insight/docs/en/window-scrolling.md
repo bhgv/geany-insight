@@ -30,3 +30,6 @@ bottom row is excluded. No preferred visual column is retained.
 
 References: [Top of Window](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Top_of_Window.htm),
 [Bottom of Window](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Bottom_of_Window.htm).
+
+Horizontal commands leave the viewport unchanged while line wrapping is enabled.
+При включённом переносе строк горизонтальная прокрутка не выполняется.

@@ -26,3 +26,24 @@
 Только одно обычное выделение: прямоугольные, множественные и виртуальные пробелы исключены. Умные границы и выделение до точки требуют UTF-8 без NUL, корректных границ символов/CRLF и документа не более 8 МиБ. Штатные команды фрагментов не копируют весь документ и не имеют этого ограничения. Ошибка проверки или неподдерживаемый режим сохраняют выделение.
 
 Источники: [Smart Beginning](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Smart_Beginning_of_Line.htm), [Smart End](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Smart_End_of_Line.htm), [Select Sentence](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Select_Sentence.htm), [Word Fragment Left](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Word_Fragment_Left.htm), [Word Fragment Right](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Word_Fragment_Right.htm).
+
+## Extend selection / Расширить выделение
+
+The adjacent **Extend selection** submenu exposes Select Char Left/Right,
+Select Word Left/Right and Select Line Up/Down. The anchor stays fixed while the
+active caret moves. Character steps use native UTF-8/CRLF boundaries; word steps
+use the editor's word classification (left to the start, right to the end).
+Line steps use native display-row movement and retain the preferred horizontal
+position across short lines. Existing Shift shortcuts remain unchanged.
+Read-only is supported; one ordinary selection without virtual space is required.
+Explicit commands retain the Extend Mode flag and leave bytes/savepoint/Undo intact.
+
+Подменю **Расширить выделение**: символ влево/вправо, слово влево/вправо,
+строка вверх/вниз. Anchor остаётся на месте; двигается активный край. Границы
+символов UTF-8/CRLF и слов определяет Scintilla. Движение вверх/вниз выполняется
+по экранным строкам с сохранением предпочтительной колонки. Режим Extend Mode
+сохраняется, изменения текста и Undo не создаются.
+
+References: [Select Char Left](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Select_Char_Left.htm),
+[Select Word Right](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Select_Word_Right.htm),
+[Select Line Down](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Select_Line_Down.htm).

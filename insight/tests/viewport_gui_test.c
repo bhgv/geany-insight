@@ -22,6 +22,21 @@ static void selection(gint anchor,gint caret)
 {
  g_assert_cmpint(SEND(sci,SCI_GETANCHOR,0,0),==,anchor);g_assert_cmpint(SEND(sci,SCI_GETCURRENTPOS,0,0),==,caret);
 }
+static gboolean wrapped_checks(gpointer data)
+{
+ (void)data;
+ g_assert_cmpint(SEND(sci,SCI_WRAPCOUNT,0,0),>,1);
+ SEND(sci,SCI_SETSEL,8,2);SEND(sci,SCI_SETFIRSTVISIBLELINE,50,0);
+ gint display=SEND(sci,SCI_GETFIRSTVISIBLELINE,0,0);action("scroll-half-down");
+ g_assert_cmpint(SEND(sci,SCI_GETFIRSTVISIBLELINE,0,0),==,display+MAX(1,SEND(sci,SCI_LINESONSCREEN,0,0)/2));selection(8,2);
+ SEND(sci,SCI_SETXOFFSET,0,0);action("scroll-right");g_assert_cmpint(SEND(sci,SCI_GETXOFFSET,0,0),==,0);
+ SEND(sci,SCI_SETFIRSTVISIBLELINE,50,0);gint line=SEND(sci,SCI_DOCLINEFROMVISIBLE,50,0);gint target=sci_get_position_from_line(sci,line);action("window-top");selection(target,target);
+ SEND(sci,SCI_SETSEL,8,2);SEND(sci,SCI_SETFIRSTVISIBLELINE,50,0);display=50+MAX(1,SEND(sci,SCI_LINESONSCREEN,0,0))-1;line=SEND(sci,SCI_DOCLINEFROMVISIBLE,display,0);target=sci_get_position_from_line(sci,line);action("window-bottom");selection(target,target);
+ SEND(sci,SCI_SETREADONLY,0,0);sci_set_text(sci,"");SEND(sci,SCI_EMPTYUNDOBUFFER,0,0);SEND(sci,SCI_SETSAVEPOINT,0,0);
+ action("window-top");action("window-bottom");action("scroll-half-down");action("scroll-line-up");selection(0,0);g_assert_cmpint(SEND(sci,SCI_GETLENGTH,0,0),==,0);g_assert_false(SEND(sci,SCI_CANUNDO,0,0));g_assert_false(SEND(sci,SCI_GETMODIFY,0,0));
+ g_print("Viewport wrapped-row mapping, horizontal wrap guard and empty-buffer EOF passed\n");
+ gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+}
 static gboolean step(gpointer data)
 {
  (void)data;GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;
@@ -54,13 +69,13 @@ static gboolean step(gpointer data)
  SEND(sci,SCI_SETSEL,0,0);SEND(sci,SCI_SETWRAPMODE,SC_WRAP_CHAR,0);SEND(sci,SCI_SETFIRSTVISIBLELINE,0,0);action("window-top");selection(0,0);
  g_assert_false(SEND(sci,SCI_CANUNDO,0,0));g_assert_false(SEND(sci,SCI_GETMODIFY,0,0));
  SEND(sci,SCI_SETREADONLY,0,0);g_print("Viewport GUI: line/half-page/pixel scroll, reverse/multiple/rectangular selections, read-only, folded rows and bounds passed\n");
- gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+ g_timeout_add(200,wrapped_checks,NULL);return G_SOURCE_REMOVE;
 }
 static gboolean timeout(gpointer data) { (void)data;g_error("Viewport GUI timeout");return G_SOURCE_REMOVE; }
 int main(void)
 {
  if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;
  gchar *directory=g_dir_make_tmp("viewport-XXXXXX",NULL),*config=g_build_filename(directory,"geany.conf",NULL),*source=g_build_filename(directory,"source.txt",NULL);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));
- GString *text=g_string_new(NULL);for(guint i=0;i<300;i++) g_string_append_printf(text,"αβ %03u long viewport test line\r\n",i);g_assert_true(g_file_set_contents(source,text->str,text->len,NULL));g_string_free(text,TRUE);
+ GString *text=g_string_new(NULL);for(guint i=0;i<300;i++) { g_string_append_printf(text,"αβ %03u ",i);for(guint j=0;j<30;j++) g_string_append(text,"long viewport test line ");g_string_append(text,"\r\n"); }g_assert_true(g_file_set_contents(source,text->str,text->len,NULL));g_string_free(text,TRUE);
  gchar *args[]={"viewport-test","--new-instance","--no-session","--config",directory,source,NULL};g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);g_timeout_add(500,step,NULL);g_timeout_add_seconds(30,timeout,NULL);return main_lib(6,args);
 }

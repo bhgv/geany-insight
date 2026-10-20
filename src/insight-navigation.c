@@ -207,6 +207,42 @@ static void text_boundary_menu(GtkWidget *menu)
  g_signal_connect(sub,"show",G_CALLBACK(text_boundary_menu_show),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),parent);gtk_widget_show_all(parent);
 }
 
+static void unit_selection_command(GtkMenuItem *item, gpointer data)
+{
+    (void)item;
+    GeanyDocument *doc = document_get_current();
+    if (!doc || !normal(doc->editor->sci)) return;
+    static const guint messages[] = { SCI_CHARLEFTEXTEND, SCI_CHARRIGHTEXTEND,
+        SCI_WORDLEFTEXTEND, SCI_WORDRIGHTENDEXTEND, SCI_LINEUPEXTEND, SCI_LINEDOWNEXTEND };
+    guint action = GPOINTER_TO_UINT(data);
+    if (action >= G_N_ELEMENTS(messages)) return;
+    ScintillaObject *sci = doc->editor->sci;
+    gboolean mode = requested(sci);
+    SEND(sci, messages[action], 0, 0);
+    set_mode(sci, mode);
+    gtk_widget_grab_focus(GTK_WIDGET(sci));
+}
+static void unit_selection_menu(GtkWidget *menu)
+{
+    GtkWidget *parent = gtk_menu_item_new_with_label("Extend selection");
+    GtkWidget *sub = gtk_menu_new();
+    gtk_widget_set_name(parent, "insight-unit-selection");
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(parent), sub);
+    const gchar *labels[] = {"Select Char Left", "Select Char Right", "Select Word Left", "Select Word Right", "Select Line Up", "Select Line Down"};
+    const gchar *ids[] = {"select-char-left", "select-char-right", "select-word-left", "select-word-right", "select-line-up", "select-line-down"};
+    for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
+    {
+        GtkWidget *entry = gtk_menu_item_new_with_label(labels[i]);
+        gchar *name = g_strconcat("insight-nav-", ids[i], NULL);
+        gtk_widget_set_name(entry, name);g_free(name);
+        g_object_set_data(G_OBJECT(entry), "insight-boundary-command", GINT_TO_POINTER(1));
+        g_signal_connect(entry, "activate", G_CALLBACK(unit_selection_command), GUINT_TO_POINTER(i));
+        gtk_menu_shell_append(GTK_MENU_SHELL(sub), entry);
+    }
+    g_signal_connect(sub, "show", G_CALLBACK(text_boundary_menu_show), NULL);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), parent);gtk_widget_show_all(parent);
+}
+
 /* Viewport-only operations deliberately allow rectangular/multiple selections.
  * SCI_LINESCROLL operates on display rows, including wrapped/folded text,
  * without moving any selection or revealing the off-screen caret. */
@@ -237,6 +273,7 @@ static void viewport_command(GtkMenuItem *item, gpointer data)
     }
     else
     {
+        if (SEND(sci, SCI_GETWRAPMODE, 0, 0) != SC_WRAP_NONE) return;
         gint64 step = (gint64)MAX(1, SEND(sci, SCI_GETTABWIDTH, 0, 0)) *
             MAX(1, SEND(sci, SCI_TEXTWIDTH, STYLE_DEFAULT, (sptr_t)" "));
         gint64 offset = SEND(sci, SCI_GETXOFFSET, 0, 0);
@@ -383,6 +420,7 @@ void insight_navigation_menu(GtkWidget *menu)
     }
     text_boundary_menu(sub);
     viewport_menu(sub);
+    unit_selection_menu(sub);
     GtkWidget *history=gtk_menu_item_new_with_label("Selection History…");gtk_widget_set_name(history,"insight-selection-history-command");g_signal_connect(history,"activate",G_CALLBACK(show_history),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(sub),gtk_separator_menu_item_new());gtk_menu_shell_append(GTK_MENU_SHELL(sub),history);
     g_signal_connect(sub, "show", G_CALLBACK(menu_show), NULL);
     g_signal_connect_object(geany_object, "document-activate", G_CALLBACK(activated), parent, G_CONNECT_AFTER);

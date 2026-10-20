@@ -35,6 +35,13 @@ static void checks(void) {
  reset(original,10,10);SEND(sci,SCI_SETSELECTIONNCARETVIRTUALSPACE,0,2);action("select-sentence");g_assert_cmpint(SEND(sci,SCI_GETCURRENTPOS,0,0),==,10);SEND(sci,SCI_SETSELECTIONNCARETVIRTUALSPACE,0,0);
  reset("",0,0);SEND(sci,SCI_ADDTEXT,3,(sptr_t)"a\0b");SEND(sci,SCI_EMPTYUNDOBUFFER,0,0);SEND(sci,SCI_SETSEL,0,0);action("smart-line-end");selection(0,0);g_assert_cmpint(SEND(sci,SCI_GETLENGTH,0,0),==,3);
  reset("",0,0);action("smart-line-start");action("smart-line-end");action("select-sentence");action("fragment-left");action("fragment-right");selection(0,0);unchanged("");
+ reset("αβ one two\r\nnext line",4,4);action("select-char-left");selection(4,2);action("select-char-left");selection(4,0);action("select-char-right");selection(4,2);unchanged("αβ one two\r\nnext line");
+ reset("αβ one two\r\nnext line",8,8);action("select-word-left");selection(8,5);action("select-word-right");selection(8,8);action("select-word-right");selection(8,12);unchanged("αβ one two\r\nnext line");
+ reset("abcd\r\nefgh\r\nijkl",2,2);action("select-line-down");selection(2,8);action("select-line-down");selection(2,14);action("select-line-up");selection(2,8);unchanged("abcd\r\nefgh\r\nijkl");
+ reset("αβ one",4,4);mode(TRUE);action("select-char-left");selection(4,2);g_assert_true(SEND(sci,SCI_GETMOVEEXTENDSSELECTION,0,0));unchanged("αβ one");
+ reset("αβ one",4,4);SEND(sci,SCI_SETREADONLY,1,0);action("select-word-left");selection(4,0);unchanged("αβ one");
+ reset("αβ one",4,4);SEND(sci,SCI_SETSELECTIONMODE,SC_SEL_RECTANGLE,0);action("select-char-left");selection(4,4);SEND(sci,SCI_SETSELECTIONMODE,SC_SEL_STREAM,0);
+ reset("αβ one",4,4);SEND(sci,SCI_ADDSELECTION,6,6);gint current=SEND(sci,SCI_GETCURRENTPOS,0,0);action("select-line-down");g_assert_cmpint(SEND(sci,SCI_GETCURRENTPOS,0,0),==,current);
  reset(original,0,0);g_print("Text boundaries GUI: smart cycles, sentence periods, native camel/acronym/snake/digit/UTF-8 fragments, explicit/reverse/Extend selections, read-only and unsupported-mode guards passed without text/savepoint/Undo changes\n");
 }
 static gboolean capture(gpointer data) {
