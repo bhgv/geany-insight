@@ -82,46 +82,64 @@ static void center_selection(GtkWidget *widget,gpointer data) {
 static void controls(GtkWidget *widget,gpointer data) {
  (void)widget;RelationGraph *g=data;g->vertical=gtk_combo_box_get_active(GTK_COMBO_BOX(g->direction))==1;g->scale=gtk_spin_button_get_value(GTK_SPIN_BUTTON(g->zoom))/100.0;update(g);
 }
-static void text_at(GtkWidget *widget,cairo_t *cr,const gchar *text,double x,double y,int width) {
- PangoLayout *layout=gtk_widget_create_pango_layout(widget,text ? text : "");pango_layout_set_width(layout,width*PANGO_SCALE);pango_layout_set_ellipsize(layout,PANGO_ELLIPSIZE_END);pango_layout_set_single_paragraph_mode(layout,TRUE);cairo_move_to(cr,x,y);pango_cairo_show_layout(cr,layout);g_object_unref(layout);
-}
-static void card(RelationGraph *g,cairo_t *cr,InsightGraphRect r,const gchar *title,const gchar *detail,gboolean selected) {
- cairo_set_source_rgba(cr,0.18,0.18,0.18,0.6);cairo_rectangle(cr,r.x+3,r.y+3,r.width,r.height);cairo_fill(cr);
- if(selected) cairo_set_source_rgb(cr,0.19,0.42,0.77);else cairo_set_source_rgb(cr,1,0.995,0.93);
- cairo_rectangle(cr,r.x,r.y,r.width,r.height);cairo_fill(cr);cairo_set_source_rgb(cr,0.36,0.36,0.34);cairo_set_line_width(cr,selected ? 2 : 1);cairo_rectangle(cr,r.x+0.5,r.y+0.5,r.width-1,r.height-1);cairo_stroke(cr);
- cairo_set_source_rgb(cr,0.05,0.64,0.66);cairo_rectangle(cr,r.x+6,r.y+6,14,14);cairo_fill(cr);cairo_set_source_rgb(cr,0.02,0.36,0.46);cairo_rectangle(cr,r.x+6.5,r.y+6.5,13,13);cairo_stroke(cr);
- cairo_set_source_rgb(cr,0.94,1,1);cairo_move_to(cr,r.x+10,r.y+10);cairo_line_to(cr,r.x+16,r.y+10);cairo_line_to(cr,r.x+11,r.y+16);cairo_line_to(cr,r.x+16,r.y+16);cairo_set_line_width(cr,1.4);cairo_stroke(cr);
- if(selected) cairo_set_source_rgb(cr,1,1,1);else cairo_set_source_rgb(cr,0.10,0.13,0.16);
- text_at(g->canvas,cr,title,r.x+25,r.y+4,g->hierarchical ? 148 : 164);text_at(g->canvas,cr,detail,r.x+8,r.y+25,g->hierarchical ? 168 : 184);
-}
-static void draw_toggle(RelationGraph *g,cairo_t *cr,InsightGraphRect node,GtkTreePath *path) {
- if(!branch_node(g,path)) return;
- InsightGraphRect r=toggle_rect(g,node);
- cairo_set_source_rgb(cr,0.19,0.5,0.82);cairo_set_line_width(cr,1);cairo_rectangle(cr,r.x+0.5,r.y+0.5,r.width-1,r.height-1);cairo_stroke(cr);
- cairo_move_to(cr,r.x+3,r.y+6);cairo_line_to(cr,r.x+9,r.y+6);if(!gtk_tree_view_row_expanded(g->tree,path)) { cairo_move_to(cr,r.x+6,r.y+3);cairo_line_to(cr,r.x+6,r.y+9); }cairo_stroke(cr);
-}
-static gboolean draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
- (void)widget;RelationGraph *g=data;gint count=count_nodes(g);
- cairo_set_source_rgb(cr,0.74,0.74,0.72);cairo_paint(cr);
- cairo_save(cr);cairo_scale(cr,g->scale,g->scale);InsightGraphRect root=insight_graph_rect(-1,g->vertical);
- GtkTreeSelection *selection=gtk_tree_view_get_selection(g->tree);GtkTreeModel *selected_model=NULL;GtkTreeIter selected;GtkTreePath *selected_path=NULL;
- if(gtk_tree_selection_get_selected(selection,&selected_model,&selected)) selected_path=gtk_tree_model_get_path(selected_model,&selected);
+typedef struct {
+ InsightGraphRect rect,parent,toggle;gchar *title,*detail;
+ gboolean selected,connected,branch,expanded;
+} GraphCard;
+typedef struct { GPtrArray *cards;PangoContext *font;gboolean vertical,hierarchical; } GraphSnapshot;
+static void card_free(gpointer data) { GraphCard *c=data;g_free(c->title);g_free(c->detail);g_free(c); }
+static void snapshot_free(GraphSnapshot *s) { g_ptr_array_unref(s->cards);g_object_unref(s->font);g_free(s); }
+static GraphSnapshot *snapshot_new(RelationGraph *g) {
+ GraphSnapshot *s=g_new0(GraphSnapshot,1);s->cards=g_ptr_array_new_with_free_func(card_free);s->vertical=g->vertical;s->hierarchical=g->hierarchical;
+ /* Copy context properties, rather than keeping a widget's mutable font
+  * context. Font maps are shared, but this snapshot's styling is private. */
+ PangoContext *font=gtk_widget_get_pango_context(g->canvas);s->font=pango_font_map_create_context(pango_context_get_font_map(font));
+ pango_context_set_font_description(s->font,pango_context_get_font_description(font));pango_context_set_language(s->font,pango_context_get_language(font));pango_context_set_base_dir(s->font,pango_context_get_base_dir(font));pango_context_set_base_gravity(s->font,pango_context_get_base_gravity(font));pango_context_set_gravity_hint(s->font,pango_context_get_gravity_hint(font));pango_context_set_matrix(s->font,pango_context_get_matrix(font));pango_cairo_context_set_resolution(s->font,pango_cairo_context_get_resolution(font));pango_cairo_context_set_font_options(s->font,pango_cairo_context_get_font_options(font));
+ GtkTreeModel *model=NULL;GtkTreeIter selected;GtkTreePath *selected_path=NULL;
+ if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(g->tree),&model,&selected)) selected_path=gtk_tree_model_get_path(model,&selected);
+ gint count=count_nodes(g);InsightGraphRect root=insight_graph_rect(-1,g->vertical);
  for(gint i=0;i<count;i++) {
   GtkTreePath *path=node_path(g,i);GtkTreeIter iter;if(!gtk_tree_model_get_iter(g->model,&iter,path)) { gtk_tree_path_free(path);continue; }
-  InsightGraphRect r=node_rect(g,i),parent=root;
-  if(g->hierarchical) { GtkTreePath *ancestor=gtk_tree_path_copy(path);gtk_tree_path_up(ancestor);gint row=path_row(g,ancestor);if(row>=0) parent=node_rect(g,row);gtk_tree_path_free(ancestor); }
-  cairo_set_source_rgb(cr,0.83,0.31,0.33);cairo_set_line_width(cr,1);
-  if(g->vertical) { double middle=(parent.y+parent.height+r.y)/2;cairo_move_to(cr,parent.x+100,parent.y+48);cairo_line_to(cr,parent.x+100,middle);cairo_line_to(cr,r.x+100,middle);cairo_line_to(cr,r.x+100,r.y); }
-  else { double middle=(parent.x+parent.width+r.x)/2;cairo_move_to(cr,parent.x+200,parent.y+24);cairo_line_to(cr,middle,parent.y+24);cairo_line_to(cr,middle,r.y+24);cairo_line_to(cr,r.x,r.y+24); }cairo_stroke(cr);
-  gchar *name=NULL,*file=NULL;gulong line=0;gtk_tree_model_get(g->model,&iter,g->name,&name,g->file,&file,g->line,&line,-1);
-  gchar *base=file ? g_path_get_basename(file) : g_strdup("untitled"),*detail=g_strdup_printf("%s:%lu",base,line);
-  gboolean active=selected_path && gtk_tree_path_compare(path,selected_path)==0;card(g,cr,r,name,detail,active);if(g->hierarchical) draw_toggle(g,cr,r,path);
-  gtk_tree_path_free(path);g_free(name);g_free(file);g_free(base);g_free(detail);
+  GraphCard *c=g_new0(GraphCard,1);c->rect=node_rect(g,i);c->parent=root;c->connected=TRUE;
+  if(g->hierarchical) { GtkTreePath *ancestor=gtk_tree_path_copy(path);gtk_tree_path_up(ancestor);gint row=path_row(g,ancestor);if(row>=0) c->parent=node_rect(g,row);gtk_tree_path_free(ancestor); }
+  gchar *file=NULL;gulong line=0;gtk_tree_model_get(g->model,&iter,g->name,&c->title,g->file,&file,g->line,&line,-1);gchar *base=file ? g_path_get_basename(file) : g_strdup("untitled");c->detail=g_strdup_printf("%s:%lu",base,line);g_free(base);g_free(file);
+  c->selected=selected_path && gtk_tree_path_compare(path,selected_path)==0;c->branch=branch_node(g,path);c->expanded=c->branch && gtk_tree_view_row_expanded(g->tree,path);c->toggle=toggle_rect(g,c->rect);g_ptr_array_add(s->cards,c);gtk_tree_path_free(path);
  }
- card(g,cr,root,gtk_entry_get_text(g->query),count ? "Relation query" : "No visible results",FALSE);
- if(g->hierarchical) { GtkTreePath *path=gtk_tree_path_new_from_indices(0,-1);draw_toggle(g,cr,root,path);gtk_tree_path_free(path); }
+ GraphCard *c=g_new0(GraphCard,1);c->rect=root;c->title=g_strdup(gtk_entry_get_text(g->query));c->detail=g_strdup(count ? "Relation query" : "No visible results");GtkTreePath *path=gtk_tree_path_new_from_indices(0,-1);c->branch=branch_node(g,path);c->expanded=c->branch && gtk_tree_view_row_expanded(g->tree,path);c->toggle=toggle_rect(g,root);gtk_tree_path_free(path);g_ptr_array_add(s->cards,c);
  if(selected_path) gtk_tree_path_free(selected_path);
- cairo_restore(cr);return FALSE;
+ return s;
+}
+static void text_at(PangoContext *context,cairo_t *cr,const gchar *text,double x,double y,int width) {
+ PangoLayout *layout=pango_layout_new(context);pango_layout_set_text(layout,text ? text : "",-1);pango_layout_set_width(layout,width*PANGO_SCALE);pango_layout_set_ellipsize(layout,PANGO_ELLIPSIZE_END);pango_layout_set_single_paragraph_mode(layout,TRUE);cairo_move_to(cr,x,y);pango_cairo_show_layout(cr,layout);g_object_unref(layout);
+}
+static void card(GraphSnapshot *s,cairo_t *cr,GraphCard *c) {
+ InsightGraphRect r=c->rect;
+ cairo_set_source_rgba(cr,0.18,0.18,0.18,0.6);cairo_rectangle(cr,r.x+3,r.y+3,r.width,r.height);cairo_fill(cr);
+ if(c->selected) cairo_set_source_rgb(cr,0.19,0.42,0.77);else cairo_set_source_rgb(cr,1,0.995,0.93);
+ cairo_rectangle(cr,r.x,r.y,r.width,r.height);cairo_fill(cr);cairo_set_source_rgb(cr,0.36,0.36,0.34);cairo_set_line_width(cr,c->selected ? 2 : 1);cairo_rectangle(cr,r.x+0.5,r.y+0.5,r.width-1,r.height-1);cairo_stroke(cr);
+ cairo_set_source_rgb(cr,0.05,0.64,0.66);cairo_rectangle(cr,r.x+6,r.y+6,14,14);cairo_fill(cr);cairo_set_source_rgb(cr,0.02,0.36,0.46);cairo_rectangle(cr,r.x+6.5,r.y+6.5,13,13);cairo_stroke(cr);
+ cairo_set_source_rgb(cr,0.94,1,1);cairo_move_to(cr,r.x+10,r.y+10);cairo_line_to(cr,r.x+16,r.y+10);cairo_line_to(cr,r.x+11,r.y+16);cairo_line_to(cr,r.x+16,r.y+16);cairo_set_line_width(cr,1.4);cairo_stroke(cr);
+ if(c->selected) cairo_set_source_rgb(cr,1,1,1);else cairo_set_source_rgb(cr,0.10,0.13,0.16);
+ text_at(s->font,cr,c->title,r.x+25,r.y+4,s->hierarchical ? 148 : 164);text_at(s->font,cr,c->detail,r.x+8,r.y+25,s->hierarchical ? 168 : 184);
+ if(c->branch) {
+  r=c->toggle;cairo_set_source_rgb(cr,0.19,0.5,0.82);cairo_set_line_width(cr,1);cairo_rectangle(cr,r.x+0.5,r.y+0.5,r.width-1,r.height-1);cairo_stroke(cr);
+  cairo_move_to(cr,r.x+3,r.y+6);cairo_line_to(cr,r.x+9,r.y+6);if(!c->expanded) { cairo_move_to(cr,r.x+6,r.y+3);cairo_line_to(cr,r.x+6,r.y+9); }cairo_stroke(cr);
+ }
+}
+static void snapshot_draw(GraphSnapshot *s,cairo_t *cr) {
+ for(guint i=0;i<s->cards->len;i++) {
+  GraphCard *c=g_ptr_array_index(s->cards,i);InsightGraphRect r=c->rect,parent=c->parent;
+  if(c->connected) {
+   cairo_set_source_rgb(cr,0.83,0.31,0.33);cairo_set_line_width(cr,1);
+   if(s->vertical) { double middle=(parent.y+parent.height+r.y)/2;cairo_move_to(cr,parent.x+100,parent.y+48);cairo_line_to(cr,parent.x+100,middle);cairo_line_to(cr,r.x+100,middle);cairo_line_to(cr,r.x+100,r.y); }
+   else { double middle=(parent.x+parent.width+r.x)/2;cairo_move_to(cr,parent.x+200,parent.y+24);cairo_line_to(cr,middle,parent.y+24);cairo_line_to(cr,middle,r.y+24);cairo_line_to(cr,r.x,r.y+24); }cairo_stroke(cr);
+  }
+  card(s,cr,c);
+ }
+}
+static gboolean draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
+ (void)widget;RelationGraph *g=data;GraphSnapshot *s=snapshot_new(g);
+ cairo_set_source_rgb(cr,0.74,0.74,0.72);cairo_paint(cr);cairo_save(cr);cairo_scale(cr,g->scale,g->scale);snapshot_draw(s,cr);cairo_restore(cr);snapshot_free(s);return FALSE;
 }
 static cairo_surface_t *image(RelationGraph *g) {
  int width=0,height=0;
@@ -159,14 +177,14 @@ static void save_image(GtkWidget *widget,gpointer data) {
  }
  gtk_widget_destroy(dialog);cairo_surface_destroy(surface);g_object_unref(status_label);
 }
-/* The recording surface owns the rendered vector commands. Printing never
- * consults live widgets/model after the factory returns: nested GTK dialogs
- * may dispatch index updates or even destroy the graph. */
+/* Snapshot node data/style, then render each page independently. Reusing one
+ * Cairo recording surface across clipped PDF pages can cache only page one's
+ * source extents. No live widget/model is consulted after factory return. */
 typedef struct {
- cairo_surface_t *surface;gchar *title;double width,height;gint shown,total;
+ GraphSnapshot *snapshot;gchar *title;double width,height;gint shown,total;
  InsightGraphPrintPlan plan;gboolean invalid;
 } GraphPrint;
-static void print_free(gpointer data) { GraphPrint *p=data;cairo_surface_destroy(p->surface);g_free(p->title);g_free(p); }
+static void print_free(gpointer data) { GraphPrint *p=data;snapshot_free(p->snapshot);g_free(p->title);g_free(p); }
 static void print_begin(GtkPrintOperation *op,GtkPrintContext *context,gpointer data) {
  GraphPrint *p=data;GtkPrintSettings *settings=gtk_print_operation_get_print_settings(op);
  gboolean tiled=settings && gtk_print_settings_get_bool(settings,"insight-graph-tiled");
@@ -187,7 +205,8 @@ static void print_page(GtkPrintOperation *op,GtkPrintContext *context,gint numbe
  cairo_save(cr);cairo_rectangle(cr,0,INSIGHT_GRAPH_PRINT_HEADER,plan->width,plan->height);cairo_clip(cr);
  double x=plan->pages==1 ? MAX(0,(plan->width-p->width*plan->scale)/2) : -column*plan->width;
  double y=plan->pages==1 ? MAX(0,(plan->height-p->height*plan->scale)/2) : -row*plan->height;
- cairo_translate(cr,x,INSIGHT_GRAPH_PRINT_HEADER+y);cairo_scale(cr,plan->scale,plan->scale);cairo_set_source_surface(cr,p->surface,0,0);cairo_paint(cr);cairo_restore(cr);
+ cairo_translate(cr,x,INSIGHT_GRAPH_PRINT_HEADER+y);cairo_scale(cr,plan->scale,plan->scale);
+ cairo_set_source_rgb(cr,0.74,0.74,0.72);cairo_rectangle(cr,0,0,p->width,p->height);cairo_fill(cr);snapshot_draw(p->snapshot,cr);cairo_restore(cr);
 }
 static GtkWidget *print_options(GtkPrintOperation *op,gpointer data) {
  (void)data;GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,8),*combo=gtk_combo_box_text_new();
@@ -207,9 +226,7 @@ static void print_apply(GtkPrintOperation *op,GtkWidget *widget,gpointer data) {
 GtkPrintOperation *insight_relation_graph_print_operation(GtkWidget *widget) {
  RelationGraph *g=g_object_get_data(G_OBJECT(widget),"insight-graph");if(!g) return NULL;
  InsightGraphRect r=extent(g);GraphPrint *p=g_new0(GraphPrint,1);p->width=r.x+r.width+16;p->height=r.y+r.height+16;p->shown=count_nodes(g);p->total=g->total;p->title=g_strdup(gtk_entry_get_text(g->query));
- cairo_rectangle_t bounds={0,0,p->width,p->height};p->surface=cairo_recording_surface_create(CAIRO_CONTENT_COLOR_ALPHA,&bounds);cairo_t *cr=cairo_create(p->surface);
- cairo_scale(cr,1/g->scale,1/g->scale);draw(g->canvas,cr,g);cairo_status_t status=cairo_status(cr);cairo_destroy(cr);
- if(status!=CAIRO_STATUS_SUCCESS || cairo_surface_status(p->surface)!=CAIRO_STATUS_SUCCESS) { print_free(p);return NULL; }
+ p->snapshot=snapshot_new(g);
  GtkPrintOperation *op=gtk_print_operation_new();gtk_print_operation_set_unit(op,GTK_UNIT_POINTS);gtk_print_operation_set_job_name(op,*p->title ? p->title : "Relation graph");gtk_print_operation_set_custom_tab_label(op,"Graph layout");gtk_print_operation_set_embed_page_setup(op,TRUE);gtk_print_operation_set_allow_async(op,FALSE);
  g_object_set_data_full(G_OBJECT(op),"insight-graph-print",p,print_free);g_signal_connect(op,"begin-print",G_CALLBACK(print_begin),p);g_signal_connect(op,"draw-page",G_CALLBACK(print_page),p);g_signal_connect(op,"create-custom-widget",G_CALLBACK(print_options),p);g_signal_connect(op,"custom-widget-apply",G_CALLBACK(print_apply),p);return op;
 }

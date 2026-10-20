@@ -31,7 +31,8 @@ static void export_pdf(GtkPrintOperation *op,guint expected,const gchar *present
  gtk_print_operation_set_export_filename(op,path);g_signal_connect(op,"draw-page",G_CALLBACK(page_drawn),NULL);pages=0;
  GtkPrintOperationResult result=gtk_print_operation_run(op,GTK_PRINT_OPERATION_ACTION_EXPORT,NULL,&error);g_assert_no_error(error);g_assert_cmpint(result,==,GTK_PRINT_OPERATION_RESULT_APPLY);g_assert_cmpuint(pages,==,expected);
  gchar *text=NULL,*stderr_text=NULL;gint status=0;gchar *args[]={"pdftotext","-layout",path,"-",NULL};
- g_assert_true(g_spawn_sync(NULL,args,NULL,G_SPAWN_SEARCH_PATH,NULL,NULL,&text,&stderr_text,&status,&error));g_assert_no_error(error);g_assert_cmpint(status,==,0);g_assert_nonnull(strstr(text,"Snapshot query"));if(!strstr(text,present)) g_printerr("Missing [%s] in PDF text:\n%s\n",present,text);g_assert_nonnull(strstr(text,present));if(absent) g_assert_null(strstr(text,absent));g_assert_null(strstr(text,"MUTATED"));
+ g_assert_true(g_spawn_sync(NULL,args,NULL,G_SPAWN_SEARCH_PATH,NULL,NULL,&text,&stderr_text,&status,&error));g_assert_no_error(error);g_assert_cmpint(status,==,0);g_assert_nonnull(strstr(text,"Snapshot query"));if(!strstr(text,present)) g_printerr("Missing [%s] in PDF text (tail):\n%s\n",present,text+MAX(0,(gint)strlen(text)-1800));g_assert_nonnull(strstr(text,present));if(absent) g_assert_null(strstr(text,absent));g_assert_null(strstr(text,"MUTATED"));
+ if(expected==1 && !g_strcmp0(present,"caller_39")) for(guint i=0;i<40;i++) { gchar *name=g_strdup_printf("caller_%02u",i);g_assert_nonnull(strstr(text,name));g_free(name); }
  g_assert_cmpuint(strlen(text),>,50);g_free(text);g_free(stderr_text);g_remove(path);g_rmdir(folder);g_free(path);g_free(folder);
 }
 static void paper(GtkPrintOperation *op,gboolean landscape) {
@@ -62,7 +63,8 @@ static void tree_snapshot(void) {
  gtk_widget_destroy(graph);g_object_unref(graph);gtk_widget_destroy(tree);gtk_widget_destroy(query);g_object_unref(tree);g_object_unref(query);g_object_unref(model);export_pdf(op,1,"VisibleBranch","HiddenChild");g_object_unref(op);
 }
 int main(int argc,char **argv) {
- if(!gtk_init_check(&argc,&argv)) return 77;g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);
+ if(!gtk_init_check(&argc,&argv)) return 77;
+ g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);
  cancel_ui();flat(FALSE,FALSE,5);flat(FALSE,FALSE,200);flat(TRUE,FALSE,29);flat(TRUE,TRUE,200);tree_snapshot();
  g_print("Graph printing GUI: vector PDF, custom layout tab, both orientations, zoom-independent pagination, immutable snapshot after widget destruction and collapsed branches passed\n");return 0;
 }
