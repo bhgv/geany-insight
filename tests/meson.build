@@ -839,3 +839,8 @@ test('Insight native styled HTML export GUI', html_export_gui_test, timeout: 60,
 console_ai_test = executable('test_insight_console_ai_gui', '../insight/tests/ai_console_gui_test.c', dependencies: test_deps)
 test('Insight native console AI and guarded review GUI', console_ai_test, args: [meson.project_source_root() / 'insight/tests/ai_mock_server.py'], timeout: 60, is_parallel: false)
 test('Insight compatible AI protocol', find_program('python3'), args: [meson.project_source_root() / 'insight/tests/ai_client_test.py'], timeout: 30)
+
+ai_edit_session_test = executable('test_insight_ai_edit_session', '../insight/tests/ai_edit_session_test.c', '../insight/desktop/ai_edit_session.c', include_directories: include_directories('../insight/desktop'), dependencies: deps, c_args: ['-UNDEBUG'])
+test('Insight cumulative AI edits and prompt usage', ai_edit_session_test)
+editor_ai_test = executable('test_insight_editor_ai_gui', '../insight/tests/editor_ai_gui_test.c', dependencies: test_deps)
+test('Insight native editor AI variants and project review GUI', editor_ai_test, args: [meson.project_source_root() / 'insight/tests/ai_mock_server.py'], timeout: 60, is_parallel: false)
