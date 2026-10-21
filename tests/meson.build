@@ -826,7 +826,7 @@ test('Insight read-only Git history objects', git_history_test, timeout: 45)
 git_history_gui_test = executable('test_insight_git_history_gui', '../insight/tests/git_history_gui_test.c', dependencies: test_deps)
 test('Insight native Git history and diff GUI', git_history_gui_test, timeout: 55, is_parallel: false)
 
-project_report_test = executable('test_insight_project_report', '../insight/tests/project_report_test.c', '../insight/desktop/project_report.c', '../insight/desktop/text_transfer.c', '../insight/core/index.c', dependencies: deps, c_args: ['-UNDEBUG'])
+project_report_test = executable('test_insight_project_report', '../insight/tests/project_report_test.c', '../insight/desktop/project_report.c', '../insight/desktop/text_transfer.c', '../insight/core/index.c', include_directories: include_directories('../insight/desktop'), dependencies: deps, c_args: ['-UNDEBUG'])
 test('Insight deterministic project report and export', project_report_test, timeout: 40)
 project_report_gui_test = executable('test_insight_project_report_gui', '../insight/tests/project_report_gui_test.c', dependencies: test_deps)
 test('Insight native project report and file list GUI', project_report_gui_test, timeout: 60, is_parallel: false)
