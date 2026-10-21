@@ -313,6 +313,8 @@ static void add_kb(GeanyKeyGroup *group, gsize key_id,
 
 static void cb_func_insight(guint key_id)
 {
+    if (key_id == GEANY_KEYS_INSIGHT_CHECKPOINT) { insight_revisions_checkpoint(FALSE);return; }
+    if (key_id == GEANY_KEYS_INSIGHT_CHECKPOINTALL) { insight_revisions_checkpoint(TRUE);return; }
     if (key_id == GEANY_KEYS_INSIGHT_TYPINGHISTORY) { insight_typing_command(2);return; }
     if (key_id == GEANY_KEYS_INSIGHT_REPEATPREVIEW) { insight_typing_command(1);return; }
     if (key_id == GEANY_KEYS_INSIGHT_CLEARTYPING) { insight_typing_command(4);return; }
@@ -787,6 +789,10 @@ static void init_default_kb(void)
         0, 0, "insight_restore_lines", _("Restore Lines"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_ORIGINALCONTENTS, cb_func_insight,
         0, 0, "insight_original_contents", _("Original Contents"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_CHECKPOINT, cb_func_insight,
+        0, 0, "insight_checkpoint", _("Checkpoint"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_CHECKPOINTALL, cb_func_insight,
+        0, 0, "insight_checkpoint_all", _("Checkpoint All"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_REPEATTYPING, cb_func_insight,
         0, 0, "insight_repeattyping", _("Repeat Typing"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_REPEATPREVIEW, cb_func_insight,

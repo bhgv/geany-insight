@@ -323,6 +323,122 @@ void insight_revisions_original(void)
     }
     g_free(text);
 }
+/* Hold source identities across confirmation and synchronous save callbacks. */
+typedef struct {
+    guint id;
+    ScintillaObject *sci;
+    guint64 generation;
+    gchar *path, *text;
+    gsize length;
+} Checkpoint;
+static gboolean checkpoint_busy;
+static void checkpoint_free(gpointer data)
+{
+    Checkpoint *entry=data;
+    g_object_unref(entry->sci);g_free(entry->path);g_free(entry->text);g_free(entry);
+}
+static GeanyDocument *checkpoint_document(Checkpoint *entry)
+{
+    GeanyDocument *doc=document_find_by_id(entry->id);
+    return doc && doc->is_valid && doc->editor->sci==entry->sci &&
+        !doc->readonly && !SEND(entry->sci,SCI_GETREADONLY,0,0) &&
+        !document_need_save_as(doc) && !g_strcmp0(doc->file_name,entry->path) ? doc : NULL;
+}
+static gboolean checkpoint_set_valid(GPtrArray *entries,gboolean all,guint current)
+{
+    guint count=0;
+    for(guint i=0;i<documents_array->len;i++)
+        if(((GeanyDocument *)g_ptr_array_index(documents_array,i))->is_valid) count++;
+    if(all && count!=entries->len) return FALSE;
+    if(!all && (!document_get_current() || document_get_current()->id!=current)) return FALSE;
+    for(guint i=0;i<entries->len;i++) {
+        Checkpoint *entry=g_ptr_array_index(entries,i);
+        if(!checkpoint_document(entry) || baseline(entry->sci)->generation!=entry->generation) return FALSE;
+    }
+    return TRUE;
+}
+void insight_revisions_checkpoint(gboolean all)
+{
+    if(checkpoint_busy) return;
+    GeanyDocument *current=document_get_current();if(!current) return;
+    checkpoint_busy=TRUE;
+    guint current_id=current->id;
+    GPtrArray *entries=g_ptr_array_new_with_free_func(checkpoint_free);
+    gboolean valid=TRUE;
+    for(guint i=0;i<documents_array->len;i++) {
+        GeanyDocument *doc=g_ptr_array_index(documents_array,i);
+        if(!doc->is_valid || (!all && doc!=current)) continue;
+        Checkpoint *entry=g_new0(Checkpoint,1);entry->id=doc->id;
+        entry->sci=g_object_ref(doc->editor->sci);entry->path=g_strdup(doc->file_name);
+        entry->generation=baseline(entry->sci)->generation;g_ptr_array_add(entries,entry);
+        if(!checkpoint_document(entry)) valid=FALSE;
+    }
+    if(!valid || !entries->len) {
+        ui_set_statusbar(TRUE,"%s",insight_tr("Checkpoint requires named, writable files. Save untitled files first."));goto done;
+    }
+    GtkWidget *dialog=gtk_dialog_new_with_buttons(insight_tr(all ? "Checkpoint All" : "Checkpoint"),GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,
+        insight_tr("Cancel"),GTK_RESPONSE_CANCEL,insight_tr("Save and reset history"),GTK_RESPONSE_ACCEPT,NULL);
+    gtk_widget_set_name(dialog,"insight-checkpoint-dialog");gtk_window_set_default_size(GTK_WINDOW(dialog),680,360);
+    gtk_dialog_set_default_response(GTK_DIALOG(dialog),GTK_RESPONSE_CANCEL);
+    GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    GtkWidget *label=gtk_label_new(insight_tr("Save these files, then discard their Undo/Redo and change history.\nOriginal Contents will start at the saved text. This cannot be undone."));
+    gtk_label_set_line_wrap(GTK_LABEL(label),TRUE);gtk_box_pack_start(GTK_BOX(box),label,FALSE,FALSE,12);
+    GtkListStore *store=gtk_list_store_new(2,G_TYPE_STRING,G_TYPE_STRING);
+    for(guint i=0;i<entries->len;i++) {
+        Checkpoint *entry=g_ptr_array_index(entries,i);GeanyDocument *doc=checkpoint_document(entry);GtkTreeIter iter;
+        gtk_list_store_append(store,&iter);gtk_list_store_set(store,&iter,0,entry->path,1,insight_tr(doc->changed ? "Modified" : "Saved"),-1);
+    }
+    GtkWidget *tree=gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));g_object_unref(store);
+    gtk_widget_set_name(tree,"insight-checkpoint-files");
+    gtk_tree_view_append_column(GTK_TREE_VIEW(tree),gtk_tree_view_column_new_with_attributes(insight_tr("File"),gtk_cell_renderer_text_new(),"text",0,NULL));
+    gtk_tree_view_append_column(GTK_TREE_VIEW(tree),gtk_tree_view_column_new_with_attributes(insight_tr("Status"),gtk_cell_renderer_text_new(),"text",1,NULL));
+    GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),tree);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
+    gtk_widget_show_all(dialog);gint response=gtk_dialog_run(GTK_DIALOG(dialog));gtk_widget_destroy(dialog);
+    if(response!=GTK_RESPONSE_ACCEPT) goto done;
+    if(!checkpoint_set_valid(entries,all,current_id)) goto stale;
+    /* Save all first. A failure may leave earlier files saved, but no history is cleared. */
+    for(guint i=0;i<entries->len;i++) {
+        Checkpoint *entry=g_ptr_array_index(entries,i);GeanyDocument *doc=checkpoint_document(entry);
+        if(!doc || baseline(entry->sci)->generation!=entry->generation || !document_save_file(doc,TRUE)) goto failed;
+        doc=checkpoint_document(entry);
+        if(!doc || doc->changed || SEND(entry->sci,SCI_GETMODIFY,0,0)) goto failed;
+        entry->generation=baseline(entry->sci)->generation;
+        gint length=sci_get_length(entry->sci);
+        if(length<0 || (guint)length>INSIGHT_RESTORE_LIMIT) goto failed;
+        entry->length=length;entry->text=sci_get_contents(entry->sci,-1);
+        if(!entry->text || strlen(entry->text)!=entry->length || !g_utf8_validate(entry->text,length,NULL)) goto failed;
+    }
+    if(!checkpoint_set_valid(entries,all,current_id)) goto stale;
+    gsize retained=baseline_bytes,needed=0;
+    for(guint i=0;i<entries->len;i++) {
+        Checkpoint *entry=g_ptr_array_index(entries,i);GeanyDocument *doc=checkpoint_document(entry);
+        if(!doc || doc->changed || SEND(entry->sci,SCI_GETMODIFY,0,0)) goto failed;
+        Baseline *base=baseline(entry->sci);if(base->text) retained-=base->length;
+        if(entry->length>TOTAL_LIMIT-needed) goto failed;
+        needed+=entry->length;
+    }
+    if(needed>TOTAL_LIMIT-retained) goto failed;
+    /* No nested loops or saves after this point. Publish every new baseline together. */
+    for(guint i=0;i<entries->len;i++) {
+        Checkpoint *entry=g_ptr_array_index(entries,i);Baseline *base=baseline(entry->sci);
+        if(base->text) baseline_bytes-=base->length;
+        g_free(base->text);base->text=entry->text;entry->text=NULL;base->length=entry->length;
+        base->initialized=TRUE;base->generation++;baseline_bytes+=base->length;
+        document_checkpoint_history(checkpoint_document(entry));
+    }
+    ui_set_statusbar(TRUE,"%s",insight_tr("Checkpoint complete: saved text is the new original; Undo/Redo and change history cleared."));goto done;
+stale:
+    ui_set_statusbar(TRUE,"%s",insight_tr("Checkpoint cancelled: the file set or text changed. No history was cleared."));goto done;
+failed:
+    ui_set_statusbar(TRUE,"%s",insight_tr("Checkpoint incomplete: save or snapshot failed. No history was cleared; some files may already be saved."));
+done:
+    g_ptr_array_free(entries,TRUE);checkpoint_busy=FALSE;
+}
+static void checkpoint_command(GtkMenuItem *item,gpointer data)
+{
+    (void)item;insight_revisions_checkpoint(GPOINTER_TO_INT(data));
+}
+
 static void revisions_command(GtkMenuItem *item,gpointer data) { (void)item;switch(GPOINTER_TO_INT(data)) { case 0: insight_revisions_show();break;case 1: insight_revisions_original();break;case 2: insight_revisions_file();break;case 3: insight_revisions_change(TRUE);break;case 4: insight_revisions_change(FALSE);break;case 5: insight_revisions_changes();break; } }
 static void revisions_menu_show(GtkWidget *menu,gpointer data)
 {
@@ -350,6 +466,15 @@ void insight_revisions_init(GtkWidget *edit_menu)
     g_signal_connect_after(geany_object,"document-open",G_CALLBACK(capture_baseline),NULL);
     g_signal_connect_after(geany_object,"document-new",G_CALLBACK(capture_baseline),NULL);
     for(guint i=0;documents_array && i<documents_array->len;i++) { GeanyDocument *doc=g_ptr_array_index(documents_array,i);if(doc->is_valid) capture_baseline(NULL,doc,NULL); }
+    GtkWidget *file_menu=ui_lookup_widget(main_widgets.window,"file1_menu");
+    const gchar *checkpoint_labels[]={"Checkpoint…","Checkpoint All…"};
+    const gchar *checkpoint_names[]={"insight-checkpoint","insight-checkpoint-all"};
+    const guint checkpoint_keys[]={GEANY_KEYS_INSIGHT_CHECKPOINT,GEANY_KEYS_INSIGHT_CHECKPOINTALL};
+    for(guint i=0;i<2;i++) {
+        GtkWidget *entry=gtk_menu_item_new_with_label(checkpoint_labels[i]);gtk_widget_set_name(entry,checkpoint_names[i]);
+        keybindings_attach_menu(GEANY_KEY_GROUP_EDITOR,checkpoint_keys[i],entry);
+        g_signal_connect(entry,"activate",G_CALLBACK(checkpoint_command),GINT_TO_POINTER(i));gtk_menu_shell_append(GTK_MENU_SHELL(file_menu),entry);gtk_widget_show(entry);
+    }
     const gchar *labels[]={"Restore Lines…","Original Contents…","Restore File…","Go To Next Change","Go To Previous Change","Original Changes…"};const gchar *names[]={"insight-restore-lines","insight-original-contents","insight-restore-file","insight-next-original-change","insight-prev-original-change","insight-original-changes"};
     const guint keys[]={GEANY_KEYS_INSIGHT_RESTORELINES,GEANY_KEYS_INSIGHT_ORIGINALCONTENTS,GEANY_KEYS_INSIGHT_RESTOREFILE,GEANY_KEYS_INSIGHT_NEXTCHANGE,GEANY_KEYS_INSIGHT_PREVCHANGE,GEANY_KEYS_INSIGHT_ORIGINALCHANGES};
     for(guint i=0;i<G_N_ELEMENTS(keys);i++) {

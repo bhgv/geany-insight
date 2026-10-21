@@ -282,6 +282,9 @@ gboolean document_check_disk_status(GeanyDocument *doc, gboolean force);
  * to the encoding or the Unicode BOM (which are Scintilla independent).
  * All Scintilla events are stored in the undo / redo buffer and are passed through. */
 
+/* Internal: clear both native and Scintilla history after a verified save. */
+void document_checkpoint_history(GeanyDocument *doc);
+
 gboolean document_can_undo(GeanyDocument *doc);
 
 gboolean document_can_redo(GeanyDocument *doc);

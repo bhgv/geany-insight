@@ -311,6 +311,8 @@ enum GeanyKeyBindingID
 	GEANY_KEYS_INSIGHT_TYPINGHISTORY, /**< Insight keybinding. */
 	GEANY_KEYS_INSIGHT_SIMPLETAB, /**< Insight keybinding. */
 	GEANY_KEYS_INSIGHT_CLEARTYPING, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_CHECKPOINT, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_CHECKPOINTALL, /**< Insight keybinding. */
 	GEANY_KEYS_COUNT	/* must not be used by plugins */
 };
 

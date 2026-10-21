@@ -9,4 +9,5 @@ void insight_revisions_original(void);
 void insight_revisions_file(void);
 void insight_revisions_change(gboolean forward);
 void insight_revisions_changes(void);
+void insight_revisions_checkpoint(gboolean all);
 #endif

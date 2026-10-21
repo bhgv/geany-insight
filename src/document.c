@@ -2944,6 +2944,20 @@ void document_undo_clear(GeanyDocument *doc)
 }
 
 
+/* Checkpoint must clear encoding/BOM actions as well as text Undo. */
+void document_checkpoint_history(GeanyDocument *doc)
+{
+    g_return_if_fail(DOC_VALID(doc) && !doc->changed);
+    ScintillaObject *sci = doc->editor->sci;
+    guint history = scintilla_send_message(sci, SCI_GETCHANGEHISTORY, 0, 0);
+    scintilla_send_message(sci, SCI_SETCHANGEHISTORY, 0, 0);
+    sci_empty_undo_buffer(sci);
+    document_undo_clear(doc);
+    scintilla_send_message(sci, SCI_SETSAVEPOINT, 0, 0);
+    scintilla_send_message(sci, SCI_SETCHANGEHISTORY, history, 0);
+}
+
+
 /* Adds an undo action without clearing the redo stack. This function should
  * not be called directly, generally (use document_undo_add() instead), but is
  * used by document_redo() in order not to erase the redo stack while moving
