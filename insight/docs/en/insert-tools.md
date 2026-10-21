@@ -35,3 +35,5 @@ Reference: [Insert GUID](https://www.sourceinsight.com/doc/v4/userguide/Manual/C
 Insert File and text export: [guide](file-text.md).
 
 [Renumber: columns and multiple selections](renumber.md) — one source-order sequence, colored before/after preview, per-fragment selection and one Undo/Redo.
+
+[Copy Text to Buffer](file-text.md#copy-text-to-buffer) — selected/whole text, four destination modes, colored preview, explicit reload and one Undo without disk writes.

@@ -1,6 +1,3 @@
-Windows x64 portable trial explicitly requested 2026-10-17 (Europe/Moscow).
-Feature source: 1475c68303d6b847baa80802883e37b9e665af92.
-Include the current native editor, GTK runtime, RU/EN help, Diff/Merge regex search and capture replacement, and snapshot match inspection.
-Build the portable package, run existing Windows checks, verify x86-64 architecture and startup without the SDK on PATH, and record the exact build commit in REVISION.txt.
-
-Retry after the Windows Symbol Info fixture compared platform-initialized CRLF text against its pre-initialization LF literal. Preserve and compare the actual initialized snapshot so the unchanged-text check covers both EOL conventions.
+Windows x64 portable trial explicitly requested 2026-10-21.
+Include the current main editor, buffer transfer preview and open Save Selection destination review, all preceding Source Insight ports, AI, Git/Diff/Merge and RU/EN documentation.
+Build the complete native UCRT64 editor and bundle GTK dependencies. Run native transfer/file text and existing Windows checks, verify PE x86-64 and startup with SDK removed from PATH. Record the exact commit in REVISION.txt and upload the portable archive.

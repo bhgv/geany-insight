@@ -117,6 +117,16 @@ jobs:
           ./_build/tests/test_insight_native_index.exe
           ./_build/tests/test_insight_python_series.exe
           ./_build/tests/test_insight_source_mask.exe
+      - name: Test buffer transfer and file text on Windows
+        run: |
+          set -e
+          ./_build/tests/test_insight_text_transfer.exe
+          mkdir -p _win-gui
+          for name in buffer_transfer file_text; do
+            cp "_build/tests/test_insight_${name}_gui.exe" portable/bin/
+            (cd _win-gui && GEANY_INSIGHT_PREFIX="$(cygpath -w ../portable)" GEANY_RUN_GUI_TESTS=1 DISPLAY=win32 GDK_BACKEND=win32 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 "../portable/bin/test_insight_${name}_gui.exe")
+            rm "portable/bin/test_insight_${name}_gui.exe"
+          done
       - name: Test native Windows GUI migration paths
         run: |
           set -e

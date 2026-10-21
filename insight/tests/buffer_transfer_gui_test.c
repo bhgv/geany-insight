@@ -33,6 +33,7 @@ static gboolean respond(gpointer data) {
  if(guard==8&&reply==4) { gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_HELP);return G_SOURCE_CONTINUE; }
  GtkWidget *apply=gtk_dialog_get_widget_for_response(GTK_DIALOG(d),GTK_RESPONSE_APPLY);
  if(guard==4) { g_assert_false(gtk_widget_get_sensitive(apply));timer=0;gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_CANCEL);return G_SOURCE_REMOVE; }
+ if(!gtk_widget_get_sensitive(apply)) g_error("Transfer mode %d guard %d reply %u: %s",mode,guard,reply,gtk_label_get_text(GTK_LABEL(named(d,"insight-transfer-status"))));
  g_assert_true(gtk_widget_get_sensitive(apply));
  if(image&&g_getenv("GEANY_BUFFER_TRANSFER_CAPTURE")) {
   ScintillaObject *before=SCINTILLA(named(d,"insight-transfer-before")),*after=SCINTILLA(named(d,"insight-transfer-after"));g_assert_true(SEND(after,SCI_GETREADONLY,0,0));g_assert_cmpint(SEND(before,SCI_GETMARGINWIDTHN,1,0),>,0);
