@@ -64,7 +64,7 @@ static void preview(Review *v) {
  invalidate(NULL,v);if(!unchanged(v)) { status(v,"Source, destination or selection changed, or destination is read-only. Reload snapshots.");return; }
  gint scope=gtk_combo_box_get_active(GTK_COMBO_BOX(v->scope)),mode=gtk_combo_box_get_active(GTK_COMBO_BOX(v->mode));
  gsize a=scope==0?MIN(v->source.anchor,v->source.caret):0,b=scope==0?MAX(v->source.anchor,v->source.caret):v->source.size;
- if(scope==0&&a==b) { status(v,"Select a nonempty stream fragment, or choose Whole buffer.");return; }
+ if(scope==0&&(a==b||(a>0&&a<v.source.size&&v.source.text[a-1]=='\r'&&v.source.text[a]=='\n')||(b>0&&b<v.source.size&&v.source.text[b-1]=='\r'&&v.source.text[b]=='\n'))) { status(v,"Select a nonempty stream fragment, or choose Whole buffer.");return; }
  v->payload=g_strndup(v->source.text+a,b-a);v->begin=mode==0?v->target.size:mode==1?0:mode==2?v->target.caret:MIN(v->target.anchor,v->target.caret);v->end=mode==1?v->target.size:mode==3?MAX(v->target.anchor,v->target.caret):v->begin;
  GError *error=NULL;v->result=insight_text_splice(v->target.text,v->target.size,v->payload,b-a,v->begin,v->end,&error);
  if(!v->result) { status(v,error?error->message:"Cannot build preview.");g_clear_error(&error);return; }
@@ -99,7 +99,7 @@ static void run(guint target,gboolean selection) {
   if(!unchanged(&v)) { invalidate(NULL,&v);status(&v,"Snapshot changed. Reload and preview again.");continue; }
   sci_start_undo_action(s);SEND(s,SCI_SETTARGETRANGE,v.begin,v.end);SEND(s,SCI_REPLACETARGET,amount,(sptr_t)v.payload);sci_end_undo_action(s);
   dest=document_find_by_id(v.target.id);gchar *actual=dest&&dest->editor->sci==s?sci_get_contents(s,-1):NULL;
-  gboolean ok=actual&&v.target.revision==expected&&SEND(s,SCI_GETLENGTH,0,0)==strlen(v.result)&&!strcmp(actual,v.result);g_free(actual);
+  gboolean ok=!v.closed&&actual&&v.target.revision==expected&&SEND(s,SCI_GETLENGTH,0,0)==strlen(v.result)&&!strcmp(actual,v.result);g_free(actual);
   if(ok) { SEND(s,SCI_SETSELECTIONMODE,SC_SEL_STREAM,0);SEND(s,SCI_CLEARSELECTIONS,0,0);SEND(s,SCI_SETSEL,v.begin,v.begin+amount);applied=v.target.id; }
   else ui_set_statusbar(TRUE,"Text transfer interrupted by an editor change. Inspect the destination and use Undo if needed.");
   break;

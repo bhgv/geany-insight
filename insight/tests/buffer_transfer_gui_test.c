@@ -16,8 +16,13 @@ static GtkWidget *named(GtkWidget *w,const gchar *name) {
 }
 static GtkWidget *dialog(void) { GList *list=gtk_window_list_toplevels();GtkWidget *found=NULL;for(GList *p=list;p;p=p->next) if(gtk_widget_get_visible(p->data)&&!g_strcmp0(gtk_widget_get_name(p->data),"insight-buffer-transfer-dialog")) found=p->data;g_list_free(list);return found; }
 static void check(ScintillaObject *s,const gchar *expected) { gchar *text=sci_get_contents(s,-1);g_assert_cmpstr(text,==,expected);g_free(text); }
+static gboolean cancel_stale(gpointer data);
+static guint chooser_reply;
 static gboolean respond(gpointer data) {
- (void)data;GtkWidget *d=dialog();if(!d) return G_SOURCE_CONTINUE;
+ (void)data;GtkWidget *d=dialog();if(!d) {
+  if(guard==10) { GList *list=gtk_window_list_toplevels();for(GList *p=list;p;p=p->next) if(gtk_widget_get_visible(p->data)&&!g_strcmp0(gtk_widget_get_name(p->data),"insight-export-text-dialog")) { if(!chooser_reply++) gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(p->data),target_path);else gtk_dialog_response(GTK_DIALOG(p->data),GTK_RESPONSE_ACCEPT);break; }g_list_free(list); }
+  return G_SOURCE_CONTINUE;
+ }
  if(!reply++) {
   gchar *id=g_strdup_printf("%u",guard==9?source->id:target->id);gtk_combo_box_set_active_id(GTK_COMBO_BOX(named(d,"insight-transfer-destination")),id);g_free(id);gtk_combo_box_set_active(GTK_COMBO_BOX(named(d,"insight-transfer-mode")),mode);gtk_combo_box_set_active(GTK_COMBO_BOX(named(d,"insight-transfer-scope")),whole?1:0);gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_HELP);return G_SOURCE_CONTINUE;
  }
@@ -36,13 +41,15 @@ static gboolean respond(gpointer data) {
  if(guard==1) { SEND(source->editor->sci,SCI_APPENDTEXT,1,(sptr_t)"x");SEND(source->editor->sci,SCI_UNDO,0,0); }
  if(guard==2) SEND(target->editor->sci,SCI_SETREADONLY,TRUE,0);
  if(guard==3) SEND(source->editor->sci,SCI_SETSEL,0,1);
+ if(guard==11) { document_set_text_changed(target,FALSE);g_assert_true(document_close(target)); }
  timer=0;gtk_dialog_response(GTK_DIALOG(d),guard==5?GTK_RESPONSE_CANCEL:GTK_RESPONSE_APPLY);
+ if((guard>=1&&guard<=3)||guard==11) g_timeout_add(50,cancel_stale,NULL);
 
  return G_SOURCE_REMOVE;
 }
 static gboolean cancel_stale(gpointer data) { (void)data;GtkWidget *d=dialog();if(!d) return G_SOURCE_CONTINUE;g_assert_false(gtk_widget_get_sensitive(gtk_dialog_get_widget_for_response(GTK_DIALOG(d),GTK_RESPONSE_APPLY)));gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_CANCEL);return G_SOURCE_REMOVE; }
 static void command(gint m,gint g,gboolean all,gboolean capture) {
- mode=m;guard=g;whole=all;image=capture;reply=0;document_open_file(path,FALSE,NULL,NULL);timer=g_timeout_add(50,respond,NULL);if(g>=1&&g<=3) g_timeout_add(300,cancel_stale,NULL);keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_BUFFERTRANSFER);if(timer) { g_source_remove(timer);timer=0; }
+ mode=m;guard=g;whole=all;image=capture;reply=0;chooser_reply=0;document_open_file(path,FALSE,NULL,NULL);timer=g_timeout_add(50,respond,NULL);if(g==10) gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-save-selection")));else keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_BUFFERTRANSFER);if(timer) { g_source_remove(timer);timer=0; }
 }
 static void reset(void) {
  SEND(source->editor->sci,SCI_SETREADONLY,FALSE,0);sci_set_text(source->editor->sci,"// α\r\nint value = 7;\r\n");SEND(source->editor->sci,SCI_EMPTYUNDOBUFFER,0,0);SEND(source->editor->sci,SCI_SETSEL,5,3);
@@ -64,7 +71,9 @@ static gboolean step(gpointer data) {
  reset();command(0,8,FALSE,FALSE);check(target->editor->sci,"int count = 1;\r\n!α");
  reset();command(0,9,FALSE,FALSE);check(source->editor->sci,"// α\r\nint value = 7;\r\nα");SEND(source->editor->sci,SCI_UNDO,0,0);check(source->editor->sci,"// α\r\nint value = 7;\r\n");
  reset();sptr_t mask=SEND(target->editor->sci,SCI_GETMODEVENTMASK,0,0);SEND(target->editor->sci,SCI_SETMODEVENTMASK,mask|SC_MOD_INSERTCHECK,0);gulong hook=g_signal_connect(target->editor->sci,"sci-notify",G_CALLBACK(interfere),NULL);armed=TRUE;command(0,0,FALSE,FALSE);armed=FALSE;g_assert_true(hook_done);check(target->editor->sci,"int count = 1;\r\nXX");SEND(target->editor->sci,SCI_UNDO,0,0);check(target->editor->sci,"int count = 1;\r\n");g_signal_handler_disconnect(target->editor->sci,hook);SEND(target->editor->sci,SCI_SETMODEVENTMASK,mask,0);
+ reset();command(0,10,FALSE,FALSE);check(target->editor->sci,expected[0]);
  reset();command(0,5,FALSE,FALSE);check(target->editor->sci,"int count = 1;\r\n");gchar *disk=NULL;g_file_get_contents(target_path,&disk,NULL,NULL);g_assert_cmpstr(disk,==,"int count = 1;\r\n");g_free(disk);
+ reset();command(0,11,FALSE,FALSE);g_assert_null(document_find_by_filename(target_path));target=document_open_file(target_path,FALSE,NULL,NULL);
  document_set_text_changed(source,FALSE);document_set_text_changed(target,FALSE);g_print("Buffer transfer: four modes, selected/whole Unicode CRLF, read-only source/target, stale edits and selections, preview, single Undo/Redo and no disk writes passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
 }
 static gboolean timeout(gpointer data) { (void)data;g_error("Buffer transfer timeout %u guard %d",reply,guard);return G_SOURCE_REMOVE; }
