@@ -1768,3 +1768,13 @@ Choose replacement folder	Выбрать папку замены
 Choose files for replacement	Выбрать файлы замены
 Replace Files — Diff preview	Замена в файлах — просмотр Diff
 Preview first. Select files and individual replacements, then Apply to buffers. No automatic Save.	Сначала предпросмотр. Выберите файлы и совпадения, затем примените в буферы. Автосохранения нет.
+
+Applied — use editor Undo	Применено — отмена Undo в редакторе
+Select next 128 files	Выбрать следующие 128 файлов
+Previous match	Предыдущее совпадение
+Next match	Следующее совпадение
+Open source in editor	Открыть исходник в редакторе
+Confirm each replacement before any changes	Подтверждать каждую замену до изменения файлов
+Skip replacement	Пропустить замену
+Replace occurrence	Заменить совпадение
+Replace remaining	Заменить остальные

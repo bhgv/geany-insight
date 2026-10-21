@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="300" viewBox="0 0 920 300" role="img" aria-labelledby="title desc">
+ <title id="title">Replacement review and remaining batches</title>
+ <desc id="desc">Preview selects up to 128 files. File and occurrence choices are staged before source checks and buffer edits. Cancel discards choices. The next batch excludes applied files.</desc>
+ <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#526680"/></marker></defs>
+ <rect width="920" height="300" rx="12" fill="#f4f7fb"/>
+ <g font-family="sans-serif" text-anchor="middle" font-size="16" fill="#19334e">
+  <rect x="20" y="44" width="190" height="80" rx="10" fill="#dfebff" stroke="#547ab3"/><text x="115" y="77">Preview</text><text x="115" y="103">≤128 selected files</text>
+  <rect x="250" y="44" width="200" height="80" rx="10" fill="#fff0cf" stroke="#b78b32"/><text x="350" y="77">File + occurrence review</text><text x="350" y="103">Replace · Skip · Remaining</text>
+  <rect x="490" y="44" width="180" height="80" rx="10" fill="#dfebff" stroke="#547ab3"/><text x="580" y="77">Recheck all sources</text><text x="580" y="103">Text · identity · limits</text>
+  <rect x="710" y="44" width="190" height="80" rx="10" fill="#dff3e5" stroke="#4e8960"/><text x="805" y="77">Apply to buffers</text><text x="805" y="103">One Undo per file</text>
+  <rect x="250" y="184" width="200" height="65" rx="10" fill="#ffe5e2" stroke="#b96b61"/><text x="350" y="211">Cancel batch</text><text x="350" y="235">No source edits</text>
+  <rect x="690" y="184" width="210" height="65" rx="10" fill="#dff3e5" stroke="#4e8960"/><text x="795" y="211">Select next 128 files</text><text x="795" y="235">Exclude applied files</text>
+ </g>
+ <g fill="none" stroke="#526680" stroke-width="2" marker-end="url(#arrow)"><path d="M210 84H245"/><path d="M450 84H485"/><path d="M670 84H705"/><path d="M350 124V179"/><path d="M805 124V179"/><path d="M690 218H580V135"/></g>
+ <text x="25" y="282" font-family="sans-serif" font-size="14" fill="#526680">Save / Save All remains an explicit editor action. Each remaining batch is checked again.</text>
+</svg>

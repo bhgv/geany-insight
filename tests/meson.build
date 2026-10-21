@@ -849,3 +849,6 @@ replace_files_test = executable('test_insight_replace_files', '../insight/tests/
 test('Insight bounded Replace Files plans', replace_files_test, timeout: 35)
 replace_files_gui_test = executable('test_insight_replace_files_gui', '../insight/tests/replace_files_gui_test.c', dependencies: test_deps)
 test('Insight native Replace Files preview and guarded buffers GUI', replace_files_gui_test, timeout: 60, is_parallel: false)
+
+replace_files_review_gui_test = executable('test_insight_replace_files_review_gui', '../insight/tests/replace_files_review_gui_test.c', dependencies: test_deps)
+test('Insight native replacement confirmation and 128-file batches GUI', replace_files_review_gui_test, timeout: 90, is_parallel: false)

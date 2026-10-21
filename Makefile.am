@@ -553,3 +553,6 @@ dist_insightdocmedia_DATA += insight/docs/media/replace-files.svg
 EXTRA_DIST += insight/tests/replace_files_test.c insight/tests/replace_files_gui_test.c
 
 dist_insightdocmedia_DATA += insight/docs/media/replace-files.jpg
+
+EXTRA_DIST += insight/tests/replace_files_review_gui_test.c
+dist_insightdocmedia_DATA += insight/docs/media/replace-files-review.svg

@@ -14,17 +14,18 @@
 #include "ui_utils.h"
 #include "../insight/desktop/replace_files.h"
 #include <string.h>
+#include <gdk/gdkkeysyms.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 #define STATE "insight-replace-files-state"
 typedef struct {
- gchar *path,*filename,*native,*before,*after,*failure;guint id,count;gboolean readonly,selected;
+ gchar *path,*filename,*native,*before,*after,*failure;guint id,count;gboolean readonly,selected,applied;
  InsightReplacePlan *plan;GeanyDocument *target;
 } Source;
 typedef struct {
  GPtrArray *sources;gchar *query,*replacement;InsightReplaceOptions options;guint64 serial;
 } Job;
 typedef struct {
- GtkWidget *window,*scope,*query,*replacement,*old_combo,*new_combo,*masks,*folder,*recursive,*region,*checks[6],*preview,*stop,*apply,*confirm,*status,*files,*hits,*labels[2];
+ GtkWidget *window,*scope,*query,*replacement,*old_combo,*new_combo,*masks,*folder,*recursive,*region,*checks[6],*preview,*stop,*apply,*confirm,*confirm_hits,*status,*files,*hits,*labels[2];
  GtkListStore *file_model,*hit_model;ScintillaObject *code[2];GPtrArray *sources,*chosen;GCancellable *cancel;
  gboolean busy,closed,dirty,changing,applying;guint64 serial;gint selected;
 } View;
@@ -40,7 +41,7 @@ static void destroyed(GtkWidget *w,gpointer p) { (void)w;View *v=p;v->closed=TRU
 static void status(View *v,const gchar *s) { gtk_label_set_text(GTK_LABEL(v->status),insight_tr(s)); }
 static void controls(View *v) {
  gint scope=gtk_combo_box_get_active(GTK_COMBO_BOX(v->scope));gtk_widget_set_sensitive(v->folder,scope==4&&!v->applying);gtk_widget_set_sensitive(v->recursive,scope==4&&!v->applying);gtk_widget_set_sensitive(v->checks[3],gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(v->checks[2]))&&!v->applying);
- gtk_widget_set_sensitive(v->preview,!v->busy&&!v->applying);gtk_widget_set_sensitive(v->stop,v->busy);gboolean selected=FALSE;for(guint i=0;i<v->sources->len;i++) { Source *s=g_ptr_array_index(v->sources,i);selected|=s->selected&&s->count>0&&!s->failure&&!s->readonly; }
+ gtk_widget_set_sensitive(v->preview,!v->busy&&!v->applying);gtk_widget_set_sensitive(v->stop,v->busy);gboolean selected=FALSE;for(guint i=0;i<v->sources->len;i++) { Source *s=g_ptr_array_index(v->sources,i);selected|=!s->applied&&s->selected&&s->count>0&&!s->failure&&!s->readonly; }
  gtk_widget_set_sensitive(v->apply,!v->busy&&!v->dirty&&!v->applying&&selected);g_object_set_data(G_OBJECT(v->window),"insight-replace-files-busy",GINT_TO_POINTER(v->busy));
 }
 static void changed(GtkWidget *w,gpointer p) { (void)w;View *v=p;if(v->changing) return;v->dirty=TRUE;v->serial++;if(v->cancel) g_cancellable_cancel(v->cancel);status(v,"Criteria changed. Preview again before applying; existing snapshots remain read-only.");controls(v); }
@@ -52,7 +53,7 @@ static gchar *snippet(const gchar *text,gsize size) {
 }
 static void populate_files(View *v) {
  v->changing=TRUE;gtk_list_store_clear(v->file_model);guint files=0,hits=0,errors=0;
- for(guint i=0;i<v->sources->len;i++) { Source *s=g_ptr_array_index(v->sources,i);GtkTreeIter it;gtk_list_store_append(v->file_model,&it);const gchar *state=s->failure ? s->failure:s->readonly ? insight_tr("Read-only — skipped"):!s->plan ? insight_tr("Not previewed"):!s->count ? insight_tr("No selected changes"):insight_tr("Ready — editor buffers only");gtk_list_store_set(v->file_model,&it,FILE_USE,s->selected,FILE_PATH,s->path,FILE_COUNT,s->count,FILE_STATUS,state,FILE_INDEX,i,-1);if(s->selected&&s->count&&!s->failure&&!s->readonly) { files++;hits+=s->count; }errors+=s->failure!=NULL; }
+ for(guint i=0;i<v->sources->len;i++) { Source *s=g_ptr_array_index(v->sources,i);GtkTreeIter it;gtk_list_store_append(v->file_model,&it);const gchar *state=s->applied ? insight_tr("Applied — use editor Undo"):s->failure ? s->failure:s->readonly ? insight_tr("Read-only — skipped"):!s->plan ? insight_tr("Not previewed"):!s->count ? insight_tr("No selected changes"):insight_tr("Ready — editor buffers only");gtk_list_store_set(v->file_model,&it,FILE_USE,s->selected,FILE_PATH,s->path,FILE_COUNT,s->count,FILE_STATUS,state,FILE_INDEX,i,-1);if(!s->applied&&s->selected&&s->count&&!s->failure&&!s->readonly) { files++;hits+=s->count; }errors+=s->failure!=NULL; }
  v->changing=FALSE;if(v->selected>=0&&(guint)v->selected<v->sources->len) { GtkTreePath *selected=gtk_tree_path_new_from_indices(v->selected,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(v->files),selected,NULL,FALSE);gtk_tree_path_free(selected); }gchar *text=g_strdup_printf("%u selected files, %u selected replacements, %u file errors. Apply changes buffers only; use normal Save/Save All afterwards.",files,hits,errors);status(v,text);g_free(text);controls(v);
 }
 static void show_source(View *v,guint index) {
@@ -66,19 +67,43 @@ static void hit_selected(GtkTreeSelection *selection,gpointer p) {
  View *v=p;if(v->selected<0||(guint)v->selected>=v->sources->len) return;Source *s=g_ptr_array_index(v->sources,v->selected);GtkTreeModel *model;GtkTreeIter it;if(!s->plan||!gtk_tree_selection_get_selected(selection,&model,&it)) return;guint i;gtk_tree_model_get(model,&it,HIT_INDEX,&i,-1);if(i>=s->plan->hits->len) return;InsightReplaceHit *h=g_ptr_array_index(s->plan->hits,i);SEND(v->code[0],SCI_SETSEL,h->begin,h->end);SEND(v->code[0],SCI_SCROLLCARET,0,0);if(h->selected) { SEND(v->code[1],SCI_SETSEL,h->after,h->after+strlen(h->replacement));SEND(v->code[1],SCI_SCROLLCARET,0,0); }
 }
 static void file_toggled(GtkCellRendererToggle *cell,gchar *path,gpointer p) {
- (void)cell;View *v=p;if(v->busy||v->dirty||v->applying) return;GtkTreeIter it;if(!gtk_tree_model_get_iter_from_string(GTK_TREE_MODEL(v->file_model),&it,path)) return;guint i;gtk_tree_model_get(GTK_TREE_MODEL(v->file_model),&it,FILE_INDEX,&i,-1);Source *s=g_ptr_array_index(v->sources,i);if(s->failure||s->readonly||!s->count) return;s->selected=!s->selected;populate_files(v);show_source(v,i);
+ (void)cell;View *v=p;if(v->busy||v->dirty||v->applying) return;GtkTreeIter it;if(!gtk_tree_model_get_iter_from_string(GTK_TREE_MODEL(v->file_model),&it,path)) return;guint i;gtk_tree_model_get(GTK_TREE_MODEL(v->file_model),&it,FILE_INDEX,&i,-1);Source *s=g_ptr_array_index(v->sources,i);if(s->applied||s->failure||s->readonly||!s->count) return;s->selected=!s->selected;populate_files(v);show_source(v,i);
 }
 static void update_render(View *v,Source *s) {
  GError *e=NULL;gchar *after=insight_replace_render(s->plan,&s->count,&e);if(!after) { g_free(s->failure);s->failure=g_strdup(e->message);g_clear_error(&e);s->selected=FALSE;populate_files(v);show_source(v,v->selected);return; }g_clear_pointer(&s->failure,g_free);g_free(s->after);s->after=after;if(!strcmp(s->before,s->after)) s->count=0;populate_files(v);show_source(v,v->selected);
 }
 static void hit_toggled(GtkCellRendererToggle *cell,gchar *path,gpointer p) {
- (void)cell;View *v=p;if(v->busy||v->dirty||v->applying||v->selected<0) return;GtkTreeIter it;if(!gtk_tree_model_get_iter_from_string(GTK_TREE_MODEL(v->hit_model),&it,path)) return;Source *s=g_ptr_array_index(v->sources,v->selected);guint i;gtk_tree_model_get(GTK_TREE_MODEL(v->hit_model),&it,HIT_INDEX,&i,-1);InsightReplaceHit *h=g_ptr_array_index(s->plan->hits,i);h->selected=!h->selected;update_render(v,s);
+ (void)cell;View *v=p;if(v->busy||v->dirty||v->applying||v->selected<0) return;GtkTreeIter it;if(!gtk_tree_model_get_iter_from_string(GTK_TREE_MODEL(v->hit_model),&it,path)) return;Source *s=g_ptr_array_index(v->sources,v->selected);if(s->applied) return;guint i;gtk_tree_model_get(GTK_TREE_MODEL(v->hit_model),&it,HIT_INDEX,&i,-1);InsightReplaceHit *h=g_ptr_array_index(s->plan->hits,i);h->selected=!h->selected;update_render(v,s);
 }
 static void select_files(GtkWidget *w,gpointer p) {
- View *v=p;if(v->busy||v->dirty||v->applying) return;gboolean use=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w),"use"));for(guint i=0;i<v->sources->len;i++) { Source *s=g_ptr_array_index(v->sources,i);s->selected=use&&s->count&&!s->failure&&!s->readonly; }populate_files(v);
+ View *v=p;if(v->busy||v->dirty||v->applying) return;gboolean use=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w),"use"));for(guint i=0;i<v->sources->len;i++) { Source *s=g_ptr_array_index(v->sources,i);s->selected=use&&!s->applied&&s->count&&!s->failure&&!s->readonly; }populate_files(v);
 }
 static void select_hits(GtkWidget *w,gpointer p) {
- View *v=p;if(v->busy||v->dirty||v->applying||v->selected<0) return;Source *s=g_ptr_array_index(v->sources,v->selected);if(!s->plan) return;gboolean use=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w),"use"));for(guint i=0;i<s->plan->hits->len;i++) ((InsightReplaceHit *)g_ptr_array_index(s->plan->hits,i))->selected=use;update_render(v,s);
+ View *v=p;if(v->busy||v->dirty||v->applying||v->selected<0) return;Source *s=g_ptr_array_index(v->sources,v->selected);if(s->applied||!s->plan) return;gboolean use=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w),"use"));for(guint i=0;i<s->plan->hits->len;i++) ((InsightReplaceHit *)g_ptr_array_index(s->plan->hits,i))->selected=use;update_render(v,s);
+}
+/* Continue the immutable preview rather than searching changed buffers again. */
+static void next_batch(GtkWidget *w,gpointer p) {
+ (void)w;View *v=p;if(v->busy||v->dirty||v->applying) return;guint n=0;
+ for(guint i=0;i<v->sources->len;i++) { Source *s=g_ptr_array_index(v->sources,i);s->selected=!s->applied&&s->count&&!s->failure&&!s->readonly&&n++<128; }
+ populate_files(v);
+}
+static void navigate_match(GtkWidget *w,gpointer p) {
+ View *v=p;if(v->busy||v->applying||!v->sources->len) return;
+ gint direction=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w),"direction"));gint source=MAX(v->selected,0),hit=-1;GtkTreeIter it;GtkTreeModel *model;
+ if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(v->hits)),&model,&it)) { guint index;gtk_tree_model_get(model,&it,HIT_INDEX,&index,-1);hit=index; }
+ for(guint n=0;n<=v->sources->len;n++) {
+  Source *s=g_ptr_array_index(v->sources,source);gint count=s->plan ? (gint)s->plan->hits->len:0;
+  gint next=n==0 ? (hit<0 ? (direction>0 ? 0:count-1):hit+direction):(direction>0 ? 0:count-1);
+  if(next>=0&&next<count) {
+   GtkTreePath *path=gtk_tree_path_new_from_indices(source,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(v->files),path,NULL,FALSE);gtk_tree_path_free(path);
+   path=gtk_tree_path_new_from_indices(next,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(v->hits),path,NULL,FALSE);gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(v->hits),path,NULL,FALSE,0,0);gtk_tree_path_free(path);return;
+  }
+  source=(source+direction+(gint)v->sources->len)%v->sources->len;
+ }
+}
+static gboolean match_key(GtkWidget *w,GdkEventKey *event,gpointer p) {
+ if(event->keyval!=GDK_KEY_F3||(event->state&(GDK_CONTROL_MASK|GDK_MOD1_MASK))) return FALSE;
+ g_object_set_data(G_OBJECT(w),"direction",GINT_TO_POINTER(event->state&GDK_SHIFT_MASK ? -1:1));navigate_match(w,p);return TRUE;
 }
 static InsightCodeDialect dialect(const gchar *path,gboolean *known) {
  const gchar *ext=strrchr(path,'.');*known=TRUE;if(ext&&(!g_ascii_strcasecmp(ext,".py")||!g_ascii_strcasecmp(ext,".pyw"))) return INSIGHT_CODE_PYTHON;if(ext&&!g_ascii_strcasecmp(ext,".lua")) return INSIGHT_CODE_LUA;if(ext&&(!g_ascii_strcasecmp(ext,".js")||!g_ascii_strcasecmp(ext,".jsx")||!g_ascii_strcasecmp(ext,".ts")||!g_ascii_strcasecmp(ext,".tsx"))) return INSIGHT_CODE_JS;if(ext&&(!g_ascii_strcasecmp(ext,".sh")||!g_ascii_strcasecmp(ext,".bash")||!g_ascii_strcasecmp(ext,".zsh"))) return INSIGHT_CODE_SHELL;
@@ -89,7 +114,7 @@ static gboolean disk_readonly(const gchar *path) {
  gboolean readonly=(g_file_info_has_attribute(info,G_FILE_ATTRIBUTE_ACCESS_CAN_WRITE)&&!g_file_info_get_attribute_boolean(info,G_FILE_ATTRIBUTE_ACCESS_CAN_WRITE)) || (g_file_info_has_attribute(info,G_FILE_ATTRIBUTE_UNIX_MODE)&&!(g_file_info_get_attribute_uint32(info,G_FILE_ATTRIBUTE_UNIX_MODE)&0222));g_object_unref(info);return readonly;
 }
 static void worker(GTask *task,gpointer object,gpointer data,GCancellable *cancel) {
- (void)object;Job *j=data;GError *error=NULL;gsize total=0,hits=0,result_size=0;
+ (void)object;Job *j=data;GError *error=NULL;gsize total=0,hits=0,result_size=0;guint selected_files=0;
  /* Validate the query and captures even for an empty input scope. */
  InsightReplaceOptions probe=j->options;probe.region=INSIGHT_REGION_ALL;InsightReplacePlan *valid=insight_replace_plan("",j->query,j->replacement,&probe,cancel,&error);if(!valid) goto failed;insight_replace_plan_free(valid);
  for(guint i=0;i<j->sources->len;i++) {
@@ -103,7 +128,7 @@ static void worker(GTask *task,gpointer object,gpointer data,GCancellable *cance
   s->after=insight_replace_render(s->plan,&s->count,&e);if(!s->after) { s->failure=g_strdup(e->message);g_clear_error(&e);continue; }hits+=s->plan->hits->len;result_size+=strlen(s->after);
   if(hits>100000||result_size>32u*1024u*1024u) { g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Preview limit: 100,000 matches and 32 MiB results. Nothing changed.");goto failed; }
   if(!strcmp(s->before,s->after)) s->count=0;
-  s->selected=s->count&&!s->readonly;
+  s->selected=s->count&&!s->readonly&&selected_files++<128;
  }
  g_task_return_boolean(task,TRUE);return;
 failed:g_task_return_error(task,error);
@@ -153,24 +178,118 @@ static gboolean source_matches(Source *s,gboolean opened,GError **error) {
  gboolean same=!strcmp(now,s->before);g_free(now);if(!same) goto stale;return TRUE;
 stale:g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_WRONG_ETAG,"A selected source changed, closed or was renamed. Nothing further was changed; preview again.");return FALSE;
 }
+/* Decisions are staged independently of both source and visible plan. Cancel
+ * therefore leaves every buffer and every occurrence checkbox unchanged. */
+typedef struct { Source *source;GArray *choices;gchar *after;guint count; } Review;
+static void review_free(gpointer data) {
+ Review *r=data;g_array_unref(r->choices);g_free(r->after);g_free(r);
+}
+static gint review_dialog(View *v,const gchar *name,const gchar *message,gboolean occurrence) {
+ GtkWidget *d=gtk_message_dialog_new(GTK_WINDOW(v->window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_QUESTION,GTK_BUTTONS_NONE,"%s",message);
+ gtk_widget_set_name(d,name);gtk_dialog_add_buttons(GTK_DIALOG(d),insight_tr("Cancel batch"),GTK_RESPONSE_CANCEL,insight_tr(occurrence ? "Skip replacement":"Skip file"),GTK_RESPONSE_NO,insight_tr(occurrence ? "Replace occurrence":"Replace in buffer"),GTK_RESPONSE_YES,NULL);
+ if(occurrence) gtk_dialog_add_button(GTK_DIALOG(d),insight_tr("Replace remaining"),GTK_RESPONSE_APPLY);
+ g_object_ref_sink(d);gint response=gtk_dialog_run(GTK_DIALOG(d));gtk_widget_destroy(d);g_object_unref(d);return response;
+}
+static gboolean review_valid(View *v,guint64 serial,GError **error) {
+ if(v->closed) return FALSE;
+ if(v->dirty||v->serial!=serial) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_WRONG_ETAG,"Criteria changed during review. Preview again; no further replacements applied.");return FALSE; }
+ return TRUE;
+}
 static void apply(GtkWidget *w,gpointer p) {
- (void)w;View *v=p;if(v->busy||v->dirty||v->applying) return;GPtrArray *selected=g_ptr_array_new();GError *e=NULL;
- for(guint i=0;i<v->sources->len;i++) { Source *s=g_ptr_array_index(v->sources,i);if(s->selected&&s->count&&!s->failure&&!s->readonly) { g_ptr_array_add(selected,s);if(selected->len>128) { g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Apply at most 128 files at once; deselect some files first.");goto finished; }if(!source_matches(s,FALSE,&e)) goto finished; } }
- if(!selected->len) goto finished;
- guint64 serial=v->serial;v->applying=TRUE;controls(v);g_object_ref(v->window);
- if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(v->confirm))) {
-  for(guint i=0;i<selected->len;i++) { Source *s=g_ptr_array_index(selected,i);GtkWidget *d=gtk_message_dialog_new(GTK_WINDOW(v->window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_QUESTION,GTK_BUTTONS_NONE,"%s\n%u replacements",s->path,s->count);gtk_widget_set_name(d,"insight-replace-files-confirm");gtk_dialog_add_buttons(GTK_DIALOG(d),insight_tr("Cancel batch"),GTK_RESPONSE_CANCEL,insight_tr("Skip file"),GTK_RESPONSE_NO,insight_tr("Replace in buffer"),GTK_RESPONSE_YES,NULL);g_object_ref_sink(d);gint response=gtk_dialog_run(GTK_DIALOG(d));gtk_widget_destroy(d);g_object_unref(d);if(v->closed||response!=GTK_RESPONSE_YES) { if(response==GTK_RESPONSE_NO&&!v->closed) { g_ptr_array_remove_index(selected,i--);continue; }if(!v->closed) status(v,"Replacement batch cancelled before buffer changes.");goto release; } }
+ (void)w;View *v=p;if(v->busy||v->dirty||v->applying) return;
+ GPtrArray *selected=g_ptr_array_new(),*reviews=g_ptr_array_new_with_free_func(review_free);GError *e=NULL;gboolean held=FALSE;guint applied=0;
+ for(guint i=0;i<v->sources->len;i++) {
+  Source *s=g_ptr_array_index(v->sources,i);if(s->applied||!s->selected||!s->count||s->failure||s->readonly) continue;
+  g_ptr_array_add(selected,s);
+  if(selected->len>128) { status(v,"Apply at most 128 files at once. Use Select next 128 files or deselect files.");goto out; }
+  if(!source_matches(s,FALSE,&e)) goto out;
  }
- for(guint i=0;i<selected->len;i++) { Source *s=g_ptr_array_index(selected,i);if(!source_matches(s,FALSE,&e)) goto release;if(!s->target) { s->target=document_open_file(s->native,FALSE,NULL,NULL);if(!s->target) { g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_FAILED,"Cannot open a selected source. No planned replacements applied.");goto release; } }if(v->closed) goto release; }
- if(v->closed) goto release;
- if(v->dirty||v->serial!=serial) { g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_WRONG_ETAG,"Criteria changed during confirmation. Preview again; no replacements applied.");goto release; }
- /* All sources are open before mutation, and all decoded snapshots rechecked. */
- GHashTable *ids=g_hash_table_new(g_direct_hash,g_direct_equal);gboolean ready=TRUE;for(guint i=0;i<selected->len;i++) { Source *s=g_ptr_array_index(selected,i);if(!source_matches(s,TRUE,&e)||g_hash_table_contains(ids,GUINT_TO_POINTER(s->target->id))) { if(!e) g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_EXISTS,"Selected paths resolve to the same editor buffer. Select it only once.");ready=FALSE;break; }g_hash_table_add(ids,GUINT_TO_POINTER(s->target->id)); }g_hash_table_unref(ids);if(!ready) goto release;
- guint applied=0;for(guint i=0;i<selected->len;i++) { if(v->closed) break;Source *s=g_ptr_array_index(selected,i);if(v->dirty||v->serial!=serial) { g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_WRONG_ETAG,"Criteria changed; remaining buffers were left untouched.");break; }if(!source_matches(s,TRUE,&e)) break;ScintillaObject *sci=s->target->editor->sci;SEND(sci,SCI_BEGINUNDOACTION,0,0);SEND(sci,SCI_SETTARGETRANGE,0,strlen(s->before));SEND(sci,SCI_REPLACETARGET,strlen(s->after),(sptr_t)s->after);SEND(sci,SCI_ENDUNDOACTION,0,0);applied++; }
- v->dirty=TRUE;if(!v->closed) { gchar *text=g_strdup_printf("Applied to %u of %u editor buffers, one Undo per file. Disk unchanged. %s",applied,selected->len,e ? e->message:"Use normal Save/Save All; preview again before another batch.");status(v,text);g_free(text); }g_clear_error(&e);
-release:
- v->applying=FALSE;if(!v->closed) controls(v);if(e&&!v->closed) { status(v,e->message);g_clear_error(&e);v->dirty=TRUE;controls(v); }g_clear_error(&e);g_ptr_array_unref(selected);g_object_unref(v->window);return;
-finished:if(e) { status(v,e->message);g_clear_error(&e);v->dirty=TRUE; }g_ptr_array_unref(selected);controls(v);
+ if(!selected->len) goto out;
+ guint64 serial=v->serial;v->applying=TRUE;held=TRUE;controls(v);g_object_ref(v->window);
+ gboolean ask_files=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(v->confirm));
+ gboolean ask_hits=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(v->confirm_hits)),remaining=FALSE;gsize bytes=0;
+ /* Finish ALL file choices before any occurrence choices or buffer edits. */
+ if(ask_files) for(guint i=0;i<selected->len;i++) {
+  Source *s=g_ptr_array_index(selected,i);gchar *message=g_strdup_printf("%s\n%u replacements",s->path,s->count);
+  gint response=review_dialog(v,"insight-replace-files-confirm",message,FALSE);g_free(message);
+  if(!review_valid(v,serial,&e)) goto out;
+  if(response==GTK_RESPONSE_NO) { g_ptr_array_remove_index(selected,i--);continue; }
+  if(response!=GTK_RESPONSE_YES) goto cancelled;
+ }
+ for(guint i=0;i<selected->len;i++) {
+  Source *s=g_ptr_array_index(selected,i);Review *r=g_new0(Review,1);r->source=s;r->choices=g_array_sized_new(FALSE,FALSE,sizeof(gboolean),s->plan->hits->len);g_ptr_array_add(reviews,r);
+  for(guint j=0;j<s->plan->hits->len;j++) {
+   InsightReplaceHit *h=g_ptr_array_index(s->plan->hits,j);gboolean use=h->selected;
+   if(use&&ask_hits&&!remaining) {
+    /* Highlight the exact candidate in the real colored/numbered preview. */
+    for(guint k=0;k<v->sources->len;k++) if(g_ptr_array_index(v->sources,k)==s) { GtkTreePath *path=gtk_tree_path_new_from_indices(k,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(v->files),path,NULL,FALSE);gtk_tree_path_free(path);break; }
+    GtkTreePath *path=gtk_tree_path_new_from_indices(j,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(v->hits),path,NULL,FALSE);gtk_tree_path_free(path);
+    gchar *old=snippet(s->before+h->begin,h->end-h->begin),*replacement=snippet(h->replacement,strlen(h->replacement));
+    gchar *message=g_strdup_printf("%s:%u:%u\n%s → %s",s->path,h->line,h->column,old,replacement);g_free(old);g_free(replacement);
+    gint response=review_dialog(v,"insight-replace-files-occurrence-confirm",message,TRUE);g_free(message);
+    if(!review_valid(v,serial,&e)) goto out;
+    if(response==GTK_RESPONSE_APPLY) remaining=TRUE;
+    else if(response==GTK_RESPONSE_NO) use=FALSE;
+    else if(response!=GTK_RESPONSE_YES) goto cancelled;
+   }
+   g_array_append_val(r->choices,use);
+  }
+  /* Render the staged subset and restore the visible selections/offsets. */
+  GArray *original=g_array_sized_new(FALSE,FALSE,sizeof(gboolean),s->plan->hits->len);
+  for(guint j=0;j<s->plan->hits->len;j++) { InsightReplaceHit *h=g_ptr_array_index(s->plan->hits,j);g_array_append_val(original,h->selected);h->selected=g_array_index(r->choices,gboolean,j); }
+  r->after=insight_replace_render(s->plan,&r->count,&e);
+  for(guint j=0;j<s->plan->hits->len;j++) ((InsightReplaceHit *)g_ptr_array_index(s->plan->hits,j))->selected=g_array_index(original,gboolean,j);
+  g_array_unref(original);gchar *restore=insight_replace_render(s->plan,NULL,NULL);g_free(restore);
+  if(!r->after) goto out;
+  if(!strcmp(r->after,s->before)) r->count=0;
+  bytes+=strlen(r->after);if(bytes>32u*1024u*1024u) { g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Reviewed results exceed 32 MiB. Nothing applied; select fewer files.");goto out; }
+ }
+ if(!review_valid(v,serial,&e)) goto out;
+ for(guint i=0;i<reviews->len;i++) {
+  Review *r=g_ptr_array_index(reviews,i);if(!r->count) continue;Source *s=r->source;
+  if(!source_matches(s,FALSE,&e)) goto out;
+  if(!s->target) { s->target=document_open_file(s->native,FALSE,NULL,NULL);if(!s->target) { g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_FAILED,"Cannot open a selected source. No planned replacements applied.");goto out; } }
+  if(!review_valid(v,serial,&e)) goto out;
+ }
+ /* Recheck the entire accepted batch after dialogs and file opening. */
+ GHashTable *ids=g_hash_table_new(g_direct_hash,g_direct_equal);gboolean ready=TRUE;
+ for(guint i=0;i<reviews->len;i++) {
+  Review *r=g_ptr_array_index(reviews,i);if(!r->count) continue;Source *s=r->source;
+  if(!source_matches(s,TRUE,&e)||g_hash_table_contains(ids,GUINT_TO_POINTER(s->target->id))) { if(!e) g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_EXISTS,"Selected paths resolve to the same editor buffer. Select it only once.");ready=FALSE;break; }
+  g_hash_table_add(ids,GUINT_TO_POINTER(s->target->id));
+ }
+ g_hash_table_unref(ids);if(!ready) goto out;
+ for(guint i=0;i<reviews->len;i++) {
+  if(!review_valid(v,serial,&e)) break;
+  Review *r=g_ptr_array_index(reviews,i);Source *s=r->source;if(!r->count) { s->selected=FALSE;continue; }
+  if(!source_matches(s,TRUE,&e)) break;
+  ScintillaObject *sci=s->target->editor->sci;SEND(sci,SCI_BEGINUNDOACTION,0,0);SEND(sci,SCI_SETTARGETRANGE,0,strlen(s->before));SEND(sci,SCI_REPLACETARGET,strlen(r->after),(sptr_t)r->after);SEND(sci,SCI_ENDUNDOACTION,0,0);
+  for(guint j=0;j<s->plan->hits->len;j++) ((InsightReplaceHit *)g_ptr_array_index(s->plan->hits,j))->selected=g_array_index(r->choices,gboolean,j);
+  g_free(s->after);s->after=insight_replace_render(s->plan,&s->count,NULL);s->applied=TRUE;s->selected=FALSE;applied++;
+ }
+ if(!v->closed) { populate_files(v);gchar *message=g_strdup_printf("Applied to %u buffers, one Undo per file. Disk unchanged. %s",applied,e ? e->message:"Select next 128 files to continue the remaining plan; normal Save/Save All saves buffers.");status(v,message);g_free(message); }goto out;
+cancelled:
+ status(v,"Replacement batch cancelled before buffer changes. Occurrence choices unchanged.");
+out:
+ if(e&&!v->closed) { gchar *message=g_strdup_printf("%s Applied buffers: %u. Undo those individually if needed.",e->message,applied);status(v,message);g_free(message);v->dirty=TRUE; }
+ g_clear_error(&e);g_ptr_array_unref(reviews);g_ptr_array_unref(selected);v->applying=FALSE;if(!v->closed) controls(v);if(held) g_object_unref(v->window);
+}
+static void open_source(GtkWidget *w,gpointer p) {
+ (void)w;View *v=p;if(v->busy||v->applying||v->selected<0) return;Source *s=g_ptr_array_index(v->sources,v->selected);g_object_ref(v->window);
+ GeanyDocument *d=s->id ? document_find_by_id(s->id):document_find_by_filename(s->filename);
+ if(s->id&&(!d||g_strcmp0(d->file_name,s->filename))) { status(v,"Source closed or renamed. Preview again before navigating.");goto out; }
+ if(!d) d=document_open_file(s->native,FALSE,NULL,NULL);
+ if(v->closed) goto out;
+ if(!d) { status(v,"Cannot open preview source in the editor.");goto out; }
+ document_show_tab(d);gchar *text=document_text(d,NULL);const gchar *expected=s->applied ? s->after:s->before;
+ if(text&&expected&&!strcmp(text,expected)) {
+  GtkTreeModel *model;GtkTreeIter it;guint index=0;
+  if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(v->hits)),&model,&it)) gtk_tree_model_get(model,&it,HIT_INDEX,&index,-1);
+  if(s->plan&&index<s->plan->hits->len) { InsightReplaceHit *h=g_ptr_array_index(s->plan->hits,index);gsize pos=s->applied ? (h->selected ? h->after:0):h->begin;SEND(d->editor->sci,SCI_GOTOPOS,MIN(pos,strlen(text)),0);SEND(d->editor->sci,SCI_SCROLLCARET,0,0); }
+  status(v,"Source opened. This preview stays open; Preview again after manual source edits.");
+ }else status(v,"Source differs from preview. Opened without using stale match offsets; Preview again before applying.");
+ g_free(text);gtk_widget_grab_focus(GTK_WIDGET(d->editor->sci));
+out:g_object_unref(v->window);
 }
 static void choose_inputs(GtkWidget *w,gpointer p) {
  View *v=p;if(v->busy||v->applying) return;gboolean folder=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w),"folder"));GtkWidget *d=gtk_file_chooser_dialog_new(insight_tr(folder ? "Choose replacement folder":"Choose files for replacement"),GTK_WINDOW(v->window),folder ? GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER:GTK_FILE_CHOOSER_ACTION_OPEN,insight_tr("Cancel"),GTK_RESPONSE_CANCEL,insight_tr("Choose"),GTK_RESPONSE_ACCEPT,NULL);gtk_widget_set_name(d,"insight-replace-files-chooser");gtk_file_chooser_set_select_multiple(GTK_FILE_CHOOSER(d),!folder);g_object_ref_sink(d);g_object_ref(v->window);
@@ -205,8 +324,10 @@ void insight_replace_files_command(void) {
  bar=row(box);v->folder=gtk_entry_new();gtk_widget_set_name(v->folder,"insight-replace-files-folder");gtk_entry_set_placeholder_text(GTK_ENTRY(v->folder),insight_tr("Folder path for Folder scope"));gtk_box_pack_start(GTK_BOX(bar),v->folder,TRUE,TRUE,0);v->recursive=gtk_check_button_new_with_label(insight_tr("Include subdirectories"));gtk_widget_set_name(v->recursive,"insight-replace-files-recursive");gtk_box_pack_start(GTK_BOX(bar),v->recursive,FALSE,FALSE,0);v->region=gtk_combo_box_text_new();gtk_widget_set_name(v->region,"insight-replace-files-region");const gchar *regions[]={"All text","Code only (skip comments and strings)","Skip comments","Comments only"};for(guint i=0;i<4;i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(v->region),insight_tr(regions[i]));gtk_combo_box_set_active(GTK_COMBO_BOX(v->region),0);gtk_box_pack_start(GTK_BOX(bar),v->region,FALSE,FALSE,0);
  bar=row(box);const gchar *labels[]={"Case sensitive","Whole words only","Regular expressions","Dot matches line endings","One occurrence per line","Preserve old case"};for(guint i=0;i<6;i++) { v->checks[i]=gtk_check_button_new_with_label(insight_tr(labels[i]));gchar *name=g_strdup_printf("insight-replace-files-option-%u",i);gtk_widget_set_name(v->checks[i],name);g_free(name);gtk_box_pack_start(GTK_BOX(bar),v->checks[i],FALSE,FALSE,0);g_signal_connect(v->checks[i],"toggled",G_CALLBACK(changed),v); }
  bar=row(box);v->preview=button(bar,"Preview replacements","insight-replace-files-preview",G_CALLBACK(preview),v);v->stop=button(bar,"Stop preview","insight-replace-files-stop",G_CALLBACK(stop),v);v->apply=button(bar,"Apply selected to buffers","insight-replace-files-apply",G_CALLBACK(apply),v);v->confirm=gtk_check_button_new_with_label(insight_tr("Confirm each file before any changes"));gtk_widget_set_name(v->confirm,"insight-replace-files-confirm-option");gtk_box_pack_start(GTK_BOX(bar),v->confirm,FALSE,FALSE,0);button(bar,"Diff / Merge preview","insight-replace-files-diff",G_CALLBACK(compare_preview),v);
+ bar=row(box);v->confirm_hits=gtk_check_button_new_with_label(insight_tr("Confirm each replacement before any changes"));gtk_widget_set_name(v->confirm_hits,"insight-replace-files-confirm-hits");gtk_box_pack_start(GTK_BOX(bar),v->confirm_hits,FALSE,FALSE,0);
  v->file_model=gtk_list_store_new(FILE_COLUMNS,G_TYPE_BOOLEAN,G_TYPE_STRING,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_UINT);v->files=gtk_tree_view_new_with_model(GTK_TREE_MODEL(v->file_model));gtk_widget_set_name(v->files,"insight-replace-files-list");GtkCellRenderer *toggle=gtk_cell_renderer_toggle_new();g_signal_connect(toggle,"toggled",G_CALLBACK(file_toggled),v);gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(v->files),-1,insight_tr("Use"),toggle,"active",FILE_USE,NULL);const gchar *titles[]={"File","Replacements","State"};for(guint i=0;i<3;i++) gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(v->files),-1,insight_tr(titles[i]),gtk_cell_renderer_text_new(),"text",i+1,NULL);g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(v->files)),"changed",G_CALLBACK(choose_file),v);GtkWidget *files_scroll=scroll(v->files);gtk_widget_set_size_request(files_scroll,-1,100);gtk_box_pack_start(GTK_BOX(box),files_scroll,TRUE,TRUE,0);
  bar=row(box);GtkWidget *all=button(bar,"Select all files","insight-replace-files-all",G_CALLBACK(select_files),v);g_object_set_data(G_OBJECT(all),"use",GINT_TO_POINTER(1));button(bar,"Deselect files","insight-replace-files-none",G_CALLBACK(select_files),v);all=button(bar,"Select all matches","insight-replace-files-hits-all",G_CALLBACK(select_hits),v);g_object_set_data(G_OBJECT(all),"use",GINT_TO_POINTER(1));button(bar,"Deselect matches","insight-replace-files-hits-none",G_CALLBACK(select_hits),v);
+ bar=row(box);button(bar,"Select next 128 files","insight-replace-files-next-batch",G_CALLBACK(next_batch),v);GtkWidget *prev=button(bar,"Previous match","insight-replace-files-previous",G_CALLBACK(navigate_match),v);g_object_set_data(G_OBJECT(prev),"direction",GINT_TO_POINTER(-1));GtkWidget *next=button(bar,"Next match","insight-replace-files-next",G_CALLBACK(navigate_match),v);g_object_set_data(G_OBJECT(next),"direction",GINT_TO_POINTER(1));button(bar,"Open source in editor","insight-replace-files-open",G_CALLBACK(open_source),v);g_signal_connect(v->window,"key-press-event",G_CALLBACK(match_key),v);
  v->hit_model=gtk_list_store_new(HIT_COLUMNS,G_TYPE_BOOLEAN,G_TYPE_UINT,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_UINT);v->hits=gtk_tree_view_new_with_model(GTK_TREE_MODEL(v->hit_model));gtk_widget_set_name(v->hits,"insight-replace-files-hits");toggle=gtk_cell_renderer_toggle_new();g_signal_connect(toggle,"toggled",G_CALLBACK(hit_toggled),v);gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(v->hits),-1,insight_tr("Replace"),toggle,"active",HIT_USE,NULL);const gchar *hit_titles[]={"Line","Column","Old","New"};for(guint i=0;i<4;i++) gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(v->hits),-1,insight_tr(hit_titles[i]),gtk_cell_renderer_text_new(),"text",i+1,NULL);g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(v->hits)),"changed",G_CALLBACK(hit_selected),v);GtkWidget *hit_scroll=scroll(v->hits);gtk_widget_set_size_request(hit_scroll,-1,100);gtk_box_pack_start(GTK_BOX(box),hit_scroll,TRUE,TRUE,0);
  GtkWidget *panes=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);gtk_box_pack_start(GTK_BOX(box),panes,TRUE,TRUE,0);for(guint i=0;i<2;i++) { GtkWidget *col=gtk_box_new(GTK_ORIENTATION_VERTICAL,2);v->labels[i]=gtk_label_new("");gtk_label_set_ellipsize(GTK_LABEL(v->labels[i]),PANGO_ELLIPSIZE_MIDDLE);gtk_box_pack_start(GTK_BOX(col),v->labels[i],FALSE,FALSE,0);v->code[i]=SCINTILLA(scintilla_new());gtk_widget_set_name(GTK_WIDGET(v->code[i]),i ? "insight-replace-files-after":"insight-replace-files-before");SEND(v->code[i],SCI_SETCODEPAGE,SC_CP_UTF8,0);sci_set_symbol_margin(v->code[i],FALSE);SEND(v->code[i],SCI_SETMARGINWIDTHN,2,0);gtk_widget_set_size_request(GTK_WIDGET(v->code[i]),100,150);gtk_box_pack_start(GTK_BOX(col),GTK_WIDGET(v->code[i]),TRUE,TRUE,0);if(i) gtk_paned_pack2(GTK_PANED(panes),col,TRUE,FALSE);else gtk_paned_pack1(GTK_PANED(panes),col,TRUE,FALSE);set_code(v,i,"",NULL); }
  v->status=gtk_label_new(insight_tr("Preview first. Select files and individual replacements, then Apply to buffers. No automatic Save."));gtk_widget_set_name(v->status,"insight-replace-files-status");gtk_label_set_line_wrap(GTK_LABEL(v->status),TRUE);gtk_box_pack_start(GTK_BOX(box),v->status,FALSE,FALSE,0);
