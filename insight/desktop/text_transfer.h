@@ -9,4 +9,6 @@
  * These GIO identity checks do not constitute a filesystem lock. */
 gchar *insight_text_file_read(const gchar *,gsize *,GError **);
 gboolean insight_text_file_write(const gchar *,const gchar *,gsize,GError **);
+/* Protects native absolute source/open/project paths and their file identities. */
+gboolean insight_text_file_write_protected(const gchar *,const gchar *,gsize,GPtrArray *,GError **);
 #endif

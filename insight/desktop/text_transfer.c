@@ -48,3 +48,14 @@ gboolean insight_text_file_write(const gchar *path,const gchar *text,gsize size,
  }
 done:g_clear_object(&output);if(temporary && created && !ok) g_file_delete(temporary,NULL,NULL);g_clear_object(&temporary);g_clear_object(&info);g_object_unref(file);return ok;
 }
+
+static gboolean real_parents(GFile *file,GError **error) {
+ GFile *parent=g_file_get_parent(file);if(!parent) return TRUE;GFileInfo *info=g_file_query_info(parent,G_FILE_ATTRIBUTE_STANDARD_TYPE,G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,NULL,error);if(!info) { g_object_unref(parent);return FALSE; }gboolean ok=g_file_info_get_file_type(info)==G_FILE_TYPE_DIRECTORY;g_object_unref(info);if(!ok) g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NOT_DIRECTORY,"Export requires real parent directories, not symbolic links.");else ok=real_parents(parent,error);g_object_unref(parent);return ok;
+}
+gboolean insight_text_file_write_protected(const gchar *path,const gchar *text,gsize size,GPtrArray *protected_paths,GError **error) {
+ if(!path || !g_path_is_absolute(path)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Export requires an absolute destination.");return FALSE; }
+ GFile *target=g_file_new_for_path(path);if(!real_parents(target,error)) { g_object_unref(target);return FALSE; }
+ GFileInfo *info=g_file_query_info(target,G_FILE_ATTRIBUTE_ID_FILE,G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,NULL,NULL);const gchar *id=info ? g_file_info_get_attribute_string(info,G_FILE_ATTRIBUTE_ID_FILE):NULL;gboolean ok=TRUE;
+ for(guint i=0;protected_paths && i<protected_paths->len;i++) { GFile *source=g_file_new_for_path(g_ptr_array_index(protected_paths,i));GFileInfo *other=id ? g_file_query_info(source,G_FILE_ATTRIBUTE_ID_FILE,G_FILE_QUERY_INFO_NONE,NULL,NULL):NULL;gboolean same=g_file_equal(target,source) || (id && other && !g_strcmp0(id,g_file_info_get_attribute_string(other,G_FILE_ATTRIBUTE_ID_FILE)));g_clear_object(&other);g_object_unref(source);if(same) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_PERMISSION_DENIED,"Choose an export destination outside source, open documents and project files.");ok=FALSE;break; } }
+ g_clear_object(&info);g_object_unref(target);return ok && insight_text_file_write(path,text,size,error);
+}
