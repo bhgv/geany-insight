@@ -307,6 +307,10 @@ void insight_revisions_changes(void)
     if(done && changes_valid(&changes)) { changes_select(&changes,selected);changes_clear(&changes);if(restore) insight_revisions_show(); }
     else changes_clear(&changes);
 }
+gchar *insight_revisions_original_text(ScintillaObject *sci)
+{
+    Baseline *base=baseline(sci);return base->text ? g_strdup(base->text):NULL;
+}
 void insight_revisions_original(void)
 {
     GeanyDocument *source=document_get_current();if(!source) return;Baseline *base=baseline(source->editor->sci);

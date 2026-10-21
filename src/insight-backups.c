@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "geany.h"
 #include "insight-backups.h"
+#include "insight-snapshot-compare.h"
 #include "app.h"
 #include "document.h"
 #include "keybindings.h"
@@ -12,7 +13,7 @@
 #include "../insight/desktop/backup_store.h"
 #include <string.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
-typedef struct { GtkWidget *dialog,*tree,*preview,*status;GtkListStore *model;GPtrArray *entries;gchar *directory,*source;GeanyFiletype *type; } Browser;
+typedef struct { GtkWidget *dialog,*tree,*preview,*status;GtkListStore *model;GPtrArray *entries;gchar *directory,*source;GeanyFiletype *type;guint source_id; } Browser;
 static gboolean initialized,busy;
 static guint64 view_serial;
 static void status_error(const GError *error)
@@ -60,6 +61,7 @@ static void selection_changed(GtkTreeSelection *selection,gpointer data)
     gboolean valid=text!=NULL;
     gtk_widget_set_sensitive(gtk_dialog_get_widget_for_response(GTK_DIALOG(browser->dialog),GTK_RESPONSE_ACCEPT),valid);
     gtk_widget_set_sensitive(gtk_dialog_get_widget_for_response(GTK_DIALOG(browser->dialog),202),valid);
+    gtk_widget_set_sensitive(gtk_dialog_get_widget_for_response(GTK_DIALOG(browser->dialog),204),valid);
     if(text) {
         gsize shown=MIN(length,16384u);while(shown<length && shown && ((guchar)text[shown]&0xc0)==0x80) shown--;
         /* GTK preview normalizes EOL; the retained file and opened tab stay exact. */
@@ -101,13 +103,13 @@ static void open_view(Browser *browser,const gchar *text)
     /* This view is a detached snapshot, never a source for another backup family. */
     g_object_set_data(G_OBJECT(sci),"insight-backup-view",GINT_TO_POINTER(1));
 }
-static void browse(void)
+static void browse(gboolean compare)
 {
     GeanyDocument *source=document_get_current();GError *error=NULL;gchar *directory=directory_for(source,&error);
     if(!directory) { status_error(error);g_clear_error(&error);return; }
-    Browser browser={0};browser.directory=directory;browser.source=g_strdup(source->file_name);browser.type=source->file_type;
-    browser.dialog=gtk_dialog_new_with_buttons(insight_tr("Open Backup File"),GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,
-        insight_tr("Close"),GTK_RESPONSE_CLOSE,insight_tr("Refresh"),201,insight_tr("Show Folder"),203,insight_tr("Copy Snapshot"),202,insight_tr("Open Backup"),GTK_RESPONSE_ACCEPT,NULL);
+    Browser browser={0};browser.directory=directory;browser.source=g_strdup(source->file_name);browser.type=source->file_type;browser.source_id=source->id;
+    browser.dialog=gtk_dialog_new_with_buttons(insight_tr(compare ? "Compare with Backup File":"Open Backup File"),GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,
+        insight_tr("Close"),GTK_RESPONSE_CLOSE,insight_tr("Refresh"),201,insight_tr("Show Folder"),203,insight_tr("Copy Snapshot"),202,insight_tr("Compare with Current Buffer"),204,insight_tr(compare ? "Compare":"Open Backup"),GTK_RESPONSE_ACCEPT,NULL);
     gtk_widget_set_name(browser.dialog,"insight-backup-dialog");gtk_window_set_default_size(GTK_WINDOW(browser.dialog),900,540);
     GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(browser.dialog));GtkWidget *label=gtk_label_new(browser.source);g_object_set_data(G_OBJECT(label),"insight-no-i18n",GINT_TO_POINTER(1));gtk_label_set_selectable(GTK_LABEL(label),TRUE);gtk_label_set_ellipsize(GTK_LABEL(label),PANGO_ELLIPSIZE_MIDDLE);gtk_box_pack_start(GTK_BOX(box),label,FALSE,FALSE,6);
     browser.model=gtk_list_store_new(4,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_UINT64,G_TYPE_STRING);browser.tree=gtk_tree_view_new_with_model(GTK_TREE_MODEL(browser.model));gtk_widget_set_name(browser.tree,"insight-backup-versions");
@@ -122,9 +124,22 @@ static void browse(void)
         gint response=gtk_dialog_run(GTK_DIALOG(browser.dialog));
         if(response==201) { refresh(&browser);continue; }
         if(response==203) { show_folder(browser.directory);continue; }
-        if(response!=202 && response!=GTK_RESPONSE_ACCEPT) break;
+        if(response!=202 && response!=204 && response!=GTK_RESPONSE_ACCEPT) break;
         gsize length=0;gchar *text=read_selected(&browser,&length);if(!text) { selection_changed(NULL,&browser);continue; }
         if(response==202) { gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),text,length);g_free(text);continue; }
+        if(response==204 || compare) {
+            GeanyDocument *doc=document_find_by_id(browser.source_id);gchar *current=NULL;gint size=-1;
+            if(doc && doc->is_valid && !g_strcmp0(doc->file_name,browser.source)) {
+                size=sci_get_length(doc->editor->sci);
+                if(size>=0 && (guint)size<=INSIGHT_SNAPSHOT_COMPARE_LIMIT) current=sci_get_contents(doc->editor->sci,-1);
+            }
+            InsightBackupEntry *entry=selected(&browser);
+            gchar *label=g_strdup_printf("%s — %s",insight_tr("Backup snapshot"),entry ? entry->name:"");
+            gboolean opened=current && insight_snapshot_compare_show(main_widgets.window,label,text,length,insight_tr("Current buffer snapshot"),current,size);
+            g_free(label);g_free(current);g_free(text);
+            if(opened) break;
+            gtk_label_set_text(GTK_LABEL(browser.status),insight_tr("Comparison requires the original source document and valid UTF-8 snapshots up to 1 MiB per side."));continue;
+        }
         open_view(&browser,text);g_free(text);break;
     }
     gtk_widget_destroy(browser.dialog);g_object_unref(browser.model);if(browser.entries) g_ptr_array_free(browser.entries,TRUE);g_free(browser.source);g_free(directory);
@@ -132,7 +147,7 @@ static void browse(void)
 void insight_backups_command(guint action)
 {
     if(busy) return;busy=TRUE;
-    if(action==0) save_backup();else if(action==1) browse();else if(action==2) {
+    if(action==0) save_backup();else if(action==1 || action==3) browse(action==3);else if(action==2) {
         GError *error=NULL;gchar *directory=directory_for(document_get_current(),&error);
         if(directory) show_folder(directory);else status_error(error);g_free(directory);g_clear_error(&error);
     }
@@ -143,9 +158,9 @@ void insight_backups_init(void)
 {
     if(initialized) return;initialized=TRUE;
     GtkWidget *menu=ui_lookup_widget(main_widgets.window,"file1_menu");
-    const gchar *labels[]={"Save New Backup File","Open Backup File…","Show Backup Folder"};const gchar *names[]={"insight-save-backup","insight-open-backup","insight-backup-folder"};
-    const guint keys[]={GEANY_KEYS_INSIGHT_SAVEBACKUP,GEANY_KEYS_INSIGHT_OPENBACKUP,GEANY_KEYS_INSIGHT_BACKUPFOLDER};
-    for(guint i=0;i<3;i++) {
+    const gchar *labels[]={"Save New Backup File","Open Backup File…","Show Backup Folder","Compare with Backup File…"};const gchar *names[]={"insight-save-backup","insight-open-backup","insight-backup-folder","insight-compare-backup"};
+    const guint keys[]={GEANY_KEYS_INSIGHT_SAVEBACKUP,GEANY_KEYS_INSIGHT_OPENBACKUP,GEANY_KEYS_INSIGHT_BACKUPFOLDER,GEANY_KEYS_INSIGHT_COMPAREBACKUP};
+    for(guint i=0;i<4;i++) {
         GtkWidget *item=gtk_menu_item_new_with_label(labels[i]);gtk_widget_set_name(item,names[i]);keybindings_attach_menu(GEANY_KEY_GROUP_EDITOR,keys[i],item);g_signal_connect(item,"activate",G_CALLBACK(activate),GUINT_TO_POINTER(i));gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);gtk_widget_show(item);
     }
     GtkWidget *help=gtk_menu_item_new_with_label("Backup Versions Help");g_signal_connect(help,"activate",G_CALLBACK(insight_help_show),"backup-versions.md");gtk_menu_shell_append(GTK_MENU_SHELL(menu),help);gtk_widget_show(help);

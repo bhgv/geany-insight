@@ -6,6 +6,8 @@ void insight_revisions_init(GtkWidget *edit_menu);
 void insight_revisions_notify(GeanyEditor *, SCNotification *);
 void insight_revisions_show(void);
 void insight_revisions_original(void);
+/* Caller owns a copy of the retained decoded original, or NULL if unavailable. */
+gchar *insight_revisions_original_text(ScintillaObject *sci);
 void insight_revisions_file(void);
 void insight_revisions_change(gboolean forward);
 void insight_revisions_changes(void);

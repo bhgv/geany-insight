@@ -233,6 +233,7 @@ libgeany_la_SOURCES += \
 	insight-selection-search.c insight-selection-search.h \
 	insight-typing.c insight-typing.h \
 	insight-backups.c insight-backups.h \
+	insight-snapshot-compare.c insight-snapshot-compare.h \
 	insight-revisions.c insight-revisions.h \
 	insight-paste.c insight-paste.h \
 	insight-completion.c insight-completion.h \
