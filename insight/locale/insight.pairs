@@ -1184,3 +1184,37 @@ Binary or non-UTF-8 historical file: text diff unavailable.|||Бинарный �
 Historical file exceeds the 1 MiB text limit.|||Исторический файл превышает предел текста 1 МиБ.
 Git diff exceeds the 4 million LCS cell limit.|||Дифф Git превышает предел 4 миллиона ячеек LCS.
 Git diff cancelled.|||Сравнение Git отменено.
+
+Project Report|||Отчёт по проекту
+Project Report…|||Отчёт по проекту…
+Export Project File List|||Экспорт списка файлов проекта
+Export Project File List…|||Экспорт списка файлов проекта…
+Include Symbols|||Включить символы
+Line Numbers|||Номера строк
+Relative file paths|||Относительные пути файлов
+Occurrence|||Порядок в файле
+Sort by|||Сортировать по
+Symbol Types…|||Типы символов…
+Report Symbol Types|||Типы символов отчёта
+Generate|||Сформировать
+Cancel generation|||Отменить генерацию
+Copy Report|||Копировать отчёт
+Open Report|||Открыть отчёт
+Save Project Report|||Сохранить отчёт по проекту
+Report options changed. Generate a new preview.|||Настройки отчёта изменены. Сформируйте новый предпросмотр.
+Generating captured project report…|||Формирование отчёта по снимку проекта…
+Preview shows the first 32 KiB. Copy, Open and Save use the complete report.|||Предпросмотр показывает первые 32 КиБ. Копирование, открытие и сохранение используют полный отчёт.
+Report ready. Copy, Open or Save the captured project snapshot.|||Отчёт готов. Скопируйте, откройте или сохраните снимок проекта.
+Project report saved. Source files and project settings are unchanged.|||Отчёт сохранён. Исходные файлы и настройки проекта не изменены.
+Cannot save project report.|||Не удалось сохранить отчёт по проекту.
+Project report snapshot unavailable.|||Снимок для отчёта по проекту недоступен.
+Open a Geany project before generating a project report.|||Откройте проект Geany перед формированием отчёта.
+Project indexing is not ready. Wait for a completed scan before generating a report.|||Индекс проекта не готов. Дождитесь завершённого обхода перед формированием отчёта.
+Project report exceeds 128 symbol types.|||Отчёт проекта превышает предел 128 типов символов.
+Project report exceeds 4 MiB. Narrow the symbol types or export a file list.|||Отчёт превышает 4 МиБ. Ограничьте типы символов или экспортируйте список файлов.
+Project report exceeds 100000 symbols. Narrow the symbol types.|||Отчёт превышает 100000 символов. Ограничьте типы символов.
+Project file list exceeds the 2 MiB Master File List limit.|||Список файлов превышает предел Master File List 2 МиБ.
+Plain file lists cannot represent line breaks, wildcards or edge whitespace in filenames.|||Обычный список файлов не поддерживает переводы строк, маски и пробельные символы по краям имён.
+Choose an output outside the captured source files and project file.|||Выберите назначение вне захваченных исходников и файла проекта.
+Close the destination document before saving a project report.|||Закройте документ назначения перед сохранением отчёта.
+Report destinations require real parent directories, not symbolic links.|||Для сохранения отчёта нужны обычные родительские каталоги без символических ссылок.
