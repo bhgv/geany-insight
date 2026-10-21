@@ -1557,3 +1557,27 @@ A backup entry is not a bounded regular file with an identity.	Резервна�
 Backup storage is limited to 200 versions and 64 MiB per source file.	История исходного файла ограничена 200 версиями и 64 МиБ.
 Choose a listed backup version.	Выберите резервную версию из списка.
 The backup changed. Refresh the list before opening it.	Резервная версия изменилась. Обновите список перед открытием.
+Snapshot comparison	Сравнение снимков
+Compare with Backup File	Сравнить с резервной версией
+Compare with Backup File…	Сравнить с резервной версией…
+Compare with Current Buffer	Сравнить с текущим буфером
+Compare Current Buffer with Disk	Сравнить текущий буфер с диском
+Compare Current Buffer with Original	Сравнить текущий буфер с исходным
+Backup snapshot	Резервный снимок
+Current buffer snapshot	Снимок текущего буфера
+Disk snapshot (UTF-8)	Снимок диска (UTF-8)
+Original Contents snapshot	Снимок исходного содержимого
+Copy difference report	Копировать отчёт о различиях
+Left lines	Строки слева
+Right lines	Строки справа
+anchor	граница
+Snapshot comparison cancelled.	Сравнение снимков отменено.
+Snapshot comparison exceeds the 4 million LCS cell limit.	Сравнение снимков превышает предел 4 миллиона ячеек LCS.
+Cannot allocate snapshot comparison.	Не удалось выделить память для сравнения снимков.
+Snapshot differences ready. Source buffers and disk files are unchanged.	Различия снимков готовы. Исходные буферы и файлы на диске не изменены.
+No differences under the selected comparison options.	При выбранных опциях сравнения различий нет.
+Comparing captured snapshots…	Сравнение захваченных снимков…
+Options changed. Compare again to rebuild the difference list.	Опции изменены. Повторите сравнение для обновления списка различий.
+Difference report exceeds 1 MiB. Clipboard unchanged.	Отчёт о различиях превышает 1 МиБ. Буфер обмена не изменён.
+Comparison requires available UTF-8 snapshots without NUL, at most 1 MiB per side.	Для сравнения нужны доступные снимки UTF-8 без NUL, до 1 МиБ на сторону.
+Comparison requires the original source document and valid UTF-8 snapshots up to 1 MiB per side.	Для сравнения нужен исходный документ и корректные снимки UTF-8 до 1 МиБ на сторону.

@@ -514,3 +514,6 @@ dist_insightdocmedia_DATA += insight/docs/media/checkpoint.svg insight/docs/medi
 
 insightdoc_DATA += insight/docs/backup-versions.md
 dist_insightdocmedia_DATA += insight/docs/media/backup-versions.svg insight/docs/media/backup-versions.jpg
+
+insightdoc_DATA += insight/docs/snapshot-comparison.md
+dist_insightdocmedia_DATA += insight/docs/media/snapshot-comparison.svg insight/docs/media/snapshot-comparison.jpg

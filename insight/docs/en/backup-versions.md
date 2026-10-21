@@ -9,6 +9,7 @@
 - **Open Backup** opens the complete snapshot in a detached, read-only editor tab. It does not replace or save the source. To use its text, copy it explicitly or export it with Save a Copy.
 - **Copy Snapshot** copies the complete selected version, including text beyond the preview.
 - **Refresh** rereads the list and selects the newest version. A missing or changed selected file cannot be opened with its old listed identity.
+- **Compare with Current Buffer** opens a [read-only snapshot comparison](snapshot-comparison.md) against the source buffer, including unsaved text (1 MiB/side). File → Compare with Backup File opens this picker directly for comparison.
 - **Show Folder** opens this source's backup folder in the system file manager. Before the first snapshot, no folder is created just by browsing.
 - **Close** is the default dialog response.
 
