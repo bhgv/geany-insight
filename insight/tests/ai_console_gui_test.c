@@ -52,7 +52,7 @@ static gboolean step(gpointer data) {
  case 3: {
   if(!gtk_widget_get_sensitive(named(diff,"insight-diff-ai-apply"))) break;
   gchar *left=text(diff,"insight-diff-left"),*right=text(diff,"insight-diff-right"),*explanation=text(diff,"insight-diff-ai-explanation");g_assert_cmpstr(left,==,base);g_assert_cmpstr(right,==,proposal);g_assert_nonnull(strstr(explanation,"Mock analysis"));g_free(left);g_free(right);g_free(explanation);
-  click(diff,"insight-diff-all-right");entry(diff,"insight-diff-ai-question","Why is this terminator required?");click(diff,"insight-diff-ai-ask");after=g_get_monotonic_time()+200*G_TIME_SPAN_MILLISECOND;phase++;break;
+  g_assert_false(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(diff,"insight-diff-ai-tools"))));gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(diff,"insight-diff-ai-tools")),TRUE);g_assert_true(gtk_widget_get_visible(gtk_widget_get_parent(named(diff,"insight-diff-replacement"))));gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(diff,"insight-diff-ai-tools")),FALSE);click(diff,"insight-diff-all-right");entry(diff,"insight-diff-ai-question","Why is this terminator required?");click(diff,"insight-diff-ai-ask");after=g_get_monotonic_time()+200*G_TIME_SPAN_MILLISECOND;phase++;break;
  }
  case 4: {
   if(g_get_monotonic_time()<after) break;gtk_window_present(GTK_WINDOW(diff));after=g_get_monotonic_time()+200*G_TIME_SPAN_MILLISECOND;phase++;break;

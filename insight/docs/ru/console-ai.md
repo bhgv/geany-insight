@@ -40,3 +40,6 @@
 Транспорт проверяется локальным mock API: совместимые запросы четырёх провайдеров, авторизация, некорректные и обрезанные ответы, перенаправления, ограничения размеров и управляющие символы команд. Нативный тест Linux проходит через реальные виджеты SSH, помощника и Diff: приложение кода, дополнительные вопросы, вставка без выполнения, защита изменённого/readonly буфера, один Undo, неизменный файл на диске, отмена и меню локального VTE. Ключи живых API не предоставлялись; реальные аккаунты OpenAI/xAI/DeepSeek/Qwen, Windows и Android не проверялись.
 
 Документация API: [OpenAI](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create), [xAI](https://docs.x.ai/developers/model-capabilities/legacy/chat-completions), [DeepSeek](https://api-docs.deepseek.com/), [Qwen](https://www.alibabacloud.com/help/en/model-studio/qwen-api-via-openai-chat-completions).
+
+
+В режиме проверки ИИ **More comparison tools** разворачивает строки файлов, пробельных символов, регулярных выражений и замены; Ctrl+H также раскрывает инструменты замены. По умолчанию они свёрнуты, чтобы оставить место исходникам и Result. Номера строк включены.

@@ -13,7 +13,7 @@ void insight_diff_set_source_opener(InsightDiffOpen opener) { source_opener=open
 typedef struct { gchar *text; gint *positions; } Snapshot;
 typedef struct { guint begin,end; } MapBlock;
 typedef struct {
- gboolean memory;GtkWidget *apply;InsightDiffApply apply_cb;InsightDiffAsk ask_cb;gpointer review_data;GDestroyNotify review_destroy;
+ gboolean memory;GtkWidget *apply,*review_tools;InsightDiffApply apply_cb;InsightDiffAsk ask_cb;gpointer review_data;GDestroyNotify review_destroy;
  GtkWidget *window,*paths[2],*views[3],*status,*undo,*redo,*take[2],*take_all[2],*external;
  GtkWidget *find_entry,*find_side,*find_case,*find_word,*find_wrap,*find_previous,*find_next,*find_status,*numbers,*find_regex,*find_dotall;
  GtkWidget *replace_entry,*replace_scope,*replace_once,*replace_case,*replace_status,*replace_apply,*replace_confirm;
@@ -196,7 +196,7 @@ static gboolean key(GtkWidget *w,GdkEventKey *event,gpointer data) {
   gtk_combo_box_set_active(GTK_COMBO_BOX(m->line_side),side);gtk_widget_grab_focus(m->views[side]);return TRUE;
  }
  if(event->keyval==GDK_KEY_Escape && w==m->line_number) { gtk_widget_grab_focus(m->views[focused_pane(m)]);return TRUE; }
- if((event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_h || event->keyval==GDK_KEY_H)) { gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),2);gtk_combo_box_set_active(GTK_COMBO_BOX(m->replace_scope),gtk_text_buffer_get_has_selection(result(m)) ? 1 : 0);gtk_widget_grab_focus(m->replace_entry);gtk_editable_select_region(GTK_EDITABLE(m->replace_entry),0,-1);return TRUE; }
+ if((event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_h || event->keyval==GDK_KEY_H)) { if(m->review_tools) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->review_tools),TRUE);gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),2);gtk_combo_box_set_active(GTK_COMBO_BOX(m->replace_scope),gtk_text_buffer_get_has_selection(result(m)) ? 1 : 0);gtk_widget_grab_focus(m->replace_entry);gtk_editable_select_region(GTK_EDITABLE(m->replace_entry),0,-1);return TRUE; }
  if((event->state&GDK_CONTROL_MASK) && event->keyval==GDK_KEY_F3) { selection_search(m,focused_pane(m),(event->state&GDK_SHIFT_MASK) ? -1 : 1);return TRUE; }
  if((event->state&(GDK_CONTROL_MASK|GDK_SHIFT_MASK))==(GDK_CONTROL_MASK|GDK_SHIFT_MASK) && (event->keyval==GDK_KEY_f || event->keyval==GDK_KEY_F)) { GtkWidget *focus=gtk_window_get_focus(GTK_WINDOW(m->window));guint side=gtk_combo_box_get_active(GTK_COMBO_BOX(m->find_side));for(guint i=0;i<3;i++) if(focus==m->views[i]) side=i;find_all(m,side);return TRUE; }
  if(event->keyval==GDK_KEY_F3) { find_text(m,(event->state&GDK_SHIFT_MASK)!=0);return TRUE; }
@@ -1216,10 +1216,18 @@ static void review_apply(GtkWidget *widget,gpointer data) {
 static void review_ask(GtkWidget *widget,gpointer data) {
  GtkWidget *entry=g_object_get_data(G_OBJECT(widget),"review-question");Merge *m=data;const gchar *question=gtk_entry_get_text(GTK_ENTRY(entry));if(m->ask_cb && *question) m->ask_cb(question,m->review_data);
 }
+static void review_tools(GtkToggleButton *toggle,gpointer data) {
+ GPtrArray *rows=data;for(guint i=0;i<rows->len;i++) gtk_widget_set_visible(g_ptr_array_index(rows,i),gtk_toggle_button_get_active(toggle));
+}
 void insight_diff_review(GtkWidget *parent,const gchar *before,const gchar *after,const gchar *explanation,InsightDiffApply apply,InsightDiffAsk ask,gpointer data,GDestroyNotify destroy_data) {
  if(!before || !after || strlen(before)>1024*1024 || strlen(after)>1024*1024 || !g_utf8_validate(before,-1,NULL) || !g_utf8_validate(after,-1,NULL)) { if(destroy_data) destroy_data(data);return; }
  Merge *m=merge_new(parent);m->memory=TRUE;gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->ignore_space),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->ignore_eol),FALSE);m->apply_cb=apply;m->ask_cb=ask;m->review_data=data;m->review_destroy=destroy_data;gtk_window_set_title(GTK_WINDOW(m->window),"AI proposal — Diff / Merge review");gtk_entry_set_text(GTK_ENTRY(m->paths[0]),"Captured source buffer");gtk_entry_set_text(GTK_ENTRY(m->paths[1]),"AI proposed replacement");
  GtkWidget *box=gtk_bin_get_child(GTK_BIN(m->window)),*panel=gtk_box_new(GTK_ORIENTATION_VERTICAL,3),*note=gtk_text_view_new(),*scroll=gtk_scrolled_window_new(NULL,NULL);gtk_widget_set_name(panel,"insight-diff-ai-panel");gtk_widget_set_name(note,"insight-diff-ai-explanation");gtk_text_view_set_editable(GTK_TEXT_VIEW(note),FALSE);gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(note),GTK_WRAP_WORD_CHAR);gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(note)),explanation ? explanation:"",-1);gtk_container_add(GTK_CONTAINER(scroll),note);gtk_widget_set_size_request(scroll,-1,100);gtk_box_pack_start(GTK_BOX(panel),scroll,FALSE,TRUE,0);
  GtkWidget *bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4),*entry=gtk_entry_new(),*send=gtk_button_new_with_label("Ask about this change");gtk_widget_set_name(entry,"insight-diff-ai-question");gtk_entry_set_max_length(GTK_ENTRY(entry),4096);gtk_widget_set_name(send,"insight-diff-ai-ask");g_object_set_data(G_OBJECT(send),"review-question",entry);gtk_box_pack_start(GTK_BOX(bar),entry,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(bar),send,FALSE,FALSE,0);g_signal_connect(send,"clicked",G_CALLBACK(review_ask),m);gtk_widget_set_sensitive(send,ask!=NULL);m->apply=gtk_button_new_with_label("Apply Result to Source");gtk_widget_set_name(m->apply,"insight-diff-ai-apply");gtk_box_pack_start(GTK_BOX(bar),m->apply,FALSE,FALSE,0);g_signal_connect(m->apply,"clicked",G_CALLBACK(review_apply),m);gtk_box_pack_start(GTK_BOX(panel),bar,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),panel,FALSE,FALSE,0);gtk_box_reorder_child(GTK_BOX(box),panel,1);gtk_widget_show_all(panel);
+ /* Keep proposal code visible; the full comparison tools remain available. */
+ m->review_tools=gtk_check_button_new_with_label("More comparison tools");gtk_widget_set_name(m->review_tools,"insight-diff-ai-tools");gtk_box_pack_start(GTK_BOX(panel),m->review_tools,FALSE,FALSE,0);
+ GtkWidget *anchors[]={m->paths[0],m->paths[1],m->ignore_space,m->visible_space,m->find_regex,m->replace_entry,m->replace_scope};GPtrArray *rows=g_ptr_array_new_with_free_func(g_object_unref);
+ for(guint i=0;i<G_N_ELEMENTS(anchors);i++) { GtkWidget *row=gtk_widget_get_parent(anchors[i]);g_ptr_array_add(rows,g_object_ref(row));gtk_widget_set_no_show_all(row,TRUE);gtk_widget_hide(row); }
+ g_object_set_data_full(G_OBJECT(m->review_tools),"review-tool-rows",rows,(GDestroyNotify)g_ptr_array_unref);g_signal_connect(m->review_tools,"toggled",G_CALLBACK(review_tools),rows);gtk_widget_show(m->review_tools);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->numbers),TRUE);gtk_window_resize(GTK_WINDOW(m->window),1100,760);
  Comparison *job=g_new0(Comparison,1);job->text[0]=g_strdup(before);job->text[1]=g_strdup(after);m->cancel=g_cancellable_new();busy(m,TRUE);GTask *task=g_task_new(m->window,m->cancel,comparison_done,NULL);g_task_set_task_data(task,job,comparison_free);g_task_run_in_thread(task,comparison_worker);g_object_unref(task);
 }

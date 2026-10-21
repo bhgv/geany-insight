@@ -40,3 +40,6 @@ This version handles one attached buffer at a time. It does not run model tools,
 The transport tests use a loopback mock API and cover all four compatible provider request shapes, authentication, malformed and truncated answers, redirects, bounds and command controls. The native Linux test exercises real SSH/assistant/Diff widgets, source attachment, follow-ups, command insertion without execution, stale/read-only rejection, one Undo, unchanged disk, cancellation and the local VTE menu. No live provider keys were supplied; live OpenAI/xAI/DeepSeek/Qwen accounts, Windows and Android were not tested.
 
 Provider references: [OpenAI](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create), [xAI](https://docs.x.ai/developers/model-capabilities/legacy/chat-completions), [DeepSeek](https://api-docs.deepseek.com/), [Qwen compatible API](https://www.alibabacloud.com/help/en/model-studio/qwen-api-via-openai-chat-completions).
+
+
+In AI review, **More comparison tools** expands the file/whitespace/regex/replacement rows; Ctrl+H also opens replacement controls. These tools start collapsed to leave room for source and Result. Line numbers start enabled.

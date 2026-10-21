@@ -1691,3 +1691,4 @@ Cannot insert into this console; copy the suggestion manually.	Вставка в
 Attached source is limited to 128 KiB.	Предел приложенного исходника — 128 КиБ.
 Attach UTF-8 source without NUL bytes.	Приложите исходник UTF-8 без байтов NUL.
 Code detached; only the displayed console context will be sent.	Код убран; будет отправлен только показанный контекст консоли.
+More comparison tools	Дополнительные инструменты сравнения
