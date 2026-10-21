@@ -277,14 +277,19 @@ static void open_source(GtkWidget *w,gpointer p) {
  if(!d) d=document_open_file(s->native,FALSE,NULL,NULL);
  if(v->closed) goto out;
  if(!d) { status(v,"Cannot open preview source in the editor.");goto out; }
- document_show_tab(d);gchar *text=document_text(d,NULL);const gchar *expected=s->applied ? s->after:s->before;
+ guint id=d->id;document_show_tab(d);
+ /* Tab activation can synchronously close the source or this review window. */
+ if(v->closed) goto out;
+ d=document_find_by_id(id);if(!d) { status(v,"Source closed during tab activation. Preview again before navigating.");goto out; }
+ gchar *text=document_text(d,NULL);const gchar *expected=s->applied ? s->after:s->before;
  if(text&&expected&&!strcmp(text,expected)) {
   GtkTreeModel *model;GtkTreeIter it;guint index=0;
   if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(v->hits)),&model,&it)) gtk_tree_model_get(model,&it,HIT_INDEX,&index,-1);
-  if(s->plan&&index<s->plan->hits->len) { InsightReplaceHit *h=g_ptr_array_index(s->plan->hits,index);gsize pos=s->applied ? h->after:h->begin;SEND(d->editor->sci,SCI_GOTOPOS,MIN(pos,strlen(text)),0);SEND(d->editor->sci,SCI_SCROLLCARET,0,0); }
+  if(s->plan&&index<s->plan->hits->len) { InsightReplaceHit *h=g_ptr_array_index(s->plan->hits,index);gsize pos=s->applied ? h->after:h->begin;SEND(d->editor->sci,SCI_GOTOPOS,MIN(pos,strlen(text)),0);d=document_find_by_id(id);if(v->closed||!d) { g_free(text);goto out; }SEND(d->editor->sci,SCI_SCROLLCARET,0,0); }
+  if(v->closed) { g_free(text);goto out; }
   status(v,"Source opened. This preview stays open; Preview again after manual source edits.");
  }else status(v,"Source differs from preview. Opened without using stale match offsets; Preview again before applying.");
- g_free(text);gtk_widget_grab_focus(GTK_WIDGET(d->editor->sci));
+ g_free(text);d=document_find_by_id(id);if(!v->closed&&d) gtk_widget_grab_focus(GTK_WIDGET(d->editor->sci));
 out:g_object_unref(v->window);
 }
 static void choose_inputs(GtkWidget *w,gpointer p) {
