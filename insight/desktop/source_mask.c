@@ -27,11 +27,11 @@ static gsize raw_string(const char *text,gsize size,gsize start) {
  for(gsize i=body+1;i<size;i++) if(text[i]==')' && i+delimiter+1<size && !memcmp(text+i+1,text+start+2,delimiter) && text[i+delimiter+1]=='"') return i+delimiter+2;
  return size;
 }
-gchar *insight_source_region_mask(const char *text,gsize size,InsightCodeDialect dialect,InsightSourceRegion region,GError **error) {
+static gchar *region_mask(const char *text,gsize size,InsightCodeDialect dialect,InsightSourceRegion region,gboolean membership,GError **error) {
  if(!text || size>2u*1024u*1024u || memchr(text,0,size) || !g_utf8_validate(text,(gssize)size,NULL) || dialect<INSIGHT_CODE_C || dialect>INSIGHT_CODE_SHELL || region<INSIGHT_REGION_ALL || region>INSIGHT_REGION_COMMENTS) {
   g_set_error_literal(error,G_FILE_ERROR,G_FILE_ERROR_INVAL,"Invalid source or unsupported lexical dialect"); return NULL;
  }
- gchar *out=g_strndup(text,size);if(region==INSIGHT_REGION_ALL) return out;if(region==INSIGHT_REGION_COMMENTS) erase(out,0,size);
+ gchar *out=g_strndup(text,size);if(membership) memset(out,region==INSIGHT_REGION_COMMENTS ? 0:1,size);if(region==INSIGHT_REGION_ALL) return out;if(!membership && region==INSIGHT_REGION_COMMENTS) erase(out,0,size);
  for(gsize i=0;i<size;) {
   gsize start=i,end=i;gboolean comment=FALSE;
   /* C++ numeric separators are not character literal delimiters. */
@@ -65,9 +65,11 @@ gchar *insight_source_region_mask(const char *text,gsize size,InsightCodeDialect
     end++;
    }
   }
-  if(end>start) { if(region==INSIGHT_REGION_COMMENTS) { if(comment) memcpy(out+start,text+start,end-start); }else if(comment || region==INSIGHT_REGION_CODE) erase(out,start,end); i=end; } else i++;
+  if(end>start) { if(region==INSIGHT_REGION_COMMENTS) { if(comment) { if(membership) memset(out+start,1,end-start);else memcpy(out+start,text+start,end-start); } }else if(comment || region==INSIGHT_REGION_CODE) { if(membership) memset(out+start,0,end-start);else erase(out,start,end); } i=end; } else i++;
  }
  return out;
 }
+gchar *insight_source_region_mask(const char *text,gsize size,InsightCodeDialect dialect,InsightSourceRegion region,GError **error) { return region_mask(text,size,dialect,region,FALSE,error); }
+guchar *insight_source_region_membership(const char *text,gsize size,InsightCodeDialect dialect,InsightSourceRegion region,GError **error) { return (guchar *)region_mask(text,size,dialect,region,TRUE,error); }
 
 gchar *insight_source_code_mask(const char *text,gsize size,InsightCodeDialect dialect,GError **error) { return insight_source_region_mask(text,size,dialect,INSIGHT_REGION_CODE,error); }
