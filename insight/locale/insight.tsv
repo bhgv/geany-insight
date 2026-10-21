@@ -1735,3 +1735,36 @@ Write useful documentation and API/docstring comments: purpose, parameters, retu
 Review the target and every selected project-context file together for syntax, logic, incompatible interfaces, naming and data-flow errors. Report file/line evidence and uncertainty. Propose code only for the target; list corrections needed in other files for their own review.	Проверьте целевой и все выбранные контекстные файлы проекта вместе: синтаксис, логику, несовместимые интерфейсы, имена и поток данных. Укажите файлы, строки, основания и неопределённость. Предлагайте код только для целевого файла; перечислите необходимые изменения в остальных для отдельной проверки.
 Additional AI request — appended to earlier requirements	Новый запрос ИИ — добавляется к предыдущим требованиям
 Recompare variant	Повторить сравнение варианта
+Replace Files	Замена в файлах
+Replace Files…	Замена в файлах…
+Old	Старый текст
+New	Новый текст
+Filename masks (; separated)	Маски имён (через ;)
+Folder path for Folder scope	Путь для области «Папка»
+Choose files…	Выбрать файлы…
+Choose folder…	Выбрать папку…
+Code only (skip comments and strings)	Только код (без комментариев и строк)
+Skip comments	Без комментариев
+Case sensitive	Учитывать регистр
+Regular expressions	Регулярные выражения
+Preview replacements	Предпросмотр замен
+Stop preview	Остановить просмотр
+Apply selected to buffers	Применить выбранное в буферы
+Confirm each file before any changes	Подтверждать каждый файл до изменений
+Diff / Merge preview	Предпросмотр Diff / Merge
+Select all files	Выбрать все файлы
+Deselect files	Снять выбор файлов
+Select all matches	Выбрать все совпадения
+Deselect matches	Снять выбор совпадений
+Read-only — skipped	Только чтение — пропущен
+Not previewed	Нет предпросмотра
+No selected changes	Нет выбранных изменений
+Ready — editor buffers only	Готово — только буферы редактора
+After selected replacements — read only	После выбранных замен — только чтение
+Replacements	Замены
+Skip file	Пропустить файл
+Replace in buffer	Заменить в буфере
+Choose replacement folder	Выбрать папку замены
+Choose files for replacement	Выбрать файлы замены
+Replace Files — Diff preview	Замена в файлах — просмотр Diff
+Preview first. Select files and individual replacements, then Apply to buffers. No automatic Save.	Сначала предпросмотр. Выберите файлы и совпадения, затем примените в буферы. Автосохранения нет.

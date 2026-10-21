@@ -92,3 +92,6 @@ Full reference: [Search and replacement modes and query languages](search-replac
 
 
 [Editor and project AI: cumulative requests, variants, manual Result and refresh](editor-ai.md).
+
+
+[Replace Files: preview, individual choices and guarded multi-buffer replacement](replace-files.md).

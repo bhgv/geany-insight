@@ -547,3 +547,7 @@ dist_insightdocmedia_DATA += insight/docs/media/editor-ai.svg
 EXTRA_DIST += insight/tests/ai_edit_session_test.c insight/tests/editor_ai_gui_test.c
 
 dist_insightdocmedia_DATA += insight/docs/media/editor-ai.jpg
+
+insightdoc_DATA += insight/docs/replace-files.md
+dist_insightdocmedia_DATA += insight/docs/media/replace-files.svg
+EXTRA_DIST += insight/tests/replace_files_test.c insight/tests/replace_files_gui_test.c

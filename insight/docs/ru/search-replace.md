@@ -163,3 +163,6 @@ docstring Python остаются строками. В фильтрованны�
 
 
 See [the unified File Search and File Symbols interface](unified-file-tools.md).
+
+
+[Replace Files: предварительный просмотр, выбор совпадений и замена в нескольких буферах](replace-files.md).

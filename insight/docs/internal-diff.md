@@ -322,3 +322,6 @@ Enable **Confirm replacements**, then use **Replace all in Result**. Each effect
 
 
 [ИИ исходника и проекта: накопление запросов, варианты, ручной Result и обновление](editor-ai.md).
+
+
+[Replace Files: предварительный просмотр, выбор совпадений и замена в нескольких буферах](replace-files.md).

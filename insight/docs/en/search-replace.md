@@ -160,3 +160,6 @@ source in Context at its original position.
 
 
 See [the unified File Search and File Symbols interface](unified-file-tools.md).
+
+
+[Replace Files: preview, individual choices and guarded multi-buffer replacement](replace-files.md).
