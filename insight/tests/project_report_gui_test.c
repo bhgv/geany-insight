@@ -20,10 +20,13 @@ static gchar *preview(GtkWidget *v) { GtkTextBuffer *b=gtk_text_view_get_buffer(
 static void toggle(GtkWidget *v,const gchar *name,gboolean value) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(v,name)),value); }
 static gboolean types(gpointer data) { GtkWidget *v=top("insight-report-types-dialog");if(!v) return G_SOURCE_CONTINUE;GtkWidget *area=gtk_dialog_get_content_area(GTK_DIALOG(v));GList *stack=gtk_container_get_children(GTK_CONTAINER(area));while(stack) { GtkWidget *w=stack->data;stack=g_list_delete_link(stack,stack);if(GTK_IS_TOGGLE_BUTTON(w)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(w),GPOINTER_TO_INT(data));if(GTK_IS_CONTAINER(w)) stack=g_list_concat(stack,gtk_container_get_children(GTK_CONTAINER(w))); }gtk_dialog_response(GTK_DIALOG(v),GTK_RESPONSE_APPLY);return G_SOURCE_REMOVE; }
 static gboolean choose_save(gpointer data) {
- (void)data;GtkWidget *v=top("insight-report-save-dialog");if(!v) return G_SOURCE_CONTINUE;gchar *dir=g_path_get_dirname(output),*name=g_path_get_basename(output);g_assert_true(gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(v),dir));gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(v),name);g_free(dir);g_free(name);gtk_dialog_response(GTK_DIALOG(v),GTK_RESPONSE_ACCEPT);return G_SOURCE_REMOVE;
+ (void)data;GtkWidget *v=top("insight-report-save-dialog");if(!v) return G_SOURCE_CONTINUE;
+ if(!g_object_get_data(G_OBJECT(v),"fixture-save-initialized")) { gchar *dir=g_path_get_dirname(output),*name=g_path_get_basename(output);g_assert_true(gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(v),dir));gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(v),name);g_free(dir);g_free(name);g_object_set_data(G_OBJECT(v),"fixture-save-initialized",GINT_TO_POINTER(1));return G_SOURCE_CONTINUE; }
+ gchar *selected=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(v));gboolean ready=!g_strcmp0(selected,output);g_free(selected);if(!ready) return G_SOURCE_CONTINUE;
+ gtk_dialog_response(GTK_DIALOG(v),GTK_RESPONSE_ACCEPT);return G_SOURCE_REMOVE;
 }
 static gboolean respond(gpointer data) {
- (void)data;GtkWidget *v=top("insight-project-report-dialog");if(!v || g_object_get_data(G_OBJECT(v),"insight-report-busy")) return G_SOURCE_CONTINUE;
+ (void)data;if(top("insight-report-save-dialog")) return G_SOURCE_CONTINUE;GtkWidget *v=top("insight-project-report-dialog");if(!v || g_object_get_data(G_OBJECT(v),"insight-report-busy")) return G_SOURCE_CONTINUE;
  gchar *text=preview(v);if(!*text) { g_free(text);return G_SOURCE_CONTINUE; }g_assert_false(gtk_text_view_get_editable(GTK_TEXT_VIEW(named(v,"insight-report-preview"))));
  if(mode==1) { g_assert_cmpstr(text,==,"a.c\nb.c\nempty.h\n");g_assert_false(gtk_widget_get_sensitive(named(v,"insight-report-symbols")));gtk_dialog_response(GTK_DIALOG(v),203);g_free(text);return G_SOURCE_CONTINUE; }
  if(mode==2) { mode=3;gtk_dialog_response(GTK_DIALOG(v),GTK_RESPONSE_CLOSE);g_free(text);return G_SOURCE_CONTINUE; }
