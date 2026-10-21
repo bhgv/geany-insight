@@ -43,3 +43,17 @@ Provider references: [OpenAI](https://developers.openai.com/api/reference/resour
 
 
 In AI review, **More comparison tools** expands the file/whitespace/regex/replacement rows; Ctrl+H also opens replacement controls. These tools start collapsed to leave room for source and Result. Line numbers start enabled.
+
+
+## Actual editor windows
+
+These are real assistant and Diff/Merge windows from the complete Linux editor under Xvfb. Diagnostics, source and replies are synthetic test fixtures from a loopback mock API, not a live provider session. The screenshots show context review, an explicit source attachment, a suggested command without execution, and the explanation/follow-up area beside Apply.
+
+![Console assistant with mock diagnostic and proposed command](../media/console-ai.jpg)
+
+![Native AI proposal review with line numbers and editable Result](../media/ai-review.jpg)
+
+Each review keeps its captured proposal. A follow-up opens the assistant with the new answer; use Review code again to compare a new proposal. Cancelled or failed comparisons cannot apply a Result.
+
+
+Verified code: [`5a2f1e4271b30304e218a5664e8565e3010f9c77`](https://github.com/bhgv/geany-insight/commit/5a2f1e4271b30304e218a5664e8565e3010f9c77). [Native Linux CI 39595574834](https://github.com/bhgv/geany-insight/actions/runs/39595574834): complete build/install with VTE, comparison core and **66/66 selected tests passed**, zero failures, skips or timeouts. Includes cancelled-comparison application rejection. Live providers were not tested.

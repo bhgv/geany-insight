@@ -36,3 +36,7 @@ Keep screenshots current when visible behavior changes. Favor small, useful illu
 `file-compare.jpg`: real production Diff/Merge window captured in an isolated Linux GTK/Xvfb fixture with synthetic test files; not the complete editor. `file-compare-flow.svg` explains block selection and exact-byte result editing.
 
 `directory-compare.jpg`: real production Directory Compare window from the isolated Linux GTK fixture with synthetic files, not the complete editor. `directory-compare.svg` illustrates relative matching and pair routing.
+
+`console-ai.svg`: self-contained diagram of reviewed console context, explicit API requests and guarded code application.
+
+`console-ai.jpg` and `ai-review.jpg`: actual assistant and Diff/Merge windows from the complete Linux editor under Xvfb (native integration run 39594612131). The source, diagnostic, key and reply are synthetic loopback mock API fixtures; these are not live provider sessions. JPEGs are optimized and stripped of metadata.
