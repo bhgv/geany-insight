@@ -1990,3 +1990,29 @@ Added Whole Result / Selection / Current position to end scope selector, shared 
 Merged Ctrl+F/native repeat commands with the File Search Bar; compact Source Insight arrangement and options include wrap, selection, incremental search and button word loading. Merged native ctags structure and rich Insight list into one File Symbols page with one query and explicit modes. Native structure is default; custom square type badges, pale background, bold structural declarations and bottom sorting follow the official visual reference. Platform rendering and parser differences remain; pixel identity and unimplemented SI search dialect/context features are not claimed. [Guide](unified-file-tools.md).
 
 Unified file tools validation: source commit `6b07ca9`, [Linux CI](https://github.com/bhgv/geany-insight/actions/runs/39337698410), complete editor build/install and 29 tests passed with zero failures/skips. Includes large-file literal/regex search, caret-only backward navigation, prefix-stable incremental search, query history, one shared symbol page, actual native class/member nesting and mapped focus. Real full-editor capture: [JPEG](media/unified-file-tools.jpg). Windows and Android were not executed for this series.
+
+
+## 2026-10-21 — staged Replace Files review and remaining batches
+
+Replace Files now stages modal per-occurrence Replace / Skip / Replace remaining /
+Cancel decisions before any buffer edits. File confirmations run first; Cancel
+preserves the occurrence checkboxes and every source buffer. Independent review
+vectors render without mutating the original plan and are checked for size again.
+
+Preview selects at most 128 eligible files. Applied sources remain marked and
+excluded, including after editor Undo; Select next 128 files continues the same
+snapshot rather than rematching replacement text. Each batch rechecks its sources.
+Added wrapped Previous/Next and F3/Shift+F3 preview navigation plus guarded source
+handoff without closing the review window. Manual source edits require a new
+Preview; snapshots do not automatically reload on focus.
+
+Validation: complete Linux build/install and 72/72 tests passed, code
+`b6ebd9315d2ade5422b93410f073121d1360bd89`,
+[run 39616948566](https://github.com/bhgv/geany-insight/actions/runs/39616948566).
+The new native fixture checks cancelled/staged decisions, Skip/remaining across
+files, source/criteria changes during review, wrapped navigation, source handoff,
+applied-file exclusion, 131 files in 128+3 batches, individual Undo and unchanged
+disk. Core checks cover immutable decisions, oversized subsets and skipped-match
+offsets. RU/EN help and installed SVG/JPEG assets are updated. The captures are
+real complete-editor GTK windows under Xvfb with synthetic sources from the
+preceding successful 72-test run 39616085928. Windows/Android were not executed.

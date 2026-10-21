@@ -163,3 +163,5 @@ See [the unified File Search and File Symbols interface](unified-file-tools.md).
 
 
 [Replace Files: preview, individual choices and guarded multi-buffer replacement](replace-files.md).
+
+Replace Files also offers modal Replace/Skip/Remaining/Cancel review, F3/Shift+F3 preview navigation and Open source in editor. Select next 128 files continues the remaining snapshot plan while keeping applied files excluded.

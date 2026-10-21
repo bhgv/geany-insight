@@ -103,3 +103,5 @@ Options → Language profiles… и контекстное меню редакт
 
 
 [Replace Files: предварительный просмотр, выбор совпадений и замена в нескольких буферах](replace-files.md).
+
+В Replace Files доступны диалоги Replace/Skip/Remaining/Cancel, переходы F3/Shift+F3 и Open source in editor. Select next 128 files продолжает оставшийся план снимка, исключая уже применённые файлы.

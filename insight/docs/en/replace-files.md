@@ -37,6 +37,10 @@ Full read-only **before/after** panes have syntax colors and line numbers. Selec
 
 ## Apply and confirmation
 
+![Native occurrence confirmation](../media/replace-review.jpg)
+
+Actual modal review over the complete Linux editor window under Xvfb, using synthetic source fixtures. Both screenshots show the new batch/navigation controls and come from run 39616085928, code `0f6d1549055ac635e85c969660baa0c12d2ce7a2`.
+
 **Confirm each file before any changes** offers Replace / Skip / Cancel per file. Decisions are collected before buffer changes, so Cancel aborts the unmodified batch. **Confirm each replacement before any changes** additionally opens a modal review with file, line, column, bounded old/new snippets and the candidate highlighted behind it. **Replace occurrence / Skip replacement / Replace remaining / Cancel batch** stage choices without source edits. Replace remaining accepts the remaining enabled occurrences in this batch across files. All file confirmations run first. Cancel discards all staged occurrence choices and leaves the match checkboxes and buffers unchanged. Reviewed results are validated again, including size limits, before application. Confirmation options are local to the window.
 
 All selected sources are preflighted: document identity, filename, complete text and read-only state. Closed files are reread, opened in the editor and their decoded buffers rechecked before mutation. A preflight mismatch aborts the batch; newly opened unchanged tabs may remain open.
@@ -51,6 +55,6 @@ Up to 2,000 inputs; 1 MiB per source/result; 16 MiB source total, 32 MiB result 
 
 Native Linux tests exercise a real project, menu/key routing, masks, lexical regions, colored/numbered read-only previews, individual choices, stale/read-only guards, per-file Skip/Cancel, one Undo per file, unchanged disk, folder recursion, history and cancellation. Core tests cover Unicode/CRLF, captures, zero-width matches, regex bounds and exact comment membership. Windows and Android were not run.
 
-Initial implementation validated on Linux: complete build and installation, **71/71 tests passed**, [run 39609587088](https://github.com/bhgv/geany-insight/actions/runs/39609587088), code `2ce4631551103cbed25147159c35c4df6a9d2b3a`. The capture above comes from this run.
+Linux: complete build and installation, **72/72 tests passed**, [run 39616948566](https://github.com/bhgv/geany-insight/actions/runs/39616948566), code `b6ebd9315d2ade5422b93410f073121d1360bd89`. This includes staged Cancel/Skip/Remaining choices, criteria/source changes during review, wrapped navigation, editor handoff, applied-file exclusion and 131 files in 128+3 batches with one Undo per file and unchanged disk. Core tests additionally verify immutable review vectors, oversized subsets and offsets for skipped occurrences.
 
 Reference: [Source Insight Replace Files](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Replace_Files.htm). Automatic saving, forced read-only edits, Skip Inactive Code and Source Insight's exact legacy regex dialect are not implemented.

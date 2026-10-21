@@ -95,3 +95,5 @@ Full reference: [Search and replacement modes and query languages](search-replac
 
 
 [Replace Files: preview, individual choices and guarded multi-buffer replacement](replace-files.md).
+
+Replace Files also offers modal Replace/Skip/Remaining/Cancel review, F3/Shift+F3 preview navigation and Open source in editor. Select next 128 files continues the remaining snapshot plan while keeping applied files excluded.

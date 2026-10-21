@@ -48,4 +48,7 @@ Keep screenshots current when visible behavior changes. Favor small, useful illu
 
 `replace-files.svg`: self-contained diagram of scope capture, selected replacement plans and guarded buffer application.
 
-`replace-files.jpg`: actual Replace Files window in the complete Linux editor under Xvfb, native run 39609587088 (code 2ce4631551103cbed25147159c35c4df6a9d2b3a). Source files and project are synthetic fixtures. One occurrence is deselected and comments are skipped. Optimized JPEG, metadata stripped.
+`replace-files.jpg` and `replace-review.jpg`: actual Replace Files window and modal occurrence review in the complete Linux editor under Xvfb, native run 39616085928 (code 0f6d1549055ac635e85c969660baa0c12d2ce7a2). Source/project data are synthetic fixtures. The overview deselects an occurrence and skips comments; the review shows staged decisions. Optimized JPEGs, metadata stripped.
+
+
+`replace-files-review.svg`: self-contained diagram of staged file/occurrence decisions, cancellation, source rechecks and remaining batches excluding applied files.
