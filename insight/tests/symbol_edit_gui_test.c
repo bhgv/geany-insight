@@ -52,6 +52,9 @@ static gboolean step(gpointer data) {
   document_set_filetype(doc,filetypes_lookup_by_name("Python"));
   verify_edits(doc,"def outer():\n    def inner():\n        return 'α'\n    return inner()\n",42,"    def inner():\n        return 'α'\n","def outer():\n    return inner()\n","def outer():\n    def inner():\n        return 'α'\n    def inner():\n        return 'α'\n    return inner()\n");
   document_set_filetype(doc,filetypes_lookup_by_name("C++"));
+  const gchar *nominal_invalid[]={"struct Box { int value; }\n","struct Box { int value; }; int other;\n","struct Box;\n"};
+  for(guint i=0;i<G_N_ELEMENTS(nominal_invalid);i++) { reset(sci,nominal_invalid[i],8);command("insight-cut-symbol");command("insight-duplicate-symbol");check(sci,nominal_invalid[i]);g_assert_false(scintilla_send_message(sci,SCI_CANUNDO,0,0)); }
+
   verify_edits(doc,"struct Box {\n int value;\n};\nint other;\n",8,"struct Box {\n int value;\n};\n","int other;\n","struct Box {\n int value;\n};\nstruct Box {\n int value;\n};\nint other;\n");
   verify_edits(doc,"class Box {\npublic:\n int value;\n};\n",7,"class Box {\npublic:\n int value;\n};\n","","class Box {\npublic:\n int value;\n};\nclass Box {\npublic:\n int value;\n};\n");
   document_set_filetype(doc,filetypes_lookup_by_name("Python"));

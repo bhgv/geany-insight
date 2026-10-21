@@ -14,7 +14,7 @@
 #include <string.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 typedef struct {
- guint id,action;ScintillaObject *sci;GeanyFiletype *filetype;gchar *text,*name,*eol;gsize size,first,last;sptr_t anchor,caret;guint64 revision;gulong watch;gboolean closed;InsightSymbolPlan plan;
+ guint id,action;gint eol_mode;ScintillaObject *sci;GeanyFiletype *filetype;gchar *text,*name,*eol;gsize size,first,last;sptr_t anchor,caret;guint64 revision;gulong watch;gboolean closed;InsightSymbolPlan plan;
 } Edit;
 static void modified(ScintillaObject *s,gint unused,SCNotification *nt,gpointer data) {
  (void)s;(void)unused;Edit *v=data;if(nt->nmhdr.code==SCN_MODIFIED&&(nt->modificationType&(SC_MOD_INSERTTEXT|SC_MOD_DELETETEXT))) v->revision++;
@@ -25,7 +25,7 @@ static void release(Edit *v) {
 }
 static gboolean valid(Edit *v) {
  GeanyDocument *d=document_find_by_id(v->id);if(v->closed||!d||d!=document_get_current()||d->editor->sci!=v->sci||v->revision||g_strcmp0(d->file_name,v->name)||d->file_type!=v->filetype) return FALSE;
- ScintillaObject *s=v->sci;if(v->action&&(d->readonly||SEND(s,SCI_GETREADONLY,0,0))) return FALSE;
+ ScintillaObject *s=v->sci;if(SEND(s,SCI_GETEOLMODE,0,0)!=v->eol_mode) return FALSE;if(v->action&&(d->readonly||SEND(s,SCI_GETREADONLY,0,0))) return FALSE;
  if(SEND(s,SCI_GETSELECTIONS,0,0)!=1||SEND(s,SCI_GETSELECTIONMODE,0,0)!=SC_SEL_STREAM||SEND(s,SCI_GETANCHOR,0,0)!=v->anchor||SEND(s,SCI_GETCURRENTPOS,0,0)!=v->caret||SEND(s,SCI_GETSELECTIONNANCHORVIRTUALSPACE,0,0)||SEND(s,SCI_GETSELECTIONNCARETVIRTUALSPACE,0,0)) return FALSE;
  gchar *text=sci_get_contents(s,-1);gboolean same=SEND(s,SCI_GETLENGTH,0,0)==v->size&&!memcmp(text,v->text,v->size);g_free(text);return same;
 }
@@ -57,7 +57,7 @@ static void clipboard_ready(GtkClipboard *clipboard,const gchar *text,gpointer d
 void insight_symbol_edit_range(guint id,gint first,gint last,guint action) {
  GeanyDocument *d=document_find_by_id(id);if(!d||d!=document_get_current()||action>INSIGHT_SYMBOL_PASTE) return;ScintillaObject *s=d->editor->sci;gint size=sci_get_length(s);
  if(first<0||last<=first||last>size||size>INSIGHT_SYMBOL_SOURCE_LIMIT||last-first>INSIGHT_SYMBOL_TEXT_LIMIT) return;
- Edit *v=g_new0(Edit,1);v->id=id;v->action=action;v->sci=g_object_ref(s);v->filetype=d->file_type;v->text=sci_get_contents(s,-1);v->size=size;v->first=first;v->last=last;v->name=g_strdup(d->file_name);v->eol=g_strdup(sci_get_eol_mode(s)==SC_EOL_CRLF?"\r\n":sci_get_eol_mode(s)==SC_EOL_CR?"\r":"\n");v->anchor=SEND(s,SCI_GETANCHOR,0,0);v->caret=SEND(s,SCI_GETCURRENTPOS,0,0);
+ Edit *v=g_new0(Edit,1);v->id=id;v->action=action;v->eol_mode=SEND(s,SCI_GETEOLMODE,0,0);v->sci=g_object_ref(s);v->filetype=d->file_type;v->text=sci_get_contents(s,-1);v->size=size;v->first=first;v->last=last;v->name=g_strdup(d->file_name);v->eol=g_strdup(sci_get_eol_mode(s)==SC_EOL_CRLF?"\r\n":sci_get_eol_mode(s)==SC_EOL_CR?"\r":"\n");v->anchor=SEND(s,SCI_GETANCHOR,0,0);v->caret=SEND(s,SCI_GETCURRENTPOS,0,0);
  if(memchr(v->text,0,size)||!g_utf8_validate(v->text,size,NULL)||!valid(v)) { release(v);return; }
  v->watch=g_signal_connect(s,"sci-notify",G_CALLBACK(modified),v);
  if(action==INSIGHT_SYMBOL_PASTE) { gtk_clipboard_request_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),clipboard_ready,v);return; }

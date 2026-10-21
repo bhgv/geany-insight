@@ -26,6 +26,7 @@ static gboolean respond(gpointer unused) {
  if(guard==5) { document_set_text_changed(doc,FALSE);g_assert_true(document_close(doc)); }
  if(guard==6) document_new_file("other.c",NULL,"int n;\n");
  if(guard==7) { gtk_widget_destroy(d);timer=0;return G_SOURCE_REMOVE; }
+ if(guard==9) SEND(sci,SCI_SETEOLMODE,SC_EOL_LF,0);
  if(guard==8) { g_free(doc->file_name);doc->file_name=g_strdup("renamed.c"); }
  timer=0;gtk_dialog_response(GTK_DIALOG(d),guard==4?GTK_RESPONSE_CANCEL:GTK_RESPONSE_APPLY);return G_SOURCE_REMOVE;
 }
@@ -36,16 +37,17 @@ static void command(gint g,gboolean capture) {
  while(timer) g_main_context_iteration(NULL,TRUE);
 }
 static void interfere(ScintillaObject *s,gint id,SCNotification *nt,gpointer data) {
- (void)id;(void)data;if(!hook_done&&nt->nmhdr.code==SCN_MODIFIED&&(nt->modificationType&SC_MOD_INSERTCHECK)) { hook_done=TRUE;SEND(s,SCI_CHANGEINSERTION,2,(sptr_t)"XX"); }
+ (void)id;(void)data;if(!hook_done&&nt->nmhdr.code==SCN_MODIFIED&&(nt->modificationType&SC_MOD_INSERTCHECK)) { hook_done=TRUE;gchar *replacement=g_strnfill(nt->length,'X');SEND(s,SCI_CHANGEINSERTION,nt->length,(sptr_t)replacement);g_free(replacement); }
 }
 static gboolean step(gpointer unused) {
  (void)unused;doc=document_find_by_filename(path);if(!doc) return G_SOURCE_CONTINUE;sci=doc->editor->sci;window=gtk_widget_get_toplevel(GTK_WIDGET(sci));
  const gchar *payload="int helper(void) { return 1; }";gchar *expected=g_strconcat(payload,"\r\n",original,NULL);
  reset();gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),payload,-1);command(0,TRUE);check(expected);SEND(sci,SCI_UNDO,0,0);check(original);g_assert_false(SEND(sci,SCI_CANUNDO,0,0));SEND(sci,SCI_REDO,0,0);check(expected);
  for(gint g=1;g<=4;g++) { reset();command(g,FALSE);check(original);g_assert_false(SEND(sci,SCI_CANUNDO,0,0)); }
+ reset();command(9,FALSE);check(original);g_assert_false(SEND(sci,SCI_CANUNDO,0,0));
  reset();command(7,FALSE);check(original);g_assert_false(SEND(sci,SCI_CANUNDO,0,0));
  reset();command(6,FALSE);check(original);document_open_file(path,FALSE,NULL,NULL);
- reset();sptr_t mask=SEND(sci,SCI_GETMODEVENTMASK,0,0);SEND(sci,SCI_SETMODEVENTMASK,mask|SC_MOD_INSERTCHECK,0);gulong hook=g_signal_connect(sci,"sci-notify",G_CALLBACK(interfere),NULL);command(0,FALSE);g_assert_true(hook_done);gchar *changed=g_strconcat("XX",original,NULL);check(changed);g_free(changed);SEND(sci,SCI_UNDO,0,0);check(original);g_signal_handler_disconnect(sci,hook);SEND(sci,SCI_SETMODEVENTMASK,mask,0);
+ reset();sptr_t mask=SEND(sci,SCI_GETMODEVENTMASK,0,0);SEND(sci,SCI_SETMODEVENTMASK,mask|SC_MOD_INSERTCHECK,0);gulong hook=g_signal_connect(sci,"sci-notify",G_CALLBACK(interfere),NULL);command(0,FALSE);g_assert_true(hook_done);gchar *replacement=g_strnfill(strlen(payload)+2,'X'),*changed=g_strconcat(replacement,original,NULL);check(changed);g_free(replacement);g_free(changed);SEND(sci,SCI_UNDO,0,0);check(original);g_signal_handler_disconnect(sci,hook);SEND(sci,SCI_SETMODEVENTMASK,mask,0);
  reset();gchar *saved=g_strdup(doc->file_name);command(8,FALSE);check(original);g_free(doc->file_name);doc->file_name=saved;
  reset();gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),"α\n",-1);gchar *mixed=g_strconcat("α\n",original,NULL);command(0,FALSE);check(mixed);g_free(mixed);
  gchar *disk=NULL;g_file_get_contents(path,&disk,NULL,NULL);g_assert_cmpstr(disk,==,original);g_free(disk);reset();command(5,FALSE);g_assert_null(document_find_by_filename(path));g_free(expected);

@@ -4554,7 +4554,8 @@ static gboolean symbol_text_range(GeanyDocument *doc,const gchar *name,gulong li
   size_t complete=final_line+1<sci_get_line_count(sci) ? (size_t)sci_get_position_from_line(sci,final_line+1) : (size_t)length;
   if(nominal&&function_style(dialect)==INSIGHT_FUNCTION_BRACES) {
    size_t at=finish;while(at<complete&&(mask[at]==' '||mask[at]=='\t')) at++;
-   if(at<complete&&mask[at]==';') finish=at+1;
+   gboolean terminated=at<complete&&mask[at]==';';if(terminated) finish=at+1;
+   if(!terminated&&strcmp(nominal,"namespace")&&(!g_strcmp0(doc->file_type->name,"C")||!g_strcmp0(doc->file_type->name,"C++"))) continue;
   }
   for(size_t at=finish;at<complete;at++) if(!g_ascii_isspace(mask[at])) { unsafe=TRUE;break; }
   if(unsafe || complete-start>1024*1024 || finish-start>=best) continue;
