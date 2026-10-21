@@ -118,6 +118,9 @@ static gboolean apply(Review *v) {
   if(!live(v)) { ok=FALSE;break; }
   guint64 revision=v->revision;SEND(v->source,SCI_SETTARGETRANGE,r.begin,r.end);SEND(v->source,SCI_REPLACETARGET,after,(sptr_t)(v->plan->text+r.after_begin));length=length-before+after;
   if(!live(v)||v->revision-revision!=(guint64)((before>0)+(after>0))||SEND(v->source,SCI_GETLENGTH,0,0)!=(sptr_t)length) { ok=FALSE;break; }
+  /* InsertCheck handlers may legally change text without extra notifications,
+   * including substitutions of exactly the same length. */
+  gchar *inserted=sci_get_contents_range(v->source,r.begin,r.begin+after);gboolean exact=!memcmp(inserted,v->plan->text+r.after_begin,after);g_free(inserted);if(!exact) { ok=FALSE;break; }
  }
  sci_end_undo_action(v->source);if(!ok||!live(v)) return FALSE;
  gchar *actual=sci_get_contents(v->source,-1);ok=!strcmp(actual,v->plan->text);g_free(actual);if(!ok) return FALSE;

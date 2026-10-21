@@ -33,3 +33,5 @@ Reads are asynchronous: responses for closed windows are discarded, and old read
 Reference: [Insert GUID](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Insert_GUID.htm), [Insert ASCII](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Insert_ASCII.htm), [Show Clipboard](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Show_Clipboard.htm). Unicode support extends the ASCII command.
 
 Insert File and text export: [guide](file-text.md).
+
+[Renumber: columns and multiple selections](renumber.md) — one source-order sequence, colored before/after preview, per-fragment selection and one Undo/Redo.

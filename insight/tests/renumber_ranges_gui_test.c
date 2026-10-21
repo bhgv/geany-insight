@@ -2,6 +2,7 @@
 #include "geany.h"
 #include "document.h"
 #include "main.h"
+#include "keybindings.h"
 #include "sciwrappers.h"
 #include "ui_utils.h"
 #include <glib/gstdio.h>
@@ -14,7 +15,7 @@ static gchar *path;
 static guint phase,timer,reply;
 static gint mode,radix,guard;
 static const gchar *value;
-static gboolean hook_armed,hook_done,capture_image;
+static gboolean hook_armed,hook_done,capture_image,use_key;
 static const gchar *original="int a = 4; // keep 99\r\nint b = 7; // keep 88\r\nint c = 9; // keep 77\r\n";
 static GtkWidget *named(GtkWidget *w,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(w),name)) return w;
@@ -61,17 +62,17 @@ static gboolean respond(gpointer data) {
  timer=0;gtk_dialog_response(GTK_DIALOG(d),guard==4 ? GTK_RESPONSE_CANCEL:GTK_RESPONSE_APPLY);return G_SOURCE_REMOVE;
 }
 static void command(gint m,gint r,const gchar *v,gint g,gboolean image) {
- mode=m;radix=r;value=v;guard=g;reply=0;capture_image=image;timer=g_timeout_add(50,respond,NULL);GtkWidget *item=named(window,"insight-renumber");g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item));if(timer) { g_source_remove(timer);timer=0; }
+ mode=m;radix=r;value=v;guard=g;reply=0;capture_image=image;timer=g_timeout_add(50,respond,NULL);GtkWidget *item=named(window,"insight-renumber");g_assert_nonnull(item);if(use_key) keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_RENUMBER);else gtk_menu_item_activate(GTK_MENU_ITEM(item));if(timer) { g_source_remove(timer);timer=0; }
 }
 static void interfere(ScintillaObject *s,gint id,SCNotification *nt,gpointer data) {
- (void)s;(void)id;(void)data;if(!hook_armed||hook_done||nt->nmhdr.code!=SCN_MODIFIED||!(nt->modificationType&SC_MOD_INSERTTEXT)) return;hook_done=TRUE;
- if(phase==1) SEND(sci,SCI_INSERTTEXT,0,(sptr_t)"// hook\n");else { GtkWidget *d=dialog();g_assert_nonnull(d);gtk_widget_destroy(d); }
+ (void)s;(void)id;(void)data;if(!hook_armed||hook_done||nt->nmhdr.code!=SCN_MODIFIED||!(nt->modificationType&(phase==1 ? SC_MOD_INSERTCHECK:SC_MOD_INSERTTEXT))) return;hook_done=TRUE;
+ if(phase==1) SEND(sci,SCI_CHANGEINSERTION,2,(sptr_t)"XX");else { GtkWidget *d=dialog();g_assert_nonnull(d);gtk_widget_destroy(d); }
 }
 static gboolean step(gpointer data) {
  (void)data;doc=document_find_by_filename(path);if(!doc) return G_SOURCE_CONTINUE;sci=doc->editor->sci;window=gtk_widget_get_toplevel(GTK_WIDGET(sci));
  reset(original);rectangle(0,2,8,9,FALSE);g_assert_cmpint(SEND(sci,SCI_GETSELECTIONS,0,0),==,3);gint handle=SEND(sci,SCI_MARKERADD,2,24);command(1,1,"10",0,TRUE);g_assert_cmpint(SEND(sci,SCI_GETSELECTIONMODE,0,0),==,SC_SEL_STREAM);g_assert_cmpint(SEND(sci,SCI_GETSELECTIONS,0,0),==,3);g_assert_cmpint(SEND(sci,SCI_MARKERLINEFROMHANDLE,handle,0),==,2);undo_redo("int a = 10; // keep 99\r\nint b = 11; // keep 88\r\nint c = 12; // keep 77\r\n",original);
  reset(original);rectangle(0,2,8,9,TRUE);gint main_line=SEND(sci,SCI_LINEFROMPOSITION,SEND(sci,SCI_GETSELECTIONNCARET,SEND(sci,SCI_GETMAINSELECTION,0,0),0),0);command(2,2,"2",0,FALSE);g_assert_cmpint(SEND(sci,SCI_LINEFROMPOSITION,SEND(sci,SCI_GETSELECTIONNCARET,SEND(sci,SCI_GETMAINSELECTION,0,0),0),0),==,main_line);for(guint i=0;i<3;i++) g_assert_cmpint(SEND(sci,SCI_GETSELECTIONNANCHOR,i,0),>,SEND(sci,SCI_GETSELECTIONNCARET,i,0));undo_redo("int a = 0x6; // keep 99\r\nint b = 0x9; // keep 88\r\nint c = 0xb; // keep 77\r\n",original);
- reset(original);SEND(sci,SCI_SETSELECTION,pos(2,9),pos(2,8));SEND(sci,SCI_ADDSELECTION,pos(0,9),pos(0,8));SEND(sci,SCI_ADDSELECTION,pos(1,9),pos(1,8));SEND(sci,SCI_SETMAINSELECTION,0,0);command(0,1,"0",0,FALSE);g_assert_cmpint(SEND(sci,SCI_GETMAINSELECTION,0,0),==,2);undo_redo("int a = 4; // keep 99\r\nint b = 5; // keep 88\r\nint c = 6; // keep 77\r\n",original);
+ reset(original);SEND(sci,SCI_SETSELECTION,pos(2,9),pos(2,8));SEND(sci,SCI_ADDSELECTION,pos(0,9),pos(0,8));SEND(sci,SCI_ADDSELECTION,pos(1,9),pos(1,8));SEND(sci,SCI_SETMAINSELECTION,0,0);use_key=TRUE;command(0,1,"0",0,FALSE);use_key=FALSE;g_assert_cmpint(SEND(sci,SCI_GETMAINSELECTION,0,0),==,2);undo_redo("int a = 4; // keep 99\r\nint b = 5; // keep 88\r\nint c = 6; // keep 77\r\n",original);
  const gchar *shorts="    4\nx\n    9\n";reset(shorts);rectangle(0,2,4,5,FALSE);command(1,1,"1",0,FALSE);undo_redo("    1\nx\n    2\n",shorts);
  const gchar *unicode="\tα 4;\r\n\tβ 7;\r\n";reset(unicode);rectangle(0,1,6,7,FALSE);command(1,2,"8",0,FALSE);undo_redo("\tα 0x8;\r\n\tβ 0x9;\r\n",unicode);
  reset("1\n\n2\n");SEND(sci,SCI_SETSELECTIONMODE,SC_SEL_RECTANGLE,0);SEND(sci,SCI_SETRECTANGULARSELECTIONANCHOR,1,0);SEND(sci,SCI_SETRECTANGULARSELECTIONANCHORVIRTUALSPACE,3,0);SEND(sci,SCI_SETRECTANGULARSELECTIONCARET,4,0);SEND(sci,SCI_SETRECTANGULARSELECTIONCARETVIRTUALSPACE,4,0);command(1,1,"10",8,FALSE);check("1\n\n2\n");g_assert_false(SEND(sci,SCI_CANUNDO,0,0));
@@ -80,8 +81,8 @@ static gboolean step(gpointer data) {
  reset(original);rectangle(0,2,8,9,FALSE);command(1,1,"10",9,FALSE);gchar *manual=g_strconcat(original,"manual\n",NULL);check(manual);g_free(manual);SEND(sci,SCI_UNDO,0,0);check(original);g_assert_false(SEND(sci,SCI_CANUNDO,0,0));
  reset(original);rectangle(0,2,8,9,FALSE);command(1,1,"10",6,FALSE);g_assert_true(document_get_current()!=doc);g_assert_true(document_open_file(path,FALSE,NULL,NULL)==doc);check(original);g_assert_false(SEND(sci,SCI_CANUNDO,0,0));
  reset("\t4\n\t7\n");rectangle(0,1,0,1,FALSE);SEND(sci,SCI_SETRECTANGULARSELECTIONANCHORVIRTUALSPACE,1,0);SEND(sci,SCI_SETSELECTIONNANCHORVIRTUALSPACE,0,1);command(1,1,"10",0,FALSE);g_assert_cmpuint(reply,==,0);check("\t4\n\t7\n");g_assert_false(SEND(sci,SCI_CANUNDO,0,0));
- reset(original);rectangle(0,2,8,9,FALSE);gulong hook=g_signal_connect(sci,"sci-notify",G_CALLBACK(interfere),NULL);phase=1;hook_armed=TRUE;hook_done=FALSE;command(1,1,"10",0,FALSE);hook_armed=FALSE;g_assert_true(hook_done);undo_redo("// hook\nint a = 4; // keep 99\r\nint b = 7; // keep 88\r\nint c = 12; // keep 77\r\n",original);
- reset(original);rectangle(0,2,8,9,FALSE);phase=2;hook_armed=TRUE;hook_done=FALSE;command(1,1,"10",0,FALSE);hook_armed=FALSE;g_assert_true(hook_done);check("int a = 4; // keep 99\r\nint b = 7; // keep 88\r\nint c = 12; // keep 77\r\n");SEND(sci,SCI_UNDO,0,0);check(original);g_signal_handler_disconnect(sci,hook);
+ reset(original);rectangle(0,2,8,9,FALSE);sptr_t event_mask=SEND(sci,SCI_GETMODEVENTMASK,0,0);SEND(sci,SCI_SETMODEVENTMASK,event_mask|SC_MOD_INSERTCHECK,0);gulong hook=g_signal_connect(sci,"sci-notify",G_CALLBACK(interfere),NULL);phase=1;hook_armed=TRUE;hook_done=FALSE;command(1,1,"10",0,FALSE);hook_armed=FALSE;g_assert_true(hook_done);undo_redo("int a = 4; // keep 99\r\nint b = 7; // keep 88\r\nint c = XX; // keep 77\r\n",original);
+ reset(original);rectangle(0,2,8,9,FALSE);phase=2;hook_armed=TRUE;hook_done=FALSE;command(1,1,"10",0,FALSE);hook_armed=FALSE;g_assert_true(hook_done);check("int a = 4; // keep 99\r\nint b = 7; // keep 88\r\nint c = 12; // keep 77\r\n");SEND(sci,SCI_UNDO,0,0);check(original);g_signal_handler_disconnect(sci,hook);SEND(sci,SCI_SETMODEVENTMASK,event_mask,0);
  gchar *disk=NULL;g_assert_true(g_file_get_contents(path,&disk,NULL,NULL));g_assert_cmpstr(disk,==,original);g_free(disk);reset(original);rectangle(0,2,8,9,FALSE);command(1,1,"10",5,FALSE);g_assert_null(document_find_by_filename(path));
  g_print("Renumber ranges native: real rectangles/multiple selections, reverse/main selection, Unicode/tabs/CRLF, virtual/empty rows, bounds, colored readonly preview, markers, exact outside bytes, Undo/Redo, text/selection/readonly/tab/close guards and synchronous modification/destruction passed\n");GeanyDocument *current=document_get_current();if(current) document_set_text_changed(current,FALSE);gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
 }

@@ -1060,6 +1060,8 @@ static void renumber_text(GtkMenuItem *item,gpointer data)
  gtk_widget_destroy(dialog);g_object_unref(dialog);g_free(text);
 }
 
+void insight_paste_renumber(void) { renumber_text(NULL,NULL); }
+
 static void tools_menu_show(GtkWidget *menu,gpointer data)
 {
  (void)data;Request request={0};gboolean ready=tools_capture(&request);
@@ -1080,6 +1082,6 @@ void insight_paste_tools_menu(GtkWidget *menu)
  gtk_menu_shell_append(GTK_MENU_SHELL(sub),gtk_separator_menu_item_new());
  const gchar *file_labels[]={"Insert File…","Save Selection…","Save a Copy…"},*file_ids[]={"insight-insert-file","insight-save-selection","insight-save-copy"},*file_keys[]={"insert-file","save-selection","save-copy"};
  for(guint i=0;i<3;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(file_labels[i]);gtk_widget_set_name(entry,file_ids[i]);g_object_set_data(G_OBJECT(sub),file_keys[i],entry);g_signal_connect(entry,"activate",i ? G_CALLBACK(export_text) : G_CALLBACK(insert_file),GINT_TO_POINTER(i==1));gtk_menu_shell_append(GTK_MENU_SHELL(sub),entry); }
- GtkWidget *renumber=gtk_menu_item_new_with_label("Renumber…");gtk_widget_set_name(renumber,"insight-renumber");g_object_set_data(G_OBJECT(sub),"renumber",renumber);g_signal_connect(renumber,"activate",G_CALLBACK(renumber_text),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(sub),renumber);
+ GtkWidget *renumber=gtk_menu_item_new_with_label("Renumber…");gtk_widget_set_name(renumber,"insight-renumber");keybindings_attach_menu(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_RENUMBER,renumber);g_object_set_data(G_OBJECT(sub),"renumber",renumber);g_signal_connect(renumber,"activate",G_CALLBACK(renumber_text),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(sub),renumber);
  g_signal_connect(sub,"show",G_CALLBACK(tools_menu_show),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),parent);gtk_widget_show_all(parent);
 }
