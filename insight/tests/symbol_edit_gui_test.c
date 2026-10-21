@@ -51,6 +51,11 @@ static gboolean step(gpointer data) {
   GString *large=g_string_new("int target(void) {\n/*");for(guint i=0;i<1024*1024;i++) g_string_append_c(large,'x');g_string_append(large,"*/\nreturn 1;\n}\n");reset(sci,large->str,20);gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),"sentinel",-1);command("insight-copy-symbol");command("insight-duplicate-symbol");check(sci,large->str);g_assert_false(scintilla_send_message(sci,SCI_CANUNDO,0,0));g_string_free(large,TRUE);
   document_set_filetype(doc,filetypes_lookup_by_name("Python"));
   verify_edits(doc,"def outer():\n    def inner():\n        return 'α'\n    return inner()\n",42,"    def inner():\n        return 'α'\n","def outer():\n    return inner()\n","def outer():\n    def inner():\n        return 'α'\n    def inner():\n        return 'α'\n    return inner()\n");
+  document_set_filetype(doc,filetypes_lookup_by_name("C++"));
+  verify_edits(doc,"struct Box {\n int value;\n};\nint other;\n",8,"struct Box {\n int value;\n};\n","int other;\n","struct Box {\n int value;\n};\nstruct Box {\n int value;\n};\nint other;\n");
+  verify_edits(doc,"class Box {\npublic:\n int value;\n};\n",7,"class Box {\npublic:\n int value;\n};\n","","class Box {\npublic:\n int value;\n};\nclass Box {\npublic:\n int value;\n};\n");
+  document_set_filetype(doc,filetypes_lookup_by_name("Python"));
+  verify_edits(doc,"class Box:\n    value = 1\nother = 2\n",7,"class Box:\n    value = 1\n","other = 2\n","class Box:\n    value = 1\nclass Box:\n    value = 1\nother = 2\n");
   document_set_filetype(doc,filetypes_lookup_by_name("Lua"));
   verify_edits(doc,"function target()\n if true then\n  return 1\n end\nend\nother()\n",35,"function target()\n if true then\n  return 1\n end\nend\n","other()\n","function target()\n if true then\n  return 1\n end\nend\nfunction target()\n if true then\n  return 1\n end\nend\nother()\n");
   document_set_filetype(doc,filetypes_lookup_by_name("C"));reset(sci,"int target(void) { return 1; }\nint other(void) { return 2; }\n",45);phase++;return G_SOURCE_CONTINUE;

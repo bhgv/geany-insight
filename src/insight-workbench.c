@@ -13,6 +13,7 @@
 #endif
 #include "geany.h"
 #include "insight-workbench.h"
+#include "insight-symbol-edit.h"
 #include "insight-project-report.h"
 #include "insight-diff.h"
 #include "insight-directory.h"
@@ -212,7 +213,7 @@ static void workspace_changed(gpointer);
 static void create_search_toolbars(void);
 static guint text_search_flags(GtkWidget *,GtkWidget *,GtkWidget *);
 static char *read_disk_source(const char *,gboolean);
-enum { SP_OPEN,SP_INFO,SP_REFERENCES,SP_NAME,SP_LOCATION,SP_ONLY,SP_HIDE,SP_ALL,SP_GROUP,SP_EXPAND,SP_COLLAPSE,SP_HELP,SP_MORE,SP_LOCATE,SP_COLUMNS,SP_QUALIFIED,SP_PATH,SP_LINE,SP_FILTER_NAME,SP_FILTER_SCOPE,SP_FILTER_FILE,SP_CLEAR,SP_EXPAND_ONE,SP_COLLAPSE_ONE,SP_INVERT,SP_VISIBILITY,SP_COPY_TEXT,SP_CUT_TEXT,SP_DUPLICATE,SP_COUNT };
+enum { SP_OPEN,SP_INFO,SP_REFERENCES,SP_NAME,SP_LOCATION,SP_ONLY,SP_HIDE,SP_ALL,SP_GROUP,SP_EXPAND,SP_COLLAPSE,SP_HELP,SP_MORE,SP_LOCATE,SP_COLUMNS,SP_QUALIFIED,SP_PATH,SP_LINE,SP_FILTER_NAME,SP_FILTER_SCOPE,SP_FILTER_FILE,SP_CLEAR,SP_EXPAND_ONE,SP_COLLAPSE_ONE,SP_INVERT,SP_VISIBILITY,SP_COPY_TEXT,SP_CUT_TEXT,SP_DUPLICATE,SP_PASTE_TEXT,SP_COUNT };
 enum { FP_OPEN,FP_NAME,FP_PATH,FP_FILTER,FP_CLEAR,FP_RESET,FP_COLUMNS,FP_HELP,FP_COUNT };
 static void file_action(guint);
 static gboolean file_popup_key(GtkWidget *,gpointer);
@@ -1892,7 +1893,7 @@ static void symbol_action(GtkTreeView *view,guint action) {
  gchar *name=NULL,*path=NULL,*scope=NULL; gulong line=0;
  if(selected) gtk_tree_model_get(model,&iter,SYMBOL_NAME,&name,SYMBOL_PATH,&path,SYMBOL_SCOPE,&scope,SYMBOL_LINE,&line,-1);
  switch(action) {
- case SP_COPY_TEXT: case SP_CUT_TEXT: case SP_DUPLICATE: symbol_text_from_outline(view,action-SP_COPY_TEXT);break;
+ case SP_COPY_TEXT: case SP_CUT_TEXT: case SP_DUPLICATE: case SP_PASTE_TEXT: symbol_text_from_outline(view,action-SP_COPY_TEXT);break;
  case SP_OPEN: if(selected) { GtkTreePath *row=gtk_tree_model_get_path(model,&iter); browser_activated(view,row,NULL,NULL); gtk_tree_path_free(row); } break;
  case SP_INFO: if(line) browser_symbol_info(NULL,view); break;
  case SP_REFERENCES:
@@ -1926,8 +1927,8 @@ static GtkWidget *symbol_menu(GtkTreeView *view) {
  GtkWidget *menu=g_object_get_data(G_OBJECT(view),"insight-symbol-popup");
  if(!menu) {
   menu=gtk_menu_new(); gtk_widget_set_name(menu,"insight-symbol-popup"); gtk_menu_attach_to_widget(GTK_MENU(menu),GTK_WIDGET(view),NULL); g_object_set_data_full(G_OBJECT(view),"insight-symbol-popup",g_object_ref_sink(menu),g_object_unref);
-  const gchar *labels[]={"Open definition","Symbol Info…","Find references to this symbol","Copy symbol name","Copy source location","Show only this category","Hide this category","Show all symbol types","Group by symbol type","Expand all symbol groups","Collapse all symbol groups","Help for this panel","Load more symbols","Locate symbol at caret","Reset symbol columns","Copy qualified symbol name","Copy source file path","Copy source line number","Filter by this symbol name","Filter by this scope","Filter by this source file","Clear symbol query","Expand selected symbol group","Collapse selected symbol group","Invert symbol type selection","Visible symbol columns","Copy Symbol","Cut Symbol","Duplicate Symbol"};
-  const gchar *icons[]={"go-jump","dialog-information","relations","edit-copy","edit-copy","view-filter-symbolic","view-filter-symbolic","view-list-symbolic","view-list-symbolic","list-add","list-remove","panel-help","list-add-symbolic","find-location-symbolic","view-refresh","edit-copy","edit-copy","edit-copy","edit-find","view-filter-symbolic","view-filter-symbolic","edit-clear","list-add","list-remove","object-flip-horizontal","view-list-symbolic","edit-copy","edit-cut","edit-copy"};
+  const gchar *labels[]={"Open definition","Symbol Info…","Find references to this symbol","Copy symbol name","Copy source location","Show only this category","Hide this category","Show all symbol types","Group by symbol type","Expand all symbol groups","Collapse all symbol groups","Help for this panel","Load more symbols","Locate symbol at caret","Reset symbol columns","Copy qualified symbol name","Copy source file path","Copy source line number","Filter by this symbol name","Filter by this scope","Filter by this source file","Clear symbol query","Expand selected symbol group","Collapse selected symbol group","Invert symbol type selection","Visible symbol columns","Copy Symbol","Cut Symbol","Duplicate Symbol","Paste Symbol…"};
+  const gchar *icons[]={"go-jump","dialog-information","relations","edit-copy","edit-copy","view-filter-symbolic","view-filter-symbolic","view-list-symbolic","view-list-symbolic","list-add","list-remove","panel-help","list-add-symbolic","find-location-symbolic","view-refresh","edit-copy","edit-copy","edit-copy","edit-find","view-filter-symbolic","view-filter-symbolic","edit-clear","list-add","list-remove","object-flip-horizontal","view-list-symbolic","edit-copy","edit-cut","edit-copy","edit-paste"};
   for(guint i=0;i<SP_COUNT;i++) {
    if(i==SP_ONLY || i==SP_GROUP || i==SP_HELP) gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());
    GtkWidget *item;
@@ -4512,7 +4513,7 @@ static void select_function(GtkMenuItem *item,gpointer data) {
  else ui_set_statusbar(TRUE,"No complete enclosing function body");
 }
 /* A symbol edit uses a fresh parser snapshot and accepts only complete,
- * standalone function definitions. Never operate on a stale outline range. */
+ * standalone function or nominal definitions. Never use a stale outline range. */
 static gboolean symbol_text_range(GeanyDocument *doc,const gchar *name,gulong line,gint *first,gint *last) {
  ScintillaObject *sci=doc->editor->sci;gint length=sci_get_length(sci);InsightCodeDialect dialect;
  if(length>2*1024*1024 || !source_dialect(doc->file_type,&dialect) ||
@@ -4527,16 +4528,18 @@ static gboolean symbol_text_range(GeanyDocument *doc,const gchar *name,gulong li
  size_t begin=sci_get_selection_start(sci),end=sci_get_selection_end(sci),best=SIZE_MAX;
  for(guint i=0;i<doc->tm_file->tags_array->len;i++) {
   TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,i);
-  if(!function_tag(tag) || !tag->name || !*tag->name || tag->line>(gulong)sci_get_line_count(sci) ||
+  if(!tag) continue;
+  const gchar *nominal=tag->type&tm_tag_class_t?"class":tag->type&tm_tag_struct_t?"struct":tag->type&tm_tag_union_t?"union":tag->type&tm_tag_enum_t?"enum":tag->type&tm_tag_namespace_t?"namespace":tag->type&tm_tag_interface_t?"interface":NULL;
+  if((!function_tag(tag)&&!nominal) || !tag->line || !tag->name || !*tag->name || tag->line>(gulong)sci_get_line_count(sci) ||
      (name && (line!=tag->line || strcmp(name,tag->name)))) continue;
   size_t start=sci_get_position_from_line(sci,tag->line-1),body=0,finish=0;
   if(!name && start>begin) continue;
-  if(insight_function_range(text,mask,length,start,function_style(dialect),&body,&finish)!=1 || finish<=start) continue;
+  if((nominal ? insight_nominal_range(text,mask,length,start,tag->name,nominal,function_style(dialect),&body,&finish) : insight_function_range(text,mask,length,start,function_style(dialect),&body,&finish))!=1 || finish<=start) continue;
   if(!name && (end>finish || (begin==end && begin>=finish))) continue;
   /* Confirm the parser's name before the first body. Reject another
    * declaration/block on that line rather than duplicating neighboring code. */
-  gboolean named=FALSE,unsafe=FALSE;gsize size=strlen(tag->name);
-  for(size_t at=start;at<body;at++) {
+  gboolean named=nominal!=NULL,unsafe=FALSE;gsize size=strlen(tag->name);
+  for(size_t at=start;!nominal&&at<body;at++) {
    if(mask[at]=='(' || mask[at]=='[') { size_t a=0,b=0;if(insight_select_match(mask,length,at,&a,&b)!=1 || b>body) { unsafe=TRUE;break; }at=b-1;continue; }
    if(mask[at]==';' || mask[at]=='}' ||
       (mask[at]=='{' && !(function_style(dialect)==INSIGHT_FUNCTION_BRACES && at+1==body))) { unsafe=TRUE;break; }
@@ -4549,6 +4552,10 @@ static gboolean symbol_text_range(GeanyDocument *doc,const gchar *name,gulong li
   if(unsafe || !named) continue;
   gint final_line=sci_get_line_from_position(sci,finish-1);
   size_t complete=final_line+1<sci_get_line_count(sci) ? (size_t)sci_get_position_from_line(sci,final_line+1) : (size_t)length;
+  if(nominal&&function_style(dialect)==INSIGHT_FUNCTION_BRACES) {
+   size_t at=finish;while(at<complete&&(mask[at]==' '||mask[at]=='\t')) at++;
+   if(at<complete&&mask[at]==';') finish=at+1;
+  }
   for(size_t at=finish;at<complete;at++) if(!g_ascii_isspace(mask[at])) { unsafe=TRUE;break; }
   if(unsafe || complete-start>1024*1024 || finish-start>=best) continue;
   best=finish-start;*first=start;*last=complete;
@@ -4560,25 +4567,10 @@ static void symbol_text_edit(GeanyDocument *doc,const gchar *name,gulong line,gu
  ScintillaObject *sci=doc->editor->sci;
  if(command && (doc->readonly || SSM(sci,SCI_GETREADONLY,0,0))) { ui_set_statusbar(TRUE,"Symbol editing requires a writable document");return; }
  gint first=0,last=0;
- if(!symbol_text_range(doc,name,line,&first,&last)) { ui_set_statusbar(TRUE,"Symbol operation requires a complete standalone brace, Python or Lua function (up to 1 MiB)");return; }
- gchar *text=sci_get_contents_range(sci,first,last);
- if(command<2) gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),text,last-first);
- if(command) {
-  insight_completion_cancel(doc->editor);SSM(sci,SCI_AUTOCCANCEL,0,0);
-  sci_start_undo_action(sci);
-  if(command==1) { sci_set_selection(sci,first,last);sci_replace_sel(sci,""); }
-  else {
-   const gchar *eol=sci_get_eol_mode(sci)==SC_EOL_CRLF ? "\r\n" : sci_get_eol_mode(sci)==SC_EOL_CR ? "\r" : "\n";
-   gboolean separator=last>first && text[last-first-1]!='\n' && text[last-first-1]!='\r';
-   gchar *copy=g_strconcat(separator ? eol : "",text,NULL);
-   SSM(sci,SCI_INSERTTEXT,last,(sptr_t)copy);
-   gint start=last+(separator ? (gint)strlen(eol) : 0);
-   sci_set_selection(sci,start,start+last-first);g_free(copy);
-  }
-  sci_end_undo_action(sci);SSM(sci,SCI_SCROLLCARET,0,0);document_grab_focus(doc);
- }
- g_free(text);
+ if(!symbol_text_range(doc,name,line,&first,&last)) { ui_set_statusbar(TRUE,"Symbol operation requires a complete standalone function or supported nominal definition (up to 1 MiB)");return; }
+ insight_symbol_edit_range(doc->id,first,last,command);
 }
+void insight_workbench_symbol_edit(guint action) { symbol_text_edit(document_get_current(),NULL,0,action); }
 static void symbol_text_command(GtkMenuItem *item,gpointer data) { (void)item;symbol_text_edit(document_get_current(),NULL,0,GPOINTER_TO_UINT(data)); }
 static void symbol_text_from_outline(GtkTreeView *view,guint command) {
  GeanyDocument *doc=document_get_current();
@@ -4605,9 +4597,9 @@ static void create_structural_selection_menu(void) {
  g_signal_connect(function,"activate",G_CALLBACK(select_function),NULL);
  gtk_widget_add_accelerator(function,"activate",wb.navigation_accels,GDK_KEY_f,GEANY_PRIMARY_MOD_MASK|GDK_MOD1_MASK,GTK_ACCEL_VISIBLE);
  gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());
- const gchar *ops[]={"Copy Symbol","Cut Symbol","Duplicate Symbol"};
- const gchar *ids[]={"insight-copy-symbol","insight-cut-symbol","insight-duplicate-symbol"};
- for(guint i=0;i<G_N_ELEMENTS(ops);i++) { GtkWidget *entry=gtk_menu_item_new_with_label(ops[i]);gtk_widget_set_name(entry,ids[i]);g_signal_connect(entry,"activate",G_CALLBACK(symbol_text_command),GUINT_TO_POINTER(i));gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry); }
+ const gchar *ops[]={"Copy Symbol","Cut Symbol","Duplicate Symbol","Paste Symbol…"};
+ const gchar *ids[]={"insight-copy-symbol","insight-cut-symbol","insight-duplicate-symbol","insight-paste-symbol"};
+ for(guint i=0;i<G_N_ELEMENTS(ops);i++) { GtkWidget *entry=gtk_menu_item_new_with_label(ops[i]);gtk_widget_set_name(entry,ids[i]);keybindings_attach_menu(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_COPYSYMBOL+i,entry);g_signal_connect(entry,"activate",G_CALLBACK(symbol_text_command),GUINT_TO_POINTER(i));gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry); }
  gtk_widget_show_all(item);
 }
 static void git_project_refresh(GtkWidget *widget,gpointer data) {

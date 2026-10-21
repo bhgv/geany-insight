@@ -861,3 +861,6 @@ test('Insight native buffer text transfer GUI', buffer_transfer_gui_test, timeou
 
 symbol_edit_plan_test = executable('test_insight_symbol_edit_plan', '../insight/tests/symbol_edit_plan_test.c', '../insight/desktop/symbol_edit.c', '../insight/desktop/text_transfer.c', include_directories: include_directories('../insight/desktop'), dependencies: deps, c_args: ['-UNDEBUG'])
 test('Insight guarded symbol edit plans', symbol_edit_plan_test)
+
+paste_symbol_gui_test = executable('test_insight_paste_symbol_gui', '../insight/tests/paste_symbol_gui_test.c', dependencies: test_deps)
+test('Insight native Paste Symbol guarded preview GUI', paste_symbol_gui_test, timeout: 55, is_parallel: false)

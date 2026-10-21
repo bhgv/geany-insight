@@ -13,6 +13,7 @@ gboolean insight_workbench_focus_file_symbols(void);
 gboolean insight_workbench_file_find_again(gboolean);
 void insight_workbench_source_link_notify(struct GeanyEditor *,struct SCNotification *);
 gboolean insight_workbench_source_link_key(GdkEventKey *);
+void insight_workbench_symbol_edit(guint action);
 void insight_workbench_init(void);
 void insight_workbench_finalize(void);
 void insight_workbench_refresh(void);

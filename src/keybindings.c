@@ -34,6 +34,7 @@
 #include "insight-paste.h"
 #include "insight-buffer-transfer.h"
 #include "insight-navigation.h"
+#include "insight-workbench.h"
 #include "insight-command-list.h"
 #include "insight-selection-search.h"
 #include "insight-typing.h"
@@ -321,6 +322,7 @@ static void add_kb(GeanyKeyGroup *group, gsize key_id,
 
 static void cb_func_insight(guint key_id)
 {
+    if (key_id >= GEANY_KEYS_INSIGHT_COPYSYMBOL && key_id <= GEANY_KEYS_INSIGHT_PASTESYMBOL) { insight_workbench_symbol_edit(key_id-GEANY_KEYS_INSIGHT_COPYSYMBOL);return; }
     if (key_id == GEANY_KEYS_INSIGHT_BUFFERTRANSFER) { insight_buffer_transfer_command();return; }
     if (key_id == GEANY_KEYS_INSIGHT_RENUMBER) { insight_paste_renumber();return; }
     if (key_id == GEANY_KEYS_INSIGHT_REPLACEFILES) { insight_replace_files_command();return; }
@@ -813,6 +815,10 @@ static void init_default_kb(void)
         0, 0, "insight_original_contents", _("Original Contents"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_GITHISTORY, cb_func_insight,
         0, 0, "insight_githistory", _("Git History and Diff"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_COPYSYMBOL, cb_func_insight, 0, 0, "insight_copy_symbol", _("Copy Symbol"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_CUTSYMBOL, cb_func_insight, 0, 0, "insight_cut_symbol", _("Cut Symbol"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_DUPLICATESYMBOL, cb_func_insight, 0, 0, "insight_duplicate_symbol", _("Duplicate Symbol"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_PASTESYMBOL, cb_func_insight, 0, 0, "insight_paste_symbol", _("Paste Symbol"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_BUFFERTRANSFER, cb_func_insight,
         0, 0, "insight_buffer_transfer", _("Copy Text to Buffer"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_RENUMBER, cb_func_insight,

@@ -1805,3 +1805,10 @@ No text changes.	Текст не изменился.
 Preview ready. Apply changes the destination in one Undo action; no disk writes.	Просмотр готов. Применение изменит назначение одним действием Undo без записи на диск.
 Source, destination or selection changed, or destination is read-only. Reload snapshots.	Исходник, назначение или выделение изменились, либо назначение доступно только для чтения. Обновите снимки.
 Select a nonempty stream fragment, or choose Whole buffer.	Выделите непустой фрагмент либо выберите Весь буфер.
+
+Paste Symbol	Вставить перед символом
+Paste Symbol…	Вставить перед символом…
+Insert before symbol	Вставить перед символом
+Symbol edit cancelled because the source, selection or permissions changed.	Правка определения отменена: изменились исходник, выделение или разрешения.
+Symbol edit was interrupted by an editor change. Inspect the source and use Undo if needed.	Изменение определения прервано вмешательством редактора. Проверьте исходник и при необходимости воспользуйтесь Undo.
+Paste clipboard text before the captured definition. A missing final line ending uses the document mode. Apply is one Undo action; no disk writes.	Вставка текста буфера обмена перед выбранным определением. Отсутствующий конечный перевод строки берётся из режима документа. Одно действие Undo без записи на диск.
