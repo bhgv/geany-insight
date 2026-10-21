@@ -858,3 +858,6 @@ test('Insight native column and multiple renumber GUI', renumber_ranges_gui_test
 
 buffer_transfer_gui_test = executable('test_insight_buffer_transfer_gui', '../insight/tests/buffer_transfer_gui_test.c', dependencies: test_deps)
 test('Insight native buffer text transfer GUI', buffer_transfer_gui_test, timeout: 60, is_parallel: false)
+
+symbol_edit_plan_test = executable('test_insight_symbol_edit_plan', '../insight/tests/symbol_edit_plan_test.c', '../insight/desktop/symbol_edit.c', '../insight/desktop/text_transfer.c', include_directories: include_directories('../insight/desktop'), dependencies: deps, c_args: ['-UNDEBUG'])
+test('Insight guarded symbol edit plans', symbol_edit_plan_test)

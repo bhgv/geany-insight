@@ -568,3 +568,5 @@ EXTRA_DIST += insight/tests/buffer_transfer_gui_test.c
 dist_insightdocmedia_DATA += insight/docs/media/buffer-transfer.svg
 
 dist_insightdocmedia_DATA += insight/docs/media/buffer-transfer.jpg
+
+EXTRA_DIST += insight/tests/symbol_edit_plan_test.c
