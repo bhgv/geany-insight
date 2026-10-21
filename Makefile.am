@@ -511,3 +511,6 @@ dist_insightdocmedia_DATA += insight/docs/media/repeat-typing.jpg insight/docs/m
 
 insightdoc_DATA += insight/docs/checkpoint.md
 dist_insightdocmedia_DATA += insight/docs/media/checkpoint.svg insight/docs/media/checkpoint.jpg
+
+insightdoc_DATA += insight/docs/backup-versions.md
+dist_insightdocmedia_DATA += insight/docs/media/backup-versions.svg insight/docs/media/backup-versions.jpg

@@ -1531,3 +1531,29 @@ Checkpoint requires named, writable files. Save untitled files first.	Для к�
 Checkpoint complete: saved text is the new original; Undo/Redo and change history cleared.	Контрольная точка создана: сохранённый текст стал исходным; Undo/Redo и история изменений очищены.
 Checkpoint cancelled: the file set or text changed. No history was cleared.	Контрольная точка отменена: изменились файлы или текст. История сохранена.
 Checkpoint incomplete: save or snapshot failed. No history was cleared; some files may already be saved.	Контрольная точка не создана: ошибка сохранения или снимка. История сохранена; часть файлов уже могла быть записана.
+Save New Backup File	Создать резервную версию
+Open Backup File	Открыть резервную версию
+Open Backup File…	Открыть резервную версию…
+Show Backup Folder	Показать папку резервных версий
+Backup Versions Help	Справка по резервным версиям
+Backup Contents	Содержимое резервной версии
+Open Backup	Открыть копию
+Copy Snapshot	Копировать снимок
+Created (UTC)	Создано (UTC)
+Version	Версия
+Backup operation failed.	Не удалось выполнить операцию с резервной версией.
+Save the file with a name before using backup versions.	Сначала сохраните файл под именем, чтобы использовать резервные версии.
+New backup saved. The source buffer, disk file and Undo history are unchanged.	Резервная версия создана. Исходный буфер, файл на диске и история Undo сохранены.
+Preview shows the first 16 KiB. Open or copy uses the complete snapshot.	Показаны первые 16 КиБ. Открытие и копирование используют полный снимок.
+Read-only UTF-8 snapshot. Opening does not replace the source file.	Снимок UTF-8 только для чтения. Открытие не заменяет исходный файл.
+No backup versions for this file. Use Save New Backup File first.	Резервных версий этого файла нет. Сначала создайте резервную версию.
+No backup folder yet. Save a backup first.	Папки резервных версий ещё нет. Сначала создайте версию.
+Backup snapshots are limited to 8 MiB.	Размер резервного снимка ограничен 8 МиБ.
+Backup snapshots require valid UTF-8 without NUL bytes.	Для резервных снимков требуется корректный UTF-8 без байтов NUL.
+Backup storage requires an absolute local path.	Для резервных версий нужен абсолютный локальный путь.
+Backup folders must be real directories, not symbolic links.	Папки резервных версий должны быть настоящими каталогами, а не символическими ссылками.
+Backup folder scan exceeds 1000 entries.	В папке резервных версий более 1000 элементов.
+A backup entry is not a bounded regular file with an identity.	Резервная версия не является обычным файлом допустимого размера с идентификатором.
+Backup storage is limited to 200 versions and 64 MiB per source file.	История исходного файла ограничена 200 версиями и 64 МиБ.
+Choose a listed backup version.	Выберите резервную версию из списка.
+The backup changed. Refresh the list before opening it.	Резервная версия изменилась. Обновите список перед открытием.
