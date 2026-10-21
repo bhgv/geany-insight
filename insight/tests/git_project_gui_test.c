@@ -9,6 +9,9 @@ static GeanyApp test_app;
 static gchar *opened;
 GeanyApp *app=&test_app;
 GPtrArray *documents_array;
+GeanyDocument *document_get_current(void) { return NULL; }
+gchar *project_get_base_path(void) { return g_strdup("/"); }
+void insight_git_history_show(GtkWidget *parent,const gchar *location) { (void)parent;(void)location; }
 gboolean document_save_file(GeanyDocument *doc,gboolean force) { (void)doc;(void)force;return TRUE; }
 gboolean project_close(gboolean defaults) { (void)defaults;return TRUE; }
 gboolean project_load_file_with_session(const gchar *file) { g_free(opened);opened=g_strdup(file);return TRUE; }
