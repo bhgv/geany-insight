@@ -808,3 +808,6 @@ test('Insight literal typing repetition plans', repeat_typing_test)
 
 typing_replay_gui_test = executable('test_insight_typing_replay_gui', '../insight/tests/typing_replay_gui_test.c', dependencies: test_deps)
 test('Insight native typing replay and history GUI', typing_replay_gui_test, timeout: 55, is_parallel: false)
+
+checkpoint_gui_test = executable('test_insight_checkpoint_gui', '../insight/tests/checkpoint_gui_test.c', dependencies: test_deps)
+test('Insight native Checkpoint and Checkpoint All GUI', checkpoint_gui_test, timeout: 50, is_parallel: false)
