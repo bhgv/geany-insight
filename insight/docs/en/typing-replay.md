@@ -72,3 +72,17 @@ and history are local snapshots, not persistent edit recovery.
 
 References: [Repeat Typing](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Repeat_Typing.htm),
 [Simple Tab](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Simple_Tab.htm).
+
+![Native Repeat Typing Preview](../media/repeat-typing.jpg)
+
+![Native Typing History](../media/typing-history.jpg)
+
+Both are actual production dialogs from an isolated native Linux GUI fixture in
+the successful 54-test run, not mockups. Ordinary typing uses real GTK key/IM
+handling. Committed/tentative IME cases use controlled Scintilla notifications;
+an external OS IME provider was not tested.
+
+Оба снимка показывают настоящие окна из изолированного нативного GUI-теста Linux,
+прошедшего в составе 54 проверок; это не макеты. Обычный ввод проходит через
+GTK/Scintilla. Для IME использованы управляемые уведомления; внешний системный
+IME-провайдер не проверялся.
