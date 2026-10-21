@@ -12,7 +12,7 @@
 #include "../insight/desktop/backup_store.h"
 #include <string.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
-typedef struct { GtkWidget *dialog,*tree,*preview,*status;GtkListStore *model;GPtrArray *entries;gchar *directory,*source;GeanyFiletype *type;guint document; } Browser;
+typedef struct { GtkWidget *dialog,*tree,*preview,*status;GtkListStore *model;GPtrArray *entries;gchar *directory,*source;GeanyFiletype *type; } Browser;
 static gboolean initialized,busy;
 static guint64 view_serial;
 static void status_error(const GError *error)
@@ -72,6 +72,7 @@ static void selection_changed(GtkTreeSelection *selection,gpointer data)
 static void refresh(Browser *browser)
 {
     gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(browser->tree)));gtk_list_store_clear(browser->model);
+    selection_changed(NULL,browser);
     if(browser->entries) g_ptr_array_free(browser->entries,TRUE);browser->entries=NULL;
     GError *error=NULL;browser->entries=insight_backup_list(browser->directory,&error);
     if(error) { gtk_label_set_text(GTK_LABEL(browser->status),insight_tr(error->message));g_clear_error(&error);return; }
@@ -104,7 +105,7 @@ static void browse(void)
 {
     GeanyDocument *source=document_get_current();GError *error=NULL;gchar *directory=directory_for(source,&error);
     if(!directory) { status_error(error);g_clear_error(&error);return; }
-    Browser browser={0};browser.directory=directory;browser.source=g_strdup(source->file_name);browser.type=source->file_type;browser.document=source->id;
+    Browser browser={0};browser.directory=directory;browser.source=g_strdup(source->file_name);browser.type=source->file_type;
     browser.dialog=gtk_dialog_new_with_buttons(insight_tr("Open Backup File"),GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,
         insight_tr("Close"),GTK_RESPONSE_CLOSE,insight_tr("Refresh"),201,insight_tr("Show Folder"),203,insight_tr("Copy Snapshot"),202,insight_tr("Open Backup"),GTK_RESPONSE_ACCEPT,NULL);
     gtk_widget_set_name(browser.dialog,"insight-backup-dialog");gtk_window_set_default_size(GTK_WINDOW(browser.dialog),900,540);
