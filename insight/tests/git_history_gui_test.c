@@ -30,6 +30,7 @@ static GtkWidget *ready(void) { GtkWidget *v=top();g_assert_nonnull(v);gint64 en
 static void click(GtkWidget *v,const gchar *name) { gtk_button_clicked(GTK_BUTTON(named(v,name))); }
 static void row(GtkWidget *v,const gchar *name,gint n) { GtkTreePath *p=gtk_tree_path_new_from_indices(n,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(named(v,name)),p,NULL,FALSE);gtk_tree_path_free(p); }
 static void file(GtkWidget *v,const gchar *name) { GtkTreeModel *m=gtk_tree_view_get_model(GTK_TREE_VIEW(named(v,"insight-git-history-files")));GtkTreeIter i;gboolean valid=gtk_tree_model_get_iter_first(m,&i);gint n=0;while(valid) { gchar *p=NULL;gtk_tree_model_get(m,&i,2,&p,-1);gboolean match=!strcmp(name,p);g_free(p);if(match) { row(v,"insight-git-history-files",n);ready();return; }n++;valid=gtk_tree_model_iter_next(m,&i); }g_error("Missing historical file %s",name); }
+static void revision(GtkWidget *v,const gchar *subject) { GtkTreeModel *m=gtk_tree_view_get_model(GTK_TREE_VIEW(named(v,"insight-git-history-commits")));GtkTreeIter i;gint n=0;for(gboolean valid=gtk_tree_model_get_iter_first(m,&i);valid;valid=gtk_tree_model_iter_next(m,&i),n++) { gchar *text=NULL;gtk_tree_model_get(m,&i,2,&text,-1);gboolean match=!strcmp(text,subject);g_free(text);if(match) { row(v,"insight-git-history-commits",n);ready();return; } }g_error("Missing commit %s",subject); }
 static void pane(GtkWidget *v,const gchar *name,const gchar *expected) { ScintillaObject *s=SCINTILLA(named(v,name));g_assert_true(SEND(s,SCI_GETREADONLY,0,0));g_assert_cmpint(SEND(s,SCI_GETMARGINWIDTHN,0,0),>,0);g_assert_false(SEND(s,SCI_CANUNDO,0,0));gchar *text=sci_get_contents(s,-1);g_assert_cmpstr(text,==,expected);g_free(text); }
 static void branch(GtkWidget *v,gint index) { gtk_combo_box_set_active(GTK_COMBO_BOX(named(v,"insight-git-history-branch")),index);ready(); }
 static gboolean step(gpointer data)
@@ -41,7 +42,7 @@ static gboolean step(gpointer data)
  g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(named(v,"insight-git-history-parent"))),NULL),==,2);
  gtk_combo_box_set_active(GTK_COMBO_BOX(named(v,"insight-git-history-parent")),1);ready();file(v,"sample.c");pane(v,"insight-git-history-left",old_code);pane(v,"insight-git-history-right",new_code);
  /* Newer/older commits select and reload; inspect binary status then source. */
- click(v,"insight-git-history-older");ready();file(v,"binary.dat");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(named(v,"insight-git-history-status"))),"Binary"));pane(v,"insight-git-history-right","");file(v,"sample.c");
+ click(v,"insight-git-history-older");ready();click(v,"insight-git-history-newer");ready();revision(v,"Revise source");file(v,"binary.dat");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(named(v,"insight-git-history-status"))),"Binary"));pane(v,"insight-git-history-right","");file(v,"sample.c");
  pane(v,"insight-git-history-left",old_code);pane(v,"insight-git-history-right",new_code);ScintillaObject *s=SCINTILLA(named(v,"insight-git-history-right"));
  g_assert_cmpint(SEND(s,SCI_GETSTYLEAT,0,0),!=,SEND(s,SCI_GETSTYLEAT,strlen("// revised value\n"),0));g_assert_cmpint(SEND(s,SCI_MARKERGET,1,0)&(1<<10),!=,0);
  SEND(s,SCI_INSERTTEXT,0,(sptr_t)"should not edit");pane(v,"insight-git-history-right",new_code);
