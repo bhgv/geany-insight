@@ -830,3 +830,8 @@ project_report_test = executable('test_insight_project_report', '../insight/test
 test('Insight deterministic project report and export', project_report_test, timeout: 40)
 project_report_gui_test = executable('test_insight_project_report_gui', '../insight/tests/project_report_gui_test.c', dependencies: test_deps)
 test('Insight native project report and file list GUI', project_report_gui_test, timeout: 60, is_parallel: false)
+
+html_export_test = executable('test_insight_html_export', '../insight/tests/html_export_test.c', '../insight/desktop/html_export.c', '../insight/desktop/text_transfer.c', dependencies: deps, c_args: ['-UNDEBUG'])
+test('Insight styled HTML serialization and destinations', html_export_test, timeout: 40)
+html_export_gui_test = executable('test_insight_html_export_gui', '../insight/tests/html_export_gui_test.c', dependencies: test_deps)
+test('Insight native styled HTML export GUI', html_export_gui_test, timeout: 60, is_parallel: false)
