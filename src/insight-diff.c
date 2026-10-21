@@ -190,6 +190,7 @@ static void find_all(Merge *,guint);
 static gboolean key(GtkWidget *w,GdkEventKey *event,gpointer data) {
  (void)w;
  Merge *m=data;
+ if(m->review_tools && (event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_f || event->keyval==GDK_KEY_F || event->keyval==GDK_KEY_g || event->keyval==GDK_KEY_G)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->review_tools),TRUE);
  if((event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_g || event->keyval==GDK_KEY_G)) { focus_line(m,focused_pane(m));return TRUE; }
  if(event->keyval==GDK_KEY_F6 && !(event->state&(GDK_CONTROL_MASK|GDK_MOD1_MASK))) {
   gint side=(focused_pane(m)+((event->state&GDK_SHIFT_MASK) ? 2 : 1))%3;
