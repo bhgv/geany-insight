@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "geany.h"
-#include "app.h"
 #include "document.h"
 #include "keybindings.h"
 #include "main.h"
@@ -49,7 +48,7 @@ static gboolean respond(gpointer data) {
 }
 static void invoke(gboolean key,gboolean files) { if(key) keybindings_send_command(GEANY_KEY_GROUP_EDITOR,files ? GEANY_KEYS_INSIGHT_EXPORTPROJECTFILES:GEANY_KEYS_INSIGHT_PROJECTREPORT);else { GtkWidget *item=named(window,files ? "insight-export-project-files":"insight-project-report");g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item)); } }
 static gboolean step(gpointer data) {
- (void)data;if(!app->project) return G_SOURCE_CONTINUE;
+ (void)data;
  if(!source) { source=document_get_current();if(!source || !source->file_name || strcmp(source->file_name,path)) { source=NULL;return G_SOURCE_CONTINUE; }window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));undo=SEND(source->editor->sci,SCI_GETUNDOCURRENT,0,0);SEND(source->editor->sci,SCI_SETSEL,8,3); }
  invoke(FALSE,FALSE);if(phase<8) return G_SOURCE_CONTINUE;
  GeanyDocument *report=document_get_current();g_assert_true(report!=source);gchar *text=sci_get_contents(report->editor->sci,-1);g_assert_cmpstr(text,==,saved);g_free(text);document_set_text_changed(report,FALSE);g_assert_true(document_close(report));
