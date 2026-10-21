@@ -57,3 +57,6 @@ Each review keeps its captured proposal. A follow-up opens the assistant with th
 
 
 Verified code: [`5a2f1e4271b30304e218a5664e8565e3010f9c77`](https://github.com/bhgv/geany-insight/commit/5a2f1e4271b30304e218a5664e8565e3010f9c77). [Native Linux CI 39595574834](https://github.com/bhgv/geany-insight/actions/runs/39595574834): complete build/install with VTE, comparison core and **66/66 selected tests passed**, zero failures, skips or timeouts. Includes cancelled-comparison application rejection. Live providers were not tested.
+
+
+[Editor and project AI: cumulative requests, variants, manual Result and refresh](editor-ai.md).

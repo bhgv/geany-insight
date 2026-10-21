@@ -235,6 +235,7 @@ libgeany_la_SOURCES += \
 	insight-backups.c insight-backups.h \
 	insight-git-history.c insight-git-history.h \
 	insight-snapshot-compare.c insight-snapshot-compare.h \
+	insight-editor-ai.c insight-editor-ai.h \
 	insight-ai.c insight-ai.h \
 	insight-html-export.c insight-html-export.h \
 	insight-project-report.c insight-project-report.h \
@@ -285,6 +286,7 @@ libgeany_la_SOURCES += \
 	../insight/desktop/git_history.c ../insight/desktop/git_history.h \
 	../insight/desktop/backup_store.c ../insight/desktop/backup_store.h \
 	../insight/desktop/ai_client.c ../insight/desktop/ai_client.h \
+	../insight/desktop/ai_edit_session.c ../insight/desktop/ai_edit_session.h \
 	../insight/desktop/html_export.c ../insight/desktop/html_export.h \
 	../insight/desktop/project_report.c ../insight/desktop/project_report.h \
 	../insight/desktop/text_transfer.c ../insight/desktop/text_transfer.h \

@@ -1692,3 +1692,33 @@ Attached source is limited to 128 KiB.	Предел приложенного и�
 Attach UTF-8 source without NUL bytes.	Приложите исходник UTF-8 без байтов NUL.
 Code detached; only the displayed console context will be sent.	Код убран; будет отправлен только показанный контекст консоли.
 More comparison tools	Дополнительные инструменты сравнения
+Editor / Project AI Assistant…	ИИ-помощник исходника / проекта…
+Add current file	Добавить текущий файл
+Project files…	Файлы проекта…
+Open source in editor	Открыть исходник в редакторе
+Refresh sources	Обновить исходники
+Remove file	Убрать файл
+API settings	Настройки API
+Add standard task	Добавить стандартную задачу
+Add request and generate variant	Добавить запрос и создать вариант
+Undo variant	Отменить вариант
+Redo variant	Вернуть вариант
+Prepare project context	Подготовить контекст проекта
+Accumulated requirements for this variant	Накопленные требования этого варианта
+Recent	Последние
+Frequent	Частые
+Recent and frequent requests (stored locally when enabled)	Последние и частые запросы (локальное сохранение при включении)
+Remember request text for recent/frequent lists	Сохранять текст запросов для списков последних/частых
+Project context sent with each request — review or edit before Send	Контекст проекта для каждого запроса — проверьте перед отправкой
+Syntax and diagnostics	Синтаксис и диагностика
+Logic and edge cases	Логика и граничные случаи
+Format code	Форматирование кода
+Improve solution	Улучшение решения
+Readable names	Читаемые имена
+Algorithms	Алгоритмы
+Function reference	Справка по функциям
+Add useful comments	Полезные комментарии
+Write documentation	Написание документации
+Choose project files for AI review	Выбрать файлы проекта для ИИ
+Add selected files	Добавить выбранные файлы
+Project files — select up to 16	Файлы проекта — выберите до 16

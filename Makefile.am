@@ -541,3 +541,7 @@ dist_insightdocmedia_DATA += insight/docs/media/console-ai.svg
 EXTRA_DIST += insight/tests/ai_client_test.py insight/tests/ai_mock_server.py insight/tests/ai_console_gui_test.c
 
 dist_insightdocmedia_DATA += insight/docs/media/console-ai.jpg insight/docs/media/ai-review.jpg
+
+insightdoc_DATA += insight/docs/editor-ai.md
+dist_insightdocmedia_DATA += insight/docs/media/editor-ai.svg
+EXTRA_DIST += insight/tests/ai_edit_session_test.c insight/tests/editor_ai_gui_test.c

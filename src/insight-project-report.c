@@ -112,6 +112,11 @@ static void save_report(ReportView *view)
     gtk_widget_destroy(dialog);g_object_unref(dialog);
 }
 static gint string_order(gconstpointer a,gconstpointer b) { return strcmp(*(gchar * const *)a,*(gchar * const *)b); }
+InsightReportSnapshot *insight_project_report_capture(GError **error)
+{
+    if(provider) return provider(error);
+    g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NOT_INITIALIZED,"Project membership is not ready.");return NULL;
+}
 void insight_project_report_command(guint action)
 {
     if(command_busy || !provider) return;GError *error=NULL;InsightReportSnapshot *snapshot=provider(&error);

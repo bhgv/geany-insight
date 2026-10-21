@@ -6,4 +6,6 @@
 typedef InsightReportSnapshot *(*InsightReportCapture)(GError **);
 void insight_project_report_init(GtkWidget *menu,InsightReportCapture capture);
 void insight_project_report_command(guint action);
+/* Immutable indexed project membership, without reading source contents. */
+InsightReportSnapshot *insight_project_report_capture(GError **);
 #endif

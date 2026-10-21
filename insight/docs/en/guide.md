@@ -89,3 +89,6 @@ Full reference: [Search and replacement modes and query languages](search-replac
 
 
 [Console AI assistant: configuration, diagnostics and Diff/Merge review](console-ai.md).
+
+
+[Editor and project AI: cumulative requests, variants, manual Result and refresh](editor-ai.md).

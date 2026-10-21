@@ -12,4 +12,10 @@ void insight_diff_show_files(GtkWidget *parent,const gchar *left,const gchar *ri
 typedef gboolean (*InsightDiffApply)(const gchar *,gpointer,GError **);
 typedef void (*InsightDiffAsk)(const gchar *,gpointer);
 void insight_diff_review(GtkWidget *,const gchar *,const gchar *,const gchar *,InsightDiffApply,InsightDiffAsk,gpointer,GDestroyNotify);
+GtkWidget *insight_diff_review_create(GtkWidget *,const gchar *,const gchar *,const gchar *,InsightDiffApply,InsightDiffAsk,gpointer,GDestroyNotify);
+/* Owned snapshot; NULL while comparing or after failure. All calls are main-thread. */
+gchar *insight_diff_review_result(GtkWidget *);
+gboolean insight_diff_review_update(GtkWidget *,const gchar *,const gchar *,const gchar *,const gchar *);
+void insight_diff_review_lock(GtkWidget *,gboolean);
+void insight_diff_review_compact(GtkWidget *);
 #endif

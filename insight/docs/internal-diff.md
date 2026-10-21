@@ -319,3 +319,6 @@ Enable **Confirm replacements**, then use **Replace all in Result**. Each effect
 **Ctrl+H** chooses selection scope when Result has a selection and Whole Result otherwise, then focuses the replacement field. To start at the current position, choose that scope explicitly after Ctrl+H. Scope starts as Whole Result for each new window and is not persisted. One occurrence per line means the first eligible occurrence after the scope start. Every accepted batch remains one Undo/Redo action.
 
 ![Replacement scopes](media/replace-scope.svg)
+
+
+[ИИ исходника и проекта: накопление запросов, варианты, ручной Result и обновление](editor-ai.md).
