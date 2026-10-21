@@ -819,3 +819,9 @@ test('Insight native backup versions GUI', backup_gui_test, timeout: 55, is_para
 
 snapshot_compare_gui_test = executable('test_insight_snapshot_compare_gui', '../insight/tests/snapshot_compare_gui_test.c', dependencies: test_deps)
 test('Insight native snapshot comparison GUI', snapshot_compare_gui_test, timeout: 55, is_parallel: false)
+
+
+git_history_test = executable('test_insight_git_history', '../insight/tests/git_history_test.c', '../insight/desktop/git_history.c', dependencies: deps, c_args: ['-UNDEBUG'])
+test('Insight read-only Git history objects', git_history_test, timeout: 45)
+git_history_gui_test = executable('test_insight_git_history_gui', '../insight/tests/git_history_gui_test.c', dependencies: test_deps)
+test('Insight native Git history and diff GUI', git_history_gui_test, timeout: 55, is_parallel: false)
