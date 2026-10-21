@@ -54,7 +54,7 @@ static void destination_changed(GtkWidget *w,gpointer data) {
 }
 static void populate(Review *v,guint chosen) {
  v->busy=TRUE;gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(v->dest));
- foreach_document(i) { GeanyDocument *d=documents[i];gchar *id=g_strdup_printf("%u",d->id),*label=g_strdup_printf("%s [%u]",d->file_name?d->file_name:"Untitled",d->id);gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(v->dest),id,label);g_free(id);g_free(label); }
+ guint i;foreach_document(i) { GeanyDocument *d=documents[i];gchar *id=g_strdup_printf("%u",d->id),*label=g_strdup_printf("%s [%u]",d->file_name?d->file_name:"Untitled",d->id);gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(v->dest),id,label);g_free(id);g_free(label); }
  gchar *id=g_strdup_printf("%u",chosen);gtk_combo_box_set_active_id(GTK_COMBO_BOX(v->dest),id);g_free(id);v->busy=FALSE;destination_changed(NULL,v);
 }
 static gboolean unchanged(Review *v) {
@@ -64,7 +64,7 @@ static void preview(Review *v) {
  invalidate(NULL,v);if(!unchanged(v)) { status(v,"Source, destination or selection changed, or destination is read-only. Reload snapshots.");return; }
  gint scope=gtk_combo_box_get_active(GTK_COMBO_BOX(v->scope)),mode=gtk_combo_box_get_active(GTK_COMBO_BOX(v->mode));
  gsize a=scope==0?MIN(v->source.anchor,v->source.caret):0,b=scope==0?MAX(v->source.anchor,v->source.caret):v->source.size;
- if(scope==0&&(a==b||(a>0&&a<v.source.size&&v.source.text[a-1]=='\r'&&v.source.text[a]=='\n')||(b>0&&b<v.source.size&&v.source.text[b-1]=='\r'&&v.source.text[b]=='\n'))) { status(v,"Select a nonempty stream fragment, or choose Whole buffer.");return; }
+ if(scope==0&&(a==b||(a>0&&a<v->source.size&&v->source.text[a-1]=='\r'&&v->source.text[a]=='\n')||(b>0&&b<v->source.size&&v->source.text[b-1]=='\r'&&v->source.text[b]=='\n'))) { status(v,"Select a nonempty stream fragment, or choose Whole buffer.");return; }
  v->payload=g_strndup(v->source.text+a,b-a);v->begin=mode==0?v->target.size:mode==1?0:mode==2?v->target.caret:MIN(v->target.anchor,v->target.caret);v->end=mode==1?v->target.size:mode==3?MAX(v->target.anchor,v->target.caret):v->begin;
  GError *error=NULL;v->result=insight_text_splice(v->target.text,v->target.size,v->payload,b-a,v->begin,v->end,&error);
  if(!v->result) { status(v,error?error->message:"Cannot build preview.");g_clear_error(&error);return; }
@@ -112,6 +112,6 @@ void insight_buffer_transfer_command(void) {
 }
 void insight_buffer_transfer_to_path(const gchar *path) {
  GFile *file=g_file_new_for_path(path);GFileInfo *info=g_file_query_info(file,G_FILE_ATTRIBUTE_ID_FILE,0,NULL,NULL);const gchar *identity=info?g_file_info_get_attribute_string(info,G_FILE_ATTRIBUTE_ID_FILE):NULL;guint chosen=0,count=0;
- foreach_document(i) { GeanyDocument *d=documents[i];if(!d->file_name) continue;gchar *native=g_filename_from_utf8(d->file_name,-1,NULL,NULL,NULL);if(!native) continue;GFile *other=g_file_new_for_path(native);GFileInfo *oi=identity?g_file_query_info(other,G_FILE_ATTRIBUTE_ID_FILE,0,NULL,NULL):NULL;gboolean same=g_file_equal(file,other)||(identity&&oi&&!g_strcmp0(identity,g_file_info_get_attribute_string(oi,G_FILE_ATTRIBUTE_ID_FILE)));if(same) { chosen=d->id;count++; }g_clear_object(&oi);g_object_unref(other);g_free(native); }
+ guint i;foreach_document(i) { GeanyDocument *d=documents[i];if(!d->file_name) continue;gchar *native=g_filename_from_utf8(d->file_name,-1,NULL,NULL,NULL);if(!native) continue;GFile *other=g_file_new_for_path(native);GFileInfo *oi=identity?g_file_query_info(other,G_FILE_ATTRIBUTE_ID_FILE,0,NULL,NULL):NULL;gboolean same=g_file_equal(file,other)||(identity&&oi&&!g_strcmp0(identity,g_file_info_get_attribute_string(oi,G_FILE_ATTRIBUTE_ID_FILE)));if(same) { chosen=d->id;count++; }g_clear_object(&oi);g_object_unref(other);g_free(native); }
  g_clear_object(&info);g_object_unref(file);if(count==1) run(chosen,TRUE);else ui_set_statusbar(TRUE,"Open destination is missing or has ambiguous aliases. Use Copy Text to Buffer to choose explicitly.");
 }
