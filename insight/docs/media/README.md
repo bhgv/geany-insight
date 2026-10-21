@@ -44,3 +44,8 @@ Keep screenshots current when visible behavior changes. Favor small, useful illu
 `editor-ai.svg`: self-contained diagram of cumulative requirements, editable Result, variants and explicit source refresh/application.
 
 `editor-ai.jpg`: actual editor/project AI panel and Diff/Merge window in the complete Linux editor under Xvfb, native run 39602110109. Project source, prompts and replies are synthetic loopback mock API fixtures, not a live provider session. Optimized JPEG with metadata stripped.
+
+
+`replace-files.svg`: self-contained diagram of scope capture, selected replacement plans and guarded buffer application.
+
+`replace-files.jpg`: actual Replace Files window in the complete Linux editor under Xvfb, native run 39609587088 (code 2ce4631551103cbed25147159c35c4df6a9d2b3a). Source files and project are synthetic fixtures. One occurrence is deselected and comments are skipped. Optimized JPEG, metadata stripped.

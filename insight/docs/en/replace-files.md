@@ -2,6 +2,10 @@
 
 **Search → Replace Files…** opens multi-file replacement. The command can also receive a shortcut in the Editor keybinding category. Preview first; **Apply selected to buffers** changes editor buffers only. Nothing is automatically saved to disk. Use normal Save / Save All afterwards, and Undo in each changed file to revert its batch.
 
+![Native Replace Files window on Linux](../media/replace-files.jpg)
+
+Actual window of the complete Linux editor under Xvfb, using synthetic source/project fixtures. The second replacement in `a.c` is deselected and the comment is skipped; before/after panes show syntax colors and line numbers.
+
 ![Scope, preview and explicit application](../media/replace-files.svg)
 
 ## Scope and patterns
@@ -42,5 +46,7 @@ Read-only sources are not unlocked. One UTF-8 BOM is stripped for comparison wit
 Up to 2,000 inputs; 1 MiB per source/result; 16 MiB source total, 32 MiB result total; 100,000 batch matches, 10,000 matches per file; at most 128 files per Apply. Masks: 4 KiB; Old/New: 8 KiB. Folder traversal: depth 32 and 10,000 entries. Limits reject the preview/application rather than silently applying a partial plan; narrow the scope/masks or select fewer files. Regex work/depth is bounded.
 
 Native Linux tests exercise a real project, menu/key routing, masks, lexical regions, colored/numbered read-only previews, individual choices, stale/read-only guards, per-file Skip/Cancel, one Undo per file, unchanged disk, folder recursion, history and cancellation. Core tests cover Unicode/CRLF, captures, zero-width matches, regex bounds and exact comment membership. Windows and Android were not run.
+
+Validated on Linux: complete build and installation, **71/71 tests passed**, [run 39609587088](https://github.com/bhgv/geany-insight/actions/runs/39609587088), code `2ce4631551103cbed25147159c35c4df6a9d2b3a`. The capture above comes from this run.
 
 Reference: [Source Insight Replace Files](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Replace_Files.htm). Automatic saving, forced read-only edits, Skip Inactive Code and Source Insight's exact legacy regex dialect are not implemented.
