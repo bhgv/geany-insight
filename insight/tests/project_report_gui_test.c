@@ -8,7 +8,8 @@
 #include <glib/gstdio.h>
 #include <string.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
-static gchar *root,*project,*path,*output,*saved;static GtkWidget *window;static GeanyDocument *source;static guint phase,mode;static gint undo;
+static const gchar *original="int zebra(void) { return 1; }\n\nint alpha(void) { return 2; }\n";
+static gchar *root,*project,*path,*output,*saved,*source_text;static GtkWidget *window;static GeanyDocument *source;static guint phase,mode;static gint undo;
 static GtkWidget *named(GtkWidget *w,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(w),name)) return w;
  if(GTK_IS_MENU_ITEM(w)) { GtkWidget *m=gtk_menu_item_get_submenu(GTK_MENU_ITEM(w));if(m) { GtkWidget *f=named(m,name);if(f) return f; } }
@@ -25,7 +26,7 @@ static gboolean respond(gpointer data) {
  (void)data;GtkWidget *v=top("insight-project-report-dialog");if(!v || g_object_get_data(G_OBJECT(v),"insight-report-busy")) return G_SOURCE_CONTINUE;
  gchar *text=preview(v);if(!*text) { g_free(text);return G_SOURCE_CONTINUE; }g_assert_false(gtk_text_view_get_editable(GTK_TEXT_VIEW(named(v,"insight-report-preview"))));
  if(mode==1) { g_assert_cmpstr(text,==,"a.c\nb.c\nempty.h\n");g_assert_false(gtk_widget_get_sensitive(named(v,"insight-report-symbols")));gtk_dialog_response(GTK_DIALOG(v),203);g_free(text);return G_SOURCE_CONTINUE; }
- if(mode==2) { gtk_dialog_response(GTK_DIALOG(v),201);gtk_dialog_response(GTK_DIALOG(v),GTK_RESPONSE_CLOSE);g_free(text);return G_SOURCE_CONTINUE; }
+ if(mode==2) { mode=3;gtk_dialog_response(GTK_DIALOG(v),GTK_RESPONSE_CLOSE);g_free(text);return G_SOURCE_CONTINUE; }
  switch(phase++) {
  case 0:
   g_assert_nonnull(strstr(text,"Files: 3"));g_assert_nonnull(strstr(text,"File: empty.h"));g_assert_nonnull(strstr(text,"zebra"));g_assert_true(strstr(text,"zebra")<strstr(text,"alpha"));
@@ -48,19 +49,21 @@ static gboolean respond(gpointer data) {
 }
 static void invoke(gboolean key,gboolean files) { if(key) keybindings_send_command(GEANY_KEY_GROUP_EDITOR,files ? GEANY_KEYS_INSIGHT_EXPORTPROJECTFILES:GEANY_KEYS_INSIGHT_PROJECTREPORT);else { GtkWidget *item=named(window,files ? "insight-export-project-files":"insight-project-report");g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item)); } }
 static gboolean step(gpointer data) {
- (void)data;
- if(!source) { source=document_get_current();if(!source || !source->file_name || strcmp(source->file_name,path)) { source=NULL;return G_SOURCE_CONTINUE; }window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));undo=SEND(source->editor->sci,SCI_GETUNDOCURRENT,0,0);SEND(source->editor->sci,SCI_SETSEL,8,3); }
- invoke(FALSE,FALSE);if(phase<8) return G_SOURCE_CONTINUE;
- GeanyDocument *report=document_get_current();g_assert_true(report!=source);gchar *text=sci_get_contents(report->editor->sci,-1);g_assert_cmpstr(text,==,saved);g_free(text);document_set_text_changed(report,FALSE);g_assert_true(document_close(report));
- mode=1;invoke(TRUE,TRUE);GeanyDocument *list=document_get_current();g_assert_true(list!=source);text=sci_get_contents(list->editor->sci,-1);g_assert_cmpstr(text,==,"a.c\nb.c\nempty.h\n");g_free(text);document_set_text_changed(list,FALSE);g_assert_true(document_close(list));
- mode=2;invoke(TRUE,FALSE);
+ (void)data;gchar *text=NULL;
+ if(!source) { source=document_get_current();if(!source || !source->file_name || strcmp(source->file_name,path)) { source=NULL;return G_SOURCE_CONTINUE; }window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));source_text=g_strconcat(original," ",NULL);sci_set_text(source->editor->sci,source_text);undo=SEND(source->editor->sci,SCI_GETUNDOCURRENT,0,0);SEND(source->editor->sci,SCI_SETSEL,8,3); }
+ if(mode==0) { invoke(FALSE,FALSE);if(phase<8) return G_SOURCE_CONTINUE;
+ GeanyDocument *report=document_get_current();g_assert_true(report!=source);text=sci_get_contents(report->editor->sci,-1);g_assert_cmpstr(text,==,saved);g_free(text);document_set_text_changed(report,FALSE);g_assert_true(document_close(report));
+ mode=1;return G_SOURCE_CONTINUE; }
+ if(mode==1) { invoke(TRUE,TRUE);GeanyDocument *list=document_get_current();if(list==source) return G_SOURCE_CONTINUE;text=sci_get_contents(list->editor->sci,-1);g_assert_cmpstr(text,==,"a.c\nb.c\nempty.h\n");g_free(text);document_set_text_changed(list,FALSE);g_assert_true(document_close(list));
+ mode=2;return G_SOURCE_CONTINUE; }
+ invoke(TRUE,FALSE);if(mode!=3) return G_SOURCE_CONTINUE;
  g_assert_cmpint(SEND(source->editor->sci,SCI_GETUNDOCURRENT,0,0),==,undo);g_assert_cmpint(SEND(source->editor->sci,SCI_GETANCHOR,0,0),==,8);g_assert_cmpint(SEND(source->editor->sci,SCI_GETCURRENTPOS,0,0),==,3);
- text=sci_get_contents(source->editor->sci,-1);gchar *disk=NULL;g_assert_true(g_file_get_contents(path,&disk,NULL,NULL));g_assert_cmpstr(text,==,disk);g_free(text);g_free(disk);
- g_print("Project report GUI: real completed project index, zero-symbol files, menu/keys, line/name/symbol/type options, invalidation, full copy/save/open, file-list export, unchanged source/selection/Undo and close during generation passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+ text=sci_get_contents(source->editor->sci,-1);gchar *disk=NULL;g_assert_true(g_file_get_contents(path,&disk,NULL,NULL));g_assert_cmpstr(text,==,source_text);g_assert_cmpstr(disk,==,original);g_free(text);g_free(disk);document_set_text_changed(source,FALSE);
+ g_print("Project report GUI: real completed project index, zero-symbol files, menu/keys, line/name/symbol/type options, invalidation, full copy/save/open, file-list export, unchanged source/selection/Undo and window closure passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
 }
 static gboolean timeout(gpointer data) { (void)data;g_error("Project report timeout phase %u mode %u",phase,mode);return G_SOURCE_REMOVE; }
 int main(void) {
  if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;
- gchar *dir=g_dir_make_tmp("project-report-native-XXXXXX",NULL);root=g_build_filename(dir,"source",NULL);g_assert_cmpint(g_mkdir(root,0700),==,0);project=g_build_filename(dir,"report.geany",NULL);path=g_build_filename(root,"a.c",NULL);output=g_build_filename(dir,"output.RPT",NULL);gchar *b=g_build_filename(root,"b.c",NULL),*empty=g_build_filename(root,"empty.h",NULL),*profile=g_build_filename(dir,"profile",NULL);g_assert_true(g_file_set_contents(path,"int zebra(void) { return 1; }\n\nint alpha(void) { return 2; }\n",-1,NULL));g_assert_true(g_file_set_contents(b,"int other(void) { return 3; }\n",-1,NULL));g_assert_true(g_file_set_contents(empty,"/* no symbols here */\n",-1,NULL));gchar *settings=g_strdup_printf("[project]\nname=Project report fixture\nbase_path=%s\n",root);g_assert_true(g_file_set_contents(project,settings,-1,NULL));g_free(settings);
+ gchar *dir=g_dir_make_tmp("project-report-native-XXXXXX",NULL);root=g_build_filename(dir,"source",NULL);g_assert_cmpint(g_mkdir(root,0700),==,0);project=g_build_filename(dir,"report.geany",NULL);path=g_build_filename(root,"a.c",NULL);output=g_build_filename(dir,"output.RPT",NULL);gchar *b=g_build_filename(root,"b.c",NULL),*empty=g_build_filename(root,"empty.h",NULL),*profile=g_build_filename(dir,"profile",NULL);g_assert_true(g_file_set_contents(path,original,-1,NULL));g_assert_true(g_file_set_contents(b,"int other(void) { return 3; }\n",-1,NULL));g_assert_true(g_file_set_contents(empty,"/* no symbols here */\n",-1,NULL));gchar *settings=g_strdup_printf("[project]\nname=Project report fixture\nbase_path=%s\n",root);g_assert_true(g_file_set_contents(project,settings,-1,NULL));g_free(settings);
  gchar *args[]={"project-report-native","--new-instance","--no-session","--config",profile,project,path,NULL};g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);g_timeout_add(100,respond,NULL);g_timeout_add(300,step,NULL);g_timeout_add_seconds(50,timeout,NULL);return main_lib(7,args);
 }
