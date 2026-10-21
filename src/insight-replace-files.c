@@ -56,7 +56,8 @@ static void populate_files(View *v) {
  v->changing=FALSE;if(v->selected>=0&&(guint)v->selected<v->sources->len) { GtkTreePath *selected=gtk_tree_path_new_from_indices(v->selected,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(v->files),selected,NULL,FALSE);gtk_tree_path_free(selected); }gchar *text=g_strdup_printf("%u selected files, %u selected replacements, %u file errors. Apply changes buffers only; use normal Save/Save All afterwards.",files,hits,errors);status(v,text);g_free(text);controls(v);
 }
 static void show_source(View *v,guint index) {
- if(index>=v->sources->len) return;v->selected=index;Source *s=g_ptr_array_index(v->sources,index);gtk_list_store_clear(v->hit_model);
+ if(index>=v->sources->len) return;
+ v->selected=index;Source *s=g_ptr_array_index(v->sources,index);gtk_list_store_clear(v->hit_model);
  if(s->plan) for(guint i=0;i<s->plan->hits->len;i++) { InsightReplaceHit *h=g_ptr_array_index(s->plan->hits,i);gchar *old=snippet(s->before+h->begin,h->end-h->begin),*replacement=snippet(h->replacement,strlen(h->replacement));GtkTreeIter it;gtk_list_store_append(v->hit_model,&it);gtk_list_store_set(v->hit_model,&it,HIT_USE,h->selected,HIT_LINE,h->line,HIT_COLUMN,h->column,HIT_OLD,old,HIT_NEW,replacement,HIT_INDEX,i,-1);g_free(old);g_free(replacement); }
  for(guint side=0;side<2;side++) { gtk_label_set_text(GTK_LABEL(v->labels[side]),side ? insight_tr("After selected replacements — read only"):s->path);set_code(v,side,side ? s->after:s->before,s->path); }
 }
@@ -92,7 +93,8 @@ static void worker(GTask *task,gpointer object,gpointer data,GCancellable *cance
  /* Validate the query and captures even for an empty input scope. */
  InsightReplaceOptions probe=j->options;probe.region=INSIGHT_REGION_ALL;InsightReplacePlan *valid=insight_replace_plan("",j->query,j->replacement,&probe,cancel,&error);if(!valid) goto failed;insight_replace_plan_free(valid);
  for(guint i=0;i<j->sources->len;i++) {
-  if(g_cancellable_set_error_if_cancelled(cancel,&error)) goto failed;Source *s=g_ptr_array_index(j->sources,i);GError *e=NULL;if(!s->before) s->before=insight_replace_read(s->native,cancel,&e);
+  if(g_cancellable_set_error_if_cancelled(cancel,&error)) goto failed;
+  Source *s=g_ptr_array_index(j->sources,i);GError *e=NULL;if(!s->before) s->before=insight_replace_read(s->native,cancel,&e);
   if(!s->before) { s->failure=g_strdup(e ? e->message:"Cannot read source.");g_clear_error(&e);continue; }
   if(!s->id&&s->native) s->readonly=disk_readonly(s->native);
   total+=strlen(s->before);if(total>16u*1024u*1024u) { g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Preview source total exceeds 16 MiB. Narrow the scope or masks.");goto failed; }
@@ -100,7 +102,8 @@ static void worker(GTask *task,gpointer object,gpointer data,GCancellable *cance
   s->plan=insight_replace_plan(s->before,j->query,j->replacement,&options,cancel,&e);if(!s->plan) { s->failure=g_strdup(e ? e->message:"Cannot plan replacements.");g_clear_error(&e);continue; }
   s->after=insight_replace_render(s->plan,&s->count,&e);if(!s->after) { s->failure=g_strdup(e->message);g_clear_error(&e);continue; }hits+=s->plan->hits->len;result_size+=strlen(s->after);
   if(hits>100000||result_size>32u*1024u*1024u) { g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Preview limit: 100,000 matches and 32 MiB results. Nothing changed.");goto failed; }
-  if(!strcmp(s->before,s->after)) s->count=0;s->selected=s->count&&!s->readonly;
+  if(!strcmp(s->before,s->after)) s->count=0;
+  s->selected=s->count&&!s->readonly;
  }
  g_task_return_boolean(task,TRUE);return;
 failed:g_task_return_error(task,error);
@@ -127,7 +130,8 @@ static gboolean folder_inputs(GPtrArray *sources,GHashTable *seen,GFile *folder,
  GFileEnumerator *en=g_file_enumerate_children(folder,G_FILE_ATTRIBUTE_STANDARD_NAME","G_FILE_ATTRIBUTE_STANDARD_TYPE,G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,NULL,error);if(!en) return FALSE;GFileInfo *info;gboolean ok=TRUE;
  while(ok&&(info=g_file_enumerator_next_file(en,NULL,error))) { (*visited)++;GFile *child=g_file_get_child(folder,g_file_info_get_name(info));GFileType type=g_file_info_get_file_type(info);if(*visited>10000) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Folder traversal exceeds 10,000 entries.");ok=FALSE; }
   else if(type==G_FILE_TYPE_DIRECTORY&&recursive&&strcmp(g_file_info_get_name(info),".git")&&strcmp(g_file_info_get_name(info),".hg")&&strcmp(g_file_info_get_name(info),".svn")) ok=folder_inputs(sources,seen,child,recursive,masks,depth+1,visited,bytes,error);
-  else if(type==G_FILE_TYPE_REGULAR) { gchar *native=g_file_get_path(child),*utf8=native ? g_filename_to_utf8(native,-1,NULL,NULL,error):NULL;if(!utf8) ok=FALSE;else ok=add_input(sources,seen,utf8,NULL,masks,bytes,error);g_free(utf8);g_free(native); }g_object_unref(child);g_object_unref(info);
+  else if(type==G_FILE_TYPE_REGULAR) { gchar *native=g_file_get_path(child),*utf8=native ? g_filename_to_utf8(native,-1,NULL,NULL,error):NULL;if(!utf8) ok=FALSE;else ok=add_input(sources,seen,utf8,NULL,masks,bytes,error);g_free(utf8);g_free(native); }
+  g_object_unref(child);g_object_unref(info);
  }if(error&&*error) ok=FALSE;g_object_unref(en);return ok;
 }
 static void preview(GtkWidget *w,gpointer p) {
@@ -145,18 +149,21 @@ static gboolean source_matches(Source *s,gboolean opened,GError **error) {
  s->target=NULL;GeanyDocument *d=s->id ? document_find_by_id(s->id):document_find_by_filename(s->filename);if(s->id&&(!d||g_strcmp0(d->file_name,s->filename))) goto stale;
  gchar *now=NULL;if(d) { if(d->readonly||SEND(d->editor->sci,SCI_GETREADONLY,0,0)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_PERMISSION_DENIED,"A selected buffer is read-only. Deselect it and preview again.");return FALSE; }now=document_text(d,error);s->target=d; }
  else { if(opened) goto stale;if(disk_readonly(s->native)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_PERMISSION_DENIED,"A selected source is read-only or unavailable.");return FALSE; }now=insight_replace_read(s->native,NULL,error); }
- if(!now) return FALSE;gboolean same=!strcmp(now,s->before);g_free(now);if(!same) goto stale;return TRUE;
+ if(!now) return FALSE;
+ gboolean same=!strcmp(now,s->before);g_free(now);if(!same) goto stale;return TRUE;
 stale:g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_WRONG_ETAG,"A selected source changed, closed or was renamed. Nothing further was changed; preview again.");return FALSE;
 }
 static void apply(GtkWidget *w,gpointer p) {
  (void)w;View *v=p;if(v->busy||v->dirty||v->applying) return;GPtrArray *selected=g_ptr_array_new();GError *e=NULL;
  for(guint i=0;i<v->sources->len;i++) { Source *s=g_ptr_array_index(v->sources,i);if(s->selected&&s->count&&!s->failure&&!s->readonly) { g_ptr_array_add(selected,s);if(selected->len>128) { g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Apply at most 128 files at once; deselect some files first.");goto finished; }if(!source_matches(s,FALSE,&e)) goto finished; } }
- if(!selected->len) goto finished;guint64 serial=v->serial;v->applying=TRUE;controls(v);g_object_ref(v->window);
+ if(!selected->len) goto finished;
+ guint64 serial=v->serial;v->applying=TRUE;controls(v);g_object_ref(v->window);
  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(v->confirm))) {
   for(guint i=0;i<selected->len;i++) { Source *s=g_ptr_array_index(selected,i);GtkWidget *d=gtk_message_dialog_new(GTK_WINDOW(v->window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_QUESTION,GTK_BUTTONS_NONE,"%s\n%u replacements",s->path,s->count);gtk_widget_set_name(d,"insight-replace-files-confirm");gtk_dialog_add_buttons(GTK_DIALOG(d),insight_tr("Cancel batch"),GTK_RESPONSE_CANCEL,insight_tr("Skip file"),GTK_RESPONSE_NO,insight_tr("Replace in buffer"),GTK_RESPONSE_YES,NULL);g_object_ref_sink(d);gint response=gtk_dialog_run(GTK_DIALOG(d));gtk_widget_destroy(d);g_object_unref(d);if(v->closed||response!=GTK_RESPONSE_YES) { if(response==GTK_RESPONSE_NO&&!v->closed) { g_ptr_array_remove_index(selected,i--);continue; }if(!v->closed) status(v,"Replacement batch cancelled before buffer changes.");goto release; } }
  }
  for(guint i=0;i<selected->len;i++) { Source *s=g_ptr_array_index(selected,i);if(!source_matches(s,FALSE,&e)) goto release;if(!s->target) { s->target=document_open_file(s->native,FALSE,NULL,NULL);if(!s->target) { g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_FAILED,"Cannot open a selected source. No planned replacements applied.");goto release; } }if(v->closed) goto release; }
- if(v->closed) goto release;if(v->dirty||v->serial!=serial) { g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_WRONG_ETAG,"Criteria changed during confirmation. Preview again; no replacements applied.");goto release; }
+ if(v->closed) goto release;
+ if(v->dirty||v->serial!=serial) { g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_WRONG_ETAG,"Criteria changed during confirmation. Preview again; no replacements applied.");goto release; }
  /* All sources are open before mutation, and all decoded snapshots rechecked. */
  GHashTable *ids=g_hash_table_new(g_direct_hash,g_direct_equal);gboolean ready=TRUE;for(guint i=0;i<selected->len;i++) { Source *s=g_ptr_array_index(selected,i);if(!source_matches(s,TRUE,&e)||g_hash_table_contains(ids,GUINT_TO_POINTER(s->target->id))) { if(!e) g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_EXISTS,"Selected paths resolve to the same editor buffer. Select it only once.");ready=FALSE;break; }g_hash_table_add(ids,GUINT_TO_POINTER(s->target->id)); }g_hash_table_unref(ids);if(!ready) goto release;
  guint applied=0;for(guint i=0;i<selected->len;i++) { if(v->closed) break;Source *s=g_ptr_array_index(selected,i);if(v->dirty||v->serial!=serial) { g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_WRONG_ETAG,"Criteria changed; remaining buffers were left untouched.");break; }if(!source_matches(s,TRUE,&e)) break;ScintillaObject *sci=s->target->editor->sci;SEND(sci,SCI_BEGINUNDOACTION,0,0);SEND(sci,SCI_SETTARGETRANGE,0,strlen(s->before));SEND(sci,SCI_REPLACETARGET,strlen(s->after),(sptr_t)s->after);SEND(sci,SCI_ENDUNDOACTION,0,0);applied++; }

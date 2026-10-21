@@ -14,6 +14,14 @@ static const gchar *original_a="int old = 1; // old\nint old_two = old;\n",*orig
 static GtkWidget *named(GtkWidget *w,const gchar *name) { if(!g_strcmp0(gtk_widget_get_name(w),name)) return w;if(GTK_IS_MENU_ITEM(w)) { GtkWidget *menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(w));if(menu) { GtkWidget *v=named(menu,name);if(v) return v; } }if(GTK_IS_CONTAINER(w)) { GList *list=gtk_container_get_children(GTK_CONTAINER(w));GtkWidget *v=NULL;for(GList *p=list;p&&!v;p=p->next) v=named(p->data,name);g_list_free(list);return v; }return NULL; }
 static GtkWidget *top(const gchar *name) { GList *list=gtk_window_list_toplevels();GtkWidget *v=NULL;for(GList *p=list;p;p=p->next) if(gtk_widget_get_visible(p->data)&&!g_strcmp0(gtk_widget_get_name(p->data),name)) v=p->data;g_list_free(list);return v; }
 static void click(const gchar *name) { GtkWidget *w=named(view,name);g_assert_nonnull(w);if(!gtk_widget_get_sensitive(w)) g_error("Disabled %s at phase %u: %s",name,phase,gtk_label_get_text(GTK_LABEL(named(view,"insight-replace-files-status"))));g_print("Replace Files phase %u: %s\n",phase,name);gtk_button_clicked(GTK_BUTTON(w)); }
+/* Opening a project file can schedule another asynchronous index scan. A
+ * rejected Preview leaves the old table visible and must be retried explicitly. */
+static gboolean ready(void) {
+ if(gtk_widget_get_sensitive(named(view,"insight-replace-files-apply"))) return TRUE;
+ const gchar *message=gtk_label_get_text(GTK_LABEL(named(view,"insight-replace-files-status")));
+ if(g_str_has_prefix(message,"Project indexing is not ready.")) { click("insight-replace-files-preview");return FALSE; }
+ g_error("Replacement preview unavailable at phase %u: %s",phase,message);return FALSE;
+}
 static void entry(const gchar *name,const gchar *value) { gtk_entry_set_text(GTK_ENTRY(named(view,name)),value); }
 static void toggle(const gchar *name,gboolean value) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(view,name)),value); }
 static void source_is(GeanyDocument *doc,const gchar *expected) { gchar *s=sci_get_contents(doc->editor->sci,-1);g_assert_cmpstr(s,==,expected);g_free(s); }
@@ -33,10 +41,13 @@ static gboolean step(gpointer p) {
   { ScintillaObject *before=SCINTILLA(named(view,"insight-replace-files-before")),*after_code=SCINTILLA(named(view,"insight-replace-files-after"));g_assert_true(SEND(before,SCI_GETREADONLY,0,0));g_assert_true(SEND(after_code,SCI_GETREADONLY,0,0));gchar *text=sci_get_contents(after_code,-1);g_assert_cmpstr(text,==,replaced_a);g_free(text);g_assert_cmpint(SEND(before,SCI_GETMARGINWIDTHN,1,0),>,0);g_assert_cmpint(SEND(before,SCI_GETSTYLEAT,0,0),!=,SEND(before,SCI_GETSTYLEAT,strstr(original_a,"//")-original_a,0)); }
   g_assert_true(g_file_set_contents(path_b,"int later = 9;\n",-1,NULL));click("insight-replace-files-apply");source_is(a,original_a);g_assert_false(gtk_widget_get_sensitive(named(view,"insight-replace-files-apply")));g_assert_true(g_file_set_contents(path_b,original_b,-1,NULL));click("insight-replace-files-preview");phase++;break;
  case 3:
+  if(!ready()) break;
   skip_second_hit();toggle("insight-replace-files-confirm-option",TRUE);confirm_mode=1;confirm_count=0;click("insight-replace-files-apply");g_assert_cmpuint(confirm_count,==,2);source_is(a,original_a);g_assert_null(document_find_by_filename(path_b));confirm_mode=2;confirm_count=0;click("insight-replace-files-apply");g_assert_cmpuint(confirm_count,==,2);source_is(a,original_a);b=document_find_by_filename(path_b);g_assert_nonnull(b);source_is(b,replaced_b);SEND(b->editor->sci,SCI_UNDO,0,0);source_is(b,original_b);toggle("insight-replace-files-confirm-option",FALSE);click("insight-replace-files-preview");phase++;break;
  case 4:
+  if(!ready()) break;
   skip_second_hit();SEND(a->editor->sci,SCI_SETREADONLY,TRUE,0);click("insight-replace-files-apply");source_is(a,original_a);source_is(b,original_b);SEND(a->editor->sci,SCI_SETREADONLY,FALSE,0);click("insight-replace-files-preview");phase++;break;
  case 5:
+  if(!ready()) break;
   skip_second_hit();after=g_get_monotonic_time()+200*G_TIME_SPAN_MILLISECOND;phase++;break;
  case 6:
   if(g_get_monotonic_time()<after) { break; }

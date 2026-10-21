@@ -21,7 +21,7 @@ Scopes are **Project files** (actual indexed membership), **Open documents** (in
 
 ## Inspect and select
 
-**Preview replacements** builds snapshots without changing buffers or disk. **Stop preview** cancels; cancelled/superseded plans cannot apply.
+**Preview replacements** collects the scope, then reads closed files and builds matching snapshots in a cancellable worker without changing buffers or disk. Folder enumeration is bounded but runs on the UI thread before that worker; very slow mounted folders can delay its start. **Stop preview** cancels; cancelled/superseded plans cannot apply.
 
 The file table shows path, selected replacement count and state. Unsupported, unavailable and read-only sources are marked separately. Toggle individual files or use **Select all files / Deselect files**. The match table shows line, column, old and new text; its checkboxes and **Select all matches / Deselect matches** let you confirm individual occurrences before applying.
 

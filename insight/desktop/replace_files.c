@@ -7,7 +7,8 @@ static gboolean word(gunichar c) { return g_unichar_isalnum(c) || g_unichar_isma
 static gchar *preserve(const gchar *old,const gchar *replacement) {
  guint upper=0,lower=0,cased=0;gboolean initial=TRUE;
  for(const gchar *p=old;*p;p=g_utf8_next_char(p)) { gunichar c=g_utf8_get_char(p);gboolean up=g_unichar_isupper(c)||g_unichar_istitle(c),down=g_unichar_islower(c);if(up||down) { if((cased==0&&!up)||(cased>0&&!down)) initial=FALSE;cased++;upper+=up;lower+=down; } }
- if(upper&&!lower) return g_utf8_strup(replacement,-1);if(lower&&!upper) return g_utf8_strdown(replacement,-1);
+ if(upper&&!lower) return g_utf8_strup(replacement,-1);
+ if(lower&&!upper) return g_utf8_strdown(replacement,-1);
  if(initial&&cased) { gchar *low=g_utf8_strdown(replacement,-1);for(gchar *p=low;*p;p=g_utf8_next_char(p)) if(g_unichar_islower(g_utf8_get_char(p))||g_unichar_isupper(g_utf8_get_char(p))) { gchar *next=g_utf8_next_char(p),*up=g_utf8_strup(p,next-p),*prefix=g_strndup(low,p-low),*out=g_strconcat(prefix,up,next,NULL);g_free(up);g_free(prefix);g_free(low);return out; }return low; }return g_strdup(replacement);
 }
 /* Replacement escapes match the comparison window: \1, \g<name>, \n, \r,
@@ -22,7 +23,8 @@ static gchar *expand(GRegex *regex,GMatchInfo *info,const gchar *replacement,GEr
     if(g_ascii_isdigit(*p)) { group=*p++-'0';if(!group&&g_ascii_isdigit(*p)) goto invalid;if(group&&g_ascii_isdigit(*p)) group=10*group+(*p++-'0'); }
     else if(*p=='g'&&p[1]=='<') { p+=2;const gchar *end=strchr(p,'>');if(!end||end==p||end-p>128) goto invalid;gchar *name=g_strndup(p,end-p);gboolean numeric=TRUE;for(const gchar *q=name;*q;q++) if(!g_ascii_isdigit(*q)) numeric=FALSE;group=numeric&&strlen(name)<6 ? (gint)g_ascii_strtoull(name,NULL,10):numeric ? -1:g_regex_get_string_number(regex,name);g_free(name);p=end+1; }
     else goto invalid;
-    if(group<0||group>captures) goto invalid;if(info) { gchar *part=g_match_info_fetch(info,group);if(part) { if(!g_utf8_validate(part,-1,NULL)) { g_free(part);goto invalid; }g_string_append(s,part);g_free(part); } }
+    if(group<0||group>captures) goto invalid;
+    if(info) { gchar *part=g_match_info_fetch(info,group);if(part) { if(!g_utf8_validate(part,-1,NULL)) { g_free(part);goto invalid; }g_string_append(s,part);g_free(part); } }
    }
   }
   if(s->len>INSIGHT_REPLACE_FILE_LIMIT) goto invalid;
@@ -56,7 +58,8 @@ InsightReplacePlan *insight_replace_plan(const gchar *text,const gchar *query,co
   }
   found=g_match_info_next(info,&match_error);if(match_error) failed=TRUE;
  }
- if(info) g_match_info_free(info);g_regex_unref(regex);g_free(region);if(match_error) g_propagate_error(error,match_error);if(failed) { insight_replace_plan_free(plan);return NULL; }
+ if(info) g_match_info_free(info);
+ g_regex_unref(regex);g_free(region);if(match_error) g_propagate_error(error,match_error);if(failed) { insight_replace_plan_free(plan);return NULL; }
  gchar *after=insight_replace_render(plan,NULL,error);if(!after) { insight_replace_plan_free(plan);return NULL; }g_free(after);return plan;
 }
 gchar *insight_replace_render(InsightReplacePlan *p,guint *count,GError **error) {
