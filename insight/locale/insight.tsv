@@ -1521,3 +1521,13 @@ Repeat a literal single-line typing fragment at the current selection. Clipboard
 Typing fragments: %u / 20 · memory only	Фрагментов набора: %u / 20 · только в памяти
 Recent direct/committed typing fragments, newest first. Paste and programmatic edits are excluded. Select a fragment to preview repetition.	Последние фрагменты прямого или подтверждённого набора, новые сверху. Вставка и программные правки исключены. Выберите фрагмент для предпросмотра повторения.
 Typing history changed; use Refresh	История набора изменилась; обновите список
+Checkpoint	Контрольная точка
+Checkpoint All	Контрольная точка для всех
+Checkpoint…	Контрольная точка…
+Checkpoint All…	Контрольная точка для всех…
+Save and reset history	Сохранить и сбросить историю
+Save these files, then discard their Undo/Redo and change history.\nOriginal Contents will start at the saved text. This cannot be undone.	Сохранить эти файлы и очистить Undo/Redo и историю изменений.\nИсходным станет сохранённый текст. Это действие нельзя отменить.
+Checkpoint requires named, writable files. Save untitled files first.	Для контрольной точки нужны именованные файлы с разрешением записи. Сначала сохраните безымянные файлы.
+Checkpoint complete: saved text is the new original; Undo/Redo and change history cleared.	Контрольная точка создана: сохранённый текст стал исходным; Undo/Redo и история изменений очищены.
+Checkpoint cancelled: the file set or text changed. No history was cleared.	Контрольная точка отменена: изменились файлы или текст. История сохранена.
+Checkpoint incomplete: save or snapshot failed. No history was cleared; some files may already be saved.	Контрольная точка не создана: ошибка сохранения или снимка. История сохранена; часть файлов уже могла быть записана.

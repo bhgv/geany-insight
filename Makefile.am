@@ -508,3 +508,6 @@ dist_insightdocmedia_DATA += insight/docs/media/selection-search.jpg
 insightdoc_DATA += insight/docs/typing-replay.md
 dist_insightdocmedia_DATA += insight/docs/media/typing-replay.svg
 dist_insightdocmedia_DATA += insight/docs/media/repeat-typing.jpg insight/docs/media/typing-history.jpg
+
+insightdoc_DATA += insight/docs/checkpoint.md
+dist_insightdocmedia_DATA += insight/docs/media/checkpoint.svg insight/docs/media/checkpoint.jpg

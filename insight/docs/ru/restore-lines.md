@@ -2,7 +2,7 @@
 
 **Edit → Restore Lines…** previews restoration to the decoded UTF-8 text captured
 when this document was opened or created. Saving and Reload do not replace that
-baseline. Closing releases it; reopening captures a new baseline. Untitled buffers
+baseline. [Checkpoint](checkpoint.md) explicitly replaces it after saving and clears Undo/Redo. Closing releases it; reopening captures a new baseline. Untitled buffers
 use their initial template/empty contents. A modified buffer already present at
 initialization has no original baseline.
 
@@ -33,14 +33,14 @@ Limits: 8 MiB per original/current/final document, 64 MiB total original snapsho
 valid UTF-8 without NUL, one normal selection without virtual space, existing diff
 work limits. Preview displays at most 8 KiB per side, with EOL normalized for
 viewing; restoration preserves exact original EOL. Snapshots live only in memory.
-Unsupported/oversized original files have no snapshot until close/reopen. These
+Unsupported/oversized original files have no snapshot until close/reopen or a successful bounded Checkpoint. These
 are line/diff blocks, not AST or semantic changes. Core and GUI limits reject an
 operation before any partial edit. Native Preferences offers unassigned Editor
 bindings for Restore Lines and Original Contents.
 
 **Правка → Восстановить строки…** показывает текущий и исходный блоки строк,
 сохранённые при открытии документа. Save и Reload сохраняют первоначальный снимок;
-после закрытия и повторного открытия исходным становится новый текст с диска.
+команда [Checkpoint](checkpoint.md) явно заменяет снимок после сохранения и очищает Undo/Redo. После закрытия и повторного открытия исходным становится новый текст с диска.
 Восстанавливаются **целые блоки изменений**, которые могут быть шире выделения:
 сначала проверьте диапазоны в окне. Удалённые строки привязаны к границам диапазона.
 Правка выполняется одним Undo, текст вне диапазона сохраняется. Файл на диске и
