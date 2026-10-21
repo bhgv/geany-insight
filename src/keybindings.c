@@ -36,6 +36,7 @@
 #include "insight-selection-search.h"
 #include "insight-typing.h"
 #include "insight-revisions.h"
+#include "insight-backups.h"
 #include "insight-template-fields.h"
 #include "insight-relation-graph.h"
 
@@ -313,6 +314,9 @@ static void add_kb(GeanyKeyGroup *group, gsize key_id,
 
 static void cb_func_insight(guint key_id)
 {
+    if (key_id == GEANY_KEYS_INSIGHT_SAVEBACKUP) { insight_backups_command(0);return; }
+    if (key_id == GEANY_KEYS_INSIGHT_OPENBACKUP) { insight_backups_command(1);return; }
+    if (key_id == GEANY_KEYS_INSIGHT_BACKUPFOLDER) { insight_backups_command(2);return; }
     if (key_id == GEANY_KEYS_INSIGHT_CHECKPOINT) { insight_revisions_checkpoint(FALSE);return; }
     if (key_id == GEANY_KEYS_INSIGHT_CHECKPOINTALL) { insight_revisions_checkpoint(TRUE);return; }
     if (key_id == GEANY_KEYS_INSIGHT_TYPINGHISTORY) { insight_typing_command(2);return; }
@@ -789,6 +793,12 @@ static void init_default_kb(void)
         0, 0, "insight_restore_lines", _("Restore Lines"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_ORIGINALCONTENTS, cb_func_insight,
         0, 0, "insight_original_contents", _("Original Contents"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_SAVEBACKUP, cb_func_insight,
+        0, 0, "insight_savebackup", _("Save New Backup File"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_OPENBACKUP, cb_func_insight,
+        0, 0, "insight_openbackup", _("Open Backup File"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_BACKUPFOLDER, cb_func_insight,
+        0, 0, "insight_backupfolder", _("Show Backup Folder"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_CHECKPOINT, cb_func_insight,
         0, 0, "insight_checkpoint", _("Checkpoint"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_CHECKPOINTALL, cb_func_insight,
