@@ -46,7 +46,7 @@ static InsightHtmlSnapshot *capture(GeanyDocument *doc,gboolean selection,GError
  return out;
 }
 static void preview(View *v) {
- ScintillaObject *s=v->preview;InsightHtmlSnapshot *x=v->snapshot;SEND(s,SCI_SETCODEPAGE,SC_CP_UTF8,0);SEND(s,SCI_SETLEXER,0,0);SEND(s,SCI_SETTEXT,0,(sptr_t)x->text);SEND(s,SCI_SETTABWIDTH,x->tab_width,0);
+ ScintillaObject *s=v->preview;InsightHtmlSnapshot *x=v->snapshot;SEND(s,SCI_SETCODEPAGE,SC_CP_UTF8,0);SEND(s,SCI_SETILEXER,0,0);SEND(s,SCI_SETTEXT,0,(sptr_t)x->text);SEND(s,SCI_SETTABWIDTH,x->tab_width,0);
  for(guint i=0;i<256;i++) { InsightHtmlStyle *p=&x->palette[i];SEND(s,SCI_STYLESETFORE,i,p->fore);SEND(s,SCI_STYLESETBACK,i,p->back);SEND(s,SCI_STYLESETSIZE,i,p->size);SEND(s,SCI_STYLESETBOLD,i,p->bold);SEND(s,SCI_STYLESETITALIC,i,p->italic);SEND(s,SCI_STYLESETUNDERLINE,i,p->underline);SEND(s,SCI_STYLESETFONT,i,(sptr_t)p->font); }
  SEND(s,SCI_STARTSTYLING,0,0);for(gsize i=0;i<x->length;) { gsize end=i+1;while(end<x->length && x->styles[end]==x->styles[i]) end++;SEND(s,SCI_SETSTYLING,end-i,x->styles[i]);i=end; }sci_set_symbol_margin(s,FALSE);SEND(s,SCI_SETMARGINWIDTHN,2,0);sci_set_line_numbers(s,TRUE);SEND(s,SCI_EMPTYUNDOBUFFER,0,0);SEND(s,SCI_SETREADONLY,TRUE,0);
 }
