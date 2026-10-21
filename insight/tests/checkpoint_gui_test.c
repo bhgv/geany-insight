@@ -34,12 +34,17 @@ static gboolean respond(gpointer data) {
  if(mode==2) edit(source,"changed during confirmation\n");
  if(mode==3) extra=document_new_file(NULL,NULL,"extra\n");
  if(mode==6) edit(second,"other changed during confirmation\n");
- if(mode==7) { source->readonly=TRUE;sci_set_readonly(source->editor->sci,TRUE); }
+ if(mode==7) { source->readonly=TRUE;SEND(source->editor->sci,SCI_SETREADONLY,1,0); }
+ if(mode==9) source->has_bom=!source->has_bom;
+ if(mode==10) document_set_encoding(source,"ISO-8859-1");
  if(mode==8) { document_set_text_changed(second,FALSE);g_assert_true(document_close(second));second=NULL; }
  gtk_dialog_response(GTK_DIALOG(d),mode==1 ? GTK_RESPONSE_CANCEL:GTK_RESPONSE_ACCEPT);return G_SOURCE_REMOVE;
 }
 static void run(guint which,gboolean all,gboolean key) { mode=which;g_timeout_add(100,respond,NULL);if(key) keybindings_send_command(GEANY_KEY_GROUP_EDITOR,all ? GEANY_KEYS_INSIGHT_CHECKPOINTALL:GEANY_KEYS_INSIGHT_CHECKPOINT);else action(all ? "insight-checkpoint-all":"insight-checkpoint");g_assert_null(dialog()); }
-static void clean(GeanyDocument *doc) { g_assert_false(SEND(doc->editor->sci,SCI_CANUNDO,0,0));g_assert_false(SEND(doc->editor->sci,SCI_CANREDO,0,0));g_assert_false(doc->changed); }
+static void clean(GeanyDocument *doc) { g_assert_false(SEND(doc->editor->sci,SCI_CANUNDO,0,0));g_assert_false(SEND(doc->editor->sci,SCI_CANREDO,0,0));g_assert_false(doc->changed);
+ guint mask=(1u<<SC_MARKNUM_HISTORY_REVERTED_TO_ORIGIN)|(1u<<SC_MARKNUM_HISTORY_SAVED)|(1u<<SC_MARKNUM_HISTORY_MODIFIED)|(1u<<SC_MARKNUM_HISTORY_REVERTED_TO_MODIFIED);
+ g_assert_cmpint(SEND(doc->editor->sci,SCI_MARKERNEXT,0,mask),==,-1);
+ g_assert_cmpint(SEND(doc->editor->sci,SCI_GETCHANGEHISTORY,0,0)&SC_CHANGE_HISTORY_ENABLED,!=,0); }
 static void original(const gchar *expected) { GeanyDocument *before=document_get_current();action("insight-original-contents");GeanyDocument *view=document_get_current();g_assert_true(view!=before);contents(view,expected);g_assert_true(view->readonly);g_assert_true(document_close(view)); }
 static gboolean mutate_other(GSignalInvocationHint *hint,guint n,const GValue *values,gpointer data) { (void)hint;(void)n;(void)data;GeanyDocument *doc=g_value_get_boxed(&values[1]);if(doc==source) edit(second,"modified by save hook\n");return TRUE; }
 static gboolean step(gpointer data) {
@@ -52,7 +57,9 @@ static gboolean step(gpointer data) {
  gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(ui_lookup_widget(window,"menu_write_unicode_bom1")),TRUE);g_assert_true(source->has_bom);run(0,FALSE,FALSE);clean(source);action("menu_undo2");g_assert_true(source->has_bom);
  source->has_bom=FALSE;document_set_text_changed(source,TRUE);g_assert_true(document_save_file(source,TRUE));
  edit(source,"unsaved\n");run(3,FALSE,FALSE);g_assert_true(document_get_current()==extra);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));document_set_text_changed(extra,FALSE);g_assert_true(document_close(extra));
- run(7,FALSE,FALSE);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));source->readonly=FALSE;sci_set_readonly(source->editor->sci,FALSE);
+ run(7,FALSE,FALSE);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));source->readonly=FALSE;SEND(source->editor->sci,SCI_SETREADONLY,0,0);
+ run(9,FALSE,FALSE);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));source->has_bom=FALSE;
+ run(10,FALSE,FALSE);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));document_set_encoding(source,"UTF-8");
  extra=document_new_file(NULL,NULL,"untitled\n");action("insight-checkpoint-all");g_assert_null(dialog());g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));document_set_text_changed(extra,FALSE);g_assert_true(document_close(extra));
  second=document_open_file(second_path,FALSE,NULL,NULL);edit(second,"second checkpoint\n");edit(source,"first checkpoint\n");
  run(6,TRUE,FALSE);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));g_assert_true(SEND(second->editor->sci,SCI_CANUNDO,0,0));disk(second_path,"second initial\n");
@@ -62,7 +69,7 @@ static gboolean step(gpointer data) {
  run(4,TRUE,TRUE);clean(source);clean(second);disk(path,"first checkpoint\n");disk(second_path,"modified by save hook\n");original("modified by save hook\n");
  edit(source,"pending first\n");edit(second,"pending second\n");run(8,TRUE,FALSE);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));disk(path,"first checkpoint\n");
  /* Snapshot rejection keeps undo even when saving already succeeded. */
- gchar invalid[]={'b',(gchar)0xff,'\n',0};sci_set_text(source->editor->sci,invalid);run(0,FALSE,FALSE);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));
+ gchar invalid[]={'b',(gchar)0xff,'\n',0};sci_set_text(source->editor->sci,invalid);run(0,FALSE,FALSE);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));original("first checkpoint\n");
  document_set_text_changed(source,FALSE);
  g_print("Checkpoint GUI: Cancel, stale edits/tab/file set/read-only, single/all key dispatch, save-hook failure, native BOM and text Undo/Redo, UTF-8 guard, new original and saved disk passed\n");
  gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;

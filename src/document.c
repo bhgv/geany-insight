@@ -2955,6 +2955,8 @@ void document_checkpoint_history(GeanyDocument *doc)
     document_undo_clear(doc);
     scintilla_send_message(sci, SCI_SETSAVEPOINT, 0, 0);
     scintilla_send_message(sci, SCI_SETCHANGEHISTORY, history, 0);
+    if (doc == document_get_current())
+        ui_update_popup_reundo_items(doc);
 }
 
 
