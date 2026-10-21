@@ -526,3 +526,4 @@ dist_insightdocmedia_DATA += insight/docs/media/git-history.jpg
 insightdoc_DATA += insight/docs/project-report.md
 dist_insightdocmedia_DATA += insight/docs/media/project-report.svg
 EXTRA_DIST += insight/tests/project_report_test.c insight/tests/project_report_gui_test.c
+dist_insightdocmedia_DATA += insight/docs/media/project-report.jpg
