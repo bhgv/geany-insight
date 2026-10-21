@@ -6,6 +6,7 @@
 #endif
 #include "geany.h"
 #include "insight-git.h"
+#include "insight-git-history.h"
 #include "../insight/desktop/git_project.h"
 #include "app.h"
 #include "document.h"
@@ -223,6 +224,17 @@ static GtkWidget *git_icon(gboolean add)
  if(loader) { if(gdk_pixbuf_loader_write(loader,(const guchar *)svg,strlen(svg),NULL) && gdk_pixbuf_loader_close(loader,NULL)) icon=gtk_image_new_from_pixbuf(gdk_pixbuf_loader_get_pixbuf(loader));g_object_unref(loader); }
  return icon ? icon : gtk_image_new_from_icon_name(add ? "list-add" : "emblem-default",GTK_ICON_SIZE_SMALL_TOOLBAR);
 }
+void insight_git_history_command(void)
+{
+ gchar *location=NULL;
+ if(git_root) location=g_strdup(git_root);
+ else if(app->project) { gchar *base=project_get_base_path();location=utils_get_locale_from_utf8(base);g_free(base); }
+ else { GeanyDocument *doc=document_get_current();if(doc && doc->file_name && g_path_is_absolute(doc->file_name)) { gchar *dir=g_path_get_dirname(doc->file_name);location=utils_get_locale_from_utf8(dir);g_free(dir); } }
+ if(location) { insight_git_history_show(main_widgets.window,location);g_free(location); }
+ else ui_set_statusbar(FALSE,"Open a project or a file in a Git repository first.");
+}
+static void history_command(GtkWidget *widget,gpointer data)
+{ (void)widget;(void)data;insight_git_history_command(); }
 void insight_git_install(GCallback callback)
 {
  refresh_project=callback;GtkWidget *menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(ui_lookup_widget(main_widgets.window,"menu_project1")));
@@ -232,6 +244,7 @@ void insight_git_install(GCallback callback)
  if(!menu) menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(ui_lookup_widget(main_widgets.window,"file1")));
  GList *children=gtk_container_get_children(GTK_CONTAINER(menu));gint position=5,index=0;for(GList *p=children;p;p=p->next,index++) if(p->data==ui_lookup_widget(main_widgets.window,"menu_save_as1")) position=index+1;g_list_free(children);
  for(guint i=0;i<2;i++) { GtkWidget *item=gtk_image_menu_item_new_with_label(i ? "Add to Git…" : "Commit changes…");gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(item),git_icon(i));gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(item),TRUE);gtk_widget_set_name(item,i ? "insight-git-add-menu" : "insight-git-commit-menu");gtk_menu_shell_insert(GTK_MENU_SHELL(menu),item,position+i);g_signal_connect(item,"activate",i ? G_CALLBACK(add_command) : G_CALLBACK(commit_command),NULL);gtk_widget_show_all(item); }
+ GtkWidget *history=gtk_menu_item_new_with_label("Git History and Diff…");gtk_widget_set_name(history,"insight-git-history-menu");gtk_menu_shell_insert(GTK_MENU_SHELL(menu),history,position+2);g_signal_connect(history,"activate",G_CALLBACK(history_command),NULL);gtk_widget_show(history);
 }
 void insight_git_toolbar(void)
 {

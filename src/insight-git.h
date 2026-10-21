@@ -10,4 +10,5 @@ InsightProjectFiles *insight_git_membership(GError **);
 void insight_git_manage(GtkWidget *,gpointer);
 void insight_git_install(GCallback refresh);
 void insight_git_toolbar(void);
+void insight_git_history_command(void);
 #endif
