@@ -2048,3 +2048,51 @@ requests, equal-length InsertCheck substitutions and dialog destruction. Existin
 Renumber core/ordinary GUI checks run in the same suite. The JPEG is a real window
 of this complete editor run under Xvfb using synthetic source/column fixtures.
 Windows and Android were not run.
+
+
+## Guarded transfer between open buffers and Windows x64 trial
+
+Copy Text to Buffer is available under Edit → Insert and clipboard and as a
+configurable Editor keybinding. It captures the selected fragment or whole source,
+then previews append, whole-target replacement, caret insertion or selection
+replacement in an explicit open destination. New destination creates an unsaved
+tab; Reload snapshots explicitly accepts current buffers and selections. A source
+snapshot tab and full syntax-colored, numbered read-only before/after panes make
+the operation reviewable. Apply changes the destination in one Undo/Redo action,
+focuses it and performs no disk writes. Read-only sources and self-targeting are
+supported. Save Selection routes already-open destinations through this review;
+Save a Copy retains open-path protection. Ambiguous file aliases are refused.
+
+The shared exact splice planner bounds source/target/results to 8 MiB, rejects
+binary/non-UTF-8 text and boundaries splitting UTF-8 or CRLF, and never injects
+separators or converts line endings. Snapshot IDs, filenames, revisions, full text
+and relevant selection geometry reject stale requests, including edits followed
+by Undo. Closure and read-only guards protect Apply. Completion cancellation is
+followed by another preflight. Actual replacement text is verified to detect
+extension substitutions, including equal-length InsertCheck changes. RU/EN help,
+a self-contained SVG, native JPEG and both installation manifests are included.
+
+Validation: full Linux build/install and **78/78 tests passed** (3 transfer/export
+checks plus 75 regressions), source `cd2d9bee006c63362c73514dbeb0a7c66123cddf`,
+[run 39639977511](https://github.com/bhgv/geany-insight/actions/runs/39639977511).
+The native transfer fixture covers four modes, reverse Unicode selection/CRLF,
+whole source, source/target read-only states, edits/Undo, selection changes,
+closed destination, Cancel, explicit reload, new buffer, self-copy, legal
+InsertCheck substitution, Save Selection routing, one Undo/Redo and unchanged
+on-disk text. The screenshot uses synthetic C fixtures in the complete Linux app,
+captured from successful run 39638933057 at source a848bc56efcac6b514e4dd82a6921e5bbed45090.
+
+The explicitly requested **Windows x64 portable trial** also passed:
+[run 39639977403](https://github.com/bhgv/geany-insight/actions/runs/39639977403),
+source `cd2d9bee006c63362c73514dbeb0a7c66123cddf`. The UCRT64 build includes the GTK
+runtime, launcher, examples and RU/EN help. Checks include 57 C/C++ parser fixtures,
+native transfer/file-export checks and existing Windows GUI migration checks,
+PE x86-64 architecture, and `geany.exe --version` with SDK directories removed
+from PATH. An explicit navigation header fixes a strict current MinGW compiler
+error. `REVISION.txt` records the exact packaged commit. Unpack the archive and
+run `Start-Insight.cmd`; settings live in its `config` directory.
+
+[Windows x64 trial artifact](https://github.com/bhgv/geany-insight/actions/runs/39639977403/artifacts/12365298073)
+(75,005,597 bytes), SHA256
+`594115304b9999216a5a6cddb387ef910fdf7111fa3452442d26729da172ba9a`.
+Android was not run in this stage.

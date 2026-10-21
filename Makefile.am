@@ -566,3 +566,5 @@ dist_insightdocmedia_DATA += insight/docs/media/renumber-ranges.jpg
 
 EXTRA_DIST += insight/tests/buffer_transfer_gui_test.c
 dist_insightdocmedia_DATA += insight/docs/media/buffer-transfer.svg
+
+dist_insightdocmedia_DATA += insight/docs/media/buffer-transfer.jpg

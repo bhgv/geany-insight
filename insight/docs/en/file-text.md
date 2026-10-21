@@ -48,3 +48,7 @@ Choose source scope, destination and mode, then **Preview**. The Source snapshot
 Text edits (even followed by Undo), renames, closure and read-only destinations invalidate Apply. Selection-based modes also recheck selection geometry; multiple/column/virtual selections are refused. Text and results must be NUL-free UTF-8 up to 8 MiB. UTF-8 and CRLF boundaries cannot be split. Exact bytes and line endings are preserved. If an extension changes the insertion, inspect the destination and use Undo; the status bar reports the interrupted operation.
 
 ![Buffer transfer review](../media/buffer-transfer.svg)
+
+![Native Linux buffer transfer review](../media/buffer-transfer.jpg)
+
+Actual window in the complete Linux editor under Xvfb, using synthetic C source and target fixtures. Read-only before/after panes show whole-buffer replacement.

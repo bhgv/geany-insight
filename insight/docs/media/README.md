@@ -62,3 +62,7 @@ Linux editor under Xvfb, successful native run 39625341427, source
 f366a1dd576a56dcedbafccbdf7986c98b14f85b. Synthetic C source and column selections;
 4/7/9 become 10/11/12 while unselected comment values stay unchanged. Optimized JPEG,
 metadata stripped. It is a native test fixture running the complete application.
+
+`buffer-transfer.svg`: self-contained source/destination splice and preview/Undo diagram. No external fonts, scripts or resources.
+
+`buffer-transfer.jpg`: actual Copy Text to Buffer window in the complete Linux editor under Xvfb, native run 39638933057, source a848bc56efcac6b514e4dd82a6921e5bbed45090. Synthetic C source/target fixtures, whole-buffer replacement, numbered syntax-colored read-only panes. Optimized progressive JPEG, metadata stripped. This is a native fixture running the complete application.
