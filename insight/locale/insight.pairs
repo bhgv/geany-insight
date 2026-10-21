@@ -1218,3 +1218,27 @@ Plain file lists cannot represent line breaks, wildcards or edge whitespace in f
 Choose an output outside the captured source files and project file.|||Выберите назначение вне захваченных исходников и файла проекта.
 Close the destination document before saving a project report.|||Закройте документ назначения перед сохранением отчёта.
 Report destinations require real parent directories, not symbolic links.|||Для сохранения отчёта нужны обычные родительские каталоги без символических ссылок.
+
+Export File as HTML|||Экспорт файла в HTML
+Export File as HTML…|||Экспорт файла в HTML…
+Export Selection as HTML|||Экспорт выделения в HTML
+Export Selection as HTML…|||Экспорт выделения в HTML…
+Save HTML Export|||Сохранить HTML
+Copy HTML|||Копировать HTML
+Open HTML Source|||Открыть исходный HTML
+Captured source|||Снимок кода
+HTML source|||Исходный HTML
+Generating styled HTML…|||Формирование HTML с оформлением…
+HTML options changed. Generate a new preview.|||Настройки HTML изменены. Сформируйте новый предпросмотр.
+HTML ready. Markup preview is limited to 32 KiB; Copy, Open and Save use the full output.|||HTML готов. Предпросмотр разметки ограничен 32 КиБ; копирование, открытие и сохранение используют полный результат.
+HTML export saved. Source documents are unchanged.|||HTML сохранён. Исходные документы не изменены.
+Cannot save HTML export.|||Не удалось сохранить HTML.
+Select one normal text range without virtual spaces or split CRLF endings.|||Выберите один обычный диапазон без виртуальных пробелов и разрезанных CRLF.
+HTML source capture is limited to 1 MiB.|||Снимок исходника для HTML ограничен 1 МиБ.
+HTML export requires bounded UTF-8 text and a valid snapshot.|||Экспорт HTML требует ограниченного текста UTF-8 и корректного снимка.
+HTML export cannot represent source control characters other than tabs and line endings.|||Экспорт HTML не поддерживает управляющие символы исходника кроме табуляции и окончаний строк.
+HTML export font names must be bounded UTF-8.|||Имена шрифтов для HTML должны быть ограниченными строками UTF-8.
+HTML export exceeds the 8 MiB output limit.|||Экспорт HTML превышает предел результата 8 МиБ.
+Export requires real parent directories, not symbolic links.|||Для экспорта нужны обычные родительские каталоги без символических ссылок.
+Export requires an absolute destination.|||Для экспорта нужен абсолютный путь назначения.
+Choose an export destination outside source, open documents and project files.|||Выберите назначение экспорта вне исходника, открытых документов и файлов проекта.

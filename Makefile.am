@@ -527,3 +527,7 @@ insightdoc_DATA += insight/docs/project-report.md
 dist_insightdocmedia_DATA += insight/docs/media/project-report.svg
 EXTRA_DIST += insight/tests/project_report_test.c insight/tests/project_report_gui_test.c
 dist_insightdocmedia_DATA += insight/docs/media/project-report.jpg
+
+insightdoc_DATA += insight/docs/html-export.md
+dist_insightdocmedia_DATA += insight/docs/media/html-export.svg
+EXTRA_DIST += insight/tests/html_export_test.c insight/tests/html_export_gui_test.c
