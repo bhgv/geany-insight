@@ -1786,3 +1786,22 @@ Before — read only	До — только чтение
 After — read only	После — только чтение
 Press Preview to inspect all selected fragments. No source changes yet.	Нажмите Preview для просмотра всех фрагментов. Исходник пока не изменяется.
 Source or selection changed. Cancel and run Renumber again.	Исходник или выделение изменились. Отмените и вызовите Renumber заново.
+
+Copy Text to Buffer	Копировать текст в буфер
+Copy Text to Buffer…	Копировать текст в буфер…
+Selected text	Выделенный текст
+Whole buffer	Весь буфер
+Append at EOF	Дописать в конец
+Replace whole destination	Заменить весь буфер назначения
+Insert at destination caret	Вставить в курсор назначения
+Replace destination selection	Заменить выделение назначения
+Reload snapshots	Обновить снимки
+New destination	Новый буфер назначения
+Destination: before / after	Назначение: до / после
+Source snapshot	Снимок исходника
+Press Preview. Changes stay in the destination buffer until you save it.	Нажмите Просмотр. Изменения останутся в буфере назначения до сохранения.
+Snapshot changed. Reload and preview again.	Снимок изменился. Обновите и повторите просмотр.
+No text changes.	Текст не изменился.
+Preview ready. Apply changes the destination in one Undo action; no disk writes.	Просмотр готов. Применение изменит назначение одним действием Undo без записи на диск.
+Source, destination or selection changed, or destination is read-only. Reload snapshots.	Исходник, назначение или выделение изменились, либо назначение доступно только для чтения. Обновите снимки.
+Select a nonempty stream fragment, or choose Whole buffer.	Выделите непустой фрагмент либо выберите Весь буфер.

@@ -41,7 +41,7 @@ Reference: [Insert File](https://www.sourceinsight.com/doc/v4/userguide/Manual/C
 | Insert at destination caret | Insert at the captured caret without deleting its selection. |
 | Replace destination selection | Replace one captured normal selection. |
 
-Choose source scope, destination and mode, then **Preview**. The left and right read-only panes show the full destination before and after with syntax colors and line numbers. **New destination** creates an ordinary unsaved tab. **Reload snapshots** explicitly accepts current source/destination text and selections; it clears the previous proposal. Changing options also requires another preview.
+Choose source scope, destination and mode, then **Preview**. The Source snapshot tab shows captured source text. The left and right read-only panes show the full destination before and after with syntax colors and line numbers. **New destination** creates an ordinary unsaved tab. **Reload snapshots** explicitly accepts current source/destination text and selections; it clears the previous proposal. Changing options also requires another preview.
 
 **Apply** changes only the destination buffer, as one Undo/Redo action. It does not write to disk. The destination opens in the editor after review closes. Choosing the source as destination is allowed. Cancel leaves text unchanged; an explicitly created new tab remains open.
 

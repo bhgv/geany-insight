@@ -3,6 +3,9 @@ on:
   push:
     branches: [main]
     paths:
+      - insight/tests/buffer_transfer_gui_test.c
+      - insight/tests/text_transfer_test.c
+      - insight/tests/file_text_gui_test.c
       - src/insight-buffer-transfer.*
       - src/insight-renumber-ranges.*
       - insight/desktop/renumber.*

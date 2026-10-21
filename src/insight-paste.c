@@ -809,7 +809,7 @@ static void export_text(GtkMenuItem *item,gpointer data)
  GtkWidget *dialog=gtk_file_chooser_dialog_new(insight_tr(selection ? "Save Selection" : "Save a Copy"),GTK_WINDOW(main_widgets.window),GTK_FILE_CHOOSER_ACTION_SAVE,insight_tr("Cancel"),GTK_RESPONSE_CANCEL,insight_tr("Save"),GTK_RESPONSE_ACCEPT,NULL);
  g_object_ref_sink(dialog);gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog),TRUE);gtk_widget_set_name(dialog,"insight-export-text-dialog");gtk_file_chooser_set_local_only(GTK_FILE_CHOOSER(dialog),TRUE);gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog),TRUE);gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog),selection ? "selection.txt" : "copy.txt");
  if(selection) g_signal_connect(dialog,"confirm-overwrite",G_CALLBACK(export_confirmation),NULL);
- GtkWidget *note=gtk_label_new(insight_tr("Export UTF-8 text without changing the original document. Open destinations are protected."));gtk_label_set_line_wrap(GTK_LABEL(note),TRUE);gtk_file_chooser_set_extra_widget(GTK_FILE_CHOOSER(dialog),note);gtk_widget_show(note);
+ GtkWidget *note=gtk_label_new(insight_tr(selection ? "Export UTF-8 text. Open destinations use buffer review without saving to disk." : "Export UTF-8 text without changing the original document. Open destinations are protected."));gtk_label_set_line_wrap(GTK_LABEL(note),TRUE);gtk_file_chooser_set_extra_widget(GTK_FILE_CHOOSER(dialog),note);gtk_widget_show(note);
  gchar *path=NULL;if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));gtk_widget_destroy(dialog);g_object_unref(dialog);
  if(path) {
   GError *error=NULL;gboolean saved=FALSE;

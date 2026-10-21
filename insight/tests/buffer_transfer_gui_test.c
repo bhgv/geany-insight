@@ -19,9 +19,13 @@ static void check(ScintillaObject *s,const gchar *expected) { gchar *text=sci_ge
 static gboolean respond(gpointer data) {
  (void)data;GtkWidget *d=dialog();if(!d) return G_SOURCE_CONTINUE;
  if(!reply++) {
-  gchar *id=g_strdup_printf("%u",target->id);gtk_combo_box_set_active_id(GTK_COMBO_BOX(named(d,"insight-transfer-destination")),id);g_free(id);gtk_combo_box_set_active(GTK_COMBO_BOX(named(d,"insight-transfer-mode")),mode);gtk_combo_box_set_active(GTK_COMBO_BOX(named(d,"insight-transfer-scope")),whole?1:0);gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_HELP);return G_SOURCE_CONTINUE;
+  gchar *id=g_strdup_printf("%u",guard==9?source->id:target->id);gtk_combo_box_set_active_id(GTK_COMBO_BOX(named(d,"insight-transfer-destination")),id);g_free(id);gtk_combo_box_set_active(GTK_COMBO_BOX(named(d,"insight-transfer-mode")),mode);gtk_combo_box_set_active(GTK_COMBO_BOX(named(d,"insight-transfer-scope")),whole?1:0);gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_HELP);return G_SOURCE_CONTINUE;
  }
  if(reply==2) return G_SOURCE_CONTINUE;
+ if(guard==7&&reply==3) { gtk_dialog_response(GTK_DIALOG(d),2);return G_SOURCE_CONTINUE; }
+ if(guard==7&&reply==4) { gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_HELP);return G_SOURCE_CONTINUE; }
+ if(guard==8&&reply==3) { SEND(target->editor->sci,SCI_APPENDTEXT,1,(sptr_t)"!");gtk_dialog_response(GTK_DIALOG(d),1);return G_SOURCE_CONTINUE; }
+ if(guard==8&&reply==4) { gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_HELP);return G_SOURCE_CONTINUE; }
  GtkWidget *apply=gtk_dialog_get_widget_for_response(GTK_DIALOG(d),GTK_RESPONSE_APPLY);
  if(guard==4) { g_assert_false(gtk_widget_get_sensitive(apply));timer=0;gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_CANCEL);return G_SOURCE_REMOVE; }
  g_assert_true(gtk_widget_get_sensitive(apply));
@@ -44,6 +48,10 @@ static void reset(void) {
  SEND(source->editor->sci,SCI_SETREADONLY,FALSE,0);sci_set_text(source->editor->sci,"// α\r\nint value = 7;\r\n");SEND(source->editor->sci,SCI_EMPTYUNDOBUFFER,0,0);SEND(source->editor->sci,SCI_SETSEL,5,3);
  SEND(target->editor->sci,SCI_SETREADONLY,FALSE,0);sci_set_text(target->editor->sci,"int count = 1;\r\n");SEND(target->editor->sci,SCI_EMPTYUNDOBUFFER,0,0);SEND(target->editor->sci,SCI_SETSEL,4,9);
 }
+static gboolean armed,hook_done;
+static void interfere(ScintillaObject *s,gint id,SCNotification *nt,gpointer data) {
+ (void)id;(void)data;if(armed&&!hook_done&&nt->nmhdr.code==SCN_MODIFIED&&(nt->modificationType&SC_MOD_INSERTCHECK)) { hook_done=TRUE;SEND(s,SCI_CHANGEINSERTION,2,(sptr_t)"XX"); }
+}
 static gboolean step(gpointer data) {
  (void)data;source=document_find_by_filename(path);if(!source) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));target=document_open_file(target_path,FALSE,NULL,NULL);g_assert_nonnull(target);
  const gchar *expected[]={"int count = 1;\r\nα","α","int countα = 1;\r\n","int α = 1;\r\n"};
@@ -52,6 +60,10 @@ static gboolean step(gpointer data) {
  reset();SEND(source->editor->sci,SCI_SETREADONLY,TRUE,0);command(0,0,FALSE,FALSE);check(target->editor->sci,expected[0]);
  for(gint g=1;g<=3;g++) { reset();command(0,g,FALSE,FALSE);check(target->editor->sci,"int count = 1;\r\n"); }
  reset();SEND(target->editor->sci,SCI_SETREADONLY,TRUE,0);command(0,4,FALSE,FALSE);check(target->editor->sci,"int count = 1;\r\n");
+ reset();command(0,7,FALSE,FALSE);GeanyDocument *created=document_get_current();g_assert_true(created!=source&&created!=target);g_assert_null(created->file_name);check(created->editor->sci,"α");document_set_text_changed(created,FALSE);
+ reset();command(0,8,FALSE,FALSE);check(target->editor->sci,"int count = 1;\r\n!α");
+ reset();command(0,9,FALSE,FALSE);check(source->editor->sci,"// α\r\nint value = 7;\r\nα");SEND(source->editor->sci,SCI_UNDO,0,0);check(source->editor->sci,"// α\r\nint value = 7;\r\n");
+ reset();sptr_t mask=SEND(target->editor->sci,SCI_GETMODEVENTMASK,0,0);SEND(target->editor->sci,SCI_SETMODEVENTMASK,mask|SC_MOD_INSERTCHECK,0);gulong hook=g_signal_connect(target->editor->sci,"sci-notify",G_CALLBACK(interfere),NULL);armed=TRUE;command(0,0,FALSE,FALSE);armed=FALSE;g_assert_true(hook_done);check(target->editor->sci,"int count = 1;\r\nXX");SEND(target->editor->sci,SCI_UNDO,0,0);check(target->editor->sci,"int count = 1;\r\n");g_signal_handler_disconnect(target->editor->sci,hook);SEND(target->editor->sci,SCI_SETMODEVENTMASK,mask,0);
  reset();command(0,5,FALSE,FALSE);check(target->editor->sci,"int count = 1;\r\n");gchar *disk=NULL;g_file_get_contents(target_path,&disk,NULL,NULL);g_assert_cmpstr(disk,==,"int count = 1;\r\n");g_free(disk);
  document_set_text_changed(source,FALSE);document_set_text_changed(target,FALSE);g_print("Buffer transfer: four modes, selected/whole Unicode CRLF, read-only source/target, stale edits and selections, preview, single Undo/Redo and no disk writes passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
 }

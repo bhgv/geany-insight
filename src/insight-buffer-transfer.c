@@ -8,6 +8,7 @@
 #include "highlighting.h"
 #include "ui_utils.h"
 #include "insight-completion.h"
+#include "insight-i18n.h"
 #include "../insight/desktop/text_transfer.h"
 #include <string.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
@@ -15,7 +16,7 @@ typedef struct {
  guint id;ScintillaObject *sci;gchar *text,*name;gsize size;sptr_t anchor,caret;gboolean stream;guint64 revision;gulong watch;
 } Snapshot;
 typedef struct {
- Snapshot source,target;GtkWidget *dialog,*dest,*scope,*mode,*status;ScintillaObject *before,*after;
+ Snapshot source,target;GtkWidget *dialog,*dest,*scope,*mode,*status;ScintillaObject *before,*after,*source_view;
  gchar *result,*payload;gsize begin,end;gboolean closed,busy;
 } Review;
 static void modified(ScintillaObject *s,gint unused,SCNotification *nt,gpointer data) {
@@ -42,7 +43,7 @@ static gboolean valid(Snapshot *v,gboolean selection,gboolean writable) {
 static void code(ScintillaObject *s,const gchar *text,const gchar *name) {
  GeanyFiletype *ft=filetypes_detect_from_extension(name?name:"");highlighting_set_styles(s,ft?ft:filetypes[GEANY_FILETYPES_NONE]);SEND(s,SCI_SETREADONLY,FALSE,0);SEND(s,SCI_SETUNDOCOLLECTION,FALSE,0);sci_set_text(s,text?text:"");SEND(s,SCI_EMPTYUNDOBUFFER,0,0);SEND(s,SCI_SETREADONLY,TRUE,0);sci_set_line_numbers(s,TRUE);SEND(s,SCI_SETMARGINWIDTHN,0,0);SEND(s,SCI_SETMARGINWIDTHN,1,50);SEND(s,SCI_SETMARGINWIDTHN,2,0);SEND(s,SCI_COLOURISE,0,-1);
 }
-static void status(Review *v,const gchar *text) { if(!v->closed) gtk_label_set_text(GTK_LABEL(v->status),text); }
+static void status(Review *v,const gchar *text) { if(!v->closed) gtk_label_set_text(GTK_LABEL(v->status),insight_tr(text)); }
 static void invalidate(GtkWidget *w,gpointer data) {
  (void)w;Review *v=data;g_clear_pointer(&v->result,g_free);g_clear_pointer(&v->payload,g_free);if(v->closed) return;
  gtk_dialog_set_response_sensitive(GTK_DIALOG(v->dialog),GTK_RESPONSE_APPLY,FALSE);code(v->after,"",NULL);status(v,"Press Preview. Changes stay in the destination buffer until you save it.");
@@ -71,30 +72,31 @@ static void preview(Review *v) {
 }
 static void destroyed(GtkWidget *w,gpointer data) { (void)w;((Review *)data)->closed=TRUE; }
 static GtkWidget *combo(const gchar *name,const gchar **labels,guint n) {
- GtkWidget *w=gtk_combo_box_text_new();gtk_widget_set_name(w,name);for(guint i=0;i<n;i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(w),labels[i]);gtk_combo_box_set_active(GTK_COMBO_BOX(w),0);return w;
+ GtkWidget *w=gtk_combo_box_text_new();gtk_widget_set_name(w,name);for(guint i=0;i<n;i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(w),insight_tr(labels[i]));gtk_combo_box_set_active(GTK_COMBO_BOX(w),0);return w;
 }
 static void run(guint target,gboolean selection) {
  GeanyDocument *d=document_get_current();if(!d) return;Review v={0};guint source=d->id;
  if(!capture(&v.source,source)) { ui_set_statusbar(TRUE,"Text transfer requires NUL-free UTF-8 buffers up to 8 MiB.");return; }
- v.dialog=gtk_dialog_new_with_buttons("Copy Text to Buffer",GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Cancel",GTK_RESPONSE_CANCEL,"Reload snapshots",1,"New destination",2,"Preview",GTK_RESPONSE_HELP,"Apply",GTK_RESPONSE_APPLY,NULL);
+ v.dialog=gtk_dialog_new_with_buttons(insight_tr("Copy Text to Buffer"),GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,insight_tr("Cancel"),GTK_RESPONSE_CANCEL,insight_tr("Reload snapshots"),1,insight_tr("New destination"),2,insight_tr("Preview"),GTK_RESPONSE_HELP,insight_tr("Apply"),GTK_RESPONSE_APPLY,NULL);
  g_object_ref_sink(v.dialog);gtk_widget_set_name(v.dialog,"insight-buffer-transfer-dialog");gtk_window_set_default_size(GTK_WINDOW(v.dialog),1060,650);g_signal_connect(v.dialog,"destroy",G_CALLBACK(destroyed),&v);
- GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(v.dialog)),*row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,8);gtk_box_pack_start(GTK_BOX(box),row,FALSE,FALSE,6);
+ GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(v.dialog));gchar *source_label=g_strdup_printf("%s: %s [%u]",insight_tr("Source"),v.source.name?v.source.name:insight_tr("Untitled"),source);GtkWidget *source_name=gtk_label_new(source_label);gtk_label_set_ellipsize(GTK_LABEL(source_name),PANGO_ELLIPSIZE_MIDDLE);gtk_box_pack_start(GTK_BOX(box),source_name,FALSE,FALSE,4);g_free(source_label);GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,8);gtk_box_pack_start(GTK_BOX(box),row,FALSE,FALSE,6);
  const gchar *scopes[]={"Selected text","Whole buffer"},*modes[]={"Append at EOF","Replace whole destination","Insert at destination caret","Replace destination selection"};
  v.scope=combo("insight-transfer-scope",scopes,2);gtk_combo_box_set_active(GTK_COMBO_BOX(v.scope),selection?0:1);v.mode=combo("insight-transfer-mode",modes,4);v.dest=gtk_combo_box_text_new();gtk_widget_set_name(v.dest,"insight-transfer-destination");
  gtk_box_pack_start(GTK_BOX(row),v.scope,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(row),v.dest,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(row),v.mode,FALSE,FALSE,0);
- GtkWidget *paned=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);gtk_box_pack_start(GTK_BOX(box),paned,TRUE,TRUE,4);v.before=SCINTILLA(scintilla_new());v.after=SCINTILLA(scintilla_new());gtk_widget_set_name(GTK_WIDGET(v.before),"insight-transfer-before");gtk_widget_set_name(GTK_WIDGET(v.after),"insight-transfer-after");gtk_paned_pack1(GTK_PANED(paned),GTK_WIDGET(v.before),TRUE,FALSE);gtk_paned_pack2(GTK_PANED(paned),GTK_WIDGET(v.after),TRUE,FALSE);gtk_paned_set_position(GTK_PANED(paned),520);
+ GtkWidget *notebook=gtk_notebook_new(),*paned=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);gtk_box_pack_start(GTK_BOX(box),notebook,TRUE,TRUE,4);gtk_notebook_append_page(GTK_NOTEBOOK(notebook),paned,gtk_label_new(insight_tr("Destination: before / after")));v.source_view=SCINTILLA(scintilla_new());gtk_notebook_append_page(GTK_NOTEBOOK(notebook),GTK_WIDGET(v.source_view),gtk_label_new(insight_tr("Source snapshot")));code(v.source_view,v.source.text,v.source.name);v.before=SCINTILLA(scintilla_new());v.after=SCINTILLA(scintilla_new());gtk_widget_set_name(GTK_WIDGET(v.before),"insight-transfer-before");gtk_widget_set_name(GTK_WIDGET(v.after),"insight-transfer-after");gtk_paned_pack1(GTK_PANED(paned),GTK_WIDGET(v.before),TRUE,FALSE);gtk_paned_pack2(GTK_PANED(paned),GTK_WIDGET(v.after),TRUE,FALSE);gtk_paned_set_position(GTK_PANED(paned),520);
  v.status=gtk_label_new("");gtk_widget_set_name(v.status,"insight-transfer-status");gtk_label_set_line_wrap(GTK_LABEL(v.status),TRUE);gtk_box_pack_start(GTK_BOX(box),v.status,FALSE,FALSE,6);
  g_signal_connect(v.scope,"changed",G_CALLBACK(invalidate),&v);g_signal_connect(v.mode,"changed",G_CALLBACK(invalidate),&v);g_signal_connect(v.dest,"changed",G_CALLBACK(destination_changed),&v);populate(&v,target?target:source);gtk_widget_show_all(v.dialog);
  guint applied=0;
  while(!v.closed) {
   gint response=gtk_dialog_run(GTK_DIALOG(v.dialog));if(v.closed) break;
   if(response==GTK_RESPONSE_HELP) { preview(&v);continue; }
-  if(response==1) { guint chosen=destination(&v);capture(&v.source,source);populate(&v,chosen);continue; }
+  if(response==1) { guint chosen=destination(&v);capture(&v.source,source);code(v.source_view,v.source.text,v.source.name);populate(&v,chosen);continue; }
   if(response==2) { GeanyDocument *next=document_new_file(NULL,NULL,"");if(next) populate(&v,next->id);continue; }
   if(response!=GTK_RESPONSE_APPLY) break;
   if(!v.result||!unchanged(&v)) { invalidate(NULL,&v);status(&v,"Snapshot changed. Reload and preview again.");continue; }
   ScintillaObject *s=v.target.sci;gsize amount=strlen(v.payload);guint64 expected=(v.end>v.begin)+(amount>0);
   GeanyDocument *dest=document_find_by_id(v.target.id);insight_completion_cancel(dest->editor);SEND(s,SCI_AUTOCCANCEL,0,0);
+  if(!unchanged(&v)) { invalidate(NULL,&v);status(&v,"Snapshot changed. Reload and preview again.");continue; }
   sci_start_undo_action(s);SEND(s,SCI_SETTARGETRANGE,v.begin,v.end);SEND(s,SCI_REPLACETARGET,amount,(sptr_t)v.payload);sci_end_undo_action(s);
   dest=document_find_by_id(v.target.id);gchar *actual=dest&&dest->editor->sci==s?sci_get_contents(s,-1):NULL;
   gboolean ok=actual&&v.target.revision==expected&&SEND(s,SCI_GETLENGTH,0,0)==strlen(v.result)&&!strcmp(actual,v.result);g_free(actual);
