@@ -11,4 +11,6 @@ gchar *insight_text_file_read(const gchar *,gsize *,GError **);
 gboolean insight_text_file_write(const gchar *,const gchar *,gsize,GError **);
 /* Protects native absolute source/open/project paths and their file identities. */
 gboolean insight_text_file_write_protected(const gchar *,const gchar *,gsize,GPtrArray *,GError **);
+/* Exact in-memory replacement. Boundaries must not split UTF-8 or CRLF. */
+gchar *insight_text_splice(const gchar *target,gsize size,const gchar *payload,gsize payload_size,gsize begin,gsize end,GError **error);
 #endif

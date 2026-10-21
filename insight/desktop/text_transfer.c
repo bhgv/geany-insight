@@ -10,6 +10,16 @@ static gboolean text_valid(const gchar *text,gsize size,GError **error) {
  if(size>INSIGHT_TEXT_TRANSFER_LIMIT) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Text transfer is limited to 8 MiB.");return FALSE; }
  if(!text || memchr(text,0,size) || !g_utf8_validate(text,size,NULL)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Text transfer requires UTF-8 without NUL bytes.");return FALSE; }return TRUE;
 }
+static gboolean boundary(const gchar *text,gsize size,gsize position) {
+ return position<=size && (position==size || (((guchar)text[position]&0xc0)!=0x80)) && !(position>0&&position<size&&text[position-1]=='\r'&&text[position]=='\n');
+}
+gchar *insight_text_splice(const gchar *target,gsize size,const gchar *payload,gsize payload_size,gsize begin,gsize end,GError **error) {
+ if(!text_valid(target,size,error)||!text_valid(payload,payload_size,error)) return NULL;
+ if(begin>end||!boundary(target,size,begin)||!boundary(target,size,end)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Choose complete UTF-8 and line-ending boundaries.");return NULL; }
+ gsize length=size-(end-begin)+payload_size;
+ if(length>INSIGHT_TEXT_TRANSFER_LIMIT) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Text transfer result exceeds 8 MiB.");return NULL; }
+ gchar *result=g_malloc(length+1);memcpy(result,target,begin);memcpy(result+begin,payload,payload_size);memcpy(result+begin+payload_size,target+end,size-end);result[length]=0;return result;
+}
 gchar *insight_text_file_read(const gchar *path,gsize *size,GError **error) {
  GFile *file=g_file_new_for_path(path);GFileInfo *info=g_file_query_info(file,ATTRS,G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,NULL,error);GFileInputStream *input=NULL;gchar *text=NULL;
  if(!info || !regular(info,error)) goto done;

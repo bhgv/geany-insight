@@ -2,7 +2,18 @@
 #include "text_transfer.h"
 #include <glib/gstdio.h>
 #include <string.h>
+static void splice_tests(void) {
+ GError *error=NULL;gchar *s=insight_text_splice("α\r\nb",5,"β",2,4,5,&error);g_assert_no_error(error);g_assert_cmpstr(s,==,"α\r\nβ");g_free(s);
+ s=insight_text_splice("α",2,"!",1,2,2,&error);g_assert_cmpstr(s,==,"α!");g_free(s);
+ s=insight_text_splice("abc",3,"",0,0,3,&error);g_assert_cmpstr(s,==,"");g_free(s);
+ s=insight_text_splice("abc",3,"b",1,1,2,&error);g_assert_cmpstr(s,==,"abc");g_free(s);
+ const gchar *targets[]={"α","a\r\nb","abc","abc"};gsize sizes[]={2,4,3,3},begins[]={1,2,3,4},ends[]={2,2,1,4};
+ for(guint i=0;i<4;i++) { g_assert_null(insight_text_splice(targets[i],sizes[i],"x",1,begins[i],ends[i],&error));g_assert_error(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT);g_clear_error(&error); }
+ g_assert_null(insight_text_splice("abc",3,"a\0b",3,0,0,&error));g_clear_error(&error);
+ gchar *large=g_strnfill(INSIGHT_TEXT_TRANSFER_LIMIT,'x');g_assert_null(insight_text_splice(large,INSIGHT_TEXT_TRANSFER_LIMIT,"x",1,0,0,&error));g_assert_error(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE);g_clear_error(&error);g_free(large);
+}
 int main(void) {
+ splice_tests();
  gchar *dir=g_dir_make_tmp("text-transfer-XXXXXX",NULL),*file=g_build_filename(dir,"text.txt",NULL),*bad=g_build_filename(dir,"bad.txt",NULL);g_assert_nonnull(dir);GError *error=NULL;gsize size;
  const gchar *sample="α\r\nbeta\nlast";g_assert_true(insight_text_file_write(file,sample,strlen(sample),&error));g_assert_no_error(error);gchar *text=insight_text_file_read(file,&size,&error);g_assert_no_error(error);g_assert_cmpuint(size,==,strlen(sample));g_assert_cmpstr(text,==,sample);g_free(text);
  g_assert_true(insight_text_file_write(file,"",0,&error));g_assert_no_error(error);text=insight_text_file_read(file,&size,&error);g_assert_cmpuint(size,==,0);g_assert_cmpstr(text,==,"");g_free(text);
