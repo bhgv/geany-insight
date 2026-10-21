@@ -26,7 +26,11 @@ static GtkWidget *named(GtkWidget *w,const gchar *name) {
 }
 static GtkWidget *top(void) { GList *list=gtk_window_list_toplevels();GtkWidget *found=NULL;for(GList *p=list;p;p=p->next) if(gtk_widget_get_visible(p->data) && !g_strcmp0(gtk_widget_get_name(p->data),"insight-git-history-window")) found=p->data;g_list_free(list);return found; }
 static void flush(void) { while(gtk_events_pending()) gtk_main_iteration(); }
-static GtkWidget *ready(void) { GtkWidget *v=top();g_assert_nonnull(v);gint64 end=g_get_monotonic_time()+10*G_TIME_SPAN_SECOND;while(g_object_get_data(G_OBJECT(v),"insight-git-history-busy") && g_get_monotonic_time()<end) { flush();g_usleep(1000); }g_assert_null(g_object_get_data(G_OBJECT(v),"insight-git-history-busy"));flush();return v; }
+static GtkWidget *ready(void) {
+ GtkWidget *v=top();g_assert_nonnull(v);gint64 end=g_get_monotonic_time()+10*G_TIME_SPAN_SECOND,quiet=0;
+ while(g_get_monotonic_time()<end) { flush();gint64 now=g_get_monotonic_time();if(g_object_get_data(G_OBJECT(v),"insight-git-history-busy")) quiet=0;else if(!quiet) quiet=now;else if(now-quiet>100*G_TIME_SPAN_MILLISECOND) return v;g_usleep(1000); }
+ g_error("History did not become idle");return NULL;
+}
 static void click(GtkWidget *v,const gchar *name) { gtk_button_clicked(GTK_BUTTON(named(v,name))); }
 static void row(GtkWidget *v,const gchar *name,gint n) { GtkTreePath *p=gtk_tree_path_new_from_indices(n,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(named(v,name)),p,NULL,FALSE);gtk_tree_path_free(p); }
 static void file(GtkWidget *v,const gchar *name) { GtkTreeModel *m=gtk_tree_view_get_model(GTK_TREE_VIEW(named(v,"insight-git-history-files")));GtkTreeIter i;gboolean valid=gtk_tree_model_get_iter_first(m,&i);gint n=0;while(valid) { gchar *p=NULL;gtk_tree_model_get(m,&i,2,&p,-1);gboolean match=!strcmp(name,p);g_free(p);if(match) { row(v,"insight-git-history-files",n);ready();return; }n++;valid=gtk_tree_model_iter_next(m,&i); }g_error("Missing historical file %s",name); }
@@ -47,7 +51,7 @@ static gboolean step(gpointer data)
  g_assert_cmpint(SEND(s,SCI_GETSTYLEAT,0,0),!=,SEND(s,SCI_GETSTYLEAT,strlen("// revised value\n"),0));g_assert_cmpint(SEND(s,SCI_MARKERGET,1,0)&(1<<10),!=,0);
  SEND(s,SCI_INSERTTEXT,0,(sptr_t)"should not edit");pane(v,"insight-git-history-right",new_code);
  GtkTreeModel *hunks=gtk_tree_view_get_model(GTK_TREE_VIEW(named(v,"insight-git-history-hunks")));g_assert_cmpint(gtk_tree_model_iter_n_children(hunks,NULL),==,2);click(v,"insight-git-history-diff-next");g_assert_cmpint(SEND(s,SCI_GETSELECTIONSTART,0,0),>,20);click(v,"insight-git-history-diff-previous");
- if(g_getenv("GEANY_GIT_HISTORY_CAPTURE")) { flush();GdkPixbuf *image=gdk_pixbuf_get_from_window(gtk_widget_get_window(v),0,0,gtk_widget_get_allocated_width(v),gtk_widget_get_allocated_height(v));g_assert_nonnull(image);g_assert_true(gdk_pixbuf_save(image,g_getenv("GEANY_GIT_HISTORY_CAPTURE"),"jpeg",NULL,"quality","88",NULL));g_object_unref(image); }
+ if(g_getenv("GEANY_GIT_HISTORY_CAPTURE")) { ready();gdk_display_sync(gtk_widget_get_display(v));GdkPixbuf *image=gdk_pixbuf_get_from_window(gtk_widget_get_window(v),0,0,gtk_widget_get_allocated_width(v),gtk_widget_get_allocated_height(v));g_assert_nonnull(image);g_assert_true(gdk_pixbuf_save(image,g_getenv("GEANY_GIT_HISTORY_CAPTURE"),"jpeg",NULL,"quality","88",NULL));g_object_unref(image); }
  /* HEAD, main, topic; topic has an initial root commit. */
  branch(v,2);row(v,"insight-git-history-commits",1);ready();file(v,"sample.c");pane(v,"insight-git-history-left","");pane(v,"insight-git-history-right",old_code);
  /* Replaced workers cannot publish a stale branch or commit. */
