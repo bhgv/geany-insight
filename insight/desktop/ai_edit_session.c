@@ -33,12 +33,14 @@ GPtrArray *insight_ai_prompts_load(const gchar *path) {
 }
 gboolean insight_ai_prompts_record(GPtrArray *a,const gchar *path,const gchar *text,GError **error) {
  if(!valid(text,4096) || !*text) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid saved prompt.");return FALSE; }
+ /* Merge the latest private store so separate review windows do not lose usage. */
+ GPtrArray *disk=insight_ai_prompts_load(path);if(disk->len) { g_ptr_array_set_size(a,0);g_ptr_array_set_free_func(disk,NULL);for(guint i=0;i<disk->len;i++) g_ptr_array_add(a,g_ptr_array_index(disk,i)); }g_ptr_array_unref(disk);
  InsightAiPrompt *q=NULL;for(guint i=0;i<a->len;i++) { InsightAiPrompt *p=g_ptr_array_index(a,i);if(!strcmp(p->text,text)) { q=p;break; } }
  if(!q) { if(a->len>=64) { guint oldest=0;for(guint i=1;i<a->len;i++) if(((InsightAiPrompt *)g_ptr_array_index(a,i))->last<((InsightAiPrompt *)g_ptr_array_index(a,oldest))->last) oldest=i;g_ptr_array_remove_index(a,oldest); }q=g_new0(InsightAiPrompt,1);q->text=g_strdup(text);g_ptr_array_add(a,q); }
  q->count=MIN(q->count,1000000)+1;q->last=g_get_real_time();GKeyFile *k=g_key_file_new();for(guint i=0;i<a->len;i++) { InsightAiPrompt *p=g_ptr_array_index(a,i);gchar *group=g_strdup_printf("prompt-%u",i);g_key_file_set_string(k,group,"text",p->text);g_key_file_set_integer(k,group,"count",p->count);g_key_file_set_int64(k,group,"last",p->last);g_free(group); }
  gsize n;gchar *data=g_key_file_to_data(k,&n,NULL);GFile *file=g_file_new_for_path(path);gboolean ok=g_file_replace_contents(file,data,n,NULL,FALSE,G_FILE_CREATE_PRIVATE,NULL,NULL,error);g_object_unref(file);g_free(data);g_key_file_unref(k);return ok;
 }
-static const gchar *names[]={"Syntax and diagnostics","Logic and edge cases","Format code","Improve solution","Readable names","Algorithms","Function reference","Add useful comments","Write documentation"};
+static const gchar *names[]={"Syntax and diagnostics","Logic and edge cases","Format code","Improve solution","Readable names","Algorithms","Function reference","Add useful comments","Write documentation","Project consistency"};
 static const gchar *tasks[]={
  "Review syntax and likely compiler diagnostics. Explain locations and fixes; distinguish model reasoning from actual compiler validation.",
  "Find logical errors, boundary cases, invalid assumptions and resource/lifetime problems. Explain evidence and propose focused corrections.",
@@ -48,7 +50,8 @@ static const gchar *tasks[]={
  "Explain suitable algorithms and alternatives, their preconditions, time and space complexity. Propose the best justified implementation for this source.",
  "Explain the selected source's functions, parameters, return values, contracts and usage. Mark uncertain library or version-specific behavior rather than inventing references.",
  "Add concise comments explaining intent, invariants and non-obvious decisions. Avoid comments that merely repeat code.",
- "Write useful documentation and API/docstring comments: purpose, parameters, return values, errors, examples and limitations. Preserve behavior."};
+ "Write useful documentation and API/docstring comments: purpose, parameters, return values, errors, examples and limitations. Preserve behavior.",
+ "Review the target and every selected project-context file together for syntax, logic, incompatible interfaces, naming and data-flow errors. Report file/line evidence and uncertainty. Propose code only for the target; list corrections needed in other files for their own review."};
 guint insight_ai_task_count(void) { return G_N_ELEMENTS(names); }
 const gchar *insight_ai_task_name(guint i) { return i<G_N_ELEMENTS(names) ? names[i]:NULL; }
 const gchar *insight_ai_task_prompt(guint i) { return i<G_N_ELEMENTS(tasks) ? tasks[i]:NULL; }

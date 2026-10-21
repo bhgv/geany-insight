@@ -49,9 +49,13 @@ static gboolean step(gpointer data) {
   if(g_getenv("GEANY_EDITOR_AI_CAPTURE")) { GdkPixbuf *im=gdk_pixbuf_get_from_window(gtk_widget_get_window(review),0,0,gtk_widget_get_allocated_width(review),gtk_widget_get_allocated_height(review));g_assert_nonnull(im);g_assert_true(gdk_pixbuf_save(im,g_getenv("GEANY_EDITOR_AI_CAPTURE"),"jpeg",NULL,"quality","88",NULL));g_object_unref(im); }
   gchar *disk=NULL;g_assert_true(g_file_get_contents(path,&disk,NULL,NULL));g_assert_cmpstr(disk,==,base);g_free(disk);gchar *config=g_build_filename(profile,"insight-ai.conf",NULL);g_assert_true(g_file_get_contents(config,&disk,NULL,NULL));g_assert_null(strstr(disk,"private-editor-key"));g_free(disk);g_free(config);config=g_build_filename(profile,"insight-ai-prompts.conf",NULL);g_assert_true(g_file_get_contents(config,&disk,NULL,NULL));g_assert_nonnull(strstr(disk,"FIRST"));g_assert_nonnull(strstr(disk,"SECOND"));g_assert_null(strstr(disk,"private-editor-key"));g_assert_null(strstr(disk,"generated variant"));g_free(disk);g_free(config);
   GtkTreeModel *recent=gtk_combo_box_get_model(GTK_COMBO_BOX(named(review,"insight-editor-ai-recent")));g_assert_cmpint(gtk_tree_model_iter_n_children(recent,NULL),==,2);
-  entry("insight-editor-ai-model","slow");set_text("insight-editor-ai-prompt","cancel this request");click("insight-editor-ai-send");click("insight-editor-ai-cancel");phase++;break;
+  click("insight-editor-ai-recompare");click("insight-diff-cancel");phase++;break;
  }
  case 8:
+  g_assert_false(gtk_widget_get_sensitive(named(review,"insight-diff-ai-apply")));click("insight-editor-ai-recompare");phase++;break;
+ case 9:
+  assert_text("insight-diff-result",v2);entry("insight-editor-ai-model","slow");set_text("insight-editor-ai-prompt","cancel this request");click("insight-editor-ai-send");click("insight-editor-ai-cancel");phase++;break;
+ case 10:
   assert_text("insight-diff-result",v2);gtk_widget_destroy(review);review=NULL;document_set_text_changed(source,FALSE);g_subprocess_force_exit(server);g_subprocess_wait(server,NULL,NULL);g_object_unref(server);g_print("Editor AI native GUI: project membership/context, standard tasks, cumulative requests and manual Result, variant Undo/Redo, open source without closing Diff, explicit refresh, stale/read-only guards, one Undo, unchanged disk, prompt lists/privacy and request cancellation passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }
  return G_SOURCE_CONTINUE;

@@ -45,3 +45,9 @@ When **Remember request text for recent/frequent lists** is enabled, successful 
 ## Validation
 
 Core tests cover accumulated requirements, variant Undo/Redo, branching, bounds and durable prompt usage. The full-editor Linux GUI test uses a real indexed project and loopback mock API to check project context, manually edited Result in subsequent requests, cumulative requirements, variant navigation, source opening, refresh without Result loss, stale/read-only guards, one Undo, unchanged disk, prompt lists and cancellation. Live provider accounts, Windows and Android were not tested.
+
+
+The **Project consistency** task reviews the target and selected context together and lists evidence and cross-file corrections. Standard task prompts follow the selected interface language.
+
+
+**Recompare variant** retries a cancelled/failed comparison without losing the retained variant. It first captures manual Result corrections when a complete comparison is available.
