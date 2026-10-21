@@ -835,3 +835,7 @@ html_export_test = executable('test_insight_html_export', '../insight/tests/html
 test('Insight styled HTML serialization and destinations', html_export_test, timeout: 40)
 html_export_gui_test = executable('test_insight_html_export_gui', '../insight/tests/html_export_gui_test.c', dependencies: test_deps)
 test('Insight native styled HTML export GUI', html_export_gui_test, timeout: 60, is_parallel: false)
+
+console_ai_test = executable('test_insight_console_ai_gui', '../insight/tests/ai_console_gui_test.c', dependencies: test_deps)
+test('Insight native console AI and guarded review GUI', console_ai_test, args: [meson.project_source_root() / 'insight/tests/ai_mock_server.py'], timeout: 60, is_parallel: false)
+test('Insight compatible AI protocol', find_program('python3'), args: [meson.project_source_root() / 'insight/tests/ai_client_test.py'], timeout: 30)
