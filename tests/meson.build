@@ -816,3 +816,6 @@ backup_store_test = executable('test_insight_backup_store', '../insight/tests/ba
 test('Insight guarded backup snapshot store', backup_store_test, timeout: 40)
 backup_gui_test = executable('test_insight_backup_gui', '../insight/tests/backup_gui_test.c', dependencies: test_deps)
 test('Insight native backup versions GUI', backup_gui_test, timeout: 55, is_parallel: false)
+
+snapshot_compare_gui_test = executable('test_insight_snapshot_compare_gui', '../insight/tests/snapshot_compare_gui_test.c', dependencies: test_deps)
+test('Insight native snapshot comparison GUI', snapshot_compare_gui_test, timeout: 55, is_parallel: false)
