@@ -38,12 +38,12 @@ InsightReplacePlan *insight_replace_plan(const gchar *text,const gchar *query,co
  GRegex *regex=g_regex_new(limited,flags,0,error);g_free(limited);if(!regex) return NULL;
  if(o->regex) { gchar *test=expand(regex,NULL,replacement,error);if(!test) { g_regex_unref(regex);return NULL; }g_free(test); }
  guchar *region=NULL;if(o->region!=INSIGHT_REGION_ALL) { region=insight_source_region_membership(text,strlen(text),o->dialect,o->region,error);if(!region) { g_regex_unref(regex);return NULL; } }
- InsightReplacePlan *plan=g_new0(InsightReplacePlan,1);plan->before=g_strdup(text);plan->hits=g_ptr_array_new_with_free_func(hit_free);GMatchInfo *info=NULL;gsize len=strlen(text),cursor=0,line_start=0;guint line=1,previous_line=0,scanned=0;guint64 expanded=0;
+ InsightReplacePlan *plan=g_new0(InsightReplacePlan,1);plan->before=g_strdup(text);plan->hits=g_ptr_array_new_with_free_func(hit_free);GMatchInfo *info=NULL;gsize len=strlen(text),cursor=0;guint line=1,column=1,previous_line=0,scanned=0;guint64 expanded=0;
  GError *match_error=NULL;gboolean found=g_regex_match_full(regex,text,len,0,0,&info,&match_error);gboolean failed=match_error!=NULL;
  while(found&&!failed) {
   if(cancel&&g_cancellable_set_error_if_cancelled(cancel,error)) { failed=TRUE;break; }
   gint a,b;g_match_info_fetch_pos(info,0,&a,&b);if(++scanned>100000 || a<0 || b<a || (gsize)b>len || (text[a]&&((guchar)text[a]&0xc0)==0x80) || (text[b]&&((guchar)text[b]&0xc0)==0x80)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Match limit exceeded or expression splits a UTF-8 character.");failed=TRUE;break; }
-  while(cursor<(gsize)a) { if(text[cursor]=='\r') { line++;line_start=cursor+1; }else if(text[cursor]=='\n') { if(!cursor||text[cursor-1]!='\r') line++;line_start=cursor+1; }cursor++; }
+  while(cursor<(gsize)a) { if(text[cursor]=='\r') { line++;column=1; }else if(text[cursor]=='\n') { if(!cursor||text[cursor-1]!='\r') line++;column=1; }else if(((guchar)text[cursor]&0xc0)!=0x80) column++;cursor++; }
   const gchar *before=a ? g_utf8_find_prev_char(text,text+a):NULL;gboolean accept=!(a==b&&a>0&&text[a-1]=='\r'&&text[a]=='\n');
   if(o->whole&&((before&&word(g_utf8_get_char(before)))||(text[b]&&word(g_utf8_get_char(text+b))))) accept=FALSE;
   if(region) { if(a==b) { if((a>0&&!region[a-1])||((gsize)a<len&&!region[a])) accept=FALSE; }else for(gint i=a;i<b;i++) if(!region[i]) { accept=FALSE;break; } }
@@ -52,7 +52,7 @@ InsightReplacePlan *insight_replace_plan(const gchar *text,const gchar *query,co
    gchar *value=o->regex ? expand(regex,info,replacement,error):g_strdup(replacement);if(!value) { failed=TRUE;break; }
    if(o->preserve_case) { gchar *old=g_strndup(text+a,b-a),*cased=preserve(old,value);g_free(old);g_free(value);value=cased; }
    expanded+=strlen(value);if(plan->hits->len>=10000 || expanded>8u*1024u*1024u) { g_free(value);g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Per-file limit: 10,000 matches and 8 MiB expanded replacements.");failed=TRUE;break; }
-   InsightReplaceHit *h=g_new0(InsightReplaceHit,1);h->begin=a;h->end=b;h->line=line;h->column=1+g_utf8_pointer_to_offset(text+line_start,text+a);h->replacement=value;h->selected=TRUE;g_ptr_array_add(plan->hits,h);previous_line=line;
+   InsightReplaceHit *h=g_new0(InsightReplaceHit,1);h->begin=a;h->end=b;h->line=line;h->column=column;h->replacement=value;h->selected=TRUE;g_ptr_array_add(plan->hits,h);previous_line=line;
   }
   found=g_match_info_next(info,&match_error);if(match_error) failed=TRUE;
  }
