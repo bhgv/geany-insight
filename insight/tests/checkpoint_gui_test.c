@@ -57,7 +57,7 @@ static gboolean step(gpointer data) {
  gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(ui_lookup_widget(window,"menu_write_unicode_bom1")),TRUE);g_assert_true(source->has_bom);run(0,FALSE,FALSE);clean(source);action("menu_undo2");g_assert_true(source->has_bom);
  source->has_bom=FALSE;document_set_text_changed(source,TRUE);g_assert_true(document_save_file(source,TRUE));
  edit(source,"unsaved\n");run(3,FALSE,FALSE);g_assert_true(document_get_current()==extra);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));document_set_text_changed(extra,FALSE);g_assert_true(document_close(extra));
- run(7,FALSE,FALSE);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));source->readonly=FALSE;SEND(source->editor->sci,SCI_SETREADONLY,0,0);
+ run(7,FALSE,FALSE);source->readonly=FALSE;SEND(source->editor->sci,SCI_SETREADONLY,0,0);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));
  run(9,FALSE,FALSE);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));source->has_bom=FALSE;
  run(10,FALSE,FALSE);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));document_set_encoding(source,"UTF-8");
  extra=document_new_file(NULL,NULL,"untitled\n");action("insight-checkpoint-all");g_assert_null(dialog());g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));document_set_text_changed(extra,FALSE);g_assert_true(document_close(extra));
