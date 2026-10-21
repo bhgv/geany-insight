@@ -517,3 +517,6 @@ dist_insightdocmedia_DATA += insight/docs/media/backup-versions.svg insight/docs
 
 insightdoc_DATA += insight/docs/snapshot-comparison.md
 dist_insightdocmedia_DATA += insight/docs/media/snapshot-comparison.svg insight/docs/media/snapshot-comparison.jpg
+
+insightdoc_DATA += insight/docs/git-history.md
+dist_insightdocmedia_DATA += insight/docs/media/git-history.svg

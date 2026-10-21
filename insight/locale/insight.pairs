@@ -1161,3 +1161,26 @@ Repeat a literal single-line typing fragment at the current selection. Clipboard
 Typing fragments: %u / 20 · memory only|||Фрагментов набора: %u / 20 · только в памяти
 Recent direct/committed typing fragments, newest first. Paste and programmatic edits are excluded. Select a fragment to preview repetition.|||Последние фрагменты прямого или подтверждённого набора, новые сверху. Вставка и программные правки исключены. Выберите фрагмент для предпросмотра повторения.
 Typing history changed; use Refresh|||История набора изменилась; обновите список
+
+Git History and Diff|||История Git и сравнение
+Git History and Diff…|||История Git и сравнение…
+Newer commit|||Более новый коммит
+Older commit|||Более старый коммит
+Loading Git history…|||Загрузка истории Git…
+Parent|||Родитель
+Parent version|||Версия родителя
+Selected commit|||Выбранный коммит
+Parent line|||Строка родителя
+Commit line|||Строка коммита
+Changed file|||Изменённый файл
+Root commit — empty parent|||Корневой коммит — пустой родитель
+Read-only Git diff. Branch selection does not check out files.|||Дифф Git только для чтения. Выбор ветки не переключает рабочую копию.
+No text differences; file mode or metadata may have changed.|||Текстовых различий нет; могли измениться режим или метаданные файла.
+No changed files against the selected parent.|||Нет изменённых файлов относительно выбранного родителя.
+Select a changed file to inspect its historical versions.|||Выберите изменённый файл для просмотра исторических версий.
+Repository has no commits or branch tips yet.|||В репозитории пока нет коммитов или концов веток.
+No commits on this history page.|||На этой странице истории нет коммитов.
+Binary or non-UTF-8 historical file: text diff unavailable.|||Бинарный файл или исторический файл не в UTF-8: текстовый дифф недоступен.
+Historical file exceeds the 1 MiB text limit.|||Исторический файл превышает предел текста 1 МиБ.
+Git diff exceeds the 4 million LCS cell limit.|||Дифф Git превышает предел 4 миллиона ячеек LCS.
+Git diff cancelled.|||Сравнение Git отменено.
