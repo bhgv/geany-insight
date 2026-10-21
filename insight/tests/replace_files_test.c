@@ -17,6 +17,17 @@ int main(void) {
  o.region=INSIGHT_REGION_CODE;p=plan("word; // word\n\"word\"; R\"tag(word)tag\";\n","word","new",&o);result(p,"new; // word\n\"word\"; R\"tag(word)tag\";\n",1);insight_replace_plan_free(p);
  o.region=INSIGHT_REGION_COMMENTS;o.dialect=INSIGHT_CODE_PYTHON;p=plan("x='word' # word\n\"\"\"word\"\"\"\n","word","new",&o);result(p,"x='word' # new\n\"\"\"word\"\"\"\n",1);insight_replace_plan_free(p);
  o=(InsightReplaceOptions){0};GString *longline=g_string_new(NULL);for(guint i=0;i<5000;i++) { for(guint j=0;j<100;j++) g_string_append(longline,"α");g_string_append_c(longline,'a'); }p=plan(longline->str,"a","b",&o);g_assert_cmpuint(p->hits->len,==,5000);g_assert_cmpuint(((InsightReplaceHit *)g_ptr_array_index(p->hits,4999))->column,==,505000);insight_replace_plan_free(p);g_string_free(longline,TRUE);
+ /* Staged decisions never mutate the displayed plan, including on failure. */
+ o=(InsightReplaceOptions){0};p=plan("abc abc abc","abc","longer",&o);gboolean choices[]={FALSE,TRUE,FALSE};guint reviewed=0;
+ gsize first_after=((InsightReplaceHit *)g_ptr_array_index(p->hits,1))->after;
+ gchar *staged=insight_replace_review_render(p,choices,3,&reviewed,&e);g_assert_no_error(e);g_assert_cmpstr(staged,==,"abc longer abc");g_assert_cmpuint(reviewed,==,1);g_free(staged);
+ for(guint i=0;i<3;i++) g_assert_true(((InsightReplaceHit *)g_ptr_array_index(p->hits,i))->selected);
+ g_assert_cmpuint(((InsightReplaceHit *)g_ptr_array_index(p->hits,1))->after,==,first_after);
+ g_assert_null(insight_replace_review_render(p,choices,2,NULL,&e));g_assert_error(e,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT);g_clear_error(&e);
+ ((InsightReplaceHit *)g_ptr_array_index(p->hits,1))->selected=FALSE;result(p,"longer abc longer",2);g_assert_cmpuint(((InsightReplaceHit *)g_ptr_array_index(p->hits,1))->after,==,7);g_assert_cmpuint(((InsightReplaceHit *)g_ptr_array_index(p->hits,2))->after,==,11);insight_replace_plan_free(p);
+ gchar *large=g_strnfill(900000,'A'),*input=g_strconcat(large,"xxxxxxxxxxxxxxxxxxxx",NULL),*expansion=g_strnfill(8192,'X');o=(InsightReplaceOptions){.regex=TRUE};p=plan(input,"A+|x",expansion,&o);g_assert_cmpuint(p->hits->len,==,21);
+ gboolean oversized[21];for(guint i=0;i<21;i++) oversized[i]=i!=0;
+ g_assert_null(insight_replace_review_render(p,oversized,21,NULL,&e));g_assert_error(e,G_IO_ERROR,G_IO_ERROR_NO_SPACE);g_clear_error(&e);g_assert_true(((InsightReplaceHit *)g_ptr_array_index(p->hits,0))->selected);insight_replace_plan_free(p);g_free(large);g_free(input);g_free(expansion);
  GCancellable *cancel=g_cancellable_new();g_cancellable_cancel(cancel);g_assert_null(insight_replace_plan("","missing","x",&o,cancel,&e));g_assert_error(e,G_IO_ERROR,G_IO_ERROR_CANCELLED);g_clear_error(&e);g_object_unref(cancel);
  g_assert_true(insight_replace_mask("/tmp/α.c"," ?.c ; *.h ",&e));g_assert_false(insight_replace_mask("/tmp/a.cpp","*.c;*.h",&e));g_assert_no_error(e);
  gchar *dir=g_dir_make_tmp("replace-files-core-XXXXXX",NULL),*path=g_build_filename(dir,"bom.c",NULL);g_assert_true(g_file_set_contents(path,"\357\273\277word\r\n",-1,&e));gchar *read=insight_replace_read(path,NULL,&e);g_assert_no_error(e);g_assert_cmpstr(read,==,"word\r\n");g_free(read);g_assert_true(g_file_set_contents(path,"a\0b",3,&e));g_assert_null(insight_replace_read(path,NULL,&e));g_clear_error(&e);g_free(path);g_free(dir);

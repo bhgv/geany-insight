@@ -234,12 +234,8 @@ static void apply(GtkWidget *w,gpointer p) {
    }
    g_array_append_val(r->choices,use);
   }
-  /* Render the staged subset and restore the visible selections/offsets. */
-  GArray *original=g_array_sized_new(FALSE,FALSE,sizeof(gboolean),s->plan->hits->len);
-  for(guint j=0;j<s->plan->hits->len;j++) { InsightReplaceHit *h=g_ptr_array_index(s->plan->hits,j);g_array_append_val(original,h->selected);h->selected=g_array_index(r->choices,gboolean,j); }
-  r->after=insight_replace_render(s->plan,&r->count,&e);
-  for(guint j=0;j<s->plan->hits->len;j++) ((InsightReplaceHit *)g_ptr_array_index(s->plan->hits,j))->selected=g_array_index(original,gboolean,j);
-  g_array_unref(original);gchar *restore=insight_replace_render(s->plan,NULL,NULL);g_free(restore);
+  /* Independent review vector: no checkbox or offset mutation before Apply. */
+  r->after=insight_replace_review_render(s->plan,(const gboolean *)r->choices->data,r->choices->len,&r->count,&e);
   if(!r->after) goto out;
   if(!strcmp(r->after,s->before)) r->count=0;
   bytes+=strlen(r->after);if(bytes>32u*1024u*1024u) { g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Reviewed results exceed 32 MiB. Nothing applied; select fewer files.");goto out; }
@@ -285,7 +281,7 @@ static void open_source(GtkWidget *w,gpointer p) {
  if(text&&expected&&!strcmp(text,expected)) {
   GtkTreeModel *model;GtkTreeIter it;guint index=0;
   if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(v->hits)),&model,&it)) gtk_tree_model_get(model,&it,HIT_INDEX,&index,-1);
-  if(s->plan&&index<s->plan->hits->len) { InsightReplaceHit *h=g_ptr_array_index(s->plan->hits,index);gsize pos=s->applied ? (h->selected ? h->after:0):h->begin;SEND(d->editor->sci,SCI_GOTOPOS,MIN(pos,strlen(text)),0);SEND(d->editor->sci,SCI_SCROLLCARET,0,0); }
+  if(s->plan&&index<s->plan->hits->len) { InsightReplaceHit *h=g_ptr_array_index(s->plan->hits,index);gsize pos=s->applied ? h->after:h->begin;SEND(d->editor->sci,SCI_GOTOPOS,MIN(pos,strlen(text)),0);SEND(d->editor->sci,SCI_SCROLLCARET,0,0); }
   status(v,"Source opened. This preview stays open; Preview again after manual source edits.");
  }else status(v,"Source differs from preview. Opened without using stale match offsets; Preview again before applying.");
  g_free(text);gtk_widget_grab_focus(GTK_WIDGET(d->editor->sci));

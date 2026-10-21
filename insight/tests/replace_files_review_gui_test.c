@@ -73,7 +73,7 @@ static gboolean step(gpointer data) {
   g_assert_cmpint(gtk_tree_model_iter_n_children(file_model(),NULL),==,2);choose(path_a,0);toggle("insight-replace-files-confirm-hits",TRUE);
   mode=1;prompts=0;click("insight-replace-files-apply");g_assert_cmpuint(prompts,==,2);text_is(a,"old old\n");text_is(b,"old\n");g_assert_cmpuint(selected_files(),==,2);choose(path_a,0);hit_use(0,TRUE);hit_use(1,TRUE);
   mode=2;prompts=0;click("insight-replace-files-apply");g_assert_cmpuint(prompts,==,2);text_is(a,"old old_new\n");text_is(b,"old_new\n");choose(path_a,0);hit_use(0,FALSE);hit_use(1,TRUE);click("insight-replace-files-next-batch");g_assert_cmpuint(selected_files(),==,0);click("insight-replace-files-all");g_assert_cmpuint(selected_files(),==,0);g_assert_false(gtk_widget_get_sensitive(named(view,"insight-replace-files-apply")));
-  choose(path_a,1);click("insight-replace-files-open");g_assert_true(document_get_current()==a);g_assert_true(gtk_widget_get_visible(view));g_assert_cmpint(SEND(a->editor->sci,SCI_GETCURRENTPOS,0,0),==,4);
+  choose(path_a,1);click("insight-replace-files-open");g_assert_true(document_get_current()==a);g_assert_true(gtk_widget_get_visible(view));g_assert_cmpint(SEND(a->editor->sci,SCI_GETCURRENTPOS,0,0),==,4);choose(path_a,0);click("insight-replace-files-open");g_assert_cmpint(SEND(a->editor->sci,SCI_GETCURRENTPOS,0,0),==,0);
   SEND(a->editor->sci,SCI_APPENDTEXT,7,(sptr_t)"manual\n");SEND(a->editor->sci,SCI_GOTOPOS,1,0);click("insight-replace-files-open");g_assert_cmpint(SEND(a->editor->sci,SCI_GETCURRENTPOS,0,0),==,1);SEND(a->editor->sci,SCI_UNDO,0,0);SEND(a->editor->sci,SCI_UNDO,0,0);SEND(b->editor->sci,SCI_UNDO,0,0);text_is(a,"old old\n");text_is(b,"old\n");click("insight-replace-files-next-batch");g_assert_cmpuint(selected_files(),==,0);click("insight-replace-files-preview");phase++;break;
  case 2:
   choose(path_a,0);click("insight-replace-files-next");position_is(path_a,1);click("insight-replace-files-next");position_is(path_b,0);click("insight-replace-files-next");position_is(path_a,0);click("insight-replace-files-previous");position_is(path_b,0);
@@ -85,7 +85,11 @@ static gboolean step(gpointer data) {
   toggle("insight-replace-files-confirm-hits",FALSE);gtk_combo_box_set_active(GTK_COMBO_BOX(named(view,"insight-replace-files-scope")),4);entry("insight-replace-files-folder",root);entry("insight-replace-files-masks","*.c");click("insight-replace-files-preview");phase++;break;
  case 4:
   g_assert_cmpint(gtk_tree_model_iter_n_children(file_model(),NULL),==,131);g_assert_cmpuint(selected_files(),==,128);click("insight-replace-files-apply");g_assert_cmpuint(selected_files(),==,0);click("insight-replace-files-next-batch");g_assert_cmpuint(selected_files(),==,3);click("insight-replace-files-apply");click("insight-replace-files-next-batch");g_assert_cmpuint(selected_files(),==,0);text_is(a,"old_new old_new\n");text_is(b,"old_new\n");
-  { guint i,count=0;foreach_document(i) { GeanyDocument *d=documents[i];if(!d->file_name||!g_str_has_prefix(d->file_name,root)) continue;count++;if(d!=a) text_is(d,"old_new\n");gchar *disk=NULL;g_assert_true(g_file_get_contents(d->file_name,&disk,NULL,NULL));g_assert_cmpstr(disk,==,d==a ? "old old\n":"old\n");g_free(disk);SEND(d->editor->sci,SCI_UNDO,0,0);text_is(d,d==a ? "old old\n":"old\n");document_set_text_changed(d,FALSE); }g_assert_cmpuint(count,==,131); }
+  for(guint i=0;i<131;i++) {
+   gchar *path;if(i<2) path=g_strdup(i ? path_b:path_a);else { gchar *name=g_strdup_printf("bulk-%03u.c",i-2);path=g_build_filename(root,name,NULL);g_free(name); }
+   GeanyDocument *d=document_find_by_filename(path);g_assert_nonnull(d);if(d!=a) text_is(d,"old_new\n");gchar *disk=NULL;g_assert_true(g_file_get_contents(path,&disk,NULL,NULL));g_assert_cmpstr(disk,==,d==a ? "old old\n":"old\n");g_free(disk);SEND(d->editor->sci,SCI_UNDO,0,0);text_is(d,d==a ? "old old\n":"old\n");document_set_text_changed(d,FALSE);g_free(path);
+  }
+
   gtk_widget_destroy(view);view=NULL;g_print("Replace review: staged Cancel/Skip/remaining, source and criteria races, wrapped buttons/F3, editor handoff, immutable applied files, 128+3 batches, one Undo and unchanged disk passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }
  return G_SOURCE_CONTINUE;

@@ -12,6 +12,9 @@ void insight_replace_plan_free(InsightReplacePlan *);
 /* Rebuild after individual inclusion changes. Exact bytes outside enabled hits
  * are retained, including BOM, CRLF and terminal newlines. */
 gchar *insight_replace_render(InsightReplacePlan *,guint *,GError **);
+/* Render staged review decisions without mutating selected flags or offsets.
+ * The complete choice vector must match the number of plan occurrences. */
+gchar *insight_replace_review_render(const InsightReplacePlan *,const gboolean *,guint,guint *,GError **);
 /* Bounded local UTF-8 snapshot, strips one BOM for editor-buffer comparison. */
 gchar *insight_replace_read(const gchar *,GCancellable *,GError **);
 gboolean insight_replace_mask(const gchar *,const gchar *,GError **);

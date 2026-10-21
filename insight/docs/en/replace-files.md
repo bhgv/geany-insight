@@ -31,7 +31,7 @@ The file table shows path, selected replacement count and state. Preview initial
 
 Full read-only **before/after** panes have syntax colors and line numbers. Selecting a match highlights its location. **Diff / Merge preview** opens an independent snapshot in the existing comparison window; it does not edit the batch or apply anything to source. Adjust patterns or match choices in Replace Files to change the plan.
 
-**Previous match / Next match** and **Shift+F3 / F3** move through all preview occurrences and wrap across files, including unchecked occurrences. **Open source in editor** opens or focuses the selected source without closing Replace Files. Match offsets are used only if the complete live text still equals the expected snapshot; changed sources open without a stale jump. A skipped occurrence in an applied file opens at the start instead. After manual edits, use Preview to rebuild. Snapshots do not automatically reload on focus changes.
+**Previous match / Next match** and **Shift+F3 / F3** move through all preview occurrences and wrap across files, including unchecked occurrences. **Open source in editor** opens or focuses the selected source without closing Replace Files. Match offsets are used only if the complete live text still equals the expected snapshot; changed sources open without a stale jump. Offsets for skipped occurrences in applied files include the length changes of earlier replacements. After manual edits, use Preview to rebuild. Snapshots do not automatically reload on focus changes.
 
 ![Staged review and remaining batches](../media/replace-files-review.svg)
 

@@ -62,11 +62,23 @@ InsightReplacePlan *insight_replace_plan(const gchar *text,const gchar *query,co
  g_regex_unref(regex);g_free(region);if(match_error) g_propagate_error(error,match_error);if(failed) { insight_replace_plan_free(plan);return NULL; }
  gchar *after=insight_replace_render(plan,NULL,error);if(!after) { insight_replace_plan_free(plan);return NULL; }g_free(after);return plan;
 }
-gchar *insight_replace_render(InsightReplacePlan *p,guint *count,GError **error) {
+static gchar *render(const InsightReplacePlan *p,const gboolean *choices,gboolean positions,guint *count,GError **error) {
  GString *s=g_string_new(NULL);gsize cursor=0;guint n=0;
- for(guint i=0;i<p->hits->len;i++) { InsightReplaceHit *h=g_ptr_array_index(p->hits,i);if(!h->selected) continue;g_string_append_len(s,p->before+cursor,h->begin-cursor);h->after=s->len;g_string_append(s,h->replacement);cursor=h->end;n++;if(s->len>INSIGHT_REPLACE_FILE_LIMIT) goto large; }
+ for(guint i=0;i<p->hits->len;i++) {
+  InsightReplaceHit *h=g_ptr_array_index(p->hits,i);
+  /* Disabled occurrences still need an exact position in the resulting file. */
+  if(positions) h->after=s->len+h->begin-cursor;
+  if(!(choices ? choices[i]:h->selected)) continue;
+  g_string_append_len(s,p->before+cursor,h->begin-cursor);g_string_append(s,h->replacement);cursor=h->end;n++;
+  if(s->len>INSIGHT_REPLACE_FILE_LIMIT) goto large;
+ }
  g_string_append(s,p->before+cursor);if(s->len>INSIGHT_REPLACE_FILE_LIMIT) goto large;if(count) *count=n;return g_string_free(s,FALSE);
 large:g_string_free(s,TRUE);g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Replacement Result exceeds 1 MiB. Nothing changed.");return NULL;
+}
+gchar *insight_replace_render(InsightReplacePlan *p,guint *count,GError **error) { return render(p,NULL,TRUE,count,error); }
+gchar *insight_replace_review_render(const InsightReplacePlan *p,const gboolean *choices,guint n,guint *count,GError **error) {
+ if(!p||n!=p->hits->len||(!choices&&n)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Review choices must match the complete occurrence plan.");return NULL; }
+ return render(p,choices,FALSE,count,error);
 }
 gchar *insight_replace_read(const gchar *path,GCancellable *cancel,GError **error) {
  GFile *file=g_file_new_for_path(path);GFileInfo *info=g_file_query_info(file,G_FILE_ATTRIBUTE_STANDARD_TYPE,G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,cancel,error);if(!info) { g_object_unref(file);return NULL; }gboolean regular=g_file_info_get_file_type(info)==G_FILE_TYPE_REGULAR;g_object_unref(info);if(!regular) { g_object_unref(file);g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NOT_REGULAR_FILE,"Only regular local source files are supported.");return NULL; }
