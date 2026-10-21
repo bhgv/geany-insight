@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="290" viewBox="0 0 920 290" role="img" aria-labelledby="title desc">
+ <title id="title">Renumber a column or multiple selections</title><desc id="desc">Selected fragments are sorted by source position. One number sequence produces a complete preview. Apply rechecks the source and changes only those fragments as one Undo action.</desc>
+ <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#526680"/></marker></defs>
+ <rect width="920" height="290" rx="12" fill="#f4f7fb"/>
+ <g font-family="sans-serif" text-anchor="middle" font-size="16" fill="#19334e">
+  <rect x="20" y="35" width="190" height="85" rx="10" fill="#dfebff" stroke="#547ab3"/><text x="115" y="65">Column / multi-selection</text><text x="115" y="93">4 · 7 · 9</text>
+  <rect x="250" y="35" width="190" height="85" rx="10" fill="#fff0cf" stroke="#b78b32"/><text x="345" y="65">One source-order sequence</text><text x="345" y="93">Start 10 → 10 · 11 · 12</text>
+  <rect x="480" y="35" width="190" height="85" rx="10" fill="#dfebff" stroke="#547ab3"/><text x="575" y="65">Full before / after preview</text><text x="575" y="93">Colors + line numbers</text>
+  <rect x="710" y="35" width="190" height="85" rx="10" fill="#dff3e5" stroke="#4e8960"/><text x="805" y="65">Recheck + apply ranges</text><text x="805" y="93">One Undo / Redo</text>
+  <rect x="250" y="178" width="420" height="65" rx="10" fill="#ffe5e2" stroke="#b96b61"/><text x="460" y="204">Overflow · stale selection · source changed</text><text x="460" y="229">Reject before edits</text>
+ </g>
+ <g fill="none" stroke="#526680" stroke-width="2" marker-end="url(#arrow)"><path d="M210 77H245"/><path d="M440 77H475"/><path d="M670 77H705"/><path d="M345 120V173"/><path d="M805 120V211H680"/></g>
+ <text x="25" y="274" font-family="sans-serif" font-size="14" fill="#526680">Unselected bytes stay exact. Empty fragments add nothing. Saving remains a separate editor action.</text>
+</svg>

@@ -1,15 +1,29 @@
-# Renumber
+# Renumber — перенумерация
 
-Edit → Insert and clipboard → **Renumber…** transforms the exact selection, or the whole document when the selection is empty. Preview does not modify the editor. Apply creates one Undo action and selects the result; Cancel leaves it unchanged.
+**Edit → Insert and clipboard → Renumber…** перенумеровывает целые числа. При обычном выделении обрабатывается его точный текст; одиночный курсор без выделения означает весь документ. Preview не меняет редактор, Apply объединяет изменения в один Undo, Cancel оставляет исходник без изменений.
 
-![Native Renumber dialog in a Linux GUI fixture](media/renumber.jpg)
+![Обычный диалог Renumber в нативной Linux-проверке](media/renumber.jpg)
 
-![Renumber options](media/renumber.svg)
+![Параметры перенумерации](media/renumber.svg)
 
-- **Auto** counts up from the first integer; **Start at value** counts up from the entered value; **Offset** adds the value to every integer.
-- Output radix: preserve each token's radix, decimal, hexadecimal (`0x`), or octal (leading zero). Input values use decimal, `0x` hex, or leading-zero octal. Signed values are supported.
-- Standalone integer tokens only: identifiers, decimal fractions, exponent forms, suffixes and malformed octal/hex candidates are left unchanged. Whitespace, Unicode and line endings are preserved. This is a text operation: integers inside comments and strings are included. A selection is treated as independent text, so select complete numbers.
-- Values must fit signed 64-bit integers. Overflow aborts the entire operation. Input and output are limited to 8 MiB; preview displays the first 8000 bytes. Leading zero padding, explicit plus signs and hex letter case are normalized.
-- Single ordinary selections only; column selections, multiple selections, virtual space and read-only buffers are excluded. A document edit, selection change, tab switch or closed target while the dialog is open cancels Apply.
+- **Auto** начинает последовательность с первого найденного числа; **Start at value** — с заданного значения; **Offset** прибавляет значение к каждому исходному числу.
+- Система счисления результата: исходная для каждого числа, десятичная, шестнадцатеричная (`0x`) или восьмеричная (ведущий ноль). Значение Start/Offset также принимает десятичную, `0x` или восьмеричную запись и знак.
+- Изменяются самостоятельные целые числа. Идентификаторы, дроби, экспоненты, суффиксы и ошибочная запись чисел пропускаются. Это текстовая операция: числа в строках и комментариях тоже включены. Выделение считается самостоятельным текстом — выбирайте числа полностью.
+- Значения должны помещаться в знаковое 64-битное целое. Переполнение отменяет весь план. Вход и результат ограничены 8 МиБ. Прежний диалог обычного выделения показывает первые 8000 байт; начальные нули, явный плюс и регистр hex нормализуются.
+- Обычный диалог работает с одним стандартным выделением без виртуального пространства. Для колонки и нескольких выделений используется новое окно ниже. Readonly-буферы исключены; изменение текста/выделения, другой текущий документ или закрытый источник отменяет Apply.
 
-Source Insight reference: [Renumber](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Renumber.htm). Column renumbering is not implemented.
+## Колонка и несколько выделений
+
+Вызовите ту же команду **Renumber…** для прямоугольного/тонкого столбца либо нескольких обычных выделений. Окно **Renumber selected fragments** показывает полный снимок документа до/после с синтаксической подсветкой и номерами строк. В таблице — исходная строка, экранная колонка, число целых чисел и ограниченные фрагменты до/после. Выбор строки подсвечивает соответствующий диапазон в обоих снимках.
+
+![План колонки и проверка перед применением](media/renumber-ranges.svg)
+
+**Preview** вычисляет весь план. Смена параметров очищает его и отключает Apply. Auto / Start / Offset и четыре системы счисления действуют последовательно по фрагментам в порядке исходника, независимо от порядка создания выделений. Последовательность не начинается заново на каждой строке. Невыделенные байты, отступы, комментарии, Unicode и CRLF/LF/CR сохраняются точно. Выделенные числа в комментариях и строках тоже участвуют; выбирайте целые числовые токены.
+
+Пустой фрагмент не содержит чисел и никогда не означает весь файл. Виртуальное пространство после конца строки не добавляет пробелов: короткие строки остаются короткими. Границы, представленные внутри табуляции, отклоняются — выровняйте их по целым границам TAB. Обычные символы TAB внутри выделенного текста сохраняются.
+
+Apply меняет только отличающиеся фрагменты в обратном порядке, одним Undo/Redo, без сохранения. Числа могут получить разную длину, поэтому результат выделяется несколькими обычными диапазонами, точно покрывающими изменённые фрагменты. Направление каждого диапазона и основная исходная строка сохраняются, расстояния виртуального пространства — нет. На этих выделениях можно сразу повторить Renumber. При отсутствии изменений Apply отключён, записи Undo не создаются.
+
+Полный документ и результат ограничены 8 МиБ, должны быть UTF-8 без NUL; максимум 4096 выделений. Переполнение signed 64-bit в любом фрагменте отклоняет весь план до правок. Изменение текста (даже с последующим Undo), выделения, текущего/закрытого документа или права записи отменяет Apply. Если синхронное расширение редактора меняет исходник либо уничтожает диалог во время применения, оставшиеся правки останавливаются; при частичном применении отмените операцию через Undo. Общего Undo проекта и автосохранения нет. Проверка Windows и Android не заявляется.
+
+Ориентир: [Source Insight Renumber](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Renumber.htm).

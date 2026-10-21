@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "geany.h"
 #include "insight-paste.h"
+#include "insight-renumber-ranges.h"
 #include "keybindings.h"
 #include "insight-languages.h"
 #include "insight-completion.h"
@@ -1021,6 +1022,7 @@ static void renumber_changed(GtkWidget *widget,gpointer data)
 }
 static void renumber_text(GtkMenuItem *item,gpointer data)
 {
+ if(insight_renumber_ranges_available()) { insight_renumber_ranges_command();return; }
  (void)item;(void)data;Request request={0};if(!tools_capture(&request)) return;
  gint start=MIN(request.anchor,request.caret),end=MAX(request.anchor,request.caret);
  if(start==end) { start=0;end=sci_get_length(request.sci); }
@@ -1061,7 +1063,7 @@ static void renumber_text(GtkMenuItem *item,gpointer data)
 static void tools_menu_show(GtkWidget *menu,gpointer data)
 {
  (void)data;Request request={0};gboolean ready=tools_capture(&request);
- gtk_widget_set_sensitive(g_object_get_data(G_OBJECT(menu),"renumber"),ready);
+ gtk_widget_set_sensitive(g_object_get_data(G_OBJECT(menu),"renumber"),ready||insight_renumber_ranges_available());
  gtk_widget_set_sensitive(g_object_get_data(G_OBJECT(menu),"guid"),ready);
  gtk_widget_set_sensitive(g_object_get_data(G_OBJECT(menu),"character"),ready);
  gtk_widget_set_sensitive(g_object_get_data(G_OBJECT(menu),"insert-file"),ready);

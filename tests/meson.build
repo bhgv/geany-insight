@@ -852,3 +852,6 @@ test('Insight native Replace Files preview and guarded buffers GUI', replace_fil
 
 replace_files_review_gui_test = executable('test_insight_replace_files_review_gui', '../insight/tests/replace_files_review_gui_test.c', dependencies: test_deps)
 test('Insight native replacement confirmation and 128-file batches GUI', replace_files_review_gui_test, timeout: 90, is_parallel: false)
+
+renumber_ranges_gui_test = executable('test_insight_renumber_ranges_gui', '../insight/tests/renumber_ranges_gui_test.c', dependencies: test_deps)
+test('Insight native column and multiple renumber GUI', renumber_ranges_gui_test, timeout: 85, is_parallel: false)

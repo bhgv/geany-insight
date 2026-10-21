@@ -1778,3 +1778,11 @@ Confirm each replacement before any changes	Подтверждать кажду�
 Skip replacement	Пропустить замену
 Replace occurrence	Заменить совпадение
 Replace remaining	Заменить остальные
+
+Renumber selected fragments	Перенумерация выбранных фрагментов
+Scope: selected column or multiple fragments, in source order. Virtual space adds no text.	Область: колонка или несколько фрагментов в порядке исходника. Виртуальное пространство не добавляет текст.
+Integer tokens	Целые числа
+Before — read only	До — только чтение
+After — read only	После — только чтение
+Press Preview to inspect all selected fragments. No source changes yet.	Нажмите Preview для просмотра всех фрагментов. Исходник пока не изменяется.
+Source or selection changed. Cancel and run Renumber again.	Исходник или выделение изменились. Отмените и вызовите Renumber заново.
