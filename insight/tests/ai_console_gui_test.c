@@ -1,4 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
 #include "geany.h"
 #include "document.h"
 #include "main.h"
@@ -65,7 +68,7 @@ static gboolean step(gpointer data) {
  case 6:
   g_assert_false(gtk_widget_get_sensitive(named(assistant,"insight-ai-review")));gtk_widget_destroy(assistant);assistant=NULL;
 #ifdef HAVE_VTE
-  g_assert_true(vte_info.have_vte);GtkWidget *item=named(vte_config.menu,"insight-terminal-ai");g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item));assistant=top("insight-ai-window");g_assert_nonnull(assistant);g_assert_nonnull(named(assistant,"insight-ai-context"));gtk_widget_destroy(assistant);assistant=NULL;
+  GtkWidget *terminal=named(window,"insight-local-terminal");g_assert_nonnull(terminal);GList *menus=gtk_menu_get_for_attach_widget(terminal);g_assert_nonnull(menus);GtkWidget *item=named(menus->data,"insight-terminal-ai");g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item));assistant=top("insight-ai-window");g_assert_nonnull(assistant);g_assert_nonnull(named(assistant,"insight-ai-context"));gtk_widget_destroy(assistant);assistant=NULL;
 #endif
   gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-ai-menu")));assistant=top("insight-ai-window");g_assert_nonnull(assistant);entry(assistant,"insight-ai-model","slow");entry(assistant,"insight-ai-question","Cancel safely on close");click(assistant,"insight-ai-send");gtk_widget_destroy(assistant);assistant=NULL;after=g_get_monotonic_time()+300*G_TIME_SPAN_MILLISECOND;phase++;break;
  case 7:

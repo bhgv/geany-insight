@@ -1662,3 +1662,32 @@ HTML export exceeds the 8 MiB output limit.	Экспорт HTML превышае
 Export requires real parent directories, not symbolic links.	Для экспорта нужны обычные родительские каталоги без символических ссылок.
 Export requires an absolute destination.	Для экспорта нужен абсолютный путь назначения.
 Choose an export destination outside source, open documents and project files.	Выберите назначение экспорта вне исходника, открытых документов и файлов проекта.
+Console AI Assistant	ИИ-помощник консоли
+Console AI Assistant…	ИИ-помощник консоли…
+AI Assistant…	ИИ-помощник…
+API key (memory only)	Ключ API (только в памяти)
+Attach current file	Приложить текущий файл
+View attached code	Показать приложенный код
+Detach code / clear history	Убрать код / очистить историю
+Review code in Diff / Merge	Проверить код в Diff / Merge
+Insert suggested command (do not run)	Вставить команду (без запуска)
+Attached source	Приложенный исходник
+Attached source sent to the API	Приложенный исходник для отправки API
+Cancel request	Отменить запрос
+Ask about this change	Вопрос об этом изменении
+Apply Result to Source	Применить Result к исходнику
+AI proposal — Diff / Merge review	Предложение ИИ — проверка Diff / Merge
+Complete chat/completions URL	Полный адрес chat/completions
+Model ID from your API account	ID модели из вашего API-аккаунта
+Question or follow-up about the console output and attached code	Вопрос или уточнение о выводе консоли и приложенном коде
+Suggested command — never executed automatically	Предложенная команда — автоматический запуск отключён
+Enter a model ID and a question first.	Сначала укажите ID модели и вопрос.
+No data is sent until Send. API credentials and conversation are not saved.	Отправка только по кнопке Send. Ключ API и беседа не сохраняются.
+Review and edit console context before Send. Only this text and explicitly attached code are uploaded.	Проверьте контекст перед Send. Отправляются только этот текст и явно приложенный код.
+Answer ready. Review commands and code changes before using them.	Ответ готов. Проверьте команды и изменения кода перед применением.
+Sending the displayed console context and attached code to the selected API…	Отправка показанного контекста и приложенного кода выбранному API…
+Command inserted without Enter. Review it before running.	Команда вставлена без Enter. Проверьте её перед запуском.
+Cannot insert into this console; copy the suggestion manually.	Вставка в эту консоль недоступна; скопируйте предложение вручную.
+Attached source is limited to 128 KiB.	Предел приложенного исходника — 128 КиБ.
+Attach UTF-8 source without NUL bytes.	Приложите исходник UTF-8 без байтов NUL.
+Code detached; only the displayed console context will be sent.	Код убран; будет отправлен только показанный контекст консоли.

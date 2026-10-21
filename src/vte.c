@@ -340,11 +340,13 @@ static void create_vte(void)
 	GtkWidget *vte, *scrollbar, *hbox;
 
 	vte_config.vte = vte = vf->vte_terminal_new();
+	gtk_widget_set_name(vte, "insight-local-terminal");
 	scrollbar = gtk_scrollbar_new(GTK_ORIENTATION_VERTICAL, vf->vte_terminal_get_adjustment(VTE_TERMINAL(vte)));
 	gtk_widget_set_can_focus(scrollbar, FALSE);
 
 	/* create menu now so copy/paste shortcuts work */
 	vte_config.menu = vte_create_popup_menu();
+	gtk_menu_attach_to_widget(GTK_MENU(vte_config.menu), vte, NULL);
 	g_object_ref_sink(vte_config.menu);
 
 	hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
