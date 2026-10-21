@@ -22,7 +22,7 @@ static GtkWidget *dialog(void) {
  for(GList *p=list;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-checkpoint-dialog") && gtk_widget_get_visible(p->data)) result=p->data;
  g_list_free(list);return result;
 }
-static void action(const gchar *name) { GtkWidget *item=named(window,name);g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item)); }
+static void action(const gchar *name) { GtkWidget *item=g_str_has_prefix(name,"menu_") ? ui_lookup_widget(window,name):named(window,name);g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item)); }
 static void contents(GeanyDocument *doc,const gchar *expected) { gchar *text=sci_get_contents(doc->editor->sci,-1);g_assert_cmpstr(text,==,expected);g_free(text); }
 static void disk(const gchar *name,const gchar *expected) { gchar *text=NULL;g_assert_true(g_file_get_contents(name,&text,NULL,NULL));g_assert_cmpstr(text,==,expected);g_free(text); }
 static void edit(GeanyDocument *doc,const gchar *text) { sci_set_text(doc->editor->sci,text);g_assert_true(SEND(doc->editor->sci,SCI_CANUNDO,0,0)); }
