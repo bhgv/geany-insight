@@ -13,3 +13,6 @@ Select Terminal and run a command showing the current directory. For SSH, open i
 The ? button at the upper right opens this page. Help follows the interface language selected in Options.
 
 More: [panel-ssh.md](panel-ssh.md).
+
+
+[Console AI assistant: configuration, diagnostics and Diff/Merge review](console-ai.md).

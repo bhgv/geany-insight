@@ -13,3 +13,6 @@ Select Terminal and run a command showing the current directory. For SSH, open i
 The ? button at the upper right opens this page. Help follows the interface language selected in Options.
 
 More: [panel-ssh.md](panel-ssh.md).
+
+
+[ИИ-помощник консоли: настройка, разбор ошибок и исправления через Diff/Merge](console-ai.md).

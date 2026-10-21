@@ -532,3 +532,10 @@ insightdoc_DATA += insight/docs/html-export.md
 dist_insightdocmedia_DATA += insight/docs/media/html-export.svg
 EXTRA_DIST += insight/tests/html_export_test.c insight/tests/html_export_gui_test.c
 dist_insightdocmedia_DATA += insight/docs/media/html-export.jpg
+
+insighttooldir = $(pkgdatadir)/insight/tools
+dist_insighttool_DATA = insight/tools/ai_client.py
+
+insightdoc_DATA += insight/docs/console-ai.md
+dist_insightdocmedia_DATA += insight/docs/media/console-ai.svg
+EXTRA_DIST += insight/tests/ai_client_test.py insight/tests/ai_mock_server.py insight/tests/ai_console_gui_test.c

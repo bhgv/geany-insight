@@ -13,3 +13,6 @@ Enter your server settings and connect. Open a known remote file. After editing,
 The ? button at the upper right opens this page. Help follows the interface language selected in Options.
 
 More: [guide.md](guide.md).
+
+
+[ИИ-помощник консоли: настройка, разбор ошибок и исправления через Diff/Merge](console-ai.md).

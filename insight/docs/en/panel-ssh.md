@@ -13,3 +13,6 @@ Enter your server settings and connect. Open a known remote file. After editing,
 The ? button at the upper right opens this page. Help follows the interface language selected in Options.
 
 More: [guide.md](guide.md).
+
+
+[Console AI assistant: configuration, diagnostics and Diff/Merge review](console-ai.md).

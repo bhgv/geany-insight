@@ -29,6 +29,7 @@
 #ifdef HAVE_VTE
 
 #include "vte.h"
+#include "insight-ai.h"
 
 #include "callbacks.h"
 #include "document.h"
@@ -96,6 +97,8 @@ typedef enum {
 /* Holds function pointers we need to access the VTE API. */
 struct VteFunctions
 {
+ gchar *(*vte_terminal_get_text)(VteTerminal *,gboolean (*)(VteTerminal *,glong,glong,gpointer),gpointer,GArray *);
+ gchar *(*vte_terminal_get_text_selected)(VteTerminal *,gint);
 	guint (*vte_get_major_version) (void);
 	guint (*vte_get_minor_version) (void);
 	GtkWidget* (*vte_terminal_new) (void);
@@ -615,6 +618,8 @@ static gboolean vte_register_symbols(GModule *mod)
 		BIND_REQUIRED_SYMBOL(vte_terminal_set_color_background);
 	}
 	BIND_REQUIRED_SYMBOL(vte_terminal_feed_child);
+ BIND_SYMBOL(vte_terminal_get_text);
+ BIND_SYMBOL(vte_terminal_get_text_selected);
 	if (! BIND_SYMBOL(vte_terminal_set_cursor_blink_mode))
 		/* vte_terminal_set_cursor_blink_mode() is only available since 0.17.1, so if we don't find
 		 * this symbol, we are probably on an older version and use the old API instead */
@@ -709,12 +714,19 @@ static void vte_popup_menu_clicked(GtkMenuItem *menuitem, gpointer user_data)
 }
 
 
+static gboolean ai_vte_insert(const gchar *command,gpointer data) {
+ (void)data;if(!vte_info.have_vte || !clean) return FALSE;vf->vte_terminal_feed_child(VTE_TERMINAL(vte_config.vte),command,strlen(command));set_clean(FALSE);return TRUE;
+}
+static void ai_vte_open(GtkWidget *widget,gpointer data) {
+ (void)widget;(void)data;gchar *context=NULL;if(vf->vte_terminal_get_text_selected && vf->vte_terminal_get_has_selection(VTE_TERMINAL(vte_config.vte))) context=vf->vte_terminal_get_text_selected(VTE_TERMINAL(vte_config.vte),1);else if(vf->vte_terminal_get_text) context=vf->vte_terminal_get_text(VTE_TERMINAL(vte_config.vte),NULL,NULL,NULL);insight_ai_open("Local terminal — review visible or selected output before sending",context ? context:"",vte_config.vte,ai_vte_insert,NULL);g_free(context);
+}
 static GtkWidget *vte_create_popup_menu(void)
 {
 	GtkWidget *menu, *item;
 	GtkAccelGroup *accel_group;
 
 	menu = gtk_menu_new();
+ item=gtk_menu_item_new_with_label("AI Assistant…");gtk_widget_set_name(item,"insight-terminal-ai");gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(ai_vte_open),NULL);gtk_widget_show(item);
 
 	accel_group = gtk_accel_group_new();
 	gtk_window_add_accel_group(GTK_WINDOW(main_widgets.window), accel_group);

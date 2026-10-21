@@ -1,0 +1,42 @@
+# Console AI assistant
+
+Open **AI Assistant…** in the SSH shell toolbar or the local Terminal context menu. **Tools → Console AI Assistant…** opens an empty context for pasted diagnostics. Python 3 is required at runtime; the helper uses its standard library, without an SDK.
+
+![Console assistance and explicit review](../media/console-ai.svg)
+
+## Configure an API
+
+Choose OpenAI / ChatGPT API, xAI / Grok, DeepSeek, Qwen / Model Studio, or a custom OpenAI-compatible API. Enter the **model ID available in your API account**, API key, complete chat/completions endpoint and Python 3 executable. API access uses provider credentials; a ChatGPT web subscription does not configure this integration.
+
+| Provider | Endpoint / setup | Optional key environment variable |
+| --- | --- | --- |
+| OpenAI | `https://api.openai.com/v1/chat/completions` | `OPENAI_API_KEY` |
+| xAI | `https://api.x.ai/v1/chat/completions` | `XAI_API_KEY` |
+| DeepSeek | `https://api.deepseek.com/chat/completions` | `DEEPSEEK_API_KEY` |
+| Qwen | Replace `YOUR_WORKSPACE` and region in the preset with the endpoint from your Model Studio workspace | `DASHSCOPE_API_KEY` |
+| Custom | Complete compatible endpoint; HTTP allowed only on loopback | entered manually |
+
+Provider changes replace the endpoint and read the corresponding environment key. Model IDs are deliberately editable rather than pinned to a changing provider catalog. Settings remember only provider, endpoint, model and interpreter in `insight-ai.conf`. Keys are held in memory and passed to the helper through stdin, not command-line arguments. Console text, code and conversation are not saved by the assistant. HTTPS is required for remote APIs; redirects are rejected. Normal application session, editor and shell settings retain their existing behavior.
+
+## Ask about output and code
+
+1. The SSH button captures selected output, or its last 16,000 characters. The Terminal menu captures selected text where the installed VTE supports it, otherwise visible output. Review and edit the context before sending; nothing is uploaded just by opening the window.
+2. To connect an error to source, select the document and press **Attach current file**. This captures the complete current UTF-8 buffer, including unsaved edits, and its path. **View attached code** shows exactly that snapshot. Attachment is explicit, limited to 128 KiB, and supports empty files. No other project files are read automatically.
+3. Ask a question about commands, configuration, a diagnostic or its relation to the attached code, then press **Send**. Each request sends the displayed context, attached snapshot/path, question and in-memory explanation history. Context is limited to 64 KiB. A new attachment or **Detach code / clear history** clears the conversation; history also resets when it exceeds 64 KiB.
+4. The answer can include an explanation, a single-line command and a complete replacement for the attached buffer. Unstructured answers remain readable but cannot change source. Incomplete/truncated responses are rejected. **Cancel request** terminates the pending helper; closing the window cancels it too. Network operations have a 60-second timeout.
+
+**Insert suggested command (do not run)** places a command into the SSH input or a clean local terminal prompt without Enter. It does not connect SSH or execute anything. A dirty local prompt rejects insertion to avoid appending to an existing command. Inspect the command and run it yourself when ready.
+
+## Review corrections
+
+**Review code in Diff / Merge** opens the actual comparison window with captured source on the left, the proposed replacement on the right and editable Result. Its explanation area displays the model's reasoning; the adjacent question field and **Ask about this change** send an explicit follow-up through the assistant.
+
+Use **Take Right**, **All Right**, or manual Result edits to choose the correction. **Apply Result to Source** updates the attached editor buffer in one Undo action. The document must still have the same identity, filename and exact contents as when attached, and must be writable. Changed, closed, renamed or read-only buffers reject application; attach fresh code and ask again. Result must fit the same 128 KiB UTF-8 limit. Applying does not save files or upload remote files. Review the result and use the editor's normal Save / remote upload actions.
+
+This version handles one attached buffer at a time. It does not run model tools, search the project automatically or apply multiple-file patches. Follow-ups reuse the captured attachment until you replace it. Provider output is a proposal and may require correction.
+
+## Validation
+
+The transport tests use a loopback mock API and cover all four compatible provider request shapes, authentication, malformed and truncated answers, redirects, bounds and command controls. The native Linux test exercises real SSH/assistant/Diff widgets, source attachment, follow-ups, command insertion without execution, stale/read-only rejection, one Undo, unchanged disk, cancellation and the local VTE menu. No live provider keys were supplied; live OpenAI/xAI/DeepSeek/Qwen accounts, Windows and Android were not tested.
+
+Provider references: [OpenAI](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create), [xAI](https://docs.x.ai/developers/model-capabilities/legacy/chat-completions), [DeepSeek](https://api-docs.deepseek.com/), [Qwen compatible API](https://www.alibabacloud.com/help/en/model-studio/qwen-api-via-openai-chat-completions).

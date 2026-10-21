@@ -86,3 +86,6 @@ Full reference: [Search and replacement modes and query languages](search-replac
 [Project Report / Отчёт по проекту и экспорт списка файлов](project-report.md) — Project → Project Report… / Export Project File List…
 
 [Styled HTML export / Экспорт кода в HTML с оформлением](html-export.md) — File → Export File as HTML… / Export Selection as HTML…
+
+
+[Console AI assistant: configuration, diagnostics and Diff/Merge review](console-ai.md).

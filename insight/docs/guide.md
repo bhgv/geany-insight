@@ -94,3 +94,6 @@ Options → Language profiles… и контекстное меню редакт
 [Project Report / Отчёт по проекту и экспорт списка файлов](project-report.md) — Project → Project Report… / Export Project File List…
 
 [Styled HTML export / Экспорт кода в HTML с оформлением](html-export.md) — File → Export File as HTML… / Export Selection as HTML…
+
+
+[ИИ-помощник консоли: настройка, разбор ошибок и исправления через Diff/Merge](console-ai.md).

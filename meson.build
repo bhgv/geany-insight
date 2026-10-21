@@ -888,7 +888,7 @@ insight_native = static_library('insight_native',
  'insight/desktop/remote_io.c',
  'insight/desktop/remote_credentials.c',
  'insight/desktop/search_state.c',
-	'insight/desktop/calculate.c', 'insight/desktop/text_boundary.c', 'insight/desktop/line_insert.c', 'insight/desktop/paragraph.c', 'insight/desktop/renumber.c', 'insight/desktop/text_transfer.c', 'insight/desktop/html_export.c', 'insight/desktop/project_report.c', 'insight/desktop/backup_store.c', 'insight/desktop/intelligent_paste.c', 'insight/desktop/completion_settings.c', 'insight/desktop/completion_preferences.c', 'insight/desktop/filetype_pairs.c', 'insight/desktop/filetype_editing.c', 'insight/desktop/filetype_options.c', 'insight/desktop/git_history.c', 'insight/desktop/git_project.c', 'insight/desktop/folder_tree.c', 'insight/desktop/folder_layout.c', 'insight/desktop/disk_operation.c', 'insight/desktop/directory_operation.c', 'insight/desktop/project_files.c', 'insight/desktop/master_list.c', 'insight/desktop/master_sync.c',
+	'insight/desktop/calculate.c', 'insight/desktop/text_boundary.c', 'insight/desktop/line_insert.c', 'insight/desktop/paragraph.c', 'insight/desktop/renumber.c', 'insight/desktop/text_transfer.c', 'insight/desktop/ai_client.c', 'insight/desktop/html_export.c', 'insight/desktop/project_report.c', 'insight/desktop/backup_store.c', 'insight/desktop/intelligent_paste.c', 'insight/desktop/completion_settings.c', 'insight/desktop/completion_preferences.c', 'insight/desktop/filetype_pairs.c', 'insight/desktop/filetype_editing.c', 'insight/desktop/filetype_options.c', 'insight/desktop/git_history.c', 'insight/desktop/git_project.c', 'insight/desktop/folder_tree.c', 'insight/desktop/folder_layout.c', 'insight/desktop/disk_operation.c', 'insight/desktop/directory_operation.c', 'insight/desktop/project_files.c', 'insight/desktop/master_list.c', 'insight/desktop/master_sync.c',
  'insight/core/index.c', 'insight/core/document.c', 'insight/core/occurrences.c', 'insight/desktop/index_cache.c',
  'src/insight-index.c', 'src/insight-scopes.c', 'insight/core/runtime.c', 'insight/core/context.c', 'insight/desktop/extensions.c', 'insight/desktop/lookup_filter.c', 'insight/desktop/file_patterns.c', 'insight/desktop/layout_state.c', 'insight/desktop/context_search.c', 'insight/desktop/notebook_store.c', 'insight/desktop/snippet.c', 'insight/desktop/workspace_watch.c', 'insight/desktop/source_mask.c', 'insight/desktop/relation_query.c', 'insight/desktop/type_resolve.c', insight_lua_sources,
  c_args: geany_cflags,
@@ -949,7 +949,7 @@ libgeany = shared_library('geany',
 	'src/insight-relation-graph.h',
 	'src/insight-help.c',
  'src/insight-search-links.c', 'src/insight-search-links.h', 'insight/desktop/source_link_anchor.c',
- 'src/insight-html-export.c', 'src/insight-html-export.h', 'src/insight-project-report.c', 'src/insight-project-report.h', 'src/insight-git-history.c', 'src/insight-git-history.h', 'src/insight-snapshot-compare.c', 'src/insight-snapshot-compare.h', 'src/insight-backups.c', 'src/insight-backups.h', 'src/insight-revisions.c', 'src/insight-revisions.h', 'src/insight-typing.c', 'src/insight-typing.h', 'src/insight-selection-search.c', 'src/insight-selection-search.h', 'src/insight-command-list.c', 'src/insight-command-list.h', 'src/insight-navigation.c', 'src/insight-navigation.h', 'src/insight-paste.c', 'src/insight-paste.h', 'src/insight-completion.c', 'src/insight-completion.h', 'src/insight-languages.c',
+ 'src/insight-ai.c', 'src/insight-ai.h', 'src/insight-html-export.c', 'src/insight-html-export.h', 'src/insight-project-report.c', 'src/insight-project-report.h', 'src/insight-git-history.c', 'src/insight-git-history.h', 'src/insight-snapshot-compare.c', 'src/insight-snapshot-compare.h', 'src/insight-backups.c', 'src/insight-backups.h', 'src/insight-revisions.c', 'src/insight-revisions.h', 'src/insight-typing.c', 'src/insight-typing.h', 'src/insight-selection-search.c', 'src/insight-selection-search.h', 'src/insight-command-list.c', 'src/insight-command-list.h', 'src/insight-navigation.c', 'src/insight-navigation.h', 'src/insight-paste.c', 'src/insight-paste.h', 'src/insight-completion.c', 'src/insight-completion.h', 'src/insight-languages.c',
  'src/insight-formatting.c',
  'src/insight-formatting.h',
  'src/insight-i18n.c',
@@ -1121,7 +1121,7 @@ install_data(
   'insight/docs/panel-messages.md',
   'insight/docs/panel-scratchpad.md',
   'insight/docs/panel-terminal.md',
-  'insight/docs/panel-editor.md', 'insight/docs/structural-selection.md', 'insight/docs/editor-history.md', 'insight/docs/insert-tools.md', 'insight/docs/file-text.md', 'insight/docs/renumber.md', 'insight/docs/paragraph-tools.md', 'insight/docs/line-insertion.md', 'insight/docs/text-boundaries.md', 'insight/docs/calculate.md', 'insight/docs/window-scrolling.md', 'insight/docs/word-editing.md', 'insight/docs/command-reference.md', 'insight/docs/restore-lines.md', 'insight/docs/delimiter-navigation.md', 'insight/docs/selection-search.md', 'insight/docs/typing-replay.md', 'insight/docs/checkpoint.md', 'insight/docs/backup-versions.md', 'insight/docs/snapshot-comparison.md', 'insight/docs/git-history.md', 'insight/docs/project-report.md', 'insight/docs/html-export.md',
+  'insight/docs/panel-editor.md', 'insight/docs/structural-selection.md', 'insight/docs/editor-history.md', 'insight/docs/insert-tools.md', 'insight/docs/file-text.md', 'insight/docs/renumber.md', 'insight/docs/paragraph-tools.md', 'insight/docs/line-insertion.md', 'insight/docs/text-boundaries.md', 'insight/docs/calculate.md', 'insight/docs/window-scrolling.md', 'insight/docs/word-editing.md', 'insight/docs/command-reference.md', 'insight/docs/restore-lines.md', 'insight/docs/delimiter-navigation.md', 'insight/docs/selection-search.md', 'insight/docs/typing-replay.md', 'insight/docs/checkpoint.md', 'insight/docs/backup-versions.md', 'insight/docs/snapshot-comparison.md', 'insight/docs/git-history.md', 'insight/docs/project-report.md', 'insight/docs/html-export.md', 'insight/docs/console-ai.md',
   'insight/docs/panel-ssh.md',
   'insight/docs/panel-overview.md',
   'insight/docs/panel-diff-input.md',
@@ -1137,3 +1137,5 @@ install_subdir('insight/docs/ru', install_dir: cdata.get('GEANY_DATA_DIR') / 'in
 
 install_subdir('styles', install_dir: cdata.get('GEANY_DATA_DIR'))
 install_subdir('fonts', install_dir: cdata.get('GEANY_DATA_DIR'))
+
+install_data('insight/tools/ai_client.py', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'tools')
