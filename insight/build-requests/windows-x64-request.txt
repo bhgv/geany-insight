@@ -1,3 +1,5 @@
 Windows x64 portable trial explicitly requested 2026-10-21.
 Include the current main editor, buffer transfer preview and open Save Selection destination review, all preceding Source Insight ports, AI, Git/Diff/Merge and RU/EN documentation.
 Build the complete native UCRT64 editor and bundle GTK dependencies. Run native transfer/file text and existing Windows checks, verify PE x86-64 and startup with SDK removed from PATH. Record the exact commit in REVISION.txt and upload the portable archive.
+
+Use the corrected native transfer fixture, which restores the source selection after focusing its tab through document_open_file.

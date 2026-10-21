@@ -50,7 +50,7 @@ static gboolean respond(gpointer data) {
 }
 static gboolean cancel_stale(gpointer data) { (void)data;GtkWidget *d=dialog();if(!d) return G_SOURCE_CONTINUE;g_assert_false(gtk_widget_get_sensitive(gtk_dialog_get_widget_for_response(GTK_DIALOG(d),GTK_RESPONSE_APPLY)));gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_CANCEL);return G_SOURCE_REMOVE; }
 static void command(gint m,gint g,gboolean all,gboolean capture) {
- mode=m;guard=g;whole=all;image=capture;reply=0;chooser_reply=0;document_open_file(path,FALSE,NULL,NULL);timer=g_timeout_add(50,respond,NULL);if(g==10) gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-save-selection")));else keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_BUFFERTRANSFER);if(timer) { g_source_remove(timer);timer=0; }
+ mode=m;guard=g;whole=all;image=capture;reply=0;chooser_reply=0;sptr_t anchor=SEND(source->editor->sci,SCI_GETANCHOR,0,0),caret=SEND(source->editor->sci,SCI_GETCURRENTPOS,0,0);document_open_file(path,FALSE,NULL,NULL);SEND(source->editor->sci,SCI_SETSEL,anchor,caret);timer=g_timeout_add(50,respond,NULL);if(g==10) gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-save-selection")));else keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_BUFFERTRANSFER);if(timer) { g_source_remove(timer);timer=0; }
 }
 static void reset(void) {
  SEND(source->editor->sci,SCI_SETREADONLY,FALSE,0);sci_set_text(source->editor->sci,"// α\r\nint value = 7;\r\n");SEND(source->editor->sci,SCI_EMPTYUNDOBUFFER,0,0);SEND(source->editor->sci,SCI_SETSEL,5,3);
