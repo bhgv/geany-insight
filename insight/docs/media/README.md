@@ -52,3 +52,13 @@ Keep screenshots current when visible behavior changes. Favor small, useful illu
 
 
 `replace-files-review.svg`: self-contained diagram of staged file/occurrence decisions, cancellation, source rechecks and remaining batches excluding applied files.
+
+
+`renumber-ranges.svg`: self-contained diagram of source-order sequences across
+column/multiple fragments, full preview, preflight and partial-operation Undo.
+
+`renumber-ranges.jpg`: actual Renumber selected fragments window in the complete
+Linux editor under Xvfb, successful native run 39625341427, source
+f366a1dd576a56dcedbafccbdf7986c98b14f85b. Synthetic C source and column selections;
+4/7/9 become 10/11/12 while unselected comment values stay unchanged. Optimized JPEG,
+metadata stripped. It is a native test fixture running the complete application.

@@ -561,3 +561,5 @@ dist_insightdocmedia_DATA += insight/docs/media/replace-review.jpg
 
 EXTRA_DIST += insight/tests/renumber_ranges_gui_test.c
 dist_insightdocmedia_DATA += insight/docs/media/renumber-ranges.svg
+
+dist_insightdocmedia_DATA += insight/docs/media/renumber-ranges.jpg

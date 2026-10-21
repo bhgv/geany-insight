@@ -2016,3 +2016,35 @@ disk. Core checks cover immutable decisions, oversized subsets and skipped-match
 offsets. RU/EN help and installed SVG/JPEG assets are updated. The captures are
 real complete-editor GTK windows under Xvfb with synthetic sources from the
 preceding successful 72-test run 39616085928. Windows/Android were not executed.
+
+
+## 2026-10-21 — column and multiple-selection Renumber
+
+Renumber now accepts rectangular/thin columns and multiple ordinary selections.
+An immutable full-document plan runs one signed 64-bit sequence across fragments
+in source order, preserving each fragment's radix or forcing decimal/hex/octal.
+Unselected bytes remain exact. Empty/virtual EOL slices add no padding; partial-tab
+boundaries are rejected. Full source/result are bounded to 8 MiB and 4096 ranges.
+
+The native range dialog shows a line/column/token table and full colored, numbered
+read-only before/after panes. Apply changes only differing fragments in reverse
+order as one Undo/Redo action, retains direction/main source row and selects exact
+result fragments as ordinary multiple selections. Editor keybinding registration
+routes through the same command. Text revision, selection, active document and
+write checks reject stale requests; per-range insertion verification detects
+legal extension substitutions, including equal-length changes. Source closure
+and dialog destruction are guarded, including GTK's automatic handler cleanup.
+
+The original ordinary-selection dialog remains available. RU/EN help, a compact
+SVG and a real native-window JPEG document the new scope and limitations.
+
+Validation: complete Linux build/install and **75/75 tests passed**, source
+`f366a1dd576a56dcedbafccbdf7986c98b14f85b`,
+[run 39625341427](https://github.com/bhgv/geany-insight/actions/runs/39625341427).
+The new native fixture exercises columns and unordered multiple selections,
+reverse/main selection, short/virtual rows, Unicode/tabs/CRLF, marker preservation,
+menu/key routing, exact outside bytes, Undo/Redo, stale/readonly/tab/closed-source
+requests, equal-length InsertCheck substitutions and dialog destruction. Existing
+Renumber core/ordinary GUI checks run in the same suite. The JPEG is a real window
+of this complete editor run under Xvfb using synthetic source/column fixtures.
+Windows and Android were not run.

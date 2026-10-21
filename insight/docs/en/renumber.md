@@ -16,7 +16,11 @@ Source Insight reference: [Renumber](https://www.sourceinsight.com/doc/v4/usergu
 
 ## Column and multiple selections
 
-Use the same **Renumber…** command with a rectangular/thin column selection or multiple ordinary selections. The separate **Renumber selected fragments** window shows the captured document before/after with syntax colors and line numbers. The table lists source line, display column, integer count and bounded old/new snippets; choosing a row highlights the exact fragment in both panes.
+Use the same **Renumber…** command with a rectangular/thin column selection or multiple ordinary selections. The separate **Renumber selected fragments** window shows the captured document before/after with syntax colors and line numbers. The table lists source line, editor column, integer count and bounded old/new snippets; choosing a row highlights the exact fragment in both panes.
+
+![Native column Renumber preview](../media/renumber-ranges.jpg)
+
+Actual window in the complete Linux editor under Xvfb, using synthetic source/column selections. The selected values 4, 7 and 9 become 10, 11 and 12; comment values 99, 88 and 77 remain outside the scope.
 
 ![Column plan and guarded application](../media/renumber-ranges.svg)
 
@@ -29,3 +33,5 @@ Apply edits only changed fragments, backwards, as one Undo/Redo action and does 
 The complete document and output must each fit 8 MiB, NUL-free UTF-8, with at most 4096 selections. Signed 64-bit overflow in any fragment rejects the complete plan before edits. A text edit (even followed by Undo), changed selection, non-current/closed source or lost write permission rejects Apply. If a synchronous editor extension edits the source or destroys the dialog during application, remaining fragment edits stop; Undo the operation if partial changes occurred. There is no project-wide Undo or automatic save. Windows and Android validation is not claimed.
 
 Renumber can receive a shortcut in the **Editor** keybinding category; menu and shortcut share the same scope selection. No default shortcut is assigned.
+
+Validated on Linux: complete build/install and **75/75 tests passed**, [run 39625341427](https://github.com/bhgv/geany-insight/actions/runs/39625341427), source `f366a1dd576a56dcedbafccbdf7986c98b14f85b`. The new capture comes from this successful run. Coverage includes the original command, shared range sequences, Unicode/CRLF/tabs, virtual/short rows, reverse/main selections, menu/key routing, markers, exact outside bytes, Undo/Redo, stale/readonly/tab/closed-source guards, equal-length InsertCheck substitutions and dialog destruction. Windows and Android were not run.
