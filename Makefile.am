@@ -521,3 +521,4 @@ dist_insightdocmedia_DATA += insight/docs/media/snapshot-comparison.svg insight/
 insightdoc_DATA += insight/docs/git-history.md
 dist_insightdocmedia_DATA += insight/docs/media/git-history.svg
 EXTRA_DIST += insight/tests/git_history_test.c insight/tests/git_history_gui_test.c
+dist_insightdocmedia_DATA += insight/docs/media/git-history.jpg
