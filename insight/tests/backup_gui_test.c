@@ -34,7 +34,7 @@ static gboolean respond(gpointer data) {
  }
  if(mode==1 || mode==2) {
   if(!tick++) { GtkTreePath *p=gtk_tree_path_new_from_indices(1,-1);gtk_tree_view_set_cursor(GTK_TREE_VIEW(tree),p,NULL,FALSE);gtk_tree_path_free(p);gtk_dialog_response(GTK_DIALOG(d),mode==1 ? 202:GTK_RESPONSE_ACCEPT);return mode==1 ? G_SOURCE_CONTINUE:G_SOURCE_REMOVE; }
-  gchar *text=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));g_assert_cmpstr(text,==,first);g_free(text);gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_CLOSE);return G_SOURCE_REMOVE;
+  gchar *text=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));g_assert_cmpstr(text,==,"α first snapshot\nsecond line\nthird\n");g_free(text);gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_CLOSE);return G_SOURCE_REMOVE;
  }
  if(mode==3) {
   if(!tick++) { GtkTreeIter iter;GtkTreeModel *selected=NULL;g_assert_true(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)),&selected,&iter));gchar *name=NULL;gtk_tree_model_get(selected,&iter,3,&name,-1);gchar *target=g_build_filename(directory,name,NULL);g_assert_true(g_file_set_contents(target,"tampered\n",-1,NULL));g_free(name);g_free(target);gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_ACCEPT);return G_SOURCE_CONTINUE; }
