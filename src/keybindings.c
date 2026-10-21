@@ -33,6 +33,7 @@
 #include "keybindings.h"
 #include "insight-paste.h"
 #include "insight-buffer-transfer.h"
+#include "insight-navigation.h"
 #include "insight-command-list.h"
 #include "insight-selection-search.h"
 #include "insight-typing.h"

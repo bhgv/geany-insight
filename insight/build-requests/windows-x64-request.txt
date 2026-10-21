@@ -3,3 +3,5 @@ Include the current main editor, buffer transfer preview and open Save Selection
 Build the complete native UCRT64 editor and bundle GTK dependencies. Run native transfer/file text and existing Windows checks, verify PE x86-64 and startup with SDK removed from PATH. Record the exact commit in REVISION.txt and upload the portable archive.
 
 Use the corrected native transfer fixture, which restores the source selection after focusing its tab through document_open_file.
+
+Retry with the explicit navigation header in keybindings.c for current MinGW GCC strict declaration checks.
