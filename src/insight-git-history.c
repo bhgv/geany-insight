@@ -47,7 +47,7 @@ static void set_code(History *view,guint side,const gchar *text,const gchar *pat
 {
     ScintillaObject *sci=view->code[side];GeanyFiletype *type=filetypes_detect_from_extension(path ? path:"");highlighting_set_styles(sci,type ? type:filetypes[GEANY_FILETYPES_NONE]);
     SEND(sci,SCI_SETREADONLY,FALSE,0);SEND(sci,SCI_SETUNDOCOLLECTION,FALSE,0);sci_set_text(sci,text ? text:"");SEND(sci,SCI_EMPTYUNDOBUFFER,0,0);SEND(sci,SCI_SETSAVEPOINT,0,0);SEND(sci,SCI_SETREADONLY,TRUE,0);
-    sci_set_line_numbers(sci,TRUE);SEND(sci,SCI_SETMARGINWIDTHN,0,56);SEND(sci,SCI_MARKERDEFINE,10,SC_MARK_BACKGROUND);SEND(sci,SCI_MARKERSETBACK,10,side ? 0xDDF3D5:0xD5DFFF);SEND(sci,SCI_MARKERDELETEALL,10,0);SEND(sci,SCI_COLOURISE,0,-1);
+    sci_set_line_numbers(sci,TRUE);SEND(sci,SCI_SETMARGINWIDTHN,0,0);SEND(sci,SCI_SETMARGINWIDTHN,1,MAX(40,SEND(sci,SCI_GETMARGINWIDTHN,1,0)));SEND(sci,SCI_MARKERDEFINE,10,SC_MARK_BACKGROUND);SEND(sci,SCI_MARKERSETBACK,10,side ? 0xDDF3D5:0xD5DFFF);SEND(sci,SCI_MARKERDELETEALL,10,0);SEND(sci,SCI_COLOURISE,0,-1);
 }
 static void clear_text(History *view)
 {
