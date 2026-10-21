@@ -146,5 +146,5 @@ void insight_renumber_ranges_command(void) {
  for(;;) { gint response=gtk_dialog_run(GTK_DIALOG(v.dialog));if(v.closed) break;if(response==GTK_RESPONSE_HELP) preview(&v);else if(response==GTK_RESPONSE_APPLY) { gboolean ok=apply(&v);if(!v.closed) ui_set_statusbar(TRUE,"%s",ok ? "Renumber applied to selected fragments; one Undo, disk unchanged":"Renumber stopped: source, selection or permissions changed. If partial edits occurred, Undo the operation.");break; }else break; }
  gtk_widget_destroy(v.dialog);g_object_unref(v.dialog);g_object_unref(v.model);
 out:
- if(v.source) { if(v.watch) g_signal_handler_disconnect(v.source,v.watch);g_object_unref(v.source); }if(v.ranges) g_array_unref(v.ranges);insight_renumber_plan_free(v.plan);g_free(v.text);g_free(v.filename);
+ if(v.source) { if(v.watch&&g_signal_handler_is_connected(v.source,v.watch)) g_signal_handler_disconnect(v.source,v.watch);g_object_unref(v.source); }if(v.ranges) g_array_unref(v.ranges);insight_renumber_plan_free(v.plan);g_free(v.text);g_free(v.filename);
 }
