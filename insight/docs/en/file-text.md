@@ -18,7 +18,7 @@ Requires write permission and one normal selection without virtual space. Any te
 
 Exports buffer text as UTF-8 without adding a BOM, preserving line endings without adding a final EOL. The original filename, Undo and saved/modified state are preserved. Read-only sources are allowed. Save Selection requires a nonempty normal selection, including reverse selections. Exported text is limited to 8 MiB.
 
-Choose a path in the standard Save dialog. Existing closed files require overwrite confirmation. Paths belonging to any open document, including the original file and detected file aliases, are protected: close the destination first. Appending to an open buffer is not implemented yet.
+Choose a path in the standard Save dialog. Existing closed files require overwrite confirmation. Save Selection routes an already open destination to the buffer review below, without saving it. Ambiguous aliases are refused. Save a Copy continues to protect all open destinations, including the source.
 
 ![Native Linux export chooser](../media/file-text-export.jpg)
 
@@ -29,3 +29,22 @@ New destinations use a sibling temporary file and a no-overwrite move. Existing 
 ![Exact text insertion and export](../media/file-text.svg)
 
 Reference: [Insert File](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Insert_File.htm), [Save Selection](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Save_Selection.htm), [Save A Copy](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Save_A_Copy.htm).
+
+## Copy Text to Buffer
+
+**Edit → Insert and clipboard → Copy Text to Buffer…** copies selected text or the whole source into an explicitly chosen open buffer. The Editor keybinding is configurable and has no default shortcut. Read-only sources are supported.
+
+| Destination mode | Operation |
+| --- | --- |
+| Append at EOF | Add the exact payload at the end, without adding a separator. |
+| Replace whole destination | Replace the entire destination text. |
+| Insert at destination caret | Insert at the captured caret without deleting its selection. |
+| Replace destination selection | Replace one captured normal selection. |
+
+Choose source scope, destination and mode, then **Preview**. The left and right read-only panes show the full destination before and after with syntax colors and line numbers. **New destination** creates an ordinary unsaved tab. **Reload snapshots** explicitly accepts current source/destination text and selections; it clears the previous proposal. Changing options also requires another preview.
+
+**Apply** changes only the destination buffer, as one Undo/Redo action. It does not write to disk. The destination opens in the editor after review closes. Choosing the source as destination is allowed. Cancel leaves text unchanged; an explicitly created new tab remains open.
+
+Text edits (even followed by Undo), renames, closure and read-only destinations invalidate Apply. Selection-based modes also recheck selection geometry; multiple/column/virtual selections are refused. Text and results must be NUL-free UTF-8 up to 8 MiB. UTF-8 and CRLF boundaries cannot be split. Exact bytes and line endings are preserved. If an extension changes the insertion, inspect the destination and use Undo; the status bar reports the interrupted operation.
+
+![Buffer transfer review](../media/buffer-transfer.svg)

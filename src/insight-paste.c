@@ -2,6 +2,7 @@
 #include "geany.h"
 #include "insight-paste.h"
 #include "insight-renumber-ranges.h"
+#include "insight-buffer-transfer.h"
 #include "keybindings.h"
 #include "insight-languages.h"
 #include "insight-completion.h"
@@ -792,6 +793,10 @@ static void insert_file(GtkMenuItem *item,gpointer data)
   g_clear_error(&error);g_free(text);g_free(path);
  }
 }
+static GtkFileChooserConfirmation export_confirmation(GtkFileChooser *chooser,gpointer data) {
+ (void)data;gchar *path=gtk_file_chooser_get_filename(chooser);gboolean open=path&&destination_open(path);g_free(path);return open?GTK_FILE_CHOOSER_CONFIRMATION_ACCEPT_FILENAME:GTK_FILE_CHOOSER_CONFIRMATION_CONFIRM;
+}
+static void transfer_text(GtkMenuItem *item,gpointer data) { (void)item;(void)data;insight_buffer_transfer_command(); }
 static void export_text(GtkMenuItem *item,gpointer data)
 {
  (void)item;gboolean selection=GPOINTER_TO_INT(data);GeanyDocument *doc=document_get_current();if(!doc) return;
@@ -803,12 +808,13 @@ static void export_text(GtkMenuItem *item,gpointer data)
  Request request={0};request.id=doc->id;request.sci=sci;request.generation=state(sci)->generation;request.anchor=SEND(sci,SCI_GETANCHOR,0,0);request.caret=sci_get_current_position(sci);
  GtkWidget *dialog=gtk_file_chooser_dialog_new(insight_tr(selection ? "Save Selection" : "Save a Copy"),GTK_WINDOW(main_widgets.window),GTK_FILE_CHOOSER_ACTION_SAVE,insight_tr("Cancel"),GTK_RESPONSE_CANCEL,insight_tr("Save"),GTK_RESPONSE_ACCEPT,NULL);
  g_object_ref_sink(dialog);gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog),TRUE);gtk_widget_set_name(dialog,"insight-export-text-dialog");gtk_file_chooser_set_local_only(GTK_FILE_CHOOSER(dialog),TRUE);gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog),TRUE);gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog),selection ? "selection.txt" : "copy.txt");
+ if(selection) g_signal_connect(dialog,"confirm-overwrite",G_CALLBACK(export_confirmation),NULL);
  GtkWidget *note=gtk_label_new(insight_tr("Export UTF-8 text without changing the original document. Open destinations are protected."));gtk_label_set_line_wrap(GTK_LABEL(note),TRUE);gtk_file_chooser_set_extra_widget(GTK_FILE_CHOOSER(dialog),note);gtk_widget_show(note);
  gchar *path=NULL;if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));gtk_widget_destroy(dialog);g_object_unref(dialog);
  if(path) {
   GError *error=NULL;gboolean saved=FALSE;
   if(!file_request_valid(&request,selection)) ui_set_statusbar(TRUE,"Export cancelled because the source document or selection changed");
-  else if(destination_open(path)) ui_set_statusbar(TRUE,"Close the destination document before exporting to this path");
+  else if(destination_open(path)) { if(selection) insight_buffer_transfer_to_path(path);else ui_set_statusbar(TRUE,"Close the destination document before exporting to this path"); }
   else if(!(saved=insight_text_file_write(path,text,length,&error))) ui_set_statusbar(TRUE,"%s",error ? insight_tr(error->message) : insight_tr("Choose a local filename."));
   if(saved) document_open_file(path,FALSE,NULL,"UTF-8");
   g_clear_error(&error);g_free(path);
@@ -1072,6 +1078,7 @@ static void tools_menu_show(GtkWidget *menu,gpointer data)
  GeanyDocument *doc=document_get_current();gboolean single=doc && SEND(doc->editor->sci,SCI_GETSELECTIONS,0,0)==1 && sci_get_selection_mode(doc->editor->sci)==SC_SEL_STREAM && sci_has_selection(doc->editor->sci) && !SEND(doc->editor->sci,SCI_GETSELECTIONNCARETVIRTUALSPACE,0,0) && !SEND(doc->editor->sci,SCI_GETSELECTIONNANCHORVIRTUALSPACE,0,0);
  gtk_widget_set_sensitive(g_object_get_data(G_OBJECT(menu),"save-selection"),single);
  gtk_widget_set_sensitive(g_object_get_data(G_OBJECT(menu),"save-copy"),doc!=NULL);
+ gtk_widget_set_sensitive(g_object_get_data(G_OBJECT(menu),"buffer-transfer"),doc!=NULL);
 }
 void insight_paste_tools_menu(GtkWidget *menu)
 {
@@ -1082,6 +1089,7 @@ void insight_paste_tools_menu(GtkWidget *menu)
  gtk_menu_shell_append(GTK_MENU_SHELL(sub),gtk_separator_menu_item_new());
  const gchar *file_labels[]={"Insert File…","Save Selection…","Save a Copy…"},*file_ids[]={"insight-insert-file","insight-save-selection","insight-save-copy"},*file_keys[]={"insert-file","save-selection","save-copy"};
  for(guint i=0;i<3;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(file_labels[i]);gtk_widget_set_name(entry,file_ids[i]);g_object_set_data(G_OBJECT(sub),file_keys[i],entry);g_signal_connect(entry,"activate",i ? G_CALLBACK(export_text) : G_CALLBACK(insert_file),GINT_TO_POINTER(i==1));gtk_menu_shell_append(GTK_MENU_SHELL(sub),entry); }
+ GtkWidget *transfer=gtk_menu_item_new_with_label("Copy Text to Buffer…");gtk_widget_set_name(transfer,"insight-buffer-transfer");g_object_set_data(G_OBJECT(sub),"buffer-transfer",transfer);g_signal_connect(transfer,"activate",G_CALLBACK(transfer_text),NULL);keybindings_attach_menu(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_BUFFERTRANSFER,transfer);gtk_menu_shell_append(GTK_MENU_SHELL(sub),transfer);
  GtkWidget *renumber=gtk_menu_item_new_with_label("Renumber…");gtk_widget_set_name(renumber,"insight-renumber");keybindings_attach_menu(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_RENUMBER,renumber);g_object_set_data(G_OBJECT(sub),"renumber",renumber);g_signal_connect(renumber,"activate",G_CALLBACK(renumber_text),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(sub),renumber);
  g_signal_connect(sub,"show",G_CALLBACK(tools_menu_show),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),parent);gtk_widget_show_all(parent);
 }

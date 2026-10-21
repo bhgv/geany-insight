@@ -241,6 +241,7 @@ libgeany_la_SOURCES += \
 	insight-html-export.c insight-html-export.h \
 	insight-project-report.c insight-project-report.h \
 	insight-revisions.c insight-revisions.h \
+	insight-buffer-transfer.c insight-buffer-transfer.h \
 	insight-renumber-ranges.c insight-renumber-ranges.h \
 	insight-paste.c insight-paste.h \
 	insight-completion.c insight-completion.h \

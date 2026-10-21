@@ -32,6 +32,7 @@
 
 #include "keybindings.h"
 #include "insight-paste.h"
+#include "insight-buffer-transfer.h"
 #include "insight-command-list.h"
 #include "insight-selection-search.h"
 #include "insight-typing.h"
@@ -319,6 +320,7 @@ static void add_kb(GeanyKeyGroup *group, gsize key_id,
 
 static void cb_func_insight(guint key_id)
 {
+    if (key_id == GEANY_KEYS_INSIGHT_BUFFERTRANSFER) { insight_buffer_transfer_command();return; }
     if (key_id == GEANY_KEYS_INSIGHT_RENUMBER) { insight_paste_renumber();return; }
     if (key_id == GEANY_KEYS_INSIGHT_REPLACEFILES) { insight_replace_files_command();return; }
     if (key_id == GEANY_KEYS_INSIGHT_GITHISTORY) { insight_git_history_command();return; }
@@ -810,6 +812,8 @@ static void init_default_kb(void)
         0, 0, "insight_original_contents", _("Original Contents"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_GITHISTORY, cb_func_insight,
         0, 0, "insight_githistory", _("Git History and Diff"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_BUFFERTRANSFER, cb_func_insight,
+        0, 0, "insight_buffer_transfer", _("Copy Text to Buffer"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_RENUMBER, cb_func_insight,
         0, 0, "insight_renumber", _("Renumber"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_REPLACEFILES, cb_func_insight,

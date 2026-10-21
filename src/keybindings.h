@@ -326,6 +326,7 @@ enum GeanyKeyBindingID
 	GEANY_KEYS_INSIGHT_EXPORTSELECTIONHTML, /**< Insight keybinding. */
 	GEANY_KEYS_INSIGHT_REPLACEFILES, /**< Insight keybinding. */
 	GEANY_KEYS_INSIGHT_RENUMBER, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_BUFFERTRANSFER, /**< Insight keybinding. */
 	GEANY_KEYS_COUNT	/* must not be used by plugins */
 };
 
