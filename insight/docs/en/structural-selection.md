@@ -38,3 +38,7 @@ All four commands have configurable Editor keybindings, with no default shortcut
 ![Symbol editing flow](../media/paste-symbol.svg)
 
 References: [Paste Symbol](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Paste_Symbol.htm), [Copy Symbol](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Copy_Symbol.htm), [Cut Symbol](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Cut_Symbol.htm), [Duplicate Symbol](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Duplicate_Symbol.htm).
+
+![Actual native Paste Symbol review](../media/paste-symbol.jpg)
+
+Complete Linux editor under Xvfb using synthetic C fixtures. The right pane selects the insertion before the original function.

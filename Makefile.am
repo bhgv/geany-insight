@@ -574,3 +574,5 @@ EXTRA_DIST += insight/tests/symbol_edit_plan_test.c
 EXTRA_DIST += insight/tests/paste_symbol_gui_test.c
 
 dist_insightdocmedia_DATA += insight/docs/media/paste-symbol.svg
+
+dist_insightdocmedia_DATA += insight/docs/media/paste-symbol.jpg

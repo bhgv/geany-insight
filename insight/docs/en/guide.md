@@ -101,3 +101,5 @@ Replace Files also offers modal Replace/Skip/Remaining/Cancel review, F3/Shift+F
 [Renumber: columns and multiple selections](renumber.md) — one source-order sequence, colored before/after preview, per-fragment selection and one Undo/Redo.
 
 [Copy Text to Buffer](file-text.md#copy-text-to-buffer) — selected/whole text, four destination modes, colored preview, explicit reload and one Undo without disk writes.
+
+[Symbol editing](structural-selection.md#paste-symbol-review-and-guarded-editing) — Copy/Cut/Duplicate definitions and Paste Symbol before a selected definition with guarded colored preview.

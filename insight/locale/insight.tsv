@@ -1812,3 +1812,6 @@ Insert before symbol	Вставить перед символом
 Symbol edit cancelled because the source, selection or permissions changed.	Правка определения отменена: изменились исходник, выделение или разрешения.
 Symbol edit was interrupted by an editor change. Inspect the source and use Undo if needed.	Изменение определения прервано вмешательством редактора. Проверьте исходник и при необходимости воспользуйтесь Undo.
 Paste clipboard text before the captured definition. A missing final line ending uses the document mode. Apply is one Undo action; no disk writes.	Вставка текста буфера обмена перед выбранным определением. Отсутствующий конечный перевод строки берётся из режима документа. Одно действие Undo без записи на диск.
+
+Symbol operation requires a complete standalone function or supported nominal definition (up to 1 MiB)	Требуется полная отдельная функция либо поддерживаемое определение типа размером до 1 МиБ
+Symbol editing requires a complete standalone definition up to 1 MiB, a source up to 2 MiB and nonempty UTF-8 clipboard text for Paste.	Требуется полное отдельное определение до 1 МиБ и исходник до 2 МиБ; для вставки нужен непустой текст буфера обмена в UTF-8.

@@ -124,3 +124,5 @@ See [the unified File Search and File Symbols interface](unified-file-tools.md).
 ![Panel controls](media/panel-windows.jpg)
 
 Copy/Cut/Duplicate Symbol and exact selection duplication: [structural editing](structural-selection.md).
+
+[Редактирование определений](structural-selection.md#дополнение-paste-symbol-и-редактирование-определений) — Copy/Cut/Duplicate и вставка перед символом с просмотром и проверками исходника.

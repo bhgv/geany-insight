@@ -2096,3 +2096,50 @@ run `Start-Insight.cmd`; settings live in its `config` directory.
 (75,005,597 bytes), SHA256
 `594115304b9999216a5a6cddb387ef910fdf7111fa3452442d26729da172ba9a`.
 Android was not run in this stage.
+
+
+## Paste Symbol and guarded definition editing
+
+Edit → Structural selection and File Symbols now provide Paste Symbol alongside
+Copy/Cut/Duplicate Symbol. All four commands have configurable Editor bindings,
+without assigned default shortcuts. Paste captures the selected definition before
+an asynchronous clipboard read, then opens full syntax-colored, numbered read-only
+before/after panes. Apply inserts before the definition and selects the received
+payload; it does not replace the definition or selection, reindent, rename symbols,
+or save disk files. A missing final clipboard EOL adds the captured document EOL;
+existing received bytes/EOL remain exact. Cancel makes no source edit.
+
+A shared bounded splice planner now drives Cut/Duplicate/Paste. Mutations are one
+Undo/Redo action. Source ID, filename, file type, full text, revision, active tab,
+ordinary selection, EOL mode and write permission are checked again before Apply
+and after completion cancellation. Even edit-then-Undo invalidates a Paste snapshot.
+Actual post-edit bytes and notification counts detect extension interference,
+including same-length InsertCheck substitutions; interrupted edits remain available
+for ordinary Undo. Source closure and preview destruction have guarded cleanup.
+Read-only sources still support Copy; clipboard text and definition size are capped
+at 1 MiB, source size at 2 MiB.
+
+Fresh parser tags and lexical masks also extend symbol ranges to supported named
+class/struct/union/enum/namespace/interface definitions, including Python classes.
+The smallest enclosing definition wins; a selected File Symbols row remains
+independent of the caret. Complete bodies and standalone closing lines are required;
+C/C++ nominal definitions except namespaces require a same-line terminal semicolon.
+Forward declarations, trailing declarators, neighboring same-line definitions,
+incomplete bodies and unsupported ranges are refused. This is lexical range editing,
+not semantic refactoring; preceding decorators/template/return-type lines are excluded.
+
+RU/EN help, navigation links, localized review text, self-contained SVG and a real
+native-window JPEG document the commands. Meson and Autotools package the new module,
+planner, fixtures and media.
+
+Validation: complete Linux build/install and **81/81 tests passed**, source
+`19411bffdd7e59c6345bb175eaa22a8d53d72f0c`,
+[run 39644155010](https://github.com/bhgv/geany-insight/actions/runs/39644155010).
+Six focused checks cover symbol plans, expanded Copy/Cut/Duplicate, Paste review,
+existing file export and buffer transfers; all 75 remaining regressions also pass.
+New cases include C++ classes/structs and Python classes, invalid terminators and
+same-line neighbors, exact UTF-8/mixed EOL, missing separator, readonly/cancel,
+edit-Undo/selection/rename/EOL/tab/close guards, window destruction, same-length
+insertion substitution, unchanged disk content and single Undo/Redo. The JPEG is
+captured by a native fixture running the complete application with synthetic C
+source and clipboard text. Windows and Android were not run in this series.

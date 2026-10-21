@@ -124,3 +124,5 @@ Native Linux application captured during the automated panel scenario:
 ![Panel controls](../media/panel-windows.jpg)
 
 Function operations and exact selection duplication: [structural editing](structural-selection.md).
+
+[Symbol editing](structural-selection.md#paste-symbol-review-and-guarded-editing) — Copy/Cut/Duplicate definitions and Paste Symbol before a selected definition with guarded colored preview.

@@ -66,3 +66,7 @@ metadata stripped. It is a native test fixture running the complete application.
 `buffer-transfer.svg`: self-contained source/destination splice and preview/Undo diagram. No external fonts, scripts or resources.
 
 `buffer-transfer.jpg`: actual Copy Text to Buffer window in the complete Linux editor under Xvfb, native run 39638933057, source a848bc56efcac6b514e4dd82a6921e5bbed45090. Synthetic C source/target fixtures, whole-buffer replacement, numbered syntax-colored read-only panes. Optimized progressive JPEG, metadata stripped. This is a native fixture running the complete application.
+
+`paste-symbol.svg`: self-contained diagram of fresh lexical definition ranges, Copy/Cut/Duplicate/Paste before, preview and one Undo/Redo.
+
+`paste-symbol.jpg`: actual Paste Symbol review in the complete Linux editor under Xvfb, native run 39644155010, code 19411bffdd7e59c6345bb175eaa22a8d53d72f0c. Synthetic C source and clipboard helper; full read-only colored/numbered before/after panes, new helper selected. Optimized progressive JPEG with metadata stripped.
