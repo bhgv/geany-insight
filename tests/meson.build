@@ -811,3 +811,8 @@ test('Insight native typing replay and history GUI', typing_replay_gui_test, tim
 
 checkpoint_gui_test = executable('test_insight_checkpoint_gui', '../insight/tests/checkpoint_gui_test.c', dependencies: test_deps)
 test('Insight native Checkpoint and Checkpoint All GUI', checkpoint_gui_test, timeout: 50, is_parallel: false)
+
+backup_store_test = executable('test_insight_backup_store', '../insight/tests/backup_store_test.c', '../insight/desktop/backup_store.c', include_directories: include_directories('../insight/desktop'), dependencies: deps, c_args: ['-UNDEBUG'])
+test('Insight guarded backup snapshot store', backup_store_test, timeout: 40)
+backup_gui_test = executable('test_insight_backup_gui', '../insight/tests/backup_gui_test.c', dependencies: test_deps)
+test('Insight native backup versions GUI', backup_gui_test, timeout: 55, is_parallel: false)
