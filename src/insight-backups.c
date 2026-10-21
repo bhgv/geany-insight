@@ -135,8 +135,9 @@ static void browse(gboolean compare)
             }
             InsightBackupEntry *entry=selected(&browser);
             gchar *label=g_strdup_printf("%s — %s",insight_tr("Backup snapshot"),entry ? entry->name:"");
-            gboolean opened=current && insight_snapshot_compare_show(main_widgets.window,label,text,length,insight_tr("Current buffer snapshot"),current,size);
-            g_free(label);g_free(current);g_free(text);
+            gchar *right_name=g_strdup_printf("%s — %s",insight_tr("Current buffer snapshot"),browser.source);
+            gboolean opened=current && insight_snapshot_compare_show(main_widgets.window,label,text,length,right_name,current,size);
+            g_free(right_name);g_free(label);g_free(current);g_free(text);
             if(opened) break;
             gtk_label_set_text(GTK_LABEL(browser.status),insight_tr("Comparison requires the original source document and valid UTF-8 snapshots up to 1 MiB per side."));continue;
         }

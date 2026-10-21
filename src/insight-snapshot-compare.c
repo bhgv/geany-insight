@@ -194,7 +194,7 @@ gboolean insight_snapshot_compare_show(GtkWidget *parent,const gchar *left_name,
     const gchar *names[]={left_name,right_name};
     for(guint i=0;i<2;i++) {
         view->text[i]=g_strndup(text[i],sizes[i]);view->names[i]=g_strdup(names[i] ? names[i]:"");
-        GtkWidget *column=gtk_box_new(GTK_ORIENTATION_VERTICAL,4),*label=gtk_label_new(view->names[i]);gtk_widget_set_name(label,i ? "insight-snapshot-right-name":"insight-snapshot-left-name");g_object_set_data(G_OBJECT(label),"insight-no-i18n",GINT_TO_POINTER(1));gtk_label_set_selectable(GTK_LABEL(label),TRUE);gtk_label_set_ellipsize(GTK_LABEL(label),PANGO_ELLIPSIZE_MIDDLE);gtk_box_pack_start(GTK_BOX(column),label,FALSE,FALSE,0);
+        GtkWidget *column=gtk_box_new(GTK_ORIENTATION_VERTICAL,4),*label=gtk_label_new(view->names[i]);gtk_widget_set_name(label,i ? "insight-snapshot-right-name":"insight-snapshot-left-name");g_object_set_data(G_OBJECT(label),"insight-no-i18n",GINT_TO_POINTER(1));gtk_widget_set_tooltip_text(label,view->names[i]);gtk_label_set_selectable(GTK_LABEL(label),TRUE);gtk_label_set_ellipsize(GTK_LABEL(label),PANGO_ELLIPSIZE_MIDDLE);gtk_box_pack_start(GTK_BOX(column),label,FALSE,FALSE,0);
         view->views[i]=gtk_text_view_new();gtk_widget_set_name(view->views[i],i ? "insight-snapshot-right":"insight-snapshot-left");gtk_text_view_set_editable(GTK_TEXT_VIEW(view->views[i]),FALSE);gtk_text_view_set_monospace(GTK_TEXT_VIEW(view->views[i]),TRUE);
         GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->views[i]));gtk_text_buffer_set_text(buffer,view->text[i],sizes[i]);gtk_text_buffer_create_tag(buffer,"difference","background",i ? "#d5f5d5":"#ffe0d0","foreground","#202020",NULL);
         GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),view->views[i]);gtk_box_pack_start(GTK_BOX(column),scroll,TRUE,TRUE,0);if(i) gtk_paned_pack2(GTK_PANED(panes),column,TRUE,FALSE);else gtk_paned_pack1(GTK_PANED(panes),column,TRUE,FALSE);
@@ -210,24 +210,26 @@ gboolean insight_snapshot_compare_show(GtkWidget *parent,const gchar *left_name,
 void insight_snapshot_compare_command(guint action)
 {
     GeanyDocument *doc=document_get_current();if(!doc || !doc->is_valid) return;
-    gint length=sci_get_length(doc->editor->sci);gchar *left=NULL,*right=NULL,*name=NULL;gsize size=0;GError *error=NULL;
+    gint length=sci_get_length(doc->editor->sci);gchar *left=NULL,*right=NULL,*name=NULL,*right_name=NULL;gsize size=0;GError *error=NULL;
     if(length<0 || (guint)length>INSIGHT_SNAPSHOT_COMPARE_LIMIT) goto invalid;
     right=sci_get_contents(doc->editor->sci,-1);
+    const gchar *source_name=doc->file_name ? doc->file_name:insight_tr("Untitled");
+    right_name=g_strdup_printf("%s — %s",insight_tr("Current buffer snapshot"),source_name);
     if(action==0) {
         if(!doc->file_name || !g_path_is_absolute(doc->file_name)) goto invalid;
         gchar *path=g_filename_from_utf8(doc->file_name,-1,NULL,NULL,&error);
         if(path) left=insight_text_file_read(path,&size,&error);
-        g_free(path);name=g_strdup(insight_tr("Disk snapshot (UTF-8)"));
+        g_free(path);name=g_strdup_printf("%s — %s",insight_tr("Disk snapshot (UTF-8)"),source_name);
     } else {
         left=insight_revisions_original_text(doc->editor->sci);if(left) size=strlen(left);
-        name=g_strdup(insight_tr("Original Contents snapshot"));
+        name=g_strdup_printf("%s — %s",insight_tr("Original Contents snapshot"),source_name);
     }
-    if(!left || !insight_snapshot_compare_show(main_widgets.window,name,left,size,insight_tr("Current buffer snapshot"),right,length)) goto invalid;
+    if(!left || !insight_snapshot_compare_show(main_widgets.window,name,left,size,right_name,right,length)) goto invalid;
     goto done;
 invalid:
     ui_set_statusbar(TRUE,"%s",insight_tr(error ? error->message : "Comparison requires available UTF-8 snapshots without NUL, at most 1 MiB per side."));
 done:
-    g_clear_error(&error);g_free(left);g_free(right);g_free(name);
+    g_clear_error(&error);g_free(left);g_free(right);g_free(name);g_free(right_name);
 }
 static void activate(GtkMenuItem *item,gpointer data) { (void)item;insight_snapshot_compare_command(GPOINTER_TO_UINT(data)); }
 void insight_snapshot_compare_init(void)
