@@ -545,3 +545,5 @@ dist_insightdocmedia_DATA += insight/docs/media/console-ai.jpg insight/docs/medi
 insightdoc_DATA += insight/docs/editor-ai.md
 dist_insightdocmedia_DATA += insight/docs/media/editor-ai.svg
 EXTRA_DIST += insight/tests/ai_edit_session_test.c insight/tests/editor_ai_gui_test.c
+
+dist_insightdocmedia_DATA += insight/docs/media/editor-ai.jpg

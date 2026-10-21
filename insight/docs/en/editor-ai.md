@@ -51,3 +51,13 @@ The **Project consistency** task reviews the target and selected context togethe
 
 
 **Recompare variant** retries a cancelled/failed comparison without losing the retained variant. It first captures manual Result corrections when a complete comparison is available.
+
+
+## Actual application window
+
+This is the real editor/project AI panel in the complete Linux editor under Xvfb. The project source, requests and replies are synthetic loopback mock API fixtures, not a live provider session. The snapshot shows cumulative requirements, a retained manual correction, explicit refresh and editable Result.
+
+![Editor/project AI in the native Diff/Merge window](../media/editor-ai.jpg)
+
+
+Verified implementation: [`08eb8655d4d40be8c8c61f62a07d65224c0791cb`](https://github.com/bhgv/geany-insight/commit/08eb8655d4d40be8c8c61f62a07d65224c0791cb). [Native Linux run 39602110109](https://github.com/bhgv/geany-insight/actions/runs/39602110109): complete editor build/install with VTE, comparison-core checks and **68/68 selected tests passed**, zero failures, skips or timeouts. Includes variant recovery after cancelled comparison, compact search keyboard commands and prompt usage shared by review windows. Live provider accounts were not tested.

@@ -40,3 +40,7 @@ Keep screenshots current when visible behavior changes. Favor small, useful illu
 `console-ai.svg`: self-contained diagram of reviewed console context, explicit API requests and guarded code application.
 
 `console-ai.jpg` and `ai-review.jpg`: actual assistant and Diff/Merge windows from the complete Linux editor under Xvfb (native integration run 39594612131). The source, diagnostic, key and reply are synthetic loopback mock API fixtures; these are not live provider sessions. JPEGs are optimized and stripped of metadata.
+
+`editor-ai.svg`: self-contained diagram of cumulative requirements, editable Result, variants and explicit source refresh/application.
+
+`editor-ai.jpg`: actual editor/project AI panel and Diff/Merge window in the complete Linux editor under Xvfb, native run 39602110109. Project source, prompts and replies are synthetic loopback mock API fixtures, not a live provider session. Optimized JPEG with metadata stripped.
