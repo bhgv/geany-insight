@@ -25,5 +25,20 @@ int main(void) {
  fail("-9223372036854775808",2,1,"-1");fail("9223372036854775807",2,1,"1");
  fail("1",1,1,"08");fail("1",1,1,"");fail("1",1,1,"1 ");fail("1",1,1,"9223372036854775808");fail("1",3,0,NULL);fail("\xff",0,0,NULL);
  gchar *big=g_strnfill(8*1024*1024+1,' ');fail(big,0,0,NULL);g_free(big);
+ /* Rectangular fragments share sequence state without joining token edges. */
+ const gchar *source="α=4; keep=99\r\nβ=0x10; keep=88\r\nγ=020; keep=77\r\n";
+ const gchar *p1=strstr(source,"4;"),*p2=strstr(source,"0x10"),*p3=strstr(source,"020");
+ InsightRenumberRange ranges[]={{p1-source,p1-source+1,0,0,0},{p2-source,p2-source+4,0,0,0},{p3-source,p3-source+3,0,0,0}};
+ GError *error=NULL;InsightRenumberPlan *plan=insight_renumber_plan(source,ranges,3,1,0,"10",&error);g_assert_no_error(error);g_assert_nonnull(plan);g_assert_cmpuint(plan->count,==,3);g_assert_cmpstr(plan->text,==,"α=10; keep=99\r\nβ=0xb; keep=88\r\nγ=014; keep=77\r\n");g_assert_cmpuint(g_array_index(plan->ranges,InsightRenumberRange,1).after_begin,==,(gsize)(strstr(plan->text,"0xb")-plan->text));insight_renumber_plan_free(plan);
+ plan=insight_renumber_plan(source,ranges,3,0,1,NULL,&error);g_assert_no_error(error);g_assert_cmpstr(plan->text,==,"α=4; keep=99\r\nβ=5; keep=88\r\nγ=6; keep=77\r\n");insight_renumber_plan_free(plan);
+ plan=insight_renumber_plan(source,ranges,3,2,1,"-2",&error);g_assert_no_error(error);g_assert_cmpstr(plan->text,==,"α=2; keep=99\r\nβ=14; keep=88\r\nγ=14; keep=77\r\n");insight_renumber_plan_free(plan);
+ InsightRenumberRange separate[]={{0,1,0,0,0},{1,2,0,0,0}};plan=insight_renumber_plan("12",separate,2,1,1,"7",&error);g_assert_no_error(error);g_assert_cmpstr(plan->text,==,"78");g_assert_cmpuint(plan->count,==,2);insight_renumber_plan_free(plan);
+ InsightRenumberRange empty[]={{1,1,0,0,0},{3,3,0,0,0}};plan=insight_renumber_plan("1\n2\n",empty,2,0,0,NULL,&error);g_assert_no_error(error);g_assert_cmpstr(plan->text,==,"1\n2\n");g_assert_cmpuint(plan->count,==,0);insight_renumber_plan_free(plan);
+ g_assert_null(insight_renumber_plan("12",separate,2,1,1,"9223372036854775807",&error));g_assert_nonnull(error);g_clear_error(&error);
+ InsightRenumberRange invalid[]={{0,2,0,0,0},{1,2,0,0,0}};g_assert_null(insight_renumber_plan("12",invalid,2,0,0,NULL,&error));g_assert_nonnull(error);g_clear_error(&error);
+ invalid[0]=(InsightRenumberRange){1,2,0,0,0};g_assert_null(insight_renumber_plan("α",invalid,1,0,0,NULL,&error));g_assert_nonnull(error);g_clear_error(&error);
+ invalid[0]=(InsightRenumberRange){0,2,0,0,0};g_assert_null(insight_renumber_plan("1\r\n",invalid,1,0,0,NULL,&error));g_assert_nonnull(error);g_clear_error(&error);
+ g_assert_null(insight_renumber_plan("1",ranges,4097,0,0,NULL,&error));g_assert_nonnull(error);g_clear_error(&error);
+ gchar *near=g_strnfill(8*1024*1024,' ');near[0]='1';InsightRenumberRange one={0,1,0,0,0};g_assert_null(insight_renumber_plan(near,&one,1,1,1,"10",&error));g_assert_nonnull(error);g_clear_error(&error);g_free(near);
  g_print("Renumber: modes, mixed radices, signs, Unicode/EOL, skipped candidates, signed boundaries and atomic failures passed\n");return 0;
 }
