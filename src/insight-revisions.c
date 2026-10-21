@@ -328,21 +328,23 @@ typedef struct {
     guint id;
     ScintillaObject *sci;
     guint64 generation;
-    gchar *path, *text;
+    gchar *path, *text, *encoding;
+    gboolean bom;
     gsize length;
 } Checkpoint;
 static gboolean checkpoint_busy;
 static void checkpoint_free(gpointer data)
 {
     Checkpoint *entry=data;
-    g_object_unref(entry->sci);g_free(entry->path);g_free(entry->text);g_free(entry);
+    g_object_unref(entry->sci);g_free(entry->path);g_free(entry->text);g_free(entry->encoding);g_free(entry);
 }
 static GeanyDocument *checkpoint_document(Checkpoint *entry)
 {
     GeanyDocument *doc=document_find_by_id(entry->id);
     return doc && doc->is_valid && doc->editor->sci==entry->sci &&
         !doc->readonly && !SEND(entry->sci,SCI_GETREADONLY,0,0) &&
-        !document_need_save_as(doc) && !g_strcmp0(doc->file_name,entry->path) ? doc : NULL;
+        !document_need_save_as(doc) && !g_strcmp0(doc->file_name,entry->path) &&
+        !g_strcmp0(doc->encoding,entry->encoding) && doc->has_bom==entry->bom ? doc : NULL;
 }
 static gboolean checkpoint_set_valid(GPtrArray *entries,gboolean all,guint current)
 {
@@ -370,6 +372,7 @@ void insight_revisions_checkpoint(gboolean all)
         if(!doc->is_valid || (!all && doc!=current)) continue;
         Checkpoint *entry=g_new0(Checkpoint,1);entry->id=doc->id;
         entry->sci=g_object_ref(doc->editor->sci);entry->path=g_strdup(doc->file_name);
+        entry->encoding=g_strdup(doc->encoding);entry->bom=doc->has_bom;
         entry->generation=baseline(entry->sci)->generation;g_ptr_array_add(entries,entry);
         if(!checkpoint_document(entry)) valid=FALSE;
     }
@@ -396,6 +399,7 @@ void insight_revisions_checkpoint(gboolean all)
     gtk_widget_show_all(dialog);gint response=gtk_dialog_run(GTK_DIALOG(dialog));gtk_widget_destroy(dialog);
     if(response!=GTK_RESPONSE_ACCEPT) goto done;
     if(!checkpoint_set_valid(entries,all,current_id)) goto stale;
+    gsize captured=0;
     /* Save all first. A failure may leave earlier files saved, but no history is cleared. */
     for(guint i=0;i<entries->len;i++) {
         Checkpoint *entry=g_ptr_array_index(entries,i);GeanyDocument *doc=checkpoint_document(entry);
@@ -404,7 +408,8 @@ void insight_revisions_checkpoint(gboolean all)
         if(!doc || doc->changed || SEND(entry->sci,SCI_GETMODIFY,0,0)) goto failed;
         entry->generation=baseline(entry->sci)->generation;
         gint length=sci_get_length(entry->sci);
-        if(length<0 || (guint)length>INSIGHT_RESTORE_LIMIT) goto failed;
+        if(length<0 || (guint)length>INSIGHT_RESTORE_LIMIT || (gsize)length>TOTAL_LIMIT-captured) goto failed;
+        captured+=length;
         entry->length=length;entry->text=sci_get_contents(entry->sci,-1);
         if(!entry->text || strlen(entry->text)!=entry->length || !g_utf8_validate(entry->text,length,NULL)) goto failed;
     }

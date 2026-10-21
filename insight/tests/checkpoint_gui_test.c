@@ -39,9 +39,9 @@ static gboolean respond(gpointer data) {
  gtk_dialog_response(GTK_DIALOG(d),mode==1 ? GTK_RESPONSE_CANCEL:GTK_RESPONSE_ACCEPT);return G_SOURCE_REMOVE;
 }
 static void run(guint which,gboolean all,gboolean key) { mode=which;g_timeout_add(100,respond,NULL);if(key) keybindings_send_command(GEANY_KEY_GROUP_EDITOR,all ? GEANY_KEYS_INSIGHT_CHECKPOINTALL:GEANY_KEYS_INSIGHT_CHECKPOINT);else action(all ? "insight-checkpoint-all":"insight-checkpoint");g_assert_null(dialog()); }
-static void clean(GeanyDocument *doc) { g_assert_false(SEND(doc->editor->sci,SCI_CANUNDO,0,0));g_assert_false(SEND(doc->editor->sci,SCI_CANREDO,0,0));g_assert_false(SEND(doc->editor->sci,SCI_CANUNDO,0,0));g_assert_false(SEND(doc->editor->sci,SCI_CANREDO,0,0));g_assert_false(doc->changed); }
+static void clean(GeanyDocument *doc) { g_assert_false(SEND(doc->editor->sci,SCI_CANUNDO,0,0));g_assert_false(SEND(doc->editor->sci,SCI_CANREDO,0,0));g_assert_false(doc->changed); }
 static void original(const gchar *expected) { GeanyDocument *before=document_get_current();action("insight-original-contents");GeanyDocument *view=document_get_current();g_assert_true(view!=before);contents(view,expected);g_assert_true(view->readonly);g_assert_true(document_close(view)); }
-static gboolean mutate_other(GSignalInvocationHint *hint,guint n,const GValue *values,gpointer data) { (void)hint;(void)n;(void)data;GeanyDocument *doc=g_value_get_pointer(&values[1]);if(doc==source) edit(second,"modified by save hook\n");return TRUE; }
+static gboolean mutate_other(GSignalInvocationHint *hint,guint n,const GValue *values,gpointer data) { (void)hint;(void)n;(void)data;GeanyDocument *doc=g_value_get_boxed(&values[1]);if(doc==source) edit(second,"modified by save hook\n");return TRUE; }
 static gboolean step(gpointer data) {
  (void)data;source=document_get_current();if(!source) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));
  edit(source,"α checkpoint\n");run(1,FALSE,FALSE);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));disk(path,"initial\n");original("initial\n");
