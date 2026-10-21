@@ -39,6 +39,7 @@
 #include "insight-backups.h"
 #include "insight-snapshot-compare.h"
 #include "insight-git.h"
+#include "insight-project-report.h"
 #include "insight-template-fields.h"
 #include "insight-relation-graph.h"
 
@@ -317,6 +318,8 @@ static void add_kb(GeanyKeyGroup *group, gsize key_id,
 static void cb_func_insight(guint key_id)
 {
     if (key_id == GEANY_KEYS_INSIGHT_GITHISTORY) { insight_git_history_command();return; }
+    if (key_id == GEANY_KEYS_INSIGHT_PROJECTREPORT) { insight_project_report_command(0);return; }
+    if (key_id == GEANY_KEYS_INSIGHT_EXPORTPROJECTFILES) { insight_project_report_command(1);return; }
     if (key_id == GEANY_KEYS_INSIGHT_COMPAREBACKUP) { insight_backups_command(3);return; }
     if (key_id == GEANY_KEYS_INSIGHT_COMPAREDISK) { insight_snapshot_compare_command(0);return; }
     if (key_id == GEANY_KEYS_INSIGHT_COMPAREORIGINAL) { insight_snapshot_compare_command(1);return; }
@@ -801,6 +804,10 @@ static void init_default_kb(void)
         0, 0, "insight_original_contents", _("Original Contents"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_GITHISTORY, cb_func_insight,
         0, 0, "insight_githistory", _("Git History and Diff"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_PROJECTREPORT, cb_func_insight,
+        0, 0, "insight_projectreport", _("Project Report"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_EXPORTPROJECTFILES, cb_func_insight,
+        0, 0, "insight_exportprojectfiles", _("Export Project File List"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_COMPAREBACKUP, cb_func_insight,
         0, 0, "insight_comparebackup", _("Compare with Backup File"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_COMPAREDISK, cb_func_insight,

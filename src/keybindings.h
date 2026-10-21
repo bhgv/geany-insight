@@ -320,6 +320,8 @@ enum GeanyKeyBindingID
 	GEANY_KEYS_INSIGHT_COMPAREDISK, /**< Insight keybinding. */
 	GEANY_KEYS_INSIGHT_COMPAREORIGINAL, /**< Insight keybinding. */
 	GEANY_KEYS_INSIGHT_GITHISTORY, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_PROJECTREPORT, /**< Insight keybinding. */
+	GEANY_KEYS_INSIGHT_EXPORTPROJECTFILES, /**< Insight keybinding. */
 	GEANY_KEYS_COUNT	/* must not be used by plugins */
 };
 
