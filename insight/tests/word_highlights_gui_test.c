@@ -31,7 +31,7 @@ static gboolean step(gpointer unused) {
   if(!marked(other,0)) break;g_assert_false(marked(other,4));g_assert_false(marked(other,11));gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(manager,"insight-word-highlights-case")),FALSE);phase++;break;
  case 3:
   if(!marked(other,11) || !marked(source,15)) break;
-  document_show_tab(source);SEND(sci,SCI_SETSEL,0,3);action("next");g_assert_cmpint(SEND(sci,SCI_GETSELECTIONSTART,0,0),==,4);action("previous");g_assert_cmpint(SEND(sci,SCI_GETSELECTIONSTART,0,0),==,0);action("previous");g_assert_cmpint(SEND(sci,SCI_GETSELECTIONSTART,0,0),==,15);
+  { GtkWidget *page=GTK_WIDGET(sci);while(gtk_widget_get_parent(page) && !GTK_IS_NOTEBOOK(gtk_widget_get_parent(page))) page=gtk_widget_get_parent(page);GtkWidget *book=gtk_widget_get_parent(page);g_assert_true(GTK_IS_NOTEBOOK(book));gtk_notebook_set_current_page(GTK_NOTEBOOK(book),gtk_notebook_page_num(GTK_NOTEBOOK(book),page)); }SEND(sci,SCI_SETSEL,0,3);action("next");g_assert_cmpint(SEND(sci,SCI_GETSELECTIONSTART,0,0),==,4);action("previous");g_assert_cmpint(SEND(sci,SCI_GETSELECTIONSTART,0,0),==,0);action("previous");g_assert_cmpint(SEND(sci,SCI_GETSELECTIONSTART,0,0),==,15);
   SEND(sci,SCI_INSERTTEXT,3,(sptr_t)"x");phase++;break;
  case 4:
   if(marked(source,0) || !marked(source,5)) break;
