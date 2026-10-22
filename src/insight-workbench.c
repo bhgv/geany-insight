@@ -3509,8 +3509,10 @@ static gboolean preview_single_click(gpointer data) {
  return G_SOURCE_REMOVE;
 }
 static void reveal_context_file(GtkMenuItem *item,gpointer data) { (void)item;(void)data;if(wb.source_path && wb.source_path[0]!='@') ui_reveal_file(wb.source_path); }
+static void context_popup_edit(GtkMenuItem *item,gpointer command) { (void)item;SSM(wb.preview,GPOINTER_TO_UINT(command),0,0); }
 static gboolean preview_button(GtkWidget *widget,GdkEventButton *event,gpointer data) {
- if(event->button==3) { GtkWidget *menu=gtk_menu_new(),*item=gtk_menu_item_new_with_label("Show in file manager");gtk_widget_set_sensitive(item,wb.source_path && wb.source_path[0]!='@');gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(reveal_context_file),NULL);g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu);gtk_widget_show_all(menu);gtk_menu_popup_at_pointer(GTK_MENU(menu),(GdkEvent *)event);return TRUE; }
+ if(event->button==3) { GtkWidget *menu=gtk_menu_new(),*item=gtk_menu_item_new_with_label("Show in file manager");
+  const gchar *labels[]={"Copy","Select All"};const guint commands[]={SCI_COPY,SCI_SELECTALL};for(guint i=0;i<G_N_ELEMENTS(commands);i++) { GtkWidget *edit=gtk_menu_item_new_with_label(labels[i]);if(i==0) gtk_widget_set_sensitive(edit,SSM(wb.preview,SCI_GETSELECTIONSTART,0,0)!=SSM(wb.preview,SCI_GETSELECTIONEND,0,0));g_signal_connect(edit,"activate",G_CALLBACK(context_popup_edit),GUINT_TO_POINTER(commands[i]));gtk_menu_shell_append(GTK_MENU_SHELL(menu),edit); }gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());gtk_widget_set_sensitive(item,wb.source_path && wb.source_path[0]!='@');gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(reveal_context_file),NULL);g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu);insight_i18n_apply(menu);gtk_widget_show_all(menu);gtk_menu_popup_at_pointer(GTK_MENU(menu),(GdkEvent *)event);return TRUE; }
  (void)widget; (void)data;if(event->button!=1) return FALSE;
  if(wb.preview_click_timer) { g_source_remove(wb.preview_click_timer);wb.preview_click_timer=0; }
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE);
