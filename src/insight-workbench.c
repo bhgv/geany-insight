@@ -4224,8 +4224,8 @@ static void register_panels(void) {
  PanelHost *left=&wb.hosts[8]; left->home=main_widgets.sidebar_notebook; left->page=wb.local_entry; while(gtk_widget_get_parent(left->page)!=left->home) left->page=gtk_widget_get_parent(left->page); left->order=(guint)gtk_notebook_page_num(GTK_NOTEBOOK(left->home),left->page); left->label=g_strdup("File Symbols");
  PanelHost *context=&wb.hosts[9]; context->home=main_widgets.message_window_notebook; context->page=wb.box; context->order=(guint)gtk_notebook_page_num(GTK_NOTEBOOK(context->home),wb.box); context->pane=FALSE; context->label=g_strdup("Context");
  const gchar *topics[]={"panel-project-files.md","panel-project-symbols.md","panel-project-folders.md","panel-relations.md","panel-categories.md","panel-file-types.md","panel-bookmarks.md","panel-clips.md","panel-file-symbols.md","panel-context.md"};
- for(guint i=0;i<wb.host_count;i++) { PanelHost *host=&wb.hosts[i]; if(i<8) {
-   /* Wide controls must not impose their minimum on the project splitter.
+ for(guint i=0;i<wb.host_count;i++) { PanelHost *host=&wb.hosts[i]; if(i<9) {
+   /* Wide controls must not impose their minimum on either side splitter.
     * Keep panel help outside the viewport so it stays at the visible corner. */
    GtkWidget *old=host->page,*box=gtk_box_new(GTK_ORIENTATION_VERTICAL,0),*scroll=gtk_scrolled_window_new(NULL,NULL);
    gint position=gtk_notebook_page_num(GTK_NOTEBOOK(host->home),old);
