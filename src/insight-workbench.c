@@ -779,7 +779,7 @@ static void index_job_done(GObject *source,GAsyncResult *result,gpointer data) {
  wb.scan=g_idle_add(scan_step,NULL);
 }
 static gboolean scan_continue(void) { if(wb.scan_worker) { wb.scan=0; return G_SOURCE_REMOVE; } return G_SOURCE_CONTINUE; }
-static void scan_source_file(const char *path,gboolean explicit_file) {
+static void scan_source_file(const char *path) {
  if(g_hash_table_contains(wb.scan_seen,path)) return;
  g_hash_table_add(wb.scan_seen,g_strdup(path));
  gchar *utf8=utils_get_utf8_from_locale(path),*root=utils_get_utf8_from_locale(wb.root);
@@ -792,7 +792,7 @@ static void scan_source_file(const char *path,gboolean explicit_file) {
  gchar *stamp=source_stamp(path,ft?ft->name:NULL,file_prefs.default_open_encoding);
  if(!wb.force_parse&&stamp&&!g_strcmp0(stamp,g_hash_table_lookup(wb.file_stamps,utf8))) { g_ptr_array_add(wb.scan_members,g_strdup(utf8));wb.reused++;g_free(stamp);g_free(utf8);return; }
  ft=filetypes_detect_from_file(utf8);g_free(stamp);stamp=source_stamp(path,ft?ft->name:NULL,file_prefs.default_open_encoding);
- IndexJob *j=g_new0(IndexJob,1);wb.scan_backup=insight_index_ref(wb.base); j->index=wb.base; wb.base=NULL;j->calls=insight_index_ref(wb.disk_calls);j->outline=insight_index_ref(wb.disk_declarations);j->stamp=stamp; j->path=g_strdup(path); j->utf8=utf8; j->language=g_strdup(ft ? ft->name : NULL); j->lang=ft ? ft->lang : -1; j->read=explicit_file || (ft && ft->id!=GEANY_FILETYPES_NONE); j->encoding=file_prefs.default_open_encoding; j->generation=wb.scan_generation; j->epoch=workbench_epoch;
+ IndexJob *j=g_new0(IndexJob,1);wb.scan_backup=insight_index_ref(wb.base); j->index=wb.base; wb.base=NULL;j->calls=insight_index_ref(wb.disk_calls);j->outline=insight_index_ref(wb.disk_declarations);j->stamp=stamp; j->path=g_strdup(path); j->utf8=utf8; j->language=g_strdup(ft ? ft->name : NULL); j->lang=ft ? ft->lang : -1; j->read=ft && ft->id!=GEANY_FILETYPES_NONE; j->encoding=file_prefs.default_open_encoding; j->generation=wb.scan_generation; j->epoch=workbench_epoch;
  wb.scan_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.scan_worker,index_job_done,NULL); g_task_set_task_data(task,j,index_job_free); g_task_run_in_thread(task,index_job_run); g_object_unref(task);
 }
 static gboolean scan_step(gpointer data) {
@@ -820,7 +820,7 @@ static gboolean scan_step(gpointer data) {
   if(wb.watch_changed && !wb.watch_idle) { wb.watch_changed=FALSE; wb.watch_idle=g_timeout_add(2000,rescan_changed,NULL); }
   return G_SOURCE_REMOVE;
  }
- if(wb.scan_file_position<wb.scan_files->len) { scan_source_file(g_ptr_array_index(wb.scan_files,wb.scan_file_position++),TRUE); return scan_continue(); }
+ if(wb.scan_file_position<wb.scan_files->len) { scan_source_file(g_ptr_array_index(wb.scan_files,wb.scan_file_position++)); return scan_continue(); }
  if(!wb.frames->len) {
   const char *path=g_ptr_array_index(wb.scan_trees,wb.scan_tree_position++);
   if(!g_hash_table_contains(wb.scan_seen,path)) { GDir *dir=g_dir_open(path,0,NULL); if(dir) { ScanFrame *extra=g_new0(ScanFrame,1); extra->path=g_strdup(path); extra->dir=dir; g_hash_table_add(wb.scan_seen,g_strdup(path)); g_ptr_array_add(wb.frames,extra); watch_directory(path); } else { wb.scan_failed=TRUE; wb.skipped++; } }
@@ -839,7 +839,7 @@ static gboolean scan_step(gpointer data) {
   else { wb.scan_failed=TRUE; wb.skipped++; g_free(path); }
   return G_SOURCE_CONTINUE;
  }
- scan_source_file(path,FALSE); g_free(path); return scan_continue();
+ scan_source_file(path); g_free(path); return scan_continue();
 }
 static gboolean start_scan(const char *root) {
  gchar *requested_root=g_strdup(root);stop_scan();root=requested_root;
