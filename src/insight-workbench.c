@@ -5448,7 +5448,7 @@ void insight_workbench_init(void) {
  gtk_widget_set_size_request(wb.project_notebook,0,-1);
  gtk_widget_set_name(wb.right_pane,"insight-project-split"); gtk_widget_set_name(wb.project_notebook,"insight-project-notebook");
  wb.initial_right_split=-2;g_signal_connect(wb.right_pane,"size-allocate",G_CALLBACK(project_split_allocated),NULL);gtk_paned_set_position(GTK_PANED(wb.right_pane),850);
- gtk_paned_pack1(GTK_PANED(wb.pane),wb.right_pane,TRUE,TRUE);
+ gtk_paned_pack1(GTK_PANED(wb.pane),wb.right_pane,TRUE,FALSE);
  gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),wb.box,gtk_label_new("Context")); gtk_widget_show_all(wb.box);
  gtk_box_pack_start(GTK_BOX(parent),wb.pane,TRUE,TRUE,0);
  gtk_box_reorder_child(GTK_BOX(parent),wb.pane,position);
