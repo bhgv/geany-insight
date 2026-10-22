@@ -4,8 +4,20 @@
 #define TEXT_LIMIT (2u*1024u*1024u)
 #define ENTRY_LIMIT 10000u
 static gboolean root_valid(const gchar *root) { return root && g_path_is_absolute(root) && strlen(root)<=16384 && g_utf8_validate(root,-1,NULL) && !strpbrk(root,"\r\n"); }
-static InsightMasterList *list_new(void) { InsightMasterList *list=g_new0(InsightMasterList,1);list->files=g_ptr_array_new_with_free_func(g_free);list->trees=g_ptr_array_new_with_free_func(g_free);return list; }
-void insight_master_list_free(InsightMasterList *list) { if(!list) return;g_ptr_array_unref(list->files);g_ptr_array_unref(list->trees);g_free(list->etag);g_free(list->digest);g_free(list->text);g_free(list->membership_digest);g_free(list); }
+static gchar *dependency_stamp(const gchar *path,GCancellable *cancel) {
+ GFile *file=g_file_new_for_path(path);GFileInfo *info=g_file_query_info(file,"standard::type,standard::size,time::modified,time::modified-usec,time::changed,time::changed-usec,etag::value,id::file",G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,cancel,NULL);g_object_unref(file);
+ if(!info) return g_strdup("missing");
+ gboolean dir=g_file_info_get_file_type(info)==G_FILE_TYPE_DIRECTORY;
+ gchar *stamp=g_strdup_printf("%u:%" G_GUINT64_FORMAT ":%u:%" G_GUINT64_FORMAT ":%u:%" G_GOFFSET_FORMAT ":%s:%s",g_file_info_get_file_type(info),g_file_info_get_attribute_uint64(info,G_FILE_ATTRIBUTE_TIME_MODIFIED),g_file_info_get_attribute_uint32(info,G_FILE_ATTRIBUTE_TIME_MODIFIED_USEC),dir?0:g_file_info_get_attribute_uint64(info,G_FILE_ATTRIBUTE_TIME_CHANGED),dir?0:g_file_info_get_attribute_uint32(info,G_FILE_ATTRIBUTE_TIME_CHANGED_USEC),dir?0:g_file_info_get_size(info),g_file_info_get_etag(info)?g_file_info_get_etag(info):"",g_file_info_get_attribute_string(info,G_FILE_ATTRIBUTE_ID_FILE)?g_file_info_get_attribute_string(info,G_FILE_ATTRIBUTE_ID_FILE):"");g_object_unref(info);return stamp;
+}
+static void depend(InsightMasterList *list,const gchar *path,GCancellable *cancel) { if(!g_hash_table_contains(list->dependencies,path)) g_hash_table_insert(list->dependencies,g_strdup(path),dependency_stamp(path,cancel)); }
+gboolean insight_master_list_unchanged(GHashTable *dependencies,GCancellable *cancel) {
+ if(!dependencies || !g_hash_table_size(dependencies)) return FALSE;
+ GHashTableIter iter;gpointer path,before;g_hash_table_iter_init(&iter,dependencies);
+ while(g_hash_table_iter_next(&iter,&path,&before)) { if(cancel&&g_cancellable_is_cancelled(cancel)) return FALSE;gchar *after=dependency_stamp(path,cancel);gboolean same=!g_strcmp0(before,after);g_free(after);if(!same) return FALSE; }return TRUE;
+}
+static InsightMasterList *list_new(void) { InsightMasterList *list=g_new0(InsightMasterList,1);list->files=g_ptr_array_new_with_free_func(g_free);list->trees=g_ptr_array_new_with_free_func(g_free);list->dependencies=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);return list; }
+void insight_master_list_free(InsightMasterList *list) { if(!list) return;g_ptr_array_unref(list->files);g_ptr_array_unref(list->trees);g_hash_table_unref(list->dependencies);g_free(list->etag);g_free(list->digest);g_free(list->text);g_free(list->membership_digest);g_free(list); }
 static gchar *path_key(const gchar *path) {
 #ifdef G_OS_WIN32
  return g_utf8_casefold(path,-1);
@@ -59,6 +71,7 @@ static gboolean known_match(const KnownTypes *known,const gchar *path,const gcha
 static gboolean expand_pattern(InsightMasterList *list,GHashTable *seen,const gchar *path,guint *visited,const KnownTypes *known,GCancellable *cancel,GError **error) {
  gchar *directory=g_path_get_dirname(path),*pattern=g_path_get_basename(path);gboolean valid=TRUE;
  if((strpbrk(directory,"*?") && !g_file_test(directory,G_FILE_TEST_IS_DIR)) || strlen(pattern)>1024) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Master file list wildcards require a literal directory and a filename pattern up to 1024 bytes");valid=FALSE; }
+ depend(list,directory,cancel);
  GFile *folder=valid ? g_file_new_for_path(directory) : NULL;
  GFileEnumerator *entries=folder ? g_file_enumerate_children(folder,G_FILE_ATTRIBUTE_STANDARD_NAME "," G_FILE_ATTRIBUTE_STANDARD_TYPE,G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,cancel,error) : NULL;
  if(valid && !entries) valid=FALSE;
@@ -94,7 +107,7 @@ static InsightMasterList *parse(const gchar *text,gsize length,const gchar *root
   if(g_cancellable_set_error_if_cancelled(cancel,error)) { valid=FALSE;break; }
   gchar *line=lines[i];gsize size=strlen(line);if(size && line[size-1]=='\r') line[--size]=0;if(!size || line[0]==';') continue;
   if(size>16384 || strchr(line,'\r') || (g_ascii_isalpha(line[0]) && line[1]==':' && (line[2]=='/' || line[2]=='\\') && !g_path_is_absolute(line)) || (g_str_has_prefix(line,"\\\\") && !g_path_is_absolute(line))) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Unsupported master file list path");valid=FALSE;break; }
-  gboolean tree=G_IS_DIR_SEPARATOR(line[size-1]);gchar *path=g_canonicalize_filename(line,root);if(strlen(path)>16384) { g_free(path);g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Master file list path exceeds 16384 bytes");valid=FALSE;break; }tree|=g_file_test(path,G_FILE_TEST_IS_DIR);
+  gboolean tree=G_IS_DIR_SEPARATOR(line[size-1]);gchar *path=g_canonicalize_filename(line,root);if(strlen(path)>16384) { g_free(path);g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Master file list path exceeds 16384 bytes");valid=FALSE;break; }gchar *parent=g_path_get_dirname(path);depend(list,parent,cancel);g_free(parent);tree|=g_file_test(path,G_FILE_TEST_IS_DIR);
   if(strpbrk(path,"*?") && !g_file_test(path,G_FILE_TEST_EXISTS)) {
    if(++patterns>256) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Master file list exceeds 256 wildcard patterns");valid=FALSE; }else valid=expand_pattern(list,seen,path,&visited,NULL,cancel,error);
   }else if(tree && types) {
@@ -114,13 +127,13 @@ InsightMasterList *insight_master_list_parse(const gchar *text,gsize length,cons
 InsightMasterList *insight_master_list_parse_typed(const gchar *text,gsize length,const gchar *root,const InsightMasterTypes *types,GError **error) { return parse(text,length,root,types,NULL,error); }
 InsightMasterList *insight_master_list_read_typed(const gchar *path,const gchar *root,const InsightMasterTypes *types,GCancellable *cancel,GError **error) {
  if(!path || !root_valid(root)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid master file list source");return NULL; }
- GFile *file=g_file_new_for_path(path);GFileInputStream *stream=g_file_read(file,cancel,error);g_object_unref(file);if(!stream) return NULL;
+ gchar *stamp=dependency_stamp(path,cancel);GFile *file=g_file_new_for_path(path);GFileInputStream *stream=g_file_read(file,cancel,error);g_object_unref(file);if(!stream) { g_free(stamp);return NULL; }
  GFileInfo *before=g_file_input_stream_query_info(stream,G_FILE_ATTRIBUTE_ETAG_VALUE "," G_FILE_ATTRIBUTE_STANDARD_SIZE,cancel,error);GString *bytes=g_string_new(NULL);gboolean valid=before!=NULL;
  if(before && g_file_info_get_size(before)>TEXT_LIMIT) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Master file list exceeds 2 MiB");valid=FALSE; }
  char buffer[16384];while(valid) { gssize size=g_input_stream_read(G_INPUT_STREAM(stream),buffer,sizeof buffer,cancel,error);if(size<0) { valid=FALSE;break; }if(!size) break;if(bytes->len+(gsize)size>TEXT_LIMIT) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Master file list exceeds 2 MiB");valid=FALSE;break; }g_string_append_len(bytes,buffer,size); }
  GFileInfo *after=valid ? g_file_input_stream_query_info(stream,G_FILE_ATTRIBUTE_ETAG_VALUE,cancel,error) : NULL;if(valid && !after) valid=FALSE;
  if(valid && g_strcmp0(g_file_info_get_etag(before),g_file_info_get_etag(after))) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_BUSY,"Master file list changed while reading");valid=FALSE; }
- InsightMasterList *list=valid ? parse(bytes->str,bytes->len,root,types,cancel,error) : NULL;if(list) list->etag=g_strdup(g_file_info_get_etag(after));g_clear_object(&before);g_clear_object(&after);g_object_unref(stream);g_string_free(bytes,TRUE);return list;
+ InsightMasterList *list=valid ? parse(bytes->str,bytes->len,root,types,cancel,error) : NULL;if(list) { list->etag=g_strdup(g_file_info_get_etag(after));g_hash_table_replace(list->dependencies,g_strdup(path),stamp);stamp=NULL; }g_free(stamp);g_clear_object(&before);g_clear_object(&after);g_object_unref(stream);g_string_free(bytes,TRUE);return list;
 }
 InsightMasterList *insight_master_list_read(const gchar *path,const gchar *root,GCancellable *cancel,GError **error) { return insight_master_list_read_typed(path,root,NULL,cancel,error); }
 static gint compare_lines(gconstpointer a,gconstpointer b) { return strcmp(*(gchar *const *)a,*(gchar *const *)b); }

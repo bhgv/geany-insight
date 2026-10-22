@@ -2,7 +2,7 @@
 #ifndef INSIGHT_MASTER_LIST_H
 #define INSIGHT_MASTER_LIST_H
 #include "project_files.h"
-typedef struct { GPtrArray *files,*trees;gchar *etag,*digest,*text,*membership_digest; } InsightMasterList;
+typedef struct { GPtrArray *files,*trees;GHashTable *dependencies;gchar *etag,*digest,*text,*membership_digest; } InsightMasterList;
 /* Immutable borrowed filename globs, literal extensions, and bound full paths.
  * copy/free manage an owned snapshot; NULL uses the legacy recursive API. */
 typedef struct InsightMasterTypes { const gchar *const *patterns,*const *extensions,*const *files; } InsightMasterTypes;
@@ -24,6 +24,8 @@ InsightMasterList *insight_master_list_read_typed(const gchar *,const gchar *,co
 InsightMasterList *insight_master_list_parse(const gchar *,gsize,const gchar *,GError **);
 InsightMasterList *insight_master_list_read(const gchar *,const gchar *,GCancellable *,GError **);
 void insight_master_list_free(InsightMasterList *);
+/* Metadata only: no list contents or directory names are read. */
+gboolean insight_master_list_unchanged(GHashTable *,GCancellable *);
 /* Refresh after changing the owned file/tree arrays; order-independent. */
 void insight_master_list_rehash(InsightMasterList *);
 gchar *insight_master_list_render(const InsightMasterList *,const gchar *,GError **);
