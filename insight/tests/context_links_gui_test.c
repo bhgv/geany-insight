@@ -12,8 +12,7 @@
 #undef SSM
 #define SSM(s,m,w,l) scintilla_send_message(s,m,w,l)
 static GtkWidget *window;static gchar *directory,*profile;static guint phase;static GeanyDocument *source;
-static const gchar *code="int main(int argc,char **args) {
- (void)argc;\n native_header(); native_asm(); foreign_shell(); foreign_vhdl(); unknown_name();\n bool x = false; return x;\n}\n/* native_header */\nconst char *text = \"native_header\";\n";
+static const gchar *code="int main(void) {\n native_header(); native_asm(); foreign_shell(); foreign_vhdl(); unknown_name();\n bool x = false; return x;\n}\n/* native_header */\nconst char *text = \"native_header\";\n";
 static GtkWidget *named(GtkWidget *root,const gchar *name) { if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;if(GTK_IS_CONTAINER(root)) { GList *children=gtk_container_get_children(GTK_CONTAINER(root));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL; }
 static void open_source(const gchar *name,const gchar *text,const gchar *type) { gchar *path=g_build_filename(directory,name,NULL);g_assert_true(g_file_set_contents(path,text,-1,NULL));g_assert_nonnull(document_open_file(path,FALSE,filetypes_lookup_by_name(type),NULL));g_free(path); }
 static void key(ScintillaObject *sci,guint keyval) { GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);event->key.window=g_object_ref(gtk_widget_get_window(GTK_WIDGET(sci)));event->key.keyval=keyval;gtk_widget_event(GTK_WIDGET(sci),event);gdk_event_free(event); }
