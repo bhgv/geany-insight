@@ -585,3 +585,5 @@ dist_insightdocmedia_DATA += insight/docs/media/project-database.svg insight/doc
 EXTRA_DIST += insight/tests/selection_parse_test.cxx insight/tests/selection_parse_test.py
 
 EXTRA_DIST += insight/tests/glib_compat_test.c insight/tests/build_sources_test.py
+
+dist_insightdocmedia_DATA += insight/docs/media/revision-colors.svg

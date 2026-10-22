@@ -55,6 +55,7 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <gtk/gtk.h>
+#include <gio/gio.h>
 #include <gdk/gdkkeysyms.h>
 
 
@@ -3241,4 +3242,35 @@ gboolean ui_encodings_combo_box_set_active_encoding(GtkComboBox *combo, gint enc
 		return TRUE;
 	}
 	return FALSE;
+}
+
+/* Reveal a local file without interpreting its name as shell code. */
+#ifndef G_OS_WIN32
+static void reveal_reply(GObject *object, GAsyncResult *result, gpointer data)
+{
+ GError *error=NULL;GVariant *reply=g_dbus_connection_call_finish(G_DBUS_CONNECTION(object),result,&error);
+ if(reply) g_variant_unref(reply);
+ else { gchar *folder=g_path_get_dirname(data),*uri=g_filename_to_uri(folder,NULL,NULL);if(uri) { g_app_info_launch_default_for_uri(uri,NULL,NULL);g_free(uri); }g_free(folder);g_clear_error(&error); }
+ g_free(data);
+}
+static void reveal_bus(GObject *object,GAsyncResult *result,gpointer data)
+{
+ (void)object;GError *error=NULL;GDBusConnection *bus=g_bus_get_finish(result,&error);
+ if(bus) { gchar *uri=g_filename_to_uri(data,NULL,NULL);const gchar *items[]={uri,NULL};if(uri) g_dbus_connection_call(bus,"org.freedesktop.FileManager1","/org/freedesktop/FileManager1","org.freedesktop.FileManager1","ShowItems",g_variant_new("(^ass)",items,""),NULL,G_DBUS_CALL_FLAGS_NONE,5000,NULL,reveal_reply,g_strdup(data));g_free(uri);g_object_unref(bus); }
+ else { gchar *folder=g_path_get_dirname(data),*uri=g_filename_to_uri(folder,NULL,NULL);if(uri) { g_app_info_launch_default_for_uri(uri,NULL,NULL);g_free(uri); }g_free(folder);g_clear_error(&error); }
+ g_free(data);
+}
+#endif
+void ui_reveal_file(const gchar *path)
+{
+ if(!path || !*path || path[0]=='@') return;
+ GFile *file=g_file_new_for_path(path);gchar *absolute=g_file_get_path(file);g_object_unref(file);if(!absolute) return;
+#ifdef G_OS_WIN32
+ gchar *option=g_strconcat("/select,",absolute,NULL);gchar *argv[]={"explorer.exe",option,NULL};g_spawn_async(NULL,argv,NULL,G_SPAWN_SEARCH_PATH,NULL,NULL,NULL,NULL);g_free(option);
+#elif defined(__APPLE__)
+ gchar *argv[]={"open","-R",absolute,NULL};g_spawn_async(NULL,argv,NULL,G_SPAWN_SEARCH_PATH,NULL,NULL,NULL,NULL);
+#else
+ g_bus_get(G_BUS_TYPE_SESSION,NULL,reveal_bus,g_strdup(absolute));
+#endif
+ g_free(absolute);
 }

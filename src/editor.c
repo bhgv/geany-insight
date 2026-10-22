@@ -5370,7 +5370,12 @@ void editor_apply_update_prefs(GeanyEditor *editor)
 	const guint history_markers = (1u << SC_MARKNUM_HISTORY_REVERTED_TO_ORIGIN) |
 		(1u << SC_MARKNUM_HISTORY_SAVED) | (1u << SC_MARKNUM_HISTORY_MODIFIED) |
 		(1u << SC_MARKNUM_HISTORY_REVERTED_TO_MODIFIED);
-	SSM(sci, SCI_SETMARGINMASKN, 0, (~SC_MASK_FOLDERS) &
+	SSM(sci, SCI_SETMARGINTYPEN, 3, SC_MARGIN_SYMBOL);
+ SSM(sci, SCI_SETMARGINWIDTHN, 3, 4);
+ SSM(sci, SCI_SETMARGINMASKN, 3, history_markers);
+ const gint revision_marks[]={SC_MARKNUM_HISTORY_MODIFIED,SC_MARKNUM_HISTORY_REVERTED_TO_MODIFIED,SC_MARKNUM_HISTORY_SAVED};
+ for(guint i=0;i<G_N_ELEMENTS(revision_marks);i++) { SSM(sci,SCI_MARKERDEFINE,revision_marks[i],SC_MARK_LEFTRECT);SSM(sci,SCI_MARKERSETBACK,revision_marks[i],i==2 ? 0x99e099 : 0x1499f2);SSM(sci,SCI_MARKERSETFORE,revision_marks[i],i==2 ? 0x99e099 : 0x1499f2); }
+ SSM(sci, SCI_SETMARGINMASKN, 0, (~SC_MASK_FOLDERS) &
 		(editor_prefs.change_history_markers ? ~0u : ~history_markers));
 
 	/* caret Y policy */

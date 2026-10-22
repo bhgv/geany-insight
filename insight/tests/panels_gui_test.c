@@ -5,6 +5,8 @@
 #include "main.h"
 #include "ui_utils.h"
 #include "insight-help.h"
+#include "sciwrappers.h"
+#include "insight-overview.h"
 #include <glib/gstdio.h>
 #include <string.h>
 static GtkWidget *window,*local,*project,*book,*split; static guint phase;static gboolean geometry_ready,valid_split;static gint saved_split; static gchar *directory,*profile,*source; static GtkListStore *base;
@@ -20,10 +22,10 @@ static GdkRGBA color(GtkWidget *view,const gchar *name) { GtkTreeModel *m=gtk_tr
 /* Exercise production page controls rather than a duplicate docking fixture. */
 static void panel_controls(GtkWidget *page,GtkWidget *home) {
  GtkWidget *dock=named(page,"insight-panel-toggle-dock"),*maximize=named(page,"insight-panel-toggle-maximize");
- g_assert_nonnull(dock);g_assert_nonnull(maximize);g_assert_false(gtk_widget_get_sensitive(maximize));
+ g_assert_nonnull(dock);g_assert_nonnull(maximize);g_assert_false(gtk_widget_get_sensitive(maximize));g_assert_false(gtk_widget_get_visible(maximize));
  g_object_ref(page);gtk_button_clicked(GTK_BUTTON(dock));
  GtkWidget *floating=gtk_widget_get_toplevel(page);g_assert_true(GTK_IS_WINDOW(floating));g_assert_true(floating!=window);
- g_assert_true(gtk_widget_get_sensitive(maximize));g_assert_true(named(floating,"insight-panel-toggle-dock")==dock);
+ g_assert_true(gtk_widget_get_sensitive(maximize));g_assert_true(gtk_widget_get_visible(maximize));g_assert_true(named(floating,"insight-panel-toggle-dock")==dock);
  gtk_button_clicked(GTK_BUTTON(dock));g_assert_true(gtk_widget_get_parent(page)==home);
  g_assert_false(gtk_widget_get_sensitive(maximize));
  g_assert_cmpint(gtk_notebook_get_current_page(GTK_NOTEBOOK(home)),==,gtk_notebook_page_num(GTK_NOTEBOOK(home),page));
@@ -41,7 +43,16 @@ static gboolean step(gpointer data) {
   base=GTK_LIST_STORE(g_object_ref(g_object_get_data(G_OBJECT(project),"insight-symbol-source-model")));gtk_list_store_clear(base);GtkTreeIter row;const gchar *names[]={"sample_function","sample_variable","SampleStruct"},*kinds[]={"f","v","s"};for(guint i=0;i<3;i++) {gtk_list_store_append(base,&row);gtk_list_store_set(base,&row,0,names[i],2,source,3,(gulong)i+1,4,kinds[i],-1);}
   GdkRGBA f=color(local,names[0]),v=color(local,names[1]),s=color(local,names[2]),p=color(project,names[0]);g_assert_false(gdk_rgba_equal(&f,&v));g_assert_false(gdk_rgba_equal(&f,&s));g_assert_true(gdk_rgba_equal(&f,&p));
   for(gint i=0;i<8;i++) { GtkWidget *page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(book),i),*help=named(page,"insight-panel-help");g_assert_nonnull(help);g_assert_null(gtk_button_get_label(GTK_BUTTON(help)));g_assert_true(GTK_IS_IMAGE(gtk_button_get_image(GTK_BUTTON(help))));g_assert_nonnull(g_object_get_data(G_OBJECT(help),"insight-help-topic")); }
-  g_assert_nonnull(named(window,"insight-diff-tool"));GtkWidget *context=named(window,"insight-context");g_assert_nonnull(named(context,"insight-panel-help"));g_assert_null(named(context,"insight-diff-tool"));
+  g_assert_nonnull(named(window,"insight-diff-tool"));GtkWidget *context=named(window,"insight-context");g_assert_nonnull(named(context,"insight-panel-help"));g_assert_true(gtk_label_get_selectable(GTK_LABEL(named(context,"insight-context-title"))));
+  g_assert_true(gtk_widget_is_ancestor(named(context,"insight-panel-toggle-dock"),named(context,"insight-context-tools")));
+  g_assert_null(named(context,"insight-panel-controls-header"));
+  g_assert_false(insight_overview_get_visible());
+  g_assert_cmpint(SSM(doc->editor->sci,SCI_GETMARGINWIDTHN,3,0),==,4);
+  SSM(doc->editor->sci,SCI_INSERTTEXT,0,(sptr_t)"/* changed */\n");
+  g_assert_true(((guint)SSM(doc->editor->sci,SCI_MARKERGET,0,0)&(1u<<SC_MARKNUM_HISTORY_MODIFIED))!=0);
+  g_assert_true(document_save_file(doc,FALSE));
+  g_assert_true(((guint)SSM(doc->editor->sci,SCI_MARKERGET,0,0)&(1u<<SC_MARKNUM_HISTORY_SAVED))!=0);
+g_assert_null(named(context,"insight-diff-tool"));
   for(gint i=0;i<8;i++) panel_controls(gtk_notebook_get_nth_page(GTK_NOTEBOOK(book),i),book);
   GtkWidget *local_page=local;while(gtk_widget_get_parent(local_page) && !GTK_IS_NOTEBOOK(gtk_widget_get_parent(local_page))) local_page=gtk_widget_get_parent(local_page);
   panel_controls(local_page,gtk_widget_get_parent(local_page));panel_controls(context,gtk_widget_get_parent(context));

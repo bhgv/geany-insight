@@ -377,6 +377,8 @@ void ui_menu_sort_by_label(GtkMenu *menu);
 
 #endif /* GEANY_PRIVATE */
 
+void ui_reveal_file(const gchar *path);
+
 G_END_DECLS
 
 #endif /* GEANY_UI_UTILS_H */

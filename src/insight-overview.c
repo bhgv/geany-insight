@@ -13,6 +13,8 @@
 #include "sciwrappers.h"
 #include "ui_utils.h"
 #include "navqueue.h"
+#include "document.h"
+#include "utils.h"
 #include "tagmanager/tm_tag.h"
 #include "../insight/desktop/source_mask.h"
 #include "../insight/core/structure_select.h"
@@ -25,7 +27,7 @@ typedef struct {
  guint64 functions_generation; gboolean functions_dirty; GCancellable *functions_cancel; GPtrArray *functions;
 } Overview;
 static GList *overviews;
-static gboolean enabled=TRUE,show_selection=TRUE,show_viewport=TRUE;
+static gboolean enabled=FALSE,show_selection=TRUE,show_viewport=TRUE;
 static gboolean show_function=TRUE,show_all_functions=FALSE;
 static gboolean show_bookmarks=TRUE,show_changes=TRUE,show_saved=TRUE,show_tips=TRUE;
 #define MODIFIED_MARKS ((1u<<SC_MARKNUM_HISTORY_MODIFIED)|(1u<<SC_MARKNUM_HISTORY_REVERTED_TO_MODIFIED))
@@ -109,7 +111,7 @@ static gboolean shade_draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
  for(gint line=map_first;line<=map_last;line++) {
   guint marks=(guint)SSM(source,SCI_MARKERGET,line,0); gdouble y=(line-map_first)*row_height;
   if(show_changes && ((marks&MODIFIED_MARKS) || (show_saved && (marks&SAVED_MARKS)))) {
-   if(marks&MODIFIED_MARKS) cairo_set_source_rgb(cr,0.95,0.58,0.08); else cairo_set_source_rgb(cr,0.2,0.65,0.3);
+   if(marks&MODIFIED_MARKS) cairo_set_source_rgb(cr,0.95,0.58,0.08); else cairo_set_source_rgb(cr,0.6,0.88,0.6);
    cairo_rectangle(cr,MAX(0,w-5),y,5,MAX(2,row_height)); cairo_fill(cr);
   }
   if(show_bookmarks && (marks&2)) { cairo_set_source_rgb(cr,0.12,0.42,0.95); cairo_arc(cr,5,y+row_height/2.0,3,0,2*G_PI); cairo_fill(cr); }
@@ -185,7 +187,12 @@ static void change_navigation(GtkMenuItem *item,gpointer data) {
 static GtkWidget *change_item(const char *label,const char *name,const char *icon,gint direction) {
  GtkWidget *item=gtk_image_menu_item_new_with_label(label); gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(item),gtk_image_new_from_icon_name(icon,GTK_ICON_SIZE_MENU)); gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(item),TRUE); gtk_widget_set_name(item,name); g_signal_connect(item,"activate",G_CALLBACK(change_navigation),GINT_TO_POINTER(direction)); return item;
 }
+static void overview_toggle(GtkCheckMenuItem *item,gpointer data) { (void)data;insight_overview_set_visible(gtk_check_menu_item_get_active(item)); }
+static void overview_menu_sync(GtkWidget *menu,gpointer data) { (void)menu;gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(data),enabled); }
+static GtkWidget *overview_toggle_item(void) { GtkWidget *item=gtk_check_menu_item_new_with_label("Overview");gtk_widget_set_name(item,"insight-overview-toggle");gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item),enabled);g_signal_connect(item,"toggled",G_CALLBACK(overview_toggle),NULL);return item; }
+static void reveal_editor_file(GtkMenuItem *item,gpointer data) { (void)item;(void)data;GeanyDocument *doc=document_get_current();if(doc && doc->file_name) { gchar *path=utils_get_locale_from_utf8(doc->file_name);ui_reveal_file(path);g_free(path); } }
 void insight_overview_install_commands(void) {
+ GtkWidget *toggle=overview_toggle_item(),*reveal=gtk_menu_item_new_with_label("Show in file manager");gtk_widget_set_name(reveal,"insight-reveal-file");gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.editor_menu),toggle);gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.editor_menu),reveal);g_signal_connect(main_widgets.editor_menu,"show",G_CALLBACK(overview_menu_sync),toggle);g_signal_connect(reveal,"activate",G_CALLBACK(reveal_editor_file),NULL);gtk_widget_show(toggle);gtk_widget_show(reveal);
  GtkWidget *edit=ui_lookup_widget(main_widgets.window,"edit1_menu"); GtkAccelGroup *accels=gtk_accel_group_new(); gtk_window_add_accel_group(GTK_WINDOW(main_widgets.window),accels);
  GtkWidget *previous=change_item("Previous unsaved change","insight-previous-change","go-up",-1),*next=change_item("Next unsaved change","insight-next-change","go-down",1);
  gtk_menu_shell_append(GTK_MENU_SHELL(edit),gtk_separator_menu_item_new()); gtk_menu_shell_append(GTK_MENU_SHELL(edit),previous); gtk_menu_shell_append(GTK_MENU_SHELL(edit),next);
@@ -193,7 +200,7 @@ void insight_overview_install_commands(void) {
 }
 static gboolean map_button(GtkWidget *widget,GdkEventButton *event,gpointer data) {
  Overview *o=data;
- if(event->button==3) { GtkWidget *menu=gtk_menu_new(),*options=gtk_image_menu_item_new_with_label("Overview Options…"); gtk_menu_attach_to_widget(GTK_MENU(menu),widget,NULL); gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(options),gtk_image_new_from_icon_name("preferences-system",GTK_ICON_SIZE_MENU)); gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(options),TRUE); gtk_widget_set_name(options,"insight-overview-options"); gtk_menu_shell_append(GTK_MENU_SHELL(menu),options);
+ if(event->button==3) { GtkWidget *menu=gtk_menu_new(),*options=gtk_image_menu_item_new_with_label("Overview Options…"); gtk_menu_attach_to_widget(GTK_MENU(menu),widget,NULL); gtk_menu_shell_append(GTK_MENU_SHELL(menu),overview_toggle_item()); gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(options),gtk_image_new_from_icon_name("preferences-system",GTK_ICON_SIZE_MENU)); gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(options),TRUE); gtk_widget_set_name(options,"insight-overview-options"); gtk_menu_shell_append(GTK_MENU_SHELL(menu),options);
  gtk_menu_shell_append(GTK_MENU_SHELL(menu),change_item("Previous unsaved change","insight-overview-previous-change","go-up",-1)); gtk_menu_shell_append(GTK_MENU_SHELL(menu),change_item("Next unsaved change","insight-overview-next-change","go-down",1)); g_signal_connect_object(options,"activate",G_CALLBACK(overview_options),o->pane,0); g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu); gtk_widget_show_all(menu); gtk_menu_popup_at_pointer(GTK_MENU(menu),(GdkEvent *)event); return TRUE; }
  if(event->button==1) { GeanyDocument *doc=owner(o); if(doc) { gint first=first_document_line(doc->editor->sci),last=last_document_line(doc->editor->sci),line=line_at(o,event->y); o->drag_offset=line>=first && line<=last ? line-first : MAX(0,(last-first)/2); o->dragging=TRUE; o->drag_y=event->y; gtk_grab_add(widget); drag_scroll(o,event->y); } }
  return TRUE;
@@ -224,7 +231,7 @@ GtkWidget *insight_overview_wrap(GeanyDocument *doc) {
  gtk_widget_set_direction(GTK_WIDGET(o->map),GTK_TEXT_DIR_LTR); gtk_widget_set_can_focus(GTK_WIDGET(o->map),FALSE); sci_set_codepage(o->map,SC_CP_UTF8); sci_use_popup(o->map,FALSE); sci_set_readonly(o->map,TRUE); SSM(o->map,SCI_SETHSCROLLBAR,FALSE,0); SSM(o->map,SCI_SETVSCROLLBAR,FALSE,0); SSM(o->map,SCI_SETWRAPMODE,SC_WRAP_NONE,0); SSM(o->map,SCI_SETCARETWIDTH,0,0); SSM(o->map,SCI_SETCURSOR,SC_CURSORARROW,0);
  for(guint i=0;i<5;i++) SSM(o->map,SCI_SETMARGINWIDTHN,i,0);
  gtk_drag_dest_unset(GTK_WIDGET(o->map)); gtk_container_add(GTK_CONTAINER(o->host),GTK_WIDGET(o->map)); gtk_overlay_add_overlay(GTK_OVERLAY(o->host),o->shade); gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(o->host),o->shade,TRUE); GtkWidget *help=insight_panel_help_button("panel-overview.md"); gtk_widget_set_halign(help,GTK_ALIGN_END); gtk_widget_set_valign(help,GTK_ALIGN_START); gtk_overlay_add_overlay(GTK_OVERLAY(o->host),help); gtk_widget_show_all(help); gtk_widget_set_size_request(o->host,40,-1);
- gtk_paned_pack1(GTK_PANED(o->pane),GTK_WIDGET(doc->editor->sci),TRUE,FALSE); gtk_paned_pack2(GTK_PANED(o->pane),o->host,FALSE,FALSE); gtk_widget_set_no_show_all(o->host,TRUE);
+ gtk_paned_pack1(GTK_PANED(o->pane),GTK_WIDGET(doc->editor->sci),TRUE,TRUE); gtk_paned_pack2(GTK_PANED(o->pane),o->host,FALSE,FALSE); gtk_widget_set_no_show_all(o->host,TRUE);
  g_object_set_data_full(G_OBJECT(o->pane),"insight-overview",o,overview_free); g_signal_connect_object(doc->editor->sci,"sci-notify",G_CALLBACK(source_notify),o->pane,0); g_signal_connect(o->shade,"draw",G_CALLBACK(shade_draw),o); g_signal_connect(o->host,"map",G_CALLBACK(host_mapped),o); g_signal_connect(o->pane,"notify::position",G_CALLBACK(pane_position),o); g_signal_connect(o->pane,"size-allocate",G_CALLBACK(pane_allocated),o);
  gtk_widget_add_events(GTK_WIDGET(o->map),GDK_BUTTON_PRESS_MASK|GDK_BUTTON_RELEASE_MASK|GDK_POINTER_MOTION_MASK|GDK_SCROLL_MASK|GDK_SMOOTH_SCROLL_MASK); g_signal_connect(o->map,"button-press-event",G_CALLBACK(map_button),o); g_signal_connect(o->map,"button-release-event",G_CALLBACK(map_release),o); g_signal_connect(o->map,"motion-notify-event",G_CALLBACK(map_motion),o); g_signal_connect(o->map,"scroll-event",G_CALLBACK(map_scroll),o); gtk_widget_set_has_tooltip(GTK_WIDGET(o->map),TRUE); g_signal_connect(o->map,"query-tooltip",G_CALLBACK(map_tooltip),o);
  overviews=g_list_prepend(overviews,o); gtk_widget_show(GTK_WIDGET(o->map)); gtk_widget_show(o->shade); gtk_widget_set_visible(o->host,enabled); gtk_widget_show(o->pane); return o->pane;

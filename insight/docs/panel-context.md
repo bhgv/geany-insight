@@ -180,3 +180,11 @@ the latter is a function object, whose dynamic attributes are not inferred.
 Окно настоящего приложения Linux в автоматическом сценарии проверки:
 
 ![Panel controls](media/panel-windows.jpg)
+
+## Compact layout
+
+Context keeps its controls in the right rail, including Float/Dock. Minimize and Maximize appear only in a floating window. The smaller location/status line is selectable: select and copy its text. Definitions stay to the left of the rail. Right-click the preview, editor or Project Files row and choose **Show in file manager**. Windows Explorer and FileManager1-compatible Linux desktops select the file; other Linux desktops fall back to its folder.
+
+Tabs use compact spacing; the active editor tab and Project Files names are bold. Overview starts hidden in a new profile; right-click the editor or Overview to toggle it. A thin editor margin marks unsaved lines orange and saved changes light green; Overview uses the same colors. Existing Overview preferences are preserved.
+
+![Change markers](media/revision-colors.svg)

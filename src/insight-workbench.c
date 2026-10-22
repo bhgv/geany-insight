@@ -216,7 +216,7 @@ static void create_search_toolbars(void);
 static guint text_search_flags(GtkWidget *,GtkWidget *,GtkWidget *);
 static char *read_disk_source(const char *,gboolean);
 enum { SP_OPEN,SP_INFO,SP_REFERENCES,SP_NAME,SP_LOCATION,SP_ONLY,SP_HIDE,SP_ALL,SP_GROUP,SP_EXPAND,SP_COLLAPSE,SP_HELP,SP_MORE,SP_LOCATE,SP_COLUMNS,SP_QUALIFIED,SP_PATH,SP_LINE,SP_FILTER_NAME,SP_FILTER_SCOPE,SP_FILTER_FILE,SP_CLEAR,SP_EXPAND_ONE,SP_COLLAPSE_ONE,SP_INVERT,SP_VISIBILITY,SP_COPY_TEXT,SP_CUT_TEXT,SP_DUPLICATE,SP_PASTE_TEXT,SP_COUNT };
-enum { FP_OPEN,FP_NAME,FP_PATH,FP_FILTER,FP_CLEAR,FP_RESET,FP_COLUMNS,FP_HELP,FP_COUNT };
+enum { FP_OPEN,FP_NAME,FP_PATH,FP_FILTER,FP_CLEAR,FP_RESET,FP_COLUMNS,FP_HELP,FP_REVEAL,FP_COUNT };
 static void file_action(guint);
 static gboolean file_popup_key(GtkWidget *,gpointer);
 static void symbol_action(GtkTreeView *,guint);
@@ -1307,6 +1307,7 @@ static void file_action(guint action) {
  if(action==FP_HELP) { insight_help_show(NULL,"panel-project-files.md");return; }if(!gtk_widget_get_sensitive(wb.file_view)) return;
  GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(wb.file_view));GtkTreeIter iter;gboolean selected=gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.file_view)),NULL,&iter);gchar *name=NULL,*path=NULL;if(selected) gtk_tree_model_get(model,&iter,0,&name,1,&path,-1);
  switch(action) {
+ case FP_REVEAL: if(path) ui_reveal_file(path);break;
  case FP_OPEN: if(selected) { GtkTreePath *row=gtk_tree_model_get_path(model,&iter);browser_activated(GTK_TREE_VIEW(wb.file_view),row,NULL,NULL);gtk_tree_path_free(row); }break;
  case FP_NAME: case FP_PATH: if(selected) gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),action==FP_NAME ? name : path,-1);break;
  case FP_FILTER: if(path) { gchar *query=g_strdup_printf("file:\"%s\"",path);if(strlen(query)<=1024) { gtk_entry_set_text(GTK_ENTRY(wb.file_entry),query);gtk_widget_grab_focus(wb.file_entry); }else ui_set_statusbar(TRUE,"Selected value is too long for a lookup filter");g_free(query); }break;
@@ -1318,11 +1319,11 @@ static void file_action(guint action) {
 static void file_menu_action(GtkMenuItem *item,gpointer data) { (void)data;file_action(GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(item),"insight-file-action"))); }
 static GtkWidget *file_menu(void) {
  GtkWidget *menu=g_object_get_data(G_OBJECT(wb.file_view),"insight-file-popup");
- if(!menu) { menu=gtk_menu_new();gtk_menu_attach_to_widget(GTK_MENU(menu),wb.file_view,NULL);g_object_set_data_full(G_OBJECT(wb.file_view),"insight-file-popup",g_object_ref_sink(menu),g_object_unref);const gchar *labels[]={"Open file","Copy file name","Copy full file path","Filter by this file","Clear file query","Reset file columns","Visible file columns","Help for this panel"},*icons[]={"go-jump","edit-copy","edit-copy","edit-find","edit-clear","view-refresh","view-list-symbolic","panel-help"};
+ if(!menu) { menu=gtk_menu_new();gtk_menu_attach_to_widget(GTK_MENU(menu),wb.file_view,NULL);g_object_set_data_full(G_OBJECT(wb.file_view),"insight-file-popup",g_object_ref_sink(menu),g_object_unref);const gchar *labels[]={"Open file","Copy file name","Copy full file path","Filter by this file","Clear file query","Reset file columns","Visible file columns","Help for this panel","Show in file manager"},*icons[]={"go-jump","edit-copy","edit-copy","edit-find","edit-clear","view-refresh","view-list-symbolic","panel-help","folder-open"};
   for(guint i=0;i<FP_COUNT;i++) { if(i==FP_FILTER || i==FP_RESET || i==FP_HELP) gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());GtkWidget *item=symbol_history_item(labels[i],icons[i]);gchar *key=g_strdup_printf("insight-file-command-%u",i);gtk_widget_set_name(item,key);g_object_set_data(G_OBJECT(menu),key,item);g_free(key);g_object_set_data(G_OBJECT(item),"insight-file-action",GUINT_TO_POINTER(i));if(i==FP_COLUMNS) gtk_menu_item_set_submenu(GTK_MENU_ITEM(item),insight_symbol_view_columns_menu(GTK_TREE_VIEW(wb.file_view)));else g_signal_connect(item,"activate",G_CALLBACK(file_menu_action),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),item); }
  }
  gboolean ready=gtk_widget_get_sensitive(wb.file_view),selected=gtk_tree_selection_count_selected_rows(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.file_view)))>0;
- for(guint i=0;i<FP_COUNT;i++) { gchar *key=g_strdup_printf("insight-file-command-%u",i);GtkWidget *item=g_object_get_data(G_OBJECT(menu),key);g_free(key);gtk_widget_set_sensitive(item,i==FP_HELP || (ready && (i>FP_FILTER || selected))); }insight_i18n_apply(menu);gtk_widget_show_all(menu);return menu;
+ for(guint i=0;i<FP_COUNT;i++) { gchar *key=g_strdup_printf("insight-file-command-%u",i);GtkWidget *item=g_object_get_data(G_OBJECT(menu),key);g_free(key);gtk_widget_set_sensitive(item,i==FP_HELP || (ready && ((i>FP_FILTER && i!=FP_REVEAL) || selected))); }insight_i18n_apply(menu);gtk_widget_show_all(menu);return menu;
 }
 static gboolean file_popup_key(GtkWidget *widget,gpointer data) { (void)data;GdkEvent *event=gtk_get_current_event();gtk_menu_popup_at_widget(GTK_MENU(file_menu()),widget,GDK_GRAVITY_SOUTH_WEST,GDK_GRAVITY_NORTH_WEST,event);if(event) gdk_event_free(event);return TRUE; }
 static gboolean file_popup_button(GtkWidget *widget,GdkEventButton *event,gpointer data) {
@@ -1339,7 +1340,7 @@ static void create_files_browser(void) {
  gtk_entry_set_placeholder_text(GTK_ENTRY(wb.file_entry),"Find workspace file…");gtk_widget_set_tooltip_text(wb.file_entry,"Enter applies filename masks without opening; * clears the filter");
  wb.file_store=gtk_list_store_new(5,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_UINT64,G_TYPE_BOOLEAN); wb.file_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(wb.file_store)); gtk_widget_set_name(wb.file_view,"insight-project-files");
  const gchar *file_labels[]={"File","Directory","Size"}; const gint file_fields[]={0,2,3};
- for(guint i=0;i<3;i++) { GtkCellRenderer *renderer=gtk_cell_renderer_text_new(); GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(file_labels[i],renderer,NULL); if(i==2) gtk_tree_view_column_set_cell_data_func(column,renderer,project_file_size,NULL,NULL); else gtk_tree_view_column_add_attribute(column,renderer,"text",file_fields[i]); gtk_tree_view_column_set_sort_column_id(column,file_fields[i]); gtk_tree_view_append_column(GTK_TREE_VIEW(wb.file_view),column); }
+ for(guint i=0;i<3;i++) { GtkCellRenderer *renderer=gtk_cell_renderer_text_new(); if(i==0) g_object_set(renderer,"weight",PANGO_WEIGHT_BOLD,NULL); GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(file_labels[i],renderer,NULL); if(i==2) gtk_tree_view_column_set_cell_data_func(column,renderer,project_file_size,NULL,NULL); else gtk_tree_view_column_add_attribute(column,renderer,"text",file_fields[i]); gtk_tree_view_column_set_sort_column_id(column,file_fields[i]); gtk_tree_view_append_column(GTK_TREE_VIEW(wb.file_view),column); }
  GtkTreeViewColumn *full_path=gtk_tree_view_column_new_with_attributes("Path",gtk_cell_renderer_text_new(),"text",1,NULL);gtk_tree_view_column_set_sort_column_id(full_path,1);gtk_tree_view_append_column(GTK_TREE_VIEW(wb.file_view),full_path);
  const gint widths[]={220,300,260,90};insight_symbol_view_columns_configure(GTK_TREE_VIEW(wb.file_view),widths,G_N_ELEMENTS(widths));gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(wb.file_view),1);
  gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(wb.file_store),0,GTK_SORT_ASCENDING);
@@ -3507,7 +3508,9 @@ static gboolean preview_single_click(gpointer data) {
  if(wb.alive && !g_strcmp0(click->path,wb.source_path) && !g_strcmp0(click->digest,wb.source_digest)) preview_definition(click->position);
  return G_SOURCE_REMOVE;
 }
+static void reveal_context_file(GtkMenuItem *item,gpointer data) { (void)item;(void)data;if(wb.source_path && wb.source_path[0]!='@') ui_reveal_file(wb.source_path); }
 static gboolean preview_button(GtkWidget *widget,GdkEventButton *event,gpointer data) {
+ if(event->button==3) { GtkWidget *menu=gtk_menu_new(),*item=gtk_menu_item_new_with_label("Show in file manager");gtk_widget_set_sensitive(item,wb.source_path && wb.source_path[0]!='@');gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(reveal_context_file),NULL);g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu);gtk_widget_show_all(menu);gtk_menu_popup_at_pointer(GTK_MENU(menu),(GdkEvent *)event);return TRUE; }
  (void)widget; (void)data;if(event->button!=1) return FALSE;
  if(wb.preview_click_timer) { g_source_remove(wb.preview_click_timer);wb.preview_click_timer=0; }
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE);
@@ -3993,8 +3996,8 @@ static void panel_controls_update(PanelHost *host) {
  gboolean maximized=floating && gtk_window_is_maximized(GTK_WINDOW(host->window));
  gtk_button_set_image(GTK_BUTTON(host->dock_button),gtk_image_new_from_icon_name(floating ? "go-home-symbolic" : "window-new-symbolic",GTK_ICON_SIZE_MENU));
  gtk_widget_set_tooltip_text(host->dock_button,insight_tr(floating ? "Dock this panel" : "Float this panel"));
- gtk_widget_set_sensitive(host->maximize_button,floating);
- if(host->minimize_button) gtk_widget_set_sensitive(host->minimize_button,floating);
+ gtk_widget_set_sensitive(host->maximize_button,floating);gtk_widget_set_visible(host->maximize_button,floating);
+ if(host->minimize_button) { gtk_widget_set_sensitive(host->minimize_button,floating);gtk_widget_set_visible(host->minimize_button,floating); }
  if(host->group_button) gtk_widget_set_visible(host->group_button,floating);
  if(host->drag_handle) gtk_widget_set_visible(host->drag_handle,floating);
  if(host->ungroup_item) gtk_widget_set_sensitive(host->ungroup_item,floating && panel_window_count(host->window)>1);
@@ -4192,10 +4195,11 @@ static void panel_controls_attach(guint index) {
  GList *children=gtk_container_get_children(GTK_CONTAINER(host->page));
  for(GList *p=children;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-panel-help-header")) { header=p->data;break; }
  g_list_free(children);
+ if(index==9) header=g_object_get_data(G_OBJECT(wb.box),"insight-context-rail");
  if(!header) { header=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0);gtk_widget_set_name(header,"insight-panel-controls-header");gtk_box_pack_start(GTK_BOX(host->page),header,FALSE,FALSE,0);gtk_box_reorder_child(GTK_BOX(host->page),header,0); }
  const gchar *opacity_icons[]={"display-brightness-symbolic",NULL};
  host->opacity_button=gtk_scale_button_new(GTK_ICON_SIZE_MENU,40,100,5,opacity_icons);gtk_widget_set_name(host->opacity_button,"insight-panel-opacity");gtk_widget_set_tooltip_text(host->opacity_button,"Floating panel opacity");gtk_widget_set_no_show_all(host->opacity_button,TRUE);gtk_scale_button_set_value(GTK_SCALE_BUTTON(host->opacity_button),host->opacity);gtk_button_set_relief(GTK_BUTTON(host->opacity_button),GTK_RELIEF_NONE);gtk_widget_set_size_request(host->opacity_button,22,22);gtk_box_pack_end(GTK_BOX(header),host->opacity_button,FALSE,FALSE,0);g_signal_connect(host->opacity_button,"value-changed",G_CALLBACK(panel_opacity_changed),GUINT_TO_POINTER(index));
- host->dock_button=gtk_button_new();host->maximize_button=gtk_button_new();host->minimize_button=gtk_button_new();
+ host->dock_button=gtk_button_new();host->maximize_button=gtk_button_new();host->minimize_button=gtk_button_new();gtk_widget_set_no_show_all(host->maximize_button,TRUE);gtk_widget_set_no_show_all(host->minimize_button,TRUE);
  GtkWidget *buttons[]={host->dock_button,host->maximize_button,host->minimize_button};
  for(guint n=0;n<G_N_ELEMENTS(buttons);n++) { gtk_button_set_relief(GTK_BUTTON(buttons[n]),GTK_RELIEF_NONE);gtk_widget_set_size_request(buttons[n],22,22);gtk_box_pack_end(GTK_BOX(header),buttons[n],FALSE,FALSE,0); }
  gtk_widget_set_name(host->minimize_button,"insight-panel-minimize");gtk_button_set_image(GTK_BUTTON(host->minimize_button),gtk_image_new_from_icon_name("window-minimize-symbolic",GTK_ICON_SIZE_MENU));gtk_widget_set_tooltip_text(host->minimize_button,"Minimize panel to Tab Tray");
@@ -5352,6 +5356,7 @@ void insight_workbench_init(void) {
  for(guint i=0;i<10;i++) wb.hosts[i].opacity=100;
  wb.alive=TRUE;wb.tray_enabled=TRUE;wb.marks_preserve=TRUE; workbench_epoch++; wb.symbol_key_signal=g_signal_connect(geany_object,"key-press",G_CALLBACK(symbol_key_global),NULL);insight_window_list_init(window_list_preview);
  GtkWidget *existing=ui_lookup_widget(main_widgets.window,"vpaned1");
+ GtkWidget *left_split=ui_lookup_widget(main_widgets.window,"hpaned1");gtk_container_child_set(GTK_CONTAINER(left_split),gtk_paned_get_child1(GTK_PANED(left_split)),"resize",FALSE,"shrink",FALSE,NULL);gtk_notebook_set_scrollable(GTK_NOTEBOOK(main_widgets.sidebar_notebook),TRUE);
  GtkWidget *parent=gtk_widget_get_parent(existing); gint position=0;
  gtk_container_child_get(GTK_CONTAINER(parent),existing,"position",&position,NULL);
  wb.usage_paths=g_ptr_array_new_with_free_func(location_free);
@@ -5367,7 +5372,7 @@ void insight_workbench_init(void) {
  create_browser(); create_files_browser(); create_project_tree(); create_usage_browser(); create_categories(); create_file_types(); create_notes(); create_local_browser();
  wb.pane=gtk_paned_new(GTK_ORIENTATION_VERTICAL);
  wb.box=gtk_box_new(GTK_ORIENTATION_VERTICAL,2);
- wb.title=gtk_label_new("Context — integrated source navigation");
+ wb.title=gtk_label_new("");gtk_widget_set_name(wb.title,"insight-context-location");gtk_label_set_selectable(GTK_LABEL(wb.title),TRUE);
  gtk_label_set_xalign(GTK_LABEL(wb.title),0.0f);
  GtkWidget *header=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4),*open=gtk_button_new_with_label("Open source");
  GtkWidget *folder=gtk_button_new_with_label("Source folder…"),*cancel=gtk_button_new_with_label("Cancel scan");
@@ -5417,7 +5422,7 @@ void insight_workbench_init(void) {
  g_signal_connect(wb.preview,"key-press-event",G_CALLBACK(preview_key),NULL);
  gtk_widget_set_tooltip_text(GTK_WIDGET(wb.preview),"Single click / F12: definition in Context; double click / Enter: open this line in editor");
  GtkWidget *content=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0),*rail=gtk_box_new(GTK_ORIENTATION_VERTICAL,0),*rail_scroll=gtk_scrolled_window_new(NULL,NULL);
- gtk_widget_set_name(rail,"insight-context-tools");gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(rail_scroll),GTK_POLICY_NEVER,GTK_POLICY_AUTOMATIC);gtk_container_add(GTK_CONTAINER(rail_scroll),rail);
+ g_object_set_data(G_OBJECT(wb.box),"insight-context-rail",rail);gtk_widget_set_name(rail,"insight-context-tools");gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(rail_scroll),GTK_POLICY_NEVER,GTK_POLICY_AUTOMATIC);gtk_container_add(GTK_CONTAINER(rail_scroll),rail);
  GtkWidget *find_toggle=gtk_toggle_button_new(),*definitions_toggle=gtk_toggle_button_new();wb.context_find_toggle=find_toggle;
  context_icon(back,"go-previous-symbolic","Previous Context location","insight-context-back");context_icon(forward,"go-next-symbolic","Next Context location","insight-context-forward");
  context_icon(open,"document-open-symbolic","Open the preview caret line in the editor (Enter)","insight-context-open");
@@ -5428,7 +5433,12 @@ void insight_workbench_init(void) {
  g_signal_connect(find_toggle,"toggled",G_CALLBACK(context_tools_toggle),wb.context_find_row);g_signal_connect(definitions_toggle,"toggled",G_CALLBACK(context_tools_toggle),definitions_row);
  GtkWidget *commands[]={back,forward,open,find_toggle,definitions_toggle,wb.follow,wb.wrap,copy};for(guint i=0;i<G_N_ELEMENTS(commands);i++) gtk_box_pack_start(GTK_BOX(rail),commands[i],FALSE,FALSE,0);
  gtk_box_pack_start(GTK_BOX(rail),insight_panel_help_button("panel-context.md"),FALSE,FALSE,0);
- gtk_box_pack_start(GTK_BOX(content),GTK_WIDGET(wb.preview),TRUE,TRUE,0);gtk_box_pack_end(GTK_BOX(content),rail_scroll,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(wb.box),content,TRUE,TRUE,0);
+ /* Metadata and preview share the column to the left of the tool rail. */
+ GtkWidget *source_column=gtk_box_new(GTK_ORIENTATION_VERTICAL,0);
+ GtkWidget *metadata[]={header,definitions_row,wb.context_find_row};
+ for(guint i=0;i<G_N_ELEMENTS(metadata);i++) { g_object_ref(metadata[i]);gtk_container_remove(GTK_CONTAINER(wb.box),metadata[i]);gtk_box_pack_start(GTK_BOX(source_column),metadata[i],FALSE,FALSE,0);g_object_unref(metadata[i]); }
+ GList *choice_cells=gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(wb.choices));for(GList *p=choice_cells;p;p=p->next) if(GTK_IS_CELL_RENDERER_TEXT(p->data)) g_object_set(p->data,"ellipsize",PANGO_ELLIPSIZE_MIDDLE,"width-chars",12,NULL);g_list_free(choice_cells);
+ gtk_box_pack_start(GTK_BOX(source_column),GTK_WIDGET(wb.preview),TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(content),source_column,TRUE,TRUE,0);gtk_box_pack_end(GTK_BOX(content),rail_scroll,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(wb.box),content,TRUE,TRUE,0);
  gtk_widget_set_size_request(wb.box,-1,0);
  g_object_ref(existing); gtk_container_remove(GTK_CONTAINER(parent),existing);
  wb.right_pane=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
@@ -5438,7 +5448,7 @@ void insight_workbench_init(void) {
  gtk_widget_set_size_request(wb.project_notebook,0,-1);
  gtk_widget_set_name(wb.right_pane,"insight-project-split"); gtk_widget_set_name(wb.project_notebook,"insight-project-notebook");
  wb.initial_right_split=-2;g_signal_connect(wb.right_pane,"size-allocate",G_CALLBACK(project_split_allocated),NULL);gtk_paned_set_position(GTK_PANED(wb.right_pane),850);
- gtk_paned_pack1(GTK_PANED(wb.pane),wb.right_pane,TRUE,FALSE);
+ gtk_paned_pack1(GTK_PANED(wb.pane),wb.right_pane,TRUE,TRUE);
  gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),wb.box,gtk_label_new("Context")); gtk_widget_show_all(wb.box);
  gtk_box_pack_start(GTK_BOX(parent),wb.pane,TRUE,TRUE,0);
  gtk_box_reorder_child(GTK_BOX(parent),wb.pane,position);

@@ -718,6 +718,7 @@ gint notebook_new_tab(GeanyDocument *this)
 	gtk_box_pack_start(GTK_BOX(vbox), page, TRUE, TRUE, 0);
 
 	this->priv->tab_label = gtk_label_new(NULL);
+ gtk_style_context_add_class(gtk_widget_get_style_context(this->priv->tab_label),"insight-editor-tab-title");
 
 	/* get button press events for the tab label and the space between it and
 	 * the close button, if any */
