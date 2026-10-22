@@ -27,6 +27,7 @@ typedef struct {
  guint64 functions_generation; gboolean functions_dirty; GCancellable *functions_cancel; GPtrArray *functions;
 } Overview;
 static GList *overviews;
+static GtkWidget *view_toggle;
 static gboolean enabled=FALSE,show_selection=TRUE,show_viewport=TRUE;
 static gboolean show_function=TRUE,show_all_functions=FALSE;
 static gboolean show_bookmarks=TRUE,show_changes=TRUE,show_saved=TRUE,show_tips=TRUE;
@@ -192,6 +193,7 @@ static void overview_menu_sync(GtkWidget *menu,gpointer data) { (void)menu;gtk_c
 static GtkWidget *overview_toggle_item(void) { GtkWidget *item=gtk_check_menu_item_new_with_label("Overview");gtk_widget_set_name(item,"insight-overview-toggle");gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item),enabled);g_signal_connect(item,"toggled",G_CALLBACK(overview_toggle),NULL);return item; }
 static void reveal_editor_file(GtkMenuItem *item,gpointer data) { (void)item;(void)data;GeanyDocument *doc=document_get_current();if(doc && doc->file_name) { gchar *path=utils_get_locale_from_utf8(doc->file_name);ui_reveal_file(path);g_free(path); } }
 void insight_overview_install_commands(void) {
+ GtkWidget *view_menu=ui_lookup_widget(main_widgets.window,"menu_view1_menu");GList *view_items=gtk_container_get_children(GTK_CONTAINER(view_menu));for(GList *p=view_items;p;p=p->next) if(GTK_IS_CHECK_MENU_ITEM(p->data) && !g_strcmp0(gtk_menu_item_get_label(GTK_MENU_ITEM(p->data)),"Overview")) view_toggle=p->data;g_list_free(view_items);
  GtkWidget *toggle=overview_toggle_item(),*reveal=gtk_menu_item_new_with_label("Show in file manager");gtk_widget_set_name(reveal,"insight-reveal-file");gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.editor_menu),toggle);gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.editor_menu),reveal);g_signal_connect(main_widgets.editor_menu,"show",G_CALLBACK(overview_menu_sync),toggle);g_signal_connect(reveal,"activate",G_CALLBACK(reveal_editor_file),NULL);gtk_widget_show(toggle);gtk_widget_show(reveal);
  GtkWidget *edit=ui_lookup_widget(main_widgets.window,"edit1_menu"); GtkAccelGroup *accels=gtk_accel_group_new(); gtk_window_add_accel_group(GTK_WINDOW(main_widgets.window),accels);
  GtkWidget *previous=change_item("Previous unsaved change","insight-previous-change","go-up",-1),*next=change_item("Next unsaved change","insight-next-change","go-down",1);
@@ -236,7 +238,7 @@ GtkWidget *insight_overview_wrap(GeanyDocument *doc) {
  gtk_widget_add_events(GTK_WIDGET(o->map),GDK_BUTTON_PRESS_MASK|GDK_BUTTON_RELEASE_MASK|GDK_POINTER_MOTION_MASK|GDK_SCROLL_MASK|GDK_SMOOTH_SCROLL_MASK); g_signal_connect(o->map,"button-press-event",G_CALLBACK(map_button),o); g_signal_connect(o->map,"button-release-event",G_CALLBACK(map_release),o); g_signal_connect(o->map,"motion-notify-event",G_CALLBACK(map_motion),o); g_signal_connect(o->map,"scroll-event",G_CALLBACK(map_scroll),o); gtk_widget_set_has_tooltip(GTK_WIDGET(o->map),TRUE); g_signal_connect(o->map,"query-tooltip",G_CALLBACK(map_tooltip),o);
  overviews=g_list_prepend(overviews,o); gtk_widget_show(GTK_WIDGET(o->map)); gtk_widget_show(o->shade); gtk_widget_set_visible(o->host,enabled); gtk_widget_show(o->pane); return o->pane;
 }
-void insight_overview_set_visible(gboolean visible) { enabled=visible; for(GList *p=overviews;p;p=p->next) { Overview *o=p->data; gtk_widget_set_visible(o->host,visible); if(visible) { o->dirty=TRUE; queue_sync(o); } } }
+void insight_overview_set_visible(gboolean visible) { enabled=visible; if(view_toggle) gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(view_toggle),visible); for(GList *p=overviews;p;p=p->next) { Overview *o=p->data; gtk_widget_set_visible(o->host,visible); if(visible) { o->dirty=TRUE; queue_sync(o); } } }
 gboolean insight_overview_get_visible(void) { return enabled; }
 void insight_overview_read(GKeyFile *key) {
  if(g_key_file_has_key(key,"workbench","overview-visible",NULL)) enabled=g_key_file_get_boolean(key,"workbench","overview-visible",NULL);
