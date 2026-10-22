@@ -5,6 +5,10 @@ on:
     paths:
       - insight/desktop/glib_compat.h
       - insight/tests/glib_compat_test.c
+      - insight/tests/panels_gui_test.c
+      - data/geany.css
+      - src/notebook.c
+      - src/ui_utils.*
       - src/Makefile.am
       - scintilla/src/Selection.cxx
       - insight/tests/selection_parse_test.*
