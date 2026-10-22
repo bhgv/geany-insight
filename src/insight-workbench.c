@@ -109,7 +109,7 @@ typedef struct {
  InsightWorkspaceWatch *watch; guint watch_idle; gboolean watch_changed,watch_incomplete;
  guint local_doc_id,local_symbol_limit,project_symbol_limit,file_event_idle; gulong symbol_key_signal;
  gchar *project_page_root,*project_page_profile;
- GeanyFiletype *preview_filetype;
+ GeanyFiletype *preview_filetype; gboolean preview_styles_ready;
  GtkListStore *file_store,*matches;
  GtkListStore *search_matches,*usage_target;
  GtkWidget *search_view,*search_status,*search_page,*search_scope,*search_mask,*search_keywords,*search_variations,*search_context,*search_region;
@@ -130,7 +130,7 @@ typedef struct {
  GHashTable *preview_python_scopes;guint64 preview_python_version;
  InsightNativePythonBindings *preview_python_bindings;guint64 preview_python_binding_version;
  InsightNativeScopes *preview_scopes;gchar *preview_scopes_path;guint64 preview_scopes_version;gboolean preview_scopes_ready;
- GHashTable *preview_names,*preview_candidates; gsize preview_names_position; guint preview_links_idle; gchar *preview_links_text,*preview_code_mask;gsize preview_links_length;gboolean preview_calls,preview_python; gint preview_links_position,preview_styled_position;
+ GHashTable *preview_names,*preview_candidates; gsize preview_names_position; guint preview_links_idle; gchar *preview_links_text,*preview_code_mask,*preview_links_path; GeanyFiletype *preview_links_filetype; guint64 preview_links_version; gboolean preview_links_valid;gsize preview_links_length;gboolean preview_calls,preview_python; gint preview_links_position,preview_styled_position;
  guint editor_follow_id; gint editor_follow_position,editor_follow_anchor;
  gboolean editor_follow_focused;
  gchar *follow_word; guint follow_doc; gulong follow_line;
@@ -238,18 +238,11 @@ static void decorate_setup(ScintillaObject *sci) {
  SSM(sci,SCI_INDICSETSTYLE,INSIGHT_SAME_TEXT,INDIC_STRAIGHTBOX); SSM(sci,SCI_INDICSETFORE,INSIGHT_SAME_TEXT,0x00ffff);
  SSM(sci,SCI_INDICSETALPHA,INSIGHT_SAME_TEXT,90); SSM(sci,SCI_INDICSETOUTLINEALPHA,INSIGHT_SAME_TEXT,0); SSM(sci,SCI_INDICSETUNDER,INSIGHT_SAME_TEXT,TRUE);
 }
-static void decorate_match(ScintillaObject *sci,gsize begin,gsize end) {
- decorate_setup(sci);
- /* The normal blue selection must not tint a selected search hit green. */
- SSM(sci,SCI_SETSELBACK,TRUE,0x00ffff); SSM(sci,SCI_SETSELFORE,FALSE,0); SSM(sci,SCI_SETSELALPHA,SC_ALPHA_NOALPHA,0);
- for(gint indicator=INSIGHT_MATCH_FILL;indicator<=INSIGHT_MATCH_FRAME;indicator++) {
-  SSM(sci,SCI_SETINDICATORCURRENT,indicator,0); SSM(sci,SCI_INDICATORCLEARRANGE,0,sci_get_length(sci));
-  if(end>begin && end<=(gsize)sci_get_length(sci)) SSM(sci,SCI_INDICATORFILLRANGE,begin,end-begin);
- }
-}
+static void decorate_match(ScintillaObject *sci,gsize begin,gsize end);
 typedef struct {
  guint timer,apply; guint64 generation,text_version,requested_version;
  gint begin,end,length; gboolean alive,highlighted;
+ gsize match_begin,match_end; guint64 match_version; gboolean match_ready;
  GCancellable *cancel; InsightSearchMatch *matches; gsize count,position;
 } SelectionState;
 typedef struct { GWeakRef sci; gchar *text,*query; InsightSearchMatch *matches; gsize count; guint64 generation; } SelectionJob;
@@ -270,6 +263,18 @@ static SelectionState *selection_state(ScintillaObject *sci) {
  SelectionState *s=g_object_get_data(G_OBJECT(sci),"insight-selection-worker");
  if(!s) { s=g_new0(SelectionState,1); s->alive=TRUE; s->begin=s->end=-1; g_object_set_data_full(G_OBJECT(sci),"insight-selection-worker",s,selection_state_free); g_signal_connect(sci,"sci-notify",G_CALLBACK(selection_modified),s); g_signal_connect(sci,"destroy",G_CALLBACK(selection_destroy),s); }
  return s;
+}
+static void decorate_match(ScintillaObject *sci,gsize begin,gsize end) {
+ SelectionState *state=selection_state(sci);
+ if(state->match_ready && state->match_begin==begin && state->match_end==end && state->match_version==state->text_version) return;
+ state->match_ready=TRUE;state->match_begin=begin;state->match_end=end;state->match_version=state->text_version;
+ decorate_setup(sci);
+ /* The normal blue selection must not tint a selected search hit green. */
+ SSM(sci,SCI_SETSELBACK,TRUE,0x00ffff); SSM(sci,SCI_SETSELFORE,FALSE,0); SSM(sci,SCI_SETSELALPHA,SC_ALPHA_NOALPHA,0);
+ for(gint indicator=INSIGHT_MATCH_FILL;indicator<=INSIGHT_MATCH_FRAME;indicator++) {
+  SSM(sci,SCI_SETINDICATORCURRENT,indicator,0); SSM(sci,SCI_INDICATORCLEARRANGE,0,sci_get_length(sci));
+  if(end>begin && end<=(gsize)sci_get_length(sci)) SSM(sci,SCI_INDICATORFILLRANGE,begin,end-begin);
+ }
 }
 static gboolean selection_apply(gpointer data) {
  ScintillaObject *sci=data; SelectionState *s=selection_state(sci); gint64 deadline=g_get_monotonic_time()+3000;
@@ -369,23 +374,33 @@ static void navigation_state(void) {
  if(wb.forward) gtk_widget_set_sensitive(wb.forward,wb.history && wb.history_position+1<(gint)wb.history->len);
  if(wb.open) gtk_widget_set_sensitive(wb.open,wb.source_line!=0);
 }
-static void render_source(const char *text,GeanyFiletype *filetype,gulong line) {
+/* Keep the lexer and language profile stable while following the same source. */
+static GeanyFiletype *preview_filetype(const gchar *path) {
+ GeanyFiletype *ft=path ? insight_languages_detect(path) : NULL;
+ return ft ? ft : (path ? filetypes_detect_from_extension(path) : NULL);
+}
+static void render_source(const char *text,GeanyFiletype *filetype,gulong line,const gchar *path) {
  gchar *previous=sci_get_contents(wb.preview,sci_get_length(wb.preview)+1);
- gboolean unchanged=wb.preview_filetype==filetype && !strcmp(previous,text);
+ gboolean unchanged=!strcmp(previous,text);
+ gboolean restyle=!wb.preview_styles_ready || wb.preview_filetype!=filetype || g_strcmp0(wb.source_path,path);
  g_free(previous);
+ if(restyle) {
+  wb.preview_filetype=filetype;wb.preview_styles_ready=TRUE;wb.preview_links_valid=FALSE;
+  highlighting_set_styles(wb.preview,filetype ? filetype : filetypes[GEANY_FILETYPES_NONE]);
+  insight_languages_apply(wb.preview,path,filetype);
+ }
+ if(!unchanged) {
+  sci_set_readonly(wb.preview,FALSE);sci_set_text(wb.preview,text);
+  sci_set_line_numbers(wb.preview,TRUE);
+  SSM(wb.preview,SCI_SETCARETLINEVISIBLE,TRUE,0);
+  SSM(wb.preview,SCI_EMPTYUNDOBUFFER,0,0);sci_set_readonly(wb.preview,TRUE);
+  decorate_match(wb.preview,0,0);
+ }
+ /* Colour the first chunk before symbol-link indexing, even for a large index.
+  * Scintilla styles the remaining visible range on demand. */
+ if(restyle || !unchanged) SSM(wb.preview,SCI_COLOURISE,0,MIN(sci_get_length(wb.preview),16384));
  gint target=(gint)MIN(line ? line-1 : 0,(gulong)MAX(0,sci_get_line_count(wb.preview)-1));
  if(unchanged && sci_get_current_line(wb.preview)==target) return;
- if(!unchanged) {
- wb.preview_filetype=filetype;
- highlighting_set_styles(wb.preview,filetype ? filetype : filetypes[GEANY_FILETYPES_NONE]);
- sci_set_readonly(wb.preview,FALSE); sci_set_text(wb.preview,text);
- /* Scintilla styles the visible range on demand; avoid a whole-file pass. */
- sci_set_line_numbers(wb.preview,TRUE);
- SSM(wb.preview,SCI_SETCARETLINEVISIBLE,TRUE,0);
- SSM(wb.preview,SCI_EMPTYUNDOBUFFER,0,0); sci_set_readonly(wb.preview,TRUE);
- decorate_match(wb.preview,0,0); preview_links();
- }
- target=(gint)MIN(line ? line-1 : 0,(gulong)MAX(0,sci_get_line_count(wb.preview)-1));
  SSM(wb.preview,SCI_GOTOLINE,target,0);
  SSM(wb.preview,SCI_VERTICALCENTRECARET,0,0);
 }
@@ -602,12 +617,15 @@ static gboolean preview_links_step(gpointer data) {
 }
 static void preview_links(void) {
  if(!wb.preview) return;
- if(wb.preview_links_idle) { g_source_remove(wb.preview_links_idle); wb.preview_links_idle=0; }
  refresh_index();
+ gchar *text=sci_get_contents(wb.preview,sci_get_length(wb.preview)+1);
+ if(wb.preview_links_valid && wb.preview_links_text && !strcmp(text,wb.preview_links_text) && !g_strcmp0(wb.source_path,wb.preview_links_path) && wb.preview_filetype==wb.preview_links_filetype && wb.index_version==wb.preview_links_version) { g_free(text);return; }
+ if(wb.preview_links_idle) { g_source_remove(wb.preview_links_idle); wb.preview_links_idle=0; }
+ g_free(wb.preview_links_path);wb.preview_links_path=g_strdup(wb.source_path);wb.preview_links_filetype=wb.preview_filetype;wb.preview_links_version=wb.index_version;wb.preview_links_valid=TRUE;
  g_clear_pointer(&wb.preview_candidates,g_hash_table_destroy);wb.preview_candidates=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,(GDestroyNotify)g_ptr_array_unref);wb.preview_names_position=0;
  SSM(wb.preview,SCI_INDICSETSTYLE,INSIGHT_LINK,INDIC_PLAIN); SSM(wb.preview,SCI_INDICSETFORE,INSIGHT_LINK,0xcc5500);
  SSM(wb.preview,SCI_SETINDICATORCURRENT,INSIGHT_LINK,0); SSM(wb.preview,SCI_INDICATORCLEARRANGE,0,sci_get_length(wb.preview));
- preview_scopes_clear();gchar *text=sci_get_contents(wb.preview,sci_get_length(wb.preview)+1);gboolean calls=member_calls_language(wb.preview_filetype),python=python_language(wb.preview_filetype);
+ preview_scopes_clear();gboolean calls=member_calls_language(wb.preview_filetype),python=python_language(wb.preview_filetype);
  if(!wb.preview_links_text || strcmp(wb.preview_links_text,text) || calls!=wb.preview_calls || python!=wb.preview_python) { g_clear_pointer(&wb.preview_code_mask,g_free);if(calls || python) wb.preview_code_mask=insight_source_code_mask(text,strlen(text),python ? INSIGHT_CODE_PYTHON : INSIGHT_CODE_C,NULL); }
  g_free(wb.preview_links_text);wb.preview_links_text=text;wb.preview_links_length=strlen(text);wb.preview_calls=calls;wb.preview_python=python; wb.preview_links_position=0;wb.preview_styled_position=0;
  wb.preview_links_idle=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,preview_links_step,NULL,NULL);
@@ -972,7 +990,8 @@ static void reveal_context(void) {
  if(gtk_widget_get_parent(wb.box)==main_widgets.message_window_notebook) {
   GtkWidget *focus=gtk_window_get_focus(GTK_WINDOW(main_widgets.window));if(focus) g_object_ref(focus);
   if(!gtk_widget_get_visible(main_widgets.message_window_notebook)) msgwin_show_hide(TRUE);
-  gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.message_window_notebook),wb.box));
+  gint page=gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.message_window_notebook),wb.box);
+  if(gtk_notebook_get_current_page(GTK_NOTEBOOK(main_widgets.message_window_notebook))!=page) gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),page);
   if(focus) { if(gtk_widget_get_mapped(focus) && gtk_widget_get_sensitive(focus)) gtk_widget_grab_focus(focus);g_object_unref(focus); }
  }
 }
@@ -992,10 +1011,10 @@ static void file_preview_done(GObject *source,GAsyncResult *result,gpointer data
  g_clear_object(&wb.preview_worker); if(!ok) return;
  GeanyDocument *doc=document_find_by_filename(j->path);
  if((doc && (doc->id!=j->id || selection_state(doc->editor->sci)->text_version!=j->text_version)) || (!doc && j->id)) { request_file_preview(j->path); return; }
- if(!j->digest) { render_source("",NULL,1); gtk_label_set_text(GTK_LABEL(wb.title),"Context unavailable: requires a decodable text source up to 2 MiB"); g_clear_pointer(&wb.source_path,g_free); wb.source_id=0; wb.source_line=0; navigation_state(); return; }
+ if(!j->digest) { render_source("",NULL,1,NULL); gtk_label_set_text(GTK_LABEL(wb.title),"Context unavailable: requires a decodable text source up to 2 MiB"); g_clear_pointer(&wb.source_path,g_free); wb.source_id=0; wb.source_line=0; preview_links();navigation_state(); return; }
  if(wb.source_line) remember_location(wb.source_path,wb.source_id,(gulong)sci_get_current_line(wb.preview)+1);
- render_source(j->text,doc ? doc->file_type : filetypes_detect_from_extension(j->path),1);
- g_free(wb.source_digest); wb.source_digest=g_strdup(j->digest); g_free(wb.source_path); wb.source_path=g_strdup(j->path); wb.source_id=doc ? doc->id : 0; wb.source_line=1;insight_languages_apply(wb.preview,wb.source_path,wb.preview_filetype);preview_links();
+ render_source(j->text,doc ? doc->file_type : preview_filetype(j->path),1,j->path);
+ g_free(wb.source_digest); wb.source_digest=g_strdup(j->digest); g_free(wb.source_path); wb.source_path=g_strdup(j->path); wb.source_id=doc ? doc->id : 0; wb.source_line=1;preview_links();
  gchar *label=g_strdup_printf("Context — %s:1",j->path); gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label); remember_location(wb.source_path,wb.source_id,1); navigation_state();
 }
 static void request_file_preview(const char *path) {
@@ -1014,19 +1033,19 @@ static gboolean show_location(const char *path,guint id,gulong line,gboolean rem
   if(length>=0 && length<=2*1024*1024) text=sci_get_contents(doc->editor->sci,length+1);
   if(text && (!g_utf8_validate(text,length,NULL) || memchr(text,0,(gsize)length))) g_clear_pointer(&text,g_free);
   ft=doc->file_type;
- } else if(path) { text=read_disk_source(path,TRUE); ft=filetypes_detect_from_file(path); }
+ } else if(path) { text=read_disk_source(path,TRUE); ft=preview_filetype(path); }
  if(!text) {
-  render_source("",NULL,1); gtk_label_set_text(GTK_LABEL(wb.title),"Context unavailable: requires a decodable text source up to 2 MiB");
-  g_clear_pointer(&wb.source_path,g_free); wb.source_id=0; wb.source_line=0; navigation_state(); return FALSE;
+  render_source("",NULL,1,NULL); gtk_label_set_text(GTK_LABEL(wb.title),"Context unavailable: requires a decodable text source up to 2 MiB");
+  g_clear_pointer(&wb.source_path,g_free); wb.source_id=0; wb.source_line=0; preview_links();navigation_state(); return FALSE;
  }
  gchar *owned_path=g_strdup(path ? path : (doc ? doc->file_name : NULL));
  size_t begin,end,target_begin,target_end; unsigned long first;
  gboolean valid=insight_context_range(text,strlen(text),line,0,&begin,&end,&first,&target_begin,&target_end);
  if(remember && valid && wb.source_line) remember_location(wb.source_path,wb.source_id,(gulong)sci_get_current_line(wb.preview)+1);
- render_source(text,ft,valid ? line : 1);
+ render_source(text,ft,valid ? line : 1,path ? path : (doc ? doc->file_name : NULL));
  g_free(wb.source_digest); wb.source_digest=source_digest(text); g_free(text);
  if(!valid) line=0;
- g_free(wb.source_path); wb.source_path=owned_path; wb.source_id=doc ? doc->id : 0; wb.source_line=line;insight_languages_apply(wb.preview,wb.source_path,wb.preview_filetype);preview_links();
+ g_free(wb.source_path); wb.source_path=owned_path; wb.source_id=doc ? doc->id : 0; wb.source_line=line;preview_links();
  gchar *label=g_strdup_printf("Context — %s:%lu%s",owned_path ? owned_path : "untitled",line,line ? "" : " • definition line changed; reindex");
  gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label);
  if(remember) remember_location(wb.source_path,wb.source_id,line);
@@ -2848,7 +2867,7 @@ static void note_selected(GtkTreeSelection *selection,gpointer data) {
  (void)selection; InsightNoteKind kind=(InsightNoteKind)GPOINTER_TO_INT(data); gchar *name=selected_note(kind); if(!name || !wb.preview) { g_free(name); return; }
  const InsightNote *note=insight_notes_get(notes_for(kind),kind,name);
  if(note && kind==INSIGHT_BOOKMARK) bookmark_open_note(note);
- else if(note) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.context_toggle),TRUE); GeanyDocument *doc=document_get_current(); render_source(note->text,doc ? doc->file_type : NULL,1); g_clear_pointer(&wb.source_path,g_free); g_clear_pointer(&wb.source_digest,g_free); wb.source_id=0; wb.source_line=0; navigation_state(); gchar *label=g_strdup_printf("Clip — %s",note->name); gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label); }
+ else if(note) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.context_toggle),TRUE); GeanyDocument *doc=document_get_current(); render_source(note->text,doc ? doc->file_type : NULL,1,NULL); g_clear_pointer(&wb.source_path,g_free); g_clear_pointer(&wb.source_digest,g_free); wb.source_id=0; wb.source_line=0; preview_links();navigation_state(); gchar *label=g_strdup_printf("Clip — %s",note->name); gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label); }
  g_free(name);
 }
 static void bookmark_add(GtkWidget *widget,gpointer data) {
@@ -3376,14 +3395,28 @@ static void definition_job_done(GObject *source,GAsyncResult *result,gpointer da
  GeanyDocument *doc=j->path ? document_find_by_filename(j->path) : current;
  if(doc) { gint length=sci_get_length(doc->editor->sci); if(length>=0 && length<=2*1024*1024) { g_free(j->text); j->text=sci_get_contents(doc->editor->sci,length+1); g_free(j->digest); j->digest=source_digest(j->text); } }
  if(!j->text || !g_utf8_validate(j->text,-1,NULL)) { ui_set_statusbar(TRUE,"Definition source unavailable or exceeds 2 MiB"); return; }
- wb.populating=TRUE; g_ptr_array_set_size(wb.definitions,0); gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(wb.choices));
- for(gsize n=0;n<j->count;n++) { const InsightSymbol *hit=j->matches[n]; Location *location=g_new0(Location,1); location->path=g_strdup(hit->path); location->line=hit->line; g_ptr_array_add(wb.definitions,location); gchar *label=g_strdup_printf("%s %s%s • %s — %s:%lu",hit->type,hit->name,hit->signature,hit->scope,hit->path,hit->line); gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.choices),label); g_free(label); }
- gtk_combo_box_set_active(GTK_COMBO_BOX(wb.choices),j->count ? j->chosen : -1); wb.populating=FALSE;
- GeanyFiletype *ft=doc ? doc->file_type : (j->path ? filetypes_detect_from_extension(j->path) : NULL); render_source(j->text,ft,j->line);insight_languages_apply(wb.preview,j->path,ft);
- g_free(wb.source_path); wb.source_path=g_strdup(j->path); wb.source_id=doc ? doc->id : 0; wb.source_line=j->line<=(gulong)sci_get_line_count(wb.preview) ? j->line : 0; g_free(wb.source_digest); wb.source_digest=g_strdup(j->digest);
- gchar *label=j->count ? g_strdup_printf("Context — %s:%lu",j->path ? j->path : "untitled",j->line) : g_strdup_printf("Context — no indexed definition: %s • %s:%lu",j->query,j->path ? j->path : "untitled",j->line); gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label); if(j->count) preview_mark_symbol(j->matches[j->chosen]->name); navigation_state();
+ /* Do not empty/repopulate the visible combo when Follow finds the same candidates. */
+ GPtrArray *labels=g_ptr_array_new_with_free_func(g_free);
+ GtkTreeModel *model=gtk_combo_box_get_model(GTK_COMBO_BOX(wb.choices));
+ gboolean same=gtk_tree_model_iter_n_children(model,NULL)==(gint)j->count;
+ for(gsize n=0;n<j->count;n++) {
+  const InsightSymbol *hit=j->matches[n];
+  gchar *label=g_strdup_printf("%s %s%s • %s — %s:%lu",hit->type,hit->name,hit->signature,hit->scope,hit->path,hit->line);g_ptr_array_add(labels,label);
+  if(same) { GtkTreeIter iter;gchar *old=NULL;gtk_tree_model_iter_nth_child(model,&iter,NULL,(gint)n);gtk_tree_model_get(model,&iter,0,&old,-1);same=!g_strcmp0(old,label);g_free(old); }
+ }
+ wb.populating=TRUE;
+ if(!same) {
+  g_ptr_array_set_size(wb.definitions,0);gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(wb.choices));
+  for(gsize n=0;n<j->count;n++) { const InsightSymbol *hit=j->matches[n];Location *location=g_new0(Location,1);location->path=g_strdup(hit->path);location->line=hit->line;g_ptr_array_add(wb.definitions,location);gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.choices),g_ptr_array_index(labels,n)); }
+ }
+ gint chosen=j->count ? (gint)j->chosen : -1;
+ if(gtk_combo_box_get_active(GTK_COMBO_BOX(wb.choices))!=chosen) gtk_combo_box_set_active(GTK_COMBO_BOX(wb.choices),chosen);
+ wb.populating=FALSE;g_ptr_array_free(labels,TRUE);
+ GeanyFiletype *ft=doc ? doc->file_type : preview_filetype(j->path); render_source(j->text,ft,j->line,j->path);
+ g_free(wb.source_path); wb.source_path=g_strdup(j->path); wb.source_id=doc ? doc->id : 0; wb.source_line=j->line<=(gulong)sci_get_line_count(wb.preview) ? j->line : 0; g_free(wb.source_digest); wb.source_digest=g_strdup(j->digest);preview_links();
+ gchar *label=j->count ? g_strdup_printf("Context — %s:%lu",j->path ? j->path : "untitled",j->line) : g_strdup_printf("Context — no indexed definition: %s • %s:%lu",j->query,j->path ? j->path : "untitled",j->line); if(g_strcmp0(gtk_label_get_text(GTK_LABEL(wb.title)),label)) gtk_label_set_text(GTK_LABEL(wb.title),label); g_free(label); if(j->count) preview_mark_symbol(j->matches[j->chosen]->name); navigation_state();
  wb.follow_doc=j->document; wb.follow_line=(gulong)sci_get_current_line(current->editor->sci)+1; g_free(wb.follow_word); wb.follow_word=g_strdup(j->query);
- if(gtk_widget_has_focus(GTK_WIDGET(current->editor->sci)) && gtk_widget_get_parent(wb.box)==main_widgets.message_window_notebook) { msgwin_show_hide(TRUE); gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.message_window_notebook),wb.box)); }
+ if(gtk_widget_has_focus(GTK_WIDGET(current->editor->sci)) && gtk_widget_get_parent(wb.box)==main_widgets.message_window_notebook) { reveal_context(); }
 }
 static gboolean definition_timeout(gpointer data) {
  (void)data; wb.definition_timer=0; if(!wb.alive || !wb.preview || !wb.context_visible || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow))) return G_SOURCE_REMOVE;
@@ -3415,7 +3448,7 @@ static gboolean refresh_now(gpointer data) {
  relation_update_from_editor(dirty);
  if(!wb.preview || !wb.context_visible || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow))) return G_SOURCE_REMOVE;
  GeanyDocument *doc=document_get_current();
- if(!doc) { render_source("",NULL,1); g_clear_pointer(&wb.source_path,g_free); wb.source_id=0; wb.source_line=0; navigation_state(); gtk_label_set_text(GTK_LABEL(wb.title),"Context — no active source"); return G_SOURCE_REMOVE; }
+ if(!doc) { render_source("",NULL,1,NULL); g_clear_pointer(&wb.source_path,g_free); wb.source_id=0; wb.source_line=0; preview_links();navigation_state(); gtk_label_set_text(GTK_LABEL(wb.title),"Context — no active source"); return G_SOURCE_REMOVE; }
  queue_definition(dirty);
  return G_SOURCE_REMOVE;
 }
@@ -5572,7 +5605,7 @@ void insight_workbench_finalize(void) {
  g_free(wb.follow_word); g_free(wb.relation_word);
  g_free(wb.source_path); g_free(wb.source_digest); g_free(wb.find_last_query); g_free(wb.find_last_digest);
  if(wb.preview_links_idle) { g_source_remove(wb.preview_links_idle); wb.preview_links_idle=0; }
- preview_scopes_clear();g_clear_pointer(&wb.preview_links_text,g_free);g_clear_pointer(&wb.preview_code_mask,g_free); g_clear_pointer(&wb.preview_names,g_hash_table_destroy);g_clear_pointer(&wb.preview_candidates,g_hash_table_destroy);
+ preview_scopes_clear();g_clear_pointer(&wb.preview_links_text,g_free);g_clear_pointer(&wb.preview_code_mask,g_free);g_clear_pointer(&wb.preview_links_path,g_free); g_clear_pointer(&wb.preview_names,g_hash_table_destroy);g_clear_pointer(&wb.preview_candidates,g_hash_table_destroy);
  g_hash_table_unref(wb.declarations);insight_index_free(wb.base); insight_index_free(wb.index);
  if(wb.symbols) g_object_unref(wb.symbols);
  if(wb.local_symbols) g_object_unref(wb.local_symbols);
@@ -5591,7 +5624,7 @@ void insight_workbench_finalize(void) {
  insight_languages_finalize();insight_i18n_finalize();memset(&wb,0,sizeof wb);
 }
 
-void insight_workbench_languages_changed(void) { if(!wb.alive) return;InsightMasterTypes *types=insight_languages_master_types();insight_master_sync_set_types(wb.master_sync,types);insight_master_types_free(types);stop_definition();wb.follow_doc=0;if(wb.root) { wb.force_parse=TRUE;gchar *path=g_strdup(wb.root);start_scan(path);g_free(path); }else mark_index_dirty();stop_usage();browser_filter(NULL,NULL);files_filter(NULL,NULL);categories_filter(NULL,NULL);preview_links();insight_workbench_refresh(); }
+void insight_workbench_languages_changed(void) { if(!wb.alive) return;wb.preview_styles_ready=FALSE;wb.preview_links_valid=FALSE;InsightMasterTypes *types=insight_languages_master_types();insight_master_sync_set_types(wb.master_sync,types);insight_master_types_free(types);stop_definition();wb.follow_doc=0;if(wb.root) { wb.force_parse=TRUE;gchar *path=g_strdup(wb.root);start_scan(path);g_free(path); }else mark_index_dirty();stop_usage();browser_filter(NULL,NULL);files_filter(NULL,NULL);categories_filter(NULL,NULL);preview_links();insight_workbench_refresh(); }
 
 void insight_workbench_locale_changed(void) { if(!wb.alive) return;for(guint i=0;i<wb.host_count;i++) { panel_controls_update(&wb.hosts[i]);if(panel_window_owner(wb.hosts[i].window)==i) panel_window_refresh(wb.hosts[i].window); }if(wb.disk_browser) insight_disk_browser_locale_changed(wb.disk_browser);if(wb.relation_tree) insight_relation_tree_locale_changed(wb.relation_tree);if(wb.type_panel.status) grouped_count(&wb.type_panel,wb.type_panel.shown,wb.type_panel.total);if(wb.category_panel.status) { grouped_count(&wb.category_panel,wb.category_panel.shown,wb.category_panel.total);categories_filter(NULL,NULL); }if(wb.tree_status) folder_count(GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(wb.tree_status),"insight-folder-count")),GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(wb.tree_status),"insight-folder-total")));if(wb.file_status) { gchar *text=insight_i18n_printf(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(wb.file_status),"insight-files-more")) ? "Files: %u+" : "Files: %u",GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(wb.file_status),"insight-files-count")));gtk_label_set_text(GTK_LABEL(wb.file_status),text);g_free(text); }}
 

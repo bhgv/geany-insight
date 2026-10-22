@@ -15,6 +15,19 @@ static const gchar *code="int main(void) {\n native_header(); native_asm(); fore
 static GtkWidget *named(GtkWidget *root,const gchar *name) { if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;if(GTK_IS_CONTAINER(root)) { GList *children=gtk_container_get_children(GTK_CONTAINER(root));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL; }
 static void open_source(const gchar *name,const gchar *text,const gchar *type) { gchar *path=g_build_filename(directory,name,NULL);g_assert_true(g_file_set_contents(path,text,-1,NULL));g_assert_nonnull(document_open_file(path,FALSE,filetypes_lookup_by_name(type),NULL));g_free(path); }
 static void key(ScintillaObject *sci,guint keyval) { GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);event->key.window=g_object_ref(gtk_widget_get_window(GTK_WIDGET(sci)));event->key.keyval=keyval;gtk_widget_event(GTK_WIDGET(sci),event);gdk_event_free(event); }
+static guint text_changes,style_changes,indicator_changes,stable_ticks;static gboolean watching;
+static void changed(ScintillaObject *sci,gint message,SCNotification *n,gpointer data) {
+ (void)sci;(void)message;(void)data;if(n->nmhdr.code!=SCN_MODIFIED) return;
+ if(n->modificationType&(SC_MOD_INSERTTEXT|SC_MOD_DELETETEXT)) text_changes++;
+ if(n->modificationType&SC_MOD_CHANGESTYLE) style_changes++;
+ if(n->modificationType&SC_MOD_CHANGEINDICATOR) indicator_changes++;
+}
+static void colored(ScintillaObject *preview) {
+ const gchar *samples[]={"int main","return x","/* native_header","\"native_header"};
+ for(guint i=0;i<G_N_ELEMENTS(samples);i++) { gint pos=strstr(code,samples[i])-code;gint style=SSM(preview,SCI_GETSTYLEAT,pos,0),editor_style=SSM(source->editor->sci,SCI_GETSTYLEAT,pos,0);g_assert_cmpint(style,==,editor_style);g_assert_cmpint(SSM(preview,SCI_STYLEGETFORE,style,0),==,SSM(source->editor->sci,SCI_STYLEGETFORE,editor_style,0)); }
+ gint keyword=SSM(preview,SCI_GETSTYLEAT,strstr(code,"return x")-code,0),comment=SSM(preview,SCI_GETSTYLEAT,strstr(code,"/* native_header")-code,0);
+ g_assert_cmpint(SSM(preview,SCI_STYLEGETFORE,keyword,0),!=,SSM(preview,SCI_STYLEGETFORE,comment,0));
+}
 static gboolean step(gpointer data) {
  (void)data;if(!document_get_current()) return G_SOURCE_CONTINUE;
  if(phase==0) { window=gtk_widget_get_toplevel(GTK_WIDGET(document_get_current()->editor->sci));open_source("native.hpp","void native_header(void);\n#define false 0\n","C++");open_source("native.S","native_asm:\n nop\n","ASM");open_source("foreign.sh","foreign_shell() { echo test; }\nnative_header() { echo wrong; }\n","Sh");open_source("foreign.vhdl","entity foreign_vhdl is\nend foreign_vhdl;\n","VHDL");open_source("main.cpp",code,"C++");source=document_get_current();phase++;return G_SOURCE_CONTINUE; }
@@ -25,12 +38,17 @@ static gboolean step(gpointer data) {
   if(!SSM(preview,SCI_INDICATORVALUEAT,31,header) || !SSM(preview,SCI_INDICATORVALUEAT,31,assembly)) return G_SOURCE_CONTINUE;
   const gchar *blocked[]={"foreign_shell","foreign_vhdl","unknown_name","false","return","/* native_header","\"native_header"};
   for(guint n=0;n<G_N_ELEMENTS(blocked);n++) { gint offset=strstr(code,blocked[n])-code;if(n==5) offset+=3;if(n==6) offset++;g_assert_cmpint(SSM(preview,SCI_INDICATORVALUEAT,31,offset),==,0); }
+  colored(preview);
+  if(!watching) { g_signal_connect(preview,"sci-notify",G_CALLBACK(changed),NULL);watching=TRUE; }
+  /* Repeated Follow requests for the same word must not reset text/styles/links. */
+  if(stable_ticks++<16) { if(stable_ticks==4) text_changes=style_changes=indicator_changes=0;if(stable_ticks%4==0) sci_set_current_position(source->editor->sci,(stable_ticks/4)%2,FALSE);gtk_widget_grab_focus(GTK_WIDGET(source->editor->sci));return G_SOURCE_CONTINUE; }
+  g_assert_cmpuint(text_changes,==,0);g_assert_cmpuint(style_changes,==,0);g_assert_cmpuint(indicator_changes,==,0);
   g_assert_nonnull(named(window,"insight-context-definitions-label"));
   gint before=sci_get_current_position(source->editor->sci);sci_set_current_position(preview,strstr(code,"false")-code,FALSE);key(preview,GDK_KEY_F12);g_assert_cmpint(sci_get_length(preview),==,strlen(code));g_assert_cmpint(sci_get_current_position(source->editor->sci),==,before);
   sci_set_current_position(preview,header,FALSE);key(preview,GDK_KEY_F12);phase++;return G_SOURCE_CONTINUE;
  }
  if(phase==2) { gchar *text=sci_get_contents(preview,sci_get_length(preview)+1);g_assert_nonnull(strstr(text,"void native_header"));g_free(text);GtkWidget *choices=named(window,"insight-context-definitions");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(choices)),NULL),==,1);g_assert_true(document_get_current()==source);
-  g_print("Context GUI: resolved C++/header/assembly links, blocked shell/VHDL/unknown/keywords/comments/strings, labelled candidates, inert false and preview-only definition jump passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE; }
+  g_print("Context GUI: matching syntax palette, stable Follow without text/style/indicator resets, resolved C++/header/assembly links, blocked shell/VHDL/unknown/keywords/comments/strings, labelled candidates, inert false and preview-only definition jump passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE; }
  return G_SOURCE_CONTINUE;
 }
 static gboolean timeout(gpointer data) { (void)data;g_error("Context GUI timeout at phase %u",phase);return G_SOURCE_REMOVE; }

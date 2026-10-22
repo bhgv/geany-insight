@@ -188,3 +188,11 @@ Tabs use compact spacing; the active editor tab and Project Files names are bold
 ![Compact Context](../media/compact-context.jpg)
 
 Real Linux editor at 792 px width, captured by the native GUI regression after floating and docking the panels.
+
+## Syntax colours and stable updates
+
+Context uses the source language, syntax palette and configured language profile, including files not open in an editor. Initial syntax colouring runs before symbol-link indexing. Monochrome mode remains available through the formatting options.
+
+Following the same source keeps its text, lexer styles, link indicators and unchanged definition list. Moving the caret does not clear and rebuild them. Text edits, a changed index or language settings invalidate the relevant cache; the preview then updates normally.
+
+![Context update flow](../media/context-updates.svg)
