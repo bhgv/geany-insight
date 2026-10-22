@@ -61,6 +61,7 @@ static gboolean cancel_dialog(gpointer data) {
  g_list_free(windows);if(!dialog) return G_SOURCE_CONTINUE;gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_CANCEL);return G_SOURCE_REMOVE;
 }
 static gboolean select_doc(GtkWidget *view,guint id) {
+ gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)));
  GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));GtkTreeIter iter;gboolean valid=gtk_tree_model_get_iter_first(model,&iter);
  while(valid) { guint row=0;gtk_tree_model_get(model,&iter,0,&row,-1);if(row==id) { gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),&iter);return TRUE; }valid=gtk_tree_model_iter_next(model,&iter); }return FALSE;
 }

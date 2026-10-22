@@ -1538,3 +1538,14 @@ Cannot save word highlight settings	Не удалось сохранить на�
 Word highlights support source buffers up to 2 MiB	Подсветка слов поддерживает исходники до 2 МиБ
 Word highlight limit reached: first 20000 matches shown	Предел подсветки: показаны первые 20 000 совпадений
 Place the caret in a word or select one word up to 256 bytes	Установите курсор в слове или выделите слово до 256 байт
+
+Select all	Выбрать все
+Invert selection	Инвертировать выбор
+Copy paths	Копировать пути
+Save As…	Сохранить как…
+All open files	Все открытые файлы
+Modified files	Изменённые файлы
+Read-only files	Файлы только для чтения
+Unsaved files	Несохранённые файлы
+%u of %u open files • %u selected	%u из %u открытых файлов • выбрано %u
+Selected paths exceed the 2 MiB clipboard limit	Пути выбранных файлов превышают предел буфера обмена 2 МиБ

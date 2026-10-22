@@ -724,3 +724,7 @@ File → Export File as HTML and Export Selection as HTML capture current unsave
 ## 2026-10-22 — Highlight Word
 
 Added independent whole-word highlights across open buffers, a session list, configurable color/case, next/previous navigation, editor popup commands and configurable shortcuts. Background snapshots and incremental painting avoid rescanning on caret movement. See [word highlights](word-highlights.md).
+
+### Pick Window selected-file workflows (2026-10-23)
+
+Window List now supports multiple selected stable document IDs, selected-file Save / Save As / Close with cancellation stopping the batch, all/invert/copy-path tools and intersecting state filters. Unchanged metadata refresh leaves rows and selection intact; actual model changes preserve surviving selected IDs. Read-only save targets are skipped; native source tabs are not individual tiled MDI windows. [Guide and diagram](window-list.md).

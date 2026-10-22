@@ -601,3 +601,6 @@ EXTRA_DIST += insight/tests/ssh_console_gui_test.c insight/tests/ssh_console_fix
 insightdoc_DATA += insight/docs/word-highlights.md
 dist_insightdocmedia_DATA += insight/docs/media/word-highlights.svg
 EXTRA_DIST += insight/tests/word_highlights_gui_test.c
+
+EXTRA_DIST += insight/tests/window_batch_gui_test.c
+dist_insightdocmedia_DATA += insight/docs/media/window-batch.svg
