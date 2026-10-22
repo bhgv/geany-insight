@@ -294,6 +294,7 @@ libgeany_la_SOURCES += \
 	../insight/desktop/replace_files.c ../insight/desktop/replace_files.h \
 	../insight/desktop/html_export.c ../insight/desktop/html_export.h \
 	../insight/desktop/project_report.c ../insight/desktop/project_report.h \
+	../insight/desktop/project_db.c ../insight/desktop/project_db.h \
 	../insight/desktop/symbol_edit.c ../insight/desktop/symbol_edit.h \
 	../insight/desktop/text_transfer.c ../insight/desktop/text_transfer.h \
 	../insight/desktop/intelligent_paste.c \

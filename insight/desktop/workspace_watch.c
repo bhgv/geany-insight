@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "workspace_watch.h"
 struct InsightWorkspaceWatch {
- GHashTable *directories;
+ GHashTable *directories,*paths;
  guint pending,delay;
  InsightWorkspaceChanged changed;
  gpointer data;
@@ -27,11 +27,13 @@ static gboolean hidden(GFile *file) {
 static void changed(GFileMonitor *monitor,GFile *file,GFile *other,GFileMonitorEvent event,gpointer data) {
  (void)monitor; InsightWorkspaceWatch *watch=data;
  if(event==G_FILE_MONITOR_EVENT_ATTRIBUTE_CHANGED || event==G_FILE_MONITOR_EVENT_PRE_UNMOUNT || (hidden(file) && (!other || hidden(other)))) return;
+ GFile *items[]={file,other};for(guint n=0;n<2;n++) if(items[n]) { gchar *path=g_file_get_path(items[n]);if(path) g_hash_table_add(watch->paths,path); }
  if(watch->pending) g_source_remove(watch->pending);
  watch->pending=g_timeout_add(watch->delay,deliver,watch);
 }
 InsightWorkspaceWatch *insight_workspace_watch_new(guint delay,InsightWorkspaceChanged callback,gpointer data) {
  InsightWorkspaceWatch *watch=g_new0(InsightWorkspaceWatch,1);
+ watch->paths=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
  watch->directories=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,monitor_free);
  watch->delay=MAX(delay,10); watch->changed=callback; watch->data=data; return watch;
 }
@@ -49,10 +51,12 @@ gboolean insight_workspace_watch_add(InsightWorkspaceWatch *watch,const char *di
 void insight_workspace_watch_clear(InsightWorkspaceWatch *watch) {
  if(!watch) return;
  if(watch->pending) { g_source_remove(watch->pending); watch->pending=0; }
- g_hash_table_remove_all(watch->directories);
+ g_hash_table_remove_all(watch->directories);g_hash_table_remove_all(watch->paths);
 }
 void insight_workspace_watch_free(InsightWorkspaceWatch *watch) {
  if(!watch) return;
- insight_workspace_watch_clear(watch); g_hash_table_unref(watch->directories); g_free(watch);
+ insight_workspace_watch_clear(watch); g_hash_table_unref(watch->directories);g_hash_table_unref(watch->paths); g_free(watch);
 }
 guint insight_workspace_watch_count(const InsightWorkspaceWatch *watch) { return watch ? g_hash_table_size(watch->directories) : 0; }
+
+GPtrArray *insight_workspace_watch_take_changes(InsightWorkspaceWatch *watch) { GPtrArray *paths=g_ptr_array_new_with_free_func(g_free);GHashTableIter it;gpointer key;g_hash_table_iter_init(&it,watch->paths);while(g_hash_table_iter_next(&it,&key,NULL)) g_ptr_array_add(paths,g_strdup(key));g_hash_table_remove_all(watch->paths);return paths; }

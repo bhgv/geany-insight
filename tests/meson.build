@@ -864,3 +864,8 @@ test('Insight guarded symbol edit plans', symbol_edit_plan_test)
 
 paste_symbol_gui_test = executable('test_insight_paste_symbol_gui', '../insight/tests/paste_symbol_gui_test.c', dependencies: test_deps)
 test('Insight native Paste Symbol guarded preview GUI', paste_symbol_gui_test, timeout: 55, is_parallel: false)
+
+project_db_test = executable('test_insight_project_db', '../insight/tests/project_db_test.c', '../insight/desktop/project_db.c', '../insight/core/index.c', include_directories: include_directories('../insight/desktop','../insight/core'), dependencies: deps, c_args: ['-UNDEBUG'])
+test('Insight persistent project database', project_db_test)
+project_db_gui_test = executable('test_insight_project_db_gui', '../insight/tests/project_db_gui_test.c', dependencies: test_deps)
+test('Insight native persistent incremental project GUI', project_db_gui_test, timeout: 110, is_parallel: false)

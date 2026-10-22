@@ -14,6 +14,7 @@ int main(void) {
  g_assert_true(insight_workspace_watch_add(watch,root,&error)); g_assert_no_error(error);
  g_assert_true(insight_workspace_watch_add(watch,root,&error)); g_assert_cmpuint(insight_workspace_watch_count(watch),==,1);
  g_assert_true(g_file_set_contents(file,"int a;",-1,&error)); pump(500); g_assert_cmpuint(deliveries,>,0);
+ GPtrArray *events=insight_workspace_watch_take_changes(watch);g_assert_cmpuint(events->len,>,0);g_ptr_array_unref(events);events=insight_workspace_watch_take_changes(watch);g_assert_cmpuint(events->len,==,0);g_ptr_array_unref(events);
  deliveries=0;
  g_assert_true(g_file_set_contents(file,"int b;",-1,&error));
  g_assert_true(g_file_set_contents(file,"int c;",-1,&error));

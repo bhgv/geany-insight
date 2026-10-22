@@ -51,6 +51,7 @@
 #include <glib/gstdio.h>
 #include <sys/stat.h>
 #include "../insight/desktop/index_cache.h"
+#include "../insight/desktop/project_db.h"
 #include <stdlib.h>
 #include <stdint.h>
 #include "insight-index.h"
@@ -144,7 +145,7 @@ typedef struct {
  gboolean alive; guint64 scan_generation,usage_generation,definition_generation; guint definition_timer; GCancellable *scan_worker,*search_worker,*definition_worker,*snapshot_worker,*cache_worker,*preview_worker; guint64 preview_generation; guint64 index_generation,index_version; gint64 publish_due;
  InsightIndex *base,*index;
  InsightProjectFiles *membership; gchar *membership_project; gboolean membership_valid;InsightMasterSync *master_sync;guint64 membership_generation;
- GPtrArray *frames,*files,*scan_files,*scan_trees,*scan_members; gboolean scan_keep_files; GHashTable *scan_seen; guint scan_file_position,scan_tree_position; gchar *root,*cache_path; guint scan,parsed,skipped;
+ GPtrArray *frames,*files,*scan_files,*scan_trees,*scan_members; gboolean scan_keep_files; GHashTable *scan_seen; guint scan_file_position,scan_tree_position; gchar *root,*cache_path; gchar *db_identity,*db_policy;GHashTable *file_stamps,*directory_stamps;InsightIndex *disk_calls,*disk_declarations;gboolean force_parse,cache_validation;guint reused; guint scan,parsed,skipped;
  gchar *source_path,*source_digest; gulong source_line;
  GPtrArray *history,*definitions; gint history_position; gboolean populating;
 } Workbench;
@@ -629,6 +630,8 @@ static void stop_scan(void) {
  if(wb.scan_trees) g_ptr_array_set_size(wb.scan_trees,0);
  if(wb.scan_seen) g_hash_table_remove_all(wb.scan_seen);
 }
+static gboolean source_dialect(GeanyFiletype *,InsightCodeDialect *);
+static gchar *reference_snippet(const char *,gsize);
 static gboolean rescan_changed(gpointer data) {
  (void)data; wb.watch_idle=0; workspace_changed(NULL); return G_SOURCE_REMOVE;
 }
@@ -636,16 +639,52 @@ static void workspace_changed(gpointer data) {
  (void)data;
  if(!wb.root) return;
  if(wb.scan || wb.scan_worker) { wb.watch_changed=TRUE; return; }
+ GPtrArray *paths=insight_workspace_watch_take_changes(wb.watch);gboolean membership=FALSE;
+ for(guint n=0;n<paths->len;n++) { const gchar *native=g_ptr_array_index(paths,n);gchar *utf8=utils_get_utf8_from_locale(native);if(!g_hash_table_contains(wb.file_stamps,utf8)||!g_file_test(native,G_FILE_TEST_IS_REGULAR)) membership=TRUE;g_free(utf8); }
+ g_ptr_array_unref(paths);if(!membership&&g_hash_table_size(wb.file_stamps)) wb.cache_validation=TRUE;
  if(!start_scan(wb.root)) ui_set_statusbar(TRUE,"Workspace changed but source folder is unavailable; previous index retained");
 }
+static gchar *project_policy(const gchar *native_root) {
+ GKeyFile *key=g_key_file_new();gchar *root=native_root?utils_get_utf8_from_locale(native_root):NULL;
+ if(wb.workspace_from_project&&wb.membership&&root) insight_project_files_write(wb.membership,key,root,NULL);
+ gchar *data=g_key_file_to_data(key,NULL,NULL),*digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,data,-1);g_free(data);g_free(root);g_key_file_unref(key);return digest;
+}
+static gboolean database_identity(const gchar *root) {
+ gchar *identity=wb.workspace_from_project&&app->project?g_strdup(app->project->file_name):g_strconcat("workspace:",root,NULL);
+ gchar *policy=project_policy(root);gboolean changed=g_strcmp0(identity,wb.db_identity)!=0;
+ if(g_strcmp0(identity,wb.db_identity)||g_strcmp0(policy,wb.db_policy)) {
+  g_free(wb.cache_path);wb.cache_path=insight_project_db_path(app->configdir,identity);g_free(wb.db_identity);wb.db_identity=g_strdup(identity);g_free(wb.db_policy);wb.db_policy=g_strdup(policy);
+ }
+ g_free(identity);g_free(policy);return changed;
+}
+static gchar *source_stamp(const gchar *native,const gchar *language,gint encoding) {
+ gchar *stamp=insight_project_db_stamp(native,FALSE);if(!stamp) return NULL;gchar *value=g_strdup_printf("%s:%d:%s",language?language:"",encoding,stamp);g_free(stamp);return value;
+}
+static void restore_project_database(const gchar *root) {
+ InsightProjectDb db={0};GError *error=NULL;
+ if(!insight_project_db_load(wb.cache_path,wb.db_identity,root,NULL,&db,&error)) { g_clear_error(&error);return; }
+ retire_index(wb.base);wb.base=db.symbols;db.symbols=NULL;retire_index(wb.disk_calls);wb.disk_calls=db.calls;db.calls=NULL;retire_index(wb.disk_declarations);wb.disk_declarations=db.declarations;db.declarations=NULL;
+ g_hash_table_unref(wb.file_stamps);wb.file_stamps=db.files;db.files=NULL;g_hash_table_unref(wb.directory_stamps);wb.directory_stamps=db.directories;db.directories=NULL;
+ g_free(wb.root);wb.root=g_strdup(root);g_ptr_array_set_size(wb.files,0);GHashTableIter it;gpointer path;g_hash_table_iter_init(&it,wb.file_stamps);while(g_hash_table_iter_next(&it,&path,NULL)) g_ptr_array_add(wb.files,g_strdup(path));
+ /* Rehydrate declaration rows without invoking a parser or opening source files. */
+ g_hash_table_remove_all(wb.declarations);
+ for(gsize n=0;n<insight_index_count(wb.disk_declarations);n++) {
+  const InsightSymbol *row=insight_index_at(wb.disk_declarations,n);OutlineFile *o=g_hash_table_lookup(wb.declarations,row->path);
+  if(!o) { GeanyFiletype *ft=filetypes_detect_from_extension(row->path);o=outline_capture(NULL,row->path);o->lang=ft?ft->lang:-1;g_hash_table_insert(wb.declarations,g_strdup(row->path),o); }
+  if(!g_str_has_prefix(row->kind,"@decl:")) continue;gchar *end=NULL;guint type=g_ascii_strtoull(row->kind+6,&end,10);if(!end||*end!=':'||!end[1]) continue;
+  TMTag *tag=tm_tag_new();tag->name=g_strdup(row->name);tag->type=type;tag->kind_letter=end[1];tag->line=row->line;tag->scope=g_strdup(row->scope);tag->arglist=g_strdup(row->signature);tag->var_type=g_strdup(row->type);tag->inheritance=g_strdup(row->inheritance);g_ptr_array_add(o->tags,tag);
+ }
+ wb.cache_validation=!g_strcmp0(db.policy,wb.db_policy);insight_project_db_clear(&db);
+}
 static void watch_directory(const char *path) {
+ gchar *stamp=insight_project_db_stamp(path,TRUE);if(stamp) g_hash_table_replace(wb.directory_stamps,g_strdup(path),stamp);
  GError *error=NULL;
  if(!insight_workspace_watch_add(wb.watch,path,&error)) wb.watch_incomplete=TRUE;
  g_clear_error(&error);
 }
-typedef struct { InsightIndex *index; gchar *path,*root; guint64 epoch,generation; } CacheJob;
+typedef struct { InsightIndex *index;InsightProjectDb db; gchar *path,*root,*identity,*policy; guint64 epoch,generation; } CacheJob;
 static GMutex cache_write_mutex;
-static void cache_job_free(gpointer data) { CacheJob *j=data; retire_index(j->index); g_free(j->path); g_free(j->root); g_free(j); }
+static void cache_job_free(gpointer data) { CacheJob *j=data; retire_index(j->index);insight_project_db_clear(&j->db); g_free(j->path); g_free(j->root);g_free(j->identity);g_free(j->policy); g_free(j); }
 static void cache_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
  (void)source; CacheJob *j=data; GError *error=NULL;
  /* A cancelled older writer cannot replace a newer project's cache. */
@@ -656,7 +695,7 @@ static void cache_job_run(GTask *task,gpointer source,gpointer data,GCancellable
   if(g_mkdir_with_parents(directory,0700)) { ok=FALSE; g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_FAILED,"Unable to create index cache directory"); }
   g_free(directory);
  }
- if(ok) ok=insight_cache_save_cancellable(j->path,j->index,j->root,cancel,&error);
+ if(ok) ok=insight_project_db_save(j->path,j->identity,j->root,j->policy,&j->db,cancel,&error);
  g_mutex_unlock(&cache_write_mutex);
  if(error) g_task_return_error(task,error); else g_task_return_boolean(task,ok);
 }
@@ -664,6 +703,7 @@ static void cache_job_done(GObject *source,GAsyncResult *result,gpointer data) {
  (void)source; (void)data; GTask *task=G_TASK(result); CacheJob *j=g_task_get_task_data(task); GError *error=NULL; gboolean ok=g_task_propagate_boolean(task,&error);
  if(wb.alive && j->epoch==workbench_epoch && j->generation==wb.scan_generation) {
   if(wb.cache_worker==g_task_get_cancellable(task)) g_clear_object(&wb.cache_worker);
+  if(ok) g_object_set_data(G_OBJECT(main_widgets.window),"insight-db-saved",GINT_TO_POINTER(1));
   if(!ok && error && !g_error_matches(error,G_IO_ERROR,G_IO_ERROR_CANCELLED)) ui_set_statusbar(TRUE,"Workspace cache not saved: %s",error->message);
  }
  g_clear_error(&error);
@@ -671,35 +711,21 @@ static void cache_job_done(GObject *source,GAsyncResult *result,gpointer data) {
 static void save_index_cache(void) {
  if(!wb.alive || !wb.base || !wb.root || !wb.cache_path) return;
  if(wb.cache_worker) { g_cancellable_cancel(wb.cache_worker); g_clear_object(&wb.cache_worker); }
- CacheJob *j=g_new0(CacheJob,1); j->index=insight_index_ref(wb.base); j->path=g_strdup(wb.cache_path); j->root=g_strdup(wb.root); j->epoch=workbench_epoch; j->generation=wb.scan_generation;
+ CacheJob *j=g_new0(CacheJob,1); j->index=NULL;j->db.symbols=insight_index_ref(wb.base);j->db.calls=insight_index_ref(wb.disk_calls);j->db.declarations=insight_index_ref(wb.disk_declarations);j->db.files=insight_project_db_copy_table(wb.file_stamps);j->db.directories=insight_project_db_copy_table(wb.directory_stamps);j->identity=g_strdup(wb.db_identity);j->policy=g_strdup(wb.db_policy); j->path=g_strdup(wb.cache_path); j->root=g_strdup(wb.root); j->epoch=workbench_epoch; j->generation=wb.scan_generation;
  wb.cache_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.cache_worker,cache_job_done,NULL); g_task_set_task_data(task,j,cache_job_free); g_task_run_in_thread(task,cache_job_run); g_object_unref(task);
-}
-static void restore_index_cache(void) {
- if(!g_file_test(wb.cache_path,G_FILE_TEST_EXISTS)) return;
- char *root=NULL; GError *error=NULL; InsightIndex *index=insight_cache_load(wb.cache_path,&root,&error);
- if(!index) { ui_set_statusbar(TRUE,"Workspace cache ignored: %s",error ? error->message : "invalid snapshot"); g_clear_error(&error); return; }
- gboolean valid=root && g_path_is_absolute(root); const InsightSymbol *page[256]; size_t total=insight_index_count(index);
- for(size_t offset=0;valid && offset<total;offset+=256) {
-  insight_index_query(index,"",FALSE,NULL,NULL,NULL,offset,page,256);
-  for(size_t i=0;i<256 && offset+i<total;i++) if(!g_utf8_validate(page[i]->name,-1,NULL) || !g_utf8_validate(page[i]->path,-1,NULL) || !g_utf8_validate(page[i]->scope,-1,NULL) || !g_utf8_validate(page[i]->kind,-1,NULL) || !g_utf8_validate(page[i]->signature,-1,NULL) || !g_utf8_validate(page[i]->type,-1,NULL) || !g_utf8_validate(page[i]->inheritance,-1,NULL) || !g_path_is_absolute(page[i]->path)) { valid=FALSE; break; }
- }
- if(!valid) { insight_index_free(index); free(root); ui_set_statusbar(TRUE,"Workspace cache contains invalid paths or text"); return; }
- retire_index(wb.base); wb.base=index; wb.root=g_strdup(root); free(root);
- size_t count=insight_index_file_count(index);
- if(count!=SIZE_MAX && count<=10000) {
-  const char **paths=g_new(const char *,count); insight_index_files(index,"",0,paths,count);
-  for(size_t i=0;i<count;i++) g_ptr_array_add(wb.files,g_strdup(paths[i]));
-  g_free(paths);
- }
 }
 static char *read_disk_source_full(const char *,gboolean,gint,GCancellable *);
 static gboolean scan_step(gpointer);
-typedef struct { InsightIndex *index; OutlineFile *declarations;gchar *path,*utf8,*language; gint lang,encoding; guint64 generation,epoch; gboolean read,parsed,failed,skipped,regular; } IndexJob;
-static void index_job_free(gpointer data) { IndexJob *j=data;outline_free(j->declarations); retire_index(j->index); g_free(j->path); g_free(j->utf8); g_free(j->language); g_free(j); }
+typedef struct { InsightIndex *index,*calls,*outline; OutlineFile *declarations;gchar *stamp,*path,*utf8,*language; gint lang,encoding; guint64 generation,epoch; gboolean read,parsed,failed,skipped,regular; } IndexJob;
+static void index_job_free(gpointer data) { IndexJob *j=data;outline_free(j->declarations); retire_index(j->index);retire_index(j->calls);retire_index(j->outline);g_free(j->stamp); g_free(j->path); g_free(j->utf8); g_free(j->language); g_free(j); }
 static void index_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
  (void)source; IndexJob *j=data; GStatBuf st;
  if(g_cancellable_is_cancelled(cancel)) { g_task_return_boolean(task,FALSE); return; }
  if(!insight_index_exclusive(j->index)) { InsightIndex *copy=insight_index_clone(j->index); if(!copy) { j->failed=TRUE; g_task_return_boolean(task,TRUE); return; } insight_index_free(j->index); j->index=copy; }
+ if(!insight_index_exclusive(j->calls)) { InsightIndex *copy=insight_index_clone(j->calls);insight_index_free(j->calls);j->calls=copy; }
+ if(!insight_index_exclusive(j->outline)) { InsightIndex *copy=insight_index_clone(j->outline);insight_index_free(j->outline);j->outline=copy; }
+ if(!j->calls||!j->outline) { j->failed=TRUE;g_task_return_boolean(task,TRUE);return; }
+ insight_index_update(j->index,j->utf8,NULL,0);insight_index_update(j->calls,j->utf8,NULL,0);insight_index_update(j->outline,j->utf8,NULL,0);
  j->regular=!g_lstat(j->path,&st) && S_ISREG(st.st_mode);
  if(!j->regular || st.st_size>2*1024*1024) j->skipped=TRUE;
  else if(j->read) {
@@ -709,10 +735,23 @@ static void index_job_run(GTask *task,gpointer source,gpointer data,GCancellable
    j->parsed=TRUE;
    if(j->lang>=0 && !g_cancellable_is_cancelled(cancel)) {
     TMSourceFile *file=tm_source_file_new(j->path,j->language);
-    if(file) { file->lang=j->lang; if(!insight_native_parse(j->index,file,j->utf8,text,strlen(text))) j->failed=TRUE;else j->declarations=outline_capture(file,j->utf8); tm_source_file_free(file); }
+    if(file) { file->lang=j->lang; if(!insight_native_parse(j->index,file,j->utf8,text,strlen(text))) j->failed=TRUE;else { j->declarations=outline_capture(file,j->utf8);if(!insight_native_outline_import(j->outline,file,j->utf8)) j->failed=TRUE; } tm_source_file_free(file); }
     else j->failed=TRUE;
    }
-   g_free(text);
+   InsightCodeDialect dialect;
+   GeanyFiletype *ft=filetypes_lookup_by_name(j->language?j->language:"");
+   if(!j->failed&&source_dialect(ft,&dialect)) {
+    gchar *mask=insight_source_code_mask(text,strlen(text),dialect,NULL),*digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,text,-1);GArray *rows=g_array_new(FALSE,FALSE,sizeof(InsightSymbol));GPtrArray *owned=g_ptr_array_new_with_free_func(g_free);size_t cursor=0,a=0,b=0,line=1,line_at=0;
+    while(mask&&rows->len<32000&&insight_next_call(mask,strlen(text),&cursor,&a,&b)==1) {
+     while(line_at<a) { if(text[line_at]=='\n') line++;else if(text[line_at]=='\r'&&(line_at+1>=a||text[line_at+1]!='\n')) line++;line_at++; }
+     size_t start=a;while(start&&text[start-1]!='\n'&&text[start-1]!='\r') start--;
+     gchar *name=g_strndup(text+a,b-a),*positions=g_strdup_printf("%zu:%zu:%lu",a,b,(gulong)g_utf8_strlen(text+start,a-start)+1),*snippet=reference_snippet(text,a);g_ptr_array_add(owned,name);g_ptr_array_add(owned,positions);g_ptr_array_add(owned,snippet);InsightSymbol row={name,j->utf8,"","@call",line,positions,snippet,digest};g_array_append_val(rows,row);
+    }
+    InsightSymbol coverage={"@file",j->utf8,"","@file",1,"","",digest};g_array_append_val(rows,coverage);
+    if(!mask||rows->len>=32001||!insight_index_update(j->calls,j->utf8,(InsightSymbol *)rows->data,rows->len)) j->failed=TRUE;
+    g_ptr_array_unref(owned);g_array_unref(rows);g_free(mask);g_free(digest);
+   }
+   gchar *after=source_stamp(j->path,j->language,j->encoding);if(g_strcmp0(after,j->stamp)) j->failed=TRUE;g_free(after);g_free(text);
   }
  }
  g_task_return_boolean(task,TRUE);
@@ -720,8 +759,10 @@ static void index_job_run(GTask *task,gpointer source,gpointer data,GCancellable
 static void index_job_done(GObject *source,GAsyncResult *result,gpointer data) {
  (void)source; (void)data; GTask *task=G_TASK(result); IndexJob *j=g_task_get_task_data(task); gboolean ok=g_task_propagate_boolean(task,NULL);
  if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.scan_generation) return;
- g_clear_object(&wb.scan_worker); retire_index(wb.base); wb.base=j->index; j->index=NULL; wb.index_dirty=TRUE;
+ g_clear_object(&wb.scan_worker); retire_index(wb.base); wb.base=j->index; j->index=NULL;retire_index(wb.disk_calls);wb.disk_calls=j->calls;j->calls=NULL;retire_index(wb.disk_declarations);wb.disk_declarations=j->outline;j->outline=NULL; wb.index_dirty=TRUE;
+ if(!j->failed&&j->stamp) g_hash_table_replace(wb.file_stamps,g_strdup(j->utf8),g_strdup(j->stamp));
  if(j->declarations && !j->failed) { g_hash_table_replace(wb.declarations,g_strdup(j->utf8),j->declarations);j->declarations=NULL; }
+ if(!j->parsed&&!j->failed) g_hash_table_remove(wb.declarations,j->utf8);
  if(j->parsed) wb.parsed++;
  if(j->regular) {
   g_ptr_array_add(wb.scan_members,g_strdup(j->utf8));
@@ -739,8 +780,10 @@ static void scan_source_file(const char *path,gboolean explicit_file) {
  g_hash_table_add(wb.scan_seen,g_strdup(path));
  gchar *utf8=utils_get_utf8_from_locale(path),*root=utils_get_utf8_from_locale(wb.root);
  if(wb.workspace_from_project && !insight_project_files_contains(wb.membership,root,utf8)) { g_free(root); g_free(utf8); return; }
- g_free(root); GeanyFiletype *ft=filetypes_detect_from_file(utf8);
- IndexJob *j=g_new0(IndexJob,1); j->index=wb.base; wb.base=NULL; j->path=g_strdup(path); j->utf8=utf8; j->language=g_strdup(ft ? ft->name : NULL); j->lang=ft ? ft->lang : -1; j->read=explicit_file || (ft && ft->id!=GEANY_FILETYPES_NONE); j->encoding=file_prefs.default_open_encoding; j->generation=wb.scan_generation; j->epoch=workbench_epoch;
+ g_free(root); GeanyFiletype *ft=filetypes_detect_from_extension(utf8);
+ gchar *stamp=source_stamp(path,ft?ft->name:NULL,file_prefs.default_open_encoding);
+ if(!wb.force_parse&&stamp&&!g_strcmp0(stamp,g_hash_table_lookup(wb.file_stamps,utf8))) { g_ptr_array_add(wb.scan_members,g_strdup(utf8));wb.reused++;g_free(stamp);g_free(utf8);return; }
+ IndexJob *j=g_new0(IndexJob,1); j->index=wb.base; wb.base=NULL;j->calls=insight_index_ref(wb.disk_calls);j->outline=insight_index_ref(wb.disk_declarations);j->stamp=stamp; j->path=g_strdup(path); j->utf8=utf8; j->language=g_strdup(ft ? ft->name : NULL); j->lang=ft ? ft->lang : -1; j->read=explicit_file || (ft && ft->id!=GEANY_FILETYPES_NONE); j->encoding=file_prefs.default_open_encoding; j->generation=wb.scan_generation; j->epoch=workbench_epoch;
  wb.scan_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.scan_worker,index_job_done,NULL); g_task_set_task_data(task,j,index_job_free); g_task_run_in_thread(task,index_job_run); g_object_unref(task);
 }
 static gboolean scan_step(gpointer data) {
@@ -751,10 +794,19 @@ static gboolean scan_step(gpointer data) {
   /* Project membership is separate from the symbol index. Publish a complete
    * replacement only after enumeration; do not narrow the visible list while
    * a same-root rescan is still in progress. */
+  if(!wb.scan_failed) {
+   gboolean detached=FALSE;
+   GHashTable *live=g_hash_table_new(g_str_hash,g_str_equal);for(guint n=0;n<wb.scan_members->len;n++) g_hash_table_add(live,g_ptr_array_index(wb.scan_members,n));
+   GHashTableIter it;gpointer path;g_hash_table_iter_init(&it,wb.file_stamps);while(g_hash_table_iter_next(&it,&path,NULL)) if(!g_hash_table_contains(live,path)) {
+    if(!detached) { InsightIndex *copy=insight_index_clone(wb.base);retire_index(wb.base);wb.base=copy;copy=insight_index_clone(wb.disk_calls);retire_index(wb.disk_calls);wb.disk_calls=copy;copy=insight_index_clone(wb.disk_declarations);retire_index(wb.disk_declarations);wb.disk_declarations=copy;detached=TRUE; }
+    insight_index_update(wb.base,path,NULL,0);insight_index_update(wb.disk_calls,path,NULL,0);insight_index_update(wb.disk_declarations,path,NULL,0);g_hash_table_remove(wb.declarations,path);g_hash_table_iter_remove(&it); }g_hash_table_unref(live);
+  }
+  wb.force_parse=FALSE;
   if(!wb.scan_failed) { GPtrArray *old=wb.files; wb.files=wb.scan_members; wb.scan_members=old; g_ptr_array_set_size(wb.scan_members,0); }
   g_ptr_array_set_size(wb.frames,0); g_ptr_array_set_size(wb.scan_files,0); g_ptr_array_set_size(wb.scan_trees,0); g_hash_table_remove_all(wb.scan_seen); refresh_index();
+  g_object_set_data(G_OBJECT(main_widgets.window),"insight-db-parsed",GUINT_TO_POINTER(wb.parsed+1));g_object_set_data(G_OBJECT(main_widgets.window),"insight-db-reused",GUINT_TO_POINTER(wb.reused+1));g_object_set_data(G_OBJECT(main_widgets.window),"insight-db-members",GUINT_TO_POINTER(wb.files->len+1));g_object_set_data(G_OBJECT(main_widgets.window),"insight-db-scanning",NULL);
   if(!limited && !wb.scan_failed) save_index_cache();
-  ui_set_statusbar(TRUE,"Workspace: %u files, %zu symbols, %u skipped%s",wb.parsed,insight_index_count(wb.index),wb.skipped,limited ? "; file limit reached" : (wb.watch_incomplete ? "; directory monitoring incomplete" : ""));
+  ui_set_statusbar(TRUE,"Workspace: %u parsed, %u reused, %zu symbols, %u skipped%s",wb.parsed,wb.reused,insight_index_count(wb.index),wb.skipped,limited ? "; file limit reached" : (wb.watch_incomplete ? "; directory monitoring incomplete" : ""));
   browser_filter(NULL,NULL); files_filter(NULL,NULL); tree_refresh(); file_types_refresh(); categories_filter(NULL,NULL); local_filter(NULL,NULL); insight_workbench_refresh();
   if(wb.watch_changed && !wb.watch_idle) { wb.watch_changed=FALSE; wb.watch_idle=g_timeout_add(2000,rescan_changed,NULL); }
   return G_SOURCE_REMOVE;
@@ -781,26 +833,39 @@ static gboolean scan_step(gpointer data) {
  scan_source_file(path,FALSE); g_free(path); return scan_continue();
 }
 static gboolean start_scan(const char *root) {
+ gchar *requested_root=g_strdup(root);stop_scan();root=requested_root;
  if(wb.workspace_from_project && insight_git_active()) {
   stop_scan();GError *error=NULL;InsightProjectFiles *policy=insight_git_membership(&error);
-  if(!policy) { ui_set_statusbar(TRUE,"Cannot read Git project files: %s",error ? error->message : "Git is busy");g_clear_error(&error);return FALSE; }
+  if(!policy) { g_free(requested_root);ui_set_statusbar(TRUE,"Cannot read Git project files: %s",error ? error->message : "Git is busy");g_clear_error(&error);return FALSE; }
   insight_project_files_free(wb.membership);wb.membership=policy;
  }
- gchar *owned=g_canonicalize_filename(root,NULL); GDir *dir=g_dir_open(owned,0,NULL); InsightIndex *next=insight_index_new();
+ gchar *owned=g_canonicalize_filename(root,NULL);g_free(requested_root); GDir *dir=g_dir_open(owned,0,NULL); InsightIndex *next=NULL;
+ gboolean context_changed=database_identity(owned)||g_strcmp0(wb.root,owned)!=0;
+ if(context_changed) { g_hash_table_remove_all(wb.file_stamps);g_hash_table_remove_all(wb.directory_stamps);g_hash_table_remove_all(wb.declarations);retire_index(wb.base);wb.base=insight_index_new();retire_index(wb.disk_calls);wb.disk_calls=insight_index_new();retire_index(wb.disk_declarations);wb.disk_declarations=insight_index_new(); }
+ if(!wb.force_parse&&(context_changed||!g_hash_table_size(wb.file_stamps))) restore_project_database(owned);
+ next=wb.base?insight_index_ref(wb.base):insight_index_new();
  if(!dir || !next) { if(dir) g_dir_close(dir); insight_index_free(next); g_free(owned); return FALSE; }
  gboolean same_root=!g_strcmp0(wb.root,owned);
  invalidate_search_context(); stop_scan(); wb.scan_keep_files=same_root; g_ptr_array_set_size(wb.scan_members,0);
  if(wb.watch_idle) { g_source_remove(wb.watch_idle); wb.watch_idle=0; }
- insight_workspace_watch_clear(wb.watch); wb.watch_changed=FALSE; wb.watch_incomplete=FALSE; watch_directory(owned);
- g_hash_table_remove_all(wb.declarations);retire_index(wb.base); wb.base=next; g_free(wb.root); wb.root=g_strdup(owned);
+ insight_workspace_watch_clear(wb.watch); wb.watch_changed=FALSE; wb.watch_incomplete=FALSE; if(!wb.cache_validation) watch_directory(owned);
+ retire_index(wb.base); wb.base=next; g_free(wb.root); wb.root=g_strdup(owned);
  if(!same_root) g_ptr_array_set_size(wb.files,0);
  ScanFrame *frame=g_new0(ScanFrame,1); frame->path=owned; frame->dir=dir;
- if(!wb.workspace_from_project || wb.membership->automatic) { g_ptr_array_add(wb.frames,frame); g_hash_table_add(wb.scan_seen,g_strdup(owned)); } else frame_free(frame);
- if(wb.workspace_from_project) {
+ gboolean known_only=wb.cache_validation;wb.cache_validation=FALSE;
+ if(known_only) { GHashTableIter it;gpointer path,value;g_hash_table_iter_init(&it,wb.directory_stamps);while(g_hash_table_iter_next(&it,&path,&value)) { gchar *now=insight_project_db_stamp(path,TRUE);if(g_strcmp0(now,value)) known_only=FALSE;g_free(now); } }
+ if(!known_only) { g_hash_table_remove_all(wb.directory_stamps);watch_directory(owned); }
+ if(known_only) {
+  GHashTableIter it;gpointer path;g_hash_table_iter_init(&it,wb.file_stamps);while(g_hash_table_iter_next(&it,&path,NULL)) { gchar *native=utils_get_locale_from_utf8(path);if(g_file_test(native,G_FILE_TEST_IS_REGULAR)) g_ptr_array_add(wb.scan_files,native);else g_free(native); }
+  g_hash_table_iter_init(&it,wb.directory_stamps);while(g_hash_table_iter_next(&it,&path,NULL)) { GError *error=NULL;insight_workspace_watch_add(wb.watch,path,&error);g_clear_error(&error); }
+  frame_free(frame);
+ }else if(!wb.workspace_from_project || wb.membership->automatic) { g_ptr_array_add(wb.frames,frame); g_hash_table_add(wb.scan_seen,g_strdup(owned)); } else frame_free(frame);
+ if(wb.workspace_from_project&&!known_only) {
   for(guint i=0;i<wb.membership->files->len;i++) { const char *path=g_ptr_array_index(wb.membership->files,i); gchar *native=utils_get_locale_from_utf8(path),*parent=g_path_get_dirname(native); g_ptr_array_add(wb.scan_files,native); watch_directory(parent); g_free(parent); }
   for(guint i=0;i<wb.membership->trees->len;i++) g_ptr_array_add(wb.scan_trees,utils_get_locale_from_utf8(g_ptr_array_index(wb.membership->trees,i)));
  }
- wb.scan_file_position=wb.scan_tree_position=0; wb.parsed=wb.skipped=0;wb.report_scan_completed=FALSE; mark_index_dirty(); wb.scan_failed=FALSE; wb.scan=g_idle_add(scan_step,NULL); ui_set_statusbar(TRUE,"Workspace: indexing source folder…"); return TRUE;
+ g_object_set_data(G_OBJECT(main_widgets.window),"insight-db-saved",NULL);g_object_set_data(G_OBJECT(main_widgets.window),"insight-db-scanning",GINT_TO_POINTER(1));
+ wb.scan_file_position=wb.scan_tree_position=0; wb.parsed=wb.skipped=wb.reused=0;wb.report_scan_completed=FALSE; mark_index_dirty(); wb.scan_failed=FALSE; wb.scan=g_idle_add(scan_step,NULL); ui_set_statusbar(TRUE,"Workspace: indexing source folder…"); return TRUE;
 }
 static void choose_root(GtkButton *button,gpointer data) {
  (void)button; (void)data;
@@ -1209,8 +1274,15 @@ static void browser_entry_activate(GtkEntry *entry,gpointer data) {
  if(gtk_tree_model_get_iter_first(model,&iter)) { GtkTreeIter child; while(gtk_tree_model_iter_children(model,&child,&iter)) iter=child; GtkTreePath *path=gtk_tree_model_get_path(model,&iter); gtk_tree_view_expand_to_path(view,path); browser_activated(view,path,NULL,NULL); gtk_tree_path_free(path); }
 }
 static void outline_changed(GtkToggleButton *button,gpointer data) { (void)button; (void)data; browser_filter(NULL,NULL); }
+static gint project_path_compare(gconstpointer a,gconstpointer b) { return g_strcmp0(*(gchar *const *)a,*(gchar *const *)b); }
 static void files_filter(GtkEditable *entry,gpointer data) {
- (void)entry; (void)data; if(!wb.file_store) return; SymbolListJob *j=symbol_list_begin(wb.file_store,wb.file_entry,10000,TRUE); if(!j) return;
+ (void)entry; (void)data; if(!wb.file_store) return;
+ g_ptr_array_sort(wb.files,project_path_compare);GChecksum *sum=g_checksum_new(G_CHECKSUM_SHA256);const gchar *query=gtk_entry_get_text(GTK_ENTRY(wb.file_entry));g_checksum_update(sum,(const guchar *)query,strlen(query)+1);if(wb.root) g_checksum_update(sum,(const guchar *)wb.root,strlen(wb.root)+1);
+ for(guint n=0;n<wb.files->len;n++) { const gchar *path=g_ptr_array_index(wb.files,n);g_checksum_update(sum,(const guchar *)path,strlen(path)+1); }
+ GeanyDocument *active=document_get_current();gchar *profile=active?insight_languages_profile_name(active->editor->sci,active->file_name,active->file_type):g_strdup("");g_checksum_update(sum,(const guchar *)profile,strlen(profile)+1);g_free(profile);
+ if(!wb.workspace_from_project) for(guint n=0;n<documents_array->len;n++) { GeanyDocument *d=g_ptr_array_index(documents_array,n);if(d->is_valid&&d->file_name) g_checksum_update(sum,(const guchar *)d->file_name,strlen(d->file_name)+1); }
+ const gchar *key=g_checksum_get_string(sum);gboolean same=!g_strcmp0(key,g_object_get_data(G_OBJECT(wb.file_store),"insight-request-key"));if(!same) g_object_set_data_full(G_OBJECT(wb.file_store),"insight-request-key",g_strdup(key),g_free);g_checksum_free(sum);if(same) return;
+ SymbolListJob *j=symbol_list_begin(wb.file_store,wb.file_entry,10000,TRUE); if(!j) return;
  j->paths=g_ptr_array_new_with_free_func(g_free);
  for(guint n=0;n<wb.files->len;n++) g_ptr_array_add(j->paths,g_strdup(g_ptr_array_index(wb.files,n)));
  if(!wb.workspace_from_project) for(guint n=0;n<documents_array->len;n++) { GeanyDocument *doc=g_ptr_array_index(documents_array,n); if(doc->is_valid && doc->file_name) g_ptr_array_add(j->paths,g_strdup(doc->file_name)); }
@@ -1354,11 +1426,19 @@ static InsightSourceRegion reference_region(void) {
  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_code))) return INSIGHT_REGION_CODE;
  gint mode=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.usage_comments));return mode==1 ? INSIGHT_REGION_SKIP_COMMENTS : mode==2 ? INSIGHT_REGION_COMMENTS : INSIGHT_REGION_ALL;
 }
-typedef struct { gchar *path,*query,*text,*digest; InsightOccurrence *found; GPtrArray *snippets; gulong *columns; gsize total,apply_position; guint id,flags,context,capacity; gint mode,encoding; InsightCodeDialect dialect; gboolean keywords,have_dialect,valid;InsightSourceRegion region; guint64 generation,epoch; } SearchJob;
+typedef struct { gchar *path,*query,*text,*digest,*cached_stamp,*cached_language;InsightIndex *cached_calls; InsightOccurrence *found; GPtrArray *snippets; gulong *columns; gsize total,apply_position; guint id,flags,context,capacity; gint mode,encoding; InsightCodeDialect dialect; gboolean keywords,have_dialect,valid;InsightSourceRegion region; guint64 generation,epoch; } SearchJob;
 static gboolean usage_step(gpointer);
-static void search_job_free(gpointer data) { SearchJob *j=data; g_free(j->path); g_free(j->query); g_free(j->text); g_free(j->digest); g_free(j->found); g_clear_pointer(&j->snippets,g_ptr_array_unref); g_free(j->columns); g_free(j); }
+static void search_job_free(gpointer data) { SearchJob *j=data; g_free(j->path); g_free(j->query); g_free(j->text); g_free(j->digest);g_free(j->cached_stamp);g_free(j->cached_language);retire_index(j->cached_calls); g_free(j->found); g_clear_pointer(&j->snippets,g_ptr_array_unref); g_free(j->columns); g_free(j); }
 static void search_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
  (void)source; SearchJob *j=data;
+ if(j->mode==7&&!j->text&&j->cached_calls&&j->cached_stamp) {
+  gchar *native=utils_get_locale_from_utf8(j->path);gchar *now=source_stamp(native,j->cached_language,j->encoding);g_free(native);
+  const InsightSymbol *coverage=NULL;gboolean usable=!g_strcmp0(now,j->cached_stamp)&&insight_index_query(j->cached_calls,"@file",TRUE,NULL,"@file",j->path,0,&coverage,1)==1;g_free(now);
+  if(usable) {
+   j->digest=g_strdup(coverage->inheritance);j->total=insight_index_query(j->cached_calls,j->query,TRUE,NULL,"@call",j->path,0,NULL,0);gsize count=MIN(j->total,j->capacity);const InsightSymbol **rows=g_new(const InsightSymbol *,count);insight_index_query(j->cached_calls,j->query,TRUE,NULL,"@call",j->path,0,rows,count);j->found=g_new0(InsightOccurrence,count);j->columns=g_new0(gulong,count);j->snippets=g_ptr_array_new_with_free_func(g_free);j->valid=TRUE;
+   for(gsize n=0;n<count;n++) { gchar **parts=g_strsplit(rows[n]->signature,":",3);if(g_strv_length(parts)!=3) j->valid=FALSE;else { j->found[n]=(InsightOccurrence){g_ascii_strtoull(parts[0],NULL,10),g_ascii_strtoull(parts[1],NULL,10),rows[n]->line,0};j->columns[n]=g_ascii_strtoull(parts[2],NULL,10);g_ptr_array_add(j->snippets,g_strdup(rows[n]->type)); }g_strfreev(parts); }g_free(rows);g_task_return_boolean(task,TRUE);return;
+  }
+ }
  if(!j->text && j->path && !g_cancellable_is_cancelled(cancel)) j->text=read_disk_source_full(j->path,TRUE,j->encoding,cancel);
  char *mask=j->text && j->region!=INSIGHT_REGION_ALL && j->have_dialect ? insight_source_region_mask(j->text,strlen(j->text),j->dialect,j->region,NULL) : NULL;
  const char *text=j->region!=INSIGHT_REGION_ALL ? mask : j->text; j->found=g_new(InsightOccurrence,j->capacity);
@@ -1446,7 +1526,8 @@ static gboolean usage_step(gpointer data) {
  Location *location=g_ptr_array_index(wb.usage_paths,wb.usage_position++); GeanyDocument *doc=location->id ? document_find_by_id(location->id) : document_find_by_filename(location->path);
  SearchJob *j=g_new0(SearchJob,1); j->path=g_strdup(location->path); j->query=g_strdup(wb.usage_name); j->id=doc ? doc->id : 0; j->mode=wb.usage_mode; j->flags=wb.usage_flags; j->keywords=wb.usage_keywords; j->context=wb.usage_context; j->capacity=2000-wb.usage_shown; j->encoding=file_prefs.default_open_encoding; j->generation=wb.usage_generation; j->epoch=workbench_epoch;
  if(doc) { gint length=sci_get_length(doc->editor->sci); if(length>=0 && length<=2*1024*1024) { j->text=sci_get_contents(doc->editor->sci,length+1); if(j->text && (!g_utf8_validate(j->text,length,NULL) || memchr(j->text,0,length))) g_clear_pointer(&j->text,g_free); } }
- j->region=j->mode==7 ? INSIGHT_REGION_CODE : j->mode==0 ? wb.usage_region : j->mode==3 ? wb.project_region : INSIGHT_REGION_ALL; GeanyFiletype *ft=doc ? doc->file_type : (j->path ? filetypes_detect_from_extension(j->path) : NULL); j->have_dialect=source_dialect(ft,&j->dialect);
+ if(j->mode==7&&!doc&&j->path) { j->cached_calls=insight_index_ref(wb.disk_calls);j->cached_stamp=g_strdup(g_hash_table_lookup(wb.file_stamps,j->path)); }
+ j->region=j->mode==7 ? INSIGHT_REGION_CODE : j->mode==0 ? wb.usage_region : j->mode==3 ? wb.project_region : INSIGHT_REGION_ALL; GeanyFiletype *ft=doc ? doc->file_type : (j->path ? filetypes_detect_from_extension(j->path) : NULL); j->have_dialect=source_dialect(ft,&j->dialect);j->cached_language=g_strdup(ft?ft->name:NULL);
  wb.search_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.search_worker,search_job_done,NULL); g_task_set_task_data(task,j,search_job_free); g_task_run_in_thread(task,search_job_run); g_object_unref(task); wb.usage_idle=0; return G_SOURCE_REMOVE;
 }
 static gboolean search_path_matches(const char *path) {
@@ -3599,7 +3680,7 @@ static void native_document_event(GObject *object,GeanyDocument *doc,gpointer da
  insight_window_list_document_event(doc ? doc->id : 0,data); if(!strcmp(data,"document_close") || !strcmp(data,"document_save")) insight_workbench_bookmarks_changed();
  if(!strcmp(data,"document_close")) bookmark_file_closed(doc);
  if(!strcmp(data,"document_open") || !strcmp(data,"document_activate")) bookmark_restore_document(doc);
- if(wb.alive && !wb.file_event_idle) wb.file_event_idle=g_idle_add(file_event_refresh,NULL);
+ if(wb.alive && strcmp(data,"document_activate") && !wb.file_event_idle) wb.file_event_idle=g_idle_add(file_event_refresh,NULL);
  if(!strcmp(data,"document_save") && doc && doc->file_name && wb.membership && !g_strcmp0(doc->file_name,wb.membership->master_file)) insight_master_sync_poll(wb.master_sync);
  if(strcmp(data,"document_activate")) mark_index_dirty();
  insight_workbench_refresh();
@@ -3789,7 +3870,7 @@ static void native_project_close(GObject *object,gpointer data) {
  (void)object; (void)data; g_clear_pointer(&wb.geany_root,g_free); g_clear_pointer(&wb.membership_project,g_free); wb.membership_valid=FALSE;
  if(!wb.workspace_from_project) return;
  wb.workspace_from_project=FALSE; invalidate_search_context(); stop_scan(); insight_workspace_watch_clear(wb.watch); wb.watch_changed=FALSE; if(wb.watch_idle) { g_source_remove(wb.watch_idle); wb.watch_idle=0; } retire_index(wb.base); wb.base=insight_index_new();g_hash_table_remove_all(wb.declarations); mark_index_dirty(); g_ptr_array_set_size(wb.files,0); g_clear_pointer(&wb.root,g_free);
- if(wb.cache_path) g_unlink(wb.cache_path);
+ /* Project databases survive project-close and application restart. */
  refresh_index(); browser_filter(NULL,NULL); files_filter(NULL,NULL); tree_refresh(); categories_filter(NULL,NULL); file_types_refresh(); insight_workbench_refresh();
 }
 static void create_native_lua(void) {
@@ -4606,11 +4687,15 @@ static void create_structural_selection_menu(void) {
 static void git_project_refresh(GtkWidget *widget,gpointer data) {
  (void)widget;(void)data;if(app->project) native_project_update(NULL,NULL,GINT_TO_POINTER(1));
 }
+static void project_synchronize(GtkMenuItem *item,gpointer data) {
+ (void)item;if(!wb.root) { ui_set_statusbar(TRUE,"Open a project first");return; }wb.force_parse=GPOINTER_TO_INT(data)!=0;wb.cache_validation=FALSE;start_scan(wb.root);
+}
 static void create_workbench_menus(void) {
  insight_git_install(G_CALLBACK(git_project_refresh));
  GtkWidget *overview=gtk_check_menu_item_new_with_label("Overview"); gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(overview),insight_overview_get_visible()); g_signal_connect(overview,"toggled",G_CALLBACK(overview_visible),NULL); gtk_container_add(GTK_CONTAINER(ui_lookup_widget(main_widgets.window,"menu_view1_menu")),overview); gtk_widget_show(overview);
  GtkWidget *project_menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(ui_lookup_widget(main_widgets.window,"menu_project1"))),*manage=gtk_menu_item_new_with_label("Add and Remove Project Files…"); gtk_container_add(GTK_CONTAINER(project_menu),manage); g_signal_connect(manage,"activate",G_CALLBACK(manage_project_files),NULL); gtk_widget_show(manage);
  const gchar *master_labels[]={"Synchronize Master File List","Open Project Master File List"};for(guint i=0;i<2;i++) { GtkWidget *command=gtk_menu_item_new_with_label(master_labels[i]);gtk_widget_set_name(command,i ? "insight-open-master-list" : "insight-sync-master-list");gtk_menu_shell_append(GTK_MENU_SHELL(project_menu),command);g_signal_connect(command,"activate",G_CALLBACK(project_master_command),GINT_TO_POINTER(i));gtk_widget_show(command); }
+ const gchar *sync_labels[]={"Synchronize Files","Rebuild Project"};for(guint n=0;n<2;n++) { GtkWidget *command=gtk_menu_item_new_with_label(sync_labels[n]);gtk_widget_set_name(command,n?"insight-project-rebuild":"insight-project-synchronize");g_signal_connect(command,"activate",G_CALLBACK(project_synchronize),GINT_TO_POINTER(n));gtk_menu_shell_append(GTK_MENU_SHELL(project_menu),command);gtk_widget_show(command); }
  insight_project_report_init(project_menu,capture_project_report);
  GtkWidget *menubar=ui_lookup_widget(main_widgets.window,"menubar1"),*navigate=gtk_menu_item_new_with_mnemonic("_Navigate"),*menu=gtk_menu_new();
  gtk_menu_item_set_submenu(GTK_MENU_ITEM(navigate),menu); gtk_menu_shell_insert(GTK_MENU_SHELL(menubar),navigate,4);
@@ -4798,7 +4883,7 @@ static void restore_workbench_settings(void) {
 }
 static void reindex_root(GtkButton *button,gpointer data) {
  (void)button; (void)data;
- if(!wb.root || !start_scan(wb.root)) ui_set_statusbar(TRUE,"Choose a readable source folder first");
+ wb.force_parse=TRUE;if(!wb.root || !start_scan(wb.root)) ui_set_statusbar(TRUE,"Choose a readable source folder first");
 }
 static void toolbar_definition(GtkToolButton *button,gpointer data) { (void)button; go_definition(NULL,data); }
 static void toolbar_focus(GtkToolButton *button,gpointer data) { (void)button; focus_browser(NULL,data); }
@@ -5258,7 +5343,7 @@ void insight_workbench_init(void) {
  wb.membership=insight_project_files_new();wb.master_sync=insight_master_sync_new(3000,master_membership_applied,master_sync_report,NULL);InsightMasterTypes *master_types=insight_languages_master_types();insight_master_sync_set_types(wb.master_sync,master_types);insight_master_types_free(master_types); wb.scan_members=g_ptr_array_new_with_free_func(g_free); wb.scan_files=g_ptr_array_new_with_free_func(g_free); wb.scan_trees=g_ptr_array_new_with_free_func(g_free); wb.scan_seen=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
  wb.frames=g_ptr_array_new_with_free_func(frame_free); wb.files=g_ptr_array_new_with_free_func(g_free);
  wb.declarations=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,outline_free);wb.base=insight_index_new(); wb.index=insight_index_new(); mark_index_dirty();
- wb.cache_path=g_build_filename(app->configdir,"insight","workspace.idx",NULL); restore_index_cache();
+ wb.file_stamps=insight_project_db_copy_table(NULL);wb.directory_stamps=insight_project_db_copy_table(NULL);wb.disk_calls=insight_index_new();wb.disk_declarations=insight_index_new();
  wb.definitions=g_ptr_array_new_with_free_func(location_free);
  wb.history=g_ptr_array_new_with_free_func(location_free); wb.history_position=-1;
  wb.project_notebook=gtk_notebook_new(); g_signal_connect(wb.project_notebook,"switch-page",G_CALLBACK(project_panel_changed),NULL); gtk_notebook_set_scrollable(GTK_NOTEBOOK(wb.project_notebook),TRUE);
@@ -5361,7 +5446,7 @@ void insight_workbench_init(void) {
  for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].restore) detach_panel(i);
  panel_groups_apply(&session_groups);
  for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].window) { if(session_groups.values[IL_HOST_MINIMIZED]&(1<<i)) panel_minimize(i);else gtk_widget_set_visible(wb.hosts[i].window,(session_groups.values[IL_HOST_VISIBLE]&(1<<i))!=0); }
- if(wb.root && !wb.scan) start_scan(wb.root);
+ if(wb.root && !wb.scan && !wb.report_scan_completed) start_scan(wb.root);
  g_signal_connect(wb.right_pane,"notify::position",G_CALLBACK(panel_position_guard),NULL);g_signal_connect(ui_lookup_widget(main_widgets.window,"hpaned1"),"notify::position",G_CALLBACK(panel_position_guard),NULL);g_signal_connect(existing,"notify::position",G_CALLBACK(panel_position_guard),NULL);
  ui_sidebar_show_hide();
  if(ui_prefs.msgwindow_visible && !g_file_test(wb.prefs_path,G_FILE_TEST_EXISTS)) reveal_context();
@@ -5411,7 +5496,7 @@ void insight_workbench_finalize(void) {
  g_free(wb.search_state_path); g_ptr_array_free(wb.search_files,TRUE); g_ptr_array_free(wb.search_history,TRUE); g_object_unref(wb.search_matches);
  if(wb.watch_idle) g_source_remove(wb.watch_idle);
  insight_workspace_watch_free(wb.watch);insight_master_sync_free(wb.master_sync);wb.master_sync=NULL;
- stop_scan(); g_ptr_array_free(wb.scan_members,TRUE); insight_project_files_free(wb.membership); g_free(wb.membership_project); g_ptr_array_free(wb.scan_files,TRUE); g_ptr_array_free(wb.scan_trees,TRUE); g_hash_table_destroy(wb.scan_seen); g_ptr_array_free(wb.frames,TRUE); g_ptr_array_free(wb.files,TRUE); g_free(wb.root); g_free(wb.cache_path);
+ stop_scan(); g_ptr_array_free(wb.scan_members,TRUE); insight_project_files_free(wb.membership); g_free(wb.membership_project); g_ptr_array_free(wb.scan_files,TRUE); g_ptr_array_free(wb.scan_trees,TRUE); g_hash_table_destroy(wb.scan_seen); g_ptr_array_free(wb.frames,TRUE); g_ptr_array_free(wb.files,TRUE); g_free(wb.root); g_free(wb.cache_path);g_free(wb.db_identity);g_free(wb.db_policy);g_hash_table_unref(wb.file_stamps);g_hash_table_unref(wb.directory_stamps);retire_index(wb.disk_calls);retire_index(wb.disk_declarations);
  g_free(wb.editor_find_query); g_free(wb.editor_find_digest);
  g_free(wb.follow_word); g_free(wb.relation_word);
  g_free(wb.source_path); g_free(wb.source_digest); g_free(wb.find_last_query); g_free(wb.find_last_digest);
@@ -5435,7 +5520,7 @@ void insight_workbench_finalize(void) {
  insight_languages_finalize();insight_i18n_finalize();memset(&wb,0,sizeof wb);
 }
 
-void insight_workbench_languages_changed(void) { if(!wb.alive) return;InsightMasterTypes *types=insight_languages_master_types();insight_master_sync_set_types(wb.master_sync,types);insight_master_types_free(types);stop_definition();wb.follow_doc=0;if(wb.root) { gchar *path=g_strdup(wb.root);start_scan(path);g_free(path); }else mark_index_dirty();stop_usage();browser_filter(NULL,NULL);files_filter(NULL,NULL);categories_filter(NULL,NULL);preview_links();insight_workbench_refresh(); }
+void insight_workbench_languages_changed(void) { if(!wb.alive) return;InsightMasterTypes *types=insight_languages_master_types();insight_master_sync_set_types(wb.master_sync,types);insight_master_types_free(types);stop_definition();wb.follow_doc=0;if(wb.root) { wb.force_parse=TRUE;gchar *path=g_strdup(wb.root);start_scan(path);g_free(path); }else mark_index_dirty();stop_usage();browser_filter(NULL,NULL);files_filter(NULL,NULL);categories_filter(NULL,NULL);preview_links();insight_workbench_refresh(); }
 
 void insight_workbench_locale_changed(void) { if(!wb.alive) return;for(guint i=0;i<wb.host_count;i++) { panel_controls_update(&wb.hosts[i]);if(panel_window_owner(wb.hosts[i].window)==i) panel_window_refresh(wb.hosts[i].window); }if(wb.disk_browser) insight_disk_browser_locale_changed(wb.disk_browser);if(wb.relation_tree) insight_relation_tree_locale_changed(wb.relation_tree);if(wb.type_panel.status) grouped_count(&wb.type_panel,wb.type_panel.shown,wb.type_panel.total);if(wb.category_panel.status) { grouped_count(&wb.category_panel,wb.category_panel.shown,wb.category_panel.total);categories_filter(NULL,NULL); }if(wb.tree_status) folder_count(GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(wb.tree_status),"insight-folder-count")),GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(wb.tree_status),"insight-folder-total")));if(wb.file_status) { gchar *text=insight_i18n_printf(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(wb.file_status),"insight-files-more")) ? "Files: %u+" : "Files: %u",GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(wb.file_status),"insight-files-count")));gtk_label_set_text(GTK_LABEL(wb.file_status),text);g_free(text); }}
 
