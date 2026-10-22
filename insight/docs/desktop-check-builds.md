@@ -107,3 +107,9 @@ embedded queue with APIs available in GLib 2.56. Tests cover element destruction
 empty queues and reuse. The complete Autotools build now sets
 `GLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_56` and treats newer API usage as a compile
 error. Compatibility branches respect that limit even with modern headers.
+
+## Minimum GTK dependency / Минимальная версия GTK
+
+Both Meson and Autotools require **GTK >= 3.22.0**, with GLib/GIO >= 2.56. The editor uses the GTK 3.22 popup placement API (`gtk_menu_popup_at_pointer`, `gtk_menu_popup_at_widget`, `gtk_menu_popup_at_rect`), so earlier GTK versions are insufficient. GTK 3.24 is not required. CI compiles and links the complete editor against real GTK 3.22 / GLib 2.56 packages in Ubuntu 18.04, in addition to the current Linux build.
+
+[GTK popup API version](https://docs.gtk.org/gtk3/method.Menu.popup_at_pointer.html)
