@@ -30,7 +30,7 @@ static void colored(ScintillaObject *preview) {
  g_assert_cmpint(SSM(preview,SCI_STYLEGETFORE,keyword,0),!=,SSM(preview,SCI_STYLEGETFORE,comment,0));
 }
 static void legacy_seed(void) {
- ScintillaObject *plain=SCINTILLA(scintilla_new());g_object_ref_sink(plain);highlighting_set_styles(plain,filetypes[GEANY_FILETYPES_NONE]);
+ ScintillaObject *plain=SCINTILLA(scintilla_new());g_object_ref_sink(plain);highlighting_set_styles(plain,filetypes_lookup_by_name("None"));
  GString *css=g_string_new("editor { font-family: \"Monospace\"; font-size: 13pt; }\n");
  for(gint style=0;style<=STYLE_MAX;style++) { gint fore=SSM(plain,SCI_STYLEGETFORE,style,0),back=SSM(plain,SCI_STYLEGETBACK,style,0);g_string_append_printf(css,".style-%d { color: #%02x%02x%02x; background-color: #%02x%02x%02x; font-weight: %s; font-style: %s; }\n",style,fore&255,(fore>>8)&255,(fore>>16)&255,back&255,(back>>8)&255,(back>>16)&255,SSM(plain,SCI_STYLEGETBOLD,style,0) ? "bold" : "normal",SSM(plain,SCI_STYLEGETITALIC,style,0) ? "italic" : "normal"); }
  gchar *saved=g_build_filename(directory,"legacy-original.css",NULL);g_assert_true(g_file_set_contents(saved,css->str,-1,NULL));g_free(saved);
@@ -46,7 +46,7 @@ static void check_seed(void) {
 }
 static gboolean step(gpointer data) {
  (void)data;if(!document_get_current()) return G_SOURCE_CONTINUE;
- if(phase==0) { if(!g_strcmp0(g_getenv("INSIGHT_CONTEXT_STAGE"),"produce")) { legacy_seed();gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(main_widgets.window,"menu_quit1")));return G_SOURCE_REMOVE; }if(!g_strcmp0(g_getenv("INSIGHT_CONTEXT_STAGE"),"check")) check_seed();window=gtk_widget_get_toplevel(GTK_WIDGET(document_get_current()->editor->sci));open_source("native.hpp","void native_header(void);\n#define false 0\n","C++");open_source("native.S","native_asm:\n nop\n","ASM");open_source("foreign.sh","foreign_shell() { echo test; }\nnative_header() { echo wrong; }\n","Sh");open_source("foreign.vhdl","entity foreign_vhdl is\nend foreign_vhdl;\n","VHDL");open_source("main.cpp",code,"C++");source=document_get_current();phase++;return G_SOURCE_CONTINUE; }
+ if(phase==0) { if(!g_strcmp0(g_getenv("INSIGHT_CONTEXT_STAGE"),"produce")) { legacy_seed();gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(gtk_widget_get_toplevel(GTK_WIDGET(document_get_current()->editor->sci)),"menu_quit1")));return G_SOURCE_REMOVE; }if(!g_strcmp0(g_getenv("INSIGHT_CONTEXT_STAGE"),"check")) check_seed();window=gtk_widget_get_toplevel(GTK_WIDGET(document_get_current()->editor->sci));open_source("native.hpp","void native_header(void);\n#define false 0\n","C++");open_source("native.S","native_asm:\n nop\n","ASM");open_source("foreign.sh","foreign_shell() { echo test; }\nnative_header() { echo wrong; }\n","Sh");open_source("foreign.vhdl","entity foreign_vhdl is\nend foreign_vhdl;\n","VHDL");open_source("main.cpp",code,"C++");source=document_get_current();phase++;return G_SOURCE_CONTINUE; }
  ScintillaObject *preview=SCINTILLA(named(window,"insight-context-code"));g_assert_nonnull(preview);
  if(phase==1) {
   if(sci_get_length(preview)!=(gint)strlen(code)) return G_SOURCE_CONTINUE;
