@@ -2230,6 +2230,12 @@ static void tree_refresh(void) {
  if(!filter) { gtk_widget_set_tooltip_text(wb.tree_entry,error ? error->message : "Invalid folder filter"); gtk_style_context_add_class(gtk_widget_get_style_context(wb.tree_entry),"error"); g_clear_error(&error); return; }
  gtk_style_context_remove_class(gtk_widget_get_style_context(wb.tree_entry),"error");
  gtk_widget_set_tooltip_text(wb.tree_entry,"Filter project paths: fragments, glob, ?regex or ~fuzzy; ancestors stay visible");
+ /* Text edits do not change the folder model. Keep expanded rows and selection
+  * intact unless membership, root or the path filter actually changed. */
+ g_ptr_array_sort(wb.files,project_path_compare);GChecksum *sum=g_checksum_new(G_CHECKSUM_SHA256);const gchar *query=gtk_entry_get_text(GTK_ENTRY(wb.tree_entry));g_checksum_update(sum,(const guchar *)query,strlen(query)+1);if(wb.root) g_checksum_update(sum,(const guchar *)wb.root,strlen(wb.root)+1);
+ for(guint n=0;n<wb.files->len;n++) { const gchar *path=g_ptr_array_index(wb.files,n);g_checksum_update(sum,(const guchar *)path,strlen(path)+1); }
+ const gchar *key=g_checksum_get_string(sum);gboolean same=!g_strcmp0(key,g_object_get_data(G_OBJECT(wb.project_tree),"insight-request-key"));if(!same) g_object_set_data_full(G_OBJECT(wb.project_tree),"insight-request-key",g_strdup(key),g_free);g_checksum_free(sum);
+ if(same) { insight_lookup_filter_free(filter);if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.tree_follow))) folder_locate(FALSE);return; }
  gboolean directory=FALSE; gchar *selected=folder_selected_path(&directory);
  GHashTable *expanded=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL); FolderVisit visit={.expanded=expanded};
  gtk_tree_model_foreach(GTK_TREE_MODEL(wb.project_tree),folder_visit,&visit);
