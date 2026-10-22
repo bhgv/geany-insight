@@ -377,7 +377,7 @@ static void navigation_state(void) {
 /* Keep the lexer and language profile stable while following the same source. */
 static GeanyFiletype *preview_filetype(const gchar *path) {
  GeanyFiletype *ft=path ? insight_languages_detect(path) : NULL;
- return ft ? ft : (path ? filetypes_detect_from_extension(path) : NULL);
+ return ft ? ft : (path ? filetypes_detect_from_file(path) : NULL);
 }
 static void render_source(const char *text,GeanyFiletype *filetype,gulong line,const gchar *path) {
  gchar *previous=sci_get_contents(wb.preview,sci_get_length(wb.preview)+1);
