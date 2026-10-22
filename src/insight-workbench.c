@@ -5513,10 +5513,19 @@ void insight_workbench_init(void) {
  GList *choice_cells=gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(wb.choices));for(GList *p=choice_cells;p;p=p->next) if(GTK_IS_CELL_RENDERER_TEXT(p->data)) g_object_set(p->data,"ellipsize",PANGO_ELLIPSIZE_MIDDLE,"width-chars",12,NULL);g_list_free(choice_cells);
  gtk_box_pack_start(GTK_BOX(source_column),GTK_WIDGET(wb.preview),TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(content),source_column,TRUE,TRUE,0);gtk_box_pack_end(GTK_BOX(content),rail_scroll,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(wb.box),content,TRUE,TRUE,0);
  gtk_widget_set_size_request(wb.box,-1,0);
- g_object_ref(existing); gtk_container_remove(GTK_CONTAINER(parent),existing);
+ /* The two side shelves surround the entire editor/Context column.
+  * Keep the original split widgets so saved widths and Context height work. */
+ GtkWidget *editor_book=gtk_paned_get_child2(GTK_PANED(left_split));
+ g_object_ref(existing);g_object_ref(left_split);g_object_ref(editor_book);
+ gtk_container_remove(GTK_CONTAINER(parent),existing);
+ gtk_container_remove(GTK_CONTAINER(existing),left_split);
+ gtk_container_remove(GTK_CONTAINER(left_split),editor_book);
+ gtk_paned_pack1(GTK_PANED(existing),editor_book,TRUE,TRUE);
+ gtk_paned_pack2(GTK_PANED(left_split),existing,TRUE,TRUE);
+ g_object_unref(editor_book);g_object_unref(existing);
  wb.right_pane=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
  /* Wide editor/message controls must not collapse the Project pane. */
- GtkWidget *width_host=g_object_new(insight_width_host_get_type(),NULL);gtk_container_add(GTK_CONTAINER(width_host),existing);gtk_paned_pack1(GTK_PANED(wb.right_pane),width_host,TRUE,TRUE); g_object_unref(existing);
+ GtkWidget *width_host=g_object_new(insight_width_host_get_type(),NULL);gtk_container_add(GTK_CONTAINER(width_host),left_split);gtk_paned_pack1(GTK_PANED(wb.right_pane),width_host,TRUE,TRUE);g_object_unref(left_split);
  gtk_paned_pack2(GTK_PANED(wb.right_pane),wb.project_notebook,FALSE,TRUE);
  gtk_widget_set_size_request(wb.project_notebook,0,-1);
  gtk_widget_set_name(wb.right_pane,"insight-project-split"); gtk_widget_set_name(wb.project_notebook,"insight-project-notebook");

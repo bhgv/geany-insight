@@ -40,6 +40,11 @@ static GLogWriterOutput gtk_failure(GLogLevelFlags level,const GLogField *fields
 
 static gboolean finish(gpointer data) {
  (void)data;
+ GtkWidget *left=ui_lookup_widget(window,"notebook3"),*horizontal=ui_lookup_widget(window,"hpaned1"),*vertical=ui_lookup_widget(window,"vpaned1"),*editors=ui_lookup_widget(window,"notebook1");
+ g_assert_true(gtk_paned_get_child2(GTK_PANED(horizontal))==vertical);g_assert_true(gtk_paned_get_child1(GTK_PANED(vertical))==editors);
+ gint lx,ly,rx,ry;g_assert_true(gtk_widget_translate_coordinates(left,window,0,0,&lx,&ly));g_assert_true(gtk_widget_translate_coordinates(book,window,0,0,&rx,&ry));
+ g_assert_cmpint(ABS(ly-ry),<=,2);g_assert_cmpint(ABS((ly+gtk_widget_get_allocated_height(left))-(ry+gtk_widget_get_allocated_height(book))),<=,2);
+ g_print("Full-height shelves: File Symbols and Project share top and bottom bounds\n");
  const gchar *capture=g_getenv("INSIGHT_COMPACT_CAPTURE");if(capture) { GdkWindow *w=gtk_widget_get_window(window);GdkPixbuf *picture=gdk_pixbuf_get_from_window(w,0,0,gtk_widget_get_allocated_width(window),gtk_widget_get_allocated_height(window));g_assert_nonnull(picture);gint stride=gdk_pixbuf_get_rowstride(picture),channels=gdk_pixbuf_get_n_channels(picture),width=gdk_pixbuf_get_width(picture),height=gdk_pixbuf_get_height(picture);guchar *pixels=gdk_pixbuf_get_pixels(picture);guint painted=0;for(gint y=0;y<height/2;y++) for(gint x=0;x<width;x++) { guchar *rgb=pixels+y*stride+x*channels;if(rgb[0] || rgb[1] || rgb[2]) painted++; }g_assert_cmpuint(painted,>,(guint)(width*height/200));g_assert_true(gdk_pixbuf_save(picture,capture,"jpeg",NULL,"quality","90",NULL));g_object_unref(picture); }
  gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
 }

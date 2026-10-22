@@ -204,3 +204,7 @@ Following the same source keeps its text, lexer styles, link indicators and unch
 ![Context update flow](media/context-updates.svg)
 
 Old untouched generated profiles affected by the first-use inherited-lexer bug are repaired automatically at startup. Only an exact generated plain-text style snapshot is replaced; the font and user profiles are preserved.
+
+The File Symbols shelf spans the full workspace height, matching the Project shelf on the right. The editor and Context share the central column. Moving their horizontal divider changes only the central column; sidebar widths remain independent.
+
+![Full-height shelves](media/full-height-shelves.svg)

@@ -591,3 +591,5 @@ dist_insightdocmedia_DATA += insight/docs/media/revision-colors.svg
 dist_insightdocmedia_DATA += insight/docs/media/compact-context.jpg
 
 dist_insightdocmedia_DATA += insight/docs/media/context-updates.svg
+
+dist_insightdocmedia_DATA += insight/docs/media/full-height-shelves.svg
