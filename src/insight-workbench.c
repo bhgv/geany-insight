@@ -5348,6 +5348,33 @@ static InsightReportSnapshot *capture_project_report(GError **error)
  gchar *root=utils_get_utf8_from_locale(wb.root);
  InsightReportSnapshot *snapshot=insight_report_snapshot_new(app->project->name,root,app->project->file_name,wb.files,wb.index,wb.skipped,wb.files->len>=10000 || wb.skipped>0 || wb.watch_incomplete,error);g_free(root);return snapshot;
 }
+/* GtkPaned shifts an undersized first child left to preserve its minimum.
+ * A width-constrained host keeps the source workspace at x=0 and forwards the
+ * available width to its vertical/editor splitters. Preserve height requests:
+ * allowing the same underallocation vertically breaks notebook tab gadgets. */
+typedef struct { GtkBin parent; } InsightWidthHost;
+typedef struct { GtkBinClass parent; } InsightWidthHostClass;
+static GType insight_width_host_get_type(void);
+G_DEFINE_TYPE(InsightWidthHost,insight_width_host,GTK_TYPE_BIN)
+static void width_host_width(GtkWidget *widget,gint *minimum,gint *natural) {
+ GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));gint ignored=0;*minimum=1;*natural=1;if(child && gtk_widget_get_visible(child)) gtk_widget_get_preferred_width(child,&ignored,natural);
+}
+static void width_host_height(GtkWidget *widget,gint *minimum,gint *natural) {
+ GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));*minimum=*natural=0;if(child && gtk_widget_get_visible(child)) gtk_widget_get_preferred_height(child,minimum,natural);
+}
+static void width_host_width_for_height(GtkWidget *widget,gint height,gint *minimum,gint *natural) {
+ GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));gint ignored=0;*minimum=1;*natural=1;if(child && gtk_widget_get_visible(child)) gtk_widget_get_preferred_width_for_height(child,height,&ignored,natural);
+}
+static void width_host_height_for_width(GtkWidget *widget,gint width,gint *minimum,gint *natural) {
+ GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));*minimum=*natural=0;if(child && gtk_widget_get_visible(child)) gtk_widget_get_preferred_height_for_width(child,width,minimum,natural);
+}
+static void width_host_allocate(GtkWidget *widget,GtkAllocation *allocation) {
+ gtk_widget_set_allocation(widget,allocation);GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));if(child && gtk_widget_get_visible(child)) gtk_widget_size_allocate(child,allocation);
+}
+static void insight_width_host_class_init(InsightWidthHostClass *klass) {
+ GtkWidgetClass *widget=GTK_WIDGET_CLASS(klass);widget->get_preferred_width=width_host_width;widget->get_preferred_height=width_host_height;widget->get_preferred_width_for_height=width_host_width_for_height;widget->get_preferred_height_for_width=width_host_height_for_width;widget->size_allocate=width_host_allocate;
+}
+static void insight_width_host_init(InsightWidthHost *host) { gtk_widget_set_has_window(GTK_WIDGET(host),FALSE);gtk_widget_set_name(GTK_WIDGET(host),"insight-editor-width-host"); }
 void insight_workbench_init(void) {
  insight_diff_set_source_opener(diff_source_open);
  insight_directory_set_types_provider(directory_known_types);insight_directory_set_open_guard(directory_path_open);
@@ -5443,7 +5470,7 @@ void insight_workbench_init(void) {
  g_object_ref(existing); gtk_container_remove(GTK_CONTAINER(parent),existing);
  wb.right_pane=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
  /* Wide editor/message controls must not collapse the Project pane. */
- gtk_paned_pack1(GTK_PANED(wb.right_pane),existing,TRUE,TRUE); g_object_unref(existing);
+ GtkWidget *width_host=g_object_new(insight_width_host_get_type(),NULL);gtk_container_add(GTK_CONTAINER(width_host),existing);gtk_paned_pack1(GTK_PANED(wb.right_pane),width_host,TRUE,TRUE); g_object_unref(existing);
  gtk_paned_pack2(GTK_PANED(wb.right_pane),wb.project_notebook,FALSE,TRUE);
  gtk_widget_set_size_request(wb.project_notebook,0,-1);
  gtk_widget_set_name(wb.right_pane,"insight-project-split"); gtk_widget_set_name(wb.project_notebook,"insight-project-notebook");
