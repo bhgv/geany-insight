@@ -21,10 +21,10 @@ static gboolean cancel_dialog(gpointer data) { (void)data;GList *tops=gtk_window
 static gboolean step(gpointer data) {
  (void)data;if(++ticks>160) g_error("Window batch timeout phase %u",phase);
  if(phase==0) {
-  a=document_get_current();if(!a) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(a->editor->sci));GtkWidget *command=named(window,"insight-window-list-command");if(!command) return G_SOURCE_CONTINUE;
+  a=document_get_current();if(!a) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(a->editor->sci));GtkWidget *menu=named(window,"insight-window-menu");if(!menu) return G_SOURCE_CONTINUE;
   b=document_open_file(path_b,FALSE,NULL,NULL);ro=document_new_file("readonly.c",NULL,"read only\n");ro->readonly=TRUE;SEND(ro->editor->sci,SCI_SETREADONLY,TRUE,0);
   SEND(a->editor->sci,SCI_APPENDTEXT,2,(sptr_t)"A\n");SEND(b->editor->sci,SCI_APPENDTEXT,2,(sptr_t)"B\n");
-  gtk_menu_item_activate(GTK_MENU_ITEM(command));GList *tops=gtk_window_list_toplevels();for(GList *p=tops;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-window-list-window")) panel=p->data;g_list_free(tops);g_assert_nonnull(panel);view=named(panel,"insight-window-list");count(3);click("all");selected(3);g_assert_false(gtk_widget_get_sensitive(named(panel,"insight-window-activate")));phase++;return G_SOURCE_CONTINUE;
+  g_signal_emit_by_name(menu,"show");GtkWidget *command=named(window,"insight-window-list-command");g_assert_nonnull(command);gtk_menu_item_activate(GTK_MENU_ITEM(command));GList *tops=gtk_window_list_toplevels();for(GList *p=tops;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-window-list-window")) panel=p->data;g_list_free(tops);g_assert_nonnull(panel);view=named(panel,"insight-window-list");count(3);click("all");selected(3);g_assert_false(gtk_widget_get_sensitive(named(panel,"insight-window-activate")));phase++;return G_SOURCE_CONTINUE;
  }
  if(phase==1) {
   click("invert");selected(0);g_assert_false(gtk_widget_get_sensitive(named(panel,"insight-window-save")));click("all");click("paths");gchar *copy=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));g_assert_nonnull(copy);g_assert_nonnull(strstr(copy,path_a));g_assert_nonnull(strstr(copy,path_b));g_free(copy);
@@ -47,5 +47,5 @@ static gboolean step(gpointer data) {
  return G_SOURCE_CONTINUE;
 }
 int main(void) {
- if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;folder=g_dir_make_tmp("window-batch-XXXXXX",NULL);path_a=g_build_filename(folder,"a.c",NULL);path_b=g_build_filename(folder,"b.c",NULL);gchar *config=g_build_filename(folder,"geany.conf",NULL);g_assert_true(g_file_set_contents(path_a,"a\n",-1,NULL));g_assert_true(g_file_set_contents(path_b,"b\n",-1,NULL));g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\nuse_native_windows_dialogs=false\n",-1,NULL));gchar *args[]={"window-batch","--new-instance","--no-session","--config",folder,path_a,NULL};g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);g_timeout_add(250,step,NULL);return main_lib(6,args);
+ if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;folder=g_dir_make_tmp("window-batch-XXXXXX",NULL);path_a=g_build_filename(folder,"a.c",NULL);path_b=g_build_filename(folder,"b.c",NULL);gchar *config=g_build_filename(folder,"geany.conf",NULL);g_assert_true(g_file_set_contents(path_a,"a\n",-1,NULL));g_assert_true(g_file_set_contents(path_b,"b\n",-1,NULL));g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\nuse_native_dialogs=false\n",-1,NULL));gchar *args[]={"window-batch","--new-instance","--no-session","--config",folder,path_a,NULL};g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);g_timeout_add(250,step,NULL);return main_lib(6,args);
 }
