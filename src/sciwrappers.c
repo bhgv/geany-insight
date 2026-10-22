@@ -716,8 +716,11 @@ void sci_set_lexer(ScintillaObject *sci, guint lexer_id)
 {
 	gint old = sci_get_lexer(sci);
 
-	/* TODO, LexerNameFromID() is already deprecated */
+	/* Numeric SCLEX IDs still need Lexilla's compatibility entry point.
+	 * Exempt only this call, keeping the GLib API ceiling fully enforced. */
+	G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 	const char *lexer_name = LexerNameFromID(lexer_id);
+	G_GNUC_END_IGNORE_DEPRECATIONS
 	if (! lexer_name)
 	{
 		g_warning("Failed to find lexer for ID %u", lexer_id);
