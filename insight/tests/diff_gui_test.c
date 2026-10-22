@@ -358,8 +358,20 @@ static void regex_limits_test(void) {
  large=g_strnfill(5000,'a');gchar *hard=g_strconcat(large,"!",NULL);gtk_text_buffer_set_text(b,hard,-1);g_free(hard);g_free(large);gtk_entry_set_text(GTK_ENTRY(m->find_entry),"(*NO_AUTO_POSSESS)(a+)+$");hits=regex_collect(m,b,100000,NULL,NULL,m->find_status);g_assert_null(hits);g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->find_status)),"work limit"));
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->find_regex),FALSE);gtk_widget_destroy(m->window);flush();
 }
+static void aligned_geometry_test(void) {
+ Merge *m=merge_new(NULL);gtk_window_resize(GTK_WINDOW(m->window),1200,1000);flush();
+ GtkWidget *split=named(m->window,"insight-diff-source-split"),*merge=named(m->window,"insight-diff-merge-split");g_assert_true(GTK_IS_PANED(split));g_assert_true(GTK_IS_PANED(merge));g_assert_cmpint(gtk_orientable_get_orientation(GTK_ORIENTABLE(split)),==,GTK_ORIENTATION_HORIZONTAL);g_assert_cmpint(gtk_orientable_get_orientation(GTK_ORIENTABLE(merge)),==,GTK_ORIENTATION_VERTICAL);
+ gint x[3],y[3];for(guint n=0;n<3;n++) g_assert_true(gtk_widget_translate_coordinates(m->views[n],m->window,0,0,&x[n],&y[n]));g_assert_cmpint(x[0],<,x[1]);g_assert_cmpint(ABS(y[0]-y[1]),<=,2);g_assert_cmpint(y[2],>,y[0]);
+ GString *left=g_string_new("start\n"),*right=g_string_new("start\n");for(guint n=0;n<15;n++) g_string_append_printf(right,"inserted %u\n",n);g_string_append(left,"anchor\n");g_string_append(right,"anchor\n");for(guint n=0;n<100;n++) { g_string_append_printf(left,"equal %u\n",n);g_string_append_printf(right,"equal %u\n",n); }
+ Comparison *job=g_new0(Comparison,1);job->text[0]=g_strdup(left->str);job->text[1]=g_strdup(right->str);m->cancel=g_cancellable_new();busy(m,TRUE);GTask *task=g_task_new(m->window,m->cancel,comparison_done,NULL);g_task_set_task_data(task,job,comparison_free);g_task_run_in_thread(task,comparison_worker);g_object_unref(task);wait_comparison(m);flush();g_assert_true(m->aligned);
+ GtkTextIter it[2];GdkRectangle rect[2];for(guint n=0;n<2;n++) { GtkTextBuffer *b=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[n]));gtk_text_buffer_get_iter_at_line(b,&it[n],n?16:1);gtk_text_view_get_iter_location(GTK_TEXT_VIEW(m->views[n]),&it[n],&rect[n]);gchar *text=contents(b);g_assert_cmpstr(text,==,n?right->str:left->str);g_free(text); }g_assert_cmpint(ABS(rect[0].y-rect[1].y),<=,1);
+ gtk_adjustment_set_value(m->adjustments[1],rect[1].y+100);flush();g_assert_cmpfloat(ABS(gtk_adjustment_get_value(m->adjustments[0])-gtk_adjustment_get_value(m->adjustments[1])),<,2.0);
+ gtk_adjustment_set_value(m->adjustments[0],rect[0].y+200);flush();g_assert_cmpfloat(ABS(gtk_adjustment_get_value(m->adjustments[0])-gtk_adjustment_get_value(m->adjustments[1])),<,2.0);
+ gtk_adjustment_set_value(m->adjustments[0],0);flush();if(g_getenv("INSIGHT_ALIGNED_DIFF_CAPTURE")) { GdkPixbuf *image=gdk_pixbuf_get_from_window(gtk_widget_get_window(m->window),0,0,gtk_widget_get_allocated_width(m->window),gtk_widget_get_allocated_height(m->window));g_assert_nonnull(image);g_assert_true(gdk_pixbuf_save(image,g_getenv("INSIGHT_ALIGNED_DIFF_CAPTURE"),"jpeg",NULL,"quality","90",NULL));g_object_unref(image); }
+ g_string_free(left,TRUE);g_string_free(right,TRUE);gtk_widget_destroy(m->window);flush();g_clear_pointer(&view_defaults,g_key_file_unref);g_print("Aligned diff geometry, equal-line pixel anchors, bidirectional scrolling and exact source bytes passed\n");
+}
 int main(int argc,char **argv) {
- g_setenv("GSETTINGS_BACKEND","memory",TRUE);gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();replace_scope_test();confirm_replace_test();case_test();line_edit_test();history_test();export_test();whitespace_test();search_actions_test();search_output_test();search_preview_test();output_limit_test();regex_search_test();regex_replace_test();regex_limits_test();insight_diff_set_source_opener(source_opened);
+ g_setenv("GSETTINGS_BACKEND","memory",TRUE);gtk_init(&argc,&argv);aligned_geometry_test();line_navigation_test();search_options_test();replace_test();replace_scope_test();confirm_replace_test();case_test();line_edit_test();history_test();export_test();whitespace_test();search_actions_test();search_output_test();search_preview_test();output_limit_test();regex_search_test();regex_replace_test();regex_limits_test();insight_diff_set_source_opener(source_opened);
  GError *error=NULL;gchar *dir=g_dir_make_tmp("insight-diff-XXXXXX",&error);g_assert_no_error(error);
  gchar *left=g_build_filename(dir,"left.txt",NULL),*right=g_build_filename(dir,"right.txt",NULL);
  const char *a="start\nleft\ncommon\nlast left\nend\n",*b="start\nright\ncommon\nlast right\nextra\nend\n";
@@ -438,7 +450,7 @@ int main(int argc,char **argv) {
  guint collapsed=m->position;take_all(m->take_all[1],m);assert_text(m,"");g_assert_cmpuint(m->position,==,collapsed);g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->status)),"boundaries"));undo(NULL,m);assert_text(m,a);
  GtkWidget *toggle=gtk_check_button_new();g_object_ref_sink(toggle);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle),TRUE);wrap(GTK_TOGGLE_BUTTON(toggle),m);
- for(int i=0;i<3;i++) g_assert_cmpint(gtk_text_view_get_wrap_mode(GTK_TEXT_VIEW(m->views[i])),==,GTK_WRAP_WORD_CHAR);
+ for(int i=0;i<3;i++) g_assert_cmpint(gtk_text_view_get_wrap_mode(GTK_TEXT_VIEW(m->views[i])),==,i==2?GTK_WRAP_WORD_CHAR:GTK_WRAP_NONE);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle),FALSE);show_list(GTK_TOGGLE_BUTTON(toggle),m);
  g_assert_false(gtk_widget_get_visible(m->list_scroll));navigate(m,1);g_assert_cmpint(selected(m),==,1);
  gtk_tree_selection_unselect_all(m->selection);navigate(m,-1);g_assert_cmpint(selected(m),==,1);
