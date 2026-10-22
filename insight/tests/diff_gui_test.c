@@ -371,7 +371,7 @@ static void aligned_geometry_test(void) {
  g_string_free(left,TRUE);g_string_free(right,TRUE);gtk_widget_destroy(m->window);flush();g_clear_pointer(&view_defaults,g_key_file_unref);g_print("Aligned diff geometry, equal-line pixel anchors, bidirectional scrolling and exact source bytes passed\n");
 }
 int main(int argc,char **argv) {
- g_setenv("GSETTINGS_BACKEND","memory",TRUE);gtk_init(&argc,&argv);aligned_geometry_test();line_navigation_test();search_options_test();replace_test();replace_scope_test();confirm_replace_test();case_test();line_edit_test();history_test();export_test();whitespace_test();search_actions_test();search_output_test();search_preview_test();output_limit_test();regex_search_test();regex_replace_test();regex_limits_test();insight_diff_set_source_opener(source_opened);
+ g_setenv("GSETTINGS_BACKEND","memory",TRUE);gtk_init(&argc,&argv);line_navigation_test();search_options_test();replace_test();replace_scope_test();confirm_replace_test();case_test();line_edit_test();history_test();export_test();whitespace_test();search_actions_test();search_output_test();search_preview_test();output_limit_test();regex_search_test();regex_replace_test();regex_limits_test();insight_diff_set_source_opener(source_opened);
  GError *error=NULL;gchar *dir=g_dir_make_tmp("insight-diff-XXXXXX",&error);g_assert_no_error(error);
  gchar *left=g_build_filename(dir,"left.txt",NULL),*right=g_build_filename(dir,"right.txt",NULL);
  const char *a="start\nleft\ncommon\nlast left\nend\n",*b="start\nright\ncommon\nlast right\nextra\nend\n";
@@ -513,6 +513,7 @@ int main(int argc,char **argv) {
  custom=merge_new(NULL);g_assert_false(custom->busy);g_assert_null(custom->sources[0]);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(custom->zoom)),==,140);g_assert_true(gtk_widget_get_visible(custom->maps[0]));g_assert_false(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(custom->vertical)));gtk_widget_destroy(custom->window);
  g_key_file_set_integer(prefs,view_group,"zoom",999);g_key_file_set_value(prefs,view_group,"numbers","broken");g_key_file_set_integer(prefs,view_group,"width",-1);insight_diff_read(prefs);custom=merge_new(NULL);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(custom->zoom)),==,100);g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(custom->numbers)));
  gboolean options_closed=FALSE;g_object_weak_ref(G_OBJECT(custom->window),finalized,&options_closed);g_idle_add(close_options_parent,custom->window);view_options(NULL,custom);flush();g_assert_true(options_closed);g_assert_null(open_compares);g_key_file_unref(prefs);g_clear_pointer(&view_defaults,g_key_file_unref);
+ aligned_geometry_test();
  g_remove(left);g_remove(right);g_rmdir(dir);g_free(left);g_free(right);g_free(dir);g_free(editor_path);
  g_print("Production Diff/Merge fixture: navigation, search, gutters, merge history, options, worker cancellation and close passed.\n");return 0;
 }
