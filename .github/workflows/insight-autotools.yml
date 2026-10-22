@@ -17,6 +17,13 @@ permissions:
 jobs:
   autotools:
     runs-on: ubuntu-24.04
+    env:
+      GLIB_API_CEILING: >-
+        -Werror=deprecated-declarations
+        -DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_56
+        -DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_56
+        -DGTK_DISABLE_DEPRECATION_WARNINGS
+        -DGDK_DISABLE_DEPRECATION_WARNINGS
     steps:
       - uses: actions/checkout@v4
       - name: Install build dependencies
@@ -26,12 +33,20 @@ jobs:
           python3 insight/tests/build_sources_test.py
           cc -std=c99 -Wall -Wextra -Werror insight/tests/glib_compat_test.c $(pkg-config --cflags --libs gio-2.0) -o /tmp/insight-glib-compat
           /tmp/insight-glib-compat
+      - name: Verify the API ceiling rejects the original unsupported call
+        run: |
+          printf '#include <glib.h>\nvoid probe(GQueue *q) { g_queue_clear_full(q, g_free); }\n' > /tmp/glib-api-ceiling.c
+          if cc -c $GLIB_API_CEILING /tmp/glib-api-ceiling.c $(pkg-config --cflags glib-2.0) -o /tmp/glib-api-ceiling.o 2>/tmp/glib-api-ceiling.log; then
+            echo 'The GLib 2.56 API ceiling did not reject g_queue_clear_full'
+            exit 1
+          fi
+          grep -F g_queue_clear_full /tmp/glib-api-ceiling.log
       - name: Generate configure and build out of tree
         run: |
           NOCONFIGURE=1 ./autogen.sh
           mkdir _autotools
           cd _autotools
-          ../configure --prefix="$PWD/install" --disable-html-docs --disable-pdf-docs --disable-api-docs --disable-gtkdoc-header CFLAGS='-O2 -Werror=implicit-function-declaration -Werror=deprecated-declarations -DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_56 -DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_56 -DGTK_DISABLE_DEPRECATION_WARNINGS -DGDK_DISABLE_DEPRECATION_WARNINGS -DINSIGHT_GLIB_COMPAT_FORCE_FALLBACK=1' CXXFLAGS='-O2 -Werror=deprecated-declarations -DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_56 -DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_56 -DGTK_DISABLE_DEPRECATION_WARNINGS -DGDK_DISABLE_DEPRECATION_WARNINGS'
+          ../configure --prefix="$PWD/install" --disable-html-docs --disable-pdf-docs --disable-api-docs --disable-gtkdoc-header CFLAGS="-O2 -Werror=implicit-function-declaration $GLIB_API_CEILING -DINSIGHT_GLIB_COMPAT_FORCE_FALLBACK=1" CXXFLAGS="-O2 $GLIB_API_CEILING"
           make -j2
       - name: Install and verify linked programs
         run: |
