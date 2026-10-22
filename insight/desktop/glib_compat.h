@@ -24,10 +24,10 @@ static inline gchar *insight_canonicalize_filename(const gchar *filename, const 
  GFile *file;
  if (relative_to && !g_path_is_absolute(filename)) {
   GFile *base = g_file_new_for_path(relative_to);
-  file = g_file_resolve_relative_path(base, filename);
+  file = g_file_resolve_relative_path(base, *filename ? filename : ".");
   g_object_unref(base);
  } else {
-  file = g_file_new_for_path(filename);
+  file = g_file_new_for_path(*filename ? filename : ".");
  }
  gchar *path = g_file_get_path(file);
  g_object_unref(file);
