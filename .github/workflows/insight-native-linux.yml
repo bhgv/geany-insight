@@ -163,6 +163,7 @@ jobs:
         with:
           name: insight-editor-menus
           path: |
+            _native/meson-logs/testlog.txt
             aligned-diff.jpg
             paste-symbol.jpg
             buffer-transfer.jpg
