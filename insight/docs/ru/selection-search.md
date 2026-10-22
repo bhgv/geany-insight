@@ -79,3 +79,5 @@ that exact-selection matching includes alphabet unless Whole word is enabled.
 Настоящее окно из изолированного нативного GUI-теста Linux, прошедшего в составе
 52 проверок; это не макет. Пример UTF-8/CRLF показывает буквальные совпадения внутри
 alphabet при отключённом параметре «Целое слово».
+
+[Word highlights / Подсветка слов](word-highlights.md)

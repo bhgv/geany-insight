@@ -872,3 +872,6 @@ project_db_test = executable('test_insight_project_db', '../insight/tests/projec
 test('Insight persistent project database', project_db_test)
 project_db_gui_test = executable('test_insight_project_db_gui', '../insight/tests/project_db_gui_test.c', dependencies: test_deps)
 test('Insight native persistent incremental project GUI', project_db_gui_test, timeout: 110, is_parallel: false)
+
+word_highlights_gui_test = executable('test_insight_word_highlights_gui', '../insight/tests/word_highlights_gui_test.c', dependencies: test_deps)
+test('Insight persistent word highlights GUI', word_highlights_gui_test, timeout: 50, is_parallel: false)

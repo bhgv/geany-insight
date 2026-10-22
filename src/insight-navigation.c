@@ -3,6 +3,7 @@
 #include "insight-navigation.h"
 #include "insight-command-list.h"
 #include "insight-selection-search.h"
+#include "insight-word-highlights.h"
 #include "insight-typing.h"
 #include "insight-revisions.h"
 #include "insight-backups.h"
@@ -60,6 +61,7 @@ static gboolean normal(ScintillaObject *sci)
 void insight_navigation_notify(GeanyEditor *editor, SCNotification *nt)
 {
     insight_selection_search_notify(editor,nt);
+    insight_word_highlights_notify(editor,nt);
     ScintillaObject *sci = editor->sci;
     if (nt->nmhdr.code == SCN_MODIFIED &&
         (nt->modificationType & (SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT)))
@@ -577,6 +579,7 @@ void insight_navigation_menu(GtkWidget *menu)
 {
     insight_command_list_menu();
     insight_selection_search_init();
+    insight_word_highlights_init();
     insight_typing_init(menu);
     insight_revisions_init(menu);
     insight_backups_init();

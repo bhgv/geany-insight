@@ -597,3 +597,7 @@ dist_insightdocmedia_DATA += insight/docs/media/full-height-shelves.svg
 dist_insightdocmedia_DATA += insight/docs/media/ssh-connection.svg
 
 EXTRA_DIST += insight/tests/ssh_console_gui_test.c insight/tests/ssh_console_fixture.py
+
+insightdoc_DATA += insight/docs/word-highlights.md
+dist_insightdocmedia_DATA += insight/docs/media/word-highlights.svg
+EXTRA_DIST += insight/tests/word_highlights_gui_test.c

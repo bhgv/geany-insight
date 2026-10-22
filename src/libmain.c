@@ -42,6 +42,7 @@
 #include "geanyobject.h"
 #include "highlighting.h"
 #include "insight-workbench.h"
+#include "insight-word-highlights.h"
 #include "keybindings.h"
 #include "keyfile.h"
 #include "log.h"
@@ -1320,6 +1321,7 @@ static gboolean do_main_quit(void)
 	plugins_finalize();
 #endif
 
+	insight_word_highlights_finalize();
 	insight_workbench_finalize();
 	navqueue_free();
 	keybindings_free();

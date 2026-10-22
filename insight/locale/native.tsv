@@ -1522,3 +1522,19 @@ Cursor or selection after pasting whole lines with intelligent paste	Курсо�
 Cursor at end of pasted text	Курсор в конце вставленного текста
 Cursor at start of pasted text	Курсор в начале вставленного текста
 Select pasted text	Выделить вставленный текст
+
+Word highlights	Подсветка слов
+Highlight Word	Подсветить слово
+Highlighted Words	Подсвеченные слова
+Highlighted Words…	Подсвеченные слова…
+Clear Word Highlights	Очистить подсветку слов
+Next Highlighted Word	Следующее подсвеченное слово
+Previous Highlighted Word	Предыдущее подсвеченное слово
+Up to 16 words, shared by all open source buffers for this session	До 16 слов во всех открытых исходниках на время сеанса
+Highlight list is full; remove a word first	Список подсветки заполнен; сначала удалите слово
+Word highlights are updating	Подсветка слов обновляется
+No highlighted words in this file	В этом файле нет подсвеченных слов
+Cannot save word highlight settings	Не удалось сохранить настройки подсветки слов
+Word highlights support source buffers up to 2 MiB	Подсветка слов поддерживает исходники до 2 МиБ
+Word highlight limit reached: first 20000 matches shown	Предел подсветки: показаны первые 20 000 совпадений
+Place the caret in a word or select one word up to 256 bytes	Установите курсор в слове или выделите слово до 256 байт
