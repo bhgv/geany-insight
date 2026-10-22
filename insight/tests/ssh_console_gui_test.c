@@ -14,20 +14,20 @@ static GtkWidget *named(GtkWidget *root,const gchar *name) {
 static void click(const gchar *name) { GtkWidget *button=named(window,name);g_assert_nonnull(button);gtk_button_clicked(GTK_BUTTON(button)); }
 static gchar *transcript(void) { GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(output));GtkTextIter a,b;gtk_text_buffer_get_bounds(buffer,&a,&b);return gtk_text_buffer_get_text(buffer,&a,&b,FALSE); }
 static guint ready_count(const gchar *text) { guint count=0;const gchar *p=text;while((p=strstr(p,"\nINSIGHT_SSH_OK\n"))) { count++;p++; }return count; }
-static void send(const gchar *command) { gtk_entry_set_text(GTK_ENTRY(input),command);g_signal_emit_by_name(input,"activate"); }
+static void send_line(const gchar *command) { gtk_entry_set_text(GTK_ENTRY(input),command);g_signal_emit_by_name(input,"activate"); }
 static gboolean step(gpointer data) {
  (void)data;if(!document_get_current()) return G_SOURCE_CONTINUE;
  if(!window) {
   window=gtk_widget_get_toplevel(GTK_WIDGET(document_get_current()->editor->sci));GtkWidget *page=named(window,"insight-ssh-page");g_assert_nonnull(page);GtkWidget *book=gtk_widget_get_parent(page);g_assert_true(GTK_IS_NOTEBOOK(book));gtk_widget_show(book);gtk_notebook_set_current_page(GTK_NOTEBOOK(book),gtk_notebook_page_num(GTK_NOTEBOOK(book),page));gtk_window_present(GTK_WINDOW(window));
   output=named(window,"insight-ssh-output");state=named(window,"insight-ssh-status");input=named(window,"insight-ssh-input");g_assert_nonnull(output);g_assert_nonnull(state);g_assert_nonnull(input);g_assert_true(gtk_label_get_selectable(GTK_LABEL(state)));g_assert_cmpint(gtk_label_get_ellipsize(GTK_LABEL(state)),==,PANGO_ELLIPSIZE_NONE);
   gtk_entry_set_text(GTK_ENTRY(named(window,"insight-ssh-host"))," 127.0.0.1 ");gchar *user=g_strdup_printf(" %s ",g_getenv("INSIGHT_SSH_TEST_USER"));gtk_entry_set_text(GTK_ENTRY(named(window,"insight-ssh-user")),user);g_free(user);gtk_entry_set_text(GTK_ENTRY(named(window,"insight-ssh-identity")),g_getenv("INSIGHT_SSH_TEST_KEY"));gtk_spin_button_set_value(GTK_SPIN_BUTTON(named(window,"insight-ssh-port")),g_ascii_strtod(g_getenv("INSIGHT_SSH_TEST_PORT"),NULL));
-  click("insight-ssh-connect");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(state)),"Starting SSH"));send("printf '\\nINSIGHT_SSH_OK\\n'");return G_SOURCE_CONTINUE;
+  click("insight-ssh-connect");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(state)),"Starting SSH"));send_line("printf '\\nINSIGHT_SSH_OK\\n'");return G_SOURCE_CONTINUE;
  }
  gchar *text=transcript();const gchar *label=gtk_label_get_text(GTK_LABEL(state));
  if(phase==0 && ready_count(text)>=1) {
   /* Old EOF/wait callbacks must not tear down a replacement connection. */
-  click("insight-ssh-disconnect");click("insight-ssh-connect");send("printf '\\nINSIGHT_SSH_OK\\n'");phase++;
- } else if(phase==1 && ready_count(text)>=2) { send("exit 7");phase++; }
+  click("insight-ssh-disconnect");click("insight-ssh-connect");send_line("printf '\\nINSIGHT_SSH_OK\\n'");phase++;
+ } else if(phase==1 && ready_count(text)>=2) { send_line("exit 7");phase++; }
  else if(phase==2 && strstr(label,"status 7")) {
   g_assert_cmpuint(ready_count(text),==,2);g_assert_nonnull(strstr(text,"status 7"));gtk_spin_button_set_value(GTK_SPIN_BUTTON(named(window,"insight-ssh-port")),g_ascii_strtod(g_getenv("INSIGHT_SSH_REFUSED_PORT"),NULL));click("insight-ssh-connect");phase++;
  } else if(phase==3 && strstr(label,"status 255")) {

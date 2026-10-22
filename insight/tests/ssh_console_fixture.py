@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Run the production SSH panel against an isolated real loopback OpenSSH server."""
 import os
-import pwd
 import shlex
 import shutil
 import socket
@@ -22,6 +21,7 @@ def main():
     if (os.name != 'posix' or not os.environ.get('DISPLAY')
             or not os.environ.get('GEANY_RUN_GUI_TESTS')):
         return 77
+    import pwd
     sshd = shutil.which('sshd') or '/usr/sbin/sshd'
     ssh = shutil.which('ssh')
     keygen = shutil.which('ssh-keygen')
