@@ -593,3 +593,7 @@ dist_insightdocmedia_DATA += insight/docs/media/compact-context.jpg
 dist_insightdocmedia_DATA += insight/docs/media/context-updates.svg
 
 dist_insightdocmedia_DATA += insight/docs/media/full-height-shelves.svg
+
+dist_insightdocmedia_DATA += insight/docs/media/ssh-connection.svg
+
+EXTRA_DIST += insight/tests/ssh_console_gui_test.c insight/tests/ssh_console_fixture.py

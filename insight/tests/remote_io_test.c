@@ -13,6 +13,19 @@ static void sftp_batch(const char *batch) {
 #endif
 int main(void) {
  GError *error=NULL; gchar *cwd=g_get_current_dir(),*cache=g_build_filename(cwd,"remote-cache",NULL);
+ /* A client shipped beside the application must work even outside PATH. */
+ gchar *bin=g_build_filename(cwd,"remote-client-bin",NULL);g_assert_cmpint(g_mkdir_with_parents(bin,0700),==,0);
+#ifdef G_OS_WIN32
+ gchar *client=g_build_filename(bin,"insight-bundled-test.exe",NULL);
+#else
+ gchar *client=g_build_filename(bin,"insight-bundled-test",NULL);
+#endif
+ g_assert_true(g_file_set_contents(client,"#!/bin/sh\nexit 0\n",-1,&error));g_assert_no_error(error);g_assert_cmpint(g_chmod(client,0700),==,0);
+ gchar *resolved=insight_remote_program("insight-bundled-test",bin);g_assert_cmpstr(resolved,==,client);g_assert_true(g_path_is_absolute(resolved));
+#ifndef G_OS_WIN32
+ GSubprocessLauncher *spawn=g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_NONE);g_subprocess_launcher_setenv(spawn,"PATH",bin,TRUE);const gchar *args[]={resolved,NULL};GSubprocess *process=g_subprocess_launcher_spawnv(spawn,args,&error);g_assert_no_error(error);g_assert_nonnull(process);g_assert_true(g_subprocess_wait_check(process,NULL,&error));g_assert_no_error(error);g_object_unref(process);g_object_unref(spawn);
+#endif
+ g_free(resolved);g_remove(client);g_rmdir(bin);g_assert_null(insight_remote_program("insight-bundled-test",bin));g_free(client);g_free(bin);
  InsightRemote *r=insight_remote_new("host-alias","login",2222,"","/src",cache,&error); g_assert_no_error(error); g_assert_nonnull(r);
  gchar **argv=insight_remote_argv(r,TRUE); g_assert_cmpstr(argv[0],==,"sftp"); g_assert_cmpstr(argv[g_strv_length(argv)-1],==,"host-alias"); g_assert_true(g_strv_contains((const gchar *const *)argv,"-oUser=login")); g_strfreev(argv);
  gchar *file=g_build_filename(cache,"folder","source.c",NULL),*path=insight_remote_path(r,file); g_assert_cmpstr(path,==,"/src/folder/source.c"); g_free(path); g_free(file);

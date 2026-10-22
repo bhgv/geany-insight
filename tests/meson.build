@@ -422,6 +422,8 @@ keyword_search_test = executable('test_insight_keyword_search', '../insight/test
 test('Insight keyword search', keyword_search_test)
 remote_io_test = executable('test_insight_remote_io', '../insight/tests/remote_io_test.c', '../insight/desktop/remote_io.c', '../insight/desktop/remote_credentials.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)
 test('Insight remote IO', remote_io_test)
+ssh_console_gui_test = executable('test_insight_ssh_console_gui', '../insight/tests/ssh_console_gui_test.c', dependencies: test_deps)
+test('Insight native SSH shell connection GUI', find_program('python3'), args: [meson.project_source_root() / 'insight/tests/ssh_console_fixture.py', ssh_console_gui_test.full_path()], timeout: 65, is_parallel: false)
 search_state_test = executable('test_insight_search_state', '../insight/tests/search_state_test.c', '../insight/desktop/search_state.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)
 test('Insight search state', search_state_test)
 project_files_test = executable('test_insight_project_files', '../insight/tests/project_files_test.c', '../insight/desktop/project_files.c', include_directories: include_directories('../insight/desktop'), dependencies: deps)

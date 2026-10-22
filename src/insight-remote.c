@@ -36,7 +36,23 @@ static void root_free(gpointer data) { RemoteRoot *r=data; if(!r) return; insigh
 static RemoteRoot *root_copy(const RemoteRoot *r) { RemoteRoot *copy=g_new0(RemoteRoot,1); const InsightRemote *s=r->remote; copy->remote=insight_remote_new(s->host,s->user,s->port,s->identity,s->remote,s->local,NULL); copy->directory=g_strdup(r->directory); copy->config=g_strdup(r->config); copy->auto_upload=r->auto_upload; return copy; }
 static void auth_cleanup(const char *path) { if(!path) return; GDir *dir=g_dir_open(path,0,NULL); if(dir) { const char *name; while((name=g_dir_read_name(dir))) { gchar *file=g_build_filename(path,name,NULL); g_remove(file); g_free(file); } g_dir_close(dir); } g_rmdir(path); }
 static void transfer_free(Transfer *t) { if(!t) return; root_free(t->root); if(t->snapshot) g_remove(t->snapshot); auth_cleanup(t->auth); g_free(t->auth); g_free(t->origin); g_free(t->target); g_free(t->snapshot); if(t->project) g_key_file_unref(t->project); g_clear_object(&t->process); g_clear_object(&t->cancel); g_free(t); }
-static void status(const char *message) { if(remote_ui.closing) return; gtk_label_set_text(GTK_LABEL(remote_ui.status),message); ui_set_statusbar(TRUE,"SSH: %s",message); }
+static void status(const char *message) {
+ if(remote_ui.closing) return;
+ gchar *short_message=g_utf8_strlen(message,-1)>180 ? g_utf8_substring(message,0,180) : NULL;
+ gchar *label=short_message ? g_strconcat(short_message,"…",NULL) : g_strdup(message);
+ gtk_label_set_text(GTK_LABEL(remote_ui.status),label);gtk_widget_set_tooltip_text(remote_ui.status,message);g_free(label);g_free(short_message);ui_set_statusbar(TRUE,"SSH: %s",message);
+ /* Keep a selectable, persistent explanation even in a narrow panel. */
+ if(remote_ui.output) { GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(remote_ui.output));GtkTextIter end;gtk_text_buffer_get_end_iter(buffer,&end);gtk_text_buffer_insert(buffer,&end,"\n[SSH] ",-1);gtk_text_buffer_insert(buffer,&end,message,-1);gtk_text_buffer_insert(buffer,&end,"\n",1);gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(remote_ui.output),&end,0,FALSE,0,0); }
+}
+static gchar *client_program(const gchar *program) {
+ gchar *bin=NULL;
+#ifdef G_OS_WIN32
+ gchar *prefix=win32_get_installation_dir();bin=g_build_filename(prefix,"bin",NULL);g_free(prefix);
+#else
+ gchar *executable=g_file_read_link("/proc/self/exe",NULL);if(executable) { bin=g_path_get_dirname(executable);g_free(executable); }
+#endif
+ gchar *path=insight_remote_program(program,bin);g_free(bin);return path;
+}
 static gchar *credentials_target(const InsightRemote *r) { gchar *identity=g_strdup_printf("%s:%u:%s",r->host,r->port,r->user),*hash=g_compute_checksum_for_string(G_CHECKSUM_SHA256,identity,-1); g_free(identity); return hash; }
 static GSubprocessLauncher *launcher(RemoteRoot *root,gchar **auth) {
  GSubprocessLauncher *spawn=g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_STDIN_PIPE|G_SUBPROCESS_FLAGS_STDOUT_PIPE|G_SUBPROCESS_FLAGS_STDERR_MERGE);
@@ -44,16 +60,20 @@ static GSubprocessLauncher *launcher(RemoteRoot *root,gchar **auth) {
  gchar *installation=win32_get_installation_dir(),*client_bin=g_build_filename(installation,"bin",NULL),*search_path=g_strconcat(client_bin,";",g_getenv("PATH") ? g_getenv("PATH") : "",NULL);
  g_subprocess_launcher_setenv(spawn,"PATH",search_path,TRUE); g_free(search_path); g_free(client_bin); g_free(installation);
 #endif
- gchar *helper=g_find_program_in_path("geany-insight-askpass");
-#ifdef G_OS_WIN32
- if(!helper) { gchar *prefix=win32_get_installation_dir(); helper=g_build_filename(prefix,"bin","geany-insight-askpass.exe",NULL); g_free(prefix); if(!g_file_test(helper,G_FILE_TEST_IS_EXECUTABLE)) g_clear_pointer(&helper,g_free); }
-#else
- if(!helper) { gchar *executable=g_file_read_link("/proc/self/exe",NULL); if(executable) { gchar *bin=g_path_get_dirname(executable); helper=g_build_filename(bin,"geany-insight-askpass",NULL); g_free(bin); g_free(executable); if(!g_file_test(helper,G_FILE_TEST_IS_EXECUTABLE)) g_clear_pointer(&helper,g_free); } }
-#endif
- if(helper) { g_subprocess_launcher_setenv(spawn,"SSH_ASKPASS",helper,TRUE); g_subprocess_launcher_setenv(spawn,"SSH_ASKPASS_REQUIRE","force",TRUE); }
+ gchar *helper=client_program("geany-insight-askpass");
+ if(helper) { g_subprocess_launcher_setenv(spawn,"SSH_ASKPASS",helper,TRUE);g_subprocess_launcher_setenv(spawn,"SSH_ASKPASS_REQUIRE","force",TRUE); }
+ g_object_set_data(G_OBJECT(spawn),"insight-ssh-askpass",GINT_TO_POINTER(helper!=NULL));
  gchar *uuid=g_uuid_string_random(); *auth=g_build_filename(remote_ui.directory,uuid,NULL); g_mkdir_with_parents(*auth,0700); g_free(uuid);
  gchar *target=credentials_target(root->remote); g_subprocess_launcher_setenv(spawn,"GEANY_INSIGHT_SSH_CONFIG",root->config,TRUE); g_subprocess_launcher_setenv(spawn,"GEANY_INSIGHT_SSH_TARGET",target,TRUE); g_subprocess_launcher_setenv(spawn,"GEANY_INSIGHT_SSH_AUTH_SESSION",*auth,TRUE);
  g_subprocess_launcher_setenv(spawn,"GEANY_INSIGHT_SSH_SAVE_PASSWORD",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(remote_ui.save_password)) ? "1" : "0",TRUE); g_free(target); g_free(helper); return spawn;
+}
+static GSubprocess *spawn_client(GSubprocessLauncher *spawn,RemoteRoot *root,gboolean sftp,GError **error) {
+ const gchar *name=sftp ? "sftp" : "ssh";gchar *client=client_program(name);
+ if(!client) { g_set_error(error,G_IO_ERROR,G_IO_ERROR_NOT_FOUND,"OpenSSH client '%s' was not found in the application bin directory or PATH. Install OpenSSH or use a package containing its clients.",name);return NULL; }
+ gchar **argv=insight_remote_argv(root->remote,sftp);g_free(argv[0]);argv[0]=client;
+ /* Without a GUI helper there must be no invisible /dev/tty password read. */
+ if(!g_object_get_data(G_OBJECT(spawn),"insight-ssh-askpass")) { g_free(argv[1]);argv[1]=g_strdup("-oBatchMode=yes"); }
+ GSubprocess *process=g_subprocess_launcher_spawnv(spawn,(const gchar *const *)argv,error);g_strfreev(argv);return process;
 }
 static void root_metadata(RemoteRoot *root) {
  GKeyFile *key=g_key_file_new(); InsightRemote *r=root->remote;
@@ -108,12 +128,12 @@ static void transfer_run(Transfer *t) {
  remote_ui.active=t; GError *error=NULL; gchar *batch=NULL;
  if(t->kind==UPLOAD) { gchar *nonce=g_uuid_string_random(); batch=insight_remote_upload(t->snapshot,t->target,nonce,&error); g_free(nonce); }
  else batch=insight_remote_download(t->kind==OPEN_FILE || t->kind==PROJECT_READ ? t->origin : t->root->remote->remote,t->kind==OPEN_FILE || t->kind==PROJECT_READ ? t->target : t->root->remote->local,t->kind==OPEN_FOLDER || t->kind==PROJECT_FOLDER,&error);
- if(batch) { GSubprocessLauncher *spawn=launcher(t->root,&t->auth); gchar **argv=insight_remote_argv(t->root->remote,TRUE); t->process=g_subprocess_launcher_spawnv(spawn,(const gchar *const *)argv,&error); g_strfreev(argv); g_object_unref(spawn); }
+ if(batch) { GSubprocessLauncher *spawn=launcher(t->root,&t->auth); t->process=spawn_client(spawn,t->root,TRUE,&error); g_object_unref(spawn); }
  if(!t->process) { status(error ? error->message : "SFTP unavailable"); g_clear_error(&error); g_free(batch); transfer_free(t); next_transfer(); return; }
  t->cancel=g_cancellable_new(); status(t->kind==UPLOAD ? "Uploading saved snapshot…" : "Downloading via SFTP…"); g_subprocess_communicate_utf8_async(t->process,batch,t->cancel,transfer_done,t); g_free(batch);
 }
 static RemoteRoot *form_root(const char *remote,const char *local,const char *directory,GError **error) {
- RemoteRoot *root=g_new0(RemoteRoot,1); root->remote=insight_remote_new(gtk_entry_get_text(GTK_ENTRY(remote_ui.host)),gtk_entry_get_text(GTK_ENTRY(remote_ui.user)),(guint)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote_ui.port)),gtk_entry_get_text(GTK_ENTRY(remote_ui.identity)),remote,local,error);
+ RemoteRoot *root=g_new0(RemoteRoot,1);gchar *host=g_strdup(gtk_entry_get_text(GTK_ENTRY(remote_ui.host))),*user=g_strdup(gtk_entry_get_text(GTK_ENTRY(remote_ui.user)));g_strstrip(host);g_strstrip(user);root->remote=insight_remote_new(host,user,(guint)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote_ui.port)),gtk_entry_get_text(GTK_ENTRY(remote_ui.identity)),remote,local,error);g_free(host);g_free(user);
  if(!root->remote) { g_free(root); return NULL; } root->directory=g_strdup(directory); root->config=g_strdup(remote_ui.config); root->auto_upload=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(remote_ui.automatic)); return root;
 }
 static void open_remote(GtkWidget *widget,gpointer data) {
@@ -180,16 +200,27 @@ static void shell_append(const gchar *bytes,gsize size) {
  if(gtk_text_buffer_get_char_count(buffer)>1000000) { GtkTextIter a,b; gtk_text_buffer_get_start_iter(buffer,&a); b=a; gtk_text_iter_forward_chars(&b,100000); gtk_text_buffer_delete(buffer,&a,&b); }
  gtk_text_buffer_get_end_iter(buffer,&it); gtk_text_buffer_place_cursor(buffer,&it); gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(remote_ui.output),&it,0,FALSE,0,0);
 }
+static void shell_complete(GSubprocess *process) {
+ if(remote_ui.closing || remote_ui.shell!=process || !g_object_get_data(G_OBJECT(process),"insight-ssh-eof") || !g_object_get_data(G_OBJECT(process),"insight-ssh-exited")) return;
+ const gchar *error=g_object_get_data(G_OBJECT(process),"insight-ssh-error");gchar *message=NULL;
+ if(error) message=g_strdup_printf("SSH failed: %s",error);
+ else if(g_subprocess_get_if_exited(process)) { gint code=g_subprocess_get_exit_status(process);message=code ? g_strdup_printf("SSH client exited with status %d. See its output above.",code) : g_strdup("SSH session ended"); }
+ else message=g_strdup("SSH client terminated. See its output above.");
+ status(message);g_free(message);g_cancellable_cancel(remote_ui.shell_cancel);g_clear_object(&remote_ui.shell_cancel);g_clear_object(&remote_ui.shell);auth_cleanup(remote_ui.shell_auth);g_clear_pointer(&remote_ui.shell_auth,g_free);
+ remote_ui.shell_writing=FALSE;insight_queue_clear_full(&remote_ui.shell_pending,g_free);
+}
 static void shell_read(GObject *object,GAsyncResult *result,gpointer data) {
- GSubprocess *process=data; GError *error=NULL; GBytes *bytes=g_input_stream_read_bytes_finish(G_INPUT_STREAM(object),result,&error);
- if(!remote_ui.closing && remote_ui.shell==process && bytes && g_bytes_get_size(bytes)) { gsize size; const gchar *text=g_bytes_get_data(bytes,&size); shell_append(text,size); g_input_stream_read_bytes_async(g_subprocess_get_stdout_pipe(process),8192,G_PRIORITY_DEFAULT,remote_ui.shell_cancel,shell_read,g_object_ref(process)); }
- else if(!remote_ui.closing && remote_ui.shell==process) { status(error ? error->message : "SSH shell disconnected"); g_cancellable_cancel(remote_ui.shell_cancel); g_clear_object(&remote_ui.shell_cancel); g_clear_object(&remote_ui.shell); auth_cleanup(remote_ui.shell_auth); g_clear_pointer(&remote_ui.shell_auth,g_free); }
- if(bytes) g_bytes_unref(bytes);
- g_clear_error(&error); g_object_unref(process);
+ GSubprocess *process=data;GError *error=NULL;GBytes *bytes=g_input_stream_read_bytes_finish(G_INPUT_STREAM(object),result,&error);
+ if(!remote_ui.closing && remote_ui.shell==process) {
+  if(bytes && g_bytes_get_size(bytes)) { if(!g_object_get_data(G_OBJECT(process),"insight-ssh-output-seen")) { g_object_set_data(G_OBJECT(process),"insight-ssh-output-seen",GINT_TO_POINTER(1));status("SSH client running — authentication and server output follow below"); }gsize size;const gchar *text=g_bytes_get_data(bytes,&size);shell_append(text,size);g_input_stream_read_bytes_async(g_subprocess_get_stdout_pipe(process),8192,G_PRIORITY_DEFAULT,remote_ui.shell_cancel,shell_read,g_object_ref(process)); }
+  else { if(error) { g_object_set_data_full(G_OBJECT(process),"insight-ssh-error",g_strdup(error->message),g_free);g_subprocess_force_exit(process); }g_object_set_data(G_OBJECT(process),"insight-ssh-eof",GINT_TO_POINTER(1));shell_complete(process); }
+ }
+ if(bytes) g_bytes_unref(bytes);g_clear_error(&error);g_object_unref(process);
 }
 static void shell_finished(GObject *object,GAsyncResult *result,gpointer data) {
- (void)data; g_subprocess_wait_finish(G_SUBPROCESS(object),result,NULL);
- if(!remote_ui.closing && remote_ui.shell==G_SUBPROCESS(object)) status("SSH shell exited; draining output…");
+ (void)data;GSubprocess *process=G_SUBPROCESS(object);GError *error=NULL;gboolean ok=g_subprocess_wait_finish(process,result,&error);
+ if(!remote_ui.closing && remote_ui.shell==process) { if(!ok) g_object_set_data_full(G_OBJECT(process),"insight-ssh-error",g_strdup(error ? error->message : "Cannot wait for SSH client"),g_free);g_object_set_data(G_OBJECT(process),"insight-ssh-exited",GINT_TO_POINTER(1));shell_complete(process); }
+ g_clear_error(&error);
 }
 static void shell_disconnect(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; if(remote_ui.shell) { g_cancellable_cancel(remote_ui.shell_cancel); g_subprocess_force_exit(remote_ui.shell); g_clear_object(&remote_ui.shell); g_clear_object(&remote_ui.shell_cancel); auth_cleanup(remote_ui.shell_auth); g_clear_pointer(&remote_ui.shell_auth,g_free); } if(!remote_ui.closing) status("SSH shell disconnected");
@@ -198,11 +229,11 @@ static void shell_disconnect(GtkWidget *widget,gpointer data) {
 static void shell_connect(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; profile_save(); shell_disconnect(NULL,NULL); GError *error=NULL; RemoteRoot *root=form_root("/",remote_ui.directory,remote_ui.directory,&error);
  if(!root) { status(error ? error->message : "Invalid SSH connection"); g_clear_error(&error); return; }
- GSubprocessLauncher *spawn=launcher(root,&remote_ui.shell_auth); g_subprocess_launcher_setenv(spawn,"TERM","dumb",TRUE); gchar **argv=insight_remote_argv(root->remote,FALSE); remote_ui.shell=g_subprocess_launcher_spawnv(spawn,(const gchar *const *)argv,&error); g_strfreev(argv); g_object_unref(spawn); root_free(root);
+ GSubprocessLauncher *spawn=launcher(root,&remote_ui.shell_auth); g_subprocess_launcher_setenv(spawn,"TERM","dumb",TRUE); gboolean askpass=g_object_get_data(G_OBJECT(spawn),"insight-ssh-askpass")!=NULL;status("Starting SSH client; waiting for the server and authentication…");remote_ui.shell=spawn_client(spawn,root,FALSE,&error);g_object_unref(spawn);root_free(root);
  if(!remote_ui.shell) { status(error ? error->message : "OpenSSH unavailable"); g_clear_error(&error); auth_cleanup(remote_ui.shell_auth); g_clear_pointer(&remote_ui.shell_auth,g_free); return; }
  remote_ui.shell_cancel=g_cancellable_new(); remote_ui.ansi=0; remote_ui.carriage=FALSE; g_string_truncate(remote_ui.tail,0);
  g_input_stream_read_bytes_async(g_subprocess_get_stdout_pipe(remote_ui.shell),8192,G_PRIORITY_DEFAULT,remote_ui.shell_cancel,shell_read,g_object_ref(remote_ui.shell)); g_subprocess_wait_async(remote_ui.shell,NULL,shell_finished,NULL);
- status("SSH shell connected: line input, Ctrl+C interrupts; full-screen TUI is not emulated"); gtk_widget_grab_focus(remote_ui.input);
+ if(!askpass) status("SSH password dialog helper is missing; only key/agent authentication is available.");gtk_widget_grab_focus(remote_ui.input);
 }
 typedef struct { GSubprocess *process; gchar *text; } ShellWrite;
 static void shell_flush(void);
@@ -274,13 +305,13 @@ void insight_remote_ui_init(gboolean (*workspace)(const char *)) {
  remote_epoch++; remote_ui.upload_versions=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free); remote_ui.snapshot_cancel=g_cancellable_new();
  remote_ui.workspace=workspace; remote_ui.roots=g_ptr_array_new_with_free_func(root_free); remote_ui.tail=g_string_new(NULL); remote_ui.directory=g_build_filename(app->configdir,"insight","remote",NULL); g_mkdir_with_parents(remote_ui.directory,0700); remote_ui.config=g_build_filename(app->configdir,"insight","ssh.conf",NULL);
  restore_roots();
- remote_ui.page=gtk_box_new(GTK_ORIENTATION_VERTICAL,2); GtkWidget *connection=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3); remote_ui.host=gtk_entry_new(); remote_ui.user=gtk_entry_new(); remote_ui.port=gtk_spin_button_new_with_range(1,65535,1); remote_ui.identity=gtk_entry_new(); gtk_spin_button_set_value(GTK_SPIN_BUTTON(remote_ui.port),22);
+ remote_ui.page=gtk_box_new(GTK_ORIENTATION_VERTICAL,2);gtk_widget_set_name(remote_ui.page,"insight-ssh-page"); GtkWidget *connection=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3); remote_ui.host=gtk_entry_new(); remote_ui.user=gtk_entry_new(); remote_ui.port=gtk_spin_button_new_with_range(1,65535,1); remote_ui.identity=gtk_entry_new();gtk_widget_set_name(remote_ui.host,"insight-ssh-host");gtk_widget_set_name(remote_ui.user,"insight-ssh-user");gtk_widget_set_name(remote_ui.port,"insight-ssh-port");gtk_widget_set_name(remote_ui.identity,"insight-ssh-identity"); gtk_spin_button_set_value(GTK_SPIN_BUTTON(remote_ui.port),22);
  GtkWidget *fields[]={remote_ui.host,remote_ui.user,remote_ui.identity}; const char *hints[]={"Host or SSH config alias","Login (optional)","Identity file (optional)"}; for(guint i=0;i<3;i++) { gtk_entry_set_placeholder_text(GTK_ENTRY(fields[i]),hints[i]); gtk_entry_set_width_chars(GTK_ENTRY(fields[i]),i==0 ? 18 : 12); gtk_box_pack_start(GTK_BOX(connection),fields[i],TRUE,TRUE,0); } gtk_box_pack_start(GTK_BOX(connection),remote_ui.port,FALSE,FALSE,0);
  GtkWidget *key=gtk_button_new_with_label("Key…"); gtk_box_pack_start(GTK_BOX(connection),key,FALSE,FALSE,0); g_signal_connect(key,"clicked",G_CALLBACK(identity_choose),NULL);
  remote_ui.save_password=gtk_check_button_new_with_label("Save password"); gtk_widget_set_tooltip_text(remote_ui.save_password,"Opt-in: save login password / key passphrase as text in the project config (global SSH profile when no project is open)"); remote_ui.automatic=gtk_check_button_new_with_label("Auto upload on save"); gtk_box_pack_start(GTK_BOX(connection),remote_ui.save_password,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(connection),remote_ui.automatic,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(remote_ui.page),connection,FALSE,FALSE,0);
  GtkWidget *files=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3); remote_ui.path=gtk_entry_new(); gtk_entry_set_placeholder_text(GTK_ENTRY(remote_ui.path),"Absolute remote file, folder or .geany project path"); gtk_box_pack_start(GTK_BOX(files),remote_ui.path,TRUE,TRUE,0);
  const char *labels[]={"Open file","Open folder","Open project","Save remote","Stop transfer"}; for(guint i=0;i<5;i++) { GtkWidget *button=gtk_button_new_with_label(labels[i]); gtk_box_pack_start(GTK_BOX(files),button,FALSE,FALSE,0); g_signal_connect(button,"clicked",i<3 ? G_CALLBACK(open_remote) : (i==3 ? G_CALLBACK(save_remote) : G_CALLBACK(stop_transfer)),GINT_TO_POINTER(i==2 ? PROJECT_READ : (i==1 ? OPEN_FOLDER : OPEN_FILE))); } gtk_box_pack_start(GTK_BOX(remote_ui.page),files,FALSE,FALSE,0);
- GtkWidget *shell=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3); const char *shell_labels[]={"Connect shell","Disconnect","Forget saved password"}; for(guint i=0;i<3;i++) { GtkWidget *button=gtk_button_new_with_label(shell_labels[i]); gtk_box_pack_start(GTK_BOX(shell),button,FALSE,FALSE,0); g_signal_connect(button,"clicked",i==0 ? G_CALLBACK(shell_connect) : (i==1 ? G_CALLBACK(shell_disconnect) : G_CALLBACK(forget_password)),NULL); } GtkWidget *ai=gtk_button_new_with_label("AI Assistant…");gtk_widget_set_name(ai,"insight-ssh-ai");gtk_box_pack_start(GTK_BOX(shell),ai,FALSE,FALSE,0);g_signal_connect(ai,"clicked",G_CALLBACK(ai_console),NULL);remote_ui.status=gtk_label_new("SSH/SFTP — OpenSSH config, key/agent or password; line-oriented remote shell"); gtk_label_set_ellipsize(GTK_LABEL(remote_ui.status),PANGO_ELLIPSIZE_END); gtk_box_pack_start(GTK_BOX(shell),remote_ui.status,TRUE,TRUE,0); gtk_box_pack_start(GTK_BOX(remote_ui.page),shell,FALSE,FALSE,0);
+ GtkWidget *shell=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3); const char *shell_labels[]={"Connect shell","Disconnect","Forget saved password"}; for(guint i=0;i<3;i++) { GtkWidget *button=gtk_button_new_with_label(shell_labels[i]); gtk_box_pack_start(GTK_BOX(shell),button,FALSE,FALSE,0); if(i<2) gtk_widget_set_name(button,i==0 ? "insight-ssh-connect" : "insight-ssh-disconnect");g_signal_connect(button,"clicked",i==0 ? G_CALLBACK(shell_connect) : (i==1 ? G_CALLBACK(shell_disconnect) : G_CALLBACK(forget_password)),NULL); } GtkWidget *ai=gtk_button_new_with_label("AI Assistant…");gtk_widget_set_name(ai,"insight-ssh-ai");gtk_box_pack_start(GTK_BOX(shell),ai,FALSE,FALSE,0);g_signal_connect(ai,"clicked",G_CALLBACK(ai_console),NULL);remote_ui.status=gtk_label_new("SSH/SFTP — OpenSSH config, key/agent or password; line-oriented remote shell"); gtk_widget_set_name(remote_ui.status,"insight-ssh-status");gtk_label_set_xalign(GTK_LABEL(remote_ui.status),0);gtk_label_set_line_wrap(GTK_LABEL(remote_ui.status),TRUE);gtk_label_set_line_wrap_mode(GTK_LABEL(remote_ui.status),PANGO_WRAP_WORD_CHAR);gtk_label_set_selectable(GTK_LABEL(remote_ui.status),TRUE);gtk_label_set_width_chars(GTK_LABEL(remote_ui.status),1);gtk_box_pack_start(GTK_BOX(remote_ui.page),shell,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(remote_ui.page),remote_ui.status,FALSE,TRUE,0);
  remote_ui.output=gtk_text_view_new();gtk_widget_set_name(remote_ui.output,"insight-ssh-output"); gtk_text_view_set_editable(GTK_TEXT_VIEW(remote_ui.output),FALSE); gtk_text_view_set_monospace(GTK_TEXT_VIEW(remote_ui.output),TRUE); GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),remote_ui.output); gtk_box_pack_start(GTK_BOX(remote_ui.page),scroll,TRUE,TRUE,0);
  GtkWidget *input=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3); remote_ui.input=gtk_entry_new();gtk_widget_set_name(remote_ui.input,"insight-ssh-input"); gtk_entry_set_placeholder_text(GTK_ENTRY(remote_ui.input),"SSH shell input — Enter sends a line, Ctrl+C interrupts"); gtk_box_pack_start(GTK_BOX(input),remote_ui.input,TRUE,TRUE,0); GtkWidget *send=gtk_button_new_with_label("Send"),*interrupt=gtk_button_new_with_label("Ctrl+C"); gtk_box_pack_start(GTK_BOX(input),send,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(input),interrupt,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(remote_ui.page),input,FALSE,FALSE,0); g_signal_connect(send,"clicked",G_CALLBACK(shell_send),NULL); g_signal_connect(interrupt,"clicked",G_CALLBACK(shell_send),GINT_TO_POINTER(1)); g_signal_connect(remote_ui.input,"activate",G_CALLBACK(shell_send),NULL); g_signal_connect(remote_ui.input,"key-press-event",G_CALLBACK(shell_key),NULL);
  insight_panel_help_attach(remote_ui.page,"panel-ssh.md"); gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),remote_ui.page,gtk_label_new("SSH Terminal")); gtk_widget_show_all(remote_ui.page);

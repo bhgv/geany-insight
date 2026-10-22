@@ -16,3 +16,11 @@ More: [guide.md](guide.md).
 
 
 [Console AI assistant: configuration, diagnostics and Diff/Merge review](console-ai.md).
+
+## Connection feedback
+
+Connect starts an OpenSSH client, then the client authenticates with the server. Starting a process is not reported as a completed connection. The selectable status is on its own wrapping row; startup errors, disconnects and exit codes also remain in the console transcript. Read the original client output above a nonzero exit status for the server/network reason.
+
+Clients shipped in the application bin directory are resolved to absolute paths before spawning; PATH and, on Windows, system OpenSSH locations are fallbacks. If the password dialog helper is missing, a visible message explains that only key/agent authentication is available. Password/host-key questions use the separate SSH dialog. Spaces around the host and login are ignored.
+
+![SSH connection flow](../media/ssh-connection.svg)
