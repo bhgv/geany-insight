@@ -15,7 +15,7 @@ static GtkWidget *window;static gchar *directory,*profile;static guint phase;sta
 static const gchar *code="int main(void) {\n native_header(); native_asm(); foreign_shell(); foreign_vhdl(); unknown_name();\n bool x = false; return x;\n}\n/* native_header */\nconst char *text = \"native_header\";\n";
 static GtkWidget *named(GtkWidget *root,const gchar *name) { if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;if(GTK_IS_CONTAINER(root)) { GList *children=gtk_container_get_children(GTK_CONTAINER(root));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL; }
 static void open_source(const gchar *name,const gchar *text,const gchar *type) { gchar *path=g_build_filename(directory,name,NULL);g_assert_true(g_file_set_contents(path,text,-1,NULL));g_assert_nonnull(document_open_file(path,FALSE,filetypes_lookup_by_name(type),NULL));g_free(path); }
-static void key(ScintillaObject *sci,guint keyval) { GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);event->key.window=g_object_ref(gtk_widget_get_window(GTK_WIDGET(sci)));event->key.keyval=keyval;gtk_widget_event(GTK_WIDGET(sci),event);gdk_event_free(event); }
+static void key(ScintillaObject *sci,guint keyval) { GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);GdkWindow *target=gtk_widget_get_window(GTK_WIDGET(sci));g_assert_nonnull(target);event->key.window=g_object_ref(target);event->key.keyval=keyval;gtk_widget_event(GTK_WIDGET(sci),event);gdk_event_free(event); }
 static guint text_changes,style_changes,indicator_changes,stable_ticks;static gboolean watching;
 static void changed(ScintillaObject *sci,gint message,SCNotification *n,gpointer data) {
  (void)sci;(void)message;(void)data;if(n->nmhdr.code!=SCN_MODIFIED) return;
@@ -46,7 +46,7 @@ static void check_seed(void) {
 }
 static gboolean step(gpointer data) {
  (void)data;if(!document_get_current()) return G_SOURCE_CONTINUE;
- if(phase==0) { if(!g_strcmp0(g_getenv("INSIGHT_CONTEXT_STAGE"),"produce")) { legacy_seed();gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(gtk_widget_get_toplevel(GTK_WIDGET(document_get_current()->editor->sci)),"menu_quit1")));return G_SOURCE_REMOVE; }if(!g_strcmp0(g_getenv("INSIGHT_CONTEXT_STAGE"),"check")) check_seed();window=gtk_widget_get_toplevel(GTK_WIDGET(document_get_current()->editor->sci));open_source("native.hpp","void native_header(void);\n#define false 0\n","C++");open_source("native.S","native_asm:\n nop\n","ASM");open_source("foreign.sh","foreign_shell() { echo test; }\nnative_header() { echo wrong; }\n","Sh");open_source("foreign.vhdl","entity foreign_vhdl is\nend foreign_vhdl;\n","VHDL");open_source("main.cpp",code,"C++");source=document_get_current();phase++;return G_SOURCE_CONTINUE; }
+ if(phase==0) { g_printerr("Context test stage: %s\n",g_getenv("INSIGHT_CONTEXT_STAGE") ? g_getenv("INSIGHT_CONTEXT_STAGE") : "normal");if(!g_strcmp0(g_getenv("INSIGHT_CONTEXT_STAGE"),"check")) check_seed();window=gtk_widget_get_toplevel(GTK_WIDGET(document_get_current()->editor->sci));open_source("native.hpp","void native_header(void);\n#define false 0\n","C++");open_source("native.S","native_asm:\n nop\n","ASM");open_source("foreign.sh","foreign_shell() { echo test; }\nnative_header() { echo wrong; }\n","Sh");open_source("foreign.vhdl","entity foreign_vhdl is\nend foreign_vhdl;\n","VHDL");open_source("main.cpp",code,"C++");source=document_get_current();phase++;return G_SOURCE_CONTINUE; }
  ScintillaObject *preview=SCINTILLA(named(window,"insight-context-code"));g_assert_nonnull(preview);
  if(phase==1) {
   if(sci_get_length(preview)!=(gint)strlen(code)) return G_SOURCE_CONTINUE;
@@ -59,6 +59,10 @@ static gboolean step(gpointer data) {
   /* Repeated Follow requests for the same word must not reset text/styles/links. */
   if(stable_ticks++<16) { if(stable_ticks==4) text_changes=style_changes=indicator_changes=0;if(stable_ticks%4==0) sci_set_current_position(source->editor->sci,(stable_ticks/4)%2,FALSE);gtk_widget_grab_focus(GTK_WIDGET(source->editor->sci));return G_SOURCE_CONTINUE; }
   g_assert_cmpuint(text_changes,==,0);g_assert_cmpuint(style_changes,==,0);g_assert_cmpuint(indicator_changes,==,0);
+  if(g_getenv("INSIGHT_CONTEXT_STAGE")) {
+   if(!strcmp(g_getenv("INSIGHT_CONTEXT_STAGE"),"produce")) legacy_seed();
+   g_print("Palette restart stage passed: %s\n",g_getenv("INSIGHT_CONTEXT_STAGE"));gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+  }
   g_assert_nonnull(named(window,"insight-context-definitions-label"));
   gint before=sci_get_current_position(source->editor->sci);sci_set_current_position(preview,strstr(code,"false")-code,FALSE);key(preview,GDK_KEY_F12);g_assert_cmpint(sci_get_length(preview),==,strlen(code));g_assert_cmpint(sci_get_current_position(source->editor->sci),==,before);
   sci_set_current_position(preview,header,FALSE);key(preview,GDK_KEY_F12);phase++;return G_SOURCE_CONTINUE;
