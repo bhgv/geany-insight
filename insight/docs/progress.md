@@ -2143,3 +2143,56 @@ edit-Undo/selection/rename/EOL/tab/close guards, window destruction, same-length
 insertion substitution, unchanged disk content and single Undo/Redo. The JPEG is
 captured by a native fixture running the complete application with synthetic C
 source and clipboard text. Windows and Android were not run in this series.
+
+## Persistent project databases and aligned source panes — 2026-10-22
+
+Project opening previously launched another full membership/source scan, project
+closure removed the shared workspace cache, and tab activation rebuilt the file
+list. The workbench now saves a checksummed, atomically replaced database per
+project identity: membership (including empty/non-source files), directory/file
+stamps, symbol and declaration indexes, and supported lexical call sites. A warm
+opening restores the indexes and validates metadata; only changed/new sources are
+parsed. Deletions and inclusion-policy changes prune obsolete records. Saved
+extensionless-language detection avoids reopening unchanged shebang sources.
+Unsaved editor overlays are kept separate from committed disk snapshots, including
+when indexing is cancelled. Explicit binary members no longer fail the whole
+database save. Missing/incompatible/corrupt snapshots require a fresh parse.
+
+Identical file-list requests keep their model; unchanged membership/root/filter
+also preserves the Project Folders rows, expansion and selection. External master
+list polls validate file/expansion-directory metadata before rereading contents or
+enumerating names. Linked list targets and automatic wildcard additions/deletions
+are covered. Manual **Project > Synchronize Files** checks membership and parses
+changed files; **Rebuild Project** forces eligible sources. This follows the roles
+of the Source Insight commands without copying every dialog option.
+
+Diff/Merge now places Left/Right side by side above a full-width editable Result.
+Visual paragraph padding aligns common anchors without modifying source text,
+offsets, line numbers or copied/merged bytes. Linked vertical scrolling uses pixel
+positions, horizontal scrolling is linked too, and wrapping applies only to
+Result. Splitter/font changes schedule alignment; closing cancels pending work.
+Read-only review modes continue to hide the editable result where appropriate.
+
+RU/EN/root guides, localized labels, a self-contained SVG and a real production
+Diff/Merge GTK capture document the behavior. The JPEG is from an isolated fixture
+with synthetic insertion/equal lines, not a whole editor/desktop capture. Both
+Meson and Autotools package the database module, tests and new help/media.
+
+Validation: complete Linux build/install and **88/88 tests passed**, source
+`37a096a8c604f206fcf91369516330c5b1766973`,
+[run 39700162123](https://github.com/bhgv/geany-insight/actions/runs/39700162123).
+All 14 focused checks and all 74 remaining regressions pass. Coverage includes a
+fresh editor process restoring four members (including an explicit binary file)
+with zero source parses, changed/add/delete, manual synchronization/rebuild,
+corruption/cancellation/identity guards, master-list metadata gates and linked
+sources, aligned geometry/equal-line pixel anchors, bidirectional scroll and
+exact source preservation.
+
+A separate synthetic database-only measurement restored **10,000 member names in
+8303 µs (8.3 ms)** with zero source reads/parses, source
+`16caa2b5950392bc8bf2ad88dcdc35109c56cfa6`,
+[run 39698740706](https://github.com/bhgv/geany-insight/actions/runs/39698740706).
+It uses a small symbol/call index immediately after saving the snapshot; this is
+not a cold full-project startup benchmark and excludes metadata validation.
+Existing indexing/serialization bounds remain; lexical call caching is not a
+complete semantic graph. Windows and Android were not run in this series.
