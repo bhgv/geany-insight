@@ -581,3 +581,5 @@ EXTRA_DIST += insight/tests/project_db_test.c insight/tests/project_db_gui_test.
 
 insightdoc_DATA += insight/docs/project-database.md
 dist_insightdocmedia_DATA += insight/docs/media/project-database.svg insight/docs/media/aligned-diff.jpg
+
+EXTRA_DIST += insight/tests/selection_parse_test.cxx insight/tests/selection_parse_test.py

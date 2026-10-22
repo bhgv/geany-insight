@@ -52,3 +52,18 @@ GEANY_RUN_GUI_TESTS=1 meson test -C build-editor \
 На Windows исполнение и проверку GUI выполняйте в Windows-сессии. Успешная Linux GUI-проверка или факт компиляции Windows PE не подтверждают работу Windows GUI сами по себе. Результаты относятся к конкретному коммиту, а не к ранее скачанному архиву.
 
 Windows workflow запускается вручную (`workflow_dispatch`) или явным изменением файла `insight/build-requests/windows-x64-request.txt` в main по запросу проверочной сборки. Обычные коммиты без этого файла не запускают сборку. Его сценарий включает native-сборку, упаковку GTK, проверку ядра diff/структурного выделения/геометрии графа, `geany --version` без SDK в PATH и `REVISION.txt`.
+
+## Building without the charconv header
+
+Some C++17 standard libraries report `scintilla/src/Selection.cxx: fatal error:
+charconv: No such file or directory`. Selection restoration now uses a local,
+range-checked decimal parser, so this code does not require `<charconv>`. There is
+no replacement STL header to install or copy into the project. The editor still
+requires C++17 for its other components.
+
+After updating sources, rerun `make` in the existing build directory. If Autotools
+inputs changed in a Git checkout, rerun `./autogen.sh` and your existing configure
+command first. Do not replace system STL headers.
+`SANITIZE=undefined python3 insight/tests/selection_parse_test.py` forbids including
+`<charconv>` and verifies signed/unsigned limits, overflow, exact suffixes, 20,000
+random conversions and selection restoration.

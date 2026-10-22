@@ -15,7 +15,8 @@
 #include <optional>
 #include <algorithm>
 #include <memory>
-#include <charconv>
+#include <limits>
+#include <type_traits>
 
 #include "Debugging.h"
 
@@ -30,13 +31,31 @@ namespace {
 // Failures include values that are out of range for the destination variable.
 template <typename T>
 void ValueFromString(std::string_view &sv, T &value) {
-	const std::from_chars_result res = std::from_chars(sv.data(), sv.data() + sv.size(), value);
-	if (res.ec != std::errc{}) {
-		if (res.ec == std::errc::result_out_of_range)
-			throw std::runtime_error("from_chars out of range.");
+	// Some otherwise usable C++17 libraries do not provide <charconv>.
+	// Parse decimal digits directly, with the same sign/prefix/range rules.
+	using Unsigned = typename std::make_unsigned<T>::type;
+	const bool negative = std::is_signed<T>::value && !sv.empty() && sv.front() == '-';
+	size_t end = negative ? 1 : 0;
+	if (end == sv.size() || sv[end] < '0' || sv[end] > '9')
 		throw std::runtime_error("from_chars failed.");
+
+	const Unsigned limit = static_cast<Unsigned>(std::numeric_limits<T>::max()) +
+		static_cast<Unsigned>(negative);
+	Unsigned number = 0;
+	while (end < sv.size() && sv[end] >= '0' && sv[end] <= '9') {
+		const Unsigned digit = static_cast<Unsigned>(sv[end] - '0');
+		if (number > limit / 10 || (number == limit / 10 && digit > limit % 10))
+			throw std::runtime_error("from_chars out of range.");
+		number = number * 10 + digit;
+		end++;
 	}
-	sv.remove_prefix(res.ptr - sv.data());
+	if (negative) {
+		// Avoid converting or negating the magnitude of the signed minimum.
+		value = number == limit ? std::numeric_limits<T>::min() : -static_cast<T>(number);
+	} else {
+		value = static_cast<T>(number);
+	}
+	sv.remove_prefix(end);
 }
 
 }

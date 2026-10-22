@@ -1,0 +1,30 @@
+name: Scintilla selection older C++17 library
+on:
+  push:
+    branches: [main]
+    paths:
+      - scintilla/src/Selection.*
+      - insight/tests/selection_parse_test.*
+      - .github/workflows/scintilla-selection-compat.yml
+  pull_request:
+    paths:
+      - scintilla/src/Selection.*
+      - insight/tests/selection_parse_test.*
+      - .github/workflows/scintilla-selection-compat.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gcc7:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run production selection parser with GCC 7
+        run: |
+          mkdir _selection-no-charconv
+          printf '#error "Building without charconv is required"\n' > _selection-no-charconv/charconv
+          docker run --rm -v "$PWD:/src:ro" -v "$PWD/_selection-no-charconv:/build" -w /src gcc:7 bash -ec '
+            g++ --version
+            g++ -std=c++17 -Wall -Wextra -Werror -pedantic -I/build insight/tests/selection_parse_test.cxx -o /build/selection-test
+            /build/selection-test
+          '

@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
     paths:
+      - scintilla/src/Selection.cxx
+      - insight/tests/selection_parse_test.*
       - insight/tests/buffer_transfer_gui_test.c
       - insight/tests/text_transfer_test.c
       - insight/tests/file_text_gui_test.c
@@ -149,6 +151,8 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y libgtk-3-dev libvte-2.91-dev meson ninja-build gettext python3-docutils xvfb poppler-utils
       - name: Validate exact and normalized comparison core
         run: SANITIZE=undefined python3 insight/tests/diff_test.py
+      - name: Validate selection parsing without charconv
+        run: SANITIZE=undefined python3 insight/tests/selection_parse_test.py
       - name: Configure and build the complete editor
         run: |
           meson setup _native --prefix="$PWD/_native-install" --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=true -Dmac-integration=disabled
