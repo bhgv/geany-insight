@@ -5,7 +5,7 @@
 #define ENTRY_LIMIT 10000u
 static gboolean root_valid(const gchar *root) { return root && g_path_is_absolute(root) && strlen(root)<=16384 && g_utf8_validate(root,-1,NULL) && !strpbrk(root,"\r\n"); }
 static gchar *dependency_stamp(const gchar *path,GCancellable *cancel) {
- GFile *file=g_file_new_for_path(path);GFileInfo *info=g_file_query_info(file,"standard::type,standard::size,time::modified,time::modified-usec,time::changed,time::changed-usec,etag::value,id::file",G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,cancel,NULL);g_object_unref(file);
+ GFile *file=g_file_new_for_path(path);GFileInfo *info=g_file_query_info(file,"standard::type,standard::size,time::modified,time::modified-usec,time::changed,time::changed-usec,etag::value,id::file",G_FILE_QUERY_INFO_NONE,cancel,NULL);g_object_unref(file);
  if(!info) return g_strdup("missing");
  gboolean dir=g_file_info_get_file_type(info)==G_FILE_TYPE_DIRECTORY;
  gchar *stamp=g_strdup_printf("%u:%" G_GUINT64_FORMAT ":%u:%" G_GUINT64_FORMAT ":%u:%" G_GOFFSET_FORMAT ":%s:%s",g_file_info_get_file_type(info),g_file_info_get_attribute_uint64(info,G_FILE_ATTRIBUTE_TIME_MODIFIED),g_file_info_get_attribute_uint32(info,G_FILE_ATTRIBUTE_TIME_MODIFIED_USEC),dir?0:g_file_info_get_attribute_uint64(info,G_FILE_ATTRIBUTE_TIME_CHANGED),dir?0:g_file_info_get_attribute_uint32(info,G_FILE_ATTRIBUTE_TIME_CHANGED_USEC),dir?0:g_file_info_get_size(info),g_file_info_get_etag(info)?g_file_info_get_etag(info):"",g_file_info_get_attribute_string(info,G_FILE_ATTRIBUTE_ID_FILE)?g_file_info_get_attribute_string(info,G_FILE_ATTRIBUTE_ID_FILE):"");g_object_unref(info);return stamp;
