@@ -10,6 +10,7 @@ static GtkWidget *window,*panel,*view;static GeanyDocument *a,*b,*ro;static gcha
 static GtkWidget *named(GtkWidget *w,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(w),name)) return w;
  if(GTK_IS_MENU_ITEM(w)) { GtkWidget *sub=gtk_menu_item_get_submenu(GTK_MENU_ITEM(w));if(sub) { GtkWidget *f=named(sub,name);if(f) return f; } }
+ if(GTK_IS_MENU_BUTTON(w)) { GtkWidget *popover=GTK_WIDGET(gtk_menu_button_get_popover(GTK_MENU_BUTTON(w)));if(popover) { GtkWidget *f=named(popover,name);if(f) return f; } }
  if(GTK_IS_CONTAINER(w)) { GList *children=gtk_container_get_children(GTK_CONTAINER(w));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL;
 }
 static void click(const gchar *suffix) { gchar *name=g_strconcat("insight-window-",suffix,NULL);GtkWidget *button=named(panel,name);g_free(name);g_assert_nonnull(button);g_assert_true(gtk_widget_get_sensitive(button));gtk_button_clicked(GTK_BUTTON(button)); }
