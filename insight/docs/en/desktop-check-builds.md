@@ -101,3 +101,11 @@ make -j2
 The recheck retains the previous configure arguments. With an out-of-tree build,
 run autogen in the source directory and config.status/make in the existing build
 directory.
+
+### SSH queue cleanup and minimum-API enforcement
+
+The `undefined reference to g_queue_clear_full` failure is fixed by clearing the
+embedded queue with APIs available in GLib 2.56. Tests cover element destruction,
+empty queues and reuse. The complete Autotools build now sets
+`GLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_56` and treats newer API usage as a compile
+error. Compatibility branches respect that limit even with modern headers.

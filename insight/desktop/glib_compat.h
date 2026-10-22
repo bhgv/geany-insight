@@ -5,7 +5,7 @@
 
 /* Keep the declared GLib 2.56 baseline, including standalone core modules. */
 static inline gboolean insight_pattern_match_string(GPatternSpec *pattern, const gchar *text) {
-#if GLIB_CHECK_VERSION(2, 70, 0) && !defined(INSIGHT_GLIB_COMPAT_FORCE_FALLBACK)
+#if GLIB_CHECK_VERSION(2, 70, 0) && GLIB_VERSION_MAX_ALLOWED >= G_ENCODE_VERSION(2, 70) && !defined(INSIGHT_GLIB_COMPAT_FORCE_FALLBACK)
  return g_pattern_spec_match_string(pattern, text);
 #else
  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
@@ -16,7 +16,7 @@ static inline gboolean insight_pattern_match_string(GPatternSpec *pattern, const
 }
 
 static inline gchar *insight_canonicalize_filename(const gchar *filename, const gchar *relative_to) {
-#if GLIB_CHECK_VERSION(2, 58, 0) && !defined(INSIGHT_GLIB_COMPAT_FORCE_FALLBACK)
+#if GLIB_CHECK_VERSION(2, 58, 0) && GLIB_VERSION_MAX_ALLOWED >= G_ENCODE_VERSION(2, 58) && !defined(INSIGHT_GLIB_COMPAT_FORCE_FALLBACK)
  return g_canonicalize_filename(filename, relative_to);
 #else
  g_return_val_if_fail(filename != NULL, NULL);
@@ -34,4 +34,16 @@ static inline gchar *insight_canonicalize_filename(const gchar *filename, const 
  return path;
 #endif
 }
+/* g_queue_clear_full() is newer than the supported GLib 2.56 baseline.
+ * The queue is embedded in the SSH state, so never free the GQueue itself. */
+static inline void insight_queue_clear_full(GQueue *queue, GDestroyNotify destroy) {
+ g_return_if_fail(queue != NULL);
+ GList *head = queue->head;
+ g_queue_init(queue);
+ if (destroy)
+  g_list_free_full(head, destroy);
+ else
+  g_list_free(head);
+}
+
 #endif

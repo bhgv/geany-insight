@@ -28,6 +28,17 @@ static void patterns(void) {
  spec=g_pattern_spec_new("*.c");g_assert_true(insight_pattern_match_string(spec,"unit.c"));g_assert_false(insight_pattern_match_string(spec,"unit.h"));g_pattern_spec_free(spec);
  spec=g_pattern_spec_new("*");g_assert_true(insight_pattern_match_string(spec,""));g_pattern_spec_free(spec);
 }
+static guint destroyed;
+static void destroy_item(gpointer item) { destroyed++;g_free(item); }
+static void queues(void) {
+ GQueue queue=G_QUEUE_INIT;
+ g_queue_push_tail(&queue,g_strdup("one"));g_queue_push_tail(&queue,NULL);g_queue_push_tail(&queue,g_strdup("two"));
+ insight_queue_clear_full(&queue,destroy_item);
+ g_assert_cmpuint(destroyed,==,3);g_assert_true(g_queue_is_empty(&queue));g_assert_null(queue.head);g_assert_null(queue.tail);g_assert_cmpuint(queue.length,==,0);
+ insight_queue_clear_full(&queue,destroy_item);g_assert_cmpuint(destroyed,==,3);
+ g_queue_push_tail(&queue,GINT_TO_POINTER(1));insight_queue_clear_full(&queue,NULL);g_assert_true(g_queue_is_empty(&queue));
+ g_queue_push_tail(&queue,g_strdup("reused"));insight_queue_clear_full(&queue,destroy_item);g_assert_cmpuint(destroyed,==,4);g_assert_true(g_queue_is_empty(&queue));
+}
 int main(int argc,char **argv) {
- g_test_init(&argc,&argv,NULL);g_test_add_func("/glib-compat/lexical-paths",paths);g_test_add_func("/glib-compat/unicode-patterns",patterns);return g_test_run();
+ g_test_init(&argc,&argv,NULL);g_test_add_func("/glib-compat/lexical-paths",paths);g_test_add_func("/glib-compat/unicode-patterns",patterns);g_test_add_func("/glib-compat/embedded-queues",queues);return g_test_run();
 }

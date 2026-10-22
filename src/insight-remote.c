@@ -3,6 +3,7 @@
 #include "config.h"
 #endif
 #include "geany.h"
+#include "../insight/desktop/glib_compat.h"
 #include "insight-remote.h"
 #include "insight-ai.h"
 #include "insight-help.h"
@@ -192,7 +193,7 @@ static void shell_finished(GObject *object,GAsyncResult *result,gpointer data) {
 }
 static void shell_disconnect(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; if(remote_ui.shell) { g_cancellable_cancel(remote_ui.shell_cancel); g_subprocess_force_exit(remote_ui.shell); g_clear_object(&remote_ui.shell); g_clear_object(&remote_ui.shell_cancel); auth_cleanup(remote_ui.shell_auth); g_clear_pointer(&remote_ui.shell_auth,g_free); } if(!remote_ui.closing) status("SSH shell disconnected");
- remote_ui.shell_writing=FALSE; g_queue_clear_full(&remote_ui.shell_pending,g_free);
+ remote_ui.shell_writing=FALSE; insight_queue_clear_full(&remote_ui.shell_pending,g_free);
 }
 static void shell_connect(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; profile_save(); shell_disconnect(NULL,NULL); GError *error=NULL; RemoteRoot *root=form_root("/",remote_ui.directory,remote_ui.directory,&error);

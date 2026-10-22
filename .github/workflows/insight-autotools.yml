@@ -31,7 +31,7 @@ jobs:
           NOCONFIGURE=1 ./autogen.sh
           mkdir _autotools
           cd _autotools
-          ../configure --prefix="$PWD/install" --disable-html-docs --disable-pdf-docs --disable-api-docs --disable-gtkdoc-header CFLAGS='-O2 -Werror=implicit-function-declaration -DINSIGHT_GLIB_COMPAT_FORCE_FALLBACK=1'
+          ../configure --prefix="$PWD/install" --disable-html-docs --disable-pdf-docs --disable-api-docs --disable-gtkdoc-header CFLAGS='-O2 -Werror=implicit-function-declaration -Werror=deprecated-declarations -DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_56 -DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_56 -DGTK_DISABLE_DEPRECATION_WARNINGS -DGDK_DISABLE_DEPRECATION_WARNINGS -DINSIGHT_GLIB_COMPAT_FORCE_FALLBACK=1' CXXFLAGS='-O2 -Werror=deprecated-declarations -DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_56 -DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_56 -DGTK_DISABLE_DEPRECATION_WARNINGS -DGDK_DISABLE_DEPRECATION_WARNINGS'
           make -j2
       - name: Install and verify linked programs
         run: |

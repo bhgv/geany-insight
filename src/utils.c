@@ -2465,7 +2465,7 @@ gchar *utils_get_os_info_string(void)
 {
 	gchar *os_info = NULL;
 
-#if GLIB_CHECK_VERSION(2, 64, 0)
+#if GLIB_CHECK_VERSION(2, 64, 0) && GLIB_VERSION_MAX_ALLOWED >= G_ENCODE_VERSION(2, 64)
 # if ! defined(__APPLE__)
 	/* on non-macOS operating systems */
 	{
