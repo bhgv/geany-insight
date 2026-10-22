@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "workspace_watch.h"
+#include "glib_compat.h"
 struct InsightWorkspaceWatch {
  GHashTable *directories,*paths;
  guint pending,delay;
@@ -39,7 +40,7 @@ InsightWorkspaceWatch *insight_workspace_watch_new(guint delay,InsightWorkspaceC
 }
 gboolean insight_workspace_watch_add(InsightWorkspaceWatch *watch,const char *directory,GError **error) {
  g_return_val_if_fail(watch && directory,FALSE);
- gchar *path=g_canonicalize_filename(directory,NULL);
+ gchar *path=insight_canonicalize_filename(directory,NULL);
  if(g_hash_table_contains(watch->directories,path)) { g_free(path); return TRUE; }
  if(g_hash_table_size(watch->directories)>=1024) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Directory monitor limit reached (1024)"); g_free(path); return FALSE; }
  GFile *file=g_file_new_for_path(path);

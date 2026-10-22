@@ -1,5 +1,6 @@
 #define INSIGHT_LOCALIZE_FORMATS
 #include "insight-i18n.h"
+#include "../insight/desktop/glib_compat.h"
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -107,7 +108,7 @@ void insight_menu_icons(GtkWidget *menu) {
 static gchar *resolve(const gchar *path,const gchar *base) {
  if(g_str_has_prefix(path,"file://")) return g_filename_from_uri(path,NULL,NULL);
  if(strstr(path,"://") || g_str_has_prefix(path,"data:") || g_str_has_prefix(path,"javascript:")) return NULL;
- return g_canonicalize_filename(path,base);
+ return insight_canonicalize_filename(path,base);
 }
 static gchar *uri_for(const gchar *path,const gchar *base) {
  if(g_str_has_prefix(path,"https://") || g_str_has_prefix(path,"http://") || g_str_has_prefix(path,"mailto:")) return g_strdup(path);
@@ -235,8 +236,8 @@ static gboolean load_document(Help *h,const gchar *filename,gboolean remember) {
  gchar *key=g_strdup(filename),*path=NULL,*source=NULL;gsize length=0;GError *error=NULL;GStatBuf st;
  if(g_str_has_prefix(key,"@editor:")) {
   gchar *end=NULL;guint64 id=g_ascii_strtoull(key+8,&end,10);GeanyDocument *doc=id && id<=G_MAXUINT && end && !*end ? document_find_by_id((guint)id) : NULL;
-  if(doc && sci_get_length(doc->editor->sci)<=8*1024*1024) { length=sci_get_length(doc->editor->sci);source=sci_get_contents(doc->editor->sci,length+1);path=doc->file_name ? g_canonicalize_filename(doc->file_name,NULL) : g_canonicalize_filename("untitled.md",NULL); }
- }else { path=g_canonicalize_filename(key,NULL);if(!g_stat(path,&st) && st.st_size<=8*1024*1024) g_file_get_contents(path,&source,&length,&error); }
+  if(doc && sci_get_length(doc->editor->sci)<=8*1024*1024) { length=sci_get_length(doc->editor->sci);source=sci_get_contents(doc->editor->sci,length+1);path=doc->file_name ? insight_canonicalize_filename(doc->file_name,NULL) : insight_canonicalize_filename("untitled.md",NULL); }
+ }else { path=insight_canonicalize_filename(key,NULL);if(!g_stat(path,&st) && st.st_size<=8*1024*1024) g_file_get_contents(path,&source,&length,&error); }
  if(!source || !g_utf8_validate(source,length,NULL) || memchr(source,0,length)) { gtk_label_set_text(GTK_LABEL(h->status),error ? error->message : "Preview unavailable: source closed, invalid UTF-8, or larger than 8 MiB");g_clear_error(&error);g_free(source);g_free(path);g_free(key);return FALSE; }
  if(remember) { while(h->history->len && h->position+1<h->history->len) g_ptr_array_remove_index(h->history,h->history->len-1);g_ptr_array_add(h->history,g_strdup(g_str_has_prefix(key,"@editor:") ? key : path));if(h->history->len>128) g_ptr_array_remove_index(h->history,0);h->position=h->history->len-1; }
  g_free(h->key);h->key=key;clear_find(h);if(h->scroll_idle) { g_source_remove(h->scroll_idle);h->scroll_idle=0; }g_clear_object(&h->scroll_target);h->filling=TRUE;gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(h->toc));g_ptr_array_set_size(h->headings,0);

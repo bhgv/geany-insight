@@ -1,0 +1,55 @@
+name: Insight Autotools and minimum GLib
+on:
+  push:
+    branches: [main]
+    paths:
+      - src/**
+      - insight/**
+      - scintilla/**
+      - Makefile.am
+      - configure.ac
+      - m4/**
+      - meson.build
+      - .github/workflows/insight-autotools.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  autotools:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y autoconf automake autopoint libtool gettext pkg-config libgtk-3-dev python3-docutils xvfb
+      - name: Check source lists and GLib fallback semantics
+        run: |
+          python3 insight/tests/build_sources_test.py
+          cc -std=c99 -Wall -Wextra -Werror insight/tests/glib_compat_test.c $(pkg-config --cflags --libs gio-2.0) -o /tmp/insight-glib-compat
+          /tmp/insight-glib-compat
+      - name: Generate configure and build out of tree
+        run: |
+          NOCONFIGURE=1 ./autogen.sh
+          mkdir _autotools
+          cd _autotools
+          ../configure --prefix="$PWD/install" --disable-html-docs --disable-pdf-docs --disable-api-docs --disable-gtkdoc-header CFLAGS='-O2 -Werror=implicit-function-declaration -DINSIGHT_GLIB_COMPAT_FORCE_FALLBACK=1'
+          make -j2
+      - name: Install and verify linked programs
+        run: |
+          make -C _autotools install
+          test -x _autotools/install/bin/geany-insight-askpass
+          ldd -r _autotools/install/lib/libgeany.so 2>&1 | tee _autotools/link-check.txt
+          if grep -E 'undefined symbol:|not found' _autotools/link-check.txt; then exit 1; fi
+          LD_LIBRARY_PATH="$PWD/_autotools/install/lib" _autotools/install/bin/geany --version
+  glib256:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run against actual GLib 2.56 headers and libraries
+        run: |
+          docker run --rm -v "$PWD:/src:ro" -w /src ubuntu:18.04 bash -ec '
+            apt-get update -qq
+            apt-get install -y --no-install-recommends gcc libc6-dev libglib2.0-dev pkg-config
+            pkg-config --modversion gio-2.0
+            cc -std=c99 -Wall -Wextra -Werror insight/tests/glib_compat_test.c $(pkg-config --cflags --libs gio-2.0) -o /tmp/glib-compat
+            /tmp/glib-compat
+          '

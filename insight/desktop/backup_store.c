@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "backup_store.h"
+#include "glib_compat.h"
 #include <string.h>
 #define ATTRS G_FILE_ATTRIBUTE_STANDARD_NAME "," G_FILE_ATTRIBUTE_STANDARD_TYPE "," G_FILE_ATTRIBUTE_STANDARD_SIZE "," G_FILE_ATTRIBUTE_ETAG_VALUE "," G_FILE_ATTRIBUTE_ID_FILE
 static gboolean fail(GError **error,GIOErrorEnum code,const gchar *message)
@@ -36,7 +37,7 @@ static gboolean directory_check(GFile *directory,gboolean create,GError **error)
 gchar *insight_backup_directory(const gchar *config,const gchar *source,GError **error)
 {
     if(!absolute(config,error) || !absolute(source,error)) return NULL;
-    gchar *canonical=g_canonicalize_filename(source,NULL),*hash=g_compute_checksum_for_string(G_CHECKSUM_SHA256,canonical,-1);
+    gchar *canonical=insight_canonicalize_filename(source,NULL),*hash=g_compute_checksum_for_string(G_CHECKSUM_SHA256,canonical,-1);
     gchar *directory=g_build_filename(config,"insight-backups",hash,NULL);g_free(canonical);g_free(hash);return directory;
 }
 static gboolean snapshot_name(const gchar *name)

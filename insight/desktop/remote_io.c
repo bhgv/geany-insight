@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "remote_io.h"
+#include "glib_compat.h"
 #include <string.h>
 static gboolean valid_path(const char *path) { return path && *path && strlen(path)<=16384 && g_utf8_validate(path,-1,NULL) && !strchr(path,'\n') && !strchr(path,'\r'); }
 static gboolean identifier(const char *s,gboolean host) {
@@ -11,7 +12,7 @@ InsightRemote *insight_remote_new(const char *host,const char *user,guint port,c
  if(!identifier(host,TRUE) || (user && *user && !identifier(user,FALSE)) || !port || port>65535 || !valid_path(remote) || *remote!='/' || !valid_path(local) || !g_path_is_absolute(local) || (identity && *identity && !valid_path(identity))) {
   g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Use a host/SSH alias, valid user and port, absolute remote path and local cache path"); return NULL;
  }
- InsightRemote *r=g_new0(InsightRemote,1); r->host=g_strdup(host); r->user=g_strdup(user ? user : ""); r->port=port; r->identity=g_strdup(identity ? identity : ""); r->remote=g_strdup(remote); r->local=g_canonicalize_filename(local,NULL); return r;
+ InsightRemote *r=g_new0(InsightRemote,1); r->host=g_strdup(host); r->user=g_strdup(user ? user : ""); r->port=port; r->identity=g_strdup(identity ? identity : ""); r->remote=g_strdup(remote); r->local=insight_canonicalize_filename(local,NULL); return r;
 }
 void insight_remote_free(InsightRemote *r) { if(!r) return; g_free(r->host); g_free(r->user); g_free(r->identity); g_free(r->remote); g_free(r->local); g_free(r); }
 gchar **insight_remote_argv(const InsightRemote *r,gboolean sftp) {
@@ -48,7 +49,7 @@ gchar *insight_remote_upload(const char *local,const char *remote,const char *no
  gchar *batch=g_strdup_printf("put %s %s\nrename %s %s\nbye\n",a,b,b,c); g_free(a); g_free(b); g_free(c); g_free(temporary); return batch;
 }
 gchar *insight_remote_path(const InsightRemote *r,const char *local) {
- gchar *canonical=g_canonicalize_filename(local,NULL); gsize prefix=strlen(r->local); gchar *result=NULL;
+ gchar *canonical=insight_canonicalize_filename(local,NULL); gsize prefix=strlen(r->local); gchar *result=NULL;
  if(!strncmp(canonical,r->local,prefix) && G_IS_DIR_SEPARATOR(canonical[prefix])) {
   gchar *relative=g_strdup(canonical+prefix+1); for(char *p=relative;*p;p++) if(G_IS_DIR_SEPARATOR(*p)) *p='/';
   result=g_strdup_printf("%s%s%s",r->remote,g_str_has_suffix(r->remote,"/") ? "" : "/",relative); g_free(relative);

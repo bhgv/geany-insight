@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #define INSIGHT_LOCALIZE_FORMATS
 #include "insight-i18n.h"
+#include "../insight/desktop/glib_compat.h"
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -195,7 +196,7 @@ static void create_project(GtkWidget *widget,gpointer data)
   if(!clone && g_mkdir_with_parents(native,0700)) { show_error(GTK_WINDOW(d),"Cannot create the repository folder.");g_free(native);g_free(file);continue; }
   GitJob j={0};j.kind=clone ? JOB_CLONE : JOB_INIT;j.root=native;j.remote=(gchar *)url;
   gboolean ok=FALSE;
-  if(!clone) { const gchar *probe[]={"rev-parse","--show-toplevel",NULL};GBytes *out=insight_git_run(native,NULL,probe,NULL,NULL);if(out) { gsize n;const gchar *p=g_bytes_get_data(out,&n);gchar *top=g_strndup(p,n);g_strchomp(top);gchar *canonical=g_canonicalize_filename(native,NULL);ok=!g_strcmp0(top,canonical);g_free(top);g_free(canonical);g_bytes_unref(out);if(!ok) { show_error(GTK_WINDOW(d),"Choose the root of the existing repository, not a subfolder.");g_free(native);g_free(file);continue; } } }
+  if(!clone) { const gchar *probe[]={"rev-parse","--show-toplevel",NULL};GBytes *out=insight_git_run(native,NULL,probe,NULL,NULL);if(out) { gsize n;const gchar *p=g_bytes_get_data(out,&n);gchar *top=g_strndup(p,n);g_strchomp(top);gchar *canonical=insight_canonicalize_filename(native,NULL);ok=!g_strcmp0(top,canonical);g_free(top);g_free(canonical);g_bytes_unref(out);if(!ok) { show_error(GTK_WINDOW(d),"Choose the root of the existing repository, not a subfolder.");g_free(native);g_free(file);continue; } } }
   if(!ok) ok=run_job(&j,GTK_WINDOW(d));
   if(ok) {
    GKeyFile *config=g_key_file_new();g_key_file_set_string(config,"project","name",project_name);g_key_file_set_string(config,"project","base_path","./");g_key_file_set_boolean(config,"project","git_based",TRUE);gsize length;gchar *text=g_key_file_to_data(config,&length,NULL);

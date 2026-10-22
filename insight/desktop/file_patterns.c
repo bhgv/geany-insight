@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "file_patterns.h"
+#include "glib_compat.h"
 #include <string.h>
 typedef struct { GPatternSpec *spec;gint stage; } Pattern;
 struct InsightFilePatterns { gchar **tokens;GArray *compiled; };
@@ -23,7 +24,7 @@ InsightFilePatterns *insight_file_patterns_new(const gchar *text,GError **error)
 gboolean insight_file_patterns_match(const InsightFilePatterns *patterns,const gchar *path,gint stage) {
  if(!patterns || !path || !g_utf8_validate(path,-1,NULL)) return FALSE;
  gchar *base=g_path_get_basename(path),*name=fold(base);gboolean found=FALSE;
- for(guint n=0;n<patterns->compiled->len && !found;n++) { const Pattern *p=&g_array_index(patterns->compiled,Pattern,n);if(stage==INSIGHT_FILE_PATTERN_ANY || p->stage==stage) found=g_pattern_spec_match_string(p->spec,name); }
+ for(guint n=0;n<patterns->compiled->len && !found;n++) { const Pattern *p=&g_array_index(patterns->compiled,Pattern,n);if(stage==INSIGHT_FILE_PATTERN_ANY || p->stage==stage) found=insight_pattern_match_string(p->spec,name); }
  g_free(base);g_free(name);return found;
 }
 gchar **insight_file_patterns_tokens(const InsightFilePatterns *patterns) { return patterns ? g_strdupv(patterns->tokens) : NULL; }

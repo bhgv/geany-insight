@@ -69,3 +69,35 @@ command first. Do not replace system STL headers.
 `SANITIZE=undefined python3 insight/tests/selection_parse_test.py` forbids including
 `<charconv>` and verifies signed/unsigned limits, overflow, exact suffixes, 20,000
 random conversions and selection restoration.
+
+## Autotools link errors and GLib 2.56
+
+Undefined references to `insight_file_patterns_*`, `insight_overview_*`,
+`insight_remote_ui_*`, `insight_search_state_*` or `insight_keyword_collect`
+were caused by missing runtime modules in `src/Makefile.am`. The source list now
+includes them, the SSH dependencies and the installed `geany-insight-askpass`
+helper. `python3 insight/tests/build_sources_test.py` checks Insight source parity
+between Autotools and Meson so future omissions fail CI.
+
+Wrappers preserve the declared GLib 2.56 baseline: wildcard matching uses the
+older API when `g_pattern_spec_match_string` is unavailable; path normalization
+uses a local GFile when `g_canonicalize_filename` is unavailable. This is lexical
+normalization without reading files or resolving symbolic links. System libraries
+need no replacement. CI generates an out-of-tree Autotools build, links and
+installs the editor, checks unresolved symbols and runs `--version`. A separate
+check builds the wrappers against actual GLib 2.56 headers and libraries.
+
+After updating a Git checkout, regenerate Makefiles too. For an existing
+in-source build:
+
+```sh
+git pull --ff-only
+NOCONFIGURE=1 ./autogen.sh
+./config.status --recheck
+./config.status
+make -j2
+```
+
+The recheck retains the previous configure arguments. With an out-of-tree build,
+run autogen in the source directory and config.status/make in the existing build
+directory.

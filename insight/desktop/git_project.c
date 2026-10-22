@@ -3,6 +3,7 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 #include "git_project.h"
+#include "glib_compat.h"
 #include <glib/gstdio.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -101,7 +102,7 @@ static gchar *git_path(const gchar *root,const gchar *path,GError **error)
 {
  const gchar *args[]={"rev-parse","--git-path",path,NULL};GBytes *b=insight_git_run(root,NULL,args,NULL,error);if(!b) return NULL;
  gsize n;const gchar *p=g_bytes_get_data(b,&n);while(n && (p[n-1]=='\n' || p[n-1]=='\r')) n--;
- gchar *raw=g_strndup(p,n),*result=g_canonicalize_filename(raw,root);g_free(raw);g_bytes_unref(b);return result;
+ gchar *raw=g_strndup(p,n),*result=insight_canonicalize_filename(raw,root);g_free(raw);g_bytes_unref(b);return result;
 }
 gboolean insight_git_commit(const gchar *root,GPtrArray *changes,const gchar *message,GError **error)
 {

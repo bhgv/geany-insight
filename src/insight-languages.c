@@ -1,5 +1,6 @@
 #define INSIGHT_LOCALIZE_FORMATS
 #include "insight-i18n.h"
+#include "../insight/desktop/glib_compat.h"
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "geany.h"
 #include "insight-languages.h"
@@ -62,7 +63,7 @@ static gboolean native_pattern_match(const gchar *path,gboolean exact) {
 }
 static Language *for_path(const gchar *path) {
  if(!path) return NULL;
- gchar *canonical=g_canonicalize_filename(path,NULL);Language *found=NULL;
+ gchar *canonical=insight_canonicalize_filename(path,NULL);Language *found=NULL;
  if(!path_cache) path_cache=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
  gpointer cached=NULL;if(g_hash_table_lookup_extended(path_cache,canonical,NULL,&cached)) { g_free(canonical);return cached; }
  for(guint n=0;languages && n<languages->len && !found;n++) { Language *p=g_ptr_array_index(languages,n);for(guint k=0;p->files && p->files[k];k++) if(binding_path_equal(p->files[k],canonical)) { found=p;break; } }
@@ -147,7 +148,7 @@ InsightLanguageFilter *insight_language_filter_new(const gchar *from,GeanyFilety
 gboolean insight_language_filter_match(const InsightLanguageFilter *filter,const gchar *path) {
  if(!filter || filter->unrestricted) return TRUE;
  if(!path) return FALSE;
- gchar *canonical=g_canonicalize_filename(path,NULL);gboolean own=FALSE,excluded=FALSE;
+ gchar *canonical=insight_canonicalize_filename(path,NULL);gboolean own=FALSE,excluded=FALSE;
  for(guint n=0;n<filter->own->len;n++) if(binding_path_equal(g_ptr_array_index(filter->own,n),canonical)) own=TRUE;
  for(guint n=0;n<filter->excluded->len;n++) if(binding_path_equal(g_ptr_array_index(filter->excluded,n),canonical)) excluded=TRUE;
  g_free(canonical);
@@ -157,7 +158,7 @@ void insight_language_filter_free(InsightLanguageFilter *filter) { if(!filter) r
 GeanyFiletype *insight_languages_detect(const gchar *path) { Language *p=for_path(path);return p ? p->parser : NULL; }
 gboolean insight_languages_compatible(const gchar *from,GeanyFiletype *fallback,const gchar *to) {
  Language *p=for_path(from);if(!p && !from) { GeanyDocument *current=document_get_current();p=current ? for_editor(current->editor->sci,NULL,fallback) : by_name(fallback ? fallback->name : NULL); }
- if(p) { Language *target=for_path(to);if(target && target!=p) { gchar *canonical=to ? g_canonicalize_filename(to,NULL) : NULL;for(guint n=0;canonical && target->files && target->files[n];n++) if(binding_path_equal(target->files[n],canonical)) { g_free(canonical);return FALSE; }g_free(canonical); }return target==p || insight_file_patterns_match(p->patterns,to,INSIGHT_FILE_PATTERN_ANY) || extensions_match(p->extensions,to) || extensions_match(p->compatible,to); }
+ if(p) { Language *target=for_path(to);if(target && target!=p) { gchar *canonical=to ? insight_canonicalize_filename(to,NULL) : NULL;for(guint n=0;canonical && target->files && target->files[n];n++) if(binding_path_equal(target->files[n],canonical)) { g_free(canonical);return FALSE; }g_free(canonical); }return target==p || insight_file_patterns_match(p->patterns,to,INSIGHT_FILE_PATTERN_ANY) || extensions_match(p->extensions,to) || extensions_match(p->compatible,to); }
  GeanyDocument *d=to ? document_find_by_filename(to) : NULL;GeanyFiletype *ft=d ? d->file_type : (to ? filetypes_detect_from_extension(to) : NULL);
  return fallback && ft && insight_native_language_compatible(fallback->lang,ft->lang);
 }
@@ -269,13 +270,13 @@ static void seed_languages(void) {
 }
 static void binding_saved(GObject *object,GeanyDocument *doc,gpointer data) {
  (void)object;(void)data;if(!doc || !doc->is_valid || !doc->file_name) return;Language *p=by_name(g_object_get_data(G_OBJECT(doc->editor->sci),"insight-language-binding"));if(!p) return;
- g_clear_pointer(&path_cache,g_hash_table_destroy);gchar *path=g_canonicalize_filename(doc->file_name,NULL);for(guint n=0;p->files && p->files[n];n++) if(binding_path_equal(p->files[n],path)) { g_free(path);return; }
+ g_clear_pointer(&path_cache,g_hash_table_destroy);gchar *path=insight_canonicalize_filename(doc->file_name,NULL);for(guint n=0;p->files && p->files[n];n++) if(binding_path_equal(p->files[n],path)) { g_free(path);return; }
  GPtrArray *files=g_ptr_array_new_with_free_func(g_free);for(guint n=0;p->files && p->files[n];n++) g_ptr_array_add(files,g_strdup(p->files[n]));g_ptr_array_add(files,path);g_ptr_array_add(files,NULL);g_strfreev(p->files);p->files=(gchar **)g_ptr_array_free(files,FALSE);GError *error=NULL;if(!write_language(p,&error)) ui_set_statusbar(TRUE,"Cannot save language binding: %s",error ? error->message : "write failed");g_clear_error(&error);
 }
 static gboolean reset_binding(GeanyDocument *doc,GError **error) {
  if(!doc) return TRUE;
  g_clear_pointer(&path_cache,g_hash_table_destroy);
- gchar *path=doc->file_name ? g_canonicalize_filename(doc->file_name,NULL) : NULL;
+ gchar *path=doc->file_name ? insight_canonicalize_filename(doc->file_name,NULL) : NULL;
  for(guint n=0;path && n<languages->len;n++) { Language *p=g_ptr_array_index(languages,n);GPtrArray *files=g_ptr_array_new_with_free_func(g_free);gboolean changed=FALSE;for(guint k=0;p->files && p->files[k];k++) { if(binding_path_equal(p->files[k],path)) changed=TRUE;else g_ptr_array_add(files,g_strdup(p->files[k])); }g_ptr_array_add(files,NULL);if(changed) { g_strfreev(p->files);p->files=(gchar **)g_ptr_array_free(files,FALSE);if(!write_language(p,error)) { g_free(path);return FALSE; } }else g_ptr_array_free(files,TRUE); }
  g_free(path);g_object_set_data(G_OBJECT(doc->editor->sci),"insight-language-binding",NULL);document_set_filetype(doc,doc->file_name ? filetypes_detect_from_file(doc->file_name) : filetypes[GEANY_FILETYPES_NONE]);document_reload_config(doc);insight_languages_apply_editor(doc->editor);insight_workbench_languages_changed();return TRUE;
 }
@@ -287,7 +288,7 @@ static gboolean save_dialog(LanguageDialog *d,GError **error) {
  Language *old=by_name(d->original),*collision=by_name(p.name);if(collision && collision!=old) { g_set_error_literal(error,G_FILE_ERROR,G_FILE_ERROR_EXIST,"Another profile already has this name");goto fail; }
  gchar **extensions=g_strsplit_set(p.extensions,";, \t\r\n",-1);
  for(guint n=0;languages && n<languages->len;n++) { Language *other=g_ptr_array_index(languages,n);if(other==old || other->seeded) continue;for(guint k=0;extensions[k];k++) { const gchar *ext=extensions[k];while(*ext=='*' || *ext=='.') ext++;if(!*ext) continue;gchar *sample=g_strconcat("file.",ext,NULL);gboolean overlap=extensions_match(other->extensions,sample);g_free(sample);if(overlap) { g_set_error(error,G_FILE_ERROR,G_FILE_ERROR_EXIST,"Extension %s already belongs to profile %s",ext,other->name);g_strfreev(extensions);goto fail; } } }g_strfreev(extensions);
- p.folder=g_build_filename(root,p.name,NULL);if(old) p.files=g_strdupv(old->files);GeanyDocument *doc=document_find_by_id(d->document);gboolean bind=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->bind));gchar *path=bind && doc && doc->file_name ? g_canonicalize_filename(doc->file_name,NULL) : NULL;
+ p.folder=g_build_filename(root,p.name,NULL);if(old) p.files=g_strdupv(old->files);GeanyDocument *doc=document_find_by_id(d->document);gboolean bind=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->bind));gchar *path=bind && doc && doc->file_name ? insight_canonicalize_filename(doc->file_name,NULL) : NULL;
  if(path) { GPtrArray *files=g_ptr_array_new_with_free_func(g_free);for(guint n=0;p.files && p.files[n];n++) if(!binding_path_equal(p.files[n],path)) g_ptr_array_add(files,g_strdup(p.files[n]));g_ptr_array_add(files,g_strdup(path));g_ptr_array_add(files,NULL);g_strfreev(p.files);p.files=(gchar **)g_ptr_array_free(files,FALSE); }
  if(old && strcmp(old->folder,p.folder) && g_rename(old->folder,p.folder)) { g_set_error_literal(error,G_FILE_ERROR,G_FILE_ERROR_FAILED,"Cannot rename profile folder (destination may exist)");g_free(path);goto fail; }
  if(!write_language(&p,error)) { if(old && strcmp(old->folder,p.folder)) g_rename(p.folder,old->folder);g_free(path);goto fail; }

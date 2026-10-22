@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "directory_compare.h"
+#include "glib_compat.h"
 #include <string.h>
 #include "../core/diff.h"
 #define ATTRS "standard::name,standard::type,standard::is-symlink,standard::is-hidden,standard::size,time::modified,time::modified-usec,id::file,etag::value"
@@ -155,7 +156,7 @@ static gboolean known_entry(InsightDirectoryEntry *entry,GPtrArray *specs) {
  gboolean found=FALSE;
  for(guint i=0;i<specs->len && !found;i++) {
 #if GLIB_CHECK_VERSION(2,70,0)
-  found=g_pattern_spec_match_string(g_ptr_array_index(specs,i),text);
+  found=insight_pattern_match_string(g_ptr_array_index(specs,i),text);
 #else
   found=g_pattern_match_string(g_ptr_array_index(specs,i),text);
 #endif

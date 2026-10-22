@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "master_sync.h"
+#include "glib_compat.h"
 #include <string.h>
 struct _InsightMasterSync { GObject parent;gboolean alive,paused;guint timer,rollbacks;guint64 generation;GCancellable *worker;gchar *project,*root,*path,*digest,*etag,*last_error,*membership_digest;GHashTable *dependencies;InsightProjectFiles *policy;InsightMasterTypes *types;InsightMasterApply apply;InsightMasterReport report;gpointer data; };
 typedef struct { GObjectClass parent; } InsightMasterSyncClass;
@@ -13,7 +14,7 @@ static void insight_master_sync_class_init(InsightMasterSyncClass *klass) { G_OB
 static void insight_master_sync_init(InsightMasterSync *sync) { sync->alive=TRUE; }
 static gboolean same_path(const gchar *one,const gchar *two) {
  if(!one || !two || !*one || !*two) return FALSE;
- gchar *a=g_canonicalize_filename(one,NULL),*b=g_canonicalize_filename(two,NULL);
+ gchar *a=insight_canonicalize_filename(one,NULL),*b=insight_canonicalize_filename(two,NULL);
 #ifdef G_OS_WIN32
  gchar *fold_a=g_utf8_casefold(a,-1),*fold_b=g_utf8_casefold(b,-1);gboolean same=!g_strcmp0(fold_a,fold_b);g_free(fold_a);g_free(fold_b);
 #else

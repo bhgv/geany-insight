@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "project_files.h"
+#include "glib_compat.h"
 #include <string.h>
 #ifdef G_OS_WIN32
 #include <windows.h>
@@ -7,7 +8,7 @@
 #define GROUP "insight-project-files"
 static gchar *canonical(const char *path) {
  if(!path || !g_path_is_absolute(path) || strlen(path)>16384 || !g_utf8_validate(path,-1,NULL) || strchr(path,'\n') || strchr(path,'\r')) return NULL;
- return g_canonicalize_filename(path,NULL);
+ return insight_canonicalize_filename(path,NULL);
 }
 static gchar *key(const char *path) {
 #ifdef G_OS_WIN32
@@ -104,7 +105,7 @@ gboolean insight_project_files_set_master(InsightProjectFiles *s,const gchar *in
   else { g_string_append(expanded,value);variable=TRUE; }
   g_free(value);g_free(name);p=end+1;
  }
- gchar *path=valid && expanded->len ? g_canonicalize_filename(expanded->str,base) : g_strdup("");
+ gchar *path=valid && expanded->len ? insight_canonicalize_filename(expanded->str,base) : g_strdup("");
  if(!valid || strlen(path)>16384) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Unknown or unavailable master file list path variable");valid=FALSE; }
  if(valid) { gchar *expression=g_strdup(variable ? input : "");g_free(s->master_file);s->master_file=path;path=NULL;g_free(s->master_expression);s->master_expression=expression; }
  g_free(path);g_string_free(expanded,TRUE);g_strfreev(environment);g_free(base);return valid;
@@ -126,7 +127,7 @@ static gboolean masks_match(const InsightProjectFiles *s,const char *root,const 
  GFile *r=g_file_new_for_path(root),*p=g_file_new_for_path(path); gchar *relative=g_file_get_relative_path(r,p),*base=g_path_get_basename(path); g_object_unref(r); g_object_unref(p);
  if(relative) for(gchar *c=relative;*c;c++) if(G_IS_DIR_SEPARATOR(*c)) *c='/';
  gchar **patterns=g_strsplit(s->masks,";",-1); gboolean result=FALSE;
- for(guint i=0;patterns[i] && !result;i++) { gchar *pattern=g_strstrip(patterns[i]); if(!*pattern) continue; GPatternSpec *spec=g_pattern_spec_new(pattern); result=g_pattern_spec_match_string(spec,base) || (relative && g_pattern_spec_match_string(spec,relative)); g_pattern_spec_free(spec); }
+ for(guint i=0;patterns[i] && !result;i++) { gchar *pattern=g_strstrip(patterns[i]); if(!*pattern) continue; GPatternSpec *spec=g_pattern_spec_new(pattern); result=insight_pattern_match_string(spec,base) || (relative && insight_pattern_match_string(spec,relative)); g_pattern_spec_free(spec); }
  g_strfreev(patterns); g_free(relative); g_free(base); return result;
 }
 gboolean insight_project_files_contains(const InsightProjectFiles *s,const char *root,const char *path) {
@@ -173,12 +174,12 @@ InsightProjectFiles *insight_project_files_read_project(GKeyFile *config,const c
  for(guint i=0;i<4 && !e;i++) { gsize count=0; gchar **paths=g_key_file_get_string_list(config,GROUP,names[i],&count,&e);
   if(!e && count>10000) g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Too many project membership rules");
   for(gsize j=0;j<count && !e;j++) { if(!paths[j][0] || strlen(paths[j])>16384 || strchr(paths[j],'\n') || strchr(paths[j],'\r')) { g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid stored project path"); break; }
-   gchar *joined=g_canonicalize_filename(paths[j],r),*p=canonical(joined); g_free(joined); if(!p) g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid stored project path"); else g_ptr_array_add(arrays[i],p);
+   gchar *joined=insight_canonicalize_filename(paths[j],r),*p=canonical(joined); g_free(joined); if(!p) g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid stored project path"); else g_ptr_array_add(arrays[i],p);
   }
   g_strfreev(paths);
  }
  if(!e && g_key_file_has_key(config,GROUP,"master-file-expression",NULL)) { gchar *value=g_key_file_get_string(config,GROUP,"master-file-expression",&e);if(value) insight_project_files_set_master(s,value,r,project,&e);g_free(value); }
- else if(!e && g_key_file_has_key(config,GROUP,"master-file",NULL)) { gchar *value=g_key_file_get_string(config,GROUP,"master-file",&e);if(value) { if(strlen(value)>16384 || strpbrk(value,"\r\n")) g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid stored master file list path");else if(*value) { g_free(s->master_file);s->master_file=g_canonicalize_filename(value,r); }g_free(value); } }
+ else if(!e && g_key_file_has_key(config,GROUP,"master-file",NULL)) { gchar *value=g_key_file_get_string(config,GROUP,"master-file",&e);if(value) { if(strlen(value)>16384 || strpbrk(value,"\r\n")) g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid stored master file list path");else if(*value) { g_free(s->master_file);s->master_file=insight_canonicalize_filename(value,r); }g_free(value); } }
  g_free(r); if(!e) valid(s,&e); if(e) { g_propagate_error(error,e); insight_project_files_free(s); return NULL; } return s;
 }
 

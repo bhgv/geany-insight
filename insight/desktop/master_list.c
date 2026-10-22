@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "master_list.h"
+#include "glib_compat.h"
 #include <string.h>
 #define TEXT_LIMIT (2u*1024u*1024u)
 #define ENTRY_LIMIT 10000u
@@ -58,7 +59,7 @@ static KnownTypes *known_new(const InsightMasterTypes *types,GError **error) {
   if(strlen(value)>(kind==2 ? 16384u : 1024u) || !g_utf8_validate(value,-1,NULL) || strpbrk(value,"\r\n") || (kind==2 && !g_path_is_absolute(value))) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid known file type snapshot for master file list");known_free(known);return NULL; }
   if(!kind) { gchar *pattern=path_key(value);g_ptr_array_add(known->patterns,g_pattern_spec_new(pattern));g_free(pattern); }
   else if(kind==1) g_hash_table_add(known->extensions,g_strdup(value));
-  else { gchar *canonical=g_canonicalize_filename(value,NULL);g_hash_table_add(known->files,path_key(canonical));g_free(canonical); }
+  else { gchar *canonical=insight_canonicalize_filename(value,NULL);g_hash_table_add(known->files,path_key(canonical));g_free(canonical); }
  }
  return known;
 }
@@ -66,7 +67,7 @@ static gboolean known_match(const KnownTypes *known,const gchar *path,const gcha
  if(!known) return TRUE;
  const gchar *ext=strrchr(name,'.');if(ext && g_hash_table_contains(known->extensions,ext+1)) return TRUE;
  gchar *key=path_key(path);gboolean found=g_hash_table_contains(known->files,key);g_free(key);if(found) return TRUE;
- gchar *folded=path_key(name);for(guint n=0;n<known->patterns->len && !found;n++) found=g_pattern_spec_match_string(g_ptr_array_index(known->patterns,n),folded);g_free(folded);return found;
+ gchar *folded=path_key(name);for(guint n=0;n<known->patterns->len && !found;n++) found=insight_pattern_match_string(g_ptr_array_index(known->patterns,n),folded);g_free(folded);return found;
 }
 static gboolean expand_pattern(InsightMasterList *list,GHashTable *seen,const gchar *path,guint *visited,const KnownTypes *known,GCancellable *cancel,GError **error) {
  gchar *directory=g_path_get_dirname(path),*pattern=g_path_get_basename(path);gboolean valid=TRUE;
@@ -90,7 +91,7 @@ static gboolean expand_pattern(InsightMasterList *list,GHashTable *seen,const gc
 #else
    const gchar *match=name;
 #endif
-   if(g_pattern_spec_match_string(spec,match)) { gchar *child=g_build_filename(directory,name,NULL);if(strlen(child)>16384) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Master file list path exceeds 16384 bytes");valid=FALSE; }else if(known_match(known,child,name)) valid=add_path(list,seen,child,FALSE,error);g_free(child); }
+   if(insight_pattern_match_string(spec,match)) { gchar *child=g_build_filename(directory,name,NULL);if(strlen(child)>16384) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Master file list path exceeds 16384 bytes");valid=FALSE; }else if(known_match(known,child,name)) valid=add_path(list,seen,child,FALSE,error);g_free(child); }
 #ifdef G_OS_WIN32
    g_free(match);
 #endif
@@ -107,7 +108,7 @@ static InsightMasterList *parse(const gchar *text,gsize length,const gchar *root
   if(g_cancellable_set_error_if_cancelled(cancel,error)) { valid=FALSE;break; }
   gchar *line=lines[i];gsize size=strlen(line);if(size && line[size-1]=='\r') line[--size]=0;if(!size || line[0]==';') continue;
   if(size>16384 || strchr(line,'\r') || (g_ascii_isalpha(line[0]) && line[1]==':' && (line[2]=='/' || line[2]=='\\') && !g_path_is_absolute(line)) || (g_str_has_prefix(line,"\\\\") && !g_path_is_absolute(line))) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Unsupported master file list path");valid=FALSE;break; }
-  gboolean tree=G_IS_DIR_SEPARATOR(line[size-1]);gchar *path=g_canonicalize_filename(line,root);if(strlen(path)>16384) { g_free(path);g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Master file list path exceeds 16384 bytes");valid=FALSE;break; }gchar *parent=g_path_get_dirname(path);depend(list,parent,cancel);g_free(parent);tree|=g_file_test(path,G_FILE_TEST_IS_DIR);
+  gboolean tree=G_IS_DIR_SEPARATOR(line[size-1]);gchar *path=insight_canonicalize_filename(line,root);if(strlen(path)>16384) { g_free(path);g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Master file list path exceeds 16384 bytes");valid=FALSE;break; }gchar *parent=g_path_get_dirname(path);depend(list,parent,cancel);g_free(parent);tree|=g_file_test(path,G_FILE_TEST_IS_DIR);
   if(strpbrk(path,"*?") && !g_file_test(path,G_FILE_TEST_EXISTS)) {
    if(++patterns>256) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Master file list exceeds 256 wildcard patterns");valid=FALSE; }else valid=expand_pattern(list,seen,path,&visited,NULL,cancel,error);
   }else if(tree && types) {
@@ -142,7 +143,7 @@ gchar *insight_master_list_render(const InsightMasterList *list,const gchar *roo
  GPtrArray *lines=g_ptr_array_new_with_free_func(g_free);GHashTable *seen=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);GFile *base=g_file_new_for_path(root);gboolean valid=TRUE;
  for(guint kind=0;kind<2 && valid;kind++) { GPtrArray *paths=kind ? list->trees : list->files;for(guint i=0;i<paths->len;i++) {
   const gchar *path=g_ptr_array_index(paths,i);if(!path || !g_path_is_absolute(path) || strlen(path)>16384 || strpbrk(path,"\r\n") || !g_utf8_validate(path,-1,NULL)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid master file list path");valid=FALSE;break; }
-  gchar *normalized=g_canonicalize_filename(path,NULL),*key=path_key(normalized);if(g_hash_table_contains(seen,key)) { g_free(key);g_free(normalized);continue; }g_hash_table_add(seen,key);GFile *file=g_file_new_for_path(normalized);gchar *relative=g_file_get_relative_path(base,file);if(!relative && g_file_equal(base,file)) relative=g_strdup(".");gchar *line=relative ? relative : g_strdup(normalized);for(gchar *p=line;*p;p++) if(G_IS_DIR_SEPARATOR(*p)) *p='/';
+  gchar *normalized=insight_canonicalize_filename(path,NULL),*key=path_key(normalized);if(g_hash_table_contains(seen,key)) { g_free(key);g_free(normalized);continue; }g_hash_table_add(seen,key);GFile *file=g_file_new_for_path(normalized);gchar *relative=g_file_get_relative_path(base,file);if(!relative && g_file_equal(base,file)) relative=g_strdup(".");gchar *line=relative ? relative : g_strdup(normalized);for(gchar *p=line;*p;p++) if(G_IS_DIR_SEPARATOR(*p)) *p='/';
   if(line[0]==';') { gchar *literal=g_strconcat("./",line,NULL);g_free(line);line=literal; }
   if(kind && !g_str_has_suffix(line,"/")) { gchar *directory=g_strconcat(line,"/",NULL);g_free(line);line=directory; }g_ptr_array_add(lines,line);g_object_unref(file);g_free(normalized);
  } }

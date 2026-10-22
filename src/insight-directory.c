@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #define INSIGHT_LOCALIZE_FORMATS
 #include "insight-directory.h"
+#include "../insight/desktop/glib_compat.h"
 #include "insight-diff.h"
 #include "insight-help.h"
 #include "insight-list-style.h"
@@ -96,7 +97,7 @@ static gboolean matches(GPtrArray *specs,const gchar *path) {
  for(guint i=0;specs && i<specs->len && !found;i++) {
   GPatternSpec *spec=g_ptr_array_index(specs,i);
 #if GLIB_CHECK_VERSION(2,70,0)
-  found=g_pattern_spec_match_string(spec,path) || g_pattern_spec_match_string(spec,base);
+  found=insight_pattern_match_string(spec,path) || insight_pattern_match_string(spec,base);
 #else
   found=g_pattern_match_string(spec,path) || g_pattern_match_string(spec,base);
 #endif
@@ -233,7 +234,7 @@ static void start(GtkWidget *widget,gpointer data) {
  for(gint i=0;i<2;i++) {
   GError *error=NULL;gchar *native=g_filename_from_utf8(gtk_entry_get_text(GTK_ENTRY(d->paths[i])),-1,NULL,NULL,&error);
   if(!native) { gtk_label_set_text(GTK_LABEL(d->status),error->message);g_clear_error(&error);job_free(job);return; }
-  job->paths[i]=g_canonicalize_filename(native,NULL);g_free(native);
+  job->paths[i]=insight_canonicalize_filename(native,NULL);g_free(native);
  }
  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->known))) {
   job->known_patterns=types_provider ? types_provider() : NULL;

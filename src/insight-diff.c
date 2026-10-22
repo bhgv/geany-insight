@@ -1,5 +1,6 @@
 #define INSIGHT_LOCALIZE_FORMATS
 #include "insight-i18n.h"
+#include "../insight/desktop/glib_compat.h"
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "insight-diff.h"
 #include "insight-directory.h"
@@ -1063,7 +1064,7 @@ static void compare(GtkWidget *w,gpointer data) {
  for(int i=0;i<2;i++) {
   GError *error=NULL;gchar *native=g_filename_from_utf8(gtk_entry_get_text(GTK_ENTRY(m->paths[i])),-1,NULL,NULL,&error);
   if(!native || !*native) { message(m,error ? error->message : "Choose two source files before comparing.");g_clear_error(&error);g_free(native);comparison_free(job);return; }
-  job->paths[i]=g_canonicalize_filename(native,NULL);g_free(native);
+  job->paths[i]=insight_canonicalize_filename(native,NULL);g_free(native);
  }
  job->options=(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->ignore_space)) ? INSIGHT_DIFF_IGNORE_SPACE : 0) |
   (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->ignore_eol)) ? INSIGHT_DIFF_IGNORE_EOL : 0);
@@ -1110,7 +1111,7 @@ static void external(GtkWidget *w,gpointer data) {
   const gchar *entry=gtk_entry_get_text(GTK_ENTRY(m->paths[i]));
   if(!*entry || !g_file_test(entry,G_FILE_TEST_IS_REGULAR)) { message(m,"Choose two existing files before launching KDiff3.");g_free(program);return; }
  }
- for(int i=0;i<2;i++) paths[i]=g_canonicalize_filename(gtk_entry_get_text(GTK_ENTRY(m->paths[i])),NULL);
+ for(int i=0;i<2;i++) paths[i]=insight_canonicalize_filename(gtk_entry_get_text(GTK_ENTRY(m->paths[i])),NULL);
  gchar *argv[]={program,paths[0],paths[1],NULL};GError *error=NULL;
  if(!g_spawn_async(NULL,argv,NULL,0,NULL,NULL,NULL,&error)) { message(m,error->message);g_clear_error(&error); }
  g_free(paths[0]);g_free(paths[1]);g_free(program);

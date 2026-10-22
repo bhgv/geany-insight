@@ -67,3 +67,35 @@ Windows workflow запускается вручную (`workflow_dispatch`) и�
 Проверка `SANITIZE=undefined python3 insight/tests/selection_parse_test.py`
 запрещает включение `<charconv>` и проверяет диапазоны signed/unsigned,
 переполнение, суффиксы, 20 000 случайных преобразований и восстановление выделений.
+
+## Ошибки линковки Autotools и GLib 2.56
+
+Сообщения `undefined reference to insight_file_patterns_*`, `insight_overview_*`,
+`insight_remote_ui_*`, `insight_search_state_*` и `insight_keyword_collect`
+означали, что соответствующие модули отсутствовали в `src/Makefile.am`. Теперь
+список включает их, зависимости SSH и устанавливаемый `geany-insight-askpass`.
+Проверка `python3 insight/tests/build_sources_test.py` сравнивает исходники
+Insight в Autotools и Meson, чтобы новое расхождение останавливало CI.
+
+Для заявленной базовой GLib 2.56 добавлены обёртки: маски используют старый API
+при отсутствии `g_pattern_spec_match_string`, а нормализация путей — локальный
+GFile при отсутствии `g_canonicalize_filename`. Это лексическая нормализация без
+чтения файлов или разрешения символьных ссылок. Системные библиотеки подменять
+не нужно. CI проверяет полный цикл Autotools: генерацию, отдельный каталог сборки,
+линковку, установку, отсутствие неопределённых символов и запуск `--version`.
+Отдельный тест компилирует обёртки с настоящими заголовками и библиотекой GLib 2.56.
+
+После обновления Git-исходников обновите и сгенерированные Makefile. Для уже
+настроенной сборки в каталоге исходников:
+
+```sh
+git pull --ff-only
+NOCONFIGURE=1 ./autogen.sh
+./config.status --recheck
+./config.status
+make -j2
+```
+
+`config.status --recheck` сохраняет прежние параметры configure. При сборке в
+отдельном каталоге запускайте autogen из исходников, а config.status и make —
+из существующего каталога сборки.

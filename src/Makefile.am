@@ -23,7 +23,7 @@ AM_CPPFLAGS = \
 	@GTK_CFLAGS@ \
 	$(MAC_INTEGRATION_CFLAGS)
 
-bin_PROGRAMS = geany
+bin_PROGRAMS = geany geany-insight-askpass
 lib_LTLIBRARIES = libgeany.la
 
 geany_SOURCES = main.c
@@ -399,3 +399,21 @@ libgeany_la_SOURCES += \
 libgeany_la_LIBADD += -lm
 
 libgeany_la_SOURCES += insight-themes.c insight-themes.h
+
+# Keep the Autotools runtime complete, matching Meson's Insight sources.
+libgeany_la_SOURCES += \
+ insight-overview.c insight-overview.h \
+ insight-remote.c insight-remote.h \
+ ../insight/desktop/file_patterns.c ../insight/desktop/file_patterns.h \
+ ../insight/desktop/keyword_search.c ../insight/desktop/keyword_search.h \
+ ../insight/desktop/search_state.c ../insight/desktop/search_state.h \
+ ../insight/desktop/remote_io.c ../insight/desktop/remote_io.h \
+ ../insight/desktop/remote_credentials.c ../insight/desktop/remote_credentials.h \
+ ../insight/desktop/glib_compat.h
+
+geany_insight_askpass_SOURCES = insight-askpass.c ../insight/desktop/remote_credentials.c ../insight/desktop/remote_credentials.h
+geany_insight_askpass_LDADD = $(GTK_LIBS) $(INTLLIBS)
+geany_insight_askpass_LDFLAGS =
+if MINGW
+geany_insight_askpass_LDFLAGS += -mwindows -mms-bitfields
+endif

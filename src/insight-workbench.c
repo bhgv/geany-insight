@@ -1,5 +1,6 @@
 #define INSIGHT_LOCALIZE_FORMATS
 #include "insight-i18n.h"
+#include "../insight/desktop/glib_compat.h"
 #include "insight-languages.h"
 #include "insight-completion.h"
 #include "insight-paste.h"
@@ -832,7 +833,7 @@ static gboolean scan_step(gpointer data) {
  gchar *path=g_build_filename(frame->path,name,NULL); GStatBuf st;
  if(g_lstat(path,&st)) { wb.scan_failed=TRUE; wb.skipped++; g_free(path); return G_SOURCE_CONTINUE; }
  if(S_ISDIR(st.st_mode)) {
-  gchar *profile=g_canonicalize_filename(app->configdir,NULL); gboolean own_profile=!g_strcmp0(path,profile); g_free(profile);
+  gchar *profile=insight_canonicalize_filename(app->configdir,NULL); gboolean own_profile=!g_strcmp0(path,profile); g_free(profile);
   if(own_profile || g_hash_table_contains(wb.scan_seen,path)) { g_free(path); return G_SOURCE_CONTINUE; }
   GDir *dir=wb.frames->len<64 ? g_dir_open(path,0,NULL) : NULL;
   if(dir) { g_hash_table_add(wb.scan_seen,g_strdup(path)); watch_directory(path); ScanFrame *next=g_new0(ScanFrame,1); next->path=path; next->dir=dir; g_ptr_array_add(wb.frames,next); }
@@ -848,7 +849,7 @@ static gboolean start_scan(const char *root) {
   if(!policy) { g_free(requested_root);ui_set_statusbar(TRUE,"Cannot read Git project files: %s",error ? error->message : "Git is busy");g_clear_error(&error);return FALSE; }
   insight_project_files_free(wb.membership);wb.membership=policy;
  }
- gchar *owned=g_canonicalize_filename(root,NULL);g_free(requested_root); GDir *dir=g_dir_open(owned,0,NULL); InsightIndex *next=NULL;
+ gchar *owned=insight_canonicalize_filename(root,NULL);g_free(requested_root); GDir *dir=g_dir_open(owned,0,NULL); InsightIndex *next=NULL;
  gboolean context_changed=database_identity(owned)||g_strcmp0(wb.root,owned)!=0;
  if(context_changed) { g_hash_table_remove_all(wb.file_stamps);g_hash_table_remove_all(wb.directory_stamps);g_hash_table_remove_all(wb.declarations);retire_index(wb.base);wb.base=insight_index_new();retire_index(wb.disk_calls);wb.disk_calls=insight_index_new();retire_index(wb.disk_declarations);wb.disk_declarations=insight_index_new(); }
  if(!wb.force_parse&&(context_changed||!g_hash_table_size(wb.file_stamps))) restore_project_database(owned);
@@ -3717,7 +3718,7 @@ static void native_document_event(GObject *object,GeanyDocument *doc,gpointer da
 static void native_project_update(GObject *object,GKeyFile *config,gpointer data) {
  (void)object; if(!wb.preview || !app->project) return;
  gchar *utf8=project_get_base_path(); if(!utf8) return;
- gchar *native=utils_get_locale_from_utf8(utf8),*root=g_canonicalize_filename(native,NULL); g_free(native);
+ gchar *native=utils_get_locale_from_utf8(utf8),*root=insight_canonicalize_filename(native,NULL); g_free(native);
  gboolean changed=GPOINTER_TO_INT(data) || g_strcmp0(root,wb.geany_root) || g_strcmp0(wb.membership_project,app->project->file_name);
  if(changed) {
   bookmarks_project_load(app->project->file_name,utf8,FALSE);clips_project_load(app->project->file_name,FALSE);
@@ -3820,7 +3821,7 @@ static void membership_dialog_file_list(GtkWidget *widget,gpointer data) {
     InsightProjectFiles *next=insight_project_files_clone(d->candidate); GPtrArray *added=g_ptr_array_new_with_free_func(g_free),*trees=g_ptr_array_new_with_free_func(g_free); gchar **lines=g_strsplit(g_str_has_prefix(text,"\xEF\xBB\xBF") ? text+3 : text,"\n",-1); guint count=0;
     for(guint i=0;lines[i] && !error;i++) { gsize length=strlen(lines[i]); if(length && lines[i][length-1]=='\r') lines[i][--length]=0; if(!length) continue;
      if(++count>10000) { g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"File list exceeds 10000 entries"); break; }
-     gchar *p=g_canonicalize_filename(lines[i],d->root),*native=utils_get_locale_from_utf8(p); gboolean tree=g_file_test(native,G_FILE_TEST_IS_DIR); g_free(native);
+     gchar *p=insight_canonicalize_filename(lines[i],d->root),*native=utils_get_locale_from_utf8(p); gboolean tree=g_file_test(native,G_FILE_TEST_IS_DIR); g_free(native);
      if(insight_project_files_set(next,p,tree,TRUE,&error)) g_ptr_array_add(tree ? trees : added,p); else g_free(p);
     }
     if(!error) { insight_project_files_free(d->candidate); d->candidate=next; next=NULL; GPtrArray *from[]={added,trees},*to[]={d->paths,d->trees}; for(guint kind=0;kind<2;kind++) for(guint i=0;i<from[kind]->len;i++) { const char *p=g_ptr_array_index(from[kind],i); if(!g_ptr_array_find_with_equal_func(to[kind],p,(GEqualFunc)g_str_equal,NULL)) g_ptr_array_add(to[kind],g_strdup(p)); } membership_dialog_refresh(d); }

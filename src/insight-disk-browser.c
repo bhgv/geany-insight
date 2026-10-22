@@ -1,5 +1,6 @@
 #define INSIGHT_LOCALIZE_FORMATS
 #include "insight-i18n.h"
+#include "../insight/desktop/glib_compat.h"
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -138,7 +139,7 @@ static void read_done(GObject *source,GAsyncResult *result,gpointer data) {
 }
 static void load(DiskBrowser *b,const gchar *path) {
  if(!b->alive || !path || !*path || !g_utf8_validate(path,-1,NULL) || strlen(path)>16384) return;
- gchar *root=g_canonicalize_filename(path,b->root);b->generation++;if(b->cancel) g_cancellable_cancel(b->cancel);g_clear_object(&b->cancel);b->cancel=g_cancellable_new();
+ gchar *root=insight_canonicalize_filename(path,b->root);b->generation++;if(b->cancel) g_cancellable_cancel(b->cancel);g_clear_object(&b->cancel);b->cancel=g_cancellable_new();
  g_free(b->root);b->root=root;folders_rebuild(b,NULL,FALSE);gtk_entry_set_text(GTK_ENTRY(b->path),root);gtk_widget_set_sensitive(b->create,!b->creating && !b->operating);b->setting=TRUE;gtk_list_store_clear(b->store);b->setting=FALSE;b->loading=TRUE;b->cancelled=FALSE;b->mutation_error=FALSE;b->operation_error=FALSE;g_clear_pointer(&b->failure,g_free);status(b);
  DiskJob *j=g_new0(DiskJob,1);g_weak_ref_init(&j->box,b->box);j->generation=b->generation;j->root=g_strdup(root);j->hidden=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(b->hidden));
  if(following(b)) { gchar *parent=g_path_get_dirname(b->current_file);if(same_path(parent,root)) j->current_name=g_path_get_basename(b->current_file);g_free(parent); }
@@ -148,7 +149,7 @@ void insight_disk_browser_set_root(GtkWidget *box,const gchar *path) { DiskBrows
 void insight_disk_browser_resume(GtkWidget *box,const gchar *root) { DiskBrowser *b=g_object_get_data(G_OBJECT(box),"insight-disk-browser");if(b) load(b,b->root ? b->root : root); }
 void insight_disk_browser_current_file(GtkWidget *box,const gchar *path,gboolean active) {
  DiskBrowser *b=g_object_get_data(G_OBJECT(box),"insight-disk-browser");if(!b || !b->alive) return;
- gchar *file=path && *path && g_path_is_absolute(path) && strlen(path)<=16384 && g_utf8_validate(path,-1,NULL) ? g_canonicalize_filename(path,NULL) : NULL;gboolean changed=!same_path(file,b->current_file);
+ gchar *file=path && *path && g_path_is_absolute(path) && strlen(path)<=16384 && g_utf8_validate(path,-1,NULL) ? insight_canonicalize_filename(path,NULL) : NULL;gboolean changed=!same_path(file,b->current_file);
  g_free(b->current_file);b->current_file=file;b->active=active;gboolean setting=b->setting;b->setting=TRUE;gtk_tree_model_filter_refilter(b->model);b->setting=setting;
  if(!following(b) || b->setting) return;
  gchar *parent=g_path_get_dirname(b->current_file);
@@ -397,7 +398,7 @@ gboolean insight_disk_browser_read(GtkWidget *box,GKeyFile *settings) {
  b->adaptive=saved_boolean(settings,"adaptive-layout",TRUE);b->vertical=saved_boolean(settings,"stack-vertically",TRUE);
  gint horizontal=g_key_file_get_integer(settings,group,"horizontal-position",NULL),vertical=g_key_file_get_integer(settings,group,"vertical-position",NULL);if(horizontal>=40 && horizontal<=2000) b->split_h=horizontal;if(vertical>=40 && vertical<=2000) b->split_v=vertical;
  insight_disk_browser_cancel(box);b->setting=TRUE;gtk_list_store_clear(b->store);gtk_tree_store_clear(b->folder_store);gchar *root=g_key_file_get_string(settings,group,"directory",NULL),*query=g_key_file_get_string(settings,group,"query",NULL);
- if(root && *root && strlen(root)<=16384 && g_utf8_validate(root,-1,NULL) && g_path_is_absolute(root)) { g_free(b->root);b->root=g_canonicalize_filename(root,NULL);gtk_entry_set_text(GTK_ENTRY(b->path),b->root); }
+ if(root && *root && strlen(root)<=16384 && g_utf8_validate(root,-1,NULL) && g_path_is_absolute(root)) { g_free(b->root);b->root=insight_canonicalize_filename(root,NULL);gtk_entry_set_text(GTK_ENTRY(b->path),b->root); }
  InsightLookupFilter *filter=query ? insight_lookup_filter_new(query,TRUE,NULL) : NULL;if(filter) { gtk_entry_set_text(GTK_ENTRY(b->query),query);insight_lookup_filter_free(filter); }
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(b->hidden),saved_boolean(settings,"hidden",gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(b->hidden))));
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(b->follow),saved_boolean(settings,"follow-current-file",FALSE));
