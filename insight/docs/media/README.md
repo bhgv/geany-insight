@@ -70,3 +70,6 @@ metadata stripped. It is a native test fixture running the complete application.
 `paste-symbol.svg`: self-contained diagram of fresh lexical definition ranges, Copy/Cut/Duplicate/Paste before, preview and one Undo/Redo.
 
 `paste-symbol.jpg`: actual Paste Symbol review in the complete Linux editor under Xvfb, native run 39644155010, code 19411bffdd7e59c6345bb175eaa22a8d53d72f0c. Synthetic C source and clipboard helper; full read-only colored/numbered before/after panes, new helper selected. Optimized progressive JPEG with metadata stripped.
+
+- `aligned-diff.jpg`: production Diff/Merge GTK window from its isolated GUI fixture, synthetic insertion/equal lines; Linux source `16caa2b5950392bc8bf2ad88dcdc35109c56cfa6`. Left/Right above editable Result; RGB optimized progressive JPEG, quality 90, no EXIF.
+- `project-database.svg`: explanatory diagram of persisted membership/indexes and incremental refresh; not a screenshot.

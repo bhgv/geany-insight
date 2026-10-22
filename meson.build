@@ -1096,7 +1096,7 @@ endif
 
 # Portable, offline Insight guides consumed by the built-in markup viewer.
 install_data(
-  'insight/docs/guide.md', 'insight/docs/tutorials.md', 'insight/docs/languages.md',
+  'insight/docs/project-database.md', 'insight/docs/guide.md', 'insight/docs/tutorials.md', 'insight/docs/languages.md',
   'insight/docs/scripting.md', 'insight/docs/markup-viewer.rst',
   'insight/docs/directory-compare.md', 'insight/docs/lua-api.md', 'insight/docs/internal-diff.md',
   'insight/docs/desktop-check-builds.md',

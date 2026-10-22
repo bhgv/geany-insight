@@ -1242,3 +1242,11 @@ HTML export exceeds the 8 MiB output limit.|||Экспорт HTML превыша
 Export requires real parent directories, not symbolic links.|||Для экспорта нужны обычные родительские каталоги без символических ссылок.
 Export requires an absolute destination.|||Для экспорта нужен абсолютный путь назначения.
 Choose an export destination outside source, open documents and project files.|||Выберите назначение экспорта вне исходника, открытых документов и файлов проекта.
+
+Synchronize Files|||Синхронизировать файлы
+Rebuild Project|||Перестроить проект
+Wrap result lines|||Переносить строки результата
+Rebuilding project symbols…|||Перестроение символов проекта…
+Project database restored; checking file stamps…|||База проекта восстановлена; проверка метаданных файлов…
+Synchronizing project membership and changed files…|||Синхронизация состава проекта и изменённых файлов…
+Workspace: %u parsed, %u reused, %zu symbols, %u skipped%s|||Проект: разобрано %u, из базы %u, символов %zu, пропущено %u%s

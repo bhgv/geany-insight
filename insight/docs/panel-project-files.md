@@ -124,3 +124,5 @@ Reference: [Source Insight Project File List](https://www.sourceinsight.com/doc/
 Окно настоящего приложения Linux в автоматическом сценарии проверки:
 
 ![Panel controls](media/panel-windows.jpg)
+
+[Project database, synchronization and aligned Diff/Merge layout](project-database.md).

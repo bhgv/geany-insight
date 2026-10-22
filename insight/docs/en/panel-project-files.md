@@ -114,3 +114,5 @@ whole Project Window group are outside this tray.
 Native Linux application captured during the automated panel scenario:
 
 ![Panel controls](../media/panel-windows.jpg)
+
+[Project database, synchronization and aligned Diff/Merge layout](project-database.md).

@@ -578,3 +578,6 @@ dist_insightdocmedia_DATA += insight/docs/media/paste-symbol.svg
 dist_insightdocmedia_DATA += insight/docs/media/paste-symbol.jpg
 
 EXTRA_DIST += insight/tests/project_db_test.c insight/tests/project_db_gui_test.c
+
+insightdoc_DATA += insight/docs/project-database.md
+dist_insightdocmedia_DATA += insight/docs/media/project-database.svg insight/docs/media/aligned-diff.jpg

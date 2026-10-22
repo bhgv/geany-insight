@@ -1815,3 +1815,11 @@ Paste clipboard text before the captured definition. A missing final line ending
 
 Symbol operation requires a complete standalone function or supported nominal definition (up to 1 MiB)	Требуется полная отдельная функция либо поддерживаемое определение типа размером до 1 МиБ
 Symbol editing requires a complete standalone definition up to 1 MiB, a source up to 2 MiB and nonempty UTF-8 clipboard text for Paste.	Требуется полное отдельное определение до 1 МиБ и исходник до 2 МиБ; для вставки нужен непустой текст буфера обмена в UTF-8.
+
+Synchronize Files	Синхронизировать файлы
+Rebuild Project	Перестроить проект
+Wrap result lines	Переносить строки результата
+Rebuilding project symbols…	Перестроение символов проекта…
+Project database restored; checking file stamps…	База проекта восстановлена; проверка метаданных файлов…
+Synchronizing project membership and changed files…	Синхронизация состава проекта и изменённых файлов…
+Workspace: %u parsed, %u reused, %zu symbols, %u skipped%s	Проект: разобрано %u, из базы %u, символов %zu, пропущено %u%s

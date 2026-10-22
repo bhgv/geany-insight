@@ -130,3 +130,5 @@ Enter после корректной маски (`z.c?p`, `*.c`) оставля
 Окно настоящего приложения Linux в автоматическом сценарии проверки:
 
 ![Panel controls](../media/panel-windows.jpg)
+
+[База проекта, синхронизация и расположение Diff/Merge](project-database.md).

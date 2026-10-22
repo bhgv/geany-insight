@@ -44,15 +44,15 @@ and Previous selects the last. Clicking a changed source block also selects it.
 The status shows the selected difference number and total count.
 
 **Difference list** hides or shows the block list; navigation keeps working while
-it is hidden. **Wrap lines** applies word/character wrapping to all three panes.
-These display options last for the lifetime of the comparison window.
+it is hidden. Left and Right sit side by side above the full-width editable Result.
+**Wrap result lines** wraps Result only; source lines stay unwrapped for alignment.
 
-**Scroll sources together** is enabled initially. It maps the top visible source
-line through the diff, so insertions/deletions do not accumulate a line offset.
-Inside a changed block it aligns to the start of the opposite block. Disable it
-for independent scrolling. The editable Result scrolls independently; selecting
-a difference still reveals its current marked range. This is position linking,
-not blank-line padding or pixel-perfect alignment of wrapped lines.
+**Scroll sources together** is enabled initially. Visual paragraph padding at
+insertions/deletions aligns following equal lines at the same vertical pixel
+position, and scrolling links both vertical and horizontal offsets. The padding
+adds no source characters or line numbers. Disable linking for independent
+scrolling. Result scrolls independently; selecting a difference reveals its
+current marked range. See [the layout and database guide](project-database.md).
 
 Reference: [Source Insight File Compare](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/File_Compare.htm).
 The Source Insight commands copy directly between files; this implementation
@@ -325,3 +325,5 @@ Enable **Confirm replacements**, then use **Replace all in Result**. Each effect
 
 
 [Replace Files: предварительный просмотр, выбор совпадений и замена в нескольких буферах](replace-files.md).
+
+[Project database, synchronization and aligned Diff/Merge layout](project-database.md).

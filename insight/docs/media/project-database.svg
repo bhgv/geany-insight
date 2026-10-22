@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="420" viewBox="0 0 800 420">
+<rect width="800" height="420" rx="16" fill="#f4f7fb"/>
+<g font-family="sans-serif" fill="#182d46"><text x="28" y="38" font-size="23" font-weight="bold">Project database · incremental refresh</text>
+<rect x="28" y="65" width="230" height="112" rx="12" fill="#e1ebfa" stroke="#839dbe"/>
+<text x="46" y="93" font-size="18" font-weight="bold">Open project</text><text x="46" y="120" font-size="16">Restore names + indexes</text><text x="46" y="148" font-size="16">Check file / directory stamps</text>
+<rect x="310" y="65" width="222" height="112" rx="12" fill="#e0f3e9" stroke="#64a184"/>
+<text x="328" y="93" font-size="18" font-weight="bold">Unchanged</text><text x="328" y="120" font-size="16">Reuse stored records</text><text x="328" y="148" font-size="16">Keep the Files model</text>
+<rect x="310" y="220" width="222" height="120" rx="12" fill="#fff0d8" stroke="#c39b59"/>
+<text x="328" y="250" font-size="18" font-weight="bold">Changed / added / deleted</text><text x="328" y="278" font-size="16">Update affected files</text><text x="328" y="306" font-size="16">Prune obsolete records</text>
+<rect x="584" y="143" width="188" height="144" rx="12" fill="#e9e2fa" stroke="#9b89bd"/>
+<text x="602" y="174" font-size="18" font-weight="bold">Per-project .pdb</text><text x="602" y="203" font-size="16">Membership + stamps</text><text x="602" y="230" font-size="16">Symbols + declarations</text><text x="602" y="257" font-size="16">Lexical call sites</text>
+<text x="28" y="384" font-size="16">Synchronize Files: changed only    ·    Rebuild Project: force all eligible sources</text></g>
+<g fill="none" stroke="#4b6584" stroke-width="3"><path d="M258 115h42m-9-7 9 7-9 7"/><path d="M143 177v103h157m-9-7 9 7-9 7"/><path d="M532 115h30v57h12m-9-7 9 7-9 7"/><path d="M532 280h30v-24h12m-9-7 9 7-9 7"/></g></svg>
