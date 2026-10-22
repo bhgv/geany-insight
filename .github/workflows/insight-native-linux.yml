@@ -52,6 +52,8 @@ on:
       - insight/desktop/context_search.*
       - insight/tests/context_search_test.c
       - src/insight-workbench.*
+      - src/highlighting.c
+      - src/insight-languages.c
       - src/insight-symbol-view.*
       - src/search.c
       - src/sidebar.c
@@ -169,7 +171,7 @@ jobs:
           meson install -C _native
       - name: Check compact panels and Context controls
         run: |
-          INSIGHT_COMPACT_CAPTURE="$PWD/compact-context.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight panel resizing, symbol types and contextual help GUI' 'Insight language-aware Context links GUI' 'Insight Python Context and tools GUI'
+          INSIGHT_COMPACT_CAPTURE="$PWD/compact-context.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight panel resizing, symbol types and contextual help GUI' 'Insight language-aware Context links GUI' 'Insight legacy generated palette recovery GUI' 'Insight Python Context and tools GUI'
           cp _native/meson-logs/testlog.txt compact-testlog.txt
       - name: Run guarded text transfer checks
         run: |

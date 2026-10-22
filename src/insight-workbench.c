@@ -992,7 +992,7 @@ static void reveal_context(void) {
   if(!gtk_widget_get_visible(main_widgets.message_window_notebook)) msgwin_show_hide(TRUE);
   gint page=gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.message_window_notebook),wb.box);
   if(gtk_notebook_get_current_page(GTK_NOTEBOOK(main_widgets.message_window_notebook))!=page) gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),page);
-  if(focus) { if(gtk_widget_get_mapped(focus) && gtk_widget_get_sensitive(focus)) gtk_widget_grab_focus(focus);g_object_unref(focus); }
+  if(focus) { if(gtk_window_get_focus(GTK_WINDOW(main_widgets.window))!=focus && gtk_widget_get_mapped(focus) && gtk_widget_get_sensitive(focus)) gtk_widget_grab_focus(focus);g_object_unref(focus); }
  }
 }
 typedef struct { gchar *path,*text,*digest; guint id; gint encoding,length; guint64 epoch,generation,text_version; } FilePreviewJob;

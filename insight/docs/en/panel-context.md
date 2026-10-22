@@ -196,3 +196,5 @@ Context uses the source language, syntax palette and configured language profile
 Following the same source keeps its text, lexer styles, link indicators and unchanged definition list. Moving the caret does not clear and rebuild them. Text edits, a changed index or language settings invalidate the relevant cache; the preview then updates normally.
 
 ![Context update flow](../media/context-updates.svg)
+
+Old untouched generated profiles affected by the first-use inherited-lexer bug are repaired automatically at startup. Only an exact generated plain-text style snapshot is replaced; the font and user profiles are preserved.

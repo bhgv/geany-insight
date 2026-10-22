@@ -258,13 +258,36 @@ static void append_font(GtkButton *button,gpointer data) {
 static gboolean write_language(Language *p,GError **error) {
  if(g_mkdir_with_parents(p->folder,0700)) { g_set_error_literal(error,G_FILE_ERROR,G_FILE_ERROR_FAILED,"Cannot create language folder");return FALSE; }GKeyFile *key=g_key_file_new();g_key_file_set_string(key,"language","name",p->name);g_key_file_set_string(key,"language","parser",p->parser->name);g_key_file_set_string(key,"language","file-filters",p->file_filters ? p->file_filters : "");g_key_file_set_string(key,"language","extensions",p->extensions);g_key_file_set_string(key,"language","compatible-extensions",p->compatible);g_key_file_set_string(key,"language","keywords",p->words);g_key_file_set_string(key,"language","theme",p->theme);g_key_file_set_boolean(key,"language","seeded",p->seeded);if(p->files) g_key_file_set_string_list(key,"language","files",(const gchar * const *)p->files,g_strv_length(p->files));if(!insight_filetype_options_write(&p->editing,key,error)) { g_key_file_free(key);return FALSE; }gsize size;gchar *contents=g_key_file_to_data(key,&size,NULL),*config=g_build_filename(p->folder,"language.conf",NULL),*style=g_build_filename(p->folder,"style.css",NULL);gboolean ok=g_file_set_contents(style,p->css,-1,error) && g_file_set_contents(config,contents,size,error);g_free(contents);g_free(config);g_free(style);g_key_file_free(key);return ok;
 }
+/* Byte-for-byte generated style rules also identify the old broken seed.
+ * User profiles (seeded=false) and edited CSS are never migrated. */
+static gchar *seed_style_rules(ScintillaObject *sci) {
+ GString *css=g_string_new(NULL);
+  for(gint style=0;style<=STYLE_MAX;style++) { gint fore=SEND(sci,SCI_STYLEGETFORE,style,0),back=SEND(sci,SCI_STYLEGETBACK,style,0);g_string_append_printf(css,".style-%d { color: #%02x%02x%02x; background-color: #%02x%02x%02x; font-weight: %s; font-style: %s; }\n",style,fore&255,(fore>>8)&255,(fore>>16)&255,back&255,(back>>8)&255,(back>>16)&255,SEND(sci,SCI_STYLEGETBOLD,style,0) ? "bold" : "normal",SEND(sci,SCI_STYLEGETITALIC,style,0) ? "italic" : "normal"); }
+ return g_string_free(css,FALSE);
+}
+static void repair_seed(ScintillaObject *sci,GeanyFiletype *ft) {
+ Language *old=by_name(ft->name);
+ filetypes_load_config(ft->id,FALSE);
+ if(!old || !old->seeded || old->parser!=ft || !ft->lexer_filetype || g_strcmp0(old->theme,"current")) return;
+ /* The first-use bug selected the plain-text fallback before loading the
+  * inherited lexer. Compare its exact generated suffix before replacing it. */
+ highlighting_set_styles(sci,filetypes[GEANY_FILETYPES_NONE]);
+ gchar *legacy=seed_style_rules(sci);gsize length=strlen(old->css),suffix=strlen(legacy);
+ const gchar *line=strchr(old->css,'\n');
+ if(line && g_str_has_prefix(old->css,"editor { font-family: ") && length>suffix && (gsize)(line+1-old->css)==length-suffix && !strcmp(line+1,legacy)) {
+  highlighting_set_styles(sci,ft);gchar *rules=seed_style_rules(sci),*prefix=g_strndup(old->css,length-suffix),*css=g_strconcat(prefix,rules,NULL),*path=g_build_filename(old->folder,"style.css",NULL);GError *error=NULL;
+  if(!g_file_set_contents(path,css,-1,&error)) g_warning("Cannot restore generated language colours for %s: %s",ft->name,error->message);
+  g_clear_error(&error);g_free(path);g_free(css);g_free(prefix);g_free(rules);
+ }
+ g_free(legacy);
+}
 static void seed_languages(void) {
  /* Seed absent folders once. Existing profiles and hand-written CSS win. */
  ScintillaObject *sci=SCINTILLA(scintilla_new());g_object_ref_sink(sci);
- for(guint n=0;n<filetypes_array->len;n++) { GeanyFiletype *ft=filetypes[n];if(ft->lang<0) continue;gchar *folder=g_build_filename(root,ft->name,NULL),*config=g_build_filename(folder,"language.conf",NULL);if(g_file_test(config,G_FILE_TEST_EXISTS)) { g_free(folder);g_free(config);continue; }
+ for(guint n=0;n<filetypes_array->len;n++) { GeanyFiletype *ft=filetypes[n];if(ft->lang<0) continue;gchar *folder=g_build_filename(root,ft->name,NULL),*config=g_build_filename(folder,"language.conf",NULL);if(g_file_test(config,G_FILE_TEST_EXISTS)) { repair_seed(sci,ft);g_free(folder);g_free(config);continue; }
   Language p={0};insight_filetype_options_default(&p.editing);p.name=ft->name;p.folder=folder;p.parser=ft;p.extensions=default_extensions(ft);p.compatible=insight_native_language_compatible(TM_PARSER_C,ft->lang) ? "c;c++;C;cpp;cxx;cc;h;hpp;hxx;h++;hh;asm;ASM;s;S;sx" : "";p.theme="current";p.seeded=TRUE;
   highlighting_set_styles(sci,ft);p.words=(gchar *)highlighting_primary_keywords(ft);PangoFontDescription *font=pango_font_description_from_string(interface_prefs.editor_font ? interface_prefs.editor_font : "Monospace 12");const gchar *family=pango_font_description_get_family(font);gchar *escaped=font_family_escape(family ? family : "Monospace");gchar size[G_ASCII_DTOSTR_BUF_SIZE];g_ascii_dtostr(size,sizeof size,pango_font_description_get_size(font)/(double)PANGO_SCALE);GString *css=g_string_new(NULL);g_string_append_printf(css,"editor { font-family: \"%s\"; font-size: %spt; }\n",escaped,size);g_free(escaped);pango_font_description_free(font);
-  for(gint style=0;style<=STYLE_MAX;style++) { gint fore=SEND(sci,SCI_STYLEGETFORE,style,0),back=SEND(sci,SCI_STYLEGETBACK,style,0);g_string_append_printf(css,".style-%d { color: #%02x%02x%02x; background-color: #%02x%02x%02x; font-weight: %s; font-style: %s; }\n",style,fore&255,(fore>>8)&255,(fore>>16)&255,back&255,(back>>8)&255,(back>>16)&255,SEND(sci,SCI_STYLEGETBOLD,style,0) ? "bold" : "normal",SEND(sci,SCI_STYLEGETITALIC,style,0) ? "italic" : "normal"); }
+  gchar *rules=seed_style_rules(sci);g_string_append(css,rules);g_free(rules);
   p.css=css->str;GError *error=NULL;if(!write_language(&p,&error)) g_warning("Cannot seed language %s: %s",ft->name,error ? error->message : "write failed");g_clear_error(&error);g_string_free(css,TRUE);g_free(p.extensions);g_free(folder);g_free(config);
  }gtk_widget_destroy(GTK_WIDGET(sci));g_object_unref(sci);
 }
