@@ -6,7 +6,7 @@
 #include "ui_utils.h"
 #include "insight-help.h"
 #include "sciwrappers.h"
-#include "insight-overview.h"
+
 #include <glib/gstdio.h>
 #include <string.h>
 static GtkWidget *window,*local,*project,*book,*split; static guint phase;static gboolean geometry_ready,valid_split;static gint saved_split; static gchar *directory,*profile,*source; static GtkListStore *base;
@@ -46,12 +46,12 @@ static gboolean step(gpointer data) {
   g_assert_nonnull(named(window,"insight-diff-tool"));GtkWidget *context=named(window,"insight-context");g_assert_nonnull(named(context,"insight-panel-help"));g_assert_true(gtk_label_get_selectable(GTK_LABEL(named(context,"insight-context-title"))));
   g_assert_true(gtk_widget_is_ancestor(named(context,"insight-panel-toggle-dock"),named(context,"insight-context-tools")));
   g_assert_null(named(context,"insight-panel-controls-header"));
-  g_assert_false(insight_overview_get_visible());
-  g_assert_cmpint(SSM(doc->editor->sci,SCI_GETMARGINWIDTHN,3,0),==,4);
-  SSM(doc->editor->sci,SCI_INSERTTEXT,0,(sptr_t)"/* changed */\n");
-  g_assert_true(((guint)SSM(doc->editor->sci,SCI_MARKERGET,0,0)&(1u<<SC_MARKNUM_HISTORY_MODIFIED))!=0);
+  g_assert_false(gtk_widget_get_visible(gtk_widget_get_parent(named(window,"insight-overview-markers")))) ;
+  g_assert_cmpint(scintilla_send_message(doc->editor->sci,SCI_GETMARGINWIDTHN,3,0),==,4);
+  scintilla_send_message(doc->editor->sci,SCI_INSERTTEXT,0,(sptr_t)"/* changed */\n");
+  g_assert_true(((guint)scintilla_send_message(doc->editor->sci,SCI_MARKERGET,0,0)&(1u<<SC_MARKNUM_HISTORY_MODIFIED))!=0);
   g_assert_true(document_save_file(doc,FALSE));
-  g_assert_true(((guint)SSM(doc->editor->sci,SCI_MARKERGET,0,0)&(1u<<SC_MARKNUM_HISTORY_SAVED))!=0);
+  g_assert_true(((guint)scintilla_send_message(doc->editor->sci,SCI_MARKERGET,0,0)&(1u<<SC_MARKNUM_HISTORY_SAVED))!=0);
 g_assert_null(named(context,"insight-diff-tool"));
   for(gint i=0;i<8;i++) panel_controls(gtk_notebook_get_nth_page(GTK_NOTEBOOK(book),i),book);
   GtkWidget *local_page=local;while(gtk_widget_get_parent(local_page) && !GTK_IS_NOTEBOOK(gtk_widget_get_parent(local_page))) local_page=gtk_widget_get_parent(local_page);
