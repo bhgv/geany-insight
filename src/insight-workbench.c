@@ -5375,6 +5375,14 @@ static void insight_width_host_class_init(InsightWidthHostClass *klass) {
  GtkWidgetClass *widget=GTK_WIDGET_CLASS(klass);widget->get_preferred_width=width_host_width;widget->get_preferred_height=width_host_height;widget->get_preferred_width_for_height=width_host_width_for_height;widget->get_preferred_height_for_width=width_host_height_for_width;widget->size_allocate=width_host_allocate;
 }
 static void insight_width_host_init(InsightWidthHost *host) { gtk_widget_set_has_window(GTK_WIDGET(host),FALSE);gtk_widget_set_name(GTK_WIDGET(host),"insight-editor-width-host"); }
+static void constrain_message_width(GtkWidget *page) {
+ if(!GTK_IS_BOX(page) || g_object_get_data(G_OBJECT(page),"insight-width-constrained")) return;
+ GtkWidget *body=gtk_box_new(gtk_orientable_get_orientation(GTK_ORIENTABLE(page)),gtk_box_get_spacing(GTK_BOX(page))),*host=g_object_new(insight_width_host_get_type(),NULL);
+ gtk_widget_set_name(host,"insight-message-width-host");gtk_box_set_homogeneous(GTK_BOX(body),gtk_box_get_homogeneous(GTK_BOX(page)));
+ GList *children=gtk_container_get_children(GTK_CONTAINER(page));
+ for(GList *p=children;p;p=p->next) { GtkWidget *child=p->data;gboolean expand,fill;guint padding;GtkPackType pack;gtk_box_query_child_packing(GTK_BOX(page),child,&expand,&fill,&padding,&pack);g_object_ref(child);gtk_container_remove(GTK_CONTAINER(page),child);if(pack==GTK_PACK_START) gtk_box_pack_start(GTK_BOX(body),child,expand,fill,padding);else gtk_box_pack_end(GTK_BOX(body),child,expand,fill,padding);g_object_unref(child); }
+ g_list_free(children);gtk_container_add(GTK_CONTAINER(host),body);gtk_box_pack_start(GTK_BOX(page),host,TRUE,TRUE,0);g_object_set_data(G_OBJECT(page),"insight-width-constrained",GINT_TO_POINTER(1));gtk_widget_show(body);gtk_widget_show(host);
+}
 void insight_workbench_init(void) {
  insight_diff_set_source_opener(diff_source_open);
  insight_directory_set_types_provider(directory_known_types);insight_directory_set_open_guard(directory_path_open);
@@ -5501,6 +5509,10 @@ void insight_workbench_init(void) {
  panel_groups_apply(&session_groups);
  for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].window) { if(session_groups.values[IL_HOST_MINIMIZED]&(1<<i)) panel_minimize(i);else gtk_widget_set_visible(wb.hosts[i].window,(session_groups.values[IL_HOST_VISIBLE]&(1<<i))!=0); }
  if(wb.root && !wb.scan && !wb.report_scan_completed) start_scan(wb.root);
+ /* Notebook stack minima include inactive pages as well as Context. Keep
+  * auxiliary rows from forcing the entire source workspace wider than its slot. */
+ for(gint i=0;i<gtk_notebook_get_n_pages(GTK_NOTEBOOK(main_widgets.message_window_notebook));i++) constrain_message_width(gtk_notebook_get_nth_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),i));
+ constrain_message_width(wb.box);
  g_signal_connect(wb.right_pane,"notify::position",G_CALLBACK(panel_position_guard),NULL);g_signal_connect(ui_lookup_widget(main_widgets.window,"hpaned1"),"notify::position",G_CALLBACK(panel_position_guard),NULL);g_signal_connect(existing,"notify::position",G_CALLBACK(panel_position_guard),NULL);
  ui_sidebar_show_hide();
  if(ui_prefs.msgwindow_visible && !g_file_test(wb.prefs_path,G_FILE_TEST_EXISTS)) reveal_context();
