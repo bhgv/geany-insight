@@ -587,3 +587,5 @@ EXTRA_DIST += insight/tests/selection_parse_test.cxx insight/tests/selection_par
 EXTRA_DIST += insight/tests/glib_compat_test.c insight/tests/build_sources_test.py
 
 dist_insightdocmedia_DATA += insight/docs/media/revision-colors.svg
+
+dist_insightdocmedia_DATA += insight/docs/media/compact-context.jpg

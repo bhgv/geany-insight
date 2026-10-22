@@ -3509,6 +3509,9 @@ static gboolean preview_single_click(gpointer data) {
  return G_SOURCE_REMOVE;
 }
 static void reveal_context_file(GtkMenuItem *item,gpointer data) { (void)item;(void)data;if(wb.source_path && wb.source_path[0]!='@') ui_reveal_file(wb.source_path); }
+static void context_location_popup(GtkLabel *label,GtkMenu *menu,gpointer data) {
+ (void)label;(void)data;GtkWidget *item=gtk_menu_item_new_with_label(insight_tr("Show in file manager"));gtk_widget_set_name(item,"insight-context-location-reveal");gtk_widget_set_sensitive(item,wb.source_path && wb.source_path[0]!='@');g_signal_connect(item,"activate",G_CALLBACK(reveal_context_file),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);gtk_widget_show(item);
+}
 static void context_popup_edit(GtkMenuItem *item,gpointer command) { (void)item;SSM(wb.preview,GPOINTER_TO_UINT(command),0,0); }
 static gboolean preview_button(GtkWidget *widget,GdkEventButton *event,gpointer data) {
  if(event->button==3) { GtkWidget *menu=gtk_menu_new(),*item=gtk_menu_item_new_with_label("Show in file manager");
@@ -5409,7 +5412,7 @@ void insight_workbench_init(void) {
  create_browser(); create_files_browser(); create_project_tree(); create_usage_browser(); create_categories(); create_file_types(); create_notes(); create_local_browser();
  wb.pane=gtk_paned_new(GTK_ORIENTATION_VERTICAL);
  wb.box=gtk_box_new(GTK_ORIENTATION_VERTICAL,2);
- wb.title=gtk_label_new("");gtk_widget_set_name(wb.title,"insight-context-location");gtk_label_set_selectable(GTK_LABEL(wb.title),TRUE);
+ wb.title=gtk_label_new("");gtk_widget_set_name(wb.title,"insight-context-location");gtk_label_set_selectable(GTK_LABEL(wb.title),TRUE);g_signal_connect(wb.title,"populate-popup",G_CALLBACK(context_location_popup),NULL);
  gtk_label_set_xalign(GTK_LABEL(wb.title),0.0f);
  GtkWidget *header=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4),*open=gtk_button_new_with_label("Open source");
  GtkWidget *folder=gtk_button_new_with_label("Source folder…"),*cancel=gtk_button_new_with_label("Cancel scan");
