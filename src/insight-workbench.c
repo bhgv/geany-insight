@@ -4859,6 +4859,29 @@ static gboolean info_kind_matches(const InsightSymbol *symbol,gint category,Gean
  default:return FALSE;
  }
 }
+/* Definitions in the shared Relations API use short names. Symbol Info also
+ * accepts exact qualified owners; use sorted leaf lookup and exact scope so
+ * unrelated namespaces never become counterpart candidates. */
+static size_t info_lookup(const InsightIndex *index,const gchar *query,const InsightSymbol **out,size_t capacity) {
+ if(!query || !*query || strlen(query)>1024) return SIZE_MAX;
+ while(g_str_has_prefix(query,"::")) query+=2;
+ if(!*query) return SIZE_MAX;
+ const gchar *leaf=query,*separator=NULL;
+ for(const gchar *p=query;*p;p++) {
+  if(p[0]==':' && p[1]==':') { separator=p;leaf=p+2;p++; }
+  else if(*p=='.') { separator=p;leaf=p+1; }
+ }
+ if(!*leaf) return 0;
+ if(!separator) return insight_index_find(index,query,1,out,capacity);
+ size_t left=0,right=insight_index_count(index),scope_length=(size_t)(separator-query),total=0;
+ while(left<right) { size_t mid=left+(right-left)/2;const InsightSymbol *symbol=insight_index_at(index,mid);if(strcmp(symbol->name,leaf)<0) left=mid+1;else right=mid; }
+ for(size_t n=left;n<insight_index_count(index);n++) {
+  const InsightSymbol *symbol=insight_index_at(index,n);if(strcmp(symbol->name,leaf)) break;
+  if(strlen(symbol->scope)!=scope_length || memcmp(symbol->scope,query,scope_length)) continue;
+  if(out && total<capacity) out[total]=symbol;total++;
+ }
+ return total;
+}
 static void info_search(GtkWidget *widget,gpointer data) {
  (void)widget;SymbolInfo *info=data;gtk_label_set_text(GTK_LABEL(info->count),"0");gtk_widget_set_sensitive(info->prototype,FALSE);gtk_widget_set_sensitive(info->implementation,FALSE);gtk_widget_set_sensitive(info->base,FALSE);gtk_widget_set_sensitive(info->jump,FALSE);gtk_widget_set_sensitive(info->references,FALSE);gtk_widget_set_sensitive(info->leave,FALSE);
  if(!*gtk_entry_get_text(GTK_ENTRY(info->entry))) {
@@ -4879,10 +4902,10 @@ static void info_search(GtkWidget *widget,gpointer data) {
  }
  /* Filter BEFORE the 512-row presentation limit, including language filters.
   * Bound broad lookups explicitly instead of silently losing later matches. */
- size_t raw_total=insight_relation_query(index,gtk_entry_get_text(GTK_ENTRY(info->entry)),INSIGHT_RELATION_DEFINITIONS,0,NULL,0),total=0;gboolean broad=raw_total!=SIZE_MAX && raw_total>16384;const InsightSymbol **matches=NULL;
+ size_t raw_total=info_lookup(index,gtk_entry_get_text(GTK_ENTRY(info->entry)),NULL,0),total=0;gboolean broad=raw_total!=SIZE_MAX && raw_total>16384;const InsightSymbol **matches=NULL;
  if(raw_total==SIZE_MAX || broad) total=SIZE_MAX;
  else {
-  matches=g_new(const InsightSymbol *,MAX((size_t)1,raw_total));size_t found=insight_relation_query(index,gtk_entry_get_text(GTK_ENTRY(info->entry)),INSIGHT_RELATION_DEFINITIONS,0,matches,raw_total);
+  matches=g_new(const InsightSymbol *,MAX((size_t)1,raw_total));size_t found=info_lookup(index,gtk_entry_get_text(GTK_ENTRY(info->entry)),matches,raw_total);
   if(found!=raw_total) total=SIZE_MAX;
   else for(size_t n=0;n<raw_total;n++) if((!current || g_str_has_prefix(matches[n]->path,"@buffer:") || insight_languages_search_path(current->file_name,current->file_type,matches[n]->path)) && info_kind_matches(matches[n],gtk_combo_box_get_active(GTK_COMBO_BOX(info->kind)),current ? current->file_type:NULL)) matches[total++]=matches[n];
  }
