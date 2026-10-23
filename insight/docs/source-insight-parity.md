@@ -732,3 +732,7 @@ Window List now supports multiple selected stable document IDs, selected-file Sa
 ### Search Web and Search Engines (2026-10-23)
 
 Added source selection/caret query capture, reusable Search Web with engine selection and URL preview, explicit browser launch/copy, and an editable/reorderable persistent engine list using %S templates. HTTP(S), escaped single-component queries and bounded UTF-8 inputs keep template/query roles distinct; no implicit requests or saved query history. Two unassigned Search bindings and editor popup commands are available. [Guide and diagram](web-search.md).
+
+### Shared AI connections and parallel answers (2026-10-23)
+
+Unified console/SSH/editor profile configuration; source selection, program help and compiler-message AI entry points share up to 16 connections. One to four checked profiles dispatch simultaneous immutable request snapshots into separate answer/error tabs; explicit selection routes one response through existing guarded command/diff/variant flows. Optional unencrypted private key persistence is per-profile opt-in; queries and answers remain session-only. This is an application extension, not a Source Insight AI parity claim. [Guide and diagram](ai-connections.md).

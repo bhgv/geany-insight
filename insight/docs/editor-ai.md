@@ -61,3 +61,5 @@
 
 
 Проверенная реализация: [`08eb8655d4d40be8c8c61f62a07d65224c0791cb`](https://github.com/bhgv/geany-insight/commit/08eb8655d4d40be8c8c61f62a07d65224c0791cb). [Linux CI 39602110109](https://github.com/bhgv/geany-insight/actions/runs/39602110109): полная сборка/установка с VTE, проверка ядра сравнения и **68/68 выбранных тестов пройдены**, без ошибок, пропусков и тайм-аутов. Проверены восстановление варианта после отмены сравнения, поиск с клавиатуры в компактном окне и общая история запросов разных окон. Живые аккаунты провайдеров не проверялись.
+
+[Shared AI Connections / Общие подключения ИИ](ai-connections.md) — shared profiles, optional key storage and parallel answer selection supersede the earlier single-connection setup.

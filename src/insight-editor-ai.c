@@ -5,6 +5,7 @@
 #include "insight-project-report.h"
 #include "insight-i18n.h"
 #include "insight-help.h"
+#include "insight-ai-profiles.h"
 #include "document.h"
 #include "main.h"
 #include "sciwrappers.h"
@@ -17,12 +18,10 @@
 typedef struct { gchar *path,*base;guint id;InsightAiEdits *edits; } Source;
 typedef struct {
  GtkWidget *window,*panel,*file,*prompt,*requirements,*context,*status,*send,*cancel_button,*undo,*redo,*tasks,*recent,*frequent,*remember,*provider,*endpoint,*model,*key,*python;
- GPtrArray *files,*prompts;gchar *generated_context;guint current;gboolean busy,closed,switching;GCancellable *cancel;
+ GPtrArray *files,*prompts;gchar *generated_context;guint current;gboolean busy,closed,switching;GCancellable *cancel;InsightAiProfiles *profiles;
 } Review;
 typedef struct { gchar *endpoint,*model,*key,*python,*helper,*question,*context,*code,*location,*extra;InsightAiAnswer *answer; } Job;
 static gboolean initialized;
-static const gchar *endpoints[]={"https://api.openai.com/v1/chat/completions","https://api.x.ai/v1/chat/completions","https://api.deepseek.com/chat/completions","https://YOUR_WORKSPACE.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions","http://127.0.0.1:8000/v1/chat/completions"};
-static const gchar *keys[]={"OPENAI_API_KEY","XAI_API_KEY","DEEPSEEK_API_KEY","DASHSCOPE_API_KEY",""};
 static GtkWidget *named(GtkWidget *w,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(w),name)) return w;
  if(GTK_IS_CONTAINER(w)) { GList *list=gtk_container_get_children(GTK_CONTAINER(w));GtkWidget *v=NULL;for(GList *p=list;p && !v;p=p->next) v=named(p->data,name);g_list_free(list);return v; }return NULL;
@@ -136,16 +135,17 @@ static void done(GObject *object,GAsyncResult *result,gpointer data) {
  g_clear_error(&e);controls(r);
 }
 static void save_config(Review *r) {
+ insight_ai_profiles_save_current(r->profiles);
  GKeyFile *k=g_key_file_new();g_key_file_set_integer(k,"assistant","provider",gtk_combo_box_get_active(GTK_COMBO_BOX(r->provider)));const gchar *names[]={"endpoint","model","python"};GtkWidget *fields[]={r->endpoint,r->model,r->python};for(guint i=0;i<3;i++) g_key_file_set_string(k,"assistant",names[i],gtk_entry_get_text(GTK_ENTRY(fields[i])));gsize n;gchar *raw=g_key_file_to_data(k,&n,NULL),*path=config_path("insight-ai.conf");GFile *file=g_file_new_for_path(path);g_file_replace_contents(file,raw,n,NULL,FALSE,G_FILE_CREATE_PRIVATE,NULL,NULL,NULL);g_object_unref(file);g_free(raw);g_free(path);g_key_file_unref(k);
 }
 static void send_request(GtkWidget *w,gpointer p) {
  (void)w;Review *r=p;if(r->busy || !stage_manual(r)) return;GError *e=NULL;gchar *extra=text(r->prompt);const InsightAiVariant *v=insight_ai_edits_current(current(r)->edits);gchar *all=insight_ai_requirements_append(v->requirements,extra,&e);if(!all) { message(r,e->message);g_clear_error(&e);g_free(extra);return; }
- if(!*gtk_entry_get_text(GTK_ENTRY(r->model))) { message(r,"Enter a model ID and a question first.");g_free(all);g_free(extra);return; }
+ if(!*gtk_entry_get_text(GTK_ENTRY(r->model)) && !insight_ai_profiles_multiple(r->profiles)) { message(r,"Enter a model ID and a question first.");g_free(all);g_free(extra);return; }
  Job *j=g_new0(Job,1);j->endpoint=g_strdup(gtk_entry_get_text(GTK_ENTRY(r->endpoint)));j->model=g_strdup(gtk_entry_get_text(GTK_ENTRY(r->model)));j->key=g_strdup(gtk_entry_get_text(GTK_ENTRY(r->key)));j->python=g_strdup(gtk_entry_get_text(GTK_ENTRY(r->python)));j->helper=g_build_filename(app->datadir,"insight","tools","ai_client.py",NULL);j->question=all;j->extra=extra;j->code=g_strdup(v->code);j->context=text(r->context);j->location=g_strdup(current(r)->path);
- if(strlen(j->context)>65536) { message(r,"Project context exceeds 64 KiB; edit it before Send.");job_free(j);return; }save_config(r);r->busy=TRUE;r->cancel=g_cancellable_new();insight_diff_review_lock(r->window,TRUE);controls(r);message(r,"Sending accumulated requirements, current Result and reviewed project context to the API…");GTask *task=g_task_new(r->window,r->cancel,done,NULL);g_task_set_task_data(task,j,job_free);g_task_run_in_thread(task,worker);g_object_unref(task);
+ if(strlen(j->context)>65536) { message(r,"Project context exceeds 64 KiB; edit it before Send.");job_free(j);return; }save_config(r);r->busy=TRUE;r->cancel=g_cancellable_new();insight_diff_review_lock(r->window,TRUE);controls(r);message(r,"Sending accumulated requirements, current Result and reviewed project context to the API…");GTask *task=g_task_new(r->window,r->cancel,done,NULL);g_task_set_task_data(task,j,job_free);InsightAiRequest request={j->endpoint,j->model,j->key,j->question,j->context,j->code,"",j->location};if(!insight_ai_profiles_dispatch(r->profiles,task,&request,&j->answer)) g_task_run_in_thread(task,worker);g_object_unref(task);
 }
 static void cancel_request(GtkWidget *w,gpointer p) { (void)w;Review *r=p;if(r->cancel) g_cancellable_cancel(r->cancel); }
-static void provider_changed(GtkComboBox *combo,gpointer p) { Review *r=p;gint n=gtk_combo_box_get_active(combo);if(n<0 || n>4) return;gtk_entry_set_text(GTK_ENTRY(r->endpoint),endpoints[n]);const gchar *key=*keys[n] ? g_getenv(keys[n]):NULL;gtk_entry_set_text(GTK_ENTRY(r->key),key ? key:""); }
+static void provider_changed(GtkComboBox *combo,gpointer p) { Review *r=p;gint n=gtk_combo_box_get_active(combo);if(n<0 || n>4) return;gtk_entry_set_text(GTK_ENTRY(r->endpoint),insight_ai_profiles_endpoint(n));const gchar *key=*insight_ai_profiles_key_env(n) ? g_getenv(insight_ai_profiles_key_env(n)):NULL;gtk_entry_set_text(GTK_ENTRY(r->key),key ? key:""); }
 static void append_prompt(Review *r,const gchar *request) { if(!request) return;gchar *old=text(r->prompt);gchar *next=*old ? g_strconcat(old,"\n",request,NULL):g_strdup(request);set_text(r->prompt,next);g_free(old);g_free(next); }
 static void task_chosen(GtkWidget *w,gpointer p) { (void)w;Review *r=p;if(r->busy) return;gint n=gtk_combo_box_get_active(GTK_COMBO_BOX(r->tasks));if(n>=0) append_prompt(r,insight_tr(insight_ai_task_prompt(n))); }
 static void history_chosen(GtkComboBox *combo,gpointer p) { Review *r=p;if(!r->busy) append_prompt(r,gtk_combo_box_get_active_id(combo)); }
@@ -156,13 +156,13 @@ static GtkWidget *expander(GtkWidget *box,const gchar *label) { GtkWidget *e=gtk
 static void api_controls(Review *r,GtkWidget *box) {
  GtkWidget *bar=row(box);r->provider=gtk_combo_box_text_new();gtk_widget_set_name(r->provider,"insight-editor-ai-provider");const gchar *labels[]={"OpenAI / ChatGPT API","xAI / Grok","DeepSeek","Qwen / Model Studio","Custom compatible API"};for(guint i=0;i<5;i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(r->provider),labels[i]);gtk_box_pack_start(GTK_BOX(bar),r->provider,FALSE,FALSE,0);
  r->endpoint=gtk_entry_new();gtk_widget_set_name(r->endpoint,"insight-editor-ai-endpoint");gtk_entry_set_placeholder_text(GTK_ENTRY(r->endpoint),"Complete chat/completions URL");gtk_box_pack_start(GTK_BOX(bar),r->endpoint,TRUE,TRUE,0);r->model=gtk_entry_new();gtk_widget_set_name(r->model,"insight-editor-ai-model");gtk_entry_set_placeholder_text(GTK_ENTRY(r->model),"Model ID from your API account");gtk_box_pack_start(GTK_BOX(bar),r->model,FALSE,FALSE,0);
- bar=row(box);gtk_box_pack_start(GTK_BOX(bar),gtk_label_new(insight_tr("API key (memory only)")),FALSE,FALSE,0);r->key=gtk_entry_new();gtk_widget_set_name(r->key,"insight-editor-ai-key");gtk_entry_set_visibility(GTK_ENTRY(r->key),FALSE);gtk_box_pack_start(GTK_BOX(bar),r->key,TRUE,TRUE,0);r->python=gtk_entry_new();gtk_widget_set_name(r->python,"insight-editor-ai-python");gtk_box_pack_start(GTK_BOX(bar),gtk_label_new("Python 3"),FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(bar),r->python,FALSE,FALSE,0);
+ bar=row(box);gtk_box_pack_start(GTK_BOX(bar),gtk_label_new(insight_tr("API key (shared profile)")),FALSE,FALSE,0);r->key=gtk_entry_new();gtk_widget_set_name(r->key,"insight-editor-ai-key");gtk_entry_set_visibility(GTK_ENTRY(r->key),FALSE);gtk_box_pack_start(GTK_BOX(bar),r->key,TRUE,TRUE,0);r->python=gtk_entry_new();gtk_widget_set_name(r->python,"insight-editor-ai-python");gtk_box_pack_start(GTK_BOX(bar),gtk_label_new("Python 3"),FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(bar),r->python,FALSE,FALSE,0);
 #ifdef G_OS_WIN32
  gtk_entry_set_text(GTK_ENTRY(r->python),"python");
 #else
  gtk_entry_set_text(GTK_ENTRY(r->python),"python3");
 #endif
- g_signal_connect(r->provider,"changed",G_CALLBACK(provider_changed),r);gtk_combo_box_set_active(GTK_COMBO_BOX(r->provider),0);GKeyFile *k=g_key_file_new();gchar *path=config_path("insight-ai.conf");if(g_key_file_load_from_file(k,path,G_KEY_FILE_NONE,NULL)) { gtk_combo_box_set_active(GTK_COMBO_BOX(r->provider),CLAMP(g_key_file_get_integer(k,"assistant","provider",NULL),0,4));const gchar *names[]={"endpoint","model","python"};GtkWidget *fields[]={r->endpoint,r->model,r->python};for(guint i=0;i<3;i++) { gchar *s=g_key_file_get_string(k,"assistant",names[i],NULL);if(s) gtk_entry_set_text(GTK_ENTRY(fields[i]),s);g_free(s); } }g_free(path);g_key_file_unref(k);
+ g_signal_connect(r->provider,"changed",G_CALLBACK(provider_changed),r);gtk_combo_box_set_active(GTK_COMBO_BOX(r->provider),0);GKeyFile *k=g_key_file_new();gchar *path=config_path("insight-ai.conf");if(g_key_file_load_from_file(k,path,G_KEY_FILE_NONE,NULL)) { gtk_combo_box_set_active(GTK_COMBO_BOX(r->provider),CLAMP(g_key_file_get_integer(k,"assistant","provider",NULL),0,4));const gchar *names[]={"endpoint","model","python"};GtkWidget *fields[]={r->endpoint,r->model,r->python};for(guint i=0;i<3;i++) { gchar *s=g_key_file_get_string(k,"assistant",names[i],NULL);if(s) gtk_entry_set_text(GTK_ENTRY(fields[i]),s);g_free(s); } }g_free(path);g_key_file_unref(k);r->profiles=insight_ai_profiles_bind(box,r->provider,r->endpoint,r->model,r->key,r->python);
 }
 static void open_review(GtkWidget *w,gpointer data) {
  (void)w;(void)data;GeanyDocument *d=document_get_current();if(!d) return;GError *e=NULL;Source *s=source_new(d->file_name ? d->file_name:"untitled",d,&e);if(!s) { ui_set_statusbar(TRUE,"%s",e->message);g_clear_error(&e);return; }

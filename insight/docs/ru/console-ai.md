@@ -60,3 +60,5 @@
 
 
 [ИИ исходника и проекта: накопление запросов, варианты, ручной Result и обновление](editor-ai.md).
+
+[Shared AI Connections / Общие подключения ИИ](ai-connections.md) — shared profiles, optional key storage and parallel answer selection supersede the earlier single-connection setup.

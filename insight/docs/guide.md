@@ -113,3 +113,5 @@ Options → Language profiles… и контекстное меню редакт
 [Редактирование определений](structural-selection.md#дополнение-paste-symbol-и-редактирование-определений) — Copy/Cut/Duplicate и вставка перед символом с просмотром и проверками исходника.
 
 [Search Web / Поиск в интернете](web-search.md)
+
+[Shared AI Connections / Общие подключения ИИ](ai-connections.md) — shared profiles, optional key storage and parallel answer selection supersede the earlier single-connection setup.

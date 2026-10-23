@@ -883,3 +883,6 @@ web_search_test = executable('test_insight_web_search', '../insight/tests/web_se
 test('Insight escaped web search URLs', web_search_test)
 web_search_gui_test = executable('test_insight_web_search_gui', '../insight/tests/web_search_gui_test.c', dependencies: test_deps)
 test('Insight native Search Web and Search Engines GUI', web_search_gui_test, timeout: 45, is_parallel: false)
+
+ai_profiles_gui_test = executable('test_insight_ai_profiles_gui', '../insight/tests/ai_profiles_gui_test.c', dependencies: test_deps)
+test('Insight shared AI profiles and parallel answer selection GUI', ai_profiles_gui_test, args: [meson.project_source_root() / 'insight/tests/ai_profiles_mock_server.py'], timeout: 55, is_parallel: false)

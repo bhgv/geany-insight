@@ -60,3 +60,5 @@ Verified code: [`5a2f1e4271b30304e218a5664e8565e3010f9c77`](https://github.com/b
 
 
 [Editor and project AI: cumulative requests, variants, manual Result and refresh](editor-ai.md).
+
+[Shared AI Connections / Общие подключения ИИ](ai-connections.md) — shared profiles, optional key storage and parallel answer selection supersede the earlier single-connection setup.

@@ -109,3 +109,5 @@ Geany Insight — редактор исходного кода с индексо
 [Replace Files: предварительный просмотр, выбор совпадений и замена в нескольких буферах](replace-files.md).
 
 [Search Web / Поиск в интернете](web-search.md)
+
+[Shared AI Connections / Общие подключения ИИ](ai-connections.md) — shared profiles, optional key storage and parallel answer selection supersede the earlier single-connection setup.

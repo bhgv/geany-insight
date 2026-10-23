@@ -105,3 +105,5 @@ Replace Files also offers modal Replace/Skip/Remaining/Cancel review, F3/Shift+F
 [Symbol editing](structural-selection.md#paste-symbol-review-and-guarded-editing) — Copy/Cut/Duplicate definitions and Paste Symbol before a selected definition with guarded colored preview.
 
 [Search Web / Поиск в интернете](web-search.md)
+
+[Shared AI Connections / Общие подключения ИИ](ai-connections.md) — shared profiles, optional key storage and parallel answer selection supersede the earlier single-connection setup.

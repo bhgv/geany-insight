@@ -38,6 +38,8 @@
 #include "filetypes.h"
 #include "keybindings.h"
 #include "main.h"
+#include "insight-ai.h"
+#include "insight-i18n.h"
 #include "navqueue.h"
 #include "prefs.h"
 #include "support.h"
@@ -703,11 +705,22 @@ static void on_scribble_populate(GtkTextView *textview, GtkMenu *arg1, gpointer 
 }
 
 
+static void message_ai(GtkMenuItem *item,gpointer data) {
+ (void)item;(void)data;GtkWidget *view=gtk_widget_get_mapped(msgwindow.tree_compiler) ? msgwindow.tree_compiler:gtk_widget_get_mapped(msgwindow.tree_msg) ? msgwindow.tree_msg:msgwindow.tree_status;gint column=view==msgwindow.tree_compiler ? COMPILER_COL_STRING:view==msgwindow.tree_msg ? MSG_COL_STRING:0;GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));GtkTreeIter iter;GtkTreeModel *selected_model=NULL;GString *context=g_string_new(NULL);
+ if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),&selected_model,&iter)) { gchar *line=NULL;gtk_tree_model_get(selected_model,&iter,column,&line,-1);if(line && strlen(line)<=65536) g_string_append(context,line);g_free(line); }
+ else { gint count=gtk_tree_model_iter_n_children(model,NULL);for(gint i=MAX(0,count-200);i<count;i++) if(gtk_tree_model_iter_nth_child(model,&iter,NULL,i)) { gchar *line=NULL;gtk_tree_model_get(model,&iter,column,&line,-1);if(line && context->len+strlen(line)+1<=65536) { g_string_append(context,line);g_string_append_c(context,'\n'); }g_free(line); } }
+ insight_ai_lookup("Messages and compiler errors",context->str,"Explain these messages and errors, identify likely causes and suggest diagnostic steps. Attach source explicitly if code changes are needed.");g_string_free(context,TRUE);
+}
 /* Menu items that should be on all message window popup menus */
 void msgwin_menu_add_common_items(GtkMenu *menu)
 {
 	GtkWidget *item;
 
+	item = gtk_menu_item_new_with_label(insight_tr("Ask AI about messages…"));
+	gtk_widget_set_name(item,"insight-messages-ai");
+	g_signal_connect(item,"activate",G_CALLBACK(message_ai),NULL);
+	gtk_container_add(GTK_CONTAINER(menu),item);
+	gtk_widget_show(item);
 	item = gtk_separator_menu_item_new();
 	gtk_widget_show(item);
 	gtk_container_add(GTK_CONTAINER(menu), item);

@@ -1567,3 +1567,32 @@ Encode spaces and control characters in the URL template	Закодируйте 
 URL template contains an invalid percent escape	В шаблоне URL неверная процентная последовательность
 Search query must be a single line without control characters	Запрос должен быть одной строкой без управляющих символов
 Choose an engine and enter a name up to 128 bytes; maximum 32 engines	Выберите поисковик и введите имя до 128 байт; максимум 32 записи
+
+AI Assistant	ИИ-помощник
+AI Connections	Подключения ИИ
+AI Connections…	Подключения ИИ…
+Profile name	Название профиля
+API endpoint	Адрес API
+Model ID	Идентификатор модели
+API key	Ключ API
+API key (shared profile)	Ключ API (общий профиль)
+API key environment variable	Переменная окружения с ключом
+Compare checked AI profiles	Сравнить отмеченные профили ИИ
+Include in parallel comparison (up to 4)	Включить в параллельное сравнение (до 4)
+Save API key in private config (not encrypted)	Сохранять ключ в приватном конфиге (без шифрования)
+Add profile	Добавить профиль
+Update profile	Обновить профиль
+Remove profile	Удалить профиль
+Compare AI Answers	Сравнение ответов ИИ
+Use selected answer	Использовать выбранный ответ
+Copy answer	Копировать ответ
+Cancel requests	Отменить запросы
+Waiting for this AI response…	Ожидание ответа этого ИИ…
+Look up selection with AI…	Найти и объяснить выделение с ИИ…
+Ask AI…	Спросить ИИ…
+Ask AI about messages…	Спросить ИИ о сообщениях…
+Select ordinary source text for AI lookup	Выделите обычный текст исходника для поиска с ИИ
+AI lookup selection is limited to 64 KiB	Выделение для поиска с ИИ ограничено 64 КиБ
+Shared by editor, console, SSH, selection lookup and help. Queries and answers are not saved.	Общие настройки редактора, консоли, SSH, поиска выделения и справки. Запросы и ответы не сохраняются.
+Enter a name, HTTP(S) API endpoint and model; check field limits.	Укажите имя, адрес API HTTP(S) и модель; проверьте ограничения полей.
+AI connection fields exceed their size limits	Поля подключения ИИ превышают ограничения длины
