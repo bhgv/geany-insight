@@ -13,6 +13,7 @@
 static GtkWidget *window;
 static GeanyDocument *doc;
 static guint expected_rows;
+static void rows(guint count);
 static gchar *project_path,*profile;
 #define GROUP "insight-command-recording"
 static GtkWidget *named(GtkWidget *w,const gchar *name)
