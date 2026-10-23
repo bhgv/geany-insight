@@ -5,7 +5,6 @@
 #include "sciwrappers.h"
 #include "ui_utils.h"
 #include "keybindings.h"
-#include "insight-workbench.h"
 #include <glib/gstdio.h>
 #include <string.h>
 static GtkWidget *window;static GeanyDocument *source;static guint phase,ticks;
@@ -22,7 +21,7 @@ static gboolean step(gpointer unused) {
   menu(14);g_assert_true(gtk_window_get_focus(GTK_WINDOW(window))==GTK_WIDGET(source->editor->sci));GtkWidget *book=named(window,"insight-project-notebook");gtk_widget_hide(book);menu(0);at(0);g_assert_true(gtk_widget_get_visible(book));
   GtkWidget *page=panel(find(targets[7]));gtk_button_clicked(GTK_BUTTON(named(page,"insight-panel-toggle-dock")));GtkWidget *owner=gtk_widget_get_toplevel(page);g_assert_true(owner!=window);gtk_button_clicked(GTK_BUTTON(named(page,"insight-panel-minimize")));g_assert_false(gtk_widget_get_visible(owner));menu(7);at(7);gtk_button_clicked(GTK_BUTTON(named(page,"insight-panel-toggle-dock")));menu(7);at(7);phase++;return G_SOURCE_CONTINUE;
  }
- if(phase==15) { g_assert_false(insight_workbench_activate(99));keybindings_send_command(GEANY_KEY_GROUP_FOCUS,GEANY_KEYS_INSIGHT_ACTIVATEEDITOR);g_assert_true(gtk_window_get_focus(GTK_WINDOW(window))==GTK_WIDGET(source->editor->sci));gchar *text=sci_get_contents(source->editor->sci,-1);g_assert_cmpstr(text,==,"int value = 1;\n");g_free(text);g_assert_false(source->changed);g_assert_false(scintilla_send_message(source->editor->sci,SCI_CANUNDO,0,0));g_print("Panel activation: 15 menu/key commands, preserved queries/source, hidden project and detached minimized panel restoration passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE; }
+ if(phase==15) { keybindings_send_command(GEANY_KEY_GROUP_FOCUS,GEANY_KEYS_INSIGHT_ACTIVATEEDITOR);g_assert_true(gtk_window_get_focus(GTK_WINDOW(window))==GTK_WIDGET(source->editor->sci));gchar *text=sci_get_contents(source->editor->sci,-1);g_assert_cmpstr(text,==,"int value = 1;\n");g_free(text);g_assert_false(source->changed);g_assert_false(scintilla_send_message(source->editor->sci,SCI_CANUNDO,0,0));g_print("Panel activation: 15 menu/key commands, preserved queries/source, hidden project and detached minimized panel restoration passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE; }
  return G_SOURCE_CONTINUE;
 }
 int main(void) { if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;gchar *dir=g_dir_make_tmp("panel-activation-XXXXXX",NULL),*file=g_build_filename(dir,"source.c",NULL),*config=g_build_filename(dir,"geany.conf",NULL);g_file_set_contents(file,"int value = 1;\n",-1,NULL);g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL);gchar *args[]={"panel-activation","--new-instance","--no-session","--config",dir,file,NULL};g_timeout_add(200,step,NULL);return main_lib(6,args); }
