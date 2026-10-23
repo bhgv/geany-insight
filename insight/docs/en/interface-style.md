@@ -11,3 +11,9 @@ The macOS-inspired style provides light gradient surfaces, translucent panel lay
 Interface style is independent of the source **Visual theme**. It preserves Scintilla font/syntax colors, text, selection, savepoint and Undo. A light shell can be combined with dark code. Explicit panel Font & Color overrides keep priority. **Classic** removes the appearance layer and restores the current GTK look without resetting the source palette or other preferences.
 
 Settings are stored in `insight/interface-style.conf` under the configuration directory. Atomic save failures leave the previous style active. Classic is the initial default. Installed CSS is `styles/appearance-macos.css`, scoped to the `insight-macos` class; the system GTK theme is not changed. Windows are styled on mapping, without background redraw timers.
+
+## Actual application appearance
+
+[Real Classic and macOS-inspired captures are available in the successful Linux GUI run artifact](https://github.com/bhgv/geany-insight/actions/runs/39900274485/artifacts/12479155454), as `interface-classic.jpg` and `interface-macos.jpg`. They show the production GTK editor in an isolated Linux/Xvfb fixture with the same demo source and panel widths, not mockups or a native macOS run.
+
+Verified on Linux: [108 full-editor checks](https://github.com/bhgv/geany-insight/actions/runs/39900274485), including switching, saved startup state, failed-save rollback, future windows and independent code palette/font behavior. Autotools and GTK 3.22 / GLib 2.56 builds passed. Windows/macOS GUI was not run in this stage.
