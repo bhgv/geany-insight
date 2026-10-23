@@ -3990,14 +3990,14 @@ gboolean insight_workbench_activate(guint action) {
  if(!wb.alive || action>=15) return FALSE;
  if(action==14) { GeanyDocument *doc=document_get_current();if(!DOC_VALID(doc)) return FALSE;gtk_window_present(GTK_WINDOW(main_widgets.window));document_grab_focus(doc);return TRUE; }
  if(action==10) { insight_window_list_show(NULL,NULL);return TRUE; }
- if(action==13) { focus_search_results(NULL,NULL);return TRUE; }
+ if(action==13) { focus_search_results(NULL,NULL);gtk_window_present(GTK_WINDOW(main_widgets.window));return TRUE; }
  GtkWidget *targets[]={wb.file_entry,wb.tree_entry,wb.symbol_entry,wb.usage_entry,wb.marks_entry,wb.clips_entry,wb.type_panel.entry,wb.category_panel.entry,wb.local_entry,GTK_WIDGET(wb.preview),NULL,wb.editor_query,wb.project_query};
  GtkWidget *target=targets[action];if(!target) return FALSE;
  if(action==8 && !wb.hosts[8].window) { ui_prefs.sidebar_visible=TRUE;interface_prefs.sidebar_symbol_visible=TRUE;ui_sidebar_show_hide(); }
  if(action==9) { wb.context_visible=TRUE;gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.context_toggle),TRUE);gtk_widget_show(wb.box);reveal_context(); }
  if(action==11) gtk_widget_show(wb.editor_search_row);
  if(action==12) { gtk_widget_show(wb.project_search_row);focus_search_results(NULL,NULL); }
- focus_widget_panel(target);return TRUE;
+ focus_widget_panel(target);GtkWidget *owner=gtk_widget_get_toplevel(target);if(GTK_IS_WINDOW(owner)) gtk_window_present(GTK_WINDOW(owner));return TRUE;
 }
 static void activate_panel(GtkMenuItem *item,gpointer data) { (void)item;insight_workbench_activate(GPOINTER_TO_UINT(data)); }
 static void expand_panel(GtkMenuItem *item,gpointer data) {

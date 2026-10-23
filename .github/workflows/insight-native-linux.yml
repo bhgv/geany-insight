@@ -147,6 +147,7 @@ on:
       - insight/desktop/git_history.*
       - insight/tests/git_history*_test.c
       - src/insight-git.*
+      - insight/tests/panel_activation_gui_test.c
       - src/insight-workbench.c
       - insight/desktop/git_project.*
       - insight/tests/git_project*_test.c
