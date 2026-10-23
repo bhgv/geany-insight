@@ -780,3 +780,8 @@ SSH: right-side Connection/Transfer/session tabs, up to 16 independent shells, d
 ### Relation outline snapshots and bookmark batches (2026-10-23)
 
 Navigate, Relations icon buttons and its context menu expose View Relation Outline and Create Bookmarks from Relation Items. The explicit read-only snapshot follows list filtering/sorting or the materialized tree, with indentation, Copy and a new unnamed unsaved editable buffer. It does not fetch lazy branches or implement a live inline text mode. Background source preparation captures real open-buffer/decoded closed-file lines; exact path/line duplicates and existing locations are skipped, unique names preserve prior notes. Model/store/source revalidation and the existing checked store commit protect whole-batch writes. Closing cancels pending preparation; source text, selection, Undo and source disk files are untouched. Existing 64-note capacity, 2000 source rows / 1 MiB outline and source size bounds remain explicit. [RU/EN guide and diagram](relation-results.md).
+
+
+### Relation and Context window commands
+
+Navigate exposes Lock Context Window, Lock Relation Window, Refresh Relation Window and direct list/tree, horizontal and vertical graph commands. Lock states mirror Follow controls and reuse their persisted preferences. Disabling relation tracking cancels the active automatic query without clearing/restarting its model; explicit refresh remains available while locked and does not select Search Results. Project text-search mode is excluded from the symbol-panel refresh command. See [Relations](panel-relations.md) and [Context](panel-context.md).

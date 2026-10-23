@@ -204,3 +204,6 @@ The File Symbols shelf spans the full workspace height, matching the Project she
 ![Full-height shelves](../media/full-height-shelves.svg)
 
 Drag the divider above the bottom shelf down to collapse it almost to a thin strip. Drag it up to restore the contents; tabs and controls are preserved.
+
+
+**Navigate → Lock Context Window** mirrors the Context Follow button: locking disables tracking and cancels the pending definition update while retaining the displayed source. Unlocking resumes tracking. Locking Context does not cancel the shared refresh queue used by other panels.

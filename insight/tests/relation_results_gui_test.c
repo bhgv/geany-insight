@@ -64,15 +64,52 @@ static void cycle_views(gboolean tree_mode) {
   g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,count);
  }
 }
+static GtkWidget *command(const gchar *name) {
+ GtkWidget *navigate=g_object_get_data(G_OBJECT(window),"insight-navigate");
+ GtkWidget *item=named(gtk_menu_item_get_submenu(GTK_MENU_ITEM(navigate)),name);g_assert_nonnull(item);return item;
+}
+static void row_deleted(GtkTreeModel *model,GtkTreePath *path,gpointer data) { (void)model;(void)path;(*(guint *)data)++; }
+static void check_locks(void) {
+ GtkWidget *follow=named(window,"insight-relations-follow");GtkWidget *lock=command("insight-relation-lock-command");
+ GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(flat));guint deleted=0;
+ gulong handler=g_signal_connect(model,"row-deleted",G_CALLBACK(row_deleted),&deleted);
+ g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(lock)));
+ gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(lock),FALSE);
+ g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(follow)));
+ gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(lock),TRUE);
+ g_assert_false(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(follow)));
+ g_assert_cmpuint(deleted,==,0);g_signal_handler_disconnect(model,handler);
+ GtkWidget *context=named(window,"insight-context-follow");GtkWidget *context_lock=command("insight-context-lock-command");
+ g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(context_lock)));
+ gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(context_lock),FALSE);
+ g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(context)));
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(context),FALSE);
+ g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(context_lock)));
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(follow),TRUE);
+ g_assert_false(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(lock)));
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(follow),FALSE);
+ g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(lock)));
+}
+static void direct_views(gboolean tree_mode) {
+ const gchar *names[]={"insight-relation-vertical-command","insight-relation-horizontal-command","insight-relation-list-command"};
+ GtkWidget *direction=named(window,tree_mode ? "insight-relation-tree-graph-direction":"insight-relation-graph-direction");
+ for(guint i=0;i<3;i++) {
+  gtk_menu_item_activate(GTK_MENU_ITEM(command(names[i])));
+  g_assert_cmpint(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(window,"insight-relation-graph-toggle"))),==,i!=2);
+  if(i!=2) g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(direction)),==,i==0);
+ }
+}
 static gboolean step(gpointer data) {
  (void)data;if(!window) { source_doc=document_get_current();if(!source_doc) return G_SOURCE_CONTINUE;source_doc=document_open_file(file,FALSE,NULL,NULL);window=gtk_widget_get_toplevel(GTK_WIDGET(source_doc->editor->sci));flat=named(window,"insight-relations");tree=named(window,"insight-relations-tree");g_assert_nonnull(flat);g_assert_nonnull(tree);toggle("insight-relations-follow",FALSE);gtk_entry_set_text(GTK_ENTRY(named(window,"insight-relation-query")),"Root");gtk_combo_box_set_active(GTK_COMBO_BOX(named(window,"insight-relation-mode")),5);return G_SOURCE_CONTINUE; }
  GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(flat));
- if(phase==0) { if(gtk_tree_model_iter_n_children(model,NULL)!=3) return G_SOURCE_CONTINUE;caret=sci_get_current_position(source_doc->editor->sci);anchor=scintilla_send_message(source_doc->editor->sci,SCI_GETANCHOR,0,0);cycle_views(FALSE);filter("Other");open_report(1);filter("");phase++; }
+ if(phase==0) { if(gtk_tree_model_iter_n_children(model,NULL)!=3) return G_SOURCE_CONTINUE;caret=sci_get_current_position(source_doc->editor->sci);anchor=scintilla_send_message(source_doc->editor->sci,SCI_GETANCHOR,0,0);check_locks();cycle_views(FALSE);direct_views(FALSE);filter("Other");open_report(1);filter("");
+ GtkTreePath *first=gtk_tree_path_new_first();gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(flat)),first);gtk_tree_path_free(first);gtk_button_clicked(GTK_BUTTON(named(window,"insight-relation-node-remove")));g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,2);
+ gtk_menu_item_activate(GTK_MENU_ITEM(command("insight-relation-refresh-command")));g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(command("insight-relation-lock-command"))));phase++; }
  else if(phase==1) { if(gtk_tree_model_iter_n_children(model,NULL)!=3) return G_SOURCE_CONTINUE;open_report(2);wait_until=g_get_monotonic_time()+500000;phase++; }
  else if(phase==2) { if(g_get_monotonic_time()<wait_until) return G_SOURCE_CONTINUE;g_assert_cmpuint(bookmarks(),==,0);open_report(3);filter("");phase++; }
  else if(phase==3) { if(gtk_tree_model_iter_n_children(model,NULL)!=3) return G_SOURCE_CONTINUE;open_report(4);g_assert_null(document_find_by_filename(closed_file));toggle("insight-relation-tree-toggle",TRUE);phase++; }
  else if(phase==4) { gtk_tree_model_foreach(gtk_tree_view_get_model(GTK_TREE_VIEW(tree)),find_middle,NULL);if(!middle) return G_SOURCE_CONTINUE;gtk_tree_view_expand_row(GTK_TREE_VIEW(tree),middle,FALSE);gtk_tree_path_free(middle);middle=NULL;phase++; }
- else if(phase==5) { gboolean found=FALSE;gtk_tree_model_foreach(gtk_tree_view_get_model(GTK_TREE_VIEW(tree)),has_end,&found);if(!found) return G_SOURCE_CONTINUE;cycle_views(TRUE);open_report(5);toggle("insight-relation-tree-toggle",FALSE);wait_until=g_get_monotonic_time()+G_TIME_SPAN_SECOND;phase++; }
+ else if(phase==5) { gboolean found=FALSE;gtk_tree_model_foreach(gtk_tree_view_get_model(GTK_TREE_VIEW(tree)),has_end,&found);if(!found) return G_SOURCE_CONTINUE;cycle_views(TRUE);direct_views(TRUE);open_report(5);toggle("insight-relation-tree-toggle",FALSE);wait_until=g_get_monotonic_time()+G_TIME_SPAN_SECOND;phase++; }
  else if(phase==6) {
   if(g_get_monotonic_time()<wait_until) return G_SOURCE_CONTINUE;
   GtkTreeModel *base=model;while(GTK_IS_TREE_MODEL_SORT(base) || GTK_IS_TREE_MODEL_FILTER(base)) base=GTK_IS_TREE_MODEL_SORT(base) ? gtk_tree_model_sort_get_model(GTK_TREE_MODEL_SORT(base)):gtk_tree_model_filter_get_model(GTK_TREE_MODEL_FILTER(base));g_assert_true(GTK_IS_LIST_STORE(base));for(guint i=0;i<65;i++) { GtkTreeIter row;gtk_list_store_append(GTK_LIST_STORE(base),&row);gtk_list_store_set(GTK_LIST_STORE(base),&row,0,file,1,file,2,(gulong)(100+i),7,"Overflow",-1); }open_report(6);

@@ -35,3 +35,11 @@ source in Context at its original position.
 
 
 **Next Relation Window View**, in Navigate and beside the Relations view controls, cycles list/tree → horizontal graph → vertical graph → list/tree. It retains zoom, query, filter and loaded branches without launching a new search. The expandable-tree option independently selects the underlying outline.
+
+## Lock and refresh
+
+**Navigate** now includes **Lock Relation Window**, **Refresh Relation Window**, **Relation List / Tree View**, **Horizontal Relation Graph** and **Vertical Relation Graph**. Lock is the inverse of Follow: either control updates the other. Disabling tracking cancels the active automatic query without clearing results or restarting it. Loaded trees remain available for manual expansion.
+
+Refresh reruns the panel query and restores hidden nodes while retaining the lock, filter and selected bottom-shelf tab. It declines in project text-search mode; use the project search commands there. Direct view commands preserve zoom without querying again.
+
+![Lock and refresh](media/relation-lock.svg)
