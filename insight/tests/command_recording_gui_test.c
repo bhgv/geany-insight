@@ -17,7 +17,7 @@ static GtkWidget *named(GtkWidget *w,const gchar *name)
  if(GTK_IS_MENU_ITEM(w)) { GtkWidget *menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(w));if(menu) { GtkWidget *found=named(menu,name);if(found) return found; } }
  if(GTK_IS_CONTAINER(w)) { GList *list=gtk_container_get_children(GTK_CONTAINER(w));GtkWidget *found=NULL;for(GList *p=list;p && !found;p=p->next) found=named(p->data,name);g_list_free(list);return found; }return NULL;
 }
-static void action(const gchar *suffix) { gchar *name=g_strconcat("insight-recording-",suffix,NULL);GtkWidget *item=named(window,name);g_free(name);g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item)); }
+static void action(const gchar *suffix) { gchar *name=g_strconcat("insight-recording-",suffix,NULL);GtkWidget *item=named(window,name);g_free(name);g_assert_nonnull(item);g_signal_emit_by_name(gtk_widget_get_parent(item),"show");gtk_menu_item_activate(GTK_MENU_ITEM(item)); }
 /* Exercise ordinary input through the real GTK/Scintilla key handler. */
 static void typed(gunichar code)
 {
@@ -34,7 +34,11 @@ static gboolean close_preview(gpointer data)
  (void)data;GList *list=gtk_window_list_toplevels();GtkWidget *dialog=NULL;for(GList *p=list;p;p=p->next) if(!strcmp(gtk_widget_get_name(p->data),"insight-recording-dialog")) dialog=p->data;g_list_free(list);if(!dialog) return G_SOURCE_CONTINUE;
  GtkWidget *tree=named(dialog,"insight-recording-list");g_assert_nonnull(tree);g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(tree)),NULL),==,expected_rows);gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_CLOSE);return G_SOURCE_REMOVE;
 }
-static void rows(guint count) { expected_rows=count;g_timeout_add(80,close_preview,NULL);action("preview"); }
+static void rows(guint count) {
+ g_printerr("Inspect recording: %u steps\n",count);
+ if(!count) { GtkWidget *item=named(window,"insight-recording-preview");g_assert_nonnull(item);g_signal_emit_by_name(gtk_widget_get_parent(item),"show");g_assert_false(gtk_widget_get_sensitive(item));return; }
+ expected_rows=count;g_timeout_add(80,close_preview,NULL);action("preview");
+}
 static gboolean run(gpointer data)
 {
  (void)data;doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;ScintillaObject *sci=doc->editor->sci;window=gtk_widget_get_toplevel(GTK_WIDGET(sci));
@@ -49,7 +53,7 @@ static gboolean run(gpointer data)
  reset("",0);action("start");SEND(sci,SCI_REPLACESEL,0,(sptr_t)"x");SEND(sci,SCI_UNDO,0,0);rows(0);
  reset("",0);action("start");SEND(sci,SCI_REPLACESEL,0,(sptr_t)"ok");GeanyDocument *other=document_new_file("record-other.txt",NULL,"");ScintillaObject *other_sci=other->editor->sci;SEND(other_sci,SCI_REPLACESEL,0,(sptr_t)"outside");rows(1);document_set_text_changed(other,FALSE);g_assert_true(document_close(other));gtk_widget_grab_focus(GTK_WIDGET(sci));
  action("clear");rows(0);reset("",0);action("play");text_is("");
- g_print("Command recording: literal UTF-8/CRLF, relative movement, preview, one Undo/Redo, clipboard preservation, keys, readonly, unsupported actions, bounds, Undo invalidation and document switch passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+ document_set_text_changed(doc,FALSE);g_print("Command recording: literal UTF-8/CRLF, relative movement, preview, one Undo/Redo, clipboard preservation, keys, readonly, unsupported actions, bounds, Undo invalidation and document switch passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
 }
 static gboolean timed_out(gpointer data) { (void)data;g_error("Command recording timeout");return G_SOURCE_REMOVE; }
 int main(void)

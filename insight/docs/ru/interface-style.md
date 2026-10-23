@@ -42,7 +42,7 @@ is determined by the longest label and shortcut, with a small icon/arrow allowan
 Menus have a soft shadow and a layered blue/lilac gradient. Reduce transparency
 removes the material gradients and makes menus and chrome opaque; unticking restores
 the translucent layers immediately. Source text remains opaque. RGBA visuals are
-selected before new windows realize; desktop blending and outer shadows depend on
+selected for composited popup windows before realization; opaque editors retain their native visual; desktop blending and outer shadows depend on
 the desktop compositor. No desktop blur or global fading of source text is used.
 
 Строки меню используют место под значок 16 px вместо прежних 40 px. Для неизвестных

@@ -46,7 +46,10 @@ static void style_icons(GtkWidget *widget) {
  if(GTK_IS_CONTAINER(widget)) { GList *children=gtk_container_get_children(GTK_CONTAINER(widget));for(GList *p=children;p;p=p->next) style_icons(p->data);g_list_free(children); }
 }
 static void apply_surface(GtkWidget *widget) {
- if(GTK_IS_WINDOW(widget) && !gtk_widget_get_realized(widget)) {
+ /* Opaque editor windows retain their native visual and focus behavior.
+  * Only composited popups need alpha for their rounded material and shadow. */
+ if(GTK_IS_WINDOW(widget) && gtk_window_get_window_type(GTK_WINDOW(widget))==GTK_WINDOW_POPUP &&
+    gdk_screen_is_composited(gtk_widget_get_screen(widget)) && !gtk_widget_get_realized(widget)) {
   GdkVisual *visual=gdk_screen_get_rgba_visual(gtk_widget_get_screen(widget));if(visual) gtk_widget_set_visual(widget,visual);
  }
  GtkStyleContext *style=gtk_widget_get_style_context(widget);
