@@ -14,6 +14,7 @@
 #endif
 #include "geany.h"
 #include "insight-workbench.h"
+#include "insight-tree-expand.h"
 #include "insight-symbol-edit.h"
 #include "insight-project-report.h"
 #include "insight-diff.h"
@@ -4004,6 +4005,43 @@ static void expand_panel(GtkMenuItem *item,gpointer data) {
  (void)item; gint action=GPOINTER_TO_INT(data);if(action<2) gtk_combo_box_set_active(GTK_COMBO_BOX(wb.folder_mode),0); GtkTreeView *view=GTK_TREE_VIEW(action<2 ? wb.tree_view : (action<4 ? wb.category_view : wb.types_view));
  if(action%2) gtk_tree_view_collapse_all(view); else gtk_tree_view_expand_all(view);
 }
+/* A dialog may outlive project refreshes: any model change invalidates its target. */
+static void tree_target_changed(gboolean *changed) { *changed=TRUE; }
+static void tree_dialog_destroyed(GtkWidget *widget,gpointer data) { (void)widget;*(gboolean *)data=TRUE; }
+static void tree_branch_command(GtkMenuItem *item,gpointer data) {
+ (void)item;guint command=GPOINTER_TO_UINT(data),panel=command/3,action=command%3;
+ GtkWidget *widget=panel==0 ? wb.tree_view : (panel==1 ? wb.category_view : wb.types_view);
+ if(panel==0) gtk_combo_box_set_active(GTK_COMBO_BOX(wb.folder_mode),0);
+ if(!GTK_IS_TREE_VIEW(widget)) return;
+ GtkTreeView *view=GTK_TREE_VIEW(widget);GtkTreePath *path=NULL;
+ gtk_tree_view_get_cursor(view,&path,NULL);
+ if(!path) { ui_set_statusbar(TRUE,"%s",insight_tr("Select a tree row first"));return; }
+ GtkTreeModel *model=gtk_tree_view_get_model(view);g_object_ref(model);g_object_ref(view);
+ GtkTreeRowReference *row=gtk_tree_row_reference_new(model,path);gtk_tree_path_free(path);
+ guint levels=32;gboolean changed=FALSE,accepted=TRUE;
+ if(action==0) {
+  const gchar *signals[]={"row-changed","row-inserted","row-deleted","rows-reordered"};gulong handlers[4];
+  for(guint i=0;i<4;i++) handlers[i]=g_signal_connect_swapped(model,signals[i],G_CALLBACK(tree_target_changed),&changed);
+  GtkWidget *dialog=gtk_dialog_new_with_buttons(insight_tr("Expand Special"),GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,insight_tr("Cancel"),GTK_RESPONSE_CANCEL,insight_tr("Expand"),GTK_RESPONSE_ACCEPT,NULL);
+  gtk_widget_set_name(dialog,"insight-tree-expand-dialog");
+  GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  GtkWidget *label=gtk_label_new(insight_tr("Levels below the selected row (1–32)")),*spin=gtk_spin_button_new_with_range(1,32,1);
+  gtk_widget_set_name(spin,"insight-tree-expand-depth");gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin),1);
+  gtk_container_set_border_width(GTK_CONTAINER(box),12);gtk_box_pack_start(GTK_BOX(box),label,FALSE,FALSE,4);gtk_box_pack_start(GTK_BOX(box),spin,FALSE,FALSE,4);
+  gboolean destroyed=FALSE;g_object_ref(dialog);g_signal_connect(dialog,"destroy",G_CALLBACK(tree_dialog_destroyed),&destroyed);
+  gtk_widget_show_all(dialog);accepted=gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT && !destroyed;
+  if(!destroyed) { levels=gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spin));gtk_widget_destroy(dialog); }
+  g_object_unref(dialog);
+  for(guint i=0;i<4;i++) g_signal_handler_disconnect(model,handlers[i]);
+ }
+ path=gtk_tree_row_reference_get_path(row);
+ if(accepted && (changed || !path || !wb.alive || gtk_widget_in_destruction(widget) || gtk_tree_view_get_model(view)!=model)) ui_set_statusbar(TRUE,"%s",insight_tr("Tree changed; select the row again"));
+ else if(accepted) {
+  if(action==2) gtk_tree_view_collapse_row(view,path);
+  else if(!insight_tree_expand_levels(view,path,levels)) ui_set_statusbar(TRUE,"%s",insight_tr("Tree expansion stopped at its safety limit or the tree changed"));
+ }
+ if(path) gtk_tree_path_free(path);gtk_tree_row_reference_free(row);g_object_unref(model);g_object_unref(view);
+}
 static void project_visible(GtkCheckMenuItem *item,gpointer data) {
  (void)data; gboolean visible=gtk_check_menu_item_get_active(item); gtk_widget_set_visible(wb.project_notebook,visible); if(wb.float_window) gtk_widget_set_visible(wb.float_window,visible);
  for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].home==wb.project_notebook && wb.hosts[i].window) gtk_widget_set_visible(wb.hosts[i].window,visible && !wb.hosts[i].minimized);
@@ -4423,6 +4461,12 @@ static void panel_menu(GtkWidget *view_menu) {
  for(guint i=0;i<G_N_ELEMENTS(focus);i++) { GtkWidget *entry=gtk_menu_item_new_with_label(focus[i]);gchar *name=g_strdup_printf("insight-activate-panel-%u",i);gtk_widget_set_name(entry,name);g_free(name);g_signal_connect(entry,"activate",G_CALLBACK(activate_panel),GUINT_TO_POINTER(i));gtk_container_add(GTK_CONTAINER(activation_menu),entry);keybindings_attach_menu(GEANY_KEY_GROUP_FOCUS,GEANY_KEYS_INSIGHT_ACTIVATEPROJECTFILES+i,entry); }
  const char *expand[]={"Expand Folders","Collapse Folders","Expand Symbol Categories","Collapse Symbol Categories","Expand File Types","Collapse File Types"};
  for(guint i=0;i<6;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(expand[i]); g_signal_connect(entry,"activate",G_CALLBACK(expand_panel),GINT_TO_POINTER(i)); gtk_container_add(GTK_CONTAINER(menu),entry); }
+ const gchar *branches[]={"Selected Folder Branch","Selected Symbol Category Branch","Selected File Type Branch"};
+ const gchar *actions[]={"Expand Special…","Expand Selected Branch","Collapse Selected Branch"};
+ for(guint p=0;p<3;p++) {
+  GtkWidget *parent=gtk_menu_item_new_with_label(branches[p]),*submenu=gtk_menu_new();gtk_menu_item_set_submenu(GTK_MENU_ITEM(parent),submenu);gtk_container_add(GTK_CONTAINER(menu),parent);
+  for(guint a=0;a<3;a++) { GtkWidget *entry=gtk_menu_item_new_with_label(actions[a]);gchar *name=g_strdup_printf("insight-tree-branch-%u-%u",p,a);gtk_widget_set_name(entry,name);g_free(name);g_signal_connect(entry,"activate",G_CALLBACK(tree_branch_command),GUINT_TO_POINTER(p*3+a));gtk_container_add(GTK_CONTAINER(submenu),entry); }
+ }
  GtkWidget *relations=gtk_menu_item_new_with_label("Relation Window"); gtk_container_add(GTK_CONTAINER(menu),relations); g_signal_connect(relations,"activate",G_CALLBACK(focus_relations),NULL);
  GtkWidget *project=gtk_check_menu_item_new_with_label("Project Window"),*local=gtk_check_menu_item_new_with_label("File Symbols Window"); wb.project_toggle=project; wb.local_toggle=local;
  gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(project),gtk_widget_get_visible(wb.project_notebook)); gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(local),ui_prefs.sidebar_visible);

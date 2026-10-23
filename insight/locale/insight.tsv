@@ -1867,3 +1867,15 @@ Classic	Классический
 macOS style	Стиль macOS
 Reduce transparency	Уменьшить прозрачность
 Cannot save interface style	Не удалось сохранить стиль интерфейса
+
+Expand Special	Раскрыть на глубину
+Expand Special…	Раскрыть на глубину…
+Expand Selected Branch	Раскрыть выбранную ветку
+Collapse Selected Branch	Свернуть выбранную ветку
+Selected Folder Branch	Выбранная ветка папок
+Selected Symbol Category Branch	Выбранная ветка категорий символов
+Selected File Type Branch	Выбранная ветка типов файлов
+Select a tree row first	Сначала выберите строку дерева
+Levels below the selected row (1–32)	Уровней ниже выбранной строки (1–32)
+Tree changed; select the row again	Дерево изменилось; выберите строку повторно
+Tree expansion stopped at its safety limit or the tree changed	Раскрытие остановлено: достигнут предел или дерево изменилось

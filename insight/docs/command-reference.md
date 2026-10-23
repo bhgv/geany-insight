@@ -85,3 +85,11 @@ State reflects the current menu-widget snapshot; Run refreshes native menu state
 Столбец состояния — снимок свойств меню; перед Run штатное состояние меню проверяется заново.
 
 ![Production UI in an isolated native Linux fixture](media/command-browser.jpg)
+
+## Expand Special / Selected Branch
+
+View → Panels → Selected Folder Branch / Selected Symbol Category Branch / Selected File Type Branch provides **Expand Special…**, **Expand Selected Branch** and **Collapse Selected Branch**. Select a row in the corresponding tree first. Expand Special reveals 1–32 levels below that row; one level reveals its immediate children. Existing deeper expansions and sibling branches are preserved. Collapse hides the selected branch and retains descendant expansion state.
+
+Operations use the currently materialized project tree, without disk enumeration or index rebuilding. Expansion visits at most 4096 rows per invocation; the branch command uses a maximum depth of 32. A status message reports a work limit or an invalidated tree. Cancel changes nothing. If the project tree changes while the depth dialog is open, select the row again. This command is distinct from code outlining in the editor.
+
+![Selected subtree expansion / Раскрытие ветки](media/tree-expand.svg)

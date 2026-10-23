@@ -626,3 +626,5 @@ dist_insightdocmedia_DATA += insight/docs/media/code-outlining.svg
 EXTRA_DIST += insight/tests/appearance_gui_test.c
 insightdoc_DATA += insight/docs/interface-style.md
 dist_insightdocmedia_DATA += insight/docs/media/interface-style.svg
+EXTRA_DIST += insight/tests/tree_expand_gui_test.c
+dist_insightdocmedia_DATA += insight/docs/media/tree-expand.svg
