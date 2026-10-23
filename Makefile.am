@@ -654,3 +654,7 @@ insightdoc_DATA += insight/docs/relation-results.md
 dist_insightdocmedia_DATA += insight/docs/media/relation-results.svg
 
 dist_insightdocmedia_DATA += insight/docs/media/relation-lock.svg
+
+EXTRA_DIST += insight/tests/list_tools_gui_test.c
+insightdoc_DATA += insight/docs/list-tools.md
+dist_insightdocmedia_DATA += insight/docs/media/list-tools.svg

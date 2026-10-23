@@ -947,6 +947,8 @@ libgeany = shared_library('geany',
 	'src/insight-list-style.h',
 	'src/insight-template-fields.c',
 	'src/insight-relation-tree.h',
+	'src/insight-list-tools.c',
+	'src/insight-list-tools.h',
 	'src/insight-relation-graph.c',
 	'src/insight-relation-graph.h',
 	'src/insight-help.c',
@@ -1143,3 +1145,5 @@ install_subdir('fonts', install_dir: cdata.get('GEANY_DATA_DIR'))
 install_data('insight/tools/ai_client.py', 'insight/tools/remote_pack.py', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'tools')
 
 install_data('insight/docs/relation-results.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
+
+install_data('insight/docs/list-tools.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')

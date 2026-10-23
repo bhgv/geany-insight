@@ -52,6 +52,7 @@
 #include "insight-html-export.h"
 #include "insight-template-fields.h"
 #include "insight-relation-graph.h"
+#include "insight-list-tools.h"
 
 #include "app.h"
 #include "build.h"
@@ -1623,6 +1624,9 @@ static gboolean on_key_press_event(GtkWidget *widget, GdkEventKey *ev, gpointer 
 
 	g_signal_emit_by_name(geany_object, "key-press", ev, &key_press_ret);
 	if (key_press_ret)
+		return TRUE;
+
+	if (insight_list_tools_key(gtk_window_get_focus(GTK_WINDOW(widget)), ev))
 		return TRUE;
 
 	if (insight_relation_graph_handle_key(gtk_window_get_focus(GTK_WINDOW(widget)), ev))

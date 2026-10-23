@@ -126,3 +126,6 @@ Reference: [Source Insight Project File List](https://www.sourceinsight.com/doc/
 ![Panel controls](media/panel-windows.jpg)
 
 [Project database, synchronization and aligned Diff/Merge layout](project-database.md).
+
+
+[Search and copy the current list](list-tools.md): context menu, F4/Shift+F4, visible columns and loaded rows.

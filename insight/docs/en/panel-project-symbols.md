@@ -86,3 +86,6 @@ Enable **Scope hierarchy** for nested namespace/module/class branches from the n
 Scope branches are structural headers without a source line; definition/member rows can be opened. This reflects indexed scopes, not semantic owner, alias or inheritance resolution. Scope splitting is bounded to 64 parts.
 
 The list has a separate declaration index from the Geany/ctags language parser, combining saved project sources with live open-buffer snapshots. It does not expose the navigation database of parameters and internal bindings. Names are bold. Project-relative file displays the path from the source root; sources outside that root retain an absolute path. Selection and Up/Down preview in Context without switching the editor. Enter, Space and double-click open exactly the selected list row in the editor, independently of the Context caret. The destination symbol is highlighted yellow with a red one-pixel frame.
+
+
+[Search and copy the current list](list-tools.md): context menu, F4/Shift+F4, visible columns and loaded rows.

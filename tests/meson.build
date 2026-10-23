@@ -916,3 +916,6 @@ test('Insight compact macOS menus and live materials GUI', macos_menu_gui_test, 
 
 relation_results_gui_test = executable('test_insight_relation_results_gui', '../insight/tests/relation_results_gui_test.c', dependencies: test_deps)
 test('Insight native relation outline and batch bookmarks GUI', relation_results_gui_test, timeout: 50, is_parallel: false)
+
+list_tools_gui_test = executable('test_insight_list_tools_gui', '../insight/tests/list_tools_gui_test.c', '../src/insight-list-tools.c', dependencies: deps)
+test('Insight list copy and search GUI', list_tools_gui_test, timeout: 45, is_parallel: false)

@@ -6,6 +6,7 @@
 #include "insight-paste.h"
 #include "insight-navigation.h"
 #include "insight-search-links.h"
+#include "insight-list-tools.h"
 #include "insight-formatting.h"
 #include "insight-themes.h"
 /* SPDX-License-Identifier: GPL-2.0-or-later */
@@ -1378,6 +1379,7 @@ static GtkWidget *file_menu(void) {
  if(!menu) { menu=gtk_menu_new();gtk_menu_attach_to_widget(GTK_MENU(menu),wb.file_view,NULL);g_object_set_data_full(G_OBJECT(wb.file_view),"insight-file-popup",g_object_ref_sink(menu),g_object_unref);const gchar *labels[]={"Open file","Copy file name","Copy full file path","Filter by this file","Clear file query","Reset file columns","Visible file columns","Help for this panel","Show in file manager"},*icons[]={"go-jump","edit-copy","edit-copy","edit-find","edit-clear","view-refresh","view-list-symbolic","panel-help","folder-open"};
   for(guint i=0;i<FP_COUNT;i++) { if(i==FP_FILTER || i==FP_RESET || i==FP_HELP) gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());GtkWidget *item=symbol_history_item(labels[i],icons[i]);gchar *key=g_strdup_printf("insight-file-command-%u",i);gtk_widget_set_name(item,key);g_object_set_data(G_OBJECT(menu),key,item);g_free(key);g_object_set_data(G_OBJECT(item),"insight-file-action",GUINT_TO_POINTER(i));if(i==FP_COLUMNS) gtk_menu_item_set_submenu(GTK_MENU_ITEM(item),insight_symbol_view_columns_menu(GTK_TREE_VIEW(wb.file_view)));else g_signal_connect(item,"activate",G_CALLBACK(file_menu_action),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),item); }
  }
+ insight_list_tools_menu(GTK_TREE_VIEW(wb.file_view),menu);
  gboolean ready=gtk_widget_get_sensitive(wb.file_view),selected=gtk_tree_selection_count_selected_rows(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.file_view)))>0;
  for(guint i=0;i<FP_COUNT;i++) { gchar *key=g_strdup_printf("insight-file-command-%u",i);GtkWidget *item=g_object_get_data(G_OBJECT(menu),key);g_free(key);gtk_widget_set_sensitive(item,i==FP_HELP || (ready && ((i>FP_FILTER && i!=FP_REVEAL) || selected))); }insight_i18n_apply(menu);gtk_widget_show_all(menu);return menu;
 }
@@ -1905,7 +1907,7 @@ static GtkWidget *relation_node_menu(GtkTreeView *view) {
   menu=gtk_menu_new();g_object_ref_sink(menu);const gchar *labels[]={"Remove node from view","Restore nodes (refresh)"};
   for(guint i=0;i<2;i++) { GtkWidget *item=gtk_menu_item_new_with_label(labels[i]);gtk_widget_set_name(item,i ? "insight-relation-node-restore-menu" : "insight-relation-node-remove-menu");gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(relation_node_button),GUINT_TO_POINTER(i)); }
   const gchar *reports[]={"View Relation Outline…","Create Bookmarks from Relation Items…"};for(guint i=0;i<2;i++) { GtkWidget *item=gtk_menu_item_new_with_label(reports[i]);gtk_widget_set_name(item,i ? "insight-relation-bookmark-menu":"insight-relation-outline-menu");gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(relation_report_show),GUINT_TO_POINTER(i)); }
-  g_object_set_data_full(G_OBJECT(view),"insight-node-menu",menu,relation_node_menu_free);
+  insight_list_tools_menu(view,menu);g_object_set_data_full(G_OBJECT(view),"insight-node-menu",menu,relation_node_menu_free);
  }
  GList *items=gtk_container_get_children(GTK_CONTAINER(menu));gtk_widget_set_sensitive(items->data,relation_source_selected(view));g_list_free(items);insight_i18n_apply(menu);gtk_widget_show_all(menu);return menu;
 }
@@ -2141,6 +2143,7 @@ static GtkWidget *symbol_menu(GtkTreeView *view) {
    gchar *key=g_strdup_printf("insight-symbol-command-%u",i); gtk_widget_set_name(item,key); g_object_set_data(G_OBJECT(menu),key,item); g_free(key); g_object_set_data(G_OBJECT(item),"insight-symbol-action",GUINT_TO_POINTER(i)); g_signal_connect_object(item,i==SP_GROUP ? "toggled" : "activate",G_CALLBACK(symbol_menu_action),view,0); if(i>=SP_MORE) { GList *children=gtk_container_get_children(GTK_CONTAINER(menu));gint position=(gint)g_list_length(children)-2;g_list_free(children);gtk_menu_shell_insert(GTK_MENU_SHELL(menu),item,position); }else gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);
   }
  }
+ insight_list_tools_menu(view,menu);
  GtkTreeModel *model=gtk_tree_view_get_model(view); GtkTreeIter iter; gboolean selected=gtk_tree_selection_get_selected(gtk_tree_view_get_selection(view),NULL,&iter); gchar *path=NULL;gulong line=0;
  if(selected) gtk_tree_model_get(model,&iter,SYMBOL_PATH,&path,SYMBOL_LINE,&line,-1);
  gboolean ready=gtk_widget_get_sensitive(GTK_WIDGET(view)),grouped=insight_symbol_view_grouped(view);
@@ -5903,6 +5906,7 @@ void insight_workbench_init(void) {
  gtk_paned_set_position(GTK_PANED(wb.pane),430);
  gtk_widget_show_all(wb.pane);
  create_search_toolbars();
+ GtkWidget *list_views[]={wb.local_view,wb.symbol_view,wb.file_view,wb.usage_view,GTK_WIDGET(insight_relation_tree_view(wb.relation_tree))};for(guint i=0;i<G_N_ELEMENTS(list_views);i++) insight_list_tools_attach(GTK_TREE_VIEW(list_views[i]));
  restore_workbench_settings(); restore_search_settings();
  create_native_lua();
  const char *signals[]={"document-open","document-save","document-activate","document-close"};

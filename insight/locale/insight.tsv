@@ -1990,3 +1990,24 @@ Relation List / Tree View	Связи: список / дерево
 Horizontal Relation Graph	Горизонтальный граф связей
 Vertical Relation Graph	Вертикальный граф связей
 Select a symbol relation mode before refreshing Relations	Перед обновлением связей выберите режим связей символов
+List changed; run the command again	Список изменился; повторите команду
+List copied (loaded rows and visible columns only)	Список скопирован (только загруженные строки и видимые колонки)
+List match selected; F4 next, Shift+F4 previous	Совпадение в списке выбрано; F4 — следующее, Shift+F4 — предыдущее
+No matching list item in this direction	В этом направлении совпадений в списке нет
+List exceeds 20000 rows or 64 levels; narrow the filter	Список превышает 20 000 строк или 64 уровня; сузьте фильтр
+List cell exceeds 64 KiB or is not valid UTF-8	Ячейка списка превышает 64 КиБ или содержит некорректный UTF-8
+List exceeds 8 MiB; narrow the filter	Список превышает 8 МиБ; сузьте фильтр
+List regular expression exceeded its work limit	Превышен лимит работы регулярного выражения поиска в списке
+List is still loading; try again	Список ещё загружается; повторите команду позже
+Enter a list search pattern (up to 512 UTF-8 bytes)	Введите запрос для поиска в списке (до 512 байт UTF-8)
+Invalid list regular expression	Некорректное регулярное выражение поиска в списке
+No visible list columns	В списке нет видимых колонок
+Copying loaded list…	Копирование загруженного списка…
+Searching loaded list…	Поиск в загруженном списке…
+Search List	Поиск в списке
+Search List…	Поиск в списке…
+Wrap list search	Продолжать поиск через край списка
+Start at beginning	Начать с начала списка
+Search visible columns of loaded rows; no files are opened	Поиск по видимым колонкам загруженных строк; файлы не открываются
+Next list match (F4)	Следующее совпадение в списке (F4)
+Previous list match (Shift+F4)	Предыдущее совпадение в списке (Shift+F4)

@@ -785,3 +785,8 @@ Navigate, Relations icon buttons and its context menu expose View Relation Outli
 ### Relation and Context window commands
 
 Navigate exposes Lock Context Window, Lock Relation Window, Refresh Relation Window and direct list/tree, horizontal and vertical graph commands. Lock states mirror Follow controls and reuse their persisted preferences. Disabling relation tracking cancels the active automatic query without clearing/restarting its model; explicit refresh remains available while locked and does not select Search Results. Project text-search mode is excluded from the symbol-panel refresh command. See [Relations](panel-relations.md) and [Context](panel-context.md).
+
+
+### Copy List and Search List
+
+File/Project Symbols, Project Files and flat/tree Relations now share context-menu Copy List, Search List, F4 and Shift+F4. Visible rendered columns, current filtering/sorting, Unicode case matching, bounded regex, beginning/wrap and loaded-tree ancestor reveal are supported. Copy is atomic tab-separated escaped text with headings and indentation. Idle slices, model/column/selection invalidation, cancellation and row/depth/byte limits keep the commands scoped to loaded data; no source reading, page loading or editor activation. Per-panel patterns/options are memory-only. [Guide and SVG](list-tools.md).

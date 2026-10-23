@@ -43,3 +43,6 @@ source in Context at its original position.
 Refresh reruns the panel query and restores hidden nodes while retaining the lock, filter and selected bottom-shelf tab. It declines in project text-search mode; use the project search commands there. Direct view commands preserve zoom without querying again.
 
 ![Lock and refresh](media/relation-lock.svg)
+
+
+[Search and copy the current list](list-tools.md): context menu, F4/Shift+F4, visible columns and loaded rows.
