@@ -5,6 +5,13 @@
   font-size: 10pt;
   color: #253146;
 }
+/* Give UI nodes their own family so syntax-theme list fonts cannot replace it.
+ * Inherited sizes retain the compact Diff toolbar and Context status ratios. */
+.insight-macos label, .insight-macos button, .insight-macos entry,
+.insight-macos treeview, .insight-macos menuitem {
+  font-family: "SF Pro Text", "Helvetica Neue", "Segoe UI", "Noto Sans", sans-serif;
+}
+.insight-macos treeview { font-size: 10pt; }
 window.insight-macos.background {
   background-color: #eef0f6;
   background-image: linear-gradient(135deg, #e7edf6, #f6f2f5 55%, #e5eaf2);
