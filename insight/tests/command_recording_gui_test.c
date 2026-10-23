@@ -5,7 +5,6 @@
 #include "main.h"
 #include "sciwrappers.h"
 #include "ui_utils.h"
-#include "geanyobject.h"
 #include "project.h"
 #include <string.h>
 #include <gdk/gdkkeysyms.h>
@@ -15,6 +14,16 @@ static GeanyDocument *doc;
 static guint expected_rows;
 static void rows(guint count);
 static gchar *project_path,*profile;
+static gboolean choose_project(gpointer data)
+{
+ (void)data;GList *list=gtk_window_list_toplevels();GtkWidget *dialog=NULL;for(GList *p=list;p;p=p->next) if(GTK_IS_FILE_CHOOSER(p->data) && gtk_widget_get_visible(p->data)) dialog=p->data;g_list_free(list);if(!dialog) return G_SOURCE_CONTINUE;
+ gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));gboolean ready=!g_strcmp0(path,project_path);g_free(path);if(!ready) { gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(dialog),project_path);return G_SOURCE_CONTINUE; }gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_ACCEPT);return G_SOURCE_REMOVE;
+}
+static void save_settings(GKeyFile *key)
+{
+ gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"preferences1")));GList *list=gtk_window_list_toplevels();GtkWidget *dialog=NULL;for(GList *p=list;p;p=p->next) if(!strcmp(gtk_widget_get_name(p->data),"GeanyPrefsDialog")) dialog=p->data;g_list_free(list);g_assert_nonnull(dialog);gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_OK);
+ gchar *path=g_build_filename(profile,"geany.conf",NULL);g_assert_true(g_key_file_load_from_file(key,path,0,NULL));g_free(path);
+}
 #define GROUP "insight-command-recording"
 static GtkWidget *named(GtkWidget *w,const gchar *name)
 {
@@ -49,26 +58,26 @@ static GKeyFile *record_key(const gchar *text)
 static void open_project(GKeyFile *key)
 {
  g_key_file_set_string(key,"project","name","Recording test");g_key_file_set_string(key,"project","base_path",profile);gsize n=0;gchar *data=g_key_file_to_data(key,&n,NULL);g_assert_true(g_file_set_contents(project_path,data,n,NULL));g_free(data);
- document_set_text_changed(doc,FALSE);g_assert_true(project_load_file(project_path));doc=document_new_file("record-project.txt",NULL,"");gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));
+ document_set_text_changed(doc,FALSE);g_timeout_add(100,choose_project,NULL);gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));doc=document_new_file("record-project.txt",NULL,"");gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));
 }
 static void close_project(void)
 {
- for(guint i=0;i<documents_array->len;i++) { GeanyDocument *d=g_ptr_array_index(documents_array,i);if(DOC_VALID(d)) document_set_text_changed(d,FALSE); }
- g_assert_true(project_close(FALSE));doc=document_new_file("record-global.txt",NULL,"");gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));
+ GtkWidget *book=ui_lookup_widget(window,"notebook1");for(gint i=0;i<gtk_notebook_get_n_pages(GTK_NOTEBOOK(book));i++) { GeanyDocument *d=document_get_from_page(i);if(DOC_VALID(d)) document_set_text_changed(d,FALSE); }
+ gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_close1")));doc=document_new_file("record-global.txt",NULL,"");gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));
 }
 static void persistence(void)
 {
  const gchar *global="global;\\n\r\nя",*local="project;\\t\r\nΩ";
  reset("",0);action("start");SEND(doc->editor->sci,SCI_REPLACESEL,0,(sptr_t)global);action("stop");remember(TRUE);
- GKeyFile *settings=g_key_file_new();g_signal_emit_by_name(geany_object,"save-settings",settings);saved_text(settings,global);
+ GKeyFile *settings=g_key_file_new();save_settings(settings);saved_text(settings,global);
  GKeyFile *key=record_key(local);open_project(key);rows(1);text_is("");action("play");text_is(local);
- g_signal_emit_by_name(geany_object,"save-settings",settings);saved_text(settings,global);
+ save_settings(settings);saved_text(settings,global);
  remember(FALSE);project_write_config();GKeyFile *disk=g_key_file_new();g_assert_true(g_key_file_load_from_file(disk,project_path,0,NULL));g_assert_false(g_key_file_has_key(disk,GROUP,"texts",NULL));
  remember(TRUE);project_write_config();g_assert_true(g_key_file_load_from_file(disk,project_path,0,NULL));saved_text(disk,local);close_project();reset("",0);action("play");text_is(global);
  open_project(disk);rows(1);action("play");text_is(local);action("clear");project_write_config();g_assert_true(g_key_file_load_from_file(disk,project_path,0,NULL));g_assert_false(g_key_file_has_key(disk,GROUP,"commands",NULL));close_project();
  /* Disabling persistence must not lose the in-memory global recording when
   * temporarily entering a project, or put its text in global preferences. */
- remember(FALSE);open_project(key);close_project();reset("",0);action("play");text_is(global);g_signal_emit_by_name(geany_object,"save-settings",settings);g_assert_false(g_key_file_has_key(settings,GROUP,"texts",NULL));
+ remember(FALSE);open_project(key);close_project();reset("",0);action("play");text_is(global);save_settings(settings);g_assert_false(g_key_file_has_key(settings,GROUP,"texts",NULL));
  const gchar *bad_commands[]={"SCI_COPY","SCI_CHARLEFT","12345","SCI_REPLACESEL"};
  for(guint i=0;i<4;i++) {
   GKeyFile *bad=record_key("opaque");g_key_file_set_string_list(bad,GROUP,"commands",bad_commands+i,1);if(i==3) g_key_file_remove_key(bad,GROUP,"texts",NULL);
@@ -92,7 +101,7 @@ static gboolean run(gpointer data)
 {
  (void)data;doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;ScintillaObject *sci=doc->editor->sci;window=gtk_widget_get_toplevel(GTK_WIDGET(sci));
  if(g_getenv("GEANY_TEST_RECORDING_PROJECT_STARTUP")) {
-  g_assert_nonnull(app->project);text_is("");rows(1);reset("",0);action("play");text_is("cold project;\r\nΩ");close_project();rows(1);action("play");text_is("startup;\r\nя");document_set_text_changed(doc,FALSE);g_print("Cold project recording and independent global restore passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+  g_assert_true(gtk_widget_get_sensitive(ui_lookup_widget(window,"project_close1")) );text_is("");rows(1);reset("",0);action("play");text_is("cold project;\r\nΩ");close_project();rows(1);action("play");text_is("startup;\r\nя");document_set_text_changed(doc,FALSE);g_print("Cold project recording and independent global restore passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }
  text_is("");rows(1);reset("",0);action("play");text_is("startup;\r\nя");SEND(sci,SCI_UNDO,0,0);text_is("");
  reset("",0);action("start");typed('a');typed('b');SEND(sci,SCI_CHARLEFT,0,0);SEND(sci,SCI_REPLACESEL,0,(sptr_t)"x");action("stop");text_is("axb");rows(4);
