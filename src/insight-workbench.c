@@ -4768,10 +4768,13 @@ static void panel_menu(GtkWidget *view_menu) {
 static void overview_visible(GtkCheckMenuItem *item,gpointer data) { (void)data; insight_overview_set_visible(gtk_check_menu_item_get_active(item)); }
 enum { INFO_NAME,INFO_PATH,INFO_LINE,INFO_KIND,INFO_SCOPE,INFO_SIGNATURE,INFO_TYPE,INFO_INHERITANCE,INFO_DISPLAY,INFO_COLUMNS };
 typedef struct {
- GtkWidget *window,*entry,*choice,*details,*code,*status,*jump,*references,*leave;GtkListStore *model;
- gchar *path,*digest,*name,*preferred,*preferred_candidate;gulong line,preferred_line;gboolean filling;guint center;InsightIndex *index;
+ GtkWidget *window,*entry,*choice,*details,*code,*status,*jump,*references,*leave,*kind,*count,*prototype,*implementation,*base;GtkListStore *model;
+ gchar *path,*digest,*name,*preferred,*preferred_candidate,*base_name,*base_path;gulong line,preferred_line,base_line;gboolean filling;guint center;InsightIndex *index;
 } SymbolInfo;
 static SymbolInfo *symbol_info;
+static void info_show_query_kind(const gchar *,const gchar *,gulong,gint);
+static void info_companion(GtkWidget *,gpointer);
+static void info_kind_changed(GtkComboBox *,gpointer);
 static GeanyDocument *info_document(const gchar *path) {
  if(g_str_has_prefix(path,"@buffer:")) { gchar *end=NULL;guint64 id=g_ascii_strtoull(path+8,&end,10);if(!end || *end || !id || id>G_MAXUINT) return NULL;GeanyDocument *doc=document_find_by_id((guint)id);return doc && !doc->file_name ? doc : NULL; }
  return document_find_by_filename(path);
@@ -4789,6 +4792,7 @@ static gboolean info_center(gpointer data) { SymbolInfo *info=data;info->center=
 static void info_choice(GtkComboBox *combo,gpointer data) {
  SymbolInfo *info=data;if(info->filling) return;GtkTreeIter iter;
  g_clear_pointer(&info->path,g_free);g_clear_pointer(&info->digest,g_free);g_clear_pointer(&info->name,g_free);info->line=0;
+ g_clear_pointer(&info->base_name,g_free);g_clear_pointer(&info->base_path,g_free);info->base_line=0;gtk_widget_set_sensitive(info->prototype,FALSE);gtk_widget_set_sensitive(info->implementation,FALSE);gtk_widget_set_sensitive(info->base,FALSE);
  gtk_widget_set_sensitive(info->jump,FALSE);gtk_widget_set_sensitive(info->references,FALSE);gtk_widget_set_sensitive(info->leave,FALSE);
  if(!gtk_combo_box_get_active_iter(combo,&iter)) return;
  gchar *kind,*scope,*signature,*type,*inheritance;
@@ -4797,11 +4801,13 @@ static void info_choice(GtkComboBox *combo,gpointer data) {
  GString *description=g_string_new(details);g_free(details);
  g_free(info->preferred);info->preferred=g_strdup(info->path);info->preferred_line=info->line;g_free(info->preferred_candidate);info->preferred_candidate=info_candidate_identity(info->path,info->line,info->name,kind,scope,signature);
  GeanyFiletype *filetype=NULL;gchar *text=info_source(info->path,&filetype);ScintillaObject *code=SCINTILLA(info->code);
+ guint callable_type=insight_symbol_kind_type(info->path,kind,filetype);gboolean function=(callable_type&(tm_tag_function_t|tm_tag_method_t|tm_tag_prototype_t))!=0;gtk_widget_set_sensitive(info->prototype,function);gtk_widget_set_sensitive(info->implementation,function);
  if(info->index && *type) {
   ScopeLanguage language={info->path,filetype};InsightSymbol declaration={info->name,info->path,scope,kind,info->line,signature,type,inheritance};
   gboolean callable=!strcmp(kind,"f") || !strcmp(kind,"p") || (!strcmp(kind,"m") && *signature);
   InsightTypeResult resolved=callable && member_calls_language(filetype) ? insight_type_resolve_return(info->index,&declaration,scope_language_eligible,&language) : insight_type_resolve(info->index,type,scope,info->path,scope_language_eligible,&language);
   if(resolved.status==INSIGHT_TYPE_FOUND) { gchar *line=insight_i18n_printf("\nNominal type: %s (alias hops: %u)",resolved.owner,resolved.aliases);g_string_append(description,line);g_free(line); }
+  if(resolved.status==INSIGHT_TYPE_FOUND && resolved.symbol) { info->base_name=g_strdup(resolved.owner);info->base_path=g_strdup(resolved.symbol->path);info->base_line=resolved.symbol->line;gtk_widget_set_sensitive(info->base,TRUE); }
   insight_type_result_clear(&resolved);
  }
  highlighting_set_styles(code,filetype ? filetype : filetypes[GEANY_FILETYPES_NONE]);sci_set_readonly(code,FALSE);sci_set_text(code,text ? text : "");sci_set_line_numbers(code,TRUE);SSM(code,SCI_EMPTYUNDOBUFFER,0,0);sci_set_readonly(code,TRUE);
@@ -4843,8 +4849,18 @@ static void info_choice(GtkComboBox *combo,gpointer data) {
  g_free(kind);g_free(scope);g_free(signature);g_free(type);g_free(inheritance);
  gtk_widget_set_sensitive(info->references,TRUE);g_free(text);
 }
+static gboolean info_kind_matches(const InsightSymbol *symbol,gint category,GeanyFiletype *fallback) {
+ if(!category) return TRUE;guint type=insight_symbol_kind_type(symbol->path,symbol->kind,fallback);
+ switch(category) {
+ case 1:return (type&tm_tag_prototype_t)!=0;
+ case 2:return (type&(tm_tag_function_t|tm_tag_method_t))!=0 && !(type&tm_tag_prototype_t);
+ case 3:return (type&(tm_tag_class_t|tm_tag_struct_t|tm_tag_union_t|tm_tag_interface_t|tm_tag_typedef_t|tm_tag_enum_t|tm_tag_namespace_t|tm_tag_package_t))!=0;
+ case 4:return (type&(tm_tag_variable_t|tm_tag_externvar_t|tm_tag_local_var_t|tm_tag_field_t|tm_tag_member_t))!=0;
+ default:return FALSE;
+ }
+}
 static void info_search(GtkWidget *widget,gpointer data) {
- (void)widget;SymbolInfo *info=data;gtk_widget_set_sensitive(info->jump,FALSE);gtk_widget_set_sensitive(info->references,FALSE);gtk_widget_set_sensitive(info->leave,FALSE);
+ (void)widget;SymbolInfo *info=data;gtk_label_set_text(GTK_LABEL(info->count),"0");gtk_widget_set_sensitive(info->prototype,FALSE);gtk_widget_set_sensitive(info->implementation,FALSE);gtk_widget_set_sensitive(info->base,FALSE);gtk_widget_set_sensitive(info->jump,FALSE);gtk_widget_set_sensitive(info->references,FALSE);gtk_widget_set_sensitive(info->leave,FALSE);
  if(!*gtk_entry_get_text(GTK_ENTRY(info->entry))) {
   info->filling=TRUE;gtk_list_store_clear(info->model);gtk_combo_box_set_active(GTK_COMBO_BOX(info->choice),-1);info->filling=FALSE;info_choice(GTK_COMBO_BOX(info->choice),info);
   gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(info->details)),"",-1);sci_set_readonly(SCINTILLA(info->code),FALSE);sci_set_text(SCINTILLA(info->code),"");sci_set_readonly(SCINTILLA(info->code),TRUE);gtk_label_set_text(GTK_LABEL(info->status),"Enter a symbol or qualified name");return;
@@ -4861,10 +4877,18 @@ static void info_search(GtkWidget *widget,gpointer data) {
    if(source) { source->file_name=g_strdup("untitled");source->short_name=source->file_name;source->lang=current->file_type->lang;gchar *path=g_strdup_printf("@buffer:%u",current->id);gint length=sci_get_length(current->editor->sci);gchar *text=sci_get_contents(current->editor->sci,length+1);insight_native_parse(index,source,path,text,length);g_free(text);g_free(path);tm_source_file_free(source); }
   }
  }
- const InsightSymbol *matches[512];size_t total=insight_relation_query(index,gtk_entry_get_text(GTK_ENTRY(info->entry)),INSIGHT_RELATION_DEFINITIONS,0,matches,G_N_ELEMENTS(matches));
- if(total!=SIZE_MAX && current) { gsize eligible=0;for(gsize n=0;n<MIN(total,G_N_ELEMENTS(matches));n++) if(g_str_has_prefix(matches[n]->path,"@buffer:") || insight_languages_search_path(current->file_name,current->file_type,matches[n]->path)) matches[eligible++]=matches[n];total=eligible; }
+ /* Filter BEFORE the 512-row presentation limit, including language filters.
+  * Bound broad lookups explicitly instead of silently losing later matches. */
+ size_t raw_total=insight_relation_query(index,gtk_entry_get_text(GTK_ENTRY(info->entry)),INSIGHT_RELATION_DEFINITIONS,0,NULL,0),total=0;gboolean broad=raw_total!=SIZE_MAX && raw_total>16384;const InsightSymbol **matches=NULL;
+ if(raw_total==SIZE_MAX || broad) total=SIZE_MAX;
+ else {
+  matches=g_new(const InsightSymbol *,MAX((size_t)1,raw_total));size_t found=insight_relation_query(index,gtk_entry_get_text(GTK_ENTRY(info->entry)),INSIGHT_RELATION_DEFINITIONS,0,matches,raw_total);
+  if(found!=raw_total) total=SIZE_MAX;
+  else for(size_t n=0;n<raw_total;n++) if((!current || g_str_has_prefix(matches[n]->path,"@buffer:") || insight_languages_search_path(current->file_name,current->file_type,matches[n]->path)) && info_kind_matches(matches[n],gtk_combo_box_get_active(GTK_COMBO_BOX(info->kind)),current ? current->file_type:NULL)) matches[total++]=matches[n];
+ }
+ gchar *counter=total==SIZE_MAX ? g_strdup("0"):g_strdup_printf("%u / %"G_GSIZE_FORMAT,(guint)MIN(total,(size_t)512),(gsize)total);gtk_label_set_text(GTK_LABEL(info->count),counter);g_free(counter);
  info->filling=TRUE;gtk_list_store_clear(info->model);gint chosen=0,preferred_rank=0;
- if(total!=SIZE_MAX) for(size_t i=0;i<MIN(total,G_N_ELEMENTS(matches));i++) {
+ if(total!=SIZE_MAX) for(size_t i=0;i<MIN(total,(size_t)512);i++) {
   const InsightSymbol *hit=matches[i];GtkTreeIter iter;gchar *display=g_strdup_printf("%s %s%s • %s — %s:%lu",hit->kind,hit->name,hit->signature,hit->scope,g_str_has_prefix(hit->path,"@buffer:") ? "untitled" : hit->path,hit->line);
   gtk_list_store_append(info->model,&iter);gtk_list_store_set(info->model,&iter,INFO_NAME,hit->name,INFO_PATH,hit->path,INFO_LINE,hit->line,INFO_KIND,hit->kind,INFO_SCOPE,hit->scope,INFO_SIGNATURE,hit->signature,INFO_TYPE,hit->type,INFO_INHERITANCE,hit->inheritance,INFO_DISPLAY,display,-1);g_free(display);
   gint rank=!g_strcmp0(info->preferred,hit->path) ? (hit->line==info->preferred_line ? 2 : 1) : 0;
@@ -4873,8 +4897,10 @@ static void info_search(GtkWidget *widget,gpointer data) {
  }
  insight_index_free(info->index);info->index=index;gtk_combo_box_set_active(GTK_COMBO_BOX(info->choice),total!=SIZE_MAX && total ? chosen : -1);info->filling=FALSE;
  gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(info->details)),"",-1);sci_set_readonly(SCINTILLA(info->code),FALSE);sci_set_text(SCINTILLA(info->code),"");sci_set_readonly(SCINTILLA(info->code),TRUE);info_choice(GTK_COMBO_BOX(info->choice),info);
- if(total==SIZE_MAX || !total) gtk_label_set_text(GTK_LABEL(info->status),total==SIZE_MAX ? "Symbol query could not be completed" : "No indexed definitions; try a qualified name or reindex the workspace");
- else if(total>G_N_ELEMENTS(matches)) gtk_label_set_text(GTK_LABEL(info->status),"Showing first 512 candidates; narrow the qualified symbol name");
+ g_free(matches);
+ if(broad) gtk_label_set_text(GTK_LABEL(info->status),"More than 16384 name matches; use a qualified symbol name");
+ else if(total==SIZE_MAX || !total) gtk_label_set_text(GTK_LABEL(info->status),total==SIZE_MAX ? "Symbol query could not be completed" : "No indexed candidates in this category; change the filter or qualified name");
+ else if(total>512) gtk_label_set_text(GTK_LABEL(info->status),"Showing first 512 candidates; narrow the qualified symbol name");
 }
 static void info_open(SymbolInfo *info,gboolean jump) {
  if(!info->path || !info->digest || !info->line) return;
@@ -4909,7 +4935,7 @@ static void info_disconnect(GtkWidget *widget,gpointer data) {
  g_signal_handlers_disconnect_by_data(widget,data);if(GTK_IS_CONTAINER(widget)) gtk_container_foreach(GTK_CONTAINER(widget),info_disconnect,data);
 }
 static void info_destroy(GtkWidget *widget,gpointer data) {
- SymbolInfo *info=data;info_disconnect(widget,info);if(info->center) g_source_remove(info->center);g_object_unref(info->model);g_free(info->path);g_free(info->digest);g_free(info->name);g_free(info->preferred);g_free(info->preferred_candidate);insight_index_free(info->index);symbol_info=NULL;g_free(info);
+ SymbolInfo *info=data;info_disconnect(widget,info);if(info->center) g_source_remove(info->center);g_object_unref(info->model);g_free(info->path);g_free(info->digest);g_free(info->name);g_free(info->preferred);g_free(info->preferred_candidate);g_free(info->base_name);g_free(info->base_path);insight_index_free(info->index);symbol_info=NULL;g_free(info);
 }
 static gboolean info_key(GtkWidget *widget,GdkEventKey *event,gpointer data) { (void)widget;if(event->keyval==GDK_KEY_Escape) { info_close(NULL,data);return TRUE; }
  if((event->state&gtk_accelerator_get_default_mod_mask())==GEANY_PRIMARY_MOD_MASK) {
@@ -4917,19 +4943,40 @@ static gboolean info_key(GtkWidget *widget,GdkEventKey *event,gpointer data) { (
   if(event->keyval==GDK_KEY_r || event->keyval==GDK_KEY_R) { info_search(NULL,data);return TRUE; }
  }
  return FALSE; }
-static void info_show_query(const gchar *query,const gchar *path,gulong line) {
+static void info_show_query_kind(const gchar *query,const gchar *path,gulong line,gint category) {
  if(!symbol_info) {
   SymbolInfo *info=g_new0(SymbolInfo,1);symbol_info=info;info->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(info->window,"insight-symbol-info-window");gtk_window_set_title(GTK_WINDOW(info->window),"Symbol Info");gtk_window_set_default_size(GTK_WINDOW(info->window),850,600);gtk_window_set_transient_for(GTK_WINDOW(info->window),GTK_WINDOW(main_widgets.window));gtk_window_set_destroy_with_parent(GTK_WINDOW(info->window),TRUE);
   GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,5),*bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4),*buttons=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4),*scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_set_border_width(GTK_CONTAINER(box),8);gtk_container_add(GTK_CONTAINER(info->window),box);
   info->entry=gtk_search_entry_new();gtk_widget_set_name(info->entry,"insight-symbol-info-query");gtk_entry_set_placeholder_text(GTK_ENTRY(info->entry),"Symbol or qualified name…");GtkWidget *search=gtk_button_new_with_label("Refresh");gtk_box_pack_start(GTK_BOX(bar),info->entry,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(bar),search,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);
   info->model=gtk_list_store_new(INFO_COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING);info->choice=gtk_combo_box_new_with_model(GTK_TREE_MODEL(info->model));gtk_widget_set_name(info->choice,"insight-symbol-info-candidates");GtkCellRenderer *cell=gtk_cell_renderer_text_new();g_object_set(cell,"ellipsize",PANGO_ELLIPSIZE_END,NULL);gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(info->choice),cell,TRUE);gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(info->choice),cell,"text",INFO_DISPLAY,NULL);gtk_box_pack_start(GTK_BOX(box),info->choice,FALSE,FALSE,0);
+  GtkWidget *kinds=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);info->kind=gtk_combo_box_text_new();gtk_widget_set_name(info->kind,"insight-symbol-info-kind");const gchar *categories[]={"All indexed symbols","Function prototypes","Function implementations","Types and namespaces","Variables and members"};for(guint i=0;i<G_N_ELEMENTS(categories);i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(info->kind),categories[i]);gtk_combo_box_set_active(GTK_COMBO_BOX(info->kind),0);GList *kind_cells=gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(info->kind));for(GList *c=kind_cells;c;c=c->next) if(GTK_IS_CELL_RENDERER_TEXT(c->data)) g_object_set(c->data,"ellipsize",PANGO_ELLIPSIZE_END,"width-chars",1,NULL);g_list_free(kind_cells);gtk_box_pack_start(GTK_BOX(kinds),info->kind,TRUE,TRUE,0);
+  info->count=gtk_label_new("0");gtk_widget_set_name(info->count,"insight-symbol-info-count");gtk_widget_set_tooltip_text(info->count,"Shown / matching candidates after category and language filtering");gtk_box_pack_start(GTK_BOX(kinds),info->count,FALSE,FALSE,4);
+  GtkWidget **peers[]={&info->prototype,&info->implementation,&info->base};const gchar *icons[]={"text-x-generic-symbolic","go-jump-symbolic","go-up-symbolic"},*tips[]={"Browse function prototypes","Browse function implementations","Browse underlying nominal type"},*names[]={"insight-symbol-info-prototype","insight-symbol-info-implementation","insight-symbol-info-base"};for(guint i=0;i<3;i++) { *peers[i]=gtk_button_new_from_icon_name(icons[i],GTK_ICON_SIZE_MENU);gtk_widget_set_name(*peers[i],names[i]);gtk_widget_set_tooltip_text(*peers[i],tips[i]);g_object_set_data(G_OBJECT(*peers[i]),"insight-info-companion",GUINT_TO_POINTER(i+1));g_signal_connect(*peers[i],"clicked",G_CALLBACK(info_companion),info);gtk_box_pack_start(GTK_BOX(kinds),*peers[i],FALSE,FALSE,0); }
+  gtk_box_pack_start(GTK_BOX(box),kinds,FALSE,FALSE,0);g_signal_connect(info->kind,"changed",G_CALLBACK(info_kind_changed),info);
   insight_panel_help_attach(box,"symbol-info.md");
   info->details=gtk_text_view_new();gtk_widget_set_name(info->details,"insight-symbol-info-details");gtk_text_view_set_editable(GTK_TEXT_VIEW(info->details),FALSE);gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(info->details),GTK_WRAP_WORD_CHAR);gtk_container_add(GTK_CONTAINER(scroll),info->details);gtk_widget_set_size_request(scroll,-1,125);gtk_box_pack_start(GTK_BOX(box),scroll,FALSE,TRUE,0);
   info->code=scintilla_new();gtk_widget_set_name(info->code,"insight-symbol-info-code");SSM(SCINTILLA(info->code),SCI_SETCODEPAGE,SC_CP_UTF8,0);sci_set_symbol_margin(SCINTILLA(info->code),FALSE);SSM(SCINTILLA(info->code),SCI_SETMARGINWIDTHN,2,0);gtk_box_pack_start(GTK_BOX(box),info->code,TRUE,TRUE,0);
   info->jump=gtk_button_new_with_label("Jump"),info->references=gtk_button_new_with_label("References");info->leave=gtk_button_new_with_label("Leave file open");gtk_widget_set_tooltip_text(info->jump,"Jump to displayed definition (Ctrl+Enter)");GtkWidget *copy=gtk_button_new_with_label("Copy details"),*close=gtk_button_new_with_label("Close");GtkWidget *items[]={info->jump,info->references,info->leave,copy,close};for(guint i=0;i<G_N_ELEMENTS(items);i++) gtk_box_pack_start(GTK_BOX(buttons),items[i],FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),buttons,FALSE,FALSE,0);info->status=gtk_label_new("");gtk_widget_set_name(info->status,"insight-symbol-info-status");gtk_label_set_line_wrap(GTK_LABEL(info->status),TRUE);gtk_box_pack_start(GTK_BOX(box),info->status,FALSE,FALSE,0);
   g_signal_connect(info->choice,"changed",G_CALLBACK(info_choice),info);g_signal_connect(search,"clicked",G_CALLBACK(info_search),info);g_signal_connect(info->entry,"activate",G_CALLBACK(info_search),info);g_signal_connect(info->jump,"clicked",G_CALLBACK(info_jump),info);g_signal_connect(info->leave,"clicked",G_CALLBACK(info_leave),info);g_signal_connect(info->references,"clicked",G_CALLBACK(info_references),info);g_signal_connect(copy,"clicked",G_CALLBACK(info_copy),info);g_signal_connect(close,"clicked",G_CALLBACK(info_close),info);g_signal_connect(info->window,"destroy",G_CALLBACK(info_destroy),info);g_signal_connect(info->window,"key-press-event",G_CALLBACK(info_key),info);
  }
- SymbolInfo *info=symbol_info;g_clear_pointer(&info->preferred_candidate,g_free);g_free(info->preferred);info->preferred=g_strdup(path);info->preferred_line=line;gtk_entry_set_text(GTK_ENTRY(info->entry),query);gtk_widget_show_all(info->window);info_search(NULL,info);gtk_window_present(GTK_WINDOW(info->window));gtk_widget_grab_focus(info->entry);
+ SymbolInfo *info=symbol_info;info->filling=TRUE;gtk_combo_box_set_active(GTK_COMBO_BOX(info->kind),category);info->filling=FALSE;g_clear_pointer(&info->preferred_candidate,g_free);g_free(info->preferred);info->preferred=g_strdup(path);info->preferred_line=line;gtk_entry_set_text(GTK_ENTRY(info->entry),query);gtk_widget_show_all(info->window);info_search(NULL,info);gtk_window_present(GTK_WINDOW(info->window));gtk_widget_grab_focus(info->entry);
+}
+static void info_show_query(const gchar *query,const gchar *path,gulong line) { info_show_query_kind(query,path,line,0); }
+static void info_kind_changed(GtkComboBox *combo,gpointer data) { (void)combo;SymbolInfo *info=data;if(!info->filling) info_search(NULL,info); }
+static void info_companion(GtkWidget *widget,gpointer data) {
+ SymbolInfo *info=data;guint mode=GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(widget),"insight-info-companion"));
+ if(mode==3) { if(!info->base_name || !info->base_path) return;gchar *name=g_strdup(info->base_name),*path=g_strdup(info->base_path);gulong line=info->base_line;info_show_query_kind(name,path,line,3);g_free(name);g_free(path);return; }
+ GtkTreeIter iter;if(!gtk_combo_box_get_active_iter(GTK_COMBO_BOX(info->choice),&iter)) return;gchar *name=NULL,*scope=NULL,*path=NULL;gulong line=0;
+ gtk_tree_model_get(GTK_TREE_MODEL(info->model),&iter,INFO_NAME,&name,INFO_SCOPE,&scope,INFO_PATH,&path,INFO_LINE,&line,-1);
+ GeanyDocument *doc=info_document(path);GeanyFiletype *ft=doc ? doc->file_type:insight_languages_detect(path);const gchar *separator=ft ? tm_parser_scope_separator_printable(ft->lang):"::";if(!separator || !*separator) separator="::";
+ gchar *query=scope && *scope ? g_strconcat(scope,separator,name,NULL):g_strdup(name);info_show_query_kind(query,path,line,mode==1 ? 1:2);g_free(query);g_free(name);g_free(scope);g_free(path);
+}
+static void show_function_target(GtkWidget *widget,gpointer data) {
+ (void)widget;GeanyDocument *doc=document_get_current();if(!doc) return;ScintillaObject *sci=doc->editor->sci;
+ if(sci_get_length(sci)>2*1024*1024 || sci_get_selection_mode(sci)!=SC_SEL_STREAM || SSM(sci,SCI_GETSELECTIONS,0,0)!=1) { ui_set_statusbar(TRUE,"Function target lookup requires one normal selection in a buffer up to 2 MiB");return; }
+ SSM(sci,SCI_COLOURISE,0,-1);gint position=sci_get_current_position(sci);gchar word[1025]={0};editor_find_current_word_sciwc(doc->editor,position,word,sizeof word);
+ if(!*word || !definition_code(sci,position)) { ui_set_statusbar(TRUE,"Place the caret on a function name in code");return; }
+ gchar *path=doc->file_name ? g_strdup(doc->file_name):g_strdup_printf("@buffer:%u",doc->id);info_show_query_kind(word,path,sci_get_current_line(sci)+1,GPOINTER_TO_INT(data));g_free(path);
 }
 static void show_symbol_info(GtkWidget *widget,gpointer data) {
  (void)widget;(void)data;GeanyDocument *doc=document_get_current();if(!doc) { info_show_query("",NULL,0);return; }gchar word[1025]={0};editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);
@@ -5111,6 +5158,7 @@ static void create_workbench_menus(void) {
  wb.navigation_accels=gtk_accel_group_new(); gtk_window_add_accel_group(GTK_WINDOW(main_widgets.window),wb.navigation_accels);
  GtkWidget *templates=gtk_image_menu_item_new_with_label("Code templates / Clips…"); gtk_widget_set_name(templates,"insight-templates-command"); gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(templates),insight_command_icon("snippets")); gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(templates),TRUE); gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu),templates); g_signal_connect(templates,"activate",G_CALLBACK(focus_templates),NULL); gtk_widget_show(templates);
  create_structural_selection_menu(); insight_overview_install_commands();
+ const gchar *target_labels[]={"Jump To Prototype…","Jump To Implementation…"};for(guint i=0;i<2;i++) { GtkWidget *item=gtk_menu_item_new_with_label(target_labels[i]);gtk_widget_set_name(item,i ? "insight-jump-implementation-command":"insight-jump-prototype-command");g_signal_connect(item,"activate",G_CALLBACK(show_function_target),GUINT_TO_POINTER(i+1));gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);GtkWidget *popup=gtk_menu_item_new_with_label(target_labels[i]);gtk_widget_set_name(popup,i ? "insight-jump-implementation-popup":"insight-jump-prototype-popup");g_signal_connect(popup,"activate",G_CALLBACK(show_function_target),GUINT_TO_POINTER(i+1));gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.editor_menu),popup); }
  GtkWidget *info=gtk_menu_item_new_with_label("Symbol Info…");gtk_widget_set_name(info,"insight-symbol-info-command");g_signal_connect(info,"activate",G_CALLBACK(show_symbol_info),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),info);
  GtkWidget *search_menu=ui_lookup_widget(main_widgets.window,"search1_menu");
  const char *names[]={"Go to definition","Find symbol…","Find file…","Find usages…","Context back","Context forward"};

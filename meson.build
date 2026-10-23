@@ -1151,3 +1151,5 @@ install_data('insight/docs/relation-results.md', install_dir: cdata.get('GEANY_D
 install_data('insight/docs/list-tools.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 
 install_data('insight/docs/list-printing.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
+
+install_data('insight/docs/function-targets.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')

@@ -922,3 +922,6 @@ test('Insight list copy and search GUI', list_tools_gui_test, timeout: 45, is_pa
 
 text_print_gui_test = executable('test_insight_text_print_gui', '../insight/tests/text_print_gui_test.c', '../src/insight-text-print.c', dependencies: deps)
 test('Insight paginated text printing GUI', text_print_gui_test, timeout: 60, is_parallel: false)
+
+function_targets_gui_test = executable('test_insight_function_targets_gui', '../insight/tests/function_targets_gui_test.c', dependencies: test_deps)
+test('Insight function targets and Symbol Info categories GUI', function_targets_gui_test, timeout: 55, is_parallel: false)

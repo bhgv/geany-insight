@@ -663,3 +663,8 @@ EXTRA_DIST += insight/tests/text_print_gui_test.c
 
 insightdoc_DATA += insight/docs/list-printing.md
 dist_insightdocmedia_DATA += insight/docs/media/list-printing.svg
+
+EXTRA_DIST += insight/tests/function_targets_gui_test.c
+
+insightdoc_DATA += insight/docs/function-targets.md
+dist_insightdocmedia_DATA += insight/docs/media/function-targets.svg

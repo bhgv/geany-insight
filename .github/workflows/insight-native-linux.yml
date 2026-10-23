@@ -87,6 +87,7 @@ on:
       - insight/tests/relation_tree_graph_gui_test.c
       - insight/tests/relation_history_gui_test.c
       - insight/tests/relation_nodes_gui_test.c
+      - insight/tests/function_targets_gui_test.c
       - insight/tests/relation_results_gui_test.c
       - src/insight-relation-tree.*
       - insight/tests/relation_tree_gui_test.c
@@ -224,7 +225,7 @@ jobs:
       - name: Check active editor focus and command recording
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |
-          GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight native search source links GUI' 'Insight native relation node removal GUI' 'Insight native relation outline and batch bookmarks GUI' 'Insight list copy and search GUI' 'Insight paginated text printing GUI' 'Insight native command recording GUI' 'Insight project command recording startup GUI'
+          GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight native search source links GUI' 'Insight native relation node removal GUI' 'Insight native relation outline and batch bookmarks GUI' 'Insight list copy and search GUI' 'Insight paginated text printing GUI' 'Insight function targets and Symbol Info categories GUI' 'Insight native command recording GUI' 'Insight project command recording startup GUI'
           cp _native/meson-logs/testlog.txt editor-focus-testlog.txt
       - name: Check compact panels and Context controls
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}

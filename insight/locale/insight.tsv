@@ -2029,3 +2029,18 @@ List	Список
 Print snapshot ready	Снимок печати готов
 Printing cancelled	Печать отменена
 Print job sent	Задание отправлено на печать
+All indexed symbols	Все индексированные символы
+Function prototypes	Прототипы функций
+Function implementations	Реализации функций
+Types and namespaces	Типы и пространства имён
+Variables and members	Переменные и поля
+Shown / matching candidates after category and language filtering	Показано / найдено после фильтрации категории и языка
+Browse function prototypes	Просмотреть прототипы функции
+Browse function implementations	Просмотреть реализации функции
+Browse underlying nominal type	Просмотреть исходный номинальный тип
+More than 16384 name matches; use a qualified symbol name	Более 16 384 совпадений имени; укажите квалифицированное имя символа
+No indexed candidates in this category; change the filter or qualified name	В этой категории нет индексированных кандидатов; измените фильтр или уточните имя
+Function target lookup requires one normal selection in a buffer up to 2 MiB	Для поиска объявления нужно одно обычное выделение в буфере до 2 МиБ
+Place the caret on a function name in code	Поставьте курсор на имя функции в коде
+Jump To Prototype…	Перейти к прототипу…
+Jump To Implementation…	Перейти к реализации…

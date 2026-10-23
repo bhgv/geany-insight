@@ -34,3 +34,6 @@ headers include common modifiers, scoped enums, C++ template prefixes and
 base clauses; macros/attributes and specialized syntax may still decline.
 JavaScript/TypeScript nominal sizes are deferred because their lexical mask
 does not yet cover all regular-expression literals.
+
+
+[Function targets and Symbol Info categories](function-targets.md): filtering before the row limit, counts and nominal-type links.

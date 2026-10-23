@@ -795,3 +795,8 @@ File/Project Symbols, Project Files, Search Results and flat/tree Relations now 
 ### Print Relation Window and paginated lists
 
 Navigate and Relations context menus dispatch Print Relation Window to the existing fit/tiled vector graph printer or an immutable loaded-outline text job. The report dialog gains Print outline; six list/tree panels gain Print List without clipboard changes. Short GTK capture slices and stale guards precede the native print dialog. Monospace UTF-8 text wraps between pages with repeated title and numbered footers; PDF is available through the platform print dialog. Text limits: 1 MiB, 20000 physical lines, 64 KiB per physical line, 100000 layout lines and 512 pages. Graph tiled limits remain 256 pages. Text lists are an extension beyond the Source Insight graphic print command. [Guide and SVG](list-printing.md).
+
+
+### Function targets and Symbol Info categories
+
+Navigate and editor-popup Jump To Prototype / Implementation open a category-filtered guarded Symbol Info chooser. Category filters include prototypes, implementations, types/namespaces and variables/members, with shown/matching counts. Source-language and kind eligibility apply before the 512-row presentation cap; raw queries above 16384 matches explicitly require qualification. Scoped counterpart buttons retain overloads for manual choice; the nominal-type link reuses the existing alias/return resolver and declines unknown/ambiguous/cyclic targets. Existing source-digest checks, preview and Jump/Back remain in use. This does not add semantic caller/overload resolution or automatic one-candidate jumps. [Guide and SVG](function-targets.md).
