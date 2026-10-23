@@ -8,6 +8,10 @@ void insight_remote_free(InsightRemote *);
 /* Resolve bundled clients before PATH; pass the absolute result to spawnv. */
 gchar *insight_remote_program(const gchar *program,const gchar *directory);
 gchar **insight_remote_argv(const InsightRemote *,gboolean);
+/* SCP uses conservative literal paths, compatible with legacy remote shells. */
+gchar **insight_remote_scp_argv(const InsightRemote *,const gchar *,gboolean,gboolean,GError **);
+/* Binary archive stream over SSH, no PTY. Caller redirects stdout to a file. */
+gchar **insight_remote_archive_argv(const InsightRemote *,gboolean,GError **);
 gchar *insight_remote_download(const char *,const char *,gboolean,GError **);
 gchar *insight_remote_upload(const char *,const char *,const char *,GError **);
 gchar *insight_remote_path(const InsightRemote *,const char *);

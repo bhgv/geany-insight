@@ -28,6 +28,10 @@ int main(void) {
  g_free(resolved);g_remove(client);g_rmdir(bin);g_assert_null(insight_remote_program("insight-bundled-test",bin));g_free(client);g_free(bin);
  InsightRemote *r=insight_remote_new("host-alias","login",2222,"","/src",cache,&error); g_assert_no_error(error); g_assert_nonnull(r);
  gchar **argv=insight_remote_argv(r,TRUE); g_assert_cmpstr(argv[0],==,"sftp"); g_assert_cmpstr(argv[g_strv_length(argv)-1],==,"host-alias"); g_assert_true(g_strv_contains((const gchar *const *)argv,"-oUser=login")); g_strfreev(argv);
+ argv=insight_remote_scp_argv(r,cache,TRUE,TRUE,&error);g_assert_no_error(error);g_assert_cmpstr(argv[0],==,"scp");g_assert_true(g_strv_contains((const gchar *const *)argv,"-r"));g_assert_true(g_strv_contains((const gchar *const *)argv,"-P"));g_assert_false(g_strv_contains((const gchar *const *)argv,"-b"));g_assert_cmpstr(argv[g_strv_length(argv)-1],==,"host-alias:/src");g_strfreev(argv);
+ argv=insight_remote_scp_argv(r,cache,FALSE,FALSE,&error);g_assert_no_error(error);g_assert_cmpstr(argv[g_strv_length(argv)-1],==,cache);g_strfreev(argv);
+ InsightRemote *unsafe=insight_remote_new("::1","login",22,"","/src/$(touch bad)",cache,&error);g_assert_no_error(error);g_assert_null(insight_remote_scp_argv(unsafe,cache,TRUE,FALSE,&error));g_assert_error(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT);g_clear_error(&error);
+ argv=insight_remote_archive_argv(unsafe,TRUE,&error);g_assert_no_error(error);g_assert_true(g_strv_contains((const gchar *const *)argv,"-T"));g_assert_nonnull(strstr(argv[g_strv_length(argv)-1],"'$(touch bad)'"));g_strfreev(argv);insight_remote_free(unsafe);
  gchar *file=g_build_filename(cache,"folder","source.c",NULL),*path=insight_remote_path(r,file); g_assert_cmpstr(path,==,"/src/folder/source.c"); g_free(path); g_free(file);
  file=g_strconcat(cache,"-other/source.c",NULL); g_assert_null(insight_remote_path(r,file)); g_free(file);
  file=g_build_filename(cache,"..","outside.c",NULL); g_assert_null(insight_remote_path(r,file)); g_free(file);

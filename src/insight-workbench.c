@@ -5545,10 +5545,10 @@ static void width_host_height(GtkWidget *widget,gint *minimum,gint *natural) {
  GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));*minimum=*natural=0;if(child && gtk_widget_get_visible(child)) gtk_widget_get_preferred_height(child,minimum,natural);
 }
 static void width_host_width_for_height(GtkWidget *widget,gint height,gint *minimum,gint *natural) {
- GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));gint ignored=0;*minimum=1;*natural=1;if(child && gtk_widget_get_visible(child)) gtk_widget_get_preferred_width_for_height(child,height,&ignored,natural);
+ GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));gint ignored=0;*minimum=1;*natural=1;if(child && gtk_widget_get_visible(child)) gtk_widget_get_preferred_width_for_height(child,MAX(height,0),&ignored,natural);
 }
 static void width_host_height_for_width(GtkWidget *widget,gint width,gint *minimum,gint *natural) {
- GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));*minimum=*natural=0;if(child && gtk_widget_get_visible(child)) gtk_widget_get_preferred_height_for_width(child,width,minimum,natural);
+ GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));*minimum=*natural=0;if(child && gtk_widget_get_visible(child)) gtk_widget_get_preferred_height_for_width(child,MAX(width,1),minimum,natural);
 }
 static void width_host_allocate(GtkWidget *widget,GtkAllocation *allocation) {
  gtk_widget_set_allocation(widget,allocation);GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));if(child && gtk_widget_get_visible(child)) gtk_widget_size_allocate(child,allocation);
@@ -5558,7 +5558,7 @@ static void insight_width_host_class_init(InsightWidthHostClass *klass) {
 }
 static void insight_width_host_init(InsightWidthHost *host) { gtk_widget_set_has_window(GTK_WIDGET(host),FALSE);gtk_widget_set_name(GTK_WIDGET(host),"insight-editor-width-host"); }
 static GtkWidget *narrow_panel_host(GtkWidget *child) {
- GtkWidget *host=g_object_new(insight_width_host_get_type(),NULL);gtk_widget_set_name(host,"insight-panel-width-host");gtk_container_add(GTK_CONTAINER(host),child);return host;
+ GtkWidget *host=g_object_new(insight_width_host_get_type(),NULL);gtk_widget_set_name(host,"insight-panel-width-host");GtkWidget *viewport=gtk_viewport_new(NULL,NULL);gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport),GTK_SHADOW_NONE);gtk_container_add(GTK_CONTAINER(viewport),child);gtk_container_add(GTK_CONTAINER(host),viewport);return host;
 }
 static void constrain_message_width(GtkWidget *page) {
  if(!GTK_IS_BOX(page) || g_object_get_data(G_OBJECT(page),"insight-width-constrained")) return;
@@ -5566,7 +5566,7 @@ static void constrain_message_width(GtkWidget *page) {
  gtk_widget_set_name(host,"insight-message-width-host");gtk_box_set_homogeneous(GTK_BOX(body),gtk_box_get_homogeneous(GTK_BOX(page)));
  GList *children=gtk_container_get_children(GTK_CONTAINER(page));
  for(GList *p=children;p;p=p->next) { GtkWidget *child=p->data;gboolean expand,fill;guint padding;GtkPackType pack;gtk_box_query_child_packing(GTK_BOX(page),child,&expand,&fill,&padding,&pack);g_object_ref(child);gtk_container_remove(GTK_CONTAINER(page),child);if(pack==GTK_PACK_START) gtk_box_pack_start(GTK_BOX(body),child,expand,fill,padding);else gtk_box_pack_end(GTK_BOX(body),child,expand,fill,padding);g_object_unref(child); }
- g_list_free(children);gtk_container_add(GTK_CONTAINER(host),body);gtk_box_pack_start(GTK_BOX(page),host,TRUE,TRUE,0);g_object_set_data(G_OBJECT(page),"insight-width-constrained",GINT_TO_POINTER(1));gtk_widget_show(body);gtk_widget_show(host);
+ g_list_free(children);GtkWidget *viewport=gtk_viewport_new(NULL,NULL);gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport),GTK_SHADOW_NONE);gtk_container_add(GTK_CONTAINER(viewport),body);gtk_container_add(GTK_CONTAINER(host),viewport);gtk_widget_show(viewport);gtk_box_pack_start(GTK_BOX(page),host,TRUE,TRUE,0);g_object_set_data(G_OBJECT(page),"insight-width-constrained",GINT_TO_POINTER(1));gtk_widget_show(body);gtk_widget_show(host);
 }
 void insight_workbench_init(void) {
  insight_diff_set_source_opener(diff_source_open);insight_diff_set_colorizer(insight_diff_native_colorize);

@@ -23,6 +23,7 @@
 typedef struct { InsightRemote *remote; gchar *directory,*config; gboolean auto_upload; } RemoteRoot;
 typedef enum { OPEN_FILE,OPEN_FOLDER,PROJECT_READ,PROJECT_FOLDER,UPLOAD } TransferKind;
 typedef struct { RemoteRoot *root; TransferKind kind; gchar *target,*snapshot,*auth,*origin; GKeyFile *project; GSubprocess *process; GCancellable *cancel; } Transfer;
+typedef struct _ScpJob ScpJob;
 typedef struct {
  gint refs;guint number;GtkWidget *page,*output,*input,*overlay,*ai_button,*stack,*chat;
  GSubprocess *process;GCancellable *cancel;gchar *auth,*endpoint;GQueue pending;gboolean writing,carriage,dragging,moved;guint ansi;
@@ -32,13 +33,14 @@ static ShellSession *session_ref(ShellSession *s) { g_atomic_int_inc(&s->refs);r
 static void session_unref(gpointer data) { ShellSession *s=data;if(!g_atomic_int_dec_and_test(&s->refs)) return;if(s->chat) g_object_remove_weak_pointer(G_OBJECT(s->chat),(gpointer *)&s->chat);g_clear_object(&s->page);g_string_free(s->tail,TRUE);g_free(s->endpoint);g_free(s); }
 static struct {
  GtkWidget *page,*host,*user,*port,*identity,*path,*status,*output,*input,*save_password,*automatic;
- GPtrArray *roots; GHashTable *upload_versions; GCancellable *snapshot_cancel; GQueue pending;Transfer *active;GPtrArray *sessions;ShellSession *selected;GtkWidget *tabs,*connection,*files,*transfer_local,*transfer_remote,*transfer_mode,*transfer_folder,*transfer_status;
+ GPtrArray *roots; GHashTable *upload_versions; GCancellable *snapshot_cancel; GQueue pending;Transfer *active;ScpJob *scp;GPtrArray *sessions;ShellSession *selected;GtkWidget *tabs,*connection,*files,*transfer_local,*transfer_remote,*transfer_mode,*transfer_folder,*transfer_status;
  gchar *config,*directory;gboolean closing,loading;
  gulong signals[4]; gboolean (*workspace)(const char *);
 } remote_ui;
 static guint64 remote_epoch,upload_sequence;
 static void profile_save(void);
 static void transfer_run(Transfer *);
+static void scp_cancel(void);
 static void root_free(gpointer data) { RemoteRoot *r=data; if(!r) return; insight_remote_free(r->remote); g_free(r->directory); g_free(r->config); g_free(r); }
 static RemoteRoot *root_copy(const RemoteRoot *r) { RemoteRoot *copy=g_new0(RemoteRoot,1); const InsightRemote *s=r->remote; copy->remote=insight_remote_new(s->host,s->user,s->port,s->identity,s->remote,s->local,NULL); copy->directory=g_strdup(r->directory); copy->config=g_strdup(r->config); copy->auto_upload=r->auto_upload; return copy; }
 static void auth_cleanup(const char *path) { if(!path) return; GDir *dir=g_dir_open(path,0,NULL); if(dir) { const char *name; while((name=g_dir_read_name(dir))) { gchar *file=g_build_filename(path,name,NULL); g_remove(file); g_free(file); } g_dir_close(dir); } g_rmdir(path); }
@@ -164,6 +166,59 @@ static RemoteRoot *root_for_file(const char *path,gchar **remote) {
  for(gint i=(gint)remote_ui.roots->len-1;i>=0;i--) { RemoteRoot *root=g_ptr_array_index(remote_ui.roots,(guint)i); *remote=insight_remote_path(root->remote,path); if(*remote) return root; } return NULL;
 }
 typedef struct { Transfer *transfer; gchar *source,*key; guint64 sequence,epoch; } UploadSnapshot;
+/* Independent SCP/archive job. Each child is owned directly, so Stop also
+ * cancels packing and never touches an interactive shell process. */
+struct _ScpJob {
+ RemoteRoot *root;gchar *local,*temporary,*stage,*auth,*client,*python,*helper;gint mode;gboolean upload,folder;
+ GSubprocessLauncher *spawn;GSubprocess *process;GCancellable *cancel;GMutex lock;
+};
+static void remove_staging(const gchar *path) {
+ if(!path) return;if(g_file_test(path,G_FILE_TEST_IS_DIR) && !g_file_test(path,G_FILE_TEST_IS_SYMLINK)) { GDir *dir=g_dir_open(path,0,NULL);const gchar *name;if(dir) { while((name=g_dir_read_name(dir))) { gchar *child=g_build_filename(path,name,NULL);remove_staging(child);g_free(child); }g_dir_close(dir); }g_rmdir(path); }else g_remove(path);
+}
+static void scp_free(gpointer data) {
+ ScpJob *j=data;remove_staging(j->temporary);auth_cleanup(j->auth);root_free(j->root);g_free(j->local);g_free(j->temporary);g_free(j->stage);g_free(j->auth);g_free(j->client);g_free(j->python);g_free(j->helper);g_clear_object(&j->spawn);g_clear_object(&j->process);g_clear_object(&j->cancel);g_mutex_clear(&j->lock);g_free(j);
+}
+static void scp_cancel(void) {
+ ScpJob *j=remote_ui.scp;if(!j) return;g_cancellable_cancel(j->cancel);g_mutex_lock(&j->lock);if(j->process) g_subprocess_force_exit(j->process);g_mutex_unlock(&j->lock);
+}
+static gboolean scp_child(ScpJob *j,const gchar *const *argv,const gchar *binary,GError **error) {
+ if(g_cancellable_set_error_if_cancelled(j->cancel,error)) return FALSE;
+ g_subprocess_launcher_set_flags(j->spawn,binary ? G_SUBPROCESS_FLAGS_STDERR_PIPE:G_SUBPROCESS_FLAGS_STDOUT_PIPE|G_SUBPROCESS_FLAGS_STDERR_MERGE);
+ if(binary) g_subprocess_launcher_set_stdout_file_path(j->spawn,binary);
+ GSubprocess *p=g_subprocess_launcher_spawnv(j->spawn,argv,error);if(!p) return FALSE;
+ g_mutex_lock(&j->lock);j->process=g_object_ref(p);if(g_cancellable_is_cancelled(j->cancel)) g_subprocess_force_exit(p);g_mutex_unlock(&j->lock);
+ GInputStream *stream=binary ? g_subprocess_get_stderr_pipe(p):g_subprocess_get_stdout_pipe(p);GString *log=g_string_new(NULL);gchar buffer[4096];gboolean ok=TRUE;
+ while(ok) { gssize n=g_input_stream_read(stream,buffer,sizeof buffer,j->cancel,error);if(n<0) { ok=FALSE;break; }if(!n) break;if(log->len+(gsize)n>262144) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Transfer diagnostics exceed 256 KiB");ok=FALSE;break; }g_string_append_len(log,buffer,n); }
+ if(ok) ok=g_subprocess_wait(p,j->cancel,error);if(ok && !g_subprocess_get_successful(p)) { gchar *valid=g_utf8_make_valid(log->str,MIN(log->len,(gsize)8192));g_set_error(error,G_IO_ERROR,G_IO_ERROR_FAILED,"Transfer failed: %s",*valid ? valid:"OpenSSH/packing process exited unsuccessfully");g_free(valid);ok=FALSE; }
+ if(!ok) { g_subprocess_force_exit(p);g_subprocess_wait(p,NULL,NULL); }
+ g_mutex_lock(&j->lock);g_clear_object(&j->process);g_mutex_unlock(&j->lock);g_string_free(log,TRUE);g_object_unref(p);return ok;
+}
+static void scp_worker(GTask *task,gpointer object,gpointer data,GCancellable *cancel) {
+ (void)object;ScpJob *j=data;GError *error=NULL;gboolean ok=TRUE;
+ if(j->upload && j->mode) { const gchar *pack[]={j->python,"-I",j->helper,j->mode==1 ? "gz":"tar.gz",j->local,j->stage,NULL};ok=scp_child(j,pack,NULL,&error); }
+ gchar **argv=NULL;if(ok) { if(!j->upload && j->mode) argv=insight_remote_archive_argv(j->root->remote,j->mode==2,&error);else argv=insight_remote_scp_argv(j->root->remote,j->upload ? (j->mode ? j->stage:j->local):j->stage,j->upload,j->folder && !j->mode,&error);ok=argv!=NULL; }
+ if(ok) { g_free(argv[0]);argv[0]=g_strdup(j->client);if(!g_object_get_data(G_OBJECT(j->spawn),"insight-ssh-askpass")) { g_free(argv[1]);argv[1]=g_strdup("-oBatchMode=yes"); }ok=scp_child(j,(const gchar *const *)argv,!j->upload && j->mode ? j->stage:NULL,&error); }g_strfreev(argv);
+ if(ok && !j->upload) { GFile *from=g_file_new_for_path(j->stage),*to=g_file_new_for_path(j->local);/* No overwrite, including a target created during transfer. */ok=g_file_move(from,to,G_FILE_COPY_NOFOLLOW_SYMLINKS,cancel,NULL,NULL,&error);g_object_unref(from);g_object_unref(to); }
+ if(ok) g_task_return_boolean(task,TRUE);else if(error) g_task_return_error(task,error);else g_task_return_new_error(task,G_IO_ERROR,G_IO_ERROR_FAILED,"Transfer failed");
+}
+static void scp_done(GObject *object,GAsyncResult *result,gpointer data) {
+ (void)object;(void)data;ScpJob *j=g_task_get_task_data(G_TASK(result));GError *error=NULL;gboolean ok=g_task_propagate_boolean(G_TASK(result),&error);
+ if(remote_ui.scp==j) { remote_ui.scp=NULL;if(!remote_ui.closing) { const gchar *message=ok ? "Transfer completed; terminal connections retained":error->message;gtk_label_set_text(GTK_LABEL(remote_ui.transfer_status),message);status(message); } }g_clear_error(&error);
+}
+static void scp_start(GtkWidget *widget,gpointer data) {
+ (void)widget;if(remote_ui.scp) { status("A file transfer is already running. Stop it before starting another.");return; }
+ const gchar *local=gtk_entry_get_text(GTK_ENTRY(remote_ui.transfer_local)),*remote=gtk_entry_get_text(GTK_ENTRY(remote_ui.transfer_remote));gboolean upload=GPOINTER_TO_INT(data),folder=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(remote_ui.transfer_folder));gint mode=gtk_combo_box_get_active(GTK_COMBO_BOX(remote_ui.transfer_mode));GError *error=NULL;
+ if(!g_path_is_absolute(local) || (!upload && g_file_test(local,G_FILE_TEST_EXISTS)) || (upload && !g_file_test(local,folder ? G_FILE_TEST_IS_DIR:G_FILE_TEST_IS_REGULAR)) || (folder && mode==1)) { status("Choose an absolute local path and matching File/Folder mode. Receive requires a new destination. gz accepts one file.");return; }
+ ScpJob *j=g_new0(ScpJob,1);g_mutex_init(&j->lock);j->cancel=g_cancellable_new();j->root=form_root(remote,local,remote_ui.directory,&error);j->upload=upload;j->folder=folder;j->mode=mode;j->local=g_strdup(local);
+ if(j->root) { j->client=client_program(!upload && mode ? "ssh":"scp");if(!j->client) g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_NOT_FOUND,"Install the OpenSSH scp/ssh clients"); }
+ if(j->root && !error) { j->spawn=launcher(j->root,&j->auth);gchar *parent=upload ? g_strdup(remote_ui.directory):g_path_get_dirname(local);gchar *template=g_build_filename(parent,".geany-transfer-XXXXXX",NULL);g_free(parent);j->temporary=g_mkdtemp(template);if(!j->temporary) { g_free(template);g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_FAILED,"Cannot create private transfer staging directory"); }else { j->stage=g_build_filename(j->temporary,mode==1 ? "payload.gz":mode==2 ? "payload.tar.gz":"payload",NULL); } }
+ if(!error && upload && mode) { j->python=client_program("python3");if(!j->python) j->python=client_program("python");j->helper=g_build_filename(app->datadir,"insight","tools","remote_pack.py",NULL);if(!j->python || !g_file_test(j->helper,G_FILE_TEST_IS_REGULAR)) g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_NOT_FOUND,"Archive upload requires Python 3 and the installed remote_pack.py helper"); }
+ if(error || !j->root) { status(error ? error->message:"Invalid transfer settings");g_clear_error(&error);scp_free(j);return; }
+ remote_ui.scp=j;gtk_label_set_text(GTK_LABEL(remote_ui.transfer_status),"Transferring… Stop cancels packing and transfer; SSH sessions stay connected.");GTask *task=g_task_new(NULL,j->cancel,scp_done,NULL);g_task_set_task_data(task,j,scp_free);g_task_run_in_thread(task,scp_worker);g_object_unref(task);
+}
+static void scp_choose(GtkWidget *widget,gpointer data) {
+ (void)widget;(void)data;gboolean folder=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(remote_ui.transfer_folder));GtkWidget *d=gtk_file_chooser_dialog_new("Choose local source",GTK_WINDOW(main_widgets.window),folder ? GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER:GTK_FILE_CHOOSER_ACTION_OPEN,"Cancel",GTK_RESPONSE_CANCEL,"Choose",GTK_RESPONSE_ACCEPT,NULL);if(gtk_dialog_run(GTK_DIALOG(d))==GTK_RESPONSE_ACCEPT) { gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(d));gtk_entry_set_text(GTK_ENTRY(remote_ui.transfer_local),path);g_free(path); }gtk_widget_destroy(d);
+}
 static void upload_snapshot_free(gpointer data) { UploadSnapshot *j=data; transfer_free(j->transfer); g_free(j->source); g_free(j->key); g_free(j); }
 static void upload_snapshot_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
  (void)source; UploadSnapshot *j=data; GFile *from=g_file_new_for_path(j->source),*to=g_file_new_for_path(j->transfer->snapshot); GError *error=NULL;
@@ -195,7 +250,7 @@ static void upload_document(GeanyDocument *doc) {
 }
 static void saved_document(GObject *object,GeanyDocument *doc,gpointer data) { (void)object; (void)data; if(!doc || !doc->file_name) return; gchar *path=NULL; RemoteRoot *root=root_for_file(doc->file_name,&path); g_free(path); if(root && root->auto_upload) upload_document(doc); }
 static void save_remote(GtkWidget *widget,gpointer data) { (void)widget; (void)data; GeanyDocument *doc=document_get_current(); if(!doc) return; gchar *path=NULL; RemoteRoot *root=doc->file_name ? root_for_file(doc->file_name,&path) : NULL; g_free(path); if(!root) { status("Open a file through SSH first"); return; } if(!doc->changed) upload_document(doc); else if(document_save_file(doc,FALSE) && !root->auto_upload) upload_document(doc); }
-static void stop_transfer(GtkWidget *widget,gpointer data) { (void)widget; (void)data; remote_epoch++; if(remote_ui.snapshot_cancel) { g_cancellable_cancel(remote_ui.snapshot_cancel); g_clear_object(&remote_ui.snapshot_cancel); } if(!remote_ui.closing) remote_ui.snapshot_cancel=g_cancellable_new(); if(remote_ui.upload_versions) g_hash_table_remove_all(remote_ui.upload_versions); if(remote_ui.active) { g_cancellable_cancel(remote_ui.active->cancel); g_subprocess_force_exit(remote_ui.active->process); } while(!g_queue_is_empty(&remote_ui.pending)) transfer_free(g_queue_pop_head(&remote_ui.pending)); status("Transfers stopped; local edits retained"); }
+static void stop_transfer(GtkWidget *widget,gpointer data) { (void)widget; (void)data; scp_cancel(); remote_epoch++; if(remote_ui.snapshot_cancel) { g_cancellable_cancel(remote_ui.snapshot_cancel); g_clear_object(&remote_ui.snapshot_cancel); } if(!remote_ui.closing) remote_ui.snapshot_cancel=g_cancellable_new(); if(remote_ui.upload_versions) g_hash_table_remove_all(remote_ui.upload_versions); if(remote_ui.active) { g_cancellable_cancel(remote_ui.active->cancel); g_subprocess_force_exit(remote_ui.active->process); } while(!g_queue_is_empty(&remote_ui.pending)) transfer_free(g_queue_pop_head(&remote_ui.pending)); status("Transfers stopped; local edits retained"); }
 static void shell_append(ShellSession *s,const gchar *bytes,gsize size) {
  GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(s->output)); g_string_append_len(s->tail,bytes,(gssize)size); GString *plain=g_string_new(NULL); gsize consumed=0;
  for(const gchar *p=s->tail->str,*end=p+s->tail->len;p<end;) {
@@ -382,6 +437,10 @@ void insight_remote_ui_init(gboolean (*workspace)(const char *)) {
  remote_ui.save_password=gtk_check_button_new_with_label("Save password");gtk_widget_set_tooltip_text(remote_ui.save_password,"Opt-in: save password / key passphrase as text in this project or global SSH config");gtk_box_pack_start(GTK_BOX(remote_ui.connection),remote_ui.save_password,FALSE,FALSE,0);form_button(remote_ui.connection,"Forget saved password",NULL,G_CALLBACK(forget_password),NULL);
  remote_ui.files=form_page("Transfer");remote_ui.path=gtk_entry_new();gtk_entry_set_width_chars(GTK_ENTRY(remote_ui.path),1);gtk_widget_set_name(remote_ui.path,"insight-ssh-path");gtk_entry_set_placeholder_text(GTK_ENTRY(remote_ui.path),"Absolute remote file, folder or project path");gtk_box_pack_start(GTK_BOX(remote_ui.files),remote_ui.path,FALSE,FALSE,0);row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);gtk_box_pack_start(GTK_BOX(remote_ui.files),row,FALSE,FALSE,0);const gchar *open_labels[]={"Open file","Open folder","Open project"};for(guint i=0;i<3;i++) form_button(row,open_labels[i],NULL,G_CALLBACK(open_remote),GINT_TO_POINTER(i==0 ? OPEN_FILE:i==1 ? OPEN_FOLDER:PROJECT_READ));
  remote_ui.automatic=gtk_check_button_new_with_label("Auto upload on save");gtk_box_pack_start(GTK_BOX(remote_ui.files),remote_ui.automatic,FALSE,FALSE,0);row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);gtk_box_pack_start(GTK_BOX(remote_ui.files),row,FALSE,FALSE,0);form_button(row,"Save remote",NULL,G_CALLBACK(save_remote),NULL);form_button(row,"Stop transfer",NULL,G_CALLBACK(stop_transfer),NULL);
+ GtkWidget *separator=gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);gtk_box_pack_start(GTK_BOX(remote_ui.files),separator,FALSE,FALSE,4);
+ grid=gtk_grid_new();gtk_grid_set_row_spacing(GTK_GRID(grid),4);gtk_grid_set_column_spacing(GTK_GRID(grid),5);gtk_box_pack_start(GTK_BOX(remote_ui.files),grid,FALSE,FALSE,0);remote_ui.transfer_local=gtk_entry_new();form_row(grid,0,"Local source / new destination",remote_ui.transfer_local);gtk_widget_set_name(remote_ui.transfer_local,"insight-scp-local");remote_ui.transfer_remote=gtk_entry_new();form_row(grid,1,"Remote source / destination",remote_ui.transfer_remote);gtk_widget_set_name(remote_ui.transfer_remote,"insight-scp-remote");
+ row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);gtk_box_pack_start(GTK_BOX(remote_ui.files),row,FALSE,FALSE,0);remote_ui.transfer_folder=gtk_check_button_new_with_label("Folder");gtk_widget_set_name(remote_ui.transfer_folder,"insight-scp-folder");gtk_box_pack_start(GTK_BOX(row),remote_ui.transfer_folder,FALSE,FALSE,0);remote_ui.transfer_mode=gtk_combo_box_text_new();gtk_widget_set_name(remote_ui.transfer_mode,"insight-scp-packing");const gchar *packing[]={"No packing","gz (file)","tar.gz (file/folder)"};for(guint i=0;i<3;i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(remote_ui.transfer_mode),packing[i]);gtk_combo_box_set_active(GTK_COMBO_BOX(remote_ui.transfer_mode),0);gtk_box_pack_start(GTK_BOX(row),remote_ui.transfer_mode,FALSE,FALSE,0);form_button(row,"Choose…","insight-scp-choose",G_CALLBACK(scp_choose),NULL);
+ row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);gtk_box_pack_start(GTK_BOX(remote_ui.files),row,FALSE,FALSE,0);form_button(row,"Send","insight-scp-send",G_CALLBACK(scp_start),GINT_TO_POINTER(TRUE));form_button(row,"Receive","insight-scp-receive",G_CALLBACK(scp_start),GINT_TO_POINTER(FALSE));form_button(row,"Stop","insight-scp-stop",G_CALLBACK(stop_transfer),NULL);remote_ui.transfer_status=gtk_label_new("Archives are transferred as files. Receive never overwrites an existing local destination.");gtk_widget_set_name(remote_ui.transfer_status,"insight-scp-status");gtk_label_set_selectable(GTK_LABEL(remote_ui.transfer_status),TRUE);gtk_label_set_line_wrap(GTK_LABEL(remote_ui.transfer_status),TRUE);gtk_label_set_xalign(GTK_LABEL(remote_ui.transfer_status),0);gtk_box_pack_start(GTK_BOX(remote_ui.files),remote_ui.transfer_status,FALSE,FALSE,0);
  remote_ui.status=gtk_label_new("SSH/SFTP — configure a connection, transfer files, or add a terminal");gtk_widget_set_name(remote_ui.status,"insight-ssh-status");gtk_label_set_xalign(GTK_LABEL(remote_ui.status),0);gtk_label_set_line_wrap(GTK_LABEL(remote_ui.status),TRUE);gtk_label_set_line_wrap_mode(GTK_LABEL(remote_ui.status),PANGO_WRAP_WORD_CHAR);gtk_label_set_selectable(GTK_LABEL(remote_ui.status),TRUE);gtk_label_set_width_chars(GTK_LABEL(remote_ui.status),1);gtk_box_pack_start(GTK_BOX(remote_ui.page),remote_ui.status,FALSE,TRUE,0);
  GtkWidget *plus=gtk_button_new_from_icon_name("list-add-symbolic",GTK_ICON_SIZE_MENU);gtk_widget_set_name(plus,"insight-ssh-new-terminal");gtk_widget_set_tooltip_text(plus,"New SSH terminal");g_signal_connect(plus,"clicked",G_CALLBACK(session_add),NULL);gtk_notebook_set_action_widget(GTK_NOTEBOOK(remote_ui.tabs),plus,GTK_PACK_END);session_add(NULL,NULL);gtk_notebook_set_current_page(GTK_NOTEBOOK(remote_ui.tabs),0);
  insight_panel_help_attach(remote_ui.page,"panel-ssh.md"); gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),remote_ui.page,gtk_label_new("SSH Terminal")); gtk_widget_show_all(remote_ui.page);

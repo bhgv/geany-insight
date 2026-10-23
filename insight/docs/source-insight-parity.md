@@ -774,3 +774,5 @@ Appearance and live-translation hooks exclude GTK tooltip windows and their desc
 ### Collapsible sidebars and independent SSH console tabs (2026-10-23)
 
 Both shelf splitters can shrink below their content requisition. Text controls use zero CSS minimum width and ellipsized labels; width hosts constrain panel bodies while adjacent icon buttons retain their own size until collision. SSH introduces a right-side tab rail, separate connection/file-access forms and up to 16 process-isolated terminals. An 80%-opaque draggable Ai overlay opens an embedded assistant using shared connections and guarded code proposals; explicit reviewed-command execution targets its originating session. Existing queued SFTP/cache integration remains separate. [SSH guide](panel-ssh.md).
+
+SSH: right-side Connection/Transfer/session tabs, up to 16 independent shells, draggable embedded Ai, independent SCP and gz/tar.gz archive transfers. Stop does not disconnect shells; local receive refuses overwrites.

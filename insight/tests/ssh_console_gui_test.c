@@ -16,6 +16,8 @@ static gchar *view_text(GtkWidget *view) { GtkTextBuffer *buffer=gtk_text_view_g
 static gchar *transcript(void) { return view_text(output); }
 static guint ready_count(const gchar *text) { guint count=0;const gchar *p=text;while((p=strstr(p,"\nINSIGHT_SSH_OK\n"))) { count++;p++; }return count; }
 static void send_line(const gchar *command) { gtk_entry_set_text(GTK_ENTRY(input),command);g_signal_emit_by_name(input,"activate"); }
+static void transfer_path(const gchar *widget,const gchar *name) { gchar *path=g_build_filename(g_getenv("INSIGHT_SSH_TRANSFER_DIR"),name,NULL);gtk_entry_set_text(GTK_ENTRY(named(window,widget)),path);g_free(path); }
+static gboolean transfer_complete(void) { return strstr(gtk_label_get_text(GTK_LABEL(named(window,"insight-scp-status"))),"Transfer completed")!=NULL; }
 static gboolean step(gpointer data) {
  (void)data;if(!document_get_current()) return G_SOURCE_CONTINUE;
  if(!window) {
@@ -30,6 +32,14 @@ static gboolean step(gpointer data) {
  } else if(phase==10) {
   gchar *second=view_text(output2);gboolean ready=strstr(second,"\nSESSION_TWO\n")!=NULL;g_free(second);if(ready) { gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs),2);send_line("printf '\\nSESSION_ONE_ALIVE\\n'");phase=11; }
  } else if(phase==11 && strstr(text,"\nSESSION_ONE_ALIVE\n")) {
+  transfer_path("insight-scp-local","transfer-source.bin");transfer_path("insight-scp-remote","uploaded.bin");click("insight-scp-send");phase=12;
+ } else if(phase==12 && transfer_complete()) {
+  transfer_path("insight-scp-local","received.bin");click("insight-scp-receive");phase=13;
+ } else if(phase==13 && transfer_complete()) {
+  transfer_path("insight-scp-local","folder-source");transfer_path("insight-scp-remote","uploaded.tar.gz");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(window,"insight-scp-folder")),TRUE);gtk_combo_box_set_active(GTK_COMBO_BOX(named(window,"insight-scp-packing")),2);click("insight-scp-send");phase=14;
+ } else if(phase==14 && transfer_complete()) {
+  transfer_path("insight-scp-local","received.gz");transfer_path("insight-scp-remote","transfer-source.bin");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(window,"insight-scp-folder")),FALSE);gtk_combo_box_set_active(GTK_COMBO_BOX(named(window,"insight-scp-packing")),1);click("insight-scp-receive");phase=15;
+ } else if(phase==15 && transfer_complete()) {
   click("insight-ssh-disconnect");click("insight-ssh-connect");send_line("printf '\\nINSIGHT_SSH_OK\\n'");phase=1;
  } else if(phase==1 && ready_count(text)>=2) { send_line("exit 7");phase++; }
  else if(phase==2 && strstr(label,"status 7")) {

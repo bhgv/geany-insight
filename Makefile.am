@@ -534,7 +534,7 @@ EXTRA_DIST += insight/tests/html_export_test.c insight/tests/html_export_gui_tes
 dist_insightdocmedia_DATA += insight/docs/media/html-export.jpg
 
 insighttooldir = $(pkgdatadir)/insight/tools
-dist_insighttool_DATA = insight/tools/ai_client.py
+dist_insighttool_DATA = insight/tools/ai_client.py insight/tools/remote_pack.py
 
 insightdoc_DATA += insight/docs/console-ai.md
 dist_insightdocmedia_DATA += insight/docs/media/console-ai.svg
@@ -645,3 +645,6 @@ EXTRA_DIST += insight/tests/macos_menu_gui_test.c
 dist_insightdocmedia_DATA += insight/docs/media/compare-windows.svg
 
 insightdoc_DATA += insight/docs/comparison-layout.md
+
+dist_insightdocmedia_DATA += insight/docs/media/ssh-workspace.svg
+EXTRA_DIST += insight/tests/remote_pack_test.py

@@ -43,6 +43,8 @@ on:
       - src/insight-askpass.c
       - insight/desktop/remote_io.*
       - insight/tests/remote_io_test.c
+      - insight/tools/remote_pack.py
+      - insight/tests/remote_pack_test.py
       - insight/tests/ssh_console*
       - src/vte.*
       - insight/desktop/ai_client.*

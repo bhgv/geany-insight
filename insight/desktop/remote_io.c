@@ -26,7 +26,7 @@ gchar *insight_remote_program(const gchar *program,const gchar *directory) {
  if(path && g_file_test(path,G_FILE_TEST_IS_REGULAR) && g_file_test(path,G_FILE_TEST_IS_EXECUTABLE)) { gchar *absolute=insight_canonicalize_filename(path,NULL);g_free(path);return absolute; }
  g_free(path);path=g_find_program_in_path(program);
 #ifdef G_OS_WIN32
- if(!path && (!strcmp(program,"ssh") || !strcmp(program,"sftp"))) {
+ if(!path && (!strcmp(program,"ssh") || !strcmp(program,"sftp") || !strcmp(program,"scp"))) {
   const gchar *root=g_getenv("SystemRoot");
   if(root) { name=g_strconcat(program,".exe",NULL);const gchar *folders[]={"Sysnative","System32"};
    for(guint i=0;i<G_N_ELEMENTS(folders) && !path;i++) { gchar *candidate=g_build_filename(root,folders[i],"OpenSSH",name,NULL);if(g_file_test(candidate,G_FILE_TEST_IS_REGULAR) && g_file_test(candidate,G_FILE_TEST_IS_EXECUTABLE)) path=candidate;else g_free(candidate); }
@@ -49,6 +49,24 @@ gchar **insight_remote_argv(const InsightRemote *r,gboolean sftp) {
  else g_ptr_array_add(args,g_strdup("-tt"));
  g_ptr_array_add(args,g_strdup("--")); g_ptr_array_add(args,sftp && strchr(r->host,':') ? g_strdup_printf("[%s]",r->host) : g_strdup(r->host));
  g_ptr_array_add(args,NULL); return (gchar **)g_ptr_array_free(args,FALSE);
+}
+gchar **insight_remote_scp_argv(const InsightRemote *r,const gchar *local,gboolean upload,gboolean folder,GError **error) {
+ if(!valid_path(local) || !g_path_is_absolute(local)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"SCP requires an absolute local path");return NULL; }
+ for(const gchar *p=r->remote;*p;p++) if(!g_ascii_isalnum(*p) && !strchr("/._-",*p)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"SCP remote paths may contain letters, digits, / . _ - only. Use Open remote via SFTP for other names.");return NULL; }
+ gchar **base=insight_remote_argv(r,TRUE);GPtrArray *args=g_ptr_array_new_with_free_func(g_free);
+ g_ptr_array_add(args,g_strdup("scp"));
+ /* Reuse authentication/keepalive options, excluding SFTP batch/host. */
+ guint n=g_strv_length(base);for(guint i=1;i<n-4;i++) g_ptr_array_add(args,g_strdup(base[i]));
+ if(folder) g_ptr_array_add(args,g_strdup("-r"));g_ptr_array_add(args,g_strdup("--"));
+ gchar *host=strchr(r->host,':') ? g_strdup_printf("[%s]",r->host):g_strdup(r->host),*remote=g_strdup_printf("%s:%s",host,r->remote);g_free(host);
+ g_ptr_array_add(args,g_strdup(upload ? local:remote));g_ptr_array_add(args,g_strdup(upload ? remote:local));g_free(remote);g_strfreev(base);g_ptr_array_add(args,NULL);return (gchar **)g_ptr_array_free(args,FALSE);
+}
+gchar **insight_remote_archive_argv(const InsightRemote *r,gboolean tar,GError **error) {
+ if(!valid_path(r->remote) || !strcmp(r->remote,"/")) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Choose a remote file or folder below the root directory");return NULL; }
+ gchar **base=insight_remote_argv(r,FALSE);GPtrArray *args=g_ptr_array_new_with_free_func(g_free);
+ for(guint i=0;base[i];i++) g_ptr_array_add(args,g_strdup(!strcmp(base[i],"-tt") ? "-T":base[i]));g_strfreev(base);
+ gchar *command;if(tar) { gchar *dir=g_path_get_dirname(r->remote),*name=g_path_get_basename(r->remote),*a=g_shell_quote(dir),*b=g_shell_quote(name);command=g_strdup_printf("tar -czf - -C %s -- %s",a,b);g_free(a);g_free(b);g_free(dir);g_free(name); }else { gchar *path=g_shell_quote(r->remote);command=g_strdup_printf("gzip -c -- %s",path);g_free(path); }
+ g_ptr_array_add(args,command);g_ptr_array_add(args,NULL);return (gchar **)g_ptr_array_free(args,FALSE);
 }
 /* OpenSSH's quoted pathname parser protects glob characters itself. Escape
  * quotes/backslashes only; extra glob escapes would become literal slashes. */

@@ -1140,4 +1140,4 @@ install_subdir('insight/docs/ru', install_dir: cdata.get('GEANY_DATA_DIR') / 'in
 install_subdir('styles', install_dir: cdata.get('GEANY_DATA_DIR'))
 install_subdir('fonts', install_dir: cdata.get('GEANY_DATA_DIR'))
 
-install_data('insight/tools/ai_client.py', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'tools')
+install_data('insight/tools/ai_client.py', 'insight/tools/remote_pack.py', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'tools')

@@ -43,7 +43,7 @@ def main():
             f'PidFile {root / "sshd.pid"}\nAuthorizedKeysFile {authorized}\n'
             f'AllowUsers {user}\nStrictModes no\nUsePAM no\nPasswordAuthentication no\n'
             'KbdInteractiveAuthentication no\nPubkeyAuthentication yes\n'
-            'PermitRootLogin prohibit-password\nPrintMotd no\nLogLevel ERROR\n')
+            'PermitRootLogin prohibit-password\nPrintMotd no\nLogLevel ERROR\nSubsystem sftp internal-sftp\n')
         public = (root / 'host.pub').read_text().split()
         (root / 'known_hosts').write_text(f'[127.0.0.1]:{port} {public[0]} {public[1]}\n')
         client_config = root / 'ssh.conf'
@@ -56,6 +56,18 @@ def main():
         wrapper = bin_dir / 'ssh'
         wrapper.write_text(f'#!/bin/sh\nexec {shlex.quote(ssh)} -F {shlex.quote(str(client_config))} "$@"\n')
         wrapper.chmod(0o700)
+        scp = shutil.which('scp')
+        if not scp:
+            return 77
+        scp_wrapper = bin_dir / 'scp'
+        scp_wrapper.write_text(f'#!/bin/sh\nexec {shlex.quote(scp)} -F {shlex.quote(str(client_config))} "$@"\n')
+        scp_wrapper.chmod(0o700)
+        (bin_dir / 'python3').symlink_to(sys.executable)
+        transfer_source = root / 'transfer-source.bin'
+        transfer_source.write_bytes(bytes(range(256)) * 100)
+        folder_source = root / 'folder-source'
+        folder_source.mkdir()
+        (folder_source / 'source.c').write_text('int value;\n')
         with (root / 'server.log').open('w+') as log:
             server = subprocess.Popen([sshd, '-D', '-e', '-f', str(config)], stdout=log, stderr=log)
             try:
@@ -80,10 +92,15 @@ def main():
                 env.update(PATH=str(bin_dir) + os.pathsep + str(prefix / 'bin'), LC_ALL='C',
                            INSIGHT_SSH_TEST_PORT=str(port), INSIGHT_SSH_REFUSED_PORT=str(refused),
                            INSIGHT_SSH_TEST_USER=user, INSIGHT_SSH_TEST_KEY=str(root / 'client'),
-                           INSIGHT_SSH_TEST_WRAPPER=str(wrapper))
+                           INSIGHT_SSH_TEST_WRAPPER=str(wrapper), INSIGHT_SSH_TRANSFER_DIR=str(root))
                 result = subprocess.run([str(Path(sys.argv[1]).resolve())], env=env, timeout=45)
                 if result.returncode:
                     raise RuntimeError(f'GUI SSH regression failed: {result.returncode}')
+                import gzip, tarfile
+                assert (root / 'received.bin').read_bytes() == transfer_source.read_bytes()
+                assert gzip.decompress((root / 'received.gz').read_bytes()) == transfer_source.read_bytes()
+                with tarfile.open(root / 'uploaded.tar.gz') as archive:
+                    assert archive.extractfile('folder-source/source.c').read() == b'int value;\n'
                 return 0
             finally:
                 server.terminate()
