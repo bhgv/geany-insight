@@ -3,8 +3,8 @@
 Comparison/Merge, Directory Compare, snapshot comparisons, Git History and editor
 AI review now share the same toolbar component: compact 2/3-size controls, scrollable
 tabs at the top, and 86 px control pages. The default window size is 1100×700;
-explicitly saved Directory Compare and Diff/Merge sizes remain respected. Source
-fonts are independent of toolbar scaling. Excess controls scroll inside their page
+explicitly saved Directory Compare and Diff/Merge sizes remain respected. Comparison code uses a shared 10 pt starting baseline, independent of toolbar
+scaling and editor font preferences. Excess controls scroll inside their page
 instead of forcing the whole window wider or taller.
 
 Directory tabs: Files and comparison; Comparison options; View (filters, masks,
@@ -18,7 +18,7 @@ Directory Compare reveals the filter tab before focusing its input.
 «Сравнение/сведение», сравнение каталогов и снимков, история Git и ИИ-проверка
 используют общий компонент: верхние вкладки, уменьшенные в 1,5 раза элементы,
 область параметров 86 px и начальный размер окна 1100×700. Явно сохранённые размеры
-пользователя сохраняются. Шрифт исходника от масштаба параметров не зависит.
+пользователя сохраняются. Начальная база кода в сравнении — 10 pt; она не зависит от масштаба параметров и шрифта основного редактора.
 Длинные панели прокручиваются внутри вкладки, сохраняя место для содержимого.
 У каталогов отдельные группы файлов, сравнения, вида/фильтров, файловых операций
 и навигации; у ИИ — запроса, файлов, подключения и истории запросов.

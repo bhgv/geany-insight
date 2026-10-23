@@ -776,7 +776,7 @@ static void source_allocated(GtkWidget *widget,GtkAllocation *allocation,gpointe
 static void horizontal_scroll(GtkAdjustment *adjustment,gpointer data) { Merge *m=data;if(m->scrolling||!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->sync))) return;m->scrolling=TRUE;guint side=adjustment==m->horizontal[1];gtk_adjustment_set_value(m->horizontal[1-side],gtk_adjustment_get_value(adjustment));m->scrolling=FALSE; }
 static void display_changed(GtkWidget *widget,gpointer data) {
  (void)widget;Merge *m=data;alignment_queue(m);gint zoom=gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(m->zoom));
- gchar size[G_ASCII_DTOSTR_BUF_SIZE];g_ascii_dtostr(size,sizeof size,10.0*zoom/100.0);gchar *css=g_strdup_printf("textview { font-size: %spt; }",size);gtk_css_provider_load_from_data(m->font_css,css,-1,NULL);g_free(css);
+ gchar size[G_ASCII_DTOSTR_BUF_SIZE];g_ascii_dtostr(size,sizeof size,(gdouble)INSIGHT_COMPARE_CODE_POINTS*zoom/100.0);gchar *css=g_strdup_printf("textview { font-size: %spt; }",size);gtk_css_provider_load_from_data(m->font_css,css,-1,NULL);g_free(css);
  for(gint i=0;i<3;i++) {
   gtk_text_view_set_monospace(GTK_TEXT_VIEW(m->views[i]),gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->mono)));
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(m->scrollers[i]),GTK_POLICY_AUTOMATIC,gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->vertical)) ? GTK_POLICY_AUTOMATIC : GTK_POLICY_NEVER);

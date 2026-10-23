@@ -5,6 +5,7 @@
 /* Shared chrome only: no comparison state, source fonts or operation callbacks. */
 #define INSIGHT_COMPARE_WIDTH 1100
 #define INSIGHT_COMPARE_HEIGHT 700
+#define INSIGHT_COMPARE_CODE_POINTS 10
 static inline void insight_compare_ui_move(GtkWidget *widget,GtkWidget *page)
 {
  g_object_ref(widget);GtkWidget *old=gtk_widget_get_parent(widget);if(old) gtk_container_remove(GTK_CONTAINER(old),widget);
@@ -15,7 +16,7 @@ static inline GtkWidget *insight_compare_ui_tabs(GtkWidget *root,const gchar *na
  GdkScreen *screen=gtk_widget_get_screen(root);
  if(!g_object_get_data(G_OBJECT(screen),"insight-compare-ui-css")) {
   GtkCssProvider *css=gtk_css_provider_new();gtk_css_provider_load_from_data(css,
-   ".insight-compare-toolbar { font-size: 66.667%; } "
+   ".insight-compare-code { font-size: " G_STRINGIFY(INSIGHT_COMPARE_CODE_POINTS) "pt; } .insight-compare-toolbar { font-size: 66.667%; } "
    ".insight-compare-toolbar button, .insight-compare-toolbar entry, .insight-compare-toolbar combobox { min-height: 0; min-width: 0; padding: 2px 4px; } "
    ".insight-compare-toolbar checkbutton check { min-height: 10px; min-width: 10px; } "
    ".insight-compare-toolbar tab { min-height: 0; padding: 2px 5px; }",-1,NULL);
