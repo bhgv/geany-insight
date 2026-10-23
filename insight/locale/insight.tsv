@@ -2011,3 +2011,4 @@ Start at beginning	Начать с начала списка
 Search visible columns of loaded rows; no files are opened	Поиск по видимым колонкам загруженных строк; файлы не открываются
 Next list match (F4)	Следующее совпадение в списке (F4)
 Previous list match (Shift+F4)	Предыдущее совпадение в списке (Shift+F4)
+Use regular expressions	Использовать регулярные выражения

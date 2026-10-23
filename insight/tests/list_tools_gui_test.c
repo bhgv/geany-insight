@@ -60,8 +60,11 @@ int main(int argc,char **argv) {
     gtk_list_store_clear(store);for(guint i=0;i<20001;i++) { gtk_list_store_append(store,&iter);gtk_list_store_set(store,&iter,0,"row",1,"sample.c",-1); }
     command(menu,"insight-list-copy");settle(view);clipboard_is("sentinel");g_assert_nonnull(strstr(g_object_get_data(G_OBJECT(view),"insight-list-tools-status"),"20000"));
     gtk_list_store_clear(store);gchar *huge=g_strnfill(65537,'x');gtk_list_store_append(store,&iter);gtk_list_store_set(store,&iter,0,huge,1,"sample.c",-1);g_free(huge);command(menu,"insight-list-copy");settle(view);clipboard_is("sentinel");
+    gtk_list_store_clear(store);gchar *hard=g_strnfill(512,'a');gchar *difficult=g_strconcat(hard,"!",NULL);g_free(hard);gtk_list_store_append(store,&iter);gtk_list_store_set(store,&iter,0,difficult,1,"sample.c",-1);g_free(difficult);
+    command(menu,"insight-list-search-command");d=dialog();search(view,d,"(a+)+$",TRUE,TRUE,TRUE,FALSE);g_assert_nonnull(strstr(g_object_get_data(G_OBJECT(view),"insight-list-tools-status"),"work limit"));gtk_widget_destroy(d);
     /* Model replacement and destruction while idle work is pending. */
     command(menu,"insight-list-copy");gtk_tree_view_set_model(GTK_TREE_VIEW(view),GTK_TREE_MODEL(store));settle(view);clipboard_is("sentinel");
+    insight_list_tools_popup_attach(GTK_TREE_VIEW(view));gboolean handled=FALSE;g_signal_emit_by_name(view,"popup-menu",&handled);g_assert_true(handled);GtkWidget *popup=g_object_get_data(G_OBJECT(view),"insight-list-popup");g_assert_nonnull(named(popup,"insight-list-copy"));gtk_menu_popdown(GTK_MENU(popup));
     command(menu,"insight-list-copy");g_object_ref(view);gtk_widget_destroy(window);settle(view);g_object_unref(view);gtk_widget_destroy(menu);g_object_unref(menu);
     /* A collapsed ancestor is expanded to show a loaded descendant. */
     GtkTreeStore *tree=gtk_tree_store_new(1,G_TYPE_STRING);GtkTreeIter root,child;gtk_tree_store_append(tree,&root,NULL);gtk_tree_store_set(tree,&root,0,"parent",-1);gtk_tree_store_append(tree,&child,&root);gtk_tree_store_set(tree,&child,0,"nested needle",-1);

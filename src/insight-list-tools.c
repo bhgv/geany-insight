@@ -227,6 +227,30 @@ void insight_list_tools_menu(GtkTreeView *view,GtkWidget *menu) {
     const gchar *labels[]={"Copy List","Search List…","Next list match (F4)","Previous list match (Shift+F4)"};const gchar *names[]={"insight-list-copy","insight-list-search-command","insight-list-next","insight-list-previous"};
     for(guint i=0;i<G_N_ELEMENTS(labels);i++) { GtkWidget *item=gtk_menu_item_new_with_label(labels[i]);gtk_widget_set_name(item,names[i]);g_object_set_data(G_OBJECT(item),"insight-list-action",GUINT_TO_POINTER(i));g_signal_connect_object(item,"activate",G_CALLBACK(action),view,0);gtk_menu_shell_append(GTK_MENU_SHELL(menu),item); }
 }
+static void menu_free(gpointer data) { gtk_widget_destroy(GTK_WIDGET(data));g_object_unref(data); }
+static GtkWidget *default_menu(GtkTreeView *view) {
+    GtkWidget *menu=g_object_get_data(G_OBJECT(view),"insight-list-popup");
+    if(!menu) {
+        menu=gtk_menu_new();g_object_ref_sink(menu);gtk_menu_attach_to_widget(GTK_MENU(menu),GTK_WIDGET(view),NULL);
+        insight_list_tools_menu(view,menu);
+        /* The shared appender separates commands from an existing menu. */
+        GList *children=gtk_container_get_children(GTK_CONTAINER(menu));if(children) gtk_widget_destroy(children->data);g_list_free(children);
+        g_object_set_data_full(G_OBJECT(view),"insight-list-popup",menu,menu_free);
+    }
+    insight_i18n_apply(menu);gtk_widget_show_all(menu);return menu;
+}
+static gboolean popup(GtkWidget *widget,gpointer data) {
+    (void)data;gtk_menu_popup_at_widget(GTK_MENU(default_menu(GTK_TREE_VIEW(widget))),widget,GDK_GRAVITY_SOUTH_WEST,GDK_GRAVITY_NORTH_WEST,NULL);return TRUE;
+}
+static gboolean popup_button(GtkWidget *widget,GdkEventButton *event,gpointer data) {
+    (void)data;if(event->type!=GDK_BUTTON_PRESS || event->button!=3) return FALSE;
+    gtk_widget_grab_focus(widget);gtk_menu_popup_at_pointer(GTK_MENU(default_menu(GTK_TREE_VIEW(widget))),(GdkEvent *)event);return TRUE;
+}
+void insight_list_tools_popup_attach(GtkTreeView *view) {
+    insight_list_tools_attach(view);if(g_object_get_data(G_OBJECT(view),"insight-list-default-menu")) return;
+    g_object_set_data(G_OBJECT(view),"insight-list-default-menu",GINT_TO_POINTER(1));
+    g_signal_connect(view,"popup-menu",G_CALLBACK(popup),NULL);g_signal_connect(view,"button-press-event",G_CALLBACK(popup_button),NULL);
+}
 gboolean insight_list_tools_key(GtkWidget *widget,GdkEventKey *event) {
     if(!widget || !GTK_IS_TREE_VIEW(widget) || event->keyval!=GDK_KEY_F4 || (event->state&(GDK_CONTROL_MASK|GDK_MOD1_MASK|GDK_SUPER_MASK|GDK_META_MASK))) return FALSE;
     ListTools *s=g_object_get_data(G_OBJECT(widget),"insight-list-tools");if(!s) return FALSE;

@@ -20,3 +20,6 @@ Full reference: [Search and replacement modes and query languages](search-replac
 [Source Links](source-links.md)
 
 Background search refreshes (Follow, source edits and index updates) keep the selected message tab and leave closed Results closed. An explicit search or navigation to results still shows the tab.
+
+
+[Search and copy the list](list-tools.md): context menu and F4/Shift+F4 within already collected results.

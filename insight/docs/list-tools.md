@@ -1,6 +1,6 @@
 # Search and copy lists
 
-The context menus of **File Symbols**, **Project Symbols**, **Project Files** and the flat/tree **Relations** lists provide:
+The context menus of **File Symbols**, **Project Symbols**, **Project Files**, **Search Results** and the flat/tree **Relations** lists provide:
 
 | Command | Action |
 | --- | --- |
@@ -27,3 +27,5 @@ Copy includes headings and visible columns in their current order. Columns use t
 GTK work is sliced into short idle intervals. Model, sorting or column layout/visibility changes invalidate pending work; a changed selection also prevents search from replacing a newer user choice. Closing the search dialog cancels its pending search. A new command replaces unfinished work. Clipboard contents change only after the complete copy succeeds.
 
 Limits per operation: 20000 rows, 64 tree levels, 64 KiB per cell/row and 8 MiB total text; patterns are at most 512 UTF-8 bytes. Regular expressions have additional match/depth work limits. Narrow the filter when a limit is reached. Unloaded pages/branches and source files on disk are never read. These commands operate on the current loaded list rather than exporting the entire project symbol database.
+
+Search Results has its own context menu: right click retains the current result selection. The existing **Copy results** button retains its diagnostic-line format; **Copy List** copies visible columns with headings.
