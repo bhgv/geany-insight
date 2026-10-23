@@ -20,7 +20,7 @@ static void refresh(void) { gtk_button_clicked(GTK_BUTTON(button(info(),"Refresh
 static guint count(void) { GtkWidget *w=info();if(!w) return 0;return gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(named(w,"insight-symbol-info-candidates"))),NULL); }
 static void query(const gchar *text,gint kind) { gtk_combo_box_set_active(GTK_COMBO_BOX(named(info(),"insight-symbol-info-kind")),kind);gtk_entry_set_text(GTK_ENTRY(named(info(),"insight-symbol-info-query")),text);refresh(); }
 static void command(const gchar *name) { GtkWidget *navigate=g_object_get_data(G_OBJECT(window),"insight-navigate");GtkWidget *item=named(gtk_menu_item_get_submenu(GTK_MENU_ITEM(navigate)),name);g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item)); }
-static void caret(const gchar *needle) { const gchar *at=strstr(code,needle);g_assert_nonnull(at);origin=(gint)(at-code);sci_set_selection(source->editor->sci,origin,origin);gtk_widget_grab_focus(GTK_WIDGET(source->editor->sci)); }
+static void caret(const gchar *needle) { const gchar *at=strstr(code,needle);g_assert_nonnull(at);origin=(gint)(at-code);scintilla_send_message(source->editor->sci,SCI_SETSEL,origin,origin);gtk_widget_grab_focus(GTK_WIDGET(source->editor->sci)); }
 static void same_source(void) { g_assert_true(document_get_current()==source);g_assert_cmpint(sci_get_current_position(source->editor->sci),==,origin);gchar *text=sci_get_contents(source->editor->sci,-1);g_assert_cmpstr(text,==,code);g_free(text);g_assert_false(source->changed);g_assert_false(scintilla_send_message(source->editor->sci,SCI_CANUNDO,0,0)); }
 static void close_info(void) { if(info()) gtk_widget_destroy(info()); }
 static gboolean step(gpointer data) {
