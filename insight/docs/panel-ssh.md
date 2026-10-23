@@ -24,3 +24,5 @@ Connect starts an OpenSSH client, then the client authenticates with the server.
 Clients shipped in the application bin directory are resolved to absolute paths before spawning; PATH and, on Windows, system OpenSSH locations are fallbacks. If the password dialog helper is missing, a visible message explains that only key/agent authentication is available. Password/host-key questions use the separate SSH dialog. Spaces around the host and login are ignored.
 
 ![SSH connection flow](media/ssh-connection.svg)
+
+SSH-панель разделена на вкладки справа: подключение, доступ к файлам и независимые терминалы. Кнопка «+» добавляет терминал (до 16); у каждого свой процесс, очередь ввода и журнал. Кнопку Ai с непрозрачностью 80% можно перетащить по терминалу; она открывает встроенного помощника. Используются общие профили моделей и проверяемые предложения правок через дифф. Явная кнопка выполнения отправляет предложенную команду только в этот терминал.

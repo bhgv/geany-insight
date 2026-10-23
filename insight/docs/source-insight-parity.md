@@ -770,3 +770,7 @@ File Symbols search/mode/sort fields now have shrinkable text requisitions. Chec
 ### Native tooltip presentation without map-time restyling (2026-10-23)
 
 Appearance and live-translation hooks exclude GTK tooltip windows and their descendants. Their font/visual/icons and rendered labels remain native after GTK measures and positions the popup; translation continues on source controls. Ordinary windows and menus keep the selected style. The native menu fixture now exercises repeated tooltip-type popup mapping, unchanged label/icon state, real pointer-triggered GTK tooltips and stable editor/Context allocations. [Interface guide and diagram](interface-style.md).
+
+### Collapsible sidebars and independent SSH console tabs (2026-10-23)
+
+Both shelf splitters can shrink below their content requisition. Text controls use zero CSS minimum width and ellipsized labels; width hosts constrain panel bodies while adjacent icon buttons retain their own size until collision. SSH introduces a right-side tab rail, separate connection/file-access forms and up to 16 process-isolated terminals. An 80%-opaque draggable Ai overlay opens an embedded assistant using shared connections and guarded code proposals; explicit reviewed-command execution targets its originating session. Existing queued SFTP/cache integration remains separate. [SSH guide](panel-ssh.md).

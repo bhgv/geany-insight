@@ -4,6 +4,9 @@
 #include <gtk/gtk.h>
 typedef gboolean (*InsightAiInsert)(const gchar *,gpointer);
 void insight_ai_init(void);
+GtkWidget *insight_ai_embed(GtkWidget *,const gchar *,const gchar *,GtkWidget *,InsightAiInsert,gpointer);
+gboolean insight_ai_context_update(GtkWidget *,const gchar *);
+gchar *insight_ai_suggested_command(GtkWidget *);
 void insight_ai_lookup(const gchar *,const gchar *,const gchar *);
 GtkWidget *insight_ai_open(const gchar *,const gchar *,GtkWidget *,InsightAiInsert,gpointer);
 #endif
