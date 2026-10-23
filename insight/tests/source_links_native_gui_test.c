@@ -63,13 +63,13 @@ static gboolean step(gpointer data) {
   command(1);doc=document_get_current();g_assert_cmpstr(doc->file_name,==,file);selected("needle");back_key();
   g_assert_true(document_close(doc));doc=NULL;gchar *saved=NULL;g_assert_true(g_file_get_contents(file,&saved,NULL,NULL));gchar *changed=g_strconcat("// external change\r\n",saved,NULL);g_assert_true(g_file_set_contents(file,changed,-1,NULL));g_free(saved);g_free(changed);
   command(1);doc=document_get_current();g_assert_cmpstr(doc->file_name,==,file);g_assert_cmpint(sci_get_selection_start(doc->editor->sci),==,sci_get_selection_end(doc->editor->sci));g_assert_false(doc->changed);
-  results_page=results;while(gtk_widget_get_parent(results_page)!=main_widgets.message_window_notebook) results_page=gtk_widget_get_parent(results_page);
-  gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),0);gchar *contents=sci_get_contents(doc->editor->sci,-1);gchar *word=strstr(contents,"needle");g_assert_nonnull(word);gint cursor=(gint)(word-contents)+1;SEND(doc->editor->sci,SCI_SETSEL,cursor,cursor);g_free(contents);document_grab_focus(doc);
+  results_page=results;while(gtk_widget_get_parent(results_page)!=ui_lookup_widget(window,"notebook_info")) results_page=gtk_widget_get_parent(results_page);
+  gtk_notebook_set_current_page(GTK_NOTEBOOK(ui_lookup_widget(window,"notebook_info")),0);gchar *contents=sci_get_contents(doc->editor->sci,-1);gchar *word=strstr(contents,"needle");g_assert_nonnull(word);gint cursor=(gint)(word-contents)+1;SEND(doc->editor->sci,SCI_SETSEL,cursor,cursor);g_free(contents);gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(window,"insight-relations-follow")),TRUE);after=g_get_monotonic_time()+G_TIME_SPAN_SECOND;phase=3;return G_SOURCE_CONTINUE;
  }
  if(phase==3) {
   if(g_get_monotonic_time()<after) return G_SOURCE_CONTINUE;
-  GtkNotebook *book=GTK_NOTEBOOK(main_widgets.message_window_notebook);g_assert_true(gtk_notebook_get_nth_page(book,gtk_notebook_get_current_page(book))!=results_page);g_assert_false(gtk_widget_has_focus(results));
+  GtkNotebook *book=GTK_NOTEBOOK(ui_lookup_widget(window,"notebook_info"));g_assert_true(gtk_notebook_get_nth_page(book,gtk_notebook_get_current_page(book))!=results_page);g_assert_false(gtk_widget_has_focus(results));
   gtk_button_clicked(GTK_BUTTON(close_button(window)));SEND(doc->editor->sci,SCI_INSERTTEXT,0,(sptr_t)"// background edit\n");after=g_get_monotonic_time()+G_TIME_SPAN_SECOND;phase=4;return G_SOURCE_CONTINUE;
  }
  if(phase==4) {

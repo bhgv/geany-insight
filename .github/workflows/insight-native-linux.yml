@@ -200,7 +200,7 @@ jobs:
         run: |
           # The regional Azure mirror can take ten minutes for this package set.
           # Keep Ubuntu's signed repositories, using its main HTTPS mirror.
-          for source in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do
+          for source in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list /etc/apt/apt-mirrors.txt /etc/apt/apt-mirrors/*.txt; do
             if test -f "$source"; then sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g; s|https://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$source"; fi
           done
           timeout 90s sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Languages=none update -qq || echo "Package index refresh unavailable; using runner package indexes"
