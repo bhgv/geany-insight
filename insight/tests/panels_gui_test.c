@@ -38,24 +38,29 @@ static void dump_notebooks(GtkWidget *widget) {
 }
 static GLogWriterOutput gtk_failure(GLogLevelFlags level,const GLogField *fields,gsize count,gpointer data) { (void)data;if(level&G_LOG_LEVEL_CRITICAL) { GList *windows=gtk_window_list_toplevels();for(GList *p=windows;p;p=p->next) dump_notebooks(p->data);g_list_free(windows); }return g_log_writer_default(level,fields,count,NULL); }
 
+static gboolean collapse_restored(gpointer data) { (void)data;GtkWidget *left=named(window,"insight-sidebar-width-host");g_assert_cmpint(gtk_widget_get_allocated_width(left),>=,170);g_assert_cmpint(gtk_paned_get_position(GTK_PANED(split)),==,saved_split);g_print("Both shelves collapse to a narrow strip and restore without moving source/Context beyond the left edge\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE; }
+static gboolean collapsed(gpointer data) {
+ (void)data;GtkWidget *left=named(window,"insight-sidebar-width-host");g_assert_cmpint(gtk_widget_get_allocated_width(left),<=,40);g_assert_cmpint(gtk_widget_get_allocated_width(book),<=,80);gint x,y;g_assert_true(gtk_widget_translate_coordinates(named(window,"insight-context"),window,0,0,&x,&y));g_assert_cmpint(x,>=,0);g_assert_true(gtk_widget_translate_coordinates(ui_lookup_widget(window,"notebook1"),window,0,0,&x,&y));g_assert_cmpint(x,>=,0);gtk_paned_set_position(GTK_PANED(ui_lookup_widget(window,"hpaned1")),180);gtk_paned_set_position(GTK_PANED(split),saved_split);g_timeout_add(250,collapse_restored,NULL);return G_SOURCE_REMOVE;
+}
 static gboolean finish(gpointer data) {
  (void)data;
  GtkWidget *left=ui_lookup_widget(window,"notebook3"),*horizontal=ui_lookup_widget(window,"hpaned1"),*vertical=ui_lookup_widget(window,"vpaned1"),*editors=ui_lookup_widget(window,"notebook1");
- g_assert_true(gtk_paned_get_child2(GTK_PANED(horizontal))==vertical);g_assert_true(gtk_paned_get_child1(GTK_PANED(vertical))==editors);
+ g_assert_true(gtk_widget_is_ancestor(vertical,gtk_paned_get_child2(GTK_PANED(horizontal))));g_assert_true(gtk_paned_get_child1(GTK_PANED(vertical))==editors);
  gint lx,ly,rx,ry;g_assert_true(gtk_widget_translate_coordinates(left,window,0,0,&lx,&ly));g_assert_true(gtk_widget_translate_coordinates(book,window,0,0,&rx,&ry));
  g_assert_cmpint(ABS(ly-ry),<=,2);g_assert_cmpint(ABS((ly+gtk_widget_get_allocated_height(left))-(ry+gtk_widget_get_allocated_height(book))),<=,2);
  g_print("Full-height shelves: File Symbols and Project share top and bottom bounds\n");
+ GtkWidget *bounds=named(window,"insight-sidebar-width-host");g_assert_nonnull(bounds);
  const gchar *controls[]={"insight-local-query","insight-local-query-history","insight-file-symbol-mode","insight-local-sort","insight-local-group-types","insight-local-scope-hierarchy","insight-local-type-filters","insight-local-locate"};
  for(guint i=0;i<G_N_ELEMENTS(controls);i++) {
-  GtkWidget *control=named(window,controls[i]);g_assert_nonnull(control);g_assert_true(gtk_widget_get_mapped(control));gint x,y;g_assert_true(gtk_widget_translate_coordinates(control,left,0,0,&x,&y));
-  g_printerr("Narrow sidebar %s: x=%d width=%d parent=%d\n",controls[i],x,gtk_widget_get_allocated_width(control),gtk_widget_get_allocated_width(left));g_assert_cmpint(x,>=,0);g_assert_cmpint(x+gtk_widget_get_allocated_width(control),<=,gtk_widget_get_allocated_width(left));
+  GtkWidget *control=named(window,controls[i]);g_assert_nonnull(control);g_assert_true(gtk_widget_get_mapped(control));gint x,y;g_assert_true(gtk_widget_translate_coordinates(control,bounds,0,0,&x,&y));
+  g_printerr("Narrow sidebar %s: x=%d width=%d parent=%d\n",controls[i],x,gtk_widget_get_allocated_width(control),gtk_widget_get_allocated_width(left));g_assert_cmpint(x,>=,0);g_assert_cmpint(x+gtk_widget_get_allocated_width(control),<=,gtk_widget_get_allocated_width(bounds));
  }
- GtkWidget *sort=named(window,"insight-local-sort"),*direction=named(sort,"insight-symbol-sort-descending");gint dx,dy;g_assert_true(gtk_widget_translate_coordinates(direction,left,0,0,&dx,&dy));g_assert_cmpint(dx+gtk_widget_get_allocated_width(direction),<=,gtk_widget_get_allocated_width(left));
+ GtkWidget *sort=named(window,"insight-local-sort"),*direction=named(sort,"insight-symbol-sort-descending");gint dx,dy;g_assert_true(gtk_widget_translate_coordinates(direction,bounds,0,0,&dx,&dy));g_assert_cmpint(dx+gtk_widget_get_allocated_width(direction),<=,gtk_widget_get_allocated_width(bounds));
  /* GTK may clamp the requested 180px to the active theme/font's minimum.
   * All controls above must fit that actual width; it must leave editor space. */
  g_assert_cmpint(gtk_widget_get_allocated_width(left),<,gtk_widget_get_allocated_width(window)/2);g_print("Russian File Symbols controls and right-hand buttons stay inside the narrow sidebar\n");
  const gchar *capture=g_getenv("INSIGHT_COMPACT_CAPTURE");if(capture) { GdkWindow *w=gtk_widget_get_window(window);GdkPixbuf *picture=gdk_pixbuf_get_from_window(w,0,0,gtk_widget_get_allocated_width(window),gtk_widget_get_allocated_height(window));g_assert_nonnull(picture);gint stride=gdk_pixbuf_get_rowstride(picture),channels=gdk_pixbuf_get_n_channels(picture),width=gdk_pixbuf_get_width(picture),height=gdk_pixbuf_get_height(picture);guchar *pixels=gdk_pixbuf_get_pixels(picture);guint painted=0;for(gint y=0;y<height/2;y++) for(gint x=0;x<width;x++) { guchar *rgb=pixels+y*stride+x*channels;if(rgb[0] || rgb[1] || rgb[2]) painted++; }g_assert_cmpuint(painted,>,(guint)(width*height/200));g_assert_true(gdk_pixbuf_save(picture,capture,"jpeg",NULL,"quality","90",NULL));g_object_unref(picture); }
- gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+ gtk_paned_set_position(GTK_PANED(horizontal),16);gtk_paned_set_position(GTK_PANED(split),gtk_widget_get_allocated_width(split)-16);g_timeout_add(250,collapsed,NULL);return G_SOURCE_REMOVE;
 }
 static gboolean timeout(gpointer data) { (void)data;g_error("Panels GUI timeout at phase %u",phase);return G_SOURCE_REMOVE; }
 static gboolean step(gpointer data) {
