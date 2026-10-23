@@ -38,6 +38,7 @@
 #include "insight-command-list.h"
 #include "insight-selection-search.h"
 #include "insight-word-highlights.h"
+#include "insight-web-search.h"
 #include "insight-typing.h"
 #include "insight-revisions.h"
 #include "insight-backups.h"
@@ -348,6 +349,8 @@ static void cb_func_insight(guint key_id)
     if (key_id == GEANY_KEYS_INSIGHT_ORIGINALCONTENTS) { insight_revisions_original();return; }
     if (key_id == GEANY_KEYS_INSIGHT_BACKTOGGLE) { navqueue_go_back_toggle();return; }
     if (key_id == GEANY_KEYS_INSIGHT_COMMANDBROWSER) { insight_command_browser_show();return; }
+    if (key_id == GEANY_KEYS_INSIGHT_SEARCHWEB) { insight_web_search_command(0);return; }
+    if (key_id == GEANY_KEYS_INSIGHT_SEARCHENGINES) { insight_web_search_command(1);return; }
     if (key_id == GEANY_KEYS_INSIGHT_HIGHLIGHTWORDS) { insight_word_highlights_command(1);return; }
     if (key_id == GEANY_KEYS_INSIGHT_CLEARHIGHLIGHTS) { insight_word_highlights_command(2);return; }
     GeanyDocument *doc = document_get_current();
@@ -870,6 +873,8 @@ static void init_default_kb(void)
     add_kb(group, GEANY_KEYS_INSIGHT_ORIGINALCHANGES, cb_func_insight,
         0, 0, "insight_original_changes", _("Original Changes"), NULL);
     group = keybindings_get_core_group(GEANY_KEY_GROUP_SEARCH);
+    add_kb(group, GEANY_KEYS_INSIGHT_SEARCHWEB, cb_func_insight, 0, 0, "insight_searchweb", _("Search Web"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_SEARCHENGINES, cb_func_insight, 0, 0, "insight_searchengines", _("Search Engines"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_HIGHLIGHTWORD, cb_func_insight, 0, 0, "insight_highlightword", _("Highlight Word"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_HIGHLIGHTWORDS, cb_func_insight, 0, 0, "insight_highlightwords", _("Highlighted Words"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_CLEARHIGHLIGHTS, cb_func_insight, 0, 0, "insight_clearhighlights", _("Clear Word Highlights"), NULL);

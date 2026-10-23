@@ -878,3 +878,8 @@ test('Insight persistent word highlights GUI', word_highlights_gui_test, timeout
 
 window_batch_gui_test = executable('test_insight_window_batch_gui', '../insight/tests/window_batch_gui_test.c', dependencies: test_deps)
 test('Insight open window batch actions GUI', window_batch_gui_test, timeout: 50, is_parallel: false)
+
+web_search_test = executable('test_insight_web_search', '../insight/tests/web_search_test.c', '../insight/desktop/web_search.c', include_directories: include_directories('../insight/desktop'), dependencies: deps, c_args: ['-UNDEBUG'])
+test('Insight escaped web search URLs', web_search_test)
+web_search_gui_test = executable('test_insight_web_search_gui', '../insight/tests/web_search_gui_test.c', dependencies: test_deps)
+test('Insight native Search Web and Search Engines GUI', web_search_gui_test, timeout: 45, is_parallel: false)

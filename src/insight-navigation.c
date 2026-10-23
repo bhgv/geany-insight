@@ -4,6 +4,7 @@
 #include "insight-command-list.h"
 #include "insight-selection-search.h"
 #include "insight-word-highlights.h"
+#include "insight-web-search.h"
 #include "insight-typing.h"
 #include "insight-revisions.h"
 #include "insight-backups.h"
@@ -580,6 +581,7 @@ void insight_navigation_menu(GtkWidget *menu)
     insight_command_list_menu();
     insight_selection_search_init();
     insight_word_highlights_init();
+    insight_web_search_init();
     insight_typing_init(menu);
     insight_revisions_init(menu);
     insight_backups_init();

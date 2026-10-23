@@ -728,3 +728,7 @@ Added independent whole-word highlights across open buffers, a session list, con
 ### Pick Window selected-file workflows (2026-10-23)
 
 Window List now supports multiple selected stable document IDs, selected-file Save / Save As / Close with cancellation stopping the batch, all/invert/copy-path tools and intersecting state filters. Unchanged metadata refresh leaves rows and selection intact; actual model changes preserve surviving selected IDs. Read-only save targets are skipped; native source tabs are not individual tiled MDI windows. [Guide and diagram](window-list.md).
+
+### Search Web and Search Engines (2026-10-23)
+
+Added source selection/caret query capture, reusable Search Web with engine selection and URL preview, explicit browser launch/copy, and an editable/reorderable persistent engine list using %S templates. HTTP(S), escaped single-component queries and bounded UTF-8 inputs keep template/query roles distinct; no implicit requests or saved query history. Two unassigned Search bindings and editor popup commands are available. [Guide and diagram](web-search.md).

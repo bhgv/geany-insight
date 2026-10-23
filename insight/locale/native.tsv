@@ -1549,3 +1549,21 @@ Read-only files	Файлы только для чтения
 Unsaved files	Несохранённые файлы
 %u of %u open files • %u selected	%u из %u открытых файлов • выбрано %u
 Selected paths exceed the 2 MiB clipboard limit	Пути выбранных файлов превышают предел буфера обмена 2 МиБ
+
+Search Web	Поиск в интернете
+Search Web…	Поиск в интернете…
+Search Engines	Поисковые системы
+Search Engines…	Поисковые системы…
+Engine name	Название поисковой системы
+Copy URL	Копировать URL
+Update selected	Изменить выбранное
+Cannot save web search settings	Не удалось сохранить настройки интернет-поиска
+Select a search engine	Выберите поисковую систему
+URL template and query must be valid UTF-8, up to 4096 bytes each	Шаблон URL и запрос должны быть в UTF-8, до 4096 байт каждый
+URL template must contain exactly one %S	Шаблон URL должен содержать ровно один %S
+Only HTTP and HTTPS search URLs are supported	Поддерживаются только URL HTTP и HTTPS
+Use a host without credentials and put %S after the host	Укажите узел без логина и пароля и разместите %S после узла
+Encode spaces and control characters in the URL template	Закодируйте пробелы и управляющие символы в шаблоне URL
+URL template contains an invalid percent escape	В шаблоне URL неверная процентная последовательность
+Search query must be a single line without control characters	Запрос должен быть одной строкой без управляющих символов
+Choose an engine and enter a name up to 128 bytes; maximum 32 engines	Выберите поисковик и введите имя до 128 байт; максимум 32 записи

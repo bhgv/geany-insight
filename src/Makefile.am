@@ -230,6 +230,8 @@ libgeany_la_SOURCES += \
 	insight-search-links.c insight-search-links.h ../insight/desktop/source_link_anchor.c ../insight/desktop/source_link_anchor.h \
 	insight-navigation.c insight-navigation.h \
 	insight-command-list.c insight-command-list.h \
+	insight-web-search.c insight-web-search.h \
+	../insight/desktop/web_search.c ../insight/desktop/web_search.h \
 	insight-word-highlights.c insight-word-highlights.h \
 	insight-selection-search.c insight-selection-search.h \
 	insight-typing.c insight-typing.h \

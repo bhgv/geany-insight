@@ -604,3 +604,7 @@ EXTRA_DIST += insight/tests/word_highlights_gui_test.c
 
 EXTRA_DIST += insight/tests/window_batch_gui_test.c
 dist_insightdocmedia_DATA += insight/docs/media/window-batch.svg
+
+EXTRA_DIST += insight/tests/web_search_test.c insight/tests/web_search_gui_test.c
+insightdoc_DATA += insight/docs/web-search.md
+dist_insightdocmedia_DATA += insight/docs/media/web-search.svg
