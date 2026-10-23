@@ -2201,7 +2201,7 @@ static void create_local_browser(void) {
  GtkWidget *types=insight_symbol_view_types_control(GTK_TREE_VIEW(wb.local_view)); gtk_widget_set_name(types,"insight-local-type-filters"); gtk_box_pack_start(GTK_BOX(details),types,FALSE,FALSE,0); insight_symbol_view_more_loader(GTK_TREE_VIEW(wb.local_view),G_CALLBACK(symbols_load_more),2000);
  GtkWidget *locate=gtk_button_new();gtk_widget_set_name(locate,"insight-local-locate");gtk_button_set_image(GTK_BUTTON(locate),insight_command_icon("find-location-symbolic"));gtk_widget_set_tooltip_text(locate,"Locate symbol at caret");g_signal_connect(locate,"clicked",G_CALLBACK(symbols_locate),NULL);gtk_box_pack_start(GTK_BOX(types),locate,FALSE,FALSE,0);
  compact_panel_control(types);
- GtkWidget *info=gtk_button_new_with_label("Symbol Info…");g_signal_connect(info,"clicked",G_CALLBACK(browser_symbol_info),wb.local_view);gtk_box_pack_start(GTK_BOX(details),info,FALSE,FALSE,0);
+ GtkWidget *info=gtk_button_new_with_label("Symbol Info…");compact_panel_control(info);g_signal_connect(info,"clicked",G_CALLBACK(browser_symbol_info),wb.local_view);gtk_box_pack_start(GTK_BOX(details),info,FALSE,FALSE,0);
  GtkWidget *home=gtk_notebook_get_nth_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),0),*native=ui_lookup_widget(main_widgets.window,"scrolledwindow2");
  wb.native_symbol_query=ui_lookup_widget(main_widgets.window,"entry_tagfilter");gtk_widget_set_no_show_all(wb.native_symbol_query,TRUE);gtk_widget_hide(wb.native_symbol_query);
  wb.local_mode=gtk_combo_box_text_new();gtk_widget_set_name(wb.local_mode,"insight-file-symbol-mode");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.local_mode),"Structure");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.local_mode),"Detailed symbols");gtk_combo_box_set_active(GTK_COMBO_BOX(wb.local_mode),0);compact_panel_control(wb.local_mode);gtk_box_pack_start(GTK_BOX(box),wb.local_mode,FALSE,FALSE,0);
@@ -4335,11 +4335,18 @@ static void register_panels(void) {
  for(guint i=0;i<wb.host_count;i++) { PanelHost *host=&wb.hosts[i]; if(i<9) {
    /* Wide controls must not impose their minimum on either side splitter.
     * Keep panel help outside the viewport so it stays at the visible corner. */
-   GtkWidget *old=host->page,*box=gtk_box_new(GTK_ORIENTATION_VERTICAL,0),*scroll=gtk_scrolled_window_new(NULL,NULL);
+   GtkWidget *old=host->page,*box=gtk_box_new(GTK_ORIENTATION_VERTICAL,0);
    gint position=gtk_notebook_page_num(GTK_NOTEBOOK(host->home),old);
-   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),GTK_POLICY_AUTOMATIC,GTK_POLICY_NEVER);
-   g_object_ref(old); gtk_container_remove(GTK_CONTAINER(host->home),old); gtk_container_add(GTK_CONTAINER(scroll),old); g_object_unref(old);
-   gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0); gtk_notebook_insert_page(GTK_NOTEBOOK(host->home),box,gtk_label_new(host->label),position);
+   g_object_ref(old); gtk_container_remove(GTK_CONTAINER(host->home),old);
+   if(i==8) {
+    /* File Symbols already scrolls its two trees. Scrolling the whole page
+     * expands the control rows and hides their right-hand buttons. */
+    gtk_box_pack_start(GTK_BOX(box),old,TRUE,TRUE,0);
+   }else {
+    GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),GTK_POLICY_AUTOMATIC,GTK_POLICY_NEVER);
+    gtk_container_add(GTK_CONTAINER(scroll),old);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
+   }
+   g_object_unref(old);gtk_notebook_insert_page(GTK_NOTEBOOK(host->home),box,gtk_label_new(host->label),position);
    host->page=box; gtk_widget_show_all(box);
   } if(i!=9) insight_panel_help_attach(host->page,topics[i]);g_object_set_data(G_OBJECT(host->page),"insight-panel-id",GUINT_TO_POINTER(i+1)); panel_controls_attach(i); }
  insight_panel_help_attach(wb.search_page,"panel-search-results.md");
