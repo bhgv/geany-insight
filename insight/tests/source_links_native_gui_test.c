@@ -25,14 +25,18 @@ static void command(guint n) { gchar *name=g_strdup_printf("insight-source-link-
 static void selected(const gchar *text) { gchar *value=sci_get_selection_contents(doc->editor->sci);g_assert_cmpstr(value,==,text);g_free(value); }
 static void activate(gint row) { GtkTreePath *path=gtk_tree_path_new_from_indices(row,-1);gtk_tree_view_row_activated(GTK_TREE_VIEW(results),path,gtk_tree_view_get_column(GTK_TREE_VIEW(results),0));gtk_tree_path_free(path);doc=document_get_current(); }
 static void back_key(void) {
- GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);event->key.window=g_object_ref(gtk_widget_get_window(GTK_WIDGET(doc->editor->sci)));event->key.keyval=GDK_KEY_l;event->key.state=GDK_CONTROL_MASK;gboolean handled=FALSE;
+ GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);event->key.window=g_object_ref(gtk_widget_get_window(GTK_WIDGET(doc->editor->sci)));event->key.keyval=GDK_KEY_l;event->key.state=GDK_CONTROL_MASK;
+ GdkSeat *seat=gdk_display_get_default_seat(gtk_widget_get_display(window));if(seat) { GdkDevice *device=gdk_seat_get_keyboard(seat);if(device) gdk_event_set_device(event,device); }gboolean handled=FALSE;
  static guint calls;g_signal_emit_by_name((++calls % 2) ? G_OBJECT(window) : G_OBJECT(doc->editor->sci),"key-press-event",&event->key,&handled);g_assert_true(handled);gdk_event_free(event);g_assert_true(gtk_widget_has_focus(results));
 }
 static void search(void) { gtk_combo_box_set_active(GTK_COMBO_BOX(named(window,"insight-search-scope")),2);GtkWidget *query=named(window,"insight-project-query");gtk_entry_set_text(GTK_ENTRY(query),"needle");g_signal_emit_by_name(query,"activate"); }
 static gboolean timeout(gpointer data) { (void)data;g_error("Source links native GUI timeout at phase %u",phase);return G_SOURCE_REMOVE; }
 static gboolean step(gpointer data) {
  (void)data;if(!window) { doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci)); }
- if(!phase) { doc=document_open_file(file,FALSE,NULL,NULL);g_assert_nonnull(doc);results=named(window,"insight-search-results");g_assert_nonnull(results);search();phase++;return G_SOURCE_CONTINUE; }
+ if(!phase) { doc=document_open_file(file,FALSE,NULL,NULL);g_assert_nonnull(doc);results=named(window,"insight-search-results");g_assert_nonnull(results);
+  /* Synthetic keys on a shared Xvfb server have no window manager to grant
+   * activation. Establish real X input focus before testing has_focus(). */
+  gtk_window_present(GTK_WINDOW(window));gdk_window_focus(gtk_widget_get_window(window),GDK_CURRENT_TIME);search();phase++;return G_SOURCE_CONTINUE; }
  GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(results));
  if(phase==1) {
   if(gtk_tree_model_iter_n_children(model,NULL)!=2) return G_SOURCE_CONTINUE;

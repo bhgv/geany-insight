@@ -40,7 +40,10 @@ static gboolean tick(gpointer data) {
  }else if(phase==7) {
   if(!has(tree,"Root",3)) return G_SOURCE_CONTINUE;toggle("insight-relation-graph-toggle",FALSE);reveal(tree);select_row(tree,"Root",3);key(tree,GDK_KEY_Menu);GtkWidget *menu=g_object_get_data(G_OBJECT(tree),"insight-node-menu");g_assert_nonnull(menu);GtkWidget *remove=named(menu,"insight-relation-node-remove-menu");g_assert_nonnull(remove);g_assert_true(gtk_widget_get_sensitive(remove));gtk_menu_item_activate(GTK_MENU_ITEM(remove));gtk_menu_popdown(GTK_MENU(menu));g_assert_false(has(tree,"Root",3));g_assert_true(has(tree,"Middle",2));key(tree,GDK_KEY_F5);phase++;
  }else if(phase==8) {
-  if(!has(tree,"Middle",2)) return G_SOURCE_CONTINUE;select_row(tree,"Middle",2);gtk_widget_grab_focus(tree);if(!gtk_widget_has_focus(tree)) return G_SOURCE_CONTINUE;key(window,GDK_KEY_Delete);waits=0;phase++;
+  if(!has(tree,"Middle",2)) return G_SOURCE_CONTINUE;select_row(tree,"Middle",2);gtk_widget_grab_focus(tree);if(!gtk_widget_has_focus(tree)) {
+   /* A popup can return focus to the root on Xvfb without a window manager. */
+   gtk_window_present(GTK_WINDOW(window));gdk_window_focus(gtk_widget_get_window(window),GDK_CURRENT_TIME);return G_SOURCE_CONTINUE;
+  }key(window,GDK_KEY_Delete);waits=0;phase++;
  }else if(phase==9) {
   if(waits++<4) return G_SOURCE_CONTINUE;g_assert_false(has(tree,"Middle",2));g_assert_false(has(tree,"Root",3));g_assert_true(has(tree,"End",1));g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(query)),==,"End");g_assert_cmpint(sci_get_current_position(doc->editor->sci),==,caret);gchar *text=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1);g_assert_cmpstr(text,==,source);g_free(text);g_assert_false(doc->changed);
   g_print("Native relation nodes: filtered/sorted deletion, shared graph model, branch deletion, protected root, outline menu, Delete/F5 restore, worker completion safety and unchanged source passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
