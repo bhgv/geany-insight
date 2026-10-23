@@ -92,7 +92,7 @@ static GtkWidget *preview(const gchar *text,gsize begin,gsize end,const gchar *n
         else g_string_append_c(display,c);
     }
     if(begin+length<end) { g_string_append(display,"\n");g_string_append(display,insight_tr("Preview truncated; Restore uses the complete block")); }
-    GtkWidget *view=gtk_text_view_new();gtk_widget_set_name(view,name);gtk_text_view_set_editable(GTK_TEXT_VIEW(view),FALSE);
+    GtkWidget *view=gtk_text_view_new();gtk_style_context_add_class(gtk_widget_get_style_context(view),"insight-compare-code");gtk_widget_set_name(view,name);gtk_text_view_set_editable(GTK_TEXT_VIEW(view),FALSE);
     gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(view),FALSE);gtk_text_view_set_monospace(GTK_TEXT_VIEW(view),TRUE);
     g_object_set_data(G_OBJECT(view),"insight-no-i18n",GINT_TO_POINTER(1));
     gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)),display->str,display->len);g_string_free(display,TRUE);
