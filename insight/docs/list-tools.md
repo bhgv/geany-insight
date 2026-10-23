@@ -31,3 +31,6 @@ Limits per operation: 20000 rows, 64 tree levels, 64 KiB per cell/row and 8 MiB 
 Search Results has its own context menu: right click retains the current result selection. The existing **Copy results** button retains its diagnostic-line format; **Copy List** copies visible columns with headings.
 
 When Copy List is requested from several panels, only the most recent command may publish its result; older unfinished list copies are superseded.
+
+
+[Print lists and the Relations outline](list-printing.md): Print List, Print Relation Window and Print outline, wrapping and page numbering.

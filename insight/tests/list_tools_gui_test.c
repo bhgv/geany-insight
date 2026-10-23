@@ -32,6 +32,12 @@ static void search(GtkWidget *view,GtkWidget *d,const gchar *pattern,gboolean re
 static void key(GtkWidget *view,guint modifiers) { GdkEventKey event={0};event.type=GDK_KEY_PRESS;event.keyval=GDK_KEY_F4;event.state=modifiers;gboolean handled=FALSE;g_signal_emit_by_name(view,"key-press-event",&event,&handled);g_assert_true(handled);settle(view); }
 static gboolean visible(GtkTreeModel *m,GtkTreeIter *i,gpointer d) { (void)d;gchar *text=NULL;gtk_tree_model_get(m,i,0,&text,-1);gboolean show=g_strcmp0(text,"hidden")!=0;g_free(text);return show; }
 static void clipboard_is(const gchar *expected) { gchar *text=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));g_assert_cmpstr(text,==,expected);g_free(text); }
+static guint print_cancelled;
+static gboolean cancel_print(gpointer data) {
+    guint *attempts=data;g_assert_cmpuint(++*attempts,<,100);GList *list=gtk_window_list_toplevels();
+    for(GList *p=list;p;p=p->next) if(GTK_IS_DIALOG(p->data) && gtk_widget_get_visible(p->data) && g_str_has_prefix(G_OBJECT_TYPE_NAME(p->data),"GtkPrint")) { print_cancelled++;gtk_dialog_response(GTK_DIALOG(p->data),GTK_RESPONSE_CANCEL);g_list_free(list);return G_SOURCE_REMOVE; }
+    g_list_free(list);return G_SOURCE_CONTINUE;
+}
 int main(int argc,char **argv) {
     if(!gtk_init_check(&argc,&argv)) return 77;
     g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);
@@ -46,6 +52,7 @@ int main(int argc,char **argv) {
     insight_list_tools_menu(GTK_TREE_VIEW(view),menu);insight_list_tools_menu(GTK_TREE_VIEW(view),menu);g_signal_connect(view,"row-activated",G_CALLBACK(activated),NULL);gtk_widget_show_all(window);
     command(menu,"insight-list-copy");settle(view);clipboard_is("Name\tFile\nalpha\tsample.c\nzeta\ta\\tb\\nc\nАЛЬФА\tsample.c\n");
     gtk_tree_view_move_column_after(GTK_TREE_VIEW(view),file,NULL);command(menu,"insight-list-copy");settle(view);clipboard_is("File\tName\nsample.c\talpha\na\\tb\\nc\tzeta\nsample.c\tАЛЬФА\n");
+    gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),"print-sentinel",-1);guint attempts=0;g_timeout_add(50,cancel_print,&attempts);command(menu,"insight-list-print");settle(view);g_assert_cmpuint(print_cancelled,==,1);clipboard_is("print-sentinel");
     command(menu,"insight-list-search-command");GtkWidget *d=dialog();search(view,d,"альфа",FALSE,FALSE,TRUE,FALSE);selected_is(view,"АЛЬФА");
     search(view,d,"альфа",FALSE,TRUE,TRUE,FALSE);selected_is(view,"АЛЬФА");g_assert_nonnull(strstr(g_object_get_data(G_OBJECT(view),"insight-list-tools-status"),"No matching"));
     search(view,d,"sample\\.c",TRUE,TRUE,TRUE,FALSE);selected_is(view,"alpha");key(view,0);selected_is(view,"АЛЬФА");key(view,GDK_SHIFT_MASK);selected_is(view,"alpha");key(view,GDK_SHIFT_MASK);selected_is(view,"alpha");

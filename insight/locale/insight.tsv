@@ -2013,3 +2013,16 @@ Next list match (F4)	Следующее совпадение в списке (F4
 Previous list match (Shift+F4)	Предыдущее совпадение в списке (Shift+F4)
 Use regular expressions	Использовать регулярные выражения
 A newer Copy List command superseded this copy	Эту копию заменила более новая команда копирования списка
+Print Relation Window…	Печать окна связей…
+Print outline…	Печать структуры…
+Print List…	Печать списка…
+Preparing list for printing…	Подготовка списка к печати…
+Printing captured list…	Печать снимка списка…
+Print snapshot is invalid or exceeds 1 MiB, 20000 lines or 64 KiB per line	Снимок печати некорректен или превышает 1 МиБ, 20 000 строк либо 64 КиБ на строку
+Printable area is too small or invalid	Область печати слишком мала или некорректна
+Text exceeds the printable page or layout limits	Текст превышает размер области печати или пределы вёрстки
+Text printing exceeds 512 pages; narrow the list	Печать текста превышает 512 страниц; сузьте список
+Wait for symbol Relations to finish before printing	Перед печатью дождитесь завершения поиска связей символов
+Relations tree	Дерево связей
+Page	Страница
+List	Список

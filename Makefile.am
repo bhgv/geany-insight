@@ -658,3 +658,8 @@ dist_insightdocmedia_DATA += insight/docs/media/relation-lock.svg
 EXTRA_DIST += insight/tests/list_tools_gui_test.c
 insightdoc_DATA += insight/docs/list-tools.md
 dist_insightdocmedia_DATA += insight/docs/media/list-tools.svg
+
+EXTRA_DIST += insight/tests/text_print_gui_test.c
+
+insightdoc_DATA += insight/docs/list-printing.md
+dist_insightdocmedia_DATA += insight/docs/media/list-printing.svg

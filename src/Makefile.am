@@ -224,6 +224,8 @@ libgeany_la_SOURCES += \
 	insight-list-style.c \
 	insight-list-style.h \
 	insight-relation-tree.h \
+	insight-text-print.c \
+	insight-text-print.h \
 	insight-list-tools.c \
 	insight-list-tools.h \
 	insight-relation-graph.c \

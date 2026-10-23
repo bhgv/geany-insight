@@ -7,6 +7,7 @@
 #include "insight-navigation.h"
 #include "insight-search-links.h"
 #include "insight-list-tools.h"
+#include "insight-text-print.h"
 #include "insight-formatting.h"
 #include "insight-themes.h"
 /* SPDX-License-Identifier: GPL-2.0-or-later */
@@ -412,6 +413,7 @@ static void refresh_index(void);
 static void usage_start(GtkWidget *,gpointer);
 static void relation_view_update(void);
 static void relation_report_show(GtkWidget *,gpointer);
+static void relation_print_show(GtkWidget *,gpointer);
 typedef struct { InsightIndex *base,*overlay,*result,*previous; GPtrArray *paths; GHashTable *changed,*names,*all_names; guint64 epoch,generation; gboolean valid; } SnapshotJob;
 static void retire_index_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) { (void)source; (void)cancel; insight_index_free(data); g_task_return_boolean(task,TRUE); }
 static void retire_index(InsightIndex *index) { if(!index) return; GTask *task=g_task_new(NULL,NULL,NULL,NULL); g_task_set_task_data(task,index,NULL); g_task_run_in_thread(task,retire_index_run); g_object_unref(task); }
@@ -1907,6 +1909,7 @@ static GtkWidget *relation_node_menu(GtkTreeView *view) {
   menu=gtk_menu_new();g_object_ref_sink(menu);const gchar *labels[]={"Remove node from view","Restore nodes (refresh)"};
   for(guint i=0;i<2;i++) { GtkWidget *item=gtk_menu_item_new_with_label(labels[i]);gtk_widget_set_name(item,i ? "insight-relation-node-restore-menu" : "insight-relation-node-remove-menu");gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(relation_node_button),GUINT_TO_POINTER(i)); }
   const gchar *reports[]={"View Relation Outline…","Create Bookmarks from Relation Items…"};for(guint i=0;i<2;i++) { GtkWidget *item=gtk_menu_item_new_with_label(reports[i]);gtk_widget_set_name(item,i ? "insight-relation-bookmark-menu":"insight-relation-outline-menu");gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(relation_report_show),GUINT_TO_POINTER(i)); }
+  GtkWidget *print=gtk_menu_item_new_with_label("Print Relation Window…");gtk_widget_set_name(print,"insight-relation-print-menu");gtk_menu_shell_append(GTK_MENU_SHELL(menu),print);g_signal_connect(print,"activate",G_CALLBACK(relation_print_show),NULL);
   insight_list_tools_menu(view,menu);g_object_set_data_full(G_OBJECT(view),"insight-node-menu",menu,relation_node_menu_free);
  }
  GList *items=gtk_container_get_children(GTK_CONTAINER(menu));gtk_widget_set_sensitive(items->data,relation_source_selected(view));g_list_free(items);insight_i18n_apply(menu);gtk_widget_show_all(menu);return menu;
@@ -3003,6 +3006,13 @@ static RelationSnapshot *relation_snapshot_new(void) {
  RelationSnapshot *s=g_new0(RelationSnapshot,1);s->rows=g_ptr_array_new_with_free_func(relation_note_row_free);gchar *query=relation_escape(gtk_entry_get_text(GTK_ENTRY(wb.usage_entry)));s->text=g_string_new("Relations: ");g_string_append_printf(s->text,"%s\nMode: %d; %s\n",query,gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode)),tree ? "loaded tree":"filtered list");g_free(query);
  gtk_tree_model_foreach(gtk_tree_view_get_model(view),relation_snapshot_row,s);if(s->invalid) { relation_snapshot_free(s);return NULL; }return s;
 }
+static void relation_print_show(GtkWidget *widget,gpointer data) {
+ (void)widget;(void)data;if(wb.search_worker || wb.usage_idle || gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode))==3) { ui_set_statusbar(TRUE,"Wait for symbol Relations to finish before printing");return; }
+ const gchar *view=gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack));GtkPrintOperation *op=NULL;
+ if(!g_strcmp0(view,"graph") || !g_strcmp0(view,"treegraph")) op=insight_relation_graph_print_operation(!strcmp(view,"treegraph") ? wb.relation_tree_graph:wb.relation_graph);
+ else { RelationSnapshot *snapshot=relation_snapshot_new();if(snapshot) { op=insight_text_print_operation(insight_tr("Relations"),snapshot->text->str,snapshot->text->len);relation_snapshot_free(snapshot); } }
+ insight_text_print_run(op,GTK_WINDOW(main_widgets.window));
+}
 static void relation_report_free(gpointer data) { RelationReport *s=data;relation_snapshot_free(s->snapshot);g_clear_object(&s->cancel);g_free(s); }
 static void relation_report_destroy(GtkWidget *widget,gpointer data) { (void)widget;RelationReport *s=data;s->closed=TRUE;if(s->cancel) g_cancellable_cancel(s->cancel); }
 static void relation_note_job_free(gpointer data) { RelationNoteJob *j=data;g_ptr_array_unref(j->rows);insight_notes_free(j->candidate);g_hash_table_unref(j->versions);g_free(j->outline);g_free(j->store_digest);g_free(j); }
@@ -3046,7 +3056,7 @@ static gboolean relation_notes_current(RelationNoteJob *j) {
 static void relation_notes_done(GObject *source,GAsyncResult *result,gpointer data) {
  (void)data;RelationReport *s=g_object_get_data(source,"insight-relation-report");RelationNoteJob *j=g_task_get_task_data(G_TASK(result));GError *error=NULL;gboolean ok=g_task_propagate_boolean(G_TASK(result),&error);
  if(s->closed) { g_clear_error(&error);return; }s->busy=FALSE;g_object_set_data(source,"insight-relation-busy",NULL);g_clear_object(&s->cancel);
- for(gint response=1;response<=4;response++) gtk_dialog_set_response_sensitive(GTK_DIALOG(source),response,TRUE);
+ for(gint response=1;response<=5;response++) gtk_dialog_set_response_sensitive(GTK_DIALOG(source),response,TRUE);
  if(ok && !relation_notes_current(j)) { ok=FALSE;g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_BUSY,"Relations, source or bookmark store changed; refresh before creating bookmarks"); }
  if(ok) { InsightNotes *candidate=j->candidate;j->candidate=NULL;ok=notes_commit(candidate,INSIGHT_BOOKMARK); }
  if(ok) { gchar *text=g_strdup_printf("%u bookmarks created; existing locations were kept",j->rows->len);gtk_label_set_text(GTK_LABEL(s->status),text);g_free(text); }else gtk_label_set_text(GTK_LABEL(s->status),error ? error->message:"Bookmarks were not saved");g_clear_error(&error);
@@ -3064,19 +3074,19 @@ static void relation_notes_start(RelationReport *s) {
   g_ptr_array_add(j->rows,copy);if(bytes>16u*1024u*1024u) g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Source snapshots exceed 16 MiB; no bookmarks were created");
  }
  g_hash_table_unref(opened);g_hash_table_unref(seen);if(error || !j->candidate || !j->rows->len) { gtk_label_set_text(GTK_LABEL(s->status),error ? error->message:"No new source locations; existing bookmarks were kept");g_clear_error(&error);relation_note_job_free(j);return; }
- s->busy=TRUE;s->cancel=g_cancellable_new();g_object_set_data(G_OBJECT(s->dialog),"insight-relation-busy",GINT_TO_POINTER(1));for(gint response=1;response<=4;response++) gtk_dialog_set_response_sensitive(GTK_DIALOG(s->dialog),response,FALSE);gtk_label_set_text(GTK_LABEL(s->status),"Preparing bookmarks from source snapshots…");
+ s->busy=TRUE;s->cancel=g_cancellable_new();g_object_set_data(G_OBJECT(s->dialog),"insight-relation-busy",GINT_TO_POINTER(1));for(gint response=1;response<=5;response++) gtk_dialog_set_response_sensitive(GTK_DIALOG(s->dialog),response,FALSE);gtk_label_set_text(GTK_LABEL(s->status),"Preparing bookmarks from source snapshots…");
  GTask *task=g_task_new(s->dialog,s->cancel,relation_notes_done,NULL);g_task_set_task_data(task,j,relation_note_job_free);g_task_run_in_thread(task,relation_notes_run);g_object_unref(task);
 }
 static void relation_report_refresh(RelationReport *s) {
  s->epoch=workbench_epoch;s->scope=notes_generation(INSIGHT_BOOKMARK);relation_snapshot_free(s->snapshot);s->snapshot=relation_snapshot_new();gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(s->preview)),s->snapshot ? s->snapshot->text->str:"",-1);
  gchar *text=s->snapshot ? g_strdup_printf("%u source items. Loaded/filtered rows only; unloaded branches are not fetched. Existing bookmark locations are skipped.",s->snapshot->rows->len):g_strdup("Wait for Relations to finish, or reduce results (2000 source items / 1 MiB outline)");gchar *destination=g_strconcat(text,"\n",gtk_label_get_text(GTK_LABEL(wb.marks_scope)),NULL);gtk_label_set_text(GTK_LABEL(s->status),destination);g_free(destination);g_free(text);
- for(gint response=2;response<=4;response++) gtk_dialog_set_response_sensitive(GTK_DIALOG(s->dialog),response,s->snapshot!=NULL);
+ for(gint response=2;response<=5;response++) gtk_dialog_set_response_sensitive(GTK_DIALOG(s->dialog),response,s->snapshot!=NULL);
 }
 static void relation_report_show(GtkWidget *widget,gpointer data) {
- (void)widget;RelationReport *s=g_new0(RelationReport,1);s->dialog=gtk_dialog_new_with_buttons(insight_tr(GPOINTER_TO_INT(data) ? "Create Bookmarks from Relation Items":"View Relation Outline"),GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,insight_tr("Close"),GTK_RESPONSE_CLOSE,insight_tr("Refresh"),1,insight_tr("Copy outline"),2,insight_tr("Open outline buffer"),3,insight_tr("Create bookmarks"),4,NULL);g_object_ref_sink(s->dialog);gtk_widget_set_name(s->dialog,"insight-relation-report");gtk_window_set_default_size(GTK_WINDOW(s->dialog),820,520);g_object_set_data_full(G_OBJECT(s->dialog),"insight-relation-report",s,relation_report_free);g_signal_connect(s->dialog,"destroy",G_CALLBACK(relation_report_destroy),s);
- const gchar *names[]={"insight-relation-report-refresh","insight-relation-report-copy","insight-relation-report-open","insight-relation-report-create"};for(gint i=0;i<4;i++) gtk_widget_set_name(gtk_dialog_get_widget_for_response(GTK_DIALOG(s->dialog),i+1),names[i]);
+ (void)widget;RelationReport *s=g_new0(RelationReport,1);s->dialog=gtk_dialog_new_with_buttons(insight_tr(GPOINTER_TO_INT(data) ? "Create Bookmarks from Relation Items":"View Relation Outline"),GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,insight_tr("Close"),GTK_RESPONSE_CLOSE,insight_tr("Refresh"),1,insight_tr("Copy outline"),2,insight_tr("Open outline buffer"),3,insight_tr("Create bookmarks"),4,insight_tr("Print outline…"),5,NULL);g_object_ref_sink(s->dialog);gtk_widget_set_name(s->dialog,"insight-relation-report");gtk_window_set_default_size(GTK_WINDOW(s->dialog),820,520);g_object_set_data_full(G_OBJECT(s->dialog),"insight-relation-report",s,relation_report_free);g_signal_connect(s->dialog,"destroy",G_CALLBACK(relation_report_destroy),s);
+ const gchar *names[]={"insight-relation-report-refresh","insight-relation-report-copy","insight-relation-report-open","insight-relation-report-create","insight-relation-report-print"};for(gint i=0;i<5;i++) gtk_widget_set_name(gtk_dialog_get_widget_for_response(GTK_DIALOG(s->dialog),i+1),names[i]);
  GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(s->dialog)),*scroll=gtk_scrolled_window_new(NULL,NULL);s->preview=gtk_text_view_new();gtk_widget_set_name(s->preview,"insight-relation-report-text");gtk_text_view_set_editable(GTK_TEXT_VIEW(s->preview),FALSE);gtk_text_view_set_monospace(GTK_TEXT_VIEW(s->preview),TRUE);g_object_set_data(G_OBJECT(s->preview),"insight-no-i18n",GINT_TO_POINTER(1));gtk_container_add(GTK_CONTAINER(scroll),s->preview);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,4);s->status=gtk_label_new("");gtk_widget_set_name(s->status,"insight-relation-report-status");gtk_label_set_line_wrap(GTK_LABEL(s->status),TRUE);gtk_label_set_selectable(GTK_LABEL(s->status),TRUE);gtk_box_pack_start(GTK_BOX(box),s->status,FALSE,FALSE,4);insight_panel_help_attach(box,"relation-results.md");relation_report_refresh(s);gtk_widget_show_all(s->dialog);
- for(;;) { gint response=gtk_dialog_run(GTK_DIALOG(s->dialog));if(response<0 || s->closed) break;if(s->busy) continue;if(response==1) relation_report_refresh(s);else if(response==2 && s->snapshot) gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),s->snapshot->text->str,(gint)s->snapshot->text->len);else if(response==3 && s->snapshot) { GeanyDocument *doc=document_new_file(NULL,NULL,s->snapshot->text->str);if(doc) document_set_text_changed(doc,TRUE); }else if(response==4) relation_notes_start(s); }
+ for(;;) { gint response=gtk_dialog_run(GTK_DIALOG(s->dialog));if(response<0 || s->closed) break;if(s->busy) continue;if(response==1) relation_report_refresh(s);else if(response==2 && s->snapshot) gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),s->snapshot->text->str,(gint)s->snapshot->text->len);else if(response==3 && s->snapshot) { GeanyDocument *doc=document_new_file(NULL,NULL,s->snapshot->text->str);if(doc) document_set_text_changed(doc,TRUE); }else if(response==4) relation_notes_start(s);else if(response==5 && s->snapshot) insight_text_print_run(insight_text_print_operation(insight_tr("Relations"),s->snapshot->text->str,s->snapshot->text->len),GTK_WINDOW(s->dialog)); }
  GtkWidget *dialog=s->dialog;gtk_widget_destroy(dialog);g_object_unref(dialog);
 }
 
@@ -5092,6 +5102,7 @@ static void create_workbench_menus(void) {
  const gchar *view_labels[]={"Relation List / Tree View","Horizontal Relation Graph","Vertical Relation Graph"};
  const gchar *view_names[]={"insight-relation-list-command","insight-relation-horizontal-command","insight-relation-vertical-command"};
  for(guint i=0;i<G_N_ELEMENTS(view_labels);i++) { GtkWidget *item=gtk_menu_item_new_with_label(view_labels[i]);gtk_widget_set_name(item,view_names[i]);gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(relation_select_view),GUINT_TO_POINTER(i)); }
+ GtkWidget *print_relation=gtk_menu_item_new_with_label("Print Relation Window…");gtk_widget_set_name(print_relation,"insight-relation-print-command");gtk_menu_shell_append(GTK_MENU_SHELL(menu),print_relation);g_signal_connect(print_relation,"activate",G_CALLBACK(relation_print_show),NULL);
  GtkWidget *next_view_command=gtk_menu_item_new_with_label("Next Relation Window View");gtk_widget_set_name(next_view_command,"insight-relation-next-view-command");gtk_menu_shell_append(GTK_MENU_SHELL(menu),next_view_command);g_signal_connect(next_view_command,"activate",G_CALLBACK(relation_next_view),NULL);
  const gchar *relation_reports[]={"View Relation Outline…","Create Bookmarks from Relation Items…"};for(guint i=0;i<2;i++) { GtkWidget *item=gtk_menu_item_new_with_label(relation_reports[i]);gtk_widget_set_name(item,i ? "insight-relation-bookmark-command":"insight-relation-outline-command");gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(relation_report_show),GUINT_TO_POINTER(i)); }
 
@@ -5471,7 +5482,7 @@ static void create_search_results(void) {
  wb.search_matches=gtk_list_store_new(USAGE_COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG,G_TYPE_ULONG,G_TYPE_ULONG,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_ULONG); wb.search_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(wb.search_matches)); gtk_widget_set_name(wb.search_view,"insight-search-results"); gtk_widget_set_tooltip_text(wb.search_view,"Alt+Up/Down: browse matches in Context without moving the editor; Enter/double click or Ctrl+L: open the selected match; Shift+F8/F9: previous/next match");
  const char *labels[]={"File","Line","Column","Source"}; const gint columns[]={USAGE_DISPLAY,USAGE_LINE,USAGE_COLUMN,USAGE_SNIPPET};
  for(guint i=0;i<4;i++) { GtkCellRenderer *cell=gtk_cell_renderer_text_new(); g_object_set(cell,"ellipsize",PANGO_ELLIPSIZE_END,NULL); GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(labels[i],cell,"text",columns[i],NULL); gtk_tree_view_column_set_sort_column_id(column,columns[i]); gtk_tree_view_column_set_resizable(column,TRUE); gtk_tree_view_column_set_sizing(column,GTK_TREE_VIEW_COLUMN_FIXED); gtk_tree_view_column_set_fixed_width(column,i==0 ? 260 : (i<3 ? 70 : 450)); gtk_tree_view_column_set_expand(column,i==3); gtk_tree_view_append_column(GTK_TREE_VIEW(wb.search_view),column); }
- insight_list_tools_popup_attach(GTK_TREE_VIEW(wb.search_view));
+ g_object_set_data(G_OBJECT(wb.search_view),"insight-list-title","Search Results");insight_list_tools_popup_attach(GTK_TREE_VIEW(wb.search_view));
  wb.search_links=insight_search_links_new(GTK_TREE_VIEW(wb.search_view),(InsightSearchLinkColumns){USAGE_DISPLAY,USAGE_PATH,USAGE_LINE,USAGE_START,USAGE_END,USAGE_ID,USAGE_DIGEST,USAGE_COLUMN});
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),wb.search_view); gtk_box_pack_start(GTK_BOX(wb.search_page),scroll,TRUE,TRUE,0);
  g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(wb.search_view)),"changed",G_CALLBACK(usage_selected),NULL); g_signal_connect(wb.search_view,"row-activated",G_CALLBACK(usage_activated),NULL);
@@ -5907,7 +5918,8 @@ void insight_workbench_init(void) {
  gtk_paned_set_position(GTK_PANED(wb.pane),430);
  gtk_widget_show_all(wb.pane);
  create_search_toolbars();
- GtkWidget *list_views[]={wb.local_view,wb.symbol_view,wb.file_view,wb.usage_view,GTK_WIDGET(insight_relation_tree_view(wb.relation_tree))};for(guint i=0;i<G_N_ELEMENTS(list_views);i++) insight_list_tools_attach(GTK_TREE_VIEW(list_views[i]));
+ const gchar *list_titles[]={"File Symbols","Project Symbols","Project Files","Relations","Relations tree"};
+ GtkWidget *list_views[]={wb.local_view,wb.symbol_view,wb.file_view,wb.usage_view,GTK_WIDGET(insight_relation_tree_view(wb.relation_tree))};for(guint i=0;i<G_N_ELEMENTS(list_views);i++) { insight_list_tools_attach(GTK_TREE_VIEW(list_views[i]));g_object_set_data(G_OBJECT(list_views[i]),"insight-list-title",(gpointer)list_titles[i]); }
  restore_workbench_settings(); restore_search_settings();
  create_native_lua();
  const char *signals[]={"document-open","document-save","document-activate","document-close"};

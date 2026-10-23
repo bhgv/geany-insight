@@ -947,6 +947,8 @@ libgeany = shared_library('geany',
 	'src/insight-list-style.h',
 	'src/insight-template-fields.c',
 	'src/insight-relation-tree.h',
+	'src/insight-text-print.c',
+	'src/insight-text-print.h',
 	'src/insight-list-tools.c',
 	'src/insight-list-tools.h',
 	'src/insight-relation-graph.c',
@@ -1147,3 +1149,5 @@ install_data('insight/tools/ai_client.py', 'insight/tools/remote_pack.py', insta
 install_data('insight/docs/relation-results.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 
 install_data('insight/docs/list-tools.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
+
+install_data('insight/docs/list-printing.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')

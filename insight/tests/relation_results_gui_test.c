@@ -24,7 +24,7 @@ static gboolean drive(gpointer data) {
  if(action==6) { if(!stage) { if(!gtk_widget_get_sensitive(create)) { gtk_dialog_response(GTK_DIALOG(d),1);return G_SOURCE_CONTINUE; } gtk_dialog_response(GTK_DIALOG(d),4);stage=1; }else { g_assert_nonnull(strstr(status,"remaining note capacity"));g_assert_cmpuint(bookmarks(),==,4);action=0;gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_CLOSE); }return G_SOURCE_CONTINUE; }
  if(!gtk_widget_get_sensitive(create)) { gtk_dialog_response(GTK_DIALOG(d),1);return G_SOURCE_CONTINUE; }
  if(!stage) {
-  gchar *text=preview(d);g_assert_nonnull(strstr(text,"Relations: Root"));g_assert_false(gtk_text_view_get_editable(GTK_TEXT_VIEW(named(d,"insight-relation-report-text"))));
+  gchar *text=preview(d);g_assert_nonnull(strstr(text,"Relations: Root"));g_assert_nonnull(named(d,"insight-relation-report-print"));g_assert_false(gtk_text_view_get_editable(GTK_TEXT_VIEW(named(d,"insight-relation-report-text"))));
   if(action==1) { g_assert_nonnull(strstr(text,"Other"));g_assert_null(strstr(text,"Middle"));g_assert_cmpuint(bookmarks(),==,0);g_free(text);action=0;gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_CLOSE);return G_SOURCE_CONTINUE; }
   if(action==5) { g_assert_nonnull(strstr(text,"    End\t"));g_assert_nonnull(strstr(text,"Closed")); }
   g_free(text);gtk_dialog_response(GTK_DIALOG(d),2);stage=1;return G_SOURCE_CONTINUE;
@@ -69,6 +69,18 @@ static GtkWidget *command(const gchar *name) {
  GtkWidget *item=named(gtk_menu_item_get_submenu(GTK_MENU_ITEM(navigate)),name);g_assert_nonnull(item);return item;
 }
 static void row_deleted(GtkTreeModel *model,GtkTreePath *path,gpointer data) { (void)model;(void)path;(*(guint *)data)++; }
+static guint print_cancelled;
+static gboolean cancel_print(gpointer data) {
+ guint *attempts=data;g_assert_cmpuint(++*attempts,<,100);GList *list=gtk_window_list_toplevels();
+ for(GList *p=list;p;p=p->next) if(GTK_IS_DIALOG(p->data) && gtk_widget_get_visible(p->data) && g_str_has_prefix(G_OBJECT_TYPE_NAME(p->data),"GtkPrint")) { print_cancelled++;gtk_dialog_response(GTK_DIALOG(p->data),GTK_RESPONSE_CANCEL);g_list_free(list);return G_SOURCE_REMOVE; }
+ g_list_free(list);return G_SOURCE_CONTINUE;
+}
+static void check_print_commands(void) {
+ for(guint graph=0;graph<2;graph++) {
+  toggle("insight-relation-graph-toggle",graph);guint attempts=0;g_timeout_add(50,cancel_print,&attempts);gtk_menu_item_activate(GTK_MENU_ITEM(command("insight-relation-print-command")));g_assert_cmpuint(print_cancelled,==,graph+1);
+ }
+ toggle("insight-relation-graph-toggle",FALSE);
+}
 static void check_locks(void) {
  GtkWidget *follow=named(window,"insight-relations-follow");GtkWidget *lock=command("insight-relation-lock-command");
  GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(flat));guint deleted=0;
@@ -102,7 +114,7 @@ static void direct_views(gboolean tree_mode) {
 static gboolean step(gpointer data) {
  (void)data;if(!window) { source_doc=document_get_current();if(!source_doc) return G_SOURCE_CONTINUE;source_doc=document_open_file(file,FALSE,NULL,NULL);window=gtk_widget_get_toplevel(GTK_WIDGET(source_doc->editor->sci));flat=named(window,"insight-relations");tree=named(window,"insight-relations-tree");g_assert_nonnull(flat);g_assert_nonnull(tree);toggle("insight-relations-follow",FALSE);gtk_entry_set_text(GTK_ENTRY(named(window,"insight-relation-query")),"Root");gtk_combo_box_set_active(GTK_COMBO_BOX(named(window,"insight-relation-mode")),5);return G_SOURCE_CONTINUE; }
  GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(flat));
- if(phase==0) { if(gtk_tree_model_iter_n_children(model,NULL)!=3) return G_SOURCE_CONTINUE;caret=sci_get_current_position(source_doc->editor->sci);anchor=scintilla_send_message(source_doc->editor->sci,SCI_GETANCHOR,0,0);check_locks();cycle_views(FALSE);direct_views(FALSE);filter("Other");open_report(1);filter("");
+ if(phase==0) { if(gtk_tree_model_iter_n_children(model,NULL)!=3) return G_SOURCE_CONTINUE;caret=sci_get_current_position(source_doc->editor->sci);anchor=scintilla_send_message(source_doc->editor->sci,SCI_GETANCHOR,0,0);check_print_commands();check_locks();cycle_views(FALSE);direct_views(FALSE);filter("Other");open_report(1);filter("");
  GtkTreePath *first=gtk_tree_path_new_first();gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(flat)),first);gtk_tree_path_free(first);gtk_button_clicked(GTK_BUTTON(named(window,"insight-relation-node-remove")));g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,2);
  gtk_menu_item_activate(GTK_MENU_ITEM(command("insight-relation-refresh-command")));g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(command("insight-relation-lock-command"))));phase++; }
  else if(phase==1) { if(gtk_tree_model_iter_n_children(model,NULL)!=3) return G_SOURCE_CONTINUE;open_report(2);wait_until=g_get_monotonic_time()+500000;phase++; }

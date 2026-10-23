@@ -17,3 +17,6 @@
 Пример: найдите производные типы, отфильтруйте одну ветвь, просмотрите и создайте её закладки. Снимите фильтр и создайте остальные: прежние позиции будут пропущены. Раскройте ветвь дерева и нажмите «Обновить», чтобы включить её загруженных потомков.
 
 Эталон Source Insight: [Create Bookmarks from Relation Items](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Create_Bookmarks_from_Relation_Items.htm), [View Relation Outline](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/View_Relation_Outline.htm). Здесь реализован явный снимок в диалоге/буфере; полное совпадение с живым встроенным текстовым представлением и семантикой Source Insight не заявляется.
+
+
+[Печать списка и структуры Relations](list-printing.md): Print List, Print Relation Window и Print outline, переносы и нумерация страниц.

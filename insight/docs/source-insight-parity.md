@@ -790,3 +790,8 @@ Navigate exposes Lock Context Window, Lock Relation Window, Refresh Relation Win
 ### Copy List and Search List
 
 File/Project Symbols, Project Files, Search Results and flat/tree Relations now share context-menu Copy List, Search List, F4 and Shift+F4. Visible rendered columns, current filtering/sorting, Unicode case matching, bounded regex, beginning/wrap and loaded-tree ancestor reveal are supported. Copy is atomic tab-separated escaped text with headings and indentation. Idle slices, model/column/selection invalidation, cancellation and row/depth/byte limits keep the commands scoped to loaded data; no source reading, page loading or editor activation. Per-panel patterns/options are memory-only. [Guide and SVG](list-tools.md).
+
+
+### Print Relation Window and paginated lists
+
+Navigate and Relations context menus dispatch Print Relation Window to the existing fit/tiled vector graph printer or an immutable loaded-outline text job. The report dialog gains Print outline; six list/tree panels gain Print List without clipboard changes. Short GTK capture slices and stale guards precede the native print dialog. Monospace UTF-8 text wraps between pages with repeated title and numbered footers; PDF is available through the platform print dialog. Text limits: 1 MiB, 20000 physical lines, 64 KiB per physical line, 100000 layout lines and 512 pages. Graph tiled limits remain 256 pages. Text lists are an extension beyond the Source Insight graphic print command. [Guide and SVG](list-printing.md).

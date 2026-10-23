@@ -48,3 +48,6 @@ Refresh reruns the panel query and restores hidden nodes while retaining the loc
 
 
 [Search and copy the current list](list-tools.md): context menu, F4/Shift+F4, visible columns and loaded rows.
+
+
+[Print lists and the Relations outline](list-printing.md): Print List, Print Relation Window and Print outline, wrapping and page numbering.

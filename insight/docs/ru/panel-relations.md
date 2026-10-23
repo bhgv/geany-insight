@@ -49,3 +49,6 @@ docstring Python остаются строками. В фильтрованны�
 
 
 [Поиск и копирование текущего списка](list-tools.md): контекстное меню, F4/Shift+F4, видимые колонки и загруженные строки.
+
+
+[Печать списка и структуры Relations](list-printing.md): Print List, Print Relation Window и Print outline, переносы и нумерация страниц.

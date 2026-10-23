@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "insight-list-tools.h"
 #include "insight-i18n.h"
+#include "insight-text-print.h"
 #include <string.h>
 #include <gdk/gdkkeysyms.h>
 #ifdef GEANY_PRIVATE
@@ -25,7 +26,7 @@ typedef struct {
     guint rows;
     guint64 clipboard_generation;
     gsize bytes;
-    gboolean copy, backward, beginning, dirty;
+    gboolean copy, printing, backward, beginning, dirty;
 } ListJob;
 static guint64 clipboard_generation;
 struct ListTools {
@@ -112,9 +113,17 @@ static void advance(ListJob *j,GtkTreeIter *iter) {
 }
 static gboolean finish(ListTools *s,const gchar *error) {
     ListJob *j=s->job;s->idle=0;
-    if(!error && j->copy && j->clipboard_generation!=clipboard_generation) error="A newer Copy List command superseded this copy";
+    if(!error && j->copy && !j->printing && j->clipboard_generation!=clipboard_generation) error="A newer Copy List command superseded this copy";
     if(!error && (j->dirty || gtk_tree_view_get_model(s->view)!=j->model || (!j->copy && !selection_same(j)))) error="List changed; run the command again";
     if(error) status(s,error);
+    else if(j->printing) {
+        const gchar *title=g_object_get_data(G_OBJECT(s->view),"insight-list-title");
+        GtkPrintOperation *op=insight_text_print_operation(insight_tr(title ? title:"List"),j->output->str,j->output->len);
+        GtkWidget *parent=gtk_widget_get_toplevel(GTK_WIDGET(s->view));if(GTK_IS_WINDOW(parent)) g_object_ref(parent);else parent=NULL;
+        status(s,op ? "Printing captured list…":"Print snapshot is invalid or exceeds 1 MiB, 20000 lines or 64 KiB per line");
+        s->job=NULL;job_free(j);g_object_set_data(G_OBJECT(s->view),"insight-list-tools-busy",NULL);
+        insight_text_print_run(op,parent ? GTK_WINDOW(parent):NULL);if(parent) g_object_unref(parent);return G_SOURCE_REMOVE;
+    }
     else if(j->copy) {
         gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),j->output->str,(gint)j->output->len);
         status(s,"List copied (loaded rows and visible columns only)");
@@ -134,7 +143,7 @@ static gboolean finish(ListTools *s,const gchar *error) {
 }
 static gboolean scan(gpointer data) {
     ListTools *s=data;ListJob *j=s->job;gint64 deadline=g_get_monotonic_time()+3000;
-    if(j->copy && j->clipboard_generation!=clipboard_generation) return finish(s,"A newer Copy List command superseded this copy");
+    if(j->copy && !j->printing && j->clipboard_generation!=clipboard_generation) return finish(s,"A newer Copy List command superseded this copy");
     if(j->dirty || gtk_tree_view_get_model(s->view)!=j->model || !gtk_widget_get_sensitive(GTK_WIDGET(s->view))) return finish(s,"List changed; run the command again");
     while(j->path) {
         if(j->rows>=MAX_ROWS || gtk_tree_path_get_depth(j->path)>64) return finish(s,"List exceeds 20000 rows or 64 levels; narrow the filter");
@@ -163,11 +172,11 @@ static gboolean scan(gpointer data) {
     if(j->output->len>MAX_BYTES) return finish(s,"List exceeds 8 MiB; narrow the filter");
     return finish(s,NULL);
 }
-static void start(ListTools *s,gboolean copy,gboolean backward,gboolean beginning) {
+static void start(ListTools *s,gboolean copy,gboolean backward,gboolean beginning,gboolean printing) {
     cancel(s);if(s->destroyed) return;
-    if(copy) clipboard_generation++;
+    if(copy && !printing) clipboard_generation++;
     if(!gtk_widget_get_sensitive(GTK_WIDGET(s->view)) || !gtk_tree_view_get_model(s->view)) { status(s,"List is still loading; try again");return; }
-    ListJob *j=g_new0(ListJob,1);j->owner=s;j->copy=copy;j->clipboard_generation=clipboard_generation;j->backward=backward;j->beginning=beginning;j->output=g_string_new(NULL);j->model=g_object_ref(gtk_tree_view_get_model(s->view));
+    ListJob *j=g_new0(ListJob,1);j->owner=s;j->copy=copy;j->printing=printing;j->clipboard_generation=clipboard_generation;j->backward=backward;j->beginning=beginning;j->output=g_string_new(NULL);j->model=g_object_ref(gtk_tree_view_get_model(s->view));
     s->job=j;
     if(!copy) {
         if(!s->pattern || !*s->pattern || strlen(s->pattern)>512 || !g_utf8_validate(s->pattern,-1,NULL)) { finish(s,"Enter a list search pattern (up to 512 UTF-8 bytes)");return; }
@@ -192,13 +201,13 @@ static void start(ListTools *s,gboolean copy,gboolean backward,gboolean beginnin
     g_signal_connect(j->model,"row-inserted",G_CALLBACK(changed),j);g_signal_connect(j->model,"row-changed",G_CALLBACK(changed),j);g_signal_connect(j->model,"row-deleted",G_CALLBACK(deleted),j);g_signal_connect(j->model,"rows-reordered",G_CALLBACK(reordered),j);
     g_signal_connect(s->view,"notify::model",G_CALLBACK(notify),j);g_signal_connect(s->view,"columns-changed",G_CALLBACK(columns_changed),j);
     if(gtk_tree_model_get_iter_first(j->model,&selected)) j->path=gtk_tree_model_get_path(j->model,&selected);
-    g_object_set_data(G_OBJECT(s->view),"insight-list-tools-busy",GINT_TO_POINTER(1));status(s,copy ? "Copying loaded list…":"Searching loaded list…");s->idle=g_idle_add(scan,s);
+    g_object_set_data(G_OBJECT(s->view),"insight-list-tools-busy",GINT_TO_POINTER(1));status(s,printing ? "Preparing list for printing…":copy ? "Copying loaded list…":"Searching loaded list…");s->idle=g_idle_add(scan,s);
 }
 static void dialog_destroy(GtkWidget *widget,gpointer data) { (void)widget;ListTools *s=data;s->dialog=NULL;if(s->job && !s->job->copy) cancel(s); }
 static void response(GtkDialog *dialog,gint response_id,gpointer data) {
     ListTools *s=data;if(response_id!=GTK_RESPONSE_ACCEPT) { gtk_widget_destroy(GTK_WIDGET(dialog));return; }
     g_free(s->pattern);s->pattern=g_strdup(gtk_entry_get_text(GTK_ENTRY(s->entry)));s->match_case=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(s->sensitive));s->use_regex=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(s->regex));s->do_wrap=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(s->wrap));
-    start(s,FALSE,FALSE,gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(s->beginning)));
+    start(s,FALSE,FALSE,gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(s->beginning)),FALSE);
 }
 static void search_dialog(ListTools *s) {
     if(s->dialog) { gtk_window_present(GTK_WINDOW(s->dialog));return; }
@@ -214,8 +223,8 @@ static void search_dialog(ListTools *s) {
 }
 static void action(GtkWidget *item,gpointer data) {
     ListTools *s=g_object_get_data(G_OBJECT(data),"insight-list-tools");if(!s || s->destroyed) return;guint mode=GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(item),"insight-list-action"));
-    if(mode==1 || (mode>=2 && (!s->pattern || !*s->pattern))) search_dialog(s);
-    else start(s,mode==0,mode==3,FALSE);
+    if(mode==1 || ((mode==2 || mode==3) && (!s->pattern || !*s->pattern))) search_dialog(s);
+    else start(s,mode==0 || mode==4,mode==3,FALSE,mode==4);
 }
 static void destroyed(GtkWidget *widget,gpointer data) { (void)widget;ListTools *s=data;s->destroyed=TRUE;cancel(s);if(s->dialog) gtk_widget_destroy(s->dialog); }
 static void freed(gpointer data) { ListTools *s=data;g_free(s->pattern);g_free(s); }
@@ -229,7 +238,7 @@ void insight_list_tools_menu(GtkTreeView *view,GtkWidget *menu) {
     insight_list_tools_attach(view);if(g_object_get_data(G_OBJECT(menu),"insight-list-tools-added")) return;
     g_object_set_data(G_OBJECT(menu),"insight-list-tools-added",GINT_TO_POINTER(1));
     gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());
-    const gchar *labels[]={"Copy List","Search List…","Next list match (F4)","Previous list match (Shift+F4)"};const gchar *names[]={"insight-list-copy","insight-list-search-command","insight-list-next","insight-list-previous"};
+    const gchar *labels[]={"Copy List","Search List…","Next list match (F4)","Previous list match (Shift+F4)","Print List…"};const gchar *names[]={"insight-list-copy","insight-list-search-command","insight-list-next","insight-list-previous","insight-list-print"};
     for(guint i=0;i<G_N_ELEMENTS(labels);i++) { GtkWidget *item=gtk_menu_item_new_with_label(labels[i]);gtk_widget_set_name(item,names[i]);g_object_set_data(G_OBJECT(item),"insight-list-action",GUINT_TO_POINTER(i));g_signal_connect_object(item,"activate",G_CALLBACK(action),view,0);gtk_menu_shell_append(GTK_MENU_SHELL(menu),item); }
 }
 static void menu_free(gpointer data) { gtk_widget_destroy(GTK_WIDGET(data));g_object_unref(data); }
@@ -259,5 +268,5 @@ void insight_list_tools_popup_attach(GtkTreeView *view) {
 gboolean insight_list_tools_key(GtkWidget *widget,GdkEventKey *event) {
     if(!widget || !GTK_IS_TREE_VIEW(widget) || event->keyval!=GDK_KEY_F4 || (event->state&(GDK_CONTROL_MASK|GDK_MOD1_MASK|GDK_SUPER_MASK|GDK_META_MASK))) return FALSE;
     ListTools *s=g_object_get_data(G_OBJECT(widget),"insight-list-tools");if(!s) return FALSE;
-    if(!s->pattern || !*s->pattern) search_dialog(s);else start(s,FALSE,(event->state&GDK_SHIFT_MASK)!=0,FALSE);return TRUE;
+    if(!s->pattern || !*s->pattern) search_dialog(s);else start(s,FALSE,(event->state&GDK_SHIFT_MASK)!=0,FALSE,FALSE);return TRUE;
 }

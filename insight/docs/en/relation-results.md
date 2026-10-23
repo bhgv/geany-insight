@@ -17,3 +17,6 @@ Limits: 2000 source items, 4000 visited model rows, 64 tree levels, 1 MiB outlin
 For example, search for derived types, filter the list to one branch, preview and create its bookmarks. Clear the filter and create the rest: the previously stored locations are skipped. Expand a tree branch and Refresh to include its newly loaded descendants.
 
 Source Insight references: [Create Bookmarks from Relation Items](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Create_Bookmarks_from_Relation_Items.htm), [View Relation Outline](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/View_Relation_Outline.htm). The outline here is an explicit snapshot dialog/buffer, not a claim of a live inline textual view or complete semantic parity.
+
+
+[Print lists and the Relations outline](list-printing.md): Print List, Print Relation Window and Print outline, wrapping and page numbering.
