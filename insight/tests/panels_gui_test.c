@@ -42,6 +42,9 @@ static gboolean collapse_restored(gpointer data) { (void)data;GtkWidget *left=na
 static gboolean collapsed(gpointer data) {
  (void)data;GtkWidget *left=named(window,"insight-sidebar-width-host");g_assert_cmpint(gtk_widget_get_allocated_width(left),<=,40);g_assert_cmpint(gtk_widget_get_allocated_width(named(window,"insight-project-width-host")),<=,40);gint x,y;g_assert_true(gtk_widget_translate_coordinates(named(window,"insight-context"),window,0,0,&x,&y));g_assert_cmpint(x,>=,0);g_assert_true(gtk_widget_translate_coordinates(ui_lookup_widget(window,"notebook1"),window,0,0,&x,&y));g_assert_cmpint(x,>=,0);gtk_paned_set_position(GTK_PANED(ui_lookup_widget(window,"hpaned1")),180);gtk_paned_set_position(GTK_PANED(split),saved_split);g_timeout_add(250,collapse_restored,NULL);return G_SOURCE_REMOVE;
 }
+static void width_diagnostics(GtkWidget *widget,gint depth) {
+ gint minimum,natural;gtk_widget_get_preferred_width(widget,&minimum,&natural);if(minimum>160 || depth<3) g_printerr("WIDTH depth=%d %s type=%s minimum=%d natural=%d allocated=%d\n",depth,gtk_widget_get_name(widget),G_OBJECT_TYPE_NAME(widget),minimum,natural,gtk_widget_get_allocated_width(widget));if(GTK_IS_CONTAINER(widget)) { GList *children=gtk_container_get_children(GTK_CONTAINER(widget));for(GList *p=children;p;p=p->next) width_diagnostics(p->data,depth+1);g_list_free(children); }
+}
 static gboolean finish(gpointer data) {
  (void)data;
  GtkWidget *left=ui_lookup_widget(window,"notebook3"),*horizontal=ui_lookup_widget(window,"hpaned1"),*vertical=ui_lookup_widget(window,"vpaned1"),*editors=ui_lookup_widget(window,"notebook1");
@@ -53,7 +56,7 @@ static gboolean finish(gpointer data) {
  const gchar *controls[]={"insight-local-query","insight-local-query-history","insight-file-symbol-mode","insight-local-sort","insight-local-group-types","insight-local-scope-hierarchy","insight-local-type-filters","insight-local-locate"};
  for(guint i=0;i<G_N_ELEMENTS(controls);i++) {
   GtkWidget *control=named(window,controls[i]);g_assert_nonnull(control);g_assert_true(gtk_widget_get_mapped(control));gint x,y;g_assert_true(gtk_widget_translate_coordinates(control,bounds,0,0,&x,&y));
-  g_printerr("Narrow sidebar %s: x=%d width=%d parent=%d\n",controls[i],x,gtk_widget_get_allocated_width(control),gtk_widget_get_allocated_width(left));g_assert_cmpint(x,>=,0);g_assert_cmpint(x+gtk_widget_get_allocated_width(control),<=,gtk_widget_get_allocated_width(bounds));
+  if(x+gtk_widget_get_allocated_width(control)>gtk_widget_get_allocated_width(bounds)) width_diagnostics(bounds,0);g_printerr("Narrow sidebar %s: x=%d width=%d parent=%d\n",controls[i],x,gtk_widget_get_allocated_width(control),gtk_widget_get_allocated_width(left));g_assert_cmpint(x,>=,0);g_assert_cmpint(x+gtk_widget_get_allocated_width(control),<=,gtk_widget_get_allocated_width(bounds));
  }
  GtkWidget *sort=named(window,"insight-local-sort"),*direction=named(sort,"insight-symbol-sort-descending");gint dx,dy;g_assert_true(gtk_widget_translate_coordinates(direction,bounds,0,0,&dx,&dy));g_assert_cmpint(dx+gtk_widget_get_allocated_width(direction),<=,gtk_widget_get_allocated_width(bounds));
  /* GTK may clamp the requested 180px to the active theme/font's minimum.

@@ -4332,6 +4332,7 @@ static void panel_controls_attach(guint index) {
 static void float_panel_command(GtkMenuItem *item,gpointer data) { (void)item; detach_panel(GPOINTER_TO_UINT(data)); }
 static void dock_panels_command(GtkMenuItem *item,gpointer data) { (void)item; (void)data; dock_all_panels(); }
 static GtkWidget *narrow_panel_host(GtkWidget *child);
+static GtkWidget *panel_content_host(GtkWidget *child);
 static void register_panels(void) {
  wb.host_count=10;panel_tray_create();
  wb.transparency_toggle=gtk_check_menu_item_new_with_label("Enable transparent panels");gtk_widget_set_name(wb.transparency_toggle,"insight-panel-transparency-toggle");gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.transparency_toggle),wb.transparent_panels);g_signal_connect(wb.transparency_toggle,"toggled",G_CALLBACK(panel_transparency_toggled),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(wb.panel_commands),wb.transparency_toggle);gtk_widget_show(wb.transparency_toggle);
@@ -4345,7 +4346,7 @@ static void register_panels(void) {
    GtkWidget *old=host->page,*box=gtk_box_new(GTK_ORIENTATION_VERTICAL,0);
    gint position=gtk_notebook_page_num(GTK_NOTEBOOK(host->home),old);
    g_object_ref(old); gtk_container_remove(GTK_CONTAINER(host->home),old);
-   compact_panel_control(old);gtk_box_pack_start(GTK_BOX(box),narrow_panel_host(old),TRUE,TRUE,0);
+   compact_panel_control(old);gtk_box_pack_start(GTK_BOX(box),panel_content_host(old),TRUE,TRUE,0);
    g_object_unref(old);gtk_notebook_insert_page(GTK_NOTEBOOK(host->home),box,gtk_label_new(host->label),position);
    GtkWidget *tab=gtk_notebook_get_tab_label(GTK_NOTEBOOK(host->home),box);if(GTK_IS_LABEL(tab)) { gtk_label_set_ellipsize(GTK_LABEL(tab),PANGO_ELLIPSIZE_END);gtk_label_set_width_chars(GTK_LABEL(tab),1); }host->page=box; gtk_widget_show_all(box);
   } if(i!=9) insight_panel_help_attach(host->page,topics[i]);g_object_set_data(G_OBJECT(host->page),"insight-panel-id",GUINT_TO_POINTER(i+1)); panel_controls_attach(i); }
@@ -5562,6 +5563,11 @@ static void insight_width_host_class_init(InsightWidthHostClass *klass) {
  GtkWidgetClass *widget=GTK_WIDGET_CLASS(klass);widget->get_preferred_width=width_host_width;widget->get_preferred_height=width_host_height;widget->get_preferred_width_for_height=width_host_width_for_height;widget->get_preferred_height_for_width=width_host_height_for_width;widget->size_allocate=width_host_allocate;
 }
 static void insight_width_host_init(InsightWidthHost *host) { gtk_widget_set_has_window(GTK_WIDGET(host),FALSE);gtk_widget_set_name(GTK_WIDGET(host),"insight-editor-width-host"); }
+static GtkWidget *panel_content_host(GtkWidget *child) {
+ /* Let vertical boxes allocate their actual width to entry/button rows.
+  * The outer shelf viewport clips only after fixed controls collide. */
+ GtkWidget *host=g_object_new(insight_width_host_get_type(),NULL);gtk_widget_set_name(host,"insight-panel-content-host");gtk_container_add(GTK_CONTAINER(host),child);return host;
+}
 static GtkWidget *narrow_panel_host(GtkWidget *child) {
  GtkWidget *host=g_object_new(insight_width_host_get_type(),NULL);gtk_widget_set_name(host,"insight-panel-width-host");GtkWidget *viewport=gtk_viewport_new(NULL,NULL);gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport),GTK_SHADOW_NONE);gtk_container_add(GTK_CONTAINER(viewport),child);gtk_container_add(GTK_CONTAINER(host),viewport);return host;
 }
