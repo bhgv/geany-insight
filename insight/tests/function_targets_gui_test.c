@@ -2,6 +2,7 @@
 /* Real editor/index/Symbol Info; closed headers, overloads and language guard. */
 #include "geany.h"
 #include "document.h"
+#include "documentprivate.h"
 #include "editor.h"
 #include "main.h"
 #include "ui_utils.h"
@@ -10,7 +11,7 @@
 #include <glib/gstdio.h>
 #include <string.h>
 static GtkWidget *window;static GeanyDocument *source;
-static gchar *cpp,*header,*header_text;static guint phase;static gint origin;
+static gchar *cpp,*header,*header_text,*prefs_path;static guint phase;static gint origin;
 static const gchar *code="#include \"api.hpp\"\nnamespace api {\nint work(int value) { return value+1; }\ndouble work(double value) { return value+2; }\nAlias make_cell() { return {}; }\nint use() { return work(3); }\n}\nint overload(double value) { return (int)value; }\n// work in comment\nconst char *hint = \"work\";\n";
 static GtkWidget *named(GtkWidget *w,const gchar *name) { if(!g_strcmp0(gtk_widget_get_name(w),name)) return w;if(GTK_IS_CONTAINER(w)) { GList *c=gtk_container_get_children(GTK_CONTAINER(w));GtkWidget *found=NULL;for(GList *p=c;p && !found;p=p->next) found=named(p->data,name);g_list_free(c);return found; }return NULL; }
 static GtkWidget *info(void) { GList *list=gtk_window_list_toplevels();GtkWidget *found=NULL;for(GList *p=list;p;p=p->next) if(gtk_widget_get_visible(p->data) && !g_strcmp0(gtk_widget_get_name(p->data),"insight-symbol-info-window")) found=p->data;g_list_free(list);return found; }
@@ -22,6 +23,7 @@ static void query(const gchar *text,gint kind) { gtk_entry_set_text(GTK_ENTRY(na
 static void command(const gchar *name) { GtkWidget *navigate=g_object_get_data(G_OBJECT(window),"insight-navigate");GtkWidget *item=named(gtk_menu_item_get_submenu(GTK_MENU_ITEM(navigate)),name);g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item)); }
 static void caret(const gchar *needle) { const gchar *at=strstr(code,needle);g_assert_nonnull(at);origin=(gint)(at-code);scintilla_send_message(source->editor->sci,SCI_SETSEL,origin,origin);gtk_widget_grab_focus(GTK_WIDGET(source->editor->sci)); }
 static void same_source(void) { g_assert_true(document_get_current()==source);g_assert_cmpint(sci_get_current_position(source->editor->sci),==,origin);gchar *text=sci_get_contents(source->editor->sci,-1);g_assert_cmpstr(text,==,code);g_free(text);g_assert_false(source->changed);g_assert_false(scintilla_send_message(source->editor->sci,SCI_CANUNDO,0,0)); }
+static void option(const gchar *name,gboolean enabled) { gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(info(),name)),enabled); }
 static void info_key(guint key) { GdkEventKey event={0};event.type=GDK_KEY_PRESS;event.keyval=key;event.state=GDK_MOD1_MASK;gboolean handled=FALSE;g_signal_emit_by_name(info(),"key-press-event",&event,&handled);g_assert_true(handled); }
 static void close_info(void) { if(info()) gtk_widget_destroy(info()); }
 static gboolean step(gpointer data) {
@@ -29,6 +31,8 @@ static gboolean step(gpointer data) {
  if(phase==0) {
   if(count()!=2) { refresh();return G_SOURCE_CONTINUE; }
   g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(named(info(),"insight-symbol-info-kind"))),==,1);g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(named(info(),"insight-symbol-info-count"))),==,"2 / 2");same_source();g_assert_null(document_find_by_filename(header));
+  g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(info(),"insight-symbol-info-parse-local"))));g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(info(),"insight-symbol-info-across-languages"))));option("insight-symbol-info-across-languages",FALSE);
+  guint64 tags=source->priv->tag_parse_generation;for(guint i=0;i<20;i++) refresh();g_assert_cmpuint(source->priv->tag_parse_generation,==,tags);same_source();
   click("insight-symbol-info-implementation");g_assert_cmpuint(count(),==,2);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(info(),"insight-symbol-info-query"))),==,"api::work");same_source();
   click("insight-symbol-info-prototype");g_assert_cmpuint(count(),==,2);same_source();
   g_assert_false(gtk_widget_get_sensitive(named(info(),"insight-symbol-info-previous")));click("insight-symbol-info-next");g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(named(info(),"insight-symbol-info-candidates"))),==,1);g_assert_false(gtk_widget_get_sensitive(named(info(),"insight-symbol-info-next")));
@@ -58,7 +62,13 @@ static gboolean step(gpointer data) {
   for(guint i=0;i<63;i++) click("insight-symbol-info-back");
   g_assert_false(gtk_widget_get_sensitive(named(info(),"insight-symbol-info-back")));g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(info(),"insight-symbol-info-query"))),==,"missing_006");same_source();close_info();
   command("insight-symbol-info-command");g_assert_false(gtk_widget_get_sensitive(named(info(),"insight-symbol-info-back")));g_assert_false(gtk_widget_get_sensitive(named(info(),"insight-symbol-info-forward")));close_info();same_source();
-  g_print("Function targets: prototype/implementation filters, scoped peers, language guard, filtering before 512 cap, counters, nominal alias/return links, cycles, stale-source refusal, jump/back, bounded query history, candidate keys, branch pruning, native shortcuts, base-type command and comment/string guards passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+  command("insight-symbol-info-options-command");g_assert_true(gtk_expander_get_expanded(GTK_EXPANDER(named(info(),"insight-symbol-info-options"))));query("work",0);option("insight-symbol-info-across-languages",TRUE);g_assert_cmpuint(count(),==,5);option("insight-symbol-info-across-languages",FALSE);g_assert_cmpuint(count(),==,4);same_source();
+  option("insight-symbol-info-parse-local",FALSE);const gchar *added="\nint local_fresh_probe() { return 7; }\n";scintilla_send_message(source->editor->sci,SCI_BEGINUNDOACTION,0,0);scintilla_send_message(source->editor->sci,SCI_APPENDTEXT,strlen(added),(sptr_t)added);scintilla_send_message(source->editor->sci,SCI_ENDUNDOACTION,0,0);
+  guint64 stale=source->priv->tag_parse_generation;query("local_fresh_probe",0);g_assert_cmpuint(count(),==,0);g_assert_cmpuint(source->priv->tag_parse_generation,==,stale);
+  option("insight-symbol-info-parse-local",TRUE);g_assert_cmpuint(count(),==,1);g_assert_cmpuint(source->priv->tag_snapshot_generation,==,source->priv->tag_parse_generation);guint64 fresh=source->priv->tag_parse_generation;for(guint i=0;i<10;i++) refresh();g_assert_cmpuint(source->priv->tag_parse_generation,==,fresh);
+  scintilla_send_message(source->editor->sci,SCI_UNDO,0,0);scintilla_send_message(source->editor->sci,SCI_EMPTYUNDOBUFFER,0,0);caret("work(3)");query("work",0);g_assert_cmpuint(count(),==,4);same_source();option("insight-symbol-info-across-languages",TRUE);g_assert_cmpuint(count(),==,5);option("insight-symbol-info-parse-local",FALSE);close_info();
+  command("insight-symbol-info-options-command");g_assert_true(gtk_expander_get_expanded(GTK_EXPANDER(named(info(),"insight-symbol-info-options"))));g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(info(),"insight-symbol-info-across-languages"))));g_assert_false(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(info(),"insight-symbol-info-parse-local"))));g_assert_cmpuint(count(),==,5);close_info();same_source();
+  g_print("Function targets: prototype/implementation filters, scoped peers, language guard, filtering before 512 cap, counters, nominal alias/return links, cycles, stale-source refusal, jump/back, bounded query history, candidate keys, branch pruning, native shortcuts, base-type command, lookup options, cross-language counts, unchanged-tag reuse, stale-buffer parsing, persistence and comment/string guards passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }
  return G_SOURCE_CONTINUE;
 }
@@ -69,8 +79,8 @@ int main(void) {
  cpp=g_build_filename(dir,"z_impl.cpp",NULL);header=g_build_filename(dir,"api.hpp",NULL);header_text=g_strdup("namespace api {\nstruct Cell { int value; };\nusing Alias = Cell;\nextern Alias instance;\nint work(int value);\ndouble work(double value);\nusing LoopA = LoopB;\nusing LoopB = LoopA;\n}\n");g_assert_true(g_file_set_contents(cpp,code,-1,NULL));g_assert_true(g_file_set_contents(header,header_text,-1,NULL));
  gchar *bulk=g_build_filename(dir,"bulk.hpp",NULL);GString *prototypes=g_string_new(NULL);for(guint i=0;i<600;i++) g_string_append_printf(prototypes,"namespace N%03u { int overload(int value); }\n",i);g_assert_true(g_file_set_contents(bulk,prototypes->str,prototypes->len,NULL));g_string_free(prototypes,TRUE);g_free(bulk);
  gchar *foreign=g_build_filename(dir,"foreign.py",NULL);g_assert_true(g_file_set_contents(foreign,"def work(value):\n    return value\n",-1,NULL));g_free(foreign);
- gchar *encoded=g_base64_encode((const guchar *)dir,strlen(dir)),*seed=g_strdup_printf("[workbench]\nversion=1\nfollow=false\nrelation-follow=false\nproject-visible=true\nroot-base64=%s\n",encoded),*settings=g_build_filename(settings_dir,"workbench.conf",NULL);g_assert_true(g_file_set_contents(settings,seed,-1,NULL));g_free(encoded);g_free(seed);g_free(settings);
+ gchar *encoded=g_base64_encode((const guchar *)dir,strlen(dir)),*seed=g_strdup_printf("[workbench]\nversion=1\ninfo-parse-local=invalid\ninfo-across-languages=true\nfollow=false\nrelation-follow=false\nproject-visible=true\nroot-base64=%s\n",encoded),*settings=g_build_filename(settings_dir,"workbench.conf",NULL);g_assert_true(g_file_set_contents(settings,seed,-1,NULL));prefs_path=g_strdup(settings);g_free(encoded);g_free(seed);g_free(settings);
  gchar *conf=g_build_filename(profile,"geany.conf",NULL);g_assert_true(g_file_set_contents(conf,"[geany]\nconfirm_exit=false\n",-1,NULL));g_free(conf);
  gchar *args[]={"function-targets","--new-instance","--no-session","--config",profile,cpp,NULL};g_timeout_add(200,step,NULL);g_timeout_add_seconds(45,timeout,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);gint result=main_lib(6,args);
- gchar *disk=NULL;g_assert_true(g_file_get_contents(cpp,&disk,NULL,NULL));g_assert_cmpstr(disk,==,code);g_free(disk);return result;
+ gchar *disk=NULL;g_assert_true(g_file_get_contents(cpp,&disk,NULL,NULL));g_assert_cmpstr(disk,==,code);g_free(disk);GKeyFile *saved=g_key_file_new();g_assert_true(g_key_file_load_from_file(saved,prefs_path,G_KEY_FILE_NONE,NULL));g_assert_false(g_key_file_get_boolean(saved,"workbench","info-parse-local",NULL));g_assert_true(g_key_file_get_boolean(saved,"workbench","info-across-languages",NULL));g_key_file_unref(saved);return result;
 }

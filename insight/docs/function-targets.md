@@ -39,3 +39,16 @@ Four configurable **Editor** keybindings are initially unassigned: Symbol Info, 
 The window has independent **Back / Forward** query history (`Alt+Left / Alt+Right`) and **Previous / Next candidate** (`Alt+Up / Alt+Down`). Up to 64 queries retain category, preferred location and overload identity. History re-queries the current index and rereads the preview; it is not an old source snapshot and never navigates the source editor. New queries after Back discard the forward branch; Refresh and candidate changes preserve it. Candidate traversal stops at either end without wrapping. Empty/oversized queries are not recorded. Closing the window discards its history; nothing is saved in project settings. This query history is a usability extension rather than a claim of a matching Source Insight dialog.
 
 Reference: [Jump To Base Type](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Jump_To_Base_Type.htm).
+
+## Lookup options and reusing parsed symbols
+
+**Navigate → Symbol Info Lookup Options…** opens the modeless window and expands its compact options section. The same section is available inside Symbol Info. Both choices are stored in the workbench configuration and apply to Symbol Info plus prototype, implementation and nominal-type choosers:
+
+- **Parse locally before lookup** (initially enabled): update stale tags for the current saved buffer before querying. If its native tag generation is already current, reuse it. Repeated Refresh, categories and query history do not reparse an unchanged saved buffer or invalidate the shared index. Untitled buffers use the existing private in-memory parse when enabled.
+- **Find symbols across different language types** (initially disabled): include any indexed source language before the category and 512-row filters. With it disabled, the existing language compatibility rules remain active. Type metadata still resolves within the selected declaration's compatible languages.
+
+Disabling local parsing uses the available cached tags, which may be stale; it does not disable the editor's ordinary background tag updates. Re-enable the option to update stale current-buffer tags explicitly. The source preview and Jump digest guards remain active under either setting. History uses the current lookup options, rather than restoring old options from an earlier visit.
+
+These controls do not change automatic Context, F12, project indexing, project membership or the search paths of other panels. They do not import another project's database or add an external symbol path. Opening the options alone does not start a project rescan. Existing configuration files retain their prior behavior; a malformed local-parse value retains the enabled default.
+
+Reference: [Symbol Lookup Options](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Symbol_Lookup_Options.htm).

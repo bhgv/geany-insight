@@ -805,3 +805,8 @@ Navigate and editor-popup Jump To Prototype / Implementation open a category-fil
 ### Symbol Info history, candidate traversal and nominal-type command
 
 Navigate/editor Jump To Base Type previews the resolved nominal target for a single declaration or retains an explicit declaration chooser when ambiguous. Four appended unassigned Editor bindings dispatch Symbol Info, prototype, implementation and base-type browsing. Independent per-window query history is bounded to 64 entries, retains category and overload identity, refreshes index/source on replay and prunes the forward branch on a new query. Alt+Left/Right traverse queries; Alt+Up/Down traverse candidates without wrapping. No automatic source jump, expression-type inference or persisted history. [Guide and diagram](function-targets.md).
+
+
+### Symbol Info lookup policy and unchanged-tag reuse
+
+A Navigate command expands persistent Parse locally before lookup / Find symbols across different language types options in Symbol Info. Source-language eligibility remains before the 512-row cap; declared-type metadata keeps its own compatible-language resolver. Locally parsed saved buffers reuse native tag generations: unchanged Refresh/category/history requests no longer cancel tag workers, dirty the shared index or reparse the current source. Disabled local parsing imports available cached tags; ordinary background updates remain independent. This scope covers Symbol Info and its target choosers, not automatic Context/F12 or cross-project symbol paths. [Guide and diagram](function-targets.md).

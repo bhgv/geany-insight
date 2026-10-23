@@ -2051,3 +2051,8 @@ Previous candidate (Alt+Up)	Предыдущий кандидат (Alt+↑)
 Next candidate (Alt+Down)	Следующий кандидат (Alt+↓)
 Select a declaration, then browse its underlying nominal type	Выберите объявление, затем просмотрите его исходный номинальный тип
 No unambiguous indexed nominal type; inspect or qualify the declaration	Однозначный индексированный тип не найден; просмотрите или уточните объявление
+Symbol Info lookup options	Настройки поиска Symbol Info
+Symbol Info Lookup Options…	Настройки поиска Symbol Info…
+Parse locally before lookup	Разобрать текущий буфер перед поиском
+Update stale current-buffer tags before lookup; reuse unchanged tags	Обновлять устаревшие теги перед поиском; использовать неизменённые повторно
+Find symbols across different language types	Искать символы среди разных языков
