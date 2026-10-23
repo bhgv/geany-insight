@@ -192,7 +192,8 @@ gboolean insight_snapshot_compare_show(GtkWidget *parent,const gchar *left_name,
     gtk_box_pack_start(GTK_BOX(options),view->space,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(options),view->eol,FALSE,FALSE,0);
     g_signal_connect(view->space,"toggled",G_CALLBACK(option_changed),view);g_signal_connect(view->eol,"toggled",G_CALLBACK(option_changed),view);
     GtkWidget *tabs=insight_compare_ui_tabs(box,"insight-snapshot-toolbar-tabs"),*files=insight_compare_ui_page(tabs,insight_tr("Files and comparison")),*view_page=insight_compare_ui_page(tabs,insight_tr("View")),*navigation=insight_compare_ui_page(tabs,insight_tr("Navigation"));
-    insight_compare_ui_move(bar,files);insight_compare_ui_move(options,files);insight_compare_ui_move(view->previous,navigation);insight_compare_ui_move(view->next,navigation);insight_compare_ui_move(view->copy,view_page);
+    insight_compare_ui_move(bar,files);insight_compare_ui_move(options,files);GtkWidget *navigation_row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3),*report_row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);gtk_box_pack_start(GTK_BOX(navigation),navigation_row,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(view_page),report_row,FALSE,FALSE,0);
+    insight_compare_ui_move(view->previous,navigation_row);insight_compare_ui_move(view->next,navigation_row);insight_compare_ui_move(view->copy,report_row);
     GtkWidget *panes=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);gtk_box_pack_start(GTK_BOX(box),panes,TRUE,TRUE,0);
     const gchar *names[]={left_name,right_name};
     for(guint i=0;i<2;i++) {

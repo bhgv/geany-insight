@@ -436,7 +436,8 @@ static Directory *directory_new(GtkWidget *parent) {
  GtkWidget *files=insight_compare_ui_page(tabs,insight_tr("Files and comparison")),*compare_options=insight_compare_ui_page(tabs,insight_tr("Comparison options")),*view_options=insight_compare_ui_page(tabs,insight_tr("View")),*file_operations=insight_compare_ui_page(tabs,insight_tr("File operations")),*navigation=insight_compare_ui_page(tabs,insight_tr("Navigation"));
  insight_compare_ui_move(options,compare_options);insight_compare_ui_move(text_options,compare_options);insight_compare_ui_move(d->controls,files);insight_compare_ui_move(bar,files);
  insight_compare_ui_move(filters,view_options);insight_compare_ui_move(masks,view_options);insight_compare_ui_move(operations,file_operations);
- insight_compare_ui_move(d->previous,navigation);insight_compare_ui_move(d->next,navigation);
+ GtkWidget *navigation_row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);gtk_box_pack_start(GTK_BOX(navigation),navigation_row,FALSE,FALSE,0);
+ insight_compare_ui_move(d->previous,navigation_row);insight_compare_ui_move(d->next,navigation_row);
  g_signal_connect(d->include,"changed",G_CALLBACK(masks_changed),d);g_signal_connect(d->exclude,"changed",G_CALLBACK(masks_changed),d);g_signal_connect(d->status_filter,"changed",G_CALLBACK(refilter),d);
  g_signal_connect(d->filter_entry,"changed",G_CALLBACK(refilter),d);g_signal_connect(d->different,"toggled",G_CALLBACK(refilter),d);g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(d->view)),"changed",G_CALLBACK(selection_changed),d);
  g_signal_connect(d->method,"changed",G_CALLBACK(method_changed),d);method_changed(GTK_COMBO_BOX(d->method),d);
