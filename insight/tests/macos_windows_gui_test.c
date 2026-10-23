@@ -40,7 +40,7 @@ static gboolean step(gpointer unused) {
   for(guint i=0;i<4;i++) { gchar *name=g_strdup_printf("insight-appearance-0-%u",i);options[i]=any(name);g_free(name);g_assert_nonnull(options[i]); }
   left=any("insight-local-symbols");context=any("insight-context");project=any("insight-project-files");g_assert_nonnull(left);g_assert_nonnull(context);g_assert_nonnull(project);
   map=SCINTILLA(any("insight-overview-code"));g_assert_nonnull(map);original_size=SEND(doc->editor->sci,SCI_STYLEGETSIZEFRACTIONAL,STYLE_DEFAULT,0);
-  icon=gtk_image_new_from_icon_name("document-open",GTK_ICON_SIZE_MENU);GtkToolItem *item=gtk_tool_button_new(icon,NULL);gtk_toolbar_insert(GTK_TOOLBAR(main_widgets.toolbar),item,-1);gtk_widget_show_all(GTK_WIDGET(item));
+  icon=gtk_image_new_from_icon_name("document-open",GTK_ICON_SIZE_MENU);GtkToolItem *item=gtk_tool_button_new(icon,NULL);GtkWidget *toolbar=gtk_widget_get_ancestor(any("insight-find-tool"),GTK_TYPE_TOOLBAR);g_assert_true(GTK_IS_TOOLBAR(toolbar));gtk_toolbar_insert(GTK_TOOLBAR(toolbar),item,-1);gtk_widget_show_all(GTK_WIDGET(item));
   phase=restoring ? 5:1;return G_SOURCE_CONTINUE;
  }
  if(phase==1) { miniature(10);SEND(map,SCI_STYLESETSIZEFRACTIONAL,0,2200);SEND(map,SCI_STYLESETSIZEFRACTIONAL,STYLE_DEFAULT,2200);SEND(map,SCI_SETZOOM,8,0);gtk_widget_queue_draw(GTK_WIDGET(doc->editor->sci));phase++;return G_SOURCE_CONTINUE; }
