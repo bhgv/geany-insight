@@ -207,7 +207,7 @@ def request(data):
         replacement = text(replacement, 131072, 'replacement')
     else:
         replacement = ''
-    return {'explanation': explanation, 'command': command, 'replacement': replacement, 'has_replacement': has_replacement, 'files': files_checked(structured.get('files', []), 256 * 1024)}
+    return {'explanation': explanation, 'command': command, 'replacement': replacement, 'has_replacement': has_replacement, 'files': files_checked(structured.get('files') or [], 256 * 1024)}
 
 def emit(result, error=False):
     print('[response]\nerror=' + str(error).lower())

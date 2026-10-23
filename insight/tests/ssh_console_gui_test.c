@@ -9,6 +9,7 @@
 static GtkWidget *window,*output,*state,*input,*output2,*input2,*tabs;static guint phase,ticks;static gchar *directory,*profile;
 static GtkWidget *named(GtkWidget *root,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;
+ if(GTK_IS_NOTEBOOK(root)) { for(guint i=0;i<2;i++) { GtkWidget *action=gtk_notebook_get_action_widget(GTK_NOTEBOOK(root),i ? GTK_PACK_END : GTK_PACK_START);if(action) { GtkWidget *found=named(action,name);if(found) return found; } } }
  if(GTK_IS_CONTAINER(root)) { GList *children=gtk_container_get_children(GTK_CONTAINER(root));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL;
 }
 static void click(const gchar *name) { GtkWidget *button=named(window,name);g_assert_nonnull(button);gtk_button_clicked(GTK_BUTTON(button)); }

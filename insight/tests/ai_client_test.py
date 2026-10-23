@@ -25,7 +25,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(401); self.end_headers(); self.wfile.write(b'private body must not be echoed'); return
         model = payload['model']
         if model == 'plain': content = 'Plain answer without a code edit.'
-        else: content = json.dumps({'explanation': 'source.c:1 lacks a semicolon. α', 'command': 'printf safe' if model != 'control' else 'a\nb', 'replacement': 'int value = 2;\n', 'files': [{'name':'report.txt','mime':'text/plain','data':base64.b64encode(b'checked\n').decode()}]}, ensure_ascii=False)
+        else: content = json.dumps({'explanation': 'source.c:1 lacks a semicolon. α', 'command': 'printf safe' if model != 'control' else 'a\nb', 'replacement': 'int value = 2;\n', 'files': None if model == 'null-files' else [{'name':'report.txt','mime':'text/plain','data':base64.b64encode(b'checked\n').decode()}]}, ensure_ascii=False)
         result = {'choices': [{'message': {'content': content}, 'finish_reason': 'length' if model == 'truncated' else 'stop'}]}
         raw = json.dumps(result).encode(); self.send_response(200); self.end_headers(); self.wfile.write(raw)
 class Tests(unittest.TestCase):
@@ -45,7 +45,7 @@ class Tests(unittest.TestCase):
     def test_no_attachment_and_empty_attachment(self):
         data=self.data();data['code']='';data['location']='';self.assertFalse(client.request(data)['has_replacement']);data['location']='empty.c';self.assertTrue(client.request(data)['has_replacement'])
     def test_plain_and_command(self):
-        self.assertFalse(client.request(self.data('plain'))['has_replacement']);self.assertEqual(client.request(self.data('control'))['command'],'')
+        self.assertEqual(client.request(self.data('null-files'))['files'],[]);self.assertFalse(client.request(self.data('plain'))['has_replacement']);self.assertEqual(client.request(self.data('control'))['command'],'')
     def test_errors_and_redirect(self):
         for path in ['/error','/redirect']:
             data=self.data();data['endpoint']=self.server.url+path
