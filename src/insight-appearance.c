@@ -117,10 +117,20 @@ void insight_appearance_join_windows(void) {
  if(!save(macos,reduced,FALSE,&error)) { ui_set_statusbar(TRUE,"%s",error->message);g_clear_error(&error);return; }
  independent=FALSE;apply();
 }
+static void window_title_changed(GObject *window,GParamSpec *spec,gpointer data) {
+ (void)spec;GtkHeaderBar *header=GTK_HEADER_BAR(data);const gchar *title=gtk_window_get_title(GTK_WINDOW(window));
+ if(g_strcmp0(title,gtk_header_bar_get_title(header))) gtk_header_bar_set_title(header,title);
+}
 void insight_appearance_decorate(GtkWidget *window) {
  if(!macos || !GTK_IS_WINDOW(window) || gtk_widget_get_realized(window) || gtk_window_get_titlebar(GTK_WINDOW(window))) return;
  GtkWidget *header=gtk_header_bar_new();gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(header),TRUE);
  gtk_header_bar_set_decoration_layout(GTK_HEADER_BAR(header),"close,minimize,maximize:");
- g_object_bind_property(window,"title",header,"title",G_BINDING_SYNC_CREATE);
- gtk_window_set_titlebar(GTK_WINDOW(window),header);gtk_widget_show(header);
+ /* GTK also synchronizes its custom titlebar. A second GBinding can keep
+  * queuing equal title notifications during set_titlebar(), starving the UI.
+  * Translate the owning window once, not GTK's internal header labels. */
+ g_object_set_data(G_OBJECT(header),"insight-no-i18n",GINT_TO_POINTER(1));
+ gtk_header_bar_set_title(GTK_HEADER_BAR(header),gtk_window_get_title(GTK_WINDOW(window)));
+ gtk_window_set_titlebar(GTK_WINDOW(window),header);
+ g_signal_connect_object(window,"notify::title",G_CALLBACK(window_title_changed),header,0);
+ gtk_widget_show(header);
 }

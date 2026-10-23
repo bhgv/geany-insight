@@ -66,6 +66,8 @@ static gboolean step(gpointer unused) {
   GtkWidget *tools=any("insight-tools-palette");g_assert_nonnull(tools);g_assert_true(gtk_widget_get_toplevel(ui_lookup_widget(window,"menubar1"))==tools);
   GtkWidget *l=gtk_widget_get_toplevel(left),*r=gtk_widget_get_toplevel(project),*c=gtk_widget_get_toplevel(context);
   g_assert_true(l!=window && r!=window && c!=window && l!=r && l!=c && r!=c);
+  gtk_window_set_title(GTK_WINDOW(tools),"Updated palette title");
+  g_assert_cmpstr(gtk_header_bar_get_title(GTK_HEADER_BAR(gtk_window_get_titlebar(GTK_WINDOW(tools)))),==,"Updated palette title");
   g_assert_true(GTK_IS_HEADER_BAR(gtk_window_get_titlebar(GTK_WINDOW(tools))));g_assert_true(GTK_IS_HEADER_BAR(gtk_window_get_titlebar(GTK_WINDOW(l))));unchanged();
   const gchar *capture=g_getenv("INSIGHT_MACOS_WINDOWS_CAPTURE");
   if(capture && !restoring) { GdkWindow *root=gdk_get_default_root_window();GdkPixbuf *pix=gdk_pixbuf_get_from_window(root,0,0,gdk_window_get_width(root),gdk_window_get_height(root));g_assert_nonnull(pix);g_assert_true(gdk_pixbuf_save(pix,capture,"jpeg",NULL,"quality","88",NULL));g_object_unref(pix); }
