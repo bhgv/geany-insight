@@ -63,6 +63,7 @@ on:
       - src/sidebar.c
       - insight/tests/unified_workbench_gui_test.c
       - src/insight-diff.*
+      - src/insight-diff-syntax.*
       - insight/core/diff.*
       - insight/core/restore_lines.*
       - insight/tests/restore_lines_test.c

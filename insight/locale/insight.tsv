@@ -1824,3 +1824,9 @@ Project database restored; checking file stamps…	База проекта во�
 Synchronizing project membership and changed files…	Синхронизация состава проекта и изменённых файлов…
 Workspace: %u parsed, %u reused, %zu symbols, %u skipped%s	Проект: разобрано %u, из базы %u, символов %zu, пропущено %u%s
 Show in file manager	Показать в проводнике
+Files and comparison	Файлы и сравнение
+Merge and history	Сведение и история
+AI answers	Ответы ИИ
+Current source	Текущий исходник
+Right answer	Ответ справа
+Compare each answer with current code or with another answer. Manual Result edits stay with the right answer.	Сравните ответ с исходником или другим ответом. Ручные правки результата сохраняются для ответа справа.

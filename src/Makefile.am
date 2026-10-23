@@ -230,6 +230,7 @@ libgeany_la_SOURCES += \
 	insight-search-links.c insight-search-links.h ../insight/desktop/source_link_anchor.c ../insight/desktop/source_link_anchor.h \
 	insight-navigation.c insight-navigation.h \
 	insight-command-list.c insight-command-list.h \
+	insight-diff-syntax.c insight-diff-syntax.h \
 	insight-ai-profiles.c insight-ai-profiles.h \
 	insight-web-search.c insight-web-search.h \
 	../insight/desktop/web_search.c ../insight/desktop/web_search.h \

@@ -9,12 +9,15 @@
 #include <string.h>
 #include <gio/gio.h>
 
+static InsightDiffColorize colorizer;
+void insight_diff_set_colorizer(InsightDiffColorize callback) { colorizer=callback; }
 static InsightDiffOpen source_opener;
 void insight_diff_set_source_opener(InsightDiffOpen opener) { source_opener=opener; }
 typedef struct { gchar *text; gint *positions; } Snapshot;
 typedef struct { guint begin,end; } MapBlock;
 typedef struct {
  gboolean memory,review_ready,review_locked;GtkWidget *apply,*review_tools;InsightDiffApply apply_cb;InsightDiffAsk ask_cb;gpointer review_data;GDestroyNotify review_destroy;
+ GtkWidget *toolbar,*answer_page,*answer_left,*answer_right;GPtrArray *answers;gchar *answer_base,*syntax_path;guint answer_l,answer_r,syntax_idle;gboolean answer_sync;GtkTextBuffer *syntax_buffers[3];
  GtkWidget *window,*paths[2],*views[3],*status,*undo,*redo,*take[2],*take_all[2],*external;
  GtkWidget *find_entry,*find_side,*find_case,*find_word,*find_wrap,*find_previous,*find_next,*find_status,*numbers,*find_regex,*find_dotall;
  GtkWidget *replace_entry,*replace_scope,*replace_once,*replace_case,*replace_status,*replace_apply,*replace_confirm;
@@ -32,6 +35,10 @@ typedef struct {
  gboolean zero_found;gint zero_side,zero_offset;guint64 zero_serial;
  GPtrArray *history; guint position;guint64 history_serial; gboolean changing,user_action,pending;
 } Merge;
+typedef struct { gchar *name,*code,*working,*explanation; } AnswerChoice;
+static void answer_free(gpointer data) { AnswerChoice *a=data;g_free(a->name);g_free(a->code);g_free(a->working);g_free(a->explanation);g_free(a); }
+static gboolean syntax_idle(gpointer data) { Merge *m=data;if(m->busy) return G_SOURCE_CONTINUE;m->syntax_idle=0;if(colorizer) for(guint i=0;i<3;i++) colorizer(m->syntax_buffers[i],m->syntax_path ? m->syntax_path:m->loaded_paths[i<2 ? i:1]);return G_SOURCE_REMOVE; }
+static void syntax_changed(GtkTextBuffer *buffer,gpointer data) { (void)buffer;Merge *m=data;if(!m->syntax_idle) m->syntax_idle=g_timeout_add(150,syntax_idle,m); }
 static GKeyFile *view_defaults;
 static GList *open_compares;
 static const gchar *view_group="file-compare";
@@ -146,6 +153,7 @@ static void find_text(Merge *m,gboolean backwards);
 static void view_options(GtkWidget *,gpointer);
 static void edit_source(Merge *,guint);
 static void focus_find(Merge *m) {
+ if(m->toolbar) gtk_notebook_set_current_page(GTK_NOTEBOOK(m->toolbar),3);
  GtkWidget *focus=gtk_window_get_focus(GTK_WINDOW(m->window));
  for(int i=0;i<3;i++) if(focus==m->views[i]) {
   gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),i);
@@ -164,6 +172,7 @@ static gint focused_pane(Merge *m) {
  return CLAMP(gtk_combo_box_get_active(GTK_COMBO_BOX(m->line_side)),0,2);
 }
 static void focus_line(Merge *m,gint side) {
+ if(m->toolbar) gtk_notebook_set_current_page(GTK_NOTEBOOK(m->toolbar),5);
  GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]));GtkTextIter at;
  gtk_text_buffer_get_iter_at_mark(buffer,&at,gtk_text_buffer_get_insert(buffer));
  gtk_combo_box_set_active(GTK_COMBO_BOX(m->line_side),side);
@@ -198,7 +207,7 @@ static gboolean key(GtkWidget *w,GdkEventKey *event,gpointer data) {
   gtk_combo_box_set_active(GTK_COMBO_BOX(m->line_side),side);gtk_widget_grab_focus(m->views[side]);return TRUE;
  }
  if(event->keyval==GDK_KEY_Escape && w==m->line_number) { gtk_widget_grab_focus(m->views[focused_pane(m)]);return TRUE; }
- if((event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_h || event->keyval==GDK_KEY_H)) { if(m->review_tools) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->review_tools),TRUE);gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),2);gtk_combo_box_set_active(GTK_COMBO_BOX(m->replace_scope),gtk_text_buffer_get_has_selection(result(m)) ? 1 : 0);gtk_widget_grab_focus(m->replace_entry);gtk_editable_select_region(GTK_EDITABLE(m->replace_entry),0,-1);return TRUE; }
+ if((event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_h || event->keyval==GDK_KEY_H)) { if(m->review_tools) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->review_tools),TRUE);if(m->toolbar) gtk_notebook_set_current_page(GTK_NOTEBOOK(m->toolbar),4);gtk_combo_box_set_active(GTK_COMBO_BOX(m->find_side),2);gtk_combo_box_set_active(GTK_COMBO_BOX(m->replace_scope),gtk_text_buffer_get_has_selection(result(m)) ? 1 : 0);gtk_widget_grab_focus(m->replace_entry);gtk_editable_select_region(GTK_EDITABLE(m->replace_entry),0,-1);return TRUE; }
  if((event->state&GDK_CONTROL_MASK) && event->keyval==GDK_KEY_F3) { selection_search(m,focused_pane(m),(event->state&GDK_SHIFT_MASK) ? -1 : 1);return TRUE; }
  if((event->state&(GDK_CONTROL_MASK|GDK_SHIFT_MASK))==(GDK_CONTROL_MASK|GDK_SHIFT_MASK) && (event->keyval==GDK_KEY_f || event->keyval==GDK_KEY_F)) { GtkWidget *focus=gtk_window_get_focus(GTK_WINDOW(m->window));guint side=gtk_combo_box_get_active(GTK_COMBO_BOX(m->find_side));for(guint i=0;i<3;i++) if(focus==m->views[i]) side=i;find_all(m,side);return TRUE; }
  if(event->keyval==GDK_KEY_F3) { find_text(m,(event->state&GDK_SHIFT_MASK)!=0);return TRUE; }
@@ -811,6 +820,7 @@ static void destroyed(GtkWidget *w,gpointer data) {
  view_save(m,view_defaults);open_compares=g_list_remove(open_compares,m);
  g_object_set_data(G_OBJECT(m->window),"insight-diff-state",NULL);
  if(m->alignment_idle) g_source_remove(m->alignment_idle);
+ if(m->syntax_idle) g_source_remove(m->syntax_idle);for(guint i=0;i<3;i++) { g_signal_handlers_disconnect_by_data(m->syntax_buffers[i],m);g_object_unref(m->syntax_buffers[i]); }g_clear_pointer(&m->answers,g_ptr_array_unref);g_free(m->answer_base);g_free(m->syntax_path);
  if(m->cancel) g_cancellable_cancel(m->cancel);
  g_clear_object(&m->cancel);
  /* Child text widgets can already be destroyed here; their buffer owns the marks. */
@@ -1123,6 +1133,15 @@ static GtkWidget *scroll(GtkWidget *child) {
  GtkWidget *w=gtk_scrolled_window_new(NULL,NULL);gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(w),GTK_POLICY_AUTOMATIC,GTK_POLICY_AUTOMATIC);gtk_container_add(GTK_CONTAINER(w),child);return w;
 }
 static void show_directory(GtkWidget *widget,gpointer data) { (void)widget;Merge *m=data;insight_directory_show(m->window); }
+static GtkWidget *toolbar_page(Merge *m,const gchar *label) {
+ GtkWidget *page=gtk_box_new(GTK_ORIENTATION_VERTICAL,2),*scroll=gtk_scrolled_window_new(NULL,NULL);gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),GTK_POLICY_AUTOMATIC,GTK_POLICY_AUTOMATIC);gtk_widget_set_size_request(scroll,-1,86);gtk_container_add(GTK_CONTAINER(scroll),page);gtk_notebook_append_page(GTK_NOTEBOOK(m->toolbar),scroll,gtk_label_new(insight_tr(label)));return page;
+}
+static void move_widget(GtkWidget *widget,GtkWidget *parent) { g_object_ref(widget);GtkWidget *old=gtk_widget_get_parent(widget);if(old) gtk_container_remove(GTK_CONTAINER(old),widget);gtk_box_pack_start(GTK_BOX(parent),widget,FALSE,FALSE,0);g_object_unref(widget); }
+static void toolbar_build(Merge *m,GtkWidget *root,GtkWidget **rows) {
+ m->toolbar=gtk_notebook_new();gtk_widget_set_name(m->toolbar,"insight-diff-toolbar-tabs");gtk_notebook_set_scrollable(GTK_NOTEBOOK(m->toolbar),TRUE);gtk_box_pack_start(GTK_BOX(root),m->toolbar,FALSE,FALSE,0);gtk_box_reorder_child(GTK_BOX(root),m->toolbar,0);const gchar *labels[]={"Files and comparison","Merge and history","View","Search","Replace","Navigation"};GtkWidget *pages[6];for(guint i=0;i<6;i++) pages[i]=toolbar_page(m,labels[i]);const guint groups[]={0,0,1,2,0,2,2,3,3,4,4,5};for(guint i=0;i<12;i++) move_widget(rows[i],pages[groups[i]]);
+ GtkWidget *actions=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);gtk_box_pack_start(GTK_BOX(pages[0]),actions,FALSE,FALSE,0);move_widget(m->compare_button,actions);move_widget(m->cancel_button,actions);move_widget(m->external,actions);
+ static gboolean styled;if(!styled) { GtkCssProvider *css=gtk_css_provider_new();gtk_css_provider_load_from_data(css,"#insight-diff-toolbar-tabs { font-size: 66.667%; } #insight-diff-toolbar-tabs button, #insight-diff-toolbar-tabs entry, #insight-diff-toolbar-tabs combobox { min-height: 0; min-width: 0; padding: 2px 4px; } #insight-diff-toolbar-tabs checkbutton check { min-height: 10px; min-width: 10px; } #insight-diff-toolbar-tabs tab { min-height: 0; padding: 2px 5px; }",-1,NULL);gtk_style_context_add_provider_for_screen(gtk_widget_get_screen(m->window),GTK_STYLE_PROVIDER(css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);g_object_unref(css);styled=TRUE; }
+}
 static Merge *merge_new(GtkWidget *parent) {
  Merge *m=g_new0(Merge,1);for(guint i=0;i<4;i++) m->search_fields[i]=TRUE;m->history=g_ptr_array_new_with_free_func(snapshot_free);m->saved=g_strdup("");
  m->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(m->window,"insight-diff-window");gtk_window_set_transient_for(GTK_WINDOW(m->window),GTK_WINDOW(parent));gtk_window_set_destroy_with_parent(GTK_WINDOW(m->window),TRUE);gtk_window_set_default_size(GTK_WINDOW(m->window),1100,700);
@@ -1236,6 +1255,8 @@ static Merge *merge_new(GtkWidget *parent) {
  g_signal_connect(m->visible_space,"toggled",G_CALLBACK(display_changed),m);g_signal_connect(m->visible_eol,"toggled",G_CALLBACK(display_changed),m);
  g_signal_connect(m->zoom,"value-changed",G_CALLBACK(display_changed),m);g_signal_connect(m->mono,"toggled",G_CALLBACK(display_changed),m);g_signal_connect(m->vertical,"toggled",G_CALLBACK(display_changed),m);g_signal_connect(m->overview,"toggled",G_CALLBACK(display_changed),m);
  GtkWidget *controls[G_N_ELEMENTS(view_checks)];view_controls(m,controls);for(guint i=0;i<G_N_ELEMENTS(view_checks);i++) { g_object_ref(controls[i]);gchar *name=g_strconcat("insight-diff-",view_checks[i],NULL);gtk_widget_set_name(controls[i],name);g_free(name); }g_object_ref(m->zoom);
+ GtkWidget *tool_rows[]={gtk_widget_get_parent(m->paths[0]),gtk_widget_get_parent(m->paths[1]),bar,options,comparison,display,whitespace,find,regex_options,replace,replace_options,line};toolbar_build(m,box,tool_rows);
+ for(guint i=0;i<3;i++) { m->syntax_buffers[i]=g_object_ref(gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[i])));g_signal_connect(m->syntax_buffers[i],"changed",G_CALLBACK(syntax_changed),m); }
  record(m);selection(NULL,m);gtk_widget_show_all(m->window);view_restore(m,view_defaults);display_changed(NULL,m);open_compares=g_list_prepend(open_compares,m);return m;
 }
 
@@ -1255,17 +1276,17 @@ static void review_ask(GtkWidget *widget,gpointer data) {
  GtkWidget *entry=g_object_get_data(G_OBJECT(widget),"review-question");Merge *m=data;const gchar *question=gtk_entry_get_text(GTK_ENTRY(entry));if(m->ask_cb && *question) m->ask_cb(question,m->review_data);
 }
 static void review_tools(GtkToggleButton *toggle,gpointer data) {
- GPtrArray *rows=data;for(guint i=0;i<rows->len;i++) gtk_widget_set_visible(g_ptr_array_index(rows,i),gtk_toggle_button_get_active(toggle));
+ GPtrArray *rows=data;for(guint i=0;i<rows->len;i++) gtk_widget_set_visible(g_ptr_array_index(rows,i),TRUE);(void)toggle;
 }
 GtkWidget *insight_diff_review_create(GtkWidget *parent,const gchar *before,const gchar *after,const gchar *explanation,InsightDiffApply apply,InsightDiffAsk ask,gpointer data,GDestroyNotify destroy_data) {
  if(!before || !after || strlen(before)>1024*1024 || strlen(after)>1024*1024 || !g_utf8_validate(before,-1,NULL) || !g_utf8_validate(after,-1,NULL)) { if(destroy_data) destroy_data(data);return NULL; }
- Merge *m=merge_new(parent);m->memory=TRUE;gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->ignore_space),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->ignore_eol),FALSE);m->apply_cb=apply;m->ask_cb=ask;m->review_data=data;m->review_destroy=destroy_data;gtk_window_set_title(GTK_WINDOW(m->window),"AI proposal — Diff / Merge review");gtk_entry_set_text(GTK_ENTRY(m->paths[0]),"Captured source buffer");gtk_entry_set_text(GTK_ENTRY(m->paths[1]),"AI proposed replacement");
+ Merge *m=merge_new(parent);m->memory=TRUE;gtk_notebook_set_current_page(GTK_NOTEBOOK(m->toolbar),1);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->ignore_space),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->ignore_eol),FALSE);m->apply_cb=apply;m->ask_cb=ask;m->review_data=data;m->review_destroy=destroy_data;gtk_window_set_title(GTK_WINDOW(m->window),"AI proposal — Diff / Merge review");gtk_entry_set_text(GTK_ENTRY(m->paths[0]),"Captured source buffer");gtk_entry_set_text(GTK_ENTRY(m->paths[1]),"AI proposed replacement");
  GtkWidget *box=gtk_bin_get_child(GTK_BIN(m->window)),*panel=gtk_box_new(GTK_ORIENTATION_VERTICAL,3),*note=gtk_text_view_new(),*scroll=gtk_scrolled_window_new(NULL,NULL);gtk_widget_set_name(panel,"insight-diff-ai-panel");gtk_widget_set_name(note,"insight-diff-ai-explanation");g_object_set_data(G_OBJECT(m->window),"insight-diff-review-note",note);gtk_text_view_set_editable(GTK_TEXT_VIEW(note),FALSE);gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(note),GTK_WRAP_WORD_CHAR);gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(note)),explanation ? explanation:"",-1);gtk_container_add(GTK_CONTAINER(scroll),note);gtk_widget_set_size_request(scroll,-1,100);gtk_box_pack_start(GTK_BOX(panel),scroll,FALSE,TRUE,0);
  GtkWidget *bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4),*entry=gtk_entry_new(),*send=gtk_button_new_with_label("Ask about this change");gtk_widget_set_name(entry,"insight-diff-ai-question");gtk_entry_set_max_length(GTK_ENTRY(entry),4096);gtk_widget_set_name(send,"insight-diff-ai-ask");g_object_set_data(G_OBJECT(send),"review-question",entry);gtk_box_pack_start(GTK_BOX(bar),entry,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(bar),send,FALSE,FALSE,0);g_signal_connect(send,"clicked",G_CALLBACK(review_ask),m);gtk_widget_set_sensitive(send,ask!=NULL);m->apply=gtk_button_new_with_label("Apply Result to Source");gtk_widget_set_name(m->apply,"insight-diff-ai-apply");gtk_box_pack_start(GTK_BOX(bar),m->apply,FALSE,FALSE,0);g_signal_connect(m->apply,"clicked",G_CALLBACK(review_apply),m);gtk_box_pack_start(GTK_BOX(panel),bar,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),panel,FALSE,FALSE,0);gtk_box_reorder_child(GTK_BOX(box),panel,1);gtk_widget_show_all(panel);
  /* Keep proposal code visible; the full comparison tools remain available. */
  m->review_tools=gtk_check_button_new_with_label("More comparison tools");gtk_widget_set_name(m->review_tools,"insight-diff-ai-tools");gtk_box_pack_start(GTK_BOX(panel),m->review_tools,FALSE,FALSE,0);
  GtkWidget *anchors[]={m->paths[0],m->paths[1],m->ignore_space,m->visible_space,m->find_regex,m->replace_entry,m->replace_scope};GPtrArray *rows=g_ptr_array_new_with_free_func(g_object_unref);
- for(guint i=0;i<G_N_ELEMENTS(anchors);i++) { GtkWidget *row=gtk_widget_get_parent(anchors[i]);g_ptr_array_add(rows,g_object_ref(row));gtk_widget_set_no_show_all(row,TRUE);gtk_widget_hide(row); }
+ for(guint i=0;i<G_N_ELEMENTS(anchors);i++) { GtkWidget *row=gtk_widget_get_parent(anchors[i]);g_ptr_array_add(rows,g_object_ref(row)); }
  g_object_set_data_full(G_OBJECT(m->review_tools),"review-tool-rows",rows,(GDestroyNotify)g_ptr_array_unref);g_signal_connect(m->review_tools,"toggled",G_CALLBACK(review_tools),rows);gtk_widget_show(m->review_tools);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->numbers),TRUE);gtk_window_resize(GTK_WINDOW(m->window),1100,760);
  Comparison *job=g_new0(Comparison,1);job->text[0]=g_strdup(before);job->text[1]=g_strdup(after);m->cancel=g_cancellable_new();busy(m,TRUE);GTask *task=g_task_new(m->window,m->cancel,comparison_done,NULL);g_task_set_task_data(task,job,comparison_free);g_task_run_in_thread(task,comparison_worker);g_object_unref(task);
  return m->window;
@@ -1291,6 +1312,21 @@ void insight_diff_review_lock(GtkWidget *window,gboolean locked) {
 }
 void insight_diff_review_compact(GtkWidget *window) {
  Merge *m=g_object_get_data(G_OBJECT(window),"insight-diff-state");if(!m || !m->review_tools) return;GPtrArray *rows=g_object_get_data(G_OBJECT(m->review_tools),"review-tool-rows");GtkWidget *anchors[]={m->mono,m->find_entry,m->line_number};
- for(guint i=0;i<G_N_ELEMENTS(anchors);i++) { GtkWidget *row=gtk_widget_get_parent(anchors[i]);g_ptr_array_add(rows,g_object_ref(row));gtk_widget_set_no_show_all(row,TRUE);gtk_widget_hide(row); }
+ for(guint i=0;i<G_N_ELEMENTS(anchors);i++) { GtkWidget *row=gtk_widget_get_parent(anchors[i]);g_ptr_array_add(rows,g_object_ref(row)); }
  gtk_paned_set_position(GTK_PANED(gtk_widget_get_parent(m->list_scroll)),70);
+}
+void insight_diff_review_language(GtkWidget *window,const gchar *filename) { Merge *m=g_object_get_data(G_OBJECT(window),"insight-diff-state");if(!m) return;g_free(m->syntax_path);m->syntax_path=g_strdup(filename);syntax_changed(NULL,m); }
+static void answer_changed(GtkComboBox *combo,gpointer data) {
+ (void)combo;Merge *m=data;if(m->answer_sync || !m->answers) return;gint left=gtk_combo_box_get_active(GTK_COMBO_BOX(m->answer_left)),right=gtk_combo_box_get_active(GTK_COMBO_BOX(m->answer_right));
+ if(m->busy || m->review_locked || left<0 || right<0 || (guint)left>m->answers->len || (guint)right>=m->answers->len) { m->answer_sync=TRUE;gtk_combo_box_set_active(GTK_COMBO_BOX(m->answer_left),m->answer_l);gtk_combo_box_set_active(GTK_COMBO_BOX(m->answer_right),m->answer_r);m->answer_sync=FALSE;return; }
+ gchar *working=insight_diff_review_result(m->window);if(working) { AnswerChoice *old=g_ptr_array_index(m->answers,m->answer_r);g_free(old->working);old->working=working; }AnswerChoice *target=g_ptr_array_index(m->answers,right);const gchar *before=left ? ((AnswerChoice *)g_ptr_array_index(m->answers,left-1))->code:m->answer_base;
+ if(insight_diff_review_update(m->window,before,target->working,target->explanation,target->working)) { m->answer_l=left;m->answer_r=right; }
+}
+void insight_diff_review_choices(GtkWidget *window,const gchar *base,const gchar *const *names,const gchar *const *codes,const gchar *const *explanations,guint count,guint chosen) {
+ Merge *m=g_object_get_data(G_OBJECT(window),"insight-diff-state");if(!m || !m->memory || count>4) return;
+ m->answer_sync=TRUE;if(m->answer_page) { GtkWidget *page=gtk_widget_get_ancestor(m->answer_page,GTK_TYPE_SCROLLED_WINDOW);if(page) gtk_widget_destroy(page);m->answer_page=m->answer_left=m->answer_right=NULL; }g_clear_pointer(&m->answers,g_ptr_array_unref);g_clear_pointer(&m->answer_base,g_free);if(!count || chosen>=count || !base) { m->answer_sync=FALSE;return; }
+ for(guint i=0;i<count;i++) if(!codes[i] || strlen(codes[i])>1024*1024 || !g_utf8_validate(codes[i],-1,NULL)) { m->answer_sync=FALSE;return; }
+ m->answers=g_ptr_array_new_with_free_func(answer_free);m->answer_base=g_strdup(base);m->answer_l=0;m->answer_r=chosen;m->answer_sync=TRUE;m->answer_page=toolbar_page(m,"AI answers");gtk_widget_set_name(m->answer_page,"insight-diff-answer-controls");GtkWidget *label=gtk_label_new(insight_tr("Compare each answer with current code or with another answer. Manual Result edits stay with the right answer."));gtk_label_set_line_wrap(GTK_LABEL(label),TRUE);gtk_box_pack_start(GTK_BOX(m->answer_page),label,FALSE,FALSE,0);
+ GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);m->answer_left=gtk_combo_box_text_new();m->answer_right=gtk_combo_box_text_new();gtk_widget_set_name(m->answer_left,"insight-diff-answer-left");gtk_widget_set_name(m->answer_right,"insight-diff-answer-right");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->answer_left),insight_tr("Current source"));gtk_box_pack_start(GTK_BOX(row),gtk_label_new(insight_tr("Left")),FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(row),m->answer_left,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(row),gtk_label_new(insight_tr("Right answer")),FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(row),m->answer_right,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(m->answer_page),row,FALSE,FALSE,0);
+ for(guint i=0;i<count;i++) { AnswerChoice *a=g_new0(AnswerChoice,1);a->name=g_strdup(names[i]);a->code=g_strdup(codes[i]);a->working=g_strdup(codes[i]);a->explanation=g_strdup(explanations[i]);g_ptr_array_add(m->answers,a);gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->answer_left),a->name);gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->answer_right),a->name); }gtk_combo_box_set_active(GTK_COMBO_BOX(m->answer_left),0);gtk_combo_box_set_active(GTK_COMBO_BOX(m->answer_right),chosen);g_signal_connect(m->answer_left,"changed",G_CALLBACK(answer_changed),m);g_signal_connect(m->answer_right,"changed",G_CALLBACK(answer_changed),m);m->answer_sync=FALSE;gtk_widget_show_all(m->answer_page);GtkWidget *scroll=gtk_widget_get_ancestor(m->answer_page,GTK_TYPE_SCROLLED_WINDOW);gtk_widget_show(scroll);gtk_notebook_set_current_page(GTK_NOTEBOOK(m->toolbar),gtk_notebook_page_num(GTK_NOTEBOOK(m->toolbar),scroll));
 }

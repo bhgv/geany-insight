@@ -612,3 +612,5 @@ dist_insightdocmedia_DATA += insight/docs/media/web-search.svg
 EXTRA_DIST += insight/tests/ai_profiles_gui_test.c insight/tests/ai_profiles_mock_server.py
 insightdoc_DATA += insight/docs/ai-connections.md
 dist_insightdocmedia_DATA += insight/docs/media/ai-connections.svg
+
+dist_insightdocmedia_DATA += insight/docs/media/diff-answer-tabs.svg

@@ -327,3 +327,15 @@ Enable **Confirm replacements**, then use **Replace all in Result**. Each effect
 [Replace Files: preview, individual choices and guarded multi-buffer replacement](replace-files.md).
 
 [Project database, synchronization and aligned Diff/Merge layout](project-database.md).
+
+## Diff/Merge tabs and AI answers
+
+Controls above the source panes are grouped into **Files and comparison**, **Merge and history**, **View**, **Search**, **Replace**, and **Navigation** tabs. Controls use roughly two thirds of their former size; source text retains its font size. Overflowing tab contents can be scrolled.
+
+After choosing a parallel response, **AI answers** compares any completed answer with the captured source or another answer. Left selects the source or an original answer; Right selects a working answer. Manual Result corrections stay with each right answer when switching. The explanation follows the answer. Applying still checks the actual captured source buffer, including when comparing two answers.
+
+Only successful responses completed at selection time are retained; pending requests are cancelled. Choices belong to the current round. Navigating accepted variants in the editor assistant clears these choices while preserving the normal variant Undo/Redo history.
+
+All three code panes use the editor lexer and palette for the file type. Coloring refreshes after text changes rather than cursor movement; work is bounded to 1 MiB and 20,000 style transitions per pane.
+
+![Tabs and answer comparison](../media/diff-answer-tabs.svg)

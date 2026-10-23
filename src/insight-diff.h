@@ -5,6 +5,10 @@
 /* Main-thread source navigation; native filename, one-based logical line. */
 typedef void (*InsightDiffOpen)(const gchar *,guint);
 void insight_diff_set_source_opener(InsightDiffOpen);
+typedef void (*InsightDiffColorize)(GtkTextBuffer *,const gchar *);
+void insight_diff_set_colorizer(InsightDiffColorize);
+void insight_diff_review_language(GtkWidget *,const gchar *);
+void insight_diff_review_choices(GtkWidget *,const gchar *,const gchar *const *,const gchar *const *,const gchar *const *,guint,guint);
 void insight_diff_read(GKeyFile *);
 void insight_diff_write(GKeyFile *);
 void insight_diff_show(GtkWidget *parent);

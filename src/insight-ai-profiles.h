@@ -9,6 +9,7 @@ typedef struct InsightAiProfiles InsightAiProfiles;
 InsightAiProfiles *insight_ai_profiles_bind(GtkWidget *,GtkWidget *,GtkWidget *,GtkWidget *,GtkWidget *,GtkWidget *);
 gboolean insight_ai_profiles_multiple(InsightAiProfiles *);
 void insight_ai_profiles_save_current(InsightAiProfiles *);
+void insight_ai_profiles_install_choices(GtkWidget *,GtkWidget *,const gchar *,const gchar *);
 void insight_ai_profiles_show(GtkWidget *,gpointer);
 /* TRUE: parallel comparison owns completion of outer; FALSE: use current fields. */
 gboolean insight_ai_profiles_dispatch(InsightAiProfiles *,GTask *,const InsightAiRequest *,InsightAiAnswer **);

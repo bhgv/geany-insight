@@ -17,6 +17,7 @@
 #include "insight-symbol-edit.h"
 #include "insight-project-report.h"
 #include "insight-diff.h"
+#include "insight-diff-syntax.h"
 #include "insight-directory.h"
 #include "insight-relation-graph.h"
 #include "insight-relation-tree.h"
@@ -5422,7 +5423,7 @@ static void constrain_message_width(GtkWidget *page) {
  g_list_free(children);gtk_container_add(GTK_CONTAINER(host),body);gtk_box_pack_start(GTK_BOX(page),host,TRUE,TRUE,0);g_object_set_data(G_OBJECT(page),"insight-width-constrained",GINT_TO_POINTER(1));gtk_widget_show(body);gtk_widget_show(host);
 }
 void insight_workbench_init(void) {
- insight_diff_set_source_opener(diff_source_open);
+ insight_diff_set_source_opener(diff_source_open);insight_diff_set_colorizer(insight_diff_native_colorize);
  insight_directory_set_types_provider(directory_known_types);insight_directory_set_open_guard(directory_path_open);
  wb.main_geometry_handlers[0]=g_signal_connect(main_widgets.window,"configure-event",G_CALLBACK(main_geometry_changed),NULL);
  wb.main_geometry_handlers[1]=g_signal_connect(main_widgets.window,"window-state-event",G_CALLBACK(main_geometry_changed),NULL);
