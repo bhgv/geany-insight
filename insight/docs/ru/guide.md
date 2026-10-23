@@ -115,3 +115,5 @@ Geany Insight — редактор исходного кода с индексо
 - [Panel activation / Активация панелей](panel-activation.md)
 
 - [Code outlining / Сворачивание кода](code-outlining.md)
+
+- [Interface style / Стиль интерфейса](interface-style.md)

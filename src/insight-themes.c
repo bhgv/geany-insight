@@ -4,6 +4,7 @@
 #endif
 #include "geany.h"
 #include "insight-themes.h"
+#include "insight-appearance.h"
 #include "insight-formatting.h"
 #include "insight-i18n.h"
 #include "highlighting.h"
@@ -245,7 +246,7 @@ static gboolean choose(const gchar *name,gboolean persist,GError **error) {
 }
 void insight_themes_init(void) {
  if(initialized) return;
- initialized=TRUE;load_fonts();themes=g_ptr_array_new_with_free_func(free_theme);config=g_build_filename(app->configdir,"insight","visual-theme.conf",NULL);selected=g_strdup("");
+ initialized=TRUE;insight_appearance_init();load_fonts();themes=g_ptr_array_new_with_free_func(free_theme);config=g_build_filename(app->configdir,"insight","visual-theme.conf",NULL);selected=g_strdup("");
  gchar *root=g_build_filename(app->datadir,"styles",NULL);scan(root);
  g_free(root);root=g_build_filename(app->configdir,"styles",NULL);scan(root);
  g_free(root);g_ptr_array_sort(themes,compare);
@@ -267,10 +268,12 @@ static void options(GtkWidget *widget,gpointer data) {
  gtk_widget_destroy(dialog);
 }
 void insight_themes_menu(GtkWidget *menu) {
+ insight_appearance_menu(menu);insight_appearance_menu(ui_lookup_widget(main_widgets.window,"menu_view1_menu"));
  gtk_style_context_add_class(gtk_widget_get_style_context(main_widgets.window),"insight-visual-theme");GtkWidget *item=gtk_menu_item_new_with_label("Visual theme…");gtk_widget_set_name(item,"insight-visual-theme");g_signal_connect(item,"activate",G_CALLBACK(options),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);gtk_widget_show(item);
 }
 void insight_themes_finalize(void) {
  if(!initialized) return;
+ insight_appearance_finalize();
  if(provider) gtk_style_context_remove_provider_for_screen(gdk_screen_get_default(),GTK_STYLE_PROVIDER(provider));
  g_clear_object(&provider);
  g_clear_pointer(&rules,g_hash_table_unref);

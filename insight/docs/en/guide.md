@@ -111,3 +111,5 @@ Replace Files also offers modal Replace/Skip/Remaining/Cancel review, F3/Shift+F
 - [Panel activation / Активация панелей](panel-activation.md)
 
 - [Code outlining / Сворачивание кода](code-outlining.md)
+
+- [Interface style / Стиль интерфейса](interface-style.md)

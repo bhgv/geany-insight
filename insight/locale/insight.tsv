@@ -1862,3 +1862,8 @@ Cannot capture code outline	Не удалось получить список б
 The active lexer provides no fold blocks	Текущий лексер не предоставляет блоков сворачивания
 Code outlining supports up to 2 MiB and 100000 lines	Сворачивание кода: предел 2 МиБ и 100000 строк
 Code outline limit reached: 5000 blocks or 256 levels	Достигнут предел списка: 5000 блоков или 256 уровней
+Interface style	Стиль интерфейса
+Classic	Классический
+macOS style	Стиль macOS
+Reduce transparency	Уменьшить прозрачность
+Cannot save interface style	Не удалось сохранить стиль интерфейса

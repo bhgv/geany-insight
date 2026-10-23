@@ -892,3 +892,7 @@ test('Insight native panel activation and focus commands GUI', panel_activation_
 
 outlining_gui_test = executable('test_insight_outlining_gui', '../insight/tests/outlining_gui_test.c', dependencies: test_deps)
 test('Insight native code outlining and block browser GUI', outlining_gui_test, timeout: 35, is_parallel: false)
+
+appearance_gui_test = executable('test_insight_appearance_gui', '../insight/tests/appearance_gui_test.c', dependencies: test_deps)
+test('Insight classic and macOS interface styles GUI', appearance_gui_test, timeout: 45, is_parallel: false)
+test('Insight macOS interface style startup restore GUI', appearance_gui_test, timeout: 45, is_parallel: false, env: ['GEANY_TEST_APPEARANCE_RESTORE=1'])

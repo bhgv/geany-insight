@@ -1,0 +1,90 @@
+/* macOS-inspired GTK 3.22 interface chrome. Code palettes/fonts remain independent.
+ * RGBA surfaces blend within the window; no compositor-specific blur API is used. */
+.insight-macos {
+  font-family: "SF Pro Text", "Helvetica Neue", "Segoe UI", "Noto Sans", sans-serif;
+  font-size: 10pt;
+  color: #253146;
+}
+window.insight-macos.background {
+  background-color: #eef0f6;
+  background-image: linear-gradient(135deg, #e7edf6, #f6f2f5 55%, #e5eaf2);
+}
+.insight-macos notebook, .insight-macos scrolledwindow,
+.insight-macos viewport, .insight-macos paned {
+  background-color: transparent;
+  background-image: none;
+}
+.insight-macos toolbar, .insight-macos menubar,
+.insight-macos headerbar, .insight-macos statusbar {
+  background-color: rgba(248,249,252,0.82);
+  background-image: none;
+  color: #283449;
+  border-color: rgba(80,95,120,0.18);
+  box-shadow: none;
+}
+.insight-macos toolbar { padding: 3px 6px; border-bottom: 1px solid rgba(80,95,120,0.16); }
+.insight-macos menubar { padding: 1px 5px; }
+.insight-macos statusbar { padding: 1px 5px; border-top: 1px solid rgba(80,95,120,0.16); }
+.insight-macos button {
+  background-image: linear-gradient(to bottom, rgba(255,255,255,0.94), rgba(240,243,249,0.90));
+  background-color: transparent;
+  border: 1px solid rgba(85,101,130,0.25);
+  border-radius: 7px;
+  box-shadow: 0 1px 2px rgba(35,50,75,0.07);
+  color: #283449;
+  min-height: 18px;
+  min-width: 0;
+  padding: 2px 7px;
+}
+.insight-macos button:hover { background-image: none; background-color: #e7eefb; border-color: #a5b9da; }
+.insight-macos button:active, .insight-macos button:checked,
+.insight-macos button.suggested-action { background-image: none; background-color: #3478f6; border-color: #2568dc; color: white; }
+.insight-macos button:disabled { color: #8c94a3; background-image: none; background-color: rgba(232,235,241,0.6); box-shadow: none; }
+.insight-macos toolbar button, .insight-macos button.flat {
+  background-image: none; background-color: transparent; border-color: transparent; box-shadow: none; padding: 2px 4px;
+}
+.insight-macos toolbar button:hover, .insight-macos button.flat:hover { background-color: rgba(88,119,169,0.12); }
+.insight-macos entry, .insight-macos spinbutton {
+  background-image: none; background-color: rgba(255,255,255,0.88); color: #253146;
+  border: 1px solid rgba(96,111,139,0.27); border-radius: 7px; min-height: 18px; padding: 2px 6px; box-shadow: inset 0 1px 2px rgba(50,65,90,0.04);
+}
+.insight-macos entry:focus, .insight-macos spinbutton:focus { border-color: #5592f5; box-shadow: 0 0 0 2px rgba(52,120,246,0.16); }
+.insight-macos entry selection { background-color: #3478f6; color: white; }
+.insight-macos notebook > header {
+  background-color: rgba(236,240,247,0.82); background-image: none; border-color: rgba(80,95,120,0.17); padding: 2px;
+}
+.insight-macos notebook > header > tabs > tab {
+  background-image: none; background-color: transparent; border: 1px solid transparent;
+  border-radius: 7px; min-height: 18px; padding: 1px 7px; margin: 1px 2px; box-shadow: none; color: #657084;
+}
+.insight-macos notebook > header > tabs > tab:checked {
+  background-color: rgba(255,255,255,0.94); border-color: rgba(110,125,150,0.22); color: #253146; box-shadow: 0 1px 2px rgba(40,55,80,0.08);
+}
+.insight-macos notebook > header > tabs > tab:hover { color: #1c63c8; }
+.insight-macos treeview.view { background-color: rgba(249,250,253,0.80); color: #253146; border-color: rgba(90,110,140,0.12); }
+.insight-macos treeview.view:selected { background-color: #3478f6; color: white; }
+.insight-macos treeview.view:hover:not(:selected) { background-color: rgba(218,230,250,0.9); }
+.insight-macos treeview header button { background-image: none; background-color: rgba(239,243,249,0.95); border-radius: 0; box-shadow: none; font-weight: 600; border-width: 0 0 1px; }
+.insight-macos scrollbar { background-color: transparent; }
+.insight-macos scrollbar trough { background-color: rgba(100,115,140,0.04); border: none; }
+.insight-macos scrollbar slider { background-color: rgba(105,119,140,0.40); border-radius: 6px; border: none; min-width: 6px; min-height: 6px; margin: 2px; }
+.insight-macos scrollbar slider:hover { background-color: rgba(85,103,132,0.65); }
+.insight-macos paned > separator { background-color: rgba(100,118,148,0.16); background-image: none; min-width: 3px; min-height: 3px; }
+.insight-macos #insight-context { border-top: 1px solid rgba(95,112,142,0.24); }
+menu.insight-macos, .insight-macos menu, .insight-macos popover {
+  background-color: rgba(250,251,254,0.97); color: #253146; border: 1px solid rgba(85,103,135,0.23); border-radius: 9px; padding: 4px;
+}
+.insight-macos menuitem { padding: 4px 8px; border-radius: 5px; }
+.insight-macos menuitem:hover { background-color: #3478f6; color: white; }
+.insight-macos tooltip { background-color: #253146; color: white; border-radius: 6px; }
+/* Opaque material alternative; source editors were opaque in both variants. */
+window.insight-macos.insight-solid.background { background-image: none; background-color: #eef1f6; }
+.insight-macos.insight-solid toolbar, .insight-macos.insight-solid menubar,
+.insight-macos.insight-solid headerbar, .insight-macos.insight-solid statusbar,
+.insight-macos.insight-solid notebook > header { background-color: #eef1f6; }
+.insight-macos.insight-solid treeview.view { background-color: #f9fafd; }
+.insight-macos.insight-solid treeview.view:selected { background-color: #3478f6; }
+.insight-macos.insight-solid entry, .insight-macos.insight-solid spinbutton,
+.insight-macos.insight-solid notebook > header > tabs > tab:checked { background-color: #ffffff; }
+menu.insight-macos.insight-solid, .insight-macos.insight-solid menu,
+.insight-macos.insight-solid popover { background-color: #fafbfe; }

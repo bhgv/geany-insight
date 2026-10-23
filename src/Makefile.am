@@ -424,3 +424,5 @@ geany_insight_askpass_LDFLAGS += -mwindows -mms-bitfields
 endif
 
 libgeany_la_SOURCES += insight-outlining.c insight-outlining.h
+
+libgeany_la_SOURCES += insight-appearance.c insight-appearance.h

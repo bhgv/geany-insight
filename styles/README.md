@@ -53,3 +53,7 @@ Panel fonts retain their exported sizes. Installed original font families are
 preferred; UI stacks also allow installed Verdana before the bundled Noto Sans.
 Code falls back to bundled Noto Sans Mono. See `../fonts/README.md` for licenses,
 Cyrillic coverage and private font loading.
+
+## Interface presets
+
+Options / View → Interface style switches Classic and a macOS-inspired GTK shell independently of these source palettes. See [interface guide](../insight/docs/interface-style.md). `appearance-macos.css` is a standalone scoped UI stylesheet, not a source-theme directory. RGBA blending is within the window; no system blur is claimed.

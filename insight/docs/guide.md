@@ -119,3 +119,5 @@ Options → Language profiles… и контекстное меню редакт
 - [Panel activation / Активация панелей](panel-activation.md)
 
 - [Code outlining / Сворачивание кода](code-outlining.md)
+
+- [Interface style / Стиль интерфейса](interface-style.md)
