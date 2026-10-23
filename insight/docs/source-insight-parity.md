@@ -736,3 +736,7 @@ Added source selection/caret query capture, reusable Search Web with engine sele
 ### Shared AI connections and parallel answers (2026-10-23)
 
 Unified console/SSH/editor profile configuration; source selection, program help and compiler-message AI entry points share up to 16 connections. One to four checked profiles dispatch simultaneous immutable request snapshots into separate answer/error tabs; explicit selection routes one response through existing guarded command/diff/variant flows. Optional unencrypted private key persistence is per-profile opt-in; queries and answers remain session-only. This is an application extension, not a Source Insight AI parity claim. [Guide and diagram](ai-connections.md).
+
+### Panel activation commands (2026-10-23)
+
+Fifteen focus commands reveal/select panels, restore minimized floating windows and preserve queries. Appended unassigned Focus keybindings expose each in the command browser. Source Editor returns focus to the current source. No search dispatch or source edits. [Guide and diagram](panel-activation.md).

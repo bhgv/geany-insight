@@ -349,6 +349,7 @@ static void cb_func_insight(guint key_id)
     if (key_id == GEANY_KEYS_INSIGHT_ORIGINALCONTENTS) { insight_revisions_original();return; }
     if (key_id == GEANY_KEYS_INSIGHT_BACKTOGGLE) { navqueue_go_back_toggle();return; }
     if (key_id == GEANY_KEYS_INSIGHT_COMMANDBROWSER) { insight_command_browser_show();return; }
+    if (key_id >= GEANY_KEYS_INSIGHT_ACTIVATEPROJECTFILES && key_id <= GEANY_KEYS_INSIGHT_ACTIVATEEDITOR) { insight_workbench_activate(key_id-GEANY_KEYS_INSIGHT_ACTIVATEPROJECTFILES);return; }
     if (key_id == GEANY_KEYS_INSIGHT_SEARCHWEB) { insight_web_search_command(0);return; }
     if (key_id == GEANY_KEYS_INSIGHT_SEARCHENGINES) { insight_web_search_command(1);return; }
     if (key_id == GEANY_KEYS_INSIGHT_HIGHLIGHTWORDS) { insight_word_highlights_command(1);return; }
@@ -872,6 +873,22 @@ static void init_default_kb(void)
         0, 0, "insight_restore_file", _("Restore File"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_ORIGINALCHANGES, cb_func_insight,
         0, 0, "insight_original_changes", _("Original Changes"), NULL);
+    group = keybindings_get_core_group(GEANY_KEY_GROUP_FOCUS);
+    add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATEPROJECTFILES, cb_func_insight, 0, 0, "insight_activate_projectfiles", _("Activate Project File List"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATEFOLDERS, cb_func_insight, 0, 0, "insight_activate_folders", _("Activate Project Folder Browser"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATEPROJECTSYMBOLS, cb_func_insight, 0, 0, "insight_activate_projectsymbols", _("Activate Project Symbol List"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATERELATIONS, cb_func_insight, 0, 0, "insight_activate_relations", _("Activate Relation Window"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATEBOOKMARKS, cb_func_insight, 0, 0, "insight_activate_bookmarks", _("Activate Bookmarks"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATECLIPS, cb_func_insight, 0, 0, "insight_activate_clips", _("Activate Clip Window"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATEFILETYPES, cb_func_insight, 0, 0, "insight_activate_filetypes", _("Activate File Types"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATECATEGORIES, cb_func_insight, 0, 0, "insight_activate_categories", _("Activate Symbol Categories"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATEFILESYMBOLS, cb_func_insight, 0, 0, "insight_activate_filesymbols", _("Activate File Symbols"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATECONTEXT, cb_func_insight, 0, 0, "insight_activate_context", _("Activate Context Window"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATEWINDOWLIST, cb_func_insight, 0, 0, "insight_activate_windowlist", _("Activate Window List"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATEFILESEARCH, cb_func_insight, 0, 0, "insight_activate_filesearch", _("Activate File Search Bar"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATEPROJECTSEARCH, cb_func_insight, 0, 0, "insight_activate_projectsearch", _("Activate Project Search Bar"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATESEARCHRESULTS, cb_func_insight, 0, 0, "insight_activate_searchresults", _("Activate Search Results"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATEEDITOR, cb_func_insight, 0, 0, "insight_activate_editor", _("Activate Source Editor"), NULL);
     group = keybindings_get_core_group(GEANY_KEY_GROUP_SEARCH);
     add_kb(group, GEANY_KEYS_INSIGHT_SEARCHWEB, cb_func_insight, 0, 0, "insight_searchweb", _("Search Web"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_SEARCHENGINES, cb_func_insight, 0, 0, "insight_searchengines", _("Search Engines"), NULL);

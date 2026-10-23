@@ -3986,11 +3986,20 @@ static void context_visible(GtkCheckMenuItem *item,gpointer data) {
  for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].page==wb.box && wb.hosts[i].window) gtk_widget_set_visible(wb.hosts[i].window,wb.context_visible && !wb.hosts[i].minimized);
 }
 static void focus_relations(GtkMenuItem *item,gpointer data) { (void)item; (void)data; focus_widget_panel(wb.usage_entry); }
-static void focus_panel(GtkMenuItem *item,gpointer data) {
- (void)item; gint panel=GPOINTER_TO_INT(data); GtkWidget *view=panel==0 ? wb.local_entry : (panel==1 ? wb.tree_view : (panel==2 ? wb.category_entry : wb.types_view));
- if(!panel && !wb.hosts[8].window) { ui_prefs.sidebar_visible=TRUE; ui_sidebar_show_hide(); }
- if(panel==1 && gtk_combo_box_get_active(GTK_COMBO_BOX(wb.folder_mode))==1) { focus_widget_panel(wb.disk_browser);gtk_widget_child_focus(wb.disk_browser,GTK_DIR_TAB_FORWARD); }else focus_widget_panel(view);
+gboolean insight_workbench_activate(guint action) {
+ if(!wb.alive || action>=15) return FALSE;
+ if(action==14) { GeanyDocument *doc=document_get_current();if(!DOC_VALID(doc)) return FALSE;gtk_window_present(GTK_WINDOW(main_widgets.window));document_grab_focus(doc);return TRUE; }
+ if(action==10) { insight_window_list_show(NULL,NULL);return TRUE; }
+ if(action==13) { focus_search_results(NULL,NULL);return TRUE; }
+ GtkWidget *targets[]={wb.file_entry,wb.tree_entry,wb.symbol_entry,wb.usage_entry,wb.marks_entry,wb.clips_entry,wb.type_panel.entry,wb.category_panel.entry,wb.local_entry,GTK_WIDGET(wb.preview),NULL,wb.editor_query,wb.project_query};
+ GtkWidget *target=targets[action];if(!target) return FALSE;
+ if(action==8 && !wb.hosts[8].window) { ui_prefs.sidebar_visible=TRUE;interface_prefs.sidebar_symbol_visible=TRUE;ui_sidebar_show_hide(); }
+ if(action==9) { wb.context_visible=TRUE;gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.context_toggle),TRUE);gtk_widget_show(wb.box);reveal_context(); }
+ if(action==11) gtk_widget_show(wb.editor_search_row);
+ if(action==12) { gtk_widget_show(wb.project_search_row);focus_search_results(NULL,NULL); }
+ focus_widget_panel(target);return TRUE;
 }
+static void activate_panel(GtkMenuItem *item,gpointer data) { (void)item;insight_workbench_activate(GPOINTER_TO_UINT(data)); }
 static void expand_panel(GtkMenuItem *item,gpointer data) {
  (void)item; gint action=GPOINTER_TO_INT(data);if(action<2) gtk_combo_box_set_active(GTK_COMBO_BOX(wb.folder_mode),0); GtkTreeView *view=GTK_TREE_VIEW(action<2 ? wb.tree_view : (action<4 ? wb.category_view : wb.types_view));
  if(action%2) gtk_tree_view_collapse_all(view); else gtk_tree_view_expand_all(view);
@@ -4409,8 +4418,9 @@ static void panel_menu_sync(GtkWidget *menu,gpointer data) {
 }
 static void panel_menu(GtkWidget *view_menu) {
  GtkWidget *item=gtk_menu_item_new_with_label("Panels"),*menu=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(item),menu); gtk_container_add(GTK_CONTAINER(view_menu),item); wb.panel_commands=menu;
- const char *focus[]={"Activate File Symbols","Activate Folders","Activate Symbol Categories","Activate File Types"};
- for(guint i=0;i<4;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(focus[i]); g_signal_connect(entry,"activate",G_CALLBACK(focus_panel),GINT_TO_POINTER(i)); gtk_container_add(GTK_CONTAINER(menu),entry); }
+ GtkWidget *activation=gtk_menu_item_new_with_label("Activate panel"),*activation_menu=gtk_menu_new();gtk_menu_item_set_submenu(GTK_MENU_ITEM(activation),activation_menu);gtk_container_add(GTK_CONTAINER(menu),activation);
+ const gchar *focus[]={"Activate Project File List","Activate Project Folder Browser","Activate Project Symbol List","Activate Relation Window","Activate Bookmarks","Activate Clip Window","Activate File Types","Activate Symbol Categories","Activate File Symbols","Activate Context Window","Activate Window List","Activate File Search Bar","Activate Project Search Bar","Activate Search Results","Activate Source Editor"};
+ for(guint i=0;i<G_N_ELEMENTS(focus);i++) { GtkWidget *entry=gtk_menu_item_new_with_label(focus[i]);gchar *name=g_strdup_printf("insight-activate-panel-%u",i);gtk_widget_set_name(entry,name);g_free(name);g_signal_connect(entry,"activate",G_CALLBACK(activate_panel),GUINT_TO_POINTER(i));gtk_container_add(GTK_CONTAINER(activation_menu),entry);keybindings_attach_menu(GEANY_KEY_GROUP_FOCUS,GEANY_KEYS_INSIGHT_ACTIVATEPROJECTFILES+i,entry); }
  const char *expand[]={"Expand Folders","Collapse Folders","Expand Symbol Categories","Collapse Symbol Categories","Expand File Types","Collapse File Types"};
  for(guint i=0;i<6;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(expand[i]); g_signal_connect(entry,"activate",G_CALLBACK(expand_panel),GINT_TO_POINTER(i)); gtk_container_add(GTK_CONTAINER(menu),entry); }
  GtkWidget *relations=gtk_menu_item_new_with_label("Relation Window"); gtk_container_add(GTK_CONTAINER(menu),relations); g_signal_connect(relations,"activate",G_CALLBACK(focus_relations),NULL);

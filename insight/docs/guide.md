@@ -115,3 +115,5 @@ Options → Language profiles… и контекстное меню редакт
 [Search Web / Поиск в интернете](web-search.md)
 
 [Shared AI Connections / Общие подключения ИИ](ai-connections.md) — shared profiles, optional key storage and parallel answer selection supersede the earlier single-connection setup.
+
+- [Panel activation / Активация панелей](panel-activation.md)

@@ -1830,3 +1830,16 @@ AI answers	Ответы ИИ
 Current source	Текущий исходник
 Right answer	Ответ справа
 Compare each answer with current code or with another answer. Manual Result edits stay with the right answer.	Сравните ответ с исходником или другим ответом. Ручные правки результата сохраняются для ответа справа.
+Activate panel	Активировать панель
+Activate Project File List	Активировать файлы проекта
+Activate Project Folder Browser	Активировать папки проекта
+Activate Project Symbol List	Активировать символы проекта
+Activate Relation Window	Активировать Relations
+Activate Bookmarks	Активировать закладки
+Activate Clip Window	Активировать Clips
+Activate Context Window	Активировать Context
+Activate Window List	Активировать список окон
+Activate File Search Bar	Активировать поиск в файле
+Activate Project Search Bar	Активировать поиск в проекте
+Activate Search Results	Активировать результаты поиска
+Activate Source Editor	Активировать редактор исходника

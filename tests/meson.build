@@ -886,3 +886,6 @@ test('Insight native Search Web and Search Engines GUI', web_search_gui_test, ti
 
 ai_profiles_gui_test = executable('test_insight_ai_profiles_gui', '../insight/tests/ai_profiles_gui_test.c', dependencies: test_deps)
 test('Insight shared AI profiles and parallel answer selection GUI', ai_profiles_gui_test, args: [meson.project_source_root() / 'insight/tests/ai_profiles_mock_server.py'], timeout: 55, is_parallel: false)
+
+panel_activation_gui_test = executable('test_insight_panel_activation_gui', '../insight/tests/panel_activation_gui_test.c', dependencies: test_deps)
+test('Insight native panel activation and focus commands GUI', panel_activation_gui_test, timeout: 35, is_parallel: false)

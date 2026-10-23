@@ -14,6 +14,9 @@ gboolean insight_workbench_file_find_again(gboolean);
 void insight_workbench_source_link_notify(struct GeanyEditor *,struct SCNotification *);
 gboolean insight_workbench_source_link_key(GdkEventKey *);
 void insight_workbench_symbol_edit(guint action);
+/* Stable panel actions: project files/folders/symbols, relations, bookmarks, clips,
+ * types, categories, file symbols, context, windows, file/project search, results, editor. */
+gboolean insight_workbench_activate(guint action);
 void insight_workbench_init(void);
 void insight_workbench_finalize(void);
 void insight_workbench_refresh(void);
