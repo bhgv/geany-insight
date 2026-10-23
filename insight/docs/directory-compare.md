@@ -146,3 +146,5 @@ The confirmation below is captured from the real production widgets in the isola
 A successful refresh keeps the currently selected relative path and scrolls it into view, including when sort order changes. Selection is restored only if the row still exists and passes the current filters. A removed or filtered-out row is not replaced with an unrelated selection; cancelled and failed scans preserve the old model and selection.
 
 **Confirm file operations** controls both copy and Trash prompts and is remembered with window options. Turning it off makes the toolbar/context-menu action start immediately; editor-buffer guards, identity/etag checks, cancellation and the mandatory refresh after an attempt still apply. Invalid saved confirmation values restore the enabled default.
+
+[Shared comparison layout / Единое оформление сравнений](comparison-layout.md).

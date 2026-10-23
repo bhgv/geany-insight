@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+#include "insight-compare-ui.h"
 #include "geany.h"
 #include "insight-snapshot-compare.h"
 #include "insight-revisions.h"
@@ -178,7 +179,7 @@ gboolean insight_snapshot_compare_show(GtkWidget *parent,const gchar *left_name,
     const gchar *text[]={left,right};gsize sizes[]={left_size,right_size};
     for(guint i=0;i<2;i++) if(!text[i] || sizes[i]>INSIGHT_SNAPSHOT_COMPARE_LIMIT || memchr(text[i],0,sizes[i]) || !g_utf8_validate(text[i],sizes[i],NULL)) return FALSE;
     CompareView *view=g_new0(CompareView,1);view->model=gtk_list_store_new(4,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING);
-    view->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(view->window,"insight-snapshot-compare-window");gtk_window_set_title(GTK_WINDOW(view->window),insight_tr("Snapshot comparison"));gtk_window_set_default_size(GTK_WINDOW(view->window),960,640);
+    view->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(view->window,"insight-snapshot-compare-window");gtk_window_set_title(GTK_WINDOW(view->window),insight_tr("Snapshot comparison"));gtk_window_set_default_size(GTK_WINDOW(view->window),INSIGHT_COMPARE_WIDTH,INSIGHT_COMPARE_HEIGHT);
     gtk_window_set_transient_for(GTK_WINDOW(view->window),GTK_WINDOW(parent));gtk_window_set_destroy_with_parent(GTK_WINDOW(view->window),TRUE);
     g_object_set_data_full(G_OBJECT(view->window),STATE,view,view_free);g_signal_connect(view->window,"destroy",G_CALLBACK(closing),view);
     GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,6);gtk_container_set_border_width(GTK_CONTAINER(box),8);gtk_container_add(GTK_CONTAINER(view->window),box);insight_panel_help_attach(box,"snapshot-comparison.md");
@@ -190,6 +191,8 @@ gboolean insight_snapshot_compare_show(GtkWidget *parent,const gchar *left_name,
     view->space=gtk_check_button_new_with_label(insight_tr("Ignore spaces and tabs"));view->eol=gtk_check_button_new_with_label(insight_tr("Ignore line ending style"));gtk_widget_set_name(view->space,"insight-snapshot-ignore-space");gtk_widget_set_name(view->eol,"insight-snapshot-ignore-eol");
     gtk_box_pack_start(GTK_BOX(options),view->space,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(options),view->eol,FALSE,FALSE,0);
     g_signal_connect(view->space,"toggled",G_CALLBACK(option_changed),view);g_signal_connect(view->eol,"toggled",G_CALLBACK(option_changed),view);
+    GtkWidget *tabs=insight_compare_ui_tabs(box,"insight-snapshot-toolbar-tabs"),*files=insight_compare_ui_page(tabs,insight_tr("Files and comparison")),*view_page=insight_compare_ui_page(tabs,insight_tr("View")),*navigation=insight_compare_ui_page(tabs,insight_tr("Navigation"));
+    insight_compare_ui_move(bar,files);insight_compare_ui_move(options,files);insight_compare_ui_move(view->previous,navigation);insight_compare_ui_move(view->next,navigation);insight_compare_ui_move(view->copy,view_page);
     GtkWidget *panes=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);gtk_box_pack_start(GTK_BOX(box),panes,TRUE,TRUE,0);
     const gchar *names[]={left_name,right_name};
     for(guint i=0;i<2;i++) {

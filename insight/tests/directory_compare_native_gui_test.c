@@ -57,6 +57,11 @@ static gboolean step(gpointer data) {
  }
  if(phase==2) {
   if(!gtk_widget_get_sensitive(named(merge,"insight-diff-compare"))) return G_SOURCE_CONTINUE;
+  GtkWidget *directory_tabs=named(directory,"insight-directory-toolbar-tabs"),*merge_tabs=named(merge,"insight-diff-toolbar-tabs");g_assert_true(GTK_IS_NOTEBOOK(directory_tabs));g_assert_true(GTK_IS_NOTEBOOK(merge_tabs));
+  g_assert_true(gtk_style_context_has_class(gtk_widget_get_style_context(directory_tabs),"insight-compare-toolbar"));g_assert_true(gtk_style_context_has_class(gtk_widget_get_style_context(merge_tabs),"insight-compare-toolbar"));g_assert_cmpint(gtk_notebook_get_n_pages(GTK_NOTEBOOK(directory_tabs)),==,5);
+  const PangoFontDescription *directory_font=gtk_style_context_get_font(gtk_widget_get_style_context(named(directory,"insight-directory-scan")),GTK_STATE_FLAG_NORMAL),*merge_font=gtk_style_context_get_font(gtk_widget_get_style_context(named(merge,"insight-diff-compare")),GTK_STATE_FLAG_NORMAL);g_assert_cmpint(pango_font_description_get_size(directory_font),==,pango_font_description_get_size(merge_font));
+  GtkWidget *directory_page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(directory_tabs),0),*merge_page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(merge_tabs),0);gint dw,dh,mw,mh;gtk_widget_get_size_request(directory_page,&dw,&dh);gtk_widget_get_size_request(merge_page,&mw,&mh);g_assert_cmpint(dh,==,mh);g_assert_cmpint(dh,==,86);
+
   GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(named(merge,"insight-diff-result")));GtkTextIter a,z;gtk_text_buffer_get_bounds(buffer,&a,&z);gchar *text=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);g_assert_cmpstr(text,==,"port = 3000\n");g_free(text);
   GdkEventKey shortcut={0};shortcut.type=GDK_KEY_PRESS;shortcut.state=GDK_CONTROL_MASK;shortcut.keyval=GDK_KEY_q;gboolean handled=FALSE;g_idle_add(apply_compare_options,NULL);g_signal_emit_by_name(merge,"key-press-event",&shortcut,&handled);g_assert_true(handled);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(named(merge,"insight-diff-zoom"))),==,130);g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(merge,"insight-diff-overview"))));
   g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(merge,"insight-diff-visible-space"))));g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(merge,"insight-diff-visible-eol"))));

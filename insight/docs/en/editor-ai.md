@@ -63,3 +63,5 @@ This is the real editor/project AI panel in the complete Linux editor under Xvfb
 Verified implementation: [`08eb8655d4d40be8c8c61f62a07d65224c0791cb`](https://github.com/bhgv/geany-insight/commit/08eb8655d4d40be8c8c61f62a07d65224c0791cb). [Native Linux run 39602110109](https://github.com/bhgv/geany-insight/actions/runs/39602110109): complete editor build/install with VTE, comparison-core checks and **68/68 selected tests passed**, zero failures, skips or timeouts. Includes variant recovery after cancelled comparison, compact search keyboard commands and prompt usage shared by review windows. Live provider accounts were not tested.
 
 [Shared AI Connections / Общие подключения ИИ](ai-connections.md) — shared profiles, optional key storage and parallel answer selection supersede the earlier single-connection setup.
+
+[Shared comparison layout / Единое оформление сравнений](comparison-layout.md).

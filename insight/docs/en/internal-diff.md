@@ -339,3 +339,5 @@ Only successful responses completed at selection time are retained; pending requ
 All three code panes use the editor lexer and palette for the file type. Coloring refreshes after text changes rather than cursor movement; work is bounded to 1 MiB and 20,000 style transitions per pane.
 
 ![Tabs and answer comparison](../media/diff-answer-tabs.svg)
+
+[Shared comparison layout / Единое оформление сравнений](comparison-layout.md).

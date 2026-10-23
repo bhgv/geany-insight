@@ -641,3 +641,7 @@ dist_insightdocmedia_DATA += insight/docs/media/command-recording.svg
 EXTRA_DIST += insight/tests/command_recording_gui_test.c
 
 EXTRA_DIST += insight/tests/macos_menu_gui_test.c
+
+dist_insightdocmedia_DATA += insight/docs/media/compare-windows.svg
+
+insightdoc_DATA += insight/docs/comparison-layout.md

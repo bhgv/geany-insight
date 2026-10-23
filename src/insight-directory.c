@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #define INSIGHT_LOCALIZE_FORMATS
+#include "insight-compare-ui.h"
 #include "insight-directory.h"
 #include "../insight/desktop/glib_compat.h"
 #include "insight-diff.h"
@@ -57,7 +58,7 @@ static void options_read(Directory *d,GKeyFile *key) {
  const gchar *checks[]={"recursive","hidden","space","eol","known","different","confirm"};GtkWidget *toggles[]={d->recursive,d->hidden,d->space,d->eol,d->known,d->different,d->confirm};
  for(guint i=0;i<G_N_ELEMENTS(checks);i++) { GError *error=NULL;gboolean value=g_key_file_get_boolean(key,options_group,checks[i],&error);if(!error && (i!=4 || types_provider)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggles[i]),value);g_clear_error(&error); }
  gint value;if(option_integer(key,"method",0,2,&value)) gtk_combo_box_set_active(GTK_COMBO_BOX(d->method),value);if(option_integer(key,"status",0,8,&value)) gtk_combo_box_set_active(GTK_COMBO_BOX(d->status_filter),value);
- gint width=1100,height=650;option_integer(key,"width",640,4000,&width);option_integer(key,"height",400,2400,&height);gtk_window_set_default_size(GTK_WINDOW(d->window),width,height);
+ gint width=INSIGHT_COMPARE_WIDTH,height=INSIGHT_COMPARE_HEIGHT;option_integer(key,"width",640,4000,&width);option_integer(key,"height",400,2400,&height);gtk_window_set_default_size(GTK_WINDOW(d->window),width,height);
  gint column,order;if(option_integer(key,"sort",DC_PATH,DC_STATUS_TEXT,&column) && option_integer(key,"order",GTK_SORT_ASCENDING,GTK_SORT_DESCENDING,&order)) gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(gtk_tree_view_get_model(GTK_TREE_VIEW(d->view))),column,order);
  for(gint i=1;i<4;i++) { gchar *name=g_strdup_printf("column-%d",i);GError *error=NULL;gboolean show=g_key_file_get_boolean(key,options_group,name,&error);if(!error) gtk_tree_view_column_set_visible(gtk_tree_view_get_column(GTK_TREE_VIEW(d->view),i),show);g_clear_error(&error);g_free(name); }
  insight_list_style_read(d->view,key,style_group);
@@ -152,7 +153,7 @@ static void masks_changed(GtkWidget *widget,gpointer data) {
  d->include_patterns=patterns(gtk_entry_get_text(GTK_ENTRY(d->include)));d->exclude_patterns=patterns(gtk_entry_get_text(GTK_ENTRY(d->exclude)));refilter(NULL,d);
 }
 static void busy(Directory *d,gboolean active) {
- d->busy=active;gtk_widget_set_sensitive(d->scan,!active);gtk_widget_set_sensitive(d->cancel_button,active);gtk_widget_set_sensitive(d->controls,!active);
+ d->busy=active;gtk_widget_set_sensitive(d->scan,!active);gtk_widget_set_sensitive(d->cancel_button,active);gtk_widget_set_sensitive(d->controls,!active);gtk_widget_set_sensitive(gtk_widget_get_parent(d->method),!active);gtk_widget_set_sensitive(gtk_widget_get_parent(d->space),!active);
  selection_changed(NULL,d);
 }
 static void clear_pending(Directory *d) {
@@ -387,7 +388,7 @@ static void method_changed(GtkComboBox *combo,gpointer data) {
 static gboolean key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
  Directory *d=data;if(event->keyval==GDK_KEY_F5) { start(NULL,d);return TRUE; }
  if((event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_Up || event->keyval==GDK_KEY_Down)) { advance(d,event->keyval==GDK_KEY_Up ? -1 : 1);return TRUE; }
- if((event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_f || event->keyval==GDK_KEY_F)) { gtk_widget_grab_focus(d->filter_entry);return TRUE; }
+ if((event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_f || event->keyval==GDK_KEY_F)) { insight_compare_ui_reveal(d->filter_entry);gtk_widget_grab_focus(d->filter_entry);return TRUE; }
  if(widget==d->view && (event->keyval==GDK_KEY_Return || event->keyval==GDK_KEY_KP_Enter)) { open_pair(NULL,d);return TRUE; }return FALSE;
 }
 static GtkWidget *button(GtkWidget *box,const gchar *label,GCallback callback,Directory *d) {
@@ -397,7 +398,7 @@ static GtkWidget *check(GtkWidget *box,const gchar *label,gboolean active) {
  GtkWidget *widget=gtk_check_button_new_with_label(label);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget),active);gtk_box_pack_start(GTK_BOX(box),widget,FALSE,FALSE,0);return widget;
 }
 static Directory *directory_new(GtkWidget *parent) {
- Directory *d=g_new0(Directory,1);d->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(d->window,"insight-directory-window");gtk_window_set_title(GTK_WINDOW(d->window),"Directory Compare");gtk_window_set_default_size(GTK_WINDOW(d->window),1100,650);
+ Directory *d=g_new0(Directory,1);d->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(d->window,"insight-directory-window");gtk_window_set_title(GTK_WINDOW(d->window),"Directory Compare");gtk_window_set_default_size(GTK_WINDOW(d->window),INSIGHT_COMPARE_WIDTH,INSIGHT_COMPARE_HEIGHT);
  if(parent) { gtk_window_set_transient_for(GTK_WINDOW(d->window),GTK_WINDOW(parent));gtk_window_set_destroy_with_parent(GTK_WINDOW(d->window),TRUE); }
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,6);gtk_container_set_border_width(GTK_CONTAINER(box),8);gtk_container_add(GTK_CONTAINER(d->window),box);insight_panel_help_attach(box,"directory-compare.md");
  d->controls=gtk_box_new(GTK_ORIENTATION_VERTICAL,4);gtk_box_pack_start(GTK_BOX(box),d->controls,FALSE,FALSE,0);
@@ -431,6 +432,11 @@ static Directory *directory_new(GtkWidget *parent) {
  GtkWidget *appearance=insight_list_style_button(d->view);gtk_widget_set_name(appearance,"insight-directory-appearance");gtk_box_pack_start(GTK_BOX(filters),appearance,FALSE,FALSE,0);
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),d->view);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
  d->status=gtk_label_new("Choose two directories and scan. Results are a snapshot.");gtk_label_set_xalign(GTK_LABEL(d->status),0);gtk_label_set_line_wrap(GTK_LABEL(d->status),TRUE);gtk_box_pack_start(GTK_BOX(box),d->status,FALSE,FALSE,0);
+ GtkWidget *tabs=insight_compare_ui_tabs(box,"insight-directory-toolbar-tabs");
+ GtkWidget *files=insight_compare_ui_page(tabs,insight_tr("Files and comparison")),*compare_options=insight_compare_ui_page(tabs,insight_tr("Comparison options")),*view_options=insight_compare_ui_page(tabs,insight_tr("View")),*file_operations=insight_compare_ui_page(tabs,insight_tr("File operations")),*navigation=insight_compare_ui_page(tabs,insight_tr("Navigation"));
+ insight_compare_ui_move(options,compare_options);insight_compare_ui_move(text_options,compare_options);insight_compare_ui_move(d->controls,files);insight_compare_ui_move(bar,files);
+ insight_compare_ui_move(filters,view_options);insight_compare_ui_move(masks,view_options);insight_compare_ui_move(operations,file_operations);
+ insight_compare_ui_move(d->previous,navigation);insight_compare_ui_move(d->next,navigation);
  g_signal_connect(d->include,"changed",G_CALLBACK(masks_changed),d);g_signal_connect(d->exclude,"changed",G_CALLBACK(masks_changed),d);g_signal_connect(d->status_filter,"changed",G_CALLBACK(refilter),d);
  g_signal_connect(d->filter_entry,"changed",G_CALLBACK(refilter),d);g_signal_connect(d->different,"toggled",G_CALLBACK(refilter),d);g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(d->view)),"changed",G_CALLBACK(selection_changed),d);
  g_signal_connect(d->method,"changed",G_CALLBACK(method_changed),d);method_changed(GTK_COMBO_BOX(d->method),d);

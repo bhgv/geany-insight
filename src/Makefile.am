@@ -215,7 +215,7 @@ libgeany_la_SOURCES += \
 	../insight/desktop/directory_compare.c \
 	../insight/desktop/directory_compare.h \
 	insight-diff.c \
-	insight-diff.h \
+	insight-diff.h insight-compare-ui.h \
 	insight-template-fields.c \
 	insight-template-fields.h \
 	insight-relation-tree.c \

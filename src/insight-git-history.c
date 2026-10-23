@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+#include "insight-compare-ui.h"
 #include "geany.h"
 #include "insight-git-history.h"
 #include "highlighting.h"
@@ -200,7 +201,7 @@ static GtkWidget *tree(GtkListStore *model,const gchar *name,const gchar *const 
 void insight_git_history_show(GtkWidget *parent,const gchar *location)
 {
     History *view=g_new0(History,1);view->root=g_strdup(location);view->commit_model=gtk_list_store_new(5,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING);view->file_model=gtk_list_store_new(3,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING);view->hunk_model=gtk_list_store_new(3,G_TYPE_UINT,G_TYPE_INT,G_TYPE_INT);
-    view->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(view->window,"insight-git-history-window");gtk_window_set_title(GTK_WINDOW(view->window),insight_tr("Git History and Diff"));gtk_window_set_default_size(GTK_WINDOW(view->window),1250,850);gtk_window_set_transient_for(GTK_WINDOW(view->window),GTK_WINDOW(parent));gtk_window_set_destroy_with_parent(GTK_WINDOW(view->window),TRUE);g_object_set_data_full(G_OBJECT(view->window),STATE,view,history_free);g_signal_connect(view->window,"destroy",G_CALLBACK(destroyed),view);
+    view->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(view->window,"insight-git-history-window");gtk_window_set_title(GTK_WINDOW(view->window),insight_tr("Git History and Diff"));gtk_window_set_default_size(GTK_WINDOW(view->window),INSIGHT_COMPARE_WIDTH,INSIGHT_COMPARE_HEIGHT);gtk_window_set_transient_for(GTK_WINDOW(view->window),GTK_WINDOW(parent));gtk_window_set_destroy_with_parent(GTK_WINDOW(view->window),TRUE);g_object_set_data_full(G_OBJECT(view->window),STATE,view,history_free);g_signal_connect(view->window,"destroy",G_CALLBACK(destroyed),view);
     GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,6);gtk_container_set_border_width(GTK_CONTAINER(box),6);gtk_container_add(GTK_CONTAINER(view->window),box);insight_panel_help_attach(box,"git-history.md");
     view->root_label=gtk_label_new("");g_object_set_data(G_OBJECT(view->root_label),"insight-no-i18n",GINT_TO_POINTER(1));gtk_label_set_ellipsize(GTK_LABEL(view->root_label),PANGO_ELLIPSIZE_MIDDLE);gtk_box_pack_start(GTK_BOX(box),view->root_label,FALSE,FALSE,0);
     GtkWidget *bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,5);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);view->branch=gtk_combo_box_text_new();gtk_widget_set_name(view->branch,"insight-git-history-branch");gtk_widget_set_size_request(view->branch,260,-1);gtk_box_pack_start(GTK_BOX(bar),view->branch,TRUE,TRUE,0);g_signal_connect(view->branch,"changed",G_CALLBACK(branch_changed),view);
@@ -217,5 +218,7 @@ void insight_git_history_show(GtkWidget *parent,const gchar *location)
     }
     GtkWidget *navigation=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,5);gtk_box_pack_start(GTK_BOX(right),navigation,FALSE,FALSE,0);button(navigation,"Previous difference","insight-git-history-diff-previous",G_CALLBACK(prev_hunk),view);button(navigation,"Next difference","insight-git-history-diff-next",G_CALLBACK(next_hunk),view);
     view->hunks=tree(view->hunk_model,"insight-git-history-hunks",hunk_titles,2);g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(view->hunks)),"changed",G_CALLBACK(select_hunk),view);GtkWidget *hunk_scroll=scrolled(view->hunks);gtk_widget_set_size_request(hunk_scroll,-1,85);gtk_box_pack_start(GTK_BOX(right),hunk_scroll,FALSE,TRUE,0);
+    GtkWidget *tabs=insight_compare_ui_tabs(box,"insight-git-history-toolbar-tabs"),*history_page=insight_compare_ui_page(tabs,insight_tr("Merge and history")),*navigation_page=insight_compare_ui_page(tabs,insight_tr("Navigation"));
+    insight_compare_ui_move(view->root_label,history_page);insight_compare_ui_move(bar,history_page);insight_compare_ui_move(view->parents,history_page);insight_compare_ui_move(navigation,navigation_page);
     view->status=gtk_label_new("");gtk_widget_set_name(view->status,"insight-git-history-status");gtk_label_set_line_wrap(GTK_LABEL(view->status),TRUE);gtk_box_pack_start(GTK_BOX(box),view->status,FALSE,FALSE,0);gtk_widget_show_all(view->window);refresh(NULL,view);
 }

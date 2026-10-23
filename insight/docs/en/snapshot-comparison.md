@@ -21,3 +21,5 @@ Both inputs require valid UTF-8 without NUL, up to 1 MiB per side. Two-sided lin
 Linux validation covers all three menu/key commands, backup selection/cancel and closed-source rejection, immutable pane text, mixed-EOL ranges, navigation/report, unchanged source text/selection/Undo/disk, read-only sources, save-versus-original semantics, ignore options, case sensitivity, size/NUL/work limits, cancellation and window destruction. The JPEG is a real production window captured by the native test under Xvfb. Windows and Android were not run.
 
 Source Insight reference: [Compare with Backup File](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Compare_with_Backup_File.htm). Disk/original companion commands and this independent read-only snapshot window are extensions specific to Geany Insight. See [Backup versions](backup-versions.md).
+
+[Shared comparison layout / Единое оформление сравнений](comparison-layout.md).

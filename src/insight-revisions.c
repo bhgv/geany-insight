@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+#include "insight-compare-ui.h"
 #include "geany.h"
 #include "insight-revisions.h"
 #include "document.h"
@@ -125,11 +126,14 @@ static void restore_preview(gboolean whole)
     }
     GtkWidget *dialog=gtk_dialog_new_with_buttons(insight_tr(whole ? "Restore File" : "Restore Lines"),GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,
         insight_tr("Copy Original Block"),201,insight_tr("Cancel"),GTK_RESPONSE_CANCEL,insight_tr("Restore"),GTK_RESPONSE_ACCEPT,NULL);
-    g_object_ref_sink(dialog);gtk_widget_set_name(dialog,whole ? "insight-restore-file-dialog" : "insight-restore-lines-dialog");gtk_window_set_default_size(GTK_WINDOW(dialog),1000,540);
+    g_object_ref_sink(dialog);gtk_widget_set_name(dialog,whole ? "insight-restore-file-dialog" : "insight-restore-lines-dialog");gtk_window_set_default_size(GTK_WINDOW(dialog),INSIGHT_COMPARE_WIDTH,INSIGHT_COMPARE_HEIGHT);
     GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     GtkWidget *hint=gtk_label_new(insight_tr(whole ? "Restore the entire buffer to its original contents from opening, including changes already saved. The disk file is unchanged." : "Restore complete changed blocks touching the selected lines. Review both ranges before restoring."));
     gtk_label_set_line_wrap(GTK_LABEL(hint),TRUE);gtk_box_pack_start(GTK_BOX(box),hint,FALSE,FALSE,6);
     gchar *summary=whole ? g_strdup(insight_tr("Whole file restoration")) : insight_i18n_printf("Changed blocks: %u",(guint)plan.blocks);GtkWidget *count=gtk_label_new(summary);g_free(summary);gtk_widget_set_name(count,"insight-restore-count");gtk_box_pack_start(GTK_BOX(box),count,FALSE,FALSE,4);
+    GtkWidget *tabs=insight_compare_ui_tabs(box,"insight-restore-toolbar-tabs"),*files=insight_compare_ui_page(tabs,insight_tr("Files and comparison"));
+    insight_compare_ui_move(hint,files);insight_compare_ui_move(count,files);
+    gtk_style_context_add_class(gtk_widget_get_style_context(gtk_dialog_get_action_area(GTK_DIALOG(dialog))),"insight-compare-toolbar");
     GtkWidget *columns=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,8);gtk_box_pack_start(GTK_BOX(box),columns,TRUE,TRUE,4);
     const gchar *sources[]={current,base->text};gsize begins[]={plan.current_begin,plan.original_begin},ends[]={plan.current_end,plan.original_end};
     const gchar *names[]={"insight-restore-current","insight-restore-original"};

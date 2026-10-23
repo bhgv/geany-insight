@@ -26,7 +26,8 @@ static gboolean step(gpointer data) {
  if(review && gtk_widget_get_sensitive(named(review,"insight-diff-cancel"))) return G_SOURCE_CONTINUE;
  switch(phase) {
  case 0:
-  source=document_get_current();if(!source || g_strcmp0(source->file_name,path)) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-editor-ai-menu")));review=top("insight-editor-ai-window");g_assert_nonnull(review);phase++;break;
+  source=document_get_current();if(!source || g_strcmp0(source->file_name,path)) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-editor-ai-menu")));review=top("insight-editor-ai-window");g_assert_nonnull(review);
+  GtkWidget *tabs=named(review,"insight-diff-toolbar-tabs");g_assert_true(GTK_IS_NOTEBOOK(tabs));g_assert_cmpint(gtk_notebook_get_n_pages(GTK_NOTEBOOK(tabs)),>=,10);g_assert_true(gtk_widget_get_ancestor(named(review,"insight-editor-ai-prompt"),GTK_TYPE_NOTEBOOK)==tabs);g_assert_true(gtk_widget_get_ancestor(named(review,"insight-editor-ai-provider"),GTK_TYPE_NOTEBOOK)==tabs);phase++;break;
  case 1: {
   gtk_combo_box_set_active(GTK_COMBO_BOX(named(review,"insight-editor-ai-provider")),4);entry("insight-editor-ai-endpoint",endpoint);entry("insight-editor-ai-model","editor");entry("insight-editor-ai-key","private-editor-key");
   /* Project capture can become ready a little later than the editor. */

@@ -756,3 +756,7 @@ Edit → Command Recording adds Start/Stop/Play, an exact command inspector and 
 ### Menu geometry and material correction (2026-10-23)
 
 Unknown commands no longer receive a generic development icon. Native check/radio indicators have no injected duplicate. The command-icon toggle reservation is reduced from 40 to 16 px, fixing inflated row height and excess width; drawing uses actual padding and RTL direction. macOS menu rows share compact padding and soft shadows, with blue/lilac layered materials and an immediate opaque Reduce Transparency alternative. New profiles default to macOS; saved style choices remain respected. A new full-editor fixture checks mixed row allocations, real Find Next/Find in Files/Replace heights, width, default startup and live menu alpha. [Interface guide](interface-style.md).
+
+### Shared comparison chrome (2026-10-23)
+
+Comparison/Merge, Directory Compare, snapshot comparisons, Git History and editor AI use one GTK toolbar/page helper: 2/3 control scale, scrollable top tabs, 86 px pages and 1100×700 defaults. Saved user sizes remain respected. Directory controls are grouped by files, comparison, view/filter, operations and navigation; Ctrl+F reveals its page. Snapshot/Git navigation and AI request/files/connection/history controls use the same chrome. Native operation callbacks, read-only states, cancellation and source fonts remain independent. AI request pages remain usable during review locks. Native directory routing validation now compares real Directory and Diff/Merge control fonts and page dimensions.

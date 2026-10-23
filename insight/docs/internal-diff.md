@@ -339,3 +339,5 @@ Enable **Confirm replacements**, then use **Replace all in Result**. Each effect
 Все три области исходников используют лексер и цвета редактора по типу файла. Подсветка обновляется после изменения текста, а не движения курсора; ограничена 1 МиБ и 20 000 переходов стиля на область.
 
 ![Вкладки и сравнение ответов](media/diff-answer-tabs.svg)
+
+[Shared comparison layout / Единое оформление сравнений](comparison-layout.md).

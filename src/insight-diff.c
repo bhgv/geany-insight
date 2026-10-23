@@ -1,4 +1,5 @@
 #define INSIGHT_LOCALIZE_FORMATS
+#include "insight-compare-ui.h"
 #include "insight-i18n.h"
 #include "../insight/desktop/glib_compat.h"
 /* SPDX-License-Identifier: GPL-2.0-or-later */
@@ -1134,17 +1135,17 @@ static GtkWidget *scroll(GtkWidget *child) {
 }
 static void show_directory(GtkWidget *widget,gpointer data) { (void)widget;Merge *m=data;insight_directory_show(m->window); }
 static GtkWidget *toolbar_page(Merge *m,const gchar *label) {
- GtkWidget *page=gtk_box_new(GTK_ORIENTATION_VERTICAL,2),*scroll=gtk_scrolled_window_new(NULL,NULL);gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),GTK_POLICY_AUTOMATIC,GTK_POLICY_AUTOMATIC);gtk_widget_set_size_request(scroll,-1,86);gtk_container_add(GTK_CONTAINER(scroll),page);gtk_notebook_append_page(GTK_NOTEBOOK(m->toolbar),scroll,gtk_label_new(insight_tr(label)));return page;
+ return insight_compare_ui_page(m->toolbar,insight_tr(label));
 }
 static void move_widget(GtkWidget *widget,GtkWidget *parent) { g_object_ref(widget);GtkWidget *old=gtk_widget_get_parent(widget);if(old) gtk_container_remove(GTK_CONTAINER(old),widget);gtk_box_pack_start(GTK_BOX(parent),widget,FALSE,FALSE,0);g_object_unref(widget); }
 static void toolbar_build(Merge *m,GtkWidget *root,GtkWidget **rows) {
- m->toolbar=gtk_notebook_new();gtk_widget_set_name(m->toolbar,"insight-diff-toolbar-tabs");gtk_notebook_set_scrollable(GTK_NOTEBOOK(m->toolbar),TRUE);gtk_box_pack_start(GTK_BOX(root),m->toolbar,FALSE,FALSE,0);gtk_box_reorder_child(GTK_BOX(root),m->toolbar,0);const gchar *labels[]={"Files and comparison","Merge and history","View","Search","Replace","Navigation"};GtkWidget *pages[6];for(guint i=0;i<6;i++) pages[i]=toolbar_page(m,labels[i]);const guint groups[]={0,0,1,2,0,2,2,3,3,4,4,5};for(guint i=0;i<12;i++) move_widget(rows[i],pages[groups[i]]);
+ m->toolbar=insight_compare_ui_tabs(root,"insight-diff-toolbar-tabs");const gchar *labels[]={"Files and comparison","Merge and history","View","Search","Replace","Navigation"};GtkWidget *pages[6];for(guint i=0;i<6;i++) pages[i]=toolbar_page(m,labels[i]);const guint groups[]={0,0,1,2,0,2,2,3,3,4,4,5};for(guint i=0;i<12;i++) move_widget(rows[i],pages[groups[i]]);
  GtkWidget *actions=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);gtk_box_pack_start(GTK_BOX(pages[0]),actions,FALSE,FALSE,0);move_widget(m->compare_button,actions);move_widget(m->cancel_button,actions);move_widget(m->external,actions);
- static gboolean styled;if(!styled) { GtkCssProvider *css=gtk_css_provider_new();gtk_css_provider_load_from_data(css,"#insight-diff-toolbar-tabs { font-size: 66.667%; } #insight-diff-toolbar-tabs button, #insight-diff-toolbar-tabs entry, #insight-diff-toolbar-tabs combobox { min-height: 0; min-width: 0; padding: 2px 4px; } #insight-diff-toolbar-tabs checkbutton check { min-height: 10px; min-width: 10px; } #insight-diff-toolbar-tabs tab { min-height: 0; padding: 2px 5px; }",-1,NULL);gtk_style_context_add_provider_for_screen(gtk_widget_get_screen(m->window),GTK_STYLE_PROVIDER(css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);g_object_unref(css);styled=TRUE; }
+
 }
 static Merge *merge_new(GtkWidget *parent) {
  Merge *m=g_new0(Merge,1);for(guint i=0;i<4;i++) m->search_fields[i]=TRUE;m->history=g_ptr_array_new_with_free_func(snapshot_free);m->saved=g_strdup("");
- m->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(m->window,"insight-diff-window");gtk_window_set_transient_for(GTK_WINDOW(m->window),GTK_WINDOW(parent));gtk_window_set_destroy_with_parent(GTK_WINDOW(m->window),TRUE);gtk_window_set_default_size(GTK_WINDOW(m->window),1100,700);
+ m->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(m->window,"insight-diff-window");gtk_window_set_transient_for(GTK_WINDOW(m->window),GTK_WINDOW(parent));gtk_window_set_destroy_with_parent(GTK_WINDOW(m->window),TRUE);gtk_window_set_default_size(GTK_WINDOW(m->window),INSIGHT_COMPARE_WIDTH,INSIGHT_COMPARE_HEIGHT);
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,6);gtk_container_set_border_width(GTK_CONTAINER(box),8);gtk_container_add(GTK_CONTAINER(m->window),box);insight_panel_help_attach(box,"internal-diff.md");
  for(int i=0;i<2;i++) {
   GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),row,FALSE,FALSE,0);
@@ -1287,7 +1288,7 @@ GtkWidget *insight_diff_review_create(GtkWidget *parent,const gchar *before,cons
  m->review_tools=gtk_check_button_new_with_label("More comparison tools");gtk_widget_set_name(m->review_tools,"insight-diff-ai-tools");gtk_box_pack_start(GTK_BOX(panel),m->review_tools,FALSE,FALSE,0);
  GtkWidget *anchors[]={m->paths[0],m->paths[1],m->ignore_space,m->visible_space,m->find_regex,m->replace_entry,m->replace_scope};GPtrArray *rows=g_ptr_array_new_with_free_func(g_object_unref);
  for(guint i=0;i<G_N_ELEMENTS(anchors);i++) { GtkWidget *row=gtk_widget_get_parent(anchors[i]);g_ptr_array_add(rows,g_object_ref(row)); }
- g_object_set_data_full(G_OBJECT(m->review_tools),"review-tool-rows",rows,(GDestroyNotify)g_ptr_array_unref);g_signal_connect(m->review_tools,"toggled",G_CALLBACK(review_tools),rows);gtk_widget_show(m->review_tools);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->numbers),TRUE);gtk_window_resize(GTK_WINDOW(m->window),1100,760);
+ g_object_set_data_full(G_OBJECT(m->review_tools),"review-tool-rows",rows,(GDestroyNotify)g_ptr_array_unref);g_signal_connect(m->review_tools,"toggled",G_CALLBACK(review_tools),rows);gtk_widget_show(m->review_tools);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->numbers),TRUE);gtk_window_resize(GTK_WINDOW(m->window),INSIGHT_COMPARE_WIDTH,INSIGHT_COMPARE_HEIGHT);
  Comparison *job=g_new0(Comparison,1);job->text[0]=g_strdup(before);job->text[1]=g_strdup(after);m->cancel=g_cancellable_new();busy(m,TRUE);GTask *task=g_task_new(m->window,m->cancel,comparison_done,NULL);g_task_set_task_data(task,job,comparison_free);g_task_run_in_thread(task,comparison_worker);g_object_unref(task);
  return m->window;
 }
@@ -1307,7 +1308,10 @@ gboolean insight_diff_review_update(GtkWidget *window,const gchar *before,const 
 }
 void insight_diff_review_lock(GtkWidget *window,gboolean locked) {
  Merge *m=g_object_get_data(G_OBJECT(window),"insight-diff-state");if(!m) return;m->review_locked=locked;
- GtkWidget *box=gtk_bin_get_child(GTK_BIN(window));GList *rows=gtk_container_get_children(GTK_CONTAINER(box));for(GList *p=rows;p;p=p->next) if(!g_object_get_data(G_OBJECT(p->data),"insight-editor-ai-controls")) gtk_widget_set_sensitive(p->data,!locked);g_list_free(rows);
+ GtkWidget *box=gtk_bin_get_child(GTK_BIN(window));GList *rows=gtk_container_get_children(GTK_CONTAINER(box));for(GList *p=rows;p;p=p->next) {
+  if(p->data==m->toolbar) { for(gint i=0;i<gtk_notebook_get_n_pages(GTK_NOTEBOOK(m->toolbar));i++) { GtkWidget *page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(m->toolbar),i);if(!g_object_get_data(G_OBJECT(page),"insight-editor-ai-controls")) gtk_widget_set_sensitive(page,!locked); } }
+  else if(!g_object_get_data(G_OBJECT(p->data),"insight-editor-ai-controls")) gtk_widget_set_sensitive(p->data,!locked);
+ }g_list_free(rows);
  busy(m,m->busy);
 }
 void insight_diff_review_compact(GtkWidget *window) {

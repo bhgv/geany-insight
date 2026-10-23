@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+#include "insight-compare-ui.h"
 #include "geany.h"
 #include "insight-editor-ai.h"
 #include "insight-diff.h"
@@ -174,7 +175,20 @@ static void open_review(GtkWidget *w,gpointer data) {
  r->remember=gtk_check_button_new_with_label(insight_tr("Remember request text for recent/frequent lists"));gtk_widget_set_name(r->remember,"insight-editor-ai-remember");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(r->remember),TRUE);gtk_box_pack_start(GTK_BOX(recent_box),r->remember,FALSE,FALSE,0);
  gtk_box_pack_start(GTK_BOX(r->panel),gtk_label_new(insight_tr("Additional AI request — appended to earlier requirements")),FALSE,FALSE,0);r->prompt=view(r->panel,"insight-editor-ai-prompt",TRUE,55);bar=row(r->panel);r->send=button(bar,"Add request and generate variant","insight-editor-ai-send",G_CALLBACK(send_request),r);r->cancel_button=button(bar,"Cancel request","insight-editor-ai-cancel",G_CALLBACK(cancel_request),r);r->undo=button(bar,"Undo variant","insight-editor-ai-undo",G_CALLBACK(move_variant),r);r->redo=button(bar,"Redo variant","insight-editor-ai-redo",G_CALLBACK(move_variant),r);button(bar,"Recompare variant","insight-editor-ai-recompare",G_CALLBACK(retry_comparison),r);button(bar,"Prepare project context","insight-editor-ai-context-build",G_CALLBACK(build_context),r);
  r->requirements=view(expander(r->panel,"Accumulated requirements for this variant"),"insight-editor-ai-requirements",FALSE,90);r->context=view(expander(r->panel,"Project context sent with each request — review or edit before Send"),"insight-editor-ai-context",TRUE,100);r->status=gtk_label_new(insight_tr("New requests build on Result and earlier requirements. Review staged code before Apply; files are never saved automatically."));gtk_widget_set_name(r->status,"insight-editor-ai-status");gtk_label_set_line_wrap(GTK_LABEL(r->status),TRUE);gtk_box_pack_start(GTK_BOX(r->panel),r->status,FALSE,FALSE,0);
- GtkWidget *question=named(r->window,"insight-diff-ai-question"),*ask=named(r->window,"insight-diff-ai-ask");gtk_widget_hide(question);gtk_widget_set_no_show_all(question,TRUE);gtk_widget_hide(ask);gtk_widget_set_no_show_all(ask,TRUE);insight_diff_review_compact(r->window);prompt_lists(r);controls(r);gtk_widget_show_all(r->panel);gtk_window_resize(GTK_WINDOW(r->window),1200,950);
+ GtkWidget *question=named(r->window,"insight-diff-ai-question"),*ask=named(r->window,"insight-diff-ai-ask");gtk_widget_hide(question);gtk_widget_set_no_show_all(question,TRUE);gtk_widget_hide(ask);gtk_widget_set_no_show_all(ask,TRUE);insight_diff_review_compact(r->window);prompt_lists(r);controls(r);
+ GtkWidget *tabs=named(r->window,"insight-diff-toolbar-tabs");
+ GtkWidget *request_page=insight_compare_ui_page(tabs,insight_tr("AI request")),*files_page=insight_compare_ui_page(tabs,insight_tr("AI files")),*settings_page=insight_compare_ui_page(tabs,insight_tr("AI connection")),*history_page=insight_compare_ui_page(tabs,insight_tr("AI request history"));
+ GtkWidget *pages[]={request_page,files_page,settings_page,history_page};
+ for(guint i=0;i<G_N_ELEMENTS(pages);i++) g_object_set_data(G_OBJECT(gtk_widget_get_ancestor(pages[i],GTK_TYPE_SCROLLED_WINDOW)),"insight-editor-ai-controls",GINT_TO_POINTER(1));
+ GList *children=gtk_container_get_children(GTK_CONTAINER(r->panel));
+ GtkWidget *file_row=insight_compare_ui_row(r->file,r->panel),*context_row=insight_compare_ui_row(r->context,r->panel),*api_row=insight_compare_ui_row(r->provider,r->panel),*recent_row=insight_compare_ui_row(r->recent,r->panel),*requirements_row=insight_compare_ui_row(r->requirements,r->panel);
+ for(GList *p=children;p;p=p->next) {
+  GtkWidget *child=p->data,*page=child==file_row || child==context_row || !g_strcmp0(gtk_widget_get_name(child),"insight-panel-help-header") ? files_page:child==api_row ? settings_page:child==recent_row || child==requirements_row ? history_page:request_page;
+  insight_compare_ui_move(child,child==r->status ? root:page);
+ }
+ g_list_free(children);gtk_widget_destroy(r->panel);r->panel=request_page;
+ for(guint i=0;i<G_N_ELEMENTS(pages);i++) gtk_widget_show_all(gtk_widget_get_ancestor(pages[i],GTK_TYPE_SCROLLED_WINDOW));
+ insight_compare_ui_reveal(r->prompt);
 }
 void insight_editor_ai_init(void) {
  if(initialized) { return; }
