@@ -55,7 +55,9 @@ static gboolean finish(gpointer data) {
  GtkWidget *bounds=named(window,"insight-sidebar-width-host");g_assert_nonnull(bounds);
  const gchar *controls[]={"insight-local-query","insight-local-query-history","insight-file-symbol-mode","insight-local-sort","insight-local-group-types","insight-local-scope-hierarchy","insight-local-type-filters","insight-local-locate"};
  for(guint i=0;i<G_N_ELEMENTS(controls);i++) {
-  GtkWidget *control=named(window,controls[i]);g_assert_nonnull(control);g_assert_true(gtk_widget_get_mapped(control));gint x,y;g_assert_true(gtk_widget_translate_coordinates(control,bounds,0,0,&x,&y));
+  GtkWidget *control=named(window,controls[i]);g_assert_nonnull(control);
+  if(GTK_IS_CHECK_BUTTON(control)) { GtkWidget *label=gtk_bin_get_child(GTK_BIN(control));g_assert_true(GTK_IS_LABEL(label));g_assert_cmpint(gtk_label_get_ellipsize(GTK_LABEL(label)),==,PANGO_ELLIPSIZE_END);g_assert_cmpint(gtk_label_get_width_chars(GTK_LABEL(label)),==,1); }
+g_assert_true(gtk_widget_get_mapped(control));gint x,y;g_assert_true(gtk_widget_translate_coordinates(control,bounds,0,0,&x,&y));
   if(x+gtk_widget_get_allocated_width(control)>gtk_widget_get_allocated_width(bounds)) width_diagnostics(bounds,0);g_printerr("Narrow sidebar %s: x=%d width=%d parent=%d\n",controls[i],x,gtk_widget_get_allocated_width(control),gtk_widget_get_allocated_width(left));g_assert_cmpint(x,>=,0);g_assert_cmpint(x+gtk_widget_get_allocated_width(control),<=,gtk_widget_get_allocated_width(bounds));
  }
  GtkWidget *sort=named(window,"insight-local-sort"),*direction=named(sort,"insight-symbol-sort-descending");gint dx,dy;g_assert_true(gtk_widget_translate_coordinates(direction,bounds,0,0,&dx,&dy));g_assert_cmpint(dx+gtk_widget_get_allocated_width(direction),<=,gtk_widget_get_allocated_width(bounds));

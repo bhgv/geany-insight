@@ -1275,7 +1275,20 @@ static void panel_scroll_minimum(GtkWidget *widget) {
  if(GTK_IS_SCROLLED_WINDOW(widget)) gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(widget),48);
  if(GTK_IS_CONTAINER(widget)) { GList *children=gtk_container_get_children(GTK_CONTAINER(widget));for(GList *p=children;p;p=p->next) panel_scroll_minimum(p->data);g_list_free(children); }
 }
+static void compact_panel_control(GtkWidget *widget);
+static void compact_button_label(GObject *object,GParamSpec *spec,gpointer data) {
+ (void)spec;(void)data;
+ /* GtkButton may rebuild its label when its translated caption changes. */
+ GtkWidget *label=gtk_bin_get_child(GTK_BIN(object));if(label) compact_panel_control(label);
+}
 static void compact_panel_control(GtkWidget *widget) {
+ if(GTK_IS_BUTTON(widget)) {
+  if(!g_object_get_data(G_OBJECT(widget),"insight-compact-label")) {
+   g_object_set_data(G_OBJECT(widget),"insight-compact-label",GINT_TO_POINTER(1));
+   g_signal_connect(widget,"notify::label",G_CALLBACK(compact_button_label),NULL);
+  }
+  compact_button_label(G_OBJECT(widget),NULL,NULL);
+ }
  if(GTK_IS_SCROLLED_WINDOW(widget)) gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(widget),48);
  if(GTK_IS_ENTRY(widget)) { gtk_style_context_add_class(gtk_widget_get_style_context(widget),"insight-shrink-control");gtk_entry_set_width_chars(GTK_ENTRY(widget),1);gtk_entry_set_max_width_chars(GTK_ENTRY(widget),18); }
  if(GTK_IS_COMBO_BOX(widget)) {
