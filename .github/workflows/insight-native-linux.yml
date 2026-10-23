@@ -192,7 +192,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   native:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - name: Install build dependencies
@@ -245,7 +245,7 @@ jobs:
             GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" timeout 45 gdb -batch -ex run -ex 'thread apply all bt' --args _native/tests/test_insight_panels_gui || true
           fi
           if command -v gdb >/dev/null && test -x _native/tests/test_insight_source_links_native_gui; then
-            GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" timeout 45 gdb -batch -ex run -ex 'thread apply all bt' --args _native/tests/test_insight_source_links_native_gui || true
+            GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" timeout 45 gdb -batch -ex 'set breakpoint pending on' -ex 'break gtk_widget_get_preferred_width_for_height if (int)$rsi < 0' -ex run -ex 'set $bad = (void*)$rdi' -ex 'p (char*)gtk_widget_get_name($bad)' -ex 'p (char*)gtk_widget_get_name((void*)gtk_widget_get_parent($bad))' -ex 'p (char*)gtk_widget_get_name((void*)gtk_widget_get_parent((void*)gtk_widget_get_parent($bad)))' -ex 'thread apply all bt' --args _native/tests/test_insight_source_links_native_gui || true
           fi
       - uses: actions/upload-artifact@v4
         if: always()

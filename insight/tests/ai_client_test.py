@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 import base64
 import io
+import gzip
+import tarfile
 import zipfile
 import importlib.util
 import json
@@ -69,6 +71,19 @@ class Tests(unittest.TestCase):
         with zipfile.ZipFile(bomb,'w',compression=zipfile.ZIP_DEFLATED) as bundle:bundle.writestr('large.txt','x'*524289)
         with self.assertRaises(ValueError):client.archive_preview({'name':'large.zip','data':base64.b64encode(bomb.getvalue()).decode()})
         with self.assertRaises(ValueError):client.input_files('[DEFAULT]\nname=injected\n[attachment]\nmime=text/plain\ndata=')
+    def test_tar_gzip_previews_and_generated_file_limits(self):
+        stream=io.BytesIO()
+        with tarfile.open(fileobj=stream,mode='w:gz') as archive:
+            info=tarfile.TarInfo('../source.c');body=b'int value;\n';info.size=len(body);archive.addfile(info,io.BytesIO(body))
+            link=tarfile.TarInfo('outside');link.type=tarfile.SYMTYPE;link.linkname='/etc/passwd';archive.addfile(link)
+        preview=client.archive_preview({'name':'sources.tar.gz','data':base64.b64encode(stream.getvalue()).decode()})
+        self.assertIn('int value;',preview);self.assertIn('not followed',preview)
+        preview=client.archive_preview({'name':'error.log.gz','data':base64.b64encode(gzip.compress(b'compiler error\n')).decode()})
+        self.assertIn('compiler error',preview)
+        with self.assertRaises(ValueError):client.archive_preview({'name':'bomb.tar.gz','data':base64.b64encode(gzip.compress(b'x'*1048577)).decode()})
+        empty={'name':'empty.txt','mime':'text/plain','data':''}
+        self.assertEqual(client.files_checked([empty],0),[empty])
+        with self.assertRaises(ValueError):client.files_checked([empty]*5,262144)
     def test_validation(self):
         for url in ['http://example.org/a','file:///etc/passwd','https://u:p@example.org','https://example.org?a=key','https://example.org/#token']:
             with self.assertRaises(ValueError):client.endpoint_valid(url)

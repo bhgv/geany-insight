@@ -94,7 +94,7 @@ static OutlineFile *outline_copy(OutlineFile *o) { OutlineFile *copy=g_new0(Outl
 typedef struct {
  GHashTable *declarations;
  GtkWidget *pane,*box,*title,*follow,*choices,*browser,*symbol_entry,*symbol_view,*outline,*file_entry,*file_view;
- GtkWidget *back,*forward,*open,*wrap,*project_notebook,*right_pane;
+ GtkWidget *back,*forward,*open,*wrap,*project_notebook,*project_host,*right_pane;
  gint initial_right_split;
  GtkWidget *local_entry,*local_view,*local_label,*tree_view,*file_status,*tree_entry,*tree_status,*tree_follow,*folder_mode,*folder_stack,*disk_browser;
  guint tree_filter_idle; gboolean tree_setting;
@@ -1271,7 +1271,12 @@ static void symbol_history_show(GtkWidget *menu,gpointer data) {
 }
 /* A narrow sidebar must shrink text, not allocate controls beyond its edge.
  * Keep native button/arrow/icon requisitions and ellipsize only their labels. */
+static void panel_scroll_minimum(GtkWidget *widget) {
+ if(GTK_IS_SCROLLED_WINDOW(widget)) gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(widget),48);
+ if(GTK_IS_CONTAINER(widget)) { GList *children=gtk_container_get_children(GTK_CONTAINER(widget));for(GList *p=children;p;p=p->next) panel_scroll_minimum(p->data);g_list_free(children); }
+}
 static void compact_panel_control(GtkWidget *widget) {
+ if(GTK_IS_SCROLLED_WINDOW(widget)) gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(widget),48);
  if(GTK_IS_ENTRY(widget)) { gtk_style_context_add_class(gtk_widget_get_style_context(widget),"insight-shrink-control");gtk_entry_set_width_chars(GTK_ENTRY(widget),1);gtk_entry_set_max_width_chars(GTK_ENTRY(widget),18); }
  if(GTK_IS_COMBO_BOX(widget)) {
   gtk_style_context_add_class(gtk_widget_get_style_context(widget),"insight-shrink-control");
@@ -4075,14 +4080,14 @@ static void dock_project(GtkMenuItem *item,gpointer data) {
  (void)item; (void)data; if(!wb.float_window) return;
  gtk_window_get_position(GTK_WINDOW(wb.float_window),&wb.float_x,&wb.float_y); gtk_window_get_size(GTK_WINDOW(wb.float_window),&wb.float_width,&wb.float_height);
  GtkWidget *window=wb.float_window; wb.float_window=NULL; gboolean visible=gtk_widget_get_visible(wb.project_notebook);
- g_object_ref(wb.project_notebook); gtk_container_remove(GTK_CONTAINER(window),wb.project_notebook); gtk_paned_pack2(GTK_PANED(wb.right_pane),wb.project_notebook,FALSE,TRUE); g_object_unref(wb.project_notebook); gtk_widget_set_visible(wb.project_notebook,visible); gtk_widget_destroy(window);
+ g_object_ref(wb.project_host); gtk_container_remove(GTK_CONTAINER(window),wb.project_host); gtk_paned_pack2(GTK_PANED(wb.right_pane),wb.project_host,FALSE,TRUE); g_object_unref(wb.project_host); gtk_widget_set_visible(wb.project_notebook,visible); gtk_widget_destroy(window);
 }
 static gboolean float_closed(GtkWidget *widget,GdkEvent *event,gpointer data) { (void)widget; (void)event; dock_project(NULL,data); return TRUE; }
 static void float_project(GtkMenuItem *item,gpointer data) {
  (void)item; (void)data; if(wb.float_window) { gtk_window_present(GTK_WINDOW(wb.float_window)); return; }
  wb.float_window=gtk_window_new(GTK_WINDOW_TOPLEVEL); gtk_window_set_title(GTK_WINDOW(wb.float_window),"Geany Insight — Project"); gtk_window_set_transient_for(GTK_WINDOW(wb.float_window),GTK_WINDOW(main_widgets.window));
  gtk_window_set_default_size(GTK_WINDOW(wb.float_window),wb.float_width>=300 ? wb.float_width : 440,wb.float_height>=200 ? wb.float_height : 620);
- g_object_ref(wb.project_notebook); gtk_container_remove(GTK_CONTAINER(wb.right_pane),wb.project_notebook); gtk_container_add(GTK_CONTAINER(wb.float_window),wb.project_notebook); g_object_unref(wb.project_notebook);
+ g_object_ref(wb.project_host); gtk_container_remove(GTK_CONTAINER(wb.right_pane),wb.project_host); gtk_container_add(GTK_CONTAINER(wb.float_window),wb.project_host); g_object_unref(wb.project_host);
  g_signal_connect(wb.float_window,"delete-event",G_CALLBACK(float_closed),NULL);insight_appearance_decorate(wb.float_window); gtk_widget_show_all(wb.float_window);
  if(wb.float_width>=300) {
   GdkMonitor *monitor=gdk_display_get_monitor_at_point(gdk_display_get_default(),wb.float_x,wb.float_y);
@@ -4342,7 +4347,7 @@ static void register_panels(void) {
    g_object_ref(old); gtk_container_remove(GTK_CONTAINER(host->home),old);
    compact_panel_control(old);gtk_box_pack_start(GTK_BOX(box),narrow_panel_host(old),TRUE,TRUE,0);
    g_object_unref(old);gtk_notebook_insert_page(GTK_NOTEBOOK(host->home),box,gtk_label_new(host->label),position);
-   host->page=box; gtk_widget_show_all(box);
+   GtkWidget *tab=gtk_notebook_get_tab_label(GTK_NOTEBOOK(host->home),box);if(GTK_IS_LABEL(tab)) { gtk_label_set_ellipsize(GTK_LABEL(tab),PANGO_ELLIPSIZE_END);gtk_label_set_width_chars(GTK_LABEL(tab),1); }host->page=box; gtk_widget_show_all(box);
   } if(i!=9) insight_panel_help_attach(host->page,topics[i]);g_object_set_data(G_OBJECT(host->page),"insight-panel-id",GUINT_TO_POINTER(i+1)); panel_controls_attach(i); }
  insight_panel_help_attach(wb.search_page,"panel-search-results.md");
  insight_panel_help_notebook(GTK_NOTEBOOK(main_widgets.sidebar_notebook),"panel-native-symbols.md"); insight_panel_help_notebook(GTK_NOTEBOOK(main_widgets.message_window_notebook),"panel-messages.md"); insight_panel_help_notebook(GTK_NOTEBOOK(main_widgets.notebook),"panel-editor.md");
@@ -5548,7 +5553,7 @@ static void width_host_width_for_height(GtkWidget *widget,gint height,gint *mini
  GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));gint ignored=0;*minimum=1;*natural=1;if(child && gtk_widget_get_visible(child)) gtk_widget_get_preferred_width_for_height(child,MAX(height,0),&ignored,natural);
 }
 static void width_host_height_for_width(GtkWidget *widget,gint width,gint *minimum,gint *natural) {
- GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));*minimum=*natural=0;if(child && gtk_widget_get_visible(child)) gtk_widget_get_preferred_height_for_width(child,MAX(width,1),minimum,natural);
+ GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));*minimum=*natural=0;if(child && gtk_widget_get_visible(child)) { gint child_width=1;gtk_widget_get_preferred_width(child,&child_width,NULL);gtk_widget_get_preferred_height_for_width(child,MAX(width,child_width),minimum,natural); }
 }
 static void width_host_allocate(GtkWidget *widget,GtkAllocation *allocation) {
  gtk_widget_set_allocation(widget,allocation);GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));if(child && gtk_widget_get_visible(child)) gtk_widget_size_allocate(child,allocation);
@@ -5566,7 +5571,7 @@ static void constrain_message_width(GtkWidget *page) {
  gtk_widget_set_name(host,"insight-message-width-host");gtk_box_set_homogeneous(GTK_BOX(body),gtk_box_get_homogeneous(GTK_BOX(page)));
  GList *children=gtk_container_get_children(GTK_CONTAINER(page));
  for(GList *p=children;p;p=p->next) { GtkWidget *child=p->data;gboolean expand,fill;guint padding;GtkPackType pack;gtk_box_query_child_packing(GTK_BOX(page),child,&expand,&fill,&padding,&pack);g_object_ref(child);gtk_container_remove(GTK_CONTAINER(page),child);if(pack==GTK_PACK_START) gtk_box_pack_start(GTK_BOX(body),child,expand,fill,padding);else gtk_box_pack_end(GTK_BOX(body),child,expand,fill,padding);g_object_unref(child); }
- g_list_free(children);GtkWidget *viewport=gtk_viewport_new(NULL,NULL);gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport),GTK_SHADOW_NONE);gtk_container_add(GTK_CONTAINER(viewport),body);gtk_container_add(GTK_CONTAINER(host),viewport);gtk_widget_show(viewport);gtk_box_pack_start(GTK_BOX(page),host,TRUE,TRUE,0);g_object_set_data(G_OBJECT(page),"insight-width-constrained",GINT_TO_POINTER(1));gtk_widget_show(body);gtk_widget_show(host);
+ g_list_free(children);panel_scroll_minimum(body);GtkWidget *viewport=gtk_viewport_new(NULL,NULL);gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport),GTK_SHADOW_NONE);gtk_container_add(GTK_CONTAINER(viewport),body);gtk_container_add(GTK_CONTAINER(host),viewport);gtk_widget_show(viewport);gtk_box_pack_start(GTK_BOX(page),host,TRUE,TRUE,0);g_object_set_data(G_OBJECT(page),"insight-width-constrained",GINT_TO_POINTER(1));gtk_widget_show(body);gtk_widget_show(host);
 }
 void insight_workbench_init(void) {
  insight_diff_set_source_opener(diff_source_open);insight_diff_set_colorizer(insight_diff_native_colorize);
@@ -5676,7 +5681,7 @@ void insight_workbench_init(void) {
  wb.right_pane=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
  /* Wide editor/message controls must not collapse the Project pane. */
  GtkWidget *width_host=g_object_new(insight_width_host_get_type(),NULL);gtk_container_add(GTK_CONTAINER(width_host),left_split);gtk_paned_pack1(GTK_PANED(wb.right_pane),width_host,TRUE,TRUE);g_object_unref(left_split);
- gtk_paned_pack2(GTK_PANED(wb.right_pane),wb.project_notebook,FALSE,TRUE);
+ wb.project_host=narrow_panel_host(wb.project_notebook);gtk_widget_set_name(wb.project_host,"insight-project-width-host");g_object_bind_property(wb.project_notebook,"visible",wb.project_host,"visible",G_BINDING_SYNC_CREATE);gtk_paned_pack2(GTK_PANED(wb.right_pane),wb.project_host,FALSE,TRUE);
  gtk_widget_set_size_request(wb.project_notebook,0,-1);
  gtk_widget_set_name(wb.right_pane,"insight-project-split"); gtk_widget_set_name(wb.project_notebook,"insight-project-notebook");
  wb.initial_right_split=-2;g_signal_connect(wb.right_pane,"size-allocate",G_CALLBACK(project_split_allocated),NULL);gtk_paned_set_position(GTK_PANED(wb.right_pane),850);

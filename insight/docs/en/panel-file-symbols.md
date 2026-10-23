@@ -128,3 +128,5 @@ Function operations and exact selection duplication: [structural editing](struct
 [Symbol editing](structural-selection.md#paste-symbol-review-and-guarded-editing) — Copy/Cut/Duplicate definitions and Paste Symbol before a selected definition with guarded colored preview.
 
 Search, mode and sort controls shrink within the panel while neighboring buttons remain visible. Long labels are ellipsized.
+
+Both side shelves can collapse to a narrow strip. Field text shrinks first and adjacent buttons move inward; once controls reach their minimum sizes, the remaining content is clipped to the visible area. The editor and Context keep their left boundary. The right shelf carries its viewport when floated or docked.

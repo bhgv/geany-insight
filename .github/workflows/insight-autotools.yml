@@ -16,7 +16,7 @@ permissions:
   contents: read
 jobs:
   autotools:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     env:
       GLIB_API_CEILING: >-
         -Werror=deprecated-declarations
