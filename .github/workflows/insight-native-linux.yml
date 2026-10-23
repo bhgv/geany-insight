@@ -83,6 +83,7 @@ on:
       - insight/tests/relation_tree_graph_gui_test.c
       - insight/tests/relation_history_gui_test.c
       - insight/tests/relation_nodes_gui_test.c
+      - insight/tests/relation_results_gui_test.c
       - src/insight-relation-tree.*
       - insight/tests/relation_tree_gui_test.c
       - src/insight-search-links.*
