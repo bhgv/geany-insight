@@ -648,3 +648,7 @@ insightdoc_DATA += insight/docs/comparison-layout.md
 
 dist_insightdocmedia_DATA += insight/docs/media/ssh-workspace.svg
 EXTRA_DIST += insight/tests/remote_pack_test.py
+
+EXTRA_DIST += insight/tests/relation_results_gui_test.c
+insightdoc_DATA += insight/docs/relation-results.md
+dist_insightdocmedia_DATA += insight/docs/media/relation-results.svg

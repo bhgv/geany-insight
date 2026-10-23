@@ -913,3 +913,6 @@ test('Insight project command recording startup GUI', recording_gui_test, timeou
 
 macos_menu_gui_test = executable('test_insight_macos_menu_gui', '../insight/tests/macos_menu_gui_test.c', dependencies: test_deps)
 test('Insight compact macOS menus and live materials GUI', macos_menu_gui_test, timeout: 40, is_parallel: false)
+
+relation_results_gui_test = executable('test_insight_relation_results_gui', '../insight/tests/relation_results_gui_test.c', dependencies: test_deps)
+test('Insight native relation outline and batch bookmarks GUI', relation_results_gui_test, timeout: 50, is_parallel: false)

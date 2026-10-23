@@ -1961,3 +1961,24 @@ Review and edit console context before Send. Only displayed context, conversatio
 
 AI settings / context / attachments	Настройки ИИ / контекст / вложения
 Code detached; displayed context and selected file attachments will be sent.	Исходник отключён; будут отправлены показанный контекст и выбранные файловые вложения.
+View Relation Outline	Текстовое дерево связей
+View Relation Outline…	Текстовое дерево связей…
+Create Bookmarks from Relation Items	Создать закладки из элементов связей
+Create Bookmarks from Relation Items…	Создать закладки из элементов связей…
+Copy outline	Копировать дерево
+Open outline buffer	Открыть дерево в буфере
+Create bookmarks	Создать закладки
+%u source items. Loaded/filtered rows only; unloaded branches are not fetched. Existing bookmark locations are skipped.	Позиций исходников: %u. Только загруженные строки с учётом фильтра; нераскрытые ветви не подгружаются. Существующие закладки пропускаются.
+%u bookmarks created; existing locations were kept	Создано закладок: %u; существующие позиции сохранены
+Wait for Relations to finish, or reduce results (2000 source items / 1 MiB outline)	Дождитесь завершения поиска связей или уменьшите список (2000 позиций / 1 МиБ текста)
+No new source locations; existing bookmarks were kept	Новых позиций нет; существующие закладки сохранены
+Relations changed; refresh the outline first	Связи изменились; сначала обновите текстовое дерево
+Preparing bookmarks from source snapshots…	Подготовка закладок по снимкам исходников…
+Relations, source or bookmark store changed; refresh before creating bookmarks	Связи, исходник или хранилище изменились; обновите список перед созданием закладок
+The batch exceeds the remaining note capacity (64 total); no bookmarks were created	Пакет превышает свободную ёмкость хранилища (всего 64 заметки); закладки не созданы
+Cannot read a stable source snapshot (2 MiB per file, 16 MiB total)	Не удалось прочитать устойчивый снимок исходника (2 МиБ на файл, 16 МиБ суммарно)
+A result line is unavailable or exceeds 64 KiB; refresh Relations	Строка результата недоступна или превышает 64 КиБ; обновите связи
+A source exceeds 2 MiB; no bookmarks were created	Исходник превышает 2 МиБ; закладки не созданы
+Source snapshots exceed 16 MiB; no bookmarks were created	Снимки исходников превышают 16 МиБ; закладки не созданы
+Source contains NUL or invalid UTF-8; no bookmarks were created	Исходник содержит NUL или некорректный UTF-8; закладки не созданы
+Bookmarks were not saved	Закладки не сохранены

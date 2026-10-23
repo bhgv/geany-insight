@@ -30,3 +30,5 @@ They apply to References, not project text search or replacement. Call sites kee
 their existing code-only behavior. Back restores the reference filter; the chosen
 filter is saved for the next session. Selecting a result previews the original
 source in Context at its original position.
+
+[Relation outline snapshots and bookmark batches / Текстовое дерево и пакет закладок](relation-results.md).
