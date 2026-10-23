@@ -57,7 +57,12 @@ static GeanyDocument *valid(Snapshot *s) {
 }
 static void state_rows(void) {
  GeanyDocument *doc=valid(&snapshot);if(!doc) return;
- GtkTreeIter it;for(gboolean ok=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(model),&it);ok;ok=gtk_tree_model_iter_next(GTK_TREE_MODEL(model),&it)) { gint index;gtk_tree_model_get(GTK_TREE_MODEL(model),&it,4,&index,-1);Block *b=g_ptr_array_index(snapshot.blocks,index);gtk_list_store_set(model,&it,2,insight_tr(SEND(doc->editor->sci,SCI_GETFOLDEXPANDED,b->line,0) ? "Expanded" : "Collapsed"),-1); }
+ /* GtkListStore iters persist across sorting. Snapshot them before updating a
+  * sortable State column: changing a row may otherwise skip subsequent rows. */
+ GArray *rows=g_array_new(FALSE,FALSE,sizeof(GtkTreeIter));GtkTreeIter it;
+ for(gboolean ok=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(model),&it);ok;ok=gtk_tree_model_iter_next(GTK_TREE_MODEL(model),&it)) g_array_append_val(rows,it);
+ for(guint i=0;i<rows->len;i++) { GtkTreeIter *row=&g_array_index(rows,GtkTreeIter,i);gint index;gtk_tree_model_get(GTK_TREE_MODEL(model),row,4,&index,-1);Block *b=g_ptr_array_index(snapshot.blocks,index);gtk_list_store_set(model,row,2,insight_tr(SEND(doc->editor->sci,SCI_GETFOLDEXPANDED,b->line,0) ? "Expanded" : "Collapsed"),-1); }
+ g_array_unref(rows);
 }
 static void filter(GtkWidget *widget,gpointer data) {
  (void)widget;(void)data;gtk_list_store_clear(model);if(!snapshot.blocks) return;
