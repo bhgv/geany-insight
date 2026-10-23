@@ -62,3 +62,12 @@ Verified code: [`5a2f1e4271b30304e218a5664e8565e3010f9c77`](https://github.com/b
 [Editor and project AI: cumulative requests, variants, manual Result and refresh](editor-ai.md).
 
 [Shared AI Connections / Общие подключения ИИ](ai-connections.md) — shared profiles, optional key storage and parallel answer selection supersede the earlier single-connection setup.
+
+
+## Embedded SSH assistant, attachments and history
+
+Ai opens inside the selected SSH terminal. Connection, Context / source and Attachments group the settings at the top. The paperclip accepts up to four files totaling 512 KiB. Text is sent as text, PNG/JPEG/WebP/GIF as image parts, PDF and other binary types as file parts where supported by the API/model. ZIP/TAR/GZ are inspected in memory: the listing and small UTF-8 members are sent; binary/large members are explicitly marked as omitted. Limits: 64 entries, 512 KiB content, 64 KiB per text member, 1 MiB tar stream including headers. Archives are never extracted to disk.
+
+Generated files returned by the model (up to four, 256 KiB combined and within the overall answer limit) appear under Attachments → Save received file. Only validated bytes from the answer are saved, to a user-chosen path; nothing opens or runs automatically. Image and binary file-part support depends on the provider/model; provider errors remain visible.
+
+The list above the answer retains up to 32 answers in this session. Selecting one restores its text, suggested command and files; Diff uses the same explicitly attached source snapshot. Attaching/detaching source clears answer history. SSH Run reviewed command executes the selected suggestion only when clicked. The jump button next to terminal input opens a selected file:line diagnostic in an existing local source or SFTP cache.

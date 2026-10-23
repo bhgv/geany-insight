@@ -13,7 +13,7 @@
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 static GtkWidget *window,*assistant,*diff;
 static GeanyDocument *source;
-static gchar *path,*profile,*endpoint;
+static gchar *path,*profile,*endpoint,*attachment_path,*received_path;static gint chooser_action;
 static guint phase;
 static gint64 after;
 static GSubprocess *server;
@@ -29,6 +29,9 @@ static void entry(GtkWidget *w,const gchar *name,const gchar *value) { GtkWidget
 static gchar *text(GtkWidget *w,const gchar *name) { GtkTextBuffer *b=gtk_text_view_get_buffer(GTK_TEXT_VIEW(named(w,name)));GtkTextIter a,z;gtk_text_buffer_get_bounds(b,&a,&z);return gtk_text_buffer_get_text(b,&a,&z,TRUE); }
 static void source_is(const gchar *expected) { gchar *s=sci_get_contents(source->editor->sci,-1);g_assert_cmpstr(s,==,expected);g_free(s); }
 static void capture(GtkWidget *w,const gchar *env) { if(!g_getenv(env)) return;GdkPixbuf *im=gdk_pixbuf_get_from_window(gtk_widget_get_window(w),0,0,gtk_widget_get_allocated_width(w),gtk_widget_get_allocated_height(w));g_assert_nonnull(im);g_assert_true(gdk_pixbuf_save(im,g_getenv(env),"jpeg",NULL,"quality","88",NULL));g_object_unref(im); }
+static gboolean choose_file(gpointer data) {
+ (void)data;if(!chooser_action) return G_SOURCE_CONTINUE;GList *windows=gtk_window_list_toplevels();for(GList *p=windows;p;p=p->next) if(GTK_IS_FILE_CHOOSER_DIALOG(p->data) && gtk_widget_get_visible(p->data)) { GtkWidget *d=p->data;if(chooser_action==1) { gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(d),attachment_path);chooser_action=3; }else if(chooser_action==2) { gchar *folder=g_path_get_dirname(received_path),*name=g_path_get_basename(received_path);gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(d),folder);gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(d),name);g_free(folder);g_free(name);chooser_action=4; }else { gchar *selected=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(d));if(!g_strcmp0(selected,chooser_action==3 ? attachment_path:received_path)) { chooser_action=0;gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_ACCEPT); }g_free(selected); }break; }g_list_free(windows);return G_SOURCE_CONTINUE;
+}
 static gboolean step(gpointer data) {
  (void)data;
  if(phase && assistant && g_object_get_data(G_OBJECT(assistant),"insight-ai-busy")) return G_SOURCE_CONTINUE;
@@ -39,10 +42,11 @@ static gboolean step(gpointer data) {
   GtkWidget *out=named(window,"insight-ssh-output");g_assert_nonnull(out);gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(out)),"source.c:1: error: expected ';' before end of input\n",-1);
   click(window,"insight-ssh-ai");assistant=named(window,"insight-ai-window");g_assert_nonnull(assistant);
   gchar *context=text(assistant,"insight-ai-context");g_assert_nonnull(strstr(context,"source.c:1"));g_free(context);
-  gtk_combo_box_set_active(GTK_COMBO_BOX(named(assistant,"insight-ai-provider")),4);entry(assistant,"insight-ai-endpoint",endpoint);entry(assistant,"insight-ai-model","mock-model");entry(assistant,"insight-ai-key","fixture-secret-key");click(assistant,"insight-ai-attach");entry(assistant,"insight-ai-question","Explain this compiler error and propose a correction.");click(assistant,"insight-ai-send");phase++;break;
+  gtk_combo_box_set_active(GTK_COMBO_BOX(named(assistant,"insight-ai-provider")),4);entry(assistant,"insight-ai-endpoint",endpoint);entry(assistant,"insight-ai-model","mock-model");entry(assistant,"insight-ai-key","fixture-secret-key");click(assistant,"insight-ai-attach");chooser_action=1;click(assistant,"insight-ai-attach-files");entry(assistant,"insight-ai-question","Explain this compiler error and propose a correction.");click(assistant,"insight-ai-send");phase++;break;
  }
  case 1: {
   gchar *answer=text(assistant,"insight-ai-answer");g_assert_nonnull(strstr(answer,"Mock analysis"));g_free(answer);g_assert_false(gtk_text_view_get_editable(GTK_TEXT_VIEW(named(assistant,"insight-ai-answer"))));
+  GtkWidget *history=named(assistant,"insight-ai-answer-history");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(history)),NULL),==,1);g_assert_nonnull(named(assistant,"insight-ai-options"));g_assert_true(gtk_widget_get_sensitive(named(assistant,"insight-ai-save-file")));chooser_action=2;click(assistant,"insight-ai-save-file");gchar *received=NULL;g_assert_true(g_file_get_contents(received_path,&received,NULL,NULL));g_assert_cmpstr(received,==,"fixture attachment\n");g_free(received);
   click(assistant,"insight-ai-insert");g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(window,"insight-ssh-input"))),==,"printf 'review only'");source_is(base);
   gchar *config=g_build_filename(profile,"insight-ai.conf",NULL),*saved=NULL;g_assert_true(g_file_get_contents(config,&saved,NULL,NULL));g_assert_null(strstr(saved,"fixture-secret-key"));g_assert_null(strstr(saved,"compiler error"));g_assert_null(strstr(saved,"int value"));g_free(config);g_free(saved);
   after=g_get_monotonic_time()+200*G_TIME_SPAN_MILLISECOND;phase++;break;
@@ -58,6 +62,7 @@ static gboolean step(gpointer data) {
  }
  case 4: {
   if(g_get_monotonic_time()<after) { break; }
+  GtkWidget *history=named(assistant,"insight-ai-answer-history");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(history)),NULL),==,2);gtk_combo_box_set_active(GTK_COMBO_BOX(history),0);g_assert_true(gtk_widget_get_sensitive(named(assistant,"insight-ai-review")));gtk_combo_box_set_active(GTK_COMBO_BOX(history),1);
   gtk_window_present(GTK_WINDOW(diff));after=g_get_monotonic_time()+200*G_TIME_SPAN_MILLISECOND;phase++;break;
  }
  case 5: {
@@ -88,5 +93,5 @@ static gboolean timeout(gpointer p) { (void)p;g_error("Console AI timeout phase 
 int main(int argc,char **argv) {
  if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) { return 77; }
  g_assert_cmpint(argc,==,2);GError *error=NULL;server=g_subprocess_new(G_SUBPROCESS_FLAGS_STDOUT_PIPE,&error,"python3","-I",argv[1],NULL);g_assert_no_error(error);GDataInputStream *stream=g_data_input_stream_new(g_subprocess_get_stdout_pipe(server));gchar *port=g_data_input_stream_read_line(stream,NULL,NULL,&error);g_assert_no_error(error);g_assert_nonnull(port);endpoint=g_strdup_printf("http://127.0.0.1:%s/v1/chat/completions",port);g_free(port);g_object_unref(stream);
- gchar *dir=g_dir_make_tmp("console-ai-native-XXXXXX",NULL);profile=g_build_filename(dir,"profile",NULL);path=g_build_filename(dir,"source.c",NULL);g_assert_true(g_file_set_contents(path,base,-1,NULL));gchar *args[]={"console-ai-native","--new-instance","--no-session","--config",profile,path,NULL};g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);g_timeout_add(100,step,NULL);g_timeout_add_seconds(50,timeout,NULL);return main_lib(6,args);
+ gchar *dir=g_dir_make_tmp("console-ai-native-XXXXXX",NULL);profile=g_build_filename(dir,"profile",NULL);path=g_build_filename(dir,"source.c",NULL);attachment_path=g_build_filename(dir,"notes.txt",NULL);received_path=g_build_filename(dir,"received.txt",NULL);g_assert_true(g_file_set_contents(attachment_path,"compiler notes\n",-1,NULL));g_timeout_add(150,choose_file,NULL);g_assert_true(g_file_set_contents(path,base,-1,NULL));gchar *args[]={"console-ai-native","--new-instance","--no-session","--config",profile,path,NULL};g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);g_timeout_add(100,step,NULL);g_timeout_add_seconds(50,timeout,NULL);return main_lib(6,args);
 }

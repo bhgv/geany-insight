@@ -1933,3 +1933,28 @@ Remember Recording in Workspace	Сохранять запись в рабоче�
 Saves literal recorded text on the next normal project/preferences save. Disable to remove saved steps on the next save. Never plays automatically.	Сохраняет буквальный текст записи при следующем штатном сохранении проекта или настроек. Выключение удалит сохранённые шаги при следующем сохранении. Автоматического повтора нет.
 Saved command recording rejected: unsupported format, action or limit	Сохранённая запись команд отклонена: неподдерживаемый формат, команда или превышение лимита
 Relative native editor commands and literal input. Start replaces the previous recording. Remember Recording saves literal source text in the current project file or global preferences; playback is always explicit.	Относительные команды редактора и буквальный ввод. Новая запись заменяет прежнюю. Опция сохранения записывает текст вставок в файл текущего проекта или общие настройки; повтор запускается только явно.
+
+Connection	Подключение
+Transfer	Передача
+SSH AI assistant — drag to move	ИИ-помощник SSH — перетащите для перемещения
+Independent SSH terminal	Независимый SSH-терминал
+Run reviewed command in this SSH session	Выполнить проверенную команду в этом SSH-сеансе
+Local source / new destination	Локальный источник / новый путь назначения
+Remote source / destination	Удалённый источник / путь назначения
+No packing	Без упаковки
+gz (file)	gz (файл)
+tar.gz (file/folder)	tar.gz (файл/папка)
+Choose…	Выбрать…
+Receive	Получить
+No file attachments	Нет вложенных файлов
+Attach files…	Прикрепить файлы…
+Clear attachments	Убрать вложения
+Save received file…	Сохранить полученный файл…
+Attach files, images or archives	Прикрепить файлы, изображения или архивы
+Save received attachment	Сохранить полученное вложение
+Context / source	Контекст / исходник
+Attachments	Вложения
+Previous answers in this console (up to 32)	Предыдущие ответы в этой консоли (до 32)
+Open selected file:line diagnostic in local editor	Открыть выбранную диагностику файл:строка в локальном редакторе
+Attachment saved. Files are never opened or executed automatically.	Вложение сохранено. Файлы не открываются и не запускаются автоматически.
+Review and edit console context before Send. Only displayed context, conversation and explicitly attached code/files are uploaded.	Проверьте контекст перед отправкой. Отправляются только показанный контекст, история и явно приложенные исходники/файлы.

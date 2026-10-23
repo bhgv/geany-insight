@@ -5576,7 +5576,8 @@ void insight_workbench_init(void) {
  for(guint i=0;i<10;i++) wb.hosts[i].opacity=100;
  wb.alive=TRUE;wb.tray_enabled=TRUE;wb.marks_preserve=TRUE; workbench_epoch++; wb.symbol_key_signal=g_signal_connect(geany_object,"key-press",G_CALLBACK(symbol_key_global),NULL);insight_window_list_init(window_list_preview);
  GtkWidget *existing=ui_lookup_widget(main_widgets.window,"vpaned1");
- GtkWidget *left_split=ui_lookup_widget(main_widgets.window,"hpaned1");gtk_container_child_set(GTK_CONTAINER(left_split),gtk_paned_get_child1(GTK_PANED(left_split)),"resize",FALSE,"shrink",TRUE,NULL);gtk_notebook_set_scrollable(GTK_NOTEBOOK(main_widgets.sidebar_notebook),TRUE);
+ GtkWidget *left_split=ui_lookup_widget(main_widgets.window,"hpaned1");gtk_container_child_set(GTK_CONTAINER(left_split),gtk_paned_get_child1(GTK_PANED(left_split)),"resize",FALSE,"shrink",TRUE,NULL);gtk_notebook_set_scrollable(GTK_NOTEBOOK(main_widgets.sidebar_notebook),TRUE);for(gint i=0;i<gtk_notebook_get_n_pages(GTK_NOTEBOOK(main_widgets.sidebar_notebook));i++) { GtkWidget *page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(main_widgets.sidebar_notebook),i),*label=gtk_notebook_get_tab_label(GTK_NOTEBOOK(main_widgets.sidebar_notebook),page);if(GTK_IS_LABEL(label)) { gtk_label_set_ellipsize(GTK_LABEL(label),PANGO_ELLIPSIZE_END);gtk_label_set_width_chars(GTK_LABEL(label),1); } }
+ GtkWidget *sidebar=gtk_paned_get_child1(GTK_PANED(left_split));g_object_ref(sidebar);gtk_container_remove(GTK_CONTAINER(left_split),sidebar);GtkWidget *sidebar_host=narrow_panel_host(sidebar);gtk_widget_set_name(sidebar_host,"insight-sidebar-width-host");gtk_paned_pack1(GTK_PANED(left_split),sidebar_host,FALSE,TRUE);g_object_bind_property(sidebar,"visible",sidebar_host,"visible",G_BINDING_SYNC_CREATE);g_object_unref(sidebar);
  GtkWidget *parent=gtk_widget_get_parent(existing); gint position=0;
  gtk_container_child_get(GTK_CONTAINER(parent),existing,"position",&position,NULL);
  wb.usage_paths=g_ptr_array_new_with_free_func(location_free);
@@ -5668,7 +5669,9 @@ void insight_workbench_init(void) {
  gtk_container_remove(GTK_CONTAINER(existing),left_split);
  gtk_container_remove(GTK_CONTAINER(left_split),editor_book);
  gtk_paned_pack1(GTK_PANED(existing),editor_book,TRUE,TRUE);
- gtk_paned_pack2(GTK_PANED(left_split),existing,TRUE,TRUE);
+ GtkWidget *source_width_host=g_object_new(insight_width_host_get_type(),NULL);gtk_widget_set_name(source_width_host,"insight-source-width-host");gtk_container_add(GTK_CONTAINER(source_width_host),existing);gtk_paned_pack2(GTK_PANED(left_split),source_width_host,TRUE,TRUE);
+ /* GTK notebooks cannot safely underallocate their vertical tab gadgets. */
+ gtk_container_child_set(GTK_CONTAINER(existing),gtk_paned_get_child2(GTK_PANED(existing)),"shrink",FALSE,NULL);
  g_object_unref(editor_book);g_object_unref(existing);
  wb.right_pane=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
  /* Wide editor/message controls must not collapse the Project pane. */
