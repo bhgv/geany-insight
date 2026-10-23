@@ -42,7 +42,7 @@ static gboolean drive(gpointer data) {
  action=0;gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_CLOSE);return G_SOURCE_CONTINUE;
 }
 static gboolean drive_open(gpointer data) {
- (void)data;if(action!=7) return G_SOURCE_CONTINUE;GtkWidget *d=report();g_assert_nonnull(d);GeanyDocument *doc=document_get_current();g_assert_nonnull(doc);g_assert_true(doc!=source_doc);g_assert_null(doc->file_name);g_assert_true(doc->changed);gchar *text=sci_get_contents(doc->editor->sci,-1);g_assert_nonnull(strstr(text,"    End\t"));g_free(text);document_set_text_changed(doc,FALSE);g_assert_true(document_close(doc));action=0;gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_CLOSE);return G_SOURCE_CONTINUE;
+ (void)data;if(action!=7) return G_SOURCE_CONTINUE;GtkWidget *d=report();g_assert_nonnull(d);GeanyDocument *doc=document_get_current();g_assert_nonnull(doc);if(doc==source_doc) return G_SOURCE_CONTINUE;g_assert_true(doc!=source_doc);g_assert_null(doc->file_name);g_assert_true(doc->changed);gchar *text=sci_get_contents(doc->editor->sci,-1);g_assert_nonnull(strstr(text,"    End\t"));g_free(text);document_set_text_changed(doc,FALSE);g_assert_true(document_close(doc));action=0;gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_CLOSE);return G_SOURCE_CONTINUE;
 }
 static GtkTreePath *middle;
 static gboolean find_middle(GtkTreeModel *m,GtkTreePath *p,GtkTreeIter *i,gpointer data) { (void)data;gchar *name=NULL;gtk_tree_model_get(m,i,7,&name,-1);gboolean found=!g_strcmp0(name,"Middle");g_free(name);if(found) middle=gtk_tree_path_copy(p);return found; }

@@ -1,6 +1,6 @@
 # Relation results: outlines and bookmark batches
 
-![Loaded relation snapshot](../media/relation-results.svg)
+![Loaded relation snapshot](media/relation-results.svg)
 
 Open **Navigate → View Relation Outline…** or **Create Bookmarks from Relation Items…**. The same commands are in the Relations right-click menu and in the two icon buttons beside Search/Stop.
 
