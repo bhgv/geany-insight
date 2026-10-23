@@ -16,7 +16,7 @@
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 #define FILE_LIMIT (8u*1024u*1024u)
 #define SCAN_LIMIT (64u*1024u*1024u)
-enum { PICK, INDEX, PATH, STATE, COLUMNS };
+enum { PICK, INDEX, PATH, STATE, ELIGIBLE, COLUMNS };
 enum { REFRESH=1, CLEAN, NONE, OPEN, COMPARE, COPY, RELOAD };
 typedef struct {
     guint id;
@@ -97,7 +97,7 @@ static void refresh(ReloadView *view)
             }
         }
         GtkTreeIter iter;gtk_list_store_append(view->model,&iter);
-        gtk_list_store_set(view->model,&iter,PICK,row->eligible && !row->dirty,INDEX,view->rows->len,PATH,row->name,STATE,insight_tr(state),-1);
+        gtk_list_store_set(view->model,&iter,PICK,row->eligible && !row->dirty,INDEX,view->rows->len,PATH,row->name,STATE,insight_tr(state),ELIGIBLE,row->eligible,-1);
         g_ptr_array_add(view->rows,row);g_clear_error(&error);
     }
     gchar *message=g_strdup_printf(insight_tr("%u checked • %u changed • %u omitted (128-file limit)"),scanned,modified,omitted);
@@ -168,7 +168,8 @@ static void reload_selected(ReloadView *view)
     g_signal_connect_swapped(question,"destroy",G_CALLBACK(g_nullify_pointer),&question);
     /* Keep a separate owner reference because the parent can be destroyed in run(). */
     GtkWidget *owner=question;gint answer=gtk_dialog_run(GTK_DIALOG(owner));gone=question==NULL;
-    if(!gone) gtk_widget_destroy(owner);g_object_unref(owner);
+    if(!gone) gtk_widget_destroy(owner);
+    g_object_unref(owner);
     if(view->destroyed || answer!=GTK_RESPONSE_ACCEPT) { g_ptr_array_unref(picked);return; }
     guint done=0;
     /* Validate the whole batch before changing its first member. */
@@ -187,17 +188,18 @@ stale:
 }
 void insight_reload_command(void)
 {
-    if(busy) return;busy=TRUE;
+    if(busy) return;
+    busy=TRUE;
     ReloadView view={0};view.rows=g_ptr_array_new_with_free_func(row_free);
     view.dialog=gtk_dialog_new_with_buttons(insight_tr("Reload Modified Files"),GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,
         insight_tr("Refresh"),REFRESH,insight_tr("Select Clean"),CLEAN,insight_tr("Select None"),NONE,insight_tr("Open File"),OPEN,insight_tr("Compare with Disk"),COMPARE,insight_tr("Copy Paths"),COPY,insight_tr("Reload Selected…"),RELOAD,insight_tr("Close"),GTK_RESPONSE_CLOSE,NULL);
     g_object_ref_sink(view.dialog);gtk_widget_set_name(view.dialog,"insight-reload-modified");gtk_window_set_default_size(GTK_WINDOW(view.dialog),920,440);
     g_signal_connect(view.dialog,"destroy",G_CALLBACK(destroyed),&view);
     GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(view.dialog));gtk_container_set_border_width(GTK_CONTAINER(box),8);
-    view.model=gtk_list_store_new(COLUMNS,G_TYPE_BOOLEAN,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING);
+    view.model=gtk_list_store_new(COLUMNS,G_TYPE_BOOLEAN,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_BOOLEAN);
     view.tree=gtk_tree_view_new_with_model(GTK_TREE_MODEL(view.model));gtk_widget_set_name(view.tree,"insight-reload-files");
     GtkCellRenderer *check=gtk_cell_renderer_toggle_new();g_signal_connect(check,"toggled",G_CALLBACK(toggle),&view);
-    gtk_tree_view_append_column(GTK_TREE_VIEW(view.tree),gtk_tree_view_column_new_with_attributes(insight_tr("Reload"),check,"active",PICK,NULL));
+    gtk_tree_view_append_column(GTK_TREE_VIEW(view.tree),gtk_tree_view_column_new_with_attributes(insight_tr("Reload"),check,"active",PICK,"activatable",ELIGIBLE,"sensitive",ELIGIBLE,NULL));
     const gchar *labels[]={"File","State"};
     for(guint i=0;i<2;i++) { GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(insight_tr(labels[i]),gtk_cell_renderer_text_new(),"text",PATH+i,NULL);gtk_tree_view_column_set_resizable(column,TRUE);gtk_tree_view_append_column(GTK_TREE_VIEW(view.tree),column); }
     GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),view.tree);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
@@ -225,7 +227,8 @@ static void activate(GtkMenuItem *item,gpointer data)
 { (void)item;(void)data;insight_reload_command(); }
 void insight_reload_init(void)
 {
-    if(initialized) return;initialized=TRUE;
+    if(initialized) return;
+    initialized=TRUE;
     GtkWidget *menu=ui_lookup_widget(main_widgets.window,"file1_menu"),*item=gtk_menu_item_new_with_label("Reload Modified Files…");
     gtk_widget_set_name(item,"insight-reload-modified-command");g_signal_connect(item,"activate",G_CALLBACK(activate),NULL);
     keybindings_attach_menu(GEANY_KEY_GROUP_DOCUMENT,GEANY_KEYS_INSIGHT_RELOADMODIFIED,item);gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);gtk_widget_show(item);

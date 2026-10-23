@@ -85,7 +85,7 @@ static void run(guint which,gboolean key)
  scenario=which;phase=0;g_timeout_add(80,drive,NULL);
  if(key) keybindings_send_command(GEANY_KEY_GROUP_DOCUMENT,GEANY_KEYS_INSIGHT_RELOADMODIFIED);
  else { GtkWidget *item=named(window,"insight-reload-modified-command");g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item)); }
- g_assert_null(top("insight-reload-modified"));g_assert_cmpuint(phase,==,10);
+ g_assert_null(top("insight-reload-modified"));g_assert_cmpuint(phase,==,10);g_print("Reload scenario %u finished\n",which);
 }
 static gboolean step(gpointer data)
 {
@@ -100,7 +100,7 @@ static gboolean step(gpointer data)
  source->readonly=FALSE;SEND(source->editor->sci,SCI_SETREADONLY,FALSE,0);
  disk_change(path,"external next\n");run(2,FALSE);contents(source,"external α\nstale\nα");
  /* Save prepares a new clean baseline without altering the other dirty buffer. */
- g_assert_true(document_save_file(source,TRUE));disk_change(path,"external final\n");run(3,FALSE);contents(source,"external α\nstale\nα");
+ g_assert_true(document_save_file(source,TRUE));disk_change(path,"external final\n");run(3,FALSE);contents(source,"external α\nstale\nα\n");
  run(4,FALSE);contents(second,"external second\n");g_assert_false(second->changed);
  /* Closed document IDs cannot be reused as batch targets. */
  run(5,FALSE);g_assert_null(source);contents(second,"external second\n");
