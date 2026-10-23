@@ -898,3 +898,6 @@ test('Insight classic and macOS interface styles GUI', appearance_gui_test, time
 test('Insight macOS interface style startup restore GUI', appearance_gui_test, timeout: 45, is_parallel: false, env: ['GEANY_TEST_APPEARANCE_RESTORE=1'])
 tree_expand_test = executable('test_insight_tree_expand', '../insight/tests/tree_expand_gui_test.c', '../src/insight-tree-expand.c', dependencies: deps, c_args: ['-UNDEBUG'])
 test('Insight bounded selected tree expansion GUI', tree_expand_test, timeout: 35, is_parallel: false)
+
+reload_modified_gui_test = executable('test_insight_reload_modified_gui', '../insight/tests/reload_modified_gui_test.c', dependencies: test_deps)
+test('Insight native Reload Modified Files guarded batches GUI', reload_modified_gui_test, timeout: 50, is_parallel: false)

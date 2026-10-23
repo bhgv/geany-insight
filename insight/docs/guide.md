@@ -121,3 +121,5 @@ Options → Language profiles… и контекстное меню редакт
 - [Code outlining / Сворачивание кода](code-outlining.md)
 
 - [Interface style / Стиль интерфейса](interface-style.md)
+
+- [Reload Modified Files / Перечитать изменённые файлы](reload-modified.md)

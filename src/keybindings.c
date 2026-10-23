@@ -36,6 +36,7 @@
 #include "insight-navigation.h"
 #include "insight-workbench.h"
 #include "insight-outlining.h"
+#include "insight-reload.h"
 #include "insight-command-list.h"
 #include "insight-selection-search.h"
 #include "insight-word-highlights.h"
@@ -350,6 +351,7 @@ static void cb_func_insight(guint key_id)
     if (key_id == GEANY_KEYS_INSIGHT_ORIGINALCONTENTS) { insight_revisions_original();return; }
     if (key_id == GEANY_KEYS_INSIGHT_BACKTOGGLE) { navqueue_go_back_toggle();return; }
     if (key_id == GEANY_KEYS_INSIGHT_COMMANDBROWSER) { insight_command_browser_show();return; }
+    if (key_id == GEANY_KEYS_INSIGHT_RELOADMODIFIED) { insight_reload_command();return; }
     if (key_id == GEANY_KEYS_INSIGHT_CODEOUTLINE) { insight_outlining_command(7);return; }
     if (key_id >= GEANY_KEYS_INSIGHT_EXPANDBLOCK && key_id <= GEANY_KEYS_INSIGHT_FOLDLEVEL) { GeanyDocument *target=document_get_current();if(DOC_VALID(target) && gtk_window_get_focus(GTK_WINDOW(main_widgets.window))==GTK_WIDGET(target->editor->sci)) insight_outlining_command(key_id-GEANY_KEYS_INSIGHT_EXPANDBLOCK);return; }
     if (key_id >= GEANY_KEYS_INSIGHT_ACTIVATEPROJECTFILES && key_id <= GEANY_KEYS_INSIGHT_ACTIVATEEDITOR) { insight_workbench_activate(key_id-GEANY_KEYS_INSIGHT_ACTIVATEPROJECTFILES);return; }
@@ -884,6 +886,7 @@ static void init_default_kb(void)
     add_kb(group, GEANY_KEYS_INSIGHT_EXPANDALLCODE, cb_func_insight, 0, 0, "insight_expandallcode", _("Expand all code"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_COLLAPSEALLCODE, cb_func_insight, 0, 0, "insight_collapseallcode", _("Collapse all code"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_FOLDLEVEL, cb_func_insight, 0, 0, "insight_foldlevel", _("Fold to level"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_RELOADMODIFIED, cb_func_insight, 0, 0, "insight_reloadmodified", _("Reload Modified Files"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_CODEOUTLINE, cb_func_insight, 0, 0, "insight_codeoutline", _("Code outline"), NULL);
     group = keybindings_get_core_group(GEANY_KEY_GROUP_FOCUS);
     add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATEPROJECTFILES, cb_func_insight, 0, 0, "insight_activate_projectfiles", _("Activate Project File List"), NULL);

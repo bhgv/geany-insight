@@ -744,3 +744,7 @@ Fifteen focus commands reveal/select panels, restore minimized floating windows 
 ### Code outlining and fold block browser (2026-10-23)
 
 Eight native lexer-based block/branch/file/depth/browser commands with unassigned Document bindings, View and editor menus. The modeless block list filters, sorts, navigates and copies bounded fold headers; identity/generation/language guards reject stale actions. Read-only sources supported; no semantic folding or source edits. [RU/EN guide and SVG](code-outlining.md).
+
+### Reload Modified Files: selected open-file review (2026-10-23)
+
+File menu and an unassigned Document shortcut inspect up to 128 open local files by timestamp/native change status. Clean modified rows are checked automatically; dirty buffers require explicit selection and confirmation. Refresh, select clean/none, copy paths, open source and read-only disk comparison support review. Whole-batch and per-file revalidation guard document identity, buffer hash/history/encoding/read-only state and disk metadata; partial completion is reported. Native reload controls Undo policy. No periodic polling, bytewise disk scan, Sharing setting or project reindex. [RU/EN guide and diagram](reload-modified.md).

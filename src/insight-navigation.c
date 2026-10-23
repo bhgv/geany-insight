@@ -6,6 +6,7 @@
 #include "insight-word-highlights.h"
 #include "insight-web-search.h"
 #include "insight-outlining.h"
+#include "insight-reload.h"
 #include "insight-typing.h"
 #include "insight-revisions.h"
 #include "insight-backups.h"
@@ -589,6 +590,7 @@ void insight_navigation_menu(GtkWidget *menu)
     insight_revisions_init(menu);
     insight_backups_init();
     insight_snapshot_compare_init();
+    insight_reload_init();
     insight_html_export_init();
     insight_ai_init();insight_editor_ai_init();insight_replace_files_init();
     GtkWidget *file_menu=ui_lookup_widget(main_widgets.window,"file1_menu"),*status=gtk_menu_item_new_with_label("Show File Status");gtk_widget_set_name(status,"insight-show-file-status");g_signal_connect(status,"activate",G_CALLBACK(show_file_status),NULL);GList *file_children=gtk_container_get_children(GTK_CONTAINER(file_menu));gint status_position=g_list_index(file_children,ui_lookup_widget(main_widgets.window,"properties1"));g_list_free(file_children);gtk_menu_shell_insert(GTK_MENU_SHELL(file_menu),status,status_position);g_signal_connect(file_menu,"show",G_CALLBACK(file_status_menu_show),status);gtk_widget_show(status);

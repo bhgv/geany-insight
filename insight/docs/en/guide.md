@@ -113,3 +113,5 @@ Replace Files also offers modal Replace/Skip/Remaining/Cancel review, F3/Shift+F
 - [Code outlining / Сворачивание кода](code-outlining.md)
 
 - [Interface style / Стиль интерфейса](interface-style.md)
+
+- [Reload Modified Files / Перечитать изменённые файлы](reload-modified.md)

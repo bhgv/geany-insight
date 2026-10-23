@@ -1879,3 +1879,26 @@ Select a tree row first	Сначала выберите строку дерев�
 Levels below the selected row (1–32)	Уровней ниже выбранной строки (1–32)
 Tree changed; select the row again	Дерево изменилось; выберите строку повторно
 Tree expansion stopped at its safety limit or the tree changed	Раскрытие остановлено: достигнут предел или дерево изменилось
+Reload Modified Files	Перечитать изменённые файлы
+Reload Modified Files…	Перечитать изменённые файлы…
+Select Clean	Выбрать без правок
+Select None	Снять выбор
+Open File	Открыть файл
+Compare with Disk	Сравнить с диском
+Copy Paths	Копировать пути
+Reload Selected…	Перечитать выбранные…
+Unchanged on disk	Без изменений на диске
+Not a local saved file	Не локальный сохранённый файл
+Cannot inspect disk file	Не удалось проверить файл на диске
+Requires a regular local file of at most 8 MiB	Нужен обычный локальный файл не более 8 МиБ
+Buffer snapshot limit reached	Достигнут предел снимков буфера
+Changed on disk — unsaved buffer edits	Изменён на диске — есть несохранённые правки
+Changed on disk	Изменён на диске
+%u checked • %u changed • %u omitted (128-file limit)	Проверено: %u • изменено: %u • пропущено: %u (предел 128 файлов)
+Selection changed or unavailable; Refresh the list	Выбранный файл изменился или недоступен; обновите список
+Comparison requires UTF-8 snapshots of at most 1 MiB; Refresh if the file changed	Сравнение требует снимков UTF-8 до 1 МиБ; обновите список, если файл изменился
+Choose files to reload first	Сначала выберите файлы для перечитывания
+Reload %u selected files from disk?	Перечитать выбранные файлы с диска (%u)?
+%u files contain unsaved edits. Reload replaces buffer contents. Undo history follows the native reload preference. No disk files are written.	Файлов с несохранёнными правками: %u. Перечитывание заменяет содержимое буфера. История Undo зависит от штатной настройки. Файлы на диск не записываются.
+Selected files reloaded	Выбранные файлы перечитаны
+Reload stopped after %u files: a buffer or disk file changed. Review the refreshed list.	Перечитывание остановлено после %u файлов: буфер или файл на диске изменился. Проверьте обновлённый список.

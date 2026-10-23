@@ -55,6 +55,8 @@ on:
       - insight/tests/directory_compare*_test.c
       - insight/desktop/context_search.*
       - insight/tests/context_search_test.c
+      - src/insight-reload.*
+      - insight/tests/reload_modified_gui_test.c
       - src/insight-tree-expand.*
       - insight/tests/tree_expand_gui_test.c
       - src/insight-workbench.*
@@ -202,7 +204,7 @@ jobs:
           meson install -C _native
       - name: Check compact panels and Context controls
         run: |
-          INSIGHT_APPEARANCE_CLASSIC_CAPTURE="$PWD/interface-classic.jpg" INSIGHT_APPEARANCE_MAC_CAPTURE="$PWD/interface-macos.jpg" INSIGHT_COMPACT_CAPTURE="$PWD/compact-context.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight panel resizing, symbol types and contextual help GUI' 'Insight language-aware Context links GUI' 'Insight legacy generated palette recovery GUI' 'Insight Python Context and tools GUI' 'Insight open window batch actions GUI' 'Insight escaped web search URLs' 'Insight native Search Web and Search Engines GUI' 'Insight shared AI profiles and parallel answer selection GUI' 'Insight native panel activation and focus commands GUI' 'Insight native code outlining and block browser GUI' 'Insight classic and macOS interface styles GUI' 'Insight macOS interface style startup restore GUI' 'Insight CSS visual themes GUI' 'Insight CSS visual theme restore GUI' 'Insight CSS theme panel override GUI' 'Insight CSS theme and Cyrillic font assets'
+          INSIGHT_APPEARANCE_CLASSIC_CAPTURE="$PWD/interface-classic.jpg" INSIGHT_APPEARANCE_MAC_CAPTURE="$PWD/interface-macos.jpg" INSIGHT_COMPACT_CAPTURE="$PWD/compact-context.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight panel resizing, symbol types and contextual help GUI' 'Insight language-aware Context links GUI' 'Insight legacy generated palette recovery GUI' 'Insight Python Context and tools GUI' 'Insight open window batch actions GUI' 'Insight escaped web search URLs' 'Insight native Search Web and Search Engines GUI' 'Insight shared AI profiles and parallel answer selection GUI' 'Insight native panel activation and focus commands GUI' 'Insight native Reload Modified Files guarded batches GUI' 'Insight native code outlining and block browser GUI' 'Insight classic and macOS interface styles GUI' 'Insight macOS interface style startup restore GUI' 'Insight CSS visual themes GUI' 'Insight CSS visual theme restore GUI' 'Insight CSS theme panel override GUI' 'Insight CSS theme and Cyrillic font assets'
           cp _native/meson-logs/testlog.txt compact-testlog.txt
       - name: Check SSH connection startup and failures
         run: |

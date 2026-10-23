@@ -427,3 +427,5 @@ libgeany_la_SOURCES += insight-outlining.c insight-outlining.h
 
 libgeany_la_SOURCES += insight-appearance.c insight-appearance.h
 libgeany_la_SOURCES += insight-tree-expand.c insight-tree-expand.h
+
+libgeany_la_SOURCES += insight-reload.c insight-reload.h
