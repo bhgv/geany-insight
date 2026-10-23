@@ -10,7 +10,7 @@
 
 Стиль интерфейса независим от **Визуальной темы** исходника. Он не изменяет Scintilla-шрифт, цвета синтаксиса, текст, выделение, сохранённое состояние и Undo. Можно сочетать светлую оболочку с тёмным исходником. Явные настройки «Шрифт и цвет» панели сохраняют приоритет. **Классический** убирает слой оформления и возвращает текущий GTK-вид без сброса цветовой темы и других настроек.
 
-Настройки находятся в `insight/interface-style.conf` каталога конфигурации. Сохранение атомарное; при ошибке записи прежний стиль остаётся активным. Начальный стиль — классический. CSS установлен в `styles/appearance-macos.css`; он ограничен классом `insight-macos` и не меняет системную GTK-тему. Окна оформляются при показе; фоновые таймеры для перерисовки не используются.
+Настройки находятся в `insight/interface-style.conf` каталога конфигурации. Сохранение атомарное; при ошибке записи прежний стиль остаётся активным. Начальный стиль нового профиля — macOS; ранее сохранённый выбор сохраняется. CSS установлен в `styles/appearance-macos.css`; он ограничен классом `insight-macos` и не меняет системную GTK-тему. Окна оформляются при показе; фоновые таймеры для перерисовки не используются.
 
 ## Реальный вид приложения
 
@@ -31,3 +31,25 @@
 ![Независимые окна](media/independent-windows.svg)
 
 В macOS вкладки используют подписи 9pt, минимальную высоту содержимого 16px, небольшое скругление, уменьшенные поля, ненавязчивые кнопки закрытия и светлый фон выбранной вкладки. Имя активного исходника остаётся жирным, неактивных — обычным. В классике сохраняется прежнее оформление вкладок.
+
+## Compact menus / Компактные меню
+
+Menu rows use a 16 px icon slot instead of the former 40 px reservation. Unknown
+commands have no placeholder icon; check/radio rows retain their native indicator.
+The native accelerator label and shortcuts stay intact. In macOS styles all ordinary
+rows use compact spacing, including Find Next, Find in Files and Replace. Menu width
+is determined by the longest label and shortcut, with a small icon/arrow allowance.
+Menus have a soft shadow and a layered blue/lilac gradient. Reduce transparency
+removes the material gradients and makes menus and chrome opaque; unticking restores
+the translucent layers immediately. Source text remains opaque. RGBA visuals are
+selected before new windows realize; desktop blending and outer shadows depend on
+the desktop compositor. No desktop blur or global fading of source text is used.
+
+Строки меню используют место под значок 16 px вместо прежних 40 px. Для неизвестных
+команд нет значка-заглушки; чекбоксы и радиокнопки используют собственный индикатор.
+Пункты «Найти следующее», «Найти в файлах» и «Заменить» имеют одинаковые компактные
+отступы. Ширина определяется самым длинным названием и сочетанием клавиш.
+Мягкая тень и голубовато-сиреневый градиент оформляют меню. «Уменьшить прозрачность»
+сразу убирает градиент материала и делает поверхности непрозрачными, снятие отметки
+возвращает слои. Исходник остаётся непрозрачным. Смешивание с рабочим столом и внешние
+тени зависят от композитора ОС; размытие рабочего стола не применяется.

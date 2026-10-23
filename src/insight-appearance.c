@@ -8,7 +8,7 @@
 #include <glib/gstdio.h>
 #include <string.h>
 typedef struct { GWeakRef widget; } Surface;
-static gboolean alive,macos,reduced,syncing,independent;
+static gboolean alive,macos=TRUE,reduced,syncing,independent;
 static GtkCssProvider *provider;
 static GPtrArray *surfaces;
 static GtkWidget *choices[2][4];
@@ -46,6 +46,9 @@ static void style_icons(GtkWidget *widget) {
  if(GTK_IS_CONTAINER(widget)) { GList *children=gtk_container_get_children(GTK_CONTAINER(widget));for(GList *p=children;p;p=p->next) style_icons(p->data);g_list_free(children); }
 }
 static void apply_surface(GtkWidget *widget) {
+ if(GTK_IS_WINDOW(widget) && !gtk_widget_get_realized(widget)) {
+  GdkVisual *visual=gdk_screen_get_rgba_visual(gtk_widget_get_screen(widget));if(visual) gtk_widget_set_visual(widget,visual);
+ }
  GtkStyleContext *style=gtk_widget_get_style_context(widget);
  if(macos) gtk_style_context_add_class(style,"insight-macos");else gtk_style_context_remove_class(style,"insight-macos");
  if(macos && reduced) gtk_style_context_add_class(style,"insight-solid");else gtk_style_context_remove_class(style,"insight-solid");
@@ -57,6 +60,7 @@ static void remember(GtkWidget *widget) {
  for(guint i=0;i<surfaces->len;) { Surface *s=g_ptr_array_index(surfaces,i);GtkWidget *old=g_weak_ref_get(&s->widget);if(!old) { g_ptr_array_remove_index(surfaces,i);continue; }if(old==widget) found=TRUE;g_object_unref(old);i++; }
  if(!found) { Surface *s=g_new0(Surface,1);g_weak_ref_init(&s->widget,widget);g_ptr_array_add(surfaces,s); }
  apply_surface(widget);style_icons(widget);
+ if(GTK_IS_MENU(widget)) { GtkWidget *popup=gtk_widget_get_toplevel(widget);if(GTK_IS_WINDOW(popup)) apply_surface(popup); }
 }
 static gboolean mapped(GSignalInvocationHint *hint,guint count,const GValue *values,gpointer data) {
  (void)hint;(void)data;if(alive && count) remember(g_value_get_object(&values[0]));return TRUE;
@@ -90,7 +94,7 @@ static void selected(GtkCheckMenuItem *item,gpointer data) {
  macos=next_mac;reduced=next_reduced;independent=next_independent;apply();
 }
 void insight_appearance_init(void) {
- if(alive) return;alive=TRUE;surfaces=g_ptr_array_new_with_free_func(surface_free);config=g_build_filename(app->configdir,"insight","interface-style.conf",NULL);
+ if(alive) return;alive=TRUE;macos=TRUE;surfaces=g_ptr_array_new_with_free_func(surface_free);config=g_build_filename(app->configdir,"insight","interface-style.conf",NULL);
  GKeyFile *key=g_key_file_new();GStatBuf info;
  if(!g_stat(config,&info) && info.st_size<=8192 && g_key_file_load_from_file(key,config,G_KEY_FILE_NONE,NULL) && g_key_file_get_integer(key,"interface","version",NULL)==1) { gchar *name=g_key_file_get_string(key,"interface","style",NULL);independent=!g_strcmp0(name,"macos-windows");macos=independent || !g_strcmp0(name,"macos");reduced=g_key_file_get_boolean(key,"interface","reduce-transparency",NULL);g_free(name); }
  g_key_file_unref(key);if(macos) { GError *error=NULL;if(!load_css(&error)) { macos=independent=FALSE;g_warning("Interface style ignored: %s",error ? error->message:"CSS unavailable");g_clear_error(&error); } }

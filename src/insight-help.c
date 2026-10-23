@@ -71,11 +71,14 @@ static const gchar *command_icon(const gchar *label) {
  if(strstr(label,"Redo")) return "edit-redo";
  if(strstr(label,"Script") || strstr(label,"command") || strstr(label,"Run")) return "system-run";
  if(strstr(label,"Preferences") || strstr(label,"Options")) return "preferences-system";
- return "applications-development";
+ return NULL;
 }
-static void menu_icon_space(GtkMenuItem *item,gint *size,gpointer data) { (void)item;(void)data;*size=MAX(*size,40); }
+static void menu_icon_space(GtkMenuItem *item,gint *size,gpointer data) { (void)item;(void)data;*size=MAX(*size,16); }
 static gboolean menu_icon_draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
- const gchar *id=data;cairo_save(cr);cairo_translate(cr,23,(gtk_widget_get_allocated_height(widget)-16)/2);
+ const gchar *id=data;GtkStyleContext *style=gtk_widget_get_style_context(widget);GtkBorder padding,border;
+ gtk_style_context_get_padding(style,gtk_widget_get_state_flags(widget),&padding);gtk_style_context_get_border(style,gtk_widget_get_state_flags(widget),&border);
+ gint x=gtk_widget_get_direction(widget)==GTK_TEXT_DIR_RTL ? gtk_widget_get_allocated_width(widget)-padding.right-border.right-16 : padding.left+border.left;
+ cairo_save(cr);cairo_translate(cr,x,(gtk_widget_get_allocated_height(widget)-16)/2);
  if(g_str_has_prefix(id,"layout-") || !strcmp(id,"media") || !strcmp(id,"manual") || !strcmp(id,"tutorial") || !strcmp(id,"bookmarks") || !strcmp(id,"diff") || !strcmp(id,"snippets") || !strcmp(id,"relations")) icon_draw(widget,cr,data);
  else { GdkPixbuf *pixbuf=gtk_icon_theme_load_icon(gtk_icon_theme_get_default(),id,16,GTK_ICON_LOOKUP_USE_BUILTIN,NULL);if(pixbuf) { gdk_cairo_set_source_pixbuf(cr,pixbuf,0,0);cairo_paint(cr);g_object_unref(pixbuf); } }
  cairo_restore(cr);return FALSE;
@@ -94,12 +97,12 @@ void insight_menu_icons(GtkWidget *menu) {
  for(GList *p=children;p;p=p->next) {
   GtkWidget *item=p->data;if(!GTK_IS_MENU_ITEM(item) || GTK_IS_SEPARATOR_MENU_ITEM(item)) continue;
   GtkWidget *submenu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(item));if(submenu) insight_menu_icons(submenu);
-  if(GTK_IS_MENU_BAR(menu) || g_object_get_data(G_OBJECT(item),"insight-icon-added")) continue;
+  if(GTK_IS_MENU_BAR(menu) || GTK_IS_CHECK_MENU_ITEM(item) || g_object_get_data(G_OBJECT(item),"insight-icon-added")) continue;
   const gchar *label=gtk_menu_item_get_label(GTK_MENU_ITEM(item));const gchar *id=command_icon(label ? label : "");
   /* Keep native GtkAccelLabel/accelerator association and the original action
    * widget intact. GtkImageMenuItem needs always-show-image on GTK themes. */
-  if(GTK_IS_IMAGE_MENU_ITEM(item)) { if(!gtk_image_menu_item_get_image(GTK_IMAGE_MENU_ITEM(item))) gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(item),insight_command_icon(id));gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(item),TRUE); }
-  else { /* Preserve GtkAccelLabel: Geany also reads labels for MRU sorting. */
+  if(GTK_IS_IMAGE_MENU_ITEM(item)) { if(!gtk_image_menu_item_get_image(GTK_IMAGE_MENU_ITEM(item)) && id) gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(item),insight_command_icon(id));if(gtk_image_menu_item_get_image(GTK_IMAGE_MENU_ITEM(item))) gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(item),TRUE); }
+  else if(id) { /* Preserve GtkAccelLabel: Geany also reads labels for MRU sorting. */
    g_object_set_data_full(G_OBJECT(item),"insight-menu-icon",g_strdup(id),g_free);g_signal_connect(item,"toggle-size-request",G_CALLBACK(menu_icon_space),NULL);g_signal_connect_after(item,"draw",G_CALLBACK(menu_icon_draw),g_object_get_data(G_OBJECT(item),"insight-menu-icon"));
   }
   g_object_set_data(G_OBJECT(item),"insight-icon-added",GINT_TO_POINTER(1));

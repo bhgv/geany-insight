@@ -908,3 +908,6 @@ test('Insight independent macOS windows startup GUI', macos_windows_gui_test, ti
 
 recording_gui_test = executable('test_insight_recording_gui', '../insight/tests/command_recording_gui_test.c', dependencies: test_deps)
 test('Insight native command recording GUI', recording_gui_test, timeout: 40, is_parallel: false)
+
+macos_menu_gui_test = executable('test_insight_macos_menu_gui', '../insight/tests/macos_menu_gui_test.c', dependencies: test_deps)
+test('Insight compact macOS menus and live materials GUI', macos_menu_gui_test, timeout: 40, is_parallel: false)
