@@ -422,3 +422,5 @@ geany_insight_askpass_LDFLAGS =
 if MINGW
 geany_insight_askpass_LDFLAGS += -mwindows -mms-bitfields
 endif
+
+libgeany_la_SOURCES += insight-outlining.c insight-outlining.h

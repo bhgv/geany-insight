@@ -889,3 +889,6 @@ test('Insight shared AI profiles and parallel answer selection GUI', ai_profiles
 
 panel_activation_gui_test = executable('test_insight_panel_activation_gui', '../insight/tests/panel_activation_gui_test.c', dependencies: test_deps)
 test('Insight native panel activation and focus commands GUI', panel_activation_gui_test, timeout: 35, is_parallel: false)
+
+outlining_gui_test = executable('test_insight_outlining_gui', '../insight/tests/outlining_gui_test.c', dependencies: test_deps)
+test('Insight native code outlining and block browser GUI', outlining_gui_test, timeout: 35, is_parallel: false)

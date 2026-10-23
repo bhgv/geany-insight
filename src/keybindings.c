@@ -35,6 +35,7 @@
 #include "insight-buffer-transfer.h"
 #include "insight-navigation.h"
 #include "insight-workbench.h"
+#include "insight-outlining.h"
 #include "insight-command-list.h"
 #include "insight-selection-search.h"
 #include "insight-word-highlights.h"
@@ -349,6 +350,8 @@ static void cb_func_insight(guint key_id)
     if (key_id == GEANY_KEYS_INSIGHT_ORIGINALCONTENTS) { insight_revisions_original();return; }
     if (key_id == GEANY_KEYS_INSIGHT_BACKTOGGLE) { navqueue_go_back_toggle();return; }
     if (key_id == GEANY_KEYS_INSIGHT_COMMANDBROWSER) { insight_command_browser_show();return; }
+    if (key_id == GEANY_KEYS_INSIGHT_CODEOUTLINE) { insight_outlining_command(7);return; }
+    if (key_id >= GEANY_KEYS_INSIGHT_EXPANDBLOCK && key_id <= GEANY_KEYS_INSIGHT_FOLDLEVEL) { GeanyDocument *target=document_get_current();if(DOC_VALID(target) && gtk_window_get_focus(GTK_WINDOW(main_widgets.window))==GTK_WIDGET(target->editor->sci)) insight_outlining_command(key_id-GEANY_KEYS_INSIGHT_EXPANDBLOCK);return; }
     if (key_id >= GEANY_KEYS_INSIGHT_ACTIVATEPROJECTFILES && key_id <= GEANY_KEYS_INSIGHT_ACTIVATEEDITOR) { insight_workbench_activate(key_id-GEANY_KEYS_INSIGHT_ACTIVATEPROJECTFILES);return; }
     if (key_id == GEANY_KEYS_INSIGHT_SEARCHWEB) { insight_web_search_command(0);return; }
     if (key_id == GEANY_KEYS_INSIGHT_SEARCHENGINES) { insight_web_search_command(1);return; }
@@ -873,6 +876,15 @@ static void init_default_kb(void)
         0, 0, "insight_restore_file", _("Restore File"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_ORIGINALCHANGES, cb_func_insight,
         0, 0, "insight_original_changes", _("Original Changes"), NULL);
+    group = keybindings_get_core_group(GEANY_KEY_GROUP_DOCUMENT);
+    add_kb(group, GEANY_KEYS_INSIGHT_EXPANDBLOCK, cb_func_insight, 0, 0, "insight_expandblock", _("Expand block"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_COLLAPSEBLOCK, cb_func_insight, 0, 0, "insight_collapseblock", _("Collapse block"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_EXPANDBRANCH, cb_func_insight, 0, 0, "insight_expandbranch", _("Expand branch"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_COLLAPSEBRANCH, cb_func_insight, 0, 0, "insight_collapsebranch", _("Collapse branch"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_EXPANDALLCODE, cb_func_insight, 0, 0, "insight_expandallcode", _("Expand all code"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_COLLAPSEALLCODE, cb_func_insight, 0, 0, "insight_collapseallcode", _("Collapse all code"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_FOLDLEVEL, cb_func_insight, 0, 0, "insight_foldlevel", _("Fold to level"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_CODEOUTLINE, cb_func_insight, 0, 0, "insight_codeoutline", _("Code outline"), NULL);
     group = keybindings_get_core_group(GEANY_KEY_GROUP_FOCUS);
     add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATEPROJECTFILES, cb_func_insight, 0, 0, "insight_activate_projectfiles", _("Activate Project File List"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_ACTIVATEFOLDERS, cb_func_insight, 0, 0, "insight_activate_folders", _("Activate Project Folder Browser"), NULL);

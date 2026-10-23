@@ -109,3 +109,5 @@ Replace Files also offers modal Replace/Skip/Remaining/Cancel review, F3/Shift+F
 [Shared AI Connections / Общие подключения ИИ](ai-connections.md) — shared profiles, optional key storage and parallel answer selection supersede the earlier single-connection setup.
 
 - [Panel activation / Активация панелей](panel-activation.md)
+
+- [Code outlining / Сворачивание кода](code-outlining.md)

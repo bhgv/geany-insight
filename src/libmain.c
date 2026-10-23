@@ -44,6 +44,7 @@
 #include "insight-workbench.h"
 #include "insight-word-highlights.h"
 #include "insight-web-search.h"
+#include "insight-outlining.h"
 #include "keybindings.h"
 #include "keyfile.h"
 #include "log.h"
@@ -1322,6 +1323,7 @@ static gboolean do_main_quit(void)
 	plugins_finalize();
 #endif
 
+	insight_outlining_finalize();
 	insight_web_search_finalize();
 	insight_word_highlights_finalize();
 	insight_workbench_finalize();

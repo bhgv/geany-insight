@@ -1843,3 +1843,22 @@ Activate File Search Bar	Активировать поиск в файле
 Activate Project Search Bar	Активировать поиск в проекте
 Activate Search Results	Активировать результаты поиска
 Activate Source Editor	Активировать редактор исходника
+Code outlining	Сворачивание кода
+Code outline	Список блоков
+Code outline…	Список блоков…
+Expand block	Развернуть блок
+Collapse block	Свернуть блок
+Expand branch	Развернуть ветку
+Collapse branch	Свернуть ветку
+Expand all code	Развернуть весь код
+Collapse all code	Свернуть весь код
+Fold to level	Свернуть до уровня
+Fold to level…	Свернуть до уровня…
+Expanded	Развёрнут
+Collapsed	Свёрнут
+Keep outer levels expanded; collapse deeper blocks	Оставить внешние уровни видимыми, свернуть вложенные блоки
+Source changed or switched; refresh the code outline	Исходник изменён или переключён; обновите список блоков
+Cannot capture code outline	Не удалось получить список блоков
+The active lexer provides no fold blocks	Текущий лексер не предоставляет блоков сворачивания
+Code outlining supports up to 2 MiB and 100000 lines	Сворачивание кода: предел 2 МиБ и 100000 строк
+Code outline limit reached: 5000 blocks or 256 levels	Достигнут предел списка: 5000 блоков или 256 уровней

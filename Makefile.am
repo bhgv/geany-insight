@@ -618,3 +618,7 @@ dist_insightdocmedia_DATA += insight/docs/media/diff-answer-tabs.svg
 EXTRA_DIST += insight/tests/panel_activation_gui_test.c
 insightdoc_DATA += insight/docs/panel-activation.md
 dist_insightdocmedia_DATA += insight/docs/media/panel-activation.svg
+
+EXTRA_DIST += insight/tests/outlining_gui_test.c
+insightdoc_DATA += insight/docs/code-outlining.md
+dist_insightdocmedia_DATA += insight/docs/media/code-outlining.svg

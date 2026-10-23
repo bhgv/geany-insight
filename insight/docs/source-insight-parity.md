@@ -740,3 +740,7 @@ Unified console/SSH/editor profile configuration; source selection, program help
 ### Panel activation commands (2026-10-23)
 
 Fifteen focus commands reveal/select panels, restore minimized floating windows and preserve queries. Appended unassigned Focus keybindings expose each in the command browser. Source Editor returns focus to the current source. No search dispatch or source edits. [Guide and diagram](panel-activation.md).
+
+### Code outlining and fold block browser (2026-10-23)
+
+Eight native lexer-based block/branch/file/depth/browser commands with unassigned Document bindings, View and editor menus. The modeless block list filters, sorts, navigates and copies bounded fold headers; identity/generation/language guards reject stale actions. Read-only sources supported; no semantic folding or source edits. [RU/EN guide and SVG](code-outlining.md).
