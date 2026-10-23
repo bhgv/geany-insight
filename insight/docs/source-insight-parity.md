@@ -760,3 +760,9 @@ Unknown commands no longer receive a generic development icon. Native check/radi
 ### Shared comparison chrome (2026-10-23)
 
 Comparison/Merge, Directory Compare, snapshot comparisons, Git History and editor AI use one GTK toolbar/page helper: 2/3 control scale, scrollable top tabs, 86 px pages and 1100×700 defaults. Saved user sizes remain respected. Directory controls are grouped by files, comparison, view/filter, operations and navigation; Ctrl+F reveals its page. Snapshot/Git navigation and AI request/files/connection/history controls use the same chrome. Native operation callbacks, read-only states, cancellation and source fonts remain independent. AI request pages remain usable during review locks. Native directory routing validation now compares real Directory and Diff/Merge control fonts and page dimensions.
+
+### Workspace command recordings and narrow File Symbols controls (2026-10-23)
+
+Command Recording gains per-workspace opt-in persistence through native global preferences and project saves. Project switches stop recording and isolate sequences; closing restores the global sequence, including memory-only state. Startup projects are restored explicitly after workbench initialization. Stored symbolic actions are checked against the same whitelist and size limits; malformed records are rejected wholesale, never replayed automatically. Disable/Clear remove steps on the next normal save. This closes recording persistence without claiming full application/macro-language recording or SI workspace binary compatibility. [Guide and SVG](command-recording.md).
+
+File Symbols search/mode/sort fields now have shrinkable text requisitions. Checkbox/count labels and native sort buttons ellipsize within the sidebar, preserving neighboring history, direction, paging and locate controls. GUI assertions cover actual narrow Russian panel allocations, including control right edges.

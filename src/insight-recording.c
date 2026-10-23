@@ -5,6 +5,8 @@
 #include "geanyobject.h"
 #include "keybindings.h"
 #include "main.h"
+#include "project.h"
+#include "utils.h"
 #include "sciwrappers.h"
 #include "ui_utils.h"
 #include "insight-completion.h"
@@ -35,6 +37,10 @@ static GPtrArray *actions;
 static guint recording_document, payload_bytes;
 static gboolean playing;
 static GtkWidget *items[5];
+static GtkWidget *remember_item;
+static gboolean remember, project_scope, syncing;
+static GKeyFile *global_recording;
+#define RECORD_GROUP "insight-command-recording"
 static const gchar *message_name(guint message)
 {
     switch(message) {
@@ -60,6 +66,82 @@ static void stop(void)
     if(doc) SEND(doc->editor->sci,SCI_STOPRECORD,0,0);
 }
 static void discard(void) { stop();g_ptr_array_set_size(actions,0);payload_bytes=0; }
+/* Persist symbolic, whitelisted messages only, never raw messages/pointers. */
+static void write_recording(GKeyFile *key,gboolean snapshot)
+{
+    g_key_file_remove_group(key,RECORD_GROUP,NULL);
+    g_key_file_set_integer(key,RECORD_GROUP,"version",1);
+    g_key_file_set_boolean(key,RECORD_GROUP,"remember",remember);
+    if((!remember && !snapshot) || !actions->len) return;
+    const gchar *commands[ACTION_LIMIT],*texts[ACTION_LIMIT];
+    for(guint i=0;i<actions->len;i++) {
+        RecordedAction *a=g_ptr_array_index(actions,i);commands[i]=message_name(a->message);texts[i]=a->text ? a->text:"";
+    }
+    g_key_file_set_string_list(key,RECORD_GROUP,"commands",commands,actions->len);
+    g_key_file_set_string_list(key,RECORD_GROUP,"texts",texts,actions->len);
+}
+static guint message_from_name(const gchar *name)
+{
+#define MATCH(m) if(!strcmp(name,#m)) return m;
+    MOVEMENTS(MATCH) EDITS(MATCH) MATCH(SCI_REPLACESEL)
+#undef MATCH
+    return 0;
+}
+static void read_recording(GKeyFile *key,gboolean snapshot)
+{
+    discard();remember=FALSE;
+    if(g_key_file_get_integer(key,RECORD_GROUP,"version",NULL)!=1) return;
+    remember=g_key_file_get_boolean(key,RECORD_GROUP,"remember",NULL);
+    if(!remember && !snapshot) return;
+    if(!g_key_file_has_key(key,RECORD_GROUP,"commands",NULL) && !g_key_file_has_key(key,RECORD_GROUP,"texts",NULL)) return;
+    gsize n=0,t=0;gchar **commands=g_key_file_get_string_list(key,RECORD_GROUP,"commands",&n,NULL),**texts=g_key_file_get_string_list(key,RECORD_GROUP,"texts",&t,NULL);
+    gboolean valid=commands && texts && n>0 && n==t && n<=ACTION_LIMIT;
+    for(gsize i=0;valid && i<n;i++) {
+        guint message=message_from_name(commands[i]);gsize length=strlen(texts[i]);
+        if(!message || length>TEXT_LIMIT-payload_bytes || !g_utf8_validate(texts[i],length,NULL) || (message!=SCI_REPLACESEL && length)) { valid=FALSE;break; }
+        RecordedAction *a=g_new0(RecordedAction,1);a->message=message;a->text=message==SCI_REPLACESEL ? g_strdup(texts[i]):NULL;g_ptr_array_add(actions,a);payload_bytes+=length;
+    }
+    g_strfreev(commands);g_strfreev(texts);
+    if(!valid) { discard();remember=FALSE;ui_set_statusbar(TRUE,"%s",insight_tr("Saved command recording rejected: unsupported format, action or limit")); }
+}
+static void copy_recording(GKeyFile *from,GKeyFile *to)
+{
+    g_key_file_remove_group(to,RECORD_GROUP,NULL);
+    gsize n=0;gchar **keys=g_key_file_get_keys(from,RECORD_GROUP,&n,NULL);
+    for(gsize i=0;i<n;i++) {
+        if(!g_key_file_get_boolean(from,RECORD_GROUP,"remember",NULL) && (!strcmp(keys[i],"commands") || !strcmp(keys[i],"texts"))) continue;
+        gchar *value=g_key_file_get_value(from,RECORD_GROUP,keys[i],NULL);g_key_file_set_value(to,RECORD_GROUP,keys[i],value);g_free(value);
+    }
+    g_strfreev(keys);
+}
+static void settings_saved(GObject *object,GKeyFile *key,gpointer data)
+{
+    (void)object;(void)data;
+    if(project_scope) copy_recording(global_recording,key);else write_recording(key,FALSE);
+}
+static void project_opened(GObject *object,GKeyFile *key,gpointer data)
+{
+    (void)object;(void)data;stop();
+    if(!project_scope) write_recording(global_recording,TRUE);
+    project_scope=TRUE;read_recording(key,FALSE);
+}
+static void project_saved(GObject *object,GKeyFile *key,gpointer data)
+{
+    (void)object;(void)data;
+    /* New projects have no project-open signal: retain the global recording
+     * separately, never silently copy its source text into a project file. */
+    if(!project_scope) { stop();write_recording(global_recording,TRUE);discard();remember=FALSE;project_scope=TRUE; }
+    write_recording(key,FALSE);
+}
+static void project_closed(GObject *object,gpointer data)
+{
+    (void)object;(void)data;if(!project_scope) return;
+    project_scope=FALSE;read_recording(global_recording,TRUE);
+}
+static void remember_toggled(GtkCheckMenuItem *item,gpointer data)
+{
+    (void)data;if(!syncing) remember=gtk_check_menu_item_get_active(item);
+}
 static void failed(void)
 {
     discard();ui_set_statusbar(TRUE,"%s",insight_tr("Recording discarded: unsupported action, target or limit"));
@@ -116,7 +198,7 @@ static void preview(void)
         insight_tr("Close"),GTK_RESPONSE_CLOSE,NULL);
     g_object_ref_sink(dialog);gtk_widget_set_name(dialog,"insight-recording-dialog");gtk_window_set_default_size(GTK_WINDOW(dialog),720,420);
     GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    GtkWidget *hint=gtk_label_new(insight_tr("Memory-only recording: relative native editor commands and literal input. Clipboard, application commands and mouse selections are not replayed. Start replaces the previous recording."));
+    GtkWidget *hint=gtk_label_new(insight_tr("Relative native editor commands and literal input. Start replaces the previous recording. Remember Recording saves literal source text in the current project file or global preferences; playback is always explicit."));
     gtk_label_set_line_wrap(GTK_LABEL(hint),TRUE);gtk_box_pack_start(GTK_BOX(box),hint,FALSE,FALSE,6);
     GtkListStore *store=gtk_list_store_new(3,G_TYPE_UINT,G_TYPE_STRING,G_TYPE_STRING);GtkWidget *tree=gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));gtk_widget_set_name(tree,"insight-recording-list");
     g_object_set_data(G_OBJECT(tree),"insight-no-i18n",GINT_TO_POINTER(1));const gchar *titles[]={"Step","Command","Text preview"};
@@ -148,10 +230,21 @@ static void shown(GtkWidget *menu,gpointer data)
     (void)menu;(void)data;gtk_widget_set_sensitive(items[0],!recording_document && ordinary(document_get_current()));
     gtk_widget_set_sensitive(items[1],recording_document!=0);gtk_widget_set_sensitive(items[2],actions->len && ordinary(document_get_current()));
     gtk_widget_set_sensitive(items[3],actions->len>0);gtk_widget_set_sensitive(items[4],actions->len || recording_document);
+    syncing=TRUE;gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(remember_item),remember);syncing=FALSE;
 }
 void insight_recording_init(GtkWidget *edit_menu)
 {
     if(actions) return;actions=g_ptr_array_new_with_free_func(action_free);
+    global_recording=g_key_file_new();
+    gchar *path=g_build_filename(app->configdir,"geany.conf",NULL);GKeyFile *key=g_key_file_new();g_key_file_load_from_file(key,path,G_KEY_FILE_NONE,NULL);read_recording(key,FALSE);g_key_file_unref(key);g_free(path);
+    /* Startup projects are loaded before the workbench/menu is initialized. */
+    if(app->project && app->project->file_name) {
+        path=utils_get_locale_from_utf8(app->project->file_name);key=g_key_file_new();g_key_file_load_from_file(key,path,G_KEY_FILE_NONE,NULL);project_opened(NULL,key,NULL);g_key_file_unref(key);g_free(path);
+    }
+    g_signal_connect(geany_object,"save-settings",G_CALLBACK(settings_saved),NULL);
+    g_signal_connect(geany_object,"project-open",G_CALLBACK(project_opened),NULL);
+    g_signal_connect(geany_object,"project-save",G_CALLBACK(project_saved),NULL);
+    g_signal_connect(geany_object,"project-close",G_CALLBACK(project_closed),NULL);
     g_signal_connect(geany_object,"document-activate",G_CALLBACK(changed_document),NULL);g_signal_connect(geany_object,"document-close",G_CALLBACK(closing_document),NULL);
     GtkWidget *parent=gtk_menu_item_new_with_label("Command Recording"),*menu=gtk_menu_new();gtk_menu_item_set_submenu(GTK_MENU_ITEM(parent),menu);
     const gchar *labels[]={"Start Recording","Stop Recording","Play Recording","Recorded Editor Commands…","Clear Recording"};
@@ -161,5 +254,8 @@ void insight_recording_init(GtkWidget *edit_menu)
         keybindings_attach_menu(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_RECORDSTART+i,items[i]);g_signal_connect(items[i],"activate",G_CALLBACK(activate),GUINT_TO_POINTER(i));gtk_menu_shell_append(GTK_MENU_SHELL(menu),items[i]);
     }
     GtkWidget *help=gtk_menu_item_new_with_label("Command Recording Help");g_signal_connect(help,"activate",G_CALLBACK(insight_help_show),"command-recording.md");gtk_menu_shell_append(GTK_MENU_SHELL(menu),help);
+    remember_item=gtk_check_menu_item_new_with_label("Remember Recording in Workspace");gtk_widget_set_name(remember_item,"insight-recording-remember");
+    gtk_widget_set_tooltip_text(remember_item,"Saves literal recorded text on the next normal project/preferences save. Disable to remove saved steps on the next save. Never plays automatically.");
+    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(remember_item),remember);g_signal_connect(remember_item,"toggled",G_CALLBACK(remember_toggled),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),remember_item);
     g_signal_connect(menu,"show",G_CALLBACK(shown),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(edit_menu),parent);gtk_widget_show_all(parent);
 }

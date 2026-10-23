@@ -1928,3 +1928,8 @@ AI files	Файлы ИИ
 AI connection	Подключение ИИ
 AI request history	История запросов ИИ
 AI review	Проверка ИИ
+
+Remember Recording in Workspace	Сохранять запись в рабочей области
+Saves literal recorded text on the next normal project/preferences save. Disable to remove saved steps on the next save. Never plays automatically.	Сохраняет буквальный текст записи при следующем штатном сохранении проекта или настроек. Выключение удалит сохранённые шаги при следующем сохранении. Автоматического повтора нет.
+Saved command recording rejected: unsupported format, action or limit	Сохранённая запись команд отклонена: неподдерживаемый формат, команда или превышение лимита
+Relative native editor commands and literal input. Start replaces the previous recording. Remember Recording saves literal source text in the current project file or global preferences; playback is always explicit.	Относительные команды редактора и буквальный ввод. Новая запись заменяет прежнюю. Опция сохранения записывает текст вставок в файл текущего проекта или общие настройки; повтор запускается только явно.

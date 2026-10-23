@@ -126,3 +126,5 @@ Native Linux application captured during the automated panel scenario:
 Function operations and exact selection duplication: [structural editing](structural-selection.md).
 
 [Symbol editing](structural-selection.md#paste-symbol-review-and-guarded-editing) — Copy/Cut/Duplicate definitions and Paste Symbol before a selected definition with guarded colored preview.
+
+Search, mode and sort controls shrink within the panel while neighboring buttons remain visible. Long labels are ellipsized.

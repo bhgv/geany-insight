@@ -126,3 +126,5 @@ See [the unified File Search and File Symbols interface](unified-file-tools.md).
 Copy/Cut/Duplicate Symbol and exact selection duplication: [structural editing](structural-selection.md).
 
 [Редактирование определений](structural-selection.md#дополнение-paste-symbol-и-редактирование-определений) — Copy/Cut/Duplicate и вставка перед символом с просмотром и проверками исходника.
+
+Поля поиска, выбора режима и сортировки сужаются внутри панели; соседние кнопки остаются видимыми. Длинные подписи сокращаются многоточием.

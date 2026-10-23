@@ -124,3 +124,5 @@ See [the unified File Search and File Symbols interface](unified-file-tools.md).
 ![Panel controls](../media/panel-windows.jpg)
 
 Операции с функциями и точное дублирование выделения: [структурное редактирование](structural-selection.md).
+
+Поля поиска, выбора режима и сортировки сужаются внутри панели; соседние кнопки остаются видимыми. Длинные подписи сокращаются многоточием.
