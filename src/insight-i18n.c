@@ -24,7 +24,13 @@ const gchar *insight_tr(const gchar *text) { if(!text) return NULL;const gchar *
 gboolean insight_i18n_is_applying(void) { return busy; }
 const gchar *insight_i18n_language(void) { return russian ? "ru" : "en"; }
 gchar *insight_i18n_printf(const gchar *format,...) { g_mutex_lock(&catalog_mutex);gchar *localized=g_strdup(insight_tr(format));g_mutex_unlock(&catalog_mutex);va_list args;va_start(args,format);gchar *value=g_strdup_vprintf(localized,args);va_end(args);g_free(localized);return value; }
-static gboolean excluded(GtkWidget *widget) { for(GtkWidget *p=widget;p;p=gtk_widget_get_parent(p)) if(g_object_get_data(G_OBJECT(p),"insight-no-i18n")) return TRUE;else if(main_widgets.notebook && gtk_widget_get_parent(p)==main_widgets.notebook && gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.notebook),p)<0) return TRUE;return FALSE; }
+static gboolean excluded(GtkWidget *widget) {
+ GtkWidget *top=gtk_widget_get_toplevel(widget);
+ /* Translate the source widget's tooltip-text, never GTK's private rendered
+  * tooltip labels while GTK is measuring/positioning the popup. */
+ if(GTK_IS_WINDOW(top) && (gtk_window_get_type_hint(GTK_WINDOW(top))==GDK_WINDOW_TYPE_HINT_TOOLTIP || !strcmp(G_OBJECT_TYPE_NAME(top),"GtkTooltipWindow"))) return TRUE;
+ for(GtkWidget *p=widget;p;p=gtk_widget_get_parent(p)) if(g_object_get_data(G_OBJECT(p),"insight-no-i18n")) return TRUE;else if(main_widgets.notebook && gtk_widget_get_parent(p)==main_widgets.notebook && gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.notebook),p)<0) return TRUE;return FALSE;
+}
 static void property(GObject *object,const gchar *name) {
  GParamSpec *spec=g_object_class_find_property(G_OBJECT_GET_CLASS(object),name);if(!spec || spec->value_type!=G_TYPE_STRING || !(spec->flags&G_PARAM_WRITABLE)) return;
  gchar *text=NULL;g_object_get(object,name,&text,NULL);if(text) {

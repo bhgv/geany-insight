@@ -15,6 +15,13 @@ static GtkWidget *choices[2][4];
 static guint menu_count,map_signal;
 static gulong map_hook;
 static gchar *config;
+/* GTK measures and positions tooltips before mapping their private window.
+ * Replacing its font/visual/icons from a global map hook invalidates that
+ * measurement and causes a second resize/repaint under the pointer. */
+static gboolean tooltip_surface(GtkWidget *widget) {
+ GtkWidget *top=gtk_widget_get_toplevel(widget);
+ return GTK_IS_WINDOW(top) && (gtk_window_get_type_hint(GTK_WINDOW(top))==GDK_WINDOW_TYPE_HINT_TOOLTIP || !strcmp(G_OBJECT_TYPE_NAME(top),"GtkTooltipWindow"));
+}
 static void surface_free(gpointer data) { Surface *s=data;g_weak_ref_clear(&s->widget);g_free(s); }
 typedef struct { gchar *name,*replacement;GtkIconSize size;gint pixels;gboolean stock; } OriginalIcon;
 static void icon_free(gpointer data) { OriginalIcon *icon=data;g_free(icon->name);g_free(icon->replacement);g_free(icon); }
@@ -46,6 +53,7 @@ static void style_icons(GtkWidget *widget) {
  if(GTK_IS_CONTAINER(widget)) { GList *children=gtk_container_get_children(GTK_CONTAINER(widget));for(GList *p=children;p;p=p->next) style_icons(p->data);g_list_free(children); }
 }
 static void apply_surface(GtkWidget *widget) {
+ if(tooltip_surface(widget)) return;
  /* Opaque editor windows retain their native visual and focus behavior.
   * Only composited popups need alpha for their rounded material and shadow. */
  if(GTK_IS_WINDOW(widget) && gtk_window_get_window_type(GTK_WINDOW(widget))==GTK_WINDOW_POPUP &&
@@ -57,6 +65,7 @@ static void apply_surface(GtkWidget *widget) {
  if(macos && reduced) gtk_style_context_add_class(style,"insight-solid");else gtk_style_context_remove_class(style,"insight-solid");
 }
 static void remember(GtkWidget *widget) {
+ if(tooltip_surface(widget)) return;
  if(GTK_IS_IMAGE(widget)) { style_icons(widget);return; }
  if(!GTK_IS_WINDOW(widget) && !GTK_IS_MENU(widget)) return;
  gboolean found=FALSE;

@@ -53,3 +53,5 @@ the desktop compositor. No desktop blur or global fading of source text is used.
 сразу убирает градиент материала и делает поверхности непрозрачными, снятие отметки
 возвращает слои. Исходник остаётся непрозрачным. Смешивание с рабочим столом и внешние
 тени зависят от композитора ОС; размытие рабочего стола не применяется.
+
+Tooltips retain native GTK styling and geometry. The application does not change their font, visual, icons or rendered labels during show/map; tooltip text is translated on the source control. Menus and ordinary windows retain the selected interface style.

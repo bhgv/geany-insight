@@ -6,12 +6,30 @@
 #include <string.h>
 static GtkWidget *window,*menu,*unknown,*check,*radio,*known,*native,*reduced;
 static guint phase,ticks;
+static GtkWidget *named(GtkWidget *w,const gchar *name);
+static GtkWidget *tip,*tip_label,*tip_icon,*tip_source;
+static GtkAllocation before[3];
+static guint tip_cycles,tip_wait;
+static void geometry(gboolean capture) {
+ GtkWidget *nodes[]={window,GTK_WIDGET(document_get_current()->editor->sci),named(window,"insight-context")};
+ for(guint i=0;i<3;i++) { g_assert_nonnull(nodes[i]);GtkAllocation a;gtk_widget_get_allocation(nodes[i],&a);if(capture) before[i]=a;else { g_assert_cmpint(a.x,==,before[i].x);g_assert_cmpint(a.y,==,before[i].y);g_assert_cmpint(a.width,==,before[i].width);g_assert_cmpint(a.height,==,before[i].height); } }
+}
 static GtkWidget *named(GtkWidget *w,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(w),name)) return w;
  if(GTK_IS_MENU_ITEM(w)) { GtkWidget *m=gtk_menu_item_get_submenu(GTK_MENU_ITEM(w));if(m) { GtkWidget *f=named(m,name);if(f) return f; } }
  if(GTK_IS_CONTAINER(w)) { GList *c=gtk_container_get_children(GTK_CONTAINER(w));GtkWidget *f=NULL;for(GList *p=c;p && !f;p=p->next) f=named(p->data,name);g_list_free(c);return f; }return NULL;
 }
 static gint height(GtkWidget *w) { gint minimum,natural;gtk_widget_get_preferred_height(w,&minimum,&natural);return natural; }
+static GtkWidget *native_tip(void) {
+ GList *list=gtk_window_list_toplevels();GtkWidget *found=NULL;for(GList *p=list;p;p=p->next) if(!strcmp(G_OBJECT_TYPE_NAME(p->data),"GtkTooltipWindow") && gtk_widget_get_mapped(p->data)) found=p->data;g_list_free(list);return found;
+}
+static void pointer_at(GtkWidget *widget) {
+ gint x,y,rx,ry;g_assert_true(gtk_widget_translate_coordinates(widget,window,gtk_widget_get_allocated_width(widget)/2,gtk_widget_get_allocated_height(widget)/2,&x,&y));gdk_window_get_origin(gtk_widget_get_window(window),&rx,&ry);
+ GdkDisplay *display=gtk_widget_get_display(window);GdkDevice *device=gdk_seat_get_pointer(gdk_display_get_default_seat(display));g_assert_nonnull(device);gdk_device_warp(device,gtk_widget_get_screen(window),rx+x,ry+y);gdk_display_sync(display);gtk_tooltip_trigger_tooltip_query(display);
+}
+static void native_tooltip_style(GtkWidget *widget) {
+ g_assert_false(gtk_style_context_has_class(gtk_widget_get_style_context(widget),"insight-macos"));g_assert_false(gtk_style_context_has_class(gtk_widget_get_style_context(widget),"insight-solid"));g_assert_null(g_object_get_data(G_OBJECT(widget),"insight-i18n-watched"));
+}
 static GdkRGBA background(GtkWidget *w) { GdkRGBA color;gtk_style_context_get_background_color(gtk_widget_get_style_context(w),GTK_STATE_FLAG_NORMAL,&color);return color; }
 static void popup(GtkWidget *m) {
  GdkEvent *event=gdk_event_new(GDK_BUTTON_PRESS);event->button.window=g_object_ref(gtk_widget_get_window(window));event->button.button=3;event->button.time=GDK_CURRENT_TIME;
@@ -53,7 +71,23 @@ static gboolean step(gpointer data) {
  }
  if(phase==4) {
   g_assert_cmpfloat(background(menu).alpha,<,1.0);gtk_menu_popdown(GTK_MENU(menu));gtk_widget_destroy(menu);
-  g_print("macOS menus: fresh default, no fallback/check/radio duplicate icons, native mixed-row compact geometry, constrained width, live translucent/opaque materials passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+  gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-ru")),TRUE);
+  tip_source=named(window,"insight-local-query-history");g_assert_nonnull(tip_source);gtk_widget_set_tooltip_text(tip_source,"Project files");gchar *translated=gtk_widget_get_tooltip_text(tip_source);g_assert_cmpstr(translated,==,"Файлы проекта");g_free(translated);phase++;return G_SOURCE_CONTINUE;
+ }
+ if(phase==5) {
+  geometry(TRUE);tip=gtk_window_new(GTK_WINDOW_POPUP);gtk_window_set_type_hint(GTK_WINDOW(tip),GDK_WINDOW_TYPE_HINT_TOOLTIP);GtkWidget *box=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,2);tip_label=gtk_label_new("Project files");tip_icon=gtk_image_new_from_icon_name("edit-copy",GTK_ICON_SIZE_DIALOG);gtk_container_add(GTK_CONTAINER(tip),box);gtk_box_pack_start(GTK_BOX(box),tip_label,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),tip_icon,FALSE,FALSE,0);gtk_widget_show_all(tip);phase++;return G_SOURCE_CONTINUE;
+ }
+ if(phase==6) {
+  native_tooltip_style(tip);native_tooltip_style(tip_label);g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(tip_label)),==,"Project files");const gchar *name=NULL;GtkIconSize size;gtk_image_get_icon_name(GTK_IMAGE(tip_icon),&name,&size);g_assert_cmpstr(name,==,"edit-copy");g_assert_cmpint(size,==,GTK_ICON_SIZE_DIALOG);geometry(FALSE);
+  if(++tip_cycles<4) { gtk_widget_hide(tip);gtk_widget_show_all(tip);return G_SOURCE_CONTINUE; }
+  gtk_widget_destroy(tip);tip=NULL;pointer_at(tip_source);phase++;return G_SOURCE_CONTINUE;
+ }
+ if(phase==7) {
+  GtkWidget *shown=native_tip();if(!shown) { if(++tip_wait>20) g_error("Native GTK tooltip did not appear");return G_SOURCE_CONTINUE; }
+  native_tooltip_style(shown);geometry(FALSE);pointer_at(GTK_WIDGET(doc->editor->sci));phase++;return G_SOURCE_CONTINUE;
+ }
+ if(phase==8) {
+  geometry(FALSE);g_print("macOS menus and tooltips: native mixed-row geometry/materials, translated source tooltip, repeated popup maps without font/icon/translation mutation, real GTK tooltip and stable editor/Context allocations passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }
  return G_SOURCE_CONTINUE;
 }
