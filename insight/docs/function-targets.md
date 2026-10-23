@@ -29,3 +29,13 @@ Opening either command requires a single normal selection in a buffer up to 2 Mi
 Refresh uses an index snapshot and updates tags for the current buffer. It does not initiate a full project rescan. Opening ordinary Symbol Info starts with All indexed symbols; counterpart buttons select the relevant category explicitly. Category choices are not stored in project configuration.
 
 Source Insight references: [Jump To Prototype](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Jump_To_Prototype.htm) and [Jump To Caller](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Jump_To_Caller.htm). Caller selection remains in the separate lexical Call sites Relations mode; this series adds declaration/implementation browsing, not semantic caller resolution.
+
+## Type command, shortcuts and query history
+
+**Jump To Base Type…** in Navigate and the editor menu captures the code identifier. When exactly one indexed declaration has a resolved nominal type, the chooser previews that type directly. Otherwise it keeps the declaration candidates: select one and use **Browse underlying nominal type**. Unknown, cyclic and ambiguous types are not guessed. This is tag-based browsing rather than local-expression or overload inference; **Jump** remains explicit and source-checked.
+
+Four configurable **Editor** keybindings are initially unassigned: Symbol Info, Jump To Prototype, Jump To Implementation and Jump To Base Type. Existing shortcut IDs are preserved.
+
+The window has independent **Back / Forward** query history (`Alt+Left / Alt+Right`) and **Previous / Next candidate** (`Alt+Up / Alt+Down`). Up to 64 queries retain category, preferred location and overload identity. History re-queries the current index and rereads the preview; it is not an old source snapshot and never navigates the source editor. New queries after Back discard the forward branch; Refresh and candidate changes preserve it. Candidate traversal stops at either end without wrapping. Empty/oversized queries are not recorded. Closing the window discards its history; nothing is saved in project settings. This query history is a usability extension rather than a claim of a matching Source Insight dialog.
+
+Reference: [Jump To Base Type](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Jump_To_Base_Type.htm).

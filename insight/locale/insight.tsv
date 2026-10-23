@@ -2044,3 +2044,10 @@ Function target lookup requires one normal selection in a buffer up to 2 MiB	Д�
 Place the caret on a function name in code	Поставьте курсор на имя функции в коде
 Jump To Prototype…	Перейти к прототипу…
 Jump To Implementation…	Перейти к реализации…
+Jump To Base Type…	Перейти к исходному типу…
+Previous symbol query (Alt+Left)	Предыдущий запрос символа (Alt+←)
+Next symbol query (Alt+Right)	Следующий запрос символа (Alt+→)
+Previous candidate (Alt+Up)	Предыдущий кандидат (Alt+↑)
+Next candidate (Alt+Down)	Следующий кандидат (Alt+↓)
+Select a declaration, then browse its underlying nominal type	Выберите объявление, затем просмотрите его исходный номинальный тип
+No unambiguous indexed nominal type; inspect or qualify the declaration	Однозначный индексированный тип не найден; просмотрите или уточните объявление

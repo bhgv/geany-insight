@@ -17,6 +17,8 @@ void insight_workbench_symbol_edit(guint action);
 /* Stable panel actions: project files/folders/symbols, relations, bookmarks, clips,
  * types, categories, file symbols, context, windows, file/project search, results, editor. */
 gboolean insight_workbench_activate(guint action);
+/* Symbol Info, prototype, implementation, nominal base type. */
+void insight_workbench_symbol_navigation(guint action);
 void insight_workbench_init(void);
 void insight_workbench_finalize(void);
 void insight_workbench_set_independent(gboolean active);

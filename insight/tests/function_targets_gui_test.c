@@ -18,10 +18,11 @@ static GtkWidget *button(GtkWidget *w,const gchar *label) { if(GTK_IS_BUTTON(w) 
 static void click(const gchar *name) { GtkWidget *w=named(info(),name);g_assert_nonnull(w);g_assert_true(gtk_widget_get_sensitive(w));gtk_button_clicked(GTK_BUTTON(w)); }
 static void refresh(void) { gtk_button_clicked(GTK_BUTTON(button(info(),"Refresh"))); }
 static guint count(void) { GtkWidget *w=info();if(!w) return 0;return gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(named(w,"insight-symbol-info-candidates"))),NULL); }
-static void query(const gchar *text,gint kind) { gtk_combo_box_set_active(GTK_COMBO_BOX(named(info(),"insight-symbol-info-kind")),kind);gtk_entry_set_text(GTK_ENTRY(named(info(),"insight-symbol-info-query")),text);refresh(); }
+static void query(const gchar *text,gint kind) { gtk_entry_set_text(GTK_ENTRY(named(info(),"insight-symbol-info-query")),text);gtk_combo_box_set_active(GTK_COMBO_BOX(named(info(),"insight-symbol-info-kind")),kind);refresh(); }
 static void command(const gchar *name) { GtkWidget *navigate=g_object_get_data(G_OBJECT(window),"insight-navigate");GtkWidget *item=named(gtk_menu_item_get_submenu(GTK_MENU_ITEM(navigate)),name);g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item)); }
 static void caret(const gchar *needle) { const gchar *at=strstr(code,needle);g_assert_nonnull(at);origin=(gint)(at-code);scintilla_send_message(source->editor->sci,SCI_SETSEL,origin,origin);gtk_widget_grab_focus(GTK_WIDGET(source->editor->sci)); }
 static void same_source(void) { g_assert_true(document_get_current()==source);g_assert_cmpint(sci_get_current_position(source->editor->sci),==,origin);gchar *text=sci_get_contents(source->editor->sci,-1);g_assert_cmpstr(text,==,code);g_free(text);g_assert_false(source->changed);g_assert_false(scintilla_send_message(source->editor->sci,SCI_CANUNDO,0,0)); }
+static void info_key(guint key) { GdkEventKey event={0};event.type=GDK_KEY_PRESS;event.keyval=key;event.state=GDK_MOD1_MASK;gboolean handled=FALSE;g_signal_emit_by_name(info(),"key-press-event",&event,&handled);g_assert_true(handled); }
 static void close_info(void) { if(info()) gtk_widget_destroy(info()); }
 static gboolean step(gpointer data) {
  (void)data;if(!window) { source=document_get_current();if(!source || g_strcmp0(source->file_name,cpp)) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));caret("work(3)");command("insight-jump-prototype-command");return G_SOURCE_CONTINUE; }
@@ -29,7 +30,11 @@ static gboolean step(gpointer data) {
   if(count()!=2) { refresh();return G_SOURCE_CONTINUE; }
   g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(named(info(),"insight-symbol-info-kind"))),==,1);g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(named(info(),"insight-symbol-info-count"))),==,"2 / 2");same_source();g_assert_null(document_find_by_filename(header));
   click("insight-symbol-info-implementation");g_assert_cmpuint(count(),==,2);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(info(),"insight-symbol-info-query"))),==,"api::work");same_source();
-  click("insight-symbol-info-prototype");g_assert_cmpuint(count(),==,2);same_source();query("work",0);g_assert_cmpuint(count(),==,4);query("work",2);g_assert_cmpuint(count(),==,2);phase++;
+  click("insight-symbol-info-prototype");g_assert_cmpuint(count(),==,2);same_source();
+  g_assert_false(gtk_widget_get_sensitive(named(info(),"insight-symbol-info-previous")));click("insight-symbol-info-next");g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(named(info(),"insight-symbol-info-candidates"))),==,1);g_assert_false(gtk_widget_get_sensitive(named(info(),"insight-symbol-info-next")));
+  query("missing_symbol",0);g_assert_cmpuint(count(),==,0);info_key(GDK_KEY_Left);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(info(),"insight-symbol-info-query"))),==,"api::work");g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(named(info(),"insight-symbol-info-kind"))),==,1);g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(named(info(),"insight-symbol-info-candidates"))),==,1);
+  info_key(GDK_KEY_Up);g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(named(info(),"insight-symbol-info-candidates"))),==,0);info_key(GDK_KEY_Down);g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(named(info(),"insight-symbol-info-candidates"))),==,1);
+  info_key(GDK_KEY_Right);g_assert_cmpuint(count(),==,0);info_key(GDK_KEY_Left);query("different_missing",0);g_assert_false(gtk_widget_get_sensitive(named(info(),"insight-symbol-info-forward")));same_source();query("work",0);g_assert_cmpuint(count(),==,4);query("work",2);g_assert_cmpuint(count(),==,2);phase++;
  } else if(phase==1) {
   query("overload",2);if(count()!=1) { refresh();return G_SOURCE_CONTINUE; }g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(named(info(),"insight-symbol-info-count"))),==,"1 / 1");same_source();
   query("overload",1);g_assert_cmpuint(count(),==,512);g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(named(info(),"insight-symbol-info-count"))),==,"512 / 600");same_source();
@@ -44,9 +49,16 @@ static gboolean step(gpointer data) {
   refresh();gtk_button_clicked(GTK_BUTTON(button(info(),"Jump")));g_assert_null(info());g_assert_cmpstr(document_get_current()->file_name,==,header);keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_GOTO_BACK);same_source();phase++;
  } else if(phase==4) {
   caret("work in comment");command("insight-jump-prototype-command");g_assert_null(info());same_source();caret("work\"");command("insight-jump-implementation-command");g_assert_null(info());same_source();
-  caret("work(3)");command("insight-jump-implementation-command");g_assert_cmpuint(count(),==,2);close_info();same_source();
-  command("insight-symbol-info-command");g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(named(info(),"insight-symbol-info-kind"))),==,0);close_info();same_source();
-  g_print("Function targets: prototype/implementation filters, scoped peers, language guard, filtering before 512 cap, counters, nominal alias/return links, cycles, stale-source refusal, jump/back and comment/string guards passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+  caret("work(3)");keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_JUMPIMPLEMENTATION);g_assert_cmpuint(count(),==,2);close_info();same_source();
+  keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_JUMPPROTOTYPE);g_assert_cmpuint(count(),==,2);close_info();same_source();
+  caret("make_cell()");keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_JUMPBASETYPE);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(info(),"insight-symbol-info-query"))),==,"api::Cell");g_assert_cmpuint(count(),==,1);click("insight-symbol-info-back");g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(info(),"insight-symbol-info-query"))),==,"make_cell");close_info();same_source();
+  caret("work(3)");command("insight-jump-base-type-command");g_assert_cmpuint(count(),==,4);g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(named(info(),"insight-symbol-info-status"))),"Select a declaration"));close_info();same_source();
+  keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_SYMBOLINFO);g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(named(info(),"insight-symbol-info-kind"))),==,0);same_source();
+  for(guint i=0;i<70;i++) { gchar *q=g_strdup_printf("missing_%03u",i);query(q,0);g_free(q); }
+  for(guint i=0;i<63;i++) click("insight-symbol-info-back");
+  g_assert_false(gtk_widget_get_sensitive(named(info(),"insight-symbol-info-back")));g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(info(),"insight-symbol-info-query"))),==,"missing_006");same_source();close_info();
+  command("insight-symbol-info-command");g_assert_false(gtk_widget_get_sensitive(named(info(),"insight-symbol-info-back")));g_assert_false(gtk_widget_get_sensitive(named(info(),"insight-symbol-info-forward")));close_info();same_source();
+  g_print("Function targets: prototype/implementation filters, scoped peers, language guard, filtering before 512 cap, counters, nominal alias/return links, cycles, stale-source refusal, jump/back, bounded query history, candidate keys, branch pruning, native shortcuts, base-type command and comment/string guards passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }
  return G_SOURCE_CONTINUE;
 }

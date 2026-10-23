@@ -800,3 +800,8 @@ Navigate and Relations context menus dispatch Print Relation Window to the exist
 ### Function targets and Symbol Info categories
 
 Navigate and editor-popup Jump To Prototype / Implementation open a category-filtered guarded Symbol Info chooser. Category filters include prototypes, implementations, types/namespaces and variables/members, with shown/matching counts. Source-language and kind eligibility apply before the 512-row presentation cap; raw queries above 16384 matches explicitly require qualification. Scoped counterpart buttons retain overloads for manual choice; the nominal-type link reuses the existing alias/return resolver and declines unknown/ambiguous/cyclic targets. Existing source-digest checks, preview and Jump/Back remain in use. This does not add semantic caller/overload resolution or automatic one-candidate jumps. [Guide and SVG](function-targets.md).
+
+
+### Symbol Info history, candidate traversal and nominal-type command
+
+Navigate/editor Jump To Base Type previews the resolved nominal target for a single declaration or retains an explicit declaration chooser when ambiguous. Four appended unassigned Editor bindings dispatch Symbol Info, prototype, implementation and base-type browsing. Independent per-window query history is bounded to 64 entries, retains category and overload identity, refreshes index/source on replay and prunes the forward branch on a new query. Alt+Left/Right traverse queries; Alt+Up/Down traverse candidates without wrapping. No automatic source jump, expression-type inference or persisted history. [Guide and diagram](function-targets.md).
