@@ -379,12 +379,13 @@ static void ai_execute(GtkWidget *widget,gpointer data) {
  (void)widget;ShellSession *s=data;if(!s->process) { session_status(s,"Connect this SSH session first");return; }gchar *command=insight_ai_suggested_command(s->chat);if(!command) { session_status(s,"Select a complete AI answer with a valid suggested command first");return; }
  g_queue_push_tail(&s->pending,g_strconcat(command,"\n",NULL));shell_flush(s);g_free(command);session_status(s,"Reviewed AI command sent to this SSH session");
 }
+static void ai_closed(GtkWidget *controller,gpointer data) { ShellSession *s=data;if(s->chat==controller) { g_object_remove_weak_pointer(G_OBJECT(controller),(gpointer *)&s->chat);s->chat=NULL; } }
 static void ai_console(GtkWidget *widget,gpointer data) {
  (void)widget;ShellSession *s=data ? data:remote_ui.selected;if(!s) return;gchar *context=session_context(s);
  if(!s->chat) {
   GtkWidget *body=gtk_box_new(GTK_ORIENTATION_VERTICAL,3),*row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3),*back=gtk_button_new_with_label("Terminal"),*run=gtk_button_new_with_label("Run reviewed command in this SSH session");
   gtk_box_pack_start(GTK_BOX(row),back,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(row),run,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(body),row,FALSE,FALSE,0);g_signal_connect(back,"clicked",G_CALLBACK(ai_back),s);g_signal_connect(run,"clicked",G_CALLBACK(ai_execute),s);gtk_widget_set_name(run,"insight-ssh-ai-run");
-  gtk_stack_add_named(GTK_STACK(s->stack),body,"assistant");s->chat=insight_ai_embed(body,"SSH assistant — connection, transfer, errors and local code",context,s->page,ai_insert,s);g_object_add_weak_pointer(G_OBJECT(s->chat),(gpointer *)&s->chat);g_object_set_data_full(G_OBJECT(s->chat),"insight-ssh-session-owner",session_ref(s),session_unref);gtk_widget_show_all(body);
+  gtk_stack_add_named(GTK_STACK(s->stack),body,"assistant");s->chat=insight_ai_embed(body,"SSH assistant — connection, transfer, errors and local code",context,s->page,ai_insert,s);g_object_add_weak_pointer(G_OBJECT(s->chat),(gpointer *)&s->chat);g_signal_connect(s->chat,"destroy",G_CALLBACK(ai_closed),s);g_object_set_data_full(G_OBJECT(s->chat),"insight-ssh-session-owner",session_ref(s),session_unref);gtk_widget_show_all(body);
  }else insight_ai_context_update(s->chat,context);
  g_free(context);gtk_stack_set_visible_child_name(GTK_STACK(s->stack),"assistant");gtk_notebook_set_current_page(GTK_NOTEBOOK(remote_ui.tabs),gtk_notebook_page_num(GTK_NOTEBOOK(remote_ui.tabs),s->page));
 }

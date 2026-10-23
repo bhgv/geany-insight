@@ -40,6 +40,7 @@ static gboolean step(gpointer data) {
   source=document_get_current();if(!source || g_strcmp0(source->file_name,path)) return G_SOURCE_CONTINUE;
   window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));
   GtkWidget *out=named(window,"insight-ssh-output");g_assert_nonnull(out);gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(out)),"source.c:1: error: expected ';' before end of input\n",-1);
+  GtkTextBuffer *diagnostic=gtk_text_view_get_buffer(GTK_TEXT_VIEW(out));GtkTextIter begin,end;gtk_text_buffer_get_bounds(diagnostic,&begin,&end);gtk_text_buffer_select_range(diagnostic,&begin,&end);click(window,"insight-ssh-open-diagnostic");g_assert_true(document_get_current()==source);g_assert_cmpint(sci_get_current_line(source->editor->sci),==,0);g_assert_cmpfloat(gtk_widget_get_opacity(named(window,"insight-ssh-ai")),==,0.8);
   click(window,"insight-ssh-ai");assistant=named(window,"insight-ai-window");g_assert_nonnull(assistant);
   gchar *context=text(assistant,"insight-ai-context");g_assert_nonnull(strstr(context,"source.c:1"));g_free(context);
   gtk_combo_box_set_active(GTK_COMBO_BOX(named(assistant,"insight-ai-provider")),4);entry(assistant,"insight-ai-endpoint",endpoint);entry(assistant,"insight-ai-model","mock-model");entry(assistant,"insight-ai-key","fixture-secret-key");click(assistant,"insight-ai-attach");chooser_action=1;click(assistant,"insight-ai-attach-files");entry(assistant,"insight-ai-question","Explain this compiler error and propose a correction.");click(assistant,"insight-ai-send");phase++;break;

@@ -71,3 +71,5 @@ Ai opens inside the selected SSH terminal. Connection, Context / source and Atta
 Generated files returned by the model (up to four, 256 KiB combined and within the overall answer limit) appear under Attachments → Save received file. Only validated bytes from the answer are saved, to a user-chosen path; nothing opens or runs automatically. Image and binary file-part support depends on the provider/model; provider errors remain visible.
 
 The list above the answer retains up to 32 answers in this session. Selecting one restores its text, suggested command and files; Diff uses the same explicitly attached source snapshot. Attaching/detaching source clears answer history. SSH Run reviewed command executes the selected suggestion only when clicked. The jump button next to terminal input opens a selected file:line diagnostic in an existing local source or SFTP cache.
+
+In embedded mode, AI settings / context / attachments starts folded to leave room for the answer and prompt in a short panel. Expand it to configure the connection, inspect context or use the paperclip.

@@ -1958,3 +1958,6 @@ Previous answers in this console (up to 32)	Предыдущие ответы в
 Open selected file:line diagnostic in local editor	Открыть выбранную диагностику файл:строка в локальном редакторе
 Attachment saved. Files are never opened or executed automatically.	Вложение сохранено. Файлы не открываются и не запускаются автоматически.
 Review and edit console context before Send. Only displayed context, conversation and explicitly attached code/files are uploaded.	Проверьте контекст перед отправкой. Отправляются только показанный контекст, история и явно приложенные исходники/файлы.
+
+AI settings / context / attachments	Настройки ИИ / контекст / вложения
+Code detached; displayed context and selected file attachments will be sent.	Исходник отключён; будут отправлены показанный контекст и выбранные файловые вложения.
