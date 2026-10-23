@@ -86,3 +86,5 @@ an external OS IME provider was not tested.
 прошедшего в составе 54 проверок; это не макеты. Обычный ввод проходит через
 GTK/Scintilla. Для IME использованы управляемые уведомления; внешний системный
 IME-провайдер не проверялся.
+
+[Command Recording / Запись команд](command-recording.md) — separate native editor command sequences.

@@ -1905,3 +1905,19 @@ Reload stopped after %u files: a buffer or disk file changed. Review the refresh
 macOS — Independent Windows	macOS — независимые окна
 Geany Insight — Menu and Tools	Geany Insight — меню и инструменты
 Cannot capture layout for independent windows	Не удалось сохранить компоновку для независимых окон
+Command Recording	Запись команд
+Start Recording	Начать запись
+Stop Recording	Остановить запись
+Play Recording	Воспроизвести запись
+Recorded Editor Commands…	Записанные команды редактора…
+Recorded Editor Commands	Записанные команды редактора
+Clear Recording	Очистить запись
+Command Recording Help	Справка по записи команд
+Step	Шаг
+Command	Команда
+Recording discarded: unsupported action, target or limit	Запись сброшена: неподдерживаемое действие, цель или превышен предел
+Recording played; one Undo restores edits	Запись воспроизведена; один Undo отменяет изменения
+Recording stopped at its work limit; completed edits can be undone	Повтор остановлен по пределу работы; выполненные изменения можно отменить
+Recording editor commands — Stop Recording finishes the sequence	Идёт запись команд редактора — завершите командой «Остановить запись»
+Editor recording stopped	Запись команд остановлена
+Memory-only recording: relative native editor commands and literal input. Clipboard, application commands and mouse selections are not replayed. Start replaces the previous recording.	Запись в памяти: относительные команды редактора и буквальный ввод. Буфер обмена, команды приложения и выделения мышью не воспроизводятся. Новая запись заменяет прежнюю.

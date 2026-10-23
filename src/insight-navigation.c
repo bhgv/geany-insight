@@ -8,6 +8,7 @@
 #include "insight-outlining.h"
 #include "insight-reload.h"
 #include "insight-typing.h"
+#include "insight-recording.h"
 #include "insight-revisions.h"
 #include "insight-backups.h"
 #include "insight-snapshot-compare.h"
@@ -587,6 +588,7 @@ void insight_navigation_menu(GtkWidget *menu)
     insight_web_search_init();
     insight_outlining_init();
     insight_typing_init(menu);
+    insight_recording_init(menu);
     insight_revisions_init(menu);
     insight_backups_init();
     insight_snapshot_compare_init();

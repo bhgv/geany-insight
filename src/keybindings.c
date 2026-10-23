@@ -42,6 +42,7 @@
 #include "insight-word-highlights.h"
 #include "insight-web-search.h"
 #include "insight-typing.h"
+#include "insight-recording.h"
 #include "insight-revisions.h"
 #include "insight-backups.h"
 #include "insight-snapshot-compare.h"
@@ -326,6 +327,7 @@ static void add_kb(GeanyKeyGroup *group, gsize key_id,
 
 static void cb_func_insight(guint key_id)
 {
+    if (key_id >= GEANY_KEYS_INSIGHT_RECORDSTART && key_id <= GEANY_KEYS_INSIGHT_RECORDCLEAR) { insight_recording_command(key_id-GEANY_KEYS_INSIGHT_RECORDSTART);return; }
     if (key_id >= GEANY_KEYS_INSIGHT_COPYSYMBOL && key_id <= GEANY_KEYS_INSIGHT_PASTESYMBOL) { insight_workbench_symbol_edit(key_id-GEANY_KEYS_INSIGHT_COPYSYMBOL);return; }
     if (key_id == GEANY_KEYS_INSIGHT_BUFFERTRANSFER) { insight_buffer_transfer_command();return; }
     if (key_id == GEANY_KEYS_INSIGHT_RENUMBER) { insight_paste_renumber();return; }
@@ -874,6 +876,16 @@ static void init_default_kb(void)
         0, 0, "insight_simpletab", _("Simple Tab"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_CLEARTYPING, cb_func_insight,
         0, 0, "insight_cleartyping", _("Clear Typing History"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_RECORDSTART, cb_func_insight,
+        0, 0, "insight_record_start", _("Start Recording"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_RECORDSTOP, cb_func_insight,
+        0, 0, "insight_record_stop", _("Stop Recording"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_RECORDPLAY, cb_func_insight,
+        0, 0, "insight_record_play", _("Play Recording"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_RECORDPREVIEW, cb_func_insight,
+        0, 0, "insight_record_preview", _("Recorded Editor Commands"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_RECORDCLEAR, cb_func_insight,
+        0, 0, "insight_record_clear", _("Clear Recording"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_RESTOREFILE, cb_func_insight,
         0, 0, "insight_restore_file", _("Restore File"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_ORIGINALCHANGES, cb_func_insight,

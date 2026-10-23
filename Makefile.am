@@ -635,3 +635,7 @@ EXTRA_DIST += insight/tests/reload_modified_gui_test.c
 
 EXTRA_DIST += insight/tests/macos_windows_gui_test.c
 dist_insightdocmedia_DATA += insight/docs/media/independent-windows.svg
+
+insightdoc_DATA += insight/docs/command-recording.md
+dist_insightdocmedia_DATA += insight/docs/media/command-recording.svg
+EXTRA_DIST += insight/tests/command_recording_gui_test.c

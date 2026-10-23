@@ -237,6 +237,7 @@ libgeany_la_SOURCES += \
 	insight-word-highlights.c insight-word-highlights.h \
 	insight-selection-search.c insight-selection-search.h \
 	insight-typing.c insight-typing.h \
+	insight-recording.c insight-recording.h \
 	insight-backups.c insight-backups.h \
 	insight-git-history.c insight-git-history.h \
 	insight-snapshot-compare.c insight-snapshot-compare.h \

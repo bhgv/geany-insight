@@ -748,3 +748,7 @@ Eight native lexer-based block/branch/file/depth/browser commands with unassigne
 ### Reload Modified Files: selected open-file review (2026-10-23)
 
 File menu and an unassigned Document shortcut inspect up to 128 open local files by timestamp/native change status. Clean modified rows are checked automatically; dirty buffers require explicit selection and confirmation. Refresh, select clean/none, copy paths, open source and read-only disk comparison support review. Whole-batch and per-file revalidation guard document identity, buffer hash/history/encoding/read-only state and disk metadata; partial completion is reported. Native reload controls Undo policy. No periodic polling, bytewise disk scan, Sharing setting or project reindex. [RU/EN guide and diagram](reload-modified.md).
+
+### Native editor command recording (2026-10-23)
+
+Edit → Command Recording adds Start/Stop/Play, an exact command inspector and Clear, plus five appended unassigned Editor shortcuts. Relative native movement/selection, literal UTF-8 input, deletions, duplication and case changes use the active source with one grouped Undo/Redo. Clipboard/search/absolute/unsupported macro messages invalidate the recording; mouse presses, document switch and close stop it; Undo/Redo invalidate it. Memory-only single recording, 256 actions / 64 KiB payload, 1 MiB document / 16 MiB conservative replay work. This is not SI's application-wide recorder, persistent workspace recording or macro language; generated/plugin edits are not reconstructed. [Scope and flow diagram](command-recording.md).
