@@ -114,7 +114,7 @@ static void preview(void)
 {
     stop();GtkWidget *dialog=gtk_dialog_new_with_buttons(insight_tr("Recorded Editor Commands"),GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,
         insight_tr("Close"),GTK_RESPONSE_CLOSE,NULL);
-    gtk_widget_set_name(dialog,"insight-recording-dialog");gtk_window_set_default_size(GTK_WINDOW(dialog),720,420);
+    g_object_ref_sink(dialog);gtk_widget_set_name(dialog,"insight-recording-dialog");gtk_window_set_default_size(GTK_WINDOW(dialog),720,420);
     GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     GtkWidget *hint=gtk_label_new(insight_tr("Memory-only recording: relative native editor commands and literal input. Clipboard, application commands and mouse selections are not replayed. Start replaces the previous recording."));
     gtk_label_set_line_wrap(GTK_LABEL(hint),TRUE);gtk_box_pack_start(GTK_BOX(box),hint,FALSE,FALSE,6);
@@ -126,7 +126,7 @@ static void preview(void)
         GtkTreeIter iter;gtk_list_store_append(store,&iter);gtk_list_store_set(store,&iter,0,i+1,1,message_name(a->message),2,excerpt,-1);g_free(excerpt);
     }
     GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),tree);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,4);g_object_unref(store);
-    gtk_widget_show_all(dialog);gtk_dialog_run(GTK_DIALOG(dialog));gtk_widget_destroy(dialog);
+    gtk_widget_show_all(dialog);gtk_dialog_run(GTK_DIALOG(dialog));gtk_widget_destroy(dialog);g_object_unref(dialog);
 }
 void insight_recording_command(guint action)
 {

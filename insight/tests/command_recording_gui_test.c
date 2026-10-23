@@ -6,6 +6,7 @@
 #include "sciwrappers.h"
 #include "ui_utils.h"
 #include <string.h>
+#include <gdk/gdkkeysyms.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 static GtkWidget *window;
 static GeanyDocument *doc;
@@ -17,6 +18,15 @@ static GtkWidget *named(GtkWidget *w,const gchar *name)
  if(GTK_IS_CONTAINER(w)) { GList *list=gtk_container_get_children(GTK_CONTAINER(w));GtkWidget *found=NULL;for(GList *p=list;p && !found;p=p->next) found=named(p->data,name);g_list_free(list);return found; }return NULL;
 }
 static void action(const gchar *suffix) { gchar *name=g_strconcat("insight-recording-",suffix,NULL);GtkWidget *item=named(window,name);g_free(name);g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item)); }
+/* Exercise ordinary input through the real GTK/Scintilla key handler. */
+static void typed(gunichar code)
+{
+ ScintillaObject *sci=doc->editor->sci;GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);event->key.window=g_object_ref(gtk_widget_get_window(GTK_WIDGET(sci)));event->key.send_event=TRUE;event->key.keyval=gdk_unicode_to_keyval(code);event->key.time=GDK_CURRENT_TIME;
+ gchar utf8[8]={0};event->key.length=g_unichar_to_utf8(code,utf8);event->key.string=g_strdup(utf8);
+ GdkKeymapKey *keys=NULL;gint count=0;if(gdk_keymap_get_entries_for_keyval(gdk_keymap_get_for_display(gtk_widget_get_display(GTK_WIDGET(sci))),event->key.keyval,&keys,&count) && count) { event->key.hardware_keycode=keys[0].keycode;event->key.group=keys[0].group; }g_free(keys);
+ GdkSeat *seat=gdk_display_get_default_seat(gtk_widget_get_display(GTK_WIDGET(sci)));if(seat) { GdkDevice *device=gdk_seat_get_keyboard(seat);if(device) gdk_event_set_device(event,device); }
+ gboolean handled=FALSE;g_signal_emit_by_name(sci,"key-press-event",&event->key,&handled);gdk_event_free(event);
+}
 static void text_is(const gchar *expected) { gchar *text=sci_get_contents(doc->editor->sci,-1);g_assert_cmpstr(text,==,expected);g_free(text); }
 static void reset(const gchar *text,gint caret) { ScintillaObject *sci=doc->editor->sci;SEND(sci,SCI_SETREADONLY,0,0);sci_set_text(sci,text);SEND(sci,SCI_SETSEL,caret,caret);SEND(sci,SCI_EMPTYUNDOBUFFER,0,0);gtk_widget_grab_focus(GTK_WIDGET(sci)); }
 static gboolean close_preview(gpointer data)
@@ -28,7 +38,7 @@ static void rows(guint count) { expected_rows=count;g_timeout_add(80,close_previ
 static gboolean run(gpointer data)
 {
  (void)data;doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;ScintillaObject *sci=doc->editor->sci;window=gtk_widget_get_toplevel(GTK_WIDGET(sci));
- reset("",0);action("start");SEND(sci,SCI_REPLACESEL,0,(sptr_t)"ab");SEND(sci,SCI_CHARLEFT,0,0);SEND(sci,SCI_REPLACESEL,0,(sptr_t)"x");action("stop");text_is("axb");rows(3);
+ reset("",0);action("start");typed('a');typed('b');SEND(sci,SCI_CHARLEFT,0,0);SEND(sci,SCI_REPLACESEL,0,(sptr_t)"x");action("stop");text_is("axb");rows(4);
  reset("12",1);gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),"sentinel",-1);action("play");text_is("1axb2");SEND(sci,SCI_UNDO,0,0);text_is("12");g_assert_false(SEND(sci,SCI_CANUNDO,0,0));SEND(sci,SCI_REDO,0,0);text_is("1axb2");
  gchar *clip=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));g_assert_cmpstr(clip,==,"sentinel");g_free(clip);
  reset("",0);keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_RECORDPLAY);text_is("axb");
