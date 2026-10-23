@@ -43,6 +43,9 @@ static gboolean step(gpointer unused) {
   if(ticks<8 || !any("insight-appearance-0-3")) return G_SOURCE_CONTINUE;
   for(guint i=0;i<4;i++) { gchar *name=g_strdup_printf("insight-appearance-0-%u",i);options[i]=any(name);g_free(name);g_assert_nonnull(options[i]); }
   left=any("insight-local-symbols");context=any("insight-context");project=any("insight-project-files");g_assert_nonnull(left);g_assert_nonnull(context);g_assert_nonnull(project);
+  GList *items=gtk_container_get_children(GTK_CONTAINER(ui_lookup_widget(window,"menu_view1_menu")));gboolean found=FALSE;
+  for(GList *p=items;p;p=p->next) if(GTK_IS_CHECK_MENU_ITEM(p->data) && !g_strcmp0(gtk_menu_item_get_label(GTK_MENU_ITEM(p->data)),"Overview")) { gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(p->data),TRUE);found=TRUE;break; }
+  g_list_free(items);g_assert_true(found);
   map=SCINTILLA(any("insight-overview-code"));g_assert_nonnull(map);original_size=SEND(doc->editor->sci,SCI_STYLEGETSIZEFRACTIONAL,STYLE_DEFAULT,0);
   icon=gtk_image_new_from_icon_name("document-open",GTK_ICON_SIZE_MENU);GtkToolItem *item=gtk_tool_button_new(icon,NULL);GtkWidget *toolbar=gtk_widget_get_ancestor(any("insight-find-tool"),GTK_TYPE_TOOLBAR);g_assert_true(GTK_IS_TOOLBAR(toolbar));gtk_toolbar_insert(GTK_TOOLBAR(toolbar),item,-1);gtk_widget_show_all(GTK_WIDGET(item));
   phase=restoring ? 5:1;return G_SOURCE_CONTINUE;
@@ -88,7 +91,6 @@ int main(void) {
  restoring=g_getenv("GEANY_TEST_INDEPENDENT_RESTORE")!=NULL;
  gchar *dir=g_dir_make_tmp("macos-windows-XXXXXX",NULL),*folder=g_build_filename(dir,"insight",NULL),*config=g_build_filename(dir,"geany.conf",NULL),*source=g_build_filename(dir,"source.c",NULL);
  g_assert_cmpint(g_mkdir_with_parents(folder,0700),==,0);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));g_assert_true(g_file_set_contents(source,"int main(void) { return 0; }\n",-1,NULL));
- gchar *workbench=g_build_filename(folder,"workbench.conf",NULL);g_assert_true(g_file_set_contents(workbench,"[workbench]\noverview-visibility-policy=1\noverview-visible=true\noverview-scale=10\n",-1,NULL));
  if(restoring) { gchar *style=g_build_filename(folder,"interface-style.conf",NULL);g_assert_true(g_file_set_contents(style,"[interface]\nversion=1\nstyle=macos-windows\n",-1,NULL));g_free(style); }
  gchar *args[]={"macos-windows","--new-instance","--no-session","--config",dir,source,NULL};g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);g_timeout_add(250,step,NULL);return main_lib(6,args);
 }
