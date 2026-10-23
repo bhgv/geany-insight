@@ -17,3 +17,17 @@ Settings are stored in `insight/interface-style.conf` under the configuration di
 [Real Classic and macOS-inspired captures are available in the successful Linux GUI run artifact](https://github.com/bhgv/geany-insight/actions/runs/39900274485/artifacts/12479155454), as `interface-classic.jpg` and `interface-macos.jpg`. They show the production GTK editor in an isolated Linux/Xvfb fixture with the same demo source and panel widths, not mockups or a native macOS run.
 
 Verified on Linux: [108 full-editor checks](https://github.com/bhgv/geany-insight/actions/runs/39900274485), including switching, saved startup state, failed-save rollback, future windows and independent code palette/font behavior. Autotools and GTK 3.22 / GLib 2.56 builds passed. Windows/macOS GUI was not run in this stage.
+
+## Compact menus and independent windows
+
+**View / Options → Interface style → macOS — Independent Windows** moves menu and toolbar into a separate top-level palette. File Symbols, Project and Context occupy three other GTK windows. Native source tabs remain in the original editor window, preserving document identity and keyboard handling; these are not MDI children. Existing panel Float/Dock and project-tab grouping controls remain available.
+
+Choosing normal macOS or Classic restores the pre-entry layout. Closing the tools palette also joins windows and selects normal macOS. Panel Close uses existing docking behavior. The style choice survives restart; entry arranges windows in the monitor work area. Positions are not a separately persisted workspace yet: use named Layouts for custom arrangements. This is an application palette, not an OS global menubar. Rebuilt native toolbars return to the palette.
+
+Menus explicitly reset GTK minimum row heights, margins and icon/check spacing, with 10pt UI type and compact padding. Font preference is SF Pro Text, Helvetica Neue, Inter, Segoe UI, Noto Sans, sans-serif, depending on installed families. Apple fonts and SF Symbols are not redistributed. Available themed symbolic icons replace corresponding named/stock icons at 16px; Classic restores originals. Bespoke application icons retain their artwork.
+
+New floating windows use GTK client-side headerbars with round close/minimize/maximize controls on the left, rounded decoration edges and soft CSS shadows. Outer frames and shadow visibility depend on the platform/window manager/compositor. Already realized editor windows retain their OS frame; no desktop blur is added. Source fonts, syntax palettes, selection and Undo are unchanged.
+
+![Independent application windows](../media/independent-windows.svg)
+
+macOS tabs use 9pt labels, 16px minimum tab content height, small rounded corners, reduced margins, unobtrusive close buttons and a light selected-tab surface. The active source filename remains bold; inactive filenames remain normal. Classic retains its previous tab styling.

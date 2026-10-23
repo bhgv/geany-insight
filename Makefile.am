@@ -632,3 +632,6 @@ dist_insightdocmedia_DATA += insight/docs/media/tree-expand.svg
 insightdoc_DATA += insight/docs/reload-modified.md
 dist_insightdocmedia_DATA += insight/docs/media/reload-modified.svg
 EXTRA_DIST += insight/tests/reload_modified_gui_test.c
+
+EXTRA_DIST += insight/tests/macos_windows_gui_test.c
+dist_insightdocmedia_DATA += insight/docs/media/independent-windows.svg

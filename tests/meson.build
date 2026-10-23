@@ -901,3 +901,7 @@ test('Insight bounded selected tree expansion GUI', tree_expand_test, timeout: 3
 
 reload_modified_gui_test = executable('test_insight_reload_modified_gui', '../insight/tests/reload_modified_gui_test.c', dependencies: test_deps)
 test('Insight native Reload Modified Files guarded batches GUI', reload_modified_gui_test, timeout: 50, is_parallel: false)
+
+macos_windows_gui_test = executable('test_insight_macos_windows_gui', '../insight/tests/macos_windows_gui_test.c', dependencies: test_deps)
+test('Insight independent macOS windows and minimap scale GUI', macos_windows_gui_test, timeout: 50, is_parallel: false)
+test('Insight independent macOS windows startup GUI', macos_windows_gui_test, timeout: 50, is_parallel: false, env: ['GEANY_TEST_INDEPENDENT_RESTORE=1'])

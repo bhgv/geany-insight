@@ -1902,3 +1902,6 @@ Reload %u selected files from disk?	Перечитать выбранные фа
 %u files contain unsaved edits. Reload replaces buffer contents. Undo history follows the native reload preference. No disk files are written.	Файлов с несохранёнными правками: %u. Перечитывание заменяет содержимое буфера. История Undo зависит от штатной настройки. Файлы на диск не записываются.
 Selected files reloaded	Выбранные файлы перечитаны
 Reload stopped after %u files: a buffer or disk file changed. Review the refreshed list.	Перечитывание остановлено после %u файлов: буфер или файл на диске изменился. Проверьте обновлённый список.
+macOS — Independent Windows	macOS — независимые окна
+Geany Insight — Menu and Tools	Geany Insight — меню и инструменты
+Cannot capture layout for independent windows	Не удалось сохранить компоновку для независимых окон

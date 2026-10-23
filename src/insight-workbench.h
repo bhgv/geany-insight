@@ -19,6 +19,8 @@ void insight_workbench_symbol_edit(guint action);
 gboolean insight_workbench_activate(guint action);
 void insight_workbench_init(void);
 void insight_workbench_finalize(void);
+void insight_workbench_set_independent(gboolean active);
+void insight_workbench_tools_changed(void);
 void insight_workbench_refresh(void);
 void insight_workbench_bookmarks_changed(void);
 void insight_workbench_editor_updated(gboolean);

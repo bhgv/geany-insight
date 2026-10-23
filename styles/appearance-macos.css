@@ -1,7 +1,7 @@
 /* macOS-inspired GTK 3.22 interface chrome. Code palettes/fonts remain independent.
  * RGBA surfaces blend within the window; no compositor-specific blur API is used. */
 .insight-macos {
-  font-family: "SF Pro Text", "Helvetica Neue", "Segoe UI", "Noto Sans", sans-serif;
+  font-family: "SF Pro Text", "Helvetica Neue", "Inter", "Segoe UI", "Noto Sans", sans-serif;
   font-size: 10pt;
   color: #253146;
 }
@@ -9,7 +9,7 @@
  * Inherited sizes retain the compact Diff toolbar and Context status ratios. */
 .insight-macos label, .insight-macos button, .insight-macos entry,
 .insight-macos treeview, .insight-macos menuitem {
-  font-family: "SF Pro Text", "Helvetica Neue", "Segoe UI", "Noto Sans", sans-serif;
+  font-family: "SF Pro Text", "Helvetica Neue", "Inter", "Segoe UI", "Noto Sans", sans-serif;
 }
 .insight-macos treeview { font-size: 10pt; }
 window.insight-macos.background {
@@ -58,16 +58,25 @@ window.insight-macos.background {
 .insight-macos entry:focus, .insight-macos spinbutton:focus { border-color: #5592f5; box-shadow: 0 0 0 2px rgba(52,120,246,0.16); }
 .insight-macos entry selection { background-color: #3478f6; color: white; }
 .insight-macos notebook > header {
-  background-color: rgba(236,240,247,0.82); background-image: none; border-color: rgba(80,95,120,0.17); padding: 2px;
+  background-color: rgba(236,240,247,0.82); background-image: none; border-color: rgba(80,95,120,0.17); padding: 0;
 }
 .insight-macos notebook > header > tabs > tab {
   background-image: none; background-color: transparent; border: 1px solid transparent;
-  border-radius: 7px; min-height: 18px; padding: 1px 7px; margin: 1px 2px; box-shadow: none; color: #657084;
+  border-radius: 5px; min-height: 16px; padding: 0 5px; margin: 1px; box-shadow: none; color: #657084;
 }
 .insight-macos notebook > header > tabs > tab:checked {
   background-color: rgba(255,255,255,0.94); border-color: rgba(110,125,150,0.22); color: #253146; box-shadow: 0 1px 2px rgba(40,55,80,0.08);
 }
 .insight-macos notebook > header > tabs > tab:hover { color: #1c63c8; }
+.insight-macos notebook > header > tabs > tab label { font-size: 9pt; padding: 0; margin: 0; }
+.insight-macos notebook > header > tabs > tab button {
+  min-height: 0; min-width: 0; padding: 0; margin: 0 0 0 3px;
+  border-color: transparent; border-radius: 4px; box-shadow: none; background-image: none; background-color: transparent;
+}
+.insight-macos notebook > header > tabs > tab button:hover { background-color: rgba(100,115,140,0.14); }
+.insight-macos notebook > header > tabs > arrow { min-height: 14px; min-width: 14px; padding: 0; margin: 0; }
+.insight-macos #geany-close-tab-button { padding: 0; margin: 0 0 0 3px; min-height: 0; min-width: 0; border: none; }
+
 .insight-macos treeview.view { background-color: rgba(249,250,253,0.80); color: #253146; border-color: rgba(90,110,140,0.12); }
 .insight-macos treeview.view:selected { background-color: #3478f6; color: white; }
 .insight-macos treeview.view:hover:not(:selected) { background-color: rgba(218,230,250,0.9); }
@@ -81,7 +90,20 @@ window.insight-macos.background {
 menu.insight-macos, .insight-macos menu, .insight-macos popover {
   background-color: rgba(250,251,254,0.97); color: #253146; border: 1px solid rgba(85,103,135,0.23); border-radius: 9px; padding: 4px;
 }
-.insight-macos menuitem { padding: 4px 8px; border-radius: 5px; }
+.insight-macos menuitem { min-height: 0; min-width: 0; padding: 2px 8px; margin: 0; border-width: 0; border-radius: 5px; }
+.insight-macos menuitem label, .insight-macos menuitem accelerator { min-height: 0; padding: 0; margin: 0; font-size: 10pt; }
+.insight-macos menuitem image { min-height: 0; min-width: 0; padding: 0; margin: 0; -gtk-icon-style: symbolic; }
+.insight-macos menuitem check, .insight-macos menuitem radio { min-height: 13px; min-width: 13px; margin: 0 5px 0 0; padding: 0; }
+.insight-macos menuitem arrow { min-height: 8px; min-width: 8px; }
+.insight-macos menu separator { min-height: 1px; padding: 0; margin: 3px 6px; background-color: rgba(90,105,125,0.2); }
+.insight-macos menubar > menuitem { padding: 2px 8px; }
+.insight-macos toolbar image, .insight-macos button image { -gtk-icon-style: symbolic; }
+.insight-macos decoration { border-radius: 12px 12px 10px 10px; box-shadow: 0 10px 28px rgba(25,35,55,0.28); border: 1px solid rgba(95,105,125,0.3); }
+.insight-macos headerbar { border-radius: 11px 11px 0 0; min-height: 24px; padding: 3px 7px; }
+.insight-macos headerbar button.titlebutton { background-image: none; border-radius: 8px; min-height: 13px; min-width: 13px; padding: 2px; margin: 0 2px; }
+.insight-macos headerbar button.close { background-color: #ff6058; border-color: #dd4943; color: #742724; }
+.insight-macos headerbar button.minimize { background-color: #ffbd2e; border-color: #d9a027; color: #735513; }
+.insight-macos headerbar button.maximize { background-color: #28c840; border-color: #20a735; color: #125b20; }
 .insight-macos menuitem:hover { background-color: #3478f6; color: white; }
 .insight-macos tooltip { background-color: #253146; color: white; border-radius: 6px; }
 /* Opaque material alternative; source editors were opaque in both variants. */

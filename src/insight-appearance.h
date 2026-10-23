@@ -5,4 +5,7 @@
 void insight_appearance_init(void);
 void insight_appearance_menu(GtkWidget *menu);
 void insight_appearance_finalize(void);
+gboolean insight_appearance_independent(void);
+void insight_appearance_join_windows(void);
+void insight_appearance_decorate(GtkWidget *window);
 #endif

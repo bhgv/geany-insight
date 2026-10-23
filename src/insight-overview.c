@@ -126,7 +126,15 @@ static void copy_styles(Overview *o,ScintillaObject *source) {
   SSM(o->map,SCI_STYLESETSIZEFRACTIONAL,style,MAX(100,SSM(source,SCI_STYLEGETSIZEFRACTIONAL,style,0)*scale/100));
   gint size=(gint)SSM(source,SCI_STYLEGETFONT,style,0); if(size>=0 && size<1024) { gchar *font=g_malloc0((gsize)size+1); SSM(source,SCI_STYLEGETFONT,style,(sptr_t)font); SSM(o->map,SCI_STYLESETFONT,style,(sptr_t)font); g_free(font); }
  }
+ SSM(o->map,SCI_SETZOOM,0,0);
  SSM(o->map,SCI_SETTABWIDTH,SSM(source,SCI_GETTABWIDTH,0,0),0);
+}
+/* Font refreshes can restyle this auxiliary editor after our initial copy. */
+static gboolean miniature_sizes_valid(Overview *o,ScintillaObject *source) {
+ if(SSM(o->map,SCI_GETZOOM,0,0)!=0) return FALSE;
+ for(gint style=0;style<=STYLE_MAX;style++)
+  if(SSM(o->map,SCI_STYLEGETSIZEFRACTIONAL,style,0)!=MAX(100,SSM(source,SCI_STYLEGETSIZEFRACTIONAL,style,0)*scale/100)) return FALSE;
+ return TRUE;
 }
 static gboolean overview_sync(gpointer data) {
  Overview *o=data; o->timer=0; GeanyDocument *doc=owner(o); if(!doc || !enabled || !gtk_widget_get_mapped(o->host)) return G_SOURCE_REMOVE;
@@ -141,7 +149,7 @@ static gboolean overview_sync(gpointer data) {
   SSM(o->map,SCI_SETFIRSTVISIBLELINE,old_top,0); g_free(text); o->dirty=FALSE; o->style_dirty=TRUE;
  }
  functions_start(o,doc);
- if(o->style_dirty || o->last_scale!=scale) { copy_styles(o,source); o->style_dirty=FALSE; o->last_scale=scale; }
+ if(o->style_dirty || o->last_scale!=scale || !miniature_sizes_valid(o,source)) { copy_styles(o,source); o->style_dirty=FALSE; o->last_scale=scale; }
  gint top=first_document_line(source),line=sci_get_current_line(source);
  if(!o->dragging && (top!=o->last_top || line!=o->last_line)) { gint rows=MAX(1,SSM(o->map,SCI_LINESONSCREEN,0,0)),visible=MAX(1,last_document_line(source)-top+1); gint start=MAX(0,top-MAX(0,rows-visible)/2); SSM(o->map,SCI_SETFIRSTVISIBLELINE,start,0); }
  o->last_top=top; o->last_line=line; gtk_widget_queue_draw(o->shade); return G_SOURCE_REMOVE;
@@ -212,7 +220,7 @@ static gboolean map_motion(GtkWidget *widget,GdkEventMotion *event,gpointer data
 static gboolean map_scroll(GtkWidget *widget,GdkEventScroll *event,gpointer data) {
  (void)widget; Overview *o=data; gdouble dx=0,dy=0;
  if(!gdk_event_get_scroll_deltas((GdkEvent *)event,&dx,&dy)) dy=event->direction==GDK_SCROLL_UP || event->direction==GDK_SCROLL_LEFT ? -1 : 1;
- if(event->state&GDK_CONTROL_MASK) { scale=CLAMP(scale+(dy<0 ? 5 : -5),5,100); o->last_scale=-1; queue_sync(o); }
+ if(event->state&GDK_CONTROL_MASK) { if(dy!=0) { scale=CLAMP(scale+(dy<0 ? 5 : -5),5,100);for(GList *p=overviews;p;p=p->next) { Overview *map=p->data;map->last_scale=-1;queue_sync(map); } } }
  else { SSM(o->map,SCI_LINESCROLL,0,(sptr_t)(dy*(event->state&GDK_SHIFT_MASK ? 100 : 10))); gtk_widget_queue_draw(o->shade); }
  return TRUE;
 }
@@ -226,10 +234,10 @@ static gboolean map_tooltip(GtkWidget *widget,gint x,gint y,gboolean keyboard,Gt
 static void pane_position(GObject *object,GParamSpec *spec,gpointer data) { (void)spec; Overview *o=data; gint total=gtk_widget_get_allocated_width(GTK_WIDGET(object)); if(o->positioned && enabled && gtk_widget_get_mapped(o->host) && total>400) width=CLAMP(total-gtk_paned_get_position(GTK_PANED(object)),40,400); }
 static void pane_allocated(GtkWidget *widget,GtkAllocation *allocation,gpointer data) { Overview *o=data; if(!o->positioned && allocation->width>width+100) { gtk_paned_set_position(GTK_PANED(widget),allocation->width-width); o->positioned=TRUE; } }
 static void overview_free(gpointer data) { Overview *o=data; if(o->timer) g_source_remove(o->timer); functions_invalidate(o); overviews=g_list_remove(overviews,o); g_free(o); }
-static void host_mapped(GtkWidget *widget,gpointer data) { (void)widget; Overview *o=data; o->last_top=-1; queue_sync(o); }
+static void host_mapped(GtkWidget *widget,gpointer data) { (void)widget; Overview *o=data; o->last_top=-1;o->style_dirty=TRUE; queue_sync(o); }
 GtkWidget *insight_overview_wrap(GeanyDocument *doc) {
  Overview *o=g_new0(Overview,1); o->id=doc->id; o->dirty=TRUE; o->functions_dirty=TRUE; o->last_top=o->last_line=o->last_scale=-1;
- o->pane=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL); o->host=gtk_overlay_new(); o->map=SCINTILLA(scintilla_new()); o->shade=gtk_drawing_area_new(); gtk_widget_set_name(o->shade,"insight-overview-markers");
+ o->pane=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL); o->host=gtk_overlay_new(); o->map=SCINTILLA(scintilla_new()); o->shade=gtk_drawing_area_new();gtk_widget_set_name(GTK_WIDGET(o->map),"insight-overview-code"); gtk_widget_set_name(o->shade,"insight-overview-markers");
  gtk_widget_set_direction(GTK_WIDGET(o->map),GTK_TEXT_DIR_LTR); gtk_widget_set_can_focus(GTK_WIDGET(o->map),FALSE); sci_set_codepage(o->map,SC_CP_UTF8); sci_use_popup(o->map,FALSE); sci_set_readonly(o->map,TRUE); SSM(o->map,SCI_SETHSCROLLBAR,FALSE,0); SSM(o->map,SCI_SETVSCROLLBAR,FALSE,0); SSM(o->map,SCI_SETWRAPMODE,SC_WRAP_NONE,0); SSM(o->map,SCI_SETCARETWIDTH,0,0); SSM(o->map,SCI_SETCURSOR,SC_CURSORARROW,0);
  for(guint i=0;i<5;i++) SSM(o->map,SCI_SETMARGINWIDTHN,i,0);
  gtk_drag_dest_unset(GTK_WIDGET(o->map)); gtk_container_add(GTK_CONTAINER(o->host),GTK_WIDGET(o->map)); gtk_overlay_add_overlay(GTK_OVERLAY(o->host),o->shade); gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(o->host),o->shade,TRUE); GtkWidget *help=insight_panel_help_button("panel-overview.md"); gtk_widget_set_halign(help,GTK_ALIGN_END); gtk_widget_set_valign(help,GTK_ALIGN_START); gtk_overlay_add_overlay(GTK_OVERLAY(o->host),help); gtk_widget_show_all(help); gtk_widget_set_size_request(o->host,40,-1);

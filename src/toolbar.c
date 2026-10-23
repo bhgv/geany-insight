@@ -28,6 +28,7 @@
 # include "config.h"
 #endif
 
+#include "insight-workbench.h"
 #include "toolbar.h"
 
 #include "app.h"
@@ -256,6 +257,7 @@ static GtkWidget *toolbar_reload(const gchar *markup)
 		gtk_box_reorder_child(GTK_BOX(box), main_widgets.toolbar, 1);
 	}
 	gtk_widget_show(main_widgets.toolbar);
+	insight_workbench_tools_changed();
 
 	/* re-add und unref the plugin toolbar items */
 	i = toolbar_get_insert_position();
