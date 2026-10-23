@@ -23,9 +23,11 @@ typedef struct {
     GRegex *regex;
     gchar *needle;
     guint rows;
+    guint64 clipboard_generation;
     gsize bytes;
     gboolean copy, backward, beginning, dirty;
 } ListJob;
+static guint64 clipboard_generation;
 struct ListTools {
     GtkTreeView *view;
     GtkWidget *dialog, *entry, *sensitive, *regex, *beginning, *wrap, *status;
@@ -110,6 +112,7 @@ static void advance(ListJob *j,GtkTreeIter *iter) {
 }
 static gboolean finish(ListTools *s,const gchar *error) {
     ListJob *j=s->job;s->idle=0;
+    if(!error && j->copy && j->clipboard_generation!=clipboard_generation) error="A newer Copy List command superseded this copy";
     if(!error && (j->dirty || gtk_tree_view_get_model(s->view)!=j->model || (!j->copy && !selection_same(j)))) error="List changed; run the command again";
     if(error) status(s,error);
     else if(j->copy) {
@@ -131,6 +134,7 @@ static gboolean finish(ListTools *s,const gchar *error) {
 }
 static gboolean scan(gpointer data) {
     ListTools *s=data;ListJob *j=s->job;gint64 deadline=g_get_monotonic_time()+3000;
+    if(j->copy && j->clipboard_generation!=clipboard_generation) return finish(s,"A newer Copy List command superseded this copy");
     if(j->dirty || gtk_tree_view_get_model(s->view)!=j->model || !gtk_widget_get_sensitive(GTK_WIDGET(s->view))) return finish(s,"List changed; run the command again");
     while(j->path) {
         if(j->rows>=MAX_ROWS || gtk_tree_path_get_depth(j->path)>64) return finish(s,"List exceeds 20000 rows or 64 levels; narrow the filter");
@@ -161,8 +165,9 @@ static gboolean scan(gpointer data) {
 }
 static void start(ListTools *s,gboolean copy,gboolean backward,gboolean beginning) {
     cancel(s);if(s->destroyed) return;
+    if(copy) clipboard_generation++;
     if(!gtk_widget_get_sensitive(GTK_WIDGET(s->view)) || !gtk_tree_view_get_model(s->view)) { status(s,"List is still loading; try again");return; }
-    ListJob *j=g_new0(ListJob,1);j->owner=s;j->copy=copy;j->backward=backward;j->beginning=beginning;j->output=g_string_new(NULL);j->model=g_object_ref(gtk_tree_view_get_model(s->view));
+    ListJob *j=g_new0(ListJob,1);j->owner=s;j->copy=copy;j->clipboard_generation=clipboard_generation;j->backward=backward;j->beginning=beginning;j->output=g_string_new(NULL);j->model=g_object_ref(gtk_tree_view_get_model(s->view));
     s->job=j;
     if(!copy) {
         if(!s->pattern || !*s->pattern || strlen(s->pattern)>512 || !g_utf8_validate(s->pattern,-1,NULL)) { finish(s,"Enter a list search pattern (up to 512 UTF-8 bytes)");return; }

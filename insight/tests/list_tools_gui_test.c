@@ -54,6 +54,9 @@ int main(int argc,char **argv) {
     /* A new job must discard an old partial copy, never publish stale text. */
     gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),"sentinel",-1);command(menu,"insight-list-copy");gtk_list_store_append(store,&iter);gtk_list_store_set(store,&iter,0,"late",1,"later.c",-1);settle(view);clipboard_is("sentinel");
     command(menu,"insight-list-copy");gtk_tree_view_column_set_visible(line,TRUE);settle(view);clipboard_is("sentinel");
+    GtkListStore *other_store=gtk_list_store_new(1,G_TYPE_STRING);GtkTreeIter other_iter;gtk_list_store_append(other_store,&other_iter);gtk_list_store_set(other_store,&other_iter,0,"newest",-1);
+    GtkWidget *other=gtk_tree_view_new_with_model(GTK_TREE_MODEL(other_store)),*other_menu=gtk_menu_new();g_object_ref_sink(other);g_object_ref_sink(other_menu);gtk_tree_view_append_column(GTK_TREE_VIEW(other),gtk_tree_view_column_new_with_attributes("Other",gtk_cell_renderer_text_new(),"text",0,NULL));insight_list_tools_menu(GTK_TREE_VIEW(other),other_menu);
+    command(menu,"insight-list-copy");command(other_menu,"insight-list-copy");settle(other);settle(view);clipboard_is("Other\nnewest\n");g_assert_nonnull(strstr(g_object_get_data(G_OBJECT(view),"insight-list-tools-status"),"superseded"));gtk_widget_destroy(other);g_object_unref(other);gtk_widget_destroy(other_menu);g_object_unref(other_menu);g_object_unref(other_store);gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),"sentinel",-1);
     search(view,d,"sample.c",FALSE,FALSE,TRUE,FALSE);gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_ACCEPT);gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)));settle(view);g_assert_null(selected(view));
     gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_ACCEPT);gtk_widget_destroy(d);settle(view);g_assert_null(selected(view));
     /* Work limits are atomic even when 20000 preceding rows were processed. */
