@@ -65,7 +65,7 @@ static void view_restore(Merge *m,GKeyFile *settings) {
  GtkWidget *controls[G_N_ELEMENTS(view_checks)];view_controls(m,controls);
  for(guint i=0;i<G_N_ELEMENTS(view_checks);i++) { GError *error=NULL;gboolean value=g_key_file_get_boolean(settings,view_group,view_checks[i],&error);if(!error) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(controls[i]),value);g_clear_error(&error); }
  const gchar *fields[]={"search-file","search-line","search-column","search-text"};for(guint i=0;i<4;i++) { GError *error=NULL;gboolean value=g_key_file_get_boolean(settings,view_group,fields[i],&error);if(!error) m->search_fields[i]=value;g_clear_error(&error); }
- gint value;if(view_integer(settings,"zoom",50,250,&value)) gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->zoom),value);gint width=1100,height=700;view_integer(settings,"width",640,4000,&width);view_integer(settings,"height",400,2400,&height);gtk_window_resize(GTK_WINDOW(m->window),width,height);
+ gint value;if(view_integer(settings,"zoom",50,250,&value)) gtk_spin_button_set_value(GTK_SPIN_BUTTON(m->zoom),value);gint width=INSIGHT_COMPARE_WIDTH,height=INSIGHT_COMPARE_HEIGHT;view_integer(settings,"width",640,4000,&width);view_integer(settings,"height",400,2400,&height);gtk_window_resize(GTK_WINDOW(m->window),width,height);
 }
 void insight_diff_read(GKeyFile *settings) { if(!view_defaults) view_defaults=g_key_file_new();view_copy(settings,view_defaults); }
 void insight_diff_write(GKeyFile *settings) { if(!view_defaults) view_defaults=g_key_file_new();if(open_compares) view_save(open_compares->data,view_defaults);view_copy(view_defaults,settings); }
@@ -1288,6 +1288,7 @@ GtkWidget *insight_diff_review_create(GtkWidget *parent,const gchar *before,cons
  m->review_tools=gtk_check_button_new_with_label("More comparison tools");gtk_widget_set_name(m->review_tools,"insight-diff-ai-tools");gtk_box_pack_start(GTK_BOX(panel),m->review_tools,FALSE,FALSE,0);
  GtkWidget *anchors[]={m->paths[0],m->paths[1],m->ignore_space,m->visible_space,m->find_regex,m->replace_entry,m->replace_scope};GPtrArray *rows=g_ptr_array_new_with_free_func(g_object_unref);
  for(guint i=0;i<G_N_ELEMENTS(anchors);i++) { GtkWidget *row=gtk_widget_get_parent(anchors[i]);g_ptr_array_add(rows,g_object_ref(row)); }
+ GtkWidget *review_page=toolbar_page(m,"AI review");move_widget(bar,review_page);move_widget(m->review_tools,review_page);gtk_widget_show_all(gtk_widget_get_ancestor(review_page,GTK_TYPE_SCROLLED_WINDOW));insight_compare_ui_reveal(m->apply);
  g_object_set_data_full(G_OBJECT(m->review_tools),"review-tool-rows",rows,(GDestroyNotify)g_ptr_array_unref);g_signal_connect(m->review_tools,"toggled",G_CALLBACK(review_tools),rows);gtk_widget_show(m->review_tools);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->numbers),TRUE);gtk_window_resize(GTK_WINDOW(m->window),INSIGHT_COMPARE_WIDTH,INSIGHT_COMPARE_HEIGHT);
  Comparison *job=g_new0(Comparison,1);job->text[0]=g_strdup(before);job->text[1]=g_strdup(after);m->cancel=g_cancellable_new();busy(m,TRUE);GTask *task=g_task_new(m->window,m->cancel,comparison_done,NULL);g_task_set_task_data(task,job,comparison_free);g_task_run_in_thread(task,comparison_worker);g_object_unref(task);
  return m->window;

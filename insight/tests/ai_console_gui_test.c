@@ -49,7 +49,8 @@ static gboolean step(gpointer data) {
  }
  case 2:
   if(g_get_monotonic_time()<after) { break; }
-  capture(assistant,"GEANY_CONSOLE_AI_CAPTURE");click(assistant,"insight-ai-review");diff=top("insight-diff-window");g_assert_nonnull(diff);phase++;break;
+  capture(assistant,"GEANY_CONSOLE_AI_CAPTURE");click(assistant,"insight-ai-review");diff=top("insight-diff-window");g_assert_nonnull(diff);
+  GtkWidget *tabs=named(diff,"insight-diff-toolbar-tabs");g_assert_true(gtk_widget_get_ancestor(named(diff,"insight-diff-ai-question"),GTK_TYPE_NOTEBOOK)==tabs);g_assert_true(gtk_widget_get_ancestor(named(diff,"insight-diff-ai-apply"),GTK_TYPE_NOTEBOOK)==tabs);phase++;break;
  case 3: {
   if(!gtk_widget_get_sensitive(named(diff,"insight-diff-ai-apply"))) break;
   gchar *left=text(diff,"insight-diff-left"),*right=text(diff,"insight-diff-right"),*explanation=text(diff,"insight-diff-ai-explanation");g_assert_cmpstr(left,==,base);g_assert_cmpstr(right,==,proposal);g_assert_nonnull(strstr(explanation,"Mock analysis"));g_free(left);g_free(right);g_free(explanation);
