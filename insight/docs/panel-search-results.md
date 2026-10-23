@@ -18,3 +18,5 @@ More: [tutorials.md](tutorials.md).
 Полная справка: [Режимы поиска/замены и языки запросов](search-replace.md).
 
 [Source Links](source-links.md)
+
+Background search refreshes (Follow, source edits and index updates) keep the selected message tab and leave closed Results closed. An explicit search or navigation to results still shows the tab.

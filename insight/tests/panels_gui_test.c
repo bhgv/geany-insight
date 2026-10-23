@@ -9,7 +9,7 @@
 
 #include <glib/gstdio.h>
 #include <string.h>
-static GtkWidget *window,*local,*project,*book,*split; static guint phase;static gboolean geometry_ready,valid_split;static gint saved_split; static gchar *directory,*profile,*source; static GtkListStore *base;
+static GtkWidget *window,*local,*project,*book,*split; static guint phase;static gboolean geometry_ready,valid_split;static gint saved_split,bottom_saved; static gchar *directory,*profile,*source; static GtkListStore *base;
 static GtkWidget *named(GtkWidget *root,const gchar *name) {
  if(!strcmp(gtk_widget_get_name(root),name)) return root;
  if(GTK_IS_MENU_ITEM(root)) { GtkWidget *menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(root));if(menu) { GtkWidget *found=named(menu,name);if(found) return found; } }
@@ -38,7 +38,14 @@ static void dump_notebooks(GtkWidget *widget) {
 }
 static GLogWriterOutput gtk_failure(GLogLevelFlags level,const GLogField *fields,gsize count,gpointer data) { (void)data;if(level&G_LOG_LEVEL_CRITICAL) { GList *windows=gtk_window_list_toplevels();for(GList *p=windows;p;p=p->next) dump_notebooks(p->data);g_list_free(windows); }return g_log_writer_default(level,fields,count,NULL); }
 
-static gboolean collapse_restored(gpointer data) { (void)data;GtkWidget *left=named(window,"insight-sidebar-width-host");g_assert_cmpint(gtk_widget_get_allocated_width(left),>=,170);g_assert_cmpint(gtk_paned_get_position(GTK_PANED(split)),==,saved_split);g_print("Both shelves collapse to a narrow strip and restore without moving source/Context beyond the left edge\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE; }
+static gboolean bottom_restored(gpointer data) {
+ (void)data;GtkWidget *pane=ui_lookup_widget(window,"vpaned1"),*host=named(window,"insight-message-height-host");g_assert_cmpint(gtk_paned_get_position(GTK_PANED(pane)),==,bottom_saved);g_assert_cmpint(gtk_widget_get_allocated_height(host),>,40);
+ g_print("Bottom shelf collapses to a strip and restores without underallocating notebook tabs\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+}
+static gboolean bottom_collapsed(gpointer data) {
+ (void)data;GtkWidget *pane=ui_lookup_widget(window,"vpaned1"),*host=named(window,"insight-message-height-host");g_assert_cmpint(gtk_widget_get_allocated_height(host),<=,24);gtk_paned_set_position(GTK_PANED(pane),bottom_saved);g_timeout_add(250,bottom_restored,NULL);return G_SOURCE_REMOVE;
+}
+static gboolean collapse_restored(gpointer data) { (void)data;GtkWidget *left=named(window,"insight-sidebar-width-host");g_assert_cmpint(gtk_widget_get_allocated_width(left),>=,170);g_assert_cmpint(gtk_paned_get_position(GTK_PANED(split)),==,saved_split);g_print("Both shelves collapse to a narrow strip and restore without moving source/Context beyond the left edge\n");GtkWidget *pane=ui_lookup_widget(window,"vpaned1");bottom_saved=gtk_paned_get_position(GTK_PANED(pane));gtk_paned_set_position(GTK_PANED(pane),gtk_widget_get_allocated_height(pane)-20);g_timeout_add(250,bottom_collapsed,NULL);return G_SOURCE_REMOVE; }
 static gboolean collapsed(gpointer data) {
  (void)data;GtkWidget *left=named(window,"insight-sidebar-width-host");g_assert_cmpint(gtk_widget_get_allocated_width(left),<=,40);g_assert_cmpint(gtk_widget_get_allocated_width(named(window,"insight-project-width-host")),<=,40);gint x,y;g_assert_true(gtk_widget_translate_coordinates(named(window,"insight-context"),window,0,0,&x,&y));g_assert_cmpint(x,>=,0);g_assert_true(gtk_widget_translate_coordinates(ui_lookup_widget(window,"notebook1"),window,0,0,&x,&y));g_assert_cmpint(x,>=,0);gtk_paned_set_position(GTK_PANED(ui_lookup_widget(window,"hpaned1")),180);gtk_paned_set_position(GTK_PANED(split),saved_split);g_timeout_add(250,collapse_restored,NULL);return G_SOURCE_REMOVE;
 }

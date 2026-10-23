@@ -1702,7 +1702,7 @@ static void usage_start(GtkWidget *widget,gpointer data) {
  if(mode==3) insight_search_links_clear(wb.search_links);
  wb.usage_existing=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,symbol_iter_queue_free); wb.usage_collecting=TRUE;
  wb.usage_iter_valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(wb.usage_target),&wb.usage_iter);
- if(mode==3) { gtk_entry_set_text(GTK_ENTRY(wb.project_query),query); insight_search_history_record(wb.search_history,query); save_search_settings(); focus_search_results(NULL,NULL); }
+ if(mode==3) { gtk_entry_set_text(GTK_ENTRY(wb.project_query),query); insight_search_history_record(wb.search_history,query); save_search_settings(); if(widget) focus_search_results(NULL,NULL); }
  wb.usage_name=g_strdup(query); wb.usage_position=wb.usage_shown=wb.usage_skipped=0;
  GHashTable *seen=g_hash_table_new(g_str_hash,g_str_equal);
  gint scope=mode==3 ? gtk_combo_box_get_active(GTK_COMBO_BOX(wb.search_scope)) : (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_buffer)) ? 2 : 0);
@@ -5386,7 +5386,7 @@ static void search_command_dialog(GtkWidget *widget,gpointer data) {
  if(response==GTK_RESPONSE_ACCEPT && *text) {
   wb.relation_setting=TRUE;gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_follow),FALSE);gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),3);gtk_entry_set_text(GTK_ENTRY(wb.usage_entry),text);gtk_entry_set_text(GTK_ENTRY(wb.search_mask),gtk_entry_get_text(GTK_ENTRY(d.mask)));gtk_combo_box_set_active(GTK_COMBO_BOX(wb.search_scope),scope);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_case),gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d.sensitive)));gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_word),method==3 || gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d.word)));gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_regex),method==1);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.search_keywords),method==2);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.search_variations),gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d.variations)));gtk_spin_button_set_value(GTK_SPIN_BUTTON(wb.search_context),gtk_spin_button_get_value(GTK_SPIN_BUTTON(d.context)));gtk_combo_box_set_active(GTK_COMBO_BOX(wb.search_region),comments);wb.relation_setting=FALSE;
-  gtk_widget_hide(d.dialog);if(scope==3 && !wb.search_files->len) search_choose_files(NULL,NULL);if(scope!=3 || wb.search_files->len) usage_start(NULL,NULL);
+  gtk_widget_hide(d.dialog);if(scope==3 && !wb.search_files->len) search_choose_files(NULL,NULL);if(scope!=3 || wb.search_files->len) { usage_start(NULL,NULL);focus_search_results(NULL,NULL); }
  }
  gtk_widget_destroy(d.dialog);g_ptr_array_unref(saved);g_strfreev(queries);g_key_file_unref(state);g_free(path);
 }
@@ -5561,13 +5561,13 @@ static void width_host_width(GtkWidget *widget,gint *minimum,gint *natural) {
  GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));gint ignored=0;*minimum=1;*natural=1;if(child && gtk_widget_get_visible(child)) gtk_widget_get_preferred_width(child,&ignored,natural);
 }
 static void width_host_height(GtkWidget *widget,gint *minimum,gint *natural) {
- GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));*minimum=*natural=0;if(child && gtk_widget_get_visible(child)) gtk_widget_get_preferred_height(child,minimum,natural);
+ GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));*minimum=*natural=0;if(child && gtk_widget_get_visible(child)) gtk_widget_get_preferred_height(child,minimum,natural);if(g_object_get_data(G_OBJECT(widget),"insight-collapse-height")) *minimum=1;
 }
 static void width_host_width_for_height(GtkWidget *widget,gint height,gint *minimum,gint *natural) {
- GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));gint ignored=0;*minimum=1;*natural=1;if(child && gtk_widget_get_visible(child)) gtk_widget_get_preferred_width_for_height(child,MAX(height,0),&ignored,natural);
+ GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));gint ignored=0;*minimum=1;*natural=1;if(child && gtk_widget_get_visible(child)) { gint child_height=0;if(g_object_get_data(G_OBJECT(widget),"insight-collapse-height")) gtk_widget_get_preferred_height(child,&child_height,NULL);gtk_widget_get_preferred_width_for_height(child,MAX(height,child_height),&ignored,natural); }
 }
 static void width_host_height_for_width(GtkWidget *widget,gint width,gint *minimum,gint *natural) {
- GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));*minimum=*natural=0;if(child && gtk_widget_get_visible(child)) { gint child_width=1;gtk_widget_get_preferred_width(child,&child_width,NULL);gtk_widget_get_preferred_height_for_width(child,MAX(width,child_width),minimum,natural); }
+ GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));*minimum=*natural=0;if(child && gtk_widget_get_visible(child)) { gint child_width=1;gtk_widget_get_preferred_width(child,&child_width,NULL);gtk_widget_get_preferred_height_for_width(child,MAX(width,child_width),minimum,natural); }if(g_object_get_data(G_OBJECT(widget),"insight-collapse-height")) *minimum=1;
 }
 static void width_host_allocate(GtkWidget *widget,GtkAllocation *allocation) {
  gtk_widget_set_allocation(widget,allocation);GtkWidget *child=gtk_bin_get_child(GTK_BIN(widget));if(child && gtk_widget_get_visible(child)) gtk_widget_size_allocate(child,allocation);
@@ -5713,8 +5713,11 @@ void insight_workbench_init(void) {
  gtk_container_remove(GTK_CONTAINER(left_split),editor_book);
  gtk_paned_pack1(GTK_PANED(existing),editor_book,TRUE,TRUE);
  GtkWidget *source_width_host=g_object_new(insight_width_host_get_type(),NULL);gtk_widget_set_name(source_width_host,"insight-source-width-host");gtk_container_add(GTK_CONTAINER(source_width_host),existing);gtk_paned_pack2(GTK_PANED(left_split),source_width_host,TRUE,TRUE);
- /* GTK notebooks cannot safely underallocate their vertical tab gadgets. */
- gtk_container_child_set(GTK_CONTAINER(existing),gtk_paned_get_child2(GTK_PANED(existing)),"shrink",FALSE,NULL);
+ /* Clip the message notebook at its native minimum instead of allocating
+  * its tabs/scrollbars an invalid height when the bottom shelf is collapsed. */
+ GtkWidget *messages=gtk_paned_get_child2(GTK_PANED(existing));g_object_ref(messages);gtk_container_remove(GTK_CONTAINER(existing),messages);
+ GtkWidget *message_host=narrow_panel_host(messages);gtk_widget_set_name(message_host,"insight-message-height-host");g_object_set_data(G_OBJECT(message_host),"insight-collapse-height",GINT_TO_POINTER(1));
+ gtk_paned_pack2(GTK_PANED(existing),message_host,FALSE,TRUE);g_object_bind_property(messages,"visible",message_host,"visible",G_BINDING_SYNC_CREATE);gtk_widget_show(message_host);g_object_unref(messages);
  g_object_unref(editor_book);g_object_unref(existing);
  wb.right_pane=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
  /* Wide editor/message controls must not collapse the Project pane. */

@@ -202,3 +202,5 @@ Old untouched generated profiles affected by the first-use inherited-lexer bug a
 The File Symbols shelf spans the full workspace height, matching the Project shelf on the right. The editor and Context share the central column. Moving their horizontal divider changes only the central column; sidebar widths remain independent.
 
 ![Full-height shelves](../media/full-height-shelves.svg)
+
+Drag the divider above the bottom shelf down to collapse it almost to a thin strip. Drag it up to restore the contents; tabs and controls are preserved.

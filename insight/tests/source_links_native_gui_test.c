@@ -11,7 +11,7 @@
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 static const gchar *source="// header\r\n// α needle one\r\n// needle two\r\n// tail\r\n";
 static const gchar *prefix="// inserted\r\n";
-static GtkWidget *window,*results;static gchar *file,*profile;static guint phase;static GeanyDocument *doc;
+static GtkWidget *window,*results,*results_page;static gint64 after;static gchar *file,*profile;static guint phase;static GeanyDocument *doc;
 static GtkWidget *named(GtkWidget *root,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;
  if(GTK_IS_MENU_ITEM(root)) { GtkWidget *sub=gtk_menu_item_get_submenu(GTK_MENU_ITEM(root)),*found=sub ? named(sub,name) : NULL;if(found) return found; }
@@ -63,7 +63,19 @@ static gboolean step(gpointer data) {
   command(1);doc=document_get_current();g_assert_cmpstr(doc->file_name,==,file);selected("needle");back_key();
   g_assert_true(document_close(doc));doc=NULL;gchar *saved=NULL;g_assert_true(g_file_get_contents(file,&saved,NULL,NULL));gchar *changed=g_strconcat("// external change\r\n",saved,NULL);g_assert_true(g_file_set_contents(file,changed,-1,NULL));g_free(saved);g_free(changed);
   command(1);doc=document_get_current();g_assert_cmpstr(doc->file_name,==,file);g_assert_cmpint(sci_get_selection_start(doc->editor->sci),==,sci_get_selection_end(doc->editor->sci));g_assert_false(doc->changed);
-  g_print("Source Links: bidirectional Ctrl+L, UTF-8/CRLF edits, undo/redo, sorting, row removal, Results-close/undo snapshot pairing, deleted-line refusal, fresh search, saved target reopening and changed-disk refusal passed.\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+  results_page=results;while(gtk_widget_get_parent(results_page)!=main_widgets.message_window_notebook) results_page=gtk_widget_get_parent(results_page);
+  gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),0);gchar *contents=sci_get_contents(doc->editor->sci,-1);gchar *word=strstr(contents,"needle");g_assert_nonnull(word);gint cursor=(gint)(word-contents)+1;SEND(doc->editor->sci,SCI_SETSEL,cursor,cursor);g_free(contents);document_grab_focus(doc);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(window,"insight-relations-follow")),TRUE);after=g_get_monotonic_time()+G_TIME_SPAN_SECOND;phase=3;return G_SOURCE_CONTINUE;
+ }
+ if(phase==3) {
+  if(g_get_monotonic_time()<after) return G_SOURCE_CONTINUE;
+  GtkNotebook *book=GTK_NOTEBOOK(main_widgets.message_window_notebook);g_assert_true(gtk_notebook_get_nth_page(book,gtk_notebook_get_current_page(book))!=results_page);g_assert_false(gtk_widget_has_focus(results));
+  gtk_button_clicked(GTK_BUTTON(close_button(window)));SEND(doc->editor->sci,SCI_INSERTTEXT,0,(sptr_t)"// background edit\n");after=g_get_monotonic_time()+G_TIME_SPAN_SECOND;phase=4;return G_SOURCE_CONTINUE;
+ }
+ if(phase==4) {
+  if(g_get_monotonic_time()<after) return G_SOURCE_CONTINUE;
+  g_assert_false(gtk_widget_get_visible(results_page));g_assert_false(gtk_widget_has_focus(results));document_set_text_changed(doc,FALSE);
+  g_print("Source links and background search: Follow/edits preserve the chosen message tab and closed Results stay closed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }
  return G_SOURCE_CONTINUE;
 }
