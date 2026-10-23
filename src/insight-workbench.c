@@ -1923,6 +1923,26 @@ static void relation_view_update(void) {
  }
  gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),tree ? (graph ? "treegraph" : "tree") : (graph ? "graph" : "list"));
 }
+/* Presentation changes deliberately do not dispatch usage_start: keep the
+ * current query, loaded branches, filter and selection intact. */
+static void relation_next_view(GtkWidget *widget,gpointer data) {
+ (void)widget;(void)data;if(!wb.relation_stack || !wb.relation_graph_toggle) return;
+ gboolean graph=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_graph_toggle));
+ gboolean tree=!g_strcmp0(gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack)),"treegraph");
+ gboolean vertical=FALSE;gint zoom=100;
+ insight_relation_graph_get_options(tree ? wb.relation_tree_graph : wb.relation_graph,&vertical,&zoom);
+ if(!graph) {
+  /* Read the displayed outline's graph settings before switching. */
+  gboolean outline_tree=!g_strcmp0(gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack)),"tree");
+  insight_relation_graph_get_options(outline_tree ? wb.relation_tree_graph : wb.relation_graph,NULL,&zoom);
+  insight_relation_graph_set_options(wb.relation_graph,FALSE,zoom);
+  insight_relation_graph_set_options(wb.relation_tree_graph,FALSE,zoom);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_graph_toggle),TRUE);
+ } else if(!vertical) {
+  insight_relation_graph_set_options(wb.relation_graph,TRUE,zoom);
+  insight_relation_graph_set_options(wb.relation_tree_graph,TRUE,zoom);
+ } else gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_graph_toggle),FALSE);
+}
 static void relation_graph_toggle(GtkToggleButton *button,gpointer data) { (void)button;(void)data;relation_view_update(); }
 static void relation_tree_toggle(GtkToggleButton *button,gpointer data) { (void)data;relation_view_update();if(!wb.relation_setting && gtk_toggle_button_get_active(button) && *gtk_entry_get_text(GTK_ENTRY(wb.usage_entry))) usage_start(NULL,NULL); }
 static void reference_region_changed(GtkWidget *widget,gpointer data) {
@@ -1988,6 +2008,7 @@ static void create_usage_browser(void) {
  wb.relation_graph=insight_relation_graph_new(GTK_TREE_VIEW(wb.usage_view),GTK_ENTRY(wb.usage_entry),USAGE_SYMBOL,USAGE_DISPLAY,USAGE_LINE);insight_relation_graph_set_query_handler(wb.relation_graph,relation_graph_query,NULL);insight_relation_graph_set_node_handler(wb.relation_graph,relation_node_action,NULL);gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_graph,"graph");gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"list");
  wb.relation_tree_graph=insight_relation_graph_new_tree(tree_view,GTK_ENTRY(wb.usage_entry),USAGE_SYMBOL,USAGE_DISPLAY,USAGE_LINE);insight_relation_graph_set_query_handler(wb.relation_tree_graph,relation_graph_query,NULL);insight_relation_graph_set_node_handler(wb.relation_tree_graph,relation_node_action,NULL);gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_tree_graph,"treegraph");
  wb.relation_graph_toggle=gtk_check_button_new_with_label("Graph view");gtk_widget_set_name(wb.relation_graph_toggle,"insight-relation-graph-toggle");gtk_box_pack_start(GTK_BOX(controls),wb.relation_graph_toggle,FALSE,FALSE,0);g_signal_connect(wb.relation_graph_toggle,"toggled",G_CALLBACK(relation_graph_toggle),NULL);
+ GtkWidget *next_view=gtk_button_new_from_icon_name("view-refresh-symbolic",GTK_ICON_SIZE_MENU);gtk_widget_set_name(next_view,"insight-relation-next-view");gtk_widget_set_tooltip_text(next_view,"Next Relation Window View");gtk_box_pack_start(GTK_BOX(controls),next_view,FALSE,FALSE,0);g_signal_connect(next_view,"clicked",G_CALLBACK(relation_next_view),NULL);
  gtk_box_pack_start(GTK_BOX(box),wb.usage_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_mode,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_transitive,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_follow,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_enclosing,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_code,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),wb.usage_comments,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_buffer,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),controls,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_status,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_filter_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),drill,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_stack,TRUE,TRUE,0);
  gtk_notebook_append_page(GTK_NOTEBOOK(wb.project_notebook),box,gtk_label_new("Relations"));
  g_signal_connect(search,"clicked",G_CALLBACK(usage_start),NULL); g_signal_connect(cancel,"clicked",G_CALLBACK(usage_cancel),NULL); g_signal_connect(wb.usage_entry,"activate",G_CALLBACK(usage_start),NULL);
@@ -5031,6 +5052,7 @@ static void create_workbench_menus(void) {
  GtkWidget *menubar=ui_lookup_widget(main_widgets.window,"menubar1"),*navigate=gtk_menu_item_new_with_mnemonic("_Navigate"),*menu=gtk_menu_new();
  gtk_menu_item_set_submenu(GTK_MENU_ITEM(navigate),menu); gtk_menu_shell_insert(GTK_MENU_SHELL(menubar),navigate,4);
  g_object_set_data(G_OBJECT(main_widgets.window),"insight-navigate",navigate);
+ GtkWidget *next_view_command=gtk_menu_item_new_with_label("Next Relation Window View");gtk_widget_set_name(next_view_command,"insight-relation-next-view-command");gtk_menu_shell_append(GTK_MENU_SHELL(menu),next_view_command);g_signal_connect(next_view_command,"activate",G_CALLBACK(relation_next_view),NULL);
  const gchar *relation_reports[]={"View Relation Outline…","Create Bookmarks from Relation Items…"};for(guint i=0;i<2;i++) { GtkWidget *item=gtk_menu_item_new_with_label(relation_reports[i]);gtk_widget_set_name(item,i ? "insight-relation-bookmark-command":"insight-relation-outline-command");gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(relation_report_show),GUINT_TO_POINTER(i)); }
 
  GtkWidget *diff_item=gtk_menu_item_new_with_label("Diff / Merge…");gtk_widget_set_name(diff_item,"insight-diff-menu");gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),diff_item);g_signal_connect(diff_item,"activate",G_CALLBACK(show_diff),NULL);gtk_widget_show(diff_item);

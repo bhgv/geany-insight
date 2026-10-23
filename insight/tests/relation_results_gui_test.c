@@ -47,15 +47,32 @@ static gboolean drive_open(gpointer data) {
 static GtkTreePath *middle;
 static gboolean find_middle(GtkTreeModel *m,GtkTreePath *p,GtkTreeIter *i,gpointer data) { (void)data;gchar *name=NULL;gtk_tree_model_get(m,i,7,&name,-1);gboolean found=!g_strcmp0(name,"Middle");g_free(name);if(found) middle=gtk_tree_path_copy(p);return found; }
 static gboolean has_end(GtkTreeModel *m,GtkTreePath *p,GtkTreeIter *i,gpointer data) { (void)p;gchar *name=NULL;gtk_tree_model_get(m,i,7,&name,-1);gboolean found=!g_strcmp0(name,"End");g_free(name);if(found) *(gboolean *)data=TRUE;return found; }
+static void cycle_views(gboolean tree_mode) {
+ GtkWidget *button=named(window,"insight-relation-next-view");
+ GtkWidget *direction=named(window,tree_mode ? "insight-relation-tree-graph-direction":"insight-relation-graph-direction");
+ GtkWidget *zoom=named(window,tree_mode ? "insight-relation-tree-graph-zoom":"insight-relation-graph-zoom");
+ GtkWidget *graph=named(window,"insight-relation-graph-toggle");
+ GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(tree_mode ? tree:flat));
+ gint count=gtk_tree_model_iter_n_children(model,NULL);
+ gtk_spin_button_set_value(GTK_SPIN_BUTTON(zoom),125);
+ for(guint i=0;i<6;i++) {
+  gtk_button_clicked(GTK_BUTTON(button));
+  g_assert_cmpint(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(graph)),==,i%3!=2);
+  if(i%3!=2) g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(direction)),==,i%3);
+  g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(zoom)),==,125);
+  g_assert_true(model==gtk_tree_view_get_model(GTK_TREE_VIEW(tree_mode ? tree:flat)));
+  g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,count);
+ }
+}
 static gboolean step(gpointer data) {
  (void)data;if(!window) { source_doc=document_get_current();if(!source_doc) return G_SOURCE_CONTINUE;source_doc=document_open_file(file,FALSE,NULL,NULL);window=gtk_widget_get_toplevel(GTK_WIDGET(source_doc->editor->sci));flat=named(window,"insight-relations");tree=named(window,"insight-relations-tree");g_assert_nonnull(flat);g_assert_nonnull(tree);toggle("insight-relations-follow",FALSE);gtk_entry_set_text(GTK_ENTRY(named(window,"insight-relation-query")),"Root");gtk_combo_box_set_active(GTK_COMBO_BOX(named(window,"insight-relation-mode")),5);return G_SOURCE_CONTINUE; }
  GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(flat));
- if(phase==0) { if(gtk_tree_model_iter_n_children(model,NULL)!=3) return G_SOURCE_CONTINUE;caret=sci_get_current_position(source_doc->editor->sci);anchor=scintilla_send_message(source_doc->editor->sci,SCI_GETANCHOR,0,0);filter("Other");open_report(1);filter("");phase++; }
+ if(phase==0) { if(gtk_tree_model_iter_n_children(model,NULL)!=3) return G_SOURCE_CONTINUE;caret=sci_get_current_position(source_doc->editor->sci);anchor=scintilla_send_message(source_doc->editor->sci,SCI_GETANCHOR,0,0);cycle_views(FALSE);filter("Other");open_report(1);filter("");phase++; }
  else if(phase==1) { if(gtk_tree_model_iter_n_children(model,NULL)!=3) return G_SOURCE_CONTINUE;open_report(2);wait_until=g_get_monotonic_time()+500000;phase++; }
  else if(phase==2) { if(g_get_monotonic_time()<wait_until) return G_SOURCE_CONTINUE;g_assert_cmpuint(bookmarks(),==,0);open_report(3);filter("");phase++; }
  else if(phase==3) { if(gtk_tree_model_iter_n_children(model,NULL)!=3) return G_SOURCE_CONTINUE;open_report(4);g_assert_null(document_find_by_filename(closed_file));toggle("insight-relation-tree-toggle",TRUE);phase++; }
  else if(phase==4) { gtk_tree_model_foreach(gtk_tree_view_get_model(GTK_TREE_VIEW(tree)),find_middle,NULL);if(!middle) return G_SOURCE_CONTINUE;gtk_tree_view_expand_row(GTK_TREE_VIEW(tree),middle,FALSE);gtk_tree_path_free(middle);middle=NULL;phase++; }
- else if(phase==5) { gboolean found=FALSE;gtk_tree_model_foreach(gtk_tree_view_get_model(GTK_TREE_VIEW(tree)),has_end,&found);if(!found) return G_SOURCE_CONTINUE;open_report(5);toggle("insight-relation-tree-toggle",FALSE);wait_until=g_get_monotonic_time()+G_TIME_SPAN_SECOND;phase++; }
+ else if(phase==5) { gboolean found=FALSE;gtk_tree_model_foreach(gtk_tree_view_get_model(GTK_TREE_VIEW(tree)),has_end,&found);if(!found) return G_SOURCE_CONTINUE;cycle_views(TRUE);open_report(5);toggle("insight-relation-tree-toggle",FALSE);wait_until=g_get_monotonic_time()+G_TIME_SPAN_SECOND;phase++; }
  else if(phase==6) {
   if(g_get_monotonic_time()<wait_until) return G_SOURCE_CONTINUE;
   GtkTreeModel *base=model;while(GTK_IS_TREE_MODEL_SORT(base) || GTK_IS_TREE_MODEL_FILTER(base)) base=GTK_IS_TREE_MODEL_SORT(base) ? gtk_tree_model_sort_get_model(GTK_TREE_MODEL_SORT(base)):gtk_tree_model_filter_get_model(GTK_TREE_MODEL_FILTER(base));g_assert_true(GTK_IS_LIST_STORE(base));for(guint i=0;i<65;i++) { GtkTreeIter row;gtk_list_store_append(GTK_LIST_STORE(base),&row);gtk_list_store_set(GTK_LIST_STORE(base),&row,0,file,1,file,2,(gulong)(100+i),7,"Overflow",-1); }open_report(6);

@@ -1982,3 +1982,4 @@ A source exceeds 2 MiB; no bookmarks were created	Исходник превыш�
 Source snapshots exceed 16 MiB; no bookmarks were created	Снимки исходников превышают 16 МиБ; закладки не созданы
 Source contains NUL or invalid UTF-8; no bookmarks were created	Исходник содержит NUL или некорректный UTF-8; закладки не созданы
 Bookmarks were not saved	Закладки не сохранены
+Next Relation Window View	Следующее представление окна связей

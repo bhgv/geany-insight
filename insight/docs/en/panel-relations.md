@@ -34,3 +34,6 @@ filter is saved for the next session. Selecting a result previews the original
 source in Context at its original position.
 
 [Relation outline snapshots and bookmark batches / Текстовое дерево и пакет закладок](relation-results.md).
+
+
+**Next Relation Window View**, in Navigate and beside the Relations view controls, cycles list/tree → horizontal graph → vertical graph → list/tree. It retains zoom, query, filter and loaded branches without launching a new search. The expandable-tree option independently selects the underlying outline.
