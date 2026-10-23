@@ -150,7 +150,7 @@ typedef struct {
  GtkCssProvider *css; GtkWidget *context_toggle;
  gboolean alive; guint64 scan_generation,usage_generation,definition_generation; guint definition_timer; GCancellable *scan_worker,*search_worker,*definition_worker,*snapshot_worker,*cache_worker,*preview_worker; guint64 preview_generation; guint64 index_generation,index_version; gint64 publish_due;
  InsightIndex *base,*index;
- gboolean info_parse_local,info_across_languages;
+ gboolean info_parse_local,info_across_languages;gint info_scope;
  InsightProjectFiles *membership; gchar *membership_project; gboolean membership_valid;InsightMasterSync *master_sync;guint64 membership_generation;
  GPtrArray *frames,*files,*scan_files,*scan_trees,*scan_members; gboolean scan_keep_files; GHashTable *scan_seen; guint scan_file_position,scan_tree_position; gchar *root,*cache_path; gchar *db_identity,*db_policy;GHashTable *file_stamps,*directory_stamps;InsightIndex *disk_calls,*disk_declarations,*scan_backup;gboolean force_parse,cache_validation;guint reused; guint scan,parsed,skipped;
  gchar *source_path,*source_digest; gulong source_line;
@@ -4770,7 +4770,7 @@ static void overview_visible(GtkCheckMenuItem *item,gpointer data) { (void)data;
 enum { INFO_NAME,INFO_PATH,INFO_LINE,INFO_KIND,INFO_SCOPE,INFO_SIGNATURE,INFO_TYPE,INFO_INHERITANCE,INFO_DISPLAY,INFO_COLUMNS };
 typedef struct { gchar *query,*path,*candidate;gulong line;gint kind; } InfoVisit;
 typedef struct {
- GtkWidget *window,*entry,*choice,*details,*code,*status,*jump,*references,*leave,*kind,*count,*prototype,*implementation,*base,*back,*forward,*previous,*next,*options,*parse_local,*across_languages;GtkListStore *model;
+ GtkWidget *window,*entry,*choice,*details,*code,*status,*jump,*references,*leave,*kind,*count,*prototype,*implementation,*base,*back,*forward,*previous,*next,*options,*parse_local,*across_languages,*scope;GtkListStore *model;GHashTable *sources;
  GPtrArray *visits;guint visit;gboolean replaying;
  gchar *path,*digest,*name,*preferred,*preferred_candidate,*base_name,*base_path;gulong line,preferred_line,base_line;gboolean filling;guint center;InsightIndex *index;
 } SymbolInfo;
@@ -4815,9 +4815,10 @@ static void info_history_step(GtkWidget *widget,gpointer data) {
 }
 static void info_options_changed(GtkToggleButton *button,gpointer data) {
  (void)button;SymbolInfo *info=data;if(info->filling) return;
- wb.info_parse_local=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(info->parse_local));wb.info_across_languages=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(info->across_languages));
+ wb.info_parse_local=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(info->parse_local));wb.info_across_languages=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(info->across_languages));wb.info_scope=gtk_combo_box_get_active(GTK_COMBO_BOX(info->scope));
  save_workbench_settings();info_search(NULL,info);
 }
+static void info_scope_changed(GtkComboBox *combo,gpointer data) { (void)combo;info_options_changed(NULL,data); }
 static void info_candidate_step(GtkWidget *widget,gpointer data) {
  SymbolInfo *info=data;gint delta=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget),"insight-info-delta")),active=gtk_combo_box_get_active(GTK_COMBO_BOX(info->choice)),count=gtk_tree_model_iter_n_children(GTK_TREE_MODEL(info->model),NULL);
  if(active>=0 && active+delta>=0 && active+delta<count) gtk_combo_box_set_active(GTK_COMBO_BOX(info->choice),active+delta);
@@ -4854,7 +4855,7 @@ static void info_choice(GtkComboBox *combo,gpointer data) {
   gboolean callable=!strcmp(kind,"f") || !strcmp(kind,"p") || (!strcmp(kind,"m") && *signature);
   InsightTypeResult resolved=callable && member_calls_language(filetype) ? insight_type_resolve_return(info->index,&declaration,scope_language_eligible,&language) : insight_type_resolve(info->index,type,scope,info->path,scope_language_eligible,&language);
   if(resolved.status==INSIGHT_TYPE_FOUND) { gchar *line=insight_i18n_printf("\nNominal type: %s (alias hops: %u)",resolved.owner,resolved.aliases);g_string_append(description,line);g_free(line); }
-  if(resolved.status==INSIGHT_TYPE_FOUND && resolved.symbol) { info->base_name=g_strdup(resolved.owner);info->base_path=g_strdup(resolved.symbol->path);info->base_line=resolved.symbol->line;gtk_widget_set_sensitive(info->base,TRUE); }
+  if(resolved.status==INSIGHT_TYPE_FOUND && resolved.symbol && info->sources && g_hash_table_contains(info->sources,resolved.symbol->path)) { info->base_name=g_strdup(resolved.owner);info->base_path=g_strdup(resolved.symbol->path);info->base_line=resolved.symbol->line;gtk_widget_set_sensitive(info->base,TRUE); }
   insight_type_result_clear(&resolved);
  }
  highlighting_set_styles(code,filetype ? filetype : filetypes[GEANY_FILETYPES_NONE]);sci_set_readonly(code,FALSE);sci_set_text(code,text ? text : "");sci_set_line_numbers(code,TRUE);SSM(code,SCI_EMPTYUNDOBUFFER,0,0);sci_set_readonly(code,TRUE);
@@ -4909,7 +4910,7 @@ static gboolean info_kind_matches(const InsightSymbol *symbol,gint category,Gean
 /* Definitions in the shared Relations API use short names. Symbol Info also
  * accepts exact qualified owners; use sorted leaf lookup and exact scope so
  * unrelated namespaces never become counterpart candidates. */
-static size_t info_lookup(const InsightIndex *index,const gchar *query,const InsightSymbol **out,size_t capacity) {
+static size_t info_lookup(const InsightIndex *index,const gchar *query,GHashTable *sources,const InsightSymbol **out,size_t capacity) {
  if(!query || !*query || strlen(query)>1024) return SIZE_MAX;
  while(g_str_has_prefix(query,"::")) query+=2;
  if(!*query) return SIZE_MAX;
@@ -4919,12 +4920,12 @@ static size_t info_lookup(const InsightIndex *index,const gchar *query,const Ins
   else if(*p=='.') { separator=p;leaf=p+1; }
  }
  if(!*leaf) return 0;
- if(!separator) return insight_index_find(index,query,1,out,capacity);
- size_t left=0,right=insight_index_count(index),scope_length=(size_t)(separator-query),total=0;
+ size_t left=0,right=insight_index_count(index),scope_length=separator ? (size_t)(separator-query):0,total=0;
  while(left<right) { size_t mid=left+(right-left)/2;const InsightSymbol *symbol=insight_index_at(index,mid);if(strcmp(symbol->name,leaf)<0) left=mid+1;else right=mid; }
  for(size_t n=left;n<insight_index_count(index);n++) {
   const InsightSymbol *symbol=insight_index_at(index,n);if(strcmp(symbol->name,leaf)) break;
-  if(strlen(symbol->scope)!=scope_length || memcmp(symbol->scope,query,scope_length)) continue;
+  if(separator && (strlen(symbol->scope)!=scope_length || memcmp(symbol->scope,query,scope_length))) continue;
+  if(sources && !g_hash_table_contains(sources,symbol->path)) continue;
   if(out && total<capacity) out[total]=symbol;total++;
  }
  return total;
@@ -4938,27 +4939,40 @@ static void info_search(GtkWidget *widget,gpointer data) {
  refresh_index();InsightIndex *index=wb.index ? insight_index_clone(wb.index) : insight_index_new();
  if(!index) { gtk_label_set_text(GTK_LABEL(info->status),"Symbol index snapshot could not be created");return; }
  GeanyDocument *current=document_get_current();
- if(current && sci_get_length(current->editor->sci)<=2*1024*1024) {
+ g_clear_pointer(&info->sources,g_hash_table_unref);info->sources=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
+ gchar *current_path=current ? (current->file_name ? g_strdup(current->file_name):g_strdup_printf("@buffer:%u",current->id)):NULL;
+ if(wb.info_scope!=2) for(guint n=0;n<wb.files->len;n++) g_hash_table_add(info->sources,g_strdup(g_ptr_array_index(wb.files,n)));
+ /* Without a workspace, project-only lookup uses the current named buffer. */
+ if(current_path && (wb.info_scope!=1 || !wb.root)) g_hash_table_add(info->sources,g_strdup(current_path));
+ gboolean source_error=FALSE;guint open_count=0;size_t tag_work=insight_index_count(index);
+ if(wb.info_scope==0) for(guint n=0;n<documents_array->len;n++) {
+  GeanyDocument *doc=g_ptr_array_index(documents_array,n);if(!DOC_VALID(doc) || !doc->file_name) continue;
+  g_hash_table_add(info->sources,g_strdup(doc->file_name));if(doc==current || !doc->tm_file) continue;
+  size_t tags=doc->tm_file->tags_array ? doc->tm_file->tags_array->len:0;
+  if(++open_count>128 || sci_get_length(doc->editor->sci)>2*1024*1024 || tag_work>250000 || tags>250000-tag_work) { source_error=TRUE;break; }
+  tag_work+=tags;if(!insight_native_import(index,doc->tm_file,doc->file_name)) { source_error=TRUE;break; }
+ }
+ if(current && current_path && g_hash_table_contains(info->sources,current_path) && sci_get_length(current->editor->sci)<=2*1024*1024) {
   /* The document generation already identifies the parsed buffer. Reusing it
    * avoids cancelling workers, dirtying the shared index and reparsing on every
    * category/history/Refresh action when the source has not changed. */
   if(wb.info_parse_local) bookmark_prepare_tags(current);
-  if(current->tm_file) { insight_native_import(index,current->tm_file,current->file_name); }
+  if(current->tm_file) { if(!insight_native_import(index,current->tm_file,current->file_name)) source_error=TRUE; }
   else if(wb.info_parse_local && !current->file_name && current->file_type && current->file_type->lang>=0) {
    /* Untitled buffers have no workspace tag source. Parse a private in-memory
     * source, without creating a file or publishing it into the workspace. */
    TMSourceFile *source=tm_source_file_new(NULL,NULL);
-   if(source) { source->file_name=g_strdup("untitled");source->short_name=source->file_name;source->lang=current->file_type->lang;gchar *path=g_strdup_printf("@buffer:%u",current->id);gint length=sci_get_length(current->editor->sci);gchar *text=sci_get_contents(current->editor->sci,length+1);insight_native_parse(index,source,path,text,length);g_free(text);g_free(path);tm_source_file_free(source); }
+   if(source) { source->file_name=g_strdup("untitled");source->short_name=source->file_name;source->lang=current->file_type->lang;gchar *path=g_strdup_printf("@buffer:%u",current->id);gint length=sci_get_length(current->editor->sci);gchar *text=sci_get_contents(current->editor->sci,length+1);if(!insight_native_parse(index,source,path,text,length)) source_error=TRUE;g_free(text);g_free(path);tm_source_file_free(source); }
   }
  }
  /* Filter BEFORE the 512-row presentation limit, including language filters.
   * Bound broad lookups explicitly instead of silently losing later matches. */
- size_t raw_total=info_lookup(index,gtk_entry_get_text(GTK_ENTRY(info->entry)),NULL,0),total=0;gboolean broad=raw_total!=SIZE_MAX && raw_total>16384;const InsightSymbol **matches=NULL;
+ size_t raw_total=source_error ? SIZE_MAX:info_lookup(index,gtk_entry_get_text(GTK_ENTRY(info->entry)),info->sources,NULL,0),total=0;gboolean broad=raw_total!=SIZE_MAX && raw_total>16384;const InsightSymbol **matches=NULL;
  if(raw_total==SIZE_MAX || broad) total=SIZE_MAX;
  else {
-  matches=g_new(const InsightSymbol *,MAX((size_t)1,raw_total));size_t found=info_lookup(index,gtk_entry_get_text(GTK_ENTRY(info->entry)),matches,raw_total);
+  matches=g_new(const InsightSymbol *,MAX((size_t)1,raw_total));size_t found=info_lookup(index,gtk_entry_get_text(GTK_ENTRY(info->entry)),info->sources,matches,raw_total);
   if(found!=raw_total) total=SIZE_MAX;
-  else for(size_t n=0;n<raw_total;n++) if((wb.info_across_languages || !current || g_str_has_prefix(matches[n]->path,"@buffer:") || insight_languages_search_path(current->file_name,current->file_type,matches[n]->path)) && info_kind_matches(matches[n],gtk_combo_box_get_active(GTK_COMBO_BOX(info->kind)),current ? current->file_type:NULL)) matches[total++]=matches[n];
+  else for(size_t n=0;n<raw_total;n++) if(g_hash_table_contains(info->sources,matches[n]->path) && (wb.info_across_languages || !current || g_str_has_prefix(matches[n]->path,"@buffer:") || insight_languages_search_path(current->file_name,current->file_type,matches[n]->path)) && info_kind_matches(matches[n],gtk_combo_box_get_active(GTK_COMBO_BOX(info->kind)),current ? current->file_type:NULL)) matches[total++]=matches[n];
  }
  gchar *counter=total==SIZE_MAX ? g_strdup("0"):g_strdup_printf("%u / %"G_GSIZE_FORMAT,(guint)MIN(total,(size_t)512),(gsize)total);gtk_label_set_text(GTK_LABEL(info->count),counter);g_free(counter);
  info->filling=TRUE;gtk_list_store_clear(info->model);gint chosen=0,preferred_rank=0;
@@ -4971,8 +4985,9 @@ static void info_search(GtkWidget *widget,gpointer data) {
  }
  insight_index_free(info->index);info->index=index;gtk_combo_box_set_active(GTK_COMBO_BOX(info->choice),total!=SIZE_MAX && total ? chosen : -1);info->filling=FALSE;
  gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(info->details)),"",-1);sci_set_readonly(SCINTILLA(info->code),FALSE);sci_set_text(SCINTILLA(info->code),"");sci_set_readonly(SCINTILLA(info->code),TRUE);info_choice(GTK_COMBO_BOX(info->choice),info);
- g_free(matches);
- if(broad) gtk_label_set_text(GTK_LABEL(info->status),"More than 16384 name matches; use a qualified symbol name");
+ g_free(matches);g_free(current_path);
+ if(source_error) gtk_label_set_text(GTK_LABEL(info->status),"Symbol lookup snapshot could not be completed; narrow the source scope");
+ else if(broad) gtk_label_set_text(GTK_LABEL(info->status),"More than 16384 name matches; use a qualified symbol name");
  else if(total==SIZE_MAX || !total) gtk_label_set_text(GTK_LABEL(info->status),total==SIZE_MAX ? "Symbol query could not be completed" : "No indexed candidates in this category; change the filter or qualified name");
  else if(total>512) gtk_label_set_text(GTK_LABEL(info->status),"Showing first 512 candidates; narrow the qualified symbol name");
  info_visit_record(info);
@@ -5010,7 +5025,7 @@ static void info_disconnect(GtkWidget *widget,gpointer data) {
  g_signal_handlers_disconnect_by_data(widget,data);if(GTK_IS_CONTAINER(widget)) gtk_container_foreach(GTK_CONTAINER(widget),info_disconnect,data);
 }
 static void info_destroy(GtkWidget *widget,gpointer data) {
- SymbolInfo *info=data;info_disconnect(widget,info);if(info->center) g_source_remove(info->center);g_object_unref(info->model);g_free(info->path);g_free(info->digest);g_free(info->name);g_free(info->preferred);g_free(info->preferred_candidate);g_free(info->base_name);g_free(info->base_path);insight_index_free(info->index);g_ptr_array_unref(info->visits);symbol_info=NULL;g_free(info);
+ SymbolInfo *info=data;info_disconnect(widget,info);if(info->center) g_source_remove(info->center);g_object_unref(info->model);g_free(info->path);g_free(info->digest);g_free(info->name);g_free(info->preferred);g_free(info->preferred_candidate);g_free(info->base_name);g_free(info->base_path);insight_index_free(info->index);g_ptr_array_unref(info->visits);g_clear_pointer(&info->sources,g_hash_table_unref);symbol_info=NULL;g_free(info);
 }
 static gboolean info_key(GtkWidget *widget,GdkEventKey *event,gpointer data) { (void)widget;SymbolInfo *info=data;
  if((event->state&gtk_accelerator_get_default_mod_mask())==GDK_MOD1_MASK) {
@@ -5040,6 +5055,8 @@ static void info_show_query_kind(const gchar *query,const gchar *path,gulong lin
   info->options=gtk_expander_new("Symbol Info lookup options");gtk_widget_set_name(info->options,"insight-symbol-info-options");GtkWidget *options=gtk_box_new(GTK_ORIENTATION_VERTICAL,2);
   info->parse_local=gtk_check_button_new_with_label("Parse locally before lookup");gtk_widget_set_name(info->parse_local,"insight-symbol-info-parse-local");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(info->parse_local),wb.info_parse_local);gtk_widget_set_tooltip_text(info->parse_local,"Update stale current-buffer tags before lookup; reuse unchanged tags");
   info->across_languages=gtk_check_button_new_with_label("Find symbols across different language types");gtk_widget_set_name(info->across_languages,"insight-symbol-info-across-languages");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(info->across_languages),wb.info_across_languages);
+  GtkWidget *scope_row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4),*scope_label=gtk_label_new("Lookup sources");info->scope=gtk_combo_box_text_new();gtk_widget_set_name(info->scope,"insight-symbol-info-scope");const gchar *scopes[]={"Project and open files","Project files only","Current buffer only"};for(guint i=0;i<G_N_ELEMENTS(scopes);i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(info->scope),scopes[i]);gtk_combo_box_set_active(GTK_COMBO_BOX(info->scope),wb.info_scope);gtk_box_pack_start(GTK_BOX(scope_row),scope_label,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(scope_row),info->scope,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(options),scope_row,FALSE,FALSE,0);
+  GList *scope_cells=gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(info->scope));for(GList *c=scope_cells;c;c=c->next) if(GTK_IS_CELL_RENDERER_TEXT(c->data)) g_object_set(c->data,"ellipsize",PANGO_ELLIPSIZE_END,"width-chars",1,NULL);g_list_free(scope_cells);g_signal_connect(info->scope,"changed",G_CALLBACK(info_scope_changed),info);
   gtk_box_pack_start(GTK_BOX(options),info->parse_local,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(options),info->across_languages,FALSE,FALSE,0);gtk_container_add(GTK_CONTAINER(info->options),options);gtk_box_pack_start(GTK_BOX(box),info->options,FALSE,FALSE,0);
   g_signal_connect(info->parse_local,"toggled",G_CALLBACK(info_options_changed),info);g_signal_connect(info->across_languages,"toggled",G_CALLBACK(info_options_changed),info);
   insight_panel_help_attach(box,"symbol-info.md");
@@ -5339,6 +5356,7 @@ static void save_workbench_settings(void) {
  g_key_file_set_boolean(settings,"workbench","file-symbols-scopes",insight_symbol_view_scopes(GTK_TREE_VIEW(wb.local_view)));g_key_file_set_boolean(settings,"workbench","project-symbols-scopes",insight_symbol_view_scopes(GTK_TREE_VIEW(wb.symbol_view)));
  g_key_file_set_boolean(settings,"workbench","file-symbols-grouped",insight_symbol_view_grouped(GTK_TREE_VIEW(wb.local_view))); g_key_file_set_boolean(settings,"workbench","project-symbols-grouped",insight_symbol_view_grouped(GTK_TREE_VIEW(wb.symbol_view)));
  g_key_file_set_integer(settings,"workbench","file-symbol-types",insight_symbol_view_types_mask(GTK_TREE_VIEW(wb.local_view))); g_key_file_set_integer(settings,"workbench","project-symbol-types",insight_symbol_view_types_mask(GTK_TREE_VIEW(wb.symbol_view)));
+ g_key_file_set_integer(settings,"workbench","info-source-scope",wb.info_scope);
  g_key_file_set_boolean(settings,"workbench","info-parse-local",wb.info_parse_local);
  g_key_file_set_boolean(settings,"workbench","info-across-languages",wb.info_across_languages);
  g_key_file_set_integer(settings,"workbench","right-split",gtk_paned_get_position(GTK_PANED(wb.right_pane)));
@@ -5377,6 +5395,7 @@ static void restore_workbench_settings(void) {
  if(strlen(text)<=262144 && g_key_file_load_from_data(settings,text,-1,G_KEY_FILE_NONE,NULL) && g_key_file_get_integer(settings,"workbench","version",NULL)==1) {
   if(g_key_file_has_key(settings,"workbench","info-parse-local",NULL)) { GError *option_error=NULL;gboolean enabled=g_key_file_get_boolean(settings,"workbench","info-parse-local",&option_error);if(!option_error) wb.info_parse_local=enabled;g_clear_error(&option_error); }
   wb.info_across_languages=g_key_file_get_boolean(settings,"workbench","info-across-languages",NULL);
+  gint info_scope=g_key_file_get_integer(settings,"workbench","info-source-scope",NULL);wb.info_scope=info_scope>=0 && info_scope<=2 ? info_scope:0;
   insight_overview_read(settings);
  grouped_read(&wb.type_panel,settings); grouped_read(&wb.category_panel,settings);
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.tree_follow),g_key_file_get_boolean(settings,"workbench","folder-follow-current-file",NULL));

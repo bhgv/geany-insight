@@ -810,3 +810,8 @@ Navigate/editor Jump To Base Type previews the resolved nominal target for a sin
 ### Symbol Info lookup policy and unchanged-tag reuse
 
 A Navigate command expands persistent Parse locally before lookup / Find symbols across different language types options in Symbol Info. Source-language eligibility remains before the 512-row cap; declared-type metadata keeps its own compatible-language resolver. Locally parsed saved buffers reuse native tag generations: unchanged Refresh/category/history requests no longer cancel tag workers, dirty the shared index or reparse the current source. Disabled local parsing imports available cached tags; ordinary background updates remain independent. This scope covers Symbol Info and its target choosers, not automatic Context/F12 or cross-project symbol paths. [Guide and diagram](function-targets.md).
+
+
+### Symbol Info source scopes and non-project open buffers
+
+Lookup sources persists Project and open files / Project files only / Current buffer only. Completed membership and exact open-buffer identities filter before raw-name and 512-row bounds. Other named open buffers supply cached tags to a bounded private snapshot without reparsing or changing project membership/database. Closed external buffers lose eligibility immediately; nominal links obey source scope. Snapshot failure refuses a partial result and disables Jump. History uses current options. These controls remain specific to Symbol Info and target choosers. [Guide and diagram](function-targets.md).

@@ -2056,3 +2056,7 @@ Symbol Info Lookup Options…	Настройки поиска Symbol Info…
 Parse locally before lookup	Разобрать текущий буфер перед поиском
 Update stale current-buffer tags before lookup; reuse unchanged tags	Обновлять устаревшие теги перед поиском; использовать неизменённые повторно
 Find symbols across different language types	Искать символы среди разных языков
+Lookup sources	Область поиска
+Project and open files	Проект и открытые файлы
+Project files only	Только файлы проекта
+Symbol lookup snapshot could not be completed; narrow the source scope	Не удалось завершить снимок поиска символов; сузьте область поиска

@@ -52,3 +52,21 @@ Disabling local parsing uses the available cached tags, which may be stale; it d
 These controls do not change automatic Context, F12, project indexing, project membership or the search paths of other panels. They do not import another project's database or add an external symbol path. Opening the options alone does not start a project rescan. Existing configuration files retain their prior behavior; a malformed local-parse value retains the enabled default.
 
 Reference: [Symbol Lookup Options](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Symbol_Lookup_Options.htm).
+
+## Source scopes and open non-project files
+
+**Lookup sources** offers three persistent choices:
+
+| Scope | Candidates |
+| --- | --- |
+| Project and open files (default) | Completed project membership plus named open buffers, including files outside the project; the current untitled buffer is supported |
+| Project files only | Files in the published project membership, even if another non-project buffer is active |
+| Current buffer only | The active named or untitled buffer, excluding closed headers and other open tabs |
+
+Without a workspace root, Project files only falls back to the current buffer. Source membership is checked before the 16384 raw name-match bound and 512 displayed-candidate limit; category and language filters still apply. History uses the current scope. A nominal-type link is enabled only when its resolved destination is also eligible in this scope.
+
+Other named open buffers contribute **already available native tags** to the private lookup snapshot. They are not reparsed by these queries; ordinary editor background updates still apply. The existing local-parse option affects only the active eligible buffer. Unsaved source changes appear after those tags update; source previews and Jump retain their digest checks. Closing an external buffer removes its eligibility immediately, even while the shared index is refreshing. Opening external files does not add them to project membership or its database.
+
+Additional open-file capture is bounded to 128 named buffers, 2 MiB per buffer and a conservative 250000-tag import-work budget including the cloned index. A failed/oversized snapshot clears candidates and disables Jump rather than publishing a partial list; narrow the scope and retry. This is not cross-project database import, an external symbol path or an expansion of automatic Context/F12 search.
+
+Reference: [Symbol Lookup Options](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Symbol_Lookup_Options.htm), “Find symbols in open files not part of the current project”.
