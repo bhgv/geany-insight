@@ -223,6 +223,9 @@ jobs:
       - name: Diagnose native layout failure
         if: failure()
         run: |
+          if command -v gdb >/dev/null && test -x _native/tests/test_insight_macos_windows_gui && test -d _native-install; then
+            GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" timeout 40 gdb -batch -ex 'handle SIGALRM stop nopass' -ex run -ex 'thread apply all bt' --args _native/tests/test_insight_macos_windows_gui || true
+          fi
           if command -v gdb >/dev/null && test -x _native/tests/test_insight_panels_gui; then
             GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" timeout 45 gdb -batch -ex run -ex 'thread apply all bt' --args _native/tests/test_insight_panels_gui || true
           fi

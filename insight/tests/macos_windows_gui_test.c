@@ -6,6 +6,9 @@
 #include "ui_utils.h"
 #include <glib/gstdio.h>
 #include <string.h>
+#ifdef G_OS_UNIX
+#include <unistd.h>
+#endif
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 static GeanyDocument *doc;
 static GtkWidget *window,*options[4],*left,*context,*project,*icon;
@@ -32,7 +35,8 @@ static void miniature(guint percent) {
 }
 static void choose(guint which) { gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(options[which]),TRUE); }
 static gboolean step(gpointer unused) {
- (void)unused;if(++ticks>160) g_error("macOS windows timeout phase %u",phase);
+ (void)unused;static guint last=G_MAXUINT;if(last!=phase) { g_printerr("macOS window phase %u\n",phase);last=phase; }
+ if(++ticks>160) g_error("macOS windows timeout phase %u",phase);
  if(!doc) doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;
  window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));
  if(phase==0) {
@@ -78,6 +82,9 @@ static gboolean step(gpointer unused) {
 }
 int main(void) {
  if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;
+ #ifdef G_OS_UNIX
+ alarm(25);
+ #endif
  restoring=g_getenv("GEANY_TEST_INDEPENDENT_RESTORE")!=NULL;
  gchar *dir=g_dir_make_tmp("macos-windows-XXXXXX",NULL),*folder=g_build_filename(dir,"insight",NULL),*config=g_build_filename(dir,"geany.conf",NULL),*source=g_build_filename(dir,"source.c",NULL);
  g_assert_cmpint(g_mkdir_with_parents(folder,0700),==,0);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));g_assert_true(g_file_set_contents(source,"int main(void) { return 0; }\n",-1,NULL));

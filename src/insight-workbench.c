@@ -3955,7 +3955,13 @@ static void focus_widget_panel(GtkWidget *widget) {
 static void panel_position_guard(GObject *object,GParamSpec *spec,gpointer data) {
  (void)spec;(void)data;GtkWidget *widget=GTK_WIDGET(object);gint extent=gtk_orientable_get_orientation(GTK_ORIENTABLE(widget))==GTK_ORIENTATION_HORIZONTAL ? gtk_widget_get_allocated_width(widget) : gtk_widget_get_allocated_height(widget);
  if(extent<100) return;
- gint position=gtk_paned_get_position(GTK_PANED(widget)),safe=CLAMP(position,16,extent-16);if(position!=safe) gtk_paned_set_position(GTK_PANED(widget),safe);
+ GtkWidget *first=gtk_paned_get_child1(GTK_PANED(widget)),*second=gtk_paned_get_child2(GTK_PANED(widget));
+ /* A detached/hidden child has no split to protect. Forcing 16px against
+  * GTK's zero-width side repeatedly schedules allocation/position updates. */
+ if(!first || !second || !gtk_widget_get_visible(first) || !gtk_widget_get_visible(second)) return;
+ gint minimum=0,maximum=0;g_object_get(widget,"min-position",&minimum,"max-position",&maximum,NULL);
+ minimum=MAX(minimum,16);maximum=MIN(maximum,extent-16);if(minimum>maximum) return;
+ gint position=gtk_paned_get_position(GTK_PANED(widget)),safe=CLAMP(position,minimum,maximum);if(position!=safe) gtk_paned_set_position(GTK_PANED(widget),safe);
 }
 static void project_split_allocated(GtkWidget *widget,GtkAllocation *allocation,gpointer data) {
  (void)data;if(!wb.alive || wb.initial_right_split==-1 || allocation->width<400) return;
