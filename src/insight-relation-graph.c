@@ -189,6 +189,7 @@ static void print_begin(GtkPrintOperation *op,GtkPrintContext *context,gpointer 
  GraphPrint *p=data;GtkPrintSettings *settings=gtk_print_operation_get_print_settings(op);
  gboolean tiled=settings && gtk_print_settings_get_bool(settings,"insight-graph-tiled");
  p->invalid=!insight_graph_print_plan(p->width,p->height,gtk_print_context_get_width(context),gtk_print_context_get_height(context),tiled,&p->plan);
+ g_object_set_data(G_OBJECT(op),"insight-graph-print-error",p->invalid ? "Graph cannot fit the selected paper or exceeds 256 tiled pages. Choose Fit graph on one page or increase the printable area." : NULL);
  if(p->invalid) { gtk_print_operation_cancel(op);return; }
  gtk_print_operation_set_n_pages(op,p->plan.pages);
 }

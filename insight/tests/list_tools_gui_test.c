@@ -52,7 +52,7 @@ int main(int argc,char **argv) {
     insight_list_tools_menu(GTK_TREE_VIEW(view),menu);insight_list_tools_menu(GTK_TREE_VIEW(view),menu);g_signal_connect(view,"row-activated",G_CALLBACK(activated),NULL);gtk_widget_show_all(window);
     command(menu,"insight-list-copy");settle(view);clipboard_is("Name\tFile\nalpha\tsample.c\nzeta\ta\\tb\\nc\nАЛЬФА\tsample.c\n");
     gtk_tree_view_move_column_after(GTK_TREE_VIEW(view),file,NULL);command(menu,"insight-list-copy");settle(view);clipboard_is("File\tName\nsample.c\talpha\na\\tb\\nc\tzeta\nsample.c\tАЛЬФА\n");
-    gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),"print-sentinel",-1);guint attempts=0;g_timeout_add(50,cancel_print,&attempts);command(menu,"insight-list-print");settle(view);g_assert_cmpuint(print_cancelled,==,1);clipboard_is("print-sentinel");
+    gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),"print-sentinel",-1);guint attempts=0;g_timeout_add(50,cancel_print,&attempts);command(menu,"insight-list-print");settle(view);g_assert_cmpuint(print_cancelled,==,1);clipboard_is("print-sentinel");g_assert_cmpstr(g_object_get_data(G_OBJECT(view),"insight-list-tools-status"),==,"Print snapshot ready");
     command(menu,"insight-list-search-command");GtkWidget *d=dialog();search(view,d,"альфа",FALSE,FALSE,TRUE,FALSE);selected_is(view,"АЛЬФА");
     search(view,d,"альфа",FALSE,TRUE,TRUE,FALSE);selected_is(view,"АЛЬФА");g_assert_nonnull(strstr(g_object_get_data(G_OBJECT(view),"insight-list-tools-status"),"No matching"));
     search(view,d,"sample\\.c",TRUE,TRUE,TRUE,FALSE);selected_is(view,"alpha");key(view,0);selected_is(view,"АЛЬФА");key(view,GDK_SHIFT_MASK);selected_is(view,"alpha");key(view,GDK_SHIFT_MASK);selected_is(view,"alpha");

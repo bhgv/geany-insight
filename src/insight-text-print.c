@@ -80,9 +80,12 @@ void insight_text_print_run(GtkPrintOperation *op,GtkWindow *parent) {
 #endif
         return;
     }
-    GError *error=NULL;gtk_print_operation_run(op,GTK_PRINT_OPERATION_ACTION_PRINT_DIALOG,parent,&error);
+    GError *error=NULL;GtkPrintOperationResult result=gtk_print_operation_run(op,GTK_PRINT_OPERATION_ACTION_PRINT_DIALOG,parent,&error);(void)result;
 #ifdef GEANY_PRIVATE
-    const gchar *reason=g_object_get_data(G_OBJECT(op),"insight-text-print-error");if(reason || error) ui_set_statusbar(TRUE,"%s",reason ? insight_tr(reason):error->message);
+    const gchar *reason=g_object_get_data(G_OBJECT(op),"insight-text-print-error");if(!reason) reason=g_object_get_data(G_OBJECT(op),"insight-graph-print-error");
+    if(reason || error) ui_set_statusbar(TRUE,"%s",reason ? insight_tr(reason):error->message);
+    else if(result==GTK_PRINT_OPERATION_RESULT_CANCEL) ui_set_statusbar(FALSE,"%s",insight_tr("Printing cancelled"));
+    else if(result==GTK_PRINT_OPERATION_RESULT_APPLY) ui_set_statusbar(FALSE,"%s",insight_tr("Print job sent"));
 #endif
     g_clear_error(&error);g_object_unref(op);
 }

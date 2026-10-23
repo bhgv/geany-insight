@@ -120,7 +120,7 @@ static gboolean finish(ListTools *s,const gchar *error) {
         const gchar *title=g_object_get_data(G_OBJECT(s->view),"insight-list-title");
         GtkPrintOperation *op=insight_text_print_operation(insight_tr(title ? title:"List"),j->output->str,j->output->len);
         GtkWidget *parent=gtk_widget_get_toplevel(GTK_WIDGET(s->view));if(GTK_IS_WINDOW(parent)) g_object_ref(parent);else parent=NULL;
-        status(s,op ? "Printing captured list…":"Print snapshot is invalid or exceeds 1 MiB, 20000 lines or 64 KiB per line");
+        status(s,op ? "Print snapshot ready":"Print snapshot is invalid or exceeds 1 MiB, 20000 lines or 64 KiB per line");
         s->job=NULL;job_free(j);g_object_set_data(G_OBJECT(s->view),"insight-list-tools-busy",NULL);
         insight_text_print_run(op,parent ? GTK_WINDOW(parent):NULL);if(parent) g_object_unref(parent);return G_SOURCE_REMOVE;
     }

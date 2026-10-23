@@ -3009,7 +3009,7 @@ static RelationSnapshot *relation_snapshot_new(void) {
 static void relation_print_show(GtkWidget *widget,gpointer data) {
  (void)widget;(void)data;if(wb.search_worker || wb.usage_idle || gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode))==3) { ui_set_statusbar(TRUE,"Wait for symbol Relations to finish before printing");return; }
  const gchar *view=gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack));GtkPrintOperation *op=NULL;
- if(!g_strcmp0(view,"graph") || !g_strcmp0(view,"treegraph")) op=insight_relation_graph_print_operation(!strcmp(view,"treegraph") ? wb.relation_tree_graph:wb.relation_graph);
+ if(!g_strcmp0(view,"graph") || !g_strcmp0(view,"treegraph")) { op=insight_relation_graph_print_operation(!strcmp(view,"treegraph") ? wb.relation_tree_graph:wb.relation_graph);if(!op) { ui_set_statusbar(TRUE,"Graph print snapshot could not be created");return; } }
  else { RelationSnapshot *snapshot=relation_snapshot_new();if(snapshot) { op=insight_text_print_operation(insight_tr("Relations"),snapshot->text->str,snapshot->text->len);relation_snapshot_free(snapshot); } }
  insight_text_print_run(op,GTK_WINDOW(main_widgets.window));
 }

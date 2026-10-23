@@ -23,3 +23,5 @@ Text jobs are limited to 1 MiB UTF-8 without NUL or unsupported control bytes, 2
 Print Relation Window dispatches to the existing graph printer while Graph view is active. Its native Graph layout tab retains fit-to-page and tiled vector output, including coordinate footers. Graph limits remain separate (256 tiled pages). In list/tree mode the command captures the loaded outline, including the query and relation mode. The report dialog always prints its captured text; Refresh replaces that snapshot explicitly.
 
 The Source Insight reference describes [printing the graphic Relation Window](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Print_Relation_Window.htm). Printing text lists and the outline is a Geany Insight extension of this command family.
+
+The status bar reports cancellation or successful submission explicitly. Graph pagination errors, including the 256-page limit, are also reported when printing from the shared menu command.
