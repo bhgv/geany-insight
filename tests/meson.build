@@ -928,3 +928,6 @@ test('Insight function targets and Symbol Info categories GUI', function_targets
 
 browser_mode_gui_test = executable('test_insight_browser_mode_gui', '../insight/tests/browser_mode_gui_test.c', dependencies: test_deps)
 test('Insight native Browser Mode GUI', browser_mode_gui_test, timeout: 50, is_parallel: false)
+
+scroll_links_gui_test = executable('test_insight_scroll_links_gui', '../insight/tests/scroll_links_gui_test.c', dependencies: test_deps)
+test('Insight native source scroll links GUI', scroll_links_gui_test, timeout: 50, is_parallel: false)

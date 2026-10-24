@@ -31,6 +31,7 @@
 #endif
 
 #include "insight-browser-mode.h"
+#include "insight-scroll-links.h"
 #include "keybindings.h"
 #include "insight-paste.h"
 #include "insight-buffer-transfer.h"
@@ -329,6 +330,7 @@ static void add_kb(GeanyKeyGroup *group, gsize key_id,
 
 static void cb_func_insight(guint key_id)
 {
+    if(key_id>=GEANY_KEYS_INSIGHT_LINKWINDOW && key_id<=GEANY_KEYS_INSIGHT_UNLINKWINDOWS) { insight_scroll_links_command(key_id-GEANY_KEYS_INSIGHT_LINKWINDOW);return; }
     if(key_id==GEANY_KEYS_INSIGHT_BROWSERMODE) { insight_browser_mode_toggle();return; }
     if (key_id >= GEANY_KEYS_INSIGHT_SYMBOLINFO && key_id <= GEANY_KEYS_INSIGHT_JUMPBASETYPE) { insight_workbench_symbol_navigation(key_id-GEANY_KEYS_INSIGHT_SYMBOLINFO);return; }
     if (key_id >= GEANY_KEYS_INSIGHT_RECORDSTART && key_id <= GEANY_KEYS_INSIGHT_RECORDCLEAR) { insight_recording_command(key_id-GEANY_KEYS_INSIGHT_RECORDSTART);return; }
@@ -880,6 +882,9 @@ static void init_default_kb(void)
         0, 0, "insight_simpletab", _("Simple Tab"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_CLEARTYPING, cb_func_insight,
         0, 0, "insight_cleartyping", _("Clear Typing History"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_LINKWINDOW, cb_func_insight, 0, 0, "insight_link_window", _("Link Source Windows…"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_LINKALLWINDOWS, cb_func_insight, 0, 0, "insight_link_all_windows", _("Link All Source Windows"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_UNLINKWINDOWS, cb_func_insight, 0, 0, "insight_unlink_windows", _("Unlink All Source Windows"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_BROWSERMODE, cb_func_insight, 0, 0, "insight_browser_mode", _("Browser Mode"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_SYMBOLINFO, cb_func_insight,
         0, 0, "insight_symbol_info", _("Symbol Info…"), NULL);

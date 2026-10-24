@@ -16,6 +16,7 @@
 #endif
 #include "geany.h"
 #include "insight-workbench.h"
+#include "insight-scroll-links.h"
 #include "insight-tree-expand.h"
 #include "insight-appearance.h"
 #include "insight-symbol-edit.h"
@@ -5851,9 +5852,9 @@ static void window_activate(GtkMenuItem *item,gpointer data) {
  if(doc) { gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.notebook),document_get_notebook_page(doc)); document_grab_focus(doc); }
 }
 static void window_menu_refresh(GtkWidget *menu,gpointer data) {
- (void)data; GList *items=gtk_container_get_children(GTK_CONTAINER(menu)); for(GList *p=items;p;p=p->next) gtk_widget_destroy(p->data); g_list_free(items);
- GtkWidget *windows=gtk_menu_item_new_with_label("Window List…");gtk_widget_set_name(windows,"insight-window-list-command");g_signal_connect(windows,"activate",G_CALLBACK(insight_window_list_show),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),windows);gtk_widget_show(windows);
- GtkWidget *separator=gtk_separator_menu_item_new();gtk_menu_shell_append(GTK_MENU_SHELL(menu),separator);gtk_widget_show(separator);
+ (void)data; GList *items=gtk_container_get_children(GTK_CONTAINER(menu)); for(GList *p=items;p;p=p->next) if(!g_object_get_data(G_OBJECT(p->data),"insight-window-persistent")) gtk_widget_destroy(p->data); g_list_free(items);
+ GtkWidget *windows=gtk_menu_item_new_with_label("Window List…");gtk_widget_set_name(windows,"insight-window-list-command");g_signal_connect(windows,"activate",G_CALLBACK(insight_window_list_show),NULL);gtk_menu_shell_insert(GTK_MENU_SHELL(menu),windows,0);gtk_widget_show(windows);
+ GtkWidget *separator=gtk_separator_menu_item_new();gtk_menu_shell_insert(GTK_MENU_SHELL(menu),separator,1);gtk_widget_show(separator);
  for(guint i=0;i<documents_array->len;i++) {
   GeanyDocument *doc=g_ptr_array_index(documents_array,i); if(!doc->is_valid) continue;
   GtkWidget *item=gtk_check_menu_item_new_with_label(doc->file_name ? doc->file_name : "untitled");g_object_set_data(G_OBJECT(item),"insight-no-i18n",GINT_TO_POINTER(1));
@@ -5869,6 +5870,7 @@ static void arrange_main_menus(void) {
  GtkWidget *document_menu=ui_lookup_widget(main_widgets.window,"menu_document1");
  g_object_ref(document_menu); gtk_container_remove(GTK_CONTAINER(bar),document_menu); gtk_container_add(GTK_CONTAINER(menu),document_menu); g_object_unref(document_menu);
  GtkWidget *windows=gtk_menu_item_new_with_mnemonic("_Window"),*window_menu=gtk_menu_new();
+ insight_scroll_links_init(window_menu);
  gtk_widget_set_name(window_menu,"insight-window-menu");gtk_menu_item_set_submenu(GTK_MENU_ITEM(windows),window_menu); g_signal_connect(window_menu,"show",G_CALLBACK(window_menu_refresh),NULL); gtk_menu_shell_insert(GTK_MENU_SHELL(bar),windows,7); gtk_widget_show(windows);
  GtkWidget *items[]={ui_lookup_widget(main_widgets.window,"file1"),ui_lookup_widget(main_widgets.window,"edit1"),ui_lookup_widget(main_widgets.window,"search1"),ui_lookup_widget(main_widgets.window,"menu_project1"),options,ui_lookup_widget(main_widgets.window,"tools1"),ui_lookup_widget(main_widgets.window,"menu_view1"),windows,ui_lookup_widget(main_widgets.window,"menu_help1"),g_object_get_data(G_OBJECT(main_widgets.window),"insight-navigate"),wb.lua_item};
  for(guint i=0;i<G_N_ELEMENTS(items);i++) {

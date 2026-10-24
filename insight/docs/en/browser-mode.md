@@ -25,3 +25,6 @@ Browser Mode is **session-only** and starts disabled. Session serialization stor
 Reference: [Source Insight Browser Mode](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Browser_Mode.htm).
 
 Navigation records the final selected-symbol caret, so Back returns directly to the originating location instead of an intermediate beginning of the definition line. Undo/Redo become available again after leaving read-only mode; their retained history is unchanged by the toggle.
+
+
+Scroll related buffers together: [source-window links](scroll-links.md).

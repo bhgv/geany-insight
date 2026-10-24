@@ -820,3 +820,8 @@ Lookup sources persists Project and open files / Project files only / Current bu
 ### Browser Mode source browsing
 
 Edit/editor-popup and a status-bar toggle enable session-only read-only browsing across existing/new source buffers. Click/Space use the current definition resolver with lexical code guards; Backspace uses native Back; Ctrl/Cmd selection bypasses normal Ctrl+click navigation. Original document/Scintilla flags, dirty text and Undo/Redo survive toggling; underlying flags are serialized into sessions. Reload, Save As (including failure) and Clone reapply protection while retaining native semantics. This does not add semantic resolution or an ambiguity chooser; source lookups retain a 2 MiB/single-selection limit. [RU/EN guide and diagram](browser-mode.md).
+
+
+### Linked source-window scrolling
+
+Window exposes Link Source Windows, Link All Source Windows and Unlink All with appended unassigned Editor bindings. Modeless management captures stable document IDs, explicit one/two-way pairs, global vertical/horizontal axes and an editable target choice. Relative viewport deltas traverse chains/cycles with a visited set and notification baselines; followers retain text, caret, selection, Undo and read-only state. Closed endpoints are purged and stale dialog application is rejected. Link All adopts new buffers, is bounded to 128 members and leaves up to 64 explicit pairs intact when disabled. Memory-only main-source views, including hidden tabs/untitled buffers; no MDI creation, diff alignment, preview/console links or project-index work. Window-menu refresh retains fixed commands. [RU/EN guide and SVG](scroll-links.md).

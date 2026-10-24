@@ -2067,3 +2067,23 @@ Browser Mode: read-only browsing; right-click for options	Режим просм�
 Browser Mode: ON — click/Space to browse, Backspace to go back	Просмотр ВКЛ — щелчок/Пробел для перехода, Backspace для возврата
 Browser Mode: OFF	Режим просмотра: ВЫКЛ
 Exit Browser Mode to change file read-only state	Для изменения состояния чтения файла выключите режим просмотра
+Link Source Windows…	Связать окна исходников…
+Link Source Windows	Связи окон исходников
+Link All Source Windows	Связать все окна исходников
+Unlink All Source Windows	Удалить все связи окон исходников
+Unlink All	Удалить все связи
+Apply Link	Применить связь
+Two Way	В обе стороны
+Vertical scrolling	По вертикали
+Horizontal scrolling	По горизонтали
+None — unlink this source	Нет — удалить исходящую связь
+Closed source	Закрытый источник
+source links	связей исходников
+All source windows linked	Все окна связаны
+Individual source links	Отдельные связи
+Source closed — Refresh to choose the current editor	Источник закрыт — обновите, чтобы выбрать текущий редактор
+Source or target closed; Refresh before linking	Источник или цель закрыты; обновите перед связыванием
+At most 64 individual source links are supported	Поддерживается не более 64 отдельных связей
+Link All supports at most 128 open source buffers	Связать все можно не более 128 открытых буферов
+Link All disabled: more than 128 source buffers are open	Связь всех отключена: открыто более 128 исходных буферов
+Direction	Направление

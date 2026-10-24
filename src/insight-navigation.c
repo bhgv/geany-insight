@@ -2,6 +2,7 @@
 #include "insight-browser-mode.h"
 #include "geany.h"
 #include "insight-navigation.h"
+#include "insight-scroll-links.h"
 #include "insight-command-list.h"
 #include "insight-selection-search.h"
 #include "insight-word-highlights.h"
@@ -65,6 +66,7 @@ static gboolean normal(ScintillaObject *sci)
 }
 void insight_navigation_notify(GeanyEditor *editor, SCNotification *nt)
 {
+    insight_scroll_links_notify(editor,nt);
     insight_selection_search_notify(editor,nt);
     insight_word_highlights_notify(editor,nt);
     insight_outlining_notify(editor,nt);
