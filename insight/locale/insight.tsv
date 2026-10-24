@@ -2525,3 +2525,25 @@ Cannot save source window links: %s	Не удалось сохранить св�
 Linked source file cannot be opened	Не удалось открыть связанный исходный файл
 Choose the target buffer in the first table row.	Выберите ведомое окно в первой строке таблицы.
 Choose Source and Target in the first row. Show together opens linked editors side by side.	Выберите главное и ведомое окно в первой строке. Флажок совместного показа открывает редакторы бок о бок.
+Tile Horizontal	Расположить горизонтально
+Tile Vertical	Расположить вертикально
+Tile Two Windows	Два последних окна
+Tile One Window	Одно окно
+Arrange Source Windows…	Расположение окон исходников…
+Arrange Source Windows	Расположение окон исходников
+Source window arrangement	Расположение окон исходников
+Return editors to tabs	Вернуть редакторы во вкладки
+Equalize source panes	Выровнять размеры полей исходников
+Zoom source pane	Развернуть поле исходника
+Previous source pane	Предыдущее поле исходника
+Next source pane	Следующее поле исходника
+Selected source windows: %u / %u	Выбрано окон исходников: %u / %u
+Filter open source windows by filename or path.	Фильтр открытых окон исходников по имени или пути файла.
+Source windows changed; Refresh the list before arranging.	Состав окон изменился; обновите список перед расположением.
+Clear visible	Снять видимые флажки
+Select visible	Отметить видимые
+Side by side	Бок о бок
+Stacked	Друг над другом
+Choose the primary direction of the source window layout.	Выберите основное направление расположения окон исходников.
+Open at least two source windows before tiling two windows	Для расположения двух окон откройте как минимум два исходника
+Source window arrangements support at most 128 open buffers	Расположение окон поддерживает не более 128 открытых файлов

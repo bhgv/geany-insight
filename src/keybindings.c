@@ -333,6 +333,7 @@ static void add_kb(GeanyKeyGroup *group, gsize key_id,
 static void cb_func_insight(guint key_id)
 {
     if(key_id==GEANY_KEYS_INSIGHT_INCREMENTAL || key_id==GEANY_KEYS_INSIGHT_INCREMENTALBACK) { insight_incremental_search_command(key_id==GEANY_KEYS_INSIGHT_INCREMENTALBACK);return; }
+    if(key_id>=GEANY_KEYS_INSIGHT_TILEHORIZONTAL && key_id<=GEANY_KEYS_INSIGHT_ZOOMSOURCE) {insight_scroll_links_command(3+key_id-GEANY_KEYS_INSIGHT_TILEHORIZONTAL);return;}
     if(key_id>=GEANY_KEYS_INSIGHT_LINKWINDOW && key_id<=GEANY_KEYS_INSIGHT_UNLINKWINDOWS) { insight_scroll_links_command(key_id-GEANY_KEYS_INSIGHT_LINKWINDOW);return; }
     if(key_id==GEANY_KEYS_INSIGHT_BROWSERMODE) { insight_browser_mode_toggle();return; }
     if (key_id >= GEANY_KEYS_INSIGHT_SYMBOLINFO && key_id <= GEANY_KEYS_INSIGHT_JUMPBASETYPE) { insight_workbench_symbol_navigation(key_id-GEANY_KEYS_INSIGHT_SYMBOLINFO);return; }
@@ -364,14 +365,14 @@ static void cb_func_insight(guint key_id)
     if (key_id == GEANY_KEYS_INSIGHT_COMMANDBROWSER) { insight_command_browser_show();return; }
     if (key_id == GEANY_KEYS_INSIGHT_RELOADMODIFIED) { insight_reload_command();return; }
     if (key_id == GEANY_KEYS_INSIGHT_CODEOUTLINE) { insight_outlining_command(7);return; }
-    if (key_id >= GEANY_KEYS_INSIGHT_EXPANDBLOCK && key_id <= GEANY_KEYS_INSIGHT_FOLDLEVEL) { GeanyDocument *target=document_get_current();if(DOC_VALID(target) && gtk_window_get_focus(GTK_WINDOW(main_widgets.window))==GTK_WIDGET(target->editor->sci)) insight_outlining_command(key_id-GEANY_KEYS_INSIGHT_EXPANDBLOCK);return; }
+    if (key_id >= GEANY_KEYS_INSIGHT_EXPANDBLOCK && key_id <= GEANY_KEYS_INSIGHT_FOLDLEVEL) { GeanyDocument *target=document_get_current();if(DOC_VALID(target) && ui_get_focus_widget()==GTK_WIDGET(target->editor->sci)) insight_outlining_command(key_id-GEANY_KEYS_INSIGHT_EXPANDBLOCK);return; }
     if (key_id >= GEANY_KEYS_INSIGHT_ACTIVATEPROJECTFILES && key_id <= GEANY_KEYS_INSIGHT_ACTIVATEEDITOR) { insight_workbench_activate(key_id-GEANY_KEYS_INSIGHT_ACTIVATEPROJECTFILES);return; }
     if (key_id == GEANY_KEYS_INSIGHT_SEARCHWEB) { insight_web_search_command(0);return; }
     if (key_id == GEANY_KEYS_INSIGHT_SEARCHENGINES) { insight_web_search_command(1);return; }
     if (key_id == GEANY_KEYS_INSIGHT_HIGHLIGHTWORDS) { insight_word_highlights_command(1);return; }
     if (key_id == GEANY_KEYS_INSIGHT_CLEARHIGHLIGHTS) { insight_word_highlights_command(2);return; }
     GeanyDocument *doc = document_get_current();
-    if (!doc || gtk_window_get_focus(GTK_WINDOW(main_widgets.window)) != GTK_WIDGET(doc->editor->sci)) return;
+    if (!doc || ui_get_focus_widget() != GTK_WIDGET(doc->editor->sci)) return;
     switch (key_id)
     {
         case GEANY_KEYS_INSIGHT_HIGHLIGHTWORD: insight_word_highlights_command(0);break;
@@ -887,6 +888,14 @@ static void init_default_kb(void)
         0, 0, "insight_simpletab", _("Simple Tab"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_CLEARTYPING, cb_func_insight,
         0, 0, "insight_cleartyping", _("Clear Typing History"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_TILEHORIZONTAL, cb_func_insight, 0, 0, "insight_tilehorizontal", _("Tile Horizontal"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_TILEVERTICAL, cb_func_insight, 0, 0, "insight_tilevertical", _("Tile Vertical"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_TILETWO, cb_func_insight, 0, 0, "insight_tiletwo", _("Tile Two Windows"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_TILEONE, cb_func_insight, 0, 0, "insight_tileone", _("Tile One Window"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_ARRANGESOURCES, cb_func_insight, 0, 0, "insight_arrangesources", _("Arrange Source Windows…"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_RESTORESOURCETABS, cb_func_insight, 0, 0, "insight_restoresourcetabs", _("Return editors to tabs"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_EQUALIZESOURCES, cb_func_insight, 0, 0, "insight_equalizesources", _("Equalize source panes"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_ZOOMSOURCE, cb_func_insight, 0, 0, "insight_zoomsource", _("Zoom source pane"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_LINKWINDOW, cb_func_insight, 0, 0, "insight_link_window", _("Link Source Windows…"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_LINKALLWINDOWS, cb_func_insight, 0, 0, "insight_link_all_windows", _("Link All Source Windows"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_UNLINKWINDOWS, cb_func_insight, 0, 0, "insight_unlink_windows", _("Unlink All Source Windows"), NULL);
@@ -1001,6 +1010,13 @@ static void free_key_group(gpointer item)
 	}
 }
 
+
+static gboolean source_window_key(GtkWidget *window,GdkEventKey *event,gpointer data) {
+ (void)data;g_object_set_data(G_OBJECT(window),"insight-source-key-dispatch",GINT_TO_POINTER(1));gboolean handled=on_key_press_event(window,event,NULL);g_object_set_data(G_OBJECT(window),"insight-source-key-dispatch",NULL);return handled;
+}
+void keybindings_connect_source_window(GtkWidget *window) {
+ if(!g_object_get_data(G_OBJECT(window),"insight-source-key-connected")) {g_object_set_data(G_OBJECT(window),"insight-source-key-connected",GINT_TO_POINTER(1));g_signal_connect(window,"key-press-event",G_CALLBACK(source_window_key),NULL);}
+}
 
 void keybindings_init(void)
 {
@@ -1412,7 +1428,7 @@ static gboolean check_fixed_kb(guint keyval, guint state)
 
 static gboolean check_snippet_completion(GeanyDocument *doc)
 {
-	GtkWidget *focusw = gtk_window_get_focus(GTK_WINDOW(main_widgets.window));
+	GtkWidget *focusw = ui_get_focus_widget();
 
 	g_return_val_if_fail(doc, FALSE);
 
@@ -1463,7 +1479,7 @@ static gboolean check_menu_key(GeanyDocument *doc, guint keyval, guint state, gu
 
 	if ((keyval == GDK_KEY_Menu && state == 0) || (keyval == GDK_KEY_F10 && state == GDK_SHIFT_MASK))
 	{
-		GtkWidget *focusw = gtk_window_get_focus(GTK_WINDOW(main_widgets.window));
+		GtkWidget *focusw = ui_get_focus_widget();
 		if (doc != NULL)
 		{
 			if (focusw == doc->priv->tag_tree)
@@ -1518,7 +1534,7 @@ static gboolean check_vte(GdkModifierType state, guint keyval)
 	GeanyKeyGroup *group;
 	GtkWidget *widget;
 
-	if (gtk_window_get_focus(GTK_WINDOW(main_widgets.window)) != vte_config.vte)
+	if (ui_get_focus_widget() != vte_config.vte)
 		return FALSE;
 	/* let VTE copy/paste override any user keybinding */
 	if (state == (GEANY_PRIMARY_MOD_MASK | GDK_SHIFT_MASK) && (keyval == GDK_KEY_c || keyval == GDK_KEY_v))
@@ -1657,7 +1673,7 @@ static gboolean on_key_press_event(GtkWidget *widget, GdkEventKey *ev, gpointer 
 	if (insight_relation_graph_handle_key(gtk_window_get_focus(GTK_WINDOW(widget)), ev))
 		return TRUE;
 
-	if (insight_template_fields_key(gtk_window_get_focus(GTK_WINDOW(main_widgets.window)), ev))
+	if (insight_template_fields_key(ui_get_focus_widget(), ev))
 		return TRUE;
 
 	doc = document_get_current();
@@ -2129,7 +2145,7 @@ static void switch_notebook_page(gint direction)
 	gint page_count, cur_page, pass;
 	gboolean parent_is_notebook = FALSE;
 	GtkNotebook *notebook;
-	GtkWidget *focusw = gtk_window_get_focus(GTK_WINDOW(main_widgets.window));
+	GtkWidget *focusw = ui_get_focus_widget();
 
 	/* check whether the current widget is a GtkNotebook or a child of a GtkNotebook */
 	do
@@ -2256,7 +2272,7 @@ static void goto_matching_brace(GeanyDocument *doc)
 
 static gboolean cb_func_clipboard_action(guint key_id)
 {
-	GtkWidget *focusw = gtk_window_get_focus(GTK_WINDOW(main_widgets.window));
+	GtkWidget *focusw = ui_get_focus_widget();
 
 	switch (key_id)
 	{
@@ -2363,7 +2379,7 @@ static gboolean cb_func_goto_action(guint key_id)
 	}
 	/* only check editor-sensitive keybindings when editor has focus so home,end still
 	 * work in other widgets */
-	if (gtk_window_get_focus(GTK_WINDOW(main_widgets.window)) != GTK_WIDGET(doc->editor->sci))
+	if (ui_get_focus_widget() != GTK_WIDGET(doc->editor->sci))
 		return FALSE;
 
 	switch (key_id)
@@ -2413,7 +2429,7 @@ static void delete_lines(GeanyEditor *editor)
 static gboolean cb_func_editor_action(guint key_id)
 {
 	GeanyDocument *doc = document_get_current();
-	GtkWidget *focusw = gtk_window_get_focus(GTK_WINDOW(main_widgets.window));
+	GtkWidget *focusw = ui_get_focus_widget();
 
 	/* edit keybindings only valid when scintilla widget has focus */
 	if (doc == NULL || focusw != GTK_WIDGET(doc->editor->sci))
@@ -2716,7 +2732,7 @@ static void join_paragraph(GeanyEditor *editor)
 static gboolean cb_func_format_action(guint key_id)
 {
 	GeanyDocument *doc = document_get_current();
-	GtkWidget *focusw = gtk_window_get_focus(GTK_WINDOW(main_widgets.window));
+	GtkWidget *focusw = ui_get_focus_widget();
 
 	/* keybindings only valid when scintilla widget has focus */
 	if (doc == NULL || focusw != GTK_WIDGET(doc->editor->sci))
@@ -2805,7 +2821,7 @@ static gboolean cb_func_format_action(guint key_id)
 static gboolean cb_func_select_action(guint key_id)
 {
 	GeanyDocument *doc = document_get_current();
-	GtkWidget *focusw = gtk_window_get_focus(GTK_WINDOW(main_widgets.window));
+	GtkWidget *focusw = ui_get_focus_widget();
 
 	switch (key_id)
 	{
@@ -2922,7 +2938,7 @@ static void insert_line_before(GeanyEditor *editor)
 static gboolean cb_func_insert_action(guint key_id)
 {
 	GeanyDocument *doc = document_get_current();
-	GtkWidget *focusw = gtk_window_get_focus(GTK_WINDOW(main_widgets.window));
+	GtkWidget *focusw = ui_get_focus_widget();
 
 	/* keybindings only valid when scintilla widget has focus */
 	if (doc == NULL || focusw != GTK_WIDGET(doc->editor->sci))

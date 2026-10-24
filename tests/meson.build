@@ -955,3 +955,6 @@ endif
 
 stream_gui_test = executable('test_insight_stream_gui', '../insight/tests/stream_gui_test.c', '../src/insight-stream.c', dependencies: deps)
 test('Insight streaming comparison and history GUI', stream_gui_test, timeout: 40, is_parallel: false)
+
+source_arrangement_gui_test = executable('test_insight_source_arrangement_gui', '../insight/tests/source_arrangement_gui_test.c', dependencies: test_deps)
+test('Insight native source window arrangements GUI', source_arrangement_gui_test, timeout: 50, is_parallel: false)

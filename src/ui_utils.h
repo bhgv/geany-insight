@@ -307,6 +307,8 @@ void ui_update_popup_goto_items(gboolean enable);
 
 void ui_menu_copy_items_set_sensitive(gboolean sensitive);
 
+GtkWidget *ui_get_focus_widget(void);
+
 void ui_update_menu_copy_items(GeanyDocument *doc);
 
 void ui_update_insert_include_item(GeanyDocument *doc, gint item);

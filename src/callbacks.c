@@ -240,7 +240,7 @@ void on_redo1_activate(GtkMenuItem *menuitem, gpointer user_data)
 
 void on_cut1_activate(GtkMenuItem *menuitem, gpointer user_data)
 {
-	GtkWidget *focusw = gtk_window_get_focus(GTK_WINDOW(main_widgets.window));
+	GtkWidget *focusw = ui_get_focus_widget();
 
 	if (GTK_IS_EDITABLE(focusw))
 		gtk_editable_cut_clipboard(GTK_EDITABLE(focusw));
@@ -257,7 +257,7 @@ void on_cut1_activate(GtkMenuItem *menuitem, gpointer user_data)
 
 void on_copy1_activate(GtkMenuItem *menuitem, gpointer user_data)
 {
-	GtkWidget *focusw = gtk_window_get_focus(GTK_WINDOW(main_widgets.window));
+	GtkWidget *focusw = ui_get_focus_widget();
 
 	if (GTK_IS_EDITABLE(focusw))
 		gtk_editable_copy_clipboard(GTK_EDITABLE(focusw));
@@ -274,7 +274,7 @@ void on_copy1_activate(GtkMenuItem *menuitem, gpointer user_data)
 
 void on_paste1_activate(GtkMenuItem *menuitem, gpointer user_data)
 {
-	GtkWidget *focusw = gtk_window_get_focus(GTK_WINDOW(main_widgets.window));
+	GtkWidget *focusw = ui_get_focus_widget();
 
 	if (GTK_IS_EDITABLE(focusw))
 		gtk_editable_paste_clipboard(GTK_EDITABLE(focusw));
@@ -292,7 +292,7 @@ void on_paste1_activate(GtkMenuItem *menuitem, gpointer user_data)
 
 void on_delete1_activate(GtkMenuItem *menuitem, gpointer user_data)
 {
-	GtkWidget *focusw = gtk_window_get_focus(GTK_WINDOW(main_widgets.window));
+	GtkWidget *focusw = ui_get_focus_widget();
 
 	if (GTK_IS_EDITABLE(focusw))
 		gtk_editable_delete_selection(GTK_EDITABLE(focusw));
@@ -1328,7 +1328,7 @@ void on_print1_activate(GtkMenuItem *menuitem, gpointer user_data)
 
 void on_menu_select_all1_activate(GtkMenuItem *menuitem, gpointer user_data)
 {
-	GtkWidget *focusw = gtk_window_get_focus(GTK_WINDOW(main_widgets.window));
+	GtkWidget *focusw = ui_get_focus_widget();
 
 	/* special case for Select All in the scribble widget */
 	if (GTK_IS_TEXT_VIEW(focusw))

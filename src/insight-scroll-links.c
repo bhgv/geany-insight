@@ -89,23 +89,48 @@ void insight_scroll_links_membership(const InsightProjectFiles *policy,const gch
  if(changed) { restore_panes();editing_uid=0;persist_links();links_changed(); }
 }
 /* Actual editor widgets are moved, not copied: syntax, Undo and saving stay native. */
-typedef struct { GtkWidget *parent,*content,*placeholder;guint id;gint position;gulong focus; } LinkedPane;
+typedef struct { GtkWidget *parent,*content,*placeholder;guint id;gint position;gulong focus;GtkWidget *box,*label; } LinkedPane;
 static GArray *panes;
-static GtkWidget *pane_window;
+static GtkWidget *pane_window,*pane_body;
+static gboolean manual_layout,zoomed;
+static GtkOrientation layout_axis=GTK_ORIENTATION_HORIZONTAL;
+static guint recent_source,previous_source;
+static GQueue source_mru=G_QUEUE_INIT;
+static void tile_command(guint action);
+static void show_panes(GeanyDocument *doc,GArray *ids,gboolean manual,GtkOrientation axis);
+static void remember_source(GeanyDocument *doc) {
+ if(!DOC_VALID(doc) || recent_source==doc->id) return;g_queue_remove(&source_mru,GUINT_TO_POINTER(doc->id));g_queue_push_head(&source_mru,GUINT_TO_POINTER(doc->id));while(source_mru.length>ALL_LIMIT) g_queue_pop_tail(&source_mru);recent_source=doc->id;previous_source=GPOINTER_TO_UINT(g_queue_peek_nth(&source_mru,1));
+}
+static gboolean pane_visibility(GtkWidget *widget,guint id) {
+ for(guint n=0;panes && n<panes->len;n++) {LinkedPane *pane=&g_array_index(panes,LinkedPane,n);if(widget==pane->box) {gboolean match=pane->id==id;gtk_widget_set_visible(widget,!zoomed || match);return match;}}
+ gboolean found=FALSE;if(GTK_IS_CONTAINER(widget)) {GList *children=gtk_container_get_children(GTK_CONTAINER(widget));for(GList *p=children;p;p=p->next) if(pane_visibility(p->data,id)) found=TRUE;g_list_free(children);}gtk_widget_set_visible(widget,!zoomed || found);return found;
+}
+static void pane_action(GtkWidget *widget,gpointer data) { (void)widget;tile_command(GPOINTER_TO_UINT(data)); }
+static void equalize(GtkWidget *widget) {
+ for(guint n=0;panes && n<panes->len;n++) if(widget==g_array_index(panes,LinkedPane,n).box) return;
+ if(GTK_IS_PANED(widget)) {gint size=gtk_orientable_get_orientation(GTK_ORIENTABLE(widget))==GTK_ORIENTATION_HORIZONTAL ? gtk_widget_get_allocated_width(widget):gtk_widget_get_allocated_height(widget);guint weight=GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(widget),"insight-pane-weight")),total=GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(widget),"insight-pane-total"));if(size>1) gtk_paned_set_position(GTK_PANED(widget),total ? (gint)((gint64)size*weight/total):size/2);}
+ if(GTK_IS_CONTAINER(widget)) {GList *children=gtk_container_get_children(GTK_CONTAINER(widget));for(GList *p=children;p;p=p->next) equalize(p->data);g_list_free(children);}
+}
+static gboolean equalize_idle(gpointer data) { GtkWidget *window=data;if(pane_window==window && pane_body) equalize(pane_body);return G_SOURCE_REMOVE; }
+static GtkWidget *tile_tree(GPtrArray *widgets,guint start,guint count,GtkOrientation axis,gboolean grid) {
+ if(count==1) return g_ptr_array_index(widgets,start);guint left=grid ? (count+1)/2:1;GtkWidget *split=gtk_paned_new(axis);g_object_set_data(G_OBJECT(split),"insight-pane-weight",GUINT_TO_POINTER(left));g_object_set_data(G_OBJECT(split),"insight-pane-total",GUINT_TO_POINTER(count));GtkOrientation next=grid ? (axis==GTK_ORIENTATION_HORIZONTAL ? GTK_ORIENTATION_VERTICAL:GTK_ORIENTATION_HORIZONTAL):axis;gtk_paned_pack1(GTK_PANED(split),tile_tree(widgets,start,left,next,grid),TRUE,TRUE);gtk_paned_pack2(GTK_PANED(split),tile_tree(widgets,start+left,count-left,next,grid),TRUE,TRUE);return split;
+}
 static gboolean pane_focus(GtkWidget *widget,GdkEventFocus *event,gpointer data) {
- (void)widget;(void)event;GeanyDocument *doc=document_find_by_id(GPOINTER_TO_UINT(data));if(DOC_VALID(doc)) { gboolean old=presenting;presenting=TRUE;gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.notebook),document_get_notebook_page(doc));presenting=old; }return FALSE;
+ (void)widget;(void)event;GeanyDocument *doc=document_find_by_id(GPOINTER_TO_UINT(data));if(DOC_VALID(doc)) {if(!presenting) remember_source(doc);if(zoomed && pane_body) pane_visibility(pane_body,doc->id);gboolean old=presenting;presenting=TRUE;gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.notebook),document_get_notebook_page(doc));presenting=old; }return FALSE;
 }
 static void restore_panes(void) {
  gboolean old=presenting;presenting=TRUE;
  if(panes) { for(guint n=0;n<panes->len;n++) { LinkedPane *p=&g_array_index(panes,LinkedPane,n);GeanyDocument *doc=document_find_by_id(p->id);if(DOC_VALID(doc) && p->focus) g_signal_handler_disconnect(doc->editor->sci,p->focus);
    GtkWidget *parent=gtk_widget_get_parent(p->content);if(parent) gtk_container_remove(GTK_CONTAINER(parent),p->content);gtk_box_pack_start(GTK_BOX(p->parent),p->content,TRUE,TRUE,0);gtk_box_reorder_child(GTK_BOX(p->parent),p->content,p->position);gtk_widget_destroy(p->placeholder);gtk_widget_show(p->content);g_object_unref(p->content);g_object_unref(p->parent);
   }g_array_unref(panes);panes=NULL; }
- if(pane_window) { GtkWidget *window=pane_window;pane_window=NULL;gtk_widget_destroy(window); }presenting=old;
+ if(pane_window) { GtkWidget *window=pane_window;pane_window=NULL;pane_body=NULL;gtk_widget_destroy(window); }manual_layout=zoomed=FALSE;presenting=old;
 }
 static gboolean pane_delete(GtkWidget *widget,GdkEvent *event,gpointer data) { (void)widget;(void)event;(void)data;restore_panes();return TRUE; }
 static void pane_reveal(GtkWidget *widget,gpointer data) { (void)widget;GeanyDocument *doc=document_find_by_id(GPOINTER_TO_UINT(data));if(DOC_VALID(doc)) present_links(doc); }
 static void present_links(GeanyDocument *doc) {
- if(project_loading || presenting || !DOC_VALID(doc) || !link_pairs) return;presenting=TRUE;
+ if(project_loading || presenting || !DOC_VALID(doc) || !link_pairs) return;
+ if(manual_layout && pane_window && panes) {for(guint n=0;n<panes->len;n++) if(g_array_index(panes,LinkedPane,n).id==doc->id) {if(zoomed && pane_body) pane_visibility(pane_body,doc->id);gtk_window_present(GTK_WINDOW(pane_window));return;}restore_panes();}
+ presenting=TRUE;
  /* A closed partner remains a project relation even when tiling is disabled.
   * Reopen it in a normal tab and keep the selected source active. */
  gboolean reopened=FALSE;gchar *path=doc_path(doc);
@@ -118,22 +143,32 @@ static void present_links(GeanyDocument *doc) {
    GeanyDocument *other=p->source==id ? reopen(p->target,p->b):reopen(p->source,p->a);if(!DOC_VALID(other)) continue;if(p->source==id) p->target=other->id;else p->source=other->id;gboolean seen=FALSE;for(guint k=0;k<ids->len;k++) if(g_array_index(ids,guint,k)==other->id) seen=TRUE;if(!seen) { guint value=other->id;g_array_append_val(ids,value); }
   } }
  if(ids->len<2) { g_array_unref(ids);presenting=FALSE;return; }
- gboolean same=panes && panes->len==ids->len;if(same) for(guint n=0;n<ids->len;n++) { gboolean found=FALSE;for(guint k=0;k<panes->len;k++) if(g_array_index(panes,LinkedPane,k).id==g_array_index(ids,guint,n)) found=TRUE;if(!found) same=FALSE; }
- if(same) {gtk_window_present(GTK_WINDOW(pane_window));g_array_unref(ids);presenting=FALSE;return;}
- restore_panes();pane_window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(pane_window,"insight-linked-source-windows");gtk_window_set_title(GTK_WINDOW(pane_window),insight_tr("Linked source windows"));gtk_window_set_transient_for(GTK_WINDOW(pane_window),GTK_WINDOW(main_widgets.window));gtk_window_set_destroy_with_parent(GTK_WINDOW(pane_window),TRUE);
+ show_panes(doc,ids,FALSE,GTK_ORIENTATION_HORIZONTAL);g_array_unref(ids);presenting=FALSE;
+}
+static void show_panes(GeanyDocument *doc,GArray *ids,gboolean manual,GtkOrientation axis) {
+ if(!DOC_VALID(doc) || !ids->len) return;gboolean old=presenting;presenting=TRUE;
+ gboolean same=panes && panes->len==ids->len && manual_layout==manual && layout_axis==axis;
+ if(same) for(guint n=0;n<ids->len;n++) {gboolean found=FALSE;if(manual) found=g_array_index(panes,LinkedPane,n).id==g_array_index(ids,guint,n);else for(guint k=0;k<panes->len;k++) if(g_array_index(panes,LinkedPane,k).id==g_array_index(ids,guint,n)) found=TRUE;if(!found) same=FALSE;}
+ if(same) {gtk_window_present(GTK_WINDOW(pane_window));presenting=old;return;}
+ restore_panes();manual_layout=manual;layout_axis=axis;pane_window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(pane_window,"insight-linked-source-windows");gtk_window_set_title(GTK_WINDOW(pane_window),insight_tr(manual ? "Source window arrangement":"Linked source windows"));gtk_window_set_transient_for(GTK_WINDOW(pane_window),GTK_WINDOW(main_widgets.window));gtk_window_set_destroy_with_parent(GTK_WINDOW(pane_window),TRUE);g_object_set_data(G_OBJECT(pane_window),"insight-source-host",GINT_TO_POINTER(1));keybindings_connect_source_window(pane_window);
  GdkRectangle area={0,0,1000,700};GdkDisplay *display=gtk_widget_get_display(main_widgets.window);GdkMonitor *monitor=gdk_display_get_monitor_at_window(display,gtk_widget_get_window(main_widgets.window));if(monitor) gdk_monitor_get_workarea(monitor,&area);gtk_window_set_default_size(GTK_WINDOW(pane_window),MAX(200,area.width*9/10),MAX(150,area.height*8/10));
  GSList *accels=gtk_accel_groups_from_object(G_OBJECT(main_widgets.window));for(GSList *a=accels;a;a=a->next) gtk_window_add_accel_group(GTK_WINDOW(pane_window),a->data);
- panes=g_array_new(FALSE,FALSE,sizeof(LinkedPane));GtkWidget *slot=pane_window;
+ GtkWidget *root=gtk_box_new(GTK_ORIENTATION_VERTICAL,3),*toolbar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);gtk_container_add(GTK_CONTAINER(pane_window),root);gtk_box_pack_start(GTK_BOX(root),toolbar,FALSE,FALSE,0);
+ const gchar *icons[]={"view-split-top-bottom-symbolic","view-split-left-right-symbolic","view-restore-symbolic","view-fullscreen-symbolic","go-previous-symbolic","go-next-symbolic","window-close-symbolic"};
+ const gchar *tips[]={"Tile Horizontal","Tile Vertical","Equalize source panes","Zoom source pane","Previous source pane","Next source pane","Return editors to tabs"};const gchar *names[]={"horizontal","vertical","equalize","zoom","previous","next","restore"};const guint actions[]={11,12,9,10,13,14,8};
+ for(guint n=0;n<G_N_ELEMENTS(icons);n++) {GtkWidget *button=gtk_button_new_from_icon_name(icons[n],GTK_ICON_SIZE_MENU);gtk_button_set_relief(GTK_BUTTON(button),GTK_RELIEF_NONE);gtk_button_set_focus_on_click(GTK_BUTTON(button),FALSE);gchar *name=g_strconcat("insight-source-arrangement-",names[n],NULL);gtk_widget_set_name(button,name);g_free(name);insight_i18n_key(G_OBJECT(button),"tooltip-text",tips[n]);gtk_box_pack_start(GTK_BOX(toolbar),button,FALSE,FALSE,0);g_signal_connect(button,"clicked",G_CALLBACK(pane_action),GUINT_TO_POINTER(actions[n]));}
+ pane_body=gtk_box_new(GTK_ORIENTATION_VERTICAL,0);gtk_widget_set_name(pane_body,"insight-source-arrangement-body");gtk_box_pack_start(GTK_BOX(root),pane_body,TRUE,TRUE,0);panes=g_array_new(FALSE,FALSE,sizeof(LinkedPane));GPtrArray *widgets=g_ptr_array_new();
  for(guint n=0;n<ids->len;n++) { GeanyDocument *d=document_find_by_id(g_array_index(ids,guint,n));GtkWidget *page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(main_widgets.notebook),document_get_notebook_page(d)),*content=GTK_WIDGET(d->editor->sci);while(gtk_widget_get_parent(content) && gtk_widget_get_parent(content)!=page) content=gtk_widget_get_parent(content);if(gtk_widget_get_parent(content)!=page) continue;
   GList *children=gtk_container_get_children(GTK_CONTAINER(page));gint position=g_list_index(children,content);g_list_free(children);LinkedPane pane={g_object_ref(page),g_object_ref(content),gtk_button_new_with_label(insight_tr("Show linked source windows")),d->id,position,0};g_signal_connect(pane.placeholder,"clicked",G_CALLBACK(pane_reveal),GUINT_TO_POINTER(d->id));
   gtk_container_remove(GTK_CONTAINER(page),content);gtk_box_pack_start(GTK_BOX(page),pane.placeholder,TRUE,TRUE,0);gtk_widget_show(pane.placeholder);
   GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,2),*label=gtk_label_new(d->file_name ? d->file_name:insight_tr("Untitled"));g_object_set_data(G_OBJECT(label),"insight-no-i18n",GINT_TO_POINTER(1));gtk_label_set_selectable(GTK_LABEL(label),TRUE);gtk_label_set_ellipsize(GTK_LABEL(label),PANGO_ELLIPSIZE_MIDDLE);gtk_widget_set_tooltip_text(label,d->file_name);gtk_box_pack_start(GTK_BOX(box),label,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),content,TRUE,TRUE,0);
-  if(n+1<ids->len) { GtkWidget *split=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);gtk_container_add(GTK_CONTAINER(slot),split);gtk_paned_pack1(GTK_PANED(split),box,TRUE,TRUE);GtkWidget *rest=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0);gtk_paned_pack2(GTK_PANED(split),rest,TRUE,TRUE);gtk_paned_set_position(GTK_PANED(split),MAX(100,area.width*9/10/(gint)ids->len));slot=rest; }else gtk_container_add(GTK_CONTAINER(slot),box);
+  pane.box=box;pane.label=label;g_ptr_array_add(widgets,box);
   pane.focus=g_signal_connect(d->editor->sci,"focus-in-event",G_CALLBACK(pane_focus),GUINT_TO_POINTER(d->id));g_array_append_val(panes,pane);
  }
- g_signal_connect(pane_window,"delete-event",G_CALLBACK(pane_delete),NULL);gtk_widget_show_all(pane_window);gtk_window_present(GTK_WINDOW(pane_window));gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.notebook),document_get_notebook_page(doc));gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));g_array_unref(ids);presenting=FALSE;
+ if(widgets->len) gtk_container_add(GTK_CONTAINER(pane_body),tile_tree(widgets,0,widgets->len,axis,manual && widgets->len>3));g_ptr_array_unref(widgets);
+ g_signal_connect(pane_window,"delete-event",G_CALLBACK(pane_delete),NULL);gtk_widget_show_all(pane_window);gtk_window_present(GTK_WINDOW(pane_window));gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.notebook),document_get_notebook_page(doc));gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,equalize_idle,g_object_ref(pane_window),g_object_unref);presenting=old;
 }
-static void document_activated(GObject *o,GeanyDocument *doc,gpointer unused) { (void)o;(void)unused;if(!close_guard) present_links(doc); }
+static void document_activated(GObject *o,GeanyDocument *doc,gpointer unused) { (void)o;(void)unused;if(!presenting) remember_source(doc);if(!close_guard) present_links(doc); }
 
 
 static ViewSample sample_view(GeanyDocument *doc) {
@@ -303,7 +338,53 @@ void insight_scroll_links_add_popup(GtkWidget *menu,guint document_id) {
 static void editor_menu_updated(GObject *object,const gchar *word,gint position,GeanyDocument *doc,gpointer data) {
  (void)object;(void)word;(void)position;(void)data;GList *items=gtk_container_get_children(GTK_CONTAINER(main_widgets.editor_menu));for(GList *i=items;i;i=i->next) if(!g_strcmp0(gtk_widget_get_name(i->data),"insight-scroll-links-context")) gtk_widget_destroy(i->data);g_list_free(items);if(DOC_VALID(doc)) insight_scroll_links_add_popup(main_widgets.editor_menu,doc->id);
 }
-void insight_scroll_links_command(guint action) { if(!link_pairs) return;if(action==0) show_dialog();else if(action==1) set_all(!link_all);else if(action==2) clear_links(); }
+static GtkWidget *arrangement_dialog,*arrangement_view,*arrangement_query,*arrangement_axis,*arrangement_status;
+static GtkListStore *arrangement_store;
+static void arrangement_count(void) {
+ if(!arrangement_store) return;guint checked=0,total=0;GtkTreeIter it;for(gboolean valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(arrangement_store),&it);valid;valid=gtk_tree_model_iter_next(GTK_TREE_MODEL(arrangement_store),&it)) {gboolean active;gtk_tree_model_get(GTK_TREE_MODEL(arrangement_store),&it,0,&active,-1);checked+=active;total++;}gchar *label=insight_i18n_printf("Selected source windows: %u / %u",checked,total);gtk_label_set_text(GTK_LABEL(arrangement_status),label);g_free(label);gtk_dialog_set_response_sensitive(GTK_DIALOG(arrangement_dialog),GTK_RESPONSE_APPLY,checked>0);
+}
+static void arrangement_filter(GtkEditable *editable,gpointer data) {
+ (void)editable;(void)data;gchar *query=g_utf8_casefold(gtk_entry_get_text(GTK_ENTRY(arrangement_query)),-1);GtkTreeIter it;for(gboolean valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(arrangement_store),&it);valid;valid=gtk_tree_model_iter_next(GTK_TREE_MODEL(arrangement_store),&it)) {gchar *path=NULL;gtk_tree_model_get(GTK_TREE_MODEL(arrangement_store),&it,2,&path,-1);gchar *fold=g_utf8_casefold(path,-1);gtk_list_store_set(arrangement_store,&it,4,strstr(fold,query)!=NULL,-1);g_free(fold);g_free(path);}g_free(query);arrangement_count();
+}
+static void arrangement_toggle(GtkCellRendererToggle *cell,gchar *path,gpointer data) {
+ (void)cell;(void)data;GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(arrangement_view));GtkTreeIter it;if(!gtk_tree_model_get_iter_from_string(model,&it,path)) return;guint id;gboolean active;gtk_tree_model_get(model,&it,0,&active,3,&id,-1);for(gboolean valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(arrangement_store),&it);valid;valid=gtk_tree_model_iter_next(GTK_TREE_MODEL(arrangement_store),&it)) {guint candidate;gtk_tree_model_get(GTK_TREE_MODEL(arrangement_store),&it,3,&candidate,-1);if(candidate==id) {gtk_list_store_set(arrangement_store,&it,0,!active,-1);break;}}arrangement_count();
+}
+static void arrangement_select(GtkWidget *widget,gpointer data) {
+ (void)widget;GtkTreeIter it;for(gboolean valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(arrangement_store),&it);valid;valid=gtk_tree_model_iter_next(GTK_TREE_MODEL(arrangement_store),&it)) {gboolean visible;gtk_tree_model_get(GTK_TREE_MODEL(arrangement_store),&it,4,&visible,-1);if(visible) gtk_list_store_set(arrangement_store,&it,0,GPOINTER_TO_INT(data),-1);}arrangement_count();
+}
+static void arrangement_refresh(void) {
+ if(!arrangement_store) return;GHashTable *choices=g_hash_table_new(g_direct_hash,g_direct_equal);GtkTreeIter it;for(gboolean valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(arrangement_store),&it);valid;valid=gtk_tree_model_iter_next(GTK_TREE_MODEL(arrangement_store),&it)) {guint id;gboolean active;gtk_tree_model_get(GTK_TREE_MODEL(arrangement_store),&it,0,&active,3,&id,-1);g_hash_table_insert(choices,GUINT_TO_POINTER(id),GINT_TO_POINTER(active ? 2:1));}
+ gtk_list_store_clear(arrangement_store);guint count=0;for(gint n=0;n<gtk_notebook_get_n_pages(GTK_NOTEBOOK(main_widgets.notebook)) && count<ALL_LIMIT;n++) {GeanyDocument *doc=document_get_from_page(n);if(!DOC_VALID(doc)) continue;gchar *label=document_label(doc->id),*base=doc->file_name ? g_path_get_basename(doc->file_name):g_strdup(label);gpointer choice=g_hash_table_lookup(choices,GUINT_TO_POINTER(doc->id));gboolean checked=choice ? GPOINTER_TO_INT(choice)==2:doc->id==recent_source || doc->id==previous_source;gtk_list_store_append(arrangement_store,&it);gtk_list_store_set(arrangement_store,&it,0,checked,1,base,2,label,3,doc->id,4,TRUE,-1);g_free(base);g_free(label);count++;}g_hash_table_unref(choices);arrangement_filter(NULL,NULL);
+}
+static void arrangement_locale(gpointer data) { (void)data;arrangement_count(); }
+static void arrangement_destroy(GtkWidget *widget,gpointer data) { (void)widget;(void)data;arrangement_dialog=arrangement_view=arrangement_query=arrangement_axis=arrangement_status=NULL;g_clear_object(&arrangement_store); }
+static void arrangement_response(GtkDialog *dialog,gint response,gpointer data) {
+ (void)data;if(response==GTK_RESPONSE_HELP) {arrangement_refresh();return;}if(response!=GTK_RESPONSE_APPLY) {gtk_widget_destroy(GTK_WIDGET(dialog));return;}
+ GArray *ids=g_array_new(FALSE,FALSE,sizeof(guint));GtkTreeIter it;gboolean stale=FALSE;for(gboolean valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(arrangement_store),&it);valid;valid=gtk_tree_model_iter_next(GTK_TREE_MODEL(arrangement_store),&it)) {gboolean checked;guint id;gtk_tree_model_get(GTK_TREE_MODEL(arrangement_store),&it,0,&checked,3,&id,-1);if(checked) {if(!DOC_VALID(document_find_by_id(id))) stale=TRUE;g_array_append_val(ids,id);}}
+ if(stale || !ids->len) {gtk_label_set_text(GTK_LABEL(arrangement_status),insight_tr("Source windows changed; Refresh the list before arranging."));g_array_unref(ids);return;}
+ GeanyDocument *doc=document_get_current();gboolean included=FALSE;for(guint n=0;n<ids->len;n++) if(DOC_VALID(doc) && g_array_index(ids,guint,n)==doc->id) included=TRUE;if(!included) doc=document_find_by_id(g_array_index(ids,guint,0));show_panes(doc,ids,TRUE,gtk_combo_box_get_active(GTK_COMBO_BOX(arrangement_axis))==0 ? GTK_ORIENTATION_HORIZONTAL:GTK_ORIENTATION_VERTICAL);g_array_unref(ids);
+}
+static void arrange_dialog(void) {
+ if(!arrangement_dialog) {
+  arrangement_dialog=gtk_dialog_new_with_buttons(insight_tr("Arrange Source Windows"),GTK_WINDOW(main_widgets.window),GTK_DIALOG_DESTROY_WITH_PARENT,"Close",GTK_RESPONSE_CLOSE,"Refresh",GTK_RESPONSE_HELP,"Apply",GTK_RESPONSE_APPLY,NULL);gtk_widget_set_name(arrangement_dialog,"insight-source-arrangement-dialog");gtk_window_set_default_size(GTK_WINDOW(arrangement_dialog),700,440);GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(arrangement_dialog));gtk_container_set_border_width(GTK_CONTAINER(box),8);gtk_box_set_spacing(GTK_BOX(box),4);
+  arrangement_query=gtk_search_entry_new();gtk_widget_set_name(arrangement_query,"insight-source-arrangement-query");insight_i18n_key(G_OBJECT(arrangement_query),"tooltip-text","Filter open source windows by filename or path.");gtk_box_pack_start(GTK_BOX(box),arrangement_query,FALSE,FALSE,0);
+  arrangement_store=gtk_list_store_new(5,G_TYPE_BOOLEAN,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_UINT,G_TYPE_BOOLEAN);GtkTreeModel *filter=gtk_tree_model_filter_new(GTK_TREE_MODEL(arrangement_store),NULL);gtk_tree_model_filter_set_visible_column(GTK_TREE_MODEL_FILTER(filter),4);arrangement_view=gtk_tree_view_new_with_model(filter);g_object_unref(filter);gtk_widget_set_name(arrangement_view,"insight-source-arrangement-list");GtkCellRenderer *toggle=gtk_cell_renderer_toggle_new();gtk_tree_view_append_column(GTK_TREE_VIEW(arrangement_view),gtk_tree_view_column_new_with_attributes("Show",toggle,"active",0,NULL));g_signal_connect(toggle,"toggled",G_CALLBACK(arrangement_toggle),NULL);const gchar *titles[]={"Name","Path"};for(guint n=0;n<2;n++) {GtkCellRenderer *cell=gtk_cell_renderer_text_new();g_object_set(cell,"ellipsize",PANGO_ELLIPSIZE_MIDDLE,NULL);GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(titles[n],cell,"text",n+1,NULL);gtk_tree_view_column_set_expand(column,TRUE);gtk_tree_view_column_set_resizable(column,TRUE);gtk_tree_view_append_column(GTK_TREE_VIEW(arrangement_view),column);}GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),arrangement_view);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
+  GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);const gchar *labels[]={"Clear visible","Select visible"};for(guint n=0;n<2;n++) {GtkWidget *button=gtk_button_new_with_label(insight_tr(labels[n]));gtk_widget_set_name(button,n ? "insight-source-arrangement-select":"insight-source-arrangement-clear");gtk_box_pack_start(GTK_BOX(row),button,FALSE,FALSE,0);g_signal_connect(button,"clicked",G_CALLBACK(arrangement_select),GUINT_TO_POINTER(n));}arrangement_axis=gtk_combo_box_text_new();gtk_widget_set_name(arrangement_axis,"insight-source-arrangement-axis");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(arrangement_axis),insight_tr("Side by side"));gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(arrangement_axis),insight_tr("Stacked"));gtk_combo_box_set_active(GTK_COMBO_BOX(arrangement_axis),0);gtk_widget_set_tooltip_text(arrangement_axis,insight_tr("Choose the primary direction of the source window layout."));gtk_box_pack_start(GTK_BOX(row),arrangement_axis,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(box),row,FALSE,FALSE,0);arrangement_status=gtk_label_new("");gtk_box_pack_start(GTK_BOX(box),arrangement_status,FALSE,FALSE,0);g_signal_connect(arrangement_query,"changed",G_CALLBACK(arrangement_filter),NULL);g_signal_connect(arrangement_dialog,"response",G_CALLBACK(arrangement_response),NULL);g_signal_connect(arrangement_dialog,"destroy",G_CALLBACK(arrangement_destroy),NULL);insight_i18n_on_refresh(G_OBJECT(arrangement_dialog),arrangement_locale,NULL);
+ }
+ arrangement_refresh();gtk_widget_show_all(arrangement_dialog);gtk_window_present(GTK_WINDOW(arrangement_dialog));
+}
+static void tile_command(guint action) {
+ GeanyDocument *doc=document_get_current();if(action==7) {arrange_dialog();return;}if(action==8) {restore_panes();if(DOC_VALID(doc)) gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));return;}if(!DOC_VALID(doc)) return;
+ if(action==9) {if(pane_body && !zoomed) equalize(pane_body);return;}
+ if(action==10) {if(!panes) return;zoomed=!zoomed;if(pane_body) pane_visibility(pane_body,doc->id);if(!zoomed && pane_window) g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,equalize_idle,g_object_ref(pane_window),g_object_unref);return;}
+ if(action==13 || action==14) {if(!panes || !panes->len) return;guint at=0;for(guint n=0;n<panes->len;n++) if(g_array_index(panes,LinkedPane,n).id==doc->id) at=n;at=(at+panes->len+(action==13 ? -1:1))%panes->len;GeanyDocument *target=document_find_by_id(g_array_index(panes,LinkedPane,at).id);if(DOC_VALID(target)) {if(zoomed) tile_command(10);gtk_widget_grab_focus(GTK_WIDGET(target->editor->sci));}return;}
+ GArray *ids=g_array_new(FALSE,FALSE,sizeof(guint));guint first=doc->id;g_array_append_val(ids,first);GtkOrientation axis=(action==3 || action==11) ? GTK_ORIENTATION_VERTICAL:GTK_ORIENTATION_HORIZONTAL;
+ if(action==11 || action==12) {if(panes) for(guint n=0;n<panes->len;n++) {guint id=g_array_index(panes,LinkedPane,n).id;if(id!=first && DOC_VALID(document_find_by_id(id))) g_array_append_val(ids,id);}}
+ else if(action==5) {GeanyDocument *other=document_find_by_id(previous_source);if(!DOC_VALID(other) || other==doc) {gint at=document_get_notebook_page(doc);other=document_get_from_page(at>0 ? at-1:1);}if(DOC_VALID(other) && other!=doc) {guint id=other->id;g_array_append_val(ids,id);}else {ui_set_statusbar(TRUE,"Open at least two source windows before tiling two windows");g_array_unref(ids);return;}}
+ else if(action!=6) {if(open_count()>ALL_LIMIT) {ui_set_statusbar(TRUE,"Source window arrangements support at most 128 open buffers");g_array_unref(ids);return;}for(gint n=0;n<gtk_notebook_get_n_pages(GTK_NOTEBOOK(main_widgets.notebook));n++) {GeanyDocument *other=document_get_from_page(n);if(DOC_VALID(other) && other!=doc) {guint id=other->id;g_array_append_val(ids,id);}}}
+ show_panes(doc,ids,TRUE,axis);g_array_unref(ids);
+}
+void insight_scroll_links_command(guint action) { if(!link_pairs) return;if(action==0) show_dialog();else if(action==1) set_all(!link_all);else if(action==2) clear_links();else tile_command(action); }
 static void menu_command(GtkWidget *widget,gpointer data) { (void)widget;insight_scroll_links_command(GPOINTER_TO_UINT(data)); }
 static void document_opened(GObject *object,GeanyDocument *doc,gpointer data) {
  (void)object;(void)data;if(!view_samples || !DOC_VALID(doc)) return;bind_paths();g_hash_table_remove(view_samples,GUINT_TO_POINTER(doc->id));
@@ -311,20 +392,22 @@ static void document_opened(GObject *object,GeanyDocument *doc,gpointer data) {
  if(link_dialog) { populate_sources(0);populate_target(TRUE,0);refresh_controls(); }
 }
 static void document_saved(GObject *object,GeanyDocument *doc,gpointer data) {
- (void)object;(void)data;if(!view_samples || !DOC_VALID(doc)) return;for(guint n=0;n<link_pairs->len;n++) { ScrollPair *p=&g_array_index(link_pairs,ScrollPair,n);if(p->source==doc->id) {g_free(p->a);p->a=doc_path(doc);}if(p->target==doc->id) {g_free(p->b);p->b=doc_path(doc);} }persist_links();cache_view(doc);if(link_dialog) { populate_sources(0);populate_target(TRUE,0);links_changed(); }
+ (void)object;(void)data;if(!view_samples || !DOC_VALID(doc)) return;for(guint n=0;n<link_pairs->len;n++) { ScrollPair *p=&g_array_index(link_pairs,ScrollPair,n);if(p->source==doc->id) {g_free(p->a);p->a=doc_path(doc);}if(p->target==doc->id) {g_free(p->b);p->b=doc_path(doc);} }persist_links();cache_view(doc);for(guint n=0;panes && n<panes->len;n++) {LinkedPane *pane=&g_array_index(panes,LinkedPane,n);if(pane->id==doc->id) {gtk_label_set_text(GTK_LABEL(pane->label),doc->file_name ? doc->file_name:insight_tr("Untitled"));gtk_widget_set_tooltip_text(pane->label,doc->file_name);}}if(link_dialog) { populate_sources(0);populate_target(TRUE,0);links_changed(); }
 }
 static void document_closed(GObject *object,GeanyDocument *doc,gpointer data) {
- (void)object;(void)data;if(!view_samples) return;if(!close_guard) close_guard=g_idle_add(clear_close_guard,NULL);restore_panes();g_hash_table_remove(view_samples,GUINT_TO_POINTER(doc->id));
+ (void)object;(void)data;if(!view_samples) return;g_queue_remove(&source_mru,GUINT_TO_POINTER(doc->id));recent_source=GPOINTER_TO_UINT(g_queue_peek_head(&source_mru));previous_source=GPOINTER_TO_UINT(g_queue_peek_nth(&source_mru,1));if(!close_guard) close_guard=g_idle_add(clear_close_guard,NULL);restore_panes();g_hash_table_remove(view_samples,GUINT_TO_POINTER(doc->id));
  for(guint n=link_pairs->len;n>0;n--) { ScrollPair pair=g_array_index(link_pairs,ScrollPair,n-1);if(pair.source==doc->id || pair.target==doc->id) { if(!pair.a || !pair.b) remove_pair(n-1);else {ScrollPair *p=&g_array_index(link_pairs,ScrollPair,n-1);if(p->source==doc->id) p->source=0;if(p->target==doc->id) p->target=0;} } }
  if(link_dialog) { if(dialog_source==doc->id) { dialog_source=0;gtk_label_set_text(GTK_LABEL(source_label),insight_tr("Source closed — Refresh to choose the current editor")); }if(selected_target()==doc->id) target_closed=TRUE; }
  if(link_dialog) {gboolean old=ui_loading;ui_loading=TRUE;gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(links_view)));editing_uid=0;ui_loading=old;populate_sources(doc->id);populate_target(TRUE,doc->id); }links_changed();
 }
-static void menu_destroyed(GtkWidget *widget,gpointer data) { (void)widget;(void)data;ui_loading=TRUE;if(close_guard) {g_source_remove(close_guard);close_guard=0;}persist_links();restore_panes();if(link_dialog) gtk_widget_destroy(link_dialog);link_all=FALSE;while(link_pairs->len) remove_pair(link_pairs->len-1);g_clear_pointer(&scope,g_free);g_clear_pointer(&link_pairs,g_array_unref);g_clear_pointer(&view_samples,g_hash_table_unref);all_menu=NULL;ui_loading=FALSE; }
+static void menu_destroyed(GtkWidget *widget,gpointer data) { (void)widget;(void)data;ui_loading=TRUE;if(close_guard) {g_source_remove(close_guard);close_guard=0;}persist_links();restore_panes();if(link_dialog) gtk_widget_destroy(link_dialog);if(arrangement_dialog) gtk_widget_destroy(arrangement_dialog);link_all=FALSE;g_queue_clear(&source_mru);recent_source=previous_source=0;while(link_pairs->len) remove_pair(link_pairs->len-1);g_clear_pointer(&scope,g_free);g_clear_pointer(&link_pairs,g_array_unref);g_clear_pointer(&view_samples,g_hash_table_unref);all_menu=NULL;ui_loading=FALSE; }
 void insight_scroll_links_init(GtkWidget *menu) {
  link_pairs=g_array_new(FALSE,FALSE,sizeof(ScrollPair));view_samples=g_hash_table_new_full(g_direct_hash,g_direct_equal,NULL,g_free);
  GtkWidget *item=gtk_menu_item_new_with_label("Link Source Windows…");gtk_widget_set_name(item,"insight-scroll-links-command");g_object_set_data(G_OBJECT(item),"insight-window-persistent",GINT_TO_POINTER(1));keybindings_attach_menu(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_LINKWINDOW,item);g_signal_connect(item,"activate",G_CALLBACK(menu_command),GUINT_TO_POINTER(0));gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);gtk_widget_show(item);
  all_menu=gtk_check_menu_item_new_with_label("Link All Source Windows");gtk_widget_set_name(all_menu,"insight-scroll-links-all-command");g_object_set_data(G_OBJECT(all_menu),"insight-window-persistent",GINT_TO_POINTER(1));keybindings_attach_menu(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_LINKALLWINDOWS,all_menu);g_signal_connect(all_menu,"toggled",G_CALLBACK(all_menu_changed),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),all_menu);gtk_widget_show(all_menu);
  item=gtk_menu_item_new_with_label("Unlink All Source Windows");gtk_widget_set_name(item,"insight-scroll-links-clear-command");g_object_set_data(G_OBJECT(item),"insight-window-persistent",GINT_TO_POINTER(1));keybindings_attach_menu(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_UNLINKWINDOWS,item);g_signal_connect(item,"activate",G_CALLBACK(menu_command),GUINT_TO_POINTER(2));gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);gtk_widget_show(item);
+ const gchar *tile_labels[]={"Tile Horizontal","Tile Vertical","Tile Two Windows","Tile One Window","Arrange Source Windows…","Return editors to tabs","Equalize source panes","Zoom source pane"};const gchar *tile_names[]={"horizontal","vertical","two","one","choose","restore","equalize","zoom"};
+ for(guint n=0;n<G_N_ELEMENTS(tile_labels);n++) {GtkWidget *entry=gtk_menu_item_new_with_label(insight_tr(tile_labels[n]));gchar *name=g_strconcat("insight-tile-",tile_names[n],NULL);gtk_widget_set_name(entry,name);g_free(name);g_object_set_data(G_OBJECT(entry),"insight-window-persistent",GINT_TO_POINTER(1));keybindings_attach_menu(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_TILEHORIZONTAL+n,entry);g_signal_connect(entry,"activate",G_CALLBACK(menu_command),GUINT_TO_POINTER(n+3));gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry);gtk_widget_show(entry);}
  GtkWidget *separator=gtk_separator_menu_item_new();g_object_set_data(G_OBJECT(separator),"insight-window-persistent",GINT_TO_POINTER(1));gtk_menu_shell_append(GTK_MENU_SHELL(menu),separator);gtk_widget_show(separator);
  g_signal_connect_object(geany_object,"document-new",G_CALLBACK(document_opened),all_menu,G_CONNECT_AFTER);g_signal_connect_object(geany_object,"document-open",G_CALLBACK(document_opened),all_menu,G_CONNECT_AFTER);g_signal_connect_object(geany_object,"document-close",G_CALLBACK(document_closed),all_menu,0);g_signal_connect_object(geany_object,"document-save",G_CALLBACK(document_saved),all_menu,G_CONNECT_AFTER);g_signal_connect_object(geany_object,"document-activate",G_CALLBACK(document_activated),all_menu,0);g_signal_connect_object(geany_object,"update-editor-menu",G_CALLBACK(editor_menu_updated),all_menu,0);g_signal_connect_object(geany_object,"project-open",G_CALLBACK(project_opened),all_menu,0);g_signal_connect_object(geany_object,"project-save",G_CALLBACK(project_saved),all_menu,0);g_signal_connect_object(geany_object,"project-close",G_CALLBACK(project_closed),all_menu,0);g_signal_connect(all_menu,"destroy",G_CALLBACK(menu_destroyed),NULL);
  if(app->project) { GKeyFile *key=g_key_file_new();gchar *path=utils_get_locale_from_utf8(app->project->file_name);g_key_file_load_from_file(key,path,G_KEY_FILE_NONE,NULL);project_opened(NULL,key,NULL);g_free(path);g_key_file_unref(key); }

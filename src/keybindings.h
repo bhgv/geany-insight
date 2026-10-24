@@ -377,6 +377,14 @@ enum GeanyKeyBindingID
 	GEANY_KEYS_INSIGHT_UNLINKWINDOWS,
 	GEANY_KEYS_INSIGHT_INCREMENTAL,
 	GEANY_KEYS_INSIGHT_INCREMENTALBACK,
+	GEANY_KEYS_INSIGHT_TILEHORIZONTAL,
+	GEANY_KEYS_INSIGHT_TILEVERTICAL,
+	GEANY_KEYS_INSIGHT_TILETWO,
+	GEANY_KEYS_INSIGHT_TILEONE,
+	GEANY_KEYS_INSIGHT_ARRANGESOURCES,
+	GEANY_KEYS_INSIGHT_RESTORESOURCETABS,
+	GEANY_KEYS_INSIGHT_EQUALIZESOURCES,
+	GEANY_KEYS_INSIGHT_ZOOMSOURCE,
 	GEANY_KEYS_COUNT	/* must not be used by plugins */
 };
 
@@ -402,6 +410,8 @@ void keybindings_load_keyfile(void);
 
 extern GPtrArray *keybinding_groups;	/* array of GeanyKeyGroup pointers */
 
+
+void keybindings_connect_source_window(GtkWidget *window);
 
 void keybindings_init(void);
 

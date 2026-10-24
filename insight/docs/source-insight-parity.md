@@ -840,3 +840,10 @@ SSH replaces the separate command entry and escape-stripping log with a shared n
 ### Responsive terminal dimensions and configurable scrollback
 
 SSH/TTY screen rows and columns follow native viewport allocation. Unix SSH now uses a raw local PTY, with window-size ioctls forwarded by OpenSSH; Windows retains pipe transport (local resize, no remote resize notification). Scrollback defaults to 10000 rows, configurable 0–100000 for all current/new SSH/TTY sessions and persisted in insight/terminal.conf; the 4 MiB history cutoff is removed. Compact trailing blanks reduce cell storage without dropping retained rows. Native scrolling and Shift+PageUp/Down preserve history viewing during output. Right-click adds literal bidirectional wrapped search, local Clear, complete UTF-8 snapshot export, Settings and guarded ASCII suffix Cut (copy + Backspace, not modification of historic output). Tests exercise real remote stty dimensions, 10000 retained rows, resizing, search, scroll preservation, limits/persistence/export and clear. [Guide](panel-tty.md).
+
+
+### Project source links and native source arrangements
+
+Named source links now live in the project with relative paths, per-pair simultaneous display, first-row endpoint selectors and editor/tab context linking. Duplicates focus the existing relation; closed partners reopen, and explicit project membership removal prunes links. This supersedes the earlier memory-only/purged-endpoint description.
+
+Window adds Tile Horizontal/Vertical, Tile Two Windows using the previous live source, Tile One Window and a filtered checked-source arrangement manager. Actual editors share a compact layout toolbar, proportional equalization, single-pane zoom/restore and previous/next traversal. Manual groups remain independent of project scroll links and restore native pages on close. Native keyboard routing/focus covers detached editing, with original document identity and no copied preview buffers. Up to 128 sources, session-only manual layout; GTK presentation instead of overlapping SI MDI/Cascade. [Guide and diagram](scroll-links.md).

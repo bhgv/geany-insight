@@ -1184,3 +1184,5 @@ install_data('insight/docs/panel-tty.md', install_dir: cdata.get('GEANY_DATA_DIR
 install_data('insight/docs/media/terminals.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
 
 install_data('insight/docs/media/binary-merge.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
+
+install_data('insight/docs/media/source-arrangement.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')

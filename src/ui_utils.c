@@ -507,10 +507,17 @@ void ui_menu_copy_items_set_sensitive(gboolean sensitive)
 }
 
 
+GtkWidget *ui_get_focus_widget(void)
+{
+ GtkWidget *focus=gtk_window_get_focus(GTK_WINDOW(main_widgets.window));GeanyDocument *doc=document_get_current();
+ if(DOC_VALID(doc)) {GtkWidget *top=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));if(GTK_IS_WINDOW(top) && top!=main_widgets.window && g_object_get_data(G_OBJECT(top),"insight-source-host") && (gtk_window_is_active(GTK_WINDOW(top)) || !focus || g_object_get_data(G_OBJECT(top),"insight-source-key-dispatch"))) return gtk_window_get_focus(GTK_WINDOW(top));}
+ return focus;
+}
+
 void ui_update_menu_copy_items(GeanyDocument *doc)
 {
 	gboolean enable = FALSE;
-	GtkWidget *focusw = gtk_window_get_focus(GTK_WINDOW(main_widgets.window));
+	GtkWidget *focusw = ui_get_focus_widget();
 
 	g_return_if_fail(doc == NULL || doc->is_valid);
 
