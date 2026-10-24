@@ -163,7 +163,7 @@ static guint64 workbench_epoch;
 static void open_context(GtkButton *,gpointer);
 static gboolean python_language(GeanyFiletype *);
 static void show_diff(GtkWidget *,gpointer);
-static void show_hex(GtkWidget *w,gpointer p) { (void)w;(void)p;insight_hex_show(main_widgets.window,NULL,NULL); }
+static void show_hex(GtkWidget *w,gpointer p) { (void)w;(void)p;GeanyDocument *doc=document_get_current();insight_hex_show(main_widgets.window,doc ? doc->real_path:NULL,NULL); }
 static void diff_source_open(const gchar *path,guint line) {
  GeanyDocument *previous=document_get_current(),*doc=document_open_file(path,FALSE,NULL,NULL);if(!doc) return;
  navqueue_goto_line(previous,doc,CLAMP((gint)line,1,sci_get_line_count(doc->editor->sci)));document_grab_focus(doc);gtk_window_present(GTK_WINDOW(main_widgets.window));

@@ -58,7 +58,7 @@ the existing guarded review action.
 
 Base64 exports **Result**, including manual edits. Choose the whole stream, encoded
 parts of 10/100 KiB or 1/10 MiB, or a custom encoded byte count (zero means whole).
-Encoding happens once before splitting. Parts are named `name.b64.part000001`,
+Each export is limited to 4096 parts. Encoding happens once before splitting. Parts are named `name.b64.part000001`,
 `name.b64.part000002`, etc. Existing parts are protected; failed exports remove only
 parts created by that operation. Reassemble before decoding:
 

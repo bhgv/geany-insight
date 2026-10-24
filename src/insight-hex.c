@@ -96,7 +96,8 @@ static void browse(GtkWidget *w,gpointer data) {
 static void save(GtkWidget *w,gpointer data) {
  Hex *h=data;guint mode=GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(w),"mode"));GBytes *snapshot=g_bytes_new(h->result->data,h->result->len);gsize n;const guint8 *p=g_bytes_get_data(snapshot,&n);gchar *encoded=mode ? g_base64_encode(p,n):NULL;
  guint size=value(h->chunk_size);gsize total=mode ? strlen(encoded):n;
- if(mode==2) { gsize start=size ? (gsize)value(h->part)*size:0;if(start>total) note(h,insight_tr("This Base64 part does not exist."));else { gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),encoded+start,MIN(total-start,size ? size:total));note(h,insight_tr("Base64 copied to clipboard.")); }g_free(encoded);g_bytes_unref(snapshot);return; }
+ if(mode==1 && size && (total+size-1)/size>4096) { note(h,insight_tr("Export would exceed 4096 parts. Choose a larger part size."));g_free(encoded);g_bytes_unref(snapshot);return; }
+ if(mode==2) { guint part=size ? value(h->part):0;gboolean valid=!part || (size && part<=(total ? (total-1)/size:0));gsize start=valid && size ? (gsize)part*size:0;if(!valid) note(h,insight_tr("This Base64 part does not exist."));else { gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),encoded+start,MIN(total-start,size ? size:total));note(h,insight_tr("Base64 copied to clipboard.")); }g_free(encoded);g_bytes_unref(snapshot);return; }
  GtkWidget *d=gtk_file_chooser_dialog_new(mode ? insight_tr("Export Base64"):insight_tr("Save binary result"),GTK_WINDOW(h->window),GTK_FILE_CHOOSER_ACTION_SAVE,"Cancel",GTK_RESPONSE_CANCEL,"Save",GTK_RESPONSE_ACCEPT,NULL);gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(d),TRUE);gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(d),mode ? "binary.b64":"merged.bin");
  if(gtk_dialog_run(GTK_DIALOG(d))==GTK_RESPONSE_ACCEPT) {
   gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(d));GError *error=NULL;gboolean ok=TRUE;
@@ -113,7 +114,7 @@ static void chunk_changed(GtkComboBox *combo,gpointer data) { Hex *h=data;const 
 static void next_difference(GtkWidget *w,gpointer data) {
  (void)w;Hex *h=data;gsize a,b;const guint8 *left=g_bytes_get_data(h->source[0],&a),*right=g_bytes_get_data(h->source[1],&b);gsize start=(gsize)value(h->offset)+value(h->length),max=MAX(a,b),at=start;
  while(at<max && at<a && at<b && left[at]==right[at]) at++;
- if(at==max) { note(h,insight_tr("No later difference. Set source offset and length to zero to restart."));return; }
+ if(at>=max) { note(h,insight_tr("No later difference. Set source offset and length to zero to restart."));return; }
  gsize end=at;while(end<max && (end>=a || end>=b || left[end]!=right[end])) end++;
  gtk_spin_button_set_value(GTK_SPIN_BUTTON(h->offset),at);gtk_spin_button_set_value(GTK_SPIN_BUTTON(h->length),end-at);gtk_spin_button_set_value(GTK_SPIN_BUTTON(h->target),MIN(at,h->result->len));gtk_spin_button_set_value(GTK_SPIN_BUTTON(h->remove),MIN(end,h->result->len)-MIN(at,h->result->len));gtk_spin_button_set_value(GTK_SPIN_BUTTON(h->page),at/PAGE);
  note(h,insight_tr("Difference selected by byte offset. Review source and Result ranges before merging; shifted data is not automatically aligned."));

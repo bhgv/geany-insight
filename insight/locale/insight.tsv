@@ -2182,3 +2182,4 @@ Discard unsaved binary result?	Отбросить несохранённый б�
 Open binary file	Открыть бинарный файл
 Base64 copied to clipboard.	Base64 скопирован в буфер обмена.
 Export completed.	Экспорт завершён.
+Export would exceed 4096 parts. Choose a larger part size.	Экспорт создаст более 4096 частей. Увеличьте размер части.
