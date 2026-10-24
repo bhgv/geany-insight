@@ -9,13 +9,13 @@
 typedef struct { gint cols;VTermScreenCell cells[]; } TerminalLine;
 typedef struct {
  GtkWidget *view;GtkIMContext *im;VTerm *vt;VTermScreen *screen;GQueue history;gsize history_bytes;
- InsightTerminalWrite write;gpointer data;guint render;gboolean closed,rendering,trimmed,cursor_visible,alternate;
+ InsightTerminalWrite write;gpointer data;GByteArray *batch;guint render;gboolean closed,rendering,trimmed,cursor_visible,alternate;
  gint rows,cols,cw,ch;GHashTable *tags;
 } Terminal;
 typedef struct { gint first,last;guint fg,bg,attrs; } PaintRun;
 static Terminal *state(GtkWidget *view) { return view ? g_object_get_data(G_OBJECT(view),STATE):NULL; }
 static void schedule(Terminal *t);
-static void output(const char *bytes,size_t length,void *data) { Terminal *t=data;if(!t->closed && t->write && length) t->write(bytes,length,t->data); }
+static void output(const char *bytes,size_t length,void *data) { Terminal *t=data;if(t->closed || !length) return;if(t->batch) g_byte_array_append(t->batch,(const guint8 *)bytes,length);else if(t->write) t->write(bytes,length,t->data); }
 static int damage(VTermRect rect,void *data) { (void)rect;schedule(data);return 1; }
 static int cursor_moved(VTermPos pos,VTermPos old,int visible,void *data) { (void)pos;(void)old;Terminal *t=data;t->cursor_visible=visible;schedule(t);return 1; }
 static int property(VTermProp prop,VTermValue *value,void *data) { Terminal *t=data;if(prop==VTERM_PROP_ALTSCREEN) t->alternate=value->boolean;if(prop==VTERM_PROP_CURSORVISIBLE) t->cursor_visible=value->boolean;schedule(t);return 1; }
@@ -77,7 +77,8 @@ static gboolean render(gpointer data) {
 static void schedule(Terminal *t) { if(!t->closed && !t->render) t->render=g_timeout_add(25,render,t); }
 void insight_terminal_feed(GtkWidget *view,const gchar *bytes,gsize length) { Terminal *t=state(view);if(!t || t->closed) return;vterm_input_write(t->vt,bytes,length);vterm_screen_flush_damage(t->screen);schedule(t); }
 void insight_terminal_reset(GtkWidget *view) { Terminal *t=state(view);if(t) { vterm_screen_reset(t->screen,TRUE);schedule(t); } }
-void insight_terminal_send(GtkWidget *view,const gchar *text) { Terminal *t=state(view);if(!t || t->closed || !text || strlen(text)>1024*1024 || !g_utf8_validate(text,-1,NULL)) return;vterm_keyboard_start_paste(t->vt);output(text,strlen(text),t);vterm_keyboard_end_paste(t->vt); }
+void insight_terminal_send(GtkWidget *view,const gchar *text) { Terminal *t=state(view);if(!t || t->closed || !text || strlen(text)>1024*1024-32 || !g_utf8_validate(text,-1,NULL)) return;
+ t->batch=g_byte_array_new();vterm_keyboard_start_paste(t->vt);output(text,strlen(text),t);vterm_keyboard_end_paste(t->vt);GByteArray *batch=t->batch;t->batch=NULL;if(t->write && batch->len) t->write((const gchar *)batch->data,batch->len,t->data);g_byte_array_unref(batch); }
 static void insert_text(GtkTextView *view,const gchar *text,gpointer data) { (void)data;insight_terminal_send(GTK_WIDGET(view),text);g_signal_stop_emission_by_name(view,"insert-at-cursor"); }
 static gchar *selection_text(GtkWidget *view) { GtkTextBuffer *b=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));GtkTextIter a,z;return gtk_text_buffer_get_selection_bounds(b,&a,&z) ? gtk_text_buffer_get_text(b,&a,&z,FALSE):NULL; }
 static void pasted(GtkClipboard *clipboard,const gchar *text,gpointer data) { (void)clipboard;GtkWidget *view=data;insight_terminal_send(view,text);g_object_unref(view); }

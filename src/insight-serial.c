@@ -4,6 +4,7 @@
 #include "insight-terminal.h"
 #include "insight-help.h"
 #include "main.h"
+#include "ui_utils.h"
 #include <string.h>
 #include <errno.h>
 #ifdef G_OS_WIN32
