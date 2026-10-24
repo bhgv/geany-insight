@@ -107,7 +107,7 @@ static void connect_port(GtkWidget *widget,gpointer data) {
 static void disconnect_port(GtkWidget *widget,gpointer data) { (void)widget;(void)data;if(serial.selected) { close_session(serial.selected);message(serial.selected,"TTY disconnected"); } }
 static gint compare_names(gconstpointer a,gconstpointer b) { return g_strcmp0(*(gchar *const *)a,*(gchar *const *)b); }
 static void refresh_ports(GtkWidget *widget,gpointer data) {
- (void)widget;(void)data;GtkWidget *entry=gtk_bin_get_child(GTK_BIN(serial.ports));gchar *selected=g_strdup(gtk_entry_get_text(GTK_ENTRY(entry)));GPtrArray *ports=g_ptr_array_new_with_free_func(g_free);
+ (void)widget;(void)data;if(serial.closing) return;GtkWidget *entry=gtk_bin_get_child(GTK_BIN(serial.ports));gchar *selected=g_strdup(gtk_entry_get_text(GTK_ENTRY(entry)));GPtrArray *ports=g_ptr_array_new_with_free_func(g_free);
 #ifdef G_OS_WIN32
  for(guint n=1;n<=256;n++) { wchar_t name[16],target[4096];swprintf(name,16,L"COM%u",n);if(QueryDosDeviceW(name,target,G_N_ELEMENTS(target))) g_ptr_array_add(ports,g_strdup_printf("COM%u",n)); }
 #else
@@ -115,7 +115,7 @@ static void refresh_ports(GtkWidget *widget,gpointer data) {
 #endif
  g_ptr_array_sort(ports,compare_names);gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(serial.ports));for(guint n=0;n<ports->len;n++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(serial.ports),g_ptr_array_index(ports,n));if(*selected) gtk_entry_set_text(GTK_ENTRY(entry),selected);else if(ports->len) gtk_combo_box_set_active(GTK_COMBO_BOX(serial.ports),0);g_free(selected);g_ptr_array_unref(ports);
 }
-static void switched(GtkNotebook *book,GtkWidget *page,guint number,gpointer data) { (void)book;(void)number;(void)data;SerialSession *s=g_object_get_data(G_OBJECT(page),"insight-tty-session");if(s) serial.selected=s;else refresh_ports(NULL,NULL); }
+static void switched(GtkNotebook *book,GtkWidget *page,guint number,gpointer data) { (void)book;(void)number;(void)data;if(serial.closing) return;SerialSession *s=g_object_get_data(G_OBJECT(page),"insight-tty-session");if(s) serial.selected=s;else refresh_ports(NULL,NULL); }
 static void new_session(GtkWidget *widget,gpointer data) {
  (void)widget;(void)data;if(serial.sessions->len>=16) { message(NULL,"Up to 16 TTY terminals can be open");return; }SerialSession *s=g_new0(SerialSession,1);s->number=serial.sessions->len+1;s->pending=g_byte_array_new();
 #ifdef G_OS_WIN32
@@ -136,4 +136,4 @@ void insight_serial_init(void) {
  serial.status=gtk_label_new("TTY / RS-232 — choose a port and connection parameters");gtk_widget_set_name(serial.status,"insight-tty-status");gtk_label_set_selectable(GTK_LABEL(serial.status),TRUE);gtk_label_set_line_wrap(GTK_LABEL(serial.status),TRUE);gtk_label_set_width_chars(GTK_LABEL(serial.status),1);gtk_box_pack_start(GTK_BOX(serial.page),serial.status,FALSE,FALSE,0);GtkWidget *plus=gtk_button_new_from_icon_name("list-add-symbolic",GTK_ICON_SIZE_MENU);gtk_widget_set_name(plus,"insight-tty-new-terminal");gtk_widget_set_tooltip_text(plus,"New TTY terminal");g_signal_connect(plus,"clicked",G_CALLBACK(new_session),NULL);gtk_notebook_set_action_widget(GTK_NOTEBOOK(serial.tabs),plus,GTK_PACK_END);g_signal_connect(serial.tabs,"switch-page",G_CALLBACK(switched),NULL);g_signal_connect(scroll,"map",G_CALLBACK(refresh_ports),NULL);new_session(NULL,NULL);gtk_notebook_set_current_page(GTK_NOTEBOOK(serial.tabs),0);
  insight_panel_help_attach(serial.page,"panel-tty.md");gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),serial.page,gtk_label_new("TTY Terminal"));gtk_widget_show_all(serial.page);
 }
-void insight_serial_finalize(void) { serial.closing=TRUE;if(!serial.sessions) return;for(guint n=0;n<serial.sessions->len;n++) { SerialSession *s=g_ptr_array_index(serial.sessions,n);close_session(s);gtk_widget_destroy(s->view);g_byte_array_unref(s->pending);g_free(s); }g_ptr_array_unref(serial.sessions);serial.sessions=NULL; }
+void insight_serial_finalize(void) { serial.closing=TRUE;if(!serial.sessions) return;for(guint n=0;n<serial.sessions->len;n++) { SerialSession *s=g_ptr_array_index(serial.sessions,n);close_session(s);gtk_widget_destroy(s->page);g_byte_array_unref(s->pending);g_free(s); }g_ptr_array_unref(serial.sessions);serial.sessions=NULL; }

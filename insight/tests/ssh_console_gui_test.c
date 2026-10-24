@@ -47,9 +47,9 @@ static gboolean step(gpointer data) {
  } else if(phase==15 && transfer_complete()) {
   click("insight-ssh-disconnect");click("insight-ssh-connect");send_line("printf '\\nINSIGHT_SSH_OK\\n'");phase=1;
  } else if(phase==1 && ready_count(text)>=2) { send_line("exit 7");phase++; }
- else if(phase==2 && strstr(label,"status 7")) {
+ else if(phase==2 && strstr(label,"status 7") && strstr(text,"status 7")) {
   g_assert_cmpuint(ready_count(text),==,2);g_assert_nonnull(strstr(text,"status 7"));gtk_spin_button_set_value(GTK_SPIN_BUTTON(named(window,"insight-ssh-port")),g_ascii_strtod(g_getenv("INSIGHT_SSH_REFUSED_PORT"),NULL));click("insight-ssh-connect");phase++;
- } else if(phase==3 && strstr(label,"status 255")) {
+ } else if(phase==3 && strstr(label,"status 255") && strstr(text,"status 255")) {
   g_assert_nonnull(strstr(text,"Connection refused"));g_assert_nonnull(strstr(text,"status 255"));g_assert_cmpint(g_remove(g_getenv("INSIGHT_SSH_TEST_WRAPPER")),==,0);click("insight-ssh-connect");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(state)),"was not found"));phase++;
  } else if(phase==4) {
   g_assert_nonnull(strstr(text,"OpenSSH client 'ssh' was not found"));gtk_entry_set_text(GTK_ENTRY(named(window,"insight-ssh-host")),"");click("insight-ssh-connect");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(state)),"Use a host"));phase++;
