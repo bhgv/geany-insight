@@ -64,24 +64,44 @@ GEANY_API_SYMBOL
 const gchar *insight_tr(const gchar *text) { if(!text) return NULL;g_mutex_lock(&catalog_mutex);const gchar *key=canonical_locked(text),*value=active ? g_hash_table_lookup(active,key):NULL;g_mutex_unlock(&catalog_mutex);return value ? value:text; }
 gboolean insight_i18n_is_applying(void) { return busy; }
 const gchar *insight_i18n_language(void) { return g_atomic_int_get(&russian) ? "ru":"en"; }
-typedef struct { gchar *en,*ru;gsize bytes; } Rendered;
+typedef struct { guint argument;gchar *value; } Slot;
+typedef struct { gchar *key,*en,*ru;gsize bytes;GPtrArray *slots; } Rendered;
 static GQueue rendered_queue=G_QUEUE_INIT;static GHashTable *rendered_en,*rendered_ru;static gsize rendered_bytes;
-static void rendered_free(gpointer data) { Rendered *r=data;g_free(r->en);g_free(r->ru);g_free(r); }
+static void slot_free(gpointer data) { Slot *slot=data;g_free(slot->value);g_free(slot); }
+static void rendered_free(gpointer data) { Rendered *r=data;g_free(r->key);g_free(r->en);g_free(r->ru);if(r->slots) g_ptr_array_free(r->slots,TRUE);g_free(r); }
 static void rendered_clear(void) { while(!g_queue_is_empty(&rendered_queue)) rendered_free(g_queue_pop_head(&rendered_queue));g_clear_pointer(&rendered_en,g_hash_table_destroy);g_clear_pointer(&rendered_ru,g_hash_table_destroy);rendered_bytes=0; }
+/* Identify conversion arguments without reading or reinterpreting their types. */
+static const gchar *conversion_end(const gchar *start,guint *next,guint *argument) {
+ const gchar *p=start+1;guint position=format_position(&p);while(*p && strchr("-+ #0'I",*p)) p++;if(*p=='*') { p++;if(!format_position(&p)) (*next)++; }else while(g_ascii_isdigit(*p)) p++;if(*p=='.') { p++;if(*p=='*') { p++;if(!format_position(&p)) (*next)++; }else while(g_ascii_isdigit(*p)) p++; }while(*p && strchr("hljztL",*p)) p++;
+ if(!*p || !strchr("diuoxXfFeEgGaAcsp",*p)) return NULL;*argument=position ? position:(*next)++;return p+1;
+}
+static GPtrArray *capture_slots(const gchar *format,va_list arguments) {
+ GPtrArray *slots=g_ptr_array_new_with_free_func(slot_free);const gchar *literal=format;gsize previous=0;guint next=1;
+ for(const gchar *p=format;*p;) { if(*p!='%') { p++;continue; }if(p[1]=='%') { p+=2;continue; }guint argument;const gchar *end=conversion_end(p,&next,&argument);if(!end || slots->len>=64) { g_ptr_array_free(slots,TRUE);return NULL; }
+  gsize size=0;for(const gchar *q=literal;q<p;q++,size++) if(q[0]=='%' && q[1]=='%') q++;
+  gchar *prefix=g_strndup(format,end-format);va_list copy;va_copy(copy,arguments);gchar *value=g_strdup_vprintf(prefix,copy);va_end(copy);g_free(prefix);gsize length=strlen(value);if(length<previous+size) { g_free(value);g_ptr_array_free(slots,TRUE);return NULL; }
+  Slot *slot=g_new0(Slot,1);slot->argument=argument;slot->value=g_strdup(value+previous+size);g_ptr_array_add(slots,slot);previous=length;g_free(value);literal=end;p=end;
+ }return slots;
+}
+static gchar *render_value(Rendered *r) {
+ if(!r->key || !r->slots) return g_strdup(g_atomic_int_get(&russian) ? r->ru:r->en);const gchar *format=insight_tr(r->key);gchar *a=format_signature(r->key),*b=format_signature(format);if(strcmp(a,b)) format=r->key;g_free(a);g_free(b);GString *out=g_string_new(NULL);guint next=1;
+ for(const gchar *p=format;*p;) { if(*p!='%') { g_string_append_c(out,*p++);continue; }if(p[1]=='%') { g_string_append_c(out,'%');p+=2;continue; }guint argument;const gchar *end=conversion_end(p,&next,&argument);if(!end) { g_string_append_c(out,*p++);continue; }Slot *found=NULL;for(guint i=0;i<r->slots->len;i++) { Slot *slot=g_ptr_array_index(r->slots,i);if(slot->argument==argument) { found=slot;break; } }if(!found) { g_string_free(out,TRUE);return g_strdup(g_atomic_int_get(&russian) ? r->ru:r->en); }g_string_append(out,found->value);p=end;
+ }return g_string_free(out,FALSE);
+}
 static Rendered *rendered_copy(const gchar *text) {
- g_mutex_lock(&catalog_mutex);Rendered *r=rendered_en ? g_hash_table_lookup(rendered_en,text):NULL;if(!r && rendered_ru) r=g_hash_table_lookup(rendered_ru,text);Rendered *copy=NULL;if(r) { copy=g_new0(Rendered,1);copy->en=g_strdup(r->en);copy->ru=g_strdup(r->ru); }g_mutex_unlock(&catalog_mutex);return copy;
+ g_mutex_lock(&catalog_mutex);Rendered *r=rendered_en ? g_hash_table_lookup(rendered_en,text):NULL;if(!r && rendered_ru) r=g_hash_table_lookup(rendered_ru,text);Rendered *copy=NULL;if(r) { copy=g_new0(Rendered,1);copy->en=g_strdup(r->en);copy->ru=g_strdup(r->ru);copy->key=g_strdup(r->key);if(r->slots) { copy->slots=g_ptr_array_new_with_free_func(slot_free);for(guint i=0;i<r->slots->len;i++) { Slot *old=g_ptr_array_index(r->slots,i),*slot=g_new0(Slot,1);slot->argument=old->argument;slot->value=g_strdup(old->value);g_ptr_array_add(copy->slots,slot); } } }g_mutex_unlock(&catalog_mutex);return copy;
 }
 GEANY_API_SYMBOL
 gchar *insight_i18n_printf(const gchar *format,...) {
- g_mutex_lock(&catalog_mutex);const gchar *key=canonical_locked(format),*en=catalog.en ? g_hash_table_lookup(catalog.en,key):NULL,*ru=catalog.ru ? g_hash_table_lookup(catalog.ru,key):NULL;g_mutex_unlock(&catalog_mutex);if(!en) en=format;if(!ru) ru=en;
- gchar *signature=format_signature(en),*translated_signature=format_signature(ru);if(strcmp(signature,translated_signature)) ru=en;g_free(signature);g_free(translated_signature);
- va_list args,copy;va_start(args,format);va_copy(copy,args);gchar *a=g_strdup_vprintf(en,args),*b=g_strdup_vprintf(ru,copy);va_end(copy);va_end(args);gchar *value=g_strdup(g_atomic_int_get(&russian) ? b:a);
- /* Remember bounded formatted UI values so switching an already displayed
-  * counter/error preserves its arguments. Widgets take their own copy. */
- if(strcmp(a,b) && strlen(a)+strlen(b)<=16384) { g_mutex_lock(&catalog_mutex);if(!rendered_en) { rendered_en=g_hash_table_new(g_str_hash,g_str_equal);rendered_ru=g_hash_table_new(g_str_hash,g_str_equal); }
-  if(!g_hash_table_contains(rendered_en,a)) { Rendered *r=g_new0(Rendered,1);r->en=a;r->ru=b;r->bytes=strlen(a)+strlen(b)+sizeof(*r);rendered_bytes+=r->bytes;g_queue_push_tail(&rendered_queue,r);g_hash_table_insert(rendered_en,r->en,r);g_hash_table_insert(rendered_ru,r->ru,r);a=b=NULL; }
-  while(g_queue_get_length(&rendered_queue)>512 || rendered_bytes>1024*1024) { Rendered *old=g_queue_pop_head(&rendered_queue);g_hash_table_remove(rendered_en,old->en);if(g_hash_table_lookup(rendered_ru,old->ru)==old) g_hash_table_remove(rendered_ru,old->ru);rendered_bytes-=old->bytes;rendered_free(old); }g_mutex_unlock(&catalog_mutex);
- }g_free(a);g_free(b);return value;
+ g_mutex_lock(&catalog_mutex);const gchar *key=canonical_locked(format),*en=catalog.en ? g_hash_table_lookup(catalog.en,key):NULL,*ru=catalog.ru ? g_hash_table_lookup(catalog.ru,key):NULL;g_mutex_unlock(&catalog_mutex);
+ va_list args,copy;va_start(args,format);if(!en) { gchar *value=g_strdup_vprintf(format,args);va_end(args);return value; }if(!ru) ru=en;gchar *signature=format_signature(key),*en_signature=format_signature(en),*ru_signature=format_signature(ru);if(strcmp(signature,en_signature)) en=key;if(strcmp(signature,ru_signature)) ru=en;gboolean side_effect=strstr(signature,"!write")!=NULL;g_free(signature);g_free(en_signature);g_free(ru_signature);
+ va_copy(copy,args);gchar *a=g_strdup_vprintf(en,args),*b=strcmp(en,ru) ? g_strdup_vprintf(ru,copy):g_strdup(a);va_end(copy);gchar *value=g_strdup(g_atomic_int_get(&russian) ? b:a);GPtrArray *slots=NULL;
+ if(!side_effect && strlen(a)+strlen(b)<=16384) { va_end(args);va_start(args,format);slots=capture_slots(key,args); }va_end(args);
+ if(slots && slots->len) { Rendered *r=g_new0(Rendered,1);r->key=g_strdup(key);r->en=a;r->ru=b;r->slots=slots;r->bytes=strlen(a)+strlen(b)+strlen(key)+sizeof(*r);for(guint i=0;i<slots->len;i++) r->bytes+=sizeof(Slot)+strlen(((Slot*)g_ptr_array_index(slots,i))->value);g_mutex_lock(&catalog_mutex);if(!rendered_en) { rendered_en=g_hash_table_new(g_str_hash,g_str_equal);rendered_ru=g_hash_table_new(g_str_hash,g_str_equal); }
+  Rendered *old=g_hash_table_lookup(rendered_en,a);if(old) { g_hash_table_remove(rendered_en,old->en);if(g_hash_table_lookup(rendered_ru,old->ru)==old) g_hash_table_remove(rendered_ru,old->ru);g_queue_remove(&rendered_queue,old);rendered_bytes-=old->bytes;rendered_free(old); }
+  rendered_bytes+=r->bytes;g_queue_push_tail(&rendered_queue,r);g_hash_table_insert(rendered_en,r->en,r);g_hash_table_insert(rendered_ru,r->ru,r);a=b=NULL;
+  while(g_queue_get_length(&rendered_queue)>512 || rendered_bytes>1024*1024) { old=g_queue_pop_head(&rendered_queue);g_hash_table_remove(rendered_en,old->en);if(g_hash_table_lookup(rendered_ru,old->ru)==old) g_hash_table_remove(rendered_ru,old->ru);rendered_bytes-=old->bytes;rendered_free(old); }g_mutex_unlock(&catalog_mutex);
+ }else if(slots) g_ptr_array_free(slots,TRUE);g_free(a);g_free(b);return value;
 }
 static gboolean explicit_property(GObject *object,const gchar *name) { gchar *a=g_strconcat("insight-i18n-key-",name,NULL),*b=g_strconcat("insight-i18n-text-",name,NULL);gboolean result=g_object_get_data(object,a) || g_object_get_data(object,b);g_free(a);g_free(b);return result; }
 static gboolean protected_data(GtkWidget *widget) {
@@ -102,13 +122,14 @@ static void property(GObject *object,const gchar *name) {
  if(!strcmp(name,"tooltip-markup") && explicit_property(object,"tooltip-text")) name="tooltip-text";
  if(GTK_IS_WIDGET(object) && protected_data(GTK_WIDGET(object)) && !explicit_property(object,name)) return;
  GParamSpec *spec=g_object_class_find_property(G_OBJECT_GET_CLASS(object),name);if(!spec || spec->value_type!=G_TYPE_STRING || !(spec->flags&G_PARAM_WRITABLE) || !(spec->flags&G_PARAM_READABLE)) return;
+ if(GTK_IS_MENU_ITEM(object) && !strcmp(name,"label") && !GTK_IS_LABEL(gtk_bin_get_child(GTK_BIN(object)))) return;
  gchar *text=NULL;g_object_get(object,name,&text,NULL);if(!text) return;
  gboolean markup=!strcmp(name,"tooltip-markup") || (GTK_IS_LABEL(object) && !strcmp(name,"label") && gtk_label_get_use_markup(GTK_LABEL(object)));
  gchar *source_key=g_strconcat("insight-i18n-source-",name,NULL),*last_key=g_strconcat("insight-i18n-last-",name,NULL),*key_name=g_strconcat("insight-i18n-key-",name,NULL),*text_name=g_strconcat("insight-i18n-text-",name,NULL),*rendered_name=g_strconcat("insight-i18n-rendered-",name,NULL);
  const gchar *source=g_object_get_data(object,source_key),*last=g_object_get_data(object,last_key),*explicit_key=g_object_get_data(object,key_name);InsightI18nText *binding=g_object_get_data(object,text_name);gchar *translated=NULL;
  if(binding) { gchar **parts=g_strsplit(insight_tr(binding->key),"{value}",-1);translated=g_strjoinv(binding->value,parts);g_strfreev(parts); }
  else if(explicit_key) translated=g_strdup(insight_tr(explicit_key));
- else { if(!source || !last || strcmp(last,text)) { Rendered *rendered=markup && strchr(text,'<') ? NULL:rendered_copy(text);g_object_set_data_full(object,rendered_name,rendered,rendered_free);g_object_set_data_full(object,source_key,rendered ? g_strdup(rendered->en):markup ? markup_translate(text,TRUE):g_strdup(insight_i18n_english(text)),g_free);source=g_object_get_data(object,source_key); }Rendered *rendered=g_object_get_data(object,rendered_name);translated=rendered ? (markup ? g_markup_escape_text(g_atomic_int_get(&russian) ? rendered->ru:rendered->en,-1):g_strdup(g_atomic_int_get(&russian) ? rendered->ru:rendered->en)):markup ? markup_translate(source,FALSE):g_strdup(insight_tr(source)); }
+ else { if(!source || !last || strcmp(last,text)) { Rendered *rendered=markup && strchr(text,'<') ? NULL:rendered_copy(text);g_object_set_data_full(object,rendered_name,rendered,rendered_free);g_object_set_data_full(object,source_key,rendered ? g_strdup(rendered->en):markup ? markup_translate(text,TRUE):g_strdup(insight_i18n_english(text)),g_free);source=g_object_get_data(object,source_key); }Rendered *rendered=g_object_get_data(object,rendered_name);if(rendered) { gchar *value=render_value(rendered);translated=markup ? g_markup_escape_text(value,-1):g_strdup(value);g_free(value); }else translated=markup ? markup_translate(source,FALSE):g_strdup(insight_tr(source)); }
  g_object_set_data_full(object,last_key,g_strdup(translated),g_free);if(strcmp(text,translated)) g_object_set(object,name,translated,NULL);g_free(translated);g_free(source_key);g_free(last_key);g_free(key_name);g_free(text_name);g_free(rendered_name);g_free(text);
 }
 static void changed(GObject *object,GParamSpec *spec,gpointer data) { (void)data;if(busy || !active || (GTK_IS_WIDGET(object) && excluded(GTK_WIDGET(object)))) return;gboolean found=FALSE;for(guint i=0;i<G_N_ELEMENTS(properties);i++) if(!strcmp(spec->name,properties[i])) found=TRUE;if(!strcmp(spec->name,"tooltip-text")) found=TRUE;if(!strcmp(spec->name,"text") && g_object_get_data(object,"insight-i18n-cell")) found=TRUE;if(!found) return;busy=TRUE;if(!g_object_get_data(object,"insight-i18n-setting")) { const gchar *property_name=!strcmp(spec->name,"tooltip-text") && !explicit_property(object,"tooltip-text") ? "tooltip-markup":spec->name;gchar *a=g_strconcat("insight-i18n-key-",property_name,NULL),*b=g_strconcat("insight-i18n-text-",property_name,NULL);g_object_set_data(object,a,NULL);g_object_set_data(object,b,NULL);g_free(a);g_free(b); }property(object,!strcmp(spec->name,"tooltip-text") ? "tooltip-markup":spec->name);busy=FALSE; }
@@ -128,7 +149,7 @@ static void translate_combo(GtkWidget *widget) {
  GtkTreeIter iter;for(gboolean valid=gtk_tree_model_get_iter_first(model,&iter);valid;valid=gtk_tree_model_iter_next(model,&iter)) { gchar *text=NULL;gtk_tree_model_get(model,&iter,0,&text,-1);if(!text) continue;GtkTreePath *path=gtk_tree_model_get_path(model,&iter);Row *row=NULL;
   for(guint i=0;i<combo->rows->len;i++) { Row *r=g_ptr_array_index(combo->rows,i);GtkTreePath *p=gtk_tree_row_reference_get_path(r->row);gboolean same=p && !gtk_tree_path_compare(path,p);if(p) gtk_tree_path_free(p);if(same) { row=r;break; } }
   if(!row) { row=g_new0(Row,1);row->row=gtk_tree_row_reference_new(model,path);g_ptr_array_add(combo->rows,row); }if(!row->source || g_strcmp0(row->last,text)) { g_free(row->source);if(row->rendered) rendered_free(row->rendered);row->rendered=rendered_copy(text);row->source=g_strdup(row->rendered ? row->rendered->en:insight_i18n_english(text)); }
-  const gchar *translated=row->rendered ? (g_atomic_int_get(&russian) ? row->rendered->ru:row->rendered->en):insight_tr(row->source);g_free(row->last);row->last=g_strdup(translated);if(strcmp(text,translated)) gtk_list_store_set(GTK_LIST_STORE(model),&iter,0,translated,-1);gtk_tree_path_free(path);g_free(text);
+  gchar *translated=row->rendered ? render_value(row->rendered):g_strdup(insight_tr(row->source));g_free(row->last);row->last=g_strdup(translated);if(strcmp(text,translated)) gtk_list_store_set(GTK_LIST_STORE(model),&iter,0,translated,-1);gtk_tree_path_free(path);g_free(text);g_free(translated);
  }
 }
 static void translate_widget(GtkWidget *widget,gpointer data) {

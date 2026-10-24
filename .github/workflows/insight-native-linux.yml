@@ -254,6 +254,9 @@ jobs:
           ai_layout_failed=0
           GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight Russian and English interface GUI' 'Insight native console AI and guarded review GUI' 'Insight shared AI profiles and parallel answer selection GUI' 'Insight streaming large file piece table' 'Insight streaming comparison and history GUI' 'Insight binary merge and hex Base64 export GUI' 'Insight comparison toolbar natural height and collapse GUI' 'Insight isolated Diff Merge GUI' || ai_layout_failed=1
           GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1024x640x24" meson test -C _native --print-errorlogs 'Insight native console AI and guarded review GUI' || ai_layout_failed=1
+          if test "$ai_layout_failed" = 1; then
+            GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" timeout 45 gdb -batch -ex run -ex 'thread apply all bt' --args _native/tests/test_insight_i18n_gui || true
+          fi
           exit "$ai_layout_failed"
       - name: Check active editor focus and command recording
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' && steps.ai-layout.outcome == 'success' }}
