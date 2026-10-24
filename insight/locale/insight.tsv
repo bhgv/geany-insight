@@ -2183,3 +2183,23 @@ Open binary file	Открыть бинарный файл
 Base64 copied to clipboard.	Base64 скопирован в буфер обмена.
 Export completed.	Экспорт завершён.
 Export would exceed 4096 parts. Choose a larger part size.	Экспорт создаст более 4096 частей. Увеличьте размер части.
+Range outside Result or result exceeds 16 MiB.	Диапазон за пределами результата или результат превышает 16 МиБ.
+Source range is outside both files.	Диапазон источника выходит за пределы обоих файлов.
+Enter pairs of hex digits, optionally separated by whitespace.	Введите пары шестнадцатеричных цифр, при необходимости разделённые пробелами.
+An incomplete hex byte cannot be applied.	Нельзя применить неполный hex-байт.
+This Base64 part does not exist.	Такой части Base64 нет.
+No later difference. Set source offset and length to zero to restart.	Дальше отличий нет. Для поиска с начала задайте нулевые смещение и длину источника.
+Difference selected by byte offset. Review source and Result ranges before merging; shifted data is not automatically aligned.	Отличие выбрано по смещению байтов. Проверьте диапазоны перед слиянием: сдвинутые данные автоматически не выравниваются.
+File path; blank means an empty byte stream. Load resets Result to Left.	Путь файла; пустое поле означает пустой поток. Загрузка заменяет результат левым файлом.
+Page number (zero-based), 4096 bytes per page	Номер страницы с нуля; 4096 байт на странице
+Source byte offset (decimal)	Смещение источника в байтах (десятичное)
+Source byte count (decimal)	Число байтов источника (десятичное)
+Result byte offset (decimal)	Смещение результата в байтах (десятичное)
+Result bytes to replace; zero inserts (decimal)	Число заменяемых байтов результата; ноль — вставка (десятичное)
+Hex bytes to insert at Result offset, replacing Result byte count. Empty input deletes that range.	Hex-байты для замены указанного диапазона результата. Пустой ввод удаляет диапазон.
+Size of each encoded Base64 part. Concatenate parts before decoding.	Размер закодированной части Base64. Перед декодированием соедините части.
+Encoded bytes per part; zero exports one complete Base64 stream	Число закодированных байтов в части; ноль — весь поток Base64
+Clipboard part number (zero-based); ignored for Whole stream	Номер копируемой части с нуля; не используется при экспорте всего потока
+Click a hex word or ASCII byte to set its range; drag to select whole rows. Fine-tune byte offsets/counts in Merge and history.	Щелчок по hex-слову или ASCII-байту задаёт диапазон; выделение мышью выбирает целые строки. Точные смещения и длины — на вкладке слияния.
+Select source text first.	Сначала выделите текст источника.
+Replace the selected Result text, or insert at its caret. Undo restores the previous Result.	Заменить выделение результата или вставить в позиции курсора. Undo восстанавливает предыдущий результат.

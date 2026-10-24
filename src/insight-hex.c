@@ -16,27 +16,27 @@ static GtkWidget *spin(GtkWidget *box,const gchar *tip,guint max) {
  GtkWidget *w=gtk_spin_button_new_with_range(0,max,1);gtk_entry_set_width_chars(GTK_ENTRY(w),9);gtk_widget_set_tooltip_text(w,insight_tr(tip));gtk_box_pack_start(GTK_BOX(box),w,FALSE,FALSE,0);return w;
 }
 static guint value(GtkWidget *w) { return gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(w)); }
-static gchar *dump(const guint8 *data,gsize size,gsize start,guint word,gboolean big) {
- GString *s=g_string_new(NULL);gsize end=MIN(size,start+PAGE);
+static gchar *dump(const guint8 *data,gsize size,gsize start,guint word,gboolean big,gsize extent) {
+ GString *s=g_string_new(NULL);gsize end=MIN(extent,start+PAGE);
  for(gsize row=start;row<end;row+=16) {
   g_string_append_printf(s,"%08" G_GSIZE_MODIFIER "X  ",row);
   for(guint j=0;j<16;j+=word) {
-   for(guint k=0;k<word;k++) { gsize p=row+j+(big ? k:word-1-k);if(p<end) g_string_append_printf(s,"%02X",data[p]);else g_string_append(s,"  "); }g_string_append_c(s,' ');
+   for(guint k=0;k<word;k++) { gsize p=row+j+(big ? k:word-1-k);if(p<size) g_string_append_printf(s,"%02X",data[p]);else g_string_append(s,"  "); }g_string_append_c(s,' ');
   }
-  g_string_append(s," | ");for(guint j=0;j<16 && row+j<end;j++) { guint8 c=data[row+j];g_string_append_c(s,c>=32 && c<=126 ? c:'.'); }g_string_append_c(s,'\n');
+  g_string_append(s," | ");for(guint j=0;j<16 && row+j<size;j++) { guint8 c=data[row+j];g_string_append_c(s,c>=32 && c<=126 ? c:'.'); }g_string_append_c(s,'\n');
  }
  return g_string_free(s,FALSE);
 }
 static void render(Hex *h) {
  guint word=1u<<gtk_combo_box_get_active(GTK_COMBO_BOX(h->word));gboolean big=gtk_combo_box_get_active(GTK_COMBO_BOX(h->endian))==1;
- gsize start=(gsize)value(h->page)*PAGE;
+ gsize start=(gsize)value(h->page)*PAGE,extent=MAX(MAX(g_bytes_get_size(h->source[0]),g_bytes_get_size(h->source[1])),h->result->len);
  for(guint side=0;side<3;side++) {
   gsize n=0;const guint8 *p=side<2 ? g_bytes_get_data(h->source[side],&n):h->result->data;if(side==2) n=h->result->len;
-  gchar *text=dump(p,n,start,word,big);GtkTextBuffer *b=gtk_text_view_get_buffer(GTK_TEXT_VIEW(h->view[side]));gtk_text_buffer_set_text(b,text,-1);g_free(text);
+  gchar *text=dump(p,n,start,word,big,extent);GtkTextBuffer *b=gtk_text_view_get_buffer(GTK_TEXT_VIEW(h->view[side]));gtk_text_buffer_set_text(b,text,-1);g_free(text);
   /* Highlight changed byte rows, independently of word display/endian. */
   GtkTextTag *tag=gtk_text_tag_table_lookup(gtk_text_buffer_get_tag_table(b),"changed");if(!tag) tag=gtk_text_buffer_create_tag(b,"changed","background","#f7d69b","foreground","#202020",NULL);
   gsize other_n;const guint8 *other=g_bytes_get_data(h->source[side==0 ? 1:0],&other_n);
-  for(gsize row=start;row<MIN(n,start+PAGE);row+=16) { gsize len=MIN((gsize)16,n-row);if(row+len>other_n || memcmp(p+row,other+row,len)) { GtkTextIter a,z;gtk_text_buffer_get_iter_at_line(b,&a,(row-start)/16);z=a;gtk_text_iter_forward_line(&z);gtk_text_buffer_apply_tag(b,tag,&a,&z); } }
+  for(gsize row=start;row<MIN(extent,start+PAGE);row+=16) { gsize len=row<n ? MIN((gsize)16,n-row):0,other_len=row<other_n ? MIN((gsize)16,other_n-row):0;if(len!=other_len || (len && memcmp(p+row,other+row,len))) { GtkTextIter a,z;gtk_text_buffer_get_iter_at_line(b,&a,(row-start)/16);z=a;gtk_text_iter_forward_line(&z);gtk_text_buffer_apply_tag(b,tag,&a,&z); } }
  }
  gchar *status=g_strdup_printf("Left: %" G_GSIZE_FORMAT " bytes | Right: %" G_GSIZE_FORMAT " bytes | Result: %u bytes%s | Page %u (4096 bytes)",g_bytes_get_size(h->source[0]),g_bytes_get_size(h->source[1]),h->result->len,h->dirty ? " *":"",value(h->page)+1);note(h,status);g_free(status);
 }
@@ -93,6 +93,13 @@ static void browse(GtkWidget *w,gpointer data) {
  Hex *h=data;guint side=GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(w),"side"));GtkWidget *d=gtk_file_chooser_dialog_new(insight_tr("Open binary file"),GTK_WINDOW(h->window),GTK_FILE_CHOOSER_ACTION_OPEN,"Cancel",GTK_RESPONSE_CANCEL,"Open",GTK_RESPONSE_ACCEPT,NULL);
  if(gtk_dialog_run(GTK_DIALOG(d))==GTK_RESPONSE_ACCEPT) { gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(d));gchar *utf8=g_filename_to_utf8(path,-1,NULL,NULL,NULL);if(utf8) gtk_entry_set_text(GTK_ENTRY(h->path[side]),utf8);g_free(utf8);g_free(path); }gtk_widget_destroy(d);
 }
+static gboolean export_parts(const gchar *path,const gchar *encoded,gsize total,guint size,GError **error) {
+ if(!size || (total+size-1)/size>4096) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Choose a part size producing at most 4096 parts.");return FALSE; }
+ guint count=MAX((gsize)1,(total+size-1)/size);GPtrArray *created=g_ptr_array_new_with_free_func(g_free);gboolean ok=TRUE;
+ /* Exclusive creation protects existing parts; roll back only files created by this export. */
+ for(guint i=0;i<count && ok;i++) { gchar *name=g_strdup_printf("%s.part%06u",path,i+1);GFile *f=g_file_new_for_path(name);GFileOutputStream *out=g_file_create(f,G_FILE_CREATE_PRIVATE,NULL,error);g_object_unref(f);if(!out) { g_free(name);ok=FALSE;break; }g_ptr_array_add(created,name);gsize at=(gsize)i*size;ok=g_output_stream_write_all(G_OUTPUT_STREAM(out),encoded+at,MIN((gsize)size,total-at),NULL,NULL,error);if(ok) ok=g_output_stream_close(G_OUTPUT_STREAM(out),NULL,error);g_object_unref(out); }
+ if(!ok) for(guint i=0;i<created->len;i++) { GFile *f=g_file_new_for_path(g_ptr_array_index(created,i));g_file_delete(f,NULL,NULL);g_object_unref(f); }g_ptr_array_unref(created);return ok;
+}
 static void save(GtkWidget *w,gpointer data) {
  Hex *h=data;guint mode=GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(w),"mode"));GBytes *snapshot=g_bytes_new(h->result->data,h->result->len);gsize n;const guint8 *p=g_bytes_get_data(snapshot,&n);gchar *encoded=mode ? g_base64_encode(p,n):NULL;
  guint size=value(h->chunk_size);gsize total=mode ? strlen(encoded):n;
@@ -102,10 +109,7 @@ static void save(GtkWidget *w,gpointer data) {
  if(gtk_dialog_run(GTK_DIALOG(d))==GTK_RESPONSE_ACCEPT) {
   gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(d));GError *error=NULL;gboolean ok=TRUE;
   if(mode && size) {
-   guint count=MAX((gsize)1,(total+size-1)/size);GPtrArray *created=g_ptr_array_new_with_free_func(g_free);
-   /* Exclusive creation protects existing parts; roll back only files created by this export. */
-   for(guint i=0;i<count && ok;i++) { gchar *name=g_strdup_printf("%s.part%06u",path,i+1);GFile *f=g_file_new_for_path(name);GFileOutputStream *out=g_file_create(f,G_FILE_CREATE_PRIVATE,NULL,&error);g_object_unref(f);if(!out) { g_free(name);ok=FALSE;break; }g_ptr_array_add(created,name);gsize at=(gsize)i*size;ok=g_output_stream_write_all(G_OUTPUT_STREAM(out),encoded+at,MIN((gsize)size,total-at),NULL,NULL,&error);if(ok) ok=g_output_stream_close(G_OUTPUT_STREAM(out),NULL,&error);g_object_unref(out); }
-   if(!ok) for(guint i=0;i<created->len;i++) { GFile *f=g_file_new_for_path(g_ptr_array_index(created,i));g_file_delete(f,NULL,NULL);g_object_unref(f); }g_ptr_array_unref(created);
+   ok=export_parts(path,encoded,total,size,&error);
   } else { GFile *f=g_file_new_for_path(path);ok=g_file_replace_contents(f,mode ? encoded:(p ? (const gchar*)p:""),total,NULL,FALSE,G_FILE_CREATE_PRIVATE,NULL,NULL,&error);g_object_unref(f); }
   if(ok) { if(!mode) h->dirty=FALSE;render(h);note(h,insight_tr("Export completed.")); }else note(h,error ? error->message:"Export failed");g_clear_error(&error);g_free(path);
  }gtk_widget_destroy(d);g_free(encoded);g_bytes_unref(snapshot);
