@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-#include "geany.h"
 #include "insight-terminal.h"
 #include "../vendor/libvterm/include/vterm.h"
 #include <gdk/gdkkeysyms.h>
@@ -62,7 +61,18 @@ static gboolean render(gpointer data) {
  VTermScreenCell cells[300];gint used=cursor.row+1;
  for(gint row=t->rows-1;row>=used;row--) { gboolean content=FALSE;for(gint col=0;col<t->cols;col++) { VTermScreenCell cell={0};vterm_screen_get_cell(t->screen,(VTermPos){row,col},&cell);if((cell.chars[0] && cell.chars[0]!=' ' && cell.chars[0]!=(guint32)-1) || rgb(t,cell.bg) || cell.attrs.reverse) { content=TRUE;break; } }if(content) { used=row+1;break; } }
  for(gint row=0;row<used;row++) { for(gint col=0;col<t->cols;col++) { memset(&cells[col],0,sizeof(cells[col]));vterm_screen_get_cell(t->screen,(VTermPos){row,col},&cells[col]); }append_row(t,text,runs,cells,t->cols,row==cursor.row ? cursor.col:-1,&characters,&caret); }
- t->rendering=TRUE;gtk_text_buffer_set_text(buffer,text->str,text->len);
+ /* Preserve native marks and selection during streaming output. Only replace
+  * the changed UTF-8 span, instead of clearing/rebuilding the entire buffer. */
+ gtk_text_buffer_get_bounds(buffer,&a,&b);gchar *old=gtk_text_buffer_get_text(buffer,&a,&b,FALSE);gsize old_length=strlen(old),prefix=0,suffix=0;
+ while(prefix<old_length && prefix<text->len && old[prefix]==text->str[prefix]) prefix++;
+ while(prefix && prefix<text->len && ((guchar)text->str[prefix]&0xc0)==0x80) prefix--;
+ while(suffix<old_length-prefix && suffix<text->len-prefix && old[old_length-1-suffix]==text->str[text->len-1-suffix]) suffix++;
+ while(suffix && ((guchar)text->str[text->len-suffix]&0xc0)==0x80) suffix--;
+ t->rendering=TRUE;
+ if(prefix+suffix!=old_length || old_length!=text->len) {
+  gtk_text_buffer_get_iter_at_offset(buffer,&a,g_utf8_strlen(old,prefix));gtk_text_buffer_get_iter_at_offset(buffer,&b,g_utf8_strlen(old,old_length-suffix));gtk_text_buffer_delete(buffer,&a,&b);gtk_text_buffer_insert(buffer,&a,text->str+prefix,text->len-prefix-suffix);
+ }
+ g_free(old);gtk_text_buffer_get_bounds(buffer,&a,&b);gtk_text_buffer_remove_all_tags(buffer,&a,&b);
  for(guint n=0;n<runs->len;n++) {
   PaintRun run=g_array_index(runs,PaintRun,n);gtk_text_buffer_get_iter_at_offset(buffer,&a,run.first);gtk_text_buffer_get_iter_at_offset(buffer,&b,run.last);
   GtkTextTag *tag;if(run.fg!=0xdddddd && (tag=color_tag(t,run.fg,FALSE))) gtk_text_buffer_apply_tag(buffer,tag,&a,&b);if(run.bg && (tag=color_tag(t,run.bg,TRUE))) gtk_text_buffer_apply_tag(buffer,tag,&a,&b);

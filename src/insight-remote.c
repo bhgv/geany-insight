@@ -55,13 +55,13 @@ static void status(const char *message) {
  gchar *label=short_message ? g_strconcat(short_message,"…",NULL) : g_strdup(message);
  gtk_label_set_text(GTK_LABEL(remote_ui.status),label);gtk_widget_set_tooltip_text(remote_ui.status,message);g_free(label);g_free(short_message);ui_set_statusbar(TRUE,"SSH: %s",message);
  /* Keep a selectable, persistent explanation even in a narrow panel. */
- if(remote_ui.output) { gchar *line=g_strdup_printf("\r\n[SSH] %s\r\n",message);insight_terminal_feed(remote_ui.output,line,strlen(line));g_free(line); }
+ if(remote_ui.output && (!remote_ui.selected || !remote_ui.selected->process)) { gchar *line=g_strdup_printf("\r\n[SSH] %s\r\n",message);insight_terminal_feed(remote_ui.output,line,strlen(line));g_free(line); }
 }
 static void session_status(ShellSession *s,const gchar *message) {
  if(remote_ui.closing) return;
  if(!s) { status(message);return; }
  if(s==remote_ui.selected) { status(message);return; }
- gchar *line=g_strdup_printf("\r\n[SSH] %s\r\n",message);insight_terminal_feed(s->output,line,strlen(line));g_free(line);
+ if(!s->process) { gchar *line=g_strdup_printf("\r\n[SSH] %s\r\n",message);insight_terminal_feed(s->output,line,strlen(line));g_free(line); }
 }
 static gchar *client_program(const gchar *program) {
  gchar *bin=NULL;
@@ -262,8 +262,8 @@ static void shell_complete(ShellSession *s,GSubprocess *process) {
  if(error) message=g_strdup_printf("SSH failed: %s",error);
  else if(g_subprocess_get_if_exited(process)) { gint code=g_subprocess_get_exit_status(process);message=code ? g_strdup_printf("SSH client exited with status %d. See its output above.",code) : g_strdup("SSH session ended"); }
  else message=g_strdup("SSH client terminated. See its output above.");
- session_status(s,message);g_free(message);g_cancellable_cancel(s->cancel);g_clear_object(&s->cancel);g_clear_object(&s->process);auth_cleanup(s->auth);g_clear_pointer(&s->auth,g_free);
- s->writing=FALSE;s->pending_bytes=0;insight_queue_clear_full(&s->pending,(GDestroyNotify)g_bytes_unref);
+ g_cancellable_cancel(s->cancel);g_clear_object(&s->cancel);g_clear_object(&s->process);auth_cleanup(s->auth);g_clear_pointer(&s->auth,g_free);
+ s->writing=FALSE;s->pending_bytes=0;insight_queue_clear_full(&s->pending,(GDestroyNotify)g_bytes_unref);session_status(s,message);g_free(message);
 }
 static void shell_read(GObject *object,GAsyncResult *result,gpointer data) {
  GSubprocess *process=data;ShellSession *s=g_object_get_data(G_OBJECT(process),"insight-ssh-session");GError *error=NULL;GBytes *bytes=g_input_stream_read_bytes_finish(G_INPUT_STREAM(object),result,&error);

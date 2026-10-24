@@ -2,8 +2,8 @@
 #include "../../src/insight-terminal.h"
 #include <gdk/gdkkeysyms.h>
 #include <string.h>
-static GtkWidget *window,*view;static GString *sent;static guint phase,ticks;
-static void write_bytes(const gchar *text,gsize size,gpointer data) { (void)data;g_string_append_len(sent,text,size); }
+static GtkWidget *window,*view;static GString *sent;static guint phase,ticks,writes;
+static void write_bytes(const gchar *text,gsize size,gpointer data) { (void)data;writes++;g_string_append_len(sent,text,size); }
 static gchar *contents(void) { GtkTextBuffer *b=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));GtkTextIter a,z;gtk_text_buffer_get_bounds(b,&a,&z);return gtk_text_buffer_get_text(b,&a,&z,FALSE); }
 static void button(guint number) { GdkEvent *event=gdk_event_new(GDK_BUTTON_PRESS);event->button.window=g_object_ref(gtk_widget_get_window(view));event->button.button=number;gboolean handled=FALSE;g_signal_emit_by_name(view,"button-press-event",event,&handled);g_assert_true(handled);gdk_event_free(event); }
 static void key(guint val,guint modifiers) { GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);event->key.window=g_object_ref(gtk_widget_get_window(view));event->key.keyval=val;event->key.state=modifiers;g_assert_true(insight_terminal_key(view,&event->key));gdk_event_free(event); }
@@ -18,7 +18,8 @@ static gboolean step(gpointer data) {
   g_string_truncate(sent,0);key(GDK_KEY_Up,0);g_assert_cmpstr(sent->str,==,"\033[A");g_string_truncate(sent,0);key(GDK_KEY_c,GDK_CONTROL_MASK);g_assert_cmpuint(sent->len,==,1);g_assert_cmpint(sent->str[0],==,3);
   insight_terminal_feed(view,"\033[?1049h\033[HALTERNATE",strlen("\033[?1049h\033[HALTERNATE"));phase++;
  } else if(phase==2) { g_assert_nonnull(strstr(text,"ALTERNATE"));g_assert_null(strstr(text,"READY"));insight_terminal_feed(view,"\033[?1049l",8);phase++; }
- else if(phase==3) { g_assert_nonnull(strstr(text,"READY"));GtkWidget *tab=insight_terminal_tab(0,0,"Connection");g_assert_true(GTK_IS_IMAGE(tab));g_assert_nonnull(gtk_image_get_pixbuf(GTK_IMAGE(tab)));g_object_ref_sink(tab);gtk_widget_destroy(tab);g_object_unref(tab);g_print("Production terminal widget: SGR tags, overwrite/erase, UTF-8, alternate screen, copy, selected middle paste, clipboard fallback, VT key bytes and SVG icons passed\n");gtk_widget_destroy(window);gtk_main_quit();g_free(text);return G_SOURCE_REMOVE; }
+ else if(phase==3) { g_assert_nonnull(strstr(text,"READY"));gtk_text_buffer_get_iter_at_offset(buffer,&a,2);gtk_text_buffer_create_mark(buffer,"terminal-stable-mark",&a,TRUE);gtk_text_buffer_get_start_iter(buffer,&a);z=a;gtk_text_iter_forward_chars(&z,5);gtk_text_buffer_select_range(buffer,&a,&z);insight_terminal_feed(view,"\r\nSTREAM",8);phase++; }
+ else if(phase==4) { gtk_text_buffer_get_iter_at_mark(buffer,&a,gtk_text_buffer_get_mark(buffer,"terminal-stable-mark"));g_assert_cmpint(gtk_text_iter_get_offset(&a),==,2);g_assert_true(gtk_text_buffer_get_selection_bounds(buffer,&a,&z));gchar *selected=gtk_text_buffer_get_text(buffer,&a,&z,FALSE);g_assert_cmpstr(selected,==,"READY");g_free(selected);insight_terminal_feed(view,"\033[?2004h",8);g_string_truncate(sent,0);writes=0;insight_terminal_send(view,"paste");g_assert_cmpuint(writes,==,1);g_assert_cmpstr(sent->str,==,"\033[200~paste\033[201~");GtkWidget *tab=insight_terminal_tab(0,0,"Connection");g_assert_true(GTK_IS_IMAGE(tab));g_assert_nonnull(gtk_image_get_pixbuf(GTK_IMAGE(tab)));g_object_ref_sink(tab);gtk_widget_destroy(tab);g_object_unref(tab);g_print("Production terminal widget: SGR tags, overwrite/erase, UTF-8, alternate screen, copy, selected middle paste, clipboard fallback, VT key bytes and SVG icons passed\n");gtk_widget_destroy(window);gtk_main_quit();g_free(text);return G_SOURCE_REMOVE; }
  g_free(text);if(++ticks>100) g_error("Terminal widget timeout phase %u",phase);return G_SOURCE_CONTINUE;
 }
 int main(int argc,char **argv) {
