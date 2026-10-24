@@ -31,7 +31,7 @@ typedef struct {
  GtkWidget *compare_button,*cancel_button,*save_button; GCancellable *cancel; gboolean busy;
  GtkWidget *previous,*next,*list_scroll,*sync,*ignore_space,*ignore_eol; GtkAdjustment *adjustments[2]; gboolean scrolling;GtkAdjustment *horizontal[2];GPtrArray *alignment[2];guint alignment_idle;gint source_width[2];gboolean aligned;
  GtkListStore *list; GtkWidget *hunk_view; GtkTextBuffer *output; GtkTreeSelection *selection;
- gchar *sources[2],*loaded_paths[2],*saved;
+ gchar *sources[2],*loaded_paths[2],*picked[2],*saved;
  InsightDiff diff; GtkTextMark **marks;
  gboolean search_fields[4];
  gboolean zero_found;gint zero_side,zero_offset;guint64 zero_serial;
@@ -830,7 +830,7 @@ static void destroyed(GtkWidget *w,gpointer data) {
  for(int i=0;i<2;i++) { g_signal_handlers_disconnect_by_data(m->adjustments[i],m);g_object_unref(m->adjustments[i]);g_signal_handlers_disconnect_by_data(m->horizontal[i],m);g_object_unref(m->horizontal[i]);g_ptr_array_unref(m->alignment[i]); }
  g_object_unref(m->output);g_object_unref(m->selection);
  g_free(m->marks);insight_diff_clear(&m->diff);g_ptr_array_free(m->history,TRUE);
- for(int i=0;i<2;i++) { g_free(m->sources[i]);g_free(m->loaded_paths[i]); }
+ for(int i=0;i<2;i++) { g_free(m->sources[i]);g_free(m->loaded_paths[i]);g_free(m->picked[i]); }
  for(gint i=0;i<2;i++) { g_clear_pointer(&m->map_blocks[i],g_array_unref);g_clear_object(&m->maps[i]); }
  GtkWidget *controls[G_N_ELEMENTS(view_checks)];view_controls(m,controls);for(guint i=0;i<G_N_ELEMENTS(view_checks);i++) g_object_unref(controls[i]);g_object_unref(m->zoom);
  g_clear_object(&m->font_css);g_free(m->saved);g_object_unref(m->list);if(m->review_destroy) m->review_destroy(m->review_data);g_free(m);
@@ -1149,10 +1149,15 @@ static void binary_mode(GtkWidget *w,gpointer data) {
  gchar *paths[2];for(guint i=0;i<2;i++) paths[i]=g_filename_from_utf8(gtk_entry_get_text(GTK_ENTRY(m->paths[i])),-1,NULL,NULL,NULL);
  insight_hex_show(m->window,paths[0],paths[1]);for(guint i=0;i<2;i++) g_free(paths[i]);
 }
+static void remember_source_selection(GtkTextBuffer *buffer,GtkTextIter *location,GtkTextMark *mark,gpointer data) {
+ (void)location;Merge *m=data;if(m->busy || m->changing || (mark!=gtk_text_buffer_get_insert(buffer) && mark!=gtk_text_buffer_get_selection_bound(buffer))) return;
+ GtkTextIter a,z;if(!gtk_text_buffer_get_selection_bounds(buffer,&a,&z)) return;guint side=buffer==m->syntax_buffers[1] ? 1:0;g_free(m->picked[side]);m->picked[side]=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);
+}
+static void forget_source_selection(GtkTextBuffer *buffer,gpointer data) { Merge *m=data;guint side=buffer==m->syntax_buffers[1] ? 1:0;g_clear_pointer(&m->picked[side],g_free); }
 static void merge_source_selection(GtkWidget *w,gpointer data) {
  Merge *m=data;if(m->busy || m->review_locked) return;guint side=GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(w),"side"));GtkTextIter a,z;
- GtkTextBuffer *source=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]));if(!gtk_text_buffer_get_selection_bounds(source,&a,&z)) { message(m,"Select source text first.");return; }
- gchar *text=gtk_text_buffer_get_text(source,&a,&z,TRUE);gtk_text_buffer_begin_user_action(result(m));gtk_text_buffer_delete_selection(result(m),TRUE,TRUE);gtk_text_buffer_insert_at_cursor(result(m),text,-1);gtk_text_buffer_end_user_action(result(m));g_free(text);selection(NULL,m);
+ GtkTextBuffer *source=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]));gchar *text=gtk_text_buffer_get_selection_bounds(source,&a,&z) ? gtk_text_buffer_get_text(source,&a,&z,TRUE):g_strdup(m->picked[side]);if(!text) { message(m,"Select source text first.");return; }
+ gtk_text_buffer_begin_user_action(result(m));gtk_text_buffer_delete_selection(result(m),TRUE,TRUE);gtk_text_buffer_insert_at_cursor(result(m),text,-1);gtk_text_buffer_end_user_action(result(m));g_free(text);selection(NULL,m);
 }
 static Merge *merge_new(GtkWidget *parent) {
  Merge *m=g_new0(Merge,1);for(guint i=0;i<4;i++) m->search_fields[i]=TRUE;m->history=g_ptr_array_new_with_free_func(snapshot_free);m->saved=g_strdup("");
@@ -1270,9 +1275,9 @@ static Merge *merge_new(GtkWidget *parent) {
  GtkWidget *tool_rows[]={gtk_widget_get_parent(m->paths[0]),gtk_widget_get_parent(m->paths[1]),bar,options,comparison,display,whitespace,find,regex_options,replace,replace_options,line};toolbar_build(m,box,tool_rows);
  GtkWidget *binary_page=gtk_widget_get_parent(gtk_widget_get_parent(m->paths[0]));GtkWidget *binary=gtk_button_new_with_label("Binary comparison / Hex editor…");gtk_box_pack_start(GTK_BOX(binary_page),binary,FALSE,FALSE,0);g_signal_connect(binary,"clicked",G_CALLBACK(binary_mode),m);
  GtkWidget *selection_row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);GtkWidget *merge_page=gtk_widget_get_parent(bar);gtk_box_pack_start(GTK_BOX(merge_page),selection_row,FALSE,FALSE,0);
- for(guint side=0;side<2;side++) { GtkWidget *b=gtk_button_new_with_label(side ? "Insert Right selection":"Insert Left selection");gtk_widget_set_tooltip_text(b,"Replace the selected Result text, or insert at its caret. Undo restores the previous Result.");g_object_set_data(G_OBJECT(b),"side",GUINT_TO_POINTER(side));gtk_box_pack_start(GTK_BOX(selection_row),b,FALSE,FALSE,0);g_signal_connect(b,"clicked",G_CALLBACK(merge_source_selection),m); }
+ for(guint side=0;side<2;side++) { GtkWidget *b=gtk_button_new_with_label(side ? "Insert Right selection":"Insert Left selection");gtk_widget_set_tooltip_text(b,"Insert the last source selection at the Result caret or replace its selection. Source text stays captured while choosing the Result range. Undo restores Result.");g_object_set_data(G_OBJECT(b),"side",GUINT_TO_POINTER(side));gtk_box_pack_start(GTK_BOX(selection_row),b,FALSE,FALSE,0);g_signal_connect(b,"clicked",G_CALLBACK(merge_source_selection),m); }
 
- for(guint i=0;i<3;i++) { m->syntax_buffers[i]=g_object_ref(gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[i])));g_signal_connect(m->syntax_buffers[i],"changed",G_CALLBACK(syntax_changed),m); }
+ for(guint i=0;i<3;i++) { m->syntax_buffers[i]=g_object_ref(gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[i])));g_signal_connect(m->syntax_buffers[i],"changed",G_CALLBACK(syntax_changed),m);if(i<2) { g_signal_connect(m->syntax_buffers[i],"mark-set",G_CALLBACK(remember_source_selection),m);g_signal_connect(m->syntax_buffers[i],"changed",G_CALLBACK(forget_source_selection),m); } }
  record(m);selection(NULL,m);gtk_widget_show_all(m->window);view_restore(m,view_defaults);display_changed(NULL,m);open_compares=g_list_prepend(open_compares,m);return m;
 }
 

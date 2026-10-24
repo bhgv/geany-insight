@@ -52,7 +52,8 @@ budget. Save writes raw bytes, without formatting or addresses; closing a change
 result requires confirmation.
 
 Text Diff/Merge also offers Insert Left/Right selection: select any source fragment,
-then a Result selection or caret. One Undo reverts the operation. This also works
+then a Result selection or caret. The last source selection is retained while you
+choose the Result range, and cleared when source text changes. One Undo reverts the operation. This also works
 with AI proposals: take just the useful fragment, edit Result and apply through
 the existing guarded review action.
 
