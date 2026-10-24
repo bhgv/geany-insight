@@ -6,6 +6,7 @@
 void insight_i18n_apply(GtkWidget *widget) { (void)widget; }
 const gchar *insight_tr(const gchar *text) { return text; }
 gchar *insight_i18n_printf(const gchar *format,...) { va_list args;va_start(args,format);gchar *text=g_strdup_vprintf(format,args);va_end(args);return text; }
+GtkWidget *insight_panel_help_button(const gchar *topic) { (void)topic;return gtk_button_new_with_label("?"); }
 void insight_panel_help_attach(GtkWidget *widget,const gchar *topic) { (void)widget;(void)topic; }
 static gchar **known_types(void) { const gchar *names[]={"*.ini","*.cpp",NULL};return g_strdupv((gchar **)names); }
 static const gchar *blocked_path,*expected_destination,*block_after_confirmation;

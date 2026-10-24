@@ -44,7 +44,9 @@ static int read_at(InsightStream *s,FILE *f,uint64_t offset,void *out,size_t siz
 static int stable(InsightStream *s) {
  if(s->storage_failed) return fail(s,"Temporary storage failed. Reopen comparison before continuing.");
  for(unsigned i=0;i<2;i++) if(s->source[i]) { struct stream_stat now;if(stream_fstat(stream_fileno(s->source[i]),&now) || now.st_size!=s->stamp[i].st_size || now.st_mtime!=s->stamp[i].st_mtime
-#ifndef _WIN32
+#if defined(__APPLE__)
+ || now.st_mtimespec.tv_nsec!=s->stamp[i].st_mtimespec.tv_nsec
+#elif !defined(_WIN32)
  || now.st_mtim.tv_nsec!=s->stamp[i].st_mtim.tv_nsec
 #endif
 ) return fail(s,"Source changed on disk. Reopen comparison before reading or saving."); }return 1;
