@@ -675,7 +675,7 @@ test('Insight selection navigation native GUI', navigation_native_gui_test, time
 
 # This fixture includes the production Diff/Merge window; no editor host is needed.
 diff_gui_test = executable('test_insight_diff_gui',
- '../insight/tests/diff_gui_test.c', '../insight/core/diff.c', dependencies: deps)
+ '../insight/tests/diff_gui_test.c', '../insight/core/diff.c', '../src/insight-stream.c', '../src/insight-stream-ui.c', dependencies: deps)
 test('Insight isolated Diff Merge GUI', diff_gui_test, timeout: 45, is_parallel: false)
 
  directory_compare_test = executable('test_insight_directory_compare',
@@ -942,8 +942,16 @@ test('Insight production VT terminal widget GUI', terminal_widget_gui_test, time
 tty_console_gui_test = executable('test_insight_tty_console_gui', '../insight/tests/tty_console_gui_test.c', dependencies: test_deps)
 test('Insight native TTY terminal GUI', find_program('python3'), args: [meson.project_source_root() / 'insight/tests/tty_console_fixture.py', tty_console_gui_test.full_path()], timeout: 35, is_parallel: false)
 
-hex_gui_test = executable('test_insight_hex_gui', '../insight/tests/hex_gui_test.c', dependencies: deps)
+hex_gui_test = executable('test_insight_hex_gui', '../insight/tests/hex_gui_test.c', '../src/insight-stream.c', '../src/insight-stream-ui.c', dependencies: deps)
 test('Insight binary merge and hex Base64 export GUI', hex_gui_test, timeout: 40, is_parallel: false)
 
 compare_ui_gui_test = executable('test_insight_compare_ui_gui', '../insight/tests/compare_ui_gui_test.c', dependencies: deps)
 test('Insight comparison toolbar natural height and collapse GUI', compare_ui_gui_test, timeout: 25, is_parallel: false)
+
+if host_machine.system() != 'windows'
+stream_test = executable('test_insight_stream', '../insight/tests/stream_test.c', '../src/insight-stream.c')
+test('Insight streaming large file piece table', stream_test, timeout: 60)
+endif
+
+stream_gui_test = executable('test_insight_stream_gui', '../insight/tests/stream_gui_test.c', '../src/insight-stream.c', dependencies: deps)
+test('Insight streaming comparison and history GUI', stream_gui_test, timeout: 40, is_parallel: false)

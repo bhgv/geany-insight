@@ -400,7 +400,7 @@ static GtkWidget *check(GtkWidget *box,const gchar *label,gboolean active) {
 static Directory *directory_new(GtkWidget *parent) {
  Directory *d=g_new0(Directory,1);d->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(d->window,"insight-directory-window");gtk_window_set_title(GTK_WINDOW(d->window),"Directory Compare");gtk_window_set_default_size(GTK_WINDOW(d->window),INSIGHT_COMPARE_WIDTH,INSIGHT_COMPARE_HEIGHT);
  if(parent) { gtk_window_set_transient_for(GTK_WINDOW(d->window),GTK_WINDOW(parent));gtk_window_set_destroy_with_parent(GTK_WINDOW(d->window),TRUE); }
- GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,6);gtk_container_set_border_width(GTK_CONTAINER(box),8);gtk_container_add(GTK_CONTAINER(d->window),box);insight_panel_help_attach(box,"directory-compare.md");
+ GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,6);gtk_container_set_border_width(GTK_CONTAINER(box),8);gtk_container_add(GTK_CONTAINER(d->window),box);
  d->controls=gtk_box_new(GTK_ORIENTATION_VERTICAL,4);gtk_box_pack_start(GTK_BOX(box),d->controls,FALSE,FALSE,0);
  for(gint side=0;side<2;side++) {
   GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(d->controls),row,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(row),gtk_label_new(side ? "Right directory" : "Left directory"),FALSE,FALSE,0);
@@ -431,7 +431,7 @@ static Directory *directory_new(GtkWidget *parent) {
  for(gint i=0;i<4;i++) { GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(labels[i],gtk_cell_renderer_text_new(),"text",DC_PATH+i,NULL);gtk_tree_view_column_set_resizable(column,TRUE);if(i<2) gtk_tree_view_column_set_sort_column_id(column,DC_PATH+i);gtk_tree_view_append_column(GTK_TREE_VIEW(d->view),column); }
  GtkWidget *appearance=insight_list_style_button(d->view);gtk_widget_set_name(appearance,"insight-directory-appearance");gtk_box_pack_start(GTK_BOX(filters),appearance,FALSE,FALSE,0);
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),d->view);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
- d->status=gtk_label_new("Choose two directories and scan. Results are a snapshot.");gtk_label_set_xalign(GTK_LABEL(d->status),0);gtk_label_set_line_wrap(GTK_LABEL(d->status),TRUE);gtk_box_pack_start(GTK_BOX(box),d->status,FALSE,FALSE,0);
+ d->status=gtk_label_new("Choose two directories and scan. Results are a snapshot.");gtk_label_set_xalign(GTK_LABEL(d->status),0);gtk_label_set_line_wrap(GTK_LABEL(d->status),TRUE);gtk_widget_set_margin_end(d->status,24);gtk_box_pack_start(GTK_BOX(box),insight_panel_help_overlay(d->status,"directory-compare.md"),FALSE,FALSE,0);
  GtkWidget *tabs=insight_compare_ui_tabs(box,"insight-directory-toolbar-tabs");
  GtkWidget *files=insight_compare_ui_page(tabs,insight_tr("Files and comparison")),*compare_options=insight_compare_ui_page(tabs,insight_tr("Comparison options")),*view_options=insight_compare_ui_page(tabs,insight_tr("View")),*file_operations=insight_compare_ui_page(tabs,insight_tr("File operations")),*navigation=insight_compare_ui_page(tabs,insight_tr("Navigation"));
  insight_compare_ui_move(options,compare_options);insight_compare_ui_move(text_options,compare_options);insight_compare_ui_move(d->controls,files);insight_compare_ui_move(bar,files);

@@ -105,3 +105,32 @@ and file chooser. Selecting a destination never writes data. Save opens its choo
 with that destination and overwrite confirmation. Binary output has the same
 choice. Text comparison help buttons overlay headers/table at 80% opacity rather
 than reserving separate empty rows.
+
+## Streaming large files and edit history
+
+Files larger than 16 MiB in Hex, or 1 MiB in text Diff/Merge, open the streaming
+comparison window. There is no 100 MiB ceiling. Sources are read in 64 KiB blocks;
+only a 4096-byte page enters each GTK text buffer. Result is a piece table of
+source ID, offset and length, with separate manual bytes. Each metadata list and
+manual payload spills to private temporary storage after 2 MiB. Undo/Redo retains
+piece-table versions rather than file copies. Temporary storage is removed on close;
+this is not a persistent recovery journal. Source changes invalidate reads and saving.
+Saving materializes the current composition into a temporary file before replacing
+the selected destination. Allow disk space for Result and the destination staging file.
+Base64 export is streamed through temporary storage; split parts concatenate before
+decoding. Clipboard parts are limited to 16 MiB.
+
+Text comparison uses bounded line-start anchors to resynchronise insertions and
+deletions. It is a heuristic, not a globally minimal edit script; anchors beyond
+64 KiB may produce broader ranges. Byte offsets remain authoritative, and original
+bytes/line endings are preserved. Page boundaries can display an incomplete UTF-8
+character as a replacement glyph; this never changes saved bytes. Manual replacement
+text is UTF-8. Large-file comparison does not apply the small-window ignore-space,
+regex, or whole-buffer editing commands.
+
+Curved-arrow Undo/Redo buttons and a History dropdown stay beside Result when the
+upper tabs collapse. Choose an event directly, keeping later events available for
+Redo. Hover an event for Before/After: grey before, red after. The same controls
+serve text, AI proposals, binary and streaming Result. Git and snapshot windows
+remain read only; their labels and difference table headers identify the sources,
+and help overlays do not allocate a separate blank row.

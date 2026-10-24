@@ -1252,3 +1252,15 @@ Synchronizing project membership and changed files…|||Синхронизаци
 Workspace: %u parsed, %u reused, %zu symbols, %u skipped%s|||Проект: разобрано %u, из базы %u, символов %zu, пропущено %u%s
 
 Show in file manager|||Показать в проводнике
+
+Before|||До
+After|||После
+Initial Result|||Начальный результат
+Result change|||Изменение результата
+Merge decisions changed|||Изменены решения слияния
+Streaming comparison|||Потоковое сравнение
+Streaming text Diff / Merge|||Потоковое сравнение / слияние текста
+Streaming binary Diff / Merge|||Потоковое бинарное сравнение / слияние
+Partly merged|||Частично сведено
+Editable blocks|||Редактируемые блоки
+Apply manual change|||Применить ручную правку

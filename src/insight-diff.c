@@ -5,6 +5,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "insight-diff.h"
 #include "insight-hex.h"
+#include "insight-stream-ui.h"
+#include "insight-history-ui.h"
 #include "insight-directory.h"
 #include "insight-help.h"
 #include "../insight/core/diff.h"
@@ -12,7 +14,7 @@
 #include <gio/gio.h>
 
 static InsightDiffColorize colorizer;
-void insight_diff_set_colorizer(InsightDiffColorize callback) { colorizer=callback; }
+void insight_diff_set_colorizer(InsightDiffColorize callback) { colorizer=callback;insight_stream_ui_set_colorizer(callback); }
 static InsightDiffOpen source_opener;
 void insight_diff_set_source_opener(InsightDiffOpen opener) { source_opener=opener; }
 typedef struct { gchar *text; gint *positions;guchar *resolutions; } Snapshot;
@@ -20,7 +22,7 @@ typedef struct { guint begin,end; } MapBlock;
 typedef struct {
  gboolean memory,review_ready,review_locked;GtkWidget *apply,*review_tools;InsightDiffApply apply_cb;InsightDiffAsk ask_cb;gpointer review_data;GDestroyNotify review_destroy;
  GtkWidget *toolbar,*answer_page,*answer_left,*answer_right;GPtrArray *answers;gchar *answer_base,*syntax_path;guint answer_l,answer_r,syntax_idle;gboolean answer_sync;GtkTextBuffer *syntax_buffers[3];
- GtkWidget *headers[3],*destination,*destination_kind;GtkTreeViewColumn *file_columns[2];guchar *resolutions;
+ InsightHistoryUI *history_ui;GtkWidget *headers[3],*destination,*destination_kind;GtkTreeViewColumn *file_columns[2];guchar *resolutions;
  GtkWidget *window,*paths[2],*views[3],*status,*undo,*redo,*take[2],*take_all[2],*external;
  GtkWidget *find_entry,*find_side,*find_case,*find_word,*find_wrap,*find_previous,*find_next,*find_status,*numbers,*find_regex,*find_dotall;
  GtkWidget *replace_entry,*replace_scope,*replace_once,*replace_case,*replace_status,*replace_apply,*replace_confirm;
@@ -104,9 +106,10 @@ static GtkWidget *help_overlay(GtkWidget *content,const gchar *topic) {
  GtkWidget *overlay=gtk_overlay_new(),*help=insight_panel_help_button(topic);gtk_container_add(GTK_CONTAINER(overlay),content);gtk_widget_set_opacity(help,0.8);gtk_widget_set_halign(help,GTK_ALIGN_END);gtk_widget_set_valign(help,GTK_ALIGN_START);gtk_overlay_add_overlay(GTK_OVERLAY(overlay),help);return overlay;
 }
 static void state(Merge *m) {
+ insight_history_update(m->history_ui,!m->busy && !m->review_locked);
  if(m->replace_apply) gtk_widget_set_sensitive(m->replace_apply,!m->busy);
- gtk_widget_set_sensitive(m->undo,!m->busy && m->position>0);
- gtk_widget_set_sensitive(m->redo,!m->busy && m->position+1<m->history->len);
+ gtk_widget_set_sensitive(m->undo,!m->busy && !m->review_locked && m->position>0);
+ gtk_widget_set_sensitive(m->redo,!m->busy && !m->review_locked && m->position+1<m->history->len);
  gchar *text=contents(result(m));
  gboolean dirty=g_strcmp0(text,m->saved)!=0;g_free(text);
  gtk_window_set_title(GTK_WINDOW(m->window),dirty ? "Diff / Merge — unsaved result" : "Diff / Merge");
@@ -1110,6 +1113,7 @@ static void compare(GtkWidget *w,gpointer data) {
   if(!native || !*native) { message(m,error ? error->message : "Choose two source files before comparing.");g_clear_error(&error);g_free(native);comparison_free(job);return; }
   job->paths[i]=insight_canonicalize_filename(native,NULL);g_free(native);
  }
+ if(insight_stream_ui_large(job->paths[0],job->paths[1],1024*1024)) { insight_stream_ui_show(m->window,job->paths[0],job->paths[1],TRUE);comparison_free(job);return; }
  job->options=(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->ignore_space)) ? INSIGHT_DIFF_IGNORE_SPACE : 0) |
   (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(m->ignore_eol)) ? INSIGHT_DIFF_IGNORE_EOL : 0);
  m->cancel=g_cancellable_new();busy(m,TRUE);message(m,"Comparing… Cancel keeps the previous result.");
@@ -1192,6 +1196,11 @@ static void merge_source_selection(GtkWidget *w,gpointer data) {
  GtkTextBuffer *source=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]));gchar *text=gtk_text_buffer_get_selection_bounds(source,&a,&z) ? gtk_text_buffer_get_text(source,&a,&z,TRUE):g_strdup(m->picked[side]);if(!text) { message(m,"Select source text first.");return; }
  gtk_text_buffer_begin_user_action(result(m));gtk_text_buffer_delete_selection(result(m),TRUE,TRUE);gtk_text_buffer_insert_at_cursor(result(m),text,-1);gtk_text_buffer_end_user_action(result(m));g_free(text);selection(NULL,m);
 }
+static gchar *diff_history_label(gpointer data,guint index) { Merge *m=data;if(!index) return g_strdup(insight_tr("Initial Result"));Snapshot *a=g_ptr_array_index(m->history,index-1),*b=g_ptr_array_index(m->history,index);return insight_history_text_label(a->text,b->text); }
+static guint diff_history_count(gpointer data) { return ((Merge*)data)->history->len; }
+static guint diff_history_position(gpointer data) { return ((Merge*)data)->position; }
+static void diff_history_jump(gpointer data,guint index) { Merge *m=data;if(!m->busy && !m->review_locked && index<m->history->len) restore(m,index); }
+static void diff_history_tip(gpointer data,guint index,gchar **a,gchar **b) { Merge *m=data;if(index>=m->history->len) return;Snapshot *before=g_ptr_array_index(m->history,index ? index-1:0),*after=g_ptr_array_index(m->history,index);insight_history_text_preview(before->text,after->text,a,b); }
 static Merge *merge_new(GtkWidget *parent) {
  Merge *m=g_new0(Merge,1);for(guint i=0;i<4;i++) m->search_fields[i]=TRUE;m->history=g_ptr_array_new_with_free_func(snapshot_free);m->saved=g_strdup("");
  m->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(m->window,"insight-diff-window");gtk_window_set_transient_for(GTK_WINDOW(m->window),GTK_WINDOW(parent));gtk_window_set_destroy_with_parent(GTK_WINDOW(m->window),TRUE);gtk_window_set_default_size(GTK_WINDOW(m->window),INSIGHT_COMPARE_WIDTH,INSIGHT_COMPARE_HEIGHT);
@@ -1206,7 +1215,7 @@ static Merge *merge_new(GtkWidget *parent) {
  m->compare_button=button(bar,"Compare",G_CALLBACK(compare),m);gtk_widget_set_name(m->compare_button,"insight-diff-compare");m->cancel_button=button(bar,"Cancel comparison",G_CALLBACK(cancel_compare),m);gtk_widget_set_name(m->cancel_button,"insight-diff-cancel");gtk_widget_set_sensitive(m->cancel_button,FALSE);m->take[0]=button(bar,"Take Left",G_CALLBACK(take),m);m->take[1]=button(bar,"Take Right",G_CALLBACK(take),m);
  m->take_all[0]=button(bar,"All Left",G_CALLBACK(take_all),m);m->take_all[1]=button(bar,"All Right",G_CALLBACK(take_all),m);gtk_widget_set_name(m->take_all[1],"insight-diff-all-right");
  gtk_widget_set_tooltip_text(m->take_all[0],"Take all difference blocks from Left — one Undo");gtk_widget_set_tooltip_text(m->take_all[1],"Take all difference blocks from Right — one Undo");
- m->undo=button(bar,"Undo",G_CALLBACK(undo),m);m->redo=button(bar,"Redo",G_CALLBACK(redo),m);m->save_button=button(bar,"Save result…",G_CALLBACK(save),m);
+ m->save_button=button(bar,"Save result…",G_CALLBACK(save),m);
  m->external=button(bar,"External KDiff3 (optional)",G_CALLBACK(external),m);
  GtkWidget *options=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(box),options,FALSE,FALSE,0);
  m->previous=button(options,"Previous difference",G_CALLBACK(step),m);m->next=button(options,"Next difference",G_CALLBACK(step),m);
@@ -1276,7 +1285,7 @@ static Merge *merge_new(GtkWidget *parent) {
  for(int i=0;i<3;i++) {
   GtkWidget *column=gtk_box_new(GTK_ORIENTATION_VERTICAL,3);if(i==0) gtk_paned_pack1(GTK_PANED(columns),column,TRUE,FALSE);else if(i==1) gtk_paned_pack2(GTK_PANED(columns),column,TRUE,FALSE);else gtk_paned_pack2(GTK_PANED(merge_split),column,TRUE,FALSE);
   m->headers[i]=gtk_label_new(NULL);gtk_label_set_selectable(GTK_LABEL(m->headers[i]),TRUE);gtk_label_set_xalign(GTK_LABEL(m->headers[i]),0);gtk_label_set_ellipsize(GTK_LABEL(m->headers[i]),PANGO_ELLIPSIZE_MIDDLE);gtk_widget_set_margin_end(m->headers[i],24);gtk_box_pack_start(GTK_BOX(column),help_overlay(m->headers[i],i==2 ? "panel-merge-result.md":"panel-diff-input.md"),FALSE,FALSE,0);
-  if(i==2) { GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);m->destination_kind=gtk_combo_box_text_new();const gchar *choices[]={"Merge into Left file","Merge into Right file","Separate output file"};for(guint n=0;n<3;n++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->destination_kind),insight_tr(choices[n]));gtk_combo_box_set_active(GTK_COMBO_BOX(m->destination_kind),2);gtk_box_pack_start(GTK_BOX(row),m->destination_kind,FALSE,FALSE,0);m->destination=gtk_entry_new();gtk_widget_set_name(m->destination,"insight-diff-output-path");gtk_widget_set_tooltip_text(m->destination,insight_tr("Output filename; choosing a destination does not write until Save."));gtk_box_pack_start(GTK_BOX(row),m->destination,TRUE,TRUE,0);button(row,"Browse…",G_CALLBACK(destination_browse),m);gtk_box_pack_start(GTK_BOX(column),row,FALSE,FALSE,0);g_signal_connect(m->destination_kind,"changed",G_CALLBACK(destination_choice),m);g_signal_connect(m->destination,"changed",G_CALLBACK(destination_changed),m); }
+  if(i==2) { m->history_ui=insight_history_ui(column,m,diff_history_count,diff_history_position,diff_history_jump,diff_history_tip);m->history_ui->label=diff_history_label;m->undo=m->history_ui->undo;m->redo=m->history_ui->redo;GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);m->destination_kind=gtk_combo_box_text_new();const gchar *choices[]={"Merge into Left file","Merge into Right file","Separate output file"};for(guint n=0;n<3;n++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->destination_kind),insight_tr(choices[n]));gtk_combo_box_set_active(GTK_COMBO_BOX(m->destination_kind),2);gtk_box_pack_start(GTK_BOX(row),m->destination_kind,FALSE,FALSE,0);m->destination=gtk_entry_new();gtk_widget_set_name(m->destination,"insight-diff-output-path");gtk_widget_set_tooltip_text(m->destination,insight_tr("Output filename; choosing a destination does not write until Save."));gtk_box_pack_start(GTK_BOX(row),m->destination,TRUE,TRUE,0);button(row,"Browse…",G_CALLBACK(destination_browse),m);gtk_box_pack_start(GTK_BOX(column),row,FALSE,FALSE,0);g_signal_connect(m->destination_kind,"changed",G_CALLBACK(destination_choice),m);g_signal_connect(m->destination,"changed",G_CALLBACK(destination_changed),m); }
   m->views[i]=gtk_text_view_new();gtk_widget_set_name(m->views[i],i==0 ? "insight-diff-left" : i==1 ? "insight-diff-right" : "insight-diff-result");gtk_text_view_set_monospace(GTK_TEXT_VIEW(m->views[i]),TRUE);gtk_text_view_set_editable(GTK_TEXT_VIEW(m->views[i]),i==2);
   GtkWidget *body=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0);gtk_box_pack_start(GTK_BOX(column),body,TRUE,TRUE,0);m->scrollers[i]=scroll(m->views[i]);gtk_box_pack_start(GTK_BOX(body),m->scrollers[i],TRUE,TRUE,0);
   if(i<2) { m->maps[i]=gtk_drawing_area_new();gtk_widget_set_size_request(m->maps[i],18,-1);gtk_widget_set_no_show_all(m->maps[i],TRUE);gtk_box_pack_start(GTK_BOX(body),m->maps[i],FALSE,FALSE,0);g_object_ref(m->maps[i]);gtk_widget_add_events(m->maps[i],GDK_BUTTON_PRESS_MASK);gtk_widget_set_tooltip_text(m->maps[i],"Overview: click a marker to select its difference; click elsewhere to scroll.");g_signal_connect(m->maps[i],"draw",G_CALLBACK(map_draw),m);g_signal_connect(m->maps[i],"button-press-event",G_CALLBACK(map_click),m); }
@@ -1318,6 +1327,7 @@ static Merge *merge_new(GtkWidget *parent) {
 void insight_diff_show(GtkWidget *parent) { (void)merge_new(parent); }
 
 void insight_diff_show_files(GtkWidget *parent,const gchar *left,const gchar *right,guint text_flags) {
+ if(insight_stream_ui_large(left,right,1024*1024)) { insight_stream_ui_show(parent,left,right,TRUE);return; }
  Merge *m=merge_new(parent);const gchar *paths[]={left,right};
  for(guint side=0;side<2;side++) { GError *error=NULL;gchar *text=g_filename_to_utf8(paths[side],-1,NULL,NULL,&error);if(!text) { message(m,error->message);g_clear_error(&error);return; }gtk_entry_set_text(GTK_ENTRY(m->paths[side]),text);g_free(text); }
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->ignore_space),(text_flags&INSIGHT_DIFF_IGNORE_SPACE)!=0);

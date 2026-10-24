@@ -182,7 +182,7 @@ gboolean insight_snapshot_compare_show(GtkWidget *parent,const gchar *left_name,
     view->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(view->window,"insight-snapshot-compare-window");gtk_window_set_title(GTK_WINDOW(view->window),insight_tr("Snapshot comparison"));gtk_window_set_default_size(GTK_WINDOW(view->window),INSIGHT_COMPARE_WIDTH,INSIGHT_COMPARE_HEIGHT);
     gtk_window_set_transient_for(GTK_WINDOW(view->window),GTK_WINDOW(parent));gtk_window_set_destroy_with_parent(GTK_WINDOW(view->window),TRUE);
     g_object_set_data_full(G_OBJECT(view->window),STATE,view,view_free);g_signal_connect(view->window,"destroy",G_CALLBACK(closing),view);
-    GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,6);gtk_container_set_border_width(GTK_CONTAINER(box),8);gtk_container_add(GTK_CONTAINER(view->window),box);insight_panel_help_attach(box,"snapshot-comparison.md");
+    GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,6);gtk_container_set_border_width(GTK_CONTAINER(box),8);gtk_container_add(GTK_CONTAINER(view->window),box);
     GtkWidget *bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);
     view->run=button(bar,"Compare","insight-snapshot-run",G_CALLBACK(run),view);view->cancel_button=button(bar,"Cancel comparison","insight-snapshot-cancel",G_CALLBACK(cancel_compare),view);
     view->previous=button(bar,"Previous difference","insight-snapshot-previous",G_CALLBACK(step),view);view->next=button(bar,"Next difference","insight-snapshot-next",G_CALLBACK(step),view);
@@ -198,14 +198,14 @@ gboolean insight_snapshot_compare_show(GtkWidget *parent,const gchar *left_name,
     const gchar *names[]={left_name,right_name};
     for(guint i=0;i<2;i++) {
         view->text[i]=g_strndup(text[i],sizes[i]);view->names[i]=g_strdup(names[i] ? names[i]:"");
-        GtkWidget *column=gtk_box_new(GTK_ORIENTATION_VERTICAL,4),*label=gtk_label_new(view->names[i]);gtk_widget_set_name(label,i ? "insight-snapshot-right-name":"insight-snapshot-left-name");g_object_set_data(G_OBJECT(label),"insight-no-i18n",GINT_TO_POINTER(1));gtk_widget_set_tooltip_text(label,view->names[i]);gtk_label_set_selectable(GTK_LABEL(label),TRUE);gtk_label_set_ellipsize(GTK_LABEL(label),PANGO_ELLIPSIZE_MIDDLE);gtk_box_pack_start(GTK_BOX(column),label,FALSE,FALSE,0);
+        GtkWidget *column=gtk_box_new(GTK_ORIENTATION_VERTICAL,4),*label=gtk_label_new(view->names[i]);gtk_widget_set_name(label,i ? "insight-snapshot-right-name":"insight-snapshot-left-name");g_object_set_data(G_OBJECT(label),"insight-no-i18n",GINT_TO_POINTER(1));gtk_widget_set_tooltip_text(label,view->names[i]);gtk_label_set_selectable(GTK_LABEL(label),TRUE);gtk_label_set_ellipsize(GTK_LABEL(label),PANGO_ELLIPSIZE_MIDDLE);gtk_widget_set_margin_end(label,24);gtk_box_pack_start(GTK_BOX(column),insight_panel_help_overlay(label,"snapshot-comparison.md"),FALSE,FALSE,0);
         view->views[i]=gtk_text_view_new();gtk_style_context_add_class(gtk_widget_get_style_context(view->views[i]),"insight-compare-code");gtk_widget_set_name(view->views[i],i ? "insight-snapshot-right":"insight-snapshot-left");gtk_text_view_set_editable(GTK_TEXT_VIEW(view->views[i]),FALSE);gtk_text_view_set_monospace(GTK_TEXT_VIEW(view->views[i]),TRUE);
         GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->views[i]));gtk_text_buffer_set_text(buffer,view->text[i],sizes[i]);gtk_text_buffer_create_tag(buffer,"difference","background",i ? "#d5f5d5":"#ffe0d0","foreground","#202020",NULL);
         GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),view->views[i]);gtk_box_pack_start(GTK_BOX(column),scroll,TRUE,TRUE,0);if(i) gtk_paned_pack2(GTK_PANED(panes),column,TRUE,FALSE);else gtk_paned_pack1(GTK_PANED(panes),column,TRUE,FALSE);
     }
     gtk_paned_set_position(GTK_PANED(panes),460);
     view->tree=gtk_tree_view_new_with_model(GTK_TREE_MODEL(view->model));gtk_widget_set_name(view->tree,"insight-snapshot-differences");
-    const gchar *columns[]={"Kind","Left lines","Right lines"};for(guint i=0;i<3;i++) gtk_tree_view_append_column(GTK_TREE_VIEW(view->tree),gtk_tree_view_column_new_with_attributes(insight_tr(columns[i]),gtk_cell_renderer_text_new(),"text",i+1,NULL));
+    const gchar *columns[]={"Kind","Left lines","Right lines"};for(guint i=0;i<3;i++) gtk_tree_view_append_column(GTK_TREE_VIEW(view->tree),gtk_tree_view_column_new_with_attributes(i ? view->names[i-1]:insight_tr(columns[i]),gtk_cell_renderer_text_new(),"text",i+1,NULL));
     g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(view->tree)),"changed",G_CALLBACK(select_row),view);
     GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_widget_set_size_request(scroll,-1,135);gtk_container_add(GTK_CONTAINER(scroll),view->tree);gtk_box_pack_start(GTK_BOX(box),scroll,FALSE,TRUE,0);
     view->status=gtk_label_new("");gtk_widget_set_name(view->status,"insight-snapshot-status");gtk_label_set_line_wrap(GTK_LABEL(view->status),TRUE);gtk_box_pack_start(GTK_BOX(box),view->status,FALSE,FALSE,0);
