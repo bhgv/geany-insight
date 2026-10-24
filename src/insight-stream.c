@@ -35,13 +35,14 @@ struct InsightStream {
  FILE *source[2],*manual,*metadata,*ranges_file;
  struct stream_stat stamp[2];uint64_t sizes[2],manual_size,scanned,run_start;
  uint64_t text_at[2];unsigned char *manual_memory;InsightStreamRange *ranges;size_t range_count;
- Version *versions;size_t version_count,position,resident;char error[160];int scanning_run,scan_done;
+ Version *versions;size_t version_count,position,resident;char error[160];int scanning_run,scan_done,storage_failed;
 };
 static int fail(InsightStream *s,const char *message) { snprintf(s->error,sizeof(s->error),"%s",message);return 0; }
 static int read_at(InsightStream *s,FILE *f,uint64_t offset,void *out,size_t size) {
  if(offset>INT64_MAX || seek64(f,(int64_t)offset,SEEK_SET) || (size && fread(out,1,size,f)!=size)) return fail(s,"Cannot read source or temporary data.");return 1;
 }
 static int stable(InsightStream *s) {
+ if(s->storage_failed) return fail(s,"Temporary storage failed. Reopen comparison before continuing.");
  for(unsigned i=0;i<2;i++) if(s->source[i]) { struct stream_stat now;if(stream_fstat(stream_fileno(s->source[i]),&now) || now.st_size!=s->stamp[i].st_size || now.st_mtime!=s->stamp[i].st_mtime
 #ifndef _WIN32
  || now.st_mtim.tv_nsec!=s->stamp[i].st_mtim.tv_nsec
@@ -61,7 +62,7 @@ static FILE *private_temp(void) {
 }
 static int append_file(InsightStream *s,FILE **file,const void *data,size_t bytes,uint64_t *offset) {
  if(!*file) *file=private_temp();if(!*file || seek64(*file,0,SEEK_END)) return fail(s,"Cannot create or seek private temporary storage.");
- int64_t at=tell64(*file);if(at<0 || (bytes && fwrite(data,1,bytes,*file)!=bytes) || fflush(*file)) return fail(s,"Cannot write temporary storage (disk full?).");if(offset) *offset=(uint64_t)at;return 1;
+ int64_t at=tell64(*file);if(at<0 || (bytes && fwrite(data,1,bytes,*file)!=bytes) || fflush(*file)) { s->storage_failed=1;return fail(s,"Cannot write temporary storage (disk full?)."); }if(offset) *offset=(uint64_t)at;return 1;
 }
 static int piece_get(InsightStream *s,Version *v,size_t index,Piece *p) {
  if(index>=v->count) return fail(s,"Invalid piece index.");if(v->pieces) { *p=v->pieces[index];return 1; }return read_at(s,s->metadata,v->disk+index*sizeof(Piece),p,sizeof(*p));
@@ -117,7 +118,7 @@ int insight_stream_replace(InsightStream *s,uint64_t at,uint64_t remove,unsigned
  Version *versions=realloc(s->versions,capacity*sizeof(Version));
  if(!versions) { free(out);return fail(s,"Out of memory for history."); }s->versions=versions;
  for(size_t i=s->position+1;i<s->version_count;i++) { if(s->versions[i].pieces) s->resident-=s->versions[i].count*sizeof(Piece);free(s->versions[i].pieces); }
- s->versions[s->position+1]=(Version){out,count,0,new_size,{at,remove,offset,length,source}};s->version_count=s->position+2;s->position++;s->resident+=count*sizeof(Piece);return spill_versions(s);
+ s->versions[s->position+1]=(Version){out,count,0,new_size,{at,remove,offset,length,source}};s->version_count=s->position+2;s->position++;s->resident+=count*sizeof(Piece);if(!spill_versions(s)) { Version *failed=&s->versions[s->position];if(failed->pieces) { s->resident-=failed->count*sizeof(Piece);free(failed->pieces); }s->position--;s->version_count--;return 0; }return 1;
 }
 static uint64_t moved(uint64_t p,InsightStreamEvent e,int end) {
  if(p<e.target) return p;if(p>e.target+e.removed || (p==e.target+e.removed && e.removed)) return p-e.removed+e.length;return e.target+(end ? e.length:0);
@@ -127,7 +128,7 @@ int insight_stream_map_range(InsightStream *s,const InsightStreamRange *range,ui
  for(size_t i=1;i<=s->position;i++) { InsightStreamEvent e=s->versions[i].event;
   int touches=begin==end ? e.target<=begin && e.target+e.removed>=begin:e.target<end && e.target+e.removed>begin;
   if(!e.removed && e.length && e.target>=begin && e.target<=end) touches=1;
-  if(touches) { uint64_t source_at=e.source ? range->right_offset:range->offset,source_len=e.source ? range->right_length:range->length;
+  if(touches) { uint64_t source_at=e.source ? range->right_offset:range->offset,source_len=e.source ? range->right_length:range->length;if(e.source<2) { if(source_at>s->sizes[e.source]) source_at=s->sizes[e.source];if(source_len>s->sizes[e.source]-source_at) source_len=s->sizes[e.source]-source_at; }
    status=e.source==2 ? 3:(e.target<=begin && e.target+e.removed>=end && e.offset<=source_at && e.length>=source_at-e.offset+source_len ? (int)e.source+1:4);
   }
   begin=moved(begin,e,0);end=moved(end,e,1);if(end<begin) end=begin;
@@ -187,7 +188,7 @@ int insight_stream_scan_text(InsightStream *s,size_t budget) {
 uint64_t insight_stream_scanned(InsightStream *s) { return s->scanned; }
 size_t insight_stream_difference_count(InsightStream *s) { return s->range_count; }
 int insight_stream_difference(InsightStream *s,size_t index,InsightStreamRange *range) { if(index>=s->range_count) return fail(s,"Difference index outside range.");if(s->ranges_file) return read_at(s,s->ranges_file,index*sizeof(*range),range,sizeof(*range));*range=s->ranges[index];return 1; }
-int insight_stream_write(InsightStream *s,FILE *output) { unsigned char bytes[BLOCK];uint64_t total=insight_stream_size(s,2);for(uint64_t at=0;at<total;) { size_t n=(size_t)((total-at)<BLOCK ? total-at:BLOCK);if(!insight_stream_read(s,2,at,bytes,n) || fwrite(bytes,1,n,output)!=n) return fail(s,"Cannot stream result (source changed or output disk full).");at+=n; }return fflush(output)==0 ? 1:fail(s,"Cannot flush result."); }
+int insight_stream_write(InsightStream *s,FILE *output) { unsigned char bytes[BLOCK];uint64_t total=insight_stream_size(s,2);for(uint64_t at=0;at<total;) { size_t n=(size_t)((total-at)<BLOCK ? total-at:BLOCK);if(!insight_stream_read(s,2,at,bytes,n) || fwrite(bytes,1,n,output)!=n) return fail(s,"Cannot stream result (source changed or output disk full).");at+=n; }return stable(s) && fflush(output)==0 ? 1:fail(s,"Cannot flush result or source changed."); }
 size_t insight_stream_resident_metadata(InsightStream *s) { return s->resident+(s->manual ? 0:(size_t)s->manual_size)+(s->ranges_file ? 0:s->range_count*sizeof(InsightStreamRange)); }
 
 int insight_stream_write_base64(InsightStream *s,FILE *output) {
@@ -195,5 +196,5 @@ int insight_stream_write_base64(InsightStream *s,FILE *output) {
  for(uint64_t at=0;at<total;) { size_t n=(size_t)((total-at)<sizeof(input) ? total-at:sizeof(input));if(!insight_stream_read(s,2,at,input,n)) return 0;size_t used=0;
   for(size_t i=0;i<n;i+=3) { unsigned x=(unsigned)input[i]<<16;if(i+1<n) x|=(unsigned)input[i+1]<<8;if(i+2<n) x|=input[i+2];encoded[used++]=alphabet[x>>18];encoded[used++]=alphabet[(x>>12)&63];encoded[used++]=i+1<n ? alphabet[(x>>6)&63]:'=';encoded[used++]=i+2<n ? alphabet[x&63]:'='; }
   if(fwrite(encoded,1,used,output)!=used) return fail(s,"Cannot write Base64 output.");at+=n;
- }return fflush(output)==0 ? 1:fail(s,"Cannot flush Base64 output.");
+ }return stable(s) && fflush(output)==0 ? 1:fail(s,"Cannot flush Base64 output or source changed.");
 }
