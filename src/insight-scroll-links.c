@@ -42,8 +42,9 @@ static void restore_panes(void);
 static gchar *doc_path(GeanyDocument *doc) { return DOC_VALID(doc) && doc->file_name ? insight_canonicalize_filename(doc->file_name,NULL):NULL; }
 static void remove_pair(guint n) { ScrollPair *p=&g_array_index(link_pairs,ScrollPair,n);g_free(p->a);g_free(p->b);g_array_remove_index(link_pairs,n); }
 static void bind_paths(void) {
- for(guint i=0;i<link_pairs->len;i++) { ScrollPair *p=&g_array_index(link_pairs,ScrollPair,i);
-  for(guint n=0;documents_array && n<documents_array->len;n++) { GeanyDocument *doc=g_ptr_array_index(documents_array,n);gchar *path=doc_path(doc);if(path) { if(!g_strcmp0(path,p->a)) p->source=doc->id;if(!g_strcmp0(path,p->b)) p->target=doc->id; }g_free(path); }
+ for(guint n=0;documents_array && n<documents_array->len;n++) {
+  GeanyDocument *doc=g_ptr_array_index(documents_array,n);gchar *path=doc_path(doc);if(!path) continue;
+  for(guint i=0;i<link_pairs->len;i++) { ScrollPair *p=&g_array_index(link_pairs,ScrollPair,i);if(!g_strcmp0(path,p->a)) p->source=doc->id;if(!g_strcmp0(path,p->b)) p->target=doc->id; }g_free(path);
  }
 }
 static GeanyDocument *reopen(guint id,const gchar *path) {
@@ -107,7 +108,7 @@ static void present_links(GeanyDocument *doc) {
  if(project_loading || presenting || !DOC_VALID(doc) || !link_pairs) return;presenting=TRUE;
  GArray *ids=g_array_new(FALSE,FALSE,sizeof(guint));guint first=doc->id;g_array_append_val(ids,first);
  for(guint at=0;at<ids->len;at++) { guint id=g_array_index(ids,guint,at);for(guint n=0;n<link_pairs->len;n++) { ScrollPair *p=&g_array_index(link_pairs,ScrollPair,n);if(!p->together || (p->source!=id && p->target!=id)) continue;
-   GeanyDocument *other=p->source==id ? reopen(p->target,p->b):reopen(p->source,p->a);if(!DOC_VALID(other)) continue;bind_paths();gboolean seen=FALSE;for(guint k=0;k<ids->len;k++) if(g_array_index(ids,guint,k)==other->id) seen=TRUE;if(!seen) { guint value=other->id;g_array_append_val(ids,value); }
+   GeanyDocument *other=p->source==id ? reopen(p->target,p->b):reopen(p->source,p->a);if(!DOC_VALID(other)) continue;if(p->source==id) p->target=other->id;else p->source=other->id;gboolean seen=FALSE;for(guint k=0;k<ids->len;k++) if(g_array_index(ids,guint,k)==other->id) seen=TRUE;if(!seen) { guint value=other->id;g_array_append_val(ids,value); }
   } }
  if(ids->len<2) { g_array_unref(ids);presenting=FALSE;return; }
  gboolean same=panes && panes->len==ids->len;if(same) for(guint n=0;n<ids->len;n++) { gboolean found=FALSE;for(guint k=0;k<panes->len;k++) if(g_array_index(panes,LinkedPane,k).id==g_array_index(ids,guint,n)) found=TRUE;if(!found) same=FALSE; }
@@ -231,7 +232,7 @@ static void source_changed(GtkComboBox *combo,gpointer data) {
 static void pair_selected(GtkTreeSelection *selection,gpointer data) {
  (void)selection;(void)data;if(ui_loading) return;guint source,target;if(!selected_pair(&source,&target)) {refresh_controls();return;}if(selected_pair(&source,&target)) { GtkTreeIter row;GtkTreeModel *model;gtk_tree_selection_get_selected(selection,&model,&row);gtk_tree_model_get(model,&row,7,&editing_uid,-1);
  for(guint n=0;n<link_pairs->len;n++) { ScrollPair *p=&g_array_index(link_pairs,ScrollPair,n);if(p->uid!=editing_uid) continue;gboolean was=ui_loading;ui_loading=TRUE;gboolean old=presenting;presenting=TRUE;GeanyDocument *a=reopen(p->source,p->a),*b=reopen(p->target,p->b);presenting=old;bind_paths();ui_loading=was;if(!DOC_VALID(a) || !DOC_VALID(b)) {ui_set_statusbar(TRUE,"Linked source file cannot be opened");return;}source=a->id;target=b->id;gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(together_check),p->together);break; }
- dialog_source=source;target_closed=FALSE;populate_sources(0);populate_target(FALSE,0);gchar *id=g_strdup_printf("%u",target);gboolean was=ui_loading;ui_loading=TRUE;gtk_combo_box_set_active_id(GTK_COMBO_BOX(target_choice),id);g_free(id);for(guint n=0;n<link_pairs->len;n++) {ScrollPair *p=&g_array_index(link_pairs,ScrollPair,n);if(p->uid==editing_uid) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(two_way),p->two_way);}ui_loading=was; }g_object_set_data(G_OBJECT(link_dialog),"insight-links-rebuild",GINT_TO_POINTER(1));refresh_controls();
+ dialog_source=source;target_closed=FALSE;populate_sources(0);populate_target(FALSE,0);gchar *id=g_strdup_printf("%u",target);gboolean was=ui_loading;ui_loading=TRUE;gtk_combo_box_set_active_id(GTK_COMBO_BOX(target_choice),id);g_free(id);for(guint n=0;n<link_pairs->len;n++) {ScrollPair *p=&g_array_index(link_pairs,ScrollPair,n);if(p->uid==editing_uid) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(two_way),p->two_way);}ui_loading=was; }g_object_set_data(G_OBJECT(link_dialog),"insight-links-rebuild",GINT_TO_POINTER(1));refresh_controls();present_links(document_find_by_id(dialog_source));
 }
 static void row_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) { (void)path;(void)column;(void)data;pair_selected(gtk_tree_view_get_selection(view),NULL); }
 static void remove_selected(GtkWidget *widget,gpointer data) {
@@ -290,7 +291,7 @@ static void context_link(GtkWidget *widget,gpointer data) {
  show_dialog();if(doc->id==pending_source) return;dialog_source=pending_source;editing_uid=0;populate_sources(0);populate_target(TRUE,0);gchar *id=g_strdup_printf("%u",doc->id);gtk_combo_box_set_active_id(GTK_COMBO_BOX(target_choice),id);g_free(id);apply_pair();pending_source=0;
 }
 void insight_scroll_links_add_popup(GtkWidget *menu,guint document_id) {
- if(!link_pairs || !DOC_VALID(document_find_by_id(document_id))) return;GtkWidget *item=gtk_menu_item_new_with_label(insight_tr("Link source window…"));gtk_widget_set_name(item,"insight-scroll-links-context");g_signal_connect(item,"activate",G_CALLBACK(context_link),GUINT_TO_POINTER(document_id));gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);gtk_widget_show(item);
+ if(!link_pairs || !DOC_VALID(document_find_by_id(document_id))) return;g_object_set_data(G_OBJECT(document_find_by_id(document_id)->editor->sci),"insight-scroll-links-popup",menu);GtkWidget *item=gtk_menu_item_new_with_label(insight_tr("Link source window…"));gtk_widget_set_name(item,"insight-scroll-links-context");g_signal_connect(item,"activate",G_CALLBACK(context_link),GUINT_TO_POINTER(document_id));gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);gtk_widget_show(item);
 }
 static void editor_menu_updated(GObject *object,const gchar *word,gint position,GeanyDocument *doc,gpointer data) {
  (void)object;(void)word;(void)position;(void)data;GList *items=gtk_container_get_children(GTK_CONTAINER(main_widgets.editor_menu));for(GList *i=items;i;i=i->next) if(!g_strcmp0(gtk_widget_get_name(i->data),"insight-scroll-links-context")) gtk_widget_destroy(i->data);g_list_free(items);if(DOC_VALID(doc)) insight_scroll_links_add_popup(main_widgets.editor_menu,doc->id);
