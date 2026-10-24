@@ -1012,7 +1012,7 @@ static void free_key_group(gpointer item)
 
 
 static gboolean source_window_key(GtkWidget *window,GdkEventKey *event,gpointer data) {
- (void)data;g_object_set_data(G_OBJECT(window),"insight-source-key-dispatch",GINT_TO_POINTER(1));gboolean handled=on_key_press_event(window,event,NULL);g_object_set_data(G_OBJECT(window),"insight-source-key-dispatch",NULL);return handled;
+ (void)data;g_object_ref(window);g_object_set_data(G_OBJECT(window),"insight-source-key-dispatch",GINT_TO_POINTER(1));gboolean handled=on_key_press_event(window,event,NULL);g_object_set_data(G_OBJECT(window),"insight-source-key-dispatch",NULL);g_object_unref(window);return handled;
 }
 void keybindings_connect_source_window(GtkWidget *window) {
  if(!g_object_get_data(G_OBJECT(window),"insight-source-key-connected")) {g_object_set_data(G_OBJECT(window),"insight-source-key-connected",GINT_TO_POINTER(1));g_signal_connect(window,"key-press-event",G_CALLBACK(source_window_key),NULL);}

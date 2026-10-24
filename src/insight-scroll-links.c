@@ -145,6 +145,9 @@ static void present_links(GeanyDocument *doc) {
  if(ids->len<2) { g_array_unref(ids);presenting=FALSE;return; }
  show_panes(doc,ids,FALSE,GTK_ORIENTATION_HORIZONTAL);g_array_unref(ids);presenting=FALSE;
 }
+static void pane_locale(gpointer data) {
+ (void)data;for(guint n=0;panes && n<panes->len;n++) {LinkedPane *pane=&g_array_index(panes,LinkedPane,n);GeanyDocument *doc=document_find_by_id(pane->id);if(DOC_VALID(doc)) gtk_label_set_text(GTK_LABEL(pane->label),doc->file_name ? doc->file_name:insight_tr("Untitled"));}
+}
 static void show_panes(GeanyDocument *doc,GArray *ids,gboolean manual,GtkOrientation axis) {
  if(!DOC_VALID(doc) || !ids->len) return;gboolean old=presenting;presenting=TRUE;
  gboolean same=panes && panes->len==ids->len && manual_layout==manual && layout_axis==axis;
@@ -165,8 +168,8 @@ static void show_panes(GeanyDocument *doc,GArray *ids,gboolean manual,GtkOrienta
   pane.box=box;pane.label=label;g_ptr_array_add(widgets,box);
   pane.focus=g_signal_connect(d->editor->sci,"focus-in-event",G_CALLBACK(pane_focus),GUINT_TO_POINTER(d->id));g_array_append_val(panes,pane);
  }
- if(widgets->len) gtk_container_add(GTK_CONTAINER(pane_body),tile_tree(widgets,0,widgets->len,axis,manual && widgets->len>3));g_ptr_array_unref(widgets);
- g_signal_connect(pane_window,"delete-event",G_CALLBACK(pane_delete),NULL);gtk_widget_show_all(pane_window);gtk_window_present(GTK_WINDOW(pane_window));gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.notebook),document_get_notebook_page(doc));gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,equalize_idle,g_object_ref(pane_window),g_object_unref);presenting=old;
+ if(widgets->len) gtk_box_pack_start(GTK_BOX(pane_body),tile_tree(widgets,0,widgets->len,axis,manual && widgets->len>3),TRUE,TRUE,0);g_ptr_array_unref(widgets);
+ insight_i18n_on_refresh(G_OBJECT(pane_window),pane_locale,NULL);g_signal_connect(pane_window,"delete-event",G_CALLBACK(pane_delete),NULL);gtk_widget_show_all(pane_window);gtk_window_present(GTK_WINDOW(pane_window));gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.notebook),document_get_notebook_page(doc));gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,equalize_idle,g_object_ref(pane_window),g_object_unref);presenting=old;
 }
 static void document_activated(GObject *o,GeanyDocument *doc,gpointer unused) { (void)o;(void)unused;if(!presenting) remember_source(doc);if(!close_guard) present_links(doc); }
 
@@ -356,7 +359,7 @@ static void arrangement_refresh(void) {
  if(!arrangement_store) return;GHashTable *choices=g_hash_table_new(g_direct_hash,g_direct_equal);GtkTreeIter it;for(gboolean valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(arrangement_store),&it);valid;valid=gtk_tree_model_iter_next(GTK_TREE_MODEL(arrangement_store),&it)) {guint id;gboolean active;gtk_tree_model_get(GTK_TREE_MODEL(arrangement_store),&it,0,&active,3,&id,-1);g_hash_table_insert(choices,GUINT_TO_POINTER(id),GINT_TO_POINTER(active ? 2:1));}
  gtk_list_store_clear(arrangement_store);guint count=0;for(gint n=0;n<gtk_notebook_get_n_pages(GTK_NOTEBOOK(main_widgets.notebook)) && count<ALL_LIMIT;n++) {GeanyDocument *doc=document_get_from_page(n);if(!DOC_VALID(doc)) continue;gchar *label=document_label(doc->id),*base=doc->file_name ? g_path_get_basename(doc->file_name):g_strdup(label);gpointer choice=g_hash_table_lookup(choices,GUINT_TO_POINTER(doc->id));gboolean checked=choice ? GPOINTER_TO_INT(choice)==2:doc->id==recent_source || doc->id==previous_source;gtk_list_store_append(arrangement_store,&it);gtk_list_store_set(arrangement_store,&it,0,checked,1,base,2,label,3,doc->id,4,TRUE,-1);g_free(base);g_free(label);count++;}g_hash_table_unref(choices);arrangement_filter(NULL,NULL);
 }
-static void arrangement_locale(gpointer data) { (void)data;arrangement_count(); }
+static void arrangement_locale(gpointer data) { (void)data;arrangement_refresh(); }
 static void arrangement_destroy(GtkWidget *widget,gpointer data) { (void)widget;(void)data;arrangement_dialog=arrangement_view=arrangement_query=arrangement_axis=arrangement_status=NULL;g_clear_object(&arrangement_store); }
 static void arrangement_response(GtkDialog *dialog,gint response,gpointer data) {
  (void)data;if(response==GTK_RESPONSE_HELP) {arrangement_refresh();return;}if(response!=GTK_RESPONSE_APPLY) {gtk_widget_destroy(GTK_WIDGET(dialog));return;}
