@@ -23,3 +23,5 @@ Enabling/disabling the mode does not edit, save or reload text, change encoding,
 Browser Mode is **session-only** and starts disabled. Session serialization stores each file's underlying read-only flag, never the temporary browser flag. Closed document identities are removed from tracking. This is editor interaction mode, not an access-control boundary for plugins or external filesystem writes.
 
 Reference: [Source Insight Browser Mode](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Browser_Mode.htm).
+
+Navigation records the final selected-symbol caret, so Back returns directly to the originating location instead of an intermediate beginning of the definition line. Undo/Redo become available again after leaving read-only mode; their retained history is unchanged by the toggle.

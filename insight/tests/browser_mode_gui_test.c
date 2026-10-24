@@ -30,14 +30,15 @@ static gboolean tick(gpointer data) {
   source=document_get_current();if(!source || g_strcmp0(source->file_name,path)) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));
   g_assert_false(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(named(window,"insight-browser-mode"))));
   locked=document_open_file(locked_path,TRUE,NULL,NULL);g_assert_nonnull(locked);special=document_new_file(NULL,NULL,"special\n");SEND(special->editor->sci,SCI_SETREADONLY,TRUE,0);activate(source);
-  SEND(source->editor->sci,SCI_APPENDTEXT,strlen("// unsaved\n"),(sptr_t)"// unsaved\n");check(source,dirty);g_assert_true(source->changed);
+  SEND(source->editor->sci,SCI_APPENDTEXT,strlen("// unsaved\n"),(sptr_t)"// unsaved\n");check(source,dirty);g_assert_true(source->changed);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));
   call=(gint)(strstr(dirty,"helper(2)")-dirty)+1;caret(call);mode(TRUE);g_assert_true(source->readonly);g_assert_true(locked->readonly);g_assert_true(SEND(source->editor->sci,SCI_GETREADONLY,0,0));
-  SEND(source->editor->sci,SCI_REPLACESEL,0,(sptr_t)"BAD");check(source,dirty);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));phase++;return G_SOURCE_CONTINUE;
+  SEND(source->editor->sci,SCI_REPLACESEL,0,(sptr_t)"BAD");check(source,dirty);g_assert_false(SEND(source->editor->sci,SCI_CANUNDO,0,0));phase++;return G_SOURCE_CONTINUE;
  }
  if(phase==1) {
   caret(call);key(GDK_KEY_space);if(sci_get_current_line(source->editor->sci)!=0) return G_SOURCE_CONTINUE;
   key(GDK_KEY_BackSpace);g_assert_cmpint(sci_get_current_position(source->editor->sci),==,call);check(source,dirty);
-  click_at(call,0);g_assert_cmpint(sci_get_current_line(source->editor->sci),==,0);key(GDK_KEY_BackSpace);
+  GtkWidget *context=named(window,"insight-context-code");g_assert_nonnull(context);SEND(SCINTILLA(context),SCI_SETSEL,4,10);
+  click_at(call,0);g_assert_cmpint(sci_get_current_line(source->editor->sci),==,0);g_assert_cmpint(sci_get_current_position(source->editor->sci),==,10);key(GDK_KEY_BackSpace);g_assert_cmpint(sci_get_current_position(source->editor->sci),==,call);
   click_at(call,GEANY_PRIMARY_MOD_MASK);g_assert_cmpint(sci_get_current_line(source->editor->sci),==,1);caret(call);
   gint comment=(gint)(strstr(dirty,"helper comment")-dirty)+1;click_at(comment,0);g_assert_cmpint(sci_get_current_line(source->editor->sci),==,2);key(GDK_KEY_space);g_assert_cmpint(sci_get_current_line(source->editor->sci),==,2);
   gint quoted=(gint)(strstr(dirty,"\"helper\"")-dirty)+2;click_at(quoted,0);g_assert_cmpint(sci_get_current_line(source->editor->sci),==,3);check(source,dirty);

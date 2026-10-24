@@ -3685,14 +3685,17 @@ static void open_context(GtkButton *button,gpointer data) {
   gboolean unchanged=wb.source_digest && !g_strcmp0(digest,wb.source_digest); g_free(current); g_free(digest);
   if(!unchanged) { ui_set_statusbar(TRUE,"Context source changed; refresh the preview before opening"); g_free(path); return; }
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),TRUE);
-  navqueue_goto_line(old,doc,(gint)line);
-  gsize a=(gsize)SSM(wb.preview,SCI_GETSELECTIONSTART,0,0),b=(gsize)SSM(wb.preview,SCI_GETSELECTIONEND,0,0);
+  gsize a=(gsize)SSM(wb.preview,SCI_GETSELECTIONSTART,0,0),b=(gsize)SSM(wb.preview,SCI_GETSELECTIONEND,0,0),mapped_a=0,mapped_b=0;gboolean selected=FALSE;
   if(b>a) {
    gint first=(gint)SSM(wb.preview,SCI_LINEFROMPOSITION,a,0),last=(gint)SSM(wb.preview,SCI_LINEFROMPOSITION,b,0);
-   gsize mapped_a=(gsize)sci_get_position_from_line(doc->editor->sci,first)+a-(gsize)sci_get_position_from_line(wb.preview,first);
-   gsize mapped_b=(gsize)sci_get_position_from_line(doc->editor->sci,last)+b-(gsize)sci_get_position_from_line(wb.preview,last);
-   if(mapped_b<=(gsize)sci_get_length(doc->editor->sci)) { SSM(doc->editor->sci,SCI_SETSEL,mapped_a,mapped_b); decorate_match(doc->editor->sci,mapped_a,mapped_b); }
+   mapped_a=(gsize)sci_get_position_from_line(doc->editor->sci,first)+a-(gsize)sci_get_position_from_line(wb.preview,first);
+   mapped_b=(gsize)sci_get_position_from_line(doc->editor->sci,last)+b-(gsize)sci_get_position_from_line(wb.preview,last);
+   selected=mapped_a<=mapped_b && mapped_b<=(gsize)sci_get_length(doc->editor->sci);
   }
+  /* Record the final selection caret, not an intermediate line start.
+   * Otherwise Back first returns to that line start instead of the caller. */
+  navqueue_goto_position(old,doc,selected ? (gint)mapped_b:sci_get_position_from_line(doc->editor->sci,(gint)line-1));
+  if(selected) { SSM(doc->editor->sci,SCI_SETSEL,mapped_a,mapped_b);decorate_match(doc->editor->sci,mapped_a,mapped_b); }
   SSM(doc->editor->sci,SCI_VERTICALCENTRECARET,0,0); document_grab_focus(doc);
  } else ui_set_statusbar(TRUE,"Context source is unavailable or changed; refresh the index");
  g_free(path);
