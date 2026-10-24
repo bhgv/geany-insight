@@ -129,12 +129,12 @@ static void completed(GObject *object,GAsyncResult *result,gpointer data)
         gchar *message=g_strdup_printf("commit %s\nAuthor: %s\nDate: %s\n\n%s",revision->oid,revision->author,revision->date,revision->message);gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->message)),message,-1);g_free(message);
         view->changing=TRUE;
         if(!revision->parents->len) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->parents),insight_tr("Root commit — empty parent"));
-        for(guint i=0;i<revision->parents->len;i++) { gchar *label=g_strdup_printf("%s %u: %.12s",insight_tr("Parent"),i+1,(gchar *)g_ptr_array_index(revision->parents,i));gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->parents),label);g_free(label); }
+        for(guint i=0;i<revision->parents->len;i++) { gchar *label=insight_i18n_printf("Parent %u: %.12s",i+1,(gchar *)g_ptr_array_index(revision->parents,i));gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(view->parents),label);g_free(label); }
         gtk_combo_box_set_active(GTK_COMBO_BOX(view->parents),0);view->changing=FALSE;GPtrArray *files=job->files;job->files=NULL;fill_files(view,files);
     } else if(job->kind==FILES) { GPtrArray *files=job->files;job->files=NULL;fill_files(view,files); }
     else {
         guint index;if(!selected(view->files,&index) || !view->deltas || index>=view->deltas->len) return;InsightGitDelta *delta=g_ptr_array_index(view->deltas,index);gchar *path=g_utf8_make_valid(delta->path,-1);
-        for(guint side=0;side<2;side++) { set_code(view,side,job->text[side],path);gchar *label=g_strdup_printf("%s — %s",insight_tr(side ? "Selected commit":"Parent version"),path);gtk_label_set_text(GTK_LABEL(view->labels[side]),label);gtk_widget_set_tooltip_text(view->labels[side],label);GtkTreeViewColumn *column=gtk_tree_view_get_column(GTK_TREE_VIEW(view->hunks),side);if(column) gtk_tree_view_column_set_title(column,label);g_free(label); }g_free(path);
+        for(guint side=0;side<2;side++) { set_code(view,side,job->text[side],path);gchar *label=g_strdup_printf("%s — %s",insight_tr(side ? "Selected commit":"Parent version"),path);insight_i18n_text(G_OBJECT(view->labels[side]),"label",side ? "Selected commit — {value}":"Parent version — {value}",path);insight_i18n_text(G_OBJECT(view->labels[side]),"tooltip-text",side ? "Selected commit — {value}":"Parent version — {value}",path);GtkTreeViewColumn *column=gtk_tree_view_get_column(GTK_TREE_VIEW(view->hunks),side);if(column) gtk_tree_view_column_set_title(column,label);g_free(label); }g_free(path);
         view->diff=job->diff;job->diff=(InsightDiff){0};view->changing=TRUE;
         for(guint i=0;i<view->diff.count;i++) {
             InsightDiffHunk *h=&view->diff.hunks[i];gint lines[2];
@@ -221,7 +221,7 @@ void insight_git_history_show(GtkWidget *parent,const gchar *location)
     }
     GtkWidget *navigation=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,5);gtk_box_pack_start(GTK_BOX(right),navigation,FALSE,FALSE,0);button(navigation,"Previous difference","insight-git-history-diff-previous",G_CALLBACK(prev_hunk),view);button(navigation,"Next difference","insight-git-history-diff-next",G_CALLBACK(next_hunk),view);
     view->hunks=tree(view->hunk_model,"insight-git-history-hunks",hunk_titles,2);g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(view->hunks)),"changed",G_CALLBACK(select_hunk),view);GtkWidget *hunk_scroll=scrolled(view->hunks);gtk_widget_set_size_request(hunk_scroll,-1,85);gtk_box_pack_start(GTK_BOX(right),hunk_scroll,FALSE,TRUE,0);
-    GtkWidget *tabs=insight_compare_ui_tabs(box,"insight-git-history-toolbar-tabs"),*history_page=insight_compare_ui_page(tabs,insight_tr("Merge and history")),*navigation_page=insight_compare_ui_page(tabs,insight_tr("Navigation"));
+    GtkWidget *tabs=insight_compare_ui_tabs(box,"insight-git-history-toolbar-tabs"),*history_page=insight_compare_ui_page(tabs,"Merge and history"),*navigation_page=insight_compare_ui_page(tabs,"Navigation");
     insight_compare_ui_move(view->root_label,history_page);insight_compare_ui_move(bar,history_page);insight_compare_ui_move(view->parents,history_page);insight_compare_ui_move(navigation,navigation_page);
     view->status=gtk_label_new("");gtk_widget_set_name(view->status,"insight-git-history-status");gtk_label_set_line_wrap(GTK_LABEL(view->status),TRUE);gtk_box_pack_start(GTK_BOX(box),view->status,FALSE,FALSE,0);gtk_widget_show_all(view->window);refresh(NULL,view);
 }

@@ -39,6 +39,10 @@ on:
       - insight/desktop/ai_edit_session.*
       - insight/tests/editor_ai_gui_test.c
       - src/insight-ai.*
+      - src/insight-i18n.*
+      - insight/locale/**
+      - insight/tools/build_i18n.py
+      - insight/tests/i18n_gui_test.c
       - src/insight-ai-ui.h
       - src/insight-ai-console.*
       - vendor/libvterm/**
@@ -239,6 +243,7 @@ jobs:
       - name: Configure and build the complete editor
         id: native-build
         run: |
+          python3 insight/tools/build_i18n.py --check
           meson setup _native --prefix="$PWD/_native-install" --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=true -Dmac-integration=disabled
           meson compile -C _native
           meson install -C _native
@@ -247,7 +252,7 @@ jobs:
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |
           ai_layout_failed=0
-          GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight native console AI and guarded review GUI' 'Insight shared AI profiles and parallel answer selection GUI' 'Insight streaming large file piece table' 'Insight streaming comparison and history GUI' 'Insight binary merge and hex Base64 export GUI' 'Insight comparison toolbar natural height and collapse GUI' 'Insight isolated Diff Merge GUI' || ai_layout_failed=1
+          GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight Russian and English interface GUI' 'Insight native console AI and guarded review GUI' 'Insight shared AI profiles and parallel answer selection GUI' 'Insight streaming large file piece table' 'Insight streaming comparison and history GUI' 'Insight binary merge and hex Base64 export GUI' 'Insight comparison toolbar natural height and collapse GUI' 'Insight isolated Diff Merge GUI' || ai_layout_failed=1
           GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1024x640x24" meson test -C _native --print-errorlogs 'Insight native console AI and guarded review GUI' || ai_layout_failed=1
           exit "$ai_layout_failed"
       - name: Check active editor focus and command recording

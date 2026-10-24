@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "../../src/insight-stream-ui.c"
 const gchar *insight_tr(const gchar *s) { return s; }
+gchar *insight_i18n_printf(const gchar *format,...) { va_list args;va_start(args,format);gchar *text=g_strdup_vprintf(format,args);va_end(args);return text; }
 void insight_i18n_apply(GtkWidget *w) { (void)w; }
 int main(int argc,char **argv) {
  if(!g_getenv("DISPLAY")) return 77;gtk_init(&argc,&argv);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);

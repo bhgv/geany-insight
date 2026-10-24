@@ -131,7 +131,7 @@ static void restore_preview(gboolean whole)
     GtkWidget *hint=gtk_label_new(insight_tr(whole ? "Restore the entire buffer to its original contents from opening, including changes already saved. The disk file is unchanged." : "Restore complete changed blocks touching the selected lines. Review both ranges before restoring."));
     gtk_label_set_line_wrap(GTK_LABEL(hint),TRUE);gtk_box_pack_start(GTK_BOX(box),hint,FALSE,FALSE,6);
     gchar *summary=whole ? g_strdup(insight_tr("Whole file restoration")) : insight_i18n_printf("Changed blocks: %u",(guint)plan.blocks);GtkWidget *count=gtk_label_new(summary);g_free(summary);gtk_widget_set_name(count,"insight-restore-count");gtk_box_pack_start(GTK_BOX(box),count,FALSE,FALSE,4);
-    GtkWidget *tabs=insight_compare_ui_tabs(box,"insight-restore-toolbar-tabs"),*files=insight_compare_ui_page(tabs,insight_tr("Files and comparison"));
+    GtkWidget *tabs=insight_compare_ui_tabs(box,"insight-restore-toolbar-tabs"),*files=insight_compare_ui_page(tabs,"Files and comparison");
     insight_compare_ui_move(hint,files);insight_compare_ui_move(count,files);
     gtk_style_context_add_class(gtk_widget_get_style_context(gtk_dialog_get_action_area(GTK_DIALOG(dialog))),"insight-compare-toolbar");
     GtkWidget *columns=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,8);gtk_box_pack_start(GTK_BOX(box),columns,TRUE,TRUE,4);

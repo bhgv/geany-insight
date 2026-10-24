@@ -281,7 +281,7 @@ dist_insightdocen_DATA = $(addprefix insight/docs/en/,$(notdir $(insightdoc_DATA
 dist_insightdocru_DATA = $(addprefix insight/docs/ru/,$(notdir $(insightdoc_DATA)))
 insightlocaledir = $(pkgdatadir)/insight/locale
 dist_insightlocale_DATA = insight/locale/native.tsv insight/locale/insight.tsv
-EXTRA_DIST += insight/locale/insight.pairs insight/tools/build_i18n.py insight/tests/languages_gui_test.c insight/tests/overview_markers_gui_test.c insight/tests/overview_functions_gui_test.c \
+EXTRA_DIST += insight/tools/build_i18n.py insight/tests/languages_gui_test.c insight/tests/overview_markers_gui_test.c insight/tests/overview_functions_gui_test.c \
 	insight/tests/i18n_gui_test.c
 
 EXTRA_DIST += insight/tests/snippet_test.c insight/tests/snippet_gui_test.c
@@ -716,3 +716,5 @@ dist_insightdocmedia_DATA += insight/docs/media/binary-merge.svg
 EXTRA_DIST += insight/tests/compare_ui_gui_test.c
 
 EXTRA_DIST += insight/tests/stream_test.c insight/tests/stream_gui_test.c
+
+dist_insightdocmedia_DATA += insight/docs/media/interface-texts.svg

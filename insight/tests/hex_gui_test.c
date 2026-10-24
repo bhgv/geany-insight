@@ -2,6 +2,7 @@
 /* Production binary editor, with only the application translation service stubbed. */
 #include "../../src/insight-hex.c"
 const gchar *insight_tr(const gchar *s) { return s; }
+gchar *insight_i18n_printf(const gchar *format,...) { va_list args;va_start(args,format);gchar *text=g_strdup_vprintf(format,args);va_end(args);return text; }
 void insight_i18n_apply(GtkWidget *w) { (void)w; }
 static gchar *destination;
 static gboolean accept_save(gpointer data) { gtk_dialog_response(GTK_DIALOG(data),GTK_RESPONSE_ACCEPT);return G_SOURCE_REMOVE; }

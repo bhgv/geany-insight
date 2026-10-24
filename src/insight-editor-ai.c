@@ -184,7 +184,7 @@ static void open_review(GtkWidget *w,gpointer data) {
  r->requirements=view(expander(r->panel,"Accumulated requirements for this variant"),"insight-editor-ai-requirements",FALSE,90);r->context=view(expander(r->panel,"Project context sent with each request — review or edit before Send"),"insight-editor-ai-context",TRUE,100);r->status=gtk_label_new(insight_tr("New requests build on Result and earlier requirements. Review staged code before Apply; files are never saved automatically."));gtk_widget_set_name(r->status,"insight-editor-ai-status");gtk_label_set_line_wrap(GTK_LABEL(r->status),TRUE);gtk_box_pack_start(GTK_BOX(r->panel),r->status,FALSE,FALSE,0);
  GtkWidget *question=named(r->window,"insight-diff-ai-question"),*ask=named(r->window,"insight-diff-ai-ask");gtk_widget_hide(question);gtk_widget_set_no_show_all(question,TRUE);gtk_widget_hide(ask);gtk_widget_set_no_show_all(ask,TRUE);insight_diff_review_compact(r->window);prompt_lists(r);controls(r);
  GtkWidget *tabs=named(r->window,"insight-diff-toolbar-tabs");
- GtkWidget *request_page=insight_compare_ui_page(tabs,insight_tr("AI request")),*files_page=insight_compare_ui_page(tabs,insight_tr("AI files")),*settings_page=insight_compare_ui_page(tabs,insight_tr("AI connection")),*history_page=insight_compare_ui_page(tabs,insight_tr("AI request history"));
+ GtkWidget *request_page=insight_compare_ui_page(tabs,"AI request"),*files_page=insight_compare_ui_page(tabs,"AI files"),*settings_page=insight_compare_ui_page(tabs,"AI connection"),*history_page=insight_compare_ui_page(tabs,"AI request history");
  GtkWidget *pages[]={request_page,files_page,settings_page,history_page};
  for(guint i=0;i<G_N_ELEMENTS(pages);i++) g_object_set_data(G_OBJECT(gtk_widget_get_ancestor(pages[i],GTK_TYPE_SCROLLED_WINDOW)),"insight-editor-ai-controls",GINT_TO_POINTER(1));
  GList *children=gtk_container_get_children(GTK_CONTAINER(r->panel));
@@ -195,7 +195,7 @@ static void open_review(GtkWidget *w,gpointer data) {
  }
  g_list_free(children);gtk_widget_destroy(r->panel);r->panel=request_page;
  for(guint i=0;i<G_N_ELEMENTS(pages);i++) gtk_widget_show_all(gtk_widget_get_ancestor(pages[i],GTK_TYPE_SCROLLED_WINDOW));
- insight_ai_ui_fold(tabs,insight_tr("Collapse"));insight_ai_ui_window(r->window,insight_tr("Minimize window"),insight_tr("Maximize / restore window"),insight_tr("Close window"));gtk_widget_set_tooltip_text(r->prompt,insight_tr("Additional editable request included with earlier requirements; Send generates a reviewed code variant"));insight_compare_ui_reveal(r->prompt);
+ insight_ai_ui_fold(tabs,"Collapse");insight_ai_ui_window(r->window,"Minimize window","Maximize / restore window","Close window");gtk_widget_set_tooltip_text(r->prompt,insight_tr("Additional editable request included with earlier requirements; Send generates a reviewed code variant"));insight_compare_ui_reveal(r->prompt);
 }
 void insight_editor_ai_init(void) {
  if(initialized) { return; }

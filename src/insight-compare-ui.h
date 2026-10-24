@@ -18,7 +18,7 @@ static inline void insight_compare_ui_move(GtkWidget *widget,GtkWidget *page)
 static gboolean insight_compare_ui_layout(gpointer data) {
  GtkWidget *widget=data;g_object_set_data(G_OBJECT(widget),"insight-compare-layout-idle",NULL);
  if(!gtk_widget_get_parent(widget) || gtk_widget_in_destruction(widget)) return G_SOURCE_REMOVE;
- GtkNotebook *tabs=GTK_NOTEBOOK(widget);if(!gtk_notebook_get_n_pages(tabs)) return G_SOURCE_REMOVE;insight_ai_ui_fold(widget,insight_tr("Collapse"));
+ GtkNotebook *tabs=GTK_NOTEBOOK(widget);if(!gtk_notebook_get_n_pages(tabs)) return G_SOURCE_REMOVE;insight_ai_ui_fold(widget,"Collapse");
  if(g_object_get_data(G_OBJECT(widget),"insight-ai-options-folded")) return G_SOURCE_REMOVE;
  gint current=gtk_notebook_get_current_page(tabs),width=MAX(1,gtk_widget_get_allocated_width(widget)-12),height=700;GtkWidget *top=gtk_widget_get_toplevel(widget);if(GTK_IS_WINDOW(top)) { gint unused;gtk_window_get_size(GTK_WINDOW(top),&unused,&height);GdkRectangle area=insight_ai_workarea(top);height=MIN(height,area.height-32); }
  for(gint i=0;i<gtk_notebook_get_n_pages(tabs);i++) {
@@ -61,7 +61,7 @@ static inline GtkWidget *insight_compare_ui_page(GtkWidget *tabs,const gchar *la
  GtkWidget *page=gtk_box_new(GTK_ORIENTATION_VERTICAL,2),*scroll=gtk_scrolled_window_new(NULL,NULL);
  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),GTK_POLICY_AUTOMATIC,GTK_POLICY_AUTOMATIC);
  gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(scroll),0);gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scroll),FALSE);gtk_container_add(GTK_CONTAINER(scroll),page);g_signal_connect_object(page,"size-allocate",G_CALLBACK(insight_compare_ui_allocate),tabs,0);
- gtk_notebook_append_page(GTK_NOTEBOOK(tabs),scroll,gtk_label_new(label));insight_compare_ui_queue(tabs);return page;
+ GtkWidget *tab=gtk_label_new(NULL);insight_i18n_key(G_OBJECT(tab),"label",label);gtk_notebook_append_page(GTK_NOTEBOOK(tabs),scroll,tab);insight_compare_ui_queue(tabs);return page;
 }
 static inline GtkWidget *insight_compare_ui_row(GtkWidget *widget,GtkWidget *box)
 {

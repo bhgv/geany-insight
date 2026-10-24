@@ -201,3 +201,36 @@ Commands work in read-only, never edit source text or create Undo entries, and r
 Positions use the transformed block, including its destination indentation and EOLs. At an unterminated EOF, the separator added to the previous line is excluded from the selected block. Each insertion remains one Undo action. The setting is saved in `insight-paste.conf`; missing or out-of-range values use the default. Failed saves restore the previous menu choice and report an error.
 
 This series covers intelligent whole-line insertion only. Partial/native fallback, multiple/rectangular selections, file types forbidding intelligent paste and mouse drag/drop keep their existing behavior. A separate always-select override and general selection policy for native partial-text paste remain open Source Insight porting items.
+
+## Live interface captions
+
+Options → Interface language switches the active English/Russian table and refreshes
+open windows, notebook tabs, detached menus, combo options, formatted counters,
+Pango labels/tooltips and enum/status cells. Stable keys retain the original message;
+paths, source text, editable input, model values and combo IDs remain data.
+
+`insight/locale/insight.tsv` is the single editable Insight caption table. Native
+Geany captions are generated from `po/ru.po` into `native.tsv`; both feed the same
+runtime registry. The old separate `insight.pairs` source is retired without losing
+its captions. `python3 insight/tools/build_i18n.py --check` checks catalog consistency;
+without `--check` it updates only the native catalog.
+
+For local changes create `insight/interface-texts.tsv` in the Geany configuration
+directory. Each UTF-8 row contains a stable English key, a literal TAB, and its
+Russian caption; three fields allow separate English and Russian captions:
+
+```text
+Before<TAB>Earlier<TAB>Ранее
+After<TAB>Later<TAB>Позже
+```
+
+Replace `<TAB>` with actual tab characters. `\n`, `\t` and `\\` represent a newline,
+tab and backslash inside a field. Preserve printf argument types and `{value}`
+placeholders. Choose **Options → Interface language → Reload interface texts** to
+reload captions and refresh existing UI without restarting. Invalid UTF-8, malformed
+rows or incompatible printf slots leave the previous catalog active. Remove the
+file and reload to restore distributed captions. Existing gettext language handling
+is retained for future native dialogs. Editor text and AI/terminal contents are not
+translated.
+
+![Shared caption registry / Общий реестр надписей](../media/interface-texts.svg)
