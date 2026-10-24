@@ -1,6 +1,6 @@
 # Linked source-window scrolling
 
-**Window → Link Source Windows…** opens a modeless source-link manager. Choose another open buffer and **Apply Link**. A link starts from the source named above the selector; **Refresh** captures the current editor and rebuilds the target list. Select **None — unlink this source** to remove that source's outgoing link.
+**Window → Link Source Windows…** opens a modeless source-link manager. Choose Source and Target from the open-buffer lists, then **Apply Link**. Choosing endpoints does not switch the active editor; **Refresh** captures the current editor and rebuilds the target list. Select **None — unlink this source** to remove that source's outgoing link.
 
 ![Source scroll links](../media/scroll-links.svg)
 
@@ -23,3 +23,12 @@ Links apply to the main Scintilla view of each open Geany source buffer, includi
 Links and axis choices are memory-only for the running application. Closing the manager keeps links active. Closing a source or target removes affected pairs; stale dialog endpoints cannot be applied silently. Refresh chooses the current editor explicitly. New Link All members adopt their initial viewport without an immediate group jump. Individual links are capped at 64 pairs; Link All supports 128 open source buffers and disables itself with a status message if that limit is exceeded. Individual pairs remain when Link All is disabled. No project file or source file is written.
 
 References: [Source Insight Link Window](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Link_Window.htm) and [Link All Windows](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Link_All_Windows.htm).
+
+## Manage individual pairs
+
+Choose both endpoints in the dialog. Selecting a table row loads its source,
+target and direction for editing; Apply Link commits that change. Remove selected
+link removes only that pair. Open/closed documents update both lists; closed
+endpoints cannot be applied. Refresh explicitly selects the current editor as
+source. Disabling both axes shows a paused-scrolling message. Language changes
+retain endpoint choices and an unapplied direction change.

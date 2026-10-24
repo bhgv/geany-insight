@@ -2505,3 +2505,14 @@ Source byte offset	Смещение в источнике, в байтах
 TTY / RS-232 — choose a port and connection parameters	TTY / RS-232 — выбрать порт и параметры подключения
 Little endian	Младший байт первым
 Big endian	Старший байт первым
+Linked sources scroll together; their text, caret and selection remain independent.	Связанные исходники прокручиваются вместе; текст, курсор и выделение остаются независимыми.
+Choose the source buffer without changing the active editor.	Выберите источник, не переключая активный редактор.
+Choose the target buffer; None removes this source's outgoing link.	Выберите цель; «Нет» удаляет исходящую связь источника.
+Two Way lets either file drive scrolling; otherwise only the source drives the target.	В двустороннем режиме прокруткой управляет любой файл; иначе — только источник.
+Select a link to edit its source, target and direction, then Apply Link.	Выберите связь, измените источник, цель или направление и нажмите «Применить связь».
+Remove selected link	Удалить выбранную связь
+Remove only the selected pair; other links remain active.	Удалить только выбранную пару; остальные связи останутся активны.
+Use the current editor as source and refresh both file lists.	Выбрать текущий редактор источником и обновить оба списка файлов.
+Scrolling paused — enable a scrolling axis	Прокрутка приостановлена — включите ось прокрутки
+All source windows linked — individual links: %u / %u	Связаны все окна исходников — отдельных связей: %u / %u
+Individual source links: %u / %u	Отдельные связи исходников: %u / %u
