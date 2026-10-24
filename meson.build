@@ -23,6 +23,10 @@ foreach dep : deps_in
 	deps_for_pc += ' ' + dep[0] + ' >= ' + dep[1]
 endforeach
 
+if host_machine.system() != 'windows'
+ deps += dependency('gio-unix-2.0', version: '>= 2.56')
+endif
+
 glib = deps[0]
 gtk = deps[2]
 

@@ -24,6 +24,16 @@
 #include <glib/gstdio.h>
 #include <string.h>
 #include <stdio.h>
+#ifndef G_OS_WIN32
+#include <gio/gunixinputstream.h>
+#include <gio/gunixoutputstream.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <termios.h>
+#include <sys/ioctl.h>
+#include <stdlib.h>
+#include <errno.h>
+#endif
 typedef struct { InsightRemote *remote; gchar *directory,*config; gboolean auto_upload; } RemoteRoot;
 typedef enum { OPEN_FILE,OPEN_FOLDER,PROJECT_READ,PROJECT_FOLDER,UPLOAD } TransferKind;
 typedef struct { RemoteRoot *root; TransferKind kind; gchar *target,*snapshot,*auth,*origin; GKeyFile *project; GSubprocess *process; GCancellable *cancel; } Transfer;
@@ -255,6 +265,29 @@ static void upload_document(GeanyDocument *doc) {
 static void saved_document(GObject *object,GeanyDocument *doc,gpointer data) { (void)object; (void)data; if(!doc || !doc->file_name) return; gchar *path=NULL; RemoteRoot *root=root_for_file(doc->file_name,&path); g_free(path); if(root && root->auto_upload) upload_document(doc); }
 static void save_remote(GtkWidget *widget,gpointer data) { (void)widget; (void)data; GeanyDocument *doc=document_get_current(); if(!doc) return; gchar *path=NULL; RemoteRoot *root=doc->file_name ? root_for_file(doc->file_name,&path) : NULL; g_free(path); if(!root) { status("Open a file through SSH first"); return; } if(!doc->changed) upload_document(doc); else if(document_save_file(doc,FALSE) && !root->auto_upload) upload_document(doc); }
 static void stop_transfer(GtkWidget *widget,gpointer data) { (void)widget; (void)data; scp_cancel(); remote_epoch++; if(remote_ui.snapshot_cancel) { g_cancellable_cancel(remote_ui.snapshot_cancel); g_clear_object(&remote_ui.snapshot_cancel); } if(!remote_ui.closing) remote_ui.snapshot_cancel=g_cancellable_new(); if(remote_ui.upload_versions) g_hash_table_remove_all(remote_ui.upload_versions); if(remote_ui.active) { g_cancellable_cancel(remote_ui.active->cancel); g_subprocess_force_exit(remote_ui.active->process); } while(!g_queue_is_empty(&remote_ui.pending)) transfer_free(g_queue_pop_head(&remote_ui.pending)); status("Transfers stopped; local edits retained"); }
+static GInputStream *shell_input(GSubprocess *process) { GInputStream *stream=g_object_get_data(G_OBJECT(process),"insight-pty-input");return stream ? stream:g_subprocess_get_stdout_pipe(process); }
+static GOutputStream *shell_output(GSubprocess *process) { GOutputStream *stream=g_object_get_data(G_OBJECT(process),"insight-pty-output");return stream ? stream:g_subprocess_get_stdin_pipe(process); }
+#ifndef G_OS_WIN32
+static void close_pty(gpointer data) { close(GPOINTER_TO_INT(data)-1); }
+static void child_terminal(gpointer data) { (void)data;setsid();ioctl(0,TIOCSCTTY,0); }
+static gint prepare_pty(GSubprocessLauncher *spawn,GtkWidget *view,GError **error) {
+ gint master=posix_openpt(O_RDWR|O_NOCTTY|O_NONBLOCK);if(master<0) goto fail;
+ if(grantpt(master)<0 || unlockpt(master)<0) { close(master);goto fail; }
+ gchar *name=ptsname(master);gint slave=name ? open(name,O_RDWR|O_NOCTTY):-1;if(slave<0) { close(master);goto fail; }
+ struct termios term;if(tcgetattr(slave,&term)<0) { close(slave);close(master);goto fail; }cfmakeraw(&term);tcsetattr(slave,TCSANOW,&term);gint rows,cols;insight_terminal_size(view,&rows,&cols);struct winsize size={rows,cols,0,0};ioctl(slave,TIOCSWINSZ,&size);
+ gint out=dup(slave),err=dup(slave);if(out<0 || err<0) { if(out>=0) close(out);if(err>=0) close(err);close(slave);close(master);goto fail; }
+ fcntl(master,F_SETFD,FD_CLOEXEC);g_subprocess_launcher_set_flags(spawn,G_SUBPROCESS_FLAGS_NONE);g_subprocess_launcher_take_stdin_fd(spawn,slave);g_subprocess_launcher_take_stdout_fd(spawn,out);g_subprocess_launcher_take_stderr_fd(spawn,err);g_subprocess_launcher_set_child_setup(spawn,child_terminal,NULL,NULL);return master;
+fail:g_set_error(error,G_IO_ERROR,g_io_error_from_errno(errno),"Cannot create SSH PTY: %s",g_strerror(errno));return -1;
+}
+#endif
+static void shell_resize(gint rows,gint cols,gpointer data) {
+ ShellSession *s=data;if(!s->process) return;
+#ifndef G_OS_WIN32
+ gpointer stored=g_object_get_data(G_OBJECT(s->process),"insight-pty-fd");if(stored) { struct winsize size={rows,cols,0,0};ioctl(GPOINTER_TO_INT(stored)-1,TIOCSWINSZ,&size); }
+#else
+ (void)rows;(void)cols;
+#endif
+}
 static void shell_append(ShellSession *s,const gchar *bytes,gsize size) { insight_terminal_feed(s->output,bytes,size); }
 static void shell_complete(ShellSession *s,GSubprocess *process) {
  if(remote_ui.closing || s->process!=process || !g_object_get_data(G_OBJECT(process),"insight-ssh-eof") || !g_object_get_data(G_OBJECT(process),"insight-ssh-exited")) return;
@@ -268,8 +301,8 @@ static void shell_complete(ShellSession *s,GSubprocess *process) {
 static void shell_read(GObject *object,GAsyncResult *result,gpointer data) {
  GSubprocess *process=data;ShellSession *s=g_object_get_data(G_OBJECT(process),"insight-ssh-session");GError *error=NULL;GBytes *bytes=g_input_stream_read_bytes_finish(G_INPUT_STREAM(object),result,&error);
  if(!remote_ui.closing && s->process==process) {
-  if(bytes && g_bytes_get_size(bytes)) { if(!g_object_get_data(G_OBJECT(process),"insight-ssh-output-seen")) { g_object_set_data(G_OBJECT(process),"insight-ssh-output-seen",GINT_TO_POINTER(1));session_status(s,"SSH client running — authentication and server output follow below"); }gsize size;const gchar *text=g_bytes_get_data(bytes,&size);shell_append(s,text,size);g_input_stream_read_bytes_async(g_subprocess_get_stdout_pipe(process),8192,G_PRIORITY_DEFAULT,s->cancel,shell_read,g_object_ref(process)); }
-  else { if(error) { g_object_set_data_full(G_OBJECT(process),"insight-ssh-error",g_strdup(error->message),g_free);g_subprocess_force_exit(process); }g_object_set_data(G_OBJECT(process),"insight-ssh-eof",GINT_TO_POINTER(1));shell_complete(s,process); }
+  if(bytes && g_bytes_get_size(bytes)) { if(!g_object_get_data(G_OBJECT(process),"insight-ssh-output-seen")) { g_object_set_data(G_OBJECT(process),"insight-ssh-output-seen",GINT_TO_POINTER(1));session_status(s,"SSH client running — authentication and server output follow below"); }gsize size;const gchar *text=g_bytes_get_data(bytes,&size);shell_append(s,text,size);g_input_stream_read_bytes_async(shell_input(process),8192,G_PRIORITY_DEFAULT,s->cancel,shell_read,g_object_ref(process)); }
+  else { if(error && !(g_object_get_data(G_OBJECT(process),"insight-pty-fd") && g_error_matches(error,G_IO_ERROR,G_IO_ERROR_FAILED))) { g_object_set_data_full(G_OBJECT(process),"insight-ssh-error",g_strdup(error->message),g_free);g_subprocess_force_exit(process); }g_object_set_data(G_OBJECT(process),"insight-ssh-eof",GINT_TO_POINTER(1));shell_complete(s,process); }
  }
  if(bytes) g_bytes_unref(bytes);g_clear_error(&error);g_object_unref(process);
 }
@@ -288,10 +321,17 @@ static void shell_disconnect(GtkWidget *widget,gpointer data) {
 static void shell_connect(GtkWidget *widget,gpointer data) {
  (void)widget;(void)data;ShellSession *s=remote_ui.selected;if(!s) return;profile_save();session_disconnect(s); GError *error=NULL; RemoteRoot *root=form_root("/",remote_ui.directory,remote_ui.directory,&error);
  if(!root) { session_status(s,error ? error->message : "Invalid SSH connection"); g_clear_error(&error); return; }
- GSubprocessLauncher *spawn=launcher(root,&s->auth); g_subprocess_launcher_setenv(spawn,"TERM","xterm-256color",TRUE); gboolean askpass=g_object_get_data(G_OBJECT(spawn),"insight-ssh-askpass")!=NULL;session_status(s,"Starting SSH client; waiting for the server and authentication…");s->process=spawn_client(spawn,root,FALSE,&error);g_object_unref(spawn);g_free(s->endpoint);s->endpoint=g_strdup_printf("%s@%s:%u",root->remote->user,root->remote->host,root->remote->port);insight_remote_free(s->remote);s->remote=insight_remote_new(root->remote->host,root->remote->user,root->remote->port,root->remote->identity,"/",root->remote->local,NULL);root_free(root);
+ GSubprocessLauncher *spawn=launcher(root,&s->auth); g_subprocess_launcher_setenv(spawn,"TERM","xterm-256color",TRUE); gboolean askpass=g_object_get_data(G_OBJECT(spawn),"insight-ssh-askpass")!=NULL;session_status(s,"Starting SSH client; waiting for the server and authentication…");
+#ifndef G_OS_WIN32
+ gint master=prepare_pty(spawn,s->output,&error);s->process=master>=0 ? spawn_client(spawn,root,FALSE,&error):NULL;
+ if(s->process) { g_object_set_data_full(G_OBJECT(s->process),"insight-pty-fd",GINT_TO_POINTER(master+1),close_pty);g_object_set_data_full(G_OBJECT(s->process),"insight-pty-input",g_unix_input_stream_new(dup(master),TRUE),g_object_unref);g_object_set_data_full(G_OBJECT(s->process),"insight-pty-output",g_unix_output_stream_new(dup(master),TRUE),g_object_unref); }else if(master>=0) close(master);
+#else
+ s->process=spawn_client(spawn,root,FALSE,&error);
+#endif
+ g_object_unref(spawn);g_free(s->endpoint);s->endpoint=g_strdup_printf("%s@%s:%u",root->remote->user,root->remote->host,root->remote->port);insight_remote_free(s->remote);s->remote=insight_remote_new(root->remote->host,root->remote->user,root->remote->port,root->remote->identity,"/",root->remote->local,NULL);root_free(root);
  if(!s->process) { session_status(s,error ? error->message : "OpenSSH unavailable"); g_clear_error(&error); auth_cleanup(s->auth); g_clear_pointer(&s->auth,g_free); return; }
  g_object_set_data_full(G_OBJECT(s->process),"insight-ssh-session",session_ref(s),session_unref);s->cancel=g_cancellable_new();
- g_input_stream_read_bytes_async(g_subprocess_get_stdout_pipe(s->process),8192,G_PRIORITY_DEFAULT,s->cancel,shell_read,g_object_ref(s->process)); g_subprocess_wait_async(s->process,NULL,shell_finished,NULL);
+ g_input_stream_read_bytes_async(shell_input(s->process),8192,G_PRIORITY_DEFAULT,s->cancel,shell_read,g_object_ref(s->process)); g_subprocess_wait_async(s->process,NULL,shell_finished,NULL);
  if(!askpass) session_status(s,"SSH password dialog helper is missing; only key/agent authentication is available.");gtk_notebook_set_current_page(GTK_NOTEBOOK(remote_ui.tabs),gtk_notebook_page_num(GTK_NOTEBOOK(remote_ui.tabs),s->page));gtk_widget_grab_focus(s->input);
 }
 typedef struct { GSubprocess *process; GBytes *text; } ShellWrite;
@@ -304,7 +344,7 @@ static void shell_write_done(GObject *object,GAsyncResult *result,gpointer data)
 static void shell_flush(ShellSession *s) {
  if(!s->process || s->writing || g_queue_is_empty(&s->pending)) return;
  ShellWrite *write=g_new0(ShellWrite,1); write->process=g_object_ref(s->process); write->text=g_queue_pop_head(&s->pending); s->writing=TRUE;
- g_output_stream_write_all_async(g_subprocess_get_stdin_pipe(s->process),g_bytes_get_data(write->text,NULL),g_bytes_get_size(write->text),G_PRIORITY_DEFAULT,s->cancel,shell_write_done,write);
+ g_output_stream_write_all_async(shell_output(s->process),g_bytes_get_data(write->text,NULL),g_bytes_get_size(write->text),G_PRIORITY_DEFAULT,s->cancel,shell_write_done,write);
 }
 static void terminal_write(const gchar *bytes,gsize length,gpointer data) {
  ShellSession *s=data;if(!s->process || remote_ui.closing) return;
@@ -412,7 +452,7 @@ static void session_add(GtkWidget *widget,gpointer data) {
  (void)widget;(void)data;if(remote_ui.sessions->len>=16) { status("Up to 16 SSH terminals can be open");return; }
  ShellSession *s=g_new0(ShellSession,1);s->refs=1;s->number=remote_ui.sessions->len+1;s->x=1;s->page=gtk_box_new(GTK_ORIENTATION_VERTICAL,2);g_object_ref_sink(s->page);g_object_set_data(G_OBJECT(s->page),"insight-ssh-session",s);
  s->stack=gtk_stack_new();gtk_stack_set_homogeneous(GTK_STACK(s->stack),FALSE);gtk_stack_set_transition_type(GTK_STACK(s->stack),GTK_STACK_TRANSITION_TYPE_NONE);gtk_box_pack_start(GTK_BOX(s->page),s->stack,TRUE,TRUE,0);GtkWidget *terminal=gtk_box_new(GTK_ORIENTATION_VERTICAL,2);gtk_stack_add_named(GTK_STACK(s->stack),terminal,"terminal");
- s->overlay=gtk_overlay_new();GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);s->output=insight_terminal_new(terminal_write,s);s->input=s->output;gtk_container_add(GTK_CONTAINER(scroll),s->output);gtk_container_add(GTK_CONTAINER(s->overlay),scroll);gtk_box_pack_start(GTK_BOX(terminal),s->overlay,TRUE,TRUE,0);
+ s->overlay=gtk_overlay_new();GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);s->output=insight_terminal_new(terminal_write,s);insight_terminal_set_resize(s->output,shell_resize,s);s->input=s->output;gtk_container_add(GTK_CONTAINER(scroll),s->output);gtk_container_add(GTK_CONTAINER(s->overlay),scroll);gtk_box_pack_start(GTK_BOX(terminal),s->overlay,TRUE,TRUE,0);
  s->ai_button=gtk_button_new_with_label("Ai");gtk_widget_set_name(s->ai_button,"insight-ssh-ai");gtk_widget_set_opacity(s->ai_button,0.8);gtk_widget_set_tooltip_text(s->ai_button,"SSH AI assistant — drag to move");gtk_widget_set_halign(s->ai_button,GTK_ALIGN_START);gtk_widget_set_valign(s->ai_button,GTK_ALIGN_START);gtk_widget_add_events(s->ai_button,GDK_BUTTON_PRESS_MASK|GDK_BUTTON_RELEASE_MASK|GDK_POINTER_MOTION_MASK);gtk_overlay_add_overlay(GTK_OVERLAY(s->overlay),s->ai_button);
  g_signal_connect(s->ai_button,"clicked",G_CALLBACK(ai_console),s);g_signal_connect(s->ai_button,"button-press-event",G_CALLBACK(ai_press),s);g_signal_connect(s->ai_button,"motion-notify-event",G_CALLBACK(ai_motion),s);g_signal_connect(s->ai_button,"button-release-event",G_CALLBACK(ai_release),s);g_signal_connect(s->overlay,"size-allocate",G_CALLBACK(ai_position),s);
  GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3),*diagnostic=gtk_button_new_from_icon_name("go-jump-symbolic",GTK_ICON_SIZE_MENU);gtk_widget_set_name(diagnostic,"insight-ssh-open-diagnostic");gtk_widget_set_tooltip_text(diagnostic,"Open selected file:line diagnostic in local editor");gtk_box_pack_end(GTK_BOX(row),diagnostic,FALSE,FALSE,0);g_signal_connect(diagnostic,"clicked",G_CALLBACK(open_diagnostic),s);gtk_box_pack_start(GTK_BOX(terminal),row,FALSE,FALSE,0);
@@ -428,6 +468,7 @@ static GtkWidget *form_button(GtkWidget *box,const gchar *label,const gchar *nam
  GtkWidget *b=gtk_button_new_with_label(label);if(name) gtk_widget_set_name(b,name);gtk_box_pack_start(GTK_BOX(box),b,FALSE,FALSE,0);g_signal_connect(b,"clicked",cb,data);return b;
 }
 void insight_remote_ui_init(gboolean (*workspace)(const char *)) {
+ gchar *terminal_settings=g_build_filename(app->configdir,"insight","terminal.conf",NULL);insight_terminal_settings_path(terminal_settings);g_free(terminal_settings);
  remote_epoch++; remote_ui.upload_versions=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free); remote_ui.snapshot_cancel=g_cancellable_new();
  remote_ui.workspace=workspace; remote_ui.roots=g_ptr_array_new_with_free_func(root_free); remote_ui.directory=g_build_filename(app->configdir,"insight","remote",NULL); g_mkdir_with_parents(remote_ui.directory,0700); remote_ui.config=g_build_filename(app->configdir,"insight","ssh.conf",NULL);
  restore_roots();

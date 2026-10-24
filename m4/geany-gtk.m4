@@ -5,6 +5,7 @@ AC_DEFUN([GEANY_CHECK_GTK],
 	gtk_modules="gtk+-3.0 >= 3.22.0 glib-2.0 >= 2.56"
 	gtk_modules_private="gio-2.0 >= 2.56 gmodule-no-export-2.0 gthread-2.0"
 
+	AS_CASE([$host_os], [mingw*|cygwin*], [], [gtk_modules_private="$gtk_modules_private gio-unix-2.0 >= 2.56"])
 	PKG_CHECK_MODULES([GTK], [$gtk_modules $gtk_modules_private])
 	AC_SUBST([DEPENDENCIES], [$gtk_modules])
 	AS_VAR_APPEND([GTK_CFLAGS], [" -DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_56"])

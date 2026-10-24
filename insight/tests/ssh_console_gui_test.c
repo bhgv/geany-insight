@@ -6,6 +6,7 @@
 #include "ui_utils.h"
 #include <glib/gstdio.h>
 #include <string.h>
+#include <stdio.h>
 #include <gdk/gdkkeysyms.h>
 static GtkWidget *window,*output,*state,*input,*output2,*input2,*tabs;static guint phase,ticks;static gchar *directory,*profile;
 static GtkWidget *named(GtkWidget *root,const gchar *name) {
@@ -32,7 +33,9 @@ static gboolean step(gpointer data) {
   click("insight-ssh-connect");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(state)),"Starting SSH"));send_line("printf '\\nINSIGHT_SSH_OK\\n'");return G_SOURCE_CONTINUE;
  }
  gchar *text=transcript();const gchar *label=gtk_label_get_text(GTK_LABEL(state));
- if(phase==0 && ready_count(text)>=1) {
+ if(phase==0 && ready_count(text)>=1) { gtk_window_resize(GTK_WINDOW(window),1280,900);phase=20;
+ } else if(phase==20) { send_line("printf '\\nPTY_SIZE '; stty size");phase=21;
+ } else if(phase==21 && strstr(text,"\nPTY_SIZE ")) { gint rows=0,cols=0;g_assert_cmpint(sscanf(strstr(text,"\nPTY_SIZE ")+1,"PTY_SIZE %d %d",&rows,&cols),==,2);g_assert_cmpint(rows,==,GPOINTER_TO_INT(g_object_get_data(G_OBJECT(output),"insight-terminal-rows")));g_assert_cmpint(cols,==,GPOINTER_TO_INT(g_object_get_data(G_OBJECT(output),"insight-terminal-columns")));
   click("insight-ssh-new-terminal");g_assert_cmpint(gtk_notebook_get_n_pages(GTK_NOTEBOOK(tabs)),==,4);output2=named(window,"insight-ssh-output-2");input2=named(window,"insight-ssh-output-2");g_assert_nonnull(output2);g_assert_nonnull(input2);click("insight-ssh-connect");send_to(input2,"printf '\\nSESSION_TWO\\n'");phase=10;
  } else if(phase==10) {
   gchar *second=view_text(output2);gboolean ready=strstr(second,"\nSESSION_TWO\n")!=NULL;g_free(second);if(ready) { gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs),2);send_line("printf '\\nSESSION_ONE_ALIVE\\n'");phase=11; }

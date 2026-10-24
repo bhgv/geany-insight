@@ -2109,3 +2109,13 @@ TTY / COM connection	Подключение TTY / COM
 Choose a serial port and valid connection parameters	Выберите порт и допустимые параметры соединения
 TTY disconnected	TTY отключён
 TTY device disconnected or I/O failed; connection closed	Устройство TTY отключено или произошла ошибка обмена; соединение закрыто
+Search terminal	Поиск в терминале
+Terminal settings	Настройки терминала
+Save terminal buffer	Сохранить буфер терминала
+Save to file…	Записать в файл…
+Settings…	Настройки…
+Scrollback lines for all SSH / TTY terminals (0 disables history)	Строк истории для всех SSH / TTY (0 — без истории)
+Reducing the buffer discards its oldest lines. New terminals use this setting too.	При уменьшении буфера старые строки удаляются. Настройка действует и для новых терминалов.
+Literal search, ignoring case; wraps through the retained buffer	Буквальный поиск без учёта регистра с обходом сохранённого буфера
+Found	Найдено
+Not found	Не найдено
