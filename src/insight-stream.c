@@ -35,7 +35,7 @@ struct InsightStream {
  FILE *source[2],*manual,*metadata,*ranges_file;
  struct stream_stat stamp[2];uint64_t sizes[2],manual_size,scanned,run_start;
  uint64_t text_at[2];unsigned char *manual_memory;InsightStreamRange *ranges;size_t range_count;
- Version *versions;size_t version_count,position,resident;char error[160];int scanning_run,scan_done,storage_failed;
+ Version *versions;size_t version_count,position,resident;char error[160];int scanning_run,scan_done,storage_failed,ranges_read;
 };
 static int fail(InsightStream *s,const char *message) { snprintf(s->error,sizeof(s->error),"%s",message);return 0; }
 static int read_at(InsightStream *s,FILE *f,uint64_t offset,void *out,size_t size) {
@@ -141,9 +141,12 @@ int insight_stream_event(InsightStream *s,size_t index,InsightStreamEvent *event
 size_t insight_stream_history_count(InsightStream *s) { return s->version_count; }
 size_t insight_stream_history_position(InsightStream *s) { return s->position; }
 int insight_stream_jump(InsightStream *s,size_t position) { if(position>=s->version_count) return fail(s,"History event no longer exists.");s->position=position;return 1; }
-static int append_range(InsightStream *s,InsightStreamRange r) {if(s->ranges_file || (s->range_count+1)*sizeof(r)>SPILL) {
-  if(!s->ranges_file && s->range_count && !append_file(s,&s->ranges_file,s->ranges,s->range_count*sizeof(r),NULL)) return 0;
-  if(!append_file(s,&s->ranges_file,&r,sizeof(r),NULL)) return 0;free(s->ranges);s->ranges=NULL;
+static int append_range(InsightStream *s,InsightStreamRange r) {
+ if(s->ranges_file || (s->range_count+1)*sizeof(r)>SPILL) {
+  if(!s->ranges_file) { if(!append_file(s,&s->ranges_file,s->ranges,s->range_count*sizeof(r),NULL)) return 0;free(s->ranges);s->ranges=NULL; }
+  /* Preserve buffered writes across adjacent ranges; a UI lookup may seek. */
+  if(s->ranges_read) { if(seek64(s->ranges_file,0,SEEK_END)) return fail(s,"Cannot seek difference storage.");s->ranges_read=0; }
+  if(fwrite(&r,sizeof(r),1,s->ranges_file)!=1) { s->storage_failed=1;return fail(s,"Cannot write difference storage."); }
  }else { void *p=realloc(s->ranges,(s->range_count+1)*sizeof(r));if(!p) return fail(s,"Out of memory for difference ranges.");s->ranges=p;s->ranges[s->range_count]=r; }s->range_count++;return 1;
 }
 static int add_range(InsightStream *s,uint64_t begin,uint64_t end) {
@@ -156,7 +159,7 @@ int insight_stream_scan(InsightStream *s,size_t budget) {
   size_t lengths[2];for(unsigned side=0;side<2;side++) { lengths[side]=(size_t)(s->scanned<s->sizes[side] ? ((s->sizes[side]-s->scanned)<n ? s->sizes[side]-s->scanned:n):0);if(lengths[side] && !data_read(s,side,s->scanned,side ? b:a,lengths[side])) return -1; }
   for(size_t i=0;i<n;i++) { int different=i>=lengths[0] || i>=lengths[1] || a[i]!=b[i];if(different && !s->scanning_run) { s->run_start=s->scanned+i;s->scanning_run=1; }else if(!different && s->scanning_run) { if(!add_range(s,s->run_start,s->scanned+i)) return -1;s->scanning_run=0; } }s->scanned+=n;budget-=n;
  }
- if(s->scanned==end) { if(s->scanning_run && !add_range(s,s->run_start,end)) return -1;s->scanning_run=0;s->scan_done=1; }return s->scan_done;
+ if(s->scanned==end) { if(s->scanning_run && !add_range(s,s->run_start,end)) return -1;s->scanning_run=0;s->scan_done=1; }if(s->ranges_file && fflush(s->ranges_file)) { s->storage_failed=1;fail(s,"Cannot flush difference storage.");return -1; }return s->scan_done;
 }
 /* Bounded line-start anchors resynchronise insertions/deletions without indexing
  * every line. This is a streaming heuristic, not a minimum edit script. */
@@ -166,7 +169,7 @@ int insight_stream_scan_text(InsightStream *s,size_t budget) {
  unsigned char a[BLOCK],b[BLOCK];int table[8192];
  do {
   size_t an=(size_t)((s->sizes[0]-s->text_at[0])<BLOCK ? s->sizes[0]-s->text_at[0]:BLOCK),bn=(size_t)((s->sizes[1]-s->text_at[1])<BLOCK ? s->sizes[1]-s->text_at[1]:BLOCK);
-  if(!an && !bn) { s->scan_done=1;return 1; }
+  if(!an && !bn) { if(s->ranges_file && fflush(s->ranges_file)) { s->storage_failed=1;fail(s,"Cannot flush difference storage.");return -1; }s->scan_done=1;return 1; }
   if((an && !data_read(s,0,s->text_at[0],a,an)) || (bn && !data_read(s,1,s->text_at[1],b,bn))) return -1;
   size_t common=0;while(common<an && common<bn && a[common]==b[common]) common++;
   s->text_at[0]+=common;s->text_at[1]+=common;
@@ -185,11 +188,11 @@ int insight_stream_scan_text(InsightStream *s,size_t budget) {
   }
   s->scanned=s->text_at[0]>s->text_at[1] ? s->text_at[0]:s->text_at[1];size_t used=an>bn ? an:bn;if(used>=budget) break;budget-=used;
  }while(budget);
- return 0;
+ if(s->ranges_file && fflush(s->ranges_file)) { s->storage_failed=1;fail(s,"Cannot flush difference storage.");return -1; }return 0;
 }
 uint64_t insight_stream_scanned(InsightStream *s) { return s->scanned; }
 size_t insight_stream_difference_count(InsightStream *s) { return s->range_count; }
-int insight_stream_difference(InsightStream *s,size_t index,InsightStreamRange *range) { if(index>=s->range_count) return fail(s,"Difference index outside range.");if(s->ranges_file) return read_at(s,s->ranges_file,index*sizeof(*range),range,sizeof(*range));*range=s->ranges[index];return 1; }
+int insight_stream_difference(InsightStream *s,size_t index,InsightStreamRange *range) { if(index>=s->range_count) return fail(s,"Difference index outside range.");if(s->ranges_file) { s->ranges_read=1;return read_at(s,s->ranges_file,index*sizeof(*range),range,sizeof(*range)); }*range=s->ranges[index];return 1; }
 int insight_stream_write(InsightStream *s,FILE *output) { unsigned char bytes[BLOCK];uint64_t total=insight_stream_size(s,2);for(uint64_t at=0;at<total;) { size_t n=(size_t)((total-at)<BLOCK ? total-at:BLOCK);if(!insight_stream_read(s,2,at,bytes,n) || fwrite(bytes,1,n,output)!=n) return fail(s,"Cannot stream result (source changed or output disk full).");at+=n; }return stable(s) && fflush(output)==0 ? 1:fail(s,"Cannot flush result or source changed."); }
 size_t insight_stream_resident_metadata(InsightStream *s) { return s->resident+(s->manual ? 0:(size_t)s->manual_size)+(s->ranges_file ? 0:s->range_count*sizeof(InsightStreamRange)); }
 

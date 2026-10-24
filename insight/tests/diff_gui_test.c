@@ -480,8 +480,8 @@ int main(int argc,char **argv) {
  g_assert_true(g_file_set_contents(right,"\xff",1,&error));g_assert_no_error(error);compare(NULL,m);wait_comparison(m);
  assert_text(m,"a b\r\nя\r\n");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->status)),"UTF-8"));
  gchar *oversized=g_strnfill(1024*1024+1,'x');g_assert_true(g_file_set_contents(right,oversized,-1,&error));g_assert_no_error(error);g_free(oversized);
- compare(NULL,m);g_assert_false(gtk_widget_get_sensitive(m->views[2]));g_assert_false(gtk_widget_get_sensitive(m->save_button));wait_comparison(m);g_assert_true(gtk_widget_get_sensitive(m->save_button));
- assert_text(m,"a b\r\nя\r\n");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->status)),"1 MiB"));
+ compare(NULL,m);g_assert_false(m->busy);g_assert_true(gtk_widget_get_sensitive(m->views[2]));g_assert_true(gtk_widget_get_sensitive(m->save_button));
+ GtkWidget *stream_window=NULL;GList *stream_windows=gtk_window_list_toplevels();for(GList *p=stream_windows;p;p=p->next) if(g_object_get_data(G_OBJECT(p->data),"insight-stream-state")) stream_window=p->data;g_list_free(stream_windows);g_assert_nonnull(stream_window);assert_text(m,"a b\r\nя\r\n");gtk_widget_destroy(stream_window);
  GString *scroll_left=g_string_new(NULL),*scroll_right=g_string_new(NULL);
  for(int i=0;i<300;i++) {
   if(i==150) for(int j=0;j<20;j++) g_string_append(scroll_right,"inserted\n");
