@@ -142,7 +142,7 @@ static void row_free(gpointer data) { Row *r=data;gtk_tree_row_reference_free(r-
 typedef struct { GtkTreeModel *model;GPtrArray *rows; } Combo;
 static void combo_free(gpointer data) { Combo *c=data;g_ptr_array_free(c->rows,TRUE);g_object_unref(c->model);g_free(c); }
 static void translate_combo(GtkWidget *widget);
-static void combo_changed(GtkTreeModel *model,GtkTreePath *path,GtkTreeIter *iter,gpointer data) { (void)path;(void)iter;GtkWidget *widget=data;if(!busy && !excluded(widget) && gtk_combo_box_get_model(GTK_COMBO_BOX(widget))==model) { busy=TRUE;translate_combo(widget);busy=FALSE; } }
+static void combo_changed(GtkTreeModel *model,GtkTreePath *path,GtkTreeIter *iter,gpointer data) { (void)path;(void)iter;GtkWidget *widget=data;if(!busy && !excluded(widget) && !protected_data(widget) && gtk_combo_box_get_model(GTK_COMBO_BOX(widget))==model) { busy=TRUE;translate_combo(widget);busy=FALSE; } }
 static void translate_combo(GtkWidget *widget) {
  GtkTreeModel *model=gtk_combo_box_get_model(GTK_COMBO_BOX(widget));if(!GTK_IS_LIST_STORE(model)) return;Combo *combo=g_object_get_data(G_OBJECT(widget),"insight-i18n-combo");
  if(!combo || combo->model!=model) { combo=g_new0(Combo,1);combo->model=g_object_ref(model);combo->rows=g_ptr_array_new_with_free_func(row_free);g_object_set_data_full(G_OBJECT(widget),"insight-i18n-combo",combo,combo_free);g_signal_connect_object(model,"row-changed",G_CALLBACK(combo_changed),widget,0); }
@@ -156,11 +156,11 @@ static void translate_combo(GtkWidget *widget) {
 static void translate_widget(GtkWidget *widget,gpointer data) {
  (void)data;if(excluded(widget)) { /* Header title labels are owned by GTK; explicitly bound button tips are safe. */if(GTK_IS_HEADER_BAR(widget)) gtk_container_foreach(GTK_CONTAINER(widget),translate_widget,NULL);if(GTK_IS_TREE_VIEW(widget)) { GList *columns=gtk_tree_view_get_columns(GTK_TREE_VIEW(widget));for(GList *p=columns;p;p=p->next) { watch(p->data);property(p->data,"title");GtkWidget *header=gtk_tree_view_column_get_widget(p->data);if(header) translate_widget(header,NULL); }g_list_free(columns); }return; }
  watch(G_OBJECT(widget));property(G_OBJECT(widget),"tooltip-markup");
- if(GTK_IS_LABEL(widget) || GTK_IS_BUTTON(widget) || GTK_IS_TOOL_BUTTON(widget) || GTK_IS_MENU_ITEM(widget)) property(G_OBJECT(widget),"label");
+ if(GTK_IS_LABEL(widget) || GTK_IS_BUTTON(widget) || GTK_IS_TOOL_BUTTON(widget)) property(G_OBJECT(widget),"label");
  if(GTK_IS_WINDOW(widget)) property(G_OBJECT(widget),"title");
  if(GTK_IS_ENTRY(widget)) property(G_OBJECT(widget),"placeholder-text");
  if(GTK_IS_TREE_VIEW(widget)) { GList *columns=gtk_tree_view_get_columns(GTK_TREE_VIEW(widget));for(GList *p=columns;p;p=p->next) { watch(p->data);property(p->data,"title");GtkWidget *header=gtk_tree_view_column_get_widget(p->data);if(header) translate_widget(header,NULL);GList *cells=gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(p->data));for(GList *c=cells;c;c=c->next) if(g_object_get_data(c->data,"insight-i18n-cell")) { watch(c->data);property(c->data,"text"); }g_list_free(cells); }g_list_free(columns); }
- if(GTK_IS_COMBO_BOX_TEXT(widget)) translate_combo(widget);
+ if(GTK_IS_COMBO_BOX_TEXT(widget) && !protected_data(widget)) translate_combo(widget);
  if(GTK_IS_NOTEBOOK(widget)) { for(gint i=0;i<gtk_notebook_get_n_pages(GTK_NOTEBOOK(widget));i++) { GtkWidget *page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(widget),i),*tab=gtk_notebook_get_tab_label(GTK_NOTEBOOK(widget),page),*menu=gtk_notebook_get_menu_label(GTK_NOTEBOOK(widget),page);if(tab) translate_widget(tab,NULL);if(menu && menu!=tab) translate_widget(menu,NULL); }for(guint i=0;i<2;i++) { GtkWidget *action=gtk_notebook_get_action_widget(GTK_NOTEBOOK(widget),i ? GTK_PACK_END:GTK_PACK_START);if(action) translate_widget(action,NULL); } }
  if(GTK_IS_WINDOW(widget)) { GtkWidget *header=gtk_window_get_titlebar(GTK_WINDOW(widget));if(header) translate_widget(header,NULL); }
  if(GTK_IS_MENU_ITEM(widget)) { GtkWidget *menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(widget));if(menu) translate_widget(menu,NULL); }
@@ -169,11 +169,20 @@ static void translate_widget(GtkWidget *widget,gpointer data) {
 void insight_i18n_apply(GtkWidget *widget) { if(busy || !active || !widget) return;busy=TRUE;translate_widget(widget,NULL);busy=FALSE; }
 GEANY_API_SYMBOL
 void insight_i18n_refresh(void) {
- if(busy || !active) return;GList *windows=gtk_window_list_toplevels();for(GList *p=windows;p;p=p->next) insight_i18n_apply(p->data);g_list_free(windows);if(main_widgets.editor_menu) insight_i18n_apply(main_widgets.editor_menu);
- /* Refresh weakly registered detached menus, columns and explicitly bound values. */
- GPtrArray *objects=g_ptr_array_new_with_free_func(g_object_unref);GHashTableIter iter;gpointer object;g_hash_table_iter_init(&iter,watched);while(g_hash_table_iter_next(&iter,&object,NULL)) g_ptr_array_add(objects,g_object_ref(object));busy=TRUE;
- for(guint i=0;i<objects->len;i++) { GObject *item=g_ptr_array_index(objects,i);if(GTK_IS_WIDGET(item) && excluded(GTK_WIDGET(item))) continue;for(guint n=0;n<G_N_ELEMENTS(properties);n++) property(item,properties[n]);if(g_object_get_data(item,"insight-i18n-cell")) property(item,"text");if(GTK_IS_WIDGET(item)) gtk_widget_queue_draw(GTK_WIDGET(item)); }
- busy=FALSE;for(guint i=0;i<objects->len;i++) { GObject *item=g_ptr_array_index(objects,i);if(GTK_IS_WIDGET(item) && excluded(GTK_WIDGET(item))) continue;InsightI18nRefresh *refresh=g_object_get_data(item,"insight-i18n-refresh");if(refresh) refresh->callback(refresh->data); }g_ptr_array_free(objects,TRUE);
+ if(busy || !active) return;
+ /* Keep root objects alive. Translating combo models can replace GTK-private
+  * popup children; never revisit a snapshot of those obsolete child widgets. */
+ GPtrArray *windows=g_ptr_array_new_with_free_func(g_object_unref);GList *tops=gtk_window_list_toplevels();for(GList *p=tops;p;p=p->next) g_ptr_array_add(windows,g_object_ref(p->data));g_list_free(tops);
+ for(guint i=0;i<windows->len;i++) { GtkWidget *window=g_ptr_array_index(windows,i);if(!g_object_get_data(G_OBJECT(window),"insight-i18n-destroyed")) insight_i18n_apply(window); }
+ if(main_widgets.editor_menu) insight_i18n_apply(main_widgets.editor_menu);
+ GPtrArray *objects=g_ptr_array_new_with_free_func(g_object_unref);GHashTableIter iter;gpointer object;g_hash_table_iter_init(&iter,watched);while(g_hash_table_iter_next(&iter,&object,NULL)) g_ptr_array_add(objects,g_object_ref(object));
+ for(guint i=0;i<objects->len;i++) { GObject *item=g_ptr_array_index(objects,i);if(g_object_get_data(item,"insight-i18n-destroyed")) continue;
+  /* Application GtkMenus can outlive their visible popup. GtkTreeMenu belongs
+   * to GtkComboBox and must be rebuilt only by its model owner. */
+  if(G_OBJECT_TYPE(item)==GTK_TYPE_MENU) insight_i18n_apply(GTK_WIDGET(item));
+ }
+ for(guint i=0;i<objects->len;i++) { GObject *item=g_ptr_array_index(objects,i);InsightI18nRefresh *refresh=g_object_get_data(item,"insight-i18n-refresh");if(refresh && !g_object_get_data(item,"insight-i18n-destroyed")) refresh->callback(refresh->data); }
+ g_ptr_array_free(objects,TRUE);g_ptr_array_free(windows,TRUE);
  insight_help_locale_changed();insight_window_list_locale_changed();insight_symbol_views_locale_changed();insight_workbench_locale_changed();
 }
 static gboolean shown(GSignalInvocationHint *hint,guint count,const GValue *values,gpointer data) { (void)hint;(void)data;if(count) insight_i18n_apply(g_value_get_object(values));return TRUE; }
