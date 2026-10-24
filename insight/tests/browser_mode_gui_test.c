@@ -23,7 +23,7 @@ static void click_at(gint pos,guint state) {
  caret(pos);GdkEvent *event=gdk_event_new(GDK_BUTTON_PRESS);event->button.button=1;event->button.state=state;event->button.time=GDK_CURRENT_TIME;event->button.window=g_object_ref(gtk_widget_get_window(GTK_WIDGET(source->editor->sci)));event->button.x=SEND(source->editor->sci,SCI_POINTXFROMPOSITION,0,pos)+1;event->button.y=SEND(source->editor->sci,SCI_POINTYFROMPOSITION,0,pos)+2;
  gdk_event_set_device(event,gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_display_get_default())));gboolean handled=FALSE;g_signal_emit_by_name(source->editor->sci,"button-press-event",event,&handled);event->type=GDK_BUTTON_RELEASE;g_signal_emit_by_name(source->editor->sci,"button-release-event",event,&handled);gdk_event_free(event);
 }
-static void mode(gboolean on) { gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-browser-mode")),on);g_assert_cmpint(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(window,"insight-browser-mode-status"))),==,on);g_assert_cmpint(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(named(window,"insight-browser-mode-popup"))),==,on); }
+static void mode(gboolean on) { gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-browser-mode")),on);g_assert_cmpint(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(window,"insight-browser-mode-status"))),==,on);g_assert_cmpint(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(named(g_object_get_data(G_OBJECT(window),"insight-editor-menu"),"insight-browser-mode-popup"))),==,on); }
 static gboolean tick(gpointer data) {
  (void)data;
  if(!phase) {
