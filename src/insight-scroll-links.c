@@ -166,6 +166,9 @@ static void document_opened(GObject *object,GeanyDocument *doc,gpointer data) {
  if(link_all && open_count()>ALL_LIMIT) { set_all(FALSE);ui_set_statusbar(TRUE,"Link All disabled: more than 128 source buffers are open"); }
  if(link_dialog) { populate_sources(0);populate_target(TRUE,0);refresh_controls(); }
 }
+static void document_saved(GObject *object,GeanyDocument *doc,gpointer data) {
+ (void)object;(void)data;if(!view_samples || !DOC_VALID(doc)) return;cache_view(doc);if(link_dialog) { populate_sources(0);populate_target(TRUE,0);links_changed(); }
+}
 static void document_closed(GObject *object,GeanyDocument *doc,gpointer data) {
  (void)object;(void)data;if(!view_samples) return;g_hash_table_remove(view_samples,GUINT_TO_POINTER(doc->id));
  for(guint n=link_pairs->len;n>0;n--) { ScrollPair pair=g_array_index(link_pairs,ScrollPair,n-1);if(pair.source==doc->id || pair.target==doc->id) g_array_remove_index(link_pairs,n-1); }
@@ -179,5 +182,5 @@ void insight_scroll_links_init(GtkWidget *menu) {
  all_menu=gtk_check_menu_item_new_with_label("Link All Source Windows");gtk_widget_set_name(all_menu,"insight-scroll-links-all-command");g_object_set_data(G_OBJECT(all_menu),"insight-window-persistent",GINT_TO_POINTER(1));keybindings_attach_menu(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_LINKALLWINDOWS,all_menu);g_signal_connect(all_menu,"toggled",G_CALLBACK(all_menu_changed),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),all_menu);gtk_widget_show(all_menu);
  item=gtk_menu_item_new_with_label("Unlink All Source Windows");gtk_widget_set_name(item,"insight-scroll-links-clear-command");g_object_set_data(G_OBJECT(item),"insight-window-persistent",GINT_TO_POINTER(1));keybindings_attach_menu(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_UNLINKWINDOWS,item);g_signal_connect(item,"activate",G_CALLBACK(menu_command),GUINT_TO_POINTER(2));gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);gtk_widget_show(item);
  GtkWidget *separator=gtk_separator_menu_item_new();g_object_set_data(G_OBJECT(separator),"insight-window-persistent",GINT_TO_POINTER(1));gtk_menu_shell_append(GTK_MENU_SHELL(menu),separator);gtk_widget_show(separator);
- g_signal_connect_object(geany_object,"document-new",G_CALLBACK(document_opened),all_menu,G_CONNECT_AFTER);g_signal_connect_object(geany_object,"document-open",G_CALLBACK(document_opened),all_menu,G_CONNECT_AFTER);g_signal_connect_object(geany_object,"document-close",G_CALLBACK(document_closed),all_menu,0);g_signal_connect_object(geany_object,"document-save",G_CALLBACK(document_opened),all_menu,G_CONNECT_AFTER);g_signal_connect(all_menu,"destroy",G_CALLBACK(menu_destroyed),NULL);
+ g_signal_connect_object(geany_object,"document-new",G_CALLBACK(document_opened),all_menu,G_CONNECT_AFTER);g_signal_connect_object(geany_object,"document-open",G_CALLBACK(document_opened),all_menu,G_CONNECT_AFTER);g_signal_connect_object(geany_object,"document-close",G_CALLBACK(document_closed),all_menu,0);g_signal_connect_object(geany_object,"document-save",G_CALLBACK(document_saved),all_menu,G_CONNECT_AFTER);g_signal_connect(all_menu,"destroy",G_CALLBACK(menu_destroyed),NULL);
 }
