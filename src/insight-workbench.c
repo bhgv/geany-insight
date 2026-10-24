@@ -22,6 +22,7 @@
 #include "insight-symbol-edit.h"
 #include "insight-project-report.h"
 #include "insight-diff.h"
+#include "insight-hex.h"
 #include "insight-diff-syntax.h"
 #include "insight-directory.h"
 #include "insight-relation-graph.h"
@@ -162,6 +163,7 @@ static guint64 workbench_epoch;
 static void open_context(GtkButton *,gpointer);
 static gboolean python_language(GeanyFiletype *);
 static void show_diff(GtkWidget *,gpointer);
+static void show_hex(GtkWidget *w,gpointer p) { (void)w;(void)p;insight_hex_show(main_widgets.window,NULL,NULL); }
 static void diff_source_open(const gchar *path,guint line) {
  GeanyDocument *previous=document_get_current(),*doc=document_open_file(path,FALSE,NULL,NULL);if(!doc) return;
  navqueue_goto_line(previous,doc,CLAMP((gint)line,1,sci_get_line_count(doc->editor->sci)));document_grab_focus(doc);gtk_window_present(GTK_WINDOW(main_widgets.window));
@@ -5284,6 +5286,7 @@ static void create_workbench_menus(void) {
  const gchar *relation_reports[]={"View Relation Outline…","Create Bookmarks from Relation Items…"};for(guint i=0;i<2;i++) { GtkWidget *item=gtk_menu_item_new_with_label(relation_reports[i]);gtk_widget_set_name(item,i ? "insight-relation-bookmark-command":"insight-relation-outline-command");gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(relation_report_show),GUINT_TO_POINTER(i)); }
 
  GtkWidget *diff_item=gtk_menu_item_new_with_label("Diff / Merge…");gtk_widget_set_name(diff_item,"insight-diff-menu");gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),diff_item);g_signal_connect(diff_item,"activate",G_CALLBACK(show_diff),NULL);gtk_widget_show(diff_item);
+ GtkWidget *hex_item=gtk_menu_item_new_with_label("Hex editor…");gtk_widget_set_name(hex_item,"insight-hex-menu");gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),hex_item);g_signal_connect(hex_item,"activate",G_CALLBACK(show_hex),NULL);gtk_widget_show(hex_item);
  GtkWidget *directory_item=gtk_menu_item_new_with_label("Directory Compare…");gtk_widget_set_name(directory_item,"insight-directory-menu");gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),directory_item);g_signal_connect(directory_item,"activate",G_CALLBACK(show_directory_compare),NULL);gtk_widget_show(directory_item);
  wb.navigation_accels=gtk_accel_group_new(); gtk_window_add_accel_group(GTK_WINDOW(main_widgets.window),wb.navigation_accels);
  GtkWidget *templates=gtk_image_menu_item_new_with_label("Code templates / Clips…"); gtk_widget_set_name(templates,"insight-templates-command"); gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(templates),insight_command_icon("snippets")); gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(templates),TRUE); gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu),templates); g_signal_connect(templates,"activate",G_CALLBACK(focus_templates),NULL); gtk_widget_show(templates);

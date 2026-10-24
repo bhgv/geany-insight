@@ -952,7 +952,7 @@ libgeany = shared_library('geany',
 	'src/insight-git.c', 'src/insight-git.h', 'src/insight-workbench.c', 'src/insight-symbol-view.c', 'src/insight-symbol-view.h',
 	'src/insight-directory.c', 'src/insight-directory.h',
 	'insight/desktop/directory_compare.c', 'insight/desktop/directory_compare.h',
-	'src/insight-diff.c',
+	'src/insight-diff.c', 'src/insight-hex.c', 'src/insight-hex.h',
 	'src/insight-diff.h', 'src/insight-compare-ui.h',
 	'src/insight-reload.c', 'src/insight-reload.h',
 	'src/insight-tree-expand.c', 'src/insight-tree-expand.h',
@@ -1182,3 +1182,5 @@ install_data('insight/docs/media/incremental-search.svg', install_dir: cdata.get
 
 install_data('insight/docs/panel-tty.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 install_data('insight/docs/media/terminals.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
+
+install_data('insight/docs/media/binary-merge.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')

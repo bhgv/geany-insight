@@ -1,0 +1,29 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+/* Production binary editor, with only the application translation service stubbed. */
+#include "../../src/insight-hex.c"
+const gchar *insight_tr(const gchar *s) { return s; }
+void insight_i18n_apply(GtkWidget *w) { (void)w; }
+static gchar *destination;
+static gboolean accept_save(gpointer data) { gtk_dialog_response(GTK_DIALOG(data),GTK_RESPONSE_ACCEPT);return G_SOURCE_REMOVE; }
+static gboolean choose_save(gpointer data) {
+ (void)data;GList *list=gtk_window_list_toplevels();GtkWidget *d=NULL;for(GList *p=list;p;p=p->next) if(GTK_IS_FILE_CHOOSER(p->data)) d=p->data;g_list_free(list);g_assert_nonnull(d);
+ gchar *dir=g_path_get_dirname(destination),*name=g_path_get_basename(destination);gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(d),dir);gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(d),name);g_free(dir);g_free(name);g_timeout_add(300,accept_save,d);return G_SOURCE_REMOVE;
+}
+static void set(GtkWidget *w,guint n) { gtk_spin_button_set_value(GTK_SPIN_BUTTON(w),n); }
+static void exported(Hex *h,guint mode) { GtkWidget *b=gtk_button_new();g_object_ref_sink(b);g_object_set_data(G_OBJECT(b),"mode",GUINT_TO_POINTER(mode));if(mode!=2) g_timeout_add(200,choose_save,NULL);save(b,h);gtk_widget_destroy(b);g_object_unref(b); }
+int main(int argc,char **argv) {
+ if(!g_getenv("DISPLAY")) return 77;gtk_init(&argc,&argv);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);
+ gchar *dir=g_dir_make_tmp("hex-editor-XXXXXX",NULL),*a=g_build_filename(dir,"left.bin",NULL),*b=g_build_filename(dir,"right.bin",NULL);guint8 all[256];for(guint i=0;i<256;i++) all[i]=i;g_assert_true(g_file_set_contents(a,(gchar*)all,256,NULL));all[17]=0xFE;g_assert_true(g_file_set_contents(b,(gchar*)all,254,NULL));
+ insight_hex_show(NULL,a,b);GList *windows=gtk_window_list_toplevels();Hex *h=NULL;for(GList *p=windows;p;p=p->next) { h=g_object_get_data(G_OBJECT(p->data),"insight-hex-state");if(h) break; }g_list_free(windows);g_assert_nonnull(h);g_assert_cmpuint(h->result->len,==,256);
+ gchar *text=dump(all,256,0,2,FALSE);g_assert_nonnull(strstr(text,"0100 0302"));g_assert_nonnull(strstr(text,"00000010"));g_free(text);text=dump(all,256,0,8,TRUE);g_assert_nonnull(strstr(text,"0001020304050607"));g_free(text);text=dump(all,3,0,4,FALSE);g_assert_nonnull(strstr(text,"  020100"));g_free(text);
+ next_difference(NULL,h);g_assert_cmpuint(value(h->offset),==,17);g_assert_cmpuint(value(h->length),==,1);GtkWidget *take=gtk_button_new();g_object_ref_sink(take);g_object_set_data(G_OBJECT(take),"side",GUINT_TO_POINTER(1));take_range(take,h);g_assert_cmpuint(h->result->data[17],==,254);next_difference(NULL,h);g_assert_cmpuint(value(h->offset),==,254);take_range(take,h);g_assert_cmpuint(h->result->len,==,254);
+ history(take,h);g_assert_cmpuint(h->result->len,==,256);g_object_set_data(G_OBJECT(take),"redo",GINT_TO_POINTER(1));history(take,h);g_assert_cmpuint(h->result->len,==,254);
+ set(h->target,2);set(h->remove,3);gtk_entry_set_text(GTK_ENTRY(h->edit),"00 ff 41");edit_range(NULL,h);g_assert_cmpuint(h->result->data[2],==,0);g_assert_cmpuint(h->result->data[3],==,255);g_assert_cmpuint(h->result->data[4],==,65);guint before=h->history->len;gtk_entry_set_text(GTK_ENTRY(h->edit),"0fz");edit_range(NULL,h);g_assert_cmpuint(h->history->len,==,before);gtk_entry_set_text(GTK_ENTRY(h->edit),"f");edit_range(NULL,h);g_assert_cmpuint(h->history->len,==,before);set(h->target,LIMIT);g_assert_false(replace(h,all,1));
+ set(h->target,254);set(h->remove,0);g_assert_true(replace(h,all,2));g_assert_cmpuint(h->result->len,==,256);
+ /* Preserve all byte values, including NUL and invalid UTF-8; many Base64 parts. */
+ g_byte_array_set_size(h->result,0);for(guint i=0;i<100;i++) g_byte_array_append(h->result,all,256);remember(h);set(h->chunk_size,10240);destination=g_build_filename(dir,"bytes.b64",NULL);exported(h,1);
+ GString *joined=g_string_new(NULL);for(guint i=1;i<=4;i++) { gchar *name=g_strdup_printf("%s.part%06u",destination,i),*data=NULL;gsize n;g_assert_true(g_file_get_contents(name,&data,&n,NULL));if(i<4) g_assert_cmpuint(n,==,10240);g_string_append_len(joined,data,n);g_free(data);g_free(name); }gsize decoded_n;guchar *decoded=g_base64_decode(joined->str,&decoded_n);g_assert_cmpuint(decoded_n,==,h->result->len);g_assert_cmpmem(decoded,decoded_n,h->result->data,h->result->len);g_free(decoded);
+ /* A repeated export must leave all prior parts intact. */
+ exported(h,1);g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(h->status)),"exists"));set(h->part,1);exported(h,2);gchar *clip=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));g_assert_cmpuint(strlen(clip),==,10240);g_assert_cmpmem(clip,10240,joined->str+10240,10240);g_free(clip);set(h->chunk_size,0);exported(h,2);clip=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));g_assert_cmpstr(clip,==,joined->str);g_free(clip);g_string_free(joined,TRUE);
+ g_free(destination);destination=g_build_filename(dir,"saved.bin",NULL);exported(h,0);gchar *saved;gsize n;g_assert_true(g_file_get_contents(destination,&saved,&n,NULL));g_assert_cmpmem(saved,n,h->result->data,h->result->len);g_free(saved);g_assert_false(h->dirty);gtk_widget_destroy(take);g_object_unref(take);gtk_widget_destroy(h->window);g_free(destination);g_free(a);g_free(b);g_free(dir);g_print("Binary editor: endian dumps, changed ranges, EOF deletion, insert/replace, Undo/Redo, binary save, Base64 parts round-trip, collision protection and clipboard passed\n");return 0;
+}

@@ -941,3 +941,6 @@ terminal_widget_gui_test = executable('test_insight_terminal_widget_gui', '../in
 test('Insight production VT terminal widget GUI', terminal_widget_gui_test, timeout: 30, is_parallel: false)
 tty_console_gui_test = executable('test_insight_tty_console_gui', '../insight/tests/tty_console_gui_test.c', dependencies: test_deps)
 test('Insight native TTY terminal GUI', find_program('python3'), args: [meson.project_source_root() / 'insight/tests/tty_console_fixture.py', tty_console_gui_test.full_path()], timeout: 35, is_parallel: false)
+
+hex_gui_test = executable('test_insight_hex_gui', '../insight/tests/hex_gui_test.c', dependencies: deps)
+test('Insight binary merge and hex Base64 export GUI', hex_gui_test, timeout: 40, is_parallel: false)

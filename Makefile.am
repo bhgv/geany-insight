@@ -709,3 +709,6 @@ EXTRA_DIST += \
 EXTRA_DIST += insight/tests/terminal_core_test.c insight/tests/terminal_widget_gui_test.c insight/tests/tty_console_gui_test.c insight/tests/tty_console_fixture.py
 insightdoc_DATA += insight/docs/panel-tty.md
 dist_insightdocmedia_DATA += insight/docs/media/terminals.svg
+
+EXTRA_DIST += insight/tests/hex_gui_test.c
+dist_insightdocmedia_DATA += insight/docs/media/binary-merge.svg

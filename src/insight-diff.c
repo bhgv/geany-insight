@@ -4,6 +4,7 @@
 #include "../insight/desktop/glib_compat.h"
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "insight-diff.h"
+#include "insight-hex.h"
 #include "insight-directory.h"
 #include "insight-help.h"
 #include "../insight/core/diff.h"
@@ -1143,6 +1144,16 @@ static void toolbar_build(Merge *m,GtkWidget *root,GtkWidget **rows) {
  GtkWidget *actions=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);gtk_box_pack_start(GTK_BOX(pages[0]),actions,FALSE,FALSE,0);move_widget(m->compare_button,actions);move_widget(m->cancel_button,actions);move_widget(m->external,actions);
 
 }
+static void binary_mode(GtkWidget *w,gpointer data) {
+ (void)w;Merge *m=data;if(m->busy || m->memory) return;
+ gchar *paths[2];for(guint i=0;i<2;i++) paths[i]=g_filename_from_utf8(gtk_entry_get_text(GTK_ENTRY(m->paths[i])),-1,NULL,NULL,NULL);
+ insight_hex_show(m->window,paths[0],paths[1]);for(guint i=0;i<2;i++) g_free(paths[i]);
+}
+static void merge_source_selection(GtkWidget *w,gpointer data) {
+ Merge *m=data;if(m->busy || m->review_locked) return;guint side=GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(w),"side"));GtkTextIter a,z;
+ GtkTextBuffer *source=gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]));if(!gtk_text_buffer_get_selection_bounds(source,&a,&z)) { message(m,"Select source text first.");return; }
+ gchar *text=gtk_text_buffer_get_text(source,&a,&z,TRUE);gtk_text_buffer_begin_user_action(result(m));gtk_text_buffer_delete_selection(result(m),TRUE,TRUE);gtk_text_buffer_insert_at_cursor(result(m),text,-1);gtk_text_buffer_end_user_action(result(m));g_free(text);selection(NULL,m);
+}
 static Merge *merge_new(GtkWidget *parent) {
  Merge *m=g_new0(Merge,1);for(guint i=0;i<4;i++) m->search_fields[i]=TRUE;m->history=g_ptr_array_new_with_free_func(snapshot_free);m->saved=g_strdup("");
  m->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(m->window,"insight-diff-window");gtk_window_set_transient_for(GTK_WINDOW(m->window),GTK_WINDOW(parent));gtk_window_set_destroy_with_parent(GTK_WINDOW(m->window),TRUE);gtk_window_set_default_size(GTK_WINDOW(m->window),INSIGHT_COMPARE_WIDTH,INSIGHT_COMPARE_HEIGHT);
@@ -1257,6 +1268,10 @@ static Merge *merge_new(GtkWidget *parent) {
  g_signal_connect(m->zoom,"value-changed",G_CALLBACK(display_changed),m);g_signal_connect(m->mono,"toggled",G_CALLBACK(display_changed),m);g_signal_connect(m->vertical,"toggled",G_CALLBACK(display_changed),m);g_signal_connect(m->overview,"toggled",G_CALLBACK(display_changed),m);
  GtkWidget *controls[G_N_ELEMENTS(view_checks)];view_controls(m,controls);for(guint i=0;i<G_N_ELEMENTS(view_checks);i++) { g_object_ref(controls[i]);gchar *name=g_strconcat("insight-diff-",view_checks[i],NULL);gtk_widget_set_name(controls[i],name);g_free(name); }g_object_ref(m->zoom);
  GtkWidget *tool_rows[]={gtk_widget_get_parent(m->paths[0]),gtk_widget_get_parent(m->paths[1]),bar,options,comparison,display,whitespace,find,regex_options,replace,replace_options,line};toolbar_build(m,box,tool_rows);
+ GtkWidget *binary_page=gtk_widget_get_parent(gtk_widget_get_parent(m->paths[0]));GtkWidget *binary=gtk_button_new_with_label("Binary comparison / Hex editor…");gtk_box_pack_start(GTK_BOX(binary_page),binary,FALSE,FALSE,0);g_signal_connect(binary,"clicked",G_CALLBACK(binary_mode),m);
+ GtkWidget *selection_row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);GtkWidget *merge_page=gtk_widget_get_parent(bar);gtk_box_pack_start(GTK_BOX(merge_page),selection_row,FALSE,FALSE,0);
+ for(guint side=0;side<2;side++) { GtkWidget *b=gtk_button_new_with_label(side ? "Insert Right selection":"Insert Left selection");gtk_widget_set_tooltip_text(b,"Replace the selected Result text, or insert at its caret. Undo restores the previous Result.");g_object_set_data(G_OBJECT(b),"side",GUINT_TO_POINTER(side));gtk_box_pack_start(GTK_BOX(selection_row),b,FALSE,FALSE,0);g_signal_connect(b,"clicked",G_CALLBACK(merge_source_selection),m); }
+
  for(guint i=0;i<3;i++) { m->syntax_buffers[i]=g_object_ref(gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[i])));g_signal_connect(m->syntax_buffers[i],"changed",G_CALLBACK(syntax_changed),m); }
  record(m);selection(NULL,m);gtk_widget_show_all(m->window);view_restore(m,view_defaults);display_changed(NULL,m);open_compares=g_list_prepend(open_compares,m);return m;
 }

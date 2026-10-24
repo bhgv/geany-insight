@@ -2158,3 +2158,27 @@ Undo prompt	Отменить правку промпта
 Redo prompt	Вернуть правку промпта
 Select current prompt	Выделить текущий промпт
 AI conversation: edit after You>. Ctrl+Enter sends; Enter inserts a new line. Earlier messages are read-only. Ctrl+Z undoes prompt edits; Ctrl+Y or Ctrl+Shift+Z redoes them.	Общение с ИИ: редактируйте после You>. Ctrl+Enter отправляет, Enter добавляет строку. История защищена. Ctrl+Z отменяет правку промпта, Ctrl+Y или Ctrl+Shift+Z возвращает её.
+Hex editor…	Hex-редактор…
+Binary comparison / Hex editor…	Бинарное сравнение / Hex-редактор…
+Binary Diff / Merge — Hex editor	Бинарное сравнение / слияние — Hex-редактор
+Base64 export	Экспорт Base64
+Source offset / count	Смещение / число байтов источника
+Result offset / replace count	Смещение / число заменяемых байтов результата
+Load / Compare	Загрузить / сравнить
+Take Right range	Взять диапазон справа
+Take Left range	Взять диапазон слева
+Save binary result	Сохранить бинарный результат
+Apply hex bytes	Применить hex-байты
+Export Base64	Экспортировать Base64
+Copy Base64 part	Копировать часть Base64
+Whole stream	Весь поток
+Bytes (8)	Байты (8)
+Words (16)	Слова (16)
+Words (32)	Слова (32)
+Words (64)	Слова (64)
+Insert Right selection	Вставить выделение справа
+Insert Left selection	Вставить выделение слева
+Discard unsaved binary result?	Отбросить несохранённый бинарный результат?
+Open binary file	Открыть бинарный файл
+Base64 copied to clipboard.	Base64 скопирован в буфер обмена.
+Export completed.	Экспорт завершён.

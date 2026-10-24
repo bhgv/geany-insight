@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="350" viewBox="0 0 900 350">
+<rect width="900" height="350" rx="16" fill="#edf2f7"/>
+<g font-family="sans-serif" font-size="17" fill="#243449">
+<text x="24" y="34">Binary Diff / Merge · bytes / 16 / 32 / 64 · LE / BE</text>
+<rect x="24" y="54" width="416" height="100" rx="8" fill="white"/><rect x="460" y="54" width="416" height="100" rx="8" fill="white"/>
+<text x="40" y="80">Left · source range</text><text x="476" y="80">Right · source range</text>
+<g font-family="monospace" font-size="15"><text x="40" y="115">00000010  41 42 00 FF  | AB..</text><text x="476" y="115">00000010  41 43 00 FF  | AC..</text></g>
+<path d="M220 157V178H445M670 157V178H455M450 178V198" fill="none" stroke="#55748c" stroke-width="3"/>
+<rect x="24" y="205" width="852" height="65" rx="8" fill="#daeada"/>
+<text x="40" y="231">Result · replace / insert / delete · Undo / Redo · raw binary save</text>
+<text x="40" y="254" font-size="14">Explicit byte ranges preserve control over every merge.</text>
+<text x="40" y="309">Result → one Base64 stream → numbered parts → cat → decode</text>
+</g></svg>
