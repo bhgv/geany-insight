@@ -9,6 +9,7 @@ void insight_directory_show(GtkWidget *parent) { (void)parent; }
 gchar *insight_i18n_printf(const gchar *format,...) {
  va_list args;va_start(args,format);gchar *s=g_strdup_vprintf(format,args);va_end(args);return s;
 }
+GtkWidget *insight_panel_help_button(const gchar *topic) { (void)topic;return gtk_button_new_with_label("?"); }
 void insight_panel_help_attach(GtkWidget *widget,const gchar *topic) { (void)widget;(void)topic; }
 static gchar *editor_path;static guint editor_line;
 static void source_opened(const gchar *path,guint line) { g_free(editor_path);editor_path=g_strdup(path);editor_line=line; }
@@ -381,6 +382,10 @@ int main(int argc,char **argv) {
  Merge *m=merge_new(NULL);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->visible_space),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(m->visible_eol),FALSE);flush();g_assert_false(gtk_widget_get_sensitive(m->next));
  gtk_entry_set_text(GTK_ENTRY(m->paths[0]),left);gtk_entry_set_text(GTK_ENTRY(m->paths[1]),right);
  compare(NULL,m);wait_comparison(m);g_assert_cmpuint(m->diff.count,==,2);g_assert_cmpint(selected(m),==,0);
+ g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->headers[0])),left));g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->headers[1])),right));g_assert_nonnull(strstr(gtk_tree_view_column_get_title(m->file_columns[0]),left));g_assert_cmpint(gtk_tree_view_get_n_columns(GTK_TREE_VIEW(m->hunk_view)),==,3);g_assert_cmpuint(m->resolutions[0],==,0);
+ take(m->take[0],m);g_assert_cmpuint(m->resolutions[0],==,1);undo(NULL,m);g_assert_cmpuint(m->resolutions[0],==,0);take(m->take[1],m);g_assert_cmpuint(m->resolutions[0],==,2);GtkTextIter edit;gtk_text_buffer_get_iter_at_mark(result(m),&edit,m->marks[0]);gtk_text_buffer_insert(result(m),&edit,"manual ",-1);g_assert_cmpuint(m->resolutions[0],==,3);g_assert_cmpuint(m->resolutions[1],==,0);undo(NULL,m);g_assert_cmpuint(m->resolutions[0],==,2);undo(NULL,m);g_assert_cmpuint(m->resolutions[0],==,0);history_end(m,FALSE);assert_text(m,a);
+ gtk_combo_box_set_active(GTK_COMBO_BOX(m->destination_kind),1);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(m->destination)),==,right);gtk_combo_box_set_active(GTK_COMBO_BOX(m->destination_kind),2);gtk_entry_set_text(GTK_ENTRY(m->destination),"separate-output.txt");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->headers[2])),"separate-output.txt"));gtk_entry_set_text(GTK_ENTRY(m->destination),"");
+
  g_assert_false(gtk_widget_get_sensitive(m->previous));g_assert_true(gtk_widget_get_sensitive(m->next));
  step(m->next,m);g_assert_cmpint(selected(m),==,1);step(m->next,m);g_assert_cmpint(selected(m),==,1);
  g_assert_false(gtk_widget_get_sensitive(m->next));step(m->previous,m);g_assert_cmpint(selected(m),==,0);

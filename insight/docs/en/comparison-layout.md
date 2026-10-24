@@ -85,3 +85,23 @@ The Collapse tab leaves only the tab strip. Select any normal tab to restore tha
 group at its required height. Files, selections, unfinished Result and Undo/Redo
 remain intact. If a group cannot fit a small window, internal scrolling remains
 available so its final control is still reachable while retaining comparison space.
+
+### File identity, difference table and merge destination
+
+Each pane keeps a selectable source path visible above its content, including in
+the binary editor. Long paths ellipsize in the middle and remain available in
+full through tooltips. Editing source chooser fields does not relabel already
+loaded snapshots until a comparison succeeds.
+
+The difference table has Left file, Right file and Merge status columns. Headers
+identify source paths; cells show logical line ranges. Status is Not merged,
+Merged — Left, Merged — Right or Edited manually. The initial copy of Left is not
+an accepted resolution; explicitly taking an unchanged Left block records that
+choice. Manual edits mark affected blocks. Undo/Redo restore both text and status;
+saving alone does not mark unresolved blocks as merged.
+
+The Result header offers Left, Right or a separate output file, with a path entry
+and file chooser. Selecting a destination never writes data. Save opens its chooser
+with that destination and overwrite confirmation. Binary output has the same
+choice. Text comparison help buttons overlay headers/table at 80% opacity rather
+than reserving separate empty rows.

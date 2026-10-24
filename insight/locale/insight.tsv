@@ -2204,3 +2204,14 @@ Click a hex word or ASCII byte to set its range; drag to select whole rows. Fine
 Select source text first.	Сначала выделите текст источника.
 Replace the selected Result text, or insert at its caret. Undo restores the previous Result.	Заменить выделение результата или вставить в позиции курсора. Undo восстанавливает предыдущий результат.
 Insert the last source selection at the Result caret or replace its selection. Source text stays captured while choosing the Result range. Undo restores Result.	Вставить последнее выделение источника в позиции курсора результата или заменить его выделение. Текст источника сохраняется при выборе диапазона результата. Undo отменяет операцию.
+Not merged	Не сведено
+Merged — Left	Сведено — слева
+Merged — Right	Сведено — справа
+Edited manually	Отредактировано вручную
+Merge status	Статус слияния
+No file	Нет файла
+Choose output file	Выбрать выходной файл
+Merge into Left file	Сливать в левый файл
+Merge into Right file	Сливать в правый файл
+Separate output file	Отдельный выходной файл
+Output filename; choosing a destination does not write until Save.	Путь результата; выбор назначения ничего не записывает до сохранения.
