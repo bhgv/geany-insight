@@ -104,9 +104,9 @@ void insight_scroll_links_notify(GeanyEditor *editor,SCNotification *nt) {
 }
 static void target_changed(GtkComboBox *combo,gpointer data) { (void)combo;(void)data;if(!ui_loading) { target_closed=FALSE;refresh_controls(); } }
 static void all_menu_changed(GtkCheckMenuItem *item,gpointer data) { (void)data;if(!ui_loading) set_all(gtk_check_menu_item_get_active(item)); }
-static void all_dialog_changed(GtkToggleButton *item,gpointer data) { (void)data;if(!ui_loading) set_all(gtk_toggle_button_get_active(item)); }
+static void all_dialog_changed(GtkToggleButton *item,gpointer data) { (void)data;if(!ui_loading && link_dialog) set_all(gtk_toggle_button_get_active(item)); }
 static void axes_changed(GtkToggleButton *item,gpointer data) {
- (void)item;(void)data;if(ui_loading) return;vertical=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(vertical_check));horizontal=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(horizontal_check));reset_baselines();refresh_controls();
+ (void)item;(void)data;if(ui_loading || !link_dialog || !vertical_check || !horizontal_check) return;vertical=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(vertical_check));horizontal=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(horizontal_check));reset_baselines();refresh_controls();
 }
 static void populate_sources(guint skip) {
  gboolean loading=ui_loading;ui_loading=TRUE;gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(source_choice));
@@ -122,7 +122,7 @@ static void populate_target(gboolean preserve,guint skip) {
 }
 static void capture_current(void) { GeanyDocument *doc=document_get_current();dialog_source=DOC_VALID(doc) ? doc->id:0;target_closed=FALSE;populate_sources(0);populate_target(FALSE,0);links_changed(); }
 static void source_changed(GtkComboBox *combo,gpointer data) {
- (void)data;if(ui_loading) return;const gchar *id=gtk_combo_box_get_active_id(combo);dialog_source=id ? (guint)g_ascii_strtoull(id,NULL,10):0;target_closed=FALSE;populate_target(FALSE,0);refresh_controls();
+ (void)data;if(ui_loading || !link_dialog || !target_choice) return;const gchar *id=gtk_combo_box_get_active_id(combo);dialog_source=id ? (guint)g_ascii_strtoull(id,NULL,10):0;target_closed=FALSE;populate_target(FALSE,0);refresh_controls();
 }
 static void pair_selected(GtkTreeSelection *selection,gpointer data) {
  (void)selection;(void)data;if(ui_loading) return;guint source,target;if(selected_pair(&source,&target)) { dialog_source=source;target_closed=FALSE;populate_sources(0);populate_target(FALSE,0); }refresh_controls();
