@@ -4,7 +4,7 @@ Remote files and commands through OpenSSH.
 
 ## Controls
 
-Set host, user, port and key. Commands open a remote file, folder or project; Save uploads changes. Stop cancels a transfer. Connect/Disconnect controls the shell; Enter sends input and Ctrl+C interrupts. This is a line-oriented shell rather than a full terminal emulator.
+Set host, user, port and key. Commands open a remote file, folder or project; Save uploads changes. Stop cancels a transfer. Connect/Disconnect controls the shell; Enter sends input and Ctrl+C interrupts. Input and output share one VT100/xterm-compatible terminal screen; the current screen size is 80×24 (see TTY / COM for bounds).
 
 ## Short tutorial
 
