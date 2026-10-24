@@ -243,7 +243,7 @@ static void pair_selected(GtkTreeSelection *selection,gpointer data) {
 }
 static void row_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) { (void)path;(void)column;(void)data;pair_selected(gtk_tree_view_get_selection(view),NULL); }
 static void remove_selected(GtkWidget *widget,gpointer data) {
- (void)widget;(void)data;guint source,target;if(!selected_pair(&source,&target)) return;for(guint n=0;n<link_pairs->len;n++) { ScrollPair pair=g_array_index(link_pairs,ScrollPair,n);if(pair.source==source && pair.target==target) { remove_pair(n);break; } }editing_uid=0;restore_panes();reset_baselines();populate_target(FALSE,0);persist_links();links_changed();
+ (void)widget;(void)data;GtkTreeIter row;GtkTreeModel *model;if(!gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(links_view)),&model,&row)) return;guint uid=0;gtk_tree_model_get(model,&row,7,&uid,-1);if(!uid) return;for(guint n=0;n<link_pairs->len;n++) if(g_array_index(link_pairs,ScrollPair,n).uid==uid) { remove_pair(n);break; }editing_uid=0;restore_panes();reset_baselines();populate_target(FALSE,0);persist_links();links_changed();
 }
 static void locale_changed(gpointer data) { (void)data;if(!link_dialog) return;populate_sources(0);populate_target(TRUE,0);links_changed(); }
 static void apply_pair(void) {
