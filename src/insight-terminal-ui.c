@@ -10,15 +10,29 @@
 #include "insight-i18n.h"
 #include "vte.h"
 #include <string.h>
-static GtkWidget *group;
-static void group_destroyed(GtkWidget *widget,gpointer data) { (void)widget;(void)data;group=NULL; }
+static GtkWidget *group,*group_root;
+static void group_destroyed(GtkWidget *widget,gpointer data) { (void)widget;(void)data;group=NULL;group_root=NULL; }
+/* Status is an overlay over the unused header area: it never participates in
+ * notebook measurement and its own viewport clips only the right-hand end. */
+static gboolean status_position(GtkOverlay *overlay,GtkWidget *child,GdkRectangle *allocation,gpointer data) {
+ (void)data;if(!group) return FALSE;GtkWidget *label=g_object_get_data(G_OBJECT(child),"terminal-status-label");if(!label) return FALSE;gint left=0,top=0,height=1,needed=0;
+ for(gint i=0;i<gtk_notebook_get_n_pages(GTK_NOTEBOOK(group));i++) { GtkWidget *page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(group),i),*tab=gtk_notebook_get_tab_label(GTK_NOTEBOOK(group),page);gint natural=0,x,y;gtk_widget_get_preferred_width(tab,NULL,&natural);needed+=natural+24;if(gtk_widget_translate_coordinates(tab,GTK_WIDGET(overlay),0,0,&x,&y) && gtk_widget_get_mapped(tab)) { left=MAX(left,x+gtk_widget_get_allocated_width(tab)+16);top=y;height=MAX(height,gtk_widget_get_allocated_height(tab)); } }
+ gint width=gtk_widget_get_allocated_width(GTK_WIDGET(overlay)),text_width=0;pango_layout_get_pixel_size(gtk_label_get_layout(GTK_LABEL(label)),&text_width,NULL);if(width<needed+24) left=width;gint free_width=MAX(0,width-left-4);allocation->width=MAX(1,MIN(text_width,free_width));allocation->x=free_width ? MAX(left,width-text_width-4):width;allocation->y=MAX(0,top-2);allocation->height=height+4;return TRUE;
+}
+static void status_switch(GtkNotebook *book,GtkWidget *page,guint number,gpointer data) {
+ (void)book;(void)number;(void)data;if(!group_root || !group) return;GList *children=gtk_container_get_children(GTK_CONTAINER(group_root));for(GList *p=children;p;p=p->next) { GtkWidget *owner=g_object_get_data(G_OBJECT(p->data),"terminal-status-page");if(owner) gtk_widget_set_visible(p->data,owner==page); }g_list_free(children);gtk_widget_queue_resize(group_root);
+}
+static void status_changed(GObject *label,GParamSpec *spec,gpointer data) { (void)spec;gtk_widget_set_tooltip_text(GTK_WIDGET(data),gtk_label_get_text(GTK_LABEL(label)));if(group_root) gtk_widget_queue_resize(group_root); }
+void insight_terminal_ui_status(GtkWidget *page,GtkWidget *label) {
+ g_return_if_fail(group_root!=NULL);GtkWidget *clip=gtk_scrolled_window_new(NULL,NULL);gtk_widget_set_name(clip,"insight-terminal-status-clip");gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(clip),GTK_POLICY_EXTERNAL,GTK_POLICY_EXTERNAL);gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(clip),GTK_SHADOW_NONE);gtk_widget_set_size_request(clip,0,0);gtk_widget_set_no_show_all(clip,TRUE);gtk_label_set_line_wrap(GTK_LABEL(label),FALSE);gtk_label_set_single_line_mode(GTK_LABEL(label),TRUE);gtk_label_set_ellipsize(GTK_LABEL(label),PANGO_ELLIPSIZE_NONE);gtk_label_set_xalign(GTK_LABEL(label),0);gtk_container_add(GTK_CONTAINER(clip),label);g_object_set_data(G_OBJECT(clip),"terminal-status-page",page);g_object_set_data(G_OBJECT(clip),"terminal-status-label",label);gtk_overlay_add_overlay(GTK_OVERLAY(group_root),clip);g_signal_connect_object(label,"notify::label",G_CALLBACK(status_changed),clip,0);g_signal_connect_object(page,"destroy",G_CALLBACK(gtk_widget_destroy),clip,G_CONNECT_SWAPPED);gtk_widget_show(label);gtk_widget_show(gtk_widget_get_parent(label));status_changed(G_OBJECT(label),NULL,clip);GtkWidget *active=gtk_notebook_get_nth_page(GTK_NOTEBOOK(group),gtk_notebook_get_current_page(GTK_NOTEBOOK(group)));status_switch(GTK_NOTEBOOK(group),active,0,NULL);
+}
 static void ensure_group(void) {
  if(group) return;GtkWidget *outer=main_widgets.message_window_notebook,*local=NULL,*label=NULL;gint position=-1;
 #ifdef HAVE_VTE
  if(vte_info.have_vte && vte_config.vte) { GtkWidget *child=vte_config.vte;while(gtk_widget_get_parent(child) && gtk_widget_get_parent(child)!=outer) child=gtk_widget_get_parent(child);if(gtk_widget_get_parent(child)==outer) { local=child;position=gtk_notebook_page_num(GTK_NOTEBOOK(outer),local);label=gtk_notebook_get_tab_label(GTK_NOTEBOOK(outer),local);g_object_ref(local);if(label) g_object_ref(label);gtk_notebook_remove_page(GTK_NOTEBOOK(outer),position); } }
 #endif
- group=gtk_notebook_new();gtk_widget_set_name(group,"insight-terminal-group");gtk_notebook_set_scrollable(GTK_NOTEBOOK(group),TRUE);gtk_notebook_insert_page(GTK_NOTEBOOK(outer),group,gtk_label_new(insight_tr("Terminals")),position);g_signal_connect(group,"destroy",G_CALLBACK(group_destroyed),NULL);
- if(local) { gtk_notebook_append_page(GTK_NOTEBOOK(group),local,label ? label:gtk_label_new(insight_tr("Local")));if(label) { if(GTK_IS_LABEL(label)) gtk_label_set_text(GTK_LABEL(label),insight_tr("Local"));g_object_unref(label); }g_object_unref(local); }gtk_widget_show_all(group);
+ group=gtk_notebook_new();gtk_widget_set_name(group,"insight-terminal-group");gtk_notebook_set_scrollable(GTK_NOTEBOOK(group),TRUE);group_root=gtk_overlay_new();gtk_container_add(GTK_CONTAINER(group_root),group);gtk_notebook_insert_page(GTK_NOTEBOOK(outer),group_root,gtk_label_new(insight_tr("Terminals")),position);g_object_set_data_full(G_OBJECT(group_root),"insight-help-topic",g_strdup("panel-terminal.md"),g_free);g_signal_connect(group_root,"get-child-position",G_CALLBACK(status_position),NULL);g_signal_connect(group,"switch-page",G_CALLBACK(status_switch),NULL);g_signal_connect(group,"destroy",G_CALLBACK(group_destroyed),NULL);
+ if(local) { gtk_notebook_append_page(GTK_NOTEBOOK(group),local,label ? label:gtk_label_new(insight_tr("Local")));if(label) { if(GTK_IS_LABEL(label)) gtk_label_set_text(GTK_LABEL(label),insight_tr("Local"));g_object_unref(label); }g_object_unref(local); }gtk_widget_show_all(group_root);
 }
 void insight_terminal_ui_add(GtkWidget *page,const gchar *label) { ensure_group();gtk_notebook_append_page(GTK_NOTEBOOK(group),page,gtk_label_new(insight_tr(label)));gtk_widget_show_all(page); }
 void insight_terminal_ui_reveal(GtkWidget *page) {
