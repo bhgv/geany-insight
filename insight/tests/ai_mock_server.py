@@ -8,6 +8,8 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self,*args):pass
     def do_POST(self):
         data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        if data['model']=='fail':
+            self.send_response(503);self.end_headers();self.wfile.write(b'fixture service failure');return
         if data['model']=='slow':time.sleep(5)
         answer={'explanation':'Mock analysis: source.c line 1 is missing a semicolon; compare the attached code with the compiler message. Review the proposed value and terminator before applying.', 'command':"printf 'review only'",'replacement':'int value = 2;\n'}
         answer['files']=[{'name':'diagnostic.txt','mime':'text/plain','data':base64.b64encode(b'fixture attachment\n').decode()}]

@@ -92,3 +92,13 @@ API URL, model, key and helper executable fields have purpose tooltips and expan
 In the regular AI window, input and replies share one black screen. Earlier messages are protected; edit the current request after **You>**. **Enter** inserts a line; **Ctrl+Enter** or **Send** submits. Native selection, copy and paste are supported. Select a saved request to edit it before resending. Command actions, attachments and answer variants are in the upper tabs. The editor assistant retains its main Diff / Merge area for reviewing code.
 
 Initial geometry is bounded to the current monitor's work area, accounting for the titlebar. Title buttons minimize, maximize/restore and close the window. Resizing gives free space primarily to the conversation screen (or code comparison in the editor assistant).
+
+## Draft Undo/Redo and request recovery
+
+In the unified console, **Ctrl+Z** undoes the current prompt edit; **Ctrl+Y** or **Ctrl+Shift+Z** redoes it. Up to 64 editing steps are retained in the window's memory; a paste or selection replacement is one action. Editing after Undo discards the previous Redo branch. Replies, source and request dispatch are unaffected.
+
+The context menu provides **Undo prompt**, **Redo prompt** and **Select current prompt**. The last action selects only editable text after `You>`, excluding earlier messages.
+
+After API cancellation or failure, the sent request is restored into an empty prompt for correction and retry. A newer draft is preserved. Recovery never sends automatically. Undo/Redo are disabled during an active request. Per-project sent-request history remains separate from editing history.
+
+Initial geometry fitting stops when the user minimizes/maximizes the window and leaves already maximized windows unchanged.

@@ -2154,3 +2154,7 @@ Additional editable request included with earlier requirements; Send generates a
 Connections are shared. Request history is stored separately per project and context; replies are not saved.	Подключения общие. История запросов хранится раздельно по проекту и месту применения; ответы не сохраняются.
 Choose a saved AI connection or compare enabled providers	Выберите сохранённое подключение ИИ или сравнение включённых провайдеров
 Follow-up request about this code proposal; review the text before sending	Дополнительный вопрос о предложенной правке; проверьте текст перед отправкой
+Undo prompt	Отменить правку промпта
+Redo prompt	Вернуть правку промпта
+Select current prompt	Выделить текущий промпт
+AI conversation: edit after You>. Ctrl+Enter sends; Enter inserts a new line. Earlier messages are read-only. Ctrl+Z undoes prompt edits; Ctrl+Y or Ctrl+Shift+Z redoes them.	Общение с ИИ: редактируйте после You>. Ctrl+Enter отправляет, Enter добавляет строку. История защищена. Ctrl+Z отменяет правку промпта, Ctrl+Y или Ctrl+Shift+Z возвращает её.
