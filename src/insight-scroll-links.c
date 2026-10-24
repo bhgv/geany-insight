@@ -37,7 +37,7 @@ static void reset_baselines(void) {
  for(guint n=0;documents_array && n<documents_array->len;n++) { GeanyDocument *doc=g_ptr_array_index(documents_array,n);if(DOC_VALID(doc)) cache_view(doc); }
 }
 static guint open_count(void) {
- guint count=0;for(guint n=0;documents_array && n<documents_array->len;n++) if(DOC_VALID(g_ptr_array_index(documents_array,n))) count++;return count;
+ guint count=0;for(guint n=0;documents_array && n<documents_array->len;n++) { GeanyDocument *doc=g_ptr_array_index(documents_array,n);if(DOC_VALID(doc)) count++; }return count;
 }
 static guint selected_target(void) {
  const gchar *id=target_choice ? gtk_combo_box_get_active_id(GTK_COMBO_BOX(target_choice)):NULL;
