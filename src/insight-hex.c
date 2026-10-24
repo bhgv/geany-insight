@@ -31,8 +31,10 @@ static gchar *dump(const guint8 *data,gsize size,gsize start,guint word,gboolean
 static void hex_headers(Hex *h) {
  for(guint i=0;i<3;i++) { const gchar *path=i<2 ? h->loaded[i]:gtk_entry_get_text(GTK_ENTRY(h->output));gchar *text=g_strdup_printf("%s — %s",insight_tr(i==0 ? "Left":i==1 ? "Right":"Result"),path && *path ? path:insight_tr(i<2 ? "No file":"Choose output file"));gtk_label_set_text(GTK_LABEL(h->head[i]),text);gtk_widget_set_tooltip_text(h->head[i],text);g_free(text); }
 }
-static void hex_output_changed(GtkWidget *w,gpointer data) { (void)w;hex_headers(data); }
-static void hex_output_choice(GtkComboBox *combo,gpointer data) { Hex *h=data;gint side=gtk_combo_box_get_active(combo);if(side>=0 && side<2 && h->loaded[side]) gtk_entry_set_text(GTK_ENTRY(h->output),h->loaded[side]);else if(side==2) gtk_entry_set_text(GTK_ENTRY(h->output),""); }
+static void hex_output_changed(GtkWidget *w,gpointer data) {
+ (void)w;Hex *h=data;if(!g_object_get_data(G_OBJECT(h->output),"insight-output-selecting")) { gint choice=2;const gchar *target=gtk_entry_get_text(GTK_ENTRY(h->output));for(guint side=0;side<2;side++) if(h->loaded[side] && *target && !strcmp(target,h->loaded[side])) choice=side;g_object_set_data(G_OBJECT(h->output),"insight-output-selecting",GINT_TO_POINTER(1));gtk_combo_box_set_active(GTK_COMBO_BOX(h->output_kind),choice);g_object_set_data(G_OBJECT(h->output),"insight-output-selecting",NULL); }hex_headers(h);
+}
+static void hex_output_choice(GtkComboBox *combo,gpointer data) { Hex *h=data;if(g_object_get_data(G_OBJECT(h->output),"insight-output-selecting")) return;g_object_set_data(G_OBJECT(h->output),"insight-output-selecting",GINT_TO_POINTER(1));gint side=gtk_combo_box_get_active(combo);if(side>=0 && side<2 && h->loaded[side]) gtk_entry_set_text(GTK_ENTRY(h->output),h->loaded[side]);else if(side==2) gtk_entry_set_text(GTK_ENTRY(h->output),"");g_object_set_data(G_OBJECT(h->output),"insight-output-selecting",NULL); }
 static void render(Hex *h) {
  hex_headers(h);
  guint word=1u<<gtk_combo_box_get_active(GTK_COMBO_BOX(h->word));gboolean big=gtk_combo_box_get_active(GTK_COMBO_BOX(h->endian))==1;

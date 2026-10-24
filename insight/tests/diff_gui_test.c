@@ -384,7 +384,7 @@ int main(int argc,char **argv) {
  compare(NULL,m);wait_comparison(m);g_assert_cmpuint(m->diff.count,==,2);g_assert_cmpint(selected(m),==,0);
  g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->headers[0])),left));g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->headers[1])),right));g_assert_nonnull(strstr(gtk_tree_view_column_get_title(m->file_columns[0]),left));g_assert_cmpint(gtk_tree_view_get_n_columns(GTK_TREE_VIEW(m->hunk_view)),==,3);g_assert_cmpuint(m->resolutions[0],==,0);
  take(m->take[0],m);g_assert_cmpuint(m->resolutions[0],==,1);undo(NULL,m);g_assert_cmpuint(m->resolutions[0],==,0);take(m->take[1],m);g_assert_cmpuint(m->resolutions[0],==,2);GtkTextIter edit;gtk_text_buffer_get_iter_at_mark(result(m),&edit,m->marks[0]);gtk_text_buffer_insert(result(m),&edit,"manual ",-1);g_assert_cmpuint(m->resolutions[0],==,3);g_assert_cmpuint(m->resolutions[1],==,0);undo(NULL,m);g_assert_cmpuint(m->resolutions[0],==,2);undo(NULL,m);g_assert_cmpuint(m->resolutions[0],==,0);history_end(m,FALSE);assert_text(m,a);
- gtk_combo_box_set_active(GTK_COMBO_BOX(m->destination_kind),1);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(m->destination)),==,right);gtk_combo_box_set_active(GTK_COMBO_BOX(m->destination_kind),2);gtk_entry_set_text(GTK_ENTRY(m->destination),"separate-output.txt");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->headers[2])),"separate-output.txt"));gtk_entry_set_text(GTK_ENTRY(m->destination),"");
+ gtk_combo_box_set_active(GTK_COMBO_BOX(m->destination_kind),1);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(m->destination)),==,right);gtk_entry_set_text(GTK_ENTRY(m->destination),"typed-output.txt");g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(m->destination_kind)),==,2);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(m->destination)),==,"typed-output.txt");gtk_combo_box_set_active(GTK_COMBO_BOX(m->destination_kind),2);gtk_entry_set_text(GTK_ENTRY(m->destination),"separate-output.txt");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(m->headers[2])),"separate-output.txt"));gtk_entry_set_text(GTK_ENTRY(m->destination),"");
 
  g_assert_false(gtk_widget_get_sensitive(m->previous));g_assert_true(gtk_widget_get_sensitive(m->next));
  step(m->next,m);g_assert_cmpint(selected(m),==,1);step(m->next,m);g_assert_cmpint(selected(m),==,1);
@@ -444,7 +444,7 @@ int main(int argc,char **argv) {
   GdkPixbuf *pixels=gdk_pixbuf_get_from_window(window,0,0,gdk_window_get_width(window),gdk_window_get_height(window));g_assert_nonnull(pixels);
   g_assert_true(gdk_pixbuf_save(pixels,capture,"jpeg",&error,"quality","88",NULL));g_assert_no_error(error);g_object_unref(pixels);
  }
- guint before_all=m->position;take_all(m->take_all[0],m);g_assert_cmpuint(m->position,==,before_all);
+ guint before_all=m->position;take_all(m->take_all[0],m);g_assert_cmpuint(m->position,==,before_all+1);for(guint i=0;i<m->diff.count;i++) g_assert_cmpuint(m->resolutions[i],==,1);before_all=m->position;
  take_all(m->take_all[1],m);assert_text(m,b);g_assert_cmpuint(m->position,==,before_all+1);undo(NULL,m);assert_text(m,a);redo(NULL,m);assert_text(m,b);
  take_all(m->take_all[0],m);assert_text(m,a);undo(NULL,m);assert_text(m,b);undo(NULL,m);assert_text(m,a);
  event.state=GDK_MOD1_MASK|GDK_SHIFT_MASK;event.keyval=GDK_KEY_Right;g_assert_true(key(m->views[2],&event,m));assert_text(m,b);undo(NULL,m);assert_text(m,a);
