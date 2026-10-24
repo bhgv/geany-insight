@@ -11,7 +11,7 @@
 #include <glib/gstdio.h>
 #include <string.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
-static GtkWidget *window;static GeanyDocument *source,*locked,*special,*fresh,*clone;static gchar *path,*locked_path,*saved_path,*config;static guint phase;static gint call;
+static GtkWidget *window;static GeanyDocument *source,*locked,*special,*fresh,*cloned;static gchar *path,*locked_path,*saved_path,*config;static guint phase;static gint call;
 static const gchar *text="int helper(int x) { return x+1; }\nint caller(void) { return helper(2); }\n// helper comment\nconst char *s = \"helper\";\n";
 static const gchar *dirty="int helper(int x) { return x+1; }\nint caller(void) { return helper(2); }\n// helper comment\nconst char *s = \"helper\";\n// unsaved\n";
 static GtkWidget *named(GtkWidget *w,const gchar *name) { if(!g_strcmp0(gtk_widget_get_name(w),name)) return w;if(GTK_IS_MENU_ITEM(w)) { GtkWidget *m=gtk_menu_item_get_submenu(GTK_MENU_ITEM(w));if(m) { GtkWidget *f=named(m,name);if(f) return f; } }if(GTK_IS_CONTAINER(w)) { GList *c=gtk_container_get_children(GTK_CONTAINER(w));GtkWidget *f=NULL;for(GList *p=c;p&&!f;p=p->next) f=named(p->data,name);g_list_free(c);return f; }return NULL; }
@@ -44,12 +44,12 @@ static gboolean tick(gpointer data) {
   GtkWidget *readonly=ui_lookup_widget(window,"set_file_readonly1");gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(readonly),TRUE);gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(readonly),FALSE);g_assert_true(source->readonly);g_assert_true(SEND(source->editor->sci,SCI_GETREADONLY,0,0));
   fresh=document_new_file(NULL,filetypes_lookup_by_name("C"),"int fresh(void) { return 1; }\n");g_assert_true(fresh->readonly);g_assert_true(SEND(fresh->editor->sci,SCI_GETREADONLY,0,0));check(fresh,"int fresh(void) { return 1; }\n");g_assert_true(document_save_file_as(fresh,saved_path));g_assert_true(fresh->readonly);g_assert_true(SEND(fresh->editor->sci,SCI_GETREADONLY,0,0));
   g_assert_true(document_reload_force(fresh,NULL));g_assert_true(fresh->readonly);check(fresh,"int fresh(void) { return 1; }\n");
-  gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"clone1")));clone=document_get_current();g_assert_true(clone!=fresh);g_assert_true(clone->readonly);check(clone,"int fresh(void) { return 1; }\n");
-  mode(FALSE);g_assert_false(source->readonly);g_assert_false(SEND(source->editor->sci,SCI_GETREADONLY,0,0));g_assert_true(locked->readonly);g_assert_true(SEND(locked->editor->sci,SCI_GETREADONLY,0,0));g_assert_false(special->readonly);g_assert_true(SEND(special->editor->sci,SCI_GETREADONLY,0,0));g_assert_false(fresh->readonly);g_assert_false(clone->readonly);g_assert_false(SEND(fresh->editor->sci,SCI_GETREADONLY,0,0));
+  gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"clone1")));cloned=document_get_current();g_assert_true(cloned!=fresh);g_assert_true(cloned->readonly);check(cloned,"int fresh(void) { return 1; }\n");
+  mode(FALSE);g_assert_false(source->readonly);g_assert_false(SEND(source->editor->sci,SCI_GETREADONLY,0,0));g_assert_true(locked->readonly);g_assert_true(SEND(locked->editor->sci,SCI_GETREADONLY,0,0));g_assert_false(special->readonly);g_assert_true(SEND(special->editor->sci,SCI_GETREADONLY,0,0));g_assert_false(fresh->readonly);g_assert_false(cloned->readonly);g_assert_false(SEND(fresh->editor->sci,SCI_GETREADONLY,0,0));
   activate(source);check(source,dirty);g_assert_true(source->changed);SEND(source->editor->sci,SCI_UNDO,0,0);check(source,text);SEND(source->editor->sci,SCI_REDO,0,0);check(source,dirty);g_assert_true(source->changed);
   gtk_button_clicked(GTK_BUTTON(named(window,"insight-browser-mode-status")));g_assert_true(source->readonly);keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_BROWSERMODE);g_assert_false(source->readonly);keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_BROWSERMODE);g_assert_true(source->readonly);
-  document_set_text_changed(source,FALSE);document_set_text_changed(clone,FALSE);document_set_text_changed(special,FALSE);
-  g_print("Browser Mode: menus/status/keybinding, all/new/read-only buffers, single-click/Space/Backspace, Ctrl selection, comment/string guards, writable-state/session isolation, Save As/reload/clone and original Undo/Redo passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+  document_set_text_changed(source,FALSE);document_set_text_changed(cloned,FALSE);document_set_text_changed(special,FALSE);
+  g_print("Browser Mode: menus/status/keybinding, all/new/read-only buffers, single-click/Space/Backspace, Ctrl selection, comment/string guards, writable-state/session isolation, Save As/reload/cloned and original Undo/Redo passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }
  return G_SOURCE_CONTINUE;
 }
