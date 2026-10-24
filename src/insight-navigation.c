@@ -3,6 +3,7 @@
 #include "geany.h"
 #include "insight-navigation.h"
 #include "insight-scroll-links.h"
+#include "insight-incremental-search.h"
 #include "insight-command-list.h"
 #include "insight-selection-search.h"
 #include "insight-word-highlights.h"
@@ -66,6 +67,7 @@ static gboolean normal(ScintillaObject *sci)
 }
 void insight_navigation_notify(GeanyEditor *editor, SCNotification *nt)
 {
+    insight_incremental_search_notify(editor,nt);
     insight_scroll_links_notify(editor,nt);
     insight_selection_search_notify(editor,nt);
     insight_word_highlights_notify(editor,nt);
@@ -588,6 +590,7 @@ void insight_navigation_menu(GtkWidget *menu)
     insight_browser_mode_init(menu);
     insight_command_list_menu();
     insight_selection_search_init();
+    insight_incremental_search_init();
     insight_word_highlights_init();
     insight_web_search_init();
     insight_outlining_init();

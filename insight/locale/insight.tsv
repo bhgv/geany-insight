@@ -2087,3 +2087,12 @@ At most 64 individual source links are supported	Поддерживается н
 Link All supports at most 128 open source buffers	Связать все можно не более 128 открытых буферов
 Link All disabled: more than 128 source buffers are open	Связь всех отключена: открыто более 128 исходных буферов
 Direction	Направление
+Incremental Search	Инкрементальный поиск
+Incremental Search Backward	Инкрементальный поиск назад
+Incremental:	Поиск по вводу:
+Type to search • Enter accepts • Esc restores	Введите запрос • Enter — принять • Esc — вернуть позицию
+Use a single literal line up to 4096 bytes	Введите одну буквальную строку до 4096 байт
+No match — previous selection retained	Нет совпадений — прежнее выделение сохранено
+ • wrapped	 • через границу файла
+Incremental search supports source buffers up to 8 MiB	Инкрементальный поиск поддерживает исходники до 8 МиБ
+Incremental search requires complete UTF-8 without NUL	Для инкрементального поиска нужен UTF-8 без NUL

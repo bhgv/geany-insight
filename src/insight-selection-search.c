@@ -106,6 +106,10 @@ static void sync_pattern(const gchar *pattern,gboolean sensitive,gboolean word,g
     g_free(owned_pattern);owned_pattern=g_strdup(pattern);owned_flags=search_data.flags;
     if(incremental) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(incremental),old);
 }
+void insight_selection_search_set_literal(const gchar *pattern,gboolean sensitive,gboolean backwards)
+{
+    if(pattern_valid(pattern)) sync_pattern(pattern,sensitive,FALSE,backwards);
+}
 static gboolean find_range(ScintillaObject *sci,const gchar *pattern,gboolean sensitive,gboolean word,gint begin,gint end,QuickMatch *match)
 {
     struct Sci_TextToFind ttf={{begin,end},(gchar *)pattern,{0,0}};

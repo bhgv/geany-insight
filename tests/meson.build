@@ -931,3 +931,6 @@ test('Insight native Browser Mode GUI', browser_mode_gui_test, timeout: 50, is_p
 
 scroll_links_gui_test = executable('test_insight_scroll_links_gui', '../insight/tests/scroll_links_gui_test.c', dependencies: test_deps)
 test('Insight native source scroll links GUI', scroll_links_gui_test, timeout: 50, is_parallel: false)
+
+incremental_search_gui_test = executable('test_insight_incremental_search_gui', '../insight/tests/incremental_search_gui_test.c', dependencies: test_deps)
+test('Insight native incremental search GUI', incremental_search_gui_test, timeout: 50, is_parallel: false)

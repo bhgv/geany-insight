@@ -678,3 +678,7 @@ EXTRA_DIST += insight/tests/scroll_links_gui_test.c
 
 insightdoc_DATA += insight/docs/scroll-links.md
 dist_insightdocmedia_DATA += insight/docs/media/scroll-links.svg
+
+EXTRA_DIST += insight/tests/incremental_search_gui_test.c
+insightdoc_DATA += insight/docs/incremental-search.md
+dist_insightdocmedia_DATA += insight/docs/media/incremental-search.svg

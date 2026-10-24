@@ -7,5 +7,6 @@ gboolean insight_selection_search_show_loaded(void);
 gboolean insight_selection_search_find_again(gboolean change_direction);
 void insight_selection_search_init(void);
 void insight_selection_search_command(guint action);
+void insight_selection_search_set_literal(const gchar *pattern,gboolean sensitive,gboolean backwards);
 void insight_selection_search_notify(GeanyEditor *,SCNotification *);
 #endif

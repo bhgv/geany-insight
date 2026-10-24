@@ -32,6 +32,7 @@
 
 #include "insight-browser-mode.h"
 #include "insight-scroll-links.h"
+#include "insight-incremental-search.h"
 #include "keybindings.h"
 #include "insight-paste.h"
 #include "insight-buffer-transfer.h"
@@ -330,6 +331,7 @@ static void add_kb(GeanyKeyGroup *group, gsize key_id,
 
 static void cb_func_insight(guint key_id)
 {
+    if(key_id==GEANY_KEYS_INSIGHT_INCREMENTAL || key_id==GEANY_KEYS_INSIGHT_INCREMENTALBACK) { insight_incremental_search_command(key_id==GEANY_KEYS_INSIGHT_INCREMENTALBACK);return; }
     if(key_id>=GEANY_KEYS_INSIGHT_LINKWINDOW && key_id<=GEANY_KEYS_INSIGHT_UNLINKWINDOWS) { insight_scroll_links_command(key_id-GEANY_KEYS_INSIGHT_LINKWINDOW);return; }
     if(key_id==GEANY_KEYS_INSIGHT_BROWSERMODE) { insight_browser_mode_toggle();return; }
     if (key_id >= GEANY_KEYS_INSIGHT_SYMBOLINFO && key_id <= GEANY_KEYS_INSIGHT_JUMPBASETYPE) { insight_workbench_symbol_navigation(key_id-GEANY_KEYS_INSIGHT_SYMBOLINFO);return; }
@@ -629,6 +631,8 @@ static void init_default_kb(void)
 
 	group = keybindings_get_core_group(GEANY_KEY_GROUP_SEARCH);
 
+    add_kb(group, GEANY_KEYS_INSIGHT_INCREMENTAL, cb_func_insight, 0, 0, "insight_incremental_search", _("Incremental Search"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_INCREMENTALBACK, cb_func_insight, 0, 0, "insight_incremental_search_backward", _("Incremental Search Backward"), NULL);
 	add_kb(group, GEANY_KEYS_SEARCH_FIND, NULL,
 		GDK_KEY_f, GEANY_PRIMARY_MOD_MASK, "menu_find", _("Find"), "find1");
 	add_kb(group, GEANY_KEYS_SEARCH_FINDNEXT, NULL,
@@ -1643,6 +1647,7 @@ static gboolean on_key_press_event(GtkWidget *widget, GdkEventKey *ev, gpointer 
 	if (key_press_ret)
 		return TRUE;
 
+	if (insight_incremental_search_key(ev)) return TRUE;
 	if (insight_browser_mode_key(gtk_window_get_focus(GTK_WINDOW(widget)),ev)) return TRUE;
 	if (insight_list_tools_key(gtk_window_get_focus(GTK_WINDOW(widget)), ev))
 		return TRUE;
