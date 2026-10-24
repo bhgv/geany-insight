@@ -108,7 +108,7 @@ static gboolean protected_data(GtkWidget *widget) {
  for(GtkWidget *p=widget;p;p=gtk_widget_get_parent(p)) if(g_object_get_data(G_OBJECT(p),"insight-no-i18n")) return TRUE;else if(main_widgets.notebook && gtk_widget_get_parent(p)==main_widgets.notebook && gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.notebook),p)<0) return TRUE;return FALSE;
 }
 static gboolean excluded(GtkWidget *widget) {
- GtkWidget *top=gtk_widget_get_toplevel(widget);if(g_object_get_data(G_OBJECT(widget),"insight-i18n-destroyed")) return TRUE;
+ if(g_object_get_data(G_OBJECT(widget),"insight-i18n-destroyed") || gtk_widget_in_destruction(widget)) return TRUE;GtkWidget *top=gtk_widget_get_toplevel(widget);
  if(GTK_IS_WINDOW(top) && (gtk_window_get_type_hint(GTK_WINDOW(top))==GDK_WINDOW_TYPE_HINT_TOOLTIP || !strcmp(G_OBJECT_TYPE_NAME(top),"GtkTooltipWindow"))) return TRUE;
  if(g_object_get_data(G_OBJECT(widget),"insight-i18n-bound")) { if(explicit_property(G_OBJECT(widget),"tooltip-text")) return FALSE;for(guint i=0;i<G_N_ELEMENTS(properties);i++) if(explicit_property(G_OBJECT(widget),properties[i])) return FALSE; }
  return protected_data(widget);
@@ -119,6 +119,7 @@ static void markup_end(GMarkupParseContext *ctx,const gchar *name,gpointer data,
 static void markup_text(GMarkupParseContext *ctx,const gchar *text,gsize size,gpointer data,GError **error) { (void)ctx;(void)error;Markup *m=data;gchar *part=g_strndup(text,size),*escaped=g_markup_escape_text(m->canonical ? insight_i18n_english(part):insight_tr(part),-1);g_string_append(m->out,escaped);g_free(escaped);g_free(part); }
 static gchar *markup_translate(const gchar *text,gboolean canonical) { Markup m={g_string_new(NULL),canonical};const GMarkupParser parser={markup_start,markup_end,markup_text,NULL,NULL};GMarkupParseContext *ctx=g_markup_parse_context_new(&parser,0,&m,NULL);gchar *wrapped=g_strconcat("<i18n-root>",text,"</i18n-root>",NULL);gboolean ok=g_markup_parse_context_parse(ctx,wrapped,-1,NULL) && g_markup_parse_context_end_parse(ctx,NULL);g_free(wrapped);g_markup_parse_context_free(ctx);if(!ok) { g_string_free(m.out,TRUE);return g_strdup(text); }return g_string_free(m.out,FALSE); }
 static void property(GObject *object,const gchar *name) {
+ if(GTK_IS_WIDGET(object) && (g_object_get_data(object,"insight-i18n-destroyed") || gtk_widget_in_destruction(GTK_WIDGET(object)))) return;
  if(!strcmp(name,"tooltip-markup") && explicit_property(object,"tooltip-text")) name="tooltip-text";
  if(GTK_IS_WIDGET(object) && protected_data(GTK_WIDGET(object)) && !explicit_property(object,name)) return;
  GParamSpec *spec=g_object_class_find_property(G_OBJECT_GET_CLASS(object),name);if(!spec || spec->value_type!=G_TYPE_STRING || !(spec->flags&G_PARAM_WRITABLE) || !(spec->flags&G_PARAM_READABLE)) return;

@@ -2479,3 +2479,29 @@ Left — No file	Слева — Нет файла
 Right — No file	Справа — Нет файла
 Result — Choose output file	Результат — Выберите файл результата
 Result — Editable blocks	Результат — Редактируемые блоки
+Absolute remote file, folder or project path	Абсолютный путь к удалённому файлу, папке или проекту
+Alt+Up/Down: browse matches in Context without moving the editor; Enter/double click or Ctrl+L: open the selected match; Shift+F8/F9: previous/next match	Alt+Вверх/Вниз: просмотр совпадений в контексте без перемещения редактора; Enter, двойной щелчок или Ctrl+L: открыть выбранное; Shift+F8/F9: предыдущее/следующее
+Archives are transferred as files. Receive never overwrites an existing local destination.	Архивы передаются как файлы. Получение не перезаписывает существующий локальный файл.
+Auto upload on save	Автозагрузка при сохранении
+Cancel loading	Отменить загрузку
+Categories	Категории
+Clipboard part number (zero-based)	Номер части для буфера обмена (с нуля)
+Cut an ASCII suffix ending at the terminal cursor: copy and send Backspace. Older output is read-only.	Вырезать конец ASCII-строки до курсора терминала: скопировать и отправить Backspace. Предыдущий вывод доступен только для чтения.
+Encoded Base64 bytes per part; zero exports one stream. Presets: 10240, 102400, 1048576, 10485760.	Байт Base64 в каждой части; ноль — единый поток. Размеры: 10240, 102400, 1048576, 10485760.
+Literal incremental search; uppercase enables Match case. Enter accepts, Esc restores. Repeat the command to find again.	Пошаговый поиск текста; заглавные буквы включают учёт регистра. Enter — принять, Esc — вернуть. Повторите команду для следующего совпадения.
+New SSH terminal	Новый SSH-терминал
+Open…	Открыть…
+Opt-in: save password / key passphrase as text in this project or global SSH config	По желанию: сохранять пароль или пароль ключа текстом в проекте либо общих настройках SSH
+Options…	Параметры…
+Result byte offset	Смещение в результате, в байтах
+Result bytes to replace	Число заменяемых байтов результата
+Right source byte count	Число байтов правого источника
+Right source byte offset	Смещение в правом источнике, в байтах
+SSH files / folders / projects…	Файлы, папки и проекты SSH…
+SSH/SFTP — configure a connection, transfer files, or add a terminal	SSH/SFTP — настроить соединение, передать файлы или добавить терминал
+Save password	Сохранить пароль
+Source byte count	Число байтов источника
+Source byte offset	Смещение в источнике, в байтах
+TTY / RS-232 — choose a port and connection parameters	TTY / RS-232 — выбрать порт и параметры подключения
+Little endian	Младший байт первым
+Big endian	Старший байт первым

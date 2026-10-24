@@ -205,7 +205,7 @@ gboolean insight_snapshot_compare_show(GtkWidget *parent,const gchar *left_name,
     }
     gtk_paned_set_position(GTK_PANED(panes),460);
     view->tree=gtk_tree_view_new_with_model(GTK_TREE_MODEL(view->model));gtk_widget_set_name(view->tree,"insight-snapshot-differences");
-    const gchar *columns[]={"Kind","Left lines","Right lines"};for(guint i=0;i<3;i++) gtk_tree_view_append_column(GTK_TREE_VIEW(view->tree),gtk_tree_view_column_new_with_attributes(i ? view->names[i-1]:insight_tr(columns[i]),gtk_cell_renderer_text_new(),"text",i+1,NULL));
+    const gchar *columns[]={"Kind","Left lines","Right lines"};for(guint i=0;i<3;i++) { GtkCellRenderer *renderer=gtk_cell_renderer_text_new();if(!i) insight_i18n_cell(renderer);gtk_tree_view_append_column(GTK_TREE_VIEW(view->tree),gtk_tree_view_column_new_with_attributes(i ? view->names[i-1]:insight_tr(columns[i]),renderer,"text",i+1,NULL)); }
     g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(view->tree)),"changed",G_CALLBACK(select_row),view);
     GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_widget_set_size_request(scroll,-1,135);gtk_container_add(GTK_CONTAINER(scroll),view->tree);gtk_box_pack_start(GTK_BOX(box),scroll,FALSE,TRUE,0);
     view->status=gtk_label_new("");gtk_widget_set_name(view->status,"insight-snapshot-status");gtk_label_set_line_wrap(GTK_LABEL(view->status),TRUE);gtk_box_pack_start(GTK_BOX(box),view->status,FALSE,FALSE,0);
