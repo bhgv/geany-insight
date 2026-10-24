@@ -2516,3 +2516,10 @@ Use the current editor as source and refresh both file lists.	Выбрать т�
 Scrolling paused — enable a scrolling axis	Прокрутка приостановлена — включите ось прокрутки
 All source windows linked — individual links: %u / %u	Связаны все окна исходников — отдельных связей: %u / %u
 Individual source links: %u / %u	Отдельные связи исходников: %u / %u
+Choose target…	Выберите ведомое окно…
+Show together	Показывать одновременно
+Linked source windows	Связанные окна исходников
+Show linked source windows	Показать связанные окна исходников
+Link source window…	Связать окно исходника…
+Cannot save source window links: %s	Не удалось сохранить связи окон исходников: %s
+Linked source file cannot be opened	Не удалось открыть связанный исходный файл

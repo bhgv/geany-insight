@@ -1,34 +1,21 @@
-# Linked source-window scrolling
+# Linked source windows
 
-**Window → Link Source Windows…** opens a modeless source-link manager. Choose Source and Target from the open-buffer lists, then **Apply Link**. Choosing endpoints does not switch the active editor; **Refresh** captures the current editor and rebuilds the target list. Select **None — unlink this source** to remove that source's outgoing link.
+**Window → Link Source Windows…** manages project source links. The first table row contains editable **Source** and **Target** drop-down cells. Select a saved relation to load both selectors and its options, then **Apply Link** to change it. **Remove selected link** deletes just that relation.
 
-![Source scroll links](../media/scroll-links.svg)
+![Linked source windows](../media/scroll-links.svg)
 
-| Setting or command | Behavior |
+Right-click an editor or its tab and choose **Link source window…**. The first click starts a draft with that file in the Source column. Choose Target in the first row and apply, or repeat the context command on another editor/tab. Selecting the same file does nothing; an existing pair, including the reverse ordering, is selected instead of duplicated. One file can participate in multiple links.
+
+| Option | Effect |
 | --- | --- |
-| Two Way | Add reverse traversal for this pair |
-| Link All Source Windows | Scroll every open source buffer together, including newly opened buffers |
-| Vertical scrolling | Apply the same change in visible display rows to reachable buffers |
-| Horizontal scrolling | Apply the same change in pixel offset to reachable buffers |
-| Unlink All | Clear individual links and disable Link All |
+| Show together | Selecting either endpoint reopens closed partners and presents the connected group side by side |
+| Two Way | Either endpoint drives scrolling; otherwise Source drives Target |
+| Vertical / Horizontal scrolling | Synchronize changes in visible rows / horizontal pixel offset |
+| Link All Source Windows | Synchronize all open source buffers, including newly opened ones |
+| Unlink All | Remove individual relations and turn off Link All |
 
-Vertical is initially enabled, horizontal initially disabled. Axis choices apply to all links and take effect immediately. Pair changes require Apply Link. Enabling links or changing axes establishes current view baselines without moving the views. Each target retains its own relative offset and clamps at its native scrolling bounds. Scrolling a target in a one-way pair does not scroll its source. Chains and circular graphs are supported; each reachable buffer is updated at most once per scroll event. Native asynchronous notifications are absorbed by cached view samples rather than fed back as another scroll.
+The side-by-side window contains the actual editor widgets, with syntax highlighting, native editing, Undo/Redo and saving. Focus selects the corresponding document for editor commands. Drag the vertical dividers to resize the panes. Closing this presentation returns editors to their original notebook pages. Closing a file also restores the panes and retains named-file relations. Selecting its table row or subsequently activating a linked partner reopens it. A file that cannot be opened keeps its relation so it can be restored later.
 
-## Scope and lifetime
+Named-file links, direction, simultaneous-display flags and scroll axes are stored in the **project file**, with relative paths inside the project folder. They survive project close/reopen and application restart. Changes update only the link group without replacing unrelated project settings. Removing a member through the project file manager, master file list or Git membership refresh removes its relations. Untitled buffers and links without a project are session-only.
 
-The manager lists explicit links and their directions. Each source has at most one explicit outgoing pair; Two Way supplies an additional reverse path. Existing reverse links from other sources remain independent. Link All supersedes individual routing while enabled; turning it off retains the individual pairs. The Window menu and dialog share the same Link All state. Three initially unassigned Editor shortcuts expose Link Source Windows, Link All Source Windows and Unlink All Source Windows.
-
-Links apply to the main Scintilla view of each open Geany source buffer, including inactive tabs and untitled buffers. They do not create tiled MDI windows or make hidden tabs visible. They do not link Context, terminal, diff/merge, Git-history or AI-preview widgets. Visible rows follow each buffer's own folding/wrapping; this is relative scrolling, not matching-line diff alignment. Scrolling caused by navigation or native view changes follows the same rules. Target text, selection, caret, Undo/Redo, read-only flags and clipboard are not changed. The feature does not read source files or query/rebuild the project index while scrolling.
-
-Links and axis choices are memory-only for the running application. Closing the manager keeps links active. Closing a source or target removes affected pairs; stale dialog endpoints cannot be applied silently. Refresh chooses the current editor explicitly. New Link All members adopt their initial viewport without an immediate group jump. Individual links are capped at 64 pairs; Link All supports 128 open source buffers and disables itself with a status message if that limit is exceeded. Individual pairs remain when Link All is disabled. No project file or source file is written.
-
-References: [Source Insight Link Window](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Link_Window.htm) and [Link All Windows](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Link_All_Windows.htm).
-
-## Manage individual pairs
-
-Choose both endpoints in the dialog. Selecting a table row loads its source,
-target and direction for editing; Apply Link commits that change. Remove selected
-link removes only that pair. Open/closed documents update both lists; closed
-endpoints cannot be applied. Refresh explicitly selects the current editor as
-source. Disabling both axes shows a paused-scrolling message. Language changes
-retain endpoint choices and an unapplied direction change.
+Scrolling preserves each buffer's relative offset and clamps at its own bounds. Chains and cycles visit each reachable buffer once. This uses display rows, including each file's own folding/wrapping, rather than matching-line diff alignment. Context, terminal, diff/merge and AI previews are not source-link endpoints. No source text is copied or changed by linking. Limits: 64 explicit relations; Link All supports up to 128 open source buffers. Closing the manager keeps links active.

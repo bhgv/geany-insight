@@ -3987,6 +3987,7 @@ static void native_project_update(GObject *object,GKeyFile *config,gpointer data
   insight_git_bind(config,root);
   InsightProjectFiles *policy=error ? NULL : (insight_git_active() ? insight_git_membership(&error) : insight_project_files_read_project(config,utf8,app->project->file_name,&error));
   wb.membership_valid=policy!=NULL;
+  if(policy) insight_scroll_links_membership(policy,root);
   if(!policy) { policy=insight_project_files_new(); policy->automatic=FALSE; ui_set_statusbar(TRUE,"Project membership could not be restored: %s",error ? error->message : "invalid settings"); }
   insight_project_files_free(wb.membership); wb.membership=policy; g_free(wb.membership_project); wb.membership_project=g_strdup(app->project->file_name); g_clear_error(&error); if(loaded) { g_key_file_unref(loaded); config=NULL; }
   wb.workspace_from_project=TRUE;wb.membership_generation++;insight_master_sync_set(wb.master_sync,app->project->file_name,utf8,wb.membership);
@@ -4007,7 +4008,7 @@ static gboolean membership_store(const InsightProjectFiles *candidate) {
  if(ok) ok=g_key_file_load_from_file(config,filename,G_KEY_FILE_KEEP_COMMENTS,&error);
  if(ok) ok=insight_project_files_write(candidate,config,root,&error);
  if(ok) { gsize length; gchar *data=g_key_file_to_data(config,&length,&error); ok=data!=NULL && length<=8*1024*1024; if(!ok && !error) g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Project configuration exceeds 8 MiB"); if(ok) ok=g_file_replace_contents(file,data,length,NULL,FALSE,G_FILE_CREATE_PRIVATE,NULL,NULL,&error); g_free(data); }
- if(ok) { if(wb.usage_idle || wb.search_worker) { stop_usage(); gtk_label_set_text(GTK_LABEL(wb.search_status),"Project files changed; run the search again"); } insight_project_files_free(wb.membership); wb.membership=insight_project_files_clone(candidate); wb.membership_valid=TRUE;wb.membership_generation++; start_scan(wb.root); files_filter(NULL,NULL); }
+ if(ok) { insight_scroll_links_membership(candidate,root);if(wb.usage_idle || wb.search_worker) { stop_usage(); gtk_label_set_text(GTK_LABEL(wb.search_status),"Project files changed; run the search again"); } insight_project_files_free(wb.membership); wb.membership=insight_project_files_clone(candidate); wb.membership_valid=TRUE;wb.membership_generation++; start_scan(wb.root); files_filter(NULL,NULL); }
  else ui_set_statusbar(TRUE,"Project files not changed: %s",error ? error->message : "cannot save configuration");
  g_clear_error(&error); g_key_file_unref(config); g_object_unref(file); g_free(filename); g_free(root); return ok;
 }

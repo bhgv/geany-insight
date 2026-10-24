@@ -28,6 +28,7 @@
 
 #include "notebook.h"
 #include "insight-overview.h"
+#include "insight-scroll-links.h"
 
 #include "callbacks.h"
 #include "documentprivate.h"
@@ -472,6 +473,7 @@ static void show_tab_bar_popup_menu(GdkEventButton *event, GeanyDocument *doc)
 
 	ui_menu_add_document_items(GTK_MENU(menu), document_get_current(),
 		G_CALLBACK(tab_bar_menu_activate_cb));
+	if (DOC_VALID(doc)) insight_scroll_links_add_popup(menu, doc->id);
 
 	menu_item = gtk_separator_menu_item_new();
 	gtk_widget_show(menu_item);
