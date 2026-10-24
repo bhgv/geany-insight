@@ -271,7 +271,20 @@ static GtkWidget *document_get_notebook_child(GeanyDocument *doc)
 		parent = gtk_widget_get_parent(child);
 	}
 
-	return child;
+	if (parent == main_widgets.notebook)
+		return child;
+
+	/* A linked source presentation may temporarily host the actual editor
+	 * outside the notebook. Its page and tab remain the document identity:
+	 * closing, saving and focus routing must not follow the floating widget. */
+	gint pages = gtk_notebook_get_n_pages(GTK_NOTEBOOK(main_widgets.notebook));
+	for (gint n = 0; n < pages; n++)
+	{
+		GtkWidget *page = gtk_notebook_get_nth_page(GTK_NOTEBOOK(main_widgets.notebook), n);
+		if (g_object_get_data(G_OBJECT(page), "geany_document") == doc)
+			return page;
+	}
+	return child; /* document creation, before insertion into the notebook */
 }
 
 

@@ -98,8 +98,14 @@ static gboolean tick(gpointer data) {
   g_assert_null(document_find_by_filename(path_b));activate(doc_c);activate(doc_a);doc_b=document_find_by_filename(path_b);g_assert_nonnull(doc_b);g_assert_nonnull(toplevel_named("insight-linked-source-windows"));
   /* Closing the shared view restores actual notebook widgets. */
   gboolean handled=FALSE;g_signal_emit_by_name(toplevel_named("insight-linked-source-windows"),"delete-event",NULL,&handled);g_assert_true(handled);g_assert_true(gtk_widget_get_toplevel(GTK_WIDGET(doc_b->editor->sci))==window);
+  GtkTreeViewColumn *column=gtk_tree_view_get_column(GTK_TREE_VIEW(named(dialog_widget,"insight-scroll-links-list")),3);GList *cells=gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(column));g_signal_emit_by_name(cells->data,"toggled","1");g_list_free(cells);g_assert_null(toplevel_named("insight-linked-source-windows"));g_assert_true(document_close(doc_b));phase=7;return G_SOURCE_CONTINUE;
+ }
+ if(phase==7) {
+  /* A normal tab relation also reopens its closed partner, without tiling. */
+  g_assert_null(document_find_by_filename(path_b));activate(doc_c);activate(doc_a);doc_b=document_find_by_filename(path_b);g_assert_nonnull(doc_b);g_assert_null(toplevel_named("insight-linked-source-windows"));
+  GtkTreeViewColumn *column=gtk_tree_view_get_column(GTK_TREE_VIEW(named(dialog_widget,"insight-scroll-links-list")),3);GList *cells=gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(column));g_signal_emit_by_name(cells->data,"toggled","1");g_list_free(cells);g_assert_nonnull(toplevel_named("insight-linked-source-windows"));
   /* Reload the project through the native menu/file chooser. */
-  gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_close1")));g_assert_cmpuint(pair_count(),==,0);phase++;return G_SOURCE_CONTINUE;
+  gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_close1")));g_assert_cmpuint(pair_count(),==,0);phase=5;return G_SOURCE_CONTINUE;
  }
  if(phase==5) {
   g_timeout_add(100,select_project,NULL);gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"project_open1")));phase++;return G_SOURCE_CONTINUE;

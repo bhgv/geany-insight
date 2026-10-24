@@ -106,6 +106,13 @@ static gboolean pane_delete(GtkWidget *widget,GdkEvent *event,gpointer data) { (
 static void pane_reveal(GtkWidget *widget,gpointer data) { (void)widget;GeanyDocument *doc=document_find_by_id(GPOINTER_TO_UINT(data));if(DOC_VALID(doc)) present_links(doc); }
 static void present_links(GeanyDocument *doc) {
  if(project_loading || presenting || !DOC_VALID(doc) || !link_pairs) return;presenting=TRUE;
+ /* A closed partner remains a project relation even when tiling is disabled.
+  * Reopen it in a normal tab and keep the selected source active. */
+ gboolean reopened=FALSE;gchar *path=doc_path(doc);
+ for(guint n=0;n<link_pairs->len;n++) { ScrollPair *p=&g_array_index(link_pairs,ScrollPair,n);if(path) {if(!g_strcmp0(path,p->a)) p->source=doc->id;if(!g_strcmp0(path,p->b)) p->target=doc->id;}
+  gboolean target=p->source==doc->id;if(!target && p->target!=doc->id) continue;guint previous=target ? p->target:p->source;GeanyDocument *other=reopen(previous,target ? p->b:p->a);if(DOC_VALID(other)) {if(target) p->target=other->id;else p->source=other->id;if(previous!=other->id) reopened=TRUE;}
+ }
+ g_free(path);if(reopened) gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.notebook),document_get_notebook_page(doc));
  GArray *ids=g_array_new(FALSE,FALSE,sizeof(guint));guint first=doc->id;g_array_append_val(ids,first);
  for(guint at=0;at<ids->len;at++) { guint id=g_array_index(ids,guint,at);for(guint n=0;n<link_pairs->len;n++) { ScrollPair *p=&g_array_index(link_pairs,ScrollPair,n);if(!p->together || (p->source!=id && p->target!=id)) continue;
    GeanyDocument *other=p->source==id ? reopen(p->target,p->b):reopen(p->source,p->a);if(!DOC_VALID(other)) continue;if(p->source==id) p->target=other->id;else p->source=other->id;gboolean seen=FALSE;for(guint k=0;k<ids->len;k++) if(g_array_index(ids,guint,k)==other->id) seen=TRUE;if(!seen) { guint value=other->id;g_array_append_val(ids,value); }
