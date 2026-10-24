@@ -735,7 +735,7 @@ static gboolean ai_vte_insert(const gchar *command,gpointer data) {
  (void)data;if(!vte_info.have_vte || !clean) return FALSE;vf->vte_terminal_feed_child(VTE_TERMINAL(vte_config.vte),command,strlen(command));set_clean(FALSE);return TRUE;
 }
 static void ai_vte_open(GtkWidget *widget,gpointer data) {
- (void)widget;(void)data;gchar *context=NULL;if(vf->vte_terminal_get_text_selected && vf->vte_terminal_get_has_selection(VTE_TERMINAL(vte_config.vte))) context=vf->vte_terminal_get_text_selected(VTE_TERMINAL(vte_config.vte),1);else if(vf->vte_terminal_get_text) context=vf->vte_terminal_get_text(VTE_TERMINAL(vte_config.vte),NULL,NULL,NULL);insight_terminal_ui_assistant("Local terminal — review visible or selected output before sending",context ? context:"",vte_config.vte,ai_vte_insert,NULL);g_free(context);
+ (void)widget;(void)data;gchar *context=NULL;if(vf->vte_terminal_get_text_selected && vf->vte_terminal_get_has_selection(VTE_TERMINAL(vte_config.vte))) context=vf->vte_terminal_get_text_selected(VTE_TERMINAL(vte_config.vte),1);else if(vf->vte_terminal_get_text) context=vf->vte_terminal_get_text(VTE_TERMINAL(vte_config.vte),NULL,NULL,NULL);insight_terminal_ui_assistant("terminal-local","Local terminal — review visible or selected output before sending",context ? context:"",vte_config.vte,ai_vte_insert,NULL);g_free(context);
 }
 static GtkWidget *vte_create_popup_menu(void)
 {

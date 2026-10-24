@@ -2131,3 +2131,9 @@ Analyze the displayed errors, locate their causes in the attached source files, 
 Help me with this shell: explain the next commands, their effects and how to verify the result.	Помоги с этой оболочкой: объясни следующие команды, их действие и проверку результата.
 Explain the displayed terminal output and identify warnings, errors and their likely causes.	Объясни вывод терминала, найди предупреждения, ошибки и их вероятные причины.
 Help configure or troubleshoot this connection and explain how to transfer files without interrupting the active session.	Помоги настроить это соединение или устранить неполадки; объясни передачу файлов без разрыва текущего сеанса.
+Delete selected	Удалить выбранный
+Select a saved request to delete first.	Сначала выберите сохранённый запрос для удаления.
+History for this context cleared; other contexts are unchanged.	История этого места очищена; другие истории не изменены.
+Selected request deleted from this context history.	Выбранный запрос удалён из истории этого места.
+Recent and frequent requests (100 per project and context)	Последние и частые запросы (100 на проект и место применения)
+No data is sent until Send. API keys are saved only when explicitly enabled in AI Connections; request history is saved by context; replies are not saved.	Данные отправляются только кнопкой Отправить. Сохранение API-ключей включается явно в Подключениях ИИ; история запросов сохраняется раздельно по месту, ответы не сохраняются.

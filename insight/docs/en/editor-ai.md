@@ -40,7 +40,9 @@ Limits: **16 files** per session; **128 KiB** per complete UTF-8 source/Result; 
 
 **Recent and frequent requests** offers up to 20 recent and 20 most-used requests. Selection appends text to the draft without sending it. Standard tasks also append to the current draft.
 
-When **Remember request text for recent/frequent lists** is enabled, successful new request texts, counts and timestamps are saved privately in `insight-ai-prompts.conf` (up to 64 entries). Code, replies and API keys are not recorded there. Disable the checkbox to exclude current requests from these lists. Code variants and accumulated requirements remain in memory only.
+**Errors → source**, **Shell help**, **Explain output** and **Connection help** stage an editable prompt. History and the four frequent requests are separated by usage context: Local terminal, SSH, TTY, manual console, diagnostics, program help, source help, and Editor/Project. Each context retains up to **100 unique requests**; repeating a request updates its frequency and recency, and adding the 101st discards the oldest. Selecting does not send: edit the text, then press **Send**. **Delete selected** removes one entry; **Clear history** clears this context only and leaves the current prompt editable. Answer history is separate: up to 32 replies held in the window's memory.
+
+Requests are saved immediately before dispatch in **`<project-file>.ai-history/`**, beside the project file, with a separate `.conf` per context. The directory can be tracked with the project in Git. Without a project, storage uses `insight/ai-history/` under the configuration directory. Restarting reloads the history. An open window stays bound to the project it was created for; reopening terminal Ai after switching projects creates a window with the new project's history. The history controls' tooltip shows the file path. Only request text, frequency and timestamp are stored, excluding API keys, replies, terminal output and attached source. A save failure displays an error and prevents dispatch.
 
 ## Validation
 

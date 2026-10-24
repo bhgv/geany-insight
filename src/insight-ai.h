@@ -5,7 +5,9 @@
 typedef gboolean (*InsightAiInsert)(const gchar *,gpointer);
 void insight_ai_init(void);
 void insight_ai_window_modes(void);
-GtkWidget *insight_ai_terminal_open(const gchar *,const gchar *,GtkWidget *,InsightAiInsert,gpointer);
+gchar *insight_ai_history_path(const gchar *);
+void insight_ai_lookup_for(const gchar *,const gchar *,const gchar *,const gchar *);
+GtkWidget *insight_ai_terminal_open(const gchar *,const gchar *,const gchar *,GtkWidget *,InsightAiInsert,gpointer);
 GtkWidget *insight_ai_embed(GtkWidget *,const gchar *,const gchar *,GtkWidget *,InsightAiInsert,gpointer);
 gboolean insight_ai_context_update(GtkWidget *,const gchar *);
 gchar *insight_ai_suggested_command(GtkWidget *);

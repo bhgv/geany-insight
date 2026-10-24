@@ -13,6 +13,8 @@ gboolean insight_ai_edits_push(InsightAiEdits *,const gchar *,const gchar *,cons
 gboolean insight_ai_edits_move(InsightAiEdits *,gint);
 gchar *insight_ai_requirements_append(const gchar *,const gchar *,GError **);
 typedef struct { gchar *text;guint count;gint64 last; } InsightAiPrompt;
+gchar *insight_ai_prompts_path(const gchar *,const gchar *,const gchar *);
+gboolean insight_ai_prompts_remove(GPtrArray *,const gchar *,const gchar *,GError **);
 GPtrArray *insight_ai_prompts_load(const gchar *);
 gboolean insight_ai_prompts_record(GPtrArray *,const gchar *,const gchar *,GError **);
 const gchar *insight_ai_task_name(guint);
