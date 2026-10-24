@@ -2137,3 +2137,19 @@ History for this context cleared; other contexts are unchanged.	История �
 Selected request deleted from this context history.	Выбранный запрос удалён из истории этого места.
 Recent and frequent requests (100 per project and context)	Последние и частые запросы (100 на проект и место применения)
 No data is sent until Send. API keys are saved only when explicitly enabled in AI Connections; request history is saved by context; replies are not saved.	Данные отправляются только кнопкой Отправить. Сохранение API-ключей включается явно в Подключениях ИИ; история запросов сохраняется раздельно по месту, ответы не сохраняются.
+Collapse	Свернуть
+History / requests	История / запросы
+Minimize window	Свернуть окно
+Maximize / restore window	Развернуть / восстановить окно
+Close window	Закрыть окно
+Complete API chat/completions URL	Полный адрес API chat/completions
+Model ID supplied by your AI API provider	Идентификатор модели у вашего провайдера API
+Secret API key for the selected connection	Секретный API-ключ выбранного подключения
+Python 3 executable used by the AI network helper	Исполняемый файл Python 3, которым сетевой модуль обращается к ИИ
+AI service or a custom compatible API	Провайдер ИИ или собственный совместимый API
+Suggested command: review before inserting or running	Предложенная команда: проверьте её перед вставкой или запуском
+Displayed terminal output or selected source context sent with your request	Вывод терминала или выделенный исходник, отправляемый вместе с запросом
+AI conversation: edit after You>. Ctrl+Enter sends; Enter inserts a new line. Earlier messages are read-only.	Общение с ИИ: редактируйте после You>. Ctrl+Enter отправляет, Enter добавляет строку. Предыдущие сообщения доступны только для чтения.
+Additional editable request included with earlier requirements; Send generates a reviewed code variant	Дополнительный запрос вместе с предыдущими требованиями; Отправить создаёт вариант кода для проверки
+Connections are shared. Request history is stored separately per project and context; replies are not saved.	Подключения общие. История запросов хранится раздельно по проекту и месту применения; ответы не сохраняются.
+Choose a saved AI connection or compare enabled providers	Выберите сохранённое подключение ИИ или сравнение включённых провайдеров

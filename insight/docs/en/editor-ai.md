@@ -67,3 +67,11 @@ Verified implementation: [`08eb8655d4d40be8c8c61f62a07d65224c0791cb`](https://gi
 [Shared AI Connections / Общие подключения ИИ](ai-connections.md) — shared profiles, optional key storage and parallel answer selection supersede the earlier single-connection setup.
 
 [Shared comparison layout / Единое оформление сравнений](comparison-layout.md).
+
+## Connection fields, collapse and a unified conversation screen
+
+API URL, model, key and helper executable fields have purpose tooltips and expand with the window. The **Collapse** tab folds the top block down to its tab strip; select another tab to restore its content. The conversation receives the freed height.
+
+In the regular AI window, input and replies share one black screen. Earlier messages are protected; edit the current request after **You>**. **Enter** inserts a line; **Ctrl+Enter** or **Send** submits. Native selection, copy and paste are supported. Select a saved request to edit it before resending. Command actions, attachments and answer variants are in the upper tabs. The editor assistant retains its main Diff / Merge area for reviewing code.
+
+Initial geometry is bounded to the current monitor's work area, accounting for the titlebar. Title buttons minimize, maximize/restore and close the window. Resizing gives free space primarily to the conversation screen (or code comparison in the editor assistant).

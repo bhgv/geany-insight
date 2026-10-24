@@ -3,6 +3,7 @@
 #include "geany.h"
 #include "insight-editor-ai.h"
 #include "insight-ai.h"
+#include "insight-ai-ui.h"
 #include "insight-diff.h"
 #include "insight-project-report.h"
 #include "insight-i18n.h"
@@ -161,14 +162,14 @@ static GtkWidget *view(GtkWidget *box,const gchar *name,gboolean editable,gint h
 static GtkWidget *expander(GtkWidget *box,const gchar *label) { GtkWidget *e=gtk_expander_new(insight_tr(label)),*b=gtk_box_new(GTK_ORIENTATION_VERTICAL,3);gtk_container_add(GTK_CONTAINER(e),b);gtk_box_pack_start(GTK_BOX(box),e,FALSE,FALSE,0);return b; }
 static void api_controls(Review *r,GtkWidget *box) {
  GtkWidget *bar=row(box);r->provider=gtk_combo_box_text_new();gtk_widget_set_name(r->provider,"insight-editor-ai-provider");const gchar *labels[]={"OpenAI / ChatGPT API","xAI / Grok","DeepSeek","Qwen / Model Studio","Custom compatible API"};for(guint i=0;i<5;i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(r->provider),labels[i]);gtk_box_pack_start(GTK_BOX(bar),r->provider,FALSE,FALSE,0);
- r->endpoint=gtk_entry_new();gtk_widget_set_name(r->endpoint,"insight-editor-ai-endpoint");gtk_entry_set_placeholder_text(GTK_ENTRY(r->endpoint),"Complete chat/completions URL");gtk_box_pack_start(GTK_BOX(bar),r->endpoint,TRUE,TRUE,0);r->model=gtk_entry_new();gtk_widget_set_name(r->model,"insight-editor-ai-model");gtk_entry_set_placeholder_text(GTK_ENTRY(r->model),"Model ID from your API account");gtk_box_pack_start(GTK_BOX(bar),r->model,FALSE,FALSE,0);
- bar=row(box);gtk_box_pack_start(GTK_BOX(bar),gtk_label_new(insight_tr("API key (shared profile)")),FALSE,FALSE,0);r->key=gtk_entry_new();gtk_widget_set_name(r->key,"insight-editor-ai-key");gtk_entry_set_visibility(GTK_ENTRY(r->key),FALSE);gtk_box_pack_start(GTK_BOX(bar),r->key,TRUE,TRUE,0);r->python=gtk_entry_new();gtk_widget_set_name(r->python,"insight-editor-ai-python");gtk_box_pack_start(GTK_BOX(bar),gtk_label_new("Python 3"),FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(bar),r->python,FALSE,FALSE,0);
+ r->endpoint=gtk_entry_new();gtk_widget_set_name(r->endpoint,"insight-editor-ai-endpoint");gtk_entry_set_placeholder_text(GTK_ENTRY(r->endpoint),"Complete chat/completions URL");gtk_box_pack_start(GTK_BOX(bar),r->endpoint,TRUE,TRUE,0);r->model=gtk_entry_new();gtk_widget_set_name(r->model,"insight-editor-ai-model");gtk_entry_set_placeholder_text(GTK_ENTRY(r->model),"Model ID from your API account");gtk_box_pack_start(GTK_BOX(bar),r->model,TRUE,TRUE,0);
+ bar=row(box);gtk_box_pack_start(GTK_BOX(bar),gtk_label_new(insight_tr("API key (shared profile)")),FALSE,FALSE,0);r->key=gtk_entry_new();gtk_widget_set_name(r->key,"insight-editor-ai-key");gtk_entry_set_visibility(GTK_ENTRY(r->key),FALSE);gtk_box_pack_start(GTK_BOX(bar),r->key,TRUE,TRUE,0);r->python=gtk_entry_new();gtk_widget_set_name(r->python,"insight-editor-ai-python");gtk_box_pack_start(GTK_BOX(bar),gtk_label_new("Python 3"),FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(bar),r->python,TRUE,TRUE,0);
 #ifdef G_OS_WIN32
  gtk_entry_set_text(GTK_ENTRY(r->python),"python");
 #else
  gtk_entry_set_text(GTK_ENTRY(r->python),"python3");
 #endif
- g_signal_connect(r->provider,"changed",G_CALLBACK(provider_changed),r);gtk_combo_box_set_active(GTK_COMBO_BOX(r->provider),0);GKeyFile *k=g_key_file_new();gchar *path=config_path("insight-ai.conf");if(g_key_file_load_from_file(k,path,G_KEY_FILE_NONE,NULL)) { gtk_combo_box_set_active(GTK_COMBO_BOX(r->provider),CLAMP(g_key_file_get_integer(k,"assistant","provider",NULL),0,4));const gchar *names[]={"endpoint","model","python"};GtkWidget *fields[]={r->endpoint,r->model,r->python};for(guint i=0;i<3;i++) { gchar *s=g_key_file_get_string(k,"assistant",names[i],NULL);if(s) gtk_entry_set_text(GTK_ENTRY(fields[i]),s);g_free(s); } }g_free(path);g_key_file_unref(k);r->profiles=insight_ai_profiles_bind(box,r->provider,r->endpoint,r->model,r->key,r->python);
+ insight_ai_ui_entry(r->endpoint,insight_tr("Complete API chat/completions URL"),18);insight_ai_ui_entry(r->model,insight_tr("Model ID supplied by your AI API provider"),12);insight_ai_ui_entry(r->key,insight_tr("Secret API key for the selected connection"),12);insight_ai_ui_entry(r->python,insight_tr("Python 3 executable used by the AI network helper"),12);gtk_widget_set_tooltip_text(r->provider,insight_tr("AI service or a custom compatible API"));g_signal_connect(r->provider,"changed",G_CALLBACK(provider_changed),r);gtk_combo_box_set_active(GTK_COMBO_BOX(r->provider),0);GKeyFile *k=g_key_file_new();gchar *path=config_path("insight-ai.conf");if(g_key_file_load_from_file(k,path,G_KEY_FILE_NONE,NULL)) { gtk_combo_box_set_active(GTK_COMBO_BOX(r->provider),CLAMP(g_key_file_get_integer(k,"assistant","provider",NULL),0,4));const gchar *names[]={"endpoint","model","python"};GtkWidget *fields[]={r->endpoint,r->model,r->python};for(guint i=0;i<3;i++) { gchar *s=g_key_file_get_string(k,"assistant",names[i],NULL);if(s) gtk_entry_set_text(GTK_ENTRY(fields[i]),s);g_free(s); } }g_free(path);g_key_file_unref(k);r->profiles=insight_ai_profiles_bind(box,r->provider,r->endpoint,r->model,r->key,r->python);
 }
 static void open_review(GtkWidget *w,gpointer data) {
  (void)w;(void)data;GeanyDocument *d=document_get_current();if(!d) return;GError *e=NULL;Source *s=source_new(d->file_name ? d->file_name:"untitled",d,&e);if(!s) { ui_set_statusbar(TRUE,"%s",e->message);g_clear_error(&e);return; }
@@ -194,7 +195,7 @@ static void open_review(GtkWidget *w,gpointer data) {
  }
  g_list_free(children);gtk_widget_destroy(r->panel);r->panel=request_page;
  for(guint i=0;i<G_N_ELEMENTS(pages);i++) gtk_widget_show_all(gtk_widget_get_ancestor(pages[i],GTK_TYPE_SCROLLED_WINDOW));
- insight_compare_ui_reveal(r->prompt);
+ insight_ai_ui_fold(tabs,insight_tr("Collapse"));insight_ai_ui_window(r->window,insight_tr("Minimize window"),insight_tr("Maximize / restore window"),insight_tr("Close window"));gtk_widget_set_tooltip_text(r->prompt,insight_tr("Additional editable request included with earlier requirements; Send generates a reviewed code variant"));insight_compare_ui_reveal(r->prompt);
 }
 void insight_editor_ai_init(void) {
  if(initialized) { return; }

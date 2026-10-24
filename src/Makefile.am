@@ -439,7 +439,7 @@ libgeany_la_SOURCES += insight-tree-expand.c insight-tree-expand.h
 
 libgeany_la_SOURCES += insight-reload.c insight-reload.h
 
-libgeany_la_SOURCES += insight-terminal-ui.c insight-terminal-ui.h insight-terminal.c insight-terminal.h insight-serial.c insight-serial.h \
+libgeany_la_SOURCES += insight-ai-ui.h insight-ai-console.c insight-ai-console.h insight-terminal-ui.c insight-terminal-ui.h insight-terminal.c insight-terminal.h insight-serial.c insight-serial.h \
 	../vendor/libvterm/src/encoding.c \
 	../vendor/libvterm/src/keyboard.c \
 	../vendor/libvterm/src/mouse.c \

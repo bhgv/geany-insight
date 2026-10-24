@@ -37,3 +37,11 @@ Only successful responses completed at selection time are retained; pending requ
 All three code panes use the editor lexer and palette for the file type. Coloring refreshes after text changes rather than cursor movement; work is bounded to 1 MiB and 20,000 style transitions per pane.
 
 ![Tabs and answer comparison](../media/diff-answer-tabs.svg)
+
+## Connection fields, collapse and a unified conversation screen
+
+API URL, model, key and helper executable fields have purpose tooltips and expand with the window. The **Collapse** tab folds the top block down to its tab strip; select another tab to restore its content. The conversation receives the freed height.
+
+In the regular AI window, input and replies share one black screen. Earlier messages are protected; edit the current request after **You>**. **Enter** inserts a line; **Ctrl+Enter** or **Send** submits. Native selection, copy and paste are supported. Select a saved request to edit it before resending. Command actions, attachments and answer variants are in the upper tabs. The editor assistant retains its main Diff / Merge area for reviewing code.
+
+Initial geometry is bounded to the current monitor's work area, accounting for the titlebar. Title buttons minimize, maximize/restore and close the window. Resizing gives free space primarily to the conversation screen (or code comparison in the editor assistant).

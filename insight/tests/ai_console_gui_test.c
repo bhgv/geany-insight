@@ -3,6 +3,7 @@
 #include "config.h"
 #endif
 #include "geany.h"
+#include "../../src/insight-ai-console.h"
 #include "document.h"
 #include "main.h"
 #include "sciwrappers.h"
@@ -14,11 +15,12 @@
 static GtkWidget *window,*assistant,*diff;
 static GeanyDocument *source;
 static gchar *path,*profile,*endpoint,*attachment_path,*received_path;static gint chooser_action;
-static guint phase;
+static guint phase;static gint collapsed_height;
 static gint64 after;
 static GSubprocess *server;
 static const gchar *base="int value = 1\n",*proposal="int value = 2;\n";
 static GtkWidget *named(GtkWidget *w,const gchar *name) {
+ if(!strcmp(name,"insight-ai-question")) name="insight-ai-answer";
  if(!g_strcmp0(gtk_widget_get_name(w),name)) return w;
  if(GTK_IS_NOTEBOOK(w)) { for(guint i=0;i<2;i++) { GtkWidget *action=gtk_notebook_get_action_widget(GTK_NOTEBOOK(w),i ? GTK_PACK_END:GTK_PACK_START);if(action) { GtkWidget *found=named(action,name);if(found) return found; } } }
  if(GTK_IS_MENU_ITEM(w)) { GtkWidget *m=gtk_menu_item_get_submenu(GTK_MENU_ITEM(w));if(m) { GtkWidget *v=named(m,name);if(v) return v; } }
@@ -26,7 +28,7 @@ static GtkWidget *named(GtkWidget *w,const gchar *name) {
 }
 static GtkWidget *top(const gchar *name) { GList *list=gtk_window_list_toplevels();GtkWidget *v=NULL;for(GList *p=list;p;p=p->next) if(gtk_widget_get_visible(p->data) && !g_strcmp0(gtk_widget_get_name(p->data),name)) v=p->data;g_list_free(list);return v; }
 static void click(GtkWidget *w,const gchar *name) { GtkWidget *b=named(w,name);g_assert_nonnull(b);g_assert_true(gtk_widget_get_sensitive(b));gtk_button_clicked(GTK_BUTTON(b)); }
-static void entry(GtkWidget *w,const gchar *name,const gchar *value) { GtkWidget *v=named(w,name);g_assert_nonnull(v);gtk_entry_set_text(GTK_ENTRY(v),value); }
+static void entry(GtkWidget *w,const gchar *name,const gchar *value) { GtkWidget *v=named(w,name);g_assert_nonnull(v);if(!strcmp(name,"insight-ai-question")) insight_ai_console_set_prompt(v,value);else gtk_entry_set_text(GTK_ENTRY(v),value); }
 static gchar *text(GtkWidget *w,const gchar *name) { GtkTextBuffer *b=gtk_text_view_get_buffer(GTK_TEXT_VIEW(named(w,name)));GtkTextIter a,z;gtk_text_buffer_get_bounds(b,&a,&z);return gtk_text_buffer_get_text(b,&a,&z,TRUE); }
 static void source_is(const gchar *expected) { gchar *s=sci_get_contents(source->editor->sci,-1);g_assert_cmpstr(s,==,expected);g_free(s); }
 static void capture(GtkWidget *w,const gchar *env) { if(!g_getenv(env)) return;GdkPixbuf *im=gdk_pixbuf_get_from_window(gtk_widget_get_window(w),0,0,gtk_widget_get_allocated_width(w),gtk_widget_get_allocated_height(w));g_assert_nonnull(im);g_assert_true(gdk_pixbuf_save(im,g_getenv(env),"jpeg",NULL,"quality","88",NULL));g_object_unref(im); }
@@ -39,7 +41,7 @@ static void drag_ai(GtkWidget *b) {
  event=gdk_event_new(GDK_BUTTON_RELEASE);event->button.window=g_object_ref(gtk_widget_get_window(b));event->button.button=1;g_signal_emit_by_name(b,"button-release-event",event,&handled);gdk_event_free(event);g_assert_cmpint(gtk_widget_get_margin_start(b),<,old_x);g_assert_cmpint(gtk_widget_get_margin_top(b),>=,0);g_assert_cmpint(gtk_widget_get_margin_top(b),<=,gtk_widget_get_allocated_height(overlay));
 }
 static void terminal_geometry(void) {
- GtkWidget *group=named(window,"insight-terminal-group"),*page=named(window,"insight-ssh-page"),*view=named(window,"insight-ssh-output"),*state=named(window,"insight-ssh-status"),*clip=gtk_widget_get_ancestor(state,GTK_TYPE_SCROLLED_WINDOW),*root=gtk_widget_get_parent(group);g_assert_true(GTK_IS_OVERLAY(root));g_assert_nonnull(clip);g_assert_true(gtk_widget_get_parent(clip)==root);g_assert_null(named(page,"insight-panel-help-header"));gint page_y,view_y,x;g_assert_true(gtk_widget_translate_coordinates(page,root,0,0,&x,&page_y));g_assert_true(gtk_widget_translate_coordinates(view,root,0,0,&x,&view_y));g_assert_cmpint(view_y,<=,page_y+3);g_assert_cmpint(view_y+gtk_widget_get_allocated_height(view),>=,page_y+gtk_widget_get_allocated_height(page)-3);
+ GtkWidget *group=named(window,"insight-terminal-group"),*page=named(window,"insight-ssh-page"),*view=named(window,"insight-ssh-output"),*state=named(window,"insight-ssh-status"),*clip=gtk_widget_get_ancestor(state,GTK_TYPE_SCROLLED_WINDOW),*root=gtk_widget_get_parent(group);g_assert_true(GTK_IS_OVERLAY(root));g_assert_nonnull(clip);g_assert_true(gtk_widget_get_mapped(clip));g_assert_true(gtk_widget_get_parent(clip)==root);g_assert_null(named(page,"insight-panel-help-header"));gint page_y,view_y,x;g_assert_true(gtk_widget_translate_coordinates(page,root,0,0,&x,&page_y));g_assert_true(gtk_widget_translate_coordinates(view,root,0,0,&x,&view_y));g_assert_cmpint(view_y,<=,page_y+3);g_assert_cmpint(view_y+gtk_widget_get_allocated_height(view),>=,page_y+gtk_widget_get_allocated_height(page)-3);
  GtkAllocation allocation;gtk_widget_get_allocation(clip,&allocation);for(gint i=0;i<gtk_notebook_get_n_pages(GTK_NOTEBOOK(group));i++) { GtkWidget *tab=gtk_notebook_get_tab_label(GTK_NOTEBOOK(group),gtk_notebook_get_nth_page(GTK_NOTEBOOK(group),i));gint tx,ty;if(gtk_widget_translate_coordinates(tab,root,0,0,&tx,&ty)) g_assert_cmpint(allocation.x,>=,tx+gtk_widget_get_allocated_width(tab)); }g_assert_cmpint(allocation.y+allocation.height,<=,view_y+3);g_assert_cmpint(allocation.x+allocation.width,<=,gtk_widget_get_allocated_width(root)+1);gchar *tooltip=gtk_widget_get_tooltip_text(clip);g_assert_cmpstr(tooltip,==,gtk_label_get_text(GTK_LABEL(state)));g_free(tooltip);
 }
 static gboolean step(gpointer data) {
@@ -55,15 +57,19 @@ static gboolean step(gpointer data) {
   g_assert_true(GTK_IS_WINDOW(assistant));g_assert_true(gtk_window_get_resizable(GTK_WINDOW(assistant)));g_assert_true(gtk_widget_get_toplevel(named(assistant,"insight-ai-question"))==assistant);g_assert_null(named(window,"insight-ai-window"));
   GtkWidget *child=named(window,"insight-ssh-session-1");while(gtk_widget_get_parent(child)) { GtkWidget *parent=gtk_widget_get_parent(child);if(GTK_IS_NOTEBOOK(parent)) gtk_notebook_set_current_page(GTK_NOTEBOOK(parent),gtk_notebook_page_num(GTK_NOTEBOOK(parent),child));child=parent; }
   GtkWidget *group=named(window,"insight-terminal-group");g_assert_true(GTK_IS_NOTEBOOK(group));g_assert_true(gtk_widget_get_parent(named(window,"insight-ssh-page"))==group);g_assert_true(gtk_widget_get_parent(named(window,"insight-tty-page"))==group);
-  click(assistant,"insight-ai-standard-0");g_assert_nonnull(strstr(gtk_entry_get_text(GTK_ENTRY(named(assistant,"insight-ai-question"))),"Diff / Merge"));g_assert_null(g_object_get_data(G_OBJECT(assistant),"insight-ai-busy"));
+  GtkWidget *options=named(assistant,"insight-ai-options"),*fold=named(assistant,"insight-ai-options-collapse");g_assert_nonnull(fold);gtk_notebook_set_current_page(GTK_NOTEBOOK(options),gtk_notebook_page_num(GTK_NOTEBOOK(options),fold));g_assert_true(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(options),"insight-ai-options-folded")));gtk_notebook_set_current_page(GTK_NOTEBOOK(options),0);g_assert_false(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(options),"insight-ai-options-folded")));
+  click(assistant,"insight-ai-standard-0");gchar *staged=insight_ai_console_prompt(named(assistant,"insight-ai-question"));g_assert_nonnull(strstr(staged,"Diff / Merge"));g_free(staged);g_assert_null(g_object_get_data(G_OBJECT(assistant),"insight-ai-busy"));
   GtkWidget *same=assistant;click(window,"insight-ssh-ai");g_assert_true(same==top("insight-ai-window"));
   gchar *context=text(assistant,"insight-ai-context");g_assert_nonnull(strstr(context,"source.c:1"));g_free(context);
   gtk_combo_box_set_active(GTK_COMBO_BOX(named(assistant,"insight-ai-provider")),4);entry(assistant,"insight-ai-endpoint",endpoint);entry(assistant,"insight-ai-model","mock-model");entry(assistant,"insight-ai-key","fixture-secret-key");click(assistant,"insight-ai-attach");chooser_action=1;click(assistant,"insight-ai-attach-files");entry(assistant,"insight-ai-question","Explain this compiler error and propose a correction.");click(assistant,"insight-ai-send");phase++;break;
  }
  case 1: {
-  terminal_geometry();gchar *long_status=g_strnfill(2000,'S');gtk_label_set_text(GTK_LABEL(named(window,"insight-ssh-status")),long_status);g_free(long_status);drag_ai(named(window,"insight-ssh-ai"));
-  gchar *answer=text(assistant,"insight-ai-answer");g_assert_nonnull(strstr(answer,"Mock analysis"));g_free(answer);g_assert_false(gtk_text_view_get_editable(GTK_TEXT_VIEW(named(assistant,"insight-ai-answer"))));
-  GtkWidget *requests=named(assistant,"insight-ai-request-history");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(requests)),NULL),==,1);entry(assistant,"insight-ai-question","");gtk_combo_box_set_active(GTK_COMBO_BOX(requests),0);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(assistant,"insight-ai-question"))),==,"Explain this compiler error and propose a correction.");click(assistant,"insight-ai-frequent-0");g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(assistant,"insight-ai-question"))),==,"Explain this compiler error and propose a correction.");
+  GdkMonitor *monitor=gdk_display_get_monitor_at_window(gtk_widget_get_display(assistant),gtk_widget_get_window(assistant));GdkRectangle work,frame;gdk_monitor_get_workarea(monitor,&work);gdk_window_get_frame_extents(gtk_widget_get_window(assistant),&frame);g_assert_cmpint(frame.x,>=,work.x);g_assert_cmpint(frame.y,>=,work.y);g_assert_cmpint(frame.x+frame.width,<=,work.x+work.width);g_assert_cmpint(frame.y+frame.height,<=,work.y+work.height);GtkWidget *header=gtk_window_get_titlebar(GTK_WINDOW(assistant));g_assert_nonnull(named(header,"insight-ai-window-minimize"));g_assert_nonnull(named(header,"insight-ai-window-maximize"));g_assert_nonnull(named(header,"insight-ai-window-close"));
+  terminal_geometry();GtkWidget *console=named(assistant,"insight-ai-answer");GtkTextBuffer *chat=gtk_text_view_get_buffer(GTK_TEXT_VIEW(console));GtkTextIter start,end;gtk_text_buffer_get_start_iter(chat,&start);end=start;gtk_text_iter_forward_chars(&end,3);g_assert_false(gtk_text_buffer_delete_interactive(chat,&start,&end,TRUE));insight_ai_console_set_prompt(console,"editable tail");gtk_text_buffer_get_end_iter(chat,&end);g_assert_true(gtk_text_buffer_insert_interactive(chat,&end," + edit",-1,TRUE));gchar *tail=insight_ai_console_prompt(console);g_assert_cmpstr(tail,==,"editable tail + edit");g_free(tail);
+  GtkWidget *options=named(assistant,"insight-ai-options"),*model=named(assistant,"insight-ai-model"),*python=named(assistant,"insight-ai-python");g_assert_cmpint(gtk_widget_get_allocated_width(model),>=,70);g_assert_cmpint(gtk_widget_get_allocated_width(python),>=,70);gchar *tip=gtk_widget_get_tooltip_text(model);g_assert_nonnull(tip);g_free(tip);GtkWidget *fold=named(assistant,"insight-ai-options-collapse");gtk_notebook_set_current_page(GTK_NOTEBOOK(options),gtk_notebook_page_num(GTK_NOTEBOOK(options),fold));collapsed_height=gtk_widget_get_allocated_height(console);
+  gchar *long_status=g_strnfill(2000,'S');gtk_label_set_text(GTK_LABEL(named(window,"insight-ssh-status")),long_status);g_free(long_status);drag_ai(named(window,"insight-ssh-ai"));
+  gchar *answer=text(assistant,"insight-ai-answer");g_assert_nonnull(strstr(answer,"Mock analysis"));g_free(answer);g_assert_true(gtk_text_view_get_editable(GTK_TEXT_VIEW(named(assistant,"insight-ai-answer"))));
+  GtkWidget *requests=named(assistant,"insight-ai-request-history");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(requests)),NULL),==,1);entry(assistant,"insight-ai-question","");gtk_combo_box_set_active(GTK_COMBO_BOX(requests),0);gchar *staged_prompt=insight_ai_console_prompt(named(assistant,"insight-ai-question"));g_assert_cmpstr(staged_prompt,==,"Explain this compiler error and propose a correction.");g_free(staged_prompt);click(assistant,"insight-ai-frequent-0");staged_prompt=insight_ai_console_prompt(named(assistant,"insight-ai-question"));g_assert_cmpstr(staged_prompt,==,"Explain this compiler error and propose a correction.");g_free(staged_prompt);
   GtkWidget *history=named(assistant,"insight-ai-answer-history");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(history)),NULL),==,1);g_assert_nonnull(named(assistant,"insight-ai-options"));g_assert_true(gtk_widget_get_sensitive(named(assistant,"insight-ai-save-file")));chooser_action=2;click(assistant,"insight-ai-save-file");gchar *received=NULL;g_assert_true(g_file_get_contents(received_path,&received,NULL,NULL));g_assert_cmpstr(received,==,"fixture attachment\n");g_free(received);
   click(assistant,"insight-ai-insert");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(named(assistant,"insight-ai-status"))),"Cannot insert"));source_is(base);
   gchar *config=g_build_filename(profile,"insight-ai.conf",NULL),*saved=NULL;g_assert_true(g_file_get_contents(config,&saved,NULL,NULL));g_assert_null(strstr(saved,"fixture-secret-key"));g_assert_null(strstr(saved,"compiler error"));g_assert_null(strstr(saved,"int value"));g_free(config);g_free(saved);
@@ -71,7 +77,7 @@ static gboolean step(gpointer data) {
  }
  case 2:
   if(g_get_monotonic_time()<after) { break; }
-  terminal_geometry();capture(GTK_IS_WINDOW(assistant) ? assistant:window,"GEANY_CONSOLE_AI_CAPTURE");click(assistant,"insight-ai-review");diff=top("insight-diff-window");g_assert_nonnull(diff);
+  terminal_geometry();g_assert_cmpint(gtk_widget_get_allocated_height(named(assistant,"insight-ai-answer")),>,collapsed_height);GtkWidget *options=named(assistant,"insight-ai-options");g_assert_cmpint(gtk_widget_get_allocated_height(options),<,60);gtk_notebook_set_current_page(GTK_NOTEBOOK(options),0);capture(GTK_IS_WINDOW(assistant) ? assistant:window,"GEANY_CONSOLE_AI_CAPTURE");click(assistant,"insight-ai-review");diff=top("insight-diff-window");g_assert_nonnull(diff);
   GtkWidget *tabs=named(diff,"insight-diff-toolbar-tabs");g_assert_true(gtk_widget_get_ancestor(named(diff,"insight-diff-ai-question"),GTK_TYPE_NOTEBOOK)==tabs);g_assert_true(gtk_widget_get_ancestor(named(diff,"insight-diff-ai-apply"),GTK_TYPE_NOTEBOOK)==tabs);phase++;break;
  case 3: {
   if(!gtk_widget_get_sensitive(named(diff,"insight-diff-ai-apply"))) break;
@@ -94,7 +100,7 @@ static gboolean step(gpointer data) {
  }
  case 6:
   if(gtk_widget_get_sensitive(named(diff,"insight-diff-cancel"))) break;
-  g_assert_false(gtk_widget_get_sensitive(named(diff,"insight-diff-ai-apply")));gtk_widget_destroy(diff);diff=NULL;entry(assistant,"insight-ai-model","slow");click(assistant,"insight-ai-send");click(assistant,"insight-ai-stop");phase++;break;
+  g_assert_false(gtk_widget_get_sensitive(named(diff,"insight-diff-ai-apply")));gtk_widget_destroy(diff);diff=NULL;entry(assistant,"insight-ai-model","slow");entry(assistant,"insight-ai-question","Why is this terminator required?");click(assistant,"insight-ai-send");click(assistant,"insight-ai-stop");phase++;break;
  case 7:
   g_assert_false(gtk_widget_get_sensitive(named(assistant,"insight-ai-review")));gtk_widget_destroy(assistant);assistant=NULL;
   click(window,"insight-ssh-ai");assistant=top("insight-ai-window");GtkWidget *requests=named(assistant,"insight-ai-request-history");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(requests)),NULL),==,2);gtk_combo_box_set_active(GTK_COMBO_BOX(requests),0);entry(assistant,"insight-ai-question","Edited before explicit Send");g_assert_null(g_object_get_data(G_OBJECT(assistant),"insight-ai-busy"));click(assistant,"insight-ai-history-delete");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(requests)),NULL),==,1);gtk_widget_destroy(assistant);click(window,"insight-ssh-ai");assistant=top("insight-ai-window");requests=named(assistant,"insight-ai-request-history");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(requests)),NULL),==,1);click(assistant,"insight-ai-history-clear");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(requests)),NULL),==,0);gtk_widget_destroy(assistant);assistant=NULL;
