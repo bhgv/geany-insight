@@ -55,7 +55,11 @@ static gboolean load_catalog(GError **error) {
  if(ok) { gchar *path=g_build_filename(app->configdir,"insight","interface-texts.tsv",NULL);ok=read_catalog(&next,path,TRUE,error);g_free(path); }
  if(!ok) { catalog_free(&next);return FALSE; }
  GList *keys=g_hash_table_get_keys(next.en);keys=g_list_sort(keys,(GCompareFunc)g_strcmp0);for(GList *p=keys;p;p=p->next) { gpointer a=g_hash_table_lookup(next.en,p->data),b=g_hash_table_lookup(next.ru,p->data);if(!g_hash_table_contains(next.reverse,a)) g_hash_table_insert(next.reverse,a,p->data);if(!g_hash_table_contains(next.reverse,b)) g_hash_table_insert(next.reverse,b,p->data); }g_list_free(keys);
- g_mutex_lock(&catalog_mutex);Catalog old=catalog;catalog=next;active=russian ? catalog.ru:catalog.en;g_mutex_unlock(&catalog_mutex);catalog_free(&old);return TRUE;
+ g_mutex_lock(&catalog_mutex);Catalog old=catalog;
+ /* Legacy models can still contain a caption rendered before Reload. Keep its
+  * canonical key as an alias; current captions always take precedence. */
+ if(old.reverse) { GHashTableIter aliases;gpointer caption,key;g_hash_table_iter_init(&aliases,old.reverse);while(g_hash_table_iter_next(&aliases,&caption,&key)) if(g_hash_table_contains(next.en,key) && !g_hash_table_contains(next.reverse,caption)) g_hash_table_insert(next.reverse,caption,key); }
+ catalog=next;active=russian ? catalog.ru:catalog.en;g_mutex_unlock(&catalog_mutex);catalog_free(&old);return TRUE;
 }
 static const gchar *canonical_locked(const gchar *text) { if(catalog.en && g_hash_table_contains(catalog.en,text)) return text;const gchar *key=catalog.reverse ? g_hash_table_lookup(catalog.reverse,text):NULL;return key ? key:text; }
 GEANY_API_SYMBOL
