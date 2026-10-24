@@ -815,3 +815,8 @@ A Navigate command expands persistent Parse locally before lookup / Find symbols
 ### Symbol Info source scopes and non-project open buffers
 
 Lookup sources persists Project and open files / Project files only / Current buffer only. Completed membership and exact open-buffer identities filter before raw-name and 512-row bounds. Other named open buffers supply cached tags to a bounded private snapshot without reparsing or changing project membership/database. Closed external buffers lose eligibility immediately; nominal links obey source scope. Snapshot failure refuses a partial result and disables Jump. History uses current options. These controls remain specific to Symbol Info and target choosers. [Guide and diagram](function-targets.md).
+
+
+### Browser Mode source browsing
+
+Edit/editor-popup and a status-bar toggle enable session-only read-only browsing across existing/new source buffers. Click/Space use the current definition resolver with lexical code guards; Backspace uses native Back; Ctrl/Cmd selection bypasses normal Ctrl+click navigation. Original document/Scintilla flags, dirty text and Undo/Redo survive toggling; underlying flags are serialized into sessions. Reload, Save As (including failure) and Clone reapply protection while retaining native semantics. This does not add semantic resolution or an ambiguity chooser; source lookups retain a 2 MiB/single-selection limit. [RU/EN guide and diagram](browser-mode.md).

@@ -27,6 +27,7 @@
 # include "config.h"
 #endif
 
+#include "insight-browser-mode.h"
 #include "document.h"
 
 #include "app.h"
@@ -1571,7 +1572,7 @@ gboolean document_reload_force(GeanyDocument *doc, const gchar *forced_enc)
 
 	/* try to set the cursor to the position before reloading */
 	pos = sci_get_current_position(doc->editor->sci);
-	new_doc = document_open_file_full(doc, NULL, pos, doc->readonly, doc->file_type, forced_enc);
+	new_doc = document_open_file_full(doc, NULL, pos, insight_browser_mode_file_readonly(doc), doc->file_type, forced_enc);
 
 	if (file_prefs.keep_edit_history_on_reload && file_prefs.show_keep_edit_history_on_reload_msg)
 	{
@@ -1815,6 +1816,8 @@ gboolean document_save_file_as(GeanyDocument *doc, const gchar *utf8_fname)
 	replace_header_filename(doc);
 
 	ret = document_save_file(doc, TRUE);
+	/* Save As may clear native read-only even on a failed save. */
+	if (!doc->readonly) insight_browser_mode_reloaded(doc);
 
 	/* file monitoring support, add file monitoring after the file has been saved
 	 * to ignore any earlier events */
@@ -3389,13 +3392,14 @@ GeanyDocument *document_clone(GeanyDocument *old_doc)
 	doc->editor->auto_indent = old_doc->editor->auto_indent;
 	editor_set_indent(doc->editor, old_doc->editor->indent_type,
 		old_doc->editor->indent_width);
-	doc->readonly = old_doc->readonly;
+	doc->readonly = insight_browser_mode_file_readonly(old_doc);
 	doc->has_bom = old_doc->has_bom;
 	doc->priv->protected = 0;
 	document_set_encoding(doc, old_doc->encoding);
 	sci_set_lines_wrapped(doc->editor->sci, doc->editor->line_wrapping);
 	sci_set_readonly(doc->editor->sci, doc->readonly);
 
+	insight_browser_mode_reloaded(doc);
 	/* update ui */
 	ui_document_show_hide(doc);
 	return doc;

@@ -1,3 +1,4 @@
+#include "insight-browser-mode.h"
 #include "insight-languages.h"
 #include "insight-completion.h"
 #include "insight-paste.h"
@@ -323,6 +324,8 @@ static gboolean on_editor_button_press_event(GtkWidget *widget, GdkEventButton *
 
 	if (event->button == 1)
 	{
+        if (insight_browser_mode_mouse(editor,event,editor_info.click_pos)) return TRUE;
+        if (insight_browser_mode_active() && (keybindings_get_modifiers(event->state)&GEANY_PRIMARY_MOD_MASK)) return document_check_disk_status(doc,FALSE);
         if (event->type == GDK_2BUTTON_PRESS) {
             gint left = (gint) SSM(editor->sci, SCI_GETMARGINWIDTHN, 0, 0);
             gint numbers = (gint) SSM(editor->sci, SCI_GETMARGINWIDTHN, 1, 0);
@@ -5107,6 +5110,7 @@ static ScintillaObject *create_new_sci(GeanyEditor *editor)
 static gboolean filetype_return_key(GtkWidget *widget, GdkEventKey *event, gpointer data)
 {
  GeanyEditor *editor=data;
+ if(insight_browser_mode_key(widget,event)) return TRUE;
  if(insight_workbench_source_link_key(event)) return TRUE;
  if(insight_completion_key(editor,event)) return TRUE;
  if(insight_navigation_key(editor,event)) return TRUE;

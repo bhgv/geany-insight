@@ -27,6 +27,7 @@
 # include "config.h"
 #endif
 
+#include "insight-browser-mode.h"
 #include "callbacks.h"
 
 #include "about.h"
@@ -874,6 +875,7 @@ static void on_set_file_readonly1_toggled(GtkCheckMenuItem *checkmenuitem, gpoin
 		GeanyDocument *doc = document_get_current();
 		g_return_if_fail(doc != NULL);
 
+		if(insight_browser_mode_active()) { ignore_callback=TRUE;gtk_check_menu_item_set_active(checkmenuitem,TRUE);ignore_callback=FALSE;ui_set_statusbar(FALSE,"Exit Browser Mode to change file read-only state");return; }
 		doc->readonly = ! doc->readonly;
 		sci_set_readonly(doc->editor->sci, doc->readonly);
 		ui_update_tab_status(doc);

@@ -668,3 +668,8 @@ EXTRA_DIST += insight/tests/function_targets_gui_test.c
 
 insightdoc_DATA += insight/docs/function-targets.md
 dist_insightdocmedia_DATA += insight/docs/media/function-targets.svg
+
+EXTRA_DIST += insight/tests/browser_mode_gui_test.c
+
+insightdoc_DATA += insight/docs/browser-mode.md
+dist_insightdocmedia_DATA += insight/docs/media/browser-mode.svg

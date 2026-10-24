@@ -31,6 +31,7 @@
 # include "config.h"
 #endif
 
+#include "insight-browser-mode.h"
 #include "keyfile.h"
 
 #include "app.h"
@@ -454,7 +455,7 @@ static gchar *get_session_file_string(GeanyDocument *doc)
 	fname = g_strdup_printf("%d;%s;%d;E%s;%d;%d;%d;%s;%d;%d",
 		sci_get_current_position(doc->editor->sci),
 		ft->name,
-		doc->readonly,
+		insight_browser_mode_file_readonly(doc),
 		doc->encoding,
 		doc->editor->indent_type,
 		doc->editor->auto_indent,

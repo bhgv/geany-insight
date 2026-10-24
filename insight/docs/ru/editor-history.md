@@ -44,3 +44,6 @@ unassigned Go to keybinding allows a user shortcut without replacing defaults.
 не создают пару. В настройках клавиш Go to можно назначить своё сочетание.
 
 Reference: [Go Back Toggle](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Go_Back_Toggle.htm).
+
+
+Режим чтения и переходов: [Browser Mode](browser-mode.md).

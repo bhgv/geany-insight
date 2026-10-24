@@ -5077,6 +5077,13 @@ static void info_companion(GtkWidget *widget,gpointer data) {
  GeanyDocument *doc=info_document(path);GeanyFiletype *ft=doc ? doc->file_type:insight_languages_detect(path);const gchar *separator=ft ? tm_parser_scope_separator_printable(ft->lang):"::";if(!separator || !*separator) separator="::";
  gchar *query=scope && *scope ? g_strconcat(scope,separator,name,NULL):g_strdup(name);info_show_query_kind(query,path,line,mode==1 ? 1:2);g_free(query);g_free(name);g_free(scope);g_free(path);
 }
+gboolean insight_workbench_browser_definition(gint position) {
+ GeanyDocument *doc=document_get_current();if(!doc || position<0 || position>=sci_get_length(doc->editor->sci) || sci_get_length(doc->editor->sci)>2*1024*1024) return FALSE;
+ ScintillaObject *sci=doc->editor->sci;if(sci_get_selection_mode(sci)!=SC_SEL_STREAM || SSM(sci,SCI_GETSELECTIONS,0,0)!=1) return FALSE;
+ gint start=(gint)SSM(sci,SCI_WORDSTARTPOSITION,position,TRUE),end=(gint)SSM(sci,SCI_WORDENDPOSITION,position,TRUE);if(start>=end || position>=end) return FALSE;
+ SSM(sci,SCI_COLOURISE,start,end);if(!definition_code(sci,position)) return FALSE;
+ sci_set_current_position(sci,position,FALSE);if(!insight_workbench_goto_definition()) ui_set_statusbar(TRUE,"Known definition not found");return TRUE;
+}
 static void show_function_target(GtkWidget *widget,gpointer data) {
  (void)widget;GeanyDocument *doc=document_get_current();if(!doc) return;ScintillaObject *sci=doc->editor->sci;
  if(sci_get_length(sci)>2*1024*1024 || sci_get_selection_mode(sci)!=SC_SEL_STREAM || SSM(sci,SCI_GETSELECTIONS,0,0)!=1) { ui_set_statusbar(TRUE,"Function target lookup requires one normal selection in a buffer up to 2 MiB");return; }

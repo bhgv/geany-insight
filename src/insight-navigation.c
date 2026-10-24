@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+#include "insight-browser-mode.h"
 #include "geany.h"
 #include "insight-navigation.h"
 #include "insight-command-list.h"
@@ -582,6 +583,7 @@ static void back_toggle_command(GtkMenuItem *item,gpointer data) { (void)item;(v
 static void show_history(GtkMenuItem *item,gpointer data) { (void)item;(void)data;navqueue_show_history(); }
 void insight_navigation_menu(GtkWidget *menu)
 {
+    insight_browser_mode_init(menu);
     insight_command_list_menu();
     insight_selection_search_init();
     insight_word_highlights_init();

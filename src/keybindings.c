@@ -30,6 +30,7 @@
 # include "config.h"
 #endif
 
+#include "insight-browser-mode.h"
 #include "keybindings.h"
 #include "insight-paste.h"
 #include "insight-buffer-transfer.h"
@@ -328,6 +329,7 @@ static void add_kb(GeanyKeyGroup *group, gsize key_id,
 
 static void cb_func_insight(guint key_id)
 {
+    if(key_id==GEANY_KEYS_INSIGHT_BROWSERMODE) { insight_browser_mode_toggle();return; }
     if (key_id >= GEANY_KEYS_INSIGHT_SYMBOLINFO && key_id <= GEANY_KEYS_INSIGHT_JUMPBASETYPE) { insight_workbench_symbol_navigation(key_id-GEANY_KEYS_INSIGHT_SYMBOLINFO);return; }
     if (key_id >= GEANY_KEYS_INSIGHT_RECORDSTART && key_id <= GEANY_KEYS_INSIGHT_RECORDCLEAR) { insight_recording_command(key_id-GEANY_KEYS_INSIGHT_RECORDSTART);return; }
     if (key_id >= GEANY_KEYS_INSIGHT_COPYSYMBOL && key_id <= GEANY_KEYS_INSIGHT_PASTESYMBOL) { insight_workbench_symbol_edit(key_id-GEANY_KEYS_INSIGHT_COPYSYMBOL);return; }
@@ -878,6 +880,7 @@ static void init_default_kb(void)
         0, 0, "insight_simpletab", _("Simple Tab"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_CLEARTYPING, cb_func_insight,
         0, 0, "insight_cleartyping", _("Clear Typing History"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_BROWSERMODE, cb_func_insight, 0, 0, "insight_browser_mode", _("Browser Mode"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_SYMBOLINFO, cb_func_insight,
         0, 0, "insight_symbol_info", _("Symbol Info…"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_JUMPPROTOTYPE, cb_func_insight,
@@ -1635,6 +1638,7 @@ static gboolean on_key_press_event(GtkWidget *widget, GdkEventKey *ev, gpointer 
 	if (key_press_ret)
 		return TRUE;
 
+	if (insight_browser_mode_key(gtk_window_get_focus(GTK_WINDOW(widget)),ev)) return TRUE;
 	if (insight_list_tools_key(gtk_window_get_focus(GTK_WINDOW(widget)), ev))
 		return TRUE;
 

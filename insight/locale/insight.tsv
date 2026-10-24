@@ -2060,3 +2060,10 @@ Lookup sources	Область поиска
 Project and open files	Проект и открытые файлы
 Project files only	Только файлы проекта
 Symbol lookup snapshot could not be completed; narrow the source scope	Не удалось завершить снимок поиска символов; сузьте область поиска
+Browser Mode	Режим просмотра
+Browse	Просмотр
+Browser Mode help…	Справка режима просмотра…
+Browser Mode: read-only browsing; right-click for options	Режим просмотра без правки; правый щелчок открывает параметры
+Browser Mode: ON — click/Space to browse, Backspace to go back	Просмотр ВКЛ — щелчок/Пробел для перехода, Backspace для возврата
+Browser Mode: OFF	Режим просмотра: ВЫКЛ
+Exit Browser Mode to change file read-only state	Для изменения состояния чтения файла выключите режим просмотра
