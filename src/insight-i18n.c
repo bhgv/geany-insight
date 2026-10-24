@@ -175,7 +175,7 @@ void insight_i18n_refresh(void) {
  GPtrArray *windows=g_ptr_array_new_with_free_func(g_object_unref);GList *tops=gtk_window_list_toplevels();for(GList *p=tops;p;p=p->next) g_ptr_array_add(windows,g_object_ref(p->data));g_list_free(tops);
  for(guint i=0;i<windows->len;i++) { GtkWidget *window=g_ptr_array_index(windows,i);if(!g_object_get_data(G_OBJECT(window),"insight-i18n-destroyed")) insight_i18n_apply(window); }
  if(main_widgets.editor_menu) insight_i18n_apply(main_widgets.editor_menu);
- GPtrArray *objects=g_ptr_array_new_with_free_func(g_object_unref);GHashTableIter iter;gpointer object;g_hash_table_iter_init(&iter,watched);while(g_hash_table_iter_next(&iter,&object,NULL)) g_ptr_array_add(objects,g_object_ref(object));
+ GPtrArray *objects=g_ptr_array_new_with_free_func(g_object_unref);GHashTableIter iter;gpointer object;g_hash_table_iter_init(&iter,watched);while(g_hash_table_iter_next(&iter,&object,NULL)) if(G_OBJECT_TYPE(object)==GTK_TYPE_MENU || g_object_get_data(object,"insight-i18n-refresh")) g_ptr_array_add(objects,g_object_ref(object));
  for(guint i=0;i<objects->len;i++) { GObject *item=g_ptr_array_index(objects,i);if(g_object_get_data(item,"insight-i18n-destroyed")) continue;
   /* Application GtkMenus can outlive their visible popup. GtkTreeMenu belongs
    * to GtkComboBox and must be rebuilt only by its model owner. */
