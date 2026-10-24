@@ -2523,3 +2523,5 @@ Show linked source windows	Показать связанные окна исхо
 Link source window…	Связать окно исходника…
 Cannot save source window links: %s	Не удалось сохранить связи окон исходников: %s
 Linked source file cannot be opened	Не удалось открыть связанный исходный файл
+Choose the target buffer in the first table row.	Выберите ведомое окно в первой строке таблицы.
+Choose Source and Target in the first row. Show together opens linked editors side by side.	Выберите главное и ведомое окно в первой строке. Флажок совместного показа открывает редакторы бок о бок.
