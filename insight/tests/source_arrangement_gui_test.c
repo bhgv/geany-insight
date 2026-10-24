@@ -40,10 +40,10 @@ static gboolean step(gpointer data) {
   /* The real native keyboard dispatcher, source focus checks and callbacks. */
   gtk_widget_grab_focus(GTK_WIDGET(docs[0]->editor->sci));SEND(docs[0]->editor->sci,SCI_SETSEL,0,3);key(GDK_KEY_c,GDK_CONTROL_MASK);gchar *clipboard=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));g_assert_cmpstr(clipboard,==,"int");g_free(clipboard);
   SEND(docs[0]->editor->sci,SCI_SETSEL,0,0);key(GDK_KEY_d,GDK_CONTROL_MASK);g_assert_true(docs[0]->changed);key(GDK_KEY_z,GDK_CONTROL_MASK);intact(docs[0]);key(GDK_KEY_v,GDK_CONTROL_MASK);g_assert_true(docs[0]->changed);key(GDK_KEY_z,GDK_CONTROL_MASK);intact(docs[0]);
-  SEND(docs[0]->editor->sci,SCI_APPENDTEXT,1,(sptr_t)"!");key(GDK_KEY_s,GDK_CONTROL_MASK);g_assert_false(docs[0]->changed);gchar *disk=NULL;g_assert_true(g_file_get_contents(paths[0],&disk,NULL,NULL));g_assert_true(g_str_has_suffix(disk,"!"));g_free(disk);key(GDK_KEY_z,GDK_CONTROL_MASK);key(GDK_KEY_s,GDK_CONTROL_MASK);intact(docs[0]);
+  SEND(docs[0]->editor->sci,SCI_APPENDTEXT,2,(sptr_t)"!\n");key(GDK_KEY_s,GDK_CONTROL_MASK);g_assert_false(docs[0]->changed);gchar *disk=NULL;g_assert_true(g_file_get_contents(paths[0],&disk,NULL,NULL));g_assert_true(g_str_has_suffix(disk,"!\n"));g_free(disk);key(GDK_KEY_z,GDK_CONTROL_MASK);key(GDK_KEY_s,GDK_CONTROL_MASK);intact(docs[0]);
   gtk_button_clicked(GTK_BUTTON(named(host,"insight-source-arrangement-horizontal")));host=toplevel("insight-linked-source-windows");phase++;return G_SOURCE_CONTINUE;
  }
- if(phase==2) {separated(docs[0],docs[2],FALSE);action(GEANY_KEYS_INSIGHT_TILEVERTICAL);phase++;return G_SOURCE_CONTINUE;}
+ if(phase==2) {separated(docs[0],docs[2],FALSE);gtk_button_clicked(GTK_BUTTON(named(host,"insight-source-arrangement-next")));g_assert_true(document_get_current()==docs[2]);gtk_button_clicked(GTK_BUTTON(named(host,"insight-source-arrangement-previous")));g_assert_true(document_get_current()==docs[0]);action(GEANY_KEYS_INSIGHT_TILEVERTICAL);phase++;return G_SOURCE_CONTINUE;}
  if(phase==3) {
   g_assert_nonnull(host);for(guint n=0;n<4;n++) g_assert_true(gtk_widget_get_toplevel(GTK_WIDGET(docs[n]->editor->sci))==host);
   for(guint n=0;n<4;n++) for(guint k=n+1;k<4;k++) {GdkRectangle a=rect(docs[n]),b=rect(docs[k]);g_assert_true(a.x+a.width<=b.x || b.x+b.width<=a.x || a.y+a.height<=b.y || b.y+b.height<=a.y);}
