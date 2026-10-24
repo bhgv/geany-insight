@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "geany.h"
 #include "insight-appearance.h"
+#include "insight-ai.h"
 #include "insight-i18n.h"
 #include "insight-workbench.h"
 #include "ui_utils.h"
@@ -85,6 +86,7 @@ static void apply(void) {
  for(guint i=0;i<surfaces->len;i++) { Surface *s=g_ptr_array_index(surfaces,i);GtkWidget *w=g_weak_ref_get(&s->widget);if(w) { apply_surface(w);style_icons(w);g_object_unref(w); } }
  sync_menus();
  insight_workbench_set_independent(independent);
+ insight_ai_window_modes();
 }
 static gboolean load_css(GError **error) {
  if(provider) return TRUE;

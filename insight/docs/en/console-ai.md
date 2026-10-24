@@ -66,10 +66,19 @@ Verified code: [`5a2f1e4271b30304e218a5664e8565e3010f9c77`](https://github.com/b
 
 ## Embedded SSH assistant, attachments and history
 
-Ai opens inside the selected SSH terminal. Connection, Context / source and Attachments group the settings at the top. The paperclip accepts up to four files totaling 512 KiB. Text is sent as text, PNG/JPEG/WebP/GIF as image parts, PDF and other binary types as file parts where supported by the API/model. ZIP/TAR/GZ are inspected in memory: the listing and small UTF-8 members are sent; binary/large members are explicitly marked as omitted. Limits: 64 entries, 512 KiB content, 64 KiB per text member, 1 MiB tar stream including headers. Archives are never extracted to disk.
+Ai opens a separate window for the selected SSH terminal. Connection, Context / source and Attachments group the settings at the top. The paperclip accepts up to four files totaling 512 KiB. Text is sent as text, PNG/JPEG/WebP/GIF as image parts, PDF and other binary types as file parts where supported by the API/model. ZIP/TAR/GZ are inspected in memory: the listing and small UTF-8 members are sent; binary/large members are explicitly marked as omitted. Limits: 64 entries, 512 KiB content, 64 KiB per text member, 1 MiB tar stream including headers. Archives are never extracted to disk.
 
 Generated files returned by the model (up to four, 256 KiB combined and within the overall answer limit) appear under Attachments → Save received file. Only validated bytes from the answer are saved, to a user-chosen path; nothing opens or runs automatically. Image and binary file-part support depends on the provider/model; provider errors remain visible.
 
 The list above the answer retains up to 32 answers in this session. Selecting one restores its text, suggested command and files; Diff uses the same explicitly attached source snapshot. Attaching/detaching source clears answer history. SSH Run reviewed command executes the selected suggestion only when clicked. The jump button next to terminal input opens a selected file:line diagnostic in an existing local source or SFTP cache.
 
-In embedded mode, AI settings / context / attachments starts folded to leave room for the answer and prompt in a short panel. Expand it to configure the connection, inspect context or use the paperclip.
+
+## One terminal group and a floating Ai window
+
+The bottom **Terminals** tab contains **Local / SSH / TTY**. Context remains a separate tab. Every terminal screen has an **80%-opaque Ai** button: drag it to a free area; resizing keeps it inside the screen.
+
+Ai opens a separate resizable system window with window controls, prompt, answers, model settings and attachments. In the regular style it is transient for the main window; independent-window mode removes that relationship. Pressing Ai again raises the existing window and refreshes context unless a request is active. Destroying the source terminal closes its assistant. This is a floating system window; no internal MDI container is introduced.
+
+**Errors → source**, **Shell help**, **Explain output** and **Connection help** stage an editable prompt. Recent requests and the four most frequent requests are shared across terminal assistants: up to 128 unique requests held in memory until application exit, never written to disk. Selecting a request does not send it; press **Send** explicitly. Received-answer history remains separate, up to 32 answers per window.
+
+SSH/TTY use selected text or the last 12,000 characters; Local uses selected text or its available transcript. The resulting context is capped at 60 KiB and can be inspected and edited. Attach source explicitly. Review code proposals in **Diff / Merge**; inserting a command does not execute it. For TTY, check the device protocol: shell commands may not apply to a COM device.

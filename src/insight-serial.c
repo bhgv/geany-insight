@@ -2,6 +2,7 @@
 #include "geany.h"
 #include "insight-serial.h"
 #include "insight-terminal.h"
+#include "insight-terminal-ui.h"
 #include "insight-help.h"
 #include "main.h"
 #include "ui_utils.h"
@@ -17,7 +18,7 @@
 #include <poll.h>
 #endif
 typedef struct {
- GtkWidget *page,*view;GByteArray *pending;guint timer,number;gboolean echo;
+ GtkWidget *page,*view;GByteArray *pending;guint timer,number;gboolean echo;gchar *endpoint;
 #ifdef G_OS_WIN32
  HANDLE handle;OVERLAPPED read_op,write_op;gboolean reading,writing;guint write_size;gchar read_buffer[8192],write_buffer[8192];
 #else
@@ -102,7 +103,7 @@ static void connect_port(GtkWidget *widget,gpointer data) {
 #ifdef G_OS_WIN32
  s->read_op.hEvent=CreateEvent(NULL,TRUE,FALSE,NULL);s->write_op.hEvent=CreateEvent(NULL,TRUE,FALSE,NULL);if(!s->read_op.hEvent || !s->write_op.hEvent) { close_session(s);message(s,"Cannot allocate serial I/O events");return; }
 #endif
- s->echo=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(serial.echo));s->timer=g_timeout_add(20,tick,s);gchar *text=g_strdup_printf("Connected: %s • %d baud • %d data bits • %d stop bits",port,baud,bits,stops);message(s,text);g_free(text);gtk_notebook_set_current_page(GTK_NOTEBOOK(serial.tabs),gtk_notebook_page_num(GTK_NOTEBOOK(serial.tabs),s->page));gtk_widget_grab_focus(s->view);
+ g_free(s->endpoint);s->endpoint=g_strdup(port);s->echo=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(serial.echo));s->timer=g_timeout_add(20,tick,s);gchar *text=g_strdup_printf("Connected: %s • %d baud • %d data bits • %d stop bits",port,baud,bits,stops);message(s,text);g_free(text);gtk_notebook_set_current_page(GTK_NOTEBOOK(serial.tabs),gtk_notebook_page_num(GTK_NOTEBOOK(serial.tabs),s->page));gtk_widget_grab_focus(s->view);
 }
 static void disconnect_port(GtkWidget *widget,gpointer data) { (void)widget;(void)data;if(serial.selected) { close_session(serial.selected);message(serial.selected,"TTY disconnected"); } }
 static gint compare_names(gconstpointer a,gconstpointer b) { return g_strcmp0(*(gchar *const *)a,*(gchar *const *)b); }
@@ -116,6 +117,11 @@ static void refresh_ports(GtkWidget *widget,gpointer data) {
  g_ptr_array_sort(ports,compare_names);gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(serial.ports));for(guint n=0;n<ports->len;n++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(serial.ports),g_ptr_array_index(ports,n));if(*selected) gtk_entry_set_text(GTK_ENTRY(entry),selected);else if(ports->len) gtk_combo_box_set_active(GTK_COMBO_BOX(serial.ports),0);g_free(selected);g_ptr_array_unref(ports);
 }
 static void switched(GtkNotebook *book,GtkWidget *page,guint number,gpointer data) { (void)book;(void)number;(void)data;if(serial.closing) return;SerialSession *s=g_object_get_data(G_OBJECT(page),"insight-tty-session");if(s) serial.selected=s;else refresh_ports(NULL,NULL); }
+static gboolean ai_insert(const gchar *command,gpointer data) { SerialSession *s=data;if(serial.closing || !connected(s)) return FALSE;insight_terminal_send(s->view,command);return TRUE; }
+static void ai_console(GtkWidget *widget,gpointer data) {
+ (void)widget;SerialSession *s=data;GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(s->view));GtkTextIter a,z;if(!gtk_text_buffer_get_selection_bounds(buffer,&a,&z)) { gtk_text_buffer_get_end_iter(buffer,&z);a=z;gtk_text_iter_backward_chars(&a,12000); }
+ gchar *output=gtk_text_buffer_get_text(buffer,&a,&z,TRUE),*context=g_strdup_printf("TTY / RS-232 terminal %u\nEndpoint: %s\nConnection: %s\nAnalyze device output and relate diagnostics to explicitly attached local source. Review the device protocol before inserting commands.\n\n%s",s->number,s->endpoint ? s->endpoint:"not connected",connected(s) ? "open":"closed",output);insight_terminal_ui_assistant("TTY assistant — serial device output and local code",context,s->view,ai_insert,s);g_free(output);g_free(context);
+}
 static void new_session(GtkWidget *widget,gpointer data) {
  (void)widget;(void)data;if(serial.sessions->len>=16) { message(NULL,"Up to 16 TTY terminals can be open");return; }SerialSession *s=g_new0(SerialSession,1);s->number=serial.sessions->len+1;s->pending=g_byte_array_new();
 #ifdef G_OS_WIN32
@@ -123,7 +129,7 @@ static void new_session(GtkWidget *widget,gpointer data) {
 #else
  s->fd=-1;
 #endif
- s->page=gtk_scrolled_window_new(NULL,NULL);s->view=insight_terminal_new(write_terminal,s);gchar *name=g_strdup_printf("insight-tty-terminal-%u",s->number);gtk_widget_set_name(s->view,name);g_free(name);gtk_container_add(GTK_CONTAINER(s->page),s->view);g_object_set_data(G_OBJECT(s->page),"insight-tty-session",s);gchar *hint=g_strdup_printf("TTY terminal %u",s->number);gtk_notebook_append_page(GTK_NOTEBOOK(serial.tabs),s->page,insight_terminal_tab(2,s->number,hint));g_free(hint);g_ptr_array_add(serial.sessions,s);serial.selected=s;gtk_widget_show_all(s->page);gtk_notebook_set_current_page(GTK_NOTEBOOK(serial.tabs),gtk_notebook_page_num(GTK_NOTEBOOK(serial.tabs),s->page));
+ GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);s->view=insight_terminal_new(write_terminal,s);gchar *name=g_strdup_printf("insight-tty-terminal-%u",s->number);gtk_widget_set_name(s->view,name);g_free(name);gtk_container_add(GTK_CONTAINER(scroll),s->view);name=g_strdup_printf("insight-tty-ai-%u",s->number);s->page=insight_terminal_ui_overlay(scroll,name,G_CALLBACK(ai_console),s);g_free(name);g_object_set_data(G_OBJECT(s->page),"insight-tty-session",s);gchar *hint=g_strdup_printf("TTY terminal %u",s->number);gtk_notebook_append_page(GTK_NOTEBOOK(serial.tabs),s->page,insight_terminal_tab(2,s->number,hint));g_free(hint);g_ptr_array_add(serial.sessions,s);serial.selected=s;gtk_widget_show_all(s->page);gtk_notebook_set_current_page(GTK_NOTEBOOK(serial.tabs),gtk_notebook_page_num(GTK_NOTEBOOK(serial.tabs),s->page));
 }
 static GtkWidget *options(GtkWidget *grid,gint row,const gchar *label,const gchar *name,const gchar *values,gint active) {
  GtkWidget *combo=gtk_combo_box_text_new(),*title=gtk_label_new(label);gtk_label_set_xalign(GTK_LABEL(title),0);gchar **items=g_strsplit(values,";",-1);for(guint n=0;items[n];n++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo),items[n]);g_strfreev(items);gtk_combo_box_set_active(GTK_COMBO_BOX(combo),active);gtk_widget_set_name(combo,name);gtk_grid_attach(GTK_GRID(grid),title,0,row,1,1);gtk_grid_attach(GTK_GRID(grid),combo,1,row,1,1);return combo;
@@ -134,6 +140,6 @@ void insight_serial_init(void) {
  serial.ports=gtk_combo_box_text_new_with_entry();gtk_widget_set_name(serial.ports,"insight-tty-port");GtkWidget *title=gtk_label_new("Serial port");gtk_grid_attach(GTK_GRID(grid),title,0,0,1,1);gtk_grid_attach(GTK_GRID(grid),serial.ports,1,0,1,1);gtk_entry_set_width_chars(GTK_ENTRY(gtk_bin_get_child(GTK_BIN(serial.ports))),12);serial.baud=options(grid,1,"Baud rate","insight-tty-baud","300;600;1200;2400;4800;9600;19200;38400;57600;115200;230400",9);serial.bits=options(grid,2,"Data bits","insight-tty-bits","5;6;7;8",3);serial.stop=options(grid,3,"Stop bits","insight-tty-stop","1;2",0);serial.parity=options(grid,4,"Parity","insight-tty-parity","None;Even;Odd",0);
  serial.echo=gtk_check_button_new_with_label("Local echo");gtk_widget_set_name(serial.echo,"insight-tty-echo");gtk_box_pack_start(GTK_BOX(body),serial.echo,FALSE,FALSE,0);GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(body),row,FALSE,FALSE,0);const gchar *labels[]={"Connect","Disconnect","Refresh ports"},*names[]={"insight-tty-connect","insight-tty-disconnect","insight-tty-refresh"};GCallback callbacks[]={G_CALLBACK(connect_port),G_CALLBACK(disconnect_port),G_CALLBACK(refresh_ports)};for(guint n=0;n<3;n++) { GtkWidget *button=gtk_button_new_with_label(labels[n]);gtk_widget_set_name(button,names[n]);gtk_box_pack_start(GTK_BOX(row),button,FALSE,FALSE,0);g_signal_connect(button,"clicked",callbacks[n],NULL); }
  serial.status=gtk_label_new("TTY / RS-232 — choose a port and connection parameters");gtk_widget_set_name(serial.status,"insight-tty-status");gtk_label_set_selectable(GTK_LABEL(serial.status),TRUE);gtk_label_set_line_wrap(GTK_LABEL(serial.status),TRUE);gtk_label_set_width_chars(GTK_LABEL(serial.status),1);gtk_box_pack_start(GTK_BOX(serial.page),serial.status,FALSE,FALSE,0);GtkWidget *plus=gtk_button_new_from_icon_name("list-add-symbolic",GTK_ICON_SIZE_MENU);gtk_widget_set_name(plus,"insight-tty-new-terminal");gtk_widget_set_tooltip_text(plus,"New TTY terminal");g_signal_connect(plus,"clicked",G_CALLBACK(new_session),NULL);gtk_notebook_set_action_widget(GTK_NOTEBOOK(serial.tabs),plus,GTK_PACK_END);g_signal_connect(serial.tabs,"switch-page",G_CALLBACK(switched),NULL);g_signal_connect(scroll,"map",G_CALLBACK(refresh_ports),NULL);new_session(NULL,NULL);gtk_notebook_set_current_page(GTK_NOTEBOOK(serial.tabs),0);
- insight_panel_help_attach(serial.page,"panel-tty.md");gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),serial.page,gtk_label_new("TTY Terminal"));gtk_widget_show_all(serial.page);
+ insight_panel_help_attach(serial.page,"panel-tty.md");insight_terminal_ui_add(serial.page,"TTY");
 }
-void insight_serial_finalize(void) { serial.closing=TRUE;if(!serial.sessions) return;for(guint n=0;n<serial.sessions->len;n++) { SerialSession *s=g_ptr_array_index(serial.sessions,n);close_session(s);gtk_widget_destroy(s->page);g_byte_array_unref(s->pending);g_free(s); }g_ptr_array_unref(serial.sessions);serial.sessions=NULL; }
+void insight_serial_finalize(void) { serial.closing=TRUE;if(!serial.sessions) return;for(guint n=0;n<serial.sessions->len;n++) { SerialSession *s=g_ptr_array_index(serial.sessions,n);close_session(s);gtk_widget_destroy(s->page);g_byte_array_unref(s->pending);g_free(s->endpoint);g_free(s); }g_ptr_array_unref(serial.sessions);serial.sessions=NULL; }

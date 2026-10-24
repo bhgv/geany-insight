@@ -41,6 +41,7 @@ on:
       - src/insight-ai.*
       - vendor/libvterm/**
       - src/insight-terminal.*
+      - src/insight-terminal-ui.*
       - src/insight-serial.*
       - insight/tests/terminal*
       - insight/tests/tty*

@@ -32,6 +32,11 @@ static void capture(GtkWidget *w,const gchar *env) { if(!g_getenv(env)) return;G
 static gboolean choose_file(gpointer data) {
  (void)data;if(!chooser_action) return G_SOURCE_CONTINUE;GList *windows=gtk_window_list_toplevels();for(GList *p=windows;p;p=p->next) if(GTK_IS_FILE_CHOOSER_DIALOG(p->data) && gtk_widget_get_visible(p->data)) { GtkWidget *d=p->data;if(chooser_action==1) { gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(d),attachment_path);chooser_action=3; }else if(chooser_action==2) { gchar *folder=g_path_get_dirname(received_path),*name=g_path_get_basename(received_path);gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(d),folder);gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(d),name);g_free(folder);g_free(name);chooser_action=4; }else { gchar *selected=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(d));if(!g_strcmp0(selected,chooser_action==3 ? attachment_path:received_path)) { chooser_action=0;gtk_dialog_response(GTK_DIALOG(d),GTK_RESPONSE_ACCEPT); }g_free(selected); }break; }g_list_free(windows);return G_SOURCE_CONTINUE;
 }
+static void drag_ai(GtkWidget *b) {
+ GtkWidget *overlay=gtk_widget_get_parent(b);gint old_x=gtk_widget_get_margin_start(b);GdkEvent *event=gdk_event_new(GDK_BUTTON_PRESS);event->button.window=g_object_ref(gtk_widget_get_window(b));event->button.button=1;event->button.x_root=500;event->button.y_root=100;gboolean handled=FALSE;g_signal_emit_by_name(b,"button-press-event",event,&handled);g_assert_true(handled);gdk_event_free(event);
+ event=gdk_event_new(GDK_MOTION_NOTIFY);event->motion.window=g_object_ref(gtk_widget_get_window(b));event->motion.x_root=100;event->motion.y_root=180;g_signal_emit_by_name(b,"motion-notify-event",event,&handled);gdk_event_free(event);
+ event=gdk_event_new(GDK_BUTTON_RELEASE);event->button.window=g_object_ref(gtk_widget_get_window(b));event->button.button=1;g_signal_emit_by_name(b,"button-release-event",event,&handled);gdk_event_free(event);g_assert_cmpint(gtk_widget_get_margin_start(b),<,old_x);g_assert_cmpint(gtk_widget_get_margin_top(b),>=,0);g_assert_cmpint(gtk_widget_get_margin_top(b),<=,gtk_widget_get_allocated_height(overlay));
+}
 static gboolean step(gpointer data) {
  (void)data;
  if(phase && assistant && g_object_get_data(G_OBJECT(assistant),"insight-ai-busy")) return G_SOURCE_CONTINUE;
@@ -41,12 +46,19 @@ static gboolean step(gpointer data) {
   window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));
   GtkWidget *out=named(window,"insight-ssh-output");g_assert_nonnull(out);gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(out)),"source.c:1: error: expected ';' before end of input\n",-1);
   GtkTextBuffer *diagnostic=gtk_text_view_get_buffer(GTK_TEXT_VIEW(out));GtkTextIter begin,end;gtk_text_buffer_get_bounds(diagnostic,&begin,&end);gtk_text_buffer_select_range(diagnostic,&begin,&end);click(window,"insight-ssh-open-diagnostic");g_assert_true(document_get_current()==source);g_assert_cmpint(sci_get_current_line(source->editor->sci),==,0);g_assert_cmpfloat(gtk_widget_get_opacity(named(window,"insight-ssh-ai")),==,0.8);
-  click(window,"insight-ssh-ai");assistant=named(window,"insight-ai-window");g_assert_nonnull(assistant);
+  click(window,"insight-ssh-ai");assistant=top("insight-ai-window");g_assert_nonnull(assistant);
+  g_assert_true(GTK_IS_WINDOW(assistant));g_assert_true(gtk_window_get_resizable(GTK_WINDOW(assistant)));g_assert_true(gtk_widget_get_toplevel(named(assistant,"insight-ai-question"))==assistant);g_assert_null(named(window,"insight-ai-window"));
+  GtkWidget *child=named(window,"insight-ssh-session-1");while(gtk_widget_get_parent(child)) { GtkWidget *parent=gtk_widget_get_parent(child);if(GTK_IS_NOTEBOOK(parent)) gtk_notebook_set_current_page(GTK_NOTEBOOK(parent),gtk_notebook_page_num(GTK_NOTEBOOK(parent),child));child=parent; }
+  GtkWidget *group=named(window,"insight-terminal-group");g_assert_true(GTK_IS_NOTEBOOK(group));g_assert_true(gtk_widget_get_parent(named(window,"insight-ssh-page"))==group);g_assert_true(gtk_widget_get_parent(named(window,"insight-tty-page"))==group);
+  click(assistant,"insight-ai-standard-0");g_assert_nonnull(strstr(gtk_entry_get_text(GTK_ENTRY(named(assistant,"insight-ai-question"))),"Diff / Merge"));g_assert_null(g_object_get_data(G_OBJECT(assistant),"insight-ai-busy"));
+  GtkWidget *same=assistant;click(window,"insight-ssh-ai");g_assert_true(same==top("insight-ai-window"));
   gchar *context=text(assistant,"insight-ai-context");g_assert_nonnull(strstr(context,"source.c:1"));g_free(context);
   gtk_combo_box_set_active(GTK_COMBO_BOX(named(assistant,"insight-ai-provider")),4);entry(assistant,"insight-ai-endpoint",endpoint);entry(assistant,"insight-ai-model","mock-model");entry(assistant,"insight-ai-key","fixture-secret-key");click(assistant,"insight-ai-attach");chooser_action=1;click(assistant,"insight-ai-attach-files");entry(assistant,"insight-ai-question","Explain this compiler error and propose a correction.");click(assistant,"insight-ai-send");phase++;break;
  }
  case 1: {
+  drag_ai(named(window,"insight-ssh-ai"));
   gchar *answer=text(assistant,"insight-ai-answer");g_assert_nonnull(strstr(answer,"Mock analysis"));g_free(answer);g_assert_false(gtk_text_view_get_editable(GTK_TEXT_VIEW(named(assistant,"insight-ai-answer"))));
+  GtkWidget *requests=named(assistant,"insight-ai-request-history");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(requests)),NULL),==,1);entry(assistant,"insight-ai-question","");gtk_combo_box_set_active(GTK_COMBO_BOX(requests),0);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(assistant,"insight-ai-question"))),==,"Explain this compiler error and propose a correction.");click(assistant,"insight-ai-frequent-0");g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(assistant,"insight-ai-question"))),==,"Explain this compiler error and propose a correction.");
   GtkWidget *history=named(assistant,"insight-ai-answer-history");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(history)),NULL),==,1);g_assert_nonnull(named(assistant,"insight-ai-options"));g_assert_true(gtk_widget_get_sensitive(named(assistant,"insight-ai-save-file")));chooser_action=2;click(assistant,"insight-ai-save-file");gchar *received=NULL;g_assert_true(g_file_get_contents(received_path,&received,NULL,NULL));g_assert_cmpstr(received,==,"fixture attachment\n");g_free(received);
   click(assistant,"insight-ai-insert");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(named(assistant,"insight-ai-status"))),"Cannot insert"));source_is(base);
   gchar *config=g_build_filename(profile,"insight-ai.conf",NULL),*saved=NULL;g_assert_true(g_file_get_contents(config,&saved,NULL,NULL));g_assert_null(strstr(saved,"fixture-secret-key"));g_assert_null(strstr(saved,"compiler error"));g_assert_null(strstr(saved,"int value"));g_free(config);g_free(saved);
@@ -81,8 +93,10 @@ static gboolean step(gpointer data) {
  case 7:
   g_assert_false(gtk_widget_get_sensitive(named(assistant,"insight-ai-review")));gtk_widget_destroy(assistant);assistant=NULL;
 #ifdef HAVE_VTE
+  g_assert_cmpfloat(gtk_widget_get_opacity(named(window,"insight-local-ai")),==,0.8);click(window,"insight-local-ai");assistant=top("insight-ai-window");g_assert_nonnull(assistant);g_assert_nonnull(named(assistant,"insight-ai-request-history"));gtk_widget_destroy(assistant);assistant=NULL;
   GtkWidget *terminal=named(window,"insight-local-terminal");g_assert_nonnull(terminal);GList *menus=gtk_menu_get_for_attach_widget(terminal);g_assert_nonnull(menus);GtkWidget *item=named(menus->data,"insight-terminal-ai");g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item));assistant=top("insight-ai-window");g_assert_nonnull(assistant);g_assert_nonnull(named(assistant,"insight-ai-context"));gtk_widget_destroy(assistant);assistant=NULL;
 #endif
+  GtkWidget *tty=named(window,"insight-tty-ai-1");g_assert_nonnull(tty);g_assert_cmpfloat(gtk_widget_get_opacity(tty),==,0.8);click(window,"insight-tty-ai-1");assistant=top("insight-ai-window");g_assert_nonnull(assistant);gchar *tty_context=text(assistant,"insight-ai-context");g_assert_nonnull(strstr(tty_context,"TTY / RS-232 terminal 1"));g_free(tty_context);gtk_widget_destroy(assistant);assistant=NULL;
   gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-ai-menu")));assistant=top("insight-ai-window");g_assert_nonnull(assistant);entry(assistant,"insight-ai-model","slow");entry(assistant,"insight-ai-question","Cancel safely on close");click(assistant,"insight-ai-send");gtk_widget_destroy(assistant);assistant=NULL;after=g_get_monotonic_time()+300*G_TIME_SPAN_MILLISECOND;phase++;break;
  case 8:
   if(g_get_monotonic_time()<after) { break; }

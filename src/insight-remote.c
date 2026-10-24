@@ -6,6 +6,7 @@
 #include "../insight/desktop/glib_compat.h"
 #include "insight-remote.h"
 #include "insight-terminal.h"
+#include "insight-terminal-ui.h"
 #include "insight-serial.h"
 #include "insight-ai.h"
 #include "insight-help.h"
@@ -39,9 +40,8 @@ typedef enum { OPEN_FILE,OPEN_FOLDER,PROJECT_READ,PROJECT_FOLDER,UPLOAD } Transf
 typedef struct { RemoteRoot *root; TransferKind kind; gchar *target,*snapshot,*auth,*origin; GKeyFile *project; GSubprocess *process; GCancellable *cancel; } Transfer;
 typedef struct _ScpJob ScpJob;
 typedef struct {
- gint refs;guint number;GtkWidget *page,*output,*input,*overlay,*ai_button,*stack,*chat;
- GSubprocess *process;GCancellable *cancel;gchar *auth,*endpoint;InsightRemote *remote;GQueue pending;gsize pending_bytes;gboolean writing,dragging,moved;
- gdouble x,y,press_x,press_y,start_x,start_y;
+ gint refs;guint number;GtkWidget *page,*output,*input,*overlay,*stack,*chat;
+ GSubprocess *process;GCancellable *cancel;gchar *auth,*endpoint;InsightRemote *remote;GQueue pending;gsize pending_bytes;gboolean writing;
 } ShellSession;
 static ShellSession *session_ref(ShellSession *s) { g_atomic_int_inc(&s->refs);return s; }
 static void session_unref(gpointer data) { ShellSession *s=data;if(!g_atomic_int_dec_and_test(&s->refs)) return;if(s->chat) g_object_remove_weak_pointer(G_OBJECT(s->chat),(gpointer *)&s->chat);g_clear_object(&s->page);g_free(s->endpoint);insight_remote_free(s->remote);g_free(s); }
@@ -392,7 +392,7 @@ static void project_changed(GObject *object,GKeyFile *key,gpointer data) {
 }
 static void project_closed(GObject *object,gpointer data) { (void)object; (void)data; g_free(remote_ui.config); remote_ui.config=g_build_filename(app->configdir,"insight","ssh.conf",NULL); GKeyFile *key=g_key_file_new(); g_key_file_load_from_file(key,remote_ui.config,G_KEY_FILE_NONE,NULL); profile_load(key); g_key_file_unref(key); }
 static void forget_password(GtkWidget *widget,gpointer data) { (void)widget; (void)data; RemoteRoot *root=form_root("/",remote_ui.directory,remote_ui.directory,NULL); if(!root) return; gchar *target=credentials_target(root->remote); GError *error=NULL; if(insight_remote_password_forget(remote_ui.config,target,&error)) status("Saved login password removed from this config"); else status(error ? error->message : "Could not remove password"); g_clear_error(&error); g_free(target); root_free(root); }
-static void show_remote(GtkWidget *widget,gpointer data) { (void)widget; (void)data; msgwin_show_hide(TRUE); gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.message_window_notebook),remote_ui.page)); gtk_widget_grab_focus(remote_ui.host); }
+static void show_remote(GtkWidget *widget,gpointer data) { (void)widget; (void)data; insight_terminal_ui_reveal(remote_ui.page); gtk_widget_grab_focus(remote_ui.host); }
 static gboolean ai_insert(const gchar *command,gpointer data) {
  ShellSession *s=data;if(remote_ui.closing || !s->input) return FALSE;if(!s->process) return FALSE;insight_terminal_send(s->output,command);return TRUE;
 }
@@ -400,34 +400,14 @@ static gchar *session_context(ShellSession *s) {
  GtkTextBuffer *b=gtk_text_view_get_buffer(GTK_TEXT_VIEW(s->output));GtkTextIter a,z;if(!gtk_text_buffer_get_selection_bounds(b,&a,&z)) { gtk_text_buffer_get_end_iter(b,&z);a=z;gtk_text_iter_backward_chars(&a,12000); }
  gchar *log=gtk_text_buffer_get_text(b,&a,&z,TRUE),*context=g_strdup_printf("SSH session %u\nConnected endpoint: %s\nConnection form: host=%s user=%s port=%d\nTransfer remote path: %s\nThe shell uses a VT100/xterm-compatible screen. Analyze connection/transfer issues and remote diagnostics; relate file:line errors to explicitly attached local source. Commands execute only on explicit user action.\n\n%s",s->number,s->endpoint ? s->endpoint:"not connected",gtk_entry_get_text(GTK_ENTRY(remote_ui.host)),gtk_entry_get_text(GTK_ENTRY(remote_ui.user)),gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote_ui.port)),gtk_entry_get_text(GTK_ENTRY(remote_ui.path)),log);g_free(log);return context;
 }
-static void ai_back(GtkWidget *widget,gpointer data) { (void)widget;ShellSession *s=data;gtk_stack_set_visible_child_name(GTK_STACK(s->stack),"terminal"); }
 static void ai_execute(GtkWidget *widget,gpointer data) {
  (void)widget;ShellSession *s=data;if(!s->process) { session_status(s,"Connect this SSH session first");return; }gchar *command=insight_ai_suggested_command(s->chat);if(!command) { session_status(s,"Select a complete AI answer with a valid suggested command first");return; }
  gchar *line=g_strconcat(command,"\r",NULL);terminal_write(line,strlen(line),s);g_free(line);g_free(command);session_status(s,"Reviewed AI command sent to this SSH session");
 }
 static void ai_closed(GtkWidget *controller,gpointer data) { ShellSession *s=data;if(s->chat==controller) { g_object_remove_weak_pointer(G_OBJECT(controller),(gpointer *)&s->chat);s->chat=NULL; } }
 static void ai_console(GtkWidget *widget,gpointer data) {
- (void)widget;ShellSession *s=data ? data:remote_ui.selected;if(!s) return;msgwin_show_hide(TRUE);gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.message_window_notebook),remote_ui.page));gchar *context=session_context(s);
- if(!s->chat) {
-  GtkWidget *body=gtk_box_new(GTK_ORIENTATION_VERTICAL,3),*row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3),*back=gtk_button_new_with_label("Terminal"),*run=gtk_button_new_with_label("Run reviewed command in this SSH session");
-  gtk_box_pack_start(GTK_BOX(row),back,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(row),run,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(body),row,FALSE,FALSE,0);g_signal_connect(back,"clicked",G_CALLBACK(ai_back),s);g_signal_connect(run,"clicked",G_CALLBACK(ai_execute),s);gtk_widget_set_name(run,"insight-ssh-ai-run");
-  gtk_stack_add_named(GTK_STACK(s->stack),body,"assistant");s->chat=insight_ai_embed(body,"SSH assistant — connection, transfer, errors and local code",context,s->page,ai_insert,s);g_object_add_weak_pointer(G_OBJECT(s->chat),(gpointer *)&s->chat);g_signal_connect(s->chat,"destroy",G_CALLBACK(ai_closed),s);g_object_set_data_full(G_OBJECT(s->chat),"insight-ssh-session-owner",session_ref(s),session_unref);gtk_widget_show_all(body);
- }else insight_ai_context_update(s->chat,context);
- g_free(context);gtk_stack_set_visible_child_name(GTK_STACK(s->stack),"assistant");gtk_notebook_set_current_page(GTK_NOTEBOOK(remote_ui.tabs),gtk_notebook_page_num(GTK_NOTEBOOK(remote_ui.tabs),s->page));
-}
-static void ai_position(GtkWidget *widget,GtkAllocation *allocation,gpointer data) {
- (void)widget;ShellSession *s=data;gint w=MAX(0,allocation->width-gtk_widget_get_allocated_width(s->ai_button)),h=MAX(0,allocation->height-gtk_widget_get_allocated_height(s->ai_button));gint x=(gint)(s->x*w),y=(gint)(s->y*h);
- if(gtk_widget_get_margin_start(s->ai_button)!=x) gtk_widget_set_margin_start(s->ai_button,x);if(gtk_widget_get_margin_top(s->ai_button)!=y) gtk_widget_set_margin_top(s->ai_button,y);
-}
-static gboolean ai_press(GtkWidget *widget,GdkEventButton *event,gpointer data) {
- (void)widget;ShellSession *s=data;if(event->button!=1) return FALSE;s->dragging=TRUE;s->moved=FALSE;s->press_x=event->x_root;s->press_y=event->y_root;s->start_x=gtk_widget_get_margin_start(s->ai_button);s->start_y=gtk_widget_get_margin_top(s->ai_button);return TRUE;
-}
-static gboolean ai_motion(GtkWidget *widget,GdkEventMotion *event,gpointer data) {
- (void)widget;ShellSession *s=data;if(!s->dragging) return FALSE;gdouble dx=event->x_root-s->press_x,dy=event->y_root-s->press_y;if(dx*dx+dy*dy<25 && !s->moved) return TRUE;s->moved=TRUE;
- gint w=MAX(1,gtk_widget_get_allocated_width(s->overlay)-gtk_widget_get_allocated_width(s->ai_button)),h=MAX(1,gtk_widget_get_allocated_height(s->overlay)-gtk_widget_get_allocated_height(s->ai_button));s->x=CLAMP((s->start_x+dx)/w,0,1);s->y=CLAMP((s->start_y+dy)/h,0,1);GtkAllocation a;gtk_widget_get_allocation(s->overlay,&a);ai_position(s->overlay,&a,s);return TRUE;
-}
-static gboolean ai_release(GtkWidget *widget,GdkEventButton *event,gpointer data) {
- (void)widget;ShellSession *s=data;if(event->button!=1 || !s->dragging) return FALSE;s->dragging=FALSE;if(!s->moved) ai_console(NULL,s);return TRUE;
+ (void)widget;ShellSession *s=data ? data:remote_ui.selected;if(!s) return;gchar *context=session_context(s);GtkWidget *window=insight_terminal_ui_assistant("SSH assistant — connection, transfer, errors and local code",context,s->output,ai_insert,s);g_free(context);
+ if(s->chat!=window) { s->chat=window;g_object_add_weak_pointer(G_OBJECT(window),(gpointer *)&s->chat);g_signal_connect(window,"destroy",G_CALLBACK(ai_closed),s);g_object_set_data_full(G_OBJECT(window),"insight-ssh-session-owner",session_ref(s),session_unref);GtkWidget *box=gtk_bin_get_child(GTK_BIN(window)),*run=gtk_button_new_with_label("Run reviewed command in this SSH session");gtk_widget_set_name(run,"insight-ssh-ai-run");gtk_box_pack_start(GTK_BOX(box),run,FALSE,FALSE,0);g_signal_connect(run,"clicked",G_CALLBACK(ai_execute),s);gtk_widget_show(run); }
 }
 static void ssh_tab(GtkWidget *page,const gchar *label,const gchar *hint) {
  guint number=0;guint kind=!strcmp(label,"Connection") ? 0:!strcmp(label,"Transfer") ? 1:2;
@@ -450,11 +430,9 @@ static void open_diagnostic(GtkWidget *widget,gpointer data) {
 }
 static void session_add(GtkWidget *widget,gpointer data) {
  (void)widget;(void)data;if(remote_ui.sessions->len>=16) { status("Up to 16 SSH terminals can be open");return; }
- ShellSession *s=g_new0(ShellSession,1);s->refs=1;s->number=remote_ui.sessions->len+1;s->x=1;s->page=gtk_box_new(GTK_ORIENTATION_VERTICAL,2);g_object_ref_sink(s->page);g_object_set_data(G_OBJECT(s->page),"insight-ssh-session",s);
+ ShellSession *s=g_new0(ShellSession,1);s->refs=1;s->number=remote_ui.sessions->len+1;s->page=gtk_box_new(GTK_ORIENTATION_VERTICAL,2);g_object_ref_sink(s->page);g_object_set_data(G_OBJECT(s->page),"insight-ssh-session",s);
  s->stack=gtk_stack_new();gtk_stack_set_homogeneous(GTK_STACK(s->stack),FALSE);gtk_stack_set_transition_type(GTK_STACK(s->stack),GTK_STACK_TRANSITION_TYPE_NONE);gtk_box_pack_start(GTK_BOX(s->page),s->stack,TRUE,TRUE,0);GtkWidget *terminal=gtk_box_new(GTK_ORIENTATION_VERTICAL,2);gtk_stack_add_named(GTK_STACK(s->stack),terminal,"terminal");
- s->overlay=gtk_overlay_new();GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);s->output=insight_terminal_new(terminal_write,s);insight_terminal_set_resize(s->output,shell_resize,s);s->input=s->output;gtk_container_add(GTK_CONTAINER(scroll),s->output);gtk_container_add(GTK_CONTAINER(s->overlay),scroll);gtk_box_pack_start(GTK_BOX(terminal),s->overlay,TRUE,TRUE,0);
- s->ai_button=gtk_button_new_with_label("Ai");gtk_widget_set_name(s->ai_button,"insight-ssh-ai");gtk_widget_set_opacity(s->ai_button,0.8);gtk_widget_set_tooltip_text(s->ai_button,"SSH AI assistant — drag to move");gtk_widget_set_halign(s->ai_button,GTK_ALIGN_START);gtk_widget_set_valign(s->ai_button,GTK_ALIGN_START);gtk_widget_add_events(s->ai_button,GDK_BUTTON_PRESS_MASK|GDK_BUTTON_RELEASE_MASK|GDK_POINTER_MOTION_MASK);gtk_overlay_add_overlay(GTK_OVERLAY(s->overlay),s->ai_button);
- g_signal_connect(s->ai_button,"clicked",G_CALLBACK(ai_console),s);g_signal_connect(s->ai_button,"button-press-event",G_CALLBACK(ai_press),s);g_signal_connect(s->ai_button,"motion-notify-event",G_CALLBACK(ai_motion),s);g_signal_connect(s->ai_button,"button-release-event",G_CALLBACK(ai_release),s);g_signal_connect(s->overlay,"size-allocate",G_CALLBACK(ai_position),s);
+ GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);s->output=insight_terminal_new(terminal_write,s);insight_terminal_set_resize(s->output,shell_resize,s);s->input=s->output;gtk_container_add(GTK_CONTAINER(scroll),s->output);s->overlay=insight_terminal_ui_overlay(scroll,"insight-ssh-ai",G_CALLBACK(ai_console),s);gtk_box_pack_start(GTK_BOX(terminal),s->overlay,TRUE,TRUE,0);
  GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3),*diagnostic=gtk_button_new_from_icon_name("go-jump-symbolic",GTK_ICON_SIZE_MENU);gtk_widget_set_name(diagnostic,"insight-ssh-open-diagnostic");gtk_widget_set_tooltip_text(diagnostic,"Open selected file:line diagnostic in local editor");gtk_box_pack_end(GTK_BOX(row),diagnostic,FALSE,FALSE,0);g_signal_connect(diagnostic,"clicked",G_CALLBACK(open_diagnostic),s);gtk_box_pack_start(GTK_BOX(terminal),row,FALSE,FALSE,0);
  gchar *name=g_strdup_printf("insight-ssh-session-%u",s->number);gtk_widget_set_name(s->page,name);g_free(name);name=s->number==1 ? g_strdup("insight-ssh-output"):g_strdup_printf("insight-ssh-output-%u",s->number);gtk_widget_set_name(s->output,name);g_free(name);g_ptr_array_add(remote_ui.sessions,s);name=g_strdup_printf("SSH %u",s->number);ssh_tab(s->page,name,"Independent SSH terminal");g_free(name);gtk_widget_show_all(s->page);gtk_notebook_set_current_page(GTK_NOTEBOOK(remote_ui.tabs),gtk_notebook_page_num(GTK_NOTEBOOK(remote_ui.tabs),s->page));
 }
@@ -485,8 +463,7 @@ void insight_remote_ui_init(gboolean (*workspace)(const char *)) {
  row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);gtk_box_pack_start(GTK_BOX(remote_ui.files),row,FALSE,FALSE,0);form_button(row,"Send","insight-scp-send",G_CALLBACK(scp_start),GINT_TO_POINTER(TRUE));form_button(row,"Receive","insight-scp-receive",G_CALLBACK(scp_start),GINT_TO_POINTER(FALSE));form_button(row,"Stop","insight-scp-stop",G_CALLBACK(stop_transfer),NULL);remote_ui.transfer_status=gtk_label_new("Archives are transferred as files. Receive never overwrites an existing local destination.");gtk_widget_set_name(remote_ui.transfer_status,"insight-scp-status");gtk_label_set_selectable(GTK_LABEL(remote_ui.transfer_status),TRUE);gtk_label_set_line_wrap(GTK_LABEL(remote_ui.transfer_status),TRUE);gtk_label_set_xalign(GTK_LABEL(remote_ui.transfer_status),0);gtk_box_pack_start(GTK_BOX(remote_ui.files),remote_ui.transfer_status,FALSE,FALSE,0);
  remote_ui.status=gtk_label_new("SSH/SFTP — configure a connection, transfer files, or add a terminal");gtk_widget_set_name(remote_ui.status,"insight-ssh-status");gtk_label_set_xalign(GTK_LABEL(remote_ui.status),0);gtk_label_set_line_wrap(GTK_LABEL(remote_ui.status),TRUE);gtk_label_set_line_wrap_mode(GTK_LABEL(remote_ui.status),PANGO_WRAP_WORD_CHAR);gtk_label_set_selectable(GTK_LABEL(remote_ui.status),TRUE);gtk_label_set_width_chars(GTK_LABEL(remote_ui.status),1);gtk_box_pack_start(GTK_BOX(remote_ui.page),remote_ui.status,FALSE,TRUE,0);
  GtkWidget *plus=gtk_button_new_from_icon_name("list-add-symbolic",GTK_ICON_SIZE_MENU);gtk_widget_set_name(plus,"insight-ssh-new-terminal");gtk_widget_set_tooltip_text(plus,"New SSH terminal");g_signal_connect(plus,"clicked",G_CALLBACK(session_add),NULL);gtk_notebook_set_action_widget(GTK_NOTEBOOK(remote_ui.tabs),plus,GTK_PACK_END);session_add(NULL,NULL);gtk_notebook_set_current_page(GTK_NOTEBOOK(remote_ui.tabs),0);
- insight_serial_init();
- insight_panel_help_attach(remote_ui.page,"panel-ssh.md"); gtk_notebook_append_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),remote_ui.page,gtk_label_new("SSH Terminal")); gtk_widget_show_all(remote_ui.page);
+ insight_panel_help_attach(remote_ui.page,"panel-ssh.md"); insight_terminal_ui_add(remote_ui.page,"SSH");insight_serial_init();
  GKeyFile *profile=g_key_file_new(); g_key_file_load_from_file(profile,remote_ui.config,G_KEY_FILE_NONE,NULL); profile_load(profile); g_key_file_unref(profile);
  g_signal_connect(remote_ui.automatic,"toggled",G_CALLBACK(profile_toggle),NULL); g_signal_connect(remote_ui.save_password,"toggled",G_CALLBACK(profile_toggle),NULL);
  remote_ui.signals[0]=g_signal_connect_after(geany_object,"document-save",G_CALLBACK(saved_document),NULL); remote_ui.signals[1]=g_signal_connect_after(geany_object,"project-save",G_CALLBACK(project_changed),GINT_TO_POINTER(1)); remote_ui.signals[2]=g_signal_connect_after(geany_object,"project-open",G_CALLBACK(project_changed),NULL); remote_ui.signals[3]=g_signal_connect_after(geany_object,"project-close",G_CALLBACK(project_closed),NULL);

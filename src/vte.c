@@ -30,6 +30,7 @@
 
 #include "vte.h"
 #include "insight-ai.h"
+#include "insight-terminal-ui.h"
 
 #include "callbacks.h"
 #include "document.h"
@@ -143,6 +144,7 @@ struct VteFunctions
 
 
 static void create_vte(void);
+static void ai_vte_open(GtkWidget *,gpointer);
 static void vte_start(GtkWidget *widget);
 static void vte_restart(GtkWidget *widget);
 static gboolean vte_button_pressed(GtkWidget *widget, GdkEventButton *event, gpointer user_data);
@@ -381,7 +383,9 @@ static void create_vte(void)
 
 	gtk_widget_show_all(hbox);
 	terminal_label = gtk_label_new(_("Terminal"));
-	gtk_notebook_insert_page(GTK_NOTEBOOK(msgwindow.notebook), hbox, terminal_label, MSG_VTE);
+	GtkWidget *overlay=insight_terminal_ui_overlay(hbox,"insight-local-ai",G_CALLBACK(ai_vte_open),NULL);
+	gtk_notebook_insert_page(GTK_NOTEBOOK(msgwindow.notebook), overlay, terminal_label, MSG_VTE);
+	gtk_widget_show_all(overlay);
 
 	g_signal_connect_after(vte, "realize", G_CALLBACK(on_vte_realize), NULL);
 }
@@ -731,7 +735,7 @@ static gboolean ai_vte_insert(const gchar *command,gpointer data) {
  (void)data;if(!vte_info.have_vte || !clean) return FALSE;vf->vte_terminal_feed_child(VTE_TERMINAL(vte_config.vte),command,strlen(command));set_clean(FALSE);return TRUE;
 }
 static void ai_vte_open(GtkWidget *widget,gpointer data) {
- (void)widget;(void)data;gchar *context=NULL;if(vf->vte_terminal_get_text_selected && vf->vte_terminal_get_has_selection(VTE_TERMINAL(vte_config.vte))) context=vf->vte_terminal_get_text_selected(VTE_TERMINAL(vte_config.vte),1);else if(vf->vte_terminal_get_text) context=vf->vte_terminal_get_text(VTE_TERMINAL(vte_config.vte),NULL,NULL,NULL);insight_ai_open("Local terminal — review visible or selected output before sending",context ? context:"",vte_config.vte,ai_vte_insert,NULL);g_free(context);
+ (void)widget;(void)data;gchar *context=NULL;if(vf->vte_terminal_get_text_selected && vf->vte_terminal_get_has_selection(VTE_TERMINAL(vte_config.vte))) context=vf->vte_terminal_get_text_selected(VTE_TERMINAL(vte_config.vte),1);else if(vf->vte_terminal_get_text) context=vf->vte_terminal_get_text(VTE_TERMINAL(vte_config.vte),NULL,NULL,NULL);insight_terminal_ui_assistant("Local terminal — review visible or selected output before sending",context ? context:"",vte_config.vte,ai_vte_insert,NULL);g_free(context);
 }
 static GtkWidget *vte_create_popup_menu(void)
 {
@@ -1027,7 +1031,7 @@ void vte_send_selection_to_vte(void)
 	vf->vte_terminal_feed_child(VTE_TERMINAL(vte_config.vte), text, len);
 
 	/* show the VTE */
-	gtk_notebook_set_current_page(GTK_NOTEBOOK(msgwindow.notebook), MSG_VTE);
+	insight_terminal_ui_reveal(vte_config.vte);
 	gtk_widget_grab_focus(vte_config.vte);
 	msgwin_show_hide(TRUE);
 

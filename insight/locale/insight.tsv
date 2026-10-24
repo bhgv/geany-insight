@@ -2119,3 +2119,15 @@ Reducing the buffer discards its oldest lines. New terminals use this setting to
 Literal search, ignoring case; wraps through the retained buffer	Буквальный поиск без учёта регистра с обходом сохранённого буфера
 Found	Найдено
 Not found	Не найдено
+Terminals	Терминалы
+Local	Локальный
+AI assistant — drag to move	ИИ-помощник — перетащите для перемещения
+Errors → source	Ошибки → исходник
+Shell help	Помощь в шелле
+Explain output	Объяснить вывод
+Connection help	Помощь с подключением
+Recent requests — select to edit; Send submits explicitly	Последние запросы — выберите для редактирования; отправляйте кнопкой Отправить
+Analyze the displayed errors, locate their causes in the attached source files, and propose corrections for review in Diff / Merge.	Разбери показанные ошибки, найди их причины в приложенных исходниках и предложи исправления для проверки в Diff / Merge.
+Help me with this shell: explain the next commands, their effects and how to verify the result.	Помоги с этой оболочкой: объясни следующие команды, их действие и проверку результата.
+Explain the displayed terminal output and identify warnings, errors and their likely causes.	Объясни вывод терминала, найди предупреждения, ошибки и их вероятные причины.
+Help configure or troubleshoot this connection and explain how to transfer files without interrupting the active session.	Помоги настроить это соединение или устранить неполадки; объясни передачу файлов без разрыва текущего сеанса.

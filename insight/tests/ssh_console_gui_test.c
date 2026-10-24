@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <gdk/gdkkeysyms.h>
 static GtkWidget *window,*output,*state,*input,*output2,*input2,*tabs;static guint phase,ticks;static gchar *directory,*profile;
+static void reveal(GtkWidget *child) { while(gtk_widget_get_parent(child)) { GtkWidget *parent=gtk_widget_get_parent(child);if(GTK_IS_NOTEBOOK(parent)) gtk_notebook_set_current_page(GTK_NOTEBOOK(parent),gtk_notebook_page_num(GTK_NOTEBOOK(parent),child));child=parent; } }
 static GtkWidget *named(GtkWidget *root,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;
  if(GTK_IS_NOTEBOOK(root)) { for(guint i=0;i<2;i++) { GtkWidget *action=gtk_notebook_get_action_widget(GTK_NOTEBOOK(root),i ? GTK_PACK_END : GTK_PACK_START);if(action) { GtkWidget *found=named(action,name);if(found) return found; } } }
@@ -27,7 +28,7 @@ static gboolean transfer_complete(void) { return strstr(gtk_label_get_text(GTK_L
 static gboolean step(gpointer data) {
  (void)data;if(!document_get_current()) return G_SOURCE_CONTINUE;
  if(!window) {
-  window=gtk_widget_get_toplevel(GTK_WIDGET(document_get_current()->editor->sci));GtkWidget *page=named(window,"insight-ssh-page");g_assert_nonnull(page);GtkWidget *book=gtk_widget_get_parent(page);g_assert_true(GTK_IS_NOTEBOOK(book));gtk_widget_show(book);gtk_notebook_set_current_page(GTK_NOTEBOOK(book),gtk_notebook_page_num(GTK_NOTEBOOK(book),page));gtk_window_present(GTK_WINDOW(window));
+  window=gtk_widget_get_toplevel(GTK_WIDGET(document_get_current()->editor->sci));GtkWidget *page=named(window,"insight-ssh-page");g_assert_nonnull(page);GtkWidget *book=gtk_widget_get_parent(page);g_assert_true(GTK_IS_NOTEBOOK(book));gtk_widget_show(book);reveal(page);gtk_window_present(GTK_WINDOW(window));
   tabs=named(window,"insight-ssh-tabs");g_assert_nonnull(tabs);g_assert_cmpint(gtk_notebook_get_tab_pos(GTK_NOTEBOOK(tabs)),==,GTK_POS_RIGHT);g_assert_cmpint(gtk_notebook_get_n_pages(GTK_NOTEBOOK(tabs)),==,3);output=named(window,"insight-ssh-output");state=named(window,"insight-ssh-status");input=named(window,"insight-ssh-output");g_assert_nonnull(output);g_assert_nonnull(state);g_assert_nonnull(input);g_assert_true(gtk_label_get_selectable(GTK_LABEL(state)));g_assert_cmpint(gtk_label_get_ellipsize(GTK_LABEL(state)),==,PANGO_ELLIPSIZE_NONE);
   gtk_entry_set_text(GTK_ENTRY(named(window,"insight-ssh-host"))," 127.0.0.1 ");gchar *user=g_strdup_printf(" %s ",g_getenv("INSIGHT_SSH_TEST_USER"));gtk_entry_set_text(GTK_ENTRY(named(window,"insight-ssh-user")),user);g_free(user);gtk_entry_set_text(GTK_ENTRY(named(window,"insight-ssh-identity")),g_getenv("INSIGHT_SSH_TEST_KEY"));gtk_spin_button_set_value(GTK_SPIN_BUTTON(named(window,"insight-ssh-port")),g_ascii_strtod(g_getenv("INSIGHT_SSH_TEST_PORT"),NULL));
   click("insight-ssh-connect");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(state)),"Starting SSH"));send_line("printf '\\nINSIGHT_SSH_OK\\n'");return G_SOURCE_CONTINUE;

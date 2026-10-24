@@ -1,0 +1,43 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+#include "geany.h"
+#include "insight-terminal-ui.h"
+#include "main.h"
+#include "ui_utils.h"
+#include "msgwindow.h"
+#include "insight-i18n.h"
+#include "vte.h"
+#include <string.h>
+static GtkWidget *group;
+static void group_destroyed(GtkWidget *widget,gpointer data) { (void)widget;(void)data;group=NULL; }
+static void ensure_group(void) {
+ if(group) return;GtkWidget *outer=main_widgets.message_window_notebook,*local=NULL,*label=NULL;gint position=-1;
+#ifdef HAVE_VTE
+ if(vte_info.have_vte && vte_config.vte) { GtkWidget *child=vte_config.vte;while(gtk_widget_get_parent(child) && gtk_widget_get_parent(child)!=outer) child=gtk_widget_get_parent(child);if(gtk_widget_get_parent(child)==outer) { local=child;position=gtk_notebook_page_num(GTK_NOTEBOOK(outer),local);label=gtk_notebook_get_tab_label(GTK_NOTEBOOK(outer),local);g_object_ref(local);if(label) g_object_ref(label);gtk_notebook_remove_page(GTK_NOTEBOOK(outer),position); } }
+#endif
+ group=gtk_notebook_new();gtk_widget_set_name(group,"insight-terminal-group");gtk_notebook_set_scrollable(GTK_NOTEBOOK(group),TRUE);gtk_notebook_insert_page(GTK_NOTEBOOK(outer),group,gtk_label_new(insight_tr("Terminals")),position);g_signal_connect(group,"destroy",G_CALLBACK(group_destroyed),NULL);
+ if(local) { gtk_notebook_append_page(GTK_NOTEBOOK(group),local,label ? label:gtk_label_new(insight_tr("Local")));if(label) { if(GTK_IS_LABEL(label)) gtk_label_set_text(GTK_LABEL(label),insight_tr("Local"));g_object_unref(label); }g_object_unref(local); }gtk_widget_show_all(group);
+}
+void insight_terminal_ui_add(GtkWidget *page,const gchar *label) { ensure_group();gtk_notebook_append_page(GTK_NOTEBOOK(group),page,gtk_label_new(insight_tr(label)));gtk_widget_show_all(page); }
+void insight_terminal_ui_reveal(GtkWidget *page) {
+ if(!page) return;msgwin_show_hide(TRUE);GtkWidget *child=page;
+ while(gtk_widget_get_parent(child)) { GtkWidget *parent=gtk_widget_get_parent(child);if(GTK_IS_NOTEBOOK(parent)) gtk_notebook_set_current_page(GTK_NOTEBOOK(parent),gtk_notebook_page_num(GTK_NOTEBOOK(parent),child));child=parent; }
+}
+typedef struct { GtkWidget *overlay,*button;GCallback callback;gpointer data;gboolean dragging,moved;gdouble x,y,start_x,start_y,press_x,press_y; } Overlay;
+static void position(GtkWidget *widget,GtkAllocation *allocation,gpointer data) { (void)widget;Overlay *o=data;gint width=MAX(0,allocation->width-gtk_widget_get_allocated_width(o->button)),height=MAX(0,allocation->height-gtk_widget_get_allocated_height(o->button));gint x=o->x*width,y=o->y*height;if(gtk_widget_get_margin_start(o->button)!=x) gtk_widget_set_margin_start(o->button,x);if(gtk_widget_get_margin_top(o->button)!=y) gtk_widget_set_margin_top(o->button,y); }
+static gboolean press(GtkWidget *widget,GdkEventButton *event,gpointer data) { (void)widget;Overlay *o=data;if(event->button!=1) return FALSE;o->dragging=TRUE;o->moved=FALSE;o->press_x=event->x_root;o->press_y=event->y_root;o->start_x=gtk_widget_get_margin_start(o->button);o->start_y=gtk_widget_get_margin_top(o->button);gtk_grab_add(o->button);return TRUE; }
+static gboolean motion(GtkWidget *widget,GdkEventMotion *event,gpointer data) { (void)widget;Overlay *o=data;if(!o->dragging) return FALSE;gdouble dx=event->x_root-o->press_x,dy=event->y_root-o->press_y;if(dx*dx+dy*dy<25 && !o->moved) return TRUE;o->moved=TRUE;gint width=MAX(1,gtk_widget_get_allocated_width(o->overlay)-gtk_widget_get_allocated_width(o->button)),height=MAX(1,gtk_widget_get_allocated_height(o->overlay)-gtk_widget_get_allocated_height(o->button));o->x=CLAMP((o->start_x+dx)/width,0,1);o->y=CLAMP((o->start_y+dy)/height,0,1);GtkAllocation allocation;gtk_widget_get_allocation(o->overlay,&allocation);position(o->overlay,&allocation,o);return TRUE; }
+static void clicked(GtkButton *button,gpointer data) { Overlay *o=data;((void (*)(GtkWidget *,gpointer))o->callback)(GTK_WIDGET(button),o->data); }
+static gboolean release(GtkWidget *widget,GdkEventButton *event,gpointer data) { Overlay *o=data;if(event->button!=1 || !o->dragging) return FALSE;o->dragging=FALSE;gtk_grab_remove(widget);if(!o->moved) clicked(GTK_BUTTON(widget),o);return TRUE; }
+static void overlay_destroyed(GtkWidget *widget,gpointer data) { (void)widget;Overlay *o=data;if(o->dragging) { gtk_grab_remove(o->button);o->dragging=FALSE; } }
+GtkWidget *insight_terminal_ui_overlay(GtkWidget *content,const gchar *name,GCallback callback,gpointer data) {
+ Overlay *o=g_new0(Overlay,1);o->overlay=gtk_overlay_new();o->x=1;o->callback=callback;o->data=data;gtk_container_add(GTK_CONTAINER(o->overlay),content);o->button=gtk_button_new_with_label("Ai");gtk_widget_set_name(o->button,name);gtk_widget_set_opacity(o->button,0.8);gtk_widget_set_tooltip_text(o->button,insight_tr("AI assistant — drag to move"));gtk_widget_set_halign(o->button,GTK_ALIGN_START);gtk_widget_set_valign(o->button,GTK_ALIGN_START);gtk_widget_add_events(o->button,GDK_BUTTON_PRESS_MASK|GDK_BUTTON_RELEASE_MASK|GDK_POINTER_MOTION_MASK);gtk_overlay_add_overlay(GTK_OVERLAY(o->overlay),o->button);g_signal_connect(o->button,"clicked",G_CALLBACK(clicked),o);g_signal_connect(o->button,"button-press-event",G_CALLBACK(press),o);g_signal_connect(o->button,"motion-notify-event",G_CALLBACK(motion),o);g_signal_connect(o->button,"button-release-event",G_CALLBACK(release),o);g_signal_connect(o->overlay,"size-allocate",G_CALLBACK(position),o);g_signal_connect(o->overlay,"destroy",G_CALLBACK(overlay_destroyed),o);g_object_set_data_full(G_OBJECT(o->overlay),"insight-terminal-overlay",o,g_free);return o->overlay;
+}
+static void free_weak(gpointer data) { GWeakRef *ref=data;g_weak_ref_clear(ref);g_free(ref); }
+GtkWidget *insight_terminal_ui_assistant(const gchar *label,const gchar *context,GtkWidget *owner,InsightAiInsert insert,gpointer data) {
+ GWeakRef *ref=g_object_get_data(G_OBJECT(owner),"insight-terminal-assistant");GtkWidget *window=ref ? g_weak_ref_get(ref):NULL;if(window && g_object_get_data(G_OBJECT(window),"insight-ai-closed")) { g_object_unref(window);window=NULL; }gchar *valid=g_utf8_make_valid(context ? context:"",-1);gsize size=strlen(valid),offset=size>61440 ? size-61440:0;while(offset<size && ((guchar)valid[offset]&0xc0)==0x80) offset++;
+ if(!window) { window=insight_ai_terminal_open(label,valid+offset,owner,insert,data);ref=g_new0(GWeakRef,1);g_weak_ref_init(ref,window);g_object_set_data_full(G_OBJECT(owner),"insight-terminal-assistant",ref,free_weak);g_signal_connect_object(owner,"destroy",G_CALLBACK(gtk_widget_destroy),window,G_CONNECT_SWAPPED); }else { insight_ai_context_update(window,valid+offset);gtk_window_deiconify(GTK_WINDOW(window));gtk_window_present(GTK_WINDOW(window));g_object_unref(window); }
+ g_free(valid);return window;
+}

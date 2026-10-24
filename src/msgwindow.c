@@ -39,6 +39,7 @@
 #include "keybindings.h"
 #include "main.h"
 #include "insight-ai.h"
+#include "insight-terminal-ui.h"
 #include "insight-i18n.h"
 #include "navqueue.h"
 #include "prefs.h"
@@ -1320,7 +1321,12 @@ void msgwin_switch_tab(gint tabnum, gboolean show)
 		msgwin_show_hide(TRUE);
 	gtk_notebook_set_current_page(GTK_NOTEBOOK(msgwindow.notebook), tabnum);
 	if (show && widget)
+	{
+#ifdef HAVE_VTE
+		if (tabnum == MSG_VTE) insight_terminal_ui_reveal(widget);
+#endif
 		gtk_widget_grab_focus(widget);
+	}
 }
 
 
