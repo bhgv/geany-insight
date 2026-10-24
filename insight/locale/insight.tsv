@@ -2153,3 +2153,4 @@ AI conversation: edit after You>. Ctrl+Enter sends; Enter inserts a new line. Ea
 Additional editable request included with earlier requirements; Send generates a reviewed code variant	Дополнительный запрос вместе с предыдущими требованиями; Отправить создаёт вариант кода для проверки
 Connections are shared. Request history is stored separately per project and context; replies are not saved.	Подключения общие. История запросов хранится раздельно по проекту и месту применения; ответы не сохраняются.
 Choose a saved AI connection or compare enabled providers	Выберите сохранённое подключение ИИ или сравнение включённых провайдеров
+Follow-up request about this code proposal; review the text before sending	Дополнительный вопрос о предложенной правке; проверьте текст перед отправкой
