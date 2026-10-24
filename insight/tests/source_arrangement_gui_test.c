@@ -45,7 +45,7 @@ static gboolean step(gpointer data) {
  }
  if(phase==2) {separated(docs[0],docs[2],FALSE);gtk_button_clicked(GTK_BUTTON(named(host,"insight-source-arrangement-next")));g_assert_true(document_get_current()==docs[2]);gtk_button_clicked(GTK_BUTTON(named(host,"insight-source-arrangement-previous")));g_assert_true(document_get_current()==docs[0]);action(GEANY_KEYS_INSIGHT_TILEVERTICAL);phase++;return G_SOURCE_CONTINUE;}
  if(phase==3) {
-  g_assert_nonnull(host);for(guint n=0;n<4;n++) g_assert_true(gtk_widget_get_toplevel(GTK_WIDGET(docs[n]->editor->sci))==host);
+  g_assert_nonnull(host);GtkWidget *arranged=host;action(GEANY_KEYS_INSIGHT_LINKALLWINDOWS);action(GEANY_KEYS_INSIGHT_UNLINKWINDOWS);g_assert_true(host==arranged);for(guint n=0;n<4;n++) g_assert_true(gtk_widget_get_toplevel(GTK_WIDGET(docs[n]->editor->sci))==host);
   for(guint n=0;n<4;n++) for(guint k=n+1;k<4;k++) {GdkRectangle a=rect(docs[n]),b=rect(docs[k]);g_assert_true(a.x+a.width<=b.x || b.x+b.width<=a.x || a.y+a.height<=b.y || b.y+b.height<=a.y);}
   action(GEANY_KEYS_INSIGHT_ZOOMSOURCE);phase++;return G_SOURCE_CONTINUE;
  }

@@ -39,6 +39,7 @@ static void links_changed(void);
 static void show_dialog(void);
 static void present_links(GeanyDocument *doc);
 static void restore_panes(void);
+static gboolean manual_panes(void);
 static gchar *doc_path(GeanyDocument *doc) { return DOC_VALID(doc) && doc->file_name ? insight_canonicalize_filename(doc->file_name,NULL):NULL; }
 static void remove_pair(guint n) { ScrollPair *p=&g_array_index(link_pairs,ScrollPair,n);g_free(p->a);g_free(p->b);g_array_remove_index(link_pairs,n); }
 static void bind_paths(void) {
@@ -86,13 +87,14 @@ static void project_closed(GObject *o,gpointer unused) { (void)o;(void)unused;pe
 void insight_scroll_links_membership(const InsightProjectFiles *policy,const gchar *root) {
  if(!link_pairs || !policy || !scope || !app->project || g_strcmp0(scope,app->project->file_name)) return;gboolean changed=FALSE;
  for(guint n=link_pairs->len;n>0;n--) { ScrollPair *p=&g_array_index(link_pairs,ScrollPair,n-1);if((p->a && !insight_project_files_contains(policy,root,p->a)) || (p->b && !insight_project_files_contains(policy,root,p->b))) { remove_pair(n-1);changed=TRUE; } }
- if(changed) { restore_panes();editing_uid=0;persist_links();links_changed(); }
+ if(changed) { if(!manual_panes()) restore_panes();editing_uid=0;persist_links();links_changed(); }
 }
 /* Actual editor widgets are moved, not copied: syntax, Undo and saving stay native. */
 typedef struct { GtkWidget *parent,*content,*placeholder;guint id;gint position;gulong focus;GtkWidget *box,*label; } LinkedPane;
 static GArray *panes;
 static GtkWidget *pane_window,*pane_body;
 static gboolean manual_layout,zoomed;
+static gboolean manual_panes(void) { return manual_layout && pane_window!=NULL; }
 static GtkOrientation layout_axis=GTK_ORIENTATION_HORIZONTAL;
 static guint recent_source,previous_source;
 static GQueue source_mru=G_QUEUE_INIT;
@@ -220,7 +222,7 @@ static void set_all(gboolean active) {
  if(active && open_count()>ALL_LIMIT) { ui_set_statusbar(TRUE,"Link All supports at most 128 open source buffers");refresh_controls();return; }
  link_all=active;reset_baselines();refresh_controls();
 }
-static void clear_links(void) { restore_panes();while(link_pairs->len) remove_pair(link_pairs->len-1);editing_uid=pending_source=0;link_all=FALSE;g_hash_table_remove_all(view_samples);persist_links();links_changed(); }
+static void clear_links(void) { if(!manual_panes()) restore_panes();while(link_pairs->len) remove_pair(link_pairs->len-1);editing_uid=pending_source=0;link_all=FALSE;g_hash_table_remove_all(view_samples);persist_links();links_changed(); }
 static void add_reachable(GArray *ids,GHashTable *seen,guint id) {
  if(!g_hash_table_contains(seen,GUINT_TO_POINTER(id)) && DOC_VALID(document_find_by_id(id))) { g_hash_table_add(seen,GUINT_TO_POINTER(id));g_array_append_val(ids,id); }
 }
@@ -281,7 +283,7 @@ static void pair_selected(GtkTreeSelection *selection,gpointer data) {
 }
 static void row_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) { (void)path;(void)column;(void)data;pair_selected(gtk_tree_view_get_selection(view),NULL); }
 static void remove_selected(GtkWidget *widget,gpointer data) {
- (void)widget;(void)data;GtkTreeIter row;GtkTreeModel *model;if(!gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(links_view)),&model,&row)) return;guint uid=0;gtk_tree_model_get(model,&row,7,&uid,-1);if(!uid) return;for(guint n=0;n<link_pairs->len;n++) if(g_array_index(link_pairs,ScrollPair,n).uid==uid) { remove_pair(n);break; }editing_uid=0;restore_panes();reset_baselines();populate_target(FALSE,0);persist_links();links_changed();
+ (void)widget;(void)data;GtkTreeIter row;GtkTreeModel *model;if(!gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(links_view)),&model,&row)) return;guint uid=0;gtk_tree_model_get(model,&row,7,&uid,-1);if(!uid) return;for(guint n=0;n<link_pairs->len;n++) if(g_array_index(link_pairs,ScrollPair,n).uid==uid) { remove_pair(n);break; }editing_uid=0;if(!manual_panes()) restore_panes();reset_baselines();populate_target(FALSE,0);persist_links();links_changed();
 }
 static void locale_changed(gpointer data) { (void)data;if(!link_dialog) return;populate_sources(0);populate_target(TRUE,0);links_changed(); }
 static void apply_pair(void) {
@@ -292,7 +294,7 @@ static void apply_pair(void) {
  if(target && existing<0 && link_pairs->len>=PAIR_LIMIT) { gtk_label_set_text(GTK_LABEL(links_status),insight_tr("At most 64 individual source links are supported"));return; }
  if(existing>=0) remove_pair((guint)existing);
  if(target) { ScrollPair pair={dialog_source,target,gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(two_way)),doc_path(document_find_by_id(dialog_source)),doc_path(document_find_by_id(target)),gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(together_check)),editing_uid ? editing_uid:next_uid++};editing_uid=pair.uid;g_array_append_val(link_pairs,pair); }
- reset_baselines();persist_links();links_changed();restore_panes();present_links(document_find_by_id(dialog_source));
+ reset_baselines();persist_links();links_changed();if(!manual_panes() || gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(together_check))) {restore_panes();present_links(document_find_by_id(dialog_source));}
 }
 static void dialog_destroyed(GtkWidget *widget,gpointer data) { (void)widget;(void)data;link_dialog=NULL;source_choice=links_view=remove_link=NULL;source_label=target_choice=two_way=all_check=vertical_check=horizontal_check=links_status=NULL;together_check=NULL;pending_source=0;g_clear_object(&links_model); }
 static void dialog_response(GtkDialog *dialog,gint response,gpointer data) {
@@ -312,7 +314,7 @@ static void cell_changed(GtkCellRendererCombo *cell,gchar *path,GtkTreeIter *ite
 static void together_toggled(GtkCellRendererToggle *cell,gchar *path,gpointer data) {
  (void)cell;(void)data;GtkTreeIter row;if(!gtk_tree_model_get_iter_from_string(GTK_TREE_MODEL(links_model),&row,path)) return;guint uid;gboolean active;gtk_tree_model_get(GTK_TREE_MODEL(links_model),&row,7,&uid,6,&active,-1);
  if(!uid) {gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(together_check),!active);gtk_list_store_set(links_model,&row,6,!active,-1);return;}
- for(guint n=0;n<link_pairs->len;n++) { ScrollPair *p=&g_array_index(link_pairs,ScrollPair,n);if(p->uid==uid) {p->together=!active;gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(together_check),p->together);break;} }persist_links();links_changed();restore_panes();present_links(document_get_current());
+ for(guint n=0;n<link_pairs->len;n++) { ScrollPair *p=&g_array_index(link_pairs,ScrollPair,n);if(p->uid==uid) {p->together=!active;gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(together_check),p->together);break;} }persist_links();links_changed();if(!manual_panes() || !active) {restore_panes();present_links(document_get_current());}
 }
 static void show_dialog(void) {
  if(!link_dialog) {
