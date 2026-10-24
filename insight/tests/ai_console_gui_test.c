@@ -48,7 +48,7 @@ static gboolean step(gpointer data) {
  case 1: {
   gchar *answer=text(assistant,"insight-ai-answer");g_assert_nonnull(strstr(answer,"Mock analysis"));g_free(answer);g_assert_false(gtk_text_view_get_editable(GTK_TEXT_VIEW(named(assistant,"insight-ai-answer"))));
   GtkWidget *history=named(assistant,"insight-ai-answer-history");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(history)),NULL),==,1);g_assert_nonnull(named(assistant,"insight-ai-options"));g_assert_true(gtk_widget_get_sensitive(named(assistant,"insight-ai-save-file")));chooser_action=2;click(assistant,"insight-ai-save-file");gchar *received=NULL;g_assert_true(g_file_get_contents(received_path,&received,NULL,NULL));g_assert_cmpstr(received,==,"fixture attachment\n");g_free(received);
-  click(assistant,"insight-ai-insert");g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(window,"insight-ssh-input"))),==,"printf 'review only'");source_is(base);
+  click(assistant,"insight-ai-insert");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(named(assistant,"insight-ai-status"))),"Cannot insert"));source_is(base);
   gchar *config=g_build_filename(profile,"insight-ai.conf",NULL),*saved=NULL;g_assert_true(g_file_get_contents(config,&saved,NULL,NULL));g_assert_null(strstr(saved,"fixture-secret-key"));g_assert_null(strstr(saved,"compiler error"));g_assert_null(strstr(saved,"int value"));g_free(config);g_free(saved);
   after=g_get_monotonic_time()+200*G_TIME_SPAN_MILLISECOND;phase++;break;
  }

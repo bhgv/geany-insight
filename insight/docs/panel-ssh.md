@@ -35,3 +35,8 @@ SSH-панель разделена на вкладки справа: подкл
 Для локальной упаковки нужен Python 3, для удалённой — gzip/tar на сервере. SCP-пути на сервере ограничены буквами ASCII, цифрами и `/._-`, чтобы оставаться безопасными и на старых клиентах; для остальных имён используйте существующее открытие через SFTP. Перед отправкой проверьте имя назначения: удалённый файл может быть заменён.
 
 ![SSH workspace](media/ssh-workspace.svg)
+
+
+## Unified terminal input/output
+
+SSH now uses a single black VT100/xterm input/output screen with colors and native selection instead of a separate command entry. Right-hand icon tabs show a plug, file transfer and numbered terminals, with tooltip names. Local VTE also uses a black background and middle-click selection/clipboard fallback. See [TTY / COM](panel-tty.md) for the serial panel and current limits, including the shared 80×24 SSH/TTY screen.

@@ -33,6 +33,7 @@
 #include "insight-browser-mode.h"
 #include "insight-scroll-links.h"
 #include "insight-incremental-search.h"
+#include "insight-terminal.h"
 #include "keybindings.h"
 #include "insight-paste.h"
 #include "insight-buffer-transfer.h"
@@ -1647,6 +1648,7 @@ static gboolean on_key_press_event(GtkWidget *widget, GdkEventKey *ev, gpointer 
 	if (key_press_ret)
 		return TRUE;
 
+	if (insight_terminal_key(gtk_window_get_focus(GTK_WINDOW(widget)),ev)) return TRUE;
 	if (insight_incremental_search_key(ev)) return TRUE;
 	if (insight_browser_mode_key(gtk_window_get_focus(GTK_WINDOW(widget)),ev)) return TRUE;
 	if (insight_list_tools_key(gtk_window_get_focus(GTK_WINDOW(widget)), ev))

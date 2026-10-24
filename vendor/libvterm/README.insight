@@ -1,0 +1,5 @@
+libvterm 0.3.3
+Upstream: https://github.com/neovim/libvterm
+Commit: 934bc2fbf21800ac3458a499df8820ca5fb45fd3
+License: MIT, see LICENSE (unicode.c also retains its original notice).
+Unmodified portable terminal parser/screen; compiled into the editor.

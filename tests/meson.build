@@ -934,3 +934,10 @@ test('Insight native source scroll links GUI', scroll_links_gui_test, timeout: 5
 
 incremental_search_gui_test = executable('test_insight_incremental_search_gui', '../insight/tests/incremental_search_gui_test.c', dependencies: test_deps)
 test('Insight native incremental search GUI', incremental_search_gui_test, timeout: 50, is_parallel: false)
+
+terminal_core_test = executable('test_insight_terminal_core', '../insight/tests/terminal_core_test.c', link_with: insight_vterm)
+test('Insight portable VT terminal core', terminal_core_test)
+terminal_widget_gui_test = executable('test_insight_terminal_widget_gui', '../insight/tests/terminal_widget_gui_test.c', '../src/insight-terminal.c', include_directories: include_directories('..', '../src', '../scintilla/include'), link_with: insight_vterm, dependencies: deps)
+test('Insight production VT terminal widget GUI', terminal_widget_gui_test, timeout: 30, is_parallel: false)
+tty_console_gui_test = executable('test_insight_tty_console_gui', '../insight/tests/tty_console_gui_test.c', dependencies: test_deps)
+test('Insight native TTY terminal GUI', find_program('python3'), args: [meson.project_source_root() / 'insight/tests/tty_console_fixture.py', tty_console_gui_test.full_path()], timeout: 35, is_parallel: false)

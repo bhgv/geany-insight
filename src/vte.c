@@ -98,6 +98,7 @@ typedef enum {
 struct VteFunctions
 {
  gchar *(*vte_terminal_get_text)(VteTerminal *,gboolean (*)(VteTerminal *,glong,glong,gpointer),gpointer,GArray *);
+ void (*vte_terminal_paste_text)(VteTerminal *,const gchar *);
  gchar *(*vte_terminal_get_text_selected)(VteTerminal *,gint);
 	guint (*vte_get_major_version) (void);
 	guint (*vte_get_minor_version) (void);
@@ -304,7 +305,7 @@ void vte_init(void)
 		else
 		{
 			vte_info.have_vte = FALSE;
-			g_free(vf);
+			g_free(vf);vf=NULL;
 			/* FIXME: is closing the module safe? see vte_close() and test on FreeBSD */
 			/*g_module_close(module);*/
 			module = NULL;
@@ -397,7 +398,7 @@ void vte_close(void)
 	g_free(vte_config.shell);
 	g_free(vte_config.font);
 	g_free(vte_config.send_cmd_prefix);
-	g_free(vf);
+	g_free(vf);vf=NULL;
 	g_free(gtk_menu_key_accel);
 	/* Don't unload the module explicitly because it causes a segfault on FreeBSD. The segfault
 	 * happens when the app really exits, not directly on g_module_close(). This still needs to
@@ -522,6 +523,10 @@ static void vte_restart(GtkWidget *widget)
 }
 
 
+static void middle_text(GtkClipboard *clipboard,const gchar *text,gpointer data) {
+ (void)clipboard;GtkWidget *widget=data;if(vf && widget==vte_config.vte && gtk_widget_get_realized(widget) && text && strlen(text)<=1024*1024) { if(vf->vte_terminal_paste_text) vf->vte_terminal_paste_text(VTE_TERMINAL(widget),text);else vf->vte_terminal_feed_child(VTE_TERMINAL(widget),text,strlen(text)); }g_object_unref(widget);
+}
+static void middle_primary(GtkClipboard *clipboard,const gchar *text,gpointer data) { if(text && *text) middle_text(clipboard,text,data);else gtk_clipboard_request_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),middle_text,data); }
 static gboolean vte_button_pressed(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
 	if (event->button == 3)
@@ -532,7 +537,9 @@ static gboolean vte_button_pressed(GtkWidget *widget, GdkEventButton *event, gpo
 	}
 	else if (event->button == 2)
 	{
-		gtk_widget_grab_focus(widget);
+		gtk_widget_grab_focus(widget);gchar *selected=NULL;
+        if(vf->vte_terminal_get_text_selected && vf->vte_terminal_get_has_selection(VTE_TERMINAL(widget))) selected=vf->vte_terminal_get_text_selected(VTE_TERMINAL(widget),1);
+        if(selected && *selected) middle_text(NULL,selected,g_object_ref(widget));else gtk_clipboard_request_text(gtk_clipboard_get(GDK_SELECTION_PRIMARY),middle_primary,g_object_ref(widget));g_free(selected);return TRUE;
 	}
 	return FALSE;
 }
@@ -622,6 +629,7 @@ static gboolean vte_register_symbols(GModule *mod)
 	BIND_REQUIRED_SYMBOL(vte_terminal_feed_child);
  BIND_SYMBOL(vte_terminal_get_text);
  BIND_SYMBOL(vte_terminal_get_text_selected);
+ BIND_SYMBOL(vte_terminal_paste_text);
 	if (! BIND_SYMBOL(vte_terminal_set_cursor_blink_mode))
 		/* vte_terminal_set_cursor_blink_mode() is only available since 0.17.1, so if we don't find
 		 * this symbol, we are probably on an older version and use the old API instead */
@@ -658,7 +666,10 @@ void vte_apply_user_settings(void)
 	pango_font_description_free(font_desc);
 	vf->vte_terminal_set_color_foreground(VTE_TERMINAL(vc->vte), &vc->colour_fore);
 	vf->vte_terminal_set_color_bold(VTE_TERMINAL(vc->vte), &vc->colour_fore);
-	vf->vte_terminal_set_color_background(VTE_TERMINAL(vc->vte), &vc->colour_back);
+	GdkColor terminal_black={0,0,0,0},terminal_fore={0,0xdddd,0xdddd,0xdddd};
+    vf->vte_terminal_set_color_background(VTE_TERMINAL(vc->vte), &terminal_black);
+    vf->vte_terminal_set_color_foreground(VTE_TERMINAL(vc->vte), &terminal_fore);
+    vf->vte_terminal_set_color_bold(VTE_TERMINAL(vc->vte), &terminal_fore);
 	vf->vte_terminal_set_audible_bell(VTE_TERMINAL(vc->vte), prefs.beep_on_errors);
 	vte_set_cursor_blink_mode();
 

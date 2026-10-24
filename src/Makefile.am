@@ -14,6 +14,7 @@ EXTRA_DIST = \
 
 AM_CPPFLAGS = \
 	-I$(top_srcdir) \
+	-I$(top_srcdir)/vendor/libvterm/include \
 	-I$(top_srcdir)/scintilla/include \
 	-I$(top_srcdir)/scintilla/lexilla/include \
 	-I$(srcdir)/tagmanager \
@@ -437,3 +438,14 @@ libgeany_la_SOURCES += insight-appearance.c insight-appearance.h
 libgeany_la_SOURCES += insight-tree-expand.c insight-tree-expand.h
 
 libgeany_la_SOURCES += insight-reload.c insight-reload.h
+
+libgeany_la_SOURCES += insight-terminal.c insight-terminal.h insight-serial.c insight-serial.h \
+	../vendor/libvterm/src/encoding.c \
+	../vendor/libvterm/src/keyboard.c \
+	../vendor/libvterm/src/mouse.c \
+	../vendor/libvterm/src/parser.c \
+	../vendor/libvterm/src/pen.c \
+	../vendor/libvterm/src/screen.c \
+	../vendor/libvterm/src/state.c \
+	../vendor/libvterm/src/unicode.c \
+	../vendor/libvterm/src/vterm.c

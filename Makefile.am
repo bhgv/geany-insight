@@ -682,3 +682,30 @@ dist_insightdocmedia_DATA += insight/docs/media/scroll-links.svg
 EXTRA_DIST += insight/tests/incremental_search_gui_test.c
 insightdoc_DATA += insight/docs/incremental-search.md
 dist_insightdocmedia_DATA += insight/docs/media/incremental-search.svg
+
+EXTRA_DIST += \
+	vendor/libvterm/LICENSE \
+	vendor/libvterm/README.insight \
+	vendor/libvterm/include/vterm.h \
+	vendor/libvterm/include/vterm_keycodes.h \
+	vendor/libvterm/src/encoding/DECdrawing.inc \
+	vendor/libvterm/src/encoding/DECdrawing.tbl \
+	vendor/libvterm/src/encoding/uk.inc \
+	vendor/libvterm/src/encoding/uk.tbl \
+	vendor/libvterm/src/encoding.c \
+	vendor/libvterm/src/fullwidth.inc \
+	vendor/libvterm/src/keyboard.c \
+	vendor/libvterm/src/mouse.c \
+	vendor/libvterm/src/parser.c \
+	vendor/libvterm/src/pen.c \
+	vendor/libvterm/src/rect.h \
+	vendor/libvterm/src/screen.c \
+	vendor/libvterm/src/state.c \
+	vendor/libvterm/src/unicode.c \
+	vendor/libvterm/src/utf8.h \
+	vendor/libvterm/src/vterm.c \
+	vendor/libvterm/src/vterm_internal.h
+
+EXTRA_DIST += insight/tests/terminal_core_test.c insight/tests/terminal_widget_gui_test.c insight/tests/tty_console_gui_test.c insight/tests/tty_console_fixture.py
+insightdoc_DATA += insight/docs/panel-tty.md
+dist_insightdocmedia_DATA += insight/docs/media/terminals.svg

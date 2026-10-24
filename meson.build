@@ -895,6 +895,19 @@ insight_native = static_library('insight_native',
  include_directories: include_directories('insight/core', 'insight/vendor/lua'),
  dependencies: deps + [cc.find_library('m', required: false)])
 
+insight_vterm_sources = files(
+ 'vendor/libvterm/src/encoding.c',
+ 'vendor/libvterm/src/keyboard.c',
+ 'vendor/libvterm/src/mouse.c',
+ 'vendor/libvterm/src/parser.c',
+ 'vendor/libvterm/src/pen.c',
+ 'vendor/libvterm/src/screen.c',
+ 'vendor/libvterm/src/state.c',
+ 'vendor/libvterm/src/unicode.c',
+ 'vendor/libvterm/src/vterm.c',
+)
+insight_vterm = static_library('insight_vterm', insight_vterm_sources, include_directories: include_directories('vendor/libvterm/include'), pic: true, gnu_symbol_visibility: 'hidden')
+
 libgeany = shared_library('geany',
 	'src/about.c',
 	'src/about.h',
@@ -955,7 +968,7 @@ libgeany = shared_library('geany',
 	'src/insight-relation-graph.h',
 	'src/insight-help.c',
  'src/insight-search-links.c', 'src/insight-search-links.h', 'insight/desktop/source_link_anchor.c',
- 'src/insight-symbol-edit.c', 'src/insight-symbol-edit.h', 'src/insight-buffer-transfer.c', 'src/insight-buffer-transfer.h', 'src/insight-renumber-ranges.c', 'src/insight-renumber-ranges.h', 'src/insight-replace-files.c', 'src/insight-replace-files.h', 'src/insight-editor-ai.c', 'src/insight-editor-ai.h', 'src/insight-ai.c', 'src/insight-ai.h', 'src/insight-html-export.c', 'src/insight-html-export.h', 'src/insight-project-report.c', 'src/insight-project-report.h', 'src/insight-git-history.c', 'src/insight-git-history.h', 'src/insight-snapshot-compare.c', 'src/insight-snapshot-compare.h', 'src/insight-backups.c', 'src/insight-backups.h', 'src/insight-revisions.c', 'src/insight-revisions.h', 'src/insight-typing.c', 'src/insight-typing.h', 'src/insight-recording.c', 'src/insight-recording.h', 'src/insight-diff-syntax.c', 'src/insight-diff-syntax.h', 'src/insight-ai-profiles.c', 'src/insight-ai-profiles.h', 'src/insight-outlining.c', 'src/insight-outlining.h', 'src/insight-web-search.c', 'src/insight-web-search.h', 'insight/desktop/web_search.c', 'insight/desktop/web_search.h', 'src/insight-word-highlights.c', 'src/insight-word-highlights.h', 'src/insight-selection-search.c', 'src/insight-selection-search.h', 'src/insight-command-list.c', 'src/insight-command-list.h', 'src/insight-incremental-search.c', 'src/insight-incremental-search.h', 'src/insight-scroll-links.c', 'src/insight-scroll-links.h', 'src/insight-browser-mode.c', 'src/insight-browser-mode.h', 'src/insight-navigation.c', 'src/insight-navigation.h', 'src/insight-paste.c', 'src/insight-paste.h', 'src/insight-completion.c', 'src/insight-completion.h', 'src/insight-languages.c',
+ 'src/insight-symbol-edit.c', 'src/insight-symbol-edit.h', 'src/insight-buffer-transfer.c', 'src/insight-buffer-transfer.h', 'src/insight-renumber-ranges.c', 'src/insight-renumber-ranges.h', 'src/insight-replace-files.c', 'src/insight-replace-files.h', 'src/insight-editor-ai.c', 'src/insight-editor-ai.h', 'src/insight-ai.c', 'src/insight-ai.h', 'src/insight-html-export.c', 'src/insight-html-export.h', 'src/insight-project-report.c', 'src/insight-project-report.h', 'src/insight-git-history.c', 'src/insight-git-history.h', 'src/insight-snapshot-compare.c', 'src/insight-snapshot-compare.h', 'src/insight-backups.c', 'src/insight-backups.h', 'src/insight-revisions.c', 'src/insight-revisions.h', 'src/insight-typing.c', 'src/insight-typing.h', 'src/insight-recording.c', 'src/insight-recording.h', 'src/insight-diff-syntax.c', 'src/insight-diff-syntax.h', 'src/insight-ai-profiles.c', 'src/insight-ai-profiles.h', 'src/insight-outlining.c', 'src/insight-outlining.h', 'src/insight-web-search.c', 'src/insight-web-search.h', 'insight/desktop/web_search.c', 'insight/desktop/web_search.h', 'src/insight-word-highlights.c', 'src/insight-word-highlights.h', 'src/insight-selection-search.c', 'src/insight-selection-search.h', 'src/insight-command-list.c', 'src/insight-command-list.h', 'src/insight-terminal.c', 'src/insight-terminal.h', 'src/insight-serial.c', 'src/insight-serial.h', 'src/insight-incremental-search.c', 'src/insight-incremental-search.h', 'src/insight-scroll-links.c', 'src/insight-scroll-links.h', 'src/insight-browser-mode.c', 'src/insight-browser-mode.h', 'src/insight-navigation.c', 'src/insight-navigation.h', 'src/insight-paste.c', 'src/insight-paste.h', 'src/insight-completion.c', 'src/insight-completion.h', 'src/insight-languages.c',
  'src/insight-formatting.c',
  'src/insight-formatting.h',
  'src/insight-i18n.c',
@@ -1024,7 +1037,7 @@ libgeany = shared_library('geany',
 	gen_src,
 	win_src,
 	osx_src,
-	link_with: insight_native,
+	link_with: [insight_native, insight_vterm],
 	link_args: win_link_args,
 	soversion: '0',
 	c_args: geany_cflags + [ '-DG_LOG_DOMAIN="Geany"' ],
@@ -1162,3 +1175,6 @@ install_data('insight/docs/media/scroll-links.svg', install_dir: cdata.get('GEAN
 
 install_data('insight/docs/incremental-search.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 install_data('insight/docs/media/incremental-search.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
+
+install_data('insight/docs/panel-tty.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
+install_data('insight/docs/media/terminals.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')

@@ -2096,3 +2096,16 @@ No match — previous selection retained	Нет совпадений — пре�
  • wrapped	 • через границу файла
 Incremental search supports source buffers up to 8 MiB	Инкрементальный поиск поддерживает исходники до 8 МиБ
 Incremental search requires complete UTF-8 without NUL	Для инкрементального поиска нужен UTF-8 без NUL
+TTY Terminal	TTY-терминал
+Serial port	Последовательный порт
+Baud rate	Скорость
+Data bits	Биты данных
+Stop bits	Стоп-биты
+Parity	Чётность
+Local echo	Локальное эхо
+Refresh ports	Обновить порты
+New TTY terminal	Новый TTY-терминал
+TTY / COM connection	Подключение TTY / COM
+Choose a serial port and valid connection parameters	Выберите порт и допустимые параметры соединения
+TTY disconnected	TTY отключён
+TTY device disconnected or I/O failed; connection closed	Устройство TTY отключено или произошла ошибка обмена; соединение закрыто

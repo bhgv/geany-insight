@@ -6,6 +6,7 @@
 #include "ui_utils.h"
 #include <glib/gstdio.h>
 #include <string.h>
+#include <gdk/gdkkeysyms.h>
 static GtkWidget *window,*output,*state,*input,*output2,*input2,*tabs;static guint phase,ticks;static gchar *directory,*profile;
 static GtkWidget *named(GtkWidget *root,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;
@@ -16,20 +17,23 @@ static void click(const gchar *name) { GtkWidget *button=named(window,name);g_as
 static gchar *view_text(GtkWidget *view) { GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));GtkTextIter a,b;gtk_text_buffer_get_bounds(buffer,&a,&b);return gtk_text_buffer_get_text(buffer,&a,&b,FALSE); }
 static gchar *transcript(void) { return view_text(output); }
 static guint ready_count(const gchar *text) { guint count=0;const gchar *p=text;while((p=strstr(p,"\nINSIGHT_SSH_OK\n"))) { count++;p++; }return count; }
-static void send_line(const gchar *command) { gtk_entry_set_text(GTK_ENTRY(input),command);g_signal_emit_by_name(input,"activate"); }
+static void send_to(GtkWidget *view,const gchar *command) {
+ g_signal_emit_by_name(view,"insert-at-cursor",command);GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);event->key.window=g_object_ref(gtk_widget_get_window(window));event->key.keyval=GDK_KEY_Return;gboolean handled=FALSE;g_signal_emit_by_name(view,"key-press-event",event,&handled);g_assert_true(handled);gdk_event_free(event);
+}
+static void send_line(const gchar *command) { send_to(input,command); }
 static void transfer_path(const gchar *widget,const gchar *name) { gchar *path=g_build_filename(g_getenv("INSIGHT_SSH_TRANSFER_DIR"),name,NULL);gtk_entry_set_text(GTK_ENTRY(named(window,widget)),path);g_free(path); }
 static gboolean transfer_complete(void) { return strstr(gtk_label_get_text(GTK_LABEL(named(window,"insight-scp-status"))),"Transfer completed")!=NULL; }
 static gboolean step(gpointer data) {
  (void)data;if(!document_get_current()) return G_SOURCE_CONTINUE;
  if(!window) {
   window=gtk_widget_get_toplevel(GTK_WIDGET(document_get_current()->editor->sci));GtkWidget *page=named(window,"insight-ssh-page");g_assert_nonnull(page);GtkWidget *book=gtk_widget_get_parent(page);g_assert_true(GTK_IS_NOTEBOOK(book));gtk_widget_show(book);gtk_notebook_set_current_page(GTK_NOTEBOOK(book),gtk_notebook_page_num(GTK_NOTEBOOK(book),page));gtk_window_present(GTK_WINDOW(window));
-  tabs=named(window,"insight-ssh-tabs");g_assert_nonnull(tabs);g_assert_cmpint(gtk_notebook_get_tab_pos(GTK_NOTEBOOK(tabs)),==,GTK_POS_RIGHT);g_assert_cmpint(gtk_notebook_get_n_pages(GTK_NOTEBOOK(tabs)),==,3);output=named(window,"insight-ssh-output");state=named(window,"insight-ssh-status");input=named(window,"insight-ssh-input");g_assert_nonnull(output);g_assert_nonnull(state);g_assert_nonnull(input);g_assert_true(gtk_label_get_selectable(GTK_LABEL(state)));g_assert_cmpint(gtk_label_get_ellipsize(GTK_LABEL(state)),==,PANGO_ELLIPSIZE_NONE);
+  tabs=named(window,"insight-ssh-tabs");g_assert_nonnull(tabs);g_assert_cmpint(gtk_notebook_get_tab_pos(GTK_NOTEBOOK(tabs)),==,GTK_POS_RIGHT);g_assert_cmpint(gtk_notebook_get_n_pages(GTK_NOTEBOOK(tabs)),==,3);output=named(window,"insight-ssh-output");state=named(window,"insight-ssh-status");input=named(window,"insight-ssh-output");g_assert_nonnull(output);g_assert_nonnull(state);g_assert_nonnull(input);g_assert_true(gtk_label_get_selectable(GTK_LABEL(state)));g_assert_cmpint(gtk_label_get_ellipsize(GTK_LABEL(state)),==,PANGO_ELLIPSIZE_NONE);
   gtk_entry_set_text(GTK_ENTRY(named(window,"insight-ssh-host"))," 127.0.0.1 ");gchar *user=g_strdup_printf(" %s ",g_getenv("INSIGHT_SSH_TEST_USER"));gtk_entry_set_text(GTK_ENTRY(named(window,"insight-ssh-user")),user);g_free(user);gtk_entry_set_text(GTK_ENTRY(named(window,"insight-ssh-identity")),g_getenv("INSIGHT_SSH_TEST_KEY"));gtk_spin_button_set_value(GTK_SPIN_BUTTON(named(window,"insight-ssh-port")),g_ascii_strtod(g_getenv("INSIGHT_SSH_TEST_PORT"),NULL));
   click("insight-ssh-connect");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(state)),"Starting SSH"));send_line("printf '\\nINSIGHT_SSH_OK\\n'");return G_SOURCE_CONTINUE;
  }
  gchar *text=transcript();const gchar *label=gtk_label_get_text(GTK_LABEL(state));
  if(phase==0 && ready_count(text)>=1) {
-  click("insight-ssh-new-terminal");g_assert_cmpint(gtk_notebook_get_n_pages(GTK_NOTEBOOK(tabs)),==,4);output2=named(window,"insight-ssh-output-2");input2=named(window,"insight-ssh-input-2");g_assert_nonnull(output2);g_assert_nonnull(input2);click("insight-ssh-connect");gtk_entry_set_text(GTK_ENTRY(input2),"printf '\\nSESSION_TWO\\n'");g_signal_emit_by_name(input2,"activate");phase=10;
+  click("insight-ssh-new-terminal");g_assert_cmpint(gtk_notebook_get_n_pages(GTK_NOTEBOOK(tabs)),==,4);output2=named(window,"insight-ssh-output-2");input2=named(window,"insight-ssh-output-2");g_assert_nonnull(output2);g_assert_nonnull(input2);click("insight-ssh-connect");send_to(input2,"printf '\\nSESSION_TWO\\n'");phase=10;
  } else if(phase==10) {
   gchar *second=view_text(output2);gboolean ready=strstr(second,"\nSESSION_TWO\n")!=NULL;g_free(second);if(ready) { gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs),2);send_line("printf '\\nSESSION_ONE_ALIVE\\n'");phase=11; }
  } else if(phase==11 && strstr(text,"\nSESSION_ONE_ALIVE\n")) {
@@ -50,7 +54,7 @@ static gboolean step(gpointer data) {
  } else if(phase==4) {
   g_assert_nonnull(strstr(text,"OpenSSH client 'ssh' was not found"));gtk_entry_set_text(GTK_ENTRY(named(window,"insight-ssh-host")),"");click("insight-ssh-connect");g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(state)),"Use a host"));phase++;
  } else if(phase==5) {
-  g_assert_nonnull(strstr(text,"Use a host"));gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs),3);gtk_entry_set_text(GTK_ENTRY(input2),"printf '\\nSESSION_TWO_STILL_ALIVE\\n'");g_signal_emit_by_name(input2,"activate");phase=6;
+  g_assert_nonnull(strstr(text,"Use a host"));gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs),3);send_to(input2,"printf '\\nSESSION_TWO_STILL_ALIVE\\n'");phase=6;
  } else if(phase==6) {
   gchar *second=view_text(output2);gboolean ready=strstr(second,"\nSESSION_TWO_STILL_ALIVE\n")!=NULL;g_free(second);if(!ready) { g_free(text);return G_SOURCE_CONTINUE; }g_print("SSH console GUI: real OpenSSH loopback command, whitespace normalization, reconnect during old callbacks, drained output and exit 7, refused connection and exit 255, missing client and invalid input visibly reported\n");g_free(text);gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }

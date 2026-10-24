@@ -16,3 +16,8 @@ More: [panel-ssh.md](panel-ssh.md).
 
 
 [ИИ-помощник консоли: настройка, разбор ошибок и исправления через Diff/Merge](console-ai.md).
+
+
+## Unified terminal input/output
+
+SSH now uses a single black VT100/xterm input/output screen with colors and native selection instead of a separate command entry. Right-hand icon tabs show a plug, file transfer and numbered terminals, with tooltip names. Local VTE also uses a black background and middle-click selection/clipboard fallback. See [TTY / COM](panel-tty.md) for the serial panel and current limits, including the shared 80×24 SSH/TTY screen.
