@@ -15,7 +15,7 @@ static GtkWidget *named(GtkWidget *w,const gchar *name) {
  if(GTK_IS_CONTAINER(w)) { GList *list=gtk_container_get_children(GTK_CONTAINER(w));GtkWidget *f=NULL;for(GList *p=list;p&&!f;p=p->next) f=named(p->data,name);g_list_free(list);return f; }return NULL;
 }
 static GtkWidget *dialog(void) { GList *list=gtk_window_list_toplevels();GtkWidget *found=NULL;for(GList *p=list;p;p=p->next) if(gtk_widget_get_visible(p->data)&&!g_strcmp0(gtk_widget_get_name(p->data),"insight-buffer-transfer-dialog")) found=p->data;g_list_free(list);return found; }
-static void check(ScintillaObject *s,const gchar *expected) { gchar *text=sci_get_contents(s,-1);g_assert_cmpstr(text,==,expected);g_free(text); }
+static void check(ScintillaObject *s,const gchar *expected) { gchar *text=sci_get_contents(s,-1);if(g_strcmp0(text,expected)) g_printerr("Buffer transfer mismatch: mode %d guard %d whole %d reply %u\n",mode,guard,whole,reply);g_assert_cmpstr(text,==,expected);g_free(text); }
 static gboolean cancel_stale(gpointer data);
 static guint chooser_reply;
 static gboolean respond(gpointer data) {

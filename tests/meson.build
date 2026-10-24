@@ -944,3 +944,6 @@ test('Insight native TTY terminal GUI', find_program('python3'), args: [meson.pr
 
 hex_gui_test = executable('test_insight_hex_gui', '../insight/tests/hex_gui_test.c', dependencies: deps)
 test('Insight binary merge and hex Base64 export GUI', hex_gui_test, timeout: 40, is_parallel: false)
+
+compare_ui_gui_test = executable('test_insight_compare_ui_gui', '../insight/tests/compare_ui_gui_test.c', dependencies: deps)
+test('Insight comparison toolbar natural height and collapse GUI', compare_ui_gui_test, timeout: 25, is_parallel: false)
