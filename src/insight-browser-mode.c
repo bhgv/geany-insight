@@ -4,6 +4,7 @@
 #include "insight-browser-mode.h"
 #include "insight-workbench.h"
 #include "document.h"
+#include "callbacks.h"
 #include "documentprivate.h"
 #include "geanyobject.h"
 #include "main.h"
@@ -20,10 +21,14 @@ static gboolean enabled,syncing;
 static Original *original(GeanyDocument *doc) { return originals && DOC_VALID(doc) ? g_hash_table_lookup(originals,GUINT_TO_POINTER(doc->id)):NULL; }
 gboolean insight_browser_mode_active(void) { return enabled; }
 gboolean insight_browser_mode_file_readonly(GeanyDocument *doc) { Original *old=original(doc);return old ? old->readonly:doc->readonly; }
+static void sync_readonly_indicator(GeanyDocument *doc) {
+ if(!DOC_VALID(doc) || doc!=document_get_current()) return;
+ gboolean previous_ignore=ignore_callback;ignore_callback=TRUE;gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(ui_lookup_widget(main_widgets.window,"set_file_readonly1")),doc->readonly);ignore_callback=previous_ignore;
+}
 static void protect(GeanyDocument *doc) {
  if(!enabled || !DOC_VALID(doc)) return;
  if(!original(doc)) { Original *old=g_new(Original,1);old->readonly=doc->readonly;old->sci_readonly=SEND(doc->editor->sci,SCI_GETREADONLY,0,0);g_hash_table_insert(originals,GUINT_TO_POINTER(doc->id),old); }
- doc->readonly=TRUE;sci_set_readonly(doc->editor->sci,TRUE);ui_update_tab_status(doc);
+ doc->readonly=TRUE;sci_set_readonly(doc->editor->sci,TRUE);ui_update_tab_status(doc);sync_readonly_indicator(doc);
 }
 void insight_browser_mode_reloaded(GeanyDocument *doc) {
  if(!enabled || !DOC_VALID(doc)) return;
@@ -36,7 +41,7 @@ static void saved(GObject *object,GeanyDocument *doc,gpointer data) {
 static void closed(GObject *object,GeanyDocument *doc,gpointer data) { (void)object;(void)data;if(originals) g_hash_table_remove(originals,GUINT_TO_POINTER(doc->id)); }
 static void sync_controls(void) {
  syncing=TRUE;gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(menu_item),enabled);gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(popup_item),enabled);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(badge),enabled);syncing=FALSE;
- GeanyDocument *doc=document_get_current();if(doc) { ui_update_tab_status(doc);ui_update_statusbar(doc); }
+ GeanyDocument *doc=document_get_current();if(doc) { sync_readonly_indicator(doc);ui_update_tab_status(doc);ui_update_statusbar(doc); }
 }
 void insight_browser_mode_toggle(void) {
  if(!originals || !menu_item) return;
@@ -63,7 +68,12 @@ gboolean insight_browser_mode_key(GtkWidget *widget,GdkEventKey *event) {
  return FALSE;
 }
 gboolean insight_browser_mode_mouse(GeanyEditor *editor,GdkEventButton *event,gint position) {
- if(!enabled || editor->document!=document_get_current() || event->button!=1 || event->type!=GDK_BUTTON_PRESS || (event->state&gtk_accelerator_get_default_mod_mask())) return FALSE;
+ GdkModifierType modifiers=gtk_accelerator_get_default_mod_mask();
+#ifdef __APPLE__
+ /* Quartz reports Command as MOD2 in pointer events, as in ScintillaGTK. */
+ modifiers|=GDK_MOD2_MASK;
+#endif
+ if(!enabled || editor->document!=document_get_current() || event->button!=1 || event->type!=GDK_BUTTON_PRESS || (event->state&modifiers)) return FALSE;
  gint margin=(gint)SEND(editor->sci,SCI_GETMARGINLEFT,0,0);for(guint n=0;n<5;n++) margin+=(gint)SEND(editor->sci,SCI_GETMARGINWIDTHN,n,0);
  if(event->x<margin || position<0) return FALSE;
  /* Normal clicks on whitespace retain native selection/caret behavior. */
