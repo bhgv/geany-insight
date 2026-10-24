@@ -34,7 +34,7 @@ static void saved(GObject *object,GeanyDocument *doc,gpointer data) {
  (void)object;(void)data;if(enabled && DOC_VALID(doc) && !doc->readonly) insight_browser_mode_reloaded(doc);else protect(doc);
 }
 static void closed(GObject *object,GeanyDocument *doc,gpointer data) { (void)object;(void)data;if(originals) g_hash_table_remove(originals,GUINT_TO_POINTER(doc->id)); }
-static void sync(void) {
+static void sync_controls(void) {
  syncing=TRUE;gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(menu_item),enabled);gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(popup_item),enabled);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(badge),enabled);syncing=FALSE;
  GeanyDocument *doc=document_get_current();if(doc) { ui_update_tab_status(doc);ui_update_statusbar(doc); }
 }
@@ -47,7 +47,7 @@ void insight_browser_mode_toggle(void) {
   else { Original *old=original(doc);if(old) { doc->readonly=old->readonly;sci_set_readonly(doc->editor->sci,old->sci_readonly || doc->readonly || (doc->priv && doc->priv->protected));ui_update_tab_status(doc); } }
  }
  if(!enabled) g_hash_table_remove_all(originals);
- sync();ui_set_statusbar(FALSE,"%s",insight_tr(enabled ? "Browser Mode: ON — click/Space to browse, Backspace to go back":"Browser Mode: OFF"));
+ sync_controls();ui_set_statusbar(FALSE,"%s",insight_tr(enabled ? "Browser Mode: ON — click/Space to browse, Backspace to go back":"Browser Mode: OFF"));
 }
 static void toggled(GtkWidget *widget,gpointer data) { (void)widget;(void)data;if(!syncing) insight_browser_mode_toggle(); }
 static void help(GtkWidget *widget,gpointer data) { (void)widget;(void)data;insight_help_show(NULL,"browser-mode.md"); }
