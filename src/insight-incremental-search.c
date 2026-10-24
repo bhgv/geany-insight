@@ -122,7 +122,8 @@ static gboolean own_key(GdkEventKey *event)
 }
 gboolean insight_incremental_search_key(GdkEventKey *event)
 {
- if(!active || !entry || !gtk_widget_is_focus(entry)) return FALSE;
+ GtkWidget *focus=gtk_window_get_focus(GTK_WINDOW(main_widgets.window));
+ if(!active || !entry || !focus || (focus!=entry && !gtk_widget_is_ancestor(focus,strip))) return FALSE;
  if(own_key(event)) return FALSE;
  guint state=keybindings_get_modifiers(event->state),key=event->keyval;
  if(key==GDK_KEY_Escape) { finish(TRUE,TRUE);return TRUE; }
