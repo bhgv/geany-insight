@@ -44,6 +44,11 @@ static gboolean tick(gpointer data) {
   pair(doc_c,doc_a,FALSE);g_assert_cmpuint(pair_count(),==,3);positions(20,70,120,100,200,300,TRUE,FALSE);scroll_to(doc_a,27,100);g_assert_cmpint(row(doc_a),==,27);g_assert_cmpint(row(doc_b),==,77);g_assert_cmpint(row(doc_c),==,127);intact(doc_a);intact(doc_b);intact(doc_c);phase++;return G_SOURCE_CONTINUE;
  }
  if(phase==1) {
+  /* Let native document activation finish before measuring delayed scroll
+   * notifications: opening/switching tabs may restore their own viewport. */
+  positions(20,70,120,100,200,300,TRUE,FALSE);scroll_to(doc_a,27,100);phase++;return G_SOURCE_CONTINUE;
+ }
+ if(phase==2) {
   g_assert_cmpint(row(doc_a),==,27);g_assert_cmpint(row(doc_b),==,77);g_assert_cmpint(row(doc_c),==,127);
   positions(20,70,120,100,200,300,FALSE,TRUE);scroll_to(doc_a,30,125);g_assert_cmpint(row(doc_b),==,70);g_assert_cmpint(row(doc_c),==,120);g_assert_cmpint(xpos(doc_b),==,225);g_assert_cmpint(xpos(doc_c),==,325);scroll_to(doc_b,70,240);g_assert_cmpint(xpos(doc_a),==,140);g_assert_cmpint(xpos(doc_c),==,340);
   command(GEANY_KEYS_INSIGHT_BROWSERMODE);g_assert_true(doc_c->readonly);scroll_to(doc_c,130,350);g_assert_cmpint(xpos(doc_a),==,150);g_assert_cmpint(xpos(doc_b),==,250);command(GEANY_KEYS_INSIGHT_BROWSERMODE);g_assert_false(doc_c->readonly);
