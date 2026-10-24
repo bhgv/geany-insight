@@ -62,7 +62,7 @@ static gboolean status_popup(GtkWidget *widget,GdkEventButton *event,gpointer da
  gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(toggle),enabled);g_signal_connect(toggle,"toggled",G_CALLBACK(toggled),NULL);g_signal_connect(guide,"activate",G_CALLBACK(help),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),toggle);gtk_menu_shell_append(GTK_MENU_SHELL(menu),guide);g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu);insight_i18n_apply(menu);gtk_widget_show_all(menu);gtk_menu_popup_at_widget(GTK_MENU(menu),widget,GDK_GRAVITY_NORTH_EAST,GDK_GRAVITY_SOUTH_EAST,(GdkEvent *)event);return TRUE;
 }
 gboolean insight_browser_mode_key(GtkWidget *widget,GdkEventKey *event) {
- GeanyDocument *doc=document_get_current();if(!enabled || !DOC_VALID(doc) || widget!=GTK_WIDGET(doc->editor->sci) || !gtk_widget_has_focus(widget) || (event->state&gtk_accelerator_get_default_mod_mask())) return FALSE;
+ GeanyDocument *doc=document_get_current();if(!enabled || !DOC_VALID(doc) || widget!=GTK_WIDGET(doc->editor->sci) || !gtk_widget_is_focus(widget) || (event->state&gtk_accelerator_get_default_mod_mask())) return FALSE;
  if(event->keyval==GDK_KEY_BackSpace) { keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_GOTO_BACK);return TRUE; }
  if(event->keyval==GDK_KEY_space) { insight_workbench_browser_definition(sci_get_current_position(doc->editor->sci));return TRUE; }
  return FALSE;

@@ -20,10 +20,10 @@ static void check(GeanyDocument *doc,const gchar *expected) { gchar *actual=sci_
 static void caret(gint pos) { SEND(source->editor->sci,SCI_CLEARSELECTIONS,0,0);SEND(source->editor->sci,SCI_SETSEL,pos,pos);gtk_widget_grab_focus(GTK_WIDGET(source->editor->sci)); }
 static void key(guint val) {
  GtkWidget *target=val==GDK_KEY_BackSpace ? window:GTK_WIDGET(source->editor->sci);GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);GdkWindow *surface=gtk_widget_get_window(target);g_assert_nonnull(surface);event->key.window=g_object_ref(surface);event->key.keyval=val;event->key.time=GDK_CURRENT_TIME;gdk_event_set_device(event,gdk_seat_get_keyboard(gdk_display_get_default_seat(gdk_display_get_default())));gboolean handled=FALSE;
- g_print("Browser key %u\n",val);g_signal_emit_by_name(target,"key-press-event",event,&handled);g_assert_true(handled);gdk_event_free(event);
+ g_assert_true(gtk_widget_is_focus(GTK_WIDGET(source->editor->sci)));g_printerr("Browser key %u logical-focus=%d global-focus=%d\n",val,gtk_widget_is_focus(GTK_WIDGET(source->editor->sci)),gtk_widget_has_focus(GTK_WIDGET(source->editor->sci)));g_signal_emit_by_name(target,"key-press-event",event,&handled);g_assert_true(handled);gdk_event_free(event);
 }
 static void click_at(gint pos,guint state) {
- g_print("Browser click %d modifiers %u\n",pos,state);caret(pos);GdkEvent *event=gdk_event_new(GDK_BUTTON_PRESS);event->button.button=1;event->button.state=state;event->button.time=GDK_CURRENT_TIME;event->button.window=g_object_ref(gtk_widget_get_window(GTK_WIDGET(source->editor->sci)));event->button.x=SEND(source->editor->sci,SCI_POINTXFROMPOSITION,0,pos)+1;event->button.y=SEND(source->editor->sci,SCI_POINTYFROMPOSITION,0,pos)+2;
+ g_printerr("Browser click %d modifiers %u\n",pos,state);caret(pos);GdkEvent *event=gdk_event_new(GDK_BUTTON_PRESS);event->button.button=1;event->button.state=state;event->button.time=GDK_CURRENT_TIME;event->button.window=g_object_ref(gtk_widget_get_window(GTK_WIDGET(source->editor->sci)));event->button.x=SEND(source->editor->sci,SCI_POINTXFROMPOSITION,0,pos)+1;event->button.y=SEND(source->editor->sci,SCI_POINTYFROMPOSITION,0,pos)+2;
  gdk_event_set_device(event,gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_display_get_default())));gboolean handled=FALSE;g_signal_emit_by_name(source->editor->sci,"button-press-event",event,&handled);event->type=GDK_BUTTON_RELEASE;g_signal_emit_by_name(source->editor->sci,"button-release-event",event,&handled);gdk_event_free(event);
 }
 static void mode(gboolean on) { gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-browser-mode")),on);g_assert_cmpint(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(window,"insight-browser-mode-status"))),==,on);g_assert_cmpint(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(named(g_object_get_data(G_OBJECT(window),"insight-editor-menu"),"insight-browser-mode-popup"))),==,on); }
@@ -31,7 +31,7 @@ static void readonly_indicator(void) { GeanyDocument *doc=document_get_current()
 static gboolean tick(gpointer data) {
  (void)data;
  if(!phase) {
-  source=document_get_current();if(!source || g_strcmp0(source->file_name,path)) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));
+  source=document_get_current();if(!source || g_strcmp0(source->file_name,path)) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));gtk_window_present(GTK_WINDOW(window));
   g_assert_false(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(named(window,"insight-browser-mode"))));
   locked=document_open_file(locked_path,TRUE,NULL,NULL);g_assert_nonnull(locked);special=document_new_file(NULL,NULL,"special\n");SEND(special->editor->sci,SCI_SETREADONLY,TRUE,0);activate(source);
   SEND(source->editor->sci,SCI_APPENDTEXT,strlen("// unsaved\n"),(sptr_t)"// unsaved\n");check(source,dirty);g_assert_true(source->changed);g_assert_true(SEND(source->editor->sci,SCI_CANUNDO,0,0));
@@ -39,7 +39,7 @@ static gboolean tick(gpointer data) {
   SEND(source->editor->sci,SCI_REPLACESEL,0,(sptr_t)"BAD");check(source,dirty);g_assert_false(SEND(source->editor->sci,SCI_CANUNDO,0,0));phase++;return G_SOURCE_CONTINUE;
  }
  if(phase==1) {
-  caret(call);key(GDK_KEY_space);if(sci_get_current_line(source->editor->sci)!=0) return G_SOURCE_CONTINUE;
+  caret(call);key(GDK_KEY_space);g_printerr("Browser lookup current-line=%d caret=%d readonly=%d\n",sci_get_current_line(source->editor->sci),sci_get_current_position(source->editor->sci),source->readonly);if(sci_get_current_line(source->editor->sci)!=0) return G_SOURCE_CONTINUE;
   key(GDK_KEY_BackSpace);g_assert_cmpint(sci_get_current_position(source->editor->sci),==,call);check(source,dirty);
   GtkWidget *context=named(window,"insight-context-code");g_assert_nonnull(context);SEND(SCINTILLA(context),SCI_SETSEL,4,10);
   click_at(call,0);g_assert_cmpint(sci_get_current_line(source->editor->sci),==,0);g_assert_cmpint(sci_get_current_position(source->editor->sci),==,10);key(GDK_KEY_BackSpace);g_assert_cmpint(sci_get_current_position(source->editor->sci),==,call);
