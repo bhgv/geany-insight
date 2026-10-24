@@ -20,13 +20,13 @@ static gboolean insight_compare_ui_layout(gpointer data) {
  if(!gtk_widget_get_parent(widget) || gtk_widget_in_destruction(widget)) return G_SOURCE_REMOVE;
  GtkNotebook *tabs=GTK_NOTEBOOK(widget);if(!gtk_notebook_get_n_pages(tabs)) return G_SOURCE_REMOVE;insight_ai_ui_fold(widget,insight_tr("Collapse"));
  if(g_object_get_data(G_OBJECT(widget),"insight-ai-options-folded")) return G_SOURCE_REMOVE;
- gint current=gtk_notebook_get_current_page(tabs),width=MAX(1,gtk_widget_get_allocated_width(widget)-12),height=700;GtkWidget *top=gtk_widget_get_toplevel(widget);if(GTK_IS_WINDOW(top)) { gint unused;gtk_window_get_size(GTK_WINDOW(top),&unused,&height); }
+ gint current=gtk_notebook_get_current_page(tabs),width=MAX(1,gtk_widget_get_allocated_width(widget)-12),height=700;GtkWidget *top=gtk_widget_get_toplevel(widget);if(GTK_IS_WINDOW(top)) { gint unused;gtk_window_get_size(GTK_WINDOW(top),&unused,&height);GdkRectangle area=insight_ai_workarea(top);height=MIN(height,area.height-32); }
  for(gint i=0;i<gtk_notebook_get_n_pages(tabs);i++) {
   GtkWidget *page=gtk_notebook_get_nth_page(tabs,i);if(!GTK_IS_SCROLLED_WINDOW(page)) continue;
   gint target=0;if(i==current) {
    GtkWidget *content=gtk_bin_get_child(GTK_BIN(page));if(GTK_IS_VIEWPORT(content)) content=gtk_bin_get_child(GTK_BIN(content));
    if(content && gtk_widget_get_visible(content)) { gint minimum,natural,minimum_width,natural_width;gtk_widget_get_preferred_width(content,&minimum_width,&natural_width);gtk_widget_get_preferred_height_for_width(content,MAX(width,minimum_width),&minimum,&natural);target=natural+12;
-    if(minimum_width>width) { GtkWidget *bar=gtk_scrolled_window_get_hscrollbar(GTK_SCROLLED_WINDOW(page));gtk_widget_get_preferred_height(bar,&minimum,&natural);target+=natural; }
+    if(minimum_width>width) { GtkWidget *bar=gtk_scrolled_window_get_hscrollbar(GTK_SCROLLED_WINDOW(page));gtk_widget_get_preferred_height(bar,&minimum,&natural);target+=MAX(natural,24); }
     target=MIN(target,MAX(64,height-180));
    }
   }
