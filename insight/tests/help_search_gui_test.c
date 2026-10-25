@@ -80,9 +80,11 @@ static gboolean step(gpointer data) {
   GtkWidget *scope=named(window,"insight-search-scope");gint before=gtk_combo_box_get_active(GTK_COMBO_BOX(scope));g_timeout_add(20,cancel_folder,NULL);gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-search-folder-command")));g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(scope)),==,before);
   GtkWidget *entry=named(window,"insight-project-query");GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);event->key.window=g_object_ref(gtk_widget_get_window(entry));event->key.keyval=GDK_KEY_Escape;gtk_widget_event(entry,event);gdk_event_free(event);g_assert_false(gtk_widget_get_visible(named(window,"insight-project-search-panel")));
   shortcut(GDK_KEY_f);phase++;
- } else if(phase==3 || phase==4) {
-  GList *windows=gtk_window_list_toplevels();GtkWidget *dialog=NULL;for(GList *p=windows;p;p=p->next) if(GTK_IS_DIALOG(p->data) && gtk_widget_get_visible(p->data)) dialog=p->data;g_list_free(windows);g_assert_nonnull(dialog);gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_CANCEL);
-  if(phase==3) { shortcut(GDK_KEY_h);phase++; }else phase++;
+ } else if(phase==3) {
+  /* Find now opens the compact file-search bar; Replace retains its dialog. */
+  GtkWidget *bar=named(window,"insight-editor-search-panel"),*entry=named(window,"insight-file-search-query");g_assert_true(gtk_widget_get_visible(bar));GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);event->key.window=g_object_ref(gtk_widget_get_window(entry));event->key.keyval=GDK_KEY_Escape;gtk_widget_event(entry,event);gdk_event_free(event);g_assert_false(gtk_widget_get_visible(bar));shortcut(GDK_KEY_h);phase++;
+ } else if(phase==4) {
+  GList *windows=gtk_window_list_toplevels();GtkWidget *dialog=NULL;for(GList *p=windows;p;p=p->next) if(GTK_IS_DIALOG(p->data) && gtk_widget_get_visible(p->data)) dialog=p->data;g_list_free(windows);g_assert_nonnull(dialog);gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_CANCEL);phase++;
  } else {
   g_signal_emit_by_name(named(window,"insight-help-tool"),"clicked");g_assert_nonnull(viewer());
   g_print("Real editor GUI: hidden search startup, shared menu icons, icon-only toolbar, bundled Help/tutorials, Markdown/RST formatting, GIF animation, video card, TOC/unique anchors, Unicode/literal page search, unsaved and untitled preview/reload, closed-buffer guard, Escape close and native Find/Replace commands passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
