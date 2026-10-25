@@ -3,6 +3,8 @@
 #include <string.h>
 static GtkWidget *window,*book,*wrapper,*help;
 static guint help_clicks;
+static gboolean translated;
+static const gchar *translate(const gchar *text) {return translated && !g_strcmp0(text,"File Symbols") ? "Символы файла":text;}
 static void help_clicked(GtkButton *button,gpointer data) {(void)button;(void)data;help_clicks++;}
 static guint phase,ticks;
 static const gchar *names[]={"File Symbols","Project Files","Project Symbols"};
@@ -40,12 +42,13 @@ static gboolean step(gpointer data) {
  if(phase==6) {single(0);gchar *tip=gtk_widget_get_tooltip_text(tab(0));g_assert_cmpstr(tip,==,"Символы текущего файла — полное название");g_free(tip);gtk_window_resize(GTK_WINDOW(window),24,300);phase=7;return G_SOURCE_CONTINUE;}
  if(phase==7) {single(0);g_assert_false(gtk_widget_get_visible(find(wrapper,"insight-side-tabs-next")));gtk_notebook_set_tab_label_text(GTK_NOTEBOOK(book),gtk_notebook_get_nth_page(GTK_NOTEBOOK(book),0),names[0]);gtk_window_resize(GTK_WINDOW(window),900,300);phase=8;return G_SOURCE_CONTINUE;}
  if(phase==8) {g_assert_false(carousel());for(guint n=0;n<3;n++) g_assert_true(gtk_widget_get_visible(tab(n)));GtkWidget *page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(book),1);g_object_ref(page);gtk_notebook_remove_page(GTK_NOTEBOOK(book),1);gtk_notebook_append_page(GTK_NOTEBOOK(book),page,gtk_label_new("Reattached panel"));g_object_unref(page);phase=9;return G_SOURCE_CONTINUE;}
- if(phase==9) {pages_intact();gchar *tip=gtk_widget_get_tooltip_text(tab(2));g_assert_cmpstr(tip,==,"Reattached panel");g_free(tip);insight_side_tabs_refresh(wrapper);gtk_widget_destroy(window);g_print("Proportional side tabs, active-only carousel, cyclic arrows, GTK pointer drag propagation, live captions/tooltips, 24px collapse, re-expansion, detach/reattach and queued teardown passed\n");gtk_main_quit();return G_SOURCE_REMOVE;}
+ if(phase==9) {pages_intact();gchar *tip=gtk_widget_get_tooltip_text(tab(2));g_assert_cmpstr(tip,==,"Reattached panel");g_free(tip);translated=TRUE;insight_side_tabs_refresh(wrapper);phase=10;return G_SOURCE_CONTINUE;}
+ if(phase==10) {gchar *tip=gtk_widget_get_tooltip_text(tab(0));g_assert_cmpstr(tip,==,"Символы файла");g_free(tip);GtkWidget *label=gtk_bin_get_child(GTK_BIN(tab(0)));g_assert_cmpint(gtk_label_get_width_chars(GTK_LABEL(label)),==,1);g_assert_cmpint(gtk_label_get_ellipsize(GTK_LABEL(label)),==,PANGO_ELLIPSIZE_END);insight_side_tabs_refresh(wrapper);gtk_widget_destroy(window);g_print("Proportional side tabs, active-only carousel, cyclic arrows, GTK pointer drag propagation, live captions/tooltips, 24px collapse, re-expansion, detach/reattach and queued teardown passed\n");gtk_main_quit();return G_SOURCE_REMOVE;}
  return G_SOURCE_CONTINUE;
 }
 int main(int argc,char **argv) {
  if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;gtk_init(&argc,&argv);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);
  window=gtk_window_new(GTK_WINDOW_TOPLEVEL);book=gtk_notebook_new();GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),GTK_POLICY_EXTERNAL,GTK_POLICY_EXTERNAL);gtk_container_add(GTK_CONTAINER(window),scroll);gtk_container_add(GTK_CONTAINER(scroll),book);
  for(guint n=0;n<3;n++) {GtkWidget *page=gtk_label_new("Panel contents remain visible and unchanged");gtk_label_set_ellipsize(GTK_LABEL(page),PANGO_ELLIPSIZE_END);gtk_label_set_width_chars(GTK_LABEL(page),1);gtk_notebook_append_page(GTK_NOTEBOOK(book),page,gtk_label_new(names[n]));}
- help=gtk_button_new_with_label("?");g_signal_connect(help,"clicked",G_CALLBACK(help_clicked),NULL);gtk_notebook_set_action_widget(GTK_NOTEBOOK(book),help,GTK_PACK_END);wrapper=insight_side_tabs_wrap(GTK_NOTEBOOK(book),NULL);g_assert_nonnull(wrapper);gtk_window_set_default_size(GTK_WINDOW(window),900,300);gtk_widget_show_all(window);g_timeout_add(150,step,NULL);gtk_main();return 0;
+ help=gtk_button_new_with_label("?");g_signal_connect(help,"clicked",G_CALLBACK(help_clicked),NULL);gtk_notebook_set_action_widget(GTK_NOTEBOOK(book),help,GTK_PACK_END);wrapper=insight_side_tabs_wrap(GTK_NOTEBOOK(book),translate);g_assert_nonnull(wrapper);gtk_window_set_default_size(GTK_WINDOW(window),900,300);gtk_widget_show_all(window);g_timeout_add(150,step,NULL);gtk_main();return 0;
 }

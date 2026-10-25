@@ -44,14 +44,17 @@ static gboolean key_press(GtkWidget *widget,GdkEventKey *event,gpointer data) {
  (void)widget;if(event->state&(GDK_CONTROL_MASK|GDK_MOD1_MASK)) return FALSE;
  if(event->keyval==GDK_KEY_Left || event->keyval==GDK_KEY_Right) {SideTabs *s=data;s->focus_active=TRUE;turn(s,event->keyval==GDK_KEY_Left ? -1:1);return TRUE;}return FALSE;
 }
+static void configure_label(GtkWidget *button) {
+ GtkWidget *label=gtk_bin_get_child(GTK_BIN(button));if(!GTK_IS_LABEL(label)) return;
+ gtk_label_set_ellipsize(GTK_LABEL(label),PANGO_ELLIPSIZE_END);gtk_label_set_width_chars(GTK_LABEL(label),1);g_object_set_data(G_OBJECT(label),"insight-no-i18n",GINT_TO_POINTER(1));
+}
 static void rebuild(SideTabs *s) {
  for(guint n=0;n<s->buttons->len;n++) gtk_widget_destroy(g_ptr_array_index(s->buttons,n));g_ptr_array_set_size(s->buttons,0);
  for(gint n=0;n<gtk_notebook_get_n_pages(s->book);n++) {
-  GtkWidget *page=gtk_notebook_get_nth_page(s->book,n),*button=gtk_toggle_button_new_with_label(caption(s->book,page));
+  GtkWidget *page=gtk_notebook_get_nth_page(s->book,n),*button=gtk_toggle_button_new_with_label(translated(s,caption(s->book,page)));
   gchar *name=g_strdup_printf("insight-side-tab-%d",n);gtk_widget_set_name(button,name);g_free(name);
   gtk_widget_set_no_show_all(button,TRUE);gtk_style_context_add_class(gtk_widget_get_style_context(button),"insight-side-tab");gtk_button_set_focus_on_click(GTK_BUTTON(button),FALSE);
-  GtkWidget *label=gtk_bin_get_child(GTK_BIN(button));gtk_label_set_ellipsize(GTK_LABEL(label),PANGO_ELLIPSIZE_END);gtk_label_set_width_chars(GTK_LABEL(label),1);
-  g_object_set_data(G_OBJECT(button),"insight-no-i18n",GINT_TO_POINTER(1));g_object_set_data(G_OBJECT(label),"insight-no-i18n",GINT_TO_POINTER(1));
+  configure_label(button);g_object_set_data(G_OBJECT(button),"insight-no-i18n",GINT_TO_POINTER(1));
   GWeakRef *ref=g_new0(GWeakRef,1);g_weak_ref_init(ref,page);g_object_set_data_full(G_OBJECT(button),"insight-side-tab-page",ref,weak_free);g_object_set_data(G_OBJECT(button),"insight-side-tab-owner",s);
   gtk_style_context_add_provider(gtk_widget_get_style_context(button),GTK_STYLE_PROVIDER(s->css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION+1);
   g_signal_connect(button,"clicked",G_CALLBACK(select_button),s);
@@ -66,9 +69,11 @@ static gboolean update(gpointer data) {
  gint current=gtk_notebook_get_current_page(s->book),visible=0,active_width=0;
  gint width=gtk_widget_get_allocated_width(s->wrapper);GtkWidget *parent=gtk_widget_get_parent(s->wrapper);if(parent) width=MIN(width,gtk_widget_get_allocated_width(parent));
  for(guint n=0;n<2;n++) if(s->actions[n] && gtk_widget_get_visible(s->actions[n])) {gint minimum;gtk_widget_get_preferred_width(s->actions[n],&minimum,NULL);width-=MAX(minimum,gtk_widget_get_allocated_width(s->actions[n]));}
+ s->syncing=TRUE;
  for(guint n=0;n<s->buttons->len;n++) {
   GtkWidget *button=g_ptr_array_index(s->buttons,n),*page=button_page(button);if(!page) continue;
-  const gchar *text=caption(s->book,page);if(g_strcmp0(gtk_button_get_label(GTK_BUTTON(button)),text)) gtk_button_set_label(GTK_BUTTON(button),text);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button),(gint)n==current);
+  const gchar *text=translated(s,caption(s->book,page));if(g_strcmp0(gtk_button_get_label(GTK_BUTTON(button)),text)) {gtk_button_set_label(GTK_BUTTON(button),text);configure_label(button);}
   gchar *old=gtk_widget_get_tooltip_text(button);if(g_strcmp0(old,text)) gtk_widget_set_tooltip_text(button,text);g_free(old);
   if(gtk_widget_get_visible(page)) visible++;
   if((gint)n==current) {
@@ -81,10 +86,9 @@ static gboolean update(gpointer data) {
  g_object_set_data(G_OBJECT(s->wrapper),"insight-side-tabs-carousel",GINT_TO_POINTER(s->single));
  gtk_widget_set_visible(s->previous,s->single && width>=40);gtk_widget_set_visible(s->next,s->single && width>=40);
  gtk_widget_set_tooltip_text(s->previous,translated(s,"Previous panel tab"));gtk_widget_set_tooltip_text(s->next,translated(s,"Next panel tab"));
- s->syncing=TRUE;
  for(guint n=0;n<s->buttons->len;n++) {
   GtkWidget *button=g_ptr_array_index(s->buttons,n),*page=button_page(button);gboolean selected=(gint)n==current;
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button),selected);gtk_widget_set_visible(button,page && gtk_widget_get_visible(page) && (!s->single || selected));if(selected && s->focus_active) gtk_widget_grab_focus(button);if(page) g_object_unref(page);
+  gtk_widget_set_visible(button,page && gtk_widget_get_visible(page) && (!s->single || selected));if(selected && s->focus_active) gtk_widget_grab_focus(button);if(page) g_object_unref(page);
  }
  s->syncing=FALSE;s->focus_active=FALSE;gtk_widget_set_visible(s->row,visible>0);return G_SOURCE_REMOVE;
 }
