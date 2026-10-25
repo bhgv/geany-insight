@@ -30,7 +30,11 @@ static void edge_positions(void) {
  GdkMonitor *monitor=gdk_display_get_monitor_at_window(gtk_widget_get_display(window),gtk_widget_get_window(window));GdkRectangle area;gdk_monitor_get_workarea(monitor,&area);GtkWidget *tools=any("insight-tools-palette");g_assert_nonnull(tools);GdkRectangle t=frame(tools),l=frame(gtk_widget_get_toplevel(left)),r=frame(gtk_widget_get_toplevel(project)),b=frame(gtk_widget_get_toplevel(context)),e=frame(window);GdkRectangle all[]={t,l,r,b,e};
  for(guint n=0;n<G_N_ELEMENTS(all);n++) {g_assert_cmpint(all[n].x,>=,area.x-3);g_assert_cmpint(all[n].y,>=,area.y-3);g_assert_cmpint(all[n].x+all[n].width,<=,area.x+area.width+3);g_assert_cmpint(all[n].y+all[n].height,<=,area.y+area.height+3);}
  g_assert_cmpint(abs(t.y-area.y),<=,3);g_assert_cmpint(abs(2*t.x+t.width-2*area.x-area.width),<=,4);g_assert_cmpint(abs(l.x-area.x),<=,3);g_assert_cmpint(abs(2*l.y+l.height-2*area.y-area.height),<=,4);g_assert_cmpint(abs(r.x+r.width-area.x-area.width),<=,3);g_assert_cmpint(abs(2*r.y+r.height-2*area.y-area.height),<=,4);g_assert_cmpint(abs(b.y+b.height-area.y-area.height),<=,3);g_assert_cmpint(abs(2*b.x+b.width-2*area.x-area.width),<=,4);g_assert_cmpint(abs(2*e.x+e.width-2*area.x-area.width),<=,4);g_assert_cmpint(abs(2*e.y+e.height-2*area.y-area.height),<=,4);
- g_assert_false(gtk_widget_get_visible(any("insight-message-height-host")));
+ GtkWidget *split=ui_lookup_widget(window,"vpaned1");g_assert_null(gtk_paned_get_child2(GTK_PANED(split)));
+ g_assert_true(gtk_widget_get_toplevel(any("insight-message-height-host"))==gtk_widget_get_toplevel(context));
+ /* Moving the abandoned source divider must never hide detached Context. */
+ gtk_paned_set_position(GTK_PANED(split),gtk_widget_get_allocated_height(split));
+ g_assert_true(gtk_widget_get_visible(main_widgets.message_window_notebook));
  GtkWidget *terminals=any("insight-terminal-group");g_assert_nonnull(terminals); g_assert_true(gtk_widget_get_toplevel(terminals)==gtk_widget_get_toplevel(context));
  for(guint n=0;n<5;n++) {GtkWidget *owner=n==0 ? tools:n==1 ? gtk_widget_get_toplevel(left):n==2 ? gtk_widget_get_toplevel(project):n==3 ? gtk_widget_get_toplevel(context):window;g_assert_cmpfloat(gtk_widget_get_opacity(owner),>,.995);if(owner!=window) g_assert_null(gtk_window_get_transient_for(GTK_WINDOW(owner)));}
 }
@@ -85,6 +89,7 @@ static gboolean step(gpointer unused) {
   GtkWidget *tools=any("insight-tools-palette");g_assert_nonnull(tools);g_assert_true(gtk_widget_get_toplevel(ui_lookup_widget(window,"menubar1"))==tools);
   GtkWidget *l=gtk_widget_get_toplevel(left),*r=gtk_widget_get_toplevel(project),*c=gtk_widget_get_toplevel(context);
   g_assert_true(l!=window && r!=window && c!=window && l!=r && l!=c && r!=c);
+  if(other) {document_show_tab(other);document_show_tab(doc);g_assert_null(gtk_paned_get_child2(GTK_PANED(ui_lookup_widget(window,"vpaned1"))));g_assert_true(gtk_widget_get_visible(main_widgets.message_window_notebook));}
   gtk_window_set_title(GTK_WINDOW(tools),"Updated palette title");
   g_assert_cmpstr(gtk_header_bar_get_title(GTK_HEADER_BAR(gtk_window_get_titlebar(GTK_WINDOW(tools)))),==,"Updated palette title");
   g_assert_true(GTK_IS_HEADER_BAR(gtk_window_get_titlebar(GTK_WINDOW(tools))));g_assert_true(GTK_IS_HEADER_BAR(gtk_window_get_titlebar(GTK_WINDOW(l))));unchanged();

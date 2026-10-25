@@ -2149,6 +2149,10 @@ static void on_vpaned1_position_notify(GObject *object, GParamSpec *pspec, gpoin
 	GtkPaned *vpaned = GTK_PANED(ui_lookup_widget(main_widgets.window, "vpaned1"));
 	GtkAllocation allocation;
 
+	/* Detached Context/terminals are independent of the editor splitter. */
+	if (!gtk_widget_is_ancestor(main_widgets.message_window_notebook, GTK_WIDGET(vpaned)))
+		return;
+
 	gtk_widget_get_allocation(GTK_WIDGET(vpaned), &allocation);
 
 	if (interface_prefs.msgwin_orientation == GTK_ORIENTATION_VERTICAL &&

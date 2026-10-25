@@ -381,7 +381,8 @@ void msgwin_show_hide(gboolean show)
 		show);
 	ignore_callback = FALSE;
 	ui_widget_show_hide(main_widgets.message_window_notebook, show);
-	if (show)
+	GtkWidget *source_split = ui_lookup_widget(main_widgets.window, "vpaned1");
+	if (show && gtk_widget_is_ancestor(main_widgets.message_window_notebook, source_split))
 	{
 		/* When msgwin has the size <10px, re-show it with rougly the default
 		 * size. This prevents the situation when the separator is too close

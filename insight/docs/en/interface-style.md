@@ -66,4 +66,4 @@ Four radio choices replace Reduce transparency: 100%, 90%, 80%, 70%. The value i
 
 Actual positioning and desktop transparency depend on the window manager/compositor; Wayland may restrict window moves. Linux/Xvfb checks coordinates and GTK opacity, not the visual output of every desktop compositor.
 
-Independent palettes have no transient parent, so the editor can be raised normally. The empty bottom shelf host is hidden while its notebook is detached. Every open document retains its first visible line and horizontal offset through split/join allocations, without moving its caret or selection.
+Independent palettes have no transient parent, so the editor can be raised normally. The entire bottom clipping host moves with its notebook, leaving no empty splitter child in the editor. Source divider changes and tab switches cannot hide the detached Context. Every open document retains its first visible line and horizontal offset through split/join allocations, without moving its caret or selection.
