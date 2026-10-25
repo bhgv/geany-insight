@@ -125,3 +125,5 @@ Hide or show the editor footer with View → Show status bar, the same check ite
 Side panels switch to one active tab when each header has less than half the active caption width. Navigation arrows remain visible when multiple headers return, and their reserved space participates in the threshold calculation. Only nearly collapsed panels without physical room hide the arrows. The main toolbar defaults to 22 logical pixels; the previous 16-pixel setting is enlarged once by a factor of 1.4. Toolbar contents are capped at 85% of its height. Independent titlebars retain their earlier 1.5-fold reduction, with their controls and captions capped at 85% of the titlebar height.
 
 Side headers reveal adjacent tabs progressively as space grows; arrows stay available. Toolbar height is increased once by 1.4 (16 → 22 logical pixels), with the existing 85% control cap. The detached Menu and Tools window fits its rows without a blank bottom shelf.
+
+Wrapped side panels retain a single tab strip when native sidebar callbacks update page visibility or pages are detached and reattached. The original GtkNotebook header stays hidden.
