@@ -65,7 +65,7 @@ static gboolean step(gpointer data) {
 
   phase++;
  } else if(phase==1) {
-  if(g_getenv("GEANY_GUI_SCREENSHOT")) { GdkPixbuf *picture=gdk_pixbuf_get_from_window(gtk_widget_get_window(viewer()),0,0,gtk_widget_get_allocated_width(viewer()),gtk_widget_get_allocated_height(viewer()));g_assert_nonnull(picture);g_assert_true(gdk_pixbuf_save(picture,g_getenv("GEANY_GUI_SCREENSHOT"),"png",NULL,NULL));g_object_unref(picture); }
+  const gchar *capture=g_getenv("INSIGHT_HELP_CAPTURE");if(!capture) capture=g_getenv("GEANY_GUI_SCREENSHOT");if(capture) { GdkPixbuf *picture=gdk_pixbuf_get_from_window(gtk_widget_get_window(viewer()),0,0,gtk_widget_get_allocated_width(viewer()),gtk_widget_get_allocated_height(viewer()));g_assert_nonnull(picture);g_assert_true(gdk_pixbuf_save(picture,capture,"jpeg",NULL,"quality","85",NULL));g_object_unref(picture); }
   gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-tutorial-command")));g_assert_true(has_text(viewer(),"tutorials"));
   g_signal_emit_by_name(named(window,"insight-help-tool"),"clicked");g_assert_true(has_text(viewer(),"user guide"));g_signal_emit_by_name(named(window,"insight-tutorial-tool"),"clicked");g_assert_true(has_text(viewer(),"tutorials"));
   gchar *gif=g_build_filename(directory,"demo.gif",NULL);gsize bytes=0;guchar *image=g_base64_decode("R0lGODlhCAAIAIEAAAAA/wAAAAAAAAAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQACgAAACwAAAAACAAIAAAIDwABCBxIsKDBgwgTKkwYEAAh+QQBCgABACwAAAAACAAIAIH/AAAAAAAAAAAAAAAIDwABCBxIsKDBgwgTKkwYEAA7",&bytes);g_assert_true(g_file_set_contents(gif,(gchar*)image,bytes,NULL));g_free(image);g_free(gif);
