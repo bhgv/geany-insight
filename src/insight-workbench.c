@@ -4696,7 +4696,7 @@ static void palette_restore_now(void) {
  if(palette.window) {gtk_widget_destroy(palette.window);palette.window=NULL;}g_clear_pointer(&palette.rows,g_ptr_array_unref);
  if(palette.bottom) {
   GtkWidget *book=main_widgets.message_window_notebook;g_object_ref(book);GtkWidget *parent=gtk_widget_get_parent(book);if(parent) gtk_container_remove(GTK_CONTAINER(parent),book);
-  gtk_paned_pack2(GTK_PANED(palette.bottom_parent),book,palette.bottom_resize,palette.bottom_shrink);g_object_unref(book);gtk_widget_destroy(palette.bottom);palette.bottom=NULL;g_clear_object(&palette.bottom_parent);
+  if(GTK_IS_PANED(palette.bottom_parent)) gtk_paned_pack2(GTK_PANED(palette.bottom_parent),book,palette.bottom_resize,palette.bottom_shrink);else gtk_container_add(GTK_CONTAINER(palette.bottom_parent),book);g_object_unref(book);gtk_widget_destroy(palette.bottom);palette.bottom=NULL;g_clear_object(&palette.bottom_parent);
  }
  for(guint n=0;n<INSIGHT_FLOAT_COUNT;n++) {GtkWidget *window=palette_part_window(n);if(window) g_object_set_data(G_OBJECT(window),"insight-independent-opacity",NULL);}
  insight_appearance_opacity_tick(TRUE);apply_layout_record(&palette.before);gtk_widget_set_visible(main_widgets.message_window_notebook,palette.message_visible);
@@ -4778,7 +4778,7 @@ void insight_workbench_set_independent(gboolean active) {
  dock_all_panels();dock_project(NULL,NULL);detach_panel(8);float_project(NULL,NULL);
  /* Move the complete bottom notebook, not just the Context page: Local/SSH/TTY,
   * messages and the selected tab keep their widget and process identities. */
- palette.bottom_parent=g_object_ref(gtk_widget_get_parent(book));gtk_container_child_get(GTK_CONTAINER(palette.bottom_parent),book,"resize",&palette.bottom_resize,"shrink",&palette.bottom_shrink,NULL);
+ palette.bottom_parent=g_object_ref(gtk_widget_get_parent(book));if(GTK_IS_PANED(palette.bottom_parent)) gtk_container_child_get(GTK_CONTAINER(palette.bottom_parent),book,"resize",&palette.bottom_resize,"shrink",&palette.bottom_shrink,NULL);
  palette.bottom=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(palette.bottom,"insight-bottom-palette");gtk_window_set_title(GTK_WINDOW(palette.bottom),insight_tr("Geany Insight — Context and Terminals"));gtk_window_set_transient_for(GTK_WINDOW(palette.bottom),GTK_WINDOW(main_widgets.window));g_object_set_data(G_OBJECT(palette.bottom),"GladeParentKey",main_widgets.window);g_object_ref(book);gtk_container_remove(GTK_CONTAINER(palette.bottom_parent),book);gtk_container_add(GTK_CONTAINER(palette.bottom),book);g_object_unref(book);g_signal_connect(palette.bottom,"delete-event",G_CALLBACK(palette_closed),NULL);insight_appearance_decorate(palette.bottom);gtk_widget_show(book);
  ui_prefs.sidebar_visible=FALSE;ui_sidebar_show_hide();gtk_window_unmaximize(GTK_WINDOW(main_widgets.window));
  InsightWindowRect targets[INSIGHT_FLOAT_COUNT];insight_window_edge_layout(palette.area,NULL,targets);
