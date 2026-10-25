@@ -46,6 +46,7 @@ static void style_icons(GtkWidget *widget) {
   if(macos && !old) {
    gboolean stock=type==GTK_IMAGE_STOCK;
    if(stock) gtk_image_get_stock(image,(gchar **)&name,&size);
+   if(type==GTK_IMAGE_PIXBUF && g_object_get_data(G_OBJECT(image),"insight-toolbar-stock")) {stock=TRUE;name=g_object_get_data(G_OBJECT(image),"insight-toolbar-stock");}
    if(name && !g_str_has_suffix(name,"-symbolic")) {
     const gchar *base=name;
     const gchar *stocks[][2]={{"gtk-new","document-new"},{"gtk-open","document-open"},{"gtk-save","document-save"},{"gtk-save-as","document-save-as"},{"gtk-close","window-close"},{"gtk-quit","application-exit"},{"gtk-undo","edit-undo"},{"gtk-redo","edit-redo"},{"gtk-cut","edit-cut"},{"gtk-copy","edit-copy"},{"gtk-paste","edit-paste"},{"gtk-find","edit-find"},{"gtk-print","document-print"},{"gtk-refresh","view-refresh"},{"gtk-delete","edit-delete"}};
@@ -57,6 +58,7 @@ static void style_icons(GtkWidget *widget) {
     } else g_free(symbolic);
    }
   }
+  if(gtk_widget_get_ancestor(widget,GTK_TYPE_TOOLBAR)) toolbar_compact_widget(widget);
  }
  if(GTK_IS_MENU_ITEM(widget)) { GtkWidget *menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(widget));if(menu) style_icons(menu); }
  if(GTK_IS_CONTAINER(widget)) { GList *children=gtk_container_get_children(GTK_CONTAINER(widget));for(GList *p=children;p;p=p->next) style_icons(p->data);g_list_free(children); }

@@ -579,6 +579,10 @@ static void toolbar_set_icon_size(void)
 static void compact_image(GtkWidget *widget,gpointer data)
 {
  if(GTK_IS_IMAGE(widget)) {
+  GtkImageType storage=gtk_image_get_storage_type(GTK_IMAGE(widget));GdkPixbuf *rendered=NULL;
+  if(storage==GTK_IMAGE_STOCK) {gchar *stock=NULL;GtkIconSize unused;gtk_image_get_stock(GTK_IMAGE(widget),&stock,&unused);if(stock) {g_object_set_data_full(G_OBJECT(widget),"insight-toolbar-stock",g_strdup(stock),g_free);rendered=gtk_widget_render_icon_pixbuf(widget,stock,GTK_ICON_SIZE_MENU);}}
+  else if(storage==GTK_IMAGE_ICON_SET) {GtkIconSet *set=NULL;GtkIconSize unused;gtk_image_get_icon_set(GTK_IMAGE(widget),&set,&unused);if(set) rendered=gtk_icon_set_render_icon_pixbuf(set,gtk_widget_get_style_context(widget),GTK_ICON_SIZE_MENU);}
+  if(rendered) {g_object_set_data_full(G_OBJECT(widget),"insight-toolbar-original-pixbuf",g_object_ref(rendered),g_object_unref);gtk_image_set_from_pixbuf(GTK_IMAGE(widget),rendered);g_object_unref(rendered);}
   gint pixels=GPOINTER_TO_INT(data);gtk_image_set_pixel_size(GTK_IMAGE(widget),pixels);cairo_surface_t *original=g_object_get_data(G_OBJECT(widget),"insight-icon-surface");
   if(gtk_image_get_storage_type(GTK_IMAGE(widget))==GTK_IMAGE_PIXBUF) {GdkPixbuf *source=g_object_get_data(G_OBJECT(widget),"insight-toolbar-original-pixbuf");if(!source) {source=gtk_image_get_pixbuf(GTK_IMAGE(widget));if(source) g_object_set_data_full(G_OBJECT(widget),"insight-toolbar-original-pixbuf",g_object_ref(source),g_object_unref);}if(source) {gint w=gdk_pixbuf_get_width(source),h=gdk_pixbuf_get_height(source);gdouble scale=pixels/(gdouble)MAX(w,h);GdkPixbuf *scaled=gdk_pixbuf_scale_simple(source,MAX(1,(gint)(w*scale)),MAX(1,(gint)(h*scale)),GDK_INTERP_BILINEAR);gtk_image_set_from_pixbuf(GTK_IMAGE(widget),scaled);g_object_unref(scaled);}}
   if(original) {cairo_surface_t *scaled=cairo_image_surface_create(CAIRO_FORMAT_ARGB32,pixels,pixels);cairo_t *cr=cairo_create(scaled);cairo_scale(cr,pixels/16.0,pixels/16.0);cairo_set_source_surface(cr,original,0,0);cairo_paint(cr);cairo_destroy(cr);gtk_image_set_from_surface(GTK_IMAGE(widget),scaled);cairo_surface_destroy(scaled);}
@@ -588,11 +592,12 @@ static void compact_image(GtkWidget *widget,gpointer data)
  if(GTK_IS_ENTRY(widget)) for(guint n=0;n<2;n++) {
   GtkEntryIconPosition position=n ? GTK_ENTRY_ICON_SECONDARY:GTK_ENTRY_ICON_PRIMARY;const gchar *key=n ? "insight-secondary-stock":"insight-primary-stock";const gchar *stock=gtk_entry_get_icon_storage_type(GTK_ENTRY(widget),position)==GTK_IMAGE_STOCK ? gtk_entry_get_icon_stock(GTK_ENTRY(widget),position):NULL;
   if(stock) g_object_set_data_full(G_OBJECT(widget),key,g_strdup(stock),g_free);stock=g_object_get_data(G_OBJECT(widget),key);
-  if(stock) {gchar *name=g_strdup_printf("insight-toolbar-%d",GPOINTER_TO_INT(data));GtkIconSize size=gtk_icon_size_from_name(name);g_free(name);GdkPixbuf *pixbuf=gtk_widget_render_icon_pixbuf(widget,stock,size);if(pixbuf) {gtk_entry_set_icon_from_pixbuf(GTK_ENTRY(widget),position,pixbuf);g_object_unref(pixbuf);}}
+  if(stock) {gchar *name=g_strdup_printf("insight-toolbar-%d",GPOINTER_TO_INT(data));GtkIconSize size=gtk_icon_size_from_name(name);g_free(name);GdkPixbuf *pixbuf=gtk_widget_render_icon_pixbuf(widget,stock,size);if(pixbuf) {gint pixels=GPOINTER_TO_INT(data);GdkPixbuf *scaled=gdk_pixbuf_scale_simple(pixbuf,pixels,pixels,GDK_INTERP_BILINEAR);gtk_entry_set_icon_from_pixbuf(GTK_ENTRY(widget),position,scaled);g_object_unref(scaled);g_object_unref(pixbuf);}}
  }
  if(GTK_IS_DRAWING_AREA(widget)) gtk_widget_set_size_request(widget,GPOINTER_TO_INT(data),GPOINTER_TO_INT(data));
  if(GTK_IS_CONTAINER(widget)) gtk_container_forall(GTK_CONTAINER(widget),compact_image,data);
 }
+void toolbar_compact_widget(GtkWidget *widget) {compact_image(widget,GINT_TO_POINTER(MAX(8,CLAMP(toolbar_prefs.height,12,64)*2/3)));}
 static void toolbar_child_limit(GtkWidget *widget,gpointer data)
 {
  gint limit=GPOINTER_TO_INT(data);GtkAllocation a;gtk_widget_get_allocation(widget,&a);

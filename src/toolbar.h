@@ -56,6 +56,7 @@ gint toolbar_get_insert_position(void);
 void toolbar_update_ui(void);
 
 void toolbar_apply_settings(void);
+void toolbar_compact_widget(GtkWidget *widget);
 
 void toolbar_show_hide(void);
 
