@@ -4773,11 +4773,11 @@ static void palette_prepare_motion(void) {
   insight_window_edge_layout(palette.area,sizes,to);
   for(guint n=0;n<INSIGHT_FLOAT_COUNT;n++) palette.destinations[n]=to[n];
  }
- /* Same vector speed, with the longest path completing in 0.4 seconds. */
- InsightWindowMotion planned[INSIGHT_FLOAT_COUNT];insight_window_motion_plan(planned,from,to,INSIGHT_FLOAT_COUNT,.4,1);
+ /* Same vector speed, with the longest path completing in 0.8 seconds. */
+ InsightWindowMotion planned[INSIGHT_FLOAT_COUNT];insight_window_motion_plan(planned,from,to,INSIGHT_FLOAT_COUNT,.8,1);
  gdouble longest=0;for(guint n=0;n<INSIGHT_FLOAT_COUNT;n++) longest=MAX(longest,planned[n].distance);
- palette.speed=MAX(palette.speed,longest/.4);
- palette.speed=insight_window_motion_plan(planned,from,to,INSIGHT_FLOAT_COUNT,.4,palette.speed);
+ palette.speed=MAX(palette.speed,longest/.8);
+ palette.speed=insight_window_motion_plan(planned,from,to,INSIGHT_FLOAT_COUNT,.8,palette.speed);
  for(guint n=0;n<INSIGHT_FLOAT_COUNT;n++) palette.motions[n].motion=planned[n];palette.motions_ready=TRUE;palette.started=g_get_monotonic_time();
 }
 static gboolean palette_motion_step(gpointer data) {

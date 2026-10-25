@@ -7,7 +7,7 @@
 }
 /* Give UI nodes their own family so syntax-theme list fonts cannot replace it.
  * Inherited sizes retain the compact Diff toolbar and Context status ratios. */
-.insight-macos label, .insight-macos button, .insight-macos entry,
+.insight-macos label, .insight-macos button:not(.titlebutton), .insight-macos entry,
 .insight-macos treeview, .insight-macos menuitem {
   font-family: "SF Pro Text", "Helvetica Neue", "Inter", "Segoe UI", "Noto Sans", sans-serif;
 }
@@ -32,7 +32,7 @@ window.insight-macos.background {
 .insight-macos toolbar { padding: 3px 6px; border-bottom: 1px solid rgba(80,95,120,0.16); }
 .insight-macos menubar { padding: 1px 5px; }
 .insight-macos statusbar { padding: 1px 5px; border-top: 1px solid rgba(80,95,120,0.16); }
-.insight-macos button {
+.insight-macos button:not(.titlebutton) {
   background-image: linear-gradient(to bottom, rgba(255,255,255,0.94), rgba(240,243,249,0.90));
   background-color: transparent;
   border: 1px solid rgba(85,101,130,0.25);
@@ -43,14 +43,14 @@ window.insight-macos.background {
   min-width: 0;
   padding: 2px 7px;
 }
-.insight-macos button:hover { background-image: none; background-color: #e7eefb; border-color: #a5b9da; }
-.insight-macos button:active, .insight-macos button:checked,
-.insight-macos button.suggested-action { background-image: none; background-color: #3478f6; border-color: #2568dc; color: white; }
-.insight-macos button:disabled { color: #8c94a3; background-image: none; background-color: rgba(232,235,241,0.6); box-shadow: none; }
-.insight-macos toolbar button, .insight-macos button.flat {
+.insight-macos button:not(.titlebutton):hover { background-image: none; background-color: #e7eefb; border-color: #a5b9da; }
+.insight-macos button:not(.titlebutton):active, .insight-macos button:not(.titlebutton):checked,
+.insight-macos button:not(.titlebutton).suggested-action { background-image: none; background-color: #3478f6; border-color: #2568dc; color: white; }
+.insight-macos button:not(.titlebutton):disabled { color: #8c94a3; background-image: none; background-color: rgba(232,235,241,0.6); box-shadow: none; }
+.insight-macos toolbar button, .insight-macos button:not(.titlebutton).flat {
   background-image: none; background-color: transparent; border-color: transparent; box-shadow: none; padding: 2px 4px;
 }
-.insight-macos toolbar button:hover, .insight-macos button.flat:hover { background-color: rgba(88,119,169,0.12); }
+.insight-macos toolbar button:hover, .insight-macos button:not(.titlebutton).flat:hover { background-color: rgba(88,119,169,0.12); }
 .insight-macos entry, .insight-macos spinbutton {
   background-image: none; background-color: rgba(255,255,255,0.88); color: #253146;
   border: 1px solid rgba(96,111,139,0.27); border-radius: 7px; min-height: 18px; padding: 2px 6px; box-shadow: inset 0 1px 2px rgba(50,65,90,0.04);
@@ -100,13 +100,9 @@ menu.insight-macos, .insight-macos menu, .insight-macos popover {
 .insight-macos menuitem arrow { min-height: 8px; min-width: 8px; margin: 0 0 0 5px; }
 .insight-macos menu separator { min-height: 1px; padding: 0; margin: 3px 6px; background-color: rgba(90,105,125,0.2); }
 .insight-macos menubar > menuitem { padding: 2px 8px; }
-.insight-macos toolbar image, .insight-macos button image { -gtk-icon-style: symbolic; }
+.insight-macos toolbar image, .insight-macos button:not(.titlebutton) image { -gtk-icon-style: symbolic; }
 .insight-macos decoration { border-radius: 12px 12px 10px 10px; box-shadow: 0 10px 28px rgba(25,35,55,0.28); border: 1px solid rgba(95,105,125,0.3); }
 .insight-macos headerbar { border-radius: 11px 11px 0 0; min-height: 24px; padding: 3px 7px; }
-.insight-macos headerbar button.titlebutton { background-image: none; border-radius: 8px; min-height: 13px; min-width: 13px; padding: 2px; margin: 0 2px; }
-.insight-macos headerbar button.close { background-color: #ff6058; border-color: #dd4943; color: #742724; }
-.insight-macos headerbar button.minimize { background-color: #ffbd2e; border-color: #d9a027; color: #735513; }
-.insight-macos headerbar button.maximize { background-color: #28c840; border-color: #20a735; color: #125b20; }
 .insight-macos menuitem:hover { background-color: #3478f6; color: white; }
 .insight-macos tooltip { background-color: #253146; color: white; border-radius: 6px; }
 /* Opaque material alternative; source editors were opaque in both variants. */
@@ -126,23 +122,152 @@ window.insight-macos.popup { background-color: transparent; background-image: no
 
 /* Independent palettes use one title line, approximately half the old chrome. */
 .insight-macos.insight-independent-chrome headerbar {
-  min-height: 12px;
-  padding: 0 4px;
+  min-height: 18px;
+  padding: 2px 4px;
   margin: 0;
   border-width: 0 0 1px;
   border-radius: 6px 6px 0 0;
   font-size: 8pt;
 }
-.insight-macos.insight-independent-chrome headerbar button.titlebutton {
-  min-height: 10px;
-  min-width: 10px;
-  padding: 0;
-  margin: 0 2px;
-  border-radius: 6px;
-  -gtk-icon-transform: scale(0.75);
-}
+
 .insight-macos.insight-independent-chrome headerbar .title {
   padding: 0;
   margin: 0;
   font-size: 8pt;
 }
+
+/* Keep native GTK titlebutton paint/icons: no traffic-light palette or shape. */
+.insight-macos headerbar button.titlebutton {
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+  margin: 0 3px;
+}
+
+/* golden-light: original GTK adaptation, independent of window layout/source palette. */
+window.insight-macos.insight-theme-golden-light.background { background-color: #e4eaf2; background-image: linear-gradient(140deg, #f9f5f0, #e7f0fa 55%, #edf4ed); color: #253044; }
+.insight-macos.insight-theme-golden-light toolbar, .insight-macos.insight-theme-golden-light menubar, .insight-macos.insight-theme-golden-light statusbar, .insight-macos.insight-theme-golden-light notebook > header {
+ background-color: #f4f6fa; background-image: linear-gradient(to bottom, #f4f6fa, #e4eaf2); color: #253044; border-color: #cad4e4;
+}
+.insight-macos.insight-theme-golden-light headerbar { background-color: #f4f6fa; background-image: linear-gradient(to bottom, #f4f6fa, #e4eaf2); color: #253044; }
+.insight-macos.insight-theme-golden-light treeview.view, .insight-macos.insight-theme-golden-light textview.view, .insight-macos.insight-theme-golden-light textview text, .insight-macos.insight-theme-golden-light iconview.view { background-color: #fcfdff; color: #253044; }
+.insight-macos.insight-theme-golden-light treeview header button { background-color: #f4f6fa; background-image: none; color: #253044; border-color: #cad4e4; }
+.insight-macos.insight-theme-golden-light entry, .insight-macos.insight-theme-golden-light spinbutton, .insight-macos.insight-theme-golden-light button:not(.titlebutton) {
+ background-color: #fcfdff; background-image: none; color: #253044; border-color: #cad4e4; border-radius: 12px;
+}
+.insight-macos.insight-theme-golden-light button:not(.titlebutton):hover { background-color: #e4eaf2; }
+.insight-macos.insight-theme-golden-light button:not(.titlebutton):checked, .insight-macos.insight-theme-golden-light button:not(.titlebutton).suggested-action { background-color: #3478f6; color: white; }
+.insight-macos.insight-theme-golden-light notebook > header > tabs > tab { background-color: #e4eaf2; border-radius: 12px; color: #253044; }
+.insight-macos.insight-theme-golden-light notebook > header > tabs > tab:checked { background-color: #fcfdff; color: #253044; }
+menu.insight-macos.insight-theme-golden-light, .insight-macos.insight-theme-golden-light menu, .insight-macos.insight-theme-golden-light popover { background-color: #fcfdff; background-image: linear-gradient(to bottom, #fcfdff, #f4f6fa); color: #253044; border-color: #cad4e4; border-radius: 12px; }
+.insight-macos.insight-theme-golden-light menuitem { color: #253044; }
+.insight-macos.insight-theme-golden-light menuitem:hover, .insight-macos.insight-theme-golden-light treeview.view:selected, .insight-macos.insight-theme-golden-light textview text selection { background-color: #3478f6; color: white; }
+.insight-macos.insight-theme-golden-light decoration { border-radius: 12px; border-color: #cad4e4; }
+
+/* golden-dark: original GTK adaptation, independent of window layout/source palette. */
+window.insight-macos.insight-theme-golden-dark.background { background-color: #1b1e26; background-image: linear-gradient(140deg, #36323a, #202c3b 55%, #243331); color: #e8edf6; }
+.insight-macos.insight-theme-golden-dark toolbar, .insight-macos.insight-theme-golden-dark menubar, .insight-macos.insight-theme-golden-dark statusbar, .insight-macos.insight-theme-golden-dark notebook > header {
+ background-color: #292d36; background-image: linear-gradient(to bottom, #292d36, #1b1e26); color: #e8edf6; border-color: #555e70;
+}
+.insight-macos.insight-theme-golden-dark headerbar { background-color: #292d36; background-image: linear-gradient(to bottom, #292d36, #1b1e26); color: #e8edf6; }
+.insight-macos.insight-theme-golden-dark treeview.view, .insight-macos.insight-theme-golden-dark textview.view, .insight-macos.insight-theme-golden-dark textview text, .insight-macos.insight-theme-golden-dark iconview.view { background-color: #353b47; color: #e8edf6; }
+.insight-macos.insight-theme-golden-dark treeview header button { background-color: #292d36; background-image: none; color: #e8edf6; border-color: #555e70; }
+.insight-macos.insight-theme-golden-dark entry, .insight-macos.insight-theme-golden-dark spinbutton, .insight-macos.insight-theme-golden-dark button:not(.titlebutton) {
+ background-color: #353b47; background-image: none; color: #e8edf6; border-color: #555e70; border-radius: 12px;
+}
+.insight-macos.insight-theme-golden-dark button:not(.titlebutton):hover { background-color: #1b1e26; }
+.insight-macos.insight-theme-golden-dark button:not(.titlebutton):checked, .insight-macos.insight-theme-golden-dark button:not(.titlebutton).suggested-action { background-color: #3478f6; color: white; }
+.insight-macos.insight-theme-golden-dark notebook > header > tabs > tab { background-color: #1b1e26; border-radius: 12px; color: #e8edf6; }
+.insight-macos.insight-theme-golden-dark notebook > header > tabs > tab:checked { background-color: #353b47; color: #e8edf6; }
+menu.insight-macos.insight-theme-golden-dark, .insight-macos.insight-theme-golden-dark menu, .insight-macos.insight-theme-golden-dark popover { background-color: #353b47; background-image: linear-gradient(to bottom, #353b47, #292d36); color: #e8edf6; border-color: #555e70; border-radius: 12px; }
+.insight-macos.insight-theme-golden-dark menuitem { color: #e8edf6; }
+.insight-macos.insight-theme-golden-dark menuitem:hover, .insight-macos.insight-theme-golden-dark treeview.view:selected, .insight-macos.insight-theme-golden-dark textview text selection { background-color: #3478f6; color: white; }
+.insight-macos.insight-theme-golden-dark decoration { border-radius: 12px; border-color: #555e70; }
+
+/* tahoe: original GTK adaptation, independent of window layout/source palette. */
+window.insight-macos.insight-theme-tahoe.background { background-color: #dceaf4; background-image: linear-gradient(135deg, #dceefe, #f6ecfa 50%, #d9f4ef); color: #23364d; }
+.insight-macos.insight-theme-tahoe toolbar, .insight-macos.insight-theme-tahoe menubar, .insight-macos.insight-theme-tahoe statusbar, .insight-macos.insight-theme-tahoe notebook > header {
+ background-color: #f6f9fc; background-image: linear-gradient(to bottom, #f6f9fc, #dceaf4); color: #23364d; border-color: #bed3e8;
+}
+.insight-macos.insight-theme-tahoe headerbar { background-color: #f6f9fc; background-image: linear-gradient(to bottom, #f6f9fc, #dceaf4); color: #23364d; }
+.insight-macos.insight-theme-tahoe treeview.view, .insight-macos.insight-theme-tahoe textview.view, .insight-macos.insight-theme-tahoe textview text, .insight-macos.insight-theme-tahoe iconview.view { background-color: #ffffff; color: #23364d; }
+.insight-macos.insight-theme-tahoe treeview header button { background-color: #f6f9fc; background-image: none; color: #23364d; border-color: #bed3e8; }
+.insight-macos.insight-theme-tahoe entry, .insight-macos.insight-theme-tahoe spinbutton, .insight-macos.insight-theme-tahoe button:not(.titlebutton) {
+ background-color: #ffffff; background-image: none; color: #23364d; border-color: #bed3e8; border-radius: 16px;
+}
+.insight-macos.insight-theme-tahoe button:not(.titlebutton):hover { background-color: #dceaf4; }
+.insight-macos.insight-theme-tahoe button:not(.titlebutton):checked, .insight-macos.insight-theme-tahoe button:not(.titlebutton).suggested-action { background-color: #3478f6; color: white; }
+.insight-macos.insight-theme-tahoe notebook > header > tabs > tab { background-color: #dceaf4; border-radius: 16px; color: #23364d; }
+.insight-macos.insight-theme-tahoe notebook > header > tabs > tab:checked { background-color: #ffffff; color: #23364d; }
+menu.insight-macos.insight-theme-tahoe, .insight-macos.insight-theme-tahoe menu, .insight-macos.insight-theme-tahoe popover { background-color: #ffffff; background-image: linear-gradient(to bottom, #ffffff, #f6f9fc); color: #23364d; border-color: #bed3e8; border-radius: 16px; }
+.insight-macos.insight-theme-tahoe menuitem { color: #23364d; }
+.insight-macos.insight-theme-tahoe menuitem:hover, .insight-macos.insight-theme-tahoe treeview.view:selected, .insight-macos.insight-theme-tahoe textview text selection { background-color: #3478f6; color: white; }
+.insight-macos.insight-theme-tahoe decoration { border-radius: 16px; border-color: #bed3e8; }
+
+/* sequoia: original GTK adaptation, independent of window layout/source palette. */
+window.insight-macos.insight-theme-sequoia.background { background-color: #dedfe4; background-image: linear-gradient(to bottom, #f0f0f3, #e3e4e9); color: #30323a; }
+.insight-macos.insight-theme-sequoia toolbar, .insight-macos.insight-theme-sequoia menubar, .insight-macos.insight-theme-sequoia statusbar, .insight-macos.insight-theme-sequoia notebook > header {
+ background-color: #f2f2f4; background-image: linear-gradient(to bottom, #f2f2f4, #dedfe4); color: #30323a; border-color: #bfc2cb;
+}
+.insight-macos.insight-theme-sequoia headerbar { background-color: #f2f2f4; background-image: linear-gradient(to bottom, #f2f2f4, #dedfe4); color: #30323a; }
+.insight-macos.insight-theme-sequoia treeview.view, .insight-macos.insight-theme-sequoia textview.view, .insight-macos.insight-theme-sequoia textview text, .insight-macos.insight-theme-sequoia iconview.view { background-color: #fafafb; color: #30323a; }
+.insight-macos.insight-theme-sequoia treeview header button { background-color: #f2f2f4; background-image: none; color: #30323a; border-color: #bfc2cb; }
+.insight-macos.insight-theme-sequoia entry, .insight-macos.insight-theme-sequoia spinbutton, .insight-macos.insight-theme-sequoia button:not(.titlebutton) {
+ background-color: #fafafb; background-image: none; color: #30323a; border-color: #bfc2cb; border-radius: 7px;
+}
+.insight-macos.insight-theme-sequoia button:not(.titlebutton):hover { background-color: #dedfe4; }
+.insight-macos.insight-theme-sequoia button:not(.titlebutton):checked, .insight-macos.insight-theme-sequoia button:not(.titlebutton).suggested-action { background-color: #3478f6; color: white; }
+.insight-macos.insight-theme-sequoia notebook > header > tabs > tab { background-color: #dedfe4; border-radius: 7px; color: #30323a; }
+.insight-macos.insight-theme-sequoia notebook > header > tabs > tab:checked { background-color: #fafafb; color: #30323a; }
+menu.insight-macos.insight-theme-sequoia, .insight-macos.insight-theme-sequoia menu, .insight-macos.insight-theme-sequoia popover { background-color: #fafafb; background-image: linear-gradient(to bottom, #fafafb, #f2f2f4); color: #30323a; border-color: #bfc2cb; border-radius: 7px; }
+.insight-macos.insight-theme-sequoia menuitem { color: #30323a; }
+.insight-macos.insight-theme-sequoia menuitem:hover, .insight-macos.insight-theme-sequoia treeview.view:selected, .insight-macos.insight-theme-sequoia textview text selection { background-color: #3478f6; color: white; }
+.insight-macos.insight-theme-sequoia decoration { border-radius: 7px; border-color: #bfc2cb; }
+
+/* macintosh: original GTK adaptation, independent of window layout/source palette. */
+window.insight-macos.insight-theme-macintosh.background { background-color: #cccccc; background-image: none; color: #111111; }
+.insight-macos.insight-theme-macintosh toolbar, .insight-macos.insight-theme-macintosh menubar, .insight-macos.insight-theme-macintosh statusbar, .insight-macos.insight-theme-macintosh notebook > header {
+ background-color: #eeeeee; background-image: linear-gradient(to bottom, #eeeeee, #cccccc); color: #111111; border-color: #111111;
+}
+.insight-macos.insight-theme-macintosh headerbar { background-color: #eeeeee; background-image: linear-gradient(to bottom, #eeeeee, #cccccc); color: #111111; }
+.insight-macos.insight-theme-macintosh treeview.view, .insight-macos.insight-theme-macintosh textview.view, .insight-macos.insight-theme-macintosh textview text, .insight-macos.insight-theme-macintosh iconview.view { background-color: #ffffff; color: #111111; }
+.insight-macos.insight-theme-macintosh treeview header button { background-color: #eeeeee; background-image: none; color: #111111; border-color: #111111; }
+.insight-macos.insight-theme-macintosh entry, .insight-macos.insight-theme-macintosh spinbutton, .insight-macos.insight-theme-macintosh button:not(.titlebutton) {
+ background-color: #ffffff; background-image: none; color: #111111; border-color: #111111; border-radius: 0;
+}
+.insight-macos.insight-theme-macintosh button:not(.titlebutton):hover { background-color: #cccccc; }
+.insight-macos.insight-theme-macintosh button:not(.titlebutton):checked, .insight-macos.insight-theme-macintosh button:not(.titlebutton).suggested-action { background-color: #3478f6; color: white; }
+.insight-macos.insight-theme-macintosh notebook > header > tabs > tab { background-color: #cccccc; border-radius: 0; color: #111111; }
+.insight-macos.insight-theme-macintosh notebook > header > tabs > tab:checked { background-color: #ffffff; color: #111111; }
+menu.insight-macos.insight-theme-macintosh, .insight-macos.insight-theme-macintosh menu, .insight-macos.insight-theme-macintosh popover { background-color: #ffffff; background-image: linear-gradient(to bottom, #ffffff, #eeeeee); color: #111111; border-color: #111111; border-radius: 0; }
+.insight-macos.insight-theme-macintosh menuitem { color: #111111; }
+.insight-macos.insight-theme-macintosh menuitem:hover, .insight-macos.insight-theme-macintosh treeview.view:selected, .insight-macos.insight-theme-macintosh textview text selection { background-color: #3478f6; color: white; }
+.insight-macos.insight-theme-macintosh decoration { border-radius: 0; border-color: #111111; }
+
+/* A native titlebutton must remain readable with the user's light/dark GTK theme. */
+.insight-macos.insight-theme-golden-dark headerbar {
+ background-color: @theme_bg_color; background-image: none; color: @theme_fg_color;
+}
+.insight-macos.insight-theme-golden-light toolbar,
+.insight-macos.insight-theme-tahoe toolbar {
+ box-shadow: inset 0 1px rgba(255,255,255,0.9), 0 1px 3px rgba(40,65,100,0.10);
+}
+.insight-macos.insight-theme-golden-dark button:not(.titlebutton):disabled,
+.insight-macos.insight-theme-golden-dark menuitem:disabled { color: #9da6b8; }
+.insight-macos.insight-theme-macintosh,
+.insight-macos.insight-theme-macintosh label,
+.insight-macos.insight-theme-macintosh button:not(.titlebutton),
+.insight-macos.insight-theme-macintosh entry,
+.insight-macos.insight-theme-macintosh treeview {
+ font-family: "Chicago", "Charcoal", "Geneva", "DejaVu Sans", sans-serif;
+}
+.insight-macos.insight-theme-macintosh headerbar {
+ background-image: linear-gradient(to bottom, #fff 0%, #fff 12%, #888 12%, #888 16%, #fff 16%, #fff 32%, #888 32%, #888 36%, #fff 36%, #fff 52%, #888 52%, #888 56%, #fff 56%, #fff 72%, #888 72%, #888 76%, #fff 76%);
+ border-radius: 0;
+}
+.insight-macos.insight-theme-macintosh headerbar .title { background-color: #fff; color: #111; padding: 0 5px; }
+.insight-macos.insight-theme-macintosh menuitem:hover,
+.insight-macos.insight-theme-macintosh treeview.view:selected,
+.insight-macos.insight-theme-macintosh button:not(.titlebutton):checked { background-color: #111; color: #fff; }
+.insight-macos.insight-theme-macintosh button:not(.titlebutton),
+.insight-macos.insight-theme-macintosh entry { box-shadow: 1px 1px #555; }

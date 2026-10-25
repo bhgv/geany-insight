@@ -20,10 +20,10 @@ int main(void) {
  InsightWindowRect diagonal={600,800,100,100},origin={0,0,100,100};InsightWindowMotion d;insight_window_motion_plan(&d,&origin,&diagonal,1,2,100);InsightWindowRect value;assert(!insight_window_motion_sample(&d,.5,&value));assert(value.x==30 && value.y==40);
  double reverse=insight_window_motion_plan(&d,&diagonal,&origin,1,2,speed);assert(reverse==speed && d.seconds==10);assert(!insight_window_motion_sample(&d,.5,&value));assert(value.x==570 && value.y==760);
  origin=(InsightWindowRect){-40,-20,100,100};diagonal=(InsightWindowRect){-40,-20,300,200};insight_window_motion_plan(&d,&origin,&diagonal,1,2,0);assert(!insight_window_motion_sample(&d,1,&value));assert(value.width==200 && value.height==150);assert(value.x==-40);assert(insight_window_motion_sample(&d,2,&value));insight_window_motion_plan(&d,&origin,&origin,1,2,0);assert(insight_window_motion_sample(&d,0,&value));
- origin=(InsightWindowRect){0,0,100,100};diagonal=(InsightWindowRect){10000,0,100,100};insight_window_motion_plan(&d,&origin,&diagonal,1,.4,25000);
- assert(!insight_window_motion_sample_eased(&d,.1,&value));assert(value.x==1035);assert(!insight_window_motion_sample_eased(&d,.2,&value));assert(value.x==5000);assert(!insight_window_motion_sample_eased(&d,.3,&value));assert(value.x==8965);assert(insight_window_motion_sample_eased(&d,.4,&value));assert(value.x==10000);
- int previous=0;for(int n=0;n<=400;n++) {insight_window_motion_sample_eased(&d,n/1000.0,&value);assert(value.x>=previous && value.x<=10000);previous=value.x;}
- insight_window_motion_sample_eased(&d,.001,&value);assert(value.x<=1);insight_window_motion_sample_eased(&d,.399,&value);assert(value.x>=9999);
- puts("S-shaped acceleration/deceleration and exact 0.4-second arrival passed");
+ origin=(InsightWindowRect){0,0,100,100};diagonal=(InsightWindowRect){10000,0,100,100};insight_window_motion_plan(&d,&origin,&diagonal,1,.8,12500);
+ assert(!insight_window_motion_sample_eased(&d,.2,&value));assert(value.x==1035);assert(!insight_window_motion_sample_eased(&d,.4,&value));assert(value.x==5000);assert(!insight_window_motion_sample_eased(&d,.6,&value));assert(value.x==8965);assert(insight_window_motion_sample_eased(&d,.8,&value));assert(value.x==10000);
+ int previous=0;for(int n=0;n<=800;n++) {insight_window_motion_sample_eased(&d,n/1000.0,&value);assert(value.x>=previous && value.x<=10000);previous=value.x;}
+ insight_window_motion_sample_eased(&d,.001,&value);assert(value.x<=1);insight_window_motion_sample_eased(&d,.799,&value);assert(value.x>=9999);
+ puts("S-shaped acceleration/deceleration and exact 0.8-second arrival passed");
  puts("Workarea edge/center anchors, native measured sizes, equal vector speed, independent arrivals, reverse sampling and resize-only motion passed");return 0;
 }

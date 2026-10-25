@@ -60,9 +60,9 @@ Tooltips retain native GTK styling and geometry. The application does not change
 
 Independent mode centers tools against the workarea top, File Symbols against the left edge, the project shelf against the right, the complete Context/terminal notebook against the bottom, and the source window in the workarea center. Monitor workarea offsets and native frame sizes are included. Existing terminal widgets and sessions are moved intact.
 
-A single nonblocking timer moves real windows with an S-shaped acceleration/deceleration profile: the longest path takes 0.4 seconds and shorter paths finish earlier. Final native frame positions are checked and corrected against workarea edges, excluding system panels. Joining restores the previous layout after the inward motion. Rapid mode changes reverse the current transition. Startup places restored independent windows directly at their endpoints.
+A single nonblocking timer moves real windows with an S-shaped acceleration/deceleration profile: the longest path takes 0.8 seconds and shorter paths finish earlier. Final native frame positions are checked and corrected against workarea edges, excluding system panels. Joining restores the previous layout after the inward motion. Rapid mode changes reverse the current transition. Startup places restored independent windows directly at their endpoints.
 
-Four radio choices replace Reduce transparency: 100%, 90%, 80%, 70%. The value is persisted and controls native GTK window opacity, including the unified main window. Splitting resets the choice to 100% and fades actual opacity back to 100% over approximately 0.4 seconds. Legacy per-panel alpha is overridden during independent mode, rather than multiplied into the global value. Users can explicitly choose a different level afterward. Outside independent mode, individual panel settings remain available.
+Four radio choices replace Reduce transparency: 100%, 90%, 80%, 70%. The value is persisted and controls native GTK window opacity, including the unified main window. Splitting resets the choice to 100% and fades actual opacity back to 100% over approximately 0.8 seconds. Legacy per-panel alpha is overridden during independent mode, rather than multiplied into the global value. Users can explicitly choose a different level afterward. Outside independent mode, individual panel settings remain available.
 
 Actual positioning and desktop transparency depend on the window manager/compositor; Wayland may restrict window moves. Linux/Xvfb checks coordinates and GTK opacity, not the visual output of every desktop compositor.
 
@@ -73,3 +73,22 @@ Position requests use explicit North-West frame gravity and absolute workarea co
 Independent palette headers reserve a single title line, without an empty subtitle row. Compact padding and buttons reduce their height to approximately half the previous chrome; joining restores ordinary styling.
 
 Edge anchors use the visible CSD frame, excluding transparent CSS shadow padding. Shadows may extend outside the workarea while the actual palette remains inside it, clear of system docks.
+
+## Separate macOS appearances
+
+Options / View → Interface style → **macOS appearance** selects the surface independently of Classic / macOS / Independent Windows. The optional `macos-theme` key persists the selection; old configurations keep the original appearance. Choosing a variant while in Classic stores the preference without changing the window mode.
+
+| Variant | Surface |
+| --- | --- |
+| Current macOS appearance | Original palette and materials retained |
+| macOS 27 Golden Gate — Light | Readable pale materials and soft glass gradients |
+| macOS 27 Golden Gate — Dark | Graphite panels, menus and contrasting text |
+| macOS 26 Tahoe — Glass | Brighter glass highlights and rounder controls |
+| macOS 15 Sequoia — Silver | Neutral silver panels and compact corners |
+| Macintosh — System 7 | Monochrome menus, gray panels, striped captions, square corners |
+
+These are original GTK adaptations inspired by Apple’s designs, not macOS system themes. They add no dependencies and do not change source syntax palettes, editor fonts, text, selections or Undo. Liquid Glass desktop refraction/blur is not implemented. The dark variant keeps the system GTK header colors so native window controls remain readable.
+
+Title buttons retain the current GTK theme and its decoration layout. Their allocated height is capped at 85% of the header height. Split/join motion uses an S-shaped curve with a maximum 0.8-second travel time.
+
+Design references: [Apple — macOS 27 Golden Gate](https://www.apple.com/os/macos/), [Apple — macOS Tahoe / Liquid Glass](https://www.apple.com/newsroom/2025/06/macos-tahoe-26-makes-the-mac-more-capable-productive-and-intelligent-than-ever/). The Linux GUI fixture captures real widgets for all six variants as `macos-theme-*.jpg` CI artifacts; the diagram above is schematic.

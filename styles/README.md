@@ -57,3 +57,5 @@ Cyrillic coverage and private font loading.
 ## Interface presets
 
 Options / View → Interface style switches Classic and a macOS-inspired GTK shell independently of these source palettes. See [interface guide](../insight/docs/interface-style.md). `appearance-macos.css` is a standalone scoped UI stylesheet, not a source-theme directory. RGBA blending is within the window; no system blur is claimed.
+
+The UI shell has six independent macOS appearances (original, Golden Gate light/dark, Tahoe glass, Sequoia silver and Macintosh System 7). They live in the scoped `appearance-macos.css`; titlebutton paint and icon layout remain native GTK. Source palette directories are unaffected.

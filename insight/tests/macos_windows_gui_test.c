@@ -35,6 +35,11 @@ static GdkRectangle frame(GtkWidget *widget) {
  }
  return rect;
 }
+static guint title_buttons;
+static void check_title_button(GtkWidget *widget,gpointer data) {
+ gint height=GPOINTER_TO_INT(data);if(GTK_IS_BUTTON(widget) && gtk_style_context_has_class(gtk_widget_get_style_context(widget),"titlebutton")) {g_assert_cmpint(gtk_widget_get_allocated_height(widget)*100,<=,height*85);title_buttons++;}
+ if(GTK_IS_CONTAINER(widget)) gtk_container_forall(GTK_CONTAINER(widget),check_title_button,data);
+}
 static void edge_positions(void) {
  GdkMonitor *monitor=gdk_display_get_monitor_at_window(gtk_widget_get_display(window),gtk_widget_get_window(window));GdkRectangle area;gdk_monitor_get_workarea(monitor,&area);GtkWidget *tools=any("insight-tools-palette");g_assert_nonnull(tools);GdkRectangle t=frame(tools),l=frame(gtk_widget_get_toplevel(left)),r=frame(gtk_widget_get_toplevel(project)),b=frame(gtk_widget_get_toplevel(context)),e=frame(window);GdkRectangle all[]={t,l,r,b,e};
  for(guint n=0;n<G_N_ELEMENTS(all);n++) {g_assert_cmpint(all[n].x,>=,area.x-3);g_assert_cmpint(all[n].y,>=,area.y-3);g_assert_cmpint(all[n].x+all[n].width,<=,area.x+area.width+3);g_assert_cmpint(all[n].y+all[n].height,<=,area.y+area.height+3);}
@@ -45,7 +50,7 @@ static void edge_positions(void) {
  gtk_paned_set_position(GTK_PANED(split),gtk_widget_get_allocated_height(split));
  g_assert_true(gtk_widget_get_visible(ui_lookup_widget(window,"notebook_info")));
  GtkWidget *terminals=any("insight-terminal-group");g_assert_nonnull(terminals); g_assert_true(gtk_widget_get_toplevel(terminals)==gtk_widget_get_toplevel(context));
- for(guint n=0;n<5;n++) {GtkWidget *owner=n==0 ? tools:n==1 ? gtk_widget_get_toplevel(left):n==2 ? gtk_widget_get_toplevel(project):n==3 ? gtk_widget_get_toplevel(context):window;g_assert_cmpfloat(gtk_widget_get_opacity(owner),>,.995);if(owner!=window) {g_assert_null(gtk_window_get_transient_for(GTK_WINDOW(owner)));GtkWidget *header=gtk_window_get_titlebar(GTK_WINDOW(owner));g_assert_true(GTK_IS_HEADER_BAR(header));g_assert_false(gtk_header_bar_get_has_subtitle(GTK_HEADER_BAR(header)));g_assert_cmpint(gtk_widget_get_allocated_height(header),<=,24);}}
+ for(guint n=0;n<5;n++) {GtkWidget *owner=n==0 ? tools:n==1 ? gtk_widget_get_toplevel(left):n==2 ? gtk_widget_get_toplevel(project):n==3 ? gtk_widget_get_toplevel(context):window;g_assert_cmpfloat(gtk_widget_get_opacity(owner),>,.995);if(owner!=window) {g_assert_null(gtk_window_get_transient_for(GTK_WINDOW(owner)));GtkWidget *header=gtk_window_get_titlebar(GTK_WINDOW(owner));g_assert_true(GTK_IS_HEADER_BAR(header));g_assert_false(gtk_header_bar_get_has_subtitle(GTK_HEADER_BAR(header)));g_assert_cmpint(gtk_widget_get_allocated_height(header),<=,24);g_assert_null(gtk_header_bar_get_decoration_layout(GTK_HEADER_BAR(header)));title_buttons=0;gtk_container_forall(GTK_CONTAINER(header),check_title_button,GINT_TO_POINTER(gtk_widget_get_allocated_height(header)));g_assert_cmpuint(title_buttons,>,0);}}
 }
 static void unchanged(void) {
  gchar *text=sci_get_contents(doc->editor->sci,-1);g_assert_cmpstr(text,==,"int main(void) { return 0; }\n");g_free(text);
