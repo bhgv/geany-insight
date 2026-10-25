@@ -5,6 +5,7 @@
 #include "insight-i18n.h"
 #include "insight-workbench.h"
 #include "ui_utils.h"
+#include "toolbar.h"
 #include <gio/gio.h>
 #include <glib/gstdio.h>
 #include <string.h>
@@ -52,7 +53,7 @@ static void style_icons(GtkWidget *widget) {
     gchar *symbolic=g_strconcat(base,"-symbolic",NULL);
     if(gtk_icon_theme_has_icon(gtk_icon_theme_get_default(),symbolic)) {
      old=g_new0(OriginalIcon,1);old->name=g_strdup(name);old->replacement=symbolic;old->size=size;old->stock=stock;old->pixels=gtk_image_get_pixel_size(image);
-     g_object_set_data_full(G_OBJECT(image),"insight-original-icon",old,icon_free);gtk_image_set_from_icon_name(image,symbolic,GTK_ICON_SIZE_MENU);gtk_image_set_pixel_size(image,16);
+     g_object_set_data_full(G_OBJECT(image),"insight-original-icon",old,icon_free);gtk_image_set_from_icon_name(image,symbolic,GTK_ICON_SIZE_MENU);gtk_image_set_pixel_size(image,gtk_widget_get_ancestor(widget,GTK_TYPE_TOOLBAR) ? MAX(8,CLAMP(toolbar_prefs.height,12,64)*2/3):16);
     } else g_free(symbolic);
    }
   }

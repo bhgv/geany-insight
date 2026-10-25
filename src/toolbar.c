@@ -603,7 +603,7 @@ void toolbar_apply_settings(void)
  GtkWidget *toolbar=main_widgets.toolbar;GtkCssProvider *css=g_object_get_data(G_OBJECT(toolbar),"insight-toolbar-geometry");
  if(!css) {css=gtk_css_provider_new();g_object_set_data_full(G_OBJECT(toolbar),"insight-toolbar-geometry",css,g_object_unref);g_signal_connect_after(toolbar,"size-allocate",G_CALLBACK(toolbar_allocated),NULL);gtk_style_context_add_provider_for_screen(gtk_widget_get_screen(toolbar),GTK_STYLE_PROVIDER(css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION+2);}
  gint height=CLAMP(toolbar_prefs.height,12,64),icon=MAX(8,height*2/3);gchar *icon_name=g_strdup_printf("insight-toolbar-%d",icon);GtkIconSize size=gtk_icon_size_from_name(icon_name);if(size==GTK_ICON_SIZE_INVALID) size=gtk_icon_size_register(icon_name,icon,icon);g_free(icon_name);gtk_toolbar_set_icon_size(GTK_TOOLBAR(toolbar),size);
- gchar *rules=g_strdup_printf("#GeanyToolbar { padding: 0; border: 0; -GtkToolbar-internal-padding: 0; min-height: %dpx; font-size: %dpx; } #GeanyToolbar toolitem, #GeanyToolbar button, #GeanyToolbar entry { min-height: 0; min-width: 0; padding: 0 2px; margin: 0; }",height,MAX(6,height/2));gtk_css_provider_load_from_data(css,rules,-1,NULL);g_free(rules);compact_image(toolbar,GINT_TO_POINTER(icon));
+ gchar *rules=g_strdup_printf("#GeanyToolbar { padding: 0; border: 0; min-height: %dpx; font-size: %dpx; } #GeanyToolbar * { min-height: 0; font-size: inherit; } #GeanyToolbar toolitem, #GeanyToolbar button, #GeanyToolbar entry { min-height: 0; min-width: 0; padding: 0 2px; margin: 0; }",height,MAX(6,height/2));gtk_css_provider_load_from_data(css,rules,-1,NULL);g_free(rules);compact_image(toolbar,GINT_TO_POINTER(icon));
 }
 
 
