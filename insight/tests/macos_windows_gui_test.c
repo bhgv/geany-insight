@@ -36,7 +36,7 @@ static void edge_positions(void) {
  gtk_paned_set_position(GTK_PANED(split),gtk_widget_get_allocated_height(split));
  g_assert_true(gtk_widget_get_visible(ui_lookup_widget(window,"notebook_info")));
  GtkWidget *terminals=any("insight-terminal-group");g_assert_nonnull(terminals); g_assert_true(gtk_widget_get_toplevel(terminals)==gtk_widget_get_toplevel(context));
- for(guint n=0;n<5;n++) {GtkWidget *owner=n==0 ? tools:n==1 ? gtk_widget_get_toplevel(left):n==2 ? gtk_widget_get_toplevel(project):n==3 ? gtk_widget_get_toplevel(context):window;g_assert_cmpfloat(gtk_widget_get_opacity(owner),>,.995);if(owner!=window) g_assert_null(gtk_window_get_transient_for(GTK_WINDOW(owner)));}
+ for(guint n=0;n<5;n++) {GtkWidget *owner=n==0 ? tools:n==1 ? gtk_widget_get_toplevel(left):n==2 ? gtk_widget_get_toplevel(project):n==3 ? gtk_widget_get_toplevel(context):window;g_assert_cmpfloat(gtk_widget_get_opacity(owner),>,.995);if(owner!=window) {g_assert_null(gtk_window_get_transient_for(GTK_WINDOW(owner)));GtkWidget *header=gtk_window_get_titlebar(GTK_WINDOW(owner));g_assert_true(GTK_IS_HEADER_BAR(header));g_assert_false(gtk_header_bar_get_has_subtitle(GTK_HEADER_BAR(header)));g_assert_cmpint(gtk_widget_get_allocated_height(header),<=,24);}}
 }
 static void unchanged(void) {
  gchar *text=sci_get_contents(doc->editor->sci,-1);g_assert_cmpstr(text,==,"int main(void) { return 0; }\n");g_free(text);

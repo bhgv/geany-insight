@@ -69,3 +69,5 @@ Actual positioning and desktop transparency depend on the window manager/composi
 Independent palettes have no transient parent, so the editor can be raised normally. The entire bottom clipping host moves with its notebook, leaving no empty splitter child in the editor. Source divider changes and tab switches cannot hide the detached Context. Every open document retains its first visible line and horizontal offset through split/join allocations, without moving its caret or selection.
 
 Position requests use explicit North-West frame gravity and absolute workarea coordinates, without inheriting offsets from the window manager’s initial placement. Quintic easing has zero velocity and acceleration at both endpoints.
+
+Independent palette headers reserve a single title line, without an empty subtitle row. Compact padding and buttons reduce their height to approximately half the previous chrome; joining restores ordinary styling.

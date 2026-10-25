@@ -4685,6 +4685,17 @@ static void palette_views_capture(void) {
  }
  palette.view_timer=g_timeout_add(32,palette_views_settle,NULL);
 }
+static void palette_compact_title(GtkWidget *window,gboolean compact) {
+ GtkStyleContext *style=gtk_widget_get_style_context(window);
+ if(compact) gtk_style_context_add_class(style,"insight-independent-chrome");else gtk_style_context_remove_class(style,"insight-independent-chrome");
+ GtkWidget *header=gtk_window_get_titlebar(GTK_WINDOW(window));if(!GTK_IS_HEADER_BAR(header)) return;
+ if(compact) {
+  if(!g_object_get_data(G_OBJECT(header),"insight-original-subtitle-space")) g_object_set_data(G_OBJECT(header),"insight-original-subtitle-space",GUINT_TO_POINTER(gtk_header_bar_get_has_subtitle(GTK_HEADER_BAR(header)) ? 2:1));
+  gtk_header_bar_set_has_subtitle(GTK_HEADER_BAR(header),FALSE);
+ } else {
+  guint previous=GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(header),"insight-original-subtitle-space"));if(previous) gtk_header_bar_set_has_subtitle(GTK_HEADER_BAR(header),previous==2);g_object_set_data(G_OBJECT(header),"insight-original-subtitle-space",NULL);
+ }
+}
 static void palette_row_free(gpointer data) { PaletteRow *row=data;g_weak_ref_clear(&row->widget);g_free(row); }
 static GtkWidget *palette_part_window(guint part) {
  switch(part) {case INSIGHT_FLOAT_TOOLS:return palette.window;case INSIGHT_FLOAT_LEFT:return wb.hosts[8].window;case INSIGHT_FLOAT_RIGHT:return wb.float_window;case INSIGHT_FLOAT_BOTTOM:return palette.bottom;default:return main_widgets.window;}
@@ -4725,7 +4736,7 @@ static void palette_restore_now(void) {
   GtkWidget *content=palette.bottom_content;g_object_ref(content);GtkWidget *parent=gtk_widget_get_parent(content);if(parent) gtk_container_remove(GTK_CONTAINER(parent),content);
   gtk_paned_set_position(GTK_PANED(palette.bottom_parent),palette.before.values[IL_CONTEXT_SPLIT]);gtk_paned_pack2(GTK_PANED(palette.bottom_parent),content,palette.bottom_resize,palette.bottom_shrink);g_object_unref(content);gtk_widget_destroy(palette.bottom);palette.bottom=NULL;palette.bottom_content=NULL;g_clear_object(&palette.bottom_parent);
  }
- for(guint n=0;n<INSIGHT_FLOAT_COUNT;n++) {GtkWidget *window=palette_part_window(n);if(window && window!=main_widgets.window) gtk_window_set_transient_for(GTK_WINDOW(window),GTK_WINDOW(main_widgets.window));if(window) g_object_set_data(G_OBJECT(window),"insight-independent-opacity",NULL);}
+ for(guint n=0;n<INSIGHT_FLOAT_COUNT;n++) {GtkWidget *window=palette_part_window(n);if(window) palette_compact_title(window,FALSE);if(window && window!=main_widgets.window) gtk_window_set_transient_for(GTK_WINDOW(window),GTK_WINDOW(main_widgets.window));if(window) g_object_set_data(G_OBJECT(window),"insight-independent-opacity",NULL);}
  insight_appearance_opacity_tick(TRUE);apply_layout_record(&palette.before);gtk_widget_set_visible(main_widgets.message_window_notebook,palette.message_visible);
  /* Restore the global alpha after the main window loses its temporary tag. */
  insight_appearance_panel_opacity(main_widgets.window,100);
@@ -4831,7 +4842,7 @@ void insight_workbench_set_independent(gboolean active) {
  ui_prefs.sidebar_visible=FALSE;ui_sidebar_show_hide();gtk_window_unmaximize(GTK_WINDOW(main_widgets.window));
  InsightWindowRect targets[INSIGHT_FLOAT_COUNT];insight_window_edge_layout(palette.area,NULL,targets);
  for(guint n=0;n<INSIGHT_FLOAT_COUNT;n++) {
-  GtkWidget *window=palette_part_window(n);if(!window) continue;if(window!=main_widgets.window) gtk_window_set_transient_for(GTK_WINDOW(window),NULL);gtk_window_set_gravity(GTK_WINDOW(window),GDK_GRAVITY_NORTH_WEST);gtk_window_set_position(GTK_WINDOW(window),GTK_WIN_POS_NONE);gtk_window_unmaximize(GTK_WINDOW(window));g_object_set_data(G_OBJECT(window),"insight-independent-opacity",GINT_TO_POINTER(1));gint wanted_h=targets[n].height;
+  GtkWidget *window=palette_part_window(n);if(!window) continue;palette_compact_title(window,TRUE);if(window!=main_widgets.window) gtk_window_set_transient_for(GTK_WINDOW(window),NULL);gtk_window_set_gravity(GTK_WINDOW(window),GDK_GRAVITY_NORTH_WEST);gtk_window_set_position(GTK_WINDOW(window),GTK_WIN_POS_NONE);gtk_window_unmaximize(GTK_WINDOW(window));g_object_set_data(G_OBJECT(window),"insight-independent-opacity",GINT_TO_POINTER(1));gint wanted_h=targets[n].height;
   if(n==INSIGHT_FLOAT_TOOLS) {gint minimum,natural;gtk_widget_get_preferred_height(window,&minimum,&natural);wanted_h=MAX(1,natural);}
   gtk_window_set_default_size(GTK_WINDOW(window),targets[n].width,wanted_h);gtk_window_resize(GTK_WINDOW(window),targets[n].width,wanted_h);
   InsightWindowRect start=insight_window_rect_clamp(palette.origins[n],palette.area);gtk_window_move(GTK_WINDOW(window),start.x,start.y);gtk_widget_show(window);insight_appearance_panel_opacity(window,100);
