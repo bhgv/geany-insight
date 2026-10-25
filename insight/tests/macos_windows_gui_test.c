@@ -101,7 +101,7 @@ static gboolean step(gpointer unused) {
  }
  if(phase==5) {
   if(moving()) {g_assert_cmpfloat_with_epsilon(gtk_widget_get_opacity(window),1.0,.006);return G_SOURCE_CONTINUE;}edge_positions();g_assert_false(gtk_widget_get_visible(ui_lookup_widget(window,"statusbar")));g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(any("insight-opacity-0-100"))));
-  GtkWidget *tools=any("insight-tools-palette");g_assert_nonnull(tools);g_assert_true(gtk_widget_get_toplevel(ui_lookup_widget(window,"menubar1"))==tools);
+  GtkWidget *tools=any("insight-tools-palette");g_assert_nonnull(tools);g_assert_true(gtk_widget_get_toplevel(ui_lookup_widget(window,"menubar1"))==tools);GtkWidget *tools_box=gtk_bin_get_child(GTK_BIN(tools));gint tools_min,tools_natural;gtk_widget_get_preferred_height(tools_box,&tools_min,&tools_natural);g_assert_cmpint(gtk_widget_get_allocated_height(tools_box),<=,tools_natural+1);
   GtkWidget *l=gtk_widget_get_toplevel(left),*r=gtk_widget_get_toplevel(project),*c=gtk_widget_get_toplevel(context);
   g_assert_true(l!=window && r!=window && c!=window && l!=r && l!=c && r!=c);
   if(other) {gtk_notebook_set_current_page(GTK_NOTEBOOK(ui_lookup_widget(window,"notebook1")),document_get_notebook_page(other));gtk_notebook_set_current_page(GTK_NOTEBOOK(ui_lookup_widget(window,"notebook1")),document_get_notebook_page(doc));g_assert_null(gtk_paned_get_child2(GTK_PANED(ui_lookup_widget(window,"vpaned1"))));g_assert_true(gtk_widget_get_visible(ui_lookup_widget(window,"notebook_info")));}

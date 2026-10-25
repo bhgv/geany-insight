@@ -108,7 +108,7 @@ At nearly collapsed widths the arrows disappear rather than displacing the capti
 
 Diff/merge, AI assistants, symbol Relations and source-window links share the same compact options notebook. Collapse leaves the tab strip and gives the space to the main content. Selecting another tab restores controls; the active group determines the required height.
 
-Ctrl+mouse wheel over a side panel changes its text size (6–28 points). Preferences → Interface → Toolbar also provides the side-panel font size and toolbar height (12–64 pixels, default 16). Both settings survive restarts.
+Ctrl+mouse wheel over a side panel changes its text size (6–28 points). Preferences → Interface → Toolbar also provides the side-panel font size and toolbar height (12–64 pixels, default 22). Both settings survive restarts.
 
 The down arrow to the right of editor tabs lists every open buffer in most-recently-used order, with full paths in tooltips. Selecting a row activates its source. Undo/Redo use the active editor. Main-toolbar and editor-popup arrows follow editor position history; Context buttons and its popup use independent preview history. Navigation commands reveal the containing panels and nested tabs.
 
@@ -122,4 +122,6 @@ Every AI receives up to 24,000 characters of relevant installed editor documenta
 Hide or show the editor footer with View → Show status bar, the same check item in the editor popup, or Preferences → Interface → Show status bar. The controls share one state. Unified and independent windows remember separate choices; the footer starts hidden in independent mode. Joining restores the unified-window choice.
 
 
-Side panels switch to one active tab when each header has less than half the active caption width. Navigation arrows remain visible when multiple headers return, and their reserved space participates in the threshold calculation. Only nearly collapsed panels without physical room hide the arrows. The main toolbar defaults to 16 pixels instead of 24; existing heights are reduced once by a factor of 1.5. Toolbar contents are capped at 85% of its height. Independent titlebars are reduced by the same factor, with their controls and captions capped at 85% of the titlebar height.
+Side panels switch to one active tab when each header has less than half the active caption width. Navigation arrows remain visible when multiple headers return, and their reserved space participates in the threshold calculation. Only nearly collapsed panels without physical room hide the arrows. The main toolbar defaults to 22 logical pixels; the previous 16-pixel setting is enlarged once by a factor of 1.4. Toolbar contents are capped at 85% of its height. Independent titlebars are reduced by the same factor, with their controls and captions capped at 85% of the titlebar height.
+
+Side headers reveal adjacent tabs progressively as space grows; arrows stay available. Toolbar height is increased once by 1.4 (16 → 22 logical pixels), with the existing 85% control cap. The detached Menu and Tools window fits its rows without a blank bottom shelf.

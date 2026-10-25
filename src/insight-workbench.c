@@ -4831,6 +4831,14 @@ static void palette_queue_motion(gboolean joining) {
  palette_views_capture();palette_cancel_motion();palette.joining=joining;palette.animate=FALSE;insight_appearance_opacity_tick(TRUE);palette.settle_ticks=0;palette.arrival_ticks=0;palette.deadline=g_get_monotonic_time()+32000;
  g_object_set_data(G_OBJECT(main_widgets.window),"insight-independent-motion",GINT_TO_POINTER(1));palette.timer=g_timeout_add(16,palette_motion_step,NULL);
 }
+/* Fit the client content, not the outer CSD requisition: passing the latter
+ * to gtk_window_resize counts decorations twice and leaves a blank shelf. */
+static void palette_tools_fit(GtkWidget *box,GtkAllocation *allocation,gpointer data) {
+ GtkWindow *window=GTK_WINDOW(data);gint minimum,natural,w,h;
+ gtk_widget_get_preferred_height(box,&minimum,&natural);
+ gint excess=allocation->height-natural;
+ if(excess>1) {gtk_window_get_size(window,&w,&h);gtk_window_resize(window,w,MAX(1,h-excess));}
+}
 void insight_workbench_set_independent(gboolean active) {
  if(!wb.alive || wb.host_count!=10) return;
  for(guint n=0;n<wb.host_count;n++) panel_controls_update(&wb.hosts[n]);
@@ -4851,7 +4859,7 @@ void insight_workbench_set_independent(gboolean active) {
  palette.origins[1]=palette_widget_rect(wb.hosts[8].page,palette_widget_rect(main_widgets.sidebar_notebook,original));palette.origins[2]=palette_widget_rect(wb.project_host,original);palette.origins[3]=palette_widget_rect(book,original);palette.origins[4]=original;
  palette.active=TRUE;palette.message_visible=gtk_widget_get_visible(book);palette.speed=0;palette.rows=g_ptr_array_new_with_free_func(palette_row_free);
  GtkWidget *root=ui_lookup_widget(main_widgets.window,"vbox1");palette.window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(palette.window,"insight-tools-palette");gtk_window_set_title(GTK_WINDOW(palette.window),insight_tr("Geany Insight — Menu and Tools"));gtk_window_set_transient_for(GTK_WINDOW(palette.window),GTK_WINDOW(main_widgets.window));g_object_set_data(G_OBJECT(palette.window),"GladeParentKey",main_widgets.window);
- GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,0);gtk_container_add(GTK_CONTAINER(palette.window),box);GList *children=gtk_container_get_children(GTK_CONTAINER(root));gint position=0;
+ GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,0);gtk_container_add(GTK_CONTAINER(palette.window),box);g_signal_connect(box,"size-allocate",G_CALLBACK(palette_tools_fit),palette.window);GList *children=gtk_container_get_children(GTK_CONTAINER(root));gint position=0;
  for(GList *p=children;p;p=p->next,position++) {
   GtkWidget *widget=p->data;if(widget!=menu_row && widget!=main_widgets.toolbar) continue;PaletteRow *row=g_new0(PaletteRow,1);row->position=position;g_weak_ref_init(&row->widget,widget);gtk_box_query_child_packing(GTK_BOX(root),widget,&row->expand,&row->fill,&row->padding,&row->pack);g_ptr_array_add(palette.rows,row);g_object_ref(widget);gtk_container_remove(GTK_CONTAINER(root),widget);gtk_box_pack_start(GTK_BOX(box),widget,FALSE,FALSE,0);g_object_unref(widget);
  }

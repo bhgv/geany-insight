@@ -108,7 +108,7 @@ the desktop compositor. No desktop blur or global fading of source text is used.
 
 Diff/merge, AI assistants, symbol Relations and source-window links share the same compact options notebook. Collapse leaves the tab strip and gives the space to the main content. Selecting another tab restores controls; the active group determines the required height.
 
-Ctrl+mouse wheel over a side panel changes its text size (6–28 points). Preferences → Interface → Toolbar also provides the side-panel font size and toolbar height (12–64 pixels, default 16). Both settings survive restarts.
+Ctrl+mouse wheel over a side panel changes its text size (6–28 points). Preferences → Interface → Toolbar also provides the side-panel font size and toolbar height (12–64 pixels, default 22). Both settings survive restarts.
 
 The down arrow to the right of editor tabs lists every open buffer in most-recently-used order, with full paths in tooltips. Selecting a row activates its source. Undo/Redo use the active editor. Main-toolbar and editor-popup arrows follow editor position history; Context buttons and its popup use independent preview history. Navigation commands reveal the containing panels and nested tabs.
 
@@ -123,3 +123,5 @@ Every AI receives up to 24,000 characters of relevant installed editor documenta
 
 
 Корешки боковых панелей переходят к одной активной вкладке, когда каждому корешку остаётся меньше половины ширины названия активной вкладки. Стрелки остаются видимыми и после возврата нескольких корешков; их место учитывается при расчёте порога. При почти полном сворачивании панели стрелки скрываются только если для них физически нет места. Главный тулбар по умолчанию имеет высоту 16 пикселей вместо 24; существующий размер один раз уменьшается в 1,5 раза. Содержимое не превышает 85% высоты тулбара. Шапки независимых окон также уменьшены в 1,5 раза, кнопки и надписи ограничены 85% высоты шапки.
+
+Корешки боковых панелей показывают соседние вкладки постепенно по мере расширения; стрелки остаются доступными. Высота тулбара увеличивается однократно в 1,4 раза (16 → 22 логических пикселя), ограничение элементов в 85% сохранено. Отдельное окно меню и инструментов подгоняется по строкам без пустой полки снизу.

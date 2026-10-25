@@ -37,7 +37,7 @@ static void previous_clicked(GtkButton *button,gpointer data) {(void)button;turn
 static void next_clicked(GtkButton *button,gpointer data) {(void)button;turn(data,1);}
 static void drag_begin(GtkGestureDrag *gesture,gdouble x,gdouble y,gpointer data) {(void)gesture;(void)x;(void)y;((SideTabs *)data)->consumed=0;}
 static void drag_update(GtkGestureDrag *gesture,gdouble x,gdouble y,gpointer data) {
- (void)y;SideTabs *s=data;if(!s->single || ABS(x-s->consumed)<40) return;
+ (void)y;SideTabs *s=data;if(ABS(x-s->consumed)<40) return;
  if(gtk_gesture_is_active(GTK_GESTURE(gesture))) gtk_gesture_set_state(GTK_GESTURE(gesture),GTK_EVENT_SEQUENCE_CLAIMED);turn(s,x<s->consumed ? 1:-1);s->consumed=x;
 }
 static gboolean key_press(GtkWidget *widget,GdkEventKey *event,gpointer data) {
@@ -86,13 +86,17 @@ static gboolean update(gpointer data) {
  /* Reserve identical arrow space in both modes: showing a header must not
   * change the threshold and immediately hide it again. */
  gint available=MAX(1,width-(arrows ? 28:0));
- s->single=visible>1 && active_width>MAX(1,available/MAX(1,visible));
+ gint slots=CLAMP(available/MAX(1,active_width),1,MAX(1,visible));
+ s->single=visible>1 && slots==1;
+ gint active=0,rank=0;
+ for(guint n=0;n<s->buttons->len;n++) {GtkWidget *page=button_page(g_ptr_array_index(s->buttons,n));if(page) {if((gint)n==current) active=rank;if(gtk_widget_get_visible(page)) rank++;g_object_unref(page);}}
+ gint first=CLAMP(active-slots/2,0,MAX(0,visible-slots));rank=0;
  g_object_set_data(G_OBJECT(s->wrapper),"insight-side-tabs-carousel",GINT_TO_POINTER(s->single));
  gtk_widget_set_visible(s->previous,arrows);gtk_widget_set_visible(s->next,arrows);
  gtk_widget_set_tooltip_text(s->previous,translated(s,"Previous panel tab"));gtk_widget_set_tooltip_text(s->next,translated(s,"Next panel tab"));
  for(guint n=0;n<s->buttons->len;n++) {
   GtkWidget *button=g_ptr_array_index(s->buttons,n),*page=button_page(button);gboolean selected=(gint)n==current;
-  gtk_widget_set_visible(button,page && gtk_widget_get_visible(page) && (!s->single || selected));if(selected && s->focus_active) gtk_widget_grab_focus(button);if(page) g_object_unref(page);
+  gboolean present=page && gtk_widget_get_visible(page);gtk_widget_set_visible(button,present && rank>=first && rank<first+slots);if(present) rank++;if(selected && s->focus_active) gtk_widget_grab_focus(button);if(page) g_object_unref(page);
  }
  s->syncing=FALSE;s->focus_active=FALSE;gtk_widget_set_visible(s->row,visible>0);return G_SOURCE_REMOVE;
 }

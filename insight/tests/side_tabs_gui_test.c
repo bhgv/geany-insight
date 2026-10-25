@@ -7,6 +7,7 @@ static gboolean translated;
 static const gchar *translate(const gchar *text) {return translated && !g_strcmp0(text,"File Symbols") ? "Символы файла":text;}
 static void help_clicked(GtkButton *button,gpointer data) {(void)button;(void)data;help_clicks++;}
 static guint phase,ticks;
+static gint partial_width;
 static const gchar *names[]={"File Symbols","Project Files","Project Symbols"};
 static GtkWidget *find(GtkWidget *root,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;
@@ -33,10 +34,12 @@ static gboolean step(gpointer data) {
   if(ticks<3) return G_SOURCE_CONTINUE;g_assert_false(carousel());gint first=gtk_widget_get_allocated_width(tab(0));g_assert_cmpint(first,>,200);
   for(guint n=0;n<3;n++) {g_assert_true(gtk_widget_get_visible(tab(n)));g_assert_cmpint(ABS(first-gtk_widget_get_allocated_width(tab(n))),<=,1);gchar *tip=gtk_widget_get_tooltip_text(tab(n));g_assert_cmpstr(tip,==,names[n]);g_free(tip);}
   g_assert_true(gtk_widget_get_visible(find(wrapper,"insight-side-tabs-next")));g_assert_true(gtk_widget_get_visible(find(wrapper,"insight-side-tabs-previous")));
-  PangoLayout *layout=gtk_widget_create_pango_layout(tab(0),names[0]);gint text_width;pango_layout_get_pixel_size(layout,&text_width,NULL);g_object_unref(layout);GtkBorder pad,border;gtk_style_context_get_padding(gtk_widget_get_style_context(tab(0)),GTK_STATE_FLAG_NORMAL,&pad);gtk_style_context_get_border(gtk_widget_get_style_context(tab(0)),GTK_STATE_FLAG_NORMAL,&border);gint slot=text_width*3/4+pad.left+pad.right+border.left+border.right+4;gtk_window_resize(GTK_WINDOW(window),3*slot+28+gtk_widget_get_allocated_width(help),300);phase=11;return G_SOURCE_CONTINUE;
+  PangoLayout *layout=gtk_widget_create_pango_layout(tab(0),names[0]);gint text_width;pango_layout_get_pixel_size(layout,&text_width,NULL);g_object_unref(layout);GtkBorder pad,border;gtk_style_context_get_padding(gtk_widget_get_style_context(tab(0)),GTK_STATE_FLAG_NORMAL,&pad);gtk_style_context_get_border(gtk_widget_get_style_context(tab(0)),GTK_STATE_FLAG_NORMAL,&border);gint slot=text_width*3/4+pad.left+pad.right+border.left+border.right+4;partial_width=2*((text_width+1)/2+pad.left+pad.right+border.left+border.right+4)+28+gtk_widget_get_allocated_width(help)+2;gtk_window_resize(GTK_WINDOW(window),3*slot+28+gtk_widget_get_allocated_width(help),300);phase=11;return G_SOURCE_CONTINUE;
  }
  if(phase==11) {g_assert_false(carousel());g_assert_true(gtk_widget_get_visible(find(wrapper,"insight-side-tabs-next")));for(guint i=0;i<8;i++) insight_side_tabs_refresh(wrapper);phase=12;return G_SOURCE_CONTINUE;}
- if(phase==12) {g_assert_false(carousel());gtk_window_resize(GTK_WINDOW(window),180,300);phase=1;return G_SOURCE_CONTINUE;}
+ if(phase==12) {g_assert_false(carousel());gtk_window_resize(GTK_WINDOW(window),partial_width,300);phase=13;return G_SOURCE_CONTINUE;}
+ if(phase==13) {g_assert_false(carousel());g_assert_true(gtk_widget_get_visible(tab(0)));g_assert_true(gtk_widget_get_visible(tab(1)));g_assert_false(gtk_widget_get_visible(tab(2)));g_signal_emit_by_name(find(wrapper,"insight-side-tabs-next"),"clicked");g_signal_emit_by_name(find(wrapper,"insight-side-tabs-next"),"clicked");phase=14;return G_SOURCE_CONTINUE;}
+ if(phase==14) {g_assert_false(carousel());g_assert_false(gtk_widget_get_visible(tab(0)));g_assert_true(gtk_widget_get_visible(tab(1)));g_assert_true(gtk_widget_get_visible(tab(2)));gtk_notebook_set_current_page(GTK_NOTEBOOK(book),0);gtk_window_resize(GTK_WINDOW(window),95,300);phase=1;return G_SOURCE_CONTINUE;}
  if(phase==1) {single(0);g_signal_emit_by_name(find(wrapper,"insight-side-tabs-next"),"clicked");phase=2;return G_SOURCE_CONTINUE;}
  if(phase==2) {single(1);g_signal_emit_by_name(help,"clicked");g_assert_cmpuint(help_clicks,==,1);g_signal_emit_by_name(find(wrapper,"insight-side-tabs-previous"),"clicked");phase=3;return G_SOURCE_CONTINUE;}
  if(phase==3) {single(0);g_signal_emit_by_name(find(wrapper,"insight-side-tabs-previous"),"clicked");phase=4;return G_SOURCE_CONTINUE;}

@@ -605,7 +605,7 @@ static void save_dialog_prefs(GKeyFile *config)
 	g_key_file_set_integer(config, PACKAGE, "pref_toolbar_icon_style", toolbar_prefs.icon_style);
 	g_key_file_set_integer(config, PACKAGE, "pref_toolbar_icon_size", toolbar_prefs.icon_size);
  g_key_file_set_integer(config,PACKAGE,"insight_toolbar_height",toolbar_prefs.height);
- g_key_file_set_integer(config,PACKAGE,"insight_toolbar_geometry_version",2);
+ g_key_file_set_integer(config,PACKAGE,"insight_toolbar_geometry_version",3);
  g_key_file_set_integer(config,PACKAGE,"insight_panel_font_size",toolbar_prefs.panel_font_size);
 
 	/* templates */
@@ -982,6 +982,7 @@ static void load_dialog_prefs(GKeyFile *config)
 	/* toolbar */
  toolbar_prefs.height=utils_get_setting_integer(config,PACKAGE,"insight_toolbar_height",24);
  if(utils_get_setting_integer(config,PACKAGE,"insight_toolbar_geometry_version",1)<2) toolbar_prefs.height=(toolbar_prefs.height*2+1)/3;
+ if(utils_get_setting_integer(config,PACKAGE,"insight_toolbar_geometry_version",1)<3) toolbar_prefs.height=(toolbar_prefs.height*14+5)/10;
  toolbar_prefs.height=CLAMP(toolbar_prefs.height,12,64);
  toolbar_prefs.panel_font_size=CLAMP(utils_get_setting_integer(config,PACKAGE,"insight_panel_font_size",9),6,28);
 	toolbar_prefs.visible = utils_get_setting_boolean(config, PACKAGE, "pref_toolbar_show", TRUE);
