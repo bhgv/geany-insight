@@ -2576,3 +2576,46 @@ Jump To Caller…	Перейти к вызывающему…
 Open a source file first	Сначала откройте исходный файл
 Place the caret on a symbol first	Сначала установите курсор на символе
 Show status bar	Показывать строку состояния
+Custom Commands	Пользовательские команды
+Custom Commands…	Пользовательские команды…
+Expanded arguments (display only):	Раскрытые аргументы (только для просмотра):
+Available context variables:	Доступные переменные контекста:
+Working directory	Рабочий каталог
+Command exited with status %d	Команда завершилась с кодом %d
+Output limit reached; command stopped	Достигнут предел вывода; команда остановлена
+Command stopped	Команда остановлена
+Command running	Команда выполняется
+Stopping command	Остановка команды
+Custom commands saved	Пользовательские команды сохранены
+Cannot create custom command settings directory	Не удалось создать каталог настроек пользовательских команд
+Save command output	Сохранить вывод команды
+Name of the saved external tool	Имя сохранённого внешнего инструмента
+Executable and quoted arguments; context variables expand inside each argument	Программа и аргументы в кавычках; переменные контекста подставляются внутри каждого аргумента
+Absolute working directory; empty uses the current project or file directory	Абсолютный рабочий каталог; пустое поле использует каталог проекта или текущего файла
+Value substituted for this numbered command argument	Значение для подстановки вместо этого нумерованного аргумента
+Arguments	Аргументы
+Output	Вывод
+Name	Имя
+New command	Новая команда
+Save command	Сохранить команду
+Delete command	Удалить команду
+Move up	Вверх
+Move down	Вниз
+Run	Запустить
+Preview command	Предпросмотр команды
+Refresh context	Обновить контекст
+Clear output	Очистить вывод
+Copy output	Копировать вывод
+Ready to run an external tool	Готово к запуску внешнего инструмента
+Invalid custom command template	Некорректный шаблон пользовательской команды
+Invalid custom command substitution	Некорректная подстановка в пользовательской команде
+Custom command variable is unavailable	Переменная пользовательской команды недоступна
+Expanded custom command is too large	Раскрытая пользовательская команда слишком велика
+Custom command has too many arguments	Слишком много аргументов пользовательской команды
+Custom command settings exceed the size limit	Настройки пользовательских команд превышают предел размера
+Custom command count exceeds the limit	Превышен предел числа пользовательских команд
+Invalid saved custom command	Некорректная сохранённая пользовательская команда
+Working directory must be an absolute path	Рабочий каталог должен быть абсолютным путём
+Working directory does not exist	Рабочий каталог не существует
+Invalid path variable context	Некорректный контекст переменной пути
+Path variable is unavailable	Переменная пути недоступна

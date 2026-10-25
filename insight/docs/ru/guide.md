@@ -119,3 +119,5 @@ Geany Insight — редактор исходного кода с индексо
 - [Interface style / Стиль интерфейса](interface-style.md)
 
 - [Reload Modified Files / Перечитать изменённые файлы](reload-modified.md)
+
+- [Custom Commands — внешние инструменты](custom-commands.md)

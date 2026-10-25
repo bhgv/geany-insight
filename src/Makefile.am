@@ -253,6 +253,7 @@ libgeany_la_SOURCES += \
 	insight-editor-ai.c insight-editor-ai.h \
 	insight-ai.c insight-ai.h \
 	insight-html-export.c insight-html-export.h \
+	insight-custom-commands.c insight-custom-commands.h \
 	insight-project-report.c insight-project-report.h \
 	insight-revisions.c insight-revisions.h \
 	insight-symbol-edit.c insight-symbol-edit.h \
@@ -329,6 +330,7 @@ libgeany_la_SOURCES += \
 	../insight/desktop/directory_operation.h \
 	../insight/desktop/disk_operation.c \
 	../insight/desktop/disk_operation.h \
+	../insight/desktop/custom_command.c ../insight/desktop/custom_command.h \
 	../insight/desktop/project_files.c \
 	../insight/desktop/project_files.h \
 	../insight/desktop/master_list.c \

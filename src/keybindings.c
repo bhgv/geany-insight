@@ -52,6 +52,7 @@
 #include "insight-snapshot-compare.h"
 #include "insight-git.h"
 #include "insight-project-report.h"
+#include "insight-custom-commands.h"
 #include "insight-replace-files.h"
 #include "insight-html-export.h"
 #include "insight-template-fields.h"
@@ -345,6 +346,7 @@ static void cb_func_insight(guint key_id)
     if (key_id == GEANY_KEYS_INSIGHT_GITHISTORY) { insight_git_history_command();return; }
     if (key_id == GEANY_KEYS_INSIGHT_EXPORTHTML) { insight_html_export_command(0);return; }
     if (key_id == GEANY_KEYS_INSIGHT_EXPORTSELECTIONHTML) { insight_html_export_command(1);return; }
+    if (key_id == GEANY_KEYS_INSIGHT_CUSTOMCOMMANDS) { insight_custom_commands_show();return; }
     if (key_id == GEANY_KEYS_INSIGHT_PROJECTREPORT) { insight_project_report_command(0);return; }
     if (key_id == GEANY_KEYS_INSIGHT_EXPORTPROJECTFILES) { insight_project_report_command(1);return; }
     if (key_id == GEANY_KEYS_INSIGHT_COMPAREBACKUP) { insight_backups_command(3);return; }
@@ -858,6 +860,7 @@ static void init_default_kb(void)
         0, 0, "insight_exporthtml", _("Export File as HTML"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_EXPORTSELECTIONHTML, cb_func_insight,
         0, 0, "insight_exportselectionhtml", _("Export Selection as HTML"), NULL);
+    add_kb(group, GEANY_KEYS_INSIGHT_CUSTOMCOMMANDS, cb_func_insight, 0, 0, "insight_custom_commands", _("Custom Commands"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_PROJECTREPORT, cb_func_insight,
         0, 0, "insight_projectreport", _("Project Report"), NULL);
     add_kb(group, GEANY_KEYS_INSIGHT_EXPORTPROJECTFILES, cb_func_insight,

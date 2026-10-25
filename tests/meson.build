@@ -965,3 +965,10 @@ test('Insight workarea window motion and equal speed', window_motion_test)
 
 side_tabs_gui_test = executable('test_insight_side_tabs_gui', '../insight/tests/side_tabs_gui_test.c', '../src/insight-side-tabs.c', dependencies: deps, c_args: ['-UNDEBUG'])
 test('Insight proportional side tabs and carousel GUI', side_tabs_gui_test, timeout: 35, is_parallel: false)
+
+custom_command_test = executable('test_insight_custom_command', '../insight/tests/custom_command_test.c', '../insight/desktop/custom_command.c', dependencies: deps, c_args: ['-UNDEBUG'])
+test('Insight custom command expansion and persistence', custom_command_test, timeout: 30)
+if host_machine.system() != 'windows'
+  custom_commands_gui_test = executable('test_insight_custom_commands_gui', '../insight/tests/custom_commands_gui_test.c', dependencies: test_deps)
+  test('Insight native custom commands GUI', custom_commands_gui_test, timeout: 60, is_parallel: false)
+endif

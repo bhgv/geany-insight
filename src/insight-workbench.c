@@ -7,6 +7,7 @@
 #include "insight-paste.h"
 #include "insight-navigation.h"
 #include "insight-compare-ui.h"
+#include "insight-custom-commands.h"
 #include "insight-search-links.h"
 #include "insight-list-tools.h"
 #include "insight-text-print.h"
@@ -5479,6 +5480,7 @@ static void create_workbench_menus(void) {
  GtkWidget *next_view_command=gtk_menu_item_new_with_label("Next Relation Window View");gtk_widget_set_name(next_view_command,"insight-relation-next-view-command");gtk_menu_shell_append(GTK_MENU_SHELL(menu),next_view_command);g_signal_connect(next_view_command,"activate",G_CALLBACK(relation_next_view),NULL);
  const gchar *relation_reports[]={"View Relation Outline…","Create Bookmarks from Relation Items…"};for(guint i=0;i<2;i++) { GtkWidget *item=gtk_menu_item_new_with_label(relation_reports[i]);gtk_widget_set_name(item,i ? "insight-relation-bookmark-command":"insight-relation-outline-command");gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(relation_report_show),GUINT_TO_POINTER(i)); }
 
+ insight_custom_commands_menu(main_widgets.tools_menu);
  GtkWidget *diff_item=gtk_menu_item_new_with_label("Diff / Merge…");gtk_widget_set_name(diff_item,"insight-diff-menu");gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),diff_item);g_signal_connect(diff_item,"activate",G_CALLBACK(show_diff),NULL);gtk_widget_show(diff_item);
  GtkWidget *hex_item=gtk_menu_item_new_with_label("Hex editor…");gtk_widget_set_name(hex_item,"insight-hex-menu");gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),hex_item);g_signal_connect(hex_item,"activate",G_CALLBACK(show_hex),NULL);gtk_widget_show(hex_item);
  GtkWidget *directory_item=gtk_menu_item_new_with_label("Directory Compare…");gtk_widget_set_name(directory_item,"insight-directory-menu");gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),directory_item);g_signal_connect(directory_item,"activate",G_CALLBACK(show_directory_compare),NULL);gtk_widget_show(directory_item);

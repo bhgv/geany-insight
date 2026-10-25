@@ -16,6 +16,9 @@ gboolean insight_project_files_contains(const InsightProjectFiles *,const char *
  * expand once against an environment snapshot; expressions stay portable.
  * Unknown, empty, conflicting-case or invalid UTF-8/line-break values decline. */
 gchar *insight_project_files_escape_master(const gchar *);
+/* One predefined path variable, without path normalization or expansion of
+ * its value. Unavailable platform/project variables return NULL. */
+gchar *insight_project_path_variable(const gchar *,const gchar *,const gchar *,GError **);
 gboolean insight_project_files_set_master(InsightProjectFiles *,const gchar *,const gchar *,const gchar *,GError **);
 InsightProjectFiles *insight_project_files_read_project(GKeyFile *,const char *,const char *,GError **);
 gboolean insight_project_files_write(const InsightProjectFiles *,GKeyFile *,const char *,GError **);
