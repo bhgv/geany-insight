@@ -11,7 +11,8 @@
 #include <unistd.h>
 #endif
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
-static GeanyDocument *doc;
+static GeanyDocument *doc,*other;
+static gint other_first,other_x;
 static GtkWidget *window,*options[4],*left,*context,*project,*icon;
 static ScintillaObject *map;
 static guint phase,ticks;static gboolean saw_motion,saw_alpha;static gdouble last_alpha=.7;static gint original_size;static gboolean restoring;
@@ -29,11 +30,13 @@ static void edge_positions(void) {
  GdkMonitor *monitor=gdk_display_get_monitor_at_window(gtk_widget_get_display(window),gtk_widget_get_window(window));GdkRectangle area;gdk_monitor_get_workarea(monitor,&area);GtkWidget *tools=any("insight-tools-palette");g_assert_nonnull(tools);GdkRectangle t=frame(tools),l=frame(gtk_widget_get_toplevel(left)),r=frame(gtk_widget_get_toplevel(project)),b=frame(gtk_widget_get_toplevel(context)),e=frame(window);GdkRectangle all[]={t,l,r,b,e};
  for(guint n=0;n<G_N_ELEMENTS(all);n++) {g_assert_cmpint(all[n].x,>=,area.x-3);g_assert_cmpint(all[n].y,>=,area.y-3);g_assert_cmpint(all[n].x+all[n].width,<=,area.x+area.width+3);g_assert_cmpint(all[n].y+all[n].height,<=,area.y+area.height+3);}
  g_assert_cmpint(abs(t.y-area.y),<=,3);g_assert_cmpint(abs(2*t.x+t.width-2*area.x-area.width),<=,4);g_assert_cmpint(abs(l.x-area.x),<=,3);g_assert_cmpint(abs(2*l.y+l.height-2*area.y-area.height),<=,4);g_assert_cmpint(abs(r.x+r.width-area.x-area.width),<=,3);g_assert_cmpint(abs(2*r.y+r.height-2*area.y-area.height),<=,4);g_assert_cmpint(abs(b.y+b.height-area.y-area.height),<=,3);g_assert_cmpint(abs(2*b.x+b.width-2*area.x-area.width),<=,4);g_assert_cmpint(abs(2*e.x+e.width-2*area.x-area.width),<=,4);g_assert_cmpint(abs(2*e.y+e.height-2*area.y-area.height),<=,4);
+ g_assert_false(gtk_widget_get_visible(any("insight-message-height-host")));
  GtkWidget *terminals=any("insight-terminal-group");g_assert_nonnull(terminals); g_assert_true(gtk_widget_get_toplevel(terminals)==gtk_widget_get_toplevel(context));
- for(guint n=0;n<5;n++) {GtkWidget *owner=n==0 ? tools:n==1 ? gtk_widget_get_toplevel(left):n==2 ? gtk_widget_get_toplevel(project):n==3 ? gtk_widget_get_toplevel(context):window;g_assert_cmpfloat(gtk_widget_get_opacity(owner),>,.995);}
+ for(guint n=0;n<5;n++) {GtkWidget *owner=n==0 ? tools:n==1 ? gtk_widget_get_toplevel(left):n==2 ? gtk_widget_get_toplevel(project):n==3 ? gtk_widget_get_toplevel(context):window;g_assert_cmpfloat(gtk_widget_get_opacity(owner),>,.995);if(owner!=window) g_assert_null(gtk_window_get_transient_for(GTK_WINDOW(owner)));}
 }
 static void unchanged(void) {
  gchar *text=sci_get_contents(doc->editor->sci,-1);g_assert_cmpstr(text,==,"int main(void) { return 0; }\n");g_free(text);
+ if(other) {g_assert_cmpint(SEND(other->editor->sci,SCI_GETFIRSTVISIBLELINE,0,0),==,other_first);g_assert_cmpint(SEND(other->editor->sci,SCI_GETXOFFSET,0,0),==,other_x);g_assert_cmpint(SEND(other->editor->sci,SCI_GETCURRENTPOS,0,0),==,0);}
  g_assert_false(doc->changed);g_assert_false(SEND(doc->editor->sci,SCI_CANUNDO,0,0));
  g_assert_cmpint(SEND(doc->editor->sci,SCI_STYLEGETSIZEFRACTIONAL,STYLE_DEFAULT,0),==,original_size);
  g_assert_true(gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci))==window);
@@ -65,11 +68,16 @@ static gboolean step(gpointer unused) {
   miniature(10);GdkEventScroll event={0};event.type=GDK_SCROLL;event.window=gtk_widget_get_window(GTK_WIDGET(map));event.direction=GDK_SCROLL_UP;event.state=GDK_CONTROL_MASK;gboolean handled=FALSE;
   g_signal_emit_by_name(map,"scroll-event",&event,&handled);g_assert_true(handled);phase++;return G_SOURCE_CONTINUE;
  }
- if(phase==3) { miniature(15);choose(1);phase++;return G_SOURCE_CONTINUE; }
+ if(phase==3) {
+  miniature(15);GString *text=g_string_new(NULL);for(guint n=0;n<700;n++) g_string_append(text,"// A deliberately long source line to exercise both horizontal and vertical viewport preservation during window layout transitions.\n");
+  other=document_new_file(NULL,NULL,text->str);g_string_free(text,TRUE);SEND(other->editor->sci,SCI_SETSAVEPOINT,0,0);SEND(other->editor->sci,SCI_SETWRAPMODE,SC_WRAP_NONE,0);SEND(other->editor->sci,SCI_GOTOPOS,0,0);
+  SEND(other->editor->sci,SCI_SETFIRSTVISIBLELINE,240,0);SEND(other->editor->sci,SCI_SETXOFFSET,96,0);document_show_tab(doc);choose(1);phase++;return G_SOURCE_CONTINUE;
+ }
  if(phase==4) {
   const gchar *name=NULL;GtkIconSize size;gtk_image_get_icon_name(GTK_IMAGE(icon),&name,&size);
   if(gtk_icon_theme_has_icon(gtk_icon_theme_get_default(),"document-open-symbolic")) g_assert_cmpstr(name,==,"document-open-symbolic");
   GtkBorder padding;gtk_style_context_get_padding(gtk_widget_get_style_context(options[0]),GTK_STATE_FLAG_NORMAL,&padding);g_assert_cmpint(padding.top,<=,2);g_assert_cmpint(padding.bottom,<=,2);
+  other_first=SEND(other->editor->sci,SCI_GETFIRSTVISIBLELINE,0,0);other_x=SEND(other->editor->sci,SCI_GETXOFFSET,0,0);g_assert_cmpint(other_first,>,0);
   GtkWidget *opacity=any("insight-opacity-0-70");g_assert_true(GTK_IS_RADIO_MENU_ITEM(opacity));gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(opacity),TRUE);g_assert_cmpfloat_with_epsilon(gtk_widget_get_opacity(window),.7,.006);last_alpha=gtk_widget_get_opacity(window);choose(3);phase++;return G_SOURCE_CONTINUE;
  }
  if(phase==5) {
@@ -86,7 +94,7 @@ static gboolean step(gpointer unused) {
  }
  if(phase==6) {
   if(moving()) return G_SOURCE_CONTINUE;
-  g_assert_null(any("insight-tools-palette"));g_assert_true(gtk_widget_get_toplevel(left)==window);g_assert_true(gtk_widget_get_toplevel(context)==window);g_assert_true(gtk_widget_get_toplevel(project)==window);unchanged();
+  g_assert_null(any("insight-tools-palette"));g_assert_true(gtk_widget_get_visible(any("insight-message-height-host"))) ;g_assert_true(gtk_widget_get_toplevel(left)==window);g_assert_true(gtk_widget_get_toplevel(context)==window);g_assert_true(gtk_widget_get_toplevel(project)==window);unchanged();
   choose(3);phase++;return G_SOURCE_CONTINUE;
  }
  if(phase==7) { if(moving()) return G_SOURCE_CONTINUE;edge_positions();GtkWidget *tools=any("insight-tools-palette");g_assert_nonnull(tools);gtk_window_close(GTK_WINDOW(tools));phase++;return G_SOURCE_CONTINUE; }

@@ -65,3 +65,5 @@ A single nonblocking timer moves real windows at one linear speed: the longest p
 Four radio choices replace Reduce transparency: 100%, 90%, 80%, 70%. The value is persisted and controls native GTK window opacity, including the unified main window. Splitting resets the choice to 100% and fades actual opacity back to 100% over approximately 0.4 seconds. Legacy per-panel alpha is overridden during independent mode, rather than multiplied into the global value. Users can explicitly choose a different level afterward. Outside independent mode, individual panel settings remain available.
 
 Actual positioning and desktop transparency depend on the window manager/compositor; Wayland may restrict window moves. Linux/Xvfb checks coordinates and GTK opacity, not the visual output of every desktop compositor.
+
+Independent palettes have no transient parent, so the editor can be raised normally. The empty bottom shelf host is hidden while its notebook is detached. Every open document retains its first visible line and horizontal offset through split/join allocations, without moving its caret or selection.
