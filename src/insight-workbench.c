@@ -4650,7 +4650,7 @@ static void apply_layout_record(const InsightLayout *record) {
  * palette and already detachable panel hosts move to separate top-levels. */
 typedef struct { GWeakRef widget;gint position;gboolean expand,fill;guint padding;GtkPackType pack; } PaletteRow;
 typedef struct { GWeakRef sci;gulong allocated;gint first,x; } PaletteView;
-typedef struct { GWeakRef window;InsightWindowMotion motion;gint chrome_width,chrome_height,offset_x,offset_y;InsightWindowRect last; } PaletteMotion;
+typedef struct { GWeakRef window;InsightWindowMotion motion;gint chrome_width,chrome_height;InsightWindowRect last; } PaletteMotion;
 static struct {
  gboolean active,joining,message_visible,animate,motions_ready;
  GtkWidget *window,*bottom,*bottom_parent,*bottom_content;gboolean bottom_resize,bottom_shrink;
@@ -4732,15 +4732,15 @@ static void palette_restore_now(void) {
 }
 static void palette_move_frame(GtkWidget *window,PaletteMotion *motion,InsightWindowRect rect) {
  if(rect.width!=motion->last.width || rect.height!=motion->last.height) gtk_window_resize(GTK_WINDOW(window),MAX(1,rect.width-motion->chrome_width),MAX(1,rect.height-motion->chrome_height));
- if(rect.x!=motion->last.x || rect.y!=motion->last.y) gtk_window_move(GTK_WINDOW(window),rect.x+motion->offset_x,rect.y+motion->offset_y);motion->last=rect;
+ if(rect.x!=motion->last.x || rect.y!=motion->last.y) gtk_window_move(GTK_WINDOW(window),rect.x,rect.y);motion->last=rect;
 }
 static void palette_prepare_motion(void) {
  InsightWindowRect from[INSIGHT_FLOAT_COUNT],to[INSIGHT_FLOAT_COUNT],sizes[INSIGHT_FLOAT_COUNT];
  for(guint n=0;n<INSIGHT_FLOAT_COUNT;n++) {
   GtkWidget *window=palette_part_window(n);PaletteMotion *motion=&palette.motions[n];g_weak_ref_init(&motion->window,window);
-  from[n]=palette_frame(window);sizes[n]=from[n];gint x=from[n].x,y=from[n].y,w=from[n].width,h=from[n].height;
-  if(GTK_IS_WINDOW(window)) {gtk_window_get_position(GTK_WINDOW(window),&x,&y);gtk_window_get_size(GTK_WINDOW(window),&w,&h);}
-  motion->chrome_width=from[n].width-w;motion->chrome_height=from[n].height-h;motion->offset_x=x-from[n].x;motion->offset_y=y-from[n].y;motion->last=from[n];
+  from[n]=palette_frame(window);sizes[n]=from[n];gint w=from[n].width,h=from[n].height;
+  if(GTK_IS_WINDOW(window)) {gtk_window_get_size(GTK_WINDOW(window),&w,&h);}
+  motion->chrome_width=from[n].width-w;motion->chrome_height=from[n].height-h;motion->last=from[n];
  }
  if(palette.joining) {
   for(guint n=0;n<INSIGHT_FLOAT_COUNT;n++) {
@@ -4770,7 +4770,7 @@ static gboolean palette_motion_step(gpointer data) {
  gdouble elapsed=(g_get_monotonic_time()-palette.started)/1000000.0;gboolean done=TRUE;
  for(guint n=0;n<INSIGHT_FLOAT_COUNT;n++) {
   PaletteMotion *motion=&palette.motions[n];GtkWidget *window=g_weak_ref_get(&motion->window);if(!window) continue;
-  InsightWindowRect rect;gboolean arrived=insight_window_motion_sample(&motion->motion,palette.animate ? elapsed:1000000,&rect);if(!arrived) done=FALSE;palette_move_frame(window,motion,rect);g_object_unref(window);
+  InsightWindowRect rect;gboolean arrived=insight_window_motion_sample_eased(&motion->motion,palette.animate ? elapsed:1000000,&rect);if(!arrived) done=FALSE;palette_move_frame(window,motion,rect);g_object_unref(window);
  }
  if(insight_appearance_opacity_tick(!palette.animate)) done=FALSE;
  if(!done) return G_SOURCE_CONTINUE;
@@ -4784,7 +4784,7 @@ static gboolean palette_motion_step(gpointer data) {
   for(guint n=0;n<INSIGHT_FLOAT_COUNT;n++) {
    GtkWidget *window=palette_part_window(n);if(!GTK_IS_WINDOW(window)) continue;
    gint dx=targets[n].x-measured[n].x,dy=targets[n].y-measured[n].y;
-   if(ABS(dx)>1 || ABS(dy)>1) {gint x,y;gtk_window_get_position(GTK_WINDOW(window),&x,&y);gtk_window_move(GTK_WINDOW(window),x+dx,y+dy);pending=TRUE;}
+   if(ABS(dx)>1 || ABS(dy)>1) {gtk_window_move(GTK_WINDOW(window),targets[n].x,targets[n].y);pending=TRUE;}
   }
   if(pending || palette.arrival_ticks<3) return G_SOURCE_CONTINUE;
  }
@@ -4831,7 +4831,7 @@ void insight_workbench_set_independent(gboolean active) {
  ui_prefs.sidebar_visible=FALSE;ui_sidebar_show_hide();gtk_window_unmaximize(GTK_WINDOW(main_widgets.window));
  InsightWindowRect targets[INSIGHT_FLOAT_COUNT];insight_window_edge_layout(palette.area,NULL,targets);
  for(guint n=0;n<INSIGHT_FLOAT_COUNT;n++) {
-  GtkWidget *window=palette_part_window(n);if(!window) continue;if(window!=main_widgets.window) gtk_window_set_transient_for(GTK_WINDOW(window),NULL);gtk_window_set_position(GTK_WINDOW(window),GTK_WIN_POS_NONE);gtk_window_unmaximize(GTK_WINDOW(window));g_object_set_data(G_OBJECT(window),"insight-independent-opacity",GINT_TO_POINTER(1));gint wanted_h=targets[n].height;
+  GtkWidget *window=palette_part_window(n);if(!window) continue;if(window!=main_widgets.window) gtk_window_set_transient_for(GTK_WINDOW(window),NULL);gtk_window_set_gravity(GTK_WINDOW(window),GDK_GRAVITY_NORTH_WEST);gtk_window_set_position(GTK_WINDOW(window),GTK_WIN_POS_NONE);gtk_window_unmaximize(GTK_WINDOW(window));g_object_set_data(G_OBJECT(window),"insight-independent-opacity",GINT_TO_POINTER(1));gint wanted_h=targets[n].height;
   if(n==INSIGHT_FLOAT_TOOLS) {gint minimum,natural;gtk_widget_get_preferred_height(window,&minimum,&natural);wanted_h=MAX(1,natural);}
   gtk_window_set_default_size(GTK_WINDOW(window),targets[n].width,wanted_h);gtk_window_resize(GTK_WINDOW(window),targets[n].width,wanted_h);
   InsightWindowRect start=insight_window_rect_clamp(palette.origins[n],palette.area);gtk_window_move(GTK_WINDOW(window),start.x,start.y);gtk_widget_show(window);insight_appearance_panel_opacity(window,100);

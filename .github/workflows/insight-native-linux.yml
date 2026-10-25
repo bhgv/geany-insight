@@ -240,7 +240,7 @@ jobs:
             if test -f "$source"; then sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g; s|https://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$source"; fi
           done
           timeout 90s sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Languages=none update -qq || echo "Package index refresh unavailable; using runner package indexes"
-          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libgtk-3-dev libvte-2.91-dev meson ninja-build gettext python3-docutils xvfb xauth poppler-utils gdb openssh-server
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libgtk-3-dev libvte-2.91-dev meson ninja-build gettext python3-docutils xvfb xauth poppler-utils gdb openssh-server openbox
           sudo mkdir -p /run/sshd
       - name: Validate exact and normalized comparison core
         run: SANITIZE=undefined python3 insight/tests/diff_test.py
@@ -253,6 +253,17 @@ jobs:
           meson setup _native --prefix="$PWD/_native-install" --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=true -Dmac-integration=disabled
           meson compile -C _native
           meson install -C _native
+      - name: Check independent window geometry under a real window manager
+        id: macos-wm
+        if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
+        run: |
+          GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" sh -eu -c '
+            openbox --sm-disable >openbox-test.log 2>&1 &
+            wm_pid=$!
+            trap "kill $wm_pid 2>/dev/null || true" EXIT
+            sleep 1
+            meson test -C _native --num-processes 1 --print-errorlogs "Insight independent macOS windows and minimap scale GUI" "Insight independent macOS windows startup GUI"
+          '
       - name: Check AI layout before the full GUI suite
         id: ai-layout
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}

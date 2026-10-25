@@ -60,10 +60,12 @@ Tooltips retain native GTK styling and geometry. The application does not change
 
 Independent mode centers tools against the workarea top, File Symbols against the left edge, the project shelf against the right, the complete Context/terminal notebook against the bottom, and the source window in the workarea center. Monitor workarea offsets and native frame sizes are included. Existing terminal widgets and sessions are moved intact.
 
-A single nonblocking timer moves real windows at one linear speed: the longest path takes 0.4 seconds and shorter paths finish earlier. Final native frame positions are checked and corrected against workarea edges, excluding system panels. Joining restores the previous layout after the inward motion. Rapid mode changes reverse the current transition. Startup places restored independent windows directly at their endpoints.
+A single nonblocking timer moves real windows with an S-shaped acceleration/deceleration profile: the longest path takes 0.4 seconds and shorter paths finish earlier. Final native frame positions are checked and corrected against workarea edges, excluding system panels. Joining restores the previous layout after the inward motion. Rapid mode changes reverse the current transition. Startup places restored independent windows directly at their endpoints.
 
 Four radio choices replace Reduce transparency: 100%, 90%, 80%, 70%. The value is persisted and controls native GTK window opacity, including the unified main window. Splitting resets the choice to 100% and fades actual opacity back to 100% over approximately 0.4 seconds. Legacy per-panel alpha is overridden during independent mode, rather than multiplied into the global value. Users can explicitly choose a different level afterward. Outside independent mode, individual panel settings remain available.
 
 Actual positioning and desktop transparency depend on the window manager/compositor; Wayland may restrict window moves. Linux/Xvfb checks coordinates and GTK opacity, not the visual output of every desktop compositor.
 
 Independent palettes have no transient parent, so the editor can be raised normally. The entire bottom clipping host moves with its notebook, leaving no empty splitter child in the editor. Source divider changes and tab switches cannot hide the detached Context. Every open document retains its first visible line and horizontal offset through split/join allocations, without moving its caret or selection.
+
+Position requests use explicit North-West frame gravity and absolute workarea coordinates, without inheriting offsets from the window manager’s initial placement. Quintic easing has zero velocity and acceleration at both endpoints.

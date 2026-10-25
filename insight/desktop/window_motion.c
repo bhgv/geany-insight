@@ -34,3 +34,11 @@ int insight_window_motion_sample(const InsightWindowMotion *motion,double elapse
  double t=motion->seconds>0 ? elapsed/motion->seconds:1;if(t>1) t=1;
  *out=(InsightWindowRect){mix(motion->from.x,motion->to.x,t),mix(motion->from.y,motion->to.y,t),mix(motion->from.width,motion->to.width,t),mix(motion->from.height,motion->to.height,t)};return t>=1;
 }
+
+int insight_window_motion_sample_eased(const InsightWindowMotion *motion,double elapsed,InsightWindowRect *out) {
+ if(!isfinite(elapsed) || elapsed<0) elapsed=0;
+ double t=motion->seconds>0 ? elapsed/motion->seconds:1;if(t>1) t=1;
+ /* Quintic smootherstep: zero velocity and acceleration at both ends. */
+ double eased=t*t*t*(t*(t*6-15)+10);
+ *out=(InsightWindowRect){mix(motion->from.x,motion->to.x,eased),mix(motion->from.y,motion->to.y,eased),mix(motion->from.width,motion->to.width,eased),mix(motion->from.height,motion->to.height,eased)};return t>=1;
+}

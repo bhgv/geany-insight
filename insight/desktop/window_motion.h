@@ -13,4 +13,6 @@ InsightWindowRect insight_window_rect_clamp(InsightWindowRect rect,InsightWindow
 double insight_window_motion_plan(InsightWindowMotion *motions,const InsightWindowRect *from,const InsightWindowRect *to,size_t count,double nominal_seconds,double speed);
 /* Pure absolute-time sampling, no per-frame accumulation or easing. */
 int insight_window_motion_sample(const InsightWindowMotion *motion,double elapsed,InsightWindowRect *out);
+/* S-shaped absolute-time sampling with zero endpoint speed/acceleration. */
+int insight_window_motion_sample_eased(const InsightWindowMotion *motion,double elapsed,InsightWindowRect *out);
 #endif
