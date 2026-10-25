@@ -179,7 +179,8 @@ static void window_title_changed(GObject *window,GParamSpec *spec,gpointer data)
 }
 static void title_button_limit(GtkWidget *widget,gpointer data) {
  gint limit=GPOINTER_TO_INT(data);
- if(GTK_IS_BUTTON(widget) && gtk_style_context_has_class(gtk_widget_get_style_context(widget),"titlebutton")) {
+ if(GTK_IS_IMAGE(widget)) {GtkWidget *top=gtk_widget_get_toplevel(widget);gboolean compact=gtk_style_context_has_class(gtk_widget_get_style_context(top),"insight-independent-chrome");gtk_image_set_pixel_size(GTK_IMAGE(widget),compact ? 10:-1);}
+ if(GTK_IS_BUTTON(widget) || GTK_IS_LABEL(widget) || GTK_IS_IMAGE(widget)) {
   GtkAllocation allocation;gtk_widget_get_allocation(widget,&allocation);
   if(allocation.height>limit) {allocation.y+=(allocation.height-limit)/2;allocation.height=limit;gtk_widget_size_allocate(widget,&allocation);}
  }

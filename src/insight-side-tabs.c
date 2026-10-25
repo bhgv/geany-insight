@@ -78,13 +78,17 @@ static gboolean update(gpointer data) {
   if(gtk_widget_get_visible(page)) visible++;
   if((gint)n==current) {
    PangoLayout *layout=gtk_widget_create_pango_layout(gtk_bin_get_child(GTK_BIN(button)),text);pango_layout_get_pixel_size(layout,&active_width,NULL);g_object_unref(layout);
-   GtkBorder padding,border;GtkStyleContext *style=gtk_widget_get_style_context(button);gtk_style_context_get_padding(style,GTK_STATE_FLAG_NORMAL,&padding);gtk_style_context_get_border(style,GTK_STATE_FLAG_NORMAL,&border);active_width+=padding.left+padding.right+border.left+border.right+4;
+   GtkBorder padding,border;GtkStyleContext *style=gtk_widget_get_style_context(button);gtk_style_context_get_padding(style,GTK_STATE_FLAG_NORMAL,&padding);gtk_style_context_get_border(style,GTK_STATE_FLAG_NORMAL,&border);active_width=(active_width+1)/2+padding.left+padding.right+border.left+border.right+4;
   }
   g_object_unref(page);
  }
- s->single=visible>1 && active_width>MAX(1,width/MAX(1,visible));
+ gboolean arrows=visible>1 && width>=40;
+ /* Reserve identical arrow space in both modes: showing a header must not
+  * change the threshold and immediately hide it again. */
+ gint available=MAX(1,width-(arrows ? 28:0));
+ s->single=visible>1 && active_width>MAX(1,available/MAX(1,visible));
  g_object_set_data(G_OBJECT(s->wrapper),"insight-side-tabs-carousel",GINT_TO_POINTER(s->single));
- gtk_widget_set_visible(s->previous,s->single && width>=40);gtk_widget_set_visible(s->next,s->single && width>=40);
+ gtk_widget_set_visible(s->previous,arrows);gtk_widget_set_visible(s->next,arrows);
  gtk_widget_set_tooltip_text(s->previous,translated(s,"Previous panel tab"));gtk_widget_set_tooltip_text(s->next,translated(s,"Next panel tab"));
  for(guint n=0;n<s->buttons->len;n++) {
   GtkWidget *button=g_ptr_array_index(s->buttons,n),*page=button_page(button);gboolean selected=(gint)n==current;
@@ -109,7 +113,7 @@ GtkWidget *insight_side_tabs_wrap(GtkNotebook *book,const gchar *(*translate)(co
  s->wrapper=gtk_box_new(GTK_ORIENTATION_VERTICAL,0);gtk_widget_set_name(s->wrapper,"insight-side-tabs-wrapper");g_object_set_data_full(G_OBJECT(s->wrapper),"insight-side-tabs",s,state_free);
  s->row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0);gtk_widget_set_name(s->row,"insight-side-tabs-row");gtk_style_context_add_class(gtk_widget_get_style_context(s->row),"insight-side-tabs");g_object_set_data(G_OBJECT(s->row),"insight-no-i18n",GINT_TO_POINTER(1));
  s->tabs=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0);gtk_box_set_homogeneous(GTK_BOX(s->tabs),TRUE);
- s->previous=gtk_button_new_from_icon_name("go-previous-symbolic",GTK_ICON_SIZE_MENU);s->next=gtk_button_new_from_icon_name("go-next-symbolic",GTK_ICON_SIZE_MENU);
+ s->previous=gtk_button_new_from_icon_name("go-previous-symbolic",GTK_ICON_SIZE_MENU);s->next=gtk_button_new_from_icon_name("go-next-symbolic",GTK_ICON_SIZE_MENU);gtk_widget_set_size_request(s->previous,14,-1);gtk_widget_set_size_request(s->next,14,-1);
  gtk_widget_set_name(s->previous,"insight-side-tabs-previous");gtk_widget_set_name(s->next,"insight-side-tabs-next");GtkWidget *arrows[]={s->previous,s->next};
  for(guint n=0;n<2;n++) {gtk_widget_set_no_show_all(arrows[n],TRUE);gtk_button_set_always_show_image(GTK_BUTTON(arrows[n]),TRUE);gtk_style_context_add_class(gtk_widget_get_style_context(arrows[n]),"insight-side-tab-arrow");gtk_image_set_pixel_size(GTK_IMAGE(gtk_button_get_image(GTK_BUTTON(arrows[n]))),10);gtk_button_set_focus_on_click(GTK_BUTTON(arrows[n]),FALSE);}
  gtk_box_pack_start(GTK_BOX(s->row),s->previous,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(s->row),s->tabs,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(s->row),s->next,FALSE,FALSE,0);

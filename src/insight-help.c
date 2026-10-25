@@ -27,6 +27,7 @@ typedef struct {
 } Help;
 static Help *help;
 static gboolean icon_draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
+ if(GTK_IS_DRAWING_AREA(widget)) cairo_scale(cr,gtk_widget_get_allocated_width(widget)/16.0,gtk_widget_get_allocated_height(widget)/16.0);
  const gchar *id=data;GdkRGBA color;gtk_style_context_get_color(gtk_widget_get_style_context(widget),gtk_widget_get_state_flags(widget),&color);gdk_cairo_set_source_rgba(cr,&color);cairo_set_line_width(cr,1.2);
  if(g_str_has_prefix(id,"layout-")) { cairo_rectangle(cr,1,2,14,12);cairo_stroke(cr);cairo_set_source_rgb(cr,.2,.55,.85);if(id[7]=='a' || id[7]=='d') cairo_rectangle(cr,2,3,4,10);if(id[7]=='b') cairo_rectangle(cr,2,10,12,3);if(id[7]=='c' || id[7]=='d') cairo_rectangle(cr,10,3,4,10);cairo_fill(cr); }
  else if(!strcmp(id,"media")) { cairo_arc(cr,8,8,6,0,2*G_PI);cairo_move_to(cr,2,8);cairo_line_to(cr,14,8);cairo_move_to(cr,8,2);cairo_curve_to(cr,3,6,3,10,8,14);cairo_curve_to(cr,13,10,13,6,8,2);cairo_stroke(cr); }

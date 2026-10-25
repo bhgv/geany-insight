@@ -513,7 +513,7 @@ static void prefs_init_dialog(void)
  GtkWidget *compact_height=g_object_get_data(G_OBJECT(ui_widgets.prefs_dialog),"insight-toolbar-height"),*panel_font=g_object_get_data(G_OBJECT(ui_widgets.prefs_dialog),"insight-panel-font");
  if(!compact_height) {
   GtkWidget *host=gtk_widget_get_parent(ui_lookup_widget(ui_widgets.prefs_dialog,"frame_toolbar_icon"));
-  GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6);compact_height=gtk_spin_button_new_with_range(18,64,1);panel_font=gtk_spin_button_new_with_range(6,28,1);
+  GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6);compact_height=gtk_spin_button_new_with_range(12,64,1);panel_font=gtk_spin_button_new_with_range(6,28,1);
   GtkWidget *label=gtk_label_new(_("Toolbar height (pixels)"));gtk_box_pack_start(GTK_BOX(row),label,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(row),compact_height,FALSE,FALSE,0);label=gtk_label_new(_("Side panel font (points)"));gtk_box_pack_start(GTK_BOX(row),label,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(row),panel_font,FALSE,FALSE,0);
   gtk_widget_set_tooltip_text(compact_height,_("Height of the main toolbar buttons and icons"));gtk_widget_set_tooltip_text(panel_font,_("Side panel text size; Ctrl+mouse wheel also changes it"));
   gtk_box_pack_start(GTK_BOX(host),row,FALSE,FALSE,0);gtk_widget_show_all(row);g_object_set_data(G_OBJECT(ui_widgets.prefs_dialog),"insight-toolbar-height",compact_height);g_object_set_data(G_OBJECT(ui_widgets.prefs_dialog),"insight-panel-font",panel_font);
