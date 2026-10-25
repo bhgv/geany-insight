@@ -178,6 +178,9 @@ static void window_title_changed(GObject *window,GParamSpec *spec,gpointer data)
  (void)spec;GtkHeaderBar *header=GTK_HEADER_BAR(data);const gchar *title=gtk_window_get_title(GTK_WINDOW(window));
  if(g_strcmp0(title,gtk_header_bar_get_title(header))) gtk_header_bar_set_title(header,title);GtkWidget *custom=gtk_header_bar_get_custom_title(header);if(GTK_IS_LABEL(custom) && g_object_get_data(G_OBJECT(custom),"insight-compact-window-title")) gtk_label_set_text(GTK_LABEL(custom),title);
 }
+static gboolean title_surface_size(cairo_surface_t *surface,gdouble *width,gdouble *height) {
+ cairo_t *cr=cairo_create(surface);gdouble x0,y0,x1,y1;cairo_clip_extents(cr,&x0,&y0,&x1,&y1);gboolean ok=cairo_status(cr)==CAIRO_STATUS_SUCCESS && isfinite(x1-x0) && isfinite(y1-y0) && x1>x0 && y1>y0;*width=x1-x0;*height=y1-y0;cairo_destroy(cr);return ok;
+}
 static void title_image_size(GtkImage *image,gboolean compact) {
  GtkImageType type=gtk_image_get_storage_type(image);GtkWidget *widget=GTK_WIDGET(image);
  gtk_image_set_pixel_size(image,compact ? 10:-1);
@@ -189,10 +192,10 @@ static void title_image_size(GtkImage *image,gboolean compact) {
  }else if(type==GTK_IMAGE_SURFACE) {
   GParamSpec *property=g_object_class_find_property(G_OBJECT_GET_CLASS(widget),"surface");if(!property || !(property->flags&G_PARAM_READABLE)) return;
   cairo_surface_t *current=NULL;g_object_get(image,"surface",&current,NULL);if(!current) return;
-  if(cairo_surface_get_type(current)==CAIRO_SURFACE_TYPE_IMAGE) {
+  gdouble cw,ch;if(title_surface_size(current,&cw,&ch)) {
    cairo_surface_t *source=g_object_get_data(G_OBJECT(image),"insight-title-original-surface");if(!source) {source=cairo_surface_reference(current);g_object_set_data_full(G_OBJECT(image),"insight-title-original-surface",source,(GDestroyNotify)cairo_surface_destroy);}
-   gint w=cairo_image_surface_get_width(source),h=cairo_image_surface_get_height(source);gdouble scale=compact ? 10.0/MAX(1,MAX(w,h)):1;gint tw=MAX(1,(gint)(w*scale)),th=MAX(1,(gint)(h*scale));
-   if(cairo_image_surface_get_width(current)!=tw || cairo_image_surface_get_height(current)!=th) {cairo_surface_t *scaled=cairo_image_surface_create(CAIRO_FORMAT_ARGB32,tw,th);cairo_t *cr=cairo_create(scaled);cairo_scale(cr,scale,scale);cairo_set_source_surface(cr,source,0,0);cairo_paint(cr);cairo_destroy(cr);gtk_image_set_from_surface(image,compact ? scaled:source);cairo_surface_destroy(scaled);}
+   gdouble w,h;title_surface_size(source,&w,&h);gdouble scale=compact ? 10.0/MAX(1,MAX(w,h)):1;gint tw=MAX(1,(gint)(w*scale)),th=MAX(1,(gint)(h*scale));
+   if(fabs(cw-tw)>.1 || fabs(ch-th)>.1) {cairo_surface_t *scaled=cairo_image_surface_create(CAIRO_FORMAT_ARGB32,tw,th);cairo_t *cr=cairo_create(scaled);cairo_scale(cr,scale,scale);cairo_set_source_surface(cr,source,0,0);cairo_paint(cr);cairo_destroy(cr);gtk_image_set_from_surface(image,compact ? scaled:source);cairo_surface_destroy(scaled);}
   }cairo_surface_destroy(current);
  }
 }
