@@ -728,3 +728,7 @@ EXTRA_DIST += insight/tests/window_motion_test.c
 dist_insightdocmedia_DATA += insight/docs/media/macos-appearance-variants.jpg
 
 EXTRA_DIST += insight/tests/side_tabs_gui_test.c
+
+dist_insightdocmedia_DATA += insight/docs/media/compact-options.svg
+
+insightdoc_DATA += insight/docs/navigation.md

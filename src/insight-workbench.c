@@ -4178,6 +4178,8 @@ static void focus_widget_panel(GtkWidget *widget) {
  /* Reveal every containing notebook, rather than just its innermost page. */
  for(GtkWidget *page=widget,*parent=gtk_widget_get_parent(page);parent;page=parent,parent=gtk_widget_get_parent(parent)) {
   if(GTK_IS_NOTEBOOK(parent)) {gtk_widget_show(page);gtk_widget_show(parent);gtk_notebook_set_current_page(GTK_NOTEBOOK(parent),gtk_notebook_page_num(GTK_NOTEBOOK(parent),page));}
+  if(GTK_IS_PANED(parent)) {gboolean horizontal=gtk_orientable_get_orientation(GTK_ORIENTABLE(parent))==GTK_ORIENTATION_HORIZONTAL;gint extent=horizontal ? gtk_widget_get_allocated_width(parent):gtk_widget_get_allocated_height(parent);gint size=horizontal ? gtk_widget_get_allocated_width(page):gtk_widget_get_allocated_height(page);if(extent>100 && size<40) gtk_paned_set_position(GTK_PANED(parent),page==gtk_paned_get_child1(GTK_PANED(parent)) ? MIN(220,extent/3):MAX(0,extent-MIN(220,extent/3)));}
+
  }
  if(gtk_widget_is_ancestor(widget,main_widgets.message_window_notebook)) msgwin_show_hide(TRUE);
  if(gtk_widget_is_ancestor(widget,main_widgets.sidebar_notebook) && !ui_prefs.sidebar_visible) {ui_prefs.sidebar_visible=TRUE;ui_sidebar_show_hide();}
@@ -4214,7 +4216,7 @@ gboolean insight_workbench_goto_definition(void) {
  GeanyDocument *doc=document_get_current(); if(!wb.preview || !doc) return FALSE;
  char word[1025]={0}; editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);
  const InsightSymbol *definition=word_definition(doc,word,NULL,(gulong)sci_get_current_line(doc->editor->sci)+1,doc->editor->sci,sci_get_current_position(doc->editor->sci));
- if(!definition) return FALSE;
+ if(!definition) {document_update_tags(doc);return symbols_goto_tag(doc,sci_get_current_position(doc->editor->sci),TRUE);}
  gchar *path=g_strdup(definition->path); gulong line=definition->line;
  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.follow),FALSE); gboolean shown=show_location(path,0,line,TRUE); if(shown) open_context(NULL,NULL); g_free(path); return shown;
 }
@@ -5439,6 +5441,11 @@ static void git_project_refresh(GtkWidget *widget,gpointer data) {
 static void project_synchronize(GtkMenuItem *item,gpointer data) {
  (void)item;if(!wb.root) { ui_set_statusbar(TRUE,"Open a project first");return; }wb.force_parse=GPOINTER_TO_INT(data)!=0;wb.cache_validation=FALSE;start_scan(wb.root);
 }
+static void navigate_relations(GtkMenuItem *item,gpointer data) {
+ (void)item;GeanyDocument *doc=document_get_current();if(!doc) {ui_set_statusbar(TRUE,"%s",insight_tr("Open a source file first"));return;}
+ gchar word[1025]={0};editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);if(!*word) {ui_set_statusbar(TRUE,"%s",insight_tr("Place the caret on a symbol first"));return;}
+ wb.relation_setting=TRUE;gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_follow),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.usage_buffer),FALSE);gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),GPOINTER_TO_INT(data));gtk_entry_set_text(GTK_ENTRY(wb.usage_entry),word);gtk_entry_set_text(GTK_ENTRY(wb.relation_filter_entry),"");wb.relation_setting=FALSE;relation_controls(NULL,NULL);focus_widget_panel(wb.usage_entry);
+}
 static void create_workbench_menus(void) {
  insight_git_install(G_CALLBACK(git_project_refresh));
  GtkWidget *overview=gtk_check_menu_item_new_with_label("Overview"); gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(overview),insight_overview_get_visible()); g_signal_connect(overview,"toggled",G_CALLBACK(overview_visible),NULL); gtk_container_add(GTK_CONTAINER(ui_lookup_widget(main_widgets.window,"menu_view1_menu")),overview); gtk_widget_show(overview);
@@ -5449,6 +5456,9 @@ static void create_workbench_menus(void) {
  GtkWidget *menubar=ui_lookup_widget(main_widgets.window,"menubar1"),*navigate=gtk_menu_item_new_with_mnemonic("_Navigate"),*menu=gtk_menu_new();
  gtk_menu_item_set_submenu(GTK_MENU_ITEM(navigate),menu); gtk_menu_shell_insert(GTK_MENU_SHELL(menubar),navigate,4);
  g_object_set_data(G_OBJECT(main_widgets.window),"insight-navigate",navigate);
+ const gchar *relation_navigation[]={"Jump To Caller…","Lookup References…","Direct members (tags)","Derived types (tags)"};const gint relation_modes[]={7,0,2,5};for(guint n=0;n<G_N_ELEMENTS(relation_modes);n++) {GtkWidget *entry=gtk_menu_item_new_with_label(relation_navigation[n]);gchar *id=g_strdup_printf("insight-navigate-relation-%d",relation_modes[n]);gtk_widget_set_name(entry,id);g_free(id);g_signal_connect(entry,"activate",G_CALLBACK(navigate_relations),GINT_TO_POINTER(relation_modes[n]));gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry);}
+ GtkWidget *navigation_help=gtk_menu_item_new_with_label("Navigation Help…");g_signal_connect(navigation_help,"activate",G_CALLBACK(insight_help_show),"navigation.md");gtk_menu_shell_append(GTK_MENU_SHELL(menu),navigation_help);
+
  const gchar *history_labels[]={"Navigate back a location","Navigate forward a location"};for(guint i=0;i<2;i++) {GtkWidget *entry=gtk_action_create_menu_item(toolbar_get_action_by_name(i ? "NavFor":"NavBack"));gtk_menu_item_set_label(GTK_MENU_ITEM(entry),history_labels[i]);gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry);GtkWidget *popup=gtk_action_create_menu_item(toolbar_get_action_by_name(i ? "NavFor":"NavBack"));gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.editor_menu),popup); }
  window_lock_item(menu,wb.follow,"Lock Context Window","insight-context-lock-command");
  window_lock_item(menu,wb.relation_follow,"Lock Relation Window","insight-relation-lock-command");
@@ -5984,12 +5994,11 @@ static void toolbar_relations(GtkToolButton *button,gpointer data) { (void)butto
 static void add_insight_tool(GtkToolbar *toolbar,GtkToolItem *item,gint position) {
  toolbar_item_ref(item);gtk_toolbar_insert(toolbar,item,position);
 }
-static void editor_history_move(GtkWidget *widget,gpointer data) {(void)widget;if(GPOINTER_TO_INT(data)<0) navqueue_go_back();else navqueue_go_forward();}
 static GtkCssProvider *panel_font_css;
 void insight_workbench_panel_font(void) {
  if(!wb.project_notebook) return;
  if(!panel_font_css) {panel_font_css=gtk_css_provider_new();gtk_style_context_add_provider_for_screen(gtk_widget_get_screen(main_widgets.window),GTK_STYLE_PROVIDER(panel_font_css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION+3);}
- gchar *css=g_strdup_printf(".insight-panel-font, .insight-panel-font * {font-size: %dpt;}",CLAMP(toolbar_prefs.panel_font_size,6,28));gtk_css_provider_load_from_data(panel_font_css,css,-1,NULL);g_free(css);
+ gchar *css=g_strdup_printf(".insight-panel-font {font-size: %dpt;} .insight-panel-font * {font-size: inherit;} .insight-panel-font .insight-compare-toolbar {font-size: 66.667%%;}",CLAMP(toolbar_prefs.panel_font_size,6,28));gtk_css_provider_load_from_data(panel_font_css,css,-1,NULL);g_free(css);
 }
 static gboolean panel_font_scroll(GtkWidget *widget,GdkEventScroll *event,gpointer data) {
  (void)widget;(void)data;if(!(event->state&GDK_CONTROL_MASK)) return FALSE;
@@ -6011,12 +6020,12 @@ static void create_browse_toolbar(void) {
  const char *icons[]={"go-previous","go-next","go-jump","edit-find","system-search","folder-open","view-refresh"};
  const char *labels[]={"Navigate back a location","Navigate forward a location","Go to definition","Project symbols","Project files","Open source workspace","Reindex workspace"};
  for(guint i=0;i<7;i++) {
-  GtkToolItem *item=gtk_tool_button_new(NULL,NULL); gtk_tool_button_set_icon_name(GTK_TOOL_BUTTON(item),icons[i]); gtk_widget_set_tooltip_text(GTK_WIDGET(item),labels[i]);
-  if(i<2) g_signal_connect(item,"clicked",G_CALLBACK(editor_history_move),GINT_TO_POINTER(i ? 1 : -1));
-  else if(i==2) g_signal_connect(item,"clicked",G_CALLBACK(toolbar_definition),NULL);
-  else if(i<5) g_signal_connect(item,"clicked",G_CALLBACK(toolbar_focus),GINT_TO_POINTER(i==4 ? 1 : 0));
+  if(i<2 && toolbar_get_widget_by_name(i ? "NavFor":"NavBack")) continue;
+  GtkToolItem *item=i<2 ? GTK_TOOL_ITEM(gtk_action_create_tool_item(toolbar_get_action_by_name(i ? "NavFor":"NavBack"))):gtk_tool_button_new(NULL,NULL);gtk_tool_button_set_icon_name(GTK_TOOL_BUTTON(item),icons[i]);gtk_widget_set_tooltip_text(GTK_WIDGET(item),labels[i]);
+  if(i==2) g_signal_connect(item,"clicked",G_CALLBACK(toolbar_definition),NULL);
+  else if(i>=3 && i<5) g_signal_connect(item,"clicked",G_CALLBACK(toolbar_focus),GINT_TO_POINTER(i==4 ? 1 : 0));
   else if(i==5) g_signal_connect(item,"clicked",G_CALLBACK(choose_root),NULL);
-  else g_signal_connect(item,"clicked",G_CALLBACK(reindex_root),NULL);
+  else if(i==6) g_signal_connect(item,"clicked",G_CALLBACK(reindex_root),NULL);
   add_insight_tool(toolbar,item,(gint)i);
  }
  gtk_toolbar_set_style(toolbar,GTK_TOOLBAR_ICONS);gtk_toolbar_set_icon_size(toolbar,GTK_ICON_SIZE_SMALL_TOOLBAR);toolbar_apply_settings(); gtk_widget_show_all(GTK_WIDGET(toolbar));
@@ -6033,7 +6042,7 @@ static void create_browse_toolbar(void) {
  const char *layouts[]={"layout-a","layout-b","layout-c","layout-d"};
  const char *tips[]={"Load layout A","Load layout B","Load layout C","Load layout D"};
  for(guint i=0;i<4;i++) { GtkToolItem *item=gtk_tool_button_new(insight_command_icon(layouts[i]),NULL); gtk_widget_set_tooltip_text(GTK_WIDGET(item),tips[i]); g_signal_connect(item,"clicked",G_CALLBACK(apply_layout),GINT_TO_POINTER(i)); add_insight_tool(toolbar,item,-1); }
- gtk_widget_show_all(GTK_WIDGET(toolbar));
+ toolbar_apply_settings();gtk_widget_show_all(GTK_WIDGET(toolbar));
 }
 static void create_help_menu(void) {
  GtkWidget *menu=ui_lookup_widget(main_widgets.window,"menu_help1_menu");const gchar *labels[]={"Geany Insight — Documentation…","Geany Insight — Tutorials…","Lua scripting guide…","Markdown / reStructuredText viewer…","Preview current Markdown / RST…"};

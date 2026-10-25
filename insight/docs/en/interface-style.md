@@ -113,3 +113,5 @@ Ctrl+mouse wheel over a side panel changes its text size (6–28 points). Prefer
 The down arrow to the right of editor tabs lists every open buffer in most-recently-used order, with full paths in tooltips. Selecting a row activates its source. Undo/Redo use the active editor. Main-toolbar and editor-popup arrows follow editor position history; Context buttons and its popup use independent preview history. Navigation commands reveal the containing panels and nested tabs.
 
 Every AI receives up to 24,000 characters of relevant installed editor documentation. Help opens with a collapsed Ask AI prompt. Its answer becomes a Markdown page with the viewer's existing back/forward history and table rendering. Other assistants offer Open answer in help viewer. Requests use the selected AI connection.
+
+![Shared options container](../media/compact-options.svg)

@@ -145,6 +145,7 @@ def editor_help(question, maximum=24000):
     root = Path(__file__).resolve().parent.parent / 'docs'
     words = set(re.findall(r'[\w-]{3,}', question.casefold()))
     ranked = []
+    seen = set()
     # English and Russian copies are both eligible; no private project files.
     for folder in (root, root / 'en', root / 'ru'):
         if not folder.is_dir():
@@ -158,6 +159,9 @@ def editor_help(question, maximum=24000):
                 source = path.read_text(encoding='utf-8')
             except (OSError, UnicodeError):
                 continue
+            if source in seen:
+                continue
+            seen.add(source)
             haystack = (path.stem + '\n' + source[:12000]).casefold()
             score = sum(1 for word in words if word in haystack)
             if score or path.name == 'guide.md':
@@ -165,7 +169,7 @@ def editor_help(question, maximum=24000):
     output = []
     remaining = maximum
     for _, name, source in sorted(ranked)[:4]:
-        section = ('\n## Packaged editor help: ' + name + '\n' + source)[:remaining]
+        section = ('\n## Packaged editor help: ' + name + '\n' + source[:6000])[:remaining]
         output.append(section)
         remaining -= len(section)
         if remaining <= 0:

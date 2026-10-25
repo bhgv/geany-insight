@@ -236,6 +236,7 @@ static gchar *media_target(const gchar *line,gchar **caption) {
  if(g_str_has_prefix(line,".. image:: ") || g_str_has_prefix(line,".. figure:: ") || g_str_has_prefix(line,".. video:: ")) { const gchar *at=strstr(line,":: ")+3;*caption=g_strdup(at);return g_strdup(at); }
  return NULL;
 }
+static void remove_history(Help *h,guint index) {const gchar *key=g_ptr_array_index(h->history,index);if(g_str_has_prefix(key,"@answer:")) g_hash_table_remove(h->answers,key);g_ptr_array_remove_index(h->history,index);}
 static gboolean load_document(Help *h,const gchar *filename,gboolean remember) {
  gchar *key=g_strdup(filename),*path=NULL,*source=NULL;gsize length=0;GError *error=NULL;GStatBuf st;
  if(g_str_has_prefix(key,"@editor:")) {
@@ -244,7 +245,7 @@ static gboolean load_document(Help *h,const gchar *filename,gboolean remember) {
  }else if(g_str_has_prefix(key,"@answer:")) {source=g_strdup(g_hash_table_lookup(h->answers,key));length=source ? strlen(source):0;path=g_build_filename(app->datadir,"insight","docs","ai-answer.md",NULL);
  }else { path=insight_canonicalize_filename(key,NULL);if(!g_stat(path,&st) && st.st_size<=8*1024*1024) g_file_get_contents(path,&source,&length,&error); }
  if(!source || !g_utf8_validate(source,length,NULL) || memchr(source,0,length)) { gtk_label_set_text(GTK_LABEL(h->status),error ? error->message : "Preview unavailable: source closed, invalid UTF-8, or larger than 8 MiB");g_clear_error(&error);g_free(source);g_free(path);g_free(key);return FALSE; }
- if(remember) { while(h->history->len && h->position+1<h->history->len) g_ptr_array_remove_index(h->history,h->history->len-1);g_ptr_array_add(h->history,g_strdup((g_str_has_prefix(key,"@editor:") || g_str_has_prefix(key,"@answer:")) ? key : path));if(h->history->len>128) g_ptr_array_remove_index(h->history,0);h->position=h->history->len-1; }
+ if(remember) { while(h->history->len && h->position+1<h->history->len) remove_history(h,h->history->len-1);g_ptr_array_add(h->history,g_strdup((g_str_has_prefix(key,"@editor:") || g_str_has_prefix(key,"@answer:")) ? key : path));if(h->history->len>128) remove_history(h,0);h->position=h->history->len-1; }
  g_free(h->key);h->key=key;clear_find(h);if(h->scroll_idle) { g_source_remove(h->scroll_idle);h->scroll_idle=0; }g_clear_object(&h->scroll_target);h->filling=TRUE;gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(h->toc));g_ptr_array_set_size(h->headings,0);
  g_free(h->path);h->path=g_strdup(path);g_object_set_data(G_OBJECT(h->window),"insight-rendered-html",NULL);g_free(h->html);h->html=NULL;GList *children=gtk_container_get_children(GTK_CONTAINER(h->body));for(GList *p=children;p;p=p->next) gtk_widget_destroy(p->data);g_list_free(children);
  gchar *base=g_path_get_dirname(path),*name=g_path_get_basename(path),*title=g_strdup_printf("Geany Insight — %s",name);gtk_window_set_title(GTK_WINDOW(h->window),title);g_free(title);g_free(name);
