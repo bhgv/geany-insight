@@ -176,7 +176,7 @@ void insight_appearance_join_windows(void) {
 }
 static void window_title_changed(GObject *window,GParamSpec *spec,gpointer data) {
  (void)spec;GtkHeaderBar *header=GTK_HEADER_BAR(data);const gchar *title=gtk_window_get_title(GTK_WINDOW(window));
- if(g_strcmp0(title,gtk_header_bar_get_title(header))) gtk_header_bar_set_title(header,title);
+ if(g_strcmp0(title,gtk_header_bar_get_title(header))) gtk_header_bar_set_title(header,title);GtkWidget *custom=gtk_header_bar_get_custom_title(header);if(GTK_IS_LABEL(custom) && g_object_get_data(G_OBJECT(custom),"insight-compact-window-title")) gtk_label_set_text(GTK_LABEL(custom),title);
 }
 static void title_button_limit(GtkWidget *widget,gpointer data) {
  gint limit=GPOINTER_TO_INT(data);

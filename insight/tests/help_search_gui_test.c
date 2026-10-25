@@ -13,6 +13,7 @@
 #include <glib/gstdio.h>
 #include <string.h>
 
+static void geometry_dump(GtkWidget *w,gpointer data) {(void)data;gint minimum,natural;gtk_widget_get_preferred_height(w,&minimum,&natural);GtkBorder pad,margin;GtkStyleContext *c=gtk_widget_get_style_context(w);gtk_style_context_get_padding(c,GTK_STATE_FLAG_NORMAL,&pad);gtk_style_context_get_margin(c,GTK_STATE_FLAG_NORMAL,&margin);gchar *font=pango_font_description_to_string(pango_context_get_font_description(gtk_widget_get_pango_context(w)));g_printerr("Geometry %s %s visible=%d allocated=%d preferred=%d/%d padding=%d,%d margin=%d,%d font=%s\n",G_OBJECT_TYPE_NAME(w),gtk_widget_get_name(w),gtk_widget_get_visible(w),gtk_widget_get_allocated_height(w),minimum,natural,pad.top,pad.bottom,margin.top,margin.bottom,font);g_free(font);if(GTK_IS_CONTAINER(w)) gtk_container_forall(GTK_CONTAINER(w),geometry_dump,NULL);}
 static GtkWidget *window;static gchar *directory,*profile;static guint phase;static const gchar *activity="startup";
 static GtkWidget *named(GtkWidget *root,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;
@@ -56,7 +57,7 @@ static gboolean step(gpointer data) {
  (void)data;GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;if(!window) window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));
  if(phase==0) {
   g_assert_false(gtk_widget_get_visible(named(window,"insight-editor-search-panel")));g_assert_false(gtk_widget_get_visible(named(window,"insight-project-search-panel")));
-  GtkWidget *toolbar=named(window,"GeanyToolbar");g_assert_nonnull(toolbar);g_assert_cmpint(gtk_widget_get_allocated_height(toolbar),<=,16);gtk_container_forall(GTK_CONTAINER(toolbar),toolbar_limit_check,GINT_TO_POINTER(gtk_widget_get_allocated_height(toolbar)*85/100));
+  GtkWidget *toolbar=named(window,"GeanyToolbar");g_assert_nonnull(toolbar);if(gtk_widget_get_allocated_height(toolbar)>16) geometry_dump(toolbar,NULL);g_assert_cmpint(gtk_widget_get_allocated_height(toolbar),<=,16);gtk_container_forall(GTK_CONTAINER(toolbar),toolbar_limit_check,GINT_TO_POINTER(gtk_widget_get_allocated_height(toolbar)*85/100));
   const gchar *tools[]={"insight-help-tool","insight-tutorial-tool","insight-diff-tool","insight-find-tool","insight-replace-tool"};
   for(guint i=0;i<G_N_ELEMENTS(tools);i++) { GtkWidget *tool=named(window,tools[i]);g_assert_true(GTK_IS_TOOL_BUTTON(tool));g_assert_null(gtk_tool_button_get_label(GTK_TOOL_BUTTON(tool)));gchar *tip=gtk_widget_get_tooltip_text(tool);g_assert_nonnull(tip);g_free(tip); }
   GtkWidget *command=named(window,"insight-help-command");g_assert_nonnull(gtk_menu_item_get_label(GTK_MENU_ITEM(command)));g_assert_nonnull(g_object_get_data(G_OBJECT(command),"insight-menu-icon"));gtk_menu_item_activate(GTK_MENU_ITEM(command));g_assert_nonnull(viewer());g_assert_true(has_text(viewer(),"user guide"));

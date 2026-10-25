@@ -13,6 +13,7 @@
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 static GeanyDocument *doc,*other;
 static gint other_first,other_x;
+static void geometry_dump(GtkWidget *w,gpointer data) {(void)data;gint minimum,natural;gtk_widget_get_preferred_height(w,&minimum,&natural);GtkBorder pad,margin;GtkStyleContext *c=gtk_widget_get_style_context(w);gtk_style_context_get_padding(c,GTK_STATE_FLAG_NORMAL,&pad);gtk_style_context_get_margin(c,GTK_STATE_FLAG_NORMAL,&margin);gchar *font=pango_font_description_to_string(pango_context_get_font_description(gtk_widget_get_pango_context(w)));g_printerr("Geometry %s %s visible=%d allocated=%d preferred=%d/%d padding=%d,%d margin=%d,%d font=%s\n",G_OBJECT_TYPE_NAME(w),gtk_widget_get_name(w),gtk_widget_get_visible(w),gtk_widget_get_allocated_height(w),minimum,natural,pad.top,pad.bottom,margin.top,margin.bottom,font);g_free(font);if(GTK_IS_CONTAINER(w)) gtk_container_forall(GTK_CONTAINER(w),geometry_dump,NULL);}
 static GtkWidget *window,*options[4],*left,*context,*project,*icon;
 static ScintillaObject *map;
 static guint phase,ticks;static gint original_size;static gboolean restoring;
@@ -50,7 +51,7 @@ static void edge_positions(void) {
  gtk_paned_set_position(GTK_PANED(split),gtk_widget_get_allocated_height(split));
  g_assert_true(gtk_widget_get_visible(ui_lookup_widget(window,"notebook_info")));
  GtkWidget *terminals=any("insight-terminal-group");g_assert_nonnull(terminals); g_assert_true(gtk_widget_get_toplevel(terminals)==gtk_widget_get_toplevel(context));
- for(guint n=0;n<5;n++) {GtkWidget *owner=n==0 ? tools:n==1 ? gtk_widget_get_toplevel(left):n==2 ? gtk_widget_get_toplevel(project):n==3 ? gtk_widget_get_toplevel(context):window;g_assert_cmpfloat(gtk_widget_get_opacity(owner),>,.995);if(owner!=window) {g_assert_null(gtk_window_get_transient_for(GTK_WINDOW(owner)));GtkWidget *header=gtk_window_get_titlebar(GTK_WINDOW(owner));g_assert_true(GTK_IS_HEADER_BAR(header));g_assert_false(gtk_header_bar_get_has_subtitle(GTK_HEADER_BAR(header)));g_assert_cmpint(gtk_widget_get_allocated_height(header),<=,16);g_assert_null(gtk_header_bar_get_decoration_layout(GTK_HEADER_BAR(header)));title_buttons=0;gtk_container_forall(GTK_CONTAINER(header),check_title_button,GINT_TO_POINTER(gtk_widget_get_allocated_height(header)));g_assert_cmpuint(title_buttons,>,0);}}
+ for(guint n=0;n<5;n++) {GtkWidget *owner=n==0 ? tools:n==1 ? gtk_widget_get_toplevel(left):n==2 ? gtk_widget_get_toplevel(project):n==3 ? gtk_widget_get_toplevel(context):window;g_assert_cmpfloat(gtk_widget_get_opacity(owner),>,.995);if(owner!=window) {g_assert_null(gtk_window_get_transient_for(GTK_WINDOW(owner)));GtkWidget *header=gtk_window_get_titlebar(GTK_WINDOW(owner));g_assert_true(GTK_IS_HEADER_BAR(header));g_assert_false(gtk_header_bar_get_has_subtitle(GTK_HEADER_BAR(header)));if(gtk_widget_get_allocated_height(header)>16) geometry_dump(header,NULL);g_assert_cmpint(gtk_widget_get_allocated_height(header),<=,16);g_assert_null(gtk_header_bar_get_decoration_layout(GTK_HEADER_BAR(header)));title_buttons=0;gtk_container_forall(GTK_CONTAINER(header),check_title_button,GINT_TO_POINTER(gtk_widget_get_allocated_height(header)));g_assert_cmpuint(title_buttons,>,0);}}
 }
 static void unchanged(void) {
  gchar *text=sci_get_contents(doc->editor->sci,-1);g_assert_cmpstr(text,==,"int main(void) { return 0; }\n");g_free(text);

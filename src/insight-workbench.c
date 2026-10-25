@@ -4710,7 +4710,10 @@ static void palette_compact_title(GtkWidget *window,gboolean compact) {
  if(compact) {
   if(!g_object_get_data(G_OBJECT(header),"insight-original-subtitle-space")) g_object_set_data(G_OBJECT(header),"insight-original-subtitle-space",GUINT_TO_POINTER(gtk_header_bar_get_has_subtitle(GTK_HEADER_BAR(header)) ? 2:1));
   gtk_header_bar_set_has_subtitle(GTK_HEADER_BAR(header),FALSE);
+  if(!gtk_header_bar_get_custom_title(GTK_HEADER_BAR(header))) {GtkWidget *label=gtk_label_new(gtk_window_get_title(GTK_WINDOW(window)));gtk_label_set_ellipsize(GTK_LABEL(label),PANGO_ELLIPSIZE_END);gtk_label_set_width_chars(GTK_LABEL(label),1);gtk_label_set_single_line_mode(GTK_LABEL(label),TRUE);g_object_set_data(G_OBJECT(label),"insight-compact-window-title",GINT_TO_POINTER(1));g_object_set_data(G_OBJECT(label),"insight-no-i18n",GINT_TO_POINTER(1));PangoAttrList *attrs=pango_attr_list_new();pango_attr_list_insert(attrs,pango_attr_size_new_absolute(7*PANGO_SCALE));gtk_label_set_attributes(GTK_LABEL(label),attrs);pango_attr_list_unref(attrs);gtk_header_bar_set_custom_title(GTK_HEADER_BAR(header),label);gtk_widget_show(label);}
+
  } else {
+  GtkWidget *custom=gtk_header_bar_get_custom_title(GTK_HEADER_BAR(header));if(custom && g_object_get_data(G_OBJECT(custom),"insight-compact-window-title")) gtk_header_bar_set_custom_title(GTK_HEADER_BAR(header),NULL);
   guint previous=GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(header),"insight-original-subtitle-space"));if(previous) gtk_header_bar_set_has_subtitle(GTK_HEADER_BAR(header),previous==2);g_object_set_data(G_OBJECT(header),"insight-original-subtitle-space",NULL);
  }
 }

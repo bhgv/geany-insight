@@ -580,6 +580,7 @@ static void compact_image(GtkWidget *widget,gpointer data)
 {
  if(GTK_IS_IMAGE(widget)) {
   gint pixels=GPOINTER_TO_INT(data);gtk_image_set_pixel_size(GTK_IMAGE(widget),pixels);cairo_surface_t *original=g_object_get_data(G_OBJECT(widget),"insight-icon-surface");
+  if(gtk_image_get_storage_type(GTK_IMAGE(widget))==GTK_IMAGE_PIXBUF) {GdkPixbuf *source=g_object_get_data(G_OBJECT(widget),"insight-toolbar-original-pixbuf");if(!source) {source=gtk_image_get_pixbuf(GTK_IMAGE(widget));if(source) g_object_set_data_full(G_OBJECT(widget),"insight-toolbar-original-pixbuf",g_object_ref(source),g_object_unref);}if(source) {gint w=gdk_pixbuf_get_width(source),h=gdk_pixbuf_get_height(source);gdouble scale=pixels/(gdouble)MAX(w,h);GdkPixbuf *scaled=gdk_pixbuf_scale_simple(source,MAX(1,(gint)(w*scale)),MAX(1,(gint)(h*scale)),GDK_INTERP_BILINEAR);gtk_image_set_from_pixbuf(GTK_IMAGE(widget),scaled);g_object_unref(scaled);}}
   if(original) {cairo_surface_t *scaled=cairo_image_surface_create(CAIRO_FORMAT_ARGB32,pixels,pixels);cairo_t *cr=cairo_create(scaled);cairo_scale(cr,pixels/16.0,pixels/16.0);cairo_set_source_surface(cr,original,0,0);cairo_paint(cr);cairo_destroy(cr);gtk_image_set_from_surface(GTK_IMAGE(widget),scaled);cairo_surface_destroy(scaled);}
  }
 
