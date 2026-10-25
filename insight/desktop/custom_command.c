@@ -14,6 +14,7 @@ gchar *insight_custom_expand(const gchar *input,GHashTable *values,GError **erro
   if(!p[1] || ++substitutions>128) {fail(error,"Invalid custom command substitution");goto invalid;}
   const gchar *end=strchr(p+1,'%');gboolean long_name=end && end-p>2 && end-p<=65;
   if(long_name) for(const gchar *q=p+1;q<end;q++) if(!g_ascii_isalnum(*q) && *q!='_') {long_name=FALSE;break;}
+  if(!long_name && strchr("frnbe",p[1]) && p[2]=='%' && (p[3]=='o' || p[3]=='m')) {fail(error,"Bulk custom command modifiers are not supported");goto invalid;}
   gchar *name=long_name ? g_ascii_strup(p+1,end-p-1):g_strndup(p+1,1);
   const gchar *value=g_hash_table_lookup(values,name);g_free(name);
   if(!value || !field(value,16384)) {fail(error,"Custom command variable is unavailable");goto invalid;}

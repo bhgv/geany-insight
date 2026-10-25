@@ -2619,3 +2619,4 @@ Working directory must be an absolute path	Рабочий каталог дол�
 Working directory does not exist	Рабочий каталог не существует
 Invalid path variable context	Некорректный контекст переменной пути
 Path variable is unavailable	Переменная пути недоступна
+Bulk custom command modifiers are not supported	Пакетные модификаторы пользовательских команд не поддерживаются
