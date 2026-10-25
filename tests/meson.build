@@ -962,3 +962,6 @@ test('Insight native source window arrangements GUI', source_arrangement_gui_tes
 
 window_motion_test = executable('test_insight_window_motion', '../insight/tests/window_motion_test.c', '../insight/desktop/window_motion.c', dependencies: cc.find_library('m', required: false))
 test('Insight workarea window motion and equal speed', window_motion_test)
+
+side_tabs_gui_test = executable('test_insight_side_tabs_gui', '../insight/tests/side_tabs_gui_test.c', '../src/insight-side-tabs.c', dependencies: deps, c_args: ['-UNDEBUG'])
+test('Insight proportional side tabs and carousel GUI', side_tabs_gui_test, timeout: 35, is_parallel: false)

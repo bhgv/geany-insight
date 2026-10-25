@@ -20,6 +20,7 @@
 #include "insight-scroll-links.h"
 #include "insight-tree-expand.h"
 #include "insight-appearance.h"
+#include "insight-side-tabs.h"
 #include "insight-symbol-edit.h"
 #include "insight-project-report.h"
 #include "insight-diff.h"
@@ -6287,6 +6288,8 @@ void insight_workbench_init(void) {
  for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].restore) detach_panel(i);
  panel_groups_apply(&session_groups);
  for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].window) { if(session_groups.values[IL_HOST_MINIMIZED]&(1<<i)) panel_minimize(i);else gtk_widget_set_visible(wb.hosts[i].window,(session_groups.values[IL_HOST_VISIBLE]&(1<<i))!=0); }
+ GtkWidget *side_books[]={main_widgets.sidebar_notebook,wb.project_notebook};
+ for(guint i=0;i<G_N_ELEMENTS(side_books);i++) {GtkWidget *tabs=insight_side_tabs_wrap(GTK_NOTEBOOK(side_books[i]),insight_tr);if(tabs) insight_i18n_on_refresh(G_OBJECT(tabs),insight_side_tabs_refresh,tabs);}
  insight_workbench_set_independent(insight_appearance_independent());
  if(wb.root && !wb.scan && !wb.report_scan_completed) start_scan(wb.root);
  /* Notebook stack minima include inactive pages as well as Context. Keep

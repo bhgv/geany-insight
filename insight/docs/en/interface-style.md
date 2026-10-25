@@ -96,3 +96,9 @@ Design references: [Apple — macOS 27 Golden Gate](https://www.apple.com/os/mac
 ![Six macOS appearances — real GTK widget crops](../media/macos-appearance-variants.jpg)
 
 Real production-widget crops at native pixel scale from an isolated Linux GUI fixture. These compare interface surfaces; source syntax colors remain unchanged.
+
+## Adaptive side-panel tabs
+
+Left and right shelves distribute available width equally across visible tabs. If the full active caption does not fit its share, the row becomes a single active tab with compact cyclic Previous/Next arrows. Drag the caption left/right to turn the carousel; Left/Right keys also work while a tab has focus. Every caption has a full-title tooltip, updated after localization.
+
+At nearly collapsed widths the arrows disappear rather than displacing the caption; dragging remains available. Widening the shelf restores the normal row automatically. Only navigation changes: notebook pages retain their visibility, identity, detach/dock behavior and saved panel selection.
