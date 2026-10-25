@@ -6,7 +6,7 @@ Open **Options → Interface style** or **View → Interface style** and choose 
 
 The macOS-inspired style provides light gradient surfaces, translucent panel layers, rounded fields/buttons/tabs, thin separators, quiet scrollbars and a blue accent. Active editor tabs remain bold and compact Diff/Merge controls remain compact. UI fonts use the first installed family: SF Pro Text, Helvetica Neue, Segoe UI, Noto Sans, system sans-serif. Apple fonts are not distributed.
 
-**Reduce transparency** makes the main surfaces opaque. Translucency blends RGBA layers within the window. This portable GTK style does not implement behind-window desktop blur, system Liquid Glass, reposition native window buttons or replace native window decorations. The OS controls the frame and system dialogs. Panel layout and functions are preserved.
+**Opacity 100%, 90%, 80%, 70%** controls native window alpha. RGBA gradients provide materials within the window; desktop blur and macOS system refraction are not implemented. GTK title buttons use the current system theme and decoration layout. Panel functions and source palettes are preserved.
 
 Interface style is independent of the source **Visual theme**. It preserves Scintilla font/syntax colors, text, selection, savepoint and Undo. A light shell can be combined with dark code. Explicit panel Font & Color overrides keep priority. **Classic** removes the appearance layer and restores the current GTK look without resetting the source palette or other preferences.
 
@@ -92,3 +92,7 @@ These are original GTK adaptations inspired by Apple’s designs, not macOS syst
 Title buttons retain the current GTK theme and its decoration layout. Their allocated height is capped at 85% of the header height. Split/join motion uses an S-shaped curve with a maximum 0.8-second travel time.
 
 Design references: [Apple — macOS 27 Golden Gate](https://www.apple.com/os/macos/), [Apple — macOS Tahoe / Liquid Glass](https://www.apple.com/newsroom/2025/06/macos-tahoe-26-makes-the-mac-more-capable-productive-and-intelligent-than-ever/). The Linux GUI fixture captures real widgets for all six variants as `macos-theme-*.jpg` CI artifacts; the diagram above is schematic.
+
+![Six macOS appearances — real GTK widget crops](../media/macos-appearance-variants.jpg)
+
+Real production-widget crops at native pixel scale from an isolated Linux GUI fixture. These compare interface surfaces; source syntax colors remain unchanged.
