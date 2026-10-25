@@ -110,16 +110,16 @@ menu.insight-macos, .insight-macos menu, .insight-macos popover {
 .insight-macos menuitem:hover { background-color: #3478f6; color: white; }
 .insight-macos tooltip { background-color: #253146; color: white; border-radius: 6px; }
 /* Opaque material alternative; source editors were opaque in both variants. */
-window.insight-macos.insight-solid.background { background-image: none; background-color: #eef1f6; }
+window.insight-macos.insight-solid.background { background-image: linear-gradient(to bottom, #f4f5f9, #e8edf5); background-color: #eef1f6; }
 .insight-macos.insight-solid toolbar, .insight-macos.insight-solid menubar,
 .insight-macos.insight-solid headerbar, .insight-macos.insight-solid statusbar,
-.insight-macos.insight-solid notebook > header { background-image: none; background-color: #eef1f6; }
+.insight-macos.insight-solid notebook > header { background-image: linear-gradient(to bottom, #f3f5f9, #e8edf5); background-color: #eef1f6; }
 .insight-macos.insight-solid treeview.view { background-color: #f9fafd; }
 .insight-macos.insight-solid treeview.view:selected { background-color: #3478f6; }
 .insight-macos.insight-solid entry, .insight-macos.insight-solid spinbutton,
 .insight-macos.insight-solid notebook > header > tabs > tab:checked { background-color: #ffffff; }
 menu.insight-macos.insight-solid, .insight-macos.insight-solid menu,
-.insight-macos.insight-solid popover { background-image: none; background-color: #fafbfe; }
+.insight-macos.insight-solid popover { background-image: linear-gradient(to bottom, #fafbfe, #eef1f7); background-color: #fafbfe; }
 
 /* Popup windows need a clear backing for rounded edges and CSS shadows. */
 window.insight-macos.popup { background-color: transparent; background-image: none; }

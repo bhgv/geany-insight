@@ -87,6 +87,8 @@ on:
       - src/insight-list-tools.*
       - insight/tests/list_tools_gui_test.c
       - src/insight-workbench.*
+      - insight/desktop/window_motion.*
+      - insight/tests/window_motion_test.c
       - src/highlighting.c
       - src/insight-languages.c
       - src/insight-symbol-view.*
@@ -256,7 +258,7 @@ jobs:
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |
           ai_layout_failed=0
-          GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight Russian and English interface GUI' 'Insight native source scroll links GUI' 'Insight native source window arrangements GUI' 'Insight native console AI and guarded review GUI' 'Insight shared AI profiles and parallel answer selection GUI' 'Insight streaming large file piece table' 'Insight streaming comparison and history GUI' 'Insight binary merge and hex Base64 export GUI' 'Insight comparison toolbar natural height and collapse GUI' 'Insight isolated Diff Merge GUI' || ai_layout_failed=1
+          GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight Russian and English interface GUI' 'Insight workarea window motion and equal speed' 'Insight independent macOS windows and minimap scale GUI' 'Insight independent macOS windows startup GUI' 'Insight native source scroll links GUI' 'Insight native source window arrangements GUI' 'Insight native console AI and guarded review GUI' 'Insight shared AI profiles and parallel answer selection GUI' 'Insight streaming large file piece table' 'Insight streaming comparison and history GUI' 'Insight binary merge and hex Base64 export GUI' 'Insight comparison toolbar natural height and collapse GUI' 'Insight isolated Diff Merge GUI' || ai_layout_failed=1
           GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1024x640x24" meson test -C _native --print-errorlogs 'Insight native console AI and guarded review GUI' || ai_layout_failed=1
           if test "$ai_layout_failed" = 1; then
             GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" timeout 45 gdb -batch -ex run -ex 'thread apply all bt' --args _native/tests/test_insight_i18n_gui || true
@@ -272,7 +274,7 @@ jobs:
       - name: Check compact panels and Context controls
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' && steps.ai-layout.outcome == 'success' }}
         run: |
-          INSIGHT_MENU_CAPTURE_DIR="$PWD" INSIGHT_MACOS_WINDOWS_CAPTURE="$PWD/macos-independent-windows.jpg" INSIGHT_APPEARANCE_CLASSIC_CAPTURE="$PWD/interface-classic.jpg" INSIGHT_APPEARANCE_MAC_CAPTURE="$PWD/interface-macos.jpg" INSIGHT_COMPACT_CAPTURE="$PWD/compact-context.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight panel resizing, symbol types and contextual help GUI' 'Insight language-aware Context links GUI' 'Insight legacy generated palette recovery GUI' 'Insight Python Context and tools GUI' 'Insight open window batch actions GUI' 'Insight escaped web search URLs' 'Insight native Search Web and Search Engines GUI' 'Insight shared AI profiles and parallel answer selection GUI' 'Insight native panel activation and focus commands GUI' 'Insight native Reload Modified Files guarded batches GUI' 'Insight native code outlining and block browser GUI' 'Insight independent macOS windows and minimap scale GUI' 'Insight independent macOS windows startup GUI' 'Insight classic and macOS interface styles GUI' 'Insight compact macOS menus and live materials GUI' 'Insight macOS interface style startup restore GUI' 'Insight CSS visual themes GUI' 'Insight CSS visual theme restore GUI' 'Insight CSS theme panel override GUI' 'Insight CSS theme and Cyrillic font assets'
+          INSIGHT_MENU_CAPTURE_DIR="$PWD" INSIGHT_MACOS_WINDOWS_CAPTURE="$PWD/macos-independent-windows.jpg" INSIGHT_APPEARANCE_CLASSIC_CAPTURE="$PWD/interface-classic.jpg" INSIGHT_APPEARANCE_MAC_CAPTURE="$PWD/interface-macos.jpg" INSIGHT_COMPACT_CAPTURE="$PWD/compact-context.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight panel resizing, symbol types and contextual help GUI' 'Insight language-aware Context links GUI' 'Insight legacy generated palette recovery GUI' 'Insight Python Context and tools GUI' 'Insight open window batch actions GUI' 'Insight escaped web search URLs' 'Insight native Search Web and Search Engines GUI' 'Insight shared AI profiles and parallel answer selection GUI' 'Insight native panel activation and focus commands GUI' 'Insight native Reload Modified Files guarded batches GUI' 'Insight native code outlining and block browser GUI' 'Insight classic and macOS interface styles GUI' 'Insight compact macOS menus and live materials GUI' 'Insight macOS interface style startup restore GUI' 'Insight CSS visual themes GUI' 'Insight CSS visual theme restore GUI' 'Insight CSS theme panel override GUI' 'Insight CSS theme and Cyrillic font assets'
           cp _native/meson-logs/testlog.txt compact-testlog.txt
       - name: Check SSH connection startup and failures
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' && steps.ai-layout.outcome == 'success' }}
@@ -293,7 +295,7 @@ jobs:
         if: failure()
         run: |
           if command -v gdb >/dev/null && test -x _native/tests/test_insight_macos_windows_gui && test -d _native-install; then
-            GEANY_TEST_INDEPENDENT_RESTORE=1 GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" timeout 40 gdb -batch -ex 'handle SIGALRM stop nopass' -ex run -ex 'thread apply all bt' --args _native/tests/test_insight_macos_windows_gui || true
+            GEANY_TEST_INDEPENDENT_RESTORE=1 GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" timeout 70 gdb -batch -ex 'handle SIGALRM stop nopass' -ex run -ex 'thread apply all bt' --args _native/tests/test_insight_macos_windows_gui || true
           fi
           if command -v gdb >/dev/null && test -x _native/tests/test_insight_panels_gui; then
             GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" timeout 45 gdb -batch -ex run -ex 'thread apply all bt' --args _native/tests/test_insight_panels_gui || true

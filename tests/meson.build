@@ -904,8 +904,8 @@ reload_modified_gui_test = executable('test_insight_reload_modified_gui', '../in
 test('Insight native Reload Modified Files guarded batches GUI', reload_modified_gui_test, timeout: 50, is_parallel: false)
 
 macos_windows_gui_test = executable('test_insight_macos_windows_gui', '../insight/tests/macos_windows_gui_test.c', dependencies: test_deps)
-test('Insight independent macOS windows and minimap scale GUI', macos_windows_gui_test, timeout: 50, is_parallel: false)
-test('Insight independent macOS windows startup GUI', macos_windows_gui_test, timeout: 50, is_parallel: false, env: ['GEANY_TEST_INDEPENDENT_RESTORE=1'])
+test('Insight independent macOS windows and minimap scale GUI', macos_windows_gui_test, timeout: 90, is_parallel: false)
+test('Insight independent macOS windows startup GUI', macos_windows_gui_test, timeout: 90, is_parallel: false, env: ['GEANY_TEST_INDEPENDENT_RESTORE=1'])
 
 recording_gui_test = executable('test_insight_recording_gui', '../insight/tests/command_recording_gui_test.c', dependencies: test_deps)
 test('Insight native command recording GUI', recording_gui_test, timeout: 70, is_parallel: false)
@@ -958,3 +958,6 @@ test('Insight streaming comparison and history GUI', stream_gui_test, timeout: 4
 
 source_arrangement_gui_test = executable('test_insight_source_arrangement_gui', '../insight/tests/source_arrangement_gui_test.c', dependencies: test_deps)
 test('Insight native source window arrangements GUI', source_arrangement_gui_test, timeout: 50, is_parallel: false)
+
+window_motion_test = executable('test_insight_window_motion', '../insight/tests/window_motion_test.c', '../insight/desktop/window_motion.c', dependencies: cc.find_library('m', required: false))
+test('Insight workarea window motion and equal speed', window_motion_test)

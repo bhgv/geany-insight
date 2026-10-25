@@ -2547,3 +2547,5 @@ Stacked	Друг над другом
 Choose the primary direction of the source window layout.	Выберите основное направление расположения окон исходников.
 Open at least two source windows before tiling two windows	Для расположения двух окон откройте как минимум два исходника
 Source window arrangements support at most 128 open buffers	Расположение окон поддерживает не более 128 открытых файлов
+Opacity %u%%	Непрозрачность %u%%
+Geany Insight — Context and Terminals	Geany Insight — Контекст и терминалы

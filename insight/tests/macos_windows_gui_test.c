@@ -6,6 +6,7 @@
 #include "ui_utils.h"
 #include <glib/gstdio.h>
 #include <string.h>
+#include <math.h>
 #ifdef G_OS_UNIX
 #include <unistd.h>
 #endif
@@ -13,7 +14,7 @@
 static GeanyDocument *doc;
 static GtkWidget *window,*options[4],*left,*context,*project,*icon;
 static ScintillaObject *map;
-static guint phase,ticks;static gint original_size;static gboolean restoring;
+static guint phase,ticks;static gboolean saw_motion,saw_alpha;static gdouble last_alpha=.7;static gint original_size;static gboolean restoring;
 static GtkWidget *named(GtkWidget *w,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(w),name)) return w;
  if(GTK_IS_MENU_ITEM(w)) { GtkWidget *sub=gtk_menu_item_get_submenu(GTK_MENU_ITEM(w));if(sub) { GtkWidget *f=named(sub,name);if(f) return f; } }
@@ -21,6 +22,15 @@ static GtkWidget *named(GtkWidget *w,const gchar *name) {
 }
 static GtkWidget *any(const gchar *name) {
  GList *windows=gtk_window_list_toplevels();GtkWidget *f=NULL;for(GList *p=windows;p && !f;p=p->next) f=named(p->data,name);g_list_free(windows);return f;
+}
+static gboolean moving(void) { return g_object_get_data(G_OBJECT(window),"insight-independent-motion")!=NULL; }
+static GdkRectangle frame(GtkWidget *widget) { GdkRectangle rect;gdk_window_get_frame_extents(gtk_widget_get_window(widget),&rect);return rect; }
+static void edge_positions(void) {
+ GdkMonitor *monitor=gdk_display_get_monitor_at_window(gtk_widget_get_display(window),gtk_widget_get_window(window));GdkRectangle area;gdk_monitor_get_workarea(monitor,&area);GtkWidget *tools=any("insight-tools-palette");g_assert_nonnull(tools);GdkRectangle t=frame(tools),l=frame(gtk_widget_get_toplevel(left)),r=frame(gtk_widget_get_toplevel(project)),b=frame(gtk_widget_get_toplevel(context)),e=frame(window);GdkRectangle all[]={t,l,r,b,e};
+ for(guint n=0;n<G_N_ELEMENTS(all);n++) {g_assert_cmpint(all[n].x,>=,area.x-3);g_assert_cmpint(all[n].y,>=,area.y-3);g_assert_cmpint(all[n].x+all[n].width,<=,area.x+area.width+3);g_assert_cmpint(all[n].y+all[n].height,<=,area.y+area.height+3);}
+ g_assert_cmpint(abs(t.y-area.y),<=,3);g_assert_cmpint(abs(2*t.x+t.width-2*area.x-area.width),<=,4);g_assert_cmpint(abs(l.x-area.x),<=,3);g_assert_cmpint(abs(2*l.y+l.height-2*area.y-area.height),<=,4);g_assert_cmpint(abs(r.x+r.width-area.x-area.width),<=,3);g_assert_cmpint(abs(2*r.y+r.height-2*area.y-area.height),<=,4);g_assert_cmpint(abs(b.y+b.height-area.y-area.height),<=,3);g_assert_cmpint(abs(2*b.x+b.width-2*area.x-area.width),<=,4);g_assert_cmpint(abs(2*e.x+e.width-2*area.x-area.width),<=,4);g_assert_cmpint(abs(2*e.y+e.height-2*area.y-area.height),<=,4);
+ GtkWidget *terminals=any("insight-terminal-group");g_assert_nonnull(terminals); g_assert_true(gtk_widget_get_toplevel(terminals)==gtk_widget_get_toplevel(context));
+ for(guint n=0;n<5;n++) {GtkWidget *owner=n==0 ? tools:n==1 ? gtk_widget_get_toplevel(left):n==2 ? gtk_widget_get_toplevel(project):n==3 ? gtk_widget_get_toplevel(context):window;g_assert_cmpfloat(gtk_widget_get_opacity(owner),>,.995);}
 }
 static void unchanged(void) {
  gchar *text=sci_get_contents(doc->editor->sci,-1);g_assert_cmpstr(text,==,"int main(void) { return 0; }\n");g_free(text);
@@ -36,12 +46,12 @@ static void miniature(guint percent) {
 static void choose(guint which) { gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(options[which]),TRUE); }
 static gboolean step(gpointer unused) {
  (void)unused;static guint last=G_MAXUINT;if(last!=phase) { g_printerr("macOS window phase %u\n",phase);last=phase; }
- if(++ticks>160) g_error("macOS windows timeout phase %u",phase);
+ if(++ticks>320) g_error("macOS windows timeout phase %u",phase);
  if(!doc) doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;
  window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));
  if(phase==0) {
   if(ticks<8 || !any("insight-appearance-0-3")) return G_SOURCE_CONTINUE;
-  for(guint i=0;i<4;i++) { gchar *name=g_strdup_printf("insight-appearance-0-%u",i);options[i]=any(name);g_free(name);g_assert_nonnull(options[i]); }
+  for(guint i=0;i<4;i++) {if(i==2) continue;gchar *name=g_strdup_printf("insight-appearance-0-%u",i);options[i]=any(name);g_free(name);g_assert_nonnull(options[i]); }
   left=any("insight-local-symbols");context=any("insight-context");project=any("insight-project-files");g_assert_nonnull(left);g_assert_nonnull(context);g_assert_nonnull(project);
   GList *items=gtk_container_get_children(GTK_CONTAINER(ui_lookup_widget(window,"menu_view1_menu")));gboolean found=FALSE;
   for(GList *p=items;p;p=p->next) if(GTK_IS_CHECK_MENU_ITEM(p->data) && !g_strcmp0(gtk_menu_item_get_label(GTK_MENU_ITEM(p->data)),"Overview")) { gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(p->data),TRUE);found=TRUE;break; }
@@ -60,9 +70,10 @@ static gboolean step(gpointer unused) {
   const gchar *name=NULL;GtkIconSize size;gtk_image_get_icon_name(GTK_IMAGE(icon),&name,&size);
   if(gtk_icon_theme_has_icon(gtk_icon_theme_get_default(),"document-open-symbolic")) g_assert_cmpstr(name,==,"document-open-symbolic");
   GtkBorder padding;gtk_style_context_get_padding(gtk_widget_get_style_context(options[0]),GTK_STATE_FLAG_NORMAL,&padding);g_assert_cmpint(padding.top,<=,2);g_assert_cmpint(padding.bottom,<=,2);
-  choose(3);phase++;return G_SOURCE_CONTINUE;
+  GtkWidget *opacity=any("insight-opacity-0-70");g_assert_true(GTK_IS_RADIO_MENU_ITEM(opacity));gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(opacity),TRUE);g_assert_cmpfloat_with_epsilon(gtk_widget_get_opacity(window),.7,.006);last_alpha=gtk_widget_get_opacity(window);choose(3);phase++;return G_SOURCE_CONTINUE;
  }
  if(phase==5) {
+  if(moving()) {saw_motion=TRUE;gdouble alpha=gtk_widget_get_opacity(window);g_assert_cmpfloat(alpha+.005,>=,last_alpha);if(alpha<.995) saw_alpha=TRUE;last_alpha=alpha;return G_SOURCE_CONTINUE;}edge_positions();if(!restoring) {g_assert_true(saw_motion);g_assert_true(saw_alpha);}g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(any("insight-opacity-0-100"))));
   GtkWidget *tools=any("insight-tools-palette");g_assert_nonnull(tools);g_assert_true(gtk_widget_get_toplevel(ui_lookup_widget(window,"menubar1"))==tools);
   GtkWidget *l=gtk_widget_get_toplevel(left),*r=gtk_widget_get_toplevel(project),*c=gtk_widget_get_toplevel(context);
   g_assert_true(l!=window && r!=window && c!=window && l!=r && l!=c && r!=c);
@@ -74,21 +85,27 @@ static gboolean step(gpointer unused) {
   choose(1);phase++;return G_SOURCE_CONTINUE;
  }
  if(phase==6) {
+  if(moving()) return G_SOURCE_CONTINUE;
   g_assert_null(any("insight-tools-palette"));g_assert_true(gtk_widget_get_toplevel(left)==window);g_assert_true(gtk_widget_get_toplevel(context)==window);g_assert_true(gtk_widget_get_toplevel(project)==window);unchanged();
   choose(3);phase++;return G_SOURCE_CONTINUE;
  }
- if(phase==7) { GtkWidget *tools=any("insight-tools-palette");g_assert_nonnull(tools);gtk_window_close(GTK_WINDOW(tools));phase++;return G_SOURCE_CONTINUE; }
- if(phase==8) { if(any("insight-tools-palette")) return G_SOURCE_CONTINUE;g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(options[1])));choose(0);phase++;return G_SOURCE_CONTINUE; }
+ if(phase==7) { if(moving()) return G_SOURCE_CONTINUE;edge_positions();GtkWidget *tools=any("insight-tools-palette");g_assert_nonnull(tools);gtk_window_close(GTK_WINDOW(tools));phase++;return G_SOURCE_CONTINUE; }
+ if(phase==8) { if(moving()) return G_SOURCE_CONTINUE;if(any("insight-tools-palette")) return G_SOURCE_CONTINUE;g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(options[1])));choose(0);phase++;return G_SOURCE_CONTINUE; }
  if(phase==9) {
   const gchar *name=NULL;GtkIconSize size;gtk_image_get_icon_name(GTK_IMAGE(icon),&name,&size);g_assert_cmpstr(name,==,"document-open");unchanged();
-  g_print("Independent macOS windows, compact menus, symbolic icon restoration, CSD, join/Close, minimap font/zoom recovery and Ctrl-wheel passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+  choose(3);phase=10;return G_SOURCE_CONTINUE;
+ }
+ if(phase==10) {g_assert_true(moving());choose(1);choose(3);phase++;return G_SOURCE_CONTINUE;}
+ if(phase==11) {if(moving()) return G_SOURCE_CONTINUE;edge_positions();choose(1);phase++;return G_SOURCE_CONTINUE;}
+ if(phase==12) {if(moving()) return G_SOURCE_CONTINUE;g_assert_null(any("insight-tools-palette"));unchanged();
+  g_print("Workarea anchors, constant-speed split/join, reversible transitions, grouped Context/terminals, native opacity fade and independent macOS windows, compact menus, symbolic icon restoration, CSD, join/Close, minimap font/zoom recovery and Ctrl-wheel passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }
  return G_SOURCE_CONTINUE;
 }
 int main(void) {
  if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;
  #ifdef G_OS_UNIX
- alarm(25);
+ alarm(70);
  #endif
  restoring=g_getenv("GEANY_TEST_INDEPENDENT_RESTORE")!=NULL;
  gchar *dir=g_dir_make_tmp("macos-windows-XXXXXX",NULL),*folder=g_build_filename(dir,"insight",NULL),*config=g_build_filename(dir,"geany.conf",NULL),*source=g_build_filename(dir,"source.c",NULL);

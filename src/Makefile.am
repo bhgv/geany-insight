@@ -449,3 +449,5 @@ libgeany_la_SOURCES += insight-ai-ui.h insight-ai-console.c insight-ai-console.h
 	../vendor/libvterm/src/state.c \
 	../vendor/libvterm/src/unicode.c \
 	../vendor/libvterm/src/vterm.c
+
+libgeany_la_SOURCES += ../insight/desktop/window_motion.c ../insight/desktop/window_motion.h

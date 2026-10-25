@@ -722,3 +722,5 @@ dist_insightdocmedia_DATA += insight/docs/media/interface-texts.svg
 EXTRA_DIST += insight/tests/source_arrangement_gui_test.c
 
 dist_insightdocmedia_DATA += insight/docs/media/source-arrangement.svg
+
+EXTRA_DIST += insight/tests/window_motion_test.c

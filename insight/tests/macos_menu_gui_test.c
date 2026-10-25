@@ -50,7 +50,7 @@ static gboolean step(gpointer data) {
  GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));
  if(phase==0) {
   if(ticks<8) return G_SOURCE_CONTINUE;g_assert_true(gtk_style_context_has_class(gtk_widget_get_style_context(window),"insight-macos"));
-  reduced=named(window,"insight-appearance-0-2");g_assert_nonnull(reduced);g_assert_false(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(reduced)));
+  reduced=named(window,"insight-opacity-0-100");GtkWidget *translucent=named(window,"insight-opacity-0-90");g_assert_true(GTK_IS_RADIO_MENU_ITEM(reduced));gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(translucent),TRUE);g_assert_nonnull(reduced);g_assert_false(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(reduced)));
   menu=gtk_menu_new();gtk_menu_attach_to_widget(GTK_MENU(menu),window,NULL);
   unknown=gtk_menu_item_new_with_label("Unmapped action");known=gtk_menu_item_new_with_label("Next result");native=gtk_image_menu_item_new_with_label("Find in Files…");gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(native),gtk_image_new_from_icon_name("edit-find",GTK_ICON_SIZE_MENU));
   check=gtk_check_menu_item_new_with_label("Show panel");radio=gtk_radio_menu_item_new_with_label(NULL,"Selected mode");
@@ -72,7 +72,7 @@ static gboolean step(gpointer data) {
  }
  if(phase==3) {
   g_assert_cmpfloat(background(menu).alpha,==,1.0);g_assert_true(gtk_style_context_has_class(gtk_widget_get_style_context(menu),"insight-solid"));capture("macos-menu-solid.jpg");gtk_menu_popdown(GTK_MENU(menu));
-  gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(reduced),FALSE);popup(menu);phase++;return G_SOURCE_CONTINUE;
+  gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-opacity-0-90")),TRUE);popup(menu);phase++;return G_SOURCE_CONTINUE;
  }
  if(phase==4) {
   g_assert_cmpfloat(background(menu).alpha,<,1.0);gtk_menu_popdown(GTK_MENU(menu));gtk_widget_destroy(menu);
