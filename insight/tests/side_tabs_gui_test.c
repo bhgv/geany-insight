@@ -26,7 +26,7 @@ static void pointer_event(GtkWidget *button,GdkEventType type,gdouble x,guint st
  gdk_event_set_device(event,gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_display_get_default())));gdk_event_put(event);gdk_event_free(event);
 }
 static gboolean step(gpointer data) {
- (void)data;if(++ticks>80) g_error("Side tabs timeout phase %u",phase);
+ (void)data;g_printerr("Side tabs phase %u, page %d\n",phase,gtk_notebook_get_current_page(GTK_NOTEBOOK(book)));if(++ticks>80) g_error("Side tabs timeout phase %u",phase);
  if(phase==0) {
   if(ticks<3) return G_SOURCE_CONTINUE;g_assert_false(carousel());gint first=gtk_widget_get_allocated_width(tab(0));g_assert_cmpint(first,>,200);
   for(guint n=0;n<3;n++) {g_assert_true(gtk_widget_get_visible(tab(n)));g_assert_cmpint(ABS(first-gtk_widget_get_allocated_width(tab(n))),<=,1);gchar *tip=gtk_widget_get_tooltip_text(tab(n));g_assert_cmpstr(tip,==,names[n]);g_free(tip);}

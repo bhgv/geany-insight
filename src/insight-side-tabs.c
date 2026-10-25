@@ -8,7 +8,7 @@ typedef struct {
  GtkCssProvider *css;
  const gchar *(*translate)(const gchar *);
  guint idle;
- gboolean alive,rebuild,single,focus_active;
+ gboolean alive,rebuild,single,focus_active,syncing;
  gdouble consumed;
 } SideTabs;
 static void queue_update(SideTabs *s);
@@ -26,7 +26,7 @@ static void label_replaced(GObject *object,GParamSpec *spec,gpointer data) {
  (void)object;(void)spec;GtkWidget *button=data;SideTabs *s=g_object_get_data(G_OBJECT(button),"insight-side-tab-owner");s->rebuild=TRUE;if(s->alive) queue_update(s);
 }
 static void select_button(GtkButton *button,gpointer data) {
- SideTabs *s=data;GtkWidget *page=button_page(GTK_WIDGET(button));
+ SideTabs *s=data;if(s->syncing || !s->alive) return;GtkWidget *page=button_page(GTK_WIDGET(button));
  if(page) {gint at=gtk_notebook_page_num(s->book,page);if(at>=0) gtk_notebook_set_current_page(s->book,at);g_object_unref(page);}queue_update(s);
 }
 static void turn(SideTabs *s,gint direction) {
@@ -81,11 +81,12 @@ static gboolean update(gpointer data) {
  g_object_set_data(G_OBJECT(s->wrapper),"insight-side-tabs-carousel",GINT_TO_POINTER(s->single));
  gtk_widget_set_visible(s->previous,s->single && width>=40);gtk_widget_set_visible(s->next,s->single && width>=40);
  gtk_widget_set_tooltip_text(s->previous,translated(s,"Previous panel tab"));gtk_widget_set_tooltip_text(s->next,translated(s,"Next panel tab"));
+ s->syncing=TRUE;
  for(guint n=0;n<s->buttons->len;n++) {
   GtkWidget *button=g_ptr_array_index(s->buttons,n),*page=button_page(button);gboolean selected=(gint)n==current;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button),selected);gtk_widget_set_visible(button,page && gtk_widget_get_visible(page) && (!s->single || selected));if(selected && s->focus_active) gtk_widget_grab_focus(button);if(page) g_object_unref(page);
  }
- s->focus_active=FALSE;gtk_widget_set_visible(s->row,visible>0);return G_SOURCE_REMOVE;
+ s->syncing=FALSE;s->focus_active=FALSE;gtk_widget_set_visible(s->row,visible>0);return G_SOURCE_REMOVE;
 }
 static void queue_update(SideTabs *s) {if(s->alive && !s->idle) s->idle=g_idle_add(update,s);}
 void insight_side_tabs_refresh(gpointer wrapper) {SideTabs *s=g_object_get_data(G_OBJECT(wrapper),"insight-side-tabs");if(s) queue_update(s);}
