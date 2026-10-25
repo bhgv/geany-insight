@@ -586,7 +586,7 @@ static void compact_image(GtkWidget *widget,gpointer data)
 
  /* Entry icons are not child GtkImages and otherwise retain a 16px minimum. */
  if(GTK_IS_ENTRY(widget)) for(guint n=0;n<2;n++) {
-  GtkEntryIconPosition position=n ? GTK_ENTRY_ICON_SECONDARY:GTK_ENTRY_ICON_PRIMARY;const gchar *key=n ? "insight-secondary-stock":"insight-primary-stock";const gchar *stock=gtk_entry_get_icon_stock(GTK_ENTRY(widget),position);
+  GtkEntryIconPosition position=n ? GTK_ENTRY_ICON_SECONDARY:GTK_ENTRY_ICON_PRIMARY;const gchar *key=n ? "insight-secondary-stock":"insight-primary-stock";const gchar *stock=gtk_entry_get_icon_storage_type(GTK_ENTRY(widget),position)==GTK_IMAGE_STOCK ? gtk_entry_get_icon_stock(GTK_ENTRY(widget),position):NULL;
   if(stock) g_object_set_data_full(G_OBJECT(widget),key,g_strdup(stock),g_free);stock=g_object_get_data(G_OBJECT(widget),key);
   if(stock) {gchar *name=g_strdup_printf("insight-toolbar-%d",GPOINTER_TO_INT(data));GtkIconSize size=gtk_icon_size_from_name(name);g_free(name);GdkPixbuf *pixbuf=gtk_widget_render_icon_pixbuf(widget,stock,size);if(pixbuf) {gtk_entry_set_icon_from_pixbuf(GTK_ENTRY(widget),position,pixbuf);g_object_unref(pixbuf);}}
  }

@@ -178,9 +178,27 @@ static void window_title_changed(GObject *window,GParamSpec *spec,gpointer data)
  (void)spec;GtkHeaderBar *header=GTK_HEADER_BAR(data);const gchar *title=gtk_window_get_title(GTK_WINDOW(window));
  if(g_strcmp0(title,gtk_header_bar_get_title(header))) gtk_header_bar_set_title(header,title);GtkWidget *custom=gtk_header_bar_get_custom_title(header);if(GTK_IS_LABEL(custom) && g_object_get_data(G_OBJECT(custom),"insight-compact-window-title")) gtk_label_set_text(GTK_LABEL(custom),title);
 }
+static void title_image_size(GtkImage *image,gboolean compact) {
+ GtkImageType type=gtk_image_get_storage_type(image);GtkWidget *widget=GTK_WIDGET(image);
+ gtk_image_set_pixel_size(image,compact ? 10:-1);
+ if(type==GTK_IMAGE_PIXBUF) {
+  GdkPixbuf *current=gtk_image_get_pixbuf(image),*source=g_object_get_data(G_OBJECT(image),"insight-title-original-pixbuf");if(!current) return;
+  if(!source) {source=current;g_object_set_data_full(G_OBJECT(image),"insight-title-original-pixbuf",g_object_ref(source),g_object_unref);}
+  gint w=gdk_pixbuf_get_width(source),h=gdk_pixbuf_get_height(source);gdouble scale=compact ? 10.0/MAX(w,h):1;gint tw=MAX(1,(gint)(w*scale)),th=MAX(1,(gint)(h*scale));
+  if(gdk_pixbuf_get_width(current)!=tw || gdk_pixbuf_get_height(current)!=th) {GdkPixbuf *scaled=gdk_pixbuf_scale_simple(source,tw,th,GDK_INTERP_BILINEAR);gtk_image_set_from_pixbuf(image,scaled);g_object_unref(scaled);}
+ }else if(type==GTK_IMAGE_SURFACE) {
+  GParamSpec *property=g_object_class_find_property(G_OBJECT_GET_CLASS(widget),"surface");if(!property || !(property->flags&G_PARAM_READABLE)) return;
+  cairo_surface_t *current=NULL;g_object_get(image,"surface",&current,NULL);if(!current) return;
+  if(cairo_surface_get_type(current)==CAIRO_SURFACE_TYPE_IMAGE) {
+   cairo_surface_t *source=g_object_get_data(G_OBJECT(image),"insight-title-original-surface");if(!source) {source=cairo_surface_reference(current);g_object_set_data_full(G_OBJECT(image),"insight-title-original-surface",source,(GDestroyNotify)cairo_surface_destroy);}
+   gint w=cairo_image_surface_get_width(source),h=cairo_image_surface_get_height(source);gdouble scale=compact ? 10.0/MAX(1,MAX(w,h)):1;gint tw=MAX(1,(gint)(w*scale)),th=MAX(1,(gint)(h*scale));
+   if(cairo_image_surface_get_width(current)!=tw || cairo_image_surface_get_height(current)!=th) {cairo_surface_t *scaled=cairo_image_surface_create(CAIRO_FORMAT_ARGB32,tw,th);cairo_t *cr=cairo_create(scaled);cairo_scale(cr,scale,scale);cairo_set_source_surface(cr,source,0,0);cairo_paint(cr);cairo_destroy(cr);gtk_image_set_from_surface(image,compact ? scaled:source);cairo_surface_destroy(scaled);}
+  }cairo_surface_destroy(current);
+ }
+}
 static void title_button_limit(GtkWidget *widget,gpointer data) {
  gint limit=GPOINTER_TO_INT(data);
- if(GTK_IS_IMAGE(widget)) {GtkWidget *top=gtk_widget_get_toplevel(widget);gboolean compact=gtk_style_context_has_class(gtk_widget_get_style_context(top),"insight-independent-chrome");gtk_image_set_pixel_size(GTK_IMAGE(widget),compact ? 10:-1);}
+ if(GTK_IS_IMAGE(widget)) {GtkWidget *top=gtk_widget_get_toplevel(widget);gboolean compact=gtk_style_context_has_class(gtk_widget_get_style_context(top),"insight-independent-chrome");title_image_size(GTK_IMAGE(widget),compact);}
  if(GTK_IS_BUTTON(widget) || GTK_IS_LABEL(widget) || GTK_IS_IMAGE(widget)) {
   GtkAllocation allocation;gtk_widget_get_allocation(widget,&allocation);
   if(allocation.height>limit) {allocation.y+=(allocation.height-limit)/2;allocation.height=limit;gtk_widget_size_allocate(widget,&allocation);}
