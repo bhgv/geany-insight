@@ -75,7 +75,7 @@ static gboolean step(gpointer unused) {
  if(phase==3) {
   miniature(15);GString *text=g_string_new(NULL);for(guint n=0;n<700;n++) g_string_append(text,"// A deliberately long source line to exercise both horizontal and vertical viewport preservation during window layout transitions.\n");
   other=document_new_file(NULL,NULL,text->str);g_string_free(text,TRUE);SEND(other->editor->sci,SCI_SETSAVEPOINT,0,0);SEND(other->editor->sci,SCI_SETWRAPMODE,SC_WRAP_NONE,0);SEND(other->editor->sci,SCI_GOTOPOS,0,0);
-  SEND(other->editor->sci,SCI_SETFIRSTVISIBLELINE,240,0);SEND(other->editor->sci,SCI_SETXOFFSET,96,0);document_show_tab(doc);choose(1);phase++;return G_SOURCE_CONTINUE;
+  SEND(other->editor->sci,SCI_SETFIRSTVISIBLELINE,240,0);SEND(other->editor->sci,SCI_SETXOFFSET,96,0);gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.notebook),document_get_notebook_page(doc));choose(1);phase++;return G_SOURCE_CONTINUE;
  }
  if(phase==4) {
   const gchar *name=NULL;GtkIconSize size;gtk_image_get_icon_name(GTK_IMAGE(icon),&name,&size);
@@ -89,7 +89,7 @@ static gboolean step(gpointer unused) {
   GtkWidget *tools=any("insight-tools-palette");g_assert_nonnull(tools);g_assert_true(gtk_widget_get_toplevel(ui_lookup_widget(window,"menubar1"))==tools);
   GtkWidget *l=gtk_widget_get_toplevel(left),*r=gtk_widget_get_toplevel(project),*c=gtk_widget_get_toplevel(context);
   g_assert_true(l!=window && r!=window && c!=window && l!=r && l!=c && r!=c);
-  if(other) {document_show_tab(other);document_show_tab(doc);g_assert_null(gtk_paned_get_child2(GTK_PANED(ui_lookup_widget(window,"vpaned1"))));g_assert_true(gtk_widget_get_visible(main_widgets.message_window_notebook));}
+  if(other) {gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.notebook),document_get_notebook_page(other));gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.notebook),document_get_notebook_page(doc));g_assert_null(gtk_paned_get_child2(GTK_PANED(ui_lookup_widget(window,"vpaned1"))));g_assert_true(gtk_widget_get_visible(main_widgets.message_window_notebook));}
   gtk_window_set_title(GTK_WINDOW(tools),"Updated palette title");
   g_assert_cmpstr(gtk_header_bar_get_title(GTK_HEADER_BAR(gtk_window_get_titlebar(GTK_WINDOW(tools)))),==,"Updated palette title");
   g_assert_true(GTK_IS_HEADER_BAR(gtk_window_get_titlebar(GTK_WINDOW(tools))));g_assert_true(GTK_IS_HEADER_BAR(gtk_window_get_titlebar(GTK_WINDOW(l))));unchanged();
