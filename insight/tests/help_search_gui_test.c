@@ -51,10 +51,12 @@ static void preview_checks(void) {
  doc=document_new_file(NULL,filetypes_lookup_by_name("Markdown"),"# Без имени\nСЛОВО\n");g_assert_nonnull(doc);g_signal_emit_by_name(named(window,"insight-markup-preview-tool"),"clicked");g_assert_true(has_text(viewer(),"Без имени"));document_set_text_changed(doc,FALSE);activity="close snapshot";g_assert_true(document_close(doc));gtk_widget_destroy(viewer());g_assert_nonnull(document_new_file(NULL,NULL,""));
 }
 static gboolean timeout(gpointer data) { (void)data;GList *tops=gtk_window_list_toplevels();for(GList *p=tops;p;p=p->next) if(gtk_widget_get_visible(p->data)) g_printerr("Visible window: %s / %s\n",gtk_widget_get_name(p->data),gtk_window_get_title(GTK_WINDOW(p->data)));g_list_free(tops);g_error("Help/search GUI timeout at phase %u: %s",phase,activity);return G_SOURCE_REMOVE; }
+static void toolbar_limit_check(GtkWidget *widget,gpointer data) {g_assert_cmpint(gtk_widget_get_allocated_height(widget),<=,GPOINTER_TO_INT(data));if(GTK_IS_CONTAINER(widget)) gtk_container_forall(GTK_CONTAINER(widget),toolbar_limit_check,data);}
 static gboolean step(gpointer data) {
  (void)data;GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;if(!window) window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));
  if(phase==0) {
   g_assert_false(gtk_widget_get_visible(named(window,"insight-editor-search-panel")));g_assert_false(gtk_widget_get_visible(named(window,"insight-project-search-panel")));
+  GtkWidget *toolbar=named(window,"GeanyToolbar");g_assert_nonnull(toolbar);g_assert_cmpint(gtk_widget_get_allocated_height(toolbar),<=,18);gtk_container_forall(GTK_CONTAINER(toolbar),toolbar_limit_check,GINT_TO_POINTER(gtk_widget_get_allocated_height(toolbar)*85/100));
   const gchar *tools[]={"insight-help-tool","insight-tutorial-tool","insight-diff-tool","insight-find-tool","insight-replace-tool"};
   for(guint i=0;i<G_N_ELEMENTS(tools);i++) { GtkWidget *tool=named(window,tools[i]);g_assert_true(GTK_IS_TOOL_BUTTON(tool));g_assert_null(gtk_tool_button_get_label(GTK_TOOL_BUTTON(tool)));gchar *tip=gtk_widget_get_tooltip_text(tool);g_assert_nonnull(tip);g_free(tip); }
   GtkWidget *command=named(window,"insight-help-command");g_assert_nonnull(gtk_menu_item_get_label(GTK_MENU_ITEM(command)));g_assert_nonnull(g_object_get_data(G_OBJECT(command),"insight-menu-icon"));gtk_menu_item_activate(GTK_MENU_ITEM(command));g_assert_nonnull(viewer());g_assert_true(has_text(viewer(),"user guide"));

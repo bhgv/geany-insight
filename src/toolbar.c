@@ -580,7 +580,7 @@ static void compact_image(GtkWidget *widget,gpointer data)
 {
  if(GTK_IS_IMAGE(widget)) gtk_image_set_pixel_size(GTK_IMAGE(widget),GPOINTER_TO_INT(data));
  if(GTK_IS_DRAWING_AREA(widget)) gtk_widget_set_size_request(widget,GPOINTER_TO_INT(data),GPOINTER_TO_INT(data));
- if(GTK_IS_CONTAINER(widget)) gtk_container_foreach(GTK_CONTAINER(widget),compact_image,data);
+ if(GTK_IS_CONTAINER(widget)) gtk_container_forall(GTK_CONTAINER(widget),compact_image,data);
 }
 static void toolbar_child_limit(GtkWidget *widget,gpointer data)
 {
@@ -599,7 +599,7 @@ void toolbar_apply_settings(void)
  GtkWidget *toolbar=main_widgets.toolbar;GtkCssProvider *css=g_object_get_data(G_OBJECT(toolbar),"insight-toolbar-geometry");
  if(!css) {css=gtk_css_provider_new();g_object_set_data_full(G_OBJECT(toolbar),"insight-toolbar-geometry",css,g_object_unref);g_signal_connect_after(toolbar,"size-allocate",G_CALLBACK(toolbar_allocated),NULL);gtk_style_context_add_provider_for_screen(gtk_widget_get_screen(toolbar),GTK_STYLE_PROVIDER(css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION+2);}
  gint height=CLAMP(toolbar_prefs.height,12,64),icon=MAX(8,height*2/3);gchar *icon_name=g_strdup_printf("insight-toolbar-%d",icon);GtkIconSize size=gtk_icon_size_from_name(icon_name);if(size==GTK_ICON_SIZE_INVALID) size=gtk_icon_size_register(icon_name,icon,icon);g_free(icon_name);gtk_toolbar_set_icon_size(GTK_TOOLBAR(toolbar),size);
- gchar *rules=g_strdup_printf("#GeanyToolbar { padding: 0; min-height: %dpx; font-size: %dpx; } #GeanyToolbar toolitem, #GeanyToolbar button, #GeanyToolbar entry { min-height: 0; min-width: 0; padding: 0 2px; margin: 0; }",height,MAX(8,height*2/3));gtk_css_provider_load_from_data(css,rules,-1,NULL);g_free(rules);compact_image(toolbar,GINT_TO_POINTER(icon));
+ gchar *rules=g_strdup_printf("#GeanyToolbar { padding: 0; min-height: %dpx; font-size: %dpx; } #GeanyToolbar toolitem, #GeanyToolbar button, #GeanyToolbar entry { min-height: 0; min-width: 0; padding: 0 2px; margin: 0; }",height,MAX(6,height/2));gtk_css_provider_load_from_data(css,rules,-1,NULL);g_free(rules);compact_image(toolbar,GINT_TO_POINTER(icon));
 }
 
 
