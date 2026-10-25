@@ -102,3 +102,14 @@ the desktop compositor. No desktop blur or global fading of source text is used.
 Левая и правая полки распределяют свободную ширину поровну между видимыми вкладками. Если полное название активной вкладки не помещается в её долю, остаётся один активный корешок на оставшуюся ширину и две компактные стрелки. Стрелки циклически перелистывают панели; такой же переход выполняется перетаскиванием корешка влево или вправо. Стрелки влево/вправо на клавиатуре работают, когда фокус находится на корешке.
 
 На всех корешках есть подсказка с полным названием, в том числе после смены языка. При почти полностью сжатой полке стрелки скрываются, чтобы не вытеснять подпись; жест перетаскивания остаётся доступным. При расширении обычный ряд вкладок восстанавливается автоматически. Это меняет только навигацию: страницы не скрываются и не пересоздаются, выбор панелей, отсоединение и сохранённые компоновки сохраняются.
+
+
+## Compact controls and navigation
+
+Diff/merge, AI assistants, symbol Relations and source-window links share the same compact options notebook. Collapse leaves the tab strip and gives the space to the main content. Selecting another tab restores controls; the active group determines the required height.
+
+Ctrl+mouse wheel over a side panel changes its text size (6–28 points). Preferences → Interface → Toolbar also provides the side-panel font size and toolbar height (18–64 pixels, default 24). Both settings survive restarts.
+
+The down arrow to the right of editor tabs lists every open buffer in most-recently-used order, with full paths in tooltips. Selecting a row activates its source. Undo/Redo use the active editor. Main-toolbar and editor-popup arrows follow editor position history; Context buttons and its popup use independent preview history. Navigation commands reveal the containing panels and nested tabs.
+
+Every AI receives up to 24,000 characters of relevant installed editor documentation. Help opens with a collapsed Ask AI prompt. Its answer becomes a Markdown page with the viewer's existing back/forward history and table rendering. Other assistants offer Open answer in help viewer. Requests use the selected AI connection.

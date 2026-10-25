@@ -240,6 +240,7 @@ static GtkWidget *toolbar_reload(const gchar *markup)
 		merge_id = gtk_ui_manager_add_ui_from_string(uim, toolbar_markup, -1, NULL);
 	}
 	main_widgets.toolbar = gtk_ui_manager_get_widget(uim, "/ui/GeanyToolbar");
+ gtk_widget_set_name(main_widgets.toolbar,"GeanyToolbar");
 	ui_init_toolbar_widgets();
 
 	/* add the toolbar again to the main window */
@@ -575,10 +576,18 @@ static void toolbar_set_icon_size(void)
 }
 
 
+static void compact_image(GtkWidget *widget,gpointer data)
+{
+ if(GTK_IS_IMAGE(widget)) gtk_image_set_pixel_size(GTK_IMAGE(widget),GPOINTER_TO_INT(data));
+ if(GTK_IS_CONTAINER(widget)) gtk_container_foreach(GTK_CONTAINER(widget),compact_image,data);
+}
 void toolbar_apply_settings(void)
 {
 	toolbar_set_icon_style();
 	toolbar_set_icon_size();
+ GtkWidget *toolbar=main_widgets.toolbar;GtkCssProvider *css=g_object_get_data(G_OBJECT(toolbar),"insight-toolbar-geometry");
+ if(!css) {css=gtk_css_provider_new();g_object_set_data_full(G_OBJECT(toolbar),"insight-toolbar-geometry",css,g_object_unref);gtk_style_context_add_provider_for_screen(gtk_widget_get_screen(toolbar),GTK_STYLE_PROVIDER(css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION+2);}
+ gint height=CLAMP(toolbar_prefs.height,18,64),icon=MAX(12,height-8);gchar *rules=g_strdup_printf("#GeanyToolbar { padding: 0; min-height: %dpx; } #GeanyToolbar button, #GeanyToolbar entry { min-height: 0; min-width: 0; padding: %dpx 3px; margin: 0; }",height,MAX(0,(height-icon-4)/2));gtk_css_provider_load_from_data(css,rules,-1,NULL);g_free(rules);compact_image(toolbar,GINT_TO_POINTER(icon));
 }
 
 

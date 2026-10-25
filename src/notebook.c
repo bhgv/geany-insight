@@ -57,7 +57,7 @@ static const GtkTargetEntry files_drop_targets[] = {
 	{ (gchar *) "text/uri-list",	0, 0 }
 };
 
-static const gsize MAX_MRU_DOCS = 20;
+static const gsize MAX_MRU_DOCS = G_MAXUINT;
 static GQueue *mru_docs = NULL;
 static guint mru_pos = 0;
 
@@ -578,6 +578,25 @@ static gboolean notebook_tab_bar_scroll_cb(GtkWidget *widget, GdkEventScroll *ev
 }
 
 
+/* Resolve IDs at activation time: files can close while the popup is open. */
+static void recent_source_activate(GtkMenuItem *item,gpointer data)
+{
+ GeanyDocument *doc=document_find_by_id(GPOINTER_TO_UINT(data));(void)item;
+ if(DOC_VALID(doc)) {gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.notebook),document_get_notebook_page(doc));gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));}
+}
+static void recent_sources_show(GtkWidget *menu,gpointer data)
+{
+ (void)data;GList *old=gtk_container_get_children(GTK_CONTAINER(menu));for(GList *p=old;p;p=p->next) gtk_widget_destroy(p->data);g_list_free(old);GHashTable *seen=g_hash_table_new(g_direct_hash,g_direct_equal);
+ /* Every open buffer appears, including buffers not visited since session restore. */
+ for(guint n=0;n<g_queue_get_length(mru_docs)+(guint)gtk_notebook_get_n_pages(GTK_NOTEBOOK(main_widgets.notebook));n++) {
+  guint count=g_queue_get_length(mru_docs);GeanyDocument *doc=n<count ? g_queue_peek_nth(mru_docs,n):document_get_from_page(n-count);
+  if(!DOC_VALID(doc) || g_hash_table_contains(seen,GUINT_TO_POINTER(doc->id))) continue;
+  g_hash_table_add(seen,GUINT_TO_POINTER(doc->id));gchar *base=doc->file_name ? g_path_get_basename(doc->file_name):g_strdup(_("untitled"));
+  GtkWidget *item=gtk_menu_item_new_with_label(base);g_free(base);gtk_widget_set_tooltip_text(item,doc->file_name);g_signal_connect(item,"activate",G_CALLBACK(recent_source_activate),GUINT_TO_POINTER(doc->id));gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);
+ }
+ g_hash_table_unref(seen);gtk_widget_show_all(menu);
+}
+
 void notebook_init(void)
 {
 	g_signal_connect_after(main_widgets.notebook, "button-press-event",
@@ -587,6 +606,9 @@ void notebook_init(void)
 		G_CALLBACK(on_window_drag_data_received), NULL);
 
 	mru_docs = g_queue_new();
+ GtkWidget *recent=gtk_menu_button_new();gtk_widget_set_name(recent,"insight-recent-sources");gtk_button_set_image(GTK_BUTTON(recent),gtk_image_new_from_icon_name("pan-down-symbolic",GTK_ICON_SIZE_MENU));gtk_widget_set_tooltip_text(recent,_("Open files — most recently used first"));
+ GtkWidget *recent_menu=gtk_menu_new();g_signal_connect(recent_menu,"show",G_CALLBACK(recent_sources_show),NULL);gtk_menu_button_set_popup(GTK_MENU_BUTTON(recent),recent_menu);
+ gtk_notebook_set_action_widget(GTK_NOTEBOOK(main_widgets.notebook),recent,GTK_PACK_END);gtk_widget_show(recent);
 	g_signal_connect(main_widgets.notebook, "switch-page",
 		G_CALLBACK(on_notebook_switch_page), NULL);
 	g_signal_connect(geany_object, "document-close",

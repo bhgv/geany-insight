@@ -102,3 +102,14 @@ Real production-widget crops at native pixel scale from an isolated Linux GUI fi
 Left and right shelves distribute available width equally across visible tabs. If the full active caption does not fit its share, the row becomes a single active tab with compact cyclic Previous/Next arrows. Drag the caption left/right to turn the carousel; Left/Right keys also work while a tab has focus. Every caption has a full-title tooltip, updated after localization.
 
 At nearly collapsed widths the arrows disappear rather than displacing the caption; dragging remains available. Widening the shelf restores the normal row automatically. Only navigation changes: notebook pages retain their visibility, identity, detach/dock behavior and saved panel selection.
+
+
+## Compact controls and navigation
+
+Diff/merge, AI assistants, symbol Relations and source-window links share the same compact options notebook. Collapse leaves the tab strip and gives the space to the main content. Selecting another tab restores controls; the active group determines the required height.
+
+Ctrl+mouse wheel over a side panel changes its text size (6–28 points). Preferences → Interface → Toolbar also provides the side-panel font size and toolbar height (18–64 pixels, default 24). Both settings survive restarts.
+
+The down arrow to the right of editor tabs lists every open buffer in most-recently-used order, with full paths in tooltips. Selecting a row activates its source. Undo/Redo use the active editor. Main-toolbar and editor-popup arrows follow editor position history; Context buttons and its popup use independent preview history. Navigation commands reveal the containing panels and nested tabs.
+
+Every AI receives up to 24,000 characters of relevant installed editor documentation. Help opens with a collapsed Ask AI prompt. Its answer becomes a Markdown page with the viewer's existing back/forward history and table rendering. Other assistants offer Open answer in help viewer. Requests use the selected AI connection.

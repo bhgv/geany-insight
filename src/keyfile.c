@@ -597,12 +597,16 @@ static void save_dialog_prefs(GKeyFile *config)
 	g_key_file_set_boolean(config, PACKAGE, "pref_editor_trail_space", file_prefs.strip_trailing_spaces);
 
 	/* toolbar */
+ toolbar_prefs.height=CLAMP(utils_get_setting_integer(config,PACKAGE,"insight_toolbar_height",24),18,64);
+ toolbar_prefs.panel_font_size=CLAMP(utils_get_setting_integer(config,PACKAGE,"insight_panel_font_size",9),6,28);
 	g_key_file_set_boolean(config, PACKAGE, "pref_toolbar_show", toolbar_prefs.visible);
 	g_key_file_set_boolean(config, PACKAGE, "pref_toolbar_append_to_menu", toolbar_prefs.append_to_menu);
 	g_key_file_set_boolean(config, PACKAGE, "pref_toolbar_use_gtk_default_style", toolbar_prefs.use_gtk_default_style);
 	g_key_file_set_boolean(config, PACKAGE, "pref_toolbar_use_gtk_default_icon", toolbar_prefs.use_gtk_default_icon);
 	g_key_file_set_integer(config, PACKAGE, "pref_toolbar_icon_style", toolbar_prefs.icon_style);
 	g_key_file_set_integer(config, PACKAGE, "pref_toolbar_icon_size", toolbar_prefs.icon_size);
+ g_key_file_set_integer(config,PACKAGE,"insight_toolbar_height",toolbar_prefs.height);
+ g_key_file_set_integer(config,PACKAGE,"insight_panel_font_size",toolbar_prefs.panel_font_size);
 
 	/* templates */
 	g_key_file_set_string(config, PACKAGE, "pref_template_developer", template_prefs.developer);
@@ -975,6 +979,8 @@ static void load_dialog_prefs(GKeyFile *config)
 	file_prefs.strip_trailing_spaces = utils_get_setting_boolean(config, PACKAGE, "pref_editor_trail_space", FALSE);
 
 	/* toolbar */
+ toolbar_prefs.height=CLAMP(utils_get_setting_integer(config,PACKAGE,"insight_toolbar_height",24),18,64);
+ toolbar_prefs.panel_font_size=CLAMP(utils_get_setting_integer(config,PACKAGE,"insight_panel_font_size",9),6,28);
 	toolbar_prefs.visible = utils_get_setting_boolean(config, PACKAGE, "pref_toolbar_show", TRUE);
 	toolbar_prefs.append_to_menu = utils_get_setting_boolean(config, PACKAGE, "pref_toolbar_append_to_menu", FALSE);
 	{

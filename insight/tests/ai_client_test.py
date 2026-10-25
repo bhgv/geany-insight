@@ -37,6 +37,18 @@ class Tests(unittest.TestCase):
     def tearDownClass(cls): cls.server.shutdown(); cls.server.server_close(); cls.thread.join()
     def data(self, model='mock'):
         return dict(endpoint=self.server.url + '/chat/completions', model=model, key='fake-key', question='Explain this error', context='source.c:1 error', code='int value = 1\n', location='source.c', history='Earlier question')
+    def test_packaged_editor_help(self):
+        result = client.editor_help('SSH terminal connection scrollback')
+        self.assertIn('Packaged editor help:', result)
+        self.assertIn('SSH', result)
+        self.assertLessEqual(len(result), 24000)
+        self.assertLessEqual(len(client.editor_help('Ctrl wheel side panels', maximum=71)), 71)
+        data = self.data(); data['question'] = 'How do I use the SSH terminal?'
+        client.request(data)
+        body = json.loads(self.server.last[1]['messages'][1]['content'])
+        self.assertIn('Packaged editor help:', body['editor_documentation'])
+        self.assertEqual(body['question'], data['question'])
+
     def test_compatible_protocol(self):
         for provider in ['OpenAI', 'Grok', 'DeepSeek', 'Qwen']:
             data=self.data(provider); answer=client.request(data); self.assertTrue(answer['has_replacement']); self.assertEqual(answer['replacement'], 'int value = 2;\n')

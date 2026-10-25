@@ -51,6 +51,7 @@
 #include "support.h"
 #include "templates.h"
 #include "toolbar.h"
+#include "insight-workbench.h"
 #include "tools.h"
 #include "ui_utils.h"
 #include "utils.h"
@@ -509,6 +510,16 @@ static void prefs_init_dialog(void)
 
 
 	/* Toolbar settings */
+ GtkWidget *compact_height=g_object_get_data(G_OBJECT(ui_widgets.prefs_dialog),"insight-toolbar-height"),*panel_font=g_object_get_data(G_OBJECT(ui_widgets.prefs_dialog),"insight-panel-font");
+ if(!compact_height) {
+  GtkWidget *host=gtk_widget_get_parent(ui_lookup_widget(ui_widgets.prefs_dialog,"frame_toolbar_icon"));
+  GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6);compact_height=gtk_spin_button_new_with_range(18,64,1);panel_font=gtk_spin_button_new_with_range(6,28,1);
+  GtkWidget *label=gtk_label_new(_("Toolbar height (pixels)"));gtk_box_pack_start(GTK_BOX(row),label,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(row),compact_height,FALSE,FALSE,0);label=gtk_label_new(_("Side panel font (points)"));gtk_box_pack_start(GTK_BOX(row),label,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(row),panel_font,FALSE,FALSE,0);
+  gtk_widget_set_tooltip_text(compact_height,_("Height of the main toolbar buttons and icons"));gtk_widget_set_tooltip_text(panel_font,_("Side panel text size; Ctrl+mouse wheel also changes it"));
+  gtk_box_pack_start(GTK_BOX(host),row,FALSE,FALSE,0);gtk_widget_show_all(row);g_object_set_data(G_OBJECT(ui_widgets.prefs_dialog),"insight-toolbar-height",compact_height);g_object_set_data(G_OBJECT(ui_widgets.prefs_dialog),"insight-panel-font",panel_font);
+ }
+ gtk_spin_button_set_value(GTK_SPIN_BUTTON(compact_height),toolbar_prefs.height);gtk_spin_button_set_value(GTK_SPIN_BUTTON(panel_font),toolbar_prefs.panel_font_size);
+
 	widget = ui_lookup_widget(ui_widgets.prefs_dialog, "check_toolbar_show");
 	gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), toolbar_prefs.visible);
 	widget = ui_lookup_widget(ui_widgets.prefs_dialog, "check_toolbar_in_menu");
@@ -1016,6 +1027,9 @@ on_prefs_dialog_response(GtkDialog *dialog, gint response, gpointer user_data)
 			}
 		}
 
+  toolbar_prefs.height=gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(g_object_get_data(G_OBJECT(ui_widgets.prefs_dialog),"insight-toolbar-height")));
+  toolbar_prefs.panel_font_size=gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(g_object_get_data(G_OBJECT(ui_widgets.prefs_dialog),"insight-panel-font")));
+  insight_workbench_panel_font();
 		/* Files settings */
 		widget = ui_lookup_widget(ui_widgets.prefs_dialog, "radio_tab_right");
 		file_prefs.tab_order_ltr = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));

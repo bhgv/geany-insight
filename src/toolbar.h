@@ -34,6 +34,8 @@ typedef struct GeanyToolbarPrefs
 	gboolean		use_gtk_default_style;
 	gboolean		use_gtk_default_icon;
 	gboolean		append_to_menu;
+ gint height; /* requested compact toolbar height, pixels */
+ gint panel_font_size; /* side-panel text, points */
 }
 GeanyToolbarPrefs;
 

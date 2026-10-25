@@ -16,6 +16,7 @@
 static GtkWidget *window;static gchar *directory,*profile;static guint phase;
 static GtkWidget *named(GtkWidget *root,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;
+ if(GTK_IS_NOTEBOOK(root)) {GtkWidget *action=gtk_notebook_get_action_widget(GTK_NOTEBOOK(root),GTK_PACK_END);if(action) {GtkWidget *found=named(action,name);if(found) return found;}}
  if(GTK_IS_MENU_ITEM(root)) { GtkWidget *submenu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(root));if(submenu) { GtkWidget *found=named(submenu,name);if(found) return found; } }
  if(GTK_IS_CONTAINER(root)) { GList *children=gtk_container_get_children(GTK_CONTAINER(root));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found; }return NULL;
 }
@@ -54,7 +55,11 @@ static gboolean step(gpointer data) {
   g_assert_false(gtk_widget_get_visible(named(window,"insight-editor-search-panel")));g_assert_false(gtk_widget_get_visible(named(window,"insight-project-search-panel")));
   const gchar *tools[]={"insight-help-tool","insight-tutorial-tool","insight-diff-tool","insight-find-tool","insight-replace-tool"};
   for(guint i=0;i<G_N_ELEMENTS(tools);i++) { GtkWidget *tool=named(window,tools[i]);g_assert_true(GTK_IS_TOOL_BUTTON(tool));g_assert_null(gtk_tool_button_get_label(GTK_TOOL_BUTTON(tool)));gchar *tip=gtk_widget_get_tooltip_text(tool);g_assert_nonnull(tip);g_free(tip); }
-  GtkWidget *command=named(window,"insight-help-command");g_assert_nonnull(gtk_menu_item_get_label(GTK_MENU_ITEM(command)));g_assert_nonnull(g_object_get_data(G_OBJECT(command),"insight-menu-icon"));gtk_menu_item_activate(GTK_MENU_ITEM(command));g_assert_nonnull(viewer());g_assert_true(has_text(viewer(),"user guide"));phase++;
+  GtkWidget *command=named(window,"insight-help-command");g_assert_nonnull(gtk_menu_item_get_label(GTK_MENU_ITEM(command)));g_assert_nonnull(g_object_get_data(G_OBJECT(command),"insight-menu-icon"));gtk_menu_item_activate(GTK_MENU_ITEM(command));g_assert_nonnull(viewer());g_assert_true(has_text(viewer(),"user guide"));
+  g_assert_false(gtk_expander_get_expanded(GTK_EXPANDER(named(viewer(),"insight-help-ai-prompt-fold"))));
+  insight_help_answer("Help fixture question","## Answer fixture\n\n| Command | Effect |\n| --- | --- |\n| Back | Previous location |\n");g_assert_true(has_text(viewer(),"Answer fixture"));const gchar *answer_html=g_object_get_data(G_OBJECT(viewer()),"insight-rendered-html");g_assert_nonnull(strstr(answer_html,"<table>"));
+  GtkWidget *recent=named(window,"insight-recent-sources");g_assert_nonnull(recent);GtkWidget *popup=GTK_WIDGET(gtk_menu_button_get_popup(GTK_MENU_BUTTON(recent)));g_signal_emit_by_name(popup,"show");GList *rows=gtk_container_get_children(GTK_CONTAINER(popup));g_assert_nonnull(rows);g_list_free(rows);
+  phase++;
  } else if(phase==1) {
   if(g_getenv("GEANY_GUI_SCREENSHOT")) { GdkPixbuf *picture=gdk_pixbuf_get_from_window(gtk_widget_get_window(viewer()),0,0,gtk_widget_get_allocated_width(viewer()),gtk_widget_get_allocated_height(viewer()));g_assert_nonnull(picture);g_assert_true(gdk_pixbuf_save(picture,g_getenv("GEANY_GUI_SCREENSHOT"),"png",NULL,NULL));g_object_unref(picture); }
   gtk_menu_item_activate(GTK_MENU_ITEM(named(window,"insight-tutorial-command")));g_assert_true(has_text(viewer(),"tutorials"));

@@ -31,4 +31,5 @@ void insight_workbench_languages_changed(void);
 void insight_workbench_locale_changed(void);
 gboolean insight_workbench_goto_definition(void);
 gboolean insight_workbench_browser_definition(gint position);
+void insight_workbench_panel_font(void);
 #endif

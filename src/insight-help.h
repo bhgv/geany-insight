@@ -12,6 +12,7 @@ void insight_panel_help_attach(GtkWidget *,const gchar *);
 void insight_panel_help_notebook(GtkNotebook *,const gchar *);
 void insight_help_locale_changed(void);
 void insight_help_show(GtkWidget *widget,gpointer topic);
+void insight_help_answer(const gchar *question,const gchar *markdown);
 void insight_markup_open_path(const gchar *path);
 void insight_markup_preview(GtkWidget *widget,gpointer data);
 void insight_markup_open(GtkWidget *widget,gpointer data);

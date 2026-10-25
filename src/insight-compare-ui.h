@@ -40,9 +40,11 @@ static void insight_compare_ui_queue(GtkWidget *tabs) {
 static void insight_compare_ui_allocate(GtkWidget *widget,GtkAllocation *allocation,gpointer data) { (void)widget;(void)allocation;insight_compare_ui_queue(data); }
 static void insight_compare_ui_switch(GtkNotebook *book,GtkWidget *page,guint number,gpointer data) { (void)page;(void)number;(void)data;insight_compare_ui_queue(GTK_WIDGET(book)); }
 static void insight_compare_ui_style(GtkWidget *widget,gpointer data) { (void)data;insight_compare_ui_queue(widget); }
-static inline GtkWidget *insight_compare_ui_tabs(GtkWidget *root,const gchar *name)
+static inline void insight_compare_ui_adopt(GtkWidget *tabs)
 {
- GdkScreen *screen=gtk_widget_get_screen(root);
+ if(g_object_get_data(G_OBJECT(tabs),"insight-controls-ready")) return;
+ g_object_set_data(G_OBJECT(tabs),"insight-controls-ready",GINT_TO_POINTER(1));
+ GdkScreen *screen=gtk_widget_get_screen(tabs);
  if(!g_object_get_data(G_OBJECT(screen),"insight-compare-ui-css")) {
   GtkCssProvider *css=gtk_css_provider_new();gtk_css_provider_load_from_data(css,
    ".insight-compare-code { font-size: " G_STRINGIFY(INSIGHT_COMPARE_CODE_POINTS) "pt; } .insight-compare-toolbar { font-size: 66.667%; } "
@@ -52,8 +54,12 @@ static inline GtkWidget *insight_compare_ui_tabs(GtkWidget *root,const gchar *na
   gtk_style_context_add_provider_for_screen(screen,GTK_STYLE_PROVIDER(css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
   g_object_set_data_full(G_OBJECT(screen),"insight-compare-ui-css",css,g_object_unref);
  }
- GtkWidget *tabs=gtk_notebook_new();gtk_widget_set_name(tabs,name);gtk_style_context_add_class(gtk_widget_get_style_context(tabs),"insight-compare-toolbar");
- gtk_notebook_set_scrollable(GTK_NOTEBOOK(tabs),TRUE);gtk_box_pack_start(GTK_BOX(root),tabs,FALSE,FALSE,0);gtk_box_reorder_child(GTK_BOX(root),tabs,0);g_signal_connect(tabs,"size-allocate",G_CALLBACK(insight_compare_ui_allocate),tabs);g_signal_connect_after(tabs,"switch-page",G_CALLBACK(insight_compare_ui_switch),NULL);g_signal_connect(tabs,"style-updated",G_CALLBACK(insight_compare_ui_style),NULL);insight_compare_ui_queue(tabs);return tabs;
+ gtk_style_context_add_class(gtk_widget_get_style_context(tabs),"insight-compare-toolbar");
+ gtk_notebook_set_scrollable(GTK_NOTEBOOK(tabs),TRUE);g_signal_connect(tabs,"size-allocate",G_CALLBACK(insight_compare_ui_allocate),tabs);g_signal_connect_after(tabs,"switch-page",G_CALLBACK(insight_compare_ui_switch),NULL);g_signal_connect(tabs,"style-updated",G_CALLBACK(insight_compare_ui_style),NULL);insight_compare_ui_queue(tabs);
+}
+static inline GtkWidget *insight_compare_ui_tabs(GtkWidget *root,const gchar *name)
+{
+ GtkWidget *tabs=gtk_notebook_new();gtk_widget_set_name(tabs,name);gtk_box_pack_start(GTK_BOX(root),tabs,FALSE,FALSE,0);gtk_box_reorder_child(GTK_BOX(root),tabs,0);insight_compare_ui_adopt(tabs);return tabs;
 }
 /* Labels are localized by callers; standalone directory fixtures need no Geany. */
 static inline GtkWidget *insight_compare_ui_page(GtkWidget *tabs,const gchar *label)

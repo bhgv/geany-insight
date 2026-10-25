@@ -34,6 +34,7 @@ static void set_text(GtkWidget *view,const gchar *s) { gtk_text_buffer_set_text(
 static void message(Review *r,const gchar *s) { gtk_label_set_text(GTK_LABEL(r->status),insight_tr(s)); }
 static gchar *config_path(const gchar *name) { return g_build_filename(app->configdir,name,NULL); }
 static Source *current(Review *r) { return g_ptr_array_index(r->files,r->current); }
+static void answer_in_help(GtkWidget *widget,gpointer data) {(void)widget;Review *r=data;const InsightAiVariant *v=insight_ai_edits_current(current(r)->edits);insight_help_answer(v->requirements,v->explanation); }
 static void source_free(gpointer p) { Source *s=p;g_free(s->path);g_free(s->base);insight_ai_edits_free(s->edits);g_free(s); }
 static void review_free(gpointer p) { Review *r=p;g_clear_object(&r->cancel);g_ptr_array_unref(r->files);g_ptr_array_unref(r->prompts);g_free(r->generated_context);g_free(r->prompt_path);g_free(r); }
 static void destroyed(GtkWidget *w,gpointer p) { (void)w;Review *r=p;r->closed=TRUE;if(r->cancel) g_cancellable_cancel(r->cancel); }
@@ -185,6 +186,7 @@ static void open_review(GtkWidget *w,gpointer data) {
  GtkWidget *question=named(r->window,"insight-diff-ai-question"),*ask=named(r->window,"insight-diff-ai-ask");gtk_widget_hide(question);gtk_widget_set_no_show_all(question,TRUE);gtk_widget_hide(ask);gtk_widget_set_no_show_all(ask,TRUE);insight_diff_review_compact(r->window);prompt_lists(r);controls(r);
  GtkWidget *tabs=named(r->window,"insight-diff-toolbar-tabs");
  GtkWidget *request_page=insight_compare_ui_page(tabs,"AI request"),*files_page=insight_compare_ui_page(tabs,"AI files"),*settings_page=insight_compare_ui_page(tabs,"AI connection"),*history_page=insight_compare_ui_page(tabs,"AI request history");
+ button(request_page,"Open answer in help viewer","insight-editor-ai-answer-help",G_CALLBACK(answer_in_help),r);
  GtkWidget *pages[]={request_page,files_page,settings_page,history_page};
  for(guint i=0;i<G_N_ELEMENTS(pages);i++) g_object_set_data(G_OBJECT(gtk_widget_get_ancestor(pages[i],GTK_TYPE_SCROLLED_WINDOW)),"insight-editor-ai-controls",GINT_TO_POINTER(1));
  GList *children=gtk_container_get_children(GTK_CONTAINER(r->panel));
