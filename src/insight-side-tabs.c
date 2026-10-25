@@ -68,6 +68,8 @@ static gboolean update(gpointer data) {
  SideTabs *s=data;s->idle=0;if(!s->alive) return G_SOURCE_REMOVE;if(s->rebuild) rebuild(s);
  gint current=gtk_notebook_get_current_page(s->book),visible=0,active_width=0;
  gint width=gtk_widget_get_allocated_width(s->wrapper);GtkWidget *parent=gtk_widget_get_parent(s->wrapper);if(parent) width=MIN(width,gtk_widget_get_allocated_width(parent));
+ /* A GtkViewport may retain its child minimum beyond the visible shelf. */
+ GtkWidget *clip=gtk_widget_get_ancestor(s->wrapper,GTK_TYPE_SCROLLED_WINDOW);if(clip) width=MIN(width,gtk_widget_get_allocated_width(clip));
  for(guint n=0;n<2;n++) if(s->actions[n] && gtk_widget_get_visible(s->actions[n])) {gint minimum;gtk_widget_get_preferred_width(s->actions[n],&minimum,NULL);width-=MAX(minimum,gtk_widget_get_allocated_width(s->actions[n]));}
  s->syncing=TRUE;
  for(guint n=0;n<s->buttons->len;n++) {
@@ -107,6 +109,7 @@ static void style_changed(GtkWidget *widget,gpointer data) {(void)widget;queue_u
 static void allocated(GtkWidget *widget,GtkAllocation *allocation,gpointer data) {
  (void)widget;SideTabs *s=data;gint old=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(s->wrapper),"insight-side-tabs-width"));if(old!=allocation->width) {g_object_set_data(G_OBJECT(s->wrapper),"insight-side-tabs-width",GINT_TO_POINTER(allocation->width));queue_update(s);}
 }
+static void clip_allocated(GtkWidget *widget,GtkAllocation *allocation,gpointer wrapper) {SideTabs *s=g_object_get_data(G_OBJECT(wrapper),"insight-side-tabs");if(s) allocated(widget,allocation,s);}
 static void switched(GtkNotebook *book,GtkWidget *page,guint index,gpointer data) {(void)book;(void)page;(void)index;insight_side_tabs_refresh(data);}
 static void pages_changed(GtkNotebook *book,GtkWidget *page,guint index,gpointer data) {(void)book;(void)page;(void)index;SideTabs *s=g_object_get_data(G_OBJECT(data),"insight-side-tabs");s->rebuild=TRUE;queue_update(s);}
 static void destroyed(GtkWidget *widget,gpointer data) {(void)widget;SideTabs *s=data;s->alive=FALSE;if(s->idle) {g_source_remove(s->idle);s->idle=0;}}
@@ -134,6 +137,7 @@ GtkWidget *insight_side_tabs_wrap(GtkNotebook *book,const gchar *(*translate)(co
  s->css=gtk_css_provider_new();gtk_css_provider_load_from_data(s->css,".insight-side-tabs button { min-width: 0; min-height: 0; padding: 1px 4px; margin: 0; } .insight-side-tabs button.insight-side-tab-arrow { padding: 0; }",-1,NULL);for(guint n=0;n<2;n++) gtk_style_context_add_provider(gtk_widget_get_style_context(arrows[n]),GTK_STYLE_PROVIDER(s->css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION+1);
  GtkGesture *drag=gtk_gesture_drag_new(s->row);gtk_event_controller_set_propagation_phase(GTK_EVENT_CONTROLLER(drag),GTK_PHASE_CAPTURE);g_signal_connect(drag,"drag-begin",G_CALLBACK(drag_begin),s);g_signal_connect(drag,"drag-update",G_CALLBACK(drag_update),s);g_object_set_data_full(G_OBJECT(s->row),"insight-side-tabs-drag",drag,g_object_unref);
  g_signal_connect(s->previous,"clicked",G_CALLBACK(previous_clicked),s);g_signal_connect(s->next,"clicked",G_CALLBACK(next_clicked),s);g_signal_connect(s->row,"key-press-event",G_CALLBACK(key_press),s);
+ GtkWidget *clip=gtk_widget_get_ancestor(s->wrapper,GTK_TYPE_SCROLLED_WINDOW);if(clip) g_signal_connect_object(clip,"size-allocate",G_CALLBACK(clip_allocated),s->wrapper,0);
  g_signal_connect(s->row,"style-updated",G_CALLBACK(style_changed),s);g_signal_connect(s->wrapper,"size-allocate",G_CALLBACK(allocated),s);g_signal_connect(s->wrapper,"destroy",G_CALLBACK(destroyed),s);
  g_signal_connect_object(book,"switch-page",G_CALLBACK(switched),s->wrapper,0);g_signal_connect_object(book,"page-added",G_CALLBACK(pages_changed),s->wrapper,0);g_signal_connect_object(book,"page-removed",G_CALLBACK(pages_changed),s->wrapper,0);g_signal_connect_object(book,"page-reordered",G_CALLBACK(pages_changed),s->wrapper,0);
  gtk_widget_show(s->tabs);gtk_widget_show(s->row);gtk_widget_show(s->wrapper);queue_update(s);return s->wrapper;
