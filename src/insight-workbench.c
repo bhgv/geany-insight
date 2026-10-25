@@ -6007,7 +6007,7 @@ static GtkCssProvider *panel_font_css;
 void insight_workbench_panel_font(void) {
  if(!wb.project_notebook) return;
  if(!panel_font_css) {panel_font_css=gtk_css_provider_new();gtk_style_context_add_provider_for_screen(gtk_widget_get_screen(main_widgets.window),GTK_STYLE_PROVIDER(panel_font_css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION+3);}
- gchar *css=g_strdup_printf(".insight-panel-font {font-size: %dpt;} .insight-panel-font * {font-size: inherit;} .insight-panel-font .insight-compare-toolbar {font-size: 66.667%%;}",CLAMP(toolbar_prefs.panel_font_size,6,28));gtk_css_provider_load_from_data(panel_font_css,css,-1,NULL);g_free(css);
+ gchar *css=g_strdup_printf(".insight-panel-font {font-size: %dpt;} .insight-panel-font * {font-size: inherit;} .insight-panel-font .insight-compare-toolbar {font-size: %d%%;}",CLAMP(toolbar_prefs.panel_font_size,6,28),INSIGHT_COMPARE_CONTROL_PERCENT);gtk_css_provider_load_from_data(panel_font_css,css,-1,NULL);g_free(css);
 }
 static gboolean panel_font_scroll(GtkWidget *widget,GdkEventScroll *event,gpointer data) {
  (void)widget;(void)data;if(!(event->state&GDK_CONTROL_MASK)) return FALSE;

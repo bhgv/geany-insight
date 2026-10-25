@@ -8,6 +8,7 @@
 #define INSIGHT_COMPARE_WIDTH 1100
 #define INSIGHT_COMPARE_HEIGHT 700
 #define INSIGHT_COMPARE_CODE_POINTS 10
+#define INSIGHT_COMPARE_CONTROL_PERCENT 80
 static inline void insight_compare_ui_move(GtkWidget *widget,GtkWidget *page)
 {
  g_object_ref(widget);GtkWidget *old=gtk_widget_get_parent(widget);if(old) gtk_container_remove(GTK_CONTAINER(old),widget);
@@ -47,10 +48,11 @@ static inline void insight_compare_ui_adopt(GtkWidget *tabs)
  GdkScreen *screen=gtk_widget_get_screen(tabs);
  if(!g_object_get_data(G_OBJECT(screen),"insight-compare-ui-css")) {
   GtkCssProvider *css=gtk_css_provider_new();gtk_css_provider_load_from_data(css,
-   ".insight-compare-code { font-size: " G_STRINGIFY(INSIGHT_COMPARE_CODE_POINTS) "pt; } .insight-compare-toolbar { font-size: 66.667%; } "
-   ".insight-compare-toolbar button, .insight-compare-toolbar entry, .insight-compare-toolbar combobox { min-height: 0; min-width: 0; padding: 2px 4px; } "
-   ".insight-compare-toolbar checkbutton check { min-height: 10px; min-width: 10px; } "
-   ".insight-compare-toolbar tab { min-height: 0; padding: 2px 5px; }",-1,NULL);
+   ".insight-compare-code { font-size: " G_STRINGIFY(INSIGHT_COMPARE_CODE_POINTS) "pt; } .insight-compare-toolbar { font-size: " G_STRINGIFY(INSIGHT_COMPARE_CONTROL_PERCENT) "%; } "
+   ".insight-compare-toolbar button, .insight-compare-toolbar entry, .insight-compare-toolbar combobox { min-height: 0; min-width: 0; padding: 2.4px 4.8px; } "
+   ".insight-compare-toolbar checkbutton check { min-height: 12px; min-width: 12px; } "
+   ".insight-compare-toolbar tab { min-height: 0; padding: 2.4px 6px; } "
+   ".insight-macos .insight-compare-toolbar > header > tabs > tab label { font-size: 10.8pt; }",-1,NULL);
   gtk_style_context_add_provider_for_screen(screen,GTK_STYLE_PROVIDER(css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
   g_object_set_data_full(G_OBJECT(screen),"insight-compare-ui-css",css,g_object_unref);
  }

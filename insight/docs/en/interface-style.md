@@ -127,3 +127,5 @@ Side panels switch to one active tab when each header has less than half the act
 Side headers reveal adjacent tabs progressively as space grows; arrows stay available. Toolbar height is increased once by 1.4 (16 → 22 logical pixels), with the existing 85% control cap. The detached Menu and Tools window fits its rows without a blank bottom shelf.
 
 Wrapped side panels retain a single tab strip when native sidebar callbacks update page visibility or pages are detached and reattached. The original GtkNotebook header stays hidden.
+
+Shared top options tabs use controls and fonts enlarged by 1.2 compared with the previous compact size (80% instead of 66⅔% of the surrounding UI font). Padding, checkbox indicators and tab captions scale with them, including the macOS tab font. The active group still determines the height and Collapse returns the space to the main content.
