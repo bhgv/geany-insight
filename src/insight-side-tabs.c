@@ -2,7 +2,7 @@
 #include "insight-side-tabs.h"
 #include <gdk/gdkkeysyms.h>
 typedef struct {
- GtkWidget *wrapper,*row,*tabs,*previous,*next;
+ GtkWidget *wrapper,*row,*tabs,*previous,*next,*actions[2];
  GtkNotebook *book;
  GPtrArray *buttons;
  GtkCssProvider *css;
@@ -65,6 +65,7 @@ static gboolean update(gpointer data) {
  SideTabs *s=data;s->idle=0;if(!s->alive) return G_SOURCE_REMOVE;if(s->rebuild) rebuild(s);
  gint current=gtk_notebook_get_current_page(s->book),visible=0,active_width=0;
  gint width=gtk_widget_get_allocated_width(s->wrapper);GtkWidget *parent=gtk_widget_get_parent(s->wrapper);if(parent) width=MIN(width,gtk_widget_get_allocated_width(parent));
+ for(guint n=0;n<2;n++) if(s->actions[n] && gtk_widget_get_visible(s->actions[n])) {gint minimum;gtk_widget_get_preferred_width(s->actions[n],&minimum,NULL);width-=MAX(minimum,gtk_widget_get_allocated_width(s->actions[n]));}
  for(guint n=0;n<s->buttons->len;n++) {
   GtkWidget *button=g_ptr_array_index(s->buttons,n),*page=button_page(button);if(!page) continue;
   const gchar *text=caption(s->book,page);if(g_strcmp0(gtk_button_get_label(GTK_BUTTON(button)),text)) gtk_button_set_label(GTK_BUTTON(button),text);
@@ -88,6 +89,7 @@ static gboolean update(gpointer data) {
 }
 static void queue_update(SideTabs *s) {if(s->alive && !s->idle) s->idle=g_idle_add(update,s);}
 void insight_side_tabs_refresh(gpointer wrapper) {SideTabs *s=g_object_get_data(G_OBJECT(wrapper),"insight-side-tabs");if(s) queue_update(s);}
+static void action_changed(GObject *object,GParamSpec *spec,gpointer data) {(void)object;(void)spec;insight_side_tabs_refresh(data);}
 static void style_changed(GtkWidget *widget,gpointer data) {(void)widget;queue_update(data);}
 static void allocated(GtkWidget *widget,GtkAllocation *allocation,gpointer data) {
  (void)widget;SideTabs *s=data;gint old=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(s->wrapper),"insight-side-tabs-width"));if(old!=allocation->width) {g_object_set_data(G_OBJECT(s->wrapper),"insight-side-tabs-width",GINT_TO_POINTER(allocation->width));queue_update(s);}
@@ -105,7 +107,15 @@ GtkWidget *insight_side_tabs_wrap(GtkNotebook *book,const gchar *(*translate)(co
  s->previous=gtk_button_new_from_icon_name("go-previous-symbolic",GTK_ICON_SIZE_MENU);s->next=gtk_button_new_from_icon_name("go-next-symbolic",GTK_ICON_SIZE_MENU);
  gtk_widget_set_name(s->previous,"insight-side-tabs-previous");gtk_widget_set_name(s->next,"insight-side-tabs-next");GtkWidget *arrows[]={s->previous,s->next};
  for(guint n=0;n<2;n++) {gtk_widget_set_no_show_all(arrows[n],TRUE);gtk_button_set_always_show_image(GTK_BUTTON(arrows[n]),TRUE);gtk_style_context_add_class(gtk_widget_get_style_context(arrows[n]),"insight-side-tab-arrow");gtk_image_set_pixel_size(GTK_IMAGE(gtk_button_get_image(GTK_BUTTON(arrows[n]))),10);gtk_button_set_focus_on_click(GTK_BUTTON(arrows[n]),FALSE);}
- gtk_box_pack_start(GTK_BOX(s->row),s->previous,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(s->row),s->tabs,TRUE,TRUE,0);gtk_box_pack_end(GTK_BOX(s->row),s->next,FALSE,FALSE,0);
+ gtk_box_pack_start(GTK_BOX(s->row),s->previous,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(s->row),s->tabs,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(s->row),s->next,FALSE,FALSE,0);
+ /* Keep existing notebook actions (notably contextual Help) usable even
+  * though the native notebook header itself is hidden. */
+ for(guint n=0;n<2;n++) {
+  GtkPackType pack=n ? GTK_PACK_END:GTK_PACK_START;GtkWidget *action=gtk_notebook_get_action_widget(book,pack);if(!action) continue;
+  g_object_ref(action);gtk_notebook_set_action_widget(book,NULL,pack);s->actions[n]=action;
+  if(n) gtk_box_pack_end(GTK_BOX(s->row),action,FALSE,FALSE,0);else {gtk_box_pack_start(GTK_BOX(s->row),action,FALSE,FALSE,0);gtk_box_reorder_child(GTK_BOX(s->row),action,0);}
+  g_object_unref(action);g_signal_connect_object(action,"notify::visible",G_CALLBACK(action_changed),s->wrapper,0);
+ }
  gtk_box_pack_start(GTK_BOX(s->wrapper),s->row,FALSE,FALSE,0);
  g_object_ref(book);gtk_container_remove(GTK_CONTAINER(parent),GTK_WIDGET(book));gtk_box_pack_start(GTK_BOX(s->wrapper),GTK_WIDGET(book),TRUE,TRUE,0);gtk_container_add(GTK_CONTAINER(parent),s->wrapper);g_object_unref(book);gtk_notebook_set_show_tabs(book,FALSE);
  s->css=gtk_css_provider_new();gtk_css_provider_load_from_data(s->css,".insight-side-tabs button { min-width: 0; min-height: 0; padding: 1px 4px; margin: 0; } .insight-side-tabs button.insight-side-tab-arrow { padding: 0; }",-1,NULL);for(guint n=0;n<2;n++) gtk_style_context_add_provider(gtk_widget_get_style_context(arrows[n]),GTK_STYLE_PROVIDER(s->css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION+1);

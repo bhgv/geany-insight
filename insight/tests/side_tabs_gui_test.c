@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "../../src/insight-side-tabs.h"
 #include <string.h>
-static GtkWidget *window,*book,*wrapper;
+static GtkWidget *window,*book,*wrapper,*help;
+static guint help_clicks;
+static void help_clicked(GtkButton *button,gpointer data) {(void)button;(void)data;help_clicks++;}
 static guint phase,ticks;
 static const gchar *names[]={"File Symbols","Project Files","Project Symbols"};
 static GtkWidget *find(GtkWidget *root,const gchar *name) {
@@ -22,7 +24,7 @@ static gboolean step(gpointer data) {
   gtk_window_resize(GTK_WINDOW(window),180,300);phase=1;return G_SOURCE_CONTINUE;
  }
  if(phase==1) {single(0);g_signal_emit_by_name(find(wrapper,"insight-side-tabs-next"),"clicked");phase=2;return G_SOURCE_CONTINUE;}
- if(phase==2) {single(1);g_signal_emit_by_name(find(wrapper,"insight-side-tabs-previous"),"clicked");phase=3;return G_SOURCE_CONTINUE;}
+ if(phase==2) {single(1);g_signal_emit_by_name(help,"clicked");g_assert_cmpuint(help_clicks,==,1);g_signal_emit_by_name(find(wrapper,"insight-side-tabs-previous"),"clicked");phase=3;return G_SOURCE_CONTINUE;}
  if(phase==3) {single(0);g_signal_emit_by_name(find(wrapper,"insight-side-tabs-previous"),"clicked");phase=4;return G_SOURCE_CONTINUE;}
  if(phase==4) {single(2);GtkWidget *row=find(wrapper,"insight-side-tabs-row");GtkGesture *drag=g_object_get_data(G_OBJECT(row),"insight-side-tabs-drag");g_signal_emit_by_name(drag,"drag-begin",0.0,0.0);g_signal_emit_by_name(drag,"drag-update",-70.0,0.0);phase=5;return G_SOURCE_CONTINUE;}
  if(phase==5) {single(0);gtk_notebook_set_tab_label_text(GTK_NOTEBOOK(book),gtk_notebook_get_nth_page(GTK_NOTEBOOK(book),0),"Символы текущего файла — полное название");phase=6;return G_SOURCE_CONTINUE;}
@@ -36,5 +38,5 @@ int main(int argc,char **argv) {
  if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;gtk_init(&argc,&argv);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);
  window=gtk_window_new(GTK_WINDOW_TOPLEVEL);book=gtk_notebook_new();GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),GTK_POLICY_EXTERNAL,GTK_POLICY_EXTERNAL);gtk_container_add(GTK_CONTAINER(window),scroll);gtk_container_add(GTK_CONTAINER(scroll),book);
  for(guint n=0;n<3;n++) {GtkWidget *page=gtk_label_new("Panel contents remain visible and unchanged");gtk_label_set_ellipsize(GTK_LABEL(page),PANGO_ELLIPSIZE_END);gtk_label_set_width_chars(GTK_LABEL(page),1);gtk_notebook_append_page(GTK_NOTEBOOK(book),page,gtk_label_new(names[n]));}
- wrapper=insight_side_tabs_wrap(GTK_NOTEBOOK(book),NULL);g_assert_nonnull(wrapper);gtk_window_set_default_size(GTK_WINDOW(window),900,300);gtk_widget_show_all(window);g_timeout_add(150,step,NULL);gtk_main();return 0;
+ help=gtk_button_new_with_label("?");g_signal_connect(help,"clicked",G_CALLBACK(help_clicked),NULL);gtk_notebook_set_action_widget(GTK_NOTEBOOK(book),help,GTK_PACK_END);wrapper=insight_side_tabs_wrap(GTK_NOTEBOOK(book),NULL);g_assert_nonnull(wrapper);gtk_window_set_default_size(GTK_WINDOW(window),900,300);gtk_widget_show_all(window);g_timeout_add(150,step,NULL);gtk_main();return 0;
 }
