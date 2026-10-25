@@ -57,7 +57,7 @@ static void style_icons(GtkWidget *widget) {
  if(GTK_IS_CONTAINER(widget)) { GList *children=gtk_container_get_children(GTK_CONTAINER(widget));for(GList *p=children;p;p=p->next) style_icons(p->data);g_list_free(children); }
 }
 static gdouble window_opacity(GtkWidget *widget) {
- if(fading) {gdouble t=CLAMP((g_get_monotonic_time()-fade_started)/2000000.0,0.0,1.0);return fade_from+(1.0-fade_from)*t;}
+ if(fading) {gdouble t=CLAMP((g_get_monotonic_time()-fade_started)/400000.0,0.0,1.0);return fade_from+(1.0-fade_from)*t;}
  if(independent || g_object_get_data(G_OBJECT(widget),"insight-independent-opacity") || opacity!=100) return opacity/100.0;
  guint local=GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(widget),"insight-local-window-opacity"));return local ? local/100.0:1.0;
 }
@@ -69,7 +69,7 @@ void insight_appearance_panel_opacity(GtkWidget *window,gint percent) {
  if(!GTK_IS_WINDOW(window)) return;g_object_set_data(G_OBJECT(window),"insight-local-window-opacity",GUINT_TO_POINTER(CLAMP(percent,1,100)));apply_native_opacity(window);
 }
 gboolean insight_appearance_opacity_tick(gboolean finish) {
- if(!fading) return FALSE;if(finish || g_get_monotonic_time()-fade_started>=2000000) fading=FALSE;
+ if(!fading) return FALSE;if(finish || g_get_monotonic_time()-fade_started>=400000) fading=FALSE;
  for(guint n=0;surfaces && n<surfaces->len;n++) {Surface *surface=g_ptr_array_index(surfaces,n);GtkWidget *widget=g_weak_ref_get(&surface->widget);if(widget) {apply_native_opacity(widget);g_object_unref(widget);}}return fading;
 }
 static void apply_surface(GtkWidget *widget) {
