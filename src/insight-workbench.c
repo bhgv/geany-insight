@@ -4706,7 +4706,17 @@ static GtkWidget *palette_part_content(guint part) {
 static InsightWindowRect palette_frame(GtkWidget *widget) {
  InsightWindowRect rect={0,0,1,1};if(!GTK_IS_WINDOW(widget)) return rect;
  gtk_window_get_position(GTK_WINDOW(widget),&rect.x,&rect.y);gtk_window_get_size(GTK_WINDOW(widget),&rect.width,&rect.height);
- GdkWindow *native=gtk_widget_get_window(widget);if(native) {GdkRectangle frame;gdk_window_get_frame_extents(native,&frame);if(frame.width>1 && frame.height>1) rect=(InsightWindowRect){frame.x,frame.y,frame.width,frame.height};}return rect;
+ GdkWindow *native=gtk_widget_get_window(widget);
+ /* Native CSD extents include the CSS shadow (84px per side with the material
+  * theme). Only the visible titlebar/body frame belongs inside the workarea. */
+ GtkWidget *body=gtk_bin_get_child(GTK_BIN(widget)),*title=gtk_window_get_titlebar(GTK_WINDOW(widget));
+ if(native && title && body && gtk_widget_get_mapped(body)) {
+  gint x=0,y=0,root_x=0,root_y=0;if(gtk_widget_translate_coordinates(body,widget,0,0,&x,&y)) {
+   gdk_window_get_origin(native,&root_x,&root_y);
+   return insight_window_visible_frame(rect.x,rect.y,(InsightWindowRect){root_x+x,root_y+y,gtk_widget_get_allocated_width(body),gtk_widget_get_allocated_height(body)});
+  }
+ }
+ if(native) {GdkRectangle frame;gdk_window_get_frame_extents(native,&frame);if(frame.width>1 && frame.height>1) rect=(InsightWindowRect){frame.x,frame.y,frame.width,frame.height};}return rect;
 }
 static InsightWindowRect palette_widget_rect(GtkWidget *widget,InsightWindowRect fallback) {
  if(!widget || !gtk_widget_get_mapped(widget) || gtk_widget_get_allocated_width(widget)<2 || gtk_widget_get_allocated_height(widget)<2) return fallback;

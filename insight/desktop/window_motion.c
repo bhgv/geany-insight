@@ -4,6 +4,10 @@
 static int minimum(int a,int b) { return a<b ? a:b; }
 static int maximum(int a,int b) { return a>b ? a:b; }
 static int mix(int a,int b,double t) { return (int)lround((double)a+((double)b-a)*t); }
+InsightWindowRect insight_window_visible_frame(int x,int y,InsightWindowRect content) {
+ int border=maximum(0,content.x-x);
+ return (InsightWindowRect){x,y,maximum(1,content.x+content.width+border-x),maximum(1,content.y+content.height+border-y)};
+}
 InsightWindowRect insight_window_rect_clamp(InsightWindowRect rect,InsightWindowRect area) {
  area.width=maximum(1,area.width);area.height=maximum(1,area.height);
  rect.width=minimum(maximum(1,rect.width),area.width);rect.height=minimum(maximum(1,rect.height),area.height);

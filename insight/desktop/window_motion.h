@@ -7,6 +7,8 @@ typedef struct { int x,y,width,height; } InsightWindowRect;
 typedef struct { InsightWindowRect from,to;double distance,seconds; } InsightWindowMotion;
 /* Optional sizes describe measured outer frames, including native decorations. */
 void insight_window_edge_layout(InsightWindowRect area,const InsightWindowRect *sizes,InsightWindowRect out[INSIGHT_FLOAT_COUNT]);
+/* Visible CSD frame from its logical origin and root-space content bounds. */
+InsightWindowRect insight_window_visible_frame(int x,int y,InsightWindowRect content);
 InsightWindowRect insight_window_rect_clamp(InsightWindowRect rect,InsightWindowRect area);
 /* One speed for the entire transition. Typical travel takes nominal_seconds;
  * longer paths take longer (bounded to three times nominal_seconds). */

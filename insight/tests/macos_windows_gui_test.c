@@ -25,7 +25,16 @@ static GtkWidget *any(const gchar *name) {
  GList *windows=gtk_window_list_toplevels();GtkWidget *f=NULL;for(GList *p=windows;p && !f;p=p->next) f=named(p->data,name);g_list_free(windows);return f;
 }
 static gboolean moving(void) { return g_object_get_data(G_OBJECT(window),"insight-independent-motion")!=NULL; }
-static GdkRectangle frame(GtkWidget *widget) { GdkRectangle rect;gdk_window_get_frame_extents(gtk_widget_get_window(widget),&rect);return rect; }
+static GdkRectangle frame(GtkWidget *widget) {
+ GdkWindow *native=gtk_widget_get_window(widget);GdkRectangle rect;gdk_window_get_frame_extents(native,&rect);
+ GtkWidget *header=gtk_window_get_titlebar(GTK_WINDOW(widget)),*body=gtk_bin_get_child(GTK_BIN(widget));
+ if(header && body) {
+  gint hx,hy,bx,by,ox,oy,x,y;gdk_window_get_origin(native,&ox,&oy);gtk_window_get_position(GTK_WINDOW(widget),&x,&y);
+  g_assert_true(gtk_widget_translate_coordinates(header,widget,0,0,&hx,&hy));g_assert_true(gtk_widget_translate_coordinates(body,widget,0,0,&bx,&by));
+  gint border=MAX(0,ox+hx-x);rect=(GdkRectangle){ox+hx-border,oy+hy-border,gtk_widget_get_allocated_width(header)+2*border,oy+by+gtk_widget_get_allocated_height(body)+border-y};
+ }
+ return rect;
+}
 static void edge_positions(void) {
  GdkMonitor *monitor=gdk_display_get_monitor_at_window(gtk_widget_get_display(window),gtk_widget_get_window(window));GdkRectangle area;gdk_monitor_get_workarea(monitor,&area);GtkWidget *tools=any("insight-tools-palette");g_assert_nonnull(tools);GdkRectangle t=frame(tools),l=frame(gtk_widget_get_toplevel(left)),r=frame(gtk_widget_get_toplevel(project)),b=frame(gtk_widget_get_toplevel(context)),e=frame(window);GdkRectangle all[]={t,l,r,b,e};
  for(guint n=0;n<G_N_ELEMENTS(all);n++) {g_assert_cmpint(all[n].x,>=,area.x-3);g_assert_cmpint(all[n].y,>=,area.y-3);g_assert_cmpint(all[n].x+all[n].width,<=,area.x+area.width+3);g_assert_cmpint(all[n].y+all[n].height,<=,area.y+area.height+3);}

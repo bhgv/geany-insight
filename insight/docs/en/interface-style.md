@@ -71,3 +71,5 @@ Independent palettes have no transient parent, so the editor can be raised norma
 Position requests use explicit North-West frame gravity and absolute workarea coordinates, without inheriting offsets from the window manager’s initial placement. Quintic easing has zero velocity and acceleration at both endpoints.
 
 Independent palette headers reserve a single title line, without an empty subtitle row. Compact padding and buttons reduce their height to approximately half the previous chrome; joining restores ordinary styling.
+
+Edge anchors use the visible CSD frame, excluding transparent CSS shadow padding. Shadows may extend outside the workarea while the actual palette remains inside it, clear of system docks.

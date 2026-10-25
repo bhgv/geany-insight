@@ -11,6 +11,8 @@ static void layout(InsightWindowRect area) {
  for(int n=0;n<5;n++) {if(n!=1 && n!=2) assert(abs(2*r[n].x+r[n].width-2*area.x-area.width)<=1);if(n!=0 && n!=3) assert(abs(2*r[n].y+r[n].height-2*area.y-area.height)<=1);}
 }
 int main(void) {
+ InsightWindowRect visible=insight_window_visible_frame(0,24,(InsightWindowRect){1,44,1100,100});assert(visible.x==0 && visible.y==24 && visible.width==1102 && visible.height==121);
+ visible=insight_window_visible_frame(-1600,40,(InsightWindowRect){-1599,60,280,600});assert(visible.x==-1600 && visible.y==40 && visible.width==282 && visible.height==621);
  layout((InsightWindowRect){0,0,1600,1200});layout((InsightWindowRect){-1920,48,1920,1032});layout((InsightWindowRect){0,24,640,456});
  InsightWindowRect sizes[5]={{0,0,950,130},{0,0,310,550},{0,0,360,600},{0,0,920,360},{0,0,700,400}},out[5];insight_window_edge_layout((InsightWindowRect){-1600,40,1600,900},sizes,out);assert(out[0].x==-1275);assert(out[2].x==-360);assert(out[3].y==580);assert(out[4].x==-1150 && out[4].y==290);
  InsightWindowRect a[3]={{0,0,100,100},{0,100,200,200},{0,200,300,300}},b[3]={{100,0,100,100},{200,100,200,200},{300,200,300,300}};InsightWindowMotion motion[3];double speed=insight_window_motion_plan(motion,a,b,3,2,0);assert(fabs(speed-100)<1e-9);assert(motion[0].seconds==1 && motion[1].seconds==2 && motion[2].seconds==3);
