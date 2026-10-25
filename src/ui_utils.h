@@ -356,6 +356,10 @@ gboolean ui_tree_view_find_previous(GtkTreeView *treeview, TVMatchCallback cb);
 gboolean ui_tree_model_iter_any_next(GtkTreeModel *model, GtkTreeIter *iter, gboolean down);
 
 void ui_statusbar_showhide(gboolean state);
+void ui_statusbar_mode(gboolean independent);
+void ui_statusbar_settings_load(GKeyFile *config);
+void ui_statusbar_settings_save(GKeyFile *config);
+void ui_statusbar_menu(GtkWidget *menu,gboolean editor);
 
 void ui_toggle_editor_features(GeanyUIEditorFeatures feature);
 

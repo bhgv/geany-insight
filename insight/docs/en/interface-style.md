@@ -60,9 +60,9 @@ Tooltips retain native GTK styling and geometry. The application does not change
 
 Independent mode centers tools against the workarea top, File Symbols against the left edge, the project shelf against the right, the complete Context/terminal notebook against the bottom, and the source window in the workarea center. Monitor workarea offsets and native frame sizes are included. Existing terminal widgets and sessions are moved intact.
 
-A single nonblocking timer moves real windows with an S-shaped acceleration/deceleration profile: the longest path takes 0.8 seconds and shorter paths finish earlier. Final native frame positions are checked and corrected against workarea edges, excluding system panels. Joining restores the previous layout after the inward motion. Rapid mode changes reverse the current transition. Startup places restored independent windows directly at their endpoints.
+Splitting and joining are immediate, without animation. Windows are placed directly at workarea edges; a short nonblocking geometry check accounts for final native frame sizes without covering system panels. Joining immediately restores the previous layout. Source viewports and terminal sessions are preserved.
 
-Four radio choices replace Reduce transparency: 100%, 90%, 80%, 70%. The value is persisted and controls native GTK window opacity, including the unified main window. Splitting resets the choice to 100% and fades actual opacity back to 100% over approximately 0.8 seconds. Legacy per-panel alpha is overridden during independent mode, rather than multiplied into the global value. Users can explicitly choose a different level afterward. Outside independent mode, individual panel settings remain available.
+Four radio choices replace Reduce transparency: 100%, 90%, 80%, 70%. The value is persisted and controls native GTK window opacity, including the unified main window. Splitting resets the choice to 100% and immediately restores actual opacity to 100%. Legacy per-panel alpha is overridden during independent mode, rather than multiplied into the global value. Users can explicitly choose a different level afterward. Outside independent mode, individual panel settings remain available.
 
 Actual positioning and desktop transparency depend on the window manager/compositor; Wayland may restrict window moves. Linux/Xvfb checks coordinates and GTK opacity, not the visual output of every desktop compositor.
 
@@ -89,7 +89,7 @@ Options / View → Interface style → **macOS appearance** selects the surface 
 
 These are original GTK adaptations inspired by Apple’s designs, not macOS system themes. They add no dependencies and do not change source syntax palettes, editor fonts, text, selections or Undo. Liquid Glass desktop refraction/blur is not implemented. The dark variant keeps the system GTK header colors so native window controls remain readable.
 
-Title buttons retain the current GTK theme and its decoration layout. Their allocated height is capped at 85% of the header height. Split/join motion uses an S-shaped curve with a maximum 0.8-second travel time.
+Title buttons retain the current GTK theme and its decoration layout. Their allocated height is capped at 85% of the header height. Splitting and joining do not animate.
 
 Design references: [Apple — macOS 27 Golden Gate](https://www.apple.com/os/macos/), [Apple — macOS Tahoe / Liquid Glass](https://www.apple.com/newsroom/2025/06/macos-tahoe-26-makes-the-mac-more-capable-productive-and-intelligent-than-ever/). The Linux GUI fixture captures real widgets for all six variants as `macos-theme-*.jpg` CI artifacts; the diagram above is schematic.
 
@@ -115,3 +115,8 @@ The down arrow to the right of editor tabs lists every open buffer in most-recen
 Every AI receives up to 24,000 characters of relevant installed editor documentation. Help opens with a collapsed Ask AI prompt. Its answer becomes a Markdown page with the viewer's existing back/forward history and table rendering. Other assistants offer Open answer in help viewer. Requests use the selected AI connection.
 
 ![Shared options container](../media/compact-options.svg)
+
+
+## Editor footer
+
+Hide or show the editor footer with View → Show status bar, the same check item in the editor popup, or Preferences → Interface → Show status bar. The controls share one state. Unified and independent windows remember separate choices; the footer starts hidden in independent mode. Joining restores the unified-window choice.

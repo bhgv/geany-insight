@@ -2068,8 +2068,32 @@ static void ui_path_box_open_clicked(GtkButton *button, gpointer user_data)
 }
 
 
+static gboolean footer_independent,footer_unified=TRUE,footer_split,footer_syncing;
+static GtkWidget *footer_items[2];
+static void footer_toggled(GtkCheckMenuItem *item,gpointer data) {
+ (void)data;if(footer_syncing) return;interface_prefs.statusbar_visible=gtk_check_menu_item_get_active(item);ui_statusbar_showhide(interface_prefs.statusbar_visible);
+}
+void ui_statusbar_menu(GtkWidget *menu,gboolean editor) {
+ guint at=editor ? 1:0;if(footer_items[at]) return;GtkWidget *item=gtk_check_menu_item_new_with_label(_("Show status bar"));gtk_widget_set_name(item,editor ? "insight-footer-editor":"insight-footer-view");footer_items[at]=item;g_object_add_weak_pointer(G_OBJECT(item),(gpointer *)&footer_items[at]);gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item),interface_prefs.statusbar_visible);g_signal_connect(item,"toggled",G_CALLBACK(footer_toggled),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);gtk_widget_show(item);
+}
+void ui_statusbar_settings_load(GKeyFile *config) {
+ footer_independent=FALSE;footer_unified=interface_prefs.statusbar_visible;footer_split=utils_get_setting_boolean(config,PACKAGE,"independent_statusbar_visible",FALSE);
+}
+void ui_statusbar_settings_save(GKeyFile *config) {
+ if(footer_independent) footer_split=interface_prefs.statusbar_visible;else footer_unified=interface_prefs.statusbar_visible;
+ g_key_file_set_boolean(config,PACKAGE,"statusbar_visible",footer_unified);g_key_file_set_boolean(config,PACKAGE,"independent_statusbar_visible",footer_split);
+}
+void ui_statusbar_mode(gboolean independent) {
+ if(footer_independent==independent) return;if(footer_independent) footer_split=interface_prefs.statusbar_visible;else footer_unified=interface_prefs.statusbar_visible;
+ footer_independent=independent;interface_prefs.statusbar_visible=independent ? footer_split:footer_unified;ui_statusbar_showhide(interface_prefs.statusbar_visible);
+}
 void ui_statusbar_showhide(gboolean state)
 {
+ footer_syncing=TRUE;for(guint n=0;n<2;n++) if(footer_items[n]) gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(footer_items[n]),interface_prefs.statusbar_visible);footer_syncing=FALSE;
+ if(ui_widgets.prefs_dialog) {GtkWidget *check=ui_lookup_widget(ui_widgets.prefs_dialog,"check_statusbar_visible");if(GTK_IS_TOGGLE_BUTTON(check)) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(check),interface_prefs.statusbar_visible);}
+
+	/* Preserve explicit hiding across show_all() during window reparenting. */
+ gtk_widget_set_no_show_all(ui_widgets.statusbar,!state);
 	/* handle statusbar visibility */
 	if (state)
 	{

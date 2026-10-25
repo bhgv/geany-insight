@@ -128,7 +128,8 @@ static gboolean save(gboolean next_mac,guint next_opacity,gboolean next_independ
 static void selected(GtkCheckMenuItem *item,gpointer data) {
  if(syncing || !alive || !gtk_check_menu_item_get_active(item)) return;guint action=GPOINTER_TO_UINT(data);gboolean next_independent=action==3,next_mac=action==1 || action==3;guint next_opacity=next_independent && !independent ? 100:opacity;GError *error=NULL;
  if((next_mac && !load_css(&error)) || !save(next_mac,next_opacity,next_independent,theme,&error)) {ui_set_statusbar(TRUE,"%s",error ? error->message:insight_tr("Cannot save interface style"));g_clear_error(&error);sync_menus();return;}
- if(next_independent && !independent && opacity<100) {fading=TRUE;fade_from=opacity/100.0;fade_started=g_get_monotonic_time();}
+ /* Splitting and joining are immediate, including the opacity reset. */
+ fading=FALSE;
  macos=next_mac;opacity=next_opacity;reduced=opacity==100;independent=next_independent;apply();
 }
 static void opacity_selected(GtkCheckMenuItem *item,gpointer data) {

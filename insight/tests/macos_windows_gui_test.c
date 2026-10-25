@@ -15,7 +15,7 @@ static GeanyDocument *doc,*other;
 static gint other_first,other_x;
 static GtkWidget *window,*options[4],*left,*context,*project,*icon;
 static ScintillaObject *map;
-static guint phase,ticks;static gboolean saw_motion,saw_alpha;static gdouble last_alpha=.7;static gint original_size;static gboolean restoring;
+static guint phase,ticks;static gint original_size;static gboolean restoring;
 static GtkWidget *named(GtkWidget *w,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(w),name)) return w;
  if(GTK_IS_MENU_ITEM(w)) { GtkWidget *sub=gtk_menu_item_get_submenu(GTK_MENU_ITEM(w));if(sub) { GtkWidget *f=named(sub,name);if(f) return f; } }
@@ -96,10 +96,10 @@ static gboolean step(gpointer unused) {
   if(gtk_icon_theme_has_icon(gtk_icon_theme_get_default(),"document-open-symbolic")) g_assert_cmpstr(name,==,"document-open-symbolic");
   GtkBorder padding;gtk_style_context_get_padding(gtk_widget_get_style_context(options[0]),GTK_STATE_FLAG_NORMAL,&padding);g_assert_cmpint(padding.top,<=,2);g_assert_cmpint(padding.bottom,<=,2);
   other_first=SEND(other->editor->sci,SCI_GETFIRSTVISIBLELINE,0,0);other_x=SEND(other->editor->sci,SCI_GETXOFFSET,0,0);g_assert_cmpint(other_first,>,0);
-  GtkWidget *opacity=any("insight-opacity-0-70");g_assert_true(GTK_IS_RADIO_MENU_ITEM(opacity));gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(opacity),TRUE);g_assert_cmpfloat_with_epsilon(gtk_widget_get_opacity(window),.7,.006);last_alpha=gtk_widget_get_opacity(window);choose(3);phase++;return G_SOURCE_CONTINUE;
+  GtkWidget *opacity=any("insight-opacity-0-70");g_assert_true(GTK_IS_RADIO_MENU_ITEM(opacity));gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(opacity),TRUE);g_assert_cmpfloat_with_epsilon(gtk_widget_get_opacity(window),.7,.006);choose(3);phase++;return G_SOURCE_CONTINUE;
  }
  if(phase==5) {
-  if(moving()) {saw_motion=TRUE;gdouble alpha=gtk_widget_get_opacity(window);g_assert_cmpfloat(alpha+.005,>=,last_alpha);if(alpha<.995) saw_alpha=TRUE;last_alpha=alpha;return G_SOURCE_CONTINUE;}edge_positions();if(!restoring) {g_assert_true(saw_motion);g_assert_true(saw_alpha);}g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(any("insight-opacity-0-100"))));
+  if(moving()) {g_assert_cmpfloat_with_epsilon(gtk_widget_get_opacity(window),1.0,.006);return G_SOURCE_CONTINUE;}edge_positions();g_assert_false(gtk_widget_get_visible(ui_lookup_widget(window,"statusbar")));g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(any("insight-opacity-0-100"))));
   GtkWidget *tools=any("insight-tools-palette");g_assert_nonnull(tools);g_assert_true(gtk_widget_get_toplevel(ui_lookup_widget(window,"menubar1"))==tools);
   GtkWidget *l=gtk_widget_get_toplevel(left),*r=gtk_widget_get_toplevel(project),*c=gtk_widget_get_toplevel(context);
   g_assert_true(l!=window && r!=window && c!=window && l!=r && l!=c && r!=c);
@@ -113,7 +113,7 @@ static gboolean step(gpointer unused) {
  }
  if(phase==6) {
   if(moving()) return G_SOURCE_CONTINUE;
-  g_assert_null(any("insight-tools-palette"));g_assert_true(gtk_widget_get_visible(any("insight-message-height-host"))) ;g_assert_true(gtk_widget_get_toplevel(left)==window);g_assert_true(gtk_widget_get_toplevel(context)==window);g_assert_true(gtk_widget_get_toplevel(project)==window);unchanged();
+  g_assert_true(gtk_widget_get_visible(ui_lookup_widget(window,"statusbar")));g_assert_null(any("insight-tools-palette"));g_assert_true(gtk_widget_get_visible(any("insight-message-height-host"))) ;g_assert_true(gtk_widget_get_toplevel(left)==window);g_assert_true(gtk_widget_get_toplevel(context)==window);g_assert_true(gtk_widget_get_toplevel(project)==window);unchanged();
   choose(3);phase++;return G_SOURCE_CONTINUE;
  }
  if(phase==7) { if(moving()) return G_SOURCE_CONTINUE;edge_positions();GtkWidget *tools=any("insight-tools-palette");g_assert_nonnull(tools);gtk_window_close(GTK_WINDOW(tools));phase++;return G_SOURCE_CONTINUE; }
@@ -122,10 +122,10 @@ static gboolean step(gpointer unused) {
   const gchar *name=NULL;GtkIconSize size;gtk_image_get_icon_name(GTK_IMAGE(icon),&name,&size);g_assert_cmpstr(name,==,"document-open");unchanged();
   choose(3);phase=10;return G_SOURCE_CONTINUE;
  }
- if(phase==10) {g_assert_true(moving());choose(1);choose(3);phase++;return G_SOURCE_CONTINUE;}
+ if(phase==10) {choose(1);choose(3);phase++;return G_SOURCE_CONTINUE;}
  if(phase==11) {if(moving()) return G_SOURCE_CONTINUE;edge_positions();choose(1);phase++;return G_SOURCE_CONTINUE;}
  if(phase==12) {if(moving()) return G_SOURCE_CONTINUE;g_assert_null(any("insight-tools-palette"));unchanged();
-  g_print("Workarea anchors, constant-speed split/join, reversible transitions, grouped Context/terminals, native opacity fade and independent macOS windows, compact menus, symbolic icon restoration, CSD, join/Close, minimap font/zoom recovery and Ctrl-wheel passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+  g_print("Workarea anchors, instant split/join, reversible transitions, grouped Context/terminals, immediate opacity reset and independent macOS windows, compact menus, symbolic icon restoration, CSD, join/Close, minimap font/zoom recovery and Ctrl-wheel passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }
  return G_SOURCE_CONTINUE;
 }

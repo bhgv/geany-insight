@@ -671,7 +671,7 @@ static void save_ui_prefs(GKeyFile *config)
 {
 	g_key_file_set_boolean(config, PACKAGE, "menubar_visible", ui_prefs.menubar_visible);
 	g_key_file_set_boolean(config, PACKAGE, "sidebar_visible", ui_prefs.sidebar_visible);
-	g_key_file_set_boolean(config, PACKAGE, "statusbar_visible", interface_prefs.statusbar_visible);
+	ui_statusbar_settings_save(config);
 	g_key_file_set_boolean(config, PACKAGE, "msgwindow_visible", ui_prefs.msgwindow_visible);
 	g_key_file_set_boolean(config, PACKAGE, "fullscreen", ui_prefs.fullscreen);
 	g_key_file_set_boolean(config, PACKAGE, "symbols_group_by_type", ui_prefs.symbols_group_by_type);
@@ -900,6 +900,7 @@ static void load_dialog_prefs(GKeyFile *config)
 	interface_prefs.sidebar_symbol_visible = utils_get_setting_boolean(config, PACKAGE, "sidebar_symbol_visible", TRUE);
 	interface_prefs.sidebar_openfiles_visible = utils_get_setting_boolean(config, PACKAGE, "sidebar_openfiles_visible", TRUE);
 	interface_prefs.statusbar_visible = utils_get_setting_boolean(config, PACKAGE, "statusbar_visible", TRUE);
+ ui_statusbar_settings_load(config);
 	file_prefs.tab_order_ltr = utils_get_setting_boolean(config, PACKAGE, "tab_order_ltr", TRUE);
 	file_prefs.tab_order_beside = utils_get_setting_boolean(config, PACKAGE, "tab_order_beside", FALSE);
 	interface_prefs.show_notebook_tabs = utils_get_setting_boolean(config, PACKAGE, "show_notebook_tabs", TRUE);
