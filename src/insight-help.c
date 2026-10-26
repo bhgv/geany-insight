@@ -133,7 +133,9 @@ static void palette_state(GObject *object,GParamSpec *spec,gpointer data) {
 }
 static void menu_palette_open(GtkWidget *menu) {
  if(gtk_widget_in_destruction(menu)) return;
- if(!gtk_menu_get_tearoff_state(GTK_MENU(menu))) {
+ gboolean opening=!gtk_menu_get_tearoff_state(GTK_MENU(menu));
+ gint width=gtk_widget_get_allocated_width(menu),height=gtk_widget_get_allocated_height(menu);
+ if(opening) {
   palette_cleanup_handlers(menu,TRUE);
   /* GtkTearoffMenuItem normally runs after GtkMenuShell has deactivated the
    * popup. Our 7px handle intercepts activation to retain transient owners,
@@ -144,6 +146,12 @@ static void menu_palette_open(GtkWidget *menu) {
  const gchar *title=GTK_IS_MENU_ITEM(attach) ? gtk_menu_item_get_label(GTK_MENU_ITEM(attach)):NULL;
  gtk_menu_set_title(GTK_MENU(menu),title ? title:insight_tr("Menu palette"));
  gtk_menu_set_tearoff_state(GTK_MENU(menu),!gtk_menu_get_tearoff_state(GTK_MENU(menu)));
+ if(opening && width>1 && height>1) {
+  /* Legacy GTK seeds the tearoff height from the menu's inner GdkWindow,
+   * which omits GTK3 CSS margins. Keep the original widget allocation. */
+  GtkWidget *window=gtk_widget_get_toplevel(menu);
+  if(GTK_IS_WINDOW(window)) gtk_window_resize(GTK_WINDOW(window),width,height);
+ }
 }
 static gboolean palette_strip_draw(GtkWidget *item,cairo_t *cr,gpointer data) {
  (void)data;gboolean hover=(gtk_widget_get_state_flags(item)&GTK_STATE_FLAG_PRELIGHT)!=0;
