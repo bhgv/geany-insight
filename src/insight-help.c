@@ -84,101 +84,49 @@ static gboolean menu_icon_draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
  else { GdkPixbuf *pixbuf=gtk_icon_theme_load_icon(gtk_icon_theme_get_default(),id,16,GTK_ICON_LOOKUP_USE_BUILTIN,NULL);if(pixbuf) { gdk_cairo_set_source_pixbuf(cr,pixbuf,0,0);cairo_paint(cr);g_object_unref(pixbuf); } }
  cairo_restore(cr);return FALSE;
 }
-/* Palettes proxy the original menu items instead of reparenting them. In
- * particular, transient popups often destroy themselves on selection-done;
- * hiding one to open a palette must not emit that signal. */
-static void menu_palette_open(GtkWidget *menu);
-static GtkWidget *palette_label(GtkWidget *widget) {
- if(GTK_IS_LABEL(widget)) return widget;
- if(GTK_IS_CONTAINER(widget)) {GList *children=gtk_container_get_children(GTK_CONTAINER(widget));GtkWidget *label=NULL;for(GList *p=children;p && !label;p=p->next) label=palette_label(p->data);g_list_free(children);return label;}return NULL;
-}
-static void palette_title(GObject *source,GParamSpec *spec,gpointer data) {
- (void)spec;GtkWidget *label=palette_label(GTK_WIDGET(source));gtk_window_set_title(GTK_WINDOW(data),label ? gtk_label_get_text(GTK_LABEL(label)):insight_tr("Menu palette"));
-}
-
-static void palette_row_sync(GObject *source,GParamSpec *spec,gpointer data) {
- (void)spec;GtkWidget *button=data,*item=GTK_WIDGET(source);
- GtkWidget *caption=palette_label(item);const gchar *label=caption ? gtk_label_get_text(GTK_LABEL(caption)):NULL;
- gboolean check=GTK_IS_CHECK_MENU_ITEM(item),active=check && gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(item));
- gchar *text=g_strconcat(check ? (active ? "✓  ":"○  "):"",label ? label:"",gtk_menu_item_get_submenu(GTK_MENU_ITEM(item)) ? "  ▸":"",NULL);
- gtk_button_set_label(GTK_BUTTON(button),text);gtk_button_set_use_underline(GTK_BUTTON(button),FALSE);g_free(text);
- gtk_widget_set_sensitive(button,gtk_widget_is_sensitive(item));gtk_widget_set_visible(button,gtk_widget_get_visible(item));
- gchar *tip=gtk_widget_get_tooltip_text(item);gtk_widget_set_tooltip_text(button,tip);g_free(tip);
-}
-static void palette_caption_changed(GObject *source,GParamSpec *spec,gpointer data) {
- (void)source;GtkWidget *item=g_weak_ref_get(g_object_get_data(G_OBJECT(data),"palette-source"));if(item) {palette_row_sync(G_OBJECT(item),spec,data);g_object_unref(item);}
-}
-static void palette_row_gone(GtkWidget *item,gpointer data) { (void)item;gtk_widget_set_sensitive(data,FALSE); }
-static void palette_row_run(GtkButton *button,gpointer data) {
- (void)data;GtkWidget *item=g_weak_ref_get(g_object_get_data(G_OBJECT(button),"palette-source"));
- if(!item) return;
- if(!gtk_widget_in_destruction(item) && gtk_widget_is_sensitive(item)) {
-  GtkWidget *sub=gtk_menu_item_get_submenu(GTK_MENU_ITEM(item));
-  if(sub) menu_palette_open(sub);else gtk_menu_item_activate(GTK_MENU_ITEM(item));
+/* Keep the real GTK menu, not an imitation assembled from buttons: native
+ * tearoffs preserve icons, accelerator columns, custom rows and activation.
+ * GTK3 retains this API, including our minimum supported GTK 3.22. */
+static void palette_cleanup_handlers(GtkWidget *menu,gboolean block) {
+ GArray *ids=g_object_get_data(G_OBJECT(menu),"insight-palette-cleanup");
+ if(block) {
+  if(!ids) {ids=g_array_new(FALSE,FALSE,sizeof(gulong));g_object_set_data_full(G_OBJECT(menu),"insight-palette-cleanup",ids,(GDestroyNotify)g_array_unref);}
+  guint signal=g_signal_lookup("selection-done",GTK_TYPE_MENU_SHELL);gulong id;
+  /* Owners of transient context menus commonly destroy on selection-done.
+   * Defer only those connected handlers while GTK keeps the menu torn off. */
+  while((id=g_signal_handler_find(menu,G_SIGNAL_MATCH_ID|G_SIGNAL_MATCH_UNBLOCKED,signal,0,NULL,NULL,NULL))) {g_signal_handler_block(menu,id);g_array_append_val(ids,id);}
+ } else if(ids) {
+  for(guint i=0;i<ids->len;i++) {gulong id=g_array_index(ids,gulong,i);if(g_signal_handler_is_connected(menu,id)) g_signal_handler_unblock(menu,id);}
+  g_object_set_data(G_OBJECT(menu),"insight-palette-cleanup",NULL);
  }
- g_object_unref(item);
 }
-static void palette_weak_free(gpointer data) { g_weak_ref_clear(data);g_free(data); }
-static void palette_rows(GtkWidget *window) {
- GtkWidget *menu=g_object_get_data(G_OBJECT(window),"palette-menu"),*box=g_object_get_data(G_OBJECT(window),"palette-box");
- GList *old=gtk_container_get_children(GTK_CONTAINER(box));for(GList *p=old;p;p=p->next) gtk_widget_destroy(p->data);g_list_free(old);
- GList *items=gtk_container_get_children(GTK_CONTAINER(menu));
- for(GList *p=items;p;p=p->next) {
-  GtkWidget *item=p->data;if(g_object_get_data(G_OBJECT(item),"insight-palette-action")) continue;
-  if(GTK_IS_SEPARATOR_MENU_ITEM(item)) { GtkWidget *line=gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);gtk_box_pack_start(GTK_BOX(box),line,FALSE,FALSE,2);gtk_widget_show(line);continue; }
-  if(!GTK_IS_MENU_ITEM(item) || !palette_label(item)) continue;
-  GtkWidget *button=gtk_button_new();gtk_button_set_relief(GTK_BUTTON(button),GTK_RELIEF_NONE);gtk_widget_set_halign(button,GTK_ALIGN_FILL);
-  GWeakRef *ref=g_new0(GWeakRef,1);g_weak_ref_init(ref,item);g_object_set_data_full(G_OBJECT(button),"palette-source",ref,palette_weak_free);
-  g_signal_connect(button,"clicked",G_CALLBACK(palette_row_run),NULL);
-  g_signal_connect_object(item,"notify::label",G_CALLBACK(palette_row_sync),button,0);
-  GtkWidget *caption=palette_label(item);if(caption) g_signal_connect_object(caption,"notify::label",G_CALLBACK(palette_caption_changed),button,0);
-  g_signal_connect_object(item,"notify::sensitive",G_CALLBACK(palette_row_sync),button,0);
-  g_signal_connect_object(item,"notify::visible",G_CALLBACK(palette_row_sync),button,0);
-  g_signal_connect_object(item,"notify::tooltip-text",G_CALLBACK(palette_row_sync),button,0);
-  if(GTK_IS_CHECK_MENU_ITEM(item)) g_signal_connect_object(item,"notify::active",G_CALLBACK(palette_row_sync),button,0);
-  g_signal_connect_object(item,"destroy",G_CALLBACK(palette_row_gone),button,0);
-  gtk_box_pack_start(GTK_BOX(box),button,FALSE,FALSE,0);palette_row_sync(G_OBJECT(item),NULL,button);
-  GtkWidget *label=gtk_bin_get_child(GTK_BIN(button));if(GTK_IS_LABEL(label)) {gtk_label_set_xalign(GTK_LABEL(label),0);gtk_label_set_ellipsize(GTK_LABEL(label),PANGO_ELLIPSIZE_END);}
+static void palette_state(GObject *object,GParamSpec *spec,gpointer data) {
+ (void)spec;(void)data;GtkWidget *menu=GTK_WIDGET(object);
+ if(gtk_widget_in_destruction(menu)) return;
+ if(gtk_menu_get_tearoff_state(GTK_MENU(menu))) {
+  palette_cleanup_handlers(menu,TRUE);GtkWidget *window=gtk_widget_get_toplevel(menu);
+  if(GTK_IS_WINDOW(window)) {
+   gtk_widget_set_name(window,"insight-menu-palette");g_object_set_data(G_OBJECT(menu),"insight-palette-window",window);
+   if(GTK_IS_WINDOW(main_widgets.window)) {gtk_window_set_transient_for(GTK_WINDOW(window),GTK_WINDOW(main_widgets.window));gtk_window_set_destroy_with_parent(GTK_WINDOW(window),TRUE);}
+  }
+ } else {
+  g_object_set_data(G_OBJECT(menu),"insight-palette-window",NULL);palette_cleanup_handlers(menu,FALSE);
+  /* Complete the deferred context-popup dismissal. Attached menus retain
+   * their normal owner and can be opened again from the menu bar. */
+  if(!gtk_menu_get_attach_widget(GTK_MENU(menu))) g_signal_emit_by_name(menu,"selection-done");
  }
- g_list_free(items);
-}
-static gboolean palette_focus(GtkWidget *window,GdkEventFocus *event,gpointer data) {
- (void)event;(void)data;GtkWidget *menu=g_object_get_data(G_OBJECT(window),"palette-menu");
- /* The GtkMenu remains inside its hidden popup window after popdown.
-  * Showing only its child runs the native context-refresh handlers without
-  * opening that popup window or obtaining a pointer/keyboard grab. */
- g_object_ref(window);g_object_ref(menu);gtk_widget_show(menu);
- if(!gtk_widget_in_destruction(menu)) gtk_widget_hide(menu);
- if(!gtk_widget_in_destruction(window)) palette_rows(window);
- g_object_unref(menu);g_object_unref(window);return FALSE;
-}
-static void palette_closed(GtkWidget *window,gpointer data) {
- GtkWidget *menu=data;(void)window;g_object_set_data(G_OBJECT(menu),"insight-palette-window",NULL);
- /* Finish the deferred popup lifetime now. Its owner can perform the same
-  * selection-done cleanup as on dismissal of an ordinary context menu. */
- if(!gtk_widget_in_destruction(menu) && !gtk_menu_get_attach_widget(GTK_MENU(menu))) g_signal_emit_by_name(menu,"selection-done");
 }
 static void menu_palette_open(GtkWidget *menu) {
  if(gtk_widget_in_destruction(menu)) return;
- GtkWidget *window=g_object_get_data(G_OBJECT(menu),"insight-palette-window");
- /* No gtk_menu_shell_deactivate(): popup owners may destroy on selection-done. */
- gtk_menu_popdown(GTK_MENU(menu));
- if(window) {gtk_window_present(GTK_WINDOW(window));return;}
- window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(window,"insight-menu-palette");
+ if(!gtk_menu_get_tearoff_state(GTK_MENU(menu))) palette_cleanup_handlers(menu,TRUE);
  GtkWidget *attach=gtk_menu_get_attach_widget(GTK_MENU(menu));
- if(GTK_IS_MENU_ITEM(attach)) {palette_title(G_OBJECT(attach),NULL,window);g_signal_connect_object(attach,"notify::label",G_CALLBACK(palette_title),window,0);}
- else insight_i18n_key(G_OBJECT(window),"title","Menu palette");
- if(GTK_IS_WINDOW(main_widgets.window)) {gtk_window_set_transient_for(GTK_WINDOW(window),GTK_WINDOW(main_widgets.window));gtk_window_set_destroy_with_parent(GTK_WINDOW(window),TRUE);}
- gtk_window_set_type_hint(GTK_WINDOW(window),GDK_WINDOW_TYPE_HINT_UTILITY);
- GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL),*box=gtk_box_new(GTK_ORIENTATION_VERTICAL,0);gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),GTK_POLICY_NEVER,GTK_POLICY_AUTOMATIC);gtk_container_add(GTK_CONTAINER(scroll),box);gtk_container_add(GTK_CONTAINER(window),scroll);
- g_object_set_data_full(G_OBJECT(window),"palette-menu",g_object_ref(menu),g_object_unref);g_object_set_data(G_OBJECT(window),"palette-box",box);g_object_set_data(G_OBJECT(menu),"insight-palette-window",window);
- g_signal_connect(window,"destroy",G_CALLBACK(palette_closed),menu);g_signal_connect_object(menu,"destroy",G_CALLBACK(gtk_widget_destroy),window,G_CONNECT_SWAPPED);
- g_signal_connect(window,"focus-in-event",G_CALLBACK(palette_focus),NULL);
- GdkDisplay *display=gtk_widget_get_display(menu);GdkMonitor *monitor=gdk_display_get_monitor_at_point(display,0,0);
- GdkWindow *native=gtk_widget_get_window(main_widgets.window);if(native) monitor=gdk_display_get_monitor_at_window(display,native);
- GdkRectangle area={0,0,800,600};if(monitor) gdk_monitor_get_workarea(monitor,&area);
- gtk_window_set_default_size(GTK_WINDOW(window),MIN(320,MAX(160,area.width-80)),MIN(480,MAX(160,area.height-80)));
- palette_rows(window);gtk_widget_show(box);gtk_widget_show(scroll);gtk_window_present(GTK_WINDOW(window));
+ const gchar *title=GTK_IS_MENU_ITEM(attach) ? gtk_menu_item_get_label(GTK_MENU_ITEM(attach)):NULL;
+ gtk_menu_set_title(GTK_MENU(menu),title ? title:insight_tr("Menu palette"));
+ gtk_menu_set_tearoff_state(GTK_MENU(menu),!gtk_menu_get_tearoff_state(GTK_MENU(menu)));
+}
+static gboolean palette_strip_draw(GtkWidget *item,cairo_t *cr,gpointer data) {
+ (void)data;gboolean hover=(gtk_widget_get_state_flags(item)&GTK_STATE_FLAG_PRELIGHT)!=0;
+ cairo_set_source_rgb(cr,hover ? .12:.18,hover ? .48:.40,hover ? .90:.76);cairo_rectangle(cr,0,0,gtk_widget_get_allocated_width(item),gtk_widget_get_allocated_height(item));cairo_fill(cr);return FALSE;
 }
 static void palette_detach(GtkMenuItem *item,gpointer data) { (void)item;menu_palette_open(data); }
 static gboolean palette_menu_event(GtkWidget *menu,GdkEvent *event,gpointer data) {
@@ -194,13 +142,17 @@ static void menu_palette_offer(GtkWidget *menu) {
   g_object_set_data(G_OBJECT(menu),"insight-palette-events",GINT_TO_POINTER(1));
   g_signal_connect(menu,"button-release-event",G_CALLBACK(palette_menu_event),NULL);
   g_signal_connect(menu,"key-press-event",G_CALLBACK(palette_menu_event),NULL);
+  g_signal_connect(menu,"notify::tearoff-state",G_CALLBACK(palette_state),NULL);
  }
+ if(gtk_menu_get_tearoff_state(GTK_MENU(menu))) palette_cleanup_handlers(menu,TRUE);
  /* Dynamic menu rebuilds may remove the old handle: discover it each time. */
  GList *items=gtk_container_get_children(GTK_CONTAINER(menu));gboolean found=FALSE;
  for(GList *p=items;p;p=p->next) if(g_object_get_data(G_OBJECT(p->data),"insight-palette-action")) {found=TRUE;break;}
  g_list_free(items);if(found) return;
- GtkWidget *item=gtk_menu_item_new_with_label(insight_tr("Open as palette"));gtk_widget_set_name(item,"insight-menu-detach");insight_i18n_key(G_OBJECT(item),"label","Open as palette");
- g_object_set_data(G_OBJECT(item),"insight-palette-action",GINT_TO_POINTER(1));g_signal_connect(item,"activate",G_CALLBACK(palette_detach),menu);gtk_menu_shell_prepend(GTK_MENU_SHELL(menu),item);gtk_widget_show(item);
+ GtkWidget *item=gtk_menu_item_new(),*strip=gtk_drawing_area_new();gtk_widget_set_name(item,"insight-menu-detach");gtk_widget_set_size_request(strip,1,7);gtk_container_add(GTK_CONTAINER(item),strip);
+ GtkCssProvider *css=gtk_css_provider_new();gtk_css_provider_load_from_data(css,"* { min-height: 7px; min-width: 0; padding: 0; margin: 0; border-width: 0; }",-1,NULL);gtk_style_context_add_provider(gtk_widget_get_style_context(item),GTK_STYLE_PROVIDER(css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION+10);g_object_unref(css);
+ insight_i18n_key(G_OBJECT(item),"tooltip-text","Open as palette");atk_object_set_name(gtk_widget_get_accessible(item),insight_tr("Open as palette"));
+ g_object_set_data(G_OBJECT(item),"insight-palette-action",GINT_TO_POINTER(1));g_object_set_data(G_OBJECT(item),"insight-icon-added",GINT_TO_POINTER(1));g_signal_connect_after(item,"draw",G_CALLBACK(palette_strip_draw),NULL);g_signal_connect(item,"activate",G_CALLBACK(palette_detach),menu);gtk_menu_shell_prepend(GTK_MENU_SHELL(menu),item);gtk_widget_show_all(item);
 }
 static gboolean menus_shown(GSignalInvocationHint *hint,guint count,const GValue *values,gpointer data) {
  (void)hint;(void)data;if(count) { GtkWidget *widget=g_value_get_object(values);if(GTK_IS_MENU(widget)) insight_menu_icons(widget); }return TRUE;

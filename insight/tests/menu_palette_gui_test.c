@@ -5,34 +5,29 @@
 #include "main.h"
 #include "ui_utils.h"
 #include <glib/gstdio.h>
-static guint phase,hits;static GtkWidget *menu,*toggle,*palette;
+static guint phase,hits;static GtkWidget *menu,*toggle,*palette,*icon,*handle;static gint width,row_height,menu_height;static gboolean cleaned;
 static void clicked(GtkMenuItem *item,gpointer data) { (void)item;(void)data;hits++; }
 static GtkWidget *find(GtkWidget *root,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;
  if(GTK_IS_CONTAINER(root)) {GList *children=gtk_container_get_children(GTK_CONTAINER(root));GtkWidget *out=NULL;for(GList *p=children;p && !out;p=p->next) out=find(p->data,name);g_list_free(children);return out;}return NULL;
 }
-static GtkWidget *first_button(GtkWidget *root) {
- if(GTK_IS_BUTTON(root)) return root;
- if(GTK_IS_CONTAINER(root)) {GList *children=gtk_container_get_children(GTK_CONTAINER(root));GtkWidget *out=NULL;for(GList *p=children;p && !out;p=p->next) out=first_button(p->data);g_list_free(children);return out;}return NULL;
-}
 static void destroyed(GtkWidget *widget,gpointer data) { (void)widget;*(gboolean *)data=TRUE; }
 static gboolean step(gpointer data) {
- (void)data;GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;
+ (void)data;GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;GtkWidget *main=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));
  if(!phase) {
-  menu=gtk_menu_new();g_object_ref_sink(menu);toggle=gtk_check_menu_item_new_with_label("Fixture toggle");gtk_menu_shell_append(GTK_MENU_SHELL(menu),toggle);g_signal_connect(toggle,"activate",G_CALLBACK(clicked),NULL);GtkWidget *label=gtk_bin_get_child(GTK_BIN(toggle)),*box=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,2);g_object_ref(label);gtk_container_remove(GTK_CONTAINER(toggle),label);gtk_box_pack_start(GTK_BOX(box),gtk_image_new_from_icon_name("text-x-generic",GTK_ICON_SIZE_MENU),FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),label,TRUE,TRUE,0);g_object_unref(label);gtk_container_add(GTK_CONTAINER(toggle),box);
-  g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu);
-  gtk_widget_show_all(menu);
-  GtkWidget *detach=find(menu,"insight-menu-detach");g_assert_nonnull(detach);gtk_menu_shell_select_item(GTK_MENU_SHELL(menu),detach);
-  GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);event->key.keyval=GDK_KEY_Return;gboolean handled=FALSE;g_signal_emit_by_name(menu,"key-press-event",event,&handled);gdk_event_free(event);g_assert_true(handled);
-  palette=g_object_get_data(G_OBJECT(menu),"insight-palette-window");g_assert_nonnull(palette);g_assert_true(gtk_widget_get_visible(palette));
+  menu=gtk_menu_new();g_object_ref_sink(menu);toggle=gtk_check_menu_item_new_with_label("Fixture toggle");gtk_menu_shell_append(GTK_MENU_SHELL(menu),toggle);g_signal_connect(toggle,"activate",G_CALLBACK(clicked),NULL);
+  GtkWidget *label=gtk_bin_get_child(GTK_BIN(toggle)),*box=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,2);g_object_ref(label);gtk_container_remove(GTK_CONTAINER(toggle),label);icon=gtk_image_new_from_icon_name("text-x-generic",GTK_ICON_SIZE_MENU);gtk_box_pack_start(GTK_BOX(box),icon,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),label,TRUE,TRUE,0);g_object_unref(label);gtk_container_add(GTK_CONTAINER(toggle),box);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_menu_item_new_with_label("Another command"));g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu);g_signal_connect(menu,"destroy",G_CALLBACK(destroyed),&cleaned);gtk_widget_show_all(menu);
+  GdkEvent *event=gdk_event_new(GDK_BUTTON_PRESS);event->button.window=g_object_ref(gtk_widget_get_window(main));event->button.button=3;GdkSeat *seat=gdk_display_get_default_seat(gtk_widget_get_display(main));gdk_event_set_device(event,gdk_seat_get_pointer(seat));gtk_menu_popup_at_widget(GTK_MENU(menu),main,GDK_GRAVITY_CENTER,GDK_GRAVITY_CENTER,event);gdk_event_free(event);
  } else if(phase==1) {
-  g_assert_false(gtk_widget_get_mapped(menu));GtkWidget *button=first_button(palette);g_assert_nonnull(button);gtk_button_clicked(GTK_BUTTON(button));g_assert_cmpuint(hits,==,1);g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(toggle)));g_assert_true(gtk_widget_get_visible(palette));
-  gtk_widget_set_sensitive(toggle,FALSE);g_assert_false(gtk_widget_get_sensitive(button));gtk_widget_set_sensitive(toggle,TRUE);GList *parts=gtk_container_get_children(GTK_CONTAINER(gtk_bin_get_child(GTK_BIN(toggle))));gtk_label_set_text(GTK_LABEL(g_list_last(parts)->data),"Updated caption");g_list_free(parts);g_assert_nonnull(g_strstr_len(gtk_button_get_label(GTK_BUTTON(button)),-1,"Updated caption"));
-  g_signal_handlers_disconnect_by_func(menu,G_CALLBACK(gtk_widget_destroy),menu);gtk_widget_destroy(palette);g_assert_null(g_object_get_data(G_OBJECT(menu),"insight-palette-window"));
-  gtk_menu_item_activate(GTK_MENU_ITEM(find(menu,"insight-menu-detach")));palette=g_object_get_data(G_OBJECT(menu),"insight-palette-window");g_assert_nonnull(palette);
-  gboolean gone=FALSE;g_signal_connect(palette,"destroy",G_CALLBACK(destroyed),&gone);gtk_widget_destroy(menu);g_assert_true(gone);g_object_unref(menu);
-  menu=gtk_menu_new();g_object_ref_sink(menu);gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_menu_item_new_with_label("Transient command"));g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu);gtk_widget_show_all(menu);gtk_menu_item_activate(GTK_MENU_ITEM(find(menu,"insight-menu-detach")));palette=g_object_get_data(G_OBJECT(menu),"insight-palette-window");g_assert_nonnull(palette);gboolean cleaned=FALSE;g_signal_connect(menu,"destroy",G_CALLBACK(destroyed),&cleaned);gtk_widget_destroy(palette);g_assert_true(cleaned);g_object_unref(menu);
-  g_print("Menu palette GUI: keyboard tear-off, retained transient popup, live state, repeated action and safe owner destruction passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci)),"menu_quit1")));return G_SOURCE_REMOVE;
+  handle=find(menu,"insight-menu-detach");g_assert_nonnull(handle);g_assert_true(GTK_IS_DRAWING_AREA(gtk_bin_get_child(GTK_BIN(handle))));g_assert_null(gtk_menu_item_get_label(GTK_MENU_ITEM(handle)));g_assert_cmpint(gtk_widget_get_allocated_height(handle),==,7);
+  width=gtk_widget_get_allocated_width(menu);menu_height=gtk_widget_get_allocated_height(menu);row_height=gtk_widget_get_allocated_height(toggle);gtk_menu_shell_select_item(GTK_MENU_SHELL(menu),handle);
+  GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);event->key.keyval=GDK_KEY_Return;gboolean handled=FALSE;g_signal_emit_by_name(menu,"key-press-event",event,&handled);gdk_event_free(event);g_assert_true(handled);g_assert_true(gtk_menu_get_tearoff_state(GTK_MENU(menu)));g_assert_false(cleaned);palette=gtk_widget_get_toplevel(menu);g_assert_true(GTK_IS_WINDOW(palette));
+ } else if(phase==2) {
+  g_assert_true(gtk_widget_get_mapped(menu));g_assert_true(gtk_widget_get_visible(icon));g_assert_true(gtk_widget_is_ancestor(toggle,menu));g_assert_cmpint(gtk_widget_get_allocated_height(toggle),==,row_height);g_assert_cmpint(ABS(gtk_widget_get_allocated_width(menu)-width),<=,2);g_assert_cmpint(ABS(gtk_widget_get_allocated_height(menu)-menu_height),<=,2);
+  gtk_menu_shell_activate_item(GTK_MENU_SHELL(menu),toggle,TRUE);g_assert_cmpuint(hits,==,1);g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(toggle)));g_assert_false(cleaned);g_assert_true(gtk_menu_get_tearoff_state(GTK_MENU(menu)));gtk_menu_shell_activate_item(GTK_MENU_SHELL(menu),toggle,TRUE);g_assert_cmpuint(hits,==,2);g_assert_false(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(toggle)));g_assert_false(cleaned);
+  gtk_menu_set_tearoff_state(GTK_MENU(menu),FALSE);g_assert_true(cleaned);g_object_unref(menu);
+  g_print("Menu palette GUI: 7px strip, original widgets/icons, preserved row geometry, repeated native activation and deferred popup cleanup passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(main,"menu_quit1")));return G_SOURCE_REMOVE;
  }
  phase++;return G_SOURCE_CONTINUE;
 }

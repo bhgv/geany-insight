@@ -121,6 +121,6 @@ Replace Files also offers modal Replace/Skip/Remaining/Cancel review, F3/Shift+F
 
 ### Floating menu palettes
 
-Choose **Open as palette** at the top of a command menu, submenu or context menu. Move and resize the resulting window; commands remain available after activation. Check and radio states follow the original menu. Open a submenu as another palette. Closing a palette leaves its original menu intact. Palettes are session-only; a popup owner that is destroyed also closes its palette. Dynamic menu contents refresh when the palette receives focus or the original menu is rebuilt. Combo-box value lists are excluded.
+Click the blue **7-pixel strip** at the very top of a command menu, submenu or context menu to tear it off. The floating window contains the original GTK menu: row geometry, icons, labels, accelerator columns, check/radio controls and command handlers remain intact. Click the strip again to reattach, or close the floating window. Submenus retain their normal behavior and have their own tear-off strips. Palettes are session-only. Combo-box value lists are excluded.
 
 ![Menu palettes](../media/menu-palettes.svg)
