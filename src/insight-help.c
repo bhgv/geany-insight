@@ -88,14 +88,25 @@ static gboolean menu_icon_draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
  * particular, transient popups often destroy themselves on selection-done;
  * hiding one to open a palette must not emit that signal. */
 static void menu_palette_open(GtkWidget *menu);
+static GtkWidget *palette_label(GtkWidget *widget) {
+ if(GTK_IS_LABEL(widget)) return widget;
+ if(GTK_IS_CONTAINER(widget)) {GList *children=gtk_container_get_children(GTK_CONTAINER(widget));GtkWidget *label=NULL;for(GList *p=children;p && !label;p=p->next) label=palette_label(p->data);g_list_free(children);return label;}return NULL;
+}
+static void palette_title(GObject *source,GParamSpec *spec,gpointer data) {
+ (void)spec;GtkWidget *label=palette_label(GTK_WIDGET(source));gtk_window_set_title(GTK_WINDOW(data),label ? gtk_label_get_text(GTK_LABEL(label)):insight_tr("Menu palette"));
+}
+
 static void palette_row_sync(GObject *source,GParamSpec *spec,gpointer data) {
  (void)spec;GtkWidget *button=data,*item=GTK_WIDGET(source);
- const gchar *label=gtk_menu_item_get_label(GTK_MENU_ITEM(item));
+ GtkWidget *caption=palette_label(item);const gchar *label=caption ? gtk_label_get_text(GTK_LABEL(caption)):NULL;
  gboolean check=GTK_IS_CHECK_MENU_ITEM(item),active=check && gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(item));
  gchar *text=g_strconcat(check ? (active ? "✓  ":"○  "):"",label ? label:"",gtk_menu_item_get_submenu(GTK_MENU_ITEM(item)) ? "  ▸":"",NULL);
- gtk_button_set_label(GTK_BUTTON(button),text);gtk_button_set_use_underline(GTK_BUTTON(button),gtk_menu_item_get_use_underline(GTK_MENU_ITEM(item)));g_free(text);
+ gtk_button_set_label(GTK_BUTTON(button),text);gtk_button_set_use_underline(GTK_BUTTON(button),FALSE);g_free(text);
  gtk_widget_set_sensitive(button,gtk_widget_is_sensitive(item));gtk_widget_set_visible(button,gtk_widget_get_visible(item));
  gchar *tip=gtk_widget_get_tooltip_text(item);gtk_widget_set_tooltip_text(button,tip);g_free(tip);
+}
+static void palette_caption_changed(GObject *source,GParamSpec *spec,gpointer data) {
+ (void)source;GtkWidget *item=g_weak_ref_get(g_object_get_data(G_OBJECT(data),"palette-source"));if(item) {palette_row_sync(G_OBJECT(item),spec,data);g_object_unref(item);}
 }
 static void palette_row_gone(GtkWidget *item,gpointer data) { (void)item;gtk_widget_set_sensitive(data,FALSE); }
 static void palette_row_run(GtkButton *button,gpointer data) {
@@ -115,11 +126,12 @@ static void palette_rows(GtkWidget *window) {
  for(GList *p=items;p;p=p->next) {
   GtkWidget *item=p->data;if(g_object_get_data(G_OBJECT(item),"insight-palette-action")) continue;
   if(GTK_IS_SEPARATOR_MENU_ITEM(item)) { GtkWidget *line=gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);gtk_box_pack_start(GTK_BOX(box),line,FALSE,FALSE,2);gtk_widget_show(line);continue; }
-  if(!GTK_IS_MENU_ITEM(item) || !gtk_menu_item_get_label(GTK_MENU_ITEM(item))) continue;
+  if(!GTK_IS_MENU_ITEM(item) || !palette_label(item)) continue;
   GtkWidget *button=gtk_button_new();gtk_button_set_relief(GTK_BUTTON(button),GTK_RELIEF_NONE);gtk_widget_set_halign(button,GTK_ALIGN_FILL);
   GWeakRef *ref=g_new0(GWeakRef,1);g_weak_ref_init(ref,item);g_object_set_data_full(G_OBJECT(button),"palette-source",ref,palette_weak_free);
   g_signal_connect(button,"clicked",G_CALLBACK(palette_row_run),NULL);
   g_signal_connect_object(item,"notify::label",G_CALLBACK(palette_row_sync),button,0);
+  GtkWidget *caption=palette_label(item);if(caption) g_signal_connect_object(caption,"notify::label",G_CALLBACK(palette_caption_changed),button,0);
   g_signal_connect_object(item,"notify::sensitive",G_CALLBACK(palette_row_sync),button,0);
   g_signal_connect_object(item,"notify::visible",G_CALLBACK(palette_row_sync),button,0);
   g_signal_connect_object(item,"notify::tooltip-text",G_CALLBACK(palette_row_sync),button,0);
@@ -154,7 +166,7 @@ static void menu_palette_open(GtkWidget *menu) {
  if(window) {gtk_window_present(GTK_WINDOW(window));return;}
  window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(window,"insight-menu-palette");
  GtkWidget *attach=gtk_menu_get_attach_widget(GTK_MENU(menu));
- if(GTK_IS_MENU_ITEM(attach)) {const gchar *title=gtk_menu_item_get_label(GTK_MENU_ITEM(attach));gtk_window_set_title(GTK_WINDOW(window),title ? title:insight_tr("Menu palette"));}
+ if(GTK_IS_MENU_ITEM(attach)) {palette_title(G_OBJECT(attach),NULL,window);g_signal_connect_object(attach,"notify::label",G_CALLBACK(palette_title),window,0);}
  else insight_i18n_key(G_OBJECT(window),"title","Menu palette");
  if(GTK_IS_WINDOW(main_widgets.window)) {gtk_window_set_transient_for(GTK_WINDOW(window),GTK_WINDOW(main_widgets.window));gtk_window_set_destroy_with_parent(GTK_WINDOW(window),TRUE);}
  gtk_window_set_type_hint(GTK_WINDOW(window),GDK_WINDOW_TYPE_HINT_UTILITY);
