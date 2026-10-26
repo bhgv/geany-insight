@@ -19,7 +19,7 @@ typedef struct {
  gint refs;gboolean closed,loading,reading,waiting,limited,stopped;
  GtkWidget *window,*tabs,*profiles,*name,*command,*directory,*run,*stop,*status,*context,*output,*title,*arguments[9];
  GPtrArray *commands,*locked;gchar *path,*status_key,*context_argv,*context_directory,*context_variables,*context_error;gint exit_code;
- GSubprocess *process;GCancellable *cancel;GString *pending;gsize received;guint lines,line_bytes;
+ GSubprocess *process;GCancellable *cancel;GString *pending;gsize received;guint lines,line_bytes,follow_idle;gdouble follow_baseline;
 } CommandView;
 static GtkWidget *command_window;
 static CommandView *view_ref(CommandView *v) {v->refs++;return v;}
@@ -33,8 +33,10 @@ static void controls(CommandView *v) {
  if(v->closed) return;gboolean busy=v->process!=NULL;for(guint i=0;i<v->locked->len;i++) gtk_widget_set_sensitive(g_ptr_array_index(v->locked,i),!busy);
  gtk_widget_set_sensitive(v->run,!busy);gtk_widget_set_sensitive(v->stop,busy && !v->stopped);g_object_set_data(G_OBJECT(v->window),"insight-custom-command-busy",GINT_TO_POINTER(busy));
 }
+static void cancel_follow(CommandView *v) {if(v->follow_idle) {guint id=v->follow_idle;v->follow_idle=0;g_source_remove(id);}}
+static void stop_scroll(GtkWidget *view) {GtkAdjustment *a=gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(view));if(a) gtk_adjustment_set_value(a,gtk_adjustment_get_value(a));}
 static void destroyed(GtkWidget *widget,gpointer data) {
- CommandView *v=data;if(command_window==widget) command_window=NULL;v->closed=TRUE;if(v->process) g_subprocess_force_exit(v->process);if(v->cancel) g_cancellable_cancel(v->cancel);
+ CommandView *v=data;if(command_window==widget) command_window=NULL;v->closed=TRUE;cancel_follow(v);if(v->process) g_subprocess_force_exit(v->process);if(v->cancel) g_cancellable_cancel(v->cancel);
 }
 static void value(GHashTable *map,const gchar *key,const gchar *text) {if(text && g_utf8_validate(text,-1,NULL) && strlen(text)<=16384 && !strpbrk(text,"\r\n")) g_hash_table_replace(map,g_strdup(key),g_strdup(text));}
 static GHashTable *context_values(void) {
@@ -71,7 +73,7 @@ static void render_context(CommandView *v) {
  g_string_append(text,v->context_argv ? v->context_argv:insight_tr(v->context_error ? v->context_error:"Invalid custom command template"));
  if(v->context_directory) g_string_append_printf(text,"\n\n%s\n%s",insight_tr("Working directory"),v->context_directory);
  g_string_append_printf(text,"\n\n%s\n%s",insight_tr("Available context variables:"),v->context_variables);
- gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->context)),text->str,-1);g_string_free(text,TRUE);
+ stop_scroll(v->context);gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->context)),text->str,-1);g_string_free(text,TRUE);
 }
 static void preview(GtkWidget *button,gpointer data) {
  (void)button;CommandView *v=data;gchar **argv=NULL,*directory=NULL;GHashTable *map=NULL;GError *error=NULL;gboolean ok=prepare(v,&argv,&directory,&map,&error);
@@ -81,9 +83,22 @@ static void preview(GtkWidget *button,gpointer data) {
  for(GList *p=keys;p;p=p->next) {const gchar *key=p->data;g_string_append_printf(variables,strlen(key)==1 ? "%%%s = %s\n":"%%%s%% = %s\n",key,(gchar *)g_hash_table_lookup(map,key));}g_list_free(keys);v->context_variables=g_string_free(variables,FALSE);
  render_context(v);insight_compare_ui_reveal(v->context);g_hash_table_unref(map);g_strfreev(argv);g_free(directory);g_clear_error(&error);
 }
+static gboolean follow_output(gpointer data) {
+ CommandView *v=data;v->follow_idle=0;if(v->closed) return G_SOURCE_REMOVE;
+ GtkAdjustment *a=gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(v->output));
+ /* Preserve a manual scroll made since this follow request was queued. */
+ if(ABS(gtk_adjustment_get_value(a)-v->follow_baseline)<1)
+  gtk_adjustment_set_value(a,MAX(gtk_adjustment_get_lower(a),gtk_adjustment_get_upper(a)-gtk_adjustment_get_page_size(a)));
+ return G_SOURCE_REMOVE;
+}
 static void append(CommandView *v,const gchar *text,gint length) {
- if(v->closed) return;GtkAdjustment *adjustment=gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(v->output));gboolean follow=gtk_adjustment_get_value(adjustment)+gtk_adjustment_get_page_size(adjustment)>=gtk_adjustment_get_upper(adjustment)-16;GtkTextBuffer *b=gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->output));GtkTextIter end;gtk_text_buffer_get_end_iter(b,&end);gtk_text_buffer_insert(b,&end,text,length);/* GTK may defer scrolling until layout; the target mark must outlive that work. */
- if(follow) {GtkTextMark *mark=gtk_text_buffer_get_mark(b,"insight-custom-output-end");if(mark) gtk_text_buffer_move_mark(b,mark,&end);else mark=gtk_text_buffer_create_mark(b,"insight-custom-output-end",&end,FALSE);gtk_text_view_scroll_mark_onscreen(GTK_TEXT_VIEW(v->output),mark);}
+ if(v->closed) return;GtkAdjustment *a=gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(v->output));
+ gboolean follow=gtk_adjustment_get_value(a)+gtk_adjustment_get_page_size(a)>=gtk_adjustment_get_upper(a)-16;
+ GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->output));GtkTextIter end;gtk_text_buffer_get_end_iter(buffer,&end);gtk_text_buffer_insert(buffer,&end,text,length);
+ /* Coalesce after GTK layout, without animated scroll-to-mark requests. GTK 3
+  * animation teardown can reenter adjustment callbacks while unmapping after
+  * replacing a large log. Direct updates have no pending animation to finish. */
+ if(follow && !v->follow_idle) {v->follow_baseline=gtk_adjustment_get_value(a);v->follow_idle=g_idle_add_full(G_PRIORITY_LOW,follow_output,view_ref(v),view_unref);}
 }
 /* Keep incomplete UTF-8 across pipe reads, and display embedded NUL safely. */
 static void decode(CommandView *v,const guint8 *bytes,gsize size,gboolean eof) {
@@ -110,7 +125,7 @@ static void run(GtkWidget *button,gpointer data) {
  if(!prepare(v,&argv,&directory,&map,&error)) {note(v,error ? error->message:"Invalid custom command template");goto done;}
  GSubprocessLauncher *launcher=g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_STDOUT_PIPE|G_SUBPROCESS_FLAGS_STDERR_MERGE);g_subprocess_launcher_set_cwd(launcher,directory);v->process=g_subprocess_launcher_spawnv(launcher,(const gchar *const *)argv,&error);g_object_unref(launcher);
  if(!v->process) {note(v,error->message);goto done;}
- gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->output)),"",0);gchar *shown=display_argv(argv);append(v,shown,-1);append(v,"\n",1);g_free(shown);v->received=0;v->lines=v->line_bytes=0;v->limited=v->stopped=FALSE;g_string_truncate(v->pending,0);v->cancel=g_cancellable_new();v->reading=v->waiting=TRUE;note(v,"Command running");controls(v);
+ cancel_follow(v);stop_scroll(v->output);gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->output)),"",0);gchar *shown=display_argv(argv);append(v,shown,-1);append(v,"\n",1);g_free(shown);v->received=0;v->lines=v->line_bytes=0;v->limited=v->stopped=FALSE;g_string_truncate(v->pending,0);v->cancel=g_cancellable_new();v->reading=v->waiting=TRUE;note(v,"Command running");controls(v);
  g_subprocess_wait_async(v->process,NULL,waited,view_ref(v));g_input_stream_read_bytes_async(g_subprocess_get_stdout_pipe(v->process),8192,G_PRIORITY_DEFAULT,v->cancel,read_ready,view_ref(v));
 done:g_clear_error(&error);g_strfreev(argv);g_free(directory);if(map) g_hash_table_unref(map);
 }
@@ -134,7 +149,7 @@ static void edit_profile(GtkWidget *button,gpointer data) {
 }
 static void output_action(GtkWidget *button,gpointer data) {
  CommandView *v=data;gint action=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button),"output-action"));GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->output));
- if(action==0) {gtk_text_buffer_set_text(buffer,"",0);return;}GtkTextIter a,b;gtk_text_buffer_get_bounds(buffer,&a,&b);gchar *text=gtk_text_buffer_get_text(buffer,&a,&b,FALSE);
+ if(action==0) {cancel_follow(v);stop_scroll(v->output);gtk_text_buffer_set_text(buffer,"",0);return;}GtkTextIter a,b;gtk_text_buffer_get_bounds(buffer,&a,&b);gchar *text=gtk_text_buffer_get_text(buffer,&a,&b,FALSE);
  if(action==1) gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),text,-1);
  else {view_ref(v);GtkWidget *dialog=gtk_file_chooser_dialog_new(insight_tr("Save command output"),GTK_WINDOW(v->window),GTK_FILE_CHOOSER_ACTION_SAVE,insight_tr("Cancel"),GTK_RESPONSE_CANCEL,insight_tr("Save"),GTK_RESPONSE_ACCEPT,NULL);g_object_ref_sink(dialog);gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog),TRUE);gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog),TRUE);gint response=gtk_dialog_run(GTK_DIALOG(dialog));if(!v->closed && response==GTK_RESPONSE_ACCEPT) {gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));GError *error=NULL;GFile *f=g_file_new_for_path(path);if(!g_file_replace_contents(f,text,strlen(text),NULL,FALSE,G_FILE_CREATE_NONE,NULL,NULL,&error)) {note(v,error->message);g_clear_error(&error);}g_object_unref(f);g_free(path);}gtk_widget_destroy(dialog);g_object_unref(dialog);view_unref(v);}g_free(text);
 }
