@@ -121,6 +121,11 @@ static void palette_state(GObject *object,GParamSpec *spec,gpointer data) {
  if(gtk_menu_get_tearoff_state(GTK_MENU(menu))) {
   palette_cleanup_handlers(menu,TRUE);GtkWidget *window=gtk_widget_get_toplevel(menu);
   if(GTK_IS_WINDOW(window)) {
+   /* GTK's legacy tearoff creates an app-paintable RGB toplevel but never
+    * paints its backing. Rounded menus/scrollbar gutters then expose black
+    * pixels. Let GtkWindow paint the current theme beneath all children;
+    * this also works without an alpha visual or a compositing manager. */
+   gtk_widget_set_app_paintable(window,FALSE);gtk_widget_queue_draw(window);
    gtk_widget_set_name(window,"insight-menu-palette");g_object_set_data(G_OBJECT(menu),"insight-palette-window",window);
    if(GTK_IS_WINDOW(main_widgets.window)) {gtk_window_set_transient_for(GTK_WINDOW(window),GTK_WINDOW(main_widgets.window));gtk_window_set_destroy_with_parent(GTK_WINDOW(window),TRUE);}
   }

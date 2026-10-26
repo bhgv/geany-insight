@@ -129,3 +129,5 @@ Click the blue **7-pixel strip** at the very top of a command menu, submenu or c
 ### Source navigation and toolbar groups
 
 Back/Forward retain the forward branch when you move the caret manually inside history. Explicit source jumps restore focus to the editor; clicking toolbar buttons leaves text input focus available. The toolbar groups files, Undo/Redo and editing, navigation, search, project browsing, build/run, Git, comparison/tools, layouts and help. Undo/Redo and Back/Forward are adjacent pairs. **View → Panels → Original Changes…** opens the list of changed positions since opening the file, including saved edits; saving does not reset that original baseline.
+
+Detached menu palettes paint the themed window background behind rounded menu corners and scrollbar gutters, including on non-composited desktops; no unpainted black backing is left exposed.
