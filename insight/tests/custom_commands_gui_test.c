@@ -6,6 +6,15 @@
 #include "ui_utils.h"
 #include "../desktop/custom_command.h"
 #include <string.h>
+#if defined(__linux__) && !defined(__ANDROID__)
+#include <execinfo.h>
+#endif
+static void critical_trace(const gchar *domain,GLogLevelFlags level,const gchar *message,gpointer data) {
+#if defined(__linux__) && !defined(__ANDROID__)
+ void *frames[64];gint count=backtrace(frames,64);g_printerr("Custom command critical stack:\n");backtrace_symbols_fd(frames,count,2);
+#endif
+ g_log_default_handler(domain,level,message,data);
+}
 static GtkWidget *window,*tool;
 static GeanyDocument *doc;
 static gchar *profile,*source,*path;
@@ -21,7 +30,7 @@ static void unchanged(void) {gchar *text=sci_get_contents(doc->editor->sci,-1);g
 static gboolean step(gpointer data) {
  (void)data;static guint last=G_MAXUINT;if(last!=phase) {g_printerr("Custom commands phase %u\n",phase);last=phase;}if(++ticks>180) g_error("Custom commands timeout phase %u",phase);
  if(!window) {GeanyDocument *current=document_get_current();if(!current) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(current->editor->sci));}
- if(phase==0) {GtkWidget *menu=find(window,"insight-custom-commands-menu");if(!menu) return G_SOURCE_CONTINUE;doc=document_open_file(source,FALSE,NULL,NULL);g_assert_nonnull(doc);gtk_menu_item_activate(GTK_MENU_ITEM(menu));tool=top();g_assert_nonnull(tool);
+ if(phase==0) {static gboolean traced=FALSE;if(!traced) {g_log_set_handler("GLib-GObject",G_LOG_LEVEL_CRITICAL|G_LOG_FLAG_FATAL|G_LOG_FLAG_RECURSION,critical_trace,NULL);traced=TRUE;}GtkWidget *menu=find(window,"insight-custom-commands-menu");if(!menu) return G_SOURCE_CONTINUE;doc=document_open_file(source,FALSE,NULL,NULL);g_assert_nonnull(doc);gtk_menu_item_activate(GTK_MENU_ITEM(menu));tool=top();g_assert_nonnull(tool);
   set("insight-custom-command-name","Fixture compiler");set("insight-custom-command-template","/bin/sh -c 'printf \"OUT:%%s\\n\" \"$1\"; printf ERR >&2; exit 7' -- %f");set("insight-custom-command-directory","%d");click("insight-custom-command-preview");gchar *preview=output("insight-custom-command-context");g_assert_nonnull(strstr(preview,source));g_free(preview);GtkWidget *ru=find(window,"insight-interface-ru"),*en=find(window,"insight-interface-en");g_assert_nonnull(ru);g_assert_nonnull(en);gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(ru),TRUE);preview=output("insight-custom-command-context");g_assert_nonnull(strstr(preview,"Доступные переменные контекста:"));g_assert_nonnull(strstr(preview,source));g_free(preview);gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(en),TRUE);preview=output("insight-custom-command-context");g_assert_nonnull(strstr(preview,"Available context variables:"));g_free(preview);click("insight-custom-command-edit-1");click("insight-custom-command-run");g_assert_true(busy());g_assert_false(gtk_widget_get_sensitive(named("insight-custom-command-run")));phase=1;return G_SOURCE_CONTINUE;
  }
  if(phase==1) {if(busy()) return G_SOURCE_CONTINUE;gchar *text=output("insight-custom-command-output");gchar *expected=g_strconcat("OUT:",source,NULL);g_assert_nonnull(strstr(text,expected));g_assert_nonnull(strstr(text,"ERR"));g_free(expected);g_free(text);unchanged();
@@ -37,7 +46,7 @@ static gboolean step(gpointer data) {
  if(phase==3) {g_assert_true(busy());click("insight-custom-command-stop");phase=4;return G_SOURCE_CONTINUE;}
  if(phase==4) {if(busy()) return G_SOURCE_CONTINUE;set("insight-custom-command-template","/bin/sh -c 'exec yes 0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789'");click("insight-custom-command-run");phase=5;return G_SOURCE_CONTINUE;}
  if(phase==5) {if(busy()) return G_SOURCE_CONTINUE;gchar *text=output("insight-custom-command-output");g_assert_cmpuint(strlen(text),>=,4*1024*1024);g_assert_cmpuint(strlen(text),<,4*1024*1024+1000);g_free(text);unchanged();
-  set("insight-custom-command-template","/bin/sh -c 'exec sleep 30'");click("insight-custom-command-run");gtk_widget_destroy(tool);tool=NULL;phase=6;return G_SOURCE_CONTINUE;
+  g_printerr("Custom command close case: set template\n");set("insight-custom-command-template","/bin/sh -c 'exec sleep 30'");g_printerr("Custom command close case: launch\n");click("insight-custom-command-run");g_printerr("Custom command close case: destroy\n");gtk_widget_destroy(tool);g_printerr("Custom command close case: destroyed\n");tool=NULL;phase=6;return G_SOURCE_CONTINUE;
  }
  if(phase==6) {if(ticks<12) return G_SOURCE_CONTINUE;gtk_menu_item_activate(GTK_MENU_ITEM(find(window,"insight-custom-commands-menu")));tool=top();g_assert_nonnull(tool);g_assert_false(busy());g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named("insight-custom-command-name"))),==,"Numbered argument");click("insight-custom-command-edit-2");GError *error=NULL;GPtrArray *list=insight_custom_commands_load(path,&error);g_assert_no_error(error);g_assert_cmpuint(list->len,==,1);g_assert_cmpstr(((InsightCustomCommand *)g_ptr_array_index(list,0))->name,==,"Fixture compiler");g_ptr_array_unref(list);unchanged();gtk_widget_destroy(tool);tool=NULL;g_print("Native custom commands: context preview, literal argument boundaries, stderr/exit, profile persistence/order/delete, clipboard, stop, output limit and close while running passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;}
  return G_SOURCE_CONTINUE;
