@@ -103,6 +103,9 @@ static void palette_cleanup_handlers(GtkWidget *menu,gboolean block) {
 static gboolean palette_finish_dismissal(gpointer data) {
  GtkWidget *menu=data;g_object_set_data(G_OBJECT(menu),"insight-palette-dismiss",NULL);
  if(!gtk_widget_in_destruction(menu) && !gtk_menu_get_tearoff_state(GTK_MENU(menu))) {
+  GList *items=gtk_container_get_children(GTK_CONTAINER(menu));
+  for(GList *p=items;p;p=p->next) if(g_object_get_data(G_OBJECT(p->data),"insight-palette-spacer")) gtk_widget_destroy(p->data);
+  g_list_free(items);
   palette_cleanup_handlers(menu,FALSE);
   if(!gtk_menu_get_attach_widget(GTK_MENU(menu))) g_signal_emit_by_name(menu,"selection-done");
  }
@@ -140,22 +143,28 @@ static void menu_palette_open(GtkWidget *menu) {
   /* GtkTearoffMenuItem normally runs after GtkMenuShell has deactivated the
    * popup. Our 7px handle intercepts activation to retain transient owners,
    * so perform that popdown before GTK changes its torn-off bookkeeping. */
+  gint natural=0;gtk_widget_get_preferred_height(menu,NULL,&natural);
   gtk_menu_popdown(GTK_MENU(menu));
+  /* A popup can include spare bottom allocation beyond its requisition.
+   * Retain that blank space as a temporary, nonselectable row so GTK's
+   * native tearoff size hints preserve it without resize feedback loops. */
+  if(height>natural) {
+   GtkWidget *spacer=gtk_separator_menu_item_new();
+   g_object_set_data(G_OBJECT(spacer),"insight-palette-spacer",GINT_TO_POINTER(1));
+   GtkCssProvider *css=gtk_css_provider_new();
+   gchar *rules=g_strdup_printf("* { min-height: %dpx; min-width: 0; padding: 0; margin: 0; border-width: 0; background: transparent; background-image: none; }",height-natural);
+   gtk_css_provider_load_from_data(css,rules,-1,NULL);g_free(rules);
+   gtk_style_context_add_provider(gtk_widget_get_style_context(spacer),GTK_STYLE_PROVIDER(css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION+10);g_object_unref(css);
+   gtk_menu_shell_append(GTK_MENU_SHELL(menu),spacer);gtk_widget_show(spacer);
+  }
  }
  GtkWidget *attach=gtk_menu_get_attach_widget(GTK_MENU(menu));
  const gchar *title=GTK_IS_MENU_ITEM(attach) ? gtk_menu_item_get_label(GTK_MENU_ITEM(attach)):NULL;
  gtk_menu_set_title(GTK_MENU(menu),title ? title:insight_tr("Menu palette"));
  gtk_menu_set_tearoff_state(GTK_MENU(menu),!gtk_menu_get_tearoff_state(GTK_MENU(menu)));
  if(opening && width>1 && height>1) {
-  /* GTK clamps tearoffs to their natural requisition, while an actual popup
-   * can have a larger allocation. Remove that legacy maximum-size clamp so
-   * its original padding and full row geometry survive reparenting. */
   GtkWidget *window=gtk_widget_get_toplevel(menu);
-  if(GTK_IS_WINDOW(window)) {
-   GdkGeometry hints={0};hints.min_width=width;hints.min_height=1;
-   gtk_window_set_geometry_hints(GTK_WINDOW(window),NULL,&hints,GDK_HINT_MIN_SIZE);
-   gtk_window_resize(GTK_WINDOW(window),width,height);
-  }
+  if(GTK_IS_WINDOW(window)) gtk_window_resize(GTK_WINDOW(window),width,height);
  }
 }
 static gboolean palette_strip_draw(GtkWidget *item,cairo_t *cr,gpointer data) {

@@ -2925,6 +2925,9 @@ static gint compare_menu_item_labels(gconstpointer a, gconstpointer b)
  gboolean handle_a=g_object_get_data(G_OBJECT(item_a),"insight-palette-action")!=NULL;
  gboolean handle_b=g_object_get_data(G_OBJECT(item_b),"insight-palette-action")!=NULL;
  if(handle_a || handle_b) return handle_a==handle_b ? 0:handle_a ? -1:1;
+ gboolean spacer_a=g_object_get_data(G_OBJECT(item_a),"insight-palette-spacer")!=NULL;
+ gboolean spacer_b=g_object_get_data(G_OBJECT(item_b),"insight-palette-spacer")!=NULL;
+ if(spacer_a || spacer_b) return spacer_a==spacer_b ? 0:spacer_a ? 1:-1;
 
 	/* put entries with submenus at the start of the menu */
 	if (gtk_menu_item_get_submenu(item_a) && !gtk_menu_item_get_submenu(item_b))
