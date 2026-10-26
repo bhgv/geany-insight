@@ -5,7 +5,17 @@
 #include "main.h"
 #include "ui_utils.h"
 #include <glib/gstdio.h>
+#if defined(__linux__) && !defined(__ANDROID__)
+#include <execinfo.h>
+#endif
 static guint phase,hits;static GtkWidget *menu,*toggle,*palette,*icon,*handle;static gint width,row_height,menu_height;static gboolean cleaned;
+static void critical_trace(const gchar *domain,GLogLevelFlags level,const gchar *message,gpointer data) {
+ g_printerr("Menu palette critical at phase %u\n",phase);
+#if defined(__linux__) && !defined(__ANDROID__)
+ void *frames[64];gint count=backtrace(frames,64);backtrace_symbols_fd(frames,count,2);
+#endif
+ g_log_default_handler(domain,level,message,data);
+}
 static void clicked(GtkMenuItem *item,gpointer data) { (void)item;(void)data;hits++; }
 static GtkWidget *find(GtkWidget *root,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;
@@ -26,7 +36,10 @@ static gboolean step(gpointer data) {
  } else if(phase==2) {
   g_assert_true(gtk_widget_get_mapped(menu));g_assert_true(gtk_widget_get_visible(icon));g_assert_true(gtk_widget_is_ancestor(toggle,menu));g_assert_cmpint(gtk_widget_get_allocated_height(toggle),==,row_height);g_assert_cmpint(ABS(gtk_widget_get_allocated_width(menu)-width),<=,2);g_assert_cmpint(ABS(gtk_widget_get_allocated_height(menu)-menu_height),<=,2);
   gtk_menu_shell_activate_item(GTK_MENU_SHELL(menu),toggle,TRUE);g_assert_cmpuint(hits,==,1);g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(toggle)));g_assert_false(cleaned);g_assert_true(gtk_menu_get_tearoff_state(GTK_MENU(menu)));gtk_menu_shell_activate_item(GTK_MENU_SHELL(menu),toggle,TRUE);g_assert_cmpuint(hits,==,2);g_assert_false(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(toggle)));g_assert_false(cleaned);
-  gtk_menu_set_tearoff_state(GTK_MENU(menu),FALSE);g_assert_true(cleaned);g_object_unref(menu);
+  g_printerr("Menu palette: native row geometry and repeated activation passed; reattaching\n");
+  gtk_menu_set_tearoff_state(GTK_MENU(menu),FALSE);g_assert_false(cleaned);
+ } else if(phase==3) {
+  g_assert_true(cleaned);g_object_unref(menu);
   g_print("Menu palette GUI: 7px strip, original widgets/icons, preserved row geometry, repeated native activation and deferred popup cleanup passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(main,"menu_quit1")));return G_SOURCE_REMOVE;
  }
  phase++;return G_SOURCE_CONTINUE;
@@ -34,5 +47,5 @@ static gboolean step(gpointer data) {
 static gboolean timeout(gpointer data) { (void)data;g_error("Menu palette timeout phase %u",phase);return G_SOURCE_REMOVE; }
 int main(void) {
  if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;
- gchar *cwd=g_get_current_dir(),*name=g_strdup_printf("menu-palette-%u",g_random_int()),*profile=g_build_filename(cwd,name,NULL),*config=g_build_filename(profile,"geany.conf",NULL);g_assert_cmpint(g_mkdir_with_parents(profile,0700),==,0);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));gchar *argv[]={"menu-palette-gui","--new-instance","--no-session","--config",profile,NULL};g_timeout_add(300,step,NULL);g_timeout_add_seconds(20,timeout,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);gint result=main_lib(5,argv);g_free(cwd);g_free(name);g_free(profile);g_free(config);return result;
+ gchar *cwd=g_get_current_dir(),*name=g_strdup_printf("menu-palette-%u",g_random_int()),*profile=g_build_filename(cwd,name,NULL),*config=g_build_filename(profile,"geany.conf",NULL);g_assert_cmpint(g_mkdir_with_parents(profile,0700),==,0);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));gchar *argv[]={"menu-palette-gui","--new-instance","--no-session","--config",profile,NULL};g_timeout_add(300,step,NULL);g_timeout_add_seconds(20,timeout,NULL);g_log_set_handler("Gtk",G_LOG_LEVEL_CRITICAL|G_LOG_FLAG_FATAL|G_LOG_FLAG_RECURSION,critical_trace,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);gint result=main_lib(5,argv);g_free(cwd);g_free(name);g_free(profile);g_free(config);return result;
 }

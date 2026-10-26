@@ -100,6 +100,18 @@ static void palette_cleanup_handlers(GtkWidget *menu,gboolean block) {
   g_object_set_data(G_OBJECT(menu),"insight-palette-cleanup",NULL);
  }
 }
+static gboolean palette_finish_dismissal(gpointer data) {
+ GtkWidget *menu=data;g_object_set_data(G_OBJECT(menu),"insight-palette-dismiss",NULL);
+ if(!gtk_widget_in_destruction(menu) && !gtk_menu_get_tearoff_state(GTK_MENU(menu))) {
+  palette_cleanup_handlers(menu,FALSE);
+  if(!gtk_menu_get_attach_widget(GTK_MENU(menu))) g_signal_emit_by_name(menu,"selection-done");
+ }
+ return G_SOURCE_REMOVE;
+}
+static void palette_menu_destroy(GtkWidget *menu,gpointer data) {
+ (void)data;guint pending=GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(menu),"insight-palette-dismiss"));
+ g_object_set_data(G_OBJECT(menu),"insight-palette-dismiss",NULL);if(pending) g_source_remove(pending);
+}
 static void palette_state(GObject *object,GParamSpec *spec,gpointer data) {
  (void)spec;(void)data;GtkWidget *menu=GTK_WIDGET(object);
  if(gtk_widget_in_destruction(menu)) return;
@@ -110,10 +122,13 @@ static void palette_state(GObject *object,GParamSpec *spec,gpointer data) {
    if(GTK_IS_WINDOW(main_widgets.window)) {gtk_window_set_transient_for(GTK_WINDOW(window),GTK_WINDOW(main_widgets.window));gtk_window_set_destroy_with_parent(GTK_WINDOW(window),TRUE);}
   }
  } else {
-  g_object_set_data(G_OBJECT(menu),"insight-palette-window",NULL);palette_cleanup_handlers(menu,FALSE);
-  /* Complete the deferred context-popup dismissal. Attached menus retain
-   * their normal owner and can be opened again from the menu bar. */
-  if(!gtk_menu_get_attach_widget(GTK_MENU(menu))) g_signal_emit_by_name(menu,"selection-done");
+  g_object_set_data(G_OBJECT(menu),"insight-palette-window",NULL);
+  /* GTK still adjusts its tearoff child geometry after notifying the property.
+   * Owner cleanup must run after that native setter has completely returned. */
+  if(!g_object_get_data(G_OBJECT(menu),"insight-palette-dismiss")) {
+   guint pending=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,palette_finish_dismissal,g_object_ref(menu),g_object_unref);
+   g_object_set_data(G_OBJECT(menu),"insight-palette-dismiss",GUINT_TO_POINTER(pending));
+  }
  }
 }
 static void menu_palette_open(GtkWidget *menu) {
@@ -143,6 +158,7 @@ static void menu_palette_offer(GtkWidget *menu) {
   g_signal_connect(menu,"button-release-event",G_CALLBACK(palette_menu_event),NULL);
   g_signal_connect(menu,"key-press-event",G_CALLBACK(palette_menu_event),NULL);
   g_signal_connect(menu,"notify::tearoff-state",G_CALLBACK(palette_state),NULL);
+  g_signal_connect(menu,"destroy",G_CALLBACK(palette_menu_destroy),NULL);
  }
  if(gtk_menu_get_tearoff_state(GTK_MENU(menu))) palette_cleanup_handlers(menu,TRUE);
  /* Dynamic menu rebuilds may remove the old handle: discover it each time. */
