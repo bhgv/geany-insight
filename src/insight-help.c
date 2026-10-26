@@ -133,7 +133,13 @@ static void palette_state(GObject *object,GParamSpec *spec,gpointer data) {
 }
 static void menu_palette_open(GtkWidget *menu) {
  if(gtk_widget_in_destruction(menu)) return;
- if(!gtk_menu_get_tearoff_state(GTK_MENU(menu))) palette_cleanup_handlers(menu,TRUE);
+ if(!gtk_menu_get_tearoff_state(GTK_MENU(menu))) {
+  palette_cleanup_handlers(menu,TRUE);
+  /* GtkTearoffMenuItem normally runs after GtkMenuShell has deactivated the
+   * popup. Our 7px handle intercepts activation to retain transient owners,
+   * so perform that popdown before GTK changes its torn-off bookkeeping. */
+  gtk_menu_popdown(GTK_MENU(menu));
+ }
  GtkWidget *attach=gtk_menu_get_attach_widget(GTK_MENU(menu));
  const gchar *title=GTK_IS_MENU_ITEM(attach) ? gtk_menu_item_get_label(GTK_MENU_ITEM(attach)):NULL;
  gtk_menu_set_title(GTK_MENU(menu),title ? title:insight_tr("Menu palette"));
