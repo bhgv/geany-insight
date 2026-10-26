@@ -734,5 +734,5 @@ dist_insightdocmedia_DATA += insight/docs/media/compact-options.svg
 insightdoc_DATA += insight/docs/navigation.md
 
 insightdoc_DATA += insight/docs/custom-commands.md
-dist_insightdocmedia_DATA += insight/docs/media/custom-commands.svg insight/docs/media/custom-commands.jpg
+dist_insightdocmedia_DATA += insight/docs/media/custom-commands.svg insight/docs/media/custom-commands.jpg insight/docs/media/custom-command-links.jpg
 EXTRA_DIST += insight/tests/custom_command_test.c insight/tests/custom_commands_gui_test.c
