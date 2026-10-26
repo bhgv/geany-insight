@@ -4,7 +4,6 @@
 #include "editor.h"
 #include "main.h"
 #include "ui_utils.h"
-#include "insight-help.h"
 #include <glib/gstdio.h>
 static guint phase,hits;static GtkWidget *menu,*toggle,*palette;
 static void clicked(GtkMenuItem *item,gpointer data) { (void)item;(void)data;hits++; }
@@ -22,7 +21,7 @@ static gboolean step(gpointer data) {
  if(!phase) {
   menu=gtk_menu_new();g_object_ref_sink(menu);toggle=gtk_check_menu_item_new_with_label("Fixture toggle");gtk_menu_shell_append(GTK_MENU_SHELL(menu),toggle);g_signal_connect(toggle,"activate",G_CALLBACK(clicked),NULL);
   g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu);
-  insight_menu_icons(menu);gtk_widget_show_all(menu);
+  gtk_widget_show_all(menu);
   GtkWidget *detach=find(menu,"insight-menu-detach");g_assert_nonnull(detach);gtk_menu_shell_select_item(GTK_MENU_SHELL(menu),detach);
   GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);event->key.keyval=GDK_KEY_Return;gboolean handled=FALSE;g_signal_emit_by_name(menu,"key-press-event",event,&handled);gdk_event_free(event);g_assert_true(handled);
   palette=g_object_get_data(G_OBJECT(menu),"insight-palette-window");g_assert_nonnull(palette);g_assert_true(gtk_widget_get_visible(palette));
@@ -32,8 +31,8 @@ static gboolean step(gpointer data) {
   g_signal_handlers_disconnect_by_func(menu,G_CALLBACK(gtk_widget_destroy),menu);gtk_widget_destroy(palette);g_assert_null(g_object_get_data(G_OBJECT(menu),"insight-palette-window"));
   gtk_menu_item_activate(GTK_MENU_ITEM(find(menu,"insight-menu-detach")));palette=g_object_get_data(G_OBJECT(menu),"insight-palette-window");g_assert_nonnull(palette);
   gboolean gone=FALSE;g_signal_connect(palette,"destroy",G_CALLBACK(destroyed),&gone);gtk_widget_destroy(menu);g_assert_true(gone);g_object_unref(menu);
-  menu=gtk_menu_new();g_object_ref_sink(menu);gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_menu_item_new_with_label("Transient command"));g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu);insight_menu_icons(menu);gtk_widget_show_all(menu);gtk_menu_item_activate(GTK_MENU_ITEM(find(menu,"insight-menu-detach")));palette=g_object_get_data(G_OBJECT(menu),"insight-palette-window");g_assert_nonnull(palette);gboolean cleaned=FALSE;g_signal_connect(menu,"destroy",G_CALLBACK(destroyed),&cleaned);gtk_widget_destroy(palette);g_assert_true(cleaned);g_object_unref(menu);
-  g_print("Menu palette GUI: keyboard tear-off, retained transient popup, live state, repeated action and safe owner destruction passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(main_widgets.window,"menu_quit1")));return G_SOURCE_REMOVE;
+  menu=gtk_menu_new();g_object_ref_sink(menu);gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_menu_item_new_with_label("Transient command"));g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu);gtk_widget_show_all(menu);gtk_menu_item_activate(GTK_MENU_ITEM(find(menu,"insight-menu-detach")));palette=g_object_get_data(G_OBJECT(menu),"insight-palette-window");g_assert_nonnull(palette);gboolean cleaned=FALSE;g_signal_connect(menu,"destroy",G_CALLBACK(destroyed),&cleaned);gtk_widget_destroy(palette);g_assert_true(cleaned);g_object_unref(menu);
+  g_print("Menu palette GUI: keyboard tear-off, retained transient popup, live state, repeated action and safe owner destruction passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci)),"menu_quit1")));return G_SOURCE_REMOVE;
  }
  phase++;return G_SOURCE_CONTINUE;
 }
