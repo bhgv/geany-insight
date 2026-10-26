@@ -10,7 +10,7 @@ static GtkWidget *window,*tool;
 static GeanyDocument *doc;
 static gchar *profile,*source,*path;
 static guint phase,ticks;
-static GtkWidget *find(GtkWidget *root,const gchar *name) {if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;if(GTK_IS_CONTAINER(root)) {GList *children=gtk_container_get_children(GTK_CONTAINER(root));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=find(p->data,name);g_list_free(children);return found;}return NULL;}
+static GtkWidget *find(GtkWidget *root,const gchar *name) {if(!g_strcmp0(gtk_widget_get_name(root),name)) return root;if(GTK_IS_MENU_ITEM(root)) {GtkWidget *menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(root));if(menu) {GtkWidget *found=find(menu,name);if(found) return found;}}if(GTK_IS_CONTAINER(root)) {GList *children=gtk_container_get_children(GTK_CONTAINER(root));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=find(p->data,name);g_list_free(children);return found;}return NULL;}
 static GtkWidget *named(const gchar *name) {GtkWidget *w=find(tool,name);g_assert_nonnull(w);return w;}
 static GtkWidget *top(void) {GList *all=gtk_window_list_toplevels();GtkWidget *found=NULL;for(GList *p=all;p && !found;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-custom-commands")) found=p->data;g_list_free(all);return found;}
 static void click(const gchar *name) {g_signal_emit_by_name(named(name),"clicked");}
@@ -19,7 +19,7 @@ static gchar *output(const gchar *name) {GtkTextBuffer *b=gtk_text_view_get_buff
 static gboolean busy(void) {return g_object_get_data(G_OBJECT(tool),"insight-custom-command-busy")!=NULL;}
 static void unchanged(void) {gchar *text=sci_get_contents(doc->editor->sci,-1);g_assert_cmpstr(text,==,"int main(void) { return 0; }\n");g_free(text);g_assert_false(doc->changed);g_assert_false(scintilla_send_message(doc->editor->sci,SCI_CANUNDO,0,0));}
 static gboolean step(gpointer data) {
- (void)data;if(++ticks>180) g_error("Custom commands timeout phase %u",phase);
+ (void)data;static guint last=G_MAXUINT;if(last!=phase) {g_printerr("Custom commands phase %u\n",phase);last=phase;}if(++ticks>180) g_error("Custom commands timeout phase %u",phase);
  if(!window) {GeanyDocument *current=document_get_current();if(!current) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(current->editor->sci));}
  if(phase==0) {GtkWidget *menu=find(window,"insight-custom-commands-menu");if(!menu) return G_SOURCE_CONTINUE;doc=document_open_file(source,FALSE,NULL,NULL);g_assert_nonnull(doc);gtk_menu_item_activate(GTK_MENU_ITEM(menu));tool=top();g_assert_nonnull(tool);
   set("insight-custom-command-name","Fixture compiler");set("insight-custom-command-template","/bin/sh -c 'printf \"OUT:%%s\\n\" \"$1\"; printf ERR >&2; exit 7' -- %f");set("insight-custom-command-directory","%d");click("insight-custom-command-preview");gchar *preview=output("insight-custom-command-context");g_assert_nonnull(strstr(preview,source));g_free(preview);click("insight-custom-command-edit-1");click("insight-custom-command-run");g_assert_true(busy());g_assert_false(gtk_widget_get_sensitive(named("insight-custom-command-run")));phase=1;return G_SOURCE_CONTINUE;
