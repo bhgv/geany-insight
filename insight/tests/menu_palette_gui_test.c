@@ -13,7 +13,7 @@ static GtkWidget *find(GtkWidget *root,const gchar *name) {
 }
 static void destroyed(GtkWidget *widget,gpointer data) { (void)widget;*(gboolean *)data=TRUE; }
 static gboolean step(gpointer data) {
- (void)data;GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;GtkWidget *main=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));
+ (void)data;GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;GtkWidget *main=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));if(!g_object_get_data(G_OBJECT(main),"insight-editor-menu")) return G_SOURCE_CONTINUE;
  if(!phase) {
   menu=gtk_menu_new();g_object_ref_sink(menu);toggle=gtk_check_menu_item_new_with_label("Fixture toggle");gtk_menu_shell_append(GTK_MENU_SHELL(menu),toggle);g_signal_connect(toggle,"activate",G_CALLBACK(clicked),NULL);
   GtkWidget *label=gtk_bin_get_child(GTK_BIN(toggle)),*box=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,2);g_object_ref(label);gtk_container_remove(GTK_CONTAINER(toggle),label);icon=gtk_image_new_from_icon_name("text-x-generic",GTK_ICON_SIZE_MENU);gtk_box_pack_start(GTK_BOX(box),icon,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),label,TRUE,TRUE,0);g_object_unref(label);gtk_container_add(GTK_CONTAINER(toggle),box);
