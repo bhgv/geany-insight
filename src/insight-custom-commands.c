@@ -18,13 +18,13 @@
 typedef struct {
  gint refs;gboolean closed,loading,reading,waiting,limited,stopped;
  GtkWidget *window,*tabs,*profiles,*name,*command,*directory,*run,*stop,*status,*context,*output,*title,*arguments[9];
- GPtrArray *commands,*locked;gchar *path,*status_key;gint exit_code;
+ GPtrArray *commands,*locked;gchar *path,*status_key,*context_argv,*context_directory,*context_variables,*context_error;gint exit_code;
  GSubprocess *process;GCancellable *cancel;GString *pending;gsize received;guint lines,line_bytes;
 } CommandView;
 static GtkWidget *command_window;
 static CommandView *view_ref(CommandView *v) {v->refs++;return v;}
 static void view_unref(gpointer data) {
- CommandView *v=data;if(--v->refs) return;g_ptr_array_unref(v->commands);g_ptr_array_unref(v->locked);g_free(v->path);g_free(v->status_key);g_clear_object(&v->process);g_clear_object(&v->cancel);g_string_free(v->pending,TRUE);g_free(v);
+ CommandView *v=data;if(--v->refs) return;g_ptr_array_unref(v->commands);g_ptr_array_unref(v->locked);g_free(v->path);g_free(v->status_key);g_free(v->context_argv);g_free(v->context_directory);g_free(v->context_variables);g_free(v->context_error);g_clear_object(&v->process);g_clear_object(&v->cancel);g_string_free(v->pending,TRUE);g_free(v);
 }
 static void note(CommandView *v,const gchar *key) {
  g_free(v->status_key);v->status_key=g_strdup(key);if(!v->closed) {gchar *formatted=!strcmp(key,"Command exited with status %d") ? g_strdup_printf(insight_tr(key),v->exit_code):g_strdup(insight_tr(key));gtk_label_set_text(GTK_LABEL(v->status),formatted);g_free(formatted);}
@@ -63,11 +63,23 @@ static gboolean prepare(CommandView *v,gchar ***argv,gchar **directory,GHashTabl
  if(!g_file_test(*directory,G_FILE_TEST_IS_DIR)) {g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NOT_DIRECTORY,"Working directory does not exist");return FALSE;}return TRUE;
 }
 static gchar *display_argv(gchar **argv) {GString *s=g_string_new(NULL);for(guint i=0;argv && argv[i];i++) {gchar *q=g_shell_quote(argv[i]);if(i) g_string_append_c(s,' ');g_string_append(s,q);g_free(q);}if(s->len>8192) {const gchar *end=g_utf8_find_prev_char(s->str,s->str+8192);g_string_truncate(s,end ? (gsize)(end-s->str):0);g_string_append(s,"\n…");}return g_string_free(s,FALSE);}
+/* Retain captured values so language changes only repaint headings, without
+ * resampling another document, touching the filesystem or changing tabs. */
+static void render_context(CommandView *v) {
+ if(v->closed || !v->context_variables) return;
+ GString *text=g_string_new(insight_tr("Expanded arguments (display only):"));g_string_append_c(text,'\n');
+ g_string_append(text,v->context_argv ? v->context_argv:insight_tr(v->context_error ? v->context_error:"Invalid custom command template"));
+ if(v->context_directory) g_string_append_printf(text,"\n\n%s\n%s",insight_tr("Working directory"),v->context_directory);
+ g_string_append_printf(text,"\n\n%s\n%s",insight_tr("Available context variables:"),v->context_variables);
+ gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->context)),text->str,-1);g_string_free(text,TRUE);
+}
 static void preview(GtkWidget *button,gpointer data) {
- (void)button;CommandView *v=data;gchar **argv=NULL,*directory=NULL;GHashTable *map=NULL;GError *error=NULL;gboolean ok=prepare(v,&argv,&directory,&map,&error);GString *text=g_string_new(insight_tr("Expanded arguments (display only):"));g_string_append_c(text,'\n');
- if(ok) {gchar *shown=display_argv(argv);g_string_append(text,shown);g_free(shown);g_string_append_printf(text,"\n\n%s\n%s",insight_tr("Working directory"),directory);}else g_string_append(text,error ? insight_tr(error->message):insight_tr("Invalid custom command template"));
- g_string_append_printf(text,"\n\n%s\n",insight_tr("Available context variables:"));GList *keys=g_hash_table_get_keys(map);keys=g_list_sort(keys,(GCompareFunc)g_strcmp0);for(GList *p=keys;p;p=p->next) {const gchar *key=p->data;g_string_append_printf(text,strlen(key)==1 ? "%%%s = %s\n":"%%%s%% = %s\n",key,(gchar *)g_hash_table_lookup(map,key));}g_list_free(keys);
- gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->context)),text->str,-1);g_string_free(text,TRUE);insight_compare_ui_reveal(v->context);g_hash_table_unref(map);g_strfreev(argv);g_free(directory);g_clear_error(&error);
+ (void)button;CommandView *v=data;gchar **argv=NULL,*directory=NULL;GHashTable *map=NULL;GError *error=NULL;gboolean ok=prepare(v,&argv,&directory,&map,&error);
+ g_free(v->context_argv);g_free(v->context_directory);g_free(v->context_variables);g_free(v->context_error);
+ v->context_argv=ok ? display_argv(argv):NULL;v->context_directory=ok ? g_filename_display_name(directory):NULL;v->context_error=ok ? NULL:g_strdup(error ? error->message:"Invalid custom command template");
+ GString *variables=g_string_new(NULL);GList *keys=g_hash_table_get_keys(map);keys=g_list_sort(keys,(GCompareFunc)g_strcmp0);
+ for(GList *p=keys;p;p=p->next) {const gchar *key=p->data;g_string_append_printf(variables,strlen(key)==1 ? "%%%s = %s\n":"%%%s%% = %s\n",key,(gchar *)g_hash_table_lookup(map,key));}g_list_free(keys);v->context_variables=g_string_free(variables,FALSE);
+ render_context(v);insight_compare_ui_reveal(v->context);g_hash_table_unref(map);g_strfreev(argv);g_free(directory);g_clear_error(&error);
 }
 static void append(CommandView *v,const gchar *text,gint length) {
  if(v->closed) return;GtkAdjustment *adjustment=gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(v->output));gboolean follow=gtk_adjustment_get_value(adjustment)+gtk_adjustment_get_page_size(adjustment)>=gtk_adjustment_get_upper(adjustment)-16;GtkTextBuffer *b=gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->output));GtkTextIter end;gtk_text_buffer_get_end_iter(b,&end);gtk_text_buffer_insert(b,&end,text,length);/* GTK may defer scrolling until layout; the target mark must outlive that work. */
@@ -129,7 +141,7 @@ static void output_action(GtkWidget *button,gpointer data) {
 static GtkWidget *button(GtkWidget *row,const gchar *label,const gchar *name,GCallback action,CommandView *v,gboolean lock) {GtkWidget *b=gtk_button_new_with_label("");gtk_widget_set_name(b,name);insight_i18n_key(G_OBJECT(b),"label",label);gtk_box_pack_start(GTK_BOX(row),b,FALSE,FALSE,0);g_signal_connect(b,"clicked",action,v);if(lock) g_ptr_array_add(v->locked,b);return b;}
 static GtkWidget *entry(GtkWidget *page,const gchar *label,const gchar *name,const gchar *tip,CommandView *v) {GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6),*l=gtk_label_new(NULL),*e=gtk_entry_new();insight_i18n_key(G_OBJECT(l),"label",label);gtk_widget_set_name(e,name);insight_ai_ui_entry(e,tip,1);insight_i18n_key(G_OBJECT(e),"tooltip-text",tip);gtk_box_pack_start(GTK_BOX(row),l,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(row),e,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(page),row,FALSE,FALSE,0);g_ptr_array_add(v->locked,e);return e;}
 static GtkWidget *text_view(GtkWidget *page,const gchar *name,gboolean expand) {GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL),*view=gtk_text_view_new();gtk_widget_set_name(view,name);gtk_text_view_set_editable(GTK_TEXT_VIEW(view),FALSE);gtk_text_view_set_monospace(GTK_TEXT_VIEW(view),TRUE);gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view),GTK_WRAP_WORD_CHAR);gtk_container_add(GTK_CONTAINER(scroll),view);gtk_box_pack_start(GTK_BOX(page),scroll,expand,expand,0);return view;}
-static void locale(gpointer data) {CommandView *v=data;if(!v->closed) {insight_i18n_key(G_OBJECT(v->window),"title","Custom Commands");if(v->title) insight_i18n_key(G_OBJECT(v->title),"label","Custom Commands");}if(!v->closed && v->status_key) {gchar *key=g_strdup(v->status_key);note(v,key);g_free(key);}}
+static void locale(gpointer data) {CommandView *v=data;if(!v->closed) {render_context(v);insight_i18n_key(G_OBJECT(v->window),"title","Custom Commands");if(v->title) insight_i18n_key(G_OBJECT(v->title),"label","Custom Commands");}if(!v->closed && v->status_key) {gchar *key=g_strdup(v->status_key);note(v,key);g_free(key);}}
 static void show(GtkMenuItem *item,gpointer unused) {
  (void)item;(void)unused;if(command_window) {gtk_window_present(GTK_WINDOW(command_window));return;}
  CommandView *v=g_new0(CommandView,1);v->refs=1;v->locked=g_ptr_array_new();v->pending=g_string_new(NULL);v->path=g_build_filename(app->configdir,"insight","custom-commands.conf",NULL);GError *error=NULL;v->commands=insight_custom_commands_load(v->path,&error);if(!v->commands) v->commands=g_ptr_array_new_with_free_func(insight_custom_command_free);
