@@ -72,6 +72,7 @@ static gboolean step(gpointer data) {
  (void)data;source=document_get_current();if(!source) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(source->editor->sci));popup=g_object_get_data(G_OBJECT(window),"insight-editor-menu");g_assert_nonnull(popup);
  ScintillaObject *sci=source->editor->sci;gint first=strstr(edited,"β")-edited,deleted=strstr(edited,"anchor")-edited,last=strstr(edited,"LAST")-edited;
  reset(edited,0);g_assert_true(document_save_file(source,TRUE));
+ g_assert_nonnull(named(window,"insight-panel-original-changes"));run(0,"insight-panel-original-changes");SEND(sci,SCI_SETSEL,0,0);
  action("insight-next-original-change");position(first);action("insight-next-original-change");position(deleted);action("insight-next-original-change");position(last);action("insight-next-original-change");position(last);action("insight-prev-original-change");position(deleted);action("insight-prev-original-change");position(first);action("insight-prev-original-change");position(first);text_is(edited);g_assert_false(SEND(sci,SCI_CANUNDO,0,0));
  SEND(sci,SCI_SETSEL,0,strlen(edited));action("insight-prev-original-change");position(last);g_assert_cmpint(SEND(sci,SCI_GETANCHOR,0,0),==,last);
  SEND(sci,SCI_SETREADONLY,1,0);action("insight-popup-prev-original-change");position(deleted);text_is(edited);SEND(sci,SCI_SETREADONLY,0,0);

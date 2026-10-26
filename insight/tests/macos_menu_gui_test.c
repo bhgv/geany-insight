@@ -45,11 +45,19 @@ static void capture(const gchar *suffix) {
  const gchar *dir=g_getenv("INSIGHT_MENU_CAPTURE_DIR");if(!dir) return;gchar *path=g_build_filename(dir,suffix,NULL);
  GdkWindow *w=gtk_widget_get_window(menu);GdkPixbuf *pix=gdk_pixbuf_get_from_window(w,0,0,gdk_window_get_width(w),gdk_window_get_height(w));g_assert_nonnull(pix);g_assert_true(gdk_pixbuf_save(pix,path,"jpeg",NULL,"quality","90",NULL));g_object_unref(pix);g_free(path);
 }
+static void toolbar_pairs(void) {
+ GtkWidget *toolbar=find_toolbar(window);g_assert_nonnull(toolbar);gint undo=-1,redo=-1,back=-1,forward=-1;
+ for(gint n=0;n<gtk_toolbar_get_n_items(GTK_TOOLBAR(toolbar));n++) {
+  GtkToolItem *item=gtk_toolbar_get_nth_item(GTK_TOOLBAR(toolbar),n);GtkAction *action=GTK_IS_ACTIVATABLE(item) ? gtk_activatable_get_related_action(GTK_ACTIVATABLE(item)):NULL;const gchar *name=action ? gtk_action_get_name(action):NULL;
+  if(!g_strcmp0(name,"Undo")) undo=n;else if(!g_strcmp0(name,"Redo")) redo=n;else if(!g_strcmp0(name,"NavBack")) back=n;else if(!g_strcmp0(name,"NavFor")) forward=n;
+ }
+ g_assert_cmpint(undo,>=,0);g_assert_cmpint(redo,==,undo+1);g_assert_cmpint(back,>=,0);g_assert_cmpint(forward,==,back+1);
+}
 static gboolean step(gpointer data) {
  (void)data;if(++ticks>100) g_error("Menu materials timeout phase %u",phase);
  GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));
  if(phase==0) {
-  if(ticks<8) return G_SOURCE_CONTINUE;g_assert_true(gtk_style_context_has_class(gtk_widget_get_style_context(window),"insight-macos"));
+  if(ticks<8) return G_SOURCE_CONTINUE;toolbar_pairs();g_assert_true(gtk_style_context_has_class(gtk_widget_get_style_context(window),"insight-macos"));
   reduced=named(window,"insight-opacity-0-100");GtkWidget *translucent=named(window,"insight-opacity-0-90");g_assert_true(GTK_IS_RADIO_MENU_ITEM(reduced));gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(translucent),TRUE);g_assert_nonnull(reduced);g_assert_false(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(reduced)));
   menu=gtk_menu_new();gtk_menu_attach_to_widget(GTK_MENU(menu),window,NULL);
   unknown=gtk_menu_item_new_with_label("Unmapped action");known=gtk_menu_item_new_with_label("Next result");native=gtk_image_menu_item_new_with_label("Find in Files…");gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(native),gtk_image_new_from_icon_name("edit-find",GTK_ICON_SIZE_MENU));

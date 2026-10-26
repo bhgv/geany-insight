@@ -29,6 +29,18 @@ static gboolean step(gpointer data) {
  scintilla_send_message(a->editor->sci,SCI_UNDO,0,0);g_assert_false(scintilla_send_message(a->editor->sci,SCI_CANUNDO,0,0));
  GeanyDocument *untitled=document_new_file(NULL,NULL,NULL);toggle();g_assert_true(document_get_current()==untitled);g_assert_true(document_close(untitled));
  gchar *text=sci_get_contents(a->editor->sci,-1);g_assert_cmpstr(text,==,"α\nbeta\ngamma\ndelta\n");g_free(text);g_assert_false(scintilla_send_message(a->editor->sci,SCI_CANUNDO,0,0));
+ /* Moving manually inside history must not erase its forward branch. */
+ navqueue_goto_line(a,a,1);navqueue_goto_line(a,a,2);navqueue_goto_line(a,a,3);
+ keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_GOTO_BACK);at(a,1);
+ sci_set_current_position(a->editor->sci,sci_get_position_from_line(a->editor->sci,3),FALSE);
+ keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_GOTO_BACK);at(a,1);
+ keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_GOTO_FORWARD);at(a,3);
+ keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_GOTO_FORWARD);at(a,2);
+ keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_GOTO_BACK);at(a,3);
+ sci_set_current_position(a->editor->sci,0,FALSE);
+ keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_GOTO_FORWARD);at(a,2);
+ keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_GOTO_BACK);at(a,0);
+ g_assert_true(gtk_window_get_focus(GTK_WINDOW(window))==GTK_WIDGET(a->editor->sci));
  g_print("Back Toggle GUI: repeated pairs, native key dispatch, manual Forward/caret, edit anchors, closed files, untitled and unchanged text/Undo passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
 }
 static gboolean timeout(gpointer data) { (void)data;g_error("Back toggle timeout");return G_SOURCE_REMOVE; }

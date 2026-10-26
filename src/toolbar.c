@@ -578,6 +578,7 @@ static void toolbar_set_icon_size(void)
 
 static void compact_image(GtkWidget *widget,gpointer data)
 {
+ if(GTK_IS_BUTTON(widget)) gtk_widget_set_focus_on_click(widget,FALSE);
  if(GTK_IS_IMAGE(widget)) {
   GtkImageType storage=gtk_image_get_storage_type(GTK_IMAGE(widget));GdkPixbuf *rendered=NULL;
   if(storage==GTK_IMAGE_STOCK) {gchar *stock=NULL;GtkIconSize unused;gtk_image_get_stock(GTK_IMAGE(widget),&stock,&unused);if(stock) {g_object_set_data_full(G_OBJECT(widget),"insight-toolbar-stock",g_strdup(stock),g_free);rendered=gtk_widget_render_icon_pixbuf(widget,stock,GTK_ICON_SIZE_MENU);}}
@@ -608,8 +609,37 @@ static void toolbar_allocated(GtkWidget *toolbar,GtkAllocation *allocation,gpoin
 {
  (void)data;if(allocation->height>1) gtk_container_forall(GTK_CONTAINER(toolbar),toolbar_child_limit,GINT_TO_POINTER(MAX(1,allocation->height*85/100)));
 }
+static gint toolbar_order(GtkWidget *item) {
+ gint order=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item),"insight-toolbar-order"));if(order) return order;
+ GtkAction *action=GTK_IS_ACTIVATABLE(item) ? gtk_activatable_get_related_action(GTK_ACTIVATABLE(item)):NULL;
+ const gchar *name=action ? gtk_action_get_name(action):gtk_widget_get_name(item);
+ static const struct {const gchar *name;gint order;} known[]={
+  {"New",100},{"Open",101},{"Save",102},{"SaveAs",103},{"SaveAll",104},{"Reload",105},{"Close",106},{"CloseAll",107},
+  {"Undo",200},{"Redo",201},{"Cut",202},{"Copy",203},{"Paste",204},
+  {"NavBack",300},{"NavFor",301},{"GotoEntry",305},{"Goto",306},
+  {"SearchEntry",403},{"Compile",600},{"Build",601},{"Run",602},
+  {"insight-git-commit-tool",700},{"insight-git-add-tool",701},{"Color",802},{"Quit",1200}};
+ for(guint i=0;i<G_N_ELEMENTS(known);i++) if(!g_strcmp0(name,known[i].name)) return known[i].order;
+ return 1100;
+}
+static gint toolbar_compare(gconstpointer a,gconstpointer b) {return toolbar_order(GTK_WIDGET(a))-toolbar_order(GTK_WIDGET(b));}
+static void toolbar_group_items(GtkWidget *toolbar) {
+ GList *items=gtk_container_get_children(GTK_CONTAINER(toolbar)),*ordered=NULL;
+ for(GList *p=items;p;p=p->next) {
+  GtkWidget *item=p->data;if(!GTK_IS_SEPARATOR_TOOL_ITEM(item)) {g_object_ref(item);ordered=g_list_append(ordered,item);}
+  gtk_container_remove(GTK_CONTAINER(toolbar),item);
+ }
+ g_list_free(items);ordered=g_list_sort(ordered,toolbar_compare);gint group=-1;
+ for(GList *p=ordered;p;p=p->next) {
+  GtkWidget *item=p->data;gint next=toolbar_order(item)/100;
+  if(group>=0 && group!=next) {GtkToolItem *separator=gtk_separator_tool_item_new();toolbar_item_ref(separator);gtk_toolbar_insert(GTK_TOOLBAR(toolbar),separator,-1);gtk_widget_show(GTK_WIDGET(separator));}
+  gtk_toolbar_insert(GTK_TOOLBAR(toolbar),GTK_TOOL_ITEM(item),-1);group=next;g_object_unref(item);
+ }
+ g_list_free(ordered);
+}
 void toolbar_apply_settings(void)
 {
+ toolbar_group_items(main_widgets.toolbar);
 	toolbar_set_icon_style();
 	toolbar_set_icon_size();
  GtkWidget *toolbar=main_widgets.toolbar;GtkCssProvider *css=g_object_get_data(G_OBJECT(toolbar),"insight-toolbar-geometry");

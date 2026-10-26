@@ -4873,8 +4873,11 @@ gboolean editor_goto_pos(GeanyEditor *editor, gint pos, gboolean mark)
 
 	/* switch to the page */
 	document_show_tab(editor->document);
+ /* Explicit source navigation must return input and the caret to the editor,
+  * including when invoked from a toolbar or another floating window. */
+ if(mark && !main_status.opening_session_files) document_grab_focus(editor->document);
 
-	return TRUE;
+ return TRUE;
 }
 
 

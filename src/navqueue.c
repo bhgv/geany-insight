@@ -43,7 +43,7 @@
 /* for the navigation history queue */
 typedef struct
 {
-	const gchar *file;	/* This is the document's filename, in UTF-8 */
+	gchar *file;	/* Owned filename: Save As may replace the document string. */
 	gint pos;
 } filepos;
 
@@ -57,6 +57,11 @@ static struct { gboolean forward; guint64 serial; guint document; gint position;
 static GtkAction *navigation_buttons[2];
 
 
+
+static void filepos_free(gpointer data)
+{
+ filepos *position=data;if(position) {g_free(position->file);g_free(position);}
+}
 
 void navqueue_init(void)
 {
@@ -75,7 +80,7 @@ void navqueue_free(void)
 {
 	while (! g_queue_is_empty(navigation_queue))
 	{
-		g_free(g_queue_pop_tail(navigation_queue));
+		filepos_free(g_queue_pop_tail(navigation_queue));
 	}
 	g_queue_free(navigation_queue);
 	navigation_queue = NULL;
@@ -85,25 +90,11 @@ void navqueue_free(void)
 
 static void adjust_buttons(void)
 {
-	if (g_queue_get_length(navigation_queue) < 2)
-	{
-		gtk_action_set_sensitive(navigation_buttons[0], FALSE);
-		gtk_action_set_sensitive(navigation_buttons[1], FALSE);
-		return;
-	}
-	if (nav_queue_pos == 0)
-	{
-		gtk_action_set_sensitive(navigation_buttons[0], TRUE);
-		gtk_action_set_sensitive(navigation_buttons[1], FALSE);
-		return;
-	}
-	/* forward should be sensitive since where not at the start */
-	gtk_action_set_sensitive(navigation_buttons[1], TRUE);
-
-	/* back should be sensitive if there's a place to go back to */
-	(nav_queue_pos < g_queue_get_length(navigation_queue) - 1) ?
-		gtk_action_set_sensitive(navigation_buttons[0], TRUE) :
-			gtk_action_set_sensitive(navigation_buttons[0], FALSE);
+ guint length=g_queue_get_length(navigation_queue);gboolean moved=FALSE;
+ GeanyDocument *doc=document_get_current();filepos *at=g_queue_peek_nth(navigation_queue,nav_queue_pos);
+ if(at && doc && doc->file_name) moved=!utils_str_equal(at->file,doc->file_name) || at->pos!=sci_get_current_position(doc->editor->sci);
+ gtk_action_set_sensitive(navigation_buttons[0],length>0 && (moved || nav_queue_pos+1<length));
+ gtk_action_set_sensitive(navigation_buttons[1],length>0 && nav_queue_pos>0);
 }
 
 
@@ -120,7 +111,7 @@ queue_pos_matches(guint queue_pos, const gchar *fname, gint pos)
 }
 
 
-static void add_new_position(const gchar *utf8_filename, gint pos)
+static void add_position(const gchar *utf8_filename, gint pos, gboolean keep_forward)
 {
 	filepos *npos;
 	guint i;
@@ -129,25 +120,34 @@ static void add_new_position(const gchar *utf8_filename, gint pos)
 		return;	/* prevent duplicates */
 
 	npos = g_new0(filepos, 1);
-	npos->file = utf8_filename;
+	npos->file = g_strdup(utf8_filename);
 	npos->pos = pos;
 
 	/* if we've jumped to a new position from inside the queue rather than going forward */
-	if (nav_queue_pos > 0)
+	if (!keep_forward && nav_queue_pos > 0)
 	{
 		for (i = 0; i < nav_queue_pos; i++)
 		{
-			g_free(g_queue_pop_head(navigation_queue));
+			filepos_free(g_queue_pop_head(navigation_queue));
 		}
 		nav_queue_pos = 0;
 	}
-	g_queue_push_head(navigation_queue, npos);
+	if(keep_forward) g_queue_push_nth(navigation_queue,npos,nav_queue_pos);
+ else g_queue_push_head(navigation_queue,npos);
 	while (g_queue_get_length(navigation_queue) > HISTORY_LIMIT)
-		g_free(g_queue_pop_tail(navigation_queue));
+		filepos_free(g_queue_pop_tail(navigation_queue));
 	navigation_serial++;
 	adjust_buttons();
 }
 
+
+static void add_new_position(const gchar *file,gint pos) {add_position(file,pos,FALSE);}
+/* Back/Forward capture a manually moved caret without discarding the forward
+ * branch. Only a new explicit jump creates a new navigation branch. */
+static void remember_current(void) {
+ GeanyDocument *doc=document_get_current();
+ if(doc && doc->file_name) add_position(doc->file_name,sci_get_current_position(doc->editor->sci),TRUE);
+}
 
 /**
  *  Adds old file position and new file position to the navqueue, then goes to the new position.
@@ -214,20 +214,7 @@ void navqueue_go_back(void)
 {
     back_toggle.forward = FALSE;
 	filepos *fprev;
-	GeanyDocument *doc = document_get_current();
-
-	/* If the navqueue is currently at some position A, but the actual cursor is at some other
-	 * place B, we should add B to the navqueue, so that (1) we go back to A, not to the next
-	 * item in the queue; and (2) we can later restore B by going forward.
-	 * (If A = B, add_new_position will ignore it.) */
-	if (doc)
-	{
-		if (doc->file_name)
-			add_new_position(doc->file_name, sci_get_current_position(doc->editor->sci));
-	}
-	else
-		/* see also https://github.com/geany/geany/pull/1537 */
-		g_warning("Attempted navigation when nothing is open");
+	remember_current();
 
 	/* return if there's no place to go back to */
 	if (g_queue_is_empty(navigation_queue) ||
@@ -244,7 +231,7 @@ void navqueue_go_back(void)
 	else
 	{
 		/** TODO: add option to re open the file */
-		g_free(g_queue_pop_nth(navigation_queue, nav_queue_pos + 1));
+		filepos_free(g_queue_pop_nth(navigation_queue, nav_queue_pos + 1));
 		navigation_serial++;
 	}
 	adjust_buttons();
@@ -260,6 +247,8 @@ void navqueue_go_forward(void)
 		nav_queue_pos >= g_queue_get_length(navigation_queue))
 		return;
 
+	remember_current();
+
 	/* jump forward */
 	fnext = g_queue_peek_nth(navigation_queue, nav_queue_pos - 1);
 	if (goto_file_pos(fnext->file, fnext->pos))
@@ -270,7 +259,7 @@ void navqueue_go_forward(void)
 	else
 	{
 		/** TODO: add option to re open the file */
-		g_free(g_queue_pop_nth(navigation_queue, nav_queue_pos - 1));
+		filepos_free(g_queue_pop_nth(navigation_queue, nav_queue_pos - 1));
 		nav_queue_pos--;
 		navigation_serial++;
 	}
@@ -319,7 +308,7 @@ void navqueue_remove_file(const gchar *filename)
 	{
 		gint index = g_queue_link_index(navigation_queue, match);
 		if ((guint)index < nav_queue_pos) nav_queue_pos--;
-		g_free(match->data);
+		filepos_free(match->data);
 		navigation_serial++;
 		g_queue_delete_link(navigation_queue, match);
 	}
@@ -332,6 +321,7 @@ void navqueue_remove_file(const gchar *filename)
  * a position collapses it to the deletion start; Undo does not resurrect it. */
 void navqueue_notify(GeanyDocument *doc, SCNotification *nt)
 {
+ if(navigation_queue && nt->nmhdr.code==SCN_UPDATEUI && doc==document_get_current()) adjust_buttons();
  if(!navigation_queue || !doc->file_name || nt->nmhdr.code!=SCN_MODIFIED ||
     !(nt->modificationType&(SC_MOD_INSERTTEXT|SC_MOD_DELETETEXT))) return;
  for(GList *link=navigation_queue->head;link;link=link->next) {
