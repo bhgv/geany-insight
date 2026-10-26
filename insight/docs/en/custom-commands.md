@@ -2,6 +2,8 @@
 
 Open **Tools → Custom Commands…**. This modeless tool window adds a saved external-tool list, literal context substitutions, a launch preview, a working directory, numbered arguments and a selectable output log. It uses the shared compact top tabs and Collapse control. An unassigned **Custom Commands** Editor binding can be configured in Keybindings.
 
+![Production window in an isolated Linux GUI fixture](../media/custom-commands.jpg)
+
 ![Command workflow](../media/custom-commands.svg)
 
 1. Choose New command, enter a name, executable/arguments and working directory.
