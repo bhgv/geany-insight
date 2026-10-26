@@ -29,9 +29,10 @@ static gboolean step(gpointer data) {
  } else if(phase==1) {
   g_assert_false(gtk_widget_get_mapped(menu));GtkWidget *button=first_button(palette);g_assert_nonnull(button);gtk_button_clicked(GTK_BUTTON(button));g_assert_cmpuint(hits,==,1);g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(toggle)));g_assert_true(gtk_widget_get_visible(palette));
   gtk_widget_set_sensitive(toggle,FALSE);g_assert_false(gtk_widget_get_sensitive(button));gtk_widget_set_sensitive(toggle,TRUE);gtk_menu_item_set_label(GTK_MENU_ITEM(toggle),"Updated caption");g_assert_nonnull(g_strstr_len(gtk_button_get_label(GTK_BUTTON(button)),-1,"Updated caption"));
-  gtk_widget_destroy(palette);g_assert_null(g_object_get_data(G_OBJECT(menu),"insight-palette-window"));
+  g_signal_handlers_disconnect_by_func(menu,G_CALLBACK(gtk_widget_destroy),menu);gtk_widget_destroy(palette);g_assert_null(g_object_get_data(G_OBJECT(menu),"insight-palette-window"));
   gtk_menu_item_activate(GTK_MENU_ITEM(find(menu,"insight-menu-detach")));palette=g_object_get_data(G_OBJECT(menu),"insight-palette-window");g_assert_nonnull(palette);
   gboolean gone=FALSE;g_signal_connect(palette,"destroy",G_CALLBACK(destroyed),&gone);gtk_widget_destroy(menu);g_assert_true(gone);g_object_unref(menu);
+  menu=gtk_menu_new();g_object_ref_sink(menu);gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_menu_item_new_with_label("Transient command"));g_signal_connect_swapped(menu,"selection-done",G_CALLBACK(gtk_widget_destroy),menu);insight_menu_icons(menu);gtk_widget_show_all(menu);gtk_menu_item_activate(GTK_MENU_ITEM(find(menu,"insight-menu-detach")));palette=g_object_get_data(G_OBJECT(menu),"insight-palette-window");g_assert_nonnull(palette);gboolean cleaned=FALSE;g_signal_connect(menu,"destroy",G_CALLBACK(destroyed),&cleaned);gtk_widget_destroy(palette);g_assert_true(cleaned);g_object_unref(menu);
   g_print("Menu palette GUI: keyboard tear-off, retained transient popup, live state, repeated action and safe owner destruction passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(main_widgets.window,"menu_quit1")));return G_SOURCE_REMOVE;
  }
  phase++;return G_SOURCE_CONTINUE;

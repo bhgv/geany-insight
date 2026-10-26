@@ -142,6 +142,9 @@ static gboolean palette_focus(GtkWidget *window,GdkEventFocus *event,gpointer da
 }
 static void palette_closed(GtkWidget *window,gpointer data) {
  GtkWidget *menu=data;(void)window;g_object_set_data(G_OBJECT(menu),"insight-palette-window",NULL);
+ /* Finish the deferred popup lifetime now. Its owner can perform the same
+  * selection-done cleanup as on dismissal of an ordinary context menu. */
+ if(!gtk_widget_in_destruction(menu) && !gtk_menu_get_attach_widget(GTK_MENU(menu))) g_signal_emit_by_name(menu,"selection-done");
 }
 static void menu_palette_open(GtkWidget *menu) {
  if(gtk_widget_in_destruction(menu)) return;
