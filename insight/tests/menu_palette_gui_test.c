@@ -27,7 +27,7 @@ static gboolean step(gpointer data) {
   GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);event->key.keyval=GDK_KEY_Return;gboolean handled=FALSE;g_signal_emit_by_name(menu,"key-press-event",event,&handled);gdk_event_free(event);g_assert_true(handled);
   palette=g_object_get_data(G_OBJECT(menu),"insight-palette-window");g_assert_nonnull(palette);g_assert_true(gtk_widget_get_visible(palette));
  } else if(phase==1) {
-  GtkWidget *button=first_button(palette);g_assert_nonnull(button);gtk_button_clicked(GTK_BUTTON(button));g_assert_cmpuint(hits,==,1);g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(toggle)));g_assert_true(gtk_widget_get_visible(palette));
+  g_assert_false(gtk_widget_get_mapped(menu));GtkWidget *button=first_button(palette);g_assert_nonnull(button);gtk_button_clicked(GTK_BUTTON(button));g_assert_cmpuint(hits,==,1);g_assert_true(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(toggle)));g_assert_true(gtk_widget_get_visible(palette));
   gtk_widget_set_sensitive(toggle,FALSE);g_assert_false(gtk_widget_get_sensitive(button));gtk_widget_set_sensitive(toggle,TRUE);gtk_menu_item_set_label(GTK_MENU_ITEM(toggle),"Updated caption");g_assert_nonnull(g_strstr_len(gtk_button_get_label(GTK_BUTTON(button)),-1,"Updated caption"));
   gtk_widget_destroy(palette);g_assert_null(g_object_get_data(G_OBJECT(menu),"insight-palette-window"));
   gtk_menu_item_activate(GTK_MENU_ITEM(find(menu,"insight-menu-detach")));palette=g_object_get_data(G_OBJECT(menu),"insight-palette-window");g_assert_nonnull(palette);

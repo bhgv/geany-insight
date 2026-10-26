@@ -132,7 +132,13 @@ static void palette_rows(GtkWidget *window) {
 }
 static gboolean palette_focus(GtkWidget *window,GdkEventFocus *event,gpointer data) {
  (void)event;(void)data;GtkWidget *menu=g_object_get_data(G_OBJECT(window),"palette-menu");
- (void)menu;palette_rows(window);return FALSE;
+ /* The GtkMenu remains inside its hidden popup window after popdown.
+  * Showing only its child runs the native context-refresh handlers without
+  * opening that popup window or obtaining a pointer/keyboard grab. */
+ g_object_ref(window);g_object_ref(menu);gtk_widget_show(menu);
+ if(!gtk_widget_in_destruction(menu)) gtk_widget_hide(menu);
+ if(!gtk_widget_in_destruction(window)) palette_rows(window);
+ g_object_unref(menu);g_object_unref(window);return FALSE;
 }
 static void palette_closed(GtkWidget *window,gpointer data) {
  GtkWidget *menu=data;(void)window;g_object_set_data(G_OBJECT(menu),"insight-palette-window",NULL);
