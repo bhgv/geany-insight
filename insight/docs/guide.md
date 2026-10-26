@@ -139,3 +139,7 @@ Options → Language profiles… и контекстное меню редакт
 Кнопки «Назад/Вперёд» сохраняют ветку переходов вперёд при ручном перемещении курсора внутри истории. Явные переходы к исходнику возвращают фокус редактору; щелчки по кнопкам тулбара не забирают фокус ввода текста. Главный тулбар разбит на группы: файлы, Undo/Redo и редактирование, навигация, поиск, проект, сборка/запуск, Git, сравнение/инструменты, раскладки и справка. Undo/Redo и «Назад/Вперёд» расположены соседними парами. **Вид → Панели → Изменения от исходного текста…** открывает список изменённых позиций с момента открытия файла, включая сохранённые правки; сохранение не сбрасывает исходный снимок.
 
 Detached menu palettes paint the themed window background behind rounded menu corners and scrollbar gutters, including on non-composited desktops; no unpainted black backing is left exposed.
+
+Where the display backend supports shaped windows, detached palettes are clipped to the current menu theme silhouette. The shape follows resizing and theme changes without replacing native window controls. Other backends use the painted themed backing.
+
+Palette size follows the native content requisition, excluding popup shadow reserve; the popup shadow is disabled inside the detached window. No blank spacer rows are added.

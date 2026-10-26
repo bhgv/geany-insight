@@ -103,9 +103,7 @@ static void palette_cleanup_handlers(GtkWidget *menu,gboolean block) {
 static gboolean palette_finish_dismissal(gpointer data) {
  GtkWidget *menu=data;g_object_set_data(G_OBJECT(menu),"insight-palette-dismiss",NULL);
  if(!gtk_widget_in_destruction(menu) && !gtk_menu_get_tearoff_state(GTK_MENU(menu))) {
-  GList *items=gtk_container_get_children(GTK_CONTAINER(menu));
-  for(GList *p=items;p;p=p->next) if(g_object_get_data(G_OBJECT(p->data),"insight-palette-spacer")) gtk_widget_destroy(p->data);
-  g_list_free(items);
+  gtk_style_context_remove_class(gtk_widget_get_style_context(menu),"insight-menu-torn");
   palette_cleanup_handlers(menu,FALSE);
   if(!gtk_menu_get_attach_widget(GTK_MENU(menu))) g_signal_emit_by_name(menu,"selection-done");
  }
@@ -115,6 +113,30 @@ static void palette_menu_destroy(GtkWidget *menu,gpointer data) {
  (void)data;guint pending=GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(menu),"insight-palette-dismiss"));
  g_object_set_data(G_OBJECT(menu),"insight-palette-dismiss",NULL);if(pending) g_source_remove(pending);
 }
+/* Shape the RGB legacy tearoff using the menu's actual themed silhouette.
+ * A server-side region also works without a compositor. Keep the ordinary
+ * painted background on backends which cannot shape toplevel windows. */
+static void palette_shape(GtkWidget *window,GtkWidget *menu) {
+ if(!GTK_IS_WINDOW(window) || !gtk_widget_get_realized(window) ||
+    !gtk_menu_get_tearoff_state(GTK_MENU(menu)) || gtk_widget_get_toplevel(menu)!=window) return;
+ GdkWindow *native=gtk_widget_get_window(window);
+ if(!gdk_display_supports_shapes(gtk_widget_get_display(window))) return;
+ gint width=gtk_widget_get_allocated_width(window),height=gtk_widget_get_allocated_height(window);
+ if(width<1 || height<1 || width>8192 || height>8192 || (guint64)width*height>16*1024*1024) {gdk_window_shape_combine_region(native,NULL,0,0);return;}
+ cairo_surface_t *surface=cairo_image_surface_create(CAIRO_FORMAT_ARGB32,width,height);cairo_t *cr=cairo_create(surface);
+ gtk_render_background(gtk_widget_get_style_context(menu),cr,0,0,width,height);
+ gtk_render_frame(gtk_widget_get_style_context(menu),cr,0,0,width,height);
+ cairo_destroy(cr);cairo_region_t *region=gdk_cairo_region_create_from_surface(surface);cairo_surface_destroy(surface);
+ /* Unusual fully transparent themes must not make commands inaccessible. */
+ if(cairo_region_status(region)!=CAIRO_STATUS_SUCCESS || cairo_region_is_empty(region)) {cairo_region_destroy(region);gdk_window_shape_combine_region(native,NULL,0,0);return;}
+ cairo_region_t *previous=g_object_get_data(G_OBJECT(window),"insight-palette-shape");
+ if(!previous || !cairo_region_equal(previous,region)) {
+  gdk_window_shape_combine_region(native,region,0,0);
+  g_object_set_data_full(G_OBJECT(window),"insight-palette-shape",region,(GDestroyNotify)cairo_region_destroy);
+ } else cairo_region_destroy(region);
+}
+static void palette_shape_allocate(GtkWidget *window,GtkAllocation *allocation,gpointer menu) { (void)allocation;palette_shape(window,menu); }
+static void palette_shape_style(GtkWidget *menu,gpointer window) { palette_shape(window,menu); }
 static void palette_state(GObject *object,GParamSpec *spec,gpointer data) {
  (void)spec;(void)data;GtkWidget *menu=GTK_WIDGET(object);
  if(gtk_widget_in_destruction(menu)) return;
@@ -126,6 +148,9 @@ static void palette_state(GObject *object,GParamSpec *spec,gpointer data) {
     * pixels. Let GtkWindow paint the current theme beneath all children;
     * this also works without an alpha visual or a compositing manager. */
    gtk_widget_set_app_paintable(window,FALSE);gtk_widget_queue_draw(window);
+   g_signal_connect_object(window,"size-allocate",G_CALLBACK(palette_shape_allocate),menu,G_CONNECT_AFTER);
+   g_signal_connect_object(menu,"style-updated",G_CALLBACK(palette_shape_style),window,G_CONNECT_AFTER);
+   palette_shape(window,menu);
    gtk_widget_set_name(window,"insight-menu-palette");g_object_set_data(G_OBJECT(menu),"insight-palette-window",window);
    if(GTK_IS_WINDOW(main_widgets.window)) {gtk_window_set_transient_for(GTK_WINDOW(window),GTK_WINDOW(main_widgets.window));gtk_window_set_destroy_with_parent(GTK_WINDOW(window),TRUE);}
   }
@@ -142,35 +167,28 @@ static void palette_state(GObject *object,GParamSpec *spec,gpointer data) {
 static void menu_palette_open(GtkWidget *menu) {
  if(gtk_widget_in_destruction(menu)) return;
  gboolean opening=!gtk_menu_get_tearoff_state(GTK_MENU(menu));
- gint width=gtk_widget_get_allocated_width(menu),height=gtk_widget_get_allocated_height(menu);
+
  if(opening) {
   palette_cleanup_handlers(menu,TRUE);
   /* GtkTearoffMenuItem normally runs after GtkMenuShell has deactivated the
    * popup. Our 7px handle intercepts activation to retain transient owners,
    * so perform that popdown before GTK changes its torn-off bookkeeping. */
-  gint natural=0;gtk_widget_get_preferred_height(menu,NULL,&natural);
   gtk_menu_popdown(GTK_MENU(menu));
-  /* A popup can include spare bottom allocation beyond its requisition.
-   * Retain that blank space as a temporary, nonselectable row so GTK's
-   * native tearoff size hints preserve it without resize feedback loops. */
-  if(height>natural) {
-   GtkWidget *spacer=gtk_separator_menu_item_new();
-   g_object_set_data(G_OBJECT(spacer),"insight-palette-spacer",GINT_TO_POINTER(1));
+  /* Popup shadow extents are not palette content. Size from the native
+   * rows after removing that shadow, not the popup's inflated allocation. */
+  GtkStyleContext *style=gtk_widget_get_style_context(menu);
+  if(!g_object_get_data(G_OBJECT(menu),"insight-palette-css")) {
    GtkCssProvider *css=gtk_css_provider_new();
-   gchar *rules=g_strdup_printf("* { min-height: %dpx; min-width: 0; padding: 0; margin: 0; border-width: 0; background: transparent; background-image: none; }",height-natural);
-   gtk_css_provider_load_from_data(css,rules,-1,NULL);g_free(rules);
-   gtk_style_context_add_provider(gtk_widget_get_style_context(spacer),GTK_STYLE_PROVIDER(css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION+10);g_object_unref(css);
-   gtk_menu_shell_append(GTK_MENU_SHELL(menu),spacer);gtk_widget_show(spacer);
+   gtk_css_provider_load_from_data(css,"menu.insight-menu-torn { margin: 0; box-shadow: none; }",-1,NULL);
+   gtk_style_context_add_provider(style,GTK_STYLE_PROVIDER(css),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION+10);g_object_unref(css);
+   g_object_set_data(G_OBJECT(menu),"insight-palette-css",GINT_TO_POINTER(1));
   }
+  gtk_style_context_add_class(style,"insight-menu-torn");
  }
  GtkWidget *attach=gtk_menu_get_attach_widget(GTK_MENU(menu));
  const gchar *title=GTK_IS_MENU_ITEM(attach) ? gtk_menu_item_get_label(GTK_MENU_ITEM(attach)):NULL;
  gtk_menu_set_title(GTK_MENU(menu),title ? title:insight_tr("Menu palette"));
  gtk_menu_set_tearoff_state(GTK_MENU(menu),!gtk_menu_get_tearoff_state(GTK_MENU(menu)));
- if(opening && width>1 && height>1) {
-  GtkWidget *window=gtk_widget_get_toplevel(menu);
-  if(GTK_IS_WINDOW(window)) gtk_window_resize(GTK_WINDOW(window),width,height);
- }
 }
 static gboolean palette_strip_draw(GtkWidget *item,cairo_t *cr,gpointer data) {
  (void)data;gboolean hover=(gtk_widget_get_state_flags(item)&GTK_STATE_FLAG_PRELIGHT)!=0;

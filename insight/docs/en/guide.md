@@ -131,3 +131,7 @@ Click the blue **7-pixel strip** at the very top of a command menu, submenu or c
 Back/Forward retain the forward branch when you move the caret manually inside history. Explicit source jumps restore focus to the editor; clicking toolbar buttons leaves text input focus available. The toolbar groups files, Undo/Redo and editing, navigation, search, project browsing, build/run, Git, comparison/tools, layouts and help. Undo/Redo and Back/Forward are adjacent pairs. **View → Panels → Original Changes…** opens the list of changed positions since opening the file, including saved edits; saving does not reset that original baseline.
 
 Detached menu palettes paint the themed window background behind rounded menu corners and scrollbar gutters, including on non-composited desktops; no unpainted black backing is left exposed.
+
+Where the display backend supports shaped windows, detached palettes are clipped to the current menu theme silhouette. The shape follows resizing and theme changes without replacing native window controls. Other backends use the painted themed backing.
+
+Palette size follows the native content requisition, excluding popup shadow reserve; the popup shadow is disabled inside the detached window. No blank spacer rows are added.
