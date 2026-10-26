@@ -264,7 +264,7 @@ jobs:
         id: menu-palettes
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |
-          if ! GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight detachable menu palettes GUI'; then
+          if ! INSIGHT_MENU_CAPTURE_DIR="$PWD" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight detachable menu palettes GUI'; then
             GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" timeout 30 gdb -batch -ex run -ex 'thread apply all bt' --args _native/tests/test_insight_menu_palette_gui || true
             exit 1
           fi
@@ -340,6 +340,8 @@ jobs:
         with:
           name: insight-editor-menus
           path: |
+            menu-attached.jpg
+            menu-detached.jpg
             _native/meson-logs/testlog.txt
             project-db-testlog.txt
             compact-context.jpg
