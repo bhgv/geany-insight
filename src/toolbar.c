@@ -614,11 +614,11 @@ static gint toolbar_order(GtkWidget *item) {
  GtkAction *action=GTK_IS_ACTIVATABLE(item) ? gtk_activatable_get_related_action(GTK_ACTIVATABLE(item)):NULL;
  const gchar *name=action ? gtk_action_get_name(action):gtk_widget_get_name(item);
  static const struct {const gchar *name;gint order;} known[]={
-  {"New",100},{"Open",101},{"Save",102},{"SaveAs",103},{"SaveAll",104},{"Reload",105},{"Close",106},{"CloseAll",107},
-  {"Undo",200},{"Redo",201},{"Cut",202},{"Copy",203},{"Paste",204},
+  {"New",100},{"Open",101},{"Save",102},{"SaveAs",103},{"SaveAll",104},{"Reload",105},{"Close",106},{"CloseAll",107},{"Print",108},
+  {"Undo",200},{"Redo",201},{"Cut",202},{"Copy",203},{"Paste",204},{"Delete",205},{"UnIndent",207},{"Indent",208},
   {"NavBack",300},{"NavFor",301},{"GotoEntry",305},{"Goto",306},
-  {"SearchEntry",403},{"Compile",600},{"Build",601},{"Run",602},
-  {"insight-git-commit-tool",700},{"insight-git-add-tool",701},{"Color",802},{"Quit",1200}};
+  {"SearchEntry",403},{"Search",404},{"Replace",405},{"Compile",600},{"Build",601},{"Run",602},
+  {"insight-git-commit-tool",700},{"insight-git-add-tool",701},{"Color",802},{"Preferences",904},{"ZoomIn",905},{"ZoomOut",906},{"Quit",1200}};
  for(guint i=0;i<G_N_ELEMENTS(known);i++) if(!g_strcmp0(name,known[i].name)) return known[i].order;
  return 1100;
 }

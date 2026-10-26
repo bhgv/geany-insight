@@ -2920,6 +2920,12 @@ static gint compare_menu_item_labels(gconstpointer a, gconstpointer b)
 	gchar *sa, *sb;
 	gint result;
 
+ /* The tearoff handle is a drawing-only row and must stay above all
+  * commands, including submenus, when MRU lists are sorted. */
+ gboolean handle_a=g_object_get_data(G_OBJECT(item_a),"insight-palette-action")!=NULL;
+ gboolean handle_b=g_object_get_data(G_OBJECT(item_b),"insight-palette-action")!=NULL;
+ if(handle_a || handle_b) return handle_a==handle_b ? 0:handle_a ? -1:1;
+
 	/* put entries with submenus at the start of the menu */
 	if (gtk_menu_item_get_submenu(item_a) && !gtk_menu_item_get_submenu(item_b))
 		return -1;
@@ -2928,14 +2934,14 @@ static gint compare_menu_item_labels(gconstpointer a, gconstpointer b)
 
 	sa = ui_menu_item_get_text(item_a);
 	sb = ui_menu_item_get_text(item_b);
-	result = utils_str_casecmp(sa, sb);
+	result = sa && sb ? utils_str_casecmp(sa, sb):g_strcmp0(sa,sb);
 	g_free(sa);
 	g_free(sb);
 	return result;
 }
 
 
-/* Currently @a menu should contain only GtkMenuItems with labels. */
+/* Sort command labels while retaining the shared tearoff handle first. */
 void ui_menu_sort_by_label(GtkMenu *menu)
 {
 	GList *list = gtk_container_get_children(GTK_CONTAINER(menu));
