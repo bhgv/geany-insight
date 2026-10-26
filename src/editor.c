@@ -4875,7 +4875,11 @@ gboolean editor_goto_pos(GeanyEditor *editor, gint pos, gboolean mark)
 	document_show_tab(editor->document);
  /* Explicit source navigation must return input and the caret to the editor,
   * including when invoked from a toolbar or another floating window. */
- if(mark && !main_status.opening_session_files) document_grab_focus(editor->document);
+ if(mark && !main_status.opening_session_files) {
+  GtkWidget *window=gtk_widget_get_toplevel(GTK_WIDGET(editor->sci));
+  if(GTK_IS_WINDOW(window)) gtk_window_present_with_time(GTK_WINDOW(window),gtk_get_current_event_time());
+  document_grab_focus(editor->document);
+ }
 
  return TRUE;
 }
