@@ -147,10 +147,15 @@ static void menu_palette_open(GtkWidget *menu) {
  gtk_menu_set_title(GTK_MENU(menu),title ? title:insight_tr("Menu palette"));
  gtk_menu_set_tearoff_state(GTK_MENU(menu),!gtk_menu_get_tearoff_state(GTK_MENU(menu)));
  if(opening && width>1 && height>1) {
-  /* Legacy GTK seeds the tearoff height from the menu's inner GdkWindow,
-   * which omits GTK3 CSS margins. Keep the original widget allocation. */
+  /* GTK clamps tearoffs to their natural requisition, while an actual popup
+   * can have a larger allocation. Remove that legacy maximum-size clamp so
+   * its original padding and full row geometry survive reparenting. */
   GtkWidget *window=gtk_widget_get_toplevel(menu);
-  if(GTK_IS_WINDOW(window)) gtk_window_resize(GTK_WINDOW(window),width,height);
+  if(GTK_IS_WINDOW(window)) {
+   GdkGeometry hints={0};hints.min_width=width;hints.min_height=1;
+   gtk_window_set_geometry_hints(GTK_WINDOW(window),NULL,&hints,GDK_HINT_MIN_SIZE);
+   gtk_window_resize(GTK_WINDOW(window),width,height);
+  }
  }
 }
 static gboolean palette_strip_draw(GtkWidget *item,cairo_t *cr,gpointer data) {
