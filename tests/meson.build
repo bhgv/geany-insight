@@ -972,3 +972,6 @@ if host_machine.system() != 'windows'
   custom_commands_gui_test = executable('test_insight_custom_commands_gui', '../insight/tests/custom_commands_gui_test.c', '../insight/desktop/custom_command.c', dependencies: test_deps)
   test('Insight native custom commands GUI', custom_commands_gui_test, timeout: 60, is_parallel: false)
 endif
+
+menu_palette_gui_test = executable('test_insight_menu_palette_gui', '../insight/tests/menu_palette_gui_test.c', dependencies: test_deps)
+test('Insight detachable menu palettes GUI', menu_palette_gui_test, timeout: 40, is_parallel: false)

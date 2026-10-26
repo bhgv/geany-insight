@@ -84,12 +84,110 @@ static gboolean menu_icon_draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
  else { GdkPixbuf *pixbuf=gtk_icon_theme_load_icon(gtk_icon_theme_get_default(),id,16,GTK_ICON_LOOKUP_USE_BUILTIN,NULL);if(pixbuf) { gdk_cairo_set_source_pixbuf(cr,pixbuf,0,0);cairo_paint(cr);g_object_unref(pixbuf); } }
  cairo_restore(cr);return FALSE;
 }
+/* Palettes proxy the original menu items instead of reparenting them. In
+ * particular, transient popups often destroy themselves on selection-done;
+ * hiding one to open a palette must not emit that signal. */
+static void menu_palette_open(GtkWidget *menu);
+static void palette_row_sync(GObject *source,GParamSpec *spec,gpointer data) {
+ (void)spec;GtkWidget *button=data,*item=GTK_WIDGET(source);
+ const gchar *label=gtk_menu_item_get_label(GTK_MENU_ITEM(item));
+ gboolean check=GTK_IS_CHECK_MENU_ITEM(item),active=check && gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(item));
+ gchar *text=g_strconcat(check ? (active ? "✓  ":"○  "):"",label ? label:"",gtk_menu_item_get_submenu(GTK_MENU_ITEM(item)) ? "  ▸":"",NULL);
+ gtk_button_set_label(GTK_BUTTON(button),text);gtk_button_set_use_underline(GTK_BUTTON(button),gtk_menu_item_get_use_underline(GTK_MENU_ITEM(item)));g_free(text);
+ gtk_widget_set_sensitive(button,gtk_widget_is_sensitive(item));gtk_widget_set_visible(button,gtk_widget_get_visible(item));
+ gchar *tip=gtk_widget_get_tooltip_text(item);gtk_widget_set_tooltip_text(button,tip);g_free(tip);
+}
+static void palette_row_gone(GtkWidget *item,gpointer data) { (void)item;gtk_widget_set_sensitive(data,FALSE); }
+static void palette_row_run(GtkButton *button,gpointer data) {
+ (void)data;GtkWidget *item=g_weak_ref_get(g_object_get_data(G_OBJECT(button),"palette-source"));
+ if(!item) return;
+ if(!gtk_widget_in_destruction(item) && gtk_widget_is_sensitive(item)) {
+  GtkWidget *sub=gtk_menu_item_get_submenu(GTK_MENU_ITEM(item));
+  if(sub) menu_palette_open(sub);else gtk_menu_item_activate(GTK_MENU_ITEM(item));
+ }
+ g_object_unref(item);
+}
+static void palette_weak_free(gpointer data) { g_weak_ref_clear(data);g_free(data); }
+static void palette_rows(GtkWidget *window) {
+ GtkWidget *menu=g_object_get_data(G_OBJECT(window),"palette-menu"),*box=g_object_get_data(G_OBJECT(window),"palette-box");
+ GList *old=gtk_container_get_children(GTK_CONTAINER(box));for(GList *p=old;p;p=p->next) gtk_widget_destroy(p->data);g_list_free(old);
+ GList *items=gtk_container_get_children(GTK_CONTAINER(menu));
+ for(GList *p=items;p;p=p->next) {
+  GtkWidget *item=p->data;if(g_object_get_data(G_OBJECT(item),"insight-palette-action")) continue;
+  if(GTK_IS_SEPARATOR_MENU_ITEM(item)) { GtkWidget *line=gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);gtk_box_pack_start(GTK_BOX(box),line,FALSE,FALSE,2);gtk_widget_show(line);continue; }
+  if(!GTK_IS_MENU_ITEM(item) || !gtk_menu_item_get_label(GTK_MENU_ITEM(item))) continue;
+  GtkWidget *button=gtk_button_new();gtk_button_set_relief(GTK_BUTTON(button),GTK_RELIEF_NONE);gtk_widget_set_halign(button,GTK_ALIGN_FILL);
+  GWeakRef *ref=g_new0(GWeakRef,1);g_weak_ref_init(ref,item);g_object_set_data_full(G_OBJECT(button),"palette-source",ref,palette_weak_free);
+  g_signal_connect(button,"clicked",G_CALLBACK(palette_row_run),NULL);
+  g_signal_connect_object(item,"notify::label",G_CALLBACK(palette_row_sync),button,0);
+  g_signal_connect_object(item,"notify::sensitive",G_CALLBACK(palette_row_sync),button,0);
+  g_signal_connect_object(item,"notify::visible",G_CALLBACK(palette_row_sync),button,0);
+  g_signal_connect_object(item,"notify::tooltip-text",G_CALLBACK(palette_row_sync),button,0);
+  if(GTK_IS_CHECK_MENU_ITEM(item)) g_signal_connect_object(item,"notify::active",G_CALLBACK(palette_row_sync),button,0);
+  g_signal_connect_object(item,"destroy",G_CALLBACK(palette_row_gone),button,0);
+  gtk_box_pack_start(GTK_BOX(box),button,FALSE,FALSE,0);palette_row_sync(G_OBJECT(item),NULL,button);
+  GtkWidget *label=gtk_bin_get_child(GTK_BIN(button));if(GTK_IS_LABEL(label)) {gtk_label_set_xalign(GTK_LABEL(label),0);gtk_label_set_ellipsize(GTK_LABEL(label),PANGO_ELLIPSIZE_END);}
+ }
+ g_list_free(items);
+}
+static gboolean palette_focus(GtkWidget *window,GdkEventFocus *event,gpointer data) {
+ (void)event;(void)data;GtkWidget *menu=g_object_get_data(G_OBJECT(window),"palette-menu");
+ (void)menu;palette_rows(window);return FALSE;
+}
+static void palette_closed(GtkWidget *window,gpointer data) {
+ GtkWidget *menu=data;(void)window;g_object_set_data(G_OBJECT(menu),"insight-palette-window",NULL);
+}
+static void menu_palette_open(GtkWidget *menu) {
+ if(gtk_widget_in_destruction(menu)) return;
+ GtkWidget *window=g_object_get_data(G_OBJECT(menu),"insight-palette-window");
+ /* No gtk_menu_shell_deactivate(): popup owners may destroy on selection-done. */
+ gtk_menu_popdown(GTK_MENU(menu));
+ if(window) {gtk_window_present(GTK_WINDOW(window));return;}
+ window=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_widget_set_name(window,"insight-menu-palette");
+ GtkWidget *attach=gtk_menu_get_attach_widget(GTK_MENU(menu));
+ if(GTK_IS_MENU_ITEM(attach)) {const gchar *title=gtk_menu_item_get_label(GTK_MENU_ITEM(attach));gtk_window_set_title(GTK_WINDOW(window),title ? title:insight_tr("Menu palette"));}
+ else insight_i18n_key(G_OBJECT(window),"title","Menu palette");
+ if(GTK_IS_WINDOW(main_widgets.window)) {gtk_window_set_transient_for(GTK_WINDOW(window),GTK_WINDOW(main_widgets.window));gtk_window_set_destroy_with_parent(GTK_WINDOW(window),TRUE);}
+ gtk_window_set_type_hint(GTK_WINDOW(window),GDK_WINDOW_TYPE_HINT_UTILITY);
+ GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL),*box=gtk_box_new(GTK_ORIENTATION_VERTICAL,0);gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),GTK_POLICY_NEVER,GTK_POLICY_AUTOMATIC);gtk_container_add(GTK_CONTAINER(scroll),box);gtk_container_add(GTK_CONTAINER(window),scroll);
+ g_object_set_data_full(G_OBJECT(window),"palette-menu",g_object_ref(menu),g_object_unref);g_object_set_data(G_OBJECT(window),"palette-box",box);g_object_set_data(G_OBJECT(menu),"insight-palette-window",window);
+ g_signal_connect(window,"destroy",G_CALLBACK(palette_closed),menu);g_signal_connect_object(menu,"destroy",G_CALLBACK(gtk_widget_destroy),window,G_CONNECT_SWAPPED);
+ g_signal_connect(window,"focus-in-event",G_CALLBACK(palette_focus),NULL);
+ GdkDisplay *display=gtk_widget_get_display(menu);GdkMonitor *monitor=gdk_display_get_monitor_at_point(display,0,0);
+ GdkWindow *native=gtk_widget_get_window(main_widgets.window);if(native) monitor=gdk_display_get_monitor_at_window(display,native);
+ GdkRectangle area={0,0,800,600};if(monitor) gdk_monitor_get_workarea(monitor,&area);
+ gtk_window_set_default_size(GTK_WINDOW(window),MIN(320,MAX(160,area.width-80)),MIN(480,MAX(160,area.height-80)));
+ palette_rows(window);gtk_widget_show(box);gtk_widget_show(scroll);gtk_window_present(GTK_WINDOW(window));
+}
+static void palette_detach(GtkMenuItem *item,gpointer data) { (void)item;menu_palette_open(data); }
+static gboolean palette_menu_event(GtkWidget *menu,GdkEvent *event,gpointer data) {
+ (void)data;GtkWidget *selected=gtk_menu_shell_get_selected_item(GTK_MENU_SHELL(menu));
+ if(!selected || !g_object_get_data(G_OBJECT(selected),"insight-palette-action")) return FALSE;
+ gboolean trigger=event->type==GDK_BUTTON_RELEASE && event->button.button==1;
+ if(event->type==GDK_KEY_PRESS) trigger=event->key.keyval==GDK_KEY_Return || event->key.keyval==GDK_KEY_KP_Enter || event->key.keyval==GDK_KEY_space;
+ if(trigger) {menu_palette_open(menu);return TRUE;}return FALSE;
+}
+static void menu_palette_offer(GtkWidget *menu) {
+ if(!GTK_IS_MENU(menu) || GTK_IS_COMBO_BOX(gtk_menu_get_attach_widget(GTK_MENU(menu)))) return;
+ if(!g_object_get_data(G_OBJECT(menu),"insight-palette-events")) {
+  g_object_set_data(G_OBJECT(menu),"insight-palette-events",GINT_TO_POINTER(1));
+  g_signal_connect(menu,"button-release-event",G_CALLBACK(palette_menu_event),NULL);
+  g_signal_connect(menu,"key-press-event",G_CALLBACK(palette_menu_event),NULL);
+ }
+ /* Dynamic menu rebuilds may remove the old handle: discover it each time. */
+ GList *items=gtk_container_get_children(GTK_CONTAINER(menu));gboolean found=FALSE;
+ for(GList *p=items;p;p=p->next) if(g_object_get_data(G_OBJECT(p->data),"insight-palette-action")) {found=TRUE;break;}
+ g_list_free(items);if(found) return;
+ GtkWidget *item=gtk_menu_item_new_with_label(insight_tr("Open as palette"));gtk_widget_set_name(item,"insight-menu-detach");insight_i18n_key(G_OBJECT(item),"label","Open as palette");
+ g_object_set_data(G_OBJECT(item),"insight-palette-action",GINT_TO_POINTER(1));g_signal_connect(item,"activate",G_CALLBACK(palette_detach),menu);gtk_menu_shell_prepend(GTK_MENU_SHELL(menu),item);gtk_widget_show(item);
+}
 static gboolean menus_shown(GSignalInvocationHint *hint,guint count,const GValue *values,gpointer data) {
  (void)hint;(void)data;if(count) { GtkWidget *widget=g_value_get_object(values);if(GTK_IS_MENU(widget)) insight_menu_icons(widget); }return TRUE;
 }
 static void icons_on_show(GtkWidget *menu,gpointer data) { (void)data;insight_menu_icons(menu); }
 void insight_menu_icons(GtkWidget *menu) {
  if(!GTK_IS_CONTAINER(menu)) return;
+ menu_palette_offer(menu);
  if(GTK_IS_MENU(menu) && GTK_IS_COMBO_BOX(gtk_menu_get_attach_widget(GTK_MENU(menu)))) return;
  /* Catch subsequently created command popups and plugin menus as well. */
  static gulong hook;if(!hook) hook=g_signal_add_emission_hook(g_signal_lookup("show",GTK_TYPE_WIDGET),0,menus_shown,NULL,NULL);

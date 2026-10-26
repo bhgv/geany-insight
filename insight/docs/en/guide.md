@@ -117,3 +117,10 @@ Replace Files also offers modal Replace/Skip/Remaining/Cancel review, F3/Shift+F
 - [Reload Modified Files / Перечитать изменённые файлы](reload-modified.md)
 
 - [Custom Commands — external tools](custom-commands.md)
+
+
+### Floating menu palettes
+
+Choose **Open as palette** at the top of a command menu, submenu or context menu. Move and resize the resulting window; commands remain available after activation. Check and radio states follow the original menu. Open a submenu as another palette. Closing a palette leaves its original menu intact. Palettes are session-only; a popup owner that is destroyed also closes its palette. Dynamic menu contents refresh when the palette receives focus or the original menu is rebuilt. Combo-box value lists are excluded.
+
+![Menu palettes](../media/menu-palettes.svg)
