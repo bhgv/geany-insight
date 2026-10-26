@@ -2620,3 +2620,16 @@ Working directory does not exist	Рабочий каталог не сущест
 Invalid path variable context	Некорректный контекст переменной пути
 Path variable is unavailable	Переменная пути недоступна
 Bulk custom command modifiers are not supported	Пакетные модификаторы пользовательских команд не поддерживаются
+Diagnostics	Диагностика
+Parsed %u source links (limit 1000)	Найдено ссылок на исходники: %u (предел 1000)
+Run a command before parsing source links	Сначала запустите команду для разбора ссылок на исходники
+Select a source link	Выберите ссылку на исходник
+Source file is unavailable	Файл исходника недоступен
+Source line is outside the current file	Указанная строка находится за пределами текущего файла
+Parse Source Links	Разобрать ссылки на исходники
+First link	Первая ссылка
+Previous link	Предыдущая ссылка
+Next link	Следующая ссылка
+File	Файл
+Line	Строка
+Message	Сообщение

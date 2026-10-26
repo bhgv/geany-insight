@@ -49,3 +49,13 @@ Output is decoded as UTF-8 across pipe chunks; invalid bytes use replacement cha
 Source Insight modifiers for all open/modified files, `%s` selection temporary files, ShellExecute and automatic per-command hotkeys are not implemented. Numbered arguments use explicit fields instead of modal argument prompts. Native GUI testing uses Linux; Windows shell syntax and runtime behavior require separate validation.
 
 Reference: [Source Insight Custom Commands](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Custom_Commands1.htm).
+
+## Source links from diagnostics
+
+On **Diagnostics**, **Parse Source Links** scans a snapshot of the latest command output into a sortable File / Line / Column / Message table (up to 1000 records). The displayed launch command is excluded. Typical GCC/Clang `file:line[:column]: message`, MSVC `file(line[,column]): message` and Python traceback `File "name", line N` formats are recognized; ANSI SGR colors are stripped for parsing. Parsing does not read source files or change project membership.
+
+Double-click a row or choose Open source. First/Previous/Next link and **F4 / Shift+F4** within this tool window use native editor navigation history. The file opens in the editor without closing the tool window; the reported line is used, while the optional column is displayed as diagnostic metadata. Missing files and line numbers beyond the current buffer are reported. No code or Undo contents are modified by navigation.
+
+Relative paths resolve against the **captured launch directory**, even if another project is active when you parse the log. The tool's internal `chdir`, remote path mappings and custom regular-expression templates are not inferred. Foreign Windows drive/UNC paths are declined on non-Windows systems. Synthetic stdin/URI locations and invalid coordinates are omitted. Run and Clear reset the old diagnostic list; new output is included only on the next explicit Parse. Copying or saving the output retains the full log.
+
+This is a bounded set of built-in diagnostic formats, rather than all Source Insight custom parsing patterns. Reference: [Parse Source Links](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Parse_Source_Links.htm).

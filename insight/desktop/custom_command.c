@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "custom_command.h"
+#include "glib_compat.h"
 #include <string.h>
 #define LIMIT (1024u*1024u)
 static gboolean fail(GError **e,const gchar *s) {g_set_error_literal(e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,s);return FALSE;}
@@ -51,4 +52,31 @@ gboolean insight_custom_commands_save(const gchar *path,GPtrArray *list,GError *
  if(text && length>LIMIT) ok=fail(error,"Custom command settings exceed the size limit");
  if(ok && text) {GFile *f=g_file_new_for_path(path);ok=g_file_replace_contents(f,text,length,NULL,FALSE,G_FILE_CREATE_PRIVATE,NULL,NULL,error);g_object_unref(f);}else ok=FALSE;
  g_free(text);return ok;
+}
+void insight_custom_link_free(gpointer data) {InsightCustomLink *link=data;if(link) {g_free(link->path);g_free(link->message);g_free(link);}}
+InsightCustomLink *insight_custom_source_link(const gchar *input,const gchar *directory) {
+ if(!input || strlen(input)>65536 || !g_utf8_validate(input,-1,NULL) || !field(directory,16384) || !g_path_is_absolute(directory)) return NULL;
+ static gsize ready;static GRegex *patterns[3];
+ if(g_once_init_enter(&ready)) {
+  patterns[0]=g_regex_new("^(.+?):([0-9]+)(?::([0-9]+))?:[ \\t]*(.*)$",G_REGEX_OPTIMIZE,0,NULL);
+  patterns[1]=g_regex_new("^(.+?)\\(([0-9]+)(?:,([0-9]+))?\\)[ \\t]*:[ \\t]*(.*)$",G_REGEX_OPTIMIZE,0,NULL);
+  patterns[2]=g_regex_new("^[ \\t]*File \"(.+)\", line ([0-9]+)(?:,.*)?$",G_REGEX_OPTIMIZE,0,NULL);g_once_init_leave(&ready,1);
+ }
+ /* Strip bounded ANSI SGR color codes, but never interpret terminal actions. */
+ GString *plain=g_string_new(NULL);for(const gchar *p=input;*p;) {if((guchar)p[0]==27 && p[1]=='[') {const gchar *q=p+2;while(q-p<64 && (g_ascii_isdigit(*q) || *q==';' || *q==':')) q++;if(*q=='m') {p=q+1;continue;}}g_string_append_c(plain,*p++);}
+ gchar *text=g_strstrip(plain->str);InsightCustomLink *link=NULL;
+ for(guint i=0;i<3 && !link;i++) {
+  GMatchInfo *match=NULL;if(!patterns[i] || !g_regex_match(patterns[i],text,0,&match)) {if(match) g_match_info_free(match);continue;}
+  gchar *file=g_match_info_fetch(match,1),*number=g_match_info_fetch(match,2),*column=i<2 ? g_match_info_fetch(match,3):NULL;
+  guint64 line=g_ascii_strtoull(number,NULL,10),col=column && *column ? g_ascii_strtoull(column,NULL,10):0;g_strstrip(file);gsize n=strlen(file);
+  if(n>=2 && file[0]=='"' && file[n-1]=='"') {file[n-1]=0;memmove(file,file+1,n-1);n-=2;}
+  gboolean valid=n>0 && n<=16384 && strcmp(file,"-") && !strpbrk(file,"\r\n\033") && !strstr(file,"://") && !(file[0]=='<' && file[n-1]=='>') && line>0 && line<=G_MAXINT && col<=G_MAXINT && (!column || !*column || col>0);
+#ifndef G_OS_WIN32
+  /* A foreign drive path must not be guessed as a relative POSIX filename. */
+  if((g_ascii_isalpha(file[0]) && file[1]==':') || (file[0]=='\\' && file[1]=='\\')) valid=FALSE;
+#endif
+  if(valid) {if(i==1) for(gchar *p=file;*p;p++) if(*p=='\\') *p=G_DIR_SEPARATOR;link=g_new0(InsightCustomLink,1);link->path=insight_canonicalize_filename(file,directory);link->line=(guint)line;link->column=(guint)col;link->message=i<2 ? g_match_info_fetch(match,4):g_strdup(text);}
+  g_free(file);g_free(number);g_free(column);g_match_info_free(match);
+ }
+ g_string_free(plain,TRUE);return link;
 }
