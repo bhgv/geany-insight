@@ -57,13 +57,12 @@ static void candidates(Builder *b,guint owner,const gchar *name,gboolean member,
  }
  if(out->len>1) {b->r->ambiguous++;if(!b->indirect) g_array_set_size(out,0);}if(!out->len) b->r->unresolved++;
 }
-static gint existing(InsightCallPaths *r,guint from,guint to) {for(guint i=r->edges->len;i>0;i--) {InsightCallEdge e=g_array_index(r->edges,InsightCallEdge,i-1);if(e.from!=from) break;if(e.to==to) return (gint)i-1;}return -1;}
 static void expand(Builder *b,guint id,GArray *found) {
  if(!prepare(b,id)) return;InsightCallFunction *f=g_ptr_array_index(b->r->functions,id);InsightCallSource *s=source(b,f->path);gsize cursor=f->body,a=0,z=0;GArray *ids=g_array_new(FALSE,FALSE,sizeof(guint));
  while(insight_next_call(s->mask,f->end-1,&cursor,&a,&z)==1 && !stopped(b)) {
   if(++b->calls>200000) {b->r->limited=TRUE;b->halt=TRUE;break;}gsize previous=a;while(previous && g_ascii_isspace(s->mask[previous-1])) previous--;gboolean member=previous && (s->mask[previous-1]=='.' || s->mask[previous-1]=='>' || s->mask[previous-1]==':');
   gchar *name=g_strndup(s->mask+a,z-a);g_array_set_size(ids,0);candidates(b,id,name,member,ids);g_free(name);
-  for(guint i=0;i<ids->len;i++) {guint to=g_array_index(ids,guint,i);gint old=existing(b->r,id,to);if(old>=0) continue;if(b->r->edges->len==INSIGHT_CALL_EDGE_LIMIT) {b->r->limited=TRUE;b->halt=TRUE;break;}
+  for(guint i=0;i<ids->len;i++) {guint to=g_array_index(ids,guint,i);if(b->r->edges->len==INSIGHT_CALL_EDGE_LIMIT) {b->r->limited=TRUE;b->halt=TRUE;break;}
    guint line=source_line(s,a);InsightCallEdge edge={id,to,line,(guint)(a-g_array_index(s->lines,gsize,line-1)),member || ids->len>1 || (*((InsightCallFunction *)g_ptr_array_index(b->r->functions,to))->scope && strcmp(((InsightCallFunction *)g_ptr_array_index(b->r->functions,to))->scope,f->scope))};guint ei=b->r->edges->len;g_array_append_val(b->r->edges,edge);g_array_append_val(found,ei);
   }
   if(b->halt) break;

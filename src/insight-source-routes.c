@@ -28,16 +28,16 @@
 #define ROUTE_GROUP "insight-source-routes"
 #define ROUTE_LIMIT 256
 
-typedef struct RoutePoint { gchar *path,*text,*label,*digest;guint line,column,lane;gsize offset;InsightFlowKind kind;struct RoutePoint *site;gboolean uncertain; } RoutePoint;
+typedef struct RoutePoint { gchar *path,*text,*label,*digest,*detail;guint line,column,lane;gsize offset;InsightFlowKind kind;struct RoutePoint *site;gboolean uncertain,is_call_site; } RoutePoint;
 typedef struct { GPtrArray *points;GArray *edges;gchar *digest;guint document; } RouteGraph;
 typedef struct {
- GtkWidget *root,*canvas,*scroll,*mode,*zoom,*status,*link,*back,*call_from,*call_to,*call_possible,*call_variants;RouteGraph routes,flow,calls;
+ GtkWidget *root,*canvas,*scroll,*mode,*zoom,*status,*link,*back,*call_from,*call_to,*call_possible,*call_variants,*call_context;RouteGraph routes,flow,calls;
  GtkWidget *endpoint_choices[2];
  GCancellable *call_cancel;InsightCallPaths *call_result;guint64 call_serial;gchar *endpoint_path[2];guint endpoint_line[2];gboolean closed,setting_endpoint;gint selected,from;gboolean loading;gdouble scale;
 } Routes;
 typedef struct { gdouble x,y,w,h; } Rect;
 static void cancel_calls(Routes *r);
-static void point_free(gpointer data) { RoutePoint *p=data;g_free(p->path);g_free(p->text);g_free(p->label);g_free(p->digest);if(p->site) point_free(p->site);g_free(p); }
+static void point_free(gpointer data) { RoutePoint *p=data;g_free(p->path);g_free(p->text);g_free(p->label);g_free(p->digest);g_free(p->detail);if(p->site) point_free(p->site);g_free(p); }
 static void graph_clear(RouteGraph *g) {g_ptr_array_set_size(g->points,0);g_array_set_size(g->edges,0);g_clear_pointer(&g->digest,g_free);g->document=0;}
 static RouteGraph *shown(Routes *r) {gint mode=gtk_combo_box_get_active(GTK_COMBO_BOX(r->mode));return mode==1 ? &r->flow:mode==2 ? &r->calls:&r->routes;}
 static void note(Routes *r,const gchar *text) {insight_i18n_key(G_OBJECT(r->status),"label",text);if(r->canvas) gtk_widget_queue_draw(r->canvas);}
@@ -124,7 +124,7 @@ static gboolean key(GtkWidget *w,GdkEventKey *event,gpointer data) {
  if(event->keyval==GDK_KEY_Return && r->selected>=0) {navigate(r,(guint)r->selected);return TRUE;}if(event->keyval==GDK_KEY_Escape) {r->from=-1;return TRUE;}return FALSE;
 }
 static gboolean tooltip(GtkWidget *w,gint x,gint y,gboolean keyboard,GtkTooltip *tip,gpointer data) {
- (void)w;Routes *r=data;gint i=keyboard ? r->selected:hit(r,x,y);RouteGraph *g=shown(r);if(i<0 || (guint)i>=g->points->len) return FALSE;RoutePoint *p=g_ptr_array_index(g->points,i);gchar *text=g_strdup_printf("%s:%u:%u\n%s",p->path ? p->path:"untitled",p->line+1,p->column+1,p->text);gtk_tooltip_set_text(tip,text);g_free(text);return TRUE;
+ (void)w;Routes *r=data;gint i=keyboard ? r->selected:hit(r,x,y);RouteGraph *g=shown(r);if(i<0 || (guint)i>=g->points->len) return FALSE;RoutePoint *p=g_ptr_array_index(g->points,i);gchar *text=g_strdup_printf("%s:%u:%u\n%s\n%s",p->path ? p->path:"untitled",p->line+1,p->column+1,p->text,p->detail ? p->detail:p->label ? p->label:"");gtk_tooltip_set_text(tip,text);g_free(text);return TRUE;
 }
 static void changed(GtkWidget *w,gpointer data) {(void)w;Routes *r=data;if(r->call_cancel && shown(r)!=&r->calls) cancel_calls(r);r->selected=r->from=-1;note(r,shown(r)==&r->routes ? "Manual links: use Call paths to find intermediate functions":shown(r)==&r->calls ? "Lexical call paths: click a function; dashed arrows are uncertain":"Flow snapshot: click a node; rebuild after source edits");update(r);}
 static void zoomed(GtkSpinButton *spin,gpointer data) {Routes *r=data;r->scale=gtk_spin_button_get_value(spin)/100.;update(r);}
@@ -195,23 +195,42 @@ static void call_result_status(Routes *r) {
  if(!r->call_result) return;InsightCallPaths *result=r->call_result;gchar *message=g_strdup_printf(insight_tr("%u shortest lexical paths • %u unresolved • %u ambiguous • %u skipped%s"),result->paths->len,result->unresolved,result->ambiguous,result->skipped,result->limited ? insight_tr(" • work limit reached"):"");gtk_label_set_text(GTK_LABEL(r->status),message);g_free(message);
  if(!result->paths->len) note(r,result->limited || result->skipped ? "No path found in the inspected sources; search is incomplete":"No lexical call path found; callbacks may need uncertain name matching");
 }
+static void append_call_node(Routes *r,RoutePoint *point,InsightFlowEdgeKind kind) {
+ guint count=r->calls.points->len;if(count) {InsightFlowEdge edge={count-1,count,kind};g_array_append_val(r->calls.edges,edge);}g_ptr_array_add(r->calls.points,point);
+}
+static void call_context(Routes *r,InsightCallFunction *caller,InsightCallSource *source,InsightCallEdge edge) {
+ gsize offset=g_array_index(source->lines,gsize,edge.line-1)+edge.column;InsightFlow *flow=g_new0(InsightFlow,1);InsightFlowEdge guards[INSIGHT_FLOW_LIMIT];gint count=-1;
+ gboolean parsed=insight_control_flow(source->mask,strlen(source->text),caller->body-1,caller->end,flow);if(parsed) count=insight_control_guards(flow,offset,guards,INSIGHT_FLOW_LIMIT);
+ InsightFlowEdgeKind pending=INSIGHT_FLOW_NEXT;
+ if(count>=0) for(gint i=0;i<count;i++) {
+  if(r->calls.points->len>=INSIGHT_FLOW_LIMIT-2) break;InsightFlowNode n=flow->nodes[guards[i].from];guint line=1;while(line<source->lines->len && g_array_index(source->lines,gsize,line)<=n.begin) line++;
+  gchar *condition=g_utf8_make_valid(source->text+n.begin,(gssize)(n.end-n.begin));RoutePoint *p=call_point(caller->path,source,line,(guint)(n.begin-g_array_index(source->lines,gsize,line-1)),condition);g_free(condition);if(!p) continue;p->kind=n.kind;p->detail=g_strdup(insight_tr("Structural branch toward this call; conditions are not evaluated"));append_call_node(r,p,pending);pending=guards[i].kind;
+ }
+ gchar *label=g_strdup_printf("%s: %s → %s",insight_tr("Call site"),caller->name,((InsightCallFunction *)g_ptr_array_index(r->call_result->functions,edge.to))->name);RoutePoint *site=call_point(caller->path,source,edge.line,edge.column,label);g_free(label);
+ if(site) {site->is_call_site=TRUE;site->uncertain=edge.uncertain;if(count<0) {site->detail=g_strdup_printf("%s: %s",insight_tr("Branch analysis unavailable"),parsed ? insight_tr("Call is unreachable in the structural graph"):insight_tr(flow->error));g_free(site->label);site->label=g_strdup_printf("%s · %s",insight_tr("Call site"),insight_tr("Branch analysis unavailable"));}else site->detail=g_strdup(insight_tr("Structural branch toward this call; conditions are not evaluated"));append_call_node(r,site,pending);}
+ g_free(flow);
+}
 static void show_call_variant(GtkComboBox *combo,gpointer data) {
  Routes *r=data;if(r->setting_endpoint || !r->call_result) return;gint variant=gtk_combo_box_get_active(combo);InsightCallPaths *result=r->call_result;graph_clear(&r->calls);r->selected=r->from=-1;
  if(variant<0 || (guint)variant>=result->paths->len) {update(r);return;}GArray *path=g_ptr_array_index(result->paths,(guint)variant);guint function=result->start;
  for(guint i=0;i<=path->len;i++) {
+  if(r->calls.points->len>=INSIGHT_FLOW_LIMIT-2) {result->limited=TRUE;break;}
   InsightCallFunction *f=g_ptr_array_index(result->functions,function);InsightCallSource *source=g_hash_table_lookup(result->sources,f->path);gchar *name=*f->scope ? g_strconcat(f->scope,"::",f->name,NULL):g_strdup(f->name);RoutePoint *p=call_point(f->path,source,f->line,0,name);g_free(name);if(!p) break;
-  if(i) {guint edge_id=g_array_index(path,guint,i-1);InsightCallEdge edge=g_array_index(result->edges,InsightCallEdge,edge_id);InsightCallFunction *caller=g_ptr_array_index(result->functions,edge.from);InsightCallSource *s=g_hash_table_lookup(result->sources,caller->path);gchar *label=g_strdup_printf("%s → %s",caller->name,f->name);p->site=call_point(caller->path,s,edge.line,edge.column,label);g_free(label);p->uncertain=edge.uncertain;InsightFlowEdge e={i-1,i,INSIGHT_FLOW_NEXT};g_array_append_val(r->calls.edges,e);}
-  g_ptr_array_add(r->calls.points,p);if(i<path->len) {guint edge_id=g_array_index(path,guint,i);function=g_array_index(result->edges,InsightCallEdge,edge_id).to;}
+  if(i) {guint edge_id=g_array_index(path,guint,i-1);InsightCallEdge edge=g_array_index(result->edges,InsightCallEdge,edge_id);InsightCallFunction *caller=g_ptr_array_index(result->functions,edge.from);InsightCallSource *s=g_hash_table_lookup(result->sources,caller->path);gchar *label=g_strdup_printf("%s → %s",caller->name,f->name);p->site=call_point(caller->path,s,edge.line,edge.column,label);g_free(label);p->uncertain=edge.uncertain;
+   if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(r->call_context))) call_context(r,caller,s,edge);
+  }
+  append_call_node(r,p,INSIGHT_FLOW_NEXT);if(r->calls.points->len>=INSIGHT_FLOW_LIMIT) {result->limited=TRUE;break;}if(i<path->len) {guint edge_id=g_array_index(path,guint,i);function=g_array_index(result->edges,InsightCallEdge,edge_id).to;}
  }
  gtk_combo_box_set_active(GTK_COMBO_BOX(r->mode),2);r->selected=r->calls.points->len ? 0:-1;update(r);call_result_status(r);
 }
+static void call_context_changed(GtkToggleButton *widget,gpointer data) {(void)widget;Routes *r=data;show_call_variant(GTK_COMBO_BOX(r->call_variants),r);}
 static void call_job_done(GObject *root,GAsyncResult *result,gpointer unused) {
  (void)unused;Routes *r=g_object_get_data(root,"insight-source-routes-state");GTask *task=G_TASK(result);CallJob *j=g_task_get_task_data(task);GError *error=NULL;gboolean ok=g_task_propagate_boolean(task,&error);
  if(r->closed || r->call_serial!=j->serial) {g_clear_error(&error);return;}g_clear_object(&r->call_cancel);g_object_set_data(G_OBJECT(r->root),"insight-call-search-running",NULL);g_object_set_data(G_OBJECT(r->root),"insight-call-search-completed",GINT_TO_POINTER(1));
  if(!app->project || g_strcmp0(app->project->file_name,j->snapshot->project_file)) {g_clear_error(&error);return;}
  if(!ok || !j->result) {insight_i18n_text(G_OBJECT(r->status),"label","Call path search: {value}",insight_tr(error ? error->message:"No result"));g_clear_error(&error);gtk_widget_queue_draw(r->canvas);return;}
  g_clear_pointer(&r->call_result,insight_call_paths_free);r->call_result=j->result;j->result=NULL;if(j->snapshot->incomplete) r->call_result->limited=TRUE;
- r->setting_endpoint=TRUE;gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(r->call_variants));for(guint i=0;i<r->call_result->paths->len;i++) {GArray *path=g_ptr_array_index(r->call_result->paths,i);gchar *label=g_strdup_printf(insight_tr("Path %u — %u calls"),i+1,path->len);gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(r->call_variants),label);g_free(label);}r->setting_endpoint=FALSE;
+ r->setting_endpoint=TRUE;gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(r->call_variants));for(guint i=0;i<r->call_result->paths->len;i++) {GArray *path=g_ptr_array_index(r->call_result->paths,i);gchar *label=g_strdup_printf(insight_tr("Path %u — %u calls"),i+1,path->len);if(path->len) {InsightCallEdge edge=g_array_index(r->call_result->edges,InsightCallEdge,g_array_index(path,guint,path->len-1));InsightCallFunction *caller=g_ptr_array_index(r->call_result->functions,edge.from);gchar *base=g_path_get_basename(caller->path),*where=g_strdup_printf("%s · %s:%u:%u",label,base,edge.line,edge.column+1);g_free(base);g_free(label);label=where;}gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(r->call_variants),label);g_free(label);}r->setting_endpoint=FALSE;
  gtk_combo_box_set_active(GTK_COMBO_BOX(r->call_variants),r->call_result->paths->len ? 0:-1);show_call_variant(GTK_COMBO_BOX(r->call_variants),r);call_result_status(r);g_object_set_data(G_OBJECT(r->root),"insight-call-search-completed",GINT_TO_POINTER(1));
 }
 /* Resolve duplicate names without requiring an existing graph node. Choices
@@ -250,7 +269,7 @@ static void endpoint_changed(GtkEditable *entry,gpointer data) {Routes *r=data;i
 static void endpoint_from_node(GtkWidget *button,gpointer data) {
  Routes *r=data;RouteGraph *g=shown(r);if(r->selected<0 || (guint)r->selected>=g->points->len) {note(r,"Select a source node first");return;}RoutePoint *p=g_ptr_array_index(g->points,(guint)r->selected);if(!p->path) {note(r,"Save the source file before adding a route location");return;}guint side=GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(button),"endpoint-side"));g_free(r->endpoint_path[side]);r->endpoint_path[side]=g_strdup(p->path);cancel_calls(r);r->endpoint_line[side]=p->line+1;gtk_widget_hide(r->endpoint_choices[side]);gchar *base=g_path_get_basename(p->path),*text=g_strdup_printf("%s:%u",base,p->line+1);r->setting_endpoint=TRUE;gtk_entry_set_text(GTK_ENTRY(side ? r->call_to:r->call_from),text);r->setting_endpoint=FALSE;g_free(base);g_free(text);note(r,"Endpoint selected; set the other endpoint and find call paths");
 }
-static void call_site_clicked(GtkWidget *w,gpointer data) {(void)w;Routes *r=data;RouteGraph *g=shown(r);if(g!=&r->calls || r->selected<0 || (guint)r->selected>=g->points->len) return;RoutePoint *p=g_ptr_array_index(g->points,(guint)r->selected);if(p->site) navigate_point(r,g,p->site);else note(r,"The first function has no incoming call in this path");}
+static void call_site_clicked(GtkWidget *w,gpointer data) {(void)w;Routes *r=data;RouteGraph *g=shown(r);if(g!=&r->calls || r->selected<0 || (guint)r->selected>=g->points->len) return;RoutePoint *p=g_ptr_array_index(g->points,(guint)r->selected);if(p->is_call_site) navigate_point(r,g,p);else if(p->site) navigate_point(r,g,p->site);else note(r,"The first function has no incoming call in this path");}
 static void possible_changed(GtkToggleButton *w,gpointer data) {(void)w;Routes *r=data;if(r->call_cancel) {cancel_calls(r);note(r,"Search options changed; find call paths again");}}
 static void routes_destroyed(GtkWidget *w,gpointer data) {(void)w;Routes *r=data;r->closed=TRUE;cancel_calls(r);}
 
@@ -296,6 +315,7 @@ GtkWidget *insight_source_routes_new(void) {
  row=controls(paths_page);for(guint i=0;i<2;i++) {GtkWidget *button=action(row,i ? "To selected":"From selected",i ? "insight-call-set-to":"insight-call-set-from","Use the enclosing function of the selected graph node as an endpoint",G_CALLBACK(endpoint_from_node),r);g_object_set_data(G_OBJECT(button),"endpoint-side",GUINT_TO_POINTER(i));}
  action(row,"Find call paths","insight-call-find","Find shortest lexical call chains between the two functions",G_CALLBACK(find_calls),r);action(row,"Stop","insight-call-stop","Cancel the current call-path search",G_CALLBACK(stop_calls),r);
  r->call_possible=gtk_check_button_new_with_label(insight_tr("Include uncertain name matches"));insight_i18n_key(G_OBJECT(r->call_possible),"tooltip-text","Allow ambiguous and member-name matches; dashed edges are hypotheses, not proven calls");gtk_box_pack_start(GTK_BOX(paths_page),r->call_possible,FALSE,FALSE,0);g_signal_connect(r->call_possible,"toggled",G_CALLBACK(possible_changed),r);
+ r->call_context=gtk_check_button_new_with_label(insight_tr("Show call sites and controlling branches"));gtk_widget_set_name(r->call_context,"insight-call-context");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(r->call_context),TRUE);gtk_box_pack_start(GTK_BOX(paths_page),r->call_context,FALSE,FALSE,0);g_signal_connect(r->call_context,"toggled",G_CALLBACK(call_context_changed),r);
  r->call_variants=gtk_combo_box_text_new();gtk_widget_set_name(r->call_variants,"insight-call-variants");insight_i18n_key(G_OBJECT(r->call_variants),"tooltip-text","Choose an alternative shortest call path");gtk_box_pack_start(GTK_BOX(paths_page),r->call_variants,FALSE,FALSE,0);g_signal_connect(r->call_variants,"changed",G_CALLBACK(show_call_variant),r);row=controls(paths_page);action(row,"Go to call site","insight-call-site","Open the call site leading to the selected function",G_CALLBACK(call_site_clicked),r);
  r->back=gtk_button_new_with_label(insight_tr("Symbol relations"));gtk_widget_set_name(r->back,"insight-route-back");insight_i18n_key(G_OBJECT(r->back),"tooltip-text","Return to symbol references, calls and relation graphs");gtk_box_pack_start(GTK_BOX(r->root),r->back,FALSE,FALSE,0);
  r->mode=gtk_combo_box_text_new();gtk_widget_set_name(r->mode,"insight-route-mode");gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(r->mode),insight_tr("Source routes"));gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(r->mode),insight_tr("Control flow"));gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(r->mode),insight_tr("Call paths"));gtk_combo_box_set_active(GTK_COMBO_BOX(r->mode),0);gtk_widget_set_tooltip_text(r->mode,insight_tr("Choose saved source routes or the generated flow snapshot"));gtk_box_pack_start(GTK_BOX(view),r->mode,FALSE,FALSE,0);

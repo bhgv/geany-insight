@@ -13,4 +13,8 @@ typedef struct { unsigned count,edge_count; InsightFlowNode nodes[INSIGHT_FLOW_L
  * body points to an opening brace; end is exclusive. Failure clears all nodes.
  * Structured C-like syntax only, no preprocessor evaluation/type inference. */
 int insight_control_flow(const char *mask,size_t length,size_t body,size_t end,InsightFlow *out);
+/* Return controlling Yes/No edges along a shortest structural entry-to-offset
+ * route. Reconverged choices are omitted. -1 means offset is unreachable or
+ * outside a statement. This is lexical reachability, not condition evaluation. */
+int insight_control_guards(const InsightFlow *,size_t offset,InsightFlowEdge *out,unsigned capacity);
 #endif

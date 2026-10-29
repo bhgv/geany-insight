@@ -145,3 +145,27 @@ the status line; it does not continue displaying a running-search message.
 **Русский:** если имена неоднозначны, под полями начала и конца появляются
 списки определений. Выберите файл и строку в каждом показанном списке и снова
 нажмите **«Найти цепочки вызовов»**. Создавать узлы вручную не требуется.
+
+### Call locations and branch context
+
+**Show call sites and controlling branches** is enabled initially. Between each
+caller and callee the graph now includes a clickable **Call site** node at the
+exact source line/column, preceded by the controlling `if/else`, `while` and `for`
+conditions on a shortest structural route to that occurrence. Yes/No arrows
+show the required branch direction, including guards such as `if (failed) return;`.
+Choices whose branches reconverge before the call are omitted. Clicking a
+condition opens its expression; clicking a call site opens the actual invocation.
+Turn the option off for the compact function-only graph.
+
+Multiple occurrences of the same caller/callee pair are retained as distinct
+path alternatives (within the same 32-path/50000-edge bounds). The path selector
+also shows the final call's file, line and column. Expanded graphs have at most
+512 nodes. The lexical CFG does not evaluate conditions or expand short-circuit
+`&&`/`||`, ternaries, macros or unsupported control syntax. If branch context is
+unsupported or structurally unreachable, the call node explicitly says **Branch
+analysis unavailable**, with the reason in its tooltip; the interfunction chain
+is still shown. This is a source-navigation view, not a runtime execution trace.
+
+**Русский:** между функциями теперь видны место вызова и ведущие к нему условия
+с отметками «Да/Нет». Узлы кликабельны. Разные места вызова одной функции
+сохраняются как отдельные варианты цепочки. Вычисление условий не производится.

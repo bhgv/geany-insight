@@ -24,6 +24,11 @@ int main(void) {
  assert(build("{returnя(); after();}"));assert(kind(INSIGHT_FLOW_RETURN)==0);
  assert(build("{while(x)return 1;}"));has(3,1,INSIGHT_FLOW_NEXT);
  assert(build("{struct options x = {.port=0,.values={1,2}};if(x.port)work();}"));assert(kind(INSIGHT_FLOW_IF)==1);
+ InsightFlowEdge guards[INSIGHT_FLOW_LIMIT];const char *nested="{if(ready){while(active){if(skip)continue;create_rule();}}}";assert(build(nested));int n=insight_control_guards(&g,(size_t)(strstr(nested,"create_rule")-nested),guards,INSIGHT_FLOW_LIMIT);assert(n==3);assert(guards[0].kind==INSIGHT_FLOW_YES && guards[1].kind==INSIGHT_FLOW_YES && guards[2].kind==INSIGHT_FLOW_NO);
+ const char *early="{if(failed)return;create_rule();}";assert(build(early));assert(insight_control_guards(&g,(size_t)(strstr(early,"create_rule")-early),guards,INSIGHT_FLOW_LIMIT)==1);assert(guards[0].kind==INSIGHT_FLOW_NO);
+ const char *join="{if(x)a();else b();create_rule();}";assert(build(join));assert(insight_control_guards(&g,(size_t)(strstr(join,"create_rule")-join),guards,INSIGHT_FLOW_LIMIT)==0);
+ const char *dead="{return;create_rule();}";assert(build(dead));assert(insight_control_guards(&g,(size_t)(strstr(dead,"create_rule")-dead),guards,INSIGHT_FLOW_LIMIT)==-1);
+ const char *condition="{if(check())create_rule();else other();}";assert(build(condition));assert(insight_control_guards(&g,(size_t)(strstr(condition,"check")-condition),guards,INSIGHT_FLOW_LIMIT)==0);assert(insight_control_guards(&g,(size_t)(strstr(condition,"other")-condition),guards,INSIGHT_FLOW_LIMIT)==1);assert(guards[0].kind==INSIGHT_FLOW_NO);
  char deep[2048]="{";for(unsigned i=0;i<70;i++) strcat(deep,"if(x)");strcat(deep,"a();}");assert(!build(deep));assert(strstr(g.error,"nesting"));
  char many[4096]="{";for(unsigned i=0;i<600;i++) strcat(many,"a();");strcat(many,"}");assert(!build(many));assert(strstr(g.error,"512"));
  puts("Control flow: branches, dangling else, loops, break/continue, return, limits and unsupported syntax passed");return 0;

@@ -80,3 +80,20 @@ int insight_control_flow(const char *mask,size_t length,size_t body,size_t end,I
  if(ok) {unsigned first=compile(&p,seq.first,1,NONE,NONE);edge(&p,0,first,INSIGHT_FLOW_NEXT);ok=!*out->error;}
  if(!ok) out->count=out->edge_count=0;return ok;
 }
+
+static int reaches(const InsightFlow *g,const int *head,const int *next,unsigned start,unsigned target,unsigned blocked) {
+ unsigned queue[INSIGHT_FLOW_LIMIT],read=0,count=0;unsigned char seen[INSIGHT_FLOW_LIMIT]={0};if(start==blocked) return 0;queue[count++]=start;seen[start]=1;
+ while(read<count) {unsigned id=queue[read++];if(id==target) return 1;for(int i=head[id];i>=0;i=next[i]) {unsigned to=g->edges[i].to;if(to!=blocked && !seen[to]) {seen[to]=1;queue[count++]=to;}}}return 0;
+}
+int insight_control_guards(const InsightFlow *g,size_t offset,InsightFlowEdge *out,unsigned capacity) {
+ if(!g || !out || g->count>INSIGHT_FLOW_LIMIT || g->edge_count>INSIGHT_FLOW_EDGE_LIMIT) return -1;
+ unsigned target=NONE;for(unsigned i=2;i<g->count;i++) if(g->nodes[i].begin<=offset && offset<g->nodes[i].end) {target=i;break;}if(target==NONE) return -1;
+ int head[INSIGHT_FLOW_LIMIT],next[INSIGHT_FLOW_EDGE_LIMIT],parent[INSIGHT_FLOW_LIMIT];for(unsigned i=0;i<g->count;i++) head[i]=parent[i]=-1;
+ for(unsigned i=0;i<g->edge_count;i++) {InsightFlowEdge e=g->edges[i];if(e.from>=g->count || e.to>=g->count) return -1;next[i]=head[e.from];head[e.from]=(int)i;}
+ unsigned queue[INSIGHT_FLOW_LIMIT],read=0,count=1;queue[0]=0;parent[0]=-2;
+ while(read<count && parent[target]==-1) {unsigned id=queue[read++];for(int i=head[id];i>=0;i=next[i]) {unsigned to=g->edges[i].to;if(parent[to]==-1) {parent[to]=i;queue[count++]=to;}}}
+ if(parent[target]==-1) return -1;unsigned reverse[INSIGHT_FLOW_LIMIT],n=0;for(unsigned id=target;id;id=g->edges[parent[id]].from) reverse[n++]=(unsigned)parent[id];
+ unsigned written=0;while(n) {InsightFlowEdge chosen=g->edges[reverse[--n]];if(chosen.kind!=INSIGHT_FLOW_YES && chosen.kind!=INSIGHT_FLOW_NO) continue;int needed=1;for(int i=head[chosen.from];i>=0;i=next[i]) if(g->edges[i].kind!=chosen.kind && reaches(g,head,next,g->edges[i].to,target,chosen.from)) {needed=0;break;}
+  if(needed) {if(written==capacity) return -1;out[written++]=chosen;}}
+ return (int)written;
+}

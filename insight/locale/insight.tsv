@@ -2735,3 +2735,7 @@ Enter two functions in Call paths, then start the search	Введите две �
 Choose the exact function definition by file and line	Выберите точное определение функции по файлу и строке
 Definition selected; choose the other endpoint if needed, then Find call paths	Определение выбрано; при необходимости выберите второй конец, затем нажмите «Найти цепочки вызовов»
 Several definitions match. Choose a file and line below each ambiguous function, then Find call paths	Найдено несколько определений. Выберите файл и строку под каждым неоднозначным именем, затем нажмите «Найти цепочки вызовов»
+Show call sites and controlling branches	Показывать места вызовов и ведущие к ним ветвления
+Structural branch toward this call; conditions are not evaluated	Структурная ветвь к этому вызову; значения условий не вычисляются
+Branch analysis unavailable	Анализ ветвлений недоступен
+Call is unreachable in the structural graph	Вызов недостижим в структурном графе
