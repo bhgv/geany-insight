@@ -655,7 +655,7 @@ static void check_line_breaking(GeanyEditor *editor, gint pos)
 static void show_autocomplete(GeanyEditor *editor, gsize rootlen, GString *words)
 {
  ScintillaObject *sci=editor->sci;
- insight_completion_cancel(editor);
+ insight_completion_native_fallback(editor);
 	/* hide autocompletion if only option is already typed */
 	if (rootlen >= words->len ||
 		(words->str[rootlen] == '?' && rootlen >= words->len - 2))

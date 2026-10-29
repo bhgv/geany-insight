@@ -5624,7 +5624,7 @@ static void create_workbench_menus(void) {
  const char *shortcuts[]={"F12","<Primary><Alt>s","<Primary><Alt>o","<Primary><Alt>r","<Primary><Alt>Left","<Primary><Alt>Right"};
  for(int i=0;i<6;i++) {
   GtkWidget *entry=gtk_menu_item_new_with_label(names[i]); gtk_container_add(GTK_CONTAINER(i>=1 && i<=3 ? search_menu : menu),entry);gtk_widget_show(entry);
-  if(!i) g_signal_connect(entry,"activate",G_CALLBACK(go_definition),NULL);
+  if(!i) {gtk_widget_set_name(entry,"insight-goto-definition-command");g_signal_connect(entry,"activate",G_CALLBACK(go_definition),NULL);}
   else if(i<4) g_signal_connect(entry,"activate",G_CALLBACK(focus_browser),GINT_TO_POINTER(i-1));
   else g_signal_connect(entry,"activate",G_CALLBACK(history_move),GINT_TO_POINTER(i==4 ? -1 : 1));
   guint key; GdkModifierType mods; gtk_accelerator_parse(shortcuts[i],&key,&mods); gtk_widget_add_accelerator(entry,"activate",wb.navigation_accels,key,mods,GTK_ACCEL_VISIBLE);
