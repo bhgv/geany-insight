@@ -2790,3 +2790,5 @@ Insert the project template using its parameter dialog and Undo	Вставка �
 Propose Clips templates in the completion list	Предлагать шаблоны Clips в списке автодополнения
 Clip template	Шаблон Clips
 Insert the Clips template using its parameter dialog and Undo	Вставка шаблона Clips с диалогом параметров и отменой
+Browse callers of selected function (Clang)	Вызывающие функции выбранного узла (Clang)
+Browse callees of selected function (Clang)	Вызываемые функции выбранного узла (Clang)

@@ -132,7 +132,7 @@ void insight_relation_tree_query(GtkWidget *box,InsightIndex *index,const gchar 
  GtkTreePath *path=gtk_tree_path_new_from_indices(0,-1);gtk_tree_view_expand_row(tree->view,path,FALSE);gtk_tree_path_free(path);gtk_widget_set_sensitive(GTK_WIDGET(tree->view),TRUE);status(tree,NULL);
 }
 void insight_relation_tree_calls(GtkWidget *box,InsightIndex *calls,const gchar *usr,const gchar *label,gboolean incoming,const gchar *source) {
- RelationTree *tree=g_object_get_data(G_OBJECT(box),"insight-relation-tree");if(!tree || !calls || !label) return;
+ RelationTree *tree=g_object_get_data(G_OBJECT(box),"insight-relation-tree");if(!tree || !calls || !label) return;g_object_set_data_full(G_OBJECT(box),"insight-call-root-usr",g_strdup(usr),g_free);g_object_set_data_full(G_OBJECT(box),"insight-call-root-source",g_strdup(source),g_free);
  g_cancellable_cancel(tree->cancel);g_clear_object(&tree->cancel);tree->cancel=g_cancellable_new();tree->generation++;tree->setting=TRUE;gtk_tree_store_clear(tree->store);tree->nodes=0;insight_index_free(tree->index);tree->index=insight_index_ref(calls);insight_index_free(tree->calls);tree->calls=insight_index_ref(calls);tree->incoming=incoming;
  g_free(tree->root);tree->root=g_strdup(usr ? usr:label);g_free(tree->source);tree->source=g_strdup(source);tree->filetype=NULL;
  GHashTable *seen=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
