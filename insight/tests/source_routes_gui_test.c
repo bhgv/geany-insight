@@ -20,7 +20,8 @@ static guint count(const gchar *key) {return GPOINTER_TO_UINT(g_object_get_data(
 static void counts(guint nodes,guint edges) {g_assert_cmpuint(count("insight-route-node-count"),==,nodes);g_assert_cmpuint(count("insight-route-edge-count"),==,edges);}
 static void click(gdouble y) {GdkEvent *event=gdk_event_new(GDK_BUTTON_PRESS);event->button.button=1;event->button.x=50;event->button.y=y;gboolean handled=FALSE;g_signal_emit_by_name(canvas,"button-press-event",event,&handled);gdk_event_free(event);g_assert_true(handled);}
 static void disk_counts(gint nodes,gint edges) {GKeyFile *key=g_key_file_new();g_assert_true(g_key_file_load_from_file(key,project_file,G_KEY_FILE_NONE,NULL));g_assert_cmpint(g_key_file_get_integer(key,"insight-source-routes","nodes",NULL),==,nodes);g_assert_cmpint(g_key_file_get_integer(key,"insight-source-routes","edges",NULL),==,edges);g_key_file_unref(key);}
-static void quit(void) {for(guint i=0;i<documents_array->len;i++) {GeanyDocument *doc=g_ptr_array_index(documents_array,i);if(DOC_VALID(doc)) document_set_text_changed(doc,FALSE);}gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));}
+static void quit(void) {GeanyDocument *doc=document_get_current();if(DOC_VALID(doc)) document_set_text_changed(doc,FALSE);if(DOC_VALID(a)) document_set_text_changed(a,FALSE);if(DOC_VALID(b)) document_set_text_changed(b,FALSE);gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));}
+
 static gboolean step(gpointer data) {
  (void)data;GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));if(!named(window,"insight-route-show-command")) return G_SOURCE_CONTINUE;
  if(!phase) {

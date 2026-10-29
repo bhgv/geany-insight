@@ -1958,6 +1958,7 @@ static void relation_view_update(void) {
  * current query, loaded branches, filter and selection intact. */
 static void relation_next_view(GtkWidget *widget,gpointer data) {
  (void)widget;(void)data;if(!wb.relation_stack || !wb.relation_graph_toggle) return;focus_widget_panel(wb.usage_entry);
+ if(!g_strcmp0(gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack)),"routes")) {gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"list");relation_view_update();}
  gboolean graph=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_graph_toggle));
  gboolean tree=!g_strcmp0(gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack)),"treegraph");
  gboolean vertical=FALSE;gint zoom=100;
@@ -1997,7 +1998,7 @@ static void window_lock_item(GtkWidget *menu,GtkWidget *follow,const gchar *labe
  gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);
 }
 static void relation_graph_toggle(GtkToggleButton *button,gpointer data) { (void)button;(void)data;gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"list");relation_view_update(); }
-static void relation_tree_toggle(GtkToggleButton *button,gpointer data) { (void)data;relation_view_update();if(!wb.relation_setting && gtk_toggle_button_get_active(button) && *gtk_entry_get_text(GTK_ENTRY(wb.usage_entry))) usage_start(NULL,NULL); }
+static void relation_tree_toggle(GtkToggleButton *button,gpointer data) { (void)data;gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"list");relation_view_update();if(!wb.relation_setting && gtk_toggle_button_get_active(button) && *gtk_entry_get_text(GTK_ENTRY(wb.usage_entry))) usage_start(NULL,NULL); }
 static void reference_region_changed(GtkWidget *widget,gpointer data) {
  (void)data;if(wb.reference_setting) return;wb.reference_setting=TRUE;
  if(widget==wb.usage_code && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_code))) gtk_combo_box_set_active(GTK_COMBO_BOX(wb.usage_comments),0);
