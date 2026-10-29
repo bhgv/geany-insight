@@ -130,3 +130,18 @@ reported; a negative result is not a proof of runtime unreachability.
 предположительных совпадениях не являются доказанными вызовами. Если переход
 происходит через указатели/таблицы callback с другими именами, лексический поиск
 может не найти его — это явно отмечается, а не заменяется ручной стрелкой.
+
+### Choosing duplicate function names
+
+If several project functions have the same name (for example `main` or
+`create_rule`), pressing **Find call paths** now shows a definition selector
+under each ambiguous endpoint. Choose the desired **function — full file path:line**
+from each visible list, then press **Find call paths** again. No manually created
+route nodes are required. Editing a function name clears its previous exact
+selection. The worker validates the selected definition against the source.
+An unsuccessful search shows its actual status in the graph area as well as
+the status line; it does not continue displaying a running-search message.
+
+**Русский:** если имена неоднозначны, под полями начала и конца появляются
+списки определений. Выберите файл и строку в каждом показанном списке и снова
+нажмите **«Найти цепочки вызовов»**. Создавать узлы вручную не требуется.

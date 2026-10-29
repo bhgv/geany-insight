@@ -41,7 +41,16 @@ static gboolean step(gpointer data) {
   gtk_combo_box_set_active(GTK_COMBO_BOX(named(routes,"insight-route-mode")),0);counts(2,1);gtk_combo_box_set_active(GTK_COMBO_BOX(named(routes,"insight-route-mode")),1);counts(5,5);
  } else if(phase==2) {
   g_assert_false(gtk_widget_get_visible(named(window,"insight-relation-toolbar-tabs")));gtk_notebook_set_current_page(GTK_NOTEBOOK(named(routes,"insight-source-routes-options")),3);
-  gtk_entry_set_text(GTK_ENTRY(named(routes,"insight-call-from")),"main");gtk_entry_set_text(GTK_ENTRY(named(routes,"insight-call-to")),"create_rule");button("insight-call-find");if(!g_object_get_data(G_OBJECT(routes),"insight-call-search-running")) return G_SOURCE_CONTINUE;
+  gtk_entry_set_text(GTK_ENTRY(named(routes,"insight-call-from")),"main");gtk_entry_set_text(GTK_ENTRY(named(routes,"insight-call-to")),"create_rule");button("insight-call-find");
+  GtkWidget *from_choices=named(routes,"insight-call-from-definitions"),*to_choices=named(routes,"insight-call-to-definitions");
+  if(gtk_widget_get_visible(from_choices) && gtk_widget_get_visible(to_choices)) {
+   g_assert_false(count("insight-call-search-running"));
+   g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(from_choices)),NULL),==,2);
+   g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(to_choices)),NULL),==,2);
+   gchar *from_id=g_strdup_printf("%s\n7",path_a),*to_id=g_strdup_printf("%s\n3",path_b);
+   g_assert_true(gtk_combo_box_set_active_id(GTK_COMBO_BOX(from_choices),from_id));g_assert_true(gtk_combo_box_set_active_id(GTK_COMBO_BOX(to_choices),to_id));g_free(from_id);g_free(to_id);button("insight-call-find");
+  }
+  if(!g_object_get_data(G_OBJECT(routes),"insight-call-search-running")) return G_SOURCE_CONTINUE;
  } else if(phase==3) {
   if(!g_object_get_data(G_OBJECT(routes),"insight-call-search-completed")) return G_SOURCE_CONTINUE;counts(4,3);g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(named(routes,"insight-call-variants"))),NULL),==,1);
   click(316);g_assert_true(document_get_current()==b);g_assert_cmpint(sci_get_current_line(b->editor->sci),==,2);button("insight-call-set-to");click(40);button("insight-call-set-from");button("insight-call-find");if(!g_object_get_data(G_OBJECT(routes),"insight-call-search-running")) {phase=2;return G_SOURCE_CONTINUE;}
@@ -51,14 +60,14 @@ static gboolean step(gpointer data) {
  } else {
   g_assert_false(gtk_widget_get_visible(named(window,"insight-relation-toolbar-tabs")));
   const gchar *capture=g_getenv("INSIGHT_SOURCE_ROUTES_CAPTURE");if(capture) {GdkWindow *native=gtk_widget_get_window(window);GdkPixbuf *image=gdk_pixbuf_get_from_window(native,0,0,gdk_window_get_width(native),gdk_window_get_height(native));g_assert_nonnull(image);g_assert_true(gdk_pixbuf_save(image,capture,"jpeg",NULL,"quality","90",NULL));g_object_unref(image);}
-  g_print("Source routes GUI: arbitrary files, duplicate guards, arrows, navigation, reopen, unique anchors, persistence, guarded function/selection flow, automatic main-to-create_rule chains, selected endpoints and call-site navigation passed\n");quit();return G_SOURCE_REMOVE;
+  g_print("Source routes GUI: arbitrary files, duplicate guards, arrows, navigation, reopen, unique anchors, persistence, guarded function/selection flow, duplicate endpoint name choosers, automatic main-to-create_rule chains, selected endpoints and call-site navigation passed\n");quit();return G_SOURCE_REMOVE;
  }
  phase++;return G_SOURCE_CONTINUE;
 }
 static gboolean timeout(gpointer data) {(void)data;g_error("Source routes timeout phase %u",phase);return G_SOURCE_REMOVE;}
 int main(int argc,char **argv) {
  if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;restore=argc==3 && !strcmp(argv[1],"--restore");directory=restore ? g_strdup(argv[2]):g_dir_make_tmp("source-routes-XXXXXX",NULL);project_file=g_build_filename(directory,"routes.geany",NULL);path_a=g_build_filename(directory,"a.c",NULL);path_b=g_build_filename(directory,"b.c",NULL);gchar *profile=g_build_filename(directory,"profile",NULL);g_mkdir_with_parents(profile,0700);
- if(!restore) {const gchar *source="int helper(int x) { struct options opts = {.port=1}; return create_rule(x); }\nint run(int x) {\n if (x > 0) { x = helper(x); } else { x = 0; }\n while (x > 1) { if (x == 3) break; --x; }\n return x;\n}\nint main(void) { return run(1); }\n";g_assert_true(g_file_set_contents(path_a,source,-1,NULL));g_assert_true(g_file_set_contents(path_b,"// destination α\nint target = 2;\nint create_rule(int x) { return x; }\n",-1,NULL));GKeyFile *key=g_key_file_new();g_key_file_set_string(key,"project","name","Source routes");g_key_file_set_string(key,"project","base_path",directory);gsize n;gchar *bytes=g_key_file_to_data(key,&n,NULL);g_assert_true(g_file_set_contents(project_file,bytes,n,NULL));g_free(bytes);g_key_file_unref(key);}
+ if(!restore) {const gchar *source="int helper(int x) { struct options opts = {.port=1}; return create_rule(x); }\nint run(int x) {\n if (x > 0) { x = helper(x); } else { x = 0; }\n while (x > 1) { if (x == 3) break; --x; }\n return x;\n}\nint main(void) { return run(1); }\n";g_assert_true(g_file_set_contents(path_a,source,-1,NULL));gchar *duplicates=g_build_filename(directory,"other.c",NULL);g_assert_true(g_file_set_contents(duplicates,"int main(void) { return 0; }\nstatic int create_rule(int x) { return 0; }\n",-1,NULL));g_free(duplicates);g_assert_true(g_file_set_contents(path_b,"// destination α\nint target = 2;\nint create_rule(int x) { return x; }\n",-1,NULL));GKeyFile *key=g_key_file_new();g_key_file_set_string(key,"project","name","Source routes");g_key_file_set_string(key,"project","base_path",directory);gsize n;gchar *bytes=g_key_file_to_data(key,&n,NULL);g_assert_true(g_file_set_contents(project_file,bytes,n,NULL));g_free(bytes);g_key_file_unref(key);}
  gchar *config=g_build_filename(profile,"geany.conf",NULL);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\nload_session=false\n",-1,NULL));gchar *args[]={"source-routes","--new-instance","--no-session","--config",profile,project_file,path_a,NULL};g_timeout_add(350,step,NULL);g_timeout_add_seconds(35,timeout,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);gint result=main_lib(7,args);
  if(!restore && !result) {gchar *child[]={argv[0],"--restore",directory,NULL};gint status=0;GError *error=NULL;g_assert_true(g_spawn_sync(NULL,child,NULL,0,NULL,NULL,NULL,NULL,&status,&error));g_assert_no_error(error);g_assert_true(g_spawn_check_wait_status(status,NULL));}
  g_free(config);g_free(profile);g_free(project_file);g_free(path_a);g_free(path_b);g_free(directory);return result;
