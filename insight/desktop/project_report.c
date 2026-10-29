@@ -28,7 +28,7 @@ InsightReportSnapshot *insight_report_snapshot_ref(InsightReportSnapshot *snapsh
 void insight_report_snapshot_unref(InsightReportSnapshot *snapshot)
 {
     if(!snapshot || !g_atomic_int_dec_and_test(&snapshot->refs)) return;
-    g_free(snapshot->project);g_free(snapshot->root);g_free(snapshot->project_file);g_ptr_array_unref(snapshot->paths);insight_index_free(snapshot->index);g_free(snapshot);
+    g_free(snapshot->project);g_free(snapshot->root);g_free(snapshot->project_file);g_ptr_array_unref(snapshot->paths);insight_index_free(snapshot->index);insight_index_free(snapshot->calls);g_free(snapshot);
 }
 static gchar *escaped(const gchar *text)
 {

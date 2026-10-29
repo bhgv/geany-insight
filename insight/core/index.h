@@ -17,11 +17,11 @@ InsightIndex *insight_index_ref(InsightIndex *);
 int insight_index_exclusive(const InsightIndex *);
 void insight_index_free(InsightIndex *);
 InsightIndex *insight_index_clone(const InsightIndex *);
-#define INSIGHT_INDEX_SNAPSHOT_LIMIT (64u * 1024u * 1024u)
+#define INSIGHT_INDEX_SNAPSHOT_LIMIT (256u * 1024u * 1024u)
 /* Version 2 (reads version 1), endian-independent snapshot with CRC32 corruption detection.
  * Root is metadata only; decoding never accesses paths from the snapshot.
  * Serialized bytes/root are malloc-owned; caller frees them. On failure,
- * output pointers are NULL and length is zero. Max 250k symbols, 64 KiB/field. */
+ * output pointers are NULL and length is zero. Max 1M records, 64 KiB/field. */
 int insight_index_serialize(const InsightIndex *,const char *root,unsigned char **data,size_t *length);
 InsightIndex *insight_index_deserialize(const unsigned char *,size_t,char **root);
 /* Runtime mutation generation; not part of the serialized snapshot. */

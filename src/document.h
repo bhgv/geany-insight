@@ -271,6 +271,7 @@ void document_replace_sel(GeanyDocument *doc, const gchar *find_text, const gcha
 						  const gchar *original_find_text, const gchar *original_replace_text, GeanyFindFlags flags);
 
 void document_update_tags(GeanyDocument *doc);
+void document_update_semantic_tags(GeanyDocument *doc);
 
 void document_update_tag_list_in_idle(GeanyDocument *doc);
 

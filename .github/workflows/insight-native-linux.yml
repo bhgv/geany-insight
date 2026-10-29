@@ -270,6 +270,15 @@ jobs:
           meson setup _native --prefix="$PWD/_native-install" --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=true -Dclang=enabled -Dclang-bundle=true -Dmac-integration=disabled
           meson compile -C _native
           meson install -C _native
+          python3 - <<'PY'
+          import pathlib, subprocess
+          root = pathlib.Path('_native-install').resolve()
+          output = subprocess.check_output(['ldd', str(root / 'lib/libgeany.so')], text=True)
+          for name in ('libclang', 'libLLVM'):
+              rows = [line for line in output.splitlines() if name in line]
+              assert rows and all(str(root / 'lib/geany/clang') in line for line in rows), (name, output)
+          subprocess.run([str(root / 'bin/geany'), '--version'], check=True)
+          PY
       - name: Check native menu tearoff geometry and lifecycle
         id: menu-palettes
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}

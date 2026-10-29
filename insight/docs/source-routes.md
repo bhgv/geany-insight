@@ -218,7 +218,7 @@ Clang-enabled builds now parse project C/C++ definitions through libclang and
 retain compiler-resolved symbol identities, references and calls in the existing
 project database. Header and compilation database stamps invalidate affected
 source results. Sources with compiler errors retain the lexical project-index
-fallback; **Navigate → Reanalyze C/C++ buffer with Clang** reports the active
+fallback; **Navigate → Clang C/C++ → Reanalyze C/C++ buffer with Clang** reports the active
 buffer's semantic result and whether compiler defaults or a compilation database
 were used. Semantic colors overlay identifier tokens without replacing the
 Scintilla lexer, comments, strings, selections or source text.

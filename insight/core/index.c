@@ -156,7 +156,7 @@ InsightIndex *insight_index_clone(const InsightIndex *source) {
  return next;
 }
 #define SNAPSHOT_FIELDS_LIMIT 65536u
-#define SNAPSHOT_SYMBOLS_LIMIT 250000u
+#define SNAPSHOT_SYMBOLS_LIMIT 1000000u
 static const unsigned char magic[8]={'G','I','S','I','D','X',0,2};
 static uint32_t checksum(const unsigned char *s,size_t length) {
  uint32_t crc=UINT32_MAX;

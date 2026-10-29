@@ -22,7 +22,7 @@ root are used. Diagnostics may therefore indicate missing build settings.
 
 ## Identifier coloring
 
-**Navigate → Clang C/C++ semantic colors** toggles identifier colors.
+**Navigate → Clang C/C++ → Clang C/C++ semantic colors** toggles identifier colors.
 **Reanalyze C/C++ buffer with Clang** refreshes the active source and reports
 symbol/token counts and the argument source. Types, functions, fields, constants,
 variables, namespaces and macros use a separate foreground indicator; comments,
@@ -57,3 +57,42 @@ frontend does not determine runtime condition values or arbitrary pointer target
 
 Official APIs: [libclang](https://clang.llvm.org/docs/LibClang.html),
 [compilation database](https://clang.llvm.org/docs/JSONCompilationDatabase.html).
+
+## Semantic references and call graphs
+
+**Navigate → Clang C/C++ → Clang references…** selects **References (Clang C/C++)** in Relations.
+If the caret's analyzed identifier has a known USR, results use that exact compiler
+identity, distinguishing overloads. Otherwise the status explicitly says the
+query is by name. Text/comment searches remain separate lexical operations.
+References reuse the project database when their sources and dependencies match;
+open buffers are parsed for the query. Partial files contribute results with a
+skipped/incomplete indication instead of being claimed as complete.
+
+Call paths use compiler-resolved call occurrences and function bodies for fresh
+Clang-indexed C/C++ sources, including unsaved open-source/header overlays.
+Calls in an uninvoked lambda are not attributed to its enclosing function.
+Virtual calls are omitted by default; uncertain mode displays the statically
+referenced virtual target with a dashed edge, without claiming its runtime
+implementation. Unresolved function-pointer targets remain unresolved. The graph
+status distinguishes Clang-resolved calls from lexical fallback. Branch rendering
+is still the bounded structural view described in [source routes](source-routes.md).
+
+Project snapshots now allow up to 1 million records / 256 MiB per index and
+768 MiB for the complete project snapshot, to accommodate reference records.
+These storage bounds do not expand independent UI/report/work budgets.
+
+Successful live C/C++ parses also publish compiler declarations into the native
+TagManager through its existing asynchronous tag-publication path. File Symbols,
+completion and native definition consumers therefore receive Clang-derived tags;
+invalid/incomplete buffers keep their native parser fallback. The existing
+workbench definition chooser prefers a fresh compiler identity where available.
+Turning off semantic colors only changes painting; compiler analysis continues.
+
+**По-русски:** результаты Clang поступают и в обычный механизм тегов редактора:
+панель символов файла, подсказки и переходы получают разобранные компилятором
+объявления. «Ссылки Clang…» доступны в «Навигации» и в «Поиск/замена» контекстного
+меню. Выключение семантических цветов не выключает разбор символов.
+
+The **Navigate → Clang C/C++** submenu groups coloring, reanalysis, semantic
+references and this help page. The color preference persists in the Geany profile
+and does not disable compiler-derived symbols or references.

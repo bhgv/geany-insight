@@ -10,6 +10,7 @@
 #include "insight-project-report.h"
 #include "encodingsprivate.h"
 #include "../insight/desktop/call_paths.h"
+#include "../insight/desktop/clang_backend.h"
 #include "document.h"
 #include "editor.h"
 #include "sciwrappers.h"
@@ -70,8 +71,8 @@ static void navigate_point(Routes *r,RouteGraph *g,RoutePoint *p) {
   gchar *text=sci_get_contents(doc->editor->sci,length+1),*digest=g_compute_checksum_for_data(G_CHECKSUM_SHA256,(const guchar *)text,length);gboolean equal=!strcmp(digest,g->digest);g_free(text);g_free(digest);if(!equal) {note(r,"Source changed; rebuild the flow graph");return;}
  } else if(p->digest) {
   gint length=sci_get_length(doc->editor->sci);if(length<0 || length>2*1024*1024) {note(r,"Source changed; search the call paths again");return;}
-  gchar *text=sci_get_contents(doc->editor->sci,length+1),*digest=insight_call_digest(text);gboolean equal=!strcmp(digest,p->digest);g_free(text);g_free(digest);if(!equal || p->line>=(guint)sci_get_line_count(doc->editor->sci)) {note(r,"Source changed; search the call paths again");return;}
-  gint begin=sci_get_position_from_line(doc->editor->sci,p->line),end=(gint)SEND(doc->editor->sci,SCI_GETLINEENDPOSITION,p->line,0);p->offset=MIN((gsize)end,(gsize)begin+p->column);
+  gchar *text=sci_get_contents(doc->editor->sci,length+1),*digest=insight_call_digest(text);gboolean equal=!strcmp(digest,p->digest);guint bom=!p->line && g_str_has_prefix(text,"\357\273\277") ? 3:0;g_free(text);g_free(digest);if(!equal || p->line>=(guint)sci_get_line_count(doc->editor->sci)) {note(r,"Source changed; search the call paths again");return;}
+  gint begin=sci_get_position_from_line(doc->editor->sci,p->line),end=(gint)SEND(doc->editor->sci,SCI_GETLINEENDPOSITION,p->line,0);p->offset=MIN((gsize)end,(gsize)begin+p->column+bom);
  } else {
   guint found=0,line=p->line;gchar *actual=p->line<(guint)sci_get_line_count(doc->editor->sci) ? line_text(doc,p->line):NULL;gboolean same=!g_strcmp0(actual,p->text);g_free(actual);
   if(!same) {
@@ -172,9 +173,9 @@ static void build_flow(GtkWidget *button,gpointer data) {
 static void cancel_calls(Routes *r) {r->call_serial++;if(!r->closed) g_object_set_data(G_OBJECT(r->root),"insight-call-search-running",NULL);if(r->call_cancel) g_cancellable_cancel(r->call_cancel);g_clear_object(&r->call_cancel);}
 static void reset_calls(Routes *r) {cancel_calls(r);graph_clear(&r->calls);g_clear_pointer(&r->call_result,insight_call_paths_free);g_clear_pointer(&r->endpoint_path[0],g_free);g_clear_pointer(&r->endpoint_path[1],g_free);}
 typedef struct {
- InsightReportSnapshot *snapshot;GHashTable *buffers;gchar *names[2],*paths[2];guint lines[2];gint encoding;guint64 serial;gboolean possible;InsightCallPaths *result;
+ InsightReportSnapshot *snapshot;GHashTable *buffers;gchar *names[2],*paths[2],*resources;guint lines[2];gint encoding;guint64 serial;gboolean possible;InsightCallPaths *result;
 } CallJob;
-static void call_job_free(gpointer data) {CallJob *j=data;insight_report_snapshot_unref(j->snapshot);g_hash_table_unref(j->buffers);for(guint i=0;i<2;i++) {g_free(j->names[i]);g_free(j->paths[i]);}insight_call_paths_free(j->result);g_free(j);}
+static void call_job_free(gpointer data) {CallJob *j=data;insight_report_snapshot_unref(j->snapshot);g_hash_table_unref(j->buffers);g_free(j->resources);for(guint i=0;i<2;i++) {g_free(j->names[i]);g_free(j->paths[i]);}insight_call_paths_free(j->result);g_free(j);}
 static gchar *load_call_source(const gchar *path,GCancellable *cancel,gpointer data) {
  CallJob *j=data;if(g_hash_table_contains(j->buffers,path)) return g_strdup(g_hash_table_lookup(j->buffers,path));
  gchar *native=utils_get_locale_from_utf8(path);GFile *file=g_file_new_for_path(native);g_free(native);GFileInputStream *stream=g_file_read(file,cancel,NULL);g_object_unref(file);if(!stream) return NULL;
@@ -184,7 +185,9 @@ static gchar *load_call_source(const gchar *path,GCancellable *cancel,gpointer d
 }
 static void call_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
  (void)source;CallJob *j=data;InsightCallEndpoint endpoints[2]={{j->names[0],j->paths[0],j->lines[0]},{j->names[1],j->paths[1],j->lines[1]}};GError *error=NULL;
- j->result=insight_call_paths_find(j->snapshot->index,j->snapshot->paths,&endpoints[0],&endpoints[1],j->possible,load_call_source,j,cancel,&error);
+ InsightIndex *symbols=NULL,*relations=NULL;
+ if(insight_clang_available() && j->snapshot->calls) {symbols=insight_index_clone(j->snapshot->index);relations=insight_index_clone(j->snapshot->calls);if(symbols && relations) {GHashTableIter it;gpointer key,value;g_hash_table_iter_init(&it,j->buffers);while(!g_cancellable_is_cancelled(cancel) && g_hash_table_iter_next(&it,&key,&value)) if(value && insight_clang_source(key)) {InsightClangResult *parsed=insight_clang_parse(key,value,j->snapshot->root,j->resources,j->buffers,cancel,NULL);if(parsed && !parsed->errors && !parsed->limited) insight_clang_import(parsed,key,symbols,relations);else insight_index_update(relations,key,NULL,0);insight_clang_result_free(parsed);}}}
+ j->result=insight_call_paths_find_semantic(symbols ? symbols:j->snapshot->index,relations,j->snapshot->paths,&endpoints[0],&endpoints[1],j->possible,load_call_source,j,cancel,&error);insight_index_free(symbols);insight_index_free(relations);
  if(error) g_task_return_error(task,error);else g_task_return_boolean(task,TRUE);
 }
 static RoutePoint *call_point(const gchar *path,InsightCallSource *source,guint line,guint column,const gchar *label) {
@@ -192,8 +195,8 @@ static RoutePoint *call_point(const gchar *path,InsightCallSource *source,guint 
  RoutePoint *p=g_new0(RoutePoint,1);p->path=g_strdup(path);p->line=line-1;p->column=column;p->kind=INSIGHT_FLOW_STEP;p->text=g_utf8_make_valid(source->text+begin,(gssize)(end-begin));p->label=g_strdup(label);p->digest=g_strdup(source->digest);return p;
 }
 static void call_result_status(Routes *r) {
- if(!r->call_result) return;InsightCallPaths *result=r->call_result;gchar *message=g_strdup_printf(insight_tr("%u shortest lexical paths • %u unresolved • %u ambiguous • %u skipped%s"),result->paths->len,result->unresolved,result->ambiguous,result->skipped,result->limited ? insight_tr(" • work limit reached"):"");gtk_label_set_text(GTK_LABEL(r->status),message);g_free(message);
- if(!result->paths->len) note(r,result->limited || result->skipped ? "No path found in the inspected sources; search is incomplete":"No lexical call path found; callbacks may need uncertain name matching");
+ if(!r->call_result) return;InsightCallPaths *result=r->call_result;gchar *message=g_strdup_printf(insight_tr("%u shortest call paths • %u unresolved • %u ambiguous • %u skipped%s"),result->paths->len,result->unresolved,result->ambiguous,result->skipped,result->limited ? insight_tr(" • work limit reached"):"");if(result->semantic_functions) {gchar *engine=g_strconcat(insight_tr(result->lexical_functions ? "Clang calls with lexical fallback":"Clang-resolved calls")," • ",message,NULL);g_free(message);message=engine;}gtk_label_set_text(GTK_LABEL(r->status),message);g_free(message);
+ if(!result->paths->len) note(r,result->limited || result->skipped ? "No path found in the inspected sources; search is incomplete":result->semantic_functions ? "No compiler-resolved call path found; unresolved pointers may require manual source routes":"No lexical call path found; callbacks may need uncertain name matching");
 }
 static void append_call_node(Routes *r,RoutePoint *point,InsightFlowEdgeKind kind) {
  guint count=r->calls.points->len;if(count) {InsightFlowEdge edge={count-1,count,kind};g_array_append_val(r->calls.edges,edge);}g_ptr_array_add(r->calls.points,point);
@@ -259,7 +262,7 @@ static void find_calls(GtkWidget *w,gpointer data) {
  (void)w;Routes *r=data;cancel_calls(r);g_object_set_data(G_OBJECT(r->root),"insight-call-search-completed",NULL);GError *error=NULL;InsightReportSnapshot *snapshot=insight_project_report_capture(&error);
  if(!snapshot) {insight_i18n_text(G_OBJECT(r->status),"label","Call path search: {value}",insight_tr(error ? error->message:"Project membership is not ready."));g_clear_error(&error);gtk_widget_queue_draw(r->canvas);return;}
  if(!choose_endpoints(r,snapshot)) {insight_report_snapshot_unref(snapshot);return;}
- CallJob *j=g_new0(CallJob,1);j->snapshot=snapshot;j->buffers=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);j->encoding=file_prefs.default_open_encoding;j->serial=r->call_serial;j->possible=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(r->call_possible));
+ CallJob *j=g_new0(CallJob,1);j->snapshot=snapshot;j->resources=g_build_filename(app->datadir,"insight","clang","resources",NULL);j->buffers=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);j->encoding=file_prefs.default_open_encoding;j->serial=r->call_serial;j->possible=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(r->call_possible));
  for(guint i=0;i<2;i++) {j->names[i]=g_strdup(gtk_entry_get_text(GTK_ENTRY(i ? r->call_to:r->call_from)));g_strstrip(j->names[i]);j->paths[i]=g_strdup(r->endpoint_path[i]);j->lines[i]=r->endpoint_line[i];if(!*j->names[i] && !j->paths[i]) {call_job_free(j);note(r,"Enter start and target functions, or set them from selected nodes");return;}}
  gsize total=0;for(guint i=0;documents_array && i<documents_array->len;i++) {GeanyDocument *doc=g_ptr_array_index(documents_array,i);if(!DOC_VALID(doc) || !doc->file_name) continue;gint length=sci_get_length(doc->editor->sci);gchar *text=NULL;if(length>=0 && length<=2*1024*1024 && total+(gsize)length<=32u*1024u*1024u) {text=sci_get_contents(doc->editor->sci,length+1);if(memchr(text,0,(gsize)length) || !g_utf8_validate(text,length,NULL)) g_clear_pointer(&text,g_free);else total+=(gsize)length;}g_hash_table_replace(j->buffers,g_strdup(doc->file_name),text);}
  graph_clear(&r->calls);g_clear_pointer(&r->call_result,insight_call_paths_free);r->setting_endpoint=TRUE;gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(r->call_variants));r->setting_endpoint=FALSE;gtk_combo_box_set_active(GTK_COMBO_BOX(r->mode),2);update(r);note(r,"Searching call paths in the indexed project…");r->call_cancel=g_cancellable_new();g_object_set_data(G_OBJECT(r->root),"insight-call-search-running",GINT_TO_POINTER(1));GTask *task=g_task_new(r->root,r->call_cancel,call_job_done,NULL);g_task_set_task_data(task,j,call_job_free);g_task_run_in_thread(task,call_job_run);g_object_unref(task);

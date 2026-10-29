@@ -133,7 +133,7 @@ typedef struct {
  GtkTreeModelFilter *relation_filter;
  GtkWidget *relation_options,*relation_routes,*relation_tree,*relation_tree_toggle,*relation_back,*relation_forward,*relation_stack,*relation_graph_toggle,*relation_graph,*relation_tree_graph;GPtrArray *relation_history,*relation_future;
  gchar *relation_word; gint relation_last_mode; gboolean relation_dirty,relation_setting,reference_setting;InsightSourceRegion usage_region;
- gint usage_mode; guint usage_flags;
+ gint usage_mode; guint usage_flags;gchar *usage_usr;
  GtkWidget *local_stack,*local_mode,*native_symbol_query;
  GtkWidget *editor_history_combo;
  GtkWidget *editor_wrap,*editor_select,*editor_incremental,*editor_load_word;gboolean editor_setting;
@@ -698,7 +698,7 @@ static gboolean database_identity(const gchar *root) {
  g_free(identity);g_free(policy);return changed;
 }
 static gchar *source_stamp(const gchar *native,const gchar *language,gint encoding) {
- gchar *stamp=insight_project_db_stamp(native,FALSE);if(!stamp) return NULL;gchar *value=g_strdup_printf("%s:%d:%s:clang%d",language?language:"",encoding,stamp,insight_clang_available());g_free(stamp);return value;
+ gchar *stamp=insight_project_db_stamp(native,FALSE);if(!stamp) return NULL;gchar *value=g_strdup_printf("%s:%d:%s:clang%d-v2",language?language:"",encoding,stamp,insight_clang_available());g_free(stamp);return value;
 }
 static void restore_project_database(const gchar *root) {
  InsightProjectDb db={0};GError *error=NULL;
@@ -781,7 +781,7 @@ static void index_job_run(GTask *task,gpointer source,gpointer data,GCancellable
    gboolean semantic=FALSE;
    if(!j->failed && insight_clang_available() && insight_clang_source(j->utf8) && !g_cancellable_is_cancelled(cancel)) {
     InsightClangResult *parsed=insight_clang_parse(j->utf8,text,j->compile_root,j->clang_resources,NULL,cancel,NULL);
-    if(parsed && !parsed->errors && !parsed->limited) semantic=insight_clang_import(parsed,j->utf8,j->index,j->calls);
+    if(parsed && !parsed->errors && !parsed->limited) {semantic=insight_clang_import(parsed,j->utf8,j->index,j->calls);if(semantic) {TMSourceFile *tags=insight_native_clang_tags(parsed,j->path,j->language,j->lang);if(tags) {outline_free(j->declarations);j->declarations=outline_capture(tags,j->utf8);if(!insight_native_outline_import(j->outline,tags,j->utf8)) j->failed=TRUE;for(guint n=0;n<tags->tags_array->len;n++) ((TMTag *)g_ptr_array_index(tags->tags_array,n))->file=NULL;tm_source_file_free(tags);}}}
     insight_clang_result_free(parsed);
    }
    InsightCodeDialect dialect;
@@ -963,8 +963,15 @@ static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word,
  }
  if(uncertain_scope) { valid_word=FALSE; }g_free(mask);g_free(reference);
  size_t count=valid_word ? (imported ? import_count : member ? insight_member_query(wb.index,owner,word,preferred,scope_language_eligible,&language,found,256,NULL,NULL) : insight_index_find(wb.index,word,TRUE,found,256)) : 0; gint selected=0;
+ gboolean compiler_choice=FALSE;InsightClangResult *semantic=reference_sci ? insight_clang_ui_result(reference_sci):NULL;
+ if(semantic && !semantic->errors && !semantic->limited && word && *word) {gchar *usr=insight_clang_symbol_at(semantic->relations,preferred,(guint)MAX(0,reference_position),(guint)reference_line,word);const InsightSymbol *definition=NULL;
+  if(usr) {gsize n=insight_index_query(semantic->relations,usr,TRUE,NULL,"@clangdef",preferred,0,&definition,1);if(n!=1) {n=insight_index_query(wb.disk_calls,usr,TRUE,NULL,"@clangdef",NULL,0,&definition,1);if(n!=1) definition=NULL;}}
+  if(definition) {const InsightSymbol *candidates[256];gsize n=insight_index_find(wb.index,word,TRUE,candidates,256);for(gsize i=0;i<MIN(n,256u);i++) if(candidates[i]->line==definition->line && !strcmp(candidates[i]->path,definition->path)) {found[0]=candidates[i];count=1;compiler_choice=TRUE;break;}}
+  g_free(usr);
+ }
+
  for(size_t i=0;i<count && i<256;i++) {
-  const InsightSymbol *tag=found[i]; if(!definition_language(preferred,reference_type,tag->path)) continue; if((python && !member && !imported ? insight_native_python_rank(wb.index,tag,preferred,scope,reference_line) : insight_native_definition_rank_at(tag,preferred,scope,reference_line))<0) continue; gboolean duplicate=FALSE;
+  const InsightSymbol *tag=found[i]; if(!definition_language(preferred,reference_type,tag->path)) continue; if(!compiler_choice && (python && !member && !imported ? insight_native_python_rank(wb.index,tag,preferred,scope,reference_line) : insight_native_definition_rank_at(tag,preferred,scope,reference_line))<0) continue; gboolean duplicate=FALSE;
   for(guint j=0;j<wb.definitions->len;j++) { Location *old=g_ptr_array_index(wb.definitions,j); if(old->line==tag->line && !g_strcmp0(old->path,tag->path)) { duplicate=TRUE; break; } }
   if(duplicate) continue;
   Location *location=g_new0(Location,1); location->path=g_strdup(tag->path); location->line=tag->line;
@@ -1445,7 +1452,7 @@ static void stop_usage(void) {
  wb.usage_generation++; if(wb.search_worker) { g_cancellable_cancel(wb.search_worker); g_clear_object(&wb.search_worker); }
  if(wb.usage_idle) { g_source_remove(wb.usage_idle); wb.usage_idle=0; }
  if(wb.usage_paths) g_ptr_array_set_size(wb.usage_paths,0);
- g_clear_pointer(&wb.usage_name,g_free);
+ g_clear_pointer(&wb.usage_name,g_free);g_clear_pointer(&wb.usage_usr,g_free);
 }
 static void invalidate_search_context(void) {
  gboolean active=wb.usage_idle || wb.search_worker; stop_usage();
@@ -1516,11 +1523,21 @@ static InsightSourceRegion reference_region(void) {
  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_code))) return INSIGHT_REGION_CODE;
  gint mode=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.usage_comments));return mode==1 ? INSIGHT_REGION_SKIP_COMMENTS : mode==2 ? INSIGHT_REGION_COMMENTS : INSIGHT_REGION_ALL;
 }
-typedef struct { gchar *path,*query,*text,*digest,*cached_stamp,*cached_language;InsightIndex *cached_calls; InsightOccurrence *found; GPtrArray *snippets; gulong *columns; gsize total,apply_position; guint id,flags,context,capacity; gint mode,encoding; InsightCodeDialect dialect; gboolean keywords,have_dialect,valid;InsightSourceRegion region; guint64 generation,epoch; } SearchJob;
+typedef struct { gchar *path,*query,*text,*digest,*cached_stamp,*cached_language,*clang_root,*clang_resources,*usr;InsightIndex *cached_calls; InsightOccurrence *found; GPtrArray *snippets; gulong *columns; gsize total,apply_position; guint id,flags,context,capacity; gint mode,encoding; InsightCodeDialect dialect; gboolean keywords,have_dialect,valid,partial;InsightSourceRegion region; guint64 generation,epoch; } SearchJob;
 static gboolean usage_step(gpointer);
-static void search_job_free(gpointer data) { SearchJob *j=data; g_free(j->path); g_free(j->query); g_free(j->text); g_free(j->digest);g_free(j->cached_stamp);g_free(j->cached_language);retire_index(j->cached_calls); g_free(j->found); g_clear_pointer(&j->snippets,g_ptr_array_unref); g_free(j->columns); g_free(j); }
+static void search_job_free(gpointer data) { SearchJob *j=data; g_free(j->path); g_free(j->query); g_free(j->text); g_free(j->digest);g_free(j->cached_stamp);g_free(j->cached_language);g_free(j->clang_root);g_free(j->clang_resources);g_free(j->usr);retire_index(j->cached_calls); g_free(j->found); g_clear_pointer(&j->snippets,g_ptr_array_unref); g_free(j->columns); g_free(j); }
+static void clang_search_result(SearchJob *j,InsightIndex *relations,const gchar *digest) {
+ gsize total=insight_index_query(relations,j->query,TRUE,NULL,"@clangref",j->path,0,NULL,0);if(total>100000) return;const InsightSymbol **rows=g_new(const InsightSymbol *,total);insight_index_query(relations,j->query,TRUE,NULL,"@clangref",j->path,0,rows,total);
+ j->digest=g_strdup(digest);j->found=g_new0(InsightOccurrence,j->capacity);j->columns=g_new0(gulong,j->capacity);j->snippets=g_ptr_array_new_with_free_func(g_free);j->valid=TRUE;
+ for(gsize i=0;i<total;i++) {if(j->usr && strcmp(j->usr,rows[i]->scope)) continue;gsize n=j->total++;if(n>=j->capacity) continue;gchar **parts=g_strsplit(rows[i]->signature,":",3);if(g_strv_length(parts)!=3) j->valid=FALSE;else {j->found[n]=(InsightOccurrence){g_ascii_strtoull(parts[0],NULL,10),g_ascii_strtoull(parts[1],NULL,10),rows[i]->line,0};j->columns[n]=g_ascii_strtoull(parts[2],NULL,10);g_ptr_array_add(j->snippets,g_strdup(rows[i]->type));}g_strfreev(parts);}g_free(rows);
+}
 static void search_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
  (void)source; SearchJob *j=data;
+ if(j->mode==8 && j->cached_calls && !j->text) {
+  gchar *native=utils_get_locale_from_utf8(j->path),*now=source_stamp(native,j->cached_language,j->encoding);g_free(native);const InsightSymbol *coverage=NULL;
+  gboolean usable=!g_strcmp0(now,j->cached_stamp) && insight_index_query(j->cached_calls,"@clangfile",TRUE,NULL,"@clangfile",j->path,0,&coverage,1)==1 && !strcmp(coverage->type,"complete") && insight_clang_dependencies_fresh(j->cached_calls,j->path);g_free(now);
+  if(usable) {clang_search_result(j,j->cached_calls,coverage->inheritance);g_task_return_boolean(task,TRUE);return;}
+ }
  if(j->mode==7&&!j->text&&j->cached_calls&&j->cached_stamp) {
   gchar *native=utils_get_locale_from_utf8(j->path);gchar *now=source_stamp(native,j->cached_language,j->encoding);g_free(native);
   const InsightSymbol *coverage=NULL;gboolean usable=!g_strcmp0(now,j->cached_stamp)&&insight_index_query(j->cached_calls,"@file",TRUE,NULL,"@file",j->path,0,&coverage,1)==1;g_free(now);
@@ -1530,6 +1547,7 @@ static void search_job_run(GTask *task,gpointer source,gpointer data,GCancellabl
   }
  }
  if(!j->text && j->path && !g_cancellable_is_cancelled(cancel)) j->text=read_disk_source_full(j->path,TRUE,j->encoding,cancel);
+ if(j->mode==8) {if(j->text && insight_clang_source(j->path)) {InsightClangResult *r=insight_clang_parse(j->path,j->text,j->clang_root,j->clang_resources,NULL,cancel,NULL);if(r && !r->limited) {clang_search_result(j,r->relations,r->digest);j->partial=r->errors;}insight_clang_result_free(r);}g_task_return_boolean(task,TRUE);return;}
  char *mask=j->text && j->region!=INSIGHT_REGION_ALL && j->have_dialect ? insight_source_region_mask(j->text,strlen(j->text),j->dialect,j->region,NULL) : NULL;
  const char *text=j->region!=INSIGHT_REGION_ALL ? mask : j->text; j->found=g_new(InsightOccurrence,j->capacity);
  if(text && !g_cancellable_is_cancelled(cancel)) {
@@ -1588,6 +1606,7 @@ static void search_job_done(GObject *source,GAsyncResult *result,gpointer data) 
  (void)source; (void)data; GTask *task=G_TASK(result); SearchJob *j=g_task_get_task_data(task); gboolean ok=g_task_propagate_boolean(task,NULL);
  if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.usage_generation) return;
  g_clear_object(&wb.search_worker);
+ if(j->partial) wb.usage_skipped++;
  if(ok && j->valid) wb.usage_idle=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,search_results_apply,g_object_ref(task),g_object_unref);
  else { wb.usage_skipped++; wb.usage_idle=g_idle_add(usage_step,NULL); }
 }
@@ -1611,12 +1630,12 @@ static gboolean usage_step(gpointer data) {
    g_hash_table_iter_remove(&pending);
   }
   g_clear_pointer(&wb.usage_existing,g_hash_table_destroy);
-  wb.usage_idle=0; gchar *label=g_strdup_printf("%u results • %u files scanned • %u skipped%s",wb.usage_shown,wb.usage_position,wb.usage_skipped,wb.usage_shown>=2000 ? " • result limit reached" : ""); set_usage_status(label); g_free(label); return G_SOURCE_REMOVE;
+  wb.usage_idle=0; gchar *label=g_strdup_printf("%u results • %u files scanned • %u skipped%s",wb.usage_shown,wb.usage_position,wb.usage_skipped,wb.usage_shown>=2000 ? " • result limit reached" : "");if(wb.usage_mode==8) {gchar *semantic=g_strconcat(insight_tr(wb.usage_usr ? "Clang symbol identity:":"Clang references by name:")," ",label,NULL);g_free(label);label=semantic;} set_usage_status(label); g_free(label); return G_SOURCE_REMOVE;
  }
  Location *location=g_ptr_array_index(wb.usage_paths,wb.usage_position++); GeanyDocument *doc=location->id ? document_find_by_id(location->id) : document_find_by_filename(location->path);
- SearchJob *j=g_new0(SearchJob,1); j->path=g_strdup(location->path); j->query=g_strdup(wb.usage_name); j->id=doc ? doc->id : 0; j->mode=wb.usage_mode; j->flags=wb.usage_flags; j->keywords=wb.usage_keywords; j->context=wb.usage_context; j->capacity=2000-wb.usage_shown; j->encoding=file_prefs.default_open_encoding; j->generation=wb.usage_generation; j->epoch=workbench_epoch;
+ SearchJob *j=g_new0(SearchJob,1);j->usr=g_strdup(wb.usage_usr);j->clang_root=wb.root ? utils_get_utf8_from_locale(wb.root):NULL;j->clang_resources=g_build_filename(app->datadir,"insight","clang","resources",NULL); j->path=g_strdup(location->path); j->query=g_strdup(wb.usage_name); j->id=doc ? doc->id : 0; j->mode=wb.usage_mode; j->flags=wb.usage_flags; j->keywords=wb.usage_keywords; j->context=wb.usage_context; j->capacity=2000-wb.usage_shown; j->encoding=file_prefs.default_open_encoding; j->generation=wb.usage_generation; j->epoch=workbench_epoch;
  if(doc) { gint length=sci_get_length(doc->editor->sci); if(length>=0 && length<=2*1024*1024) { j->text=sci_get_contents(doc->editor->sci,length+1); if(j->text && (!g_utf8_validate(j->text,length,NULL) || memchr(j->text,0,length))) g_clear_pointer(&j->text,g_free); } }
- if(j->mode==7&&!doc&&j->path) { j->cached_calls=insight_index_ref(wb.disk_calls);j->cached_stamp=g_strdup(g_hash_table_lookup(wb.file_stamps,j->path)); }
+ if((j->mode==7||j->mode==8)&&!doc&&j->path) { j->cached_calls=insight_index_ref(wb.disk_calls);j->cached_stamp=g_strdup(g_hash_table_lookup(wb.file_stamps,j->path)); }
  j->region=j->mode==7 ? INSIGHT_REGION_CODE : j->mode==0 ? wb.usage_region : j->mode==3 ? wb.project_region : INSIGHT_REGION_ALL; GeanyFiletype *ft=doc ? doc->file_type : (j->path ? filetypes_detect_from_extension(j->path) : NULL); if(j->cached_stamp&&(!ft||ft->id==GEANY_FILETYPES_NONE)) { const gchar *colon=strchr(j->cached_stamp,':');if(colon) { gchar *language=g_strndup(j->cached_stamp,colon-j->cached_stamp);GeanyFiletype *cached=filetypes_lookup_by_name(language);if(cached) ft=cached;g_free(language); } }j->have_dialect=source_dialect(ft,&j->dialect);j->cached_language=g_strdup(ft?ft->name:NULL);
  wb.search_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.search_worker,search_job_done,NULL); g_task_set_task_data(task,j,search_job_free); g_task_run_in_thread(task,search_job_run); g_object_unref(task); wb.usage_idle=0; return G_SOURCE_REMOVE;
 }
@@ -1712,6 +1731,8 @@ static void usage_start(GtkWidget *widget,gpointer data) {
  const char *query=gtk_entry_get_text(GTK_ENTRY(wb.usage_entry)); size_t total;
  gint mode=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode)); wb.usage_mode=mode;
  wb.usage_target=mode==3 ? wb.search_matches : wb.matches;
+ if(mode==8) {if(!insight_clang_available()) {set_usage_status("This build has no bundled Clang backend");return;}GeanyDocument *doc=document_get_current();InsightClangResult *semantic=DOC_VALID(doc) ? insight_clang_ui_result(doc->editor->sci):NULL;if(semantic) wb.usage_usr=insight_clang_symbol_at(semantic->relations,doc->file_name,(guint)sci_get_current_position(doc->editor->sci),(guint)sci_get_current_line(doc->editor->sci)+1,query);}
+
  if(mode==6) { relation_calls(query);return; }
  if(mode==1 || mode==2 || mode==4 || mode==5) {
   refresh_index(); RelationJob *j=g_new0(RelationJob,1); j->index=insight_index_ref(wb.index); j->query=g_strdup(query); j->mode=mode; j->transitive=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_transitive)); j->epoch=workbench_epoch; j->generation=wb.usage_generation; j->index_version=wb.index_version;GeanyDocument *active=document_get_current();if(active) j->language=insight_language_filter_new(active->file_name,active->file_type);
@@ -1776,7 +1797,7 @@ static void relation_controls(GtkWidget *widget,gpointer data) {
  gtk_widget_set_sensitive(wb.relation_transitive,relation==2 || relation==4 || relation==5);
  relation_view_update();
  gboolean references=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode))==0;
- gtk_widget_set_sensitive(wb.usage_code,references);gtk_widget_set_sensitive(wb.usage_comments,references); gtk_widget_set_sensitive(wb.usage_buffer,references || gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode))==3 || gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode))==7);
+ gtk_widget_set_sensitive(wb.usage_code,references);gtk_widget_set_sensitive(wb.usage_comments,references); gtk_widget_set_sensitive(wb.usage_buffer,references || gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode))==3 || gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode))==7 || gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode))==8);
  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_follow))) insight_workbench_refresh();
  else if(*gtk_entry_get_text(GTK_ENTRY(wb.usage_entry))) usage_start(NULL,NULL);
  else { gtk_list_store_clear(wb.matches); set_usage_status("Enter a symbol for Relations"); }
@@ -2039,7 +2060,7 @@ static void create_usage_browser(void) {
  wb.relation_enclosing=gtk_check_button_new_with_label("Track enclosing function");
  wb.relation_transitive=gtk_check_button_new_with_label("Include indirect inheritance (tags)");gtk_widget_set_name(wb.relation_transitive,"insight-relation-transitive");gtk_widget_set_sensitive(wb.relation_transitive,FALSE);
  wb.relation_mode=gtk_combo_box_text_new(); gtk_widget_set_name(wb.relation_mode,"insight-relation-mode");
- const char *modes[]={"References (lexical)","Definitions / declarations","Direct members (tags)","Text search (project)","Base types (tags)","Derived types (tags)","Calls (current function, lexical)","Call sites (project, lexical)"};
+ const char *modes[]={"References (lexical)","Definitions / declarations","Direct members (tags)","Text search (project)","Base types (tags)","Derived types (tags)","Calls (current function, lexical)","Call sites (project, lexical)","References (Clang C/C++)"};
  for(guint i=0;i<G_N_ELEMENTS(modes);i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.relation_mode),modes[i]);
  gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),0);
  GtkWidget *search=gtk_button_new_with_label("Search"),*cancel=gtk_button_new_with_label("Stop");
@@ -5488,6 +5509,7 @@ static void project_synchronize(GtkMenuItem *item,gpointer data) {
 static void navigate_relations(GtkMenuItem *item,gpointer data) {
  (void)item;GeanyDocument *doc=document_get_current();if(!doc) {ui_set_statusbar(TRUE,"%s",insight_tr("Open a source file first"));return;}
  gchar word[1025]={0};editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);if(!*word) {ui_set_statusbar(TRUE,"%s",insight_tr("Place the caret on a symbol first"));return;}
+ gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"list");relation_stack_changed(G_OBJECT(wb.relation_stack),NULL,NULL);
  wb.relation_setting=TRUE;gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_follow),FALSE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.usage_buffer),FALSE);gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),GPOINTER_TO_INT(data));gtk_entry_set_text(GTK_ENTRY(wb.usage_entry),word);gtk_entry_set_text(GTK_ENTRY(wb.relation_filter_entry),"");wb.relation_setting=FALSE;relation_controls(NULL,NULL);focus_widget_panel(wb.usage_entry);
 }
 /* Move original command widgets, preserving actions, native shared submenus,
@@ -5509,7 +5531,7 @@ static void editor_menu_group(GtkWidget *root,gpointer unused) {
   GtkAction *action=GTK_IS_ACTIVATABLE(item) ? gtk_activatable_get_related_action(GTK_ACTIVATABLE(item)):NULL;const gchar *action_name=action ? gtk_action_get_name(action):NULL;
   if(!g_strcmp0(action_name,"NavBack") || !g_strcmp0(action_name,"NavFor")) {guint side=!strcmp(action_name,"NavFor");history[side]=item;gtk_widget_set_name(item,side ? "insight-editor-forward":"insight-editor-back");continue;}
   const gchar *label=gtk_menu_item_get_label(GTK_MENU_ITEM(item)),*id=GTK_IS_BUILDABLE(item) ? gtk_buildable_get_name(GTK_BUILDABLE(item)):NULL;gchar *english=g_ascii_strdown(insight_i18n_english(label ? label:""),-1);const gchar *name=gtk_widget_get_name(item);gint group=-1;
-  if(!g_strcmp0(id,"search2") || !g_strcmp0(id,"find_usage2") || !g_strcmp0(id,"find_document_usage2") || strstr(english,"search") || strstr(english,"find") || strstr(english,"replace") || strstr(english,"look up selection") || strstr(name,"word-highlights")) group=0;
+  if(!g_strcmp0(id,"search2") || !g_strcmp0(id,"find_usage2") || !g_strcmp0(id,"find_document_usage2") || strstr(english,"search") || strstr(english,"find") || strstr(english,"replace") || strstr(english,"references") || strstr(english,"usage") || strstr(english,"look up selection") || strstr(name,"word-highlights")) group=0;
   else if(!g_strcmp0(id,"goto_tag_definition2") || strstr(english,"jump") || strstr(english,"call path") || strstr(english,"source route") || strstr(english,"go to")) group=5;
   else if(!g_strcmp0(id,"commands1") || !g_strcmp0(id,"menu_format2") || !g_strcmp0(id,"insert1") || strstr(english,"symbol") || strstr(english,"revision") || strstr(english,"backup")) group=1;
   else if(!g_strcmp0(id,"menu_open_selected_file2") || strstr(english,"file manager") || strstr(english,"file type") || strstr(english,"file language")) group=2;
@@ -5533,11 +5555,12 @@ static void create_workbench_menus(void) {
  GtkWidget *menubar=ui_lookup_widget(main_widgets.window,"menubar1"),*navigate=gtk_menu_item_new_with_mnemonic("_Navigate"),*menu=gtk_menu_new();
  gtk_menu_item_set_submenu(GTK_MENU_ITEM(navigate),menu); gtk_menu_shell_insert(GTK_MENU_SHELL(menubar),navigate,4);
  g_object_set_data(G_OBJECT(main_widgets.window),"insight-navigate",navigate);
- insight_clang_ui_init(menu);
+ GtkWidget *clang_menu=insight_clang_ui_init(menu);
  append_call_paths_menu(menu,"insight-call-menu");append_call_paths_menu(main_widgets.editor_menu,"insight-call-popup");
  const gchar *route_labels[]={"Source routes / flow","Add caret to source routes"};for(guint i=0;i<2;i++) {GtkWidget *entry=gtk_menu_item_new_with_label(route_labels[i]);gtk_widget_set_name(entry,i ? "insight-route-capture-command":"insight-route-show-command");gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry);g_signal_connect(entry,"activate",G_CALLBACK(source_routes_show),GUINT_TO_POINTER(i));gtk_widget_show(entry);}
  GtkWidget *capture_route=gtk_menu_item_new_with_label("Add caret to source routes");gtk_widget_set_name(capture_route,"insight-route-capture-popup");gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.editor_menu),capture_route);g_signal_connect(capture_route,"activate",G_CALLBACK(source_routes_show),GINT_TO_POINTER(1));gtk_widget_show(capture_route);
- const gchar *relation_navigation[]={"Jump To Caller…","Lookup References…","Direct members (tags)","Derived types (tags)"};const gint relation_modes[]={7,0,2,5};for(guint n=0;n<G_N_ELEMENTS(relation_modes);n++) {GtkWidget *entry=gtk_menu_item_new_with_label(relation_navigation[n]);gchar *id=g_strdup_printf("insight-navigate-relation-%d",relation_modes[n]);gtk_widget_set_name(entry,id);g_free(id);g_signal_connect(entry,"activate",G_CALLBACK(navigate_relations),GINT_TO_POINTER(relation_modes[n]));gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry);}
+ GtkWidget *clang_popup=gtk_menu_item_new_with_label(insight_tr("Clang references…"));gtk_widget_set_name(clang_popup,"insight-clang-references-popup");insight_i18n_key(G_OBJECT(clang_popup),"label","Clang references…");gtk_widget_set_sensitive(clang_popup,insight_clang_available());g_signal_connect(clang_popup,"activate",G_CALLBACK(navigate_relations),GINT_TO_POINTER(8));gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.editor_menu),clang_popup);gtk_widget_show(clang_popup);
+ const gchar *relation_navigation[]={"Jump To Caller…","Lookup References…","Direct members (tags)","Derived types (tags)","Clang references…"};const gint relation_modes[]={7,0,2,5,8};for(guint n=0;n<G_N_ELEMENTS(relation_modes);n++) {GtkWidget *entry=gtk_menu_item_new_with_label(relation_navigation[n]);gchar *id=g_strdup_printf("insight-navigate-relation-%d",relation_modes[n]);gtk_widget_set_name(entry,id);g_free(id);g_signal_connect(entry,"activate",G_CALLBACK(navigate_relations),GINT_TO_POINTER(relation_modes[n]));gtk_menu_shell_append(GTK_MENU_SHELL(relation_modes[n]==8 ? clang_menu:menu),entry);}
  GtkWidget *navigation_help=gtk_menu_item_new_with_label("Navigation Help…");g_signal_connect(navigation_help,"activate",G_CALLBACK(insight_help_show),"navigation.md");gtk_menu_shell_append(GTK_MENU_SHELL(menu),navigation_help);
 
  const gchar *history_labels[]={"Navigate back a location","Navigate forward a location"};for(guint i=0;i<2;i++) {GtkWidget *entry=gtk_action_create_menu_item(toolbar_get_action_by_name(i ? "NavFor":"NavBack"));gtk_menu_item_set_label(GTK_MENU_ITEM(entry),history_labels[i]);gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry);GtkWidget *popup=gtk_action_create_menu_item(toolbar_get_action_by_name(i ? "NavFor":"NavBack"));gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.editor_menu),popup); }
@@ -6207,7 +6230,7 @@ static InsightReportSnapshot *capture_project_report(GError **error)
   g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_BUSY,"Project indexing is not ready. Wait for a completed scan before generating a report.");return NULL;
  }
  gchar *root=utils_get_utf8_from_locale(wb.root);
- InsightReportSnapshot *snapshot=insight_report_snapshot_new(app->project->name,root,app->project->file_name,wb.files,wb.index,wb.skipped,wb.files->len>=10000 || wb.skipped>0 || wb.watch_incomplete,error);g_free(root);return snapshot;
+ InsightReportSnapshot *snapshot=insight_report_snapshot_new(app->project->name,root,app->project->file_name,wb.files,wb.index,wb.skipped,wb.files->len>=10000 || wb.skipped>0 || wb.watch_incomplete,error);if(snapshot) snapshot->calls=insight_index_ref(wb.disk_calls);g_free(root);return snapshot;
 }
 /* GtkPaned shifts an undersized first child left to preserve its minimum.
  * A width-constrained host keeps the source workspace at x=0 and forwards the

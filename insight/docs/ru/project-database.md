@@ -30,3 +30,12 @@
 Расположение соответствует [организации источников и результата в KDiff3](https://docs.kde.org/stable_kf6/en/kdiff3/kdiff3/merging.html). Это сравнение двух источников; новый трёхсторонний merge здесь не добавлялся. Снимок получен из изолированного теста рабочего GTK-окна, а не со всего рабочего стола.
 
 См. также [Файлы проекта](panel-project-files.md), [Diff/Merge](internal-diff.md) и [связи](relations-calls.md).
+
+## Clang relation storage
+
+Clang-enabled builds persist compiler identities, reference/call positions,
+function body locations and include/configuration dependencies in the relation
+index. Header and compilation-database changes invalidate dependent C/C++ files.
+The bounded binary format remains compatible with older saved snapshots; current
+writers allow 1 million records / 256 MiB per index and 768 MiB for the full
+project database. Unsaved semantic overlays remain in memory. See [Clang](clang.md).

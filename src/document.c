@@ -35,6 +35,8 @@
 #include "dialogs.h"
 #include "documentprivate.h"
 #include "insight-workbench.h"
+#include "insight-clang.h"
+#include "insight-index.h"
 #include "insight-overview.h"
 #include "encodings.h"
 #include "encodingsprivate.h"
@@ -2678,7 +2680,10 @@ void document_update_tags(GeanyDocument *doc)
 	 * Note: this buffer *MUST NOT* be modified */
 	len = sci_get_length(doc->editor->sci);
 	buffer_ptr = (guchar *) SSM(doc->editor->sci, SCI_GETCHARACTERPOINTER, 0, 0);
-	tm_workspace_update_source_file_buffer(doc->tm_file, buffer_ptr, len);
+	InsightClangResult *semantic=insight_clang_ui_result(doc->editor->sci);
+	TMSourceFile *parsed=semantic ? insight_native_clang_tags(semantic,doc->tm_file->file_name,tm_source_file_get_lang_name(doc->tm_file->lang),doc->tm_file->lang):NULL;
+	if(parsed) {tm_workspace_publish_source_file_tags(doc->tm_file,parsed);tm_source_file_free(parsed);}
+	else tm_workspace_update_source_file_buffer(doc->tm_file, buffer_ptr, len);
 	doc->priv->tag_snapshot_generation=doc->priv->tag_parse_generation;
 
 	sidebar_update_tag_list(doc, TRUE);
@@ -2745,13 +2750,14 @@ void document_highlight_tags(GeanyDocument *doc)
 }
 
 
-typedef struct { TMSourceFile *parsed; gchar *path,*language; guchar *text; gsize length; TMParserType lang; guint document; guint64 generation,epoch; } DocumentTagsJob;
-static void document_tags_job_free(gpointer data) { DocumentTagsJob *j=data; tm_source_file_free(j->parsed); g_free(j->path); g_free(j->language); g_free(j->text); g_free(j); }
+typedef struct { TMSourceFile *parsed;InsightIndex *clang_symbols;GHashTable *clang_attributes; gchar *path,*language; guchar *text; gsize length; TMParserType lang; guint document; guint64 generation,epoch; } DocumentTagsJob;
+static void document_tags_job_free(gpointer data) { DocumentTagsJob *j=data; tm_source_file_free(j->parsed);insight_index_free(j->clang_symbols);if(j->clang_attributes) g_hash_table_unref(j->clang_attributes); g_free(j->path); g_free(j->language); g_free(j->text); g_free(j); }
 static void document_tags_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
  (void)source; DocumentTagsJob *j=data;
  if(!g_cancellable_is_cancelled(cancel)) {
-  j->parsed=tm_source_file_new(j->path,j->language);
-  if(j->parsed) { j->parsed->lang=j->lang; tm_source_file_parse(j->parsed,j->text,j->length,TRUE); tm_workspace_prepare_source_file_tags(j->parsed); }
+  if(j->clang_symbols) {InsightClangResult captured={.symbols=j->clang_symbols,.attributes=j->clang_attributes};j->parsed=insight_native_clang_tags(&captured,j->path,j->language,j->lang);}
+  else j->parsed=tm_source_file_new(j->path,j->language);
+  if(j->parsed && !j->clang_symbols) { j->parsed->lang=j->lang; tm_source_file_parse(j->parsed,j->text,j->length,TRUE); tm_workspace_prepare_source_file_tags(j->parsed); }
  }
  g_task_return_boolean(task,j->parsed!=NULL);
 }
@@ -2762,6 +2768,7 @@ static void document_tags_job_done(GObject *source,GAsyncResult *result,gpointer
  if(!DOC_VALID(doc) || !doc->priv || j->generation!=doc->priv->tag_parse_generation) return;
  g_clear_object(&doc->priv->tag_parse_cancel);
  if(!ok || !doc->tm_file || doc->tm_file->lang!=j->lang || g_strcmp0(doc->tm_file->file_name,j->path)) return;
+ if(j->clang_symbols) {InsightClangResult *current=insight_clang_ui_result(doc->editor->sci);if(!current || current->symbols!=j->clang_symbols) return;}
  tm_workspace_publish_source_file_tags(doc->tm_file,j->parsed);
  doc->priv->tag_snapshot_generation=doc->priv->tag_parse_generation;
  sidebar_update_tag_list(doc,TRUE); insight_overview_tags_changed(doc); document_highlight_tags(doc); insight_workbench_index_changed();
@@ -2772,9 +2779,11 @@ static void document_update_tags_async(GeanyDocument *doc) {
  document_ensure_tag_source(doc);
  if(!doc->tm_file) { document_update_tags(doc); return; }
  document_tags_cancel(doc); DocumentTagsJob *j=g_new0(DocumentTagsJob,1); j->document=doc->id; j->generation=doc->priv->tag_parse_generation; j->epoch=document_tags_epoch; j->lang=doc->tm_file->lang; j->path=g_strdup(doc->tm_file->file_name); j->language=g_strdup(tm_source_file_get_lang_name(j->lang));
+ InsightClangResult *semantic=insight_clang_ui_result(doc->editor->sci);if(semantic && !semantic->errors && !semantic->limited) {j->clang_symbols=insight_index_ref(semantic->symbols);if(semantic->attributes) j->clang_attributes=g_hash_table_ref(semantic->attributes);}
  j->length=sci_get_length(doc->editor->sci); j->text=g_malloc(j->length+1); if(j->length) memcpy(j->text,(const void *)SSM(doc->editor->sci,SCI_GETCHARACTERPOINTER,0,0),j->length); j->text[j->length]=0;
  doc->priv->tag_parse_cancel=g_cancellable_new(); GTask *task=g_task_new(NULL,doc->priv->tag_parse_cancel,document_tags_job_done,NULL); g_task_set_task_data(task,j,document_tags_job_free); g_task_run_in_thread(task,document_tags_job_run); g_object_unref(task);
 }
+void document_update_semantic_tags(GeanyDocument *doc) {document_update_tags_async(doc);}
 static gboolean on_document_update_tag_list_idle(gpointer data)
 {
 	GeanyDocument *doc = data;

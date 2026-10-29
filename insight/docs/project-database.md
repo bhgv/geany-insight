@@ -30,3 +30,12 @@ The read-only Left and Right sources share the top row. The editable Result span
 The layout follows [KDiff3's source/merge arrangement](https://docs.kde.org/stable_kf6/en/kdiff3/kdiff3/merging.html). It is a two-source comparison, not a newly implemented three-way merge. The screenshot is an isolated fixture using the production GTK window, not a whole-desktop capture.
 
 See also [Project Files](panel-project-files.md), [Internal Diff/Merge](internal-diff.md) and [relationships](relations-calls.md).
+
+## Clang relation storage
+
+Clang-enabled builds persist compiler identities, reference/call positions,
+function body locations and include/configuration dependencies in the relation
+index. Header and compilation-database changes invalidate dependent C/C++ files.
+The bounded binary format remains compatible with older saved snapshots; current
+writers allow 1 million records / 256 MiB per index and 768 MiB for the full
+project database. Unsaved semantic overlays remain in memory. See [Clang](clang.md).

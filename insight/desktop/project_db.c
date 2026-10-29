@@ -2,7 +2,7 @@
 #include "project_db.h"
 #include <string.h>
 #include <stdlib.h>
-#define LIMIT (192u*1024u*1024u)
+#define LIMIT (768u*1024u*1024u)
 #define TYPE "(usssayayaya(ss)a(ss))"
 static gboolean invalid(GError **e) { g_set_error_literal(e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid, incompatible or damaged project database.");return FALSE; }
 void insight_project_db_clear(InsightProjectDb *db) { g_free(db->policy);insight_index_free(db->symbols);insight_index_free(db->declarations);insight_index_free(db->calls);g_clear_pointer(&db->files,g_hash_table_unref);g_clear_pointer(&db->directories,g_hash_table_unref);memset(db,0,sizeof(*db)); }

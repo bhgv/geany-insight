@@ -10,7 +10,7 @@ typedef struct {
     gint refs;
     gchar *project,*root,*project_file;
     GPtrArray *paths;
-    InsightIndex *index;
+    InsightIndex *index,*calls;
     guint skipped;
     gboolean incomplete;
 } InsightReportSnapshot;

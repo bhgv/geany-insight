@@ -2,12 +2,14 @@
 #ifndef GEANY_INSIGHT_INDEX_H
 #define GEANY_INSIGHT_INDEX_H
 #include <glib.h>
+#include "../insight/desktop/clang_backend.h"
 #include "tagmanager/tm_source_file.h"
 #include "tagmanager/tm_tag.h"
 #include "../insight/core/index.h"
 #include "../insight/desktop/type_resolve.h"
 /* Copy native tag data into the owning UTF-8 index. NULL/empty tags clear path.
  * Reject >250k total symbols without changing the previous file snapshot. */
+TMSourceFile *insight_native_clang_tags(const InsightClangResult *,const gchar *native_path,const gchar *language,TMParserType lang);
 gboolean insight_native_import(InsightIndex *,TMSourceFile *,const char *);
 /* Separate display database from native parser declarations, with exact tag types.
  * Parameters and undefined parser internals stay solely in the navigation index. */

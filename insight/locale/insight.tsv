@@ -2759,3 +2759,13 @@ Clang: %zu symbols, %u semantic tokens%s%s	Clang: %zu символов, %u се�
 Clang requires a C/C++ UTF-8 source up to 2 MiB	Clang требует исходник C/C++ в UTF-8 размером до 2 МиБ
 Clang could not parse the translation unit	Clang не смог разобрать единицу трансляции
 This build has no bundled Clang backend	В этой сборке отсутствует backend Clang
+References (Clang C/C++)	Ссылки (Clang C/C++)
+Clang references…	Ссылки Clang…
+Clang symbol identity:	Clang, точный символ:
+Clang references by name:	Clang, ссылки по имени:
+Clang calls with lexical fallback	Вызовы Clang с лексическим резервным разбором
+Clang-resolved calls	Вызовы, разрешённые Clang
+%u shortest call paths • %u unresolved • %u ambiguous • %u skipped%s	%u кратчайших цепочек вызовов • %u неразрешённых • %u неоднозначных • %u пропущено%s
+No compiler-resolved call path found; unresolved pointers may require manual source routes	Цепочка вызовов компилятором не разрешена; для неопределённых указателей могут понадобиться ручные маршруты
+Clang C/C++	Clang C/C++
+Clang C/C++ help…	Справка по Clang C/C++…

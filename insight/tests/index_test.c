@@ -68,11 +68,11 @@ int main(void) {
  const InsightSymbol *borrowed=insight_index_at(merge,2); assert(insight_index_update(merge,borrowed->path,borrowed,1)); assert(insight_index_count(merge)==4); assert(insight_index_find(merge,"same",1,out,5)==2); assert(!strcmp(out[0]->scope,"a"));
  borrowed=insight_index_at(merge,0); assert(insight_index_update(merge,borrowed->path,NULL,0)); assert(insight_index_count(merge)==1); assert(!strcmp(insight_index_at(merge,0)->path,"a.c")); insight_index_free(merge);
  /* Full-size snapshot traversal must use ordinal access, not repeated queries. */
- InsightIndex *large=insight_index_new(); size_t count=250000; InsightSymbol *rows=calloc(count,sizeof *rows); assert(large && rows);
+ InsightIndex *large=insight_index_new(); size_t count=300000; InsightSymbol *rows=calloc(count,sizeof *rows); assert(large && rows);
  for(size_t n=0;n<count;n++) rows[n]=(InsightSymbol){"large_symbol",NULL,NULL,"function",n+1,NULL,NULL,NULL};
  assert(insight_index_update(large,"large.c",rows,count)); free(rows);
  for(size_t n=0;n<count;n++) { const InsightSymbol *symbol=insight_index_at(large,n); assert(symbol && symbol->line==n+1 && !strcmp(symbol->name,"large_symbol")); }
- assert(!insight_index_at(large,count)); insight_index_free(large);
+ assert(!insight_index_at(large,count));unsigned char *snapshot=NULL;size_t length=0;assert(insight_index_serialize(large,"/project",&snapshot,&length));char *root=NULL;InsightIndex *restored=insight_index_deserialize(snapshot,length,&root);assert(restored && insight_index_count(restored)==count);free(snapshot);free(root);insight_index_free(restored);insight_index_free(large);
  insight_index_free(i); insight_index_free(NULL);
  puts("index: all checks passed"); return 0;
 }
