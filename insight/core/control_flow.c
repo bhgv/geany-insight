@@ -66,7 +66,7 @@ static unsigned compile(Parser *p,unsigned first,unsigned next,unsigned stop,uns
   unsigned i=order[--n];InsightFlowKind kind=p->g->nodes[i].kind;Branch b=p->branches[i];
   if(kind==INSIGHT_FLOW_IF) {unsigned yes=compile(p,b.yes,next,stop,again),no=compile(p,b.no,next,stop,again);edge(p,i,yes,INSIGHT_FLOW_YES);edge(p,i,no,INSIGHT_FLOW_NO);}
   else if(kind==INSIGHT_FLOW_LOOP) {unsigned body=compile(p,b.yes,i,next,i);edge(p,i,body,INSIGHT_FLOW_YES);edge(p,i,next,INSIGHT_FLOW_NO);}
-  else edge(p,i,kind==INSIGHT_FLOW_RETURN ? 1:kind==INSIGHT_FLOW_BREAK ? stop:kind==INSIGHT_FLOW_CONTINUE ? again:next,(kind==INSIGHT_FLOW_CONTINUE || next==again) ? INSIGHT_FLOW_BACK:INSIGHT_FLOW_NEXT);
+  else {unsigned target=kind==INSIGHT_FLOW_RETURN ? 1:kind==INSIGHT_FLOW_BREAK ? stop:kind==INSIGHT_FLOW_CONTINUE ? again:next;edge(p,i,target,target!=NONE && target==again ? INSIGHT_FLOW_BACK:INSIGHT_FLOW_NEXT);}
   next=i;
  }
  return next;
