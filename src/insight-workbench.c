@@ -129,7 +129,7 @@ typedef struct {
  InsightSearchLinks *search_links; gchar *search_state_path; GPtrArray *search_files,*search_history; gboolean usage_keywords; guint usage_context; InsightSourceRegion project_region;
  GtkWidget *usage_entry,*usage_status,*usage_buffer,*usage_view,*usage_code,*usage_comments,*relation_transitive,*relation_mode,*relation_follow,*relation_enclosing,*relation_filter_entry;
  GtkTreeModelFilter *relation_filter;
- GtkWidget *relation_routes,*relation_tree,*relation_tree_toggle,*relation_back,*relation_forward,*relation_stack,*relation_graph_toggle,*relation_graph,*relation_tree_graph;GPtrArray *relation_history,*relation_future;
+ GtkWidget *relation_options,*relation_routes,*relation_tree,*relation_tree_toggle,*relation_back,*relation_forward,*relation_stack,*relation_graph_toggle,*relation_graph,*relation_tree_graph;GPtrArray *relation_history,*relation_future;
  gchar *relation_word; gint relation_last_mode; gboolean relation_dirty,relation_setting,reference_setting;InsightSourceRegion usage_region;
  gint usage_mode; guint usage_flags;
  GtkWidget *local_stack,*local_mode,*native_symbol_query;
@@ -2005,6 +2005,7 @@ static void reference_region_changed(GtkWidget *widget,gpointer data) {
  else if(widget==wb.usage_comments && gtk_combo_box_get_active(GTK_COMBO_BOX(wb.usage_comments))>0) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.usage_code),FALSE);
  wb.reference_setting=FALSE;relation_controls(NULL,NULL);
 }
+static void relation_stack_changed(GObject *object,GParamSpec *spec,gpointer data) { (void)spec;(void)data;gboolean routes=!g_strcmp0(gtk_stack_get_visible_child_name(GTK_STACK(object)),"routes");if(wb.relation_options) {gtk_widget_set_no_show_all(wb.relation_options,routes);gtk_widget_set_visible(wb.relation_options,!routes);}gtk_widget_set_no_show_all(wb.usage_status,routes);gtk_widget_set_visible(wb.usage_status,!routes);}
 static void create_usage_browser(void) {
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,4),*controls=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,2);
  wb.usage_entry=gtk_search_entry_new(); gtk_widget_set_name(wb.usage_entry,"insight-relation-query"); gtk_entry_set_placeholder_text(GTK_ENTRY(wb.usage_entry),"Symbol or qualified owner…");
@@ -2056,7 +2057,7 @@ static void create_usage_browser(void) {
  g_signal_connect(wb.relation_filter_entry,"changed",G_CALLBACK(relation_filter_changed),NULL);
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),wb.usage_view);
  wb.relation_stack=gtk_stack_new();gtk_stack_add_named(GTK_STACK(wb.relation_stack),scroll,"list");
- wb.relation_routes=insight_source_routes_new();gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_routes,"routes");
+ wb.relation_routes=insight_source_routes_new();gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_routes,"routes");g_signal_connect(insight_source_routes_back_button(wb.relation_routes),"clicked",G_CALLBACK(relation_routes_back),NULL);g_signal_connect(wb.relation_stack,"notify::visible-child-name",G_CALLBACK(relation_stack_changed),NULL);
  wb.relation_tree=insight_relation_tree_new();gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_tree,"tree");
  GtkTreeView *tree_view=insight_relation_tree_view(wb.relation_tree);g_signal_connect(gtk_tree_view_get_selection(tree_view),"changed",G_CALLBACK(relation_tree_selected),NULL);g_signal_connect(tree_view,"row-activated",G_CALLBACK(relation_tree_activated),NULL);
  wb.relation_tree_toggle=gtk_check_button_new_with_label("Expandable relation tree");gtk_widget_set_name(wb.relation_tree_toggle,"insight-relation-tree-toggle");gtk_widget_set_sensitive(wb.relation_tree_toggle,FALSE);gtk_box_pack_start(GTK_BOX(controls),wb.relation_tree_toggle,FALSE,FALSE,0);g_signal_connect(wb.relation_tree_toggle,"toggled",G_CALLBACK(relation_tree_toggle),NULL);
@@ -2066,7 +2067,7 @@ static void create_usage_browser(void) {
  GtkWidget *routes=gtk_button_new_with_label("Source routes / flow"),*relations=gtk_button_new_with_label("Relations");gtk_widget_set_name(routes,"insight-relation-source-routes");gtk_widget_set_tooltip_text(routes,"Graphs of source locations and function control flow");gtk_box_pack_start(GTK_BOX(controls),routes,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(controls),relations,FALSE,FALSE,0);g_signal_connect(routes,"clicked",G_CALLBACK(source_routes_show),NULL);g_signal_connect(relations,"clicked",G_CALLBACK(relation_routes_back),NULL);
  GtkWidget *next_view=gtk_button_new_from_icon_name("view-refresh-symbolic",GTK_ICON_SIZE_MENU);gtk_widget_set_name(next_view,"insight-relation-next-view");gtk_widget_set_tooltip_text(next_view,"Next Relation Window View");gtk_box_pack_start(GTK_BOX(controls),next_view,FALSE,FALSE,0);g_signal_connect(next_view,"clicked",G_CALLBACK(relation_next_view),NULL);
  gtk_box_pack_start(GTK_BOX(box),wb.usage_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_mode,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_transitive,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_follow,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_enclosing,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_code,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),wb.usage_comments,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_buffer,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),controls,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_status,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_filter_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),drill,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_stack,TRUE,TRUE,0);
- GtkWidget *options=insight_compare_ui_tabs(box,"insight-relation-toolbar-tabs");
+ GtkWidget *options=insight_compare_ui_tabs(box,"insight-relation-toolbar-tabs");wb.relation_options=options;
  GtkWidget *query=insight_compare_ui_page(options,"Query"),*filter=insight_compare_ui_page(options,"Filters"),*view=insight_compare_ui_page(options,"View"),*navigation=insight_compare_ui_page(options,"Navigation");
  GtkWidget *query_widgets[]={wb.usage_entry,wb.relation_mode,wb.relation_follow,wb.relation_enclosing,wb.relation_transitive};for(guint n=0;n<G_N_ELEMENTS(query_widgets);n++) insight_compare_ui_move(query_widgets[n],query);
  GtkWidget *filter_widgets[]={wb.usage_code,wb.usage_comments,wb.usage_buffer,wb.relation_filter_entry};for(guint n=0;n<G_N_ELEMENTS(filter_widgets);n++) insight_compare_ui_move(filter_widgets[n],filter);

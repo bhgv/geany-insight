@@ -743,3 +743,7 @@ dist_insightdocmedia_DATA += insight/docs/media/menu-palettes.svg
 insightdoc_DATA += insight/docs/source-routes.md
 dist_insightdocmedia_DATA += insight/docs/media/source-routes.svg
 EXTRA_DIST += insight/tests/control_flow_test.c insight/tests/source_routes_gui_test.c
+
+EXTRA_DIST += insight/tests/call_paths_test.c
+
+dist_insightdocmedia_DATA += insight/docs/media/call-paths.svg

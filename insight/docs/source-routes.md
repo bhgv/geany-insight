@@ -51,7 +51,7 @@ strings are masked first. Conditions/loop headers are atomic; short-circuit
 operators and for-loop header steps are not separate nodes. Constant conditions,
 macro expansion, overloads, exception edges and runtime paths are not inferred.
 Switch, do/while, goto, exception constructs, labels, ternaries, preprocessors
-inside the body, nested definitions and brace initializers are refused with an
+inside the body, nested definitions and unsupported brace expressions are refused with an
 explanation. Unreachable statements may remain as disconnected syntactic nodes.
 Other languages remain supported by the existing symbol/call relation tools;
 manual routes are language-independent.
@@ -83,3 +83,50 @@ Changing graph presentation never launches a project scan or index rebuild.
 типов и условий. Неподдерживаемые конструкции явно отклоняются. После изменения
 исходника граф нужно перестроить. Графы вызовов между функциями уже доступны
 в прежних режимах **Вызовы / Места вызовов** панели «Связи».
+
+## Automatic paths from main to create_rule / Автоматические цепочки
+
+![Automatic chain / Автоматическая цепочка](media/call-paths.svg)
+
+**Call paths** is now distinct from manual Source routes and from the old
+symbol/text query. Enter **From function: main**, **To function: create_rule**
+and press **Find call paths**. Alternatively, select a source node and use
+**From selected**, then select the other node and use **To selected**. This
+resolves the containing function, including identically named static functions
+in different files. A bare ambiguous function name requires selecting a location.
+
+The background search follows lexical function calls through the captured project
+index and shows up to 32 shortest chains, with at most 64 calls per chain. Choose
+an alternative in the path list. Click a function to open its definition;
+**Go to call site** opens the caller's actual source line for the selected hop.
+Initializers in a function do not prevent call-chain scanning. Simple assignment
+brace initializers are also accepted as atomic statements by Function flow.
+
+**Include uncertain name matches** permits ambiguous and member-name matches,
+shown with dashed arrows. These are hypotheses: function pointers, virtual calls,
+overloads, callback registration, macros and runtime conditions are not semantically
+resolved. If no lexical chain is found, the UI says so; it does not replace the
+missing chain with a fabricated direct arrow. Initializers assigning a callback
+do not by themselves prove an execution edge. Cycles are bounded; only shortest
+chains in the inspected graph are listed, not every possible execution path.
+
+The search does not rebuild the project index. Wait for indexing to finish before
+starting. It snapshots open named buffers (including unsaved changes) and lazily
+reads closed sources in a worker. No code is executed or changed. Source digests
+are checked again before navigation; modified sources require another search.
+Cancel, changed endpoints/options, changed projects and destroyed panels invalidate
+pending jobs. Graphs are temporary snapshots; manual project routes stay separate.
+Bounds: 20000 function definitions, 50000 edges, 200000 inspected call tokens,
+512 source files, 2 MiB per source, 64 MiB loaded source text, 16 MiB function
+metadata, and 32 MiB copied open buffers. Skipped sources and work limits are
+reported; a negative result is not a proof of runtime unreachability.
+
+**По-русски:** для `main → … → create_rule` откройте вкладку **Цепочки вызовов**,
+введите `main` и `create_rule`, нажмите **Найти цепочки вызовов**. Старый запрос
+«Текстовый поиск» этого не делает и скрыт в новом режиме. По вашим уже созданным
+узлам можно выбрать **От выбранного / До выбранного**. Появятся найденные
+промежуточные функции и список кратчайших вариантов. Щелчок ведёт к определению,
+**К месту вызова** — к вызову из предыдущей функции. Пунктирные связи при включённых
+предположительных совпадениях не являются доказанными вызовами. Если переход
+происходит через указатели/таблицы callback с другими именами, лексический поиск
+может не найти его — это явно отмечается, а не заменяется ручной стрелкой.

@@ -109,6 +109,8 @@ on:
       - insight/tests/diff_test.py
       - insight/tests/diff_gui_test.c
       - src/insight-source-routes.*
+      - insight/desktop/call_paths.*
+      - insight/tests/call_paths_test.c
       - insight/core/control_flow.*
       - insight/tests/control_flow_test.c
       - insight/tests/source_routes_gui_test.c
@@ -277,7 +279,7 @@ jobs:
         id: source-routes
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' && steps.menu-palettes.outcome == 'success' }}
         run: |
-          if ! INSIGHT_SOURCE_ROUTES_CAPTURE="$PWD/source-routes.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight structured control flow core' 'Insight native source routes and flow GUI'; then
+          if ! INSIGHT_SOURCE_ROUTES_CAPTURE="$PWD/source-routes.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight structured control flow core' 'Insight bounded project call paths' 'Insight native source routes and flow GUI'; then
             GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" timeout 45 gdb -batch -ex run -ex 'thread apply all bt' --args _native/tests/test_insight_source_routes_gui || true
             exit 1
           fi

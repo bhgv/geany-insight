@@ -39,12 +39,13 @@ static int statement(Parser *p,Sequence *out,unsigned lane) {
   if(is_if && word(p,"else")) {p->p+=4;Sequence no={NONE,NONE};if(!statement(p,&no,lane+1)) return 0;p->branches[id].no=no.first;}
  } else {
   InsightFlowKind kind=word(p,"return") ? INSIGHT_FLOW_RETURN:word(p,"break") ? INSIGHT_FLOW_BREAK:word(p,"continue") ? INSIGHT_FLOW_CONTINUE:INSIGHT_FLOW_STEP;
-  unsigned paren=0,bracket=0;
+  unsigned paren=0,bracket=0;int assignment=0;
   while(p->p<p->end) {
    char c=p->s[p->p];
    if(!paren && !bracket && c==';') {p->p++;break;}
    if(!paren && !bracket && c=='}') return fail(p,"Missing statement terminator");
-   if(c=='{') return fail(p,"Nested definitions/initializers/lambdas require a full language parser");
+   if(c=='=' && (p->p+1==p->end || p->s[p->p+1]!='=') && (p->p==begin || !strchr("=!<>",p->s[p->p-1]))) assignment=1;
+   if(c=='{') {if(!assignment) return fail(p,"A nested definition or brace expression requires a full language parser");if(!balanced(p,'{','}')) return 0;continue;}
    if(c=='(') paren++;else if(c==')') {if(!paren) return fail(p,"Unmatched parenthesis");paren--;}
    if(c=='[') bracket++;else if(c==']') {if(!bracket) return fail(p,"Unmatched bracket");bracket--;}
    if(paren>128 || bracket>128) return fail(p,"Expression nesting exceeds 128 levels");

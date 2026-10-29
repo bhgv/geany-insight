@@ -4,4 +4,5 @@
 #include <gtk/gtk.h>
 GtkWidget *insight_source_routes_new(void);
 void insight_source_routes_capture(GtkWidget *);
+GtkWidget *insight_source_routes_back_button(GtkWidget *);
 #endif

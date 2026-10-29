@@ -2690,3 +2690,41 @@ break/continue outside a loop	break/continue вне цикла
 Control-flow graph exceeds edge limit	Граф потока превышает предел стрелок
 Expected a C-like function body up to 2 MiB	Ожидалось тело С-подобной функции размером до 2 МиБ
 Unexpected text after function body	Лишний текст после тела функции
+Call paths	Цепочки вызовов
+From function, e.g. main	От функции, например main
+To function, e.g. create_rule	До функции, например create_rule
+Start function name; use From selected for ambiguous definitions	Имя начальной функции; при неоднозначности выберите «От выбранного»
+Target function name; use To selected for ambiguous definitions	Имя конечной функции; при неоднозначности выберите «До выбранного»
+From selected	От выбранного
+To selected	До выбранного
+Use the enclosing function of the selected graph node as an endpoint	Использовать функцию, содержащую выбранный узел графа, как начало или конец
+Find call paths	Найти цепочки вызовов
+Find shortest lexical call chains between the two functions	Найти кратчайшие лексические цепочки вызовов между двумя функциями
+Cancel the current call-path search	Отменить текущий поиск цепочек вызовов
+Include uncertain name matches	Включать предположительные совпадения имён
+Allow ambiguous and member-name matches; dashed edges are hypotheses, not proven calls	Разрешить неоднозначные совпадения и имена членов; пунктирные стрелки — предположения, а не доказанные вызовы
+Choose an alternative shortest call path	Выбрать другую кратчайшую цепочку вызовов
+Go to call site	К месту вызова
+Open the call site leading to the selected function	Открыть место, из которого вызывают выбранную функцию
+Symbol relations	Связи символов
+Return to symbol references, calls and relation graphs	Вернуться к ссылкам на символы, вызовам и графам связей
+Find intermediate functions here; the symbol/text query above is separate	Здесь ищутся промежуточные функции; запрос символов и текста — отдельный режим
+Manual links: use Call paths to find intermediate functions	Ручные связи: для поиска промежуточных функций откройте «Цепочки вызовов»
+Lexical call paths: click a function; dashed arrows are uncertain	Лексические цепочки: щёлкните функцию; пунктирные стрелки предположительны
+Source changed; search the call paths again	Исходник изменён; повторите поиск цепочек вызовов
+%u shortest lexical paths • %u unresolved • %u ambiguous • %u skipped%s	%u кратчайших лексических цепочек • %u не разрешено • %u неоднозначно • %u пропущено%s
+ • work limit reached	 • достигнут предел работы
+No path found in the inspected sources; search is incomplete	В просмотренных исходниках путь не найден; поиск неполон
+No lexical call path found; callbacks may need uncertain name matching	Лексическая цепочка не найдена; для обратных вызовов могут потребоваться предположительные совпадения имён
+Call path search: {value}	Поиск цепочек вызовов: {value}
+Path %u — %u calls	Путь %u — %u вызовов
+Enter start and target functions, or set them from selected nodes	Введите начальную и конечную функции или выберите их по узлам
+Searching call paths in the indexed project…	Поиск цепочек вызовов в проиндексированном проекте…
+Call path search cancelled	Поиск цепочек вызовов отменён
+Select a source node first	Сначала выберите узел исходника
+Endpoint selected; set the other endpoint and find call paths	Конец пути выбран; задайте второй и выполните поиск цепочек
+The first function has no incoming call in this path	Для первой функции нет входящего вызова в этом пути
+Search options changed; find call paths again	Параметры поиска изменены; повторите поиск цепочек
+Several matching functions; set the endpoint from a selected source node	Найдено несколько функций; выберите начало или конец по узлу исходника
+Function definition not found in the indexed project	Определение функции не найдено в индексе проекта
+A nested definition or brace expression requires a full language parser	Вложенное определение или выражение с фигурными скобками требует полного парсера языка

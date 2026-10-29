@@ -23,6 +23,7 @@ int main(void) {
  assert(build("{{a(); b();} c();}"));has(2,3,INSIGHT_FLOW_NEXT);has(3,4,INSIGHT_FLOW_NEXT);
  assert(build("{returnя(); after();}"));assert(kind(INSIGHT_FLOW_RETURN)==0);
  assert(build("{while(x)return 1;}"));has(3,1,INSIGHT_FLOW_NEXT);
+ assert(build("{struct options x = {.port=0,.values={1,2}};if(x.port)work();}"));assert(kind(INSIGHT_FLOW_IF)==1);
  char deep[2048]="{";for(unsigned i=0;i<70;i++) strcat(deep,"if(x)");strcat(deep,"a();}");assert(!build(deep));assert(strstr(g.error,"nesting"));
  char many[4096]="{";for(unsigned i=0;i<600;i++) strcat(many,"a();");strcat(many,"}");assert(!build(many));assert(strstr(g.error,"512"));
  puts("Control flow: branches, dangling else, loops, break/continue, return, limits and unsupported syntax passed");return 0;

@@ -229,7 +229,7 @@ libgeany_la_SOURCES += \
 	insight-text-print.h \
 	insight-list-tools.c \
 	insight-list-tools.h \
-	insight-source-routes.c insight-source-routes.h ../insight/core/control_flow.c ../insight/core/control_flow.h \
+	insight-source-routes.c insight-source-routes.h ../insight/core/control_flow.c ../insight/core/control_flow.h ../insight/desktop/call_paths.c ../insight/desktop/call_paths.h \
 	insight-relation-graph.c \
 	insight-relation-graph.h \
 	insight-help.c \
