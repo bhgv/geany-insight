@@ -2728,3 +2728,5 @@ Search options changed; find call paths again	Параметры поиска и
 Several matching functions; set the endpoint from a selected source node	Найдено несколько функций; выберите начало или конец по узлу исходника
 Function definition not found in the indexed project	Определение функции не найдено в индексе проекта
 A nested definition or brace expression requires a full language parser	Вложенное определение или выражение с фигурными скобками требует полного парсера языка
+From function	От функции
+To function	До функции

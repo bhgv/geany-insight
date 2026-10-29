@@ -5,7 +5,7 @@
 #include <string.h>
 #define SOURCE_LIMIT (2u*1024u*1024u)
 #define TOTAL_LIMIT (64u*1024u*1024u)
-typedef struct { InsightCallPaths *r;GHashTable *names,*missing;InsightCallLoad load;gpointer data;GCancellable *cancel;gsize bytes;guint calls;gboolean indirect,halt; } Builder;
+typedef struct { InsightCallPaths *r;GHashTable *names,*missing;InsightCallLoad load;gpointer data;GCancellable *cancel;gsize bytes,work;guint calls;gboolean indirect,halt; } Builder;
 gchar *insight_call_normalize(const gchar *text) {
  if(g_str_has_prefix(text,"\357\273\277")) text+=3;GString *out=g_string_sized_new(strlen(text));for(const gchar *s=text;*s;s++) if(*s!='\r' || s[1]!='\n') g_string_append_c(out,*s);return g_string_free(out,FALSE);
 }
@@ -28,7 +28,9 @@ static InsightCallSource *source(Builder *b,const gchar *path) {
 static gboolean prepare(Builder *b,guint id) {
  InsightCallFunction *f=g_ptr_array_index(b->r->functions,id);if(f->checked) return f->valid;f->checked=TRUE;InsightCallSource *s=source(b,f->path);if(!s || !f->line || f->line>s->lines->len) return FALSE;
  f->begin=g_array_index(s->lines,gsize,f->line-1);gsize length=strlen(s->text);
- f->valid=insight_function_range(s->text,s->mask,length,f->begin,INSIGHT_FUNCTION_BRACES,&f->body,&f->end)==1;
+ if(b->work>256u*1024u*1024u) {b->r->limited=TRUE;return FALSE;}
+ f->valid=insight_function_range(s->text,s->mask,length,f->begin,INSIGHT_FUNCTION_BRACES,&f->body,&f->end)==1;b->work+=f->valid ? f->end-f->begin:length;
+ if(f->valid) {gsize cursor=f->begin,a=0,z=0;gboolean name_found=FALSE;while(insight_next_call(s->mask,f->body-1,&cursor,&a,&z)==1) if(z-a==strlen(f->name) && !memcmp(s->mask+a,f->name,z-a)) {name_found=TRUE;break;}if(!name_found) f->valid=FALSE;}
  if(!f->valid) {b->r->skipped++;return FALSE;}
  gsize first=f->begin;while(first && f->begin-first<2048 && s->mask[first-1]!=';' && s->mask[first-1]!='}') first--;
  for(gsize p=first;p<f->body;p++) if(word_at(s->mask,f->body,p,"static")) {f->is_static=TRUE;break;}return TRUE;
@@ -70,13 +72,13 @@ static void expand(Builder *b,guint id,GArray *found) {
 }
 static void collect_paths(InsightCallPaths *r,GPtrArray *predecessors,guint current,GArray *reverse) {
  if(r->paths->len>=INSIGHT_CALL_PATH_LIMIT) {r->limited=TRUE;return;}
- if(current==r->start) {GArray *path=g_array_new(FALSE,FALSE,sizeof(guint));for(guint i=reverse->len;i>0;i--) {guint e=g_array_index(reverse,guint,i-1);g_array_append_val(path,e);}g_ptr_array_add(r->paths,path);return;}
+ if(current==r->start) {GArray *path=g_array_new(FALSE,FALSE,sizeof(guint));for(guint i=reverse->len;i>0;i--) {guint e=g_array_index(reverse,guint,i-1);g_array_append_val(path,e);}g_ptr_array_add(r->paths,path);if(r->paths->len==INSIGHT_CALL_PATH_LIMIT) r->limited=TRUE;return;}
  GArray *pred=g_ptr_array_index(predecessors,current);for(guint i=0;pred && i<pred->len;i++) {guint e=g_array_index(pred,guint,i);InsightCallEdge edge=g_array_index(r->edges,InsightCallEdge,e);g_array_append_val(reverse,e);collect_paths(r,predecessors,edge.from,reverse);g_array_set_size(reverse,reverse->len-1);if(r->paths->len==INSIGHT_CALL_PATH_LIMIT) break;}
 }
 InsightCallPaths *insight_call_paths_find(const InsightIndex *index,GPtrArray *paths,const InsightCallEndpoint *start,const InsightCallEndpoint *target,gboolean indirect,InsightCallLoad load,gpointer data,GCancellable *cancel,GError **error) {
  g_return_val_if_fail(index && paths && start && target && load,NULL);InsightCallPaths *r=g_new0(InsightCallPaths,1);r->functions=g_ptr_array_new_with_free_func(function_free);r->paths=g_ptr_array_new_with_free_func((GDestroyNotify)g_array_unref);r->edges=g_array_new(FALSE,FALSE,sizeof(InsightCallEdge));r->sources=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,source_free);
- Builder b={r,g_hash_table_new_full(g_str_hash,g_str_equal,g_free,(GDestroyNotify)g_array_unref),g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL),load,data,cancel,0,0,indirect,FALSE};GHashTable *members=g_hash_table_new(g_str_hash,g_str_equal);for(guint i=0;i<paths->len;i++) g_hash_table_add(members,g_ptr_array_index(paths,i));
- gsize metadata=0;for(gsize i=0;i<insight_index_count(index) && !stopped(&b);i++) {const InsightSymbol *symbol=insight_index_at(index,i);if(!symbol->path || !symbol->name || !symbol->kind || (strcmp(symbol->kind,"function") && strcmp(symbol->kind,"method")) || !symbol->line || !g_hash_table_contains(members,symbol->path) || !c_like(symbol->path)) continue;
+ Builder b={.r=r,.names=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,(GDestroyNotify)g_array_unref),.missing=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL),.load=load,.data=data,.cancel=cancel,.indirect=indirect};GHashTable *members=g_hash_table_new(g_str_hash,g_str_equal);for(guint i=0;i<paths->len;i++) g_hash_table_add(members,g_ptr_array_index(paths,i));
+ gsize metadata=0;for(gsize i=0;i<insight_index_count(index) && !stopped(&b);i++) {const InsightSymbol *symbol=insight_index_at(index,i);if(!symbol->path || !symbol->name || !symbol->kind || (strcmp(symbol->kind,"f") && strcmp(symbol->kind,"function") && strcmp(symbol->kind,"method") && (strcmp(symbol->kind,"m") || !symbol->signature || !*symbol->signature)) || !symbol->line || !g_hash_table_contains(members,symbol->path) || !c_like(symbol->path)) continue;
   if(symbol->line>G_MAXUINT || !g_utf8_validate(symbol->name,-1,NULL) || !g_utf8_validate(symbol->path,-1,NULL) || (symbol->scope && !g_utf8_validate(symbol->scope,-1,NULL))) {r->skipped++;continue;}
   gsize cost=strlen(symbol->name)+strlen(symbol->path)+(symbol->scope ? strlen(symbol->scope):0);if(cost>16384 || metadata+cost>16u*1024u*1024u) {r->limited=TRUE;break;}metadata+=cost;
   if(r->functions->len==INSIGHT_CALL_FUNCTION_LIMIT) {r->limited=TRUE;break;}InsightCallFunction *f=g_new0(InsightCallFunction,1);f->name=g_strdup(symbol->name);f->scope=g_strdup(symbol->scope ? symbol->scope:"");f->path=g_strdup(symbol->path);f->line=(guint)symbol->line;guint id=r->functions->len;g_ptr_array_add(r->functions,f);GArray *ids=g_hash_table_lookup(b.names,f->name);if(!ids) {ids=g_array_new(FALSE,FALSE,sizeof(guint));g_hash_table_insert(b.names,g_strdup(f->name),ids);}g_array_append_val(ids,id);

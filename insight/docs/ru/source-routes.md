@@ -118,7 +118,7 @@ Cancel, changed endpoints/options, changed projects and destroyed panels invalid
 pending jobs. Graphs are temporary snapshots; manual project routes stay separate.
 Bounds: 20000 function definitions, 50000 edges, 200000 inspected call tokens,
 512 source files, 2 MiB per source, 64 MiB loaded source text, 16 MiB function
-metadata, and 32 MiB copied open buffers. Skipped sources and work limits are
+metadata, 256 MiB cumulative function-range scanning, and 32 MiB copied open buffers. Skipped sources and work limits are
 reported; a negative result is not a proof of runtime unreachability.
 
 **По-русски:** для `main → … → create_rule` откройте вкладку **Цепочки вызовов**,
