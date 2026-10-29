@@ -9,7 +9,7 @@ typedef struct { const char *s;size_t p,end;InsightFlow *g;Branch branches[INSIG
 typedef struct { unsigned first,last; } Sequence;
 static int fail(Parser *p,const char *why) { if(!*p->g->error) snprintf(p->g->error,sizeof(p->g->error),"%s",why);return 0; }
 static void space(Parser *p) { while(p->p<p->end && isspace((unsigned char)p->s[p->p])) p->p++; }
-static int word(Parser *p,const char *w) { size_t n=strlen(w);return p->p+n<=p->end && !memcmp(p->s+p->p,w,n) && (p->p+n==p->end || !(isalnum((unsigned char)p->s[p->p+n]) || p->s[p->p+n]=='_')); }
+static int word(Parser *p,const char *w) { size_t n=strlen(w);return p->p+n<=p->end && !memcmp(p->s+p->p,w,n) && (p->p+n==p->end || !(isalnum((unsigned char)p->s[p->p+n]) || (unsigned char)p->s[p->p+n]>=128 || p->s[p->p+n]=='_')); }
 static unsigned node(Parser *p,InsightFlowKind kind,size_t begin,size_t end,unsigned lane) {
  if(p->g->count==INSIGHT_FLOW_LIMIT) {fail(p,"Control-flow graph exceeds 512 nodes");return NONE;}
  unsigned i=p->g->count++;p->g->nodes[i]=(InsightFlowNode){begin,end,kind,lane};p->branches[i]=(Branch){NONE,NONE,NONE};return i;

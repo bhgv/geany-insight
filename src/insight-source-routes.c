@@ -40,7 +40,7 @@ static Rect rect(RouteGraph *g,guint i) {
  return (Rect){32+MIN(p->lane,7)*76,24+row*92,280,58};
 }
 static void update(Routes *r) {
- RouteGraph *g=shown(r);gdouble width=340,height=100;for(guint i=0;i<g->points->len;i++) {Rect a=rect(g,i);width=MAX(width,a.x+a.w+40);height=MAX(height,a.y+a.h+32);}
+ RouteGraph *g=shown(r);gdouble width=340,height=100;for(guint i=0;i<g->points->len;i++) {Rect a=rect(g,i);width=MAX(width,a.x+a.w+80);height=MAX(height,a.y+a.h+32);}
  gtk_widget_set_size_request(r->canvas,(gint)(width*r->scale),(gint)(height*r->scale));
  g_object_set_data(G_OBJECT(r->root),"insight-route-node-count",GUINT_TO_POINTER(g->points->len));g_object_set_data(G_OBJECT(r->root),"insight-route-edge-count",GUINT_TO_POINTER(g->edges->len));
  gtk_widget_queue_draw(r->canvas);
@@ -48,7 +48,8 @@ static void update(Routes *r) {
 static void save(Routes *r) {if(!r->loading && app->project) project_write_config();}
 static gchar *line_text(GeanyDocument *doc,guint line) {
  gint begin=sci_get_position_from_line(doc->editor->sci,line),end=(gint)SEND(doc->editor->sci,SCI_GETLINEENDPOSITION,line,0);if(begin<0 || end<begin || end-begin>4096) return NULL;
- return sci_get_contents_range(doc->editor->sci,begin,end);
+ if(begin==end) return g_strdup("");
+ gchar *text=sci_get_contents_range(doc->editor->sci,begin,end);if(memchr(text,0,(gsize)(end-begin)) || !g_utf8_validate(text,end-begin,NULL)) {g_free(text);return NULL;}return text;
 }
 static RoutePoint *capture(GeanyDocument *doc,gsize position,InsightFlowKind kind,guint lane) {
  RoutePoint *p=g_new0(RoutePoint,1);p->path=g_strdup(doc->file_name);p->line=(guint)sci_get_line_from_position(doc->editor->sci,(gint)position);p->column=(guint)position-(guint)sci_get_position_from_line(doc->editor->sci,(gint)p->line);p->offset=position;p->kind=kind;p->lane=lane;p->text=line_text(doc,p->line);
@@ -80,14 +81,17 @@ static void edge_add(Routes *r,guint from,guint to) {
 }
 static gboolean draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
  Routes *r=data;RouteGraph *g=shown(r);GtkStyleContext *style=gtk_widget_get_style_context(widget);gtk_render_background(style,cr,0,0,gtk_widget_get_allocated_width(widget),gtk_widget_get_allocated_height(widget));GdkRGBA fg;gtk_style_context_get_color(style,GTK_STATE_FLAG_NORMAL,&fg);cairo_scale(cr,r->scale,r->scale);
+ gdouble outside=320;for(guint i=0;i<g->points->len;i++) {Rect a=rect(g,i);outside=MAX(outside,a.x+a.w+24);}
  PangoLayout *layout=gtk_widget_create_pango_layout(widget,NULL);pango_layout_set_ellipsize(layout,PANGO_ELLIPSIZE_END);
  for(guint i=0;i<g->edges->len;i++) {
-  InsightFlowEdge e=g_array_index(g->edges,InsightFlowEdge,i);if(e.from>=g->points->len || e.to>=g->points->len) continue;Rect a=rect(g,e.from),b=rect(g,e.to);gboolean back=b.y<=a.y;double x=a.x+a.w/2,y=a.y+a.h,tx=b.x+b.w/2,ty=b.y;
+  InsightFlowEdge e=g_array_index(g->edges,InsightFlowEdge,i);if(e.from>=g->points->len || e.to>=g->points->len) continue;Rect a=rect(g,e.from),b=rect(g,e.to);gboolean back=b.y<=a.y,skip=b.y>a.y+100;double x=a.x+a.w/2,y=a.y+a.h,tx=b.x+b.w/2,ty=b.y,lx=x+5,ly=y+2;guint direction=0;
   cairo_set_source_rgba(cr,e.kind==INSIGHT_FLOW_NO ? .8:.15,e.kind==INSIGHT_FLOW_YES ? .55:.35,.55,.85);cairo_set_line_width(cr,1.5);cairo_move_to(cr,x,y);
-  if(back) {double side=MAX(a.x+a.w,b.x+b.w)+20+(e.from%4)*7;tx=b.x+b.w;ty=b.y+b.h/2;cairo_curve_to(cr,side,y+25,side,ty,tx,ty);}
+  if(back) {double side=outside+(e.from%4)*7;tx=b.x+b.w;ty=b.y+b.h/2;direction=1;cairo_curve_to(cr,side,y+25,side,ty,tx,ty);}
+  else if(skip) {double side=8+(e.from%3)*5;tx=b.x;ty=b.y+b.h/2;direction=2;lx=side+3;ly=a.y+a.h/2+3;cairo_move_to(cr,a.x,a.y+a.h/2);cairo_curve_to(cr,side,a.y+a.h/2,side,ty,tx,ty);}
   else cairo_curve_to(cr,x,y+18,tx,ty-18,tx,ty);cairo_stroke(cr);
-  cairo_move_to(cr,tx,ty);if(back) {cairo_line_to(cr,tx+7,ty-4);cairo_line_to(cr,tx+7,ty+4);}else {cairo_line_to(cr,tx-4,ty-7);cairo_line_to(cr,tx+4,ty-7);}cairo_close_path(cr);cairo_fill(cr);
-  if(e.kind==INSIGHT_FLOW_YES || e.kind==INSIGHT_FLOW_NO) {pango_layout_set_width(layout,-1);pango_layout_set_text(layout,insight_tr(e.kind==INSIGHT_FLOW_YES ? "Yes":"No"),-1);cairo_move_to(cr,x+5,y+2);pango_cairo_show_layout(cr,layout);}
+  cairo_move_to(cr,tx,ty);if(direction) {double dx=direction==1 ? 7:-7;cairo_line_to(cr,tx+dx,ty-4);cairo_line_to(cr,tx+dx,ty+4);}else {cairo_line_to(cr,tx-4,ty-7);cairo_line_to(cr,tx+4,ty-7);}cairo_close_path(cr);cairo_fill(cr);
+  if(e.kind==INSIGHT_FLOW_YES || e.kind==INSIGHT_FLOW_NO) {pango_layout_set_width(layout,-1);pango_layout_set_text(layout,insight_tr(e.kind==INSIGHT_FLOW_YES ? "Yes":"No"),-1);cairo_move_to(cr,lx,ly);pango_cairo_show_layout(cr,layout);}
+
  }
  for(guint i=0;i<g->points->len;i++) {
   RoutePoint *p=g_ptr_array_index(g->points,i);Rect a=rect(g,i);gboolean branch=p->kind==INSIGHT_FLOW_IF || p->kind==INSIGHT_FLOW_LOOP;
