@@ -2642,6 +2642,13 @@ static void document_ensure_tag_source(GeanyDocument *doc)
 
 }
 
+/* Parsing references need not rebuild symbol widgets when declarations and
+ * their attributes did not change. Both arrays have native file-tag ordering. */
+static gboolean document_same_tags(TMSourceFile *before,TMSourceFile *after) {
+ if(before->trust_file_scope!=after->trust_file_scope || before->tags_array->len!=after->tags_array->len) return FALSE;
+ for(guint i=0;i<before->tags_array->len;i++) {TMTag *a=g_ptr_array_index(before->tags_array,i),*b=g_ptr_array_index(after->tags_array,i);if(a->type!=b->type || a->line!=b->line || a->lang!=b->lang || a->local!=b->local || a->access!=b->access || a->impl!=b->impl || a->kind_letter!=b->kind_letter || g_strcmp0(a->name,b->name) || g_strcmp0(a->scope,b->scope) || g_strcmp0(a->arglist,b->arglist) || g_strcmp0(a->var_type,b->var_type) || g_strcmp0(a->inheritance,b->inheritance)) return FALSE;}
+ return TRUE;
+}
 void document_update_tags(GeanyDocument *doc)
 {
 	document_tags_cancel(doc);
@@ -2769,6 +2776,8 @@ static void document_tags_job_done(GObject *source,GAsyncResult *result,gpointer
  g_clear_object(&doc->priv->tag_parse_cancel);
  if(!ok || !doc->tm_file || doc->tm_file->lang!=j->lang || g_strcmp0(doc->tm_file->file_name,j->path)) return;
  if(j->clang_symbols) {InsightClangResult *current=insight_clang_ui_result(doc->editor->sci);if(!current || current->symbols!=j->clang_symbols) return;}
+ g_object_set_data(G_OBJECT(doc->editor->sci),"insight-clang-tags-published",GINT_TO_POINTER(j->clang_symbols!=NULL));
+ if(document_same_tags(doc->tm_file,j->parsed)) {doc->priv->tag_snapshot_generation=doc->priv->tag_parse_generation;return;}
  tm_workspace_publish_source_file_tags(doc->tm_file,j->parsed);
  doc->priv->tag_snapshot_generation=doc->priv->tag_parse_generation;
  sidebar_update_tag_list(doc,TRUE); insight_overview_tags_changed(doc); document_highlight_tags(doc); insight_workbench_index_changed();

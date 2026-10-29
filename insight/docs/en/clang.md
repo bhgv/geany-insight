@@ -96,3 +96,5 @@ Turning off semantic colors only changes painting; compiler analysis continues.
 The **Navigate → Clang C/C++** submenu groups coloring, reanalysis, semantic
 references and this help page. The color preference persists in the Geany profile
 and does not disable compiler-derived symbols or references.
+
+Clang preserves function parameter names, macro parameters and underlying `typedef` types for completion and symbol information. Reanalysis with unchanged declarations does not rebuild the symbol panel. Portable-build tests parse a source using the bundled Clang resource headers.
