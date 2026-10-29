@@ -3666,7 +3666,7 @@ static void create_categories(void) {
  grouped_attach(p,box); GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),p->view); gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0); gtk_notebook_append_page(GTK_NOTEBOOK(wb.project_notebook),box,gtk_label_new("Categories"));
  g_signal_connect(p->view,"row-activated",G_CALLBACK(category_activated),NULL); gtk_widget_show_all(box); categories_filter(NULL,NULL);
 }
-typedef struct { InsightIndex *index; gchar *query,*preferred,*path,*text,*digest; const InsightSymbol *matches[256]; gsize count; gint chosen,position,anchor,encoding; guint document; gulong line; GHashTable *allowed_paths;InsightLanguageFilter *language;gboolean valid_word,nominal_calls,python; guint64 generation,epoch,index_version; } DefinitionJob;
+typedef struct { InsightIndex *index,*semantic,*project_calls;InsightSymbol compiler_hit;gboolean compiler_used; gchar *query,*preferred,*path,*text,*digest; const InsightSymbol *matches[256]; gsize count; gint chosen,position,anchor,encoding; guint document; gulong line; GHashTable *allowed_paths;InsightLanguageFilter *language;gboolean valid_word,nominal_calls,python; guint64 generation,epoch,index_version; } DefinitionJob;
 static gchar *cursor_query(GeanyDocument *doc) {
  gint a=(gint)SSM(doc->editor->sci,SCI_GETSELECTIONSTART,0,0),b=(gint)SSM(doc->editor->sci,SCI_GETSELECTIONEND,0,0);
  if(b>a && b-a<=1024) { gchar *query=sci_get_selection_contents(doc->editor->sci); return g_strstrip(query); }
@@ -3676,7 +3676,15 @@ static void stop_definition(void) {
  wb.definition_generation++; if(wb.definition_timer) { g_source_remove(wb.definition_timer); wb.definition_timer=0; }
  if(wb.definition_worker) { g_cancellable_cancel(wb.definition_worker); g_clear_object(&wb.definition_worker); }
 }
-static void definition_job_free(gpointer data) { DefinitionJob *j=data;insight_language_filter_free(j->language); retire_index(j->index);g_hash_table_destroy(j->allowed_paths); g_free(j->query); g_free(j->preferred); g_free(j->path); g_free(j->text); g_free(j->digest); g_free(j); }
+static void definition_job_free(gpointer data) { DefinitionJob *j=data;insight_language_filter_free(j->language); retire_index(j->index);retire_index(j->semantic);retire_index(j->project_calls);g_hash_table_destroy(j->allowed_paths); g_free(j->query); g_free(j->preferred); g_free(j->path); g_free(j->text); g_free(j->digest); g_free(j); }
+static void definition_compiler_choice(DefinitionJob *j) {
+ if(!j->semantic || !j->preferred || !insight_clang_dependencies_fresh(j->semantic,j->preferred)) return;gchar *usr=insight_clang_symbol_at(j->semantic,j->preferred,j->position,j->line,j->query);if(!usr) return;const InsightSymbol *definition=NULL,*target=NULL;
+ if(insight_index_query(j->semantic,usr,TRUE,NULL,"@clangdef",j->preferred,0,&definition,1)!=1 && insight_index_query(j->project_calls,usr,TRUE,NULL,"@clangdef",NULL,0,&definition,1)!=1) definition=NULL;
+ insight_index_query(j->semantic,usr,TRUE,NULL,"@clangtarget",j->preferred,0,&target,1);g_free(usr);const gchar *path=definition ? definition->path:target ? target->scope:NULL;gulong line=definition ? definition->line:target ? target->line:0;if(!path || !*path || !line) return;
+ const InsightSymbol *found[4096];gsize n=insight_index_find(j->index,j->query,TRUE,found,G_N_ELEMENTS(found));const InsightSymbol *hit=NULL;for(gsize i=0;i<MIN(n,G_N_ELEMENTS(found));i++) if(found[i]->line==line && !strcmp(found[i]->path,path)) {hit=found[i];break;}
+ if(!hit) {j->compiler_hit=(InsightSymbol){j->query,path,"",target ? target->inheritance:"",line,definition && strchr(definition->type,'(') ? definition->type:"","",""};hit=&j->compiler_hit;}
+ j->matches[0]=hit;j->count=1;j->chosen=0;j->compiler_used=TRUE;
+}
 static void definition_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
  (void)source; DefinitionJob *j=data;
  if(j->valid_word && *j->query && !g_cancellable_is_cancelled(cancel)) {
@@ -3697,7 +3705,7 @@ static void definition_job_run(GTask *task,gpointer source,gpointer data,GCancel
   for(gsize n=0;n<j->count;n++) if((imported || g_hash_table_contains(j->allowed_paths,j->matches[n]->path)) && (j->python && !member && !imported ? insight_native_python_rank(j->index,j->matches[n],j->preferred,scope,j->line) : insight_native_definition_rank_at(j->matches[n],j->preferred,scope,j->line))>=0) j->matches[eligible++]=j->matches[n];
   j->count=eligible;
   for(gsize n=0;n<j->count;n++) if(n==0 || (j->python && !member && !imported ? insight_native_python_rank(j->index,j->matches[n],j->preferred,scope,j->line) : insight_native_definition_rank_at(j->matches[n],j->preferred,scope,j->line))>(j->python && !member && !imported ? insight_native_python_rank(j->index,j->matches[j->chosen],j->preferred,scope,j->line) : insight_native_definition_rank_at(j->matches[j->chosen],j->preferred,scope,j->line))) j->chosen=(gint)n;
-  g_free(scope); g_free(owner);
+  g_free(scope); g_free(owner);definition_compiler_choice(j);
   if(j->count) { const InsightSymbol *hit=j->matches[j->chosen]; j->path=g_strdup(hit->path); j->line=hit->line; }
  }
  if(!j->path) j->path=g_strdup(j->preferred);
@@ -3710,6 +3718,7 @@ static void definition_job_done(GObject *source,GAsyncResult *result,gpointer da
  if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.definition_generation) return;
  g_clear_object(&wb.definition_worker); if(j->index_version!=wb.index_version) { queue_definition(TRUE); return; } GeanyDocument *current=document_get_current();
  if(!ok || !current || current->id!=j->document || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow)) || sci_get_current_position(current->editor->sci)!=j->position || SSM(current->editor->sci,SCI_GETANCHOR,0,0)!=j->anchor) return;
+ if(j->compiler_used) {InsightClangResult *semantic=insight_clang_ui_result(current->editor->sci);if(!semantic || semantic->relations!=j->semantic) {queue_definition(TRUE);return;}}
  GeanyDocument *doc=j->path ? document_find_by_filename(j->path) : current;
  if(doc) { gint length=sci_get_length(doc->editor->sci); if(length>=0 && length<=2*1024*1024) { g_free(j->text); j->text=sci_get_contents(doc->editor->sci,length+1); g_free(j->digest); j->digest=source_digest(j->text); } }
  if(!j->text || !g_utf8_validate(j->text,-1,NULL)) { ui_set_statusbar(TRUE,"Definition source unavailable or exceeds 2 MiB"); return; }
@@ -3740,6 +3749,7 @@ static gboolean definition_timeout(gpointer data) {
  (void)data; wb.definition_timer=0; if(!wb.alive || !wb.preview || !wb.context_visible || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow))) return G_SOURCE_REMOVE;
  GeanyDocument *doc=document_get_current(); if(!doc) return G_SOURCE_REMOVE; refresh_index();
  DefinitionJob *j=g_new0(DefinitionJob,1); j->index=insight_index_ref(wb.index); j->query=cursor_query(doc); j->preferred=g_strdup(doc->file_name); j->document=doc->id; j->position=sci_get_current_position(doc->editor->sci); j->anchor=(gint)SSM(doc->editor->sci,SCI_GETANCHOR,0,0); j->line=(gulong)sci_get_current_line(doc->editor->sci)+1; j->encoding=file_prefs.default_open_encoding; j->generation=wb.definition_generation; j->epoch=workbench_epoch; j->index_version=wb.index_version;
+ InsightClangResult *semantic=insight_clang_ui_result(doc->editor->sci);if(semantic && !semantic->errors && !semantic->limited) {j->semantic=insight_index_ref(semantic->relations);j->project_calls=insight_index_ref(wb.disk_calls);}
  j->language=insight_language_filter_new(doc->file_name,doc->file_type);j->nominal_calls=member_calls_language(doc->file_type);j->python=python_language(doc->file_type);
  j->valid_word=!definition_keyword(doc->file_type,j->query) && !insight_languages_keyword(doc->editor->sci,j->query) && definition_code(doc->editor->sci,j->position);
  j->allowed_paths=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);const InsightSymbol *candidates[4096];gsize candidates_count=insight_index_find(j->index,j->query,TRUE,candidates,G_N_ELEMENTS(candidates));

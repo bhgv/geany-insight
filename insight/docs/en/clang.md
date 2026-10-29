@@ -116,3 +116,5 @@ Ambiguous function names produce separate selectable roots with signatures and f
 The detailed list combines symbols and language-eligible templates from the active global/project Clips store. Template rows have a separate icon and kind; equal symbol/template names remain distinct. Accepting reuses the existing parameter dialog and one Undo; cancelling preserves the typed prefix. Templates are excluded after member operators. The proposal option persists in the profile. Native Geany text snippets invoked by Tab retain their separate mechanism.
 
 The up/down navigation buttons browse callers/callees from the selected node, retaining its exact USR. Back/forward restores that overload even if the source caret has moved to another same-named function.
+
+Automatic Context tracking also selects the compiler-bound definition, including external headers. Its worker retains snapshot guards and rejects replies after the corresponding parse was replaced or invalidated. Without a fresh successful parse it retains the native tag fallback.
