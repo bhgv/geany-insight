@@ -66,6 +66,8 @@ static gboolean step(gpointer data) {
  } else if(phase==5) {
   if(!count("insight-call-search-completed")) return G_SOURCE_CONTINUE;counts(8,7);
   GtkWidget *tool=named(window,"insight-call-paths-tool");g_assert_nonnull(tool);g_assert_true(GTK_IS_MENU_TOOL_BUTTON(tool));g_assert_nonnull(gtk_menu_tool_button_get_menu(GTK_MENU_TOOL_BUTTON(tool)));gtk_notebook_set_current_page(GTK_NOTEBOOK(named(routes,"insight-source-routes-options")),4);g_signal_emit_by_name(tool,"clicked");g_assert_cmpint(gtk_notebook_get_current_page(GTK_NOTEBOOK(named(routes,"insight-source-routes-options"))),==,3);counts(8,7);
+  GtkWidget *popup=g_object_get_data(G_OBJECT(window),"insight-editor-menu");g_assert_nonnull(popup);
+  for(guint show=0;show<2;show++) {gtk_widget_show(popup);GList *rows=gtk_container_get_children(GTK_CONTAINER(popup));guint history=0;for(GList *p=rows;p && history<2;p=p->next) {GtkWidget *item=p->data;if(!gtk_widget_get_visible(item) || g_object_get_data(G_OBJECT(item),"insight-palette-action")) continue;g_assert_cmpstr(gtk_widget_get_name(item),==,history ? "insight-editor-forward":"insight-editor-back");history++;}g_assert_cmpuint(history,==,2);g_list_free(rows);GtkWidget *search=named(popup,"insight-editor-search-group");g_assert_nonnull(search);g_assert_true(gtk_widget_get_parent(ui_lookup_widget(popup,"find_usage2"))==gtk_menu_item_get_submenu(GTK_MENU_ITEM(search)));gtk_widget_hide(popup);}
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(named(routes,"insight-route-zoom")),60);
  } else {
   g_assert_false(gtk_widget_get_visible(named(window,"insight-relation-toolbar-tabs")));
