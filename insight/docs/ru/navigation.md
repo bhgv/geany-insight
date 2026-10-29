@@ -17,3 +17,15 @@
 Команда раскрывает нужную панель, вложенные вкладки и почти полностью сжатую полку. Для самостоятельного окна панель поднимается на передний план. Параметры окна связей сгруппированы во вкладки «Запрос», «Фильтры», «Вид», «Навигация» и «Свернуть».
 
 ![Общий контейнер параметров](../media/compact-options.svg)
+
+## Call paths / Цепочки вызовов
+
+**Navigate → Call paths** and the **Call paths** toolbar button directly open the
+call-chain graph. The toolbar arrow and editor popup offer **start from caret**,
+**target from caret**, **Find call paths** and a built-in tutorial. Endpoints use
+exact file/line locations and do not require manually linked graph nodes.
+See [the step-by-step main → create_rule tutorial](source-routes.md).
+
+**Навигация → Цепочки вызовов**: выберите начало и конец из позиции курсора в
+нужных функциях, затем «Найти цепочки вызовов». Стрелка кнопки тулбара открывает
+те же команды и инструкцию. Щелчки по условиям и местам вызовов открывают исходник.

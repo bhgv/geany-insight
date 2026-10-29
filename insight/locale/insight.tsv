@@ -2739,3 +2739,9 @@ Show call sites and controlling branches	Показывать места выз�
 Structural branch toward this call; conditions are not evaluated	Структурная ветвь к этому вызову; значения условий не вычисляются
 Branch analysis unavailable	Анализ ветвлений недоступен
 Call is unreachable in the structural graph	Вызов недостижим в структурном графе
+Open call path graph…	Открыть граф цепочек вызовов…
+Call path start from caret	Начало цепочки из позиции курсора
+Call path target from caret	Конец цепочки из позиции курсора
+Call path tutorial…	Урок построения цепочки вызовов…
+Call paths — open graph; arrow offers endpoints, search and tutorial	Цепочки вызовов — открыть граф; стрелка: начало, конец, поиск и урок
+Open a saved source file and place the caret inside a function	Откройте сохранённый исходник и поставьте курсор внутри функции

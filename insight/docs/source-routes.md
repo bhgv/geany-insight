@@ -7,6 +7,48 @@ user-defined reading/navigation link, not proof that one statement executes anot
 
 ![Two kinds of source graph](media/source-routes.svg)
 
+
+## Меню, тулбар и быстрый урок / Menu, toolbar and tutorial
+
+**Навигация → Цепочки вызовов / Navigate → Call paths** содержит команды:
+
+| Команда / Command | Результат / Result |
+| --- | --- |
+| Открыть граф цепочек вызовов… / Open call path graph… | Открывает панель и разворачивает вкладку «Цепочки вызовов» |
+| Начало цепочки из позиции курсора / Call path start from caret | Запоминает файл и строку внутри начальной функции |
+| Конец цепочки из позиции курсора / Call path target from caret | Запоминает файл и строку внутри целевой функции |
+| Найти цепочки вызовов / Find call paths | Строит цепочки между выбранными концами |
+| Урок построения цепочки вызовов… / Call path tutorial… | Открывает эту инструкцию во встроенной справке |
+
+На главном тулбаре, рядом со «Связями», находится кнопка **«Цепочки вызовов»**.
+Основная часть кнопки открывает граф, стрелка справа — те же команды. Они также
+доступны в меню правой кнопки редактора. Начало и конец берутся из текущего
+исходника; создавать ручные узлы для этого не требуется.
+
+### Пример: main → create_rule
+
+1. Откройте проект и дождитесь завершения индексации.
+2. Откройте файл с нужным `main`, поставьте курсор внутри этой функции.
+3. Выполните **Навигация → Цепочки вызовов → Начало цепочки из позиции курсора**.
+4. Откройте нужный `create_rule`, поставьте курсор внутри его определения.
+5. Выполните **Конец цепочки из позиции курсора**, затем **Найти цепочки вызовов**.
+6. Ожидаемый результат: цепочка с промежуточными функциями, местами вызовов и
+   поддерживаемыми условиями с отметками «Да/Нет». Щелчок открывает исходник.
+7. Смените вариант в списке цепочек, чтобы посмотреть другой маршрут или место
+   вызова. «Показывать места вызовов и ведущие к ним ветвления» включает подробности.
+
+Можно вместо шагов 2–5 ввести имена `main` и `create_rule` на вкладке. Если имена
+неоднозначны, выберите точные определения по файлу и строке в появившихся списках,
+затем снова нажмите поиск. При отсутствии цепочки прочитайте статус: колбэки,
+внешние библиотеки и пропущенные исходники могут требовать другого анализа.
+
+**English:** open a project, place the caret inside the desired `main`, choose
+**Navigate → Call paths → Call path start from caret**, visit `create_rule` and
+choose **Call path target from caret**, then **Find call paths**. The toolbar's
+main button reveals the graph; its arrow and the editor popup expose the same
+commands. Definition selectors resolve duplicate names. Click condition, call-site
+or function nodes to open their corresponding source locations.
+
 ## Arbitrary source positions
 
 1. Put the caret at a useful position in a saved source file.
@@ -169,3 +211,14 @@ is still shown. This is a source-navigation view, not a runtime execution trace.
 **Русский:** между функциями теперь видны место вызова и ведущие к нему условия
 с отметками «Да/Нет». Узлы кликабельны. Разные места вызова одной функции
 сохраняются как отдельные варианты цепочки. Вычисление условий не производится.
+
+### Clang C/C++ integration status
+
+This release still uses lexical call-chain and structural branch analysis.
+Clang is not bundled or enabled as a semantic graph backend yet. A future
+libclang backend needs the project's actual include paths, defines, language
+standard and target, preferably from `compile_commands.json`, plus unsaved editor
+buffers and cursor identities across translation units. See the official
+[libclang tutorial](https://clang.llvm.org/docs/LibClang.html) and
+[compilation database format](https://clang.llvm.org/docs/JSONCompilationDatabase.html).
+Installing Clang alone does not change this release's graph semantics.

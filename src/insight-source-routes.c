@@ -32,7 +32,7 @@ typedef struct RoutePoint { gchar *path,*text,*label,*digest,*detail;guint line,
 typedef struct { GPtrArray *points;GArray *edges;gchar *digest;guint document; } RouteGraph;
 typedef struct {
  GtkWidget *root,*canvas,*scroll,*mode,*zoom,*status,*link,*back,*call_from,*call_to,*call_possible,*call_variants,*call_context;RouteGraph routes,flow,calls;
- GtkWidget *endpoint_choices[2];
+ GtkWidget *endpoint_choices[2],*options;
  GCancellable *call_cancel;InsightCallPaths *call_result;guint64 call_serial;gchar *endpoint_path[2];guint endpoint_line[2];gboolean closed,setting_endpoint;gint selected,from;gboolean loading;gdouble scale;
 } Routes;
 typedef struct { gdouble x,y,w,h; } Rect;
@@ -305,6 +305,7 @@ GtkWidget *insight_source_routes_new(void) {
  Routes *r=g_new0(Routes,1);r->selected=r->from=-1;r->scale=1;r->routes.points=g_ptr_array_new_with_free_func(point_free);r->flow.points=g_ptr_array_new_with_free_func(point_free);r->calls.points=g_ptr_array_new_with_free_func(point_free);r->routes.edges=g_array_new(FALSE,FALSE,sizeof(InsightFlowEdge));r->flow.edges=g_array_new(FALSE,FALSE,sizeof(InsightFlowEdge));r->calls.edges=g_array_new(FALSE,FALSE,sizeof(InsightFlowEdge));
  r->root=gtk_box_new(GTK_ORIENTATION_VERTICAL,3);gtk_widget_set_name(r->root,"insight-source-routes");g_object_set_data_full(G_OBJECT(r->root),"insight-source-routes-state",r,freed);
  GtkWidget *options=insight_compare_ui_tabs(r->root,"insight-source-routes-options"),*locations=insight_compare_ui_page(options,"Source routes"),*flow=insight_compare_ui_page(options,"Control flow"),*view=insight_compare_ui_page(options,"View");
+ r->options=options;
  GtkWidget *row=controls(locations);action(row,"Add caret location","insight-route-add","Add the current source position to the project route graph",G_CALLBACK(capture_clicked),r);r->link=action(row,"Link from selected","insight-route-link","Select a node, then click this button and the destination node",G_CALLBACK(link_clicked),r);action(row,"Remove node","insight-route-remove","Remove the selected route node and its arrows",G_CALLBACK(remove_clicked),r);
  row=controls(flow);action(row,"Function flow","insight-route-function","Build a lexical control-flow snapshot of the function at the caret",G_CALLBACK(build_flow),r);GtkWidget *selection=action(row,"Selection flow","insight-route-selection","Build a flow graph from selected complete C-like statements",G_CALLBACK(build_flow),r);g_object_set_data(G_OBJECT(selection),"selection",GINT_TO_POINTER(1));
  GtkWidget *paths_page=insight_compare_ui_page(options,"Call paths");
@@ -332,3 +333,15 @@ GtkWidget *insight_source_routes_new(void) {
 }
 
 GtkWidget *insight_source_routes_back_button(GtkWidget *root) {Routes *r=g_object_get_data(G_OBJECT(root),"insight-source-routes-state");return r ? r->back:NULL;}
+
+void insight_source_routes_calls(GtkWidget *root,InsightCallCommand command) {
+ Routes *r=g_object_get_data(G_OBJECT(root),"insight-source-routes-state");if(!r || r->closed) return;
+ gtk_notebook_set_current_page(GTK_NOTEBOOK(r->options),3);gtk_combo_box_set_active(GTK_COMBO_BOX(r->mode),2);
+ if(command==INSIGHT_CALL_FIND) {find_calls(NULL,r);return;}
+ if(command==INSIGHT_CALL_FROM_CARET || command==INSIGHT_CALL_TO_CARET) {
+  GeanyDocument *doc=document_get_current();if(!DOC_VALID(doc) || !doc->file_name) {note(r,"Open a saved source file and place the caret inside a function");return;}
+  guint side=command==INSIGHT_CALL_TO_CARET;cancel_calls(r);g_free(r->endpoint_path[side]);r->endpoint_path[side]=g_strdup(doc->file_name);r->endpoint_line[side]=(guint)sci_get_current_line(doc->editor->sci)+1;
+  gtk_widget_hide(r->endpoint_choices[side]);gchar *base=g_path_get_basename(doc->file_name),*text=g_strdup_printf("%s:%u",base,r->endpoint_line[side]);r->setting_endpoint=TRUE;gtk_entry_set_text(GTK_ENTRY(side ? r->call_to:r->call_from),text);r->setting_endpoint=FALSE;g_free(base);g_free(text);note(r,"Endpoint selected; set the other endpoint and find call paths");
+ }else {if(r->call_result) call_result_status(r);else if(!r->call_cancel) note(r,"Enter two functions in Call paths, then start the search");gtk_widget_grab_focus(r->call_from);}
+ update(r);
+}

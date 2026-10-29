@@ -61,11 +61,16 @@ static gboolean step(gpointer data) {
   click(130);g_assert_true(document_get_current()==a);g_assert_cmpint(sci_get_current_line(a->editor->sci),==,6);button("insight-call-site");g_assert_cmpint(sci_get_current_line(a->editor->sci),==,6);
   click(316);g_assert_cmpint(sci_get_current_line(a->editor->sci),==,2);click(408);g_assert_cmpint(sci_get_current_line(a->editor->sci),==,2);
   click(684);g_assert_true(document_get_current()==b);button("insight-call-site");g_assert_true(document_get_current()==a);g_assert_cmpint(sci_get_current_line(a->editor->sci),==,0);
+  SEND(a->editor->sci,SCI_GOTOPOS,sci_get_position_from_line(a->editor->sci,6),0);command("insight-call-menu-1");g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(routes,"insight-call-from"))),==,"a.c:7");
+  click(684);g_assert_true(document_get_current()==b);command("insight-call-menu-2");g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(routes,"insight-call-to"))),==,"b.c:3");command("insight-call-menu-3");g_assert_true(count("insight-call-search-running"));
+ } else if(phase==5) {
+  if(!count("insight-call-search-completed")) return G_SOURCE_CONTINUE;counts(8,7);
+  GtkWidget *tool=named(window,"insight-call-paths-tool");g_assert_nonnull(tool);g_assert_true(GTK_IS_MENU_TOOL_BUTTON(tool));g_assert_nonnull(gtk_menu_tool_button_get_menu(GTK_MENU_TOOL_BUTTON(tool)));gtk_notebook_set_current_page(GTK_NOTEBOOK(named(routes,"insight-source-routes-options")),4);g_signal_emit_by_name(tool,"clicked");g_assert_cmpint(gtk_notebook_get_current_page(GTK_NOTEBOOK(named(routes,"insight-source-routes-options"))),==,3);counts(8,7);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(named(routes,"insight-route-zoom")),60);
  } else {
   g_assert_false(gtk_widget_get_visible(named(window,"insight-relation-toolbar-tabs")));
   const gchar *capture=g_getenv("INSIGHT_SOURCE_ROUTES_CAPTURE");if(capture) {GdkWindow *native=gtk_widget_get_window(window);GdkPixbuf *image=gdk_pixbuf_get_from_window(native,0,0,gdk_window_get_width(native),gdk_window_get_height(native));g_assert_nonnull(image);g_assert_true(gdk_pixbuf_save(image,capture,"jpeg",NULL,"quality","90",NULL));g_object_unref(image);}
-  g_print("Source routes GUI: arbitrary files, duplicate guards, arrows, navigation, reopen, unique anchors, persistence, guarded function/selection flow, duplicate endpoint name choosers, automatic main-to-create_rule chains, selected endpoints and call-site navigation passed\n");quit();return G_SOURCE_REMOVE;
+  g_print("Source routes GUI: arbitrary files, duplicate guards, arrows, navigation, reopen, unique anchors, persistence, guarded function/selection flow, duplicate endpoint name choosers, automatic main-to-create_rule chains, selected endpoints, call-site navigation, menu caret endpoints and toolbar unfolding passed\n");quit();return G_SOURCE_REMOVE;
  }
  phase++;return G_SOURCE_CONTINUE;
 }
