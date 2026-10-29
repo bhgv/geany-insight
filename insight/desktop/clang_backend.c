@@ -101,6 +101,9 @@ static enum CXChildVisitResult visit(CXCursor cursor,CXCursor parent,CXClientDat
   CXCursor target=clang_getCursorReferenced(cursor);if(!clang_Cursor_isNull(target)) {gchar *usr=own(p,string(clang_getCursorUSR(target))),*target_name=own(p,string(clang_getCursorSpelling(target)));guint end=offset;location(clang_getRangeEnd(clang_getCursorExtent(cursor)),p->path,NULL,NULL,&end);
    if(ck==CXCursor_CallExpr) {CallLocation at={p,usr,line,column,offset,FALSE};clang_visitChildren(cursor,callee_location,&at);if(at.found) {line=at.line;column=at.column;offset=at.offset;}end=offset+strlen(target_name);}
    if(*usr && *target_name && p->relations->len<100000) {
+    CXCursor declaration=clang_getCursorDefinition(target);if(clang_Cursor_isNull(declaration)) declaration=target;CXFile file=NULL;unsigned target_line=0,target_column=0;clang_getSpellingLocation(clang_getCursorLocation(declaration),&file,&target_line,&target_column,NULL);
+    if(file && target_line) {gchar *target_path=own(p,string(clang_getFileName(file))),*position=own(p,g_strdup_printf("%u:%u",target_line,target_column));InsightSymbol at={usr,p->path,target_path,"@clangtarget",target_line,position,target_name,kind(declaration) ? kind(declaration):""};g_array_append_val(p->relations,at);}
+
     relation(p,target_name,usr,ck==CXCursor_CallExpr ? "@call":"@clangref",line,column,offset,MIN(end,(guint)p->length));
     if(ck==CXCursor_CallExpr && p->owner) {gboolean virtual_call=clang_getCursorKind(target)==CXCursor_CXXMethod && clang_CXXMethod_isVirtual(target);relation(p,target_name,usr,virtual_call ? "@clangvirtual":"@clangcall",line,column,offset,MIN(end,(guint)p->length));InsightSymbol *call=&g_array_index(p->relations,InsightSymbol,p->relations->len-1);call->type=own(p,g_strdup(p->owner));CXCursor definition=clang_getCursorDefinition(target);CXFile target_file=NULL;if(!clang_Cursor_isNull(definition)) clang_getSpellingLocation(clang_getCursorLocation(definition),&target_file,NULL,NULL,NULL);call->inheritance=target_file ? own(p,string(clang_getFileName(target_file))):"";}
    }
@@ -134,6 +137,42 @@ static GPtrArray *arguments(const gchar *path,const gchar *root,const gchar *res
  if(root) {argument(args,"-I");argument(args,root);}if(resources && g_file_test(resources,G_FILE_TEST_IS_DIR)) {argument(args,"-resource-dir");argument(args,resources);}
  argument(args,"-fsyntax-only");argument(args,"-fno-modules");argument(args,"-fno-implicit-modules");return args;
 }
+static void completion_free(gpointer data) {
+ InsightClangCompletion *c=data;g_free(c->name);g_free(c->signature);g_free(c->type);g_free(c->comment);g_ptr_array_unref(c->parameters);g_free(c);
+}
+static gint completion_order(gconstpointer a,gconstpointer b) {
+ const InsightClangCompletion *x=*(InsightClangCompletion *const *)a,*y=*(InsightClangCompletion *const *)b;
+ if(x->priority!=y->priority) return x->priority<y->priority ? -1:1;gint order=g_strcmp0(x->name,y->name);return order ? order:g_strcmp0(x->signature,y->signature);
+}
+GPtrArray *insight_clang_complete(const gchar *path,const gchar *text,guint offset,const gchar *root,const gchar *resources,GHashTable *overlays,GCancellable *cancel,GError **error) {
+ if(!path || !text || !insight_clang_source(path) || strlen(text)>2u*1024u*1024u || offset>strlen(text) || !g_utf8_validate(text,-1,NULL) || !g_utf8_validate(text,offset,NULL)) {g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid C/C++ completion source or offset");return NULL;}
+ if(cancel && g_cancellable_set_error_if_cancelled(cancel,error)) return NULL;
+ gboolean database=FALSE;GPtrArray *args=arguments(path,root,resources,&database);GArray *unsaved=g_array_new(FALSE,FALSE,sizeof(struct CXUnsavedFile));gsize bytes=0;
+ if(overlays) {GHashTableIter it;gpointer key,value;g_hash_table_iter_init(&it,overlays);while(g_hash_table_iter_next(&it,&key,&value)) if(value && strcmp(key,path) && unsaved->len<256 && bytes+strlen(value)<=32u*1024u*1024u) {struct CXUnsavedFile f={key,value,strlen(value)};g_array_append_val(unsaved,f);bytes+=strlen(value);}}
+ struct CXUnsavedFile f={path,text,strlen(text)};g_array_append_val(unsaved,f);CXIndex index=clang_createIndex(1,0);CXTranslationUnit tu=NULL;
+ enum CXErrorCode code=clang_parseTranslationUnit2(index,path,(const gchar *const *)args->pdata,args->len,(struct CXUnsavedFile *)unsaved->data,unsaved->len,CXTranslationUnit_KeepGoing|CXTranslationUnit_CacheCompletionResults|CXTranslationUnit_IncludeBriefCommentsInCodeCompletion,&tu);g_ptr_array_unref(args);
+ GPtrArray *out=NULL;CXCodeCompleteResults *results=NULL;
+ if(code==CXError_Success && tu && !(cancel && g_cancellable_is_cancelled(cancel))) {
+  guint line=1,column=1;for(guint i=0;i<offset;i++) {if(text[i]=='\n') {line++;column=1;}else column++;}
+  results=clang_codeCompleteAt(tu,path,line,column,(struct CXUnsavedFile *)unsaved->data,unsaved->len,CXCodeComplete_IncludeMacros|CXCodeComplete_IncludeBriefComments);
+  if(results) {out=g_ptr_array_new_with_free_func(completion_free);gsize budget=0;
+   for(guint i=0;i<results->NumResults && i<50000 && out->len<4096 && budget<4u*1024u*1024u;i++) {
+    if(cancel && g_cancellable_is_cancelled(cancel)) break;CXCompletionString str=results->Results[i].CompletionString;if(clang_getCompletionAvailability(str)!=CXAvailability_Available) continue;
+    InsightClangCompletion *c=g_new0(InsightClangCompletion,1);c->parameters=g_ptr_array_new_with_free_func(g_free);c->priority=clang_getCompletionPriority(str);GString *label=g_string_new(NULL);c->type=g_strdup("");
+    for(guint n=0;n<clang_getNumCompletionChunks(str) && label->len<16384;n++) {enum CXCompletionChunkKind kind=clang_getCompletionChunkKind(str,n);gchar *chunk=string(clang_getCompletionChunkText(str,n));
+     if(kind==CXCompletionChunk_TypedText) {g_free(c->name);c->name=g_strdup(chunk);}else if(kind==CXCompletionChunk_ResultType) {g_free(c->type);c->type=g_strdup(chunk);}
+     else if(kind==CXCompletionChunk_Placeholder) {if(c->parameters->len<64) g_ptr_array_add(c->parameters,g_strdup(chunk));}
+     if(kind==CXCompletionChunk_LeftParen) c->callable=TRUE;
+     if(kind!=CXCompletionChunk_ResultType && kind!=CXCompletionChunk_Informative && kind!=CXCompletionChunk_Optional) g_string_append(label,chunk);g_free(chunk);
+    }
+    c->signature=g_string_free(label,FALSE);c->comment=string(clang_getCompletionBriefComment(str));
+    if(c->name && *c->name && !strpbrk(c->name,"\r\n\t") && strlen(c->name)<=1024 && strlen(c->signature)<=16384) {budget+=strlen(c->name)+strlen(c->signature)+strlen(c->type)+strlen(c->comment);g_ptr_array_add(out,c);}else completion_free(c);
+   }g_ptr_array_sort(out,completion_order);
+  }
+ }
+ if(results) clang_disposeCodeCompleteResults(results);if(tu) clang_disposeTranslationUnit(tu);clang_disposeIndex(index);g_array_unref(unsaved);
+ if(cancel && g_cancellable_set_error_if_cancelled(cancel,error)) {if(out) g_ptr_array_unref(out);return NULL;}if(!out) g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_FAILED,"Clang completion is unavailable for this source");return out;
+}
 gboolean insight_clang_available(void) {return TRUE;}
 InsightClangResult *insight_clang_parse(const gchar *path,const gchar *text,const gchar *root,const gchar *resources,GHashTable *overlays,GCancellable *cancel,GError **error) {
  if(!path || !text || !insight_clang_source(path) || strlen(text)>2u*1024u*1024u || !g_utf8_validate(text,-1,NULL)) {g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Clang requires a C/C++ UTF-8 source up to 2 MiB");return NULL;}
@@ -154,6 +193,7 @@ InsightClangResult *insight_clang_parse(const gchar *path,const gchar *text,cons
  if(cancel && g_cancellable_set_error_if_cancelled(cancel,error)) {insight_clang_result_free(r);return NULL;}return r;
 }
 #else
+GPtrArray *insight_clang_complete(const gchar *path,const gchar *text,guint offset,const gchar *root,const gchar *resources,GHashTable *overlays,GCancellable *cancel,GError **error) {(void)path;(void)text;(void)offset;(void)root;(void)resources;(void)overlays;(void)cancel;g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NOT_SUPPORTED,"Clang completion unavailable");return NULL;}
 gboolean insight_clang_available(void) {return FALSE;}
 InsightClangResult *insight_clang_parse(const gchar *path,const gchar *text,const gchar *root,const gchar *resources,GHashTable *overlays,GCancellable *cancel,GError **error) {(void)path;(void)text;(void)root;(void)resources;(void)overlays;(void)cancel;g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NOT_SUPPORTED,"This build has no bundled Clang backend");return NULL;}
 #endif

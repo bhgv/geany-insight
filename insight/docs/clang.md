@@ -98,3 +98,15 @@ references and this help page. The color preference persists in the Geany profil
 and does not disable compiler-derived symbols or references.
 
 Clang preserves function parameter names, macro parameters and underlying `typedef` types for completion and symbol information. Reanalysis with unchanged declarations does not rebuild the symbol panel. Portable-build tests parse a source using the bundled Clang resource headers.
+
+## Semantic call trees and completion
+
+**Navigate → Clang C/C++ → Callees / Callers (Clang tree)** opens a lazy Relations tree. Exact USRs distinguish overloads. Nodes retain call-site file, line and available target signature. Double-click opens the occurrence; expanding continues traversal. Repeated USRs stop recursive branches. Loaded branches also feed the existing graph, filtering, history and printing. Limits remain 200 occurrences per branch, 2000 nodes and depth 32. These are index snapshots: refresh after background analysis. Virtual edges show a static target, never a proven runtime implementation. Sources with errors are not treated as complete.
+
+Contextual Clang completion runs after `.`, `->`, `::` and on explicit completion. It uses receiver types, inheritance, accessibility, overloads, compilation-database flags and named unsaved header overlays. A short debounce and at most two worker requests avoid parsing on every keystroke. Changed source, overlays, project or caret reject stale replies. Compiler failure retains native tag completion. Completion options can disable this path.
+
+**Insert editable function parameter fields (Clang)** inserts the compiler-provided placeholders: replace them with expressions; Tab / Shift+Tab visits fields and Escape ends the session. These are editable parameter hints, not guessed argument values. The insertion is one Undo/Redo; existing arguments are preserved. Ordinary tags retain parentheses-only insertion. Spacing between inserted parameters is configurable and persisted.
+
+Definition navigation also uses compiler target locations in headers outside project membership; declarations are available when no body exists. The ordinary reference command prefers fresh compiler analysis while lexical modes remain separately selectable.
+
+![Semantic browsing](media/semantic-browsing.svg)

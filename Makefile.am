@@ -753,3 +753,5 @@ EXTRA_DIST += insight/tests/clang_backend_test.c
 EXTRA_DIST += insight/tools/bundle_clang.py
 
 insightdoc_DATA += insight/docs/clang.md
+
+dist_insightdocmedia_DATA += insight/docs/media/semantic-browsing.svg

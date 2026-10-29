@@ -2,6 +2,9 @@
 #include "geany.h"
 #include "document.h"
 #include "editor.h"
+#include "insight-completion.h"
+#include "insight-workbench.h"
+#include "insight-template-fields.h"
 #include "main.h"
 #include "ui_utils.h"
 #include "sciwrappers.h"
@@ -9,12 +12,16 @@
 #include <glib/gstdio.h>
 #include <string.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
+static gchar *external_header;
 static GtkWidget *window,*routes,*canvas;static GeanyDocument *a,*b;static gchar *directory,*project_file,*path_a,*path_b;static guint phase;static gboolean restore,menu_search_pending;
 static GtkWidget *named(GtkWidget *w,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(w),name)) return w;
  if(GTK_IS_MENU_ITEM(w)) {GtkWidget *sub=gtk_menu_item_get_submenu(GTK_MENU_ITEM(w));if(sub) {GtkWidget *out=named(sub,name);if(out) return out;}}
  if(GTK_IS_CONTAINER(w)) {GList *children=gtk_container_get_children(GTK_CONTAINER(w));GtkWidget *out=NULL;for(GList *p=children;p && !out;p=p->next) out=named(p->data,name);g_list_free(children);return out;}return NULL;
 }
+static GtkWidget *completion_popup(void) {GList *windows=gtk_window_list_toplevels();GtkWidget *found=NULL;for(GList *p=windows;p;p=p->next) if(gtk_widget_get_visible(p->data) && !g_strcmp0(gtk_widget_get_name(p->data),"insight-completion-popup")) found=p->data;g_list_free(windows);return found;}
+static gboolean relation_child(GtkTreeIter *root,GtkTreeIter *child,GtkTreeModel **model) {GtkWidget *view=named(window,"insight-relations-tree");*model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));return gtk_tree_model_get_iter_first(*model,root) && gtk_tree_model_iter_children(*model,child,root);}
+static void capture(const gchar *variable) {const gchar *path=g_getenv(variable);if(!path) return;GdkWindow *native=gtk_widget_get_window(window);GdkPixbuf *image=gdk_pixbuf_get_from_window(native,0,0,gdk_window_get_width(native),gdk_window_get_height(native));g_assert_nonnull(image);g_assert_true(gdk_pixbuf_save(image,path,"jpeg",NULL,"quality","90",NULL));g_object_unref(image);}
 static void command(const gchar *name) {GtkWidget *item=named(window,name);g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item));}
 static void button(const gchar *name) {GtkWidget *item=named(routes,name);g_assert_nonnull(item);gtk_button_clicked(GTK_BUTTON(item));}
 static guint count(const gchar *key) {return GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(routes),key));}
@@ -81,6 +88,22 @@ static gboolean step(gpointer data) {
   gchar *text=sci_get_contents(current->editor->sci,sci_get_length(current->editor->sci)+1);gchar *call=strstr(text,"pick(1)");g_assert_nonnull(call);SEND(current->editor->sci,SCI_GOTOPOS,call-text+1,0);g_free(text);command("insight-navigate-relation-8");
  } else if(phase==8 && gtk_widget_get_sensitive(named(window,"insight-clang-colors"))) {
   GtkWidget *view=named(window,"insight-relations"),*status=named(window,"insight-relation-status");if(!g_str_has_prefix(gtk_label_get_text(GTK_LABEL(status)),"Clang symbol identity:")) return G_SOURCE_CONTINUE;g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),NULL),==,1);command("insight-call-menu-0");counts(8,7);
+ } else if(phase==9 && insight_clang_available()) {
+  command("insight-navigate-relation-10");
+ } else if(phase==10 && insight_clang_available()) {
+  GtkTreeModel *model;GtkTreeIter root,child;if(!relation_child(&root,&child,&model)) return G_SOURCE_CONTINUE;gulong line=0;gchar *name=NULL;gtk_tree_model_get(model,&child,2,&line,7,&name,-1);if(!line) {g_free(name);return G_SOURCE_CONTINUE;}g_assert_cmpstr(name,==,"semantic_entry");g_free(name);g_assert_cmpuint(line,==,3);g_assert_cmpint(gtk_tree_model_iter_n_children(model,&root),==,1);
+  GtkTreePath *row=gtk_tree_model_get_path(model,&child);g_signal_emit_by_name(named(window,"insight-relations-tree"),"row-activated",row,NULL);gtk_tree_path_free(row);g_assert_cmpint(sci_get_current_line(document_get_current()->editor->sci),==,2);
+  SEND(document_get_current()->editor->sci,SCI_GOTOPOS,sci_get_position_from_line(document_get_current()->editor->sci,2)+5,0);command("insight-navigate-relation-9");
+ } else if(phase==11 && insight_clang_available()) {
+  GtkTreeModel *model;GtkTreeIter root,child;if(!relation_child(&root,&child,&model)) return G_SOURCE_CONTINUE;gulong line=0;gchar *name=NULL;gtk_tree_model_get(model,&child,2,&line,7,&name,-1);if(!line) {g_free(name);return G_SOURCE_CONTINUE;}g_assert_cmpstr(name,==,"pick");g_free(name);g_assert_cmpint(gtk_tree_model_iter_n_children(model,&root),==,1);capture("INSIGHT_SEMANTIC_RELATIONS_CAPTURE");GtkTreePath *row=gtk_tree_model_get_path(model,&child);gtk_tree_view_expand_row(GTK_TREE_VIEW(named(window,"insight-relations-tree")),row,FALSE);gtk_tree_path_free(row);
+ } else if(phase==12 && insight_clang_available()) {
+  GtkTreeModel *model;GtkTreeIter root,child,leaf;if(!relation_child(&root,&child,&model) || !gtk_tree_model_iter_children(model,&leaf,&child)) return G_SOURCE_CONTINUE;gchar *name=NULL;gtk_tree_model_get(model,&leaf,7,&name,-1);gboolean done=!g_strcmp0(name,"No indexed relations");g_free(name);if(!done) return G_SOURCE_CONTINUE;
+  gchar *path=g_build_filename(directory,"completion.cpp",NULL);const gchar *source="struct Base{int inherited;private:int hidden;};\nstruct Derived:Base{int own;int run(int count);double run(double count);};\nvoid entry(){Derived d;d.ru}\n";g_assert_true(g_file_set_contents(path,source,-1,NULL));GeanyDocument *current=document_open_file(path,FALSE,NULL,NULL);g_free(path);g_assert_nonnull(current);SEND(current->editor->sci,SCI_GOTOPOS,strstr(source,"d.ru}")-source+4,0);g_assert_true(editor_start_auto_complete(current->editor,sci_get_current_position(current->editor->sci),TRUE));
+ } else if(phase==13 && insight_clang_available()) {
+  GtkWidget *popup=completion_popup();if(!popup) return G_SOURCE_CONTINUE;GtkWidget *list=named(popup,"insight-completion-list");GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(list));if(!GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(document_get_current()->editor->sci),"insight-semantic-completion-count"))) return G_SOURCE_CONTINUE;g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,2);capture("INSIGHT_SEMANTIC_COMPLETION_CAPTURE");GtkTreeIter row;g_assert_true(gtk_tree_model_get_iter_first(model,&row));gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(list)),&row);GdkEventKey key={0};key.keyval=GDK_KEY_Return;g_assert_true(insight_completion_key(document_get_current()->editor,&key));ScintillaObject *sci=document_get_current()->editor->sci;g_assert_true(sci_has_selection(sci));gchar *field=sci_get_contents_range(sci,sci_get_selection_start(sci),sci_get_selection_end(sci));g_assert_nonnull(strstr(field,"count"));g_free(field);key.keyval=GDK_KEY_Tab;g_assert_true(insight_template_fields_key(GTK_WIDGET(sci),&key));g_assert_false(sci_has_selection(sci));SEND(sci,SCI_UNDO,0,0);gchar *text=sci_get_contents(sci,sci_get_length(sci)+1);g_assert_nonnull(strstr(text,"d.ru}"));g_free(text);document_set_text_changed(document_get_current(),FALSE);
+  gchar *external=g_dir_make_tmp("semantic-header-XXXXXX",NULL);external_header=g_build_filename(external,"api.h",NULL);g_free(external);g_assert_true(g_file_set_contents(external_header,"int semantic_external(int x){return x;}\n",-1,NULL));gchar *valid=g_strdup_printf("#include \"%s\"\nint entry(){return semantic_external(1); }\n",external_header);SEND(sci,SCI_SETTEXT,0,(sptr_t)valid);SEND(sci,SCI_GOTOPOS,strstr(valid,"semantic_external(1)")-valid+3,0);g_free(valid);
+ } else if(phase==14 && insight_clang_available()) {
+  GeanyDocument *current=document_get_current();InsightClangResult *r=g_object_get_data(G_OBJECT(current->editor->sci),"insight-clang-result");if(!r || r->errors) return G_SOURCE_CONTINUE;g_assert_true(insight_workbench_goto_definition());g_assert_cmpstr(document_get_current()->file_name,==,external_header);document_set_text_changed(current,FALSE);command("insight-call-menu-0");counts(8,7);
  } else {
   g_assert_false(gtk_widget_get_visible(named(window,"insight-relation-toolbar-tabs")));
   const gchar *capture=g_getenv("INSIGHT_SOURCE_ROUTES_CAPTURE");if(capture) {GdkWindow *native=gtk_widget_get_window(window);GdkPixbuf *image=gdk_pixbuf_get_from_window(native,0,0,gdk_window_get_width(native),gdk_window_get_height(native));g_assert_nonnull(image);g_assert_true(gdk_pixbuf_save(image,capture,"jpeg",NULL,"quality","90",NULL));g_object_unref(image);}
@@ -92,7 +115,7 @@ static gboolean timeout(gpointer data) {(void)data;g_error("Source routes timeou
 int main(int argc,char **argv) {
  if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;restore=argc==3 && !strcmp(argv[1],"--restore");directory=restore ? g_strdup(argv[2]):g_dir_make_tmp("source-routes-XXXXXX",NULL);project_file=g_build_filename(directory,"routes.geany",NULL);path_a=g_build_filename(directory,"a.c",NULL);path_b=g_build_filename(directory,"b.c",NULL);gchar *profile=g_build_filename(directory,"profile",NULL);g_mkdir_with_parents(profile,0700);
  if(!restore) {const gchar *source="int helper(int x) { struct options opts = {.port=1}; return create_rule(x); }\nint run(int x) {\n if (x > 0) { x = helper(x); } else { x = 0; }\n while (x > 1) { if (x == 3) break; --x; }\n return x;\n}\nint main(void) { return run(1); }\n";g_assert_true(g_file_set_contents(path_a,source,-1,NULL));gchar *duplicates=g_build_filename(directory,"other.c",NULL);g_assert_true(g_file_set_contents(duplicates,"int main(void) { return 0; }\nstatic int create_rule(int x) { return 0; }\n",-1,NULL));g_free(duplicates);gchar *semantic_file=g_build_filename(directory,"semantic.cpp",NULL);g_assert_true(g_file_set_contents(semantic_file,"int pick(int x){return x;}\nint pick(double x){return 2;}\nint semantic_entry(){return pick(1); }\nint semantic_other(){return pick(1.0); }\n",-1,NULL));g_free(semantic_file);g_assert_true(g_file_set_contents(path_b,"// destination α\nint target = 2;\nint create_rule(int x) { return x; }\n",-1,NULL));GKeyFile *key=g_key_file_new();g_key_file_set_string(key,"project","name","Source routes");g_key_file_set_string(key,"project","base_path",directory);gsize n;gchar *bytes=g_key_file_to_data(key,&n,NULL);g_assert_true(g_file_set_contents(project_file,bytes,n,NULL));g_free(bytes);g_key_file_unref(key);}
- gchar *config=g_build_filename(profile,"geany.conf",NULL);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\nload_session=false\n",-1,NULL));gchar *args[]={"source-routes","--new-instance","--no-session","--config",profile,project_file,path_a,NULL};g_timeout_add(350,step,NULL);g_timeout_add_seconds(35,timeout,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);gint result=main_lib(7,args);
+ gchar *completion_config=g_build_filename(profile,"insight-completion.conf",NULL);g_assert_true(g_file_set_contents(completion_config,"[completion]\ninsert-parameters=true\n",-1,NULL));g_free(completion_config);gchar *config=g_build_filename(profile,"geany.conf",NULL);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\nload_session=false\n",-1,NULL));gchar *args[]={"source-routes","--new-instance","--no-session","--config",profile,project_file,path_a,NULL};g_timeout_add(350,step,NULL);g_timeout_add_seconds(55,timeout,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);gint result=main_lib(7,args);
  if(!restore && !result) {gchar *child[]={argv[0],"--restore",directory,NULL};gint status=0;GError *error=NULL;g_assert_true(g_spawn_sync(NULL,child,NULL,0,NULL,NULL,NULL,NULL,&status,&error));g_assert_no_error(error);g_assert_true(g_spawn_check_wait_status(status,NULL));}
- g_free(config);g_free(profile);g_free(project_file);g_free(path_a);g_free(path_b);g_free(directory);return result;
+ g_free(external_header);g_free(config);g_free(profile);g_free(project_file);g_free(path_a);g_free(path_b);g_free(directory);return result;
 }

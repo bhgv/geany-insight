@@ -16,12 +16,12 @@ enum { UNLOADED,LOADING,LOADED,NOTICE,CYCLE };
 #define DEPTH_LIMIT 32
 typedef struct {
  GtkWidget *box,*status;GtkTreeView *view;GtkTreeStore *store;GtkTreeModelFilter *filter;
- InsightIndex *index;GCancellable *cancel;GHashTable *expanded;
+ InsightIndex *index,*calls;gboolean incoming;GCancellable *cancel;GHashTable *expanded;
  gchar *root,*source,*needle;const gchar *detail;GeanyFiletype *filetype;InsightRelationMode mode;
  guint generation,nodes;gboolean setting;
 } RelationTree;
 typedef struct {
- GWeakRef box;GtkTreeRowReference *row;InsightIndex *index;InsightLanguageFilter *language;
+ GWeakRef box;GtkTreeRowReference *row;InsightIndex *index,*calls;gboolean incoming;InsightLanguageFilter *language;
  gchar *owner;InsightRelationMode mode;guint generation;const InsightSymbol *found[BRANCH_LIMIT];size_t total;int limited,ambiguous;
 } BranchJob;
 static gchar *canonical(const gchar *raw) {
@@ -42,16 +42,18 @@ static gboolean visible(GtkTreeModel *model,GtkTreeIter *iter,gpointer data) {
 static void notice(RelationTree *tree,GtkTreeIter *parent,const gchar *text) { GtkTreeIter child;gtk_tree_store_append(tree->store,&child,parent);gtk_tree_store_set(tree->store,&child,NAME,insight_tr(text),STATE,NOTICE,-1); }
 static void clear_children(RelationTree *tree,GtkTreeIter *parent) { GtkTreeIter child;while(gtk_tree_model_iter_children(GTK_TREE_MODEL(tree->store),&child,parent)) gtk_tree_store_remove(tree->store,&child); }
 static int eligible(const InsightSymbol *symbol,void *data) { return insight_language_filter_match(data,symbol->path); }
-static void branch_free(gpointer data) { BranchJob *job=data;g_weak_ref_clear(&job->box);gtk_tree_row_reference_free(job->row);insight_index_free(job->index);insight_language_filter_free(job->language);g_free(job->owner);g_free(job); }
+static void branch_free(gpointer data) { BranchJob *job=data;g_weak_ref_clear(&job->box);gtk_tree_row_reference_free(job->row);insight_index_free(job->index);insight_index_free(job->calls);insight_language_filter_free(job->language);g_free(job->owner);g_free(job); }
 static void branch_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
  (void)source;BranchJob *job=data;job->total=SIZE_MAX;
- if(!g_cancellable_is_cancelled(cancel)) job->total=insight_relation_query_transitive(job->index,job->owner,job->mode,job->mode==INSIGHT_RELATION_MEMBERS ? 0 : 1,eligible,job->language,0,job->found,G_N_ELEMENTS(job->found),&job->limited,&job->ambiguous);
+ if(job->calls) {
+  job->total=0;for(gsize i=0;i<insight_index_count(job->calls) && !g_cancellable_is_cancelled(cancel);i++) {const InsightSymbol *row=insight_index_at(job->calls,i);if(strcmp(row->kind,"@clangcall") && strcmp(row->kind,"@clangvirtual")) continue;if(strcmp(job->incoming ? row->scope:row->type,job->owner)) continue;const InsightSymbol *coverage=NULL;if(insight_index_query(job->calls,"@clangfile",TRUE,NULL,"@clangfile",row->path,0,&coverage,1)!=1 || strcmp(coverage->type,"complete")) continue;if(job->total<BRANCH_LIMIT) job->found[job->total]=row;job->total++;}
+ } else if(!g_cancellable_is_cancelled(cancel)) job->total=insight_relation_query_transitive(job->index,job->owner,job->mode,job->mode==INSIGHT_RELATION_MEMBERS ? 0 : 1,eligible,job->language,0,job->found,G_N_ELEMENTS(job->found),&job->limited,&job->ambiguous);
  g_task_return_boolean(task,!g_cancellable_is_cancelled(cancel));
 }
 static gboolean cycle(RelationTree *tree,GtkTreeIter *parent,const gchar *owner) {
  GtkTreeIter current=*parent;
  do { gchar *ancestor=NULL;gtk_tree_model_get(GTK_TREE_MODEL(tree->store),&current,OWNER,&ancestor,-1);
-  const gchar *tail=strrchr(owner,'.');gboolean same=ancestor && (!strcmp(owner,ancestor) || (!strchr(ancestor,'.') && !strcmp(ancestor,tail ? tail+1 : owner)));g_free(ancestor);if(same) return TRUE;
+  const gchar *tail=strrchr(owner,'.');gboolean same=ancestor && (!strcmp(owner,ancestor) || (!tree->calls && (!strchr(ancestor,'.') && !strcmp(ancestor,tail ? tail+1 : owner))));g_free(ancestor);if(same) return TRUE;
   GtkTreeIter next;if(!gtk_tree_model_iter_parent(GTK_TREE_MODEL(tree->store),&next,&current)) break;current=next;
  }while(TRUE);return FALSE;
 }
@@ -70,12 +72,14 @@ static void branch_done(GObject *source,GAsyncResult *result,gpointer data) {
  else {
   gchar *parent_key=NULL;gtk_tree_model_get(GTK_TREE_MODEL(tree->store),&parent,KEY,&parent_key,-1);
   for(size_t i=0;i<MIN(job->total,G_N_ELEMENTS(job->found)) && tree->nodes<TREE_LIMIT;i++) {
-   const InsightSymbol *symbol=job->found[i];gchar *owner=symbol_owner(symbol),*key=g_strdup_printf("%s/%" G_GSIZE_FORMAT ":%s",parent_key,strlen(owner),owner);
-   gboolean repeated=cycle(tree,&parent,owner);guint type=insight_symbol_kind_type(symbol->path,symbol->kind,NULL);gboolean branch=(type&(tm_tag_class_t|tm_tag_struct_t|tm_tag_interface_t|tm_tag_union_t|tm_tag_enum_t|tm_tag_namespace_t|tm_tag_typedef_t))!=0;
-   gchar *description=g_strdup_printf("%s • %s%s%s",symbol->kind,symbol->scope,repeated ? " • " : "",repeated ? insight_tr("Cycle: branch stopped") : "");GtkTreeIter child;
-   gtk_tree_store_append(tree->store,&child,&parent);gtk_tree_store_set(tree->store,&child,DISPLAY,symbol->path,PATH,symbol->path,LINE,symbol->line,NAME,symbol->name,SNIPPET,description,OWNER,owner,KEY,key,STATE,repeated ? CYCLE : UNLOADED,-1);tree->nodes++;
+   const InsightSymbol *symbol=job->found[i];gchar *owner=job->calls ? g_strdup(job->incoming ? symbol->type:symbol->scope):symbol_owner(symbol),*key=g_strdup_printf("%s/%" G_GSIZE_FORMAT ":%s",parent_key,strlen(owner),owner);
+   gboolean repeated=cycle(tree,&parent,owner);guint type=insight_symbol_kind_type(symbol->path,symbol->kind,NULL);gboolean branch=job->calls || (type&(tm_tag_class_t|tm_tag_struct_t|tm_tag_interface_t|tm_tag_union_t|tm_tag_enum_t|tm_tag_namespace_t|tm_tag_typedef_t))!=0;
+   const gchar *name=symbol->name,*digest="";const InsightSymbol *coverage=NULL,*definition=NULL;gulong begin=0,end=0,column=0;
+   if(job->calls) {if(insight_index_query(job->calls,owner,TRUE,NULL,"@clangdef",NULL,0,&definition,1) && job->incoming) name=definition->signature;if(insight_index_query(job->calls,"@clangfile",TRUE,NULL,"@clangfile",symbol->path,0,&coverage,1)) digest=coverage->inheritance;gchar **positions=g_strsplit(symbol->signature,":",3);if(g_strv_length(positions)==3) {begin=g_ascii_strtoull(positions[0],NULL,10);end=g_ascii_strtoull(positions[1],NULL,10);column=g_ascii_strtoull(positions[2],NULL,10);}g_strfreev(positions);}
+   gchar *detail=job->calls && definition ? g_strconcat(name,definition->type,NULL):g_strdup(name);gchar *description=g_strdup_printf("%s • %s%s%s",job->calls ? (!strcmp(symbol->kind,"@clangvirtual") ? insight_tr("Virtual call: static target"):insight_tr("Clang call site")):symbol->kind,job->calls ? detail:symbol->scope,repeated ? " • " : "",repeated ? insight_tr("Cycle: branch stopped") : "");GtkTreeIter child;
+   gtk_tree_store_append(tree->store,&child,&parent);gtk_tree_store_set(tree->store,&child,DISPLAY,symbol->path,PATH,symbol->path,LINE,symbol->line,NAME,name,START,begin,END,end,COLUMN,column,DIGEST,digest,SNIPPET,description,OWNER,owner,KEY,key,STATE,repeated ? CYCLE : UNLOADED,-1);tree->nodes++;
    if(branch && !repeated) { if(depth>=DEPTH_LIMIT) { gtk_tree_store_set(tree->store,&child,STATE,LOADED,-1);notice(tree,&child,"Relation tree depth limit reached"); }else notice(tree,&child,"Expand to load relations…"); }
-   g_free(owner);g_free(key);g_free(description);
+   g_free(detail);g_free(owner);g_free(key);g_free(description);
   }
   g_free(parent_key);
   if(job->total>BRANCH_LIMIT) notice(tree,&parent,"Branch result limit reached (200)");
@@ -83,7 +87,7 @@ static void branch_done(GObject *source,GAsyncResult *result,gpointer data) {
   if(job->ambiguous) notice(tree,&parent,"Ambiguous class names omitted");
   if(!job->total) notice(tree,&parent,"No indexed relations");
  }
- tree->setting=FALSE;if(was_expanded) restore_branch(tree,&parent);status(tree,job->ambiguous ? "Ambiguous class names omitted" : NULL);
+ tree->setting=FALSE;if(was_expanded) restore_branch(tree,&parent);status(tree,job->calls ? "Clang call snapshot; double-click opens the call site":job->ambiguous ? "Ambiguous class names omitted" : NULL);
  GtkTreeIter child;for(gboolean valid=gtk_tree_model_iter_children(GTK_TREE_MODEL(tree->store),&child,&parent);valid;valid=gtk_tree_model_iter_next(GTK_TREE_MODEL(tree->store),&child)) restore_branch(tree,&child);
  g_object_unref(box);
 }
@@ -93,7 +97,7 @@ static void expanded(GtkTreeView *view,GtkTreeIter *filtered,GtkTreePath *path,g
  if(key) { if(g_hash_table_size(tree->expanded)>=4096) g_hash_table_remove_all(tree->expanded);g_hash_table_add(tree->expanded,g_strdup(key)); }
  if(state==UNLOADED && owner && *owner) {
   gtk_tree_store_set(tree->store,&iter,STATE,LOADING,-1);GtkTreeIter placeholder;if(gtk_tree_model_iter_children(GTK_TREE_MODEL(tree->store),&placeholder,&iter)) gtk_tree_store_set(tree->store,&placeholder,NAME,insight_tr("Loading relations…"),-1);else notice(tree,&iter,"Loading relations…");
-  BranchJob *job=g_new0(BranchJob,1);g_weak_ref_init(&job->box,tree->box);job->index=insight_index_ref(tree->index);job->owner=g_strdup(owner);job->mode=tree->mode;job->generation=tree->generation;job->language=insight_language_filter_new(tree->source,tree->filetype);
+  BranchJob *job=g_new0(BranchJob,1);g_weak_ref_init(&job->box,tree->box);job->index=insight_index_ref(tree->index);job->calls=insight_index_ref(tree->calls);job->incoming=tree->incoming;job->owner=g_strdup(owner);job->mode=tree->mode;job->generation=tree->generation;job->language=insight_language_filter_new(tree->source,tree->filetype);
   GtkTreePath *child_path=gtk_tree_model_get_path(GTK_TREE_MODEL(tree->store),&iter);job->row=gtk_tree_row_reference_new(GTK_TREE_MODEL(tree->store),child_path);gtk_tree_path_free(child_path);
   GTask *task=g_task_new(NULL,tree->cancel,branch_done,NULL);g_task_set_task_data(task,job,branch_free);g_task_run_in_thread(task,branch_run);g_object_unref(task);
  }
@@ -101,7 +105,7 @@ static void expanded(GtkTreeView *view,GtkTreeIter *filtered,GtkTreePath *path,g
  g_free(key);g_free(owner);
 }
 static void collapsed(GtkTreeView *view,GtkTreeIter *filtered,GtkTreePath *path,gpointer data) { (void)view;(void)path;RelationTree *tree=data;if(tree->setting) return;gchar *key=NULL;gtk_tree_model_get(GTK_TREE_MODEL(tree->filter),filtered,KEY,&key,-1);if(key) g_hash_table_remove(tree->expanded,key);g_free(key); }
-static void freed(gpointer data) { RelationTree *tree=data;g_cancellable_cancel(tree->cancel);g_object_unref(tree->cancel);insight_index_free(tree->index);g_object_unref(tree->filter);g_object_unref(tree->store);g_hash_table_unref(tree->expanded);g_free(tree->root);g_free(tree->source);g_free(tree->needle);g_free(tree); }
+static void freed(gpointer data) { RelationTree *tree=data;g_cancellable_cancel(tree->cancel);g_object_unref(tree->cancel);insight_index_free(tree->index);insight_index_free(tree->calls);g_object_unref(tree->filter);g_object_unref(tree->store);g_hash_table_unref(tree->expanded);g_free(tree->root);g_free(tree->source);g_free(tree->needle);g_free(tree); }
 static void line_cell(GtkTreeViewColumn *column,GtkCellRenderer *renderer,GtkTreeModel *model,GtkTreeIter *iter,gpointer data) {
  (void)column;(void)data;gulong line=0;gtk_tree_model_get(model,iter,LINE,&line,-1);gchar *text=line ? g_strdup_printf("%lu",line) : g_strdup("");g_object_set(renderer,"text",text,NULL);g_free(text);
 }
@@ -120,10 +124,16 @@ GtkWidget *insight_relation_tree_new(void) {
 GtkTreeView *insight_relation_tree_view(GtkWidget *box) { RelationTree *tree=g_object_get_data(G_OBJECT(box),"insight-relation-tree");return tree ? tree->view : NULL; }
 void insight_relation_tree_query(GtkWidget *box,InsightIndex *index,const gchar *owner,InsightRelationMode mode,const gchar *source,GeanyFiletype *ft) {
  RelationTree *tree=g_object_get_data(G_OBJECT(box),"insight-relation-tree");if(!tree || !index || !owner) return;
- g_cancellable_cancel(tree->cancel);g_clear_object(&tree->cancel);tree->cancel=g_cancellable_new();tree->generation++;tree->setting=TRUE;gtk_tree_store_clear(tree->store);tree->nodes=1;insight_index_free(tree->index);tree->index=insight_index_ref(index);tree->mode=mode;
+ g_cancellable_cancel(tree->cancel);g_clear_object(&tree->cancel);tree->cancel=g_cancellable_new();tree->generation++;tree->setting=TRUE;insight_index_free(tree->calls);tree->calls=NULL;gtk_tree_store_clear(tree->store);tree->nodes=1;insight_index_free(tree->index);tree->index=insight_index_ref(index);tree->mode=mode;
  g_free(tree->root);tree->root=canonical(owner);g_free(tree->source);tree->source=g_strdup(source);tree->filetype=ft;
  GtkTreeIter root;gtk_tree_store_append(tree->store,&root,NULL);gchar *key=g_strdup_printf("%d:%" G_GSIZE_FORMAT ":%s",mode,strlen(tree->root),tree->root);gtk_tree_store_set(tree->store,&root,NAME,owner,OWNER,tree->root,KEY,key,STATE,UNLOADED,-1);g_free(key);notice(tree,&root,"Expand to load relations…");tree->setting=FALSE;
  GtkTreePath *path=gtk_tree_path_new_from_indices(0,-1);gtk_tree_view_expand_row(tree->view,path,FALSE);gtk_tree_path_free(path);gtk_widget_set_sensitive(GTK_WIDGET(tree->view),TRUE);status(tree,NULL);
+}
+void insight_relation_tree_calls(GtkWidget *box,InsightIndex *calls,const gchar *usr,const gchar *label,gboolean incoming) {
+ RelationTree *tree=g_object_get_data(G_OBJECT(box),"insight-relation-tree");if(!tree || !calls || !usr || !*usr) return;
+ g_cancellable_cancel(tree->cancel);g_clear_object(&tree->cancel);tree->cancel=g_cancellable_new();tree->generation++;tree->setting=TRUE;gtk_tree_store_clear(tree->store);tree->nodes=1;insight_index_free(tree->index);tree->index=insight_index_ref(calls);insight_index_free(tree->calls);tree->calls=insight_index_ref(calls);tree->incoming=incoming;
+ g_free(tree->root);tree->root=g_strdup(usr);g_free(tree->source);tree->source=NULL;tree->filetype=NULL;
+ gchar *key=g_strdup_printf("clang:%d:%s",incoming,usr);GtkTreeIter root;gtk_tree_store_append(tree->store,&root,NULL);gtk_tree_store_set(tree->store,&root,NAME,label,OWNER,usr,KEY,key,STATE,UNLOADED,-1);g_free(key);notice(tree,&root,"Expand to load relations…");tree->setting=FALSE;GtkTreePath *path=gtk_tree_path_new_first();gtk_tree_view_expand_row(tree->view,path,FALSE);gtk_tree_path_free(path);gtk_widget_set_sensitive(GTK_WIDGET(tree->view),TRUE);status(tree,"Clang call snapshot; double-click opens the call site");
 }
 static gboolean restore_filtered(GtkTreeModel *model,GtkTreePath *path,GtkTreeIter *iter,gpointer data) { (void)model;(void)path;restore_branch(data,iter);return FALSE; }
 void insight_relation_tree_filter(GtkWidget *box,const gchar *query) { RelationTree *tree=g_object_get_data(G_OBJECT(box),"insight-relation-tree");if(!tree) return;g_free(tree->needle);tree->needle=g_strdup(query ? query : "");gtk_tree_model_filter_refilter(tree->filter);gtk_tree_model_foreach(GTK_TREE_MODEL(tree->store),restore_filtered,tree); }

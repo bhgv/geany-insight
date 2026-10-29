@@ -2769,3 +2769,15 @@ Clang-resolved calls	Вызовы, разрешённые Clang
 No compiler-resolved call path found; unresolved pointers may require manual source routes	Цепочка вызовов компилятором не разрешена; для неопределённых указателей могут понадобиться ручные маршруты
 Clang C/C++	Clang C/C++
 Clang C/C++ help…	Справка по Clang C/C++…
+Callees (Clang tree)	Вызываемые функции (дерево Clang)
+Callers (Clang tree)	Вызывающие функции (дерево Clang)
+Clang contextual C/C++ completion	Контекстное автодополнение C/C++ через Clang
+Insert editable function parameter fields (Clang)	Вставлять редактируемые поля параметров функций (Clang)
+Spaces between inserted parameters	Пробелы между вставляемыми параметрами
+Clang completes members after . / -> / :: and on explicit completion.\nExisting argument lists are preserved. Parameter fields use Tab / Shift+Tab.	Clang дополняет члены после . / -> / :: и по явной команде.\nСуществующие аргументы сохраняются. Переход по полям: Tab / Shift+Tab.
+Clang call site	Место вызова (Clang)
+Virtual call: static target	Виртуальный вызов: статическая цель
+Clang call snapshot; double-click opens the call site	Снимок вызовов Clang; двойной щелчок открывает место вызова
+Clang call snapshot; expand nodes for callers or callees	Снимок вызовов Clang; раскрывайте узлы для просмотра связей
+Clang call tree: select an analyzed function or wait for C/C++ analysis	Дерево Clang: выберите разобранную функцию или дождитесь разбора C/C++
+Cannot prepare Clang call snapshot	Не удалось подготовить снимок вызовов Clang

@@ -16,6 +16,9 @@ InsightClangResult *insight_clang_parse(const gchar *path,const gchar *text,cons
 static inline gchar *insight_clang_attribute_key(const InsightSymbol *s) {return g_strdup_printf("%lu:%s:%s:%s",s->line,s->name,s->scope,s->signature);}
 static inline guint insight_clang_attributes(const InsightClangResult *r,const InsightSymbol *s) {if(!r || !r->attributes) return 0;gchar *key=insight_clang_attribute_key(s);guint flags=GPOINTER_TO_UINT(g_hash_table_lookup(r->attributes,key));g_free(key);return flags;}
 gchar *insight_clang_symbol_at(InsightIndex *,const gchar *path,guint offset,guint line,const gchar *name);
+typedef struct { gchar *name,*signature,*type,*comment;GPtrArray *parameters;guint priority;gboolean callable; } InsightClangCompletion;
+/* Owned candidates, compiler-ranked; byte offset into the UTF-8 unsaved source. */
+GPtrArray *insight_clang_complete(const gchar *,const gchar *,guint,const gchar *,const gchar *,GHashTable *,GCancellable *,GError **);
 void insight_clang_result_free(InsightClangResult *);
 gboolean insight_clang_import(InsightClangResult *,const gchar *path,InsightIndex *symbols,InsightIndex *relations);
 #endif

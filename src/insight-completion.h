@@ -7,6 +7,7 @@ void insight_completion_search_limited(GeanyEditor *,gboolean);
 gint insight_completion_min_chars(void);
 gboolean insight_completion_inside_comments(void);
 GtkWidget *insight_completion_view_new(GtkListStore *);
+gboolean insight_completion_semantic(GeanyEditor *,gsize,gboolean);
 gboolean insight_completion_show(GeanyEditor *,const GPtrArray *,gsize);
 gboolean insight_completion_key(GeanyEditor *,GdkEventKey *);
 void insight_completion_notify(GeanyEditor *,SCNotification *);

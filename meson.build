@@ -1223,3 +1223,5 @@ if get_option('clang-bundle')
 endif
 
 install_data('insight/docs/clang.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
+
+install_data('insight/docs/media/semantic-browsing.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')

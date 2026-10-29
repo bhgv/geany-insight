@@ -2371,6 +2371,7 @@ gboolean editor_start_auto_complete(GeanyEditor *editor, gint pos, gboolean forc
 	read_current_word(editor, pos, cword, sizeof(cword), wordchars, TRUE);
 	root = cword;
 	rootlen = strlen(root);
+ if (!ret && highlighting_is_code_style(lexer,style) && insight_completion_semantic(editor,rootlen,force)) return TRUE;
 	if (ret || force)
 	{
 		if (autocomplete_scope_shown)

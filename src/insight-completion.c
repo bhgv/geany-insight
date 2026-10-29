@@ -3,6 +3,11 @@
 #include "insight-completion.h"
 #include "insight-languages.h"
 #include "document.h"
+#include "insight-clang.h"
+#include "insight-template-fields.h"
+#include "project.h"
+#include "utils.h"
+#include "insight-i18n.h"
 #include "sciwrappers.h"
 #include "symbols.h"
 #include "main.h"
@@ -14,9 +19,10 @@
 #include <string.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 #define KEY "insight-detailed-completion"
-enum { NAME,MARKUP,ICON,KIND,SCOPE,ORIGIN,IDENTITY,CALLABLE,COLUMNS };
-typedef struct { ScintillaObject *sci;GtkWidget *window,*view,*footer;GtkListStore *store;guint document,idle,focus_idle;gint start,end;gchar *prefix;gboolean active,accepting,limited; } Completion;
+enum { NAME,MARKUP,ICON,KIND,SCOPE,ORIGIN,IDENTITY,CALLABLE,PARAMETERS,COLUMNS };
+typedef struct { ScintillaObject *sci;GtkWidget *window,*view,*footer;GtkListStore *store;guint document,idle,focus_idle;gint start,end;gchar *prefix;gboolean active,accepting,limited,bypass;GCancellable *pending;guint semantic_idle,semantic_serial;gsize semantic_root; } Completion;
 static gboolean loaded;
+static guint semantic_workers;
 static InsightCompletionSettings settings;
 static GtkWidget *detail_item;
 static gboolean refresh(gpointer);
@@ -26,12 +32,13 @@ gboolean insight_completion_case_sensitive(void) { load();return settings.case_s
 gint insight_completion_min_chars(void) { load();return settings.min_chars ? settings.min_chars : editor_prefs.symbolcompletion_min_chars; }
 gboolean insight_completion_inside_comments(void) { load();return settings.inside_comments; }
 static Completion *state(GeanyEditor *editor) { return editor ? g_object_get_data(G_OBJECT(editor->sci),KEY) : NULL; }
-static void hide_at(Completion *c,const gchar *reason) { if(!c) return;if(c->active && g_getenv("GEANY_COMPLETION_DEBUG")) g_printerr("completion hide %s end=%d caret=%d idle=%u\n",reason,c->end,sci_get_current_position(c->sci),c->idle);c->active=FALSE;if(c->idle) { g_source_remove(c->idle);c->idle=0; }gtk_widget_hide(c->window); }
+static void semantic_cancel(Completion *c) {if(!c) return;c->semantic_serial++;if(c->semantic_idle) {g_source_remove(c->semantic_idle);c->semantic_idle=0;}if(c->pending) {g_cancellable_cancel(c->pending);g_clear_object(&c->pending);}}
+static void hide_at(Completion *c,const gchar *reason) { if(!c) return;semantic_cancel(c);if(c->active && g_getenv("GEANY_COMPLETION_DEBUG")) g_printerr("completion hide %s end=%d caret=%d idle=%u\n",reason,c->end,sci_get_current_position(c->sci),c->idle);c->active=FALSE;if(c->idle) { g_source_remove(c->idle);c->idle=0; }gtk_widget_hide(c->window); }
 
 
 #define hide(c) hide_at(c,__func__)
 void insight_completion_cancel(GeanyEditor *editor) { hide(state(editor)); }
-static void destroy(gpointer data) { Completion *c=data;if(c->focus_idle) g_source_remove(c->focus_idle);if(c->idle) g_source_remove(c->idle);gtk_widget_destroy(c->window);g_object_unref(c->store);g_free(c->prefix);g_free(c); }
+static void destroy(gpointer data) { Completion *c=data;semantic_cancel(c);if(c->focus_idle) g_source_remove(c->focus_idle);if(c->idle) g_source_remove(c->idle);gtk_widget_destroy(c->window);g_object_unref(c->store);g_free(c->prefix);g_free(c); }
 static const gchar *kind(TMTagType type) {
  if(type & (tm_tag_function_t|tm_tag_prototype_t|tm_tag_method_t)) return "function";
  if(type & (tm_tag_class_t|tm_tag_struct_t|tm_tag_interface_t|tm_tag_union_t|tm_tag_typedef_t)) return "type";
@@ -62,7 +69,10 @@ static void accept(Completion *c) {
  gint word_end=SEND(c->sci,SCI_WORDENDPOSITION,c->end,TRUE),end=editor_prefs.completion_drops_rest_of_word ? word_end : c->end;
  GtkTreeIter iter;gboolean callable=FALSE;if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(c->view)),NULL,&iter)) gtk_tree_model_get(GTK_TREE_MODEL(c->store),&iter,CALLABLE,&callable,-1);
  gchar *right=end==sci_get_length(c->sci) ? g_strdup("") : sci_get_contents_range(c->sci,end,MIN((gint64)end+128,sci_get_length(c->sci)));if(strspn(right," \t")==128) callable=FALSE;gchar *suffix=insight_completion_settings_suffix(&settings,callable && end>=word_end,right),*text=g_strconcat(name,suffix,NULL);gint name_end=c->start+strlen(name),caret=c->start+strlen(text);if(*suffix) caret--;
- c->accepting=TRUE;hide(c);SEND(c->sci,SCI_BEGINUNDOACTION,0,0);SEND(c->sci,SCI_SETTARGETSTART,c->start,0);SEND(c->sci,SCI_SETTARGETEND,end,0);SEND(c->sci,SCI_REPLACETARGET,strlen(text),(sptr_t)text);sci_set_current_position(c->sci,caret,FALSE);if(*suffix) insight_filetype_pairs_remember(c->sci,name_end+strlen(suffix)-2,name_end+strlen(suffix)-1);SEND(c->sci,SCI_ENDUNDOACTION,0,0);c->accepting=FALSE;g_free(right);g_free(suffix);g_free(text);g_free(name);
+ GArray *fields=g_array_new(FALSE,FALSE,sizeof(InsightSnippetField));gchar **parameters=NULL;if(settings.insert_parameters && *suffix && callable) gtk_tree_model_get(GTK_TREE_MODEL(c->store),&iter,PARAMETERS,&parameters,-1);
+ if(parameters && parameters[0]) {GString *insert=g_string_new(settings.space_after_name ? " (":"(");for(guint n=0;parameters[n] && n<64;n++) {if(n) g_string_append(insert,settings.space_between_parameters ? ", ":",");InsightSnippetField f={strlen(name)+insert->len,0};g_string_append(insert,parameters[n]);f.end=strlen(name)+insert->len;g_array_append_val(fields,f);}g_string_append_c(insert,')');g_free(suffix);suffix=g_string_free(insert,FALSE);g_free(text);text=g_strconcat(name,suffix,NULL);caret=c->start+strlen(text);}
+ g_strfreev(parameters);
+ c->accepting=TRUE;hide(c);SEND(c->sci,SCI_BEGINUNDOACTION,0,0);SEND(c->sci,SCI_SETTARGETSTART,c->start,0);SEND(c->sci,SCI_SETTARGETEND,end,0);SEND(c->sci,SCI_REPLACETARGET,strlen(text),(sptr_t)text);sci_set_current_position(c->sci,caret,FALSE);if(*suffix && !fields->len) insight_filetype_pairs_remember(c->sci,name_end+strlen(suffix)-2,name_end+strlen(suffix)-1);SEND(c->sci,SCI_ENDUNDOACTION,0,0);c->accepting=FALSE;if(fields->len) insight_template_fields_begin(c->sci,fields,c->start,strlen(text));g_array_unref(fields);g_free(right);g_free(suffix);g_free(text);g_free(name);
 }
 static gboolean button(GtkWidget *view,GdkEventButton *event,gpointer data) {
  Completion *c=data;if(event->button!=1) return TRUE;GtkTreePath *path=NULL;if(gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(view),event->x,event->y,&path,NULL,NULL,NULL)) { gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)),path);gtk_tree_path_free(path);accept(c); }return TRUE;
@@ -89,7 +99,7 @@ static Completion *create(GeanyEditor *editor) {
  Completion *c=state(editor);if(c) return c;c=g_new0(Completion,1);c->sci=editor->sci;c->document=editor->document->id;
  c->window=gtk_window_new(GTK_WINDOW_POPUP);gtk_widget_set_name(c->window,"insight-completion-popup");gtk_window_set_accept_focus(GTK_WINDOW(c->window),FALSE);gtk_window_set_focus_on_map(GTK_WINDOW(c->window),FALSE);gtk_window_set_resizable(GTK_WINDOW(c->window),FALSE);gtk_window_set_type_hint(GTK_WINDOW(c->window),GDK_WINDOW_TYPE_HINT_COMBO);gtk_window_set_transient_for(GTK_WINDOW(c->window),GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(c->sci))));
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,3),*scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(c->window),box);gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),GTK_POLICY_AUTOMATIC,GTK_POLICY_AUTOMATIC);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
- c->store=gtk_list_store_new(COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_BOOLEAN);c->view=insight_completion_view_new(c->store);gtk_container_add(GTK_CONTAINER(scroll),c->view);
+ c->store=gtk_list_store_new(COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_BOOLEAN,G_TYPE_STRV);c->view=insight_completion_view_new(c->store);gtk_container_add(GTK_CONTAINER(scroll),c->view);
  c->footer=gtk_label_new("");gtk_widget_set_name(c->footer,"insight-completion-details");gtk_label_set_xalign(GTK_LABEL(c->footer),0);gtk_label_set_ellipsize(GTK_LABEL(c->footer),PANGO_ELLIPSIZE_MIDDLE);gtk_box_pack_start(GTK_BOX(box),c->footer,FALSE,FALSE,3);gtk_widget_set_margin_start(box,4);gtk_widget_set_margin_end(box,4);
  g_signal_connect(c->view,"button-press-event",G_CALLBACK(button),c);g_signal_connect(c->view,"motion-notify-event",G_CALLBACK(motion),c);gtk_widget_add_events(c->view,GDK_POINTER_MOTION_MASK);g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(c->view)),"changed",G_CALLBACK(selection),c);g_signal_connect(c->sci,"focus-out-event",G_CALLBACK(focus_out),c);
  g_object_set_data_full(G_OBJECT(c->sci),KEY,c,destroy);return c;
@@ -109,7 +119,7 @@ gboolean insight_completion_show(GeanyEditor *editor,const GPtrArray *tags,gsize
  gtk_widget_set_size_request(c->view,620,MIN(count,(guint)settings.max_rows)*26);gtk_widget_show_all(c->window);position(c);return TRUE;
 }
 gboolean insight_completion_key(GeanyEditor *editor,GdkEventKey *event) {
- Completion *c=state(editor);if(!c || !c->active) return FALSE;if(event->state & (GDK_CONTROL_MASK|GDK_MOD1_MASK|GDK_SUPER_MASK)) { hide(c);return FALSE; }
+ Completion *c=state(editor);if(!c) return FALSE;if(event->keyval==GDK_KEY_Escape && (c->pending || c->semantic_idle)) {semantic_cancel(c);hide(c);return TRUE;}if(!c->active) return FALSE;if(event->state & (GDK_CONTROL_MASK|GDK_MOD1_MASK|GDK_SUPER_MASK)) { hide(c);return FALSE; }
  if(event->keyval==GDK_KEY_Escape) { hide(c);return TRUE; }
  if(event->keyval==GDK_KEY_Tab && !settings.accept_tab) { hide(c);return FALSE; }
  if(c->idle) { g_source_remove(c->idle);c->idle=0;refresh(c);if(!c->active) return FALSE; }
@@ -126,13 +136,43 @@ static gboolean refresh(gpointer data) {
  return G_SOURCE_REMOVE;
 }
 void insight_completion_notify(GeanyEditor *editor,SCNotification *nt) {
- Completion *c=state(editor);if(!c || !c->active || c->accepting) return;
+ Completion *c=state(editor);if(!c || c->accepting) return;if(nt->nmhdr.code==SCN_MODIFIED && (nt->modificationType & (SC_MOD_INSERTTEXT|SC_MOD_DELETETEXT))) semantic_cancel(c);if(!c->active) return;
  if(nt->nmhdr.code==SCN_MODIFIED && (nt->modificationType & (SC_MOD_INSERTTEXT|SC_MOD_DELETETEXT))) {
   if((nt->modificationType & (SC_PERFORMED_UNDO|SC_PERFORMED_REDO)) || nt->position<c->start || nt->position>c->end || nt->length>4096) { hide(c);return; }
   c->end+= (nt->modificationType & SC_MOD_INSERTTEXT) ? nt->length : -nt->length;if(!c->idle) c->idle=g_idle_add(refresh,c);
  } else if(nt->nmhdr.code==SCN_UPDATEUI && !c->idle && (nt->updated & SC_UPDATE_SELECTION) && sci_get_current_position(c->sci)!=c->end) hide(c);
  else if(nt->nmhdr.code==SCN_FOCUSOUT) focus_out(NULL,NULL,c);
  else if(nt->nmhdr.code==SCN_UPDATEUI && (nt->updated & (SC_UPDATE_V_SCROLL|SC_UPDATE_H_SCROLL))) hide(c);
+}
+typedef struct {GWeakRef sci;guint document,serial,offset,rootlen;gchar *path,*text,*root,*resources,*project;GHashTable *buffers;GPtrArray *results;} SemanticJob;
+static void semantic_job_free(gpointer data) {SemanticJob *j=data;g_weak_ref_clear(&j->sci);g_free(j->path);g_free(j->text);g_free(j->root);g_free(j->resources);g_free(j->project);g_hash_table_unref(j->buffers);if(j->results) g_ptr_array_unref(j->results);g_free(j);}
+static void semantic_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {(void)source;SemanticJob *j=data;j->results=insight_clang_complete(j->path,j->text,j->offset,j->root,j->resources,j->buffers,cancel,NULL);g_task_return_boolean(task,j->results!=NULL);}
+static void semantic_done(GObject *source,GAsyncResult *result,gpointer unused) {
+ (void)source;(void)unused;SemanticJob *j=g_task_get_task_data(G_TASK(result));if(semantic_workers) semantic_workers--;gboolean ok=g_task_propagate_boolean(G_TASK(result),NULL);ScintillaObject *sci=g_weak_ref_get(&j->sci);if(!sci) return;Completion *c=g_object_get_data(G_OBJECT(sci),KEY);GeanyDocument *doc=document_find_by_id(j->document);
+ if(!c || c->semantic_serial!=j->serial || !DOC_VALID(doc) || doc!=document_get_current() || doc->editor->sci!=sci || g_strcmp0(doc->file_name,j->path) || g_strcmp0(j->project,app->project ? app->project->file_name:NULL) || sci_get_current_position(sci)!=(gint)j->offset || sci_has_selection(sci) || SEND(sci,SCI_GETREADONLY,0,0) || SEND(sci,SCI_GETSELECTIONS,0,0)!=1) {g_object_unref(sci);return;}
+ g_clear_object(&c->pending);gchar *now=sci_get_contents(sci,sci_get_length(sci)+1);gboolean same=!strcmp(now,j->text);g_free(now);
+ GHashTableIter overlays;gpointer path,text;g_hash_table_iter_init(&overlays,j->buffers);while(same && g_hash_table_iter_next(&overlays,&path,&text)) {GeanyDocument *d=document_find_by_filename(path);if(!DOC_VALID(d)) {same=FALSE;break;}gchar *contents=sci_get_contents(d->editor->sci,sci_get_length(d->editor->sci)+1);same=!strcmp(contents,text);g_free(contents);}
+ if(ok && same && settings.detailed && settings.semantic) {
+  GPtrArray *tags=g_ptr_array_new_with_free_func((GDestroyNotify)tm_tag_unref),*chosen=g_ptr_array_new();gchar *prefix=g_strndup(j->text+j->offset-j->rootlen,j->rootlen),*folded=g_utf8_casefold(prefix,-1);
+  for(guint n=0;n<j->results->len && tags->len<editor_prefs.autocompletion_max_entries;n++) {InsightClangCompletion *item=g_ptr_array_index(j->results,n);gchar *candidate=g_utf8_casefold(item->name,-1);gboolean match=g_str_has_prefix(settings.case_sensitive ? item->name:candidate,settings.case_sensitive ? prefix:folded);g_free(candidate);if(!match) continue;
+   TMTag *tag=tm_tag_new();tag->name=g_strdup(item->name);tag->arglist=g_strdup(g_str_has_prefix(item->signature,item->name) ? item->signature+strlen(item->name):item->signature);tag->var_type=g_strdup(item->type);tag->lang=doc->tm_file ? doc->tm_file->lang:0;tag->type=item->callable ? tm_tag_function_t:tm_tag_member_t;tag->line=n+1;g_ptr_array_add(tags,tag);g_ptr_array_add(chosen,item);
+  }g_free(prefix);g_free(folded);
+  insight_completion_show(doc->editor,tags,j->rootlen);GtkTreeIter row;gboolean valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(c->store),&row);
+  for(guint n=0;valid && n<chosen->len;n++,valid=gtk_tree_model_iter_next(GTK_TREE_MODEL(c->store),&row)) {InsightClangCompletion *item=g_ptr_array_index(chosen,n);gchar **parameters=g_new0(gchar *,item->parameters->len+1);for(guint k=0;k<item->parameters->len;k++) parameters[k]=g_ptr_array_index(item->parameters,k);gchar *origin=g_strdup_printf("Clang • %s%s%s",item->signature,*item->comment ? " • ":"",item->comment);gtk_list_store_set(c->store,&row,ORIGIN,origin,PARAMETERS,parameters,-1);g_free(origin);g_free(parameters);}
+  selection(NULL,c);g_object_set_data(G_OBJECT(sci),"insight-semantic-completion-count",GUINT_TO_POINTER(tags->len));g_ptr_array_unref(tags);g_ptr_array_unref(chosen);
+ }else if(same && !ok) {c->bypass=TRUE;editor_start_auto_complete(doc->editor,j->offset,FALSE);c->bypass=FALSE;}g_object_unref(sci);
+}
+static gboolean semantic_start(gpointer data) {
+ Completion *c=data;if(semantic_workers>=2) return G_SOURCE_CONTINUE;c->semantic_idle=0;GeanyDocument *doc=document_find_by_id(c->document);if(!DOC_VALID(doc) || doc!=document_get_current() || !settings.semantic || !settings.detailed) return G_SOURCE_REMOVE;gint length=sci_get_length(c->sci),offset=sci_get_current_position(c->sci);if(length<0 || length>2*1024*1024 || offset<(gint)c->semantic_root || sci_has_selection(c->sci)) return G_SOURCE_REMOVE;
+ SemanticJob *j=g_new0(SemanticJob,1);g_weak_ref_init(&j->sci,c->sci);j->serial=c->semantic_serial;j->document=doc->id;j->offset=offset;j->rootlen=c->semantic_root;j->path=g_strdup(doc->file_name);j->text=sci_get_contents(c->sci,length+1);j->project=g_strdup(app->project ? app->project->file_name:NULL);j->resources=g_build_filename(app->datadir,"insight","clang","resources",NULL);gchar *native=app->project ? project_get_base_path():NULL;j->root=native ? utils_get_utf8_from_locale(native):g_path_get_dirname(doc->file_name);g_free(native);j->buffers=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);
+ gsize total=0;for(guint i=0;i<documents_array->len;i++) {GeanyDocument *d=g_ptr_array_index(documents_array,i);if(!DOC_VALID(d) || !d->file_name) continue;gint n=sci_get_length(d->editor->sci);if(n<0 || n>2*1024*1024 || total+(gsize)n>32u*1024u*1024u || g_hash_table_size(j->buffers)>=256) continue;gchar *text=sci_get_contents(d->editor->sci,n+1);if(!memchr(text,0,n) && g_utf8_validate(text,n,NULL)) {g_hash_table_insert(j->buffers,g_strdup(d->file_name),text);total+=n;}else g_free(text);}
+ if(memchr(j->text,0,length) || !g_utf8_validate(j->text,length,NULL)) {semantic_job_free(j);return G_SOURCE_REMOVE;}
+ semantic_workers++;c->pending=g_cancellable_new();GTask *task=g_task_new(NULL,c->pending,semantic_done,NULL);g_task_set_task_data(task,j,semantic_job_free);g_task_run_in_thread(task,semantic_run);g_object_unref(task);return G_SOURCE_REMOVE;
+}
+gboolean insight_completion_semantic(GeanyEditor *editor,gsize rootlen,gboolean force) {
+ load();GeanyDocument *doc=editor ? editor->document:NULL;Completion *existing=state(editor);if((existing && existing->bypass) || !settings.semantic || !settings.detailed || !insight_clang_available() || !DOC_VALID(doc) || !doc->file_name || !insight_clang_source(doc->file_name) || SEND(editor->sci,SCI_GETREADONLY,0,0) || SEND(editor->sci,SCI_GETSELECTIONS,0,0)!=1 || sci_has_selection(editor->sci)) return FALSE;
+ gint pos=sci_get_current_position(editor->sci)-(gint)rootlen;gboolean member=pos>0 && sci_get_char_at(editor->sci,pos-1)=='.';if(pos>=2) member=member || (sci_get_char_at(editor->sci,pos-2)=='-' && sci_get_char_at(editor->sci,pos-1)=='>') || (sci_get_char_at(editor->sci,pos-2)==':' && sci_get_char_at(editor->sci,pos-1)==':');if(!member && !force) return FALSE;
+ Completion *c=create(editor);semantic_cancel(c);c->semantic_root=rootlen;c->semantic_idle=g_timeout_add(150,semantic_start,c);return member;
 }
 static void close_all(void) { for(guint i=0;i<documents_array->len;i++) { GeanyDocument *doc=g_ptr_array_index(documents_array,i);if(doc->is_valid) insight_completion_cancel(doc->editor); } }
 static gboolean save(const InsightCompletionSettings *next,GError **error) {

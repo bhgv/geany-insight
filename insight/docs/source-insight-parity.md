@@ -855,3 +855,7 @@ Tools adds a modeless Custom Commands manager with shared collapsible options, 6
 ### Custom tool diagnostic source links
 
 The tool manager now snapshots output into a bounded sortable diagnostic table, with GCC/Clang, MSVC and Python presets, ANSI SGR stripping and launch-directory-relative local paths. The launch header is excluded; First/Previous/Next, double-click, Open source and local F4/Shift+F4 use native editor history without modifying source buffers. Run/Clear discard old rows. Up to 1000 rows; no custom regex patterns, remote path mappings, nested-tool chdir tracking or column-based caret positioning. [Guide](custom-commands.md).
+
+### Compiler call trees, completion and external header targets
+
+Relations adds lazy caller/callee trees keyed by Clang USR, sharing loaded-tree graphs, filtering, print and history. Contextual code completion uses libclang at the caret, preserving overloads and compiler-provided parameter fields, with debounce, stale-response checks and bounded workers. Definition lookup can open compiler targets outside the project manifest. See [Clang guide](clang.md). This does not claim arbitrary pointer-target inference, full SI macro/data compatibility or semantic support for every language.
