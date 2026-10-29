@@ -2781,3 +2781,5 @@ Clang call snapshot; double-click opens the call site	Снимок вызово�
 Clang call snapshot; expand nodes for callers or callees	Снимок вызовов Clang; раскрывайте узлы для просмотра связей
 Clang call tree: select an analyzed function or wait for C/C++ analysis	Дерево Clang: выберите разобранную функцию или дождитесь разбора C/C++
 Cannot prepare Clang call snapshot	Не удалось подготовить снимок вызовов Clang
+Choose a function overload in the Clang tree	Выберите перегрузку функции в дереве Clang
+Preparing Clang call snapshot…	Подготовка снимка вызовов Clang…

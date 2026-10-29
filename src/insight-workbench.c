@@ -1725,14 +1725,24 @@ static void relation_job_done(GObject *source,GAsyncResult *result,gpointer data
  }
  j->existing=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,symbol_iter_queue_free); j->collecting=TRUE; j->iter_valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(wb.matches),&j->iter); wb.usage_idle=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,relation_results_apply,g_object_ref(task),g_object_unref);
 }
-static void semantic_call_tree(const gchar *query,gboolean incoming) {
- InsightIndex *calls=insight_index_clone(wb.disk_calls);if(!calls) {set_usage_status("Cannot prepare Clang call snapshot");return;}
- for(guint i=0;i<documents_array->len;i++) {GeanyDocument *doc=g_ptr_array_index(documents_array,i);if(!DOC_VALID(doc) || !doc->file_name || !insight_clang_source(doc->file_name)) continue;InsightClangResult *r=insight_clang_ui_result(doc->editor->sci);if(r && !r->errors && !r->limited) {gsize n=insight_index_count(r->relations);InsightSymbol *rows=g_new(InsightSymbol,n);for(gsize k=0;k<n;k++) rows[k]=*insight_index_at(r->relations,k);insight_index_update(calls,doc->file_name,rows,n);g_free(rows);}else insight_index_update(calls,doc->file_name,NULL,0);}
- GeanyDocument *doc=document_get_current();InsightClangResult *r=DOC_VALID(doc) ? insight_clang_ui_result(doc->editor->sci):NULL;gchar *usr=r ? insight_clang_symbol_at(r->relations,doc->file_name,sci_get_current_position(doc->editor->sci),sci_get_current_line(doc->editor->sci)+1,query):NULL;
- if(!usr) {const InsightSymbol *candidate=NULL;guint count=0;for(gsize i=0;i<insight_index_count(calls);i++) {const InsightSymbol *row=insight_index_at(calls,i);if(strcmp(row->kind,"@clangdef") || strcmp(row->signature,query) || !strchr(row->type,'(')) continue;if(!candidate || strcmp(candidate->name,row->name)) {candidate=row;count++;}}if(count==1) usr=g_strdup(candidate->name);}
- if(!usr) {set_usage_status("Clang call tree: select an analyzed function or wait for C/C++ analysis");insight_index_free(calls);return;}
- insight_relation_tree_calls(wb.relation_tree,calls,usr,query,incoming);insight_relation_tree_filter(wb.relation_tree,gtk_entry_get_text(GTK_ENTRY(wb.relation_filter_entry)));g_free(usr);insight_index_free(calls);set_usage_status("Clang call snapshot; expand nodes for callers or callees");
+typedef struct {InsightIndex *base,*calls;GPtrArray *paths,*overlays;gchar *query,*usr,*source;gboolean incoming;guint64 generation,epoch;} SemanticCallsJob;
+static void semantic_calls_free(gpointer data) {SemanticCallsJob *j=data;insight_index_free(j->base);insight_index_free(j->calls);g_ptr_array_unref(j->paths);g_ptr_array_unref(j->overlays);g_free(j->query);g_free(j->usr);g_free(j->source);g_free(j);}
+static void semantic_calls_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
+ (void)source;SemanticCallsJob *j=data;j->calls=insight_index_clone(j->base);if(!j->calls) {g_task_return_boolean(task,FALSE);return;}
+ for(guint i=0;i<j->paths->len && !g_cancellable_is_cancelled(cancel);i++) {InsightIndex *overlay=g_ptr_array_index(j->overlays,i);gsize n=insight_index_count(overlay);InsightSymbol *rows=g_new(InsightSymbol,n);for(gsize k=0;k<n;k++) rows[k]=*insight_index_at(overlay,k);if(!insight_index_update(j->calls,g_ptr_array_index(j->paths,i),rows,n)) {g_free(rows);g_task_return_boolean(task,FALSE);return;}g_free(rows);}
+ if(!j->usr) {const InsightSymbol *candidate=NULL;guint count=0;for(gsize i=0;i<insight_index_count(j->calls) && !g_cancellable_is_cancelled(cancel);i++) {const InsightSymbol *row=insight_index_at(j->calls,i);if(strcmp(row->kind,"@clangdef") || strcmp(row->signature,j->query) || !strchr(row->type,'(')) continue;if(!candidate || strcmp(candidate->name,row->name) || (!strcmp(row->scope,"internal") && strcmp(candidate->path,row->path))) {candidate=row;count++;}}if(count==1) j->usr=g_strdup(candidate->name);}
+ g_task_return_boolean(task,!g_cancellable_is_cancelled(cancel));
+}
+static void semantic_calls_done(GObject *source,GAsyncResult *result,gpointer unused) {
+ (void)source;(void)unused;SemanticCallsJob *j=g_task_get_task_data(G_TASK(result));gboolean ok=g_task_propagate_boolean(G_TASK(result),NULL);if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.usage_generation) return;g_clear_object(&wb.search_worker);if(!ok) {set_usage_status("Cannot prepare Clang call snapshot");return;}
+ insight_relation_tree_calls(wb.relation_tree,j->calls,j->usr,j->query,j->incoming,j->source);insight_relation_tree_filter(wb.relation_tree,gtk_entry_get_text(GTK_ENTRY(wb.relation_filter_entry)));set_usage_status(j->usr ? "Clang call snapshot; expand nodes for callers or callees":"Choose a function overload in the Clang tree");
  gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_graph_toggle)) ? "treegraph":"tree");
+}
+static void semantic_call_tree(const gchar *query,gboolean incoming) {
+ SemanticCallsJob *j=g_new0(SemanticCallsJob,1);j->base=insight_index_ref(wb.disk_calls);j->paths=g_ptr_array_new_with_free_func(g_free);j->overlays=g_ptr_array_new_with_free_func((GDestroyNotify)insight_index_free);j->query=g_strdup(query);j->incoming=incoming;j->generation=wb.usage_generation;j->epoch=workbench_epoch;
+ for(guint i=0;i<documents_array->len;i++) {GeanyDocument *doc=g_ptr_array_index(documents_array,i);if(!DOC_VALID(doc) || !doc->file_name || !insight_clang_source(doc->file_name)) continue;InsightClangResult *r=insight_clang_ui_result(doc->editor->sci);g_ptr_array_add(j->paths,g_strdup(doc->file_name));g_ptr_array_add(j->overlays,r && !r->errors && !r->limited ? insight_index_ref(r->relations):NULL);}
+ GeanyDocument *doc=document_get_current();InsightClangResult *r=DOC_VALID(doc) ? insight_clang_ui_result(doc->editor->sci):NULL;if(r) j->usr=insight_clang_symbol_at(r->relations,doc->file_name,sci_get_current_position(doc->editor->sci),sci_get_current_line(doc->editor->sci)+1,query);j->source=DOC_VALID(doc) ? g_strdup(doc->file_name):NULL;
+ wb.search_worker=g_cancellable_new();GTask *task=g_task_new(NULL,wb.search_worker,semantic_calls_done,NULL);g_task_set_task_data(task,j,semantic_calls_free);g_task_run_in_thread(task,semantic_calls_run);g_object_unref(task);set_usage_status("Preparing Clang call snapshot…");
 }
 static void usage_start(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; stop_usage();
@@ -6202,6 +6212,7 @@ static void arrange_main_menus(void) {
   g_object_ref(item); gtk_container_remove(GTK_CONTAINER(bar),item); gtk_menu_shell_insert(GTK_MENU_SHELL(bar),item,(gint)i); g_object_unref(item);
  }
 }
+void insight_workbench_semantic_changed(guint document) {if(!wb.alive) return;GeanyDocument *doc=document_find_by_id(document);if(!DOC_VALID(doc) || doc!=document_get_current()) return;wb.relation_dirty=TRUE;wb.follow_doc=0;queue_definition(TRUE);insight_workbench_refresh();}
 void insight_workbench_index_changed(void) { if(wb.alive && wb.bookmark_handles && !wb.bookmark_sync_timer) wb.bookmark_sync_timer=g_idle_add(bookmark_sync_idle,NULL);stop_definition(); wb.follow_doc=0; mark_index_dirty(); insight_workbench_refresh(); }
 static gboolean remote_workspace(const char *path) { gboolean previous=wb.workspace_from_project; wb.workspace_from_project=FALSE; if(start_scan(path)) return TRUE; wb.workspace_from_project=previous; return FALSE; }
 static void follow_changed(GtkToggleButton *button,gpointer data) {

@@ -110,3 +110,5 @@ Contextual Clang completion runs after `.`, `->`, `::` and on explicit completio
 Definition navigation also uses compiler target locations in headers outside project membership; declarations are available when no body exists. The ordinary reference command prefers fresh compiler analysis while lexical modes remain separately selectable.
 
 ![Semantic browsing](../media/semantic-browsing.svg)
+
+Ambiguous function names produce separate selectable roots with signatures and file locations. Snapshot preparation runs in a worker. A newly published parse refreshes tracked Relations and Context even when declarations are unchanged. Calls through pointers are not presented as resolved direct function calls.
