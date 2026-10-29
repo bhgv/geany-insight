@@ -49,3 +49,5 @@ Refresh reruns the panel query and restores hidden nodes while retaining the loc
 
 
 [Print lists and the Relations outline](list-printing.md): Print List, Print Relation Window and Print outline, wrapping and page numbering.
+
+[Source routes and control flow / Маршруты и поток управления](source-routes.md): arbitrary source-location arrows, saved project routes and clickable structured function/selection graphs.

@@ -968,6 +968,7 @@ libgeany = shared_library('geany',
 	'src/insight-text-print.h',
 	'src/insight-list-tools.c',
 	'src/insight-list-tools.h',
+	'src/insight-source-routes.c', 'src/insight-source-routes.h', 'insight/core/control_flow.c', 'insight/core/control_flow.h',
 	'src/insight-relation-graph.c',
 	'src/insight-relation-graph.h',
 	'src/insight-help.c',
@@ -1188,3 +1189,5 @@ install_data('insight/docs/media/binary-merge.svg', install_dir: cdata.get('GEAN
 install_data('insight/docs/media/source-arrangement.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
 
 install_data('insight/docs/custom-commands.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
+
+install_data('insight/docs/source-routes.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')

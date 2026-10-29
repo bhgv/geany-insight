@@ -975,3 +975,8 @@ endif
 
 menu_palette_gui_test = executable('test_insight_menu_palette_gui', '../insight/tests/menu_palette_gui_test.c', dependencies: test_deps)
 test('Insight detachable menu palettes GUI', menu_palette_gui_test, timeout: 40, is_parallel: false)
+
+control_flow_test = executable('test_insight_control_flow', '../insight/core/control_flow.c', '../insight/tests/control_flow_test.c')
+test('Insight structured control flow core', control_flow_test)
+source_routes_gui_test = executable('test_insight_source_routes_gui', '../insight/tests/source_routes_gui_test.c', dependencies: test_deps)
+test('Insight native source routes and flow GUI', source_routes_gui_test, timeout: 45, is_parallel: false)

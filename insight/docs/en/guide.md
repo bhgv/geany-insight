@@ -135,3 +135,5 @@ Detached menu palettes paint the themed window background behind rounded menu co
 Where the display backend supports shaped windows, detached palettes are clipped to the current menu theme silhouette. The shape follows resizing and theme changes without replacing native window controls. Other backends use the painted themed backing.
 
 Palette size follows the native content requisition, excluding popup shadow reserve; the popup shadow is disabled inside the detached window. No blank spacer rows are added.
+
+[Source routes and control flow / Маршруты и поток управления](../source-routes.md): arbitrary source-location arrows, saved project routes and clickable structured function/selection graphs.

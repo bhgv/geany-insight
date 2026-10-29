@@ -2635,3 +2635,58 @@ Line	Строка
 Message	Сообщение
 Menu palette	Палитра меню
 Open as palette	Открыть как палитру
+Source routes	Маршруты по исходникам
+Control flow	Поток управления
+Source routes / flow	Маршруты / поток управления
+Add caret to source routes	Добавить позицию курсора в маршруты
+Graphs of source locations and function control flow	Графы позиций в исходниках и потока управления функции
+Add caret location	Добавить позицию курсора
+Link from selected	Связать от выбранного
+Remove node	Удалить узел
+Function flow	Граф функции
+Selection flow	Граф выделения
+Add the current source position to the project route graph	Добавить текущую позицию исходника в граф маршрутов проекта
+Select a node, then click this button and the destination node	Выберите узел, нажмите эту кнопку и затем узел назначения
+Remove the selected route node and its arrows	Удалить выбранный узел маршрута и его стрелки
+Build a lexical control-flow snapshot of the function at the caret	Построить лексический граф потока управления функции под курсором
+Build a flow graph from selected complete C-like statements	Построить граф выделенных полных операторов С-подобного языка
+Choose saved source routes or the generated flow snapshot	Выбор сохранённых маршрутов или построенного графа потока управления
+Graph zoom (%) — Ctrl+mouse wheel	Масштаб графа (%) — Ctrl+колесо мыши
+Source routes: click a node to open its source	Маршруты: щёлкните узел для открытия исходника
+Flow snapshot: click a node; rebuild after source edits	Снимок потока: щёлкните узел; после правок перестройте граф
+Source is closed or unavailable; rebuild the graph	Исходник закрыт или недоступен; перестройте граф
+Source changed; rebuild the flow graph	Исходник изменён; перестройте граф потока
+Source location changed or is ambiguous; capture it again	Позиция исходника изменилась или неоднозначна; добавьте её заново
+Source route graph is full	Достигнут предел графа маршрутов
+Source route added	Связь маршрута добавлена
+Add source locations or build a function flow graph	Добавьте позиции исходников или постройте граф функции
+Save the source file before adding a route location	Сохраните исходник перед добавлением позиции в маршрут
+Source line is too long to capture	Строка исходника слишком длинная для добавления
+Source location already exists	Эта позиция уже добавлена
+Source location added; select Link from selected to connect it	Позиция добавлена; нажмите «Связать от выбранного» для соединения
+Select a source route node first	Сначала выберите узел маршрута
+Click the destination node; Escape cancels linking	Щёлкните узел назначения; Escape отменяет соединение
+Flow graphs require a C-like source buffer up to 2 MiB	Граф потока требует С-подобный исходник размером до 2 МиБ
+Source must be valid UTF-8 without NUL	Исходник должен быть корректным UTF-8 без NUL
+Select one normal range of complete statements	Выделите один обычный диапазон полных операторов
+Place the caret inside a complete brace-bodied function	Поместите курсор внутри полной функции с телом в фигурных скобках
+Flow graph unavailable: {value}	Граф потока недоступен: {value}
+Invalid source route data was ignored	Некорректные данные маршрутов пропущены
+Control-flow graph exceeds 512 nodes	Граф потока превышает 512 узлов
+Expected a balanced condition or block	Ожидалось сбалансированное условие или блок
+Expression nesting exceeds 128 levels	Вложенность выражений превышает 128 уровней
+Unclosed condition or block	Незакрытое условие или блок
+Expected function body	Ожидалось тело функции
+Unclosed function block	Незакрытый блок функции
+Statement nesting exceeds 64 levels	Вложенность операторов превышает 64 уровня
+Missing statement	Отсутствует оператор
+Unsupported control syntax: switch/do/goto/exceptions/preprocessor	Не поддерживаются switch/do/goto/исключения/препроцессор
+Missing statement terminator	Отсутствует конец оператора
+Nested definitions/initializers/lambdas require a full language parser	Вложенные определения, инициализаторы и лямбды требуют полного парсера языка
+Unmatched parenthesis	Несогласованные круглые скобки
+Unmatched bracket	Несогласованные квадратные скобки
+Labels and conditional expressions are not expanded	Метки и тернарные выражения не разворачиваются
+break/continue outside a loop	break/continue вне цикла
+Control-flow graph exceeds edge limit	Граф потока превышает предел стрелок
+Expected a C-like function body up to 2 MiB	Ожидалось тело С-подобной функции размером до 2 МиБ
+Unexpected text after function body	Лишний текст после тела функции

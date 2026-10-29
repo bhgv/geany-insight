@@ -31,6 +31,7 @@
 #include "insight-diff-syntax.h"
 #include "insight-directory.h"
 #include "insight-relation-graph.h"
+#include "insight-source-routes.h"
 #include "insight-relation-tree.h"
 #include "insight-disk-browser.h"
 #include "insight-git.h"
@@ -128,7 +129,7 @@ typedef struct {
  InsightSearchLinks *search_links; gchar *search_state_path; GPtrArray *search_files,*search_history; gboolean usage_keywords; guint usage_context; InsightSourceRegion project_region;
  GtkWidget *usage_entry,*usage_status,*usage_buffer,*usage_view,*usage_code,*usage_comments,*relation_transitive,*relation_mode,*relation_follow,*relation_enclosing,*relation_filter_entry;
  GtkTreeModelFilter *relation_filter;
- GtkWidget *relation_tree,*relation_tree_toggle,*relation_back,*relation_forward,*relation_stack,*relation_graph_toggle,*relation_graph,*relation_tree_graph;GPtrArray *relation_history,*relation_future;
+ GtkWidget *relation_routes,*relation_tree,*relation_tree_toggle,*relation_back,*relation_forward,*relation_stack,*relation_graph_toggle,*relation_graph,*relation_tree_graph;GPtrArray *relation_history,*relation_future;
  gchar *relation_word; gint relation_last_mode; gboolean relation_dirty,relation_setting,reference_setting;InsightSourceRegion usage_region;
  gint usage_mode; guint usage_flags;
  GtkWidget *local_stack,*local_mode,*native_symbol_query;
@@ -1944,6 +1945,7 @@ static void relation_tree_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeV
 }
 static void relation_view_update(void) {
  if(!wb.relation_tree_toggle || !wb.relation_stack) return;
+ if(!g_strcmp0(gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack)),"routes")) return;
  gint mode=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode));gboolean supported=mode==2 || mode==4 || mode==5;
  gtk_widget_set_sensitive(wb.relation_tree_toggle,supported);gboolean tree=supported && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_tree_toggle));
  const gchar *old=gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack));gboolean graph=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_graph_toggle));
@@ -1972,14 +1974,20 @@ static void relation_next_view(GtkWidget *widget,gpointer data) {
   insight_relation_graph_set_options(wb.relation_tree_graph,TRUE,zoom);
  } else gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_graph_toggle),FALSE);
 }
+static void source_routes_show(GtkWidget *widget,gpointer data) {
+ (void)widget;focus_widget_panel(wb.usage_entry);gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"routes");
+ if(GPOINTER_TO_INT(data)) insight_source_routes_capture(wb.relation_routes);
+}
+static void relation_routes_back(GtkWidget *widget,gpointer data) { (void)widget;(void)data;gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"list");relation_view_update(); }
 static void relation_select_view(GtkWidget *widget,gpointer data) {
  (void)widget;gint mode=GPOINTER_TO_INT(data);if(!wb.relation_stack) return;focus_widget_panel(wb.usage_entry);
  const gchar *shown=gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack));
  gboolean tree=shown && g_str_has_prefix(shown,"tree");gint zoom=100;
+ if(!g_strcmp0(shown,"routes")) gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"list");
  insight_relation_graph_get_options(tree ? wb.relation_tree_graph:wb.relation_graph,NULL,&zoom);
  insight_relation_graph_set_options(wb.relation_graph,mode==2,zoom);
  insight_relation_graph_set_options(wb.relation_tree_graph,mode==2,zoom);
- gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_graph_toggle),mode!=0);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_graph_toggle),mode!=0);relation_view_update();
 }
 static void window_lock_item(GtkWidget *menu,GtkWidget *follow,const gchar *label,const gchar *name) {
  GtkWidget *item=gtk_check_menu_item_new_with_label(label);gtk_widget_set_name(item,name);
@@ -1988,7 +1996,7 @@ static void window_lock_item(GtkWidget *menu,GtkWidget *follow,const gchar *labe
  g_object_bind_property(follow,"active",item,"active",G_BINDING_BIDIRECTIONAL|G_BINDING_SYNC_CREATE|G_BINDING_INVERT_BOOLEAN);
  gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);
 }
-static void relation_graph_toggle(GtkToggleButton *button,gpointer data) { (void)button;(void)data;relation_view_update(); }
+static void relation_graph_toggle(GtkToggleButton *button,gpointer data) { (void)button;(void)data;gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"list");relation_view_update(); }
 static void relation_tree_toggle(GtkToggleButton *button,gpointer data) { (void)data;relation_view_update();if(!wb.relation_setting && gtk_toggle_button_get_active(button) && *gtk_entry_get_text(GTK_ENTRY(wb.usage_entry))) usage_start(NULL,NULL); }
 static void reference_region_changed(GtkWidget *widget,gpointer data) {
  (void)data;if(wb.reference_setting) return;wb.reference_setting=TRUE;
@@ -2047,12 +2055,14 @@ static void create_usage_browser(void) {
  g_signal_connect(wb.relation_filter_entry,"changed",G_CALLBACK(relation_filter_changed),NULL);
  GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),wb.usage_view);
  wb.relation_stack=gtk_stack_new();gtk_stack_add_named(GTK_STACK(wb.relation_stack),scroll,"list");
+ wb.relation_routes=insight_source_routes_new();gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_routes,"routes");
  wb.relation_tree=insight_relation_tree_new();gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_tree,"tree");
  GtkTreeView *tree_view=insight_relation_tree_view(wb.relation_tree);g_signal_connect(gtk_tree_view_get_selection(tree_view),"changed",G_CALLBACK(relation_tree_selected),NULL);g_signal_connect(tree_view,"row-activated",G_CALLBACK(relation_tree_activated),NULL);
  wb.relation_tree_toggle=gtk_check_button_new_with_label("Expandable relation tree");gtk_widget_set_name(wb.relation_tree_toggle,"insight-relation-tree-toggle");gtk_widget_set_sensitive(wb.relation_tree_toggle,FALSE);gtk_box_pack_start(GTK_BOX(controls),wb.relation_tree_toggle,FALSE,FALSE,0);g_signal_connect(wb.relation_tree_toggle,"toggled",G_CALLBACK(relation_tree_toggle),NULL);
  wb.relation_graph=insight_relation_graph_new(GTK_TREE_VIEW(wb.usage_view),GTK_ENTRY(wb.usage_entry),USAGE_SYMBOL,USAGE_DISPLAY,USAGE_LINE);insight_relation_graph_set_query_handler(wb.relation_graph,relation_graph_query,NULL);insight_relation_graph_set_node_handler(wb.relation_graph,relation_node_action,NULL);gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_graph,"graph");gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"list");
  wb.relation_tree_graph=insight_relation_graph_new_tree(tree_view,GTK_ENTRY(wb.usage_entry),USAGE_SYMBOL,USAGE_DISPLAY,USAGE_LINE);insight_relation_graph_set_query_handler(wb.relation_tree_graph,relation_graph_query,NULL);insight_relation_graph_set_node_handler(wb.relation_tree_graph,relation_node_action,NULL);gtk_stack_add_named(GTK_STACK(wb.relation_stack),wb.relation_tree_graph,"treegraph");
  wb.relation_graph_toggle=gtk_check_button_new_with_label("Graph view");gtk_widget_set_name(wb.relation_graph_toggle,"insight-relation-graph-toggle");gtk_box_pack_start(GTK_BOX(controls),wb.relation_graph_toggle,FALSE,FALSE,0);g_signal_connect(wb.relation_graph_toggle,"toggled",G_CALLBACK(relation_graph_toggle),NULL);
+ GtkWidget *routes=gtk_button_new_with_label("Source routes / flow"),*relations=gtk_button_new_with_label("Relations");gtk_widget_set_name(routes,"insight-relation-source-routes");gtk_widget_set_tooltip_text(routes,"Graphs of source locations and function control flow");gtk_box_pack_start(GTK_BOX(controls),routes,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(controls),relations,FALSE,FALSE,0);g_signal_connect(routes,"clicked",G_CALLBACK(source_routes_show),NULL);g_signal_connect(relations,"clicked",G_CALLBACK(relation_routes_back),NULL);
  GtkWidget *next_view=gtk_button_new_from_icon_name("view-refresh-symbolic",GTK_ICON_SIZE_MENU);gtk_widget_set_name(next_view,"insight-relation-next-view");gtk_widget_set_tooltip_text(next_view,"Next Relation Window View");gtk_box_pack_start(GTK_BOX(controls),next_view,FALSE,FALSE,0);g_signal_connect(next_view,"clicked",G_CALLBACK(relation_next_view),NULL);
  gtk_box_pack_start(GTK_BOX(box),wb.usage_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_mode,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_transitive,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_follow,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_enclosing,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_code,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),wb.usage_comments,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_buffer,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),controls,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.usage_status,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_filter_entry,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),drill,FALSE,FALSE,0); gtk_box_pack_start(GTK_BOX(box),wb.relation_stack,TRUE,TRUE,0);
  GtkWidget *options=insight_compare_ui_tabs(box,"insight-relation-toolbar-tabs");
@@ -5469,6 +5479,8 @@ static void create_workbench_menus(void) {
  GtkWidget *menubar=ui_lookup_widget(main_widgets.window,"menubar1"),*navigate=gtk_menu_item_new_with_mnemonic("_Navigate"),*menu=gtk_menu_new();
  gtk_menu_item_set_submenu(GTK_MENU_ITEM(navigate),menu); gtk_menu_shell_insert(GTK_MENU_SHELL(menubar),navigate,4);
  g_object_set_data(G_OBJECT(main_widgets.window),"insight-navigate",navigate);
+ const gchar *route_labels[]={"Source routes / flow","Add caret to source routes"};for(guint i=0;i<2;i++) {GtkWidget *entry=gtk_menu_item_new_with_label(route_labels[i]);gtk_widget_set_name(entry,i ? "insight-route-capture-command":"insight-route-show-command");gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry);g_signal_connect(entry,"activate",G_CALLBACK(source_routes_show),GUINT_TO_POINTER(i));gtk_widget_show(entry);}
+ GtkWidget *capture_route=gtk_menu_item_new_with_label("Add caret to source routes");gtk_widget_set_name(capture_route,"insight-route-capture-popup");gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.editor_menu),capture_route);g_signal_connect(capture_route,"activate",G_CALLBACK(source_routes_show),GINT_TO_POINTER(1));gtk_widget_show(capture_route);
  const gchar *relation_navigation[]={"Jump To Caller…","Lookup References…","Direct members (tags)","Derived types (tags)"};const gint relation_modes[]={7,0,2,5};for(guint n=0;n<G_N_ELEMENTS(relation_modes);n++) {GtkWidget *entry=gtk_menu_item_new_with_label(relation_navigation[n]);gchar *id=g_strdup_printf("insight-navigate-relation-%d",relation_modes[n]);gtk_widget_set_name(entry,id);g_free(id);g_signal_connect(entry,"activate",G_CALLBACK(navigate_relations),GINT_TO_POINTER(relation_modes[n]));gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry);}
  GtkWidget *navigation_help=gtk_menu_item_new_with_label("Navigation Help…");g_signal_connect(navigation_help,"activate",G_CALLBACK(insight_help_show),"navigation.md");gtk_menu_shell_append(GTK_MENU_SHELL(menu),navigation_help);
 

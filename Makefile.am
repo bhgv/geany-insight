@@ -739,3 +739,7 @@ EXTRA_DIST += insight/tests/custom_command_test.c insight/tests/custom_commands_
 
 EXTRA_DIST += insight/tests/menu_palette_gui_test.c
 dist_insightdocmedia_DATA += insight/docs/media/menu-palettes.svg
+
+insightdoc_DATA += insight/docs/source-routes.md
+dist_insightdocmedia_DATA += insight/docs/media/source-routes.svg
+EXTRA_DIST += insight/tests/control_flow_test.c insight/tests/source_routes_gui_test.c
