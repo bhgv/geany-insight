@@ -32,6 +32,8 @@
 #include "insight-directory.h"
 #include "insight-relation-graph.h"
 #include "insight-source-routes.h"
+#include "insight-clang.h"
+#include "../insight/desktop/clang_backend.h"
 #include "insight-relation-tree.h"
 #include "insight-disk-browser.h"
 #include "insight-git.h"
@@ -696,7 +698,7 @@ static gboolean database_identity(const gchar *root) {
  g_free(identity);g_free(policy);return changed;
 }
 static gchar *source_stamp(const gchar *native,const gchar *language,gint encoding) {
- gchar *stamp=insight_project_db_stamp(native,FALSE);if(!stamp) return NULL;gchar *value=g_strdup_printf("%s:%d:%s",language?language:"",encoding,stamp);g_free(stamp);return value;
+ gchar *stamp=insight_project_db_stamp(native,FALSE);if(!stamp) return NULL;gchar *value=g_strdup_printf("%s:%d:%s:clang%d",language?language:"",encoding,stamp,insight_clang_available());g_free(stamp);return value;
 }
 static void restore_project_database(const gchar *root) {
  InsightProjectDb db={0};GError *error=NULL;
@@ -754,8 +756,8 @@ static void save_index_cache(void) {
 }
 static char *read_disk_source_full(const char *,gboolean,gint,GCancellable *);
 static gboolean scan_step(gpointer);
-typedef struct { InsightIndex *index,*calls,*outline; OutlineFile *declarations;gchar *stamp,*path,*utf8,*language; gint lang,encoding; guint64 generation,epoch; gboolean read,parsed,failed,skipped,regular; } IndexJob;
-static void index_job_free(gpointer data) { IndexJob *j=data;outline_free(j->declarations); retire_index(j->index);retire_index(j->calls);retire_index(j->outline);g_free(j->stamp); g_free(j->path); g_free(j->utf8); g_free(j->language); g_free(j); }
+typedef struct { InsightIndex *index,*calls,*outline; OutlineFile *declarations;gchar *stamp,*path,*utf8,*language,*compile_root,*clang_resources; gint lang,encoding; guint64 generation,epoch; gboolean read,parsed,failed,skipped,regular; } IndexJob;
+static void index_job_free(gpointer data) { IndexJob *j=data;outline_free(j->declarations); retire_index(j->index);retire_index(j->calls);retire_index(j->outline);g_free(j->stamp); g_free(j->path); g_free(j->utf8); g_free(j->language);g_free(j->compile_root);g_free(j->clang_resources); g_free(j); }
 static void index_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
  (void)source; IndexJob *j=data; GStatBuf st;
  if(g_cancellable_is_cancelled(cancel)) { g_task_return_boolean(task,FALSE); return; }
@@ -776,9 +778,15 @@ static void index_job_run(GTask *task,gpointer source,gpointer data,GCancellable
     if(file) { file->lang=j->lang; if(!insight_native_parse(j->index,file,j->utf8,text,strlen(text))) j->failed=TRUE;else { j->declarations=outline_capture(file,j->utf8);if(!insight_native_outline_import(j->outline,file,j->utf8)) j->failed=TRUE; } tm_source_file_free(file); }
     else j->failed=TRUE;
    }
+   gboolean semantic=FALSE;
+   if(!j->failed && insight_clang_available() && insight_clang_source(j->utf8) && !g_cancellable_is_cancelled(cancel)) {
+    InsightClangResult *parsed=insight_clang_parse(j->utf8,text,j->compile_root,j->clang_resources,NULL,cancel,NULL);
+    if(parsed && !parsed->errors && !parsed->limited) semantic=insight_clang_import(parsed,j->utf8,j->index,j->calls);
+    insight_clang_result_free(parsed);
+   }
    InsightCodeDialect dialect;
    GeanyFiletype *ft=filetypes_lookup_by_name(j->language?j->language:"");
-   if(!j->failed&&source_dialect(ft,&dialect)) {
+   if(!j->failed&&!semantic&&source_dialect(ft,&dialect)) {
     gchar *mask=insight_source_code_mask(text,strlen(text),dialect,NULL),*digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,text,-1);GArray *rows=g_array_new(FALSE,FALSE,sizeof(InsightSymbol));GPtrArray *owned=g_ptr_array_new_with_free_func(g_free);size_t cursor=0,a=0,b=0,line=1,line_at=0;
     while(mask&&rows->len<32000&&insight_next_call(mask,strlen(text),&cursor,&a,&b)==1) {
      while(line_at<a) { if(text[line_at]=='\n') line++;else if(text[line_at]=='\r'&&(line_at+1>=a||text[line_at+1]!='\n')) line++;line_at++; }
@@ -827,9 +835,9 @@ static void scan_source_file(const char *path) {
  const gchar *stored=g_hash_table_lookup(wb.file_stamps,utf8);
  if(ft&&ft->id==GEANY_FILETYPES_NONE&&stored) { const gchar *colon=strchr(stored,':');if(colon) { gchar *language=g_strndup(stored,colon-stored);GeanyFiletype *cached=filetypes_lookup_by_name(language);if(cached) ft=cached;g_free(language); } }
  gchar *stamp=source_stamp(path,ft?ft->name:NULL,file_prefs.default_open_encoding);
- if(!wb.force_parse&&stamp&&!g_strcmp0(stamp,g_hash_table_lookup(wb.file_stamps,utf8))) { g_ptr_array_add(wb.scan_members,g_strdup(utf8));wb.reused++;g_free(stamp);g_free(utf8);return; }
+ if(!wb.force_parse&&stamp&&!g_strcmp0(stamp,g_hash_table_lookup(wb.file_stamps,utf8))&&(!insight_clang_available()||!insight_clang_source(utf8)||insight_clang_dependencies_fresh(wb.disk_calls,utf8))) { g_ptr_array_add(wb.scan_members,g_strdup(utf8));wb.reused++;g_free(stamp);g_free(utf8);return; }
  ft=filetypes_detect_from_file(utf8);g_free(stamp);stamp=source_stamp(path,ft?ft->name:NULL,file_prefs.default_open_encoding);
- IndexJob *j=g_new0(IndexJob,1);wb.scan_backup=insight_index_ref(wb.base); j->index=wb.base; wb.base=NULL;j->calls=insight_index_ref(wb.disk_calls);j->outline=insight_index_ref(wb.disk_declarations);j->stamp=stamp; j->path=g_strdup(path); j->utf8=utf8; j->language=g_strdup(ft ? ft->name : NULL); j->lang=ft ? ft->lang : -1; j->read=ft && ft->id!=GEANY_FILETYPES_NONE; j->encoding=file_prefs.default_open_encoding; j->generation=wb.scan_generation; j->epoch=workbench_epoch;
+ IndexJob *j=g_new0(IndexJob,1);j->compile_root=wb.root ? utils_get_utf8_from_locale(wb.root):NULL;j->clang_resources=g_build_filename(app->datadir,"insight","clang","resources",NULL);wb.scan_backup=insight_index_ref(wb.base); j->index=wb.base; wb.base=NULL;j->calls=insight_index_ref(wb.disk_calls);j->outline=insight_index_ref(wb.disk_declarations);j->stamp=stamp; j->path=g_strdup(path); j->utf8=utf8; j->language=g_strdup(ft ? ft->name : NULL); j->lang=ft ? ft->lang : -1; j->read=ft && ft->id!=GEANY_FILETYPES_NONE; j->encoding=file_prefs.default_open_encoding; j->generation=wb.scan_generation; j->epoch=workbench_epoch;
  wb.scan_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.scan_worker,index_job_done,NULL); g_task_set_task_data(task,j,index_job_free); g_task_run_in_thread(task,index_job_run); g_object_unref(task);
 }
 static gboolean scan_step(gpointer data) {
@@ -5525,6 +5533,7 @@ static void create_workbench_menus(void) {
  GtkWidget *menubar=ui_lookup_widget(main_widgets.window,"menubar1"),*navigate=gtk_menu_item_new_with_mnemonic("_Navigate"),*menu=gtk_menu_new();
  gtk_menu_item_set_submenu(GTK_MENU_ITEM(navigate),menu); gtk_menu_shell_insert(GTK_MENU_SHELL(menubar),navigate,4);
  g_object_set_data(G_OBJECT(main_widgets.window),"insight-navigate",navigate);
+ insight_clang_ui_init(menu);
  append_call_paths_menu(menu,"insight-call-menu");append_call_paths_menu(main_widgets.editor_menu,"insight-call-popup");
  const gchar *route_labels[]={"Source routes / flow","Add caret to source routes"};for(guint i=0;i<2;i++) {GtkWidget *entry=gtk_menu_item_new_with_label(route_labels[i]);gtk_widget_set_name(entry,i ? "insight-route-capture-command":"insight-route-show-command");gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry);g_signal_connect(entry,"activate",G_CALLBACK(source_routes_show),GUINT_TO_POINTER(i));gtk_widget_show(entry);}
  GtkWidget *capture_route=gtk_menu_item_new_with_label("Add caret to source routes");gtk_widget_set_name(capture_route,"insight-route-capture-popup");gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.editor_menu),capture_route);g_signal_connect(capture_route,"activate",G_CALLBACK(source_routes_show),GINT_TO_POINTER(1));gtk_widget_show(capture_route);
@@ -6427,6 +6436,7 @@ static void remove_group_accelerators(GtkWidget *widget,GtkAccelGroup *group) {
  g_list_free(closures);
 }
 void insight_workbench_finalize(void) {
+ insight_clang_ui_finalize();
  palette_restore_now();
  if(palette.view_timer) {g_source_remove(palette.view_timer);palette.view_timer=0;}g_clear_pointer(&palette.views,g_ptr_array_unref);
  if(wb.main_apply_source) { g_source_remove(wb.main_apply_source);wb.main_apply_source=0; }

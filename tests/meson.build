@@ -983,3 +983,6 @@ test('Insight native source routes and flow GUI', source_routes_gui_test, timeou
 
 call_paths_test = executable('test_insight_call_paths', '../insight/tests/call_paths_test.c', '../insight/desktop/call_paths.c', '../insight/desktop/source_mask.c', '../insight/core/structure_select.c', '../insight/core/index.c', dependencies: deps)
 test('Insight bounded project call paths', call_paths_test)
+
+clang_backend_test = executable('test_insight_clang_backend', '../insight/tests/clang_backend_test.c', '../insight/desktop/clang_backend.c', '../insight/core/index.c', dependencies: deps, c_args: basic_cflags, include_directories: '..')
+test('Insight Clang semantic frontend', clang_backend_test, timeout: 60)

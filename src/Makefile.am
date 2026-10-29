@@ -456,3 +456,7 @@ libgeany_la_SOURCES += insight-ai-ui.h insight-ai-console.c insight-ai-console.h
 libgeany_la_SOURCES += ../insight/desktop/window_motion.c ../insight/desktop/window_motion.h
 
 libgeany_la_SOURCES += insight-side-tabs.c insight-side-tabs.h
+
+libgeany_la_SOURCES += ../insight/desktop/clang_backend.c ../insight/desktop/clang_backend.h
+
+libgeany_la_SOURCES += insight-clang.c insight-clang.h

@@ -2751,3 +2751,11 @@ Find…	Найти…
 Replace…	Заменить…
 Find in Files…	Найти в файлах…
 More search commands	Дополнительные команды поиска
+Clang C/C++ semantic colors	Семантическая подсветка C/C++ через Clang
+Reanalyze C/C++ buffer with Clang	Повторно разобрать исходник C/C++ через Clang
+Clang: %zu symbols, %u semantic tokens%s%s	Clang: %zu символов, %u семантических элементов%s%s
+; source diagnostics present	; есть диагностические сообщения
+; default compiler arguments	; стандартные параметры компилятора
+Clang requires a C/C++ UTF-8 source up to 2 MiB	Clang требует исходник C/C++ в UTF-8 размером до 2 МиБ
+Clang could not parse the translation unit	Clang не смог разобрать единицу трансляции
+This build has no bundled Clang backend	В этой сборке отсутствует backend Clang

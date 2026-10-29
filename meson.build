@@ -30,6 +30,25 @@ endif
 glib = deps[0]
 gtk = deps[2]
 
+# libclang is optional for minimal/source-only builds. Release bundles enable
+# it explicitly and carry the runtime; no compiler subprocess is used.
+clang_sdk = find_program('llvm-config', 'llvm-config-22', 'llvm-config-21', 'llvm-config-20', 'llvm-config-19', 'llvm-config-18', 'llvm-config-17', 'llvm-config-16', 'llvm-config-15', 'llvm-config-14', required: false)
+clang_args = []
+clang_dirs = []
+if clang_sdk.found()
+ clang_args = ['-I' + run_command(clang_sdk, '--includedir', check: true).stdout().strip()]
+ clang_dirs = [run_command(clang_sdk, '--libdir', check: true).stdout().strip()]
+endif
+clang_dep = cc.find_library('clang', dirs: clang_dirs, required: false)
+clang_enabled = not get_option('clang').disabled() and clang_dep.found() and cc.has_header('clang-c/Index.h', args: clang_args)
+if get_option('clang').enabled() and not clang_enabled
+ error('Clang backend requested: install the matching libclang headers/library and llvm-config')
+endif
+if clang_enabled
+ deps += clang_dep
+ add_project_arguments(clang_args, language: ['c', 'cpp'])
+endif
+
 # detect libc
 glibc = false
 if cc.has_header('gnu/libc-version.h')
@@ -39,6 +58,9 @@ endif
 gnu_source = glibc
 
 cdata = configuration_data()
+if clang_enabled
+ cdata.set('HAVE_LIBCLANG', 1)
+endif
 check_headers = [
 	'alloca.h',
 	'asprintf.h',
@@ -968,7 +990,7 @@ libgeany = shared_library('geany',
 	'src/insight-text-print.h',
 	'src/insight-list-tools.c',
 	'src/insight-list-tools.h',
-	'src/insight-source-routes.c', 'src/insight-source-routes.h', 'insight/core/control_flow.c', 'insight/core/control_flow.h', 'insight/desktop/call_paths.c', 'insight/desktop/call_paths.h',
+	'src/insight-source-routes.c', 'src/insight-source-routes.h', 'insight/core/control_flow.c', 'insight/core/control_flow.h', 'insight/desktop/call_paths.c', 'insight/desktop/call_paths.h', 'insight/desktop/clang_backend.c', 'insight/desktop/clang_backend.h', 'src/insight-clang.c', 'src/insight-clang.h',
 	'src/insight-relation-graph.c',
 	'src/insight-relation-graph.h',
 	'src/insight-help.c',
@@ -1044,6 +1066,7 @@ libgeany = shared_library('geany',
 	osx_src,
 	link_with: [insight_native, insight_vterm],
 	link_args: win_link_args,
+	install_rpath: clang_enabled ? '$ORIGIN/geany/clang' : '',
 	soversion: '0',
 	c_args: geany_cflags + [ '-DG_LOG_DOMAIN="Geany"' ],
 	include_directories: [iscintilla, include_directories('insight/core', 'insight/desktop')],
@@ -1191,3 +1214,12 @@ install_data('insight/docs/media/source-arrangement.svg', install_dir: cdata.get
 install_data('insight/docs/custom-commands.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 
 install_data('insight/docs/source-routes.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
+
+if get_option('clang-bundle')
+ if not clang_enabled or not clang_sdk.found()
+  error('clang-bundle requires the enabled Clang SDK and llvm-config')
+ endif
+ meson.add_install_script(find_program('python3'), meson.current_source_dir() / 'insight/tools/bundle_clang.py', '--sdk-lib', clang_dirs[0], '--libdir', get_option('libdir'), '--datadir', host_machine.system() == 'windows' ? 'data' : get_option('datadir') / 'geany')
+endif
+
+install_data('insight/docs/clang.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')

@@ -212,13 +212,17 @@ is still shown. This is a source-navigation view, not a runtime execution trace.
 с отметками «Да/Нет». Узлы кликабельны. Разные места вызова одной функции
 сохраняются как отдельные варианты цепочки. Вычисление условий не производится.
 
-### Clang C/C++ integration status
+### Clang C/C++ frontend
 
-This release still uses lexical call-chain and structural branch analysis.
-Clang is not bundled or enabled as a semantic graph backend yet. A future
-libclang backend needs the project's actual include paths, defines, language
-standard and target, preferably from `compile_commands.json`, plus unsaved editor
-buffers and cursor identities across translation units. See the official
-[libclang tutorial](https://clang.llvm.org/docs/LibClang.html) and
-[compilation database format](https://clang.llvm.org/docs/JSONCompilationDatabase.html).
-Installing Clang alone does not change this release's graph semantics.
+Clang-enabled builds now parse project C/C++ definitions through libclang and
+retain compiler-resolved symbol identities, references and calls in the existing
+project database. Header and compilation database stamps invalidate affected
+source results. Sources with compiler errors retain the lexical project-index
+fallback; **Navigate → Reanalyze C/C++ buffer with Clang** reports the active
+buffer's semantic result and whether compiler defaults or a compilation database
+were used. Semantic colors overlay identifier tokens without replacing the
+Scintilla lexer, comments, strings, selections or source text.
+
+The call-chain renderer's branch analysis is still structural; adding a compiler
+frontend does not make runtime conditions known. Detailed integration and portable
+runtime instructions are in [Clang C/C++](clang.md).

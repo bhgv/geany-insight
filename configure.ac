@@ -93,6 +93,25 @@ GEANY_CHECK_REVISION([dnl force debug mode for a VCS working copy
 					  CFLAGS="-g -DGEANY_DEBUG $CFLAGS"])
 
 GEANY_CHECK_GTK
+dnl Optional compiler-semantic frontend. Portable delivery enables it explicitly.
+AC_ARG_WITH([libclang],AS_HELP_STRING([--with-libclang@<:@=auto/yes/no/PREFIX@:>@],[use libclang C/C++ semantic analysis]),[],[with_libclang=auto])
+AS_IF([test "x$with_libclang" != xno],[
+ AC_PATH_PROGS([LLVM_CONFIG],[llvm-config llvm-config-22 llvm-config-21 llvm-config-20 llvm-config-19 llvm-config-18 llvm-config-17 llvm-config-16 llvm-config-15 llvm-config-14])
+ clang_cppflags=""
+ clang_ldflags=""
+ AS_IF([test -n "$LLVM_CONFIG"],[clang_cppflags="-I`$LLVM_CONFIG --includedir`";clang_ldflags="-L`$LLVM_CONFIG --libdir`"],[
+  AS_CASE([$with_libclang],[auto|yes],[],[clang_cppflags="-I$with_libclang/include";clang_ldflags="-L$with_libclang/lib"])
+ ])
+ clang_save_cppflags="$CPPFLAGS";clang_save_ldflags="$LDFLAGS";clang_save_libs="$LIBS"
+ CPPFLAGS="$CPPFLAGS $clang_cppflags";LDFLAGS="$LDFLAGS $clang_ldflags"
+ clang_headers=no;clang_library=no
+ AC_CHECK_HEADER([clang-c/Index.h],[clang_headers=yes])
+ AS_IF([test x$clang_headers = xyes],[AC_CHECK_LIB([clang],[clang_createIndex],[clang_library=yes])])
+ CPPFLAGS="$clang_save_cppflags";LDFLAGS="$clang_save_ldflags";LIBS="$clang_save_libs"
+ AS_IF([test x$clang_library = xyes],[AC_DEFINE([HAVE_LIBCLANG],[1],[Use libclang C/C++ semantics])
+ GTK_CFLAGS="$GTK_CFLAGS $clang_cppflags";GTK_LIBS="$GTK_LIBS $clang_ldflags -lclang"],[
+ AS_IF([test x$with_libclang != xauto],[AC_MSG_ERROR([Requested libclang headers/library unavailable])])])
+])
 GEANY_CHECK_GTK_FUNCS([g_strv_equal])
 
 # --disable-deprecated switch for GTK purification

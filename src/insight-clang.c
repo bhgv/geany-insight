@@ -1,0 +1,58 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+#include "geany.h"
+#include "insight-clang.h"
+#include "insight-i18n.h"
+#include "document.h"
+#include "geanyobject.h"
+#include "sciwrappers.h"
+#include "project.h"
+#include "utils.h"
+#include "ui_utils.h"
+#include <string.h>
+#define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
+#define SEMANTIC_INDICATOR 25
+static gboolean alive,enabled;
+static guint timer,paint_source;static guint64 serial;
+static GCancellable *pending;
+static gulong handlers[2];
+typedef struct {gchar *path,*text,*root,*resources,*digest;GHashTable *buffers;guint document;guint64 serial;InsightClangResult *result;InsightIndex *previous;gboolean force;} Job;
+static void job_free(gpointer data) {Job *j=data;g_free(j->path);g_free(j->text);g_free(j->root);g_free(j->resources);g_free(j->digest);g_hash_table_unref(j->buffers);insight_index_free(j->previous);insight_clang_result_free(j->result);g_free(j);}
+InsightClangResult *insight_clang_ui_result(ScintillaObject *sci) {return sci ? g_object_get_data(G_OBJECT(sci),"insight-clang-result"):NULL;}
+static void clear(ScintillaObject *sci) {SEND(sci,SCI_SETINDICATORCURRENT,SEMANTIC_INDICATOR,0);SEND(sci,SCI_INDICATORCLEARRANGE,0,sci_get_length(sci));g_object_set_data(G_OBJECT(sci),"insight-clang-result",NULL);}
+static void modified(ScintillaObject *sci,gint unused,SCNotification *n,gpointer data) {(void)unused;(void)data;if(n->nmhdr.code==SCN_MODIFIED && (n->modificationType&(SC_MOD_INSERTTEXT|SC_MOD_DELETETEXT))) {clear(sci);g_object_set_data(G_OBJECT(sci),"insight-clang-dirty",GINT_TO_POINTER(1));}}
+static void watch(GeanyDocument *doc) {if(!g_object_get_data(G_OBJECT(doc->editor->sci),"insight-clang-watched")) {g_object_set_data(G_OBJECT(doc->editor->sci),"insight-clang-watched",GINT_TO_POINTER(1));g_signal_connect(doc->editor->sci,"sci-notify",G_CALLBACK(modified),NULL);}}
+static void worker(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {(void)source;Job *j=data;GError *error=NULL;if(!j->force && j->previous && insight_clang_dependencies_fresh(j->previous,j->path)) {g_task_return_boolean(task,FALSE);return;}j->result=insight_clang_parse(j->path,j->text,j->root,j->resources,j->buffers,cancel,&error);if(j->result) g_task_return_boolean(task,TRUE);else if(error) g_task_return_error(task,error);else g_task_return_boolean(task,FALSE);}
+static gboolean paint(gpointer data) {
+ ScintillaObject *sci=data;InsightClangResult *r=insight_clang_ui_result(sci);if(!alive || !enabled || !r) {paint_source=0;return G_SOURCE_REMOVE;}
+ guint position=GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(sci),"insight-clang-paint-position"));gint64 deadline=g_get_monotonic_time()+3000;glong background=SEND(sci,SCI_STYLEGETBACK,STYLE_DEFAULT,0);gboolean dark=((background&255)+((background>>8)&255)+((background>>16)&255))<384;
+ const guint light[]={0x8b3c66,0x9b5b18,0x825210,0x405d9c,0x624332,0x925c77,0x467c35},night[]={0xd9a0d5,0xe8cf8c,0xe0bf85,0x8fc9d5,0xe5d6c4,0xd5a7bd,0x8fcaa0};
+ SEND(sci,SCI_SETINDICATORCURRENT,SEMANTIC_INDICATOR,0);SEND(sci,SCI_INDICSETSTYLE,SEMANTIC_INDICATOR,INDIC_TEXTFORE);SEND(sci,SCI_INDICSETFLAGS,SEMANTIC_INDICATOR,SC_INDICFLAG_VALUEFORE);
+ while(position<r->tokens->len) {InsightClangToken token=g_array_index(r->tokens,InsightClangToken,position++);if(token.role<=INSIGHT_CLANG_MACRO) {SEND(sci,SCI_SETINDICATORVALUE,SC_INDICVALUEBIT|(dark ? night[token.role]:light[token.role]),0);SEND(sci,SCI_INDICATORFILLRANGE,token.begin,token.end-token.begin);}if(g_get_monotonic_time()>=deadline) {g_object_set_data(G_OBJECT(sci),"insight-clang-paint-position",GUINT_TO_POINTER(position));return G_SOURCE_CONTINUE;}}
+ paint_source=0;return G_SOURCE_REMOVE;
+}
+static void done(GObject *source,GAsyncResult *result,gpointer unused) {
+ (void)source;(void)unused;Job *j=g_task_get_task_data(G_TASK(result));GError *error=NULL;gboolean ok=g_task_propagate_boolean(G_TASK(result),&error);
+ if(!alive || j->serial!=serial) {g_clear_error(&error);return;}g_clear_object(&pending);GeanyDocument *doc=document_find_by_id(j->document);
+ if(ok && DOC_VALID(doc)) {gchar *text=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1),*digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,text,-1);g_free(text);if(!strcmp(digest,j->digest)) {if(paint_source) {g_source_remove(paint_source);paint_source=0;}clear(doc->editor->sci);g_object_set_data_full(G_OBJECT(doc->editor->sci),"insight-clang-result",j->result,(GDestroyNotify)insight_clang_result_free);j->result=NULL;g_object_set_data(G_OBJECT(doc->editor->sci),"insight-clang-paint-position",NULL);paint_source=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,paint,g_object_ref(doc->editor->sci),g_object_unref);if(j->force) {InsightClangResult *r=insight_clang_ui_result(doc->editor->sci);ui_set_statusbar(TRUE,insight_tr("Clang: %zu symbols, %u semantic tokens%s%s"),insight_index_count(r->symbols),r->tokens->len,r->errors ? insight_tr("; source diagnostics present"):"",r->compilation_database ? "; compile_commands.json":insight_tr("; default compiler arguments"));}}g_free(digest);}
+ else if(j->force && error) ui_set_statusbar(TRUE,"Clang: %s",error->message);g_clear_error(&error);
+}
+static gboolean analyze(gpointer force_data) {
+ gboolean force=GPOINTER_TO_INT(force_data);GeanyDocument *doc=document_get_current();if(!alive || !enabled || !DOC_VALID(doc) || !doc->file_name || !insight_clang_source(doc->file_name)) return G_SOURCE_CONTINUE;
+ watch(doc);gint length=sci_get_length(doc->editor->sci);if(length>2*1024*1024) return G_SOURCE_CONTINUE;gchar *text=sci_get_contents(doc->editor->sci,length+1);InsightClangResult *previous=insight_clang_ui_result(doc->editor->sci);gchar *digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,text,-1);
+ if(!force && pending) {g_free(text);g_free(digest);return G_SOURCE_CONTINUE;}
+ if(pending) {g_cancellable_cancel(pending);g_clear_object(&pending);}Job *j=g_new0(Job,1);if(previous && !strcmp(previous->digest,digest)) j->previous=insight_index_ref(previous->relations);j->serial=++serial;j->document=doc->id;j->force=force;j->path=g_strdup(doc->file_name);j->text=text;j->digest=digest;j->resources=g_build_filename(app->datadir,"insight","clang","resources",NULL);gchar *native=app->project ? project_get_base_path():g_path_get_dirname(doc->file_name);j->root=app->project ? utils_get_utf8_from_locale(native):g_strdup(native);g_free(native);
+ j->buffers=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);gsize total=0;for(guint i=0;i<documents_array->len;i++) {GeanyDocument *d=g_ptr_array_index(documents_array,i);if(!DOC_VALID(d) || !d->file_name) continue;gint n=sci_get_length(d->editor->sci);if(n<0 || n>2*1024*1024 || total+(gsize)n>32u*1024u*1024u) continue;gchar *contents=sci_get_contents(d->editor->sci,n+1);if(!memchr(contents,0,n) && g_utf8_validate(contents,n,NULL)) {g_hash_table_insert(j->buffers,g_strdup(d->file_name),contents);total+=n;}else g_free(contents);}
+ pending=g_cancellable_new();GTask *task=g_task_new(NULL,pending,done,NULL);g_task_set_task_data(task,j,job_free);g_task_run_in_thread(task,worker);g_object_unref(task);return G_SOURCE_CONTINUE;
+}
+static void document_event(GObject *object,GeanyDocument *doc,gpointer data) {(void)object;(void)data;if(DOC_VALID(doc)) watch(doc);analyze(NULL);}
+static void reanalyze(GtkWidget *widget,gpointer data) {(void)widget;(void)data;analyze(GINT_TO_POINTER(1));}
+static void toggle(GtkCheckMenuItem *item,gpointer unused) {(void)unused;enabled=gtk_check_menu_item_get_active(item);if(!enabled) {serial++;if(pending) {g_cancellable_cancel(pending);g_clear_object(&pending);}for(guint i=0;i<documents_array->len;i++) {GeanyDocument *d=g_ptr_array_index(documents_array,i);if(DOC_VALID(d)) clear(d->editor->sci);}}else analyze(GINT_TO_POINTER(1));}
+void insight_clang_ui_init(GtkWidget *menu) {
+ if(alive) return;alive=TRUE;enabled=insight_clang_available();GtkWidget *item=gtk_check_menu_item_new_with_label(insight_tr("Clang C/C++ semantic colors"));insight_i18n_key(G_OBJECT(item),"label","Clang C/C++ semantic colors");gtk_widget_set_name(item,"insight-clang-colors");gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item),enabled);gtk_widget_set_sensitive(item,enabled);g_signal_connect(item,"toggled",G_CALLBACK(toggle),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);gtk_widget_show(item);
+ item=gtk_menu_item_new_with_label(insight_tr("Reanalyze C/C++ buffer with Clang"));insight_i18n_key(G_OBJECT(item),"label","Reanalyze C/C++ buffer with Clang");gtk_widget_set_name(item,"insight-clang-reanalyze");gtk_widget_set_sensitive(item,enabled);g_signal_connect(item,"activate",G_CALLBACK(reanalyze),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);gtk_widget_show(item);
+ handlers[0]=g_signal_connect_after(geany_object,"document-open",G_CALLBACK(document_event),NULL);handlers[1]=g_signal_connect_after(geany_object,"document-activate",G_CALLBACK(document_event),NULL);timer=g_timeout_add(2000,analyze,NULL);analyze(NULL);
+}
+void insight_clang_ui_finalize(void) {alive=FALSE;serial++;if(timer) g_source_remove(timer);timer=0;if(paint_source) g_source_remove(paint_source);paint_source=0;if(pending) {g_cancellable_cancel(pending);g_clear_object(&pending);}for(guint i=0;i<2;i++) if(handlers[i]) g_signal_handler_disconnect(geany_object,handlers[i]);}

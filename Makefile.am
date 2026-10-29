@@ -747,3 +747,9 @@ EXTRA_DIST += insight/tests/control_flow_test.c insight/tests/source_routes_gui_
 EXTRA_DIST += insight/tests/call_paths_test.c
 
 dist_insightdocmedia_DATA += insight/docs/media/call-paths.svg
+
+EXTRA_DIST += insight/tests/clang_backend_test.c
+
+EXTRA_DIST += insight/tools/bundle_clang.py
+
+insightdoc_DATA += insight/docs/clang.md

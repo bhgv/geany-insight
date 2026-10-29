@@ -1,0 +1,19 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+#include "../desktop/clang_backend.h"
+#include <glib/gstdio.h>
+#include <string.h>
+int main(void) {
+ if(!insight_clang_available()) return 77;
+ gchar *root=g_dir_make_tmp("insight-clang-XXXXXX",NULL),*path=g_build_filename(root,"test.cpp",NULL),*header=g_build_filename(root,"api.h",NULL);
+ const gchar *text="#include \"api.h\"\nint pick(int x){return x;}\nint pick(double x){return 2;}\nint main(){ Box b; int v=pick(1); return b.run(v); }\n";
+ g_assert_true(g_file_set_contents(header,"struct Box { int run(int x){return x;} };\n",-1,NULL));g_assert_true(g_file_set_contents(path,text,-1,NULL));
+ GError *error=NULL;InsightClangResult *r=insight_clang_parse(path,text,root,NULL,NULL,NULL,&error);g_assert_no_error(error);g_assert_nonnull(r);g_assert_false(r->errors);g_assert_cmpuint(r->tokens->len,>,5);
+ const InsightSymbol *matches[8];g_assert_cmpuint(insight_index_query(r->symbols,"pick",TRUE,NULL,"f",path,0,matches,8),==,2);
+ g_assert_cmpuint(insight_index_query(r->relations,"pick",TRUE,NULL,"@call",path,0,matches,8),==,1);gchar **positions=g_strsplit(matches[0]->signature,":",3);guint start=(guint)g_ascii_strtoull(positions[0],NULL,10),end=(guint)g_ascii_strtoull(positions[1],NULL,10);g_assert_cmpuint(end-start,==,4);g_assert_cmpmem(text+start,4,"pick",4);g_strfreev(positions);gchar *called_usr=g_strdup(matches[0]->scope);g_assert_nonnull(strstr(called_usr,"pick"));g_assert_cmpuint(insight_index_query(r->relations,called_usr,TRUE,NULL,"@clangdef",path,0,matches,8),==,1);g_assert_cmpuint(matches[0]->line,==,2);
+ g_assert_cmpuint(insight_index_query(r->relations,"run",TRUE,NULL,"@call",path,0,matches,8),==,1);g_assert_nonnull(strstr(matches[0]->scope,"Box"));g_assert_true(insight_clang_dependencies_fresh(r->relations,path));
+ g_assert_true(g_file_set_contents(header,"struct Box { int run(int x){return x+100;} };\n",-1,NULL));g_assert_false(insight_clang_dependencies_fresh(r->relations,path));insight_clang_result_free(r);
+ GHashTable *overlays=g_hash_table_new(g_str_hash,g_str_equal);g_hash_table_insert(overlays,header,"struct Box { int missing; };\n");r=insight_clang_parse(path,text,root,NULL,overlays,NULL,&error);g_assert_no_error(error);g_assert_nonnull(r);g_assert_true(r->errors);g_assert_nonnull(strstr(r->diagnostics,"run"));insight_clang_result_free(r);g_hash_table_unref(overlays);
+ gchar *db=g_build_filename(root,"compile_commands.json",NULL),*source=g_build_filename(root,"flags.c",NULL);gchar *manifest=g_strdup_printf("[{\"directory\":\"%s\",\"file\":\"%s\",\"arguments\":[\"cc\",\"-DFEATURE=1\",\"-c\",\"%s\"]}]",root,source,source);g_assert_true(g_file_set_contents(db,manifest,-1,NULL));const gchar *conditional="#ifdef FEATURE\nint enabled(void){return 1;}\n#else\nint disabled(void){return 0;}\n#endif\n";g_assert_true(g_file_set_contents(source,conditional,-1,NULL));r=insight_clang_parse(source,conditional,root,NULL,NULL,NULL,&error);g_assert_no_error(error);g_assert_nonnull(r);g_assert_true(r->compilation_database);g_assert_cmpuint(insight_index_find(r->symbols,"enabled",TRUE,matches,8),==,1);g_assert_cmpuint(insight_index_find(r->symbols,"disabled",TRUE,matches,8),==,0);insight_clang_result_free(r);
+ GCancellable *cancel=g_cancellable_new();g_cancellable_cancel(cancel);r=insight_clang_parse(path,text,root,NULL,NULL,cancel,&error);g_assert_null(r);g_assert_error(error,G_IO_ERROR,G_IO_ERROR_CANCELLED);g_clear_error(&error);g_object_unref(cancel);
+ g_free(manifest);g_free(called_usr);g_remove(path);g_remove(header);g_remove(db);g_remove(source);g_rmdir(root);g_free(path);g_free(header);g_free(db);g_free(source);g_free(root);g_print("Clang: overload identity, member calls, semantic tokens, unsaved headers, dependency invalidation, compilation database and cancellation passed\n");return 0;
+}

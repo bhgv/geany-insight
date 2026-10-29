@@ -7,3 +7,6 @@ option('gtkdoc', type : 'boolean', description : 'enable to generate gtk-doc com
 option('python-command', type: 'string', description: 'the default Python command')
 option('socket', type: 'boolean', description: 'enable if you want to detect a running instance')
 option('mac-integration', type: 'feature', description: 'enable for improved macOS integration using the gtk-mac-integration library')
+
+option('clang', type: 'feature', value: 'auto', description: 'C/C++ semantic indexing using libclang')
+option('clang-bundle', type: 'boolean', value: false, description: 'Bundle libclang, its runtime dependencies and resource headers in portable installs')

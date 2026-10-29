@@ -97,6 +97,19 @@ def main():
     shutil.copy2(ROOT / 'COPYING', destination / 'data/GPL-2')
     shutil.copytree(ROOT / 'styles', destination / 'data/styles')
     shutil.copytree(ROOT / 'fonts', destination / 'data/fonts')
+    if re.search(r'^#define HAVE_LIBCLANG 1$', (a.build / 'config.h').read_text(), re.MULTILINE):
+        installed_prefix = Path(next(option['value'] for option in options if option['name'] == 'prefix'))
+        clang_data = installed_prefix / 'data/insight/clang'
+        manifest = clang_data / 'runtime.json'
+        if not manifest.is_file() or not (clang_data / 'resources/include').is_dir():
+            raise SystemExit('Clang-enabled delivery requires meson install with -Dclang-bundle=true')
+        shutil.copytree(clang_data, destination / 'data/insight/clang', dirs_exist_ok=True)
+        for name in json.loads(manifest.read_text(encoding='utf-8'))['files']:
+            source = next((p for p in (installed_prefix / 'bin').iterdir() if p.name.lower() == name), None)
+            if source is None:
+                raise SystemExit('Missing bundled Clang runtime dependency: ' + name)
+            shutil.copy2(source, destination / 'bin' / source.name)
+
     # Keep Russian and English (built into the program), reducing download size.
     locales = destination / 'share/locale'
     if locales.exists():
