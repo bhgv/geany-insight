@@ -2783,3 +2783,10 @@ Clang call tree: select an analyzed function or wait for C/C++ analysis	Дере
 Cannot prepare Clang call snapshot	Не удалось подготовить снимок вызовов Clang
 Choose a function overload in the Clang tree	Выберите перегрузку функции в дереве Clang
 Preparing Clang call snapshot…	Подготовка снимка вызовов Clang…
+Propose project templates in the completion list	Предлагать шаблоны проекта в списке автодополнения
+Project template	Шаблон проекта
+snippet	шаблон
+Insert the project template using its parameter dialog and Undo	Вставка шаблона проекта с диалогом параметров и отменой
+Propose Clips templates in the completion list	Предлагать шаблоны Clips в списке автодополнения
+Clip template	Шаблон Clips
+Insert the Clips template using its parameter dialog and Undo	Вставка шаблона Clips с диалогом параметров и отменой

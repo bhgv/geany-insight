@@ -7,6 +7,8 @@ struct SCNotification;
 struct GeanyEditor;
 #define INSIGHT_TEMPLATE_COMPLETION_LIST 74
 gboolean insight_workbench_complete_template(struct GeanyEditor *,gint);
+GPtrArray *insight_workbench_completion_templates(struct GeanyEditor *,const gchar *,gboolean,guint64 *);
+gboolean insight_workbench_completion_template_insert(struct GeanyEditor *,const gchar *,gint,gint,guint64);
 void insight_workbench_template_selected(struct GeanyEditor *,const gchar *);
 gboolean insight_workbench_show_file_search(void);
 gboolean insight_workbench_focus_file_symbols(void);

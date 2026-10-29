@@ -3304,6 +3304,19 @@ void insight_workbench_template_selected(GeanyEditor *editor,const gchar *name) 
  SSM(sci,SCI_SETSEL,wb.template_begin,wb.template_end);clip_insert_template(note);
  doc=document_find_by_id(id);if(doc && doc==document_get_current() && selection_state(doc->editor->sci)->text_version==version) sci_set_current_position(doc->editor->sci,before,FALSE);
 }
+GPtrArray *insight_workbench_completion_templates(GeanyEditor *editor,const gchar *prefix,gboolean sensitive,guint64 *generation) {
+ GPtrArray *names=g_ptr_array_new_with_free_func(g_free);if(generation) *generation=wb.clips_generation;
+ const InsightFiletypeOptions *typing=editor ? insight_languages_editing_options(editor):NULL;if(!wb.alive || !editor || editor->document!=document_get_current() || !prefix || !*prefix || strlen(prefix)>256 || (typing && !typing->allow_snippets)) return names;
+ gchar *language=clip_current_language(),*folded=g_utf8_casefold(prefix,-1);InsightNotes *notes=notes_for(INSIGHT_CLIP);
+ for(guint i=0;notes && i<notes->items->len && names->len<64;i++) {InsightNote *note=g_ptr_array_index(notes->items,i);if(note->kind!=INSIGHT_CLIP || strpbrk(note->name,"\n\r\t") || !insight_note_matches_language(note,language)) continue;gchar *name=g_utf8_casefold(note->name,-1);if(g_str_has_prefix(sensitive ? note->name:name,sensitive ? prefix:folded)) g_ptr_array_add(names,g_strdup(note->name));g_free(name);}
+ g_free(language);g_free(folded);return names;
+}
+gboolean insight_workbench_completion_template_insert(GeanyEditor *editor,const gchar *name,gint begin,gint end,guint64 generation) {
+ if(!wb.alive || !editor || generation!=wb.clips_generation || begin<0 || end<begin || end-begin>256) return FALSE;GeanyDocument *doc=document_get_current();ScintillaObject *sci=editor->sci;const InsightFiletypeOptions *typing=insight_languages_editing_options(editor);
+ if(!doc || doc->editor!=editor || (typing && !typing->allow_snippets) || sci_get_current_position(sci)!=end || sci_has_selection(sci) || SSM(sci,SCI_GETSELECTIONS,0,0)!=1 || SSM(sci,SCI_GETREADONLY,0,0)) return FALSE;
+ const InsightNote *note=insight_notes_get(notes_for(INSIGHT_CLIP),INSIGHT_CLIP,name);gchar *language=clip_current_language();gboolean allowed=note && insight_note_matches_language(note,language);g_free(language);if(!allowed) return FALSE;
+ guint id=doc->id;guint64 version=selection_state(sci)->text_version;SSM(sci,SCI_SETSEL,begin,end);clip_insert_template(note);doc=document_find_by_id(id);if(doc && doc==document_get_current() && selection_state(doc->editor->sci)->text_version==version) sci_set_current_position(doc->editor->sci,end,FALSE);return TRUE;
+}
 gboolean insight_workbench_complete_template(GeanyEditor *editor,gint position) {
  if(!wb.alive || !wb.notes || !editor) return FALSE;
  const InsightFiletypeOptions *typing=insight_languages_editing_options(editor);if(typing && !typing->allow_snippets) return FALSE;

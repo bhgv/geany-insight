@@ -2408,7 +2408,9 @@ gboolean editor_start_auto_complete(GeanyEditor *editor, gint pos, gboolean forc
 				if (!(force && SSM(sci, SCI_AUTOCACTIVE, 0, 0)))
 					ret = autocomplete_tags(editor, editor->document->file_type, root, rootlen);
 
-				/* If forcing and there's nothing else to show, complete from words in document */
+				/* Project Clips can populate the detailed list even without matching tags. */
+                if (!ret) { GPtrArray *empty=g_ptr_array_new();ret=insight_completion_show(editor,empty,rootlen);g_ptr_array_unref(empty); }
+                /* If forcing and there's nothing else to show, complete from words in document */
 				if (!ret && (force || editor_prefs.autocomplete_doc_words))
 					ret = autocomplete_doc_word(editor, root, rootlen);
 			}

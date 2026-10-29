@@ -4,6 +4,7 @@
 #include "insight-languages.h"
 #include "document.h"
 #include "insight-clang.h"
+#include "insight-workbench.h"
 #include "insight-template-fields.h"
 #include "project.h"
 #include "utils.h"
@@ -19,8 +20,8 @@
 #include <string.h>
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 #define KEY "insight-detailed-completion"
-enum { NAME,MARKUP,ICON,KIND,SCOPE,ORIGIN,IDENTITY,CALLABLE,PARAMETERS,COLUMNS };
-typedef struct { ScintillaObject *sci;GtkWidget *window,*view,*footer;GtkListStore *store;guint document,idle,focus_idle;gint start,end;gchar *prefix;gboolean active,accepting,limited,bypass;GCancellable *pending;guint semantic_idle,semantic_serial;gsize semantic_root; } Completion;
+enum { NAME,MARKUP,ICON,KIND,SCOPE,ORIGIN,IDENTITY,CALLABLE,PARAMETERS,SNIPPET,COLUMNS };
+typedef struct { ScintillaObject *sci;GtkWidget *window,*view,*footer;GtkListStore *store;guint document,idle,focus_idle;gint start,end;gchar *prefix;gboolean active,accepting,limited,bypass;GCancellable *pending;guint semantic_idle,semantic_serial;gsize semantic_root;guint64 snippet_generation; } Completion;
 static gboolean loaded;
 static guint semantic_workers;
 static InsightCompletionSettings settings;
@@ -67,7 +68,8 @@ static gboolean valid(Completion *c,GeanyDocument **document) {
 static void accept(Completion *c) {
  GeanyDocument *doc=NULL;if(!valid(c,&doc)) { hide(c);return; }gchar *name=selected(c,NAME);if(!name) return;
  gint word_end=SEND(c->sci,SCI_WORDENDPOSITION,c->end,TRUE),end=editor_prefs.completion_drops_rest_of_word ? word_end : c->end;
- GtkTreeIter iter;gboolean callable=FALSE;if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(c->view)),NULL,&iter)) gtk_tree_model_get(GTK_TREE_MODEL(c->store),&iter,CALLABLE,&callable,-1);
+ GtkTreeIter iter;gboolean callable=FALSE,snippet=FALSE;if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(c->view)),NULL,&iter)) gtk_tree_model_get(GTK_TREE_MODEL(c->store),&iter,CALLABLE,&callable,SNIPPET,&snippet,-1);
+ if(snippet) {guint64 generation=c->snippet_generation;hide(c);insight_workbench_completion_template_insert(doc->editor,name,c->start,c->end,generation);g_free(name);return;}
  gchar *right=end==sci_get_length(c->sci) ? g_strdup("") : sci_get_contents_range(c->sci,end,MIN((gint64)end+128,sci_get_length(c->sci)));if(strspn(right," \t")==128) callable=FALSE;gchar *suffix=insight_completion_settings_suffix(&settings,callable && end>=word_end,right),*text=g_strconcat(name,suffix,NULL);gint name_end=c->start+strlen(name),caret=c->start+strlen(text);if(*suffix) caret--;
  GArray *fields=g_array_new(FALSE,FALSE,sizeof(InsightSnippetField));gchar **parameters=NULL;if(settings.insert_parameters && *suffix && callable) gtk_tree_model_get(GTK_TREE_MODEL(c->store),&iter,PARAMETERS,&parameters,-1);
  if(parameters && parameters[0]) {GString *insert=g_string_new(settings.space_after_name ? " (":"(");for(guint n=0;parameters[n] && n<64;n++) {if(n) g_string_append(insert,settings.space_between_parameters ? ", ":",");InsightSnippetField f={strlen(name)+insert->len,0};g_string_append(insert,parameters[n]);f.end=strlen(name)+insert->len;g_array_append_val(fields,f);}g_string_append_c(insert,')');g_free(suffix);suffix=g_string_free(insert,FALSE);g_free(text);text=g_strconcat(name,suffix,NULL);caret=c->start+strlen(text);}
@@ -99,7 +101,7 @@ static Completion *create(GeanyEditor *editor) {
  Completion *c=state(editor);if(c) return c;c=g_new0(Completion,1);c->sci=editor->sci;c->document=editor->document->id;
  c->window=gtk_window_new(GTK_WINDOW_POPUP);gtk_widget_set_name(c->window,"insight-completion-popup");gtk_window_set_accept_focus(GTK_WINDOW(c->window),FALSE);gtk_window_set_focus_on_map(GTK_WINDOW(c->window),FALSE);gtk_window_set_resizable(GTK_WINDOW(c->window),FALSE);gtk_window_set_type_hint(GTK_WINDOW(c->window),GDK_WINDOW_TYPE_HINT_COMBO);gtk_window_set_transient_for(GTK_WINDOW(c->window),GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(c->sci))));
  GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,3),*scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(c->window),box);gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),GTK_POLICY_AUTOMATIC,GTK_POLICY_AUTOMATIC);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
- c->store=gtk_list_store_new(COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_BOOLEAN,G_TYPE_STRV);c->view=insight_completion_view_new(c->store);gtk_container_add(GTK_CONTAINER(scroll),c->view);
+ c->store=gtk_list_store_new(COLUMNS,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_BOOLEAN,G_TYPE_STRV,G_TYPE_BOOLEAN);c->view=insight_completion_view_new(c->store);gtk_container_add(GTK_CONTAINER(scroll),c->view);
  c->footer=gtk_label_new("");gtk_widget_set_name(c->footer,"insight-completion-details");gtk_label_set_xalign(GTK_LABEL(c->footer),0);gtk_label_set_ellipsize(GTK_LABEL(c->footer),PANGO_ELLIPSIZE_MIDDLE);gtk_box_pack_start(GTK_BOX(box),c->footer,FALSE,FALSE,3);gtk_widget_set_margin_start(box,4);gtk_widget_set_margin_end(box,4);
  g_signal_connect(c->view,"button-press-event",G_CALLBACK(button),c);g_signal_connect(c->view,"motion-notify-event",G_CALLBACK(motion),c);gtk_widget_add_events(c->view,GDK_POINTER_MOTION_MASK);g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(c->view)),"changed",G_CALLBACK(selection),c);g_signal_connect(c->sci,"focus-out-event",G_CALLBACK(focus_out),c);
  g_object_set_data_full(G_OBJECT(c->sci),KEY,c,destroy);return c;
@@ -115,7 +117,9 @@ gboolean insight_completion_show(GeanyEditor *editor,const GPtrArray *tags,gsize
   gchar *description=g_strdup_printf("%s %s %s",vartype,args,scope),*origin=g_strdup_printf("%s · %s%s%s:%lu",kind(tag->type),*scope ? scope : "global",tag->file ? " · " : "",tag->file ? tag->file->file_name : "",tag->line);guint icon_id=0;gint group=tm_parser_get_sidebar_group(tag->lang,tag->type);const gchar *icon_name="text-x-generic";if(group>=0 && tm_parser_get_sidebar_info(tag->lang,group,&icon_id)) icon_name=symbols_get_icon_name(icon_id);
   GtkTreeIter iter;gtk_list_store_append(c->store,&iter);gtk_list_store_set(c->store,&iter,NAME,tag->name,MARKUP,markup,ICON,icon_name,KIND,kind(tag->type),SCOPE,description,ORIGIN,origin,IDENTITY,identity,CALLABLE,(tag->type & (tm_tag_function_t|tm_tag_prototype_t|tm_tag_method_t))!=0,-1);if(!exact && g_str_has_prefix(tag->name,c->prefix)) exact=gtk_tree_model_get_path(GTK_TREE_MODEL(c->store),&iter);if(previous && !strcmp(previous,identity)) { chosen=gtk_tree_model_get_path(GTK_TREE_MODEL(c->store),&iter);chosen_exact=g_str_has_prefix(tag->name,c->prefix); }count++;g_free(markup);g_free(description);g_free(origin);g_free(identity);
  }
- g_free(previous);if(!settings.case_sensitive && exact && !chosen_exact) { if(chosen) gtk_tree_path_free(chosen);chosen=gtk_tree_path_copy(exact); }if(exact) gtk_tree_path_free(exact);c->limited=FALSE;if(!count) { hide(c);return TRUE; }c->active=TRUE;if(!chosen) chosen=gtk_tree_path_new_first();gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(c->view)),chosen);gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(c->view),chosen,NULL,FALSE,0,0);gtk_tree_path_free(chosen);SEND(c->sci,SCI_AUTOCCANCEL,0,0);SEND(c->sci,SCI_CALLTIPCANCEL,0,0);
+ gint before=c->start;gboolean member=before>0 && sci_get_char_at(c->sci,before-1)=='.';if(before>=2) member=member || (sci_get_char_at(c->sci,before-2)=='-' && sci_get_char_at(c->sci,before-1)=='>') || (sci_get_char_at(c->sci,before-2)==':' && sci_get_char_at(c->sci,before-1)==':');
+ if(settings.propose_snippets && !member) {GPtrArray *snippets=insight_workbench_completion_templates(editor,c->prefix,settings.case_sensitive,&c->snippet_generation);for(guint n=0;n<snippets->len && count<editor_prefs.autocompletion_max_entries;n++) {const gchar *name=g_ptr_array_index(snippets,n);gchar *markup=g_markup_printf_escaped("<b>%s</b>  %s",name,insight_tr("Clip template")),*identity=g_strdup_printf("snippet:%" G_GUINT64_FORMAT ":%s",c->snippet_generation,name);GtkTreeIter row;gtk_list_store_append(c->store,&row);gtk_list_store_set(c->store,&row,NAME,name,MARKUP,markup,ICON,"insert-text",KIND,insight_tr("snippet"),SCOPE,insight_tr("Clip template"),ORIGIN,insight_tr("Insert the Clips template using its parameter dialog and Undo"),IDENTITY,identity,SNIPPET,TRUE,-1);if(!exact && g_str_has_prefix(name,c->prefix)) exact=gtk_tree_model_get_path(GTK_TREE_MODEL(c->store),&row);if(previous && !strcmp(previous,identity)) {if(chosen) gtk_tree_path_free(chosen);chosen=gtk_tree_model_get_path(GTK_TREE_MODEL(c->store),&row);chosen_exact=g_str_has_prefix(name,c->prefix);}count++;g_free(markup);g_free(identity);}g_ptr_array_unref(snippets);}
+ g_free(previous);if(!settings.case_sensitive && exact && !chosen_exact) { if(chosen) gtk_tree_path_free(chosen);chosen=gtk_tree_path_copy(exact); }if(exact) gtk_tree_path_free(exact);c->limited=FALSE;if(!count) { hide(c);return tags->len>0; }c->active=TRUE;if(!chosen) chosen=gtk_tree_path_new_first();gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(c->view)),chosen);gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(c->view),chosen,NULL,FALSE,0,0);gtk_tree_path_free(chosen);SEND(c->sci,SCI_AUTOCCANCEL,0,0);SEND(c->sci,SCI_CALLTIPCANCEL,0,0);
  gtk_widget_set_size_request(c->view,620,MIN(count,(guint)settings.max_rows)*26);gtk_widget_show_all(c->window);position(c);return TRUE;
 }
 gboolean insight_completion_key(GeanyEditor *editor,GdkEventKey *event) {
