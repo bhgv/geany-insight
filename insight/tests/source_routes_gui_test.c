@@ -40,6 +40,7 @@ static gboolean step(gpointer data) {
   gint start=sci_get_position_from_line(a->editor->sci,2),end=sci_get_position_from_line(a->editor->sci,3);SEND(a->editor->sci,SCI_SETSEL,start,end);button("insight-route-selection");counts(5,5);
   gtk_combo_box_set_active(GTK_COMBO_BOX(named(routes,"insight-route-mode")),0);counts(2,1);gtk_combo_box_set_active(GTK_COMBO_BOX(named(routes,"insight-route-mode")),1);counts(5,5);
  } else if(phase==2) {
+  g_assert_false(gtk_widget_get_visible(named(window,"insight-relation-toolbar-tabs")));gtk_notebook_set_current_page(GTK_NOTEBOOK(named(routes,"insight-source-routes-options")),3);
   gtk_entry_set_text(GTK_ENTRY(named(routes,"insight-call-from")),"main");gtk_entry_set_text(GTK_ENTRY(named(routes,"insight-call-to")),"create_rule");button("insight-call-find");if(!g_object_get_data(G_OBJECT(routes),"insight-call-search-running")) return G_SOURCE_CONTINUE;
  } else if(phase==3) {
   if(!g_object_get_data(G_OBJECT(routes),"insight-call-search-completed")) return G_SOURCE_CONTINUE;counts(4,3);g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_combo_box_get_model(GTK_COMBO_BOX(named(routes,"insight-call-variants"))),NULL),==,1);
@@ -48,6 +49,7 @@ static gboolean step(gpointer data) {
   if(!g_object_get_data(G_OBJECT(routes),"insight-call-search-completed")) return G_SOURCE_CONTINUE;counts(4,3);click(316);button("insight-call-site");g_assert_true(document_get_current()==a);g_assert_cmpint(sci_get_current_line(a->editor->sci),==,0);
   SEND(a->editor->sci,SCI_INSERTTEXT,0,(sptr_t)"// changed call snapshot\n");SEND(a->editor->sci,SCI_GOTOPOS,3,0);click(224);g_assert_cmpint(sci_get_current_position(a->editor->sci),==,3);SEND(a->editor->sci,SCI_UNDO,0,0);document_set_text_changed(a,FALSE);gtk_combo_box_set_active(GTK_COMBO_BOX(named(routes,"insight-call-variants")),-1);gtk_combo_box_set_active(GTK_COMBO_BOX(named(routes,"insight-call-variants")),0);
  } else {
+  g_assert_false(gtk_widget_get_visible(named(window,"insight-relation-toolbar-tabs")));
   const gchar *capture=g_getenv("INSIGHT_SOURCE_ROUTES_CAPTURE");if(capture) {GdkWindow *native=gtk_widget_get_window(window);GdkPixbuf *image=gdk_pixbuf_get_from_window(native,0,0,gdk_window_get_width(native),gdk_window_get_height(native));g_assert_nonnull(image);g_assert_true(gdk_pixbuf_save(image,capture,"jpeg",NULL,"quality","90",NULL));g_object_unref(image);}
   g_print("Source routes GUI: arbitrary files, duplicate guards, arrows, navigation, reopen, unique anchors, persistence, guarded function/selection flow, automatic main-to-create_rule chains, selected endpoints and call-site navigation passed\n");quit();return G_SOURCE_REMOVE;
  }

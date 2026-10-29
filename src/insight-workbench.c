@@ -221,6 +221,7 @@ static void panel_tray_sync(void);
 static void panel_restore(guint);
 static void panel_minimize(guint);
 static void focus_widget_panel(GtkWidget *);
+static void relation_stack_changed(GObject *,GParamSpec *,gpointer);
 static void select_project_tab(gint);
 static gboolean start_scan(const char *);
 static void manage_project_files(GtkWidget *,gpointer);
@@ -1976,7 +1977,7 @@ static void relation_next_view(GtkWidget *widget,gpointer data) {
  } else gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_graph_toggle),FALSE);
 }
 static void source_routes_show(GtkWidget *widget,gpointer data) {
- (void)widget;focus_widget_panel(wb.usage_entry);gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"routes");
+ (void)widget;focus_widget_panel(wb.relation_routes);gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"routes");relation_stack_changed(G_OBJECT(wb.relation_stack),NULL,NULL);
  if(GPOINTER_TO_INT(data)) insight_source_routes_capture(wb.relation_routes);
 }
 static void relation_routes_back(GtkWidget *widget,gpointer data) { (void)widget;(void)data;gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"list");relation_view_update(); }

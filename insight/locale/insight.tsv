@@ -2730,3 +2730,5 @@ Function definition not found in the indexed project	Определение фу
 A nested definition or brace expression requires a full language parser	Вложенное определение или выражение с фигурными скобками требует полного парсера языка
 From function	От функции
 To function	До функции
+No call path in the current snapshot	В текущем снимке цепочка вызовов не найдена
+Enter two functions in Call paths, then start the search	Введите две функции во вкладке «Цепочки вызовов» и запустите поиск
