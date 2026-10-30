@@ -20,17 +20,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Fetch pinned editable compiler sources
-        run: git submodule update --init --depth 1 external/llvm-project
+        id: compiler-pin
+        run: |
+          git submodule update --init --depth 1 external/llvm-project
+          echo "revision=$(git -C external/llvm-project rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Install build dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build python3 meson libgtk-3-dev gettext python3-docutils patchelf xvfb xauth
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
+        id: compiler-cache
         with:
           path: _external-clang
-          key: external-llvm-${{ runner.os }}-${{ hashFiles('external/README.md', 'insight/tools/build_external_clang.py') }}
+          key: external-llvm-${{ runner.os }}-${{ steps.compiler-pin.outputs.revision }}-release-x86-v1
       - name: Build Clang and LLVM directly from the pinned sources
+        id: sdk-build
         run: python3 insight/tools/build_external_clang.py --jobs 2
+      - uses: actions/cache/save@v4
+        if: steps.compiler-cache.outputs.cache-hit != 'true'
+        with:
+          path: _external-clang
+          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
       - name: Build editor with the source SDK and direct C++ AST adapter
         run: |
           meson setup _source-editor --prefix="$PWD/_source-install" --libdir=lib -Dclang-sdk="$PWD/_external-clang-sdk" -Dclang=enabled -Dclang-cpp=enabled -Dclang-bundle=true -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
