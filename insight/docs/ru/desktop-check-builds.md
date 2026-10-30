@@ -116,4 +116,4 @@ Both Meson and Autotools require **GTK >= 3.22.0**, with GLib/GIO >= 2.56. The e
 [GTK popup API version](https://docs.gtk.org/gtk3/method.Menu.popup_at_pointer.html)
 
 
-Clang is required by default. Install matching libclang headers/library and llvm-config (Debian/Ubuntu: `libclang-dev llvm-dev`). Minimal builds must explicitly use `-Dclang=disabled` or `--without-libclang`. To carry the Clang runtime in a portable Meson installation, add `-Dclang-bundle=true` (Linux also requires `patchelf`). See [clang.md](clang.md).
+Clang is required by default. Install matching Clang C++ headers, clang-cpp and LLVM (Debian/Ubuntu: `libclang-dev libclang-cpp-dev llvm-dev`). Minimal builds must explicitly use `-Dclang=disabled` or `--without-clang`. To carry the Clang runtime in a portable Meson installation, add `-Dclang-bundle=true` (Linux also requires `patchelf`). See [clang.md](clang.md).

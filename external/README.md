@@ -23,12 +23,13 @@ Generated files stay in `_external-clang/` and `_external-clang-sdk/`.
 `--configure-only` checks the upstream CMake integration; `--plan` prints commands.
 No source reset or cleanup is performed: local Clang changes are retained.
 
-The editor's `clang_calls.cpp` traverses Clang's **C++ AST directly**, using
-`ASTUnit`, `RecursiveASTVisitor`, `CallExpr::getDirectCallee` and native USR
-generation. These edges feed the existing caller/callee trees and call paths.
-This is the first direct C++ adapter; definition indexing, semantic token
-classification and completion still use libclang while they are migrated.
-It is not a claim that the entire frontend has already abandoned the C API.
+The editor's `clang_calls.cpp` uses the native **Clang C++ APIs** throughout:
+`ASTUnit` / `RecursiveASTVisitor` for symbols, semantic colors and relationships;
+preprocessing records for macros and include dependencies; native USRs and body
+spans for navigation; `JSONCompilationDatabase` for settings; and Sema
+`CodeCompleteConsumer` for completion. One AST is built for a normal parse. The
+libclang C frontend is neither linked nor used as a fallback. In-memory header
+buffers remain alive through the AST lifetime; completion uses copied VFS buffers.
 
 Source revisions and C++ SDK headers/libraries must match. To modify Clang,
 edit this source checkout and rebuild the SDK. Retain modifications in a fork

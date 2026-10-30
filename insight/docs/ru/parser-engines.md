@@ -1,6 +1,6 @@
 # Parser engines / Движки разбора
 
-> **Прямой C++ backend:** Разбор, списки символов, семантическая подсветка, препроцессор, настройки компиляции и автодополнение Sema теперь используют C++ API Clang. Редактор больше не линкует и не поставляет C-библиотеку libclang; повторного разбора другим frontend-ом нет. Нужны `clang-cpp`, LLVM и заголовки Clang либо SDK, собранный из `external/llvm-project`. Для Autotools используется `--with-clang`; старое `--with-libclang` осталось только совместимым именем опции. Минимальная сборка: `-Dclang=disabled` или `--without-clang`. Заметки о промежуточных этапах ниже сохранены как история переноса.
+> **Прямой C++ backend:** Разбор, списки символов, семантическая подсветка, препроцессор, настройки компиляции и автодополнение Sema теперь используют C++ API Clang. Редактор больше не линкует и не поставляет C-библиотеку libclang; повторного разбора другим frontend-ом нет. Нужны `clang-cpp`, LLVM и заголовки Clang либо SDK, собранный из `external/llvm-project`. Для Autotools используется `--with-clang`; старое `--with-libclang` осталось только совместимым именем опции. Минимальная сборка: `-Dclang=disabled` или `--without-clang`.
 
 
 ## Clang: source and direct C++ access
@@ -9,21 +9,19 @@ The editable LLVM/Clang source is a pinned Git submodule in
 `external/llvm-project`. See [external source build instructions](https://github.com/bhgv/geany-insight/blob/main/external/README.md).
 `insight/tools/build_external_clang.py` builds an SDK from that checkout.
 Meson accepts `-Dclang-sdk=ABSOLUTE_PREFIX -Dclang-cpp=enabled`; the portable
-bundler carries both libclang and clang-cpp plus LLVM dependencies and licenses.
+bundler carries clang-cpp, LLVM dependencies, resource headers and licenses. It does not copy or load the libclang C runtime.
 
 The direct C++ adapter derives resolved call edges and expression references
 from Clang AST (`ASTUnit`, `RecursiveASTVisitor`, `CallExpr::getDirectCallee`,
 `DeclRefExpr`, `MemberExpr`, USRs). These feed caller/callee trees, call paths
 and reference searches. Resolved expression/call destinations also come from
 the direct AST, preferring definitions to declarations in the translation unit.
-Supported type/alias/template/namespace references, explicit function definitions
-and compound-body spans also come from the direct AST. Symbol-list declarations,
-tokens and completion still use the existing C frontend. Unsupported constructs
-retain their frontend metadata. Unevaluated operands retain references without
-becoming executable call edges. It is a staged migration, not a
-claim that the entire compiler frontend has already moved away from libclang.
-The transitional adapter builds its own AST in a worker; it adds parsing cost.
-If that parse fails, existing call edges and references are retained. Arbitrary runtime function
+The same AST supplies symbol-list declarations, semantic colors, explicit function
+definitions and body spans. Native preprocessing records supply macros and include
+dependencies; `JSONCompilationDatabase` supplies sanitized project settings. Sema
+completion uses `CodeCompleteConsumer` with an in-memory filesystem for unsaved
+buffers. No C libclang frontend or second parser participates. Error or cancelled
+snapshots do not replace usable project metadata. Arbitrary runtime function
 pointers and dynamic dispatch targets are not inferred. Lambda-body edges are
 not attributed to the enclosing function; capture initializers are evaluated
 in the enclosing function and retain its call edges. Expression references

@@ -1,9 +1,9 @@
 # Clang C/C++
 
-> **Native C++ backend:** The editor now uses Clang C++ APIs for parsing, symbol lists, semantic coloring, preprocessing, compilation settings and Sema completion. It no longer links or bundles the libclang C runtime and does not run a second parser. Use `clang-cpp` plus LLVM and Clang development headers, or the source-built SDK in `external/llvm-project`. `--with-clang` is the Autotools option; the old `--with-libclang` spelling is only a compatibility alias. Minimal builds remain available with `-Dclang=disabled` or `--without-clang`. Earlier migration notes below describe intermediate stages.
+> **Native C++ backend:** The editor now uses Clang C++ APIs for parsing, symbol lists, semantic coloring, preprocessing, compilation settings and Sema completion. It no longer links or bundles the libclang C runtime and does not run a second parser. Use `clang-cpp` plus LLVM and Clang development headers, or the source-built SDK in `external/llvm-project`. `--with-clang` is the Autotools option; the old `--with-libclang` spelling is only a compatibility alias. Minimal builds remain available with `-Dclang=disabled` or `--without-clang`.
 
 
-Clang-enabled portable builds carry libclang, its shared runtime dependencies,
+Clang-enabled portable builds carry clang-cpp, LLVM and their shared dependencies,
 resource headers and redistribution notices. Neither the `clang` executable nor
 Python is needed by the native frontend. Project headers, generated files and
 external SDKs still come from the project.
@@ -36,18 +36,18 @@ stale results. Named open files, including unsaved headers, are Clang overlays.
 ## Build and portable runtime
 
 Normal source builds require Clang (`-Dclang=enabled`, the default). `-Dclang=enabled` requires matching
-libclang headers/library and `llvm-config`. Disabled/minimal builds keep lexical
+Clang C++ development headers, clang-cpp, LLVM and `llvm-config`. Disabled/minimal builds keep lexical
 editing. `-Dclang-bundle=true` copies the SDK runtime, transitive dependencies,
 resource headers and licenses into the portable installation. Linux bundling
 requires `patchelf`. Windows DLL dependencies come from the same compiler SDK.
 The native Linux and Windows portable workflows enable both options. Minimum
 GTK 3.22 / GLib 2.56 remain unchanged. Autotools linked builds support
-`--with-libclang=yes` by default, or `auto`, `no` or an SDK prefix; portable bundling uses Meson.
+`--with-clang=yes` by default, or `auto`, `no` or an SDK prefix; portable bundling uses Meson.
 
 Parsing is bounded to 2 MiB per source, 32 MiB of unsaved overlays, 200000 visited
 cursors/tokens, 50000 declarations and 100000 relation records. Cancellation is
 checked around the synchronous compiler parse and during traversal; a running
-libclang parse is not force-interrupted. Missing declarations, project flags,
+Clang C++ parse is not force-interrupted. Missing declarations, project flags,
 compiler extensions and incomplete files still limit semantic results. A compiler
 frontend does not determine runtime condition values or arbitrary pointer targets.
 
@@ -58,7 +58,7 @@ frontend does not determine runtime condition values or arbitrary pointer target
 Неизменённые файлы используют базу. Изменение заголовка обновляет зависимые
 исходники. Для неполного исходника сохраняется резервный лексический индекс.
 
-Official APIs: [libclang](https://clang.llvm.org/docs/LibClang.html),
+Official APIs: [LibTooling](https://clang.llvm.org/docs/LibTooling.html),
 [compilation database](https://clang.llvm.org/docs/JSONCompilationDatabase.html).
 
 ## Semantic references and call graphs
@@ -153,25 +153,25 @@ from the next snapshot. No project file or project database is written. Untitled
 buffers need a filename first. At most 256 files are captured; excess files are
 marked as an incomplete snapshot. Existing parser/overlay byte limits still apply.
 
-If Clang commands are greyed out, that executable was built without libclang.
+If Clang commands are greyed out, that executable was built without the native Clang C++ backend.
 Installing a `clang` executable afterwards cannot enable a compiled-out backend.
 **Clang analysis details…** now opens an explanation even in a minimal build;
 **Reanalyze** reports missing support or an unsupported file instead of silently
-returning. Rebuild after installing `libclang-dev llvm-dev` on Debian/Ubuntu.
-For intentional minimal builds use `-Dclang=disabled` or `--without-libclang`;
+returning. Rebuild after installing `libclang-dev libclang-cpp-dev llvm-dev` on Debian/Ubuntu.
+For intentional minimal builds use `-Dclang=disabled` or `--without-clang`;
 `auto` remains an explicit opt-in to optional detection. For portable installs,
-keep `-Dclang-bundle=true` so target systems do not need a system libclang.
+keep `-Dclang-bundle=true` so target systems do not need system Clang C++ libraries.
 
 
 ## Editable source and direct C++ AST adapter
 
-The pinned LLVM/Clang source is now in `external/llvm-project` (Git submodule). Build it with `python3 insight/tools/build_external_clang.py`; pass the resulting prefix as `-Dclang-sdk=... -Dclang-cpp=enabled`. Direct C++ AST call edges now feed caller/callee trees and call paths. The C frontend still provides symbol-list declarations, semantic tokens and completion. The direct AST also supplies supported type references, function definitions and body spans. See [parser-engines.md](parser-engines.md) for exact scope, source build instructions and other-language candidates.
+The pinned LLVM/Clang source is now in `external/llvm-project` (Git submodule). Build it with `python3 insight/tools/build_external_clang.py`; pass the resulting prefix as `-Dclang-sdk=... -Dclang-cpp=enabled`. Direct C++ AST call edges now feed caller/callee trees and call paths. The same AST supplies symbol-list declarations, semantic tokens, references, function definitions and body spans. Sema supplies completion, and the C++ preprocessor supplies macros and include dependencies. See [parser-engines.md](parser-engines.md) for exact scope, source build instructions and other-language candidates.
 
 ## Expression references through the C++ AST
 
 With `clang-cpp` enabled, `DeclRefExpr` and `MemberExpr` references now come from the direct C++ AST pass as well as call edges. Resolved USRs preserve the identity of shadowed variables and overloaded functions. Member occurrences cover the member name rather than the whole object expression; stored offsets are bytes and displayed columns count UTF-8 characters. These rows feed existing definition lookup and reference searches.
 
-The update is atomic: cancellation, parse errors or limits retain the existing frontend result. Macro expansions, operator spellings and unsupported/dependent type forms retain their C frontend reference rows. Symbol-list declarations, coloring and completion still use libclang; expression destinations now also use the direct AST; this is a staged migration, not a replacement of every compiler service. Project caches invalidate once for the new reference generation.
+Completed compiler snapshots replace file data. Cancellation, parse errors or limits prevent incomplete results from replacing usable project metadata. Macros use native preprocessing records; unsupported dependent or runtime-only targets remain unresolved, with lexical search available separately. No libclang fallback is involved. Project caches invalidate once for the new backend generation.
 
 ### Lambda capture evaluation
 
@@ -181,14 +181,16 @@ Direct AST traversal distinguishes a lambda's capture initializers from its defe
 
 For resolved expression references and calls, the direct Clang pass now emits destination records. It prefers a function or variable definition available in the current translation unit, otherwise its declaration. USRs distinguish overloads; an out-of-line method leads to its body and a field leads to its class declaration. Named unsaved headers are evaluated with the current source buffer.
 
-One destination per USR atomically replaces that symbol's old destinations together with the references. Parse errors, cancellation and limits retain the previous result. Macro-generated or implicit declarations without ordinary source positions retain the C frontend fallback. Definitions in other translation units still use the shared project/open-file index. No project compilation or execution is involved.
+One destination per USR atomically replaces that symbol's old destinations together with the references. Parse errors, cancellation and limits retain the previous result. Implicit declarations without editable source positions do not invent jump targets. Macro declarations and uses come from preprocessing records. Definitions in other translation units still use the shared project/open-file index. No project compilation or execution is involved.
 
 ## Types, function definitions and graph accuracy
 
 The direct C++ AST pass collects references to records, enums, typedef/using aliases, class templates, template type parameters and namespace qualifiers. A record use prefers its complete definition over a forward declaration. Unsupported and dependent forms retain the existing fallback; not every possible C++ type is resolved.
 
-Explicit function definitions and compound-body spans now come from the same pass: exact USRs, internal visibility, parameter signatures and physical brace coordinates. Existing symbol-list signatures are retained when available so call-path identity matching remains compatible. Unsupported body forms retain their previous metadata.
+Explicit function definitions and compound-body spans now come from the same pass: exact USRs, internal visibility, parameter signatures and physical brace coordinates. Symbol lists and function metadata share the same parameter formatter so call-path identity matching remains compatible. Unsupported body forms are not claimed as resolved compound bodies.
 
 `sizeof(sink())`, `noexcept(sink())` and `decltype(sink())` keep searchable references without inventing executable call edges. The pass distinguishes potentially evaluated `typeid` and C variable-length-array `sizeof`. Declaration default arguments are not attributed to the declared function body; their dynamic invocation is not inferred. Deferred lambda bodies likewise do not create enclosing-function edges.
 
-Snapshot replacement compacts supported rows in one pass while preserving unrelated service rows. Canonical USRs are cached for that AST traversal. Repeated publication replaces stale edges rather than accumulating them. **Clang analysis details** lists the direct AST services and the remaining libclang services.
+The normal frontend builds one AST and produces fresh symbol/reference/token snapshots. Canonical USRs are cached for that traversal; repeated AST visits to a call site are deduplicated. **Clang analysis details** lists the native AST, preprocessor and Sema services. No second C frontend is run.
+
+On Debian/Ubuntu, `libclang-dev` supplies the Clang C++ development headers; its package name does not imply that the editor links the libclang C runtime. Install it together with `libclang-cpp-dev llvm-dev`, or build the pinned source SDK.
