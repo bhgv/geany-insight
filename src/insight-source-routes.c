@@ -4,6 +4,7 @@
 #endif
 #include "geany.h"
 #include "insight-source-routes.h"
+#include "insight-workbench.h"
 #include "insight-compare-ui.h"
 #include "insight-ai-ui.h"
 #include "insight-i18n.h"
@@ -186,7 +187,7 @@ static gchar *load_call_source(const gchar *path,GCancellable *cancel,gpointer d
 static void call_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
  (void)source;CallJob *j=data;InsightCallEndpoint endpoints[2]={{j->names[0],j->paths[0],j->lines[0]},{j->names[1],j->paths[1],j->lines[1]}};GError *error=NULL;
  InsightIndex *symbols=NULL,*relations=NULL;
- if(insight_clang_available() && j->snapshot->calls) {symbols=insight_index_clone(j->snapshot->index);relations=insight_index_clone(j->snapshot->calls);if(symbols && relations) {GHashTableIter it;gpointer key,value;g_hash_table_iter_init(&it,j->buffers);while(!g_cancellable_is_cancelled(cancel) && g_hash_table_iter_next(&it,&key,&value)) if(value && insight_clang_source(key)) {InsightClangResult *parsed=insight_clang_parse(key,value,j->snapshot->root,j->resources,j->buffers,cancel,NULL);if(insight_clang_result_usable(parsed)) insight_clang_import(parsed,key,symbols,relations);else insight_index_update(relations,key,NULL,0);insight_clang_result_free(parsed);}}}
+ if(insight_clang_available() && j->snapshot->calls) {symbols=insight_index_clone(j->snapshot->index);relations=insight_index_clone(j->snapshot->calls);if(symbols && relations) {GHashTableIter it;gpointer key,value;g_hash_table_iter_init(&it,j->buffers);while(!g_cancellable_is_cancelled(cancel) && g_hash_table_iter_next(&it,&key,&value)) if(value && insight_clang_source(key)) {gchar *root=j->snapshot->project_file ? g_strdup(j->snapshot->root):g_path_get_dirname(key);InsightClangResult *parsed=insight_clang_parse(key,value,root,j->resources,j->buffers,cancel,NULL);g_free(root);if(insight_clang_result_usable(parsed)) insight_clang_import(parsed,key,symbols,relations);else insight_index_update(relations,key,NULL,0);insight_clang_result_free(parsed);}}}
  j->result=insight_call_paths_find_semantic(symbols ? symbols:j->snapshot->index,relations,j->snapshot->paths,&endpoints[0],&endpoints[1],j->possible,load_call_source,j,cancel,&error);insight_index_free(symbols);insight_index_free(relations);
  if(error) g_task_return_error(task,error);else g_task_return_boolean(task,TRUE);
 }
@@ -259,7 +260,7 @@ static gboolean choose_endpoints(Routes *r,InsightReportSnapshot *snapshot) {
  g_hash_table_unref(members);if(!ready) {gtk_combo_box_set_active(GTK_COMBO_BOX(r->mode),2);graph_clear(&r->calls);g_clear_pointer(&r->call_result,insight_call_paths_free);note(r,"Several definitions match. Choose a file and line below each ambiguous function, then Find call paths");update(r);}return ready;
 }
 static void find_calls(GtkWidget *w,gpointer data) {
- (void)w;Routes *r=data;cancel_calls(r);g_object_set_data(G_OBJECT(r->root),"insight-call-search-completed",NULL);GError *error=NULL;InsightReportSnapshot *snapshot=insight_project_report_capture(&error);
+ (void)w;Routes *r=data;cancel_calls(r);g_object_set_data(G_OBJECT(r->root),"insight-call-search-completed",NULL);GError *error=NULL;InsightReportSnapshot *snapshot=insight_workbench_source_snapshot(&error);
  if(!snapshot) {insight_i18n_text(G_OBJECT(r->status),"label","Call path search: {value}",insight_tr(error ? error->message:"Project membership is not ready."));g_clear_error(&error);gtk_widget_queue_draw(r->canvas);return;}
  if(!choose_endpoints(r,snapshot)) {insight_report_snapshot_unref(snapshot);return;}
  CallJob *j=g_new0(CallJob,1);j->snapshot=snapshot;j->resources=g_build_filename(app->datadir,"insight","clang","resources",NULL);j->buffers=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);j->encoding=file_prefs.default_open_encoding;j->serial=r->call_serial;j->possible=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(r->call_possible));

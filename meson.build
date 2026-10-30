@@ -30,8 +30,8 @@ endif
 glib = deps[0]
 gtk = deps[2]
 
-# libclang is optional for minimal/source-only builds. Release bundles enable
-# it explicitly and carry the runtime; no compiler subprocess is used.
+# Normal builds require libclang. Minimal builds must opt out explicitly;
+# release bundles also carry the runtime. No compiler subprocess is used.
 clang_sdk = find_program('llvm-config', 'llvm-config-22', 'llvm-config-21', 'llvm-config-20', 'llvm-config-19', 'llvm-config-18', 'llvm-config-17', 'llvm-config-16', 'llvm-config-15', 'llvm-config-14', required: false)
 clang_args = []
 clang_dirs = []
@@ -42,7 +42,7 @@ endif
 clang_dep = cc.find_library('clang', dirs: clang_dirs, required: false)
 clang_enabled = not get_option('clang').disabled() and clang_dep.found() and cc.has_header('clang-c/Index.h', args: clang_args)
 if get_option('clang').enabled() and not clang_enabled
- error('Clang backend requested: install the matching libclang headers/library and llvm-config')
+ error('Clang is required: install matching libclang headers/library and llvm-config (Debian/Ubuntu: libclang-dev llvm-dev). For an intentional minimal build use -Dclang=disabled.')
 endif
 if clang_enabled
  deps += clang_dep

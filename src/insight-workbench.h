@@ -3,6 +3,7 @@
 #define GEANY_INSIGHT_WORKBENCH_H
 #include <glib.h>
 #include <gdk/gdk.h>
+#include "../insight/desktop/project_report.h"
 struct SCNotification;
 struct GeanyEditor;
 #define INSIGHT_TEMPLATE_COMPLETION_LIST 74
@@ -21,6 +22,10 @@ void insight_workbench_symbol_edit(guint action);
 gboolean insight_workbench_activate(guint action);
 /* Symbol Info, prototype, implementation, nominal base type. */
 void insight_workbench_symbol_navigation(guint action);
+/* Named open documents form a temporary source workspace without a project.
+ * Captures native/Clang symbols only; services parse copied buffers in workers.
+ * No folder scan, project file, project cache or source write is performed. */
+InsightReportSnapshot *insight_workbench_source_snapshot(GError **);
 void insight_workbench_init(void);
 void insight_workbench_finalize(void);
 void insight_workbench_set_independent(gboolean active);

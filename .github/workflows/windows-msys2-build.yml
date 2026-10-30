@@ -47,6 +47,8 @@ jobs:
             mingw-w64-ucrt-x86_64-${{ matrix.build-tool }}
             ${{ matrix.build-tool == 'meson' && 'mingw-w64-ucrt-x86_64-jq' || '' }}
             mingw-w64-ucrt-x86_64-sccache
+            mingw-w64-ucrt-x86_64-clang
+            mingw-w64-ucrt-x86_64-llvm
             mingw-w64-ucrt-x86_64-gtk3
             mingw-w64-ucrt-x86_64-python-docutils
             patch

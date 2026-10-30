@@ -32,14 +32,14 @@ stale results. Named open files, including unsaved headers, are Clang overlays.
 
 ## Build and portable runtime
 
-Meson uses `-Dclang=auto` for source builds. `-Dclang=enabled` requires matching
+Normal source builds require Clang (`-Dclang=enabled`, the default). `-Dclang=enabled` requires matching
 libclang headers/library and `llvm-config`. Disabled/minimal builds keep lexical
 editing. `-Dclang-bundle=true` copies the SDK runtime, transitive dependencies,
 resource headers and licenses into the portable installation. Linux bundling
 requires `patchelf`. Windows DLL dependencies come from the same compiler SDK.
 The native Linux and Windows portable workflows enable both options. Minimum
 GTK 3.22 / GLib 2.56 remain unchanged. Autotools linked builds support
-`--with-libclang=auto`, `yes`, `no` or an SDK prefix; portable bundling uses Meson.
+`--with-libclang=yes` by default, or `auto`, `no` or an SDK prefix; portable bundling uses Meson.
 
 Parsing is bounded to 2 MiB per source, 32 MiB of unsaved overlays, 200000 visited
 cursors/tokens, 50000 declarations and 100000 relation records. Cancellation is
@@ -130,3 +130,31 @@ Clang сохраняет имена параметров функций, пар�
 При неоднозначности языка `.h` результат явно помечается неполным и не заменяет обычный индекс символов. Переходы, графы и автодополнение используют резервный механизм, пока в базе не появится подходящая точная команда. Отсутствие ошибок стандартного C-разбора не считается подтверждением правильности настроек C++ проекта.
 
 Высота всплывающего списка задаётся его прокручиваемой области, с учётом размера шрифта, числа строк и рабочей области экрана. Проверка GUI требует видимости обоих вариантов перегрузки целиком; одного наличия строк в модели недостаточно.
+
+
+## Открытые файлы без проекта / Open files without a project
+
+Без сохранённого проекта открытые **именованные** файлы образуют временную
+рабочую область в памяти. В ней доступны ссылки, деревья вызывающих/вызываемых,
+цепочки вызовов и проверка исходников ИИ. Учитываются несохранённые изменения
+и открытые заголовки. Неоткрытые файлы из соседних папок в область не добавляются;
+Clang по-прежнему читает заголовки, подключённые директивами `#include`.
+Закрытый файл исключается из следующего снимка. База проекта и `.geany` не создаются.
+Безымянным буферам сначала нужно назначить имя файла.
+
+Without a saved project, named open files form an in-memory source workspace for
+references, caller/callee trees, call paths and AI source review. Unsaved edits
+and open headers participate. Neighboring unopened sources are not members;
+Clang can still read headers included by the source. Closing a file removes it
+from the next snapshot. No project file or project database is written. Untitled
+buffers need a filename first. At most 256 files are captured; excess files are
+marked as an incomplete snapshot. Existing parser/overlay byte limits still apply.
+
+If Clang commands are greyed out, that executable was built without libclang.
+Installing a `clang` executable afterwards cannot enable a compiled-out backend.
+**Clang analysis details…** now opens an explanation even in a minimal build;
+**Reanalyze** reports missing support or an unsupported file instead of silently
+returning. Rebuild after installing `libclang-dev llvm-dev` on Debian/Ubuntu.
+For intentional minimal builds use `-Dclang=disabled` or `--without-libclang`;
+`auto` remains an explicit opt-in to optional detection. For portable installs,
+keep `-Dclang-bundle=true` so target systems do not need a system libclang.

@@ -863,3 +863,7 @@ Relations adds lazy caller/callee trees keyed by Clang USR, sharing loaded-tree 
 ### C/C++ header command inference and analysis report
 
 Unlisted headers can inherit a companion source's compilation settings, with deterministic selection, explicit C/C++ ambiguity handling and driver-language preservation. A native copyable analysis report exposes the chosen settings source, language and diagnostics. Header-indexed inline calls and contextual completion are exercised in compiler and native GUI checks. See [Clang](clang.md).
+
+
+### Temporary source workspace and build availability
+Named open documents now provide an in-memory snapshot to call-path search and AI project/source review without requiring a saved project. Clang caller/callee snapshots parse inactive open sources in a worker with the same unsaved header overlays. Closing a file removes it from the next snapshot. No project file or index cache is created. Untitled buffers are not members. Normal Meson/Autotools builds require libclang; minimal builds explicitly opt out, and analysis details explain missing support. This does not implement arbitrary runtime pointer resolution or full Source Insight parity.

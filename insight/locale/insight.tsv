@@ -2808,3 +2808,11 @@ Analysis limit reached	Достигнут предел разбора
 Compiler diagnostics	Сообщения компилятора
 No compiler diagnostics	Сообщений компилятора нет
 As configured	Как задано в настройках
+Open files (temporary workspace)	Открытые файлы (временная рабочая область)
+Clang is unavailable in this build. Rebuild with libclang-dev and llvm-dev installed; use -Dclang=enabled or --with-libclang=yes. Portable builds must include the Clang runtime.	В этой сборке Clang отсутствует. Установите libclang-dev и llvm-dev и пересоберите с -Dclang=enabled или --with-libclang=yes. Переносимая сборка должна содержать библиотеки Clang.
+Open a named C/C++ source file first.	Сначала откройте C/C++ исходник с именем файла.
+The current file is not a supported C/C++ source.	Текущий файл не является поддерживаемым исходником C/C++.
+Clang source limit is 2 MiB per file.	Предел разбора Clang — 2 МиБ на файл.
+Open a named source file to create a temporary workspace.	Откройте исходник с именем файла для создания временной рабочей области.
+Source workspace is not ready.	Рабочая область исходников ещё не готова.
+Open-source workspace exceeds the symbol limit.	Рабочая область открытых файлов превышает предел символов.

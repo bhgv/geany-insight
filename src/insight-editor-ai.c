@@ -2,6 +2,7 @@
 #include "insight-compare-ui.h"
 #include "geany.h"
 #include "insight-editor-ai.h"
+#include "insight-workbench.h"
 #include "insight-ai.h"
 #include "insight-ai-ui.h"
 #include "insight-diff.h"
@@ -109,7 +110,7 @@ static void remove_source(GtkWidget *w,gpointer p) {
  (void)w;Review *r=p;if(r->busy || r->files->len<2 || !stage_manual(r)) return;r->switching=TRUE;g_ptr_array_remove_index(r->files,r->current);r->current=0;gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(r->file));for(guint i=0;i<r->files->len;i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(r->file),((Source *)g_ptr_array_index(r->files,i))->path);gtk_combo_box_set_active(GTK_COMBO_BOX(r->file),0);r->switching=FALSE;display(r);message(r,"File removed from this review. Rebuild project context if it contained that source.");
 }
 static void project_files(GtkWidget *w,gpointer p) {
- (void)w;Review *r=p;if(r->busy) return;GError *e=NULL;InsightReportSnapshot *snapshot=insight_project_report_capture(&e);if(!snapshot) { message(r,e->message);g_clear_error(&e);return; }
+ (void)w;Review *r=p;if(r->busy) return;GError *e=NULL;InsightReportSnapshot *snapshot=insight_workbench_source_snapshot(&e);if(!snapshot) { message(r,e->message);g_clear_error(&e);return; }
  GtkWidget *d=gtk_dialog_new_with_buttons(insight_tr("Choose project files for AI review"),GTK_WINDOW(r->window),GTK_DIALOG_DESTROY_WITH_PARENT,insight_tr("Cancel"),GTK_RESPONSE_CANCEL,insight_tr("Add selected files"),GTK_RESPONSE_ACCEPT,NULL);g_object_ref_sink(d);gtk_widget_set_name(d,"insight-editor-ai-project-files");gtk_window_set_default_size(GTK_WINDOW(d),800,450);
  GtkListStore *model=gtk_list_store_new(1,G_TYPE_STRING);for(guint i=0;i<snapshot->paths->len;i++) { GtkTreeIter it;gtk_list_store_append(model,&it);gtk_list_store_set(model,&it,0,(gchar *)g_ptr_array_index(snapshot->paths,i),-1); }
  GtkWidget *tree=gtk_tree_view_new_with_model(GTK_TREE_MODEL(model));gtk_widget_set_name(tree,"insight-editor-ai-project-list");g_object_unref(model);gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(tree),-1,insight_tr("Project files — select up to 16"),gtk_cell_renderer_text_new(),"text",0,NULL);GtkTreeSelection *selection=gtk_tree_view_get_selection(GTK_TREE_VIEW(tree));gtk_tree_selection_set_mode(selection,GTK_SELECTION_MULTIPLE);GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),tree);gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(d))),scroll,TRUE,TRUE,0);gtk_widget_show_all(d);

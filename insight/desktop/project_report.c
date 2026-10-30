@@ -10,7 +10,7 @@ static gint path_order(gconstpointer a,gconstpointer b)
 { return strcmp(*(gchar * const *)a,*(gchar * const *)b); }
 InsightReportSnapshot *insight_report_snapshot_new(const gchar *project,const gchar *root,const gchar *project_file,GPtrArray *paths,InsightIndex *index,guint skipped,gboolean incomplete,GError **error)
 {
-    if(!field(project,16384) || !field(root,16384) || !g_path_is_absolute(root) || !field(project_file,16384) || !g_path_is_absolute(project_file) || !paths || paths->len>INSIGHT_REPORT_FILE_LIMIT || !index || insight_index_count(index)>250000) {
+    if(!field(project,16384) || !field(root,16384) || !g_path_is_absolute(root) || (project_file && (!field(project_file,16384) || !g_path_is_absolute(project_file))) || !paths || paths->len>INSIGHT_REPORT_FILE_LIMIT || !index || insight_index_count(index)>250000) {
         fail(error,G_IO_ERROR_INVALID_ARGUMENT,"Project report requires a bounded, completed project snapshot.");return NULL;
     }
     InsightReportSnapshot *snapshot=g_new0(InsightReportSnapshot,1);snapshot->refs=1;snapshot->project=g_strdup(project);snapshot->root=g_strdup(root);snapshot->project_file=g_strdup(project_file);
@@ -134,6 +134,7 @@ static gboolean same_file(GFile *target,const gchar *target_id,const gchar *path
 gboolean insight_project_report_save(const InsightReportSnapshot *snapshot,const gchar *path,const gchar *text,gsize size,GPtrArray *open_paths,GError **error)
 {
     if(!snapshot || !path || !g_path_is_absolute(path) || !text || size>INSIGHT_REPORT_LIMIT) return fail(error,G_IO_ERROR_INVALID_ARGUMENT,"Invalid project report destination or size.");
+    if(!snapshot->project_file) return fail(error,G_IO_ERROR_NOT_SUPPORTED,"Temporary source snapshots are memory-only.");
     GFile *target=g_file_new_for_path(path);gboolean ok=FALSE;GFileInfo *info=NULL;
     if(!parents_regular(target,error)) goto done;
     info=g_file_query_info(target,G_FILE_ATTRIBUTE_ID_FILE,G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,NULL,NULL);

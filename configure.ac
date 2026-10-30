@@ -93,8 +93,8 @@ GEANY_CHECK_REVISION([dnl force debug mode for a VCS working copy
 					  CFLAGS="-g -DGEANY_DEBUG $CFLAGS"])
 
 GEANY_CHECK_GTK
-dnl Optional compiler-semantic frontend. Portable delivery enables it explicitly.
-AC_ARG_WITH([libclang],AS_HELP_STRING([--with-libclang@<:@=auto/yes/no/PREFIX@:>@],[use libclang C/C++ semantic analysis]),[],[with_libclang=auto])
+dnl Require compiler semantics unless a minimal build is explicitly requested.
+AC_ARG_WITH([libclang],AS_HELP_STRING([--with-libclang@<:@=auto/yes/no/PREFIX@:>@],[use libclang C/C++ semantic analysis]),[],[with_libclang=yes])
 AS_IF([test "x$with_libclang" != xno],[
  AC_PATH_PROGS([LLVM_CONFIG],[llvm-config llvm-config-22 llvm-config-21 llvm-config-20 llvm-config-19 llvm-config-18 llvm-config-17 llvm-config-16 llvm-config-15 llvm-config-14])
  clang_cppflags=""
@@ -110,7 +110,7 @@ AS_IF([test "x$with_libclang" != xno],[
  CPPFLAGS="$clang_save_cppflags";LDFLAGS="$clang_save_ldflags";LIBS="$clang_save_libs"
  AS_IF([test x$clang_library = xyes],[AC_DEFINE([HAVE_LIBCLANG],[1],[Use libclang C/C++ semantics])
  GTK_CFLAGS="$GTK_CFLAGS $clang_cppflags";GTK_LIBS="$GTK_LIBS $clang_ldflags -lclang"],[
- AS_IF([test x$with_libclang != xauto],[AC_MSG_ERROR([Requested libclang headers/library unavailable])])])
+ AS_IF([test x$with_libclang != xauto],[AC_MSG_ERROR([Clang headers/library unavailable. Install libclang-dev and llvm-dev (Debian/Ubuntu), or use --without-libclang for an intentional minimal build.])])])
 ])
 GEANY_CHECK_GTK_FUNCS([g_strv_equal])
 

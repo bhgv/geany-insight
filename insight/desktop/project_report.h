@@ -19,6 +19,8 @@ typedef struct {
     GHashTable *kinds; /* NULL=all, otherwise exact UTF-8 kind names; empty=none. */
 } InsightReportOptions;
 /* Copies project/path strings and retains an immutable index reference.
+ * A NULL project_file denotes a temporary, memory-only source workspace; its
+ * snapshot cannot be saved by insight_project_report_save.
  * No file reads or writes occur. Snapshots must not be mutated after publication. */
 InsightReportSnapshot *insight_report_snapshot_new(const gchar *,const gchar *,const gchar *,GPtrArray *,InsightIndex *,guint,gboolean,GError **);
 InsightReportSnapshot *insight_report_snapshot_ref(InsightReportSnapshot *);
