@@ -59,7 +59,7 @@ def main():
             parser.error('Do not reuse a compiler cache with local source edits; rebuild normally')
         required = [build / 'CMakeCache.txt', build / 'bin' / ('llvm-config.exe' if os.name == 'nt' else 'llvm-config')]
         if os.name != 'nt':
-            required += [build / 'lib/libclang.so', build / 'lib/libclang-cpp.so', build / 'lib/libLLVM-18.so']
+            required += [build / 'lib/libclang.so', build / 'lib/libclang-cpp.so', build / 'lib/libLLVM.so']
         if not all(p.is_file() for p in required):
             parser.error('Incomplete compiler cache; rebuild normally')
         print('Reusing pinned source compiler outputs; no source timestamps are used as a cache key')
@@ -84,13 +84,16 @@ def main():
         library.symlink_to(build / 'lib', target_is_directory=True)
     elif library.resolve() != (build / 'lib').resolve():
         parser.error('SDK lib already points elsewhere; choose another SDK directory')
-    # LLVM's build tree names the dylib libLLVM-18.so; the unversioned
-    # development alias is otherwise created only by the install component.
+    # LLVM may use libLLVM.so.18.1 or a libLLVM-18.so name, depending on
+    # its shared-library configuration. Prefer the generated development link.
     if os.name != 'nt' and not (library / 'libLLVM.so').exists():
-        candidate = library / 'libLLVM-18.so'
-        if not candidate.is_file():
-            parser.error('Source build is missing libLLVM-18.so')
-        (library / 'libLLVM.so').symlink_to(candidate.name)
+        candidates = sorted(p for pattern in ('libLLVM.so.*', 'libLLVM-[0-9]*.so*') for p in library.glob(pattern) if p.is_file())
+        if not candidates:
+            parser.error('Source build is missing the LLVM shared library')
+        alias = library / 'libLLVM.so'
+        if alias.is_symlink():
+            parser.error('SDK contains a broken LLVM development link; choose another SDK directory')
+        alias.symlink_to(candidates[0].name)
     for base in (sdk, build):
         licenses = base / 'share/licenses/llvm'
         licenses.mkdir(parents=True, exist_ok=True)
