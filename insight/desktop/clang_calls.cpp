@@ -76,7 +76,13 @@ public:
   auto *previous=owner;if(auto *function=llvm::dyn_cast<clang::FunctionDecl>(decl)) owner=function->doesThisDeclarationHaveABody() ? function:nullptr;
   bool ok=clang::RecursiveASTVisitor<Calls>::TraverseDecl(decl);owner=previous;return ok;
  }
- bool TraverseLambdaExpr(clang::LambdaExpr *) {return true;} // no invented enclosing-function edge
+ bool TraverseLambdaExpr(clang::LambdaExpr *expr) {
+  if(!VisitStmt(expr)) return false;
+  // Capture initializers execute in the enclosing function. The deferred body
+  // does not: keep its references without inventing an enclosing call edge.
+  for(auto *init:expr->capture_inits()) if(init && !TraverseStmt(init)) return false;
+  auto *previous=owner;owner=nullptr;bool ok=TraverseStmt(expr->getBody());owner=previous;return ok;
+ }
  bool VisitStmt(clang::Stmt *) {if(++visited>200000) valid=false;return active();}
  bool VisitDeclRefExpr(clang::DeclRefExpr *expr) {reference(expr->getDecl(),expr->getLocation());return active();}
  bool VisitMemberExpr(clang::MemberExpr *expr) {reference(expr->getMemberDecl(),expr->getMemberLoc());return active();}

@@ -162,10 +162,14 @@ keep `-Dclang-bundle=true` so target systems do not need a system libclang.
 
 ## Editable source and direct C++ AST adapter
 
-The pinned LLVM/Clang source is now in `external/llvm-project` (Git submodule). Build it with `python3 insight/tools/build_external_clang.py`; pass the resulting prefix as `-Dclang-sdk=... -Dclang-cpp=enabled`. Direct C++ AST call edges now feed caller/callee trees and call paths. The remaining C frontend is still used for definitions, reference rows, tokens and completion. See [parser-engines.md](parser-engines.md) for exact scope, source build instructions and other-language candidates.
+The pinned LLVM/Clang source is now in `external/llvm-project` (Git submodule). Build it with `python3 insight/tools/build_external_clang.py`; pass the resulting prefix as `-Dclang-sdk=... -Dclang-cpp=enabled`. Direct C++ AST call edges now feed caller/callee trees and call paths. The remaining C frontend is still used for definitions, type-reference rows, tokens and completion. See [parser-engines.md](parser-engines.md) for exact scope, source build instructions and other-language candidates.
 
 ## Expression references through the C++ AST
 
 With `clang-cpp` enabled, `DeclRefExpr` and `MemberExpr` references now come from the direct C++ AST pass as well as call edges. Resolved USRs preserve the identity of shadowed variables and overloaded functions. Member occurrences cover the member name rather than the whole object expression; stored offsets are bytes and displayed columns count UTF-8 characters. These rows feed existing definition lookup and reference searches.
 
-The update is atomic: cancellation, parse errors or limits retain the existing frontend result. Macro expansions, operator spellings, type references and skipped lambda bodies retain their C frontend reference rows. Declarations, destination records, coloring and completion still use libclang; this is a staged migration, not a replacement of every compiler service. Project caches invalidate once for the new reference generation.
+The update is atomic: cancellation, parse errors or limits retain the existing frontend result. Macro expansions, operator spellings, and type references retain their C frontend reference rows. Declarations, destination records, coloring and completion still use libclang; this is a staged migration, not a replacement of every compiler service. Project caches invalidate once for the new reference generation.
+
+### Lambda capture evaluation
+
+Direct AST traversal distinguishes a lambda's capture initializers from its deferred body. In `auto task = [value = load()] { return work(value); };`, the enclosing function has a direct call edge to `load`, not to `work`. Both references remain searchable. Nested deferred bodies do not create enclosing-function edges. This does not infer when a stored lambda will be invoked.
