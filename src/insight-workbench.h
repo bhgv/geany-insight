@@ -26,6 +26,7 @@ void insight_workbench_symbol_navigation(guint action);
  * Captures native/Clang symbols only; services parse copied buffers in workers.
  * No folder scan, project file, project cache or source write is performed. */
 InsightReportSnapshot *insight_workbench_source_snapshot(GError **);
+void insight_workbench_manage_project_files(void);
 void insight_workbench_init(void);
 void insight_workbench_finalize(void);
 void insight_workbench_set_independent(gboolean active);

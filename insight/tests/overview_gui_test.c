@@ -29,9 +29,9 @@ static GtkWidget *find_button(GtkWidget *root,const char *label) {
 static gboolean edit_membership(gpointer data) {
  gboolean cancel=GPOINTER_TO_INT(data); GList *windows=gtk_window_list_toplevels(); GtkWidget *dialog=NULL;
  for(GList *p=windows;p;p=p->next) if(GTK_IS_DIALOG(p->data) && !g_strcmp0(gtk_window_get_title(GTK_WINDOW(p->data)),"Add and Remove Project Files")) dialog=p->data;
- g_list_free(windows); g_assert_nonnull(dialog);
- if(cancel) { GtkWidget *button=find_button(dialog,"Remove all"); g_assert_nonnull(button); gtk_button_clicked(GTK_BUTTON(button)); gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_CANCEL); }
- else { GtkWidget *view=find_named(dialog,"insight-project-membership-files"); g_assert_nonnull(view); g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),NULL),==,1); gtk_tree_selection_select_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(view))); GtkWidget *button=find_button(dialog,"Remove selected"); g_assert_nonnull(button); gtk_button_clicked(GTK_BUTTON(button)); gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_APPLY); }
+ g_list_free(windows); g_assert_nonnull(dialog);GtkWidget *status=find_named(dialog,"insight-membership-status");if(status && !g_strcmp0(gtk_label_get_text(GTK_LABEL(status)),"Reading project selection…")) return G_SOURCE_CONTINUE;
+ if(cancel) { GtkWidget *button=find_button(dialog,"Remove All"); g_assert_nonnull(button); gtk_button_clicked(GTK_BUTTON(button)); gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_CANCEL); }
+ else { GtkWidget *view=find_named(dialog,"insight-project-membership-files"); g_assert_nonnull(view); g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),NULL),==,1); gtk_tree_selection_select_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(view))); GtkWidget *button=find_button(dialog,"Remove File"); g_assert_nonnull(button); gtk_button_clicked(GTK_BUTTON(button)); gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_APPLY); }
  return G_SOURCE_REMOVE;
 }
 static gboolean pick_history(gpointer data) {

@@ -978,7 +978,7 @@ libgeany = shared_library('geany',
 	'src/log.c',
 	'src/log.h',
 	'src/libmain.c',
-	'src/insight-git.c', 'src/insight-git.h', 'src/insight-workbench.c', 'src/insight-symbol-view.c', 'src/insight-symbol-view.h',
+	'src/insight-git.c', 'src/insight-git.h', 'src/insight-workbench.c', 'src/insight-project-membership.h', 'src/insight-symbol-view.c', 'src/insight-symbol-view.h',
 	'src/insight-directory.c', 'src/insight-directory.h',
 	'insight/desktop/directory_compare.c', 'insight/desktop/directory_compare.h',
 	'src/insight-diff.c', 'src/insight-hex.c', 'src/insight-hex.h', 'src/insight-stream.c', 'src/insight-stream.h', 'src/insight-stream-ui.c', 'src/insight-stream-ui.h', 'src/insight-history-ui.h',
@@ -1232,6 +1232,6 @@ endif
 
 install_data('insight/docs/clang.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 
-install_data('insight/docs/media/semantic-browsing.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
+install_data('insight/docs/media/semantic-browsing.svg', 'insight/docs/media/project-membership.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
 
 install_data('insight/docs/parser-engines.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')

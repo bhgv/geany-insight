@@ -987,3 +987,5 @@ test('Insight bounded project call paths', call_paths_test)
 
 clang_backend_test = executable('test_insight_clang_backend', '../insight/tests/clang_backend_test.c', '../insight/desktop/clang_backend.c', '../insight/desktop/clang_calls.cpp', '../insight/desktop/call_paths.c', '../insight/desktop/source_mask.c', '../insight/core/structure_select.c', '../insight/core/index.c', dependencies: deps, c_args: basic_cflags, cpp_args: basic_cflags + (clang_cpp_enabled ? cxx.get_supported_arguments(['-fno-rtti']) : []), include_directories: '..')
 test('Insight Clang semantic frontend', clang_backend_test, timeout: 60)
+project_membership_gui_test = executable('test_insight_project_membership_gui', '../insight/tests/project_membership_gui_test.c', dependencies: test_deps)
+test('Insight project membership browser GUI', project_membership_gui_test, timeout: 60)

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="300" viewBox="0 0 900 300">
+<rect width="900" height="300" rx="12" fill="#edf1f7"/><g font-family="sans-serif" fill="#172b43">
+<text x="24" y="32" font-size="18">Project → Add and Remove Project Files</text>
+<rect x="24" y="50" width="852" height="34" rx="5" fill="white"/><text x="36" y="73" font-size="15">File Name: *.c;*.h</text>
+<g fill="white" stroke="#92a8bf"><rect x="24" y="100" width="200" height="140"/><rect x="236" y="100" width="240" height="140"/><rect x="488" y="100" width="240" height="140"/><rect x="742" y="100" width="134" height="140"/></g>
+<g font-size="15"><text x="36" y="124">Directories</text><text x="36" y="155">project / src /</text><text x="248" y="124">Available files</text><text x="248" y="155">worker.c</text><text x="248" y="180">worker.h</text><text x="500" y="124">Project files</text><text x="500" y="155">main.c</text><text x="754" y="124">Close</text><text x="754" y="153">Add / Add All</text><text x="754" y="182">Add Tree</text><text x="754" y="211">Remove…</text></g>
+<text x="24" y="272" font-size="14">Choose directory → filter types → select files → Add → Close. Removal keeps disk files.</text></g></svg>

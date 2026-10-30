@@ -152,7 +152,7 @@ typedef struct {
  guint preview_click_timer;
  guint refresh,source_id,panel_idle,index_event_idle; GHashTable *index_event_paths,*index_event_names; gboolean context_visible,index_dirty,scan_failed,report_scan_completed;
  gulong event_handlers[4];
- gulong project_handlers[3]; gchar *geany_root; gboolean workspace_from_project;
+ gulong project_handlers[3]; gchar *geany_root; gboolean workspace_from_project,git_manual;
  gchar *prefs_path;
  InsightExtensions *extensions; gboolean lua_running;
  GtkWidget *lua_menu,*lua_commands,*lua_item,*palette_item;
@@ -228,6 +228,7 @@ static void select_project_tab(gint);
 static gboolean start_scan(const char *);
 static void manage_project_files(GtkWidget *,gpointer);
 static InsightReportSnapshot *capture_project_report(GError **);
+void insight_workbench_manage_project_files(void) { manage_project_files(NULL,NULL); }
 static void project_files_drop(GtkWidget *,GdkDragContext *,gint,gint,GtkSelectionData *,guint,guint,gpointer);
 static void workspace_changed(gpointer);
 static void create_search_toolbars(void);
@@ -888,7 +889,7 @@ static gboolean scan_step(gpointer data) {
 }
 static gboolean start_scan(const char *root) {
  gchar *requested_root=g_strdup(root);stop_scan();root=requested_root;
- if(wb.workspace_from_project && insight_git_active()) {
+ if(wb.workspace_from_project && insight_git_active() && !wb.git_manual) {
   stop_scan();GError *error=NULL;InsightProjectFiles *policy=insight_git_membership(&error);
   if(!policy) { g_free(requested_root);ui_set_statusbar(TRUE,"Cannot read Git project files: %s",error ? error->message : "Git is busy");g_clear_error(&error);return FALSE; }
   insight_project_files_free(wb.membership);wb.membership=policy;
@@ -4117,7 +4118,8 @@ static void native_project_update(GObject *object,GKeyFile *config,gpointer data
   GKeyFile *loaded=NULL; GError *error=NULL;
   if(!config) { loaded=g_key_file_new(); gchar *filename=utils_get_locale_from_utf8(app->project->file_name); if(!g_key_file_load_from_file(loaded,filename,G_KEY_FILE_NONE,&error) && g_error_matches(error,G_FILE_ERROR,G_FILE_ERROR_NOENT)) g_clear_error(&error); g_free(filename); config=loaded; }
   insight_git_bind(config,root);
-  InsightProjectFiles *policy=error ? NULL : (insight_git_active() ? insight_git_membership(&error) : insight_project_files_read_project(config,utf8,app->project->file_name,&error));
+  wb.git_manual=g_key_file_get_boolean(config,"insight-project-files","manual-selection",NULL);
+  InsightProjectFiles *policy=error ? NULL : (insight_git_active() && !wb.git_manual ? insight_git_membership(&error) : insight_project_files_read_project(config,utf8,app->project->file_name,&error));
   wb.membership_valid=policy!=NULL;
   if(policy) insight_scroll_links_membership(policy,root);
   if(!policy) { policy=insight_project_files_new(); policy->automatic=FALSE; ui_set_statusbar(TRUE,"Project membership could not be restored: %s",error ? error->message : "invalid settings"); }
@@ -4138,16 +4140,15 @@ static gboolean membership_store(const InsightProjectFiles *candidate) {
  if(!ok && !error) g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Project configuration exceeds 8 MiB");
  GKeyFile *config=g_key_file_new();
  if(ok) ok=g_key_file_load_from_file(config,filename,G_KEY_FILE_KEEP_COMMENTS,&error);
- if(ok) ok=insight_project_files_write(candidate,config,root,&error);
+ if(ok) {ok=insight_project_files_write(candidate,config,root,&error);if(ok && insight_git_active()) g_key_file_set_boolean(config,"insight-project-files","manual-selection",TRUE);}
  if(ok) { gsize length; gchar *data=g_key_file_to_data(config,&length,&error); ok=data!=NULL && length<=8*1024*1024; if(!ok && !error) g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Project configuration exceeds 8 MiB"); if(ok) ok=g_file_replace_contents(file,data,length,NULL,FALSE,G_FILE_CREATE_PRIVATE,NULL,NULL,&error); g_free(data); }
- if(ok) { insight_scroll_links_membership(candidate,root);if(wb.usage_idle || wb.search_worker) { stop_usage(); gtk_label_set_text(GTK_LABEL(wb.search_status),"Project files changed; run the search again"); } insight_project_files_free(wb.membership); wb.membership=insight_project_files_clone(candidate); wb.membership_valid=TRUE;wb.membership_generation++; start_scan(wb.root); files_filter(NULL,NULL); }
+ if(ok) { if(insight_git_active()) wb.git_manual=TRUE;insight_scroll_links_membership(candidate,root);if(wb.usage_idle || wb.search_worker) { stop_usage(); gtk_label_set_text(GTK_LABEL(wb.search_status),"Project files changed; run the search again"); } insight_project_files_free(wb.membership); wb.membership=insight_project_files_clone(candidate); wb.membership_valid=TRUE;wb.membership_generation++; start_scan(wb.root); files_filter(NULL,NULL); }
  else ui_set_statusbar(TRUE,"Project files not changed: %s",error ? error->message : "cannot save configuration");
  g_clear_error(&error); g_key_file_unref(config); g_object_unref(file); g_free(filename); g_free(root); return ok;
 }
 static gboolean master_membership_applied(const InsightProjectFiles *policy,gpointer data) { (void)data;return wb.alive && membership_store(policy); }
 static void master_sync_report(const GError *error,gpointer data) { (void)data;if(wb.alive) ui_set_statusbar(TRUE,"Master file list: %s",insight_tr(error->message)); }
 static gboolean membership_apply(InsightProjectFiles *candidate) {
- if(insight_git_active()) { ui_set_statusbar(TRUE,"Use Add to Git or Add and Remove Git Project Files for this project");return FALSE; }
  if(!app->project || !wb.workspace_from_project) { ui_set_statusbar(TRUE,"Open a Geany project before changing its files");return FALSE; }
  if(candidate->master_file && *candidate->master_file) {
   GeanyDocument *master=document_find_by_filename(candidate->master_file);if(master && master->changed) { ui_set_statusbar(TRUE,"Save or reload the open master file list before changing project membership");return FALSE; }
@@ -4162,7 +4163,8 @@ static void project_master_command(GtkMenuItem *item,gpointer data) {
  if(GPOINTER_TO_INT(data)) { gchar *path=utils_get_locale_from_utf8(wb.membership->master_file);document_open_file(path,FALSE,NULL,NULL);g_free(path); }
  else { insight_master_sync_poll(wb.master_sync);ui_set_statusbar(TRUE,"Synchronizing master file list…"); }
 }
-typedef struct { GtkWidget *dialog,*query,*automatic,*masks,*master,*master_status,*view; GtkListStore *store; InsightProjectFiles *candidate; GPtrArray *paths,*trees; gchar *root,*project_file;guint64 generation;gboolean master_valid; } MembershipDialog;
+typedef struct { GtkWidget *dialog,*query,*automatic,*masks,*master,*master_status,*view; GtkListStore *store; InsightProjectFiles *candidate; GPtrArray *paths,*trees; gchar *root,*project_file;guint64 generation;gboolean master_valid; GtkWidget *filename,*known,*available,*directory_view,*directory_label,*browser_status,*browser_controls;GtkListStore *available_store,*directory_store;GPtrArray *entries;gchar *directory;GCancellable *read_cancel;guint64 read_serial; } MembershipDialog;
+static void membership_browser_refresh(MembershipDialog *);
 static void membership_dialog_refresh(MembershipDialog *d) {
  gtk_list_store_clear(d->store); const gchar *query=gtk_entry_get_text(GTK_ENTRY(d->query));
  for(guint kind=0;kind<2;kind++) { GPtrArray *paths=kind ? d->trees : d->paths;
@@ -4171,30 +4173,16 @@ static void membership_dialog_refresh(MembershipDialog *d) {
    GtkTreeIter iter; gtk_list_store_append(d->store,&iter); gchar *name=g_path_get_basename(path); gtk_list_store_set(d->store,&iter,0,name,1,path,2,kind!=0,3,kind ? "Folder (indexed on Apply)" : "File",-1); g_free(name);
   }
  }
+ membership_browser_refresh(d);
 }
 static void membership_dialog_changed(GtkWidget *widget,gpointer data) {
  (void)widget; MembershipDialog *d=data;const gchar *master=gtk_entry_get_text(GTK_ENTRY(d->master));GError *error=NULL;gboolean valid=insight_project_files_set_master(d->candidate,master,d->root,d->project_file,&error);
- d->master_valid=valid;gtk_dialog_set_response_sensitive(GTK_DIALOG(d->dialog),GTK_RESPONSE_APPLY,valid);gtk_label_set_text(GTK_LABEL(d->master_status),error ? insight_tr(error->message) : "");gtk_widget_set_visible(d->master_status,error!=NULL);g_clear_error(&error);
+ d->master_valid=valid;gtk_dialog_set_response_sensitive(GTK_DIALOG(d->dialog),GTK_RESPONSE_APPLY,valid && !d->read_cancel);gtk_label_set_text(GTK_LABEL(d->master_status),error ? insight_tr(error->message) : "");gtk_widget_set_visible(d->master_status,error!=NULL);g_clear_error(&error);
  d->candidate->automatic=!*master && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->automatic));gtk_widget_set_sensitive(d->automatic,!*master);if(*master) { g_signal_handlers_block_by_func(d->automatic,membership_dialog_changed,d);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->automatic),FALSE);g_signal_handlers_unblock_by_func(d->automatic,membership_dialog_changed,d); }g_free(d->candidate->masks); d->candidate->masks=g_strdup(gtk_entry_get_text(GTK_ENTRY(d->masks))); membership_dialog_refresh(d);
 }
 static void membership_master_choose(GtkButton *button,gpointer data) {
  (void)button;MembershipDialog *d=data;GtkWidget *chooser=gtk_file_chooser_dialog_new("Choose master file list",GTK_WINDOW(d->dialog),GTK_FILE_CHOOSER_ACTION_OPEN,"Cancel",GTK_RESPONSE_CANCEL,"Open",GTK_RESPONSE_ACCEPT,NULL);
  if(gtk_dialog_run(GTK_DIALOG(chooser))==GTK_RESPONSE_ACCEPT) { gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser)),*utf8=utils_get_utf8_from_locale(path);gchar *escaped=insight_project_files_escape_master(utf8);gtk_entry_set_text(GTK_ENTRY(d->master),escaped);g_free(escaped);g_free(utf8);g_free(path); }gtk_widget_destroy(chooser);
-}
-static void membership_dialog_add(GtkWidget *widget,gpointer data) {
- MembershipDialog *d=data; gboolean tree=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget),"membership-tree"));
- GtkWidget *chooser=gtk_file_chooser_dialog_new(tree ? "Add source tree" : "Add project files",GTK_WINDOW(d->dialog),tree ? GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER : GTK_FILE_CHOOSER_ACTION_OPEN,"Cancel",GTK_RESPONSE_CANCEL,"Add",GTK_RESPONSE_ACCEPT,NULL);
- if(!tree) gtk_file_chooser_set_select_multiple(GTK_FILE_CHOOSER(chooser),TRUE);
- if(gtk_dialog_run(GTK_DIALOG(chooser))==GTK_RESPONSE_ACCEPT) {
-  GSList *paths=gtk_file_chooser_get_filenames(GTK_FILE_CHOOSER(chooser));
-  for(GSList *p=paths;p;p=p->next) { gchar *utf8=utils_get_utf8_from_locale(p->data); GError *error=NULL;
-   if(insight_project_files_set(d->candidate,utf8,tree,TRUE,&error)) { GPtrArray *target=tree ? d->trees : d->paths; if(!g_ptr_array_find_with_equal_func(target,utf8,(GEqualFunc)g_str_equal,NULL)) g_ptr_array_add(target,g_strdup(utf8)); }
-   else ui_set_statusbar(TRUE,"Cannot add project path: %s",error ? error->message : "invalid path");
-   g_clear_error(&error); g_free(utf8);
-  }
-  g_slist_free_full(paths,g_free); membership_dialog_refresh(d);
- }
- gtk_widget_destroy(chooser);
 }
 static void membership_dialog_file_list(GtkWidget *widget,gpointer data) {
  MembershipDialog *d=data; gboolean export=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget),"membership-export"));
@@ -4229,9 +4217,9 @@ static void membership_dialog_remove(GtkWidget *widget,gpointer data) {
  MembershipDialog *d=data; gint mode=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget),"membership-remove"));
  if(mode==2) { gchar *master=g_strdup(d->candidate->master_file),*expression=g_strdup(d->candidate->master_expression);insight_project_files_free(d->candidate); d->candidate=insight_project_files_new();g_free(d->candidate->master_file);d->candidate->master_file=master;g_free(d->candidate->master_expression);d->candidate->master_expression=expression; d->candidate->automatic=FALSE; gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->automatic),FALSE); gtk_entry_set_text(GTK_ENTRY(d->masks),""); g_ptr_array_set_size(d->paths,0); g_ptr_array_set_size(d->trees,0); membership_dialog_refresh(d); return; }
  if(mode==1) {
-  GtkWidget *chooser=gtk_file_chooser_dialog_new("Remove source tree from project",GTK_WINDOW(d->dialog),GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,"Cancel",GTK_RESPONSE_CANCEL,"Remove from project",GTK_RESPONSE_ACCEPT,NULL);
-  if(gtk_dialog_run(GTK_DIALOG(chooser))==GTK_RESPONSE_ACCEPT) { gchar *path=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser)),*utf8=utils_get_utf8_from_locale(path); GError *error=NULL; if(!insight_project_files_set(d->candidate,utf8,TRUE,FALSE,&error)) ui_set_statusbar(TRUE,"Cannot remove project tree: %s",error ? error->message : "invalid path"); g_clear_error(&error); g_free(path); g_free(utf8); }
-  gtk_widget_destroy(chooser);
+  GtkTreeModel *model=NULL;GList *rows=gtk_tree_selection_get_selected_rows(gtk_tree_view_get_selection(GTK_TREE_VIEW(d->available)),&model);gboolean removed=FALSE;GError *error=NULL;
+  for(GList *p=rows;p && !error;p=p->next) {GtkTreeIter it;gchar *path=NULL;gboolean tree=FALSE;if(gtk_tree_model_get_iter(model,&it,p->data)) {gtk_tree_model_get(model,&it,1,&path,2,&tree,-1);if(tree) {removed=TRUE;insight_project_files_set(d->candidate,path,TRUE,FALSE,&error);}g_free(path);}}g_list_free_full(rows,(GDestroyNotify)gtk_tree_path_free);
+  if(!removed && !error) insight_project_files_set(d->candidate,d->directory,TRUE,FALSE,&error);if(error) gtk_label_set_text(GTK_LABEL(d->browser_status),error ? error->message : "Cannot remove project tree");g_clear_error(&error);
  } else {
   GtkTreeModel *model; GList *rows=gtk_tree_selection_get_selected_rows(gtk_tree_view_get_selection(GTK_TREE_VIEW(d->view)),&model);
   for(GList *p=rows;p;p=p->next) { GtkTreeIter iter; if(gtk_tree_model_get_iter(model,&iter,p->data)) { gchar *path; gboolean tree; gtk_tree_model_get(model,&iter,1,&path,2,&tree,-1); GError *error=NULL; if(!insight_project_files_set(d->candidate,path,tree,FALSE,&error)) ui_set_statusbar(TRUE,"Cannot remove project path: %s",error ? error->message : "invalid path"); g_clear_error(&error); if(tree) for(guint i=d->trees->len;i>0;i--) if(!g_strcmp0(path,g_ptr_array_index(d->trees,i-1))) g_ptr_array_remove_index(d->trees,i-1); g_free(path); } }
@@ -4239,29 +4227,39 @@ static void membership_dialog_remove(GtkWidget *widget,gpointer data) {
  }
  membership_dialog_refresh(d);
 }
+#include "insight-project-membership.h"
 static void manage_project_files(GtkWidget *widget,gpointer data) {
- if(insight_git_active()) { insight_git_manage(widget,data);return; }
  (void)widget; (void)data; if(!app->project || !wb.workspace_from_project) { ui_set_statusbar(TRUE,"Open a Geany project before changing its files"); return; }
  MembershipDialog d={0};d.generation=wb.membership_generation; d.candidate=insight_project_files_clone(wb.membership); d.paths=g_ptr_array_new_with_free_func(g_free); d.trees=g_ptr_array_new_with_free_func(g_free); d.root=project_get_base_path();d.project_file=g_strdup(app->project->file_name);
  for(guint i=0;i<wb.files->len;i++) g_ptr_array_add(d.paths,g_strdup(g_ptr_array_index(wb.files,i)));
  for(guint i=0;i<d.candidate->files->len;i++) { const char *path=g_ptr_array_index(d.candidate->files,i); if(!g_ptr_array_find_with_equal_func(d.paths,path,(GEqualFunc)g_str_equal,NULL)) g_ptr_array_add(d.paths,g_strdup(path)); }
  for(guint i=0;i<d.candidate->trees->len;i++) g_ptr_array_add(d.trees,g_strdup(g_ptr_array_index(d.candidate->trees,i)));
- d.dialog=gtk_dialog_new_with_buttons("Add and Remove Project Files",GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Cancel",GTK_RESPONSE_CANCEL,"Apply",GTK_RESPONSE_APPLY,NULL); gtk_window_set_default_size(GTK_WINDOW(d.dialog),760,520);
- GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(d.dialog)); gtk_box_pack_start(GTK_BOX(box),gtk_label_new("Files are removed from the project only. Added folders are indexed after Apply."),FALSE,FALSE,4);
- d.query=gtk_search_entry_new();gtk_widget_set_tooltip_text(d.query,"Prefix with ~ for fuzzy subsequence matching");gtk_widget_set_name(d.query,"insight-project-membership-query"); gtk_entry_set_placeholder_text(GTK_ENTRY(d.query),"Filter project paths…"); gtk_box_pack_start(GTK_BOX(box),d.query,FALSE,FALSE,3);
- d.store=gtk_list_store_new(4,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_BOOLEAN,G_TYPE_STRING); d.view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(d.store)); gtk_widget_set_name(d.view,"insight-project-membership-files");
- const char *labels[]={"Name","Path","Kind"}; const gint columns[]={0,1,3};
- for(guint i=0;i<3;i++) { GtkTreeViewColumn *column=gtk_tree_view_column_new_with_attributes(labels[i],gtk_cell_renderer_text_new(),"text",columns[i],NULL); gtk_tree_view_column_set_sort_column_id(column,columns[i]); gtk_tree_view_column_set_resizable(column,TRUE); gtk_tree_view_append_column(GTK_TREE_VIEW(d.view),column); }
- gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(d.store),0,GTK_SORT_ASCENDING); gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(d.view)),GTK_SELECTION_MULTIPLE); GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL); gtk_container_add(GTK_CONTAINER(scroll),d.view); gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,3);
- GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3); const char *buttons[]={"Add files…","Add tree…","Remove selected","Remove tree…","Remove all"};
- for(guint i=0;i<5;i++) { GtkWidget *button=gtk_button_new_with_label(buttons[i]); gtk_box_pack_start(GTK_BOX(row),button,FALSE,FALSE,0); if(i<2) { g_object_set_data(G_OBJECT(button),"membership-tree",GINT_TO_POINTER(i)); g_signal_connect(button,"clicked",G_CALLBACK(membership_dialog_add),&d); } else { g_object_set_data(G_OBJECT(button),"membership-remove",GINT_TO_POINTER(i-2)); g_signal_connect(button,"clicked",G_CALLBACK(membership_dialog_remove),&d); } }
- gtk_box_pack_start(GTK_BOX(box),row,FALSE,FALSE,3); d.automatic=gtk_check_button_new_with_label("Automatically include known source files under the project base folder"); gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d.automatic),d.candidate->automatic); gtk_box_pack_start(GTK_BOX(box),d.automatic,FALSE,FALSE,3);
+ d.dialog=gtk_dialog_new_with_buttons("Add and Remove Project Files",GTK_WINDOW(main_widgets.window),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,"Close",GTK_RESPONSE_APPLY,NULL);gtk_window_set_default_size(GTK_WINDOW(d.dialog),1040,600);gtk_widget_set_name(d.dialog,"insight-project-membership");g_object_set_data(G_OBJECT(d.dialog),"membership-browser",&d);
+ GtkWidget *box=gtk_dialog_get_content_area(GTK_DIALOG(d.dialog));gtk_container_set_border_width(GTK_CONTAINER(box),8);
+ GtkWidget *filename_row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6);gtk_box_pack_start(GTK_BOX(filename_row),gtk_label_new(insight_tr("File Name")),FALSE,FALSE,0);d.filename=gtk_entry_new();gtk_widget_set_name(d.filename,"insight-project-membership-filename");gtk_widget_set_tooltip_text(d.filename,insight_tr("Enter a directory or filename masks such as *.c;*.h, then press Enter"));gtk_box_pack_start(GTK_BOX(filename_row),d.filename,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(box),filename_row,FALSE,FALSE,3);g_signal_connect(d.filename,"activate",G_CALLBACK(membership_filename_activate),&d);g_signal_connect(d.filename,"changed",G_CALLBACK(membership_filename_changed),&d);
+ d.directory_label=gtk_label_new(d.root);gtk_label_set_selectable(GTK_LABEL(d.directory_label),TRUE);gtk_label_set_ellipsize(GTK_LABEL(d.directory_label),PANGO_ELLIPSIZE_MIDDLE);gtk_label_set_xalign(GTK_LABEL(d.directory_label),0);gtk_box_pack_start(GTK_BOX(box),d.directory_label,FALSE,FALSE,3);
+ GtkWidget *columns=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,8);gtk_box_pack_start(GTK_BOX(box),columns,TRUE,TRUE,3);
+ GtkWidget *directories=membership_list(&d.directory_store,&d.directory_view,"insight-project-membership-directories",insight_tr("Directories"));gtk_box_pack_start(GTK_BOX(columns),directories,TRUE,TRUE,0);
+ GtkWidget *available=membership_list(&d.available_store,&d.available,"insight-project-membership-available",insight_tr("File Name"));gtk_box_pack_start(GTK_BOX(columns),available,TRUE,TRUE,0);g_signal_connect(d.available,"row-activated",G_CALLBACK(membership_browser_activate),&d);g_signal_connect(d.directory_view,"row-activated",G_CALLBACK(membership_browser_activate),&d);gtk_tree_view_set_activate_on_single_click(GTK_TREE_VIEW(d.directory_view),TRUE);
+ d.store=gtk_list_store_new(4,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_BOOLEAN,G_TYPE_STRING);d.view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(d.store));gtk_widget_set_name(d.view,"insight-project-membership-files");gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(d.view),-1,insight_tr("Project Files"),gtk_cell_renderer_text_new(),"text",0,NULL);gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(d.store),0,GTK_SORT_ASCENDING);gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(d.view)),GTK_SELECTION_MULTIPLE);gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(d.view),1);GtkWidget *project_scroll=gtk_scrolled_window_new(NULL,NULL);gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(project_scroll),GTK_POLICY_AUTOMATIC,GTK_POLICY_AUTOMATIC);gtk_container_add(GTK_CONTAINER(project_scroll),d.view);gtk_box_pack_start(GTK_BOX(columns),project_scroll,TRUE,TRUE,0);
+ GtkWidget *buttons=gtk_box_new(GTK_ORIENTATION_VERTICAL,4);d.browser_controls=buttons;gtk_box_pack_start(GTK_BOX(columns),buttons,FALSE,FALSE,0);
+ const gchar *add_labels[]={"Add","Add All","Add Tree"};for(guint i=0;i<3;i++) {GtkWidget *button=gtk_button_new_with_label(insight_tr(add_labels[i]));gtk_widget_set_name(button,i==0 ? "insight-membership-add":i==1 ? "insight-membership-add-all":"insight-membership-add-tree");g_object_set_data(G_OBJECT(button),"browser-add",GUINT_TO_POINTER(i));g_signal_connect(button,"clicked",G_CALLBACK(membership_browser_add),&d);gtk_box_pack_start(GTK_BOX(buttons),button,FALSE,FALSE,0);}
+ const gchar *remove_labels[]={"Remove File","Remove Tree","Remove All"};for(guint i=0;i<3;i++) {GtkWidget *button=gtk_button_new_with_label(insight_tr(remove_labels[i]));gtk_widget_set_name(button,i==0 ? "insight-membership-remove":i==1 ? "insight-membership-remove-tree":"insight-membership-remove-all");g_object_set_data(G_OBJECT(button),"membership-remove",GUINT_TO_POINTER(i));g_signal_connect(button,"clicked",G_CALLBACK(membership_dialog_remove),&d);gtk_box_pack_start(GTK_BOX(buttons),button,FALSE,FALSE,0);}
+ GtkWidget *action_area=gtk_dialog_get_action_area(GTK_DIALOG(d.dialog));gtk_widget_set_no_show_all(action_area,TRUE);gtk_widget_hide(action_area);GtkWidget *close=gtk_button_new_with_label(insight_tr("Close"));g_signal_connect(close,"clicked",G_CALLBACK(membership_close),&d);gtk_box_pack_start(GTK_BOX(buttons),close,FALSE,FALSE,0);gtk_box_reorder_child(GTK_BOX(buttons),close,0);
+ GtkWidget *types_button=gtk_button_new_with_label(insight_tr("File Type Options…"));g_signal_connect(types_button,"clicked",G_CALLBACK(membership_filetypes),&d);gtk_box_pack_start(GTK_BOX(buttons),types_button,FALSE,FALSE,0);
+ GtkWidget *special=gtk_button_new_with_label(insight_tr("Remove Special…"));g_signal_connect(special,"clicked",G_CALLBACK(membership_remove_special),&d);gtk_box_pack_start(GTK_BOX(buttons),special,FALSE,FALSE,0);
+ GtkWidget *from_list=gtk_button_new_with_label(insight_tr("Add from list…"));g_signal_connect(from_list,"clicked",G_CALLBACK(membership_dialog_file_list),&d);gtk_box_pack_start(GTK_BOX(buttons),from_list,FALSE,FALSE,0);
+ d.known=gtk_check_button_new_with_label(insight_tr("Show only known file types"));gtk_widget_set_name(d.known,"insight-membership-known");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d.known),TRUE);gtk_box_pack_start(GTK_BOX(box),d.known,FALSE,FALSE,2);g_signal_connect(d.known,"toggled",G_CALLBACK(membership_known_changed),&d);
+ d.browser_status=gtk_label_new("");gtk_widget_set_name(d.browser_status,"insight-membership-status");gtk_label_set_line_wrap(GTK_LABEL(d.browser_status),TRUE);gtk_label_set_xalign(GTK_LABEL(d.browser_status),0);gtk_box_pack_start(GTK_BOX(box),d.browser_status,FALSE,FALSE,0);
+ GtkWidget *advanced=gtk_expander_new(insight_tr("Project file rules and master list")),*advanced_box=gtk_box_new(GTK_ORIENTATION_VERTICAL,3);gtk_container_add(GTK_CONTAINER(advanced),advanced_box);gtk_box_pack_start(GTK_BOX(box),advanced,FALSE,FALSE,0);
+ box=advanced_box;d.query=gtk_search_entry_new();gtk_widget_set_name(d.query,"insight-project-membership-query");gtk_entry_set_placeholder_text(GTK_ENTRY(d.query),insight_tr("Filter project paths…"));gtk_widget_set_tooltip_text(d.query,insight_tr("Filter project files; prefix with ~ for fuzzy matching"));gtk_box_pack_start(GTK_BOX(box),d.query,FALSE,FALSE,0);
+ d.automatic=gtk_check_button_new_with_label(insight_tr("Automatically include known source files under the project base folder"));gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d.automatic),d.candidate->automatic);gtk_box_pack_start(GTK_BOX(box),d.automatic,FALSE,FALSE,0);
  GtkWidget *master_row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3),*master_choose=gtk_button_new_with_label("Browse…");d.master=gtk_entry_new();gtk_widget_set_name(d.master,"insight-project-master-list");gtk_widget_set_tooltip_text(d.master,"Path variables: %PROJECT_SOURCE_DIR%, %PROJECT_DATA_DIR%, %PROJECT_NAME%, %TEMP_DIR% and environment names; use %% for a literal percent sign");gtk_entry_set_placeholder_text(GTK_ENTRY(d.master),"Master file list (optional; existing UTF-8 file)");gchar *master_text=*d.candidate->master_expression ? g_strdup(d.candidate->master_expression) : insight_project_files_escape_master(d.candidate->master_file);gtk_entry_set_text(GTK_ENTRY(d.master),master_text);g_free(master_text);gtk_widget_set_hexpand(d.master,TRUE);gtk_box_pack_start(GTK_BOX(master_row),d.master,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(master_row),master_choose,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),master_row,FALSE,FALSE,3);g_signal_connect(master_choose,"clicked",G_CALLBACK(membership_master_choose),&d);gtk_widget_set_sensitive(d.automatic,!*d.candidate->master_file);d.master_status=gtk_label_new("");gtk_widget_set_name(d.master_status,"insight-project-master-error");gtk_label_set_line_wrap(GTK_LABEL(d.master_status),TRUE);gtk_widget_set_no_show_all(d.master_status,TRUE);gtk_box_pack_start(GTK_BOX(box),d.master_status,FALSE,FALSE,0);
  GtkWidget *lists=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3); for(guint i=0;i<2;i++) { GtkWidget *button=gtk_button_new_with_label(i ? "Export file list…" : "Add from list…"); g_object_set_data(G_OBJECT(button),"membership-export",GUINT_TO_POINTER(i)); g_signal_connect(button,"clicked",G_CALLBACK(membership_dialog_file_list),&d); gtk_box_pack_start(GTK_BOX(lists),button,FALSE,FALSE,0); } gtk_box_pack_start(GTK_BOX(box),lists,FALSE,FALSE,3);
  d.masks=gtk_entry_new(); gtk_entry_set_max_length(GTK_ENTRY(d.masks),4096); gtk_entry_set_placeholder_text(GTK_ENTRY(d.masks),"Exclude masks: *.generated.c;vendor/* (case sensitive)"); gtk_entry_set_text(GTK_ENTRY(d.masks),d.candidate->masks); gtk_box_pack_start(GTK_BOX(box),d.masks,FALSE,FALSE,3);
- g_signal_connect(d.master,"changed",G_CALLBACK(membership_dialog_changed),&d);g_signal_connect(d.query,"changed",G_CALLBACK(membership_dialog_changed),&d); g_signal_connect(d.masks,"changed",G_CALLBACK(membership_dialog_changed),&d); g_signal_connect(d.automatic,"toggled",G_CALLBACK(membership_dialog_changed),&d); membership_dialog_changed(NULL,&d); gtk_widget_show_all(d.dialog);
- while(gtk_dialog_run(GTK_DIALOG(d.dialog))==GTK_RESPONSE_APPLY) { if(!d.master_valid) continue;if(d.generation!=wb.membership_generation) { ui_set_statusbar(TRUE,"Project files changed while the dialog was open; reopen it before applying");break; }if(membership_apply(d.candidate)) break; }
- gtk_widget_destroy(d.dialog); g_object_unref(d.store); insight_project_files_free(d.candidate); g_ptr_array_free(d.paths,TRUE); g_ptr_array_free(d.trees,TRUE); g_free(d.root);g_free(d.project_file);
+ g_signal_connect(d.master,"changed",G_CALLBACK(membership_dialog_changed),&d);g_signal_connect(d.query,"changed",G_CALLBACK(membership_dialog_changed),&d); g_signal_connect(d.masks,"changed",G_CALLBACK(membership_dialog_changed),&d); g_signal_connect(d.automatic,"toggled",G_CALLBACK(membership_dialog_changed),&d); membership_dialog_changed(NULL,&d); gtk_widget_show_all(d.dialog);membership_browse(&d,d.root);
+ gint response;while((response=gtk_dialog_run(GTK_DIALOG(d.dialog)))==GTK_RESPONSE_APPLY || response==GTK_RESPONSE_DELETE_EVENT) { if(!d.master_valid) continue;if(d.generation!=wb.membership_generation) { GtkWidget *notice=gtk_message_dialog_new(GTK_WINDOW(d.dialog),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_WARNING,GTK_BUTTONS_CLOSE,"%s",insight_tr("Project files changed while the dialog was open; reopen it before applying"));gtk_dialog_run(GTK_DIALOG(notice));gtk_widget_destroy(notice);break; }if(d.read_cancel) continue;if(membership_apply(d.candidate)) break;gtk_label_set_text(GTK_LABEL(d.browser_status),insight_tr("Project files could not be saved. Check project permissions or the master file list.")); }
+ g_object_set_data(G_OBJECT(d.dialog),"membership-browser",NULL);if(d.read_cancel) g_cancellable_cancel(d.read_cancel);g_clear_object(&d.read_cancel);g_clear_pointer(&d.entries,g_ptr_array_unref);g_free(d.directory);g_object_unref(d.available_store);g_object_unref(d.directory_store);gtk_widget_destroy(d.dialog); g_object_unref(d.store); insight_project_files_free(d.candidate); g_ptr_array_free(d.paths,TRUE); g_ptr_array_free(d.trees,TRUE); g_free(d.root);g_free(d.project_file);
 }
 static void project_files_drop(GtkWidget *widget,GdkDragContext *context,gint x,gint y,GtkSelectionData *selection,guint info,guint time,gpointer data) {
  (void)widget; (void)x; (void)y; (void)info; (void)data; gboolean ok=FALSE;

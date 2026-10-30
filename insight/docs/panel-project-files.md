@@ -2,6 +2,20 @@
 
 Lists files belonging to the current project.
 
+## Add and remove project files
+
+New projects, including **New from Folder**, start empty and open **Project → Add and Remove Project Files**. Selecting a base directory does not import its contents.
+
+Choose a directory on the left. Available files appear in the middle, project files on the right; files already included are hidden from the available list. Enter a directory path or filename masks such as `*.c;*.h` and press Enter. Plain text narrows available names. **Show only known file types** uses configured language patterns, extensions and file bindings.
+
+**Add** adds selected files; selecting a directory navigates into it. **Add All** adds the displayed files and asks whether to include subdirectories. **Add Tree** recursively collects the selected directory with the current type filter. It stores explicit filenames, so future files are not silently imported. Collection runs in a cancellable worker and leaves the selection unchanged on errors or limits.
+
+**Remove File**, **Remove Tree**, **Remove All**, and **Remove Special…** change membership only; disk files remain. **Close** saves the selection. Existing automatic rules and the master file list remain in the expandable advanced section. Legacy projects retain their automatic policy until you disable it.
+
+Tutorial: browse to `src`, enter `*.c;*.h`, press Enter, then Add Tree. To exclude headers, use Remove Special with `*.h`, then Close.
+
+![Membership dialog layout (diagram)](media/project-membership.svg)
+
 ## Controls
 
 The filter narrows the list; sorting changes name and path order. Add and Remove commands change project membership.
@@ -31,7 +45,7 @@ Tutorial: find `*.cpp`, remember the query, select a file and copy its full path
 
 ## Master File List
 
-To share the project membership through a text file, first use **Export file list…** in Add and Remove Project Files. Choose that existing file in **Master file list** and Apply. Its paths replace the inclusion rules; relative paths are based on the project root. Clearing the field detaches the list. The binding is saved relative to the project root when possible.
+To share the project membership through a text file, first use **Export file list…** in Add and Remove Project Files. Choose that existing file in **Master file list** and Close. Its paths replace the inclusion rules; relative paths are based on the project root. Clearing the field detaches the list. The binding is saved relative to the project root when possible.
 
 The list is checked in a worker about every three seconds. External additions/removals update the project file list and symbol index; project masks/exclusion overlays are respected. Project → Open Project Master File List opens the text, and saving it requests immediate synchronization. Project → Synchronize Master File List requests a check explicitly. Cancel indexing pauses background MFL reads too; explicit synchronization, saving the list, changing its binding or applying membership resumes them.
 
@@ -129,3 +143,5 @@ Reference: [Source Insight Project File List](https://www.sourceinsight.com/doc/
 
 
 [Search and copy the current list](list-tools.md): context menu, F4/Shift+F4, visible columns and loaded rows.
+
+In a Git project, this dialog saves an explicit source-membership override without running git add/rm. Git tracking remains available through the Git commands. Legacy Git projects use tracked files until a manual selection is saved.

@@ -27,6 +27,8 @@
 #endif
 
 #include "project.h"
+#include "insight-workbench.h"
+#include "../insight/desktop/project_files.h"
 
 #include "app.h"
 #include "build.h"
@@ -87,7 +89,8 @@ static void update_new_project_dlg(GtkEditable *editable, PropertyDialogElements
 static void on_name_entry_changed(GtkEditable *editable, PropertyDialogElements *e);
 static void on_entries_changed(GtkEditable *editable, PropertyDialogElements *e);
 static void on_radio_long_line_custom_toggled(GtkToggleButton *radio, GtkWidget *spin_long_line);
-static void run_new_dialog(PropertyDialogElements *e);
+static gboolean run_new_dialog(PropertyDialogElements *e);
+static gboolean creating_project_files;
 static void apply_editor_prefs(void);
 static void init_stash_prefs(void);
 static void destroy_project(gboolean open_default);
@@ -255,24 +258,29 @@ void project_new(gboolean from_folder)
 	}
 
 	gtk_widget_show_all(e.dialog);
-	run_new_dialog(&e);
+	gboolean created = run_new_dialog(&e);
 	gtk_widget_destroy(e.dialog);
+	if (created)
+		insight_workbench_manage_project_files();
 	document_new_file_if_non_open();
 	ui_focus_current_document();
 }
 
 
-static void run_new_dialog(PropertyDialogElements *e)
+static gboolean run_new_dialog(PropertyDialogElements *e)
 {
 	if (gtk_dialog_run(GTK_DIALOG(e->dialog)) != GTK_RESPONSE_OK ||
 		!handle_current_session())
-		return;
+		return FALSE;
 	do
 	{
 		if (update_config(e, TRUE))
 		{
 			// app->project is now set
-			if (!write_config())
+			creating_project_files = TRUE;
+			gboolean written = write_config();
+			creating_project_files = FALSE;
+			if (!written)
 			{
 				SHOW_ERR(_("Project file could not be written"));
 				destroy_project(FALSE);
@@ -281,7 +289,7 @@ static void run_new_dialog(PropertyDialogElements *e)
 			{
 				ui_set_statusbar(TRUE, _("Project \"%s\" created."), app->project->name);
 				ui_add_recent_project_file(app->project->file_name);
-				return;
+				return TRUE;
 			}
 		}
 	}
@@ -296,6 +304,7 @@ static void run_new_dialog(PropertyDialogElements *e)
 		configuration_load_default_session();
 		configuration_open_default_session();
 	}
+	return FALSE;
 }
 
 
@@ -1211,6 +1220,17 @@ static gboolean write_config(void)
 	/* store the session files into the project too */
 	configuration_save_session_files(config);
 	build_save_menu(config, (gpointer)p, GEANY_BCS_PROJ);
+	/* New projects begin empty, including New from Folder. Existing legacy
+	 * projects keep their saved automatic membership policy. */
+	if (creating_project_files)
+	{
+		InsightProjectFiles *empty = insight_project_files_new();
+		empty->automatic = FALSE;
+		gchar *root = project_get_base_path();
+		insight_project_files_write(empty, config, root, NULL);
+		g_free(root);
+		insight_project_files_free(empty);
+	}
 	g_signal_emit_by_name(geany_object, "project-save", config);
 	/* write the file */
 	data = g_key_file_to_data(config, NULL, NULL);

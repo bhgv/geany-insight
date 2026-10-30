@@ -2821,3 +2821,21 @@ Direct AST: expression/type references, destinations, function definitions and b
 libclang: symbol lists, semantic colors and completion	libclang: списки символов, семантическая подсветка и автодополнение
 Clang C++: symbols, semantic colors and Sema completion	Clang C++: символы, семантическая подсветка и автодополнение Sema
 Native Clang C++ is unavailable in this build. Build external/llvm-project or install Clang C++ development headers, clang-cpp and LLVM; use -Dclang=enabled or --with-clang=yes. Portable builds must include the Clang C++ runtime.	Прямой Clang C++ недоступен в этой сборке. Соберите external/llvm-project или установите заголовки Clang C++, clang-cpp и LLVM; включите -Dclang=enabled или --with-clang=yes. Переносимая сборка должна включать библиотеки Clang C++.
+File Name	Имя файла
+Directories	Каталоги
+Add All	Добавить всё
+Add Tree	Добавить дерево
+Remove File	Убрать файл
+Remove Tree	Убрать дерево
+Remove All	Убрать всё
+Remove Special…	Убрать по маске…
+Remove Special	Удаление по маске
+Project file rules and master list	Правила состава проекта и главный список
+Enter a directory or filename masks such as *.c;*.h, then press Enter	Введите каталог или маски файлов, например *.c;*.h, затем нажмите Enter
+Filter project files; prefix with ~ for fuzzy matching	Фильтр файлов проекта; ~ в начале включает нечёткий поиск
+Filename masks separated by semicolons; files remain on disk	Маски имён через точку с запятой; файлы остаются на диске
+Include subdirectories?	Включить подкаталоги?
+Files only	Только файлы
+Reading project selection…	Чтение выбранных файлов…
+Added %u files to the selection	В выборку добавлено файлов: %u
+Project files could not be saved. Check project permissions or the master file list.	Не удалось сохранить состав проекта. Проверьте права доступа к проекту или главный список файлов.
