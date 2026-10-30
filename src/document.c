@@ -2788,7 +2788,7 @@ static void document_update_tags_async(GeanyDocument *doc) {
  document_ensure_tag_source(doc);
  if(!doc->tm_file) { document_update_tags(doc); return; }
  document_tags_cancel(doc); DocumentTagsJob *j=g_new0(DocumentTagsJob,1); j->document=doc->id; j->generation=doc->priv->tag_parse_generation; j->epoch=document_tags_epoch; j->lang=doc->tm_file->lang; j->path=g_strdup(doc->tm_file->file_name); j->language=g_strdup(tm_source_file_get_lang_name(j->lang));
- InsightClangResult *semantic=insight_clang_ui_result(doc->editor->sci);if(semantic && !semantic->errors && !semantic->limited) {j->clang_symbols=insight_index_ref(semantic->symbols);if(semantic->attributes) j->clang_attributes=g_hash_table_ref(semantic->attributes);}
+ InsightClangResult *semantic=insight_clang_ui_result(doc->editor->sci);if(insight_clang_result_usable(semantic)) {j->clang_symbols=insight_index_ref(semantic->symbols);if(semantic->attributes) j->clang_attributes=g_hash_table_ref(semantic->attributes);}
  j->length=sci_get_length(doc->editor->sci); j->text=g_malloc(j->length+1); if(j->length) memcpy(j->text,(const void *)SSM(doc->editor->sci,SCI_GETCHARACTERPOINTER,0,0),j->length); j->text[j->length]=0;
  doc->priv->tag_parse_cancel=g_cancellable_new(); GTask *task=g_task_new(NULL,doc->priv->tag_parse_cancel,document_tags_job_done,NULL); g_task_set_task_data(task,j,document_tags_job_free); g_task_run_in_thread(task,document_tags_job_run); g_object_unref(task);
 }

@@ -698,7 +698,7 @@ static gboolean database_identity(const gchar *root) {
  g_free(identity);g_free(policy);return changed;
 }
 static gchar *source_stamp(const gchar *native,const gchar *language,gint encoding) {
- gchar *stamp=insight_project_db_stamp(native,FALSE);if(!stamp) return NULL;gchar *value=g_strdup_printf("%s:%d:%s:clang%d-v5",language?language:"",encoding,stamp,insight_clang_available());g_free(stamp);return value;
+ gchar *stamp=insight_project_db_stamp(native,FALSE);if(!stamp) return NULL;gchar *value=g_strdup_printf("%s:%d:%s:clang%d-v6",language?language:"",encoding,stamp,insight_clang_available());g_free(stamp);return value;
 }
 static void restore_project_database(const gchar *root) {
  InsightProjectDb db={0};GError *error=NULL;
@@ -781,7 +781,7 @@ static void index_job_run(GTask *task,gpointer source,gpointer data,GCancellable
    gboolean semantic=FALSE;
    if(!j->failed && insight_clang_available() && insight_clang_source(j->utf8) && !g_cancellable_is_cancelled(cancel)) {
     InsightClangResult *parsed=insight_clang_parse(j->utf8,text,j->compile_root,j->clang_resources,NULL,cancel,NULL);
-    if(parsed && !parsed->errors && !parsed->limited) {semantic=insight_clang_import(parsed,j->utf8,j->index,j->calls);if(semantic) {TMSourceFile *tags=insight_native_clang_tags(parsed,j->path,j->language,j->lang);if(tags) {outline_free(j->declarations);j->declarations=outline_capture(tags,j->utf8);if(!insight_native_outline_import(j->outline,tags,j->utf8)) j->failed=TRUE;for(guint n=0;n<tags->tags_array->len;n++) ((TMTag *)g_ptr_array_index(tags->tags_array,n))->file=NULL;tm_source_file_free(tags);}}}
+    if(insight_clang_result_usable(parsed)) {semantic=insight_clang_import(parsed,j->utf8,j->index,j->calls);if(semantic) {TMSourceFile *tags=insight_native_clang_tags(parsed,j->path,j->language,j->lang);if(tags) {outline_free(j->declarations);j->declarations=outline_capture(tags,j->utf8);if(!insight_native_outline_import(j->outline,tags,j->utf8)) j->failed=TRUE;for(guint n=0;n<tags->tags_array->len;n++) ((TMTag *)g_ptr_array_index(tags->tags_array,n))->file=NULL;tm_source_file_free(tags);}}}
     insight_clang_result_free(parsed);
    }
    InsightCodeDialect dialect;
@@ -964,7 +964,7 @@ static const InsightSymbol *word_definition(GeanyDocument *doc,const char *word,
  if(uncertain_scope) { valid_word=FALSE; }g_free(mask);g_free(reference);
  size_t count=valid_word ? (imported ? import_count : member ? insight_member_query(wb.index,owner,word,preferred,scope_language_eligible,&language,found,256,NULL,NULL) : insight_index_find(wb.index,word,TRUE,found,256)) : 0; gint selected=0;
  gboolean compiler_choice=FALSE;InsightClangResult *semantic=reference_sci ? insight_clang_ui_result(reference_sci):NULL;
- if(semantic && !semantic->errors && !semantic->limited && insight_clang_dependencies_fresh(semantic->relations,preferred) && word && *word) {gchar *usr=insight_clang_symbol_at(semantic->relations,preferred,(guint)MAX(0,reference_position),(guint)reference_line,word);const InsightSymbol *definition=NULL;
+ if(insight_clang_result_usable(semantic) && insight_clang_dependencies_fresh(semantic->relations,preferred) && word && *word) {gchar *usr=insight_clang_symbol_at(semantic->relations,preferred,(guint)MAX(0,reference_position),(guint)reference_line,word);const InsightSymbol *definition=NULL;
   if(usr) {gsize n=insight_index_query(semantic->relations,usr,TRUE,NULL,"@clangdef",preferred,0,&definition,1);if(n!=1) {n=insight_index_query(wb.disk_calls,usr,TRUE,NULL,"@clangdef",NULL,0,&definition,1);if(n!=1) definition=NULL;}}
   if(definition) {const InsightSymbol *candidates[256];gsize n=insight_index_find(wb.index,word,TRUE,candidates,256);for(gsize i=0;i<MIN(n,256u);i++) if(candidates[i]->line==definition->line && !strcmp(candidates[i]->path,definition->path)) {found[0]=candidates[i];count=1;compiler_choice=TRUE;break;}}
   if(usr && !compiler_choice) {const InsightSymbol *target=NULL;if(insight_index_query(semantic->relations,usr,TRUE,NULL,"@clangtarget",preferred,0,&target,1)>0 && target->scope && *target->scope) {static InsightSymbol resolved;resolved=(InsightSymbol){target->type,target->scope,"",target->inheritance,target->line,"","",""};found[0]=&resolved;count=1;compiler_choice=TRUE;}}
@@ -1548,7 +1548,7 @@ static void search_job_run(GTask *task,gpointer source,gpointer data,GCancellabl
   }
  }
  if(!j->text && j->path && !g_cancellable_is_cancelled(cancel)) j->text=read_disk_source_full(j->path,TRUE,j->encoding,cancel);
- if(j->mode==8) {if(j->text && insight_clang_source(j->path)) {InsightClangResult *r=insight_clang_parse(j->path,j->text,j->clang_root,j->clang_resources,NULL,cancel,NULL);if(r && !r->limited) {clang_search_result(j,r->relations,r->digest);j->partial=r->errors;}insight_clang_result_free(r);}g_task_return_boolean(task,TRUE);return;}
+ if(j->mode==8) {if(j->text && insight_clang_source(j->path)) {InsightClangResult *r=insight_clang_parse(j->path,j->text,j->clang_root,j->clang_resources,NULL,cancel,NULL);if(r && !r->limited) {clang_search_result(j,r->relations,r->digest);j->partial=r->errors || r->ambiguous_command;}insight_clang_result_free(r);}g_task_return_boolean(task,TRUE);return;}
  char *mask=j->text && j->region!=INSIGHT_REGION_ALL && j->have_dialect ? insight_source_region_mask(j->text,strlen(j->text),j->dialect,j->region,NULL) : NULL;
  const char *text=j->region!=INSIGHT_REGION_ALL ? mask : j->text; j->found=g_new(InsightOccurrence,j->capacity);
  if(text && !g_cancellable_is_cancelled(cancel)) {
@@ -1740,9 +1740,9 @@ static void semantic_calls_done(GObject *source,GAsyncResult *result,gpointer un
 }
 static void semantic_call_tree(const gchar *query,gboolean incoming) {
  SemanticCallsJob *j=g_new0(SemanticCallsJob,1);j->base=insight_index_ref(wb.disk_calls);j->paths=g_ptr_array_new_with_free_func(g_free);j->overlays=g_ptr_array_new_with_free_func((GDestroyNotify)insight_index_free);j->query=g_strdup(query);j->incoming=incoming;j->generation=wb.usage_generation;j->epoch=workbench_epoch;
- for(guint i=0;i<documents_array->len;i++) {GeanyDocument *doc=g_ptr_array_index(documents_array,i);if(!DOC_VALID(doc) || !doc->file_name || !insight_clang_source(doc->file_name)) continue;InsightClangResult *r=insight_clang_ui_result(doc->editor->sci);g_ptr_array_add(j->paths,g_strdup(doc->file_name));g_ptr_array_add(j->overlays,r && !r->errors && !r->limited ? insight_index_ref(r->relations):NULL);}
+ for(guint i=0;i<documents_array->len;i++) {GeanyDocument *doc=g_ptr_array_index(documents_array,i);if(!DOC_VALID(doc) || !doc->file_name || !insight_clang_source(doc->file_name)) continue;InsightClangResult *r=insight_clang_ui_result(doc->editor->sci);g_ptr_array_add(j->paths,g_strdup(doc->file_name));g_ptr_array_add(j->overlays,insight_clang_result_usable(r) ? insight_index_ref(r->relations):NULL);}
  gboolean fixed=g_object_steal_data(G_OBJECT(wb.usage_entry),"insight-semantic-restore")!=NULL;j->usr=g_object_steal_data(G_OBJECT(wb.usage_entry),"insight-semantic-usr");j->source=g_object_steal_data(G_OBJECT(wb.usage_entry),"insight-semantic-source");
- if(!fixed) {GeanyDocument *doc=document_get_current();InsightClangResult *r=DOC_VALID(doc) ? insight_clang_ui_result(doc->editor->sci):NULL;if(r) j->usr=insight_clang_symbol_at(r->relations,doc->file_name,sci_get_current_position(doc->editor->sci),sci_get_current_line(doc->editor->sci)+1,query);j->source=DOC_VALID(doc) ? g_strdup(doc->file_name):NULL;}
+ if(!fixed) {GeanyDocument *doc=document_get_current();InsightClangResult *r=DOC_VALID(doc) ? insight_clang_ui_result(doc->editor->sci):NULL;if(insight_clang_result_usable(r)) j->usr=insight_clang_symbol_at(r->relations,doc->file_name,sci_get_current_position(doc->editor->sci),sci_get_current_line(doc->editor->sci)+1,query);j->source=DOC_VALID(doc) ? g_strdup(doc->file_name):NULL;}
  wb.search_worker=g_cancellable_new();GTask *task=g_task_new(NULL,wb.search_worker,semantic_calls_done,NULL);g_task_set_task_data(task,j,semantic_calls_free);g_task_run_in_thread(task,semantic_calls_run);g_object_unref(task);set_usage_status("Preparing Clang call snapshot…");
 }
 static void usage_start(GtkWidget *widget,gpointer data) {
@@ -1752,7 +1752,7 @@ static void usage_start(GtkWidget *widget,gpointer data) {
  const char *query=gtk_entry_get_text(GTK_ENTRY(wb.usage_entry)); size_t total;
  gint mode=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode)); wb.usage_mode=mode;
  wb.usage_target=mode==3 ? wb.search_matches : wb.matches;
- if(mode==8) {if(!insight_clang_available()) {set_usage_status("This build has no bundled Clang backend");return;}GeanyDocument *doc=document_get_current();InsightClangResult *semantic=DOC_VALID(doc) ? insight_clang_ui_result(doc->editor->sci):NULL;if(semantic) wb.usage_usr=insight_clang_symbol_at(semantic->relations,doc->file_name,(guint)sci_get_current_position(doc->editor->sci),(guint)sci_get_current_line(doc->editor->sci)+1,query);}
+ if(mode==8) {if(!insight_clang_available()) {set_usage_status("This build has no bundled Clang backend");return;}GeanyDocument *doc=document_get_current();InsightClangResult *semantic=DOC_VALID(doc) ? insight_clang_ui_result(doc->editor->sci):NULL;if(insight_clang_result_usable(semantic)) wb.usage_usr=insight_clang_symbol_at(semantic->relations,doc->file_name,(guint)sci_get_current_position(doc->editor->sci),(guint)sci_get_current_line(doc->editor->sci)+1,query);}
 
  if(mode==9 || mode==10) {semantic_call_tree(query,mode==10);return;}
  if(mode==6) { relation_calls(query);return; }
@@ -3749,7 +3749,7 @@ static gboolean definition_timeout(gpointer data) {
  (void)data; wb.definition_timer=0; if(!wb.alive || !wb.preview || !wb.context_visible || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow))) return G_SOURCE_REMOVE;
  GeanyDocument *doc=document_get_current(); if(!doc) return G_SOURCE_REMOVE; refresh_index();
  DefinitionJob *j=g_new0(DefinitionJob,1); j->index=insight_index_ref(wb.index); j->query=cursor_query(doc); j->preferred=g_strdup(doc->file_name); j->document=doc->id; j->position=sci_get_current_position(doc->editor->sci); j->anchor=(gint)SSM(doc->editor->sci,SCI_GETANCHOR,0,0); j->line=(gulong)sci_get_current_line(doc->editor->sci)+1; j->encoding=file_prefs.default_open_encoding; j->generation=wb.definition_generation; j->epoch=workbench_epoch; j->index_version=wb.index_version;
- InsightClangResult *semantic=insight_clang_ui_result(doc->editor->sci);if(semantic && !semantic->errors && !semantic->limited) {j->semantic=insight_index_ref(semantic->relations);j->project_calls=insight_index_ref(wb.disk_calls);}
+ InsightClangResult *semantic=insight_clang_ui_result(doc->editor->sci);if(insight_clang_result_usable(semantic)) {j->semantic=insight_index_ref(semantic->relations);j->project_calls=insight_index_ref(wb.disk_calls);}
  j->language=insight_language_filter_new(doc->file_name,doc->file_type);j->nominal_calls=member_calls_language(doc->file_type);j->python=python_language(doc->file_type);
  j->valid_word=!definition_keyword(doc->file_type,j->query) && !insight_languages_keyword(doc->editor->sci,j->query) && definition_code(doc->editor->sci,j->position);
  j->allowed_paths=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);const InsightSymbol *candidates[4096];gsize candidates_count=insight_index_find(j->index,j->query,TRUE,candidates,G_N_ELEMENTS(candidates));

@@ -126,3 +126,5 @@ Headers commonly have no explicit `compile_commands.json` entry. Without an exac
 Language standard, defines, target and include paths remain available. Relative paths use the command's `directory`, including databases in `build/`. C++ driver language is preserved; explicit `-x` overrides it. Header indexing, relations, colors and completion share this selection. Database and included-header changes invalidate cached analysis.
 
 **Navigate → Clang C/C++ → Clang analysis details…** displays parse language, exact/inferred settings source, errors, limits and compiler diagnostics in a selectable, copyable report. Use it to diagnose missing graph edges or symbols, and supply an exact header command when a heuristic is unsuitable.
+
+An ambiguous `.h` result is explicitly partial and does not replace the native symbol index. Definition lookup, graphs and completion keep their fallback until suitable unambiguous or exact settings are available. A diagnostic-free default C parse is not treated as proof of correct C++ project settings.
