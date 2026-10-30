@@ -979,7 +979,7 @@ test('Insight detachable menu palettes GUI', menu_palette_gui_test, timeout: 40,
 control_flow_test = executable('test_insight_control_flow', '../insight/core/control_flow.c', '../insight/tests/control_flow_test.c')
 test('Insight structured control flow core', control_flow_test)
 source_routes_gui_test = executable('test_insight_source_routes_gui', '../insight/tests/source_routes_gui_test.c', dependencies: test_deps)
-test('Insight native source routes and flow GUI', source_routes_gui_test, timeout: 65, is_parallel: false)
+test('Insight native source routes and flow GUI', source_routes_gui_test, timeout: 80, is_parallel: false)
 
 call_paths_test = executable('test_insight_call_paths', '../insight/tests/call_paths_test.c', '../insight/desktop/call_paths.c', '../insight/desktop/clang_backend.c', '../insight/desktop/source_mask.c', '../insight/core/structure_select.c', '../insight/core/index.c', dependencies: deps)
 test('Insight bounded project call paths', call_paths_test)

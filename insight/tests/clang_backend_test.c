@@ -4,8 +4,49 @@
 #include <glib/gstdio.h>
 #include <string.h>
 static gchar *load_source(const gchar *path,GCancellable *cancel,gpointer text) {(void)path;(void)cancel;return g_strdup(text);}
+static gchar *json_escape(const gchar *path) {GString *out=g_string_new(NULL);for(const guchar *p=(const guchar *)path;*p;p++) {if(*p=='"' || *p=='\\') {g_string_append_c(out,'\\');g_string_append_c(out,*p);}else if(*p<32) g_string_append_printf(out,"\\u%04x",*p);else g_string_append_c(out,*p);}return g_string_free(out,FALSE);}
+static void header_commands(void) {
+ GError *error=NULL;gchar *root=g_dir_make_tmp("clang-header-flags-XXXXXX",&error);g_assert_no_error(error);
+ gchar *src=g_build_filename(root,"src",NULL),*inc=g_build_filename(root,"include",NULL),*sdk=g_build_filename(root,"sdk",NULL),*build=g_build_filename(root,"build",NULL);
+ g_assert_cmpint(g_mkdir(src,0700),==,0);g_assert_cmpint(g_mkdir(inc,0700),==,0);g_assert_cmpint(g_mkdir(sdk,0700),==,0);g_assert_cmpint(g_mkdir(build,0700),==,0);
+ gchar *header=g_build_filename(inc,"widget.h",NULL),*cpp=g_build_filename(src,"widget.cpp",NULL),*config=g_build_filename(sdk,"sdk_config.h",NULL),*db=g_build_filename(root,"compile_commands.json",NULL);
+ gchar *root_json=json_escape(root),*build_json=json_escape(build),*common_json=NULL,*a_json=NULL,*z_json=NULL;
+ const gchar *text="#include <sdk_config.h>\n#if !defined(FROM_CPP) || !defined(__cplusplus)\n#error missing C++ project flags\n#endif\nclass Widget {public:int method(int value){return value+SDK_VALUE;}};\ninline int via(Widget &w){return w.method(1);}\n";
+ g_assert_true(g_file_set_contents(header,text,-1,NULL));g_assert_true(g_file_set_contents(cpp,"#include \"widget.h\"\n",-1,NULL));g_assert_true(g_file_set_contents(config,"#define SDK_VALUE 7\n",-1,NULL));
+ gchar *manifest=g_strdup_printf("[{\"directory\":\"%s\",\"file\":\"../src/widget.cpp\",\"arguments\":[\"clang++\",\"-std=c++17\",\"-DFROM_CPP=1\",\"-I../sdk\",\"-c\",\"../src/widget.cpp\",\"-o\",\"widget.o\"]}]",build_json);
+ g_assert_true(g_file_set_contents(db,manifest,-1,NULL));g_free(manifest);
+ InsightClangResult *r=insight_clang_parse(header,text,root,NULL,NULL,NULL,&error);g_assert_no_error(error);g_assert_nonnull(r);if(r->errors) g_printerr("%s",r->diagnostics);g_assert_false(r->errors);g_assert_true(r->compilation_database);g_assert_true(r->inferred_command);g_assert_cmpstr(r->parse_language,==,"c++");g_assert_false(r->ambiguous_command);g_assert_cmpstr(r->command_source,==,cpp);
+ const InsightSymbol *found[8];g_assert_cmpuint(insight_index_find(r->symbols,"Widget",TRUE,found,8),==,1);g_assert_cmpuint(insight_index_query(r->relations,"method",TRUE,NULL,"@clangcall",header,0,found,8),==,1);g_assert_true(insight_clang_dependencies_fresh(r->relations,header));
+ g_assert_true(g_file_set_contents(config,"#define SDK_VALUE 123\n",-1,NULL));g_assert_false(insight_clang_dependencies_fresh(r->relations,header));insight_clang_result_free(r);
+ gchar *complete=g_strconcat(text,"inline void hints(){Widget w;w.met}\n",NULL);guint offset=(guint)(strstr(complete,"w.met}")-complete+5);GPtrArray *items=insight_clang_complete(header,complete,offset,root,NULL,NULL,NULL,&error);g_assert_no_error(error);g_assert_nonnull(items);gboolean method=FALSE;
+ for(guint i=0;i<items->len;i++) {InsightClangCompletion *item=g_ptr_array_index(items,i);if(!strcmp(item->name,"method")) method=TRUE;}g_assert_true(method);g_ptr_array_unref(items);g_free(complete);
+ /* Replacing the database invalidates saved header references. */
+ r=insight_clang_parse(header,text,root,NULL,NULL,NULL,&error);g_assert_no_error(error);g_assert_nonnull(r);
+ gchar *plain=g_build_filename(root,"plain.c",NULL),*other=g_build_filename(root,"other.cpp",NULL),*common=g_build_filename(root,"common.h",NULL),*hpp=g_build_filename(root,"common.hpp",NULL);
+ manifest=g_strdup_printf("[{\"directory\":\"%s\",\"file\":\"plain.c\",\"arguments\":[\"cc\",\"-DFROM_C=1\",\"-c\",\"plain.c\"]},{\"directory\":\"%s\",\"file\":\"other.cpp\",\"arguments\":[\"clang++\",\"-DFROM_CPP=1\",\"-c\",\"other.cpp\"]}]",root_json,root_json);
+ g_assert_true(g_file_set_contents(db,manifest,-1,NULL));g_free(manifest);g_assert_false(insight_clang_dependencies_fresh(r->relations,header));insight_clang_result_free(r);
+ common_json=json_escape(common);
+ const gchar *c_source="#if defined(FROM_C) || defined(FROM_CPP) || defined(__cplusplus)\n#error ambiguous flags must not be selected\n#endif\nint common;\n";
+ g_assert_true(g_file_set_contents(common,c_source,-1,NULL));r=insight_clang_parse(common,c_source,root,NULL,NULL,NULL,&error);g_assert_no_error(error);g_assert_nonnull(r);g_assert_false(r->errors);g_assert_false(r->compilation_database);g_assert_true(r->ambiguous_command);g_assert_cmpstr(r->parse_language,==,"c");g_assert_null(r->command_source);insight_clang_result_free(r);
+ const gchar *cpp_source="#ifndef FROM_CPP\n#error missing inferred C++ flags\n#endif\nclass Common {};\n";g_assert_true(g_file_set_contents(hpp,cpp_source,-1,NULL));r=insight_clang_parse(hpp,cpp_source,root,NULL,NULL,NULL,&error);g_assert_no_error(error);g_assert_nonnull(r);g_assert_false(r->errors);g_assert_true(r->inferred_command);g_assert_cmpstr(r->command_source,==,other);insight_clang_result_free(r);
+ /* C++ driver semantics also apply to an explicit .h command without -x. */
+ manifest=g_strdup_printf("[{\"directory\":\"%s\",\"file\":\"%s\",\"arguments\":[\"clang++\",\"-DFROM_CPP=1\",\"-c\",\"%s\"]}]",root_json,common_json,common_json);g_assert_true(g_file_set_contents(db,manifest,-1,NULL));g_free(manifest);
+ r=insight_clang_parse(common,cpp_source,root,NULL,NULL,NULL,&error);g_assert_no_error(error);g_assert_nonnull(r);g_assert_false(r->errors);g_assert_true(r->compilation_database);g_assert_false(r->inferred_command);g_assert_cmpstr(r->command_source,==,common);insight_clang_result_free(r);
+ /* An explicit C language overrides the C++ driver. */
+ manifest=g_strdup_printf("[{\"directory\":\"%s\",\"file\":\"%s\",\"arguments\":[\"clang++\",\"-x\",\"c\",\"-c\",\"%s\"]}]",root_json,common_json,common_json);g_assert_true(g_file_set_contents(db,manifest,-1,NULL));g_free(manifest);
+ r=insight_clang_parse(common,c_source,root,NULL,NULL,NULL,&error);g_assert_no_error(error);g_assert_nonnull(r);g_assert_false(r->errors);g_assert_true(r->compilation_database);g_assert_false(r->inferred_command);insight_clang_result_free(r);
+ /* Include-directory names do not masquerade as C++ driver names. */
+ manifest=g_strdup_printf("[{\"directory\":\"%s\",\"file\":\"%s\",\"arguments\":[\"cc\",\"-I\",\"c++\",\"-c\",\"%s\"]}]",root_json,common_json,common_json);g_assert_true(g_file_set_contents(db,manifest,-1,NULL));g_free(manifest);r=insight_clang_parse(common,c_source,root,NULL,NULL,NULL,&error);g_assert_no_error(error);g_assert_nonnull(r);g_assert_false(r->errors);g_assert_cmpstr(r->parse_language,==,"c");insight_clang_result_free(r);
+ /* Same-language ties do not depend on JSON command order. */
+ gchar *z=g_build_filename(root,"z.cpp",NULL),*a=g_build_filename(root,"a.cpp",NULL);
+ a_json=json_escape(a);z_json=json_escape(z);
+ for(guint reverse=0;reverse<2;reverse++) {manifest=g_strdup_printf("[{\"directory\":\"%s\",\"file\":\"%s\",\"arguments\":[\"clang++\",\"-DFROM_CPP=1\",\"-c\",\"%s\"]},{\"directory\":\"%s\",\"file\":\"%s\",\"arguments\":[\"clang++\",\"-DFROM_CPP=1\",\"-c\",\"%s\"]}]",root_json,reverse ? a_json:z_json,reverse ? a_json:z_json,root_json,reverse ? z_json:a_json,reverse ? z_json:a_json);g_assert_true(g_file_set_contents(db,manifest,-1,NULL));g_free(manifest);r=insight_clang_parse(hpp,cpp_source,root,NULL,NULL,NULL,&error);g_assert_no_error(error);g_assert_nonnull(r);g_assert_false(r->errors);g_assert_cmpstr(r->command_source,==,a);insight_clang_result_free(r);}
+ g_free(root_json);g_free(build_json);g_free(common_json);g_free(a_json);g_free(z_json);g_free(z);g_free(a);g_remove(common);g_remove(hpp);g_free(common);g_free(hpp);g_free(plain);g_free(other);g_remove(db);g_remove(header);g_remove(cpp);g_remove(config);g_rmdir(src);g_rmdir(inc);g_rmdir(sdk);g_rmdir(build);g_rmdir(root);g_free(db);g_free(header);g_free(cpp);g_free(config);g_free(src);g_free(inc);g_free(sdk);g_free(build);g_free(root);
+ g_print("Clang headers: companion flags, relative includes, inherited C++, ambiguous C/C++, explicit -x, deterministic ties, completion and dependency invalidation passed\n");
+}
 int main(void) {
  if(!insight_clang_available()) return 77;
+ header_commands();
  gchar *root=g_dir_make_tmp("insight-clang-XXXXXX",NULL),*path=g_build_filename(root,"test.cpp",NULL),*header=g_build_filename(root,"api.h",NULL);
  const gchar *text="#include \"api.h\"\nint pick(int x){return x;}\nint pick(double x){return 2;}\nint main(){ Box b; int v=pick(1); return b.run(v); }\n";
  g_assert_true(g_file_set_contents(header,"struct Box { int run(int x){return x;} };\n",-1,NULL));g_assert_true(g_file_set_contents(path,text,-1,NULL));

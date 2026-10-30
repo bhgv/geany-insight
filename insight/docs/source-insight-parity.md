@@ -859,3 +859,7 @@ The tool manager now snapshots output into a bounded sortable diagnostic table, 
 ### Compiler call trees, completion and external header targets
 
 Relations adds lazy caller/callee trees keyed by Clang USR, sharing loaded-tree graphs, filtering, print and history. Contextual code completion uses libclang at the caret, preserving overloads and compiler-provided parameter fields, with debounce, stale-response checks and bounded workers. Definition lookup can open compiler targets outside the project manifest. See [Clang guide](clang.md). This does not claim arbitrary pointer-target inference, full SI macro/data compatibility or semantic support for every language.
+
+### C/C++ header command inference and analysis report
+
+Unlisted headers can inherit a companion source's compilation settings, with deterministic selection, explicit C/C++ ambiguity handling and driver-language preservation. A native copyable analysis report exposes the chosen settings source, language and diagnostics. Header-indexed inline calls and contextual completion are exercised in compiler and native GUI checks. See [Clang](clang.md).

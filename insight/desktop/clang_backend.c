@@ -21,7 +21,7 @@ gchar *insight_clang_symbol_at(InsightIndex *relations,const gchar *path,guint o
  n=insight_index_query(relations,"",FALSE,NULL,"@clangdef",path,0,NULL,0);rows=g_new(const InsightSymbol *,n);insight_index_query(relations,"",FALSE,NULL,"@clangdef",path,0,rows,n);gboolean ambiguous=FALSE;
  for(gsize i=0;i<n;i++) if(rows[i]->line==line && !g_strcmp0(rows[i]->signature,name)) {if(usr && strcmp(usr,rows[i]->name)) ambiguous=TRUE;g_free(usr);usr=g_strdup(rows[i]->name);}g_free(rows);if(ambiguous) g_clear_pointer(&usr,g_free);return usr;
 }
-void insight_clang_result_free(InsightClangResult *r) {if(!r) return;insight_index_free(r->symbols);insight_index_free(r->relations);g_array_unref(r->tokens);if(r->attributes) g_hash_table_unref(r->attributes);g_free(r->digest);g_free(r->diagnostics);g_free(r);}
+void insight_clang_result_free(InsightClangResult *r) {if(!r) return;insight_index_free(r->symbols);insight_index_free(r->relations);g_array_unref(r->tokens);if(r->attributes) g_hash_table_unref(r->attributes);g_free(r->digest);g_free(r->diagnostics);g_free(r->command_source);g_free(r->parse_language);g_free(r);}
 static gboolean import_index(InsightIndex *from,InsightIndex *to,const gchar *path) {
  gsize n=insight_index_count(from);InsightSymbol *rows=g_new(InsightSymbol,n);for(gsize i=0;i<n;i++) rows[i]=*insight_index_at(from,i);gboolean ok=insight_index_update(to,path,rows,n);g_free(rows);return ok;
 }
@@ -118,11 +118,75 @@ static void include_dependency(Parse *p,const gchar *name) {
 static void inclusion(CXFile file,CXSourceLocation *stack,unsigned depth,CXClientData data) {(void)stack;(void)depth;Parse *p=data;gchar *name=string(clang_getFileName(file));if(strcmp(name,p->path)) include_dependency(p,name);g_free(name);}
 static gboolean path_option(const gchar *s) {return !strcmp(s,"-I") || !strcmp(s,"-isystem") || !strcmp(s,"-iquote") || !strcmp(s,"-include") || !strcmp(s,"-imacros") || !strcmp(s,"-isysroot") || !strcmp(s,"--sysroot");}
 static void argument(GPtrArray *args,const gchar *s) {g_ptr_array_add(args,g_strdup(s));}
-static GPtrArray *arguments(const gchar *path,const gchar *root,const gchar *resources,gboolean *database) {
- GPtrArray *args=g_ptr_array_new_with_free_func(g_free);CXCompilationDatabase db=NULL;CXCompileCommands commands=NULL;CXCompilationDatabase_Error error;
- if(root) {gchar *manifest=g_build_filename(root,"compile_commands.json",NULL);if(g_file_test(manifest,G_FILE_TEST_IS_REGULAR)) db=clang_CompilationDatabase_fromDirectory(root,&error);g_free(manifest);if(!db) {gchar *build=g_build_filename(root,"build",NULL);manifest=g_build_filename(build,"compile_commands.json",NULL);if(g_file_test(manifest,G_FILE_TEST_IS_REGULAR)) db=clang_CompilationDatabase_fromDirectory(build,&error);g_free(manifest);g_free(build);}if(db) commands=clang_CompilationDatabase_getCompileCommands(db,path);}
- if(commands && clang_CompileCommands_getSize(commands)) {
-  *database=TRUE;CXCompileCommand command=clang_CompileCommands_getCommand(commands,0);gchar *cwd=string(clang_CompileCommand_getDirectory(command));
+static gint command_path_compare(const gchar *a,const gchar *b) {
+#ifdef G_OS_WIN32
+ return g_ascii_strcasecmp(a,b);
+#else
+ return g_strcmp0(a,b);
+#endif
+}
+static gboolean header_source(const gchar *path) {
+ const gchar *ext=strrchr(path,'.');return ext && (!g_ascii_strcasecmp(ext,".h") || !g_ascii_strcasecmp(ext,".hpp") || !g_ascii_strcasecmp(ext,".hh") || !g_ascii_strcasecmp(ext,".hxx"));
+}
+static gboolean cpp_header(const gchar *path) {
+ const gchar *ext=strrchr(path,'.');return ext && (strcmp(ext,".h") && (!g_ascii_strcasecmp(ext,".h") || !g_ascii_strcasecmp(ext,".hpp") || !g_ascii_strcasecmp(ext,".hh") || !g_ascii_strcasecmp(ext,".hxx")));
+}
+static gchar *command_file(CXCompileCommand command) {
+ gchar *cwd=string(clang_CompileCommand_getDirectory(command)),*file=string(clang_CompileCommand_getFilename(command));gchar *absolute=g_canonicalize_filename(file,cwd);g_free(cwd);g_free(file);return absolute;
+}
+/* Explicit -x wins over driver/file suffix. The driver is inspected only;
+ * compilation-database commands and wrappers are never executed. */
+static const gchar *command_language(CXCompileCommand command,const gchar *file) {
+ const gchar *language=NULL;gboolean driver_cpp=FALSE,wrapped=FALSE;
+ for(guint i=0;i<clang_CompileCommand_getNumArgs(command) && i<2048;i++) {
+  gchar *arg=string(clang_CompileCommand_getArg(command,i));
+  if(!strcmp(arg,"-x") && i+1<clang_CompileCommand_getNumArgs(command)) {g_free(arg);arg=string(clang_CompileCommand_getArg(command,++i));if(!strcmp(arg,"c") || !strcmp(arg,"c-header")) language="c";else if(!strcmp(arg,"c++") || !strcmp(arg,"c++-header")) language="c++";else if(!strcmp(arg,"none")) language=NULL;else language="unsupported";}
+  else if(g_str_has_prefix(arg,"-x") && arg[2]) {if(!strcmp(arg+2,"c") || !strcmp(arg+2,"c-header")) language="c";else if(!strcmp(arg+2,"c++") || !strcmp(arg+2,"c++-header")) language="c++";else if(!strcmp(arg+2,"none")) language=NULL;else language="unsupported";}
+  else if((i==0 || (i==1 && wrapped)) && arg[0]!='-') {gchar *name=g_path_get_basename(arg);const gchar *tail=strstr(name,"++");if(tail && (!tail[2] || tail[2]=='-' || !g_ascii_strcasecmp(tail+2,".exe"))) driver_cpp=TRUE;if(i==0 && (g_str_has_prefix(name,"ccache") || g_str_has_prefix(name,"sccache") || g_str_has_prefix(name,"distcc"))) wrapped=TRUE;g_free(name);}
+  g_free(arg);
+ }
+ if(language) return strcmp(language,"unsupported") ? language:NULL;
+ const gchar *ext=strrchr(file,'.');if(driver_cpp || (ext && (!strcmp(ext,".C") || !g_ascii_strcasecmp(ext,".cc") || !g_ascii_strcasecmp(ext,".cpp") || !g_ascii_strcasecmp(ext,".cxx") || !g_ascii_strcasecmp(ext,".c++") || !g_ascii_strcasecmp(ext,".hpp") || !g_ascii_strcasecmp(ext,".hh") || !g_ascii_strcasecmp(ext,".hxx")))) return "c++";
+ return ext && (!strcmp(ext,".c") || !g_ascii_strcasecmp(ext,".h")) ? "c":NULL;
+}
+static gchar *file_stem(const gchar *path) {gchar *stem=g_path_get_basename(path),*dot=strrchr(stem,'.');if(dot && dot!=stem) *dot=0;return stem;}
+static guint directory_distance(const gchar *a,const gchar *b) {
+ gchar *left=g_path_get_dirname(a),*right=g_path_get_dirname(b);gchar **x=g_strsplit_set(left,"/\\",-1),**y=g_strsplit_set(right,"/\\",-1);guint same=0;
+ while(x[same] && y[same] && !command_path_compare(x[same],y[same])) same++;
+ guint distance=g_strv_length(x)+g_strv_length(y)-2*same;g_strfreev(x);g_strfreev(y);g_free(left);g_free(right);return distance;
+}
+/* Header commands are hints, not proof that a translation unit includes it.
+ * Companion basename wins, then closest directory. A mixed C/C++ tie for .h
+ * declines rather than silently choosing a language. Same-language ties use
+ * canonical filename order, independent of database entry order. */
+static gint header_command(CXCompileCommands commands,const gchar *header,gboolean *ambiguous) {
+ guint count=clang_CompileCommands_getSize(commands);if(count>8192) return -1;
+ gchar *stem=file_stem(header),*best_file=NULL;const gchar *best_language=NULL;guint best_family=G_MAXUINT,best_distance=G_MAXUINT;gint best=-1;*ambiguous=FALSE;
+ for(guint i=0;i<count;i++) {
+  CXCompileCommand command=clang_CompileCommands_getCommand(commands,i);gchar *file=command_file(command);if(strlen(file)>4096) {g_free(file);continue;}
+  const gchar *language=command_language(command,file);if(!language || (cpp_header(header) && strcmp(language,"c++"))) {g_free(file);continue;}
+  gchar *name=file_stem(file);guint family=command_path_compare(stem,name)!=0,distance=directory_distance(header,file);g_free(name);
+  if(family<best_family || (family==best_family && distance<best_distance)) {best=(gint)i;best_family=family;best_distance=distance;best_language=language;*ambiguous=FALSE;g_free(best_file);best_file=g_strdup(file);}
+  else if(family==best_family && distance==best_distance) {if(strcmp(best_language,language)) *ambiguous=TRUE;if(command_path_compare(file,best_file)<0) {best=(gint)i;g_free(best_file);best_file=g_strdup(file);}}
+  g_free(file);
+ }
+ g_free(stem);g_free(best_file);return *ambiguous ? -1:best;
+}
+static GPtrArray *arguments(const gchar *path,const gchar *root,const gchar *resources,InsightClangResult *report) {
+ GPtrArray *args=g_ptr_array_new_with_free_func(g_free);CXCompilationDatabase db=NULL;CXCompileCommands commands=NULL;CXCompilationDatabase_Error error;gint selected=-1;gboolean inferred=FALSE,ambiguous=FALSE;
+ if(root) {gchar *manifest=g_build_filename(root,"compile_commands.json",NULL);if(g_file_test(manifest,G_FILE_TEST_IS_REGULAR)) db=clang_CompilationDatabase_fromDirectory(root,&error);g_free(manifest);if(!db) {gchar *build=g_build_filename(root,"build",NULL);manifest=g_build_filename(build,"compile_commands.json",NULL);if(g_file_test(manifest,G_FILE_TEST_IS_REGULAR)) db=clang_CompilationDatabase_fromDirectory(build,&error);g_free(manifest);g_free(build);}}
+ if(db && header_source(path)) {
+  /* Enumerate explicit rows first: some Clang database wrappers can return an
+   * interpolated command from getCompileCommands for an unlisted header. */
+  commands=clang_CompilationDatabase_getAllCompileCommands(db);guint count=commands ? clang_CompileCommands_getSize(commands):0;gchar *expected=g_canonicalize_filename(path,NULL);
+  if(count<=8192) {for(guint i=0;i<count;i++) {gchar *file=command_file(clang_CompileCommands_getCommand(commands,i));gboolean exact=!command_path_compare(file,expected);g_free(file);if(exact) {selected=(gint)i;break;}}if(selected<0 && commands) {selected=header_command(commands,path,&ambiguous);inferred=selected>=0;}}
+  else {clang_CompileCommands_dispose(commands);commands=clang_CompilationDatabase_getCompileCommands(db,path);if(commands && clang_CompileCommands_getSize(commands)) {gchar *file=command_file(clang_CompileCommands_getCommand(commands,0));if(!command_path_compare(file,expected)) selected=0;g_free(file);}}
+  g_free(expected);
+ } else if(db) {commands=clang_CompilationDatabase_getCompileCommands(db,path);if(commands && clang_CompileCommands_getSize(commands)) {gchar *file=command_file(clang_CompileCommands_getCommand(commands,0)),*expected=g_canonicalize_filename(path,NULL);if(!command_path_compare(file,expected)) selected=0;g_free(file);g_free(expected);}}
+
+ if(selected>=0) {
+  CXCompileCommand command=clang_CompileCommands_getCommand(commands,(guint)selected);gchar *cwd=string(clang_CompileCommand_getDirectory(command)),*file=command_file(command);const gchar *language=command_language(command,file);
+  if(report) {report->compilation_database=TRUE;report->inferred_command=inferred;report->command_source=g_strdup(file);report->parse_language=g_strdup(language ? language:"configured");}
   for(guint i=1;i<clang_CompileCommand_getNumArgs(command) && args->len<2048;i++) {gchar *s=string(clang_CompileCommand_getArg(command,i));
    if(path_option(s) || !strcmp(s,"-D") || !strcmp(s,"-U") || !strcmp(s,"-x") || !strcmp(s,"-target")) {if(i+1<clang_CompileCommand_getNumArgs(command)) {gchar *value=string(clang_CompileCommand_getArg(command,++i));argument(args,s);if(path_option(s)) {gchar *absolute=g_canonicalize_filename(value,cwd);argument(args,absolute);g_free(absolute);}else argument(args,value);g_free(value);}}
    else if(g_str_has_prefix(s,"-I") && s[2]) {gchar *absolute=g_canonicalize_filename(s+2,cwd),*joined=g_strconcat("-I",absolute,NULL);argument(args,joined);g_free(joined);g_free(absolute);}
@@ -130,10 +194,12 @@ static GPtrArray *arguments(const gchar *path,const gchar *root,const gchar *res
    else if(g_str_has_prefix(s,"-O") || (g_str_has_prefix(s,"-m") && !g_str_has_prefix(s,"-mllvm")) || !strcmp(s,"-pthread") || !strcmp(s,"-ffreestanding") || !strcmp(s,"-fno-builtin") || !strcmp(s,"-fPIC") || !strcmp(s,"-fpic") || !strcmp(s,"-fPIE") || !strcmp(s,"-fpie")) argument(args,s);
    else if(g_str_has_prefix(s,"-D") || g_str_has_prefix(s,"-U") || g_str_has_prefix(s,"-std=") || g_str_has_prefix(s,"--target=") || !strcmp(s,"-m32") || !strcmp(s,"-m64") || !strcmp(s,"-fms-extensions") || !strcmp(s,"-fms-compatibility") || !strcmp(s,"-fno-exceptions") || !strcmp(s,"-fexceptions") || !strcmp(s,"-fno-rtti") || !strcmp(s,"-frtti")) argument(args,s);
    g_free(s);
-  }g_free(cwd);
+  }
+  if(language) {argument(args,"-x");argument(args,language);}g_free(file);g_free(cwd);
  }
+ if(report) report->ambiguous_command=ambiguous;
  if(commands) clang_CompileCommands_dispose(commands);if(db) clang_CompilationDatabase_dispose(db);
- if(!*database) {const gchar *dot=strrchr(path,'.');argument(args,"-x");argument(args,dot && (!strcmp(dot,".c") || !strcmp(dot,".h")) ? "c":"c++");}
+ if(selected<0) {const gchar *dot=strrchr(path,'.'),*language=dot && (!strcmp(dot,".c") || !strcmp(dot,".h")) ? "c":"c++";argument(args,"-x");argument(args,language);if(report) report->parse_language=g_strdup(language);}
  if(root) {argument(args,"-I");argument(args,root);}if(resources && g_file_test(resources,G_FILE_TEST_IS_DIR)) {argument(args,"-resource-dir");argument(args,resources);}
  argument(args,"-fsyntax-only");argument(args,"-fno-modules");argument(args,"-fno-implicit-modules");return args;
 }
@@ -147,7 +213,7 @@ static gint completion_order(gconstpointer a,gconstpointer b) {
 GPtrArray *insight_clang_complete(const gchar *path,const gchar *text,guint offset,const gchar *root,const gchar *resources,GHashTable *overlays,GCancellable *cancel,GError **error) {
  if(!path || !text || !insight_clang_source(path) || strlen(text)>2u*1024u*1024u || offset>strlen(text) || !g_utf8_validate(text,-1,NULL) || !g_utf8_validate(text,offset,NULL)) {g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid C/C++ completion source or offset");return NULL;}
  if(cancel && g_cancellable_set_error_if_cancelled(cancel,error)) return NULL;
- gboolean database=FALSE;GPtrArray *args=arguments(path,root,resources,&database);GArray *unsaved=g_array_new(FALSE,FALSE,sizeof(struct CXUnsavedFile));gsize bytes=0;
+ GPtrArray *args=arguments(path,root,resources,NULL);GArray *unsaved=g_array_new(FALSE,FALSE,sizeof(struct CXUnsavedFile));gsize bytes=0;
  if(overlays) {GHashTableIter it;gpointer key,value;g_hash_table_iter_init(&it,overlays);while(g_hash_table_iter_next(&it,&key,&value)) if(value && strcmp(key,path) && unsaved->len<256 && bytes+strlen(value)<=32u*1024u*1024u) {struct CXUnsavedFile f={key,value,strlen(value)};g_array_append_val(unsaved,f);bytes+=strlen(value);}}
  struct CXUnsavedFile f={path,text,strlen(text)};g_array_append_val(unsaved,f);CXIndex index=clang_createIndex(1,0);CXTranslationUnit tu=NULL;
  enum CXErrorCode code=clang_parseTranslationUnit2(index,path,(const gchar *const *)args->pdata,args->len,(struct CXUnsavedFile *)unsaved->data,unsaved->len,CXTranslationUnit_KeepGoing|CXTranslationUnit_CacheCompletionResults|CXTranslationUnit_IncludeBriefCommentsInCodeCompletion,&tu);g_ptr_array_unref(args);
@@ -178,7 +244,7 @@ InsightClangResult *insight_clang_parse(const gchar *path,const gchar *text,cons
  if(!path || !text || !insight_clang_source(path) || strlen(text)>2u*1024u*1024u || !g_utf8_validate(text,-1,NULL)) {g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Clang requires a C/C++ UTF-8 source up to 2 MiB");return NULL;}
  if(cancel && g_cancellable_set_error_if_cancelled(cancel,error)) return NULL;
  InsightClangResult *r=g_new0(InsightClangResult,1);r->symbols=insight_index_new();r->relations=insight_index_new();r->tokens=g_array_new(FALSE,FALSE,sizeof(InsightClangToken));r->attributes=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);r->digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,text,-1);
- GPtrArray *args=arguments(path,root,resources,&r->compilation_database);GArray *unsaved=g_array_new(FALSE,FALSE,sizeof(struct CXUnsavedFile));gsize bytes=0;
+ GPtrArray *args=arguments(path,root,resources,r);GArray *unsaved=g_array_new(FALSE,FALSE,sizeof(struct CXUnsavedFile));gsize bytes=0;
  if(overlays) {GHashTableIter it;gpointer key,value;g_hash_table_iter_init(&it,overlays);while(g_hash_table_iter_next(&it,&key,&value)) if(value && strcmp(key,path) && unsaved->len<256 && bytes+strlen(value)<=32u*1024u*1024u) {struct CXUnsavedFile file={key,value,strlen(value)};g_array_append_val(unsaved,file);bytes+=strlen(value);}}
  struct CXUnsavedFile main_file={path,text,strlen(text)};g_array_append_val(unsaved,main_file);CXIndex index=clang_createIndex(1,0);CXTranslationUnit tu=NULL;
  enum CXErrorCode code=clang_parseTranslationUnit2(index,path,(const gchar *const *)args->pdata,args->len,(struct CXUnsavedFile *)unsaved->data,unsaved->len,CXTranslationUnit_DetailedPreprocessingRecord|CXTranslationUnit_KeepGoing,&tu);g_array_unref(unsaved);g_ptr_array_unref(args);

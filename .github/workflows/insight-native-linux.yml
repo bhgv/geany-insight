@@ -292,7 +292,7 @@ jobs:
         id: source-routes
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' && steps.menu-palettes.outcome == 'success' }}
         run: |
-          if ! INSIGHT_SEMANTIC_RELATIONS_CAPTURE="$PWD/semantic-relations.jpg" INSIGHT_SEMANTIC_COMPLETION_CAPTURE="$PWD/semantic-completion.jpg" INSIGHT_SOURCE_ROUTES_CAPTURE="$PWD/source-routes.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight Clang semantic frontend' 'Insight structured control flow core' 'Insight bounded project call paths' 'Insight native source routes and flow GUI' 'Insight Symbol Info and Window List GUI' 'Insight detailed completion native GUI'; then
+          if ! INSIGHT_CLANG_DETAILS_CAPTURE="$PWD/clang-analysis.jpg" INSIGHT_SEMANTIC_RELATIONS_CAPTURE="$PWD/semantic-relations.jpg" INSIGHT_SEMANTIC_COMPLETION_CAPTURE="$PWD/semantic-completion.jpg" INSIGHT_SOURCE_ROUTES_CAPTURE="$PWD/source-routes.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight Clang semantic frontend' 'Insight structured control flow core' 'Insight bounded project call paths' 'Insight native source routes and flow GUI' 'Insight Symbol Info and Window List GUI' 'Insight detailed completion native GUI'; then
             GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" timeout 45 gdb -batch -ex run -ex 'thread apply all bt' --args _native/tests/test_insight_source_routes_gui || true
             exit 1
           fi
@@ -386,6 +386,7 @@ jobs:
             source-routes.jpg
             semantic-relations.jpg
             semantic-completion.jpg
+            clang-analysis.jpg
             ssh-console-testlog.txt
             aligned-diff.jpg
             paste-symbol.jpg

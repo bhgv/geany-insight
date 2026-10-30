@@ -2792,3 +2792,19 @@ Clip template	Шаблон Clips
 Insert the Clips template using its parameter dialog and Undo	Вставка шаблона Clips с диалогом параметров и отменой
 Browse callers of selected function (Clang)	Вызывающие функции выбранного узла (Clang)
 Browse callees of selected function (Clang)	Вызываемые функции выбранного узла (Clang)
+Ambiguous C/C++ header settings; default arguments	Неоднозначные настройки C/C++ заголовка; стандартные параметры
+Settings inferred from %s	Настройки подобраны из %s
+Exact compilation database command	Точная команда из базы компиляции
+Default compiler arguments	Стандартные параметры компилятора
+Clang analysis details	Сведения о разборе Clang
+Clang analysis details…	Сведения о разборе Clang…
+Clang analysis is not ready; reanalyze the current source	Разбор Clang ещё не готов; повторите разбор текущего исходника
+Compiler settings	Настройки компилятора
+Settings source	Источник настроек
+Parse language	Язык разбора
+Semantic tokens	Семантические токены
+Source diagnostics present	Есть сообщения об ошибках исходника
+Analysis limit reached	Достигнут предел разбора
+Compiler diagnostics	Сообщения компилятора
+No compiler diagnostics	Сообщений компилятора нет
+As configured	Как задано в настройках

@@ -118,3 +118,11 @@ The detailed list combines symbols and language-eligible templates from the acti
 The up/down navigation buttons browse callers/callees from the selected node, retaining its exact USR. Back/forward restores that overload even if the source caret has moved to another same-named function.
 
 Automatic Context tracking also selects the compiler-bound definition, including external headers. Its worker retains snapshot guards and rejects replies after the corresponding parse was replaced or invalidated. Without a fresh successful parse it retains the native tag fallback.
+
+## Compilation settings for C/C++ headers
+
+Headers commonly have no explicit `compile_commands.json` entry. Without an exact command, settings are inferred from a companion source: matching filename stem first, then directory proximity. `.hpp`, `.hh` and `.hxx` use C++ commands only. Equally ranked C and C++ commands for `.h` decline inference and report ambiguity. Same-language ties use canonical filename ordering, independent of JSON entry order. Inference is bounded to 8192 commands. This is a heuristic, not proof that the chosen source includes the header; an exact header command takes precedence.
+
+Language standard, defines, target and include paths remain available. Relative paths use the command's `directory`, including databases in `build/`. C++ driver language is preserved; explicit `-x` overrides it. Header indexing, relations, colors and completion share this selection. Database and included-header changes invalidate cached analysis.
+
+**Navigate → Clang C/C++ → Clang analysis details…** displays parse language, exact/inferred settings source, errors, limits and compiler diagnostics in a selectable, copyable report. Use it to diagnose missing graph edges or symbols, and supply an exact header command when a heuristic is unsuitable.
