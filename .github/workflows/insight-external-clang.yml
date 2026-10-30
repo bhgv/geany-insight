@@ -17,7 +17,7 @@ concurrency:
 jobs:
   source-sdk:
     runs-on: ubuntu-24.04
-    timeout-minutes: 100
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - name: Fetch pinned editable compiler sources
@@ -37,10 +37,12 @@ jobs:
       - name: Build Clang and LLVM directly from the pinned sources
         id: sdk-build
         run: |
+          compiler_jobs=$(python3 -c 'import os; memory=os.sysconf("SC_PHYS_PAGES")*os.sysconf("SC_PAGE_SIZE"); print(max(1,min(4,os.cpu_count() or 2,memory//(3*1024**3))))')
+          echo "Compiler build parallelism: $compiler_jobs"
           if [ "${{ steps.compiler-cache.outputs.cache-hit }}" = "true" ]; then
-            python3 insight/tools/build_external_clang.py --jobs 2 --reuse-build
+            python3 insight/tools/build_external_clang.py --jobs "$compiler_jobs" --reuse-build
           else
-            python3 insight/tools/build_external_clang.py --jobs 2
+            python3 insight/tools/build_external_clang.py --jobs "$compiler_jobs"
           fi
       - uses: actions/cache/save@v4
         if: steps.compiler-cache.outputs.cache-hit != 'true'
