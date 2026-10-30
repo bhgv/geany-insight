@@ -36,6 +36,7 @@ static void quit(void) {GeanyDocument *doc=document_get_current();if(DOC_VALID(d
 
 static gboolean temporary_step(void) {
  if(!phase) {
+  gtk_window_resize(GTK_WINDOW(window),1400,1000);routes=named(window,"insight-source-routes");canvas=named(routes,"insight-route-canvas");
   if(!gtk_widget_get_sensitive(named(window,"insight-clang-colors"))) {temporary_skip=TRUE;quit();return G_SOURCE_REMOVE;}
   g_assert_true(gtk_widget_get_sensitive(named(window,"insight-clang-details-command")));g_assert_true(gtk_widget_get_sensitive(named(window,"insight-clang-reanalyze")));command("insight-clang-details-command");GtkWidget *details=toplevel("insight-clang-details");g_assert_nonnull(details);gtk_dialog_response(GTK_DIALOG(details),GTK_RESPONSE_CLOSE);
   b=document_open_file(path_b,FALSE,NULL,NULL);g_assert_nonnull(b);SEND(b->editor->sci,SCI_SETTEXT,0,(sptr_t)"int temp_target(int x){return x+2;}\n");
@@ -45,6 +46,7 @@ static gboolean temporary_step(void) {
   g_object_set_data(G_OBJECT(a->editor->sci),"insight-clang-result",NULL);g_object_set_data(G_OBJECT(b->editor->sci),"insight-clang-result",NULL);
   SEND(a->editor->sci,SCI_GOTOPOS,sci_get_position_from_line(a->editor->sci,2)+9,0);command("insight-navigate-relation-9");
  } else if(phase==1 || phase==2) {
+  if(phase==1) for(GtkWidget *p=gtk_widget_get_parent(routes);p;p=gtk_widget_get_parent(p)) if(GTK_IS_PANED(p) && gtk_orientable_get_orientation(GTK_ORIENTABLE(p))==GTK_ORIENTATION_HORIZONTAL) {gtk_paned_set_position(GTK_PANED(p),MAX(100,gtk_widget_get_allocated_width(p)-600));break;}
   GtkTreeModel *model;GtkTreeIter root,child;if(!relation_child(&root,&child,&model)) return G_SOURCE_CONTINUE;
   gulong line=0;gchar *name=NULL,*path=NULL;gtk_tree_model_get(model,&child,2,&line,7,&name,1,&path,-1);if(!line) {g_free(name);g_free(path);return G_SOURCE_CONTINUE;}
   g_assert_cmpstr(name,==,"temp_mid");g_assert_cmpstr(path,==,path_a);g_assert_cmpuint(line,==,phase==1 ? 3:2);g_free(name);g_free(path);
@@ -53,6 +55,7 @@ static gboolean temporary_step(void) {
  } else {
   if(!count("insight-call-search-completed")) return G_SOURCE_CONTINUE;counts(5,4);
   g_assert_true(count("insight-call-workspace-temporary"));g_assert_cmpuint(count("insight-call-workspace-members"),==,2);
+  click(40);g_assert_true(document_get_current()==a);click(408);g_assert_true(document_get_current()==b);button("insight-call-site");g_assert_true(document_get_current()==a);g_assert_cmpint(sci_get_current_line(a->editor->sci),==,1);
   capture("INSIGHT_TEMPORARY_WORKSPACE_CAPTURE");gchar *disk=NULL;g_assert_true(g_file_get_contents(path_b,&disk,NULL,NULL));g_assert_nonnull(strstr(disk,"x+1"));g_free(disk);gchar *text=sci_get_contents(b->editor->sci,sci_get_length(b->editor->sci)+1);g_assert_nonnull(strstr(text,"x+2"));g_free(text);
   document_set_text_changed(b,FALSE);g_assert_true(document_close(b));b=NULL;button("insight-call-find");g_assert_cmpuint(count("insight-call-workspace-members"),==,1);g_assert_false(g_file_test(project_file,G_FILE_TEST_EXISTS));
   g_print("Temporary workspace: no project, two open files, inactive Clang callers/callees, unsaved overlays, three-function path with call sites, closed-file removal and memory-only snapshots passed\n");quit();return G_SOURCE_REMOVE;
