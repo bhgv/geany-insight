@@ -75,10 +75,36 @@ static void expression_references(void) {
  insight_clang_result_free(r);g_rmdir(root);g_free(path);g_free(root);
  g_print("Clang expression references: exact member tokens, shadowed locals, UTF-8 columns and no duplicate occurrences passed\n");
 }
+static void assert_destination(InsightClangResult *r,const gchar *source,const gchar *identity,const gchar *path,guint line,const gchar *kind) {
+ const InsightSymbol *found[8];g_assert_cmpuint(insight_index_query(r->relations,identity,TRUE,NULL,"@clangtarget",source,0,found,8),==,1);
+ g_assert_cmpstr(found[0]->scope,==,path);g_assert_cmpuint(found[0]->line,==,line);g_assert_cmpstr(found[0]->inheritance,==,kind);
+ gchar **position=g_strsplit(found[0]->signature,":",2);g_assert_cmpuint(g_ascii_strtoull(position[0],NULL,10),==,line);g_assert_cmpuint(g_ascii_strtoull(position[1],NULL,10),>,0);g_strfreev(position);
+}
+static void expression_destinations(void) {
+ gchar *root=g_dir_make_tmp("clang-expression-targets-XXXXXX",NULL),*path=g_build_filename(root,"targets.cpp",NULL),*header=g_build_filename(root,"targets.h",NULL);
+ const gchar *api="int choose(int);\nint choose(double);\nextern int shared;\nstruct Owner {int field; int method(int);};\nint external_only(int);\n";
+ const gchar *text="#include \"targets.h\"\nint choose(int x){return x;}\nint choose(double x){return (int)x;}\nint shared=7;\nint Owner::method(int x){return field+x;}\nint main(){Owner o; return choose(1)+choose(1.0)+o.method(shared)+external_only(2);}\n";
+ g_assert_true(g_file_set_contents(header,api,-1,NULL));gchar *changed=g_strconcat("\n\n",api,NULL);GHashTable *overlays=g_hash_table_new(g_str_hash,g_str_equal);g_hash_table_insert(overlays,header,changed);
+ GError *error=NULL;InsightClangResult *r=insight_clang_parse(path,text,root,NULL,overlays,NULL,&error);g_assert_no_error(error);g_assert_nonnull(r);g_assert_false(r->errors);
+#ifdef HAVE_CLANG_CPP
+ g_assert_true(r->internal_calls);
+#endif
+ const InsightSymbol *found[8];g_assert_cmpuint(insight_index_query(r->relations,"choose",TRUE,NULL,"@clangref",path,0,found,8),==,2);
+ g_assert_cmpstr(found[0]->scope,!=,found[1]->scope);
+ for(guint i=0;i<2;i++) {const InsightSymbol *definition=NULL;g_assert_cmpuint(insight_index_query(r->relations,found[i]->scope,TRUE,NULL,"@clangdef",path,0,&definition,1),==,1);g_assert_true(definition->line==2 || definition->line==3);assert_destination(r,path,found[i]->scope,path,(guint)definition->line,"f");}
+ g_assert_cmpuint(insight_index_query(r->relations,"method",TRUE,NULL,"@clangref",path,0,found,8),==,1);assert_destination(r,path,found[0]->scope,path,5,"f");
+ g_assert_cmpuint(insight_index_query(r->relations,"shared",TRUE,NULL,"@clangref",path,0,found,8),==,1);assert_destination(r,path,found[0]->scope,path,4,"v");
+ g_assert_cmpuint(insight_index_query(r->relations,"field",TRUE,NULL,"@clangref",path,0,found,8),==,1);assert_destination(r,path,found[0]->scope,header,6,"m");
+ g_assert_cmpuint(insight_index_query(r->relations,"external_only",TRUE,NULL,"@clangref",path,0,found,8),==,1);assert_destination(r,path,found[0]->scope,header,7,"p");
+ gchar *disk=NULL;g_assert_true(g_file_get_contents(header,&disk,NULL,NULL));g_assert_cmpstr(disk,==,api);g_free(disk);
+ insight_clang_result_free(r);g_hash_table_unref(overlays);g_free(changed);g_remove(header);g_rmdir(root);g_free(path);g_free(header);g_free(root);
+ g_print("Clang destinations: exact overload definitions, out-of-line methods, extern definitions, unsaved-header fields and declaration-only fallback passed\n");
+}
 int main(void) {
  if(!insight_clang_available()) return 77;
  header_commands();
  expression_references();
+ expression_destinations();
  gchar *root=g_dir_make_tmp("insight-clang-XXXXXX",NULL),*path=g_build_filename(root,"test.cpp",NULL),*header=g_build_filename(root,"api.h",NULL);
  const gchar *text="#include \"api.h\"\nint pick(int x){return x;}\nint pick(double x){return 2;}\nint main(){ Box b; int v=pick(1); return b.run(v); }\n";
  g_assert_true(g_file_set_contents(header,"struct Box { int run(int x){return x;} };\n",-1,NULL));g_assert_true(g_file_set_contents(path,text,-1,NULL));

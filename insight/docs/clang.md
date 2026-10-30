@@ -168,8 +168,14 @@ The pinned LLVM/Clang source is now in `external/llvm-project` (Git submodule). 
 
 With `clang-cpp` enabled, `DeclRefExpr` and `MemberExpr` references now come from the direct C++ AST pass as well as call edges. Resolved USRs preserve the identity of shadowed variables and overloaded functions. Member occurrences cover the member name rather than the whole object expression; stored offsets are bytes and displayed columns count UTF-8 characters. These rows feed existing definition lookup and reference searches.
 
-The update is atomic: cancellation, parse errors or limits retain the existing frontend result. Macro expansions, operator spellings, and type references retain their C frontend reference rows. Declarations, destination records, coloring and completion still use libclang; this is a staged migration, not a replacement of every compiler service. Project caches invalidate once for the new reference generation.
+The update is atomic: cancellation, parse errors or limits retain the existing frontend result. Macro expansions, operator spellings, and type references retain their C frontend reference rows. Symbol-list declarations, type references, coloring and completion still use libclang; expression destinations now also use the direct AST; this is a staged migration, not a replacement of every compiler service. Project caches invalidate once for the new reference generation.
 
 ### Lambda capture evaluation
 
 Direct AST traversal distinguishes a lambda's capture initializers from its deferred body. In `auto task = [value = load()] { return work(value); };`, the enclosing function has a direct call edge to `load`, not to `work`. Both references remain searchable. Nested deferred bodies do not create enclosing-function edges. This does not infer when a stored lambda will be invoked.
+
+## Definition destinations through the C++ AST
+
+For resolved expression references and calls, the direct Clang pass now emits destination records. It prefers a function or variable definition available in the current translation unit, otherwise its declaration. USRs distinguish overloads; an out-of-line method leads to its body and a field leads to its class declaration. Named unsaved headers are evaluated with the current source buffer.
+
+One destination per USR atomically replaces that symbol's old destinations together with the references. Parse errors, cancellation and limits retain the previous result. Macro-generated or implicit declarations without ordinary source positions retain the C frontend fallback. Definitions in other translation units still use the shared project/open-file index. No project compilation or execution is involved.

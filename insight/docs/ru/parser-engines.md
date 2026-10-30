@@ -11,8 +11,10 @@ bundler carries both libclang and clang-cpp plus LLVM dependencies and licenses.
 The direct C++ adapter derives resolved call edges and expression references
 from Clang AST (`ASTUnit`, `RecursiveASTVisitor`, `CallExpr::getDirectCallee`,
 `DeclRefExpr`, `MemberExpr`, USRs). These feed caller/callee trees, call paths
-and reference searches. Definitions, destination records, type references,
-tokens and completion still use the existing C frontend. It is a staged migration, not a
+and reference searches. Resolved expression/call destinations also come from
+the direct AST, preferring definitions to declarations in the translation unit.
+Symbol-list declarations, type references, tokens and completion still use
+the existing C frontend. It is a staged migration, not a
 claim that the entire compiler frontend has already moved away from libclang.
 The transitional adapter builds its own AST in a worker; it adds parsing cost.
 If that parse fails, existing call edges and references are retained. Arbitrary runtime function
