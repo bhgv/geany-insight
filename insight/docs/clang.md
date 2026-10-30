@@ -128,3 +128,5 @@ Language standard, defines, target and include paths remain available. Relative 
 **Navigate → Clang C/C++ → Clang analysis details…** displays parse language, exact/inferred settings source, errors, limits and compiler diagnostics in a selectable, copyable report. Use it to diagnose missing graph edges or symbols, and supply an exact header command when a heuristic is unsuitable.
 
 An ambiguous `.h` result is explicitly partial and does not replace the native symbol index. Definition lookup, graphs and completion keep their fallback until suitable unambiguous or exact settings are available. A diagnostic-free default C parse is not treated as proof of correct C++ project settings.
+
+Completion viewport height is reserved on the scroller, using font size, visible row count and monitor work area. The native GUI check requires both overload rows to be fully visible, rather than merely present in the model.
