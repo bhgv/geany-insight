@@ -3,6 +3,9 @@
 #include "config.h"
 #endif
 #include "../desktop/clang_backend.h"
+#ifdef HAVE_CLANG_CPP
+#include "../desktop/clang_calls.h"
+#endif
 #include "../desktop/call_paths.h"
 #include <glib/gstdio.h>
 #include <string.h>
@@ -96,6 +99,26 @@ static void expression_destinations(void) {
  g_assert_cmpuint(insight_index_query(r->relations,"shared",TRUE,NULL,"@clangref",path,0,found,8),==,1);assert_destination(r,path,found[0]->scope,path,4,"v");
  g_assert_cmpuint(insight_index_query(r->relations,"field",TRUE,NULL,"@clangref",path,0,found,8),==,1);assert_destination(r,path,found[0]->scope,header,6,"m");
  g_assert_cmpuint(insight_index_query(r->relations,"external_only",TRUE,NULL,"@clangref",path,0,found,8),==,1);assert_destination(r,path,found[0]->scope,header,7,"p");
+#ifdef HAVE_CLANG_CPP
+ // Start without C frontend rows: these destinations must come from the
+ // direct C++ API, not silently pass by retaining libclang's fallback.
+ GArray *rows=g_array_new(FALSE,FALSE,sizeof(InsightSymbol));GPtrArray *owned=g_ptr_array_new_with_free_func(g_free);
+ const gchar *args[]={"-xc++","-std=c++17","-I",root};
+ g_assert_true(insight_clang_cpp_calls(path,text,args,G_N_ELEMENTS(args),overlays,rows,owned,NULL));
+ InsightClangResult direct={0};direct.relations=insight_index_new();g_assert_true(insight_index_update(direct.relations,path,(const InsightSymbol *)rows->data,rows->len));
+ g_assert_cmpuint(insight_index_query(direct.relations,"choose",TRUE,NULL,"@clangref",path,0,found,8),==,2);
+ for(guint i=0;i<2;i++) {const InsightSymbol *definition=NULL;g_assert_cmpuint(insight_index_query(r->relations,found[i]->scope,TRUE,NULL,"@clangdef",path,0,&definition,1),==,1);assert_destination(&direct,path,found[i]->scope,path,(guint)definition->line,"f");}
+ g_assert_cmpuint(insight_index_query(direct.relations,"method",TRUE,NULL,"@clangref",path,0,found,8),==,1);assert_destination(&direct,path,found[0]->scope,path,5,"f");
+ g_assert_cmpuint(insight_index_query(direct.relations,"shared",TRUE,NULL,"@clangref",path,0,found,8),==,1);assert_destination(&direct,path,found[0]->scope,path,4,"v");
+ g_assert_cmpuint(insight_index_query(direct.relations,"field",TRUE,NULL,"@clangref",path,0,found,8),==,1);assert_destination(&direct,path,found[0]->scope,header,6,"m");
+ g_assert_cmpuint(insight_index_query(direct.relations,"external_only",TRUE,NULL,"@clangref",path,0,found,8),==,1);assert_destination(&direct,path,found[0]->scope,header,7,"p");
+ GBytes *before=g_bytes_new(rows->data,rows->len*sizeof(InsightSymbol));guint old_rows=rows->len,old_owned=owned->len;
+ GCancellable *cancel=g_cancellable_new();g_cancellable_cancel(cancel);
+ g_assert_false(insight_clang_cpp_calls(path,text,args,G_N_ELEMENTS(args),overlays,rows,owned,cancel));g_object_unref(cancel);
+ g_assert_false(insight_clang_cpp_calls(path,"#error deliberately invalid source\n",args,G_N_ELEMENTS(args),overlays,rows,owned,NULL));
+ g_assert_cmpuint(rows->len,==,old_rows);g_assert_cmpuint(owned->len,==,old_owned);g_assert_cmpmem(rows->data,rows->len*sizeof(InsightSymbol),g_bytes_get_data(before,NULL),g_bytes_get_size(before));
+ g_bytes_unref(before);g_array_unref(rows);g_ptr_array_unref(owned);insight_index_free(direct.relations);
+#endif
  gchar *disk=NULL;g_assert_true(g_file_get_contents(header,&disk,NULL,NULL));g_assert_cmpstr(disk,==,api);g_free(disk);
  insight_clang_result_free(r);g_hash_table_unref(overlays);g_free(changed);g_remove(header);g_rmdir(root);g_free(path);g_free(header);g_free(root);
  g_print("Clang destinations: exact overload definitions, out-of-line methods, extern definitions, unsaved-header fields and declaration-only fallback passed\n");
