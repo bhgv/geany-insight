@@ -145,3 +145,5 @@ Reference: [Source Insight Project File List](https://www.sourceinsight.com/doc/
 [Search and copy the current list](list-tools.md): context menu, F4/Shift+F4, visible columns and loaded rows.
 
 In a Git project, this dialog saves an explicit source-membership override without running git add/rm. Git tracking remains available through the Git commands. Legacy Git projects use tracked files until a manual selection is saved.
+
+Add from list accepts UTF-8/BOM, LF/CRLF, project-relative paths and masks such as `src/*.c`; lines starting with `;` are comments. Directories expand to explicit files in a worker using the current filters. Recursive collection skips hidden directories, node_modules and __pycache__, and does not traverse symbolic links. Limits: 10000 files, 4096 folders and 100000 visited entries; exceeding a limit keeps the previous selection.

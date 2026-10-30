@@ -26,19 +26,20 @@ static void membership_read_worker(GTask *task,gpointer source,gpointer input,GC
  for(guint n=0;n<r->roots->len;n++) g_ptr_array_add(queue,g_strdup(g_ptr_array_index(r->roots,n)));
  for(guint n=0;n<queue->len && !error;n++) {
   if(g_cancellable_set_error_if_cancelled(cancel,&error)) break;
-  gchar *path=g_ptr_array_index(queue,n),*native=utils_get_locale_from_utf8(path);GFile *folder=g_file_new_for_path(native);g_free(native);
+  gchar *path=g_ptr_array_index(queue,n),*native=utils_get_locale_from_utf8(path);GFile *folder=g_file_new_for_path(native);g_free(native);gchar *root_pattern=NULL,*root_directory=NULL;
+  if(r->adding && strpbrk(path,"*?")) {root_pattern=g_path_get_basename(path);root_directory=g_path_get_dirname(path);if(strpbrk(root_directory,"*?")) {g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"File list masks require a literal directory");g_free(root_pattern);g_free(root_directory);g_object_unref(folder);break;}g_object_unref(folder);native=utils_get_locale_from_utf8(root_directory);folder=g_file_new_for_path(native);g_free(native);path=root_directory;}
   GFileType type=g_file_query_file_type(folder,G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,cancel);
   if(type==G_FILE_TYPE_REGULAR && r->adding) { gchar *name=g_path_get_basename(path);if(membership_glob(name,r->pattern) && membership_known(r,path,name)) { MembershipEntry *e=g_new0(MembershipEntry,1);e->path=g_strdup(path);g_ptr_array_add(r->entries,e); }g_free(name);g_object_unref(folder);continue; }
-  if(type!=G_FILE_TYPE_DIRECTORY) { g_set_error(&error,G_IO_ERROR,G_IO_ERROR_NOT_DIRECTORY,"Cannot read directory: %s",path);g_object_unref(folder);break; }
+  if(type!=G_FILE_TYPE_DIRECTORY) { g_set_error(&error,G_IO_ERROR,G_IO_ERROR_NOT_DIRECTORY,"Cannot read directory: %s",path);g_object_unref(folder);g_free(root_pattern);g_free(root_directory);break; }
   GFileEnumerator *it=g_file_enumerate_children(folder,"standard::name,standard::type",G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,cancel,&error);GFileInfo *info;
   while(it && (info=g_file_enumerator_next_file(it,cancel,&error))) {
    if(++visited>100000 || r->entries->len>=10000 || queue->len>4096) { g_object_unref(info);g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Selection exceeds 10000 files, 4096 folders or 100000 directory entries; select a smaller tree");break; }
    gchar *name=utils_get_utf8_from_locale(g_file_info_get_name(info)),*child=g_build_filename(path,name,NULL);GFileType kind=g_file_info_get_file_type(info);
-   if(kind==G_FILE_TYPE_DIRECTORY && r->recursive && name[0]!='.' && strcmp(name,"node_modules") && strcmp(name,"__pycache__")) g_ptr_array_add(queue,g_strdup(child));
-   if((kind==G_FILE_TYPE_DIRECTORY && !r->adding) || (kind==G_FILE_TYPE_REGULAR && membership_glob(name,r->pattern) && membership_known(r,child,name))) { MembershipEntry *e=g_new0(MembershipEntry,1);e->path=g_strdup(child);e->directory=kind==G_FILE_TYPE_DIRECTORY;g_ptr_array_add(r->entries,e); }
+   if(kind==G_FILE_TYPE_DIRECTORY && r->recursive && !root_pattern && name[0]!='.' && strcmp(name,"node_modules") && strcmp(name,"__pycache__")) g_ptr_array_add(queue,g_strdup(child));
+   if((kind==G_FILE_TYPE_DIRECTORY && !r->adding) || (kind==G_FILE_TYPE_REGULAR && membership_glob(name,root_pattern) && membership_glob(name,r->pattern) && membership_known(r,child,name))) { MembershipEntry *e=g_new0(MembershipEntry,1);e->path=g_strdup(child);e->directory=kind==G_FILE_TYPE_DIRECTORY;g_ptr_array_add(r->entries,e); }
    g_free(child);g_free(name);g_object_unref(info);
   }
-  g_clear_object(&it);g_object_unref(folder);
+  g_clear_object(&it);g_object_unref(folder);g_free(root_pattern);g_free(root_directory);
  }
  g_ptr_array_unref(queue);if(error) g_task_return_error(task,error);else g_task_return_boolean(task,TRUE);
 }
@@ -56,8 +57,8 @@ static void membership_read_done(GObject *source,GAsyncResult *result,gpointer u
    if(error) { insight_project_files_free(next);gtk_label_set_text(GTK_LABEL(d->browser_status),error->message); }
    else { insight_project_files_free(d->candidate);d->candidate=next;for(guint n=0;n<r->entries->len;n++) { MembershipEntry *e=g_ptr_array_index(r->entries,n);if(!g_ptr_array_find_with_equal_func(d->paths,e->path,(GEqualFunc)g_str_equal,NULL)) g_ptr_array_add(d->paths,g_strdup(e->path)); }membership_dialog_refresh(d);gchar *count=g_strdup_printf(insight_tr("Added %u files to the selection"),r->entries->len);gtk_label_set_text(GTK_LABEL(d->browser_status),count);g_free(count); }
   } else { g_clear_pointer(&d->entries,g_ptr_array_unref);d->entries=g_ptr_array_ref(r->entries);
-   for(guint n=0;n<d->entries->len;n++) { MembershipEntry *e=g_ptr_array_index(d->entries,n);if(e->directory) {gchar *name=g_path_get_basename(e->path);GtkTreeIter it;gtk_list_store_append(d->directory_store,&it);gtk_list_store_set(d->directory_store,&it,0,name,1,e->path,2,TRUE,3,"folder",-1);g_free(name);} }
-   membership_browser_refresh(d);gtk_label_set_text(GTK_LABEL(d->browser_status),""); }
+   for(guint n=0;n<d->entries->len;n++) { MembershipEntry *e=g_ptr_array_index(d->entries,n);if(e->directory) {gchar *name=g_path_get_basename(e->path);GtkTreeIter it;gtk_tree_store_append(d->directory_store,&it,&d->directory_node);gtk_tree_store_set(d->directory_store,&it,0,name,1,e->path,2,TRUE,3,"folder",-1);g_free(name);} }
+   gtk_tree_view_expand_all(GTK_TREE_VIEW(d->directory_view));membership_browser_refresh(d);gtk_label_set_text(GTK_LABEL(d->browser_status),""); }
  }
  g_clear_error(&error);
 }
@@ -72,9 +73,9 @@ static void membership_browse(MembershipDialog *d,const gchar *path) {
  gchar *next=insight_canonicalize_filename(path,d->directory ? d->directory:d->root);g_free(d->directory);d->directory=next;gtk_label_set_text(GTK_LABEL(d->directory_label),d->directory);
  /* Ancestor chain plus the selected folder; children are loaded with the file
   * list. This works for roots and paths outside the project on every platform. */
- gtk_list_store_clear(d->directory_store);GPtrArray *parents=g_ptr_array_new_with_free_func(g_free);gchar *p=g_strdup(next);
+ gtk_tree_store_clear(d->directory_store);GPtrArray *parents=g_ptr_array_new_with_free_func(g_free);gchar *p=g_strdup(next);
  for(guint n=0;n<128;n++) { g_ptr_array_add(parents,p);gchar *up=g_path_get_dirname(p);if(!strcmp(p,up)) {g_free(up);break;}p=up; }
- for(guint n=parents->len;n>0;n--) { const gchar *path=g_ptr_array_index(parents,n-1);gchar *name=g_path_get_basename(path);GtkTreeIter it;gtk_list_store_append(d->directory_store,&it);gtk_list_store_set(d->directory_store,&it,0,name,1,path,2,TRUE,3,"folder",-1);g_free(name); }g_ptr_array_unref(parents);
+ for(guint n=parents->len;n>0;n--) { const gchar *path=g_ptr_array_index(parents,n-1);gchar *name=g_path_get_basename(path);GtkTreeIter it;gtk_tree_store_append(d->directory_store,&it,n==parents->len ? NULL:&d->directory_node);gtk_tree_store_set(d->directory_store,&it,0,name,1,path,2,TRUE,3,"folder",-1);d->directory_node=it;g_free(name); }g_ptr_array_unref(parents);gtk_tree_view_expand_all(GTK_TREE_VIEW(d->directory_view));
  GPtrArray *roots=g_ptr_array_new_with_free_func(g_free);g_ptr_array_add(roots,g_strdup(next));membership_read_start(d,roots,FALSE,FALSE);
 }
 static void membership_browser_activate(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColumn *column,gpointer data) {
@@ -109,3 +110,18 @@ static void membership_filename_changed(GtkEditable *entry,gpointer data) { (voi
 static void membership_filetypes(GtkButton *button,gpointer data) { (void)button;MembershipDialog *d=data;insight_languages_show(NULL,NULL);membership_browse(d,d->directory); }
 
 static void membership_close(GtkButton *button,gpointer data) { (void)button;MembershipDialog *d=data;if(!d->read_cancel && d->master_valid) gtk_dialog_response(GTK_DIALOG(d->dialog),GTK_RESPONSE_APPLY); }
+
+static void membership_browser_import(GtkButton *button,gpointer data) {
+ (void)button;MembershipDialog *d=data;GtkWidget *chooser=gtk_file_chooser_dialog_new(insight_tr("Add from file list"),GTK_WINDOW(d->dialog),GTK_FILE_CHOOSER_ACTION_OPEN,insight_tr("Cancel"),GTK_RESPONSE_CANCEL,insight_tr("Add"),GTK_RESPONSE_ACCEPT,NULL);
+ if(gtk_dialog_run(GTK_DIALOG(chooser))==GTK_RESPONSE_ACCEPT) {gchar *native=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser)),*path=utils_get_utf8_from_locale(native),*text=read_disk_source(path,TRUE);g_free(native);g_free(path);
+  if(!text) gtk_label_set_text(GTK_LABEL(d->browser_status),insight_tr("File list must be decodable text, at most 2 MiB"));
+  else {GPtrArray *roots=g_ptr_array_new_with_free_func(g_free);gchar **lines=g_strsplit(g_str_has_prefix(text,"\xEF\xBB\xBF") ? text+3:text,"\n",-1);gboolean valid=TRUE;
+   for(guint n=0;lines[n];n++) {gsize size=strlen(lines[n]);if(size && lines[n][size-1]=='\r') lines[n][--size]=0;if(!size || lines[n][0]==';') continue;if(roots->len>=10000 || size>16384) {valid=FALSE;break;}g_ptr_array_add(roots,insight_canonicalize_filename(lines[n],d->root));}
+   if(valid && roots->len) membership_read_start(d,roots,TRUE,TRUE);else {if(!valid) gtk_label_set_text(GTK_LABEL(d->browser_status),insight_tr("File list exceeds 10000 entries or contains an overlong path"));g_ptr_array_unref(roots);}g_strfreev(lines);g_free(text);
+  }
+ }gtk_widget_destroy(chooser);
+}
+
+static GtkWidget *membership_directory_list(MembershipDialog *d) {
+ d->directory_store=gtk_tree_store_new(4,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_BOOLEAN,G_TYPE_STRING);d->directory_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(d->directory_store));gtk_widget_set_name(d->directory_view,"insight-project-membership-directories");GtkTreeViewColumn *column=gtk_tree_view_column_new();gtk_tree_view_column_set_title(column,insight_tr("Directories"));GtkCellRenderer *icon=gtk_cell_renderer_pixbuf_new(),*text=gtk_cell_renderer_text_new();gtk_tree_view_column_pack_start(column,icon,FALSE);gtk_tree_view_column_add_attribute(column,icon,"icon-name",3);gtk_tree_view_column_pack_start(column,text,TRUE);gtk_tree_view_column_add_attribute(column,text,"text",0);gtk_tree_view_append_column(GTK_TREE_VIEW(d->directory_view),column);gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(d->directory_view),1);GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),GTK_POLICY_AUTOMATIC,GTK_POLICY_AUTOMATIC);gtk_container_add(GTK_CONTAINER(scroll),d->directory_view);gtk_widget_set_hexpand(scroll,TRUE);gtk_widget_set_vexpand(scroll,TRUE);return scroll;
+}
