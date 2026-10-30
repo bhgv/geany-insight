@@ -12,9 +12,11 @@ extern "C" {
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendActions.h>
 #include <clang/Lex/PreprocessingRecord.h>
+#include <clang/Lex/Preprocessor.h>
 #include <clang/Sema/CodeCompleteConsumer.h>
 #include <clang/Tooling/JSONCompilationDatabase.h>
 #include <llvm/Support/VirtualFileSystem.h>
+#include <llvm/Support/MemoryBuffer.h>
 #include "glib_compat.h"
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Frontend/ASTUnit.h>
@@ -104,6 +106,7 @@ class Calls : public clang::RecursiveASTVisitor<Calls> {
   std::string signature,type,bases;auto *function=llvm::dyn_cast<clang::FunctionDecl>(decl);
   if(function) {if(function->getType().isNull()) return;signature=parameters(function);type=function->getReturnType().getAsString();}
   else if(auto *alias=llvm::dyn_cast<clang::TypedefNameDecl>(decl)) type=alias->getUnderlyingType().getAsString();
+  else if(auto *tag=llvm::dyn_cast<clang::TagDecl>(decl)) type=tag->getASTContext().getTypeDeclType(tag).getAsString();
   else if(auto *value=llvm::dyn_cast<clang::ValueDecl>(decl)) {if(!value->getType().isNull()) type=value->getType().getAsString();}
   if(auto *record=llvm::dyn_cast<clang::CXXRecordDecl>(decl)) {if(record->getDescribedClassTemplate()) kind="c";if(record->isCompleteDefinition()) for(const auto &base:record->bases()) {if(!bases.empty()) bases+=",";bases+=base.getType().getAsString();}}
   InsightSymbol row={own(name),path,own(scope(decl)),kind,sm.getSpellingLineNumber(at),own(signature),own(type),own(bases)};g_array_append_val(symbols,row);
@@ -174,7 +177,7 @@ class Calls : public clang::RecursiveASTVisitor<Calls> {
   // A VLA bound or instantiated expression can be traversed repeatedly. Graph
   // occurrences describe source sites, not the number of AST paths to a site.
   if(!callsites.emplace(caller,callee,offset).second) return;
-  if(result) {gchar *position=g_strdup_printf("%u:%u:%u",offset,(unsigned)MIN(length,offset+name.size()),sm.getSpellingColumnNumber(at));g_ptr_array_add(strings,position);InsightSymbol occurrence={own(name),path,own(callee),"@call",sm.getSpellingLineNumber(at),position,"",""};g_array_append_val(rows,occurrence);}
+  if(result) {gsize first=offset,last=offset;while(first && text[first-1]!='\n' && offset-first<512) first--;while(last<length && text[last]!='\n' && last-first<1024) last++;gchar *context=g_utf8_make_valid(text+first,last-first);g_ptr_array_add(strings,context);gsize line_start=offset;while(line_start && text[line_start-1]!='\n') line_start--;guint column=(guint)g_utf8_strlen(text+line_start,offset-line_start)+1;gchar *position=g_strdup_printf("%u:%u:%u",offset,(unsigned)MIN(length,offset+name.size()),column);g_ptr_array_add(strings,position);InsightSymbol occurrence={own(name),path,own(callee),"@call",sm.getSpellingLineNumber(at),position,context,""};g_array_append_val(rows,occurrence);}
   if(!owner) return;
   if(rows->len>=50000) {valid=false;return;}
   auto *method=llvm::dyn_cast<clang::CXXMethodDecl>(target);bool virt=method && method->isVirtual();
@@ -437,7 +440,10 @@ extern "C" InsightClangResult *insight_clang_cpp_parse(const gchar *path,const g
  if(!path || !text || !insight_clang_source(path) || strlen(text)>2u*1024u*1024u || !g_utf8_validate(text,-1,nullptr)) {g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Clang requires a C/C++ UTF-8 source up to 2 MiB");return nullptr;}if(cancel && g_cancellable_set_error_if_cancelled(cancel,error)) return nullptr;
  auto *r=g_new0(InsightClangResult,1);r->symbols=insight_index_new();r->relations=insight_index_new();r->tokens=g_array_new(FALSE,FALSE,sizeof(InsightClangToken));r->attributes=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,nullptr);r->digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,text,-1);
  auto flags=flags_for(path,root,resources,r);flags.emplace_back("-Xclang");flags.emplace_back("-detailed-preprocessing-record");Diagnostics diagnostics;
- auto ast=clang::tooling::buildASTFromCodeWithArgs(text,flags,path,"clang-tool",std::make_shared<clang::PCHContainerOperations>(),clang::tooling::getClangStripDependencyFileAdjuster(),mappings(path,overlays),&diagnostics);
+ // Tooling keeps non-owning MemoryBuffers for mapped headers: retain their
+ // backing strings until after ASTUnit and SourceManager are destroyed.
+ auto captured=mappings(path,overlays);
+ auto ast=clang::tooling::buildASTFromCodeWithArgs(text,flags,path,"clang-tool",std::make_shared<clang::PCHContainerOperations>(),clang::tooling::getClangStripDependencyFileAdjuster(),captured,&diagnostics);
  r->diagnostics=g_utf8_make_valid(diagnostics.text.c_str(),diagnostics.text.size());r->errors=diagnostics.errors;
  if(!ast) {insight_clang_result_free(r);g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_FAILED,"Clang could not parse the translation unit");return nullptr;}
  GArray *empty=g_array_new(FALSE,FALSE,sizeof(InsightSymbol));Calls data(ast->getASTContext(),path,text,cancel,empty,r);g_array_unref(empty);if(!data.TraverseDecl(ast->getASTContext().getTranslationUnitDecl())) r->limited=TRUE;r->internal_calls=TRUE;preprocessing(*ast,data,path,text,r,cancel);

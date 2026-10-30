@@ -8,8 +8,8 @@ option('python-command', type: 'string', description: 'the default Python comman
 option('socket', type: 'boolean', description: 'enable if you want to detect a running instance')
 option('mac-integration', type: 'feature', description: 'enable for improved macOS integration using the gtk-mac-integration library')
 
-option('clang', type: 'feature', value: 'enabled', description: 'C/C++ semantic indexing using libclang')
-option('clang-bundle', type: 'boolean', value: false, description: 'Bundle libclang, its runtime dependencies and resource headers in portable installs')
+option('clang', type: 'feature', value: 'enabled', description: 'C/C++ semantic indexing using native Clang C++ APIs')
+option('clang-bundle', type: 'boolean', value: false, description: 'Bundle clang-cpp, LLVM dependencies and resource headers in portable installs')
 
-option('clang-cpp', type: 'feature', value: 'auto', description: 'Use direct Clang C++ AST APIs for compiler call edges')
+option('clang-cpp', type: 'feature', value: 'auto', description: 'Enable the native Clang C++ backend (no libclang)')
 option('clang-sdk', type: 'string', value: '', description: 'SDK built from external/llvm-project (include/lib/bin prefix)')

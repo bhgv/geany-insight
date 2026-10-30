@@ -103,7 +103,8 @@ AS_IF([test "x$with_clang" != xno],[
  clang_save_cppflags="$CPPFLAGS";clang_save_ldflags="$LDFLAGS";clang_save_libs="$LIBS";clang_save_cxxflags="$CXXFLAGS"
  CPPFLAGS="$CPPFLAGS $clang_cppflags";LDFLAGS="$LDFLAGS $clang_ldflags";LIBS="$LIBS -lclang-cpp -lLLVM";CXXFLAGS="$CXXFLAGS -fno-rtti"
  AC_LANG_PUSH([C++])
- AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <clang/Tooling/Tooling.h>]],[[auto ast=clang::tooling::buildASTFromCode("int value;");]])],[clang_library=yes],[clang_library=no])
+ AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <clang/Tooling/Tooling.h>
+#include <clang/Frontend/ASTUnit.h>]],[[auto ast=clang::tooling::buildASTFromCode("int value;");]])],[clang_library=yes],[clang_library=no])
  AC_LANG_POP([C++])
  CPPFLAGS="$clang_save_cppflags";LDFLAGS="$clang_save_ldflags";LIBS="$clang_save_libs";CXXFLAGS="$clang_save_cxxflags"
  AS_IF([test x$clang_library = xyes],[AC_DEFINE([HAVE_CLANG_CPP],[1],[Use native Clang C++ semantics])
