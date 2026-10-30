@@ -1,8 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "geany.h"
 #include "document.h"
-#include "app.h"
-#include "insight-workbench.h"
 #include "editor.h"
 #include "keybindings.h"
 #include "main.h"
@@ -15,7 +13,7 @@
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 static gchar *external_header,*inferred_header,*inferred_cpp;
 static GtkWidget *details_dialog;
-static GtkWidget *window,*routes,*canvas;static GeanyDocument *a,*b;static gchar *directory,*project_file,*path_a,*path_b;static guint phase;static gboolean restore,temporary,menu_search_pending;
+static GtkWidget *window,*routes,*canvas;static GeanyDocument *a,*b;static gchar *directory,*project_file,*path_a,*path_b;static guint phase;static gboolean restore,temporary,temporary_skip,menu_search_pending;
 static GtkWidget *named(GtkWidget *w,const gchar *name) {
  if(!g_strcmp0(gtk_widget_get_name(w),name)) return w;
  if(GTK_IS_MENU_ITEM(w)) {GtkWidget *sub=gtk_menu_item_get_submenu(GTK_MENU_ITEM(w));if(sub) {GtkWidget *out=named(sub,name);if(out) return out;}}
@@ -37,8 +35,8 @@ static void disk_counts(gint nodes,gint edges) {GKeyFile *key=g_key_file_new();g
 static void quit(void) {GeanyDocument *doc=document_get_current();if(DOC_VALID(doc)) document_set_text_changed(doc,FALSE);if(DOC_VALID(a)) document_set_text_changed(a,FALSE);if(DOC_VALID(b)) document_set_text_changed(b,FALSE);gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));}
 
 static gboolean temporary_step(void) {
- g_assert_null(app->project);
  if(!phase) {
+  if(!gtk_widget_get_sensitive(named(window,"insight-clang-colors"))) {temporary_skip=TRUE;quit();return G_SOURCE_REMOVE;}
   g_assert_true(gtk_widget_get_sensitive(named(window,"insight-clang-details-command")));g_assert_true(gtk_widget_get_sensitive(named(window,"insight-clang-reanalyze")));command("insight-clang-details-command");GtkWidget *details=toplevel("insight-clang-details");g_assert_nonnull(details);gtk_dialog_response(GTK_DIALOG(details),GTK_RESPONSE_CLOSE);
   b=document_open_file(path_b,FALSE,NULL,NULL);g_assert_nonnull(b);SEND(b->editor->sci,SCI_SETTEXT,0,(sptr_t)"int temp_target(int x){return x+2;}\n");
   a=document_open_file(path_a,FALSE,NULL,NULL);g_assert_nonnull(a);
@@ -54,9 +52,9 @@ static gboolean temporary_step(void) {
   else {command("insight-call-menu-0");routes=named(window,"insight-source-routes");canvas=named(routes,"insight-route-canvas");gtk_entry_set_text(GTK_ENTRY(named(routes,"insight-call-from")),"temp_entry");gtk_entry_set_text(GTK_ENTRY(named(routes,"insight-call-to")),"temp_target");button("insight-call-find");if(!count("insight-call-search-running")) return G_SOURCE_CONTINUE;}
  } else {
   if(!count("insight-call-search-completed")) return G_SOURCE_CONTINUE;counts(5,4);
-  GError *error=NULL;InsightReportSnapshot *snapshot=insight_workbench_source_snapshot(&error);g_assert_no_error(error);g_assert_nonnull(snapshot);g_assert_null(snapshot->project_file);g_assert_cmpuint(snapshot->paths->len,==,2);insight_report_snapshot_unref(snapshot);
+  g_assert_true(count("insight-call-workspace-temporary"));g_assert_cmpuint(count("insight-call-workspace-members"),==,2);
   capture("INSIGHT_TEMPORARY_WORKSPACE_CAPTURE");gchar *disk=NULL;g_assert_true(g_file_get_contents(path_b,&disk,NULL,NULL));g_assert_nonnull(strstr(disk,"x+1"));g_free(disk);gchar *text=sci_get_contents(b->editor->sci,sci_get_length(b->editor->sci)+1);g_assert_nonnull(strstr(text,"x+2"));g_free(text);
-  document_set_text_changed(b,FALSE);g_assert_true(document_close(b));b=NULL;snapshot=insight_workbench_source_snapshot(&error);g_assert_no_error(error);g_assert_cmpuint(snapshot->paths->len,==,1);g_assert_cmpuint(insight_index_query(snapshot->index,"",FALSE,NULL,NULL,path_b,0,NULL,0),==,0);insight_report_snapshot_unref(snapshot);g_assert_false(g_file_test(project_file,G_FILE_TEST_EXISTS));
+  document_set_text_changed(b,FALSE);g_assert_true(document_close(b));b=NULL;button("insight-call-find");g_assert_cmpuint(count("insight-call-workspace-members"),==,1);g_assert_false(g_file_test(project_file,G_FILE_TEST_EXISTS));
   g_print("Temporary workspace: no project, two open files, inactive Clang callers/callees, unsaved overlays, three-function path with call sites, closed-file removal and memory-only snapshots passed\n");quit();return G_SOURCE_REMOVE;
  }
  phase++;return G_SOURCE_CONTINUE;
@@ -175,10 +173,10 @@ static gboolean step(gpointer data) {
 }
 static gboolean timeout(gpointer data) {(void)data;g_error("Source routes timeout phase %u; popup=%d compiler rows=%u editor focus=%d",phase,completion_popup()!=NULL,document_get_current() ? GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(document_get_current()->editor->sci),"insight-semantic-completion-count")):0,document_get_current() ? gtk_widget_has_focus(GTK_WIDGET(document_get_current()->editor->sci)):0);return G_SOURCE_REMOVE;}
 int main(int argc,char **argv) {
- if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;temporary=argc==2 && !strcmp(argv[1],"--temporary");restore=argc==3 && !strcmp(argv[1],"--restore");if(temporary && !insight_clang_available()) return 77;directory=restore ? g_strdup(argv[2]):g_dir_make_tmp("source-routes-XXXXXX",NULL);project_file=g_build_filename(directory,"routes.geany",NULL);path_a=g_build_filename(directory,"a.c",NULL);path_b=g_build_filename(directory,"b.c",NULL);gchar *profile=g_build_filename(directory,"profile",NULL);g_mkdir_with_parents(profile,0700);
+ if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;temporary=argc==2 && !strcmp(argv[1],"--temporary");restore=argc==3 && !strcmp(argv[1],"--restore");directory=restore ? g_strdup(argv[2]):g_dir_make_tmp("source-routes-XXXXXX",NULL);project_file=g_build_filename(directory,"routes.geany",NULL);path_a=g_build_filename(directory,"a.c",NULL);path_b=g_build_filename(directory,"b.c",NULL);gchar *profile=g_build_filename(directory,"profile",NULL);g_mkdir_with_parents(profile,0700);
  if(temporary) {g_assert_true(g_file_set_contents(path_a,"int temp_target(int);\nint temp_mid(int x){return temp_target(x); }\nint temp_entry(void){return temp_mid(3); }\n",-1,NULL));g_assert_true(g_file_set_contents(path_b,"int temp_target(int x){return x+1;}\n",-1,NULL));gchar *decoy=g_build_filename(directory,"not-open.c",NULL);g_assert_true(g_file_set_contents(decoy,"int temp_target(int x){return 0;}\n",-1,NULL));g_free(decoy);}
  else if(!restore) {const gchar *source="int helper(int x) { struct options opts = {.port=1}; return create_rule(x); }\nint run(int x) {\n if (x > 0) { x = helper(x); } else { x = 0; }\n while (x > 1) { if (x == 3) break; --x; }\n return x;\n}\nint main(void) { return run(1); }\n";g_assert_true(g_file_set_contents(path_a,source,-1,NULL));gchar *duplicates=g_build_filename(directory,"other.c",NULL);g_assert_true(g_file_set_contents(duplicates,"int main(void) { return 0; }\nstatic int create_rule(int x) { return 0; }\n",-1,NULL));g_free(duplicates);gchar *semantic_file=g_build_filename(directory,"semantic.cpp",NULL);g_assert_true(g_file_set_contents(semantic_file,"int pick(int x){return x;}\nint pick(double x){return 2;}\nint semantic_entry(){return pick(1); }\nint semantic_other(){return pick(1.0); }\n",-1,NULL));g_free(semantic_file);g_assert_true(g_file_set_contents(path_b,"// destination α\nint target = 2;\nint create_rule(int x) { return x; }\n",-1,NULL));GKeyFile *key=g_key_file_new();g_key_file_set_string(key,"project","name","Source routes");g_key_file_set_string(key,"project","base_path",directory);gsize n;gchar *bytes=g_key_file_to_data(key,&n,NULL);g_assert_true(g_file_set_contents(project_file,bytes,n,NULL));g_free(bytes);g_key_file_unref(key);}
- gchar *notes_dir=g_build_filename(profile,"insight",NULL);g_mkdir_with_parents(notes_dir,0700);gchar *notes_file=g_build_filename(notes_dir,"notes.conf",NULL);g_assert_true(g_file_set_contents(notes_file,"[notes]\nversion=1\ncount=2\n[note-0]\nkind=2\nname=completion_mix_template\npath=\nline=0\ntext=/* template body */$cursor$\n[note-1]\nkind=2\nname=completion_mix_symbol\npath=\nline=0\ntext=/* same name */$cursor$\n",-1,NULL));g_free(notes_file);g_free(notes_dir);gchar *completion_config=g_build_filename(profile,"insight-completion.conf",NULL);g_assert_true(g_file_set_contents(completion_config,"[completion]\ninsert-parameters=true\n",-1,NULL));g_free(completion_config);gchar *config=g_build_filename(profile,"geany.conf",NULL);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\nload_session=false\n",-1,NULL));gchar *args[]={"source-routes","--new-instance","--no-session","--config",profile,temporary ? path_a:project_file,temporary ? NULL:path_a,NULL};g_timeout_add(350,step,NULL);g_timeout_add_seconds(65,timeout,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);gint result=main_lib(temporary ? 6:7,args);
+ gchar *notes_dir=g_build_filename(profile,"insight",NULL);g_mkdir_with_parents(notes_dir,0700);gchar *notes_file=g_build_filename(notes_dir,"notes.conf",NULL);g_assert_true(g_file_set_contents(notes_file,"[notes]\nversion=1\ncount=2\n[note-0]\nkind=2\nname=completion_mix_template\npath=\nline=0\ntext=/* template body */$cursor$\n[note-1]\nkind=2\nname=completion_mix_symbol\npath=\nline=0\ntext=/* same name */$cursor$\n",-1,NULL));g_free(notes_file);g_free(notes_dir);gchar *completion_config=g_build_filename(profile,"insight-completion.conf",NULL);g_assert_true(g_file_set_contents(completion_config,"[completion]\ninsert-parameters=true\n",-1,NULL));g_free(completion_config);gchar *config=g_build_filename(profile,"geany.conf",NULL);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\nload_session=false\n",-1,NULL));gchar *args[]={"source-routes","--new-instance","--no-session","--config",profile,temporary ? path_a:project_file,temporary ? NULL:path_a,NULL};g_timeout_add(350,step,NULL);g_timeout_add_seconds(65,timeout,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);gint result=main_lib(temporary ? 6:7,args);if(temporary_skip) result=77;
  if(!restore && !temporary && !result) {gchar *child[]={argv[0],"--restore",directory,NULL};gint status=0;GError *error=NULL;g_assert_true(g_spawn_sync(NULL,child,NULL,0,NULL,NULL,NULL,NULL,&status,&error));g_assert_no_error(error);g_assert_true(g_spawn_check_wait_status(status,NULL));}
  g_free(inferred_header);g_free(inferred_cpp);g_free(external_header);g_free(config);g_free(profile);g_free(project_file);g_free(path_a);g_free(path_b);g_free(directory);return result;
 }

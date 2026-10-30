@@ -3,6 +3,7 @@
 #include "config.h"
 #endif
 #include "clang_backend.h"
+#include "glib_compat.h"
 #include <string.h>
 gboolean insight_clang_source(const gchar *path) {
  const gchar *dot=path ? strrchr(path,'.'):NULL;if(!dot) return FALSE;const gchar *extensions[]={".c",".h",".cc",".cpp",".cxx",".hpp",".hh",".hxx"};for(guint i=0;i<G_N_ELEMENTS(extensions);i++) if(!g_ascii_strcasecmp(dot,extensions[i])) return TRUE;return FALSE;
@@ -132,7 +133,7 @@ static gboolean cpp_header(const gchar *path) {
  const gchar *ext=strrchr(path,'.');return ext && (strcmp(ext,".h") && (!g_ascii_strcasecmp(ext,".h") || !g_ascii_strcasecmp(ext,".hpp") || !g_ascii_strcasecmp(ext,".hh") || !g_ascii_strcasecmp(ext,".hxx")));
 }
 static gchar *command_file(CXCompileCommand command) {
- gchar *cwd=string(clang_CompileCommand_getDirectory(command)),*file=string(clang_CompileCommand_getFilename(command));gchar *absolute=g_path_is_absolute(cwd) ? g_canonicalize_filename(file,cwd):g_strdup("");g_free(cwd);g_free(file);return absolute;
+ gchar *cwd=string(clang_CompileCommand_getDirectory(command)),*file=string(clang_CompileCommand_getFilename(command));gchar *absolute=g_path_is_absolute(cwd) ? insight_canonicalize_filename(file,cwd):g_strdup("");g_free(cwd);g_free(file);return absolute;
 }
 /* Explicit -x wins over driver/file suffix. The driver is inspected only;
  * compilation-database commands and wrappers are never executed. */
@@ -178,19 +179,19 @@ static GPtrArray *arguments(const gchar *path,const gchar *root,const gchar *res
  if(db && header_source(path)) {
   /* Enumerate explicit rows first: some Clang database wrappers can return an
    * interpolated command from getCompileCommands for an unlisted header. */
-  commands=clang_CompilationDatabase_getAllCompileCommands(db);guint count=commands ? clang_CompileCommands_getSize(commands):0;gchar *expected=g_canonicalize_filename(path,NULL);
+  commands=clang_CompilationDatabase_getAllCompileCommands(db);guint count=commands ? clang_CompileCommands_getSize(commands):0;gchar *expected=insight_canonicalize_filename(path,NULL);
   if(count<=8192) {for(guint i=0;i<count;i++) {gchar *file=command_file(clang_CompileCommands_getCommand(commands,i));gboolean exact=!command_path_compare(file,expected);g_free(file);if(exact) {selected=(gint)i;break;}}if(selected<0 && commands) {selected=header_command(commands,path,&ambiguous);inferred=selected>=0;}}
   else {clang_CompileCommands_dispose(commands);commands=clang_CompilationDatabase_getCompileCommands(db,path);if(commands && clang_CompileCommands_getSize(commands)) {gchar *file=command_file(clang_CompileCommands_getCommand(commands,0));if(!command_path_compare(file,expected)) selected=0;g_free(file);}}
   g_free(expected);
- } else if(db) {commands=clang_CompilationDatabase_getCompileCommands(db,path);if(commands && clang_CompileCommands_getSize(commands)) {gchar *file=command_file(clang_CompileCommands_getCommand(commands,0)),*expected=g_canonicalize_filename(path,NULL);if(!command_path_compare(file,expected)) selected=0;g_free(file);g_free(expected);}}
+ } else if(db) {commands=clang_CompilationDatabase_getCompileCommands(db,path);if(commands && clang_CompileCommands_getSize(commands)) {gchar *file=command_file(clang_CompileCommands_getCommand(commands,0)),*expected=insight_canonicalize_filename(path,NULL);if(!command_path_compare(file,expected)) selected=0;g_free(file);g_free(expected);}}
 
  if(selected>=0) {
   CXCompileCommand command=clang_CompileCommands_getCommand(commands,(guint)selected);gchar *cwd=string(clang_CompileCommand_getDirectory(command)),*file=command_file(command);const gchar *language=command_language(command,file);
   if(report) {report->compilation_database=TRUE;report->inferred_command=inferred;report->command_source=g_strdup(file);report->parse_language=g_strdup(language ? language:"configured");}
   for(guint i=1;i<clang_CompileCommand_getNumArgs(command) && args->len<2048;i++) {gchar *s=string(clang_CompileCommand_getArg(command,i));
-   if(path_option(s) || !strcmp(s,"-D") || !strcmp(s,"-U") || !strcmp(s,"-x") || !strcmp(s,"-target")) {if(i+1<clang_CompileCommand_getNumArgs(command)) {gchar *value=string(clang_CompileCommand_getArg(command,++i));argument(args,s);if(path_option(s)) {gchar *absolute=g_canonicalize_filename(value,cwd);argument(args,absolute);g_free(absolute);}else argument(args,value);g_free(value);}}
-   else if(g_str_has_prefix(s,"-I") && s[2]) {gchar *absolute=g_canonicalize_filename(s+2,cwd),*joined=g_strconcat("-I",absolute,NULL);argument(args,joined);g_free(joined);g_free(absolute);}
-   else if(g_str_has_prefix(s,"-isystem") || g_str_has_prefix(s,"-iquote") || g_str_has_prefix(s,"--sysroot=")) {gsize prefix=g_str_has_prefix(s,"-isystem") ? 8:g_str_has_prefix(s,"-iquote") ? 7:10;gchar *absolute=g_canonicalize_filename(s+prefix,cwd);argument(args,prefix==8 ? "-isystem":prefix==7 ? "-iquote":"--sysroot");argument(args,absolute);g_free(absolute);}
+   if(path_option(s) || !strcmp(s,"-D") || !strcmp(s,"-U") || !strcmp(s,"-x") || !strcmp(s,"-target")) {if(i+1<clang_CompileCommand_getNumArgs(command)) {gchar *value=string(clang_CompileCommand_getArg(command,++i));argument(args,s);if(path_option(s)) {gchar *absolute=insight_canonicalize_filename(value,cwd);argument(args,absolute);g_free(absolute);}else argument(args,value);g_free(value);}}
+   else if(g_str_has_prefix(s,"-I") && s[2]) {gchar *absolute=insight_canonicalize_filename(s+2,cwd),*joined=g_strconcat("-I",absolute,NULL);argument(args,joined);g_free(joined);g_free(absolute);}
+   else if(g_str_has_prefix(s,"-isystem") || g_str_has_prefix(s,"-iquote") || g_str_has_prefix(s,"--sysroot=")) {gsize prefix=g_str_has_prefix(s,"-isystem") ? 8:g_str_has_prefix(s,"-iquote") ? 7:10;gchar *absolute=insight_canonicalize_filename(s+prefix,cwd);argument(args,prefix==8 ? "-isystem":prefix==7 ? "-iquote":"--sysroot");argument(args,absolute);g_free(absolute);}
    else if(g_str_has_prefix(s,"-O") || (g_str_has_prefix(s,"-m") && !g_str_has_prefix(s,"-mllvm")) || !strcmp(s,"-pthread") || !strcmp(s,"-ffreestanding") || !strcmp(s,"-fno-builtin") || !strcmp(s,"-fPIC") || !strcmp(s,"-fpic") || !strcmp(s,"-fPIE") || !strcmp(s,"-fpie")) argument(args,s);
    else if(g_str_has_prefix(s,"-D") || g_str_has_prefix(s,"-U") || g_str_has_prefix(s,"-std=") || g_str_has_prefix(s,"--target=") || !strcmp(s,"-m32") || !strcmp(s,"-m64") || !strcmp(s,"-fms-extensions") || !strcmp(s,"-fms-compatibility") || !strcmp(s,"-fno-exceptions") || !strcmp(s,"-fexceptions") || !strcmp(s,"-fno-rtti") || !strcmp(s,"-frtti")) argument(args,s);
    g_free(s);

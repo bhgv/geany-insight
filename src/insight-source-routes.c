@@ -262,6 +262,7 @@ static gboolean choose_endpoints(Routes *r,InsightReportSnapshot *snapshot) {
 static void find_calls(GtkWidget *w,gpointer data) {
  (void)w;Routes *r=data;cancel_calls(r);g_object_set_data(G_OBJECT(r->root),"insight-call-search-completed",NULL);GError *error=NULL;InsightReportSnapshot *snapshot=insight_workbench_source_snapshot(&error);
  if(!snapshot) {insight_i18n_text(G_OBJECT(r->status),"label","Call path search: {value}",insight_tr(error ? error->message:"Project membership is not ready."));g_clear_error(&error);gtk_widget_queue_draw(r->canvas);return;}
+ g_object_set_data(G_OBJECT(r->root),"insight-call-workspace-temporary",GINT_TO_POINTER(!snapshot->project_file));g_object_set_data(G_OBJECT(r->root),"insight-call-workspace-members",GUINT_TO_POINTER(snapshot->paths->len));
  if(!choose_endpoints(r,snapshot)) {insight_report_snapshot_unref(snapshot);return;}
  CallJob *j=g_new0(CallJob,1);j->snapshot=snapshot;j->resources=g_build_filename(app->datadir,"insight","clang","resources",NULL);j->buffers=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);j->encoding=file_prefs.default_open_encoding;j->serial=r->call_serial;j->possible=gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(r->call_possible));
  for(guint i=0;i<2;i++) {j->names[i]=g_strdup(gtk_entry_get_text(GTK_ENTRY(i ? r->call_to:r->call_from)));g_strstrip(j->names[i]);j->paths[i]=g_strdup(r->endpoint_path[i]);j->lines[i]=r->endpoint_line[i];if(!*j->names[i] && !j->paths[i]) {call_job_free(j);note(r,"Enter start and target functions, or set them from selected nodes");return;}}
