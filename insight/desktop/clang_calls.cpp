@@ -21,6 +21,7 @@ extern "C" {
 #include <vector>
 #include <set>
 #include <map>
+#include <tuple>
 namespace {
 class Calls : public clang::RecursiveASTVisitor<Calls> {
  clang::SourceManager &sm;
@@ -34,6 +35,7 @@ class Calls : public clang::RecursiveASTVisitor<Calls> {
  bool valid=true;
  std::map<const clang::Decl *,std::string> identities;
  std::map<std::string,const InsightSymbol *> old_definitions;
+ std::set<std::tuple<std::string,std::string,unsigned>> callsites;
  gchar *own(const std::string &s) {auto *p=g_strdup(s.c_str());g_ptr_array_add(strings,p);return p;}
  bool active() {return valid && !(cancel && g_cancellable_is_cancelled(cancel));}
  std::string usr(const clang::Decl *decl) {
@@ -128,6 +130,9 @@ class Calls : public clang::RecursiveASTVisitor<Calls> {
   auto callee=usr(target->getCanonicalDecl()),caller=usr(owner->getCanonicalDecl());if(callee.empty() || caller.empty()) return;
   destination(target);if(!active()) return;
   auto name=target->getNameAsString();unsigned offset=sm.getFileOffset(at);if(offset>length || name.empty()) return;
+  // A VLA bound or instantiated expression can be traversed repeatedly. Graph
+  // occurrences describe source sites, not the number of AST paths to a site.
+  if(!callsites.emplace(caller,callee,offset).second) return;
   if(rows->len>=50000) {valid=false;return;}
   auto *method=llvm::dyn_cast<clang::CXXMethodDecl>(target);bool virt=method && method->isVirtual();
   const auto *definition=target->getDefinition();std::string file=definition ? sm.getFilename(sm.getSpellingLoc(definition->getLocation())).str():"";
