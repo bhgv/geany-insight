@@ -194,3 +194,5 @@ Explicit function definitions and compound-body spans now come from the same pas
 The normal frontend builds one AST and produces fresh symbol/reference/token snapshots. Canonical USRs are cached for that traversal; repeated AST visits to a call site are deduplicated. **Clang analysis details** lists the native AST, preprocessor and Sema services. No second C frontend is run.
 
 On Debian/Ubuntu, `libclang-dev` supplies the Clang C++ development headers; its package name does not imply that the editor links the libclang C runtime. Install it together with `libclang-cpp-dev llvm-dev`, or build the pinned source SDK.
+
+Multiline macro parameter lists accept both LF and CRLF line continuations. Reference results include the source line; their display columns count UTF-8 characters, including Cyrillic text. Repeated expansions share one definition destination.

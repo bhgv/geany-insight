@@ -400,13 +400,17 @@ static void preprocessing(clang::ASTUnit &ast,Calls &data,const gchar *path,cons
   auto own=[&](const std::string &value)->const gchar * {auto *p=g_strdup(value.c_str());g_ptr_array_add(data.strings,p);return p;};
   llvm::SmallString<128> identity;clang::index::generateUSRForMacro(definition,sm,identity);
   if(!expansion) {
-   std::string signature;bool callable=end<length && text[end]=='(';if(callable) {signature="(";for(gsize i=end+1;i<length && signature.size()<4096;i++) {char c=text[i];if(c==')') {signature+=')';break;}if(c==',') signature+=", ";else if(!g_ascii_isspace(c)) signature+=c;}}
+   std::string signature;bool callable=end<length && text[end]=='(';if(callable) {signature="(";for(gsize i=end+1;i<length && signature.size()<4096;i++) {char c=text[i];if(c=='\\' && i+1<length) {if(text[i+1]=='\n') {i++;continue;}if(text[i+1]=='\r' && i+2<length && text[i+2]=='\n') {i+=2;continue;}}if(c==')') {signature+=')';break;}if(c==',') signature+=", ";else if(!g_ascii_isspace(c)) signature+=c;}}
    InsightSymbol row={own(name),path,"","d",sm.getSpellingLineNumber(at),own(signature),"",""};g_array_append_val(data.symbols,row);
    g_hash_table_replace(result->attributes,insight_clang_attribute_key(&row),GUINT_TO_POINTER(callable ? INSIGHT_CLANG_FUNCTION_MACRO:0));
    if(!identity.empty()) {InsightSymbol definition_row={own(identity.str().str()),path,"","@clangdef",row.line,own(name),"",""};g_array_append_val(data.rows,definition_row);}
   } else if(!identity.empty()) {
-   auto target_at=definition->getSourceRange().getBegin();auto file=sm.getFilename(target_at).str();gchar *position=g_strdup_printf("%u:%u",sm.getSpellingLineNumber(target_at),sm.getSpellingColumnNumber(target_at));g_ptr_array_add(data.strings,position);InsightSymbol target={own(identity.str().str()),path,own(file),"@clangtarget",sm.getSpellingLineNumber(target_at),position,own(name),"d"};g_array_append_val(data.rows,target);
-   gchar *range=g_strdup_printf("%u:%u:%u",begin,end,sm.getSpellingColumnNumber(at));g_ptr_array_add(data.strings,range);InsightSymbol row={own(name),path,own(identity.str().str()),"@clangref",sm.getSpellingLineNumber(at),range,"",""};g_array_append_val(data.rows,row);
+   auto target_at=definition->getSourceRange().getBegin();auto file=sm.getFilename(target_at).str();
+   if(data.destinations.insert(identity.str().str()).second) {gchar *position=g_strdup_printf("%u:%u",sm.getSpellingLineNumber(target_at),sm.getSpellingColumnNumber(target_at));g_ptr_array_add(data.strings,position);InsightSymbol target={own(identity.str().str()),path,own(file),"@clangtarget",sm.getSpellingLineNumber(target_at),position,own(name),"d"};g_array_append_val(data.rows,target);}
+   gsize first=begin,last=begin;while(first && text[first-1]!='\n') first--;while(last<length && text[last]!='\n' && last-first<1024) last++;
+   guint column=(guint)g_utf8_strlen(text+first,begin-first)+1;
+   gchar *snippet=g_utf8_make_valid(text+first,MIN(last-first,(gsize)1024));g_ptr_array_add(data.strings,snippet);
+   gchar *range=g_strdup_printf("%u:%u:%u",begin,end,column);g_ptr_array_add(data.strings,range);InsightSymbol row={own(name),path,own(identity.str().str()),"@clangref",sm.getSpellingLineNumber(at),range,snippet,""};g_array_append_val(data.rows,row);
   }
  }
 }
