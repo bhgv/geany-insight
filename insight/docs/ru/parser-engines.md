@@ -13,8 +13,11 @@ from Clang AST (`ASTUnit`, `RecursiveASTVisitor`, `CallExpr::getDirectCallee`,
 `DeclRefExpr`, `MemberExpr`, USRs). These feed caller/callee trees, call paths
 and reference searches. Resolved expression/call destinations also come from
 the direct AST, preferring definitions to declarations in the translation unit.
-Symbol-list declarations, type references, tokens and completion still use
-the existing C frontend. It is a staged migration, not a
+Supported type/alias/template/namespace references, explicit function definitions
+and compound-body spans also come from the direct AST. Symbol-list declarations,
+tokens and completion still use the existing C frontend. Unsupported constructs
+retain their frontend metadata. Unevaluated operands retain references without
+becoming executable call edges. It is a staged migration, not a
 claim that the entire compiler frontend has already moved away from libclang.
 The transitional adapter builds its own AST in a worker; it adds parsing cost.
 If that parse fails, existing call edges and references are retained. Arbitrary runtime function

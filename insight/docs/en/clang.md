@@ -162,13 +162,13 @@ keep `-Dclang-bundle=true` so target systems do not need a system libclang.
 
 ## Editable source and direct C++ AST adapter
 
-The pinned LLVM/Clang source is now in `external/llvm-project` (Git submodule). Build it with `python3 insight/tools/build_external_clang.py`; pass the resulting prefix as `-Dclang-sdk=... -Dclang-cpp=enabled`. Direct C++ AST call edges now feed caller/callee trees and call paths. The remaining C frontend is still used for definitions, type-reference rows, tokens and completion. See [parser-engines.md](parser-engines.md) for exact scope, source build instructions and other-language candidates.
+The pinned LLVM/Clang source is now in `external/llvm-project` (Git submodule). Build it with `python3 insight/tools/build_external_clang.py`; pass the resulting prefix as `-Dclang-sdk=... -Dclang-cpp=enabled`. Direct C++ AST call edges now feed caller/callee trees and call paths. The C frontend still provides symbol-list declarations, semantic tokens and completion. The direct AST also supplies supported type references, function definitions and body spans. See [parser-engines.md](parser-engines.md) for exact scope, source build instructions and other-language candidates.
 
 ## Expression references through the C++ AST
 
 With `clang-cpp` enabled, `DeclRefExpr` and `MemberExpr` references now come from the direct C++ AST pass as well as call edges. Resolved USRs preserve the identity of shadowed variables and overloaded functions. Member occurrences cover the member name rather than the whole object expression; stored offsets are bytes and displayed columns count UTF-8 characters. These rows feed existing definition lookup and reference searches.
 
-The update is atomic: cancellation, parse errors or limits retain the existing frontend result. Macro expansions, operator spellings, and type references retain their C frontend reference rows. Symbol-list declarations, type references, coloring and completion still use libclang; expression destinations now also use the direct AST; this is a staged migration, not a replacement of every compiler service. Project caches invalidate once for the new reference generation.
+The update is atomic: cancellation, parse errors or limits retain the existing frontend result. Macro expansions, operator spellings and unsupported/dependent type forms retain their C frontend reference rows. Symbol-list declarations, coloring and completion still use libclang; expression destinations now also use the direct AST; this is a staged migration, not a replacement of every compiler service. Project caches invalidate once for the new reference generation.
 
 ### Lambda capture evaluation
 
@@ -179,3 +179,13 @@ Direct AST traversal distinguishes a lambda's capture initializers from its defe
 For resolved expression references and calls, the direct Clang pass now emits destination records. It prefers a function or variable definition available in the current translation unit, otherwise its declaration. USRs distinguish overloads; an out-of-line method leads to its body and a field leads to its class declaration. Named unsaved headers are evaluated with the current source buffer.
 
 One destination per USR atomically replaces that symbol's old destinations together with the references. Parse errors, cancellation and limits retain the previous result. Macro-generated or implicit declarations without ordinary source positions retain the C frontend fallback. Definitions in other translation units still use the shared project/open-file index. No project compilation or execution is involved.
+
+## Types, function definitions and graph accuracy
+
+The direct C++ AST pass collects references to records, enums, typedef/using aliases, class templates, template type parameters and namespace qualifiers. A record use prefers its complete definition over a forward declaration. Unsupported and dependent forms retain the existing fallback; not every possible C++ type is resolved.
+
+Explicit function definitions and compound-body spans now come from the same pass: exact USRs, internal visibility, parameter signatures and physical brace coordinates. Existing symbol-list signatures are retained when available so call-path identity matching remains compatible. Unsupported body forms retain their previous metadata.
+
+`sizeof(sink())`, `noexcept(sink())` and `decltype(sink())` keep searchable references without inventing executable call edges. The pass distinguishes potentially evaluated `typeid` and C variable-length-array `sizeof`. Declaration default arguments are not attributed to the declared function body; their dynamic invocation is not inferred. Deferred lambda bodies likewise do not create enclosing-function edges.
+
+Snapshot replacement compacts supported rows in one pass while preserving unrelated service rows. Canonical USRs are cached for that AST traversal. Repeated publication replaces stale edges rather than accumulating them. **Clang analysis details** lists the direct AST services and the remaining libclang services.

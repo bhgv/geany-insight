@@ -123,11 +123,45 @@ static void expression_destinations(void) {
  insight_clang_result_free(r);g_hash_table_unref(overlays);g_free(changed);g_remove(header);g_rmdir(root);g_free(path);g_free(header);g_free(root);
  g_print("Clang destinations: exact overload definitions, out-of-line methods, extern definitions, unsaved-header fields and declaration-only fallback passed\n");
 }
+#ifdef HAVE_CLANG_CPP
+static guint source_line(const gchar *text,const gchar *part) {const gchar *at=strstr(text,part);g_assert_nonnull(at);guint line=1;for(const gchar *p=text;p<at;p++) if(*p=='\n') line++;return line;}
+static void direct_type_definitions(void) {
+ gchar *root=g_dir_make_tmp("clang-direct-types-XXXXXX",NULL),*path=g_build_filename(root,"types.cpp",NULL);
+ const gchar *text="namespace api {\nstruct Forward;\nstruct Forward {int member;};\nusing Alias = Forward;\ntemplate<class T> struct Box;\ntemplate<class T> struct Box {T item;};\n}\nstatic int sink(){return 1;}\nint with_default(int value=sink()){return value;}\nconstexpr bool condition(){return true;}\nint guarded() noexcept(condition()){return 1;}\nint route(){\napi::Alias a; api::Box<api::Forward> b;\nauto size=sizeof(sink()); bool safe=noexcept(sink());\nusing Result=decltype(sink());\nreturn sink()+a.member;\n}\n";
+ const gchar *args[]={"-xc++","-std=c++17"};GArray *rows=g_array_new(FALSE,FALSE,sizeof(InsightSymbol));GPtrArray *owned=g_ptr_array_new_with_free_func(g_free);
+ g_assert_true(insight_clang_cpp_calls(path,text,args,G_N_ELEMENTS(args),NULL,rows,owned,NULL));
+ InsightClangResult direct={0};direct.relations=insight_index_new();g_assert_true(insight_index_update(direct.relations,path,(const InsightSymbol *)rows->data,rows->len));
+ const InsightSymbol *found[32];g_assert_cmpuint(insight_index_query(direct.relations,"Alias",TRUE,NULL,"@clangref",path,0,found,32),==,1);assert_destination(&direct,path,found[0]->scope,path,source_line(text,"using Alias"),"t");
+ g_assert_cmpuint(insight_index_query(direct.relations,"Box",TRUE,NULL,"@clangref",path,0,found,32),>=,1);assert_destination(&direct,path,found[0]->scope,path,source_line(text,"template<class T> struct Box {T item;}"),"c");
+ guint count=(guint)insight_index_query(direct.relations,"Forward",TRUE,NULL,"@clangref",path,0,found,32);g_assert_cmpuint(count,>=,2);for(guint i=0;i<count && i<32;i++) assert_destination(&direct,path,found[i]->scope,path,source_line(text,"struct Forward {"),"s");
+ g_assert_cmpuint(insight_index_query(direct.relations,"api",TRUE,NULL,"@clangref",path,0,found,32),>,0);
+ g_assert_cmpuint(insight_index_query(direct.relations,"T",TRUE,NULL,"@clangref",path,0,found,32),==,1);assert_destination(&direct,path,found[0]->scope,path,source_line(text,"template<class T> struct Box {T item;}"),"t");
+ g_assert_cmpuint(insight_index_query(direct.relations,"sink",TRUE,NULL,"@clangref",path,0,found,32),==,5);
+ g_assert_cmpuint(insight_index_query(direct.relations,"condition",TRUE,NULL,"@clangref",path,0,found,32),==,1);g_assert_cmpuint(insight_index_query(direct.relations,"condition",TRUE,NULL,"@clangcall",path,0,found,32),==,0);
+ g_assert_cmpuint(insight_index_query(direct.relations,"sink",TRUE,NULL,"@clangcall",path,0,found,32),==,1);g_assert_cmpuint(found[0]->line,==,source_line(text,"return sink()+"));
+ g_assert_cmpuint(insight_index_query(direct.relations,"",FALSE,NULL,"@clangdef",path,0,found,32),==,5);
+ for(guint i=0;i<5;i++) {const InsightSymbol *body=NULL;g_assert_cmpuint(insight_index_query(direct.relations,found[i]->name,TRUE,NULL,"@clangbody",path,0,&body,1),==,1);g_assert_nonnull(strchr(found[i]->type,'('));if(!strcmp(found[i]->signature,"sink")) g_assert_cmpstr(found[i]->scope,==,"internal");
+  gchar **position=g_strsplit(body->signature,":",4);guint first=(guint)g_ascii_strtoull(position[0],NULL,10),last=(guint)g_ascii_strtoull(position[2],NULL,10),column=(guint)g_ascii_strtoull(position[1],NULL,10),end_column=(guint)g_ascii_strtoull(position[3],NULL,10);const gchar *begin=text,*end=text;for(guint line=1;line<first;line++) begin=strchr(begin,'\n')+1;for(guint line=1;line<last;line++) end=strchr(end,'\n')+1;g_assert_cmpint(begin[column-1],==,'{');g_assert_cmpint(end[end_column-2],==,'}');g_strfreev(position);
+ }
+ // Repeated references to one type keep one canonical destination. Refreshing
+ // a mixed snapshot preserves unrelated frontend rows and stable ordering.
+ InsightSymbol keep={"keep",path,"","@clanginclude",1,"stamp","",""};g_array_append_val(rows,keep);
+ for(guint i=0;i<20000;i++) {InsightSymbol stale={"stale",path,"old","@clangcall",1,"0:1:1","old",""};g_array_append_val(rows,stale);}
+ g_assert_true(insight_clang_cpp_calls(path,text,args,G_N_ELEMENTS(args),NULL,rows,owned,NULL));g_assert_cmpstr(g_array_index(rows,InsightSymbol,0).name,==,"keep");
+ for(guint i=0;i<4;i++) g_assert_true(insight_clang_cpp_calls(path,text,args,G_N_ELEMENTS(args),NULL,rows,owned,NULL));
+ InsightIndex *updated=insight_index_new();g_assert_true(insight_index_update(updated,path,(const InsightSymbol *)rows->data,rows->len));g_assert_cmpuint(insight_index_query(updated,"keep",TRUE,NULL,"@clanginclude",path,0,found,32),==,1);g_assert_cmpuint(insight_index_query(updated,"stale",TRUE,NULL,"@clangcall",path,0,found,32),==,0);g_assert_cmpuint(insight_index_query(updated,"sink",TRUE,NULL,"@clangcall",path,0,found,32),==,1);g_assert_cmpuint(insight_index_query(updated,"",FALSE,NULL,"@clangdef",path,0,found,32),==,5);
+ insight_index_free(updated);insight_index_free(direct.relations);g_array_unref(rows);g_ptr_array_unref(owned);g_rmdir(root);g_free(path);g_free(root);
+ g_print("Direct Clang AST: type/alias/template/namespace destinations, function definitions and body spans, unevaluated expressions and repeated snapshot replacement passed\n");
+}
+#endif
 int main(void) {
  if(!insight_clang_available()) return 77;
  header_commands();
  expression_references();
  expression_destinations();
+#ifdef HAVE_CLANG_CPP
+ direct_type_definitions();
+#endif
  gchar *root=g_dir_make_tmp("insight-clang-XXXXXX",NULL),*path=g_build_filename(root,"test.cpp",NULL),*header=g_build_filename(root,"api.h",NULL);
  const gchar *text="#include \"api.h\"\nint pick(int x){return x;}\nint pick(double x){return 2;}\nint main(){ Box b; int v=pick(1); return b.run(v); }\n";
  g_assert_true(g_file_set_contents(header,"struct Box { int run(int x){return x;} };\n",-1,NULL));g_assert_true(g_file_set_contents(path,text,-1,NULL));
