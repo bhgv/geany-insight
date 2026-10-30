@@ -147,7 +147,7 @@ public:
   if(!decl) return true;if(!active()) return false;
   if(!llvm::isa<clang::TranslationUnitDecl>(decl) && decl->getLocation().isValid() && !sm.isWrittenInMainFile(sm.getSpellingLoc(decl->getLocation()))) return true;
   auto *previous=owner;if(auto *function=llvm::dyn_cast<clang::FunctionDecl>(decl)) owner=function->doesThisDeclarationHaveABody() ? function:nullptr;
-  if(llvm::isa<clang::ParmVarDecl>(decl)) owner=nullptr; // declaration defaults are not calls by this function
+  if(language.CPlusPlus && llvm::isa<clang::ParmVarDecl>(decl)) owner=nullptr; // declaration defaults are not calls by this function
   bool ok=clang::RecursiveASTVisitor<Calls>::TraverseDecl(decl);owner=previous;return ok;
  }
  bool TraverseLambdaExpr(clang::LambdaExpr *expr) {

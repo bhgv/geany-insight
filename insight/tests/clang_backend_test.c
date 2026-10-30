@@ -125,6 +125,16 @@ static void expression_destinations(void) {
 }
 #ifdef HAVE_CLANG_CPP
 static guint source_line(const gchar *text,const gchar *part) {const gchar *at=strstr(text,part);g_assert_nonnull(at);guint line=1;for(const gchar *p=text;p<at;p++) if(*p=='\n') line++;return line;}
+static void direct_c_vla_calls(void) {
+ gchar *root=g_dir_make_tmp("clang-direct-vla-XXXXXX",NULL),*path=g_build_filename(root,"vla.c",NULL);
+ const gchar *text="int step(void){return 2;}\nint sized(int count,int values[step()]){return (int)sizeof(int[step()]);}\n";
+ const gchar *args[]={"-xc","-std=c11"};GArray *rows=g_array_new(FALSE,FALSE,sizeof(InsightSymbol));GPtrArray *owned=g_ptr_array_new_with_free_func(g_free);
+ g_assert_true(insight_clang_cpp_calls(path,text,args,G_N_ELEMENTS(args),NULL,rows,owned,NULL));InsightIndex *index=insight_index_new();g_assert_true(insight_index_update(index,path,(const InsightSymbol *)rows->data,rows->len));
+ const InsightSymbol *found[8];g_assert_cmpuint(insight_index_query(index,"step",TRUE,NULL,"@clangcall",path,0,found,8),==,2);g_assert_cmpstr(found[0]->type,==,found[1]->type);g_assert_cmpstr(found[0]->signature,!=,found[1]->signature);
+ g_assert_cmpuint(insight_index_query(index,"step",TRUE,NULL,"@clangref",path,0,found,8),==,2);
+ insight_index_free(index);g_array_unref(rows);g_ptr_array_unref(owned);g_rmdir(root);g_free(path);g_free(root);
+ g_print("Direct Clang C: evaluated VLA parameter bounds and sizeof type bounds retain call edges\n");
+}
 static void direct_type_definitions(void) {
  gchar *root=g_dir_make_tmp("clang-direct-types-XXXXXX",NULL),*path=g_build_filename(root,"types.cpp",NULL);
  const gchar *text="namespace api {\nstruct Forward;\nstruct Forward {int member;};\nusing Alias = Forward;\ntemplate<class T> struct Box;\ntemplate<class T> struct Box {T item;};\n}\nstatic int sink(){return 1;}\nint with_default(int value=sink()){return value;}\nconstexpr bool condition(){return true;}\nint guarded() noexcept(condition()){return 1;}\nint route(){\napi::Alias a; api::Box<api::Forward> b;\nauto size=sizeof(sink()); bool safe=noexcept(sink());\nusing Result=decltype(sink());\nreturn sink()+a.member;\n}\n";
@@ -161,6 +171,7 @@ int main(void) {
  expression_destinations();
 #ifdef HAVE_CLANG_CPP
  direct_type_definitions();
+ direct_c_vla_calls();
 #endif
  gchar *root=g_dir_make_tmp("insight-clang-XXXXXX",NULL),*path=g_build_filename(root,"test.cpp",NULL),*header=g_build_filename(root,"api.h",NULL);
  const gchar *text="#include \"api.h\"\nint pick(int x){return x;}\nint pick(double x){return 2;}\nint main(){ Box b; int v=pick(1); return b.run(v); }\n";
