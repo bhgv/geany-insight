@@ -1746,7 +1746,13 @@ static void semantic_call_tree(const gchar *query,gboolean incoming) {
  wb.search_worker=g_cancellable_new();GTask *task=g_task_new(NULL,wb.search_worker,semantic_calls_done,NULL);g_task_set_task_data(task,j,semantic_calls_free);g_task_run_in_thread(task,semantic_calls_run);g_object_unref(task);set_usage_status("Preparing Clang call snapshot…");
 }
 static void usage_start(GtkWidget *widget,gpointer data) {
- (void)widget; (void)data; stop_usage();
+ (void)data; stop_usage();
+ /* Explicit searches must reveal their results, even when the last view was
+  * a source route. Background tracking must leave that independent graph open. */
+ if(widget && wb.relation_stack) {
+  if(!g_strcmp0(gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack)),"routes")) gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"list");
+  relation_view_update();
+ }
  wb.usage_region=reference_region();
  gint search_region=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.search_region));wb.project_region=search_region==1 ? INSIGHT_REGION_SKIP_COMMENTS : search_region==2 ? INSIGHT_REGION_COMMENTS : search_region==3 ? INSIGHT_REGION_CODE : INSIGHT_REGION_ALL;
  const char *query=gtk_entry_get_text(GTK_ENTRY(wb.usage_entry)); size_t total;
@@ -1814,8 +1820,11 @@ static void usage_activated(GtkTreeView *view,GtkTreePath *path,GtkTreeViewColum
  usage_selected(selection,NULL); if(wb.source_line) open_context(NULL,NULL);
 }
 static void relation_controls(GtkWidget *widget,gpointer data) {
- (void)widget; (void)data; if(wb.relation_setting) return; wb.relation_dirty=TRUE; stop_usage();
+ (void)data; if(wb.relation_setting) return; wb.relation_dirty=TRUE; stop_usage();
  gint relation=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode));
+ /* A deliberate mode change selects the symbol browser, not the separate
+  * source-route canvas. Filters and automatic tracking preserve that canvas. */
+ if(widget==wb.relation_mode && wb.relation_stack && !g_strcmp0(gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack)),"routes")) gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),"list");
  gtk_widget_set_sensitive(wb.relation_transitive,relation==2 || relation==4 || relation==5);
  relation_view_update();
  gboolean references=gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode))==0;

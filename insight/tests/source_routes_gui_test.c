@@ -51,6 +51,16 @@ static gboolean step(gpointer data) {
   SEND(a->editor->sci,SCI_INSERTTEXT,0,(sptr_t)"// changed\n");SEND(a->editor->sci,SCI_GOTOPOS,3,0);click(40);g_assert_cmpint(sci_get_current_position(a->editor->sci),==,3);SEND(a->editor->sci,SCI_UNDO,0,0);document_set_text_changed(a,FALSE);
   gint start=sci_get_position_from_line(a->editor->sci,2),end=sci_get_position_from_line(a->editor->sci,3);SEND(a->editor->sci,SCI_SETSEL,start,end);button("insight-route-selection");counts(5,5);
   gtk_combo_box_set_active(GTK_COMBO_BOX(named(routes,"insight-route-mode")),0);counts(2,1);gtk_combo_box_set_active(GTK_COMBO_BOX(named(routes,"insight-route-mode")),1);counts(5,5);
+  /* A mode selection or explicit query must not leave its results behind the
+   * unrelated source-route canvas. Returning preserves the saved route. */
+  GtkWidget *query=named(window,"insight-relation-query"),*options=named(window,"insight-relation-toolbar-tabs");
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(window,"insight-relations-follow")),FALSE);
+  gtk_entry_set_text(GTK_ENTRY(query),"create_rule");
+  gtk_combo_box_set_active(GTK_COMBO_BOX(named(window,"insight-relation-mode")),7);
+  g_assert_true(gtk_widget_get_visible(options));g_assert_cmpstr(gtk_stack_get_visible_child_name(GTK_STACK(gtk_widget_get_parent(routes))),==,"list");
+  command("insight-route-show-command");g_assert_true(gtk_widget_get_child_visible(routes));
+  g_signal_emit_by_name(query,"activate");g_assert_false(gtk_widget_get_child_visible(routes));g_assert_true(gtk_widget_get_visible(options));
+  command("insight-route-show-command");counts(5,5);
  } else if(phase==2) {
   g_assert_false(gtk_widget_get_visible(named(window,"insight-relation-toolbar-tabs")));gtk_notebook_set_current_page(GTK_NOTEBOOK(named(routes,"insight-source-routes-options")),3);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(routes,"insight-call-context")),FALSE);
   gtk_entry_set_text(GTK_ENTRY(named(routes,"insight-call-from")),"main");gtk_entry_set_text(GTK_ENTRY(named(routes,"insight-call-to")),"create_rule");button("insight-call-find");

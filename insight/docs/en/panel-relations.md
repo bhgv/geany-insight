@@ -51,3 +51,6 @@ Refresh reruns the panel query and restores hidden nodes while retaining the loc
 
 
 [Print lists and the Relations outline](list-printing.md): Print List, Print Relation Window and Print outline, wrapping and page numbering.
+
+
+Selecting a relation query mode or explicitly submitting a query (Enter / Search) reveals the relation results instead of leaving the source-route canvas visible. The route remains intact; reopen Source routes / flow to return to it. Background symbol tracking does not close the route canvas.
