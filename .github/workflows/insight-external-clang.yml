@@ -12,7 +12,8 @@ permissions:
   contents: read
 concurrency:
   group: insight-external-clang-${{ github.ref }}
-  cancel-in-progress: true
+  # Keep a costly first compiler build; newer integration checks reuse its cache.
+  cancel-in-progress: false
 jobs:
   source-sdk:
     runs-on: ubuntu-24.04
@@ -46,6 +47,18 @@ jobs:
           meson setup _source-editor --prefix="$PWD/_source-install" --libdir=lib -Dclang-sdk="$PWD/_external-clang-sdk" -Dclang=enabled -Dclang-cpp=enabled -Dclang-bundle=true -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
           meson compile -C _source-editor
           meson install -C _source-editor
+      - name: Verify the editor loads the source-built compiler runtime
+        run: |
+          python3 - <<'PYCODE'
+          import pathlib, subprocess
+          root = pathlib.Path('_source-install').resolve()
+          output = subprocess.check_output(['ldd', '-r', str(root / 'lib/libgeany.so')], text=True, stderr=subprocess.STDOUT)
+          print(output)
+          assert 'not found' not in output and 'undefined symbol:' not in output
+          for name in ('libclang.so', 'libclang-cpp', 'libLLVM'):
+              rows = [line for line in output.splitlines() if name in line]
+              assert rows and all(str(root / 'lib/geany/clang') in line for line in rows), (name, output)
+          PYCODE
       - name: Validate source-built semantic services and temporary workspaces
         run: |
           GEANY_INSIGHT_PREFIX="$PWD/_source-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s '-screen 0 1600x1200x24' meson test -C _source-editor --print-errorlogs 'Insight Clang semantic frontend' 'Insight native source routes and flow GUI' 'Insight temporary open-file workspace GUI'

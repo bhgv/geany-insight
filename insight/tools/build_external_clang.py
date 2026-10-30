@@ -70,6 +70,13 @@ def main():
         library.symlink_to(build / 'lib', target_is_directory=True)
     elif library.resolve() != (build / 'lib').resolve():
         parser.error('SDK lib already points elsewhere; choose another SDK directory')
+    # LLVM's build tree names the dylib libLLVM-18.so; the unversioned
+    # development alias is otherwise created only by the install component.
+    if os.name != 'nt' and not (library / 'libLLVM.so').exists():
+        candidate = library / 'libLLVM-18.so'
+        if not candidate.is_file():
+            parser.error('Source build is missing libLLVM-18.so')
+        (library / 'libLLVM.so').symlink_to(candidate.name)
     for base in (sdk, build):
         licenses = base / 'share/licenses/llvm'
         licenses.mkdir(parents=True, exist_ok=True)

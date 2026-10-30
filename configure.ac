@@ -99,9 +99,10 @@ AS_IF([test "x$with_libclang" != xno],[
  AC_PATH_PROGS([LLVM_CONFIG],[llvm-config llvm-config-22 llvm-config-21 llvm-config-20 llvm-config-19 llvm-config-18 llvm-config-17 llvm-config-16 llvm-config-15 llvm-config-14])
  clang_cppflags=""
  clang_ldflags=""
- AS_IF([test -n "$LLVM_CONFIG"],[clang_cppflags="-I`$LLVM_CONFIG --includedir`";clang_ldflags="-L`$LLVM_CONFIG --libdir`"],[
-  AS_CASE([$with_libclang],[auto|yes],[],[clang_cppflags="-I$with_libclang/include";clang_ldflags="-L$with_libclang/lib"])
- ])
+ AS_CASE([$with_libclang],[auto|yes],[
+  AS_IF([test -n "$LLVM_CONFIG"],[clang_cppflags="-I`$LLVM_CONFIG --includedir`";clang_ldflags="-L`$LLVM_CONFIG --libdir`"])
+ ],[clang_cppflags="-I$with_libclang/include";clang_ldflags="-L$with_libclang/lib"])
+
  clang_save_cppflags="$CPPFLAGS";clang_save_ldflags="$LDFLAGS";clang_save_libs="$LIBS"
  CPPFLAGS="$CPPFLAGS $clang_cppflags";LDFLAGS="$LDFLAGS $clang_ldflags"
  clang_headers=no;clang_library=no

@@ -1740,7 +1740,7 @@ static void semantic_calls_run(GTask *task,gpointer source,gpointer data,GCancel
 static void semantic_calls_done(GObject *source,GAsyncResult *result,gpointer unused) {
  (void)source;(void)unused;SemanticCallsJob *j=g_task_get_task_data(G_TASK(result));gboolean ok=g_task_propagate_boolean(G_TASK(result),NULL);if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.usage_generation) return;g_clear_object(&wb.search_worker);if(!ok) {set_usage_status("Cannot prepare Clang call snapshot");return;}
  insight_relation_tree_calls(wb.relation_tree,j->calls,j->usr,j->query,j->incoming,j->source);insight_relation_tree_filter(wb.relation_tree,gtk_entry_get_text(GTK_ENTRY(wb.relation_filter_entry)));set_usage_status(j->usr ? "Clang call snapshot; expand nodes for callers or callees":"Choose a function overload in the Clang tree");
- gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_graph_toggle)) ? "treegraph":"tree");
+ if(g_strcmp0(gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack)),"routes")) gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack),gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_graph_toggle)) ? "treegraph":"tree");
 }
 static void semantic_call_tree(const gchar *query,gboolean incoming) {
  SemanticCallsJob *j=g_new0(SemanticCallsJob,1);j->base=insight_index_ref(wb.disk_calls);j->paths=g_ptr_array_new_with_free_func(g_free);j->overlays=g_ptr_array_new_with_free_func((GDestroyNotify)insight_index_free);j->query=g_strdup(query);j->incoming=incoming;j->generation=wb.usage_generation;j->epoch=workbench_epoch;
