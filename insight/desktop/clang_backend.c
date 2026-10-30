@@ -132,7 +132,7 @@ static gboolean cpp_header(const gchar *path) {
  const gchar *ext=strrchr(path,'.');return ext && (strcmp(ext,".h") && (!g_ascii_strcasecmp(ext,".h") || !g_ascii_strcasecmp(ext,".hpp") || !g_ascii_strcasecmp(ext,".hh") || !g_ascii_strcasecmp(ext,".hxx")));
 }
 static gchar *command_file(CXCompileCommand command) {
- gchar *cwd=string(clang_CompileCommand_getDirectory(command)),*file=string(clang_CompileCommand_getFilename(command));gchar *absolute=g_canonicalize_filename(file,cwd);g_free(cwd);g_free(file);return absolute;
+ gchar *cwd=string(clang_CompileCommand_getDirectory(command)),*file=string(clang_CompileCommand_getFilename(command));gchar *absolute=g_path_is_absolute(cwd) ? g_canonicalize_filename(file,cwd):g_strdup("");g_free(cwd);g_free(file);return absolute;
 }
 /* Explicit -x wins over driver/file suffix. The driver is inspected only;
  * compilation-database commands and wrappers are never executed. */
@@ -163,7 +163,7 @@ static gint header_command(CXCompileCommands commands,const gchar *header,gboole
  guint count=clang_CompileCommands_getSize(commands);if(count>8192) return -1;
  gchar *stem=file_stem(header),*best_file=NULL;const gchar *best_language=NULL;guint best_family=G_MAXUINT,best_distance=G_MAXUINT;gint best=-1;*ambiguous=FALSE;
  for(guint i=0;i<count;i++) {
-  CXCompileCommand command=clang_CompileCommands_getCommand(commands,i);gchar *file=command_file(command);if(strlen(file)>4096) {g_free(file);continue;}
+  CXCompileCommand command=clang_CompileCommands_getCommand(commands,i);gchar *file=command_file(command);if(!*file || strlen(file)>4096) {g_free(file);continue;}
   const gchar *language=command_language(command,file);if(!language || (cpp_header(header) && strcmp(language,"c++"))) {g_free(file);continue;}
   gchar *name=file_stem(file);guint family=command_path_compare(stem,name)!=0,distance=directory_distance(header,file);g_free(name);
   if(family<best_family || (family==best_family && distance<best_distance)) {best=(gint)i;best_family=family;best_distance=distance;best_language=language;*ambiguous=FALSE;g_free(best_file);best_file=g_strdup(file);}
