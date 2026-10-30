@@ -53,11 +53,11 @@ static gboolean temporary_step(void) {
   if(phase==1) {document_open_file(path_b,FALSE,NULL,NULL);SEND(b->editor->sci,SCI_GOTOPOS,9,0);command("insight-navigate-relation-10");}
   else {command("insight-call-menu-0");routes=named(window,"insight-source-routes");canvas=named(routes,"insight-route-canvas");gtk_entry_set_text(GTK_ENTRY(named(routes,"insight-call-from")),"temp_entry");gtk_entry_set_text(GTK_ENTRY(named(routes,"insight-call-to")),"temp_target");button("insight-call-find");if(!count("insight-call-search-running")) return G_SOURCE_CONTINUE;}
  } else {
-  if(!count("insight-call-search-completed")) return G_SOURCE_CONTINUE;counts(3,2);
+  if(!count("insight-call-search-completed")) return G_SOURCE_CONTINUE;counts(5,4);
   GError *error=NULL;InsightReportSnapshot *snapshot=insight_workbench_source_snapshot(&error);g_assert_no_error(error);g_assert_nonnull(snapshot);g_assert_null(snapshot->project_file);g_assert_cmpuint(snapshot->paths->len,==,2);insight_report_snapshot_unref(snapshot);
   capture("INSIGHT_TEMPORARY_WORKSPACE_CAPTURE");gchar *disk=NULL;g_assert_true(g_file_get_contents(path_b,&disk,NULL,NULL));g_assert_nonnull(strstr(disk,"x+1"));g_free(disk);gchar *text=sci_get_contents(b->editor->sci,sci_get_length(b->editor->sci)+1);g_assert_nonnull(strstr(text,"x+2"));g_free(text);
   document_set_text_changed(b,FALSE);g_assert_true(document_close(b));b=NULL;snapshot=insight_workbench_source_snapshot(&error);g_assert_no_error(error);g_assert_cmpuint(snapshot->paths->len,==,1);g_assert_cmpuint(insight_index_query(snapshot->index,"",FALSE,NULL,NULL,path_b,0,NULL,0),==,0);insight_report_snapshot_unref(snapshot);g_assert_false(g_file_test(project_file,G_FILE_TEST_EXISTS));
-  g_print("Temporary workspace: no project, two open files, inactive Clang callers/callees, unsaved overlays, three-node call path, closed-file removal and memory-only snapshots passed\n");quit();return G_SOURCE_REMOVE;
+  g_print("Temporary workspace: no project, two open files, inactive Clang callers/callees, unsaved overlays, three-function path with call sites, closed-file removal and memory-only snapshots passed\n");quit();return G_SOURCE_REMOVE;
  }
  phase++;return G_SOURCE_CONTINUE;
 }
