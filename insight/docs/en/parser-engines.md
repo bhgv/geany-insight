@@ -8,15 +8,18 @@ The editable LLVM/Clang source is a pinned Git submodule in
 Meson accepts `-Dclang-sdk=ABSOLUTE_PREFIX -Dclang-cpp=enabled`; the portable
 bundler carries both libclang and clang-cpp plus LLVM dependencies and licenses.
 
-The direct C++ adapter currently derives resolved call edges from Clang AST
-(`ASTUnit`, `RecursiveASTVisitor`, `CallExpr::getDirectCallee`, USRs). These feed
-the caller/callee trees and call paths. Definitions, references, tokens and
-completion still use the existing C frontend. It is a staged migration, not a
+The direct C++ adapter derives resolved call edges and expression references
+from Clang AST (`ASTUnit`, `RecursiveASTVisitor`, `CallExpr::getDirectCallee`,
+`DeclRefExpr`, `MemberExpr`, USRs). These feed caller/callee trees, call paths
+and reference searches. Definitions, destination records, type references,
+tokens and completion still use the existing C frontend. It is a staged migration, not a
 claim that the entire compiler frontend has already moved away from libclang.
 The transitional adapter builds its own AST in a worker; it adds parsing cost.
-If that parse fails, existing call edges are retained. Arbitrary runtime function
+If that parse fails, existing call edges and references are retained. Arbitrary runtime function
 pointers and dynamic dispatch targets are not inferred. Lambda-body edges are
-not attributed to the enclosing function.
+not attributed to the enclosing function; capture initializers are evaluated
+in the enclosing function and retain its call edges. Expression references
+inside deferred bodies remain searchable. See [Clang reference details](clang.md#expression-references-through-the-c-ast).
 
 ## Other languages: candidates, not implemented backends
 
