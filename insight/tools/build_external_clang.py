@@ -25,6 +25,7 @@ def main():
     parser.add_argument('--jobs', type=int, default=2)
     parser.add_argument('--targets', default={'x86_64': 'X86', 'AMD64': 'X86', 'aarch64': 'AArch64', 'arm64': 'AArch64'}.get(platform.machine(), 'X86'))
     parser.add_argument('--configure-only', action='store_true')
+    parser.add_argument('--reuse-build', action='store_true', help='Stage an already compiled, trusted CI build cache from a clean pinned checkout')
     parser.add_argument('--plan', action='store_true', help='Print the exact build commands without running CMake')
     args = parser.parse_args()
     source, build, sdk = (p.resolve() for p in (args.source, args.build, args.sdk))
@@ -50,10 +51,23 @@ def main():
     if args.plan:
         print(json.dumps({'revision': revision, 'configure': configure, 'build': compile_command, 'sdk': str(sdk)}, indent=2))
         return
-    run(configure)
-    if args.configure_only:
-        return
-    run(compile_command)
+    if args.reuse_build:
+        if args.configure_only:
+            parser.error('--reuse-build and --configure-only cannot be combined')
+        dirty = subprocess.check_output(['git', '-C', str(source), 'status', '--porcelain'], text=True)
+        if dirty.strip():
+            parser.error('Do not reuse a compiler cache with local source edits; rebuild normally')
+        required = [build / 'CMakeCache.txt', build / 'bin' / ('llvm-config.exe' if os.name == 'nt' else 'llvm-config')]
+        if os.name != 'nt':
+            required += [build / 'lib/libclang.so', build / 'lib/libclang-cpp.so', build / 'lib/libLLVM-18.so']
+        if not all(p.is_file() for p in required):
+            parser.error('Incomplete compiler cache; rebuild normally')
+        print('Reusing pinned source compiler outputs; no source timestamps are used as a cache key')
+    else:
+        run(configure)
+        if args.configure_only:
+            return
+        run(compile_command)
     include = sdk / 'include'
     for folder in (source / 'llvm/include', build / 'include', source / 'clang/include', build / 'tools/clang/include'):
         if folder.is_dir():

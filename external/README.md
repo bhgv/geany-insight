@@ -36,3 +36,10 @@ and update the gitlink, or keep reviewed patches in this repository and apply
 them to the pinned checkout. A root-repository commit alone does not record
 uncommitted edits inside a submodule. LLVM/Clang redistribution notices are
 copied into the SDK and portable runtime by the existing bundler.
+
+The CI compiler cache is keyed by the pinned revision and build configuration.
+`--reuse-build` stages validated existing compiler outputs from a trusted cache
+without rebuilding because of fresh checkout timestamps. It rejects local source
+edits. Use a normal build after modifying Clang; do not use this cache option.
+When updating the gitlink to a different commit, update the explicit PIN in the
+builder and review C++ API compatibility as part of that change.

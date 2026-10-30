@@ -36,7 +36,12 @@ jobs:
           key: external-llvm-${{ runner.os }}-${{ steps.compiler-pin.outputs.revision }}-release-x86-v1
       - name: Build Clang and LLVM directly from the pinned sources
         id: sdk-build
-        run: python3 insight/tools/build_external_clang.py --jobs 2
+        run: |
+          if [ "${{ steps.compiler-cache.outputs.cache-hit }}" = "true" ]; then
+            python3 insight/tools/build_external_clang.py --jobs 2 --reuse-build
+          else
+            python3 insight/tools/build_external_clang.py --jobs 2
+          fi
       - uses: actions/cache/save@v4
         if: steps.compiler-cache.outputs.cache-hit != 'true'
         with:
