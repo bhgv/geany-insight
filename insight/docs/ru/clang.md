@@ -158,3 +158,8 @@ returning. Rebuild after installing `libclang-dev llvm-dev` on Debian/Ubuntu.
 For intentional minimal builds use `-Dclang=disabled` or `--without-libclang`;
 `auto` remains an explicit opt-in to optional detection. For portable installs,
 keep `-Dclang-bundle=true` so target systems do not need a system libclang.
+
+
+## Editable source and direct C++ AST adapter
+
+The pinned LLVM/Clang source is now in `external/llvm-project` (Git submodule). Build it with `python3 insight/tools/build_external_clang.py`; pass the resulting prefix as `-Dclang-sdk=... -Dclang-cpp=enabled`. Direct C++ AST call edges now feed caller/callee trees and call paths. The remaining C frontend is still used for definitions, reference rows, tokens and completion. See [parser-engines.md](parser-engines.md) for exact scope, source build instructions and other-language candidates.

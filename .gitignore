@@ -149,3 +149,6 @@ Makefile.in
 #-----------------------------------------------------------------------
 /tests/**/*.trs
 /tests/**/*.log
+
+/_external-clang/
+/_external-clang-sdk/

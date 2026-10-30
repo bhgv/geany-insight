@@ -867,3 +867,7 @@ Unlisted headers can inherit a companion source's compilation settings, with det
 
 ### Temporary source workspace and build availability
 Named open documents now provide an in-memory snapshot to call-path search and AI project/source review without requiring a saved project. Clang caller/callee snapshots parse inactive open sources in a worker with the same unsaved header overlays. Closing a file removes it from the next snapshot. No project file or index cache is created. Untitled buffers are not members. Normal Meson/Autotools builds require libclang; minimal builds explicitly opt out, and analysis details explain missing support. This does not implement arbitrary runtime pointer resolution or full Source Insight parity.
+
+
+### Editable LLVM/Clang and direct C++ AST calls
+`external/llvm-project` pins source LLVM/Clang 18.1.8. A local SDK builder and Meson prefix option support modified compiler sources. The new direct C++ AST adapter supplies resolved call edges; libclang remains for other semantic services during migration. See [parser-engines.md](parser-engines.md). New Python/JS/Java/Lua engines are researched candidates, not completed integrations.

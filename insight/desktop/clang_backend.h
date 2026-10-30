@@ -6,9 +6,10 @@
 typedef enum { INSIGHT_CLANG_TYPE,INSIGHT_CLANG_FUNCTION,INSIGHT_CLANG_MEMBER,INSIGHT_CLANG_CONSTANT,INSIGHT_CLANG_VARIABLE,INSIGHT_CLANG_NAMESPACE,INSIGHT_CLANG_MACRO } InsightClangRole;
 typedef struct { guint begin,end;InsightClangRole role; } InsightClangToken;
 enum { INSIGHT_CLANG_INTERNAL=1, INSIGHT_CLANG_PUBLIC=2, INSIGHT_CLANG_PROTECTED=4, INSIGHT_CLANG_PRIVATE=8, INSIGHT_CLANG_VIRTUAL=16, INSIGHT_CLANG_EXTERN=32, INSIGHT_CLANG_FUNCTION_MACRO=64 };
-typedef struct { InsightIndex *symbols,*relations;GArray *tokens;GHashTable *attributes;gchar *digest,*diagnostics,*command_source,*parse_language;gboolean errors,limited,compilation_database,inferred_command,ambiguous_command; } InsightClangResult;
+typedef struct { InsightIndex *symbols,*relations;GArray *tokens;GHashTable *attributes;gchar *digest,*diagnostics,*command_source,*parse_language;gboolean internal_calls,errors,limited,compilation_database,inferred_command,ambiguous_command; } InsightClangResult;
 static inline gboolean insight_clang_result_usable(const InsightClangResult *r) {return r && !r->errors && !r->limited && !r->ambiguous_command;}
 gboolean insight_clang_available(void);
+gboolean insight_clang_cpp_available(void);
 gboolean insight_clang_source(const gchar *);
 gboolean insight_clang_dependencies_fresh(const InsightIndex *,const gchar *path);
 /* Worker-only: UTF-8 sources, including optional named unsaved overlays. No

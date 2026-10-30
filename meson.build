@@ -39,6 +39,11 @@ if clang_sdk.found()
  clang_args = ['-I' + run_command(clang_sdk, '--includedir', check: true).stdout().strip()]
  clang_dirs = [run_command(clang_sdk, '--libdir', check: true).stdout().strip()]
 endif
+if get_option('clang-sdk') != ''
+ clang_args = ['-I' + get_option('clang-sdk') / 'include']
+ clang_dirs = [get_option('clang-sdk') / 'lib']
+ clang_sdk = find_program(get_option('clang-sdk') / 'bin/llvm-config', required: true)
+endif
 clang_dep = cc.find_library('clang', dirs: clang_dirs, required: false)
 clang_enabled = not get_option('clang').disabled() and clang_dep.found() and cc.has_header('clang-c/Index.h', args: clang_args)
 if get_option('clang').enabled() and not clang_enabled
@@ -47,6 +52,16 @@ endif
 if clang_enabled
  deps += clang_dep
  add_project_arguments(clang_args, language: ['c', 'cpp'])
+endif
+
+clang_cpp_dep = cxx.find_library('clang-cpp', dirs: clang_dirs, required: false)
+clang_llvm_dep = cxx.find_library('LLVM', dirs: clang_dirs, required: false)
+clang_cpp_enabled = clang_enabled and not get_option('clang-cpp').disabled() and clang_cpp_dep.found() and clang_llvm_dep.found() and cxx.has_header('clang/Tooling/Tooling.h', args: clang_args)
+if get_option('clang-cpp').enabled() and not clang_cpp_enabled
+ error('Direct Clang AST backend requested: build external/llvm-project or install matching libclang-cpp development libraries')
+endif
+if clang_cpp_enabled
+ deps += [clang_cpp_dep, clang_llvm_dep]
 endif
 
 # detect libc
@@ -60,6 +75,9 @@ gnu_source = glibc
 cdata = configuration_data()
 if clang_enabled
  cdata.set('HAVE_LIBCLANG', 1)
+endif
+if clang_cpp_enabled
+ cdata.set('HAVE_CLANG_CPP', 1)
 endif
 check_headers = [
 	'alloca.h',
@@ -990,7 +1008,7 @@ libgeany = shared_library('geany',
 	'src/insight-text-print.h',
 	'src/insight-list-tools.c',
 	'src/insight-list-tools.h',
-	'src/insight-source-routes.c', 'src/insight-source-routes.h', 'insight/core/control_flow.c', 'insight/core/control_flow.h', 'insight/desktop/call_paths.c', 'insight/desktop/call_paths.h', 'insight/desktop/clang_backend.c', 'insight/desktop/clang_backend.h', 'src/insight-clang.c', 'src/insight-clang.h',
+	'src/insight-source-routes.c', 'src/insight-source-routes.h', 'insight/core/control_flow.c', 'insight/core/control_flow.h', 'insight/desktop/call_paths.c', 'insight/desktop/call_paths.h', 'insight/desktop/clang_backend.c', 'insight/desktop/clang_backend.h', 'insight/desktop/clang_calls.cpp', 'insight/desktop/clang_calls.h', 'src/insight-clang.c', 'src/insight-clang.h',
 	'src/insight-relation-graph.c',
 	'src/insight-relation-graph.h',
 	'src/insight-help.c',
@@ -1069,6 +1087,7 @@ libgeany = shared_library('geany',
 	install_rpath: clang_enabled ? '$ORIGIN/geany/clang' : '',
 	soversion: '0',
 	c_args: geany_cflags + [ '-DG_LOG_DOMAIN="Geany"' ],
+ cpp_args: basic_cflags + (clang_cpp_enabled ? cxx.get_supported_arguments(['-fno-rtti']) : []),
 	include_directories: [iscintilla, include_directories('insight/core', 'insight/desktop')],
 	dependencies: [dep_tagmanager, dep_ctags, dep_scintilla] + deps + win_deps + osx_deps,
 	install: true
@@ -1225,3 +1244,5 @@ endif
 install_data('insight/docs/clang.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 
 install_data('insight/docs/media/semantic-browsing.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
+
+install_data('insight/docs/parser-engines.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')

@@ -41,7 +41,7 @@ def main():
         sdk_bin = {p.name.lower(): p for p in (sdk / 'bin').glob('*.dll')}
         system = Path(os.environ['SystemRoot']) / 'System32'
         system_names = {p.name.lower() for p in system.iterdir() if p.is_file()}
-        queue = [source]
+        queue = [source] + [p for p in (sdk / 'bin').glob('*.dll') if 'clang-cpp' in p.name.lower()]
         copied = set()
         while queue:
             source = queue.pop()
@@ -69,6 +69,9 @@ def main():
     destination = prefix / args.libdir / 'geany/clang'
     destination.mkdir(parents=True, exist_ok=True)
     queue = [(source.name, source)]
+    cpp = library_dir / 'libclang-cpp.so'
+    if cpp.is_file():
+        queue.append((cpp.name, cpp))
     seen = set()
     while queue:
         alias, source = queue.pop()

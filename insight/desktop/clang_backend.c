@@ -4,7 +4,17 @@
 #endif
 #include "clang_backend.h"
 #include "glib_compat.h"
+#ifdef HAVE_CLANG_CPP
+#include "clang_calls.h"
+#endif
 #include <string.h>
+gboolean insight_clang_cpp_available(void) {
+#ifdef HAVE_CLANG_CPP
+ return TRUE;
+#else
+ return FALSE;
+#endif
+}
 gboolean insight_clang_source(const gchar *path) {
  const gchar *dot=path ? strrchr(path,'.'):NULL;if(!dot) return FALSE;const gchar *extensions[]={".c",".h",".cc",".cpp",".cxx",".hpp",".hh",".hxx"};for(guint i=0;i<G_N_ELEMENTS(extensions);i++) if(!g_ascii_strcasecmp(dot,extensions[i])) return TRUE;return FALSE;
 }
@@ -252,6 +262,9 @@ InsightClangResult *insight_clang_parse(const gchar *path,const gchar *text,cons
  if(code!=CXError_Success || !tu) {clang_disposeIndex(index);insight_clang_result_free(r);g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_FAILED,"Clang could not parse the translation unit");return NULL;}
  GString *diagnostics=g_string_new(NULL);for(guint i=0;i<clang_getNumDiagnostics(tu) && diagnostics->len<65536;i++) {CXDiagnostic d=clang_getDiagnostic(tu,i);if(clang_getDiagnosticSeverity(d)>=CXDiagnostic_Error) r->errors=TRUE;gchar *message=string(clang_formatDiagnostic(d,clang_defaultDiagnosticDisplayOptions()));g_string_append_printf(diagnostics,"%s\n",message);g_free(message);clang_disposeDiagnostic(d);}r->diagnostics=g_string_free(diagnostics,FALSE);
  Parse p={r,path,text,strlen(text),g_array_new(FALSE,FALSE,sizeof(InsightSymbol)),g_array_new(FALSE,FALSE,sizeof(InsightSymbol)),g_ptr_array_new_with_free_func(g_free),cancel,0};clang_visitChildren(clang_getTranslationUnitCursor(tu),visit,&p);
+#ifdef HAVE_CLANG_CPP
+ InsightClangResult command={0};GPtrArray *cpp_args=arguments(path,root,resources,&command);r->internal_calls=insight_clang_cpp_calls(path,text,(const gchar *const *)cpp_args->pdata,cpp_args->len,overlays,p.relations,p.owned,cancel);g_ptr_array_unref(cpp_args);g_free(command.command_source);g_free(command.parse_language);
+#endif
  clang_getInclusions(tu,inclusion,&p);if(root) {gchar *manifest=g_build_filename(root,"compile_commands.json",NULL);include_dependency(&p,manifest);g_free(manifest);manifest=g_build_filename(root,"build","compile_commands.json",NULL);include_dependency(&p,manifest);g_free(manifest);}
  CXFile file=clang_getFile(tu,path);if(file && !(cancel && g_cancellable_is_cancelled(cancel))) {CXSourceRange range=clang_getRange(clang_getLocationForOffset(tu,file,0),clang_getLocationForOffset(tu,file,p.length));CXToken *tokens=NULL;unsigned n=0;clang_tokenize(tu,range,&tokens,&n);if(n<=200000) {CXCursor *cursors=g_new0(CXCursor,n);clang_annotateTokens(tu,tokens,n,cursors);for(guint i=0;i<n;i++) if(clang_getTokenKind(tokens[i])==CXToken_Identifier) {CXCursor cursor=clang_getCursorReferenced(cursors[i]);if(clang_Cursor_isNull(cursor)) cursor=cursors[i];if(!kind(cursor)) continue;guint begin=0,end=0;CXSourceRange extent=clang_getTokenExtent(tu,tokens[i]);if(location(clang_getRangeStart(extent),path,NULL,NULL,&begin) && location(clang_getRangeEnd(extent),path,NULL,NULL,&end) && begin<end && end<=p.length) {InsightClangToken token={begin,end,role(cursor)};g_array_append_val(r->tokens,token);}}g_free(cursors);}else r->limited=TRUE;clang_disposeTokens(tu,tokens,n);}
  InsightSymbol coverage={"@file",path,"","@file",1,"","",r->digest};g_array_append_val(p.relations,coverage);InsightSymbol clang_coverage={"@clangfile",path,"","@clangfile",1,"",(r->errors || r->ambiguous_command) ? "partial":"complete",r->digest};g_array_append_val(p.relations,clang_coverage);

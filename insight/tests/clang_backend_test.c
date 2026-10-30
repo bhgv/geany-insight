@@ -1,4 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
 #include "../desktop/clang_backend.h"
 #include "../desktop/call_paths.h"
 #include <glib/gstdio.h>
@@ -53,6 +56,9 @@ int main(void) {
  const gchar *text="#include \"api.h\"\nint pick(int x){return x;}\nint pick(double x){return 2;}\nint main(){ Box b; int v=pick(1); return b.run(v); }\n";
  g_assert_true(g_file_set_contents(header,"struct Box { int run(int x){return x;} };\n",-1,NULL));g_assert_true(g_file_set_contents(path,text,-1,NULL));
  GError *error=NULL;InsightClangResult *r=insight_clang_parse(path,text,root,NULL,NULL,NULL,&error);g_assert_no_error(error);g_assert_nonnull(r);g_assert_false(r->errors);g_assert_cmpuint(r->tokens->len,>,5);
+#ifdef HAVE_CLANG_CPP
+ g_assert_true(r->internal_calls);
+#endif
  const InsightSymbol *matches[8];g_assert_cmpuint(insight_index_query(r->symbols,"pick",TRUE,NULL,"f",path,0,matches,8),==,2);for(guint i=0;i<2;i++) if(matches[i]->line==2) g_assert_cmpstr(matches[i]->signature,==,"(int x)");
  g_assert_cmpuint(insight_index_query(r->relations,"pick",TRUE,NULL,"@call",path,0,matches,8),==,1);gchar **positions=g_strsplit(matches[0]->signature,":",3);guint start=(guint)g_ascii_strtoull(positions[0],NULL,10),end=(guint)g_ascii_strtoull(positions[1],NULL,10);g_assert_cmpuint(end-start,==,4);g_assert_cmpmem(text+start,4,"pick",4);g_strfreev(positions);gchar *called_usr=g_strdup(matches[0]->scope);g_assert_nonnull(strstr(called_usr,"pick"));g_assert_cmpuint(insight_index_query(r->relations,called_usr,TRUE,NULL,"@clangdef",path,0,matches,8),==,1);g_assert_cmpuint(matches[0]->line,==,2);
  g_assert_cmpuint(insight_index_query(r->relations,"run",TRUE,NULL,"@call",path,0,matches,8),==,1);g_assert_nonnull(strstr(matches[0]->scope,"Box"));g_assert_true(insight_clang_dependencies_fresh(r->relations,path));

@@ -2816,3 +2816,4 @@ Clang source limit is 2 MiB per file.	Предел разбора Clang — 2 М
 Open a named source file to create a temporary workspace.	Откройте исходник с именем файла для создания временной рабочей области.
 Source workspace is not ready.	Рабочая область исходников ещё не готова.
 Open-source workspace exceeds the symbol limit.	Рабочая область открытых файлов превышает предел символов.
+Call edges: direct Clang C++ AST	Связи вызовов: прямой разбор C++ AST Clang

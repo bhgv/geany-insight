@@ -698,7 +698,7 @@ static gboolean database_identity(const gchar *root) {
  g_free(identity);g_free(policy);return changed;
 }
 static gchar *source_stamp(const gchar *native,const gchar *language,gint encoding) {
- gchar *stamp=insight_project_db_stamp(native,FALSE);if(!stamp) return NULL;gchar *value=g_strdup_printf("%s:%d:%s:clang%d-v6",language?language:"",encoding,stamp,insight_clang_available());g_free(stamp);return value;
+ gchar *stamp=insight_project_db_stamp(native,FALSE);if(!stamp) return NULL;gchar *value=g_strdup_printf("%s:%d:%s:clang%d-cpp%d-v7",language?language:"",encoding,stamp,insight_clang_available(),insight_clang_cpp_available());g_free(stamp);return value;
 }
 static void restore_project_database(const gchar *root) {
  InsightProjectDb db={0};GError *error=NULL;

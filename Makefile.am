@@ -755,3 +755,8 @@ EXTRA_DIST += insight/tools/bundle_clang.py
 insightdoc_DATA += insight/docs/clang.md
 
 dist_insightdocmedia_DATA += insight/docs/media/semantic-browsing.svg
+
+EXTRA_DIST += insight/tools/build_external_clang.py external/README.md .gitmodules
+
+insightdoc_DATA += insight/docs/parser-engines.md
+EXTRA_DIST += .github/workflows/insight-external-clang.yml

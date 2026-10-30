@@ -460,3 +460,5 @@ libgeany_la_SOURCES += insight-side-tabs.c insight-side-tabs.h
 libgeany_la_SOURCES += ../insight/desktop/clang_backend.c ../insight/desktop/clang_backend.h
 
 libgeany_la_SOURCES += insight-clang.c insight-clang.h
+
+libgeany_la_SOURCES += ../insight/desktop/clang_calls.cpp ../insight/desktop/clang_calls.h

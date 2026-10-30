@@ -1,0 +1,50 @@
+name: Insight compiler built from external sources
+on:
+  push:
+    branches: [main]
+    paths:
+      - .gitmodules
+      - external/**
+      - insight/tools/build_external_clang.py
+      - .github/workflows/insight-external-clang.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: insight-external-clang-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-sdk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned editable compiler sources
+        run: git submodule update --init --depth 1 external/llvm-project
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build python3 meson libgtk-3-dev gettext python3-docutils patchelf xvfb xauth
+      - uses: actions/cache@v4
+        with:
+          path: _external-clang
+          key: external-llvm-${{ runner.os }}-${{ hashFiles('external/README.md', 'insight/tools/build_external_clang.py') }}
+      - name: Build Clang and LLVM directly from the pinned sources
+        run: python3 insight/tools/build_external_clang.py --jobs 2
+      - name: Build editor with the source SDK and direct C++ AST adapter
+        run: |
+          meson setup _source-editor --prefix="$PWD/_source-install" --libdir=lib -Dclang-sdk="$PWD/_external-clang-sdk" -Dclang=enabled -Dclang-cpp=enabled -Dclang-bundle=true -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
+          meson compile -C _source-editor
+          meson install -C _source-editor
+      - name: Validate source-built semantic services and temporary workspaces
+        run: |
+          GEANY_INSIGHT_PREFIX="$PWD/_source-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s '-screen 0 1600x1200x24' meson test -C _source-editor --print-errorlogs 'Insight Clang semantic frontend' 'Insight native source routes and flow GUI' 'Insight temporary open-file workspace GUI'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: external-clang-source-validation
+          path: |
+            _external-clang-sdk/source-manifest.json
+            _source-editor/meson-logs/testlog.txt
+            _source-editor/meson-logs/meson-log.txt
+          retention-days: 7
