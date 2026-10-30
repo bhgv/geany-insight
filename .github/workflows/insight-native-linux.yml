@@ -333,10 +333,22 @@ jobs:
           fi
           exit "$ai_layout_failed"
       - name: Check manual project membership browser
+        id: project-membership
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |
-          INSIGHT_MEMBERSHIP_CAPTURE="$PWD/project-membership.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight project membership browser GUI' 'Insight master file list project GUI' 'Insight typed nonrecursive MFL directories GUI' 'Insight overview GUI'
+          membership_failed=0
+          INSIGHT_MEMBERSHIP_CAPTURE="$PWD/project-membership.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight project membership browser GUI' 'Insight master file list project GUI' 'Insight typed nonrecursive MFL directories GUI' 'Insight overview GUI' || membership_failed=1
           cp _native/meson-logs/testlog.txt project-membership-testlog.txt
+          exit "$membership_failed"
+      - name: Publish project membership check evidence
+        if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: insight-project-membership
+          path: |
+            project-membership.jpg
+            project-membership-testlog.txt
+          retention-days: 7
       - name: Check active editor focus and command recording
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' && steps.menu-palettes.outcome == 'success' && steps.source-routes.outcome == 'success' && steps.ai-layout.outcome == 'success' }}
         run: |

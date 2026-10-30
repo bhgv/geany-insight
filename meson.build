@@ -1232,6 +1232,6 @@ endif
 
 install_data('insight/docs/clang.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 
-install_data('insight/docs/media/semantic-browsing.svg', 'insight/docs/media/project-membership.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
+install_data('insight/docs/media/semantic-browsing.svg', 'insight/docs/media/project-membership.svg', 'insight/docs/media/project-membership.jpg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
 
 install_data('insight/docs/parser-engines.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')

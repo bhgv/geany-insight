@@ -763,3 +763,5 @@ EXTRA_DIST += .github/workflows/insight-external-clang.yml
 
 dist_insightdocmedia_DATA += insight/docs/media/project-membership.svg
 EXTRA_DIST += insight/tests/project_membership_gui_test.c
+
+dist_insightdocmedia_DATA += insight/docs/media/project-membership.jpg
