@@ -6,6 +6,11 @@ on:
       - .gitmodules
       - external/**
       - insight/tools/build_external_clang.py
+      - insight/desktop/clang_backend.*
+      - insight/desktop/clang_calls.*
+      - insight/tests/clang_backend_test.c
+      - meson.build
+      - meson_options.txt
       - .github/workflows/insight-external-clang.yml
   workflow_dispatch:
 permissions:
