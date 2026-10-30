@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install build dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y autoconf automake autopoint libtool gettext pkg-config libgtk-3-dev libclang-dev llvm-dev python3-docutils xvfb
+        run: sudo apt-get update -qq && sudo apt-get install -y autoconf automake autopoint libtool gettext pkg-config libgtk-3-dev libclang-dev libclang-cpp-dev llvm-dev python3-docutils xvfb
       - name: Check source lists and GLib fallback semantics
         run: |
           python3 insight/tests/build_sources_test.py
@@ -47,7 +47,8 @@ jobs:
           mkdir _autotools
           cd _autotools
           ../configure --prefix="$PWD/install" --disable-html-docs --disable-pdf-docs --disable-api-docs --disable-gtkdoc-header CFLAGS="-O2 -Werror=implicit-function-declaration $GLIB_API_CEILING -DINSIGHT_GLIB_COMPAT_FORCE_FALLBACK=1" CXXFLAGS="-O2 $GLIB_API_CEILING"
-          grep -E "^#define HAVE_LIBCLANG 1" config.h
+          grep -E "^#define HAVE_CLANG_CPP 1" config.h
+          ! ldd src/.libs/libgeany.so | grep -E "libclang\.so"
           make -k -j2
       - name: Install and verify linked programs
         run: |

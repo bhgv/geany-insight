@@ -97,7 +97,7 @@ def main():
     shutil.copy2(ROOT / 'COPYING', destination / 'data/GPL-2')
     shutil.copytree(ROOT / 'styles', destination / 'data/styles')
     shutil.copytree(ROOT / 'fonts', destination / 'data/fonts')
-    if re.search(r'^#define HAVE_LIBCLANG 1$', (a.build / 'config.h').read_text(), re.MULTILINE):
+    if re.search(r'^#define HAVE_CLANG_CPP 1$', (a.build / 'config.h').read_text(), re.MULTILINE):
         installed_prefix = Path(next(option['value'] for option in options if option['name'] == 'prefix'))
         clang_data = installed_prefix / 'data/insight/clang'
         manifest = clang_data / 'runtime.json'

@@ -1,5 +1,8 @@
 # Clang C/C++
 
+> **Native C++ backend:** The editor now uses Clang C++ APIs for parsing, symbol lists, semantic coloring, preprocessing, compilation settings and Sema completion. It no longer links or bundles the libclang C runtime and does not run a second parser. Use `clang-cpp` plus LLVM and Clang development headers, or the source-built SDK in `external/llvm-project`. `--with-clang` is the Autotools option; the old `--with-libclang` spelling is only a compatibility alias. Minimal builds remain available with `-Dclang=disabled` or `--without-clang`. Earlier migration notes below describe intermediate stages.
+
+
 Clang-enabled portable builds carry libclang, its shared runtime dependencies,
 resource headers and redistribution notices. Neither the `clang` executable nor
 Python is needed by the native frontend. Project headers, generated files and

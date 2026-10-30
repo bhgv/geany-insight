@@ -462,3 +462,6 @@ libgeany_la_SOURCES += ../insight/desktop/clang_backend.c ../insight/desktop/cla
 libgeany_la_SOURCES += insight-clang.c insight-clang.h
 
 libgeany_la_SOURCES += ../insight/desktop/clang_calls.cpp ../insight/desktop/clang_calls.h
+
+# LLVM/Clang uses its own RTTI; do not change Scintilla target flags.
+libgeany_la_CXXFLAGS = $(AM_CXXFLAGS) -fno-rtti

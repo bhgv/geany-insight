@@ -30,7 +30,7 @@ endif
 glib = deps[0]
 gtk = deps[2]
 
-# Normal builds require libclang. Minimal builds must opt out explicitly;
+# Normal builds require the native Clang C++ API. Minimal builds must opt out explicitly;
 # release bundles also carry the runtime. No compiler subprocess is used.
 clang_sdk = find_program('llvm-config', 'llvm-config-22', 'llvm-config-21', 'llvm-config-20', 'llvm-config-19', 'llvm-config-18', 'llvm-config-17', 'llvm-config-16', 'llvm-config-15', 'llvm-config-14', required: false)
 clang_args = []
@@ -44,24 +44,16 @@ if get_option('clang-sdk') != ''
  clang_dirs = [get_option('clang-sdk') / 'lib']
  clang_sdk = find_program(get_option('clang-sdk') / 'bin/llvm-config', required: true)
 endif
-clang_dep = cc.find_library('clang', dirs: clang_dirs, required: false)
-clang_enabled = not get_option('clang').disabled() and clang_dep.found() and cc.has_header('clang-c/Index.h', args: clang_args)
-if get_option('clang').enabled() and not clang_enabled
- error('Clang is required: install matching libclang headers/library and llvm-config (Debian/Ubuntu: libclang-dev llvm-dev). For an intentional minimal build use -Dclang=disabled.')
-endif
-if clang_enabled
- deps += clang_dep
- add_project_arguments(clang_args, language: ['c', 'cpp'])
-endif
-
 clang_cpp_dep = cxx.find_library('clang-cpp', dirs: clang_dirs, required: false)
 clang_llvm_dep = cxx.find_library('LLVM', dirs: clang_dirs, required: false)
-clang_cpp_enabled = clang_enabled and not get_option('clang-cpp').disabled() and clang_cpp_dep.found() and clang_llvm_dep.found() and cxx.has_header('clang/Tooling/Tooling.h', args: clang_args)
-if get_option('clang-cpp').enabled() and not clang_cpp_enabled
- error('Direct Clang AST backend requested: build external/llvm-project or install matching libclang-cpp development libraries')
+clang_enabled = not get_option('clang').disabled() and not get_option('clang-cpp').disabled() and clang_cpp_dep.found() and clang_llvm_dep.found() and cxx.has_header('clang/Tooling/Tooling.h', args: clang_args)
+clang_cpp_enabled = clang_enabled
+if (get_option('clang').enabled() or get_option('clang-cpp').enabled()) and not clang_enabled
+ error('Native Clang C++ backend required: build external/llvm-project or install Clang C++ development headers, clang-cpp and LLVM. Minimal builds use -Dclang=disabled.')
 endif
-if clang_cpp_enabled
+if clang_enabled
  deps += [clang_cpp_dep, clang_llvm_dep]
+ add_project_arguments(clang_args, language: ['c', 'cpp'])
 endif
 
 # detect libc
@@ -73,9 +65,6 @@ endif
 gnu_source = glibc
 
 cdata = configuration_data()
-if clang_enabled
- cdata.set('HAVE_LIBCLANG', 1)
-endif
 if clang_cpp_enabled
  cdata.set('HAVE_CLANG_CPP', 1)
 endif

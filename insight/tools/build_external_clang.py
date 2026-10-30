@@ -47,7 +47,7 @@ def main():
                  '-DLLVM_ENABLE_ZLIB=OFF', '-DLLVM_ENABLE_ZSTD=OFF',
                  '-DLLVM_ENABLE_TERMINFO=OFF', '-DLLVM_ENABLE_LIBXML2=OFF']
     compile_command = ['cmake', '--build', str(build), '--parallel', str(args.jobs),
-                       '--target', 'libclang', 'clang-cpp', 'llvm-config', 'clang-resource-headers']
+                       '--target', 'clang-cpp', 'llvm-config', 'clang-resource-headers']
     if args.plan:
         print(json.dumps({'revision': revision, 'configure': configure, 'build': compile_command, 'sdk': str(sdk)}, indent=2))
         return
@@ -59,7 +59,7 @@ def main():
             parser.error('Do not reuse a compiler cache with local source edits; rebuild normally')
         required = [build / 'CMakeCache.txt', build / 'bin' / ('llvm-config.exe' if os.name == 'nt' else 'llvm-config')]
         if os.name != 'nt':
-            required += [build / 'lib/libclang.so', build / 'lib/libclang-cpp.so', build / 'lib/libLLVM.so']
+            required += [build / 'lib/libclang-cpp.so', build / 'lib/libLLVM.so']
         if not all(p.is_file() for p in required):
             parser.error('Incomplete compiler cache; rebuild normally')
         print('Reusing pinned source compiler outputs; no source timestamps are used as a cache key')

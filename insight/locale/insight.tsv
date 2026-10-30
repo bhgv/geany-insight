@@ -2819,3 +2819,5 @@ Open-source workspace exceeds the symbol limit.	Рабочая область о
 Call edges: direct Clang C++ AST	Связи вызовов: прямой разбор C++ AST Clang
 Direct AST: expression/type references, destinations, function definitions and bodies	Прямой AST: ссылки выражений и типов, переходы, определения и тела функций
 libclang: symbol lists, semantic colors and completion	libclang: списки символов, семантическая подсветка и автодополнение
+Clang C++: symbols, semantic colors and Sema completion	Clang C++: символы, семантическая подсветка и автодополнение Sema
+Native Clang C++ is unavailable in this build. Build external/llvm-project or install Clang C++ development headers, clang-cpp and LLVM; use -Dclang=enabled or --with-clang=yes. Portable builds must include the Clang C++ runtime.	Прямой Clang C++ недоступен в этой сборке. Соберите external/llvm-project или установите заголовки Clang C++, clang-cpp и LLVM; включите -Dclang=enabled или --with-clang=yes. Переносимая сборка должна включать библиотеки Clang C++.

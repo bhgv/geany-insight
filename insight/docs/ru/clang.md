@@ -1,5 +1,8 @@
 # Clang C/C++
 
+> **Прямой C++ backend:** Разбор, списки символов, семантическая подсветка, препроцессор, настройки компиляции и автодополнение Sema теперь используют C++ API Clang. Редактор больше не линкует и не поставляет C-библиотеку libclang; повторного разбора другим frontend-ом нет. Нужны `clang-cpp`, LLVM и заголовки Clang либо SDK, собранный из `external/llvm-project`. Для Autotools используется `--with-clang`; старое `--with-libclang` осталось только совместимым именем опции. Минимальная сборка: `-Dclang=disabled` или `--without-clang`. Заметки о промежуточных этапах ниже сохранены как история переноса.
+
+
 Clang-enabled portable builds carry libclang, its shared runtime dependencies,
 resource headers and redistribution notices. Neither the `clang` executable nor
 Python is needed by the native frontend. Project headers, generated files and

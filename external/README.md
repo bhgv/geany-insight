@@ -43,3 +43,5 @@ without rebuilding because of fresh checkout timestamps. It rejects local source
 edits. Use a normal build after modifying Clang; do not use this cache option.
 When updating the gitlink to a different commit, update the explicit PIN in the
 builder and review C++ API compatibility as part of that change.
+
+The editor now links only `clang-cpp` and LLVM. The SDK helper builds `clang-cpp`, `llvm-config` and resource headers; `libclang` is not a build target or a runtime requirement. Existing compiler caches may contain unused old libclang files; the portable bundler does not copy them. CI asserts both that the installed editor does not load `libclang.so` and that the installation contains no such library.

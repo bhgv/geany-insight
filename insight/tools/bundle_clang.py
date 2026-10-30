@@ -33,15 +33,15 @@ def main():
     if not any(licenses.iterdir()):
         raise SystemExit('Clang/LLVM redistribution license files missing from SDK')
     if sys.platform == 'win32':
-        source = next((p for p in (sdk / 'bin').glob('*.dll') if p.name.lower() in ('libclang.dll', 'clang.dll')), None)
+        source = next((p for p in (sdk / 'bin').glob('*.dll') if 'clang-cpp' in p.name.lower()), None)
         if not source:
-            raise SystemExit('libclang DLL missing in SDK bin')
+            raise SystemExit('clang-cpp DLL missing in SDK bin')
         destination = prefix / 'bin'
         destination.mkdir(parents=True, exist_ok=True)
         sdk_bin = {p.name.lower(): p for p in (sdk / 'bin').glob('*.dll')}
         system = Path(os.environ['SystemRoot']) / 'System32'
         system_names = {p.name.lower() for p in system.iterdir() if p.is_file()}
-        queue = [source] + [p for p in (sdk / 'bin').glob('*.dll') if 'clang-cpp' in p.name.lower()]
+        queue = [source]
         copied = set()
         while queue:
             source = queue.pop()
@@ -61,7 +61,7 @@ def main():
         return
     if not sys.platform.startswith('linux'):
         raise SystemExit('Clang portable bundling currently supports Linux and Windows; use an SDK-linked non-bundle build here')
-    source = library_dir / 'libclang.so'
+    source = library_dir / 'libclang-cpp.so'
     if not source.is_file():
         raise SystemExit('Clang shared library missing: ' + str(source))
     if not shutil.which('patchelf'):
@@ -69,9 +69,6 @@ def main():
     destination = prefix / args.libdir / 'geany/clang'
     destination.mkdir(parents=True, exist_ok=True)
     queue = [(source.name, source)]
-    cpp = library_dir / 'libclang-cpp.so'
-    if cpp.is_file():
-        queue.append((cpp.name, cpp))
     seen = set()
     while queue:
         alias, source = queue.pop()

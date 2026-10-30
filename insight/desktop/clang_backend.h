@@ -2,6 +2,7 @@
 #ifndef INSIGHT_CLANG_BACKEND_H
 #define INSIGHT_CLANG_BACKEND_H
 #include <gio/gio.h>
+G_BEGIN_DECLS
 #include "../core/index.h"
 typedef enum { INSIGHT_CLANG_TYPE,INSIGHT_CLANG_FUNCTION,INSIGHT_CLANG_MEMBER,INSIGHT_CLANG_CONSTANT,INSIGHT_CLANG_VARIABLE,INSIGHT_CLANG_NAMESPACE,INSIGHT_CLANG_MACRO } InsightClangRole;
 typedef struct { guint begin,end;InsightClangRole role; } InsightClangToken;
@@ -23,4 +24,5 @@ typedef struct { gchar *name,*signature,*type,*comment;GPtrArray *parameters;gui
 GPtrArray *insight_clang_complete(const gchar *,const gchar *,guint,const gchar *,const gchar *,GHashTable *,GCancellable *,GError **);
 void insight_clang_result_free(InsightClangResult *);
 gboolean insight_clang_import(InsightClangResult *,const gchar *path,InsightIndex *symbols,InsightIndex *relations);
+G_END_DECLS
 #endif

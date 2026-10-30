@@ -67,7 +67,9 @@ jobs:
           output = subprocess.check_output(['ldd', '-r', str(root / 'lib/libgeany.so')], text=True, stderr=subprocess.STDOUT)
           print(output)
           assert 'not found' not in output and 'undefined symbol:' not in output
-          for name in ('libclang.so', 'libclang-cpp', 'libLLVM'):
+          assert 'libclang.so' not in output
+          assert not list((root / 'lib/geany/clang').glob('libclang.so*'))
+          for name in ('libclang-cpp', 'libLLVM'):
               rows = [line for line in output.splitlines() if name in line]
               assert rows and all(str(root / 'lib/geany/clang') in line for line in rows), (name, output)
           PYCODE
