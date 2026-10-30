@@ -13,14 +13,18 @@ extern "C" {
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/Frontend/PCHContainerOperations.h>
 #include <clang/Index/USRGeneration.h>
+#include <clang/Lex/Lexer.h>
 #include <clang/Tooling/Tooling.h>
 #include <llvm/ADT/SmallString.h>
 #include <cstring>
 #include <string>
 #include <vector>
+#include <set>
 namespace {
 class Calls : public clang::RecursiveASTVisitor<Calls> {
  clang::SourceManager &sm;
+ const clang::LangOptions &language;
+ const gchar *text;
  const clang::FunctionDecl *owner=nullptr;
  const gchar *path;
  gsize length;
@@ -30,6 +34,25 @@ class Calls : public clang::RecursiveASTVisitor<Calls> {
  gchar *own(const std::string &s) {auto *p=g_strdup(s.c_str());g_ptr_array_add(strings,p);return p;}
  bool active() {return valid && !(cancel && g_cancellable_is_cancelled(cancel));}
  std::string usr(const clang::Decl *decl) {llvm::SmallString<128> value;if(clang::index::generateUSRForDecl(decl,value)) return {};return value.str().str();}
+ void reference(const clang::ValueDecl *target,clang::SourceLocation at) {
+  // Macro expansions and non-identifier/operator spellings retain the C frontend
+  // result: a spelling location alone cannot describe their source occurrence.
+  if(!target || !active() || at.isInvalid() || at.isMacroID() || !sm.isWrittenInMainFile(at)) return;
+  const auto *identifier=target->getIdentifier();if(!identifier) return;
+  auto name=identifier->getName().str(),identity=usr(target->getCanonicalDecl());
+  unsigned begin=sm.getFileOffset(at),size=clang::Lexer::MeasureTokenLength(at,sm,language);
+  if(identity.empty() || !size || begin>length || size>length-begin || size!=name.size() || std::memcmp(text+begin,name.data(),size)) return;
+  // An instantiated template can visit the same spelling more than once. Do
+  // not invent multiple source occurrences for one resolved identity.
+  auto key=std::make_pair(begin,identity);if(!references.insert(key).second) return;
+  if(rows->len>=50000) {valid=false;return;}
+  gsize first=begin,last=begin;while(first && text[first-1]!='\n' && last-first<512) first--;while(last<length && text[last]!='\n' && last-first<1024) last++;
+  gchar *snippet=g_utf8_make_valid(text+first,last-first);g_ptr_array_add(strings,snippet);
+  gsize line_start=begin;while(line_start && text[line_start-1]!='\n') line_start--;
+  guint column=(guint)g_utf8_strlen(text+line_start,begin-line_start)+1;
+  gchar *range=g_strdup_printf("%u:%u:%u",begin,begin+size,column);g_ptr_array_add(strings,range);
+  InsightSymbol row={own(name),path,own(identity),"@clangref",sm.getSpellingLineNumber(at),range,snippet,""};g_array_append_val(rows,row);
+ }
  void call(const clang::FunctionDecl *target,clang::SourceLocation at) {
   if(!owner || !target || !active()) return;
   at=sm.getSpellingLoc(at);if(at.isInvalid() || !sm.isWrittenInMainFile(at)) return;
@@ -42,9 +65,10 @@ class Calls : public clang::RecursiveASTVisitor<Calls> {
   InsightSymbol row={own(name),path,own(callee),virt ? "@clangvirtual":"@clangcall",sm.getSpellingLineNumber(at),range,own(caller),own(file)};g_array_append_val(rows,row);
  }
 public:
+ std::set<std::pair<unsigned,std::string>> references;
  GArray *rows=g_array_new(FALSE,FALSE,sizeof(InsightSymbol));
  GPtrArray *strings=g_ptr_array_new_with_free_func(g_free);
- Calls(clang::ASTContext &context,const gchar *p,gsize n,GCancellable *c):sm(context.getSourceManager()),path(p),length(n),cancel(c) {}
+ Calls(clang::ASTContext &context,const gchar *p,const gchar *source,GCancellable *c):sm(context.getSourceManager()),language(context.getLangOpts()),text(source),path(p),length(std::strlen(source)),cancel(c) {}
  ~Calls() {g_array_unref(rows);g_ptr_array_unref(strings);}
  bool TraverseDecl(clang::Decl *decl) {
   if(!decl) return true;if(!active()) return false;
@@ -54,6 +78,8 @@ public:
  }
  bool TraverseLambdaExpr(clang::LambdaExpr *) {return true;} // no invented enclosing-function edge
  bool VisitStmt(clang::Stmt *) {if(++visited>200000) valid=false;return active();}
+ bool VisitDeclRefExpr(clang::DeclRefExpr *expr) {reference(expr->getDecl(),expr->getLocation());return active();}
+ bool VisitMemberExpr(clang::MemberExpr *expr) {reference(expr->getMemberDecl(),expr->getMemberLoc());return active();}
  bool VisitCallExpr(clang::CallExpr *expr) {
   auto *callee=expr->getCallee()->IgnoreParenImpCasts();auto loc=callee->getExprLoc();if(auto *member=llvm::dyn_cast<clang::MemberExpr>(callee)) loc=member->getMemberLoc();
   call(expr->getDirectCallee(),loc);return active();
@@ -68,8 +94,10 @@ extern "C" gboolean insight_clang_cpp_calls(const gchar *path,const gchar *text,
  clang::IgnoringDiagConsumer diagnostics;
  auto ast=clang::tooling::buildASTFromCodeWithArgs(text,flags,path,"clang-tool",std::make_shared<clang::PCHContainerOperations>(),clang::tooling::getClangStripDependencyFileAdjuster(),files,&diagnostics);
  if(!ast || ast->getDiagnostics().hasErrorOccurred() || (cancel && g_cancellable_is_cancelled(cancel))) return FALSE;
- Calls calls(ast->getASTContext(),path,std::strlen(text),cancel);if(!calls.TraverseDecl(ast->getASTContext().getTranslationUnitDecl()) || rows->len+calls.rows->len>100000) return FALSE;
- for(guint i=rows->len;i>0;i--) {auto &row=g_array_index(rows,InsightSymbol,i-1);if(!std::strcmp(row.kind,"@clangcall") || !std::strcmp(row.kind,"@clangvirtual")) g_array_remove_index(rows,i-1);}
+ Calls calls(ast->getASTContext(),path,text,cancel);if(!calls.TraverseDecl(ast->getASTContext().getTranslationUnitDecl()) || rows->len+calls.rows->len>100000) return FALSE;
+ for(guint i=rows->len;i>0;i--) {auto &row=g_array_index(rows,InsightSymbol,i-1);bool replaced_reference=false;
+  if(!std::strcmp(row.kind,"@clangref")) {char *end=nullptr;auto offset=g_ascii_strtoull(row.signature,&end,10);if(end && *end==':' && offset<=G_MAXUINT) replaced_reference=calls.references.count(std::make_pair((unsigned)offset,std::string(row.scope)))!=0;}
+  if(replaced_reference || !std::strcmp(row.kind,"@clangcall") || !std::strcmp(row.kind,"@clangvirtual")) g_array_remove_index(rows,i-1);}
  g_array_append_vals(rows,calls.rows->data,calls.rows->len);for(guint i=0;i<calls.strings->len;i++) g_ptr_array_add(owned,g_ptr_array_index(calls.strings,i));g_ptr_array_set_free_func(calls.strings,nullptr);return TRUE;
 }
 #endif

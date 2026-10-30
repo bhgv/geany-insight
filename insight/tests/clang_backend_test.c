@@ -49,9 +49,36 @@ static void header_commands(void) {
  g_free(root_json);g_free(build_json);g_free(common_json);g_free(a_json);g_free(z_json);g_free(z);g_free(a);g_remove(common);g_remove(hpp);g_free(common);g_free(hpp);g_free(plain);g_free(other);g_remove(db);g_remove(header);g_remove(cpp);g_remove(config);g_rmdir(src);g_rmdir(inc);g_rmdir(sdk);g_rmdir(build);g_rmdir(root);g_free(db);g_free(header);g_free(cpp);g_free(config);g_free(src);g_free(inc);g_free(sdk);g_free(build);g_free(root);
  g_print("Clang headers: companion flags, relative includes, inherited C++, ambiguous C/C++, explicit -x, deterministic ties, completion and dependency invalidation passed\n");
 }
+/* Same-spelling locals must remain distinct; member ranges cover the token,
+ * not the containing object expression, and columns count UTF-8 characters. */
+static void expression_references(void) {
+ gchar *root=g_dir_make_tmp("clang-expression-refs-XXXXXX",NULL),*path=g_build_filename(root,"refs.cpp",NULL);
+ const gchar *text="struct Obj {int field;};\nint take(int argument){return argument;}\nint sample(){Obj o; int value=1; /* русский */ o.field=value; {int value=2; o.field+=value;} return take(o.field)+value;}\n";
+ GError *error=NULL;InsightClangResult *r=insight_clang_parse(path,text,root,NULL,NULL,NULL,&error);
+ g_assert_no_error(error);g_assert_nonnull(r);g_assert_false(r->errors);
+#ifdef HAVE_CLANG_CPP
+ g_assert_true(r->internal_calls);
+#endif
+ const InsightSymbol *found[16];
+ g_assert_cmpuint(insight_index_query(r->relations,"field",TRUE,NULL,"@clangref",path,0,found,16),==,3);
+ for(guint i=0;i<3;i++) {
+  gchar **range=g_strsplit(found[i]->signature,":",3);guint begin=(guint)g_ascii_strtoull(range[0],NULL,10),end=(guint)g_ascii_strtoull(range[1],NULL,10),column=(guint)g_ascii_strtoull(range[2],NULL,10);
+  g_assert_cmpuint(end-begin,==,5);g_assert_cmpmem(text+begin,5,"field",5);
+  const gchar *line=text+begin;while(line>text && line[-1]!='\n') line--;
+  g_assert_cmpuint(column,==,(guint)g_utf8_strlen(line,text+begin-line)+1);g_assert_nonnull(strstr(found[i]->type,"o.field"));g_strfreev(range);
+ }
+ g_assert_cmpuint(insight_index_query(r->relations,"value",TRUE,NULL,"@clangref",path,0,found,16),==,3);
+ guint same=0;for(guint i=0;i<3;i++) for(guint j=i+1;j<3;j++) if(!strcmp(found[i]->scope,found[j]->scope)) same++;
+ // Two uses of the outer declaration and one use of the shadowing declaration.
+ g_assert_cmpuint(same,==,1);
+ g_assert_cmpuint(insight_index_query(r->relations,"take",TRUE,NULL,"@clangref",path,0,found,16),==,1);
+ insight_clang_result_free(r);g_rmdir(root);g_free(path);g_free(root);
+ g_print("Clang expression references: exact member tokens, shadowed locals, UTF-8 columns and no duplicate occurrences passed\n");
+}
 int main(void) {
  if(!insight_clang_available()) return 77;
  header_commands();
+ expression_references();
  gchar *root=g_dir_make_tmp("insight-clang-XXXXXX",NULL),*path=g_build_filename(root,"test.cpp",NULL),*header=g_build_filename(root,"api.h",NULL);
  const gchar *text="#include \"api.h\"\nint pick(int x){return x;}\nint pick(double x){return 2;}\nint main(){ Box b; int v=pick(1); return b.run(v); }\n";
  g_assert_true(g_file_set_contents(header,"struct Box { int run(int x){return x;} };\n",-1,NULL));g_assert_true(g_file_set_contents(path,text,-1,NULL));

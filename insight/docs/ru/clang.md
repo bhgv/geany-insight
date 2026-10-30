@@ -163,3 +163,9 @@ keep `-Dclang-bundle=true` so target systems do not need a system libclang.
 ## Editable source and direct C++ AST adapter
 
 The pinned LLVM/Clang source is now in `external/llvm-project` (Git submodule). Build it with `python3 insight/tools/build_external_clang.py`; pass the resulting prefix as `-Dclang-sdk=... -Dclang-cpp=enabled`. Direct C++ AST call edges now feed caller/callee trees and call paths. The remaining C frontend is still used for definitions, reference rows, tokens and completion. See [parser-engines.md](parser-engines.md) for exact scope, source build instructions and other-language candidates.
+
+## Ссылки в выражениях через C++ AST
+
+При включённом `clang-cpp` прямой проход C++ AST теперь собирает не только вызовы, но и ссылки `DeclRefExpr` и `MemberExpr`. USR различает одноимённые переменные во вложенных областях и перегруженные функции. Диапазон поля покрывает его имя, а не всё выражение с объектом. Смещения хранятся в байтах, колонки для отображения — в символах UTF-8. Эти записи используются существующими переходами и поиском использований.
+
+Обновление атомарное: при отмене, ошибках разбора или превышении лимитов остаётся прежний результат. Для макрорасширений, операторных имён, ссылок на типы и пропущенных тел лямбд сохраняются записи C-интерфейса. Объявления, записи мест назначения, подсветка и автодополнение пока используют libclang. Это следующий этап переноса, а не замена всех сервисов компилятора. Кеш проекта однократно обновляется для новой версии ссылок.
