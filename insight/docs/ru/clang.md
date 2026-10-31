@@ -215,3 +215,5 @@ The pinned LLVM/Clang source is now in `external/llvm-project` (Git submodule). 
 В Debian/Ubuntu пакет `libclang-dev` содержит заголовки Clang C++. Его название не означает, что редактор линкует C-библиотеку libclang. Установите также `libclang-cpp-dev llvm-dev` либо соберите закреплённый SDK из исходников.
 
 Многострочные параметры макросов поддерживают переносы LF и CRLF. В списке ссылок показывается строка вызова, а номер колонки учитывает UTF-8 (в том числе кириллицу). Повторные обращения к одному определению используют одну цель перехода.
+
+`clang-bundle=auto` is the default: it bundles internal Linux/Windows SDKs. `-Dclang-bundle=true` also bundles the system provider; `-Dclang-bundle=false` keeps an SDK-linked development install without copying the runtime.

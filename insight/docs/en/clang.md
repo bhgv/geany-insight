@@ -215,3 +215,5 @@ The normal frontend builds one AST and produces fresh symbol/reference/token sna
 On Debian/Ubuntu, `libclang-dev` supplies the Clang C++ development headers; its package name does not imply that the editor links the libclang C runtime. Install it together with `libclang-cpp-dev llvm-dev`, or build the pinned source SDK.
 
 Multiline macro parameter lists accept both LF and CRLF line continuations. Reference results include the source line; their display columns count UTF-8 characters, including Cyrillic text. Repeated expansions share one definition destination.
+
+`clang-bundle=auto` is the default: it bundles internal Linux/Windows SDKs. `-Dclang-bundle=true` also bundles the system provider; `-Dclang-bundle=false` keeps an SDK-linked development install without copying the runtime.

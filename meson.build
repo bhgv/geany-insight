@@ -79,7 +79,7 @@ if not get_option('clang').disabled() and not get_option('clang-cpp').disabled()
   message('Clang provider: ' + get_option('clang-provider'))
  endif
 endif
-clang_install_bundle = clang_enabled and (get_option('clang-bundle') or (clang_internal and host_machine.system() in ['linux', 'windows']))
+clang_install_bundle = clang_enabled and (get_option('clang-bundle') == 'true' or (get_option('clang-bundle') == 'auto' and clang_internal and host_machine.system() in ['linux', 'windows']))
 
 # detect libc
 glibc = false

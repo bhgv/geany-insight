@@ -62,3 +62,5 @@ meson setup build-system -Dclang-provider=system
 A custom internal SDK uses `-Dclang-sdk=/absolute/prefix` or
 `--with-clang=/absolute/prefix`; do not combine it with the system provider.
 Minimal builds use `-Dclang=disabled` or `--without-clang` and need no SDK.
+
+`clang-bundle=auto` is the default: it bundles internal Linux/Windows SDKs. `-Dclang-bundle=true` also bundles the system provider; `-Dclang-bundle=false` keeps an SDK-linked development install without copying the runtime.

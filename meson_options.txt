@@ -10,7 +10,7 @@ option('mac-integration', type: 'feature', description: 'enable for improved mac
 
 option('clang', type: 'feature', value: 'enabled', description: 'C/C++ semantic indexing using native Clang C++ APIs')
 option('clang-provider', type: 'combo', choices: ['internal', 'system'], value: 'internal', description: 'Clang source: pinned external/llvm-project SDK by default, system only by explicit selection')
-option('clang-bundle', type: 'boolean', value: false, description: 'Also bundle a system Clang runtime (internal Linux/Windows SDKs are always bundled)')
+option('clang-bundle', type: 'combo', choices: ['auto', 'true', 'false'], value: 'auto', description: 'Bundle compiler runtime: auto bundles the internal SDK on Linux/Windows; true/false override it')
 
 option('clang-cpp', type: 'feature', value: 'auto', description: 'Enable the native Clang C++ backend (no libclang)')
 option('clang-sdk', type: 'string', value: '', description: 'Internal SDK prefix; empty uses _external-clang-sdk in the source tree')
