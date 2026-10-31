@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "insight-virtual-list.h"
 #include <gdk/gdkkeysyms.h>
+#include <string.h>
 #define WINDOW_ROWS 256u
 typedef struct {
  GtkTreeView *view;GtkListStore *store;GtkWidget *scroll,*bar;
@@ -28,6 +29,50 @@ static void range(VirtualList *s) {
  gtk_adjustment_configure(s->position,s->first,0,MAX(s->count,page),1,MAX(1,page-1),page);
  gtk_widget_set_sensitive(s->bar,s->count>page);s->updating=FALSE;
 }
+typedef struct { GtkTreeIter iter;gboolean used; } ExistingRow;
+typedef struct { ExistingRow *existing;GValue *values; } DesiredRow;
+static gchar *identity(GtkTreeModel *model,GtkTreeIter *iter) {
+ GString *key=g_string_new(NULL);gboolean strings=FALSE;
+ for(gint column=0;column<gtk_tree_model_get_n_columns(model);column++) {
+  if(gtk_tree_model_get_column_type(model,column)!=G_TYPE_STRING) continue;
+  strings=TRUE;gchar *value=NULL;gtk_tree_model_get(model,iter,column,&value,-1);
+  g_string_append_printf(key,"%" G_GSIZE_FORMAT ":%s",value?strlen(value):0,value?value:"");g_free(value);
+ }
+ if(!strings) {GValue value=G_VALUE_INIT;gtk_tree_model_get_value(model,iter,0,&value);gchar *text=g_strdup_value_contents(&value);g_string_append(key,text);g_free(text);g_value_unset(&value);}
+ return g_string_free(key,FALSE);
+}
+static void queue_free(gpointer data) {g_queue_free(data);}
+static void reconcile(VirtualList *s,guint first) {
+ gint columns=gtk_tree_model_get_n_columns(GTK_TREE_MODEL(s->store));
+ GType *types=g_new(GType,columns);for(gint n=0;n<columns;n++) types[n]=gtk_tree_model_get_column_type(GTK_TREE_MODEL(s->store),n);
+ GtkListStore *temporary=gtk_list_store_newv(columns,types);g_free(types);
+ GArray *existing=g_array_sized_new(FALSE,FALSE,sizeof(ExistingRow),WINDOW_ROWS);
+ GHashTable *keys=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,queue_free);
+ GtkTreeIter iter;gboolean valid=gtk_tree_model_get_iter_first(GTK_TREE_MODEL(s->store),&iter);
+ while(valid) {ExistingRow row={iter,FALSE};g_array_append_val(existing,row);valid=gtk_tree_model_iter_next(GTK_TREE_MODEL(s->store),&iter);}
+ /* The array no longer grows: queue pointers remain valid. */
+ for(guint n=0;n<existing->len;n++) {
+  ExistingRow *row=&g_array_index(existing,ExistingRow,n);gchar *key=identity(GTK_TREE_MODEL(s->store),&row->iter);
+  GQueue *queue=g_hash_table_lookup(keys,key);if(!queue) {queue=g_queue_new();g_hash_table_insert(keys,key,queue);}else g_free(key);g_queue_push_tail(queue,row);
+ }
+ GArray *desired=g_array_new(FALSE,FALSE,sizeof(DesiredRow));
+ for(guint n=first;s->fill && n<s->count && n-first<WINDOW_ROWS;n++) {
+  s->fill(temporary,n,s->data);
+  if(!gtk_tree_model_get_iter_first(GTK_TREE_MODEL(temporary),&iter)) continue;
+  gchar *key=identity(GTK_TREE_MODEL(temporary),&iter);GQueue *queue=g_hash_table_lookup(keys,key);g_free(key);
+  DesiredRow row={queue?g_queue_pop_head(queue):NULL,g_new0(GValue,columns)};
+  if(row.existing) row.existing->used=TRUE;
+  for(gint column=0;column<columns;column++) gtk_tree_model_get_value(GTK_TREE_MODEL(temporary),&iter,column,&row.values[column]);
+  g_array_append_val(desired,row);gtk_list_store_clear(temporary);
+ }
+ for(guint n=0;n<existing->len;n++) {ExistingRow *row=&g_array_index(existing,ExistingRow,n);if(!row->used) gtk_list_store_remove(s->store,&row->iter);}
+ for(guint n=0;n<desired->len;n++) {
+  DesiredRow *row=&g_array_index(desired,DesiredRow,n);
+  if(row->existing) iter=row->existing->iter;else gtk_list_store_append(s->store,&iter);
+  for(gint column=0;column<columns;column++) {gtk_list_store_set_value(s->store,&iter,column,&row->values[column]);g_value_unset(&row->values[column]);}g_free(row->values);
+ }
+ g_object_unref(temporary);g_array_unref(desired);g_hash_table_unref(keys);g_array_unref(existing);
+}
 static void render(VirtualList *s,guint first) {
  if(s->updating) return;
  guint page=visible_rows(s);first=MIN(first,s->count>page?s->count-page:0);
@@ -35,8 +80,7 @@ static void render(VirtualList *s,guint first) {
  s->updating=TRUE;s->first=first;
  gboolean sensitive=gtk_widget_get_sensitive(GTK_WIDGET(s->view));
  gtk_widget_set_sensitive(GTK_WIDGET(s->view),FALSE);
- gtk_list_store_clear(s->store);
- for(guint n=first;s->fill && n<s->count && n-first<WINDOW_ROWS;n++) s->fill(s->store,n,s->data);
+ reconcile(s,first);
  GtkAdjustment *local=gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(s->scroll));
  gtk_adjustment_set_value(local,0);
  gtk_widget_set_sensitive(GTK_WIDGET(s->view),sensitive);s->updating=FALSE;range(s);
@@ -47,6 +91,8 @@ static void changed(GtkAdjustment *adjustment,gpointer data) {
 }
 static gboolean wheel(GtkWidget *widget,GdkEventScroll *event,gpointer data) {
  (void)widget;VirtualList *s=data;gdouble delta=0;
+ /* Let the existing panel font zoom handle Ctrl+wheel. */
+ if(event->state&GDK_CONTROL_MASK) return FALSE;
  if(event->direction==GDK_SCROLL_DOWN) delta=3;
  else if(event->direction==GDK_SCROLL_UP) delta=-3;
  else if(event->direction==GDK_SCROLL_SMOOTH) delta=event->delta_y*3;

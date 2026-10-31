@@ -21,6 +21,10 @@ int main(int argc,char **argv) {
  g_assert_cmpuint(insight_virtual_list_count(GTK_TREE_VIEW(view)),==,1000000);
  g_assert_cmpuint(filled,<=,256);
  g_assert_cmpint(gtk_tree_model_iter_n_children(GTK_TREE_MODEL(store),NULL),<=,256);
+ GtkTreePath *path=gtk_tree_path_new_from_indices(5,-1);
+ GtkTreeRowReference *retained=gtk_tree_row_reference_new(GTK_TREE_MODEL(store),path);gtk_tree_path_free(path);
+ insight_virtual_list_replace(GTK_TREE_VIEW(view),1000000,fill,NULL,release);drain();
+ g_assert_true(gtk_tree_row_reference_valid(retained));gtk_tree_row_reference_free(retained);
  insight_virtual_list_position(GTK_TREE_VIEW(view),900000);drain();
  g_assert_cmpuint(insight_virtual_list_first(GTK_TREE_VIEW(view)),==,900000);
  GtkTreeIter iter;g_assert_true(gtk_tree_model_get_iter_first(GTK_TREE_MODEL(store),&iter));guint row=0;gtk_tree_model_get(GTK_TREE_MODEL(store),&iter,1,&row,-1);g_assert_cmpuint(row,==,900000);
@@ -31,8 +35,8 @@ int main(int argc,char **argv) {
  g_assert_cmpuint(insight_virtual_list_first(GTK_TREE_VIEW(view)),>,999800);
  g_assert_cmpint(gtk_tree_model_iter_n_children(GTK_TREE_MODEL(store),NULL),<=,256);
  insight_virtual_list_replace(GTK_TREE_VIEW(view),3,fill,NULL,release);drain();
- g_assert_cmpuint(freed_count,==,1);g_assert_cmpuint(insight_virtual_list_first(GTK_TREE_VIEW(view)),==,0);
+ g_assert_cmpuint(freed_count,==,2);g_assert_cmpuint(insight_virtual_list_first(GTK_TREE_VIEW(view)),==,0);
  g_assert_cmpint(gtk_tree_model_iter_n_children(GTK_TREE_MODEL(store),NULL),==,3);
- gtk_widget_destroy(window);g_object_unref(store);drain();g_assert_cmpuint(freed_count,==,2);
+ gtk_widget_destroy(window);g_object_unref(store);drain();g_assert_cmpuint(freed_count,==,3);
  g_print("Virtual list: million-row provider, bounded 256 GTK rows, global jump, reverse scroll, shrink and snapshot ownership passed\n");return 0;
 }
