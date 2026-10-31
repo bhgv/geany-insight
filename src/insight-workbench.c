@@ -4181,7 +4181,7 @@ static void membership_dialog_changed(GtkWidget *widget,gpointer data) {
  gboolean automatic=!*master && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->automatic));
  if(!*master && d->candidate->automatic && !automatic) {
   GError *freeze_error=NULL;InsightProjectFiles *frozen=NULL;
-  if(wb.scan || wb.scan_worker || wb.skipped || wb.files->len>=10000) g_set_error_literal(&freeze_error,G_IO_ERROR,G_IO_ERROR_BUSY,"Finish a complete project scan before switching to manual membership");
+  if(wb.scan || wb.scan_worker || !wb.report_scan_completed || wb.skipped || wb.files->len>=10000) g_set_error_literal(&freeze_error,G_IO_ERROR,G_IO_ERROR_BUSY,"Finish a complete project scan before switching to manual membership");
   else {GPtrArray *snapshot=g_ptr_array_new();for(guint i=0;i<wb.files->len;i++) g_ptr_array_add(snapshot,g_ptr_array_index(wb.files,i));for(guint i=0;i<d->paths->len;i++) g_ptr_array_add(snapshot,g_ptr_array_index(d->paths,i));frozen=insight_project_files_freeze(d->candidate,d->root,snapshot,&freeze_error);g_ptr_array_unref(snapshot);}
   if(frozen) {insight_project_files_free(d->candidate);d->candidate=frozen;for(guint i=0;i<frozen->files->len;i++) {const gchar *path=g_ptr_array_index(frozen->files,i);if(!g_ptr_array_find_with_equal_func(d->paths,path,(GEqualFunc)g_str_equal,NULL)) g_ptr_array_add(d->paths,g_strdup(path));}g_ptr_array_set_size(d->trees,0);}
   else {automatic=TRUE;g_signal_handlers_block_by_func(d->automatic,membership_dialog_changed,d);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->automatic),TRUE);g_signal_handlers_unblock_by_func(d->automatic,membership_dialog_changed,d);gtk_label_set_text(GTK_LABEL(d->browser_status),freeze_error ? insight_tr(freeze_error->message):"");}g_clear_error(&freeze_error);
