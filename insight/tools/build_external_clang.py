@@ -6,11 +6,32 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
+import sys
 import shutil
 import subprocess
 
 PIN = '3b5b5c1ec4a3095ab096dd780e84d7ab81f3d7ff'
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def check_cmake(check_output=subprocess.check_output):
+    output = check_output(['cmake', '--version'], universal_newlines=True)
+    match = re.search(r'cmake version (\d+)\.(\d+)\.(\d+)', output)
+    if not match or tuple(map(int, match.groups())) < (3, 20, 0):
+        raise ValueError(
+            'LLVM 18 requires CMake >= 3.20; found: ' + output.splitlines()[0] +
+            '. Install a newer CMake, for example: python3 -m pip install --user "cmake>=3.20,<4"'
+            '; then put "$HOME/.local/bin" first in PATH and retry build.sh.')
+
+
+def copy_tree(source, destination):
+    """Merge headers without Python 3.8-only copytree options."""
+    for directory, folders, files in os.walk(str(source)):
+        target = destination / Path(directory).relative_to(source)
+        target.mkdir(parents=True, exist_ok=True)
+        for name in files:
+            shutil.copy2(Path(directory) / name, target / name)
 
 
 def run(args):
@@ -65,6 +86,7 @@ def main():
             parser.error('Incomplete compiler cache; rebuild normally')
         print('Reusing pinned source compiler outputs; no source timestamps are used as a cache key')
     else:
+        check_cmake()
         run(configure)
         if args.configure_only:
             return
@@ -72,13 +94,13 @@ def main():
     include = sdk / 'include'
     for folder in (source / 'llvm/include', build / 'include', source / 'clang/include', build / 'tools/clang/include'):
         if folder.is_dir():
-            shutil.copytree(folder, include, dirs_exist_ok=True)
+            copy_tree(folder, include)
     (sdk / 'bin').mkdir(parents=True, exist_ok=True)
     executable = 'llvm-config.exe' if os.name == 'nt' else 'llvm-config'
     shutil.copy2(build / 'bin' / executable, sdk / 'bin' / executable)
     library = sdk / 'lib'
     if os.name == 'nt':
-        shutil.copytree(build / 'lib', library, dirs_exist_ok=True)
+        copy_tree(build / 'lib', library)
         for dll in (build / 'bin').glob('*.dll'):
             shutil.copy2(dll, sdk / 'bin' / dll.name)
     elif not library.exists():
@@ -108,4 +130,8 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except (ValueError, OSError, subprocess.CalledProcessError) as exc:
+        print('Internal Clang build stopped: ' + str(exc), file=sys.stderr)
+        sys.exit(1)

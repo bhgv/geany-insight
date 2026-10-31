@@ -27,7 +27,12 @@ def main():
         raise SystemExit('Clang SDK resource headers missing: ' + str(library_dir / 'clang'))
     resource = max(resource_roots, key=lambda p: tuple(int(n) for n in re.findall(r'\d+', p.name)))
     data = args.resource_destination if args.resource_destination else prefix / args.datadir / 'insight/clang'
-    shutil.copytree(resource / 'include', data / 'resources/include', dirs_exist_ok=True)
+    # Merge the header tree on Python 3.7 as well.
+    for directory, folders, files in os.walk(str(resource / 'include')):
+        target = data / 'resources/include' / Path(directory).relative_to(resource / 'include')
+        target.mkdir(parents=True, exist_ok=True)
+        for name in files:
+            shutil.copy2(Path(directory) / name, target / name)
     licenses = data / 'licenses'
     licenses.mkdir(parents=True, exist_ok=True)
     sdk = library_dir.parent

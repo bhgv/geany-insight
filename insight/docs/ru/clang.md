@@ -266,3 +266,8 @@ The pinned LLVM/Clang source is now in `external/llvm-project` (Git submodule). 
 `clang-bundle=auto` is the default: it bundles internal Linux/Windows SDKs. `-Dclang-bundle=true` also bundles the system provider; `-Dclang-bundle=false` keeps an SDK-linked development install without copying the runtime.
 
 Existing Meson build directories can be reconfigured explicitly with `meson setup --reconfigure build-editor -Dclang-provider=internal -Dclang-bundle=auto`. The internal SDK resolver accepts ELF, Darwin dylib and Windows import-library names; runtime validation for this change uses Linux.
+
+CMake >= 3.20 is required by LLVM 18. Check with `cmake --version`.
+On older distributions, install a user-local version with
+`python3 -m pip install --user "cmake>=3.20,<4"`, then run
+`export PATH="$HOME/.local/bin:$PATH"` before retrying the build.

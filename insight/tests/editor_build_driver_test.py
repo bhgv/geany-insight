@@ -15,7 +15,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 import build_editor
 import prepare_clang_sdk
-from build_external_clang import PIN
+from build_external_clang import PIN, check_cmake, copy_tree
 
 
 def sdk_fixture(sdk):
@@ -36,6 +36,24 @@ class BuildFlow(unittest.TestCase):
 
     def args(self, *args):
         return build_editor.arguments(list(args), self.root)
+
+    def test_old_cmake_reports_required_version_before_configure(self):
+        for version in ('3.10.2', '3.19.8'):
+            with self.assertRaisesRegex(ValueError, 'CMake >= 3.20'):
+                check_cmake(lambda *a, **k: 'cmake version ' + version)
+        for version in ('3.20.0', '3.31.6', '4.0.0'):
+            check_cmake(lambda *a, **k: 'cmake version ' + version)
+
+    def test_header_copy_merges_existing_tree_on_python37(self):
+        source = self.root / 'headers'
+        target = self.root / 'sdk'
+        (source / 'nested').mkdir(parents=True)
+        (source / 'nested/new.h').write_text('new')
+        target.mkdir()
+        (target / 'old.h').write_text('keep')
+        copy_tree(source, target)
+        self.assertEqual((target / 'nested/new.h').read_text(), 'new')
+        self.assertEqual((target / 'old.h').read_text(), 'keep')
 
     def test_no_arguments_print_help_without_building(self):
         output = io.StringIO()
