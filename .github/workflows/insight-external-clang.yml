@@ -119,7 +119,7 @@ jobs:
       - name: Validate source-built semantic services and temporary workspaces
         run: |
           GEANY_INSIGHT_PREFIX="$PWD/_source-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s '-screen 0 1600x1200x24' meson test -C _source-editor --print-errorlogs 'Insight Clang semantic frontend' 'Insight native source routes and flow GUI' 'Insight temporary open-file workspace GUI'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: external-clang-source-validation-${{ matrix.cmake }}
