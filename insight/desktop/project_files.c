@@ -95,7 +95,8 @@ gchar *insight_project_path_variable(const gchar *name,const gchar *root,const g
  gchar *base=canonical(root);if(!base || !name || strlen(name)>64) {g_free(base);g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid path variable context");return NULL;}
  gchar **environment=g_get_environ();gchar *result=master_variable(name,base,project,environment);g_strfreev(environment);g_free(base);
  if(result && (!*result || strlen(result)>16384 || !g_utf8_validate(result,-1,NULL) || strpbrk(result,"\r\n"))) g_clear_pointer(&result,g_free);
- if(!result) g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NOT_FOUND,"Path variable is unavailable");return result;
+ if(!result) {g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NOT_FOUND,"Path variable is unavailable");}
+ return result;
 }
 gboolean insight_project_files_set_master(InsightProjectFiles *s,const gchar *input,const gchar *root,const gchar *project,GError **error) {
  gchar *base=canonical(root);
