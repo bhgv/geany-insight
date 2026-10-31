@@ -66,3 +66,21 @@ Minimal builds use `-Dclang=disabled` or `--without-clang` and need no SDK.
 `clang-bundle=auto` is the default: it bundles internal Linux/Windows SDKs. `-Dclang-bundle=true` also bundles the system provider; `-Dclang-bundle=false` keeps an SDK-linked development install without copying the runtime.
 
 Existing Meson build directories can be reconfigured explicitly with `meson setup --reconfigure build-editor -Dclang-provider=internal -Dclang-bundle=auto`. The internal SDK resolver accepts ELF, Darwin dylib and Windows import-library names; runtime validation for this change uses Linux.
+
+## Autotools and existing Git checkouts
+
+The generated `configure` file is not tracked by Git. After pulling changes to
+`configure.ac` or `m4/`, regenerate it before configuring the editor:
+
+```sh
+NOCONFIGURE=1 ./autogen.sh
+./configure --prefix="$PWD/out"
+make -j2
+make install
+```
+
+Prepare the internal SDK with the commands at the top of this page first.
+An old generated script may print the new Git revision yet still search system
+Clang; the revision probe does not regenerate that script. A fresh script reports
+`Clang provider: internal`. Do not install system Clang to work around a stale
+script; explicitly selecting the system provider remains a separate option.

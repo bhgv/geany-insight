@@ -50,6 +50,22 @@ elsewhere uses `-Dclang-sdk=/absolute/prefix` or `--with-clang=/absolute/prefix`
 Its source manifest must match the pinned revision; its own headers and exact
 library paths are selected together.
 
+### Обновление Autotools после git pull
+
+`configure` — локальный сгенерированный файл, он не хранится в Git. Новый номер
+ревизии в его выводе не означает, что сам скрипт обновился. Если он по-прежнему
+ищет `/usr/bin/llvm-config` без выбора `system` или предлагает установить
+системные пакеты Clang старым сообщением, сначала перегенерируйте его:
+
+```sh
+NOCONFIGURE=1 ./autogen.sh
+./configure --prefix="$PWD/out"
+```
+
+Это нужно выполнять после обновления `configure.ac` или `m4/`. Внутренний SDK
+подготавливается командами выше; его отсутствие не требует установки системного
+Clang. Актуальный скрипт выводит `Clang provider: internal` после проверки SDK.
+
 | Provider | Meson | Autotools |
 | --- | --- | --- |
 | Internal SDK (default) | `meson setup build-editor` | `./configure` |
