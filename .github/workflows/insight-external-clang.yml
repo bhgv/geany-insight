@@ -98,6 +98,21 @@ jobs:
           ../configure --disable-html-docs --disable-pdf-docs --disable-api-docs --disable-gtkdoc-header
           grep -F 'Clang provider: internal' config.log
           grep -E '^#define HAVE_CLANG_CPP 1' config.h
+      - name: Build and install Autotools editor with the internal source SDK
+        run: |
+          make -C _source-autotools -j2 V=1
+          make -C _source-autotools install
+          ldd -r _source-autotools/install/lib/libgeany.so 2>&1 | tee _source-autotools/internal-link-check.txt
+          if grep -E 'undefined symbol:|not found' _source-autotools/internal-link-check.txt; then exit 1; fi
+          grep -F 'libclang-cpp' _source-autotools/internal-link-check.txt
+          grep -F 'libLLVM' _source-autotools/internal-link-check.txt
+          _source-autotools/install/bin/geany --version
+          # Reconfiguration must invalidate both final link products.
+          sleep 1
+          touch _source-autotools/src/Makefile
+          make -C _source-autotools/src -n V=1 > _source-autotools/relink-plan.txt
+          grep -E 'mode=link.*libgeany.la' _source-autotools/relink-plan.txt
+          grep -E 'mode=link.*-o geany ' _source-autotools/relink-plan.txt
       - name: Build editor with the source SDK and direct C++ AST adapter
         run: |
           meson setup _source-editor --prefix="$PWD/_source-install" --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
@@ -125,6 +140,8 @@ jobs:
           name: external-clang-source-validation-${{ matrix.cmake }}
           path: |
             _external-clang-sdk/source-manifest.json
+            _source-autotools/internal-link-check.txt
+            _source-autotools/relink-plan.txt
             _source-editor/meson-logs/testlog.txt
             _source-editor/meson-logs/meson-log.txt
           retention-days: 7

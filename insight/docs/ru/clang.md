@@ -281,3 +281,9 @@ Existing Meson build directories can be reconfigured explicitly with `meson setu
 Современный CMake использует обычную сборку upstream.
 Драйвер использует старый синтаксис `-H/-B` и запускает Ninja напрямую.
 В CI проверяются CMake 3.10.3 и текущий системный CMake.
+
+Autotools links the validated internal SDK explicitly into both libgeany and
+the editor executable using `-L… -lclang-cpp -lLLVM` for older libtool support.
+After configure changes, both are relinked automatically; deleting the LLVM
+build or running make clean is unnecessary. CI builds and installs both
+Autotools and Meson editors against the internal SDK and checks unresolved symbols.

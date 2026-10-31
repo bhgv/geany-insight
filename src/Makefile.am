@@ -28,7 +28,7 @@ bin_PROGRAMS = geany geany-insight-askpass
 lib_LTLIBRARIES = libgeany.la
 
 geany_SOURCES = main.c
-geany_LDADD = libgeany.la $(GTK_LIBS) $(INTLLIBS)
+geany_LDADD = libgeany.la $(GTK_LIBS) $(CLANG_LIBS) $(INTLLIBS)
 geany_LDFLAGS =
 
 if ENABLE_BINRELOC
@@ -127,6 +127,7 @@ libgeany_la_LIBADD = \
 	$(top_builddir)/scintilla/libscintilla.la \
 	$(builddir)/tagmanager/libtagmanager.la \
 	@GTK_LIBS@ \
+	$(CLANG_LIBS) \
 	$(MAC_INTEGRATION_LIBS) \
 	$(INTLLIBS)
 
@@ -475,3 +476,7 @@ install-clang-resources:
 	  "$(CLANG_RESOURCE_PYTHON)" "$(top_srcdir)/insight/tools/bundle_clang.py" --sdk-lib "$(CLANG_RESOURCE_LIBDIR)" --resources-only --resource-destination "$(DESTDIR)$(pkgdatadir)/insight/clang"; \
 	fi
 .PHONY: install-clang-resources
+
+# A provider/SDK change alters library dependencies even when objects are current.
+# Reconfigure must relink both targets without cleaning the expensive compiler SDK.
+libgeany.la geany: Makefile

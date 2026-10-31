@@ -279,3 +279,9 @@ stop preparation without resetting or replacing source files. It is only needed
 for the Linux/Ninja shared Clang SDK; modern CMake uses the upstream build.
 The build driver uses the older `-H/-B` command syntax and invokes Ninja directly.
 CI exercises CMake 3.10.3 as well as the current system CMake.
+
+Autotools links the validated internal SDK explicitly into both libgeany and
+the editor executable using `-L… -lclang-cpp -lLLVM` for older libtool support.
+After configure changes, both are relinked automatically; deleting the LLVM
+build or running make clean is unnecessary. CI builds and installs both
+Autotools and Meson editors against the internal SDK and checks unresolved symbols.
