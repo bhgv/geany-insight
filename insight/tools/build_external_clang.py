@@ -51,6 +51,7 @@ def main():
     if args.plan:
         print(json.dumps({'revision': revision, 'configure': configure, 'build': compile_command, 'sdk': str(sdk)}, indent=2))
         return
+    shared_suffix = '.dylib' if platform.system() == 'Darwin' else '.so'
     if args.reuse_build:
         if args.configure_only:
             parser.error('--reuse-build and --configure-only cannot be combined')
@@ -59,7 +60,7 @@ def main():
             parser.error('Do not reuse a compiler cache with local source edits; rebuild normally')
         required = [build / 'CMakeCache.txt', build / 'bin' / ('llvm-config.exe' if os.name == 'nt' else 'llvm-config')]
         if os.name != 'nt':
-            required += [build / 'lib/libclang-cpp.so', build / 'lib/libLLVM.so']
+            required += [build / ('lib/libclang-cpp' + shared_suffix), build / ('lib/libLLVM' + shared_suffix)]
         if not all(p.is_file() for p in required):
             parser.error('Incomplete compiler cache; rebuild normally')
         print('Reusing pinned source compiler outputs; no source timestamps are used as a cache key')
@@ -86,11 +87,12 @@ def main():
         parser.error('SDK lib already points elsewhere; choose another SDK directory')
     # LLVM may use libLLVM.so.18.1 or a libLLVM-18.so name, depending on
     # its shared-library configuration. Prefer the generated development link.
-    if os.name != 'nt' and not (library / 'libLLVM.so').exists():
-        candidates = sorted(p for pattern in ('libLLVM.so.*', 'libLLVM-[0-9]*.so*') for p in library.glob(pattern) if p.is_file())
+    if os.name != 'nt' and not (library / ('libLLVM' + shared_suffix)).exists():
+        patterns = ('libLLVM*.dylib',) if shared_suffix == '.dylib' else ('libLLVM.so.*', 'libLLVM-[0-9]*.so*')
+        candidates = sorted(p for pattern in patterns for p in library.glob(pattern) if p.is_file())
         if not candidates:
             parser.error('Source build is missing the LLVM shared library')
-        alias = library / 'libLLVM.so'
+        alias = library / ('libLLVM' + shared_suffix)
         if alias.is_symlink():
             parser.error('SDK contains a broken LLVM development link; choose another SDK directory')
         alias.symlink_to(candidates[0].name)

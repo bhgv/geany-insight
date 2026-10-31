@@ -64,3 +64,5 @@ A custom internal SDK uses `-Dclang-sdk=/absolute/prefix` or
 Minimal builds use `-Dclang=disabled` or `--without-clang` and need no SDK.
 
 `clang-bundle=auto` is the default: it bundles internal Linux/Windows SDKs. `-Dclang-bundle=true` also bundles the system provider; `-Dclang-bundle=false` keeps an SDK-linked development install without copying the runtime.
+
+Existing Meson build directories can be reconfigured explicitly with `meson setup --reconfigure build-editor -Dclang-provider=internal -Dclang-bundle=auto`. The internal SDK resolver accepts ELF, Darwin dylib and Windows import-library names; runtime validation for this change uses Linux.

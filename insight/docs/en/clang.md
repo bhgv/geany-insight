@@ -217,3 +217,5 @@ On Debian/Ubuntu, `libclang-dev` supplies the Clang C++ development headers; its
 Multiline macro parameter lists accept both LF and CRLF line continuations. Reference results include the source line; their display columns count UTF-8 characters, including Cyrillic text. Repeated expansions share one definition destination.
 
 `clang-bundle=auto` is the default: it bundles internal Linux/Windows SDKs. `-Dclang-bundle=true` also bundles the system provider; `-Dclang-bundle=false` keeps an SDK-linked development install without copying the runtime.
+
+Existing Meson build directories can be reconfigured explicitly with `meson setup --reconfigure build-editor -Dclang-provider=internal -Dclang-bundle=auto`. The internal SDK resolver accepts ELF, Darwin dylib and Windows import-library names; runtime validation for this change uses Linux.

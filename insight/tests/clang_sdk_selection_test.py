@@ -33,6 +33,21 @@ class InternalSdk(unittest.TestCase):
         self.assertTrue(all(p.is_relative_to(self.sdk) for p in paths))
         self.assertEqual(paths[1].name, 'libclang-cpp.so')
 
+    def test_platform_library_names(self):
+        (self.sdk / 'lib/libclang-cpp.so').unlink()
+        (self.sdk / 'lib/libLLVM.so').unlink()
+        for cpp, llvm in (('libclang-cpp.dylib', 'libLLVM.dylib'),
+                          ('libclang-cpp.dll.a', 'libLLVM.dll.a'),
+                          ('clang-cpp.lib', 'LLVM.lib')):
+            with self.subTest(cpp=cpp):
+                for name in (cpp, llvm):
+                    (self.sdk / 'lib' / name).write_text('fixture')
+                paths = resolve(self.sdk)
+                self.assertEqual(paths[1].name, cpp)
+                self.assertEqual(paths[2].name, llvm)
+                for name in (cpp, llvm):
+                    (self.sdk / 'lib' / name).unlink()
+
     def test_missing_library_does_not_use_path(self):
         (self.sdk / 'lib/libclang-cpp.so').unlink()
         with self.assertRaisesRegex(ValueError, 'libclang-cpp'):

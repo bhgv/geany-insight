@@ -217,3 +217,5 @@ The pinned LLVM/Clang source is now in `external/llvm-project` (Git submodule). 
 Многострочные параметры макросов поддерживают переносы LF и CRLF. В списке ссылок показывается строка вызова, а номер колонки учитывает UTF-8 (в том числе кириллицу). Повторные обращения к одному определению используют одну цель перехода.
 
 `clang-bundle=auto` is the default: it bundles internal Linux/Windows SDKs. `-Dclang-bundle=true` also bundles the system provider; `-Dclang-bundle=false` keeps an SDK-linked development install without copying the runtime.
+
+Existing Meson build directories can be reconfigured explicitly with `meson setup --reconfigure build-editor -Dclang-provider=internal -Dclang-bundle=auto`. The internal SDK resolver accepts ELF, Darwin dylib and Windows import-library names; runtime validation for this change uses Linux.
