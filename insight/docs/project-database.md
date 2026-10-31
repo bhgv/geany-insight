@@ -39,3 +39,5 @@ index. Header and compilation-database changes invalidate dependent C/C++ files.
 The bounded binary format remains compatible with older saved snapshots; current
 writers allow 1 million records / 256 MiB per index and 768 MiB for the full
 project database. Unsaved semantic overlays remain in memory. See [Clang](clang.md).
+
+File discovery publishes the project file list before source parsing starts. Files can be opened and edited while a background job indexes symbols and relations. During initial discovery, the list appears in batches without waiting for Clang.

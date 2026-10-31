@@ -17,7 +17,7 @@ static gboolean ready(guint parsed,guint reused,guint members) {
 static void command(const gchar *name) { GtkWidget *item=named(window,name);g_assert_nonnull(item);gtk_menu_item_activate(GTK_MENU_ITEM(item)); }
 static gboolean step(gpointer unused) {
  (void)unused;GList *list=gtk_window_list_toplevels();if(!window) for(GList *p=list;p;p=p->next) if(named(p->data,"insight-project-synchronize")) { window=p->data;break; }g_list_free(list);if(!window) return G_SOURCE_CONTINUE;
- if(g_getenv("INSIGHT_DB_CHILD")&&!strcmp(g_getenv("INSIGHT_DB_CHILD"),"create")) { if(!ready(3,0,4)) return G_SOURCE_CONTINUE;g_print("Initial project: 3 parsed, database saved\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE; }
+ if(g_getenv("INSIGHT_DB_CHILD")&&!strcmp(g_getenv("INSIGHT_DB_CHILD"),"create")) { if(!ready(3,0,4)) return G_SOURCE_CONTINUE;g_assert_cmpuint(metric("insight-db-members-ready"),==,4);g_print("Initial project: membership published before indexing; 3 parsed, database saved\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE; }
  if(phase==0) { if(!ready(0,4,4)) return G_SOURCE_CONTINUE;g_print("Reopened project: zero source files parsed, four members reused (including explicit binary)\n");g_file_set_contents(a,"int alpha(void) { return 3; }\n",-1,NULL);phase++;return G_SOURCE_CONTINUE; }
  if(phase==1) { if(!ready(1,3,4)) return G_SOURCE_CONTINUE;g_file_set_contents(added,"int gamma(void) { return 4; }\n",-1,NULL);phase++;return G_SOURCE_CONTINUE; }
  if(phase==2) { if(!ready(1,4,5)) return G_SOURCE_CONTINUE;g_remove(b);phase++;return G_SOURCE_CONTINUE; }

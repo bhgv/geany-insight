@@ -162,7 +162,7 @@ typedef struct {
  InsightIndex *base,*index;
  gboolean info_parse_local,info_across_languages;gint info_scope;
  InsightProjectFiles *membership; gchar *membership_project; gboolean membership_valid;InsightMasterSync *master_sync;guint64 membership_generation;
- GPtrArray *frames,*files,*scan_files,*scan_trees,*scan_members; gboolean scan_keep_files; GHashTable *scan_seen; guint scan_file_position,scan_tree_position; gchar *root,*cache_path; gchar *db_identity,*db_policy;GHashTable *file_stamps,*directory_stamps;InsightIndex *disk_calls,*disk_declarations,*scan_backup;gboolean force_parse,cache_validation;guint reused; guint scan,parsed,skipped;
+ GPtrArray *frames,*files,*scan_files,*scan_trees,*scan_members; gboolean scan_keep_files,scan_indexing; guint scan_index_position; GHashTable *scan_seen; guint scan_file_position,scan_tree_position; gchar *root,*cache_path; gchar *db_identity,*db_policy;GHashTable *file_stamps,*directory_stamps;InsightIndex *disk_calls,*disk_declarations,*scan_backup;gboolean force_parse,cache_validation;guint reused; guint scan,parsed,skipped;
  gchar *source_path,*source_digest; gulong source_line;
  GPtrArray *history,*definitions; gint history_position; gboolean populating;
 } Workbench;
@@ -817,29 +817,40 @@ static void index_job_done(GObject *source,GAsyncResult *result,gpointer data) {
  if(j->declarations && !j->failed) { g_hash_table_replace(wb.declarations,g_strdup(j->utf8),j->declarations);j->declarations=NULL; }
  if(!j->parsed&&!j->failed) g_hash_table_remove(wb.declarations,j->utf8);
  if(j->parsed) wb.parsed++;
- if(j->regular) {
-  g_ptr_array_add(wb.scan_members,g_strdup(j->utf8));
-  if(!wb.scan_keep_files) g_ptr_array_add(wb.files,g_strdup(j->utf8));
- }
+
  if(j->failed || j->skipped || !ok) wb.skipped++;
  if(j->failed) wb.scan_failed=TRUE;
- if(wb.scan_members->len && wb.scan_members->len%25==0) { if(!wb.scan_keep_files) files_filter(NULL,NULL); ui_set_statusbar(TRUE,"Workspace: indexing… %u files",wb.parsed); }
+ if((wb.parsed+wb.reused)%25==0) { if(!wb.scan_keep_files) files_filter(NULL,NULL); ui_set_statusbar(TRUE,"Workspace: indexing… %u files",wb.parsed); }
  if(g_get_monotonic_time()>=wb.publish_due) { wb.publish_due=g_get_monotonic_time()+1000000; refresh_index(); }
  wb.scan=g_idle_add(scan_step,NULL);
 }
 static gboolean scan_continue(void) { if(wb.scan_worker) { wb.scan=0; return G_SOURCE_REMOVE; } return G_SOURCE_CONTINUE; }
 static void scan_source_file(const char *path) {
- if(g_hash_table_contains(wb.scan_seen,path)) return;
- g_hash_table_add(wb.scan_seen,g_strdup(path));
+ if(!wb.scan_indexing) {
+  if(g_hash_table_contains(wb.scan_seen,path)) return;
+  g_hash_table_add(wb.scan_seen,g_strdup(path));
+ }
  gchar *utf8=utils_get_utf8_from_locale(path),*root=utils_get_utf8_from_locale(wb.root);
  if(wb.workspace_from_project && !insight_project_files_contains(wb.membership,root,utf8)) { g_free(root); g_free(utf8); return; }
- g_free(root); GeanyFiletype *ft=filetypes_detect_from_extension(utf8);
+ g_free(root);
+ if(!wb.scan_indexing) {
+  GStatBuf st;
+  if(!g_lstat(path,&st) && S_ISREG(st.st_mode)) {
+   g_ptr_array_add(wb.scan_members,g_strdup(utf8));
+   if(!wb.scan_keep_files) {
+    g_ptr_array_add(wb.files,g_strdup(utf8));
+    if(wb.files->len==1 || wb.files->len%100==0) files_filter(NULL,NULL);
+   }
+  }
+  g_free(utf8); return;
+ }
+ GeanyFiletype *ft=filetypes_detect_from_extension(utf8);
  /* A cached shebang language avoids reopening extensionless source on every
   * validation. Detect content only for a genuinely new/changed file. */
  const gchar *stored=g_hash_table_lookup(wb.file_stamps,utf8);
  if(ft&&ft->id==GEANY_FILETYPES_NONE&&stored) { const gchar *colon=strchr(stored,':');if(colon) { gchar *language=g_strndup(stored,colon-stored);GeanyFiletype *cached=filetypes_lookup_by_name(language);if(cached) ft=cached;g_free(language); } }
  gchar *stamp=source_stamp(path,ft?ft->name:NULL,file_prefs.default_open_encoding);
- if(!wb.force_parse&&stamp&&!g_strcmp0(stamp,g_hash_table_lookup(wb.file_stamps,utf8))&&(!insight_clang_available()||!insight_clang_source(utf8)||insight_clang_dependencies_fresh(wb.disk_calls,utf8))) { g_ptr_array_add(wb.scan_members,g_strdup(utf8));wb.reused++;g_free(stamp);g_free(utf8);return; }
+ if(!wb.force_parse&&stamp&&!g_strcmp0(stamp,g_hash_table_lookup(wb.file_stamps,utf8))&&(!insight_clang_available()||!insight_clang_source(utf8)||insight_clang_dependencies_fresh(wb.disk_calls,utf8))) { wb.reused++;g_free(stamp);g_free(utf8);return; }
  ft=filetypes_detect_from_file(utf8);g_free(stamp);stamp=source_stamp(path,ft?ft->name:NULL,file_prefs.default_open_encoding);
  IndexJob *j=g_new0(IndexJob,1);j->compile_root=wb.root ? utils_get_utf8_from_locale(wb.root):NULL;j->clang_resources=g_build_filename(app->datadir,"insight","clang","resources",NULL);wb.scan_backup=insight_index_ref(wb.base); j->index=wb.base; wb.base=NULL;j->calls=insight_index_ref(wb.disk_calls);j->outline=insight_index_ref(wb.disk_declarations);j->stamp=stamp; j->path=g_strdup(path); j->utf8=utf8; j->language=g_strdup(ft ? ft->name : NULL); j->lang=ft ? ft->lang : -1; j->read=ft && ft->id!=GEANY_FILETYPES_NONE; j->encoding=file_prefs.default_open_encoding; j->generation=wb.scan_generation; j->epoch=workbench_epoch;
  wb.scan_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.scan_worker,index_job_done,NULL); g_task_set_task_data(task,j,index_job_free); g_task_run_in_thread(task,index_job_run); g_object_unref(task);
@@ -847,6 +858,18 @@ static void scan_source_file(const char *path) {
 static gboolean scan_step(gpointer data) {
  (void)data;
  if((!wb.frames->len && wb.scan_file_position>=wb.scan_files->len && wb.scan_tree_position>=wb.scan_trees->len) || wb.scan_members->len>=10000) {
+  /* Enumeration must never wait for Clang. Publish membership before parsing. */
+  if(!wb.scan_indexing) {
+   wb.scan_indexing=TRUE; wb.scan_index_position=0;
+   g_ptr_array_set_size(wb.files,0);
+   for(guint n=0;n<wb.scan_members->len;n++) g_ptr_array_add(wb.files,g_strdup(g_ptr_array_index(wb.scan_members,n)));
+   files_filter(NULL,NULL); tree_refresh();
+   g_object_set_data(G_OBJECT(main_widgets.window),"insight-db-members-ready",GUINT_TO_POINTER(wb.files->len+1));
+  }
+  if(wb.scan_index_position<wb.scan_members->len) {
+   gchar *native=utils_get_locale_from_utf8(g_ptr_array_index(wb.scan_members,wb.scan_index_position++));
+   scan_source_file(native);g_free(native);return scan_continue();
+  }
   gboolean limited=wb.scan_members->len>=10000;
   wb.scan=0; wb.relation_dirty=TRUE;wb.report_scan_completed=!wb.scan_failed;
   /* Project membership is separate from the symbol index. Publish a complete
@@ -923,6 +946,7 @@ static gboolean start_scan(const char *root) {
   for(guint i=0;i<wb.membership->trees->len;i++) g_ptr_array_add(wb.scan_trees,utils_get_locale_from_utf8(g_ptr_array_index(wb.membership->trees,i)));
  }
  g_object_set_data(G_OBJECT(main_widgets.window),"insight-db-saved",NULL);g_object_set_data(G_OBJECT(main_widgets.window),"insight-db-scanning",GINT_TO_POINTER(1));
+ wb.scan_indexing=FALSE;wb.scan_index_position=0;g_object_set_data(G_OBJECT(main_widgets.window),"insight-db-members-ready",NULL);
  wb.scan_file_position=wb.scan_tree_position=0; wb.parsed=wb.skipped=wb.reused=0;wb.report_scan_completed=FALSE; mark_index_dirty(); wb.scan_failed=FALSE; wb.scan=g_idle_add(scan_step,NULL); ui_set_statusbar(TRUE,wb.force_parse?"Rebuilding project symbols…":known_only?"Project database restored; checking file stamps…":"Synchronizing project membership and changed files…"); return TRUE;
 }
 static void choose_root(GtkButton *button,gpointer data) {
