@@ -267,11 +267,20 @@ jobs:
         run: SANITIZE=undefined python3 insight/tests/diff_test.py
       - name: Validate selection parsing without charconv
         run: SANITIZE=undefined python3 insight/tests/selection_parse_test.py
+      - name: Verify explicit compiler provider selection
+        run: |
+          python3 insight/tests/clang_sdk_selection_test.py
+          if meson setup _missing-internal -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled > missing-internal.log 2>&1; then
+            echo 'Default configuration silently used system Clang'
+            exit 1
+          fi
+          grep -F 'build_external_clang.py' missing-internal.log
+          meson setup _minimal-provider -Dclang=disabled -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
       - name: Configure and build the complete editor
         id: native-build
         run: |
           python3 insight/tools/build_i18n.py --check
-          meson setup _native --prefix="$PWD/_native-install" --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=true -Dclang=enabled -Dclang-cpp=enabled -Dclang-bundle=true -Dmac-integration=disabled
+          meson setup _native --prefix="$PWD/_native-install" --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=true -Dclang-provider=system -Dclang=enabled -Dclang-cpp=enabled -Dclang-bundle=true -Dmac-integration=disabled
           meson compile -C _native
           meson install -C _native
           python3 - <<'PY'

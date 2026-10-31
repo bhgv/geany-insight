@@ -1,6 +1,6 @@
 # Clang C/C++
 
-> **Native C++ backend:** The editor now uses Clang C++ APIs for parsing, symbol lists, semantic coloring, preprocessing, compilation settings and Sema completion. It no longer links or bundles the libclang C runtime and does not run a second parser. Use `clang-cpp` plus LLVM and Clang development headers, or the source-built SDK in `external/llvm-project`. `--with-clang` is the Autotools option; the old `--with-libclang` spelling is only a compatibility alias. Minimal builds remain available with `-Dclang=disabled` or `--without-clang`.
+> **Default Clang provider:** the internal SDK from `external/llvm-project`, staged in `_external-clang-sdk`. System Clang requires `-Dclang-provider=system` or `--with-clang-provider=system`. Missing internal files never trigger a system fallback. Native C++ APIs supply parsing, symbols, coloring, preprocessing and Sema; libclang is not required.
 
 
 Clang-enabled portable builds carry clang-cpp, LLVM and their shared dependencies,
@@ -35,14 +35,33 @@ stale results. Named open files, including unsaved headers, are Clang overlays.
 
 ## Build and portable runtime
 
-Normal source builds require Clang (`-Dclang=enabled`, the default). `-Dclang=enabled` requires matching
-Clang C++ development headers, clang-cpp, LLVM and `llvm-config`. Disabled/minimal builds keep lexical
-editing. `-Dclang-bundle=true` copies the SDK runtime, transitive dependencies,
-resource headers and licenses into the portable installation. Linux bundling
-requires `patchelf`. Windows DLL dependencies come from the same compiler SDK.
-The native Linux and Windows portable workflows enable both options. Minimum
-GTK 3.22 / GLib 2.56 remain unchanged. Autotools linked builds support
-`--with-clang=yes` by default, or `auto`, `no` or an SDK prefix; portable bundling uses Meson.
+Prepare the pinned internal SDK once, and rebuild after editing Clang:
+
+```sh
+git submodule update --init --depth 1 external/llvm-project
+python3 insight/tools/build_external_clang.py --jobs 2
+meson setup build-editor
+meson compile -C build-editor
+meson install -C build-editor
+```
+
+No provider or SDK option is needed for a normal source build. An internal SDK
+elsewhere uses `-Dclang-sdk=/absolute/prefix` or `--with-clang=/absolute/prefix`.
+Its source manifest must match the pinned revision; its own headers and exact
+library paths are selected together.
+
+| Provider | Meson | Autotools |
+| --- | --- | --- |
+| Internal SDK (default) | `meson setup build-editor` | `./configure` |
+| System Clang (explicit) | `-Dclang-provider=system` | `--with-clang-provider=system` |
+| Minimal lexical build | `-Dclang=disabled` | `--without-clang` |
+
+Internal Linux/Windows Meson installs automatically carry the SDK runtime,
+resource headers and licenses. A system-provider portable installation uses
+`-Dclang-bundle=true`. Linux bundling needs `patchelf`. Autotools internal builds
+link the selected SDK directly and retain its runtime path on Unix; use Meson
+for a self-contained portable installation. Minimal builds need no SDK.
+GTK 3.22 / GLib 2.56 remain the minimum versions.
 
 Parsing is bounded to 2 MiB per source, 32 MiB of unsaved overlays, 200000 visited
 cursors/tokens, 50000 declarations and 100000 relation records. Cancellation is
@@ -157,7 +176,7 @@ If Clang commands are greyed out, that executable was built without the native C
 Installing a `clang` executable afterwards cannot enable a compiled-out backend.
 **Clang analysis details…** now opens an explanation even in a minimal build;
 **Reanalyze** reports missing support or an unsupported file instead of silently
-returning. Rebuild after installing `libclang-dev libclang-cpp-dev llvm-dev` on Debian/Ubuntu.
+returning. Only the explicitly selected system provider uses installed packages such as `libclang-dev libclang-cpp-dev llvm-dev` on Debian/Ubuntu; the default uses the source SDK.
 For intentional minimal builds use `-Dclang=disabled` or `--without-clang`;
 `auto` remains an explicit opt-in to optional detection. For portable installs,
 keep `-Dclang-bundle=true` so target systems do not need system Clang C++ libraries.

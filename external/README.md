@@ -9,8 +9,6 @@ infrastructure is required by Clang; copying only `clang/` is insufficient.
 git submodule update --init --depth 1 external/llvm-project
 python3 insight/tools/build_external_clang.py --jobs 2
 meson setup build-editor --prefix="$PWD/install" --libdir=lib \
-  -Dclang-sdk="$PWD/_external-clang-sdk" \
-  -Dclang=enabled -Dclang-cpp=enabled -Dclang-bundle=true \
   -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false
 meson compile -C build-editor
 meson install -C build-editor
@@ -46,3 +44,21 @@ When updating the gitlink to a different commit, update the explicit PIN in the
 builder and review C++ API compatibility as part of that change.
 
 The editor now links only `clang-cpp` and LLVM. The SDK helper builds `clang-cpp`, `llvm-config` and resource headers; `libclang` is not a build target or a runtime requirement. Existing compiler caches may contain unused old libclang files; the portable bundler does not copy them. CI asserts both that the installed editor does not load `libclang.so` and that the installation contains no such library.
+
+## Provider selection
+
+The internal SDK above is the default for Meson and Autotools. Prepare it first;
+configuration fails with its build command if the manifest, pinned revision,
+headers or libraries are missing. No system fallback is attempted. Linux/Windows
+Meson installs automatically bundle the internal runtime and resource headers.
+
+System Clang is opt-in:
+
+```sh
+meson setup build-system -Dclang-provider=system
+./configure --with-clang-provider=system
+```
+
+A custom internal SDK uses `-Dclang-sdk=/absolute/prefix` or
+`--with-clang=/absolute/prefix`; do not combine it with the system provider.
+Minimal builds use `-Dclang=disabled` or `--without-clang` and need no SDK.

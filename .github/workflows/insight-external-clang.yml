@@ -6,6 +6,9 @@ on:
       - .gitmodules
       - external/**
       - insight/tools/build_external_clang.py
+      - insight/tools/select_clang_sdk.py
+      - insight/tests/clang_sdk_selection_test.py
+      - configure.ac
       - insight/desktop/clang_backend.*
       - insight/desktop/clang_calls.*
       - insight/tests/clang_backend_test.c
@@ -33,7 +36,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build python3 meson libgtk-3-dev gettext python3-docutils patchelf xvfb xauth
+          sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build python3 meson autoconf automake libtool libgtk-3-dev gettext python3-docutils patchelf xvfb xauth
       - uses: actions/cache/restore@v4
         id: compiler-cache
         with:
@@ -54,9 +57,19 @@ jobs:
         with:
           path: _external-clang
           key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
+      - name: Check internal SDK selection and no system fallback
+        run: python3 insight/tests/clang_sdk_selection_test.py
+      - name: Verify Autotools defaults to the internal SDK
+        run: |
+          NOCONFIGURE=1 ./autogen.sh
+          mkdir _source-autotools
+          cd _source-autotools
+          ../configure --disable-html-docs --disable-pdf-docs --disable-api-docs --disable-gtkdoc-header
+          grep -F 'Clang provider: internal' config.log
+          grep -E '^#define HAVE_CLANG_CPP 1' config.h
       - name: Build editor with the source SDK and direct C++ AST adapter
         run: |
-          meson setup _source-editor --prefix="$PWD/_source-install" --libdir=lib -Dclang-sdk="$PWD/_external-clang-sdk" -Dclang=enabled -Dclang-cpp=enabled -Dclang-bundle=true -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
+          meson setup _source-editor --prefix="$PWD/_source-install" --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
           meson compile -C _source-editor
           meson install -C _source-editor
       - name: Verify the editor loads the source-built compiler runtime

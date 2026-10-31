@@ -30,31 +30,56 @@ endif
 glib = deps[0]
 gtk = deps[2]
 
-# Normal builds require the native Clang C++ API. Minimal builds must opt out explicitly;
-# release bundles also carry the runtime. No compiler subprocess is used.
-clang_sdk = find_program('llvm-config', 'llvm-config-22', 'llvm-config-21', 'llvm-config-20', 'llvm-config-19', 'llvm-config-18', 'llvm-config-17', 'llvm-config-16', 'llvm-config-15', 'llvm-config-14', required: false)
+# Internal and system discovery are deliberately separate: no fallback is
+# allowed when the pinned SDK is missing or incomplete.
 clang_args = []
 clang_dirs = []
-if clang_sdk.found()
- clang_args = ['-I' + run_command(clang_sdk, '--includedir', check: true).stdout().strip()]
- clang_dirs = [run_command(clang_sdk, '--libdir', check: true).stdout().strip()]
+clang_sdk = disabler()
+clang_enabled = false
+clang_cpp_enabled = false
+clang_internal = get_option('clang-provider') == 'internal'
+clang_runtime_dir = ''
+if not get_option('clang').disabled() and not get_option('clang-cpp').disabled()
+ if clang_internal
+  sdk_prefix = get_option('clang-sdk')
+  if sdk_prefix == ''
+   sdk_prefix = meson.current_source_dir() / '_external-clang-sdk'
+  endif
+  sdk_check = run_command(find_program('python3'), meson.current_source_dir() / 'insight/tools/select_clang_sdk.py', '--sdk', sdk_prefix, check: false)
+  if sdk_check.returncode() != 0
+   error(sdk_check.stderr())
+  endif
+  sdk_paths = sdk_check.stdout().strip().split('\n')
+  clang_args = ['-I' + sdk_paths[0] / 'include']
+  clang_dirs = [sdk_paths[0] / 'lib']
+  clang_runtime_dir = clang_dirs[0]
+  clang_sdk = find_program(sdk_paths[3], required: true)
+  clang_cpp_dep = declare_dependency(link_args: [sdk_paths[1]])
+  clang_llvm_dep = declare_dependency(link_args: [sdk_paths[2]])
+ else
+  if get_option('clang-sdk') != ''
+   error('clang-sdk selects an internal SDK; it cannot be combined with clang-provider=system')
+  endif
+  clang_sdk = find_program('llvm-config', 'llvm-config-22', 'llvm-config-21', 'llvm-config-20', 'llvm-config-19', 'llvm-config-18', 'llvm-config-17', 'llvm-config-16', 'llvm-config-15', 'llvm-config-14', required: false)
+  if clang_sdk.found()
+   clang_args = ['-I' + run_command(clang_sdk, '--includedir', check: true).stdout().strip()]
+   clang_dirs = [run_command(clang_sdk, '--libdir', check: true).stdout().strip()]
+  endif
+  clang_cpp_dep = cxx.find_library('clang-cpp', dirs: clang_dirs, required: false)
+  clang_llvm_dep = cxx.find_library('LLVM', dirs: clang_dirs, required: false)
+ endif
+ clang_enabled = clang_cpp_dep.found() and clang_llvm_dep.found() and cxx.has_header('clang/Tooling/Tooling.h', args: clang_args)
+ clang_cpp_enabled = clang_enabled
+ if (get_option('clang').enabled() or get_option('clang-cpp').enabled()) and not clang_enabled
+  error('Selected Clang C++ provider is unavailable. Prepare the internal SDK, explicitly select -Dclang-provider=system, or use -Dclang=disabled for a minimal build.')
+ endif
+ if clang_enabled
+  deps += [clang_cpp_dep, clang_llvm_dep]
+  add_project_arguments(clang_args, language: ['c', 'cpp'])
+  message('Clang provider: ' + get_option('clang-provider'))
+ endif
 endif
-if get_option('clang-sdk') != ''
- clang_args = ['-I' + get_option('clang-sdk') / 'include']
- clang_dirs = [get_option('clang-sdk') / 'lib']
- clang_sdk = find_program(get_option('clang-sdk') / 'bin/llvm-config', required: true)
-endif
-clang_cpp_dep = cxx.find_library('clang-cpp', dirs: clang_dirs, required: false)
-clang_llvm_dep = cxx.find_library('LLVM', dirs: clang_dirs, required: false)
-clang_enabled = not get_option('clang').disabled() and not get_option('clang-cpp').disabled() and clang_cpp_dep.found() and clang_llvm_dep.found() and cxx.has_header('clang/Tooling/Tooling.h', args: clang_args)
-clang_cpp_enabled = clang_enabled
-if (get_option('clang').enabled() or get_option('clang-cpp').enabled()) and not clang_enabled
- error('Native Clang C++ backend required: build external/llvm-project or install Clang C++ development headers, clang-cpp and LLVM. Minimal builds use -Dclang=disabled.')
-endif
-if clang_enabled
- deps += [clang_cpp_dep, clang_llvm_dep]
- add_project_arguments(clang_args, language: ['c', 'cpp'])
-endif
+clang_install_bundle = clang_enabled and (get_option('clang-bundle') or (clang_internal and host_machine.system() in ['linux', 'windows']))
 
 # detect libc
 glibc = false
@@ -65,6 +90,7 @@ endif
 gnu_source = glibc
 
 cdata = configuration_data()
+cdata.set_quoted('INSIGHT_CLANG_PROVIDER', clang_enabled ? get_option('clang-provider') : 'disabled')
 if clang_cpp_enabled
  cdata.set('HAVE_CLANG_CPP', 1)
 endif
@@ -1073,7 +1099,8 @@ libgeany = shared_library('geany',
 	osx_src,
 	link_with: [insight_native, insight_vterm],
 	link_args: win_link_args,
-	install_rpath: clang_enabled ? '$ORIGIN/geany/clang' : '',
+	build_rpath: clang_runtime_dir,
+	install_rpath: clang_install_bundle ? '$ORIGIN/geany/clang' : clang_runtime_dir,
 	soversion: '0',
 	c_args: geany_cflags + [ '-DG_LOG_DOMAIN="Geany"' ],
  cpp_args: basic_cflags + (clang_cpp_enabled ? cxx.get_supported_arguments(['-fno-rtti']) : []),
@@ -1223,7 +1250,7 @@ install_data('insight/docs/custom-commands.md', install_dir: cdata.get('GEANY_DA
 
 install_data('insight/docs/source-routes.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 
-if get_option('clang-bundle')
+if clang_install_bundle
  if not clang_enabled or not clang_sdk.found()
   error('clang-bundle requires the enabled Clang SDK and llvm-config')
  endif

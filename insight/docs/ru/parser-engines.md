@@ -1,6 +1,6 @@
 # Parser engines / Движки разбора
 
-> **Прямой C++ backend:** Разбор, списки символов, семантическая подсветка, препроцессор, настройки компиляции и автодополнение Sema теперь используют C++ API Clang. Редактор больше не линкует и не поставляет C-библиотеку libclang; повторного разбора другим frontend-ом нет. Нужны `clang-cpp`, LLVM и заголовки Clang либо SDK, собранный из `external/llvm-project`. Для Autotools используется `--with-clang`; старое `--with-libclang` осталось только совместимым именем опции. Минимальная сборка: `-Dclang=disabled` или `--without-clang`.
+> **Clang по умолчанию:** внутренний SDK из `external/llvm-project`, собранный в `_external-clang-sdk`. Системный вариант включается только явно: `-Dclang-provider=system` или `--with-clang-provider=system`. При отсутствии внутреннего SDK подмены системным нет. C++ API обслуживает разбор, символы, подсветку, препроцессор и Sema; libclang не требуется. Setup: [clang.md](clang.md).
 
 
 ## Clang: source and direct C++ access

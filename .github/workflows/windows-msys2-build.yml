@@ -93,14 +93,14 @@ jobs:
           export lt_cv_deplibs_check_method=${lt_cv_deplibs_check_method='pass_all'}
           mkdir -p _build
           cd _build
-          ../configure --prefix=${DESTINATION}/build/geany --disable-silent-rules
+          ../configure --with-clang-provider=system --prefix=${DESTINATION}/build/geany --disable-silent-rules
           make -j
           make install
       - name: Build (Meson)
         if: matrix.build-tool == 'meson'
         run: |
           echo "VERSION=$(meson introspect --projectinfo meson.build | jq -r .version)" >> $GITHUB_ENV
-          meson setup --prefix=${DESTINATION}/build/geany _build .
+          meson setup -Dclang-provider=system --prefix=${DESTINATION}/build/geany _build .
           meson compile -C _build
           meson install -C _build
       - name: Compile NSIS

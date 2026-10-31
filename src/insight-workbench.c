@@ -698,8 +698,11 @@ static gboolean database_identity(const gchar *root) {
  }
  g_free(identity);g_free(policy);return changed;
 }
+#ifndef INSIGHT_CLANG_PROVIDER
+#define INSIGHT_CLANG_PROVIDER "disabled"
+#endif
 static gchar *source_stamp(const gchar *native,const gchar *language,gint encoding) {
- gchar *stamp=insight_project_db_stamp(native,FALSE);if(!stamp) return NULL;gchar *value=g_strdup_printf("%s:%d:%s:clang%d-cpp%d-v14",language?language:"",encoding,stamp,insight_clang_available(),insight_clang_cpp_available());g_free(stamp);return value;
+ gchar *stamp=insight_project_db_stamp(native,FALSE);if(!stamp) return NULL;gchar *value=g_strdup_printf("%s:%d:%s:clang%d-cpp%d-provider%s-v15",language?language:"",encoding,stamp,insight_clang_available(),insight_clang_cpp_available(),INSIGHT_CLANG_PROVIDER);g_free(stamp);return value;
 }
 static void restore_project_database(const gchar *root) {
  InsightProjectDb db={0};GError *error=NULL;

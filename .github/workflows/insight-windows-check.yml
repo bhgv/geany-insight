@@ -93,7 +93,7 @@ jobs:
         run: |
           meson setup _build --prefix="$(pwd)/portable" --libdir=lib \
             -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled \
-            -Dgtkdoc=false -Dclang=enabled -Dclang-bundle=true -Dvte=false -Dmac-integration=disabled \
+            -Dgtkdoc=false -Dclang-provider=system -Dclang=enabled -Dclang-bundle=true -Dvte=false -Dmac-integration=disabled \
             -Dc_args=-DINSIGHT_RELOCATABLE -Dcpp_args=-DINSIGHT_RELOCATABLE
           meson compile -C _build
           meson install -C _build

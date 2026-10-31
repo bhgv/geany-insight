@@ -765,3 +765,5 @@ dist_insightdocmedia_DATA += insight/docs/media/project-membership.svg
 EXTRA_DIST += insight/tests/project_membership_gui_test.c
 
 dist_insightdocmedia_DATA += insight/docs/media/project-membership.jpg
+
+EXTRA_DIST += insight/tools/select_clang_sdk.py insight/tests/clang_sdk_selection_test.py

@@ -93,22 +93,41 @@ GEANY_CHECK_REVISION([dnl force debug mode for a VCS working copy
 					  CFLAGS="-g -DGEANY_DEBUG $CFLAGS"])
 
 GEANY_CHECK_GTK
-dnl Require compiler semantics unless a minimal build is explicitly requested.
-AC_ARG_WITH([clang],AS_HELP_STRING([--with-clang@<:@=auto/yes/no/PREFIX@:>@],[use native Clang C++ semantic analysis]),[],[with_clang=yes])
+dnl The pinned internal SDK is the default; system discovery is opt-in.
+AC_ARG_WITH([clang-provider],AS_HELP_STRING([--with-clang-provider=internal/system],[Clang provider (default: internal)]),[],[with_clang_provider=internal])
+AS_CASE([$with_clang_provider],[internal|system],[],[AC_MSG_ERROR([Unknown Clang provider: use internal or system])])
+AC_ARG_WITH([clang],AS_HELP_STRING([--with-clang@<:@=auto/yes/no/PREFIX@:>@],[enable native Clang C++ analysis; PREFIX selects an internal source SDK]),[],[with_clang=yes])
 AC_ARG_WITH([libclang],AS_HELP_STRING([--with-libclang],[deprecated alias for --with-clang; never links libclang]),[with_clang=$with_libclang])
 AS_IF([test "x$with_clang" != xno],[
- AC_PATH_PROGS([LLVM_CONFIG],[llvm-config llvm-config-22 llvm-config-21 llvm-config-20 llvm-config-19 llvm-config-18 llvm-config-17 llvm-config-16 llvm-config-15 llvm-config-14])
- clang_cppflags="";clang_ldflags=""
- AS_CASE([$with_clang],[auto|yes],[AS_IF([test -n "$LLVM_CONFIG"],[clang_cppflags="-I`$LLVM_CONFIG --includedir`";clang_ldflags="-L`$LLVM_CONFIG --libdir`"])],[clang_cppflags="-I$with_clang/include";clang_ldflags="-L$with_clang/lib"])
+ clang_cppflags="";clang_ldflags="";clang_native_libs="-lclang-cpp -lLLVM"
+ AS_IF([test "x$with_clang_provider" = xinternal],[
+  AS_CASE([$with_clang],[auto|yes],[with_clang="$srcdir/_external-clang-sdk"])
+  AC_PATH_PROG([CLANG_SDK_PYTHON],[python3])
+  AS_IF([test -z "$CLANG_SDK_PYTHON"],[AC_MSG_ERROR([Python 3 is required to validate the internal Clang SDK])])
+  clang_sdk_paths=`"$CLANG_SDK_PYTHON" "$srcdir/insight/tools/select_clang_sdk.py" --sdk "$with_clang"`
+  AS_IF([test $? -ne 0],[AC_MSG_ERROR([Prepare the internal Clang SDK with python3 insight/tools/build_external_clang.py, or explicitly use --with-clang-provider=system])])
+  clang_sdk_prefix=`printf '%s\n' "$clang_sdk_paths" | sed -n '1p'`
+  clang_cpp_library=`printf '%s\n' "$clang_sdk_paths" | sed -n '2p'`
+  clang_llvm_library=`printf '%s\n' "$clang_sdk_paths" | sed -n '3p'`
+  LLVM_CONFIG=`printf '%s\n' "$clang_sdk_paths" | sed -n '4p'`
+  clang_cppflags="-I$clang_sdk_prefix/include";clang_native_libs="$clang_cpp_library $clang_llvm_library"
+  AS_CASE([$host_os],[mingw*|cygwin*],[],[clang_ldflags="-Wl,-rpath,$clang_sdk_prefix/lib"])
+ ],[
+  AS_CASE([$with_clang],[auto|yes],[],[AC_MSG_ERROR([An internal SDK prefix cannot be combined with --with-clang-provider=system])])
+  AC_PATH_PROGS([LLVM_CONFIG],[llvm-config llvm-config-22 llvm-config-21 llvm-config-20 llvm-config-19 llvm-config-18 llvm-config-17 llvm-config-16 llvm-config-15 llvm-config-14])
+  AS_IF([test -n "$LLVM_CONFIG"],[clang_cppflags="-I`$LLVM_CONFIG --includedir`";clang_ldflags="-L`$LLVM_CONFIG --libdir`"])
+ ])
+ AC_MSG_NOTICE([Clang provider: $with_clang_provider])
  clang_save_cppflags="$CPPFLAGS";clang_save_ldflags="$LDFLAGS";clang_save_libs="$LIBS";clang_save_cxxflags="$CXXFLAGS"
- CPPFLAGS="$CPPFLAGS $clang_cppflags";LDFLAGS="$LDFLAGS $clang_ldflags";LIBS="$LIBS -lclang-cpp -lLLVM";CXXFLAGS="$CXXFLAGS -fno-rtti"
+ CPPFLAGS="$CPPFLAGS $clang_cppflags";LDFLAGS="$LDFLAGS $clang_ldflags";LIBS="$LIBS $clang_native_libs";CXXFLAGS="$CXXFLAGS -fno-rtti"
  AC_LANG_PUSH([C++])
  AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <clang/Tooling/Tooling.h>
 #include <clang/Frontend/ASTUnit.h>]],[[auto ast=clang::tooling::buildASTFromCode("int value;");]])],[clang_library=yes],[clang_library=no])
  AC_LANG_POP([C++])
  CPPFLAGS="$clang_save_cppflags";LDFLAGS="$clang_save_ldflags";LIBS="$clang_save_libs";CXXFLAGS="$clang_save_cxxflags"
  AS_IF([test x$clang_library = xyes],[AC_DEFINE([HAVE_CLANG_CPP],[1],[Use native Clang C++ semantics])
- GTK_CFLAGS="$GTK_CFLAGS $clang_cppflags";GTK_LIBS="$GTK_LIBS $clang_ldflags -lclang-cpp -lLLVM"],[AS_IF([test x$with_clang != xauto],[AC_MSG_ERROR([Native Clang C++ headers/libraries unavailable. Build external/llvm-project or install Clang development headers, libclang-cpp-dev and llvm-dev. Minimal builds use --without-clang.])])])
+ AC_DEFINE_UNQUOTED([INSIGHT_CLANG_PROVIDER],["$with_clang_provider"],[Selected Clang provider])
+ GTK_CFLAGS="$GTK_CFLAGS $clang_cppflags";GTK_LIBS="$GTK_LIBS $clang_ldflags $clang_native_libs"],[AS_IF([test x$with_clang != xauto],[AC_MSG_ERROR([Selected Clang C++ headers/libraries unavailable. Build the internal SDK, select --with-clang-provider=system explicitly, or use --without-clang.])])])
 ])
 GEANY_CHECK_GTK_FUNCS([g_strv_equal])
 

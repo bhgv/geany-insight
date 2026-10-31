@@ -115,4 +115,6 @@ Both Meson and Autotools require **GTK >= 3.22.0**, with GLib/GIO >= 2.56. The e
 [GTK popup API version](https://docs.gtk.org/gtk3/method.Menu.popup_at_pointer.html)
 
 
-Clang is required by default. Install matching Clang C++ headers, clang-cpp and LLVM (Debian/Ubuntu: `libclang-dev libclang-cpp-dev llvm-dev`). Minimal builds must explicitly use `-Dclang=disabled` or `--without-clang`. To carry the Clang runtime in a portable Meson installation, add `-Dclang-bundle=true` (Linux also requires `patchelf`). See [clang.md](clang.md).
+The internal source-built Clang SDK is required by default: prepare it with `python3 insight/tools/build_external_clang.py`. System Clang requires `-Dclang-provider=system` or `--with-clang-provider=system`. Internal Linux/Windows Meson installs bundle their runtime automatically (Linux needs patchelf). Minimal builds use `-Dclang=disabled` or `--without-clang`. See [clang.md](clang.md).
+
+System-library CI checks set `clang-provider=system` explicitly. The external source workflow verifies normal Meson/Autotools defaults without a provider or SDK override.
