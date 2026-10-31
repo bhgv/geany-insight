@@ -158,7 +158,7 @@ static void publish(Symbols *s,GtkTreeModel *model) {
 }
 static void status(Symbols *s) {
  if(!s->status) return;
- guint total=insight_virtual_list_attached(s->view)?insight_virtual_list_count(s->view):gtk_tree_model_iter_n_children(GTK_TREE_MODEL(s->source),NULL);
+ guint total=insight_virtual_list_attached(s->view)?GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(s->view),"insight-virtual-total")):gtk_tree_model_iter_n_children(GTK_TREE_MODEL(s->source),NULL);
  gchar *text=insight_i18n_printf(s->has_more ? "Symbols: %u / %u+" : "Symbols: %u / %u",s->hierarchical || s->grouped || s->mask!=ALL_TYPES ? s->shown : total,total);
  gtk_label_set_text(GTK_LABEL(s->status),text); g_free(text);
 }

@@ -1133,7 +1133,7 @@ static InsightLookupFilter *entry_filter(GtkWidget *entry,gboolean files) {
 typedef struct { gchar *name,*path,*directory; guint64 size; gboolean stat_valid; } FileListRow;
 static void file_list_row_free(gpointer data) { FileListRow *r=data; g_free(r->name); g_free(r->path); g_free(r->directory); g_free(r); }
 typedef struct { guint64 generation; GCancellable *cancel; guint apply; InsightIndex *index; const InsightSymbol **rows; GPtrArray *files; gchar *local_path; guint count,position; gboolean local,collecting,iter_valid,has_more; GtkTreeIter iter; GHashTable *existing; } SymbolListState;
-typedef struct { GWeakRef store; InsightIndex *index; gchar *query,*path; const InsightSymbol **rows; GPtrArray *paths,*files,*tags,*outlines;gint lang,sort_column;GtkSortType sort_direction;guint type_mask; guint count,limit; guint64 generation,epoch; gboolean local,has_more;InsightLanguageFilter *language; } SymbolListJob;
+typedef struct { GWeakRef store; InsightIndex *index; gchar *query,*path; const InsightSymbol **rows; GPtrArray *paths,*files,*tags,*outlines;gint lang,sort_column;GtkSortType sort_direction;guint type_mask; guint count,total,limit; guint64 generation,epoch; gboolean local,has_more;InsightLanguageFilter *language; } SymbolListJob;
 static GtkWidget *symbol_list_view(GtkListStore *store) { return store==wb.file_store ? wb.file_view : (store==wb.local_symbols ? wb.local_view : wb.symbol_view); }
 static void symbol_iter_queue_free(gpointer data) { GQueue *q=data; g_queue_free_full(q,g_free); }
 static gchar *symbol_row_key(GtkTreeModel *model,GtkTreeIter *iter,gboolean files) {
@@ -1233,8 +1233,8 @@ static void symbol_list_job_run(GTask *task,gpointer source,gpointer data,GCance
   j->rows=g_new(const InsightSymbol *,MAX((gsize)1,insight_index_count(j->index)));
   if(filter) for(gsize n=0;n<insight_index_count(j->index);n++) {
    if(g_cancellable_is_cancelled(cancel)) break;
-   const InsightSymbol *tag=insight_index_at(j->index,n);if(!insight_symbol_kind_matches(tag->kind,j->type_mask)) continue;if(!insight_language_filter_match(j->language,tag->path)) continue; if(j->path && g_strcmp0(j->path,tag->path)) continue;
-   if(insight_lookup_filter_match(filter,tag->name,tag->scope,tag->path,g_str_has_prefix(tag->kind,"@decl:") ? strrchr(tag->kind,':')+1 : tag->kind)) { j->rows[j->count++]=tag; }
+   const InsightSymbol *tag=insight_index_at(j->index,n);if(!insight_language_filter_match(j->language,tag->path)) continue; if(j->path && g_strcmp0(j->path,tag->path)) continue;
+   if(insight_lookup_filter_match(filter,tag->name,tag->scope,tag->path,g_str_has_prefix(tag->kind,"@decl:") ? strrchr(tag->kind,':')+1 : tag->kind)) { j->total++;if(insight_symbol_kind_matches(tag->kind,j->type_mask)) j->rows[j->count++]=tag; }
   }
  }
  if(!g_cancellable_is_cancelled(cancel) && j->count>1) {
@@ -1266,6 +1266,7 @@ static void symbol_list_job_done(GObject *source,GAsyncResult *result,gpointer d
   if(ok && insight_virtual_list_attached(GTK_TREE_VIEW(virtual_view))) {
    VirtualSnapshot *snapshot=g_new0(VirtualSnapshot,1);snapshot->index=j->index;j->index=NULL;
    snapshot->rows=j->rows;j->rows=NULL;snapshot->files=j->files;j->files=NULL;snapshot->local=j->local;snapshot->path=g_strdup(j->path);
+   g_object_set_data(G_OBJECT(virtual_view),"insight-virtual-total",GUINT_TO_POINTER(snapshot->files?j->count:j->total));
    insight_virtual_list_replace(GTK_TREE_VIEW(virtual_view),j->count,virtual_snapshot_fill,snapshot,virtual_snapshot_free);
    insight_symbol_view_page_state(GTK_TREE_VIEW(virtual_view),FALSE);
    gtk_widget_set_sensitive(virtual_view,TRUE);insight_symbol_view_loading(GTK_TREE_VIEW(virtual_view),FALSE);
@@ -1288,7 +1289,7 @@ static void symbol_list_job_done(GObject *source,GAsyncResult *result,gpointer d
 static SymbolListJob *symbol_list_begin(GtkListStore *store,GtkWidget *entry,guint limit,gboolean files) {
  SymbolListState *s=symbol_list_state(store); symbol_list_stop(s); GtkWidget *view=symbol_list_view(store); if(view) { gtk_widget_set_sensitive(view,TRUE); insight_symbol_view_loading(GTK_TREE_VIEW(view),FALSE); }
  InsightLookupFilter *filter=entry_filter(entry,files); if(!filter) {
-  if(view && insight_virtual_list_attached(GTK_TREE_VIEW(view))) insight_virtual_list_clear(GTK_TREE_VIEW(view));
+  if(view && insight_virtual_list_attached(GTK_TREE_VIEW(view))) {g_object_set_data(G_OBJECT(view),"insight-virtual-total",NULL);insight_virtual_list_clear(GTK_TREE_VIEW(view));}
   s->has_more=FALSE;
   if(view) { gtk_widget_set_sensitive(view,FALSE); insight_symbol_view_loading(GTK_TREE_VIEW(view),TRUE); }
   s->files=files ? g_ptr_array_new_with_free_func(file_list_row_free) : NULL;

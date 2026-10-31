@@ -10,11 +10,18 @@ typedef struct {
 } VirtualList;
 static VirtualList *state(GtkTreeView *view) { return g_object_get_data(G_OBJECT(view),"insight-virtual-list"); }
 static guint visible_rows(VirtualList *s) {
- PangoContext *context=gtk_widget_get_pango_context(GTK_WIDGET(s->view));
- PangoFontMetrics *metrics=pango_context_get_metrics(context,NULL,pango_context_get_language(context));
- gint height=PANGO_PIXELS(pango_font_metrics_get_ascent(metrics)+pango_font_metrics_get_descent(metrics))+6;
- pango_font_metrics_unref(metrics);
- return CLAMP(gtk_widget_get_allocated_height(GTK_WIDGET(s->view))/MAX(1,height),1,WINDOW_ROWS/2);
+ gint height=22;
+ GList *columns=gtk_tree_view_get_columns(s->view);
+ if(columns) {
+  GList *cells=gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(columns->data));
+  if(cells) {gint minimum=0,natural=0;gtk_cell_renderer_get_preferred_height(cells->data,GTK_WIDGET(s->view),&minimum,&natural);height=MAX(height,natural+2);}
+  g_list_free(cells);
+ }
+ g_list_free(columns);
+ GdkRectangle visible={0};if(gtk_widget_get_realized(GTK_WIDGET(s->view))) gtk_tree_view_get_visible_rect(s->view,&visible);
+ gint available=visible.height>0?visible.height:gtk_widget_get_allocated_height(GTK_WIDGET(s->view));
+ /* A conservative page size keeps the final row visible despite theme padding. */
+ return CLAMP(available/MAX(1,height)-1,1,WINDOW_ROWS/2);
 }
 static void range(VirtualList *s) {
  guint page=visible_rows(s);s->updating=TRUE;
@@ -71,7 +78,10 @@ static gboolean key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
  }
  gtk_adjustment_set_value(s->position,next);return TRUE;
 }
-static void allocated(GtkWidget *widget,GtkAllocation *allocation,gpointer data) { (void)widget;(void)allocation;VirtualList *s=data;if(!s->updating) range(s); }
+static void allocated(GtkWidget *widget,GtkAllocation *allocation,gpointer data) { (void)widget;(void)allocation;VirtualList *s=data;if(!s->updating) {
+ guint page=visible_rows(s),first=MIN(s->first,s->count>page?s->count-page:0);
+ if(first!=s->first) render(s,first);else range(s);
+} }
 static void sort_changed(GtkTreeSortable *store,gpointer data) { (void)store;VirtualList *s=state(GTK_TREE_VIEW(data));if(s && !s->updating && s->reload) s->reload(s->view,s->reload_data); }
 static void freed(gpointer data) {
  VirtualList *s=data;g_signal_handlers_disconnect_by_data(s->position,s);if(s->destroy) s->destroy(s->data);g_object_unref(s->store);g_object_unref(s->position);g_free(s);
