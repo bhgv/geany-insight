@@ -95,7 +95,7 @@ jobs:
         run: |
           ./build.sh --configure-only --skip-sdk-build --build-dir "$PWD/_source-autotools" --prefix "$PWD/_source-autotools/install" -- --disable-html-docs --disable-pdf-docs --disable-api-docs --disable-gtkdoc-header
           cd _source-autotools
-          ../configure --disable-html-docs --disable-pdf-docs --disable-api-docs --disable-gtkdoc-header
+          ../configure --prefix="$PWD/install" --disable-html-docs --disable-pdf-docs --disable-api-docs --disable-gtkdoc-header
           grep -F 'Clang provider: internal' config.log
           grep -E '^#define HAVE_CLANG_CPP 1' config.h
       - name: Build and install Autotools editor with the internal source SDK
