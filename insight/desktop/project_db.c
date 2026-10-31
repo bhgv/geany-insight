@@ -38,6 +38,6 @@ gboolean insight_project_db_load(const gchar *path,const gchar *identity,const g
  guint version;const gchar *id,*r,*p;g_variant_get_child(v,0,"u",&version);g_variant_get_child(v,1,"&s",&id);g_variant_get_child(v,2,"&s",&r);g_variant_get_child(v,3,"&s",&p);if(version!=1||strcmp(identity,id)||strcmp(root,r)||(policy&&strcmp(policy,p))) goto done;
  db->policy=g_strdup(p);
  InsightIndex **indexes[]={&db->symbols,&db->declarations,&db->calls};for(guint k=0;k<3;k++) { GVariant *part=g_variant_get_child_value(v,k+4);gsize size;const guchar *data=g_variant_get_fixed_array(part,&size,1);char *stored=NULL;*indexes[k]=insight_index_deserialize(data,size,&stored);gboolean same=*indexes[k]&&stored&&!strcmp(stored,root);free(stored);g_variant_unref(part);if(!same) goto done; }
- GVariant *part=g_variant_get_child_value(v,7);db->files=read_table(part,10000);g_variant_unref(part);part=g_variant_get_child_value(v,8);db->directories=read_table(part,10000);g_variant_unref(part);ok=db->files&&db->directories;
+ GVariant *part=g_variant_get_child_value(v,7);db->files=read_table(part,1000000);g_variant_unref(part);part=g_variant_get_child_value(v,8);db->directories=read_table(part,1000000);g_variant_unref(part);ok=db->files&&db->directories;
  done:if(v) g_variant_unref(v);g_byte_array_unref(bytes);if(!ok) { insight_project_db_clear(db);if(error&&!*error) invalid(error); }return ok;
 }

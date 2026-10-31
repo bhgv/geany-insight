@@ -773,3 +773,5 @@ EXTRA_DIST += build.sh insight/tools/build_editor.py insight/tools/prepare_clang
 dist_insightdocmedia_DATA += insight/docs/media/build-bootstrap.svg
 
 EXTRA_DIST += external/cmake310/llvm18.patch external/cmake310/Compat.cmake external/cmake310/FindPython3.cmake
+
+EXTRA_DIST += insight/tests/virtual_list_gui_test.c

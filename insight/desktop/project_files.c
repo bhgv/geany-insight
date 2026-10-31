@@ -124,7 +124,7 @@ gboolean insight_project_files_set(InsightProjectFiles *s,const char *path,gbool
  gchar *p=canonical(path); if(!p) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Project paths must be absolute UTF-8 paths without line breaks"); return FALSE; }
  GPtrArray *target=tree ? (include ? s->trees : s->excluded_trees) : (include ? s->files : s->excluded_files);
  gboolean exists=FALSE; for(guint i=0;i<target->len;i++) if(same(g_ptr_array_index(target,i),p)) { exists=TRUE; break; }
- if(!exists && target->len>=10000) { g_free(p); g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Project membership rule limit reached (10000 per list)"); return FALSE; }
+ if(!exists && target->len>=1000000) { g_free(p); g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Project membership rule limit reached (1000000 per list)"); return FALSE; }
  if(tree) { remove_path(s->files,p,TRUE); remove_path(s->trees,p,TRUE); remove_path(s->excluded_files,p,TRUE); remove_path(s->excluded_trees,p,TRUE); }
  else { remove_path(s->files,p,FALSE); remove_path(s->excluded_files,p,FALSE); }
  g_ptr_array_add(target,p); return TRUE;
@@ -152,7 +152,7 @@ static gboolean valid(const InsightProjectFiles *s,GError **error) {
  if(!s->master_expression || strlen(s->master_expression)>16384 || !g_utf8_validate(s->master_expression,-1,NULL) || strpbrk(s->master_expression,"\r\n")) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid master file list expression");return FALSE; }
  if(!s->master_file || strlen(s->master_file)>16384 || !g_utf8_validate(s->master_file,-1,NULL) || strpbrk(s->master_file,"\r\n") || (*s->master_file && !g_path_is_absolute(s->master_file))) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid master file list path");return FALSE; }
  GPtrArray *arrays[]={s->files,s->trees,s->excluded_files,s->excluded_trees};
- for(guint i=0;i<4;i++) { if(!arrays[i] || arrays[i]->len>10000) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Too many project membership rules"); return FALSE; }
+ for(guint i=0;i<4;i++) { if(!arrays[i] || arrays[i]->len>1000000) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Too many project membership rules"); return FALSE; }
   for(guint j=0;j<arrays[i]->len;j++) { gchar *p=canonical(g_ptr_array_index(arrays[i],j)); if(!p) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid project membership path"); return FALSE; } g_free(p); }
  }
  return TRUE;
@@ -179,7 +179,7 @@ InsightProjectFiles *insight_project_files_read_project(GKeyFile *config,const c
  if(!e) { g_free(s->masks); s->masks=g_key_file_get_string(config,GROUP,"exclude-masks",&e); }
  GPtrArray *arrays[]={s->files,s->trees,s->excluded_files,s->excluded_trees}; const char *names[]={"files","trees","excluded-files","excluded-trees"};
  for(guint i=0;i<4 && !e;i++) { gsize count=0; gchar **paths=g_key_file_get_string_list(config,GROUP,names[i],&count,&e);
-  if(!e && count>10000) g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Too many project membership rules");
+  if(!e && count>1000000) g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Too many project membership rules");
   for(gsize j=0;j<count && !e;j++) { if(!paths[j][0] || strlen(paths[j])>16384 || strchr(paths[j],'\n') || strchr(paths[j],'\r')) { g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid stored project path"); break; }
    gchar *joined=insight_canonicalize_filename(paths[j],r),*p=canonical(joined); g_free(joined); if(!p) g_set_error_literal(&e,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid stored project path"); else g_ptr_array_add(arrays[i],p);
   }
@@ -194,7 +194,7 @@ InsightProjectFiles *insight_project_files_read(GKeyFile *config,const char *roo
 
 InsightProjectFiles *insight_project_files_freeze(const InsightProjectFiles *s,const gchar *root,const GPtrArray *paths,GError **error) {
  gchar *base=canonical(root);
- if(!s || !base || !paths || paths->len>20000 || !valid(s,error)) {g_free(base);if(error && !*error) g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid project membership snapshot");return NULL;}
+ if(!s || !base || !paths || paths->len>1000000 || !valid(s,error)) {g_free(base);if(error && !*error) g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid project membership snapshot");return NULL;}
  if(*s->master_file) {g_free(base);g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Detach the master file list before freezing membership");return NULL;}
  InsightProjectFiles *next=insight_project_files_clone(s);next->automatic=FALSE;g_ptr_array_set_size(next->files,0);g_ptr_array_set_size(next->trees,0);
  GHashTable *seen=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);const GPtrArray *sources[]={s->files,paths};gboolean ok=TRUE;

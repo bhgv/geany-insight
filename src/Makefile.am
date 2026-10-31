@@ -211,6 +211,8 @@ libgeany_la_SOURCES += \
 	insight-git.h \
 	insight-workbench.c \
 	insight-project-membership.h \
+	insight-virtual-list.c \
+	insight-virtual-list.h \
 	insight-symbol-view.c \
 	insight-symbol-view.h \
 	insight-directory.c \

@@ -989,3 +989,6 @@ clang_backend_test = executable('test_insight_clang_backend', '../insight/tests/
 test('Insight Clang semantic frontend', clang_backend_test, timeout: 60)
 project_membership_gui_test = executable('test_insight_project_membership_gui', '../insight/tests/project_membership_gui_test.c', dependencies: test_deps)
 test('Insight project membership browser GUI', project_membership_gui_test, timeout: 60)
+
+virtual_list_gui_test = executable('test_insight_virtual_list_gui', '../insight/tests/virtual_list_gui_test.c', dependencies: test_deps)
+test('Insight bounded virtual list GUI', virtual_list_gui_test, timeout: 30)

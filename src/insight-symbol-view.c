@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "geany.h"
 #include "insight-symbol-view.h"
+#include "insight-virtual-list.h"
 #include "insight-i18n.h"
 #include "document.h"
 #include "filetypes.h"
@@ -39,6 +40,12 @@ guint insight_symbol_kind_type(const gchar *path,const gchar *kind,GeanyFiletype
  if(!ft && path && *path && path[0]!='@') ft=filetypes_detect_from_extension(path);
  gint lang=doc && doc->tm_file ? doc->tm_file->lang : (ft ? ft->lang : -1);
  return lang>=0 && kind && *kind ? tm_parser_get_tag_type(*kind,lang) : tm_tag_undef_t;
+}
+gboolean insight_symbol_kind_matches(const gchar *kind,guint mask) {
+ guint type=0;
+ if(kind && (g_str_has_prefix(kind,"@decl:") || g_str_has_prefix(kind,"@type:"))) type=(guint)g_ascii_strtoull(kind+6,NULL,10);
+ else if(kind && g_str_has_prefix(kind,"@scope:")) type=tm_tag_namespace_t;
+ return (mask&(1u<<filter_category(type)))!=0;
 }
 static guint type_for(Symbols *s,const gchar *path,const gchar *kind) { return insight_symbol_kind_type(path,kind,s->fallback); }
 const gchar *insight_symbol_type_name(guint type,gboolean plural) {
@@ -151,7 +158,7 @@ static void publish(Symbols *s,GtkTreeModel *model) {
 }
 static void status(Symbols *s) {
  if(!s->status) return;
- guint total=gtk_tree_model_iter_n_children(GTK_TREE_MODEL(s->source),NULL);
+ guint total=insight_virtual_list_attached(s->view)?insight_virtual_list_count(s->view):gtk_tree_model_iter_n_children(GTK_TREE_MODEL(s->source),NULL);
  gchar *text=insight_i18n_printf(s->has_more ? "Symbols: %u / %u+" : "Symbols: %u / %u",s->hierarchical || s->grouped || s->mask!=ALL_TYPES ? s->shown : total,total);
  gtk_label_set_text(GTK_LABEL(s->status),text); g_free(text);
 }
@@ -312,6 +319,7 @@ static void filter_changed(GtkCheckMenuItem *item,gpointer data) {
  (void)item; Symbols *s=g_object_get_data(G_OBJECT(data),"insight-symbol-view"); if(!s || s->setting) return;
  s->mask=0; for(guint i=0;i<FILTER_COUNT;i++) if(gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(s->checks[i]))) s->mask|=1u<<i;
 
+ insight_virtual_list_reload(GTK_TREE_VIEW(data));
  queue(s);
 }
 void insight_symbol_view_set_types(GtkTreeView *view,guint mask) {
@@ -319,6 +327,7 @@ void insight_symbol_view_set_types(GtkTreeView *view,guint mask) {
  s->mask=mask&ALL_TYPES; s->setting=TRUE;
  for(guint i=0;i<FILTER_COUNT;i++) if(s->checks[i]) gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(s->checks[i]),(s->mask&(1u<<i))!=0);
  s->setting=FALSE;
+ insight_virtual_list_reload(view);
  queue(s);
 }
 guint insight_symbol_view_types_mask(GtkTreeView *view) { Symbols *s=g_object_get_data(G_OBJECT(view),"insight-symbol-view"); return s ? s->mask : ALL_TYPES; }
@@ -358,6 +367,7 @@ static gboolean page_near_end(GtkTreeView *view) {
 }
 static gboolean page_scroll(GtkWidget *widget,GdkEventScroll *event,gpointer unused) {
  (void)unused;
+ if(insight_virtual_list_attached(GTK_TREE_VIEW(widget))) return FALSE;
  gboolean down=event->direction==GDK_SCROLL_DOWN || (event->direction==GDK_SCROLL_SMOOTH && event->delta_y>0);
  Symbols *s=g_object_get_data(G_OBJECT(widget),"insight-symbol-view");
  if(down && s && s->has_more && !s->loading && gtk_widget_get_sensitive(widget) && page_near_end(GTK_TREE_VIEW(widget))) {

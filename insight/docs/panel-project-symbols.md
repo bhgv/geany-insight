@@ -91,3 +91,5 @@ The list has a separate declaration index from the Geany/ctags language parser, 
 [Search and copy the current list](list-tools.md): context menu, F4/Shift+F4, visible columns and loaded rows.
 
 Symbols are paged. Scrolling down at the end automatically loads the next page, including when filters hide all currently loaded rows. The + button remains available; a + in the counter means more matches remain in the index.
+
+Project and file symbols use the same moving-window control as files: at most 256 GTK source rows, while search, type filters and sorting cover the full index snapshot. Grouping displays the current range. Index and query metadata remains in memory; GTK no longer duplicates every result row.
