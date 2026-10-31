@@ -27,7 +27,9 @@ git submodule update --init --depth 1 external/llvm-project
 python3 insight/tools/build_external_clang.py --jobs 2
 ```
 
-CMake, Ninja and a C++17 compiler build the source SDK. GTK development packages,
+CMake >= 3.10, Ninja and a C++17 compiler build the source SDK.
+On Linux, build.sh automatically applies the bundled CMake 3.10–3.19
+compatibility patch in `external/cmake310/`; no CMake upgrade is needed. GTK development packages,
 Meson and gettext build the editor; Linux portable bundling also needs patchelf.
 The first LLVM build is substantially heavier than an editor-only build.
 Generated files stay in `_external-clang/` and `_external-clang-sdk/`.

@@ -267,7 +267,17 @@ The pinned LLVM/Clang source is now in `external/llvm-project` (Git submodule). 
 
 Existing Meson build directories can be reconfigured explicitly with `meson setup --reconfigure build-editor -Dclang-provider=internal -Dclang-bundle=auto`. The internal SDK resolver accepts ELF, Darwin dylib and Windows import-library names; runtime validation for this change uses Linux.
 
-CMake >= 3.20 is required by LLVM 18. Check with `cmake --version`.
-On older distributions, install a user-local version with
-`python3 -m pip install --user "cmake>=3.20,<4"`, then run
-`export PATH="$HOME/.local/bin:$PATH"` before retrying the build.
+### CMake 3.10 в Linux
+
+`build.sh` автоматически определяет CMake 3.10–3.19 и перед конфигурацией
+применяет к исходникам LLVM включённый патч `external/cmake310/llvm18.patch`.
+Он заменяет новые операции со списками, поиск Python, параметры линковщика,
+связи библиотек из разных каталогов и подключение объектных библиотек.
+Скачивать новый CMake не нужно. Минимальная версия — 3.10; более старые не поддерживаются.
+
+Повторное применение безопасно. Сторонние изменения исходников сохраняются;
+при конфликте подготовка останавливается без сброса или замены исходников.
+Совместимость предназначена для Linux/Ninja и общей библиотеки Clang SDK.
+Современный CMake использует обычную сборку upstream.
+Драйвер использует старый синтаксис `-H/-B` и запускает Ninja напрямую.
+В CI проверяются CMake 3.10.3 и текущий системный CMake.

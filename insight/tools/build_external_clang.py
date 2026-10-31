@@ -18,11 +18,23 @@ ROOT = Path(__file__).resolve().parents[2]
 def check_cmake(check_output=subprocess.check_output):
     output = check_output(['cmake', '--version'], universal_newlines=True)
     match = re.search(r'cmake version (\d+)\.(\d+)\.(\d+)', output)
-    if not match or tuple(map(int, match.groups())) < (3, 20, 0):
-        raise ValueError(
-            'LLVM 18 requires CMake >= 3.20; found: ' + output.splitlines()[0] +
-            '. Install a newer CMake, for example: python3 -m pip install --user "cmake>=3.20,<4"'
-            '; then put "$HOME/.local/bin" first in PATH and retry build.sh.')
+    if not match or tuple(map(int, match.groups())) < (3, 10, 0):
+        raise ValueError('Internal Clang SDK needs CMake >= 3.10; found: ' + output.strip())
+    return tuple(map(int, match.groups()))
+
+
+def apply_cmake310_patch(source, run=subprocess.run):
+    """Apply all hunks atomically, or reuse them; never reset compiler edits."""
+    patch = ROOT / 'external/cmake310/llvm18.patch'
+    command = ['git', '-C', str(source), 'apply']
+    options = dict(stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    if run(command + ['--reverse', '--check', str(patch)], **options).returncode == 0:
+        return
+    check = run(command + ['--check', str(patch)], **options)
+    if check.returncode:
+        raise ValueError('CMake 3.10 compatibility patch conflicts with local compiler edits; '
+                         'no files changed. Details: ' + check.stderr.strip())
+    run(command + [str(patch)], check=True)
 
 
 def copy_tree(source, destination):
@@ -58,7 +70,12 @@ def main():
     if revision != PIN:
         parser.error('External LLVM revision differs from the pinned source; update this build integration deliberately')
     # Local source edits are intentional. Never reset, clean or download over them.
-    configure = ['cmake', '-G', 'Ninja', '-S', str(source / 'llvm'), '-B', str(build),
+    cmake_version = check_cmake() if not args.reuse_build else (3, 20, 0)
+    legacy_cmake = cmake_version < (3, 20, 0)
+    if legacy_cmake and platform.system() != 'Linux':
+        parser.error('CMake 3.10 compatibility is supported for the Linux SDK; use CMake >= 3.20 on other platforms')
+    configure = ['cmake', '-G', 'Ninja', '-H' + str(source / 'llvm'), '-B' + str(build),
+                 '-DGEANY_CMAKE_COMPAT_DIR=' + str(ROOT / 'external/cmake310'),
                  '-DCMAKE_BUILD_TYPE=Release', '-DLLVM_ENABLE_PROJECTS=clang',
                  '-DLLVM_TARGETS_TO_BUILD=' + args.targets,
                  '-DLLVM_BUILD_LLVM_DYLIB=ON', '-DLLVM_LINK_LLVM_DYLIB=ON',
@@ -67,8 +84,8 @@ def main():
                  '-DLLVM_INCLUDE_BENCHMARKS=OFF', '-DLLVM_ENABLE_BINDINGS=OFF',
                  '-DLLVM_ENABLE_ZLIB=OFF', '-DLLVM_ENABLE_ZSTD=OFF',
                  '-DLLVM_ENABLE_TERMINFO=OFF', '-DLLVM_ENABLE_LIBXML2=OFF']
-    compile_command = ['cmake', '--build', str(build), '--parallel', str(args.jobs),
-                       '--target', 'clang-cpp', 'llvm-config', 'clang-resource-headers']
+    compile_command = ['ninja', '-C', str(build), '-j', str(args.jobs),
+                       'clang-cpp', 'llvm-config', 'clang-resource-headers']
     if args.plan:
         print(json.dumps({'revision': revision, 'configure': configure, 'build': compile_command, 'sdk': str(sdk)}, indent=2))
         return
@@ -86,7 +103,8 @@ def main():
             parser.error('Incomplete compiler cache; rebuild normally')
         print('Reusing pinned source compiler outputs; no source timestamps are used as a cache key')
     else:
-        check_cmake()
+        if legacy_cmake:
+            apply_cmake310_patch(source)
         run(configure)
         if args.configure_only:
             return

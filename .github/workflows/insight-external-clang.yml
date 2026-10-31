@@ -28,6 +28,14 @@ concurrency:
   cancel-in-progress: false
 jobs:
   source-sdk:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cmake: system
+            cache-suffix: ''
+          - cmake: '3.10.3'
+            cache-suffix: '-cmake310-v1'
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
@@ -41,11 +49,29 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build python3 meson autoconf automake autopoint libtool pkg-config libgtk-3-dev gettext python3-docutils patchelf xvfb xauth
+      - name: Select actual legacy CMake
+        if: matrix.cmake != 'system'
+        run: |
+          python3 -m pip download --no-deps --only-binary=:all: --python-version 37 --abi cp37m --platform manylinux1_x86_64 --implementation cp --dest "$RUNNER_TEMP/cmake310" cmake==3.10.3
+          python3 - <<'PYTHON'
+          import os, pathlib, zipfile
+          root = pathlib.Path(os.environ["RUNNER_TEMP"]) / "cmake310"
+          wheel = next(root.glob("*.whl"))
+          with zipfile.ZipFile(wheel) as archive:
+              archive.extractall(root / "unpacked")
+          binary = root / "unpacked/cmake/data/bin"
+          for tool in binary.iterdir():
+              tool.chmod(0o755)
+          with open(os.environ["GITHUB_PATH"], "a") as paths:
+              paths.write(str(binary) + "\n")
+          PYTHON
+      - name: Report CMake version
+        run: cmake --version
       - uses: actions/cache/restore@v4
         id: compiler-cache
         with:
           path: _external-clang
-          key: external-llvm-${{ runner.os }}-${{ steps.compiler-pin.outputs.revision }}-release-x86-v1
+          key: external-llvm-${{ runner.os }}-${{ steps.compiler-pin.outputs.revision }}-release-x86-v1${{ matrix.cache-suffix }}
       - name: Build Clang and LLVM directly from the pinned sources
         id: sdk-build
         run: |
@@ -96,7 +122,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: external-clang-source-validation
+          name: external-clang-source-validation-${{ matrix.cmake }}
           path: |
             _external-clang-sdk/source-manifest.json
             _source-editor/meson-logs/testlog.txt

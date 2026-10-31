@@ -14,6 +14,7 @@ from unittest.mock import patch
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 import build_editor
+import build_external_clang
 import prepare_clang_sdk
 from build_external_clang import PIN, check_cmake, copy_tree
 
@@ -37,11 +38,32 @@ class BuildFlow(unittest.TestCase):
     def args(self, *args):
         return build_editor.arguments(list(args), self.root)
 
+    def test_legacy_patch_is_idempotent_and_preserves_unrelated_edits(self):
+        source = self.root / 'compiler'
+        source.mkdir()
+        subprocess.run(['git', 'init', '-q', str(source)], check=True)
+        patch_dir = self.root / 'external/cmake310'
+        patch_dir.mkdir(parents=True)
+        (patch_dir / 'llvm18.patch').write_text(
+            'diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n'
+            '@@ -1 +1 @@\n-old\n+compatible\n')
+        (source / 'file.txt').write_text('old\n')
+        (source / 'user.cpp').write_text('keep my code')
+        with patch.object(build_external_clang, 'ROOT', self.root):
+            build_external_clang.apply_cmake310_patch(source)
+            build_external_clang.apply_cmake310_patch(source)
+            self.assertEqual((source / 'file.txt').read_text(), 'compatible\n')
+            (source / 'file.txt').write_text('user changed this\n')
+            with self.assertRaisesRegex(ValueError, 'conflicts'):
+                build_external_clang.apply_cmake310_patch(source)
+        self.assertEqual((source / 'file.txt').read_text(), 'user changed this\n')
+        self.assertEqual((source / 'user.cpp').read_text(), 'keep my code')
+
     def test_old_cmake_reports_required_version_before_configure(self):
-        for version in ('3.10.2', '3.19.8'):
-            with self.assertRaisesRegex(ValueError, 'CMake >= 3.20'):
+        for version in ('3.9.6', '2.8.12'):
+            with self.assertRaisesRegex(ValueError, 'CMake >= 3.10'):
                 check_cmake(lambda *a, **k: 'cmake version ' + version)
-        for version in ('3.20.0', '3.31.6', '4.0.0'):
+        for version in ('3.10.2', '3.10.3', '3.19.8', '3.20.0', '3.31.6', '4.0.0'):
             check_cmake(lambda *a, **k: 'cmake version ' + version)
 
     def test_header_copy_merges_existing_tree_on_python37(self):

@@ -266,7 +266,16 @@ Multiline macro parameter lists accept both LF and CRLF line continuations. Refe
 
 Existing Meson build directories can be reconfigured explicitly with `meson setup --reconfigure build-editor -Dclang-provider=internal -Dclang-bundle=auto`. The internal SDK resolver accepts ELF, Darwin dylib and Windows import-library names; runtime validation for this change uses Linux.
 
-CMake >= 3.20 is required by LLVM 18. Check with `cmake --version`.
-On older distributions, install a user-local version with
-`python3 -m pip install --user "cmake>=3.20,<4"`, then run
-`export PATH="$HOME/.local/bin:$PATH"` before retrying the build.
+### CMake 3.10 on Linux
+
+`build.sh` automatically detects CMake 3.10–3.19 and applies the bundled
+`external/cmake310/llvm18.patch` to the editable LLVM sources before configuration.
+This backports list operations, Python discovery, linker flags, cross-directory
+library dependencies and object-library use. No newer CMake download is needed.
+The minimum is CMake 3.10; older versions are not supported.
+
+The patch is idempotent. Unrelated source edits remain intact; conflicting edits
+stop preparation without resetting or replacing source files. It is only needed
+for the Linux/Ninja shared Clang SDK; modern CMake uses the upstream build.
+The build driver uses the older `-H/-B` command syntax and invokes Ninja directly.
+CI exercises CMake 3.10.3 as well as the current system CMake.

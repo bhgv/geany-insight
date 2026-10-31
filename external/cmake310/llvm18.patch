@@ -1,0 +1,121 @@
+diff --git a/clang/CMakeLists.txt b/clang/CMakeLists.txt
+index 5f2b7f064..d005c9f8d 100644
+--- a/clang/CMakeLists.txt
++++ b/clang/CMakeLists.txt
+@@ -1,4 +1,8 @@
+-cmake_minimum_required(VERSION 3.20.0)
++if(CMAKE_VERSION VERSION_LESS "3.20")
++  cmake_minimum_required(VERSION 3.10.0)
++else()
++  cmake_minimum_required(VERSION 3.20.0)
++endif()
+ 
+ if(NOT DEFINED LLVM_COMMON_CMAKE_UTILS)
+   set(LLVM_COMMON_CMAKE_UTILS ${CMAKE_CURRENT_SOURCE_DIR}/../cmake)
+diff --git a/clang/utils/TableGen/CMakeLists.txt b/clang/utils/TableGen/CMakeLists.txt
+index f136cbfee..f76d5d26f 100644
+--- a/clang/utils/TableGen/CMakeLists.txt
++++ b/clang/utils/TableGen/CMakeLists.txt
+@@ -25,6 +25,10 @@ add_tablegen(clang-tblgen CLANG
+   TableGen.cpp
+   )
+ 
+-target_link_libraries(clang-tblgen PRIVATE clangSupport_tablegen)
++if(CMAKE_VERSION VERSION_LESS "3.12" AND NOT XCODE)
++  target_sources(clang-tblgen PRIVATE $<TARGET_OBJECTS:obj.clangSupport>)
++else()
++  target_link_libraries(clang-tblgen PRIVATE clangSupport_tablegen)
++endif()
+ 
+ set_target_properties(clang-tblgen PROPERTIES FOLDER "Clang tablegenning")
+diff --git a/llvm/CMakeLists.txt b/llvm/CMakeLists.txt
+index 909a965cd..dee762cac 100644
+--- a/llvm/CMakeLists.txt
++++ b/llvm/CMakeLists.txt
+@@ -1,6 +1,14 @@
+ # See docs/CMake.html for instructions about how to build LLVM with CMake.
+ 
+-cmake_minimum_required(VERSION 3.20.0)
++if(CMAKE_VERSION VERSION_LESS "3.20")
++  cmake_minimum_required(VERSION 3.10.0)
++else()
++  cmake_minimum_required(VERSION 3.20.0)
++endif()
++
++if(CMAKE_VERSION VERSION_LESS "3.20")
++  include("${GEANY_CMAKE_COMPAT_DIR}/Compat.cmake")
++endif()
+ 
+ set(LLVM_COMMON_CMAKE_UTILS ${CMAKE_CURRENT_SOURCE_DIR}/../cmake)
+ include(${LLVM_COMMON_CMAKE_UTILS}/Modules/CMakePolicy.cmake
+@@ -889,6 +897,9 @@ endif()
+ 
+ # Find python before including config-ix, since it needs to be able to search
+ # for python modules.
++if(CMAKE_VERSION VERSION_LESS "3.12")
++  list(INSERT CMAKE_MODULE_PATH 0 "${GEANY_CMAKE_COMPAT_DIR}")
++endif()
+ find_package(Python3 ${LLVM_MINIMUM_PYTHON_VERSION} REQUIRED
+     COMPONENTS Interpreter)
+ 
+diff --git a/llvm/cmake/modules/LLVM-Build.cmake b/llvm/cmake/modules/LLVM-Build.cmake
+index 525186cbb..188233d9a 100644
+--- a/llvm/cmake/modules/LLVM-Build.cmake
++++ b/llvm/cmake/modules/LLVM-Build.cmake
+@@ -63,9 +63,12 @@ function(LLVMBuildGenerateCFragment)
+       list(APPEND llvmbuild_clibdeps ${llvmbuild_clibdep})
+     endforeach()
+ 
+-    list(TRANSFORM llvmbuild_clibdeps PREPEND "\"")
+-    list(TRANSFORM llvmbuild_clibdeps APPEND "\"")
+-    list(JOIN llvmbuild_clibdeps ", " llvmbuild_clibdeps_joint)
++    set(llvmbuild_clibdeps_joint "")
++    set(geany_separator "")
++    foreach(dependency IN LISTS llvmbuild_clibdeps)
++      set(llvmbuild_clibdeps_joint "${llvmbuild_clibdeps_joint}${geany_separator}\"${dependency}\"")
++      set(geany_separator ", ")
++    endforeach()
+     list(APPEND llvmbuild_centries "{ \"${llvmbuild_libname}\", ${llvmbuild_llvmlibname}, true, {${llvmbuild_clibdeps_joint}} },\n")
+   endforeach()
+ 
+@@ -98,7 +101,22 @@ function(LLVMBuildResolveComponentsLink)
+     llvm_map_components_to_libnames(llvm_libs ${link_components})
+     if(llvm_libs)
+       get_property(libtype TARGET ${llvm_component} PROPERTY LLVM_LIBTYPE)
+-      target_link_libraries(${llvm_component} ${libtype} ${llvm_libs})
++      if(CMAKE_VERSION VERSION_LESS "3.13")
++        # CMake 3.10 cannot call target_link_libraries across directories.
++        if(NOT libtype STREQUAL "INTERFACE")
++          set_property(TARGET ${llvm_component} APPEND PROPERTY LINK_LIBRARIES ${llvm_libs})
++        endif()
++        if(libtype STREQUAL "PRIVATE")
++          foreach(library IN LISTS llvm_libs)
++            set_property(TARGET ${llvm_component} APPEND PROPERTY
++              INTERFACE_LINK_LIBRARIES "$<LINK_ONLY:${library}>")
++          endforeach()
++        else()
++          set_property(TARGET ${llvm_component} APPEND PROPERTY INTERFACE_LINK_LIBRARIES ${llvm_libs})
++        endif()
++      else()
++        target_link_libraries(${llvm_component} ${libtype} ${llvm_libs})
++      endif()
+     endif()
+   endforeach()
+ endfunction()
+diff --git a/llvm/cmake/modules/TableGen.cmake b/llvm/cmake/modules/TableGen.cmake
+index 1d18fdde2..0da8f319d 100644
+--- a/llvm/cmake/modules/TableGen.cmake
++++ b/llvm/cmake/modules/TableGen.cmake
+@@ -120,7 +120,11 @@ function(tablegen project ofn)
+ 
+   # Filter out empty items before prepending each entry with -I
+   list(REMOVE_ITEM tblgen_includes "")
+-  list(TRANSFORM tblgen_includes PREPEND -I)
++  set(geany_tblgen_includes "")
++  foreach(path IN LISTS tblgen_includes)
++    list(APPEND geany_tblgen_includes "-I${path}")
++  endforeach()
++  set(tblgen_includes ${geany_tblgen_includes})
+ 
+   set(tablegen_exe ${${project}_TABLEGEN_EXE})
+   set(tablegen_depends ${${project}_TABLEGEN_TARGET} ${tablegen_exe})

@@ -155,3 +155,5 @@ Makefile.in
 
 /_editor-build/
 /out/
+
+/_cmake310-test/
