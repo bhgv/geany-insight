@@ -350,9 +350,32 @@ void insight_symbol_view_filter_selected(GtkTreeView *view,gboolean only) {
  guint bit=1u<<filter_category(type_for(s,path,kind));g_free(path);g_free(kind);insight_symbol_view_set_types(view,only ? bit : s->mask&~bit);
 }
 
+static gboolean page_near_end(GtkTreeView *view) {
+ GtkWidget *scroll=gtk_widget_get_ancestor(GTK_WIDGET(view),GTK_TYPE_SCROLLED_WINDOW);
+ if(!scroll) return FALSE;
+ GtkAdjustment *adjustment=gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(scroll));
+ return gtk_adjustment_get_upper(adjustment)-gtk_adjustment_get_page_size(adjustment)-gtk_adjustment_get_value(adjustment)<=48;
+}
+static gboolean page_scroll(GtkWidget *widget,GdkEventScroll *event,gpointer unused) {
+ (void)unused;
+ gboolean down=event->direction==GDK_SCROLL_DOWN || (event->direction==GDK_SCROLL_SMOOTH && event->delta_y>0);
+ Symbols *s=g_object_get_data(G_OBJECT(widget),"insight-symbol-view");
+ if(down && s && s->has_more && !s->loading && gtk_widget_get_sensitive(widget) && page_near_end(GTK_TREE_VIEW(widget))) {
+  insight_symbol_view_load_more(GTK_TREE_VIEW(widget));return TRUE;
+ }
+ return FALSE;
+}
+static void page_adjustment_changed(GtkAdjustment *adjustment,gpointer data) {
+ GtkTreeView *view=data;
+ if(gtk_adjustment_get_value(adjustment)>0 && page_near_end(view)) insight_symbol_view_load_more(view);
+}
 void insight_symbol_view_more_loader(GtkTreeView *view,GCallback callback,guint step) {
  Symbols *s=g_object_get_data(G_OBJECT(view),"insight-symbol-view");if(!s || !s->more) return;
  s->more_step=step;page_button(s);g_signal_connect_object(s->more,"clicked",callback,view,0);
+ g_signal_connect(view,"scroll-event",G_CALLBACK(page_scroll),NULL);
+ GtkWidget *scroll=gtk_widget_get_ancestor(GTK_WIDGET(view),GTK_TYPE_SCROLLED_WINDOW);
+ if(scroll) g_signal_connect_object(gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(scroll)),
+   "value-changed",G_CALLBACK(page_adjustment_changed),view,0);
 }
 void insight_symbol_view_page_state(GtkTreeView *view,gboolean more) { Symbols *s=g_object_get_data(G_OBJECT(view),"insight-symbol-view");if(s) { s->has_more=more;page_button(s);status(s); } }
 gboolean insight_symbol_view_has_more(GtkTreeView *view) { Symbols *s=g_object_get_data(G_OBJECT(view),"insight-symbol-view");return s && s->has_more; }

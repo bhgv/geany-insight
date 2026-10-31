@@ -38,6 +38,9 @@ static gboolean step(gpointer data) {
    GtkWidget *node=project;while(gtk_widget_get_parent(node) && !GTK_IS_NOTEBOOK(gtk_widget_get_parent(node))) node=gtk_widget_get_parent(node);GtkNotebook *book=GTK_NOTEBOOK(gtk_widget_get_parent(node));gtk_notebook_set_current_page(book,gtk_notebook_page_num(book,node));gtk_widget_grab_focus(project);
    GdkEvent *event=gdk_event_new(GDK_KEY_PRESS);event->key.window=g_object_ref(gtk_widget_get_window(window));event->key.keyval=GDK_KEY_Menu;gdk_event_set_device(event,gdk_seat_get_keyboard(gdk_display_get_default_seat(gdk_display_get_default())));gtk_main_do_event(event);gdk_event_free(event);
    GtkWidget *menu=g_object_get_data(G_OBJECT(project),"insight-symbol-popup");g_assert_nonnull(menu);gtk_menu_popdown(GTK_MENU(menu));GtkWidget *command=named(menu,"insight-symbol-command-12");g_assert_true(gtk_widget_get_sensitive(command));g_assert_true(GTK_IS_IMAGE(gtk_image_menu_item_get_image(GTK_IMAGE_MENU_ITEM(command))));gtk_menu_item_activate(GTK_MENU_ITEM(command));
+  }else if(project_page==1) {
+   GdkEventScroll event={0};event.type=GDK_SCROLL;event.direction=GDK_SCROLL_DOWN;
+   gboolean handled=FALSE;g_signal_emit_by_name(project,"scroll-event",&event,&handled);g_assert_true(handled);
   }else page(project_controls);project_page++; }
   else { if(!text(project_controls,"Symbols: 1 / 2301")) return G_SOURCE_CONTINUE;
   g_assert_true(find(project,"Z_after_limit",&it));g_assert_false(gtk_widget_get_visible(more(project_controls)));gtk_entry_set_text(GTK_ENTRY(named(window,"insight-symbol-query")),"Z_after_limit");phase++; }

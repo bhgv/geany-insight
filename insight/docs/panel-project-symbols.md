@@ -89,3 +89,5 @@ The list has a separate declaration index from the Geany/ctags language parser, 
 
 
 [Search and copy the current list](list-tools.md): context menu, F4/Shift+F4, visible columns and loaded rows.
+
+Symbols are paged. Scrolling down at the end automatically loads the next page, including when filters hide all currently loaded rows. The + button remains available; a + in the counter means more matches remain in the index.
