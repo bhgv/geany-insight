@@ -21,6 +21,7 @@ struct InsightSearchLinks {
  InsightSearchLinkColumns c;
  GPtrArray *links;
  SearchLink *last;
+ void (*highlight)(ScintillaObject *,gsize,gsize);
  guint digest_doc;
  gchar *digest;
 };
@@ -93,6 +94,7 @@ InsightSearchLinks *insight_search_links_new(GtkTreeView *view,InsightSearchLink
  gtk_tree_view_column_set_cell_data_func(column,cell,link_icon,s,NULL);gtk_tree_view_insert_column(view,column,0);
  return s;
 }
+void insight_search_links_set_highlight(InsightSearchLinks *s,void (*paint)(ScintillaObject *,gsize,gsize)) { if(s) s->highlight=paint; }
 void insight_search_links_clear(InsightSearchLinks *s) {
  if(!s) return;
  /* Coordinates and digest must describe the same snapshot when anchors are
@@ -162,6 +164,7 @@ gboolean insight_search_links_open(InsightSearchLinks *s,GtkTreePath *path) {
  update_row(s,link,doc,TRUE);s->last=link;
  navqueue_goto_line(document_get_current(),doc,sci_get_line_from_position(doc->editor->sci,link->anchor.start)+1);
  SEND(doc->editor->sci,SCI_SETSEL,link->anchor.start,link->anchor.end);
+ if(s->highlight) s->highlight(doc->editor->sci,link->anchor.start,link->anchor.end);
  SEND(doc->editor->sci,SCI_VERTICALCENTRECARET,0,0);document_grab_focus(doc);
  ui_set_statusbar(TRUE,"%s",insight_tr("Source link opened; Ctrl+L returns to the search result"));return TRUE;
 }

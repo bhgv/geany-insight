@@ -19,3 +19,5 @@ Closing Search Results releases live anchors; result rows remain verifiable snap
 ## Validation
 
 The native test runs the actual editor and checks reverse Ctrl+L, UTF-8/CRLF, insertions, undo/redo, sorting, result/target-line removal, a fresh search, saved target reopening and changed-disk refusal. A separate test covers offset arithmetic and overflow.
+
+Opening a live search-result link paints the source match with the same fill and frame as Context. Edits outside the matched line preserve the live anchor and its highlight.

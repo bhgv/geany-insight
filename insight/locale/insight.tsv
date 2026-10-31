@@ -2842,3 +2842,4 @@ Project files could not be saved. Check project permissions or the master file l
 File list masks require a literal directory	В масках списка файлов каталог должен быть указан без шаблона
 File list exceeds 10000 entries or contains an overlong path	В списке больше 10000 записей или слишком длинный путь
 Selection exceeds 10000 files, 4096 folders or 100000 directory entries; select a smaller tree	В выборке больше 10000 файлов, 4096 папок или 100000 записей каталога; выберите меньшее дерево
+Finish a complete project scan before switching to manual membership	Дождитесь полного завершения индексации перед переходом к ручному составу

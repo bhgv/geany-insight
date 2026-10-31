@@ -141,3 +141,5 @@ Add from list accepts UTF-8/BOM, LF/CRLF, project-relative paths and masks such 
 Actual Linux GTK dialog after adding `*.c` from the regression fixture tree:
 
 ![Project membership browser — Linux GUI fixture](../media/project-membership.jpg)
+
+Turning off automatic inclusion in a legacy project freezes the current files into an explicit list and removes live tree rules. Wait for a complete scan; incomplete snapshots decline. Later files in those folders are not imported automatically. A directory read failure clears the available list, preventing selection of files from the previous directory under a different heading.

@@ -71,6 +71,7 @@ static void membership_read_start(MembershipDialog *d,GPtrArray *roots,gboolean 
 }
 static void membership_browse(MembershipDialog *d,const gchar *path) {
  gchar *next=insight_canonicalize_filename(path,d->directory ? d->directory:d->root);g_free(d->directory);d->directory=next;gtk_label_set_text(GTK_LABEL(d->directory_label),d->directory);
+ g_clear_pointer(&d->entries,g_ptr_array_unref);gtk_list_store_clear(d->available_store);
  /* Ancestor chain plus the selected folder; children are loaded with the file
   * list. This works for roots and paths outside the project on every platform. */
  gtk_tree_store_clear(d->directory_store);GPtrArray *parents=g_ptr_array_new_with_free_func(g_free);gchar *p=g_strdup(next);

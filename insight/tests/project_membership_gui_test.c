@@ -7,7 +7,13 @@
 #include "ui_utils.h"
 #include <glib/gstdio.h>
 #include <string.h>
+#ifndef G_OS_WIN32
+#include <unistd.h>
+#endif
 static gchar *root,*project;static GtkWidget *window,*dialog;static guint phase,timer,deadline;static gboolean created;
+#ifndef G_OS_WIN32
+static guint error_phase;
+#endif
 static GtkWidget *named(GtkWidget *w,const gchar *name) { if(!g_strcmp0(gtk_widget_get_name(w),name)) return w;if(GTK_IS_CONTAINER(w)) {GList *children=gtk_container_get_children(GTK_CONTAINER(w));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found;}return NULL; }
 static GtkWidget *toplevel(const gchar *name) {GList *list=gtk_window_list_toplevels();GtkWidget *found=NULL;for(GList *p=list;p && !found;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),name)) found=p->data;g_list_free(list);return found;}
 static void entries(GtkWidget *w,GPtrArray *list) {if(GTK_IS_ENTRY(w)) g_ptr_array_add(list,w);else if(GTK_IS_CONTAINER(w)) {GList *children=gtk_container_get_children(GTK_CONTAINER(w));for(GList *p=children;p;p=p->next) entries(p->data,list);g_list_free(children);} }
@@ -21,6 +27,14 @@ static gboolean import_list(gpointer unused) { (void)unused;GList *list=gtk_wind
 static gboolean edit(gpointer unused) {
  (void)unused;dialog=toplevel("insight-project-membership");if(!dialog) {GtkWidget *new_project=toplevel("GeanyDialogProject");if(!new_project) return G_SOURCE_CONTINUE;GPtrArray *list=g_ptr_array_new();entries(new_project,list);GtkWidget *name=NULL,*file=NULL,*base=NULL;for(guint n=0;n<list->len;n++) {GtkWidget *entry=g_ptr_array_index(list,n);gchar *tip=gtk_widget_get_tooltip_text(entry);if(tip && g_str_has_prefix(tip,"Project name")) name=entry;else if(tip && g_str_has_prefix(tip,"Path of the file representing the project")) file=entry;else if(tip && g_str_has_prefix(tip,"Base directory of all files")) base=entry;g_free(tip);}g_assert_nonnull(name);g_assert_nonnull(file);g_assert_nonnull(base);gtk_entry_set_text(GTK_ENTRY(name),"Manual membership");gtk_entry_set_text(GTK_ENTRY(file),project);gtk_entry_set_text(GTK_ENTRY(base),root);g_ptr_array_unref(list);gtk_dialog_response(GTK_DIALOG(new_project),GTK_RESPONSE_OK);return G_SOURCE_CONTINUE;}
  GtkWidget *close=gtk_dialog_get_widget_for_response(GTK_DIALOG(dialog),GTK_RESPONSE_APPLY);if(!gtk_widget_is_sensitive(close)) return G_SOURCE_CONTINUE;
+#ifndef G_OS_WIN32
+ if(!phase && geteuid()!=0 && error_phase<2) {
+  gchar *locked=g_build_filename(root,"unreadable",NULL);
+  if(!error_phase) {g_assert_cmpuint(count("insight-project-membership-available"),>,0);g_assert_cmpint(g_mkdir(locked,0700),==,0);g_assert_cmpint(g_chmod(locked,0),==,0);filter(locked);error_phase=1;}
+  else {g_assert_cmpuint(count("insight-project-membership-available"),==,0);g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(named(dialog,"insight-membership-status"))),!=,"");g_assert_cmpint(g_chmod(locked,0700),==,0);g_assert_cmpint(g_rmdir(locked),==,0);filter(root);error_phase=2;}
+  g_free(locked);return G_SOURCE_CONTINUE;
+ }
+#endif
  if(phase==0) {g_assert_cmpuint(count("insight-project-membership-files"),==,0);GKeyFile *key=g_key_file_new();g_assert_true(g_key_file_load_from_file(key,project,G_KEY_FILE_NONE,NULL));g_assert_false(g_key_file_get_boolean(key,"insight-project-files","automatic",NULL));g_key_file_unref(key);filter("*.c");phase++;}
  else if(phase==1) {click("insight-membership-add-tree");phase++;}
  else if(phase==2) {g_assert_cmpuint(count("insight-project-membership-files"),==,2);capture();g_assert_true(select_name("insight-project-membership-files","one.c",FALSE));click("insight-membership-remove");g_assert_cmpuint(count("insight-project-membership-files"),==,1);g_assert_true(select_name("insight-project-membership-available","one.c",FALSE));click("insight-membership-add");phase++;}

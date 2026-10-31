@@ -10,6 +10,10 @@ typedef struct {
 InsightProjectFiles *insight_project_files_new(void);
 InsightProjectFiles *insight_project_files_clone(const InsightProjectFiles *);
 void insight_project_files_free(InsightProjectFiles *);
+/* Atomically freeze a complete, caller-captured file snapshot. Preserve explicit
+ * missing files, masks and exclusions; expand trees only through supplied paths.
+ * No disk reads. Master-list projects and invalid/oversized snapshots decline. */
+InsightProjectFiles *insight_project_files_freeze(const InsightProjectFiles *,const gchar *,const GPtrArray *,GError **);
 gboolean insight_project_files_set(InsightProjectFiles *,const char *,gboolean,gboolean,GError **);
 gboolean insight_project_files_contains(const InsightProjectFiles *,const char *,const char *);
 /* Project/system directory variables and case-insensitive environment names

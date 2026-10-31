@@ -6,6 +6,8 @@
 typedef struct InsightSearchLinks InsightSearchLinks;
 typedef struct { gint display,path,line,start,end,id,digest,column; } InsightSearchLinkColumns;
 InsightSearchLinks *insight_search_links_new(GtkTreeView *,InsightSearchLinkColumns);
+/* Called only after a live source anchor was successfully opened. */
+void insight_search_links_set_highlight(InsightSearchLinks *,void (*)(ScintillaObject *,gsize,gsize));
 void insight_search_links_free(InsightSearchLinks *);
 void insight_search_links_clear(InsightSearchLinks *);
 void insight_search_links_capture(InsightSearchLinks *,GtkTreeIter *);

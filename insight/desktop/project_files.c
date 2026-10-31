@@ -190,3 +190,18 @@ InsightProjectFiles *insight_project_files_read_project(GKeyFile *config,const c
 }
 
 InsightProjectFiles *insight_project_files_read(GKeyFile *config,const char *root,GError **error) { return insight_project_files_read_project(config,root,NULL,error); }
+
+InsightProjectFiles *insight_project_files_freeze(const InsightProjectFiles *s,const gchar *root,const GPtrArray *paths,GError **error) {
+ gchar *base=canonical(root);
+ if(!s || !base || !paths || paths->len>20000 || !valid(s,error)) {g_free(base);if(error && !*error) g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid project membership snapshot");return NULL;}
+ if(*s->master_file) {g_free(base);g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Detach the master file list before freezing membership");return NULL;}
+ InsightProjectFiles *next=insight_project_files_clone(s);next->automatic=FALSE;g_ptr_array_set_size(next->files,0);g_ptr_array_set_size(next->trees,0);
+ GHashTable *seen=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);const GPtrArray *sources[]={s->files,paths};gboolean ok=TRUE;
+ for(guint kind=0;kind<2 && ok;kind++) for(guint n=0;n<sources[kind]->len && ok;n++) {
+  gchar *path=canonical(g_ptr_array_index((GPtrArray *)sources[kind],n));if(!path) {g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Invalid project snapshot path");ok=FALSE;break;}
+  gchar *identity=key(path);if(g_hash_table_contains(seen,identity)) {g_free(identity);g_free(path);continue;}g_hash_table_add(seen,identity);
+  if(insight_project_files_contains(s,base,path)) {ok=insight_project_files_set(next,path,FALSE,TRUE,error);}
+  g_free(path);
+ }
+ g_hash_table_unref(seen);g_free(base);if(!ok) {insight_project_files_free(next);return NULL;}return next;
+}

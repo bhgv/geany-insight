@@ -1,6 +1,15 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "project_files.h"
 #include <string.h>
+static void frozen_membership(const gchar *root) {
+ GError *error=NULL;InsightProjectFiles *s=insight_project_files_new();gchar *a=g_build_filename(root,"one.c",NULL),*b=g_build_filename(root,"sub","two.c",NULL),*removed=g_build_filename(root,"removed.c",NULL),*future=g_build_filename(root,"future.c",NULL),*outside=g_build_filename(g_get_tmp_dir(),"external-missing-header.h",NULL),*tree=g_build_filename(root,"sub",NULL);
+ g_assert_true(insight_project_files_set(s,removed,FALSE,FALSE,&error));g_assert_true(insight_project_files_set(s,tree,TRUE,TRUE,&error));g_assert_true(insight_project_files_set(s,outside,FALSE,TRUE,&error));
+ GPtrArray *snapshot=g_ptr_array_new();g_ptr_array_add(snapshot,a);g_ptr_array_add(snapshot,b);g_ptr_array_add(snapshot,a);g_ptr_array_add(snapshot,removed);
+ InsightProjectFiles *frozen=insight_project_files_freeze(s,root,snapshot,&error);g_assert_no_error(error);g_assert_nonnull(frozen);g_assert_false(frozen->automatic);g_assert_cmpuint(frozen->trees->len,==,0);g_assert_cmpuint(frozen->files->len,==,3);g_assert_true(insight_project_files_contains(frozen,root,a));g_assert_true(insight_project_files_contains(frozen,root,b));g_assert_true(insight_project_files_contains(frozen,root,outside));g_assert_false(insight_project_files_contains(frozen,root,removed));g_assert_false(insight_project_files_contains(frozen,root,future));g_assert_true(s->automatic);g_assert_true(insight_project_files_contains(s,root,future));
+ GKeyFile *key=g_key_file_new();g_assert_true(insight_project_files_write(frozen,key,root,&error));InsightProjectFiles *loaded=insight_project_files_read(key,root,&error);g_assert_no_error(error);g_assert_cmpuint(loaded->files->len,==,3);g_assert_false(insight_project_files_contains(loaded,root,future));insight_project_files_free(loaded);g_key_file_unref(key);insight_project_files_free(frozen);
+ g_ptr_array_add(snapshot,"relative.c");g_assert_null(insight_project_files_freeze(s,root,snapshot,&error));g_assert_error(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT);g_clear_error(&error);g_assert_true(s->automatic);g_assert_cmpuint(s->trees->len,==,1);
+ g_ptr_array_unref(snapshot);insight_project_files_free(s);g_free(a);g_free(b);g_free(removed);g_free(future);g_free(outside);g_free(tree);
+}
 static void master_variables(const gchar *root,const gchar *moved) {
  GError *error=NULL;InsightProjectFiles *s=insight_project_files_new();gchar *project=g_build_filename(root,"Проект.geany",NULL),*moved_project=g_build_filename(moved,"Перенос.geany",NULL),*expected=g_build_filename(root,"master.txt",NULL);
  g_assert_true(insight_project_files_set_master(s,"%project_source_dir%/master.txt",root,project,&error));g_assert_no_error(error);g_assert_cmpstr(s->master_file,==,expected);g_assert_cmpstr(s->master_expression,==,"%project_source_dir%/master.txt");
@@ -142,6 +151,6 @@ int main(void) {
  gchar *before=g_key_file_to_data(config,NULL,NULL); g_free(s->masks); s->masks=g_strnfill(4097,'x'); g_assert_false(insight_project_files_write(s,config,root,&error)); g_assert_nonnull(error); g_clear_error(&error); gchar *after=g_key_file_to_data(config,NULL,NULL); g_assert_cmpstr(before,==,after); g_free(before); g_free(after);
  g_key_file_set_integer(config,"insight-project-files","version",2); g_assert_null(insight_project_files_read(config,root,&error)); g_assert_nonnull(error); g_clear_error(&error);
  g_key_file_set_integer(config,"insight-project-files","version",1); const gchar *invalid_paths[]={"bad\nname.c"}; g_key_file_set_string_list(config,"insight-project-files","files",invalid_paths,1); g_assert_null(insight_project_files_read(config,root,&error)); g_assert_nonnull(error); g_clear_error(&error);
- program_directory(root,moved);environment_variables(root,moved);master_variables(root,moved);insight_project_files_free(s); g_key_file_unref(config); g_free(cwd); g_free(root); g_free(other); g_free(a); g_free(b); g_free(tree); g_free(child); g_free(keep); g_free(external); g_free(moved); g_free(moved_a);
+ frozen_membership(root);program_directory(root,moved);environment_variables(root,moved);master_variables(root,moved);insight_project_files_free(s); g_key_file_unref(config); g_free(cwd); g_free(root); g_free(other); g_free(a); g_free(b); g_free(tree); g_free(child); g_free(keep); g_free(external); g_free(moved); g_free(moved_a);
  g_print("Project membership checks passed\n"); return 0;
 }
