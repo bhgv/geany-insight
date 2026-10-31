@@ -238,6 +238,10 @@ on:
       - insight/desktop/project_files.*
       - insight/tests/disk_operation*_test.c
       - insight/tests/project_files_test.c
+      - build.sh
+      - insight/tools/build_editor.py
+      - insight/tools/prepare_clang_sdk.py
+      - insight/tests/editor_build_driver_test.py
       - meson.build
       - tests/meson.build
       - .github/workflows/insight-native-linux.yml
@@ -270,7 +274,8 @@ jobs:
       - name: Verify explicit compiler provider selection
         run: |
           python3 insight/tests/clang_sdk_selection_test.py
-          if meson setup _missing-internal -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled > missing-internal.log 2>&1; then
+          python3 insight/tests/editor_build_driver_test.py
+          if meson setup _missing-internal -Dclang-bootstrap=false -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled > missing-internal.log 2>&1; then
             echo 'Default configuration silently used system Clang'
             exit 1
           fi

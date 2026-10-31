@@ -2,6 +2,21 @@ Geany - A fast and lightweight IDE
 ----------------------------------
 
 
+Geany Insight build
+-------------------
+
+From this repository, one command prepares the internal Clang SDK, refreshes
+configure, builds and installs the editor into a local prefix::
+
+    ./build.sh --prefix "$PWD/o" --install
+
+Use ``--backend meson`` for Meson or ``--clang-provider system`` to explicitly
+choose system Clang. Without ``--install`` only the build is performed.
+The first compiler build can take a long time. Build tools and GTK development
+files are required; installing system Clang is not required for the default mode.
+See ``external/README.md`` and ``insight/docs/clang.md`` for prerequisites and options.
+
+
 About
 -----
 Geany is a small and lightweight integrated development environment.

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="210" viewBox="0 0 920 210">
+<rect width="920" height="210" rx="12" fill="#edf2f8"/>
+<g font-family="sans-serif" fill="#183047"><text x="24" y="32" font-size="18">./build.sh --prefix "$PWD/o" --install</text>
+<g fill="white" stroke="#879db3"><rect x="24" y="54" width="210" height="100" rx="8"/><rect x="250" y="54" width="210" height="100" rx="8"/><rect x="476" y="54" width="190" height="100" rx="8"/><rect x="682" y="54" width="214" height="100" rx="8"/></g>
+<g font-size="15"><text x="36" y="81">Internal compiler SDK</text><text x="36" y="109">Fetch if missing</text><text x="36" y="133">Build or validate</text><text x="262" y="81">Fresh configuration</text><text x="262" y="109">Regenerate configure</text><text x="262" y="133">or reconfigure Meson</text><text x="488" y="81">Build editor</text><text x="488" y="109">Stop on errors</text><text x="694" y="81">Install (optional)</text><text x="694" y="109">Into selected prefix</text></g>
+<g stroke="#3f6f9f" stroke-width="2" fill="none"><path d="M234 104h16m-6-5 6 5-6 5M460 104h16m-6-5 6 5-6 5M666 104h16m-6-5 6 5-6 5"/></g>
+<text x="24" y="185" font-size="14">System / disabled modes skip SDK preparation. Existing compiler source edits are preserved.</text></g></svg>

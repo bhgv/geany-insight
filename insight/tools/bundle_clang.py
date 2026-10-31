@@ -15,14 +15,18 @@ def main():
     parser.add_argument('--sdk-lib', type=Path, required=True)
     parser.add_argument('--libdir', default='lib')
     parser.add_argument('--datadir', default='share/geany')
+    parser.add_argument('--resources-only', action='store_true')
+    parser.add_argument('--resource-destination', type=Path)
     args = parser.parse_args()
-    prefix = Path(os.environ['MESON_INSTALL_DESTDIR_PREFIX'])
+    if args.resource_destination and not args.resources_only:
+        parser.error('--resource-destination requires --resources-only')
+    prefix = Path('.') if args.resource_destination else Path(os.environ['MESON_INSTALL_DESTDIR_PREFIX'])
     library_dir = args.sdk_lib.resolve()
     resource_roots = [p for p in (library_dir / 'clang').glob('*') if (p / 'include').is_dir()]
     if not resource_roots:
         raise SystemExit('Clang SDK resource headers missing: ' + str(library_dir / 'clang'))
     resource = max(resource_roots, key=lambda p: tuple(int(n) for n in re.findall(r'\d+', p.name)))
-    data = prefix / args.datadir / 'insight/clang'
+    data = args.resource_destination if args.resource_destination else prefix / args.datadir / 'insight/clang'
     shutil.copytree(resource / 'include', data / 'resources/include', dirs_exist_ok=True)
     licenses = data / 'licenses'
     licenses.mkdir(parents=True, exist_ok=True)
@@ -32,6 +36,8 @@ def main():
         shutil.copy2(source, licenses / (str(i) + '-' + source.name))
     if not any(licenses.iterdir()):
         raise SystemExit('Clang/LLVM redistribution license files missing from SDK')
+    if args.resources_only:
+        return
     if sys.platform == 'win32':
         source = next((p for p in (sdk / 'bin').glob('*.dll') if 'clang-cpp' in p.name.lower()), None)
         if not source:

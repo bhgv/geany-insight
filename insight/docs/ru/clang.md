@@ -1,12 +1,41 @@
 # Clang C/C++
 
-> **Clang по умолчанию:** внутренний SDK из `external/llvm-project`, собранный в `_external-clang-sdk`. Системный вариант включается только явно: `-Dclang-provider=system` или `--with-clang-provider=system`. При отсутствии внутреннего SDK подмены системным нет. C++ API обслуживает разбор, символы, подсветку, препроцессор и Sema; libclang не требуется.
+> **Clang по умолчанию:** внутренний SDK из `external/llvm-project`, собранный в `_external-clang-sdk`. Системный вариант включается только явно: `-Dclang-provider=system` или `--with-clang-provider=system`. Отсутствующий SDK готовится автоматически, без подмены системным. C++ API обслуживает разбор, символы, подсветку, препроцессор и Sema; libclang не требуется.
 
 
 Clang-enabled portable builds carry clang-cpp, LLVM and their shared dependencies,
 resource headers and redistribution notices. Neither the `clang` executable nor
 Python is needed by the native frontend. Project headers, generated files and
 external SDKs still come from the project.
+
+## Одна команда для сборки
+
+```sh
+./build.sh --prefix "$PWD/o" --install
+```
+
+Скрипт сам подготавливает внутренний SDK, при необходимости получает подмодуль,
+обновляет старый `configure`, собирает редактор и устанавливает его в указанный
+каталог. Без `--install` выполняется только сборка. Существующие исходники Clang
+и локальные правки не сбрасываются. Первый LLVM/Clang собирается долго; следующие
+сборки используют готовый SDK или выполняют инкрементальную сборку после правок.
+
+Вариант Meson: `./build.sh --backend meson --prefix "$PWD/o" --install`.
+Системный Clang: `./build.sh --clang-provider system --install`.
+Минимальная сборка: `./build.sh --clang-provider disabled`.
+`--jobs 2` задаёт параллелизм; `--plan` показывает команды без запуска и записи.
+`--configure-only` обновляет конфигурацию без сборки редактора. По умолчанию
+используется `_editor-build`; существующая сборка Autotools в исходном дереве
+переиспользуется без удаления файлов. Дополнительные опции идут после `--`.
+
+Обычные свежие `./configure` и `meson setup` тоже автоматически готовят отсутствующий
+внутренний SDK. Для заранее подготовленного SDK автоматику можно отключить через
+`--disable-clang-bootstrap` или `-Dclang-bootstrap=false`. В CI разрешено явно
+использовать `--skip-sdk-build` в build.sh после подготовки проверенного SDK.
+Системный и отключённый режимы исходники LLVM не получают и не собирают.
+Неизвестный непустой каталог SDK или неполное дерево исходников не перезаписывается.
+
+![Automatic build pipeline](../media/build-bootstrap.svg)
 
 ## Project symbols and cache
 
@@ -35,7 +64,7 @@ stale results. Named open files, including unsaved headers, are Clang overlays.
 
 ## Build and portable runtime
 
-Prepare the pinned internal SDK once, and rebuild after editing Clang:
+Advanced/manual SDK preparation (normally handled by build.sh):
 
 ```sh
 git submodule update --init --depth 1 external/llvm-project

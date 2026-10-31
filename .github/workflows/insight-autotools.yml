@@ -43,16 +43,15 @@ jobs:
           grep -F g_queue_clear_full /tmp/glib-api-ceiling.log
       - name: Generate configure and build out of tree
         run: |
-          NOCONFIGURE=1 ./autogen.sh
-          mkdir _autotools
+          ./build.sh --clang-provider system --configure-only --build-dir "$PWD/_autotools" --prefix "$PWD/_autotools/install" -- --disable-html-docs --disable-pdf-docs --disable-api-docs --disable-gtkdoc-header CFLAGS="-O2 -Werror=implicit-function-declaration $GLIB_API_CEILING -DINSIGHT_GLIB_COMPAT_FORCE_FALLBACK=1" CXXFLAGS="-O2 $GLIB_API_CEILING"
           cd _autotools
-          ../configure --with-clang-provider=system --prefix="$PWD/install" --disable-html-docs --disable-pdf-docs --disable-api-docs --disable-gtkdoc-header CFLAGS="-O2 -Werror=implicit-function-declaration $GLIB_API_CEILING -DINSIGHT_GLIB_COMPAT_FORCE_FALLBACK=1" CXXFLAGS="-O2 $GLIB_API_CEILING"
           grep -E "^#define HAVE_CLANG_CPP 1" config.h
           ! ldd src/.libs/libgeany.so | grep -E "libclang\.so"
           make -k -j2
       - name: Install and verify linked programs
         run: |
           make -C _autotools install
+          test -f _autotools/install/share/geany/insight/clang/resources/include/stddef.h
           test -x _autotools/install/bin/geany-insight-askpass
           ldd -r _autotools/install/lib/libgeany.so 2>&1 | tee _autotools/link-check.txt
           if grep -E 'undefined symbol:|not found' _autotools/link-check.txt; then exit 1; fi

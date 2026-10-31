@@ -45,7 +45,9 @@ if not get_option('clang').disabled() and not get_option('clang-cpp').disabled()
   if sdk_prefix == ''
    sdk_prefix = meson.current_source_dir() / '_external-clang-sdk'
   endif
-  sdk_check = run_command(find_program('python3'), meson.current_source_dir() / 'insight/tools/select_clang_sdk.py', '--sdk', sdk_prefix, check: false)
+  message('Preparing/validating internal Clang; its first source build can take a long time')
+  sdk_helper = get_option('clang-bootstrap') ? 'prepare_clang_sdk.py' : 'select_clang_sdk.py'
+  sdk_check = run_command(find_program('python3'), meson.current_source_dir() / 'insight/tools' / sdk_helper, '--sdk', sdk_prefix, check: false)
   if sdk_check.returncode() != 0
    error(sdk_check.stderr())
   endif
@@ -1262,3 +1264,5 @@ install_data('insight/docs/clang.md', install_dir: cdata.get('GEANY_DATA_DIR') /
 install_data('insight/docs/media/semantic-browsing.svg', 'insight/docs/media/project-membership.svg', 'insight/docs/media/project-membership.jpg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
 
 install_data('insight/docs/parser-engines.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
+
+install_data('insight/docs/media/build-bootstrap.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')

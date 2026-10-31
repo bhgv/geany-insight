@@ -1,12 +1,40 @@
 # Clang C/C++
 
-> **Default Clang provider:** the internal SDK from `external/llvm-project`, staged in `_external-clang-sdk`. System Clang requires `-Dclang-provider=system` or `--with-clang-provider=system`. Missing internal files never trigger a system fallback. Native C++ APIs supply parsing, symbols, coloring, preprocessing and Sema; libclang is not required.
+> **Default Clang provider:** the internal SDK from `external/llvm-project`, staged in `_external-clang-sdk`. System Clang requires `-Dclang-provider=system` or `--with-clang-provider=system`. Missing internal files are prepared automatically, never replaced by a system fallback. Native C++ APIs supply parsing, symbols, coloring, preprocessing and Sema; libclang is not required.
 
 
 Clang-enabled portable builds carry clang-cpp, LLVM and their shared dependencies,
 resource headers and redistribution notices. Neither the `clang` executable nor
 Python is needed by the native frontend. Project headers, generated files and
 external SDKs still come from the project.
+
+## One-command build
+
+```sh
+./build.sh --prefix "$PWD/o" --install
+```
+
+This prepares the internal SDK, initializes missing compiler sources, regenerates
+stale configure scripts, builds the editor, and installs into the selected prefix.
+Without `--install` it only builds. Existing compiler source edits are preserved.
+The first LLVM build is expensive; later runs reuse the SDK or incrementally rebuild
+after compiler edits.
+
+Meson: `./build.sh --backend meson --prefix "$PWD/o" --install`.
+System Clang: `./build.sh --clang-provider system --install`.
+Minimal build: `./build.sh --clang-provider disabled`.
+`--jobs 2` controls parallelism; `--plan` prints commands without executing or writing.
+`--configure-only` refreshes configuration without compiling the editor. Builds
+normally use `_editor-build`; an existing in-tree Autotools build is reused without
+cleanup. Additional configure/setup arguments follow `--`.
+
+Fresh `./configure` and `meson setup` also prepare a missing internal SDK automatically.
+Use `--disable-clang-bootstrap` or `-Dclang-bootstrap=false` to require a prebuilt SDK.
+CI may explicitly use the driver's `--skip-sdk-build` after preparing a trusted SDK.
+System and disabled modes never fetch or build LLVM. Unknown nonempty SDK directories
+and incomplete nonempty source trees are not overwritten.
+
+![Automatic build pipeline](../media/build-bootstrap.svg)
 
 ## Project symbols and cache
 
@@ -35,7 +63,7 @@ stale results. Named open files, including unsaved headers, are Clang overlays.
 
 ## Build and portable runtime
 
-Prepare the pinned internal SDK once, and rebuild after editing Clang:
+Advanced/manual SDK preparation (normally handled by build.sh):
 
 ```sh
 git submodule update --init --depth 1 external/llvm-project

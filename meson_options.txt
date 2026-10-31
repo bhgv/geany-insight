@@ -14,3 +14,5 @@ option('clang-bundle', type: 'combo', choices: ['auto', 'true', 'false'], value:
 
 option('clang-cpp', type: 'feature', value: 'auto', description: 'Enable the native Clang C++ backend (no libclang)')
 option('clang-sdk', type: 'string', value: '', description: 'Internal SDK prefix; empty uses _external-clang-sdk in the source tree')
+
+option('clang-bootstrap', type: 'boolean', value: true, description: 'Automatically fetch missing compiler sources and build the internal SDK when needed')

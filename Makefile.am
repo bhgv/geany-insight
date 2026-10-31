@@ -767,3 +767,7 @@ EXTRA_DIST += insight/tests/project_membership_gui_test.c
 dist_insightdocmedia_DATA += insight/docs/media/project-membership.jpg
 
 EXTRA_DIST += insight/tools/select_clang_sdk.py insight/tests/clang_sdk_selection_test.py
+
+EXTRA_DIST += build.sh insight/tools/build_editor.py insight/tools/prepare_clang_sdk.py insight/tests/editor_build_driver_test.py
+
+dist_insightdocmedia_DATA += insight/docs/media/build-bootstrap.svg

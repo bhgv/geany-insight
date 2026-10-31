@@ -5,6 +5,10 @@ on:
     paths:
       - .gitmodules
       - external/**
+      - build.sh
+      - insight/tools/build_editor.py
+      - insight/tools/prepare_clang_sdk.py
+      - insight/tests/editor_build_driver_test.py
       - insight/tools/build_external_clang.py
       - insight/tools/select_clang_sdk.py
       - insight/tests/clang_sdk_selection_test.py
@@ -58,11 +62,12 @@ jobs:
           path: _external-clang
           key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
       - name: Check internal SDK selection and no system fallback
-        run: python3 insight/tests/clang_sdk_selection_test.py
+        run: |
+          python3 insight/tests/clang_sdk_selection_test.py
+          python3 insight/tests/editor_build_driver_test.py
       - name: Verify Autotools defaults to the internal SDK
         run: |
-          NOCONFIGURE=1 ./autogen.sh
-          mkdir _source-autotools
+          ./build.sh --configure-only --skip-sdk-build --build-dir "$PWD/_source-autotools" --prefix "$PWD/_source-autotools/install" -- --disable-html-docs --disable-pdf-docs --disable-api-docs --disable-gtkdoc-header
           cd _source-autotools
           ../configure --disable-html-docs --disable-pdf-docs --disable-api-docs --disable-gtkdoc-header
           grep -F 'Clang provider: internal' config.log
@@ -70,8 +75,7 @@ jobs:
       - name: Build editor with the source SDK and direct C++ AST adapter
         run: |
           meson setup _source-editor --prefix="$PWD/_source-install" --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
-          meson compile -C _source-editor
-          meson install -C _source-editor
+          ./build.sh --backend meson --skip-sdk-build --jobs 2 --build-dir "$PWD/_source-editor" --prefix "$PWD/_source-install" --install -- --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
       - name: Verify the editor loads the source-built compiler runtime
         run: |
           python3 - <<'PYCODE'

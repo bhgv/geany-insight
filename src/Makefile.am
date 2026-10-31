@@ -466,3 +466,12 @@ libgeany_la_SOURCES += ../insight/desktop/clang_calls.cpp ../insight/desktop/cla
 
 # LLVM/Clang uses its own RTTI; do not change Scintilla target flags.
 libgeany_la_CXXFLAGS = $(AM_CXXFLAGS) -fno-rtti
+
+# SDK-linked Autotools builds still need the compiler's builtin headers at the
+# same application data path used by the semantic frontend. Respect DESTDIR.
+install-exec-hook: install-clang-resources
+install-clang-resources:
+	if test -n "$(CLANG_RESOURCE_LIBDIR)"; then \
+	  "$(CLANG_RESOURCE_PYTHON)" "$(top_srcdir)/insight/tools/bundle_clang.py" --sdk-lib "$(CLANG_RESOURCE_LIBDIR)" --resources-only --resource-destination "$(DESTDIR)$(pkgdatadir)/insight/clang"; \
+	fi
+.PHONY: install-clang-resources

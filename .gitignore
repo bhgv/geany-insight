@@ -152,3 +152,6 @@ Makefile.in
 
 /_external-clang/
 /_external-clang-sdk/
+
+/_editor-build/
+/out/

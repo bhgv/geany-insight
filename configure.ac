@@ -94,6 +94,10 @@ GEANY_CHECK_REVISION([dnl force debug mode for a VCS working copy
 
 GEANY_CHECK_GTK
 dnl The pinned internal SDK is the default; system discovery is opt-in.
+CLANG_RESOURCE_LIBDIR=""
+AC_SUBST([CLANG_RESOURCE_LIBDIR])
+AC_SUBST([CLANG_RESOURCE_PYTHON])
+AC_ARG_ENABLE([clang-bootstrap],AS_HELP_STRING([--disable-clang-bootstrap],[require an already prepared internal SDK instead of preparing it automatically]),[],[enable_clang_bootstrap=yes])
 AC_ARG_WITH([clang-provider],AS_HELP_STRING([--with-clang-provider=internal/system],[Clang provider (default: internal)]),[],[with_clang_provider=internal])
 AS_CASE([$with_clang_provider],[internal|system],[],[AC_MSG_ERROR([Unknown Clang provider: use internal or system])])
 AC_ARG_WITH([clang],AS_HELP_STRING([--with-clang@<:@=auto/yes/no/PREFIX@:>@],[enable native Clang C++ analysis; PREFIX selects an internal source SDK]),[],[with_clang=yes])
@@ -104,7 +108,10 @@ AS_IF([test "x$with_clang" != xno],[
   AS_CASE([$with_clang],[auto|yes],[with_clang="$srcdir/_external-clang-sdk"])
   AC_PATH_PROG([CLANG_SDK_PYTHON],[python3])
   AS_IF([test -z "$CLANG_SDK_PYTHON"],[AC_MSG_ERROR([Python 3 is required to validate the internal Clang SDK])])
-  clang_sdk_paths=`"$CLANG_SDK_PYTHON" "$srcdir/insight/tools/select_clang_sdk.py" --sdk "$with_clang"`
+  clang_sdk_helper=select_clang_sdk.py
+  AS_IF([test "x$enable_clang_bootstrap" = xyes],[clang_sdk_helper=prepare_clang_sdk.py])
+  AC_MSG_NOTICE([Preparing or validating the internal Clang SDK; the first build may take a long time])
+  clang_sdk_paths=`"$CLANG_SDK_PYTHON" "$srcdir/insight/tools/$clang_sdk_helper" --sdk "$with_clang"`
   AS_IF([test $? -ne 0],[AC_MSG_ERROR([Prepare the internal Clang SDK with python3 insight/tools/build_external_clang.py, or explicitly use --with-clang-provider=system])])
   clang_sdk_prefix=`printf '%s\n' "$clang_sdk_paths" | sed -n '1p'`
   clang_cpp_library=`printf '%s\n' "$clang_sdk_paths" | sed -n '2p'`
@@ -127,6 +134,9 @@ AS_IF([test "x$with_clang" != xno],[
  CPPFLAGS="$clang_save_cppflags";LDFLAGS="$clang_save_ldflags";LIBS="$clang_save_libs";CXXFLAGS="$clang_save_cxxflags"
  AS_IF([test x$clang_library = xyes],[AC_DEFINE([HAVE_CLANG_CPP],[1],[Use native Clang C++ semantics])
  AC_DEFINE_UNQUOTED([INSIGHT_CLANG_PROVIDER],["$with_clang_provider"],[Selected Clang provider])
+ AC_PATH_PROG([CLANG_RESOURCE_PYTHON],[python3])
+ AS_IF([test -z "$CLANG_RESOURCE_PYTHON"],[AC_MSG_ERROR([Python 3 is required to install the Clang resource headers])])
+ AS_IF([test "x$with_clang_provider" = xinternal],[CLANG_RESOURCE_LIBDIR="$clang_sdk_prefix/lib"],[AS_IF([test -n "$LLVM_CONFIG"],[CLANG_RESOURCE_LIBDIR=`$LLVM_CONFIG --libdir`])])
  GTK_CFLAGS="$GTK_CFLAGS $clang_cppflags";GTK_LIBS="$GTK_LIBS $clang_ldflags $clang_native_libs"],[AS_IF([test x$with_clang != xauto],[AC_MSG_ERROR([Selected Clang C++ headers/libraries unavailable. Build the internal SDK, select --with-clang-provider=system explicitly, or use --without-clang.])])])
 ])
 GEANY_CHECK_GTK_FUNCS([g_strv_equal])

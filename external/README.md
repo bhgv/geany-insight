@@ -6,12 +6,25 @@ Clang and LLVM source, not a downloaded prebuilt compiler. The shared LLVM
 infrastructure is required by Clang; copying only `clang/` is insufficient.
 
 ```sh
+./build.sh --prefix "$PWD/o" --install
+# Or:
+./build.sh --backend meson --prefix "$PWD/o" --install
+```
+
+The script prepares the compiler automatically and refreshes configure before use.
+No separate submodule or SDK command is needed. `--clang-provider system` opts into
+system libraries; `--clang-provider disabled` skips the compiler. `--plan` shows the
+steps without executing them. `--install` is optional; no sudo is run. Existing
+compiler edits are retained. The first compiler build takes substantially longer
+than an editor-only build.
+
+![Automatic build pipeline](../insight/docs/media/build-bootstrap.svg)
+
+For manual compiler development only:
+
+```sh
 git submodule update --init --depth 1 external/llvm-project
 python3 insight/tools/build_external_clang.py --jobs 2
-meson setup build-editor --prefix="$PWD/install" --libdir=lib \
-  -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false
-meson compile -C build-editor
-meson install -C build-editor
 ```
 
 CMake, Ninja and a C++17 compiler build the source SDK. GTK development packages,
@@ -47,9 +60,7 @@ The editor now links only `clang-cpp` and LLVM. The SDK helper builds `clang-cpp
 
 ## Provider selection
 
-The internal SDK above is the default for Meson and Autotools. Prepare it first;
-configuration fails with its build command if the manifest, pinned revision,
-headers or libraries are missing. No system fallback is attempted. Linux/Windows
+The internal SDK above is the default for Meson and Autotools. Configuration prepares it automatically when needed. Unknown SDK directories or mismatched revisions decline without being overwritten. No system fallback is attempted. Linux/Windows
 Meson installs automatically bundle the internal runtime and resource headers.
 
 System Clang is opt-in:
@@ -79,8 +90,10 @@ make -j2
 make install
 ```
 
-Prepare the internal SDK with the commands at the top of this page first.
+The build.sh entry point prepares the SDK automatically; the manual commands above are only needed for separate compiler work.
 An old generated script may print the new Git revision yet still search system
 Clang; the revision probe does not regenerate that script. A fresh script reports
 `Clang provider: internal`. Do not install system Clang to work around a stale
 script; explicitly selecting the system provider remains a separate option.
+
+Fresh Autotools/Meson configurations prepare missing internal SDKs automatically. To forbid preparation, explicitly pass `--disable-clang-bootstrap` or `-Dclang-bootstrap=false`.
