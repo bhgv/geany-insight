@@ -37,6 +37,24 @@ class BuildFlow(unittest.TestCase):
     def args(self, *args):
         return build_editor.arguments(list(args), self.root)
 
+    def test_no_arguments_print_help_without_building(self):
+        output = io.StringIO()
+        with patch.object(build_editor, 'execute') as execute, contextlib.redirect_stdout(output):
+            with self.assertRaises(SystemExit) as result:
+                build_editor.main([])
+        self.assertEqual(result.exception.code, 0)
+        execute.assert_not_called()
+        self.assertIn('--clang-provider', output.getvalue())
+        self.assertIn('Example:', output.getvalue())
+
+    def test_execution_does_not_require_python38_shlex_join(self):
+        args = self.args('--clang-provider', 'disabled', '--configure-only')
+        calls = []
+        with patch.object(build_editor, 'prerequisites'), patch.object(
+                build_editor.shlex, 'join', None, create=True), contextlib.redirect_stdout(io.StringIO()):
+            build_editor.execute(args, self.root, lambda command, **kwargs: calls.append(command))
+        self.assertEqual(len(calls), 2)
+
     def test_default_flow_refreshes_stale_configure_before_using_it(self):
         args = self.args('--install')
         old = self.root / 'configure'

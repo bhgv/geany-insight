@@ -20,7 +20,9 @@ external SDKs still come from the project.
 и локальные правки не сбрасываются. Первый LLVM/Clang собирается долго; следующие
 сборки используют готовый SDK или выполняют инкрементальную сборку после правок.
 
-Вариант Meson: `./build.sh --backend meson --prefix "$PWD/o" --install`.
+Вариант Без аргументов `./build.sh` показывает справку и не запускает сборку.
+
+Meson: `./build.sh --backend meson --prefix "$PWD/o" --install`.
 Системный Clang: `./build.sh --clang-provider system --install`.
 Минимальная сборка: `./build.sh --clang-provider disabled`.
 `--jobs 2` задаёт параллелизм; `--plan` показывает команды без запуска и записи.

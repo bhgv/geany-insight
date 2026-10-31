@@ -17,7 +17,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def arguments(argv=None, root=ROOT):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        prog='./build.sh', description=__doc__,
+        epilog='Example: ./build.sh --prefix "$PWD/o" --install. '
+               'No arguments: show this help without starting a build.')
     parser.add_argument('--backend', choices=('autotools', 'meson'), default='autotools')
     parser.add_argument('--clang-provider', choices=('internal', 'system', 'disabled'), default='internal')
     parser.add_argument('--build-dir', type=Path)
@@ -128,7 +131,8 @@ def execute(args, root=ROOT, run=subprocess.run):
         cwd = Path(step['cwd'])
         cwd.mkdir(parents=True, exist_ok=True)
         environment = dict(os.environ, **step['env'])
-        print(f'[{number}/{len(steps)}] {shlex.join(step["command"])}', flush=True)
+        display_command = ' '.join(shlex.quote(value) for value in step['command'])
+        print(f'[{number}/{len(steps)}] {display_command}', flush=True)
         run(step['command'], cwd=cwd, env=environment, check=True)
     print('Configuration ready:' if args.configure_only else 'Build ready:', args.build_dir)
     if args.install:
@@ -136,7 +140,8 @@ def execute(args, root=ROOT, run=subprocess.run):
 
 
 def main(argv=None):
-    args = arguments(argv)
+    argv = sys.argv[1:] if argv is None else list(argv)
+    args = arguments(argv or ['--help'])
     if args.plan:
         print(json.dumps(plan(args), indent=2))
         return 0

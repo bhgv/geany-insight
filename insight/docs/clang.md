@@ -20,6 +20,8 @@ Without `--install` it only builds. Existing compiler source edits are preserved
 The first LLVM build is expensive; later runs reuse the SDK or incrementally rebuild
 after compiler edits.
 
+Running `./build.sh` without arguments displays help without starting a build.
+
 Meson: `./build.sh --backend meson --prefix "$PWD/o" --install`.
 System Clang: `./build.sh --clang-provider system --install`.
 Minimal build: `./build.sh --clang-provider disabled`.
