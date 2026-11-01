@@ -38,9 +38,15 @@ static void popup(GtkWidget *menu,GtkWidget *anchor,GdkGravity a,GdkGravity b) {
  gdk_event_set_device(event,gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_display_get_default())));
  gtk_menu_popup_at_widget(GTK_MENU(menu),anchor,a,b,event);gdk_event_free(event);
 }
+static void capture(void) {
+ const gchar *dir=g_getenv("INSIGHT_MACOS_GEOMETRY_CAPTURE_DIR");if(!dir)return;
+ g_mkdir_with_parents(dir,0700);gchar *name=g_strdup_printf("phase-%u.jpg",phase),*path=g_build_filename(dir,name,NULL);g_free(name);
+ GdkWindow *root=gdk_get_default_root_window();GdkPixbuf *pix=gdk_pixbuf_get_from_window(root,0,0,gdk_window_get_width(root),gdk_window_get_height(root));
+ if(pix) {gdk_pixbuf_save(pix,path,"jpeg",NULL,"quality","85",NULL);g_object_unref(pix);}g_free(path);
+}
 static gboolean step(gpointer data) {
  (void)data;if(!window){GeanyDocument *doc=document_get_current();if(!doc)return G_SOURCE_CONTINUE;window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));}
- if(++ticks<4)return G_SOURCE_CONTINUE;ticks=0;
+ if(++ticks<4)return G_SOURCE_CONTINUE;ticks=0;capture();
  if(phase==0){g_object_set(gtk_settings_get_default(),"gtk-decoration-layout","minimize,maximize,close:",NULL);fits(window);GtkRequisition minimum;gtk_widget_get_preferred_size(window,&minimum,NULL);GdkMonitor *monitor=gdk_display_get_monitor_at_window(gdk_display_get_default(),gtk_widget_get_window(window));GdkRectangle area;gdk_monitor_get_workarea(monitor,&area);g_assert_cmpint(minimum.height,<=,area.height);gtk_window_maximize(GTK_WINDOW(window));phase++;return G_SOURCE_CONTINUE;}
  if(phase==1){if(!maximized(window))return G_SOURCE_CONTINUE;fits(window);gtk_window_unmaximize(GTK_WINDOW(window));phase++;return G_SOURCE_CONTINUE;}
  if(phase==2){if(maximized(window))return G_SOURCE_CONTINUE;GtkWidget *choice=any("insight-appearance-0-3");g_assert_true(GTK_IS_CHECK_MENU_ITEM(choice));gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(choice),TRUE);phase++;return G_SOURCE_CONTINUE;}

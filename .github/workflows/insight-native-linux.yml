@@ -313,6 +313,28 @@ jobs:
           name: insight-virtual-list-checks
           path: virtual-list-testlog.txt
           retention-days: 7
+      - name: Check macOS maximize and submenu geometry on a small desktop
+        if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
+        run: |
+          macos_failed=0
+          INSIGHT_MACOS_GEOMETRY_CAPTURE_DIR="$PWD/macos-geometry-captures" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GEANY_TEST_WINDOW_MANAGER=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1024x640x24" sh -c '
+            openbox > /tmp/insight-geometry-openbox.log 2>&1 &
+            manager_pid=$!
+            trap "kill $manager_pid 2>/dev/null || true" EXIT
+            sleep 1
+            meson test -C _native --num-processes 1 --print-errorlogs "Insight macOS workarea maximize and submenu GUI" "Insight native persistent incremental project GUI"
+          ' || macos_failed=1
+          cp _native/meson-logs/testlog.txt macos-startup-testlog.txt
+          exit "$macos_failed"
+      - name: Publish macOS startup and geometry evidence
+        if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: insight-macos-startup-geometry
+          path: |
+            macos-startup-testlog.txt
+            macos-geometry-captures/
+          retention-days: 7
       - name: Check native menu tearoff geometry and lifecycle
         id: menu-palettes
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
@@ -331,16 +353,6 @@ jobs:
             exit 1
           fi
           cp _native/meson-logs/testlog.txt source-routes-testlog.txt
-      - name: Check macOS maximize and submenu geometry on a small desktop
-        if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
-        run: |
-          GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GEANY_TEST_WINDOW_MANAGER=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1024x640x24" sh -c '
-            openbox > /tmp/insight-geometry-openbox.log 2>&1 &
-            manager_pid=$!
-            trap "kill $manager_pid 2>/dev/null || true" EXIT
-            sleep 1
-            meson test -C _native --num-processes 1 --print-errorlogs "Insight macOS workarea maximize and submenu GUI"
-          '
       - name: Check independent window geometry under a real window manager
         id: macos-wm
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' && steps.menu-palettes.outcome == 'success' && steps.source-routes.outcome == 'success' }}

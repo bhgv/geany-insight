@@ -100,7 +100,10 @@ static void apply_surface(GtkWidget *widget) {
 }
 static void remember(GtkWidget *widget) {
  if(tooltip_surface(widget)) return;
- if(GTK_IS_IMAGE(widget)) { style_icons(widget);return; }
+ if(GTK_IS_IMAGE(widget)) {
+  /* Tooltip custom children can be shown before being parented to their tooltip. */
+  if(GTK_IS_WINDOW(gtk_widget_get_toplevel(widget))) style_icons(widget);return;
+ }
  if(!GTK_IS_WINDOW(widget) && !GTK_IS_MENU(widget)) return;
  gboolean found=FALSE;
  for(guint i=0;i<surfaces->len;) { Surface *s=g_ptr_array_index(surfaces,i);GtkWidget *old=g_weak_ref_get(&s->widget);if(!old) { g_ptr_array_remove_index(surfaces,i);continue; }if(old==widget) found=TRUE;g_object_unref(old);i++; }

@@ -162,6 +162,8 @@ static void setup_window_position(void)
  if(!monitor) monitor=gdk_display_get_primary_monitor(display);
  if(monitor) {
   GdkRectangle area;gdk_monitor_get_workarea(monitor,&area);
+  gint default_width,default_height;gtk_window_get_default_size(GTK_WINDOW(main_widgets.window),&default_width,&default_height);
+  gtk_window_set_default_size(GTK_WINDOW(main_widgets.window),MIN(default_width>0?default_width:GEANY_WINDOW_DEFAULT_WIDTH,MAX(1,area.width-16)),MIN(default_height>0?default_height:GEANY_WINDOW_DEFAULT_HEIGHT,MAX(1,area.height-48)));
   if(ui_prefs.geometry[2]>0) ui_prefs.geometry[2]=MIN(ui_prefs.geometry[2],MAX(1,area.width-16));
   if(ui_prefs.geometry[3]>0) ui_prefs.geometry[3]=MIN(ui_prefs.geometry[3],MAX(1,area.height-48));
   if(ui_prefs.geometry[0]!=-1) ui_prefs.geometry[0]=CLAMP(ui_prefs.geometry[0],area.x,area.x+MAX(0,area.width-MAX(1,ui_prefs.geometry[2])));
