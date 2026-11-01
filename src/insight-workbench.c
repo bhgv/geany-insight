@@ -1295,10 +1295,12 @@ typedef struct { InsightIndex *index;const InsightSymbol **rows;GPtrArray *files
 static void virtual_snapshot_free(gpointer data) {
  VirtualSnapshot *s=data;retire_index(s->index);g_free(s->rows);g_clear_pointer(&s->files,g_ptr_array_unref);g_free(s->path);g_free(s);
 }
-static void virtual_snapshot_fill(GtkListStore *store,guint n,gpointer data) {
- VirtualSnapshot *s=data;GtkTreeIter iter;gtk_list_store_append(store,&iter);
- if(s->files) { FileListRow *f=g_ptr_array_index(s->files,n);gtk_list_store_set(store,&iter,0,f->name,1,f->path,2,f->directory,3,f->size,4,f->stat_valid,-1); }
- else { const InsightSymbol *t=s->rows[n];gtk_list_store_set(store,&iter,SYMBOL_NAME,t->name,SYMBOL_SCOPE,t->scope,SYMBOL_PATH,s->local?s->path:t->path,SYMBOL_LINE,(gulong)t->line,SYMBOL_KIND,t->kind,-1); }
+static gboolean virtual_snapshot_read(guint n,GValue *values,gpointer data,GCancellable *cancel) {
+ if(g_cancellable_is_cancelled(cancel)) return FALSE;
+ VirtualSnapshot *s=data;
+ if(s->files) {FileListRow *f=g_ptr_array_index(s->files,n);g_value_set_string(&values[0],f->name);g_value_set_string(&values[1],f->path);g_value_set_string(&values[2],f->directory);g_value_set_uint64(&values[3],f->size);g_value_set_boolean(&values[4],f->stat_valid);}
+ else {const InsightSymbol *t=s->rows[n];g_value_set_string(&values[SYMBOL_NAME],t->name);g_value_set_string(&values[SYMBOL_SCOPE],t->scope);g_value_set_string(&values[SYMBOL_PATH],s->local?s->path:t->path);g_value_set_ulong(&values[SYMBOL_LINE],(gulong)t->line);g_value_set_string(&values[SYMBOL_KIND],t->kind);}
+ return TRUE;
 }
 static void virtual_reload(GtkTreeView *view,gpointer data) {
  (void)data;if(GTK_WIDGET(view)==wb.file_view) {g_object_set_data(G_OBJECT(wb.file_store),"insight-request-key",NULL);files_filter(NULL,NULL);}
@@ -1315,7 +1317,7 @@ static void symbol_list_job_done(GObject *source,GAsyncResult *result,gpointer d
    VirtualSnapshot *snapshot=g_new0(VirtualSnapshot,1);snapshot->index=j->index;j->index=NULL;
    snapshot->rows=j->rows;j->rows=NULL;snapshot->files=j->files;j->files=NULL;snapshot->local=j->local;snapshot->path=g_strdup(j->path);
    g_object_set_data(G_OBJECT(virtual_view),"insight-virtual-total",GUINT_TO_POINTER(snapshot->files?j->count:j->total));
-   insight_virtual_list_replace(GTK_TREE_VIEW(virtual_view),j->count,virtual_snapshot_fill,snapshot,virtual_snapshot_free);
+   insight_virtual_list_replace(GTK_TREE_VIEW(virtual_view),j->count,virtual_snapshot_read,snapshot,virtual_snapshot_free);
    insight_symbol_view_page_state(GTK_TREE_VIEW(virtual_view),FALSE);
    gtk_widget_set_sensitive(virtual_view,TRUE);insight_symbol_view_loading(GTK_TREE_VIEW(virtual_view),FALSE);
    if(store==wb.file_store && wb.file_status) {
@@ -1350,7 +1352,7 @@ static SymbolListJob *symbol_list_begin(GtkListStore *store,GtkWidget *entry,gui
  j->generation=s->generation; j->epoch=workbench_epoch;GeanyDocument *active=document_get_current();if(active && (store==wb.symbols || store==wb.file_store)) j->language=insight_language_filter_new(active->file_name,active->file_type); return j;
 }
 static void symbol_list_launch(GtkListStore *store,SymbolListJob *j) {
- GtkWidget *view=symbol_list_view(store); if(view) { gtk_widget_set_sensitive(view,FALSE); insight_symbol_view_loading(GTK_TREE_VIEW(view),TRUE); }
+ GtkWidget *view=symbol_list_view(store); if(view) { if(!insight_virtual_list_attached(GTK_TREE_VIEW(view))) gtk_widget_set_sensitive(view,FALSE); insight_symbol_view_loading(GTK_TREE_VIEW(view),TRUE); }
  SymbolListState *s=symbol_list_state(store); s->cancel=g_cancellable_new(); GTask *task=g_task_new(NULL,s->cancel,symbol_list_job_done,NULL); g_task_set_task_data(task,j,symbol_list_job_free); g_task_run_in_thread(task,symbol_list_job_run); g_object_unref(task);
 }
 static void fill_symbol_list(GtkListStore *store,GtkWidget *entry,const char *path,guint limit) {

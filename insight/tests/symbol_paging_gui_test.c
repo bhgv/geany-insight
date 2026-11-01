@@ -23,7 +23,7 @@ static gboolean step(gpointer unused) {
  (void)unused;GeanyDocument *doc=document_get_current();if(!doc)return G_SOURCE_CONTINUE;
  if(!window) {window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));project=named(window,"insight-project-symbols");entry=named(window,"insight-symbol-query");}
  if(!phase) {document_open_file(source,FALSE,NULL,NULL);phase++;return G_SOURCE_CONTINUE;}
- if(!gtk_widget_get_sensitive(project)) return G_SOURCE_CONTINUE;
+ if(!gtk_widget_get_sensitive(project) || insight_virtual_list_loading(GTK_TREE_VIEW(project))) return G_SOURCE_CONTINUE;
  if(phase==1) {
   insight_symbol_view_set_grouped(GTK_TREE_VIEW(project),FALSE);insight_symbol_view_set_scopes(GTK_TREE_VIEW(project),FALSE);
   insight_symbol_view_set_types(GTK_TREE_VIEW(project),0x7ff);phase++;return G_SOURCE_CONTINUE;

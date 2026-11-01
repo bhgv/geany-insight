@@ -43,3 +43,9 @@ project database. Unsaved semantic overlays remain in memory. See [Clang](clang.
 File discovery publishes the project file list before source parsing starts. Files can be opened and edited while a background job indexes symbols and relations. During initial discovery, the list appears in batches without waiting for Clang.
 
 Opening a project reads the database and reconstructs saved declarations in a background task. The window is shown before the restored index is applied. Closing or switching projects cancels the old result, which cannot replace the new project data.
+
+## Cached moving windows
+
+Project files, project symbols and file symbols share an asynchronous window. A dedicated two-worker pool prepares row values without touching GTK. The interface keeps responding while reads are pending; completed values are applied on the GTK thread in slices of about 3 ms. Old data stays usable until a replacement arrives. Changing the query, replacing the source or closing the widget cancels obsolete work; late replies cannot overwrite a newer result.
+
+The GTK model contains at most 256 rows. The controller retains three recently used pages of up to 1024 rows each, with a separate in-flight page. It starts a page 256 positions before the requested position and prefetches when fewer than 128 positions remain at a cache edge. This hysteresis lets short reversals of 50–100 positions reuse prepared rows rather than repeatedly requesting the same range. The least recently used page is evicted when the cache fills. A new query or index snapshot invalidates the row cache. These bounds cover row values; the complete immutable file/symbol metadata snapshot remains in memory for global search and sorting.
