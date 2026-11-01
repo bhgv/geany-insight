@@ -277,3 +277,11 @@ menu.insight-macos.insight-theme-macintosh, .insight-macos.insight-theme-macinto
 .insight-macos.insight-theme-macintosh button:not(.titlebutton):checked { background-color: #111; color: #fff; }
 .insight-macos.insight-theme-macintosh button:not(.titlebutton),
 .insight-macos.insight-theme-macintosh entry { box-shadow: 1px 1px #555; }
+
+/* Maximized windows have no outside shadow or rounded frame to reserve space. */
+window.insight-macos.maximized decoration, window.insight-macos.fullscreen decoration {
+  box-shadow: none; border-radius: 0; border-width: 0;
+}
+window.insight-macos.maximized headerbar, window.insight-macos.fullscreen headerbar {
+  border-radius: 0;
+}

@@ -33,7 +33,12 @@ static gboolean tooltip_surface(GtkWidget *widget) {
 static void surface_free(gpointer data) { Surface *s=data;g_weak_ref_clear(&s->widget);g_free(s); }
 typedef struct { gchar *name,*replacement;GtkIconSize size;gint pixels;gboolean stock; } OriginalIcon;
 static void icon_free(gpointer data) { OriginalIcon *icon=data;g_free(icon->name);g_free(icon->replacement);g_free(icon); }
+static void apply_surface(GtkWidget *);
 static void style_icons(GtkWidget *widget) {
+ if(GTK_IS_MENU(widget)) {
+  /* Prepare hidden submenu CSS before GTK asks for its popup requisition. */
+  apply_surface(widget);GtkWidget *popup=gtk_widget_get_toplevel(widget);if(GTK_IS_WINDOW(popup)) apply_surface(popup);
+ }
  if(GTK_IS_IMAGE(widget)) {
   if(gtk_widget_get_ancestor(widget,GTK_TYPE_HEADER_BAR)) return;
   GtkImage *image=GTK_IMAGE(widget);OriginalIcon *old=g_object_get_data(G_OBJECT(image),"insight-original-icon");
@@ -149,7 +154,7 @@ void insight_appearance_init(void) {
  GKeyFile *key=g_key_file_new();GStatBuf info;
  if(!g_stat(config,&info) && info.st_size<=8192 && g_key_file_load_from_file(key,config,G_KEY_FILE_NONE,NULL) && g_key_file_get_integer(key,"interface","version",NULL)==1) { gchar *name=g_key_file_get_string(key,"interface","style",NULL);independent=!g_strcmp0(name,"macos-windows");macos=independent || !g_strcmp0(name,"macos");gint saved=g_key_file_get_integer(key,"interface","opacity",NULL);if(saved==70 || saved==80 || saved==90 || saved==100) opacity=(guint)saved;else opacity=100;if(independent) opacity=100;reduced=opacity==100;g_free(name);gchar *variant=g_key_file_get_string(key,"interface","macos-theme",NULL);for(guint n=0;n<G_N_ELEMENTS(theme_ids);n++) if(!g_strcmp0(variant,theme_ids[n])) theme=n;g_free(variant); }
  g_key_file_unref(key);if(macos) { GError *error=NULL;if(!load_css(&error)) { macos=independent=FALSE;g_warning("Interface style ignored: %s",error ? error->message:"CSS unavailable");g_clear_error(&error); } }
- map_signal=g_signal_lookup("map",GTK_TYPE_WIDGET);map_hook=g_signal_add_emission_hook(map_signal,0,mapped,NULL,NULL);apply();
+ map_signal=g_signal_lookup("show",GTK_TYPE_WIDGET);map_hook=g_signal_add_emission_hook(map_signal,0,mapped,NULL,NULL);apply();
 }
 void insight_appearance_menu(GtkWidget *menu) {
  if(!alive) insight_appearance_init();if(menu_count>=2) return;guint index=menu_count++;
@@ -213,6 +218,14 @@ static void title_button_limit(GtkWidget *widget,gpointer data) {
 static void titlebar_allocated(GtkWidget *header,GtkAllocation *allocation,gpointer data) {
  (void)data;if(allocation->height<2) return;gtk_container_forall(GTK_CONTAINER(header),title_button_limit,GINT_TO_POINTER(MAX(1,allocation->height*85/100)));
 }
+static gboolean titlebar_double_click(GtkWidget *header,GdkEventButton *event,gpointer data) {
+ (void)header;GtkWindow *window=data;
+ if(event->button!=1 || event->type!=GDK_2BUTTON_PRESS) return FALSE;
+ GtkWidget *target=gtk_get_event_widget((GdkEvent *)event);
+ if(target && gtk_widget_get_ancestor(target,GTK_TYPE_BUTTON)) return FALSE;
+ if(gtk_window_is_maximized(window)) gtk_window_unmaximize(window);else gtk_window_maximize(window);
+ return TRUE;
+}
 void insight_appearance_decorate(GtkWidget *window) {
  if(!macos || !GTK_IS_WINDOW(window) || gtk_widget_get_realized(window) || gtk_window_get_titlebar(GTK_WINDOW(window))) return;
  GtkWidget *header=gtk_header_bar_new();gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(header),TRUE);
@@ -226,6 +239,8 @@ void insight_appearance_decorate(GtkWidget *window) {
  g_object_set_data(G_OBJECT(header),"insight-no-i18n",GINT_TO_POINTER(1));
  gtk_header_bar_set_title(GTK_HEADER_BAR(header),gtk_window_get_title(GTK_WINDOW(window)));
  gtk_window_set_titlebar(GTK_WINDOW(window),header);
+ gtk_widget_add_events(header,GDK_BUTTON_PRESS_MASK);
+ g_signal_connect(header,"button-press-event",G_CALLBACK(titlebar_double_click),window);
  g_signal_connect_object(window,"notify::title",G_CALLBACK(window_title_changed),header,0);
  gtk_widget_show(header);
 }

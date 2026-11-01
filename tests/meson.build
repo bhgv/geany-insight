@@ -992,3 +992,6 @@ test('Insight project membership browser GUI', project_membership_gui_test, time
 
 virtual_list_gui_test = executable('test_insight_virtual_list_gui', '../insight/tests/virtual_list_gui_test.c', dependencies: test_deps)
 test('Insight bounded virtual list GUI', virtual_list_gui_test, timeout: 30)
+
+macos_geometry_gui_test = executable('test_insight_macos_geometry_gui', '../insight/tests/macos_geometry_gui_test.c', dependencies: test_deps)
+test('Insight macOS workarea maximize and submenu GUI', macos_geometry_gui_test, timeout: 50)

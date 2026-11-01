@@ -159,11 +159,11 @@ typedef struct {
  GtkWidget *lua_menu,*lua_commands,*lua_item,*palette_item;
  GtkAccelGroup *lua_accels,*navigation_accels;
  GtkCssProvider *css; GtkWidget *context_toggle;
- gboolean alive; guint64 scan_generation,usage_generation,definition_generation; guint definition_timer; GCancellable *scan_worker,*search_worker,*definition_worker,*snapshot_worker,*cache_worker,*preview_worker; guint64 preview_generation; guint64 index_generation,index_version; gint64 publish_due;
+ gboolean alive; guint64 scan_generation,usage_generation,definition_generation; guint definition_timer; GCancellable *restore_worker,*scan_worker,*search_worker,*definition_worker,*snapshot_worker,*cache_worker,*preview_worker; guint64 preview_generation; guint64 index_generation,index_version; gint64 publish_due;
  InsightIndex *base,*index;
  gboolean info_parse_local,info_across_languages;gint info_scope;
  InsightProjectFiles *membership; gchar *membership_project; gboolean membership_valid;InsightMasterSync *master_sync;guint64 membership_generation;
- GPtrArray *frames,*files,*scan_files,*scan_trees,*scan_members; gboolean scan_keep_files,scan_indexing; guint scan_index_position; GHashTable *scan_seen; guint scan_file_position,scan_tree_position; gchar *root,*cache_path; gchar *db_identity,*db_policy;GHashTable *file_stamps,*directory_stamps;InsightIndex *disk_calls,*disk_declarations,*scan_backup;gboolean force_parse,cache_validation;guint reused; guint scan,parsed,skipped;
+ GPtrArray *frames,*files,*scan_files,*scan_trees,*scan_members; gboolean scan_keep_files,scan_indexing; guint scan_index_position; GHashTable *scan_seen; guint scan_file_position,scan_tree_position; gchar *root,*cache_path; gchar *db_identity,*db_policy,*restore_attempt_identity;GHashTable *file_stamps,*directory_stamps;InsightIndex *disk_calls,*disk_declarations,*scan_backup;gboolean force_parse,cache_validation;guint reused; guint scan,parsed,skipped;
  gchar *source_path,*source_digest; gulong source_line;
  GPtrArray *history,*definitions; gint history_position; gboolean populating;
 } Workbench;
@@ -538,7 +538,7 @@ static void snapshot_job_done(GObject *source,GAsyncResult *result,gpointer data
  index_event_publish(j->changed,j->names);
 }
 static void refresh_index(void) {
- if(!wb.alive || wb.scan_worker || wb.snapshot_worker || !wb.base || !wb.index_dirty) return;
+ if(!wb.alive || wb.restore_worker || wb.scan_worker || wb.snapshot_worker || !wb.base || !wb.index_dirty) return;
  SnapshotJob *j=g_new0(SnapshotJob,1); j->base=insight_index_ref(wb.base); j->previous=insight_index_ref(wb.index); j->overlay=insight_index_new(); j->paths=g_ptr_array_new_with_free_func(g_free); j->valid=j->overlay!=NULL; j->epoch=workbench_epoch; j->generation=wb.index_generation;
  gchar *root=wb.workspace_from_project && wb.root ? utils_get_utf8_from_locale(wb.root) : NULL;
  for(guint n=0;n<documents_array->len;n++) { GeanyDocument *doc=g_ptr_array_index(documents_array,n); if(doc->is_valid && doc->file_name && (!root || insight_project_files_contains(wb.membership,root,doc->file_name))) { g_ptr_array_add(j->paths,g_strdup(doc->file_name)); if(!insight_native_import(j->overlay,doc->tm_file,doc->file_name)) j->valid=FALSE; } }
@@ -662,9 +662,10 @@ static void preview_notify(ScintillaObject *sci,gint message,SCNotification *not
  if(notification->nmhdr.code==SCN_UPDATEUI || notification->nmhdr.code==SCN_PAINTED) decorate_selection(sci);
 }
 static void stop_scan(void) {
- if(wb.scan || wb.scan_worker) wb.report_scan_completed=FALSE;
+ if(wb.scan || wb.scan_worker || wb.restore_worker) wb.report_scan_completed=FALSE;
  stop_definition(); stop_file_preview();
- wb.scan_generation++; if(wb.cache_worker) { g_cancellable_cancel(wb.cache_worker); g_clear_object(&wb.cache_worker); } if(wb.scan_worker) { g_cancellable_cancel(wb.scan_worker); g_clear_object(&wb.scan_worker); if(wb.alive && !wb.base) wb.base=wb.scan_backup?insight_index_ref(wb.scan_backup):insight_index_new(); }
+ wb.scan_generation++;if(wb.restore_worker) {g_cancellable_cancel(wb.restore_worker);g_clear_object(&wb.restore_worker);if(wb.alive) {g_object_set_data(G_OBJECT(main_widgets.window),"insight-db-loading",NULL);g_object_set_data(G_OBJECT(main_widgets.window),"insight-db-scanning",NULL);}}
+ if(wb.cache_worker) { g_cancellable_cancel(wb.cache_worker); g_clear_object(&wb.cache_worker); } if(wb.scan_worker) { g_cancellable_cancel(wb.scan_worker); g_clear_object(&wb.scan_worker); if(wb.alive && !wb.base) wb.base=wb.scan_backup?insight_index_ref(wb.scan_backup):insight_index_new(); }
  retire_index(wb.scan_backup);wb.scan_backup=NULL;
  if(wb.scan) { g_source_remove(wb.scan); wb.scan=0; }
  if(wb.frames) g_ptr_array_set_size(wb.frames,0);
@@ -680,7 +681,7 @@ static gboolean rescan_changed(gpointer data) {
 static void workspace_changed(gpointer data) {
  (void)data;
  if(!wb.root) return;
- if(wb.scan || wb.scan_worker) { wb.watch_changed=TRUE; return; }
+ if(wb.scan || wb.scan_worker || wb.restore_worker) { wb.watch_changed=TRUE; return; }
  GPtrArray *paths=insight_workspace_watch_take_changes(wb.watch);gboolean membership=FALSE;
  for(guint n=0;n<paths->len;n++) { const gchar *native=g_ptr_array_index(paths,n);gchar *utf8=utils_get_utf8_from_locale(native);if(!g_hash_table_contains(wb.file_stamps,utf8)||!g_file_test(native,G_FILE_TEST_IS_REGULAR)) membership=TRUE;g_free(utf8); }
  g_ptr_array_unref(paths);if(!membership&&g_hash_table_size(wb.file_stamps)) wb.cache_validation=TRUE;
@@ -705,21 +706,60 @@ static gboolean database_identity(const gchar *root) {
 static gchar *source_stamp(const gchar *native,const gchar *language,gint encoding) {
  gchar *stamp=insight_project_db_stamp(native,FALSE);if(!stamp) return NULL;gchar *value=g_strdup_printf("%s:%d:%s:clang%d-cpp%d-provider%s-v15",language?language:"",encoding,stamp,insight_clang_available(),insight_clang_cpp_available(),INSIGHT_CLANG_PROVIDER);g_free(stamp);return value;
 }
-static void restore_project_database(const gchar *root) {
- InsightProjectDb db={0};GError *error=NULL;
- if(!insight_project_db_load(wb.cache_path,wb.db_identity,root,NULL,&db,&error)) { g_clear_error(&error);return; }
- retire_index(wb.base);wb.base=db.symbols;db.symbols=NULL;retire_index(wb.disk_calls);wb.disk_calls=db.calls;db.calls=NULL;retire_index(wb.disk_declarations);wb.disk_declarations=db.declarations;db.declarations=NULL;
- g_hash_table_unref(wb.file_stamps);wb.file_stamps=db.files;db.files=NULL;g_hash_table_unref(wb.directory_stamps);wb.directory_stamps=db.directories;db.directories=NULL;
- g_free(wb.root);wb.root=g_strdup(root);g_ptr_array_set_size(wb.files,0);GHashTableIter it;gpointer path;g_hash_table_iter_init(&it,wb.file_stamps);while(g_hash_table_iter_next(&it,&path,NULL)) g_ptr_array_add(wb.files,g_strdup(path));
- /* Rehydrate declaration rows without invoking a parser or opening source files. */
- g_hash_table_remove_all(wb.declarations);
- for(gsize n=0;n<insight_index_count(wb.disk_declarations);n++) {
-  const InsightSymbol *row=insight_index_at(wb.disk_declarations,n);OutlineFile *o=g_hash_table_lookup(wb.declarations,row->path);
-  if(!o) { GeanyFiletype *ft=filetypes_detect_from_extension(row->path);o=outline_capture(NULL,row->path);o->lang=ft?ft->lang:-1;g_hash_table_insert(wb.declarations,g_strdup(row->path),o); }
-  if(!g_str_has_prefix(row->kind,"@decl:")) continue;gchar *end=NULL;guint type=g_ascii_strtoull(row->kind+6,&end,10);if(!end||*end!=':'||!end[1]) continue;
-  TMTag *tag=tm_tag_new();tag->name=g_strdup(row->name);tag->type=type;tag->kind_letter=end[1];tag->line=row->line;tag->scope=g_strdup(row->scope);tag->arglist=g_strdup(row->signature);tag->var_type=g_strdup(row->type);tag->inheritance=g_strdup(row->inheritance);g_ptr_array_add(o->tags,tag);
+static gboolean start_scan(const char *);
+typedef struct { InsightProjectDb db;GHashTable *declarations;GPtrArray *members;gchar *path,*root,*identity;guint64 generation,epoch; } RestoreJob;
+static void restore_job_free(gpointer data) {
+ RestoreJob *j=data;retire_index(j->db.symbols);retire_index(j->db.calls);retire_index(j->db.declarations);
+ if(j->db.files) retire_names(j->db.files);if(j->db.directories) retire_names(j->db.directories);
+ if(j->declarations) retire_names(j->declarations);if(j->members) g_ptr_array_unref(j->members);
+ g_free(j->path);g_free(j->root);g_free(j->identity);g_free(j->db.policy);g_free(j);
+}
+static void restore_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
+ (void)source;RestoreJob *j=data;GError *error=NULL;
+ if(g_cancellable_is_cancelled(cancel) || !insight_project_db_load(j->path,j->identity,j->root,NULL,&j->db,&error)) {
+  g_clear_error(&error);g_task_return_boolean(task,FALSE);return;
  }
- wb.cache_validation=!g_strcmp0(db.policy,wb.db_policy);insight_project_db_clear(&db);
+ j->declarations=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,outline_free);
+ j->members=g_ptr_array_new_with_free_func(g_free);GHashTableIter iter;gpointer path;
+ g_hash_table_iter_init(&iter,j->db.files);while(g_hash_table_iter_next(&iter,&path,NULL)) g_ptr_array_add(j->members,g_strdup(path));
+ for(gsize n=0;n<insight_index_count(j->db.declarations);n++) {
+  if(g_cancellable_is_cancelled(cancel)) {g_task_return_boolean(task,FALSE);return;}
+  const InsightSymbol *row=insight_index_at(j->db.declarations,n);
+  if(!g_str_has_prefix(row->kind,"@decl:")) continue;
+  gchar *end=NULL;guint type=g_ascii_strtoull(row->kind+6,&end,10);if(!end||*end!=':'||!end[1]) continue;
+  OutlineFile *outline=g_hash_table_lookup(j->declarations,row->path);
+  if(!outline) {outline=outline_capture(NULL,row->path);g_hash_table_insert(j->declarations,g_strdup(row->path),outline);}
+  TMTag *tag=tm_tag_new();tag->name=g_strdup(row->name);tag->type=type;tag->kind_letter=end[1];tag->line=row->line;
+  tag->scope=g_strdup(row->scope);tag->arglist=g_strdup(row->signature);tag->var_type=g_strdup(row->type);tag->inheritance=g_strdup(row->inheritance);g_ptr_array_add(outline->tags,tag);
+ }
+ g_task_return_boolean(task,TRUE);
+}
+static void restore_job_done(GObject *source,GAsyncResult *result,gpointer unused) {
+ (void)source;(void)unused;GTask *task=G_TASK(result);RestoreJob *j=g_task_get_task_data(task);
+ gboolean ok=g_task_propagate_boolean(task,NULL);
+ if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.scan_generation) return;
+ g_clear_object(&wb.restore_worker);g_free(wb.restore_attempt_identity);wb.restore_attempt_identity=g_strdup(j->identity);
+ g_object_set_data(G_OBJECT(main_widgets.window),"insight-db-loading",NULL);
+ g_object_set_data(G_OBJECT(main_widgets.window),"insight-db-loaded-after-map",GINT_TO_POINTER(gtk_widget_get_mapped(main_widgets.window)));
+ if(ok) {
+  retire_index(wb.base);wb.base=j->db.symbols;j->db.symbols=NULL;
+  retire_index(wb.disk_calls);wb.disk_calls=j->db.calls;j->db.calls=NULL;
+  retire_index(wb.disk_declarations);wb.disk_declarations=j->db.declarations;j->db.declarations=NULL;
+  retire_names(wb.file_stamps);wb.file_stamps=j->db.files;j->db.files=NULL;
+  retire_names(wb.directory_stamps);wb.directory_stamps=j->db.directories;j->db.directories=NULL;
+  retire_names(wb.declarations);wb.declarations=j->declarations;j->declarations=NULL;
+  /* Restored @decl rows already encode their native tag type and kind.
+   * No GUI-thread filetype scan is required to import these outlines. */
+  g_ptr_array_unref(wb.files);wb.files=j->members;j->members=NULL;
+  g_free(wb.root);wb.root=g_strdup(j->root);
+  wb.cache_validation=!g_strcmp0(j->db.policy,wb.db_policy);
+ }
+ start_scan(j->root);browser_filter(NULL,NULL);files_filter(NULL,NULL);tree_refresh();
+}
+static void restore_project_database(const gchar *root) {
+ RestoreJob *j=g_new0(RestoreJob,1);j->path=g_strdup(wb.cache_path);j->root=g_strdup(root);j->identity=g_strdup(wb.db_identity);j->generation=wb.scan_generation;j->epoch=workbench_epoch;
+ wb.restore_worker=g_cancellable_new();g_object_set_data(G_OBJECT(main_widgets.window),"insight-db-loading",GINT_TO_POINTER(1));g_object_set_data(G_OBJECT(main_widgets.window),"insight-db-scanning",GINT_TO_POINTER(1));
+ GTask *task=g_task_new(NULL,wb.restore_worker,restore_job_done,NULL);g_task_set_task_data(task,j,restore_job_free);g_task_run_in_thread(task,restore_job_run);g_object_unref(task);
 }
 static void watch_directory(const char *path) {
  gchar *stamp=insight_project_db_stamp(path,TRUE);if(stamp) g_hash_table_replace(wb.directory_stamps,g_strdup(path),stamp);
@@ -754,7 +794,7 @@ static void cache_job_done(GObject *source,GAsyncResult *result,gpointer data) {
  g_clear_error(&error);
 }
 static void save_index_cache(void) {
- if(!wb.alive || !wb.base || !wb.root || !wb.cache_path) return;
+ if(!wb.alive || wb.restore_worker || !wb.base || !wb.root || !wb.cache_path) return;
  if(wb.cache_worker) { g_cancellable_cancel(wb.cache_worker); g_clear_object(&wb.cache_worker); }
  CacheJob *j=g_new0(CacheJob,1); j->index=NULL;j->db.symbols=insight_index_ref(wb.base);j->db.calls=insight_index_ref(wb.disk_calls);j->db.declarations=insight_index_ref(wb.disk_declarations);j->db.files=insight_project_db_copy_table(wb.file_stamps);j->db.directories=insight_project_db_copy_table(wb.directory_stamps);j->identity=g_strdup(wb.db_identity);j->policy=g_strdup(wb.db_policy); j->path=g_strdup(wb.cache_path); j->root=g_strdup(wb.root); j->epoch=workbench_epoch; j->generation=wb.scan_generation;
  wb.cache_worker=g_cancellable_new(); GTask *task=g_task_new(NULL,wb.cache_worker,cache_job_done,NULL); g_task_set_task_data(task,j,cache_job_free); g_task_run_in_thread(task,cache_job_run); g_object_unref(task);
@@ -924,7 +964,14 @@ static gboolean start_scan(const char *root) {
  gchar *owned=insight_canonicalize_filename(root,NULL);g_free(requested_root); GDir *dir=g_dir_open(owned,0,NULL); InsightIndex *next=NULL;
  gboolean context_changed=database_identity(owned)||g_strcmp0(wb.root,owned)!=0;
  if(context_changed) { g_hash_table_remove_all(wb.file_stamps);g_hash_table_remove_all(wb.directory_stamps);g_hash_table_remove_all(wb.declarations);retire_index(wb.base);wb.base=insight_index_new();retire_index(wb.disk_calls);wb.disk_calls=insight_index_new();retire_index(wb.disk_declarations);wb.disk_declarations=insight_index_new(); }
- if(!wb.force_parse&&(context_changed||!g_hash_table_size(wb.file_stamps))) restore_project_database(owned);
+ if(dir && !wb.force_parse&&(context_changed||!g_hash_table_size(wb.file_stamps)) && g_strcmp0(wb.restore_attempt_identity,wb.db_identity)) {
+  if(dir) g_dir_close(dir);
+  if(wb.watch_idle) {g_source_remove(wb.watch_idle);wb.watch_idle=0;}
+  wb.watch_changed=FALSE;wb.report_scan_completed=FALSE;
+  if(context_changed) g_ptr_array_set_size(wb.files,0);
+  insight_workspace_watch_clear(wb.watch);
+  restore_project_database(owned);g_free(owned);return TRUE;
+ }
  next=wb.base?insight_index_ref(wb.base):insight_index_new();
  if(!dir || !next) { if(dir) g_dir_close(dir); insight_index_free(next); g_free(owned); return FALSE; }
  gboolean same_root=!g_strcmp0(wb.root,owned)&&(!context_changed||g_hash_table_size(wb.file_stamps)>0);
@@ -6448,7 +6495,7 @@ static void insight_width_host_class_init(InsightWidthHostClass *klass) {
 }
 static void insight_width_host_init(InsightWidthHost *host) { gtk_widget_set_has_window(GTK_WIDGET(host),FALSE);gtk_widget_set_name(GTK_WIDGET(host),"insight-editor-width-host"); }
 static GtkWidget *narrow_panel_host(GtkWidget *child) {
- GtkWidget *host=g_object_new(insight_width_host_get_type(),NULL);gtk_widget_set_name(host,"insight-panel-width-host");GtkWidget *viewport=gtk_viewport_new(NULL,NULL);gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport),GTK_SHADOW_NONE);gtk_container_add(GTK_CONTAINER(viewport),child);gtk_container_add(GTK_CONTAINER(host),viewport);return host;
+ GtkWidget *host=g_object_new(insight_width_host_get_type(),NULL);g_object_set_data(G_OBJECT(host),"insight-collapse-height",GINT_TO_POINTER(1));gtk_widget_set_name(host,"insight-panel-width-host");GtkWidget *viewport=gtk_viewport_new(NULL,NULL);gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport),GTK_SHADOW_NONE);gtk_container_add(GTK_CONTAINER(viewport),child);gtk_container_add(GTK_CONTAINER(host),viewport);return host;
 }
 /* Give each row its own clipping boundary: a wide checkbox must not force
  * an unrelated entry/button row beyond the shelf's visible edge. */
@@ -6628,7 +6675,7 @@ void insight_workbench_init(void) {
  for(guint i=0;i<G_N_ELEMENTS(side_books);i++) {GtkWidget *tabs=insight_side_tabs_wrap(GTK_NOTEBOOK(side_books[i]),insight_tr);if(tabs) insight_i18n_on_refresh(G_OBJECT(tabs),insight_side_tabs_refresh,tabs);}
  gtk_style_context_add_class(gtk_widget_get_style_context(main_widgets.sidebar_notebook),"insight-panel-font");gtk_style_context_add_class(gtk_widget_get_style_context(wb.project_notebook),"insight-panel-font");for(guint n=0;n<wb.host_count;n++) if(wb.hosts[n].page && wb.hosts[n].page!=wb.box) gtk_style_context_add_class(gtk_widget_get_style_context(wb.hosts[n].page),"insight-panel-font");panel_font_watch(main_widgets.sidebar_notebook,NULL);panel_font_watch(wb.project_notebook,NULL);insight_workbench_panel_font();
  insight_workbench_set_independent(insight_appearance_independent());
- if(wb.root && !wb.scan && !wb.report_scan_completed) start_scan(wb.root);
+ if(wb.root && !wb.scan && !wb.restore_worker && !wb.report_scan_completed) start_scan(wb.root);
  /* Notebook stack minima include inactive pages as well as Context. Keep
   * auxiliary rows from forcing the entire source workspace wider than its slot. */
  for(gint i=0;i<gtk_notebook_get_n_pages(GTK_NOTEBOOK(main_widgets.message_window_notebook));i++) constrain_message_width(gtk_notebook_get_nth_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),i));
@@ -6685,7 +6732,7 @@ void insight_workbench_finalize(void) {
  g_free(wb.search_state_path); g_ptr_array_free(wb.search_files,TRUE); g_ptr_array_free(wb.search_history,TRUE); g_object_unref(wb.search_matches);
  if(wb.watch_idle) g_source_remove(wb.watch_idle);
  insight_workspace_watch_free(wb.watch);insight_master_sync_free(wb.master_sync);wb.master_sync=NULL;
- stop_scan(); g_ptr_array_free(wb.scan_members,TRUE); insight_project_files_free(wb.membership); g_free(wb.membership_project); g_ptr_array_free(wb.scan_files,TRUE); g_ptr_array_free(wb.scan_trees,TRUE); g_hash_table_destroy(wb.scan_seen); g_ptr_array_free(wb.frames,TRUE); g_ptr_array_free(wb.files,TRUE); g_free(wb.root); g_free(wb.cache_path);g_free(wb.db_identity);g_free(wb.db_policy);g_hash_table_unref(wb.file_stamps);g_hash_table_unref(wb.directory_stamps);retire_index(wb.disk_calls);retire_index(wb.disk_declarations);retire_index(wb.scan_backup);
+ stop_scan(); g_ptr_array_free(wb.scan_members,TRUE); insight_project_files_free(wb.membership); g_free(wb.membership_project); g_ptr_array_free(wb.scan_files,TRUE); g_ptr_array_free(wb.scan_trees,TRUE); g_hash_table_destroy(wb.scan_seen); g_ptr_array_free(wb.frames,TRUE); g_ptr_array_free(wb.files,TRUE); g_free(wb.root); g_free(wb.cache_path);g_free(wb.db_identity);g_free(wb.db_policy);g_free(wb.restore_attempt_identity);g_hash_table_unref(wb.file_stamps);g_hash_table_unref(wb.directory_stamps);retire_index(wb.disk_calls);retire_index(wb.disk_declarations);retire_index(wb.scan_backup);
  g_free(wb.editor_find_query); g_free(wb.editor_find_digest);
  g_free(wb.follow_word); g_free(wb.relation_word);
  g_free(wb.source_path); g_free(wb.source_digest); g_free(wb.find_last_query); g_free(wb.find_last_digest);

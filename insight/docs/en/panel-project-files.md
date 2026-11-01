@@ -145,3 +145,5 @@ Actual Linux GTK dialog after adding `*.c` from the regression fixture tree:
 Turning off automatic inclusion in a legacy project freezes the current files into an explicit list and removes live tree rules. Wait for a complete scan; incomplete snapshots decline. Later files in those folders are not imported automatically. A directory read failure clears the available list, preventing selection of files from the previous directory under a different heading.
 
 The file list uses a shared moving-window control: at most 256 GTK rows, bidirectional scrolling and Home/End/Page Up/Page Down over the complete result. Search and sorting run in a background job over all files. Result metadata stays in memory; source text is not loaded into table rows. The old 10000-file traversal cap is removed; project membership and database tables accept up to one million entries.
+
+Panel contents no longer force the main window minimum height beyond the usable desktop. Oversized saved startup geometry is clamped to the monitor workarea.

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="420" viewBox="0 0 800 420">
 <rect width="800" height="420" rx="16" fill="#f4f7fb"/>
-<g font-family="sans-serif" fill="#182d46"><text x="28" y="38" font-size="23" font-weight="bold">Project database · incremental refresh</text>
+<g font-family="sans-serif" fill="#182d46"><text x="28" y="38" font-size="23" font-weight="bold">Project database · background restore</text>
 <rect x="28" y="65" width="230" height="112" rx="12" fill="#e1ebfa" stroke="#839dbe"/>
 <text x="46" y="93" font-size="18" font-weight="bold">Open project</text><text x="46" y="120" font-size="16">Restore names + indexes</text><text x="46" y="148" font-size="16">Check file / directory stamps</text>
 <rect x="310" y="65" width="222" height="112" rx="12" fill="#e0f3e9" stroke="#64a184"/>

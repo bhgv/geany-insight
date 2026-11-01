@@ -156,6 +156,17 @@ static GOptionEntry entries[] =
 
 static void setup_window_position(void)
 {
+	/* Saved geometry may belong to another screen or an oversized old layout. */
+ GdkDisplay *display=gdk_display_get_default();
+ GdkMonitor *monitor=gdk_display_get_monitor_at_point(display,ui_prefs.geometry[0],ui_prefs.geometry[1]);
+ if(!monitor) monitor=gdk_display_get_primary_monitor(display);
+ if(monitor) {
+  GdkRectangle area;gdk_monitor_get_workarea(monitor,&area);
+  if(ui_prefs.geometry[2]>0) ui_prefs.geometry[2]=MIN(ui_prefs.geometry[2],MAX(1,area.width-16));
+  if(ui_prefs.geometry[3]>0) ui_prefs.geometry[3]=MIN(ui_prefs.geometry[3],MAX(1,area.height-48));
+  if(ui_prefs.geometry[0]!=-1) ui_prefs.geometry[0]=CLAMP(ui_prefs.geometry[0],area.x,area.x+MAX(0,area.width-MAX(1,ui_prefs.geometry[2])));
+  if(ui_prefs.geometry[1]!=-1) ui_prefs.geometry[1]=CLAMP(ui_prefs.geometry[1],area.y,area.y+MAX(0,area.height-MAX(1,ui_prefs.geometry[3])-32));
+ }
 	/* interprets the saved window geometry */
 	if (prefs.save_wingeom)
 	{

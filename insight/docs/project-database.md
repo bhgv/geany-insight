@@ -41,3 +41,5 @@ writers allow 1 million records / 256 MiB per index and 768 MiB for the full
 project database. Unsaved semantic overlays remain in memory. See [Clang](clang.md).
 
 File discovery publishes the project file list before source parsing starts. Files can be opened and edited while a background job indexes symbols and relations. During initial discovery, the list appears in batches without waiting for Clang.
+
+Opening a project reads the database and reconstructs saved declarations in a background task. The window is shown before the restored index is applied. Closing or switching projects cancels the old result, which cannot replace the new project data.
