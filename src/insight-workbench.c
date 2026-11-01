@@ -970,11 +970,12 @@ static gboolean start_scan(const char *root) {
   wb.watch_changed=FALSE;wb.report_scan_completed=FALSE;
   if(context_changed) g_ptr_array_set_size(wb.files,0);
   insight_workspace_watch_clear(wb.watch);
+  g_free(wb.root);wb.root=g_strdup(owned);
   restore_project_database(owned);g_free(owned);return TRUE;
  }
  next=wb.base?insight_index_ref(wb.base):insight_index_new();
  if(!dir || !next) { if(dir) g_dir_close(dir); insight_index_free(next); g_free(owned); return FALSE; }
- gboolean same_root=!g_strcmp0(wb.root,owned)&&(!context_changed||g_hash_table_size(wb.file_stamps)>0);
+ gboolean same_root=!g_strcmp0(wb.root,owned)&&(!context_changed||g_hash_table_size(wb.file_stamps)>0)&&(wb.files->len||wb.report_scan_completed);
  invalidate_search_context(); stop_scan(); wb.scan_keep_files=same_root; g_ptr_array_set_size(wb.scan_members,0);
  if(wb.watch_idle) { g_source_remove(wb.watch_idle); wb.watch_idle=0; }
  insight_workspace_watch_clear(wb.watch); wb.watch_changed=FALSE; wb.watch_incomplete=FALSE; if(!wb.cache_validation) watch_directory(owned);

@@ -20,8 +20,8 @@ static GtkWidget *choices[2][4],*opacity_choices[2][4],*theme_choices[2][G_N_ELE
 static guint theme;
 static guint opacity=100;
 static gboolean fading;static gdouble fade_from;static gint64 fade_started;
-static guint menu_count,map_signal;
-static gulong map_hook;
+static guint menu_count,map_signal,parent_signal;
+static gulong map_hook,parent_hook;
 static gchar *config;
 /* GTK measures and positions tooltips before mapping their private window.
  * Replacing its font/visual/icons from a global map hook invalidates that
@@ -157,7 +157,7 @@ void insight_appearance_init(void) {
  GKeyFile *key=g_key_file_new();GStatBuf info;
  if(!g_stat(config,&info) && info.st_size<=8192 && g_key_file_load_from_file(key,config,G_KEY_FILE_NONE,NULL) && g_key_file_get_integer(key,"interface","version",NULL)==1) { gchar *name=g_key_file_get_string(key,"interface","style",NULL);independent=!g_strcmp0(name,"macos-windows");macos=independent || !g_strcmp0(name,"macos");gint saved=g_key_file_get_integer(key,"interface","opacity",NULL);if(saved==70 || saved==80 || saved==90 || saved==100) opacity=(guint)saved;else opacity=100;if(independent) opacity=100;reduced=opacity==100;g_free(name);gchar *variant=g_key_file_get_string(key,"interface","macos-theme",NULL);for(guint n=0;n<G_N_ELEMENTS(theme_ids);n++) if(!g_strcmp0(variant,theme_ids[n])) theme=n;g_free(variant); }
  g_key_file_unref(key);if(macos) { GError *error=NULL;if(!load_css(&error)) { macos=independent=FALSE;g_warning("Interface style ignored: %s",error ? error->message:"CSS unavailable");g_clear_error(&error); } }
- map_signal=g_signal_lookup("show",GTK_TYPE_WIDGET);map_hook=g_signal_add_emission_hook(map_signal,0,mapped,NULL,NULL);apply();
+ map_signal=g_signal_lookup("show",GTK_TYPE_WIDGET);map_hook=g_signal_add_emission_hook(map_signal,0,mapped,NULL,NULL);parent_signal=g_signal_lookup("parent-set",GTK_TYPE_WIDGET);parent_hook=g_signal_add_emission_hook(parent_signal,0,mapped,NULL,NULL);apply();
 }
 void insight_appearance_menu(GtkWidget *menu) {
  if(!alive) insight_appearance_init();if(menu_count>=2) return;guint index=menu_count++;
@@ -172,7 +172,7 @@ void insight_appearance_menu(GtkWidget *menu) {
  for(guint i=0;i<4;i++) if(i!=2) {gchar *name=g_strdup_printf("insight-appearance-%u-%u",index,i);gtk_widget_set_name(choices[index][i],name);g_free(name);g_signal_connect(choices[index][i],"toggled",G_CALLBACK(selected),GUINT_TO_POINTER(i));}sync_menus();gtk_widget_show_all(root);
 }
 void insight_appearance_finalize(void) {
- if(!alive) return;alive=FALSE;if(map_hook) g_signal_remove_emission_hook(map_signal,map_hook);map_hook=0;
+ if(!alive) return;alive=FALSE;if(map_hook) g_signal_remove_emission_hook(map_signal,map_hook);map_hook=0;if(parent_hook) g_signal_remove_emission_hook(parent_signal,parent_hook);parent_hook=0;
  macos=FALSE;opacity=100;fading=FALSE;for(guint i=0;i<surfaces->len;i++) { Surface *s=g_ptr_array_index(surfaces,i);GtkWidget *w=g_weak_ref_get(&s->widget);if(w) { apply_surface(w);style_icons(w);g_object_unref(w); } }
  if(provider) gtk_style_context_remove_provider_for_screen(gdk_screen_get_default(),GTK_STYLE_PROVIDER(provider));g_clear_object(&provider);g_clear_pointer(&surfaces,g_ptr_array_unref);g_clear_pointer(&config,g_free);menu_count=0;memset(choices,0,sizeof choices);memset(opacity_choices,0,sizeof opacity_choices);memset(theme_choices,0,sizeof theme_choices);theme=0;reduced=independent=FALSE;
 }
