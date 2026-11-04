@@ -27,6 +27,7 @@ static gboolean step(gpointer unused) {
  if(phase==3) {g_assert_true(document_get_current()==doc);g_assert_cmpint(sci_get_current_position(doc->editor->sci),==,source_position);keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_GOTO_FORWARD);phase=4;return G_SOURCE_CONTINUE;}
  if(phase==4) {
   g_assert_cmpstr(document_get_current()->file_name,==,leaf);g_assert_cmpint(sci_get_current_position(document_get_current()->editor->sci),==,19);
+  if(!scintilla_send_message(document_get_current()->editor->sci,SCI_INDICATORVALUEAT,24,19)) return G_SOURCE_CONTINUE;
   GtkWidget *action=named(gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci)),"insight-navigate-hdl-references");g_assert_nonnull(action);gtk_menu_item_activate(GTK_MENU_ITEM(action));phase=5;return G_SOURCE_CONTINUE;
  }
  if(phase==5) {
@@ -39,6 +40,14 @@ static gboolean step(gpointer unused) {
   GtkTreePath *row=gtk_tree_model_get_path(model,&iter);gtk_tree_view_row_activated(GTK_TREE_VIEW(view),row,gtk_tree_view_get_column(GTK_TREE_VIEW(view),0));gtk_tree_path_free(row);g_assert_true(document_get_current()==doc);
   sci_set_text(doc->editor->sci,"module top;\nlogic target_signal;\ninitial $display(target_signl);\nendmodule\n\n");sci_set_current_position(doc->editor->sci,sci_get_length(doc->editor->sci),FALSE);
   g_assert_cmpint(scintilla_send_message(leaf_sci,SCI_INDICATORVALUEAT,24,19),==,0);
+  phase=7;return G_SOURCE_CONTINUE;
+ }
+ if(phase==7) {
+  /* The edited declaration is colored without touching the existing Relations result. */
+  if(!scintilla_send_message(doc->editor->sci,SCI_INDICATORVALUEAT,24,18)) return G_SOURCE_CONTINUE;
+  GtkWidget *window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));
+  GtkWidget *status=named(window,"insight-relation-status");
+  g_assert_true(g_str_has_prefix(gtk_label_get_text(GTK_LABEL(status)),"slang: 1 references"));
   GtkWidget *action=named(window,"insight-navigate-hdl-diagnostics");g_assert_nonnull(action);gtk_menu_item_activate(GTK_MENU_ITEM(action));phase=6;return G_SOURCE_CONTINUE;
  }
  if(phase==6) {

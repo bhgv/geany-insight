@@ -104,4 +104,4 @@ _external-slang/insight-slang-semantic --symbols -- leaf.sv top.sv
 
 ## Semantic highlighting
 
-Run HDL diagnostics or a slang reference search from the source tab you want to highlight. Once background analysis finishes, the editor colors recognized modules, instances, ports, subroutines, parameters and signals in that tab. The lexer still colors keywords, comments and strings. Highlighting uses the same project index, including a restored one, and covers up to 2048 locations. Editing an HDL source clears the analysis colors; run the command again to refresh them.
+Open a Verilog or SystemVerilog tab. When the installed slang helper finishes background analysis, the editor automatically colors recognized modules, instances, ports, subroutines, parameters and signals in that tab. The lexer still colors keywords, comments and strings. Highlighting uses the same project index, including a restored one, and covers up to 2048 locations. An HDL edit invalidates the old colors and schedules fresh analysis after a short pause. Background coloring does not open Relations or replace its results. Explicit diagnostics and reference searches remain available.
