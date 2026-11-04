@@ -781,3 +781,8 @@ EXTRA_DIST += insight/tests/macos_geometry_gui_test.c
 insightdoc_DATA += insight/docs/windows-build.md
 dist_insightdocmedia_DATA += insight/docs/media/windows-build.svg
 EXTRA_DIST += insight/tools/setup-windows.ps1 insight/tools/windows-toolchain.json insight/tests/windows_toolchain_test.ps1
+
+insightdoc_DATA += insight/docs/slang.md
+EXTRA_DIST += insight/tools/build_external_slang.py external/slang-compat/CMakeLists.txt external/slang-compat/Dependencies.cmake external/slang-compat/cmake310-gcc7.patch external/slang-compat/probe.cpp external/slang-compat/fixtures/leaf.sv external/slang-compat/fixtures/top.sv
+
+EXTRA_DIST += external/slang-compat/CompatCharconv.h external/slang-compat/charconv-test.cpp

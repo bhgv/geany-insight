@@ -99,3 +99,11 @@ Clang; the revision probe does not regenerate that script. A fresh script report
 script; explicitly selecting the system provider remains a separate option.
 
 Fresh Autotools/Meson configurations prepare missing internal SDKs automatically. To forbid preparation, explicitly pass `--disable-clang-bootstrap` or `-Dclang-bootstrap=false`.
+
+## SystemVerilog compatibility experiment
+
+`slang` is a separate pinned submodule (upstream v3.0, C++17). Run
+`python3 insight/tools/build_external_slang.py --jobs 2 --check` for the CMake
+3.10 / GCC 7 compatibility build and a native two-file elaboration probe.
+It does not enable a slang editor backend. See [EN](../insight/docs/en/slang.md)
+and [RU](../insight/docs/ru/slang.md) for the version tradeoffs and scope.

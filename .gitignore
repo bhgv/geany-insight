@@ -157,3 +157,7 @@ Makefile.in
 /out/
 
 /_cmake310-test/
+
+# Prepared slang dependencies and build outputs (sources are a pinned submodule).
+/external/slang-deps/
+/_external-slang/

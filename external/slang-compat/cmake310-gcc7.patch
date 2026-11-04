@@ -1,0 +1,581 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 7435d7a5e..5145a5763 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -4,7 +4,7 @@
+ # ~~~
+ 
+ # slang - cmake entry point
+-cmake_minimum_required(VERSION 3.15...3.24)
++cmake_minimum_required(VERSION 3.10)
+ 
+ # Determine if slang is built as a subproject (using add_subdirectory) or if it
+ # is the master project.
+@@ -52,7 +52,6 @@ project(
+   slang
+   VERSION ${SLANG_VERSION_STRING}
+   LANGUAGES CXX
+-  HOMEPAGE_URL https://sv-lang.com/
+   DESCRIPTION "SystemVerilog compiler and language services")
+ 
+ option(SLANG_INCLUDE_TOOLS "Include tools targets in the build"
+@@ -81,13 +80,18 @@ set(SLANG_WARN_FLAGS
+     CACHE STRING "Extra warning flags to apply to the slang library build")
+ 
+ # Variables used by subdirectories.
+-include(FetchContent)
++if(NOT GEANY_SLANG_COMPAT)
++  include(FetchContent)
++endif()
+ include(GNUInstallDirs)
+ set(SCRIPTS_DIR ${PROJECT_SOURCE_DIR}/scripts)
+ 
+ # Find Python. If we're building python bindings we need the development modules
+ # as well.
+-if(SLANG_INCLUDE_PYLIB)
++if(GEANY_SLANG_COMPAT)
++  find_package(PythonInterp 3 REQUIRED)
++  set(Python_EXECUTABLE "${PYTHON_EXECUTABLE}")
++elseif(SLANG_INCLUDE_PYLIB)
+   find_package(Python REQUIRED COMPONENTS Interpreter Development.Module)
+ else()
+   find_package(Python REQUIRED COMPONENTS Interpreter)
+@@ -131,14 +135,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
+ # targets to build and run correctly and don't affect ABI so shouldn't need
+ # target_ specific commands.
+ if(CMAKE_SYSTEM_NAME MATCHES "Windows")
+-  add_compile_definitions(WIN32 _WINDOWS NTDDI_VERSION=0x06010000
+-                          _WIN32_WINNT=0x0601)
+-  add_compile_definitions(UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+-  add_compile_definitions(_SCL_SECURE_NO_WARNINGS _CRT_SECURE_NO_WARNINGS)
+-  add_compile_definitions(_CRT_SECURE_NO_DEPRECATE _CRT_NONSTDC_NO_WARNINGS)
++  add_definitions(-DWIN32 -D_WINDOWS -DNTDDI_VERSION=0x06010000 -D_WIN32_WINNT=0x0601)
++  add_definitions(-DUNICODE -D_UNICODE -DNOMINMAX -DWIN32_LEAN_AND_MEAN)
++  add_definitions(-D_SCL_SECURE_NO_WARNINGS -D_CRT_SECURE_NO_WARNINGS)
++  add_definitions(-D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_WARNINGS)
+ 
+   # Project won't build out of the box without this flag.
+-  add_compile_options(/permissive-)
++  if(MSVC)
++    add_compile_options(/permissive-)
++  endif()
+ endif()
+ 
+ if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+@@ -158,52 +163,8 @@ if(NOT CMAKE_INSTALL_RPATH AND BUILD_SHARED_LIBS)
+   set(CMAKE_INSTALL_RPATH ${base} ${base}/${relDir})
+ endif()
+ 
++# Compatibility builds use pinned ghc::filesystem on all compilers.
+ set(STD_FS_LIB "")
+-# ==== The test below is based on:
+-# https://github.com/pybind/pybind11/blob/master/tests/CMakeLists.txt
+-#
+-# It is under a BSD-style license, see:
+-# https://github.com/pybind/pybind11/blob/master/LICENSE
+-#
+-# Check if we need to add -lstdc++fs or -lc++fs or nothing
+-if(DEFINED CMAKE_CXX_STANDARD AND CMAKE_CXX_STANDARD LESS 17)
+-  set(STD_FS_NO_LIB_NEEDED TRUE)
+-elseif(MSVC)
+-  set(STD_FS_NO_LIB_NEEDED TRUE)
+-else()
+-  file(
+-    WRITE ${CMAKE_CURRENT_BINARY_DIR}/main.cpp
+-    "#include <filesystem>\nint main(int argc, char ** argv) {\n  std::filesystem::path p(argv[0]);\n  return p.string().length();\n}"
+-  )
+-  try_compile(
+-    STD_FS_NO_LIB_NEEDED ${CMAKE_CURRENT_BINARY_DIR}
+-    SOURCES ${CMAKE_CURRENT_BINARY_DIR}/main.cpp
+-    COMPILE_DEFINITIONS -std=c++17)
+-  try_compile(
+-    STD_FS_NEEDS_STDCXXFS ${CMAKE_CURRENT_BINARY_DIR}
+-    SOURCES ${CMAKE_CURRENT_BINARY_DIR}/main.cpp
+-    COMPILE_DEFINITIONS -std=c++17
+-    LINK_LIBRARIES stdc++fs)
+-  try_compile(
+-    STD_FS_NEEDS_CXXFS ${CMAKE_CURRENT_BINARY_DIR}
+-    SOURCES ${CMAKE_CURRENT_BINARY_DIR}/main.cpp
+-    COMPILE_DEFINITIONS -std=c++17
+-    LINK_LIBRARIES c++fs)
+-endif()
+-
+-if(NOT STD_FS_NO_LIB_NEEDED)
+-  if(STD_FS_NEEDS_STDCXXFS)
+-    set(STD_FS_LIB stdc++fs)
+-  elseif(STD_FS_NEEDS_CXXFS)
+-    set(STD_FS_LIB c++fs)
+-  endif()
+-endif()
+-# ==== (end of test for stdc++fs)
+-
+-if(NOT "${STD_FS_LIB}" STREQUAL "")
+-  message(STATUS "Linking with: ${STD_FS_LIB}")
+-  list(APPEND SLANG_LIBRARIES ${STD_FS_LIB})
+-endif()
+ 
+ if(BUILD_SHARED_LIBS)
+   message(STATUS "Build SHARED library as: ${SLANG_LIB_NAME}")
+diff --git a/cmake/install-rules.cmake b/cmake/install-rules.cmake
+index 08e528d9d..f7601149c 100644
+--- a/cmake/install-rules.cmake
++++ b/cmake/install-rules.cmake
+@@ -6,14 +6,14 @@
+ install(
+   TARGETS slang_slang
+   EXPORT slangTargets
+-  RUNTIME COMPONENT slang_Runtime
+-  LIBRARY COMPONENT slang_Runtime NAMELINK_COMPONENT slang_Development
+-  ARCHIVE COMPONENT slang_Development
++  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT slang_Runtime
++  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT slang_Runtime
++  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT slang_Development
+   INCLUDES
+   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+ 
+ if(SLANG_INCLUDE_TOOLS)
+-  install(TARGETS slang_driver RUNTIME COMPONENT slang_Runtime)
++  install(TARGETS slang_driver RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT slang_Runtime)
+ endif()
+ 
+ include(CMakePackageConfigHelpers)
+diff --git a/external/CMakeLists.txt b/external/CMakeLists.txt
+index 9585b93b5..7a0d44d31 100644
+--- a/external/CMakeLists.txt
++++ b/external/CMakeLists.txt
+@@ -1,3 +1,8 @@
++if(GEANY_SLANG_COMPAT)
++  include("${GEANY_SLANG_COMPAT}/Dependencies.cmake")
++  return()
++endif()
++
+ # ~~~
+ # SPDX-FileCopyrightText: Michael Popoloski
+ # SPDX-License-Identifier: MIT
+diff --git a/include/slang/diagnostics/DiagnosticEngine.h b/include/slang/diagnostics/DiagnosticEngine.h
+index d41c6a87b..2ae97333a 100644
+--- a/include/slang/diagnostics/DiagnosticEngine.h
++++ b/include/slang/diagnostics/DiagnosticEngine.h
+@@ -7,7 +7,7 @@
+ //------------------------------------------------------------------------------
+ #pragma once
+ 
+-#include <filesystem>
++#include <ghc/filesystem.hpp>
+ #include <memory>
+ #include <string>
+ #include <typeindex>
+@@ -145,7 +145,7 @@ public:
+ 
+     /// Adds a path prefix for which all warnings will be supressed. This applies to
+     /// all natural warnings, regardless of whether they've been upgraded to an error.
+-    void addIgnorePath(const std::filesystem::path& path);
++    void addIgnorePath(const ghc::filesystem::path& path);
+ 
+     /// Sets a custom formatter function for the given type. This is used to
+     /// provide formatting for diagnostic arguments of a custom type.
+@@ -252,7 +252,7 @@ private:
+     flat_hash_map<DiagCode, flat_hash_map<BufferID, std::vector<DiagnosticMapping>>> diagMappings;
+ 
+     // A list of path prefixes to use to suppress warnings.
+-    std::vector<std::filesystem::path> ignoreWarnPrefixes;
++    std::vector<ghc::filesystem::path> ignoreWarnPrefixes;
+ 
+     // A list of all registered clients that receive issued diagnostics.
+     std::vector<std::shared_ptr<DiagnosticClient>> clients;
+diff --git a/include/slang/text/SourceManager.h b/include/slang/text/SourceManager.h
+index c996a7210..8d961f21c 100644
+--- a/include/slang/text/SourceManager.h
++++ b/include/slang/text/SourceManager.h
+@@ -8,7 +8,7 @@
+ #pragma once
+ 
+ #include <atomic>
+-#include <filesystem>
++#include <ghc/filesystem.hpp>
+ #include <memory>
+ #include <mutex>
+ #include <set>
+@@ -59,7 +59,7 @@ public:
+     /// Gets the full path to the given source buffer. This does not take
+     /// into account any `line directives. If the buffer is not a file buffer,
+     /// returns an empty string.
+-    const std::filesystem::path& getFullPath(BufferID buffer) const;
++    const ghc::filesystem::path& getFullPath(BufferID buffer) const;
+ 
+     /// Gets the column line number for a given source location.
+     /// @a location must be a file location.
+@@ -135,13 +135,13 @@ public:
+                               SourceLocation includedFrom = SourceLocation());
+ 
+     /// Read in a source file from disk.
+-    SourceBuffer readSource(const std::filesystem::path& path);
++    SourceBuffer readSource(const ghc::filesystem::path& path);
+ 
+     /// Read in a header file from disk.
+     SourceBuffer readHeader(string_view path, SourceLocation includedFrom, bool isSystemPath);
+ 
+     /// Returns true if the given file path is already loaded and cached in the source manager.
+-    bool isCached(const std::filesystem::path& path) const;
++    bool isCached(const ghc::filesystem::path& path) const;
+ 
+     /// Sets whether filenames should be made "proximate" to the current directory
+     /// for diagnostic reporting purposes. This is on by default but can be
+@@ -209,11 +209,11 @@ private:
+         const std::string name;                       // name of the file
+         const std::vector<char> mem;                  // file contents
+         std::vector<size_t> lineOffsets;              // cache of compute line offsets
+-        const std::filesystem::path* const directory; // directory in which the file exists
+-        const std::filesystem::path fullPath;         // full path to the file
++        const ghc::filesystem::path* const directory; // directory in which the file exists
++        const ghc::filesystem::path fullPath;         // full path to the file
+ 
+-        FileData(const std::filesystem::path* directory, std::string name, std::vector<char>&& data,
+-                 std::filesystem::path fullPath) :
++        FileData(const ghc::filesystem::path* directory, std::string name, std::vector<char>&& data,
++                 ghc::filesystem::path fullPath) :
+             name(std::move(name)),
+             mem(std::move(data)), directory(directory), fullPath(std::move(fullPath)) {}
+     };
+@@ -267,11 +267,11 @@ private:
+     flat_hash_map<std::string, std::unique_ptr<FileData>> lookupCache;
+ 
+     // directories for system and user includes
+-    std::vector<std::filesystem::path> systemDirectories;
+-    std::vector<std::filesystem::path> userDirectories;
++    std::vector<ghc::filesystem::path> systemDirectories;
++    std::vector<ghc::filesystem::path> userDirectories;
+ 
+     // uniquified backing memory for directories
+-    std::set<std::filesystem::path> directories;
++    std::set<ghc::filesystem::path> directories;
+ 
+     // map from buffer to diagnostic directive lists
+     flat_hash_map<BufferID, std::vector<DiagnosticDirectiveInfo>> diagDirectives;
+@@ -284,8 +284,8 @@ private:
+     SourceBuffer createBufferEntry(FileData* fd, SourceLocation includedFrom,
+                                    std::unique_lock<std::shared_mutex>& lock);
+ 
+-    SourceBuffer openCached(const std::filesystem::path& fullPath, SourceLocation includedFrom);
+-    SourceBuffer cacheBuffer(std::filesystem::path&& path, std::string&& pathStr,
++    SourceBuffer openCached(const ghc::filesystem::path& fullPath, SourceLocation includedFrom);
++    SourceBuffer cacheBuffer(ghc::filesystem::path&& path, std::string&& pathStr,
+                              SourceLocation includedFrom, std::vector<char>&& buffer);
+ 
+     // Get raw line number of a file location, ignoring any line directives
+diff --git a/include/slang/util/OS.h b/include/slang/util/OS.h
+index bbaec943c..bd11e45a6 100644
+--- a/include/slang/util/OS.h
++++ b/include/slang/util/OS.h
+@@ -7,7 +7,7 @@
+ //------------------------------------------------------------------------------
+ #pragma once
+ 
+-#include <filesystem>
++#include <ghc/filesystem.hpp>
+ #include <vector>
+ 
+ #include "slang/util/ScopeGuard.h"
+@@ -42,7 +42,7 @@ public:
+     /// Reads a file from @a path into memory. If successful, the bytes are placed
+     /// into @a buffer -- otherwise, returns false.
+     /// Note that the buffer will be null-terminated.
+-    static bool readFile(const std::filesystem::path& path, std::vector<char>& buffer);
++    static bool readFile(const ghc::filesystem::path& path, std::vector<char>& buffer);
+ 
+     /// Prints text to stdout.
+     static void print(string_view text);
+diff --git a/source/ast/CMakeLists.txt b/source/ast/CMakeLists.txt
+index 6f0d6e8b9..c3bc109b1 100644
+--- a/source/ast/CMakeLists.txt
++++ b/source/ast/CMakeLists.txt
+@@ -5,63 +5,63 @@
+ 
+ target_sources(
+   slang_slang
+-  PRIVATE builtins/ArrayMethods.cpp
+-          builtins/ConversionFuncs.cpp
+-          builtins/CoverageFuncs.cpp
+-          builtins/EnumMethods.cpp
+-          builtins/GateTypes.cpp
+-          builtins/MathFuncs.cpp
+-          builtins/MiscSystemFuncs.cpp
+-          builtins/NonConstFuncs.cpp
+-          builtins/QueryFuncs.cpp
+-          builtins/StdPackage.cpp
+-          builtins/StringMethods.cpp
+-          builtins/SystemTasks.cpp
+-          expressions/AssertionExpr.cpp
+-          expressions/AssignmentExpressions.cpp
+-          expressions/CallExpression.cpp
+-          expressions/LiteralExpressions.cpp
+-          expressions/MiscExpressions.cpp
+-          expressions/OperatorExpressions.cpp
+-          expressions/SelectExpressions.cpp
+-          symbols/AttributeSymbol.cpp
+-          symbols/BlockSymbols.cpp
+-          symbols/ClassSymbols.cpp
+-          symbols/CompilationUnitSymbols.cpp
+-          symbols/CoverSymbols.cpp
+-          symbols/InstanceSymbols.cpp
+-          symbols/MemberSymbols.cpp
+-          symbols/ParameterBuilder.cpp
+-          symbols/ParameterSymbols.cpp
+-          symbols/PortSymbols.cpp
+-          symbols/SpecifySymbols.cpp
+-          symbols/SubroutineSymbols.cpp
+-          symbols/SymbolBuilders.cpp
+-          symbols/ValueSymbol.cpp
+-          symbols/VariableSymbols.cpp
+-          types/AllTypes.cpp
+-          types/DeclaredType.cpp
+-          types/NetType.cpp
+-          types/TypePrinter.cpp
+-          types/Type.cpp
+-          ASTContext.cpp
+-          ASTSerializer.cpp
+-          Bitstream.cpp
+-          Compilation.cpp
+-          Constraints.cpp
+-          Definition.cpp
+-          EvalContext.cpp
+-          Expression.cpp
+-          FormatHelpers.cpp
+-          InstancePath.cpp
+-          Lookup.cpp
+-          LValue.cpp
+-          Patterns.cpp
+-          Scope.cpp
+-          ScriptSession.cpp
+-          SemanticFacts.cpp
+-          SemanticModel.cpp
+-          Statements.cpp
+-          Symbol.cpp
+-          SystemSubroutine.cpp
+-          TimingControl.cpp)
++  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/builtins/ArrayMethods.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/builtins/ConversionFuncs.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/builtins/CoverageFuncs.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/builtins/EnumMethods.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/builtins/GateTypes.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/builtins/MathFuncs.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/builtins/MiscSystemFuncs.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/builtins/NonConstFuncs.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/builtins/QueryFuncs.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/builtins/StdPackage.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/builtins/StringMethods.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/builtins/SystemTasks.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/expressions/AssertionExpr.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/expressions/AssignmentExpressions.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/expressions/CallExpression.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/expressions/LiteralExpressions.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/expressions/MiscExpressions.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/expressions/OperatorExpressions.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/expressions/SelectExpressions.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/symbols/AttributeSymbol.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/symbols/BlockSymbols.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/symbols/ClassSymbols.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/symbols/CompilationUnitSymbols.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/symbols/CoverSymbols.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/symbols/InstanceSymbols.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/symbols/MemberSymbols.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/symbols/ParameterBuilder.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/symbols/ParameterSymbols.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/symbols/PortSymbols.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/symbols/SpecifySymbols.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/symbols/SubroutineSymbols.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/symbols/SymbolBuilders.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/symbols/ValueSymbol.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/symbols/VariableSymbols.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/types/AllTypes.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/types/DeclaredType.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/types/NetType.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/types/TypePrinter.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/types/Type.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/ASTContext.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/ASTSerializer.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/Bitstream.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/Compilation.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/Constraints.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/Definition.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/EvalContext.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/Expression.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/FormatHelpers.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/InstancePath.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/Lookup.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/LValue.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/Patterns.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/Scope.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/ScriptSession.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/SemanticFacts.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/SemanticModel.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/Statements.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/Symbol.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/SystemSubroutine.cpp
++          ${CMAKE_CURRENT_SOURCE_DIR}/TimingControl.cpp)
+diff --git a/source/diagnostics/DiagnosticEngine.cpp b/source/diagnostics/DiagnosticEngine.cpp
+index 055cba891..5634d2d99 100644
+--- a/source/diagnostics/DiagnosticEngine.cpp
++++ b/source/diagnostics/DiagnosticEngine.cpp
+@@ -128,7 +128,7 @@ void DiagnosticEngine::clearMappings(DiagnosticSeverity severity) {
+     }
+ }
+ 
+-void DiagnosticEngine::addIgnorePath(const std::filesystem::path& path) {
++void DiagnosticEngine::addIgnorePath(const ghc::filesystem::path& path) {
+     ignoreWarnPrefixes.emplace_back(path);
+ }
+ 
+diff --git a/source/driver/Driver.cpp b/source/driver/Driver.cpp
+index 56e24f3aa..55a841171 100644
+--- a/source/driver/Driver.cpp
++++ b/source/driver/Driver.cpp
+@@ -25,7 +25,7 @@
+ #include "slang/syntax/SyntaxTree.h"
+ #include "slang/util/Random.h"
+ 
+-namespace fs = std::filesystem;
++namespace fs = ghc::filesystem;
+ 
+ namespace slang::driver {
+ 
+diff --git a/source/text/SourceManager.cpp b/source/text/SourceManager.cpp
+index ff9d4029b..2e2b3de27 100644
+--- a/source/text/SourceManager.cpp
++++ b/source/text/SourceManager.cpp
+@@ -13,7 +13,7 @@
+ #include "slang/util/StackContainer.h"
+ #include "slang/util/String.h"
+ 
+-namespace fs = std::filesystem;
++namespace fs = ghc::filesystem;
+ 
+ namespace slang {
+ 
+diff --git a/source/util/CommandLine.cpp b/source/util/CommandLine.cpp
+index 08f6e8c3b..73d0ca230 100644
+--- a/source/util/CommandLine.cpp
++++ b/source/util/CommandLine.cpp
+@@ -7,9 +7,9 @@
+ //------------------------------------------------------------------------------
+ #include "slang/util/CommandLine.h"
+ 
+-#include <charconv>
++#include "CompatCharconv.h"
+ #include <cstdlib>
+-#include <filesystem>
++#include <ghc/filesystem.hpp>
+ #include <fmt/core.h>
+ 
+ #include "slang/text/CharInfo.h"
+@@ -17,7 +17,7 @@
+ #include "slang/util/SmallVector.h"
+ #include "slang/util/String.h"
+ 
+-namespace fs = std::filesystem;
++namespace fs = ghc::filesystem;
+ 
+ namespace slang {
+ 
+@@ -721,7 +721,7 @@ static std::optional<T> parseInt(string_view name, string_view value, std::strin
+ 
+     T val;
+     auto end = value.data() + value.size();
+-    auto result = std::from_chars(value.data(), end, val);
++    auto result = slang::compat::from_chars(value.data(), end, val);
+     if (result.ec != std::errc() || result.ptr != end) {
+         error = fmt::format("invalid value '{}' for integer argument '{}'", value, name);
+         return {};
+diff --git a/source/util/OS.cpp b/source/util/OS.cpp
+index 3a71a1bcf..ec9868510 100644
+--- a/source/util/OS.cpp
++++ b/source/util/OS.cpp
+@@ -19,7 +19,7 @@
+ #include <fmt/color.h>
+ #include <fstream>
+ 
+-namespace fs = std::filesystem;
++namespace fs = ghc::filesystem;
+ 
+ namespace slang {
+ 
+diff --git a/source/util/String.cpp b/source/util/String.cpp
+index f8e8d3227..fc349d2fd 100644
+--- a/source/util/String.cpp
++++ b/source/util/String.cpp
+@@ -7,7 +7,7 @@
+ //------------------------------------------------------------------------------
+ #include "slang/util/String.h"
+ 
+-#include <charconv>
++#include "CompatCharconv.h"
+ #include <string>
+ 
+ #include "slang/util/SmallVector.h"
+@@ -38,7 +38,7 @@ void uintToStr(SmallVectorBase<char>& buffer, uint64_t value) {
+ 
+ std::optional<int32_t> strToInt(string_view str, size_t* pos, int base) {
+     int32_t value;
+-    auto result = std::from_chars(str.data(), str.data() + str.size(), value, base);
++    auto result = slang::compat::from_chars(str.data(), str.data() + str.size(), value, base);
+     if (result.ec != std::errc())
+         return std::nullopt;
+ 
+@@ -49,7 +49,7 @@ std::optional<int32_t> strToInt(string_view str, size_t* pos, int base) {
+ 
+ std::optional<uint32_t> strToUInt(string_view str, size_t* pos, int base) {
+     uint32_t value;
+-    auto result = std::from_chars(str.data(), str.data() + str.size(), value, base);
++    auto result = slang::compat::from_chars(str.data(), str.data() + str.size(), value, base);
+     if (result.ec != std::errc())
+         return std::nullopt;
+ 
+@@ -58,7 +58,7 @@ std::optional<uint32_t> strToUInt(string_view str, size_t* pos, int base) {
+     return value;
+ }
+ 
+-// TODO: improve this once std::from_chars is available everywhere
++// TODO: improve this once slang::compat::from_chars is available everywhere
+ std::optional<double> strToDouble(string_view str, size_t* pos) {
+     std::string copy(str);
+     const char* start = copy.c_str();
+diff --git a/tools/CMakeLists.txt b/tools/CMakeLists.txt
+index 81e997857..1552f201a 100644
+--- a/tools/CMakeLists.txt
++++ b/tools/CMakeLists.txt
+@@ -33,4 +33,6 @@ if(SLANG_INCLUDE_INSTALL)
+   install(TARGETS slang_driver RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+ endif()
+ 
+-add_subdirectory(tidy)
++if(NOT GEANY_SLANG_COMPAT)
++  add_subdirectory(tidy)
++endif()
+diff --git a/tools/rewriter/rewriter.cpp b/tools/rewriter/rewriter.cpp
+index 3fb6e15fa..1e99d5bb8 100644
+--- a/tools/rewriter/rewriter.cpp
++++ b/tools/rewriter/rewriter.cpp
+@@ -13,7 +13,7 @@
+ #    include <io.h>
+ #endif
+ 
+-#include <filesystem>
++#include <ghc/filesystem.hpp>
+ 
+ #include "slang/syntax/SyntaxPrinter.h"
+ #include "slang/syntax/SyntaxTree.h"
+@@ -32,12 +32,12 @@ int main(int argc, char** argv) try {
+     _setmode(_fileno(stdout), _O_BINARY);
+ #endif
+ 
+-    if (!std::filesystem::exists(argv[1])) {
++    if (!ghc::filesystem::exists(argv[1])) {
+         fprintf(stderr, "File does not exist: %s\n", argv[1]);
+         return 1;
+     }
+ 
+-    if (!std::filesystem::is_regular_file(argv[1])) {
++    if (!ghc::filesystem::is_regular_file(argv[1])) {
+         fprintf(stderr, "%s is not a file\n", argv[1]);
+         return 1;
+     }
