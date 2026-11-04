@@ -96,6 +96,44 @@ function Invoke-Msys([string]$Script, [switch]$AllowCoreRestart) {
     if ($code -ne 0 -and -not $AllowCoreRestart) { throw "MSYS2 command failed ($code). Rerun after fixing the reported error." }
     return $code
 }
+function Receive-InsightInstaller([string]$Url, [string]$Destination) {
+    $response = $null
+    $inputStream = $null
+    $outputStream = $null
+    try {
+        $request = [Net.WebRequest]::Create($Url)
+        $request.Timeout = 60000
+        $request.ReadWriteTimeout = 60000
+        $response = $request.GetResponse()
+        $length = $response.ContentLength
+        $inputStream = $response.GetResponseStream()
+        $outputStream = [IO.File]::Create($Destination)
+        $buffer = New-Object byte[] 65536
+        $received = 0L
+        $clock = [Diagnostics.Stopwatch]::StartNew()
+        $nextReport = 0L
+        while (($count = $inputStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            $outputStream.Write($buffer, 0, $count)
+            $received += $count
+            if ($clock.ElapsedMilliseconds -ge $nextReport) {
+                if ($length -gt 0) {
+                    $percent = [Math]::Min(99, [Math]::Floor(100.0 * $received / $length))
+                    Write-Host ('  {0}% ({1:N1}/{2:N1} MiB)' -f $percent, ($received / 1MB), ($length / 1MB))
+                } else {
+                    Write-Host ('  {0:N1} MiB received' -f ($received / 1MB))
+                }
+                $nextReport = $clock.ElapsedMilliseconds + 1000
+            }
+        }
+        if ($length -ge 0 -and $received -ne $length) { throw "Incomplete installer download: $received of $length bytes." }
+        $completion = if ($length -gt 0) { '100% downloaded' } else { 'Download complete' }
+        Write-Host ('  {0}: {1:N1} MiB. Verifying SHA256...' -f $completion, ($received / 1MB))
+    } finally {
+        if ($outputStream) { $outputStream.Dispose() }
+        if ($inputStream) { $inputStream.Dispose() }
+        if ($response) { $response.Dispose() }
+    }
+}
 try {
     if (-not (Test-Path -LiteralPath $bash)) {
         if ((Test-Path -LiteralPath $MsysRoot) -and @(Get-ChildItem -LiteralPath $MsysRoot -Force).Count) {
@@ -106,12 +144,19 @@ try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
         if (-not (Test-Path -LiteralPath $installer)) {
             $partial = "$installer.partial"
-            Invoke-WebRequest -UseBasicParsing -Uri $manifest.installer.url -OutFile $partial
-            Move-Item -LiteralPath $partial -Destination $installer -Force
+            Write-Host "[Download] $($manifest.installer.file) from $($manifest.installer.url)"
+            try {
+                Receive-InsightInstaller $manifest.installer.url $partial
+                Move-Item -LiteralPath $partial -Destination $installer -Force
+            } finally {
+                if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
+            }
+        } else {
+            Write-Host "[Cache] Verifying $installer"
         }
         $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
         if ($hash -ne $manifest.installer.sha256) { throw "Installer SHA256 mismatch. Remove $installer and retry." }
-        Write-Host 'Installing verified MSYS2 installer...'
+        Write-Host '[Install] MSYS2 (the installer reports its own progress)...'
         $process = Start-Process -FilePath $installer -ArgumentList @('in','--confirm-command','--accept-messages','--root',($MsysRoot -replace '\\','/')) -Wait -PassThru
         if ($process.ExitCode -ne 0) { throw "MSYS2 installer failed ($($process.ExitCode))." }
         if (-not (Test-Path -LiteralPath $bash)) { throw 'Installer did not create usr\bin\bash.exe.' }
@@ -121,10 +166,10 @@ try {
     $env:INSIGHT_BOOTSTRAP_PACKAGES = $packages -join ' '
     # Core updates may terminate their shell; always resume in a new login shell.
     # Only this first exit is tolerated; the second full upgrade must succeed.
-    Write-Host 'Updating MSYS2 (close all other MSYS2 terminals first)...'
+    Write-Host '[Update] MSYS2 (close all other MSYS2 terminals first)...'
     $null = Invoke-Msys 'pacman -Syu --noconfirm' -AllowCoreRestart
     $null = Invoke-Msys 'set -e; pacman -Syu --noconfirm'
-    Write-Host 'Downloading and installing build tools...'
+    Write-Host '[Packages] Downloading and installing UCRT64 build tools...'
     $null = Invoke-Msys @'
 set -euo pipefail
 read -r -a packages <<< "$INSIGHT_BOOTSTRAP_PACKAGES"
@@ -140,6 +185,7 @@ cmake --version
 pacman -Q "${packages[@]}"
 '@
     if ($FetchSources) {
+        Write-Host "[Sources] Geany Insight and compiler sources: $SourceDir"
         $env:INSIGHT_BOOTSTRAP_SOURCE = [IO.Path]::GetFullPath($SourceDir)
         $env:INSIGHT_BOOTSTRAP_FETCH = $manifest.repository
         $env:INSIGHT_BOOTSTRAP_INTERNAL = if ($ClangProvider -eq 'Internal') { '1' } else { '0' }
@@ -149,22 +195,25 @@ source_dir=$(cygpath -u "$INSIGHT_BOOTSTRAP_SOURCE")
 if [ -d "$source_dir/.git" ]; then
     test "$(git -C "$source_dir" remote get-url origin)" = "$INSIGHT_BOOTSTRAP_FETCH" || { echo 'Different origin: refusing to modify this checkout.' >&2; exit 1; }
 else
-    git clone --depth 1 "$INSIGHT_BOOTSTRAP_FETCH" "$source_dir"
+    git clone --progress --depth 1 "$INSIGHT_BOOTSTRAP_FETCH" "$source_dir"
 fi
 if [ "$INSIGHT_BOOTSTRAP_INTERNAL" = 1 ] && [ ! -f "$source_dir/external/llvm-project/llvm/CMakeLists.txt" ]; then
-    git -C "$source_dir" submodule update --init --depth 1 -- external/llvm-project
+    printf '%s\n' '[Sources] Downloading internal LLVM/Clang'
+    git -C "$source_dir" submodule update --progress --init --depth 1 -- external/llvm-project
 fi
 # Never pull/reset an existing checkout or overwrite initialized Clang sources.
 git -C "$source_dir" rev-parse HEAD
 '@
     }
     if ($BuildEditor) {
+        Write-Host "[Build] Clang provider: $ClangProvider; building slang and Geany Insight for $InstallDir"
         $env:INSIGHT_BOOTSTRAP_INSTALL=$InstallDir
         $env:INSIGHT_BOOTSTRAP_PROVIDER=$ClangProvider.ToLowerInvariant()
         $null = Invoke-Msys @'
 set -euo pipefail
 cd "$(cygpath -u "$INSIGHT_BOOTSTRAP_SOURCE")"
 export CC=gcc CXX=g++
+export NINJA_STATUS='[ %f/%t %p ] '
 python3 insight/tools/build_editor.py --backend meson --clang-provider "$INSIGHT_BOOTSTRAP_PROVIDER" --prefix "$(cygpath -m "$INSIGHT_BOOTSTRAP_INSTALL")" --install -- --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
 '@
     }

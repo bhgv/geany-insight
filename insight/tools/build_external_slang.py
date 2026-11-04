@@ -48,7 +48,7 @@ def prepare(source, deps):
     if not (source / 'CMakeLists.txt').is_file():
         if source.exists() and any(source.iterdir()):
             raise ValueError('Incomplete nonempty slang checkout; refusing to overwrite it')
-        run(['git', '-C', ROOT, 'submodule', 'update', '--init', '--depth', '1', '--', 'external/slang'])
+        run(['git', '-C', ROOT, 'submodule', 'update', '--progress', '--init', '--depth', '1', '--', 'external/slang'])
     if output(['git', '-C', source, 'rev-parse', 'HEAD']) != PIN:
         raise ValueError('slang revision differs from pinned v3.0; no checkout was reset')
     for name, (url, revision) in DEPS.items():
