@@ -90,7 +90,9 @@ function Wait-InsightProcess([Diagnostics.Process]$Child, [string]$Stage) {
     while (-not $Child.WaitForExit(20000)) {
         Write-Host ('[Running] {0} - elapsed {1:hh\:mm\:ss}' -f $Stage, $clock.Elapsed)
     }
-    return $Child.ExitCode
+    $code = $Child.ExitCode
+    if ($null -eq $code) { throw "${Stage}: Windows did not report a process exit code." }
+    return $code
 }
 
 function Invoke-Msys([string]$Script, [string]$Stage, [switch]$AllowCoreRestart) {
@@ -100,8 +102,12 @@ function Invoke-Msys([string]$Script, [string]$Stage, [switch]$AllowCoreRestart)
     try {
         [IO.File]::WriteAllText($scriptFile, ($Script.Replace("`r", '') + "`n"), (New-Object Text.UTF8Encoding($false)))
         $scriptArg = '"' + ($scriptFile -replace '\\','/') + '"'
-        $child = Start-Process -FilePath $bash -ArgumentList @('--login', $scriptArg) -NoNewWindow -PassThru
-        $code = Wait-InsightProcess $child $Stage
+        $start = New-Object Diagnostics.ProcessStartInfo
+        $start.FileName = $bash
+        $start.Arguments = '--login ' + $scriptArg
+        $start.UseShellExecute = $false
+        $child = [Diagnostics.Process]::Start($start)
+        try { $code = Wait-InsightProcess $child $Stage } finally { $child.Dispose() }
     } finally {
         Remove-Item -LiteralPath $scriptFile -Force
     }
@@ -110,18 +116,24 @@ function Invoke-Msys([string]$Script, [string]$Stage, [switch]$AllowCoreRestart)
     return $code
 }
 function Invoke-InsightPacman([string]$Script, [string]$Stage, [switch]$AllowCoreRestart) {
-    # Preserve the installed mirror fallbacks and signature policy.
+    # Give each attempt its own server; keep signature and repository policies.
     $prefix = @'
 set -e
 config=$(mktemp)
 trap 'rm -f "$config"' EXIT
 awk -v base="$INSIGHT_BOOTSTRAP_MIRROR" '
-    { print }
-    /^[[:space:]]*\[(msys|mingw32|mingw64|ucrt64|clang64|clangarm64|clang32)\][[:space:]]*$/ {
-        if (base == "configured") next
-        if ($0 ~ /\[msys\]/) print "Server = " base "/msys/$arch/"
-        else print "Server = " base "/mingw/$repo/"
+    /^[[:space:]]*\[/ {
+        standard = $0 ~ /^[[:space:]]*\[(msys|mingw32|mingw64|ucrt64|clang64|clangarm64|clang32)\][[:space:]]*$/
+        print
+        if (standard) {
+            if ($0 ~ /\[msys\]/) print "Server = " base "/msys/$arch/"
+            else print "Server = " base "/mingw/$repo/"
+        }
+        next
     }
+    standard && /^[[:space:]]*Server[[:space:]]*=/ { next }
+    standard && /^[[:space:]]*Include[[:space:]]*=.*\/mirrorlist\.(msys|mingw)[[:space:]]*$/ { next }
+    { print }
 ' /etc/pacman.conf > "$config"
 pacman() { command pacman --config "$config" "$@"; }
 '@
@@ -129,14 +141,14 @@ pacman() { command pacman --config "$config" "$@"; }
     $preferred = $env:INSIGHT_BOOTSTRAP_MIRROR
     $candidates = @($preferred)
     if ($MsysMirror -eq 'auto') {
-        foreach ($candidate in @('https://repo.msys2.org', 'https://mirror.msys2.org', 'configured')) {
+        foreach ($candidate in @('https://repo.msys2.org', 'https://mirror.yandex.ru/mirrors/msys2', 'https://mirrors.dotsrc.org/msys2')) {
             if ($candidates -notcontains $candidate) { $candidates += $candidate }
         }
     }
     for ($attempt = 1; $attempt -le $limit; $attempt++) {
         $mirror = $candidates[($attempt - 1) % $candidates.Count]
         $env:INSIGHT_BOOTSTRAP_MIRROR = $mirror
-        $label = if ($mirror -ne 'configured') { $mirror } else { 'installed mirror order' }
+        $label = $mirror
         Write-Host "[Mirror] $Stage ($attempt/$limit): $label"
         try {
             $null = Invoke-Msys ($prefix + [char]10 + $Script) -Stage $Stage -AllowCoreRestart:$AllowCoreRestart
