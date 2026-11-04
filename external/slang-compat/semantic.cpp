@@ -11,6 +11,9 @@
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
 #include "slang/syntax/SyntaxTree.h"
+#include "slang/parsing/Preprocessor.h"
+#include "slang/util/Bag.h"
+#include <cstdlib>
 #include "slang/syntax/AllSyntax.h"
 #include <fstream>
 #include <unordered_map>
@@ -24,6 +27,54 @@
 using namespace slang;
 using namespace slang::ast;
 namespace {
+void loadVivadoSettings(SourceManager& sources, Bag& options, std::string& top) {
+    const char* path = std::getenv("GEANY_INSIGHT_VIVADO_CONFIG");
+    if (!path || !*path)
+        return;
+    std::ifstream input(path, std::ios::binary | std::ios::ate);
+    if (!input || input.tellg() > 65536)
+        throw std::runtime_error("cannot read Vivado settings (limit: 64 KiB)");
+    input.seekg(0);
+    auto readLine = [&input](std::string& line) {
+        if (!std::getline(input, line))
+            return false;
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        return true;
+    };
+    std::string line;
+    if (!readLine(line) || line != "geany-insight-vivado-v1")
+        throw std::runtime_error("invalid Vivado settings header");
+    parsing::PreprocessorOptions preprocessing;
+    while (readLine(line)) {
+        auto separator = line.find('\t');
+        if (separator == std::string::npos || separator + 1 == line.size() ||
+            line.find('\0') != std::string::npos)
+            throw std::runtime_error("invalid Vivado settings entry");
+        auto kind = line.substr(0, separator);
+        auto value = line.substr(separator + 1);
+        if (kind == "include") {
+            if (!ghc::filesystem::path(value).is_absolute())
+                throw std::runtime_error("Vivado include directory must be absolute");
+            sources.addUserDirectory(value);
+        }
+        else if (kind == "define")
+            preprocessing.predefines.push_back(value);
+        else if (kind == "top" && top.empty())
+            top = value;
+        else
+            throw std::runtime_error("unknown or repeated Vivado settings entry");
+    }
+    if (input.bad())
+        throw std::runtime_error("cannot read Vivado settings");
+    options.set(preprocessing);
+    if (!top.empty()) {
+        CompilationOptions compilation;
+        compilation.topModules.insert(top);
+        options.set(compilation);
+    }
+}
+
 std::string quote(string_view value) {
     std::string out = "\"";
     const char hex[] = "0123456789abcdef";
@@ -298,6 +349,9 @@ int main(int argc, char** argv) {
         if (first >= argc || std::string(argv[first++]) != "--" || first >= argc)
             throw std::runtime_error("expected -- followed by source files");
         SourceManager sources;
+        std::string vivadoTop;
+        Bag options;
+        loadVivadoSettings(sources, options, vivadoTop);
         // Includes must see unsaved headers before any compilation unit parses.
         std::unordered_map<std::string, std::string> normalized;
         for (const auto& overlay : overlays) {
@@ -315,12 +369,12 @@ int main(int argc, char** argv) {
         };
         bool hasUnit = false;
         for (int i = first; i < argc; ++i) if (!header(argv[i])) hasUnit = true;
-        Compilation compilation;
+        Compilation compilation(options);
         std::unordered_set<std::string> units;
         for (int i = first; i < argc; ++i) {
             if (hasUnit && header(argv[i])) continue;
             auto name = ghc::filesystem::weakly_canonical(argv[i]).string();
-            if (units.insert(name).second) compilation.addSyntaxTree(syntax::SyntaxTree::fromFile(name, sources));
+            if (units.insert(name).second) compilation.addSyntaxTree(syntax::SyntaxTree::fromFile(name, sources, options));
         }
         const auto& root = compilation.getRoot();
         const auto diagnostics = compilation.getAllDiagnostics().size();

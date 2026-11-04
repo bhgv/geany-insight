@@ -105,3 +105,21 @@ Diagnostics use selected unsaved sources and headers. Messages are stored in the
 ## Semantic highlighting
 
 Open a Verilog or SystemVerilog tab. When the installed slang helper finishes background analysis, the editor automatically colors recognized modules, instances, ports, subroutines, parameters and signals in that tab. The lexer still colors keywords, comments and strings. Highlighting uses the same project index, including a restored one, and applies colors only near the visible lines; scrolling reveals more colors without rerunning slang. The parser and token preparation run in a worker; the editor copies open buffers and applies colors in short idle slices. An HDL edit invalidates the old colors and schedules fresh analysis after a short pause. Background coloring does not open Relations or replace its results. Explicit diagnostics and reference searches remain available.
+
+## Vivado HDL settings
+
+Open the Vivado project and run these commands in its Tcl Console:
+
+```tcl
+source C:/my/geany-insight/insight/tools/export-vivado-settings.tcl
+geany_export_hdl_settings C:/my/vivado-hdl.tsv
+```
+
+Start Geany Insight with `GEANY_INSIGHT_VIVADO_CONFIG` set to the absolute path of `vivado-hdl.tsv`. For example, in Windows Command Prompt:
+
+```cmd
+set "GEANY_INSIGHT_VIVADO_CONFIG=C:\my\vivado-hdl.tsv"
+C:\gi\editor\bin\geany.exe -i
+```
+
+The export uses the current design fileset's include directories, Verilog defines and top module. Select the HDL sources in Geany Insight's project membership separately. Requests with this configuration rebuild analysis so changes to external includes cannot reuse a stale index. Restart the editor with a different environment variable to select another Vivado export.

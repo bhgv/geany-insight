@@ -37,6 +37,9 @@ static void key_field(GChecksum *sum,const gchar *text,gsize length) {
  * Includes / macro-built dependencies need a compiler dependency manifest;
  * conservatively bypass instead of reusing an incomplete dependency key. */
 static gchar *request_key(const gchar *service,const gchar *const *arguments,GPtrArray *paths,GHashTable *buffers,GCancellable *cancel) {
+ /* The configured include directories can contain files outside project membership. */
+ const gchar *vivado=g_getenv("GEANY_INSIGHT_VIVADO_CONFIG");
+ if(vivado && *vivado) return NULL;
  guint64 executable_size=0;gchar *stamp=disk_stamp(service,&executable_size);if(!stamp) return NULL;
  GChecksum *sum=g_checksum_new(G_CHECKSUM_SHA256);key_field(sum,service,strlen(service));key_field(sum,stamp,strlen(stamp));g_free(stamp);
  gchar *cwd=g_get_current_dir();key_field(sum,cwd,strlen(cwd));g_free(cwd);
@@ -204,6 +207,6 @@ InsightSlangProject *insight_slang_project(const gchar *service,GPtrArray *paths
  }
  g_hash_table_unref(groups);g_ptr_array_unref(owned);g_strfreev(lines);g_free(reply);
  if(valid && key) {gchar *fresh=request_key(service,arguments,paths,buffers,cancel);valid=!g_strcmp0(key,fresh);g_free(fresh);}
- if(valid && cache && !(cancel && g_cancellable_is_cancelled(cancel))) {gchar *parent=g_path_get_dirname(cache);if(!g_mkdir_with_parents(parent,0700)) project->persisted=insight_cache_save_cancellable(cache,project->index,root,cancel,NULL);g_free(parent);}
+ if(valid && cache && key && !(cancel && g_cancellable_is_cancelled(cancel))) {gchar *parent=g_path_get_dirname(cache);if(!g_mkdir_with_parents(parent,0700)) project->persisted=insight_cache_save_cancellable(cache,project->index,root,cancel,NULL);g_free(parent);}
  g_free(key);if(!valid || (cancel && g_cancellable_is_cancelled(cancel))) {insight_slang_project_free(project);return NULL;}return project;
 }
