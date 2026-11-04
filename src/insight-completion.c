@@ -160,14 +160,14 @@ void insight_completion_notify(GeanyEditor *editor,SCNotification *nt) {
 }
 static gchar *slang_service(void) {
  const gchar *override=g_getenv("GEANY_INSIGHT_SLANG_SERVICE");if(override && *override) return g_strdup(override);
- gchar *share=g_path_get_dirname(app->datadir),*prefix=g_path_get_dirname(share);
- gchar *path=g_build_filename(prefix,"libexec","geany-insight","slang",
+ gchar *libexec=g_path_get_dirname(utils_resource_dir(RESOURCE_DIR_LIBEXEC));
+ gchar *path=g_build_filename(libexec,"geany-insight","slang",
 #ifdef G_OS_WIN32
  "insight-slang-semantic.exe",
 #else
  "insight-slang-semantic",
 #endif
- NULL);g_free(share);g_free(prefix);return path;
+ NULL);g_free(libexec);return path;
 }
 typedef struct {GWeakRef sci;guint document,serial,offset,rootlen;gchar *path,*text,*root,*resources,*project,*slang;GHashTable *buffers;GPtrArray *results,*paths;gboolean slang_incomplete;} SemanticJob;
 static void semantic_job_free(gpointer data) {SemanticJob *j=data;g_weak_ref_clear(&j->sci);g_free(j->path);g_free(j->text);g_free(j->root);g_free(j->resources);g_free(j->project);g_free(j->slang);if(j->paths) g_ptr_array_unref(j->paths);g_hash_table_unref(j->buffers);if(j->results) g_ptr_array_unref(j->results);g_free(j);}
