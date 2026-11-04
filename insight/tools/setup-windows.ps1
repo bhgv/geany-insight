@@ -16,6 +16,7 @@ param(
     [string]$InstallDir = '',
     [switch]$NonInteractive,
     [switch]$BuildEditor,
+    [ValidateRange(0, 2147483647)][int]$Jobs = 0,
     [switch]$UseCheckout,
     [switch]$Plan,
     [switch]$Help
@@ -33,11 +34,12 @@ Geany Insight Windows x64 toolchain bootstrap
     [-FetchSources] [-SourceDir C:\src\geany-insight] [-Autotools] [-Packaging]
     [-RootDir D:\Development\Insight] [-InstallDir PATH] [-CacheDir PATH]
     [-MsysMirror auto|HTTPS-URL]
-    [-BuildEditor] [-UseCheckout] [-NonInteractive] [-Plan] [-Help]
+    [-BuildEditor] [-Jobs 0|N] [-UseCheckout] [-NonInteractive] [-Plan] [-Help]
 From a repository checkout: build.cmd -BuildEditor
 -UseCheckout defaults SourceDir to the checkout containing this script.
 Default: show the location chooser, then install/update MSYS2 UCRT64 and Meson build tools for internal Clang.
 -FetchSources also clones the editor and initializes external/llvm-project.
+-Jobs defaults to 0 (automatic); pass a positive value to set the build job limit.
 -Plan prints the download/package plan without changing anything.
 Close other MSYS2 processes before running. Existing MSYS2 receives a full update.
 No Visual Studio, WSL, global PATH or machine execution-policy changes are needed.
@@ -62,7 +64,7 @@ if ($Packaging) { $packages += @($manifest.packages.packaging) }
 if ($ClangProvider -eq 'System') { $packages += @($manifest.packages.systemClang) }
 if ($Plan) {
     [ordered]@{ msysRoot=$MsysRoot; msysMirror=$MsysMirror; installer=$manifest.installer; packages=$packages;
-        clangProvider=$ClangProvider; fetchSources=[bool]$FetchSources; sourceDir=$SourceDir; rootDir=$RootDir; installDir=$InstallDir; cacheDir=$CacheDir; buildEditor=[bool]$BuildEditor; nonInteractive=[bool]$NonInteractive } |
+        clangProvider=$ClangProvider; jobs=$Jobs; fetchSources=[bool]$FetchSources; sourceDir=$SourceDir; rootDir=$RootDir; installDir=$InstallDir; cacheDir=$CacheDir; buildEditor=[bool]$BuildEditor; nonInteractive=[bool]$NonInteractive } |
         ConvertTo-Json -Depth 6
     return
 }
@@ -82,7 +84,7 @@ if ($MsysRoot -notmatch '^[A-Za-z]:\\[A-Za-z0-9_\\.\-]+$') {
 }
 $MsysRoot = [IO.Path]::GetFullPath($MsysRoot).TrimEnd('\')
 $bash = Join-Path $MsysRoot 'usr\bin\bash.exe'
-$envNames = @('MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_MIRROR','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL','INSIGHT_BOOTSTRAP_INSTALL','INSIGHT_BOOTSTRAP_PROVIDER')
+$envNames = @('MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_MIRROR','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL','INSIGHT_BOOTSTRAP_INSTALL','INSIGHT_BOOTSTRAP_PROVIDER','INSIGHT_BOOTSTRAP_JOBS')
 $previous = @{}
 foreach ($name in $envNames) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 function Wait-InsightProcess([Diagnostics.Process]$Child, [string]$Stage) {
@@ -288,6 +290,18 @@ git -C "$source_dir" rev-parse HEAD
 '@
     }
     if ($BuildEditor) {
+        if ($Jobs -eq 0) {
+            $cpuJobs = [Environment]::ProcessorCount
+            try {
+                $memory = (Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop).TotalPhysicalMemory
+                $memoryJobs = [Math]::Max(1, [Math]::Floor($memory / 3GB))
+                $Jobs = [Math]::Min($cpuJobs, $memoryJobs)
+            } catch {
+                $Jobs = [Math]::Min($cpuJobs, 2)
+            }
+        }
+        $env:INSIGHT_BOOTSTRAP_JOBS = [string]$Jobs
+        Write-Host "[Build] Parallel jobs: $Jobs"
         Write-Host "[Build] Clang provider: $ClangProvider; building slang and Geany Insight for $InstallDir"
         $env:INSIGHT_BOOTSTRAP_INSTALL=$InstallDir
         $env:INSIGHT_BOOTSTRAP_PROVIDER=$ClangProvider.ToLowerInvariant()
@@ -296,7 +310,7 @@ set -euo pipefail
 cd "$(cygpath -u "$INSIGHT_BOOTSTRAP_SOURCE")"
 export CC=gcc CXX=g++
 export NINJA_STATUS='[ %f/%t %p ] '
-python3 insight/tools/build_editor.py --backend meson --clang-provider "$INSIGHT_BOOTSTRAP_PROVIDER" --prefix "$(cygpath -m "$INSIGHT_BOOTSTRAP_INSTALL")" --install -- --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
+python3 insight/tools/build_editor.py --backend meson --jobs "$INSIGHT_BOOTSTRAP_JOBS" --clang-provider "$INSIGHT_BOOTSTRAP_PROVIDER" --prefix "$(cygpath -m "$INSIGHT_BOOTSTRAP_INSTALL")" --install -- --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
 '@
     }
     Write-Host "Editor sources: $SourceDir"

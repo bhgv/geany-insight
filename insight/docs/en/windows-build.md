@@ -1,5 +1,7 @@
 # Build on Windows x64
 
+`build.cmd` automatically limits concurrent jobs to the logical CPU count and approximately one job per 3 GiB of installed RAM. If memory detection fails, it uses up to two jobs. The selected limit applies to Clang, slang and the editor and is printed at the start of the build. To override it, run `build.cmd -BuildEditor -Jobs 8`.
+
 From the repository root, run `build.cmd -BuildEditor`. With no arguments, `build.cmd` opens a menu with build, plan, help and exit; the source path defaults to the checkout containing the script.
 
 Keep the console open during the build. The bootstrap shows the installer name and download percentage (or bytes received if the server did not provide a size). pacman and Git report their own download progress. Ninja shows completed tasks and percentage for the current build stage, such as Clang or the editor; there is no single percentage for the whole installation. While a command is running, the launcher prints its stage and elapsed time every 20 seconds. Failed stages report their exit code.
