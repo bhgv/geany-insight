@@ -199,3 +199,13 @@ Complete instructions and an automatic MSYS2/UCRT64 tool downloader:
 * PowerShell bootstrap: ``insight/tools/setup-windows.ps1`` (``-Help`` / ``-Plan``)
 
 The internal Clang source provider remains the default; system Clang is an explicit option.
+
+Automatic HDL engine build
+--------------------------
+
+``build.sh`` now builds the adapted slang engine for both Meson and Autotools.
+Use ``--slang-provider disabled`` to skip it explicitly, or
+``./build.sh --slang-only --install --prefix "$PWD/hdl-tools"`` to build and stage
+only its native C++ SDK/runtime. See ``insight/docs/en/slang.md`` and
+``insight/docs/ru/slang.md``. On Windows, double-click
+``insight/tools/Build-Windows.cmd`` to choose drives/folders before the full build.

@@ -3,6 +3,7 @@ on:
   push:
     branches: [main]
     paths:
+      - insight/tools/select-windows-folders.ps1
       - insight/tools/setup-windows.ps1
       - insight/tools/windows-toolchain.json
       - insight/tests/windows_toolchain_test.ps1
@@ -25,5 +26,20 @@ jobs:
       - name: Install actual UCRT64 build tools using the pinned installer
         shell: powershell
         run: |
-          ./insight/tools/setup-windows.ps1 -MsysRoot C:\insight-msys64 -CacheDir "$env:RUNNER_TEMP\insight-toolchain" -Autotools -Packaging
-          if (-not (Test-Path C:\insight-msys64\ucrt64\bin\gcc.exe)) { throw 'Tool installation incomplete.' }
+          ./insight/tools/setup-windows.ps1 -NonInteractive -RootDir D:\InsightBuild -MsysRoot D:\InsightBuild\tools\msys64 -CacheDir "$env:RUNNER_TEMP\insight-toolchain" -Autotools -Packaging
+          if (-not (Test-Path D:\InsightBuild\tools\msys64\ucrt64\bin\gcc.exe)) { throw 'Tool installation incomplete.' }
+      - name: Build and stage native slang through the common driver
+        shell: powershell
+        run: |
+          $env:MSYSTEM='UCRT64'
+          $env:CHERE_INVOKING='1'
+          $script = "$env:RUNNER_TEMP/insight-slang-build.sh"
+          [IO.File]::WriteAllText($script, ('cd "' + ($env:GITHUB_WORKSPACE -replace '\\','/') + '"' + "`n" + 'export CC=gcc CXX=g++' + "`n" + 'python3 insight/tools/build_editor.py --slang-only --install --prefix D:/InsightBuild/Editor' + "`n"), (New-Object Text.UTF8Encoding($false)))
+          & D:\InsightBuild\tools\msys64\usr\bin\bash.exe --login ($script -replace '\\','/')
+          if ($LASTEXITCODE -ne 0) { throw 'slang Windows build failed' }
+          if (-not (Test-Path D:\InsightBuild\Editor\libexec\geany-insight\slang\slang.exe)) { throw 'slang missing from selected destination' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-location-dialogs
+          path: windows-locations-*.jpg

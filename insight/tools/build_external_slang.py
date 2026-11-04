@@ -74,7 +74,9 @@ def main(argv=None):
     if args.jobs < 1:
         parser.error('--jobs must be positive')
     try:
-        for tool in ('git',) if args.prepare_only else ('git', 'cmake', 'make', os.environ.get('CXX', 'c++')):
+        generator = 'Ninja' if shutil.which('ninja') else 'Unix Makefiles'
+        build_tool = 'ninja' if generator == 'Ninja' else 'make'
+        for tool in ('git',) if args.prepare_only else ('git', 'cmake', build_tool, os.environ.get('CXX', 'c++')):
             if not shutil.which(tool):
                 raise ValueError('Missing tool: ' + tool)
         source = ROOT / 'external/slang'
@@ -85,7 +87,12 @@ def main(argv=None):
         if args.prepare_only:
             return 0
         build.mkdir(parents=True, exist_ok=True)
-        run(['cmake', '-G', 'Unix Makefiles', '-H' + str(ROOT / 'external/slang-compat'),
+        cache = build / 'CMakeCache.txt'
+        if cache.is_file():
+            for line in cache.read_text().splitlines():
+                if line.startswith('CMAKE_GENERATOR:INTERNAL='):
+                    generator = line.split('=', 1)[1]
+        run(['cmake', '-G', generator, '-H' + str(ROOT / 'external/slang-compat'),
              '-B' + str(build), '-DGEANY_SLANG_SOURCE=' + str(source),
              '-DGEANY_SLANG_DEPS=' + str(deps), '-DCMAKE_BUILD_TYPE=Release',
              '-DPYTHON_EXECUTABLE=' + sys.executable])
@@ -94,7 +101,8 @@ def main(argv=None):
             run(['ctest', '--output-on-failure'], cwd=str(build))
         manifest = {'revision': PIN, 'source': str(source), 'dependencies': DEPS,
                     'cmake': output(['cmake', '--version']).splitlines()[0],
-                    'compiler': os.environ.get('CXX', 'c++'), 'editor_backend_enabled': False}
+                    'compiler': os.environ.get('CXX', 'c++'), 'deps_dir': str(deps),
+                    'generator': generator, 'editor_backend_enabled': False}
         (build / 'source-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
         print('slang compatibility library and probe ready: ' + str(build))
         return 0

@@ -3,13 +3,17 @@
 # Run with Windows PowerShell 5.1 or PowerShell 7 on Windows x64.
 [CmdletBinding()]
 param(
-    [string]$MsysRoot = 'C:\msys64',
-    [string]$CacheDir = (Join-Path $env:TEMP 'geany-insight-toolchain'),
+    [string]$RootDir = '',
+    [string]$MsysRoot = '',
+    [string]$CacheDir = '',
     [ValidateSet('Internal', 'System', 'Disabled')][string]$ClangProvider = 'Internal',
     [switch]$Autotools,
     [switch]$Packaging,
     [switch]$FetchSources,
-    [string]$SourceDir = 'C:\src\geany-insight',
+    [string]$SourceDir = '',
+    [string]$InstallDir = '',
+    [switch]$NonInteractive,
+    [switch]$BuildEditor,
     [switch]$Plan,
     [switch]$Help
 )
@@ -24,8 +28,9 @@ if ($Help) {
 Geany Insight Windows x64 toolchain bootstrap
   .\setup-windows.ps1 [-MsysRoot C:\msys64] [-ClangProvider Internal|System|Disabled]
     [-FetchSources] [-SourceDir C:\src\geany-insight] [-Autotools] [-Packaging]
-    [-CacheDir PATH] [-Plan] [-Help]
-Default: install/update MSYS2 UCRT64 and Meson build tools for internal Clang.
+    [-RootDir D:\Development\Insight] [-InstallDir PATH] [-CacheDir PATH]
+    [-BuildEditor] [-NonInteractive] [-Plan] [-Help]
+Default: show the location chooser, then install/update MSYS2 UCRT64 and Meson build tools for internal Clang.
 -FetchSources also clones the editor and initializes external/llvm-project.
 -Plan prints the download/package plan without changing anything.
 Close other MSYS2 processes before running. Existing MSYS2 receives a full update.
@@ -33,25 +38,43 @@ No Visual Studio, WSL, global PATH or machine execution-policy changes are neede
 '@ | Write-Output
     return
 }
+if (-not $RootDir) {
+    $RootDir = Join-Path $env:LOCALAPPDATA 'GeanyInsight'
+    if ($RootDir -notmatch '^[A-Za-z]:\\[A-Za-z0-9_\\.\-]+$') { $RootDir = Join-Path $env:SystemDrive 'Development\GeanyInsight' }
+}
+if (-not $MsysRoot) { $MsysRoot = Join-Path $RootDir 'tools\msys64' }
+if (-not $SourceDir) { $SourceDir = Join-Path $RootDir 'src' }
+if (-not $InstallDir) { $InstallDir = Join-Path $RootDir 'editor' }
+$defaultCache = -not $CacheDir
+if ($defaultCache) { $CacheDir = Join-Path $RootDir 'downloads' }
+if ($BuildEditor) { $FetchSources = $true }
 $packages = @($manifest.packages.common)
 if ($Autotools) { $packages += @($manifest.packages.autotools) }
 if ($Packaging) { $packages += @($manifest.packages.packaging) }
 if ($ClangProvider -eq 'System') { $packages += @($manifest.packages.systemClang) }
 if ($Plan) {
     [ordered]@{ msysRoot=$MsysRoot; installer=$manifest.installer; packages=$packages;
-        clangProvider=$ClangProvider; fetchSources=[bool]$FetchSources; sourceDir=$SourceDir } |
+        clangProvider=$ClangProvider; fetchSources=[bool]$FetchSources; sourceDir=$SourceDir; rootDir=$RootDir; installDir=$InstallDir; cacheDir=$CacheDir; buildEditor=[bool]$BuildEditor; nonInteractive=[bool]$NonInteractive } |
         ConvertTo-Json -Depth 6
     return
 }
 if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT -or
     -not [Environment]::Is64BitOperatingSystem) { throw 'Windows x64 is required.' }
+$locationHelper = Join-Path $PSScriptRoot 'select-windows-folders.ps1'
+. $locationHelper
+$locations = @{RootDir=$RootDir; MsysRoot=$MsysRoot; SourceDir=$SourceDir; InstallDir=$InstallDir}
+if (-not $NonInteractive) { $locations = Select-InsightLocations $locations }
+$locations = Test-InsightLocations $locations
+$RootDir=$locations.RootDir; $MsysRoot=$locations.MsysRoot
+$SourceDir=$locations.SourceDir; $InstallDir=$locations.InstallDir
+if ($defaultCache) { $CacheDir=Join-Path $RootDir 'downloads' }
 # Keep installation paths compatible with the MSYS2 installer and shell launchers.
-if ($MsysRoot -notmatch '^[A-Za-z]:\\[A-Za-z0-9_\\-]+$') {
+if ($MsysRoot -notmatch '^[A-Za-z]:\\[A-Za-z0-9_\\.\-]+$') {
     throw 'MsysRoot must be an absolute drive path without spaces, e.g. C:\msys64.'
 }
 $MsysRoot = [IO.Path]::GetFullPath($MsysRoot).TrimEnd('\')
 $bash = Join-Path $MsysRoot 'usr\bin\bash.exe'
-$envNames = @('MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL')
+$envNames = @('MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL','INSIGHT_BOOTSTRAP_INSTALL','INSIGHT_BOOTSTRAP_PROVIDER')
 $previous = @{}
 foreach ($name in $envNames) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 function Invoke-Msys([string]$Script, [switch]$AllowCoreRestart) {
@@ -130,8 +153,20 @@ fi
 git -C "$source_dir" rev-parse HEAD
 '@
     }
+    if ($BuildEditor) {
+        $env:INSIGHT_BOOTSTRAP_INSTALL=$InstallDir
+        $env:INSIGHT_BOOTSTRAP_PROVIDER=$ClangProvider.ToLowerInvariant()
+        $null = Invoke-Msys @'
+set -euo pipefail
+cd "$(cygpath -u "$INSIGHT_BOOTSTRAP_SOURCE")"
+export CC=gcc CXX=g++
+python3 insight/tools/build_editor.py --backend meson --clang-provider "$INSIGHT_BOOTSTRAP_PROVIDER" --prefix "$(cygpath -m "$INSIGHT_BOOTSTRAP_INSTALL")" --install -- --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
+'@
+    }
+    Write-Host "Editor sources: $SourceDir"
+    Write-Host "Editor installation: $InstallDir"
     Write-Host "Ready. Open $MsysRoot\ucrt64.exe and follow windows-build.md (EN/RU)."
-    Write-Host 'The editor and internal Clang have not been compiled. Installed package versions were printed above.'
+    if (-not $BuildEditor) { Write-Host 'Tools ready; use -BuildEditor to compile and install the editor, Clang and slang.' }
 } finally {
     foreach ($name in $envNames) { [Environment]::SetEnvironmentVariable($name, $previous[$name], 'Process') }
 }

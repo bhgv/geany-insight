@@ -6,7 +6,7 @@
 
 ## Сборка без обновления системных инструментов
 
-Целевые инструменты Ubuntu 18.04: CMake **3.10.2**, GCC/G++ **7.5**, Python **3.6**, Make. Для первой сетевой подготовки нужны Git и сертификаты CA. Помощник сборки отделён от `build.sh`: подготовка Clang для C/C++ не готовит slang.
+Целевые инструменты Ubuntu 18.04: CMake **3.10.2**, GCC/G++ **7.5**, Python **3.6**, Make. Для первой сетевой подготовки нужны Git и сертификаты CA. Общий драйвер `build.sh` автоматически собирает slang для Meson и Autotools независимо от выбора Clang. Явное отключение: `--slang-provider disabled`.
 
 ```bash
 python3 insight/tools/build_external_slang.py --jobs 2 --check
@@ -32,3 +32,7 @@ Workflow `insight-slang-compat.yml` проверяет настоящие инс
 В upstream [4.0](https://github.com/MikePopoloski/slang/releases/tag/v4.0) появились checkers, net aliases и параллельный разбор; в [6.0](https://github.com/MikePopoloski/slang/releases/tag/v6.0) — configurations; [7.0](https://github.com/MikePopoloski/slang/releases/tag/v7.0) завершил поддержку изменений IEEE 1800-2023; [9.0](https://github.com/MikePopoloski/slang/releases/tag/v9.0) добавил анализ потоков данных и существенно улучшенное кэширование экземпляров. Поздние версии улучшают диагностику, API анализа и корректность. В [12.1](https://github.com/MikePopoloski/slang/releases/tag/v12.1) исправлено много крайних случаев вычисления констант, разрешения имён и кэширования экземпляров. В адаптированную 3.0 эти изменения автоматически не переносятся.
 
 Текущий upstream [требует](https://sv-lang.com/building.html) C++20 и CMake 3.28+. Вариант 3.0 — первая проверка возможности поддержки старых инструментов, а не решение навсегда оставить старый HDL-движок. Перенос нового движка C++20 на GCC 7 требует отдельной проверки осуществимости; одного снижения `cmake_minimum_required` недостаточно.
+
+## Автосборка и установка SDK
+
+`./build.sh --slang-only --install --prefix "$PWD/hdl-tools"` собирает и устанавливает только slang без зависимостей GTK/Clang. Обычный `--install` редактора тоже устанавливает движок. Утилита находится в `libexec/geany-insight/slang`; статический SDK — в `lib/geany-insight/slang`: исходные/сгенерированные заголовки, заголовки зависимостей, `libsvlang.a`, `libfmt.a`, pkg-config и лицензии. CI компилирует C++ проверку elaboration уже с установленным SDK. При наличии предпочитается Ninja; существующие каталоги сохраняют свой генератор.

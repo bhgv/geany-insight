@@ -788,3 +788,7 @@ EXTRA_DIST += insight/tools/build_external_slang.py external/slang-compat/CMakeL
 EXTRA_DIST += external/slang-compat/CompatCharconv.h external/slang-compat/charconv-test.cpp
 
 dist_insightdocmedia_DATA += insight/docs/media/slang-compat.svg
+
+EXTRA_DIST += insight/tools/install_slang.py insight/tools/select-windows-folders.ps1
+
+EXTRA_DIST += insight/tools/Build-Windows.cmd

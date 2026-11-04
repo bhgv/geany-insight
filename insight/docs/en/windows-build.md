@@ -25,6 +25,22 @@ The complete package lists and pinned MSYS2 installer URL/SHA256 are in [windows
 
 ## Automatic download and installation
 
+**Double-click `insight/tools/Build-Windows.cmd`** for the complete path: choose folders, install tools, download sources, build and install the editor. The PowerShell location dialog has a drive selector and separate editable/browseable locations for MSYS2, editor sources and editor installation. Changing the base folder updates its default subfolders; each location can also be overridden independently. Cancel stops before downloads or installation.
+
+The default base is under Local AppData (or a short `Development/GeanyInsight` path when the MSYS2 path would be unsupported), not the root of C:. Select another drive/folder in the dialog. The default installer cache also follows the selected base. MSYS2's own path must remain ASCII without spaces; source and install locations may contain spaces.
+
+For scripted operation add `-NonInteractive`, with e.g. `-RootDir D:\Development\Insight`; this selects `tools\msys64`, `src`, `editor` and `downloads` below that folder. `-MsysRoot`, `-SourceDir`, `-InstallDir` and `-CacheDir` override individual locations. `-Plan` and `-Help` never show a dialog or modify files.
+
+```powershell
+# Plan all paths, without changes:
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\insight\tools\setup-windows.ps1 -RootDir D:\Development\Insight -Plan
+# Unattended full build on a chosen drive:
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\insight\tools\setup-windows.ps1 -NonInteractive -RootDir D:\Development\Insight -BuildEditor
+```
+
+`-BuildEditor` implies source download and invokes the common Meson build driver with the selected install prefix. Without it the script prepares tools and optionally sources. Internal Clang and adapted slang are built automatically by the common driver; the Windows bootstrap itself is not an offline installer.
+
+
 Extract the supplied toolkit ZIP (or use the repository). Open a **normal PowerShell window**, change to the extracted/repository root, and run:
 
 ```powershell
@@ -33,7 +49,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\insight\tools\setup-wi
 
 `-ExecutionPolicy Bypass` applies only to this process. The script does not change machine execution policy or global PATH. It downloads the official MSYS2 installer, verifies its pinned SHA256 before execution, installs it if absent, performs full MSYS2 updates in separate shell sessions, then downloads/installs the build packages. Close other MSYS2 shells/applications before updating. A writable installation path usually avoids elevation; choose one you can write to if the installer reports access denied.
 
-With `-FetchSources`, it also clones Geany Insight and initializes the pinned `external/llvm-project` submodule for the default **Internal** provider. Without that switch it installs tools only. It never pulls/resets an existing editor checkout or overwrites initialized Clang sources. An existing checkout must have the expected origin URL. It does **not** compile the editor or Clang automatically.
+With `-FetchSources`, it also clones Geany Insight and initializes the pinned `external/llvm-project` submodule for the default **Internal** provider. Without that switch it installs tools only. It never pulls/resets an existing editor checkout or overwrites initialized Clang sources. An existing checkout must have the expected origin URL. `-BuildEditor` additionally compiles and installs the editor and its internal engines.
 
 Useful options:
 
@@ -71,7 +87,7 @@ Default **internal source-built Clang**, retaining editable sources in `external
   -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
 ```
 
-The driver prepares `_external-clang-sdk`, then builds the editor in `_editor-build/meson` and installs to `out`. Compiler preparation defaults to two jobs. Use `--jobs 4` before `--` to change it if memory permits. `./build.sh` without arguments displays help. Internal Clang is not silently replaced by a system installation if its build fails. See [Clang integration](clang.md).
+The driver automatically builds the adapted slang engine in `_external-slang`, prepares `_external-clang-sdk`, then builds the editor in `_editor-build/meson` and installs to `out`. Compiler preparation defaults to two jobs. Use `--jobs 4` before `--` to change it if memory permits. `./build.sh` without arguments displays help. Internal Clang is not silently replaced by a system installation if its build fails. See [Clang integration](clang.md).
 
 Explicit **system Clang** (install tools with `-ClangProvider System` first):
 
@@ -95,7 +111,7 @@ Run **inside UCRT64** so GTK/toolchain DLLs are on PATH:
 
 ## Validation and troubleshooting
 
-The bootstrap has a Windows CI check for PowerShell parsing, side-effect-free planning and actual tool installation/version probes. This is **not** a full internal LLVM/editor build. The existing Windows x64 editor CI explicitly uses system Clang; it does not establish that the internal source-built Windows SDK has passed the same checks. If that SDK build fails, keep its log and report the first CMake/compiler/linker error; selecting System must remain deliberate.
+The bootstrap has a Windows CI check for PowerShell parsing, side-effect-free planning and actual tool installation/version probes. The bootstrap CI builds/stages slang through the common driver; it does **not** perform a full internal LLVM/editor build. The existing Windows x64 editor CI explicitly uses system Clang; it does not establish that the internal source-built Windows SDK has passed the same checks. If that SDK build fails, keep its log and report the first CMake/compiler/linker error; selecting System must remain deliberate.
 
 - `gcc`/`gtk+-3.0` missing: confirm UCRT64 and the chosen MSYS2 installation. Rerun the bootstrap; do not add unrelated GTK DLLs from another environment.
 - Update interrupted: close other MSYS2 processes and rerun. The bootstrap already resumes the core upgrade in a new shell.
@@ -103,3 +119,13 @@ The bootstrap has a Windows CI check for PowerShell parsing, side-effect-free pl
 - DLL missing outside UCRT64: use the development shell, or create a complete portable package; it is not a missing C/C++ header.
 
 Official MSYS2 references: [installer and checksum/CLI instructions](https://www.msys2.org/docs/installer/), [full updates](https://www.msys2.org/docs/updating/), [supported Windows hosts](https://www.msys2.org/docs/windows_support/). The host requirements of current MSYS2 apply to this toolkit; this guide does not promise support for obsolete Windows versions.
+
+## Automatic HDL engine build
+
+Both `./build.sh --backend meson ...` and `./build.sh --backend autotools ...` build the adapted slang engine automatically. Use `--slang-provider disabled` to explicitly skip it. For just the HDL library/runtime, without GTK or Clang prerequisites:
+
+```bash
+./build.sh --slang-only --install --prefix "$PWD/hdl-tools"
+```
+
+`--install` stages the console tool under `libexec/geany-insight/slang`, and the adapted static C++ SDK (headers, libraries, pkg-config file, licenses) under `lib/geany-insight/slang`. This supplies the engine; the editor's HDL semantic navigation/completion integration remains separate work. See [slang compatibility](slang.md).

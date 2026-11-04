@@ -23,6 +23,9 @@ def arguments(argv=None, root=ROOT):
                'No arguments: show this help without starting a build.')
     parser.add_argument('--backend', choices=('autotools', 'meson'), default='autotools')
     parser.add_argument('--clang-provider', choices=('internal', 'system', 'disabled'), default='internal')
+    parser.add_argument('--slang-provider', choices=('internal', 'disabled'), default='internal', help='Build the adapted HDL engine automatically (default: internal)')
+    parser.add_argument('--slang-only', action='store_true', help='Build/stage only slang, without GTK or Clang prerequisites')
+    parser.add_argument('--slang-build-dir', type=Path, default=root / '_external-slang')
     parser.add_argument('--build-dir', type=Path)
     parser.add_argument('--prefix', type=Path, default=root / 'out')
     parser.add_argument('--sdk', type=Path, default=root / '_external-clang-sdk')
@@ -35,12 +38,14 @@ def arguments(argv=None, root=ROOT):
     args = parser.parse_args(argv)
     if args.jobs < 1:
         parser.error('--jobs must be positive')
+    if args.slang_only and (args.slang_provider == 'disabled' or args.configure_only):
+        parser.error('--slang-only needs the internal provider and cannot use --configure-only')
     if args.configure_only and args.install:
         parser.error('--configure-only cannot be combined with --install')
     if args.build_dir is None:
         # Reuse a user's existing in-tree Autotools build without deleting it.
         args.build_dir = root if args.backend == 'autotools' and (root / 'config.status').exists() else root / '_editor-build' / args.backend
-    for name in ('build_dir', 'prefix', 'sdk'):
+    for name in ('build_dir', 'prefix', 'sdk', 'slang_build_dir'):
         setattr(args, name, getattr(args, name).expanduser().resolve())
     if args.build_dir == args.sdk or args.build_dir == root / 'external/llvm-project':
         parser.error('Editor build directory must be separate from compiler files')
@@ -60,12 +65,19 @@ def plan(args, root=ROOT):
     steps = []
     def add(command, cwd=root, env=None):
         steps.append({'command': [str(x) for x in command], 'cwd': str(cwd), 'env': env or {}})
+    if args.slang_only:
+        add([sys.executable, root / 'insight/tools/build_external_slang.py', '--build', args.slang_build_dir, '--jobs', args.jobs, '--check'])
+        if args.install:
+            add([sys.executable, root / 'insight/tools/install_slang.py', '--build', args.slang_build_dir, '--prefix', args.prefix])
+        return steps
     if args.clang_provider == 'internal':
         helper = 'select_clang_sdk.py' if args.skip_sdk_build else 'prepare_clang_sdk.py'
         command = [sys.executable, root / 'insight/tools' / helper, '--sdk', args.sdk]
         if not args.skip_sdk_build:
             command += ['--jobs', args.jobs]
         add(command)
+    if args.slang_provider == 'internal':
+        add([sys.executable, root / 'insight/tools/build_external_slang.py', '--build', args.slang_build_dir, '--jobs', args.jobs, '--check'])
     if args.backend == 'autotools':
         add(['sh', root / 'autogen.sh'], env={'NOCONFIGURE': '1'})
         command = ['sh', root / 'configure', '--prefix=' + str(args.prefix)]
@@ -101,10 +113,14 @@ def plan(args, root=ROOT):
             add(['meson', 'compile', '-C', args.build_dir, '-j', args.jobs])
             if args.install:
                 add(['meson', 'install', '-C', args.build_dir])
+    if args.install and args.slang_provider == 'internal':
+        add([sys.executable, root / 'insight/tools/install_slang.py', '--build', args.slang_build_dir, '--prefix', args.prefix])
     return steps
 
 
 def prerequisites(args):
+    if args.slang_only:
+        return  # The slang builder performs its own compiler / CMake checks.
     tools = ['pkg-config']
     for variable, fallback in (('CC', 'cc'), ('CXX', 'c++')):
         compiler = shlex.split(os.environ.get(variable, fallback), posix=os.name != 'nt')
@@ -124,7 +140,7 @@ def prerequisites(args):
 
 def execute(args, root=ROOT, run=subprocess.run):
     prerequisites(args)
-    if args.clang_provider == 'internal' and args.skip_sdk_build:
+    if not args.slang_only and args.clang_provider == 'internal' and args.skip_sdk_build:
         resolve_sdk(args.sdk)
     steps = plan(args, root)
     for number, step in enumerate(steps, 1):

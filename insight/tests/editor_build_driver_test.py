@@ -88,7 +88,7 @@ class BuildFlow(unittest.TestCase):
         self.assertIn('Example:', output.getvalue())
 
     def test_execution_does_not_require_python38_shlex_join(self):
-        args = self.args('--clang-provider', 'disabled', '--configure-only')
+        args = self.args('--clang-provider', 'disabled', '--slang-provider', 'disabled', '--configure-only')
         calls = []
         with patch.object(build_editor, 'prerequisites'), patch.object(
                 build_editor.shlex, 'join', None, create=True), contextlib.redirect_stdout(io.StringIO()):
@@ -113,8 +113,9 @@ class BuildFlow(unittest.TestCase):
         with patch.object(build_editor, 'prerequisites'), contextlib.redirect_stdout(io.StringIO()):
             build_editor.execute(args, self.root, run)
         self.assertIn('prepare_clang_sdk.py', observed[0][0][1])
-        self.assertEqual(observed[-1][0], ['make', 'install'])
-        self.assertEqual(observed[-1][1]['cwd'], args.build_dir)
+        self.assertEqual(observed[-2][0], ['make', 'install'])
+        self.assertEqual(observed[-2][1]['cwd'], args.build_dir)
+        self.assertIn('install_slang.py', observed[-1][0][1])
 
     def test_system_and_disabled_never_prepare_or_fetch_compiler(self):
         for provider in ('system', 'disabled'):
@@ -127,10 +128,45 @@ class BuildFlow(unittest.TestCase):
         directory.mkdir(parents=True)
         (directory / 'coredata.dat').write_text('old settings')
         args = self.args('--backend', 'meson', '--clang-provider', 'system', '--build-dir', str(directory.parent))
-        command = build_editor.plan(args, self.root)[0]['command']
+        command = next(x['command'] for x in build_editor.plan(args, self.root) if x['command'][:2] == ['meson', 'setup'])
         self.assertIn('--reconfigure', command)
         self.assertIn('-Dclang-sdk=', command)
         self.assertIn('-Dclang-provider=system', command)
+
+    def test_slang_is_automatic_for_both_build_systems(self):
+        for backend in ('autotools', 'meson'):
+            steps = build_editor.plan(self.args('--backend', backend, '--install'), self.root)
+            names = [' '.join(step['command']) for step in steps]
+            self.assertEqual(sum('build_external_slang.py' in x for x in names), 1)
+            self.assertIn('install_slang.py', names[-1])
+            self.assertLess(next(i for i, x in enumerate(names) if 'build_external_slang.py' in x),
+                            next(i for i, x in enumerate(names) if 'autogen.sh' in x or x.startswith('meson setup')))
+
+    def test_slang_only_has_no_editor_or_clang_steps(self):
+        args = self.args('--slang-only', '--install', '--prefix', str(self.root / 'selected output'))
+        with patch.object(build_editor.shutil, 'which', return_value=None):
+            build_editor.prerequisites(args)
+        steps = build_editor.plan(args, self.root)
+        self.assertEqual(len(steps), 2)
+        self.assertIn('build_external_slang.py', steps[0]['command'][1])
+        self.assertIn('--check', steps[0]['command'])
+        self.assertEqual(steps[1]['command'][-1], str(args.prefix))
+
+    def test_explicit_slang_disabled_never_builds_or_installs_it(self):
+        steps = build_editor.plan(self.args('--slang-provider', 'disabled', '--install'), self.root)
+        self.assertFalse(any('slang.py' in ' '.join(x['command']) for x in steps))
+
+    def test_slang_failure_stops_editor_configuration(self):
+        args = self.args('--clang-provider', 'system', '--install')
+        calls = []
+        def fail(command, **kwargs):
+            calls.append(command)
+            raise subprocess.CalledProcessError(9, command)
+        with patch.object(build_editor, 'prerequisites'), contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaises(subprocess.CalledProcessError):
+                build_editor.execute(args, self.root, fail)
+        self.assertEqual(len(calls), 1)
+        self.assertIn('build_external_slang.py', calls[0][1])
 
     def test_existing_in_tree_configuration_is_reused_without_cleanup(self):
         (self.root / 'config.status').write_text('old build')
@@ -155,7 +191,7 @@ class BuildFlow(unittest.TestCase):
         self.assertEqual(list(self.root.iterdir()), before)
 
     def test_contradictory_and_invalid_arguments_decline(self):
-        for argv in (['--jobs', '0'], ['--configure-only', '--install'],
+        for argv in (['--jobs', '0'], ['--configure-only', '--install'], ['--slang-only', '--slang-provider', 'disabled'],
                      ['--', '--with-clang-provider=system']):
             with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 self.args(*argv)

@@ -25,3 +25,30 @@ $disabled = (& $scriptPath -Plan -ClangProvider Disabled | Out-String) | Convert
 if ($disabled.packages -contains 'mingw-w64-ucrt-x86_64-clang') { throw 'Disabled selected system Clang.' }
 if (-not ((& $scriptPath -Help | Out-String) -match '-FetchSources')) { throw 'Help missing.' }
 Write-Host 'PowerShell parsing and bootstrap plans passed; no filesystem or environment changes.'
+# Production folder dialog: changing drives, independent paths, validation and cancel.
+. (Join-Path $PSScriptRoot '..\tools\select-windows-folders.ps1')
+$base = if (Test-Path D:\) { 'D:\Development\GeanyInsight' } else { 'C:\Development\GeanyInsight' }
+$dialog = New-InsightFolderDialog @{RootDir=$base; MsysRoot="$base\tools\msys64"; SourceDir="$base\src"; InstallDir="$base\editor"}
+try {
+    $dialog.Show(); [Windows.Forms.Application]::DoEvents()
+    $find = {param($name) $dialog.Controls.Find($name,$true)[0]}
+    $root = & $find 'RootDir'; $root.Text = $base
+    (& $find 'ApplyBase').PerformClick()
+    if ((& $find 'MsysRoot').Text -ne "$base\tools\msys64") { throw 'Base folder did not propagate.' }
+    (& $find 'SourceDir').Text = "$base\my sources"
+    (& $find 'InstallDir').Text = "$base\my editor"
+    (& $find 'MsysRoot').Text = 'C:\Bad tools'
+    (& $find 'AcceptLocations').PerformClick()
+    if ($dialog.DialogResult -eq [Windows.Forms.DialogResult]::OK) { throw 'Accepted unsupported MSYS path.' }
+    (& $find 'MsysRoot').Text = "$base\tools\msys64"
+    $image = New-Object Drawing.Bitmap($dialog.Width,$dialog.Height)
+    try {
+        $dialog.DrawToBitmap($image, (New-Object Drawing.Rectangle(0,0,$image.Width,$image.Height)))
+        $image.Save((Join-Path (Get-Location) ("windows-locations-" + $PSVersionTable.PSVersion.Major + '.jpg')), [Drawing.Imaging.ImageFormat]::Jpeg)
+    } finally { $image.Dispose() }
+    (& $find 'AcceptLocations').PerformClick()
+    if ($dialog.Tag.SourceDir -ne "$base\my sources" -or $dialog.Tag.InstallDir -ne "$base\my editor") { throw 'Independent selections lost.' }
+} finally { $dialog.Dispose() }
+$plan = (& $scriptPath -Plan -RootDir $base -BuildEditor -NonInteractive | Out-String) | ConvertFrom-Json
+if ($plan.installDir -ne "$base\editor" -or $plan.msysRoot -ne "$base\tools\msys64" -or -not $plan.fetchSources) { throw 'Selected base/build plan lost.' }
+Write-Host 'Production folder dialog and selected-drive build plan passed.'
