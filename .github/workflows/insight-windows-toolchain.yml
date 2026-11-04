@@ -16,7 +16,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Parse and test plans on Windows PowerShell 5.1
         shell: powershell
         run: ./insight/tests/windows_toolchain_test.ps1
