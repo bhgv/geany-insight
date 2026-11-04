@@ -794,3 +794,5 @@ EXTRA_DIST += insight/tools/install_slang.py insight/tools/select-windows-folder
 EXTRA_DIST += insight/tools/Build-Windows.cmd
 
 EXTRA_DIST += insight/tests/slang_build_test.py
+
+dist_insightdocmedia_DATA += insight/docs/media/windows-build-locations.jpg

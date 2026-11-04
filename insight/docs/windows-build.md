@@ -25,6 +25,8 @@ The complete package lists and pinned MSYS2 installer URL/SHA256 are in [windows
 
 ## Automatic download and installation
 
+![Production folder dialog, isolated Windows CI fixture with synthetic paths](media/windows-build-locations.jpg)
+
 **Double-click `insight/tools/Build-Windows.cmd`** for the complete path: choose folders, install tools, download sources, build and install the editor. The PowerShell location dialog has a drive selector and separate editable/browseable locations for MSYS2, editor sources and editor installation. Changing the base folder updates its default subfolders; each location can also be overridden independently. Cancel stops before downloads or installation.
 
 The default base is under Local AppData (or a short `Development/GeanyInsight` path when the MSYS2 path would be unsupported), not the root of C:. Select another drive/folder in the dialog. The default installer cache also follows the selected base. MSYS2's own path must remain ASCII without spaces; source and install locations may contain spaces.
