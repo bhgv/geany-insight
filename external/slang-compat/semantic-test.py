@@ -129,3 +129,21 @@ assert any(row[0] == 'D' and bytes.fromhex(row[1]).decode() == 'data_i' for row 
 assert any(row[0] == 'R' and bytes.fromhex(row[7]).decode() == 'module' and bytes.fromhex(row[1]).decode() == 'leaf' for row in rows)
 assert any(row[0] == 'R' and bytes.fromhex(row[7]).decode() == 'value' and bytes.fromhex(row[1]).decode() == 'data_i' for row in rows)
 print('Project index protocol: declarations, module links, named ports and value references passed')
+
+with tempfile.TemporaryDirectory(prefix='slang include ') as directory:
+    root = Path(directory)
+    header, leaf, top, snapshot = root / 'defs.svh', root / 'leaf.sv', root / 'top.sv', root / 'snapshot.svh'
+    header.write_text('logic old_signal;\n')
+    snapshot.write_text('logic new_signal;\n')
+    leaf.write_text('module leaf;\n`include "defs.svh"\nendmodule\n')
+    text = 'module top; leaf u_leaf(); initial $display(u_leaf.new_signal); endmodule\n'
+    top.write_text(text)
+    units = [str(top), str(leaf), str(header)]  # header follows its includer
+    result = editor_query(top, 1, 'u_leaf', 'new_', units, [(header, snapshot)])
+    assert result == [('new_signal', 'Variable')], result
+    target = definition_query(top, 1, text.index('new_signal') + 1, units, [(header, snapshot)])
+    assert target == (header, 1, 7), target
+    output = subprocess.check_output([service, '--editor-index', '--overlay', str(header), str(snapshot), '--'] + units).decode('utf-8').splitlines()
+    assert output[1] == '0', output[:2]
+    assert 'old_signal' in header.read_text()
+print('Unsaved include snapshots are primed before source parsing; headers are not duplicate units')

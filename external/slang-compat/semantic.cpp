@@ -60,7 +60,7 @@ struct Locate : ASTVisitor<Locate, false, false> {
     std::string path, hierarchy;
     size_t line;
     bool ambiguous = false;
-    Locate(const SourceManager& sources, std::string path, size_t line) : sources(sources), path(ghc::filesystem::absolute(path).lexically_normal().generic_string()), line(line) {}
+    Locate(const SourceManager& sources, std::string path, size_t line) : sources(sources), path(ghc::filesystem::weakly_canonical(path).generic_string()), line(line) {}
     void handle(const InstanceSymbol& instance) {
         auto range = instance.getDefinition().syntax.sourceRange();
         if (range.start() && sources.getFullPath(range.start().buffer()).lexically_normal().generic_string() == path &&
@@ -81,7 +81,7 @@ struct Jump : ASTVisitor<Jump, true, true> {
     SourceLocation target;
     bool ambiguous = false;
     Jump(const SourceManager& s, const std::string& p, size_t l, size_t c) :
-        sources(s), path(ghc::filesystem::absolute(p).lexically_normal().generic_string()), line(l), column(c) {}
+        sources(s), path(ghc::filesystem::weakly_canonical(p).generic_string()), line(l), column(c) {}
     void consider(SourceRange range, SourceLocation destination) {
         auto begin = sources.getFullyOriginalLoc(range.start());
         auto end = sources.getFullyOriginalLoc(range.end());
@@ -138,13 +138,16 @@ struct Jump : ASTVisitor<Jump, true, true> {
 struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
     const SourceManager& sources;
     std::vector<std::string> rows;
+    size_t bytes = 0;
     explicit ProjectIndex(const SourceManager& sources) : sources(sources) {}
     bool located(SourceLocation location) const { return location && sources.getFullPath(location.buffer()).is_absolute(); }
     void add(const std::string& type, string_view name, SourceLocation location, string_view scope, string_view detail, string_view relation) {
         if (!located(location) || name.empty()) return;
         if (rows.size() >= 100000) throw std::runtime_error("HDL index exceeds 100000 records");
-        rows.push_back(type + "\t" + hex(name) + "\t" + hex(sources.getFullPath(location.buffer()).string()) + "\t" +
-            std::to_string(sources.getLineNumber(location)) + "\t" + std::to_string(sources.getColumnNumber(location)) + "\t" + hex(scope) + "\t" + hex(detail) + "\t" + hex(relation));
+        std::string row = type + "\t" + hex(name) + "\t" + hex(sources.getFullPath(location.buffer()).string()) + "\t" +
+            std::to_string(sources.getLineNumber(location)) + "\t" + std::to_string(sources.getColumnNumber(location)) + "\t" + hex(scope) + "\t" + hex(detail) + "\t" + hex(relation);
+        if (bytes + row.size() + 1 > 64u * 1024u * 1024u - 128) throw std::runtime_error("HDL index reply exceeds 64 MiB");
+        bytes += row.size() + 1; rows.push_back(std::move(row));
     }
     void reference(string_view name, SourceRange range, SourceLocation target, string_view kind) {
         if (!located(target)) return;
@@ -276,11 +279,29 @@ int main(int argc, char** argv) {
         if (first >= argc || std::string(argv[first++]) != "--" || first >= argc)
             throw std::runtime_error("expected -- followed by source files");
         SourceManager sources;
+        // Includes must see unsaved headers before any compilation unit parses.
+        std::unordered_map<std::string, std::string> normalized;
+        for (const auto& overlay : overlays) {
+            auto name = ghc::filesystem::weakly_canonical(overlay.first).string();
+            auto existing = normalized.find(name);
+            if (existing != normalized.end() && existing->second != overlay.second)
+                throw std::runtime_error("conflicting overlays for the same source");
+            normalized[name] = overlay.second;
+        }
+        for (const auto& overlay : normalized) sources.assignText(overlay.first, overlay.second);
+        auto header = [](const char* name) {
+            std::string extension = ghc::filesystem::path(name).extension().string();
+            for (char& c : extension) if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
+            return extension == ".vh" || extension == ".svh";
+        };
+        bool hasUnit = false;
+        for (int i = first; i < argc; ++i) if (!header(argv[i])) hasUnit = true;
         Compilation compilation;
+        std::unordered_set<std::string> units;
         for (int i = first; i < argc; ++i) {
-            auto overlay = overlays.find(argv[i]);
-            if (overlay == overlays.end()) compilation.addSyntaxTree(syntax::SyntaxTree::fromFile(argv[i], sources));
-            else compilation.addSyntaxTree(syntax::SyntaxTree::fromBuffer(sources.assignText(argv[i], overlay->second), sources));
+            if (hasUnit && header(argv[i])) continue;
+            auto name = ghc::filesystem::weakly_canonical(argv[i]).string();
+            if (units.insert(name).second) compilation.addSyntaxTree(syntax::SyntaxTree::fromFile(name, sources));
         }
         const auto& root = compilation.getRoot();
         const auto diagnostics = compilation.getAllDiagnostics().size();

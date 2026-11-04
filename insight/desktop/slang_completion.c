@@ -109,7 +109,7 @@ static gchar *query(const gchar *service,const gchar *const *arguments,GPtrArray
    gboolean ok=g_subprocess_communicate_utf8(process,NULL,cancel,&reply,NULL,NULL);
    if(cancel && handler) g_cancellable_disconnect(cancel,handler);
    if(!ok) {g_subprocess_force_exit(process);g_subprocess_wait(process,NULL,NULL);}
-   if(ok && g_subprocess_get_successful(process) && reply && strlen(reply)<=4u*1024u*1024u) out=g_steal_pointer(&reply);
+   if(ok && g_subprocess_get_successful(process) && reply && strlen(reply)<=(!strcmp(arguments[0],"--editor-index") ? 64u:4u)*1024u*1024u) out=g_steal_pointer(&reply);
    g_free(reply);g_object_unref(process);
   }
  }
@@ -195,7 +195,7 @@ InsightSlangProject *insight_slang_project(const gchar *service,GPtrArray *paths
  if(valid) {
   project->index=insight_index_new();GHashTableIter iter;gpointer path,rows;g_hash_table_iter_init(&iter,groups);
   while(valid && g_hash_table_iter_next(&iter,&path,&rows)) valid=insight_index_update(project->index,path,(const InsightSymbol *)((GArray *)rows)->data,((GArray *)rows)->len);
-  gchar *diagnostics=g_strdup_printf("%u",project->diagnostics);InsightSymbol meta={"@hdlmeta",root,"","@hdlmeta",0,key ? key:"",diagnostics,"slang-project-v1"};
+  gchar *diagnostics=g_strdup_printf("%u",project->diagnostics);InsightSymbol meta={"@hdlmeta",root,"","@hdlmeta",1,key ? key:"",diagnostics,"slang-project-v1"};
   /* Root is a directory, distinct from source paths. */
   if(valid) valid=insight_index_update(project->index,root,&meta,1);g_free(diagnostics);
  }
