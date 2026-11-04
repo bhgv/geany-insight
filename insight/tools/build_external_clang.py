@@ -10,6 +10,7 @@ import re
 import sys
 import shutil
 import subprocess
+import tempfile
 
 PIN = '3b5b5c1ec4a3095ab096dd780e84d7ab81f3d7ff'
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,21 +25,34 @@ def check_cmake(check_output=subprocess.check_output):
 
 
 def apply_cmake310_patch(source, run=subprocess.run):
-    apply_llvm_patch(source, ROOT / 'external/cmake310/llvm18.patch',
-                     'CMake 3.10', run)
-
-
-def apply_llvm_patch(source, patch, purpose, run=subprocess.run):
     """Apply all hunks atomically, or reuse them; never reset compiler edits."""
+    patch = ROOT / 'external/cmake310/llvm18.patch'
     command = ['git', '-C', str(source), 'apply']
     options = dict(stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
     if run(command + ['--reverse', '--check', str(patch)], **options).returncode == 0:
         return
     check = run(command + ['--check', str(patch)], **options)
     if check.returncode:
-        raise ValueError(purpose + ' compatibility patch conflicts with local compiler edits; '
+        raise ValueError('CMake 3.10 compatibility patch conflicts with local compiler edits; '
                          'no files changed. Details: ' + check.stderr.strip())
     run(command + [str(patch)], check=True)
+
+
+def ensure_windows_smallvector_include(source):
+    header = source / 'llvm/include/llvm/ADT/SmallVector.h'
+    contents = header.read_bytes()
+    if re.search(rb'(?m)^[ \t]*#[ \t]*include[ \t]+<cstdint>', contents):
+        return
+    updated, count = re.subn(
+        rb'(?m)^(#include <cstddef>[ \t]*)(\r?\n)',
+        rb'\1\2#include <cstdint>\2', contents, count=1)
+    if not count:
+        raise ValueError('Cannot locate <cstddef> in ' + str(header))
+    with tempfile.TemporaryDirectory(dir=str(header.parent)) as temp:
+        replacement = Path(temp) / header.name
+        replacement.write_bytes(updated)
+        shutil.copymode(header, replacement)
+        os.replace(replacement, header)
 
 
 def copy_tree(source, destination):
@@ -110,7 +124,7 @@ def main():
         if legacy_cmake:
             apply_cmake310_patch(source)
         if os.name == 'nt':
-            apply_llvm_patch(source, ROOT / 'external/llvm18-windows.patch', 'Windows')
+            ensure_windows_smallvector_include(source)
         run(configure)
         if args.configure_only:
             return
