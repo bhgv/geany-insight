@@ -31,7 +31,7 @@ From PowerShell in the checkout, run:
 .\build.cmd -BuildEditor
 ```
 
-The first command shows help. The second opens a folder chooser for the base drive and directory, MSYS2 tools, editor sources and installation. Sources default to the checkout containing `build.cmd`. The builder prepares MSYS2 UCRT64 and uses the same build driver as Linux. MSYS2 needs an ASCII path without spaces. Close other MSYS2 shells before the toolchain update.
+The first command opens a menu: build and install, preview the default plan, show help or exit. The second opens a folder chooser for the base drive and directory, MSYS2 tools, editor sources and installation. Sources default to the checkout containing `build.cmd`. The builder prepares MSYS2 UCRT64 and uses the same build driver as Linux. MSYS2 needs an ASCII path without spaces. Close other MSYS2 shells before the toolchain update.
 
 For automation, specify paths and preview them first:
 

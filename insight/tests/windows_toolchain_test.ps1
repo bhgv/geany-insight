@@ -26,7 +26,9 @@ if ($disabled.packages -contains 'mingw-w64-ucrt-x86_64-clang') { throw 'Disable
 if (-not ((& $scriptPath -Help | Out-String) -match '-FetchSources')) { throw 'Help missing.' }
 $checkout = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $launcher = Join-Path $checkout 'build.cmd'
-$rootHelp = (& $launcher | Out-String)
+$rootMenu = ('4' | & $launcher | Out-String)
+if ($LASTEXITCODE -ne 0 -or $rootMenu -notmatch 'Preview the default build plan') { throw 'Root launcher menu failed.' }
+$rootHelp = (& $launcher -Help | Out-String)
 if ($LASTEXITCODE -ne 0 -or $rootHelp -notmatch 'build.cmd -BuildEditor') { throw 'Root launcher help failed.' }
 $rootPlan = (& $launcher -BuildEditor -NonInteractive -RootDir 'C:\Insight Test' -Plan | Out-String) | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0 -or $rootPlan.sourceDir -ne $checkout -or
