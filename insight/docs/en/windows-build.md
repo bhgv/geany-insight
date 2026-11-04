@@ -2,6 +2,8 @@
 After you click **Continue**, the folder dialog remembers your four paths for the next interactive run. Explicit folder arguments take precedence. A run with `-RootDir` starts with defaults derived from that base, plus any explicit overrides.
 # Build on Windows x64
 
+After a successful `build.cmd` installation, launch `geany.exe` from the installation's `bin` folder in Explorer. The bootstrap copies the editor's DLL dependencies from UCRT64 into that folder.
+
 `build.cmd` automatically limits concurrent jobs to the logical CPU count and approximately one job per 3 GiB of installed RAM. If memory detection fails, it uses up to two jobs. The selected limit applies to Clang, slang and the editor and is printed at the start of the build. To override it, run `build.cmd -BuildEditor -Jobs 8`.
 
 From the repository root, run `build.cmd -BuildEditor`. With no arguments, `build.cmd` opens a menu with build, plan, help and exit; the source path defaults to the checkout containing the script.

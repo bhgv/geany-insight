@@ -335,7 +335,9 @@ set -euo pipefail
 cd "$(cygpath -u "$INSIGHT_BOOTSTRAP_SOURCE")"
 export CC=gcc CXX=g++
 export NINJA_STATUS='[ %f/%t %p ] '
-python3 insight/tools/build_editor.py --backend meson --jobs "$INSIGHT_BOOTSTRAP_JOBS" --clang-provider "$INSIGHT_BOOTSTRAP_PROVIDER" --prefix "$(cygpath -m "$INSIGHT_BOOTSTRAP_INSTALL")" --install -- --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
+install_dir=$(cygpath -m "$INSIGHT_BOOTSTRAP_INSTALL")
+python3 insight/tools/build_editor.py --backend meson --jobs "$INSIGHT_BOOTSTRAP_JOBS" --clang-provider "$INSIGHT_BOOTSTRAP_PROVIDER" --prefix "$install_dir" --install -- --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
+python3 insight/tools/bundle_windows_dependencies.py --installed-editor --package "$install_dir" --sdk "$(cygpath -m /ucrt64)"
 '@
     }
     Write-Host "Editor sources: $SourceDir"
