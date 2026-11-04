@@ -50,6 +50,10 @@ def main():
         destination = prefix / 'bin'
         destination.mkdir(parents=True, exist_ok=True)
         sdk_bin = {p.name.lower(): p for p in (sdk / 'bin').glob('*.dll')}
+        # Meson runs this script with the toolchain's native Python. Its bin
+        # directory also contains the MinGW runtime DLLs. Prefer the SDK and
+        # avoid searching unrelated toolchains on PATH.
+        toolchain_bin = Path(sys.executable).resolve().parent
         system = Path(os.environ['SystemRoot']) / 'System32'
         system_names = {p.name.lower() for p in system.iterdir() if p.is_file()}
         queue = [source]
@@ -65,9 +69,10 @@ def main():
                 key = name.lower()
                 if key in system_names or key.startswith(('api-ms-win-', 'ext-ms-win-')):
                     continue
-                if key not in sdk_bin:
+                dependency = sdk_bin.get(key, toolchain_bin / name)
+                if not dependency.is_file():
                     raise SystemExit('Clang SDK dependency missing: ' + name)
-                queue.append(sdk_bin[key])
+                queue.append(dependency)
         (data / 'runtime.json').write_text(json.dumps({'files': sorted(copied), 'resources': resource.name}), encoding='utf-8')
         return
     if not sys.platform.startswith('linux'):
