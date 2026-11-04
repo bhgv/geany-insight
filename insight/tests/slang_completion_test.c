@@ -18,7 +18,7 @@ int main(int argc,char **argv) {
  g_cancellable_cancel(cancel);g_assert_null(insight_slang_complete(argv[1],top,text,offset,5,paths,buffers,cancel));
  g_assert_null(insight_slang_complete("/missing-service",top,text,offset,5,paths,buffers,NULL));
  g_object_unref(cancel);cancel=g_cancellable_new();GThread *thread=g_thread_new("cancel-hdl",cancel_later,cancel);gint64 started=g_get_monotonic_time();
- gchar *self=g_canonicalize_filename(argv[0],NULL);g_assert_null(insight_slang_complete(self,top,text,offset,5,paths,buffers,cancel));g_free(self);g_thread_join(thread);g_assert_cmpint(g_get_monotonic_time()-started,<,3000000);
+ gchar *self=g_strdup(argv[0]);g_assert_null(insight_slang_complete(self,top,text,offset,5,paths,buffers,cancel));g_free(self);g_thread_join(thread);g_assert_cmpint(g_get_monotonic_time()-started,<,3000000);
  g_object_unref(cancel);g_hash_table_unref(buffers);g_ptr_array_unref(paths);g_unlink(leaf);g_unlink(top);g_rmdir(dir);g_free(leaf);g_free(top);g_free(dir);
  g_print("HDL worker adapter: unsaved cross-file completion, cancellation and missing service fallback passed\n");return 0;
 }
