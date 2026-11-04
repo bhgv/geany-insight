@@ -188,3 +188,14 @@ Ideas, questions, patches and bug reports
 See https://www.geany.org/.
 If you add something, or fix a bug, please create a pull request at
 https://github.com/geany/geany/. Also see the HACKING file.
+
+Windows x64 build tools
+-----------------------
+
+Complete instructions and an automatic MSYS2/UCRT64 tool downloader:
+
+* English: ``insight/docs/en/windows-build.md``
+* Русский: ``insight/docs/ru/windows-build.md``
+* PowerShell bootstrap: ``insight/tools/setup-windows.ps1`` (``-Help`` / ``-Plan``)
+
+The internal Clang source provider remains the default; system Clang is an explicit option.

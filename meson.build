@@ -1266,3 +1266,6 @@ install_data('insight/docs/media/semantic-browsing.svg', 'insight/docs/media/pro
 install_data('insight/docs/parser-engines.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 
 install_data('insight/docs/media/build-bootstrap.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
+
+install_data('insight/docs/windows-build.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
+install_data('insight/docs/media/windows-build.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')

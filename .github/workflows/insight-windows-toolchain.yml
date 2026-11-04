@@ -1,0 +1,29 @@
+name: Insight Windows toolchain bootstrap
+on:
+  push:
+    branches: [main]
+    paths:
+      - insight/tools/setup-windows.ps1
+      - insight/tools/windows-toolchain.json
+      - insight/tests/windows_toolchain_test.ps1
+      - .github/workflows/insight-windows-toolchain.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bootstrap:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse and test plans on Windows PowerShell 5.1
+        shell: powershell
+        run: ./insight/tests/windows_toolchain_test.ps1
+      - name: Parse and test plans on PowerShell 7
+        shell: pwsh
+        run: ./insight/tests/windows_toolchain_test.ps1
+      - name: Install actual UCRT64 build tools using the pinned installer
+        shell: powershell
+        run: |
+          ./insight/tools/setup-windows.ps1 -MsysRoot C:\insight-msys64 -CacheDir "$env:RUNNER_TEMP\insight-toolchain" -Autotools -Packaging
+          if (-not (Test-Path C:\insight-msys64\ucrt64\bin\gcc.exe)) { throw 'Tool installation incomplete.' }

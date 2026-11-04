@@ -285,3 +285,5 @@ the editor executable using `-L… -lclang-cpp -lLLVM` for older libtool support
 After configure changes, both are relinked automatically; deleting the LLVM
 build or running make clean is unnecessary. CI builds and installs both
 Autotools and Meson editors against the internal SDK and checks unresolved symbols.
+
+Windows x64 tools and build commands: [guide and automatic bootstrap](windows-build.md).

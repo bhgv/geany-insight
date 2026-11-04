@@ -777,3 +777,7 @@ EXTRA_DIST += external/cmake310/llvm18.patch external/cmake310/Compat.cmake exte
 EXTRA_DIST += insight/tests/virtual_list_gui_test.c
 
 EXTRA_DIST += insight/tests/macos_geometry_gui_test.c
+
+insightdoc_DATA += insight/docs/windows-build.md
+dist_insightdocmedia_DATA += insight/docs/media/windows-build.svg
+EXTRA_DIST += insight/tools/setup-windows.ps1 insight/tools/windows-toolchain.json insight/tests/windows_toolchain_test.ps1
