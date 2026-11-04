@@ -6,6 +6,9 @@
 #define VCD_BYTES (32u * 1024u * 1024u)
 #define VCD_SIGNALS 4096u
 #define VCD_EVENTS 250000u
+#define WAVE_TRACKS 16u
+#define TRACK_HEIGHT 64
+#define TRACK_LABEL_WIDTH 220
 
 typedef struct { guint64 time; gchar *value; } Edge;
 typedef struct { GArray *edges; guint width; } Trace;
@@ -18,7 +21,8 @@ typedef struct {
 } Capture;
 typedef struct {
  Capture *capture;
- GtkWidget *window, *selector, *canvas, *value, *source;
+ GtkWidget *window, *selector, *canvas, *value, *source, *pin;
+ GArray *tracks;
  guint64 cursor, start, span;
  InsightWaveSource navigate;
 } Viewer;
@@ -175,6 +179,20 @@ static Signal *selected(Viewer *viewer) {
  return index < 0 ? NULL : viewer->capture->signals->pdata[index];
 }
 
+static gint pinned_index(Viewer *viewer, gint signal) {
+ for (guint i = 0; i < viewer->tracks->len; i++)
+  if (g_array_index(viewer->tracks, gint, i) == signal) return (gint)i;
+ return -1;
+}
+
+static guint track_count(Viewer *viewer, gint active) {
+ return viewer->tracks->len + (active >= 0 && pinned_index(viewer, active) < 0);
+}
+
+static gint track_signal(Viewer *viewer, guint track, gint active) {
+ return track < viewer->tracks->len ? g_array_index(viewer->tracks, gint, track) : active;
+}
+
 static guint upper_bound(Trace *trace, guint64 time) {
  guint lo = 0, hi = trace->edges->len;
  while (lo < hi) {
@@ -190,21 +208,22 @@ static void update(Viewer *viewer) {
  if (!signal) return;
  guint at = upper_bound(signal->trace, viewer->cursor);
  const gchar *value = at ? g_array_index(signal->trace->edges, Edge, at - 1).value : "unknown";
- gchar *label = g_strdup_printf("Tick %" G_GUINT64_FORMAT " (%s)   Value: %.128s%s",
-     viewer->cursor, viewer->capture->scale ? viewer->capture->scale : "no timescale",
-     value, strlen(value) > 128 ? "…" : "");
+ gchar *label = g_strdup_printf("Tick %" G_GUINT64_FORMAT " (%s)   View: %" G_GUINT64_FORMAT
+     "–%" G_GUINT64_FORMAT "   Value: %.128s%s", viewer->cursor,
+     viewer->capture->scale ? viewer->capture->scale : "no timescale", viewer->start,
+     MIN(viewer->capture->end, viewer->start + viewer->span), value, strlen(value) > 128 ? "…" : "");
  gtk_label_set_text(GTK_LABEL(viewer->value), label);
  g_free(label);
+ gint active = gtk_combo_box_get_active(GTK_COMBO_BOX(viewer->selector));
+ gboolean pinned = pinned_index(viewer, active) >= 0;
+ gtk_button_set_label(GTK_BUTTON(viewer->pin), pinned ? "Unpin track" : "Pin track");
+ gtk_widget_set_sensitive(viewer->pin, pinned || viewer->tracks->len < WAVE_TRACKS);
+ gtk_widget_set_size_request(viewer->canvas, -1, TRACK_HEIGHT * track_count(viewer, active));
  gtk_widget_queue_draw(viewer->canvas);
 }
 
-static gboolean draw_wave(GtkWidget *widget, cairo_t *cr, gpointer data) {
- Viewer *viewer = data;
- Signal *signal = selected(viewer);
- if (!signal) return FALSE;
- Trace *trace = signal->trace;
- double width = gtk_widget_get_allocated_width(widget);
- double height = gtk_widget_get_allocated_height(widget);
+static void draw_trace(Viewer *viewer, Trace *trace, cairo_t *cr, double width) {
+ const double height = TRACK_HEIGHT;
  guint64 stop = viewer->start + viewer->span;
  guint next = upper_bound(trace, viewer->start);
  guint64 time = viewer->start;
@@ -251,13 +270,57 @@ static gboolean draw_wave(GtkWidget *widget, cairo_t *cr, gpointer data) {
   cairo_line_to(cr, x, height);
   cairo_stroke(cr);
  }
+}
+
+static gboolean draw_wave(GtkWidget *widget, cairo_t *cr, gpointer data) {
+ Viewer *viewer = data;
+ gint active = gtk_combo_box_get_active(GTK_COMBO_BOX(viewer->selector));
+ double width = MAX(1, gtk_widget_get_allocated_width(widget) - TRACK_LABEL_WIDTH);
+ guint count = track_count(viewer, active);
+ for (guint lane = 0; lane < count; lane++) {
+  gint index = track_signal(viewer, lane, active);
+  Signal *signal = viewer->capture->signals->pdata[index];
+  cairo_save(cr);
+  cairo_translate(cr, 0, lane * TRACK_HEIGHT);
+  cairo_set_source_rgba(cr, .35, .48, .6, index == active ? .25 : .10);
+  cairo_rectangle(cr, 0, 0, width + TRACK_LABEL_WIDTH, TRACK_HEIGHT - 1);
+  cairo_fill(cr);
+  cairo_save(cr);
+  cairo_rectangle(cr, 0, 0, TRACK_LABEL_WIDTH - 6, TRACK_HEIGHT);
+  cairo_clip(cr);
+  cairo_set_source_rgb(cr, .18, .48, .65);
+  cairo_move_to(cr, 8, 22);
+  cairo_show_text(cr, signal->name);
+  guint at = upper_bound(signal->trace, viewer->cursor);
+  const gchar *bits = at ? g_array_index(signal->trace->edges, Edge, at - 1).value : "unknown";
+  gchar *value = g_strdup_printf("[%u] %.26s%s", signal->trace->width, bits,
+                                strlen(bits) > 26 ? "…" : "");
+  cairo_move_to(cr, 8, 44);
+  cairo_show_text(cr, value);
+  g_free(value);
+  cairo_restore(cr);
+  cairo_translate(cr, TRACK_LABEL_WIDTH, 0);
+  cairo_rectangle(cr, 0, 0, width, TRACK_HEIGHT);
+  cairo_clip(cr);
+  draw_trace(viewer, signal->trace, cr, width);
+  cairo_restore(cr);
+ }
  return FALSE;
 }
 
 static gboolean click_wave(GtkWidget *widget, GdkEventButton *event, gpointer data) {
  Viewer *viewer = data;
- viewer->cursor = MIN(viewer->capture->end, viewer->start +
-     (guint64)(CLAMP(event->x / MAX(1, gtk_widget_get_allocated_width(widget)), 0., 1.) * viewer->span));
+ if (event->button != 1 || event->y < 0) return FALSE;
+ gint active = gtk_combo_box_get_active(GTK_COMBO_BOX(viewer->selector));
+ guint lane = (guint)event->y / TRACK_HEIGHT;
+ if (lane >= track_count(viewer, active)) return FALSE;
+ gint signal = track_signal(viewer, lane, active);
+ gtk_combo_box_set_active(GTK_COMBO_BOX(viewer->selector), signal);
+ if (event->x >= TRACK_LABEL_WIDTH) {
+  double width = MAX(1, gtk_widget_get_allocated_width(widget) - TRACK_LABEL_WIDTH);
+  double fraction = CLAMP((event->x - TRACK_LABEL_WIDTH) / width, 0., 1.);
+  viewer->cursor = MIN(viewer->capture->end, viewer->start + (guint64)(fraction * viewer->span));
+ }
  update(viewer);
  return TRUE;
 }
@@ -287,8 +350,22 @@ static void wave_action(GtkButton *button, gpointer data) {
  guint64 total = MAX(G_GUINT64_CONSTANT(1), viewer->capture->end);
  if (action == 2) viewer->span = MAX(G_GUINT64_CONSTANT(1), viewer->span / 2);
  if (action == 3) viewer->span = MIN(total, viewer->span * 2);
- viewer->start = MIN(total - viewer->span, viewer->cursor > viewer->span / 2 ?
-                    viewer->cursor - viewer->span / 2 : 0);
+ guint64 step = MAX(G_GUINT64_CONSTANT(1), viewer->span / 2);
+ if (action == 4) viewer->start -= MIN(viewer->start, step);
+ else if (action == 5) viewer->start = MIN(total - viewer->span, viewer->start + step);
+ else viewer->start = MIN(total - viewer->span, viewer->cursor > viewer->span / 2 ?
+                          viewer->cursor - viewer->span / 2 : 0);
+ update(viewer);
+}
+
+static void pin_clicked(GtkButton *button, gpointer data) {
+ (void)button;
+ Viewer *viewer = data;
+ gint active = gtk_combo_box_get_active(GTK_COMBO_BOX(viewer->selector));
+ if (active < 0) return;
+ gint index = pinned_index(viewer, active);
+ if (index >= 0) g_array_remove_index(viewer->tracks, (guint)index);
+ else if (viewer->tracks->len < WAVE_TRACKS) g_array_append_val(viewer->tracks, active);
  update(viewer);
 }
 
@@ -301,12 +378,14 @@ static void source_clicked(GtkButton *button, gpointer data) {
 static void viewer_free(gpointer data) {
  Viewer *viewer = data;
  capture_free(viewer->capture);
+ g_array_unref(viewer->tracks);
  g_free(viewer);
 }
 
 static void show_capture(GtkWindow *parent, Capture *capture, InsightWaveSource navigate) {
  Viewer *viewer = g_new0(Viewer, 1);
  viewer->capture = capture;
+ viewer->tracks = g_array_new(FALSE, FALSE, sizeof(gint));
  viewer->span = MAX(G_GUINT64_CONSTANT(1), capture->end);
  viewer->navigate = navigate;
  viewer->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -321,17 +400,25 @@ static void show_capture(GtkWindow *parent, Capture *capture, InsightWaveSource 
  viewer->selector = gtk_combo_box_text_new();
  for (guint i = 0; i < capture->signals->len; i++)
   gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(viewer->selector), ((Signal *)capture->signals->pdata[i])->name);
- gtk_box_pack_start(GTK_BOX(box), viewer->selector, FALSE, FALSE, 0);
+ GtkWidget *signal_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+ gtk_box_pack_start(GTK_BOX(box), signal_row, FALSE, FALSE, 0);
+ gtk_box_pack_start(GTK_BOX(signal_row), viewer->selector, TRUE, TRUE, 0);
+ viewer->pin = gtk_button_new_with_label("Pin track");
+ g_signal_connect(viewer->pin, "clicked", G_CALLBACK(pin_clicked), viewer);
+ gtk_box_pack_start(GTK_BOX(signal_row), viewer->pin, FALSE, FALSE, 0);
  viewer->canvas = gtk_drawing_area_new();
  gtk_widget_add_events(viewer->canvas, GDK_BUTTON_PRESS_MASK);
- gtk_box_pack_start(GTK_BOX(box), viewer->canvas, TRUE, TRUE, 0);
+ GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+ gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+ gtk_container_add(GTK_CONTAINER(scroll), viewer->canvas);
+ gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
  viewer->value = gtk_label_new(NULL);
  gtk_label_set_ellipsize(GTK_LABEL(viewer->value), PANGO_ELLIPSIZE_END);
  gtk_box_pack_start(GTK_BOX(box), viewer->value, FALSE, FALSE, 0);
  GtkWidget *controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
  gtk_box_pack_start(GTK_BOX(box), controls, FALSE, FALSE, 0);
- const gchar *labels[] = {"Previous transition", "Next transition", "Zoom in", "Zoom out"};
- const gint actions[] = {-1, 1, 2, 3};
+ const gchar *labels[] = {"Previous transition", "Next transition", "Zoom in", "Zoom out", "Earlier", "Later"};
+ const gint actions[] = {-1, 1, 2, 3, 4, 5};
  for (guint i = 0; i < G_N_ELEMENTS(labels); i++) {
   GtkWidget *button = gtk_button_new_with_label(labels[i]);
   g_object_set_data(G_OBJECT(button), "action", GINT_TO_POINTER(actions[i]));

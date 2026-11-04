@@ -135,7 +135,7 @@ geany_export_project C:/my/chip.geany
 
 Open `chip.geany` using Project → Open. The project contains existing HDL files from the current design fileset. For semantic analysis start the editor with `GEANY_INSIGHT_VIVADO_CONFIG` pointing to the adjacent `chip.hdl.tsv`, as shown above. Choose a new filename when exporting again.
 
-Export digital signals to VCD in Vivado Simulator, then choose **Tools → VCD Waveforms…** in Geany Insight. Select a signal, click the diagram to position the cursor, or use the transition and zoom buttons. The source field starts with the VCD hierarchy. Edit it if the simulator adds an outer scope, then choose **Go to HDL declaration**. Slang resolves the name using project and open HDL files. Captures are limited to 32 MiB, 4096 signals and 250000 changes. The viewer displays one selected trace at a time.
+Export digital signals to VCD in Vivado Simulator, then choose **Tools → VCD Waveforms…** in Geany Insight. Select a signal, click the diagram to position the cursor, or use the transition and zoom buttons. The source field starts with the VCD hierarchy. Edit it if the simulator adds an outer scope, then choose **Go to HDL declaration**. Slang resolves the name using project and open HDL files. Captures are limited to 32 MiB, 4096 signals and 250000 changes. Use **Pin track** to compare up to 16 pinned traces alongside the current signal. All traces share the time cursor and zoom. **Earlier** and **Later** pan the visible range. Clicking a trace selects it for transition and declaration navigation.
 
 ## Upstream backports
 
