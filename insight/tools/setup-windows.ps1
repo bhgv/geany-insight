@@ -6,8 +6,8 @@ param(
     [string]$RootDir = '',
     [string]$MsysRoot = '',
     [string]$CacheDir = '',
-    [ValidatePattern('^https://[A-Za-z0-9.-]+(?::[0-9]+)?(?:/[A-Za-z0-9._~-]+)*/?$')]
-    [string]$MsysMirror = 'https://repo.msys2.org',
+    [ValidatePattern('^(?:auto|https://[A-Za-z0-9.-]+(?::[0-9]+)?(?:/[A-Za-z0-9._~-]+)*/?)$')]
+    [string]$MsysMirror = 'auto',
     [ValidateSet('Internal', 'System', 'Disabled')][string]$ClangProvider = 'Internal',
     [switch]$Autotools,
     [switch]$Packaging,
@@ -32,7 +32,7 @@ Geany Insight Windows x64 toolchain bootstrap
   .\setup-windows.ps1 [-MsysRoot C:\msys64] [-ClangProvider Internal|System|Disabled]
     [-FetchSources] [-SourceDir C:\src\geany-insight] [-Autotools] [-Packaging]
     [-RootDir D:\Development\Insight] [-InstallDir PATH] [-CacheDir PATH]
-    [-MsysMirror https://repo.msys2.org]
+    [-MsysMirror auto|HTTPS-URL]
     [-BuildEditor] [-UseCheckout] [-NonInteractive] [-Plan] [-Help]
 From a repository checkout: build.cmd -BuildEditor
 -UseCheckout defaults SourceDir to the checkout containing this script.
@@ -118,6 +118,7 @@ trap 'rm -f "$config"' EXIT
 awk -v base="$INSIGHT_BOOTSTRAP_MIRROR" '
     { print }
     /^[[:space:]]*\[(msys|mingw32|mingw64|ucrt64|clang64|clangarm64|clang32)\][[:space:]]*$/ {
+        if (base == "configured") next
         if ($0 ~ /\[msys\]/) print "Server = " base "/msys/$arch/"
         else print "Server = " base "/mingw/$repo/"
     }
@@ -125,7 +126,18 @@ awk -v base="$INSIGHT_BOOTSTRAP_MIRROR" '
 pacman() { command pacman --config "$config" "$@"; }
 '@
     $limit = if ($AllowCoreRestart) { 1 } else { 3 }
+    $preferred = $env:INSIGHT_BOOTSTRAP_MIRROR
+    $candidates = @($preferred)
+    if ($MsysMirror -eq 'auto') {
+        foreach ($candidate in @('https://repo.msys2.org', 'https://mirror.msys2.org', 'configured')) {
+            if ($candidates -notcontains $candidate) { $candidates += $candidate }
+        }
+    }
     for ($attempt = 1; $attempt -le $limit; $attempt++) {
+        $mirror = $candidates[($attempt - 1) % $candidates.Count]
+        $env:INSIGHT_BOOTSTRAP_MIRROR = $mirror
+        $label = if ($mirror -ne 'configured') { $mirror } else { 'installed mirror order' }
+        Write-Host "[Mirror] $Stage ($attempt/$limit): $label"
         try {
             $null = Invoke-Msys ($prefix + [char]10 + $Script) -Stage $Stage -AllowCoreRestart:$AllowCoreRestart
             return
@@ -206,8 +218,7 @@ try {
     }
     $env:MSYSTEM = 'UCRT64'
     $env:CHERE_INVOKING = '1'
-    $env:INSIGHT_BOOTSTRAP_MIRROR = $MsysMirror.TrimEnd('/')
-    Write-Host "[Mirror] $MsysMirror (installed mirrors remain available as fallbacks)"
+    $env:INSIGHT_BOOTSTRAP_MIRROR = if ($MsysMirror -eq 'auto') { 'https://repo.msys2.org' } else { $MsysMirror.TrimEnd('/') }
     $env:INSIGHT_BOOTSTRAP_PACKAGES = $packages -join ' '
     # Core updates may terminate their shell; always resume in a new login shell.
     # Only this first exit is tolerated; the second full upgrade must succeed.
