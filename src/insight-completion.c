@@ -8,6 +8,7 @@
 #include "insight-workbench.h"
 #include "insight-template-fields.h"
 #include "project.h"
+#include "navqueue.h"
 #include "utils.h"
 #include "insight-i18n.h"
 #include "sciwrappers.h"
@@ -22,7 +23,7 @@
 #define SEND(s,m,w,l) scintilla_send_message(s,m,w,l)
 #define KEY "insight-detailed-completion"
 enum { NAME,MARKUP,ICON,KIND,SCOPE,ORIGIN,IDENTITY,CALLABLE,PARAMETERS,SNIPPET,COLUMNS };
-typedef struct { ScintillaObject *sci;GtkWidget *window,*view,*footer,*scroll;GtkListStore *store;guint document,idle,focus_idle;gint start,end;gchar *prefix;gboolean active,accepting,limited,bypass;GCancellable *pending;guint semantic_idle,semantic_serial;gsize semantic_root;guint64 snippet_generation;gint popup_width,popup_height; } Completion;
+typedef struct { ScintillaObject *sci;GtkWidget *window,*view,*footer,*scroll;GtkListStore *store;guint document,idle,focus_idle;gint start,end;gchar *prefix;gboolean active,accepting,limited,bypass,definition;GCancellable *pending;guint semantic_idle,semantic_serial;gsize semantic_root;guint64 snippet_generation;gint popup_width,popup_height; } Completion;
 static gboolean loaded;
 static guint semantic_workers;
 static InsightCompletionSettings settings;
@@ -34,7 +35,7 @@ gboolean insight_completion_case_sensitive(void) { load();return settings.case_s
 gint insight_completion_min_chars(void) { load();return settings.min_chars ? settings.min_chars : editor_prefs.symbolcompletion_min_chars; }
 gboolean insight_completion_inside_comments(void) { load();return settings.inside_comments; }
 static Completion *state(GeanyEditor *editor) { return editor ? g_object_get_data(G_OBJECT(editor->sci),KEY) : NULL; }
-static void semantic_cancel(Completion *c) {if(!c) return;c->semantic_serial++;if(c->semantic_idle) {g_source_remove(c->semantic_idle);c->semantic_idle=0;}if(c->pending) {g_cancellable_cancel(c->pending);g_clear_object(&c->pending);}}
+static void semantic_cancel(Completion *c) {if(!c) return;c->definition=FALSE;c->semantic_serial++;if(c->semantic_idle) {g_source_remove(c->semantic_idle);c->semantic_idle=0;}if(c->pending) {g_cancellable_cancel(c->pending);g_clear_object(&c->pending);}}
 static void hide_at(Completion *c,const gchar *reason) { if(!c) return;semantic_cancel(c);if(c->active && g_getenv("GEANY_COMPLETION_DEBUG")) g_printerr("completion hide %s end=%d caret=%d idle=%u\n",reason,c->end,sci_get_current_position(c->sci),c->idle);c->active=FALSE;if(c->idle) { g_source_remove(c->idle);c->idle=0; }gtk_widget_hide(c->window); }
 
 
@@ -169,9 +170,19 @@ static gchar *slang_service(void) {
 #endif
  NULL);g_free(libexec);return path;
 }
-typedef struct {GWeakRef sci;guint document,serial,offset,rootlen;gchar *path,*text,*root,*resources,*project,*slang;GHashTable *buffers;GPtrArray *results,*paths;gboolean slang_incomplete;} SemanticJob;
-static void semantic_job_free(gpointer data) {SemanticJob *j=data;g_weak_ref_clear(&j->sci);g_free(j->path);g_free(j->text);g_free(j->root);g_free(j->resources);g_free(j->project);g_free(j->slang);if(j->paths) g_ptr_array_unref(j->paths);g_hash_table_unref(j->buffers);if(j->results) g_ptr_array_unref(j->results);g_free(j);}
-static void semantic_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {(void)source;SemanticJob *j=data;j->results=j->slang_incomplete ? NULL:j->slang ? insight_slang_complete(j->slang,j->path,j->text,j->offset,j->rootlen,j->paths,j->buffers,cancel):insight_clang_complete(j->path,j->text,j->offset,j->root,j->resources,j->buffers,cancel,NULL);g_task_return_boolean(task,j->results!=NULL);}
+typedef struct {GWeakRef sci;guint document,serial,offset,rootlen;gchar *path,*text,*root,*resources,*project,*slang,*target,*target_digest;guint target_line,target_column;gboolean definition;GHashTable *buffers;GPtrArray *results,*paths;gboolean slang_incomplete;} SemanticJob;
+static void semantic_job_free(gpointer data) {SemanticJob *j=data;g_weak_ref_clear(&j->sci);g_free(j->path);g_free(j->text);g_free(j->root);g_free(j->resources);g_free(j->project);g_free(j->slang);g_free(j->target);g_free(j->target_digest);if(j->paths) g_ptr_array_unref(j->paths);g_hash_table_unref(j->buffers);if(j->results) g_ptr_array_unref(j->results);g_free(j);}
+static void semantic_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
+ (void)source;SemanticJob *j=data;
+ if(j->definition) {
+  gboolean ok=!j->slang_incomplete && insight_slang_definition(j->slang,j->path,j->text,j->offset,j->paths,j->buffers,cancel,&j->target,&j->target_line,&j->target_column);
+  if(ok) {const gchar *overlay=g_hash_table_lookup(j->buffers,j->target);gchar *disk=NULL;gsize length=0;
+   if(!overlay && (!g_file_get_contents(j->target,&disk,&length,NULL) || length>2u*1024u*1024u)) ok=FALSE;
+   if(ok) j->target_digest=g_compute_checksum_for_string(G_CHECKSUM_SHA256,overlay ? overlay:disk,-1);g_free(disk);
+  }g_task_return_boolean(task,ok);return;
+ }
+ j->results=j->slang_incomplete ? NULL:j->slang ? insight_slang_complete(j->slang,j->path,j->text,j->offset,j->rootlen,j->paths,j->buffers,cancel):insight_clang_complete(j->path,j->text,j->offset,j->root,j->resources,j->buffers,cancel,NULL);g_task_return_boolean(task,j->results!=NULL);
+}
 static gboolean slang_membership_current(const SemanticJob *j) {
  GPtrArray *paths=insight_workbench_source_paths(insight_slang_source,257);GHashTable *current=g_hash_table_new(g_str_hash,g_str_equal);
  for(guint i=0;i<paths->len;i++) g_hash_table_add(current,g_ptr_array_index(paths,i));
@@ -182,10 +193,24 @@ static gboolean slang_membership_current(const SemanticJob *j) {
 }
 static void semantic_done(GObject *source,GAsyncResult *result,gpointer unused) {
  (void)source;(void)unused;SemanticJob *j=g_task_get_task_data(G_TASK(result));if(semantic_workers) semantic_workers--;gboolean ok=g_task_propagate_boolean(G_TASK(result),NULL);ScintillaObject *sci=g_weak_ref_get(&j->sci);if(!sci) return;Completion *c=g_object_get_data(G_OBJECT(sci),KEY);GeanyDocument *doc=document_find_by_id(j->document);
- if(!c || c->semantic_serial!=j->serial || !DOC_VALID(doc) || doc!=document_get_current() || doc->editor->sci!=sci || g_strcmp0(doc->file_name,j->path) || g_strcmp0(j->project,app->project ? app->project->file_name:NULL) || sci_get_current_position(sci)!=(gint)j->offset || sci_has_selection(sci) || SEND(sci,SCI_GETREADONLY,0,0) || SEND(sci,SCI_GETSELECTIONS,0,0)!=1) {g_object_unref(sci);return;}
+ if(!c || c->semantic_serial!=j->serial || !DOC_VALID(doc) || doc!=document_get_current() || doc->editor->sci!=sci || g_strcmp0(doc->file_name,j->path) || g_strcmp0(j->project,app->project ? app->project->file_name:NULL) || sci_get_current_position(sci)!=(gint)j->offset || sci_has_selection(sci) || (!j->definition && SEND(sci,SCI_GETREADONLY,0,0)) || SEND(sci,SCI_GETSELECTIONS,0,0)!=1) {g_object_unref(sci);return;}
  g_clear_object(&c->pending);gchar *now=sci_get_contents(sci,sci_get_length(sci)+1);gboolean same=!strcmp(now,j->text);g_free(now);
  GHashTableIter overlays;gpointer path,text;g_hash_table_iter_init(&overlays,j->buffers);while(same && g_hash_table_iter_next(&overlays,&path,&text)) {GeanyDocument *d=document_find_by_filename(path);if(!DOC_VALID(d)) {same=FALSE;break;}gchar *contents=sci_get_contents(d->editor->sci,sci_get_length(d->editor->sci)+1);same=!strcmp(contents,text);g_free(contents);}
  if(j->slang && same) same=slang_membership_current(j);
+ if(j->definition) {
+  if(ok && same && j->target && j->target_digest) {
+   gchar *native=utils_get_locale_from_utf8(j->target);GeanyDocument *destination=native ? document_open_file(native,FALSE,NULL,NULL):NULL;g_free(native);
+   if(DOC_VALID(destination)) {
+    gint length=sci_get_length(destination->editor->sci);gchar *contents=length>=0 && length<=2*1024*1024 ? sci_get_contents(destination->editor->sci,length+1):NULL;
+    gchar *digest=contents ? g_compute_checksum_for_string(G_CHECKSUM_SHA256,contents,-1):NULL;
+    if(!g_strcmp0(digest,j->target_digest) && j->target_line<=(guint)sci_get_line_count(destination->editor->sci)) {
+     gint position=sci_get_position_from_line(destination->editor->sci,j->target_line-1),end=sci_get_line_end_position(destination->editor->sci,j->target_line-1);
+     if(j->target_column-1<=(guint)(end-position)) {navqueue_goto_position(doc,destination,position+j->target_column-1);document_grab_focus(destination);ui_set_statusbar(TRUE,"slang: %s:%u",j->target,j->target_line);}
+    }else ui_set_statusbar(TRUE,"%s",insight_tr("HDL source changed; repeat the navigation command"));g_free(digest);g_free(contents);
+   }
+  }else if(same) ui_set_statusbar(TRUE,"%s",insight_tr("No unambiguous HDL declaration found"));
+  g_object_unref(sci);return;
+ }
  if(ok && same && settings.detailed && settings.semantic) {
   GPtrArray *tags=g_ptr_array_new_with_free_func((GDestroyNotify)tm_tag_unref),*chosen=g_ptr_array_new();gchar *prefix=g_strndup(j->text+j->offset-j->rootlen,j->rootlen),*folded=g_utf8_casefold(prefix,-1);
   for(guint n=0;n<j->results->len && tags->len<editor_prefs.autocompletion_max_entries;n++) {InsightClangCompletion *item=g_ptr_array_index(j->results,n);gchar *candidate=g_utf8_casefold(item->name,-1);gboolean match=g_str_has_prefix(settings.case_sensitive ? item->name:candidate,settings.case_sensitive ? prefix:folded);g_free(candidate);if(!match) continue;
@@ -197,8 +222,8 @@ static void semantic_done(GObject *source,GAsyncResult *result,gpointer unused) 
  }else if(same && !ok) {c->bypass=TRUE;editor_start_auto_complete(doc->editor,j->offset,FALSE);c->bypass=FALSE;}g_object_unref(sci);
 }
 static gboolean semantic_start(gpointer data) {
- Completion *c=data;if(semantic_workers>=2) return G_SOURCE_CONTINUE;c->semantic_idle=0;GeanyDocument *doc=document_find_by_id(c->document);if(!DOC_VALID(doc) || doc!=document_get_current() || !settings.semantic || !settings.detailed) return G_SOURCE_REMOVE;gint length=sci_get_length(c->sci),offset=sci_get_current_position(c->sci);if(length<0 || length>2*1024*1024 || offset<(gint)c->semantic_root || sci_has_selection(c->sci)) return G_SOURCE_REMOVE;
- SemanticJob *j=g_new0(SemanticJob,1);g_weak_ref_init(&j->sci,c->sci);j->serial=c->semantic_serial;j->document=doc->id;j->offset=offset;j->rootlen=c->semantic_root;j->path=g_strdup(doc->file_name);j->text=sci_get_contents(c->sci,length+1);j->project=g_strdup(app->project ? app->project->file_name:NULL);j->resources=g_build_filename(app->datadir,"insight","clang","resources",NULL);gchar *native=app->project ? project_get_base_path():NULL;j->root=native ? utils_get_utf8_from_locale(native):g_path_get_dirname(doc->file_name);g_free(native);j->buffers=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);
+ Completion *c=data;if(semantic_workers>=2) return G_SOURCE_CONTINUE;c->semantic_idle=0;GeanyDocument *doc=document_find_by_id(c->document);if(!DOC_VALID(doc) || doc!=document_get_current() || (!c->definition && (!settings.semantic || !settings.detailed))) return G_SOURCE_REMOVE;gint length=sci_get_length(c->sci),offset=sci_get_current_position(c->sci);if(length<0 || length>2*1024*1024 || offset<(gint)c->semantic_root || sci_has_selection(c->sci)) return G_SOURCE_REMOVE;
+ SemanticJob *j=g_new0(SemanticJob,1);g_weak_ref_init(&j->sci,c->sci);j->serial=c->semantic_serial;j->definition=c->definition;j->document=doc->id;j->offset=offset;j->rootlen=c->semantic_root;j->path=g_strdup(doc->file_name);j->text=sci_get_contents(c->sci,length+1);j->project=g_strdup(app->project ? app->project->file_name:NULL);j->resources=g_build_filename(app->datadir,"insight","clang","resources",NULL);gchar *native=app->project ? project_get_base_path():NULL;j->root=native ? utils_get_utf8_from_locale(native):g_path_get_dirname(doc->file_name);g_free(native);j->buffers=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);
  gsize total=0;for(guint i=0;i<documents_array->len;i++) {GeanyDocument *d=g_ptr_array_index(documents_array,i);if(!DOC_VALID(d) || !d->file_name || (insight_slang_source(j->path) && !insight_slang_source(d->file_name))) continue;gint n=sci_get_length(d->editor->sci);if(n<0 || n>2*1024*1024 || total+(gsize)n>32u*1024u*1024u || g_hash_table_size(j->buffers)>=256) continue;gchar *text=sci_get_contents(d->editor->sci,n+1);if(!memchr(text,0,n) && g_utf8_validate(text,n,NULL)) {g_hash_table_insert(j->buffers,g_strdup(d->file_name),text);total+=n;}else g_free(text);}
  if(insight_slang_source(j->path)) {
   j->slang=slang_service();j->paths=insight_workbench_source_paths(insight_slang_source,257);
@@ -211,6 +236,12 @@ static gboolean semantic_start(gpointer data) {
  }
  if(memchr(j->text,0,length) || !g_utf8_validate(j->text,length,NULL)) {semantic_job_free(j);return G_SOURCE_REMOVE;}
  semantic_workers++;c->pending=g_cancellable_new();GTask *task=g_task_new(NULL,c->pending,semantic_done,NULL);g_task_set_task_data(task,j,semantic_job_free);g_task_run_in_thread(task,semantic_run);g_object_unref(task);return G_SOURCE_REMOVE;
+}
+gboolean insight_completion_definition(GeanyEditor *editor) {
+ load();GeanyDocument *doc=editor ? editor->document:NULL;if(!DOC_VALID(doc) || !insight_slang_source(doc->file_name) || sci_get_length(editor->sci)>2*1024*1024) return FALSE;
+ gchar word[1025]={0};editor_find_current_word_sciwc(editor,sci_get_current_position(editor->sci),word,sizeof word);if(!*word) return FALSE;
+ gchar *service=slang_service();gboolean present=g_file_test(service,G_FILE_TEST_IS_EXECUTABLE);g_free(service);if(!present) return FALSE;
+ Completion *c=create(editor);hide(c);c->definition=TRUE;c->semantic_root=0;c->semantic_idle=g_timeout_add(1,semantic_start,c);ui_set_statusbar(TRUE,"%s",insight_tr("Resolving HDL declaration with slang..."));return TRUE;
 }
 gboolean insight_completion_semantic(GeanyEditor *editor,gsize rootlen,gboolean force) {
  load();GeanyDocument *doc=editor ? editor->document:NULL;Completion *existing=state(editor);if((existing && existing->bypass) || !settings.semantic || !settings.detailed || !DOC_VALID(doc) || !doc->file_name || (!insight_slang_source(doc->file_name) && (!insight_clang_available() || !insight_clang_source(doc->file_name))) || SEND(editor->sci,SCI_GETREADONLY,0,0) || SEND(editor->sci,SCI_GETSELECTIONS,0,0)!=1 || sci_has_selection(editor->sci)) return FALSE;

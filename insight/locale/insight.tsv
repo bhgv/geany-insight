@@ -2846,3 +2846,7 @@ Finish a complete project scan before switching to manual membership	Дожди�
 
 Semantic completion: C/C++ (Clang), HDL (slang)	Семантическое дополнение: C/C++ (Clang), HDL (slang)
 Clang completes C/C++ members; slang completes HDL hierarchies.\nExisting argument lists are preserved. Parameter fields use Tab / Shift+Tab.	Clang дополняет члены C/C++, slang — иерархии HDL.\nСуществующие аргументы сохраняются. Переход по полям: Tab / Shift+Tab.
+
+HDL source changed; repeat the navigation command	Исходник HDL изменён; повторите команду перехода
+No unambiguous HDL declaration found	Однозначное объявление HDL не найдено
+Resolving HDL declaration with slang...	Поиск объявления HDL через slang…

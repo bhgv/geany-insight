@@ -4484,6 +4484,7 @@ gboolean insight_workbench_goto_definition(void) {
  if(wb.preview && gtk_widget_has_focus(GTK_WIDGET(wb.preview)))
   return preview_definition(sci_get_current_position(wb.preview));
  GeanyDocument *doc=document_get_current(); if(!wb.preview || !doc) return FALSE;
+ if(insight_completion_definition(doc->editor)) return TRUE;
  char word[1025]={0}; editor_find_current_word_sciwc(doc->editor,sci_get_current_position(doc->editor->sci),word,sizeof word);
  const InsightSymbol *definition=word_definition(doc,word,NULL,(gulong)sci_get_current_line(doc->editor->sci)+1,doc->editor->sci,sci_get_current_position(doc->editor->sci));
  if(!definition) return FALSE;

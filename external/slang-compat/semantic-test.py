@@ -78,3 +78,45 @@ with tempfile.TemporaryDirectory(prefix='slang editor ') as directory:
     top.write_text('module top; leaf first(); leaf second(); endmodule\n')
     assert editor_query(leaf, 1, '', 'old_', units) == []  # two elaborated instances: decline
 print('Editor completion protocol: local hierarchy, unsaved cross-file overlays and ambiguous scopes passed')
+
+def definition_query(path, line, column, units, overlays=()):
+    command = [service, '--editor-definition', str(path), str(line), str(column)]
+    for original, replacement in overlays:
+        command += ['--overlay', str(original), str(replacement)]
+    rows = subprocess.check_output(command + ['--'] + units).decode('utf-8').splitlines()
+    assert rows[0] == 'insight-slang-definition-v1'
+    if len(rows) == 1:
+        return None
+    assert len(rows) == 2
+    name, line, column = rows[1].split('\t')
+    return Path(bytes.fromhex(name).decode('utf-8')), int(line), int(column)
+with tempfile.TemporaryDirectory(prefix='slang navigation ') as directory:
+    root = Path(directory)
+    leaf, top, unsaved = root / 'leaf.sv', root / 'top.sv', root / 'snapshot.sv'
+    leaf.write_text('module leaf(input logic data_i); endmodule\n')
+    text = 'module top; logic data; leaf u_leaf(.data_i(data)); initial $display(u_leaf.data_i); endmodule\n'
+    top.write_text(text)
+    units = [str(leaf), str(top)]
+    for word in ['leaf u_leaf', 'u_leaf(', 'data_i(data)', 'data_i);']:
+        target = definition_query(top, 1, text.index(word) + 1, units)
+        assert target[0] == leaf, (word, target)
+    target = definition_query(top, 1, text.index('data));') + 1, units)
+    assert target[0] == top and target[2] == text.index('data;') + 1
+    assert definition_query(top, 1, 1, units) is None
+    unsaved.write_text('module leaf; logic new_signal; endmodule\n')
+    text = 'module top; leaf u_leaf(); initial $display(u_leaf.new_signal); endmodule\n'
+    top.write_text(text)
+    target = definition_query(top, 1, text.index('new_signal') + 1, units, [(leaf, unsaved)])
+    assert target == (leaf, 1, 20), target
+    package = root / 'pkg.sv'
+    package.write_text('package util; function int increment(int x); return x+1; endfunction endpackage\n')
+    text = 'module top; int x; initial x = util::increment(1); endmodule\n'
+    top.write_text(text)
+    target = definition_query(top, 1, text.index('increment') + 1, [str(package), str(top)])
+    assert target[0] == package and target[2] == 28, target
+    assert definition_query(top, 1, text.index('util::') + 1, [str(package), str(top)]) is None
+    assert definition_query(top, 1, text.index('(1)') + 2, [str(package), str(top)]) is None
+    leaf.write_text('module leaf #(parameter P=0);\nif(P) begin: branch logic value; end\nelse begin: branch logic value; end\ninitial $display(branch.value);\nendmodule\n')
+    top.write_text('module top; leaf #(.P(1)) first(); leaf #(.P(0)) second(); endmodule\n')
+    assert definition_query(leaf, 4, 25, units) is None
+print('Native HDL navigation: module/instance/port/value/function targets, overlays and ambiguous elaboration passed')

@@ -5,6 +5,7 @@
 #include "slang/ast/Definition.h"
 #include "slang/ast/expressions/MiscExpressions.h"
 #include "slang/ast/expressions/CallExpression.h"
+#include "slang/ast/expressions/SelectExpressions.h"
 #include "slang/ast/symbols/SubroutineSymbols.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
@@ -71,6 +72,69 @@ struct Locate : ASTVisitor<Locate, false, false> {
         visitDefault(instance);
     }
 };
+// Choose the narrowest bound AST reference containing the requested byte column.
+// Different elaborated targets at the same source range are explicitly ambiguous.
+struct Jump : ASTVisitor<Jump, true, true> {
+    const SourceManager& sources;
+    std::string path;
+    size_t line, column, width = SIZE_MAX;
+    SourceLocation target;
+    bool ambiguous = false;
+    Jump(const SourceManager& s, const std::string& p, size_t l, size_t c) :
+        sources(s), path(ghc::filesystem::absolute(p).lexically_normal().generic_string()), line(l), column(c) {}
+    void consider(SourceRange range, SourceLocation destination) {
+        auto begin = sources.getFullyOriginalLoc(range.start());
+        auto end = sources.getFullyOriginalLoc(range.end());
+        if (!begin || !end || !destination || begin.buffer() != end.buffer()) return;
+        if (sources.getFullPath(begin.buffer()).lexically_normal().generic_string() != path) return;
+        auto first = std::make_pair(sources.getLineNumber(begin), sources.getColumnNumber(begin));
+        auto last = std::make_pair(sources.getLineNumber(end), sources.getColumnNumber(end));
+        auto cursor = std::make_pair(line, column);
+        if (cursor < first || cursor >= last || end.offset() < begin.offset()) return;
+        size_t length = end.offset() - begin.offset();
+        if (length < width) { width = length; target = destination; ambiguous = false; }
+        else if (length == width && target != destination) {
+            // Multiple instances can share the same physical declaration.
+            auto a = sources.getFullyOriginalLoc(target), b = sources.getFullyOriginalLoc(destination);
+            if (sources.getFullPath(a.buffer()) != sources.getFullPath(b.buffer()) ||
+                sources.getLineNumber(a) != sources.getLineNumber(b) || sources.getColumnNumber(a) != sources.getColumnNumber(b)) ambiguous = true;
+        }
+    }
+    void boundName(const Expression& node, const Symbol& symbol) {
+        if (!node.syntax) return;
+        auto token = node.syntax->getLastToken();
+        if (token.valueText() == symbol.name) consider(token.range(), symbol.location);
+    }
+    void handle(const NamedValueExpression& node) { boundName(node, node.symbol); visitDefault(node); }
+    void handle(const HierarchicalValueExpression& node) { boundName(node, node.symbol); visitDefault(node); }
+    void handle(const MemberAccessExpression& node) { boundName(node, node.member); visitDefault(node); }
+    void handle(const CallExpression& node) {
+        if (!node.isSystemCall() && node.syntax) {
+            const syntax::ExpressionSyntax* callee = node.syntax;
+            if (callee->kind == syntax::SyntaxKind::InvocationExpression)
+                callee = callee->as<syntax::InvocationExpressionSyntax>().left;
+            auto token = callee->getLastToken();
+            const auto& subroutine = *std::get<0>(node.subroutine);
+            if (token.valueText() == subroutine.name) consider(token.range(), subroutine.location);
+        }
+        visitDefault(node);
+    }
+    void handle(const InstanceSymbol& node) {
+        const auto* syntax = node.getSyntax();
+        if (syntax && syntax->kind == syntax::SyntaxKind::HierarchicalInstance) {
+            const auto& instance = syntax->as<syntax::HierarchicalInstanceSyntax>();
+            if (instance.decl) consider(instance.decl->name.range(), node.getDefinition().location);
+            if (syntax->parent && syntax->parent->kind == syntax::SyntaxKind::HierarchyInstantiation)
+                consider(syntax->parent->as<syntax::HierarchyInstantiationSyntax>().type.range(), node.getDefinition().location);
+            for (const auto* connection : instance.connections) {
+                if (connection->kind != syntax::SyntaxKind::NamedPortConnection) continue;
+                const auto& port = connection->as<syntax::NamedPortConnectionSyntax>();
+                if (const auto* symbol = node.body.findPort(port.name.valueText())) consider(port.name.range(), symbol->location);
+            }
+        }
+        visitDefault(node);
+    }
+};
 struct Collector : ASTVisitor<Collector, true, true> {
     const SourceManager& sources;
     std::vector<std::string> rows;
@@ -114,9 +178,19 @@ int main(int argc, char** argv) {
         std::string mode = argv[1], scope, prefix, sourcePath;
         size_t sourceLine = 0;
         bool editor = mode == "--editor-complete";
+        bool definition = mode == "--editor-definition";
+        size_t sourceColumn = 0;
         std::unordered_map<std::string, std::string> overlays;
         int first = 2;
-        if (editor) {
+        if (definition) {
+            if (argc < 7) throw std::runtime_error("missing editor definition arguments");
+            sourcePath = argv[first++];
+            std::string l = argv[first++], c = argv[first++];
+            if (l.empty() || c.empty() || l.find_first_not_of("0123456789") != std::string::npos || c.find_first_not_of("0123456789") != std::string::npos) throw std::runtime_error("invalid source position");
+            sourceLine = std::stoul(l); sourceColumn = std::stoul(c);
+            if (!sourceLine || !sourceColumn) throw std::runtime_error("invalid source position");
+        }
+        else if (editor) {
             if (argc < 8) throw std::runtime_error("missing editor completion arguments");
             sourcePath = argv[first++];
             std::string line = argv[first++];
@@ -154,6 +228,15 @@ int main(int argc, char** argv) {
         }
         const auto& root = compilation.getRoot();
         const auto diagnostics = compilation.getAllDiagnostics().size();
+        if (definition) {
+            Jump jump(sources, sourcePath, sourceLine, sourceColumn); root.visit(jump);
+            std::cout << "insight-slang-definition-v1\n";
+            if (jump.target && !jump.ambiguous) {
+                auto location = sources.getFullyOriginalLoc(jump.target);
+                std::cout << hex(sources.getFullPath(location.buffer()).string()) << '\t' << sources.getLineNumber(location) << '\t' << sources.getColumnNumber(location) << '\n';
+            }
+            return 0;
+        }
         Collector collector(sources, mode == "--references");
         if (mode == "--symbols" || mode == "--references") root.visit(collector);
         else {

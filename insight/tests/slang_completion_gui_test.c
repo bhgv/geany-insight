@@ -8,7 +8,7 @@
 #include "ui_utils.h"
 #include <glib/gstdio.h>
 #include <string.h>
-static gchar *root,*profile,*leaf,*top;static GeanyDocument *doc;static guint phase;
+static gchar *root,*profile,*leaf,*top;static GeanyDocument *doc;static guint phase;static gint source_position;
 static GtkWidget *popup(void) {GList *windows=gtk_window_list_toplevels();GtkWidget *found=NULL;for(GList *p=windows;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-completion-popup") && gtk_widget_get_visible(p->data)) found=p->data;g_list_free(windows);return found;}
 static GtkWidget *named(GtkWidget *widget,const gchar *name) {if(!g_strcmp0(gtk_widget_get_name(widget),name)) return widget;if(GTK_IS_CONTAINER(widget)) {GList *children=gtk_container_get_children(GTK_CONTAINER(widget));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found;}return NULL;}
 static gboolean step(gpointer unused) {
@@ -20,13 +20,23 @@ static gboolean step(gpointer unused) {
   gchar *text=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1);gchar *prefix=strstr(text,"data_");g_assert_nonnull(prefix);sci_set_current_position(doc->editor->sci,prefix-text+5,FALSE);g_free(text);gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));
   keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_EDITOR_AUTOCOMPLETE);phase++;return G_SOURCE_CONTINUE;
  }
+ if(phase==2) {
+  GeanyDocument *current=document_get_current();if(!current || g_strcmp0(current->file_name,leaf)) return G_SOURCE_CONTINUE;
+  g_assert_cmpint(sci_get_current_position(current->editor->sci),==,19);keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_GOTO_BACK);phase=3;return G_SOURCE_CONTINUE;
+ }
+ if(phase==3) {g_assert_true(document_get_current()==doc);g_assert_cmpint(sci_get_current_position(doc->editor->sci),==,source_position);keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_GOTO_FORWARD);phase=4;return G_SOURCE_CONTINUE;}
+ if(phase==4) {
+  g_assert_cmpstr(document_get_current()->file_name,==,leaf);g_assert_cmpint(sci_get_current_position(document_get_current()->editor->sci),==,19);
+  document_set_text_changed(document_find_by_filename(leaf),FALSE);document_set_text_changed(doc,FALSE);
+  g_print("HDL native GUI: unsaved cross-file completion, declaration command and exact Back/Forward history passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci)),"menu_quit1")));return G_SOURCE_REMOVE;
+ }
  if(!popup()) return G_SOURCE_CONTINUE;
  GtkWidget *list=named(popup(),"insight-completion-list");g_assert_nonnull(list);GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(list));g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,2);
  GtkTreeIter iter;g_assert_true(gtk_tree_model_get_iter_first(model,&iter));do {gchar *name=NULL,*origin=NULL;gtk_tree_model_get(model,&iter,0,&name,5,&origin,-1);g_assert_true(g_str_has_prefix(name,"data_"));g_assert_nonnull(strstr(origin,"slang"));g_free(name);g_free(origin);}while(gtk_tree_model_iter_next(model,&iter));
  gchar *disk=NULL;g_assert_true(g_file_get_contents(leaf,&disk,NULL,NULL));g_assert_nonnull(strstr(disk,"old_signal"));g_free(disk);
- /* Close without writing the unsaved snapshot. */
- document_set_text_changed(document_find_by_filename(leaf),FALSE);document_set_text_changed(doc,FALSE);
- g_print("HDL native GUI: existing completion popup consumes unsaved cross-file slang candidates\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci)),"menu_quit1")));return G_SOURCE_REMOVE;
+ sci_set_text(doc->editor->sci,"module top; leaf u_leaf(); initial $display(u_leaf.data_input); endmodule\n");
+ gchar *text=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1);source_position=strstr(text,"data_input")-text+strlen("data_input");g_free(text);sci_set_current_position(doc->editor->sci,source_position,FALSE);
+ keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_GOTO_TAGDEFINITION);phase=2;return G_SOURCE_CONTINUE;
 }
 static gboolean timeout(gpointer unused) {(void)unused;g_error("HDL completion GUI timed out at phase %u",phase);return G_SOURCE_REMOVE;}
 int main(void) {

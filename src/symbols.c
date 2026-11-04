@@ -41,6 +41,7 @@
 #include "dialogs.h"
 #include "documentprivate.h"
 #include "editor.h"
+#include "insight-completion.h"
 #include "encodings.h"
 #include "filetypesprivate.h"
 #include "geanyobject.h"
@@ -1768,6 +1769,9 @@ gboolean symbols_goto_tag(GeanyDocument *doc, gint pos, gboolean definition)
 
 	if (plugin_extension_goto_provided(doc, NULL))
 		return plugin_extension_goto_perform(doc, pos, definition);
+
+	if (definition && pos == sci_get_current_position(doc->editor->sci) && insight_completion_definition(doc->editor))
+		return TRUE;
 
 	/* get the current selection if any, or current word */
 	if (sci_has_selection(doc->editor->sci))

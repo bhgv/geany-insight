@@ -15,27 +15,22 @@ static gchar *unhex(const gchar *value) {
  for(gsize i=0;i<n;i+=2) {gint a=g_ascii_xdigit_value(value[i]),b=g_ascii_xdigit_value(value[i+1]);if(a<0 || b<0 || !(a|b)) {g_free(result);return NULL;}result[i/2]=(a<<4)|b;}
  result[n/2]=0;if(!g_utf8_validate(result,-1,NULL) || strpbrk(result,"\r\n\t")) {g_free(result);return NULL;}return result;
 }
+static gchar *disk_stamp(const gchar *path,guint64 *size) {
+ GFile *file=g_file_new_for_path(path);GFileInfo *info=g_file_query_info(file,"standard::size,etag::value",G_FILE_QUERY_INFO_NONE,NULL,NULL);g_object_unref(file);if(!info) return NULL;
+ *size=g_file_info_get_size(info);gchar *etag=g_strdup(g_file_info_get_etag(info));g_object_unref(info);return etag;
+}
 static void terminate(GCancellable *cancel,gpointer data) {(void)cancel;g_subprocess_force_exit(G_SUBPROCESS(data));}
-GPtrArray *insight_slang_complete(const gchar *service,const gchar *path,const gchar *text,
- guint offset,guint rootlen,GPtrArray *paths,GHashTable *buffers,GCancellable *cancel) {
- if(!service || !*service || !path || !text || offset>strlen(text) || rootlen>offset || !paths || !buffers || (cancel && g_cancellable_is_cancelled(cancel))) return NULL;
- guint start=offset-rootlen,begin=start,line=1;
- for(guint i=0;i<offset;i++) if(text[i]=='\n') line++;
- /* Only plain identifier hierarchies. Indexed/dynamic receivers decline. */
- while(begin && (g_ascii_isalnum(text[begin-1]) || strchr("_$.:",text[begin-1]))) begin--;
- gchar *receiver=g_strndup(text+begin,start-begin),*prefix=g_strndup(text+start,rootlen);
- gsize size=strlen(receiver);if(size && receiver[size-1]=='.') receiver[--size]=0;
- else if(size>=2 && receiver[size-1]==':' && receiver[size-2]==':') receiver[size-2]=0;
- else if(size) {g_free(receiver);g_free(prefix);return NULL;}
- if(begin && (text[begin-1]==']' || text[begin-1]==')')) {g_free(receiver);g_free(prefix);return NULL;}
- gchar *directory=g_dir_make_tmp("geany-slang-XXXXXX",NULL);if(!directory) {g_free(receiver);g_free(prefix);return NULL;}
- GPtrArray *argv=g_ptr_array_new_with_free_func(g_free),*temporary=g_ptr_array_new_with_free_func(g_free),*out=NULL;
- g_ptr_array_add(argv,g_strdup(service));g_ptr_array_add(argv,g_strdup("--editor-complete"));g_ptr_array_add(argv,g_strdup(path));g_ptr_array_add(argv,g_strdup_printf("%u",line));g_ptr_array_add(argv,receiver);g_ptr_array_add(argv,prefix);
- GHashTable *selected=g_hash_table_new(g_str_hash,g_str_equal);gsize bytes=0,total_args=0;gboolean valid=TRUE;
+static gchar *query(const gchar *service,const gchar *const *arguments,GPtrArray *paths,GHashTable *buffers,GCancellable *cancel) {
+ if(!service || !*service || !paths || !buffers || (cancel && g_cancellable_is_cancelled(cancel))) return NULL;
+ gchar *directory=g_dir_make_tmp("geany-slang-XXXXXX",NULL);if(!directory) return NULL;
+ GPtrArray *argv=g_ptr_array_new_with_free_func(g_free),*temporary=g_ptr_array_new_with_free_func(g_free);gchar *out=NULL;
+ g_ptr_array_add(argv,g_strdup(service));for(guint i=0;arguments[i];i++) g_ptr_array_add(argv,g_strdup(arguments[i]));
+ GHashTable *selected=g_hash_table_new(g_str_hash,g_str_equal),*stamps=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);gsize bytes=0,total_args=0;gboolean valid=TRUE;
  for(guint i=0;i<paths->len;i++) {
   const gchar *file=g_ptr_array_index(paths,i);if(!insight_slang_source(file) || g_hash_table_contains(selected,file)) continue;
   total_args+=strlen(file);if(g_hash_table_size(selected)>=256 || total_args>12000) {valid=FALSE;break;}g_hash_table_add(selected,(gpointer)file);
   const gchar *overlay=g_hash_table_lookup(buffers,file);
+  if(!overlay) {guint64 size=0;gchar *stamp=disk_stamp(file,&size);if(!stamp || size>2u*1024u*1024u || bytes+size>32u*1024u*1024u) {g_free(stamp);valid=FALSE;break;}bytes+=size;g_hash_table_insert(stamps,g_strdup(file),stamp);}
   if(overlay) {gsize length=strlen(overlay);bytes+=length;if(length>2u*1024u*1024u || bytes>32u*1024u*1024u) {valid=FALSE;break;}
    gchar *target=g_strdup_printf("%s/%u.sv",directory,temporary->len);g_ptr_array_add(temporary,target);
    if(!g_file_set_contents(target,overlay,length,NULL)) {valid=FALSE;break;}
@@ -63,15 +58,57 @@ GPtrArray *insight_slang_complete(const gchar *service,const gchar *path,const g
    gboolean ok=g_subprocess_communicate_utf8(process,NULL,cancel,&reply,NULL,NULL);
    if(cancel && handler) g_cancellable_disconnect(cancel,handler);
    if(!ok) {g_subprocess_force_exit(process);g_subprocess_wait(process,NULL,NULL);}
-   if(ok && g_subprocess_get_successful(process) && reply && strlen(reply)<=4u*1024u*1024u && g_str_has_prefix(reply,"insight-slang-completion-v1\n")) {
-    out=g_ptr_array_new_with_free_func(candidate_free);gchar **rows=g_strsplit(reply,"\n",-1);
-    for(guint i=1;rows[i] && *rows[i] && out->len<4096;i++) {
-     gchar **fields=g_strsplit(rows[i],"\t",3);gchar *name=fields[0] && fields[1] && !fields[2] ? unhex(fields[0]):NULL,*kind=name ? unhex(fields[1]):NULL;
-     if(!name || !*name || !kind) {g_free(name);g_free(kind);g_strfreev(fields);g_ptr_array_unref(out);out=NULL;break;}
-     InsightClangCompletion *c=g_new0(InsightClangCompletion,1);c->name=name;c->signature=g_strdup(name);c->type=kind;c->comment=g_strdup("");c->parameters=g_ptr_array_new_with_free_func(g_free);c->callable=FALSE;g_ptr_array_add(out,c);g_strfreev(fields);
-    }g_strfreev(rows);
-   }if(out && !out->len) {g_ptr_array_unref(out);out=NULL;}g_free(reply);g_object_unref(process);
+   if(ok && g_subprocess_get_successful(process) && reply && strlen(reply)<=4u*1024u*1024u) out=g_steal_pointer(&reply);
+   g_free(reply);g_object_unref(process);
   }
  }
+ GHashTableIter iter;gpointer file,stamp;g_hash_table_iter_init(&iter,stamps);
+ while(out && g_hash_table_iter_next(&iter,&file,&stamp)) {guint64 size=0;gchar *now=disk_stamp(file,&size);if(g_strcmp0(now,stamp)) g_clear_pointer(&out,g_free);g_free(now);}g_hash_table_unref(stamps);
  for(guint i=0;i<temporary->len;i++) g_unlink(g_ptr_array_index(temporary,i));g_rmdir(directory);g_free(directory);g_ptr_array_unref(temporary);g_ptr_array_unref(argv);return out;
+}
+
+GPtrArray *insight_slang_complete(const gchar *service,const gchar *path,const gchar *text,
+ guint offset,guint rootlen,GPtrArray *paths,GHashTable *buffers,GCancellable *cancel) {
+ if(!service || !*service || !path || !text || offset>strlen(text) || rootlen>offset || !paths || !buffers || (cancel && g_cancellable_is_cancelled(cancel))) return NULL;
+ guint start=offset-rootlen,begin=start,line=1;
+ for(guint i=0;i<offset;i++) if(text[i]=='\n') line++;
+ /* Only plain identifier hierarchies. Indexed/dynamic receivers decline. */
+ while(begin && (g_ascii_isalnum(text[begin-1]) || strchr("_$.:",text[begin-1]))) begin--;
+ gchar *receiver=g_strndup(text+begin,start-begin),*prefix=g_strndup(text+start,rootlen);
+ gsize size=strlen(receiver);if(size && receiver[size-1]=='.') receiver[--size]=0;
+ else if(size>=2 && receiver[size-1]==':' && receiver[size-2]==':') receiver[size-2]=0;
+ else if(size) {g_free(receiver);g_free(prefix);return NULL;}
+ if(begin && (text[begin-1]==']' || text[begin-1]==')')) {g_free(receiver);g_free(prefix);return NULL;}
+ gchar *line_text=g_strdup_printf("%u",line);const gchar *arguments[]={"--editor-complete",path,line_text,receiver,prefix,NULL};
+ gchar *reply=query(service,arguments,paths,buffers,cancel);g_free(line_text);g_free(receiver);g_free(prefix);GPtrArray *out=NULL;
+ if(reply && g_str_has_prefix(reply,"insight-slang-completion-v1\n")) {
+  out=g_ptr_array_new_with_free_func(candidate_free);gchar **rows=g_strsplit(reply,"\n",-1);
+  for(guint i=1;rows[i] && *rows[i] && out->len<4096;i++) {
+   gchar **fields=g_strsplit(rows[i],"\t",3);gchar *name=fields[0] && fields[1] && !fields[2] ? unhex(fields[0]):NULL,*kind=name ? unhex(fields[1]):NULL;
+   if(!name || !*name || !kind) {g_free(name);g_free(kind);g_strfreev(fields);g_ptr_array_unref(out);out=NULL;break;}
+   InsightClangCompletion *c=g_new0(InsightClangCompletion,1);c->name=name;c->signature=g_strdup(name);c->type=kind;c->comment=g_strdup("");c->parameters=g_ptr_array_new_with_free_func(g_free);g_ptr_array_add(out,c);g_strfreev(fields);
+  }g_strfreev(rows);
+ }
+ if(out && !out->len) {g_ptr_array_unref(out);out=NULL;}g_free(reply);return out;
+}
+static gboolean positive_position(const gchar *text,guint *value) {
+ if(!text || !*text) return FALSE;for(const gchar *p=text;*p;p++) if(!g_ascii_isdigit(*p)) return FALSE;
+ guint64 n=g_ascii_strtoull(text,NULL,10);if(!n || n>G_MAXINT) return FALSE;*value=(guint)n;return TRUE;
+}
+gboolean insight_slang_definition(const gchar *service,const gchar *path,const gchar *text,guint offset,
+ GPtrArray *paths,GHashTable *buffers,GCancellable *cancel,gchar **target,guint *line,guint *column) {
+ *target=NULL;*line=*column=0;if(!path || !text || offset>strlen(text)) return FALSE;
+ if(offset && !(g_ascii_isalnum(text[offset]) || text[offset]=='_' || text[offset]=='$') && (g_ascii_isalnum(text[offset-1]) || text[offset-1]=='_' || text[offset-1]=='$')) offset--;
+ guint l=1,c=1;for(guint i=0;i<offset;i++) {if(text[i]=='\n') {l++;c=1;}else c++;}
+ gchar *ls=g_strdup_printf("%u",l),*cs=g_strdup_printf("%u",c);const gchar *arguments[]={"--editor-definition",path,ls,cs,NULL};
+ gchar *reply=query(service,arguments,paths,buffers,cancel);g_free(ls);g_free(cs);gboolean ok=FALSE;
+ if(reply && g_str_has_prefix(reply,"insight-slang-definition-v1\n")) {
+  gchar **rows=g_strsplit(reply,"\n",-1);
+  if(rows[1] && *rows[1] && rows[2] && !*rows[2] && !rows[3]) {
+   gchar **fields=g_strsplit(rows[1],"\t",4);
+   if(g_strv_length(fields)==3 && positive_position(fields[1],line) && positive_position(fields[2],column)) {
+    *target=unhex(fields[0]);ok=*target && g_path_is_absolute(*target);if(!ok) g_clear_pointer(target,g_free);
+   }g_strfreev(fields);
+  }g_strfreev(rows);
+ }g_free(reply);return ok;
 }

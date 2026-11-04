@@ -15,10 +15,13 @@ int main(int argc,char **argv) {
  GPtrArray *items=insight_slang_complete(argv[1],top,text,offset,5,paths,buffers,cancel);g_assert_nonnull(items);g_assert_cmpuint(items->len,==,2);
  for(guint i=0;i<items->len;i++) {InsightClangCompletion *item=g_ptr_array_index(items,i);g_assert_true(g_str_has_prefix(item->name,"data_"));g_assert_cmpstr(item->type,==,"Variable");}g_ptr_array_unref(items);
  gchar *disk=NULL;g_assert_true(g_file_get_contents(leaf,&disk,NULL,NULL));g_assert_nonnull(strstr(disk,"old_signal"));g_free(disk);
+ const gchar *navigation="module top; leaf u_leaf(); initial $display(u_leaf.data_input); endmodule\n";g_hash_table_replace(buffers,top,(gpointer)navigation);
+ gchar *target=NULL;guint line=0,column=0;guint caret=strstr(navigation,"data_input")-navigation+strlen("data_input");
+ g_assert_true(insight_slang_definition(argv[1],top,navigation,caret,paths,buffers,cancel,&target,&line,&column));g_assert_cmpstr(target,==,leaf);g_assert_cmpuint(line,==,1);g_assert_cmpuint(column,==,20);g_free(target);g_hash_table_replace(buffers,top,(gpointer)text);
  g_cancellable_cancel(cancel);g_assert_null(insight_slang_complete(argv[1],top,text,offset,5,paths,buffers,cancel));
  g_assert_null(insight_slang_complete("/missing-service",top,text,offset,5,paths,buffers,NULL));
  g_object_unref(cancel);cancel=g_cancellable_new();GThread *thread=g_thread_new("cancel-hdl",cancel_later,cancel);gint64 started=g_get_monotonic_time();
  gchar *self=g_strdup(argv[0]);g_assert_null(insight_slang_complete(self,top,text,offset,5,paths,buffers,cancel));g_free(self);g_thread_join(thread);g_assert_cmpint(g_get_monotonic_time()-started,<,3000000);
  g_object_unref(cancel);g_hash_table_unref(buffers);g_ptr_array_unref(paths);g_unlink(leaf);g_unlink(top);g_rmdir(dir);g_free(leaf);g_free(top);g_free(dir);
- g_print("HDL worker adapter: unsaved cross-file completion, cancellation and missing service fallback passed\n");return 0;
+ g_print("HDL worker adapter: unsaved cross-file completion, cancellation and missing service fallback and declaration navigation passed\n");return 0;
 }
