@@ -482,3 +482,5 @@ install-clang-resources:
 # A provider/SDK change alters library dependencies even when objects are current.
 # Reconfigure must relink both targets without cleaning the expensive compiler SDK.
 libgeany.la geany$(EXEEXT): Makefile
+
+libgeany_la_SOURCES += ../insight/desktop/slang_completion.c ../insight/desktop/slang_completion.h

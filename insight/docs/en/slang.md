@@ -52,6 +52,14 @@ Each request reads the explicit file set and elaborates it together. stdout cont
 
 A nonzero `diagnostics_count` marks results requiring inspection; JSON alone does not establish project correctness. Missing symbols return an empty array. Read/argument errors return nonzero, explain the failure on stderr and leave stdout empty. A 100000-record limit fails without partial JSON. Sources are never modified. An explicit file list can represent a temporary workspace without saving a project.
 
-This prepares the editor integration: **background HDL indexing, navigation menus and the completion popup do not yet consume the service**. Each process reparses its input; persistent AST caching, unsaved overlays, include/define/top options and complete reference coverage are not connected yet. A caller can terminate the process without GTK access. Editor highlighting remains lexical.
+This prepares the editor integration: **background HDL indexing and navigation menus do not yet consume the service; the completion popup is now connected**. Each process reparses its input; persistent AST caching, include/define/top options and complete reference coverage are not connected yet. A caller can terminate the process without GTK access. Editor highlighting remains lexical.
 
 The `slang_semantic_protocol` test exercises the real executable: cross-file targets, package function calls, deduplicated completion, exact positions, erroneous input and paths with spaces.
+
+## Completion inside the editor
+
+With detailed and semantic completion enabled (completion preferences), typing `u_leaf.data_` inside a module proposes members of that instance. The existing popup marks their origin as `slang`. The normal explicit completion command also requests candidates. The current build's installed `insight-slang-semantic` is required; without it ordinary tag completion remains available. Developers can override its path with `GEANY_INSIGHT_SLANG_SERVICE`.
+
+Requests combine current project members and open HDL files. Without a project, named open documents form a temporary source set. Unsaved buffers are copied to a temporary directory removed after the request; originals and project files are not written. Snapshot I/O, process execution and waiting happen in a worker. New input cancels the request and child process; buffer contents, position and project are checked before publishing a reply.
+
+Plain dotted hierarchies and package `::` qualifiers are supported. File/line identifies the current module. Multiple elaborated instances do not acquire a guessed implicit scope; use an explicit full hierarchy instead. Indexed/dynamic receivers, precise procedural local scope, function arguments, include/define/top settings and persistent caching are not implemented yet. Requests are bounded to 256 HDL files, 2 MiB per buffer, 32 MiB of snapshots and a portable command-line length; excessive requests fall back to tag completion. Headers requiring their include context do not yet receive full semantics. Each request elaborates the set again, so large HDL projects still need the next caching stage.

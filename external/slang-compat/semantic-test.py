@@ -56,3 +56,25 @@ with tempfile.TemporaryDirectory(prefix='slang space ') as directory:
 bad = subprocess.run([service, '--unknown', '--'] + files, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 assert bad.returncode != 0 and not bad.stdout
 print('Native HDL lookup, instance edges, references, completion and failure protocol passed')
+
+def editor_query(path, line, receiver, prefix, units, overlays=()):
+    command = [service, '--editor-complete', str(path), str(line), receiver, prefix]
+    for original, replacement in overlays:
+        command += ['--overlay', str(original), str(replacement)]
+    raw = subprocess.check_output(command + ['--'] + units).decode('utf-8').splitlines()
+    assert raw[0] == 'insight-slang-completion-v1'
+    return [tuple(bytes.fromhex(field).decode('utf-8') for field in row.split('\t')) for row in raw[1:]]
+with tempfile.TemporaryDirectory(prefix='slang editor ') as directory:
+    root = Path(directory)
+    leaf, top, unsaved = root / 'leaf.sv', root / 'top.sv', root / 'unsaved.sv'
+    leaf.write_text('module leaf; logic old_signal; endmodule\n')
+    top.write_text('module top; leaf u_leaf(); endmodule\n')
+    unsaved.write_text('module leaf; logic new_signal; endmodule\n')
+    units = [str(leaf), str(top)]
+    assert editor_query(top, 1, 'u_leaf', 'old_', units) == [('old_signal', 'Variable')]
+    assert editor_query(top, 1, 'u_leaf', 'new_', units, [(leaf, unsaved)]) == [('new_signal', 'Variable')]
+    assert 'old_signal' in leaf.read_text()  # snapshot never writes the original
+    assert editor_query(top, 1, 'absent', '', units) == []
+    top.write_text('module top; leaf first(); leaf second(); endmodule\n')
+    assert editor_query(leaf, 1, '', 'old_', units) == []  # two elaborated instances: decline
+print('Editor completion protocol: local hierarchy, unsaved cross-file overlays and ambiguous scopes passed')
