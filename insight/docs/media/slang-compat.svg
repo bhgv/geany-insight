@@ -5,5 +5,5 @@
 <text x="42" y="87" font-size="18" font-weight="bold">top.sv · module top</text><text x="42" y="116" font-size="16">u_leaf: leaf #(.WIDTH(16))</text><text x="42" y="147" font-size="16">a → .data_i(a)</text><text x="42" y="178" font-size="16">b ← .data_o(b)</text>
 <rect x="470" y="60" width="346" height="140" rx="10" fill="#e0f2e7" stroke="#6c9c83"/>
 <text x="488" y="87" font-size="18" font-weight="bold">leaf.sv · module leaf</text><text x="488" y="116" font-size="16">WIDTH: default 8 → instance 16</text><text x="488" y="147" font-size="16">input data_i [WIDTH-1:0]</text><text x="488" y="178" font-size="16">output data_o [WIDTH-1:0]</text>
-<text x="24" y="230" font-size="15">CMake 3.10 + GCC 7 + Python 3.6 → library + JSON lookup / completion / references</text><text x="24" y="251" font-size="13">Native AST → declarations + references + diagnostics → .hdl index → Relations. HDL graph pending.</text></g>
+<text x="24" y="230" font-size="15">CMake 3.10 + GCC 7 + Python 3.6 → library + JSON lookup / completion / references</text><text x="24" y="251" font-size="13">Native AST → declarations + references + diagnostics → .hdl index → Relations + editor colors.</text></g>
 <g fill="none" stroke="#496f94" stroke-width="3"><path d="M344 110h116m-10-7 10 7-10 7"/><path d="M344 141h116m-10-7 10 7-10 7"/><path d="M470 173H354m10-7-10 7 10 7"/></g></svg>

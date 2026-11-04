@@ -33,8 +33,12 @@ static gboolean step(gpointer unused) {
   GtkWidget *window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci)),*view=named(window,"insight-relations"),*status=named(window,"insight-relation-status");g_assert_nonnull(view);g_assert_nonnull(status);
   if(!g_str_has_prefix(gtk_label_get_text(GTK_LABEL(status)),"slang:")) return G_SOURCE_CONTINUE;
   GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),>=,1);GtkTreeIter iter;g_assert_true(gtk_tree_model_get_iter_first(model,&iter));gchar *name=NULL,*source=NULL,*relation=NULL;gtk_tree_model_get(model,&iter,7,&name,1,&source,8,&relation,-1);g_assert_cmpstr(name,==,"data_input");g_assert_cmpstr(source,==,top);g_assert_nonnull(strstr(relation,leaf));g_free(name);g_free(source);g_free(relation);
+  ScintillaObject *leaf_sci=document_find_by_filename(leaf)->editor->sci;
+  g_assert_cmpint(scintilla_send_message(leaf_sci,SCI_INDICATORVALUEAT,24,19),!=,0);
+  g_assert_cmpint(scintilla_send_message(leaf_sci,SCI_INDICATORVALUEAT,24,0),==,0);
   GtkTreePath *row=gtk_tree_model_get_path(model,&iter);gtk_tree_view_row_activated(GTK_TREE_VIEW(view),row,gtk_tree_view_get_column(GTK_TREE_VIEW(view),0));gtk_tree_path_free(row);g_assert_true(document_get_current()==doc);
   sci_set_text(doc->editor->sci,"module top;\nlogic target_signal;\ninitial $display(target_signl);\nendmodule\n\n");sci_set_current_position(doc->editor->sci,sci_get_length(doc->editor->sci),FALSE);
+  g_assert_cmpint(scintilla_send_message(leaf_sci,SCI_INDICATORVALUEAT,24,19),==,0);
   GtkWidget *action=named(window,"insight-navigate-hdl-diagnostics");g_assert_nonnull(action);gtk_menu_item_activate(GTK_MENU_ITEM(action));phase=6;return G_SOURCE_CONTINUE;
  }
  if(phase==6) {
