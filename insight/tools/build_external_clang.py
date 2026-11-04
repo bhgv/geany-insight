@@ -38,16 +38,15 @@ def apply_cmake310_patch(source, run=subprocess.run):
     run(command + [str(patch)], check=True)
 
 
-def ensure_windows_smallvector_include(source):
-    header = source / 'llvm/include/llvm/ADT/SmallVector.h'
+def ensure_cstdint_include(header, anchor):
     contents = header.read_bytes()
     if re.search(rb'(?m)^[ \t]*#[ \t]*include[ \t]+<cstdint>', contents):
         return
     updated, count = re.subn(
-        rb'(?m)^(#include <cstddef>[ \t]*)(\r?\n)',
+        rb'(?m)^(#include ' + re.escape(anchor) + rb'[ \t]*)(\r?\n)',
         rb'\1\2#include <cstdint>\2', contents, count=1)
     if not count:
-        raise ValueError('Cannot locate <cstddef> in ' + str(header))
+        raise ValueError('Cannot locate ' + anchor.decode('ascii') + ' in ' + str(header))
     with tempfile.TemporaryDirectory(dir=str(header.parent)) as temp:
         replacement = Path(temp) / header.name
         replacement.write_bytes(updated)
@@ -124,7 +123,9 @@ def main():
         if legacy_cmake:
             apply_cmake310_patch(source)
         if os.name == 'nt':
-            ensure_windows_smallvector_include(source)
+            ensure_cstdint_include(source / 'llvm/include/llvm/ADT/SmallVector.h', b'<cstddef>')
+            ensure_cstdint_include(source / 'llvm/lib/Target/X86/MCTargetDesc/X86MCTargetDesc.h',
+                                  b'<string>')
         run(configure)
         if args.configure_only:
             return

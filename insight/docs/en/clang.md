@@ -286,6 +286,6 @@ After configure changes, both are relinked automatically; deleting the LLVM
 build or running make clean is unnecessary. CI builds and installs both
 Autotools and Meson editors against the internal SDK and checks unresolved symbols.
 
-On Windows, the internal SDK build automatically adds the missing `<cstdint>` include to the pinned LLVM `SmallVector.h` before configuring CMake.
+On Windows, the internal SDK build automatically adds the missing `<cstdint>` include to the pinned LLVM headers `SmallVector.h` and `X86MCTargetDesc.h` before configuring CMake.
 
 Windows x64 tools and build commands: [guide and automatic bootstrap](windows-build.md).
