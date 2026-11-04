@@ -24,6 +24,15 @@ foreach ($suffix in @('clang','llvm','autotools','nsis')) {
 $disabled = (& $scriptPath -Plan -ClangProvider Disabled | Out-String) | ConvertFrom-Json
 if ($disabled.packages -contains 'mingw-w64-ucrt-x86_64-clang') { throw 'Disabled selected system Clang.' }
 if (-not ((& $scriptPath -Help | Out-String) -match '-FetchSources')) { throw 'Help missing.' }
+$checkout = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+$launcher = Join-Path $checkout 'build.cmd'
+$rootHelp = (& $launcher | Out-String)
+if ($LASTEXITCODE -ne 0 -or $rootHelp -notmatch 'build.cmd -BuildEditor') { throw 'Root launcher help failed.' }
+$rootPlan = (& $launcher -BuildEditor -NonInteractive -RootDir 'C:\Insight Test' -Plan | Out-String) | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0 -or $rootPlan.sourceDir -ne $checkout -or
+    $rootPlan.installDir -ne 'C:\Insight Test\editor' -or -not $rootPlan.buildEditor) { throw 'Root launcher plan failed.' }
+$override = (& $launcher -BuildEditor -Plan -SourceDir 'C:\Alternate Checkout' | Out-String) | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0 -or $override.sourceDir -ne 'C:\Alternate Checkout') { throw 'Source override lost.' }
 Write-Host 'PowerShell parsing and bootstrap plans passed; no filesystem or environment changes.'
 # Production folder dialog: changing drives, independent paths, validation and cancel.
 . (Join-Path $PSScriptRoot '..\tools\select-windows-folders.ps1')

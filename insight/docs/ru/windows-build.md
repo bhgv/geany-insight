@@ -1,5 +1,7 @@
 # Сборка на Windows x64
 
+Из корня репозитория запустите `build.cmd -BuildEditor`. Без аргументов `build.cmd` выводит справку; по умолчанию берутся исходники текущей копии.
+
 Инструкция описывает **нативную сборку Windows x64 через MSYS2 UCRT64**, GCC и GTK3. Visual Studio, WSL и Cygwin не требуются. Компилятор и библиотеки должны относиться к UCRT64: не смешивайте их с MINGW64, CLANG64 и MSVC.
 
 ![Этапы сборки Windows](../media/windows-build.svg)

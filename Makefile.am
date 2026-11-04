@@ -27,6 +27,8 @@ EXTRA_DIST = \
 	README.Packagers \
 	$(WIN32_BUILD_FILES)
 
+dist_doc_DATA = README.md README-ru.md
+
 DISTCLEANFILES = \
 	geany.desktop
 
@@ -768,7 +770,7 @@ dist_insightdocmedia_DATA += insight/docs/media/project-membership.jpg
 
 EXTRA_DIST += insight/tools/select_clang_sdk.py insight/tests/clang_sdk_selection_test.py
 
-EXTRA_DIST += build.sh insight/tools/build_editor.py insight/tools/prepare_clang_sdk.py insight/tests/editor_build_driver_test.py
+EXTRA_DIST += build.sh build.cmd insight/tools/build_editor.py insight/tools/prepare_clang_sdk.py insight/tests/editor_build_driver_test.py
 
 dist_insightdocmedia_DATA += insight/docs/media/build-bootstrap.svg
 

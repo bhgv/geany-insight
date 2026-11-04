@@ -1168,7 +1168,7 @@ misc = [
 	'THANKS',
 	'TODO'
 ]
-install_data(misc, install_dir: cdata.get('GEANY_DOC_DIR'))
+install_data(misc + ['README.md', 'README-ru.md'], install_dir: cdata.get('GEANY_DOC_DIR'))
 if host_machine.system() == 'windows'
 	# on Windows, install those files as "Somename.txt" in the prefix as well
 	misc_rename = []

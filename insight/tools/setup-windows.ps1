@@ -14,6 +14,7 @@ param(
     [string]$InstallDir = '',
     [switch]$NonInteractive,
     [switch]$BuildEditor,
+    [switch]$UseCheckout,
     [switch]$Plan,
     [switch]$Help
 )
@@ -29,7 +30,9 @@ Geany Insight Windows x64 toolchain bootstrap
   .\setup-windows.ps1 [-MsysRoot C:\msys64] [-ClangProvider Internal|System|Disabled]
     [-FetchSources] [-SourceDir C:\src\geany-insight] [-Autotools] [-Packaging]
     [-RootDir D:\Development\Insight] [-InstallDir PATH] [-CacheDir PATH]
-    [-BuildEditor] [-NonInteractive] [-Plan] [-Help]
+    [-BuildEditor] [-UseCheckout] [-NonInteractive] [-Plan] [-Help]
+From a repository checkout: build.cmd -BuildEditor
+-UseCheckout defaults SourceDir to the checkout containing this script.
 Default: show the location chooser, then install/update MSYS2 UCRT64 and Meson build tools for internal Clang.
 -FetchSources also clones the editor and initializes external/llvm-project.
 -Plan prints the download/package plan without changing anything.
@@ -43,7 +46,9 @@ if (-not $RootDir) {
     if ($RootDir -notmatch '^[A-Za-z]:\\[A-Za-z0-9_\\.\-]+$') { $RootDir = Join-Path $env:SystemDrive 'Development\GeanyInsight' }
 }
 if (-not $MsysRoot) { $MsysRoot = Join-Path $RootDir 'tools\msys64' }
-if (-not $SourceDir) { $SourceDir = Join-Path $RootDir 'src' }
+if (-not $SourceDir) {
+    $SourceDir = if ($UseCheckout) { [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..')) } else { Join-Path $RootDir 'src' }
+}
 if (-not $InstallDir) { $InstallDir = Join-Path $RootDir 'editor' }
 $defaultCache = -not $CacheDir
 if ($defaultCache) { $CacheDir = Join-Path $RootDir 'downloads' }

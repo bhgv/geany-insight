@@ -1,5 +1,7 @@
 # Build on Windows x64
 
+From the repository root, run `build.cmd -BuildEditor`. With no arguments, `build.cmd` shows help; the source path defaults to the checkout containing the script.
+
 This guide describes a **native Windows x64 build using MSYS2 UCRT64**, GCC and GTK3. Visual Studio, WSL and Cygwin are not required. Keep all compiler libraries in the UCRT64 environment: do not mix MINGW64, CLANG64 or MSVC libraries with this toolchain.
 
 ![Windows build stages](../media/windows-build.svg)
