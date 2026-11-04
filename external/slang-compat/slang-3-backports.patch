@@ -1,0 +1,40 @@
+diff --git a/source/ast/Expression.cpp b/source/ast/Expression.cpp
+--- a/source/ast/Expression.cpp
++++ b/source/ast/Expression.cpp
+@@ -345,7 +345,7 @@
+         if (lhsType->isIntegral()) {
+             bitwidth_t bits = lhsType->getBitWidth();
+             if (expr.isUnsizedInteger())
+-                bits = 32;
++                bits = std::max(bits, 32u);
+ 
+             // Keep the signed flag but force four state.
+             auto flags = lhsType->getIntegralFlags();
+diff --git a/source/ast/symbols/MemberSymbols.cpp b/source/ast/symbols/MemberSymbols.cpp
+--- a/source/ast/symbols/MemberSymbols.cpp
++++ b/source/ast/symbols/MemberSymbols.cpp
+@@ -681,16 +681,20 @@
+             return;
+     }
+ 
+-    ASSERT(expr.syntax);
+-    auto& syntax = expr.syntax->as<BinaryExpressionSyntax>();
++    auto syntax = expr.syntax;
++    ASSERT(syntax);
++    while (syntax->kind == SyntaxKind::ParenthesizedExpression)
++        syntax = syntax->as<ParenthesizedExpressionSyntax>().expression;
++
++    auto opToken = syntax->as<BinaryExpressionSyntax>().operatorToken;
+ 
+     auto lc = expr.left().constant;
+     auto rc = expr.right().constant;
+     ASSERT(lc && rc);
+ 
+-    auto& note = result.addNote(diag::NoteComparisonReduces, syntax.operatorToken.location());
++    auto& note = result.addNote(diag::NoteComparisonReduces, opToken.location());
+     note << expr.sourceRange;
+-    note << *lc << syntax.operatorToken.rawText() << *rc;
++    note << *lc << opToken.rawText() << *rc;
+ }
+ 
+ void ElabSystemTaskSymbol::reportStaticAssert(const Scope& scope, SourceLocation loc,

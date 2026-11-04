@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "slang/ast/Compilation.h"
+#include "slang/ast/types/Type.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
 #include "slang/ast/symbols/ParameterSymbols.h"
@@ -27,5 +28,22 @@ int main(int argc, char** argv) {
     const auto& parameter = width->as<slang::ast::ParameterSymbol>();
     if (parameter.getValue().integer().as<int>() != 16) return 6;
     std::cout << "Cross-file elaboration: top.u_leaf -> leaf, WIDTH=16, both ports resolved\n";
+    slang::ast::Compilation wide;
+    wide.addSyntaxTree(slang::syntax::SyntaxTree::fromText(
+        "module wide; parameter p = 'd999999999999; endmodule"));
+    const auto* value = wide.getRoot().lookupName("wide.p");
+    if (!value || value->kind != slang::ast::SymbolKind::Parameter ||
+        value->as<slang::ast::ParameterSymbol>().getType().getBitWidth() != 40) {
+        std::cerr << "Backport regression: unsized based parameter lost its width\n";
+        return 7;
+    }
+
+    slang::ast::Compilation assertions;
+    assertions.addSyntaxTree(slang::syntax::SyntaxTree::fromText(
+        "module check; initial $static_assert(((12 < 8))); endmodule"));
+    if (assertions.getAllDiagnostics().empty()) {
+        std::cerr << "Backport regression: false static assertion produced no diagnostic\n";
+        return 8;
+    }
     return 0;
 }

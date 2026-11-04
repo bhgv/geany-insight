@@ -54,6 +54,7 @@ def prepare(source, deps):
     for name, (url, revision) in DEPS.items():
         checkout(deps / name, url, revision)
     apply_patch(source, ROOT / 'external/slang-compat/cmake310-gcc7.patch')
+    apply_patch(source, ROOT / 'external/slang-compat/slang-3-backports.patch')
 
 
 def apply_patch(source, patch):

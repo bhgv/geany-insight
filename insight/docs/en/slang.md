@@ -136,3 +136,9 @@ geany_export_project C:/my/chip.geany
 Open `chip.geany` using Project → Open. The project contains existing HDL files from the current design fileset. For semantic analysis start the editor with `GEANY_INSIGHT_VIVADO_CONFIG` pointing to the adjacent `chip.hdl.tsv`, as shown above. Choose a new filename when exporting again.
 
 Export digital signals to VCD in Vivado Simulator, then choose **Tools → VCD Waveforms…** in Geany Insight. Select a signal, click the diagram to position the cursor, or use the transition and zoom buttons. The source field starts with the VCD hierarchy. Edit it if the simulator adds an outer scope, then choose **Go to HDL declaration**. Slang resolves the name using project and open HDL files. Captures are limited to 32 MiB, 4096 signals and 250000 changes. The viewer displays one selected trace at a time.
+
+## Upstream backports
+
+The separate `slang-3-backports.patch` preserves the width of large unsized based parameters and fixes the crash when diagnosing parenthesized `$static_assert` comparisons. The compatibility probe exercises both cases.
+
+[slang a93aa7c](https://github.com/MikePopoloski/slang/commit/a93aa7cffb70f257b600356421a96d44eadf8dba) · [slang 44a02d6](https://github.com/MikePopoloski/slang/commit/44a02d64e562d011ada3a1b99f79f4f26f75426c)
