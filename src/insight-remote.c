@@ -193,14 +193,57 @@ static void scp_free(gpointer data) {
 static void scp_cancel(void) {
  ScpJob *j=remote_ui.scp;if(!j) return;g_cancellable_cancel(j->cancel);g_mutex_lock(&j->lock);if(j->process) g_subprocess_force_exit(j->process);g_mutex_unlock(&j->lock);
 }
+typedef struct {
+ GSubprocess *process;
+ GCancellable *cancel;
+ GFileOutputStream *output;
+ GError *error;
+} ScpOutput;
+
+static gpointer scp_copy_output(gpointer data) {
+ ScpOutput *copy = data;
+ if (g_output_stream_splice(G_OUTPUT_STREAM(copy->output),
+      g_subprocess_get_stdout_pipe(copy->process), G_OUTPUT_STREAM_SPLICE_CLOSE_TARGET,
+      copy->cancel, &copy->error) < 0)
+  g_subprocess_force_exit(copy->process);
+ return NULL;
+}
+
 static gboolean scp_child(ScpJob *j,const gchar *const *argv,const gchar *binary,GError **error) {
  if(g_cancellable_set_error_if_cancelled(j->cancel,error)) return FALSE;
- g_subprocess_launcher_set_flags(j->spawn,binary ? G_SUBPROCESS_FLAGS_STDERR_PIPE:G_SUBPROCESS_FLAGS_STDOUT_PIPE|G_SUBPROCESS_FLAGS_STDERR_MERGE);
- if(binary) g_subprocess_launcher_set_stdout_file_path(j->spawn,binary);
- GSubprocess *p=g_subprocess_launcher_spawnv(j->spawn,argv,error);if(!p) return FALSE;
+ ScpOutput copy = {0};
+ if (binary) {
+  GFile *file = g_file_new_for_path(binary);
+  copy.output = g_file_create(file, G_FILE_CREATE_PRIVATE, j->cancel, error);
+  g_object_unref(file);
+  if (!copy.output) return FALSE;
+ }
+ g_subprocess_launcher_set_flags(j->spawn, G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+     (binary ? G_SUBPROCESS_FLAGS_STDERR_PIPE : G_SUBPROCESS_FLAGS_STDERR_MERGE));
+ GSubprocess *p = g_subprocess_launcher_spawnv(j->spawn, argv, error);
+ if (!p) {
+  g_clear_object(&copy.output);
+  return FALSE;
+ }
  g_mutex_lock(&j->lock);j->process=g_object_ref(p);if(g_cancellable_is_cancelled(j->cancel)) g_subprocess_force_exit(p);g_mutex_unlock(&j->lock);
+ GThread *writer = NULL;
+ if (binary) {
+  copy.process = p;
+  copy.cancel = j->cancel;
+  writer = g_thread_new("scp-output", scp_copy_output, &copy);
+ }
  GInputStream *stream=binary ? g_subprocess_get_stderr_pipe(p):g_subprocess_get_stdout_pipe(p);GString *log=g_string_new(NULL);gchar buffer[4096];gboolean ok=TRUE;
  while(ok) { gssize n=g_input_stream_read(stream,buffer,sizeof buffer,j->cancel,error);if(n<0) { ok=FALSE;break; }if(!n) break;if(log->len+(gsize)n>262144) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Transfer diagnostics exceed 256 KiB");ok=FALSE;break; }g_string_append_len(log,buffer,n); }
+ if (!ok) g_subprocess_force_exit(p);
+ if (writer) {
+  g_thread_join(writer);
+  g_object_unref(copy.output);
+  if (copy.error) {
+   if (ok) g_propagate_error(error, copy.error);
+   else g_error_free(copy.error);
+   ok = FALSE;
+  }
+ }
  if(ok) ok=g_subprocess_wait(p,j->cancel,error);if(ok && !g_subprocess_get_successful(p)) { gchar *valid=g_utf8_make_valid(log->str,MIN(log->len,(gsize)8192));g_set_error(error,G_IO_ERROR,G_IO_ERROR_FAILED,"Transfer failed: %s",*valid ? valid:"OpenSSH/packing process exited unsuccessfully");g_free(valid);ok=FALSE; }
  if(!ok) { g_subprocess_force_exit(p);g_subprocess_wait(p,NULL,NULL); }
  g_mutex_lock(&j->lock);g_clear_object(&j->process);g_mutex_unlock(&j->lock);g_string_free(log,TRUE);g_object_unref(p);return ok;
