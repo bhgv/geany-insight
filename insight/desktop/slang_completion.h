@@ -8,6 +8,8 @@ gboolean insight_slang_source(const gchar *);
  * NULL declines/fails and lets native completion take over. */
 GPtrArray *insight_slang_complete(const gchar *service,const gchar *path,const gchar *text,
  guint offset,guint rootlen,GPtrArray *paths,GHashTable *buffers,GCancellable *);
+gboolean insight_slang_wave_definition(const gchar *,const gchar *,GPtrArray *,GHashTable *,
+ GCancellable *,gchar **,guint *,guint *);
 gboolean insight_slang_definition(const gchar *,const gchar *,const gchar *,guint,
  GPtrArray *,GHashTable *,GCancellable *,gchar **,guint *,guint *);
 typedef struct {guint64 hits,starts,bypasses;guint entries;gsize bytes;} InsightSlangCacheStats;

@@ -75,6 +75,12 @@ static int open(lua_State *L) {
  if(!api->open_file || !api->open_file(write_host(L)->context,path)) return luaL_error(L,"cannot open document");
  return 0;
 }
+static int waveforms(lua_State *L) {
+ const InsightEditorAPI *api=editor_api(L);
+ if(!api->open_waveforms || !api->open_waveforms(write_host(L)->context))
+  return luaL_error(L,"waveform viewer unavailable");
+ return 0;
+}
 static int save(lua_State *L) {
  const InsightEditorAPI *api=editor_api(L);
  if(!api->save_file || !api->save_file(write_host(L)->context)) return luaL_error(L,"cannot save named document");
@@ -137,6 +143,7 @@ static int has(lua_State *L) {
    if(!strcmp(name,"position")) available=host->api->position!=NULL;
    if(!strcmp(name,"goto_line")) available=host->api->goto_line!=NULL && !host->read_only;
    if(!strcmp(name,"open")) available=host->api->open_file!=NULL && !host->read_only;
+   if(!strcmp(name,"waveforms")) available=host->api->open_waveforms!=NULL && !host->read_only;
    if(!strcmp(name,"save")) available=host->api->save_file!=NULL && !host->read_only;
    if(!strcmp(name,"filename")) available=host->api->filename!=NULL;
    if(!strcmp(name,"selection_range")) available=host->api->selection_range!=NULL;
@@ -328,6 +335,7 @@ static int setup(lua_State *L) {
  lua_pushcfunction(L,position); lua_setfield(L,-2,"position");
  lua_pushcfunction(L,goto_line); lua_setfield(L,-2,"goto_line");
  lua_pushcfunction(L,open); lua_setfield(L,-2,"open");
+ lua_pushcfunction(L,waveforms); lua_setfield(L,-2,"waveforms");
  lua_pushcfunction(L,save); lua_setfield(L,-2,"save");
  lua_pushcfunction(L,filename); lua_setfield(L,-2,"filename");
  lua_pushcfunction(L,selection_range); lua_setfield(L,-2,"selection_range");

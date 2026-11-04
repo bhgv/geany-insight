@@ -21,6 +21,7 @@
 #include "geany.h"
 #include "SciLexer.h"
 #include "insight-workbench.h"
+#include "insight-waveforms.h"
 #include "insight-virtual-list.h"
 #include "insight-scroll-links.h"
 #include "insight-tree-expand.h"
@@ -4443,7 +4444,63 @@ static int native_insert(void *ctx,unsigned long at,const char *text) { return n
 static int native_message(void *ctx,const char *text) {
  NativeHost *h=ctx; if(!g_utf8_validate(text,-1,NULL)) return 0; h->message_set=1; ui_set_statusbar(TRUE,"%s",text); return 1;
 }
-static const InsightEditorAPI native_host_api={.position=native_get_position,.goto_line=native_go_line,.message=native_message,.insert=native_insert,.replace_range=native_replace_range,.line_text=native_line_text,.line_count=native_line_count,.set_selection=native_set_selection,.selection_range=native_selection_range,.filename=native_filename,.save_file=native_save_file,.open_file=native_open_file};
+typedef struct {
+ HdlJob *snapshot;
+ gchar *name, *path;
+ guint line, column;
+} WaveJump;
+static void wave_jump_free(gpointer data) {
+ WaveJump *jump=data;
+ hdl_job_free(jump->snapshot);
+ g_free(jump->name);
+ g_free(jump->path);
+ g_free(jump);
+}
+static void wave_jump_run(GTask *task,gpointer object,gpointer data,GCancellable *cancel) {
+ (void)object;
+ WaveJump *jump=data;
+ HdlJob *snapshot=jump->snapshot;
+ gboolean ok=snapshot->valid && insight_slang_wave_definition(snapshot->service,jump->name,
+     snapshot->paths,snapshot->buffers,cancel,&jump->path,&jump->line,&jump->column);
+ g_task_return_boolean(task,ok);
+}
+static void wave_jump_done(GObject *object,GAsyncResult *result,gpointer data) {
+ (void)object;(void)data;
+ WaveJump *jump=g_task_get_task_data(G_TASK(result));
+ if(!wb.alive || jump->snapshot->epoch!=workbench_epoch ||
+    g_strcmp0(jump->snapshot->project,app->project ? app->project->file_name:NULL)) return;
+ if(g_task_propagate_boolean(G_TASK(result),NULL)) {
+  gchar *path=utils_get_locale_from_utf8(jump->path);
+  diff_source_open(path,jump->line);
+  g_free(path);
+ } else ui_set_statusbar(TRUE,"HDL declaration not found: %s",jump->name);
+}
+static void waveform_source(const gchar *name) {
+ if(!wb.alive || !*name || strlen(name)>4096) return;
+ WaveJump *jump=g_new0(WaveJump,1);
+ jump->snapshot=hdl_snapshot(NULL,FALSE);
+ jump->name=g_strdup(name);
+ GTask *task=g_task_new(NULL,NULL,wave_jump_done,NULL);
+ g_task_set_task_data(task,jump,wave_jump_free);
+ g_task_run_in_thread(task,wave_jump_run);
+ g_object_unref(task);
+}
+static gboolean launch_waveforms(gpointer data) {
+ (void)data;
+ if(!wb.alive) return G_SOURCE_REMOVE;
+ insight_waveforms_open(GTK_WINDOW(main_widgets.window),waveform_source);
+ return G_SOURCE_REMOVE;
+}
+static int native_waveforms(void *context) {
+ (void)context;
+ g_idle_add(launch_waveforms,NULL);
+ return 1;
+}
+static void waveforms_menu(GtkMenuItem *item,gpointer data) {
+ (void)item;
+ native_waveforms(data);
+}
+static const InsightEditorAPI native_host_api={.position=native_get_position,.goto_line=native_go_line,.message=native_message,.insert=native_insert,.replace_range=native_replace_range,.line_text=native_line_text,.line_count=native_line_count,.set_selection=native_set_selection,.selection_range=native_selection_range,.filename=native_filename,.save_file=native_save_file,.open_file=native_open_file,.open_waveforms=native_waveforms};
 static void execute_native(const char *id,const char *source,gsize length) {
  if(wb.lua_running || insight_session_is_running(insight_extensions_session(wb.extensions))) { ui_set_statusbar(TRUE,"Lua command already running"); return; }
  GeanyDocument *doc=document_get_current(); if(!doc) return;
@@ -4761,6 +4818,10 @@ static void create_native_lua(void) {
  GtkWidget *commands=gtk_menu_item_new_with_label("Commands"); wb.lua_commands=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(commands),wb.lua_commands); gtk_container_add(GTK_CONTAINER(wb.lua_menu),commands);
  wb.palette_item=gtk_menu_item_new_with_label("Command palette…"); g_signal_connect(wb.palette_item,"activate",G_CALLBACK(show_native_palette),NULL); gtk_container_add(GTK_CONTAINER(wb.lua_menu),wb.palette_item);
  gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),item); gtk_widget_show_all(item); native_commands_rebuild();
+ GtkWidget *waves=gtk_menu_item_new_with_label(insight_tr("VCD Waveforms…"));
+ gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),waves);
+ g_signal_connect(waves,"activate",G_CALLBACK(waveforms_menu),NULL);
+ gtk_widget_show(waves);
 }
 static void focus_widget_panel(GtkWidget *widget) {
  GtkWidget *owner=gtk_widget_get_toplevel(widget);for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].window==owner && wb.hosts[i].minimized) panel_restore(i); if(GTK_IS_WINDOW(owner) && owner!=main_widgets.window) { gtk_widget_show(owner); gtk_window_present(GTK_WINDOW(owner)); }

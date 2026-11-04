@@ -16,6 +16,7 @@ typedef struct {
  int (*replace_range)(void *,unsigned long,unsigned long,const char *);
  int (*insert)(void *,unsigned long,const char *);
  int (*message)(void *,const char *);
+ int (*open_waveforms)(void *);
 } InsightEditorAPI;
 typedef struct {
  void *context;

@@ -153,13 +153,8 @@ static gboolean positive_position(const gchar *text,guint *value) {
  if(!text || !*text) return FALSE;for(const gchar *p=text;*p;p++) if(!g_ascii_isdigit(*p)) return FALSE;
  guint64 n=g_ascii_strtoull(text,NULL,10);if(!n || n>G_MAXINT) return FALSE;*value=(guint)n;return TRUE;
 }
-gboolean insight_slang_definition(const gchar *service,const gchar *path,const gchar *text,guint offset,
- GPtrArray *paths,GHashTable *buffers,GCancellable *cancel,gchar **target,guint *line,guint *column) {
- *target=NULL;*line=*column=0;if(!path || !text || offset>strlen(text)) return FALSE;
- if(offset && !(g_ascii_isalnum(text[offset]) || text[offset]=='_' || text[offset]=='$') && (g_ascii_isalnum(text[offset-1]) || text[offset-1]=='_' || text[offset-1]=='$')) offset--;
- guint l=1,c=1;for(guint i=0;i<offset;i++) {if(text[i]=='\n') {l++;c=1;}else c++;}
- gchar *ls=g_strdup_printf("%u",l),*cs=g_strdup_printf("%u",c);const gchar *arguments[]={"--editor-definition",path,ls,cs,NULL};
- gchar *reply=query(service,arguments,paths,buffers,cancel);g_free(ls);g_free(cs);gboolean ok=FALSE;
+static gboolean definition_reply(gchar *reply,gchar **target,guint *line,guint *column) {
+ gboolean ok=FALSE;
  if(reply && g_str_has_prefix(reply,"insight-slang-definition-v1\n")) {
   gchar **rows=g_strsplit(reply,"\n",-1);
   if(rows[1] && *rows[1] && rows[2] && !*rows[2] && !rows[3]) {
@@ -169,6 +164,22 @@ gboolean insight_slang_definition(const gchar *service,const gchar *path,const g
    }g_strfreev(fields);
   }g_strfreev(rows);
  }g_free(reply);return ok;
+}
+
+gboolean insight_slang_wave_definition(const gchar *service,const gchar *name,GPtrArray *paths,
+ GHashTable *buffers,GCancellable *cancel,gchar **target,guint *line,guint *column) {
+ *target=NULL;*line=*column=0;
+ const gchar *arguments[]={"--editor-wave-definition",name,NULL};
+ return definition_reply(query(service,arguments,paths,buffers,cancel),target,line,column);
+}
+
+gboolean insight_slang_definition(const gchar *service,const gchar *path,const gchar *text,guint offset,
+ GPtrArray *paths,GHashTable *buffers,GCancellable *cancel,gchar **target,guint *line,guint *column) {
+ *target=NULL;*line=*column=0;if(!path || !text || offset>strlen(text)) return FALSE;
+ if(offset && !(g_ascii_isalnum(text[offset]) || text[offset]=='_' || text[offset]=='$') && (g_ascii_isalnum(text[offset-1]) || text[offset-1]=='_' || text[offset-1]=='$')) offset--;
+ guint l=1,c=1;for(guint i=0;i<offset;i++) {if(text[i]=='\n') {l++;c=1;}else c++;}
+ gchar *ls=g_strdup_printf("%u",l),*cs=g_strdup_printf("%u",c);const gchar *arguments[]={"--editor-definition",path,ls,cs,NULL};
+ gchar *reply=query(service,arguments,paths,buffers,cancel);g_free(ls);g_free(cs);return definition_reply(reply,target,line,column);
 }
 
 void insight_slang_project_free(InsightSlangProject *project) {if(project) {insight_index_free(project->index);g_free(project);}}

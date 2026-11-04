@@ -210,6 +210,8 @@ libgeany_la_SOURCES += \
 	insight-git.c \
 	insight-git.h \
 	insight-workbench.c \
+	insight-waveforms.c \
+	insight-waveforms.h \
 	insight-project-membership.h \
 	insight-virtual-list.c \
 	insight-virtual-list.h \

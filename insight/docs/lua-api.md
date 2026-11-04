@@ -166,3 +166,7 @@ traceback тоже может завершиться ошибкой. Строк�
 `path` — точный путь, `scope` — подстрока, `kind` — точный вид, `limit`
 (1–1024, по умолчанию 256), `offset` (по умолчанию 0). Страницы возвращают
 полное число совпадений. Старый вызов с двумя аргументами сохраняется.
+
+### HDL waveforms
+
+`editor.waveforms()` opens the native VCD file chooser. Scripts can check availability with `editor.has("waveforms")`. The chooser and waveform window run independently of the script invocation.

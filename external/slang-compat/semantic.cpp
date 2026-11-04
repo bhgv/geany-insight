@@ -308,6 +308,7 @@ int main(int argc, char** argv) {
         size_t sourceLine = 0;
         bool editor = mode == "--editor-complete";
         bool definition = mode == "--editor-definition";
+        bool waveDefinition = mode == "--editor-wave-definition";
         size_t sourceColumn = 0;
         std::unordered_map<std::string, std::string> overlays;
         int first = 2;
@@ -328,7 +329,7 @@ int main(int argc, char** argv) {
             if (!sourceLine) throw std::runtime_error("invalid source line");
             scope = argv[first++]; prefix = argv[first++];
         }
-        else if (mode == "--lookup" || mode == "--complete") {
+        else if (waveDefinition || mode == "--lookup" || mode == "--complete") {
             if (first >= argc) throw std::runtime_error("missing scope");
             scope = argv[first++];
             if (mode == "--complete") {
@@ -385,6 +386,17 @@ int main(int argc, char** argv) {
             std::ostringstream output;output << "insight-slang-index-v2\n" << diagnostics << '\n';
             for (const auto& row : index.rows) output << row << '\n';
             std::cout << output.str();return 0;
+        }
+        if (waveDefinition) {
+            std::cout << "insight-slang-definition-v1\n";
+            if (const auto* symbol = root.lookupName(scope)) {
+                if (symbol->location) {
+                    auto location = sources.getFullyOriginalLoc(symbol->location);
+                    std::cout << hex(sources.getFullPath(location.buffer()).string()) << '\t'
+                              << sources.getLineNumber(location) << '\t' << sources.getColumnNumber(location) << '\n';
+                }
+            }
+            return 0;
         }
         if (definition) {
             Jump jump(sources, sourcePath, sourceLine, sourceColumn); root.visit(jump);
