@@ -241,7 +241,7 @@ gboolean insight_completion_definition(GeanyEditor *editor) {
  load();GeanyDocument *doc=editor ? editor->document:NULL;if(!DOC_VALID(doc) || !insight_slang_source(doc->file_name) || sci_get_length(editor->sci)>2*1024*1024) return FALSE;
  gchar word[1025]={0};editor_find_current_word_sciwc(editor,sci_get_current_position(editor->sci),word,sizeof word);if(!*word) return FALSE;
  gchar *service=slang_service();gboolean present=g_file_test(service,G_FILE_TEST_IS_EXECUTABLE);g_free(service);if(!present) return FALSE;
- Completion *c=create(editor);hide(c);c->definition=TRUE;c->semantic_root=0;c->semantic_idle=g_timeout_add(1,semantic_start,c);ui_set_statusbar(TRUE,"%s",insight_tr("Resolving HDL declaration with slang..."));return TRUE;
+ Completion *c=create(editor);hide(c);c->definition=TRUE;c->semantic_root=0;c->semantic_idle=g_timeout_add(150,semantic_start,c);ui_set_statusbar(TRUE,"%s",insight_tr("Resolving HDL declaration with slang..."));return TRUE;
 }
 gboolean insight_completion_semantic(GeanyEditor *editor,gsize rootlen,gboolean force) {
  load();GeanyDocument *doc=editor ? editor->document:NULL;Completion *existing=state(editor);if((existing && existing->bypass) || !settings.semantic || !settings.detailed || !DOC_VALID(doc) || !doc->file_name || (!insight_slang_source(doc->file_name) && (!insight_clang_available() || !insight_clang_source(doc->file_name))) || SEND(editor->sci,SCI_GETREADONLY,0,0) || SEND(editor->sci,SCI_GETSELECTIONS,0,0)!=1 || sci_has_selection(editor->sci)) return FALSE;
