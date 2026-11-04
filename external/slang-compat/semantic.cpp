@@ -2,6 +2,7 @@
 // Read-only, process-isolated native AST service. stdout is one protocol record.
 #include "slang/ast/ASTVisitor.h"
 #include "slang/ast/Compilation.h"
+#include "slang/diagnostics/DiagnosticClient.h"
 #include "slang/ast/Definition.h"
 #include "slang/ast/expressions/MiscExpressions.h"
 #include "slang/ast/expressions/CallExpression.h"
@@ -141,13 +142,15 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
     size_t bytes = 0;
     explicit ProjectIndex(const SourceManager& sources) : sources(sources) {}
     bool located(SourceLocation location) const { return location && sources.getFullPath(location.buffer()).is_absolute(); }
+    void push(std::string row) {
+        if (rows.size() >= 100000 || bytes + row.size() + 1 > 64u * 1024u * 1024u - 128) throw std::runtime_error("HDL index reply exceeds its limits");
+        bytes += row.size() + 1;rows.push_back(std::move(row));
+    }
     void add(const std::string& type, string_view name, SourceLocation location, string_view scope, string_view detail, string_view relation) {
         if (!located(location) || name.empty()) return;
-        if (rows.size() >= 100000) throw std::runtime_error("HDL index exceeds 100000 records");
         std::string row = type + "\t" + hex(name) + "\t" + hex(sources.getFullPath(location.buffer()).string()) + "\t" +
             std::to_string(sources.getLineNumber(location)) + "\t" + std::to_string(sources.getColumnNumber(location)) + "\t" + hex(scope) + "\t" + hex(detail) + "\t" + hex(relation);
-        if (bytes + row.size() + 1 > 64u * 1024u * 1024u - 128) throw std::runtime_error("HDL index reply exceeds 64 MiB");
-        bytes += row.size() + 1; rows.push_back(std::move(row));
+        push(std::move(row));
     }
     void reference(string_view name, SourceRange range, SourceLocation target, string_view kind) {
         if (!located(target)) return;
@@ -192,6 +195,22 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
                 if (const auto* symbol = node.body.findPort(port.name.valueText())) reference(symbol->name, port.name.range(), symbol->location, "port");
             }
         }visitDefault(node);
+    }
+};
+struct IndexDiagnostics : DiagnosticClient {
+    ProjectIndex& index;
+    std::string fallback;
+    IndexDiagnostics(ProjectIndex& index, const std::string& path) : index(index), fallback(ghc::filesystem::weakly_canonical(path).string()) {}
+    void report(const ReportedDiagnostic& diagnostic) override {
+        if (diagnostic.severity == DiagnosticSeverity::Ignored) return;
+        std::string message(diagnostic.formattedMessage);
+        for (char& c : message) if (c == '\r' || c == '\n' || c == '\t') c = ' ';
+        if (message.size() > 16000) {size_t length = 16000;while (length && (static_cast<unsigned char>(message[length]) & 0xc0) == 0x80) --length;message.resize(length);message += "…";}
+        auto location = sourceManager->getFullyOriginalLoc(diagnostic.location);
+        bool located = index.located(location);
+        index.push("G\t" + hex(getSeverityString(diagnostic.severity)) + "\t" + hex(located ? sourceManager->getFullPath(location.buffer()).string() : fallback) + "\t" +
+            std::to_string(located ? sourceManager->getLineNumber(location) : 0) + "\t" + std::to_string(located ? sourceManager->getColumnNumber(location) : 0) + "\t" +
+            hex(toString(diagnostic.originalDiagnostic.code)) + "\t" + hex(message) + "\t" + hex(located ? "located" : "global"));
     }
 };
 struct Collector : ASTVisitor<Collector, true, true> {
@@ -307,7 +326,9 @@ int main(int argc, char** argv) {
         const auto diagnostics = compilation.getAllDiagnostics().size();
         if (mode == "--editor-index") {
             ProjectIndex index(sources);root.visit(index);
-            std::ostringstream output;output << "insight-slang-index-v1\n" << diagnostics << '\n';
+            DiagnosticEngine engine(sources);engine.addClient(std::make_shared<IndexDiagnostics>(index,argv[first]));
+            for (const auto& diagnostic : compilation.getAllDiagnostics()) engine.issue(diagnostic);
+            std::ostringstream output;output << "insight-slang-index-v2\n" << diagnostics << '\n';
             for (const auto& row : index.rows) output << row << '\n';
             std::cout << output.str();return 0;
         }

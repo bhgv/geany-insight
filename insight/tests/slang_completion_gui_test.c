@@ -34,8 +34,17 @@ static gboolean step(gpointer unused) {
   if(!g_str_has_prefix(gtk_label_get_text(GTK_LABEL(status)),"slang:")) return G_SOURCE_CONTINUE;
   GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),>=,1);GtkTreeIter iter;g_assert_true(gtk_tree_model_get_iter_first(model,&iter));gchar *name=NULL,*source=NULL,*relation=NULL;gtk_tree_model_get(model,&iter,7,&name,1,&source,8,&relation,-1);g_assert_cmpstr(name,==,"data_input");g_assert_cmpstr(source,==,top);g_assert_nonnull(strstr(relation,leaf));g_free(name);g_free(source);g_free(relation);
   GtkTreePath *row=gtk_tree_model_get_path(model,&iter);gtk_tree_view_row_activated(GTK_TREE_VIEW(view),row,gtk_tree_view_get_column(GTK_TREE_VIEW(view),0));gtk_tree_path_free(row);g_assert_true(document_get_current()==doc);
-  document_set_text_changed(document_find_by_filename(leaf),FALSE);document_set_text_changed(doc,FALSE);
-  g_print("HDL native GUI: completion, declaration history and semantic Relations panel with unsaved buffers passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
+  sci_set_text(doc->editor->sci,"module top;\nlogic target_signal;\ninitial $display(target_signl);\nendmodule\n\n");sci_set_current_position(doc->editor->sci,sci_get_length(doc->editor->sci),FALSE);
+  GtkWidget *action=named(window,"insight-navigate-hdl-diagnostics");g_assert_nonnull(action);gtk_menu_item_activate(GTK_MENU_ITEM(action));phase=6;return G_SOURCE_CONTINUE;
+ }
+ if(phase==6) {
+  GtkWidget *window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci)),*view=named(window,"insight-relations"),*status=named(window,"insight-relation-status");
+  if(!g_str_has_prefix(gtk_label_get_text(GTK_LABEL(status)),"slang:")) return G_SOURCE_CONTINUE;
+  g_assert_true(gtk_tree_view_column_get_visible(gtk_tree_view_get_column(GTK_TREE_VIEW(view),4)));g_assert_cmpstr(gtk_tree_view_column_get_title(gtk_tree_view_get_column(GTK_TREE_VIEW(view),0)),==,"Severity");
+  GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));GtkTreeIter iter;gboolean found=FALSE;for(gboolean valid=gtk_tree_model_get_iter_first(model,&iter);valid;valid=gtk_tree_model_iter_next(model,&iter)) {gchar *message=NULL,*path=NULL;gulong line=0,column=0;gtk_tree_model_get(model,&iter,8,&message,1,&path,2,&line,9,&column,-1);
+   if(message && strstr(message,"TypoIdentifier")) {g_assert_nonnull(strstr(message,"did you mean"));g_assert_nonnull(strstr(message,"target_signal"));g_assert_cmpstr(path,==,top);g_assert_cmpuint(line,==,3);g_assert_cmpuint(column,==,18);GtkTreePath *row=gtk_tree_model_get_path(model,&iter);gtk_tree_view_row_activated(GTK_TREE_VIEW(view),row,gtk_tree_view_get_column(GTK_TREE_VIEW(view),0));gtk_tree_path_free(row);found=TRUE;}g_free(message);g_free(path);if(found) break;
+  }g_assert_true(found);g_assert_true(document_get_current()==doc);g_assert_cmpint(sci_get_current_line(doc->editor->sci),==,2);gchar *disk=NULL;g_assert_true(g_file_get_contents(top,&disk,NULL,NULL));g_assert_null(strstr(disk,"target_signl"));g_free(disk);
+  document_set_text_changed(document_find_by_filename(leaf),FALSE);document_set_text_changed(doc,FALSE);g_print("HDL native GUI: completion, declaration history, Relations and diagnostic suggestion navigation passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }
  if(!popup()) return G_SOURCE_CONTINUE;
  GtkWidget *list=named(popup(),"insight-completion-list");g_assert_nonnull(list);GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(list));g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,2);

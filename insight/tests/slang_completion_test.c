@@ -4,6 +4,11 @@
 #include <string.h>
 static gpointer cancel_later(gpointer data) {g_usleep(100000);g_cancellable_cancel(data);return NULL;}
 int main(int argc,char **argv) {
+ if(argc>1 && !strcmp(argv[1],"--editor-index")) {
+  gint i=2;while(i<argc && strcmp(argv[i],"--")) i++;if(++i>=argc) return 2;
+  g_print("insight-slang-index-v2\n1\nG\t7761726e696e67\t");for(const guchar *p=(const guchar *)argv[i];*p;p++) g_print("%02x",*p);
+  g_print("\t0\t0\t476c6f62616c54657374\t476c6f62616c20646961676e6f73746963\t676c6f62616c\n");return 0;
+ }
  if(argc>1 && !strcmp(argv[1],"--editor-complete")) {g_usleep(30000000);return 0;}
  g_assert_cmpint(argc,==,2);gchar *dir=g_dir_make_tmp("slang adapter XXXX-separator-XXXXXX",NULL);g_assert_nonnull(dir);
  gchar *leaf=g_build_filename(dir,"leaf.sv",NULL),*top=g_build_filename(dir,"top.sv",NULL);
@@ -33,12 +38,18 @@ int main(int argc,char **argv) {
  InsightSlangProject *project=insight_slang_project(argv[1],paths,buffers,dir,database,cancel);g_assert_nonnull(project);g_assert_false(project->restored);g_assert_true(project->persisted);g_assert_cmpuint(project->diagnostics,==,0);g_assert_cmpuint(insight_index_query(project->index,"data_input",TRUE,NULL,"@hdlref",NULL,0,NULL,0),==,1);g_assert_cmpuint(insight_index_query(project->index,"leaf",TRUE,NULL,"@hdldef",NULL,0,NULL,0),>=,1);insight_slang_project_free(project);
  insight_slang_cache_clear();insight_slang_cache_stats(&before);project=insight_slang_project(argv[1],paths,buffers,dir,database,cancel);g_assert_nonnull(project);g_assert_true(project->restored);insight_slang_project_free(project);insight_slang_cache_stats(&after);g_assert_cmpuint(after.starts,==,before.starts);
  g_hash_table_replace(buffers,leaf,"module leaf; logic data_changed; endmodule\n");project=insight_slang_project(argv[1],paths,buffers,dir,database,cancel);g_assert_nonnull(project);g_assert_false(project->restored);g_assert_cmpuint(project->diagnostics,>,0);insight_slang_project_free(project);
+ insight_slang_cache_clear();project=insight_slang_project(argv[1],paths,buffers,dir,database,cancel);g_assert_nonnull(project);g_assert_true(project->restored);g_assert_cmpuint(project->diagnostics,>,0);g_assert_cmpuint(insight_index_query(project->index,"",FALSE,NULL,"@hdldiag",NULL,0,NULL,0),>,0);insight_slang_project_free(project);
  g_hash_table_replace(buffers,leaf,"`define UNUSED 1\nmodule leaf; logic data_input, data_output; endmodule\n");for(guint i=0;i<2;i++) {project=insight_slang_project(argv[1],paths,buffers,dir,database,cancel);g_assert_nonnull(project);g_assert_false(project->restored);g_assert_true(project->persisted);insight_slang_project_free(project);}g_hash_table_replace(buffers,leaf,(gpointer)original_overlay);
  g_unlink(database);project=insight_slang_project(argv[1],paths,buffers,dir,NULL,cancel);g_assert_nonnull(project);g_assert_false(project->persisted);g_assert_false(g_file_test(database,G_FILE_TEST_EXISTS));insight_slang_project_free(project);g_free(database);g_hash_table_replace(buffers,top,(gpointer)text);
+ const gchar *typo="module top;\nlogic target_signal;\ninitial $display(target_signl);\nendmodule\n";g_hash_table_replace(buffers,top,(gpointer)typo);
+ project=insight_slang_project(argv[1],paths,buffers,dir,NULL,cancel);g_assert_nonnull(project);g_assert_cmpuint(project->diagnostics,>,0);gboolean suggested=FALSE;
+ for(gsize n=0;n<insight_index_count(project->index);n++) {const InsightSymbol *row=insight_index_at(project->index,n);if(!strcmp(row->kind,"@hdldiag") && !strcmp(row->scope,"TypoIdentifier")) {g_assert_cmpuint(row->line,==,3);g_assert_cmpstr(row->signature,==,"18");g_assert_nonnull(strstr(row->type,"target_signal"));suggested=TRUE;}}g_assert_true(suggested);insight_slang_project_free(project);
+ gchar *unchanged=NULL;g_assert_true(g_file_get_contents(top,&unchanged,NULL,NULL));g_assert_cmpstr(unchanged,==,text);g_free(unchanged);
+ project=insight_slang_project(argv[0],paths,buffers,dir,NULL,cancel);g_assert_nonnull(project);const InsightSymbol *global=NULL;g_assert_cmpuint(insight_index_query(project->index,"warning",TRUE,NULL,"@hdldiag",NULL,0,&global,1),==,1);g_assert_cmpstr(global->inheritance,==,"global");g_assert_cmpstr(global->signature,==,"0");insight_slang_project_free(project);g_hash_table_replace(buffers,top,(gpointer)text);
  g_cancellable_cancel(cancel);g_assert_null(insight_slang_complete(argv[1],top,text,offset,5,paths,buffers,cancel));
  g_assert_null(insight_slang_complete("/missing-service",top,text,offset,5,paths,buffers,NULL));
  g_object_unref(cancel);cancel=g_cancellable_new();GThread *thread=g_thread_new("cancel-hdl",cancel_later,cancel);gint64 started=g_get_monotonic_time();
  gchar *self=g_strdup(argv[0]);g_assert_null(insight_slang_complete(self,top,text,offset,5,paths,buffers,cancel));g_free(self);g_thread_join(thread);g_assert_cmpint(g_get_monotonic_time()-started,<,3000000);
  g_object_unref(cancel);g_hash_table_unref(buffers);g_ptr_array_unref(paths);g_unlink(leaf);g_unlink(top);g_rmdir(dir);g_free(leaf);g_free(top);g_free(dir);
- g_print("HDL worker adapter: unsaved cross-file completion, cancellation and missing service fallback declaration navigation and bounded cache invalidation, project DB restore and temporary workspace passed\n");return 0;
+ g_print("HDL worker adapter: unsaved cross-file completion, cancellation and missing service fallback declaration navigation and bounded cache invalidation, project DB restore, diagnostics, typo suggestions and temporary workspace passed\n");return 0;
 }

@@ -122,7 +122,7 @@ with tempfile.TemporaryDirectory(prefix='slang navigation ') as directory:
 print('Native HDL navigation: module/instance/port/value/function targets, overlays and ambiguous elaboration passed')
 
 raw = subprocess.check_output([service, '--editor-index', '--'] + files).decode('utf-8').splitlines()
-assert raw[0] == 'insight-slang-index-v1' and raw[1] == '0'
+assert raw[0] == 'insight-slang-index-v2' and raw[1] == '0'
 rows = [line.split('\t') for line in raw[2:]]
 assert all(len(row) == 8 for row in rows)
 assert any(row[0] == 'D' and bytes.fromhex(row[1]).decode() == 'data_i' for row in rows)
@@ -147,3 +147,20 @@ with tempfile.TemporaryDirectory(prefix='slang include ') as directory:
     assert output[1] == '0', output[:2]
     assert 'old_signal' in header.read_text()
 print('Unsaved include snapshots are primed before source parsing; headers are not duplicate units')
+
+with tempfile.TemporaryDirectory(prefix='slang diagnostics ') as directory:
+    source = Path(directory) / 'typo.sv'
+    source.write_text('module typo;\nlogic target_signal;\ninitial $display(target_signl);\nendmodule\n')
+    output = subprocess.check_output([service, '--editor-index', '--', str(source)]).decode('utf-8').splitlines()
+    diagnostics = [row.split('\t') for row in output[2:] if row.startswith('G\t')]
+    assert int(output[1]) > 0 and diagnostics
+    decoded = [tuple(bytes.fromhex(row[i]).decode('utf-8') if i in (1,2,5,6,7) else row[i] for i in range(8)) for row in diagnostics]
+    suggestion = next(row for row in decoded if row[5] == 'TypoIdentifier')
+    assert suggestion[1] == 'error' and Path(suggestion[2]) == source
+    assert suggestion[3:5] == ('3','18'), suggestion
+    assert 'target_signl' in suggestion[6] and 'target_signal' in suggestion[6] and 'did you mean' in suggestion[6]
+    assert source.read_text().find('target_signl') >= 0
+    source.write_text('module broken;\nlogic signal\nendmodule\n')
+    output = subprocess.check_output([service, '--editor-index', '--', str(source)]).decode('utf-8').splitlines()
+    assert any(row.startswith('G\t') for row in output[2:]) and int(output[1]) > 0
+print('HDL diagnostic protocol: syntax errors, exact typo location and compiler name suggestion passed')

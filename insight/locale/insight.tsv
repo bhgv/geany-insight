@@ -2861,3 +2861,23 @@ Preparing HDL semantic project index…	Подготовка семантиче�
 slang: %u references • %zu declarations • diagnostics: %u • %s%s	slang: %u ссылок • %zu объявлений • диагностик: %u • %s%s
  • saved	 • сохранён
  • memory only	 • только в памяти
+
+Diagnostics (slang HDL)	Диагностика (slang HDL)
+
+HDL diagnostics (slang)…	Диагностика HDL (slang)…
+
+Severity	Уровень
+
+Message / code	Сообщение / код
+
+Project diagnostic	Диагностика проекта
+
+slang: %u messages • %zu declarations • diagnostics: %u • %s%s	slang: %u сообщений • %zu объявлений • диагностик: %u • %s%s
+
+error	ошибка
+
+warning	предупреждение
+
+note	примечание
+
+fatal error	критическая ошибка

@@ -124,7 +124,7 @@ def main(argv=None):
         manifest = {'revision': PIN, 'source': str(source), 'dependencies': DEPS,
                     'cmake': output(['cmake', '--version']).splitlines()[0],
                     'compiler': os.environ.get('CXX', 'c++'), 'deps_dir': str(deps),
-                    'generator': generator, 'editor_backend_enabled': False, 'semantic_protocol': 1}
+                    'generator': generator, 'editor_backend_enabled': False, 'semantic_protocol': 1, 'project_index_protocol': 2}
         (build / 'source-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
         print('slang compatibility library and probe ready: ' + str(build))
         return 0
