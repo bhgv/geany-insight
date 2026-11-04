@@ -959,7 +959,7 @@ static gboolean scan_step(gpointer data) {
  }
  scan_source_file(path); g_free(path); return scan_continue();
 }
-static guint hdl_color_timer;
+static guint hdl_color_timer,hdl_snapshot_idle,hdl_paint_idle,hdl_paint_cursor,hdl_paint_first,hdl_paint_last,hdl_paint_doc;
 static guint64 hdl_color_revision;
 static GCancellable *hdl_color_worker;
 
@@ -967,6 +967,7 @@ static void hdl_clear_document_colors(ScintillaObject *sci)
 {
  if(!g_object_get_data(G_OBJECT(sci),"insight-hdl-painted")) return;
  g_object_set_data(G_OBJECT(sci),"insight-hdl-painted",NULL);
+ g_object_set_data(G_OBJECT(sci),"insight-hdl-spans",NULL);
  SSM(sci,SCI_SETINDICATORCURRENT,INSIGHT_HDL_COLOR,0);
  SSM(sci,SCI_INDICATORCLEARRANGE,0,sci_get_length(sci));
 }
@@ -975,6 +976,8 @@ static void hdl_cancel_colors(void)
 {
  hdl_color_revision++;
  if(hdl_color_timer) {g_source_remove(hdl_color_timer);hdl_color_timer=0;}
+ if(hdl_snapshot_idle) {g_source_remove(hdl_snapshot_idle);hdl_snapshot_idle=0;}
+ if(hdl_paint_idle) {g_source_remove(hdl_paint_idle);hdl_paint_idle=0;}
  if(hdl_color_worker) g_cancellable_cancel(hdl_color_worker);
 }
 
@@ -1922,7 +1925,7 @@ static void semantic_call_tree(const gchar *query,gboolean incoming) {
  if(!fixed) {GeanyDocument *doc=document_get_current();InsightClangResult *r=DOC_VALID(doc) ? insight_clang_ui_result(doc->editor->sci):NULL;if(insight_clang_result_usable(r)) j->usr=insight_clang_symbol_at(r->relations,doc->file_name,sci_get_current_position(doc->editor->sci),sci_get_current_line(doc->editor->sci)+1,query);j->source=DOC_VALID(doc) ? g_strdup(doc->file_name):NULL;}
  wb.search_worker=g_cancellable_new();GTask *task=g_task_new(NULL,wb.search_worker,semantic_calls_done,NULL);g_task_set_task_data(task,j,semantic_calls_free);g_task_run_in_thread(task,semantic_calls_run);g_object_unref(task);set_usage_status("Preparing Clang call snapshot…");
 }
-typedef struct {GPtrArray *paths,*rows,*colors;GHashTable *buffers;gchar *service,*root,*cache,*project,*query,*paint_path;guint paint_doc;InsightSlangProject *result;guint64 epoch,generation,scan_generation;guint applied;gboolean valid,diagnostics,colors_only;} HdlJob;
+typedef struct {GPtrArray *paths,*rows;GArray *colors;GHashTable *buffers;gchar *service,*root,*cache,*project,*query,*paint_path;guint paint_doc;InsightSlangProject *result;guint64 epoch,generation,scan_generation;guint applied;gboolean valid,diagnostics,colors_only;} HdlJob;
 static void hdl_text_cell(GtkTreeViewColumn *column,GtkCellRenderer *renderer,GtkTreeModel *model,GtkTreeIter *iter,gpointer field) {
  (void)column;gchar *value=NULL,*path=NULL;gulong line=0;gint which=GPOINTER_TO_INT(field);gtk_tree_model_get(model,iter,which,&value,USAGE_PATH,&path,USAGE_LINE,&line,-1);
  const gchar *text=value ? value:"";if(wb.usage_mode==12) {if(which==USAGE_SYMBOL) text=insight_tr(text);else if(!path && !line) text=insight_tr("Project diagnostic");}g_object_set(renderer,"text",text,NULL);g_free(value);g_free(path);
@@ -1931,7 +1934,7 @@ static void hdl_position_cell(GtkTreeViewColumn *column,GtkCellRenderer *rendere
  (void)column;gulong value=0;gtk_tree_model_get(model,iter,GPOINTER_TO_INT(field),&value,-1);gchar *text=!value && wb.usage_mode==12 ? g_strdup("—"):g_strdup_printf("%lu",value);g_object_set(renderer,"text",text,NULL);g_free(text);
 }
 static void hdl_job_free(gpointer data) {
- HdlJob *j=data;if(j->result) {retire_index(j->result->index);j->result->index=NULL;insight_slang_project_free(j->result);}g_ptr_array_unref(j->paths);g_ptr_array_unref(j->rows);g_ptr_array_unref(j->colors);g_free(j->paint_path);g_hash_table_unref(j->buffers);g_free(j->service);g_free(j->root);g_free(j->cache);g_free(j->project);g_free(j->query);g_free(j);
+ HdlJob *j=data;if(j->result) {retire_index(j->result->index);j->result->index=NULL;insight_slang_project_free(j->result);}g_ptr_array_unref(j->paths);g_ptr_array_unref(j->rows);g_array_unref(j->colors);g_free(j->paint_path);g_hash_table_unref(j->buffers);g_free(j->service);g_free(j->root);g_free(j->cache);g_free(j->project);g_free(j->query);g_free(j);
 }
 /* Category zero deliberately leaves unsupported facts to the lexer. */
 static guint hdl_color_role(const InsightSymbol *row)
@@ -1951,56 +1954,112 @@ static guint hdl_color_role(const InsightSymbol *row)
  return 0;
 }
 
-static void hdl_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
- (void)source;HdlJob *j=data;if(j->valid) j->result=insight_slang_project(j->service,j->paths,j->buffers,j->root,j->cache,cancel);
- if(j->result) for(gsize i=0;i<insight_index_count(j->result->index);i++) {
-  const InsightSymbol *row=insight_index_at(j->result->index,i);
-  if(!j->colors_only && j->rows->len<2000 && !strcmp(row->kind,j->diagnostics ? "@hdldiag":"@hdlref") && (j->diagnostics || !*j->query || !strcmp(row->name,j->query))) g_ptr_array_add(j->rows,(gpointer)row);
-  if(j->paint_path && j->colors->len<2048 && !strcmp(row->path,j->paint_path) && hdl_color_role(row)) g_ptr_array_add(j->colors,(gpointer)row);
- }
- g_task_return_boolean(task,j->result!=NULL);
-}
+typedef struct {guint line,start,length,role;gboolean declaration,painted;} HdlSpan;
 
 static gboolean hdl_identifier_byte(guchar c)
 {
  return g_ascii_isalnum(c) || c=='_' || c=='$' || c>=128;
 }
 
-static void hdl_paint(const HdlJob *j)
+static gint hdl_span_order(gconstpointer a,gconstpointer b)
 {
- GeanyDocument *doc=j->paint_path ? document_find_by_id(j->paint_doc):NULL;
- if(!DOC_VALID(doc) || g_strcmp0(doc->file_name,j->paint_path)) return;
- const gchar *text=g_hash_table_lookup(j->buffers,j->paint_path);
+ const HdlSpan *x=a,*y=b;
+ if(x->start!=y->start) return x->start<y->start ? -1:1;
+ return (gint)x->declaration-(gint)y->declaration;
+}
+
+static void hdl_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel)
+{
+ (void)source;HdlJob *j=data;
+ GHashTableIter iter;gpointer value;
+ g_hash_table_iter_init(&iter,j->buffers);
+ while(j->valid && g_hash_table_iter_next(&iter,NULL,&value))
+  j->valid=g_utf8_validate(value,-1,NULL);
+ if(j->valid) j->result=insight_slang_project(j->service,j->paths,j->buffers,j->root,j->cache,cancel);
+ const gchar *text=j->paint_path ? g_hash_table_lookup(j->buffers,j->paint_path):NULL;
+ GArray *lines=g_array_new(FALSE,FALSE,sizeof(guint));
+ if(text) {
+  guint offset=0;g_array_append_val(lines,offset);
+  for(;text[offset];offset++) if(text[offset]=='\n' || (text[offset]=='\r' && text[offset+1]!='\n')) {
+   guint next=offset+1;g_array_append_val(lines,next);
+  }
+  g_array_append_val(lines,offset);
+ }
+ if(j->result) for(gsize i=0;i<insight_index_count(j->result->index) && !g_cancellable_is_cancelled(cancel);i++) {
+  const InsightSymbol *row=insight_index_at(j->result->index,i);
+  if(!j->colors_only && j->rows->len<2000 && !strcmp(row->kind,j->diagnostics ? "@hdldiag":"@hdlref") && (j->diagnostics || !*j->query || !strcmp(row->name,j->query))) g_ptr_array_add(j->rows,(gpointer)row);
+  if(!text || !row->line || row->line>=lines->len || strcmp(row->path,j->paint_path)) continue;
+  guint role=hdl_color_role(row);if(!role) continue;
+  guint64 column=g_ascii_strtoull(row->signature,NULL,10);
+  guint start=g_array_index(lines,guint,row->line-1),end=g_array_index(lines,guint,row->line);
+  if(!column || column-1>=end-start) continue;
+  guint pos=start+column-1;gsize n=strlen(row->name);
+  if(!n || n>end-pos || memcmp(text+pos,row->name,n) ||
+     (pos>start && (hdl_identifier_byte(text[pos-1]) || text[pos-1]=='\')) ||
+     (pos+n<end && hdl_identifier_byte(text[pos+n]))) continue;
+  HdlSpan span={.line=row->line-1,.start=pos,.length=n,.role=role,.declaration=!strcmp(row->kind,"@hdldef")};
+  g_array_append_val(j->colors,span);
+ }
+ g_array_unref(lines);
+ g_array_sort(j->colors,hdl_span_order);
+ g_task_return_boolean(task,j->result!=NULL);
+}
+
+static gboolean hdl_paint_visible(gpointer data)
+{
+ (void)data;
+ GeanyDocument *doc=wb.alive ? document_get_current():NULL;
+ if(!DOC_VALID(doc)) {hdl_paint_idle=0;return G_SOURCE_REMOVE;}
  ScintillaObject *sci=doc->editor->sci;
- if(!text || SSM(sci,SCI_GETLEXER,0,0)!=SCLEX_VERILOG) return;
- hdl_clear_document_colors(sci);
- gsize length=strlen(text);
- guint lines=SSM(sci,SCI_GETLINECOUNT,0,0);
- gsize styled=SSM(sci,SCI_GETENDSTYLED,0,0);
+ GArray *spans=g_object_get_data(G_OBJECT(sci),"insight-hdl-spans");
+ if(!spans) {hdl_paint_idle=0;return G_SOURCE_REMOVE;}
+ gint top=SSM(sci,SCI_GETFIRSTVISIBLELINE,0,0),height=SSM(sci,SCI_LINESONSCREEN,0,0);
+ guint first=MAX(0,SSM(sci,SCI_DOCLINEFROMVISIBLE,MAX(0,top-8),0));
+ guint last=MAX(first,SSM(sci,SCI_DOCLINEFROMVISIBLE,top+height+8,0));
+ guint lo=0,hi=spans->len;
+ while(lo<hi) {guint mid=lo+(hi-lo)/2;if(g_array_index(spans,HdlSpan,mid).line<first) lo=mid+1;else hi=mid;}
  guint bg=SSM(sci,SCI_STYLEGETBACK,STYLE_DEFAULT,0);
  const guint light[]={0,0x8b3c66,0x405d9c,0x9b5b18,0x925c77,0x467c35};
  const guint dark[]={0,0xd9a0d5,0x8fc9ed,0xe8cf8c,0xd5a7bd,0x8fcaa0};
  const guint *palette=((bg&255)+((bg>>8)&255)+((bg>>16)&255))<384 ? dark:light;
- g_object_set_data(G_OBJECT(sci),"insight-hdl-painted",GINT_TO_POINTER(1));
+ if(hdl_paint_doc!=doc->id || hdl_paint_first!=first || hdl_paint_last!=last) hdl_paint_cursor=0;
+ hdl_paint_doc=doc->id;hdl_paint_first=first;hdl_paint_last=last;
+ gint64 deadline=g_get_monotonic_time()+1500;
  SSM(sci,SCI_SETINDICATORCURRENT,INSIGHT_HDL_COLOR,0);
+ for(guint i=MAX(lo,hdl_paint_cursor);i<spans->len;i++) {
+  if((i&31)==0 && g_get_monotonic_time()>=deadline) {hdl_paint_cursor=i;return G_SOURCE_CONTINUE;}
+  HdlSpan *span=&g_array_index(spans,HdlSpan,i);
+  if(span->line>last) break;
+  if(span->painted || !SSM(sci,SCI_GETLINEVISIBLE,span->line,0)) continue;
+  if(span->start>=(guint)SSM(sci,SCI_GETENDSTYLED,0,0)) break;
+  span->painted=TRUE;
+  if(SSM(sci,SCI_GETSTYLEAT,span->start,0)==SCE_V_IDENTIFIER) {
+   SSM(sci,SCI_SETINDICATORVALUE,SC_INDICVALUEBIT|palette[span->role],0);
+   SSM(sci,SCI_INDICATORFILLRANGE,span->start,span->length);
+  }
+ }
+ hdl_paint_idle=0;return G_SOURCE_REMOVE;
+}
+
+static void hdl_queue_paint(ScintillaObject *sci)
+{
+ if(!hdl_paint_idle && g_object_get_data(G_OBJECT(sci),"insight-hdl-spans")) {
+  hdl_paint_cursor=0;hdl_paint_idle=g_idle_add_full(G_PRIORITY_LOW,hdl_paint_visible,NULL,NULL);
+ }
+}
+
+static void hdl_paint(const HdlJob *j)
+{
+ GeanyDocument *doc=j->paint_path ? document_find_by_id(j->paint_doc):NULL;
+ if(!DOC_VALID(doc) || g_strcmp0(doc->file_name,j->paint_path)) return;
+ ScintillaObject *sci=doc->editor->sci;
+ if(!g_hash_table_contains(j->buffers,j->paint_path) || SSM(sci,SCI_GETLEXER,0,0)!=SCLEX_VERILOG) return;
+ hdl_clear_document_colors(sci);hdl_paint_cursor=0;
+ g_object_set_data(G_OBJECT(sci),"insight-hdl-painted",GINT_TO_POINTER(1));
+ g_object_set_data_full(G_OBJECT(sci),"insight-hdl-spans",g_array_ref(j->colors),(GDestroyNotify)g_array_unref);
  SSM(sci,SCI_INDICSETSTYLE,INSIGHT_HDL_COLOR,INDIC_TEXTFORE);
  SSM(sci,SCI_INDICSETFLAGS,INSIGHT_HDL_COLOR,SC_INDICFLAG_VALUEFORE);
- /* Paint references first so a declaration at the same location wins. */
- for(guint pass=0;pass<2;pass++) for(guint i=0;i<j->colors->len;i++) {
-  const InsightSymbol *row=g_ptr_array_index(j->colors,i);
-  if((strcmp(row->kind,"@hdldef")==0)!=(pass!=0) || !row->line || row->line>lines) continue;
-  guint64 column=g_ascii_strtoull(row->signature,NULL,10);
-  gsize start=SSM(sci,SCI_POSITIONFROMLINE,row->line-1,0);
-  gsize end=SSM(sci,SCI_GETLINEENDPOSITION,row->line-1,0),n=strlen(row->name);
-  if(!column || start>end || end>length || column-1>end-start) continue;
-  gsize pos=start+column-1;
-  if(!n || n>end-pos || memcmp(text+pos,row->name,n) ||
-     (pos<styled && SSM(sci,SCI_GETSTYLEAT,pos,0)!=SCE_V_IDENTIFIER) ||
-     (pos>start && (hdl_identifier_byte(text[pos-1]) || text[pos-1]=='\\')) ||
-     (pos+n<end && hdl_identifier_byte(text[pos+n]))) continue;
-  SSM(sci,SCI_SETINDICATORVALUE,SC_INDICVALUEBIT|palette[hdl_color_role(row)],0);
-  SSM(sci,SCI_INDICATORFILLRANGE,pos,n);
- }
+ hdl_queue_paint(sci);
 }
 static gboolean hdl_results_apply(gpointer data) {
  GTask *task=data;HdlJob *j=g_task_get_task_data(task);
@@ -2024,10 +2083,15 @@ static void hdl_job_done(GObject *source,GAsyncResult *result,gpointer data) {
  if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.usage_generation) return;g_clear_object(&wb.search_worker);
  if(ok) wb.usage_idle=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,hdl_results_apply,g_object_ref(task),g_object_unref);else set_usage_status("HDL semantic index unavailable or exceeds its limits");
 }
-static HdlJob *hdl_snapshot(const gchar *query,gboolean diagnostics,gboolean colors_only) {
- HdlJob *j=g_new0(HdlJob,1);j->paths=insight_workbench_source_paths(insight_slang_source,257);j->rows=g_ptr_array_new();j->colors=g_ptr_array_new();j->buffers=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);j->service=insight_completion_slang_service();j->query=g_strdup(query);j->project=g_strdup(app->project ? app->project->file_name:NULL);j->root=wb.root && app->project ? utils_get_utf8_from_locale(wb.root):NULL;j->cache=app->project && wb.cache_path ? g_strconcat(wb.cache_path,".hdl",NULL):NULL;j->valid=TRUE;j->diagnostics=diagnostics;j->colors_only=colors_only;j->epoch=workbench_epoch;j->generation=colors_only ? hdl_color_revision:wb.usage_generation;j->scan_generation=wb.scan_generation;
+static HdlJob *hdl_job_new(const gchar *query,gboolean diagnostics,gboolean colors_only) {
+ HdlJob *j=g_new0(HdlJob,1);j->paths=insight_workbench_source_paths(insight_slang_source,257);j->rows=g_ptr_array_new();j->colors=g_array_new(FALSE,FALSE,sizeof(HdlSpan));j->buffers=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);j->service=insight_completion_slang_service();j->query=g_strdup(query);j->project=g_strdup(app->project ? app->project->file_name:NULL);j->root=wb.root && app->project ? utils_get_utf8_from_locale(wb.root):NULL;j->cache=app->project && wb.cache_path ? g_strconcat(wb.cache_path,".hdl",NULL):NULL;j->valid=TRUE;j->diagnostics=diagnostics;j->colors_only=colors_only;j->epoch=workbench_epoch;j->generation=colors_only ? hdl_color_revision:wb.usage_generation;j->scan_generation=wb.scan_generation;
  GeanyDocument *active=document_get_current();
  if(DOC_VALID(active) && insight_slang_source(active->file_name)) {j->paint_path=g_strdup(active->file_name);j->paint_doc=active->id;}
+ return j;
+}
+
+static HdlJob *hdl_snapshot(const gchar *query,gboolean diagnostics) {
+ HdlJob *j=hdl_job_new(query,diagnostics,FALSE);
  GHashTable *seen=g_hash_table_new(g_str_hash,g_str_equal);for(guint i=0;i<j->paths->len;i++) g_hash_table_add(seen,g_ptr_array_index(j->paths,i));gsize total=0;
  for(guint i=0;i<documents_array->len;i++) {GeanyDocument *doc=g_ptr_array_index(documents_array,i);if(!DOC_VALID(doc) || !insight_slang_source(doc->file_name)) continue;
   if(!g_hash_table_contains(seen,doc->file_name)) {g_ptr_array_add(j->paths,g_strdup(doc->file_name));g_hash_table_add(seen,doc->file_name);}gint length=sci_get_length(doc->editor->sci);
@@ -2050,6 +2114,54 @@ static void hdl_colors_done(GObject *source,GAsyncResult *result,gpointer data)
  if(DOC_VALID(active) && active->id==j->paint_doc) hdl_paint(j);
 }
 
+typedef struct {HdlJob *job;guint next;gsize total;gint offset;GString *text;} HdlCapture;
+
+static void hdl_capture_free(gpointer data)
+{
+ HdlCapture *c=data;
+ if(c->job) hdl_job_free(c->job);
+ if(c->text) g_string_free(c->text,TRUE);
+ g_free(c);
+}
+
+static gboolean hdl_capture_step(gpointer data)
+{
+ HdlCapture *c=data;HdlJob *j=c->job;
+ if(!wb.alive || j->generation!=hdl_color_revision || j->scan_generation!=wb.scan_generation) goto done;
+ gint64 deadline=g_get_monotonic_time()+1500;
+ while(c->next<documents_array->len) {
+  GeanyDocument *doc=g_ptr_array_index(documents_array,c->next);
+  if(!DOC_VALID(doc) || !insight_slang_source(doc->file_name)) {c->next++;continue;}
+  gint length=sci_get_length(doc->editor->sci);
+  if(!c->text) {
+   if(length<0 || length>2*1024*1024 || c->total+(gsize)length>32u*1024u*1024u ||
+      g_hash_table_size(j->buffers)>=256) goto done;
+   c->text=g_string_new(NULL);c->offset=0;c->total+=length;
+   if(!g_ptr_array_find_with_equal_func(j->paths,doc->file_name,(GEqualFunc)g_str_equal,NULL))
+    g_ptr_array_add(j->paths,g_strdup(doc->file_name));
+   if(j->paths->len>256) goto done;
+  }
+  if(c->offset<length) {
+   gint end=MIN(length,c->offset+65536),n=end-c->offset;
+   gchar *part=sci_get_contents_range(doc->editor->sci,c->offset,end);
+   if(!part || memchr(part,0,n)) {g_free(part);goto done;}
+   g_string_append_len(c->text,part,n);g_free(part);c->offset=end;
+  }
+  if(c->offset==length) {
+   g_hash_table_insert(j->buffers,g_strdup(doc->file_name),g_string_free(c->text,FALSE));
+   c->text=NULL;c->next++;
+  }
+  if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
+ }
+ if(!j->root && j->paths->len) j->root=g_path_get_dirname(g_ptr_array_index(j->paths,0));
+ hdl_color_worker=g_cancellable_new();
+ GTask *task=g_task_new(NULL,hdl_color_worker,hdl_colors_done,NULL);
+ g_task_set_task_data(task,j,hdl_job_free);c->job=NULL;
+ g_task_run_in_thread(task,hdl_job_run);g_object_unref(task);
+done:
+ hdl_snapshot_idle=0;return G_SOURCE_REMOVE;
+}
+
 static gboolean hdl_auto_colors(gpointer data)
 {
  (void)data;
@@ -2059,17 +2171,15 @@ static gboolean hdl_auto_colors(gpointer data)
     g_object_get_data(G_OBJECT(doc->editor->sci),"insight-hdl-painted")) {
   hdl_color_timer=0;return G_SOURCE_REMOVE;
  }
- if(hdl_color_worker || wb.search_worker || (app->project && wb.restore_worker)) return G_SOURCE_CONTINUE;
+ if(hdl_color_worker || hdl_snapshot_idle || wb.search_worker || (app->project && wb.restore_worker)) return G_SOURCE_CONTINUE;
  hdl_color_timer=0;
  gchar *service=insight_completion_slang_service();
  gboolean available=g_file_test(service,G_FILE_TEST_IS_EXECUTABLE);
  g_free(service);
  if(!available) return G_SOURCE_REMOVE;
- HdlJob *j=hdl_snapshot(NULL,FALSE,TRUE);
- if(!j->valid || j->paths->len>256) {hdl_job_free(j);return G_SOURCE_REMOVE;}
- hdl_color_worker=g_cancellable_new();
- GTask *task=g_task_new(NULL,hdl_color_worker,hdl_colors_done,NULL);
- g_task_set_task_data(task,j,hdl_job_free);g_task_run_in_thread(task,hdl_job_run);g_object_unref(task);
+ HdlCapture *c=g_new0(HdlCapture,1);c->job=hdl_job_new(NULL,FALSE,TRUE);
+ if(c->job->paths->len>256) {hdl_capture_free(c);return G_SOURCE_REMOVE;}
+ hdl_snapshot_idle=g_idle_add_full(G_PRIORITY_LOW,hdl_capture_step,c,hdl_capture_free);
  return G_SOURCE_REMOVE;
 }
 
@@ -2084,7 +2194,7 @@ static void hdl_schedule_colors(void)
 
 static void hdl_references(const gchar *query,gboolean diagnostics) {
  hdl_cancel_colors();
- HdlJob *j=hdl_snapshot(query,diagnostics,FALSE);
+ HdlJob *j=hdl_snapshot(query,diagnostics);
  wb.search_worker=g_cancellable_new();GTask *task=g_task_new(NULL,wb.search_worker,hdl_job_done,NULL);g_task_set_task_data(task,j,hdl_job_free);g_task_run_in_thread(task,hdl_job_run);g_object_unref(task);set_usage_status("Preparing HDL semantic project index…");
  hdl_schedule_colors();
 }
@@ -4425,7 +4535,7 @@ static gboolean file_event_refresh(gpointer data) { (void)data;wb.file_event_idl
 static void native_document_event(GObject *object,GeanyDocument *doc,gpointer data) {
  (void)object;
  if(DOC_VALID(doc) && insight_slang_source(doc->file_name)) {
-  if(!strcmp(data,"document_activate")) hdl_schedule_colors();
+  if(!strcmp(data,"document_activate")) {hdl_queue_paint(doc->editor->sci);hdl_schedule_colors();}
   else hdl_invalidate_colors();
  }
  if(!strcmp(data,"document_close")) insight_search_links_closed(wb.search_links,doc);
@@ -6333,6 +6443,16 @@ void insight_workbench_source_link_notify(GeanyEditor *editor,SCNotification *nt
  if(wb.alive) {
   if(nt->nmhdr.code==SCN_MODIFIED && (nt->modificationType&(SC_MOD_INSERTTEXT|SC_MOD_DELETETEXT)) &&
      insight_slang_source(editor->document->file_name)) hdl_invalidate_colors();
+  if(nt->nmhdr.code==SCN_UPDATEUI && (nt->updated&SC_UPDATE_V_SCROLL)) hdl_queue_paint(editor->sci);
+  if(nt->nmhdr.code==SCN_PAINTED && g_object_get_data(G_OBJECT(editor->sci),"insight-hdl-spans")) {
+   GObject *view=G_OBJECT(editor->sci);
+   gpointer styled=GINT_TO_POINTER((gint)SSM(editor->sci,SCI_GETENDSTYLED,0,0));
+   gpointer height=GINT_TO_POINTER((gint)SSM(editor->sci,SCI_LINESONSCREEN,0,0));
+   if(styled!=g_object_get_data(view,"insight-hdl-styled") || height!=g_object_get_data(view,"insight-hdl-height")) {
+    g_object_set_data(view,"insight-hdl-styled",styled);g_object_set_data(view,"insight-hdl-height",height);
+    hdl_queue_paint(editor->sci);
+   }
+  }
   insight_search_links_notify(wb.search_links,editor,nt);
  }
 }

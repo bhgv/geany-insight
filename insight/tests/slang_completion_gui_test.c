@@ -8,14 +8,17 @@
 #include "ui_utils.h"
 #include <glib/gstdio.h>
 #include <string.h>
-static gchar *root,*profile,*leaf,*top;static GeanyDocument *doc;static guint phase;static gint source_position;
+static gchar *root,*profile,*leaf,*top;static GeanyDocument *doc;static guint phase;static gint source_position,far_position;
 static GtkWidget *popup(void) {GList *windows=gtk_window_list_toplevels();GtkWidget *found=NULL;for(GList *p=windows;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-completion-popup") && gtk_widget_get_visible(p->data)) found=p->data;g_list_free(windows);return found;}
 static GtkWidget *named(GtkWidget *widget,const gchar *name) {if(!g_strcmp0(gtk_widget_get_name(widget),name)) return widget;if(GTK_IS_MENU_ITEM(widget)) {GtkWidget *menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(widget));if(menu) {GtkWidget *found=named(menu,name);if(found) return found;}}if(GTK_IS_CONTAINER(widget)) {GList *children=gtk_container_get_children(GTK_CONTAINER(widget));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found;}return NULL;}
 static gboolean step(gpointer unused) {
  (void)unused;if(!document_get_current()) return G_SOURCE_CONTINUE;
  if(!phase) {
   GeanyDocument *other=document_open_file(leaf,FALSE,NULL,NULL);g_assert_nonnull(other);
-  sci_set_text(other->editor->sci,"module leaf; logic data_input, data_output; endmodule\n");
+  GString *source=g_string_new("module leaf; logic data_input, data_output;\n");
+  for(guint i=0;i<800;i++) g_string_append_c(source,'\n');
+  far_position=source->len+6;
+  g_string_append(source,"logic far_signal;\nendmodule\n");sci_set_text(other->editor->sci,source->str);g_string_free(source,TRUE);
   doc=document_open_file(top,FALSE,NULL,NULL);g_assert_nonnull(doc);
   gchar *text=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1);gchar *prefix=strstr(text,"data_");g_assert_nonnull(prefix);sci_set_current_position(doc->editor->sci,prefix-text+5,FALSE);g_free(text);gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));
   keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_EDITOR_AUTOCOMPLETE);phase++;return G_SOURCE_CONTINUE;
@@ -28,6 +31,14 @@ static gboolean step(gpointer unused) {
  if(phase==4) {
   g_assert_cmpstr(document_get_current()->file_name,==,leaf);g_assert_cmpint(sci_get_current_position(document_get_current()->editor->sci),==,19);
   if(!scintilla_send_message(document_get_current()->editor->sci,SCI_INDICATORVALUEAT,24,19)) return G_SOURCE_CONTINUE;
+  ScintillaObject *sci=document_get_current()->editor->sci;
+  g_assert_cmpint(scintilla_send_message(sci,SCI_INDICATORVALUEAT,24,far_position),==,0);
+  scintilla_send_message(sci,SCI_SETFIRSTVISIBLELINE,800,0);phase=8;return G_SOURCE_CONTINUE;
+ }
+ if(phase==8) {
+  ScintillaObject *sci=document_get_current()->editor->sci;
+  if(!scintilla_send_message(sci,SCI_INDICATORVALUEAT,24,far_position)) return G_SOURCE_CONTINUE;
+  scintilla_send_message(sci,SCI_SETFIRSTVISIBLELINE,0,0);
   GtkWidget *action=named(gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci)),"insight-navigate-hdl-references");g_assert_nonnull(action);gtk_menu_item_activate(GTK_MENU_ITEM(action));phase=5;return G_SOURCE_CONTINUE;
  }
  if(phase==5) {
