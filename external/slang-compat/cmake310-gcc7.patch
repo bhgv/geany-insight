@@ -454,6 +454,19 @@ index 10475a896..60a969048 100644
          }
  
          if (to.isQueue() && !from.isQueue()) {
+diff --git a/source/ast/symbols/ClassSymbols.cpp b/source/ast/symbols/ClassSymbols.cpp
+index fc73b430a..f67e334b8 100644
+--- a/source/ast/symbols/ClassSymbols.cpp
++++ b/source/ast/symbols/ClassSymbols.cpp
+@@ -213,7 +213,7 @@ void ClassType::populate(const Scope& scope, const ClassDeclarationSyntax& synta
+         MethodBuilder builder(comp, funcName, returnType, subroutineKind);
+         builder.addFlags(extraFlags);
+         addMember(builder.symbol);
+-        return builder;
++        return std::optional<MethodBuilder>(std::move(builder));
+     };
+ 
+     makeFunc("randomize", int_t, false, MethodFlags::Virtual | MethodFlags::Randomize);
 diff --git a/source/ast/types/AllTypes.cpp b/source/ast/types/AllTypes.cpp
 index 8a3c7e3a3..00ab52e4f 100644
 --- a/source/ast/types/AllTypes.cpp
