@@ -28,11 +28,12 @@ function New-InsightFolderDialog($Initial) {
     } else {
         @('Geany Insight - locations','Drive','Base folder','MSYS2 tools','Editor sources','Editor installation','Browse...','Apply base folder','Continue','Cancel','Choose a drive and base folder. Locations below can be changed independently.')
     }
+    [Windows.Forms.Application]::EnableVisualStyles()
     $form = New-Object Windows.Forms.Form
     $form.Name = 'InsightLocations'; $form.Text = $texts[0]
     $form.StartPosition = 'CenterScreen'; $form.AutoScaleMode = 'Dpi'
     $area = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-    $form.Size = New-Object Drawing.Size([Math]::Min(850, $area.Width - 40), [Math]::Min(460, $area.Height - 40))
+    $form.Size = New-Object Drawing.Size([Math]::Min(850, $area.Width - 40), [Math]::Min(340, $area.Height - 40))
     $form.MinimumSize = New-Object Drawing.Size(520, 320)
     $form.MaximizeBox = $false
     $table = New-Object Windows.Forms.TableLayoutPanel

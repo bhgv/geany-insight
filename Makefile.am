@@ -792,3 +792,5 @@ dist_insightdocmedia_DATA += insight/docs/media/slang-compat.svg
 EXTRA_DIST += insight/tools/install_slang.py insight/tools/select-windows-folders.ps1
 
 EXTRA_DIST += insight/tools/Build-Windows.cmd
+
+EXTRA_DIST += insight/tests/slang_build_test.py

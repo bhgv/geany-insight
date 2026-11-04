@@ -3,6 +3,10 @@ on:
   push:
     branches: [main]
     paths:
+      - insight/tools/build_editor.py
+      - insight/tools/build_external_slang.py
+      - insight/tools/install_slang.py
+      - insight/tests/slang_build_test.py
       - insight/tools/select-windows-folders.ps1
       - insight/tools/setup-windows.ps1
       - insight/tools/windows-toolchain.json
@@ -23,6 +27,9 @@ jobs:
       - name: Parse and test plans on PowerShell 7
         shell: pwsh
         run: ./insight/tests/windows_toolchain_test.ps1
+      - name: Verify LF/CRLF compatibility patch and install guards
+        shell: pwsh
+        run: python insight/tests/slang_build_test.py
       - name: Install actual UCRT64 build tools using the pinned installer
         shell: powershell
         run: |
@@ -38,6 +45,18 @@ jobs:
           & D:\InsightBuild\tools\msys64\usr\bin\bash.exe --login ($script -replace '\\','/')
           if ($LASTEXITCODE -ne 0) { throw 'slang Windows build failed' }
           if (-not (Test-Path D:\InsightBuild\Editor\libexec\geany-insight\slang\slang.exe)) { throw 'slang missing from selected destination' }
+      - name: Verify installed SDK with spaces in its path
+        shell: powershell
+        run: |
+          $tools='D:\InsightBuild\tools\msys64\ucrt64\bin'
+          $env:PATH="$tools;$env:PATH"
+          & "$tools\python.exe" insight/tools/install_slang.py --build _external-slang --prefix 'D:\InsightBuild\Editor Files'
+          if ($LASTEXITCODE -ne 0) { throw 'SDK staging with spaces failed' }
+          $sdk='D:\InsightBuild\Editor Files\lib\geany-insight\slang'
+          & "$tools\g++.exe" -std=c++17 -DSLANG_STATIC_DEFINE -DNOMINMAX -DWIN32_LEAN_AND_MEAN "-I$sdk\include" external/slang-compat/probe.cpp "-L$sdk\lib" -lsvlang -lfmt -pthread -o "$env:RUNNER_TEMP\slang-sdk-probe.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Installed SDK consumer did not compile' }
+          & "$env:RUNNER_TEMP\slang-sdk-probe.exe" external/slang-compat/fixtures/leaf.sv external/slang-compat/fixtures/top.sv
+          if ($LASTEXITCODE -ne 0) { throw 'Installed SDK elaboration failed' }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

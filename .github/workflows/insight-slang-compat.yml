@@ -6,6 +6,7 @@ on:
       - external/slang
       - external/slang-compat/**
       - insight/tools/build_editor.py
+      - insight/tests/slang_build_test.py
       - insight/tools/install_slang.py
       - insight/tools/build_external_slang.py
       - .github/workflows/insight-slang-compat.yml
@@ -32,6 +33,7 @@ jobs:
             python3 --version
             cmake --version | grep "3.10.2"
             g++ -dumpversion | grep "^7$"
+            python3 insight/tests/slang_build_test.py
             python3 insight/tools/build_editor.py --slang-only --install --prefix /src/_slang-install --jobs 2
             g++ -std=c++17 -DSLANG_STATIC_DEFINE -I/src/_slang-install/lib/geany-insight/slang/include external/slang-compat/probe.cpp -L/src/_slang-install/lib/geany-insight/slang/lib -lsvlang -lfmt -pthread -o /src/_external-slang/installed-sdk-probe
             /src/_external-slang/installed-sdk-probe external/slang-compat/fixtures/leaf.sv external/slang-compat/fixtures/top.sv

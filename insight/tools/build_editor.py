@@ -150,7 +150,7 @@ def execute(args, root=ROOT, run=subprocess.run):
         display_command = ' '.join(shlex.quote(value) for value in step['command'])
         print(f'[{number}/{len(steps)}] {display_command}', flush=True)
         run(step['command'], cwd=cwd, env=environment, check=True)
-    print('Configuration ready:' if args.configure_only else 'Build ready:', args.build_dir)
+    print('Configuration ready:' if args.configure_only else 'Build ready:', args.slang_build_dir if args.slang_only else args.build_dir)
     if args.install:
         print('Installed:', args.prefix)
 

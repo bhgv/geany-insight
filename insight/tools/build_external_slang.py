@@ -11,6 +11,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 PIN = '7efcca2e348ecf1e01d1859f7ea85d6202fc9f91'  # slang v3.0 (last C++17 major)
@@ -52,15 +53,36 @@ def prepare(source, deps):
         raise ValueError('slang revision differs from pinned v3.0; no checkout was reset')
     for name, (url, revision) in DEPS.items():
         checkout(deps / name, url, revision)
-    patch = ROOT / 'external/slang-compat/cmake310-gcc7.patch'
-    command = ['git', '-C', source, 'apply']
-    quiet = dict(stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-    if subprocess.call([str(x) for x in command + ['--reverse', '--check', patch]], **quiet) == 0:
-        return
-    check = subprocess.run([str(x) for x in command + ['--check', patch]], **quiet)
-    if check.returncode:
-        raise ValueError('Compatibility patch conflicts with local slang edits; nothing patched: ' + check.stderr)
-    run(command + [patch])
+    apply_patch(source, ROOT / 'external/slang-compat/cmake310-gcc7.patch')
+
+
+def apply_patch(source, patch):
+    # Match each working file's EOL without relaxing significant whitespace
+    # or rewriting user files before git's all-hunks check has succeeded.
+    data = patch.read_bytes().replace(b'\r\n', b'\n')
+    lines = []
+    crlf = False
+    for line in data.splitlines(keepends=True):
+        if line.startswith(b'diff --git '):
+            name = line.rstrip(b'\n').split(b' b/', 1)[1].decode('utf-8')
+            path = source / name
+            path.resolve().relative_to(source.resolve())
+            contents = path.read_bytes()
+            crlf = contents.count(b'\r\n') > 0 and contents.count(b'\r\n') == contents.count(b'\n')
+        if crlf and line[:1] in (b' ', b'+', b'-') and not line.startswith((b'+++ ', b'--- ')):
+            line = line.rstrip(b'\n') + b'\r\n'
+        lines.append(line)
+    with tempfile.TemporaryDirectory(prefix='insight-slang-patch-') as directory:
+        adjusted = Path(directory) / 'compat.patch'
+        adjusted.write_bytes(b''.join(lines))
+        command = ['git', '-C', str(source), 'apply']
+        quiet = dict(stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        if subprocess.call(command + ['--reverse', '--check', str(adjusted)], **quiet) == 0:
+            return
+        check = subprocess.run(command + ['--check', str(adjusted)], **quiet)
+        if check.returncode:
+            raise ValueError('Compatibility patch conflicts with local slang edits; nothing patched: ' + check.stderr)
+        run(command + [adjusted])
 
 
 def main(argv=None):
