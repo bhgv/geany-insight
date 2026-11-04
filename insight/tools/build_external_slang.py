@@ -75,7 +75,7 @@ def apply_patch(source, patch):
     with tempfile.TemporaryDirectory(prefix='insight-slang-patch-') as directory:
         adjusted = Path(directory) / 'compat.patch'
         adjusted.write_bytes(b''.join(lines))
-        command = ['git', '-C', str(source), 'apply']
+        command = ['git', '-c', 'core.autocrlf=false', '-c', 'core.eol=lf', '-C', str(source), 'apply']
         quiet = dict(stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
         if subprocess.call(command + ['--reverse', '--check', str(adjusted)], **quiet) == 0:
             return

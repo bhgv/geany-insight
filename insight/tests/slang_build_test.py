@@ -20,6 +20,7 @@ class SlangBuild(unittest.TestCase):
                 with tempfile.TemporaryDirectory() as directory:
                     source = Path(directory) / 'source'; source.mkdir()
                     subprocess.check_call(['git','init','-q',str(source)])
+                    subprocess.check_call(['git','-C',str(source),'config','core.autocrlf','true'])
                     original = source / 'file.txt'
                     original.write_bytes(b'old\ncontext\n'.replace(b'\n',source_eol))
                     user = source / 'my.cpp'; user.write_bytes(b'keep my edits\r\n')
