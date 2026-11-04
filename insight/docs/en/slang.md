@@ -36,3 +36,22 @@ Current upstream [build requirements](https://sv-lang.com/building.html) include
 ## Automatic build and staged SDK
 
 `./build.sh --slang-only --install --prefix "$PWD/hdl-tools"` builds and stages only slang, without GTK/Clang prerequisites. Normal editor `--install` also stages the engine. The console tool is under `libexec/geany-insight/slang`; the static SDK is under `lib/geany-insight/slang` with merged/generated headers, dependency headers, `libsvlang.a`, `libfmt.a`, pkg-config metadata and licenses. The compatibility CI compiles the C++ elaboration probe against that installed SDK. Ninja is preferred when available; existing build directories retain their generator.
+
+## Native HDL semantic service
+
+The build also produces `insight-slang-semantic` (`.exe` on Windows). Installation stages it beside the slang CLI in `libexec/geany-insight/slang`. It uses the bundled engine's C++ AST directly, without LSP or a system parser.
+
+```bash
+_external-slang/insight-slang-semantic --lookup top.u_leaf.data_i -- leaf.sv top.sv
+_external-slang/insight-slang-semantic --complete top.u_leaf data_ -- leaf.sv top.sv
+_external-slang/insight-slang-semantic --references -- leaf.sv top.sv
+_external-slang/insight-slang-semantic --symbols -- leaf.sv top.sv
+```
+
+Each request reads the explicit file set and elaborates it together. stdout contains one JSON object: `protocol: 1`, `diagnostics_count`, and `records`. Locations carry an absolute path and one-based line/column. Lookup takes a hierarchical name; completion takes a scope and case-sensitive prefix. Completion deduplicates port/internal-variable pairs. References cover instance-to-module definitions, value accesses and user function calls, including functions in a separate package file. System calls do not acquire invented source declarations.
+
+A nonzero `diagnostics_count` marks results requiring inspection; JSON alone does not establish project correctness. Missing symbols return an empty array. Read/argument errors return nonzero, explain the failure on stderr and leave stdout empty. A 100000-record limit fails without partial JSON. Sources are never modified. An explicit file list can represent a temporary workspace without saving a project.
+
+This prepares the editor integration: **background HDL indexing, navigation menus and the completion popup do not yet consume the service**. Each process reparses its input; persistent AST caching, unsaved overlays, include/define/top options and complete reference coverage are not connected yet. A caller can terminate the process without GTK access. Editor highlighting remains lexical.
+
+The `slang_semantic_protocol` test exercises the real executable: cross-file targets, package function calls, deduplicated completion, exact positions, erroneous input and paths with spaces.

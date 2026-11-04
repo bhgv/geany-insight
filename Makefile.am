@@ -796,3 +796,5 @@ EXTRA_DIST += insight/tools/Build-Windows.cmd
 EXTRA_DIST += insight/tests/slang_build_test.py
 
 dist_insightdocmedia_DATA += insight/docs/media/windows-build-locations.jpg
+
+EXTRA_DIST += external/slang-compat/semantic.cpp external/slang-compat/semantic-test.py

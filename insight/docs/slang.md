@@ -36,3 +36,22 @@ Current upstream [build requirements](https://sv-lang.com/building.html) include
 ## Automatic build and staged SDK
 
 `./build.sh --slang-only --install --prefix "$PWD/hdl-tools"` builds and stages only slang, without GTK/Clang prerequisites. Normal editor `--install` also stages the engine. The console tool is under `libexec/geany-insight/slang`; the static SDK is under `lib/geany-insight/slang` with merged/generated headers, dependency headers, `libsvlang.a`, `libfmt.a`, pkg-config metadata and licenses. The compatibility CI compiles the C++ elaboration probe against that installed SDK. Ninja is preferred when available; existing build directories retain their generator.
+
+## Семантический сервис для HDL
+
+Сборка также создаёт `insight-slang-semantic` (`.exe` в Windows). Установка автоматически помещает его рядом с консольным slang в `libexec/geany-insight/slang`. Сервис обращается непосредственно к C++ AST встроенного slang, без LSP и системного парсера.
+
+```bash
+_external-slang/insight-slang-semantic --lookup top.u_leaf.data_i -- leaf.sv top.sv
+_external-slang/insight-slang-semantic --complete top.u_leaf data_ -- leaf.sv top.sv
+_external-slang/insight-slang-semantic --references -- leaf.sv top.sv
+_external-slang/insight-slang-semantic --symbols -- leaf.sv top.sv
+```
+
+Один запрос читает явно переданные файлы и элаборирует их вместе. Возвращается один JSON-объект: `protocol: 1`, `diagnostics_count` и массив `records`. Позиции содержат абсолютный путь, строку и столбец (с единицы). Поиск принимает полное иерархическое имя; дополнение — область и регистрозависимый префикс. Пары «порт / внутренняя переменная» в дополнении не дублируются. Ссылки включают переходы от экземпляров к определениям модулей, обращения к значениям и вызовы пользовательских функций, в том числе в другом файле пакета. Системные функции не получают выдуманных исходных объявлений.
+
+Ненулевой `diagnostics_count` означает, что результат требует проверки: наличие JSON не доказывает корректность проекта. Отсутствующий символ даёт пустой массив; ошибка чтения/аргументов — ненулевой код возврата, пояснение в stderr и пустой stdout. Ответ ограничен 100000 записями; превышение завершается ошибкой без частичного JSON. Исходники не изменяются. Список файлов может представлять временный набор без сохранённого проекта.
+
+Это слой для следующего подключения к редактору: **автоматическая фоновая индексация HDL, меню переходов и выпадающее дополнение пока его не используют**. Каждый запуск разбирает набор заново; постоянный AST-кэш, несохранённые буферы, параметры include/define/top и полный перечень видов ссылок ещё не подключены. Процесс можно отменить извне без обращения к GTK. Подсветка редактора пока лексическая.
+
+Автопроверка `slang_semantic_protocol` запускает настоящий сервис и проверяет переходы между файлами, вызов функции пакета, дополнение без дублей, точные позиции, ошибочные исходники и пути с пробелами.

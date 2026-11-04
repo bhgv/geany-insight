@@ -26,6 +26,7 @@ def stage(build, prefix):
         raise ValueError('slang build revision differs from the pinned adapter')
     source, deps = Path(info['source']), Path(info['deps_dir'])
     binary = build / 'slang/bin' / ('slang.exe' if sys.platform == 'win32' else 'slang')
+    semantic = build / ('insight-slang-semantic.exe' if sys.platform == 'win32' else 'insight-slang-semantic')
     libraries = [build / 'slang/lib/libsvlang.a', build / 'slang/lib/libfmt.a']
     headers = [(source / 'include/slang', 'slang'), (build / 'slang/source/slang', 'slang'),
                (deps / 'fmt/include/fmt', 'fmt'), (deps / 'unordered_dense/include/ankerl', 'ankerl'),
@@ -34,7 +35,7 @@ def stage(build, prefix):
                 (deps / 'filesystem/LICENSE', 'filesystem.txt'),
                 (deps / 'unordered_dense/LICENSE', 'unordered-dense.txt')]
     # Validate all inputs before writing a partial installation.
-    required = [binary] + libraries + [p for p, _ in licenses] + [source / 'external/span.hpp', source / 'external/flat_hash_map.hpp']
+    required = [binary, semantic] + libraries + [p for p, _ in licenses] + [source / 'external/span.hpp', source / 'external/flat_hash_map.hpp']
     if not all(p.is_file() for p in required) or not all(p.is_dir() for p, _ in headers):
         raise ValueError('Incomplete slang build; run build_external_slang.py first')
     runtime = prefix / 'libexec/geany-insight/slang'
@@ -42,6 +43,7 @@ def stage(build, prefix):
     runtime.mkdir(parents=True, exist_ok=True)
     (sdk / 'lib/pkgconfig').mkdir(parents=True, exist_ok=True)
     shutil.copy2(str(binary), str(runtime / binary.name))
+    shutil.copy2(str(semantic), str(runtime / semantic.name))
     for lib in libraries:
         shutil.copy2(str(lib), str(sdk / 'lib' / lib.name))
     for folder, relative in headers:

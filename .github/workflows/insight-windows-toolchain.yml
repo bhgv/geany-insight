@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
     paths:
+      - external/slang
+      - external/slang-compat/**
       - insight/tools/build_editor.py
       - insight/tools/build_external_slang.py
       - insight/tools/install_slang.py
@@ -45,6 +47,9 @@ jobs:
           & D:\InsightBuild\tools\msys64\usr\bin\bash.exe --login ($script -replace '\\','/')
           if ($LASTEXITCODE -ne 0) { throw 'slang Windows build failed' }
           if (-not (Test-Path D:\InsightBuild\Editor\libexec\geany-insight\slang\slang.exe)) { throw 'slang missing from selected destination' }
+          $env:PATH="D:\InsightBuild\tools\msys64\ucrt64\bin;$env:PATH"
+          & D:\InsightBuild\tools\msys64\ucrt64\bin\python.exe external/slang-compat/semantic-test.py D:\InsightBuild\Editor\libexec\geany-insight\slang\insight-slang-semantic.exe external/slang-compat/fixtures
+          if ($LASTEXITCODE -ne 0) { throw 'installed semantic service failed' }
       - name: Verify installed SDK with spaces in its path
         shell: powershell
         run: |

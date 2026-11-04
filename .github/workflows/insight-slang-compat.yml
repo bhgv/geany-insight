@@ -37,6 +37,7 @@ jobs:
             python3 insight/tools/build_editor.py --slang-only --install --prefix /src/_slang-install --jobs 2
             g++ -std=c++17 -DSLANG_STATIC_DEFINE -I/src/_slang-install/lib/geany-insight/slang/include external/slang-compat/probe.cpp -L/src/_slang-install/lib/geany-insight/slang/lib -lsvlang -lfmt -pthread -o /src/_external-slang/installed-sdk-probe
             /src/_external-slang/installed-sdk-probe external/slang-compat/fixtures/leaf.sv external/slang-compat/fixtures/top.sv
+            python3 external/slang-compat/semantic-test.py /src/_slang-install/libexec/geany-insight/slang/insight-slang-semantic external/slang-compat/fixtures
             python3 insight/tools/build_external_slang.py --prepare-only
           '
       - name: Publish toolchain and compatibility evidence
