@@ -80,8 +80,8 @@ function New-InsightFolderDialog($Initial) {
     $table.Controls.Add($apply,1,6)
     $rootBox=$fields.RootDir
     $rootBox.Add_TextChanged({ if ($rootBox.Text -match '^[A-Za-z]:\\.') { $apply.PerformClick() } }.GetNewClosure())
-    $drive.Add_SelectedIndexChanged({ if ($drive.SelectedItem) { $rootBox.Text=[string]$drive.SelectedItem + $rootBox.Text.Substring([Math]::Min(3,$rootBox.Text.Length)) } }.GetNewClosure())
     if ($drive.Items.Contains($Initial.RootDir.Substring(0,3))) { $drive.SelectedItem=$Initial.RootDir.Substring(0,3) }
+    $drive.Add_SelectedIndexChanged({ if ($drive.SelectedItem) { $rootBox.Text=[string]$drive.SelectedItem + $rootBox.Text.Substring([Math]::Min(3,$rootBox.Text.Length)) } }.GetNewClosure())
     $errorLabel=New-Object Windows.Forms.Label; $errorLabel.Name='LocationError'; $errorLabel.ForeColor=[Drawing.Color]::Firebrick; $errorLabel.AutoSize=$true
     foreach ($field in $fields.Values) { $field.Add_TextChanged({ $errorLabel.Text='' }.GetNewClosure()) }
     $validator=${function:Test-InsightLocations}

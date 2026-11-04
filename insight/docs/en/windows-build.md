@@ -1,3 +1,5 @@
+
+After you click **Continue**, the folder dialog remembers your four paths for the next interactive run. Explicit folder arguments take precedence. A run with `-RootDir` starts with defaults derived from that base, plus any explicit overrides.
 # Build on Windows x64
 
 `build.cmd` automatically limits concurrent jobs to the logical CPU count and approximately one job per 3 GiB of installed RAM. If memory detection fails, it uses up to two jobs. The selected limit applies to Clang, slang and the editor and is printed at the start of the build. To override it, run `build.cmd -BuildEditor -Jobs 8`.

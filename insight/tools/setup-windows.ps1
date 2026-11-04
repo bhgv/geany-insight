@@ -73,7 +73,32 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT -or
 $locationHelper = Join-Path $PSScriptRoot 'select-windows-folders.ps1'
 . $locationHelper
 $locations = @{RootDir=$RootDir; MsysRoot=$MsysRoot; SourceDir=$SourceDir; InstallDir=$InstallDir}
-if (-not $NonInteractive) { $locations = Select-InsightLocations $locations }
+if (-not $NonInteractive) {
+    $settingsKey = 'HKCU:\Software\GeanyInsight'
+    if (-not $PSBoundParameters.ContainsKey('RootDir')) {
+        try {
+            $saved = Get-ItemPropertyValue -LiteralPath $settingsKey -Name BuildLocations -ErrorAction Stop |
+                ConvertFrom-Json
+            $remembered = @{}
+            foreach ($name in $locations.Keys) { $remembered[$name] = $saved.$name }
+            $remembered = Test-InsightLocations $remembered
+            foreach ($name in $remembered.Keys) {
+                if (-not $PSBoundParameters.ContainsKey($name)) { $locations[$name] = $remembered[$name] }
+            }
+        } catch {
+            Write-Verbose 'No usable saved build locations.'
+        }
+    }
+    $locations = Select-InsightLocations $locations
+    try {
+        if (-not (Test-Path -LiteralPath $settingsKey)) {
+            $null = New-Item -Path $settingsKey -ErrorAction Stop
+        }
+        Set-ItemProperty -LiteralPath $settingsKey -Name BuildLocations -Value ($locations | ConvertTo-Json -Compress) -ErrorAction Stop
+    } catch {
+        Write-Warning 'Could not save the selected build locations.'
+    }
+}
 $locations = Test-InsightLocations $locations
 $RootDir=$locations.RootDir; $MsysRoot=$locations.MsysRoot
 $SourceDir=$locations.SourceDir; $InstallDir=$locations.InstallDir
