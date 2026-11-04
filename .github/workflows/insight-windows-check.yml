@@ -23,6 +23,8 @@ jobs:
           update: true
           install: >-
             mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
             mingw-w64-ucrt-x86_64-meson
             mingw-w64-ucrt-x86_64-clang
             mingw-w64-ucrt-x86_64-llvm
@@ -89,6 +91,8 @@ jobs:
           ./master-list-test.exe
           cc -std=c99 -Wall -Wextra -Werror -UNDEBUG insight/tests/master_sync_test.c insight/desktop/master_sync.c insight/desktop/master_list.c insight/desktop/project_files.c -Iinsight/desktop $(pkg-config --cflags --libs gio-2.0) -o master-sync-test.exe
           ./master-sync-test.exe
+      - name: Build and stage the internal HDL engine
+        run: python3 insight/tools/build_editor.py --slang-only --install --prefix "$(cygpath -m "$PWD/portable")"
       - name: Build native editor including internal merge window
         run: |
           meson setup _build --prefix="$(pwd)/portable" --libdir=lib \
