@@ -29,7 +29,8 @@ def resolve(sdk):
                 return path
         raise ValueError('Incomplete internal Clang SDK: missing ' + names[0])
     cpp = first('lib', ('libclang-cpp.so', 'libclang-cpp.dylib', 'libclang-cpp.dll.a', 'clang-cpp.lib'))
-    llvm = first('lib', ('libLLVM.so', 'libLLVM.dylib', 'libLLVM.dll.a', 'LLVM.lib'))
+    # The pinned MinGW build gives the LLVM import library a versioned name.
+    llvm = first('lib', ('libLLVM.so', 'libLLVM.dylib', 'libLLVM.dll.a', 'libLLVM-18.dll.a', 'LLVM.lib'))
     config = first('bin', ('llvm-config', 'llvm-config.exe'))
     return sdk, cpp, llvm, config
 
