@@ -1,0 +1,19 @@
+diff --git a/source/ast/symbols/InstanceSymbols.cpp b/source/ast/symbols/InstanceSymbols.cpp
+--- a/source/ast/symbols/InstanceSymbols.cpp
++++ b/source/ast/symbols/InstanceSymbols.cpp
+@@ -816,13 +816,13 @@
+                     }
+                 }
+ 
+-                return comp.emplace<SimpleAssertionExpr>(Expression::bind(*expr, context),
++                return comp.emplace<SimpleAssertionExpr>(Expression::bind(*expr, context, ASTFlags::StreamingAllowed),
+                                                          std::nullopt);
+             }
+         }
+     }
+ 
+-    return &AssertionExpr::bind(syntax, context);
++    return &AssertionExpr::bind(syntax, context.resetFlags(ASTFlags::StreamingAllowed));
+ }
+ 
+ span<const AssertionExpr* const> UninstantiatedDefSymbol::getPortConnections() const {

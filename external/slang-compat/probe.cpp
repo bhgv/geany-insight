@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "slang/ast/Compilation.h"
 #include "slang/ast/types/Type.h"
+#include "slang/diagnostics/ExpressionsDiags.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
 #include "slang/ast/symbols/ParameterSymbols.h"
@@ -44,6 +45,17 @@ int main(int argc, char** argv) {
     if (assertions.getAllDiagnostics().empty()) {
         std::cerr << "Backport regression: false static assertion produced no diagnostic\n";
         return 8;
+    }
+    slang::ast::Compilation streaming;
+    streaming.addSyntaxTree(slang::syntax::SyntaxTree::fromText(
+        "module unused #(parameter int N); logic [7:0] a; "
+        "external_cell u(.a({<<{a}})); endmodule "
+        "module top; endmodule"));
+    for (const auto& diagnostic : streaming.getAllDiagnostics()) {
+        if (diagnostic.code == slang::diag::BadStreamContext) {
+            std::cerr << "Backport regression: streaming expression rejected in an unresolved port\n";
+            return 9;
+        }
     }
     return 0;
 }

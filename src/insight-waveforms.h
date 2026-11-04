@@ -4,5 +4,5 @@
 #include <gtk/gtk.h>
 
 typedef void (*InsightWaveSource)(const gchar *hierarchy);
-void insight_waveforms_open(GtkWindow *parent, InsightWaveSource navigate);
+void insight_waveforms_open(GtkWindow *parent, const gchar *session_dir, InsightWaveSource navigate);
 #endif

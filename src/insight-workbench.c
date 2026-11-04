@@ -4488,7 +4488,9 @@ static void waveform_source(const gchar *name) {
 static gboolean launch_waveforms(gpointer data) {
  (void)data;
  if(!wb.alive) return G_SOURCE_REMOVE;
- insight_waveforms_open(GTK_WINDOW(main_widgets.window),waveform_source);
+ gchar *sessions=g_build_filename(app->configdir,"insight","waveforms",NULL);
+ insight_waveforms_open(GTK_WINDOW(main_widgets.window),sessions,waveform_source);
+ g_free(sessions);
  return G_SOURCE_REMOVE;
 }
 static int native_waveforms(void *context) {

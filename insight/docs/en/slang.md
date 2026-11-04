@@ -137,8 +137,12 @@ Open `chip.geany` using Project → Open. The project contains existing HDL file
 
 Export digital signals to VCD in Vivado Simulator, then choose **Tools → VCD Waveforms…** in Geany Insight. Select a signal, click the diagram to position the cursor, or use the transition and zoom buttons. The source field starts with the VCD hierarchy. Edit it if the simulator adds an outer scope, then choose **Go to HDL declaration**. Slang resolves the name using project and open HDL files. Captures are limited to 32 MiB, 4096 signals and 250000 changes. Use **Pin track** to compare up to 16 pinned traces alongside the current signal. All traces share the time cursor and zoom. **Earlier** and **Later** pan the visible range. Clicking a trace selects it for transition and declaration navigation.
 
+**Filter signal names…** matches part of the hierarchy without regard to case. Enter selects the first match. Closing the viewer saves its tracks, active signal, cursor and range separately for each VCD path. When a capture changes, missing signals are skipped and the saved range is clamped to the new duration.
+
 ## Upstream backports
 
 The separate `slang-3-backports.patch` preserves the width of large unsized based parameters and fixes the crash when diagnosing parenthesized `$static_assert` comparisons. The compatibility probe exercises both cases.
 
 [slang a93aa7c](https://github.com/MikePopoloski/slang/commit/a93aa7cffb70f257b600356421a96d44eadf8dba) · [slang 44a02d6](https://github.com/MikePopoloski/slang/commit/44a02d64e562d011ada3a1b99f79f4f26f75426c)
+
+`slang-3-streaming-ports.patch` permits streaming concatenations in port connections of unelaborated modules. [Upstream fix](https://github.com/MikePopoloski/slang/commit/0f6721311896b03d55441a37c0df9a554f017ba6)

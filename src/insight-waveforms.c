@@ -21,7 +21,10 @@ typedef struct {
 } Capture;
 typedef struct {
  Capture *capture;
- GtkWidget *window, *selector, *canvas, *value, *source, *pin;
+ GtkWidget *window, *selector, *canvas, *value, *source, *pin, *filter;
+ gchar *session_path;
+ gint active;
+ gboolean rebuilding;
  GArray *tracks;
  guint64 cursor, start, span;
  InsightWaveSource navigate;
@@ -175,7 +178,7 @@ static Capture *parse_capture(const gchar *bytes, gsize length, GError **error) 
 }
 
 static Signal *selected(Viewer *viewer) {
- gint index = gtk_combo_box_get_active(GTK_COMBO_BOX(viewer->selector));
+ gint index = viewer->active;
  return index < 0 ? NULL : viewer->capture->signals->pdata[index];
 }
 
@@ -214,7 +217,7 @@ static void update(Viewer *viewer) {
      MIN(viewer->capture->end, viewer->start + viewer->span), value, strlen(value) > 128 ? "…" : "");
  gtk_label_set_text(GTK_LABEL(viewer->value), label);
  g_free(label);
- gint active = gtk_combo_box_get_active(GTK_COMBO_BOX(viewer->selector));
+ gint active = viewer->active;
  gboolean pinned = pinned_index(viewer, active) >= 0;
  gtk_button_set_label(GTK_BUTTON(viewer->pin), pinned ? "Unpin track" : "Pin track");
  gtk_widget_set_sensitive(viewer->pin, pinned || viewer->tracks->len < WAVE_TRACKS);
@@ -274,7 +277,7 @@ static void draw_trace(Viewer *viewer, Trace *trace, cairo_t *cr, double width) 
 
 static gboolean draw_wave(GtkWidget *widget, cairo_t *cr, gpointer data) {
  Viewer *viewer = data;
- gint active = gtk_combo_box_get_active(GTK_COMBO_BOX(viewer->selector));
+ gint active = viewer->active;
  double width = MAX(1, gtk_widget_get_allocated_width(widget) - TRACK_LABEL_WIDTH);
  guint count = track_count(viewer, active);
  for (guint lane = 0; lane < count; lane++) {
@@ -308,14 +311,25 @@ static gboolean draw_wave(GtkWidget *widget, cairo_t *cr, gpointer data) {
  return FALSE;
 }
 
+static void refresh_selector(Viewer *viewer);
+static void activate_signal(Viewer *viewer, gint index);
+
 static gboolean click_wave(GtkWidget *widget, GdkEventButton *event, gpointer data) {
  Viewer *viewer = data;
  if (event->button != 1 || event->y < 0) return FALSE;
- gint active = gtk_combo_box_get_active(GTK_COMBO_BOX(viewer->selector));
+ gint active = viewer->active;
  guint lane = (guint)event->y / TRACK_HEIGHT;
  if (lane >= track_count(viewer, active)) return FALSE;
  gint signal = track_signal(viewer, lane, active);
- gtk_combo_box_set_active(GTK_COMBO_BOX(viewer->selector), signal);
+ if (signal != active) {
+  activate_signal(viewer, signal);
+  gchar id[16];
+  g_snprintf(id, sizeof id, "%d", signal);
+  viewer->rebuilding = TRUE;
+  if (!gtk_combo_box_set_active_id(GTK_COMBO_BOX(viewer->selector), id))
+   gtk_combo_box_set_active(GTK_COMBO_BOX(viewer->selector), -1);
+  viewer->rebuilding = FALSE;
+ }
  if (event->x >= TRACK_LABEL_WIDTH) {
   double width = MAX(1, gtk_widget_get_allocated_width(widget) - TRACK_LABEL_WIDTH);
   double fraction = CLAMP((event->x - TRACK_LABEL_WIDTH) / width, 0., 1.);
@@ -325,12 +339,53 @@ static gboolean click_wave(GtkWidget *widget, GdkEventButton *event, gpointer da
  return TRUE;
 }
 
-static void select_wave(GtkComboBox *box, gpointer data) {
- (void)box;
- Viewer *viewer = data;
+static void activate_signal(Viewer *viewer, gint index) {
+ viewer->active = index;
  Signal *signal = selected(viewer);
  if (signal) gtk_entry_set_text(GTK_ENTRY(viewer->source), signal->name);
  update(viewer);
+}
+
+static void select_wave(GtkComboBox *box, gpointer data) {
+ Viewer *viewer = data;
+ if (viewer->rebuilding) return;
+ const gchar *id = gtk_combo_box_get_active_id(box);
+ if (id) activate_signal(viewer, (gint)g_ascii_strtoll(id, NULL, 10));
+}
+
+static void refresh_selector(Viewer *viewer) {
+ const gchar *query = gtk_entry_get_text(GTK_ENTRY(viewer->filter));
+ gchar *folded = g_utf8_casefold(query, -1);
+ GtkComboBoxText *selector = GTK_COMBO_BOX_TEXT(viewer->selector);
+ viewer->rebuilding = TRUE;
+ gtk_combo_box_text_remove_all(selector);
+ for (guint i = 0; i < viewer->capture->signals->len; i++) {
+  Signal *signal = viewer->capture->signals->pdata[i];
+  gchar *name = g_utf8_casefold(signal->name, -1);
+  if (strstr(name, folded)) {
+   gchar id[16];
+   g_snprintf(id, sizeof id, "%u", i);
+   gtk_combo_box_text_append(selector, id, signal->name);
+  }
+  g_free(name);
+ }
+ gchar active_id[16];
+ g_snprintf(active_id, sizeof active_id, "%d", viewer->active);
+ gtk_combo_box_set_active_id(GTK_COMBO_BOX(selector), active_id);
+ viewer->rebuilding = FALSE;
+ g_free(folded);
+}
+
+static void filter_changed(GtkSearchEntry *entry, gpointer data) {
+ (void)entry;
+ refresh_selector(data);
+}
+
+static void filter_activate(GtkEntry *entry, gpointer data) {
+ (void)entry;
+ Viewer *viewer = data;
+ refresh_selector(viewer);
+ gtk_combo_box_set_active(GTK_COMBO_BOX(viewer->selector), 0);
 }
 
 static void wave_action(GtkButton *button, gpointer data) {
@@ -361,7 +416,7 @@ static void wave_action(GtkButton *button, gpointer data) {
 static void pin_clicked(GtkButton *button, gpointer data) {
  (void)button;
  Viewer *viewer = data;
- gint active = gtk_combo_box_get_active(GTK_COMBO_BOX(viewer->selector));
+ gint active = viewer->active;
  if (active < 0) return;
  gint index = pinned_index(viewer, active);
  if (index >= 0) g_array_remove_index(viewer->tracks, (guint)index);
@@ -375,19 +430,79 @@ static void source_clicked(GtkButton *button, gpointer data) {
  if (viewer->navigate) viewer->navigate(gtk_entry_get_text(GTK_ENTRY(viewer->source)));
 }
 
+static gint find_signal(Capture *capture, const gchar *name) {
+ if (!name) return -1;
+ for (guint i = 0; i < capture->signals->len; i++)
+  if (!strcmp(((Signal *)capture->signals->pdata[i])->name, name)) return (gint)i;
+ return -1;
+}
+
+static void restore_session(Viewer *viewer) {
+ GKeyFile *session = g_key_file_new();
+ if (viewer->session_path && g_key_file_load_from_file(session, viewer->session_path, G_KEY_FILE_NONE, NULL)) {
+  guint64 total = viewer->span;
+  guint64 span = g_key_file_get_uint64(session, "view", "span", NULL);
+  if (span) viewer->span = MIN(total, span);
+  viewer->start = MIN(total - viewer->span, g_key_file_get_uint64(session, "view", "start", NULL));
+  viewer->cursor = MIN(viewer->capture->end, g_key_file_get_uint64(session, "view", "cursor", NULL));
+  gchar *active = g_key_file_get_string(session, "view", "active", NULL);
+  gint found = find_signal(viewer->capture, active);
+  if (found >= 0) viewer->active = found;
+  g_free(active);
+  gsize length = 0;
+  gchar **names = g_key_file_get_string_list(session, "view", "tracks", &length, NULL);
+  for (gsize i = 0; i < MIN(length, WAVE_TRACKS); i++) {
+   gint index = find_signal(viewer->capture, names[i]);
+   if (index >= 0 && pinned_index(viewer, index) < 0)
+    g_array_append_val(viewer->tracks, index);
+  }
+  g_strfreev(names);
+ }
+ g_key_file_unref(session);
+}
+
+static void save_session(Viewer *viewer) {
+ if (!viewer->session_path) return;
+ gchar *directory = g_path_get_dirname(viewer->session_path);
+ if (g_mkdir_with_parents(directory, 0700) == 0) {
+  GKeyFile *session = g_key_file_new();
+  g_key_file_set_uint64(session, "view", "span", viewer->span);
+  g_key_file_set_uint64(session, "view", "start", viewer->start);
+  g_key_file_set_uint64(session, "view", "cursor", viewer->cursor);
+  Signal *active = selected(viewer);
+  if (active) g_key_file_set_string(session, "view", "active", active->name);
+  const gchar *names[WAVE_TRACKS];
+  for (guint i = 0; i < viewer->tracks->len; i++) {
+   Signal *signal = viewer->capture->signals->pdata[g_array_index(viewer->tracks, gint, i)];
+   names[i] = signal->name;
+  }
+  if (viewer->tracks->len) g_key_file_set_string_list(session, "view", "tracks", names, viewer->tracks->len);
+  gsize length = 0;
+  gchar *contents = g_key_file_to_data(session, &length, NULL);
+  g_file_set_contents(viewer->session_path, contents, length, NULL);
+  g_free(contents);
+  g_key_file_unref(session);
+ }
+ g_free(directory);
+}
+
 static void viewer_free(gpointer data) {
  Viewer *viewer = data;
+ save_session(viewer);
+ g_free(viewer->session_path);
  capture_free(viewer->capture);
  g_array_unref(viewer->tracks);
  g_free(viewer);
 }
 
-static void show_capture(GtkWindow *parent, Capture *capture, InsightWaveSource navigate) {
+static void show_capture(GtkWindow *parent, Capture *capture, const gchar *session_path, InsightWaveSource navigate) {
  Viewer *viewer = g_new0(Viewer, 1);
  viewer->capture = capture;
  viewer->tracks = g_array_new(FALSE, FALSE, sizeof(gint));
  viewer->span = MAX(G_GUINT64_CONSTANT(1), capture->end);
  viewer->navigate = navigate;
+ viewer->session_path = g_strdup(session_path);
+ restore_session(viewer);
  viewer->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
  gtk_window_set_title(GTK_WINDOW(viewer->window), "VCD Waveforms");
  gtk_window_set_transient_for(GTK_WINDOW(viewer->window), parent);
@@ -398,8 +513,11 @@ static void show_capture(GtkWindow *parent, Capture *capture, InsightWaveSource 
  gtk_container_set_border_width(GTK_CONTAINER(box), 10);
  gtk_container_add(GTK_CONTAINER(viewer->window), box);
  viewer->selector = gtk_combo_box_text_new();
- for (guint i = 0; i < capture->signals->len; i++)
-  gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(viewer->selector), ((Signal *)capture->signals->pdata[i])->name);
+ viewer->filter = gtk_search_entry_new();
+ gtk_entry_set_placeholder_text(GTK_ENTRY(viewer->filter), "Filter signal names…");
+ gtk_box_pack_start(GTK_BOX(box), viewer->filter, FALSE, FALSE, 0);
+ g_signal_connect(viewer->filter, "search-changed", G_CALLBACK(filter_changed), viewer);
+ g_signal_connect(viewer->filter, "activate", G_CALLBACK(filter_activate), viewer);
  GtkWidget *signal_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
  gtk_box_pack_start(GTK_BOX(box), signal_row, FALSE, FALSE, 0);
  gtk_box_pack_start(GTK_BOX(signal_row), viewer->selector, TRUE, TRUE, 0);
@@ -436,15 +554,17 @@ static void show_capture(GtkWindow *parent, Capture *capture, InsightWaveSource 
  g_signal_connect(viewer->canvas, "draw", G_CALLBACK(draw_wave), viewer);
  g_signal_connect(viewer->canvas, "button-press-event", G_CALLBACK(click_wave), viewer);
  g_signal_connect(viewer->selector, "changed", G_CALLBACK(select_wave), viewer);
- gtk_combo_box_set_active(GTK_COMBO_BOX(viewer->selector), 0);
+ refresh_selector(viewer);
+ activate_signal(viewer, viewer->active);
  gtk_widget_show_all(viewer->window);
 }
 
-typedef struct { GWeakRef parent; gchar *path; InsightWaveSource navigate; } Load;
+typedef struct { GWeakRef parent; gchar *path, *session_path; InsightWaveSource navigate; } Load;
 static void load_free(gpointer data) {
  Load *load = data;
  g_weak_ref_clear(&load->parent);
  g_free(load->path);
+ g_free(load->session_path);
  g_free(load);
 }
 static void load_capture(GTask *task, gpointer object, gpointer data, GCancellable *cancel) {
@@ -480,7 +600,7 @@ static void load_done(GObject *object, GAsyncResult *result, gpointer data) {
  GtkWindow *parent = g_weak_ref_get(&load->parent);
  GError *error = NULL;
  Capture *capture = g_task_propagate_pointer(task, &error);
- if (parent && capture) show_capture(parent, capture, load->navigate);
+ if (parent && capture) show_capture(parent, capture, load->session_path, load->navigate);
  else {
   if (capture) capture_free(capture);
   if (parent && error) {
@@ -494,7 +614,7 @@ static void load_done(GObject *object, GAsyncResult *result, gpointer data) {
  if (parent) g_object_unref(parent);
 }
 
-void insight_waveforms_open(GtkWindow *parent, InsightWaveSource navigate) {
+void insight_waveforms_open(GtkWindow *parent, const gchar *session_dir, InsightWaveSource navigate) {
  GtkWidget *dialog = gtk_file_chooser_dialog_new("Open VCD waveform", parent, GTK_FILE_CHOOSER_ACTION_OPEN,
      "_Cancel", GTK_RESPONSE_CANCEL, "_Open", GTK_RESPONSE_ACCEPT, NULL);
  GtkFileFilter *filter = gtk_file_filter_new();
@@ -508,6 +628,13 @@ void insight_waveforms_open(GtkWindow *parent, InsightWaveSource navigate) {
  Load *load = g_new0(Load, 1);
  g_weak_ref_init(&load->parent, parent);
  load->path = path;
+ if (session_dir) {
+  gchar *canonical = g_canonicalize_filename(path, NULL);
+  gchar *key = g_compute_checksum_for_string(G_CHECKSUM_SHA256, canonical, -1);
+  load->session_path = g_build_filename(session_dir, key, NULL);
+  g_free(key);
+  g_free(canonical);
+ }
  load->navigate = navigate;
  GTask *task = g_task_new(NULL, NULL, load_done, NULL);
  g_task_set_task_data(task, load, load_free);
