@@ -15,6 +15,8 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 progress rendering can severely slow binary downloads.
+$ProgressPreference = 'SilentlyContinue'
 $manifestPath = Join-Path $PSScriptRoot 'windows-toolchain.json'
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 if ($Help) {
