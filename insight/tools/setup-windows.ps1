@@ -82,7 +82,15 @@ $bash = Join-Path $MsysRoot 'usr\bin\bash.exe'
 $envNames = @('MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL','INSIGHT_BOOTSTRAP_INSTALL','INSIGHT_BOOTSTRAP_PROVIDER')
 $previous = @{}
 foreach ($name in $envNames) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
-function Invoke-Msys([string]$Script, [switch]$AllowCoreRestart) {
+function Wait-InsightProcess([Diagnostics.Process]$Child, [string]$Stage) {
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    while (-not $Child.WaitForExit(20000)) {
+        Write-Host ('[Running] {0} - elapsed {1:hh\:mm\:ss}' -f $Stage, $clock.Elapsed)
+    }
+    return $Child.ExitCode
+}
+
+function Invoke-Msys([string]$Script, [string]$Stage, [switch]$AllowCoreRestart) {
     # A UTF-8/LF file avoids native argument quoting and CRLF stdin differences
     # between Windows PowerShell 5.1 and PowerShell 7.
     $scriptFile = [IO.Path]::GetTempFileName()
@@ -93,7 +101,8 @@ function Invoke-Msys([string]$Script, [switch]$AllowCoreRestart) {
     } finally {
         Remove-Item -LiteralPath $scriptFile -Force
     }
-    if ($code -ne 0 -and -not $AllowCoreRestart) { throw "MSYS2 command failed ($code). Rerun after fixing the reported error." }
+    if ($code -ne 0 -and -not $AllowCoreRestart) { throw "${Stage}: MSYS2 exited with code $code. See the output above." }
+    if ($code -ne 0) { Write-Host "[Resume] $Stage exited with code $code; continuing in a fresh MSYS2 shell." }
     return $code
 }
 function Receive-InsightInstaller([string]$Url, [string]$Destination) {
@@ -157,8 +166,9 @@ try {
         $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
         if ($hash -ne $manifest.installer.sha256) { throw "Installer SHA256 mismatch. Remove $installer and retry." }
         Write-Host '[Install] MSYS2 (the installer reports its own progress)...'
-        $process = Start-Process -FilePath $installer -ArgumentList @('in','--confirm-command','--accept-messages','--root',($MsysRoot -replace '\\','/')) -Wait -PassThru
-        if ($process.ExitCode -ne 0) { throw "MSYS2 installer failed ($($process.ExitCode))." }
+        $process = Start-Process -FilePath $installer -ArgumentList @('in','--confirm-command','--accept-messages','--root',($MsysRoot -replace '\\','/')) -PassThru
+        $code = Wait-InsightProcess $process 'MSYS2 installer'
+        if ($code -ne 0) { throw "MSYS2 installer failed ($code)." }
         if (-not (Test-Path -LiteralPath $bash)) { throw 'Installer did not create usr\bin\bash.exe.' }
     }
     $env:MSYSTEM = 'UCRT64'
@@ -167,10 +177,10 @@ try {
     # Core updates may terminate their shell; always resume in a new login shell.
     # Only this first exit is tolerated; the second full upgrade must succeed.
     Write-Host '[Update] MSYS2 (close all other MSYS2 terminals first)...'
-    $null = Invoke-Msys 'pacman -Syu --noconfirm' -AllowCoreRestart
-    $null = Invoke-Msys 'set -e; pacman -Syu --noconfirm'
+    $null = Invoke-Msys 'pacman -Syu --noconfirm' -Stage 'MSYS2 core update' -AllowCoreRestart
+    $null = Invoke-Msys 'set -e; pacman -Syu --noconfirm' -Stage 'MSYS2 full update'
     Write-Host '[Packages] Downloading and installing UCRT64 build tools...'
-    $null = Invoke-Msys @'
+    $null = Invoke-Msys -Stage 'UCRT64 packages' -Script @'
 set -euo pipefail
 read -r -a packages <<< "$INSIGHT_BOOTSTRAP_PACKAGES"
 pacman -S --needed --noconfirm "${packages[@]}"
@@ -189,7 +199,7 @@ pacman -Q "${packages[@]}"
         $env:INSIGHT_BOOTSTRAP_SOURCE = [IO.Path]::GetFullPath($SourceDir)
         $env:INSIGHT_BOOTSTRAP_FETCH = $manifest.repository
         $env:INSIGHT_BOOTSTRAP_INTERNAL = if ($ClangProvider -eq 'Internal') { '1' } else { '0' }
-        $null = Invoke-Msys @'
+        $null = Invoke-Msys -Stage 'Git source checkout' -Script @'
 set -euo pipefail
 source_dir=$(cygpath -u "$INSIGHT_BOOTSTRAP_SOURCE")
 if [ -d "$source_dir/.git" ]; then
@@ -209,7 +219,7 @@ git -C "$source_dir" rev-parse HEAD
         Write-Host "[Build] Clang provider: $ClangProvider; building slang and Geany Insight for $InstallDir"
         $env:INSIGHT_BOOTSTRAP_INSTALL=$InstallDir
         $env:INSIGHT_BOOTSTRAP_PROVIDER=$ClangProvider.ToLowerInvariant()
-        $null = Invoke-Msys @'
+        $null = Invoke-Msys -Stage 'Clang, slang and editor build' -Script @'
 set -euo pipefail
 cd "$(cygpath -u "$INSIGHT_BOOTSTRAP_SOURCE")"
 export CC=gcc CXX=g++

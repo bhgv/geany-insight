@@ -21,7 +21,12 @@ exit /b 0
 
 :build
 powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "%insight_setup%" -UseCheckout -BuildEditor
-exit /b %errorlevel%
+set "insight_exit=%errorlevel%"
+if not "%insight_exit%"=="0" (
+    echo Build failed with exit code %insight_exit%. See the messages above.
+    pause
+)
+exit /b %insight_exit%
 
 :plan
 powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "%insight_setup%" -UseCheckout -BuildEditor -Plan
