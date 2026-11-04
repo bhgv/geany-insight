@@ -6,6 +6,8 @@ param(
     [string]$RootDir = '',
     [string]$MsysRoot = '',
     [string]$CacheDir = '',
+    [ValidatePattern('^https://[A-Za-z0-9.-]+(?::[0-9]+)?(?:/[A-Za-z0-9._~-]+)*/?$')]
+    [string]$MsysMirror = 'https://repo.msys2.org',
     [ValidateSet('Internal', 'System', 'Disabled')][string]$ClangProvider = 'Internal',
     [switch]$Autotools,
     [switch]$Packaging,
@@ -30,6 +32,7 @@ Geany Insight Windows x64 toolchain bootstrap
   .\setup-windows.ps1 [-MsysRoot C:\msys64] [-ClangProvider Internal|System|Disabled]
     [-FetchSources] [-SourceDir C:\src\geany-insight] [-Autotools] [-Packaging]
     [-RootDir D:\Development\Insight] [-InstallDir PATH] [-CacheDir PATH]
+    [-MsysMirror https://repo.msys2.org]
     [-BuildEditor] [-UseCheckout] [-NonInteractive] [-Plan] [-Help]
 From a repository checkout: build.cmd -BuildEditor
 -UseCheckout defaults SourceDir to the checkout containing this script.
@@ -58,7 +61,7 @@ if ($Autotools) { $packages += @($manifest.packages.autotools) }
 if ($Packaging) { $packages += @($manifest.packages.packaging) }
 if ($ClangProvider -eq 'System') { $packages += @($manifest.packages.systemClang) }
 if ($Plan) {
-    [ordered]@{ msysRoot=$MsysRoot; installer=$manifest.installer; packages=$packages;
+    [ordered]@{ msysRoot=$MsysRoot; msysMirror=$MsysMirror; installer=$manifest.installer; packages=$packages;
         clangProvider=$ClangProvider; fetchSources=[bool]$FetchSources; sourceDir=$SourceDir; rootDir=$RootDir; installDir=$InstallDir; cacheDir=$CacheDir; buildEditor=[bool]$BuildEditor; nonInteractive=[bool]$NonInteractive } |
         ConvertTo-Json -Depth 6
     return
@@ -79,7 +82,7 @@ if ($MsysRoot -notmatch '^[A-Za-z]:\\[A-Za-z0-9_\\.\-]+$') {
 }
 $MsysRoot = [IO.Path]::GetFullPath($MsysRoot).TrimEnd('\')
 $bash = Join-Path $MsysRoot 'usr\bin\bash.exe'
-$envNames = @('MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL','INSIGHT_BOOTSTRAP_INSTALL','INSIGHT_BOOTSTRAP_PROVIDER')
+$envNames = @('MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_MIRROR','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL','INSIGHT_BOOTSTRAP_INSTALL','INSIGHT_BOOTSTRAP_PROVIDER')
 $previous = @{}
 foreach ($name in $envNames) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 function Wait-InsightProcess([Diagnostics.Process]$Child, [string]$Stage) {
@@ -96,14 +99,44 @@ function Invoke-Msys([string]$Script, [string]$Stage, [switch]$AllowCoreRestart)
     $scriptFile = [IO.Path]::GetTempFileName()
     try {
         [IO.File]::WriteAllText($scriptFile, ($Script.Replace("`r", '') + "`n"), (New-Object Text.UTF8Encoding($false)))
-        & $bash --login ($scriptFile -replace '\\','/') | Out-Host
-        $code = $LASTEXITCODE
+        $scriptArg = '"' + ($scriptFile -replace '\\','/') + '"'
+        $child = Start-Process -FilePath $bash -ArgumentList @('--login', $scriptArg) -NoNewWindow -PassThru
+        $code = Wait-InsightProcess $child $Stage
     } finally {
         Remove-Item -LiteralPath $scriptFile -Force
     }
     if ($code -ne 0 -and -not $AllowCoreRestart) { throw "${Stage}: MSYS2 exited with code $code. See the output above." }
     if ($code -ne 0) { Write-Host "[Resume] $Stage exited with code $code; continuing in a fresh MSYS2 shell." }
     return $code
+}
+function Invoke-InsightPacman([string]$Script, [string]$Stage, [switch]$AllowCoreRestart) {
+    # Preserve the installed mirror fallbacks and signature policy.
+    $prefix = @'
+set -e
+config=$(mktemp)
+trap 'rm -f "$config"' EXIT
+awk -v base="$INSIGHT_BOOTSTRAP_MIRROR" '
+    { print }
+    /^[[:space:]]*\[(msys|mingw32|mingw64|ucrt64|clang64|clangarm64|clang32)\][[:space:]]*$/ {
+        if ($0 ~ /\[msys\]/) print "Server = " base "/msys/$arch/"
+        else print "Server = " base "/mingw/$repo/"
+    }
+' /etc/pacman.conf > "$config"
+pacman() { command pacman --config "$config" "$@"; }
+'@
+    $limit = if ($AllowCoreRestart) { 1 } else { 3 }
+    for ($attempt = 1; $attempt -le $limit; $attempt++) {
+        try {
+            $null = Invoke-Msys ($prefix + [char]10 + $Script) -Stage $Stage -AllowCoreRestart:$AllowCoreRestart
+            return
+        } catch {
+            if ($attempt -eq $limit) {
+                throw "$($_.Exception.Message) Check the MSYS2 mirror, or rerun with -MsysMirror <HTTPS base URL>."
+            }
+            Write-Host "[Retry] $($_.Exception.Message) Retrying $Stage ($($attempt + 1)/$limit) in 5 seconds."
+            Start-Sleep -Seconds 5
+        }
+    }
 }
 function Receive-InsightInstaller([string]$Url, [string]$Destination) {
     $response = $null
@@ -173,14 +206,16 @@ try {
     }
     $env:MSYSTEM = 'UCRT64'
     $env:CHERE_INVOKING = '1'
+    $env:INSIGHT_BOOTSTRAP_MIRROR = $MsysMirror.TrimEnd('/')
+    Write-Host "[Mirror] $MsysMirror (installed mirrors remain available as fallbacks)"
     $env:INSIGHT_BOOTSTRAP_PACKAGES = $packages -join ' '
     # Core updates may terminate their shell; always resume in a new login shell.
     # Only this first exit is tolerated; the second full upgrade must succeed.
     Write-Host '[Update] MSYS2 (close all other MSYS2 terminals first)...'
-    $null = Invoke-Msys 'pacman -Syu --noconfirm' -Stage 'MSYS2 core update' -AllowCoreRestart
-    $null = Invoke-Msys 'set -e; pacman -Syu --noconfirm' -Stage 'MSYS2 full update'
+    Invoke-InsightPacman 'pacman -Syu --noconfirm' -Stage 'MSYS2 core update' -AllowCoreRestart
+    Invoke-InsightPacman 'set -e; pacman -Syu --noconfirm' -Stage 'MSYS2 full update'
     Write-Host '[Packages] Downloading and installing UCRT64 build tools...'
-    $null = Invoke-Msys -Stage 'UCRT64 packages' -Script @'
+    Invoke-InsightPacman -Stage 'UCRT64 packages' -Script @'
 set -euo pipefail
 read -r -a packages <<< "$INSIGHT_BOOTSTRAP_PACKAGES"
 pacman -S --needed --noconfirm "${packages[@]}"

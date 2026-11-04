@@ -17,6 +17,9 @@ foreach ($suffix in @('gcc','gtk3','pkgconf','meson','ninja','cmake','python','p
     if ($plan.packages -notcontains "mingw-w64-ucrt-x86_64-$suffix") { throw "Missing $suffix" }
 }
 if ($plan.packages -contains 'mingw-w64-ucrt-x86_64-clang') { throw 'Internal selected system Clang.' }
+if ($plan.msysMirror -ne 'https://repo.msys2.org') { throw 'Incorrect default MSYS2 mirror.' }
+$mirrorPlan = (& $scriptPath -Plan -MsysMirror 'https://example.org/msys2' | Out-String) | ConvertFrom-Json
+if ($mirrorPlan.msysMirror -ne 'https://example.org/msys2') { throw 'Mirror override lost.' }
 $system = (& $scriptPath -Plan -ClangProvider System -Autotools -Packaging | Out-String) | ConvertFrom-Json
 foreach ($suffix in @('clang','llvm','autotools','nsis')) {
     if ($system.packages -notcontains "mingw-w64-ucrt-x86_64-$suffix") { throw "Missing optional $suffix" }

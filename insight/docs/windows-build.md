@@ -4,6 +4,8 @@ From the repository root, run `build.cmd -BuildEditor`. With no arguments, `buil
 
 Keep the console open during the build. The bootstrap shows the installer name and download percentage (or bytes received if the server did not provide a size). pacman and Git report their own download progress. Ninja shows completed tasks and percentage for the current build stage, such as Clang or the editor; there is no single percentage for the whole installation. While a command is running, the launcher prints its stage and elapsed time every 20 seconds. Failed stages report their exit code.
 
+If pacman reports `Operation too slow` or fails to synchronize databases, the bootstrap tries `https://repo.msys2.org` first, retains the installed fallback mirrors and attempts a failed full update up to three times. Pass `-MsysMirror <HTTPS base URL>` to `build.cmd -BuildEditor` to select another mirror. The installed pacman configuration remains unchanged.
+
 This guide describes a **native Windows x64 build using MSYS2 UCRT64**, GCC and GTK3. Visual Studio, WSL and Cygwin are not required. Keep all compiler libraries in the UCRT64 environment: do not mix MINGW64, CLANG64 or MSVC libraries with this toolchain.
 
 ![Windows build stages](media/windows-build.svg)
