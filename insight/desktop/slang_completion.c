@@ -49,7 +49,14 @@ GPtrArray *insight_slang_complete(const gchar *service,const gchar *path,const g
  gsize command_bytes=0;for(guint i=0;i+1<argv->len;i++) command_bytes+=2*strlen(g_ptr_array_index(argv,i))+4;
  if(command_bytes>24000) valid=FALSE;
  if(valid) {
-  GSubprocess *process=g_subprocess_newv((const gchar *const *)argv->pdata,G_SUBPROCESS_FLAGS_STDOUT_PIPE|G_SUBPROCESS_FLAGS_STDERR_SILENCE,NULL);
+  GSubprocessLauncher *launcher=g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_STDOUT_PIPE|G_SUBPROCESS_FLAGS_STDERR_SILENCE);
+#ifdef G_OS_WIN32
+  /* Portable runtime DLLs live beside geany.exe, outside the helper directory. */
+  gchar *prefix=g_path_get_dirname(service);for(guint i=0;i<3;i++) {gchar *parent=g_path_get_dirname(prefix);g_free(prefix);prefix=parent;}
+  gchar *bin=g_build_filename(prefix,"bin",NULL),*search=g_strconcat(bin,G_SEARCHPATH_SEPARATOR_S,g_getenv("PATH") ? g_getenv("PATH"):"",NULL);
+  g_subprocess_launcher_setenv(launcher,"PATH",search,TRUE);g_free(search);g_free(bin);g_free(prefix);
+#endif
+  GSubprocess *process=g_subprocess_launcher_spawnv(launcher,(const gchar *const *)argv->pdata,NULL);g_object_unref(launcher);
   if(process) {
    gulong handler=cancel ? g_cancellable_connect(cancel,G_CALLBACK(terminate),process,NULL):0;
    gchar *reply=NULL;

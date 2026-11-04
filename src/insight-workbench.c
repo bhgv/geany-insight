@@ -6450,10 +6450,10 @@ static InsightReportSnapshot *capture_project_report(GError **error)
  gchar *root=utils_get_utf8_from_locale(wb.root);
  InsightReportSnapshot *snapshot=insight_report_snapshot_new(app->project->name,root,app->project->file_name,wb.files,wb.index,wb.skipped,wb.files->len>=10000 || wb.skipped>0 || wb.watch_incomplete,error);if(snapshot) snapshot->calls=insight_index_ref(wb.disk_calls);g_free(root);return snapshot;
 }
-GPtrArray *insight_workbench_source_paths(void) {
+GPtrArray *insight_workbench_source_paths(gboolean (*eligible)(const gchar *),guint limit) {
  GPtrArray *paths=g_ptr_array_new_with_free_func(g_free);
  if(wb.alive && app->project && wb.workspace_from_project && wb.files)
-  for(guint i=0;i<wb.files->len;i++) g_ptr_array_add(paths,g_strdup(g_ptr_array_index(wb.files,i)));
+  for(guint i=0;i<wb.files->len && paths->len<limit;i++) {const gchar *path=g_ptr_array_index(wb.files,i);if(!eligible || eligible(path)) g_ptr_array_add(paths,g_strdup(path));}
  return paths;
 }
 InsightReportSnapshot *insight_workbench_source_snapshot(GError **error) {

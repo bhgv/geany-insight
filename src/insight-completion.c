@@ -172,11 +172,20 @@ static gchar *slang_service(void) {
 typedef struct {GWeakRef sci;guint document,serial,offset,rootlen;gchar *path,*text,*root,*resources,*project,*slang;GHashTable *buffers;GPtrArray *results,*paths;gboolean slang_incomplete;} SemanticJob;
 static void semantic_job_free(gpointer data) {SemanticJob *j=data;g_weak_ref_clear(&j->sci);g_free(j->path);g_free(j->text);g_free(j->root);g_free(j->resources);g_free(j->project);g_free(j->slang);if(j->paths) g_ptr_array_unref(j->paths);g_hash_table_unref(j->buffers);if(j->results) g_ptr_array_unref(j->results);g_free(j);}
 static void semantic_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {(void)source;SemanticJob *j=data;j->results=j->slang_incomplete ? NULL:j->slang ? insight_slang_complete(j->slang,j->path,j->text,j->offset,j->rootlen,j->paths,j->buffers,cancel):insight_clang_complete(j->path,j->text,j->offset,j->root,j->resources,j->buffers,cancel,NULL);g_task_return_boolean(task,j->results!=NULL);}
+static gboolean slang_membership_current(const SemanticJob *j) {
+ GPtrArray *paths=insight_workbench_source_paths(insight_slang_source,257);GHashTable *current=g_hash_table_new(g_str_hash,g_str_equal);
+ for(guint i=0;i<paths->len;i++) g_hash_table_add(current,g_ptr_array_index(paths,i));
+ for(guint i=0;i<documents_array->len;i++) {GeanyDocument *d=g_ptr_array_index(documents_array,i);if(DOC_VALID(d) && insight_slang_source(d->file_name)) g_hash_table_add(current,d->file_name);}
+ gboolean same=g_hash_table_size(current)==j->paths->len;
+ for(guint i=0;same && i<j->paths->len;i++) same=g_hash_table_contains(current,g_ptr_array_index(j->paths,i));
+ g_hash_table_unref(current);g_ptr_array_unref(paths);return same;
+}
 static void semantic_done(GObject *source,GAsyncResult *result,gpointer unused) {
  (void)source;(void)unused;SemanticJob *j=g_task_get_task_data(G_TASK(result));if(semantic_workers) semantic_workers--;gboolean ok=g_task_propagate_boolean(G_TASK(result),NULL);ScintillaObject *sci=g_weak_ref_get(&j->sci);if(!sci) return;Completion *c=g_object_get_data(G_OBJECT(sci),KEY);GeanyDocument *doc=document_find_by_id(j->document);
  if(!c || c->semantic_serial!=j->serial || !DOC_VALID(doc) || doc!=document_get_current() || doc->editor->sci!=sci || g_strcmp0(doc->file_name,j->path) || g_strcmp0(j->project,app->project ? app->project->file_name:NULL) || sci_get_current_position(sci)!=(gint)j->offset || sci_has_selection(sci) || SEND(sci,SCI_GETREADONLY,0,0) || SEND(sci,SCI_GETSELECTIONS,0,0)!=1) {g_object_unref(sci);return;}
  g_clear_object(&c->pending);gchar *now=sci_get_contents(sci,sci_get_length(sci)+1);gboolean same=!strcmp(now,j->text);g_free(now);
  GHashTableIter overlays;gpointer path,text;g_hash_table_iter_init(&overlays,j->buffers);while(same && g_hash_table_iter_next(&overlays,&path,&text)) {GeanyDocument *d=document_find_by_filename(path);if(!DOC_VALID(d)) {same=FALSE;break;}gchar *contents=sci_get_contents(d->editor->sci,sci_get_length(d->editor->sci)+1);same=!strcmp(contents,text);g_free(contents);}
+ if(j->slang && same) same=slang_membership_current(j);
  if(ok && same && settings.detailed && settings.semantic) {
   GPtrArray *tags=g_ptr_array_new_with_free_func((GDestroyNotify)tm_tag_unref),*chosen=g_ptr_array_new();gchar *prefix=g_strndup(j->text+j->offset-j->rootlen,j->rootlen),*folded=g_utf8_casefold(prefix,-1);
   for(guint n=0;n<j->results->len && tags->len<editor_prefs.autocompletion_max_entries;n++) {InsightClangCompletion *item=g_ptr_array_index(j->results,n);gchar *candidate=g_utf8_casefold(item->name,-1);gboolean match=g_str_has_prefix(settings.case_sensitive ? item->name:candidate,settings.case_sensitive ? prefix:folded);g_free(candidate);if(!match) continue;
@@ -192,7 +201,7 @@ static gboolean semantic_start(gpointer data) {
  SemanticJob *j=g_new0(SemanticJob,1);g_weak_ref_init(&j->sci,c->sci);j->serial=c->semantic_serial;j->document=doc->id;j->offset=offset;j->rootlen=c->semantic_root;j->path=g_strdup(doc->file_name);j->text=sci_get_contents(c->sci,length+1);j->project=g_strdup(app->project ? app->project->file_name:NULL);j->resources=g_build_filename(app->datadir,"insight","clang","resources",NULL);gchar *native=app->project ? project_get_base_path():NULL;j->root=native ? utils_get_utf8_from_locale(native):g_path_get_dirname(doc->file_name);g_free(native);j->buffers=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);
  gsize total=0;for(guint i=0;i<documents_array->len;i++) {GeanyDocument *d=g_ptr_array_index(documents_array,i);if(!DOC_VALID(d) || !d->file_name || (insight_slang_source(j->path) && !insight_slang_source(d->file_name))) continue;gint n=sci_get_length(d->editor->sci);if(n<0 || n>2*1024*1024 || total+(gsize)n>32u*1024u*1024u || g_hash_table_size(j->buffers)>=256) continue;gchar *text=sci_get_contents(d->editor->sci,n+1);if(!memchr(text,0,n) && g_utf8_validate(text,n,NULL)) {g_hash_table_insert(j->buffers,g_strdup(d->file_name),text);total+=n;}else g_free(text);}
  if(insight_slang_source(j->path)) {
-  j->slang=slang_service();j->paths=insight_workbench_source_paths();
+  j->slang=slang_service();j->paths=insight_workbench_source_paths(insight_slang_source,257);
   GHashTable *seen=g_hash_table_new(g_str_hash,g_str_equal);for(guint i=0;i<j->paths->len;i++) g_hash_table_add(seen,g_ptr_array_index(j->paths,i));
   for(guint i=0;i<documents_array->len;i++) {GeanyDocument *d=g_ptr_array_index(documents_array,i);if(!DOC_VALID(d) || !d->file_name || !insight_slang_source(d->file_name)) continue;
    if(!g_hash_table_contains(j->buffers,d->file_name)) j->slang_incomplete=TRUE;

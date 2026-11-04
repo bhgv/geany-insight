@@ -4,7 +4,7 @@
 #include "editor.h"
 #include "main.h"
 #include "sciwrappers.h"
-#include "insight-completion.h"
+#include "keybindings.h"
 #include "ui_utils.h"
 #include <glib/gstdio.h>
 #include <string.h>
@@ -18,7 +18,7 @@ static gboolean step(gpointer unused) {
   sci_set_text(other->editor->sci,"module leaf; logic data_input, data_output; endmodule\n");
   doc=document_open_file(top,FALSE,NULL,NULL);g_assert_nonnull(doc);
   gchar *text=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1);gchar *prefix=strstr(text,"data_");g_assert_nonnull(prefix);sci_set_current_position(doc->editor->sci,prefix-text+5,FALSE);g_free(text);gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));
-  g_assert_true(insight_completion_semantic(doc->editor,5,TRUE));phase++;return G_SOURCE_CONTINUE;
+  keybindings_send_command(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_EDITOR_AUTOCOMPLETE);phase++;return G_SOURCE_CONTINUE;
  }
  if(!popup()) return G_SOURCE_CONTINUE;
  GtkWidget *list=named(popup(),"insight-completion-list");g_assert_nonnull(list);GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(list));g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,2);

@@ -27,7 +27,8 @@ void insight_workbench_symbol_navigation(guint action);
  * No folder scan, project file, project cache or source write is performed. */
 InsightReportSnapshot *insight_workbench_source_snapshot(GError **);
 /* GUI-thread capture of project membership only; no parsing or disk access. */
-GPtrArray *insight_workbench_source_paths(void);
+/* Returns at most limit matching paths; NULL eligible accepts all. */
+GPtrArray *insight_workbench_source_paths(gboolean (*eligible)(const gchar *),guint limit);
 void insight_workbench_manage_project_files(void);
 void insight_workbench_init(void);
 void insight_workbench_finalize(void);
