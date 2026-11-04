@@ -285,6 +285,21 @@ index bbaec943c..bd11e45a6 100644
  
      /// Prints text to stdout.
      static void print(string_view text);
+diff --git a/source/CMakeLists.txt b/source/CMakeLists.txt
+index 24505e40f..14eee7d1e 100644
+--- a/source/CMakeLists.txt
++++ b/source/CMakeLists.txt
+@@ -116,6 +116,10 @@ target_link_libraries(
+   slang_slang
+   PRIVATE fmt::fmt ${CMAKE_THREAD_LIBS_INIT} ${SLANG_LIBRARIES}
+   PUBLIC unordered_dense::unordered_dense)
++if(GEANY_SLANG_COMPAT)
++  target_link_libraries(slang_slang PUBLIC geany_slang_filesystem)
++  target_include_directories(slang_slang PRIVATE "${GEANY_SLANG_COMPAT}")
++endif()
+ 
+ # If building the Python library we'll end up with a shared lib no matter what,
+ # so make sure we always build with PIC.
 diff --git a/source/ast/CMakeLists.txt b/source/ast/CMakeLists.txt
 index 6f0d6e8b9..c3bc109b1 100644
 --- a/source/ast/CMakeLists.txt

@@ -23,6 +23,7 @@ jobs:
             set -e
             apt-get update -qq
             apt-get install -y --no-install-recommends ca-certificates git g++ make cmake python3
+            git config --global --add safe.directory /src
             cmake --version
             g++ --version
             python3 --version
