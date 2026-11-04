@@ -35,6 +35,7 @@
 #include "insight-source-routes.h"
 #include "insight-clang.h"
 #include "../insight/desktop/clang_backend.h"
+#include "../insight/desktop/slang_completion.h"
 #include "insight-relation-tree.h"
 #include "insight-disk-browser.h"
 #include "insight-git.h"
@@ -1889,6 +1890,47 @@ static void semantic_call_tree(const gchar *query,gboolean incoming) {
  if(!fixed) {GeanyDocument *doc=document_get_current();InsightClangResult *r=DOC_VALID(doc) ? insight_clang_ui_result(doc->editor->sci):NULL;if(insight_clang_result_usable(r)) j->usr=insight_clang_symbol_at(r->relations,doc->file_name,sci_get_current_position(doc->editor->sci),sci_get_current_line(doc->editor->sci)+1,query);j->source=DOC_VALID(doc) ? g_strdup(doc->file_name):NULL;}
  wb.search_worker=g_cancellable_new();GTask *task=g_task_new(NULL,wb.search_worker,semantic_calls_done,NULL);g_task_set_task_data(task,j,semantic_calls_free);g_task_run_in_thread(task,semantic_calls_run);g_object_unref(task);set_usage_status("Preparing Clang call snapshot…");
 }
+typedef struct {GPtrArray *paths,*rows;GHashTable *buffers;gchar *service,*root,*cache,*project,*query;InsightSlangProject *result;guint64 epoch,generation,scan_generation;guint applied;gboolean valid;} HdlJob;
+static void hdl_job_free(gpointer data) {
+ HdlJob *j=data;if(j->result) {retire_index(j->result->index);j->result->index=NULL;insight_slang_project_free(j->result);}g_ptr_array_unref(j->paths);g_ptr_array_unref(j->rows);g_hash_table_unref(j->buffers);g_free(j->service);g_free(j->root);g_free(j->cache);g_free(j->project);g_free(j->query);g_free(j);
+}
+static void hdl_job_run(GTask *task,gpointer source,gpointer data,GCancellable *cancel) {
+ (void)source;HdlJob *j=data;if(j->valid) j->result=insight_slang_project(j->service,j->paths,j->buffers,j->root,j->cache,cancel);
+ if(j->result) for(gsize i=0;i<insight_index_count(j->result->index) && j->rows->len<2000;i++) {const InsightSymbol *row=insight_index_at(j->result->index,i);if(!strcmp(row->kind,"@hdlref") && (!*j->query || !strcmp(row->name,j->query))) g_ptr_array_add(j->rows,(gpointer)row);}
+ g_task_return_boolean(task,j->result!=NULL);
+}
+static gboolean hdl_results_apply(gpointer data) {
+ GTask *task=data;HdlJob *j=g_task_get_task_data(task);
+ if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.usage_generation || g_strcmp0(j->project,app->project ? app->project->file_name:NULL)) return G_SOURCE_REMOVE;
+ if(!j->applied) {
+  GPtrArray *paths=insight_workbench_source_paths(insight_slang_source,257);GHashTable *current=g_hash_table_new(g_str_hash,g_str_equal);for(guint i=0;i<paths->len;i++) g_hash_table_add(current,g_ptr_array_index(paths,i));for(guint i=0;i<documents_array->len;i++) {GeanyDocument *doc=g_ptr_array_index(documents_array,i);if(DOC_VALID(doc) && insight_slang_source(doc->file_name)) g_hash_table_add(current,doc->file_name);}
+  gboolean same=g_hash_table_size(current)==j->paths->len && (!j->project || j->scan_generation==wb.scan_generation);for(guint i=0;same && i<j->paths->len;i++) same=g_hash_table_contains(current,g_ptr_array_index(j->paths,i));g_hash_table_unref(current);g_ptr_array_unref(paths);
+  if(!same) {wb.usage_idle=0;set_usage_status("HDL sources changed; repeat the query");return G_SOURCE_REMOVE;}
+  GHashTableIter iter;gpointer file,text;g_hash_table_iter_init(&iter,j->buffers);while(g_hash_table_iter_next(&iter,&file,&text)) {GeanyDocument *doc=document_find_by_filename(file);gchar *now=DOC_VALID(doc) ? sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1):NULL;gboolean same=now && !strcmp(now,text);g_free(now);if(!same) {wb.usage_idle=0;set_usage_status("HDL sources changed; repeat the query");return G_SOURCE_REMOVE;}}
+  gtk_list_store_clear(wb.matches);
+ }
+ gint64 deadline=g_get_monotonic_time()+3000;
+ while(j->applied<j->rows->len) {const InsightSymbol *row=g_ptr_array_index(j->rows,j->applied++);GtkTreeIter iter;gchar *description=g_strdup_printf("%s → %s:%s",row->inheritance,row->scope,row->type);
+  gtk_list_store_append(wb.matches,&iter);gtk_list_store_set(wb.matches,&iter,USAGE_DISPLAY,row->path,USAGE_PATH,row->path,USAGE_LINE,row->line,USAGE_SYMBOL,row->name,USAGE_SNIPPET,description,-1);g_free(description);if(g_get_monotonic_time()>=deadline) return G_SOURCE_CONTINUE;
+ }
+ gchar *status=g_strdup_printf("slang: %u references • %zu declarations • diagnostics: %u • %s%s",j->rows->len,insight_index_query(j->result->index,"",FALSE,NULL,"@hdldef",NULL,0,NULL,0),j->result->diagnostics,insight_tr(j->result->restored ? "Restored HDL project index":"HDL project index rebuilt"),insight_tr(j->result->persisted ? " • saved":" • memory only"));set_usage_status(status);g_free(status);wb.usage_idle=0;return G_SOURCE_REMOVE;
+}
+static void hdl_job_done(GObject *source,GAsyncResult *result,gpointer data) {
+ (void)source;(void)data;GTask *task=G_TASK(result);HdlJob *j=g_task_get_task_data(task);gboolean ok=g_task_propagate_boolean(task,NULL);
+ if(!wb.alive || j->epoch!=workbench_epoch || j->generation!=wb.usage_generation) return;g_clear_object(&wb.search_worker);
+ if(ok) wb.usage_idle=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,hdl_results_apply,g_object_ref(task),g_object_unref);else set_usage_status("HDL semantic index unavailable or exceeds its limits");
+}
+static void hdl_references(const gchar *query) {
+ HdlJob *j=g_new0(HdlJob,1);j->paths=insight_workbench_source_paths(insight_slang_source,257);j->rows=g_ptr_array_new();j->buffers=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);j->service=insight_completion_slang_service();j->query=g_strdup(query);j->project=g_strdup(app->project ? app->project->file_name:NULL);j->root=wb.root && app->project ? utils_get_utf8_from_locale(wb.root):NULL;j->cache=app->project && wb.cache_path ? g_strconcat(wb.cache_path,".hdl",NULL):NULL;j->valid=TRUE;j->epoch=workbench_epoch;j->generation=wb.usage_generation;j->scan_generation=wb.scan_generation;
+ GHashTable *seen=g_hash_table_new(g_str_hash,g_str_equal);for(guint i=0;i<j->paths->len;i++) g_hash_table_add(seen,g_ptr_array_index(j->paths,i));gsize total=0;
+ for(guint i=0;i<documents_array->len;i++) {GeanyDocument *doc=g_ptr_array_index(documents_array,i);if(!DOC_VALID(doc) || !insight_slang_source(doc->file_name)) continue;
+  if(!g_hash_table_contains(seen,doc->file_name)) {g_ptr_array_add(j->paths,g_strdup(doc->file_name));g_hash_table_add(seen,doc->file_name);}gint length=sci_get_length(doc->editor->sci);
+  if(length<0 || length>2*1024*1024 || total+(gsize)length>32u*1024u*1024u || g_hash_table_size(j->buffers)>=256) {j->valid=FALSE;continue;}
+  gchar *text=sci_get_contents(doc->editor->sci,length+1);if(memchr(text,0,length) || !g_utf8_validate(text,length,NULL)) {j->valid=FALSE;g_free(text);}else {g_hash_table_insert(j->buffers,g_strdup(doc->file_name),text);total+=length;}
+ }
+ g_hash_table_unref(seen);if(!j->root && j->paths->len) j->root=g_path_get_dirname(g_ptr_array_index(j->paths,0));
+ wb.search_worker=g_cancellable_new();GTask *task=g_task_new(NULL,wb.search_worker,hdl_job_done,NULL);g_task_set_task_data(task,j,hdl_job_free);g_task_run_in_thread(task,hdl_job_run);g_object_unref(task);set_usage_status("Preparing HDL semantic project index…");
+}
 static void usage_start(GtkWidget *widget,gpointer data) {
  (void)data; stop_usage();
  /* Explicit searches must reveal their results, even when the last view was
@@ -1904,6 +1946,7 @@ static void usage_start(GtkWidget *widget,gpointer data) {
  wb.usage_target=mode==3 ? wb.search_matches : wb.matches;
  if(mode==8) {if(!insight_clang_available()) {set_usage_status("This build has no bundled Clang backend");return;}GeanyDocument *doc=document_get_current();InsightClangResult *semantic=DOC_VALID(doc) ? insight_clang_ui_result(doc->editor->sci):NULL;if(insight_clang_result_usable(semantic)) wb.usage_usr=insight_clang_symbol_at(semantic->relations,doc->file_name,(guint)sci_get_current_position(doc->editor->sci),(guint)sci_get_current_line(doc->editor->sci)+1,query);}
 
+ if(mode==11) {hdl_references(query);return;}
  if(mode==9 || mode==10) {semantic_call_tree(query,mode==10);return;}
  if(mode==6) { relation_calls(query);return; }
  if(mode==1 || mode==2 || mode==4 || mode==5) {
@@ -2237,7 +2280,7 @@ static void create_usage_browser(void) {
  wb.relation_enclosing=gtk_check_button_new_with_label("Track enclosing function");
  wb.relation_transitive=gtk_check_button_new_with_label("Include indirect inheritance (tags)");gtk_widget_set_name(wb.relation_transitive,"insight-relation-transitive");gtk_widget_set_sensitive(wb.relation_transitive,FALSE);
  wb.relation_mode=gtk_combo_box_text_new(); gtk_widget_set_name(wb.relation_mode,"insight-relation-mode");
- const char *modes[]={"References (lexical)","Definitions / declarations","Direct members (tags)","Text search (project)","Base types (tags)","Derived types (tags)","Calls (current function, lexical)","Call sites (project, lexical)","References (Clang C/C++)","Callees (Clang tree)","Callers (Clang tree)"};
+ const char *modes[]={"References (lexical)","Definitions / declarations","Direct members (tags)","Text search (project)","Base types (tags)","Derived types (tags)","Calls (current function, lexical)","Call sites (project, lexical)","References (Clang C/C++)","Callees (Clang tree)","Callers (Clang tree)","References (slang HDL, by name)"};
  for(guint i=0;i<G_N_ELEMENTS(modes);i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.relation_mode),modes[i]);
  gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),0);
  GtkWidget *search=gtk_button_new_with_label("Search"),*cancel=gtk_button_new_with_label("Stop");
@@ -5778,6 +5821,9 @@ static void create_workbench_menus(void) {
  GtkWidget *capture_route=gtk_menu_item_new_with_label("Add caret to source routes");gtk_widget_set_name(capture_route,"insight-route-capture-popup");gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.editor_menu),capture_route);g_signal_connect(capture_route,"activate",G_CALLBACK(source_routes_show),GINT_TO_POINTER(1));gtk_widget_show(capture_route);
  GtkWidget *clang_popup=gtk_menu_item_new_with_label(insight_tr("Clang references…"));gtk_widget_set_name(clang_popup,"insight-clang-references-popup");insight_i18n_key(G_OBJECT(clang_popup),"label","Clang references…");gtk_widget_set_sensitive(clang_popup,insight_clang_available());g_signal_connect(clang_popup,"activate",G_CALLBACK(navigate_relations),GINT_TO_POINTER(8));gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.editor_menu),clang_popup);gtk_widget_show(clang_popup);
  const gchar *relation_navigation[]={"Jump To Caller…","Lookup References…","Direct members (tags)","Derived types (tags)","Clang references…","Callees (Clang tree)","Callers (Clang tree)"};const gint relation_modes[]={7,0,2,5,8,9,10};for(guint n=0;n<G_N_ELEMENTS(relation_modes);n++) {GtkWidget *entry=gtk_menu_item_new_with_label(relation_navigation[n]);gchar *id=g_strdup_printf("insight-navigate-relation-%d",relation_modes[n]);gtk_widget_set_name(entry,id);g_free(id);g_signal_connect(entry,"activate",G_CALLBACK(navigate_relations),GINT_TO_POINTER(relation_modes[n]));gtk_menu_shell_append(GTK_MENU_SHELL(relation_modes[n]>=8 ? clang_menu:menu),entry);}
+ GtkWidget *hdl_navigation=gtk_menu_item_new_with_label(insight_tr("HDL references (slang)…"));gtk_widget_set_name(hdl_navigation,"insight-navigate-hdl-references");insight_i18n_key(G_OBJECT(hdl_navigation),"label","HDL references (slang)…");g_signal_connect(hdl_navigation,"activate",G_CALLBACK(navigate_relations),GINT_TO_POINTER(11));gtk_menu_shell_append(GTK_MENU_SHELL(menu),hdl_navigation);
+ GtkWidget *hdl_popup=gtk_menu_item_new_with_label(insight_tr("HDL references (slang)…"));gtk_widget_set_name(hdl_popup,"insight-hdl-references-popup");insight_i18n_key(G_OBJECT(hdl_popup),"label","HDL references (slang)…");g_signal_connect(hdl_popup,"activate",G_CALLBACK(navigate_relations),GINT_TO_POINTER(11));gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.editor_menu),hdl_popup);gtk_widget_show(hdl_popup);
+
  GtkWidget *navigation_help=gtk_menu_item_new_with_label("Navigation Help…");g_signal_connect(navigation_help,"activate",G_CALLBACK(insight_help_show),"navigation.md");gtk_menu_shell_append(GTK_MENU_SHELL(menu),navigation_help);
 
  const gchar *history_labels[]={"Navigate back a location","Navigate forward a location"};for(guint i=0;i<2;i++) {GtkWidget *entry=gtk_action_create_menu_item(toolbar_get_action_by_name(i ? "NavFor":"NavBack"));gtk_menu_item_set_label(GTK_MENU_ITEM(entry),history_labels[i]);gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry);GtkWidget *popup=gtk_action_create_menu_item(toolbar_get_action_by_name(i ? "NavFor":"NavBack"));gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.editor_menu),popup); }

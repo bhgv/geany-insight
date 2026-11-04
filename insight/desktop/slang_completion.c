@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "slang_completion.h"
+#include "index_cache.h"
+#include <stdlib.h>
 #include <glib/gstdio.h>
 #include <string.h>
 
@@ -164,4 +166,41 @@ gboolean insight_slang_definition(const gchar *service,const gchar *path,const g
    }g_strfreev(fields);
   }g_strfreev(rows);
  }g_free(reply);return ok;
+}
+
+void insight_slang_project_free(InsightSlangProject *project) {if(project) {insight_index_free(project->index);g_free(project);}}
+InsightSlangProject *insight_slang_project(const gchar *service,GPtrArray *paths,GHashTable *buffers,const gchar *root,const gchar *cache,GCancellable *cancel) {
+ if(!service || !*service || !root || !g_path_is_absolute(root) || !paths || !buffers || (cancel && g_cancellable_is_cancelled(cancel))) return NULL;
+ const gchar *arguments[]={"--editor-index",NULL};gchar *key=request_key(service,arguments,paths,buffers,cancel);
+ InsightSlangProject *project=g_new0(InsightSlangProject,1);
+ if(cache && key) {
+  char *stored=NULL;project->index=insight_cache_load(cache,&stored,NULL);const InsightSymbol *meta=NULL;
+  gboolean valid=project->index && stored && !strcmp(root,stored) && insight_index_query(project->index,"@hdlmeta",TRUE,NULL,"@hdlmeta",root,0,&meta,1)==1 && !strcmp(meta->signature,key) && !strcmp(meta->type,"0") && !strcmp(meta->inheritance,"slang-project-v1");free(stored);
+  if(valid) {project->restored=project->persisted=TRUE;g_free(key);return project;}insight_index_free(project->index);project->index=NULL;
+ }
+ gchar *reply=query(service,arguments,paths,buffers,cancel);if(!reply || !g_str_has_prefix(reply,"insight-slang-index-v1\n")) {g_free(reply);g_free(key);g_free(project);return NULL;}
+ gchar **lines=g_strsplit(reply,"\n",-1);gboolean valid=lines[1] && *lines[1];
+ if(valid) {for(const gchar *p=lines[1];*p;p++) if(!g_ascii_isdigit(*p)) valid=FALSE;guint64 count=g_ascii_strtoull(lines[1],NULL,10);if(count>G_MAXUINT) valid=FALSE;else project->diagnostics=count;}
+ GHashTable *groups=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,(GDestroyNotify)g_array_unref);GPtrArray *owned=g_ptr_array_new_with_free_func(g_free);guint records=0;
+ for(guint n=2;valid && lines[n] && *lines[n];n++) {
+  gchar **fields=g_strsplit(lines[n],"\t",-1);guint line=0,column=0;
+  if(g_strv_length(fields)!=8 || (strcmp(fields[0],"D") && strcmp(fields[0],"R")) || !positive_position(fields[3],&line) || !positive_position(fields[4],&column) || ++records>100000) {valid=FALSE;g_strfreev(fields);break;}
+  gchar *name=unhex(fields[1]),*path=unhex(fields[2]),*scope=unhex(fields[5]),*type=unhex(fields[6]),*relation=unhex(fields[7]),*position=g_strdup(fields[4]);
+  gchar *parts[]={name,path,scope,type,relation,position};for(guint i=0;i<G_N_ELEMENTS(parts);i++) if(parts[i]) g_ptr_array_add(owned,parts[i]);else valid=FALSE;
+  if(valid && *name && g_path_is_absolute(path) && (!strcmp(fields[0],"D") || g_path_is_absolute(scope))) {
+   GArray *rows=g_hash_table_lookup(groups,path);if(!rows) {rows=g_array_new(FALSE,FALSE,sizeof(InsightSymbol));g_hash_table_insert(groups,g_strdup(path),rows);}
+   InsightSymbol row={name,path,scope,!strcmp(fields[0],"D") ? "@hdldef":"@hdlref",line,position,type,relation};g_array_append_val(rows,row);
+  }else valid=FALSE;g_strfreev(fields);
+ }
+ if(valid) {
+  project->index=insight_index_new();GHashTableIter iter;gpointer path,rows;g_hash_table_iter_init(&iter,groups);
+  while(valid && g_hash_table_iter_next(&iter,&path,&rows)) valid=insight_index_update(project->index,path,(const InsightSymbol *)((GArray *)rows)->data,((GArray *)rows)->len);
+  gchar *diagnostics=g_strdup_printf("%u",project->diagnostics);InsightSymbol meta={"@hdlmeta",root,"","@hdlmeta",0,key ? key:"",diagnostics,"slang-project-v1"};
+  /* Root is a directory, distinct from source paths. */
+  if(valid) valid=insight_index_update(project->index,root,&meta,1);g_free(diagnostics);
+ }
+ g_hash_table_unref(groups);g_ptr_array_unref(owned);g_strfreev(lines);g_free(reply);
+ if(valid && key) {gchar *fresh=request_key(service,arguments,paths,buffers,cancel);valid=!g_strcmp0(key,fresh);g_free(fresh);}
+ if(valid && cache && !(cancel && g_cancellable_is_cancelled(cancel))) {gchar *parent=g_path_get_dirname(cache);if(!g_mkdir_with_parents(parent,0700)) project->persisted=insight_cache_save_cancellable(cache,project->index,root,cancel,NULL);g_free(parent);}
+ g_free(key);if(!valid || (cancel && g_cancellable_is_cancelled(cancel))) {insight_slang_project_free(project);return NULL;}return project;
 }

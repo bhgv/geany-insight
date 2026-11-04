@@ -14,4 +14,9 @@ typedef struct {guint64 hits,starts,bypasses;guint entries;gsize bytes;} Insight
 /* Process-local bounded response cache; no AST persistence. Safe across workers. */
 void insight_slang_cache_clear(void);
 void insight_slang_cache_stats(InsightSlangCacheStats *);
+typedef struct {InsightIndex *index;guint diagnostics;gboolean restored,persisted;} InsightSlangProject;
+/* Worker-only project sidecar. NULL cache means a memory-only workspace.
+ * Caller owns the result. Preprocessor sets are saved but not reused yet. */
+InsightSlangProject *insight_slang_project(const gchar *,GPtrArray *,GHashTable *,const gchar *,const gchar *,GCancellable *);
+void insight_slang_project_free(InsightSlangProject *);
 #endif

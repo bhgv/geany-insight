@@ -40,7 +40,7 @@ jobs:
             g++ -std=c++17 -DSLANG_STATIC_DEFINE -I/src/_slang-install/lib/geany-insight/slang/include external/slang-compat/probe.cpp -L/src/_slang-install/lib/geany-insight/slang/lib -lsvlang -lfmt -pthread -o /src/_external-slang/installed-sdk-probe
             /src/_external-slang/installed-sdk-probe external/slang-compat/fixtures/leaf.sv external/slang-compat/fixtures/top.sv
             python3 external/slang-compat/semantic-test.py /src/_slang-install/libexec/geany-insight/slang/insight-slang-semantic external/slang-compat/fixtures
-            cc -std=c11 insight/tests/slang_completion_test.c insight/desktop/slang_completion.c $(pkg-config --cflags --libs gio-2.0) -o /src/_external-slang/editor-completion-probe
+            cc -std=c11 -Iinsight/core insight/tests/slang_completion_test.c insight/desktop/slang_completion.c insight/core/index.c insight/desktop/index_cache.c $(pkg-config --cflags --libs gio-2.0) -o /src/_external-slang/editor-completion-probe
             /src/_external-slang/editor-completion-probe /src/_slang-install/libexec/geany-insight/slang/insight-slang-semantic
             python3 insight/tools/build_external_slang.py --prepare-only
           '

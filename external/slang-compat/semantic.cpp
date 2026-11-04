@@ -135,6 +135,62 @@ struct Jump : ASTVisitor<Jump, true, true> {
         visitDefault(node);
     }
 };
+struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
+    const SourceManager& sources;
+    std::vector<std::string> rows;
+    explicit ProjectIndex(const SourceManager& sources) : sources(sources) {}
+    bool located(SourceLocation location) const { return location && sources.getFullPath(location.buffer()).is_absolute(); }
+    void add(const std::string& type, string_view name, SourceLocation location, string_view scope, string_view detail, string_view relation) {
+        if (!located(location) || name.empty()) return;
+        if (rows.size() >= 100000) throw std::runtime_error("HDL index exceeds 100000 records");
+        rows.push_back(type + "\t" + hex(name) + "\t" + hex(sources.getFullPath(location.buffer()).string()) + "\t" +
+            std::to_string(sources.getLineNumber(location)) + "\t" + std::to_string(sources.getColumnNumber(location)) + "\t" + hex(scope) + "\t" + hex(detail) + "\t" + hex(relation));
+    }
+    void reference(string_view name, SourceRange range, SourceLocation target, string_view kind) {
+        if (!located(target)) return;
+        auto location = sources.getFullyOriginalLoc(range.start());
+        add("R", name, location, sources.getFullPath(target.buffer()).string(),
+            std::to_string(sources.getLineNumber(target)) + ":" + std::to_string(sources.getColumnNumber(target)), kind);
+    }
+    void boundName(const Expression& node, const Symbol& symbol, string_view kind) {
+        if (!node.syntax) return;
+        auto token = node.syntax->getLastToken();
+        if (token.valueText() == symbol.name) reference(symbol.name, token.range(), symbol.location, kind);
+    }
+    template<typename T> void handle(const T& node) {
+        if constexpr (std::is_base_of_v<Symbol, T>) add("D", node.name, node.location, identity(node), toString(node.kind), "");
+        visitDefault(node);
+    }
+    void handle(const NamedValueExpression& node) { boundName(node, node.symbol, "value"); visitDefault(node); }
+    void handle(const HierarchicalValueExpression& node) { boundName(node, node.symbol, "value"); visitDefault(node); }
+    void handle(const MemberAccessExpression& node) { boundName(node, node.member, "member"); visitDefault(node); }
+    void handle(const CallExpression& node) {
+        if (!node.isSystemCall() && node.syntax) {
+            const syntax::ExpressionSyntax* callee = node.syntax;
+            if (callee->kind == syntax::SyntaxKind::InvocationExpression) callee = callee->as<syntax::InvocationExpressionSyntax>().left;
+            auto token = callee->getLastToken();const auto& function = *std::get<0>(node.subroutine);
+            if (token.valueText() == function.name) reference(function.name, token.range(), function.location, "call");
+        }visitDefault(node);
+    }
+    void handle(const InstanceSymbol& node) {
+        add("D", node.name, node.location, identity(node), "Instance", "");
+        add("D", node.getDefinition().name, node.getDefinition().location, node.getDefinition().name, "Module", "");
+        const auto* syntax = node.getSyntax();
+        if (syntax && syntax->kind == syntax::SyntaxKind::HierarchicalInstance) {
+            const auto& instance = syntax->as<syntax::HierarchicalInstanceSyntax>();
+            if (instance.decl) reference(node.name, instance.decl->name.range(), node.getDefinition().location, "instance");
+            if (syntax->parent && syntax->parent->kind == syntax::SyntaxKind::HierarchyInstantiation) {
+                auto token = syntax->parent->as<syntax::HierarchyInstantiationSyntax>().type;
+                reference(token.valueText(), token.range(), node.getDefinition().location, "module");
+            }
+            for (const auto* connection : instance.connections) {
+                if (connection->kind != syntax::SyntaxKind::NamedPortConnection) continue;
+                const auto& port = connection->as<syntax::NamedPortConnectionSyntax>();
+                if (const auto* symbol = node.body.findPort(port.name.valueText())) reference(symbol->name, port.name.range(), symbol->location, "port");
+            }
+        }visitDefault(node);
+    }
+};
 struct Collector : ASTVisitor<Collector, true, true> {
     const SourceManager& sources;
     std::vector<std::string> rows;
@@ -207,7 +263,7 @@ int main(int argc, char** argv) {
                 prefix = argv[first++];
             }
         }
-        else if (mode != "--symbols" && mode != "--references") throw std::runtime_error("unknown operation");
+        else if (mode != "--symbols" && mode != "--references" && mode != "--editor-index") throw std::runtime_error("unknown operation");
         while (first < argc && std::string(argv[first]) == "--overlay") {
             if (first + 2 >= argc) throw std::runtime_error("missing overlay arguments");
             std::string path = argv[first + 1];
@@ -228,6 +284,12 @@ int main(int argc, char** argv) {
         }
         const auto& root = compilation.getRoot();
         const auto diagnostics = compilation.getAllDiagnostics().size();
+        if (mode == "--editor-index") {
+            ProjectIndex index(sources);root.visit(index);
+            std::ostringstream output;output << "insight-slang-index-v1\n" << diagnostics << '\n';
+            for (const auto& row : index.rows) output << row << '\n';
+            std::cout << output.str();return 0;
+        }
         if (definition) {
             Jump jump(sources, sourcePath, sourceLine, sourceColumn); root.visit(jump);
             std::cout << "insight-slang-definition-v1\n";

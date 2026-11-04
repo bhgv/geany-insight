@@ -2850,3 +2850,14 @@ Clang completes C/C++ members; slang completes HDL hierarchies.\nExisting argume
 HDL source changed; repeat the navigation command	Исходник HDL изменён; повторите команду перехода
 No unambiguous HDL declaration found	Однозначное объявление HDL не найдено
 Resolving HDL declaration with slang...	Поиск объявления HDL через slang…
+
+References (slang HDL, by name)	Ссылки (slang HDL, по имени)
+HDL references (slang)…	Ссылки HDL (slang)…
+Restored HDL project index	Индекс HDL восстановлен из базы
+HDL project index rebuilt	Индекс HDL построен заново
+HDL sources changed; repeat the query	Исходники HDL изменены; повторите запрос
+HDL semantic index unavailable or exceeds its limits	Семантический индекс HDL недоступен или превышает ограничения
+Preparing HDL semantic project index…	Подготовка семантического индекса HDL…
+slang: %u references • %zu declarations • diagnostics: %u • %s%s	slang: %u ссылок • %zu объявлений • диагностик: %u • %s%s
+ • saved	 • сохранён
+ • memory only	 • только в памяти

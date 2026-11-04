@@ -2,6 +2,7 @@
 #ifndef INSIGHT_COMPLETION_H
 #define INSIGHT_COMPLETION_H
 #include "editor.h"
+gchar *insight_completion_slang_service(void);
 gboolean insight_completion_case_sensitive(void);
 void insight_completion_search_limited(GeanyEditor *,gboolean);
 gint insight_completion_min_chars(void);

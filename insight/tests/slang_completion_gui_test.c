@@ -10,7 +10,7 @@
 #include <string.h>
 static gchar *root,*profile,*leaf,*top;static GeanyDocument *doc;static guint phase;static gint source_position;
 static GtkWidget *popup(void) {GList *windows=gtk_window_list_toplevels();GtkWidget *found=NULL;for(GList *p=windows;p;p=p->next) if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-completion-popup") && gtk_widget_get_visible(p->data)) found=p->data;g_list_free(windows);return found;}
-static GtkWidget *named(GtkWidget *widget,const gchar *name) {if(!g_strcmp0(gtk_widget_get_name(widget),name)) return widget;if(GTK_IS_CONTAINER(widget)) {GList *children=gtk_container_get_children(GTK_CONTAINER(widget));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found;}return NULL;}
+static GtkWidget *named(GtkWidget *widget,const gchar *name) {if(!g_strcmp0(gtk_widget_get_name(widget),name)) return widget;if(GTK_IS_MENU_ITEM(widget)) {GtkWidget *menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(widget));if(menu) {GtkWidget *found=named(menu,name);if(found) return found;}}if(GTK_IS_CONTAINER(widget)) {GList *children=gtk_container_get_children(GTK_CONTAINER(widget));GtkWidget *found=NULL;for(GList *p=children;p && !found;p=p->next) found=named(p->data,name);g_list_free(children);return found;}return NULL;}
 static gboolean step(gpointer unused) {
  (void)unused;if(!document_get_current()) return G_SOURCE_CONTINUE;
  if(!phase) {
@@ -27,8 +27,15 @@ static gboolean step(gpointer unused) {
  if(phase==3) {g_assert_true(document_get_current()==doc);g_assert_cmpint(sci_get_current_position(doc->editor->sci),==,source_position);keybindings_send_command(GEANY_KEY_GROUP_GOTO,GEANY_KEYS_GOTO_FORWARD);phase=4;return G_SOURCE_CONTINUE;}
  if(phase==4) {
   g_assert_cmpstr(document_get_current()->file_name,==,leaf);g_assert_cmpint(sci_get_current_position(document_get_current()->editor->sci),==,19);
+  GtkWidget *action=named(gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci)),"insight-navigate-hdl-references");g_assert_nonnull(action);gtk_menu_item_activate(GTK_MENU_ITEM(action));phase=5;return G_SOURCE_CONTINUE;
+ }
+ if(phase==5) {
+  GtkWidget *window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci)),*view=named(window,"insight-relations"),*status=named(window,"insight-relation-status");g_assert_nonnull(view);g_assert_nonnull(status);
+  if(!g_str_has_prefix(gtk_label_get_text(GTK_LABEL(status)),"slang:")) return G_SOURCE_CONTINUE;
+  GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),>=,1);GtkTreeIter iter;g_assert_true(gtk_tree_model_get_iter_first(model,&iter));gchar *name=NULL,*source=NULL,*relation=NULL;gtk_tree_model_get(model,&iter,7,&name,1,&source,8,&relation,-1);g_assert_cmpstr(name,==,"data_input");g_assert_cmpstr(source,==,top);g_assert_nonnull(strstr(relation,leaf));g_free(name);g_free(source);g_free(relation);
+  GtkTreePath *row=gtk_tree_model_get_path(model,&iter);gtk_tree_view_row_activated(GTK_TREE_VIEW(view),row,gtk_tree_view_get_column(GTK_TREE_VIEW(view),0));gtk_tree_path_free(row);g_assert_true(document_get_current()==doc);
   document_set_text_changed(document_find_by_filename(leaf),FALSE);document_set_text_changed(doc,FALSE);
-  g_print("HDL native GUI: unsaved cross-file completion, declaration command and exact Back/Forward history passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci)),"menu_quit1")));return G_SOURCE_REMOVE;
+  g_print("HDL native GUI: completion, declaration history and semantic Relations panel with unsaved buffers passed\n");gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
  }
  if(!popup()) return G_SOURCE_CONTINUE;
  GtkWidget *list=named(popup(),"insight-completion-list");g_assert_nonnull(list);GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(list));g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,2);

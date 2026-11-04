@@ -120,3 +120,12 @@ with tempfile.TemporaryDirectory(prefix='slang navigation ') as directory:
     top.write_text('module top; leaf #(.P(1)) first(); leaf #(.P(0)) second(); endmodule\n')
     assert definition_query(leaf, 4, 25, units) is None
 print('Native HDL navigation: module/instance/port/value/function targets, overlays and ambiguous elaboration passed')
+
+raw = subprocess.check_output([service, '--editor-index', '--'] + files).decode('utf-8').splitlines()
+assert raw[0] == 'insight-slang-index-v1' and raw[1] == '0'
+rows = [line.split('\t') for line in raw[2:]]
+assert all(len(row) == 8 for row in rows)
+assert any(row[0] == 'D' and bytes.fromhex(row[1]).decode() == 'data_i' for row in rows)
+assert any(row[0] == 'R' and bytes.fromhex(row[7]).decode() == 'module' and bytes.fromhex(row[1]).decode() == 'leaf' for row in rows)
+assert any(row[0] == 'R' and bytes.fromhex(row[7]).decode() == 'value' and bytes.fromhex(row[1]).decode() == 'data_i' for row in rows)
+print('Project index protocol: declarations, module links, named ports and value references passed')

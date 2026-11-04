@@ -159,7 +159,7 @@ void insight_completion_notify(GeanyEditor *editor,SCNotification *nt) {
  else if(nt->nmhdr.code==SCN_FOCUSOUT) focus_out(NULL,NULL,c);
  else if(nt->nmhdr.code==SCN_UPDATEUI && (nt->updated & (SC_UPDATE_V_SCROLL|SC_UPDATE_H_SCROLL))) hide(c);
 }
-static gchar *slang_service(void) {
+gchar *insight_completion_slang_service(void) {
  const gchar *override=g_getenv("GEANY_INSIGHT_SLANG_SERVICE");if(override && *override) return g_strdup(override);
  gchar *libexec=g_path_get_dirname(utils_resource_dir(RESOURCE_DIR_LIBEXEC));
  gchar *path=g_build_filename(libexec,"geany-insight","slang",
@@ -226,7 +226,7 @@ static gboolean semantic_start(gpointer data) {
  SemanticJob *j=g_new0(SemanticJob,1);g_weak_ref_init(&j->sci,c->sci);j->serial=c->semantic_serial;j->definition=c->definition;j->document=doc->id;j->offset=offset;j->rootlen=c->semantic_root;j->path=g_strdup(doc->file_name);j->text=sci_get_contents(c->sci,length+1);j->project=g_strdup(app->project ? app->project->file_name:NULL);j->resources=g_build_filename(app->datadir,"insight","clang","resources",NULL);gchar *native=app->project ? project_get_base_path():NULL;j->root=native ? utils_get_utf8_from_locale(native):g_path_get_dirname(doc->file_name);g_free(native);j->buffers=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);
  gsize total=0;for(guint i=0;i<documents_array->len;i++) {GeanyDocument *d=g_ptr_array_index(documents_array,i);if(!DOC_VALID(d) || !d->file_name || (insight_slang_source(j->path) && !insight_slang_source(d->file_name))) continue;gint n=sci_get_length(d->editor->sci);if(n<0 || n>2*1024*1024 || total+(gsize)n>32u*1024u*1024u || g_hash_table_size(j->buffers)>=256) continue;gchar *text=sci_get_contents(d->editor->sci,n+1);if(!memchr(text,0,n) && g_utf8_validate(text,n,NULL)) {g_hash_table_insert(j->buffers,g_strdup(d->file_name),text);total+=n;}else g_free(text);}
  if(insight_slang_source(j->path)) {
-  j->slang=slang_service();j->paths=insight_workbench_source_paths(insight_slang_source,257);
+  j->slang=insight_completion_slang_service();j->paths=insight_workbench_source_paths(insight_slang_source,257);
   GHashTable *seen=g_hash_table_new(g_str_hash,g_str_equal);for(guint i=0;i<j->paths->len;i++) g_hash_table_add(seen,g_ptr_array_index(j->paths,i));
   for(guint i=0;i<documents_array->len;i++) {GeanyDocument *d=g_ptr_array_index(documents_array,i);if(!DOC_VALID(d) || !d->file_name || !insight_slang_source(d->file_name)) continue;
    if(!g_hash_table_contains(j->buffers,d->file_name)) j->slang_incomplete=TRUE;
@@ -240,12 +240,12 @@ static gboolean semantic_start(gpointer data) {
 gboolean insight_completion_definition(GeanyEditor *editor) {
  load();GeanyDocument *doc=editor ? editor->document:NULL;if(!DOC_VALID(doc) || !insight_slang_source(doc->file_name) || sci_get_length(editor->sci)>2*1024*1024) return FALSE;
  gchar word[1025]={0};editor_find_current_word_sciwc(editor,sci_get_current_position(editor->sci),word,sizeof word);if(!*word) return FALSE;
- gchar *service=slang_service();gboolean present=g_file_test(service,G_FILE_TEST_IS_EXECUTABLE);g_free(service);if(!present) return FALSE;
+ gchar *service=insight_completion_slang_service();gboolean present=g_file_test(service,G_FILE_TEST_IS_EXECUTABLE);g_free(service);if(!present) return FALSE;
  Completion *c=create(editor);hide(c);c->definition=TRUE;c->semantic_root=0;c->semantic_idle=g_timeout_add(150,semantic_start,c);ui_set_statusbar(TRUE,"%s",insight_tr("Resolving HDL declaration with slang..."));return TRUE;
 }
 gboolean insight_completion_semantic(GeanyEditor *editor,gsize rootlen,gboolean force) {
  load();GeanyDocument *doc=editor ? editor->document:NULL;Completion *existing=state(editor);if((existing && existing->bypass) || !settings.semantic || !settings.detailed || !DOC_VALID(doc) || !doc->file_name || (!insight_slang_source(doc->file_name) && (!insight_clang_available() || !insight_clang_source(doc->file_name))) || SEND(editor->sci,SCI_GETREADONLY,0,0) || SEND(editor->sci,SCI_GETSELECTIONS,0,0)!=1 || sci_has_selection(editor->sci)) return FALSE;
- if(insight_slang_source(doc->file_name)) {gchar *service=slang_service();gboolean present=g_file_test(service,G_FILE_TEST_IS_EXECUTABLE);g_free(service);if(!present) return FALSE;}
+ if(insight_slang_source(doc->file_name)) {gchar *service=insight_completion_slang_service();gboolean present=g_file_test(service,G_FILE_TEST_IS_EXECUTABLE);g_free(service);if(!present) return FALSE;}
  gint pos=sci_get_current_position(editor->sci)-(gint)rootlen;gboolean member=pos>0 && sci_get_char_at(editor->sci,pos-1)=='.';if(pos>=2) member=member || (sci_get_char_at(editor->sci,pos-2)=='-' && sci_get_char_at(editor->sci,pos-1)=='>') || (sci_get_char_at(editor->sci,pos-2)==':' && sci_get_char_at(editor->sci,pos-1)==':');if(!member && !force) return FALSE;
  Completion *c=create(editor);semantic_cancel(c);c->semantic_root=rootlen;c->semantic_idle=g_timeout_add(150,semantic_start,c);return member;
 }

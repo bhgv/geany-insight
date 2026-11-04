@@ -52,7 +52,7 @@ Each request reads the explicit file set and elaborates it together. stdout cont
 
 A nonzero `diagnostics_count` marks results requiring inspection; JSON alone does not establish project correctness. Missing symbols return an empty array. Read/argument errors return nonzero, explain the failure on stderr and leave stdout empty. A 100000-record limit fails without partial JSON. Sources are never modified. An explicit file list can represent a temporary workspace without saving a project.
 
-This prepares the editor integration: **persistent HDL indexing and relation graphs do not yet consume the service; completion and the definition command are connected**. Each process reparses its input; persistent AST caching, include/define/top options and complete reference coverage are not connected yet. A caller can terminate the process without GTK access. Editor highlighting remains lexical.
+This prepares the editor integration: **completion, definition navigation and a saved HDL reference index are connected; automatic semantic reindexing and HDL graphs remain pending**. Each process reparses its input; persistent AST caching, include/define/top options and complete reference coverage are not connected yet. A caller can terminate the process without GTK access. Editor highlighting remains lexical.
 
 The `slang_semantic_protocol` test exercises the real executable: cross-file targets, package function calls, deduplicated completion, exact positions, erroneous input and paths with spaces.
 
@@ -72,10 +72,20 @@ The shared worker uses current project members and open files, including unsaved
 
 The internal `--editor-definition FILE LINE COLUMN -- FILE...` mode uses one-based lines and UTF-8 byte columns. Output starts with `insight-slang-definition-v1`, followed on success by one tab-separated record: hex-encoded UTF-8 path, line and column. `--overlay ORIGINAL SNAPSHOT` before `--` supplies the same snapshots as completion. Multiple instances sharing a physical declaration are accepted; different destinations for the same source range produce an empty result.
 
-Coverage includes bound value/member expressions, user calls and module/named-port links. This is not every SystemVerilog syntax reference: types, macros and some preprocessor constructs still need separate coverage. Persistent AST caching, HDL graphs and a shared project reference index remain future work.
+Coverage includes bound value/member expressions, user calls and module/named-port links. This is not every SystemVerilog syntax reference: types, macros and some preprocessor constructs still need separate coverage. Persistent AST caching, HDL graphs and automatic semantic reindexing remain future work.
 
 ## Repeated-request cache
 
 The worker adapter retains up to eight recent completion/navigation replies, totaling at most 4 MiB. An identical file set, snapshot and position can reuse a reply without starting slang again. The SHA-256 key covers source order and full contents, unsaved buffers, query arguments, working directory and executable version. Content changes invalidate reuse even if file size stays the same. Inputs are checked again before storing a reply.
 
 This is a thread-safe process-local cache. File reads and key calculation stay in workers, without blocking GTK. **Any source set containing a backtick (preprocessor directives/macros) bypasses caching**, so changing an include or its lookup path cannot leave stale suggestions. A conservative bypass for backticks inside comments/strings is acceptable. This caches replies, not persistent ASTs; changed text and include-based projects still run the parser again.
+
+## Saved index and Relations panel
+
+Choose **HDL references (slang)…** from Navigation or the editor popup, or **References (slang HDL, by name)** in Relations. A request elaborates project HDL members and named open HDL files together. Rows show reference locations and destinations (`kind → file:line:column`). Activating a row opens the reference; Go to Definition opens its bound declaration. Filtering is by name, so distinct same-named symbols may appear with different destinations; this is not compiler-identity filtering.
+
+The AST supplies declarations and value/member/user-call/instance/module/named-port references. They are atomically saved as a separate project index component: a **`.hdl` file beside the main project database**. These are semantic facts, not serialized ASTs. Status reports declaration/reference counts, diagnostic count, saved/restored/memory-only state.
+
+The index is built **on a Relations request**, rather than on every document opening or once per project file. For sets without preprocessing, subsequent requests/editor sessions restore it after checking complete source contents, membership/order and the engine executable. Changes trigger joint rebuilding on the next request. Sets containing directives/macros are saved too but currently rebuilt on request: transitive include dependency validation for reuse is unfinished. Diagnostic-bearing indexes are not restored as ready results. Changed source snapshots/membership reject stale publication.
+
+Without a project the index stays in memory. Ctags symbols continue using the existing persistent project DB mechanism. Requests are bounded to 256 files, 32 MiB of snapshots and a 4 MiB service reply; the panel shows the first 2000 references. Full interactive HDL graphs, semantic colors, detailed diagnostic display and automatic typo-fix suggestions remain unconnected.
