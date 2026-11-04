@@ -1995,7 +1995,7 @@ static void hdl_job_run(GTask *task,gpointer source,gpointer data,GCancellable *
   if(!column || column-1>=end-start) continue;
   guint pos=start+column-1;gsize n=strlen(row->name);
   if(!n || n>end-pos || memcmp(text+pos,row->name,n) ||
-     (pos>start && (hdl_identifier_byte(text[pos-1]) || text[pos-1]=='\')) ||
+     (pos>start && (hdl_identifier_byte(text[pos-1]) || text[pos-1]=='\\')) ||
      (pos+n<end && hdl_identifier_byte(text[pos+n]))) continue;
   HdlSpan span={.line=row->line-1,.start=pos,.length=n,.role=role,.declaration=!strcmp(row->kind,"@hdldef")};
   g_array_append_val(j->colors,span);
