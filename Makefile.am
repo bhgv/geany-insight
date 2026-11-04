@@ -786,3 +786,5 @@ insightdoc_DATA += insight/docs/slang.md
 EXTRA_DIST += insight/tools/build_external_slang.py external/slang-compat/CMakeLists.txt external/slang-compat/Dependencies.cmake external/slang-compat/cmake310-gcc7.patch external/slang-compat/probe.cpp external/slang-compat/fixtures/leaf.sv external/slang-compat/fixtures/top.sv
 
 EXTRA_DIST += external/slang-compat/CompatCharconv.h external/slang-compat/charconv-test.cpp
+
+dist_insightdocmedia_DATA += insight/docs/media/slang-compat.svg
