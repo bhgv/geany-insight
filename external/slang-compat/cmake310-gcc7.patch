@@ -300,6 +300,19 @@ index 24505e40f..14eee7d1e 100644
  
  # If building the Python library we'll end up with a shared lib no matter what,
  # so make sure we always build with PIC.
+diff --git a/source/ast/Bitstream.cpp b/source/ast/Bitstream.cpp
+index dc3c4843c..a7162f2cc 100644
+--- a/source/ast/Bitstream.cpp
++++ b/source/ast/Bitstream.cpp
+@@ -674,7 +674,7 @@ static bool unpackConcatenation(const StreamingConcatenationExpression& lhs, Pac
+             }
+ 
+             // Re-order to a new rvalue with the slice size
+-            ConstantValue cv = std::vector(toBeOrdered.begin(), toBeOrdered.end());
++            ConstantValue cv = std::vector<ConstantValue>(toBeOrdered.begin(), toBeOrdered.end());
+             auto rvalue = Bitstream::reOrder(std::move(cv), concat.sliceSize, cv.bitstreamWidth());
+ 
+             SmallVector<ConstantValue*> packed;
 diff --git a/source/ast/CMakeLists.txt b/source/ast/CMakeLists.txt
 index 6f0d6e8b9..c3bc109b1 100644
 --- a/source/ast/CMakeLists.txt
@@ -428,6 +441,46 @@ index 6f0d6e8b9..c3bc109b1 100644
 +          ${CMAKE_CURRENT_SOURCE_DIR}/Symbol.cpp
 +          ${CMAKE_CURRENT_SOURCE_DIR}/SystemSubroutine.cpp
 +          ${CMAKE_CURRENT_SOURCE_DIR}/TimingControl.cpp)
+diff --git a/source/ast/expressions/AssignmentExpressions.cpp b/source/ast/expressions/AssignmentExpressions.cpp
+index 10475a896..60a969048 100644
+--- a/source/ast/expressions/AssignmentExpressions.cpp
++++ b/source/ast/expressions/AssignmentExpressions.cpp
+@@ -793,7 +793,7 @@ ConstantValue ConversionExpression::convert(EvalContext& context, const Type& fr
+         if (!to.isQueue() && from.isQueue()) {
+             // Convert from queue to vector.
+             auto& q = *value.queue();
+-            return std::vector(q.begin(), q.end());
++            return std::vector<ConstantValue>(q.begin(), q.end());
+         }
+ 
+         if (to.isQueue() && !from.isQueue()) {
+diff --git a/source/ast/types/AllTypes.cpp b/source/ast/types/AllTypes.cpp
+index 8a3c7e3a3..00ab52e4f 100644
+--- a/source/ast/types/AllTypes.cpp
++++ b/source/ast/types/AllTypes.cpp
+@@ -452,9 +452,9 @@ const Type& EnumType::fromSyntax(Compilation& compilation, const EnumTypeSyntax&
+                 return compilation.getErrorType();
+ 
+             // Range must be positive.
+-            if (!context.requirePositive(std::optional(dim.range.left),
++            if (!context.requirePositive(std::optional<int32_t>(dim.range.left),
+                                          member->dimensions[0]->sourceRange()) ||
+-                !context.requirePositive(std::optional(dim.range.right),
++                !context.requirePositive(std::optional<int32_t>(dim.range.right),
+                                          member->dimensions[0]->sourceRange())) {
+                 return compilation.getErrorType();
+             }
+@@ -532,8 +532,8 @@ void EnumType::createDefaultMembers(const ASTContext& context, const EnumTypeSyn
+                 continue;
+ 
+             SourceRange dimRange = dimList->sourceRange();
+-            if (!context.requirePositive(std::optional(dim.range.left), dimRange) ||
+-                !context.requirePositive(std::optional(dim.range.right), dimRange)) {
++            if (!context.requirePositive(std::optional<int32_t>(dim.range.left), dimRange) ||
++                !context.requirePositive(std::optional<int32_t>(dim.range.right), dimRange)) {
+                 continue;
+             }
+ 
 diff --git a/source/diagnostics/DiagnosticEngine.cpp b/source/diagnostics/DiagnosticEngine.cpp
 index 055cba891..5634d2d99 100644
 --- a/source/diagnostics/DiagnosticEngine.cpp
