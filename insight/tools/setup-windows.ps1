@@ -260,8 +260,22 @@ pacman -Q "${packages[@]}"
         $null = Invoke-Msys -Stage 'Git source checkout' -Script @'
 set -euo pipefail
 source_dir=$(cygpath -u "$INSIGHT_BOOTSTRAP_SOURCE")
-if [ -d "$source_dir/.git" ]; then
-    test "$(git -C "$source_dir" remote get-url origin)" = "$INSIGHT_BOOTSTRAP_FETCH" || { echo 'Different origin: refusing to modify this checkout.' >&2; exit 1; }
+github_repo_key() {
+    local url=${1,,}
+    local pattern='^(https://github\.com/|ssh://git@github\.com/|git@github\.com:)([a-z0-9-]+/[a-z0-9._-]+)/?$'
+    [[ $url =~ $pattern ]] || return 1
+    printf '%s\n' "${BASH_REMATCH[2]%.git}"
+}
+if [ -e "$source_dir/.git" ]; then
+    origin=$(git -C "$source_dir" config --local --get remote.origin.url || true)
+    if [ "$origin" != "$INSIGHT_BOOTSTRAP_FETCH" ]; then
+        if ! origin_key=$(github_repo_key "$origin") ||
+           ! expected_key=$(github_repo_key "$INSIGHT_BOOTSTRAP_FETCH") ||
+           [ "$origin_key" != "$expected_key" ]; then
+            printf 'Expected origin for this checkout: %s. Select a checkout of that repository or an empty source directory.\n' "$INSIGHT_BOOTSTRAP_FETCH" >&2
+            exit 1
+        fi
+    fi
 else
     git clone --progress --depth 1 "$INSIGHT_BOOTSTRAP_FETCH" "$source_dir"
 fi

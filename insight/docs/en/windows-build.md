@@ -57,7 +57,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\insight\tools\setup-wi
 
 `-ExecutionPolicy Bypass` applies only to this process. The script does not change machine execution policy or global PATH. It downloads the official MSYS2 installer, verifies its pinned SHA256 before execution, installs it if absent, performs full MSYS2 updates in separate shell sessions, then downloads/installs the build packages. Close other MSYS2 shells/applications before updating. A writable installation path usually avoids elevation; choose one you can write to if the installer reports access denied.
 
-With `-FetchSources`, it also clones Geany Insight and initializes the pinned `external/llvm-project` submodule for the default **Internal** provider. Without that switch it installs tools only. It never pulls/resets an existing editor checkout or overwrites initialized Clang sources. An existing checkout must have the expected origin URL. `-BuildEditor` additionally compiles and installs the editor and its internal engines.
+With `-FetchSources`, it also clones Geany Insight and initializes the pinned `external/llvm-project` submodule for the default **Internal** provider. Without that switch it installs tools only. It never pulls/resets an existing editor checkout or overwrites initialized Clang sources. An existing checkout must point to the expected GitHub repository. HTTPS and SSH URLs are accepted with or without `.git`, and the script leaves `origin` as configured. `-BuildEditor` additionally compiles and installs the editor and its internal engines.
 
 Useful options:
 
