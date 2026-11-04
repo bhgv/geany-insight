@@ -1079,6 +1079,22 @@ gint main_lib(gint argc, gchar **argv)
 
 	log_handlers_init();
 
+#ifdef G_OS_WIN32
+	/* Make GTK's packaged settings available before GTK parses options. */
+	gchar *install_dir = win32_get_installation_dir();
+	if (install_dir != NULL)
+	{
+		gchar *schema_dir = g_build_filename(install_dir, "share", "glib-2.0", "schemas", NULL);
+		gchar *schema_file = g_build_filename(schema_dir, "gschemas.compiled", NULL);
+
+		if (g_file_test(schema_file, G_FILE_TEST_IS_REGULAR))
+			g_setenv("GSETTINGS_SCHEMA_DIR", schema_dir, FALSE);
+		g_free(schema_file);
+		g_free(schema_dir);
+		g_free(install_dir);
+	}
+#endif
+
 	setup_paths();
 
 #ifdef ENABLE_NLS

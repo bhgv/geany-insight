@@ -19,7 +19,14 @@ sdk_bin = {p.name.lower(): p for p in (sdk / 'bin').glob('*.dll')}
 system = Path(os.environ['SystemRoot']) / 'System32'
 system_dlls = {p.name.lower() for p in system.iterdir() if p.is_file()}  # Includes WINSPOOL.DRV.
 
-if not args.installed_editor:
+if args.installed_editor:
+    schema_dir = Path('share/glib-2.0/schemas')
+    schemas = sdk / schema_dir / 'gschemas.compiled'
+    if not schemas.is_file():
+        raise SystemExit('Compiled GTK settings schemas missing: ' + str(schemas))
+    (package / schema_dir).mkdir(parents=True, exist_ok=True)
+    shutil.copy2(schemas, package / schema_dir / schemas.name)
+else:
     # Keep the GTK bundle layout/data, but use the binaries that we linked against.
     for target in package.rglob('*'):
         if target.is_file() and target.suffix.lower() == '.dll':
