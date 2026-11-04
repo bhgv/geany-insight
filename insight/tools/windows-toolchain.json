@@ -32,7 +32,9 @@
       "gettext-devel"
     ],
     "packaging": [
-      "mingw-w64-ucrt-x86_64-nsis"
+      "mingw-w64-ucrt-x86_64-nsis",
+      "wget",
+      "dos2unix"
     ],
     "systemClang": [
       "mingw-w64-ucrt-x86_64-clang",

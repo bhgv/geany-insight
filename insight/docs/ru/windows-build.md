@@ -18,7 +18,7 @@
 | Python и Docutils | `mingw-w64-ucrt-x86_64-python`, `mingw-w64-ucrt-x86_64-python-docutils`; скрипты сборки и документация |
 | Git, curl, patch, diffutils, gettext, tar, xz, unzip, zip, rsync | Загрузка исходников, тесты парсеров, генерация файлов и вспомогательная упаковка |
 | Необязательные Autotools | `-Autotools`: UCRT64 autotools, MSYS make и средства разработки gettext |
-| Необязательный NSIS | `-Packaging`: `mingw-w64-ucrt-x86_64-nsis`; нужен для установщика `.exe`, но не для компиляции и запуска редактора |
+| Необязательный NSIS | `-Packaging`: `mingw-w64-ucrt-x86_64-nsis`, wget и dos2unix; нужен для установщика `.exe`, но не для компиляции и запуска редактора |
 | Необязательный системный Clang/LLVM | `-ClangProvider System`: UCRT64 `clang` и `llvm`; явно выбираемая альтернатива внутреннему SDK из исходников |
 
 Полный список пакетов, закреплённые адрес и SHA256 установщика MSYS2 находятся в [windows-toolchain.json](../../tools/windows-toolchain.json). Установщик закреплён, но pacman загружает текущие подписанные пакеты: версии пакетов не заморожены. Скрипт выводит установленные версии. Для инструментов нужны несколько ГиБ; исходники и сборка внутреннего LLVM могут занять десятки ГиБ и значительное время. MSYS2 устанавливайте в доступный для записи путь без пробелов, например `C:\msys64`; для исходников лучше короткий путь вроде `C:\src\geany-insight`.
@@ -39,8 +39,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\insight\tools\setup-wi
 
 ```powershell
 # Показать установщик, пакеты и действия с исходниками без загрузок:
-.\insight\tools\setup-windows.ps1 -Plan
-.\insight\tools\setup-windows.ps1 -Help
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\insight\tools\setup-windows.ps1 -Plan
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\insight\tools\setup-windows.ps1 -Help
 
 # Явно выбрать системный Clang — как в существующей Windows x64 CI:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\insight\tools\setup-windows.ps1 -ClangProvider System -FetchSources
@@ -58,6 +58,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\insight\tools\setup-wi
 ```bash
 cd /c/src/geany-insight
 printf '%s\n' "$MSYSTEM"   # должно быть UCRT64
+export CC=gcc CXX=g++
 which gcc g++ python3 meson ninja cmake pkg-config
 pkg-config --modversion gtk+-3.0 glib-2.0
 ```

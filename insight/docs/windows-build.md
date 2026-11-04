@@ -18,7 +18,7 @@ This guide describes a **native Windows x64 build using MSYS2 UCRT64**, GCC and 
 | Python and Docutils | `mingw-w64-ucrt-x86_64-python`, `mingw-w64-ucrt-x86_64-python-docutils`; build helpers and documentation |
 | Git, curl, patch, diffutils, gettext, tar, xz, unzip, zip, rsync | Source download, parser tests, generated files and packaging helpers |
 | Optional Autotools | `-Autotools`: UCRT64 autotools, MSYS make and gettext development tools |
-| Optional NSIS | `-Packaging`: `mingw-w64-ucrt-x86_64-nsis`; needed for an `.exe` installer, not for compiling/running the editor |
+| Optional NSIS | `-Packaging`: `mingw-w64-ucrt-x86_64-nsis`, wget and dos2unix; needed for an `.exe` installer, not for compiling/running the editor |
 | Optional system Clang/LLVM | `-ClangProvider System`: UCRT64 `clang` and `llvm`; an explicit alternative to the internal source SDK |
 
 The complete package lists and pinned MSYS2 installer URL/SHA256 are in [windows-toolchain.json](../tools/windows-toolchain.json). The installer is pinned; pacman downloads current signed packages, so package versions are not frozen. The script prints the installed versions. Allow several GiB for tools; the internal LLVM source/build can require tens of GiB and substantial build time. Use a writable directory without spaces for MSYS2, for example `C:\msys64`, and preferably a short source path such as `C:\src\geany-insight`.
@@ -39,8 +39,8 @@ Useful options:
 
 ```powershell
 # Show the exact installer, package list and source actions without downloads:
-.\insight\tools\setup-windows.ps1 -Plan
-.\insight\tools\setup-windows.ps1 -Help
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\insight\tools\setup-windows.ps1 -Plan
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\insight\tools\setup-windows.ps1 -Help
 
 # Explicit system-provider variant, matching the existing Windows x64 CI route:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\insight\tools\setup-windows.ps1 -ClangProvider System -FetchSources
@@ -58,6 +58,7 @@ Open **MSYS2 UCRT64** (`C:\msys64\ucrt64.exe`), not an MSYS/MINGW64 shell. From 
 ```bash
 cd /c/src/geany-insight
 printf '%s\n' "$MSYSTEM"   # must print UCRT64
+export CC=gcc CXX=g++
 which gcc g++ python3 meson ninja cmake pkg-config
 pkg-config --modversion gtk+-3.0 glib-2.0
 ```
