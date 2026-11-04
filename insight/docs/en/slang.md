@@ -73,3 +73,9 @@ The shared worker uses current project members and open files, including unsaved
 The internal `--editor-definition FILE LINE COLUMN -- FILE...` mode uses one-based lines and UTF-8 byte columns. Output starts with `insight-slang-definition-v1`, followed on success by one tab-separated record: hex-encoded UTF-8 path, line and column. `--overlay ORIGINAL SNAPSHOT` before `--` supplies the same snapshots as completion. Multiple instances sharing a physical declaration are accepted; different destinations for the same source range produce an empty result.
 
 Coverage includes bound value/member expressions, user calls and module/named-port links. This is not every SystemVerilog syntax reference: types, macros and some preprocessor constructs still need separate coverage. Persistent AST caching, HDL graphs and a shared project reference index remain future work.
+
+## Repeated-request cache
+
+The worker adapter retains up to eight recent completion/navigation replies, totaling at most 4 MiB. An identical file set, snapshot and position can reuse a reply without starting slang again. The SHA-256 key covers source order and full contents, unsaved buffers, query arguments, working directory and executable version. Content changes invalidate reuse even if file size stays the same. Inputs are checked again before storing a reply.
+
+This is a thread-safe process-local cache. File reads and key calculation stay in workers, without blocking GTK. **Any source set containing a backtick (preprocessor directives/macros) bypasses caching**, so changing an include or its lookup path cannot leave stale suggestions. A conservative bypass for backticks inside comments/strings is acceptable. This caches replies, not persistent ASTs; changed text and include-based projects still run the parser again.

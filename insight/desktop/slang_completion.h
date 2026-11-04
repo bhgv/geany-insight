@@ -10,4 +10,8 @@ GPtrArray *insight_slang_complete(const gchar *service,const gchar *path,const g
  guint offset,guint rootlen,GPtrArray *paths,GHashTable *buffers,GCancellable *);
 gboolean insight_slang_definition(const gchar *,const gchar *,const gchar *,guint,
  GPtrArray *,GHashTable *,GCancellable *,gchar **,guint *,guint *);
+typedef struct {guint64 hits,starts,bypasses;guint entries;gsize bytes;} InsightSlangCacheStats;
+/* Process-local bounded response cache; no AST persistence. Safe across workers. */
+void insight_slang_cache_clear(void);
+void insight_slang_cache_stats(InsightSlangCacheStats *);
 #endif

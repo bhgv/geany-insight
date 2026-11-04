@@ -19,10 +19,58 @@ static gchar *disk_stamp(const gchar *path,guint64 *size) {
  GFile *file=g_file_new_for_path(path);GFileInfo *info=g_file_query_info(file,"standard::size,etag::value",G_FILE_QUERY_INFO_NONE,NULL,NULL);g_object_unref(file);if(!info) return NULL;
  *size=g_file_info_get_size(info);gchar *etag=g_strdup(g_file_info_get_etag(info));g_object_unref(info);return etag;
 }
+typedef struct {gchar *key,*reply;gsize bytes;} CacheEntry;
+static GMutex cache_mutex;
+static GQueue cache_entries=G_QUEUE_INIT;
+static InsightSlangCacheStats cache_stats;
+static void cache_free(CacheEntry *entry) {g_free(entry->key);g_free(entry->reply);g_free(entry);}
+void insight_slang_cache_clear(void) {
+ g_mutex_lock(&cache_mutex);while(!g_queue_is_empty(&cache_entries)) cache_free(g_queue_pop_head(&cache_entries));cache_stats=(InsightSlangCacheStats){0};g_mutex_unlock(&cache_mutex);
+}
+void insight_slang_cache_stats(InsightSlangCacheStats *stats) {g_mutex_lock(&cache_mutex);*stats=cache_stats;g_mutex_unlock(&cache_mutex);}
+static void key_field(GChecksum *sum,const gchar *text,gsize length) {
+ gchar prefix[32];g_snprintf(prefix,sizeof prefix,"%"G_GSIZE_FORMAT":",length);g_checksum_update(sum,(const guchar *)prefix,strlen(prefix));g_checksum_update(sum,(const guchar *)text,length);
+}
+/* Cache only complete explicit source sets without preprocessor directives.
+ * Includes / macro-built dependencies need a compiler dependency manifest;
+ * conservatively bypass instead of reusing an incomplete dependency key. */
+static gchar *request_key(const gchar *service,const gchar *const *arguments,GPtrArray *paths,GHashTable *buffers,GCancellable *cancel) {
+ guint64 executable_size=0;gchar *stamp=disk_stamp(service,&executable_size);if(!stamp) return NULL;
+ GChecksum *sum=g_checksum_new(G_CHECKSUM_SHA256);key_field(sum,service,strlen(service));key_field(sum,stamp,strlen(stamp));g_free(stamp);
+ gchar *cwd=g_get_current_dir();key_field(sum,cwd,strlen(cwd));g_free(cwd);
+ for(guint i=0;arguments[i];i++) key_field(sum,arguments[i],strlen(arguments[i]));
+ gboolean valid=TRUE;gsize total=0;guint files=0;GHashTable *seen=g_hash_table_new(g_str_hash,g_str_equal);
+ for(guint i=0;valid && i<paths->len;i++) {
+  const gchar *file=g_ptr_array_index(paths,i);if(!insight_slang_source(file) || g_hash_table_contains(seen,file)) continue;g_hash_table_add(seen,(gpointer)file);
+  if(++files>256 || (cancel && g_cancellable_is_cancelled(cancel))) {valid=FALSE;break;}
+  const gchar *text=g_hash_table_lookup(buffers,file);gchar *disk=NULL;gsize length=0;
+  if(text) length=strlen(text);
+  else {guint64 size=0;gchar *etag=disk_stamp(file,&size);if(!etag || size>2u*1024u*1024u) {g_free(etag);valid=FALSE;break;}g_free(etag);if(!g_file_get_contents(file,&disk,&length,NULL)) {valid=FALSE;break;}text=disk;}
+  total+=length;if(length>2u*1024u*1024u || total>32u*1024u*1024u || memchr(text,'`',length) || memchr(text,0,length) || !g_utf8_validate(text,length,NULL)) valid=FALSE;
+  if(valid) {key_field(sum,file,strlen(file));key_field(sum,text,length);}g_free(disk);
+ }
+ g_hash_table_unref(seen);gchar *key=valid && files ? g_strdup(g_checksum_get_string(sum)):NULL;g_checksum_free(sum);return key;
+}
+static gchar *cache_get(const gchar *key) {
+ gchar *reply=NULL;g_mutex_lock(&cache_mutex);
+ if(key) for(GList *link=cache_entries.head;link;link=link->next) {CacheEntry *entry=link->data;if(!strcmp(key,entry->key)) {reply=g_strdup(entry->reply);g_queue_unlink(&cache_entries,link);g_queue_push_head_link(&cache_entries,link);cache_stats.hits++;break;}}
+ else cache_stats.bypasses++;
+ g_mutex_unlock(&cache_mutex);return reply;
+}
+static void cache_put(const gchar *key,const gchar *reply) {
+ if(!key || !reply || strlen(reply)>4u*1024u*1024u-128) return;
+ CacheEntry *entry=g_new0(CacheEntry,1);entry->key=g_strdup(key);entry->reply=g_strdup(reply);entry->bytes=strlen(key)+strlen(reply)+2;
+ g_mutex_lock(&cache_mutex);
+ for(GList *link=cache_entries.head;link;link=link->next) {CacheEntry *old=link->data;if(!strcmp(key,old->key)) {cache_stats.bytes-=old->bytes;cache_stats.entries--;g_queue_delete_link(&cache_entries,link);cache_free(old);break;}}
+ while(cache_entries.length>=8 || cache_stats.bytes+entry->bytes>4u*1024u*1024u) {CacheEntry *old=g_queue_pop_tail(&cache_entries);cache_stats.bytes-=old->bytes;cache_stats.entries--;cache_free(old);}
+ g_queue_push_head(&cache_entries,entry);cache_stats.bytes+=entry->bytes;cache_stats.entries++;g_mutex_unlock(&cache_mutex);
+}
 static void terminate(GCancellable *cancel,gpointer data) {(void)cancel;g_subprocess_force_exit(G_SUBPROCESS(data));}
 static gchar *query(const gchar *service,const gchar *const *arguments,GPtrArray *paths,GHashTable *buffers,GCancellable *cancel) {
  if(!service || !*service || !paths || !buffers || (cancel && g_cancellable_is_cancelled(cancel))) return NULL;
- gchar *directory=g_dir_make_tmp("geany-slang-XXXXXX",NULL);if(!directory) return NULL;
+ gchar *key=request_key(service,arguments,paths,buffers,cancel);if(cancel && g_cancellable_is_cancelled(cancel)) {g_free(key);return NULL;}gchar *cached=cache_get(key);
+ if(cached) {g_free(key);if(cancel && g_cancellable_is_cancelled(cancel)) {g_free(cached);return NULL;}return cached;}
+ gchar *directory=g_dir_make_tmp("geany-slang-XXXXXX",NULL);if(!directory) {g_free(key);return NULL;}
  GPtrArray *argv=g_ptr_array_new_with_free_func(g_free),*temporary=g_ptr_array_new_with_free_func(g_free);gchar *out=NULL;
  g_ptr_array_add(argv,g_strdup(service));for(guint i=0;arguments[i];i++) g_ptr_array_add(argv,g_strdup(arguments[i]));
  GHashTable *selected=g_hash_table_new(g_str_hash,g_str_equal),*stamps=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);gsize bytes=0,total_args=0;gboolean valid=TRUE;
@@ -51,6 +99,7 @@ static gchar *query(const gchar *service,const gchar *const *arguments,GPtrArray
   gchar *bin=g_build_filename(prefix,"bin",NULL),*search=g_strconcat(bin,G_SEARCHPATH_SEPARATOR_S,g_getenv("PATH") ? g_getenv("PATH"):"",NULL);
   g_subprocess_launcher_setenv(launcher,"PATH",search,TRUE);g_free(search);g_free(bin);g_free(prefix);
 #endif
+  g_mutex_lock(&cache_mutex);cache_stats.starts++;g_mutex_unlock(&cache_mutex);
   GSubprocess *process=g_subprocess_launcher_spawnv(launcher,(const gchar *const *)argv->pdata,NULL);g_object_unref(launcher);
   if(process) {
    gulong handler=cancel ? g_cancellable_connect(cancel,G_CALLBACK(terminate),process,NULL):0;
@@ -64,6 +113,10 @@ static gchar *query(const gchar *service,const gchar *const *arguments,GPtrArray
  }
  GHashTableIter iter;gpointer file,stamp;g_hash_table_iter_init(&iter,stamps);
  while(out && g_hash_table_iter_next(&iter,&file,&stamp)) {guint64 size=0;gchar *now=disk_stamp(file,&size);if(g_strcmp0(now,stamp)) g_clear_pointer(&out,g_free);g_free(now);}g_hash_table_unref(stamps);
+ if(out && key && !(cancel && g_cancellable_is_cancelled(cancel))) {
+  gchar *fresh=request_key(service,arguments,paths,buffers,cancel);
+  if(!g_strcmp0(key,fresh)) cache_put(key,out);else g_clear_pointer(&out,g_free);g_free(fresh);
+ }g_free(key);
  for(guint i=0;i<temporary->len;i++) g_unlink(g_ptr_array_index(temporary,i));g_rmdir(directory);g_free(directory);g_ptr_array_unref(temporary);g_ptr_array_unref(argv);return out;
 }
 
