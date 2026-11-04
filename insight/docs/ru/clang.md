@@ -288,4 +288,6 @@ After configure changes, both are relinked automatically; deleting the LLVM
 build or running make clean is unnecessary. CI builds and installs both
 Autotools and Meson editors against the internal SDK and checks unresolved symbols.
 
+При сборке внутреннего SDK на Windows скрипт автоматически добавляет недостающий `#include <cstdint>` в `SmallVector.h` закреплённой версии LLVM перед настройкой CMake.
+
 Инструменты и сборка Windows x64: [инструкция и автоматическая подготовка](windows-build.md).

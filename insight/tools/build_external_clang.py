@@ -24,15 +24,19 @@ def check_cmake(check_output=subprocess.check_output):
 
 
 def apply_cmake310_patch(source, run=subprocess.run):
+    apply_llvm_patch(source, ROOT / 'external/cmake310/llvm18.patch',
+                     'CMake 3.10', run)
+
+
+def apply_llvm_patch(source, patch, purpose, run=subprocess.run):
     """Apply all hunks atomically, or reuse them; never reset compiler edits."""
-    patch = ROOT / 'external/cmake310/llvm18.patch'
     command = ['git', '-C', str(source), 'apply']
     options = dict(stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
     if run(command + ['--reverse', '--check', str(patch)], **options).returncode == 0:
         return
     check = run(command + ['--check', str(patch)], **options)
     if check.returncode:
-        raise ValueError('CMake 3.10 compatibility patch conflicts with local compiler edits; '
+        raise ValueError(purpose + ' compatibility patch conflicts with local compiler edits; '
                          'no files changed. Details: ' + check.stderr.strip())
     run(command + [str(patch)], check=True)
 
@@ -105,6 +109,8 @@ def main():
     else:
         if legacy_cmake:
             apply_cmake310_patch(source)
+        if os.name == 'nt':
+            apply_llvm_patch(source, ROOT / 'external/llvm18-windows.patch', 'Windows')
         run(configure)
         if args.configure_only:
             return
