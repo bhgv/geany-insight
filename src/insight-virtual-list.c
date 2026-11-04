@@ -54,18 +54,36 @@ static gchar *model_identity(GtkTreeModel *model,GtkTreeIter *iter) {
  gchar *key=value_identity(values,count);for(guint n=0;n<count;n++)g_value_unset(&values[n]);g_free(values);return key;
 }
 static guint visible_rows(VirtualList *s) {
- gint height=22;
- GList *columns=gtk_tree_view_get_columns(s->view);
- if(columns) {
-  GList *cells=gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(columns->data));
-  if(cells) {gint minimum=0,natural=0;gtk_cell_renderer_get_preferred_height(cells->data,GTK_WIDGET(s->view),&minimum,&natural);height=MAX(height,natural+2);}
-  g_list_free(cells);
+ gint height=0;
+ GtkTreeIter first;
+ GtkTreeModel *model=gtk_tree_view_get_model(s->view);
+ if(gtk_widget_get_realized(GTK_WIDGET(s->view)) && model &&
+    gtk_tree_model_get_iter_first(model,&first)) {
+  GtkTreePath *path=gtk_tree_model_get_path(model,&first);
+  GdkRectangle row={0};
+  gtk_tree_view_get_background_area(s->view,path,NULL,&row);
+  gtk_tree_path_free(path);
+  height=row.height;
  }
- g_list_free(columns);
+ /* Before rows are laid out, fall back to the renderer requisition. */
+ if(height<=0) {
+  height=22;
+  GList *columns=gtk_tree_view_get_columns(s->view);
+  if(columns) {
+   GList *cells=gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(columns->data));
+   if(cells) {
+    gint minimum=0,natural=0;
+    gtk_cell_renderer_get_preferred_height(cells->data,GTK_WIDGET(s->view),&minimum,&natural);
+    height=MAX(height,natural+2);
+   }
+   g_list_free(cells);
+  }
+  g_list_free(columns);
+ }
  GdkRectangle visible={0};if(gtk_widget_get_realized(GTK_WIDGET(s->view))) gtk_tree_view_get_visible_rect(s->view,&visible);
  gint available=visible.height>0?visible.height:gtk_widget_get_allocated_height(GTK_WIDGET(s->view));
  /* A conservative page size keeps the final row visible despite theme padding. */
- return CLAMP(available/MAX(1,height)-1,1,WINDOW_ROWS/2);
+ return CLAMP(available/height-1,1,(gint)(WINDOW_ROWS/2));
 }static void busy(VirtualList *s) {g_object_set_data(G_OBJECT(s->view),"insight-virtual-loading",GINT_TO_POINTER(s->cancel||s->debounce||s->apply));}
 static void range(VirtualList *s) {
  guint page=visible_rows(s);s->updating=TRUE;
@@ -103,6 +121,7 @@ static gboolean apply_rows(gpointer data) {
   if(g_get_monotonic_time()>=deadline){g_object_unref(view);return G_SOURCE_CONTINUE;}
  }
  s->first=j->first;s->rendered_dataset=j->dataset;s->apply=0;unblock_selection(s);
+ gtk_widget_queue_resize(GTK_WIDGET(view));
  gtk_adjustment_set_value(gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(s->scroll)),0);
  g_object_set_data(G_OBJECT(view),"insight-virtual-window-rows",GUINT_TO_POINTER(j->desired->len));busy(s);g_object_unref(view);return G_SOURCE_REMOVE;
 }
