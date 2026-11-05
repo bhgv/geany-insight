@@ -6,6 +6,7 @@
 #include "slang/ast/Definition.h"
 #include "slang/ast/expressions/AssignmentExpressions.h"
 #include "slang/ast/expressions/MiscExpressions.h"
+#include "slang/ast/expressions/OperatorExpressions.h"
 #include "slang/ast/expressions/CallExpression.h"
 #include "slang/ast/expressions/SelectExpressions.h"
 #include "slang/ast/symbols/SubroutineSymbols.h"
@@ -203,6 +204,51 @@ struct Jump : ASTVisitor<Jump, true, true> {
         visitDefault(node);
     }
 };
+struct PortOperands : ASTVisitor<PortOperands, false, true> {
+    std::vector<std::pair<const Symbol*, SourceRange>> signals;
+    std::unordered_set<const Symbol*> seen;
+
+    // Keep each signal once per connection, at its first valid occurrence.
+    // Сохраняет каждый сигнал один раз на подключение, по первому месту в исходнике.
+    void add(const Symbol* symbol, SourceRange range) {
+        if (symbol && (symbol->kind == SymbolKind::Net || symbol->kind == SymbolKind::Variable) &&
+            range.start() && seen.insert(symbol).second)
+            signals.emplace_back(symbol, range);
+    }
+
+    // Collect a local signal read in an input expression.
+    // Собирает чтение локального сигнала во входном выражении.
+    void handle(const NamedValueExpression& node) { add(&node.symbol, node.sourceRange); }
+
+    // Collect a hierarchical signal read in an input expression.
+    // Собирает чтение сигнала по иерархическому имени во входном выражении.
+    void handle(const HierarchicalValueExpression& node) { add(&node.symbol, node.sourceRange); }
+
+    // Ignore output arguments when collecting reads in a port expression.
+    // Исключает выходные аргументы из чтений во входном выражении.
+    void handle(const AssignmentExpression& node) {
+        if (!node.isLValueArg())
+            node.right().visit(*this);
+    }
+
+    // Follow output destinations without treating index expressions as targets.
+    // Обходит получателей выхода и исключает выражения индексов из целей записи.
+    void destinations(const Expression& node) {
+        if (node.kind == ExpressionKind::Assignment) {
+            const auto& assignment = node.as<AssignmentExpression>();
+            if (assignment.isLValueArg())
+                destinations(assignment.left());
+        }
+        else if (node.kind == ExpressionKind::Concatenation) {
+            for (const auto* operand : node.as<ConcatenationExpression>().operands())
+                destinations(*operand);
+        }
+        else {
+            add(node.getSymbolReference(), node.sourceRange);
+        }
+    }
+};
+
 struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
     const SourceManager& sources;
     std::vector<std::string> rows;
@@ -278,29 +324,36 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
                 (port.hasInitializer() && expression == port.getInitializer()))
                 continue;
 
-            const auto* external = expression->getSymbolReference();
-            if (!external || (external->kind != SymbolKind::Net &&
-                              external->kind != SymbolKind::Variable) ||
-                !expression->sourceRange.start())
-                continue;
+            PortOperands operands;
+            if (port.direction == ArgumentDirection::In) {
+                expression->visit(operands);
+                // Implicit named connections may have no syntax to visit.
+                if (operands.signals.empty())
+                    operands.add(expression->getSymbolReference(), expression->sourceRange);
+            }
+            else if (port.direction == ArgumentDirection::Out) {
+                operands.destinations(*expression);
+            }
+            else {
+                operands.add(expression->getSymbolReference(), expression->sourceRange);
+            }
 
             const auto internalRole = port.direction == ArgumentDirection::In ? "port-source" :
                 port.direction == ArgumentDirection::Out ? "port-destination" : "port-peer";
             const auto externalRole = port.direction == ArgumentDirection::In ? "port-destination" :
                 port.direction == ArgumentDirection::Out ? "port-source" : "port-peer";
             const std::string portName = std::string(instance.name) + "." + std::string(port.name);
-            reference(portName, expression->sourceRange, external->location, externalRole);
-            reference(external->name, expression->sourceRange, port.internalSymbol->location,
-                      internalRole);
-
-            // Keep instance paths separately from declaration-based references.
-            // Хранит пути экземпляров отдельно от ссылок на объявления.
-            const auto location = sources.getFullyOriginalLoc(expression->sourceRange.start());
-            const auto outside = identity(*external);
             const auto inside = identity(instance) + "." + std::string(port.internalSymbol->name);
-            if (!outside.empty() && !instance.name.empty() && !port.internalSymbol->name.empty()) {
-                add("P", inside, location, outside, "", externalRole);
-                add("P", outside, location, inside, "", internalRole);
+            for (const auto& [external, range] : operands.signals) {
+                reference(portName, range, external->location, externalRole);
+                reference(external->name, range, port.internalSymbol->location, internalRole);
+
+                const auto location = sources.getFullyOriginalLoc(range.start());
+                const auto outside = identity(*external);
+                if (!outside.empty() && !instance.name.empty() && !port.internalSymbol->name.empty()) {
+                    add("P", inside, location, outside, "", externalRole);
+                    add("P", outside, location, inside, "", internalRole);
+                }
             }
         }
     }
