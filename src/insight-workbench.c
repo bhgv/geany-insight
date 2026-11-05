@@ -4955,6 +4955,7 @@ typedef struct {
     gchar *saved_group;
     guint minimum_hits;
     gboolean log_only;
+    gboolean disabled;
 } DebugConditionalPoint;
 
 typedef struct {
@@ -4977,6 +4978,7 @@ typedef struct {
     gsize display_length;
     GHashTable *file_breakpoints;
     GHashTable *conditional_points;
+    GHashTable *disabled_plain_points;
     guint unresolved_breakpoints;
     gchar *breakpoint_settings_path;
     GHashTable *lua_modules;
@@ -5056,6 +5058,7 @@ static void debug_window_free(gpointer data)
     g_free(view->display_source);
     g_hash_table_unref(view->file_breakpoints);
     g_hash_table_unref(view->conditional_points);
+    g_hash_table_unref(view->disabled_plain_points);
     g_free(view->breakpoint_settings_path);
     g_free(view->stop_condition);
     g_free(view->observer_source);
@@ -5751,10 +5754,10 @@ static gboolean debug_has_conditional_point(const ScriptDebugWindow *view, const
                                             unsigned long line)
 {
     InsightLuaDebug *observer = view->python ? view->python_observer : view->engine;
-    if (!insight_lua_debug_observer_active(observer) || !g_hash_table_size(view->conditional_points))
-        return FALSE;
     gchar *key = debug_conditional_point_key(filename, line);
-    gboolean found = g_hash_table_contains(view->conditional_points, key);
+    const DebugConditionalPoint *point = g_hash_table_lookup(view->conditional_points, key);
+    gboolean found = g_hash_table_contains(view->disabled_plain_points, key) ||
+        (point && (point->disabled || insight_lua_debug_observer_active(observer)));
     g_free(key);
     return found;
 }
@@ -5895,55 +5898,130 @@ static gchar *debug_conditional_settings_path(const ScriptDebugWindow *view)
 
 /* Restore bounded rule data. Counters are created by the observer at runtime. */
 /* Восстанавливает правила с проверкой границ. Счётчики создаёт обработчик при запуске. */
+static void debug_read_conditional_points(const ScriptDebugWindow *view, GKeyFile *settings,
+                                          GHashTable *points, guint *unresolved)
+{
+    gsize count;
+    gchar **groups = g_key_file_get_groups(settings, &count);
+    for (gsize i = 0; i < count; i++)
+    {
+        const gchar *group = groups[i];
+        if (!strcmp(group, "RuleSet") || !strcmp(group, "Observer"))
+            continue;
+        if (g_hash_table_size(points) >= 32)
+        {
+            (*unresolved)++;
+            continue;
+        }
+        gchar *filename = g_key_file_get_string(settings, group, "File", NULL);
+        gchar *expression = g_key_file_get_string(settings, group, "Expression", NULL);
+        gint line = g_key_file_get_integer(settings, group, "Line", NULL);
+        gint minimum_hits = g_key_file_get_integer(settings, group, "Hits", NULL);
+        if (filename && g_path_is_absolute(filename) && expression && *expression &&
+            g_utf8_strlen(expression, -1) <= 1024 && line > 0 &&
+            minimum_hits > 0 && minimum_hits <= 1000000)
+        {
+            DebugConditionalPoint *point = g_new0(DebugConditionalPoint, 1);
+            point->filename = debug_file_key(filename);
+            point->expression = g_steal_pointer(&expression);
+            point->saved_group = g_strdup(group);
+            gchar *anchor = g_key_file_get_string(settings, group, "Anchor", NULL);
+            gchar **lines = anchor && *anchor ? debug_breakpoint_source_lines(view, point->filename) : NULL;
+            point->line = debug_resolve_breakpoint(lines, lines ? g_strv_length(lines) : 0,
+                                                   anchor, (unsigned long)line);
+            g_strfreev(lines);
+            g_free(anchor);
+            point->minimum_hits = (guint)minimum_hits;
+            point->log_only = g_key_file_get_boolean(settings, group, "LogOnly", NULL);
+            point->disabled = g_key_file_get_boolean(settings, group, "Disabled", NULL);
+            gchar *key = point->line ? debug_conditional_point_key(point->filename, point->line) : NULL;
+            if (!key || g_hash_table_contains(points, key))
+            {
+                (*unresolved)++;
+                g_free(key);
+                debug_conditional_point_free(point);
+            }
+            else
+                g_hash_table_insert(points, key, point);
+        }
+        else
+            (*unresolved)++;
+        g_free(expression);
+        g_free(filename);
+    }
+    g_strfreev(groups);
+
+}
+
+/* Load the project's conditional point settings. */
+/* Загружает настройки условных точек проекта. */
 static void debug_load_conditional_points(ScriptDebugWindow *view)
 {
     gchar *path = debug_conditional_settings_path(view);
     if (!path)
         return;
-
     GKeyFile *settings = g_key_file_new();
     if (g_key_file_load_from_file(settings, path, G_KEY_FILE_NONE, NULL))
+        debug_read_conditional_points(view, settings, view->conditional_points, &view->unresolved_breakpoints);
+    g_key_file_unref(settings);
+    g_free(path);
+}
+
+/* Serialize one rule with its current source anchor. */
+/* Записывает правило с его текущей привязкой к исходнику. */
+static void debug_write_conditional_point(const ScriptDebugWindow *view, GKeyFile *settings,
+                                          const gchar *group, const DebugConditionalPoint *point)
+{
+    g_key_file_set_string(settings, group, "File", point->filename);
+    g_key_file_set_string(settings, group, "Expression", point->expression);
+    g_key_file_set_integer(settings, group, "Line", (gint)point->line);
+    g_key_file_set_integer(settings, group, "Hits", (gint)point->minimum_hits);
+    g_key_file_set_boolean(settings, group, "LogOnly", point->log_only);
+    g_key_file_set_boolean(settings, group, "Disabled", point->disabled);
+    gchar **lines = debug_breakpoint_source_lines(view, point->filename);
+    gchar *anchor = debug_breakpoint_anchor(lines, lines ? g_strv_length(lines) : 0, point->line);
+    g_key_file_set_string(settings, group, "Anchor", anchor);
+    g_free(anchor);
+    g_strfreev(lines);
+
+}
+
+/* Serialize a complete rule set for versioning or explicit replacement. */
+/* Записывает весь набор правил для истории или явной замены. */
+static void debug_write_conditional_set(const ScriptDebugWindow *view, GKeyFile *settings,
+                                        GHashTable *points)
+{
+    g_key_file_set_boolean(settings, "RuleSet", "Present", TRUE);
+    GList *keys = g_list_sort(g_hash_table_get_keys(points), (GCompareFunc)g_strcmp0);
+    for (GList *item = keys; item; item = item->next)
     {
-        gsize count;
-        gchar **groups = g_key_file_get_groups(settings, &count);
-        for (gsize i = 0; i < count && g_hash_table_size(view->conditional_points) < 32; i++)
-        {
-            const gchar *group = groups[i];
-            gchar *filename = g_key_file_get_string(settings, group, "File", NULL);
-            gchar *expression = g_key_file_get_string(settings, group, "Expression", NULL);
-            gint line = g_key_file_get_integer(settings, group, "Line", NULL);
-            gint minimum_hits = g_key_file_get_integer(settings, group, "Hits", NULL);
-            if (filename && g_path_is_absolute(filename) && expression && *expression &&
-                g_utf8_strlen(expression, -1) <= 1024 && line > 0 &&
-                minimum_hits > 0 && minimum_hits <= 1000000)
-            {
-                DebugConditionalPoint *point = g_new0(DebugConditionalPoint, 1);
-                point->filename = debug_file_key(filename);
-                point->expression = g_steal_pointer(&expression);
-                point->saved_group = g_strdup(group);
-                gchar *anchor = g_key_file_get_string(settings, group, "Anchor", NULL);
-                gchar **lines = anchor && *anchor ? debug_breakpoint_source_lines(view, point->filename) : NULL;
-                point->line = debug_resolve_breakpoint(lines, lines ? g_strv_length(lines) : 0,
-                                                       anchor, (unsigned long)line);
-                g_strfreev(lines);
-                g_free(anchor);
-                point->minimum_hits = (guint)minimum_hits;
-                point->log_only = g_key_file_get_boolean(settings, group, "LogOnly", NULL);
-                gchar *key = point->line ? debug_conditional_point_key(point->filename, point->line) : NULL;
-                if (!key || g_hash_table_contains(view->conditional_points, key))
-                {
-                    view->unresolved_breakpoints++;
-                    g_free(key);
-                    debug_conditional_point_free(point);
-                }
-                else
-                    g_hash_table_insert(view->conditional_points, key, point);
-            }
-            g_free(expression);
-            g_free(filename);
-        }
-        g_strfreev(groups);
+        const DebugConditionalPoint *point = g_hash_table_lookup(points, item->data);
+        if (g_path_is_absolute(point->filename) && point->saved_group)
+            debug_write_conditional_point(view, settings, point->saved_group, point);
     }
+    g_list_free(keys);
+}
+
+/* Replace persisted rules only when applying a complete historical draft. */
+/* Заменяет сохранённые правила только при применении полного черновика из истории. */
+static void debug_save_conditional_set(const ScriptDebugWindow *view)
+{
+    gchar *path = debug_conditional_settings_path(view);
+    if (!path)
+        return;
+    GKeyFile *settings = g_key_file_new();
+    debug_write_conditional_set(view, settings, view->conditional_points);
+    gchar *directory = g_path_get_dirname(path);
+    GError *error = NULL;
+    if (g_mkdir_with_parents(directory, 0700) == 0)
+        g_key_file_save_to_file(settings, path, &error);
+    else
+        g_set_error_literal(&error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                            "Cannot create conditional breakpoint settings directory");
+    if (error)
+        ui_set_statusbar(TRUE, "Cannot save conditional rules: %s", error->message);
+    g_clear_error(&error);
+    g_free(directory);
     g_key_file_unref(settings);
     g_free(path);
 }
@@ -5969,18 +6047,7 @@ static void debug_save_conditional_point(const ScriptDebugWindow *view, const gc
     {
         const DebugConditionalPoint *point = g_hash_table_lookup(view->conditional_points, key);
         if (point)
-        {
-            g_key_file_set_string(settings, group, "File", point->filename);
-            g_key_file_set_string(settings, group, "Expression", point->expression);
-            g_key_file_set_integer(settings, group, "Line", (gint)point->line);
-            g_key_file_set_integer(settings, group, "Hits", (gint)point->minimum_hits);
-            g_key_file_set_boolean(settings, group, "LogOnly", point->log_only);
-            gchar **lines = debug_breakpoint_source_lines(view, point->filename);
-            gchar *anchor = debug_breakpoint_anchor(lines, lines ? g_strv_length(lines) : 0, point->line);
-            g_key_file_set_string(settings, group, "Anchor", anchor);
-            g_free(anchor);
-            g_strfreev(lines);
-        }
+            debug_write_conditional_point(view, settings, group, point);
         else
             g_key_file_remove_group(settings, group, NULL);
 
@@ -6942,6 +7009,8 @@ static void debug_append_conditional_points(GString *program, GHashTable *points
     while (g_hash_table_iter_next(&iter, NULL, &value))
     {
         const DebugConditionalPoint *point = value;
+        if (point->disabled)
+            continue;
         g_string_append(program, "do\nlocal file = ");
         debug_append_lua_filename(program, point->filename);
         g_string_append_printf(program,
@@ -7300,6 +7369,7 @@ static void debug_edit_conditional_point(ScriptDebugWindow *view, const gchar *s
             }
             point->minimum_hits = (guint)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(threshold));
             point->log_only = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(log_only));
+            point->disabled = saved && saved->disabled;
         }
         gchar error[1024] = "";
         if (debug_set_conditional_point(view, key, point, error, sizeof error))
@@ -7318,50 +7388,128 @@ static void debug_edit_conditional_point(ScriptDebugWindow *view, const gchar *s
     g_free(filename);
 }
 
-/* List saved and session-only rules across files, including unopened modules. */
-/* Показывает правила из всех файлов, включая ещё не открытые модули. */
-static void debug_list_conditional_points(GtkButton *button, gpointer data)
+/* Add a row with a stable file-and-line identity to the point selector. */
+/* Добавляет строку списка с однозначным ключом файла и номера строки. */
+static void debug_add_point_row(GtkComboBoxText *choices, const gchar *filename, unsigned long line,
+                                const gchar *kind, gboolean disabled)
+{
+    gchar *key = debug_conditional_point_key(filename, line);
+    gchar *label = g_strdup_printf("%s:%lu  [%s%s]", filename, line, kind, disabled ? ", off" : "");
+    gchar *valid = g_utf8_make_valid(label, -1);
+    gtk_combo_box_text_append(choices, key, valid);
+    g_free(valid);
+    g_free(label);
+    g_free(key);
+}
+
+/* Open a point in the editor without changing the paused frame. */
+/* Открывает строку в редакторе без смены кадра на паузе. */
+static void debug_open_point_source(ScriptDebugWindow *view, const gchar *filename, gint line)
+{
+    GeanyDocument *document = g_path_is_absolute(filename) ? document_find_by_filename(filename) :
+        document_find_by_id(view->document_id);
+    if (!DOC_VALID(document) && g_path_is_absolute(filename))
+    {
+        gchar *local = utils_get_locale_from_utf8(filename);
+        if (local)
+            document = document_open_file(local, FALSE, NULL, NULL);
+        g_free(local);
+    }
+    if (!DOC_VALID(document) || line > sci_get_line_count(document->editor->sci))
+    {
+        gtk_label_set_text(GTK_LABEL(view->status), "Breakpoint source line is unavailable.");
+        return;
+    }
+    navqueue_goto_line(document_get_current(), document, line);
+    document_grab_focus(document);
+    gtk_window_present(GTK_WINDOW(main_widgets.window));
+}
+
+/* Manage ordinary, conditional and logging breakpoints in one list. */
+/* Управляет обычными, условными и журнальными точками в одном списке. */
+static void debug_list_points(GtkButton *button, gpointer data)
 {
     (void)button;
     ScriptDebugWindow *view = data;
     if (debug_is_running(view))
         return;
-    if (!g_hash_table_size(view->conditional_points))
+
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Breakpoints", GTK_WINDOW(view->window),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE,
+        "_Enable / Disable", GTK_RESPONSE_APPLY, "_Edit Rule", GTK_RESPONSE_REJECT,
+        "_Open Source", GTK_RESPONSE_ACCEPT, NULL);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 650, -1);
+    GtkComboBoxText *choices = GTK_COMBO_BOX_TEXT(gtk_combo_box_text_new());
+    gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),
+                       GTK_WIDGET(choices), TRUE, TRUE, 8);
+    GHashTableIter iter;
+    gpointer filename, text;
+    g_hash_table_iter_init(&iter, view->file_breakpoints);
+    while (g_hash_table_iter_next(&iter, &filename, &text))
     {
-        gtk_label_set_text(GTK_LABEL(view->status), "Shift-click a source line number to add a conditional point.");
-        return;
+        unsigned long lines[128];
+        gsize count = 0;
+        if (!debug_parse_breakpoints(text, lines, &count))
+            continue;
+        for (gsize i = 0; i < count; i++)
+        {
+            gchar *key = debug_conditional_point_key(filename, lines[i]);
+            if (!g_hash_table_contains(view->conditional_points, key))
+                debug_add_point_row(choices, filename, lines[i], "Stop",
+                                    g_hash_table_contains(view->disabled_plain_points, key));
+            g_free(key);
+        }
+    }
+    gpointer value;
+    g_hash_table_iter_init(&iter, view->conditional_points);
+    while (g_hash_table_iter_next(&iter, NULL, &value))
+    {
+        const DebugConditionalPoint *point = value;
+        debug_add_point_row(choices, point->filename, point->line,
+                            point->log_only ? "Log" : "Conditional", point->disabled);
     }
 
-    GtkWidget *dialog = gtk_dialog_new_with_buttons("Conditional Breakpoints", GTK_WINDOW(view->window),
-        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
-        "_Edit Rule", GTK_RESPONSE_ACCEPT, NULL);
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 600, -1);
-    GtkWidget *choices = gtk_combo_box_text_new();
-    GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    gtk_box_pack_start(GTK_BOX(box), choices, TRUE, TRUE, 8);
-
-    GList *keys = g_hash_table_get_keys(view->conditional_points);
-    keys = g_list_sort(keys, (GCompareFunc)g_strcmp0);
-    for (GList *item = keys; item; item = item->next)
-    {
-        const DebugConditionalPoint *point = g_hash_table_lookup(view->conditional_points, item->data);
-        gchar *label = g_strdup_printf("%s:%lu  [%s, %u]", point->filename, point->line,
-                                       point->log_only ? "Log" : "Stop", point->minimum_hits);
-        gchar *valid = g_utf8_make_valid(label, -1);
-        gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(choices), item->data, valid);
-        g_free(valid);
-        g_free(label);
-    }
-    g_list_free(keys);
     gtk_combo_box_set_active(GTK_COMBO_BOX(choices), 0);
     gtk_widget_show_all(dialog);
-    gchar *selected = gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT ?
-        g_strdup(gtk_combo_box_get_active_id(GTK_COMBO_BOX(choices))) : NULL;
+    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gchar *selected = g_strdup(gtk_combo_box_get_active_id(GTK_COMBO_BOX(choices)));
     gtk_widget_destroy(dialog);
+    if (!selected)
+        return;
 
-    const DebugConditionalPoint *point = selected ? g_hash_table_lookup(view->conditional_points, selected) : NULL;
-    if (point)
-        debug_edit_conditional_point(view, point->filename, point->line);
+    gchar *separator = strchr(selected, ':');
+    if (separator)
+    {
+        unsigned long line = (unsigned long)g_ascii_strtoull(selected, NULL, 10);
+        if (response == GTK_RESPONSE_ACCEPT)
+            debug_open_point_source(view, separator + 1, (gint)line);
+        else if (response == GTK_RESPONSE_REJECT)
+            debug_edit_conditional_point(view, separator + 1, line);
+        else if (response == GTK_RESPONSE_APPLY)
+        {
+            const DebugConditionalPoint *point = g_hash_table_lookup(view->conditional_points, selected);
+            if (point)
+            {
+                DebugConditionalPoint *edited = g_new0(DebugConditionalPoint, 1);
+                edited->filename = g_strdup(point->filename);
+                edited->expression = g_strdup(point->expression);
+                edited->line = point->line;
+                edited->minimum_hits = point->minimum_hits;
+                edited->log_only = point->log_only;
+                edited->disabled = !point->disabled;
+                gchar error[1024] = "";
+                if (!debug_set_conditional_point(view, selected, edited, error, sizeof error))
+                {
+                    gchar *message = g_utf8_make_valid(*error ? error : "Cannot update breakpoint", -1);
+                    gtk_label_set_text(GTK_LABEL(view->status), message);
+                    g_free(message);
+                }
+            }
+            else if (!g_hash_table_remove(view->disabled_plain_points, selected))
+                g_hash_table_add(view->disabled_plain_points, g_strdup(selected));
+            debug_mark_breakpoints(GTK_EDITABLE(view->breakpoints), view);
+        }
+    }
     g_free(selected);
 }
 
@@ -7963,7 +8111,8 @@ static gboolean debug_observer_git(const gchar *directory, const gchar *const ar
 
 /* Commit a condition and script together, keeping the project worktree separate. */
 /* Коммитит условие и сценарий вместе в отдельной от проекта истории. */
-static gboolean debug_commit_observer_draft(const gchar *directory, const gchar *name,
+static gboolean debug_commit_observer_draft(const ScriptDebugWindow *view, GHashTable *points,
+                                            const gchar *directory, const gchar *name,
                                             const gchar *condition, const gchar *source,
                                             const gchar *message, GError **error)
 {
@@ -7988,6 +8137,7 @@ static gboolean debug_commit_observer_draft(const gchar *directory, const gchar 
     GKeyFile *settings = g_key_file_new();
     g_key_file_set_string(settings, "Observer", "Condition", condition);
     g_key_file_set_string(settings, "Observer", "Source", source);
+    debug_write_conditional_set(view, settings, points);
     gsize length;
     gchar *contents = g_key_file_to_data(settings, &length, NULL);
     gchar *path = g_build_filename(directory, name, NULL);
@@ -8229,6 +8379,7 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
     if (debug_is_running(view))
         return;
 
+    GHashTable *draft_points = NULL;
     gchar *draft_condition = NULL;
     gchar *draft_source = NULL;
     gchar *filename = NULL;
@@ -8337,11 +8488,26 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
                     if (condition && source && g_utf8_strlen(condition, -1) <= 1024 &&
                         strlen(source) <= 64 * 1024)
                     {
+                        g_clear_pointer(&draft_points, g_hash_table_unref);
+                        guint unresolved = 0;
+                        if (g_key_file_get_boolean(revision, "RuleSet", "Present", NULL))
+                        {
+                            draft_points = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
+                                                                debug_conditional_point_free);
+                            debug_read_conditional_points(view, revision, draft_points, &unresolved);
+                        }
                         gtk_entry_set_text(GTK_ENTRY(entry), condition);
                         gtk_text_buffer_set_text(script, source, -1);
                         gtk_text_buffer_set_modified(script, TRUE);
                         g_clear_pointer(&filename, g_free);
-                        gtk_label_set_text(GTK_LABEL(status), "Revision loaded as a draft. Choose Apply to use it.");
+                        if (unresolved)
+                        {
+                            g_clear_pointer(&draft_points, g_hash_table_unref);
+                            gtk_label_set_text(GTK_LABEL(status),
+                                "Condition and script loaded. Rules were kept because some historical points could not be located.");
+                        }
+                        else
+                            gtk_label_set_text(GTK_LABEL(status), "Revision loaded as a draft. Choose Apply to use it.");
                     }
                     else
                         gtk_label_set_text(GTK_LABEL(status), "Invalid observer revision.");
@@ -8359,7 +8525,8 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
                     gtk_text_buffer_get_bounds(script, &first, &last);
                     gchar *source = gtk_text_buffer_get_text(script, &first, &last, FALSE);
                     const gchar *condition = gtk_entry_get_text(GTK_ENTRY(entry));
-                    if (debug_commit_observer_draft(history_path, history_name, condition, source, message, &error))
+                    if (debug_commit_observer_draft(view, draft_points ? draft_points : view->conditional_points,
+                                                    history_path, history_name, condition, source, message, &error))
                         gtk_label_set_text(GTK_LABEL(status), "Draft committed to the project's observer history.");
                     g_free(source);
                     g_free(message);
@@ -8383,15 +8550,23 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
         gchar *source = gtk_text_buffer_get_text(script, &first, &last, FALSE);
         g_strstrip(source);
         gchar error[1024] = "";
+        GHashTable *points = draft_points ? draft_points : view->conditional_points;
         gboolean valid = !source || strlen(source) <= 64 * 1024;
         if (!valid)
             g_strlcpy(error, "Observer script exceeds 64 KiB", sizeof error);
         else if (view->python)
-            valid = debug_apply_python_observer(&view->python_observer, condition, source, view->conditional_points, error, sizeof error);
+            valid = debug_apply_python_observer(&view->python_observer, condition, source, points, error, sizeof error);
         else if (view->engine)
-            valid = debug_apply_lua_observer(view->engine, condition, source, view->conditional_points, error, sizeof error);
+            valid = debug_apply_lua_observer(view->engine, condition, source, points, error, sizeof error);
         if (valid)
         {
+            if (draft_points)
+            {
+                g_hash_table_unref(view->conditional_points);
+                view->conditional_points = g_steal_pointer(&draft_points);
+                debug_save_conditional_set(view);
+                debug_mark_breakpoints(GTK_EDITABLE(view->breakpoints), view);
+            }
             g_free(view->stop_condition);
             g_free(view->observer_source);
             view->stop_condition = condition;
@@ -8411,6 +8586,7 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
         g_free(source);
     }
     g_free(filename);
+    g_clear_pointer(&draft_points, g_hash_table_unref);
     g_free(history_path);
     g_free(initial_condition);
     gtk_widget_destroy(dialog);
@@ -8486,6 +8662,7 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     view->project_root = project_root;
     view->file_breakpoints = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     view->conditional_points = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, debug_conditional_point_free);
+    view->disabled_plain_points = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     view->lua_modules = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, debug_lua_module_free);
     insight_lua_debug_set_module_loader(lua_engine, debug_lua_resolve_module, view);
     view->watch_paths = g_ptr_array_new_with_free_func(g_free);
@@ -8584,8 +8761,8 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     g_signal_connect(view->file_breakpoint_button, "clicked",
                      G_CALLBACK(debug_breakpoints_in_file), view);
     gtk_box_pack_start(GTK_BOX(breakpoint_row), view->file_breakpoint_button, FALSE, FALSE, 0);
-    GtkWidget *conditional_button = gtk_button_new_with_label("Conditional Points…");
-    g_signal_connect(conditional_button, "clicked", G_CALLBACK(debug_list_conditional_points), view);
+    GtkWidget *conditional_button = gtk_button_new_with_label("All Breakpoints…");
+    g_signal_connect(conditional_button, "clicked", G_CALLBACK(debug_list_points), view);
     gtk_box_pack_start(GTK_BOX(breakpoint_row), conditional_button, FALSE, FALSE, 0);
     GtkWidget *pane = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     gtk_box_pack_start(GTK_BOX(box), pane, TRUE, TRUE, 0);

@@ -108,7 +108,7 @@ Other breakpoints and step commands can still stop execution.
 An ochre line number marks a conditional point. It takes precedence over an
 ordinary breakpoint on the same line. **Shift-click** it again to edit the rule,
 or choose **Remove Rule** to restore normal behavior for the line. A debugger window
-can hold up to 32 rules. **Conditional Points…** lists rules across files and lets
+can hold up to 32 rules. **All Breakpoints…** lists rules across files and lets
 you edit or remove them, including rules for files that are not open. Rules for
 named files are saved per project or, outside a project, per entry file. Lua and
 Python keep separate rules. Unnamed-buffer rules last until the window closes.
@@ -361,3 +361,18 @@ once, the neighbors must identify one location. Points on deleted, ambiguous
 or unavailable lines are inactive. Their count appears in the debugger status.
 Set a point again at the intended line to rebind it manually. Older entries
 without a fingerprint use their saved line number until edited.
+
+
+### Unified breakpoint list and rule history
+
+**All Breakpoints…** lists ordinary, conditional and logging points across files.
+**Open Source** opens the line in the editor. **Edit Rule** adds, edits or removes
+a rule. **Enable / Disable** toggles the selected point. Ordinary points are muted
+until the window closes. A conditional point or logpoint saves its enabled state
+with its rule.
+
+**Commit Draft…** records the window condition, script and set of conditional
+points and logpoints in the separate debugger Git history. **Git History… →
+Load Draft** loads them into a draft. **Apply** replaces the rule set. If the
+old commit has no rule set or any historical point cannot be located in the
+source, the current rule set is kept. You can still load the condition and script.
