@@ -1160,10 +1160,11 @@ typedef struct {
     gboolean interactive;
     GMutex lock;
     GSubprocess *live_process;
-    gchar *live_log;
+    gchar *live_directory;
+    GByteArray *live_output;
+    GCond live_output_space;
     GtkWidget *console, *live_controls;
     guint refresh_source;
-    goffset read_offset;
     gchar prompt_tail[2];
     gboolean preview_pending;
     GtkWidget *signal_name;
@@ -1199,7 +1200,9 @@ static void simulation_free(gpointer data)
         g_source_remove(run->refresh_source);
     g_clear_object(&run->live_process);
     g_mutex_clear(&run->lock);
-    g_free(run->live_log);
+    g_cond_clear(&run->live_output_space);
+    g_clear_pointer(&run->live_output, g_byte_array_unref);
+    g_free(run->live_directory);
     g_free(run->trace_file);
     g_free(run->settings_path);
     g_free(run->observer_file);
@@ -1547,17 +1550,24 @@ static gchar *simulation_tool(const gchar *bin, const gchar *name)
     return g_find_program_in_path(name);
 }
 
-/* Run one phase in the scratch directory and collect bounded failure details. */
-/* Запускает этап во временной папке и читает ограниченный объём диагностики. */
+/* Terminate a child so a blocked pipe read can return on cancellation. */
+/* Завершает дочерний процесс, чтобы чтение канала вернулось при отмене. */
+static void simulation_force_exit(GCancellable *cancel, gpointer data)
+{
+    (void)cancel;
+    g_subprocess_force_exit(G_SUBPROCESS(data));
+}
+
+/* Compile or run a batch testbench and retain its first diagnostic bytes. */
+/* Компилирует или запускает тестбенч и сохраняет начало диагностики. */
 static gboolean simulation_process(const gchar *const *argv, const gchar *directory,
                                    const gchar *bin, GCancellable *cancel, GError **error)
 {
     if (g_cancellable_set_error_if_cancelled(cancel, error))
         return FALSE;
-    gchar *log = g_build_filename(directory, "simulation.log", NULL);
-    GSubprocessLauncher *launcher = g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_STDERR_MERGE);
+    GSubprocessLauncher *launcher = g_subprocess_launcher_new(
+        G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_MERGE);
     g_subprocess_launcher_set_cwd(launcher, directory);
-    g_subprocess_launcher_set_stdout_file_path(launcher, log);
     const gchar *existing = g_getenv("PATH");
     gchar *path = g_strconcat(bin, G_SEARCHPATH_SEPARATOR_S, existing ? existing : "", NULL);
     g_subprocess_launcher_setenv(launcher, "PATH", path, TRUE);
@@ -1565,48 +1575,65 @@ static gboolean simulation_process(const gchar *const *argv, const gchar *direct
 
     GSubprocess *process = g_subprocess_launcher_spawnv(launcher, argv, error);
     g_object_unref(launcher);
-    gboolean ok = process && g_subprocess_wait_check(process, cancel, error);
-    if (process && g_cancellable_is_cancelled(cancel))
+    if (!process)
+        return FALSE;
+
+    gulong cancellation = g_cancellable_connect(cancel, G_CALLBACK(simulation_force_exit), process, NULL);
+    GInputStream *output = g_subprocess_get_stdout_pipe(process);
+    gchar bytes[8192], diagnostic[4096];
+    gsize saved = 0;
+    gssize count;
+    while ((count = g_input_stream_read(output, bytes, sizeof bytes, cancel, error)) > 0)
+    {
+        gsize available = MIN((gsize)count, sizeof diagnostic - saved);
+        memcpy(diagnostic + saved, bytes, available);
+        saved += available;
+    }
+    gboolean ok = count == 0 && g_subprocess_wait_check(process, cancel, error);
+    if (count < 0 || g_cancellable_is_cancelled(cancel))
     {
         g_subprocess_force_exit(process);
         g_subprocess_wait(process, NULL, NULL);
     }
-    if (process && !ok && !g_cancellable_is_cancelled(cancel))
+    if (!ok && saved && !g_cancellable_is_cancelled(cancel))
     {
-        GFile *file = g_file_new_for_path(log);
-        GFileInputStream *stream = g_file_read(file, NULL, NULL);
-        if (stream)
-        {
-            gchar bytes[4096];
-            gssize count = g_input_stream_read(G_INPUT_STREAM(stream), bytes, sizeof bytes, NULL, NULL);
-            if (count > 0)
-            {
-                gchar *message = g_utf8_make_valid(bytes, count);
-                g_prefix_error(error, "%s\n", message);
-                g_free(message);
-            }
-            g_object_unref(stream);
-        }
-        g_object_unref(file);
+        gchar *message = g_utf8_make_valid(diagnostic, saved);
+        g_prefix_error(error, "%s\n", message);
+        g_free(message);
     }
-    g_clear_object(&process);
-    g_free(log);
+    g_cancellable_disconnect(cancel, cancellation);
+    g_object_unref(process);
     return ok;
 }
 
-/* Start vvp at its initial stop and keep its command pipe available to GTK. */
-/* Запускает vvp с начальной остановкой и оставляет канал команд доступным GTK. */
+/* Wake a blocked output reader or producer and stop the simulator on cancellation. */
+/* Будит ожидающий поток вывода и останавливает симулятор при отмене. */
+static void simulation_cancel_live(GCancellable *cancel, gpointer data)
+{
+    (void)cancel;
+    WaveSimulation *run = data;
+    g_mutex_lock(&run->lock);
+    GSubprocess *process = run->live_process ? g_object_ref(run->live_process) : NULL;
+    g_cond_broadcast(&run->live_output_space);
+    g_mutex_unlock(&run->lock);
+    if (process)
+    {
+        g_subprocess_force_exit(process);
+        g_object_unref(process);
+    }
+}
+
+/* Pump simulator output off the GTK thread through a bounded shared buffer. */
+/* Передаёт вывод симулятора через ограниченный буфер вне потока GTK. */
 static gboolean simulation_interactive(WaveSimulation *run, const gchar *directory,
                                        const gchar *bin, GCancellable *cancel, GError **error)
 {
     if (g_cancellable_set_error_if_cancelled(cancel, error))
         return FALSE;
-    gchar *log = g_build_filename(directory, "interactive.log", NULL);
     GSubprocessLauncher *launcher = g_subprocess_launcher_new(
-        G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDERR_MERGE);
+        G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_MERGE);
     g_subprocess_launcher_set_cwd(launcher, directory);
     g_subprocess_launcher_setenv(launcher, "GEANY_VVP_DEBUG", "1", TRUE);
-    g_subprocess_launcher_set_stdout_file_path(launcher, log);
     const gchar *existing = g_getenv("PATH");
     gchar *path = g_strconcat(bin, G_SEARCHPATH_SEPARATOR_S, existing ? existing : "", NULL);
     g_subprocess_launcher_setenv(launcher, "PATH", path, TRUE);
@@ -1615,22 +1642,40 @@ static gboolean simulation_interactive(WaveSimulation *run, const gchar *directo
     GSubprocess *process = g_subprocess_launcher_spawnv(launcher, argv, error);
     g_object_unref(launcher);
     if (!process)
-    {
-        g_free(log);
         return FALSE;
-    }
 
     g_mutex_lock(&run->lock);
     run->live_process = g_object_ref(process);
-    run->live_log = log;
+    run->live_directory = g_strdup(directory);
     g_mutex_unlock(&run->lock);
+    gulong cancellation = g_cancellable_connect(cancel, G_CALLBACK(simulation_cancel_live), run, NULL);
 
-    gboolean ok = g_subprocess_wait_check(process, cancel, error);
-    if (g_cancellable_is_cancelled(cancel))
+    GInputStream *output = g_subprocess_get_stdout_pipe(process);
+    guint8 bytes[8192];
+    gssize count;
+    while ((count = g_input_stream_read(output, bytes, sizeof bytes, cancel, error)) > 0)
+    {
+        g_mutex_lock(&run->lock);
+        while (run->live_output->len + (guint)count > 65536 && !g_cancellable_is_cancelled(cancel))
+            g_cond_wait(&run->live_output_space, &run->lock);
+        gboolean cancelled = g_cancellable_is_cancelled(cancel);
+        if (!cancelled)
+            g_byte_array_append(run->live_output, bytes, (guint)count);
+        g_mutex_unlock(&run->lock);
+        if (cancelled)
+        {
+            g_cancellable_set_error_if_cancelled(cancel, error);
+            break;
+        }
+    }
+
+    gboolean ok = count == 0 && g_subprocess_wait_check(process, cancel, error);
+    if (count != 0 || g_cancellable_is_cancelled(cancel))
     {
         g_subprocess_force_exit(process);
         g_subprocess_wait(process, NULL, NULL);
     }
+    g_cancellable_disconnect(cancel, cancellation);
     g_mutex_lock(&run->lock);
     g_clear_object(&run->live_process);
     g_mutex_unlock(&run->lock);
@@ -1847,7 +1892,7 @@ static void simulation_open_location(GtkButton *button, gpointer data)
 static gchar *simulation_live_directory(WaveSimulation *run)
 {
     g_mutex_lock(&run->lock);
-    gchar *directory = run->live_process && run->live_log ? g_path_get_dirname(run->live_log) : NULL;
+    gchar *directory = run->live_process ? g_strdup(run->live_directory) : NULL;
     g_mutex_unlock(&run->lock);
     return directory;
 }
@@ -1938,33 +1983,22 @@ static void simulation_handle_observer_event(WaveSimulation *run)
     g_strfreev(fields);
 }
 
-/* Read new console bytes without holding the worker lock during file I/O. */
-/* Читает новые байты консоли без удержания блокировки во время чтения файла. */
+/* Drain queued simulator bytes, then update console widgets on the GTK thread. */
+/* Забирает накопленный вывод и обновляет консоль в потоке GTK. */
 static gboolean simulation_refresh_console(gpointer data)
 {
     WaveSimulation *run = data;
     g_mutex_lock(&run->lock);
-    gchar *path = g_strdup(run->live_log);
     gboolean running = run->live_process != NULL;
+    GByteArray *output = run->live_output;
+    run->live_output = g_byte_array_new();
+    g_cond_signal(&run->live_output_space);
     g_mutex_unlock(&run->lock);
-    if (!path)
-        return G_SOURCE_CONTINUE;
 
-    GFile *file = g_file_new_for_path(path);
-    g_free(path);
-    GFileInputStream *stream = g_file_read(file, NULL, NULL);
-    g_object_unref(file);
-    if (!stream)
-        return G_SOURCE_CONTINUE;
-
-    gchar bytes[8192];
-    gssize count = 0;
-    if (g_seekable_seek(G_SEEKABLE(stream), run->read_offset, G_SEEK_SET, NULL, NULL))
-        count = g_input_stream_read(G_INPUT_STREAM(stream), bytes, sizeof bytes, NULL, NULL);
-    g_object_unref(stream);
+    const gchar *bytes = (const gchar *)output->data;
+    gssize count = output->len;
     if (count > 0)
     {
-        run->read_offset += count;
         simulation_read_records(run, bytes, (gsize)count);
         run->prompt_tail[0] = count > 1 ? bytes[count - 2] : run->prompt_tail[1];
         run->prompt_tail[1] = bytes[count - 1];
@@ -1984,6 +2018,7 @@ static gboolean simulation_refresh_console(gpointer data)
         gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(run->console), &end, 0, FALSE, 0, 0);
         g_free(valid);
     }
+    g_byte_array_unref(output);
     gboolean paused = running && run->prompt_tail[0] == '>' && run->prompt_tail[1] == ' ';
     if (paused && run->bridge_ready && !run->restored_rules)
     {
@@ -2359,7 +2394,7 @@ static void simulation_preview(GtkButton *button, gpointer data)
     if (run->preview_pending || run->prompt_tail[0] != '>' || run->prompt_tail[1] != ' ')
         return;
     g_mutex_lock(&run->lock);
-    gchar *directory = run->live_process && run->live_log ? g_path_get_dirname(run->live_log) : NULL;
+    gchar *directory = run->live_process ? g_strdup(run->live_directory) : NULL;
     g_mutex_unlock(&run->lock);
     if (!directory)
         return;
@@ -2563,6 +2598,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
     WaveSimulation *run = g_new0(WaveSimulation, 1);
     g_weak_ref_init(&run->parent, parent);
     g_mutex_init(&run->lock);
+    g_cond_init(&run->live_output_space);
     run->interactive = interactive;
     run->compiler = compiler;
     run->runtime = runtime;
@@ -2583,6 +2619,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
     {
         gtk_window_set_default_size(GTK_WINDOW(run->dialog), 680, 400);
         run->protocol_line = g_string_new(NULL);
+        run->live_output = g_byte_array_new();
         run->breakpoints = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
         run->point_anchors = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
         run->unresolved_records = g_ptr_array_new_with_free_func(g_free);

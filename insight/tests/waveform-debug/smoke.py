@@ -197,6 +197,77 @@ def check_editor(editor, directory, environment):
     require("GTK" in version and "GLib" in version, "Unexpected Geany version output")
 
 
+# EN: Check that a visible Win32 window belongs to this exact editor process.
+# RU: Проверяем, что видимое окно Win32 принадлежит запущенному процессу.
+def windows_document_visible(pid, filename):
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user32.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    found = False
+
+    @callback_type
+    def visit(window, _):
+        nonlocal found
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(window, ctypes.byref(owner))
+        if owner.value != pid or not user32.IsWindowVisible(window):
+            return True
+        title = ctypes.create_unicode_buffer(1024)
+        user32.GetWindowTextW(window, title, len(title))
+        found = filename in title.value
+        return not found
+
+    user32.EnumWindows(visit, 0)
+    return found
+
+
+# EN: Launch GTK with an isolated configuration and verify the test document opens.
+# RU: Запускаем GTK с отдельной конфигурацией и проверяем открытие тестового файла.
+def check_gtk_editor(editor, fixtures, directory, environment):
+    directory.mkdir(parents=True, exist_ok=True)
+    config = directory / "config"
+    config.mkdir(exist_ok=True)
+    source = fixtures / "procedural_flow_tb.v"
+    base = [str(editor), "--config", str(config), "--no-plugins", "--no-session"]
+    if os.name == "nt":
+        base.append("--new-instance")
+    else:
+        base += ["--socket-file", str(directory / "geany.sock")]
+
+    with (directory / "editor.log").open("wb") as log:
+        process = subprocess.Popen([*base, str(source)], cwd=directory, env=environment,
+                                   stdout=log, stderr=subprocess.STDOUT)
+        try:
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                require(process.poll() is None, f"GTK editor exited early ({process.returncode})")
+                if os.name == "nt":
+                    if windows_document_visible(process.pid, source.name):
+                        return
+                elif (directory / "geany.sock").exists():
+                    listing = subprocess.run([*base, "--list-documents"], cwd=directory,
+                                             env=environment, capture_output=True, timeout=5)
+                    if listing.returncode == 0 and source.name.encode() in listing.stdout:
+                        (directory / "documents.log").write_bytes(listing.stdout)
+                        return
+                time.sleep(0.2)
+            raise RuntimeError("GTK editor did not open the HDL fixture before the deadline")
+        finally:
+            if process.poll() is None:
+                process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+
+
 # EN: Decode a hex field from the Slang service protocol.
 # RU: Декодируем шестнадцатеричное поле протокола Slang.
 def decode_field(field):
@@ -251,6 +322,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("prefix", type=Path)
     parser.add_argument("logs", type=Path)
+    parser.add_argument("--gtk", action="store_true", help="Open a real GTK window; requires a display")
     args = parser.parse_args()
     suffix = ".exe" if os.name == "nt" else ""
     binaries = args.prefix.resolve() / "bin"
@@ -265,13 +337,15 @@ def main():
     environment["GEANY_VVP_DEBUG"] = "1"
     environment["PATH"] = str(binaries) + os.pathsep + environment.get("PATH", "")
     logs = args.logs.resolve()
-    checks = (
+    checks = [
         ("editor", lambda directory: check_editor(editor, directory, environment)),
         ("breakpoint", lambda directory: check_breakpoint(compiler, runtime, fixtures, directory, environment)),
         ("source-step", lambda directory: check_source_steps(compiler, runtime, fixtures, directory, environment)),
         ("processes", lambda directory: check_processes(compiler, runtime, fixtures, directory, environment)),
         ("slang", lambda directory: check_slang(service, fixtures, directory, environment)),
-    )
+    ]
+    if args.gtk:
+        checks.append(("gtk", lambda directory: check_gtk_editor(editor, fixtures, directory, environment)))
     failed = False
     for name, check in checks:
         directory = logs / name
