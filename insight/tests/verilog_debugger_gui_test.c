@@ -134,7 +134,11 @@ static gboolean open_hdl_uses(gpointer data)
     GtkWidget *map = find_window("Signal Map");
     if (!map)
         return G_SOURCE_CONTINUE;
-    gtk_dialog_response(GTK_DIALOG(map), GTK_RESPONSE_OK);
+    GtkWidget *button = gtk_dialog_get_widget_for_response(GTK_DIALOG(map), GTK_RESPONSE_OK);
+    if (!GTK_IS_BUTTON(button) || !gtk_widget_is_sensitive(button))
+        return G_SOURCE_CONTINUE;
+    g_print("Opening HDL Uses from the Signal Map.\n");
+    gtk_button_clicked(GTK_BUTTON(button));
     return G_SOURCE_REMOVE;
 }
 
@@ -231,6 +235,16 @@ static gboolean fail_timeout(gpointer data)
     exit(1);
 }
 
+static void log_graph_status(GtkStatusbar *bar, guint context, const gchar *message,
+                             gpointer data)
+{
+    (void)bar;
+    (void)context;
+    (void)data;
+    if (phase == INSPECT_CONNECTIONS && message && *message)
+        g_print("Graph status: %s\n", message);
+}
+
 /* Drive menu, Lua breakpoint, source navigation and VCD through GTK widgets. */
 /* Проверяет меню, точку Lua, переход к исходнику и VCD через виджеты GTK. */
 static gboolean drive_debugger(gpointer data)
@@ -259,6 +273,10 @@ static gboolean drive_debugger(gpointer data)
         if (!simulation && capture && select_track(capture, "counter_tb.dut.count"))
         {
             phase = INSPECT_CONNECTIONS;
+            GtkWidget *editor = gtk_widget_get_toplevel(GTK_WIDGET(document->editor->sci));
+            GtkWidget *status = find_control(editor, "statusbar");
+            if (status)
+                g_signal_connect(status, "text-pushed", G_CALLBACK(log_graph_status), NULL);
             g_timeout_add(100, open_hdl_uses, NULL);
             if (!click(capture, "Signal Map…"))
                 return fail_timeout(NULL);
