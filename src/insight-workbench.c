@@ -19,6 +19,7 @@
 #include "config.h"
 #endif
 #include "geany.h"
+#include "spawn.h"
 #include "SciLexer.h"
 #include <pango/pangocairo.h>
 #include <gdk/gdkkeysyms.h>
@@ -9398,6 +9399,68 @@ static void debug_select_script_entry(GtkMenuItem *item, gpointer data)
     g_free(filename);
 }
 
+/* Start an interactive GDB console for an already built executable. */
+static void debug_native_executable(GtkMenuItem *item, gpointer data)
+{
+    (void)item;
+    (void)data;
+#ifdef G_OS_WIN32
+    const gchar *gdb_name = "gdb.exe";
+#else
+    const gchar *gdb_name = "gdb";
+#endif
+    gchar *gdb = g_find_program_in_path(gdb_name);
+    if (!gdb)
+    {
+        ui_set_statusbar(TRUE, "%s", insight_tr("GDB was not found in PATH."));
+        return;
+    }
+
+#ifndef G_OS_WIN32
+    gchar *terminal = g_find_program_in_path("xterm");
+    if (!terminal)
+    {
+        ui_set_statusbar(TRUE, "%s", insight_tr("Install xterm to open the GDB console."));
+        g_free(gdb);
+        return;
+    }
+#endif
+
+    GtkWidget *chooser = gtk_file_chooser_dialog_new(insight_tr("Debug C/C++ Executable"),
+        GTK_WINDOW(main_widgets.window), GTK_FILE_CHOOSER_ACTION_OPEN,
+        "_Cancel", GTK_RESPONSE_CANCEL, "_Debug", GTK_RESPONSE_ACCEPT, NULL);
+    gchar *root = app->project ? project_get_base_path() : NULL;
+    if (root)
+        gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(chooser), root);
+    g_free(root);
+    gchar *target = gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT ?
+        gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser)) : NULL;
+    gtk_widget_destroy(chooser);
+
+    if (target)
+    {
+        gchar *directory = g_path_get_dirname(target);
+        gchar *argv[] = {
+#ifndef G_OS_WIN32
+            terminal, "-e",
+#endif
+            gdb, "--nx", "--quiet", "--args", target, NULL
+        };
+        GError *error = NULL;
+        if (!spawn_async(directory, NULL, argv, NULL, NULL, &error))
+        {
+            ui_set_statusbar(TRUE, insight_tr("Cannot open GDB: %s"), error->message);
+            g_clear_error(&error);
+        }
+        g_free(directory);
+        g_free(target);
+    }
+#ifndef G_OS_WIN32
+    g_free(terminal);
+#endif
+    g_free(gdb);
+}
+
 static void create_native_lua(void) {
  gchar *settings=g_build_filename(app->configdir,"insight","lua-extension.conf",NULL);
  wb.extensions=insight_extensions_new(settings); g_free(settings); GError *error=NULL;
@@ -9433,6 +9496,10 @@ static void create_native_lua(void) {
  gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu), debug_simulation);
  g_signal_connect(debug_simulation, "activate", G_CALLBACK(waveform_run_simulation), GINT_TO_POINTER(1));
  gtk_widget_show(debug_simulation);
+ GtkWidget *native_debug = gtk_menu_item_new_with_label(insight_tr("Debug C/C++ Executable…"));
+ gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu), native_debug);
+ g_signal_connect(native_debug, "activate", G_CALLBACK(debug_native_executable), NULL);
+ gtk_widget_show(native_debug);
  GtkWidget *syntax=gtk_menu_item_new_with_label(insight_tr("Check Lua/Python Syntax"));
  g_signal_connect(syntax,"activate",G_CALLBACK(script_check_start),NULL);
  gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu),syntax);
