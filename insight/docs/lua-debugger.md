@@ -23,6 +23,8 @@ separated by spaces or commas. The left pane highlights the paused line.
 short slices between GTK events. A native call must return before the debugger
 can pause. The Lua memory budget still applies.
 
+While paused, hover over a variable in the debugger's source pane. The tooltip shows the local, captured value, or a simple field such as `config.device.name`. Values come from the current frame snapshot. Field lookup reads the table directly without invoking metamethods.
+
 ## Watch graph
 
 Open **Watch graph** while paused. **Current frame** is the root. Follow the

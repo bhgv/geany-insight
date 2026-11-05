@@ -4977,6 +4977,8 @@ typedef struct {
     GtkTextTag *current_line_tag;
     GtkTextTag *breakpoint_tag;
     gchar *source_snapshot;
+    gchar *source_code_mask;
+    GArray *source_line_offsets;
     gchar *source_filename;
     gchar *selection_snapshot;
     gchar *project_filename;
@@ -4999,6 +5001,8 @@ static void debug_window_free(gpointer data)
         g_source_remove(view->execution_source);
     insight_lua_debug_free(view->engine);
     g_free(view->source_snapshot);
+    g_free(view->source_code_mask);
+    g_array_unref(view->source_line_offsets);
     g_free(view->source_filename);
     g_free(view->selection_snapshot);
     g_free(view->project_filename);
@@ -5569,6 +5573,7 @@ static void debug_window_step(LuaDebugWindow *view, InsightLuaStep mode)
     view->pending_mode = mode;
     view->paused_line = 0;
     view->watch_graph = NULL;
+    gtk_widget_trigger_tooltip_query(view->source_view);
     view->watch_selected = -1;
     debug_watch_layout(view);
     gtk_widget_set_sensitive(view->go_to_source, FALSE);
@@ -5870,15 +5875,138 @@ static GtkWidget *debug_create_view(GtkWidget *pane, gboolean first)
     return text;
 }
 
+/* Recognize an ASCII byte used in a Lua identifier. */
+/* Проверяет, может ли байт ASCII входить в идентификатор Lua. */
+static gboolean debug_identifier_byte(gchar byte)
+{
+    return g_ascii_isalnum(byte) || byte == '_';
+}
+
+/* Select a visible local before looking for an upvalue of the same name. */
+/* Ищет видимую локальную переменную раньше одноимённого захвата. */
+static gint debug_hover_root(const InsightLuaWatchGraph *graph, const gchar *name, gsize length)
+{
+    const gchar *prefixes[] = {"local ", "upvalue "};
+    for (guint prefix = 0; prefix < G_N_ELEMENTS(prefixes); prefix++)
+    {
+        gsize prefix_length = strlen(prefixes[prefix]);
+        for (guint i = graph->edge_count; i > 0; i--)
+        {
+            const InsightLuaWatchEdge *edge = &graph->edges[i - 1];
+            if (edge->from == 0 && strlen(edge->label) == prefix_length + length &&
+                !strncmp(edge->label, prefixes[prefix], prefix_length) &&
+                !memcmp(edge->label + prefix_length, name, length))
+                return (gint)edge->to;
+        }
+    }
+    return -1;
+}
+
+/* Resolve a raw identifier or dotted field path without evaluating Lua code. */
+/* Находит идентификатор или цепочку полей без выполнения Lua-кода. */
+static gint debug_hover_value(const InsightLuaWatchGraph *graph, const gchar *path, gsize length)
+{
+    if (!length || length > 192 || (!g_ascii_isalpha(*path) && *path != '_'))
+        return -1;
+
+    const gchar *end = path + length;
+    const gchar *next = memchr(path, '.', length);
+    gint node = debug_hover_root(graph, path, next ? (gsize)(next - path) : length);
+    while (node >= 0 && next)
+    {
+        const gchar *field = next + 1;
+        next = memchr(field, '.', (gsize)(end - field));
+        gsize field_length = (gsize)((next ? next : end) - field);
+        if (!field_length || (!g_ascii_isalpha(*field) && *field != '_'))
+            return -1;
+
+        gint child = -1;
+        for (guint i = 0; i < graph->edge_count; i++)
+        {
+            const InsightLuaWatchEdge *edge = &graph->edges[i];
+            if (edge->from == (guint)node && strlen(edge->label) == field_length + 2 &&
+                edge->label[0] == '"' && edge->label[field_length + 1] == '"' &&
+                !memcmp(edge->label + 1, field, field_length))
+            {
+                child = (gint)edge->to;
+                break;
+            }
+        }
+        node = child;
+    }
+    return node;
+}
+
+/* Show a paused value over an identifier in the numbered source view. */
+/* Показывает значение на паузе при наведении на идентификатор исходника. */
+static gboolean debug_source_tooltip(GtkWidget *widget, gint x, gint y, gboolean keyboard,
+                                     GtkTooltip *tooltip, gpointer data)
+{
+    LuaDebugWindow *view = data;
+    if (keyboard || !view->watch_graph || !view->source_code_mask || !view->paused_line)
+        return FALSE;
+
+    GtkTextView *source_view = GTK_TEXT_VIEW(widget);
+    gint buffer_x, buffer_y;
+    gtk_text_view_window_to_buffer_coords(source_view, GTK_TEXT_WINDOW_WIDGET, x, y,
+                                          &buffer_x, &buffer_y);
+    GtkTextIter location;
+    if (!gtk_text_view_get_iter_at_location(source_view, &location, buffer_x, buffer_y))
+        return FALSE;
+
+    guint line = (guint)gtk_text_iter_get_line(&location);
+    if (line >= view->source_line_offsets->len)
+        return FALSE;
+    gchar number[24];
+    gint prefix_length = g_snprintf(number, sizeof number, "%5u  ", line + 1);
+    gint byte_in_line = gtk_text_iter_get_line_index(&location) - prefix_length;
+    if (byte_in_line < 0)
+        return FALSE;
+
+    gsize line_start = g_array_index(view->source_line_offsets, gsize, line);
+    gsize hover = line_start + (gsize)byte_in_line;
+    const gchar *mask = view->source_code_mask;
+    if (hover >= view->source_length || !debug_identifier_byte(mask[hover]))
+        return FALSE;
+
+    gsize start = hover;
+    gsize end = hover + 1;
+    while (start > line_start && debug_identifier_byte(mask[start - 1]))
+        start--;
+    while (end < view->source_length && debug_identifier_byte(mask[end]))
+        end++;
+    while (start > line_start + 1 && mask[start - 1] == '.' &&
+           debug_identifier_byte(mask[start - 2]))
+    {
+        start -= 2;
+        while (start > line_start && debug_identifier_byte(mask[start - 1]))
+            start--;
+    }
+
+    gint node = debug_hover_value(view->watch_graph, mask + start, end - start);
+    if (node < 0)
+        return FALSE;
+
+    gchar *text = g_strdup_printf("%.*s = %s", (gint)(end - start), mask + start,
+                                  view->watch_graph->nodes[node].value);
+    gchar *valid = g_utf8_make_valid(text, -1);
+    gtk_tooltip_set_text(tooltip, valid);
+    g_free(valid);
+    g_free(text);
+    return TRUE;
+}
+
 /* Number source lines using the same newline rules as the Lua lexer. */
 /* Нумерует строки по тем же правилам перевода строки, что и лексер Lua. */
-static gchar *debug_number_source(const gchar *source, gsize length)
+static gchar *debug_number_source(const gchar *source, gsize length, GArray *line_offsets)
 {
     GString *numbered = g_string_sized_new(length + 128);
     const gchar *start = source;
     for (guint line = 1; ; line++)
     {
         const gchar *end = strpbrk(start, "\r\n");
+        gsize offset = (gsize)(start - source);
+        g_array_append_val(line_offsets, offset);
         g_string_append_printf(numbered, "%5u  ", line);
         if (!end)
         {
@@ -5940,6 +6068,8 @@ static void debug_current_lua(GtkMenuItem *item, gpointer data)
     view->document_id = document->id;
     view->source_snapshot = source;
     view->source_length = (gsize)length;
+    view->source_code_mask = insight_source_code_mask(source, view->source_length, INSIGHT_CODE_LUA, NULL);
+    view->source_line_offsets = g_array_new(FALSE, FALSE, sizeof(gsize));
     view->source_filename = g_strdup(document->file_name);
     view->project_filename = g_strdup(app->project ? app->project->file_name : NULL);
     ScintillaObject *sci = document->editor->sci;
@@ -6007,7 +6137,8 @@ static void debug_current_lua(GtkMenuItem *item, gpointer data)
     gtk_notebook_append_page(GTK_NOTEBOOK(inspection), stack_pane, gtk_label_new("Stack and locals"));
     gtk_notebook_append_page(GTK_NOTEBOOK(inspection), debug_create_watch_tab(view), gtk_label_new("Watch graph"));
     gtk_paned_set_position(GTK_PANED(pane), 535);
-    gchar *numbered = debug_number_source(view->source_snapshot, view->source_length);
+    gchar *numbered = debug_number_source(view->source_snapshot, view->source_length,
+                                          view->source_line_offsets);
     debug_set_text(view->source_view, numbered);
     g_free(numbered);
 
@@ -6018,6 +6149,8 @@ static void debug_current_lua(GtkMenuItem *item, gpointer data)
         "background", "#962e37", "foreground", "#ffffff", "weight", PANGO_WEIGHT_BOLD, NULL);
     g_signal_connect(view->breakpoints, "changed", G_CALLBACK(debug_mark_breakpoints), view);
     g_signal_connect(view->source_view, "button-press-event", G_CALLBACK(debug_click_line_number), view);
+    gtk_widget_set_has_tooltip(view->source_view, TRUE);
+    g_signal_connect(view->source_view, "query-tooltip", G_CALLBACK(debug_source_tooltip), view);
     g_signal_connect(view->window, "key-press-event", G_CALLBACK(debug_handle_key), view);
     view->status = gtk_label_new(NULL);
     gtk_label_set_selectable(GTK_LABEL(view->status), TRUE);
