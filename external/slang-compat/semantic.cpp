@@ -11,6 +11,7 @@
 #include "slang/ast/expressions/OperatorExpressions.h"
 #include "slang/ast/expressions/CallExpression.h"
 #include "slang/ast/expressions/SelectExpressions.h"
+#include "slang/ast/expressions/LiteralExpressions.h"
 #include "slang/ast/symbols/SubroutineSymbols.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
@@ -209,15 +210,82 @@ struct Jump : ASTVisitor<Jump, true, true> {
     }
 };
 struct PortOperands : ASTVisitor<PortOperands, false, true> {
-    std::vector<std::pair<const Symbol*, SourceRange>> signals;
-    std::unordered_set<const Symbol*> seen;
+    struct Operand {
+        const Symbol* symbol;
+        SourceRange range;
+        std::string selection;
+    };
+    std::vector<Operand> signals;
+    std::unordered_map<const Symbol*, std::unordered_set<std::string>> seen;
 
-    // Keep each signal once per connection, at its first valid occurrence.
-    // Сохраняет каждый сигнал один раз на подключение, по первому месту в исходнике.
-    void add(const Symbol* symbol, SourceRange range) {
+    // Read a literal bound without evaluating a run-time expression.
+    // Читает литеральную границу без вычисления выражения времени исполнения.
+    static std::string literalBound(const Expression& expression) {
+        if (expression.kind == ExpressionKind::IntegerLiteral) {
+            const auto value = expression.as<IntegerLiteral>().getValue().as<int32_t>();
+            if (value)
+                return std::to_string(*value);
+        }
+        return "?";
+    }
+
+    // Describe a bit or slice while retaining the signal's original hierarchy.
+    // Описывает бит или срез, сохраняя исходное иерархическое имя сигнала.
+    static std::string selectionOf(const Expression& expression) {
+        if (expression.kind == ExpressionKind::Conversion) {
+            const auto& conversion = expression.as<ConversionExpression>();
+            if (conversion.isImplicit())
+                return selectionOf(conversion.operand());
+        }
+        if (expression.kind == ExpressionKind::ElementSelect) {
+            const auto& select = expression.as<ElementSelectExpression>();
+            if (!selectionOf(select.value()).empty())
+                return "[?]";
+            return "[" + literalBound(select.selector()) + "]";
+        }
+        if (expression.kind == ExpressionKind::RangeSelect) {
+            const auto& select = expression.as<RangeSelectExpression>();
+            if (!selectionOf(select.value()).empty())
+                return "[?]";
+            const auto kind = select.getSelectionKind();
+            const char* separator = kind == RangeSelectionKind::Simple ? ":" :
+                kind == RangeSelectionKind::IndexedUp ? "+:" : "-:";
+            return "[" + literalBound(select.left()) + separator + literalBound(select.right()) + "]";
+        }
+        return {};
+    }
+
+    // Keep each signal and selection once per connection.
+    // Сохраняет каждый сигнал и срез один раз на подключение.
+    void add(const Symbol* symbol, SourceRange range, std::string selection = {}) {
         if (symbol && (symbol->kind == SymbolKind::Net || symbol->kind == SymbolKind::Variable) &&
-            range.start() && seen.insert(symbol).second)
-            signals.emplace_back(symbol, range);
+            range.start() && seen[symbol].insert(selection).second)
+            signals.push_back({symbol, range, std::move(selection)});
+    }
+
+    // Record a selected value and visit index expressions as independent reads.
+    // Записывает выбранный сигнал и обходит индексы как отдельные чтения.
+    void handle(const ElementSelectExpression& node) {
+        if (const auto* symbol = node.getSymbolReference()) {
+            add(symbol, node.sourceRange, selectionOf(node));
+            node.selector().visit(*this);
+        }
+        else {
+            visitDefault(node);
+        }
+    }
+
+    // Record a selected range and preserve reads of its bounds.
+    // Записывает выбранный диапазон и сохраняет чтения его границ.
+    void handle(const RangeSelectExpression& node) {
+        if (const auto* symbol = node.getSymbolReference()) {
+            add(symbol, node.sourceRange, selectionOf(node));
+            node.left().visit(*this);
+            node.right().visit(*this);
+        }
+        else {
+            visitDefault(node);
+        }
     }
 
     // Collect a local signal read in an input expression.
@@ -243,12 +311,16 @@ struct PortOperands : ASTVisitor<PortOperands, false, true> {
             if (assignment.isLValueArg())
                 destinations(assignment.left());
         }
+        else if (node.kind == ExpressionKind::Conversion &&
+                 node.as<ConversionExpression>().isImplicit()) {
+            destinations(node.as<ConversionExpression>().operand());
+        }
         else if (node.kind == ExpressionKind::Concatenation) {
             for (const auto* operand : node.as<ConcatenationExpression>().operands())
                 destinations(*operand);
         }
         else {
-            add(node.getSymbolReference(), node.sourceRange);
+            add(node.getSymbolReference(), node.sourceRange, selectionOf(node));
         }
     }
 };
@@ -320,6 +392,14 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
             if (token.valueText() == function.name) reference(function.name, token.range(), function.location, "call");
         }visitDefault(node);
     }
+    // Encode the endpoint selections relative to this row's owner and peer.
+    // Записывает срезы относительно владельца строки и соседнего узла.
+    static std::string endpointSelections(const std::string& owner, const std::string& peer) {
+        if (owner.empty() && peer.empty())
+            return {};
+        return (owner.empty() ? "all" : owner) + " / " + (peer.empty() ? "all" : peer);
+    }
+
     // Connect one group of dependencies to assignment targets.
     // Связывает одну группу зависимостей с целями присваивания.
     void indexDependencies(const PortOperands& inputs, const PortOperands& outputs,
@@ -329,17 +409,17 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
             return;
 
         for (const auto& input : inputs.signals) {
-            const auto source = identity(*input.first);
+            const auto source = identity(*input.symbol);
             if (source.empty())
                 continue;
-            const auto read = sources.getFullyOriginalLoc(input.second.start());
+            const auto read = sources.getFullyOriginalLoc(input.range.start());
             for (const auto& output : outputs.signals) {
-                const auto destination = identity(*output.first);
+                const auto destination = identity(*output.symbol);
                 if (destination.empty() || source == destination)
                     continue;
-                const auto write = sources.getFullyOriginalLoc(output.second.start());
-                add("P", source, read, destination, "", sourceRole);
-                add("P", destination, write, source, "", destinationRole);
+                const auto write = sources.getFullyOriginalLoc(output.range.start());
+                add("P", source, read, destination, endpointSelections(output.selection, input.selection), sourceRole);
+                add("P", destination, write, source, endpointSelections(input.selection, output.selection), destinationRole);
             }
         }
     }
@@ -450,13 +530,15 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
                 expression->visit(operands);
                 // Implicit named connections may have no syntax to visit.
                 if (operands.signals.empty())
-                    operands.add(expression->getSymbolReference(), expression->sourceRange);
+                    operands.add(expression->getSymbolReference(), expression->sourceRange,
+                             PortOperands::selectionOf(*expression));
             }
             else if (port.direction == ArgumentDirection::Out) {
                 operands.destinations(*expression);
             }
             else {
-                operands.add(expression->getSymbolReference(), expression->sourceRange);
+                operands.add(expression->getSymbolReference(), expression->sourceRange,
+                             PortOperands::selectionOf(*expression));
             }
 
             const auto internalRole = port.direction == ArgumentDirection::In ? "port-source" :
@@ -465,15 +547,15 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
                 port.direction == ArgumentDirection::Out ? "port-source" : "port-peer";
             const std::string portName = std::string(instance.name) + "." + std::string(port.name);
             const auto inside = identity(instance) + "." + std::string(port.internalSymbol->name);
-            for (const auto& [external, range] : operands.signals) {
+            for (const auto& [external, range, selection] : operands.signals) {
                 reference(portName, range, external->location, externalRole);
                 reference(external->name, range, port.internalSymbol->location, internalRole);
 
                 const auto location = sources.getFullyOriginalLoc(range.start());
                 const auto outside = identity(*external);
                 if (!outside.empty() && !instance.name.empty() && !port.internalSymbol->name.empty()) {
-                    add("P", inside, location, outside, "", externalRole);
-                    add("P", outside, location, inside, "", internalRole);
+                    add("P", inside, location, outside, endpointSelections(selection, {}), externalRole);
+                    add("P", outside, location, inside, endpointSelections({}, selection), internalRole);
                 }
             }
         }

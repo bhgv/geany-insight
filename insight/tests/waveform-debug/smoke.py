@@ -325,6 +325,19 @@ def check_slang(service, fixtures, directory, environment):
                 f"{role} leaked out of the procedural assignment")
 
 
+    reply = capture_command([str(service), "--editor-index", "--", str(fixtures / "slice_flow_tb.v")],
+                            directory, "slice-index", environment).splitlines()
+    selections = set()
+    for record in reply[2:]:
+        fields = record.split("\t")
+        if len(fields) == 8 and fields[0] == "P":
+            selections.add(tuple(decode_field(fields[i]) for i in (5, 1, 6, 7)))
+    require(("slice_flow_tb.bus", "slice_flow_tb.dut.part", "[7:4] / all", "port-destination")
+            in selections, "Missing packed slice on the port edge")
+    require(("slice_flow_tb.dut.bit_out", "slice_flow_tb.dut.part", "all / [2]", "assign-source")
+            in selections, "Missing bit selection on the assignment edge")
+
+
 # EN: Run the checks against binaries installed by either native build launcher.
 # RU: Запускаем проверки программ, установленных любым штатным сборщиком.
 def main():

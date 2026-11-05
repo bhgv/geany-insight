@@ -4489,7 +4489,7 @@ static void wave_jump_run(GTask *task, gpointer object, gpointer data, GCancella
 
 enum {
     WAVE_USE_ROLE, WAVE_USE_NAME, WAVE_USE_FILE, WAVE_USE_LINE,
-    WAVE_USE_CONNECTION, WAVE_USE_HOPS, WAVE_USE_COLUMNS
+    WAVE_USE_CONNECTION, WAVE_USE_HOPS, WAVE_USE_SELECTION, WAVE_USE_COLUMNS
 };
 
 typedef struct {
@@ -4611,7 +4611,7 @@ static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph, 
                     WAVE_USE_ROLE, repeated ? insight_tr("Already shown") : edge->inheritance,
                     WAVE_USE_NAME, edge->name, WAVE_USE_FILE, edge->path,
                     WAVE_USE_LINE, edge->line, WAVE_USE_CONNECTION, TRUE,
-                    WAVE_USE_HOPS, distance, -1);
+                    WAVE_USE_HOPS, distance, WAVE_USE_SELECTION, edge->type, -1);
                 (*remaining)--;
                 if (repeated || control)
                     continue;
@@ -4627,7 +4627,7 @@ static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph, 
                 gtk_list_store_insert_with_values(rows, NULL, -1,
                     WAVE_USE_ROLE, role, WAVE_USE_NAME, edge->name,
                     WAVE_USE_FILE, edge->path, WAVE_USE_LINE, edge->line,
-                    WAVE_USE_CONNECTION, TRUE, WAVE_USE_HOPS, distance, -1);
+                    WAVE_USE_CONNECTION, TRUE, WAVE_USE_HOPS, distance, WAVE_USE_SELECTION, edge->type, -1);
             }
         }
     }
@@ -4677,8 +4677,8 @@ static GtkTreeView *waveform_use_page(GtkNotebook *notebook, GtkTreeModel *model
     g_object_set_data(G_OBJECT(scroll), "wave-use-tree", tree);
     gtk_notebook_append_page(notebook, scroll, gtk_label_new(title));
 
-    const gchar *titles[] = {insight_tr("Name"), insight_tr("Role"), insight_tr("File"), insight_tr("Line"), insight_tr("Hops")};
-    const gint columns[] = {WAVE_USE_NAME, WAVE_USE_ROLE, WAVE_USE_FILE, WAVE_USE_LINE, WAVE_USE_HOPS};
+    const gchar *titles[] = {insight_tr("Name"), insight_tr("Role"), insight_tr("File"), insight_tr("Line"), insight_tr("Hops"), insight_tr("Signal / peer selection")};
+    const gint columns[] = {WAVE_USE_NAME, WAVE_USE_ROLE, WAVE_USE_FILE, WAVE_USE_LINE, WAVE_USE_HOPS, WAVE_USE_SELECTION};
     for (guint column = 0; column < G_N_ELEMENTS(titles); column++)
     {
         GtkTreeViewColumn *view_column = gtk_tree_view_column_new_with_attributes(
@@ -4695,9 +4695,9 @@ static void waveform_show_hdl_uses(WaveJump *jump)
 {
     const InsightIndex *index = jump->snapshot->result->index;
     GtkListStore *rows = gtk_list_store_new(WAVE_USE_COLUMNS,
-        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_UINT);
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_UINT, G_TYPE_STRING);
     GtkTreeStore *graph = gtk_tree_store_new(WAVE_USE_COLUMNS,
-        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_UINT);
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_UINT, G_TYPE_STRING);
     WaveDependencyIndex dependencies = {
         .edges = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_ptr_array_unref),
         .declarations = g_hash_table_new(g_str_hash, g_str_equal),
