@@ -222,19 +222,18 @@ struct PortOperands : ASTVisitor<PortOperands, false, true> {
     std::vector<Operand> signals;
     std::unordered_map<const Symbol*, std::unordered_set<std::string>> seen;
 
-    // Read an already resolved integer bound without evaluating a run-time expression.
-    // Читает известную целочисленную границу без вычисления выражения времени исполнения.
+    // Read an already resolved integer without evaluating a run-time expression.
+    static std::optional<int32_t> knownInteger(const Expression& expression) {
+        if (expression.kind == ExpressionKind::IntegerLiteral)
+            return expression.as<IntegerLiteral>().getValue().as<int32_t>();
+        if (expression.constant && expression.constant->isInteger())
+            return expression.constant->integer().as<int32_t>();
+        return {};
+    }
+
     static std::string knownBound(const Expression& expression) {
-        if (expression.kind == ExpressionKind::IntegerLiteral) {
-            const auto value = expression.as<IntegerLiteral>().getValue().as<int32_t>();
-            if (value)
-                return std::to_string(*value);
-        }
-        if (expression.constant && expression.constant->isInteger()) {
-            if (const auto value = expression.constant->integer().as<int32_t>())
-                return std::to_string(*value);
-        }
-        return "?";
+        const auto value = knownInteger(expression);
+        return value ? std::to_string(*value) : "?";
     }
 
     // Describe a bit or slice while retaining the signal's original hierarchy.
@@ -439,6 +438,127 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
         }
     }
 
+    struct MappedBit {
+        const Symbol* symbol;
+        SourceRange range;
+        int64_t index;
+    };
+
+    // Flatten a wiring expression in MSB-to-LSB order. A null symbol is a constant bit.
+    // Leave resizing, dynamic selects and computed expressions to the general index.
+    static bool mapBits(const Expression& node, std::vector<MappedBit>& bits) {
+        if (!node.type->isSimpleBitVector() || node.type->getBitWidth() > 256)
+            return false;
+        if (node.kind == ExpressionKind::Conversion) {
+            const auto& conversion = node.as<ConversionExpression>();
+            return conversion.isImplicit() &&
+                node.type->getBitWidth() == conversion.operand().type->getBitWidth() &&
+                mapBits(conversion.operand(), bits);
+        }
+        if (node.kind == ExpressionKind::Concatenation) {
+            for (const auto* operand : node.as<ConcatenationExpression>().operands()) {
+                if (!mapBits(*operand, bits))
+                    return false;
+            }
+            return true;
+        }
+        if (node.kind == ExpressionKind::Replication) {
+            const auto& replication = node.as<ReplicationExpression>();
+            const auto count = PortOperands::knownInteger(replication.count());
+            if (!count || *count < 0 || *count > 256)
+                return false;
+            for (int32_t i = 0; i < *count; ++i) {
+                if (!mapBits(replication.concat(), bits))
+                    return false;
+            }
+            return true;
+        }
+        if (node.kind == ExpressionKind::IntegerLiteral ||
+            node.kind == ExpressionKind::UnbasedUnsizedIntegerLiteral) {
+            bits.insert(bits.end(), node.type->getBitWidth(), {nullptr, {}, 0});
+            return true;
+        }
+
+        const Expression* base = &node;
+        auto range = node.type->getFixedRange();
+        int64_t left = range.left, right = range.right;
+        if (node.kind == ExpressionKind::ElementSelect) {
+            const auto& select = node.as<ElementSelectExpression>();
+            const auto index = PortOperands::knownInteger(select.selector());
+            if (!index)
+                return false;
+            base = &select.value();
+            left = right = *index;
+        }
+        else if (node.kind == ExpressionKind::RangeSelect) {
+            const auto& select = node.as<RangeSelectExpression>();
+            const auto first = PortOperands::knownInteger(select.left());
+            const auto last = PortOperands::knownInteger(select.right());
+            if (!first || !last)
+                return false;
+            base = &select.value();
+            left = *first;
+            right = *last;
+            if (select.getSelectionKind() != RangeSelectionKind::Simple) {
+                if (*last <= 0)
+                    return false;
+                right = left;
+                if (select.getSelectionKind() == RangeSelectionKind::IndexedUp)
+                    left += int64_t(*last) - 1;
+                else
+                    right -= int64_t(*last) - 1;
+                if (base->type->getFixedRange().left < base->type->getFixedRange().right)
+                    std::swap(left, right);
+            }
+        }
+        if ((base->kind != ExpressionKind::NamedValue &&
+             base->kind != ExpressionKind::HierarchicalValue) || !base->type->isSimpleBitVector())
+            return false;
+        range = base->type->getFixedRange();
+        if (left < std::min(range.left, range.right) || left > std::max(range.left, range.right) ||
+            right < std::min(range.left, range.right) || right > std::max(range.left, range.right) ||
+            (left > right ? left - right : right - left) + 1 != node.type->getBitWidth())
+            return false;
+        PortOperands leaf;
+        leaf.add(base->getSymbolReference(), node.sourceRange);
+        if (leaf.signals.empty())
+            return false;
+        const auto& operand = leaf.signals.front();
+        const int64_t step = left < right ? 1 : -1;
+        for (int64_t bit = left; bit != right + step; bit += step)
+            bits.push_back({operand.symbol, operand.range, bit});
+        return true;
+    }
+
+    static bool isWiringPermutation(const Expression& node) {
+        if (node.kind == ExpressionKind::Conversion)
+            return isWiringPermutation(node.as<ConversionExpression>().operand());
+        return node.kind == ExpressionKind::Concatenation || node.kind == ExpressionKind::Replication;
+    }
+
+    bool indexBitMapping(const AssignmentExpression& assignment, string_view sourceRole,
+                         string_view destinationRole) {
+        if (assignment.isCompound() ||
+            (!isWiringPermutation(assignment.left()) && !isWiringPermutation(assignment.right())))
+            return false;
+        std::vector<MappedBit> input, output;
+        if (!mapBits(assignment.left(), output) || !mapBits(assignment.right(), input) ||
+            input.size() != output.size())
+            return false;
+
+        PortOperands from, to;
+        for (size_t i = 0; i < input.size(); ++i) {
+            if (!input[i].symbol || !output[i].symbol)
+                continue;
+            from.signals.assign(1, {input[i].symbol, input[i].range,
+                                    "[" + std::to_string(input[i].index) + "]"});
+            to.signals.assign(1, {output[i].symbol, output[i].range,
+                                  "[" + std::to_string(output[i].index) + "]"});
+            indexDependencies(from, to, sourceRole, destinationRole);
+        }
+        return true;
+    }
+
     // Index data flow and the controls active at this assignment separately.
     // Индексирует поток данных и активные управляющие сигналы по отдельности.
     void indexAssignment(const AssignmentExpression& assignment, string_view sourceRole,
@@ -449,7 +569,8 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
         PortOperands inputs, outputs;
         assignment.right().visit(inputs);
         outputs.destinations(assignment.left());
-        indexDependencies(inputs, outputs, sourceRole, destinationRole);
+        if (!indexBitMapping(assignment, sourceRole, destinationRole))
+            indexDependencies(inputs, outputs, sourceRole, destinationRole);
         for (const auto& control : controls)
             indexDependencies(control.inputs, outputs, control.sourceRole, control.destinationRole);
     }

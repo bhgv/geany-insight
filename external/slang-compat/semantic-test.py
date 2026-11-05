@@ -168,3 +168,41 @@ with tempfile.TemporaryDirectory(prefix='slang diagnostics ') as directory:
     output = subprocess.check_output([service, '--editor-index', '--', str(source)]).decode('utf-8').splitlines()
     assert any(row.startswith('G\t') for row in output[2:]) and int(output[1]) > 0
 print('HDL diagnostic protocol: syntax errors, exact typo location and compiler name suggestion passed')
+
+with tempfile.TemporaryDirectory(prefix='slang bit mapping ') as directory:
+    source = Path(directory) / 'wiring.sv'
+    source.write_text("""module wiring(
+        input wire [7:0] data,
+        input wire [0:7] ascending,
+        input wire [2:0] index,
+        output wire [1:0] reordered,
+        output wire [1:0] repeated,
+        output wire [1:0] uncertain,
+        output wire high_bit, low_bit
+    );
+        assign reordered = {data[0], data[7]};
+        assign {high_bit, low_bit} = ascending[2+:2];
+        assign repeated = {2{data[3]}};
+        assign uncertain = {data[index], data[7]};
+    endmodule
+""", encoding='utf-8')
+    output = subprocess.check_output([service, '--editor-index', '--', str(source)])
+    rows = output.decode('utf-8').splitlines()
+    assert rows[1] == '0', rows[:2]
+    edges = {tuple(bytes.fromhex(row[i]).decode('utf-8') for i in (5, 1, 6, 7))
+             for row in (line.split('\t') for line in rows[2:]) if row[0] == 'P'}
+    for target, peer, detail in (
+        ('reordered', 'data', '[0] / [7]'),
+        ('reordered', 'data', '[1] / [0]'),
+        ('high_bit', 'ascending', '[0] / [2]'),
+        ('low_bit', 'ascending', '[0] / [3]'),
+        ('repeated', 'data', '[0] / [3]'),
+        ('repeated', 'data', '[1] / [3]'),
+        ('uncertain', 'data', 'all / [?]'),
+        ('uncertain', 'index', ''),
+    ):
+        edge = (f'wiring.{target}', f'wiring.{peer}', detail, 'assign-source')
+        assert edge in edges, (edge, sorted(edges))
+    assert ('wiring.reordered', 'wiring.data', '[0] / [0]', 'assign-source') not in edges
+    assert ('wiring.data', 'wiring.reordered', '[7] / [0]', 'assign-destination') in edges
+print('HDL wiring: bit order, indexed ascending slice, replication and conservative fallback passed')

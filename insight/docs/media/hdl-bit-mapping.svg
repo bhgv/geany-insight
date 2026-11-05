@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 180" role="img" aria-labelledby="title">
+  <title id="title">Bit mapping for out = {data[0], data[7]}</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 10 5 0 10Z" fill="#27609a"/>
+    </marker>
+  </defs>
+  <rect width="440" height="180" rx="12" fill="#f2f6fc"/>
+  <g fill="#fff" stroke="#6984a5">
+    <rect x="28" y="52" width="120" height="38" rx="6"/>
+    <rect x="28" y="112" width="120" height="38" rx="6"/>
+    <rect x="292" y="52" width="120" height="38" rx="6"/>
+    <rect x="292" y="112" width="120" height="38" rx="6"/>
+  </g>
+  <g fill="#142c48" font-family="sans-serif" font-size="16" text-anchor="middle">
+    <text x="220" y="30">assign out = {data[0], data[7]};</text>
+    <text x="88" y="77">data[7]</text>
+    <text x="88" y="137">data[0]</text>
+    <text x="352" y="77">out[1]</text>
+    <text x="352" y="137">out[0]</text>
+  </g>
+  <g fill="none" stroke="#27609a" stroke-width="2" marker-end="url(#arrow)">
+    <path d="M148 71L290 131"/>
+    <path d="M148 131L290 71"/>
+  </g>
+</svg>
