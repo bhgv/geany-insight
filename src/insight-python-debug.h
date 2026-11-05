@@ -8,7 +8,7 @@
 typedef struct InsightPythonDebug InsightPythonDebug;
 
 InsightPythonDebug *insight_python_debug_new(const gchar *interpreter, const gchar *helper,
-    const gchar *filename, const gchar *project_root, const gchar *source, gsize length, GError **error);
+    const gchar *filename, const gchar *project_root, const gchar *source, gsize length, GHashTable *overlays, GError **error);
 void insight_python_debug_free(InsightPythonDebug *debugger);
 gboolean insight_python_debug_send(InsightPythonDebug *debugger, const gchar *command, GError **error);
 GDataInputStream *insight_python_debug_output(InsightPythonDebug *debugger);

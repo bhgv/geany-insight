@@ -5,8 +5,7 @@ The debugger runs a snapshot of the current buffer, including unsaved changes,
 in a separate Python 3 process. Set `GEANY_INSIGHT_PYTHON` to select an
 interpreter. The original file is used as `__file__`, and its directory is
 available for imports. The program runs normally, so it can modify files and
-have other side effects. Script input and console output are unavailable in
-this debugger window.
+have other side effects. The **Console** tab shows Python's text output from stdout and stderr. Interactive input to the debugged program is unavailable.
 
 ## Source controls
 
@@ -14,7 +13,7 @@ Click a line number to toggle a breakpoint. **F5** continues, **F10** steps over
 **F11** steps into, and **Shift+F11** steps out. **Pause** requests a stop on the
 next traced line. **Shift+F5** stops the child process, and **Ctrl+F5** restarts
 the original snapshot. **Go to Source** opens the line when the editor buffer
-still matches the snapshot. The current file is the default entry point. Use **Scripts → Debug Python File…** to choose another. With a project open, the debugger follows runtime calls into files under its base directory. **Breakpoints in File…** lets you choose a file and set breakpoints before execution reaches it. Breakpoints are stored per file. The entry runs from its snapshot; Python imports other files from disk.
+still matches the snapshot. The current file is the default entry point. Use **Scripts → Debug Python File…** to choose another. With a project open, the debugger follows runtime calls into files under its base directory. **Breakpoints in File…** lets you choose a file and set breakpoints before execution reaches it. Breakpoints are stored per file. The entry and edited open project modules run from snapshots. An imported module must already exist on disk to be found by the normal import search. Python loads other modules normally. Restart keeps the captured snapshots and clears the console.
 
 ## Values and watch graph
 

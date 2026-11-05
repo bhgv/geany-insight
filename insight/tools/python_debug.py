@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Trace a Python buffer for the native Geany Insight debugger."""
 
+import importlib.machinery
+import io
 import json
 import os
 import queue
@@ -269,18 +271,130 @@ class Debugger:
             fields = ["P", str(frame.f_lineno), encode(filename), encode(stack_text(frame))]
             fields.extend(graph.fields())
             self.output.write("\t".join(fields) + "\n")
-            self.output.flush()
             self.next_action(depth)
         return self.trace
 
 
+# Read private length-prefixed snapshots created by the editor.
+# Читает приватные снимки редактора с явно указанной длиной полей.
+def read_overlays(filename):
+    overlays = {}
+    if not filename:
+        return overlays
+    with open(filename, "rb") as stream:
+        while True:
+            header = stream.readline(128)
+            if not header:
+                break
+            path_length, source_length = map(int, header.split())
+            if not 0 < path_length <= 32768 or not 0 <= source_length <= 2 * 1024 * 1024:
+                raise ValueError("invalid Python overlay length")
+            path = stream.read(path_length)
+            source = stream.read(source_length)
+            if len(path) != path_length or len(source) != source_length:
+                raise ValueError("truncated Python overlay")
+            overlays[Debugger.file_key(path.decode("utf-8"))] = source.decode("utf-8")
+    return overlays
+
+
+class OverlaySourceLoader(importlib.machinery.SourceFileLoader):
+    # Keep the module's real path and compile the captured text instead of its pyc.
+    # Сохраняет реальный путь модуля и компилирует снимок вместо его pyc.
+    def __init__(self, name, filename, source):
+        super().__init__(name, filename)
+        self.source = source
+
+    # Supply the captured code without touching the on-disk cache.
+    # Возвращает код снимка без записи кэша на диск.
+    def get_code(self, fullname):
+        return compile(self.source, self.get_filename(fullname), "exec", dont_inherit=True)
+
+    # Let standard source inspection see the same text that was executed.
+    # Возвращает инструментам просмотра тот же текст, который выполнялся.
+    def get_source(self, fullname):
+        return self.source
+
+
+class OverlayFinder:
+    # Keep the standard import search and substitute only matching source loaders.
+    # Сохраняет обычный поиск импорта и подменяет только совпавшие загрузчики.
+    def __init__(self, overlays):
+        self.overlays = overlays
+
+    # Replace the loader of a matching module or package, preserving its spec.
+    # Подменяет загрузчик совпавшего модуля или пакета, сохраняя его spec.
+    def find_spec(self, fullname, path=None, target=None):
+        spec = importlib.machinery.PathFinder.find_spec(fullname, path, target)
+        if spec and type(spec.loader) is importlib.machinery.SourceFileLoader:
+            source = self.overlays.get(Debugger.file_key(spec.origin))
+            if source is not None:
+                spec.loader = OverlaySourceLoader(fullname, spec.origin, source)
+                return spec
+        return None
+
+
+class Protocol:
+    # Serialize output and debugger packets, including writes from other threads.
+    # Упорядочивает вывод и пакеты отладчика, включая записи из других потоков.
+    def __init__(self, stream):
+        self.stream = stream
+        self.lock = threading.Lock()
+        self.remaining = 256 * 1024
+
+    # Send one complete debugger packet.
+    # Отправляет один целый пакет отладчика.
+    def write(self, packet):
+        with self.lock:
+            self.stream.write(packet)
+            self.stream.flush()
+
+    # Forward a bounded amount of user output as separate packets.
+    # Передаёт ограниченный объём вывода программы отдельными пакетами.
+    def console(self, text):
+        with self.lock:
+            if not self.remaining:
+                return
+            encoded = text[:self.remaining].encode("utf-8", errors="replace")
+            clipped = len(encoded) > self.remaining or len(text) > self.remaining
+            payload = encoded[:self.remaining].decode("utf-8", errors="ignore")
+            self.remaining -= min(len(encoded), self.remaining)
+            for start in range(0, len(payload), 2048):
+                self.stream.write("O\t" + encode(payload[start:start + 2048]) + "\n")
+            if clipped or not self.remaining:
+                self.remaining = 0
+                self.stream.write("O\t" + encode("\n[Python output limit reached]\n") + "\n")
+            self.stream.flush()
+
+
+class DebugConsole(io.TextIOBase):
+    # Connect a Python text stream to the editor console.
+    # Подключает текстовый поток Python к консоли редактора.
+    def __init__(self, protocol):
+        self.protocol = protocol
+
+    # Report the stream as writable for Python's text I/O callers.
+    # Объявляет поток доступным для записи через текстовый ввод-вывод Python.
+    def writable(self):
+        return True
+
+    # Keep print() and logging output separate from debugger control packets.
+    # Отделяет print() и журналирование от управляющих пакетов отладчика.
+    def write(self, text):
+        if not isinstance(text, str):
+            raise TypeError("expected text")
+        if text:
+            self.protocol.console(text)
+        return len(text)
+
 # Execute the buffer in a separate process; keep script output off the protocol.
 # Выполняет буфер в отдельном процессе и отделяет его вывод от протокола.
 def main():
-    snapshot, filename, project_root = sys.argv[1:4]
-    output = sys.stdout
+    snapshot, filename, project_root, overlay_file = sys.argv[1:5]
+    output = Protocol(sys.stdout)
     control = sys.stdin
-    sys.stdout = sys.__stdout__ = sys.stderr
+    console = DebugConsole(output)
+    sys.stdout = sys.__stdout__ = console
+    sys.stderr = sys.__stderr__ = console
     sys.stdin = open(os.devnull, "r")
     commands = queue.Queue()
     reader = threading.Thread(target=read_commands, args=(control.fileno(), commands), daemon=True)
@@ -292,6 +406,9 @@ def main():
         debugger.next_action(0)
         if os.path.isabs(filename):
             sys.path.insert(0, os.path.dirname(filename))
+        overlays = read_overlays(overlay_file)
+        if overlays:
+            sys.meta_path.insert(0, OverlayFinder(overlays))
         sys.argv = [filename]
         scope = {"__name__": "__main__", "__file__": filename, "__package__": None}
         sys.settrace(debugger.trace)
@@ -309,7 +426,6 @@ def main():
         output.write("E\t" + encode(name) + "\n")
     finally:
         sys.settrace(None)
-        output.flush()
 
 
 if __name__ == "__main__":

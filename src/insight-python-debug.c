@@ -9,22 +9,56 @@ struct InsightPythonDebug {
     GSubprocess *process;
     GDataInputStream *output;
     gchar *snapshot;
+    gchar *overlays;
 };
 
-/* Start the isolated interpreter using a private snapshot of the editor buffer. */
-/* Запускает отдельный интерпретатор с приватным снимком буфера редактора. */
+/* Write private debugger input into a temporary file. */
+/* Записывает входные данные отладчика в приватный временный файл. */
+static gboolean write_snapshot(gchar **filename, const gchar *contents, gsize length, GError **error)
+{
+    gint descriptor = g_file_open_tmp("geany-python-debug-XXXXXX", filename, error);
+    if (descriptor < 0)
+        return FALSE;
+    return g_close(descriptor, error) &&
+        g_file_set_contents(*filename, contents, (gssize)length, error);
+}
+
+/* Write length-prefixed path and source pairs for the Python import hook. */
+/* Записывает пары путь–исходник с длинами для обработчика импорта Python. */
+static gboolean write_overlays(InsightPythonDebug *debugger, GHashTable *overlays, GError **error)
+{
+    if (!overlays || g_hash_table_size(overlays) == 0)
+        return TRUE;
+
+    GString *contents = g_string_new(NULL);
+    GHashTableIter iterator;
+    gpointer key, value;
+    g_hash_table_iter_init(&iterator, overlays);
+    while (g_hash_table_iter_next(&iterator, &key, &value))
+    {
+        const gchar *filename = key;
+        const gchar *source = value;
+        gsize filename_length = strlen(filename);
+        gsize source_length = strlen(source);
+        g_string_append_printf(contents, "%" G_GSIZE_FORMAT " %" G_GSIZE_FORMAT "\n",
+                               filename_length, source_length);
+        g_string_append_len(contents, filename, filename_length);
+        g_string_append_len(contents, source, source_length);
+    }
+    gboolean written = write_snapshot(&debugger->overlays, contents->str, contents->len, error);
+    g_string_free(contents, TRUE);
+    return written;
+}
+
+/* Start the isolated interpreter with snapshots of the entry and edited imports. */
+/* Запускает интерпретатор со снимками точки входа и изменённых модулей. */
 InsightPythonDebug *insight_python_debug_new(const gchar *interpreter, const gchar *helper,
-    const gchar *filename, const gchar *project_root, const gchar *source, gsize length, GError **error)
+    const gchar *filename, const gchar *project_root, const gchar *source, gsize length,
+    GHashTable *overlays, GError **error)
 {
     InsightPythonDebug *debugger = g_new0(InsightPythonDebug, 1);
-    gint descriptor = g_file_open_tmp("geany-python-debug-XXXXXX", &debugger->snapshot, error);
-    if (descriptor < 0)
-    {
-        insight_python_debug_free(debugger);
-        return NULL;
-    }
-    if (!g_close(descriptor, error) ||
-        !g_file_set_contents(debugger->snapshot, source, (gssize)length, error))
+    if (!write_snapshot(&debugger->snapshot, source, length, error) ||
+        !write_overlays(debugger, overlays, error))
     {
         insight_python_debug_free(debugger);
         return NULL;
@@ -32,7 +66,8 @@ InsightPythonDebug *insight_python_debug_new(const gchar *interpreter, const gch
 
     debugger->process = g_subprocess_new(G_SUBPROCESS_FLAGS_STDIN_PIPE |
         G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_SILENCE, error,
-        interpreter, "-I", "-u", helper, debugger->snapshot, filename, project_root ? project_root : "", NULL);
+        interpreter, "-I", "-u", helper, debugger->snapshot, filename, project_root ? project_root : "",
+        debugger->overlays ? debugger->overlays : "", NULL);
     if (!debugger->process)
     {
         insight_python_debug_free(debugger);
@@ -55,6 +90,9 @@ void insight_python_debug_free(InsightPythonDebug *debugger)
     if (debugger->snapshot)
         g_unlink(debugger->snapshot);
     g_free(debugger->snapshot);
+    if (debugger->overlays)
+        g_unlink(debugger->overlays);
+    g_free(debugger->overlays);
     g_free(debugger);
 }
 
@@ -134,7 +172,19 @@ gint insight_python_debug_parse(const gchar *packet, gsize length, unsigned long
     gchar **fields = g_strsplit(packet, "\t", -1);
     guint count = g_strv_length(fields);
     gint result = -1;
-    if (count == 2 && !strcmp(fields[0], "E"))
+    if (count == 2 && !strcmp(fields[0], "O"))
+    {
+        gsize capacity = strlen(fields[1]) / 2 + 1;
+        gchar *text = g_malloc(capacity);
+        if (decode_field(fields[1], text, capacity))
+        {
+            *message = text;
+            result = 2;
+        }
+        else
+            g_free(text);
+    }
+    else if (count == 2 && !strcmp(fields[0], "E"))
     {
         gchar error[2048];
         if (decode_field(fields[1], error, sizeof error))

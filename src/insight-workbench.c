@@ -4953,6 +4953,9 @@ typedef struct {
     InsightPythonDebug *python_engine;
     InsightLuaWatchGraph *python_graph;
     gchar *python_stack;
+    GHashTable *python_overlays;
+    GtkWidget *python_console;
+    gsize python_console_bytes;
     guint64 python_request;
     gboolean python;
     gboolean python_running;
@@ -5020,6 +5023,7 @@ static void debug_window_free(gpointer data)
     insight_python_debug_free(view->python_engine);
     g_free(view->python_graph);
     g_free(view->python_stack);
+    g_clear_pointer(&view->python_overlays, g_hash_table_unref);
     g_free(view->project_root);
     g_free(view->display_filename);
     g_free(view->display_source);
@@ -5800,7 +5804,18 @@ static gboolean debug_show_script_file(ScriptDebugWindow *view, const gchar *fil
         g_free(key);
     }
     else if (g_path_is_absolute(filename))
-        source = debug_read_source_file(filename, &length);
+    {
+        gchar *key = debug_file_key(filename);
+        const gchar *overlay = view->python_overlays ? g_hash_table_lookup(view->python_overlays, key) : NULL;
+        if (overlay)
+        {
+            source = g_strdup(overlay);
+            length = strlen(overlay);
+        }
+        else
+            source = debug_read_source_file(filename, &length);
+        g_free(key);
+    }
 
     g_free(view->display_filename);
     g_free(view->display_source);
@@ -5849,6 +5864,26 @@ static gboolean debug_is_running(const ScriptDebugWindow *view)
     return view->execution_source != 0 || view->python_running;
 }
 
+/* Append bounded Python output without replacing the stack or watch snapshot. */
+/* Добавляет ограниченный вывод Python, сохраняя стек и граф наблюдения. */
+static void debug_python_append_output(ScriptDebugWindow *view, const gchar *text)
+{
+    const gsize limit = 260 * 1024;
+    if (!view->python_console || view->python_console_bytes >= limit || !text)
+        return;
+
+    gsize length = MIN(strlen(text), limit - view->python_console_bytes);
+    gchar *valid = g_utf8_make_valid(text, (gssize)length);
+    GtkTextView *console = GTK_TEXT_VIEW(view->python_console);
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(console);
+    GtkTextIter end;
+    gtk_text_buffer_get_end_iter(buffer, &end);
+    gtk_text_buffer_insert(buffer, &end, valid, -1);
+    gtk_text_view_scroll_to_iter(console, &end, 0, FALSE, 0, 0);
+    view->python_console_bytes += length;
+    g_free(valid);
+}
+
 /* Receive a Python stop packet without keeping a closed window alive. */
 /* Получает пакет остановки Python, не удерживая закрытое окно. */
 static void debug_python_received(GObject *object, GAsyncResult *result, gpointer data)
@@ -5860,28 +5895,47 @@ static void debug_python_received(GObject *object, GAsyncResult *result, gpointe
                                                         result, &length, &error);
     GtkWidget *window = g_weak_ref_get(&reply->window);
     ScriptDebugWindow *view = window ? g_object_get_data(G_OBJECT(window), "insight-lua-debugger") : NULL;
+    gboolean keep_reading = FALSE;
     if (view && !view->closing && reply->request == view->python_request)
     {
-        view->python_running = FALSE;
-        g_clear_pointer(&view->python_stack, g_free);
-        g_clear_pointer(&view->python_graph, g_free);
         unsigned long line = 0;
         gchar *filename = NULL;
+        gchar *stack = NULL;
         gchar *message = NULL;
-        gint status = insight_python_debug_parse(packet, length, &line, &filename, &view->python_stack,
-                                                 &view->python_graph, &message);
-        if (status == 1)
-            debug_show_script_file(view, filename);
-        debug_show_result(view, status, line, error ? error->message : message ? message : "");
+        InsightLuaWatchGraph *graph = NULL;
+        gint status = insight_python_debug_parse(packet, length, &line, &filename, &stack, &graph, &message);
+        if (status == 2 && !error)
+        {
+            debug_python_append_output(view, message);
+            keep_reading = TRUE;
+            g_data_input_stream_read_line_async(G_DATA_INPUT_STREAM(object), G_PRIORITY_DEFAULT,
+                                                 NULL, debug_python_received, reply);
+        }
+        else
+        {
+            view->python_running = FALSE;
+            g_free(view->python_stack);
+            g_free(view->python_graph);
+            view->python_stack = g_steal_pointer(&stack);
+            view->python_graph = g_steal_pointer(&graph);
+            if (status == 1)
+                debug_show_script_file(view, filename);
+            debug_show_result(view, status, line, error ? error->message : message ? message : "");
+        }
         g_free(filename);
+        g_free(stack);
+        g_free(graph);
         g_free(message);
     }
     if (window)
         g_object_unref(window);
     g_free(packet);
     g_clear_error(&error);
-    g_weak_ref_clear(&reply->window);
-    g_free(reply);
+    if (!keep_reading)
+    {
+        g_weak_ref_clear(&reply->window);
+        g_free(reply);
+    }
 }
 
 /* Send one Python action and wait asynchronously for its next stop. */
@@ -5938,11 +5992,69 @@ static void debug_python_step(ScriptDebugWindow *view)
         G_PRIORITY_DEFAULT, NULL, debug_python_received, reply);
 }
 
+/* Capture edited Python modules under the active project's base directory. */
+/* Снимает несохранённые исходники Python внутри корневого каталога проекта. */
+static GHashTable *debug_capture_python_overlays(const gchar *root, const gchar *entry, GError **error)
+{
+    GHashTable *overlays = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    if (!root || !g_path_is_absolute(root))
+        return overlays;
+
+    GFile *base = g_file_new_for_path(root);
+    gsize total = 0;
+    gboolean valid = TRUE;
+    for (guint i = 0; i < documents_array->len && valid; i++)
+    {
+        GeanyDocument *document = g_ptr_array_index(documents_array, i);
+        if (!DOC_VALID(document) || !document->changed || !document->file_name ||
+            !python_language(document->file_type) || debug_same_file(entry, document->file_name))
+            continue;
+
+        gchar *locale_filename = utils_get_locale_from_utf8(document->file_name);
+        if (!locale_filename)
+            continue;
+        GFile *file = g_file_new_for_path(locale_filename);
+        gchar *relative = g_file_get_relative_path(base, file);
+        gboolean include = relative && g_file_test(locale_filename, G_FILE_TEST_IS_REGULAR);
+        g_free(relative);
+        g_object_unref(file);
+        g_free(locale_filename);
+        if (!include)
+            continue;
+
+        gint length = sci_get_length(document->editor->sci);
+        if (length < 0 || length > 2 * 1024 * 1024 || total + (gsize)length > 16 * 1024 * 1024 ||
+            g_hash_table_size(overlays) >= 64)
+        {
+            valid = FALSE;
+            break;
+        }
+        gchar *text = sci_get_contents(document->editor->sci, length + 1);
+        if (memchr(text, 0, length) || !g_utf8_validate(text, length, NULL))
+        {
+            g_free(text);
+            valid = FALSE;
+            break;
+        }
+        g_hash_table_insert(overlays, debug_file_key(document->file_name), text);
+        total += (gsize)length;
+    }
+    g_object_unref(base);
+    if (!valid)
+    {
+        g_hash_table_unref(overlays);
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+            "Edited Python modules exceed the debugger snapshot limits or contain invalid text");
+        return NULL;
+    }
+    return overlays;
+}
+
 /* Resolve the interpreter and start the Python bridge for a source snapshot. */
 /* Находит интерпретатор и запускает процесс отладки для снимка исходника. */
 static InsightPythonDebug *debug_new_python_engine(const gchar *filename, const gchar *project_root,
                                                     const gchar *source,
-                                                    gsize length, GError **error)
+                                                    gsize length, GHashTable *overlays, GError **error)
 {
     const gchar *configured = g_getenv("GEANY_INSIGHT_PYTHON");
     gchar *interpreter = g_find_program_in_path(configured && *configured ? configured : "python3");
@@ -5957,7 +6069,7 @@ static InsightPythonDebug *debug_new_python_engine(const gchar *filename, const 
 
     gchar *helper = g_build_filename(app->datadir, "insight", "tools", "python_debug.py", NULL);
     InsightPythonDebug *engine = insight_python_debug_new(interpreter, helper,
-        filename && *filename ? filename : "<buffer>", project_root, source, length, error);
+        filename && *filename ? filename : "<buffer>", project_root, source, length, overlays, error);
     g_free(helper);
     g_free(interpreter);
     return engine;
@@ -6089,7 +6201,7 @@ static void debug_restart(GtkButton *button, gpointer data)
     GError *python_error = NULL;
     if (view->python)
         python_replacement = debug_new_python_engine(view->source_filename, view->project_root, view->source_snapshot,
-                                                     view->source_length, &python_error);
+                                                     view->source_length, view->python_overlays, &python_error);
     else
     {
         gchar *filename = debug_file_key(view->source_filename);
@@ -6119,6 +6231,11 @@ static void debug_restart(GtkButton *button, gpointer data)
     g_clear_pointer(&view->python_stack, g_free);
     view->engine = lua_replacement;
     view->python_engine = python_replacement;
+    if (view->python_console)
+    {
+        debug_set_text(view->python_console, "");
+        view->python_console_bytes = 0;
+    }
     g_clear_pointer(&view->watch_previous_values, g_hash_table_unref);
     view->paused_line = 0;
     gtk_widget_set_sensitive(view->go_to_source, FALSE);
@@ -6629,8 +6746,14 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     InsightLuaDebug *lua_engine = NULL;
     InsightPythonDebug *python_engine = NULL;
     gchar *project_root = app->project ? project_get_base_path() : NULL;
+    GHashTable *python_overlays = NULL;
     if (python)
-        python_engine = debug_new_python_engine(document->file_name, project_root, source, length, &python_error);
+    {
+        python_overlays = debug_capture_python_overlays(project_root, document->file_name, &python_error);
+        if (python_overlays)
+            python_engine = debug_new_python_engine(document->file_name, project_root, source, length,
+                                                    python_overlays, &python_error);
+    }
     else
     {
         gchar *filename = debug_file_key(document->file_name);
@@ -6645,6 +6768,7 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
         ui_set_statusbar(TRUE, "%s", message);
         g_free(message);
         g_clear_error(&python_error);
+        g_clear_pointer(&python_overlays, g_hash_table_unref);
         g_free(project_root);
         g_free(source);
         return;
@@ -6654,6 +6778,7 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     view->python = python;
     view->engine = lua_engine;
     view->python_engine = python_engine;
+    view->python_overlays = python_overlays;
     view->project_root = project_root;
     view->file_breakpoints = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     view->lua_modules = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, debug_lua_module_free);
@@ -6741,6 +6866,12 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     view->stack_view = debug_create_view(stack_pane, TRUE);
     gtk_notebook_append_page(GTK_NOTEBOOK(inspection), stack_pane, gtk_label_new("Stack and locals"));
     gtk_notebook_append_page(GTK_NOTEBOOK(inspection), debug_create_watch_tab(view), gtk_label_new("Watch graph"));
+    if (python)
+    {
+        GtkWidget *console_pane = gtk_paned_new(GTK_ORIENTATION_VERTICAL);
+        view->python_console = debug_create_view(console_pane, TRUE);
+        gtk_notebook_append_page(GTK_NOTEBOOK(inspection), console_pane, gtk_label_new("Console"));
+    }
     gtk_paned_set_position(GTK_PANED(pane), 535);
     gchar *numbered = debug_number_source(view->source_snapshot, view->source_length,
                                           view->source_line_offsets, python);
