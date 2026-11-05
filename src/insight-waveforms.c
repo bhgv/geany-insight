@@ -1152,7 +1152,9 @@ typedef struct {
     gsize observer_log_offset;
     gboolean bridge_ready, pause_requested;
     GString *protocol_line;
-    GHashTable *breakpoints;
+    GHashTable *breakpoints, *point_anchors;
+    GPtrArray *unresolved_records, *unresolved_anchors;
+    guint moved_points;
     gchar *trace_file;
     guint trace_line;
     InsightWaveLocation open_location;
@@ -1176,6 +1178,9 @@ static void simulation_free(gpointer data)
     if (run->protocol_line)
         g_string_free(run->protocol_line, TRUE);
     g_clear_pointer(&run->breakpoints, g_hash_table_unref);
+    g_clear_pointer(&run->point_anchors, g_hash_table_unref);
+    g_clear_pointer(&run->unresolved_records, g_ptr_array_unref);
+    g_clear_pointer(&run->unresolved_anchors, g_ptr_array_unref);
     g_weak_ref_clear(&run->parent);
     g_clear_object(&run->dialog);
     g_strfreev(run->sources);
@@ -1212,6 +1217,152 @@ static gchar *simulation_settings_path(const gchar *directory, const gchar *proj
     return path;
 }
 
+typedef struct {
+    gchar **lines;
+    gchar *digest;
+    guint count;
+} WavePointSource;
+
+/* Release the temporary source snapshot used to resolve point anchors. */
+/* Освобождает временный снимок исходника для привязки точек. */
+static void simulation_point_source_free(gpointer data)
+{
+    WavePointSource *source = data;
+    if (!source)
+        return;
+    g_strfreev(source->lines);
+    g_free(source->digest);
+    g_free(source);
+}
+
+/* Read a bounded source snapshot and normalize line endings and indentation. */
+/* Читает ограниченный снимок исходника и нормализует переводы строк и отступы. */
+static WavePointSource *simulation_point_source(const gchar *filename)
+{
+    const gsize limit = 2 * 1024 * 1024;
+    GFile *file = g_file_new_for_path(filename);
+    GFileInputStream *stream = g_file_read(file, NULL, NULL);
+    g_object_unref(file);
+    if (!stream)
+        return NULL;
+
+    gchar *bytes = g_malloc(limit + 1);
+    gsize length = 0;
+    gboolean valid = g_input_stream_read_all(G_INPUT_STREAM(stream), bytes,
+        limit + 1, &length, NULL, NULL) && length <= limit && !memchr(bytes, 0, length) &&
+        g_utf8_validate(bytes, (gssize)length, NULL);
+    g_object_unref(stream);
+    if (!valid)
+    {
+        g_free(bytes);
+        return NULL;
+    }
+
+    WavePointSource *source = g_new0(WavePointSource, 1);
+    source->digest = g_compute_checksum_for_data(G_CHECKSUM_SHA256, (const guchar *)bytes, length);
+    gsize out = 0;
+    for (gsize i = 0; i < length; i++)
+    {
+        if (bytes[i] == '\r')
+        {
+            bytes[out++] = '\n';
+            if (i + 1 < length && bytes[i + 1] == '\n')
+                i++;
+        }
+        else
+            bytes[out++] = bytes[i];
+    }
+    bytes[out] = 0;
+    source->lines = g_strsplit(bytes, "\n", -1);
+    source->count = g_strv_length(source->lines);
+    for (guint i = 0; i < source->count; i++)
+        g_strstrip(source->lines[i]);
+    g_free(bytes);
+    return source;
+}
+
+/* Encode a target line and its neighbors without using separators from the source. */
+/* Кодирует строку и её соседей без разделителей из исходного текста. */
+static gchar *simulation_point_anchor(const WavePointSource *source, guint line)
+{
+    if (!source || !line || line > source->count || !*source->lines[line - 1])
+        return g_strdup("!");
+    const gchar *context[] = {
+        source->lines[line - 1],
+        line > 1 ? source->lines[line - 2] : NULL,
+        line < source->count ? source->lines[line] : NULL
+    };
+    gchar *encoded[3];
+    for (guint i = 0; i < G_N_ELEMENTS(context); i++)
+    {
+        if (!context[i])
+            encoded[i] = g_strdup("-");
+        else if (strlen(context[i]) > 1024)
+            encoded[i] = g_strdup("!");
+        else
+            encoded[i] = g_base64_encode((const guchar *)context[i], strlen(context[i]));
+    }
+    gchar *anchor = g_strjoin(":", source->digest, encoded[0], encoded[1], encoded[2], NULL);
+    for (guint i = 0; i < G_N_ELEMENTS(encoded); i++)
+        g_free(encoded[i]);
+    return anchor;
+}
+
+/* Compare a saved neighbor, distinguishing a missing line from an empty line. */
+/* Сравнивает соседнюю строку, различая отсутствие строки и пустую строку. */
+static gboolean simulation_neighbor_matches(const gchar *encoded, const gchar *line)
+{
+    if (!line)
+        return !strcmp(encoded, "-");
+    if (!strcmp(encoded, "-") || !strcmp(encoded, "!"))
+        return FALSE;
+    gsize length;
+    guchar *text = g_base64_decode(encoded, &length);
+    gboolean equal = length == strlen(line) && (!length || !memcmp(text, line, length));
+    g_free(text);
+    return equal;
+}
+
+/* Keep unchanged files at the old line, otherwise resolve only an unambiguous match. */
+/* Сохраняет номер в неизменённом файле, иначе ищет однозначное совпадение. */
+static guint simulation_resolve_point(const WavePointSource *source, guint original, const gchar *anchor)
+{
+    if (!anchor || !*anchor)
+        return original;
+    if (!source || !strcmp(anchor, "!"))
+        return 0;
+    gchar **parts = g_strsplit(anchor, ":", 4);
+    guint resolved = 0;
+    if (g_strv_length(parts) == 4)
+    {
+        if (!strcmp(parts[0], source->digest) && original <= source->count)
+            resolved = original;
+        else if (*parts[1] && strcmp(parts[1], "!"))
+        {
+            gsize length;
+            guchar *center = g_base64_decode(parts[1], &length);
+            guint matches = 0, contexts = 0, candidate = 0, exact = 0;
+            for (guint i = 0; length && i < source->count; i++)
+            {
+                if (strlen(source->lines[i]) != length || memcmp(center, source->lines[i], length))
+                    continue;
+                candidate = i + 1;
+                matches++;
+                if (simulation_neighbor_matches(parts[2], i ? source->lines[i - 1] : NULL) &&
+                    simulation_neighbor_matches(parts[3], i + 1 < source->count ? source->lines[i + 1] : NULL))
+                {
+                    exact = i + 1;
+                    contexts++;
+                }
+            }
+            resolved = matches == 1 ? candidate : contexts == 1 ? exact : 0;
+            g_free(center);
+        }
+    }
+    g_strfreev(parts);
+    return resolved;
+}
+
 /* Restore only well-formed rules for files selected in this run. */
 /* Восстанавливает только корректные правила для выбранных файлов. */
 static void simulation_load_settings(WaveSimulation *run)
@@ -1223,6 +1374,9 @@ static void simulation_load_settings(WaveSimulation *run)
     {
         gsize count = 0;
         gchar **records = g_key_file_get_string_list(settings, "Simulation", "Points", &count, NULL);
+        gsize anchor_count = 0;
+        gchar **anchors = g_key_file_get_string_list(settings, "Simulation", "Anchors", &anchor_count, NULL);
+        GHashTable *sources = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, simulation_point_source_free);
         for (gsize i = 0; i < MIN(count, 128); i++)
         {
             gchar **parts = g_strsplit(records[i], "\t", 7);
@@ -1239,12 +1393,42 @@ static void simulation_load_settings(WaveSimulation *run)
                 (!strcmp(parts[6], "0") || !strcmp(parts[6], "1")) &&
                 (strcmp(parts[5], "1") || strcmp(parts[6], "1")))
             {
-                gchar *key = g_strdup_printf("%" G_GUINT64_FORMAT "\t%s", line, parts[1]);
-                gchar *rule = g_strjoin("\t", parts[2], parts[3], parts[4], parts[5], parts[6], NULL);
-                g_hash_table_replace(run->breakpoints, key, rule);
+                const gchar *anchor = i < anchor_count ? anchors[i] : "";
+                WavePointSource *source = NULL;
+                if (*anchor)
+                {
+                    if (!g_hash_table_contains(sources, parts[1]))
+                    {
+                        if (g_hash_table_size(sources) >= 4)
+                            g_hash_table_remove_all(sources);
+                        source = simulation_point_source(parts[1]);
+                        g_hash_table_insert(sources, g_strdup(parts[1]), source);
+                    }
+                    else
+                        source = g_hash_table_lookup(sources, parts[1]);
+                }
+                guint resolved = simulation_resolve_point(source, (guint)line, anchor);
+                gchar *key = resolved ? g_strdup_printf("%u\t%s", resolved, parts[1]) : NULL;
+                if (!key || g_hash_table_contains(run->breakpoints, key))
+                {
+                    g_ptr_array_add(run->unresolved_records, g_strdup(records[i]));
+                    g_ptr_array_add(run->unresolved_anchors, g_strdup(anchor));
+                    g_free(key);
+                }
+                else
+                {
+                    gchar *rule = g_strjoin("\t", parts[2], parts[3], parts[4], parts[5], parts[6], NULL);
+                    gchar *current_anchor = resolved != line ? simulation_point_anchor(source, resolved) : g_strdup(anchor);
+                    if (resolved != line)
+                        run->moved_points++;
+                    g_hash_table_insert(run->point_anchors, g_strdup(key), current_anchor);
+                    g_hash_table_insert(run->breakpoints, key, rule);
+                }
             }
             g_strfreev(parts);
         }
+        g_hash_table_unref(sources);
+        g_strfreev(anchors);
         g_strfreev(records);
         gchar *script = g_key_file_get_string(settings, "Simulation", "Observer", NULL);
         if (script)
@@ -1282,9 +1466,30 @@ static gboolean simulation_save_settings(const WaveSimulation *run)
         return TRUE;
     GKeyFile *settings = g_key_file_new();
     GPtrArray *records = simulation_rule_records(run);
+    GPtrArray *anchors = g_ptr_array_new();
+    for (guint i = 0; i < records->len; i++)
+    {
+        const gchar *record = records->pdata[i];
+        const gchar *tab = strchr(record, '\t');
+        const gchar *end = strchr(tab + 1, '\t');
+        gchar *key = g_strndup(record, end - record);
+        const gchar *anchor = g_hash_table_lookup(run->point_anchors, key);
+        g_ptr_array_add(anchors, (gpointer)(anchor ? anchor : ""));
+        g_free(key);
+    }
+    for (guint i = 0; i < run->unresolved_records->len; i++)
+    {
+        g_ptr_array_add(records, g_strdup(run->unresolved_records->pdata[i]));
+        g_ptr_array_add(anchors, run->unresolved_anchors->pdata[i]);
+    }
     if (records->len)
+    {
         g_key_file_set_string_list(settings, "Simulation", "Points",
             (const gchar *const *)records->pdata, records->len);
+        g_key_file_set_string_list(settings, "Simulation", "Anchors",
+            (const gchar *const *)anchors->pdata, anchors->len);
+    }
+    g_ptr_array_unref(anchors);
     if (run->observer_file)
     {
         gchar *utf8 = g_filename_to_utf8(run->observer_file, -1, NULL, NULL, NULL);
@@ -1815,6 +2020,43 @@ static void simulation_report_settings(WaveSimulation *run)
     }
 }
 
+/* Find a parked rule by its original file and line. */
+/* Ищет неактивное правило по исходному файлу и номеру строки. */
+static gint simulation_unresolved_index(const WaveSimulation *run, const gchar *key)
+{
+    gsize length = strlen(key);
+    for (guint i = 0; i < run->unresolved_records->len; i++)
+    {
+        const gchar *record = run->unresolved_records->pdata[i];
+        if (!strncmp(record, key, length) && record[length] == '\t')
+            return (gint)i;
+    }
+    return -1;
+}
+
+/* Report parked points without sending them to the simulator. */
+/* Показывает неактивные точки без передачи симулятору. */
+static void simulation_list_unresolved(GtkButton *button, gpointer data)
+{
+    (void)button;
+    WaveSimulation *run = data;
+    GString *text = g_string_new("\n");
+    g_string_append_printf(text, "Unresolved source points: %u\n", run->unresolved_records->len);
+    for (guint i = 0; i < run->unresolved_records->len; i++)
+    {
+        gchar **parts = g_strsplit(run->unresolved_records->pdata[i], "\t", 7);
+        g_string_append_printf(text, "  %s:%s\n", parts[1], parts[0]);
+        g_strfreev(parts);
+    }
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->console));
+    GtkTextIter end;
+    gtk_text_buffer_get_end_iter(buffer, &end);
+    gchar *valid = g_utf8_make_valid(text->str, -1);
+    gtk_text_buffer_insert(buffer, &end, valid, -1);
+    g_free(valid);
+    g_string_free(text, TRUE);
+}
+
 /* Send the complete enabled source-breakpoint set to the paused runtime. */
 /* Передаёт остановленному симулятору полный набор включённых точек. */
 static void simulation_edit_breakpoint(GtkButton *button, gpointer data)
@@ -1838,7 +2080,8 @@ static void simulation_edit_breakpoint(GtkButton *button, gpointer data)
         gchar *bits = g_ascii_strdown(gtk_entry_get_text(GTK_ENTRY(run->rule_bits)), -1);
         if (((*signal == '\0') != (*bits == '\0')) || strpbrk(signal, "\r\n\t ") ||
             strspn(bits, "01xz") != strlen(bits) ||
-            (g_hash_table_size(run->breakpoints) >= 128 && !g_hash_table_contains(run->breakpoints, key)))
+            (g_hash_table_size(run->breakpoints) + run->unresolved_records->len >= 128 &&
+             !g_hash_table_contains(run->breakpoints, key) && simulation_unresolved_index(run, key) < 0))
         {
             GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->console));
             GtkTextIter end;
@@ -1887,11 +2130,35 @@ static void simulation_edit_breakpoint(GtkButton *button, gpointer data)
         if (g_file_set_contents(path, contents->str, (gssize)contents->len, NULL))
         {
             if (action == 2)
+            {
                 g_hash_table_remove_all(run->breakpoints);
-            else if (action == 1)
-                g_hash_table_remove(run->breakpoints, key);
+                g_hash_table_remove_all(run->point_anchors);
+                g_ptr_array_set_size(run->unresolved_records, 0);
+                g_ptr_array_set_size(run->unresolved_anchors, 0);
+            }
             else
-                g_hash_table_replace(run->breakpoints, g_steal_pointer(&key), g_steal_pointer(&rule));
+            {
+                gint unresolved;
+                while ((unresolved = simulation_unresolved_index(run, key)) >= 0)
+                {
+                    g_ptr_array_remove_index(run->unresolved_records, (guint)unresolved);
+                    g_ptr_array_remove_index(run->unresolved_anchors, (guint)unresolved);
+                }
+                if (action == 1)
+                {
+                    g_hash_table_remove(run->breakpoints, key);
+                    g_hash_table_remove(run->point_anchors, key);
+                }
+                else
+                {
+                    WavePointSource *source = simulation_point_source(filename);
+                    gchar *anchor = simulation_point_anchor(source, (guint)line);
+                    if (source)
+                        simulation_point_source_free(source);
+                    g_hash_table_replace(run->point_anchors, g_strdup(key), anchor);
+                    g_hash_table_replace(run->breakpoints, g_steal_pointer(&key), g_steal_pointer(&rule));
+                }
+            }
             simulation_report_settings(run);
             simulation_write_command(run, "geany-load\n");
         }
@@ -2015,6 +2282,12 @@ static void simulation_rule_selected(GtkWidget *widget, gpointer data)
     gint line = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(run->breakpoint_line));
     gchar *key = g_strdup_printf("%d\t%s", line, run->sources[index]);
     const gchar *rule = g_hash_table_lookup(run->breakpoints, key);
+    gint unresolved = rule ? -1 : simulation_unresolved_index(run, key);
+    if (unresolved >= 0)
+    {
+        const gchar *record = run->unresolved_records->pdata[unresolved];
+        rule = record + strlen(key) + 1;
+    }
     gchar **fields = rule ? g_strsplit(rule, "\t", 5) : NULL;
     gboolean valid = fields && g_strv_length(fields) == 5;
     gtk_entry_set_text(GTK_ENTRY(run->rule_signal), valid ? fields[0] : "");
@@ -2210,6 +2483,9 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         gtk_window_set_default_size(GTK_WINDOW(run->dialog), 680, 400);
         run->protocol_line = g_string_new(NULL);
         run->breakpoints = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+        run->point_anchors = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+        run->unresolved_records = g_ptr_array_new_with_free_func(g_free);
+        run->unresolved_anchors = g_ptr_array_new_with_free_func(g_free);
         run->settings_path = simulation_settings_path(settings_directory, project, run->sources);
         simulation_load_settings(run);
         GtkWidget *running_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
@@ -2223,6 +2499,13 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         g_signal_connect(run->source_button, "clicked", G_CALLBACK(simulation_open_location), run);
         gtk_box_pack_start(GTK_BOX(running_actions), run->source_button, FALSE, FALSE, 0);
         run->console = gtk_text_view_new();
+        if (run->moved_points || run->unresolved_records->len)
+        {
+            gchar *summary = g_strdup_printf("Restored points: %u moved, %u unresolved.\n",
+                                             run->moved_points, run->unresolved_records->len);
+            gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->console)), summary, -1);
+            g_free(summary);
+        }
         gtk_text_view_set_monospace(GTK_TEXT_VIEW(run->console), TRUE);
         gtk_text_view_set_editable(GTK_TEXT_VIEW(run->console), FALSE);
         GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
@@ -2300,6 +2583,9 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         g_object_set_data(G_OBJECT(list_points), "vvp-command", "geany-list\n");
         g_signal_connect(list_points, "clicked", G_CALLBACK(simulation_send_command), run);
         gtk_box_pack_start(GTK_BOX(location), list_points, FALSE, FALSE, 0);
+        GtkWidget *unresolved = gtk_button_new_with_label("Unresolved Points");
+        g_signal_connect(unresolved, "clicked", G_CALLBACK(simulation_list_unresolved), run);
+        gtk_box_pack_start(GTK_BOX(location), unresolved, FALSE, FALSE, 0);
         GtkWidget *rule = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
         gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), rule, FALSE, FALSE, 0);
         run->rule_signal = gtk_entry_new();
