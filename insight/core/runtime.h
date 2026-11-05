@@ -100,6 +100,7 @@ void insight_lua_debug_request_pause(InsightLuaDebug *);
  * Up to 128 one-based breakpoint lines. The optional host is borrowed and read-only. */
 int insight_lua_debug_resume(InsightLuaDebug *,InsightLuaStep,const InsightLuaBreakpoint *,size_t,
  const InsightHost *,unsigned long *,char *,size_t);
+int insight_lua_debug_select_frame(InsightLuaDebug *, unsigned, const char **, unsigned long *);
 void insight_lua_debug_inspect(InsightLuaDebug *,char *,size_t);
 /* The graph is borrowed until the next resume or until the VM is freed. */
 const InsightLuaWatchGraph *insight_lua_debug_watch_graph(const InsightLuaDebug *);

@@ -31,6 +31,19 @@ The current Lua file is the default entry point. Use **Scripts → Debug Lua Fil
 
 The debug VM loads text modules from the project. System package search and native Lua modules are unavailable in this VM. Restart keeps loaded snapshots. Start a new session to pick up edited module sources.
 
+
+## Inspect stack frames
+
+While paused, choose a frame at the top of **Stack and locals**. Frame **#0**
+is the execution stop. Select a caller to see its call site, local variables
+and **Watch graph**. Hover tooltips use the selected frame's values too.
+**Go to Source** opens the selected frame's line when the editor text matches
+the source snapshot.
+
+Frame selection changes what you inspect. Stepping, including **Step Out**,
+starts from the actual execution stop. The next stop selects frame **#0** again.
+The selector shows available source frames among the first 16 stack levels.
+
 ## Watch graph
 
 Open **Watch graph** while paused. **Current frame** is the root. Follow the

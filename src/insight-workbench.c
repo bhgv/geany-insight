@@ -4989,6 +4989,10 @@ typedef struct {
     GtkWidget *window;
     GtkWidget *source_view;
     GtkWidget *stack_view;
+    GtkWidget *stack_frames;
+    guint inspection_frame;
+    gboolean updating_stack_frames;
+    gboolean inspecting_frame;
     GtkWidget *status;
     GtkWidget *breakpoints;
     GtkWidget *step_controls;
@@ -5538,6 +5542,40 @@ static GtkWidget *debug_create_watch_tab(ScriptDebugWindow *view)
     return box;
 }
 
+/* Fill the frame selector from the bounded source-frame headings. */
+/* Заполняет список кадров по заголовкам кадров исходников. */
+static void debug_update_stack_frames(ScriptDebugWindow *view, const gchar *stack)
+{
+    view->updating_stack_frames = TRUE;
+    GtkComboBoxText *frames = GTK_COMBO_BOX_TEXT(view->stack_frames);
+    gtk_combo_box_text_remove_all(frames);
+    guint count = 0;
+    while (stack && *stack == '#' && count < 16)
+    {
+        const gchar *end = strchr(stack, '\n');
+        const gchar *space = strchr(stack, ' ');
+        guint64 level;
+        if (!end || !space || space >= end)
+            break;
+        gchar *id = g_strndup(stack + 1, space - stack - 1);
+        if (g_ascii_string_to_unsigned(id, 10, 0, 15, &level, NULL))
+        {
+            gchar *label = g_utf8_make_valid(stack, end - stack);
+            gtk_combo_box_text_append(frames, id, label);
+            g_free(label);
+            count++;
+        }
+        g_free(id);
+        stack = end + 1;
+    }
+
+    gchar id[16];
+    g_snprintf(id, sizeof id, "%u", view->inspection_frame);
+    gtk_combo_box_set_active_id(GTK_COMBO_BOX(frames), id);
+    gtk_widget_set_sensitive(view->stack_frames, count > 1);
+    view->updating_stack_frames = FALSE;
+}
+
 /* Update the debugger panes when a source stop or terminal result arrives. */
 /* Обновляет панели отладчика при остановке на строке или завершении. */
 static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned long line, const gchar *error)
@@ -5562,17 +5600,23 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
             gtk_text_buffer_apply_tag(buffer, view->current_line_tag, &first, &last);
             gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(view->source_view), &first, 0.15, FALSE, 0, 0);
         }
-        if (view->python)
-            debug_set_text(view->stack_view, view->python_stack ? view->python_stack : "");
-        else
+        gchar lua_stack[8192];
+        const gchar *stack = view->python_stack;
+        if (!view->python)
         {
-            gchar state[8192];
-            insight_lua_debug_inspect(view->engine, state, sizeof state);
-            debug_set_text(view->stack_view, state);
+            insight_lua_debug_inspect(view->engine, lua_stack, sizeof lua_stack);
+            stack = lua_stack;
         }
-        gchar *label = view->display_filename ?
-            g_strdup_printf("Paused at %s:%lu", view->display_filename, line) :
-            g_strdup_printf("Paused at line %lu", line);
+        debug_set_text(view->stack_view, stack ? stack : "");
+        debug_update_stack_frames(view, stack);
+        gchar *label;
+        if (view->inspection_frame)
+            label = g_strdup_printf("Paused, inspecting frame #%u at %s:%lu", view->inspection_frame,
+                                    view->display_filename ? view->display_filename : "<buffer>", line);
+        else if (view->display_filename)
+            label = g_strdup_printf("Paused at %s:%lu", view->display_filename, line);
+        else
+            label = g_strdup_printf("Paused at line %lu", line);
         gtk_label_set_text(GTK_LABEL(view->status), label);
         g_free(label);
     }
@@ -5582,6 +5626,7 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
             g_utf8_make_valid(*error ? error : "Debugger stopped", -1);
         gtk_label_set_text(GTK_LABEL(view->status), label);
         debug_set_text(view->stack_view, result < 0 ? label : "");
+        debug_update_stack_frames(view, NULL);
         g_free(label);
         gtk_widget_set_sensitive(view->step_controls, FALSE);
     }
@@ -5607,7 +5652,14 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
         if (view->observer_graph->node_count)
             view->watch_graph = view->observer_graph;
     }
-    debug_watch_compare(view);
+    if (view->inspecting_frame)
+    {
+        memset(view->watch_changed, 0, sizeof view->watch_changed);
+        view->watch_change_count = 0;
+    }
+    else
+        debug_watch_compare(view);
+    view->inspecting_frame = FALSE;
     view->watch_selected = -1;
     debug_watch_layout(view);
 }
@@ -6351,6 +6403,61 @@ static void debug_python_received(GObject *object, GAsyncResult *result, gpointe
     }
 }
 
+/* Await a reply without keeping a closed debugger window alive. */
+/* Ждёт ответ, не удерживая закрытое окно отладки. */
+static void debug_python_read_reply(ScriptDebugWindow *view)
+{
+    PythonDebugReply *reply = g_new0(PythonDebugReply, 1);
+    g_weak_ref_init(&reply->window, view->window);
+    reply->request = ++view->python_request;
+    view->python_running = TRUE;
+    g_data_input_stream_read_line_async(insight_python_debug_output(view->python_engine),
+        G_PRIORITY_DEFAULT, NULL, debug_python_received, reply);
+}
+
+/* Change the inspected frame while leaving the execution point paused. */
+/* Меняет просматриваемый кадр, оставляя выполнение на паузе. */
+static void debug_stack_frame_changed(GtkComboBox *frames, gpointer data)
+{
+    ScriptDebugWindow *view = data;
+    if (view->updating_stack_frames || !view->paused_line || debug_is_running(view))
+        return;
+    const gchar *id = gtk_combo_box_get_active_id(frames);
+    guint64 level;
+    if (!id || !g_ascii_string_to_unsigned(id, 10, 0, 15, &level, NULL) ||
+        level == view->inspection_frame)
+        return;
+
+    if (view->python)
+    {
+        gchar command[24];
+        g_snprintf(command, sizeof command, "frame %u\n", (guint)level);
+        GError *error = NULL;
+        if (!insight_python_debug_send(view->python_engine, command, &error))
+        {
+            gtk_label_set_text(GTK_LABEL(view->status), error ? error->message : "Cannot inspect Python frame");
+            g_clear_error(&error);
+            return;
+        }
+        view->inspection_frame = (guint)level;
+        view->inspecting_frame = TRUE;
+        gtk_widget_set_sensitive(view->stack_frames, FALSE);
+        gtk_widget_set_sensitive(view->step_controls, FALSE);
+        debug_python_read_reply(view);
+    }
+    else
+    {
+        const char *filename;
+        unsigned long line;
+        if (!insight_lua_debug_select_frame(view->engine, (guint)level, &filename, &line))
+            return;
+        view->inspection_frame = (guint)level;
+        view->inspecting_frame = TRUE;
+        debug_show_script_file(view, filename);
+        debug_show_result(view, 1, line, "");
+    }
+}
+
 /* Send one Python action and wait asynchronously for its next stop. */
 /* Отправляет действие Python и асинхронно ждёт следующую остановку. */
 static void debug_python_step(ScriptDebugWindow *view)
@@ -6412,12 +6519,7 @@ static void debug_python_step(ScriptDebugWindow *view)
         return;
     }
 
-    PythonDebugReply *reply = g_new0(PythonDebugReply, 1);
-    g_weak_ref_init(&reply->window, view->window);
-    reply->request = ++view->python_request;
-    view->python_running = TRUE;
-    g_data_input_stream_read_line_async(insight_python_debug_output(view->python_engine),
-        G_PRIORITY_DEFAULT, NULL, debug_python_received, reply);
+    debug_python_read_reply(view);
 }
 
 /* Capture edited Python modules under the active project's base directory. */
@@ -6544,6 +6646,9 @@ static void debug_window_step(ScriptDebugWindow *view, InsightLuaStep mode)
         }
     }
     view->pending_mode = mode;
+    view->inspection_frame = 0;
+    view->inspecting_frame = FALSE;
+    gtk_widget_set_sensitive(view->stack_frames, FALSE);
     view->paused_line = 0;
     view->watch_graph = NULL;
     gtk_widget_trigger_tooltip_query(view->source_view);
@@ -8290,7 +8395,14 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     gtk_paned_pack2(GTK_PANED(pane), inspection, TRUE, FALSE);
     GtkWidget *stack_pane = gtk_paned_new(GTK_ORIENTATION_VERTICAL);
     view->stack_view = debug_create_view(stack_pane, TRUE);
-    gtk_notebook_append_page(GTK_NOTEBOOK(inspection), stack_pane, gtk_label_new("Stack and locals"));
+    GtkWidget *stack_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    view->stack_frames = gtk_combo_box_text_new();
+    gtk_widget_set_tooltip_text(view->stack_frames, "Choose a stack frame to inspect its source and values");
+    gtk_widget_set_sensitive(view->stack_frames, FALSE);
+    gtk_box_pack_start(GTK_BOX(stack_page), view->stack_frames, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(stack_page), stack_pane, TRUE, TRUE, 0);
+    g_signal_connect(view->stack_frames, "changed", G_CALLBACK(debug_stack_frame_changed), view);
+    gtk_notebook_append_page(GTK_NOTEBOOK(inspection), stack_page, gtk_label_new("Stack and locals"));
     gtk_notebook_append_page(GTK_NOTEBOOK(inspection), debug_create_watch_tab(view), gtk_label_new("Watch graph"));
     {
         GtkWidget *log_pane = gtk_paned_new(GTK_ORIENTATION_VERTICAL);

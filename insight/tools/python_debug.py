@@ -172,21 +172,19 @@ def read_commands(descriptor, commands, input_lines, observer_replies):
     commands.put("quit")
 
 
-# Collect frame names and raw values for the editor's stack pane.
-# Собирает имена кадров и значения для панели стека редактора.
-def stack_text(frame):
+# Format selectable frames and the locals of the frame being inspected.
+# Форматирует список кадров и локальные значения выбранного кадра.
+def stack_text(frames, selected):
     rows = []
-    for level in range(16):
-        if frame is None:
+    for level, frame in frames.items():
+        name = frame.f_code.co_name.replace("\r", " ").replace("\n", " ")
+        filename = frame.f_code.co_filename.replace("\r", " ").replace("\n", " ")
+        rows.append("#{} {} ({}:{})".format(level, name, filename, frame.f_lineno))
+    rows.append("\nLocals in frame #{}".format(selected))
+    for index, (name, value) in enumerate(frames[selected].f_locals.items()):
+        if index == 64:
             break
-        rows.append("#{} {} ({}:{})".format(
-            level, frame.f_code.co_name, frame.f_code.co_filename, frame.f_lineno))
-        if level == 0:
-            for index, (name, value) in enumerate(frame.f_locals.items()):
-                if index == 64:
-                    break
-                rows.append("    {} = {}".format(name, value_text(value)))
-        frame = frame.f_back
+        rows.append("    {} = {}".format(name, value_text(value)))
     return "\n".join(rows)[:8191]
 
 
@@ -234,15 +232,44 @@ class Debugger:
         self.traceable[filename] = traced
         return traced
 
+    # Keep source frames indexed by their real stack depth for inspection.
+    # Индексирует кадры исходников по их фактической глубине в стеке.
+    def source_frames(self, frame):
+        frames = {}
+        for level in range(16):
+            if frame is None:
+                break
+            if self.should_trace(frame.f_code.co_filename):
+                frames[level] = frame
+            frame = frame.f_back
+        return frames
+
+    # Send source location, locals and watch graph without resuming execution.
+    # Отправляет строку, локальные значения и граф, не возобновляя выполнение.
+    def send_frame(self, frames, selected):
+        frame = frames[selected]
+        graph = WatchSnapshot(frame)
+        fields = ["P", str(frame.f_lineno), encode(frame.f_code.co_filename),
+                  encode(stack_text(frames, selected))]
+        fields.extend(graph.fields())
+        self.output.write("\t".join(fields) + "\n")
+
     # Apply the next step command at a source stop.
     # Применяет следующую команду шага на остановке в исходнике.
-    def next_action(self, depth):
+    def next_action(self, depth, frames=None):
         while True:
             fields = self.commands.get().split()
             if not fields or fields[0] == "pause":
                 continue
             if fields[0] == "quit":
                 raise SystemExit(0)
+            if fields[0] == "frame":
+                if frames:
+                    selected = 0
+                    if len(fields) == 2 and len(fields[1]) <= 2 and fields[1].isdecimal():
+                        selected = int(fields[1])
+                    self.send_frame(frames, selected if selected in frames else 0)
+                continue
             self.mode = fields[0]
             self.depth = depth
             self.breakpoints = set()
@@ -337,11 +364,9 @@ class Debugger:
         if (pause or self.observer_stop or position in self.breakpoints or self.mode == "into" or
                 (self.mode == "over" and depth <= self.depth) or
                 (self.mode == "out" and depth < self.depth)):
-            graph = WatchSnapshot(frame)
-            fields = ["P", str(frame.f_lineno), encode(filename), encode(stack_text(frame))]
-            fields.extend(graph.fields())
-            self.output.write("\t".join(fields) + "\n")
-            self.next_action(depth)
+            frames = self.source_frames(frame)
+            self.send_frame(frames, 0)
+            self.next_action(depth, frames)
         return self.trace
 
 

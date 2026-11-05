@@ -488,8 +488,8 @@ static unsigned debug_depth(lua_State *state)
     return depth;
 }
 
-static void debug_capture(lua_State *state, char *output, size_t capacity);
-static void debug_watch_capture(lua_State *state, InsightLuaWatchGraph *graph);
+static void debug_capture(lua_State *state, int selected, char *output, size_t capacity);
+static void debug_watch_capture(lua_State *state, int selected, InsightLuaWatchGraph *graph);
 
 /* Append one bounded log entry to the debugger's observer output. */
 /* Добавляет ограниченную по размеру запись в журнал сценария отладки. */
@@ -940,8 +940,8 @@ static void debug_hook(lua_State *state, lua_Debug *event)
         debug->depth = debug_depth(state);
         debug->line = line;
         debug->stopped_filename = filename;
-        debug_capture(state, debug->snapshot, sizeof debug->snapshot);
-        debug_watch_capture(state, &debug->watch_graph);
+        debug_capture(state, 0, debug->snapshot, sizeof debug->snapshot);
+        debug_watch_capture(state, 0, &debug->watch_graph);
         lua_yield(state, 0);
     }
 }
@@ -1093,33 +1093,60 @@ static void debug_append(char **output,size_t *capacity,const char *format,...) 
  *capacity-=used;
 }
 
-static void debug_capture(lua_State *L,char *output,size_t capacity) {
- *output=0;
- for(int level=0; level<16 && capacity>1; level++) {
-  lua_Debug frame;
-  if(!lua_getstack(L,level,&frame)) break;
-  if(!lua_getinfo(L,"nSl",&frame)) continue;
-  debug_append(&output,&capacity,"#%d %s (%s:%d)\n",level,
-      frame.name ? frame.name:frame.what,frame.short_src,frame.currentline);
-  for(int slot=1; slot<=64 && capacity>1; slot++) {
-   const char *name=lua_getlocal(L,&frame,slot);
-   if(!name) break;
-   if(name[0]!='(') {
-    debug_append(&output,&capacity,"    %s = ",name);
-    switch(lua_type(L,-1)) {
-    case LUA_TSTRING: debug_append(&output,&capacity,"\"%.120s\"",lua_tostring(L,-1));break;
-    case LUA_TBOOLEAN: debug_append(&output,&capacity,"%s",lua_toboolean(L,-1)?"true":"false");break;
-    case LUA_TNUMBER:
-     if(lua_isinteger(L,-1)) debug_append(&output,&capacity,"%lld",(long long)lua_tointeger(L,-1));
-     else debug_append(&output,&capacity,"%.17g",(double)lua_tonumber(L,-1));
-     break;
-    default: debug_append(&output,&capacity,"%s",luaL_typename(L,-1));break;
+/* List source frames, then show raw locals of the selected frame. */
+/* Показывает кадры исходников и простые локальные значения выбранного кадра. */
+static void debug_capture(lua_State *state, int selected, char *output, size_t capacity)
+{
+    *output = 0;
+    lua_Debug frame;
+    for (int level = 0; level < 16 && capacity > 1; level++)
+    {
+        if (!lua_getstack(state, level, &frame))
+            break;
+        if (!lua_getinfo(state, "nSl", &frame) || !frame.source ||
+            frame.source[0] != '@' || frame.currentline < 1)
+            continue;
+        char heading[256];
+        snprintf(heading, sizeof heading, "%s (%s:%d)",
+                 frame.name ? frame.name : frame.what, frame.short_src, frame.currentline);
+        for (char *byte = heading; *byte; byte++)
+            if (*byte == '\n' || *byte == '\r')
+                *byte = ' ';
+        debug_append(&output, &capacity, "#%d %s\n", level, heading);
     }
-    debug_append(&output,&capacity,"\n");
-   }
-   lua_pop(L,1);
-  }
- }
+    if (!lua_getstack(state, selected, &frame))
+        return;
+    debug_append(&output, &capacity, "\nLocals in frame #%d\n", selected);
+    for (int slot = 1; slot <= 64 && capacity > 1; slot++)
+    {
+        const char *name = lua_getlocal(state, &frame, slot);
+        if (!name)
+            break;
+        if (name[0] != '(')
+        {
+            debug_append(&output, &capacity, "    %s = ", name);
+            switch (lua_type(state, -1))
+            {
+                case LUA_TSTRING:
+                    debug_append(&output, &capacity, "\"%.120s\"", lua_tostring(state, -1));
+                    break;
+                case LUA_TBOOLEAN:
+                    debug_append(&output, &capacity, "%s", lua_toboolean(state, -1) ? "true" : "false");
+                    break;
+                case LUA_TNUMBER:
+                    if (lua_isinteger(state, -1))
+                        debug_append(&output, &capacity, "%lld", (long long)lua_tointeger(state, -1));
+                    else
+                        debug_append(&output, &capacity, "%.17g", (double)lua_tonumber(state, -1));
+                    break;
+                default:
+                    debug_append(&output, &capacity, "%s", luaL_typename(state, -1));
+                    break;
+            }
+            debug_append(&output, &capacity, "\n");
+        }
+        lua_pop(state, 1);
+    }
 }
 
 void insight_lua_debug_inspect(InsightLuaDebug *debug,char *output,size_t capacity) {
@@ -1316,7 +1343,7 @@ static void watch_add_value(lua_State *state, WatchCapture *capture, unsigned pa
 
 /* Capture the current Lua frame while its line hook still owns the PC. */
 /* Снимает текущий кадр Lua, пока хук строки ещё видит правильную позицию VM. */
-static void debug_watch_capture(lua_State *state, InsightLuaWatchGraph *graph)
+static void debug_watch_capture(lua_State *state, int selected, InsightLuaWatchGraph *graph)
 {
     memset(graph, 0, sizeof *graph);
     graph->node_count = 1;
@@ -1324,7 +1351,7 @@ static void debug_watch_capture(lua_State *state, InsightLuaWatchGraph *graph)
     WatchCapture capture = {0};
     capture.graph = graph;
     lua_Debug frame;
-    if (!lua_checkstack(state, 4) || !lua_getstack(state, 0, &frame))
+    if (!lua_checkstack(state, 4) || !lua_getstack(state, selected, &frame))
         return;
 
     for (int slot = 1; slot <= WATCH_LOCAL_LIMIT + 1; slot++)
@@ -1347,6 +1374,25 @@ static void debug_watch_capture(lua_State *state, InsightLuaWatchGraph *graph)
         watch_expand(state, &capture, 0, -1, 1);
         lua_pop(state, 1);
     }
+}
+
+/* Inspect another source frame without changing the VM's resume position. */
+/* Просматривает другой кадр исходника, сохраняя позицию продолжения VM. */
+int insight_lua_debug_select_frame(InsightLuaDebug *debug, unsigned level,
+                                   const char **filename, unsigned long *line)
+{
+    if (!debug || !debug->line || debug->finished || level >= 16 || !filename || !line)
+        return 0;
+    lua_Debug frame;
+    if (!lua_getstack(debug->thread, (int)level, &frame) ||
+        !lua_getinfo(debug->thread, "Sl", &frame) || !frame.source ||
+        frame.source[0] != '@' || frame.currentline < 1)
+        return 0;
+    *filename = frame.source + 1;
+    *line = (unsigned long)frame.currentline;
+    debug_capture(debug->thread, (int)level, debug->snapshot, sizeof debug->snapshot);
+    debug_watch_capture(debug->thread, (int)level, &debug->watch_graph);
+    return 1;
 }
 
 /* Return a graph only while the VM is stopped at a source line. */
