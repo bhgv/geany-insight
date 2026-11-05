@@ -748,7 +748,7 @@ static void viewer_free(gpointer data) {
  g_free(viewer);
 }
 
-static void show_capture(GtkWindow *parent, Capture *capture, const gchar *session_path, InsightWaveSource navigate) {
+static GtkWidget *show_capture(GtkWindow *parent, Capture *capture, const gchar *session_path, InsightWaveSource navigate) {
  Viewer *viewer = g_new0(Viewer, 1);
  viewer->capture = capture;
  viewer->tracks = g_array_new(FALSE, FALSE, sizeof(gint));
@@ -856,6 +856,7 @@ static void show_capture(GtkWindow *parent, Capture *capture, const gchar *sessi
  refresh_selector(viewer);
  activate_signal(viewer, viewer->active);
  gtk_widget_show_all(viewer->window);
+ return viewer->window;
 }
 
 typedef struct { GWeakRef parent; gchar *path, *session_path; InsightWaveSource navigate; } Load;
@@ -966,6 +967,8 @@ typedef struct {
     guint refresh_source;
     goffset read_offset;
     gchar prompt_tail[2];
+    gboolean preview_pending;
+    GtkWidget *signal_name;
 } WaveSimulation;
 
 /* Release the run configuration after the worker and dialog have finished. */
@@ -1134,6 +1137,8 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
         const gchar *options[] = {run->compiler, "-g2012", "-I", run->include_dir, "-o", "simulation.vvp"};
         for (guint i = 0; i < G_N_ELEMENTS(options); i++)
             g_ptr_array_add(command, (gpointer)options[i]);
+        if (run->interactive)
+            g_ptr_array_add(command, "-pfileline=1");
         for (guint i = 0; run->sources[i]; i++)
             g_ptr_array_add(command, run->sources[i]);
         g_ptr_array_add(command, NULL);
@@ -1216,17 +1221,17 @@ static gboolean simulation_refresh_console(gpointer data)
         gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(run->console), &end, 0, FALSE, 0, 0);
         g_free(valid);
     }
-    gtk_widget_set_sensitive(run->live_controls, running && run->prompt_tail[0] == '>' &&
+    gtk_widget_set_sensitive(run->live_controls, running && !run->preview_pending && run->prompt_tail[0] == '>' &&
                              run->prompt_tail[1] == ' ');
     return G_SOURCE_CONTINUE;
 }
 
-/* Send a fixed debugger command only once for each vvp prompt. */
-/* Отправляет фиксированную команду отладки один раз на приглашение vvp. */
-static void simulation_send_command(GtkButton *button, gpointer data)
+/* Send one command while the console is at a simulator prompt. */
+/* Отправляет команду, когда консоль находится на приглашении симулятора. */
+static void simulation_write_command(WaveSimulation *run, const gchar *command)
 {
-    WaveSimulation *run = data;
-    const gchar *command = g_object_get_data(G_OBJECT(button), "vvp-command");
+    if (run->preview_pending || run->prompt_tail[0] != '>' || run->prompt_tail[1] != ' ')
+        return;
     g_mutex_lock(&run->lock);
     GSubprocess *process = run->live_process ? g_object_ref(run->live_process) : NULL;
     g_mutex_unlock(&run->lock);
@@ -1238,6 +1243,106 @@ static void simulation_send_command(GtkButton *button, gpointer data)
     GOutputStream *input = g_subprocess_get_stdin_pipe(process);
     g_output_stream_write_all(input, command, strlen(command), NULL, NULL, NULL);
     g_object_unref(process);
+}
+
+/* Forward a fixed debugger command from a console button. */
+/* Передаёт фиксированную команду от кнопки консоли. */
+static void simulation_send_command(GtkButton *button, gpointer data)
+{
+    const gchar *command = g_object_get_data(G_OBJECT(button), "vvp-command");
+    simulation_write_command(data, command);
+}
+
+/* Query a simple signal or enter one scope in the current simulator context. */
+/* Запрашивает простой сигнал или входит в область текущего контекста симулятора. */
+static void simulation_inspect_name(GtkButton *button, gpointer data)
+{
+    WaveSimulation *run = data;
+    const gchar *name = gtk_entry_get_text(GTK_ENTRY(run->signal_name));
+    if ((!g_ascii_isalpha(*name) && *name != '_' && *name != '$') ||
+        strspn(name, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_$") != strlen(name))
+    {
+        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->console));
+        GtkTextIter end;
+        gtk_text_buffer_get_end_iter(buffer, &end);
+        gtk_text_buffer_insert(buffer, &end, "\nEnter one signal or scope name from List.\n", -1);
+        return;
+    }
+    gboolean scope = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "scope"));
+    gchar *command = g_strdup_printf(scope ? "push %s\n" : "$display \"%%b\" %s\n", name);
+    simulation_write_command(run, command);
+    g_free(command);
+}
+
+/* Parse a snapshot of the capture while the simulator waits at its prompt. */
+/* Разбирает снимок VCD, пока симулятор ожидает команду. */
+static void simulation_preview_worker(GTask *task, gpointer object, gpointer data, GCancellable *cancel)
+{
+    (void)object;
+    GError *error = NULL;
+    gchar *path = simulation_find_vcd(data, &error);
+    Capture *capture = path ? read_capture_file(path, cancel, &error) : NULL;
+    g_free(path);
+    if (capture)
+        g_task_return_pointer(task, capture, capture_free);
+    else
+        g_task_return_error(task, error);
+}
+
+/* Show the paused snapshot only while its simulation dialog still exists. */
+/* Показывает снимок на паузе, пока диалог симуляции ещё открыт. */
+static void simulation_preview_done(GObject *object, GAsyncResult *result, gpointer data)
+{
+    (void)data;
+    GtkWidget *dialog = GTK_WIDGET(object);
+    WaveSimulation *run = g_object_get_data(object, "insight-live-simulation");
+    GError *error = NULL;
+    Capture *capture = g_task_propagate_pointer(G_TASK(result), &error);
+    if (run)
+    {
+        run->preview_pending = FALSE;
+        if (capture)
+        {
+            GtkWidget *preview = show_capture(GTK_WINDOW(dialog), capture, NULL, run->navigate);
+            gtk_window_set_modal(GTK_WINDOW(preview), TRUE);
+        }
+        else
+        {
+            GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->console));
+            GtkTextIter end;
+            gtk_text_buffer_get_end_iter(buffer, &end);
+            gchar *message = g_strdup_printf("\nWaveform preview: %s\n",
+                                             error ? error->message : "No capture available.");
+            gchar *valid = g_utf8_make_valid(message, -1);
+            gtk_text_buffer_insert(buffer, &end, valid, -1);
+            g_free(valid);
+            g_free(message);
+        }
+    }
+    else if (capture)
+        capture_free(capture);
+    g_clear_error(&error);
+}
+
+/* Open the VCD written up to the current vvp stop. */
+/* Открывает VCD, записанный к текущей остановке vvp. */
+static void simulation_preview(GtkButton *button, gpointer data)
+{
+    (void)button;
+    WaveSimulation *run = data;
+    if (run->preview_pending || run->prompt_tail[0] != '>' || run->prompt_tail[1] != ' ')
+        return;
+    g_mutex_lock(&run->lock);
+    gchar *directory = run->live_process && run->live_log ? g_path_get_dirname(run->live_log) : NULL;
+    g_mutex_unlock(&run->lock);
+    if (!directory)
+        return;
+    run->preview_pending = TRUE;
+    gtk_widget_set_sensitive(run->live_controls, FALSE);
+    GTask *task = g_task_new(run->dialog, NULL, simulation_preview_done, NULL);
+    g_task_set_task_data(task, directory, g_free);
+    g_task_run_in_thread(task, simulation_preview_worker);
+    g_object_unref(task);
 }
 
 /* Close the progress dialog and show either the capture or the diagnostic. */
@@ -1287,6 +1392,7 @@ static void simulation_dialog_destroy(GtkWidget *dialog, gpointer data)
 {
     (void)dialog;
     WaveSimulation *run = data;
+    g_object_set_data(G_OBJECT(dialog), "insight-live-simulation", NULL);
     if (run->refresh_source)
     {
         g_source_remove(run->refresh_source);
@@ -1344,8 +1450,10 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
         gtk_container_add(GTK_CONTAINER(scroll), run->console);
         gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
-        run->live_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        run->live_controls = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
         gtk_box_pack_start(GTK_BOX(box), run->live_controls, FALSE, FALSE, 6);
+        GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        gtk_box_pack_start(GTK_BOX(run->live_controls), actions, FALSE, FALSE, 0);
         const gchar *labels[] = {"Step Event", "Continue", "Time", "Scope", "List", "Finish"};
         const gchar *commands[] = {"step\n", "cont\n", "time\n", "where\n", "list\n", "finish\n"};
         for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
@@ -1353,8 +1461,38 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
             GtkWidget *button = gtk_button_new_with_label(labels[i]);
             g_object_set_data(G_OBJECT(button), "vvp-command", (gpointer)commands[i]);
             g_signal_connect(button, "clicked", G_CALLBACK(simulation_send_command), run);
-            gtk_box_pack_start(GTK_BOX(run->live_controls), button, FALSE, FALSE, 0);
+            gtk_box_pack_start(GTK_BOX(actions), button, FALSE, FALSE, 0);
         }
+        GtkWidget *inspection = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        gtk_box_pack_start(GTK_BOX(run->live_controls), inspection, FALSE, FALSE, 0);
+        run->signal_name = gtk_entry_new();
+        gtk_entry_set_max_length(GTK_ENTRY(run->signal_name), 128);
+        gtk_entry_set_placeholder_text(GTK_ENTRY(run->signal_name), "Signal or scope");
+        gtk_box_pack_start(GTK_BOX(inspection), run->signal_name, TRUE, TRUE, 0);
+        GtkWidget *read = gtk_button_new_with_label("Read Signal");
+        g_signal_connect(read, "clicked", G_CALLBACK(simulation_inspect_name), run);
+        gtk_box_pack_start(GTK_BOX(inspection), read, FALSE, FALSE, 0);
+        GtkWidget *scope = gtk_button_new_with_label("Enter Scope");
+        g_object_set_data(G_OBJECT(scope), "scope", GINT_TO_POINTER(1));
+        g_signal_connect(scope, "clicked", G_CALLBACK(simulation_inspect_name), run);
+        gtk_box_pack_start(GTK_BOX(inspection), scope, FALSE, FALSE, 0);
+        GtkWidget *up = gtk_button_new_with_label("Parent Scope");
+        g_object_set_data(G_OBJECT(up), "vvp-command", "pop\n");
+        g_signal_connect(up, "clicked", G_CALLBACK(simulation_send_command), run);
+        gtk_box_pack_start(GTK_BOX(inspection), up, FALSE, FALSE, 0);
+
+        GtkWidget *preview = gtk_button_new_with_label("Preview Waveform");
+        g_signal_connect(preview, "clicked", G_CALLBACK(simulation_preview), run);
+        gtk_box_pack_start(GTK_BOX(actions), preview, FALSE, FALSE, 0);
+        GtkWidget *trace = gtk_button_new_with_label("Trace On");
+        g_object_set_data(G_OBJECT(trace), "vvp-command", "trace on\n");
+        g_signal_connect(trace, "clicked", G_CALLBACK(simulation_send_command), run);
+        gtk_box_pack_start(GTK_BOX(actions), trace, FALSE, FALSE, 0);
+        GtkWidget *trace_off = gtk_button_new_with_label("Trace Off");
+        g_object_set_data(G_OBJECT(trace_off), "vvp-command", "trace off\n");
+        g_signal_connect(trace_off, "clicked", G_CALLBACK(simulation_send_command), run);
+        gtk_box_pack_start(GTK_BOX(actions), trace_off, FALSE, FALSE, 0);
+        g_object_set_data(G_OBJECT(run->dialog), "insight-live-simulation", run);
         gtk_widget_set_sensitive(run->live_controls, FALSE);
         run->refresh_source = g_timeout_add(100, simulation_refresh_console, run);
     }
