@@ -44,7 +44,10 @@ typedef enum {
 } InsightLuaStep;
 InsightLuaDebug *insight_lua_debug_new(const char *,size_t,char *,size_t);
 void insight_lua_debug_free(InsightLuaDebug *);
-/* Resume returns 1 when paused, 0 on completion, and -1 on failure.
+void insight_lua_debug_request_pause(InsightLuaDebug *);
+/* Resume returns 2 when another slice is needed, 1 at a source stop,
+ * 0 on completion, and -1 on failure.
+ * A pending slice keeps its original step mode and breakpoint list.
  * Up to 128 one-based breakpoint lines. The optional host is borrowed and read-only. */
 int insight_lua_debug_resume(InsightLuaDebug *,InsightLuaStep,const unsigned long *,size_t,
  const InsightHost *,unsigned long *,char *,size_t);

@@ -374,91 +374,154 @@ static int setup(lua_State *L) {
  lua_pushliteral(L,"0.8"); lua_setglobal(L,"INSIGHT_API_VERSION"); return 0;
 }
 #define DEBUG_BREAKPOINT_LIMIT 128u
+#define DEBUG_HOOK_INTERVAL 1000
+#define DEBUG_SLICE_HOOKS 20u
+#define DEBUG_NONYIELDABLE_HOOK_LIMIT 2000u
 
 struct InsightLuaDebug {
- Runtime runtime;
- lua_State *thread;
- InsightLuaStep mode;
- unsigned long breaks[DEBUG_BREAKPOINT_LIMIT];
- size_t break_count;
- unsigned depth, target_depth;
- unsigned long line;
- char snapshot[8192];
- int finished;
+    Runtime runtime;
+    lua_State *thread;
+    InsightLuaStep mode;
+    unsigned long breakpoints[DEBUG_BREAKPOINT_LIMIT];
+    size_t breakpoint_count;
+    unsigned depth;
+    unsigned target_depth;
+    unsigned long line;
+    char snapshot[8192];
+    int finished;
+    int slice_pending;
+    int pause_requested;
 };
 
-static int debug_setup(lua_State *L) {
- setup(L);
- lua_newthread(L);
- return 1;
+/* Install the sandbox and anchor the debug coroutine on the main state. */
+/* Устанавливает песочницу и закрепляет корутину отладки в основном состоянии. */
+static int debug_setup(lua_State *state)
+{
+    setup(state);
+    lua_newthread(state);
+    return 1;
 }
 
-static unsigned debug_depth(lua_State *L) {
- lua_Debug frame;
- unsigned depth=0;
- while(lua_getstack(L,(int)depth,&frame)) depth++;
- return depth;
+/* Count frames to distinguish entering, staying in, and leaving a function. */
+/* Считает кадры, чтобы отличить вход в функцию, шаг внутри и выход из неё. */
+static unsigned debug_depth(lua_State *state)
+{
+    lua_Debug frame;
+    unsigned depth = 0;
+    while (lua_getstack(state, (int)depth, &frame))
+        depth++;
+    return depth;
 }
 
-static void debug_capture(lua_State *L,char *output,size_t capacity);
+static void debug_capture(lua_State *state, char *output, size_t capacity);
 
-static void debug_hook(lua_State *L,lua_Debug *event) {
- void *context=NULL;
- lua_getallocf(L,&context);
- InsightLuaDebug *debug=context;
- if(event->event==LUA_HOOKCOUNT) {
-  if(++debug->runtime.ticks>2000) luaL_error(L,"Lua debugger instruction limit exceeded");
-  return;
- }
- if(event->currentline<1 || !lua_isyieldable(L)) return;
- unsigned depth=debug_depth(L);
- unsigned long line=(unsigned long)event->currentline;
- int pause=debug->mode==INSIGHT_LUA_STEP_INTO ||
-     (debug->mode==INSIGHT_LUA_STEP_OVER && depth<=debug->target_depth) ||
-     (debug->mode==INSIGHT_LUA_STEP_OUT && depth<debug->target_depth);
- for(size_t i=0; !pause && i<debug->break_count; i++) pause=debug->breaks[i]==line;
- if(pause) {
-  debug->depth=depth;
-  debug->line=line;
-  debug_capture(L,debug->snapshot,sizeof debug->snapshot);
-  lua_yield(L,0);
- }
+/* Yield at source stops or when a VM time slice runs out. */
+/* Приостанавливает VM на строке исходника или по окончании порции выполнения. */
+static void debug_hook(lua_State *state, lua_Debug *event)
+{
+    void *context = NULL;
+    lua_getallocf(state, &context);
+    InsightLuaDebug *debug = context;
+    int yieldable = lua_isyieldable(state);
+
+    if (event->event == LUA_HOOKCOUNT)
+    {
+        unsigned ticks = ++debug->runtime.ticks;
+        if (yieldable && ticks >= DEBUG_SLICE_HOOKS)
+            lua_yield(state, 0);
+        else if (!yieldable && ticks > DEBUG_NONYIELDABLE_HOOK_LIMIT)
+            luaL_error(state, "Lua debugger instruction limit exceeded in a non-yieldable call");
+        return;
+    }
+    if (!yieldable || event->currentline < 1)
+        return;
+
+    unsigned long line = (unsigned long)event->currentline;
+    int pause = debug->pause_requested || debug->mode == INSIGHT_LUA_STEP_INTO;
+    if (!pause && (debug->mode == INSIGHT_LUA_STEP_OVER || debug->mode == INSIGHT_LUA_STEP_OUT))
+    {
+        unsigned depth = debug_depth(state);
+        if (debug->mode == INSIGHT_LUA_STEP_OVER)
+            pause = depth <= debug->target_depth;
+        else
+            pause = depth < debug->target_depth;
+    }
+    for (size_t i = 0; !pause && i < debug->breakpoint_count; i++)
+        pause = debug->breakpoints[i] == line;
+
+    if (pause)
+    {
+        debug->pause_requested = 0;
+        debug->depth = debug_depth(state);
+        debug->line = line;
+        debug_capture(state, debug->snapshot, sizeof debug->snapshot);
+        lua_yield(state, 0);
+    }
 }
 
-void insight_lua_debug_free(InsightLuaDebug *debug) {
- if(!debug) return;
- if(debug->runtime.state) lua_close(debug->runtime.state);
- free(debug);
+/* Close the debug VM and release its state. */
+/* Закрывает виртуальную машину отладчика и освобождает её состояние. */
+void insight_lua_debug_free(InsightLuaDebug *debug)
+{
+    if (!debug)
+        return;
+    if (debug->runtime.state)
+        lua_close(debug->runtime.state);
+    free(debug);
 }
 
-InsightLuaDebug *insight_lua_debug_new(const char *source,size_t length,char *error,size_t capacity) {
- if(error && capacity) error[0]=0;
- if(!source) return NULL;
- InsightLuaDebug *debug=calloc(1,sizeof *debug);
- if(!debug) return NULL;
- lua_State *L=lua_newstate(allocate,debug);
- debug->runtime.state=L;
- if(!L) { insight_lua_debug_free(debug); return NULL; }
- lua_pushcfunction(L,debug_setup);
- int status=lua_pcall(L,0,1,0);
- if(!status) {
-  debug->thread=lua_tothread(L,-1);
-  status=luaL_loadbufferx(debug->thread,source,length,"@buffer","t");
- }
- if(status) {
-  if(error && capacity) {
-   const char *message=lua_tostring(debug->thread ? debug->thread:L,-1);
-   snprintf(error,capacity,"%s",message ? message:"Lua debugger setup failed");
-  }
-  insight_lua_debug_free(debug);
-  return NULL;
- }
- lua_sethook(debug->thread,debug_hook,LUA_MASKLINE|LUA_MASKCOUNT,1000);
- return debug;
+/* Compile a source snapshot into a fresh restricted VM. */
+/* Компилирует снимок исходника в новой виртуальной машине с ограничениями. */
+InsightLuaDebug *insight_lua_debug_new(const char *source, size_t length, char *error, size_t capacity)
+{
+    if (error && capacity)
+        error[0] = 0;
+    if (!source)
+        return NULL;
+
+    InsightLuaDebug *debug = calloc(1, sizeof *debug);
+    if (!debug)
+        return NULL;
+    lua_State *state = lua_newstate(allocate, debug);
+    debug->runtime.state = state;
+    if (!state)
+    {
+        insight_lua_debug_free(debug);
+        return NULL;
+    }
+
+    lua_pushcfunction(state, debug_setup);
+    int status = lua_pcall(state, 0, 1, 0);
+    if (!status)
+    {
+        debug->thread = lua_tothread(state, -1);
+        status = luaL_loadbufferx(debug->thread, source, length, "@buffer", "t");
+    }
+    if (status)
+    {
+        if (error && capacity)
+        {
+            const char *message = lua_tostring(debug->thread ? debug->thread : state, -1);
+            snprintf(error, capacity, "%s", message ? message : "Lua debugger setup failed");
+        }
+        insight_lua_debug_free(debug);
+        return NULL;
+    }
+
+    lua_sethook(debug->thread, debug_hook, LUA_MASKLINE | LUA_MASKCOUNT, DEBUG_HOOK_INTERVAL);
+    return debug;
 }
 
-/* Resume with a borrowed, read-only host for this VM call only. */
-/* Продолжает выполнение с контекстом только для чтения на время вызова VM. */
+/* Stop at the next yieldable Lua line of the current action. */
+/* Запрашивает остановку на ближайшей строке Lua, где допустима пауза. */
+void insight_lua_debug_request_pause(InsightLuaDebug *debug)
+{
+    if (debug && !debug->finished)
+        debug->pause_requested = 1;
+}
+
+/* Run one bounded VM slice with a borrowed read-only host. */
+/* Выполняет одну ограниченную порцию VM с контекстом только для чтения. */
 int insight_lua_debug_resume(InsightLuaDebug *debug, InsightLuaStep mode,
     const unsigned long *breakpoints, size_t breakpoint_count, const InsightHost *host,
     unsigned long *line, char *error, size_t error_capacity)
@@ -471,13 +534,17 @@ int insight_lua_debug_resume(InsightLuaDebug *debug, InsightLuaStep mode,
         (breakpoint_count && !breakpoints))
         return -1;
 
-    debug->mode = mode;
-    debug->target_depth = debug->depth;
+    if (!debug->slice_pending)
+    {
+        debug->mode = mode;
+        debug->target_depth = debug->depth;
+        debug->breakpoint_count = breakpoint_count;
+        if (breakpoint_count)
+            memcpy(debug->breakpoints, breakpoints, breakpoint_count * sizeof *breakpoints);
+    }
+    debug->slice_pending = 0;
     debug->line = 0;
     debug->runtime.ticks = 0;
-    debug->break_count = breakpoint_count;
-    if (breakpoint_count)
-        memcpy(debug->breaks, breakpoints, breakpoint_count * sizeof *breakpoints);
 
     InsightHost read_only_host;
     if (host)
@@ -490,17 +557,22 @@ int insight_lua_debug_resume(InsightLuaDebug *debug, InsightLuaStep mode,
     int status = lua_resume(debug->thread, debug->runtime.state, 0, &results);
     debug->runtime.host = NULL;
 
-    if (status == LUA_YIELD && debug->line)
+    if (status == LUA_YIELD)
     {
-        if (line)
-            *line = debug->line;
-        return 1;
+        if (debug->line)
+        {
+            if (line)
+                *line = debug->line;
+            return 1;
+        }
+        debug->slice_pending = 1;
+        return 2;
     }
 
     debug->finished = 1;
     if (status != LUA_OK && error && error_capacity)
     {
-        const char *message = status == LUA_YIELD ? NULL : lua_tostring(debug->thread, -1);
+        const char *message = lua_tostring(debug->thread, -1);
         snprintf(error, error_capacity, "%s", message ? message : "Lua debugger execution failed");
     }
     return status == LUA_OK ? 0 : -1;
