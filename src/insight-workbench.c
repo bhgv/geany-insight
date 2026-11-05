@@ -4490,7 +4490,7 @@ static void wave_jump_run(GTask *task, gpointer object, gpointer data, GCancella
 static void waveform_show_hdl_uses(const WaveJump *jump)
 {
     const InsightIndex *index = jump->snapshot->result->index;
-    GtkListStore *rows = gtk_list_store_new(3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT);
+    GtkListStore *rows = gtk_list_store_new(4, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT);
     GHashTable *seen = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     gchar *target = g_strdup_printf("%u:%u", jump->line, jump->column);
 
@@ -4501,11 +4501,11 @@ static void waveform_show_hdl_uses(const WaveJump *jump)
             g_strcmp0(row->type, target) || !row->line)
             continue;
 
-        gchar *key = g_strdup_printf("%s\n%u\n%s\n%s", row->path, row->line,
-            row->signature, row->inheritance);
+        gchar *key = g_strdup_printf("%s\n%u\n%s\n%s\n%s", row->path, row->line,
+            row->signature, row->inheritance, row->name);
         if (g_hash_table_add(seen, key))
             gtk_list_store_insert_with_values(rows, NULL, -1, 0, row->inheritance,
-                1, row->path, 2, row->line, -1);
+                1, row->name, 2, row->path, 3, row->line, -1);
         if (g_hash_table_size(seen) == 2000)
             break;
     }
@@ -4524,7 +4524,7 @@ static void waveform_show_hdl_uses(const WaveJump *jump)
     gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
     GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(rows));
     gtk_container_add(GTK_CONTAINER(scroll), tree);
-    const gchar *titles[] = {_("Role"), _("File"), _("Line")};
+    const gchar *titles[] = {_("Role"), _("Name"), _("File"), _("Line")};
     for (guint column = 0; column < G_N_ELEMENTS(titles); column++)
         gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(tree), -1,
             titles[column], gtk_cell_renderer_text_new(), "text", column, NULL);
@@ -4543,7 +4543,7 @@ static void waveform_show_hdl_uses(const WaveJump *jump)
     {
         gchar *utf8_path;
         guint line;
-        gtk_tree_model_get(GTK_TREE_MODEL(rows), &selected, 1, &utf8_path, 2, &line, -1);
+        gtk_tree_model_get(GTK_TREE_MODEL(rows), &selected, 2, &utf8_path, 3, &line, -1);
         gchar *path = utils_get_locale_from_utf8(utf8_path);
         diff_source_open(path, line);
         g_free(path);

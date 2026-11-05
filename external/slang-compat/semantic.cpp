@@ -11,6 +11,7 @@
 #include "slang/ast/symbols/SubroutineSymbols.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
+#include "slang/ast/symbols/PortSymbols.h"
 #include "slang/syntax/SyntaxTree.h"
 #include "slang/parsing/Preprocessor.h"
 #include "slang/util/Bag.h"
@@ -220,6 +221,7 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
         push(std::move(row));
     }
     void reference(string_view name, SourceRange range, SourceLocation target, string_view kind) {
+        if (!target) return;
         target = sources.getFullyOriginalLoc(target);
         if (!located(target)) return;
         auto location = sources.getFullyOriginalLoc(range.start());
@@ -260,7 +262,41 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
             if (token.valueText() == function.name) reference(function.name, token.range(), function.location, "call");
         }visitDefault(node);
     }
+    // Index each direct port connection from both sides of the instance boundary.
+    // Индексирует прямое подключение порта с обеих сторон границы экземпляра.
+    void indexPortConnections(const InstanceSymbol& instance) {
+        for (const auto* connection : instance.getPortConnections()) {
+            if (connection->port.kind != SymbolKind::Port)
+                continue;
+
+            const auto& port = connection->port.as<PortSymbol>();
+            if (!port.internalSymbol)
+                continue;
+
+            const auto* expression = connection->getExpression();
+            if (!expression || expression->bad() ||
+                (port.hasInitializer() && expression == port.getInitializer()))
+                continue;
+
+            const auto* external = expression->getSymbolReference();
+            if (!external || (external->kind != SymbolKind::Net &&
+                              external->kind != SymbolKind::Variable) ||
+                !expression->sourceRange.start())
+                continue;
+
+            const auto internalRole = port.direction == ArgumentDirection::In ? "port-source" :
+                port.direction == ArgumentDirection::Out ? "port-destination" : "port-peer";
+            const auto externalRole = port.direction == ArgumentDirection::In ? "port-destination" :
+                port.direction == ArgumentDirection::Out ? "port-source" : "port-peer";
+            const std::string portName = std::string(instance.name) + "." + std::string(port.name);
+            reference(portName, expression->sourceRange, external->location, externalRole);
+            reference(external->name, expression->sourceRange, port.internalSymbol->location,
+                      internalRole);
+        }
+    }
+
     void handle(const InstanceSymbol& node) {
+        indexPortConnections(node);
         add("D", node.name, node.location, identity(node), "Instance", "");
         add("D", node.getDefinition().name, node.getDefinition().location, node.getDefinition().name, "Module", "");
         const auto* syntax = node.getSyntax();
