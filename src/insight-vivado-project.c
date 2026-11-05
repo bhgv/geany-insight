@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "insight-vivado-project.h"
+#include "../insight/desktop/glib_compat.h"
 #include <glib/gstdio.h>
 #include <string.h>
 #define GROUP "insight-vivado"
@@ -39,7 +40,7 @@ static gchar *resolve_path(Import *state, const gchar *value) {
   if (!base) return NULL;
   relative = slash + 1;
  }
- gchar *path = g_canonicalize_filename(relative, base ? base : state->root);
+ gchar *path = insight_canonicalize_filename(relative, base ? base : state->root);
  g_free(base);
  return path;
 }
@@ -214,7 +215,7 @@ static gboolean write_import(const gchar *project, const gchar *xpr, GKeyFile *c
                              InsightProjectFiles *policy, Import *state, gboolean creating, GError **error) {
  gchar *base = g_key_file_get_string(config, "project", "base_path", NULL);
  gchar *project_dir = g_path_get_dirname(project);
- gchar *root = g_canonicalize_filename(base && *base ? base : ".", project_dir);
+ gchar *root = insight_canonicalize_filename(base && *base ? base : ".", project_dir);
  gboolean ok = insight_project_files_write(policy, config, root, error);
  g_free(root);
  g_free(project_dir);
@@ -257,7 +258,7 @@ static gboolean write_import(const gchar *project, const gchar *xpr, GKeyFile *c
 }
 
 gchar *insight_vivado_open(const gchar *filename, GError **error) {
- gchar *xpr = g_canonicalize_filename(filename, NULL);
+ gchar *xpr = insight_canonicalize_filename(filename, NULL);
  gchar *project = companion(xpr, ".geany");
  if (g_file_test(project, G_FILE_TEST_EXISTS)) {
   /* Opening never resyncs a linked companion or overwrites an unrelated one. */
@@ -311,7 +312,7 @@ InsightProjectFiles *insight_vivado_sync(const gchar *filename, GError **error) 
  if (ok) {
   gchar *base = g_key_file_get_string(config, "project", "base_path", NULL);
   gchar *dir = g_path_get_dirname(filename);
-  gchar *root = g_canonicalize_filename(base && *base ? base : ".", dir);
+  gchar *root = insight_canonicalize_filename(base && *base ? base : ".", dir);
   policy = insight_project_files_read_project(config, root, filename, error);
   g_free(root);
   g_free(dir);

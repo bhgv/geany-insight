@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "insight-waveforms.h"
+#include "../insight/desktop/glib_compat.h"
 #include "../insight/core/runtime.h"
 #include <gio/gio.h>
 #include <glib/gstdio.h>
@@ -1139,7 +1140,7 @@ void insight_waveforms_open(GtkWindow *parent, const gchar *session_dir, Insight
  g_weak_ref_init(&load->parent, parent);
  load->path = path;
  if (session_dir) {
-  gchar *canonical = g_canonicalize_filename(path, NULL);
+  gchar *canonical = insight_canonicalize_filename(path, NULL);
   gchar *key = g_compute_checksum_for_string(G_CHECKSUM_SHA256, canonical, -1);
   load->session_path = g_build_filename(session_dir, key, NULL);
   g_free(key);
