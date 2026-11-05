@@ -34,17 +34,37 @@ static gboolean icon_draw(GtkWidget *widget,cairo_t *cr,gpointer data) {
  else if(!strcmp(id,"diff")) { cairo_rectangle(cr,1,2,5,12);cairo_rectangle(cr,10,2,5,12);cairo_stroke(cr);cairo_set_source_rgb(cr,.2,.55,.85);cairo_move_to(cr,4,5);cairo_line_to(cr,12,5);cairo_move_to(cr,9,3);cairo_line_to(cr,12,5);cairo_line_to(cr,9,7);cairo_move_to(cr,12,11);cairo_line_to(cr,4,11);cairo_stroke(cr); }
  else if(!strcmp(id,"panel-help")) { cairo_set_source_rgb(cr,.2,.55,.85); cairo_arc(cr,8,8,7,0,2*G_PI); cairo_stroke(cr); cairo_select_font_face(cr,"Sans",CAIRO_FONT_SLANT_NORMAL,CAIRO_FONT_WEIGHT_BOLD); cairo_set_font_size(cr,12); cairo_move_to(cr,4.5,12); cairo_show_text(cr,"?"); }
  else if(!strcmp(id,"snippets")) { cairo_rectangle(cr,2,1,12,14); cairo_stroke(cr); cairo_set_source_rgb(cr,.2,.55,.85); cairo_move_to(cr,6,5); cairo_line_to(cr,3,8); cairo_line_to(cr,6,11); cairo_move_to(cr,10,5); cairo_line_to(cr,13,8); cairo_line_to(cr,10,11); cairo_stroke(cr); }
+ else if(!strcmp(id,"brain")) {
+  cairo_set_line_cap(cr,CAIRO_LINE_CAP_ROUND);
+  cairo_set_line_join(cr,CAIRO_LINE_JOIN_ROUND);
+  cairo_move_to(cr,8,3.5);
+  cairo_curve_to(cr,7,1,3.5,1.3,3.4,4);
+  cairo_curve_to(cr,1,4.3,0.9,7.2,2.2,8.2);
+  cairo_curve_to(cr,.8,10.5,2.6,12.8,4.6,12.4);
+  cairo_curve_to(cr,5.4,15.3,8,14.1,8,12);
+  cairo_curve_to(cr,8,14.1,10.6,15.3,11.4,12.4);
+  cairo_curve_to(cr,13.4,12.8,15.2,10.5,13.8,8.2);
+  cairo_curve_to(cr,15.1,7.2,15,4.3,12.6,4);
+  cairo_curve_to(cr,12.5,1.3,9,1,8,3.5);
+  cairo_line_to(cr,8,12);
+  cairo_move_to(cr,4.2,5.3);cairo_curve_to(cr,6.2,5.1,6.2,7.2,5.3,8);
+  cairo_move_to(cr,4.6,12.4);cairo_curve_to(cr,4.1,10.7,5.1,9.6,6,9.8);
+  cairo_move_to(cr,11.8,5.3);cairo_curve_to(cr,9.8,5.1,9.8,7.2,10.7,8);
+  cairo_move_to(cr,11.4,12.4);cairo_curve_to(cr,11.9,10.7,10.9,9.6,10,9.8);
+  cairo_stroke(cr);
+ }
  else if(!strcmp(id,"relations")) { cairo_move_to(cr,4,8);cairo_line_to(cr,9,8);cairo_move_to(cr,9,3);cairo_line_to(cr,9,13);cairo_move_to(cr,9,3);cairo_line_to(cr,13,3);cairo_move_to(cr,9,13);cairo_line_to(cr,13,13);cairo_stroke(cr);cairo_set_source_rgb(cr,.2,.55,.85);cairo_rectangle(cr,1,6,4,4);cairo_rectangle(cr,12,1,3,4);cairo_rectangle(cr,12,11,3,4);cairo_fill(cr); }
  else { cairo_move_to(cr,8,3);cairo_curve_to(cr,4,0,1,2,1,3);cairo_line_to(cr,1,13);cairo_curve_to(cr,4,11,6,12,8,14);cairo_curve_to(cr,10,12,12,11,15,13);cairo_line_to(cr,15,3);cairo_curve_to(cr,12,1,10,1,8,3);cairo_line_to(cr,8,14);cairo_stroke(cr);cairo_set_source_rgb(cr,.2,.55,.85);if(!strcmp(id,"tutorial")) { cairo_move_to(cr,10,5);cairo_line_to(cr,14,8);cairo_line_to(cr,10,11);cairo_close_path(cr); }else if(!strcmp(id,"bookmarks")) { cairo_move_to(cr,10,1);cairo_line_to(cr,13,1);cairo_line_to(cr,13,8);cairo_line_to(cr,11.5,6.5);cairo_line_to(cr,10,8);cairo_close_path(cr); }else { cairo_rectangle(cr,3,5,3,1);cairo_rectangle(cr,3,8,3,1);cairo_rectangle(cr,10,5,3,1);cairo_rectangle(cr,10,8,3,1); }cairo_fill(cr); }
  return FALSE;
 }
 GtkWidget *insight_command_icon(const gchar *command) {
  if(!strcmp(command,"snippets") || !strcmp(command,"panel-help") || !strcmp(command,"relations")) { GtkWidget *image=gtk_image_new(); cairo_surface_t *surface=cairo_image_surface_create(CAIRO_FORMAT_ARGB32,16,16); cairo_t *cr=cairo_create(surface); icon_draw(image,cr,(gpointer)command); cairo_destroy(cr); gtk_image_set_from_surface(GTK_IMAGE(image),surface);g_object_set_data_full(G_OBJECT(image),"insight-icon-surface",cairo_surface_reference(surface),(GDestroyNotify)cairo_surface_destroy); cairo_surface_destroy(surface); g_object_set_data_full(G_OBJECT(image),"insight-icon-name",g_strdup(command),g_free); return image; }
- if(g_str_has_prefix(command,"layout-") || !strcmp(command,"media") || !strcmp(command,"manual") || !strcmp(command,"tutorial") || !strcmp(command,"bookmarks") || !strcmp(command,"diff") || !strcmp(command,"snippets") || !strcmp(command,"relations")) { GtkWidget *icon=gtk_drawing_area_new();gtk_widget_set_size_request(icon,16,16);g_object_set_data_full(G_OBJECT(icon),"insight-icon-name",g_strdup(command),g_free);g_signal_connect(icon,"draw",G_CALLBACK(icon_draw),g_object_get_data(G_OBJECT(icon),"insight-icon-name"));return icon; }
+ if(!strcmp(command,"brain") || g_str_has_prefix(command,"layout-") || !strcmp(command,"media") || !strcmp(command,"manual") || !strcmp(command,"tutorial") || !strcmp(command,"bookmarks") || !strcmp(command,"diff") || !strcmp(command,"snippets") || !strcmp(command,"relations")) { GtkWidget *icon=gtk_drawing_area_new();gtk_widget_set_size_request(icon,16,16);g_object_set_data_full(G_OBJECT(icon),"insight-icon-name",g_strdup(command),g_free);g_signal_connect(icon,"draw",G_CALLBACK(icon_draw),g_object_get_data(G_OBJECT(icon),"insight-icon-name"));return icon; }
  return gtk_image_new_from_icon_name(command,GTK_ICON_SIZE_MENU);
 }
 static const gchar *command_icon(const gchar *label) {
  label=insight_i18n_english(label);
+ if(strstr(label,"AI Assistant") || strstr(label,"AI Connections") || strstr(label,"with AI")) return "brain";
  const gchar *layout=strstr(label,"layout ");if(layout) { switch(layout[7]) { case 'A':return "layout-a";case 'B':return "layout-b";case 'C':return "layout-c";case 'D':return "layout-d";default:break; } }
  if(strstr(label,"Markdown")) return "text-x-generic";
  if(strstr(label,"Diff") || strstr(label,"Merge")) return "diff";

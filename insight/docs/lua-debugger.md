@@ -1,6 +1,6 @@
 # Lua debugger
 
-Open a Lua buffer and choose **Scripts → Debug Current Lua Buffer…**. The
+Open a Lua buffer and choose **Tools → Lua → Debug Current Lua Buffer…**. The
 debugger takes a snapshot including unsaved edits and stops at the first
 executable line. Use the **?** in the upper-right corner to reopen this guide.
 
@@ -27,7 +27,7 @@ While paused, hover over a variable in the debugger's source pane. The tooltip s
 
 ## Debug a Lua project
 
-The current Lua file is the default entry point. Use **Scripts → Debug Lua File…** to choose another. In an open project, `require("net.codec")` looks for `net/codec.lua` or `net/codec/init.lua` under the project base directory. On first load the debugger snapshots the module, including unsaved edits in an open tab. Steps and breakpoints work in the entry and loaded modules. Use **Breakpoints in File…** to set line breakpoints before a module is reached. Breakpoints are stored per file and restored the next time you debug. Each language keeps separate settings for the Geany project or, outside a project, for the entry file. Breakpoints in unnamed buffers last for the current debug session. Saved line numbers are restored as entered. **All Breakpoints…** lists the breakpoints across files and shows the total. Double-click or choose **Open Source** to jump to the line in the editor. Choose **Remove** to delete the selected breakpoint.
+The current Lua file is the default entry point. Use **Tools → Lua → Debug Lua File…** to choose another. In an open project, `require("net.codec")` looks for `net/codec.lua` or `net/codec/init.lua` under the project base directory. On first load the debugger snapshots the module, including unsaved edits in an open tab. Steps and breakpoints work in the entry and loaded modules. Use **Breakpoints in File…** to set line breakpoints before a module is reached. Breakpoints are stored per file and restored the next time you debug. Each language keeps separate settings for the Geany project or, outside a project, for the entry file. Breakpoints in unnamed buffers last for the current debug session. Saved line numbers are restored as entered. **All Breakpoints…** lists the breakpoints across files and shows the total. Double-click or choose **Open Source** to jump to the line in the editor. Choose **Remove** to delete the selected breakpoint.
 
 The debug VM loads text modules from the project. System package search and native Lua modules are unavailable in this VM. Restart keeps loaded snapshots. Start a new session to pick up edited module sources.
 
@@ -89,7 +89,7 @@ Restart resets the callback state and log.
 
 ### Run the examples
 
-Save the first block as `observer-demo.lua` and choose **Scripts → Debug Current Lua Buffer…**.
+Save the first block as `observer-demo.lua` and choose **Tools → Lua → Debug Current Lua Buffer…**.
 At the first stop, open **Conditions and Script…**. To try a conditional stop, enter
 `event.globals.counter == 10` in the top field, choose **Apply** and press F5.
 The debugger stops before `local final_counter = counter`.

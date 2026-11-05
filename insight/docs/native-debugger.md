@@ -4,7 +4,7 @@ Build with debug symbols, for example `cc -g -Og main.c -o app` or
 `c++ -g -Og main.cpp -o app`. Install GDB and make it available in
 `PATH` before starting Geany.
 
-Open **Tools → Debug C/C++ Executable…** and select the built program.
+Open **Tools → C/C++ → Debug C/C++ Executable…** and select the built program.
 The C/C++ Debugger window opens with the executable directory as the
 working directory.
 

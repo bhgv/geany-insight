@@ -1,6 +1,6 @@
 # Python debugger
 
-Open a Python buffer and choose **Scripts → Debug Current Python Buffer…**.
+Open a Python buffer and choose **Tools → Python → Debug Current Python Buffer…**.
 The debugger runs a snapshot of the current buffer, including unsaved changes,
 in a separate Python 3 process. Set `GEANY_INSIGHT_PYTHON` to select an
 interpreter. The original file is used as `__file__`, and its directory is
@@ -13,7 +13,7 @@ Click a line number to toggle a breakpoint. **F5** continues, **F10** steps over
 **F11** steps into, and **Shift+F11** steps out. **Pause** requests a stop on the
 next traced line. **Shift+F5** stops the child process, and **Ctrl+F5** restarts
 the original snapshot. **Go to Source** opens the line when the editor buffer
-still matches the snapshot. The current file is the default entry point. Use **Scripts → Debug Python File…** to choose another. With a project open, the debugger follows runtime calls into files under its base directory. **Breakpoints in File…** lets you choose a file and set breakpoints before execution reaches it. Breakpoints are stored per file and restored the next time you debug. Each language keeps separate settings for the Geany project or, outside a project, for the entry file. Breakpoints in unnamed buffers last for the current debug session. Saved line numbers are restored as entered. The entry and edited open project modules run from snapshots. An imported module must already exist on disk to be found by the normal import search. Python loads other modules normally. Restart keeps the captured snapshots and clears the console.
+still matches the snapshot. The current file is the default entry point. Use **Tools → Python → Debug Python File…** to choose another. With a project open, the debugger follows runtime calls into files under its base directory. **Breakpoints in File…** lets you choose a file and set breakpoints before execution reaches it. Breakpoints are stored per file and restored the next time you debug. Each language keeps separate settings for the Geany project or, outside a project, for the entry file. Breakpoints in unnamed buffers last for the current debug session. Saved line numbers are restored as entered. The entry and edited open project modules run from snapshots. An imported module must already exist on disk to be found by the normal import search. Python loads other modules normally. Restart keeps the captured snapshots and clears the console.
 
 ## Values and watch graph
 

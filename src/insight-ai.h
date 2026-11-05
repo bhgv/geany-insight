@@ -4,6 +4,8 @@
 #include <gtk/gtk.h>
 typedef gboolean (*InsightAiInsert)(const gchar *,gpointer);
 void insight_ai_init(void);
+GtkWidget *insight_ai_tools_menu(void);
+GtkWidget *insight_ai_menu_item(const gchar *label);
 void insight_ai_help_question(const gchar *context,const gchar *question);
 void insight_ai_window_modes(void);
 gchar *insight_ai_history_path(const gchar *);

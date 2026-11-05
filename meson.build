@@ -1182,7 +1182,7 @@ endif
 install_data(
   'insight/docs/project-database.md', 'insight/docs/guide.md', 'insight/docs/tutorials.md', 'insight/docs/languages.md',
   'insight/docs/scripting.md', 'insight/docs/markup-viewer.rst',
-  'insight/docs/directory-compare.md', 'insight/docs/lua-api.md', 'insight/docs/lua-debugger.md', 'insight/docs/python-debugger.md', 'insight/docs/native-debugger.md', 'insight/docs/internal-diff.md',
+  'insight/docs/directory-compare.md', 'insight/docs/lua-api.md', 'insight/docs/lua-debugger.md', 'insight/docs/python-debugger.md', 'insight/docs/native-debugger.md', 'insight/docs/verilog-debugger.md', 'insight/docs/internal-diff.md',
   'insight/docs/desktop-check-builds.md',
   'insight/docs/context-bookmarks.md', 'insight/docs/relations-calls.md',
   'insight/docs/window-layouts.md', 'insight/docs/window-list.md', 'insight/docs/symbol-info.md',

@@ -163,7 +163,7 @@ typedef struct {
  gulong project_handlers[3]; gchar *geany_root; gboolean workspace_from_project,git_manual;
  gchar *prefs_path;
  InsightExtensions *extensions; gboolean lua_running;
- GtkWidget *lua_menu,*lua_commands,*lua_item,*palette_item;
+ GtkWidget *lua_menu,*lua_commands,*palette_item;
  GtkAccelGroup *lua_accels,*navigation_accels;
  GtkCssProvider *css; GtkWidget *context_toggle;
  gboolean alive; guint64 scan_generation,usage_generation,definition_generation; guint definition_timer; GCancellable *restore_worker,*scan_worker,*search_worker,*definition_worker,*snapshot_worker,*cache_worker,*preview_worker; guint64 preview_generation; guint64 index_generation,index_version; gint64 publish_due;
@@ -4968,6 +4968,81 @@ static void waveforms_menu(GtkMenuItem *item,gpointer data) {
 }
 /* Select saved HDL source files and run them with the installed simulator. */
 /* Выбирает сохранённые исходники HDL и запускает установленный симулятор. */
+static void waveform_start_simulation(GSList *selected, const gchar *root, gboolean interactive)
+{
+    if (selected)
+    {
+        GPtrArray *sources = g_ptr_array_new();
+        gboolean saved = TRUE;
+        for (GSList *node = selected; node; node = node->next)
+        {
+            gchar *utf8 = utils_get_utf8_from_locale(node->data);
+            GeanyDocument *document = utf8 ? document_find_by_filename(utf8) : NULL;
+            if (DOC_VALID(document) && document->changed)
+                saved = FALSE;
+            g_free(utf8);
+            g_ptr_array_add(sources, node->data);
+        }
+        g_ptr_array_add(sources, NULL);
+        if (saved)
+        {
+            gchar *working_directory = root ? g_strdup(root) : g_path_get_dirname(selected->data);
+            gchar *data_parent = g_path_get_dirname(app->datadir);
+#ifdef G_OS_WIN32
+            gchar *prefix = g_strdup(data_parent);
+#else
+            gchar *prefix = g_path_get_dirname(data_parent);
+#endif
+            gchar *bin = g_build_filename(prefix, "bin", NULL);
+            gchar *settings = g_build_filename(app->configdir, "insight", "verilog-debug", NULL);
+            insight_waveforms_simulate(GTK_WINDOW(main_widgets.window), bin, working_directory, (const gchar *const *)sources->pdata,
+                                        interactive, waveform_source, diff_source_open, settings,
+                                        app->project ? app->project->file_name : NULL);
+            g_free(working_directory);
+            g_free(settings);
+            g_free(bin);
+            g_free(prefix);
+            g_free(data_parent);
+        }
+        else
+            ui_set_statusbar(TRUE, "Save the selected HDL files before running simulation.");
+        g_ptr_array_unref(sources);
+    }
+}
+
+static gboolean waveform_testbench_path(const gchar *filename)
+{
+    const gchar *extension = filename ? strrchr(filename, '.') : NULL;
+    return extension && (!g_ascii_strcasecmp(extension, ".v") ||
+                         !g_ascii_strcasecmp(extension, ".sv"));
+}
+
+static void waveform_debug_current(GtkMenuItem *item, gpointer data)
+{
+    (void)item;
+    (void)data;
+    GeanyDocument *document = document_get_current();
+    if (!DOC_VALID(document) || !waveform_testbench_path(document->file_name) ||
+        !g_path_is_absolute(document->file_name))
+    {
+        ui_set_statusbar(TRUE, "%s", insight_tr("Open a saved Verilog or SystemVerilog testbench first."));
+        return;
+    }
+    if (document->changed)
+    {
+        ui_set_statusbar(TRUE, "%s", insight_tr("Save the current HDL file before starting the debugger."));
+        return;
+    }
+    gchar *path = utils_get_locale_from_utf8(document->file_name);
+    if (!path)
+        return;
+    gchar *root = app->project ? project_get_base_path() : NULL;
+    GSList selected = {path, NULL};
+    waveform_start_simulation(&selected, root, TRUE);
+    g_free(root);
+    g_free(path);
+}
+
 static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
 {
     (void)item;
@@ -4989,8 +5064,7 @@ static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
     GeanyDocument *current = document_get_current();
     if (DOC_VALID(current) && current->file_name)
     {
-        const gchar *extension = strrchr(current->file_name, '.');
-        if (extension && (!g_ascii_strcasecmp(extension, ".v") || !g_ascii_strcasecmp(extension, ".sv")))
+        if (waveform_testbench_path(current->file_name))
         {
             gchar *local = utils_get_locale_from_utf8(current->file_name);
             if (local)
@@ -5002,45 +5076,8 @@ static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
     GSList *selected = gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT ?
         gtk_file_chooser_get_filenames(files) : NULL;
     gtk_widget_destroy(chooser);
-    if (selected)
-    {
-        GPtrArray *sources = g_ptr_array_new();
-        gboolean saved = TRUE;
-        for (GSList *node = selected; node; node = node->next)
-        {
-            gchar *utf8 = utils_get_utf8_from_locale(node->data);
-            GeanyDocument *document = utf8 ? document_find_by_filename(utf8) : NULL;
-            if (DOC_VALID(document) && document->changed)
-                saved = FALSE;
-            g_free(utf8);
-            g_ptr_array_add(sources, node->data);
-        }
-        g_ptr_array_add(sources, NULL);
-        if (saved)
-        {
-            if (!root)
-                root = g_path_get_dirname(selected->data);
-            gchar *data_parent = g_path_get_dirname(app->datadir);
-#ifdef G_OS_WIN32
-            gchar *prefix = g_strdup(data_parent);
-#else
-            gchar *prefix = g_path_get_dirname(data_parent);
-#endif
-            gchar *bin = g_build_filename(prefix, "bin", NULL);
-            gchar *settings = g_build_filename(app->configdir, "insight", "verilog-debug", NULL);
-            insight_waveforms_simulate(parent, bin, root, (const gchar *const *)sources->pdata,
-                                        interactive, waveform_source, diff_source_open, settings,
-                                        app->project ? app->project->file_name : NULL);
-            g_free(settings);
-            g_free(bin);
-            g_free(prefix);
-            g_free(data_parent);
-        }
-        else
-            ui_set_statusbar(TRUE, "Save the selected HDL files before running simulation.");
-        g_ptr_array_unref(sources);
-        g_slist_free_full(selected, g_free);
-    }
+    waveform_start_simulation(selected, root, interactive);
+    g_slist_free_full(selected, g_free);
     g_free(root);
 }
 
@@ -5446,13 +5483,14 @@ static void script_check_done(GObject *object,GAsyncResult *result,gpointer data
  }
 }
 static void script_check_start(GtkMenuItem *item,gpointer data) {
- (void)item;(void)data;
+ (void)item;
  GeanyDocument *doc=document_get_current();
  if(!DOC_VALID(doc) || !doc->file_type) return;
  if(script_check_pending) {ui_set_statusbar(TRUE,"Syntax check already running");return;}
  gboolean python=python_language(doc->file_type);
- if(!python && doc->file_type->lang!=TM_PARSER_LUA) {
-  ui_set_statusbar(TRUE,"Open a Lua or Python file first");
+ if((GPOINTER_TO_INT(data) && !python) || (!GPOINTER_TO_INT(data) && doc->file_type->lang != TM_PARSER_LUA)) {
+  ui_set_statusbar(TRUE, "%s", insight_tr(GPOINTER_TO_INT(data) ?
+      "Open a Python file first" : "Open a Lua file first"));
   return;
  }
  gint length=sci_get_length(doc->editor->sci);
@@ -10034,50 +10072,87 @@ static void debug_native_executable(GtkMenuItem *item, gpointer data)
     g_free(gdb);
 }
 
-static void create_native_lua(void) {
- gchar *settings=g_build_filename(app->configdir,"insight","lua-extension.conf",NULL);
- wb.extensions=insight_extensions_new(settings); g_free(settings); GError *error=NULL;
- if(!insight_extensions_restore(wb.extensions,&error)) { ui_set_statusbar(TRUE,"Lua startup: %s",error->message); g_clear_error(&error); }
- GtkWidget *item=gtk_menu_item_new_with_label("Lua scripting"); wb.lua_item=item; wb.lua_menu=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(item),wb.lua_menu);
- const char *labels[]={"Load extension…","Reload saved extension","Unload extension","Run script…"};
- GCallback actions[]={G_CALLBACK(choose_native_script),G_CALLBACK(reload_native_script),G_CALLBACK(reload_native_script),G_CALLBACK(choose_native_script)};
- for(guint i=0;i<4;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(labels[i]); gtk_container_add(GTK_CONTAINER(wb.lua_menu),entry); g_signal_connect(entry,"activate",actions[i],GINT_TO_POINTER(i>=2)); }
- GtkWidget *debug=gtk_menu_item_new_with_label(insight_tr("Debug Current Lua Buffer…"));
- g_signal_connect(debug,"activate",G_CALLBACK(debug_current_script),NULL);
- gtk_menu_shell_append(GTK_MENU_SHELL(wb.lua_menu),debug);
- GtkWidget *python_debug=gtk_menu_item_new_with_label(insight_tr("Debug Current Python Buffer…"));
- g_signal_connect(python_debug,"activate",G_CALLBACK(debug_current_script),GINT_TO_POINTER(TRUE));
- gtk_menu_shell_append(GTK_MENU_SHELL(wb.lua_menu),python_debug);
- GtkWidget *python_entry=gtk_menu_item_new_with_label(insight_tr("Debug Python File…"));
- g_signal_connect(python_entry,"activate",G_CALLBACK(debug_select_script_entry),GINT_TO_POINTER(TRUE));
- gtk_menu_shell_append(GTK_MENU_SHELL(wb.lua_menu),python_entry);
- GtkWidget *lua_entry=gtk_menu_item_new_with_label(insight_tr("Debug Lua File…"));
- g_signal_connect(lua_entry,"activate",G_CALLBACK(debug_select_script_entry),NULL);
- gtk_menu_shell_append(GTK_MENU_SHELL(wb.lua_menu),lua_entry);
- GtkWidget *commands=gtk_menu_item_new_with_label("Commands"); wb.lua_commands=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(commands),wb.lua_commands); gtk_container_add(GTK_CONTAINER(wb.lua_menu),commands);
- wb.palette_item=gtk_menu_item_new_with_label("Command palette…"); g_signal_connect(wb.palette_item,"activate",G_CALLBACK(show_native_palette),NULL); gtk_container_add(GTK_CONTAINER(wb.lua_menu),wb.palette_item);
- gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),item); gtk_widget_show_all(item); native_commands_rebuild();
- GtkWidget *waves=gtk_menu_item_new_with_label(insight_tr("VCD Waveforms…"));
- gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),waves);
- g_signal_connect(waves,"activate",G_CALLBACK(waveforms_menu),NULL);
- gtk_widget_show(waves);
- GtkWidget *simulation = gtk_menu_item_new_with_label(insight_tr("Run Verilog Testbench…"));
- gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu), simulation);
- g_signal_connect(simulation, "activate", G_CALLBACK(waveform_run_simulation), NULL);
- gtk_widget_show(simulation);
- GtkWidget *debug_simulation = gtk_menu_item_new_with_label(insight_tr("Debug Verilog Testbench…"));
- gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu), debug_simulation);
- g_signal_connect(debug_simulation, "activate", G_CALLBACK(waveform_run_simulation), GINT_TO_POINTER(1));
- gtk_widget_show(debug_simulation);
- GtkWidget *native_debug = gtk_menu_item_new_with_label(insight_tr("Debug C/C++ Executable…"));
- gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu), native_debug);
- g_signal_connect(native_debug, "activate", G_CALLBACK(debug_native_executable), NULL);
- gtk_widget_show(native_debug);
- GtkWidget *syntax=gtk_menu_item_new_with_label(insight_tr("Check Lua/Python Syntax"));
- g_signal_connect(syntax,"activate",G_CALLBACK(script_check_start),NULL);
- gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu),syntax);
- gtk_widget_show(syntax);
+static GtkWidget *tool_submenu(const gchar *label)
+{
+    GtkWidget *item = gtk_menu_item_new_with_label(insight_tr(label));
+    GtkWidget *menu = gtk_menu_new();
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), menu);
+    gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu), item);
+    gtk_widget_show(item);
+    return menu;
 }
+
+static GtkWidget *tool_command(GtkWidget *menu, const gchar *label, GCallback callback, gpointer data)
+{
+    GtkWidget *item = gtk_menu_item_new_with_label(insight_tr(label));
+    g_signal_connect(item, "activate", callback, data);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+    gtk_widget_show(item);
+    return item;
+}
+
+static void tool_help(GtkWidget *menu, const gchar *label, const gchar *topic)
+{
+    GtkWidget *separator = gtk_separator_menu_item_new();
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), separator);
+    gtk_widget_show(separator);
+    tool_command(menu, label, G_CALLBACK(insight_help_show), (gpointer)topic);
+}
+
+static void create_native_lua(void)
+{
+    gchar *settings = g_build_filename(app->configdir, "insight", "lua-extension.conf", NULL);
+    wb.extensions = insight_extensions_new(settings);
+    g_free(settings);
+    GError *error = NULL;
+    if (!insight_extensions_restore(wb.extensions, &error))
+    {
+        ui_set_statusbar(TRUE, "Lua startup: %s", error->message);
+        g_clear_error(&error);
+    }
+
+    GtkWidget *cpp = tool_submenu("C/C++");
+    tool_command(cpp, "Debug C/C++ Executable…", G_CALLBACK(debug_native_executable), NULL);
+    tool_command(cpp, "Call paths…", G_CALLBACK(call_paths_command), GINT_TO_POINTER(INSIGHT_CALL_SHOW));
+    tool_help(cpp, "C/C++ Debugger Help…", "native-debugger.md");
+
+    GtkWidget *python = tool_submenu("Python");
+    tool_command(python, "Debug Current Python Buffer…", G_CALLBACK(debug_current_script), GINT_TO_POINTER(TRUE));
+    tool_command(python, "Debug Python File…", G_CALLBACK(debug_select_script_entry), GINT_TO_POINTER(TRUE));
+    tool_command(python, "Check Python Syntax", G_CALLBACK(script_check_start), GINT_TO_POINTER(TRUE));
+    tool_help(python, "Python Debugger Help…", "python-debugger.md");
+
+    wb.lua_menu = tool_submenu("Lua");
+    tool_command(wb.lua_menu, "Debug Current Lua Buffer…", G_CALLBACK(debug_current_script), NULL);
+    tool_command(wb.lua_menu, "Debug Lua File…", G_CALLBACK(debug_select_script_entry), NULL);
+    tool_command(wb.lua_menu, "Check Lua Syntax", G_CALLBACK(script_check_start), NULL);
+    tool_command(wb.lua_menu, "Run script…", G_CALLBACK(choose_native_script), GINT_TO_POINTER(TRUE));
+    tool_command(wb.lua_menu, "Load extension…", G_CALLBACK(choose_native_script), NULL);
+    tool_command(wb.lua_menu, "Reload saved extension", G_CALLBACK(reload_native_script), NULL);
+    tool_command(wb.lua_menu, "Unload extension", G_CALLBACK(reload_native_script), GINT_TO_POINTER(TRUE));
+    GtkWidget *commands = gtk_menu_item_new_with_label(insight_tr("Commands"));
+    wb.lua_commands = gtk_menu_new();
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(commands), wb.lua_commands);
+    gtk_menu_shell_append(GTK_MENU_SHELL(wb.lua_menu), commands);
+    gtk_widget_show(commands);
+    wb.palette_item = tool_command(wb.lua_menu, "Command palette…", G_CALLBACK(show_native_palette), NULL);
+    native_commands_rebuild();
+    tool_help(wb.lua_menu, "Lua Debugger Help…", "lua-debugger.md");
+    tool_command(wb.lua_menu, "Lua Scripting Help…", G_CALLBACK(insight_help_show), "lua-api.md");
+
+    GtkWidget *verilog = tool_submenu("Verilog / SystemVerilog");
+    GtkWidget *debug_hdl = tool_command(verilog, "Debug Current Verilog File",
+        G_CALLBACK(waveform_debug_current), NULL);
+    gtk_widget_set_name(debug_hdl, "insight-tools-debug-current-hdl");
+    tool_command(verilog, "Debug Verilog Testbench…", G_CALLBACK(waveform_run_simulation), GINT_TO_POINTER(TRUE));
+    tool_command(verilog, "Run Verilog Testbench…", G_CALLBACK(waveform_run_simulation), NULL);
+    tool_command(verilog, "VCD Waveforms…", G_CALLBACK(waveforms_menu), NULL);
+    tool_help(verilog, "Verilog Debugger Help…", "verilog-debugger.md");
+    GtkWidget *current_hdl = tool_command(main_widgets.editor_menu, "Debug Current Verilog File",
+        G_CALLBACK(waveform_debug_current), NULL);
+    gtk_widget_set_name(current_hdl, "insight-debug-current-hdl");
+}
+
 static void focus_widget_panel(GtkWidget *widget) {
  GtkWidget *owner=gtk_widget_get_toplevel(widget);for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].window==owner && wb.hosts[i].minimized) panel_restore(i); if(GTK_IS_WINDOW(owner) && owner!=main_widgets.window) { gtk_widget_show(owner); gtk_window_present(GTK_WINDOW(owner)); }
  /* Reveal every containing notebook, rather than just its innermost page. */
@@ -11408,7 +11483,7 @@ static void editor_menu_group(GtkWidget *root,gpointer unused) {
   const gchar *label=gtk_menu_item_get_label(GTK_MENU_ITEM(item)),*id=GTK_IS_BUILDABLE(item) ? gtk_buildable_get_name(GTK_BUILDABLE(item)):NULL;gchar *english=g_ascii_strdown(insight_i18n_english(label ? label:""),-1);const gchar *name=gtk_widget_get_name(item);gint group=-1;
   if(!g_strcmp0(id,"search2") || !g_strcmp0(id,"find_usage2") || !g_strcmp0(id,"find_document_usage2") || strstr(english,"search") || strstr(english,"find") || strstr(english,"replace") || strstr(english,"references") || strstr(english,"usage") || strstr(english,"look up selection") || strstr(name,"word-highlights")) group=0;
   else if(!g_strcmp0(id,"goto_tag_definition2") || strstr(english,"jump") || strstr(english,"call path") || strstr(english,"source route") || strstr(english,"go to")) group=5;
-  else if(!g_strcmp0(id,"commands1") || !g_strcmp0(id,"menu_format2") || !g_strcmp0(id,"insert1") || strstr(english,"symbol") || strstr(english,"revision") || strstr(english,"backup")) group=1;
+  else if(!g_strcmp0(name,"insight-debug-current-hdl") || !g_strcmp0(id,"commands1") || !g_strcmp0(id,"menu_format2") || !g_strcmp0(id,"insert1") || strstr(english,"symbol") || strstr(english,"revision") || strstr(english,"backup")) group=1;
   else if(!g_strcmp0(id,"menu_open_selected_file2") || strstr(english,"file manager") || strstr(english,"file type") || strstr(english,"file language")) group=2;
   else if(strstr(english,"ai") || strstr(name,"-ai-")) group=3;
   else if(GTK_IS_CHECK_MENU_ITEM(item) || !g_strcmp0(id,"show_menubar1") || strstr(english,"overview") || strstr(english,"statusbar")) group=4;
@@ -11460,9 +11535,15 @@ static void create_workbench_menus(void) {
  const gchar *relation_reports[]={"View Relation Outline…","Create Bookmarks from Relation Items…"};for(guint i=0;i<2;i++) { GtkWidget *item=gtk_menu_item_new_with_label(relation_reports[i]);gtk_widget_set_name(item,i ? "insight-relation-bookmark-command":"insight-relation-outline-command");gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(relation_report_show),GUINT_TO_POINTER(i)); }
 
  insight_custom_commands_menu(main_widgets.tools_menu);
- GtkWidget *diff_item=gtk_menu_item_new_with_label("Diff / Merge…");gtk_widget_set_name(diff_item,"insight-diff-menu");gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),diff_item);g_signal_connect(diff_item,"activate",G_CALLBACK(show_diff),NULL);gtk_widget_show(diff_item);
- GtkWidget *hex_item=gtk_menu_item_new_with_label("Hex editor…");gtk_widget_set_name(hex_item,"insight-hex-menu");gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),hex_item);g_signal_connect(hex_item,"activate",G_CALLBACK(show_hex),NULL);gtk_widget_show(hex_item);
- GtkWidget *directory_item=gtk_menu_item_new_with_label("Directory Compare…");gtk_widget_set_name(directory_item,"insight-directory-menu");gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),directory_item);g_signal_connect(directory_item,"activate",G_CALLBACK(show_directory_compare),NULL);gtk_widget_show(directory_item);
+ GtkWidget *compare = tool_submenu("Compare / Merge");
+ GtkWidget *diff_item = tool_command(compare, "Diff / Merge…", G_CALLBACK(show_diff), NULL);
+ gtk_widget_set_name(diff_item, "insight-diff-menu");
+ GtkWidget *directory_item = tool_command(compare, "Directory Compare…", G_CALLBACK(show_directory_compare), NULL);
+ gtk_widget_set_name(directory_item, "insight-directory-menu");
+ tool_help(compare, "Compare and Merge Help…", "internal-diff.md");
+ tool_command(compare, "Directory Compare Help…", G_CALLBACK(insight_help_show), "directory-compare.md");
+ GtkWidget *hex_item = tool_command(main_widgets.tools_menu, "Hex editor…", G_CALLBACK(show_hex), NULL);
+ gtk_widget_set_name(hex_item, "insight-hex-menu");
  wb.navigation_accels=gtk_accel_group_new(); gtk_window_add_accel_group(GTK_WINDOW(main_widgets.window),wb.navigation_accels);
  GtkWidget *templates=gtk_image_menu_item_new_with_label("Code templates / Clips…"); gtk_widget_set_name(templates,"insight-templates-command"); gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(templates),insight_command_icon("snippets")); gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(templates),TRUE); gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu),templates); g_signal_connect(templates,"activate",G_CALLBACK(focus_templates),NULL); gtk_widget_show(templates);
  create_structural_selection_menu(); insight_overview_install_commands();
@@ -11493,7 +11574,6 @@ static void create_workbench_menus(void) {
   if(i) gtk_widget_add_accelerator(entry,"activate",wb.navigation_accels,i==1 ? GDK_KEY_F8 : GDK_KEY_F9,GDK_SHIFT_MASK,GTK_ACCEL_VISIBLE);
   gtk_widget_show(entry);
  }
- g_object_ref(wb.lua_item); gtk_container_remove(GTK_CONTAINER(main_widgets.tools_menu),wb.lua_item); gtk_menu_item_set_label(GTK_MENU_ITEM(wb.lua_item),"Scripts"); gtk_menu_shell_insert(GTK_MENU_SHELL(menubar),wb.lua_item,5); g_object_unref(wb.lua_item);
  wb.context_toggle=gtk_check_menu_item_new_with_label("Context window"); gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(wb.context_toggle),wb.context_visible);
  g_signal_connect(wb.context_toggle,"toggled",G_CALLBACK(context_visible),NULL); gtk_container_add(GTK_CONTAINER(ui_lookup_widget(main_widgets.window,"menu_view1_menu")),wb.context_toggle);
  gtk_widget_show_all(navigate); gtk_widget_show(wb.context_toggle);
@@ -12084,7 +12164,7 @@ static void arrange_main_menus(void) {
  GtkWidget *windows=gtk_menu_item_new_with_mnemonic("_Window"),*window_menu=gtk_menu_new();
  insight_scroll_links_init(window_menu);
  gtk_widget_set_name(window_menu,"insight-window-menu");gtk_menu_item_set_submenu(GTK_MENU_ITEM(windows),window_menu); g_signal_connect(window_menu,"show",G_CALLBACK(window_menu_refresh),NULL); gtk_menu_shell_insert(GTK_MENU_SHELL(bar),windows,7); gtk_widget_show(windows);
- GtkWidget *items[]={ui_lookup_widget(main_widgets.window,"file1"),ui_lookup_widget(main_widgets.window,"edit1"),ui_lookup_widget(main_widgets.window,"search1"),ui_lookup_widget(main_widgets.window,"menu_project1"),options,ui_lookup_widget(main_widgets.window,"tools1"),ui_lookup_widget(main_widgets.window,"menu_view1"),windows,ui_lookup_widget(main_widgets.window,"menu_help1"),g_object_get_data(G_OBJECT(main_widgets.window),"insight-navigate"),wb.lua_item};
+ GtkWidget *items[]={ui_lookup_widget(main_widgets.window,"file1"),ui_lookup_widget(main_widgets.window,"edit1"),ui_lookup_widget(main_widgets.window,"search1"),ui_lookup_widget(main_widgets.window,"menu_project1"),options,ui_lookup_widget(main_widgets.window,"tools1"),ui_lookup_widget(main_widgets.window,"menu_view1"),windows,ui_lookup_widget(main_widgets.window,"menu_help1"),g_object_get_data(G_OBJECT(main_widgets.window),"insight-navigate")};
  for(guint i=0;i<G_N_ELEMENTS(items);i++) {
   GtkWidget *item=items[i];
   g_object_ref(item); gtk_container_remove(GTK_CONTAINER(bar),item); gtk_menu_shell_insert(GTK_MENU_SHELL(bar),item,(gint)i); g_object_unref(item);

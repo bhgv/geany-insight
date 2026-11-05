@@ -63,6 +63,8 @@ static GtkWidget *find_control(GtkWidget *widget, const gchar *key)
         return widget;
     if (GTK_IS_MENU_ITEM(widget))
     {
+        if (!g_strcmp0(gtk_widget_get_name(widget), key))
+            return widget;
         GtkMenuItem *item = GTK_MENU_ITEM(widget);
         if (!g_strcmp0(gtk_menu_item_get_label(item), key))
             return widget;
@@ -217,8 +219,7 @@ static gboolean check_connection(GtkTreeModel *model, GtkTreePath *path, GtkTree
 static gboolean accept_fixture(gpointer data)
 {
     const gchar *path = data;
-    const gchar *title = path == fixture_source ? "Debug Verilog Testbench" : "Load Verilog Observer";
-    GtkWidget *window = find_window(title);
+    GtkWidget *window = find_window("Load Verilog Observer");
     if (!GTK_IS_FILE_CHOOSER(window))
         return G_SOURCE_CONTINUE;
     GtkFileChooser *chooser = GTK_FILE_CHOOSER(window);
@@ -303,11 +304,10 @@ static gboolean drive_debugger(gpointer data)
     if (phase == OPEN_DEBUGGER)
     {
         GtkWidget *item = find_control(gtk_widget_get_toplevel(GTK_WIDGET(document->editor->sci)),
-                                      "Debug Verilog Testbench…");
+                                      "insight-tools-debug-current-hdl");
         if (!GTK_IS_MENU_ITEM(item))
             return G_SOURCE_CONTINUE;
         phase = LOAD_OBSERVER;
-        g_timeout_add(100, accept_fixture, fixture_source);
         gtk_menu_item_activate(GTK_MENU_ITEM(item));
         return G_SOURCE_CONTINUE;
     }

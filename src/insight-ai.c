@@ -172,4 +172,66 @@ static void lookup_selection(GtkWidget *widget,gpointer data) {
  gint a=SEND(sci,SCI_GETSELECTIONSTART,0,0),b=SEND(sci,SCI_GETSELECTIONEND,0,0);if(a==b) { a=SEND(sci,SCI_WORDSTARTPOSITION,a,TRUE);b=SEND(sci,SCI_WORDENDPOSITION,b,TRUE); }if(b<=a || b-a>65536) { ui_set_statusbar(FALSE,"%s",insight_tr("AI lookup selection is limited to 64 KiB"));return; }gchar *text=sci_get_contents_range(sci,a,b);if(g_utf8_validate(text,b-a,NULL) && !memchr(text,0,b-a)) insight_ai_lookup("Source selection — AI lookup",text,"Explain this selection, identify relevant functions or algorithms, and suggest useful documentation. Distinguish facts from uncertainty.");g_free(text);
 }
 static void open_manual(GtkWidget *widget,gpointer data) { (void)widget;(void)data;insight_ai_open("Console output — paste or edit context before sending","",NULL,NULL,NULL); }
-void insight_ai_init(void) { if(initialized) return;initialized=TRUE;GtkWidget *menu=ui_lookup_widget(main_widgets.window,"tools1_menu");if(!menu) menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(ui_lookup_widget(main_widgets.window,"tools1")));GtkWidget *item=gtk_menu_item_new_with_label(insight_tr("Console AI Assistant…"));gtk_widget_set_name(item,"insight-ai-menu");gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(open_manual),NULL);gtk_widget_show(item);GtkWidget *settings=gtk_menu_item_new_with_label(insight_tr("AI Connections…"));gtk_widget_set_name(settings,"insight-ai-connections-menu");gtk_menu_shell_append(GTK_MENU_SHELL(menu),settings);g_signal_connect(settings,"activate",G_CALLBACK(insight_ai_profiles_show),NULL);gtk_widget_show(settings);GtkWidget *menus[]={ui_lookup_widget(main_widgets.window,"search1_menu"),main_widgets.editor_menu};for(guint i=0;i<2;i++) { GtkWidget *lookup=gtk_menu_item_new_with_label(insight_tr("Look up selection with AI…"));gtk_widget_set_name(lookup,i ? "insight-ai-lookup-popup":"insight-ai-lookup-menu");g_signal_connect(lookup,"activate",G_CALLBACK(lookup_selection),NULL);gtk_menu_shell_append(GTK_MENU_SHELL(menus[i]),lookup);gtk_widget_show(lookup); } }
+GtkWidget *insight_ai_menu_item(const gchar *label)
+{
+    GtkWidget *item = gtk_image_menu_item_new_with_label(insight_tr(label));
+    gtk_image_menu_item_set_image(GTK_IMAGE_MENU_ITEM(item), insight_command_icon("brain"));
+    gtk_image_menu_item_set_always_show_image(GTK_IMAGE_MENU_ITEM(item), TRUE);
+    return item;
+}
+
+GtkWidget *insight_ai_tools_menu(void)
+{
+    GtkWidget *tools = main_widgets.tools_menu;
+    GtkWidget *menu = g_object_get_data(G_OBJECT(tools), "insight-ai-tools");
+    if (!menu)
+    {
+        GtkWidget *parent = insight_ai_menu_item("AI Assistant");
+        menu = gtk_menu_new();
+        gtk_menu_item_set_submenu(GTK_MENU_ITEM(parent), menu);
+        gtk_menu_shell_append(GTK_MENU_SHELL(tools), parent);
+        gtk_widget_show_all(parent);
+        g_object_set_data(G_OBJECT(tools), "insight-ai-tools", menu);
+    }
+    return menu;
+}
+
+void insight_ai_init(void)
+{
+    if (initialized)
+        return;
+    initialized = TRUE;
+    GtkWidget *tools = insight_ai_tools_menu();
+    GtkWidget *assistant = insight_ai_menu_item("Console AI Assistant…");
+    gtk_widget_set_name(assistant, "insight-ai-menu");
+    gtk_menu_shell_append(GTK_MENU_SHELL(tools), assistant);
+    g_signal_connect(assistant, "activate", G_CALLBACK(open_manual), NULL);
+    gtk_widget_show_all(assistant);
+    GtkWidget *settings = insight_ai_menu_item("AI Connections…");
+    gtk_widget_set_name(settings, "insight-ai-connections-menu");
+    gtk_menu_shell_append(GTK_MENU_SHELL(tools), settings);
+    g_signal_connect(settings, "activate", G_CALLBACK(insight_ai_profiles_show), NULL);
+    gtk_widget_show_all(settings);
+    GtkWidget *menus[] = {tools, ui_lookup_widget(main_widgets.window, "search1_menu"), main_widgets.editor_menu};
+    const gchar *names[] = {"insight-ai-lookup-tool", "insight-ai-lookup-menu", "insight-ai-lookup-popup"};
+    for (guint i = 0; i < G_N_ELEMENTS(menus); i++)
+    {
+        GtkWidget *lookup = insight_ai_menu_item("Look up selection with AI…");
+        gtk_widget_set_name(lookup, names[i]);
+        g_signal_connect(lookup, "activate", G_CALLBACK(lookup_selection), NULL);
+        gtk_menu_shell_append(GTK_MENU_SHELL(menus[i]), lookup);
+        gtk_widget_show_all(lookup);
+    }
+    GtkWidget *separator = gtk_separator_menu_item_new();
+    gtk_menu_shell_append(GTK_MENU_SHELL(tools), separator);
+    gtk_widget_show(separator);
+    const gchar *help_labels[] = {"Console AI Help…", "Editor / Project AI Help…", "AI Connections Help…"};
+    const gchar *topics[] = {"console-ai.md", "editor-ai.md", "ai-connections.md"};
+    for (guint i = 0; i < G_N_ELEMENTS(topics); i++)
+    {
+        GtkWidget *help = insight_ai_menu_item(help_labels[i]);
+        g_signal_connect(help, "activate", G_CALLBACK(insight_help_show), (gpointer)topics[i]);
+        gtk_menu_shell_append(GTK_MENU_SHELL(tools), help);
+        gtk_widget_show_all(help);
+    }
+}

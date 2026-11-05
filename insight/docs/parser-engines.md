@@ -29,7 +29,7 @@ inside deferred bodies remain searchable. See [Clang reference details](clang.md
 
 ## Lua and Python compiler diagnostics
 
-**Tools → Check Lua/Python Syntax** checks the current unsaved buffer in a worker.
+**Tools → Lua → Check Lua Syntax** or **Tools → Python → Check Python Syntax** checks the current unsaved buffer in a worker.
 Lua uses the bundled interpreter's text compiler. Python uses an isolated Python 3
 process and `compile()`. The check compiles the buffer without executing the
 script or importing project code. Errors appear in Messages and open the relevant

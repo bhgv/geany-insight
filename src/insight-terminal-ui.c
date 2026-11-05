@@ -8,6 +8,7 @@
 #include "ui_utils.h"
 #include "msgwindow.h"
 #include "insight-i18n.h"
+#include "insight-help.h"
 #include "vte.h"
 #include <string.h>
 static GtkWidget *group,*group_root;
@@ -48,7 +49,7 @@ static void clicked(GtkButton *button,gpointer data) { Overlay *o=data;((void (*
 static gboolean release(GtkWidget *widget,GdkEventButton *event,gpointer data) { Overlay *o=data;if(event->button!=1 || !o->dragging) return FALSE;o->dragging=FALSE;gtk_grab_remove(widget);if(!o->moved) clicked(GTK_BUTTON(widget),o);return TRUE; }
 static void overlay_destroyed(GtkWidget *widget,gpointer data) { (void)widget;Overlay *o=data;if(o->dragging) { gtk_grab_remove(o->button);o->dragging=FALSE; } }
 GtkWidget *insight_terminal_ui_overlay(GtkWidget *content,const gchar *name,GCallback callback,gpointer data) {
- Overlay *o=g_new0(Overlay,1);o->overlay=gtk_overlay_new();o->x=1;o->callback=callback;o->data=data;gtk_container_add(GTK_CONTAINER(o->overlay),content);o->button=gtk_button_new_with_label("Ai");gtk_widget_set_name(o->button,name);gtk_widget_set_opacity(o->button,0.8);gtk_widget_set_tooltip_text(o->button,insight_tr("AI assistant — drag to move"));gtk_widget_set_halign(o->button,GTK_ALIGN_START);gtk_widget_set_valign(o->button,GTK_ALIGN_START);gtk_widget_add_events(o->button,GDK_BUTTON_PRESS_MASK|GDK_BUTTON_RELEASE_MASK|GDK_POINTER_MOTION_MASK);gtk_overlay_add_overlay(GTK_OVERLAY(o->overlay),o->button);g_signal_connect(o->button,"clicked",G_CALLBACK(clicked),o);g_signal_connect(o->button,"button-press-event",G_CALLBACK(press),o);g_signal_connect(o->button,"motion-notify-event",G_CALLBACK(motion),o);g_signal_connect(o->button,"button-release-event",G_CALLBACK(release),o);g_signal_connect(o->overlay,"size-allocate",G_CALLBACK(position),o);g_signal_connect(o->overlay,"destroy",G_CALLBACK(overlay_destroyed),o);g_object_set_data_full(G_OBJECT(o->overlay),"insight-terminal-overlay",o,g_free);return o->overlay;
+ Overlay *o=g_new0(Overlay,1);o->overlay=gtk_overlay_new();o->x=1;o->callback=callback;o->data=data;gtk_container_add(GTK_CONTAINER(o->overlay),content);o->button=gtk_button_new();gtk_button_set_image(GTK_BUTTON(o->button),insight_command_icon("brain"));gtk_widget_set_name(o->button,name);gtk_widget_set_opacity(o->button,0.8);gtk_widget_set_tooltip_text(o->button,insight_tr("AI assistant — drag to move"));gtk_widget_set_halign(o->button,GTK_ALIGN_START);gtk_widget_set_valign(o->button,GTK_ALIGN_START);gtk_widget_add_events(o->button,GDK_BUTTON_PRESS_MASK|GDK_BUTTON_RELEASE_MASK|GDK_POINTER_MOTION_MASK);gtk_overlay_add_overlay(GTK_OVERLAY(o->overlay),o->button);g_signal_connect(o->button,"clicked",G_CALLBACK(clicked),o);g_signal_connect(o->button,"button-press-event",G_CALLBACK(press),o);g_signal_connect(o->button,"motion-notify-event",G_CALLBACK(motion),o);g_signal_connect(o->button,"button-release-event",G_CALLBACK(release),o);g_signal_connect(o->overlay,"size-allocate",G_CALLBACK(position),o);g_signal_connect(o->overlay,"destroy",G_CALLBACK(overlay_destroyed),o);g_object_set_data_full(G_OBJECT(o->overlay),"insight-terminal-overlay",o,g_free);return o->overlay;
 }
 static void free_weak(gpointer data) { GWeakRef *ref=data;g_weak_ref_clear(ref);g_free(ref); }
 GtkWidget *insight_terminal_ui_assistant(const gchar *scope,const gchar *label,const gchar *context,GtkWidget *owner,InsightAiInsert insert,gpointer data) {

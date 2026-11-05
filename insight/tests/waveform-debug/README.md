@@ -48,7 +48,7 @@ value** введите `0010`. Курсор перейдёт к такту 15. �
 
 ## Интерактивная симуляция
 
-Выберите **Tools → Debug Verilog Testbench…**, затем `counter.v` и
+Выберите **Tools → Verilog / SystemVerilog → Debug Verilog Testbench…**, затем `counter.v` и
 `counter_debug_tb.v`. Симулятор откроет консоль на начальной паузе.
 
 1. Нажмите **Time**. Начальное время равно нулю.

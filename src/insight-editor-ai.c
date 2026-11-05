@@ -202,5 +202,5 @@ static void open_review(GtkWidget *w,gpointer data) {
 }
 void insight_editor_ai_init(void) {
  if(initialized) { return; }
- initialized=TRUE;GtkWidget *menu=ui_lookup_widget(main_widgets.window,"tools1_menu");if(!menu) menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(ui_lookup_widget(main_widgets.window,"tools1")));GtkWidget *item=gtk_menu_item_new_with_label(insight_tr("Editor / Project AI Assistant…"));gtk_widget_set_name(item,"insight-editor-ai-menu");gtk_menu_shell_append(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(open_review),NULL);gtk_widget_show(item);
+ initialized=TRUE;GtkWidget *menu=insight_ai_tools_menu();GtkWidget *item=insight_ai_menu_item("Editor / Project AI Assistant…");gtk_widget_set_name(item,"insight-editor-ai-menu");gtk_menu_shell_prepend(GTK_MENU_SHELL(menu),item);g_signal_connect(item,"activate",G_CALLBACK(open_review),NULL);gtk_widget_show_all(item);
 }
