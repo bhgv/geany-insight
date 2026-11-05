@@ -381,6 +381,41 @@ def check_slang(service, fixtures, directory, environment):
             in selections, "Missing bit selection on the assignment edge")
 
 
+    reply = capture_command([str(service), "--editor-index", "--",
+                             str(fixtures / "interface_flow_tb.sv")],
+                            directory, "interface-index", environment).splitlines()
+    require(reply[1] == "0", "Interface fixture failed to elaborate")
+    interface_edges = set()
+    for record in reply[2:]:
+        fields = record.split("\t")
+        if len(fields) == 8 and fields[0] == "P":
+            interface_edges.add(tuple(decode_field(fields[i]) for i in (5, 1, 6, 7)))
+
+    root = "interface_flow_tb"
+    for link, tx, rx in (("active_link", "tx", "rx"), ("other_link", "other_tx", "other_rx")):
+        interface = f"{root}.{link}"
+        sampled = f"{root}.{rx}.sampled"
+        alias = f"{interface}.consumer.high"
+        expected = {
+            (f"{interface}.data", f"{root}.{tx}.payload", "", "assign-source"),
+            (alias, f"{interface}.data", "all / [7:4]", "interface-source"),
+            (f"{interface}.tag", f"{interface}.producer.tag_out", "[3:2] / all",
+             "interface-source"),
+            (f"{interface}.producer.tag_out", f"{root}.{tx}.payload", "all / [7:6]",
+             "assign-source"),
+            (sampled, alias, "all / [5]", "procedural-source"),
+            (sampled, f"{interface}.valid", "", "condition-source"),
+            (sampled, f"{interface}.clk", "", "posedge-source"),
+        }
+        require(expected <= interface_edges, f"Missing interface edges: {expected - interface_edges}")
+        require((sampled, f"{interface}.valid", "", "procedural-source") not in interface_edges,
+                "Case selector was misclassified as data")
+        other = "other_link" if link == "active_link" else "active_link"
+        require(not any(owner == sampled and peer.startswith(f"{root}.{other}.")
+                        for owner, peer, _, _ in interface_edges),
+                "A dependency leaked into a different interface instance")
+
+
 # EN: Run the checks against binaries installed by either native build launcher.
 # RU: Запускаем проверки программ, установленных любым штатным сборщиком.
 def main():

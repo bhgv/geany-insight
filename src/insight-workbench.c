@@ -4560,8 +4560,64 @@ static void waveform_group_index_row(GHashTable *groups, gchar *key, const Insig
 static gboolean waveform_control_edge(const gchar *role, gboolean upstream)
 {
     return (g_str_has_prefix(role, "condition-") || g_str_has_prefix(role, "event-") ||
-            g_str_has_prefix(role, "posedge-") || g_str_has_prefix(role, "negedge-")) &&
+            g_str_has_prefix(role, "posedge-") || g_str_has_prefix(role, "negedge-") ||
+            g_str_has_prefix(role, "edge-")) &&
         g_str_has_suffix(role, upstream ? "-source" : "-destination");
+}
+
+typedef struct {
+    const gchar *signal;
+    gchar *selection;
+    GtkTreeIter row;
+} WaveDependencyNode;
+
+static void waveform_dependency_node_free(gpointer data)
+{
+    WaveDependencyNode *node = data;
+    g_free(node->selection);
+    g_free(node);
+}
+
+/* Unknown or nonliteral bounds leave the branch eligible for traversal. */
+static gboolean waveform_selection_range(const gchar *selection, gint64 *low, gint64 *high)
+{
+    if (!selection || *selection != '[')
+        return FALSE;
+    const gchar *start = selection + 1;
+    gchar *end;
+    gint64 left = g_ascii_strtoll(start, &end, 10);
+    if (end == start || left < G_MININT32 || left > G_MAXINT32)
+        return FALSE;
+    gint64 right = left;
+    gchar indexed = '\0';
+    if ((*end == '+' || *end == '-') && end[1] == ':')
+        indexed = *end++;
+    if (*end == ':')
+    {
+        start = end + 1;
+        right = g_ascii_strtoll(start, &end, 10);
+        if (end == start || right < G_MININT32 || right > G_MAXINT32)
+            return FALSE;
+    }
+    if (indexed)
+    {
+        if (right <= 0)
+            return FALSE;
+        right = indexed == '+' ? left + right - 1 : left - right + 1;
+    }
+    if (*end != ']')
+        return FALSE;
+    *low = MIN(left, right);
+    *high = MAX(left, right);
+    return TRUE;
+}
+
+static gboolean waveform_selections_disjoint(const gchar *current, const gchar *edge)
+{
+    gint64 current_low, current_high, edge_low, edge_high;
+    return waveform_selection_range(current, &current_low, &current_high) &&
+        waveform_selection_range(edge, &edge_low, &edge_high) &&
+        (current_high < edge_low || edge_high < current_low);
 }
 
 /* Walk upstream or downstream without mixing directions at a shared signal. */
@@ -4572,25 +4628,27 @@ static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph, 
     const gchar *port_role = upstream ? "port-source" : "port-destination";
     const gchar *assign_role = upstream ? "assign-source" : "assign-destination";
     const gchar *procedural_role = upstream ? "procedural-source" : "procedural-destination";
-    GHashTable *visited = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
+    const gchar *interface_role = upstream ? "interface-source" : "interface-destination";
+    GHashTable *visited = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, waveform_dependency_node_free);
     GtkTreeIter root;
     gtk_tree_store_insert_with_values(graph, &root, NULL, -1,
         WAVE_USE_NAME, start, WAVE_USE_ROLE, upstream ? insight_tr("Upstream") : insight_tr("Downstream"), -1);
     if (!upstream)
         waveform_graph_uses(graph, &root, dependencies, start, root_key);
     GQueue pending = G_QUEUE_INIT;
-    GtkTreeIter *saved_root = g_new(GtkTreeIter, 1);
-    *saved_root = root;
-    g_hash_table_insert(visited, (gpointer)start, saved_root);
-    g_queue_push_tail(&pending, (gpointer)start);
+    WaveDependencyNode *saved_root = g_new0(WaveDependencyNode, 1);
+    saved_root->signal = start;
+    saved_root->row = root;
+    g_hash_table_insert(visited, g_strdup_printf("%s\nall", start), saved_root);
+    g_queue_push_tail(&pending, saved_root);
 
     for (guint distance = 1; !g_queue_is_empty(&pending) && *remaining; distance++)
     {
         guint level_size = g_queue_get_length(&pending);
         while (level_size-- && *remaining)
         {
-            const gchar *signal = g_queue_pop_head(&pending);
-            GPtrArray *edges = g_hash_table_lookup(dependencies->edges, signal);
+            const WaveDependencyNode *node = g_queue_pop_head(&pending);
+            GPtrArray *edges = g_hash_table_lookup(dependencies->edges, node->signal);
             if (!edges)
                 continue;
 
@@ -4601,26 +4659,37 @@ static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph, 
                 if (!control && g_strcmp0(edge->inheritance, port_role) &&
                     g_strcmp0(edge->inheritance, assign_role) &&
                     g_strcmp0(edge->inheritance, procedural_role) &&
+                    g_strcmp0(edge->inheritance, interface_role) &&
                     g_strcmp0(edge->inheritance, "port-peer"))
                     continue;
+                if (waveform_selections_disjoint(node->selection, edge->type))
+                    continue;
 
+                const gchar *separator = edge->type ? strstr(edge->type, " / ") : NULL;
+                const gchar *peer_selection = separator ? separator + 3 : "all";
+                gchar *key = g_strdup_printf("%s\n%s", edge->name, peer_selection);
                 GtkTreeIter branch;
-                GtkTreeIter *parent = g_hash_table_lookup(visited, signal);
-                gboolean repeated = !control && g_hash_table_contains(visited, edge->name);
-                gtk_tree_store_insert_with_values(graph, &branch, parent, -1,
+                GtkTreeIter parent = node->row;
+                gboolean repeated = !control && g_hash_table_contains(visited, key);
+                gtk_tree_store_insert_with_values(graph, &branch, &parent, -1,
                     WAVE_USE_ROLE, repeated ? insight_tr("Already shown") : edge->inheritance,
                     WAVE_USE_NAME, edge->name, WAVE_USE_FILE, edge->path,
                     WAVE_USE_LINE, edge->line, WAVE_USE_CONNECTION, TRUE,
                     WAVE_USE_HOPS, distance, WAVE_USE_SELECTION, edge->type, -1);
                 (*remaining)--;
                 if (repeated || control)
+                {
+                    g_free(key);
                     continue;
+                }
 
                 waveform_graph_uses(graph, &branch, dependencies, edge->name, NULL);
-                GtkTreeIter *saved = g_new(GtkTreeIter, 1);
-                *saved = branch;
-                g_hash_table_insert(visited, (gpointer)edge->name, saved);
-                g_queue_push_tail(&pending, (gpointer)edge->name);
+                WaveDependencyNode *saved = g_new0(WaveDependencyNode, 1);
+                saved->signal = edge->name;
+                saved->selection = g_strdup(peer_selection);
+                saved->row = branch;
+                g_hash_table_insert(visited, key, saved);
+                g_queue_push_tail(&pending, saved);
                 const gchar *role = edge->inheritance;
                 if (distance > 1)
                     role = upstream ? insight_tr("Upstream") : insight_tr("Downstream");

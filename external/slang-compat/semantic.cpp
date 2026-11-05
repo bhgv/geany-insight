@@ -218,12 +218,16 @@ struct PortOperands : ASTVisitor<PortOperands, false, true> {
     std::vector<Operand> signals;
     std::unordered_map<const Symbol*, std::unordered_set<std::string>> seen;
 
-    // Read a literal bound without evaluating a run-time expression.
-    // Читает литеральную границу без вычисления выражения времени исполнения.
-    static std::string literalBound(const Expression& expression) {
+    // Read an already resolved integer bound without evaluating a run-time expression.
+    // Читает известную целочисленную границу без вычисления выражения времени исполнения.
+    static std::string knownBound(const Expression& expression) {
         if (expression.kind == ExpressionKind::IntegerLiteral) {
             const auto value = expression.as<IntegerLiteral>().getValue().as<int32_t>();
             if (value)
+                return std::to_string(*value);
+        }
+        if (expression.constant && expression.constant->isInteger()) {
+            if (const auto value = expression.constant->integer().as<int32_t>())
                 return std::to_string(*value);
         }
         return "?";
@@ -241,7 +245,7 @@ struct PortOperands : ASTVisitor<PortOperands, false, true> {
             const auto& select = expression.as<ElementSelectExpression>();
             if (!selectionOf(select.value()).empty())
                 return "[?]";
-            return "[" + literalBound(select.selector()) + "]";
+            return "[" + knownBound(select.selector()) + "]";
         }
         if (expression.kind == ExpressionKind::RangeSelect) {
             const auto& select = expression.as<RangeSelectExpression>();
@@ -250,7 +254,7 @@ struct PortOperands : ASTVisitor<PortOperands, false, true> {
             const auto kind = select.getSelectionKind();
             const char* separator = kind == RangeSelectionKind::Simple ? ":" :
                 kind == RangeSelectionKind::IndexedUp ? "+:" : "-:";
-            return "[" + literalBound(select.left()) + separator + literalBound(select.right()) + "]";
+            return "[" + knownBound(select.left()) + separator + knownBound(select.right()) + "]";
         }
         return {};
     }
@@ -258,8 +262,13 @@ struct PortOperands : ASTVisitor<PortOperands, false, true> {
     // Keep each signal and selection once per connection.
     // Сохраняет каждый сигнал и срез один раз на подключение.
     void add(const Symbol* symbol, SourceRange range, std::string selection = {}) {
-        if (symbol && (symbol->kind == SymbolKind::Net || symbol->kind == SymbolKind::Variable) &&
-            range.start() && seen[symbol].insert(selection).second)
+        if (symbol && symbol->kind == SymbolKind::ModportPort) {
+            // A named modport member denotes the signal of the connected interface instance.
+            if (const auto* internal = symbol->as<ModportPortSymbol>().internalSymbol)
+                symbol = internal;
+        }
+        if (symbol && (symbol->kind == SymbolKind::Net || symbol->kind == SymbolKind::Variable ||
+                       symbol->kind == SymbolKind::ModportPort) && range.start() && seen[symbol].insert(selection).second)
             signals.push_back({symbol, range, std::move(selection)});
     }
 
@@ -415,7 +424,9 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
             const auto read = sources.getFullyOriginalLoc(input.range.start());
             for (const auto& output : outputs.signals) {
                 const auto destination = identity(*output.symbol);
-                if (destination.empty() || source == destination)
+                if (destination.empty() ||
+                    (source == destination && (input.selection.empty() || output.selection.empty() ||
+                                               input.selection == output.selection)))
                     continue;
                 const auto write = sources.getFullyOriginalLoc(output.range.start());
                 add("P", source, read, destination, endpointSelections(output.selection, input.selection), sourceRole);
@@ -452,6 +463,22 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
         controls.resize(depth);
     }
 
+    // Earlier case items can also affect which branch executes.
+    void handle(const CaseStatement& node) {
+        node.visitExprs(*this);
+        const auto depth = controls.size();
+        controls.push_back({{}, "condition-source", "condition-destination"});
+        node.expr.visit(controls[depth].inputs);
+        for (const auto& item : node.items) {
+            for (const auto* expression : item.expressions)
+                expression->visit(controls[depth].inputs);
+            item.stmt->visit(*this);
+        }
+        if (node.defaultCase)
+            node.defaultCase->visit(*this);
+        controls.resize(depth);
+    }
+
     // Preserve the edge polarity of explicit event controls and their iff guards.
     // Сохраняет полярность явных событий и их условия iff.
     void collectEventControls(const TimingControl& timing) {
@@ -471,6 +498,10 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
         else if (event.edge == EdgeKind::NegEdge) {
             input.sourceRole = "negedge-source";
             input.destinationRole = "negedge-destination";
+        }
+        else if (event.edge == EdgeKind::BothEdges) {
+            input.sourceRole = "edge-source";
+            input.destinationRole = "edge-destination";
         }
         event.expr.visit(input.inputs);
         controls.push_back(std::move(input));
@@ -507,6 +538,33 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
         inProceduralBlock = true;
         visitDefault(node);
         inProceduralBlock = previous;
+    }
+
+    // An explicit modport expression has its own width and coordinates.
+    // Keep a directional edge so that a slice on the alias stays distinct.
+    void handle(const ModportPortSymbol& node) {
+        add("D", node.name, node.location, identity(node), "ModportPort", "");
+        const auto* expression = node.explicitConnection;
+        if (expression && !expression->bad()) {
+            PortOperands alias;
+            alias.add(&node, SourceRange(node.location, node.location));
+            if (node.direction == ArgumentDirection::In ||
+                node.direction == ArgumentDirection::InOut) {
+                PortOperands inputs;
+                expression->visit(inputs);
+                indexDependencies(inputs, alias, "interface-source", "interface-destination");
+            }
+            if (node.direction == ArgumentDirection::Out ||
+                node.direction == ArgumentDirection::InOut ||
+                node.direction == ArgumentDirection::Ref) {
+                PortOperands outputs;
+                outputs.destinations(*expression);
+                indexDependencies(alias, outputs, "interface-source", "interface-destination");
+                if (node.direction == ArgumentDirection::Ref)
+                    indexDependencies(outputs, alias, "interface-source", "interface-destination");
+            }
+        }
+        visitDefault(node);
     }
 
     // Index each direct port connection from both sides of the instance boundary.
