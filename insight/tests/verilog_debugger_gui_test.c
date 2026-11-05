@@ -44,6 +44,12 @@ static GtkWidget *find_control(GtkWidget *widget, const gchar *key)
         return widget;
     if (GTK_IS_LABEL(widget) && !g_strcmp0(gtk_label_get_text(GTK_LABEL(widget)), key))
         return widget;
+    if (GTK_IS_TREE_VIEW(widget))
+    {
+        GtkTreeViewColumn *column = gtk_tree_view_get_column(GTK_TREE_VIEW(widget), 0);
+        if (column && !g_strcmp0(gtk_tree_view_column_get_title(column), key))
+            return widget;
+    }
     if (GTK_IS_STATUSBAR(widget) && !strcmp(key, "statusbar"))
         return widget;
     if (GTK_IS_NOTEBOOK(widget) && !strcmp(key, "notebook"))
@@ -128,12 +134,52 @@ static gboolean select_track(GtkWidget *window, const gchar *signal)
     return FALSE;
 }
 
+static gboolean select_scope_signal(GtkTreeView *view, const gchar *scope, const gchar *signal)
+{
+    GtkTreeModel *model = gtk_tree_view_get_model(view);
+    GtkTreeIter root;
+    for (gboolean valid = gtk_tree_model_get_iter_first(model, &root); valid;
+         valid = gtk_tree_model_iter_next(model, &root))
+    {
+        gchar *name = NULL;
+        gtk_tree_model_get(model, &root, 0, &name, -1);
+        gboolean match = !g_strcmp0(name, scope);
+        g_free(name);
+        if (!match)
+            continue;
+        GtkTreeIter child;
+        for (valid = gtk_tree_model_iter_children(model, &child, &root); valid;
+             valid = gtk_tree_model_iter_next(model, &child))
+        {
+            gtk_tree_model_get(model, &child, 0, &name, -1);
+            match = !g_strcmp0(name, signal);
+            g_free(name);
+            if (match)
+            {
+                GtkTreePath *path = gtk_tree_model_get_path(model, &child);
+                gtk_tree_view_expand_to_path(view, path);
+                gtk_tree_selection_select_path(gtk_tree_view_get_selection(view), path);
+                gtk_tree_path_free(path);
+                return TRUE;
+            }
+        }
+        break;
+    }
+    return FALSE;
+}
+
 static gboolean open_hdl_uses(gpointer data)
 {
     (void)data;
     GtkWidget *map = find_window("Signal Map");
     if (!map)
         return G_SOURCE_CONTINUE;
+    GtkWidget *scopes = find_control(map, "VCD scopes and signals");
+    GtkWidget *aliases = find_control(map, "Aliases on the same recorded trace");
+    if (!scopes || !aliases ||
+        !select_scope_signal(GTK_TREE_VIEW(scopes), "counter_tb.dut", "count"))
+        return G_SOURCE_CONTINUE;
+    gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(aliases)));
     GtkWidget *button = gtk_dialog_get_widget_for_response(GTK_DIALOG(map), GTK_RESPONSE_OK);
     if (!GTK_IS_BUTTON(button) || !gtk_widget_is_sensitive(button))
         return G_SOURCE_CONTINUE;
