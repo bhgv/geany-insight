@@ -958,6 +958,14 @@ typedef struct {
     gchar *compiler, *runtime, *include_dir;
     gchar **sources;
     InsightWaveSource navigate;
+    gboolean interactive;
+    GMutex lock;
+    GSubprocess *live_process;
+    gchar *live_log;
+    GtkWidget *console, *live_controls;
+    guint refresh_source;
+    goffset read_offset;
+    gchar prompt_tail[2];
 } WaveSimulation;
 
 /* Release the run configuration after the worker and dialog have finished. */
@@ -965,6 +973,11 @@ typedef struct {
 static void simulation_free(gpointer data)
 {
     WaveSimulation *run = data;
+    if (run->refresh_source)
+        g_source_remove(run->refresh_source);
+    g_clear_object(&run->live_process);
+    g_mutex_clear(&run->lock);
+    g_free(run->live_log);
     g_weak_ref_clear(&run->parent);
     g_clear_object(&run->dialog);
     g_strfreev(run->sources);
@@ -1032,6 +1045,49 @@ static gboolean simulation_process(const gchar *const *argv, const gchar *direct
     return ok;
 }
 
+/* Start vvp at its initial stop and keep its command pipe available to GTK. */
+/* Запускает vvp с начальной остановкой и оставляет канал команд доступным GTK. */
+static gboolean simulation_interactive(WaveSimulation *run, const gchar *directory,
+                                       const gchar *bin, GCancellable *cancel, GError **error)
+{
+    if (g_cancellable_set_error_if_cancelled(cancel, error))
+        return FALSE;
+    gchar *log = g_build_filename(directory, "interactive.log", NULL);
+    GSubprocessLauncher *launcher = g_subprocess_launcher_new(
+        G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDERR_MERGE);
+    g_subprocess_launcher_set_cwd(launcher, directory);
+    g_subprocess_launcher_set_stdout_file_path(launcher, log);
+    const gchar *existing = g_getenv("PATH");
+    gchar *path = g_strconcat(bin, G_SEARCHPATH_SEPARATOR_S, existing ? existing : "", NULL);
+    g_subprocess_launcher_setenv(launcher, "PATH", path, TRUE);
+    g_free(path);
+    const gchar *argv[] = {run->runtime, "-i", "-s", "simulation.vvp", NULL};
+    GSubprocess *process = g_subprocess_launcher_spawnv(launcher, argv, error);
+    g_object_unref(launcher);
+    if (!process)
+    {
+        g_free(log);
+        return FALSE;
+    }
+
+    g_mutex_lock(&run->lock);
+    run->live_process = g_object_ref(process);
+    run->live_log = log;
+    g_mutex_unlock(&run->lock);
+
+    gboolean ok = g_subprocess_wait_check(process, cancel, error);
+    if (g_cancellable_is_cancelled(cancel))
+    {
+        g_subprocess_force_exit(process);
+        g_subprocess_wait(process, NULL, NULL);
+    }
+    g_mutex_lock(&run->lock);
+    g_clear_object(&run->live_process);
+    g_mutex_unlock(&run->lock);
+    g_object_unref(process);
+    return ok;
+}
+
 /* Select the single VCD produced by the testbench in its scratch directory. */
 /* Выбирает единственный VCD, созданный тестбенчем во временной папке. */
 static gchar *simulation_find_vcd(const gchar *directory, GError **error)
@@ -1083,7 +1139,8 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
         g_ptr_array_add(command, NULL);
         const gchar *execute[] = {run->runtime, "simulation.vvp", NULL};
         if (simulation_process((const gchar *const *)command->pdata, directory, bin, cancel, &error) &&
-            simulation_process(execute, directory, bin, cancel, &error))
+            (run->interactive ? simulation_interactive(run, directory, bin, cancel, &error) :
+             simulation_process(execute, directory, bin, cancel, &error)))
         {
             gchar *vcd = simulation_find_vcd(directory, &error);
             if (vcd)
@@ -1114,6 +1171,75 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
         g_task_return_error(task, error);
 }
 
+/* Read new console bytes without holding the worker lock during file I/O. */
+/* Читает новые байты консоли без удержания блокировки во время чтения файла. */
+static gboolean simulation_refresh_console(gpointer data)
+{
+    WaveSimulation *run = data;
+    g_mutex_lock(&run->lock);
+    gchar *path = g_strdup(run->live_log);
+    gboolean running = run->live_process != NULL;
+    g_mutex_unlock(&run->lock);
+    if (!path)
+        return G_SOURCE_CONTINUE;
+
+    GFile *file = g_file_new_for_path(path);
+    g_free(path);
+    GFileInputStream *stream = g_file_read(file, NULL, NULL);
+    g_object_unref(file);
+    if (!stream)
+        return G_SOURCE_CONTINUE;
+
+    gchar bytes[8192];
+    gssize count = 0;
+    if (g_seekable_seek(G_SEEKABLE(stream), run->read_offset, G_SEEK_SET, NULL, NULL))
+        count = g_input_stream_read(G_INPUT_STREAM(stream), bytes, sizeof bytes, NULL, NULL);
+    g_object_unref(stream);
+    if (count > 0)
+    {
+        run->read_offset += count;
+        run->prompt_tail[0] = count > 1 ? bytes[count - 2] : run->prompt_tail[1];
+        run->prompt_tail[1] = bytes[count - 1];
+        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->console));
+        gint excess = gtk_text_buffer_get_char_count(buffer) - 65536;
+        GtkTextIter end;
+        if (excess > 0)
+        {
+            GtkTextIter first, limit;
+            gtk_text_buffer_get_start_iter(buffer, &first);
+            gtk_text_buffer_get_iter_at_offset(buffer, &limit, excess);
+            gtk_text_buffer_delete(buffer, &first, &limit);
+        }
+        gchar *valid = g_utf8_make_valid(bytes, count);
+        gtk_text_buffer_get_end_iter(buffer, &end);
+        gtk_text_buffer_insert(buffer, &end, valid, -1);
+        gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(run->console), &end, 0, FALSE, 0, 0);
+        g_free(valid);
+    }
+    gtk_widget_set_sensitive(run->live_controls, running && run->prompt_tail[0] == '>' &&
+                             run->prompt_tail[1] == ' ');
+    return G_SOURCE_CONTINUE;
+}
+
+/* Send a fixed debugger command only once for each vvp prompt. */
+/* Отправляет фиксированную команду отладки один раз на приглашение vvp. */
+static void simulation_send_command(GtkButton *button, gpointer data)
+{
+    WaveSimulation *run = data;
+    const gchar *command = g_object_get_data(G_OBJECT(button), "vvp-command");
+    g_mutex_lock(&run->lock);
+    GSubprocess *process = run->live_process ? g_object_ref(run->live_process) : NULL;
+    g_mutex_unlock(&run->lock);
+    if (!process)
+        return;
+
+    run->prompt_tail[0] = run->prompt_tail[1] = 0;
+    gtk_widget_set_sensitive(run->live_controls, FALSE);
+    GOutputStream *input = g_subprocess_get_stdin_pipe(process);
+    g_output_stream_write_all(input, command, strlen(command), NULL, NULL, NULL);
+    g_object_unref(process);
+}
+
 /* Close the progress dialog and show either the capture or the diagnostic. */
 /* Закрывает диалог выполнения и показывает диаграмму либо диагностику. */
 static void simulation_done(GObject *object, GAsyncResult *result, gpointer data)
@@ -1125,6 +1251,11 @@ static void simulation_done(GObject *object, GAsyncResult *result, gpointer data
     GtkWindow *parent = g_weak_ref_get(&run->parent);
     GError *error = NULL;
     Capture *capture = g_task_propagate_pointer(task, &error);
+    if (run->refresh_source)
+    {
+        g_source_remove(run->refresh_source);
+        run->refresh_source = 0;
+    }
     gtk_widget_destroy(run->dialog);
     if (capture && parent)
         show_capture(parent, capture, NULL, run->navigate);
@@ -1150,10 +1281,23 @@ static void simulation_cancel(GtkDialog *dialog, gint response, gpointer data)
     g_cancellable_cancel(data);
 }
 
+/* Stop polling before GTK destroys the console widgets. */
+/* Прекращает опрос до уничтожения виджетов консоли GTK. */
+static void simulation_dialog_destroy(GtkWidget *dialog, gpointer data)
+{
+    (void)dialog;
+    WaveSimulation *run = data;
+    if (run->refresh_source)
+    {
+        g_source_remove(run->refresh_source);
+        run->refresh_source = 0;
+    }
+}
+
 /* Launch Icarus and open the resulting VCD on completion. */
 /* Запускает Icarus и открывает полученный VCD после завершения. */
 void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar *include_dir,
-                                const gchar *const *sources, InsightWaveSource navigate)
+                                const gchar *const *sources, gboolean interactive, InsightWaveSource navigate)
 {
 #ifdef G_OS_WIN32
     const gchar *compiler_name = "iverilog.exe", *runtime_name = "vvp.exe";
@@ -1175,6 +1319,8 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
 
     WaveSimulation *run = g_new0(WaveSimulation, 1);
     g_weak_ref_init(&run->parent, parent);
+    g_mutex_init(&run->lock);
+    run->interactive = interactive;
     run->compiler = compiler;
     run->runtime = runtime;
     run->include_dir = g_strdup(include_dir);
@@ -1184,11 +1330,38 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "_Cancel", GTK_RESPONSE_CANCEL, NULL);
     g_object_ref_sink(run->dialog);
-    GtkWidget *label = gtk_label_new("Compiling and running the Verilog testbench…");
-    gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(run->dialog))), label, FALSE, FALSE, 12);
+    GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(run->dialog));
+    GtkWidget *label = gtk_label_new(interactive ?
+        "Compiling. Controls become available when vvp is paused." :
+        "Compiling and running the Verilog testbench…");
+    gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 12);
+    if (interactive)
+    {
+        gtk_window_set_default_size(GTK_WINDOW(run->dialog), 680, 400);
+        run->console = gtk_text_view_new();
+        gtk_text_view_set_monospace(GTK_TEXT_VIEW(run->console), TRUE);
+        gtk_text_view_set_editable(GTK_TEXT_VIEW(run->console), FALSE);
+        GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+        gtk_container_add(GTK_CONTAINER(scroll), run->console);
+        gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
+        run->live_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        gtk_box_pack_start(GTK_BOX(box), run->live_controls, FALSE, FALSE, 6);
+        const gchar *labels[] = {"Step Event", "Continue", "Time", "Scope", "List", "Finish"};
+        const gchar *commands[] = {"step\n", "cont\n", "time\n", "where\n", "list\n", "finish\n"};
+        for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
+        {
+            GtkWidget *button = gtk_button_new_with_label(labels[i]);
+            g_object_set_data(G_OBJECT(button), "vvp-command", (gpointer)commands[i]);
+            g_signal_connect(button, "clicked", G_CALLBACK(simulation_send_command), run);
+            gtk_box_pack_start(GTK_BOX(run->live_controls), button, FALSE, FALSE, 0);
+        }
+        gtk_widget_set_sensitive(run->live_controls, FALSE);
+        run->refresh_source = g_timeout_add(100, simulation_refresh_console, run);
+    }
 
     GCancellable *cancel = g_cancellable_new();
     g_signal_connect_object(run->dialog, "response", G_CALLBACK(simulation_cancel), cancel, 0);
+    g_signal_connect(run->dialog, "destroy", G_CALLBACK(simulation_dialog_destroy), run);
     g_signal_connect_object(run->dialog, "destroy", G_CALLBACK(g_cancellable_cancel), cancel, G_CONNECT_SWAPPED);
     GTask *task = g_task_new(NULL, cancel, simulation_done, NULL);
     g_task_set_task_data(task, run, simulation_free);

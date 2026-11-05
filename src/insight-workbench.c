@@ -4511,9 +4511,9 @@ static void waveforms_menu(GtkMenuItem *item,gpointer data) {
 static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
 {
     (void)item;
-    (void)data;
+    gboolean interactive = GPOINTER_TO_INT(data);
     GtkWindow *parent = GTK_WINDOW(main_widgets.window);
-    GtkWidget *chooser = gtk_file_chooser_dialog_new("Run Verilog Testbench", parent,
+    GtkWidget *chooser = gtk_file_chooser_dialog_new(interactive ? "Debug Verilog Testbench" : "Run Verilog Testbench", parent,
         GTK_FILE_CHOOSER_ACTION_OPEN, "_Cancel", GTK_RESPONSE_CANCEL, "_Run", GTK_RESPONSE_ACCEPT, NULL);
     GtkFileChooser *files = GTK_FILE_CHOOSER(chooser);
     gtk_file_chooser_set_select_multiple(files, TRUE);
@@ -4564,7 +4564,7 @@ static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
             gchar *prefix = g_path_get_dirname(share);
             gchar *bin = g_build_filename(prefix, "bin", NULL);
             insight_waveforms_simulate(parent, bin, root, (const gchar *const *)sources->pdata,
-                                        waveform_source);
+                                        interactive, waveform_source);
             g_free(bin);
             g_free(prefix);
             g_free(share);
@@ -8962,6 +8962,10 @@ static void create_native_lua(void) {
  gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu), simulation);
  g_signal_connect(simulation, "activate", G_CALLBACK(waveform_run_simulation), NULL);
  gtk_widget_show(simulation);
+ GtkWidget *debug_simulation = gtk_menu_item_new_with_label(insight_tr("Debug Verilog Testbench…"));
+ gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu), debug_simulation);
+ g_signal_connect(debug_simulation, "activate", G_CALLBACK(waveform_run_simulation), GINT_TO_POINTER(1));
+ gtk_widget_show(debug_simulation);
  GtkWidget *syntax=gtk_menu_item_new_with_label(insight_tr("Check Lua/Python Syntax"));
  g_signal_connect(syntax,"activate",G_CALLBACK(script_check_start),NULL);
  gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu),syntax);
