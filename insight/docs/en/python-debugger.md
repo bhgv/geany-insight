@@ -5,7 +5,7 @@ The debugger runs a snapshot of the current buffer, including unsaved changes,
 in a separate Python 3 process. Set `GEANY_INSIGHT_PYTHON` to select an
 interpreter. The original file is used as `__file__`, and its directory is
 available for imports. The program runs normally, so it can modify files and
-have other side effects. The **Console** tab shows Python's text output from stdout and stderr. Interactive input to the debugged program is unavailable.
+have other side effects. The **Console** tab shows Python's text output from stdout and stderr. When the program calls `input()` or `sys.stdin.readline()`, **Console** opens and accepts a line with **Enter**, including an empty line. **Send EOF** ends text input for the current run.
 
 ## Source controls
 
@@ -16,6 +16,8 @@ the original snapshot. **Go to Source** opens the line when the editor buffer
 still matches the snapshot. The current file is the default entry point. Use **Scripts → Debug Python File…** to choose another. With a project open, the debugger follows runtime calls into files under its base directory. **Breakpoints in File…** lets you choose a file and set breakpoints before execution reaches it. Breakpoints are stored per file. The entry and edited open project modules run from snapshots. An imported module must already exist on disk to be found by the normal import search. Python loads other modules normally. Restart keeps the captured snapshots and clears the console.
 
 ## Values and watch graph
+
+While paused, hover over the base name in `items[3]` or `config["name"]` to inspect the item when it is present in the graph snapshot. This supports simple unescaped string keys and nonnegative decimal indices without calling `__getitem__`.
 
 While paused, hover over a variable name in the source pane to see a local or
 global value in the current frame. **Stack and locals** shows the call stack.

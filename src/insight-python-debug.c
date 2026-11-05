@@ -168,6 +168,8 @@ gint insight_python_debug_parse(const gchar *packet, gsize length, unsigned long
     }
     if (!strcmp(packet, "D"))
         return 0;
+    if (!strcmp(packet, "I"))
+        return 3;
 
     gchar **fields = g_strsplit(packet, "\t", -1);
     guint count = g_strv_length(fields);

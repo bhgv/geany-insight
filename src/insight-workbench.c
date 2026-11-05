@@ -4955,6 +4955,8 @@ typedef struct {
     gchar *python_stack;
     GHashTable *python_overlays;
     GtkWidget *python_console;
+    GtkWidget *python_input_row;
+    GtkWidget *python_input_entry;
     gsize python_console_bytes;
     guint64 python_request;
     gboolean python;
@@ -5884,6 +5886,52 @@ static void debug_python_append_output(ScriptDebugWindow *view, const gchar *tex
     g_free(valid);
 }
 
+/* Send a line or end-of-file to the waiting Python program. */
+/* Передаёт строку или конец файла ожидающей программе Python. */
+static void debug_python_submit_input(ScriptDebugWindow *view, gboolean eof)
+{
+    if (!view->python_engine || !gtk_widget_get_sensitive(view->python_input_row))
+        return;
+
+    GString *command = g_string_new(eof ? "eof" : "input ");
+    if (!eof)
+    {
+        const gchar *text = gtk_entry_get_text(GTK_ENTRY(view->python_input_entry));
+        for (const guchar *byte = (const guchar *)text; *byte; byte++)
+            g_string_append_printf(command, "%02x", (guint)*byte);
+    }
+    g_string_append_c(command, '\n');
+
+    GError *error = NULL;
+    if (insight_python_debug_send(view->python_engine, command->str, &error))
+    {
+        gtk_entry_set_text(GTK_ENTRY(view->python_input_entry), "");
+        gtk_widget_set_sensitive(view->python_input_row, FALSE);
+        if (view->python_running)
+            gtk_label_set_text(GTK_LABEL(view->status), "Python is running");
+    }
+    else
+        gtk_label_set_text(GTK_LABEL(view->status), error ? error->message : "Cannot send Python input");
+    g_clear_error(&error);
+    g_string_free(command, TRUE);
+}
+
+/* Submit the console entry when the user presses Enter. */
+/* Отправляет строку консоли по клавише Enter. */
+static void debug_python_input_enter(GtkEntry *entry, gpointer data)
+{
+    (void)entry;
+    debug_python_submit_input(data, FALSE);
+}
+
+/* Close Python text input for the current run. */
+/* Завершает текстовый ввод Python в текущем запуске. */
+static void debug_python_input_eof(GtkButton *button, gpointer data)
+{
+    (void)button;
+    debug_python_submit_input(data, TRUE);
+}
+
 /* Receive a Python stop packet without keeping a closed window alive. */
 /* Получает пакет остановки Python, не удерживая закрытое окно. */
 static void debug_python_received(GObject *object, GAsyncResult *result, gpointer data)
@@ -5904,9 +5952,19 @@ static void debug_python_received(GObject *object, GAsyncResult *result, gpointe
         gchar *message = NULL;
         InsightLuaWatchGraph *graph = NULL;
         gint status = insight_python_debug_parse(packet, length, &line, &filename, &stack, &graph, &message);
-        if (status == 2 && !error)
+        if ((status == 2 || status == 3) && !error)
         {
-            debug_python_append_output(view, message);
+            if (status == 2)
+                debug_python_append_output(view, message);
+            else
+            {
+                GtkWidget *page = gtk_widget_get_parent(view->python_input_row);
+                GtkNotebook *notebook = GTK_NOTEBOOK(gtk_widget_get_parent(page));
+                gtk_notebook_set_current_page(notebook, gtk_notebook_page_num(notebook, page));
+                gtk_widget_set_sensitive(view->python_input_row, TRUE);
+                gtk_widget_grab_focus(view->python_input_entry);
+                gtk_label_set_text(GTK_LABEL(view->status), "Python is waiting for input");
+            }
             keep_reading = TRUE;
             g_data_input_stream_read_line_async(G_DATA_INPUT_STREAM(object), G_PRIORITY_DEFAULT,
                                                  NULL, debug_python_received, reply);
@@ -5914,6 +5972,8 @@ static void debug_python_received(GObject *object, GAsyncResult *result, gpointe
         else
         {
             view->python_running = FALSE;
+            if (status != 1 || error)
+                gtk_widget_set_sensitive(view->python_input_row, FALSE);
             g_free(view->python_stack);
             g_free(view->python_graph);
             view->python_stack = g_steal_pointer(&stack);
@@ -6139,6 +6199,11 @@ static void debug_cancel_execution(ScriptDebugWindow *view)
 {
     view->python_running = FALSE;
     view->python_request++;
+    if (view->python_input_row)
+    {
+        gtk_widget_set_sensitive(view->python_input_row, FALSE);
+        gtk_entry_set_text(GTK_ENTRY(view->python_input_entry), "");
+    }
     if (view->execution_source)
     {
         g_source_remove(view->execution_source);
@@ -6544,6 +6609,65 @@ static gint debug_hover_value(const InsightLuaWatchGraph *graph, const gchar *pa
     return node;
 }
 
+/* Resolve literal Python subscriptions using only the paused watch graph. */
+/* Разрешает индексы и строковые ключи Python по снимку графа. */
+static gint debug_hover_python_items(const InsightLuaWatchGraph *graph, gint node,
+                                    const gchar *source, gsize length, gsize *end)
+{
+    while (*end < length && source[*end] == '[')
+    {
+        gsize cursor = *end + 1;
+        if (cursor == length)
+            break;
+
+        gchar quote = source[cursor];
+        gboolean string_key = quote == '\'' || quote == '"';
+        gsize key_start = cursor + (string_key ? 1 : 0);
+        cursor = key_start;
+        if (string_key)
+        {
+            while (cursor < length && source[cursor] != quote &&
+                   source[cursor] >= ' ' && source[cursor] <= '~' &&
+                   source[cursor] != '\\' && source[cursor] != '"')
+                cursor++;
+        }
+        else
+        {
+            while (cursor < length && g_ascii_isdigit(source[cursor]))
+                cursor++;
+        }
+
+        gsize key_length = cursor - key_start;
+        if (key_length > 32 || (!string_key && (!key_length ||
+            (key_length > 1 && source[key_start] == '0'))))
+            break;
+        if (string_key && (cursor == length || source[cursor++] != quote))
+            break;
+        if (cursor == length || source[cursor] != ']')
+            break;
+
+        gchar opening = string_key ? '"' : '[';
+        gchar closing = string_key ? '"' : ']';
+        gint child = -1;
+        for (guint i = 0; i < graph->edge_count; i++)
+        {
+            const InsightLuaWatchEdge *edge = &graph->edges[i];
+            if (edge->from == (guint)node && strlen(edge->label) == key_length + 2 &&
+                edge->label[0] == opening && edge->label[key_length + 1] == closing &&
+                !memcmp(edge->label + 1, source + key_start, key_length))
+            {
+                child = (gint)edge->to;
+                break;
+            }
+        }
+        if (child < 0)
+            break;
+        node = child;
+        *end = cursor + 1;
+    }
+    return node;
+}
+
 /* Show a paused value over an identifier in the numbered source view. */
 /* Показывает значение на паузе при наведении на идентификатор исходника. */
 static gboolean debug_source_tooltip(GtkWidget *widget, gint x, gint y, gboolean keyboard,
@@ -6597,7 +6721,10 @@ static gboolean debug_source_tooltip(GtkWidget *widget, gint x, gint y, gboolean
     if (node < 0)
         return FALSE;
 
-    gchar *text = g_strdup_printf("%.*s = %s", (gint)(end - start), mask + start,
+    if (view->python)
+        node = debug_hover_python_items(view->watch_graph, node, view->display_source, source_length, &end);
+
+    gchar *text = g_strdup_printf("%.*s = %s", (gint)(end - start), view->display_source + start,
                                   view->watch_graph->nodes[node].value);
     gchar *valid = g_utf8_make_valid(text, -1);
     gtk_tooltip_set_text(tooltip, valid);
@@ -6870,7 +6997,20 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     {
         GtkWidget *console_pane = gtk_paned_new(GTK_ORIENTATION_VERTICAL);
         view->python_console = debug_create_view(console_pane, TRUE);
-        gtk_notebook_append_page(GTK_NOTEBOOK(inspection), console_pane, gtk_label_new("Console"));
+        GtkWidget *console_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+        gtk_box_pack_start(GTK_BOX(console_page), console_pane, TRUE, TRUE, 0);
+        view->python_input_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+        view->python_input_entry = gtk_entry_new();
+        gtk_entry_set_placeholder_text(GTK_ENTRY(view->python_input_entry), "Python input (Enter to send)");
+        gtk_entry_set_max_length(GTK_ENTRY(view->python_input_entry), 1024);
+        GtkWidget *eof = gtk_button_new_with_label("Send EOF");
+        gtk_box_pack_start(GTK_BOX(view->python_input_row), view->python_input_entry, TRUE, TRUE, 0);
+        gtk_box_pack_start(GTK_BOX(view->python_input_row), eof, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(console_page), view->python_input_row, FALSE, FALSE, 0);
+        g_signal_connect(view->python_input_entry, "activate", G_CALLBACK(debug_python_input_enter), view);
+        g_signal_connect(eof, "clicked", G_CALLBACK(debug_python_input_eof), view);
+        gtk_widget_set_sensitive(view->python_input_row, FALSE);
+        gtk_notebook_append_page(GTK_NOTEBOOK(inspection), console_page, gtk_label_new("Console"));
     }
     gtk_paned_set_position(GTK_PANED(pane), 535);
     gchar *numbered = debug_number_source(view->source_snapshot, view->source_length,

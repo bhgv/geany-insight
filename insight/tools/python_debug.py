@@ -146,7 +146,7 @@ class WatchSnapshot:
 
 # Read control commands in parallel so Pause can interrupt a Python loop.
 # Читает команды параллельно, чтобы Pause мог остановить цикл Python.
-def read_commands(descriptor, commands):
+def read_commands(descriptor, commands, input_lines):
     pending = b""
     while True:
         chunk = os.read(descriptor, 4096)
@@ -155,7 +155,17 @@ def read_commands(descriptor, commands):
         lines = (pending + chunk).split(b"\n")
         pending = lines.pop()
         for line in lines:
-            commands.put(line.decode("ascii", errors="replace").rstrip("\r"))
+            command = line.decode("ascii", errors="replace").rstrip("\r")
+            if command.startswith("input "):
+                try:
+                    input_lines.put(bytes.fromhex(command[6:]).decode("utf-8") + "\n")
+                except ValueError:
+                    input_lines.put(None)
+            elif command == "eof":
+                input_lines.put(None)
+            else:
+                commands.put(command)
+    input_lines.put(None)
     commands.put("quit")
 
 
@@ -386,6 +396,42 @@ class DebugConsole(io.TextIOBase):
             self.protocol.console(text)
         return len(text)
 
+class DebugInput(io.TextIOBase):
+    # Connect Python text input to the editor console.
+    # Подключает текстовый ввод Python к консоли редактора.
+    def __init__(self, protocol, lines):
+        self.protocol = protocol
+        self.lines = lines
+        self.pending = ""
+        self.eof = False
+        self.lock = threading.Lock()
+
+    # Report support for text input.
+    # Сообщает о поддержке текстового ввода.
+    def readable(self):
+        return True
+
+    # Request a line when buffered text is exhausted.
+    # Запрашивает строку, когда буфер ввода пуст.
+    def readline(self, size=-1):
+        with self.lock:
+            if self.closed:
+                raise ValueError("I/O operation on closed stream")
+            if size == 0 or self.eof:
+                return ""
+            if not self.pending:
+                self.protocol.write("I\n")
+                line = self.lines.get()
+                if line is None:
+                    self.eof = True
+                    return ""
+                self.pending = line
+            if size < 0:
+                size = len(self.pending)
+            text, self.pending = self.pending[:size], self.pending[size:]
+            return text
+
+
 # Execute the buffer in a separate process; keep script output off the protocol.
 # Выполняет буфер в отдельном процессе и отделяет его вывод от протокола.
 def main():
@@ -395,9 +441,11 @@ def main():
     console = DebugConsole(output)
     sys.stdout = sys.__stdout__ = console
     sys.stderr = sys.__stderr__ = console
-    sys.stdin = open(os.devnull, "r")
     commands = queue.Queue()
-    reader = threading.Thread(target=read_commands, args=(control.fileno(), commands), daemon=True)
+    input_lines = queue.Queue()
+    sys.stdin = sys.__stdin__ = DebugInput(output, input_lines)
+    reader = threading.Thread(target=read_commands,
+                              args=(control.fileno(), commands, input_lines), daemon=True)
     reader.start()
     debugger = Debugger(filename, project_root, commands, output)
     try:
