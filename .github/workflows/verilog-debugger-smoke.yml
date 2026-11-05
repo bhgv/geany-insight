@@ -20,6 +20,8 @@ on:
       - 'insight/patches/geany-vvp.patch'
       - 'insight/tests/waveform-debug/**'
       - 'src/insight-waveforms.*'
+      - 'src/insight-workbench.c'
+      - 'insight/desktop/slang_completion.c'
       - 'external/slang-compat/**'
 
 permissions:
