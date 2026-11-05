@@ -152,6 +152,34 @@ static gboolean fail_timeout(gpointer data)
 {
     (void)data;
     g_printerr("Verilog debugger GTK test timed out at phase %u\n", (guint)phase);
+    GList *windows = gtk_window_list_toplevels();
+    for (GList *entry = windows; entry; entry = entry->next)
+    {
+        GtkWidget *window = entry->data;
+        if (!gtk_widget_get_visible(window))
+            continue;
+        const gchar *title = gtk_window_get_title(GTK_WINDOW(window));
+        g_printerr("Visible window: %s\n", title ? title : "(untitled)");
+        if (GTK_IS_MESSAGE_DIALOG(window))
+        {
+            gchar *message = NULL, *details = NULL;
+            g_object_get(window, "text", &message, "secondary-text", &details, NULL);
+            g_printerr("%s\n%s\n", message ? message : "", details ? details : "");
+            g_free(message);
+            g_free(details);
+        }
+        GtkWidget *console = find_control(window, "console");
+        if (console)
+        {
+            GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(console));
+            GtkTextIter first, last;
+            gtk_text_buffer_get_bounds(buffer, &first, &last);
+            gchar *text = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
+            g_printerr("Console:\n%s\n", text);
+            g_free(text);
+        }
+    }
+    g_list_free(windows);
     exit(1);
 }
 

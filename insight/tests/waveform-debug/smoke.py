@@ -122,7 +122,7 @@ def check_source_steps(compiler, runtime, fixtures, directory, environment):
 # RU: Проверяем условную остановку установленного моста до присваивания.
 def check_breakpoint(compiler, runtime, fixtures, directory, environment):
     source = fixtures / "counter.v"
-    target = [number for number, line in enumerate(source.read_text().splitlines(), 1)
+    target = [number for number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), 1)
               if "count <= count + 1'b1;" in line]
     require(len(target) == 1, "Could not identify the counter assignment")
     line = target[0]
@@ -351,7 +351,7 @@ def main():
         directory = logs / name
         try:
             check(directory)
-        except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+        except (OSError, UnicodeError, RuntimeError, subprocess.SubprocessError) as error:
             failed = True
             print(f"{name}: {error}. See {directory}", flush=True)
         else:
