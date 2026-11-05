@@ -1178,6 +1178,8 @@ typedef struct {
     gboolean bridge_ready, pause_requested;
     gboolean source_step_ready, processes_ready;
     GtkWidget *process_controls, *process_number;
+    GtkWidget *frame_controls, *frame_depth, *memory_word;
+    gboolean frames_ready;
     GtkWidget *source_step_controls;
     GString *protocol_line;
     GHashTable *breakpoints, *point_anchors;
@@ -1804,6 +1806,8 @@ static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsi
         if (run->protocol_line->len && run->protocol_line->str[run->protocol_line->len - 1] == '\r')
             g_string_truncate(run->protocol_line, run->protocol_line->len - 1);
         const gchar *text = run->protocol_line->str;
+        if (strstr(text, "GEANY-VVP-FRAMES"))
+            run->frames_ready = TRUE;
         if (strstr(text, "GEANY-VVP-PROCESSES"))
             run->processes_ready = TRUE;
         if (strstr(text, "GEANY-VVP-SOURCE-STEP"))
@@ -1999,6 +2003,7 @@ static gboolean simulation_refresh_console(gpointer data)
     gtk_widget_set_sensitive(run->breakpoint_controls, run->bridge_ready);
     gtk_widget_set_sensitive(run->source_step_controls, run->source_step_ready);
     gtk_widget_set_sensitive(run->process_controls, run->processes_ready);
+    gtk_widget_set_sensitive(run->frame_controls, run->frames_ready);
     if (paused && run->pause_requested)
     {
         gchar *directory = simulation_live_directory(run);
@@ -2229,14 +2234,59 @@ static void simulation_select_process(GtkButton *button, gpointer data)
     g_free(command);
 }
 
+/* Accept simple identifiers that can be sent as one simulator argument. */
+/* Принимает простые имена, которые передаются одним аргументом симулятора. */
+static gboolean simulation_simple_name(const gchar *name)
+{
+    return (g_ascii_isalpha(*name) || *name == '_' || *name == '$') &&
+        strspn(name, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_$") == strlen(name);
+}
+
+/* Change the inspection frame while retaining the process for stepping. */
+/* Меняет кадр просмотра, сохраняя процесс для пошагового выполнения. */
+static void simulation_select_frame(GtkButton *button, gpointer data)
+{
+    (void)button;
+    WaveSimulation *run = data;
+    gint depth = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(run->frame_depth));
+    gchar *command = g_strdup_printf("geany-select-frame %d\n", depth);
+    simulation_write_command(run, command);
+    g_free(command);
+}
+
+/* Send a validated memory name and signed word index to the paused bridge. */
+/* Передаёт проверенное имя памяти и знаковый индекс остановленному мосту. */
+static void simulation_read_memory_word(GtkButton *button, gpointer data)
+{
+    (void)button;
+    WaveSimulation *run = data;
+    const gchar *text = gtk_entry_get_text(GTK_ENTRY(run->memory_word));
+    const gchar *opening = strchr(text, '[');
+    const gchar *closing = opening ? strchr(opening + 1, ']') : NULL;
+    if (!closing || closing[1])
+        return;
+
+    gchar *name = g_strndup(text, opening - text);
+    gchar *index_text = g_strndup(opening + 1, closing - opening - 1);
+    gint64 index;
+    if (simulation_simple_name(name) &&
+        g_ascii_string_to_signed(index_text, 10, G_MININT, G_MAXINT, &index, NULL))
+    {
+        gchar *command = g_strdup_printf("geany-read-memory %s %" G_GINT64_FORMAT "\n", name, index);
+        simulation_write_command(run, command);
+        g_free(command);
+    }
+    g_free(index_text);
+    g_free(name);
+}
+
 /* Query a simple signal or enter one scope in the current simulator context. */
 /* Запрашивает простой сигнал или входит в область текущего контекста симулятора. */
 static void simulation_inspect_name(GtkButton *button, gpointer data)
 {
     WaveSimulation *run = data;
     const gchar *name = gtk_entry_get_text(GTK_ENTRY(run->signal_name));
-    if ((!g_ascii_isalpha(*name) && *name != '_' && *name != '$') ||
-        strspn(name, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_$") != strlen(name))
+    if (!simulation_simple_name(name))
     {
         GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->console));
         GtkTextIter end;
@@ -2606,6 +2656,21 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         g_signal_connect(process_values, "clicked", G_CALLBACK(simulation_send_command), run);
         gtk_box_pack_start(GTK_BOX(run->process_controls), process_values, FALSE, FALSE, 0);
         gtk_widget_set_sensitive(run->process_controls, FALSE);
+        run->frame_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        gtk_box_pack_start(GTK_BOX(run->live_controls), run->frame_controls, FALSE, FALSE, 0);
+        run->frame_depth = gtk_spin_button_new_with_range(0, 63, 1);
+        gtk_box_pack_start(GTK_BOX(run->frame_controls), run->frame_depth, FALSE, FALSE, 0);
+        GtkWidget *frame = gtk_button_new_with_label("Select Frame");
+        g_signal_connect(frame, "clicked", G_CALLBACK(simulation_select_frame), run);
+        gtk_box_pack_start(GTK_BOX(run->frame_controls), frame, FALSE, FALSE, 0);
+        run->memory_word = gtk_entry_new();
+        gtk_entry_set_max_length(GTK_ENTRY(run->memory_word), 128);
+        gtk_entry_set_placeholder_text(GTK_ENTRY(run->memory_word), "memory[index]");
+        gtk_box_pack_start(GTK_BOX(run->frame_controls), run->memory_word, TRUE, TRUE, 0);
+        GtkWidget *memory = gtk_button_new_with_label("Read Memory Word");
+        g_signal_connect(memory, "clicked", G_CALLBACK(simulation_read_memory_word), run);
+        gtk_box_pack_start(GTK_BOX(run->frame_controls), memory, FALSE, FALSE, 0);
+        gtk_widget_set_sensitive(run->frame_controls, FALSE);
         GtkWidget *inspection = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
         gtk_box_pack_start(GTK_BOX(run->live_controls), inspection, FALSE, FALSE, 0);
         run->signal_name = gtk_entry_new();
