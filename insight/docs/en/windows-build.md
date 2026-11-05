@@ -143,3 +143,10 @@ Both `./build.sh --backend meson ...` and `./build.sh --backend autotools ...` b
 ```
 
 `--install` stages the console tool under `libexec/geany-insight/slang`, and the adapted static C++ SDK (headers, libraries, pkg-config file, licenses) under `lib/geany-insight/slang`. This supplies the engine; the editor's HDL semantic navigation/completion integration remains separate work. See [slang compatibility](slang.md).
+
+## Build log
+
+The editor build prints to the console and writes a copy to `logs\build-*.log`
+under the selected `RootDir`. The log includes the source revision. On failure,
+setup repeats the first `FAILED:` entry and the first recognized compiler or linker
+error when available, and prints the path to the full log.

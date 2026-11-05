@@ -4649,7 +4649,7 @@ static void native_project_update(GObject *object,GKeyFile *config,gpointer data
  if(!GPOINTER_TO_INT(data) && config && wb.membership_valid) { GError *error=NULL; if(!insight_project_files_write(wb.membership,config,utf8,&error)) ui_set_statusbar(TRUE,"Cannot save project membership: %s",error ? error->message : "invalid rules"); g_clear_error(&error); }
  g_free(root); g_free(utf8);
 }
-static void membership_apply_snapshot(const InsightProjectFiles *candidate,const gchar *root) {
+static void membership_apply(const InsightProjectFiles *candidate,const gchar *root) {
  insight_scroll_links_membership(candidate,root);if(wb.usage_idle || wb.search_worker) { stop_usage(); gtk_label_set_text(GTK_LABEL(wb.search_status),"Project files changed; run the search again"); } insight_project_files_free(wb.membership); wb.membership=insight_project_files_clone(candidate); wb.membership_valid=TRUE;wb.membership_generation++; start_scan(wb.root); files_filter(NULL,NULL);
 }
 static gboolean membership_store(const InsightProjectFiles *candidate) {
@@ -4663,7 +4663,7 @@ static gboolean membership_store(const InsightProjectFiles *candidate) {
  if(ok) ok=g_key_file_load_from_file(config,filename,G_KEY_FILE_KEEP_COMMENTS,&error);
  if(ok) {ok=insight_project_files_write(candidate,config,root,&error);if(ok && insight_git_active()) g_key_file_set_boolean(config,"insight-project-files","manual-selection",TRUE);}
  if(ok) { gsize length; gchar *data=g_key_file_to_data(config,&length,&error); ok=data!=NULL && length<=8*1024*1024; if(!ok && !error) g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Project configuration exceeds 8 MiB"); if(ok) ok=g_file_replace_contents(file,data,length,NULL,FALSE,G_FILE_CREATE_PRIVATE,NULL,NULL,&error); g_free(data); }
- if(ok) { if(insight_git_active()) wb.git_manual=TRUE; membership_apply_snapshot(candidate,root); }
+ if(ok) { if(insight_git_active()) wb.git_manual=TRUE; membership_apply(candidate,root); }
  else ui_set_statusbar(TRUE,"Project files not changed: %s",error ? error->message : "cannot save configuration");
  g_clear_error(&error); g_key_file_unref(config); g_object_unref(file); g_free(filename); g_free(root); return ok;
 }
@@ -9803,7 +9803,7 @@ static void vivado_synchronize(GtkMenuItem *item,gpointer data) {
   gchar *root=project_get_base_path();
   hdl_cancel_colors();
   wb.force_parse=TRUE;
-  membership_apply_snapshot(policy,root);
+  membership_apply(policy,root);
   insight_master_sync_set(wb.master_sync,app->project->file_name,root,wb.membership);
   hdl_schedule_colors();
   g_free(root);

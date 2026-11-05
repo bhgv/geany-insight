@@ -40,6 +40,7 @@ From a repository checkout: build.cmd -BuildEditor
 Default: show the location chooser, then install/update MSYS2 UCRT64 and Meson build tools for internal Clang.
 -FetchSources also clones the editor and initializes external/llvm-project.
 -Jobs defaults to 0 (automatic); pass a positive value to set the build job limit.
+-BuildEditor saves build output under RootDir\logs and prints the log path.
 -Plan prints the download/package plan without changing anything.
 Close other MSYS2 processes before running. Existing MSYS2 receives a full update.
 No Visual Studio, WSL, global PATH or machine execution-policy changes are needed.
@@ -109,7 +110,7 @@ if ($MsysRoot -notmatch '^[A-Za-z]:\\[A-Za-z0-9_\\.\-]+$') {
 }
 $MsysRoot = [IO.Path]::GetFullPath($MsysRoot).TrimEnd('\')
 $bash = Join-Path $MsysRoot 'usr\bin\bash.exe'
-$envNames = @('MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_MIRROR','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL','INSIGHT_BOOTSTRAP_INSTALL','INSIGHT_BOOTSTRAP_PROVIDER','INSIGHT_BOOTSTRAP_JOBS')
+$envNames = @('MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_MIRROR','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL','INSIGHT_BOOTSTRAP_INSTALL','INSIGHT_BOOTSTRAP_PROVIDER','INSIGHT_BOOTSTRAP_JOBS','INSIGHT_BOOTSTRAP_BUILD_LOG')
 $previous = @{}
 foreach ($name in $envNames) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 function Wait-InsightProcess([Diagnostics.Process]$Child, [string]$Stage) {
@@ -330,15 +331,41 @@ git -C "$source_dir" rev-parse HEAD
         Write-Host "[Build] Clang provider: $ClangProvider; building slang and Geany Insight for $InstallDir"
         $env:INSIGHT_BOOTSTRAP_INSTALL=$InstallDir
         $env:INSIGHT_BOOTSTRAP_PROVIDER=$ClangProvider.ToLowerInvariant()
-        $null = Invoke-Msys -Stage 'Clang, slang and editor build' -Script @'
+        $logDirectory = Join-Path $RootDir 'logs'
+        New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
+        $buildLog = Join-Path $logDirectory ('build-{0:yyyyMMdd-HHmmssfff}-{1}.log' -f (Get-Date), $PID)
+        $env:INSIGHT_BOOTSTRAP_BUILD_LOG = [IO.Path]::GetFullPath($buildLog)
+        Write-Host "[Build log] $buildLog"
+        try {
+            $null = Invoke-Msys -Stage 'Clang, slang and editor build' -Script @'
+set -u
+log_file=$(cygpath -u "$INSIGHT_BOOTSTRAP_BUILD_LOG") || exit 1
+(
 set -euo pipefail
 cd "$(cygpath -u "$INSIGHT_BOOTSTRAP_SOURCE")"
+printf '[Source revision] %s\n' "$(git rev-parse HEAD)"
 export CC=gcc CXX=g++
 export NINJA_STATUS='[ %f/%t %p ] '
 install_dir=$(cygpath -m "$INSIGHT_BOOTSTRAP_INSTALL")
 python3 insight/tools/build_editor.py --backend meson --jobs "$INSIGHT_BOOTSTRAP_JOBS" --clang-provider "$INSIGHT_BOOTSTRAP_PROVIDER" --prefix "$install_dir" --install -- --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
 python3 insight/tools/bundle_windows_dependencies.py --installed-editor --package "$install_dir" --sdk "$(cygpath -m /ucrt64)"
+) 2>&1 | tee -- "$log_file"
+statuses=("${PIPESTATUS[@]}")
+if (( statuses[0] != 0 )); then
+    exit "${statuses[0]}"
+fi
+exit "${statuses[1]}"
 '@
+        } catch {
+            if (Test-Path -LiteralPath $buildLog) {
+                $firstFailure = Select-String -LiteralPath $buildLog -Pattern '^\s*FAILED:' | Select-Object -First 1
+                $firstError = Select-String -LiteralPath $buildLog -Pattern '(?:fatal error:|\berror:|undefined reference|cannot find -l)' |
+                    Select-Object -First 1
+                if ($firstFailure) { Write-Host "[First failed command] $($firstFailure.Line.Trim())" }
+                if ($firstError) { Write-Host "[First build error] $($firstError.Line.Trim())" }
+            }
+            throw "Build failed. Build log: $buildLog. $($_.Exception.Message)"
+        }
     }
     Write-Host "Editor sources: $SourceDir"
     Write-Host "Editor installation: $InstallDir"
