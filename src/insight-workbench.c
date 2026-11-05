@@ -4971,6 +4971,7 @@ typedef struct {
     GHashTable *lua_modules;
     gsize lua_module_bytes;
     GtkWidget *file_breakpoint_button;
+    GtkWidget *breakpoint_list_button;
     GtkWidget *window;
     GtkWidget *source_view;
     GtkWidget *stack_view;
@@ -5567,6 +5568,8 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
     gtk_widget_set_sensitive(view->breakpoints, TRUE);
     if (view->file_breakpoint_button)
         gtk_widget_set_sensitive(view->file_breakpoint_button, TRUE);
+    if (view->breakpoint_list_button)
+        gtk_widget_set_sensitive(view->breakpoint_list_button, TRUE);
     view->watch_graph = NULL;
     if (result == 1)
         view->watch_graph = view->python ? view->python_graph : insight_lua_debug_watch_graph(view->engine);
@@ -6273,6 +6276,8 @@ static void debug_window_step(ScriptDebugWindow *view, InsightLuaStep mode)
     gtk_widget_set_sensitive(view->breakpoints, FALSE);
     if (view->file_breakpoint_button)
         gtk_widget_set_sensitive(view->file_breakpoint_button, FALSE);
+    if (view->breakpoint_list_button)
+        gtk_widget_set_sensitive(view->breakpoint_list_button, FALSE);
     gtk_widget_set_sensitive(view->stop, TRUE);
     gtk_widget_set_sensitive(view->pause, TRUE);
     gtk_label_set_text(GTK_LABEL(view->status), view->python ? "Python script running…" : "Lua script running…");
@@ -6423,6 +6428,8 @@ static void debug_stop(GtkButton *button, gpointer data)
     gtk_widget_set_sensitive(view->breakpoints, TRUE);
     if (view->file_breakpoint_button)
         gtk_widget_set_sensitive(view->file_breakpoint_button, TRUE);
+    if (view->breakpoint_list_button)
+        gtk_widget_set_sensitive(view->breakpoint_list_button, TRUE);
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source_view));
     GtkTextIter first, last;
     gtk_text_buffer_get_bounds(buffer, &first, &last);
@@ -6937,6 +6944,165 @@ static void debug_breakpoints_in_file(GtkButton *button, gpointer data)
     g_free(filename);
 }
 
+/* Open the current editor text at a saved breakpoint line. */
+/* Открывает текущий текст редактора на строке сохранённой точки останова. */
+static void debug_open_breakpoint(ScriptDebugWindow *view, const gchar *filename, gint line)
+{
+    GeanyDocument *document = NULL;
+    if (!g_path_is_absolute(filename))
+        document = document_find_by_id(view->document_id);
+    else
+    {
+        document = document_find_by_filename(filename);
+        if (!DOC_VALID(document))
+        {
+            gchar *locale_path = utils_get_locale_from_utf8(filename);
+            if (locale_path)
+                document = document_open_file(locale_path, FALSE, NULL, NULL);
+            g_free(locale_path);
+        }
+    }
+    if (!DOC_VALID(document) || line > sci_get_line_count(document->editor->sci))
+    {
+        gtk_label_set_text(GTK_LABEL(view->status), "The breakpoint line is unavailable in the editor.");
+        return;
+    }
+    navqueue_goto_line(document_get_current(), document, line);
+    document_grab_focus(document);
+    gtk_window_present(GTK_WINDOW(main_widgets.window));
+}
+
+/* Remove one line while retaining every other breakpoint in the file. */
+/* Удаляет одну строку, сохраняя остальные точки останова в файле. */
+static void debug_remove_breakpoint(ScriptDebugWindow *view, const gchar *filename, guint line)
+{
+    const gchar *saved = g_hash_table_lookup(view->file_breakpoints, filename);
+    unsigned long lines[128];
+    gsize count = 0;
+    if (!saved || !debug_parse_breakpoints(saved, lines, &count))
+        return;
+
+    GString *remaining = g_string_new(NULL);
+    for (gsize i = 0; i < count; i++)
+    {
+        if (lines[i] == line)
+            continue;
+        if (remaining->len)
+            g_string_append(remaining, ", ");
+        g_string_append_printf(remaining, "%lu", lines[i]);
+    }
+    debug_store_file_breakpoints(view, filename, remaining->str);
+    if (debug_same_file(view->display_filename, filename))
+        gtk_entry_set_text(GTK_ENTRY(view->breakpoints), remaining->str);
+    g_string_free(remaining, TRUE);
+}
+
+/* Fill the breakpoint list from the current debugger's file map. */
+/* Заполняет список точек останова из карты файлов текущего отладчика. */
+static guint debug_fill_breakpoint_list(ScriptDebugWindow *view, GtkListStore *store)
+{
+    gtk_list_store_clear(store);
+    GHashTableIter files;
+    gpointer filename, saved;
+    guint total = 0;
+    g_hash_table_iter_init(&files, view->file_breakpoints);
+    while (g_hash_table_iter_next(&files, &filename, &saved))
+    {
+        unsigned long lines[128];
+        gsize count = 0;
+        if (!debug_parse_breakpoints(saved, lines, &count))
+            continue;
+
+        for (gsize i = 0; i < count; i++)
+        {
+            GtkTreeIter row;
+            gtk_list_store_insert_with_values(store, &row, -1, 0, filename, 1, (guint)lines[i], -1);
+            total++;
+        }
+    }
+    return total;
+}
+
+/* Open the selected row when the user activates it with Enter or double-click. */
+/* Открывает выбранную строку по Enter или двойному щелчку. */
+static void debug_activate_breakpoint(GtkTreeView *tree, GtkTreePath *path,
+                                      GtkTreeViewColumn *column, gpointer data)
+{
+    (void)tree;
+    (void)path;
+    (void)column;
+    gtk_dialog_response(GTK_DIALOG(data), GTK_RESPONSE_ACCEPT);
+}
+
+/* Browse, open and remove breakpoints across all files in the current session. */
+/* Показывает точки останова во всех файлах и позволяет открывать и удалять их. */
+static void debug_list_breakpoints(GtkButton *button, gpointer data)
+{
+    (void)button;
+    ScriptDebugWindow *view = data;
+    if (debug_is_running(view))
+        return;
+
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Breakpoints", GTK_WINDOW(view->window),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE,
+        "_Remove", GTK_RESPONSE_APPLY, "_Open Source", GTK_RESPONSE_ACCEPT, NULL);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 700, 350);
+    GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    GtkWidget *summary = gtk_label_new(NULL);
+    gtk_box_pack_start(GTK_BOX(box), summary, FALSE, FALSE, 6);
+    GtkListStore *store = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_UINT);
+    GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
+    GtkTreeViewColumn *file_column = gtk_tree_view_column_new_with_attributes(
+        "File", gtk_cell_renderer_text_new(), "text", 0, NULL);
+    GtkTreeViewColumn *line_column = gtk_tree_view_column_new_with_attributes(
+        "Line", gtk_cell_renderer_text_new(), "text", 1, NULL);
+    gtk_tree_view_column_set_resizable(file_column, TRUE);
+    gtk_tree_view_column_set_sort_column_id(file_column, 0);
+    gtk_tree_view_column_set_sort_column_id(line_column, 1);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(tree), file_column);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(tree), line_column);
+    gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(store), 0, GTK_SORT_ASCENDING);
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(scroll), tree);
+    gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
+    g_signal_connect(tree, "row-activated", G_CALLBACK(debug_activate_breakpoint), dialog);
+    gtk_widget_show_all(dialog);
+
+    gchar *filename = NULL;
+    guint line = 0;
+    for (;;)
+    {
+        guint total = debug_fill_breakpoint_list(view, store);
+        gchar *label = g_strdup_printf("Breakpoints: %u / 128", total);
+        gtk_label_set_text(GTK_LABEL(summary), label);
+        g_free(label);
+        GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(tree));
+        GtkTreePath *first = gtk_tree_path_new_from_indices(0, -1);
+        gtk_tree_view_set_cursor(GTK_TREE_VIEW(tree), first, NULL, FALSE);
+        gtk_tree_path_free(first);
+        gtk_dialog_set_response_sensitive(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT, total > 0);
+        gtk_dialog_set_response_sensitive(GTK_DIALOG(dialog), GTK_RESPONSE_APPLY, total > 0);
+        gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+        if (response != GTK_RESPONSE_ACCEPT && response != GTK_RESPONSE_APPLY)
+            break;
+
+        GtkTreeIter row;
+        if (!gtk_tree_selection_get_selected(selection, NULL, &row))
+            continue;
+        gtk_tree_model_get(GTK_TREE_MODEL(store), &row, 0, &filename, 1, &line, -1);
+        if (response == GTK_RESPONSE_ACCEPT)
+            break;
+
+        debug_remove_breakpoint(view, filename, line);
+        g_clear_pointer(&filename, g_free);
+    }
+    gtk_widget_destroy(dialog);
+    g_object_unref(store);
+    if (filename)
+        debug_open_breakpoint(view, filename, (gint)line);
+    g_free(filename);
+}
+
 /* Capture the active script buffer and open the selected debugger. */
 /* Сохраняет снимок буфера и открывает выбранный отладчик. */
 static void debug_current_script(GtkMenuItem *item, gpointer data)
@@ -7088,6 +7254,9 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     g_signal_connect(view->file_breakpoint_button, "clicked",
                      G_CALLBACK(debug_breakpoints_in_file), view);
     gtk_box_pack_start(GTK_BOX(breakpoint_row), view->file_breakpoint_button, FALSE, FALSE, 0);
+    view->breakpoint_list_button = gtk_button_new_with_label("All Breakpoints…");
+    g_signal_connect(view->breakpoint_list_button, "clicked", G_CALLBACK(debug_list_breakpoints), view);
+    gtk_box_pack_start(GTK_BOX(breakpoint_row), view->breakpoint_list_button, FALSE, FALSE, 0);
     GtkWidget *pane = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     gtk_box_pack_start(GTK_BOX(box), pane, TRUE, TRUE, 0);
     view->source_view = debug_create_view(pane, TRUE);
