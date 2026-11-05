@@ -83,6 +83,21 @@ card. `watch(name, nil)` removes it. Values can be numbers, strings or Booleans.
 An observer can publish up to 16 cards within the graph's overall size limit.
 Names can contain up to 63 bytes.
 
+### Conditional breakpoints on a specific line
+
+While paused, **Shift-click** a line number in the debugger's source pane.
+Enter a Lua expression such as `event.locals.counter == 10` and choose **Apply**.
+An empty expression matches every visit. The threshold counts **matching** visits.
+The point acts on the threshold match and every later match. **Log hits and continue**
+writes the file, line and hit count to **Observer log** and keeps running.
+Other breakpoints and step commands can still stop execution.
+
+An ochre line number marks a conditional point. It takes precedence over an
+ordinary breakpoint on the same line. **Shift-click** it again to edit the rule,
+or choose **Remove Rule** to restore normal behavior for the line. A debugger window
+can hold up to 32 rules. Rules last until the window closes. Restarting or applying
+changes to a rule or observer resets the counters.
+
 ### Observer files
 
 In **Conditions and Script…**, choose **Load Lua…** to load a `.lua` file into

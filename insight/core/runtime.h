@@ -86,6 +86,7 @@ typedef struct {
     unsigned long line;
     const InsightObserverValue *values;
     size_t count;
+    const char *file_key;
 } InsightObserverEvent;
 /* Dispatch a copied event. Return 1 to stop, 0 to continue, -1 on callback error. */
 int insight_lua_debug_observe(InsightLuaDebug *, const InsightObserverEvent *);

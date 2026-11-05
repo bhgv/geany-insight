@@ -4949,6 +4949,14 @@ static void script_check_start(GtkMenuItem *item,gpointer data) {
  g_object_unref(task);
 }
 typedef struct {
+    gchar *filename;
+    gchar *expression;
+    unsigned long line;
+    guint minimum_hits;
+    gboolean log_only;
+} DebugConditionalPoint;
+
+typedef struct {
     InsightLuaDebug *engine;
     InsightPythonDebug *python_engine;
     InsightLuaWatchGraph *python_graph;
@@ -4967,6 +4975,7 @@ typedef struct {
     gchar *display_source;
     gsize display_length;
     GHashTable *file_breakpoints;
+    GHashTable *conditional_points;
     gchar *breakpoint_settings_path;
     GHashTable *lua_modules;
     gsize lua_module_bytes;
@@ -5005,6 +5014,7 @@ typedef struct {
     gsize pending_breakpoint_count;
     GtkTextTag *current_line_tag;
     GtkTextTag *breakpoint_tag;
+    GtkTextTag *conditional_point_tag;
     gchar *source_snapshot;
     gchar *source_code_mask;
     GArray *source_line_offsets;
@@ -5039,6 +5049,7 @@ static void debug_window_free(gpointer data)
     g_free(view->display_filename);
     g_free(view->display_source);
     g_hash_table_unref(view->file_breakpoints);
+    g_hash_table_unref(view->conditional_points);
     g_free(view->breakpoint_settings_path);
     g_free(view->stop_condition);
     g_free(view->observer_source);
@@ -5602,6 +5613,7 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
 }
 
 static gboolean debug_show_script_file(ScriptDebugWindow *view, const gchar *filename);
+static void debug_mark_breakpoints(GtkEditable *entry, gpointer data);
 
 /* Execute one VM slice and return control to GTK between slices. */
 /* Выполняет одну порцию VM и возвращает управление GTK между порциями. */
@@ -5643,7 +5655,7 @@ static gchar *debug_file_key(const gchar *filename)
 {
     if (!filename || *filename == '<')
         return g_strdup(filename ? filename : "<buffer>");
-    gchar *path = g_canonicalize_filename(filename, NULL);
+    gchar *path = insight_canonicalize_filename(filename, NULL);
 #ifdef G_OS_WIN32
     gchar *folded = g_utf8_strdown(path, -1);
     g_free(path);
@@ -5651,6 +5663,37 @@ static gchar *debug_file_key(const gchar *filename)
 #else
     return path;
 #endif
+}
+
+/* Free the condition and source identity stored for one point. */
+/* Освобождает условие и имя исходника одной точки. */
+static void debug_conditional_point_free(gpointer data)
+{
+    DebugConditionalPoint *point = data;
+    g_free(point->filename);
+    g_free(point->expression);
+    g_free(point);
+}
+
+/* Build an unambiguous key from a normalized filename and a line number. */
+/* Создаёт однозначный ключ из нормализованного имени файла и номера строки. */
+static gchar *debug_conditional_point_key(const gchar *filename, unsigned long line)
+{
+    return g_strdup_printf("%lu:%s", line, filename);
+}
+
+/* Suppress a plain breakpoint when a conditional point overrides that line. */
+/* Пропускает обычную точку, если на этой строке есть условная точка. */
+static gboolean debug_has_conditional_point(const ScriptDebugWindow *view, const gchar *filename,
+                                            unsigned long line)
+{
+    InsightLuaDebug *observer = view->python ? view->python_observer : view->engine;
+    if (!insight_lua_debug_observer_active(observer) || !g_hash_table_size(view->conditional_points))
+        return FALSE;
+    gchar *key = debug_conditional_point_key(filename, line);
+    gboolean found = g_hash_table_contains(view->conditional_points, key);
+    g_free(key);
+    return found;
 }
 
 /* Read the language's breakpoints for the active project or standalone files. */
@@ -5955,6 +5998,7 @@ static gboolean debug_show_script_file(ScriptDebugWindow *view, const gchar *fil
     gchar *key = debug_file_key(filename);
     const gchar *breakpoints = g_hash_table_lookup(view->file_breakpoints, key);
     gtk_entry_set_text(GTK_ENTRY(view->breakpoints), breakpoints ? breakpoints : "");
+    debug_mark_breakpoints(GTK_EDITABLE(view->breakpoints), view);
     g_free(key);
     return source != NULL;
 }
@@ -6114,8 +6158,13 @@ static gboolean debug_python_observer_event(ScriptDebugWindow *view, const gchar
                         .number = tag[1] == 'f' ? g_ascii_strtod(value, NULL) : 0
                     };
                 }
-                InsightObserverEvent event = {fields[1], file, name, (unsigned long)line, values, used};
+                gchar *file_key = debug_file_key(file);
+                InsightObserverEvent event = {
+                    .kind = fields[1], .file = file, .name = name, .line = (unsigned long)line,
+                    .values = values, .count = used, .file_key = file_key
+                };
                 decision = insight_lua_debug_observe(view->python_observer, &event);
+                g_free(file_key);
                 for (guint i = 0; i < used; i++)
                 {
                     g_free((gchar *)values[i].name);
@@ -6225,11 +6274,24 @@ static void debug_python_step(ScriptDebugWindow *view)
             return;
         }
         for (gsize i = 0; i < count; i++)
-            debug_append_file_breakpoint(command, filename, lines[i]);
+            if (!debug_has_conditional_point(view, filename, lines[i]))
+                debug_append_file_breakpoint(command, filename, lines[i]);
         total += (guint)count;
     }
     if (insight_lua_debug_observer_active(view->python_observer))
+    {
         g_string_append(command, " observe");
+        GHashTableIter points;
+        gpointer value;
+        g_hash_table_iter_init(&points, view->conditional_points);
+        while (g_hash_table_iter_next(&points, NULL, &value))
+        {
+            const DebugConditionalPoint *point = value;
+            g_string_append(command, " trace:");
+            for (const guchar *byte = (const guchar *)point->filename; *byte; byte++)
+                g_string_append_printf(command, "%02x", (guint)*byte);
+        }
+    }
     if (command->len > 64 * 1024)
     {
         g_string_free(command, TRUE);
@@ -6373,6 +6435,8 @@ static void debug_window_step(ScriptDebugWindow *view, InsightLuaStep mode)
             }
             for (gsize i = 0; i < count; i++)
             {
+                if (debug_has_conditional_point(view, filename, lines[i]))
+                    continue;
                 InsightLuaBreakpoint point = {filename, lines[i]};
                 view->pending_lua_breakpoints[view->pending_breakpoint_count++] = point;
             }
@@ -6459,12 +6523,50 @@ static void debug_window_action(GtkButton *button, gpointer data)
     debug_window_step(data, mode);
 }
 
+/* Quote a filename byte for Lua without letting a path become source code. */
+/* Экранирует байты имени файла, чтобы путь не стал кодом Lua. */
+static void debug_append_lua_filename(GString *program, const gchar *filename)
+{
+    g_string_append_c(program, '"');
+    for (const guchar *byte = (const guchar *)filename; *byte; byte++)
+        g_string_append_printf(program, "\\%03u", (guint)*byte);
+    g_string_append_c(program, '"');
+}
+
+/* Compile the breakpoint expressions and keep separate hit counts per point. */
+/* Компилирует условия точек и ведёт отдельный счётчик каждой точки. */
+static void debug_append_conditional_points(GString *program, GHashTable *points)
+{
+    g_string_append(program, "local points = {}\n");
+    GHashTableIter iter;
+    gpointer value;
+    g_hash_table_iter_init(&iter, points);
+    while (g_hash_table_iter_next(&iter, NULL, &value))
+    {
+        const DebugConditionalPoint *point = value;
+        g_string_append(program, "do\nlocal file = ");
+        debug_append_lua_filename(program, point->filename);
+        g_string_append_printf(program,
+            "\npoints[file] = points[file] or {}\n"
+            "local hits = 0\npoints[file][%lu] = function(event)\n"
+            "  if (%s\n) ~= true then return false end\n"
+            "  hits = hits + 1\n"
+            "  if hits < %u then return false end\n",
+            point->line, point->expression, point->minimum_hits);
+        if (point->log_only)
+            g_string_append(program, "  log(event.file .. ':' .. event.line .. ' hit ' .. hits)\n  return false\n");
+        else
+            g_string_append(program, "  return true\n");
+        g_string_append(program, "end\nend\n");
+    }
+}
+
 /* Combine the optional line condition with a stateful Lua observer. */
 /* Объединяет условие остановки на строке со сценарием Lua, сохраняющим состояние. */
 static gboolean debug_apply_lua_observer(InsightLuaDebug *engine, const gchar *condition,
-                                        const gchar *source, gchar *error, gsize capacity)
+                                        const gchar *source, GHashTable *points, gchar *error, gsize capacity)
 {
-    if ((!condition || !*condition) && (!source || !*source))
+    if ((!condition || !*condition) && (!source || !*source) && !g_hash_table_size(points))
         return insight_lua_debug_set_observer(engine, NULL, 0, error, capacity);
 
     GString *program = g_string_new("local observer\n");
@@ -6475,8 +6577,15 @@ static gboolean debug_apply_lua_observer(InsightLuaDebug *engine, const gchar *c
         g_string_append(program, "\nend)()\n"
             "if type(observer) ~= 'function' then error('Observer must return a function') end\n");
     }
+    debug_append_conditional_points(program, points);
     g_string_append(program, "return function(event)\n"
-        "  if observer and observer(event) == true then return true end\n");
+        "  local stop = observer and observer(event) == true\n"
+        "  if event.kind == 'line' then\n"
+        "    local file_points = points[event.file_key]\n"
+        "    local point = file_points and file_points[event.line]\n"
+        "    if point and point(event) then stop = true end\n"
+        "  end\n"
+        "  if stop then return true end\n");
     if (condition && *condition)
         g_string_append_printf(program, "  if event.kind == 'line' then return (%s\n) == true end\n", condition);
     g_string_append(program, "end\n");
@@ -6488,9 +6597,9 @@ static gboolean debug_apply_lua_observer(InsightLuaDebug *engine, const gchar *c
 /* Configure the common observer for a Python session or clear it. */
 /* Настраивает общий обработчик для сеанса Python или отключает его. */
 static gboolean debug_apply_python_observer(InsightLuaDebug **observer, const gchar *condition,
-                                           const gchar *source, gchar *error, gsize capacity)
+                                           const gchar *source, GHashTable *points, gchar *error, gsize capacity)
 {
-    if ((!condition || !*condition) && (!source || !*source))
+    if ((!condition || !*condition) && (!source || !*source) && !g_hash_table_size(points))
     {
         g_clear_pointer(observer, insight_lua_debug_free);
         return TRUE;
@@ -6502,7 +6611,7 @@ static gboolean debug_apply_python_observer(InsightLuaDebug **observer, const gc
         g_strlcpy(error, "Cannot allocate debugger observer", capacity);
         return FALSE;
     }
-    if (!debug_apply_lua_observer(engine, condition, source, error, capacity))
+    if (!debug_apply_lua_observer(engine, condition, source, points, error, capacity))
     {
         if (!*observer)
             insight_lua_debug_free(engine);
@@ -6528,7 +6637,7 @@ static void debug_restart(GtkButton *button, gpointer data)
         python_replacement = debug_new_python_engine(view->source_filename, view->project_root, view->source_snapshot,
                                                      view->source_length, view->python_overlays, &python_error);
         if (python_replacement && !debug_apply_python_observer(&observer_replacement, view->stop_condition,
-                                                               view->observer_source, error, sizeof error))
+                                                               view->observer_source, view->conditional_points, error, sizeof error))
             g_clear_pointer(&python_replacement, insight_python_debug_free);
     }
     else
@@ -6539,7 +6648,7 @@ static void debug_restart(GtkButton *button, gpointer data)
         g_free(filename);
         insight_lua_debug_set_module_loader(lua_replacement, debug_lua_resolve_module, view);
         if (lua_replacement && !debug_apply_lua_observer(lua_replacement, view->stop_condition,
-                                                       view->observer_source, error, sizeof error))
+                                                       view->observer_source, view->conditional_points, error, sizeof error))
             g_clear_pointer(&lua_replacement, insight_lua_debug_free);
     }
     if (!lua_replacement && !python_replacement)
@@ -6647,11 +6756,12 @@ static void debug_mark_breakpoints(GtkEditable *entry, gpointer data)
     GtkTextIter first, last;
     gtk_text_buffer_get_bounds(buffer, &first, &last);
     gtk_text_buffer_remove_tag(buffer, view->breakpoint_tag, &first, &last);
+    gtk_text_buffer_remove_tag(buffer, view->conditional_point_tag, &first, &last);
 
     unsigned long lines[128];
     gsize count = 0;
     if (!debug_parse_breakpoints(gtk_entry_get_text(GTK_ENTRY(entry)), lines, &count))
-        return;
+        count = 0;
 
     guint line_count = (guint)gtk_text_buffer_get_line_count(buffer);
     for (gsize i = 0; i < count; i++)
@@ -6663,6 +6773,21 @@ static void debug_mark_breakpoints(GtkEditable *entry, gpointer data)
         gtk_text_iter_forward_chars(&last, 7);
         gtk_text_buffer_apply_tag(buffer, view->breakpoint_tag, &first, &last);
     }
+    gchar *filename = debug_file_key(view->display_filename);
+    GHashTableIter points;
+    gpointer value;
+    g_hash_table_iter_init(&points, view->conditional_points);
+    while (g_hash_table_iter_next(&points, NULL, &value))
+    {
+        const DebugConditionalPoint *point = value;
+        if (point->line > line_count || strcmp(point->filename, filename))
+            continue;
+        gtk_text_buffer_get_iter_at_line(buffer, &first, (gint)point->line - 1);
+        last = first;
+        gtk_text_iter_forward_chars(&last, 7);
+        gtk_text_buffer_apply_tag(buffer, view->conditional_point_tag, &first, &last);
+    }
+    g_free(filename);
 }
 
 /* Persist valid edits immediately, including edits made before the first step. */
@@ -6672,6 +6797,119 @@ static void debug_breakpoint_entry_changed(GtkEditable *entry, gpointer data)
     ScriptDebugWindow *view = data;
     debug_store_file_breakpoints(view, view->display_filename, gtk_entry_get_text(GTK_ENTRY(entry)));
     debug_mark_breakpoints(entry, data);
+}
+
+/* Apply a point edit transactionally so a bad expression keeps the old rule. */
+/* Применяет правку точки так, чтобы ошибка в условии сохранила прежнее правило. */
+static gboolean debug_set_conditional_point(ScriptDebugWindow *view, const gchar *key,
+                                            DebugConditionalPoint *point, gchar *error, gsize capacity)
+{
+    gpointer old_key = NULL;
+    gpointer old_point = NULL;
+    if (g_hash_table_lookup_extended(view->conditional_points, key, &old_key, &old_point))
+        g_hash_table_steal(view->conditional_points, key);
+    if (point)
+        g_hash_table_insert(view->conditional_points, g_strdup(key), point);
+
+    gboolean applied = view->python ?
+        debug_apply_python_observer(&view->python_observer, view->stop_condition, view->observer_source,
+                                    view->conditional_points, error, capacity) :
+        debug_apply_lua_observer(view->engine, view->stop_condition, view->observer_source,
+                                 view->conditional_points, error, capacity);
+    if (!applied)
+    {
+        g_hash_table_remove(view->conditional_points, key);
+        if (old_key)
+            g_hash_table_insert(view->conditional_points, old_key, old_point);
+        return FALSE;
+    }
+    g_free(old_key);
+    if (old_point)
+        debug_conditional_point_free(old_point);
+    return TRUE;
+}
+
+/* Edit the expression, hit threshold and action of a point on this line. */
+/* Настраивает условие, порог срабатываний и действие точки на этой строке. */
+static void debug_edit_conditional_point(ScriptDebugWindow *view, unsigned long line)
+{
+    gchar *filename = debug_file_key(view->display_filename);
+    gchar *key = debug_conditional_point_key(filename, line);
+    const DebugConditionalPoint *saved = g_hash_table_lookup(view->conditional_points, key);
+    if (!saved && g_hash_table_size(view->conditional_points) >= 32)
+    {
+        gtk_label_set_text(GTK_LABEL(view->status), "The debugger supports up to 32 conditional points.");
+        g_free(key);
+        g_free(filename);
+        return;
+    }
+
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Conditional Breakpoint", GTK_WINDOW(view->window),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
+        "_Remove Rule", GTK_RESPONSE_REJECT, "_Apply", GTK_RESPONSE_ACCEPT, NULL);
+    gtk_dialog_set_response_sensitive(GTK_DIALOG(dialog), GTK_RESPONSE_REJECT, saved != NULL);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 540, -1);
+    GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gchar *location = g_strdup_printf("%s:%lu", filename, line);
+    GtkWidget *label = gtk_label_new(location);
+    g_free(location);
+    gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_MIDDLE);
+    gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 4);
+    GtkWidget *entry = gtk_entry_new();
+    gtk_entry_set_max_length(GTK_ENTRY(entry), 1024);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(entry), "Lua expression, e.g. event.locals.counter == 10");
+    gtk_entry_set_text(GTK_ENTRY(entry), saved ? saved->expression : "");
+    gtk_box_pack_start(GTK_BOX(box), entry, FALSE, FALSE, 4);
+
+    GtkWidget *threshold = gtk_spin_button_new_with_range(1, 1000000, 1);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(threshold), saved ? saved->minimum_hits : 1);
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_box_pack_start(GTK_BOX(row), gtk_label_new("Start acting after this many matching hits"), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(row), threshold, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), row, FALSE, FALSE, 4);
+    GtkWidget *log_only = gtk_check_button_new_with_label("Log hits and continue");
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(log_only), saved && saved->log_only);
+    gtk_box_pack_start(GTK_BOX(box), log_only, FALSE, FALSE, 4);
+    GtkWidget *status = gtk_label_new(NULL);
+    gtk_label_set_line_wrap(GTK_LABEL(status), TRUE);
+    gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 4);
+    gtk_widget_show_all(dialog);
+
+    for (;;)
+    {
+        gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+        if (response != GTK_RESPONSE_ACCEPT && response != GTK_RESPONSE_REJECT)
+            break;
+        DebugConditionalPoint *point = NULL;
+        if (response == GTK_RESPONSE_ACCEPT)
+        {
+            point = g_new0(DebugConditionalPoint, 1);
+            point->filename = g_strdup(filename);
+            point->line = line;
+            point->expression = g_strdup(gtk_entry_get_text(GTK_ENTRY(entry)));
+            if (!*g_strstrip(point->expression))
+            {
+                g_free(point->expression);
+                point->expression = g_strdup("true");
+            }
+            point->minimum_hits = (guint)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(threshold));
+            point->log_only = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(log_only));
+        }
+        gchar error[1024] = "";
+        if (debug_set_conditional_point(view, key, point, error, sizeof error))
+        {
+            debug_mark_breakpoints(GTK_EDITABLE(view->breakpoints), view);
+            InsightLuaDebug *observer = view->python ? view->python_observer : view->engine;
+            debug_set_text(view->observer_log, insight_lua_debug_observer_log(observer));
+            break;
+        }
+        gchar *message = g_utf8_make_valid(*error ? error : "Cannot configure this point.", -1);
+        gtk_label_set_text(GTK_LABEL(status), message);
+        g_free(message);
+    }
+    gtk_widget_destroy(dialog);
+    g_free(key);
+    g_free(filename);
 }
 
 /* Toggle a breakpoint when the source line number is clicked. */
@@ -6696,6 +6934,13 @@ static gboolean debug_click_line_number(GtkWidget *widget, GdkEventButton *event
         gtk_text_iter_get_line_offset(&location) >= 7)
         return FALSE;
 
+    unsigned long line = (unsigned long)gtk_text_iter_get_line(&location) + 1;
+    if (event->state & GDK_SHIFT_MASK)
+    {
+        debug_edit_conditional_point(view, line);
+        return TRUE;
+    }
+
     unsigned long lines[128];
     gsize count = 0;
     if (!debug_parse_breakpoints(gtk_entry_get_text(GTK_ENTRY(view->breakpoints)), lines, &count))
@@ -6704,7 +6949,6 @@ static gboolean debug_click_line_number(GtkWidget *widget, GdkEventButton *event
         return TRUE;
     }
 
-    unsigned long line = (unsigned long)gtk_text_iter_get_line(&location) + 1;
     if (!debug_toggle_breakpoint(lines, &count, G_N_ELEMENTS(lines), line))
     {
         gtk_label_set_text(GTK_LABEL(view->status), "The debugger supports up to 128 breakpoints.");
@@ -7690,9 +7934,9 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
         if (!valid)
             g_strlcpy(error, "Observer script exceeds 64 KiB", sizeof error);
         else if (view->python)
-            valid = debug_apply_python_observer(&view->python_observer, condition, source, error, sizeof error);
+            valid = debug_apply_python_observer(&view->python_observer, condition, source, view->conditional_points, error, sizeof error);
         else if (view->engine)
-            valid = debug_apply_lua_observer(view->engine, condition, source, error, sizeof error);
+            valid = debug_apply_lua_observer(view->engine, condition, source, view->conditional_points, error, sizeof error);
         if (valid)
         {
             g_free(view->stop_condition);
@@ -7788,6 +8032,7 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     view->python_overlays = python_overlays;
     view->project_root = project_root;
     view->file_breakpoints = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    view->conditional_points = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, debug_conditional_point_free);
     view->lua_modules = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, debug_lua_module_free);
     insight_lua_debug_set_module_loader(lua_engine, debug_lua_resolve_module, view);
     view->watch_paths = g_ptr_array_new_with_free_func(g_free);
@@ -7914,6 +8159,8 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
         "paragraph-background", "#416184", "foreground", "#ffffff", NULL);
     view->breakpoint_tag = gtk_text_buffer_create_tag(buffer, "insight-debug-breakpoint",
         "background", "#962e37", "foreground", "#ffffff", "weight", PANGO_WEIGHT_BOLD, NULL);
+    view->conditional_point_tag = gtk_text_buffer_create_tag(buffer, "insight-debug-conditional",
+        "background", "#805400", "foreground", "#ffffff", "weight", PANGO_WEIGHT_BOLD, NULL);
     g_signal_connect(view->breakpoints, "changed", G_CALLBACK(debug_breakpoint_entry_changed), view);
     debug_mark_breakpoints(GTK_EDITABLE(view->breakpoints), view);
     g_signal_connect(view->source_view, "button-press-event", G_CALLBACK(debug_click_line_number), view);

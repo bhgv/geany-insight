@@ -745,6 +745,8 @@ static int debug_observer_dispatch(lua_State *state)
                    event->event == LUA_HOOKRET ? "return" : "call");
     lua_setfield(state, -2, "kind");
     lua_pushstring(state, event->source + 1);
+    lua_pushvalue(state, -1);
+    lua_setfield(state, -3, "file_key");
     lua_setfield(state, -2, "file");
     lua_pushinteger(state, event->currentline > 0 ? event->currentline : event->linedefined);
     lua_setfield(state, -2, "line");
@@ -806,6 +808,8 @@ static int debug_observer_dispatch_external(lua_State *state)
     lua_setfield(state, -2, "kind");
     lua_pushstring(state, event->file);
     lua_setfield(state, -2, "file");
+    lua_pushstring(state, event->file_key ? event->file_key : event->file);
+    lua_setfield(state, -2, "file_key");
     lua_pushstring(state, event->name);
     lua_setfield(state, -2, "name");
     lua_pushinteger(state, event->line);

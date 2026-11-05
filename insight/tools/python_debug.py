@@ -246,12 +246,18 @@ class Debugger:
             self.mode = fields[0]
             self.depth = depth
             self.breakpoints = set()
-
+            trace_files = set()
             self.observe = False
             self.observer_stop = False
             for value in fields[1:]:
                 if value == "observe":
                     self.observe = True
+                    continue
+                if value.startswith("trace:"):
+                    try:
+                        trace_files.add(self.file_key(bytes.fromhex(value[6:]).decode("utf-8")))
+                    except ValueError:
+                        pass
                     continue
                 path_hex, separator, line = value.partition(":")
                 if not separator or not line.isdecimal():
@@ -261,7 +267,7 @@ class Debugger:
                     self.breakpoints.add((self.file_key(path), int(line)))
                 except (ValueError, UnicodeError):
                     continue
-            self.breakpoint_files = {path for path, _line in self.breakpoints}
+            self.breakpoint_files = trace_files | {path for path, _line in self.breakpoints}
             self.traceable = {self.filename: True}
             return
 
