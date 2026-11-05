@@ -4964,6 +4964,9 @@ typedef struct {
     GtkWidget *watch_only;
     const InsightLuaWatchGraph *watch_graph;
     GPtrArray *watch_paths;
+    GHashTable *watch_previous_values;
+    gboolean watch_changed[INSIGHT_LUA_WATCH_NODES];
+    guint watch_change_count;
     gint watch_selected;
     gint watch_column[INSIGHT_LUA_WATCH_NODES];
     gint watch_row[INSIGHT_LUA_WATCH_NODES];
@@ -5002,6 +5005,7 @@ static void debug_window_free(gpointer data)
     g_free(view->line_buffer);
     g_array_unref(view->line_starts);
     g_ptr_array_unref(view->watch_paths);
+    g_clear_pointer(&view->watch_previous_values, g_hash_table_unref);
     g_free(view);
 }
 
@@ -5154,6 +5158,64 @@ static gint debug_watch_pin_index(const LuaDebugWindow *view, const gchar *path)
     return -1;
 }
 
+/* Sort link descriptions for stable comparisons across stops. */
+/* Сортирует описания связей для стабильного сравнения между остановками. */
+static gint debug_watch_compare_link(gconstpointer left, gconstpointer right)
+{
+    const gchar *const *left_text = left;
+    const gchar *const *right_text = right;
+    return strcmp(*left_text, *right_text);
+}
+
+/* Compare values and direct links with the previous source stop. */
+/* Сравнивает значения и прямые связи с предыдущей остановкой на строке. */
+static void debug_watch_compare(LuaDebugWindow *view)
+{
+    memset(view->watch_changed, 0, sizeof view->watch_changed);
+    view->watch_change_count = 0;
+    const InsightLuaWatchGraph *graph = view->watch_graph;
+    if (!graph)
+        return;
+
+    GHashTable *current = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    for (guint i = 1; i < graph->node_count; i++)
+    {
+        const InsightLuaWatchNode *node = &graph->nodes[i];
+        if (!*node->path)
+            continue;
+
+        /* Order-independent direct links keep Lua table iteration from causing false changes.
+         * Порядок обхода таблицы Lua не должен считаться изменением её связей. */
+        GPtrArray *links = g_ptr_array_new_with_free_func(g_free);
+        for (guint j = 0; j < graph->edge_count; j++)
+        {
+            const InsightLuaWatchEdge *edge = &graph->edges[j];
+            if (edge->from == i)
+                g_ptr_array_add(links, g_strdup_printf("%s\x1e%s\x1e%s", edge->label,
+                    graph->nodes[edge->to].path, graph->nodes[edge->to].value));
+        }
+        g_ptr_array_sort(links, debug_watch_compare_link);
+        GString *signature = g_string_new(node->value);
+        for (guint j = 0; j < links->len; j++)
+        {
+            g_string_append_c(signature, '\x1d');
+            g_string_append(signature, links->pdata[j]);
+        }
+        g_ptr_array_unref(links);
+
+        if (view->watch_previous_values)
+        {
+            const gchar *before = g_hash_table_lookup(view->watch_previous_values, node->path);
+            view->watch_changed[i] = g_strcmp0(before, signature->str) != 0;
+            if (view->watch_changed[i])
+                view->watch_change_count++;
+        }
+        g_hash_table_insert(current, g_strdup(node->path), g_string_free(signature, FALSE));
+    }
+    g_clear_pointer(&view->watch_previous_values, g_hash_table_unref);
+    view->watch_previous_values = current;
+}
+
 /* Lay out reachable nodes by distance from the displayed roots. */
 /* Раскладывает достижимые узлы по расстоянию от отображаемых корней. */
 static void debug_watch_layout(LuaDebugWindow *view)
@@ -5210,8 +5272,8 @@ static void debug_watch_layout(LuaDebugWindow *view)
     gtk_widget_set_sensitive(view->watch_pin, path && *path);
     gtk_button_set_label(GTK_BUTTON(view->watch_pin),
         path && debug_watch_pin_index(view, path) >= 0 ? "Unpin member" : "Pin member");
-    gchar *status = graph ? g_strdup_printf("Pinned: %u   Unavailable: %u%s",
-        view->watch_paths->len, missing, graph->limited ? "   Snapshot limit reached" : "") :
+    gchar *status = graph ? g_strdup_printf("Pinned: %u   Unavailable: %u   Changed: %u%s",
+        view->watch_paths->len, missing, view->watch_change_count, graph->limited ? "   Snapshot limit reached" : "") :
         g_strdup("Pause on a Lua line to inspect values");
     gtk_label_set_text(GTK_LABEL(view->watch_status), status);
     g_free(status);
@@ -5305,7 +5367,10 @@ static gboolean debug_watch_draw(GtkWidget *widget, cairo_t *cr, gpointer data)
         double y = WATCH_MARGIN + view->watch_row[i] * WATCH_ROW_HEIGHT;
         gboolean selected = (gint)i == view->watch_selected;
         gboolean pinned = *node->path && debug_watch_pin_index(view, node->path) >= 0;
-        cairo_set_source_rgb(cr, selected ? .79 : .92, pinned ? .85 : .94, .97);
+        if (view->watch_changed[i])
+            cairo_set_source_rgb(cr, 1., selected ? .78 : .88, .62);
+        else
+            cairo_set_source_rgb(cr, selected ? .79 : .92, pinned ? .85 : .94, .97);
         cairo_rectangle(cr, x, y, WATCH_CARD_WIDTH, WATCH_CARD_HEIGHT);
         cairo_fill_preserve(cr);
         cairo_set_source_rgb(cr, .29, .43, .60);
@@ -5454,6 +5519,7 @@ static void debug_show_result(LuaDebugWindow *view, gint result, unsigned long l
     gtk_widget_set_sensitive(view->step_controls, result == 1);
     gtk_widget_set_sensitive(view->breakpoints, TRUE);
     view->watch_graph = result == 1 ? insight_lua_debug_watch_graph(view->engine) : NULL;
+    debug_watch_compare(view);
     view->watch_selected = -1;
     debug_watch_layout(view);
 }
@@ -5577,6 +5643,7 @@ static void debug_restart(GtkButton *button, gpointer data)
     debug_watch_layout(view);
     insight_lua_debug_free(view->engine);
     view->engine = replacement;
+    g_clear_pointer(&view->watch_previous_values, g_hash_table_unref);
     view->paused_line = 0;
     gtk_widget_set_sensitive(view->go_to_source, FALSE);
     gtk_widget_set_sensitive(view->step_controls, TRUE);
@@ -5898,6 +5965,7 @@ static void debug_current_lua(GtkMenuItem *item, gpointer data)
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
     gtk_container_set_border_width(GTK_CONTAINER(box), 8);
     gtk_container_add(GTK_CONTAINER(view->window), box);
+    insight_panel_help_attach(box, "lua-debugger.md");
     GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     gtk_box_pack_start(GTK_BOX(box), toolbar, FALSE, FALSE, 0);
 

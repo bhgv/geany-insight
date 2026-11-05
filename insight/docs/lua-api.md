@@ -173,6 +173,8 @@ traceback тоже может завершиться ошибкой. Строк�
 
 ## Source debugger
 
+See the [Lua debugger guide](lua-debugger.md), also available from the **?** button in the debugger window.
+
 Open a Lua buffer, then choose **Scripts → Debug Current Lua Buffer…**. The
 debugger takes a snapshot, including unsaved edits, and stops at the first
 executable line. The left pane highlights the current line; the right pane
