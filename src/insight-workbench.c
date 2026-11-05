@@ -4946,157 +4946,314 @@ static void script_check_start(GtkMenuItem *item,gpointer data) {
  g_object_unref(task);
 }
 typedef struct {
- InsightLuaDebug *engine;
- GtkWidget *window,*source,*inspect,*status,*breakpoints,*controls;
- GtkTextTag *current_line;
+    InsightLuaDebug *engine;
+    GtkWidget *window;
+    GtkWidget *source_view;
+    GtkWidget *stack_view;
+    GtkWidget *status;
+    GtkWidget *breakpoints;
+    GtkWidget *step_controls;
+    GtkWidget *go_to_source;
+    GtkTextTag *current_line_tag;
+    gchar *source_snapshot;
+    gsize source_length;
+    guint document_id;
+    unsigned long paused_line;
 } LuaDebugWindow;
-static void debug_window_free(gpointer data) {
- LuaDebugWindow *view=data;
- insight_lua_debug_free(view->engine);
- g_free(view);
+
+/* Release the VM and the source snapshot. */
+/* Освобождает виртуальную машину и снимок исходника. */
+static void debug_window_free(gpointer data)
+{
+    LuaDebugWindow *view = data;
+    insight_lua_debug_free(view->engine);
+    g_free(view->source_snapshot);
+    g_free(view);
 }
-static void debug_text(GtkWidget *view,const gchar *text) {
- gchar *valid=g_utf8_make_valid(text,-1);
- gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)),valid,-1);
- g_free(valid);
+
+/* Display debugger output even if a Lua string contains invalid UTF-8. */
+/* Показывает вывод отладчика, даже если строка Lua содержит некорректный UTF-8. */
+static void debug_set_text(GtkWidget *text_view, const gchar *text)
+{
+    gchar *valid = g_utf8_make_valid(text, -1);
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_view));
+    gtk_text_buffer_set_text(buffer, valid, -1);
+    g_free(valid);
 }
-static gboolean debug_breakpoints(GtkEntry *entry,unsigned long *lines,gsize *count) {
- gchar **words=g_strsplit_set(gtk_entry_get_text(entry),",; \t",-1);
- gboolean ok=TRUE;
- *count=0;
- for(guint i=0; words[i] && ok; i++) {
-  if(!*words[i]) continue;
-  guint64 line=0;
-  ok=*count<128 && g_ascii_string_to_unsigned(words[i],10,1,G_MAXINT,&line,NULL);
-  if(ok) lines[(*count)++]=(unsigned long)line;
- }
- g_strfreev(words);
- return ok;
+
+/* Parse up to 128 one-based breakpoint lines from the entry. */
+/* Разбирает до 128 номеров строк точек останова, начиная с единицы. */
+static gboolean debug_read_breakpoints(GtkEntry *entry, unsigned long *lines, gsize *count)
+{
+    gchar **words = g_strsplit_set(gtk_entry_get_text(entry), ",; \t", -1);
+    gboolean valid = TRUE;
+    *count = 0;
+    for (guint i = 0; words[i] && valid; i++)
+    {
+        if (!*words[i])
+            continue;
+        guint64 line = 0;
+        valid = *count < 128 && g_ascii_string_to_unsigned(words[i], 10, 1, G_MAXINT, &line, NULL);
+        if (valid)
+            lines[(*count)++] = (unsigned long)line;
+    }
+    g_strfreev(words);
+    return valid;
 }
-static void debug_window_step(LuaDebugWindow *view,InsightLuaStep mode) {
- unsigned long breaks[128],line=0;
- gsize count=0;
- if(!debug_breakpoints(GTK_ENTRY(view->breakpoints),breaks,&count)) {
-  gtk_label_set_text(GTK_LABEL(view->status),"Enter up to 128 positive breakpoint line numbers.");
-  return;
- }
- gchar error[1024];
- gint result=insight_lua_debug_resume(view->engine,mode,breaks,count,&line,error,sizeof error);
- GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source));
- GtkTextIter first,last;
- gtk_text_buffer_get_bounds(buffer,&first,&last);
- gtk_text_buffer_remove_tag(buffer,view->current_line,&first,&last);
- if(result==1 && line && line<=(gulong)gtk_text_buffer_get_line_count(buffer)) {
-  gtk_text_buffer_get_iter_at_line(buffer,&first,(gint)line-1);
-  last=first;
-  gtk_text_iter_forward_line(&last);
-  gtk_text_buffer_apply_tag(buffer,view->current_line,&first,&last);
-  gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(view->source),&first,0.15,FALSE,0,0);
-  gchar state[8192];
-  insight_lua_debug_inspect(view->engine,state,sizeof state);
-  debug_text(view->inspect,state);
-  gchar *label=g_strdup_printf("Paused at line %lu",line);
-  gtk_label_set_text(GTK_LABEL(view->status),label);
-  g_free(label);
- } else {
-  gchar *label=result==0 ? g_strdup("Lua script finished") :
-      g_utf8_make_valid(*error ? error : "Lua debugger stopped",-1);
-  gtk_label_set_text(GTK_LABEL(view->status),label);
-  if(result<0) debug_text(view->inspect,label);
-  g_free(label);
-  gtk_widget_set_sensitive(view->controls,FALSE);
- }
+
+/* Resume the VM and update the highlighted source line and stack. */
+/* Продолжает выполнение и обновляет подсветку строки и стек. */
+static void debug_window_step(LuaDebugWindow *view, InsightLuaStep mode)
+{
+    unsigned long breakpoints[128];
+    unsigned long line = 0;
+    gsize breakpoint_count = 0;
+    if (!debug_read_breakpoints(GTK_ENTRY(view->breakpoints), breakpoints, &breakpoint_count))
+    {
+        gtk_label_set_text(GTK_LABEL(view->status), "Enter up to 128 positive breakpoint line numbers.");
+        return;
+    }
+
+    gchar error[1024];
+    gint result = insight_lua_debug_resume(view->engine, mode, breakpoints, breakpoint_count,
+                                          &line, error, sizeof error);
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source_view));
+    GtkTextIter first, last;
+    gtk_text_buffer_get_bounds(buffer, &first, &last);
+    gtk_text_buffer_remove_tag(buffer, view->current_line_tag, &first, &last);
+    view->paused_line = 0;
+
+    if (result == 1 && line > 0 && line <= (gulong)gtk_text_buffer_get_line_count(buffer))
+    {
+        view->paused_line = line;
+        gtk_text_buffer_get_iter_at_line(buffer, &first, (gint)line - 1);
+        last = first;
+        gtk_text_iter_forward_line(&last);
+        gtk_text_buffer_apply_tag(buffer, view->current_line_tag, &first, &last);
+        gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(view->source_view), &first, 0.15, FALSE, 0, 0);
+        gchar state[8192];
+        insight_lua_debug_inspect(view->engine, state, sizeof state);
+        debug_set_text(view->stack_view, state);
+        gchar *label = g_strdup_printf("Paused at line %lu", line);
+        gtk_label_set_text(GTK_LABEL(view->status), label);
+        g_free(label);
+    }
+    else
+    {
+        gchar *label = result == 0 ? g_strdup("Lua script finished") :
+            g_utf8_make_valid(*error ? error : "Lua debugger stopped", -1);
+        gtk_label_set_text(GTK_LABEL(view->status), label);
+        debug_set_text(view->stack_view, result < 0 ? label : "");
+        g_free(label);
+        gtk_widget_set_sensitive(view->step_controls, FALSE);
+    }
+    gtk_widget_set_sensitive(view->go_to_source, view->paused_line > 0);
 }
-static void debug_window_action(GtkButton *button,gpointer data) {
- debug_window_step(data,GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button),"insight-lua-step")));
+
+/* Dispatch the step mode associated with a toolbar button. */
+/* Выбирает режим шага, связанный с кнопкой панели. */
+static void debug_window_action(GtkButton *button, gpointer data)
+{
+    InsightLuaStep mode = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "insight-lua-step"));
+    debug_window_step(data, mode);
 }
-static GtkWidget *debug_view(GtkWidget *pane,gboolean first) {
- GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);
- GtkWidget *text=gtk_text_view_new();
- gtk_text_view_set_monospace(GTK_TEXT_VIEW(text),TRUE);
- gtk_text_view_set_editable(GTK_TEXT_VIEW(text),FALSE);
- gtk_container_add(GTK_CONTAINER(scroll),text);
- if(first) gtk_paned_pack1(GTK_PANED(pane),scroll,TRUE,FALSE);
- else gtk_paned_pack2(GTK_PANED(pane),scroll,TRUE,FALSE);
- return text;
+
+/* Start a fresh VM on the same source snapshot, keeping the breakpoints. */
+/* Создаёт новую виртуальную машину для того же снимка и сохраняет точки останова. */
+static void debug_restart(GtkButton *button, gpointer data)
+{
+    (void)button;
+    LuaDebugWindow *view = data;
+    gchar error[1024];
+    InsightLuaDebug *replacement = insight_lua_debug_new(view->source_snapshot, view->source_length,
+                                                         error, sizeof error);
+    if (!replacement)
+    {
+        gchar *message = g_utf8_make_valid(*error ? error : "Unable to restart Lua debugger", -1);
+        gtk_label_set_text(GTK_LABEL(view->status), message);
+        g_free(message);
+        return;
+    }
+
+    insight_lua_debug_free(view->engine);
+    view->engine = replacement;
+    view->paused_line = 0;
+    gtk_widget_set_sensitive(view->go_to_source, FALSE);
+    gtk_widget_set_sensitive(view->step_controls, TRUE);
+    debug_window_step(view, INSIGHT_LUA_STEP_INTO);
 }
-static void debug_current_lua(GtkMenuItem *item,gpointer data) {
- (void)item;(void)data;
- GeanyDocument *doc=document_get_current();
- if(!DOC_VALID(doc) || !doc->file_type || doc->file_type->lang!=TM_PARSER_LUA) {
-  ui_set_statusbar(TRUE,"Open a Lua file to start the debugger");
-  return;
- }
- gint length=sci_get_length(doc->editor->sci);
- if(length>2*1024*1024) {
-  ui_set_statusbar(TRUE,"Lua debugging supports buffers up to 2 MiB");
-  return;
- }
- gchar *source=sci_get_contents(doc->editor->sci,length+1);
- if(memchr(source,0,length) || !g_utf8_validate(source,length,NULL)) {
-  ui_set_statusbar(TRUE,"Lua debugger requires a UTF-8 text buffer");
-  g_free(source);
-  return;
- }
- gchar error[1024];
- InsightLuaDebug *engine=insight_lua_debug_new(source,length,error,sizeof error);
- if(!engine) {
-  gchar *valid=g_utf8_make_valid(*error ? error : "Unable to start Lua debugger",-1);
-  ui_set_statusbar(TRUE,"%s",valid);
-  g_free(valid);
-  g_free(source);
-  return;
- }
- LuaDebugWindow *view=g_new0(LuaDebugWindow,1);
- view->engine=engine;
- view->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);
- gtk_window_set_title(GTK_WINDOW(view->window),"Lua Source Debugger");
- gtk_window_set_default_size(GTK_WINDOW(view->window),940,520);
- gtk_window_set_transient_for(GTK_WINDOW(view->window),GTK_WINDOW(main_widgets.window));
- gtk_window_set_destroy_with_parent(GTK_WINDOW(view->window),TRUE);
- g_object_set_data_full(G_OBJECT(view->window),"insight-lua-debugger",view,debug_window_free);
- GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,6);
- gtk_container_set_border_width(GTK_CONTAINER(box),8);
- gtk_container_add(GTK_CONTAINER(view->window),box);
- view->controls=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6);
- gtk_box_pack_start(GTK_BOX(box),view->controls,FALSE,FALSE,0);
- const gchar *labels[]={"Step Into","Step Over","Step Out","Continue"};
- for(guint i=0;i<G_N_ELEMENTS(labels);i++) {
-  GtkWidget *button=gtk_button_new_with_label(labels[i]);
-  g_object_set_data(G_OBJECT(button),"insight-lua-step",GINT_TO_POINTER(i));
-  g_signal_connect(button,"clicked",G_CALLBACK(debug_window_action),view);
-  gtk_box_pack_start(GTK_BOX(view->controls),button,FALSE,FALSE,0);
- }
- view->breakpoints=gtk_entry_new();
- gtk_entry_set_placeholder_text(GTK_ENTRY(view->breakpoints),"Breakpoint lines (e.g. 3, 12, 27)");
- gtk_box_pack_start(GTK_BOX(view->controls),view->breakpoints,TRUE,TRUE,0);
- GtkWidget *pane=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
- gtk_box_pack_start(GTK_BOX(box),pane,TRUE,TRUE,0);
- view->source=debug_view(pane,TRUE);
- view->inspect=debug_view(pane,FALSE);
- gtk_paned_set_position(GTK_PANED(pane),535);
- GString *numbered=g_string_sized_new(length+128);
- const gchar *start=source;
- for(guint line=1;;line++) {
-  const gchar *end=strchr(start,'\n');
-  g_string_append_printf(numbered,"%5u  ",line);
-  if(!end) {g_string_append(numbered,start);break;}
-  g_string_append_len(numbered,start,end-start+1);
-  start=end+1;
- }
- debug_text(view->source,numbered->str);
- g_string_free(numbered,TRUE);
- g_free(source);
- GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source));
- view->current_line=gtk_text_buffer_create_tag(buffer,"insight-debug-line",
-     "paragraph-background","#416184","foreground","#ffffff",NULL);
- view->status=gtk_label_new(NULL);
- gtk_label_set_selectable(GTK_LABEL(view->status),TRUE);
- gtk_label_set_ellipsize(GTK_LABEL(view->status),PANGO_ELLIPSIZE_END);
- gtk_box_pack_start(GTK_BOX(box),view->status,FALSE,FALSE,0);
- gtk_widget_show_all(view->window);
- debug_window_step(view,INSIGHT_LUA_STEP_INTO);
+
+/* Navigate only when the editor buffer still matches the debug snapshot. */
+/* Переходит к строке, только если буфер редактора совпадает со снимком отладки. */
+static void debug_go_to_source(GtkButton *button, gpointer data)
+{
+    (void)button;
+    LuaDebugWindow *view = data;
+    GeanyDocument *document = document_find_by_id(view->document_id);
+    if (!view->paused_line || !DOC_VALID(document))
+    {
+        gtk_label_set_text(GTK_LABEL(view->status), "The original Lua buffer is no longer open.");
+        return;
+    }
+
+    gint length = sci_get_length(document->editor->sci);
+    gboolean unchanged = length >= 0 && (gsize)length == view->source_length;
+    if (unchanged)
+    {
+        gchar *text = sci_get_contents(document->editor->sci, length + 1);
+        unchanged = memcmp(text, view->source_snapshot, view->source_length) == 0;
+        g_free(text);
+    }
+    if (!unchanged)
+    {
+        gtk_label_set_text(GTK_LABEL(view->status), "The buffer changed. Start a new debug session to follow it.");
+        return;
+    }
+
+    navqueue_goto_line(document_get_current(), document, (gint)view->paused_line);
+    document_grab_focus(document);
+    gtk_window_present(GTK_WINDOW(main_widgets.window));
 }
+
+/* Build a read-only pane for source or stack information. */
+/* Создаёт панель исходника или стека, доступную только для чтения. */
+static GtkWidget *debug_create_view(GtkWidget *pane, gboolean first)
+{
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    GtkWidget *text = gtk_text_view_new();
+    gtk_text_view_set_monospace(GTK_TEXT_VIEW(text), TRUE);
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(text), FALSE);
+    gtk_container_add(GTK_CONTAINER(scroll), text);
+    if (first)
+        gtk_paned_pack1(GTK_PANED(pane), scroll, TRUE, FALSE);
+    else
+        gtk_paned_pack2(GTK_PANED(pane), scroll, TRUE, FALSE);
+    return text;
+}
+
+/* Number source lines using the same newline rules as the Lua lexer. */
+/* Нумерует строки по тем же правилам перевода строки, что и лексер Lua. */
+static gchar *debug_number_source(const gchar *source, gsize length)
+{
+    GString *numbered = g_string_sized_new(length + 128);
+    const gchar *start = source;
+    for (guint line = 1; ; line++)
+    {
+        const gchar *end = strpbrk(start, "\r\n");
+        g_string_append_printf(numbered, "%5u  ", line);
+        if (!end)
+        {
+            g_string_append(numbered, start);
+            break;
+        }
+        g_string_append_len(numbered, start, end - start);
+        g_string_append_c(numbered, '\n');
+        start = end + 1;
+        if ((*start == '\r' || *start == '\n') && *start != *end)
+            start++;
+    }
+    return g_string_free(numbered, FALSE);
+}
+
+/* Capture the active Lua buffer and open a debugger window for it. */
+/* Сохраняет снимок активного буфера Lua и открывает окно отладчика. */
+static void debug_current_lua(GtkMenuItem *item, gpointer data)
+{
+    (void)item;
+    (void)data;
+    GeanyDocument *document = document_get_current();
+    if (!DOC_VALID(document) || !document->file_type || document->file_type->lang != TM_PARSER_LUA)
+    {
+        ui_set_statusbar(TRUE, "Open a Lua file to start the debugger");
+        return;
+    }
+
+    gint length = sci_get_length(document->editor->sci);
+    if (length < 0 || length > 2 * 1024 * 1024)
+    {
+        ui_set_statusbar(TRUE, "Lua debugging supports buffers up to 2 MiB");
+        return;
+    }
+
+    gchar *source = sci_get_contents(document->editor->sci, length + 1);
+    if (memchr(source, 0, length) || !g_utf8_validate(source, length, NULL))
+    {
+        ui_set_statusbar(TRUE, "Lua debugger requires a UTF-8 text buffer");
+        g_free(source);
+        return;
+    }
+
+    gchar error[1024];
+    InsightLuaDebug *engine = insight_lua_debug_new(source, length, error, sizeof error);
+    if (!engine)
+    {
+        gchar *message = g_utf8_make_valid(*error ? error : "Unable to start Lua debugger", -1);
+        ui_set_statusbar(TRUE, "%s", message);
+        g_free(message);
+        g_free(source);
+        return;
+    }
+
+    LuaDebugWindow *view = g_new0(LuaDebugWindow, 1);
+    view->engine = engine;
+    view->document_id = document->id;
+    view->source_snapshot = source;
+    view->source_length = (gsize)length;
+    view->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(view->window), "Lua Source Debugger");
+    gtk_window_set_default_size(GTK_WINDOW(view->window), 940, 520);
+    gtk_window_set_transient_for(GTK_WINDOW(view->window), GTK_WINDOW(main_widgets.window));
+    gtk_window_set_destroy_with_parent(GTK_WINDOW(view->window), TRUE);
+    g_object_set_data_full(G_OBJECT(view->window), "insight-lua-debugger", view, debug_window_free);
+
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    gtk_container_set_border_width(GTK_CONTAINER(box), 8);
+    gtk_container_add(GTK_CONTAINER(view->window), box);
+    GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_box_pack_start(GTK_BOX(box), toolbar, FALSE, FALSE, 0);
+
+    view->step_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_box_pack_start(GTK_BOX(toolbar), view->step_controls, FALSE, FALSE, 0);
+    const gchar *labels[] = {"Step Into", "Step Over", "Step Out", "Continue"};
+    for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
+    {
+        GtkWidget *button = gtk_button_new_with_label(labels[i]);
+        g_object_set_data(G_OBJECT(button), "insight-lua-step", GUINT_TO_POINTER(i));
+        g_signal_connect(button, "clicked", G_CALLBACK(debug_window_action), view);
+        gtk_box_pack_start(GTK_BOX(view->step_controls), button, FALSE, FALSE, 0);
+    }
+
+    GtkWidget *restart = gtk_button_new_with_label("Restart");
+    g_signal_connect(restart, "clicked", G_CALLBACK(debug_restart), view);
+    gtk_box_pack_start(GTK_BOX(toolbar), restart, FALSE, FALSE, 0);
+    view->go_to_source = gtk_button_new_with_label("Go to Source");
+    g_signal_connect(view->go_to_source, "clicked", G_CALLBACK(debug_go_to_source), view);
+    gtk_box_pack_start(GTK_BOX(toolbar), view->go_to_source, FALSE, FALSE, 0);
+
+    view->breakpoints = gtk_entry_new();
+    gtk_entry_set_max_length(GTK_ENTRY(view->breakpoints), 2048);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(view->breakpoints), "Breakpoint lines (e.g. 3, 12, 27)");
+    gtk_box_pack_start(GTK_BOX(box), view->breakpoints, FALSE, FALSE, 0);
+    GtkWidget *pane = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+    gtk_box_pack_start(GTK_BOX(box), pane, TRUE, TRUE, 0);
+    view->source_view = debug_create_view(pane, TRUE);
+    view->stack_view = debug_create_view(pane, FALSE);
+    gtk_paned_set_position(GTK_PANED(pane), 535);
+    gchar *numbered = debug_number_source(view->source_snapshot, view->source_length);
+    debug_set_text(view->source_view, numbered);
+    g_free(numbered);
+
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source_view));
+    view->current_line_tag = gtk_text_buffer_create_tag(buffer, "insight-debug-line",
+        "paragraph-background", "#416184", "foreground", "#ffffff", NULL);
+    view->status = gtk_label_new(NULL);
+    gtk_label_set_selectable(GTK_LABEL(view->status), TRUE);
+    gtk_label_set_ellipsize(GTK_LABEL(view->status), PANGO_ELLIPSIZE_END);
+    gtk_box_pack_start(GTK_BOX(box), view->status, FALSE, FALSE, 0);
+    gtk_widget_show_all(view->window);
+    debug_window_step(view, INSIGHT_LUA_STEP_INTO);
+}
+
 static void create_native_lua(void) {
  gchar *settings=g_build_filename(app->configdir,"insight","lua-extension.conf",NULL);
  wb.extensions=insight_extensions_new(settings); g_free(settings); GError *error=NULL;

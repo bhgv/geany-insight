@@ -178,7 +178,7 @@ debugger takes a snapshot, including unsaved edits, and stops at the first
 executable line. The left pane highlights the current line; the right pane
 shows Lua stack frames and locals. Use **Step Into**, **Step Over**, **Step Out**
 and **Continue**. Enter breakpoint line numbers separated by spaces or commas.
-Close the window to end the session.
+**Restart** starts the same snapshot again and keeps your breakpoints. **Go to Source** opens the paused line in the original editor buffer if it still matches the snapshot. Close the window to end the session.
 
 The snapshot runs with the editor's restricted Lua libraries. It has no live
 editor or project host, so commands that require editor access must be tested
