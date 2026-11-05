@@ -4564,7 +4564,7 @@ static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
             gchar *prefix = g_path_get_dirname(share);
             gchar *bin = g_build_filename(prefix, "bin", NULL);
             insight_waveforms_simulate(parent, bin, root, (const gchar *const *)sources->pdata,
-                                        interactive, waveform_source);
+                                        interactive, waveform_source, diff_source_open);
             g_free(bin);
             g_free(prefix);
             g_free(share);

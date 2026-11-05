@@ -17,21 +17,31 @@ if command -v cygpath >/dev/null 2>&1; then
     configure_prefix=/geany-iverilog
 fi
 archive="$cache_dir/iverilog-$version.tar.gz"
+script_dir=$(cd -- "$(dirname -- "$0")" && pwd)
+bridge_patch="$script_dir/../patches/geany-vvp.patch"
 stamp="$install_dir/share/geany-insight/iverilog-source.sha256"
 work=$(mktemp -d "${TMPDIR:-/tmp}/geany-iverilog.XXXXXXXX")
 download=
 trap 'rm -rf -- "$work"; if [[ -n "$download" ]]; then rm -f -- "$download"; fi' EXIT
 
-# Verify a downloaded archive before extracting it.
-# Проверяет скачанный архив перед распаковкой.
-verify_archive() {
+# Read the SHA-256 of a source or patch file.
+# Читает SHA-256 файла исходников или патча.
+file_digest() {
     local digest
     if command -v sha256sum >/dev/null 2>&1; then
         digest=$(sha256sum -- "$1")
     else
         digest=$(shasum -a 256 -- "$1")
     fi
-    [[ ${digest%% *} == "$sha" ]]
+    printf '%s\n' "${digest%% *}"
+}
+
+stamp_id="$sha $(file_digest "$bridge_patch")"
+
+# Check that the cached source matches the pinned archive.
+# Проверяет, что исходный архив соответствует закреплённой версии.
+verify_archive() {
+    [[ $(file_digest "$1") == "$sha" ]]
 }
 
 # Compile and run a small design using the installed executables.
@@ -55,12 +65,13 @@ VERILOG
         export PATH="$prefix/bin:$PATH" &&
         export IVERILOG_VPI_MODULE_PATH="$prefix/lib/ivl" &&
         "$prefix/bin/iverilog$executable_suffix" -s geany_smoke -o geany_smoke.vvp geany_smoke.v &&
-        "$prefix/bin/vvp$executable_suffix" geany_smoke.vvp &&
+        printf 'cont\n' | GEANY_VVP_DEBUG=1 "$prefix/bin/vvp$executable_suffix" -i -s geany_smoke.vvp > geany_smoke.log &&
+        grep -q '^GEANY-VVP-READY' geany_smoke.log &&
         test -s geany_smoke.vcd
     )
 }
 
-if [[ -f "$stamp" && $(<"$stamp") == "$sha" &&
+if [[ -f "$stamp" && $(<"$stamp") == "$stamp_id" &&
       -x "$install_dir/bin/iverilog$executable_suffix" && -x "$install_dir/bin/vvp$executable_suffix" ]]; then
     if check_simulator "$install_dir"; then
         printf '[Simulator] Icarus Verilog %s is already installed.\n' "$version"
@@ -83,6 +94,7 @@ fi
 
 mkdir -p -- "$work/src" "$work/build" "$work/stage"
 tar -xzf "$archive" -C "$work/src" --strip-components=1
+patch --batch -d "$work/src" -p1 < "$bridge_patch"
 (
     cd "$work/src"
     bash ./autoconf.sh
@@ -101,5 +113,5 @@ mkdir -p -- "$install_dir"
 rsync -a -- "$staged/" "$install_dir/"
 check_simulator "$install_dir"
 mkdir -p -- "$(dirname "$stamp")"
-printf '%s\n' "$sha" > "$stamp"
+printf '%s\n' "$stamp_id" > "$stamp"
 printf '[Simulator] Installed Icarus Verilog %s in %s.\n' "$version" "$install_dir"

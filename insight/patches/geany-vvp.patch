@@ -1,0 +1,177 @@
+--- a/vvp/stop.cc
++++ b/vvp/stop.cc
+@@ -38,6 +38,10 @@
+ #endif
+ # include  <cstring>
+ # include  <cstdlib>
++# include  <fstream>
++# include  <sstream>
++# include  <string>
++# include  <vector>
+ # include  "ivl_alloc.h"
+ 
+ __vpiScope*stop_current_scope = 0;
+@@ -70,6 +74,86 @@
+ #endif
+ 
+ 
++// EN: Keep the Geany bridge inactive for ordinary vvp invocations.
++// RU: Оставляем мост Geany выключенным при обычном запуске vvp.
++static bool geany_debug_enabled()
++{
++      static const char* enabled = std::getenv("GEANY_VVP_DEBUG");
++      return enabled && std::strcmp(enabled, "1") == 0;
++}
++
++struct geany_breakpoint {
++      unsigned line;
++      std::string filename;
++};
++
++static std::vector<geany_breakpoint> geany_breakpoints;
++
++// EN: Normalize the filename used by the compiler and by the editor.
++// RU: Нормализуем имя файла, полученное от компилятора и редактора.
++static std::string geany_file_key(const char* filename)
++{
++      std::string key(filename);
++#ifdef __MINGW32__
++      for (char& byte : key) {
++            if (byte == '\\')
++                  byte = '/';
++            else if (byte >= 'A' && byte <= 'Z')
++                  byte += 'a' - 'A';
++      }
++#endif
++      return key;
++}
++
++// EN: Reload the bounded source breakpoint list while the scheduler is stopped.
++// RU: Перечитываем ограниченный список точек, пока планировщик остановлен.
++static void cmd_geany_load(unsigned, const char*[])
++{
++      if (!geany_debug_enabled())
++            return;
++      std::ifstream input(".geany-vvp-breakpoints");
++      std::vector<geany_breakpoint> points;
++      std::string record;
++      while (points.size() < 128 && std::getline(input, record)) {
++            if (record.size() > 8192)
++                  continue;
++            const std::size_t tab = record.find('\t');
++            if (tab == std::string::npos || tab + 1 == record.size())
++                  continue;
++            std::istringstream number(record.substr(0, tab));
++            unsigned line = 0;
++            if (number >> line && number.eof() && line)
++                  points.push_back({line, geany_file_key(record.c_str() + tab + 1)});
++      }
++      geany_breakpoints.swap(points);
++      printf("Geany: %u source breakpoint(s).\n", static_cast<unsigned>(geany_breakpoints.size()));
++}
++
++// EN: Match a source opcode against the current breakpoint list.
++// RU: Сопоставляем команду исходника с текущим списком точек.
++bool geany_source_breakpoint(const char* filename, unsigned line)
++{
++      if (geany_breakpoints.empty() || !filename)
++            return false;
++      const std::string key = geany_file_key(filename);
++      for (const geany_breakpoint& point : geany_breakpoints) {
++            if (point.line == line && point.filename == key) {
++                  printf("GEANY-VVP-STOP\t%u\t%s\n", line, filename);
++                  return true;
++            }
++      }
++      return false;
++}
++
++// EN: Poll a private pause marker at bounded intervals on both platforms.
++// RU: Проверяем приватный запрос паузы с ограниченной частотой на обеих платформах.
++bool geany_pause_requested()
++{
++      static unsigned polls = 0;
++      return geany_debug_enabled() && (++polls % 1024 == 0) &&
++            std::remove(".geany-vvp-pause") == 0;
++}
++
+ static bool interact_flag = true;
+ 
+ static void cmd_call(unsigned argc, const char*argv[])
+@@ -444,6 +528,8 @@
+         "Synonym for finish."},
+       { "finish", &cmd_finish,
+         "Finish the simulation."},
++      { "geany-load", &cmd_geany_load,
++        "Reload Geany source breakpoints."},
+       { "help",   &cmd_help,
+         "Get help."},
+       { "list",   &cmd_list,
+@@ -554,6 +640,8 @@
+ 	    return;
+       }
+ 
++      if (geany_debug_enabled())
++            printf("GEANY-VVP-READY\n");
+       vpi_mcd_printf(1,"** VVP Stop(%d) **\n", rc);
+       vpi_mcd_printf(1,"** Flushing output streams.\n");
+       invoke_command_const("$fflush");
+--- a/vvp/vthread.cc
++++ b/vvp/vthread.cc
+@@ -857,6 +857,9 @@
+  * incrementing the PC, and executing the instruction. The thread may
+  * be the head of a list, so each thread is run so far as possible.
+  */
++extern bool geany_pause_requested();
++extern bool geany_source_breakpoint(const char*, unsigned);
++
+ void vthread_run(vthread_t thr)
+ {
+       while (thr != 0) {
+@@ -869,6 +872,11 @@
+             running_thread = thr;
+ 
+ 	    for (;;) {
++                  if (geany_pause_requested()) {
++                        schedule_stop(0);
++                        schedule_vthread(thr, 0, false);
++                        break;
++                  }
+ 		  vvp_code_t cp = thr->pc;
+ 		  thr->pc += 1;
+ 
+@@ -6416,6 +6424,14 @@
+ 	    cerr << thr->get_fileline()
+ 	         << vpi_get_str(_vpiDescription, handle) << endl;
+ 
++      if (geany_source_breakpoint(vpi_get_str(vpiFile, handle), vpi_get(vpiLineNo, handle))) {
++            // EN: Resume at the next opcode, before the selected statement executes.
++            // RU: Продолжаем со следующей команды, перед выполнением выбранного оператора.
++            schedule_stop(0);
++            schedule_vthread(thr, 0, false);
++            return false;
++      }
++
+       return true;
+ }
+ 
+--- a/vvp/schedule.cc
++++ b/vvp/schedule.cc
+@@ -592,6 +592,8 @@
+       schedule_runnable = false;
+ }
+ 
++extern bool geany_pause_requested();
++
+ void schedule_stop(int)
+ {
+       schedule_stopped_flag = true;
+@@ -1177,6 +1179,8 @@
+ 
+       if (schedule_runnable) while (sched_list) {
+ 
++            if (geany_pause_requested())
++                  schedule_stop(0);
+ 	    if (schedule_stopped_flag) {
+ 		  schedule_stopped_flag = false;
+ 		  stop_handler(0);

@@ -969,6 +969,13 @@ typedef struct {
     gchar prompt_tail[2];
     gboolean preview_pending;
     GtkWidget *signal_name;
+    GtkWidget *pause_button, *source_button, *breakpoint_controls, *breakpoint_file, *breakpoint_line;
+    gboolean bridge_ready, pause_requested;
+    GString *protocol_line;
+    GHashTable *breakpoints;
+    gchar *trace_file;
+    guint trace_line;
+    InsightWaveLocation open_location;
 } WaveSimulation;
 
 /* Release the run configuration after the worker and dialog have finished. */
@@ -981,6 +988,10 @@ static void simulation_free(gpointer data)
     g_clear_object(&run->live_process);
     g_mutex_clear(&run->lock);
     g_free(run->live_log);
+    g_free(run->trace_file);
+    if (run->protocol_line)
+        g_string_free(run->protocol_line, TRUE);
+    g_clear_pointer(&run->breakpoints, g_hash_table_unref);
     g_weak_ref_clear(&run->parent);
     g_clear_object(&run->dialog);
     g_strfreev(run->sources);
@@ -1059,6 +1070,7 @@ static gboolean simulation_interactive(WaveSimulation *run, const gchar *directo
     GSubprocessLauncher *launcher = g_subprocess_launcher_new(
         G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDERR_MERGE);
     g_subprocess_launcher_set_cwd(launcher, directory);
+    g_subprocess_launcher_setenv(launcher, "GEANY_VVP_DEBUG", "1", TRUE);
     g_subprocess_launcher_set_stdout_file_path(launcher, log);
     const gchar *existing = g_getenv("PATH");
     gchar *path = g_strconcat(bin, G_SEARCHPATH_SEPARATOR_S, existing ? existing : "", NULL);
@@ -1176,6 +1188,119 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
         g_task_return_error(task, error);
 }
 
+/* Decode a source location from the bridge or the native vvp trace. */
+/* Читает позицию исходника из моста или штатной трассы vvp. */
+static gboolean simulation_trace_location(const gchar *text, gchar **filename, guint *line)
+{
+    const gchar *bridge = strstr(text, "GEANY-VVP-STOP\t");
+    if (bridge)
+    {
+        const gchar *number = bridge + strlen("GEANY-VVP-STOP\t");
+        const gchar *tab = strchr(number, '\t');
+        if (!tab || !tab[1])
+            return FALSE;
+        gchar *field = g_strndup(number, tab - number);
+        guint64 value;
+        gboolean valid = g_ascii_string_to_unsigned(field, 10, 1, G_MAXINT, &value, NULL);
+        g_free(field);
+        if (!valid)
+            return FALSE;
+        *filename = g_strdup(tab + 1);
+        *line = (guint)value;
+        return TRUE;
+    }
+
+    for (const gchar *colon = strchr(text, ':'); colon; colon = strchr(colon + 1, ':'))
+    {
+        const gchar *end = colon + 1 + strspn(colon + 1, "0123456789");
+        if (end == colon + 1 || *end != ':' || end[1] != ' ')
+            continue;
+        gchar *path = g_strndup(text, colon - text);
+        if (!g_path_is_absolute(path))
+        {
+            g_free(path);
+            return FALSE;
+        }
+        gchar *field = g_strndup(colon + 1, end - colon - 1);
+        guint64 value;
+        gboolean valid = g_ascii_string_to_unsigned(field, 10, 1, G_MAXINT, &value, NULL);
+        g_free(field);
+        if (!valid)
+        {
+            g_free(path);
+            return FALSE;
+        }
+        *filename = path;
+        *line = (guint)value;
+        return TRUE;
+    }
+    return FALSE;
+}
+
+/* Collect complete control records even when the log is read in chunks. */
+/* Собирает целые управляющие записи при чтении журнала частями. */
+static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsize length)
+{
+    for (gsize i = 0; i < length; i++)
+    {
+        if (bytes[i] != '\n')
+        {
+            if (run->protocol_line->len < 8192)
+                g_string_append_c(run->protocol_line, bytes[i]);
+            continue;
+        }
+        gchar *text = g_strchomp(run->protocol_line->str);
+        if (strstr(text, "GEANY-VVP-READY"))
+            run->bridge_ready = TRUE;
+        gchar *filename = NULL;
+        guint line;
+        if (simulation_trace_location(text, &filename, &line))
+        {
+            g_free(run->trace_file);
+            run->trace_file = filename;
+            run->trace_line = line;
+        }
+        g_string_truncate(run->protocol_line, 0);
+    }
+}
+
+/* Open the latest recorded HDL statement in the editor. */
+/* Открывает в редакторе последний записанный оператор HDL. */
+static void simulation_open_location(GtkButton *button, gpointer data)
+{
+    (void)button;
+    WaveSimulation *run = data;
+    if (run->trace_file && run->open_location)
+        run->open_location(run->trace_file, run->trace_line);
+}
+
+/* Return a copy of the running simulator's scratch directory. */
+/* Возвращает копию пути к рабочей папке запущенного симулятора. */
+static gchar *simulation_live_directory(WaveSimulation *run)
+{
+    g_mutex_lock(&run->lock);
+    gchar *directory = run->live_process && run->live_log ? g_path_get_dirname(run->live_log) : NULL;
+    g_mutex_unlock(&run->lock);
+    return directory;
+}
+
+/* Request a scheduler pause through the patched runtime on either platform. */
+/* Запрашивает паузу планировщика через адаптированную среду на обеих платформах. */
+static void simulation_request_pause(GtkButton *button, gpointer data)
+{
+    WaveSimulation *run = data;
+    if (!run->bridge_ready || run->pause_requested)
+        return;
+    gchar *directory = simulation_live_directory(run);
+    if (!directory)
+        return;
+    gchar *path = g_build_filename(directory, ".geany-vvp-pause", NULL);
+    run->pause_requested = g_file_set_contents(path, "pause\n", -1, NULL);
+    gtk_widget_set_sensitive(GTK_WIDGET(button), !run->pause_requested);
+    g_free(path);
+    g_free(directory);
+}
+
 /* Read new console bytes without holding the worker lock during file I/O. */
 /* Читает новые байты консоли без удержания блокировки во время чтения файла. */
 static gboolean simulation_refresh_console(gpointer data)
@@ -1203,6 +1328,7 @@ static gboolean simulation_refresh_console(gpointer data)
     if (count > 0)
     {
         run->read_offset += count;
+        simulation_read_records(run, bytes, (gsize)count);
         run->prompt_tail[0] = count > 1 ? bytes[count - 2] : run->prompt_tail[1];
         run->prompt_tail[1] = bytes[count - 1];
         GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->console));
@@ -1221,8 +1347,24 @@ static gboolean simulation_refresh_console(gpointer data)
         gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(run->console), &end, 0, FALSE, 0, 0);
         g_free(valid);
     }
-    gtk_widget_set_sensitive(run->live_controls, running && !run->preview_pending && run->prompt_tail[0] == '>' &&
-                             run->prompt_tail[1] == ' ');
+    gboolean paused = running && run->prompt_tail[0] == '>' && run->prompt_tail[1] == ' ';
+    gtk_widget_set_sensitive(run->live_controls, paused && !run->preview_pending);
+    gtk_widget_set_sensitive(run->breakpoint_controls, run->bridge_ready);
+    if (paused && run->pause_requested)
+    {
+        gchar *directory = simulation_live_directory(run);
+        if (directory)
+        {
+            gchar *marker = g_build_filename(directory, ".geany-vvp-pause", NULL);
+            g_unlink(marker);
+            g_free(marker);
+            g_free(directory);
+        }
+        run->pause_requested = FALSE;
+    }
+    gtk_widget_set_sensitive(run->pause_button, running && run->bridge_ready && !paused &&
+                             !run->pause_requested);
+    gtk_widget_set_sensitive(run->source_button, paused && run->trace_file != NULL);
     return G_SOURCE_CONTINUE;
 }
 
@@ -1239,10 +1381,84 @@ static void simulation_write_command(WaveSimulation *run, const gchar *command)
         return;
 
     run->prompt_tail[0] = run->prompt_tail[1] = 0;
+    if (!strcmp(command, "cont\n") || !strcmp(command, "step\n"))
+    {
+        g_clear_pointer(&run->trace_file, g_free);
+        gtk_widget_set_sensitive(run->source_button, FALSE);
+    }
     gtk_widget_set_sensitive(run->live_controls, FALSE);
     GOutputStream *input = g_subprocess_get_stdin_pipe(process);
     g_output_stream_write_all(input, command, strlen(command), NULL, NULL, NULL);
     g_object_unref(process);
+}
+
+/* Send the complete enabled source-breakpoint set to the paused runtime. */
+/* Передаёт остановленному симулятору полный набор включённых точек. */
+static void simulation_edit_breakpoint(GtkButton *button, gpointer data)
+{
+    WaveSimulation *run = data;
+    if (!run->bridge_ready || run->prompt_tail[0] != '>' || run->prompt_tail[1] != ' ')
+        return;
+    gchar *directory = simulation_live_directory(run);
+    if (!directory)
+        return;
+
+    gboolean clear = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "clear-points"));
+    gchar *record = NULL;
+    if (!clear)
+    {
+        gint index = gtk_combo_box_get_active(GTK_COMBO_BOX(run->breakpoint_file));
+        gint line = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(run->breakpoint_line));
+        const gchar *filename = index >= 0 ? run->sources[index] : NULL;
+        if (filename && !strpbrk(filename, "\r\n\t"))
+            record = g_strdup_printf("%d\t%s", line, filename);
+    }
+    if (!clear && !record)
+    {
+        g_free(directory);
+        return;
+    }
+
+    gboolean remove = record && g_hash_table_contains(run->breakpoints, record);
+    GString *contents = g_string_new(NULL);
+    if (!clear)
+    {
+        GHashTableIter points;
+        gpointer key;
+        g_hash_table_iter_init(&points, run->breakpoints);
+        while (g_hash_table_iter_next(&points, &key, NULL))
+        {
+            if (strcmp(key, record))
+                g_string_append_printf(contents, "%s\n", (gchar *)key);
+        }
+        if (!remove)
+        {
+            if (g_hash_table_size(run->breakpoints) >= 128)
+            {
+                g_string_free(contents, TRUE);
+                g_free(record);
+                g_free(directory);
+                return;
+            }
+            g_string_append_printf(contents, "%s\n", record);
+        }
+    }
+
+    gchar *path = g_build_filename(directory, ".geany-vvp-breakpoints", NULL);
+    if (g_file_set_contents(path, contents->str, (gssize)contents->len, NULL))
+    {
+        if (clear)
+            g_hash_table_remove_all(run->breakpoints);
+        else if (remove)
+            g_hash_table_remove(run->breakpoints, record);
+        else
+            g_hash_table_add(run->breakpoints, g_steal_pointer(&record));
+        simulation_write_command(run, "geany-load\n");
+    }
+    g_free(path);
+    g_string_free(contents, TRUE);
+    g_free(record);
+    g_free(directory);
 }
 
 /* Forward a fixed debugger command from a console button. */
@@ -1403,7 +1619,8 @@ static void simulation_dialog_destroy(GtkWidget *dialog, gpointer data)
 /* Launch Icarus and open the resulting VCD on completion. */
 /* Запускает Icarus и открывает полученный VCD после завершения. */
 void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar *include_dir,
-                                const gchar *const *sources, gboolean interactive, InsightWaveSource navigate)
+                                const gchar *const *sources, gboolean interactive, InsightWaveSource navigate,
+                                InsightWaveLocation open_location)
 {
 #ifdef G_OS_WIN32
     const gchar *compiler_name = "iverilog.exe", *runtime_name = "vvp.exe";
@@ -1432,8 +1649,9 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
     run->include_dir = g_strdup(include_dir);
     run->sources = g_strdupv((gchar **)sources);
     run->navigate = navigate;
+    run->open_location = open_location;
     run->dialog = gtk_dialog_new_with_buttons("Verilog Simulation", parent,
-        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+        GTK_DIALOG_DESTROY_WITH_PARENT | (interactive ? 0 : GTK_DIALOG_MODAL),
         "_Cancel", GTK_RESPONSE_CANCEL, NULL);
     g_object_ref_sink(run->dialog);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(run->dialog));
@@ -1444,6 +1662,18 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
     if (interactive)
     {
         gtk_window_set_default_size(GTK_WINDOW(run->dialog), 680, 400);
+        run->protocol_line = g_string_new(NULL);
+        run->breakpoints = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+        GtkWidget *running_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        gtk_box_pack_start(GTK_BOX(box), running_actions, FALSE, FALSE, 0);
+        run->pause_button = gtk_button_new_with_label("Pause");
+        gtk_widget_set_sensitive(run->pause_button, FALSE);
+        g_signal_connect(run->pause_button, "clicked", G_CALLBACK(simulation_request_pause), run);
+        gtk_box_pack_start(GTK_BOX(running_actions), run->pause_button, FALSE, FALSE, 0);
+        run->source_button = gtk_button_new_with_label("Open HDL Line");
+        gtk_widget_set_sensitive(run->source_button, FALSE);
+        g_signal_connect(run->source_button, "clicked", G_CALLBACK(simulation_open_location), run);
+        gtk_box_pack_start(GTK_BOX(running_actions), run->source_button, FALSE, FALSE, 0);
         run->console = gtk_text_view_new();
         gtk_text_view_set_monospace(GTK_TEXT_VIEW(run->console), TRUE);
         gtk_text_view_set_editable(GTK_TEXT_VIEW(run->console), FALSE);
@@ -1492,6 +1722,27 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         g_object_set_data(G_OBJECT(trace_off), "vvp-command", "trace off\n");
         g_signal_connect(trace_off, "clicked", G_CALLBACK(simulation_send_command), run);
         gtk_box_pack_start(GTK_BOX(actions), trace_off, FALSE, FALSE, 0);
+        run->breakpoint_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        gtk_box_pack_start(GTK_BOX(run->live_controls), run->breakpoint_controls, FALSE, FALSE, 0);
+        run->breakpoint_file = gtk_combo_box_text_new();
+        for (guint i = 0; run->sources[i]; i++)
+        {
+            gchar *name = g_filename_display_basename(run->sources[i]);
+            gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(run->breakpoint_file), name);
+            g_free(name);
+        }
+        gtk_combo_box_set_active(GTK_COMBO_BOX(run->breakpoint_file), 0);
+        gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), run->breakpoint_file, TRUE, TRUE, 0);
+        run->breakpoint_line = gtk_spin_button_new_with_range(1, G_MAXINT, 1);
+        gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), run->breakpoint_line, FALSE, FALSE, 0);
+        GtkWidget *toggle = gtk_button_new_with_label("Toggle Breakpoint");
+        g_signal_connect(toggle, "clicked", G_CALLBACK(simulation_edit_breakpoint), run);
+        gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), toggle, FALSE, FALSE, 0);
+        GtkWidget *clear = gtk_button_new_with_label("Clear Breakpoints");
+        g_object_set_data(G_OBJECT(clear), "clear-points", GINT_TO_POINTER(1));
+        g_signal_connect(clear, "clicked", G_CALLBACK(simulation_edit_breakpoint), run);
+        gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), clear, FALSE, FALSE, 0);
+        gtk_widget_set_sensitive(run->breakpoint_controls, FALSE);
         g_object_set_data(G_OBJECT(run->dialog), "insight-live-simulation", run);
         gtk_widget_set_sensitive(run->live_controls, FALSE);
         run->refresh_source = g_timeout_add(100, simulation_refresh_console, run);
