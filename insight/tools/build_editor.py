@@ -63,6 +63,13 @@ def arguments(argv=None, root=ROOT):
     return args
 
 
+# EN: Use the Windows bootstrap shell explicitly when it is available.
+# RU: Используем точный путь к оболочке, выбранной сборщиком Windows.
+def simulator_shell():
+    shell = os.environ.get('INSIGHT_BOOTSTRAP_BASH')
+    return Path(shell).as_posix() if shell else 'bash'
+
+
 def plan(args, root=ROOT):
     steps = []
     def add(command, cwd=root, env=None):
@@ -120,7 +127,7 @@ def plan(args, root=ROOT):
     if args.install:
         manifest = json.loads((root / 'insight/tools/windows-toolchain.json').read_text(encoding='utf-8'))
         simulator = manifest['iverilog']
-        add(['bash', (root / 'insight/tools/build-iverilog.sh').as_posix(), args.download_cache,
+        add([simulator_shell(), (root / 'insight/tools/build-iverilog.sh').as_posix(), args.download_cache,
              args.prefix, args.jobs, simulator['version'], simulator['url'], simulator['sha256']])
     return steps
 
@@ -139,7 +146,7 @@ def prerequisites(args):
     else:
         tools += ['meson', 'ninja']
     if args.install:
-        tools += ['bash', 'curl', 'tar', 'make', 'bison', 'flex', 'gperf', 'rsync', 'patch']
+        tools += [simulator_shell(), 'curl', 'tar', 'make', 'bison', 'flex', 'gperf', 'rsync', 'patch']
     missing = [tool for tool in tools if not shutil.which(tool)]
     if args.install and not any(shutil.which(tool) for tool in ('sha256sum', 'shasum')):
         missing.append('sha256sum or shasum')

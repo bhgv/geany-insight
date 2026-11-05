@@ -4941,8 +4941,12 @@ static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
         {
             if (!root)
                 root = g_path_get_dirname(selected->data);
-            gchar *share = g_path_get_dirname(app->datadir);
-            gchar *prefix = g_path_get_dirname(share);
+            gchar *data_parent = g_path_get_dirname(app->datadir);
+#ifdef G_OS_WIN32
+            gchar *prefix = g_strdup(data_parent);
+#else
+            gchar *prefix = g_path_get_dirname(data_parent);
+#endif
             gchar *bin = g_build_filename(prefix, "bin", NULL);
             gchar *settings = g_build_filename(app->configdir, "insight", "verilog-debug", NULL);
             insight_waveforms_simulate(parent, bin, root, (const gchar *const *)sources->pdata,
@@ -4951,7 +4955,7 @@ static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
             g_free(settings);
             g_free(bin);
             g_free(prefix);
-            g_free(share);
+            g_free(data_parent);
         }
         else
             ui_set_statusbar(TRUE, "Save the selected HDL files before running simulation.");

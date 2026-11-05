@@ -112,7 +112,7 @@ if ($MsysRoot -notmatch '^[A-Za-z]:\\[A-Za-z0-9_\\.\-]+$') {
 }
 $MsysRoot = [IO.Path]::GetFullPath($MsysRoot).TrimEnd('\')
 $bash = Join-Path $MsysRoot 'usr\bin\bash.exe'
-$envNames = @('MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_MIRROR','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL','INSIGHT_BOOTSTRAP_INSTALL','INSIGHT_BOOTSTRAP_PROVIDER','INSIGHT_BOOTSTRAP_JOBS','INSIGHT_BOOTSTRAP_BUILD_LOG','INSIGHT_BOOTSTRAP_CACHE')
+$envNames = @('MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_MIRROR','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL','INSIGHT_BOOTSTRAP_INSTALL','INSIGHT_BOOTSTRAP_PROVIDER','INSIGHT_BOOTSTRAP_JOBS','INSIGHT_BOOTSTRAP_BUILD_LOG','INSIGHT_BOOTSTRAP_CACHE','INSIGHT_BOOTSTRAP_BASH')
 $previous = @{}
 foreach ($name in $envNames) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 function Wait-InsightProcess([Diagnostics.Process]$Child, [string]$Stage) {
@@ -347,6 +347,9 @@ git -C "$source_dir" rev-parse HEAD
         $env:INSIGHT_BOOTSTRAP_INSTALL=$InstallDir
         $env:INSIGHT_BOOTSTRAP_PROVIDER=$ClangProvider.ToLowerInvariant()
         $env:INSIGHT_BOOTSTRAP_CACHE = [IO.Path]::GetFullPath($CacheDir)
+        # Keep native Python on MSYS2 bash when Windows also supplies a WSL launcher.
+        # Указываем Python оболочку MSYS2, если в Windows есть и программа запуска WSL.
+        $env:INSIGHT_BOOTSTRAP_BASH = [IO.Path]::GetFullPath($bash)
         $logDirectory = Join-Path $RootDir 'logs'
         New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
         $buildLog = Join-Path $logDirectory ('build-{0:yyyyMMdd-HHmmssfff}-{1}.log' -f (Get-Date), $PID)
