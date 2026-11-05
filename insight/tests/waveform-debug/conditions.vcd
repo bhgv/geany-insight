@@ -2,11 +2,16 @@ $timescale 1 ns $end
 $scope module testbench $end
 $var wire 1 ! clk $end
 $var reg 4 " counter [3:0] $end
+$scope module dut $end
+$var wire 4 " count_alias [3:0] $end
+$var wire 4 + independent [3:0] $end
+$upscope $end
 $upscope $end
 $enddefinitions $end
 #0
 0!
 b0000 "
+b0000 +
 #5
 1!
 b0001 "
@@ -17,6 +22,7 @@ b0100 "
 #15
 1!
 b0010 "
+b0010 +
 #20
 x!
 bxxxx "
