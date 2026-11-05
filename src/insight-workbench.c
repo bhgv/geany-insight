@@ -4967,6 +4967,7 @@ typedef struct {
     gchar *display_source;
     gsize display_length;
     GHashTable *file_breakpoints;
+    gchar *breakpoint_settings_path;
     GHashTable *lua_modules;
     gsize lua_module_bytes;
     GtkWidget *file_breakpoint_button;
@@ -5030,6 +5031,7 @@ static void debug_window_free(gpointer data)
     g_free(view->display_filename);
     g_free(view->display_source);
     g_hash_table_unref(view->file_breakpoints);
+    g_free(view->breakpoint_settings_path);
     g_hash_table_unref(view->lua_modules);
     g_free(view->source_snapshot);
     g_free(view->source_code_mask);
@@ -5625,18 +5627,105 @@ static gchar *debug_file_key(const gchar *filename)
 #endif
 }
 
-/* Save or clear the breakpoint text for one source file. */
-/* Сохраняет или очищает список точек останова для одного исходника. */
+/* Read the language's breakpoints for the active project or standalone files. */
+/* Читает точки останова языка для текущего проекта или отдельных файлов. */
+static void debug_load_breakpoints(ScriptDebugWindow *view)
+{
+    const gchar *filename = view->project_filename ? view->project_filename : view->source_filename;
+    if (!filename)
+        return;
+
+    gchar *identity = debug_file_key(filename);
+    gchar *scope = g_compute_checksum_for_string(G_CHECKSUM_SHA256, identity, -1);
+    gchar *name = g_strdup_printf("%s-%s-%s.conf", view->python ? "python" : "lua",
+                                  view->project_filename ? "project" : "file", scope);
+    view->breakpoint_settings_path = g_build_filename(app->configdir, "insight", "breakpoints", name, NULL);
+    g_free(name);
+    g_free(scope);
+    g_free(identity);
+
+    GKeyFile *settings = g_key_file_new();
+    if (g_key_file_load_from_file(settings, view->breakpoint_settings_path, G_KEY_FILE_NONE, NULL))
+    {
+        gchar **keys = g_key_file_get_keys(settings, "Breakpoints", NULL, NULL);
+        for (guint i = 0; keys && keys[i]; i++)
+        {
+            gchar *filename = g_uri_unescape_string(keys[i], NULL);
+            gchar *text = g_key_file_get_string(settings, "Breakpoints", keys[i], NULL);
+            unsigned long lines[128];
+            gsize count = 0;
+            if (filename && g_path_is_absolute(filename) && text && strlen(text) <= 2048 &&
+                debug_parse_breakpoints(text, lines, &count) && count)
+                g_hash_table_replace(view->file_breakpoints, filename, text);
+            else
+            {
+                g_free(filename);
+                g_free(text);
+            }
+        }
+        g_strfreev(keys);
+    }
+    g_key_file_unref(settings);
+}
+
+/* Update only the edited file so separate debugger windows can save independently. */
+/* Обновляет только изменённый файл, чтобы окна отладки сохраняли настройки независимо. */
+static void debug_save_breakpoints(ScriptDebugWindow *view, const gchar *filename, const gchar *text)
+{
+    if (!view->breakpoint_settings_path || !g_path_is_absolute(filename))
+        return;
+
+    GError *error = NULL;
+    GKeyFile *settings = g_key_file_new();
+    if (!g_key_file_load_from_file(settings, view->breakpoint_settings_path, G_KEY_FILE_NONE, &error) &&
+        g_error_matches(error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
+        g_clear_error(&error);
+
+    if (!error)
+    {
+        gchar *key = g_uri_escape_string(filename, NULL, FALSE);
+        if (text)
+            g_key_file_set_string(settings, "Breakpoints", key, text);
+        else
+            g_key_file_remove_key(settings, "Breakpoints", key, NULL);
+        g_free(key);
+
+        gchar *directory = g_path_get_dirname(view->breakpoint_settings_path);
+        if (g_mkdir_with_parents(directory, 0700) == 0)
+            g_key_file_save_to_file(settings, view->breakpoint_settings_path, &error);
+        else
+            g_set_error_literal(&error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                                "Cannot create debugger settings directory");
+        g_free(directory);
+    }
+    if (error)
+        ui_set_statusbar(TRUE, "Cannot save debugger breakpoints: %s", error->message);
+    g_clear_error(&error);
+    g_key_file_unref(settings);
+}
+
+/* Store valid breakpoint text and persist changes for files with real paths. */
+/* Хранит корректные точки останова и сохраняет изменения для файлов с путём. */
 static void debug_store_file_breakpoints(ScriptDebugWindow *view, const gchar *filename, const gchar *text)
 {
+    unsigned long lines[128];
+    gsize count = 0;
+    if (!debug_parse_breakpoints(text, lines, &count))
+        return;
+
     gchar *key = debug_file_key(filename);
-    if (*text)
-        g_hash_table_replace(view->file_breakpoints, key, g_strdup(text));
-    else
+    const gchar *value = count ? text : NULL;
+    if (g_strcmp0(g_hash_table_lookup(view->file_breakpoints, key), value))
     {
+        debug_save_breakpoints(view, key, value);
+        if (value)
+        {
+            g_hash_table_replace(view->file_breakpoints, key, g_strdup(value));
+            return;
+        }
         g_hash_table_remove(view->file_breakpoints, key);
-        g_free(key);
     }
+    g_free(key);
 }
 
 /* Compare file identity using the same normalization as breakpoint storage. */
@@ -6394,6 +6483,15 @@ static void debug_mark_breakpoints(GtkEditable *entry, gpointer data)
     }
 }
 
+/* Persist valid edits immediately, including edits made before the first step. */
+/* Сохраняет корректные правки сразу, в том числе до первого шага. */
+static void debug_breakpoint_entry_changed(GtkEditable *entry, gpointer data)
+{
+    ScriptDebugWindow *view = data;
+    debug_store_file_breakpoints(view, view->display_filename, gtk_entry_get_text(GTK_ENTRY(entry)));
+    debug_mark_breakpoints(entry, data);
+}
+
 /* Toggle a breakpoint when the source line number is clicked. */
 /* Переключает точку останова при щелчке по номеру строки. */
 static gboolean debug_click_line_number(GtkWidget *widget, GdkEventButton *event, gpointer data)
@@ -6923,6 +7021,7 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     view->display_source = g_strdup(source);
     view->display_length = (gsize)length;
     view->project_filename = g_strdup(app->project ? app->project->file_name : NULL);
+    debug_load_breakpoints(view);
     ScintillaObject *sci = document->editor->sci;
     view->selection_snapshot = sci_get_selection_contents(sci);
     view->position = (unsigned long)sci_get_current_position(sci);
@@ -6977,6 +7076,11 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     view->breakpoints = gtk_entry_new();
     gtk_entry_set_max_length(GTK_ENTRY(view->breakpoints), 2048);
     gtk_entry_set_placeholder_text(GTK_ENTRY(view->breakpoints), "Breakpoint lines (e.g. 3, 12, 27)");
+    gchar *breakpoint_key = debug_file_key(view->display_filename);
+    const gchar *saved_breakpoints = g_hash_table_lookup(view->file_breakpoints, breakpoint_key);
+    if (saved_breakpoints)
+        gtk_entry_set_text(GTK_ENTRY(view->breakpoints), saved_breakpoints);
+    g_free(breakpoint_key);
     GtkWidget *breakpoint_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     gtk_box_pack_start(GTK_BOX(box), breakpoint_row, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(breakpoint_row), view->breakpoints, TRUE, TRUE, 0);
@@ -7023,7 +7127,8 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
         "paragraph-background", "#416184", "foreground", "#ffffff", NULL);
     view->breakpoint_tag = gtk_text_buffer_create_tag(buffer, "insight-debug-breakpoint",
         "background", "#962e37", "foreground", "#ffffff", "weight", PANGO_WEIGHT_BOLD, NULL);
-    g_signal_connect(view->breakpoints, "changed", G_CALLBACK(debug_mark_breakpoints), view);
+    g_signal_connect(view->breakpoints, "changed", G_CALLBACK(debug_breakpoint_entry_changed), view);
+    debug_mark_breakpoints(GTK_EDITABLE(view->breakpoints), view);
     g_signal_connect(view->source_view, "button-press-event", G_CALLBACK(debug_click_line_number), view);
     gtk_widget_set_has_tooltip(view->source_view, TRUE);
     g_signal_connect(view->source_view, "query-tooltip", G_CALLBACK(debug_source_tooltip), view);
