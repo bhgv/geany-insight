@@ -1002,3 +1002,5 @@ test('Insight HDL semantic completion GUI', slang_completion_gui_test, timeout: 
 # The debugger GUI scenario uses Icarus installed by the platform build launcher.
 executable('test_insight_verilog_debugger_gui',
   '../insight/tests/verilog_debugger_gui_test.c', dependencies: test_deps)
+executable('test_insight_native_debugger_gui',
+  '../insight/tests/native_debugger_gui_test.c', dependencies: test_deps)
