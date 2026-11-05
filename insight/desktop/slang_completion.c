@@ -216,7 +216,7 @@ InsightSlangProject *insight_slang_project_configured(const gchar *service,GPtrA
  InsightSlangProject *project=g_new0(InsightSlangProject,1);
  if(cache && key) {
   char *stored=NULL;project->index=insight_cache_load(cache,&stored,NULL);const InsightSymbol *meta=NULL;
-  gboolean valid=project->index && stored && !strcmp(root,stored) && insight_index_query(project->index,"@hdlmeta",TRUE,NULL,"@hdlmeta",root,0,&meta,1)==1 && !strcmp(meta->signature,key) && !strcmp(meta->inheritance,"slang-project-v6");free(stored);
+  gboolean valid=project->index && stored && !strcmp(root,stored) && insight_index_query(project->index,"@hdlmeta",TRUE,NULL,"@hdlmeta",root,0,&meta,1)==1 && !strcmp(meta->signature,key) && !strcmp(meta->inheritance,"slang-project-v7");free(stored);
   if(valid) {if(!*meta->type) valid=FALSE;for(const gchar *p=meta->type;*p;p++) if(!g_ascii_isdigit(*p)) valid=FALSE;guint64 count=g_ascii_strtoull(meta->type,NULL,10);if(count>G_MAXUINT) valid=FALSE;else project->diagnostics=count;}
   if(valid) {project->restored=project->persisted=TRUE;g_free(key);return project;}insight_index_free(project->index);project->index=NULL;
  }
@@ -239,7 +239,7 @@ InsightSlangProject *insight_slang_project_configured(const gchar *service,GPtrA
  if(valid) {
   project->index=insight_index_new();GHashTableIter iter;gpointer path,rows;g_hash_table_iter_init(&iter,groups);
   while(valid && g_hash_table_iter_next(&iter,&path,&rows)) valid=insight_index_update(project->index,path,(const InsightSymbol *)((GArray *)rows)->data,((GArray *)rows)->len);
-  gchar *diagnostics=g_strdup_printf("%u",project->diagnostics);InsightSymbol meta={"@hdlmeta",root,"","@hdlmeta",1,key ? key:"",diagnostics,"slang-project-v6"};
+  gchar *diagnostics=g_strdup_printf("%u",project->diagnostics);InsightSymbol meta={"@hdlmeta",root,"","@hdlmeta",1,key ? key:"",diagnostics,"slang-project-v7"};
   /* Root is a directory, distinct from source paths. */
   if(valid) valid=insight_index_update(project->index,root,&meta,1);g_free(diagnostics);
  }

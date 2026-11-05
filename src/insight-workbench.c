@@ -4489,9 +4489,11 @@ static void wave_jump_run(GTask *task, gpointer object, gpointer data, GCancella
 
 /* Walk upstream or downstream without mixing directions at a shared signal. */
 /* Обходит связи вверх или вниз по потоку, сохраняя направление на развилках. */
-static void waveform_walk_ports(GtkListStore *rows, GHashTable *ports, const gchar *start,
-    const gchar *direction, guint *remaining)
+static void waveform_walk_dependencies(GtkListStore *rows, GHashTable *dependencies, const gchar *start,
+    gboolean upstream, guint *remaining)
 {
+    const gchar *port_role = upstream ? "port-source" : "port-destination";
+    const gchar *assign_role = upstream ? "assign-source" : "assign-destination";
     GHashTable *visited = g_hash_table_new(g_str_hash, g_str_equal);
     GQueue pending = G_QUEUE_INIT;
     g_hash_table_add(visited, (gpointer)start);
@@ -4503,14 +4505,15 @@ static void waveform_walk_ports(GtkListStore *rows, GHashTable *ports, const gch
         while (level_size-- && *remaining)
         {
             const gchar *signal = g_queue_pop_head(&pending);
-            GPtrArray *edges = g_hash_table_lookup(ports, signal);
+            GPtrArray *edges = g_hash_table_lookup(dependencies, signal);
             if (!edges)
                 continue;
 
             for (guint i = 0; i < edges->len && *remaining; i++)
             {
                 const InsightSymbol *edge = g_ptr_array_index(edges, i);
-                if ((g_strcmp0(edge->inheritance, direction) &&
+                if ((g_strcmp0(edge->inheritance, port_role) &&
+                     g_strcmp0(edge->inheritance, assign_role) &&
                      g_strcmp0(edge->inheritance, "port-peer")) ||
                     !g_hash_table_add(visited, (gpointer)edge->name))
                     continue;
@@ -4518,7 +4521,7 @@ static void waveform_walk_ports(GtkListStore *rows, GHashTable *ports, const gch
                 g_queue_push_tail(&pending, (gpointer)edge->name);
                 const gchar *role = edge->inheritance;
                 if (distance > 1)
-                    role = !strcmp(direction, "port-source") ? _("Upstream") : _("Downstream");
+                    role = upstream ? _("Upstream") : _("Downstream");
                 gtk_list_store_insert_with_values(rows, NULL, -1,
                     WAVE_USE_ROLE, role, WAVE_USE_NAME, edge->name,
                     WAVE_USE_FILE, edge->path, WAVE_USE_LINE, edge->line,
@@ -4557,7 +4560,7 @@ static void waveform_show_hdl_uses(WaveJump *jump)
     const InsightIndex *index = jump->snapshot->result->index;
     GtkListStore *rows = gtk_list_store_new(WAVE_USE_COLUMNS,
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_UINT);
-    GHashTable *ports = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+    GHashTable *dependencies = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
         (GDestroyNotify)g_ptr_array_unref);
     GHashTable *seen = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     gchar *target = g_strdup_printf("%u:%u", jump->line, jump->column);
@@ -4569,11 +4572,11 @@ static void waveform_show_hdl_uses(WaveJump *jump)
             continue;
         if (!g_strcmp0(row->kind, "@hdlwire"))
         {
-            GPtrArray *edges = g_hash_table_lookup(ports, row->scope);
+            GPtrArray *edges = g_hash_table_lookup(dependencies, row->scope);
             if (!edges)
             {
                 edges = g_ptr_array_new();
-                g_hash_table_insert(ports, (gpointer)row->scope, edges);
+                g_hash_table_insert(dependencies, (gpointer)row->scope, edges);
             }
             g_ptr_array_add(edges, (gpointer)row);
             continue;
@@ -4589,9 +4592,9 @@ static void waveform_show_hdl_uses(WaveJump *jump)
                 WAVE_USE_NAME, row->name, WAVE_USE_FILE, row->path, WAVE_USE_LINE, row->line, -1);
     }
     guint upstream_remaining = 1000, downstream_remaining = 1000;
-    waveform_walk_ports(rows, ports, jump->name, "port-source", &upstream_remaining);
-    waveform_walk_ports(rows, ports, jump->name, "port-destination", &downstream_remaining);
-    g_hash_table_unref(ports);
+    waveform_walk_dependencies(rows, dependencies, jump->name, TRUE, &upstream_remaining);
+    waveform_walk_dependencies(rows, dependencies, jump->name, FALSE, &downstream_remaining);
+    g_hash_table_unref(dependencies);
     g_free(target);
     gboolean reference_limit_reached = g_hash_table_size(seen) >= 2000;
     g_hash_table_unref(seen);
@@ -4616,11 +4619,15 @@ static void waveform_show_hdl_uses(WaveJump *jump)
     GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(rows));
     gtk_container_add(GTK_CONTAINER(scroll), tree);
     gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(rows), 1, GTK_SORT_ASCENDING);
-    const gchar *titles[] = {_("Role"), _("Name"), _("File"), _("Line"), _("Port hops")};
+    const gchar *titles[] = {_("Role"), _("Name"), _("File"), _("Line"), _("Hops")};
     const gint columns[] = {WAVE_USE_ROLE, WAVE_USE_NAME, WAVE_USE_FILE, WAVE_USE_LINE, WAVE_USE_HOPS};
     for (guint column = 0; column < G_N_ELEMENTS(titles); column++)
-        gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(tree), -1,
+    {
+        GtkTreeViewColumn *view_column = gtk_tree_view_column_new_with_attributes(
             titles[column], gtk_cell_renderer_text_new(), "text", columns[column], NULL);
+        gtk_tree_view_column_set_sort_column_id(view_column, columns[column]);
+        gtk_tree_view_append_column(GTK_TREE_VIEW(tree), view_column);
+    }
     GtkTreeIter selected;
     GtkTreeSelection *selection = g_object_ref(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)));
     if (gtk_tree_model_get_iter_first(GTK_TREE_MODEL(rows), &selected))

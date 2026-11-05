@@ -12,6 +12,7 @@
 #include "slang/ast/symbols/SubroutineSymbols.h"
 #include "slang/ast/symbols/CompilationUnitSymbols.h"
 #include "slang/ast/symbols/InstanceSymbols.h"
+#include "slang/ast/symbols/MemberSymbols.h"
 #include "slang/ast/symbols/PortSymbols.h"
 #include "slang/syntax/SyntaxTree.h"
 #include "slang/parsing/Preprocessor.h"
@@ -308,6 +309,39 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
             if (token.valueText() == function.name) reference(function.name, token.range(), function.location, "call");
         }visitDefault(node);
     }
+    // Connect the signals read and driven by a continuous assignment.
+    // Связывает сигналы, которые читает и изменяет непрерывное присваивание.
+    void handle(const ContinuousAssignSymbol& node) {
+        const auto& expression = node.getAssignment();
+        if (!expression.bad() && expression.kind == ExpressionKind::Assignment) {
+            const auto& assignment = expression.as<AssignmentExpression>();
+            PortOperands inputs, outputs;
+            assignment.right().visit(inputs);
+            outputs.destinations(assignment.left());
+
+            // Bound expansion for assignments containing many separate signals.
+            // Ограничивает число связей для присваиваний с множеством сигналов.
+            constexpr size_t maxPairs = 4096;
+            if (!outputs.signals.empty() && inputs.signals.size() <= maxPairs / outputs.signals.size()) {
+                for (const auto& input : inputs.signals) {
+                    const auto source = identity(*input.first);
+                    if (source.empty())
+                        continue;
+                    for (const auto& output : outputs.signals) {
+                        const auto destination = identity(*output.first);
+                        if (destination.empty() || source == destination)
+                            continue;
+                        const auto read = sources.getFullyOriginalLoc(input.second.start());
+                        const auto write = sources.getFullyOriginalLoc(output.second.start());
+                        add("P", source, read, destination, "", "assign-source");
+                        add("P", destination, write, source, "", "assign-destination");
+                    }
+                }
+            }
+        }
+        visitDefault(node);
+    }
+
     // Index each direct port connection from both sides of the instance boundary.
     // Индексирует прямое подключение порта с обеих сторон границы экземпляра.
     void indexPortConnections(const InstanceSymbol& instance) {
