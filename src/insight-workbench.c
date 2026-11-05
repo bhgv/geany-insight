@@ -9404,11 +9404,22 @@ typedef enum {
 } NativeDebugAction;
 
 typedef struct {
+    gchar *expression, *value;
+} NativeWatch;
+
+typedef struct {
     GSubprocess *process;
     GDataInputStream *output;
     GCancellable *cancel;
     GtkWidget *status, *command, *location, *breakpoint, *load_lua, *unload_lua, *source, *buttons[NATIVE_ACTION_COUNT];
     GtkTextView *console, *watches;
+    GtkWidget *inspection, *observer_log, *tabs, *watch_entry, *watch_add, *watch_remove;
+    GPtrArray *expressions;
+    ScriptDebugWindow *graph_view;
+    InsightLuaWatchGraph *graph;
+    guint watch_next;
+    NativeWatch *watch_pending;
+    gboolean inspecting;
     InsightLuaDebug *observer;
     gsize log_offset;
     gchar *stop_file;
@@ -9428,6 +9439,9 @@ static void native_debug_update(NativeDebug *session)
             (i == NATIVE_PAUSE ? session->running :
              i == NATIVE_RUN ? !session->running : session->stopped && !session->running));
     gtk_widget_set_sensitive(session->command, idle && !session->running);
+    gtk_widget_set_sensitive(session->watch_entry, idle && !session->running);
+    gtk_widget_set_sensitive(session->watch_add, idle && !session->running);
+    gtk_widget_set_sensitive(session->watch_remove, idle && !session->running);
     gtk_widget_set_sensitive(session->location, idle && !session->running);
     gtk_widget_set_sensitive(session->breakpoint, idle && !session->running);
     gtk_widget_set_sensitive(session->source, session->stopped && session->stop_file && session->stop_line);
@@ -9453,10 +9467,56 @@ static void native_debug_log(NativeDebug *session, const gchar *line)
     g_free(text);
 }
 
+static void native_watch_free(gpointer data)
+{
+    NativeWatch *watch = data;
+    g_free(watch->expression);
+    g_free(watch->value);
+    g_free(watch);
+}
+
+static void native_watch_refresh(NativeDebug *session, gboolean compare)
+{
+    InsightLuaWatchGraph *graph = session->graph;
+    memset(graph, 0, sizeof *graph);
+    graph->node_count = 1;
+    g_strlcpy(graph->nodes[0].label, "GDB watches", sizeof graph->nodes[0].label);
+    for (guint i = 0; i < session->expressions->len; i++)
+    {
+        NativeWatch *watch = session->expressions->pdata[i];
+        guint id = graph->node_count++;
+        InsightLuaWatchNode *node = &graph->nodes[id];
+        g_strlcpy(node->label, watch->expression, sizeof node->label);
+        g_strlcpy(node->value, watch->value ? watch->value : "Awaiting stop", sizeof node->value);
+        g_snprintf(node->path, sizeof node->path, "gdb:%s", watch->expression);
+        InsightLuaWatchEdge *edge = &graph->edges[graph->edge_count++];
+        edge->from = 0;
+        edge->to = id;
+        g_strlcpy(edge->label, "watch", sizeof edge->label);
+    }
+    insight_lua_debug_observer_watch(session->observer, graph);
+    session->graph_view->watch_selected = -1;
+    GString *text = g_string_new(NULL);
+    for (guint i = 1; i < graph->node_count; i++)
+        g_string_append_printf(text, "%s = %s\n", graph->nodes[i].label, graph->nodes[i].value);
+    gchar *valid = g_utf8_make_valid(text->str, -1);
+    debug_set_text(GTK_WIDGET(session->watches), valid);
+    g_free(valid);
+    g_string_free(text, TRUE);
+    if (compare)
+        debug_watch_compare(session->graph_view);
+    debug_watch_layout(session->graph_view);
+}
+
 static void native_debug_free(gpointer data)
 {
     NativeDebug *session = data;
     insight_lua_debug_free(session->observer);
+    g_ptr_array_unref(session->expressions);
+    g_ptr_array_unref(session->graph_view->watch_paths);
+    g_clear_pointer(&session->graph_view->watch_previous_values, g_hash_table_unref);
+    g_free(session->graph_view);
+    g_free(session->graph);
     g_free(session->stop_file);
     g_object_unref(session->cancel);
     g_object_unref(session->output);
@@ -9477,10 +9537,21 @@ static void native_debug_send(GtkWidget *dialog, const gchar *command);
 
 static void native_debug_resume(GtkWidget *dialog, NativeDebug *session)
 {
-    if (session->resume && !session->pending && !session->writing)
+    if (session->pending || session->writing || !session->ready || !session->stopped)
+        return;
+    if (session->resume)
     {
         session->resume = FALSE;
         native_debug_send(dialog, "-exec-continue");
+    }
+    else if (session->watch_next < session->expressions->len)
+    {
+        session->watch_pending = session->expressions->pdata[session->watch_next++];
+        gchar *escaped = g_strescape(session->watch_pending->expression, NULL);
+        gchar *command = g_strdup_printf("-data-evaluate-expression \"%s\"", escaped);
+        native_debug_send(dialog, command);
+        g_free(command);
+        g_free(escaped);
     }
 }
 
@@ -9497,6 +9568,7 @@ static void native_debug_written(GObject *stream, GAsyncResult *result, gpointer
         {
             native_debug_log(session, error->message);
             session->pending = session->ready = session->resume = FALSE;
+            session->watch_pending = NULL;
         }
         native_debug_update(session);
         native_debug_resume(dialog, session);
@@ -9581,16 +9653,9 @@ static void native_debug_observe(NativeDebug *session, const gchar *record)
         native_debug_log(session, log + session->log_offset);
     session->log_offset = length;
 
-    InsightLuaWatchGraph *graph = g_new0(InsightLuaWatchGraph, 1);
-    insight_lua_debug_observer_watch(session->observer, graph);
-    GString *watch_text = g_string_new(NULL);
-    for (guint i = 1; i < graph->node_count; i++)
-        g_string_append_printf(watch_text, "%s = %s\n", graph->nodes[i].label, graph->nodes[i].value);
-    gchar *valid = g_utf8_make_valid(watch_text->str, -1);
-    debug_set_text(GTK_WIDGET(session->watches), valid);
+    gchar *valid = g_utf8_make_valid(log, -1);
+    debug_set_text(session->observer_log, valid);
     g_free(valid);
-    g_string_free(watch_text, TRUE);
-    g_free(graph);
     g_free(point);
     g_free(function);
 }
@@ -9614,12 +9679,30 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             session->running = FALSE;
             session->stopped = !g_str_has_prefix(line, "*stopped,reason=\"exited");
             if (session->stopped)
+            {
+                session->watch_next = 0;
                 native_debug_observe(session, line);
+                if (!session->expressions->len)
+                    native_watch_refresh(session, TRUE);
+            }
         }
         if (*line == '^')
         {
             session->pending = FALSE;
             session->ready = !g_str_has_prefix(line, "^exit");
+            session->inspecting = FALSE;
+            if (session->watch_pending)
+            {
+                NativeWatch *watch = session->watch_pending;
+                g_free(watch->value);
+                watch->value = native_debug_field(line,
+                    g_str_has_prefix(line, "^done") ? "value" : "msg");
+                if (!watch->value)
+                    watch->value = g_strdup("Unavailable");
+                session->watch_pending = NULL;
+                if (session->watch_next == session->expressions->len)
+                    native_watch_refresh(session, TRUE);
+            }
         }
         if ((*line == '~' || *line == '@' || *line == '&') &&
             line[1] == '"' && g_str_has_suffix(line, "\""))
@@ -9628,6 +9711,16 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             gchar *decoded = g_strcompress(line + 2);
             g_strchomp(decoded);
             native_debug_log(session, decoded);
+            if (session->inspecting && *line == '~')
+            {
+                GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(session->inspection));
+                GtkTextIter end;
+                gtk_text_buffer_get_end_iter(buffer, &end);
+                gchar *valid = g_utf8_make_valid(decoded, -1);
+                gtk_text_buffer_insert(buffer, &end, valid, -1);
+                gtk_text_buffer_insert(buffer, &end, "\n", 1);
+                g_free(valid);
+            }
             g_free(decoded);
         }
         else if (*line && strcmp(line, "(gdb)") && *line != '=' && strcmp(line, "^done"))
@@ -9656,7 +9749,15 @@ static void native_debug_clicked(GtkButton *button, gpointer data)
         "-interpreter-exec console \"info locals\""
     };
     guint action = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(button), "native-debug-action"));
-    native_debug_send(GTK_WIDGET(data), commands[action]);
+    GtkWidget *dialog = data;
+    NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
+    if (action == NATIVE_STACK || action == NATIVE_LOCALS)
+    {
+        session->inspecting = TRUE;
+        debug_set_text(session->inspection, "");
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(session->tabs), 3);
+    }
+    native_debug_send(dialog, commands[action]);
 }
 
 static void native_debug_command(GtkEntry *entry, gpointer data)
@@ -9705,7 +9806,8 @@ static void native_debug_unload(GtkButton *button, gpointer data)
     NativeDebug *session = data;
     g_clear_pointer(&session->observer, insight_lua_debug_free);
     session->log_offset = 0;
-    debug_set_text(GTK_WIDGET(session->watches), "");
+    debug_set_text(session->observer_log, "");
+    native_watch_refresh(session, FALSE);
     native_debug_update(session);
 }
 
@@ -9748,6 +9850,38 @@ static void native_debug_load(GtkButton *button, gpointer data)
     }
     g_free(filename);
     g_object_unref(dialog);
+}
+
+static void native_watch_edit(GtkButton *button, gpointer data)
+{
+    GtkWidget *dialog = data;
+    NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
+    gchar *expression = g_strdup(gtk_entry_get_text(GTK_ENTRY(session->watch_entry)));
+    g_strstrip(expression);
+    if (!*expression)
+    {
+        g_free(expression);
+        return;
+    }
+    guint index = 0;
+    while (index < session->expressions->len &&
+           strcmp(((NativeWatch *)session->expressions->pdata[index])->expression, expression))
+        index++;
+    if (GTK_WIDGET(button) == session->watch_remove)
+    {
+        if (index < session->expressions->len)
+            g_ptr_array_remove_index(session->expressions, index);
+    }
+    else if (index == session->expressions->len && index < 32)
+    {
+        NativeWatch *watch = g_new0(NativeWatch, 1);
+        watch->expression = g_strdup(expression);
+        g_ptr_array_add(session->expressions, watch);
+    }
+    g_free(expression);
+    session->watch_next = 0;
+    native_watch_refresh(session, FALSE);
+    native_debug_resume(dialog, session);
 }
 
 static void native_debug_show(const gchar *gdb, const gchar *target)
@@ -9812,6 +9946,13 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     gtk_box_pack_start(GTK_BOX(scripts), session->unload_lua, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), scripts, FALSE, FALSE, 4);
     GtkWidget *tabs = gtk_notebook_new();
+    session->tabs = tabs;
+    session->expressions = g_ptr_array_new_with_free_func(native_watch_free);
+    session->graph = g_new0(InsightLuaWatchGraph, 1);
+    session->graph_view = g_new0(ScriptDebugWindow, 1);
+    session->graph_view->watch_paths = g_ptr_array_new_with_free_func(g_free);
+    session->graph_view->watch_selected = -1;
+    session->graph_view->watch_graph = session->graph;
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     session->console = GTK_TEXT_VIEW(gtk_text_view_new());
     gtk_text_view_set_editable(session->console, FALSE);
@@ -9823,7 +9964,29 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     gtk_text_view_set_editable(session->watches, FALSE);
     gtk_text_view_set_monospace(session->watches, TRUE);
     gtk_container_add(GTK_CONTAINER(watch_scroll), GTK_WIDGET(session->watches));
-    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), watch_scroll, gtk_label_new(insight_tr("Lua Watches")));
+    GtkWidget *watch_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    GtkWidget *watch_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+    session->watch_entry = gtk_entry_new();
+    gtk_entry_set_max_length(GTK_ENTRY(session->watch_entry), 80);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(session->watch_entry), insight_tr("GDB watch expression"));
+    session->watch_add = gtk_button_new_with_label(insight_tr("Add Watch"));
+    session->watch_remove = gtk_button_new_with_label(insight_tr("Remove Watch"));
+    g_signal_connect(session->watch_add, "clicked", G_CALLBACK(native_watch_edit), dialog);
+    g_signal_connect(session->watch_remove, "clicked", G_CALLBACK(native_watch_edit), dialog);
+    gtk_box_pack_start(GTK_BOX(watch_row), session->watch_entry, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(watch_row), session->watch_add, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(watch_row), session->watch_remove, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(watch_page), watch_row, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(watch_page), watch_scroll, TRUE, TRUE, 0);
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), watch_page, gtk_label_new(insight_tr("Watches")));
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), debug_create_watch_tab(session->graph_view),
+                             gtk_label_new(insight_tr("Watch graph")));
+    GtkWidget *inspection = gtk_paned_new(GTK_ORIENTATION_VERTICAL);
+    session->inspection = debug_create_view(inspection, TRUE);
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), inspection, gtk_label_new(insight_tr("Stack and locals")));
+    GtkWidget *log = gtk_paned_new(GTK_ORIENTATION_VERTICAL);
+    session->observer_log = debug_create_view(log, TRUE);
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), log, gtk_label_new(insight_tr("Observer log")));
     gtk_box_pack_start(GTK_BOX(box), tabs, TRUE, TRUE, 0);
     session->command = gtk_entry_new();
     gtk_entry_set_max_length(GTK_ENTRY(session->command), 1024);

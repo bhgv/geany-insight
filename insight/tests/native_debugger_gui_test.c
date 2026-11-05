@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "geany.h"
 #include "main.h"
-#include "ui_utils.h"
+#include "document.h"
+#include "editor.h"
 #include <glib/gstdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,6 +25,8 @@ static GtkWidget *window_named(const gchar *title)
 
 static GtkWidget *find(GtkWidget *widget, const gchar *key)
 {
+    if (GTK_IS_NOTEBOOK(widget) && !strcmp(key, "inspection notebook"))
+        return widget;
     if (GTK_IS_BUTTON(widget) && !g_strcmp0(gtk_button_get_label(GTK_BUTTON(widget)), key))
         return widget;
     if (GTK_IS_ENTRY(widget) && !g_strcmp0(gtk_entry_get_placeholder_text(GTK_ENTRY(widget)), key))
@@ -100,9 +103,11 @@ static gboolean drive(gpointer data)
     (void)data;
     if (phase == 0)
     {
-        if (!main_widgets.window)
+        GeanyDocument *document = document_get_current();
+        if (!DOC_VALID(document))
             return G_SOURCE_CONTINUE;
-        GtkWidget *menu = find(main_widgets.window, "Debug C/C++ Executable…");
+        GtkWidget *editor = gtk_widget_get_toplevel(GTK_WIDGET(document->editor->sci));
+        GtkWidget *menu = find(editor, "Debug C/C++ Executable…");
         if (menu)
         {
             phase++;
@@ -113,6 +118,9 @@ static gboolean drive(gpointer data)
     }
     GtkWidget *window = window_named("C/C++ Debugger");
     if (!window)
+        return G_SOURCE_CONTINUE;
+    GtkWidget *tabs = find(window, "inspection notebook");
+    if (!GTK_IS_NOTEBOOK(tabs))
         return G_SOURCE_CONTINUE;
 
     if (phase == 1)
@@ -135,16 +143,26 @@ static gboolean drive(gpointer data)
             gtk_button_clicked(GTK_BUTTON(load));
         }
     }
-    else if (phase == 3 && find(window, "Lua observer loaded.") && click(window, "Run"))
-        phase++;
+    else if (phase == 3 && find(window, "Lua observer loaded."))
+    {
+        GtkWidget *expression = find(window, "GDB watch expression");
+        if (!GTK_IS_ENTRY(expression) || !gtk_widget_is_sensitive(expression))
+            return G_SOURCE_CONTINUE;
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs), 1);
+        gtk_entry_set_text(GTK_ENTRY(expression), "marker");
+        if (click(window, "Add Watch") && click(window, "Run"))
+            phase++;
+    }
     else if (phase == 4 && find(window, "Lua breakpoint: main") &&
              find(window, "Observed function = main") && click(window, "Step Over"))
         phase++;
-    else if (phase == 5 && find(window, "end-stepping-range") && click(window, "Locals"))
+    else if (phase == 5 && find(window, "end-stepping-range") &&
+             find(window, "marker = 41") && find(window, "Pin member") && click(window, "Locals"))
         phase++;
-    else if (phase == 6 && find(window, "marker = 41"))
+    else if (phase == 6 && gtk_notebook_get_current_page(GTK_NOTEBOOK(tabs)) == 3 &&
+             find(gtk_notebook_get_nth_page(GTK_NOTEBOOK(tabs), 3), "marker = 41"))
     {
-        g_print("C/C++ GTK: real GDB breakpoint, Lua observer, step and locals passed.\n");
+        g_print("C/C++ GTK: real GDB breakpoint, Lua observer, watch, step and locals passed.\n");
         passed = TRUE;
         gtk_widget_destroy(window);
         gtk_main_quit();
@@ -166,7 +184,7 @@ int main(int argc, char **argv)
     if (g_mkdir_with_parents(profile, 0700))
         return 1;
     gchar *editor_args[] = {argv[0], "--new-instance", "--no-session", "--no-plugins",
-                           "--config", profile, NULL};
+                           "--config", profile, observer, NULL};
     g_timeout_add(100, drive, NULL);
     g_timeout_add_seconds(60, timeout, NULL);
     gint result = main_lib(G_N_ELEMENTS(editor_args) - 1, editor_args);
