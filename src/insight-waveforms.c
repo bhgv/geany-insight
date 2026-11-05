@@ -22,6 +22,7 @@ typedef struct {
 typedef struct {
  Capture *capture;
  GtkWidget *window, *selector, *canvas, *value, *source, *pin, *filter, *radix, *markers;
+ GtkListStore *watch_values;
  gchar *session_path;
  gint active;
  gboolean rebuilding;
@@ -248,6 +249,71 @@ static void update_markers(Viewer *viewer) {
  g_string_free(line, TRUE);
 }
 
+/* List the values of all visible signals at the same waveform tick. */
+/* Показывает значения всех видимых сигналов на одном такте диаграммы. */
+static void update_watch_values(Viewer *viewer)
+{
+    gtk_list_store_clear(viewer->watch_values);
+    for (guint lane = 0; lane < track_count(viewer, viewer->active); lane++)
+    {
+        gint index = track_signal(viewer, lane, viewer->active);
+        const Signal *signal = viewer->capture->signals->pdata[index];
+        guint at = upper_bound(signal->trace, viewer->cursor);
+        const Edge *edge = at ? &g_array_index(signal->trace->edges, Edge, at - 1) : NULL;
+        gchar *value = format_bits(edge ? edge->value : "unknown", viewer->hexadecimal);
+        gchar *tick = edge ? g_strdup_printf("%" G_GUINT64_FORMAT, edge->time) : g_strdup("—");
+        gtk_list_store_insert_with_values(viewer->watch_values, NULL, -1,
+            0, signal->name, 1, value, 2, tick,
+            3, edge && edge->time == viewer->cursor ? "Yes" : "", -1);
+        g_free(tick);
+        g_free(value);
+    }
+}
+
+/* Find the closest recorded event on one trace in the chosen direction. */
+/* Ищет ближайшее записанное событие дорожки в выбранном направлении. */
+static gboolean wave_adjacent_event(const Trace *trace, guint64 cursor, gboolean forward, guint64 *time)
+{
+    guint at = upper_bound(trace, cursor);
+    if (forward)
+    {
+        if (at == trace->edges->len)
+            return FALSE;
+        *time = g_array_index(trace->edges, Edge, at).time;
+    }
+    else
+    {
+        if (at && g_array_index(trace->edges, Edge, at - 1).time == cursor)
+            at--;
+        if (!at)
+            return FALSE;
+        *time = g_array_index(trace->edges, Edge, at - 1).time;
+    }
+    return TRUE;
+}
+
+/* Step through the union of the displayed signal event times. */
+/* Шагает по объединению времён событий видимых сигналов. */
+static void wave_step_visible(Viewer *viewer, gboolean forward)
+{
+    gboolean found = FALSE;
+    guint64 target = 0;
+    for (guint lane = 0; lane < track_count(viewer, viewer->active); lane++)
+    {
+        gint index = track_signal(viewer, lane, viewer->active);
+        const Signal *signal = viewer->capture->signals->pdata[index];
+        guint64 time;
+        if (wave_adjacent_event(signal->trace, viewer->cursor, forward, &time) &&
+            (!found || (forward ? time < target : time > target)))
+        {
+            target = time;
+            found = TRUE;
+        }
+    }
+    if (found)
+        viewer->cursor = target;
+}
+
 static void update(Viewer *viewer) {
  Signal *signal = selected(viewer);
  if (!signal) return;
@@ -262,6 +328,7 @@ static void update(Viewer *viewer) {
  g_free(label);
  g_free(value);
  update_markers(viewer);
+ update_watch_values(viewer);
  gint active = viewer->active;
  gboolean pinned = pinned_index(viewer, active) >= 0;
  gtk_button_set_label(GTK_BUTTON(viewer->pin), pinned ? "Unpin track" : "Pin track");
@@ -456,14 +523,10 @@ static void wave_action(GtkButton *button, gpointer data) {
  if (!signal) return;
  gint action = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "action"));
  Trace *trace = signal->trace;
- guint next = upper_bound(trace, viewer->cursor);
- if (action == 1 && next < trace->edges->len)
-  viewer->cursor = g_array_index(trace->edges, Edge, next).time;
- if (action == -1 && next) {
-  guint index = next - 1;
-  if (index && g_array_index(trace->edges, Edge, index).time == viewer->cursor) index--;
-  viewer->cursor = g_array_index(trace->edges, Edge, index).time;
- }
+ guint64 time;
+ if ((action == 1 || action == -1) && wave_adjacent_event(trace, viewer->cursor, action == 1, &time))
+  viewer->cursor = time;
+ if (action == 6 || action == -6) wave_step_visible(viewer, action == 6);
  guint64 total = MAX(G_GUINT64_CONSTANT(1), viewer->capture->end);
  if (action == 2) viewer->span = MAX(G_GUINT64_CONSTANT(1), viewer->span / 2);
  if (action == 3) viewer->span = MIN(total, viewer->span * 2);
@@ -680,6 +743,7 @@ static void viewer_free(gpointer data) {
  g_free(viewer->session_path);
  capture_free(viewer->capture);
  g_array_unref(viewer->tracks);
+ g_clear_object(&viewer->watch_values);
  g_free(viewer);
 }
 
@@ -734,6 +798,32 @@ static void show_capture(GtkWindow *parent, Capture *capture, const gchar *sessi
   g_signal_connect(button, "clicked", G_CALLBACK(wave_action), viewer);
   gtk_box_pack_start(GTK_BOX(controls), button, FALSE, FALSE, 0);
  }
+ GtkWidget *watch_panel = gtk_expander_new("Signal Watch");
+ GtkWidget *watch_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+ gtk_container_add(GTK_CONTAINER(watch_panel), watch_box);
+ gtk_box_pack_start(GTK_BOX(box), watch_panel, FALSE, FALSE, 0);
+ GtkWidget *watch_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+ gtk_box_pack_start(GTK_BOX(watch_box), watch_controls, FALSE, FALSE, 0);
+ const gchar *step_labels[] = {"Previous visible event", "Next visible event"};
+ for (guint i = 0; i < G_N_ELEMENTS(step_labels); i++) {
+  GtkWidget *button = gtk_button_new_with_label(step_labels[i]);
+  g_object_set_data(G_OBJECT(button), "action", GINT_TO_POINTER(i ? 6 : -6));
+  g_signal_connect(button, "clicked", G_CALLBACK(wave_action), viewer);
+  gtk_box_pack_start(GTK_BOX(watch_controls), button, FALSE, FALSE, 0);
+ }
+ viewer->watch_values = gtk_list_store_new(4, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+ GtkWidget *watch_tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(viewer->watch_values));
+ const gchar *headings[] = {"Signal", "Value", "Last event tick", "Event at cursor"};
+ for (guint i = 0; i < G_N_ELEMENTS(headings); i++) {
+  GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(
+      headings[i], gtk_cell_renderer_text_new(), "text", i, NULL);
+  gtk_tree_view_column_set_resizable(column, TRUE);
+  gtk_tree_view_append_column(GTK_TREE_VIEW(watch_tree), column);
+ }
+ GtkWidget *watch_scroll = gtk_scrolled_window_new(NULL, NULL);
+ gtk_widget_set_size_request(watch_scroll, -1, 128);
+ gtk_container_add(GTK_CONTAINER(watch_scroll), watch_tree);
+ gtk_box_pack_start(GTK_BOX(watch_box), watch_scroll, TRUE, TRUE, 0);
  GtkWidget *measure = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
  gtk_box_pack_start(GTK_BOX(box), measure, FALSE, FALSE, 0);
  viewer->radix = gtk_combo_box_text_new();
