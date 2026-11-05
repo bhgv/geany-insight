@@ -10,7 +10,7 @@
 
 typedef enum {
     OPEN_DEBUGGER, LOAD_OBSERVER, SET_POINT, RUN_TO_POINT,
-    INSPECT_STOP, INSPECT_PREVIEW, WAIT_FOR_CAPTURE
+    INSPECT_STOP, INSPECT_PREVIEW, WAIT_FOR_CAPTURE, INSPECT_CONNECTIONS
 } TestPhase;
 
 static TestPhase phase;
@@ -43,6 +43,8 @@ static GtkWidget *find_control(GtkWidget *widget, const gchar *key)
     if (GTK_IS_BUTTON(widget) && !g_strcmp0(gtk_button_get_label(GTK_BUTTON(widget)), key))
         return widget;
     if (GTK_IS_LABEL(widget) && !g_strcmp0(gtk_label_get_text(GTK_LABEL(widget)), key))
+        return widget;
+    if (GTK_IS_NOTEBOOK(widget) && !strcmp(key, "notebook"))
         return widget;
     if (GTK_IS_TEXT_VIEW(widget) && !strcmp(key, "console"))
         return widget;
@@ -101,7 +103,7 @@ static gboolean console_contains(GtkWidget *window, const gchar *expected)
 
 /* Select the expected signal in the real waveform track list. */
 /* Выбирает ожидаемый сигнал в списке дорожек настоящей диаграммы. */
-static gboolean select_counter_track(GtkWidget *window)
+static gboolean select_track(GtkWidget *window, const gchar *signal)
 {
     GtkWidget *tracks = find_control(window, "tracks");
     if (!GTK_IS_COMBO_BOX(tracks))
@@ -113,7 +115,7 @@ static gboolean select_counter_track(GtkWidget *window)
     {
         gchar *name = NULL;
         gtk_tree_model_get(model, &row, 0, &name, -1);
-        gboolean found = !g_strcmp0(name, "counter_tb.count");
+        gboolean found = !g_strcmp0(name, signal);
         g_free(name);
         if (found)
         {
@@ -122,6 +124,40 @@ static gboolean select_counter_track(GtkWidget *window)
         }
     }
     return FALSE;
+}
+
+static gboolean open_hdl_uses(gpointer data)
+{
+    (void)data;
+    GtkWidget *map = find_window("Signal Map");
+    if (!map)
+        return G_SOURCE_CONTINUE;
+    gtk_dialog_response(GTK_DIALOG(map), GTK_RESPONSE_OK);
+    return G_SOURCE_REMOVE;
+}
+
+typedef struct
+{
+    gboolean bit;
+    gboolean clock;
+} GraphChecks;
+
+static gboolean check_connection(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *row,
+                                 gpointer data)
+{
+    (void)path;
+    GraphChecks *checks = data;
+    gchar *role, *signal, *selection;
+    gtk_tree_model_get(model, row, 0, &role, 1, &signal, 6, &selection, -1);
+    if (!g_strcmp0(signal, "counter_tb.dut.odd") &&
+        !g_strcmp0(role, "assign-destination") && !g_strcmp0(selection, "[0] / all"))
+        checks->bit = TRUE;
+    if (!g_strcmp0(signal, "counter_tb.dut.clk") && !g_strcmp0(role, "posedge-source"))
+        checks->clock = TRUE;
+    g_free(role);
+    g_free(signal);
+    g_free(selection);
+    return checks->bit && checks->clock;
 }
 
 /* Answer the real modal chooser once GTK has selected the requested file. */
@@ -208,14 +244,41 @@ static gboolean drive_debugger(gpointer data)
     if (phase == WAIT_FOR_CAPTURE)
     {
         GtkWidget *capture = find_window("VCD Waveforms");
-        if (!simulation && capture && select_counter_track(capture))
+        if (!simulation && capture && select_track(capture, "counter_tb.dut.count"))
         {
-            g_print("Verilog GTK: Lua stop, source navigation and both VCD windows passed.\n");
-            passed = TRUE;
-            gtk_main_quit();
-            return G_SOURCE_REMOVE;
+            phase = INSPECT_CONNECTIONS;
+            g_timeout_add(100, open_hdl_uses, NULL);
+            if (!click(capture, "Signal Map…"))
+                return fail_timeout(NULL);
         }
         return G_SOURCE_CONTINUE;
+    }
+    if (phase == INSPECT_CONNECTIONS)
+    {
+        GtkWidget *uses = find_window("HDL Uses");
+        if (!uses)
+            return G_SOURCE_CONTINUE;
+        GtkWidget *notebook = find_control(uses, "notebook");
+        if (!notebook)
+            return fail_timeout(NULL);
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(notebook), 1);
+        GtkWidget *page = gtk_notebook_get_nth_page(GTK_NOTEBOOK(notebook), 1);
+        GtkWidget *view = page ? gtk_bin_get_child(GTK_BIN(page)) : NULL;
+        GraphChecks checks = {FALSE, FALSE};
+        if (GTK_IS_TREE_VIEW(view))
+            gtk_tree_model_foreach(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),
+                                   check_connection, &checks);
+        if (!checks.bit || !checks.clock)
+        {
+            g_printerr("Verilog GTK Connections missing bit edge (%d) or clock edge (%d).\n",
+                       checks.bit, checks.clock);
+            return fail_timeout(NULL);
+        }
+        gtk_dialog_response(GTK_DIALOG(uses), GTK_RESPONSE_CLOSE);
+        g_print("Verilog GTK: Lua stop, source navigation, VCD and HDL Connections passed.\n");
+        passed = TRUE;
+        gtk_main_quit();
+        return G_SOURCE_REMOVE;
     }
     if (!simulation)
         return G_SOURCE_CONTINUE;
@@ -266,7 +329,7 @@ static gboolean drive_debugger(gpointer data)
     {
         GtkWidget *preview = find_window("VCD Waveforms");
         GtkWidget *resume = find_control(simulation, "Continue");
-        if (preview && resume && gtk_widget_is_sensitive(resume) && select_counter_track(preview))
+        if (preview && resume && gtk_widget_is_sensitive(resume) && select_track(preview, "counter_tb.count"))
         {
             gtk_widget_destroy(preview);
             if (click(simulation, "Continue"))
@@ -302,11 +365,11 @@ int main(int argc, char **argv)
     const gchar *assignment = strstr(counter_text, "count <= count + 1'b1;");
     if (!assignment)
         return 1;
-    point_line = 1;
+    point_line = 2;
     for (const gchar *byte = counter_text; byte < assignment; byte++)
         if (*byte == '\n')
             point_line++;
-    gchar *combined = g_strconcat(counter_text, "\n", testbench_text, NULL);
+    gchar *combined = g_strconcat("`timescale 1ns/1ns\n", counter_text, "\n", testbench_text, NULL);
     gboolean saved = g_file_set_contents(fixture_source, combined, -1, NULL);
     g_free(combined);
     g_free(counter_text);
