@@ -20,6 +20,7 @@ on:
       - 'insight/patches/geany-vvp.patch'
       - 'insight/tests/waveform-debug/**'
       - 'src/insight-waveforms.*'
+      - 'external/slang-compat/**'
 
 permissions:
   contents: read
@@ -70,4 +71,5 @@ jobs:
           if-no-files-found: ignore
           path: |
             _editor-build/logs/
+            ${{ runner.temp }}/insight-build/logs/
             ${{ runner.temp }}/insight-smoke/

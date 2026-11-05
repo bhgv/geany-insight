@@ -95,10 +95,13 @@ fi
 mkdir -p -- "$work/src" "$work/build" "$work/stage"
 tar -xzf "$archive" -C "$work/src" --strip-components=1
 patch --batch -d "$work/src" -p1 < "$bridge_patch"
-(
-    cd "$work/src"
-    bash ./autoconf.sh
-)
+# EN: The verified release already contains configure and generated keyword tables.
+# RU: Проверенный выпуск уже содержит configure и сгенерированные таблицы ключевых слов.
+if [[ ! -x "$work/src/configure" || ! -f "$work/src/lexor_keyword.cc" ||
+      ! -f "$work/src/vhdlpp/lexor_keyword.cc" ]]; then
+    printf '%s\n' 'Icarus Verilog release archive is missing generated build files.' >&2
+    exit 1
+fi
 printf '[Simulator] Building Icarus Verilog %s from source.\n' "$version"
 (
     cd "$work/build"

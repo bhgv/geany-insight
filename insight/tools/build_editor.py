@@ -139,7 +139,7 @@ def prerequisites(args):
     else:
         tools += ['meson', 'ninja']
     if args.install:
-        tools += ['bash', 'curl', 'tar', 'make', 'autoconf', 'bison', 'flex', 'gperf', 'rsync', 'patch']
+        tools += ['bash', 'curl', 'tar', 'make', 'bison', 'flex', 'gperf', 'rsync', 'patch']
     missing = [tool for tool in tools if not shutil.which(tool)]
     if args.install and not any(shutil.which(tool) for tool in ('sha256sum', 'shasum')):
         missing.append('sha256sum or shasum')

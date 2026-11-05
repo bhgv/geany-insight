@@ -153,6 +153,73 @@ def check_processes(compiler, runtime, fixtures, directory, environment):
         simulator.close()
 
 
+# EN: Execute an installed program and preserve both output streams.
+# RU: Запускаем установленную программу и сохраняем оба потока вывода.
+def capture_command(command, directory, name, environment):
+    directory.mkdir(parents=True, exist_ok=True)
+    stdout = directory / f"{name}.stdout"
+    stderr = directory / f"{name}.stderr"
+    with stdout.open("wb") as output, stderr.open("wb") as errors:
+        subprocess.run(command, cwd=directory, env=environment, stdout=output,
+                       stderr=errors, timeout=90, check=True)
+    return stdout.read_text(encoding="utf-8")
+
+
+# EN: Verify the installed editor loads its runtime libraries.
+# RU: Проверяем загрузку библиотек установленным редактором.
+def check_editor(editor, directory, environment):
+    version = capture_command([str(editor), "--version"], directory, "version", environment)
+    require("GTK" in version and "GLib" in version, "Unexpected Geany version output")
+
+
+# EN: Decode a hex field from the Slang service protocol.
+# RU: Декодируем шестнадцатеричное поле протокола Slang.
+def decode_field(field):
+    try:
+        return bytes.fromhex(field).decode("utf-8")
+    except ValueError as error:
+        raise RuntimeError("Malformed field in the installed Slang reply") from error
+
+
+# EN: Verify the recorded hierarchy resolves to HDL and crosses all edge types.
+# RU: Проверяем переход от имени на диаграмме к HDL и все типы связей.
+def check_slang(service, fixtures, directory, environment):
+    fixture = fixtures / "procedural_flow_tb.v"
+    args = ["--", str(fixture)]
+    sampled = "procedural_flow_tb.dut.sampled"
+    reply = capture_command([str(service), "--editor-wave-definition", sampled, *args],
+                            directory, "wave-definition", environment).splitlines()
+    require(len(reply) == 2 and reply[0] == "insight-slang-definition-v1",
+            "Recorded hierarchy did not resolve to a declaration")
+    fields = reply[1].split("\t")
+    require(len(fields) == 3 and fields[1].isdigit() and fields[2].isdigit(),
+            "Malformed Slang declaration position")
+    target = Path(decode_field(fields[0])).resolve()
+    line, column = int(fields[1]), int(fields[2])
+    source_lines = fixture.read_text(encoding="utf-8").splitlines()
+    require(target == fixture.resolve() and 0 < line <= len(source_lines) and column > 0
+            and "reg sampled" in source_lines[line - 1], "Wrong HDL declaration for sampled")
+
+    reply = capture_command([str(service), "--editor-index", *args], directory,
+                            "project-index", environment).splitlines()
+    require(len(reply) > 2 and reply[0] == "insight-slang-index-v2",
+            "Missing Slang project index")
+    edges = set()
+    for record in reply[2:]:
+        fields = record.split("\t")
+        require(len(fields) == 8, "Malformed Slang index record")
+        if fields[0] == "P":
+            edges.add(tuple(decode_field(fields[i]) for i in (5, 1, 7)))
+    root = "procedural_flow_tb"
+    flow = [f"{root}.stimulus", f"{root}.dut.data_in", sampled,
+            f"{root}.dut.data_out", f"{root}.result"]
+    roles = ["port", "procedural", "assign", "port"]
+    for start, end, role in zip(flow, flow[1:], roles):
+        require((start, end, f"{role}-destination") in edges
+                and (end, start, f"{role}-source") in edges,
+                f"Missing Slang dependency between {start} and {end}")
+
+
 # EN: Run the checks against binaries installed by either native build launcher.
 # RU: Запускаем проверки программ, установленных любым штатным сборщиком.
 def main():
@@ -164,17 +231,25 @@ def main():
     binaries = args.prefix.resolve() / "bin"
     compiler = binaries / f"iverilog{suffix}"
     runtime = binaries / f"vvp{suffix}"
-    require(all(path.is_file() for path in (compiler, runtime, binaries / f"geany{suffix}")),
+    editor = binaries / f"geany{suffix}"
+    service = args.prefix.resolve() / "libexec/geany-insight/slang" / f"insight-slang-semantic{suffix}"
+    require(all(path.is_file() for path in (compiler, runtime, editor)),
             f"Expected installed Geany and Icarus executables under {binaries}")
     fixtures = Path(__file__).resolve().parent
     environment = os.environ.copy()
     environment["GEANY_VVP_DEBUG"] = "1"
     environment["PATH"] = str(binaries) + os.pathsep + environment.get("PATH", "")
     logs = args.logs.resolve()
-    for name, check in (("breakpoint", check_breakpoint), ("processes", check_processes)):
+    checks = (
+        ("editor", lambda directory: check_editor(editor, directory, environment)),
+        ("breakpoint", lambda directory: check_breakpoint(compiler, runtime, fixtures, directory, environment)),
+        ("processes", lambda directory: check_processes(compiler, runtime, fixtures, directory, environment)),
+        ("slang", lambda directory: check_slang(service, fixtures, directory, environment)),
+    )
+    for name, check in checks:
         directory = logs / name
         try:
-            check(compiler, runtime, fixtures, directory, environment)
+            check(directory)
         except (OSError, RuntimeError, subprocess.SubprocessError) as error:
             raise SystemExit(f"{name}: {error}. See {directory}") from error
         print(f"{name}: OK")

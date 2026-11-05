@@ -127,7 +127,9 @@ rows = [line.split('\t') for line in raw[2:]]
 assert all(len(row) == 8 for row in rows)
 assert any(row[0] == 'D' and bytes.fromhex(row[1]).decode() == 'data_i' for row in rows)
 assert any(row[0] == 'R' and bytes.fromhex(row[7]).decode() == 'module' and bytes.fromhex(row[1]).decode() == 'leaf' for row in rows)
-assert any(row[0] == 'R' and bytes.fromhex(row[7]).decode() == 'value' and bytes.fromhex(row[1]).decode() == 'data_i' for row in rows)
+if not any(row[0] == 'R' and bytes.fromhex(row[7]).decode() == 'read'
+           and bytes.fromhex(row[1]).decode() == 'data_i' for row in rows):
+    raise RuntimeError("Expected a read of data_i in the HDL project index")
 print('Project index protocol: declarations, module links, named ports and value references passed')
 
 with tempfile.TemporaryDirectory(prefix='slang include ') as directory:
