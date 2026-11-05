@@ -1176,6 +1176,8 @@ typedef struct {
     gchar **pending_event;
     gsize observer_log_offset;
     gboolean bridge_ready, pause_requested;
+    gboolean source_step_ready;
+    GtkWidget *source_step_controls;
     GString *protocol_line;
     GHashTable *breakpoints, *point_anchors;
     GPtrArray *unresolved_records, *unresolved_anchors;
@@ -1801,6 +1803,8 @@ static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsi
         if (run->protocol_line->len && run->protocol_line->str[run->protocol_line->len - 1] == '\r')
             g_string_truncate(run->protocol_line, run->protocol_line->len - 1);
         const gchar *text = run->protocol_line->str;
+        if (strstr(text, "GEANY-VVP-SOURCE-STEP"))
+            run->source_step_ready = TRUE;
         if (strstr(text, "GEANY-VVP-READY"))
             run->bridge_ready = TRUE;
         const gchar *event = strstr(text, "GEANY-VVP-EVENT\t");
@@ -1990,6 +1994,7 @@ static gboolean simulation_refresh_console(gpointer data)
     }
     gtk_widget_set_sensitive(run->live_controls, paused && !run->preview_pending);
     gtk_widget_set_sensitive(run->breakpoint_controls, run->bridge_ready);
+    gtk_widget_set_sensitive(run->source_step_controls, run->source_step_ready);
     if (paused && run->pause_requested)
     {
         gchar *directory = simulation_live_directory(run);
@@ -2021,7 +2026,8 @@ static void simulation_write_command(WaveSimulation *run, const gchar *command)
         return;
 
     run->prompt_tail[0] = run->prompt_tail[1] = 0;
-    if (!strcmp(command, "cont\n") || !strcmp(command, "step\n"))
+    if (!strcmp(command, "cont\n") || !strcmp(command, "step\n") ||
+        g_str_has_prefix(command, "geany-step-"))
     {
         g_clear_pointer(&run->trace_file, g_free);
         gtk_widget_set_sensitive(run->source_button, FALSE);
@@ -2549,6 +2555,18 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
             g_signal_connect(button, "clicked", G_CALLBACK(simulation_send_command), run);
             gtk_box_pack_start(GTK_BOX(actions), button, FALSE, FALSE, 0);
         }
+        run->source_step_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        gtk_box_pack_start(GTK_BOX(run->live_controls), run->source_step_controls, FALSE, FALSE, 0);
+        const gchar *step_labels[] = {"Step HDL", "Step Current Process", "Next Tick"};
+        const gchar *step_commands[] = {"geany-step-source\n", "geany-step-process\n", "geany-step-tick\n"};
+        for (guint i = 0; i < G_N_ELEMENTS(step_labels); i++)
+        {
+            GtkWidget *button = gtk_button_new_with_label(step_labels[i]);
+            g_object_set_data(G_OBJECT(button), "vvp-command", (gpointer)step_commands[i]);
+            g_signal_connect(button, "clicked", G_CALLBACK(simulation_send_command), run);
+            gtk_box_pack_start(GTK_BOX(run->source_step_controls), button, FALSE, FALSE, 0);
+        }
+        gtk_widget_set_sensitive(run->source_step_controls, FALSE);
         GtkWidget *inspection = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
         gtk_box_pack_start(GTK_BOX(run->live_controls), inspection, FALSE, FALSE, 0);
         run->signal_name = gtk_entry_new();

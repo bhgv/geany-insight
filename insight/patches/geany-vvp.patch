@@ -11,13 +11,13 @@
  # include  "ivl_alloc.h"
  
  __vpiScope*stop_current_scope = 0;
-@@ -70,6 +74,190 @@
+@@ -70,8 +74,257 @@
  #endif
  
  
 +// EN: Keep the Geany bridge inactive for ordinary vvp invocations.
 +// RU: Оставляем мост Geany выключенным при обычном запуске vvp.
-+static bool geany_debug_enabled()
++bool geany_debug_enabled()
 +{
 +      static const char* enabled = std::getenv("GEANY_VVP_DEBUG");
 +      return enabled && std::strcmp(enabled, "1") == 0;
@@ -199,13 +199,86 @@
 +            std::remove(".geany-vvp-pause") == 0;
 +}
 +
++enum class geany_step_mode { none, source, process, tick };
++static geany_step_mode geany_step = geany_step_mode::none;
++static unsigned long long geany_stopped_process = 0;
++static unsigned long long geany_target_process = 0;
++
++// EN: Test a source checkpoint against the selected stepping mode.
++// RU: Проверяем точку исходника для выбранного режима шага.
++bool geany_source_step(unsigned long long process)
++{
++      return geany_step == geany_step_mode::source ||
++            (geany_step == geany_step_mode::process && process == geany_target_process);
++}
++
++// EN: Report the stopped process and use its scope for inspector commands.
++// RU: Сообщаем о процессе и используем его область для команд просмотра.
++void geany_source_context(unsigned long long process, __vpiScope* scope)
++{
++      geany_stopped_process = process;
++      stop_current_scope = scope;
++      const char* name = scope ? vpi_get_str(vpiFullName, scope) : nullptr;
++      printf("Geany process %llu in %s\n", process, name ? name : "(root)");
++}
++
++// EN: Stop at the first new simulation tick before active events.
++// RU: Останавливаемся на первом новом такте до активных событий.
++bool geany_tick_step()
++{
++      return geany_step == geany_step_mode::tick;
++}
++
  static bool interact_flag = true;
  
++// EN: Resume until the next source checkpoint in any process.
++// RU: Продолжаем до следующей точки исходника в любом процессе.
++static void cmd_geany_step_source(unsigned, const char*[])
++{
++      if (geany_debug_enabled()) {
++            geany_step = geany_step_mode::source;
++            interact_flag = false;
++      }
++}
++
++// EN: Resume until the stopped process next reaches a source checkpoint.
++// RU: Продолжаем до следующей точки исходника остановленного процесса.
++static void cmd_geany_step_process(unsigned, const char*[])
++{
++      if (!geany_debug_enabled())
++            return;
++      if (!geany_stopped_process) {
++            printf("Geany: no source process is stopped. Use Step HDL first.\n");
++            return;
++      }
++      geany_target_process = geany_stopped_process;
++      geany_step = geany_step_mode::process;
++      interact_flag = false;
++}
++
++// EN: Resume until the simulation clock advances.
++// RU: Продолжаем до перехода времени симуляции на новый такт.
++static void cmd_geany_step_tick(unsigned, const char*[])
++{
++      if (geany_debug_enabled()) {
++            geany_step = geany_step_mode::tick;
++            interact_flag = false;
++      }
++}
++
  static void cmd_call(unsigned argc, const char*argv[])
-@@ -444,6 +632,10 @@
+ {
+       __vpiHandle**table;
+@@ -444,6 +697,16 @@
          "Synonym for finish."},
        { "finish", &cmd_finish,
          "Finish the simulation."},
++      { "geany-step-source", &cmd_geany_step_source,
++        "Step to the next HDL source checkpoint."},
++      { "geany-step-process", &cmd_geany_step_process,
++        "Step to the next HDL checkpoint in the stopped process."},
++      { "geany-step-tick", &cmd_geany_step_tick,
++        "Step to the next simulation tick."},
 +      { "geany-list", &cmd_geany_list,
 +        "List Geany source breakpoints and hit counters."},
 +      { "geany-load", &cmd_geany_load,
@@ -213,32 +286,51 @@
        { "help",   &cmd_help,
          "Get help."},
        { "list",   &cmd_list,
-@@ -554,6 +746,8 @@
+@@ -554,6 +817,9 @@
  	    return;
        }
  
++      geany_step = geany_step_mode::none;
 +      if (geany_debug_enabled())
-+            printf("GEANY-VVP-READY\n");
++            printf("GEANY-VVP-SOURCE-STEP\nGEANY-VVP-READY\n");
        vpi_mcd_printf(1,"** VVP Stop(%d) **\n", rc);
        vpi_mcd_printf(1,"** Flushing output streams.\n");
        invoke_command_const("$fflush");
+@@ -583,5 +849,6 @@
+ 	    free(input);
+       }
+ 
++      geany_stopped_process = 0;
+       vpi_mcd_printf(1,"** Continue **\n");
+ }
 --- a/vvp/vthread.cc
 +++ b/vvp/vthread.cc
-@@ -857,6 +857,9 @@
+@@ -89,6 +89,7 @@
+  */
+ 
+ struct vthread_s {
++      unsigned long long geany_process_id = 0;
+       vthread_s();
+ 
+       void debug_dump(ostream&fd, const char*label_text);
+@@ -857,6 +858,12 @@
   * incrementing the PC, and executing the instruction. The thread may
   * be the head of a list, so each thread is run so far as possible.
   */
 +extern bool geany_pause_requested();
++extern bool geany_debug_enabled();
 +extern bool geany_source_breakpoint(const char*, unsigned);
++extern bool geany_source_step(unsigned long long);
++extern void geany_source_context(unsigned long long, __vpiScope*);
 +
  void vthread_run(vthread_t thr)
  {
        while (thr != 0) {
-@@ -869,6 +872,11 @@
+@@ -869,6 +876,11 @@
              running_thread = thr;
  
  	    for (;;) {
-+                  if (geany_pause_requested()) {
++                  if (!thr->i_am_in_function && geany_pause_requested()) {
 +                        schedule_stop(0);
 +                        schedule_vthread(thr, 0, false);
 +                        break;
@@ -246,11 +338,41 @@
  		  vvp_code_t cp = thr->pc;
  		  thr->pc += 1;
  
-@@ -6416,6 +6424,14 @@
+@@ -880,6 +892,15 @@
+ 			break;
+ 	    }
+ 
++            if (tmp && geany_debug_enabled() && schedule_stopped()) {
++                  // EN: Keep the remaining runnable threads queued across the stop.
++                  // RU: Оставляем остальные готовые процессы в очереди на время паузы.
++                  for (vthread_t pending = tmp; pending; pending = pending->wait_next)
++                        pending->is_scheduled = 0;
++                  schedule_vthread(tmp, 0, false);
++                  break;
++            }
++
+ 	    thr = tmp;
+       }
+       running_thread = 0;
+@@ -6416,6 +6437,28 @@
  	    cerr << thr->get_fileline()
  	         << vpi_get_str(_vpiDescription, handle) << endl;
  
-+      if (geany_source_breakpoint(vpi_get_str(vpiFile, handle), vpi_get(vpiLineNo, handle))) {
++      // EN: A synchronous function or final block cannot yield to the scheduler.
++      // RU: Синхронная функция или блок final не могут уступить управление планировщику.
++      if (thr->i_am_in_function)
++            return true;
++
++      const char* filename = vpi_get_str(vpiFile, handle);
++      const unsigned line = vpi_get(vpiLineNo, handle);
++      const bool breakpoint = geany_source_breakpoint(filename, line);
++      if (breakpoint || geany_source_step(thr->geany_process_id)) {
++            static unsigned long long next_process_id = 0;
++            if (!thr->geany_process_id)
++                  thr->geany_process_id = ++next_process_id;
++            if (!breakpoint && filename && line)
++                  printf("GEANY-VVP-STOP\t%u\t%s\n", line, filename);
++            geany_source_context(thr->geany_process_id, vthread_scope(thr));
 +            // EN: Resume at the next opcode, before the selected statement executes.
 +            // RU: Продолжаем со следующей команды, перед выполнением выбранного оператора.
 +            schedule_stop(0);
@@ -263,16 +385,17 @@
  
 --- a/vvp/schedule.cc
 +++ b/vvp/schedule.cc
-@@ -592,6 +592,8 @@
+@@ -592,6 +592,9 @@
        schedule_runnable = false;
  }
  
 +extern bool geany_pause_requested();
++extern bool geany_tick_step();
 +
  void schedule_stop(int)
  {
        schedule_stopped_flag = true;
-@@ -1177,6 +1179,8 @@
+@@ -1177,6 +1180,8 @@
  
        if (schedule_runnable) while (sched_list) {
  
@@ -281,3 +404,14 @@
  	    if (schedule_stopped_flag) {
  		  schedule_stopped_flag = false;
  		  stop_handler(0);
+@@ -1214,6 +1219,10 @@
+ 			cur->run_run();
+ 			delete (cur);
+ 		  }
++                  if (geany_tick_step()) {
++                        schedule_stop(0);
++                        continue;
++                  }
+ 	    }
+ 
+ 
