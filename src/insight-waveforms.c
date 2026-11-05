@@ -972,7 +972,9 @@ typedef struct {
     GtkWidget *signal_name;
     GtkWidget *pause_button, *source_button, *breakpoint_controls, *breakpoint_file, *breakpoint_line;
     GtkWidget *rule_signal, *rule_bits, *rule_hits, *rule_log, *rule_script;
-    GtkWidget *lua_watches;
+    GtkWidget *lua_watches, *reload_script;
+    gchar *settings_path, *observer_file;
+    gboolean restored_rules;
     InsightLuaDebug *lua_observer;
     gchar **pending_event;
     gsize observer_log_offset;
@@ -995,6 +997,8 @@ static void simulation_free(gpointer data)
     g_mutex_clear(&run->lock);
     g_free(run->live_log);
     g_free(run->trace_file);
+    g_free(run->settings_path);
+    g_free(run->observer_file);
     insight_lua_debug_free(run->lua_observer);
     g_strfreev(run->pending_event);
     if (run->protocol_line)
@@ -1007,6 +1011,122 @@ static void simulation_free(gpointer data)
     g_free(run->runtime);
     g_free(run->include_dir);
     g_free(run);
+}
+
+/* Key the run configuration by project and the unordered source selection. */
+/* Привязывает настройки к проекту и набору выбранных исходников. */
+static gchar *simulation_settings_path(const gchar *directory, const gchar *project, gchar **sources)
+{
+    if (!directory)
+        return NULL;
+    GChecksum *checksum = g_checksum_new(G_CHECKSUM_SHA256);
+    if (project)
+        g_checksum_update(checksum, (const guchar *)project, strlen(project));
+    GSList *ordered = NULL;
+    for (guint i = 0; sources[i]; i++)
+        ordered = g_slist_prepend(ordered, sources[i]);
+    ordered = g_slist_sort(ordered, (GCompareFunc)g_strcmp0);
+    for (GSList *item = ordered; item; item = item->next)
+    {
+        const gchar *source = item->data;
+        g_checksum_update(checksum, (const guchar *)"\0", 1);
+        g_checksum_update(checksum, (const guchar *)source, strlen(source));
+    }
+    gchar *name = g_strconcat(g_checksum_get_string(checksum), ".conf", NULL);
+    gchar *path = g_build_filename(directory, name, NULL);
+    g_slist_free(ordered);
+    g_checksum_free(checksum);
+    g_free(name);
+    return path;
+}
+
+/* Restore only well-formed rules for files selected in this run. */
+/* Восстанавливает только корректные правила для выбранных файлов. */
+static void simulation_load_settings(WaveSimulation *run)
+{
+    if (!run->settings_path)
+        return;
+    GKeyFile *settings = g_key_file_new();
+    if (g_key_file_load_from_file(settings, run->settings_path, G_KEY_FILE_NONE, NULL))
+    {
+        gsize count = 0;
+        gchar **records = g_key_file_get_string_list(settings, "Simulation", "Points", &count, NULL);
+        for (gsize i = 0; i < MIN(count, 128); i++)
+        {
+            gchar **parts = g_strsplit(records[i], "\t", 7);
+            guint64 line, hits;
+            if (g_strv_length(parts) == 7 &&
+                g_ascii_string_to_unsigned(parts[0], 10, 1, G_MAXINT, &line, NULL) &&
+                g_strv_contains((const gchar *const *)run->sources, parts[1]) &&
+                !strpbrk(parts[1], "\r\n") && !strpbrk(parts[2], "\r\n ") &&
+                strlen(parts[2]) <= 2048 && strlen(parts[3]) <= 1024 &&
+                ((*parts[2] == 0) == (*parts[3] == 0)) &&
+                strspn(parts[3], "01xz") == strlen(parts[3]) &&
+                g_ascii_string_to_unsigned(parts[4], 10, 1, 1000000, &hits, NULL) &&
+                (!strcmp(parts[5], "0") || !strcmp(parts[5], "1")) &&
+                (!strcmp(parts[6], "0") || !strcmp(parts[6], "1")) &&
+                (strcmp(parts[5], "1") || strcmp(parts[6], "1")))
+            {
+                gchar *key = g_strdup_printf("%" G_GUINT64_FORMAT "\t%s", line, parts[1]);
+                gchar *rule = g_strjoin("\t", parts[2], parts[3], parts[4], parts[5], parts[6], NULL);
+                g_hash_table_replace(run->breakpoints, key, rule);
+            }
+            g_strfreev(parts);
+        }
+        g_strfreev(records);
+        gchar *script = g_key_file_get_string(settings, "Simulation", "Observer", NULL);
+        if (script)
+        {
+            gchar *local = g_filename_from_utf8(script, -1, NULL, NULL, NULL);
+            if (local && g_path_is_absolute(local))
+                run->observer_file = g_steal_pointer(&local);
+            g_free(local);
+            g_free(script);
+        }
+    }
+    g_key_file_unref(settings);
+}
+
+/* Serialize the rules in stable order for storage and runtime reload. */
+/* Записывает правила в стабильном порядке для настроек и симулятора. */
+static GPtrArray *simulation_rule_records(const WaveSimulation *run)
+{
+    GPtrArray *records = g_ptr_array_new_with_free_func(g_free);
+    GList *keys = g_list_sort(g_hash_table_get_keys(run->breakpoints), (GCompareFunc)g_strcmp0);
+    for (GList *item = keys; item; item = item->next)
+    {
+        const gchar *rule = g_hash_table_lookup(run->breakpoints, item->data);
+        g_ptr_array_add(records, g_strconcat(item->data, "\t", rule, NULL));
+    }
+    g_list_free(keys);
+    return records;
+}
+
+/* Save the run setup in the Geany profile, outside the project tree. */
+/* Сохраняет настройки запуска в профиле Geany за пределами дерева проекта. */
+static gboolean simulation_save_settings(const WaveSimulation *run)
+{
+    if (!run->settings_path)
+        return TRUE;
+    GKeyFile *settings = g_key_file_new();
+    GPtrArray *records = simulation_rule_records(run);
+    if (records->len)
+        g_key_file_set_string_list(settings, "Simulation", "Points",
+            (const gchar *const *)records->pdata, records->len);
+    if (run->observer_file)
+    {
+        gchar *utf8 = g_filename_to_utf8(run->observer_file, -1, NULL, NULL, NULL);
+        if (utf8)
+            g_key_file_set_string(settings, "Simulation", "Observer", utf8);
+        g_free(utf8);
+    }
+    gchar *directory = g_path_get_dirname(run->settings_path);
+    gboolean saved = g_mkdir_with_parents(directory, 0700) == 0 &&
+        g_key_file_save_to_file(settings, run->settings_path, NULL);
+    g_free(directory);
+    g_ptr_array_unref(records);
+    g_key_file_unref(settings);
+    return saved;
 }
 
 /* Prefer the simulator installed beside the editor before searching PATH. */
@@ -1141,6 +1261,24 @@ static gchar *simulation_find_vcd(const gchar *directory, GError **error)
     return path;
 }
 
+/* Stage restored rules in the private runtime directory before starting vvp. */
+/* Подготавливает восстановленные правила в рабочей папке перед запуском vvp. */
+static gboolean simulation_stage_rules(const WaveSimulation *run, const gchar *directory, GError **error)
+{
+    if (!g_hash_table_size(run->breakpoints))
+        return TRUE;
+    GPtrArray *records = simulation_rule_records(run);
+    GString *contents = g_string_new(NULL);
+    for (guint i = 0; i < records->len; i++)
+        g_string_append_printf(contents, "%s\n", (gchar *)records->pdata[i]);
+    gchar *path = g_build_filename(directory, ".geany-vvp-breakpoints", NULL);
+    gboolean staged = g_file_set_contents(path, contents->str, (gssize)contents->len, error);
+    g_free(path);
+    g_string_free(contents, TRUE);
+    g_ptr_array_unref(records);
+    return staged;
+}
+
 /* Compile and run the selected sources off the GTK thread. */
 /* Компилирует и запускает выбранные исходники вне потока GTK. */
 static void simulation_worker(GTask *task, gpointer object, gpointer data, GCancellable *cancel)
@@ -1164,7 +1302,8 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
         g_ptr_array_add(command, NULL);
         const gchar *execute[] = {run->runtime, "simulation.vvp", NULL};
         if (simulation_process((const gchar *const *)command->pdata, directory, bin, cancel, &error) &&
-            (run->interactive ? simulation_interactive(run, directory, bin, cancel, &error) :
+            (run->interactive ? (simulation_stage_rules(run, directory, &error) &&
+             simulation_interactive(run, directory, bin, cancel, &error)) :
              simulation_process(execute, directory, bin, cancel, &error)))
         {
             gchar *vcd = simulation_find_vcd(directory, &error);
@@ -1433,6 +1572,15 @@ static gboolean simulation_refresh_console(gpointer data)
         g_free(valid);
     }
     gboolean paused = running && run->prompt_tail[0] == '>' && run->prompt_tail[1] == ' ';
+    if (paused && run->bridge_ready && !run->restored_rules)
+    {
+        run->restored_rules = TRUE;
+        if (g_hash_table_size(run->breakpoints))
+        {
+            simulation_write_command(run, "geany-load\n");
+            paused = FALSE;
+        }
+    }
     if (paused && run->pending_event)
     {
         simulation_handle_observer_event(run);
@@ -1480,6 +1628,19 @@ static void simulation_write_command(WaveSimulation *run, const gchar *command)
     GOutputStream *input = g_subprocess_get_stdin_pipe(process);
     g_output_stream_write_all(input, command, strlen(command), NULL, NULL, NULL);
     g_object_unref(process);
+}
+
+/* Report a configuration save failure without discarding the active session. */
+/* Сообщает об ошибке записи настроек, сохраняя текущий сеанс. */
+static void simulation_report_settings(WaveSimulation *run)
+{
+    if (!simulation_save_settings(run))
+    {
+        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->console));
+        GtkTextIter end;
+        gtk_text_buffer_get_end_iter(buffer, &end);
+        gtk_text_buffer_insert(buffer, &end, "\nCould not save Verilog debug settings.\n", -1);
+    }
 }
 
 /* Send the complete enabled source-breakpoint set to the paused runtime. */
@@ -1559,6 +1720,7 @@ static void simulation_edit_breakpoint(GtkButton *button, gpointer data)
                 g_hash_table_remove(run->breakpoints, key);
             else
                 g_hash_table_replace(run->breakpoints, g_steal_pointer(&key), g_steal_pointer(&rule));
+            simulation_report_settings(run);
             simulation_write_command(run, "geany-load\n");
         }
         g_free(path);
@@ -1669,21 +1831,61 @@ static void simulation_preview(GtkButton *button, gpointer data)
     g_object_unref(task);
 }
 
+/* Populate the rule fields when a saved file-and-line pair is selected. */
+/* Заполняет поля правила при выборе сохранённой пары файла и строки. */
+static void simulation_rule_selected(GtkWidget *widget, gpointer data)
+{
+    (void)widget;
+    WaveSimulation *run = data;
+    gint index = gtk_combo_box_get_active(GTK_COMBO_BOX(run->breakpoint_file));
+    if (index < 0)
+        return;
+    gint line = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(run->breakpoint_line));
+    gchar *key = g_strdup_printf("%d\t%s", line, run->sources[index]);
+    const gchar *rule = g_hash_table_lookup(run->breakpoints, key);
+    gchar **fields = rule ? g_strsplit(rule, "\t", 5) : NULL;
+    gboolean valid = fields && g_strv_length(fields) == 5;
+    gtk_entry_set_text(GTK_ENTRY(run->rule_signal), valid ? fields[0] : "");
+    gtk_entry_set_text(GTK_ENTRY(run->rule_bits), valid ? fields[1] : "");
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(run->rule_hits),
+                              valid ? g_ascii_strtoll(fields[2], NULL, 10) : 1);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(run->rule_log), valid && !strcmp(fields[3], "1"));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(run->rule_script), valid && !strcmp(fields[4], "1"));
+    g_strfreev(fields);
+    g_free(key);
+}
+
 /* Load a bounded Lua observer into the current paused session. */
 /* Загружает ограниченный по размеру Lua-сценарий в текущий сеанс на паузе. */
 static void simulation_load_observer(GtkButton *button, gpointer data)
 {
-    (void)button;
     WaveSimulation *run = data;
-    GtkWidget *chooser = gtk_file_chooser_dialog_new("Load Verilog Observer", GTK_WINDOW(run->dialog),
+    gchar *filename = NULL;
+    if (GTK_WIDGET(button) == run->reload_script)
+        filename = g_strdup(run->observer_file);
+    else
+    {
+        GtkWidget *parent = g_object_ref(run->dialog);
+        GtkWidget *chooser = gtk_file_chooser_dialog_new("Load Verilog Observer", GTK_WINDOW(parent),
         GTK_FILE_CHOOSER_ACTION_OPEN, "_Cancel", GTK_RESPONSE_CANCEL, "_Load", GTK_RESPONSE_ACCEPT, NULL);
-    GtkFileFilter *filter = gtk_file_filter_new();
-    gtk_file_filter_set_name(filter, "Lua scripts");
-    gtk_file_filter_add_pattern(filter, "*.[lL][uU][aA]");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(chooser), filter);
-    gchar *filename = gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT ?
-        gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser)) : NULL;
-    gtk_widget_destroy(chooser);
+        gtk_window_set_destroy_with_parent(GTK_WINDOW(chooser), TRUE);
+        GtkFileFilter *filter = gtk_file_filter_new();
+        gtk_file_filter_set_name(filter, "Lua scripts");
+        gtk_file_filter_add_pattern(filter, "*.[lL][uU][aA]");
+        gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(chooser), filter);
+        if (run->observer_file)
+            gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(chooser), run->observer_file);
+        filename = gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT ?
+            gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser)) : NULL;
+        gtk_widget_destroy(chooser);
+        gboolean active = g_object_get_data(G_OBJECT(parent), "insight-live-simulation") == run;
+        g_object_unref(parent);
+        if (!active)
+        {
+            g_free(filename);
+            return;
+        }
+    }
     if (!filename)
         return;
 
@@ -1708,6 +1910,10 @@ static void simulation_load_observer(GtkButton *button, gpointer data)
     if (applied)
     {
         run->observer_log_offset = 0;
+        g_free(run->observer_file);
+        run->observer_file = g_strdup(filename);
+        gtk_widget_set_sensitive(run->reload_script, TRUE);
+        simulation_report_settings(run);
         simulation_observer_output(run);
     }
     g_free(message);
@@ -1715,6 +1921,17 @@ static void simulation_load_observer(GtkButton *button, gpointer data)
     g_object_unref(file);
     g_free(source);
     g_free(filename);
+}
+
+/* Disable the current observer while keeping its file available for reload. */
+/* Отключает текущий сценарий, оставляя файл доступным для повторной загрузки. */
+static void simulation_disable_observer(GtkButton *button, gpointer data)
+{
+    (void)button;
+    WaveSimulation *run = data;
+    g_clear_pointer(&run->lua_observer, insight_lua_debug_free);
+    run->observer_log_offset = 0;
+    simulation_observer_output(run);
 }
 
 /* Close the progress dialog and show either the capture or the diagnostic. */
@@ -1776,7 +1993,8 @@ static void simulation_dialog_destroy(GtkWidget *dialog, gpointer data)
 /* Запускает Icarus и открывает полученный VCD после завершения. */
 void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar *include_dir,
                                 const gchar *const *sources, gboolean interactive, InsightWaveSource navigate,
-                                InsightWaveLocation open_location)
+                                InsightWaveLocation open_location,
+                                const gchar *settings_directory, const gchar *project)
 {
 #ifdef G_OS_WIN32
     const gchar *compiler_name = "iverilog.exe", *runtime_name = "vvp.exe";
@@ -1820,6 +2038,8 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         gtk_window_set_default_size(GTK_WINDOW(run->dialog), 680, 400);
         run->protocol_line = g_string_new(NULL);
         run->breakpoints = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+        run->settings_path = simulation_settings_path(settings_directory, project, run->sources);
+        simulation_load_settings(run);
         GtkWidget *running_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
         gtk_box_pack_start(GTK_BOX(box), running_actions, FALSE, FALSE, 0);
         run->pause_button = gtk_button_new_with_label("Pause");
@@ -1925,9 +2145,21 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         gtk_box_pack_start(GTK_BOX(rule), run->rule_log, FALSE, FALSE, 0);
         run->rule_script = gtk_check_button_new_with_label("Lua decides");
         gtk_box_pack_start(GTK_BOX(rule), run->rule_script, FALSE, FALSE, 0);
+        g_signal_connect(run->breakpoint_file, "changed", G_CALLBACK(simulation_rule_selected), run);
+        g_signal_connect(run->breakpoint_line, "value-changed", G_CALLBACK(simulation_rule_selected), run);
+        simulation_rule_selected(NULL, run);
         GtkWidget *load_script = gtk_button_new_with_label("Load Lua Observer…");
         g_signal_connect(load_script, "clicked", G_CALLBACK(simulation_load_observer), run);
-        gtk_box_pack_start(GTK_BOX(rule), load_script, FALSE, FALSE, 0);
+        GtkWidget *scripts = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), scripts, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(scripts), load_script, FALSE, FALSE, 0);
+        run->reload_script = gtk_button_new_with_label("Reload Saved Lua");
+        gtk_widget_set_sensitive(run->reload_script, run->observer_file != NULL);
+        g_signal_connect(run->reload_script, "clicked", G_CALLBACK(simulation_load_observer), run);
+        gtk_box_pack_start(GTK_BOX(scripts), run->reload_script, FALSE, FALSE, 0);
+        GtkWidget *disable_script = gtk_button_new_with_label("Disable Lua");
+        g_signal_connect(disable_script, "clicked", G_CALLBACK(simulation_disable_observer), run);
+        gtk_box_pack_start(GTK_BOX(scripts), disable_script, FALSE, FALSE, 0);
         run->lua_watches = gtk_label_new(NULL);
         gtk_label_set_selectable(GTK_LABEL(run->lua_watches), TRUE);
         gtk_label_set_xalign(GTK_LABEL(run->lua_watches), 0);

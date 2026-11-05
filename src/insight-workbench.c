@@ -4563,8 +4563,11 @@ static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
             gchar *share = g_path_get_dirname(app->datadir);
             gchar *prefix = g_path_get_dirname(share);
             gchar *bin = g_build_filename(prefix, "bin", NULL);
+            gchar *settings = g_build_filename(app->configdir, "insight", "verilog-debug", NULL);
             insight_waveforms_simulate(parent, bin, root, (const gchar *const *)sources->pdata,
-                                        interactive, waveform_source, diff_source_open);
+                                        interactive, waveform_source, diff_source_open, settings,
+                                        app->project ? app->project->file_name : NULL);
+            g_free(settings);
             g_free(bin);
             g_free(prefix);
             g_free(share);
