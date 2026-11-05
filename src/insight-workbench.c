@@ -4487,17 +4487,27 @@ static void wave_jump_run(GTask *task, gpointer object, gpointer data, GCancella
     g_task_return_boolean(task, found);
 }
 
+enum {
+    WAVE_USE_ROLE, WAVE_USE_NAME, WAVE_USE_FILE, WAVE_USE_LINE,
+    WAVE_USE_CONNECTION, WAVE_USE_HOPS, WAVE_USE_COLUMNS
+};
+
 /* Walk upstream or downstream without mixing directions at a shared signal. */
 /* Обходит связи вверх или вниз по потоку, сохраняя направление на развилках. */
-static void waveform_walk_dependencies(GtkListStore *rows, GHashTable *dependencies, const gchar *start,
+static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph, GHashTable *dependencies, const gchar *start,
     gboolean upstream, guint *remaining)
 {
     const gchar *port_role = upstream ? "port-source" : "port-destination";
     const gchar *assign_role = upstream ? "assign-source" : "assign-destination";
     const gchar *procedural_role = upstream ? "procedural-source" : "procedural-destination";
-    GHashTable *visited = g_hash_table_new(g_str_hash, g_str_equal);
+    GHashTable *visited = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
+    GtkTreeIter root;
+    gtk_tree_store_insert_with_values(graph, &root, NULL, -1,
+        WAVE_USE_NAME, start, WAVE_USE_ROLE, upstream ? _("Upstream") : _("Downstream"), -1);
     GQueue pending = G_QUEUE_INIT;
-    g_hash_table_add(visited, (gpointer)start);
+    GtkTreeIter *saved_root = g_new(GtkTreeIter, 1);
+    *saved_root = root;
+    g_hash_table_insert(visited, (gpointer)start, saved_root);
     g_queue_push_tail(&pending, (gpointer)start);
 
     for (guint distance = 1; !g_queue_is_empty(&pending) && *remaining; distance++)
@@ -4516,10 +4526,24 @@ static void waveform_walk_dependencies(GtkListStore *rows, GHashTable *dependenc
                 if ((g_strcmp0(edge->inheritance, port_role) &&
                      g_strcmp0(edge->inheritance, assign_role) &&
                      g_strcmp0(edge->inheritance, procedural_role) &&
-                     g_strcmp0(edge->inheritance, "port-peer")) ||
-                    !g_hash_table_add(visited, (gpointer)edge->name))
+                     g_strcmp0(edge->inheritance, "port-peer")))
                     continue;
 
+                GtkTreeIter branch;
+                GtkTreeIter *parent = g_hash_table_lookup(visited, signal);
+                gboolean repeated = g_hash_table_contains(visited, edge->name);
+                gtk_tree_store_insert_with_values(graph, &branch, parent, -1,
+                    WAVE_USE_ROLE, repeated ? _("Already shown") : edge->inheritance,
+                    WAVE_USE_NAME, edge->name, WAVE_USE_FILE, edge->path,
+                    WAVE_USE_LINE, edge->line, WAVE_USE_CONNECTION, TRUE,
+                    WAVE_USE_HOPS, distance, -1);
+                (*remaining)--;
+                if (repeated)
+                    continue;
+
+                GtkTreeIter *saved = g_new(GtkTreeIter, 1);
+                *saved = branch;
+                g_hash_table_insert(visited, (gpointer)edge->name, saved);
                 g_queue_push_tail(&pending, (gpointer)edge->name);
                 const gchar *role = edge->inheritance;
                 if (distance > 1)
@@ -4528,7 +4552,6 @@ static void waveform_walk_dependencies(GtkListStore *rows, GHashTable *dependenc
                     WAVE_USE_ROLE, role, WAVE_USE_NAME, edge->name,
                     WAVE_USE_FILE, edge->path, WAVE_USE_LINE, edge->line,
                     WAVE_USE_CONNECTION, TRUE, WAVE_USE_HOPS, distance, -1);
-                (*remaining)--;
             }
         }
     }
@@ -4536,31 +4559,68 @@ static void waveform_walk_dependencies(GtkListStore *rows, GHashTable *dependenc
     g_hash_table_unref(visited);
 }
 
-/* Show distinct source occurrences that bind to the selected declaration. */
-/* Показывает уникальные места в исходниках, связанные с выбранным объявлением. */
-enum {
-    WAVE_USE_ROLE, WAVE_USE_NAME, WAVE_USE_FILE, WAVE_USE_LINE,
-    WAVE_USE_CONNECTION, WAVE_USE_HOPS, WAVE_USE_COLUMNS
-};
-
-/* Enable track navigation only for an instance-specific connection. */
-/* Разрешает переход к дорожке только для связи конкретного экземпляра. */
-static void waveform_use_selected(GtkTreeSelection *selection, gpointer data)
+/* Update actions for the current tab's selected source or signal. */
+/* Обновляет действия для выбранного исходника или сигнала на текущей вкладке. */
+static void waveform_use_actions(GtkTreeSelection *selection, GtkDialog *dialog)
 {
     GtkTreeModel *model;
     GtkTreeIter row;
     gboolean connection = FALSE;
-    gboolean selected = gtk_tree_selection_get_selected(selection, &model, &row);
-    if (selected)
-        gtk_tree_model_get(model, &row, WAVE_USE_CONNECTION, &connection, -1);
-    gtk_dialog_set_response_sensitive(GTK_DIALOG(data), GTK_RESPONSE_ACCEPT, selected);
-    gtk_dialog_set_response_sensitive(GTK_DIALOG(data), GTK_RESPONSE_APPLY, connection);
+    guint line = 0;
+    if (gtk_tree_selection_get_selected(selection, &model, &row))
+        gtk_tree_model_get(model, &row, WAVE_USE_CONNECTION, &connection, WAVE_USE_LINE, &line, -1);
+    gtk_dialog_set_response_sensitive(dialog, GTK_RESPONSE_ACCEPT, line != 0);
+    gtk_dialog_set_response_sensitive(dialog, GTK_RESPONSE_APPLY, connection);
 }
 
+/* Refresh the available actions after selecting a row. */
+/* Обновляет доступные действия после выбора строки. */
+static void waveform_use_selected(GtkTreeSelection *selection, gpointer data)
+{
+    waveform_use_actions(selection, GTK_DIALOG(data));
+}
+
+/* Refresh actions using the selection of the page being opened. */
+/* Обновляет действия по выбранной строке открываемой вкладки. */
+static void waveform_use_switch(GtkNotebook *notebook, GtkWidget *page, guint number, gpointer data)
+{
+    (void)notebook;
+    (void)number;
+    GtkTreeView *tree = g_object_get_data(G_OBJECT(page), "wave-use-tree");
+    if (tree)
+        waveform_use_actions(gtk_tree_view_get_selection(tree), GTK_DIALOG(data));
+}
+
+/* Add a native GTK page for source occurrences or dependency branches. */
+/* Добавляет вкладку GTK для мест использования или ветвей зависимостей. */
+static GtkTreeView *waveform_use_page(GtkNotebook *notebook, GtkTreeModel *model, const gchar *title)
+{
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    GtkTreeView *tree = GTK_TREE_VIEW(gtk_tree_view_new_with_model(model));
+    gtk_container_add(GTK_CONTAINER(scroll), GTK_WIDGET(tree));
+    g_object_set_data(G_OBJECT(scroll), "wave-use-tree", tree);
+    gtk_notebook_append_page(notebook, scroll, gtk_label_new(title));
+
+    const gchar *titles[] = {_("Name"), _("Role"), _("File"), _("Line"), _("Hops")};
+    const gint columns[] = {WAVE_USE_NAME, WAVE_USE_ROLE, WAVE_USE_FILE, WAVE_USE_LINE, WAVE_USE_HOPS};
+    for (guint column = 0; column < G_N_ELEMENTS(titles); column++)
+    {
+        GtkTreeViewColumn *view_column = gtk_tree_view_column_new_with_attributes(
+            titles[column], gtk_cell_renderer_text_new(), "text", columns[column], NULL);
+        gtk_tree_view_column_set_sort_column_id(view_column, columns[column]);
+        gtk_tree_view_append_column(tree, view_column);
+    }
+    return tree;
+}
+
+/* Show source occurrences and the graph rooted at the selected signal. */
+/* Показывает места использования и граф от выбранного сигнала. */
 static void waveform_show_hdl_uses(WaveJump *jump)
 {
     const InsightIndex *index = jump->snapshot->result->index;
     GtkListStore *rows = gtk_list_store_new(WAVE_USE_COLUMNS,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_UINT);
+    GtkTreeStore *graph = gtk_tree_store_new(WAVE_USE_COLUMNS,
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_UINT);
     GHashTable *dependencies = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
         (GDestroyNotify)g_ptr_array_unref);
@@ -4594,8 +4654,8 @@ static void waveform_show_hdl_uses(WaveJump *jump)
                 WAVE_USE_NAME, row->name, WAVE_USE_FILE, row->path, WAVE_USE_LINE, row->line, -1);
     }
     guint upstream_remaining = 1000, downstream_remaining = 1000;
-    waveform_walk_dependencies(rows, dependencies, jump->name, TRUE, &upstream_remaining);
-    waveform_walk_dependencies(rows, dependencies, jump->name, FALSE, &downstream_remaining);
+    waveform_walk_dependencies(rows, graph, dependencies, jump->name, TRUE, &upstream_remaining);
+    waveform_walk_dependencies(rows, graph, dependencies, jump->name, FALSE, &downstream_remaining);
     g_hash_table_unref(dependencies);
     g_free(target);
     gboolean reference_limit_reached = g_hash_table_size(seen) >= 2000;
@@ -4616,41 +4676,50 @@ static void waveform_show_hdl_uses(WaveJump *jump)
     }
     gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_MIDDLE);
     gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 6);
-    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
-    gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
-    GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(rows));
-    gtk_container_add(GTK_CONTAINER(scroll), tree);
-    gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(rows), 1, GTK_SORT_ASCENDING);
-    const gchar *titles[] = {_("Role"), _("Name"), _("File"), _("Line"), _("Hops")};
-    const gint columns[] = {WAVE_USE_ROLE, WAVE_USE_NAME, WAVE_USE_FILE, WAVE_USE_LINE, WAVE_USE_HOPS};
-    for (guint column = 0; column < G_N_ELEMENTS(titles); column++)
-    {
-        GtkTreeViewColumn *view_column = gtk_tree_view_column_new_with_attributes(
-            titles[column], gtk_cell_renderer_text_new(), "text", columns[column], NULL);
-        gtk_tree_view_column_set_sort_column_id(view_column, columns[column]);
-        gtk_tree_view_append_column(GTK_TREE_VIEW(tree), view_column);
-    }
+    GtkNotebook *notebook = GTK_NOTEBOOK(gtk_notebook_new());
+    gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(notebook), TRUE, TRUE, 0);
+    g_object_ref(notebook);
+    GtkTreeView *uses_view = waveform_use_page(notebook, GTK_TREE_MODEL(rows), _("Uses"));
+    GtkTreeView *graph_view = waveform_use_page(notebook, GTK_TREE_MODEL(graph), _("Connections"));
+    gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(rows), WAVE_USE_NAME, GTK_SORT_ASCENDING);
+
     GtkTreeIter selected;
-    GtkTreeSelection *selection = g_object_ref(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)));
+    GtkTreeSelection *uses_selection = g_object_ref(gtk_tree_view_get_selection(uses_view));
+    GtkTreeSelection *graph_selection = g_object_ref(gtk_tree_view_get_selection(graph_view));
     if (gtk_tree_model_get_iter_first(GTK_TREE_MODEL(rows), &selected))
-        gtk_tree_selection_select_iter(selection, &selected);
+        gtk_tree_selection_select_iter(uses_selection, &selected);
     else
-    {
         gtk_label_set_text(GTK_LABEL(label), _("No HDL uses found."));
-        gtk_dialog_set_response_sensitive(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT, FALSE);
+
+    for (gint root = 0; root < 2; root++)
+    {
+        GtkTreePath *path = gtk_tree_path_new_from_indices(root, -1);
+        gtk_tree_view_expand_row(graph_view, path, FALSE);
+        gtk_tree_path_free(path);
     }
-    waveform_use_selected(selection, dialog);
-    g_signal_connect(selection, "changed", G_CALLBACK(waveform_use_selected), dialog);
+    waveform_use_actions(uses_selection, GTK_DIALOG(dialog));
+    g_signal_connect(uses_selection, "changed", G_CALLBACK(waveform_use_selected), dialog);
+    g_signal_connect(graph_selection, "changed", G_CALLBACK(waveform_use_selected), dialog);
+    g_signal_connect(notebook, "switch-page", G_CALLBACK(waveform_use_switch), dialog);
     gtk_widget_show_all(dialog);
     gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    GtkTreeSelection *selection = uses_selection;
+    GtkTreeModel *model = GTK_TREE_MODEL(rows);
     if (response != GTK_RESPONSE_NONE)
+    {
+        if (gtk_notebook_get_current_page(notebook) == 1)
+        {
+            selection = graph_selection;
+            model = GTK_TREE_MODEL(graph);
+        }
         gtk_widget_hide(dialog);
+    }
     if (response == GTK_RESPONSE_APPLY &&
         gtk_tree_selection_get_selected(selection, NULL, &selected))
     {
         gchar *peer;
         gboolean connection;
-        gtk_tree_model_get(GTK_TREE_MODEL(rows), &selected, WAVE_USE_NAME, &peer, WAVE_USE_CONNECTION, &connection, -1);
+        gtk_tree_model_get(model, &selected, WAVE_USE_NAME, &peer, WAVE_USE_CONNECTION, &connection, -1);
         GtkWindow *viewer = g_weak_ref_get(&jump->viewer);
         if (!connection)
             ui_set_statusbar(TRUE, "%s", _("Select a row with a full connected signal path."));
@@ -4664,16 +4733,21 @@ static void waveform_show_hdl_uses(WaveJump *jump)
     {
         gchar *utf8_path;
         guint line;
-        gtk_tree_model_get(GTK_TREE_MODEL(rows), &selected, WAVE_USE_FILE, &utf8_path, WAVE_USE_LINE, &line, -1);
+        gtk_tree_model_get(model, &selected, WAVE_USE_FILE, &utf8_path, WAVE_USE_LINE, &line, -1);
         gchar *path = utils_get_locale_from_utf8(utf8_path);
         diff_source_open(path, line);
         g_free(path);
         g_free(utf8_path);
     }
-    g_signal_handlers_disconnect_by_data(selection, dialog);
+    g_signal_handlers_disconnect_by_data(notebook, dialog);
+    g_signal_handlers_disconnect_by_data(uses_selection, dialog);
+    g_signal_handlers_disconnect_by_data(graph_selection, dialog);
     gtk_widget_destroy(dialog);
     g_object_unref(dialog);
-    g_object_unref(selection);
+    g_object_unref(notebook);
+    g_object_unref(uses_selection);
+    g_object_unref(graph_selection);
+    g_object_unref(graph);
     g_object_unref(rows);
 }
 
