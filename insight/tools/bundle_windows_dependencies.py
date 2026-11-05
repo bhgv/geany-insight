@@ -39,7 +39,7 @@ else:
 
     shutil.copy2(sdk / 'bin/gdk-pixbuf-query-loaders.exe', package / 'bin')
 
-queue = [p for p in package.rglob('*') if p.suffix.lower() in ('.exe', '.dll')]
+queue = [p for p in package.rglob('*') if p.suffix.lower() in ('.exe', '.dll', '.vpi')]
 seen = set()
 missing = set()
 while queue:

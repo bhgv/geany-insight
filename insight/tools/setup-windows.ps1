@@ -40,7 +40,7 @@ From a repository checkout: build.cmd -BuildEditor
 Default: show the location chooser, then install/update MSYS2 UCRT64 and Meson build tools for internal Clang.
 -FetchSources also clones the editor and initializes external/llvm-project.
 -Jobs defaults to 0 (automatic); pass a positive value to set the build job limit.
--BuildEditor saves build output under RootDir\logs and prints the log path.
+-BuildEditor builds Icarus Verilog from pinned sources and logs output under RootDir\logs.
 -Plan prints the download/package plan without changing anything.
 Close other MSYS2 processes before running. Existing MSYS2 receives a full update.
 No Visual Studio, WSL, global PATH or machine execution-policy changes are needed.
@@ -61,11 +61,13 @@ if ($defaultCache) { $CacheDir = Join-Path $RootDir 'downloads' }
 if ($BuildEditor) { $FetchSources = $true }
 $packages = @($manifest.packages.common)
 if ($Autotools) { $packages += @($manifest.packages.autotools) }
+if ($BuildEditor) { $packages += @($manifest.packages.simulator) }
+$packages = @($packages | Select-Object -Unique)
 if ($Packaging) { $packages += @($manifest.packages.packaging) }
 if ($ClangProvider -eq 'System') { $packages += @($manifest.packages.systemClang) }
 if ($Plan) {
     [ordered]@{ msysRoot=$MsysRoot; msysMirror=$MsysMirror; installer=$manifest.installer; packages=$packages;
-        clangProvider=$ClangProvider; jobs=$Jobs; fetchSources=[bool]$FetchSources; sourceDir=$SourceDir; rootDir=$RootDir; installDir=$InstallDir; cacheDir=$CacheDir; buildEditor=[bool]$BuildEditor; nonInteractive=[bool]$NonInteractive } |
+        clangProvider=$ClangProvider; simulator=$(if ($BuildEditor) { $manifest.iverilog }); jobs=$Jobs; fetchSources=[bool]$FetchSources; sourceDir=$SourceDir; rootDir=$RootDir; installDir=$InstallDir; cacheDir=$CacheDir; buildEditor=[bool]$BuildEditor; nonInteractive=[bool]$NonInteractive } |
         ConvertTo-Json -Depth 6
     return
 }
@@ -110,7 +112,7 @@ if ($MsysRoot -notmatch '^[A-Za-z]:\\[A-Za-z0-9_\\.\-]+$') {
 }
 $MsysRoot = [IO.Path]::GetFullPath($MsysRoot).TrimEnd('\')
 $bash = Join-Path $MsysRoot 'usr\bin\bash.exe'
-$envNames = @('MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_MIRROR','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL','INSIGHT_BOOTSTRAP_INSTALL','INSIGHT_BOOTSTRAP_PROVIDER','INSIGHT_BOOTSTRAP_JOBS','INSIGHT_BOOTSTRAP_BUILD_LOG')
+$envNames = @('MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_MIRROR','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL','INSIGHT_BOOTSTRAP_INSTALL','INSIGHT_BOOTSTRAP_PROVIDER','INSIGHT_BOOTSTRAP_JOBS','INSIGHT_BOOTSTRAP_BUILD_LOG','INSIGHT_BOOTSTRAP_CACHE','INSIGHT_IVERILOG_VERSION','INSIGHT_IVERILOG_URL','INSIGHT_IVERILOG_SHA256')
 $previous = @{}
 foreach ($name in $envNames) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 function Wait-InsightProcess([Diagnostics.Process]$Child, [string]$Stage) {
@@ -331,6 +333,10 @@ git -C "$source_dir" rev-parse HEAD
         Write-Host "[Build] Clang provider: $ClangProvider; building slang and Geany Insight for $InstallDir"
         $env:INSIGHT_BOOTSTRAP_INSTALL=$InstallDir
         $env:INSIGHT_BOOTSTRAP_PROVIDER=$ClangProvider.ToLowerInvariant()
+        $env:INSIGHT_BOOTSTRAP_CACHE = [IO.Path]::GetFullPath($CacheDir)
+        $env:INSIGHT_IVERILOG_VERSION = $manifest.iverilog.version
+        $env:INSIGHT_IVERILOG_URL = $manifest.iverilog.url
+        $env:INSIGHT_IVERILOG_SHA256 = $manifest.iverilog.sha256
         $logDirectory = Join-Path $RootDir 'logs'
         New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
         $buildLog = Join-Path $logDirectory ('build-{0:yyyyMMdd-HHmmssfff}-{1}.log' -f (Get-Date), $PID)
@@ -348,6 +354,7 @@ export CC=gcc CXX=g++
 export NINJA_STATUS='[ %f/%t %p ] '
 install_dir=$(cygpath -m "$INSIGHT_BOOTSTRAP_INSTALL")
 python3 insight/tools/build_editor.py --backend meson --jobs "$INSIGHT_BOOTSTRAP_JOBS" --clang-provider "$INSIGHT_BOOTSTRAP_PROVIDER" --prefix "$install_dir" --install -- --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
+bash insight/tools/build-iverilog.sh "$(cygpath -u "$INSIGHT_BOOTSTRAP_CACHE")" "$install_dir" "$INSIGHT_BOOTSTRAP_JOBS"
 python3 insight/tools/bundle_windows_dependencies.py --installed-editor --package "$install_dir" --sdk "$(cygpath -m /ucrt64)"
 ) 2>&1 | tee -- "$log_file"
 statuses=("${PIPESTATUS[@]}")

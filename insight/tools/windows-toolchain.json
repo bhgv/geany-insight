@@ -39,6 +39,22 @@
     "systemClang": [
       "mingw-w64-ucrt-x86_64-clang",
       "mingw-w64-ucrt-x86_64-llvm"
+    ],
+    "simulator": [
+      "mingw-w64-ucrt-x86_64-autotools",
+      "mingw-w64-ucrt-x86_64-gperf",
+      "mingw-w64-ucrt-x86_64-ghostscript",
+      "mingw-w64-ucrt-x86_64-readline",
+      "mingw-w64-ucrt-x86_64-bzip2",
+      "mingw-w64-ucrt-x86_64-zlib",
+      "make",
+      "bison",
+      "flex"
     ]
+  },
+  "iverilog": {
+    "version": "13.0",
+    "url": "https://github.com/steveicarus/iverilog/archive/v13_0/iverilog-13.0.tar.gz",
+    "sha256": "c897bbfa9848688982c6d5c30529fc29d68df0b9ff22ffa73bad89db73a7ce49"
   }
 }

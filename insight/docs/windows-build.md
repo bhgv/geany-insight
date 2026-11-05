@@ -144,3 +144,12 @@ The editor build prints to the console and writes a copy to `logs\build-*.log`
 under the selected `RootDir`. The log includes the source revision. On failure,
 setup repeats the first `FAILED:` entry and the first recognized compiler or linker
 error when available, and prints the path to the full log.
+
+## Verilog simulator
+
+When building the editor, `build.cmd` downloads the Icarus Verilog 13.0 source
+archive, verifies its SHA-256 and builds `iverilog.exe` and `vvp.exe` into the
+editor's `bin` directory. Simulator modules install under `lib\ivl`. The
+download cache keeps the archive. Setup compiles and runs a small VCD-producing
+design to check the installation. A later build reuses a working installation
+of the same revision. See the build log for simulator output.
