@@ -11,7 +11,7 @@
  # include  "ivl_alloc.h"
  
  __vpiScope*stop_current_scope = 0;
-@@ -70,6 +74,86 @@
+@@ -70,6 +74,180 @@
  #endif
  
  
@@ -26,6 +26,9 @@
 +struct geany_breakpoint {
 +      unsigned line;
 +      std::string filename;
++      std::string signal, bits;
++      unsigned threshold, hits;
++      bool log_only, missing_reported;
 +};
 +
 +static std::vector<geany_breakpoint> geany_breakpoints;
@@ -58,16 +61,96 @@
 +      while (points.size() < 128 && std::getline(input, record)) {
 +            if (record.size() > 8192)
 +                  continue;
-+            const std::size_t tab = record.find('\t');
-+            if (tab == std::string::npos || tab + 1 == record.size())
++            std::vector<std::string> fields;
++            std::size_t start = 0;
++            for (std::size_t tab = record.find('\t'); tab != std::string::npos;
++                 tab = record.find('\t', start)) {
++                  fields.push_back(record.substr(start, tab - start));
++                  start = tab + 1;
++            }
++            fields.push_back(record.substr(start));
++            if ((fields.size() != 2 && fields.size() != 6) || fields[1].empty())
 +                  continue;
-+            std::istringstream number(record.substr(0, tab));
-+            unsigned line = 0;
-+            if (number >> line && number.eof() && line)
-+                  points.push_back({line, geany_file_key(record.c_str() + tab + 1)});
++
++            std::istringstream number(fields[0]);
++            geany_breakpoint point = {};
++            if (!(number >> point.line) || !number.eof() || !point.line)
++                  continue;
++            point.filename = geany_file_key(fields[1].c_str());
++            point.threshold = 1;
++            if (fields.size() == 6) {
++                  point.signal = fields[2];
++                  point.bits = fields[3];
++                  std::istringstream hits(fields[4]);
++                  if (!(hits >> point.threshold) || !hits.eof() ||
++                      !point.threshold || point.threshold > 1000000 ||
++                      (fields[5] != "0" && fields[5] != "1") ||
++                      point.signal.empty() != point.bits.empty() ||
++                      point.bits.find_first_not_of("01xz") != std::string::npos)
++                        continue;
++                  point.log_only = fields[5] == "1";
++            }
++
++            // EN: Preserve counters for unchanged rules.
++            // RU: Сохраняем счётчики неизменённых правил.
++            for (const geany_breakpoint& old : geany_breakpoints) {
++                  if (old.filename == point.filename && old.line == point.line &&
++                      old.signal == point.signal && old.bits == point.bits &&
++                      old.threshold == point.threshold && old.log_only == point.log_only) {
++                        point.hits = old.hits;
++                        point.missing_reported = old.missing_reported;
++                        break;
++                  }
++            }
++            points.push_back(point);
 +      }
 +      geany_breakpoints.swap(points);
 +      printf("Geany: %u source breakpoint(s).\n", static_cast<unsigned>(geany_breakpoints.size()));
++}
++
++// EN: Show the configured rules and their current matching-hit counters.
++// RU: Показываем правила и текущие счётчики совпадений.
++static void cmd_geany_list(unsigned, const char*[])
++{
++      if (!geany_debug_enabled())
++            return;
++      for (const geany_breakpoint& point : geany_breakpoints) {
++            printf("%s:%u %s hits=%u threshold=%u", point.filename.c_str(), point.line,
++                   point.log_only ? "log" : "stop", point.hits, point.threshold);
++            if (!point.signal.empty())
++                  printf(" %s == %s", point.signal.c_str(), point.bits.c_str());
++            printf("\n");
++      }
++      printf("Geany: %u source breakpoint(s).\n", static_cast<unsigned>(geany_breakpoints.size()));
++}
++
++// EN: Read a four-state value without changing the design.
++// RU: Читаем четырёхсостоянийное значение без изменения схемы.
++static bool geany_signal_matches(geany_breakpoint& point)
++{
++      if (point.signal.empty())
++            return true;
++      vpiHandle signal = vpi_handle_by_name(point.signal.c_str(), nullptr);
++      if (!signal) {
++            if (!point.missing_reported) {
++                  printf("Geany: signal not found: %s\n", point.signal.c_str());
++                  point.missing_reported = true;
++            }
++            return false;
++      }
++      const int type = vpi_get(vpiType, signal);
++      if ((type != vpiNet && type != vpiReg && type != vpiIntegerVar && type != vpiMemoryWord) ||
++          vpi_get(vpiSize, signal) != static_cast<int>(point.bits.size())) {
++            if (!point.missing_reported) {
++                  printf("Geany: unsupported signal or wrong bit width: %s\n", point.signal.c_str());
++                  point.missing_reported = true;
++            }
++            return false;
++      }
++      s_vpi_value value = {};
++      value.format = vpiBinStrVal;
++      vpi_get_value(signal, &value);
++      return value.value.str && point.bits == value.value.str;
 +}
 +
 +// EN: Match a source opcode against the current breakpoint list.
@@ -77,11 +160,22 @@
 +      if (geany_breakpoints.empty() || !filename)
 +            return false;
 +      const std::string key = geany_file_key(filename);
-+      for (const geany_breakpoint& point : geany_breakpoints) {
-+            if (point.line == line && point.filename == key) {
-+                  printf("GEANY-VVP-STOP\t%u\t%s\n", line, filename);
-+                  return true;
++      for (geany_breakpoint& point : geany_breakpoints) {
++            if (point.line != line || point.filename != key || !geany_signal_matches(point))
++                  continue;
++            if (point.hits < 0xffffffffu)
++                  point.hits++;
++            if (point.hits < point.threshold)
++                  continue;
++            if (point.log_only) {
++                  printf("Geany logpoint: %s:%u hit %u", filename, line, point.hits);
++                  if (!point.signal.empty())
++                        printf(" %s=%s", point.signal.c_str(), point.bits.c_str());
++                  printf("\n");
++                  continue;
 +            }
++            printf("GEANY-VVP-STOP\t%u\t%s\n", line, filename);
++            return true;
 +      }
 +      return false;
 +}
@@ -98,16 +192,18 @@
  static bool interact_flag = true;
  
  static void cmd_call(unsigned argc, const char*argv[])
-@@ -444,6 +528,8 @@
+@@ -444,6 +622,10 @@
          "Synonym for finish."},
        { "finish", &cmd_finish,
          "Finish the simulation."},
++      { "geany-list", &cmd_geany_list,
++        "List Geany source breakpoints and hit counters."},
 +      { "geany-load", &cmd_geany_load,
 +        "Reload Geany source breakpoints."},
        { "help",   &cmd_help,
          "Get help."},
        { "list",   &cmd_list,
-@@ -554,6 +640,8 @@
+@@ -554,6 +736,8 @@
  	    return;
        }
  

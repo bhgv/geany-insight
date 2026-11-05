@@ -970,6 +970,7 @@ typedef struct {
     gboolean preview_pending;
     GtkWidget *signal_name;
     GtkWidget *pause_button, *source_button, *breakpoint_controls, *breakpoint_file, *breakpoint_line;
+    GtkWidget *rule_signal, *rule_bits, *rule_hits, *rule_log;
     gboolean bridge_ready, pause_requested;
     GString *protocol_line;
     GHashTable *breakpoints;
@@ -1399,66 +1400,73 @@ static void simulation_edit_breakpoint(GtkButton *button, gpointer data)
     WaveSimulation *run = data;
     if (!run->bridge_ready || run->prompt_tail[0] != '>' || run->prompt_tail[1] != ' ')
         return;
+
+    gint action = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "point-action"));
+    gint index = gtk_combo_box_get_active(GTK_COMBO_BOX(run->breakpoint_file));
+    gint line = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(run->breakpoint_line));
+    const gchar *filename = index >= 0 ? run->sources[index] : NULL;
+    if (action != 2 && (!filename || strpbrk(filename, "\r\n\t")))
+        return;
+
+    gchar *key = action == 2 ? NULL : g_strdup_printf("%d\t%s", line, filename);
+    gchar *rule = NULL;
+    if (action == 0)
+    {
+        const gchar *signal = gtk_entry_get_text(GTK_ENTRY(run->rule_signal));
+        gchar *bits = g_ascii_strdown(gtk_entry_get_text(GTK_ENTRY(run->rule_bits)), -1);
+        if (((*signal == '\0') != (*bits == '\0')) || strpbrk(signal, "\r\n\t ") ||
+            strspn(bits, "01xz") != strlen(bits) ||
+            (g_hash_table_size(run->breakpoints) >= 128 && !g_hash_table_contains(run->breakpoints, key)))
+        {
+            GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->console));
+            GtkTextIter end;
+            gtk_text_buffer_get_end_iter(buffer, &end);
+            gtk_text_buffer_insert(buffer, &end,
+                "\nEnter a full signal name and all bits, or leave both empty. Limit: 128 points.\n", -1);
+            g_free(bits);
+            g_free(key);
+            return;
+        }
+        gint hits = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(run->rule_hits));
+        gboolean log_only = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(run->rule_log));
+        rule = g_strdup_printf("%s\t%s\t%d\t%d", signal, bits, hits, log_only);
+        g_free(bits);
+    }
+
     gchar *directory = simulation_live_directory(run);
-    if (!directory)
-        return;
-
-    gboolean clear = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "clear-points"));
-    gchar *record = NULL;
-    if (!clear)
+    if (directory)
     {
-        gint index = gtk_combo_box_get_active(GTK_COMBO_BOX(run->breakpoint_file));
-        gint line = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(run->breakpoint_line));
-        const gchar *filename = index >= 0 ? run->sources[index] : NULL;
-        if (filename && !strpbrk(filename, "\r\n\t"))
-            record = g_strdup_printf("%d\t%s", line, filename);
-    }
-    if (!clear && !record)
-    {
-        g_free(directory);
-        return;
-    }
-
-    gboolean remove = record && g_hash_table_contains(run->breakpoints, record);
-    GString *contents = g_string_new(NULL);
-    if (!clear)
-    {
-        GHashTableIter points;
-        gpointer key;
-        g_hash_table_iter_init(&points, run->breakpoints);
-        while (g_hash_table_iter_next(&points, &key, NULL))
+        GString *contents = g_string_new(NULL);
+        if (action != 2)
         {
-            if (strcmp(key, record))
-                g_string_append_printf(contents, "%s\n", (gchar *)key);
-        }
-        if (!remove)
-        {
-            if (g_hash_table_size(run->breakpoints) >= 128)
+            GHashTableIter iter;
+            gpointer old_key, old_rule;
+            g_hash_table_iter_init(&iter, run->breakpoints);
+            while (g_hash_table_iter_next(&iter, &old_key, &old_rule))
             {
-                g_string_free(contents, TRUE);
-                g_free(record);
-                g_free(directory);
-                return;
+                if (strcmp(old_key, key))
+                    g_string_append_printf(contents, "%s\t%s\n", (gchar *)old_key, (gchar *)old_rule);
             }
-            g_string_append_printf(contents, "%s\n", record);
+            if (rule)
+                g_string_append_printf(contents, "%s\t%s\n", key, rule);
         }
+        gchar *path = g_build_filename(directory, ".geany-vvp-breakpoints", NULL);
+        if (g_file_set_contents(path, contents->str, (gssize)contents->len, NULL))
+        {
+            if (action == 2)
+                g_hash_table_remove_all(run->breakpoints);
+            else if (action == 1)
+                g_hash_table_remove(run->breakpoints, key);
+            else
+                g_hash_table_replace(run->breakpoints, g_steal_pointer(&key), g_steal_pointer(&rule));
+            simulation_write_command(run, "geany-load\n");
+        }
+        g_free(path);
+        g_string_free(contents, TRUE);
+        g_free(directory);
     }
-
-    gchar *path = g_build_filename(directory, ".geany-vvp-breakpoints", NULL);
-    if (g_file_set_contents(path, contents->str, (gssize)contents->len, NULL))
-    {
-        if (clear)
-            g_hash_table_remove_all(run->breakpoints);
-        else if (remove)
-            g_hash_table_remove(run->breakpoints, record);
-        else
-            g_hash_table_add(run->breakpoints, g_steal_pointer(&record));
-        simulation_write_command(run, "geany-load\n");
-    }
-    g_free(path);
-    g_string_free(contents, TRUE);
-    g_free(record);
-    g_free(directory);
+    g_free(key);
+    g_free(rule);
 }
 
 /* Forward a fixed debugger command from a console button. */
@@ -1663,7 +1671,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
     {
         gtk_window_set_default_size(GTK_WINDOW(run->dialog), 680, 400);
         run->protocol_line = g_string_new(NULL);
-        run->breakpoints = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+        run->breakpoints = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
         GtkWidget *running_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
         gtk_box_pack_start(GTK_BOX(box), running_actions, FALSE, FALSE, 0);
         run->pause_button = gtk_button_new_with_label("Pause");
@@ -1722,8 +1730,10 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         g_object_set_data(G_OBJECT(trace_off), "vvp-command", "trace off\n");
         g_signal_connect(trace_off, "clicked", G_CALLBACK(simulation_send_command), run);
         gtk_box_pack_start(GTK_BOX(actions), trace_off, FALSE, FALSE, 0);
-        run->breakpoint_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        run->breakpoint_controls = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
         gtk_box_pack_start(GTK_BOX(run->live_controls), run->breakpoint_controls, FALSE, FALSE, 0);
+        GtkWidget *location = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), location, FALSE, FALSE, 0);
         run->breakpoint_file = gtk_combo_box_text_new();
         for (guint i = 0; run->sources[i]; i++)
         {
@@ -1732,16 +1742,39 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
             g_free(name);
         }
         gtk_combo_box_set_active(GTK_COMBO_BOX(run->breakpoint_file), 0);
-        gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), run->breakpoint_file, TRUE, TRUE, 0);
+        gtk_box_pack_start(GTK_BOX(location), run->breakpoint_file, TRUE, TRUE, 0);
         run->breakpoint_line = gtk_spin_button_new_with_range(1, G_MAXINT, 1);
-        gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), run->breakpoint_line, FALSE, FALSE, 0);
-        GtkWidget *toggle = gtk_button_new_with_label("Toggle Breakpoint");
+        gtk_box_pack_start(GTK_BOX(location), run->breakpoint_line, FALSE, FALSE, 0);
+        GtkWidget *toggle = gtk_button_new_with_label("Set Point");
         g_signal_connect(toggle, "clicked", G_CALLBACK(simulation_edit_breakpoint), run);
-        gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), toggle, FALSE, FALSE, 0);
-        GtkWidget *clear = gtk_button_new_with_label("Clear Breakpoints");
-        g_object_set_data(G_OBJECT(clear), "clear-points", GINT_TO_POINTER(1));
+        gtk_box_pack_start(GTK_BOX(location), toggle, FALSE, FALSE, 0);
+        GtkWidget *remove = gtk_button_new_with_label("Remove Point");
+        g_object_set_data(G_OBJECT(remove), "point-action", GINT_TO_POINTER(1));
+        g_signal_connect(remove, "clicked", G_CALLBACK(simulation_edit_breakpoint), run);
+        gtk_box_pack_start(GTK_BOX(location), remove, FALSE, FALSE, 0);
+        GtkWidget *clear = gtk_button_new_with_label("Clear Points");
+        g_object_set_data(G_OBJECT(clear), "point-action", GINT_TO_POINTER(2));
         g_signal_connect(clear, "clicked", G_CALLBACK(simulation_edit_breakpoint), run);
-        gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), clear, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(location), clear, FALSE, FALSE, 0);
+        GtkWidget *list_points = gtk_button_new_with_label("List Points");
+        g_object_set_data(G_OBJECT(list_points), "vvp-command", "geany-list\n");
+        g_signal_connect(list_points, "clicked", G_CALLBACK(simulation_send_command), run);
+        gtk_box_pack_start(GTK_BOX(location), list_points, FALSE, FALSE, 0);
+        GtkWidget *rule = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), rule, FALSE, FALSE, 0);
+        run->rule_signal = gtk_entry_new();
+        gtk_entry_set_max_length(GTK_ENTRY(run->rule_signal), 512);
+        gtk_entry_set_placeholder_text(GTK_ENTRY(run->rule_signal), "Full signal name");
+        gtk_box_pack_start(GTK_BOX(rule), run->rule_signal, TRUE, TRUE, 0);
+        run->rule_bits = gtk_entry_new();
+        gtk_entry_set_max_length(GTK_ENTRY(run->rule_bits), 1024);
+        gtk_entry_set_placeholder_text(GTK_ENTRY(run->rule_bits), "Binary value");
+        gtk_box_pack_start(GTK_BOX(rule), run->rule_bits, TRUE, TRUE, 0);
+        gtk_box_pack_start(GTK_BOX(rule), gtk_label_new("Hits"), FALSE, FALSE, 0);
+        run->rule_hits = gtk_spin_button_new_with_range(1, 1000000, 1);
+        gtk_box_pack_start(GTK_BOX(rule), run->rule_hits, FALSE, FALSE, 0);
+        run->rule_log = gtk_check_button_new_with_label("Log and continue");
+        gtk_box_pack_start(GTK_BOX(rule), run->rule_log, FALSE, FALSE, 0);
         gtk_widget_set_sensitive(run->breakpoint_controls, FALSE);
         g_object_set_data(G_OBJECT(run->dialog), "insight-live-simulation", run);
         gtk_widget_set_sensitive(run->live_controls, FALSE);
