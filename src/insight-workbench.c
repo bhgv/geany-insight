@@ -4492,10 +4492,73 @@ enum {
     WAVE_USE_CONNECTION, WAVE_USE_HOPS, WAVE_USE_COLUMNS
 };
 
+typedef struct {
+    GHashTable *edges;
+    GHashTable *declarations;
+    GHashTable *references;
+    guint references_remaining;
+    gboolean reference_limit_reached;
+} WaveDependencyIndex;
+
+/* Append distinct reads and writes for the declaration of a graph node. */
+/* Добавляет уникальные места чтения и записи объявления узла графа. */
+static void waveform_graph_uses(GtkTreeStore *graph, GtkTreeIter *parent,
+    WaveDependencyIndex *dependencies, const gchar *hierarchy, const gchar *root_key)
+{
+    const InsightSymbol *declaration = g_hash_table_lookup(dependencies->declarations, hierarchy);
+    gchar *key = NULL;
+    if (root_key)
+        key = g_strdup(root_key);
+    else if (declaration)
+        key = g_strdup_printf("%s\n%u:%s", declaration->path, declaration->line, declaration->signature);
+    if (!key)
+        return;
+
+    GPtrArray *references = g_hash_table_lookup(dependencies->references, key);
+    g_free(key);
+    if (!references)
+        return;
+
+    GHashTable *seen = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    for (guint i = 0; i < references->len; i++)
+    {
+        const InsightSymbol *row = g_ptr_array_index(references, i);
+        gchar *location = g_strdup_printf("%s\n%u\n%s\n%s",
+            row->path, row->line, row->signature, row->inheritance);
+        if (!g_hash_table_add(seen, location))
+            continue;
+        if (!dependencies->references_remaining || g_hash_table_size(seen) > 24)
+        {
+            dependencies->reference_limit_reached = TRUE;
+            break;
+        }
+        gtk_tree_store_insert_with_values(graph, NULL, parent, -1,
+            WAVE_USE_NAME, row->name, WAVE_USE_ROLE, row->inheritance,
+            WAVE_USE_FILE, row->path, WAVE_USE_LINE, row->line, -1);
+        dependencies->references_remaining--;
+    }
+    g_hash_table_unref(seen);
+}
+
+/* Group index rows while borrowing their data from the live HDL snapshot. */
+/* Группирует строки индекса, используя данные снимка HDL без копирования строк. */
+static void waveform_group_index_row(GHashTable *groups, gchar *key, const InsightSymbol *row)
+{
+    GPtrArray *group = g_hash_table_lookup(groups, key);
+    if (group)
+        g_free(key);
+    else
+    {
+        group = g_ptr_array_new();
+        g_hash_table_insert(groups, key, group);
+    }
+    g_ptr_array_add(group, (gpointer)row);
+}
+
 /* Walk upstream or downstream without mixing directions at a shared signal. */
 /* Обходит связи вверх или вниз по потоку, сохраняя направление на развилках. */
-static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph, GHashTable *dependencies, const gchar *start,
-    gboolean upstream, guint *remaining)
+static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph, WaveDependencyIndex *dependencies, const gchar *start,
+    const gchar *root_key, gboolean upstream, guint *remaining)
 {
     const gchar *port_role = upstream ? "port-source" : "port-destination";
     const gchar *assign_role = upstream ? "assign-source" : "assign-destination";
@@ -4504,6 +4567,8 @@ static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph, 
     GtkTreeIter root;
     gtk_tree_store_insert_with_values(graph, &root, NULL, -1,
         WAVE_USE_NAME, start, WAVE_USE_ROLE, upstream ? _("Upstream") : _("Downstream"), -1);
+    if (!upstream)
+        waveform_graph_uses(graph, &root, dependencies, start, root_key);
     GQueue pending = G_QUEUE_INIT;
     GtkTreeIter *saved_root = g_new(GtkTreeIter, 1);
     *saved_root = root;
@@ -4516,7 +4581,7 @@ static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph, 
         while (level_size-- && *remaining)
         {
             const gchar *signal = g_queue_pop_head(&pending);
-            GPtrArray *edges = g_hash_table_lookup(dependencies, signal);
+            GPtrArray *edges = g_hash_table_lookup(dependencies->edges, signal);
             if (!edges)
                 continue;
 
@@ -4541,6 +4606,7 @@ static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph, 
                 if (repeated)
                     continue;
 
+                waveform_graph_uses(graph, &branch, dependencies, edge->name, NULL);
                 GtkTreeIter *saved = g_new(GtkTreeIter, 1);
                 *saved = branch;
                 g_hash_table_insert(visited, (gpointer)edge->name, saved);
@@ -4622,10 +4688,15 @@ static void waveform_show_hdl_uses(WaveJump *jump)
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_UINT);
     GtkTreeStore *graph = gtk_tree_store_new(WAVE_USE_COLUMNS,
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_UINT);
-    GHashTable *dependencies = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
-        (GDestroyNotify)g_ptr_array_unref);
+    WaveDependencyIndex dependencies = {
+        .edges = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_ptr_array_unref),
+        .declarations = g_hash_table_new(g_str_hash, g_str_equal),
+        .references = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_ptr_array_unref),
+        .references_remaining = 2000
+    };
     GHashTable *seen = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     gchar *target = g_strdup_printf("%u:%u", jump->line, jump->column);
+    gchar *root_key = g_strdup_printf("%s\n%s", jump->path, target);
 
     for (gsize i = 0; i < insight_index_count(index); i++)
     {
@@ -4633,16 +4704,17 @@ static void waveform_show_hdl_uses(WaveJump *jump)
         if (!row->line)
             continue;
         if (!g_strcmp0(row->kind, "@hdlwire"))
-        {
-            GPtrArray *edges = g_hash_table_lookup(dependencies, row->scope);
-            if (!edges)
-            {
-                edges = g_ptr_array_new();
-                g_hash_table_insert(dependencies, (gpointer)row->scope, edges);
-            }
-            g_ptr_array_add(edges, (gpointer)row);
-            continue;
-        }
+            waveform_group_index_row(dependencies.edges, g_strdup(row->scope), row);
+        else if (!g_strcmp0(row->kind, "@hdldef") &&
+                 (!g_strcmp0(row->type, "Variable") || !g_strcmp0(row->type, "Net")))
+            g_hash_table_insert(dependencies.declarations, (gpointer)row->scope, (gpointer)row);
+        else if (!g_strcmp0(row->kind, "@hdlref") &&
+                 (!g_strcmp0(row->inheritance, "read") || !g_strcmp0(row->inheritance, "write") ||
+                  !g_strcmp0(row->inheritance, "read/write") || !g_strcmp0(row->inheritance, "value") ||
+                  !g_strcmp0(row->inheritance, "member")))
+            waveform_group_index_row(dependencies.references,
+                g_strdup_printf("%s\n%s", row->scope, row->type), row);
+
         if (g_hash_table_size(seen) >= 2000 || g_strcmp0(row->kind, "@hdlref") ||
             g_strcmp0(row->scope, jump->path) || g_strcmp0(row->type, target))
             continue;
@@ -4654,9 +4726,12 @@ static void waveform_show_hdl_uses(WaveJump *jump)
                 WAVE_USE_NAME, row->name, WAVE_USE_FILE, row->path, WAVE_USE_LINE, row->line, -1);
     }
     guint upstream_remaining = 1000, downstream_remaining = 1000;
-    waveform_walk_dependencies(rows, graph, dependencies, jump->name, TRUE, &upstream_remaining);
-    waveform_walk_dependencies(rows, graph, dependencies, jump->name, FALSE, &downstream_remaining);
-    g_hash_table_unref(dependencies);
+    waveform_walk_dependencies(rows, graph, &dependencies, jump->name, root_key, TRUE, &upstream_remaining);
+    waveform_walk_dependencies(rows, graph, &dependencies, jump->name, root_key, FALSE, &downstream_remaining);
+    g_hash_table_unref(dependencies.edges);
+    g_hash_table_unref(dependencies.declarations);
+    g_hash_table_unref(dependencies.references);
+    g_free(root_key);
     g_free(target);
     gboolean reference_limit_reached = g_hash_table_size(seen) >= 2000;
     g_hash_table_unref(seen);
@@ -4669,7 +4744,7 @@ static void waveform_show_hdl_uses(WaveJump *jump)
     gtk_window_set_default_size(GTK_WINDOW(dialog), 760, 400);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     GtkWidget *label = gtk_label_new(jump->name);
-    if (!upstream_remaining || !downstream_remaining || reference_limit_reached)
+    if (!upstream_remaining || !downstream_remaining || reference_limit_reached || dependencies.reference_limit_reached)
     {
         GtkWidget *limit = gtk_label_new(_("Result limit reached. Some HDL uses may be omitted."));
         gtk_box_pack_start(GTK_BOX(box), limit, FALSE, FALSE, 0);
