@@ -4971,6 +4971,12 @@ typedef struct {
     GHashTable *lua_modules;
     gsize lua_module_bytes;
     GtkWidget *file_breakpoint_button;
+    GtkWidget *observer_log;
+    InsightLuaDebug *python_observer;
+    InsightLuaWatchGraph *observer_graph;
+    gchar *stop_condition;
+    gchar *observer_source;
+    gchar *observer_filename;
     GtkWidget *window;
     GtkWidget *source_view;
     GtkWidget *stack_view;
@@ -5036,6 +5042,7 @@ static void debug_window_free(gpointer data)
     g_free(view->breakpoint_settings_path);
     g_free(view->stop_condition);
     g_free(view->observer_source);
+    g_free(view->observer_filename);
     g_hash_table_unref(view->lua_modules);
     g_free(view->source_snapshot);
     g_free(view->source_code_mask);
@@ -7112,8 +7119,117 @@ static void debug_breakpoints_in_file(GtkButton *button, gpointer data)
     g_free(filename);
 }
 
-/* Edit the stop condition and, for Lua, the optional event callback. */
-/* Настраивает условие остановки и дополнительный обработчик событий Lua. */
+enum {
+    DEBUG_OBSERVER_LOAD = 1,
+    DEBUG_OBSERVER_RELOAD,
+    DEBUG_OBSERVER_SAVE
+};
+
+/* Import a UTF-8 Lua file into the draft without applying or running it. */
+/* Загружает файл Lua в UTF-8 в черновик без применения и запуска. */
+static gboolean debug_load_observer_draft(GtkTextBuffer *buffer, const gchar *filename, GtkLabel *status)
+{
+    gsize length = 0;
+    gchar *source = debug_read_source_file(filename, &length);
+    if (!source || length > 64 * 1024)
+    {
+        gtk_label_set_text(status, "Choose a UTF-8 Lua source file of at most 64 KiB.");
+        g_free(source);
+        return FALSE;
+    }
+
+    gtk_text_buffer_set_text(buffer, source, (gint)length);
+    gchar *display = g_filename_display_name(filename);
+    gchar *message = g_strdup_printf("Loaded %s. Choose Apply to use this draft.", display);
+    gtk_label_set_text(status, message);
+    g_free(message);
+    g_free(display);
+    g_free(source);
+    return TRUE;
+}
+
+/* Write the current draft to a Lua file selected by the user. */
+/* Записывает текущий черновик в выбранный пользователем файл Lua. */
+static gchar *debug_save_observer_draft(GtkWindow *parent, GtkTextBuffer *buffer,
+                                       const gchar *filename, const gchar *root, GtkLabel *status)
+{
+    GtkTextIter first, last;
+    gtk_text_buffer_get_bounds(buffer, &first, &last);
+    gchar *source = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
+    gsize length = strlen(source);
+    if (length > 64 * 1024)
+    {
+        gtk_label_set_text(status, "Observer script exceeds 64 KiB.");
+        g_free(source);
+        return NULL;
+    }
+
+    GtkWidget *chooser = gtk_file_chooser_dialog_new("Save Lua Observer", parent,
+        GTK_FILE_CHOOSER_ACTION_SAVE, "_Cancel", GTK_RESPONSE_CANCEL, "_Save", GTK_RESPONSE_ACCEPT, NULL);
+    GtkFileChooser *file_chooser = GTK_FILE_CHOOSER(chooser);
+    gtk_file_chooser_set_do_overwrite_confirmation(file_chooser, TRUE);
+    if (filename)
+    {
+        gchar *directory = g_path_get_dirname(filename);
+        gchar *basename = g_filename_display_basename(filename);
+        gtk_file_chooser_set_current_folder(file_chooser, directory);
+        gtk_file_chooser_set_current_name(file_chooser, basename);
+        g_free(directory);
+        g_free(basename);
+    }
+    else
+    {
+        if (root && g_path_is_absolute(root))
+            gtk_file_chooser_set_current_folder(file_chooser, root);
+        gtk_file_chooser_set_current_name(file_chooser, "observer.lua");
+    }
+    gchar *destination = gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT ?
+        gtk_file_chooser_get_filename(file_chooser) : NULL;
+    gtk_widget_destroy(chooser);
+
+    if (destination)
+    {
+        GFile *file = g_file_new_for_path(destination);
+        GError *error = NULL;
+        if (g_file_replace_contents(file, source, length, NULL, FALSE, G_FILE_CREATE_NONE, NULL, NULL, &error))
+        {
+            gchar *display = g_filename_display_name(destination);
+            gchar *message = g_strdup_printf("Saved %s.", display);
+            gtk_label_set_text(status, message);
+            g_free(message);
+            g_free(display);
+        }
+        else
+        {
+            gtk_label_set_text(status, error ? error->message : "Cannot save Lua observer.");
+            g_clear_pointer(&destination, g_free);
+        }
+        g_clear_error(&error);
+        g_object_unref(file);
+    }
+    g_free(source);
+    return destination;
+}
+
+/* Confirm replacement of a locally edited observer draft. */
+/* Подтверждает замену черновика обработчика с локальными правками. */
+static gboolean debug_replace_observer_draft(GtkWindow *parent, GtkTextBuffer *buffer)
+{
+    if (!gtk_text_buffer_get_modified(buffer))
+        return TRUE;
+
+    GtkWidget *confirmation = gtk_message_dialog_new(parent, GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+        GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, "Replace the edited observer draft?");
+    gtk_dialog_add_buttons(GTK_DIALOG(confirmation), "_Keep Editing", GTK_RESPONSE_CANCEL,
+                           "_Replace", GTK_RESPONSE_ACCEPT, NULL);
+    gtk_dialog_set_default_response(GTK_DIALOG(confirmation), GTK_RESPONSE_CANCEL);
+    gboolean replace = gtk_dialog_run(GTK_DIALOG(confirmation)) == GTK_RESPONSE_ACCEPT;
+    gtk_widget_destroy(confirmation);
+    return replace;
+}
+
+/* Edit the stop condition and optional Lua callback for either debugger. */
+/* Настраивает условие остановки и обработчик Lua для любого из двух отладчиков. */
 static void debug_configure_observer(GtkButton *button, gpointer data)
 {
     (void)button;
@@ -7123,7 +7239,9 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
 
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Stop Condition and Lua Observer",
         GTK_WINDOW(view->window), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-        "_Cancel", GTK_RESPONSE_CANCEL, "_Apply", GTK_RESPONSE_ACCEPT, NULL);
+        "_Load Lua…", DEBUG_OBSERVER_LOAD, "_Reload File", DEBUG_OBSERVER_RELOAD,
+        "_Save Lua As…", DEBUG_OBSERVER_SAVE, "_Cancel", GTK_RESPONSE_CANCEL,
+        "_Apply", GTK_RESPONSE_ACCEPT, NULL);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 650, 420);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     GtkWidget *entry = gtk_entry_new();
@@ -7146,9 +7264,50 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
     GtkWidget *status = gtk_label_new(NULL);
     gtk_label_set_line_wrap(GTK_LABEL(status), TRUE);
     gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 4);
+    gchar *filename = g_strdup(view->observer_filename);
+    gtk_text_buffer_set_modified(script, FALSE);
     gtk_widget_show_all(dialog);
-    while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+    for (;;)
     {
+        gtk_dialog_set_response_sensitive(GTK_DIALOG(dialog), DEBUG_OBSERVER_RELOAD, filename != NULL);
+        gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+        if (response == DEBUG_OBSERVER_LOAD || response == DEBUG_OBSERVER_RELOAD)
+        {
+            if (!debug_replace_observer_draft(GTK_WINDOW(dialog), script))
+                continue;
+            gchar *selected = NULL;
+            if (response == DEBUG_OBSERVER_RELOAD)
+                selected = g_strdup(filename);
+            else
+            {
+                gchar *directory = filename ? g_path_get_dirname(filename) : NULL;
+                selected = debug_choose_script_file(GTK_WINDOW(dialog), "Load Lua Observer",
+                                                    directory ? directory : view->project_root, FALSE);
+                g_free(directory);
+            }
+            if (selected && debug_load_observer_draft(script, selected, GTK_LABEL(status)))
+            {
+                g_free(filename);
+                filename = g_steal_pointer(&selected);
+                gtk_text_buffer_set_modified(script, FALSE);
+            }
+            g_free(selected);
+            continue;
+        }
+        if (response == DEBUG_OBSERVER_SAVE)
+        {
+            gchar *saved = debug_save_observer_draft(GTK_WINDOW(dialog), script, filename,
+                                                    view->project_root, GTK_LABEL(status));
+            if (saved)
+            {
+                g_free(filename);
+                filename = saved;
+                gtk_text_buffer_set_modified(script, FALSE);
+            }
+            continue;
+        }
+        if (response != GTK_RESPONSE_ACCEPT)
+            break;
         gchar *condition = g_strdup(gtk_entry_get_text(GTK_ENTRY(entry)));
         g_strstrip(condition);
         GtkTextIter first, last;
@@ -7169,6 +7328,8 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
             g_free(view->observer_source);
             view->stop_condition = condition;
             view->observer_source = source;
+            g_free(view->observer_filename);
+            view->observer_filename = g_steal_pointer(&filename);
             if (view->observer_log)
                 debug_set_text(view->observer_log, insight_lua_debug_observer_log(
                     view->python ? view->python_observer : view->engine));
@@ -7180,6 +7341,7 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
         g_free(condition);
         g_free(source);
     }
+    g_free(filename);
     gtk_widget_destroy(dialog);
 }
 

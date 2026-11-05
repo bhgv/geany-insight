@@ -122,6 +122,17 @@ card. `watch(name, nil)` removes it. Values can be numbers, strings or Booleans.
 An observer can publish up to 16 cards within the graph's overall size limit.
 Names can contain up to 63 bytes.
 
+### Observer files
+
+In **Conditions and Script…**, choose **Load Lua…** to load a `.lua` file into
+the lower field. **Save Lua As…** writes the lower field to a file. The condition
+in the upper field stays in the debugger dialog.
+
+If you edit the file in a Geany tab, save it and choose **Reload File**. Loading
+and reloading update the draft. Choose **Apply** to use the new version.
+**Cancel** keeps the active observer in place. Files must be UTF-8 and at most
+64 KiB.
+
 #### Log calls and arguments
 
 ```lua
