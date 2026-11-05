@@ -390,3 +390,13 @@ return function()
 -- RU: Оставляем управление выполнением обычным командам отладчика.
 end
 ```
+
+### Moving breakpoints after source edits
+
+When saving an ordinary breakpoint, conditional breakpoint or logpoint, the
+debugger records a fingerprint of the line and its two neighbors. The next
+session searches for the line in the source snapshot. If it appears more than
+once, the neighbors must identify one location. Points on deleted, ambiguous
+or unavailable lines are inactive. Their count appears in the debugger status.
+Set a point again at the intended line to rebind it manually. Older entries
+without a fingerprint use their saved line number until edited.

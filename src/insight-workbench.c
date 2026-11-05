@@ -4952,6 +4952,7 @@ typedef struct {
     gchar *filename;
     gchar *expression;
     unsigned long line;
+    gchar *saved_group;
     guint minimum_hits;
     gboolean log_only;
 } DebugConditionalPoint;
@@ -4976,6 +4977,7 @@ typedef struct {
     gsize display_length;
     GHashTable *file_breakpoints;
     GHashTable *conditional_points;
+    guint unresolved_breakpoints;
     gchar *breakpoint_settings_path;
     GHashTable *lua_modules;
     gsize lua_module_bytes;
@@ -5615,6 +5617,13 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
             label = g_strdup_printf("Paused at %s:%lu", view->display_filename, line);
         else
             label = g_strdup_printf("Paused at line %lu", line);
+        if (view->unresolved_breakpoints)
+        {
+            gchar *summary = g_strdup_printf("%s. Unresolved breakpoints: %u",
+                                             label, view->unresolved_breakpoints);
+            g_free(label);
+            label = summary;
+        }
         gtk_label_set_text(GTK_LABEL(view->status), label);
         g_free(label);
     }
@@ -5725,6 +5734,7 @@ static void debug_conditional_point_free(gpointer data)
     DebugConditionalPoint *point = data;
     g_free(point->filename);
     g_free(point->expression);
+    g_free(point->saved_group);
     g_free(point);
 }
 
@@ -5747,6 +5757,128 @@ static gboolean debug_has_conditional_point(const ScriptDebugWindow *view, const
     gboolean found = g_hash_table_contains(view->conditional_points, key);
     g_free(key);
     return found;
+}
+
+typedef struct {
+    gchar *filename;
+    gchar *source;
+    gsize length;
+} DebugLuaModule;
+
+static gchar *debug_read_source_file(const gchar *filename, gsize *length);
+
+/* Use the same captured source as the debugger when anchoring a file. */
+/* Использует снимок отладчика для привязки точки к исходнику. */
+static gchar **debug_breakpoint_source_lines(const ScriptDebugWindow *view, const gchar *filename)
+{
+    const gchar *source = NULL;
+    gchar *owned = NULL;
+    gchar *display_key = debug_file_key(view->display_filename);
+    if (!strcmp(filename, display_key) && view->display_source)
+        source = view->display_source;
+    else if (view->python_overlays)
+        source = g_hash_table_lookup(view->python_overlays, filename);
+    g_free(display_key);
+    if (!source && !view->python)
+    {
+        const DebugLuaModule *module = g_hash_table_lookup(view->lua_modules, filename);
+        GeanyDocument *document = module ? NULL : document_find_by_filename(filename);
+        if (module)
+            source = module->source;
+        else if (DOC_VALID(document))
+        {
+            gint size = sci_get_length(document->editor->sci);
+            if (size >= 0 && size <= 2 * 1024 * 1024)
+            {
+                owned = sci_get_contents(document->editor->sci, size + 1);
+                if (memchr(owned, 0, size) || !g_utf8_validate(owned, size, NULL))
+                    g_clear_pointer(&owned, g_free);
+                source = owned;
+            }
+        }
+    }
+    if (!source)
+    {
+        gchar *local = utils_get_locale_from_utf8(filename);
+        gsize length = 0;
+        if (local)
+            owned = debug_read_source_file(local, &length);
+        g_free(local);
+        source = owned;
+    }
+    if (!source)
+        return NULL;
+
+    GString *normalized = g_string_new(NULL);
+    for (const gchar *byte = source; *byte; byte++)
+    {
+        if (*byte == '\r')
+        {
+            g_string_append_c(normalized, '\n');
+            if (byte[1] == '\n')
+                byte++;
+        }
+        else
+            g_string_append_c(normalized, *byte);
+    }
+    gchar **lines = g_strsplit(normalized->str, "\n", -1);
+    for (guint i = 0; lines[i]; i++)
+        g_strstrip(lines[i]);
+    g_string_free(normalized, TRUE);
+    g_free(owned);
+    return lines;
+}
+
+/* Fingerprint the line and its immediate neighbors. */
+/* Вычисляет отпечаток строки и двух соседних строк. */
+static gchar *debug_breakpoint_anchor(gchar **lines, guint count, unsigned long line)
+{
+    if (!line || line > count || !*lines[line - 1])
+        return g_strdup("!");
+    gchar *center = g_compute_checksum_for_string(G_CHECKSUM_SHA256, lines[line - 1], -1);
+    gchar *before = line > 1 ? g_compute_checksum_for_string(G_CHECKSUM_SHA256, lines[line - 2], -1) : g_strdup("-");
+    gchar *after = line < count ? g_compute_checksum_for_string(G_CHECKSUM_SHA256, lines[line], -1) : g_strdup("-");
+    gchar *anchor = g_strjoin(":", center, before, after, NULL);
+    g_free(center);
+    g_free(before);
+    g_free(after);
+    return anchor;
+}
+
+/* Resolve only a unique text match or a unique full context match. */
+/* Переносит точку только при единственном совпадении текста или контекста. */
+static unsigned long debug_resolve_breakpoint(gchar **lines, guint count, const gchar *anchor,
+                                              unsigned long fallback)
+{
+    if (!anchor || !*anchor)
+        return fallback;
+    if (!lines || strlen(anchor) < 65 || anchor[64] != ':')
+        return 0;
+
+    unsigned matches = 0, contexts = 0;
+    unsigned long match = 0, context = 0;
+    for (guint i = 0; i < count; i++)
+    {
+        if (!*lines[i])
+            continue;
+        gchar *hash = g_compute_checksum_for_string(G_CHECKSUM_SHA256, lines[i], -1);
+        gboolean equal = !strncmp(hash, anchor, 64);
+        g_free(hash);
+        if (!equal)
+            continue;
+        matches++;
+        match = i + 1;
+        gchar *candidate = debug_breakpoint_anchor(lines, count, match);
+        if (!strcmp(candidate, anchor))
+        {
+            contexts++;
+            context = match;
+        }
+        g_free(candidate);
+    }
+    if (matches == 1)
+        return match;
+    return contexts == 1 ? context : 0;
 }
 
 /* Locate the saved conditional rules for the same scope as ordinary points. */
@@ -5788,11 +5920,24 @@ static void debug_load_conditional_points(ScriptDebugWindow *view)
                 DebugConditionalPoint *point = g_new0(DebugConditionalPoint, 1);
                 point->filename = debug_file_key(filename);
                 point->expression = g_steal_pointer(&expression);
-                point->line = (unsigned long)line;
+                point->saved_group = g_strdup(group);
+                gchar *anchor = g_key_file_get_string(settings, group, "Anchor", NULL);
+                gchar **lines = anchor && *anchor ? debug_breakpoint_source_lines(view, point->filename) : NULL;
+                point->line = debug_resolve_breakpoint(lines, lines ? g_strv_length(lines) : 0,
+                                                       anchor, (unsigned long)line);
+                g_strfreev(lines);
+                g_free(anchor);
                 point->minimum_hits = (guint)minimum_hits;
                 point->log_only = g_key_file_get_boolean(settings, group, "LogOnly", NULL);
-                gchar *key = debug_conditional_point_key(point->filename, point->line);
-                g_hash_table_replace(view->conditional_points, key, point);
+                gchar *key = point->line ? debug_conditional_point_key(point->filename, point->line) : NULL;
+                if (!key || g_hash_table_contains(view->conditional_points, key))
+                {
+                    view->unresolved_breakpoints++;
+                    g_free(key);
+                    debug_conditional_point_free(point);
+                }
+                else
+                    g_hash_table_insert(view->conditional_points, key, point);
             }
             g_free(expression);
             g_free(filename);
@@ -5805,7 +5950,8 @@ static void debug_load_conditional_points(ScriptDebugWindow *view)
 
 /* Update the saved rule for one line, retaining other windows' edits. */
 /* Обновляет сохранённое правило одной строки, сохраняя правки других окон. */
-static void debug_save_conditional_point(const ScriptDebugWindow *view, const gchar *key)
+static void debug_save_conditional_point(const ScriptDebugWindow *view, const gchar *key,
+                                         const gchar *group)
 {
     const gchar *separator = strchr(key, ':');
     if (!separator || !g_path_is_absolute(separator + 1))
@@ -5821,7 +5967,6 @@ static void debug_save_conditional_point(const ScriptDebugWindow *view, const gc
         g_clear_error(&error);
     if (!error)
     {
-        gchar *group = g_compute_checksum_for_string(G_CHECKSUM_SHA256, key, -1);
         const DebugConditionalPoint *point = g_hash_table_lookup(view->conditional_points, key);
         if (point)
         {
@@ -5830,10 +5975,14 @@ static void debug_save_conditional_point(const ScriptDebugWindow *view, const gc
             g_key_file_set_integer(settings, group, "Line", (gint)point->line);
             g_key_file_set_integer(settings, group, "Hits", (gint)point->minimum_hits);
             g_key_file_set_boolean(settings, group, "LogOnly", point->log_only);
+            gchar **lines = debug_breakpoint_source_lines(view, point->filename);
+            gchar *anchor = debug_breakpoint_anchor(lines, lines ? g_strv_length(lines) : 0, point->line);
+            g_key_file_set_string(settings, group, "Anchor", anchor);
+            g_free(anchor);
+            g_strfreev(lines);
         }
         else
             g_key_file_remove_group(settings, group, NULL);
-        g_free(group);
 
         gchar *directory = g_path_get_dirname(path);
         if (g_mkdir_with_parents(directory, 0700) == 0)
@@ -5879,12 +6028,39 @@ static void debug_load_breakpoints(ScriptDebugWindow *view)
             gsize count = 0;
             if (filename && g_path_is_absolute(filename) && text && strlen(text) <= 2048 &&
                 debug_parse_breakpoints(text, lines, &count) && count)
-                g_hash_table_replace(view->file_breakpoints, filename, text);
-            else
             {
-                g_free(filename);
-                g_free(text);
+                gsize anchor_count = 0;
+                gchar **anchors = g_key_file_get_string_list(settings, "Anchors", keys[i], &anchor_count, NULL);
+                if (anchor_count == count)
+                {
+                    gchar **source_lines = debug_breakpoint_source_lines(view, filename);
+                    guint source_count = source_lines ? g_strv_length(source_lines) : 0;
+                    GString *resolved = g_string_new(NULL);
+                    for (gsize j = 0; j < count; j++)
+                    {
+                        unsigned long line = debug_resolve_breakpoint(source_lines, source_count, anchors[j], lines[j]);
+                        if (line)
+                        {
+                            if (resolved->len)
+                                g_string_append(resolved, ", ");
+                            g_string_append_printf(resolved, "%lu", line);
+                        }
+                        else
+                            view->unresolved_breakpoints++;
+                    }
+                    g_free(text);
+                    text = g_string_free(resolved, FALSE);
+                    g_strfreev(source_lines);
+                }
+                g_strfreev(anchors);
+                if (*text)
+                {
+                    g_hash_table_replace(view->file_breakpoints, filename, text);
+                    continue;
+                }
             }
+            g_free(filename);
+            g_free(text);
         }
         g_strfreev(keys);
     }
@@ -5908,9 +6084,28 @@ static void debug_save_breakpoints(ScriptDebugWindow *view, const gchar *filenam
     {
         gchar *key = g_uri_escape_string(filename, NULL, FALSE);
         if (text)
+        {
             g_key_file_set_string(settings, "Breakpoints", key, text);
+            unsigned long lines[128];
+            gsize count = 0;
+            if (debug_parse_breakpoints(text, lines, &count))
+            {
+                gchar **source_lines = debug_breakpoint_source_lines(view, filename);
+                guint source_count = source_lines ? g_strv_length(source_lines) : 0;
+                gchar *anchors[128];
+                for (gsize i = 0; i < count; i++)
+                    anchors[i] = debug_breakpoint_anchor(source_lines, source_count, lines[i]);
+                g_key_file_set_string_list(settings, "Anchors", key, (const gchar *const *)anchors, count);
+                for (gsize i = 0; i < count; i++)
+                    g_free(anchors[i]);
+                g_strfreev(source_lines);
+            }
+        }
         else
+        {
             g_key_file_remove_key(settings, "Breakpoints", key, NULL);
+            g_key_file_remove_key(settings, "Anchors", key, NULL);
+        }
         g_free(key);
 
         gchar *directory = g_path_get_dirname(view->breakpoint_settings_path);
@@ -5963,11 +6158,7 @@ static gboolean debug_same_file(const gchar *first, const gchar *second)
     return same;
 }
 
-typedef struct {
-    gchar *filename;
-    gchar *source;
-    gsize length;
-} DebugLuaModule;
+
 
 /* Release a loaded module snapshot. */
 /* Освобождает снимок загруженного модуля. */
@@ -7031,9 +7222,16 @@ static gboolean debug_set_conditional_point(ScriptDebugWindow *view, const gchar
         return FALSE;
     }
     g_free(old_key);
+    const gchar *group = old_point ? ((DebugConditionalPoint *)old_point)->saved_group : NULL;
+    if (point)
+    {
+        point->saved_group = group ? g_strdup(group) : g_uuid_string_random();
+        group = point->saved_group;
+    }
+    if (group)
+        debug_save_conditional_point(view, key, group);
     if (old_point)
         debug_conditional_point_free(old_point);
-    debug_save_conditional_point(view, key);
     return TRUE;
 }
 
@@ -8453,6 +8651,9 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     gtk_label_set_ellipsize(GTK_LABEL(view->status), PANGO_ELLIPSIZE_END);
     gtk_box_pack_start(GTK_BOX(box), view->status, FALSE, FALSE, 0);
     gtk_widget_show_all(view->window);
+    if (view->unresolved_breakpoints)
+        ui_set_statusbar(TRUE, "%u saved breakpoints could not be located and are inactive.",
+                         view->unresolved_breakpoints);
     debug_window_step(view, INSIGHT_LUA_STEP_INTO);
 }
 
