@@ -1,3 +1,39 @@
+diff --git a/vvp/schedule.cc b/vvp/schedule.cc
+index d15672a..788ff45 100644
+--- a/vvp/schedule.cc
++++ b/vvp/schedule.cc
+@@ -592,6 +592,9 @@ void schedule_finish(int)
+       schedule_runnable = false;
+ }
+ 
++extern bool geany_pause_requested();
++extern bool geany_tick_step();
++
+ void schedule_stop(int)
+ {
+       schedule_stopped_flag = true;
+@@ -1177,6 +1180,8 @@ void schedule_simulate(void)
+ 
+       if (schedule_runnable) while (sched_list) {
+ 
++            if (geany_pause_requested())
++                  schedule_stop(0);
+ 	    if (schedule_stopped_flag) {
+ 		  schedule_stopped_flag = false;
+ 		  stop_handler(0);
+@@ -1214,6 +1219,10 @@ void schedule_simulate(void)
+ 			cur->run_run();
+ 			delete (cur);
+ 		  }
++                  if (geany_tick_step()) {
++                        schedule_stop(0);
++                        continue;
++                  }
+ 	    }
+ 
+ 
+diff --git a/vvp/stop.cc b/vvp/stop.cc
+index 175e8ae..83ceb45 100644
 --- a/vvp/stop.cc
 +++ b/vvp/stop.cc
 @@ -38,6 +38,10 @@
@@ -11,7 +47,7 @@
  # include  "ivl_alloc.h"
  
  __vpiScope*stop_current_scope = 0;
-@@ -70,8 +74,340 @@
+@@ -70,8 +74,350 @@ static char* readline_stub(const char*prompt)
  #endif
  
  
@@ -136,7 +172,13 @@
 +{
 +      if (point.signal.empty())
 +            return true;
++      // EN: Name lookup uses VPI iterators, even outside a simulator callback.
++      // RU: Поиск имени использует итераторы VPI даже вне обратного вызова.
++      const vpi_mode_t previous_mode = vpi_mode_flag;
++      if (previous_mode == VPI_MODE_NONE)
++            vpi_mode_flag = VPI_MODE_ROSYNC;
 +      vpiHandle signal = vpi_handle_by_name(point.signal.c_str(), nullptr);
++      vpi_mode_flag = previous_mode;
 +      if (!signal) {
 +            if (!point.missing_reported) {
 +                  printf("Geany: signal not found: %s\n", point.signal.c_str());
@@ -146,6 +188,7 @@
 +      }
 +      const int type = vpi_get(vpiType, signal);
 +      if ((type != vpiNet && type != vpiReg && type != vpiIntegerVar && type != vpiMemoryWord) ||
++          vpi_get(vpiAutomatic, signal) == 1 ||
 +          vpi_get(vpiSize, signal) != static_cast<int>(point.bits.size())) {
 +            if (!point.missing_reported) {
 +                  printf("Geany: unsupported signal or wrong bit width: %s\n", point.signal.c_str());
@@ -165,7 +208,10 @@
 +{
 +      if (geany_breakpoints.empty() || !filename)
 +            return false;
-+      const std::string key = geany_file_key(filename);
++      // EN: Keep the filename before VPI reuses its string result buffer.
++      // RU: Сохраняем имя файла до повторного использования буфера строк VPI.
++      const std::string source_file(filename);
++      const std::string key = geany_file_key(source_file.c_str());
 +      for (geany_breakpoint& point : geany_breakpoints) {
 +            if (point.line != line || point.filename != key || !geany_signal_matches(point))
 +                  continue;
@@ -174,7 +220,7 @@
 +            if (point.hits < point.threshold)
 +                  continue;
 +            if (point.log_only) {
-+                  printf("Geany logpoint: %s:%u hit %u", filename, line, point.hits);
++                  printf("Geany logpoint: %s:%u hit %u", source_file.c_str(), line, point.hits);
 +                  if (!point.signal.empty())
 +                        printf(" %s=%s", point.signal.c_str(), point.bits.c_str());
 +                  printf("\n");
@@ -182,9 +228,9 @@
 +            }
 +            if (point.scripted)
 +                  printf("GEANY-VVP-EVENT\t%u\t%s\t%" TIME_FMT_U "\t%u\t%s\t%s\n",
-+                         line, filename, schedule_simtime(), point.hits,
++                         line, source_file.c_str(), schedule_simtime(), point.hits,
 +                         point.signal.c_str(), point.bits.c_str());
-+            printf("GEANY-VVP-STOP\t%u\t%s\n", line, filename);
++            printf("GEANY-VVP-STOP\t%u\t%s\n", line, source_file.c_str());
 +            return true;
 +      }
 +      return false;
@@ -352,7 +398,7 @@
  static void cmd_call(unsigned argc, const char*argv[])
  {
        __vpiHandle**table;
-@@ -444,6 +780,21 @@
+@@ -444,6 +790,21 @@ static struct {
          "Synonym for finish."},
        { "finish", &cmd_finish,
          "Finish the simulation."},
@@ -374,7 +420,7 @@
        { "help",   &cmd_help,
          "Get help."},
        { "list",   &cmd_list,
-@@ -554,6 +905,9 @@
+@@ -554,6 +915,9 @@ void stop_handler(int rc)
  	    return;
        }
  
@@ -384,13 +430,15 @@
        vpi_mcd_printf(1,"** VVP Stop(%d) **\n", rc);
        vpi_mcd_printf(1,"** Flushing output streams.\n");
        invoke_command_const("$fflush");
-@@ -583,5 +937,6 @@
+@@ -583,5 +947,6 @@ void stop_handler(int rc)
  	    free(input);
        }
  
 +      geany_stopped_process = 0;
        vpi_mcd_printf(1,"** Continue **\n");
  }
+diff --git a/vvp/vthread.cc b/vvp/vthread.cc
+index de7578b..514859c 100644
 --- a/vvp/vthread.cc
 +++ b/vvp/vthread.cc
 @@ -31,6 +31,7 @@
@@ -401,7 +449,7 @@
  # include  <set>
  # include  <typeinfo>
  # include  <vector>
-@@ -89,6 +90,7 @@
+@@ -89,6 +90,7 @@ using namespace std;
   */
  
  struct vthread_s {
@@ -409,7 +457,7 @@
        vthread_s();
  
        void debug_dump(ostream&fd, const char*label_text);
-@@ -427,6 +429,190 @@
+@@ -427,6 +429,190 @@ __vpiScope* vthread_scope(struct vthread_s*thr)
  
  struct vthread_s*running_thread = 0;
  
@@ -600,7 +648,7 @@
  string get_fileline()
  {
        return running_thread->get_fileline();
-@@ -719,6 +905,10 @@
+@@ -719,6 +905,10 @@ vthread_t vthread_new(vvp_code_t pc, __vpiScope*scope)
        for (int idx = 4 ; idx < 8 ; idx += 1)
  	    thr->flags[idx] = BIT4_X;
  
@@ -611,7 +659,7 @@
        scope->threads .insert(thr);
        return thr;
  }
-@@ -820,6 +1010,8 @@
+@@ -820,6 +1010,8 @@ static void vthread_reap(vthread_t thr)
  
  void vthread_delete(vthread_t thr)
  {
@@ -620,7 +668,7 @@
        thr->cleanup();
        delete thr;
  }
-@@ -857,6 +1049,12 @@
+@@ -857,6 +1049,12 @@ void vthread_delay_delete()
   * incrementing the PC, and executing the instruction. The thread may
   * be the head of a list, so each thread is run so far as possible.
   */
@@ -633,7 +681,7 @@
  void vthread_run(vthread_t thr)
  {
        while (thr != 0) {
-@@ -869,6 +1067,11 @@
+@@ -869,6 +1067,11 @@ void vthread_run(vthread_t thr)
              running_thread = thr;
  
  	    for (;;) {
@@ -645,7 +693,7 @@
  		  vvp_code_t cp = thr->pc;
  		  thr->pc += 1;
  
-@@ -880,6 +1083,15 @@
+@@ -880,6 +1083,15 @@ void vthread_run(vthread_t thr)
  			break;
  	    }
  
@@ -661,7 +709,7 @@
  	    thr = tmp;
        }
        running_thread = 0;
-@@ -6416,6 +6628,25 @@
+@@ -6416,6 +6628,28 @@ bool of_FILE_LINE(vthread_t thr, vvp_code_t cp)
  	    cerr << thr->get_fileline()
  	         << vpi_get_str(_vpiDescription, handle) << endl;
  
@@ -674,8 +722,11 @@
 +      const unsigned line = vpi_get(vpiLineNo, handle);
 +      const bool breakpoint = geany_source_breakpoint(filename, line);
 +      if (breakpoint || geany_source_step(thr->geany_process_id)) {
-+            if (!breakpoint && filename && line)
-+                  printf("GEANY-VVP-STOP\t%u\t%s\n", line, filename);
++            if (!breakpoint && line) {
++                  const char* source = vpi_get_str(vpiFile, handle);
++                  if (source)
++                        printf("GEANY-VVP-STOP\t%u\t%s\n", line, source);
++            }
 +            geany_source_context(thr->geany_process_id, vthread_scope(thr));
 +            // EN: Resume at the next opcode, before the selected statement executes.
 +            // RU: Продолжаем со следующей команды, перед выполнением выбранного оператора.
@@ -686,36 +737,4 @@
 +
        return true;
  }
- 
---- a/vvp/schedule.cc
-+++ b/vvp/schedule.cc
-@@ -592,6 +592,9 @@
-       schedule_runnable = false;
- }
- 
-+extern bool geany_pause_requested();
-+extern bool geany_tick_step();
-+
- void schedule_stop(int)
- {
-       schedule_stopped_flag = true;
-@@ -1177,6 +1180,8 @@
- 
-       if (schedule_runnable) while (sched_list) {
- 
-+            if (geany_pause_requested())
-+                  schedule_stop(0);
- 	    if (schedule_stopped_flag) {
- 		  schedule_stopped_flag = false;
- 		  stop_handler(0);
-@@ -1214,6 +1219,10 @@
- 			cur->run_run();
- 			delete (cur);
- 		  }
-+                  if (geany_tick_step()) {
-+                        schedule_stop(0);
-+                        continue;
-+                  }
- 	    }
- 
  
