@@ -1,0 +1,302 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+#include "geany.h"
+#include "document.h"
+#include "editor.h"
+#include "main.h"
+#include "sciwrappers.h"
+#include <glib/gstdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef enum {
+    OPEN_DEBUGGER, LOAD_OBSERVER, SET_POINT, RUN_TO_POINT,
+    INSPECT_STOP, INSPECT_PREVIEW, WAIT_FOR_CAPTURE
+} TestPhase;
+
+static TestPhase phase;
+static gchar *fixture_source;
+static gchar *observer_source;
+static guint point_line;
+static gboolean passed;
+
+/* Find a visible top-level window by its editor title. */
+/* Ищет видимое окно верхнего уровня по заголовку редактора. */
+static GtkWidget *find_window(const gchar *title)
+{
+    GList *windows = gtk_window_list_toplevels();
+    GtkWidget *found = NULL;
+    for (GList *entry = windows; entry && !found; entry = entry->next)
+    {
+        GtkWidget *window = entry->data;
+        if (gtk_widget_get_visible(window) &&
+            !g_strcmp0(gtk_window_get_title(GTK_WINDOW(window)), title))
+            found = window;
+    }
+    g_list_free(windows);
+    return found;
+}
+
+/* Find a control by caption or by its unique role in the dialog. */
+/* Ищет элемент по подписи или по его однозначной роли в диалоге. */
+static GtkWidget *find_control(GtkWidget *widget, const gchar *key)
+{
+    if (GTK_IS_BUTTON(widget) && !g_strcmp0(gtk_button_get_label(GTK_BUTTON(widget)), key))
+        return widget;
+    if (GTK_IS_LABEL(widget) && !g_strcmp0(gtk_label_get_text(GTK_LABEL(widget)), key))
+        return widget;
+    if (GTK_IS_TEXT_VIEW(widget) && !strcmp(key, "console"))
+        return widget;
+    if (GTK_IS_COMBO_BOX_TEXT(widget) && !strcmp(key, "tracks"))
+        return widget;
+    if (GTK_IS_SPIN_BUTTON(widget) && !strcmp(key, "source-line") &&
+        gtk_adjustment_get_upper(gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(widget))) == G_MAXINT)
+        return widget;
+    if (GTK_IS_MENU_ITEM(widget))
+    {
+        GtkMenuItem *item = GTK_MENU_ITEM(widget);
+        if (!g_strcmp0(gtk_menu_item_get_label(item), key))
+            return widget;
+        GtkWidget *submenu = gtk_menu_item_get_submenu(item);
+        GtkWidget *found = submenu ? find_control(submenu, key) : NULL;
+        if (found)
+            return found;
+    }
+    if (!GTK_IS_CONTAINER(widget))
+        return NULL;
+
+    GList *children = gtk_container_get_children(GTK_CONTAINER(widget));
+    GtkWidget *found = NULL;
+    for (GList *entry = children; entry && !found; entry = entry->next)
+        found = find_control(entry->data, key);
+    g_list_free(children);
+    return found;
+}
+
+/* Activate a button only when the user could click it. */
+/* Нажимает кнопку, только когда она доступна пользователю. */
+static gboolean click(GtkWidget *window, const gchar *label)
+{
+    GtkWidget *button = find_control(window, label);
+    if (!GTK_IS_BUTTON(button) || !gtk_widget_is_sensitive(button))
+        return FALSE;
+    gtk_button_clicked(GTK_BUTTON(button));
+    return TRUE;
+}
+
+/* Read the displayed simulator console without accessing private run state. */
+/* Читает видимую консоль симулятора без доступа к внутреннему состоянию сеанса. */
+static gboolean console_contains(GtkWidget *window, const gchar *expected)
+{
+    GtkWidget *console = find_control(window, "console");
+    if (!console)
+        return FALSE;
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(console));
+    GtkTextIter start, end;
+    gtk_text_buffer_get_bounds(buffer, &start, &end);
+    gchar *text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+    gboolean found = strstr(text, expected) != NULL;
+    g_free(text);
+    return found;
+}
+
+/* Select the expected signal in the real waveform track list. */
+/* Выбирает ожидаемый сигнал в списке дорожек настоящей диаграммы. */
+static gboolean select_counter_track(GtkWidget *window)
+{
+    GtkWidget *tracks = find_control(window, "tracks");
+    if (!GTK_IS_COMBO_BOX(tracks))
+        return FALSE;
+    GtkTreeModel *model = gtk_combo_box_get_model(GTK_COMBO_BOX(tracks));
+    GtkTreeIter row;
+    for (gboolean valid = gtk_tree_model_get_iter_first(model, &row); valid;
+         valid = gtk_tree_model_iter_next(model, &row))
+    {
+        gchar *name = NULL;
+        gtk_tree_model_get(model, &row, 0, &name, -1);
+        gboolean found = !g_strcmp0(name, "counter_tb.count");
+        g_free(name);
+        if (found)
+        {
+            gtk_combo_box_set_active_iter(GTK_COMBO_BOX(tracks), &row);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+/* Answer the real modal chooser once GTK has selected the requested file. */
+/* Подтверждает реальный диалог выбора, когда GTK выбрал нужный файл. */
+static gboolean accept_fixture(gpointer data)
+{
+    const gchar *path = data;
+    const gchar *title = path == fixture_source ? "Debug Verilog Testbench" : "Load Verilog Observer";
+    GtkWidget *window = find_window(title);
+    if (!GTK_IS_FILE_CHOOSER(window))
+        return G_SOURCE_CONTINUE;
+    GtkFileChooser *chooser = GTK_FILE_CHOOSER(window);
+    gchar *selected = gtk_file_chooser_get_filename(chooser);
+    gboolean ready = !g_strcmp0(selected, path);
+    g_free(selected);
+    if (!ready)
+    {
+        gtk_file_chooser_select_filename(chooser, path);
+        return G_SOURCE_CONTINUE;
+    }
+    gtk_dialog_response(GTK_DIALOG(window), GTK_RESPONSE_ACCEPT);
+    return G_SOURCE_REMOVE;
+}
+
+/* Fail with the current phase so the CI log identifies the blocked action. */
+/* Завершает проверку с номером этапа, чтобы в CI было видно, где она остановилась. */
+static gboolean fail_timeout(gpointer data)
+{
+    (void)data;
+    g_printerr("Verilog debugger GTK test timed out at phase %u\n", (guint)phase);
+    exit(1);
+}
+
+/* Drive menu, Lua breakpoint, source navigation and VCD through GTK widgets. */
+/* Проверяет меню, точку Lua, переход к исходнику и VCD через виджеты GTK. */
+static gboolean drive_debugger(gpointer data)
+{
+    (void)data;
+    GeanyDocument *document = document_get_current();
+    if (!DOC_VALID(document))
+        return G_SOURCE_CONTINUE;
+
+    if (phase == OPEN_DEBUGGER)
+    {
+        GtkWidget *item = find_control(gtk_widget_get_toplevel(GTK_WIDGET(document->editor->sci)),
+                                      "Debug Verilog Testbench…");
+        if (!GTK_IS_MENU_ITEM(item))
+            return G_SOURCE_CONTINUE;
+        phase = LOAD_OBSERVER;
+        g_timeout_add(100, accept_fixture, fixture_source);
+        gtk_menu_item_activate(GTK_MENU_ITEM(item));
+        return G_SOURCE_CONTINUE;
+    }
+
+    GtkWidget *simulation = find_window("Verilog Simulation");
+    if (phase == WAIT_FOR_CAPTURE)
+    {
+        GtkWidget *capture = find_window("VCD Waveforms");
+        if (!simulation && capture && select_counter_track(capture))
+        {
+            g_print("Verilog GTK: Lua stop, source navigation and both VCD windows passed.\n");
+            passed = TRUE;
+            gtk_main_quit();
+            return G_SOURCE_REMOVE;
+        }
+        return G_SOURCE_CONTINUE;
+    }
+    if (!simulation)
+        return G_SOURCE_CONTINUE;
+
+    if (phase == LOAD_OBSERVER && console_contains(simulation, "GEANY-VVP-READY"))
+    {
+        GtkWidget *load = find_control(simulation, "Load Lua Observer…");
+        if (load && gtk_widget_is_sensitive(load))
+        {
+            phase = SET_POINT;
+            g_timeout_add(100, accept_fixture, observer_source);
+            gtk_button_clicked(GTK_BUTTON(load));
+        }
+    }
+    else if (phase == SET_POINT && console_contains(simulation, "Lua observer loaded."))
+    {
+        GtkWidget *line = find_control(simulation, "source-line");
+        GtkWidget *script = find_control(simulation, "Lua decides");
+        if (line && script)
+        {
+            gtk_spin_button_set_value(GTK_SPIN_BUTTON(line), point_line);
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(script), TRUE);
+            if (click(simulation, "Set Point"))
+                phase = RUN_TO_POINT;
+        }
+    }
+    else if (phase == RUN_TO_POINT && console_contains(simulation, "1 source breakpoint(s)."))
+    {
+        if (click(simulation, "Continue"))
+            phase = INSPECT_STOP;
+    }
+    else if (phase == INSPECT_STOP && console_contains(simulation, "HDL hit 2 at tick 15") &&
+             find_control(simulation, "HDL hits = 2"))
+    {
+        if (click(simulation, "Open HDL Line"))
+        {
+            GeanyDocument *current = document_get_current();
+            if (!DOC_VALID(current) || sci_get_current_line(current->editor->sci) + 1 != (gint)point_line)
+            {
+                g_printerr("Verilog GTK opened the wrong HDL line.\n");
+                exit(1);
+            }
+            if (click(simulation, "Preview Waveform"))
+                phase = INSPECT_PREVIEW;
+        }
+    }
+    else if (phase == INSPECT_PREVIEW)
+    {
+        GtkWidget *preview = find_window("VCD Waveforms");
+        GtkWidget *resume = find_control(simulation, "Continue");
+        if (preview && resume && gtk_widget_is_sensitive(resume) && select_counter_track(preview))
+        {
+            gtk_widget_destroy(preview);
+            if (click(simulation, "Continue"))
+                phase = WAIT_FOR_CAPTURE;
+        }
+    }
+    return G_SOURCE_CONTINUE;
+}
+
+/* Create a single-file testbench and start the real editor with a fresh profile. */
+/* Готовит однофайловый тестбенч и запускает редактор с отдельным профилем. */
+int main(int argc, char **argv)
+{
+    if (argc != 3)
+    {
+        g_printerr("Usage: test_insight_verilog_debugger_gui FIXTURES WORK_DIRECTORY\n");
+        return 2;
+    }
+    gchar *fixture_dir = g_canonicalize_filename(argv[1], NULL);
+    gchar *work_dir = g_canonicalize_filename(argv[2], NULL);
+    gchar *counter = g_build_filename(fixture_dir, "counter.v", NULL);
+    gchar *testbench = g_build_filename(fixture_dir, "counter_tb.v", NULL);
+    observer_source = g_build_filename(fixture_dir, "observe-hdl.lua", NULL);
+    gchar *profile = g_build_filename(work_dir, "profile", NULL);
+    fixture_source = g_build_filename(work_dir, "debug_counter.v", NULL);
+    gchar *counter_text = NULL, *testbench_text = NULL;
+    if (g_mkdir_with_parents(profile, 0700) || !g_file_get_contents(counter, &counter_text, NULL, NULL) ||
+        !g_file_get_contents(testbench, &testbench_text, NULL, NULL))
+    {
+        g_printerr("Cannot prepare Verilog GTK fixtures.\n");
+        return 1;
+    }
+    const gchar *assignment = strstr(counter_text, "count <= count + 1'b1;");
+    if (!assignment)
+        return 1;
+    point_line = 1;
+    for (const gchar *byte = counter_text; byte < assignment; byte++)
+        if (*byte == '\n')
+            point_line++;
+    gchar *combined = g_strconcat(counter_text, "\n", testbench_text, NULL);
+    gboolean saved = g_file_set_contents(fixture_source, combined, -1, NULL);
+    g_free(combined);
+    g_free(counter_text);
+    g_free(testbench_text);
+    g_free(counter);
+    g_free(testbench);
+    g_free(fixture_dir);
+    g_free(work_dir);
+    if (!saved)
+        return 1;
+
+    gchar *editor_args[] = {argv[0], "--new-instance", "--no-session", "--no-plugins",
+                           "--config", profile, fixture_source, NULL};
+    g_timeout_add(100, drive_debugger, NULL);
+    g_timeout_add_seconds(60, fail_timeout, NULL);
+    gint result = main_lib(G_N_ELEMENTS(editor_args) - 1, editor_args);
+    g_free(profile);
+    g_free(fixture_source);
+    g_free(observer_source);
+    return passed ? result : 1;
+}

@@ -23,6 +23,8 @@ on:
       - 'src/insight-workbench.c'
       - 'insight/desktop/slang_completion.c'
       - 'external/slang-compat/**'
+      - 'insight/tests/verilog_debugger_gui_test.c'
+      - 'tests/meson.build'
 
 permissions:
   contents: read
@@ -47,11 +49,13 @@ jobs:
             cmake gettext gperf libgtk-3-dev libreadline-dev libxml2-dev libzstd-dev \
             meson ninja-build pkg-config python3-docutils xauth xvfb zlib1g-dev
       - name: Build and install on Linux
+        id: linux_build
         if: runner.os == 'Linux'
         run: |
           ./build.sh --backend meson --install --jobs 2 \
             --clang-provider "$INSIGHT_SMOKE_CLANG" --prefix "$RUNNER_TEMP/insight-editor"
       - name: Build and install on Windows
+        id: windows_build
         if: runner.os == 'Windows'
         shell: cmd
         run: |
@@ -65,6 +69,28 @@ jobs:
         shell: pwsh
         run: |
           python insight/tests/waveform-debug/smoke.py "$env:RUNNER_TEMP/insight-editor" "$env:RUNNER_TEMP/insight-smoke" --gtk
+      - name: Exercise native debugger controls on Linux
+        if: runner.os == 'Linux' && !cancelled() && steps.linux_build.outcome == 'success'
+        run: |
+          mkdir -p "$RUNNER_TEMP/insight-smoke/gtk-debugger"
+          xvfb-run -a _editor-build/meson/tests/test_insight_verilog_debugger_gui \
+            insight/tests/waveform-debug "$RUNNER_TEMP/insight-smoke/gtk-debugger" \
+            >"$RUNNER_TEMP/insight-smoke/gtk-debugger/session.log" 2>&1 || {
+              cat "$RUNNER_TEMP/insight-smoke/gtk-debugger/session.log"
+              exit 1
+            }
+      - name: Exercise native debugger controls on Windows
+        if: runner.os == 'Windows' && !cancelled() && steps.windows_build.outcome == 'success'
+        shell: pwsh
+        run: |
+          $directory = "$env:RUNNER_TEMP/insight-smoke/gtk-debugger"
+          New-Item -ItemType Directory -Force $directory | Out-Null
+          $probe = "$env:RUNNER_TEMP/insight-editor/bin/test_insight_verilog_debugger_gui.exe"
+          Copy-Item _editor-build/meson/tests/test_insight_verilog_debugger_gui.exe $probe
+          & $probe insight/tests/waveform-debug $directory *> "$directory/session.log"
+          $code = $LASTEXITCODE
+          Get-Content "$directory/session.log"
+          exit $code
       - name: Preserve build and simulator logs
         if: always()
         uses: actions/upload-artifact@v4
