@@ -11,7 +11,7 @@
  # include  "ivl_alloc.h"
  
  __vpiScope*stop_current_scope = 0;
-@@ -70,6 +74,180 @@
+@@ -70,6 +74,190 @@
  #endif
  
  
@@ -28,7 +28,7 @@
 +      std::string filename;
 +      std::string signal, bits;
 +      unsigned threshold, hits;
-+      bool log_only, missing_reported;
++      bool log_only, scripted, missing_reported;
 +};
 +
 +static std::vector<geany_breakpoint> geany_breakpoints;
@@ -69,7 +69,7 @@
 +                  start = tab + 1;
 +            }
 +            fields.push_back(record.substr(start));
-+            if ((fields.size() != 2 && fields.size() != 6) || fields[1].empty())
++            if ((fields.size() != 2 && fields.size() != 6 && fields.size() != 7) || fields[1].empty())
 +                  continue;
 +
 +            std::istringstream number(fields[0]);
@@ -78,7 +78,7 @@
 +                  continue;
 +            point.filename = geany_file_key(fields[1].c_str());
 +            point.threshold = 1;
-+            if (fields.size() == 6) {
++            if (fields.size() >= 6) {
 +                  point.signal = fields[2];
 +                  point.bits = fields[3];
 +                  std::istringstream hits(fields[4]);
@@ -89,6 +89,11 @@
 +                      point.bits.find_first_not_of("01xz") != std::string::npos)
 +                        continue;
 +                  point.log_only = fields[5] == "1";
++                  if (fields.size() == 7) {
++                        if (fields[6] != "0" && fields[6] != "1")
++                              continue;
++                        point.scripted = fields[6] == "1";
++                  }
 +            }
 +
 +            // EN: Preserve counters for unchanged rules.
@@ -96,7 +101,8 @@
 +            for (const geany_breakpoint& old : geany_breakpoints) {
 +                  if (old.filename == point.filename && old.line == point.line &&
 +                      old.signal == point.signal && old.bits == point.bits &&
-+                      old.threshold == point.threshold && old.log_only == point.log_only) {
++                      old.threshold == point.threshold && old.log_only == point.log_only &&
++                      old.scripted == point.scripted) {
 +                        point.hits = old.hits;
 +                        point.missing_reported = old.missing_reported;
 +                        break;
@@ -116,7 +122,7 @@
 +            return;
 +      for (const geany_breakpoint& point : geany_breakpoints) {
 +            printf("%s:%u %s hits=%u threshold=%u", point.filename.c_str(), point.line,
-+                   point.log_only ? "log" : "stop", point.hits, point.threshold);
++                   point.log_only ? "log" : point.scripted ? "script" : "stop", point.hits, point.threshold);
 +            if (!point.signal.empty())
 +                  printf(" %s == %s", point.signal.c_str(), point.bits.c_str());
 +            printf("\n");
@@ -174,6 +180,10 @@
 +                  printf("\n");
 +                  continue;
 +            }
++            if (point.scripted)
++                  printf("GEANY-VVP-EVENT\t%u\t%s\t%" TIME_FMT_U "\t%u\t%s\t%s\n",
++                         line, filename, schedule_simtime(), point.hits,
++                         point.signal.c_str(), point.bits.c_str());
 +            printf("GEANY-VVP-STOP\t%u\t%s\n", line, filename);
 +            return true;
 +      }
@@ -192,7 +202,7 @@
  static bool interact_flag = true;
  
  static void cmd_call(unsigned argc, const char*argv[])
-@@ -444,6 +622,10 @@
+@@ -444,6 +632,10 @@
          "Synonym for finish."},
        { "finish", &cmd_finish,
          "Finish the simulation."},
@@ -203,7 +213,7 @@
        { "help",   &cmd_help,
          "Get help."},
        { "list",   &cmd_list,
-@@ -554,6 +736,8 @@
+@@ -554,6 +746,8 @@
  	    return;
        }
  

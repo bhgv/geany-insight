@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "insight-waveforms.h"
+#include "../insight/core/runtime.h"
 #include <gio/gio.h>
 #include <glib/gstdio.h>
 #include <string.h>
@@ -970,7 +971,11 @@ typedef struct {
     gboolean preview_pending;
     GtkWidget *signal_name;
     GtkWidget *pause_button, *source_button, *breakpoint_controls, *breakpoint_file, *breakpoint_line;
-    GtkWidget *rule_signal, *rule_bits, *rule_hits, *rule_log;
+    GtkWidget *rule_signal, *rule_bits, *rule_hits, *rule_log, *rule_script;
+    GtkWidget *lua_watches;
+    InsightLuaDebug *lua_observer;
+    gchar **pending_event;
+    gsize observer_log_offset;
     gboolean bridge_ready, pause_requested;
     GString *protocol_line;
     GHashTable *breakpoints;
@@ -990,6 +995,8 @@ static void simulation_free(gpointer data)
     g_mutex_clear(&run->lock);
     g_free(run->live_log);
     g_free(run->trace_file);
+    insight_lua_debug_free(run->lua_observer);
+    g_strfreev(run->pending_event);
     if (run->protocol_line)
         g_string_free(run->protocol_line, TRUE);
     g_clear_pointer(&run->breakpoints, g_hash_table_unref);
@@ -1250,9 +1257,17 @@ static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsi
                 g_string_append_c(run->protocol_line, bytes[i]);
             continue;
         }
-        gchar *text = g_strchomp(run->protocol_line->str);
+        if (run->protocol_line->len && run->protocol_line->str[run->protocol_line->len - 1] == '\r')
+            g_string_truncate(run->protocol_line, run->protocol_line->len - 1);
+        const gchar *text = run->protocol_line->str;
         if (strstr(text, "GEANY-VVP-READY"))
             run->bridge_ready = TRUE;
+        const gchar *event = strstr(text, "GEANY-VVP-EVENT\t");
+        if (event)
+        {
+            g_strfreev(run->pending_event);
+            run->pending_event = g_strsplit(event, "\t", 7);
+        }
         gchar *filename = NULL;
         guint line;
         if (simulation_trace_location(text, &filename, &line))
@@ -1302,6 +1317,75 @@ static void simulation_request_pause(GtkButton *button, gpointer data)
     g_free(directory);
 }
 
+static void simulation_write_command(WaveSimulation *run, const gchar *command);
+
+/* Append newly produced Lua output and refresh its published watch values. */
+/* Добавляет новый вывод Lua и обновляет опубликованные значения наблюдения. */
+static void simulation_observer_output(WaveSimulation *run)
+{
+    const gchar *log = insight_lua_debug_observer_log(run->lua_observer);
+    gsize length = strlen(log);
+    if (length > run->observer_log_offset)
+    {
+        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->console));
+        GtkTextIter end;
+        gtk_text_buffer_get_end_iter(buffer, &end);
+        gchar *message = g_utf8_make_valid(log + run->observer_log_offset, -1);
+        gtk_text_buffer_insert(buffer, &end, message, -1);
+        g_free(message);
+    }
+    run->observer_log_offset = length;
+
+    InsightLuaWatchGraph *graph = g_new0(InsightLuaWatchGraph, 1);
+    insight_lua_debug_observer_watch(run->lua_observer, graph);
+    GString *text = g_string_new(NULL);
+    for (unsigned i = 1; i < graph->node_count; i++)
+    {
+        const InsightLuaWatchNode *node = &graph->nodes[i];
+        if (text->len)
+            g_string_append_c(text, '\n');
+        g_string_append_printf(text, "%s = %s", node->label, node->value);
+    }
+    gchar *valid = g_utf8_make_valid(text->str, -1);
+    gtk_label_set_text(GTK_LABEL(run->lua_watches), valid);
+    g_free(valid);
+    g_string_free(text, TRUE);
+    g_free(graph);
+}
+
+/* Let Lua decide whether a scripted point stays stopped or resumes. */
+/* Позволяет Lua оставить сценарную точку на паузе или продолжить выполнение. */
+static void simulation_handle_observer_event(WaveSimulation *run)
+{
+    gchar **fields = g_steal_pointer(&run->pending_event);
+    if (!fields)
+        return;
+    guint64 line, tick, hits;
+    if (insight_lua_debug_observer_active(run->lua_observer) &&
+        g_strv_length(fields) == 7 &&
+        g_ascii_string_to_unsigned(fields[1], 10, 1, G_MAXINT, &line, NULL) &&
+        g_ascii_string_to_unsigned(fields[3], 10, 0, G_MAXUINT64, &tick, NULL) &&
+        g_ascii_string_to_unsigned(fields[4], 10, 1, G_MAXUINT, &hits, NULL))
+    {
+        InsightObserverValue values[] = {
+            {.scope = 0, .type = 's', .name = "tick", .text = fields[3], .length = strlen(fields[3])},
+            {.scope = 0, .type = 'i', .name = "hits", .integer = (long long)hits},
+            {.scope = 0, .type = 's', .name = "signal", .text = fields[5], .length = strlen(fields[5])},
+            {.scope = 0, .type = 's', .name = "bits", .text = fields[6], .length = strlen(fields[6])},
+            {.scope = 0, .type = 'i', .name = "ticks", .integer = tick <= G_MAXINT64 ? (long long)tick : 0}
+        };
+        InsightObserverEvent event = {
+            .kind = "hdl-point", .file = fields[2], .name = fields[5], .line = (unsigned long)line,
+            .values = values, .count = tick <= G_MAXINT64 ? G_N_ELEMENTS(values) : G_N_ELEMENTS(values) - 1
+        };
+        gint decision = insight_lua_debug_observe(run->lua_observer, &event);
+        simulation_observer_output(run);
+        if (decision == 0 && !run->pause_requested)
+            simulation_write_command(run, "cont\n");
+    }
+    g_strfreev(fields);
+}
+
 /* Read new console bytes without holding the worker lock during file I/O. */
 /* Читает новые байты консоли без удержания блокировки во время чтения файла. */
 static gboolean simulation_refresh_console(gpointer data)
@@ -1349,6 +1433,11 @@ static gboolean simulation_refresh_console(gpointer data)
         g_free(valid);
     }
     gboolean paused = running && run->prompt_tail[0] == '>' && run->prompt_tail[1] == ' ';
+    if (paused && run->pending_event)
+    {
+        simulation_handle_observer_event(run);
+        paused = run->prompt_tail[0] == '>' && run->prompt_tail[1] == ' ';
+    }
     gtk_widget_set_sensitive(run->live_controls, paused && !run->preview_pending);
     gtk_widget_set_sensitive(run->breakpoint_controls, run->bridge_ready);
     if (paused && run->pause_requested)
@@ -1429,7 +1518,18 @@ static void simulation_edit_breakpoint(GtkButton *button, gpointer data)
         }
         gint hits = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(run->rule_hits));
         gboolean log_only = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(run->rule_log));
-        rule = g_strdup_printf("%s\t%s\t%d\t%d", signal, bits, hits, log_only);
+        gboolean scripted = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(run->rule_script));
+        if (log_only && scripted)
+        {
+            GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->console));
+            GtkTextIter end;
+            gtk_text_buffer_get_end_iter(buffer, &end);
+            gtk_text_buffer_insert(buffer, &end, "\nChoose either Log and continue or Lua decides.\n", -1);
+            g_free(bits);
+            g_free(key);
+            return;
+        }
+        rule = g_strdup_printf("%s\t%s\t%d\t%d\t%d", signal, bits, hits, log_only, scripted);
         g_free(bits);
     }
 
@@ -1567,6 +1667,54 @@ static void simulation_preview(GtkButton *button, gpointer data)
     g_task_set_task_data(task, directory, g_free);
     g_task_run_in_thread(task, simulation_preview_worker);
     g_object_unref(task);
+}
+
+/* Load a bounded Lua observer into the current paused session. */
+/* Загружает ограниченный по размеру Lua-сценарий в текущий сеанс на паузе. */
+static void simulation_load_observer(GtkButton *button, gpointer data)
+{
+    (void)button;
+    WaveSimulation *run = data;
+    GtkWidget *chooser = gtk_file_chooser_dialog_new("Load Verilog Observer", GTK_WINDOW(run->dialog),
+        GTK_FILE_CHOOSER_ACTION_OPEN, "_Cancel", GTK_RESPONSE_CANCEL, "_Load", GTK_RESPONSE_ACCEPT, NULL);
+    GtkFileFilter *filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "Lua scripts");
+    gtk_file_filter_add_pattern(filter, "*.[lL][uU][aA]");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(chooser), filter);
+    gchar *filename = gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT ?
+        gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser)) : NULL;
+    gtk_widget_destroy(chooser);
+    if (!filename)
+        return;
+
+    gchar *source = g_malloc(64 * 1024 + 1);
+    GFile *file = g_file_new_for_path(filename);
+    GFileInputStream *stream = g_file_read(file, NULL, NULL);
+    gsize length = 0;
+    gboolean loaded = stream && g_input_stream_read_all(G_INPUT_STREAM(stream), source,
+        64 * 1024 + 1, &length, NULL, NULL) && length > 0 && length <= 64 * 1024 &&
+        !memchr(source, 0, length) && g_utf8_validate(source, (gssize)length, NULL);
+    gchar error[1024] = "";
+    if (loaded && !run->lua_observer)
+        run->lua_observer = insight_lua_debug_new_observer();
+    gboolean applied = loaded && run->lua_observer &&
+        insight_lua_debug_set_observer(run->lua_observer, source, length, error, sizeof error);
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->console));
+    GtkTextIter end;
+    gtk_text_buffer_get_end_iter(buffer, &end);
+    gchar *message = g_utf8_make_valid(applied ? "\nLua observer loaded.\n" :
+        *error ? error : "\nCannot load observer. Choose a UTF-8 Lua script of at most 64 KiB.\n", -1);
+    gtk_text_buffer_insert(buffer, &end, message, -1);
+    if (applied)
+    {
+        run->observer_log_offset = 0;
+        simulation_observer_output(run);
+    }
+    g_free(message);
+    g_clear_object(&stream);
+    g_object_unref(file);
+    g_free(source);
+    g_free(filename);
 }
 
 /* Close the progress dialog and show either the capture or the diagnostic. */
@@ -1775,6 +1923,15 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         gtk_box_pack_start(GTK_BOX(rule), run->rule_hits, FALSE, FALSE, 0);
         run->rule_log = gtk_check_button_new_with_label("Log and continue");
         gtk_box_pack_start(GTK_BOX(rule), run->rule_log, FALSE, FALSE, 0);
+        run->rule_script = gtk_check_button_new_with_label("Lua decides");
+        gtk_box_pack_start(GTK_BOX(rule), run->rule_script, FALSE, FALSE, 0);
+        GtkWidget *load_script = gtk_button_new_with_label("Load Lua Observer…");
+        g_signal_connect(load_script, "clicked", G_CALLBACK(simulation_load_observer), run);
+        gtk_box_pack_start(GTK_BOX(rule), load_script, FALSE, FALSE, 0);
+        run->lua_watches = gtk_label_new(NULL);
+        gtk_label_set_selectable(GTK_LABEL(run->lua_watches), TRUE);
+        gtk_label_set_xalign(GTK_LABEL(run->lua_watches), 0);
+        gtk_box_pack_start(GTK_BOX(box), run->lua_watches, FALSE, FALSE, 0);
         gtk_widget_set_sensitive(run->breakpoint_controls, FALSE);
         g_object_set_data(G_OBJECT(run->dialog), "insight-live-simulation", run);
         gtk_widget_set_sensitive(run->live_controls, FALSE);
