@@ -95,7 +95,7 @@ Default **internal source-built Clang**, retaining editable sources in `external
   -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
 ```
 
-The driver automatically builds the adapted slang engine in `_external-slang`, prepares `_external-clang-sdk`, then builds the editor in `_editor-build/meson` and installs to `out`. Compiler preparation defaults to two jobs. Use `--jobs 4` before `--` to change it if memory permits. `./build.sh` without arguments displays help. Internal Clang is not silently replaced by a system installation if its build fails. See [Clang integration](clang.md).
+The driver automatically builds the adapted slang engine in `_external-slang`, prepares `_external-clang-sdk`, then builds the editor in `_editor-build/meson` and installs to `out`. Compiler preparation defaults to two jobs. Use `--jobs 4` before `--` to change it if memory permits. `./build.sh` without arguments builds and installs with Meson. Internal Clang is not silently replaced by a system installation if its build fails. See [Clang integration](clang.md).
 
 Explicit **system Clang** (install tools with `-ClangProvider System` first):
 
@@ -153,3 +153,10 @@ editor's `bin` directory. Simulator modules install under `lib\ivl`. The
 download cache keeps the archive. Setup compiles and runs a small VCD-producing
 design to check the installation. A later build reuses a working installation
 of the same revision. See the build log for simulator output.
+
+
+On Linux, `./build.sh` with no arguments builds with Meson and installs to
+`out`. Both launchers use the same driver to build pinned Icarus Verilog for
+an editor install. On Linux the simulator build needs Bash, curl, tar, make,
+autoconf, bison, flex, gperf, rsync and either sha256sum or shasum. Linux logs
+are saved under `_editor-build/logs`. `--plan` and `--help` do not write logs.

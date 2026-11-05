@@ -3,10 +3,19 @@
 set -euo pipefail
 
 cache_dir=$1
-install_dir=$(cygpath -u "$2")
+install_dir=$2
 jobs=$3
-version=$INSIGHT_IVERILOG_VERSION
-sha=$INSIGHT_IVERILOG_SHA256
+version=$4
+url=$5
+sha=$6
+executable_suffix=
+configure_prefix=$install_dir
+if command -v cygpath >/dev/null 2>&1; then
+    cache_dir=$(cygpath -u "$cache_dir")
+    install_dir=$(cygpath -u "$install_dir")
+    executable_suffix=.exe
+    configure_prefix=/geany-iverilog
+fi
 archive="$cache_dir/iverilog-$version.tar.gz"
 stamp="$install_dir/share/geany-insight/iverilog-source.sha256"
 work=$(mktemp -d "${TMPDIR:-/tmp}/geany-iverilog.XXXXXXXX")
@@ -17,7 +26,11 @@ trap 'rm -rf -- "$work"; if [[ -n "$download" ]]; then rm -f -- "$download"; fi'
 # Проверяет скачанный архив перед распаковкой.
 verify_archive() {
     local digest
-    digest=$(sha256sum -- "$1")
+    if command -v sha256sum >/dev/null 2>&1; then
+        digest=$(sha256sum -- "$1")
+    else
+        digest=$(shasum -a 256 -- "$1")
+    fi
     [[ ${digest%% *} == "$sha" ]]
 }
 
@@ -40,14 +53,15 @@ VERILOG
         cd "$work" &&
         rm -f -- geany_smoke.vcd geany_smoke.vvp &&
         export PATH="$prefix/bin:$PATH" &&
-        "$prefix/bin/iverilog.exe" -s geany_smoke -o geany_smoke.vvp geany_smoke.v &&
-        "$prefix/bin/vvp.exe" geany_smoke.vvp &&
+        export IVERILOG_VPI_MODULE_PATH="$prefix/lib/ivl" &&
+        "$prefix/bin/iverilog$executable_suffix" -s geany_smoke -o geany_smoke.vvp geany_smoke.v &&
+        "$prefix/bin/vvp$executable_suffix" geany_smoke.vvp &&
         test -s geany_smoke.vcd
     )
 }
 
 if [[ -f "$stamp" && $(<"$stamp") == "$sha" &&
-      -x "$install_dir/bin/iverilog.exe" && -x "$install_dir/bin/vvp.exe" ]]; then
+      -x "$install_dir/bin/iverilog$executable_suffix" && -x "$install_dir/bin/vvp$executable_suffix" ]]; then
     if check_simulator "$install_dir"; then
         printf '[Simulator] Icarus Verilog %s is already installed.\n' "$version"
         exit 0
@@ -58,7 +72,7 @@ mkdir -p -- "$cache_dir"
 if [[ ! -f "$archive" ]] || ! verify_archive "$archive"; then
     printf '[Simulator] Downloading Icarus Verilog %s sources.\n' "$version"
     download=$(mktemp "$cache_dir/.iverilog-$version.XXXXXXXX")
-    curl --fail --location --retry 3 --output "$download" "$INSIGHT_IVERILOG_URL"
+    curl --fail --location --retry 3 --output "$download" "$url"
     if ! verify_archive "$download"; then
         printf '%s\n' 'Icarus Verilog source archive SHA256 mismatch.' >&2
         exit 1
@@ -76,11 +90,11 @@ tar -xzf "$archive" -C "$work/src" --strip-components=1
 printf '[Simulator] Building Icarus Verilog %s from source.\n' "$version"
 (
     cd "$work/build"
-    "$work/src/configure" --prefix=/geany-iverilog --libdir=/geany-iverilog/lib
+    "$work/src/configure" --prefix="$configure_prefix" --libdir="$configure_prefix/lib"
     make -j"$jobs"
     make DESTDIR="$work/stage" install
 )
-staged="$work/stage/geany-iverilog"
+staged="$work/stage$configure_prefix"
 install -Dm644 "$work/src/COPYING" "$staged/share/licenses/iverilog/COPYING"
 check_simulator "$staged"
 mkdir -p -- "$install_dir"

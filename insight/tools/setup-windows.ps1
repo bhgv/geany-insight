@@ -112,7 +112,7 @@ if ($MsysRoot -notmatch '^[A-Za-z]:\\[A-Za-z0-9_\\.\-]+$') {
 }
 $MsysRoot = [IO.Path]::GetFullPath($MsysRoot).TrimEnd('\')
 $bash = Join-Path $MsysRoot 'usr\bin\bash.exe'
-$envNames = @('MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_MIRROR','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL','INSIGHT_BOOTSTRAP_INSTALL','INSIGHT_BOOTSTRAP_PROVIDER','INSIGHT_BOOTSTRAP_JOBS','INSIGHT_BOOTSTRAP_BUILD_LOG','INSIGHT_BOOTSTRAP_CACHE','INSIGHT_IVERILOG_VERSION','INSIGHT_IVERILOG_URL','INSIGHT_IVERILOG_SHA256')
+$envNames = @('MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_MIRROR','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL','INSIGHT_BOOTSTRAP_INSTALL','INSIGHT_BOOTSTRAP_PROVIDER','INSIGHT_BOOTSTRAP_JOBS','INSIGHT_BOOTSTRAP_BUILD_LOG','INSIGHT_BOOTSTRAP_CACHE')
 $previous = @{}
 foreach ($name in $envNames) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 function Wait-InsightProcess([Diagnostics.Process]$Child, [string]$Stage) {
@@ -334,9 +334,6 @@ git -C "$source_dir" rev-parse HEAD
         $env:INSIGHT_BOOTSTRAP_INSTALL=$InstallDir
         $env:INSIGHT_BOOTSTRAP_PROVIDER=$ClangProvider.ToLowerInvariant()
         $env:INSIGHT_BOOTSTRAP_CACHE = [IO.Path]::GetFullPath($CacheDir)
-        $env:INSIGHT_IVERILOG_VERSION = $manifest.iverilog.version
-        $env:INSIGHT_IVERILOG_URL = $manifest.iverilog.url
-        $env:INSIGHT_IVERILOG_SHA256 = $manifest.iverilog.sha256
         $logDirectory = Join-Path $RootDir 'logs'
         New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
         $buildLog = Join-Path $logDirectory ('build-{0:yyyyMMdd-HHmmssfff}-{1}.log' -f (Get-Date), $PID)
@@ -353,8 +350,7 @@ printf '[Source revision] %s\n' "$(git rev-parse HEAD)"
 export CC=gcc CXX=g++
 export NINJA_STATUS='[ %f/%t %p ] '
 install_dir=$(cygpath -m "$INSIGHT_BOOTSTRAP_INSTALL")
-python3 insight/tools/build_editor.py --backend meson --jobs "$INSIGHT_BOOTSTRAP_JOBS" --clang-provider "$INSIGHT_BOOTSTRAP_PROVIDER" --prefix "$install_dir" --install -- --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
-bash insight/tools/build-iverilog.sh "$(cygpath -u "$INSIGHT_BOOTSTRAP_CACHE")" "$install_dir" "$INSIGHT_BOOTSTRAP_JOBS"
+python3 insight/tools/build_editor.py --backend meson --jobs "$INSIGHT_BOOTSTRAP_JOBS" --clang-provider "$INSIGHT_BOOTSTRAP_PROVIDER" --prefix "$install_dir" --download-cache "$(cygpath -m "$INSIGHT_BOOTSTRAP_CACHE")" --install -- --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
 python3 insight/tools/bundle_windows_dependencies.py --installed-editor --package "$install_dir" --sdk "$(cygpath -m /ucrt64)"
 ) 2>&1 | tee -- "$log_file"
 statuses=("${PIPESTATUS[@]}")

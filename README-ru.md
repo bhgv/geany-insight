@@ -13,14 +13,15 @@ Geany Insight — редактор исходного кода на GTK на б�
 ```sh
 sudo apt update
 sudo apt install build-essential git python3 python3-docutils cmake ninja-build \
-  pkg-config libgtk-3-dev autoconf automake libtool gettext autopoint
+  pkg-config libgtk-3-dev meson autoconf automake libtool gettext autopoint \
+  curl bison flex gperf rsync
 git clone https://github.com/bhgv/geany-insight.git
 cd geany-insight
-./build.sh --prefix "$PWD/out" --install
+./build.sh
 ./out/bin/geany
 ```
 
-При первом запуске собираются встроенный Clang и адаптированный slang. Это может занять много времени и места; повторная сборка использует уже подготовленные файлы. `./build.sh` без аргументов показывает справку, а `--plan` выводит план без запуска сборки. Для Meson установите пакет `meson` (0.56+) и добавьте `--backend meson`. Ключ `--clang-provider system` выбирает совместимый системный LLVM/Clang, `--clang-provider disabled` отключает семантический анализ C/C++, а `--slang-provider disabled` отдельно отключает анализ HDL. Требования к компиляторам и совместимость описаны в справках по [Clang](insight/docs/ru/clang.md) и [slang](insight/docs/ru/slang.md).
+При первом запуске собираются встроенный Clang и адаптированный slang. Это может занять много времени и места; повторная сборка использует уже подготовленные файлы. `./build.sh --help` показывает справку, а `--plan` выводит план без запуска сборки. Для Meson установите пакет `meson` (0.56+) и добавьте `--backend meson`. Ключ `--clang-provider system` выбирает совместимый системный LLVM/Clang, `--clang-provider disabled` отключает семантический анализ C/C++, а `--slang-provider disabled` отдельно отключает анализ HDL. Требования к компиляторам и совместимость описаны в справках по [Clang](insight/docs/ru/clang.md) и [slang](insight/docs/ru/slang.md).
 
 ## Сборка в Windows x64
 
@@ -45,3 +46,11 @@ cd geany-insight
 Сборщики для macOS и планшетов Android запланированы. Команды выше предназначены для Linux и Windows x64.
 
 [Документация проекта](insight/README.md) · [Лицензии](LICENSES.md)
+
+
+На Linux `./build.sh` без аргументов собирает и устанавливает редактор через
+Meson в `out`. При явном `--install` оба лаунчера используют общий драйвер,
+который собирает закреплённый Icarus Verilog из того же архива. Для сборки
+симулятора на Linux нужны Bash, curl, tar, make, autoconf, bison, flex, gperf,
+rsync и sha256sum или shasum. Журналы Linux находятся в `_editor-build/logs`.
+`--plan` и `--help` работают без записи журнала.

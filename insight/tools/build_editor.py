@@ -20,7 +20,7 @@ def arguments(argv=None, root=ROOT):
     parser = argparse.ArgumentParser(
         prog='./build.sh', description=__doc__,
         epilog='Example: ./build.sh --prefix "$PWD/o" --install. '
-               'No arguments: show this help without starting a build.')
+               'Without arguments, build.sh builds and installs the editor with Meson.')
     parser.add_argument('--backend', choices=('autotools', 'meson'), default='autotools')
     parser.add_argument('--clang-provider', choices=('internal', 'system', 'disabled'), default='internal')
     parser.add_argument('--slang-provider', choices=('internal', 'disabled'), default='internal', help='Build the adapted HDL engine automatically (default: internal)')
@@ -29,6 +29,8 @@ def arguments(argv=None, root=ROOT):
     parser.add_argument('--build-dir', type=Path)
     parser.add_argument('--prefix', type=Path, default=root / 'out')
     parser.add_argument('--sdk', type=Path, default=root / '_external-clang-sdk')
+    parser.add_argument('--download-cache', type=Path, default=root / '_editor-build' / 'downloads',
+                        help='Cache for pinned simulator sources')
     parser.add_argument('--jobs', type=int, default=2)
     parser.add_argument('--skip-sdk-build', action='store_true', help='Use an already prepared SDK; rebuild it yourself after editing Clang')
     parser.add_argument('--configure-only', action='store_true')
@@ -45,7 +47,7 @@ def arguments(argv=None, root=ROOT):
     if args.build_dir is None:
         # Reuse a user's existing in-tree Autotools build without deleting it.
         args.build_dir = root if args.backend == 'autotools' and (root / 'config.status').exists() else root / '_editor-build' / args.backend
-    for name in ('build_dir', 'prefix', 'sdk', 'slang_build_dir'):
+    for name in ('build_dir', 'prefix', 'sdk', 'slang_build_dir', 'download_cache'):
         setattr(args, name, getattr(args, name).expanduser().resolve())
     if args.build_dir == args.sdk or args.build_dir == root / 'external/llvm-project':
         parser.error('Editor build directory must be separate from compiler files')
@@ -115,6 +117,11 @@ def plan(args, root=ROOT):
                 add(['meson', 'install', '-C', args.build_dir])
     if args.install and args.slang_provider == 'internal':
         add([sys.executable, root / 'insight/tools/install_slang.py', '--build', args.slang_build_dir, '--prefix', args.prefix])
+    if args.install:
+        manifest = json.loads((root / 'insight/tools/windows-toolchain.json').read_text(encoding='utf-8'))
+        simulator = manifest['iverilog']
+        add(['bash', (root / 'insight/tools/build-iverilog.sh').as_posix(), args.download_cache,
+             args.prefix, args.jobs, simulator['version'], simulator['url'], simulator['sha256']])
     return steps
 
 
@@ -131,7 +138,11 @@ def prerequisites(args):
         tools += ['sh', 'autoreconf', 'autoconf', 'automake', 'autopoint', 'make']
     else:
         tools += ['meson', 'ninja']
+    if args.install:
+        tools += ['bash', 'curl', 'tar', 'make', 'autoconf', 'bison', 'flex', 'gperf', 'rsync']
     missing = [tool for tool in tools if not shutil.which(tool)]
+    if args.install and not any(shutil.which(tool) for tool in ('sha256sum', 'shasum')):
+        missing.append('sha256sum or shasum')
     if args.backend == 'autotools' and not any(shutil.which(tool) for tool in ('libtoolize', 'glibtoolize')):
         missing.append('libtoolize (glibtoolize on macOS)')
     if missing:
