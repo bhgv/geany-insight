@@ -7119,6 +7119,100 @@ static void debug_breakpoints_in_file(GtkButton *button, gpointer data)
     g_free(filename);
 }
 
+/* Use the same project or entry-file scope as the breakpoint settings. */
+/* Использует ту же привязку к проекту или точке входа, что и точки останова. */
+static gchar *debug_observer_settings_path(const ScriptDebugWindow *view)
+{
+    if (!view->breakpoint_settings_path)
+        return NULL;
+
+    gchar *name = g_path_get_basename(view->breakpoint_settings_path);
+    gchar *path = g_build_filename(app->configdir, "insight", "observers", name, NULL);
+    g_free(name);
+    return path;
+}
+
+/* Read the saved draft into the dialog without activating its condition or script. */
+/* Читает сохранённый черновик в диалог без включения условия или сценария. */
+static void debug_read_observer_settings(const ScriptDebugWindow *view,
+                                         gchar **condition, gchar **source, gchar **filename)
+{
+    gchar *path = debug_observer_settings_path(view);
+    if (!path)
+        return;
+
+    gsize length = 0;
+    gchar *contents = debug_read_source_file(path, &length);
+    g_free(path);
+    if (!contents)
+        return;
+
+    GKeyFile *settings = g_key_file_new();
+    if (g_key_file_load_from_data(settings, contents, length, G_KEY_FILE_NONE, NULL))
+    {
+        gchar *saved_condition = g_key_file_get_string(settings, "Observer", "Condition", NULL);
+        gchar *saved_source = g_key_file_get_string(settings, "Observer", "Source", NULL);
+        gchar *saved_file = g_key_file_get_string(settings, "Observer", "File", NULL);
+        if (saved_condition && g_utf8_strlen(saved_condition, -1) <= 1024)
+            *condition = g_steal_pointer(&saved_condition);
+        if (saved_source && strlen(saved_source) <= 64 * 1024)
+            *source = g_steal_pointer(&saved_source);
+        if (saved_file)
+        {
+            gchar *local_file = g_filename_from_utf8(saved_file, -1, NULL, NULL, NULL);
+            if (local_file && g_path_is_absolute(local_file))
+                *filename = g_steal_pointer(&local_file);
+            g_free(local_file);
+        }
+        g_free(saved_condition);
+        g_free(saved_source);
+        g_free(saved_file);
+    }
+    g_key_file_unref(settings);
+    g_free(contents);
+}
+
+/* Store the last applied text as a private draft for later sessions. */
+/* Сохраняет последний применённый текст как личный черновик для следующих сеансов. */
+static void debug_save_observer_settings(const ScriptDebugWindow *view)
+{
+    gchar *path = debug_observer_settings_path(view);
+    if (!path)
+        return;
+
+    GKeyFile *settings = g_key_file_new();
+    g_key_file_set_string(settings, "Observer", "Condition", view->stop_condition);
+    g_key_file_set_string(settings, "Observer", "Source", view->observer_source);
+    if (view->observer_filename)
+    {
+        gchar *utf8 = g_filename_to_utf8(view->observer_filename, -1, NULL, NULL, NULL);
+        if (utf8)
+            g_key_file_set_string(settings, "Observer", "File", utf8);
+        g_free(utf8);
+    }
+    gchar *directory = g_path_get_dirname(path);
+    GError *error = NULL;
+    if (g_mkdir_with_parents(directory, 0700) == 0)
+    {
+        gsize length;
+        gchar *contents = g_key_file_to_data(settings, &length, NULL);
+        GFile *file = g_file_new_for_path(path);
+        g_file_replace_contents(file, contents, length, NULL, FALSE, G_FILE_CREATE_PRIVATE,
+                                NULL, NULL, &error);
+        g_object_unref(file);
+        g_free(contents);
+    }
+    else
+        g_set_error_literal(&error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                            "Cannot create debugger observer settings directory");
+    if (error)
+        ui_set_statusbar(TRUE, "Cannot save debugger observer draft: %s", error->message);
+    g_clear_error(&error);
+    g_free(directory);
+    g_key_file_unref(settings);
+    g_free(path);
+}
+
 enum {
     DEBUG_OBSERVER_LOAD = 1,
     DEBUG_OBSERVER_RELOAD,
@@ -7237,6 +7331,19 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
     if (debug_is_running(view))
         return;
 
+    gchar *draft_condition = NULL;
+    gchar *draft_source = NULL;
+    gchar *filename = NULL;
+    gboolean restored = !view->stop_condition && !view->observer_source;
+    if (restored)
+        debug_read_observer_settings(view, &draft_condition, &draft_source, &filename);
+    else
+    {
+        draft_condition = g_strdup(view->stop_condition);
+        draft_source = g_strdup(view->observer_source);
+        filename = g_strdup(view->observer_filename);
+    }
+
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Stop Condition and Lua Observer",
         GTK_WINDOW(view->window), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "_Load Lua…", DEBUG_OBSERVER_LOAD, "_Reload File", DEBUG_OBSERVER_RELOAD,
@@ -7247,7 +7354,7 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
     GtkWidget *entry = gtk_entry_new();
     gtk_entry_set_max_length(GTK_ENTRY(entry), 1024);
     gtk_entry_set_placeholder_text(GTK_ENTRY(entry), "event.locals.counter == 10");
-    gtk_entry_set_text(GTK_ENTRY(entry), view->stop_condition ? view->stop_condition : "");
+    gtk_entry_set_text(GTK_ENTRY(entry), draft_condition ? draft_condition : "");
     gtk_box_pack_start(GTK_BOX(box), gtk_label_new("Stop when true on a source line. Leave empty to disable."),
                        FALSE, FALSE, 4);
     gtk_box_pack_start(GTK_BOX(box), entry, FALSE, FALSE, 4);
@@ -7258,13 +7365,16 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
     GtkWidget *editor = gtk_text_view_new();
     gtk_text_view_set_monospace(GTK_TEXT_VIEW(editor), TRUE);
     GtkTextBuffer *script = gtk_text_view_get_buffer(GTK_TEXT_VIEW(editor));
-    gtk_text_buffer_set_text(script, view->observer_source ? view->observer_source : "", -1);
+    gtk_text_buffer_set_text(script, draft_source ? draft_source : "", -1);
     gtk_container_add(GTK_CONTAINER(scroll), editor);
     gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
     GtkWidget *status = gtk_label_new(NULL);
     gtk_label_set_line_wrap(GTK_LABEL(status), TRUE);
     gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 4);
-    gchar *filename = g_strdup(view->observer_filename);
+    if (restored && ((draft_condition && *draft_condition) || (draft_source && *draft_source)))
+        gtk_label_set_text(GTK_LABEL(status), "Saved draft loaded. Choose Apply to activate it.");
+    g_free(draft_condition);
+    g_free(draft_source);
     gtk_text_buffer_set_modified(script, FALSE);
     gtk_widget_show_all(dialog);
     for (;;)
@@ -7330,6 +7440,7 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
             view->observer_source = source;
             g_free(view->observer_filename);
             view->observer_filename = g_steal_pointer(&filename);
+            debug_save_observer_settings(view);
             if (view->observer_log)
                 debug_set_text(view->observer_log, insight_lua_debug_observer_log(
                     view->python ? view->python_observer : view->engine));

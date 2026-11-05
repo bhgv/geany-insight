@@ -94,6 +94,13 @@ and reloading update the draft. Choose **Apply** to use the new version.
 **Cancel** keeps the active observer in place. Files must be UTF-8 and at most
 64 KiB.
 
+The last applied condition, script text and file path are saved for the Geany
+project or, outside a project, for the entry file. Lua and Python keep separate
+drafts. In a new session, open **Conditions and Script…** and choose **Apply**
+to activate the restored draft. **Reload File** reads the current version of
+the file if it has changed since the draft was saved. To clear the saved
+condition and script, empty both fields and choose **Apply**.
+
 #### Log calls and arguments
 
 ```lua
