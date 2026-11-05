@@ -134,8 +134,11 @@ Other breakpoints and step commands can still stop execution.
 An ochre line number marks a conditional point. It takes precedence over an
 ordinary breakpoint on the same line. **Shift-click** it again to edit the rule,
 or choose **Remove Rule** to restore normal behavior for the line. A debugger window
-can hold up to 32 rules. Rules last until the window closes. Restarting or applying
-changes to a rule or observer resets the counters.
+can hold up to 32 rules. **Conditional Points…** lists rules across files and lets
+you edit or remove them, including rules for files that are not open. Rules for
+named files are saved per project or, outside a project, per entry file. Lua and
+Python keep separate rules. Unnamed-buffer rules last until the window closes.
+Restarting or applying changes to a rule or observer resets the counters.
 
 ### Observer files
 
