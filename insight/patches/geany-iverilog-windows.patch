@@ -1,0 +1,87 @@
+diff --git a/driver/main.c b/driver/main.c
+index 352ab9f..dac6da2 100644
+--- a/driver/main.c
++++ b/driver/main.c
+@@ -321,6 +321,46 @@ static const char*my_tempfile(const char*str, FILE**fout)
+       return pathbuf;
+ }
+
++/* Keep the compiler's shell pipeline attached to the editor's pipes. */
++static int run_command(const char*command)
++{
++#ifdef __MINGW32__
++      const char* shell = getenv("COMSPEC");
++      if (!shell || !*shell)
++            shell = "cmd.exe";
++      size_t size = strlen(shell) + strlen(command) + 32;
++      char* line = malloc(size);
++      if (!line)
++            return -1;
++      snprintf(line, size, "\"%s\" /d /s /c \"%s\"", shell, command);
++
++      STARTUPINFOA startup = {0};
++      PROCESS_INFORMATION child;
++      startup.cb = sizeof startup;
++      startup.dwFlags = STARTF_USESTDHANDLES;
++      startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
++      startup.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
++      startup.hStdError = GetStdHandle(STD_ERROR_HANDLE);
++      BOOL started = CreateProcessA(NULL, line, NULL, NULL, TRUE, CREATE_NO_WINDOW,
++                                    NULL, NULL, &startup, &child);
++      DWORD launch_error = started ? ERROR_SUCCESS : GetLastError();
++      free(line);
++      if (!started) {
++            fprintf(stderr, "Cannot start the Icarus compiler pipeline (Windows error %lu).\n",
++                    (unsigned long)launch_error);
++            return -1;
++      }
++      DWORD status = 1;
++      if (WaitForSingleObject(child.hProcess, INFINITE) == WAIT_OBJECT_0)
++            GetExitCodeProcess(child.hProcess, &status);
++      CloseHandle(child.hThread);
++      CloseHandle(child.hProcess);
++      return (int)status;
++#else
++      return system(command);
++#endif
++}
++
+ static int t_version_only(void)
+ {
+       int rc;
+@@ -329,7 +369,7 @@ static int t_version_only(void)
+
+       fflush(0);
+       snprintf(tmp, sizeof tmp, "%s%civlpp -V", ivlpp_dir, sep);
+-      rc = system(tmp);
++      rc = run_command(tmp);
+       if (rc != 0) {
+ 	    fprintf(stderr, "Unable to get version from \"%s\"\n", tmp);
+       }
+@@ -337,7 +377,7 @@ static int t_version_only(void)
+       fflush(0);
+       snprintf(tmp, sizeof tmp, "%s%civl -V -C\"%s\" -C\"%s\"", base, sep,
+ 	       iconfig_path, iconfig_common_path);
+-      rc = system(tmp);
++      rc = run_command(tmp);
+       if (rc != 0) {
+ 	    fprintf(stderr, "Unable to get version from \"%s\"\n", tmp);
+       }
+@@ -388,7 +428,7 @@ static int t_preprocess_only(void)
+       if (verbose_flag)
+ 	    printf("preprocess: %s\n", cmd);
+
+-      rc = system(cmd);
++      rc = run_command(cmd);
+       remove(source_path);
+       free(source_path);
+
+@@ -489,7 +529,7 @@ static int t_compile(void)
+ 	    printf("translate: %s\n", cmd);
+
+
+-      rc = system(cmd);
++      rc = run_command(cmd);
+       if ( ! getenv("IVERILOG_ICONFIG")) {
+ 	    remove(source_path);
+ 	    free(source_path);

@@ -19,6 +19,7 @@ fi
 archive="$cache_dir/iverilog-$version.tar.gz"
 script_dir=$(cd -- "$(dirname -- "$0")" && pwd)
 bridge_patch="$script_dir/../patches/geany-vvp.patch"
+windows_patch="$script_dir/../patches/geany-iverilog-windows.patch"
 stamp="$install_dir/share/geany-insight/iverilog-source.sha256"
 work=$(mktemp -d "${TMPDIR:-/tmp}/geany-iverilog.XXXXXXXX")
 download=
@@ -37,6 +38,9 @@ file_digest() {
 }
 
 stamp_id="$sha $(file_digest "$bridge_patch")"
+if [[ -n "$executable_suffix" ]]; then
+    stamp_id+=" $(file_digest "$windows_patch")"
+fi
 
 # Check that the cached source matches the pinned archive.
 # Проверяет, что исходный архив соответствует закреплённой версии.
@@ -95,6 +99,9 @@ fi
 mkdir -p -- "$work/src" "$work/build" "$work/stage"
 tar -xzf "$archive" -C "$work/src" --strip-components=1
 patch --batch -d "$work/src" -p1 < "$bridge_patch"
+if [[ -n "$executable_suffix" ]]; then
+    patch --batch -d "$work/src" -p1 < "$windows_patch"
+fi
 # EN: The verified release already contains configure and generated keyword tables.
 # RU: Проверенный выпуск уже содержит configure и сгенерированные таблицы ключевых слов.
 if [[ ! -x "$work/src/configure" || ! -f "$work/src/lexor_keyword.cc" ||
@@ -110,6 +117,12 @@ printf '[Simulator] Building Icarus Verilog %s from source.\n' "$version"
     make DESTDIR="$work/stage" install
 )
 staged="$work/stage$configure_prefix"
+if [[ -n "$executable_suffix" ]]; then
+    # These helpers communicate over inherited pipes, without a console window.
+    for helper in bin/iverilog.exe bin/vvp.exe lib/ivl/ivl.exe lib/ivl/ivlpp.exe; do
+        objcopy --subsystem windows "$staged/$helper"
+    done
+fi
 install -Dm644 "$work/src/COPYING" "$staged/share/licenses/iverilog/COPYING"
 check_simulator "$staged"
 mkdir -p -- "$install_dir"

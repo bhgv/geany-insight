@@ -419,6 +419,22 @@ def check_slang(service, fixtures, directory, environment):
 
 # EN: Run the checks against binaries installed by either native build launcher.
 # RU: Запускаем проверки программ, установленных любым штатным сборщиком.
+def check_windowless_helpers(prefix, service):
+    helpers = [prefix / path for path in (
+        "bin/iverilog.exe", "bin/vvp.exe", "lib/ivl/ivl.exe", "lib/ivl/ivlpp.exe"
+    )] + [service]
+    for helper in helpers:
+        with helper.open("rb") as executable:
+            require(executable.read(2) == b"MZ", f"Invalid Windows executable: {helper}")
+            executable.seek(0x3C)
+            header = int.from_bytes(executable.read(4), "little")
+            executable.seek(header)
+            require(executable.read(4) == b"PE\0\0", f"Invalid PE header: {helper}")
+            executable.seek(header + 24 + 68)
+            subsystem = int.from_bytes(executable.read(2), "little")
+            require(subsystem == 2, f"Console window enabled for {helper.name}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("prefix", type=Path)
@@ -433,6 +449,8 @@ def main():
     service = args.prefix.resolve() / "libexec/geany-insight/slang" / f"insight-slang-semantic{suffix}"
     require(all(path.is_file() for path in (compiler, runtime, editor)),
             f"Expected installed Geany and Icarus executables under {binaries}")
+    if os.name == "nt":
+        check_windowless_helpers(args.prefix.resolve(), service)
     fixtures = Path(__file__).resolve().parent
     environment = os.environ.copy()
     environment["GEANY_VVP_DEBUG"] = "1"

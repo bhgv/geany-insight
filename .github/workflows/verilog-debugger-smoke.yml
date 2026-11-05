@@ -18,6 +18,7 @@ on:
       - 'insight/tools/setup-windows.ps1'
       - 'insight/tools/windows-toolchain.json'
       - 'insight/patches/geany-vvp.patch'
+      - 'insight/patches/geany-iverilog-windows.patch'
       - 'insight/tests/waveform-debug/**'
       - 'src/insight-waveforms.*'
       - 'src/insight-workbench.c'

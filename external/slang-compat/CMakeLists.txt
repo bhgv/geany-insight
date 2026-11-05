@@ -25,6 +25,10 @@ add_test(NAME slang_integer_boundaries COMMAND insight_slang_charconv)
 
 add_executable(insight-slang-semantic semantic.cpp)
 target_link_libraries(insight-slang-semantic PRIVATE slang::slang fmt::fmt)
+if(MINGW)
+  # The editor supplies stdout and stderr pipes for this background service.
+  set_property(TARGET insight-slang-semantic APPEND_STRING PROPERTY LINK_FLAGS " -mwindows")
+endif()
 add_test(NAME slang_semantic_protocol
   COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/semantic-test.py"
     "$<TARGET_FILE:insight-slang-semantic>" "${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
