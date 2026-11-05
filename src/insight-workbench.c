@@ -4566,7 +4566,7 @@ static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph, 
     GHashTable *visited = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
     GtkTreeIter root;
     gtk_tree_store_insert_with_values(graph, &root, NULL, -1,
-        WAVE_USE_NAME, start, WAVE_USE_ROLE, upstream ? _("Upstream") : _("Downstream"), -1);
+        WAVE_USE_NAME, start, WAVE_USE_ROLE, upstream ? insight_tr("Upstream") : insight_tr("Downstream"), -1);
     if (!upstream)
         waveform_graph_uses(graph, &root, dependencies, start, root_key);
     GQueue pending = G_QUEUE_INIT;
@@ -4598,7 +4598,7 @@ static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph, 
                 GtkTreeIter *parent = g_hash_table_lookup(visited, signal);
                 gboolean repeated = g_hash_table_contains(visited, edge->name);
                 gtk_tree_store_insert_with_values(graph, &branch, parent, -1,
-                    WAVE_USE_ROLE, repeated ? _("Already shown") : edge->inheritance,
+                    WAVE_USE_ROLE, repeated ? insight_tr("Already shown") : edge->inheritance,
                     WAVE_USE_NAME, edge->name, WAVE_USE_FILE, edge->path,
                     WAVE_USE_LINE, edge->line, WAVE_USE_CONNECTION, TRUE,
                     WAVE_USE_HOPS, distance, -1);
@@ -4613,7 +4613,7 @@ static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph, 
                 g_queue_push_tail(&pending, (gpointer)edge->name);
                 const gchar *role = edge->inheritance;
                 if (distance > 1)
-                    role = upstream ? _("Upstream") : _("Downstream");
+                    role = upstream ? insight_tr("Upstream") : insight_tr("Downstream");
                 gtk_list_store_insert_with_values(rows, NULL, -1,
                     WAVE_USE_ROLE, role, WAVE_USE_NAME, edge->name,
                     WAVE_USE_FILE, edge->path, WAVE_USE_LINE, edge->line,
@@ -4667,7 +4667,7 @@ static GtkTreeView *waveform_use_page(GtkNotebook *notebook, GtkTreeModel *model
     g_object_set_data(G_OBJECT(scroll), "wave-use-tree", tree);
     gtk_notebook_append_page(notebook, scroll, gtk_label_new(title));
 
-    const gchar *titles[] = {_("Name"), _("Role"), _("File"), _("Line"), _("Hops")};
+    const gchar *titles[] = {insight_tr("Name"), insight_tr("Role"), insight_tr("File"), insight_tr("Line"), insight_tr("Hops")};
     const gint columns[] = {WAVE_USE_NAME, WAVE_USE_ROLE, WAVE_USE_FILE, WAVE_USE_LINE, WAVE_USE_HOPS};
     for (guint column = 0; column < G_N_ELEMENTS(titles); column++)
     {
@@ -4736,17 +4736,17 @@ static void waveform_show_hdl_uses(WaveJump *jump)
     gboolean reference_limit_reached = g_hash_table_size(seen) >= 2000;
     g_hash_table_unref(seen);
 
-    GtkWidget *dialog = gtk_dialog_new_with_buttons(_("HDL Uses"), GTK_WINDOW(main_widgets.window),
-        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, _("_Close"), GTK_RESPONSE_CLOSE,
-        _("_Open Source"), GTK_RESPONSE_ACCEPT,
-        _("_Select Track"), GTK_RESPONSE_APPLY, NULL);
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(insight_tr("HDL Uses"), GTK_WINDOW(main_widgets.window),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, insight_tr("_Close"), GTK_RESPONSE_CLOSE,
+        insight_tr("_Open Source"), GTK_RESPONSE_ACCEPT,
+        insight_tr("_Select Track"), GTK_RESPONSE_APPLY, NULL);
     g_object_ref_sink(dialog);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 760, 400);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     GtkWidget *label = gtk_label_new(jump->name);
     if (!upstream_remaining || !downstream_remaining || reference_limit_reached || dependencies.reference_limit_reached)
     {
-        GtkWidget *limit = gtk_label_new(_("Result limit reached. Some HDL uses may be omitted."));
+        GtkWidget *limit = gtk_label_new(insight_tr("Result limit reached. Some HDL uses may be omitted."));
         gtk_box_pack_start(GTK_BOX(box), limit, FALSE, FALSE, 0);
     }
     gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_MIDDLE);
@@ -4754,8 +4754,8 @@ static void waveform_show_hdl_uses(WaveJump *jump)
     GtkNotebook *notebook = GTK_NOTEBOOK(gtk_notebook_new());
     gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(notebook), TRUE, TRUE, 0);
     g_object_ref(notebook);
-    GtkTreeView *uses_view = waveform_use_page(notebook, GTK_TREE_MODEL(rows), _("Uses"));
-    GtkTreeView *graph_view = waveform_use_page(notebook, GTK_TREE_MODEL(graph), _("Connections"));
+    GtkTreeView *uses_view = waveform_use_page(notebook, GTK_TREE_MODEL(rows), insight_tr("Uses"));
+    GtkTreeView *graph_view = waveform_use_page(notebook, GTK_TREE_MODEL(graph), insight_tr("Connections"));
     gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(rows), WAVE_USE_NAME, GTK_SORT_ASCENDING);
 
     GtkTreeIter selected;
@@ -4764,7 +4764,7 @@ static void waveform_show_hdl_uses(WaveJump *jump)
     if (gtk_tree_model_get_iter_first(GTK_TREE_MODEL(rows), &selected))
         gtk_tree_selection_select_iter(uses_selection, &selected);
     else
-        gtk_label_set_text(GTK_LABEL(label), _("No HDL uses found."));
+        gtk_label_set_text(GTK_LABEL(label), insight_tr("No HDL uses found."));
 
     for (gint root = 0; root < 2; root++)
     {
@@ -4797,9 +4797,9 @@ static void waveform_show_hdl_uses(WaveJump *jump)
         gtk_tree_model_get(model, &selected, WAVE_USE_NAME, &peer, WAVE_USE_CONNECTION, &connection, -1);
         GtkWindow *viewer = g_weak_ref_get(&jump->viewer);
         if (!connection)
-            ui_set_statusbar(TRUE, "%s", _("Select a row with a full connected signal path."));
+            ui_set_statusbar(TRUE, "%s", insight_tr("Select a row with a full connected signal path."));
         else if (!insight_waveforms_select_track(viewer, peer))
-            ui_set_statusbar(TRUE, _("Signal has no track in this recording: %s"), peer);
+            ui_set_statusbar(TRUE, insight_tr("Signal has no track in this recording: %s"), peer);
         g_clear_object(&viewer);
         g_free(peer);
     }
@@ -4838,13 +4838,13 @@ static void wave_jump_done(GObject *object, GAsyncResult *result, gpointer data)
         return;
 
     if (!g_task_propagate_boolean(G_TASK(result), NULL))
-        ui_set_statusbar(TRUE, _("HDL declaration not found: %s"), jump->name);
+        ui_set_statusbar(TRUE, insight_tr("HDL declaration not found: %s"), jump->name);
     else if (jump->show_uses)
     {
         if (jump->snapshot->result && jump->snapshot->result->index)
             waveform_show_hdl_uses(jump);
         else
-            ui_set_statusbar(TRUE, _("HDL project index unavailable for %s"), jump->name);
+            ui_set_statusbar(TRUE, insight_tr("HDL project index unavailable for %s"), jump->name);
     }
     else
     {
