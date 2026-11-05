@@ -33,7 +33,7 @@ index d15672a..788ff45 100644
  
  
 diff --git a/vvp/stop.cc b/vvp/stop.cc
-index 175e8ae..0eaf28c 100644
+index 175e8ae..6c544f5 100644
 --- a/vvp/stop.cc
 +++ b/vvp/stop.cc
 @@ -38,13 +38,18 @@
@@ -423,7 +423,7 @@ index 175e8ae..0eaf28c 100644
 +      { "geany-step-tick", &cmd_geany_step_tick,
 +        "Step to the next simulation tick."},
 +      { "geany-select-frame", &cmd_geany_select_frame, "Inspect a frame by depth."},
-+      { "geany-read-memory", &cmd_geany_read_memory, "Read one indexed memory word."},
++      { "geany-read-memory", &cmd_geany_read_memory, "Read one indexed memory, dynamic array, or queue element."},
 +      { "geany-processes", &cmd_geany_processes, "List live HDL processes."},
 +      { "geany-select-process", &cmd_geany_select_process, "Inspect a process by number."},
 +      { "geany-process-values", &cmd_geany_process_values, "Show selected process values."},
@@ -471,7 +471,7 @@ index 175e8ae..0eaf28c 100644
        vpi_mcd_printf(1,"** Continue **\n");
  }
 diff --git a/vvp/vthread.cc b/vvp/vthread.cc
-index de7578b..514859c 100644
+index de7578b..2e2901d 100644
 --- a/vvp/vthread.cc
 +++ b/vvp/vthread.cc
 @@ -31,6 +31,7 @@
@@ -490,7 +490,7 @@ index de7578b..514859c 100644
        vthread_s();
  
        void debug_dump(ostream&fd, const char*label_text);
-@@ -427,6 +429,190 @@ __vpiScope* vthread_scope(struct vthread_s*thr)
+@@ -427,6 +429,271 @@ __vpiScope* vthread_scope(struct vthread_s*thr)
  
  struct vthread_s*running_thread = 0;
  
@@ -565,8 +565,64 @@ index de7578b..514859c 100644
 +      return vthread_scope(thread);
 +}
 +
-+// EN: Read integral signals in the exact selected scope and activation.
-+// RU: Читаем целочисленные сигналы выбранной области и её активации.
++static void geany_print_string(const std::string& value)
++{
++      putchar('"');
++      unsigned length = 0;
++      for (const unsigned char* byte =
++                 reinterpret_cast<const unsigned char*>(value.data());
++           length < value.size() && length < 4096; ++byte, ++length) {
++            if (*byte == '"' || *byte == '\\')
++                  printf("\\%c", *byte);
++            else if (*byte < 32 || *byte >= 127)
++                  printf("\\x%02x", static_cast<unsigned>(*byte));
++            else
++                  putchar(*byte);
++      }
++      printf(length < value.size() ? "\"..." : "\"");
++}
++
++static bool geany_print_array_word(vpiHandle handle, const char* name, int index)
++{
++      auto* variable = dynamic_cast<__vpiBaseVar*>(handle);
++      auto* signal = variable ?
++            dynamic_cast<vvp_fun_signal_object*>(variable->get_net()->fun) : nullptr;
++      if (!signal || index < 0)
++            return false;
++      // Read the current object directly so resizing or replacing the array
++      // does not leave the debugger with a stale VPI word handle.
++      vvp_object_t object = signal->get_object();
++      auto* array = object.peek<vvp_darray>();
++      if (!array || static_cast<unsigned>(index) >= array->get_size())
++            return false;
++
++      printf("%s[%d] = ", name, index);
++      if (dynamic_cast<vvp_darray_real*>(array) || dynamic_cast<vvp_queue_real*>(array)) {
++            double value;
++            array->get_word(index, value);
++            printf("%.17g", value);
++      } else if (dynamic_cast<vvp_darray_string*>(array) ||
++                 dynamic_cast<vvp_queue_string*>(array)) {
++            std::string value;
++            array->get_word(index, value);
++            geany_print_string(value);
++      } else if (dynamic_cast<vvp_darray_object*>(array)) {
++            printf("(object)");
++      } else {
++            vvp_vector4_t value;
++            array->get_word(index, value);
++            if (value.size() > 4096)
++                  printf("(unavailable)");
++            else
++                  for (unsigned bit = value.size(); bit > 0; --bit)
++                        putchar(vvp_bit4_to_ascii(value.value(bit - 1)));
++      }
++      putchar('\n');
++      return true;
++}
++
++// EN: Read values in the exact selected scope and activation.
++// RU: Читаем значения выбранной области и её активации.
 +void geany_list_process_values(unsigned long long process, unsigned depth)
 +{
 +      vthread_t thread = geany_find_frame(process, depth);
@@ -581,31 +637,45 @@ index de7578b..514859c 100644
 +      unsigned count = 0;
 +      for (vpiHandle signal : scope->intern) {
 +            const int type = vpi_get(vpiType, signal);
-+            if (type == vpiMemory) {
-+                  const char* name = vpi_get_str(vpiName, signal);
-+                  printf("%s [memory]\n", name ? name : "(unnamed)");
-+                  if (++count == 128) {
-+                        printf("Geany: value list limited to 128 entries.\n");
-+                        break;
-+                  }
++            const bool integral = type == vpiNet || type == vpiReg;
++            const bool array = type == vpiArrayVar;
++            if (!integral && !array && type != vpiMemory &&
++                type != vpiRealVar && type != vpiStringVar)
 +                  continue;
-+            }
-+            if (type != vpiNet && type != vpiReg)
++            if (scope->is_automatic() && !exact_context)
 +                  continue;
-+            if (vpi_get(vpiAutomatic, signal) && !exact_context)
-+                  continue;
-+            if (vpi_get(vpiSize, signal) > 4096)
++            if (integral && vpi_get(vpiSize, signal) > 4096)
 +                  continue;
 +            if (count++ == 128) {
 +                  printf("Geany: value list limited to 128 entries.\n");
 +                  break;
 +            }
 +            const char* name = vpi_get_str(vpiName, signal);
-+            printf("%s = ", name ? name : "(unnamed)");
++            printf("%s", name ? name : "(unnamed)");
++            if (type == vpiMemory) {
++                  printf(" [memory]\n");
++                  continue;
++            }
++            if (array) {
++                  const char* kind = vpi_get(vpiArrayType, signal) == vpiQueueArray ?
++                        "queue" : "dynamic array";
++                  printf(" [%s, %d elements]\n", kind, vpi_get(vpiSize, signal));
++                  continue;
++            }
 +            s_vpi_value value = {};
-+            value.format = vpiBinStrVal;
++            value.format = integral ? vpiBinStrVal :
++                  type == vpiRealVar ? vpiRealVal : vpiStringVal;
 +            vpi_get_value(signal, &value);
-+            printf("%s\n", value.value.str ? value.value.str : "(unavailable)");
++            printf(" = ");
++            if (value.format == vpiRealVal) {
++                  printf("%.17g", value.value.real);
++            } else if (value.format == vpiStringVal && value.value.str) {
++                  geany_print_string(value.value.str);
++            } else {
++                  printf("%s", value.format == vpiBinStrVal && value.value.str ?
++                         value.value.str : "(unavailable)");
++            }
++            putchar('\n');
 +      }
 +      running_thread = previous;
 +}
@@ -638,11 +708,22 @@ index de7578b..514859c 100644
 +      }
 +
 +      for (vpiHandle memory : scope->intern) {
-+            if (vpi_get(vpiType, memory) != vpiMemory)
++            const int memory_type = vpi_get(vpiType, memory);
++            if (memory_type != vpiMemory && memory_type != vpiArrayVar)
 +                  continue;
 +            const char* memory_name = vpi_get_str(vpiName, memory);
 +            if (!memory_name || std::strcmp(memory_name, name))
 +                  continue;
++
++            if (memory_type == vpiArrayVar) {
++                  vthread_t previous = running_thread;
++                  running_thread = frame;
++                  const bool found = geany_print_array_word(memory, name, index);
++                  running_thread = previous;
++                  if (!found)
++                        printf("Geany: array element unavailable: %s[%d]\n", name, index);
++                  return;
++            }
 +
 +            s_vpi_value left = {}, right = {};
 +            left.format = right.format = vpiIntVal;
@@ -681,7 +762,7 @@ index de7578b..514859c 100644
  string get_fileline()
  {
        return running_thread->get_fileline();
-@@ -719,6 +905,10 @@ vthread_t vthread_new(vvp_code_t pc, __vpiScope*scope)
+@@ -719,6 +986,10 @@ vthread_t vthread_new(vvp_code_t pc, __vpiScope*scope)
        for (int idx = 4 ; idx < 8 ; idx += 1)
  	    thr->flags[idx] = BIT4_X;
  
@@ -692,7 +773,7 @@ index de7578b..514859c 100644
        scope->threads .insert(thr);
        return thr;
  }
-@@ -820,6 +1010,8 @@ static void vthread_reap(vthread_t thr)
+@@ -820,6 +1091,8 @@ static void vthread_reap(vthread_t thr)
  
  void vthread_delete(vthread_t thr)
  {
@@ -701,7 +782,7 @@ index de7578b..514859c 100644
        thr->cleanup();
        delete thr;
  }
-@@ -857,6 +1049,12 @@ void vthread_delay_delete()
+@@ -857,6 +1130,13 @@ void vthread_delay_delete()
   * incrementing the PC, and executing the instruction. The thread may
   * be the head of a list, so each thread is run so far as possible.
   */
@@ -710,23 +791,29 @@ index de7578b..514859c 100644
 +extern bool geany_source_breakpoint(const char*, unsigned);
 +extern bool geany_source_step(unsigned long long);
 +extern void geany_source_context(unsigned long long, __vpiScope*);
++extern void stop_handler(int);
 +
  void vthread_run(vthread_t thr)
  {
        while (thr != 0) {
-@@ -869,6 +1067,11 @@ void vthread_run(vthread_t thr)
+@@ -869,6 +1149,16 @@ void vthread_run(vthread_t thr)
              running_thread = thr;
  
  	    for (;;) {
-+                  if (!thr->i_am_in_function && geany_pause_requested()) {
-+                        schedule_stop(0);
-+                        schedule_vthread(thr, 0, false);
-+                        break;
++                  if (geany_pause_requested()) {
++                        if (thr->i_am_in_function) {
++                              geany_source_context(thr->geany_process_id, vthread_scope(thr));
++                              stop_handler(0);
++                        } else {
++                              schedule_stop(0);
++                              schedule_vthread(thr, 0, false);
++                              break;
++                        }
 +                  }
  		  vvp_code_t cp = thr->pc;
  		  thr->pc += 1;
  
-@@ -880,6 +1083,15 @@ void vthread_run(vthread_t thr)
+@@ -880,6 +1170,15 @@ void vthread_run(vthread_t thr)
  			break;
  	    }
  
@@ -742,25 +829,30 @@ index de7578b..514859c 100644
  	    thr = tmp;
        }
        running_thread = 0;
-@@ -6416,6 +6628,28 @@ bool of_FILE_LINE(vthread_t thr, vvp_code_t cp)
+@@ -6416,6 +6715,33 @@ bool of_FILE_LINE(vthread_t thr, vvp_code_t cp)
  	    cerr << thr->get_fileline()
  	         << vpi_get_str(_vpiDescription, handle) << endl;
  
-+      // EN: A synchronous function or final block cannot yield to the scheduler.
-+      // RU: Синхронная функция или блок final не могут уступить управление планировщику.
-+      if (thr->i_am_in_function)
-+            return true;
-+
 +      const char* filename = vpi_get_str(vpiFile, handle);
 +      const unsigned line = vpi_get(vpiLineNo, handle);
 +      const bool breakpoint = geany_source_breakpoint(filename, line);
-+      if (breakpoint || geany_source_step(thr->geany_process_id)) {
++      bool step = geany_source_step(thr->geany_process_id);
++      for (vthread_t caller = thr; !step && caller->i_am_in_function && caller->parent;) {
++            caller = caller->parent;
++            step = geany_source_step(caller->geany_process_id);
++      }
++      if (breakpoint || step) {
 +            if (!breakpoint && line) {
 +                  const char* source = vpi_get_str(vpiFile, handle);
 +                  if (source)
 +                        printf("GEANY-VVP-STOP\t%u\t%s\n", line, source);
 +            }
 +            geany_source_context(thr->geany_process_id, vthread_scope(thr));
++            // Keep the synchronous call stack intact while waiting for commands.
++            if (thr->i_am_in_function) {
++                  stop_handler(0);
++                  return true;
++            }
 +            // EN: Resume at the next opcode, before the selected statement executes.
 +            // RU: Продолжаем со следующей команды, перед выполнением выбранного оператора.
 +            schedule_stop(0);

@@ -178,6 +178,49 @@ def check_processes(compiler, runtime, fixtures, directory, environment):
         simulator.close()
 
 
+def check_synchronous_steps(compiler, runtime, fixtures, directory, environment):
+    source = fixtures / "synchronous_steps_tb.sv"
+    lines = source.read_text(encoding="utf-8").splitlines()
+    function_line = next(i for i, line in enumerate(lines, 1) if "local_value = argument" in line)
+    return_line = next(i for i, line in enumerate(lines, 1) if "calculate = local_value" in line)
+    final_line = next(i for i, line in enumerate(lines, 1) if "result = result + 1" in line)
+    display_line = next(i for i, line in enumerate(lines, 1) if "Final result:" in line)
+    compile_design(compiler, directory, [source], environment)
+    (directory / ".geany-vvp-breakpoints").write_text(
+        "".join(f"{line}\t{source.as_posix()}\n" for line in (function_line, final_line)),
+        encoding="utf-8",
+    )
+    simulator = Simulator(runtime, directory, environment)
+    try:
+        simulator.prompt()
+        require("2 source breakpoint(s)" in simulator.command("geany-load"), "Rules were not loaded")
+        require(f"GEANY-VVP-STOP\t{function_line}\t" in simulator.command("cont"),
+                "Function breakpoint did not stop")
+        require(f"GEANY-VVP-STOP\t{return_line}\t" in simulator.command("geany-step-process"),
+                "Process step did not stay inside the function")
+        require("local_value = " + format(7, "032b") in simulator.command("geany-process-values"),
+                "Function local was not read from the active frame")
+        require("Frame 1:" in simulator.command("geany-select-frame 1"), "Missing caller")
+        values = simulator.command("geany-process-values")
+        for expected in ('label_text = "ready"', "ratio = 1.25",
+                         "samples [dynamic array, 1 elements]", "pending [queue, 1 elements]"):
+            require(expected in values, f"Missing SystemVerilog value: {expected}")
+        require("samples[0] = 10xz" in simulator.command("geany-read-memory samples 0"),
+                "Wrong dynamic array element")
+        require("pending[0] = " + format(17, "032b") in
+                simulator.command("geany-read-memory pending 0"), "Wrong queue element")
+        require(f"GEANY-VVP-STOP\t{final_line}\t" in simulator.command("cont"),
+                "Final breakpoint did not stop")
+        require(f"GEANY-VVP-STOP\t{display_line}\t" in simulator.command("geany-step-source"),
+                "Source step did not stay inside final")
+        simulator.send("cont")
+        require(simulator.process.wait(timeout=30) == 0, "Synchronous simulation failed")
+        require(b"Final result: 15" in simulator.transcript.read_bytes(),
+                "Continuing did not preserve function and final execution")
+    finally:
+        simulator.close()
+
+
 # EN: Execute an installed program and preserve both output streams.
 # RU: Запускаем установленную программу и сохраняем оба потока вывода.
 def capture_command(command, directory, name, environment):
@@ -364,6 +407,8 @@ def main():
         ("breakpoint", lambda directory: check_breakpoint(compiler, runtime, fixtures, directory, environment)),
         ("source-step", lambda directory: check_source_steps(compiler, runtime, fixtures, directory, environment)),
         ("processes", lambda directory: check_processes(compiler, runtime, fixtures, directory, environment)),
+        ("synchronous-steps", lambda directory: check_synchronous_steps(
+            compiler, runtime, fixtures, directory, environment)),
         ("slang", lambda directory: check_slang(service, fixtures, directory, environment)),
     ]
     if args.gtk:

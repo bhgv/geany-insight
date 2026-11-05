@@ -2702,9 +2702,10 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         gtk_box_pack_start(GTK_BOX(run->frame_controls), frame, FALSE, FALSE, 0);
         run->memory_word = gtk_entry_new();
         gtk_entry_set_max_length(GTK_ENTRY(run->memory_word), 128);
-        gtk_entry_set_placeholder_text(GTK_ENTRY(run->memory_word), "memory[index]");
+        gtk_entry_set_placeholder_text(GTK_ENTRY(run->memory_word), "name[index]");
         gtk_box_pack_start(GTK_BOX(run->frame_controls), run->memory_word, TRUE, TRUE, 0);
         GtkWidget *memory = gtk_button_new_with_label("Read Memory Word");
+        gtk_widget_set_tooltip_text(memory, "Read an element of memory, a dynamic array, or a queue");
         g_signal_connect(memory, "clicked", G_CALLBACK(simulation_read_memory_word), run);
         gtk_box_pack_start(GTK_BOX(run->frame_controls), memory, FALSE, FALSE, 0);
         gtk_widget_set_sensitive(run->frame_controls, FALSE);

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 220" role="img" aria-labelledby="title">
+  <title id="title">Inspect a synchronous stop and resume the active frame</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 10 5 0 10Z" fill="#415873"/>
+    </marker>
+  </defs>
+  <rect width="600" height="220" rx="16" fill="#f2f6fc"/>
+  <g fill="#fff" stroke="#6984a5" stroke-width="1.5">
+    <rect x="25" y="34" width="174" height="54" rx="8"/>
+    <rect x="242" y="34" width="154" height="54" rx="8"/>
+    <rect x="439" y="34" width="136" height="54" rx="8"/>
+    <rect x="242" y="141" width="154" height="54" rx="8"/>
+  </g>
+  <g stroke="#415873" stroke-width="2" fill="none" marker-end="url(#arrow)">
+    <path d="M199 61H239"/>
+    <path d="M396 61H436"/>
+    <path d="M319 88V138"/>
+  </g>
+  <g fill="#142c48" font-family="sans-serif" font-size="16" text-anchor="middle">
+    <text x="112" y="67">Function or final</text>
+    <text x="319" y="67">Source stop</text>
+    <text x="507" y="67">Resume frame</text>
+    <text x="319" y="163">Select Frame</text>
+    <text x="319" y="183">Process Values</text>
+  </g>
+</svg>
