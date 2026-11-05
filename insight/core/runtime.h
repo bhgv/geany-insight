@@ -38,6 +38,17 @@ int insight_run(const InsightHost *, const char *, size_t, char *, size_t);
  * failed loads retain its commands and state. Editor/project access is blocked
  * during registration. Each invocation binds a temporary host and resets the
  * instruction budget; Lua globals persist, total Lua memory is bounded. */
+typedef struct InsightLuaDebug InsightLuaDebug;
+typedef enum {
+ INSIGHT_LUA_STEP_INTO, INSIGHT_LUA_STEP_OVER, INSIGHT_LUA_STEP_OUT, INSIGHT_LUA_CONTINUE
+} InsightLuaStep;
+InsightLuaDebug *insight_lua_debug_new(const char *,size_t,char *,size_t);
+void insight_lua_debug_free(InsightLuaDebug *);
+/* Resume returns 1 when paused, 0 on completion, and -1 on failure.
+ * Up to 128 one-based breakpoint lines. Debug sessions have no editor host. */
+int insight_lua_debug_resume(InsightLuaDebug *,InsightLuaStep,const unsigned long *,size_t,
+ unsigned long *,char *,size_t);
+void insight_lua_debug_inspect(InsightLuaDebug *,char *,size_t);
 typedef struct InsightSession InsightSession;
 InsightSession *insight_session_new(void);
 void insight_session_free(InsightSession *);

@@ -9,6 +9,7 @@
 #include <string.h>
 #include <limits.h>
 #include <stdint.h>
+#include <stdarg.h>
 #define MEMORY_LIMIT (16u * 1024u * 1024u)
 #define COMMAND_LIMIT 128u
 typedef struct { char name[64], label[256], shortcut[64]; int reference; } Command;
@@ -372,6 +373,161 @@ static int setup(lua_State *L) {
  lua_newtable(L); lua_pushcfunction(L,on_event); lua_setfield(L,-2,"on"); lua_setglobal(L,"events");
  lua_pushliteral(L,"0.8"); lua_setglobal(L,"INSIGHT_API_VERSION"); return 0;
 }
+#define DEBUG_BREAKPOINT_LIMIT 128u
+
+struct InsightLuaDebug {
+ Runtime runtime;
+ lua_State *thread;
+ InsightLuaStep mode;
+ unsigned long breaks[DEBUG_BREAKPOINT_LIMIT];
+ size_t break_count;
+ unsigned depth, target_depth;
+ unsigned long line;
+ char snapshot[8192];
+ int finished;
+};
+
+static int debug_setup(lua_State *L) {
+ setup(L);
+ lua_newthread(L);
+ return 1;
+}
+
+static unsigned debug_depth(lua_State *L) {
+ lua_Debug frame;
+ unsigned depth=0;
+ while(lua_getstack(L,(int)depth,&frame)) depth++;
+ return depth;
+}
+
+static void debug_capture(lua_State *L,char *output,size_t capacity);
+
+static void debug_hook(lua_State *L,lua_Debug *event) {
+ void *context=NULL;
+ lua_getallocf(L,&context);
+ InsightLuaDebug *debug=context;
+ if(event->event==LUA_HOOKCOUNT) {
+  if(++debug->runtime.ticks>2000) luaL_error(L,"Lua debugger instruction limit exceeded");
+  return;
+ }
+ if(event->currentline<1 || !lua_isyieldable(L)) return;
+ unsigned depth=debug_depth(L);
+ unsigned long line=(unsigned long)event->currentline;
+ int pause=debug->mode==INSIGHT_LUA_STEP_INTO ||
+     (debug->mode==INSIGHT_LUA_STEP_OVER && depth<=debug->target_depth) ||
+     (debug->mode==INSIGHT_LUA_STEP_OUT && depth<debug->target_depth);
+ for(size_t i=0; !pause && i<debug->break_count; i++) pause=debug->breaks[i]==line;
+ if(pause) {
+  debug->depth=depth;
+  debug->line=line;
+  debug_capture(L,debug->snapshot,sizeof debug->snapshot);
+  lua_yield(L,0);
+ }
+}
+
+void insight_lua_debug_free(InsightLuaDebug *debug) {
+ if(!debug) return;
+ if(debug->runtime.state) lua_close(debug->runtime.state);
+ free(debug);
+}
+
+InsightLuaDebug *insight_lua_debug_new(const char *source,size_t length,char *error,size_t capacity) {
+ if(error && capacity) error[0]=0;
+ if(!source) return NULL;
+ InsightLuaDebug *debug=calloc(1,sizeof *debug);
+ if(!debug) return NULL;
+ lua_State *L=lua_newstate(allocate,debug);
+ debug->runtime.state=L;
+ if(!L) { insight_lua_debug_free(debug); return NULL; }
+ lua_pushcfunction(L,debug_setup);
+ int status=lua_pcall(L,0,1,0);
+ if(!status) {
+  debug->thread=lua_tothread(L,-1);
+  status=luaL_loadbufferx(debug->thread,source,length,"@buffer","t");
+ }
+ if(status) {
+  if(error && capacity) {
+   const char *message=lua_tostring(debug->thread ? debug->thread:L,-1);
+   snprintf(error,capacity,"%s",message ? message:"Lua debugger setup failed");
+  }
+  insight_lua_debug_free(debug);
+  return NULL;
+ }
+ lua_sethook(debug->thread,debug_hook,LUA_MASKLINE|LUA_MASKCOUNT,1000);
+ return debug;
+}
+
+int insight_lua_debug_resume(InsightLuaDebug *debug,InsightLuaStep mode,
+ const unsigned long *breaks,size_t count,unsigned long *line,char *error,size_t capacity) {
+ if(line) *line=0;
+ if(error && capacity) error[0]=0;
+ if(!debug || debug->finished || count>DEBUG_BREAKPOINT_LIMIT || (count && !breaks)) return -1;
+ debug->mode=mode;
+ debug->target_depth=debug->depth;
+ debug->line=0;
+ debug->runtime.ticks=0;
+ debug->break_count=count;
+ if(count) memcpy(debug->breaks,breaks,count*sizeof *breaks);
+ int results=0;
+ int status=lua_resume(debug->thread,debug->runtime.state,0,&results);
+ if(status==LUA_YIELD && debug->line) {
+  if(line) *line=debug->line;
+  return 1;
+ }
+ debug->finished=1;
+ if(status!=LUA_OK && error && capacity) {
+  const char *message=status==LUA_YIELD ? NULL : lua_tostring(debug->thread,-1);
+  snprintf(error,capacity,"%s",message ? message:"Lua debugger execution failed");
+ }
+ return status==LUA_OK ? 0 : -1;
+}
+
+static void debug_append(char **output,size_t *capacity,const char *format,...) {
+ if(*capacity<=1) return;
+ va_list args;
+ va_start(args,format);
+ int written=vsnprintf(*output,*capacity,format,args);
+ va_end(args);
+ if(written<0) return;
+ size_t used=(size_t)written<*capacity ? (size_t)written:*capacity-1;
+ *output+=used;
+ *capacity-=used;
+}
+
+static void debug_capture(lua_State *L,char *output,size_t capacity) {
+ *output=0;
+ for(int level=0; level<16 && capacity>1; level++) {
+  lua_Debug frame;
+  if(!lua_getstack(L,level,&frame)) break;
+  if(!lua_getinfo(L,"nSl",&frame)) continue;
+  debug_append(&output,&capacity,"#%d %s (%s:%d)\n",level,
+      frame.name ? frame.name:frame.what,frame.short_src,frame.currentline);
+  for(int slot=1; slot<=64 && capacity>1; slot++) {
+   const char *name=lua_getlocal(L,&frame,slot);
+   if(!name) break;
+   if(name[0]!='(') {
+    debug_append(&output,&capacity,"    %s = ",name);
+    switch(lua_type(L,-1)) {
+    case LUA_TSTRING: debug_append(&output,&capacity,"\"%.120s\"",lua_tostring(L,-1));break;
+    case LUA_TBOOLEAN: debug_append(&output,&capacity,"%s",lua_toboolean(L,-1)?"true":"false");break;
+    case LUA_TNUMBER:
+     if(lua_isinteger(L,-1)) debug_append(&output,&capacity,"%lld",(long long)lua_tointeger(L,-1));
+     else debug_append(&output,&capacity,"%.17g",(double)lua_tonumber(L,-1));
+     break;
+    default: debug_append(&output,&capacity,"%s",luaL_typename(L,-1));break;
+    }
+    debug_append(&output,&capacity,"\n");
+   }
+   lua_pop(L,1);
+  }
+ }
+}
+
+void insight_lua_debug_inspect(InsightLuaDebug *debug,char *output,size_t capacity) {
+ if(!output || !capacity) return;
+ snprintf(output,capacity,"%s",debug && !debug->finished && debug->line ? debug->snapshot:"");
+}
+
 static int traceback(lua_State *L) {
  const char *message=lua_type(L,1)==LUA_TSTRING ? lua_tostring(L,1) : "Lua error (non-string value)";
  luaL_traceback(L,L,message,1); return 1;

@@ -4945,6 +4945,158 @@ static void script_check_start(GtkMenuItem *item,gpointer data) {
  g_task_run_in_thread(task,script_check_run);
  g_object_unref(task);
 }
+typedef struct {
+ InsightLuaDebug *engine;
+ GtkWidget *window,*source,*inspect,*status,*breakpoints,*controls;
+ GtkTextTag *current_line;
+} LuaDebugWindow;
+static void debug_window_free(gpointer data) {
+ LuaDebugWindow *view=data;
+ insight_lua_debug_free(view->engine);
+ g_free(view);
+}
+static void debug_text(GtkWidget *view,const gchar *text) {
+ gchar *valid=g_utf8_make_valid(text,-1);
+ gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)),valid,-1);
+ g_free(valid);
+}
+static gboolean debug_breakpoints(GtkEntry *entry,unsigned long *lines,gsize *count) {
+ gchar **words=g_strsplit_set(gtk_entry_get_text(entry),",; \t",-1);
+ gboolean ok=TRUE;
+ *count=0;
+ for(guint i=0; words[i] && ok; i++) {
+  if(!*words[i]) continue;
+  guint64 line=0;
+  ok=*count<128 && g_ascii_string_to_unsigned(words[i],10,1,G_MAXINT,&line,NULL);
+  if(ok) lines[(*count)++]=(unsigned long)line;
+ }
+ g_strfreev(words);
+ return ok;
+}
+static void debug_window_step(LuaDebugWindow *view,InsightLuaStep mode) {
+ unsigned long breaks[128],line=0;
+ gsize count=0;
+ if(!debug_breakpoints(GTK_ENTRY(view->breakpoints),breaks,&count)) {
+  gtk_label_set_text(GTK_LABEL(view->status),"Enter up to 128 positive breakpoint line numbers.");
+  return;
+ }
+ gchar error[1024];
+ gint result=insight_lua_debug_resume(view->engine,mode,breaks,count,&line,error,sizeof error);
+ GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source));
+ GtkTextIter first,last;
+ gtk_text_buffer_get_bounds(buffer,&first,&last);
+ gtk_text_buffer_remove_tag(buffer,view->current_line,&first,&last);
+ if(result==1 && line && line<=(gulong)gtk_text_buffer_get_line_count(buffer)) {
+  gtk_text_buffer_get_iter_at_line(buffer,&first,(gint)line-1);
+  last=first;
+  gtk_text_iter_forward_line(&last);
+  gtk_text_buffer_apply_tag(buffer,view->current_line,&first,&last);
+  gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(view->source),&first,0.15,FALSE,0,0);
+  gchar state[8192];
+  insight_lua_debug_inspect(view->engine,state,sizeof state);
+  debug_text(view->inspect,state);
+  gchar *label=g_strdup_printf("Paused at line %lu",line);
+  gtk_label_set_text(GTK_LABEL(view->status),label);
+  g_free(label);
+ } else {
+  gchar *label=result==0 ? g_strdup("Lua script finished") :
+      g_utf8_make_valid(*error ? error : "Lua debugger stopped",-1);
+  gtk_label_set_text(GTK_LABEL(view->status),label);
+  if(result<0) debug_text(view->inspect,label);
+  g_free(label);
+  gtk_widget_set_sensitive(view->controls,FALSE);
+ }
+}
+static void debug_window_action(GtkButton *button,gpointer data) {
+ debug_window_step(data,GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button),"insight-lua-step")));
+}
+static GtkWidget *debug_view(GtkWidget *pane,gboolean first) {
+ GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);
+ GtkWidget *text=gtk_text_view_new();
+ gtk_text_view_set_monospace(GTK_TEXT_VIEW(text),TRUE);
+ gtk_text_view_set_editable(GTK_TEXT_VIEW(text),FALSE);
+ gtk_container_add(GTK_CONTAINER(scroll),text);
+ if(first) gtk_paned_pack1(GTK_PANED(pane),scroll,TRUE,FALSE);
+ else gtk_paned_pack2(GTK_PANED(pane),scroll,TRUE,FALSE);
+ return text;
+}
+static void debug_current_lua(GtkMenuItem *item,gpointer data) {
+ (void)item;(void)data;
+ GeanyDocument *doc=document_get_current();
+ if(!DOC_VALID(doc) || !doc->file_type || doc->file_type->lang!=TM_PARSER_LUA) {
+  ui_set_statusbar(TRUE,"Open a Lua file to start the debugger");
+  return;
+ }
+ gint length=sci_get_length(doc->editor->sci);
+ if(length>2*1024*1024) {
+  ui_set_statusbar(TRUE,"Lua debugging supports buffers up to 2 MiB");
+  return;
+ }
+ gchar *source=sci_get_contents(doc->editor->sci,length+1);
+ if(memchr(source,0,length) || !g_utf8_validate(source,length,NULL)) {
+  ui_set_statusbar(TRUE,"Lua debugger requires a UTF-8 text buffer");
+  g_free(source);
+  return;
+ }
+ gchar error[1024];
+ InsightLuaDebug *engine=insight_lua_debug_new(source,length,error,sizeof error);
+ if(!engine) {
+  gchar *valid=g_utf8_make_valid(*error ? error : "Unable to start Lua debugger",-1);
+  ui_set_statusbar(TRUE,"%s",valid);
+  g_free(valid);
+  g_free(source);
+  return;
+ }
+ LuaDebugWindow *view=g_new0(LuaDebugWindow,1);
+ view->engine=engine;
+ view->window=gtk_window_new(GTK_WINDOW_TOPLEVEL);
+ gtk_window_set_title(GTK_WINDOW(view->window),"Lua Source Debugger");
+ gtk_window_set_default_size(GTK_WINDOW(view->window),940,520);
+ gtk_window_set_transient_for(GTK_WINDOW(view->window),GTK_WINDOW(main_widgets.window));
+ gtk_window_set_destroy_with_parent(GTK_WINDOW(view->window),TRUE);
+ g_object_set_data_full(G_OBJECT(view->window),"insight-lua-debugger",view,debug_window_free);
+ GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,6);
+ gtk_container_set_border_width(GTK_CONTAINER(box),8);
+ gtk_container_add(GTK_CONTAINER(view->window),box);
+ view->controls=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6);
+ gtk_box_pack_start(GTK_BOX(box),view->controls,FALSE,FALSE,0);
+ const gchar *labels[]={"Step Into","Step Over","Step Out","Continue"};
+ for(guint i=0;i<G_N_ELEMENTS(labels);i++) {
+  GtkWidget *button=gtk_button_new_with_label(labels[i]);
+  g_object_set_data(G_OBJECT(button),"insight-lua-step",GINT_TO_POINTER(i));
+  g_signal_connect(button,"clicked",G_CALLBACK(debug_window_action),view);
+  gtk_box_pack_start(GTK_BOX(view->controls),button,FALSE,FALSE,0);
+ }
+ view->breakpoints=gtk_entry_new();
+ gtk_entry_set_placeholder_text(GTK_ENTRY(view->breakpoints),"Breakpoint lines (e.g. 3, 12, 27)");
+ gtk_box_pack_start(GTK_BOX(view->controls),view->breakpoints,TRUE,TRUE,0);
+ GtkWidget *pane=gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+ gtk_box_pack_start(GTK_BOX(box),pane,TRUE,TRUE,0);
+ view->source=debug_view(pane,TRUE);
+ view->inspect=debug_view(pane,FALSE);
+ gtk_paned_set_position(GTK_PANED(pane),535);
+ GString *numbered=g_string_sized_new(length+128);
+ const gchar *start=source;
+ for(guint line=1;;line++) {
+  const gchar *end=strchr(start,'\n');
+  g_string_append_printf(numbered,"%5u  ",line);
+  if(!end) {g_string_append(numbered,start);break;}
+  g_string_append_len(numbered,start,end-start+1);
+  start=end+1;
+ }
+ debug_text(view->source,numbered->str);
+ g_string_free(numbered,TRUE);
+ g_free(source);
+ GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source));
+ view->current_line=gtk_text_buffer_create_tag(buffer,"insight-debug-line",
+     "paragraph-background","#416184","foreground","#ffffff",NULL);
+ view->status=gtk_label_new(NULL);
+ gtk_label_set_selectable(GTK_LABEL(view->status),TRUE);
+ gtk_label_set_ellipsize(GTK_LABEL(view->status),PANGO_ELLIPSIZE_END);
+ gtk_box_pack_start(GTK_BOX(box),view->status,FALSE,FALSE,0);
+ gtk_widget_show_all(view->window);
+ debug_window_step(view,INSIGHT_LUA_STEP_INTO);
+}
 static void create_native_lua(void) {
  gchar *settings=g_build_filename(app->configdir,"insight","lua-extension.conf",NULL);
  wb.extensions=insight_extensions_new(settings); g_free(settings); GError *error=NULL;
@@ -4953,6 +5105,9 @@ static void create_native_lua(void) {
  const char *labels[]={"Load extension…","Reload saved extension","Unload extension","Run script…"};
  GCallback actions[]={G_CALLBACK(choose_native_script),G_CALLBACK(reload_native_script),G_CALLBACK(reload_native_script),G_CALLBACK(choose_native_script)};
  for(guint i=0;i<4;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(labels[i]); gtk_container_add(GTK_CONTAINER(wb.lua_menu),entry); g_signal_connect(entry,"activate",actions[i],GINT_TO_POINTER(i>=2)); }
+ GtkWidget *debug=gtk_menu_item_new_with_label(insight_tr("Debug Current Lua Buffer…"));
+ g_signal_connect(debug,"activate",G_CALLBACK(debug_current_lua),NULL);
+ gtk_menu_shell_append(GTK_MENU_SHELL(wb.lua_menu),debug);
  GtkWidget *commands=gtk_menu_item_new_with_label("Commands"); wb.lua_commands=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(commands),wb.lua_commands); gtk_container_add(GTK_CONTAINER(wb.lua_menu),commands);
  wb.palette_item=gtk_menu_item_new_with_label("Command palette…"); g_signal_connect(wb.palette_item,"activate",G_CALLBACK(show_native_palette),NULL); gtk_container_add(GTK_CONTAINER(wb.lua_menu),wb.palette_item);
  gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),item); gtk_widget_show_all(item); native_commands_rebuild();

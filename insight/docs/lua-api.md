@@ -170,3 +170,18 @@ traceback тоже может завершиться ошибкой. Строк�
 ### HDL waveforms
 
 `editor.waveforms()` opens the native VCD file chooser. Scripts can check availability with `editor.has("waveforms")`. The chooser and waveform window run independently of the script invocation.
+
+## Source debugger
+
+Open a Lua buffer, then choose **Scripts → Debug Current Lua Buffer…**. The
+debugger takes a snapshot, including unsaved edits, and stops at the first
+executable line. The left pane highlights the current line; the right pane
+shows Lua stack frames and locals. Use **Step Into**, **Step Over**, **Step Out**
+and **Continue**. Enter breakpoint line numbers separated by spaces or commas.
+Close the window to end the session.
+
+The snapshot runs with the editor's restricted Lua libraries. It has no live
+editor or project host, so commands that require editor access must be tested
+with the normal script runner. Execution is bounded by the Lua memory budget
+and an instruction limit per resume. A callback invoked through a non-yieldable
+Lua C library call runs until execution returns to a yieldable Lua frame.
