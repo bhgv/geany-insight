@@ -39,3 +39,26 @@
 строкой, `True`, `False` или `None`. Пустое поле отключает проверку.
 Ошибку синтаксиса Python сообщает во вкладке **Console** при следующем продолжении.
 Условие действует в текущем окне отладки.
+
+### Проверка условия
+
+Сохраните блок как `condition_demo.py`. Запустите **Debug Current Python Buffer…**,
+на первой паузе введите `counter == 10` через **Stop Condition…** и нажмите F5.
+Отладчик остановится перед последней строкой, когда присваивание уже выполнено.
+Поле **Stop Condition…** принимает сравнение Python. Примеры Lua-обработчиков
+относятся к отладчику Lua.
+
+```python
+# EN: Demonstrate a conditional stop after counter becomes 10.
+# RU: Показывает условную остановку после того, как counter становится равен 10.
+
+# EN: Set a starting value that does not match the condition.
+# RU: Задаём начальное значение, которое не совпадает с условием.
+counter = 0
+# EN: Assign the target value for the stop condition.
+# RU: Присваиваем значение, заданное в условии остановки.
+counter = 10
+# EN: The debugger pauses before this line prints the value.
+# RU: Отладчик приостанавливается перед выводом значения.
+print(counter)
+```

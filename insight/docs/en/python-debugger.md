@@ -37,3 +37,26 @@ On resume, the debugger checks it before each tracked source line. Compare one l
 or global variable with a number, string, `True`, `False` or `None`.
 Clear the field to disable the check. Invalid conditions are reported in **Console**
 on resume. The condition belongs to the current debugger window.
+
+### Try a conditional stop
+
+Save this block as `condition_demo.py`. Start **Debug Current Python Buffer…**,
+enter `counter == 10` in **Stop Condition…** at the first pause and press F5.
+The debugger stops before the last line, after the assignment has run.
+**Stop Condition…** accepts a Python comparison. The Lua observer examples
+apply to the Lua debugger.
+
+```python
+# EN: Demonstrate a conditional stop after counter becomes 10.
+# RU: Показывает условную остановку после того, как counter становится равен 10.
+
+# EN: Set a starting value that does not match the condition.
+# RU: Задаём начальное значение, которое не совпадает с условием.
+counter = 0
+# EN: Assign the target value for the stop condition.
+# RU: Присваиваем значение, заданное в условии остановки.
+counter = 10
+# EN: The debugger pauses before this line prints the value.
+# RU: Отладчик приостанавливается перед выводом значения.
+print(counter)
+```
