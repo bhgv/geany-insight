@@ -34,6 +34,10 @@ class BuildFlow(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name) / 'source with spaces'
         self.root.mkdir()
+        manifest = Path(build_editor.__file__).with_name('windows-toolchain.json')
+        fixture = self.root / 'insight/tools' / manifest.name
+        fixture.parent.mkdir(parents=True)
+        fixture.write_bytes(manifest.read_bytes())
 
     def args(self, *args):
         return build_editor.arguments(list(args), self.root)
@@ -113,9 +117,10 @@ class BuildFlow(unittest.TestCase):
         with patch.object(build_editor, 'prerequisites'), contextlib.redirect_stdout(io.StringIO()):
             build_editor.execute(args, self.root, run)
         self.assertIn('prepare_clang_sdk.py', observed[0][0][1])
-        self.assertEqual(observed[-2][0], ['make', 'install'])
-        self.assertEqual(observed[-2][1]['cwd'], args.build_dir)
-        self.assertIn('install_slang.py', observed[-1][0][1])
+        self.assertEqual(observed[-3][0], ['make', 'install'])
+        self.assertEqual(observed[-3][1]['cwd'], args.build_dir)
+        self.assertIn('install_slang.py', observed[-2][0][1])
+        self.assertIn('build-iverilog.sh', observed[-1][0][1])
 
     def test_system_and_disabled_never_prepare_or_fetch_compiler(self):
         for provider in ('system', 'disabled'):
@@ -138,7 +143,8 @@ class BuildFlow(unittest.TestCase):
             steps = build_editor.plan(self.args('--backend', backend, '--install'), self.root)
             names = [' '.join(step['command']) for step in steps]
             self.assertEqual(sum('build_external_slang.py' in x for x in names), 1)
-            self.assertIn('install_slang.py', names[-1])
+            self.assertIn('install_slang.py', names[-2])
+            self.assertIn('build-iverilog.sh', names[-1])
             self.assertLess(next(i for i, x in enumerate(names) if 'build_external_slang.py' in x),
                             next(i for i, x in enumerate(names) if 'autogen.sh' in x or x.startswith('meson setup')))
 

@@ -37,37 +37,7 @@ $rootPlan = (& $launcher -BuildEditor -NonInteractive -RootDir 'C:\Insight Test'
 if ($LASTEXITCODE -ne 0 -or $rootPlan.sourceDir -ne $checkout -or
     $rootPlan.installDir -ne 'C:\Insight Test\editor' -or -not $rootPlan.buildEditor) { throw 'Root launcher plan failed.' }
 if ($rootPlan.simulator.version -ne '13.0' -or
-    $rootPlan.simulator.sha256 -notmatch '^[a-f0-9]{64} -BuildEditor -Plan -SourceDir 'C:\Alternate Checkout' | Out-String) | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0 -or $override.sourceDir -ne 'C:\Alternate Checkout') { throw 'Source override lost.' }
-Write-Host 'PowerShell parsing and bootstrap plans passed; no filesystem or environment changes.'
-# Production folder dialog: changing drives, independent paths, validation and cancel.
-. (Join-Path $PSScriptRoot '..\tools\select-windows-folders.ps1')
-$base = if (Test-Path D:\) { 'D:\Development\GeanyInsight' } else { 'C:\Development\GeanyInsight' }
-$dialog = New-InsightFolderDialog @{RootDir=$base; MsysRoot="$base\tools\msys64"; SourceDir="$base\src"; InstallDir="$base\editor"}
-try {
-    $dialog.Show(); [Windows.Forms.Application]::DoEvents()
-    $find = {param($name) $dialog.Controls.Find($name,$true)[0]}
-    $root = & $find 'RootDir'; $root.Text = $base
-    (& $find 'ApplyBase').PerformClick()
-    if ((& $find 'MsysRoot').Text -ne "$base\tools\msys64") { throw 'Base folder did not propagate.' }
-    (& $find 'SourceDir').Text = "$base\my sources"
-    (& $find 'InstallDir').Text = "$base\my editor"
-    (& $find 'MsysRoot').Text = 'C:\Bad tools'
-    (& $find 'AcceptLocations').PerformClick()
-    if ($dialog.DialogResult -eq [Windows.Forms.DialogResult]::OK) { throw 'Accepted unsupported MSYS path.' }
-    (& $find 'MsysRoot').Text = "$base\tools\msys64"
-    $image = New-Object Drawing.Bitmap($dialog.Width,$dialog.Height)
-    try {
-        $dialog.DrawToBitmap($image, (New-Object Drawing.Rectangle(0,0,$image.Width,$image.Height)))
-        $image.Save((Join-Path (Get-Location) ("windows-locations-" + $PSVersionTable.PSVersion.Major + '.jpg')), [Drawing.Imaging.ImageFormat]::Jpeg)
-    } finally { $image.Dispose() }
-    (& $find 'AcceptLocations').PerformClick()
-    if ($dialog.Tag.SourceDir -ne "$base\my sources" -or $dialog.Tag.InstallDir -ne "$base\my editor") { throw 'Independent selections lost.' }
-} finally { $dialog.Dispose() }
-$plan = (& $scriptPath -Plan -RootDir $base -BuildEditor -NonInteractive | Out-String) | ConvertFrom-Json
-if ($plan.installDir -ne "$base\editor" -or $plan.msysRoot -ne "$base\tools\msys64" -or -not $plan.fetchSources) { throw 'Selected base/build plan lost.' }
-Write-Host 'Production folder dialog and selected-drive build plan passed.'
- -or
+    $rootPlan.simulator.sha256 -notmatch '^[a-f0-9]{64}$' -or
     $rootPlan.simulator.url -notmatch '^https://github.com/steveicarus/iverilog/archive/') {
     throw 'Pinned Icarus Verilog source is missing from the build plan.'
 }
