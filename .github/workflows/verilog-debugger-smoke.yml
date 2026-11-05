@@ -1,0 +1,73 @@
+name: Verilog debugger smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      full_clang:
+        description: Also build the bundled Clang SDK
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verilog-debugger-smoke.yml'
+      - 'build.sh'
+      - 'build.cmd'
+      - 'insight/tools/build_editor.py'
+      - 'insight/tools/build-iverilog.sh'
+      - 'insight/tools/setup-windows.ps1'
+      - 'insight/tools/windows-toolchain.json'
+      - 'insight/patches/geany-vvp.patch'
+      - 'insight/tests/waveform-debug/**'
+      - 'src/insight-waveforms.*'
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 240
+    env:
+      INSIGHT_SMOKE_CLANG: ${{ inputs.full_clang && 'internal' || 'disabled' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential autoconf automake bison flex \
+            cmake gettext gperf libgtk-3-dev libreadline-dev libxml2-dev libzstd-dev \
+            meson ninja-build pkg-config python3-docutils zlib1g-dev
+      - name: Build and install on Linux
+        if: runner.os == 'Linux'
+        run: |
+          ./build.sh --backend meson --install --jobs 2 \
+            --clang-provider "$INSIGHT_SMOKE_CLANG" --prefix "$RUNNER_TEMP/insight-editor"
+      - name: Build and install on Windows
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          call build.cmd -NonInteractive -BuildEditor -Jobs 2 -ClangProvider %INSIGHT_SMOKE_CLANG% -RootDir "%RUNNER_TEMP%\insight-build" -InstallDir "%RUNNER_TEMP%\insight-editor"
+      - name: Run installed bridge on Linux
+        if: runner.os == 'Linux'
+        run: |
+          python3 insight/tests/waveform-debug/smoke.py "$RUNNER_TEMP/insight-editor" "$RUNNER_TEMP/insight-smoke"
+      - name: Run installed bridge on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python insight/tests/waveform-debug/smoke.py "$env:RUNNER_TEMP/insight-editor" "$env:RUNNER_TEMP/insight-smoke"
+      - name: Preserve build and simulator logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verilog-debugger-${{ runner.os }}
+          if-no-files-found: ignore
+          path: |
+            _editor-build/logs/
+            ${{ runner.temp }}/insight-smoke/
