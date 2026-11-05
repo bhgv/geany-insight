@@ -4494,6 +4494,7 @@ static void waveform_walk_dependencies(GtkListStore *rows, GHashTable *dependenc
 {
     const gchar *port_role = upstream ? "port-source" : "port-destination";
     const gchar *assign_role = upstream ? "assign-source" : "assign-destination";
+    const gchar *procedural_role = upstream ? "procedural-source" : "procedural-destination";
     GHashTable *visited = g_hash_table_new(g_str_hash, g_str_equal);
     GQueue pending = G_QUEUE_INIT;
     g_hash_table_add(visited, (gpointer)start);
@@ -4514,6 +4515,7 @@ static void waveform_walk_dependencies(GtkListStore *rows, GHashTable *dependenc
                 const InsightSymbol *edge = g_ptr_array_index(edges, i);
                 if ((g_strcmp0(edge->inheritance, port_role) &&
                      g_strcmp0(edge->inheritance, assign_role) &&
+                     g_strcmp0(edge->inheritance, procedural_role) &&
                      g_strcmp0(edge->inheritance, "port-peer")) ||
                     !g_hash_table_add(visited, (gpointer)edge->name))
                     continue;
