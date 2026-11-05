@@ -44,6 +44,8 @@ static GtkWidget *find_control(GtkWidget *widget, const gchar *key)
         return widget;
     if (GTK_IS_LABEL(widget) && !g_strcmp0(gtk_label_get_text(GTK_LABEL(widget)), key))
         return widget;
+    if (GTK_IS_STATUSBAR(widget) && !strcmp(key, "statusbar"))
+        return widget;
     if (GTK_IS_NOTEBOOK(widget) && !strcmp(key, "notebook"))
         return widget;
     if (GTK_IS_TEXT_VIEW(widget) && !strcmp(key, "console"))
@@ -203,6 +205,16 @@ static gboolean fail_timeout(gpointer data)
             g_printerr("%s\n%s\n", message ? message : "", details ? details : "");
             g_free(message);
             g_free(details);
+        }
+        GtkWidget *status = find_control(window, "statusbar");
+        if (status)
+        {
+            GtkWidget *area = gtk_statusbar_get_message_area(GTK_STATUSBAR(status));
+            GList *children = gtk_container_get_children(GTK_CONTAINER(area));
+            for (GList *child = children; child; child = child->next)
+                if (GTK_IS_LABEL(child->data))
+                    g_printerr("Status: %s\n", gtk_label_get_text(GTK_LABEL(child->data)));
+            g_list_free(children);
         }
         GtkWidget *console = find_control(window, "console");
         if (console)

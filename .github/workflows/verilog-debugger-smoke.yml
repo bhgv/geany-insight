@@ -73,6 +73,7 @@ jobs:
         if: runner.os == 'Linux' && !cancelled() && steps.linux_build.outcome == 'success'
         run: |
           mkdir -p "$RUNNER_TEMP/insight-smoke/gtk-debugger"
+          export GEANY_INSIGHT_SLANG_SERVICE="$RUNNER_TEMP/insight-editor/libexec/geany-insight/slang/insight-slang-semantic"
           xvfb-run -a _editor-build/meson/tests/test_insight_verilog_debugger_gui \
             insight/tests/waveform-debug "$RUNNER_TEMP/insight-smoke/gtk-debugger" \
             >"$RUNNER_TEMP/insight-smoke/gtk-debugger/session.log" 2>&1 || {
@@ -87,6 +88,7 @@ jobs:
           New-Item -ItemType Directory -Force $directory | Out-Null
           $probe = "$env:RUNNER_TEMP/insight-editor/bin/test_insight_verilog_debugger_gui.exe"
           Copy-Item _editor-build/meson/tests/test_insight_verilog_debugger_gui.exe $probe
+          $env:GEANY_INSIGHT_SLANG_SERVICE = "$env:RUNNER_TEMP/insight-editor/libexec/geany-insight/slang/insight-slang-semantic.exe"
           & $probe insight/tests/waveform-debug $directory *> "$directory/session.log"
           $code = $LASTEXITCODE
           Get-Content "$directory/session.log"
