@@ -23,6 +23,10 @@
 #include "slang/util/Bag.h"
 #include <cstdlib>
 #include <cstdio>
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
 #include <memory>
 #include "slang/syntax/AllSyntax.h"
 #include <fstream>
@@ -694,6 +698,11 @@ struct Collector : ASTVisitor<Collector, true, true> {
 }
 int main(int argc, char** argv) {
     try {
+#ifdef _WIN32
+        // Keep the editor protocol byte-for-byte identical to Unix stdout.
+        if (_setmode(_fileno(stdout), _O_BINARY) == -1)
+            throw std::runtime_error("cannot set binary stdout");
+#endif
         if (argc < 4) throw std::runtime_error("usage: insight-slang-semantic --symbols|--references|--lookup NAME|--complete SCOPE PREFIX -- FILE...");
         std::string mode = argv[1], scope, prefix, sourcePath;
         size_t sourceLine = 0;

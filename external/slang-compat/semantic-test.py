@@ -121,7 +121,9 @@ with tempfile.TemporaryDirectory(prefix='slang navigation ') as directory:
     assert definition_query(leaf, 4, 25, units) is None
 print('Native HDL navigation: module/instance/port/value/function targets, overlays and ambiguous elaboration passed')
 
-raw = subprocess.check_output([service, '--editor-index', '--'] + files).decode('utf-8').splitlines()
+index_output = subprocess.check_output([service, '--editor-index', '--'] + files)
+assert index_output.startswith(b'insight-slang-index-v2\n') and b'\r' not in index_output
+raw = index_output.decode('utf-8').splitlines()
 assert raw[0] == 'insight-slang-index-v2' and raw[1] == '0'
 rows = [line.split('\t') for line in raw[2:]]
 assert all(len(row) == 8 for row in rows)
