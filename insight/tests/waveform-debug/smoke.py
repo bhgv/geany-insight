@@ -198,8 +198,9 @@ def check_synchronous_steps(compiler, runtime, fixtures, directory, environment)
                 "Function breakpoint did not stop")
         require(f"GEANY-VVP-STOP\t{return_line}\t" in simulator.command("geany-step-process"),
                 "Process step did not stay inside the function")
-        require("local_value = " + format(7, "032b") in simulator.command("geany-process-values"),
-                "Function local was not read from the active frame")
+        function_values = simulator.command("geany-process-values")
+        require("local_value = " + format(7, "032b") in function_values,
+                f"Function local was not read from the active frame: {function_values!r}")
         require("Frame 1:" in simulator.command("geany-select-frame 1"), "Missing caller")
         values = simulator.command("geany-process-values")
         for expected in ('label_text = "ready"', "ratio = 1.25",

@@ -39,6 +39,14 @@ else:
 
     shutil.copy2(sdk / 'bin/gdk-pixbuf-query-loaders.exe', package / 'bin')
 
+# GLib starts these executables by name when spawning a process with pipes
+# or a working directory. They do not appear in the PE import table.
+for helper in ('gspawn-win64-helper.exe', 'gspawn-win64-helper-console.exe'):
+    source = sdk / 'bin' / helper
+    if not source.is_file():
+        raise SystemExit('GLib process helper missing: ' + str(source))
+    shutil.copy2(source, package / 'bin' / helper)
+
 queue = [p for p in package.rglob('*') if p.suffix.lower() in ('.exe', '.dll', '.vpi')]
 seen = set()
 missing = set()

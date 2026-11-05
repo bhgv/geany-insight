@@ -471,7 +471,7 @@ index 175e8ae..6c544f5 100644
        vpi_mcd_printf(1,"** Continue **\n");
  }
 diff --git a/vvp/vthread.cc b/vvp/vthread.cc
-index de7578b..2e2901d 100644
+index de7578b..cdd77ba 100644
 --- a/vvp/vthread.cc
 +++ b/vvp/vthread.cc
 @@ -31,6 +31,7 @@
@@ -637,7 +637,7 @@ index de7578b..2e2901d 100644
 +      unsigned count = 0;
 +      for (vpiHandle signal : scope->intern) {
 +            const int type = vpi_get(vpiType, signal);
-+            const bool integral = type == vpiNet || type == vpiReg;
++            const bool integral = dynamic_cast<__vpiSignal*>(signal) != nullptr;
 +            const bool array = type == vpiArrayVar;
 +            if (!integral && !array && type != vpiMemory &&
 +                type != vpiRealVar && type != vpiStringVar)
