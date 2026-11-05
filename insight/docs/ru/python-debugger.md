@@ -307,3 +307,51 @@ end
 ```
 
 Ожидается пауза перед `print(counter)` и запись о совпадении в журнале.
+
+### Вычисляемые карточки графа
+
+В начале Lua-сценария вызовите `watch_eval(name, function(root) ... end)`.
+Функция получает копию графа выбранного кадра при остановке и при смене кадра.
+`root.members` содержит связи из корня, а каждый узел имеет `label`, `value`,
+`path` и `members`. Имена связей совпадают с подписями графа, например
+`local state`, `"devices"` и `[3]`. Общие ссылки и циклы сохраняются.
+`root.limited` показывает, что снимок ограничен по размеру.
+`value` содержит строку отображения. Для арифметики используйте `tonumber`.
+Верните число, строку или логическое значение для карточки. `nil` убирает её.
+Ошибка вычисления отображается в карточке. Вычисление работает только на паузе
+и не меняет состояние отлаживаемой программы.
+
+Пример работает с локальной таблицей Lua или локальным словарём Python
+`state`, содержащим числовое поле `count`. Вставьте сценарий в нижнее поле
+**Conditions and Script…**.
+
+```lua
+-- EN: Show twice the count from a nested value in the paused watch graph.
+-- RU: Показывает удвоенный счётчик из вложенного значения в графе на паузе.
+
+-- EN: Register a calculation under the name shown on the card.
+-- RU: Регистрируем вычисление под именем, которое появится на карточке.
+watch_eval("Double count", function(root)
+    -- EN: Find the local variable and follow the link for the string key.
+    -- RU: Находим локальную переменную и переходим по связи строкового ключа.
+    local state = root.members["local state"]
+    -- EN: A different frame or limited snapshot may omit the value.
+    -- RU: В другом кадре или ограниченном снимке значения может не быть.
+    local count = state and state.members['"count"']
+    -- EN: Convert display text to a number before doing arithmetic.
+    -- RU: Преобразуем текст отображения в число перед вычислением.
+    local number = count and tonumber(count.value)
+    -- EN: Publish the result, or hide the card when the value is unavailable.
+    -- RU: Публикуем результат или скрываем карточку, если значения нет.
+    return number and number * 2
+-- EN: Finish the calculation registration.
+-- RU: Завершаем регистрацию вычисления.
+end)
+
+-- EN: Supply the observer callback. This example only uses paused snapshots.
+-- RU: Возвращаем обработчик событий. Пример использует только снимки на паузе.
+return function()
+-- EN: Leave execution control to the normal debugger commands.
+-- RU: Оставляем управление выполнением обычным командам отладчика.
+end
+```

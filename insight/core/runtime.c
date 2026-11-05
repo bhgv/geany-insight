@@ -562,6 +562,23 @@ void insight_lua_debug_observer_watch(const InsightLuaDebug *debug, InsightLuaWa
         graph->node_count = 1;
         snprintf(graph->nodes[0].label, sizeof graph->nodes[0].label, "Observer");
     }
+    unsigned keep = INSIGHT_LUA_WATCH_NODES - debug->observer_watch_count;
+    if (graph->node_count > keep)
+    {
+        graph->node_count = keep;
+        graph->limited = 1;
+    }
+    unsigned edges = 0;
+    for (unsigned i = 0; i < graph->edge_count; i++)
+    {
+        InsightLuaWatchEdge edge = graph->edges[i];
+        if (edge.from < graph->node_count && edge.to < graph->node_count &&
+            edges < INSIGHT_LUA_WATCH_EDGES - debug->observer_watch_count)
+            graph->edges[edges++] = edge;
+        else
+            graph->limited = 1;
+    }
+    graph->edge_count = edges;
     for (unsigned i = 0; i < debug->observer_watch_count; i++)
     {
         if (graph->node_count >= INSIGHT_LUA_WATCH_NODES || graph->edge_count >= INSIGHT_LUA_WATCH_EDGES)
@@ -580,6 +597,42 @@ void insight_lua_debug_observer_watch(const InsightLuaDebug *debug, InsightLuaWa
         edge->to = id;
         snprintf(edge->label, sizeof edge->label, "observer: %s", name);
     }
+}
+
+/* Register a bounded set of calculations to run on paused snapshots. */
+/* Регистрирует ограниченный набор вычислений для снимков на паузе. */
+static int debug_observer_register_watch(lua_State *state)
+{
+    lua_getfield(state, LUA_REGISTRYINDEX, "insight.debug.registering_watches");
+    int registering = lua_toboolean(state, -1);
+    lua_pop(state, 1);
+    if (!registering)
+        return luaL_error(state, "register calculated watches at observer setup");
+    size_t length;
+    const char *name = luaL_checklstring(state, 1, &length);
+    if (!length || length > 63 || memchr(name, 0, length))
+        return luaL_error(state, "watch name must contain 1 to 63 bytes");
+    luaL_checktype(state, 2, LUA_TFUNCTION);
+
+    lua_getfield(state, LUA_REGISTRYINDEX, "insight.debug.watch_calculations");
+    lua_getfield(state, -1, name);
+    int existing = !lua_isnil(state, -1);
+    lua_pop(state, 1);
+    if (!existing)
+    {
+        unsigned count = 0;
+        lua_pushnil(state);
+        while (lua_next(state, -2))
+        {
+            count++;
+            lua_pop(state, 1);
+        }
+        if (count >= 16)
+            return luaL_error(state, "calculated watch limit reached");
+    }
+    lua_pushvalue(state, 2);
+    lua_setfield(state, -2, name);
+    return 0;
 }
 
 static void debug_hook(lua_State *state, lua_Debug *event);
@@ -602,9 +655,17 @@ static int debug_observer_setup(lua_State *state)
         lua_pushnil(state);
         lua_setglobal(state, blocked[index]);
     }
+    lua_newtable(state);
+    lua_setfield(state, LUA_REGISTRYINDEX, "insight.debug.watch_calculations");
+    lua_pushcfunction(state, debug_observer_register_watch);
+    lua_setglobal(state, "watch_eval");
+    lua_pushboolean(state, 1);
+    lua_setfield(state, LUA_REGISTRYINDEX, "insight.debug.registering_watches");
     if (luaL_loadbufferx(state, config->source, config->length, "=debug observer", "t") != LUA_OK)
         return lua_error(state);
     lua_call(state, 0, 1);
+    lua_pushnil(state);
+    lua_setfield(state, LUA_REGISTRYINDEX, "insight.debug.registering_watches");
     if (!lua_isfunction(state, -1))
         return luaL_error(state, "The debug observer must return a function");
     lua_setfield(state, LUA_REGISTRYINDEX, "insight.debug.observer");
@@ -870,6 +931,91 @@ static int debug_call_observer(InsightLuaDebug *debug, lua_CFunction dispatch, v
 int insight_lua_debug_observe(InsightLuaDebug *debug, const InsightObserverEvent *event)
 {
     return event ? debug_call_observer(debug, debug_observer_dispatch_external, (void *)event) : -1;
+}
+
+typedef struct {
+    InsightLuaDebug *debug;
+    const InsightLuaWatchGraph *graph;
+} DebugCalculatedSnapshot;
+
+/* Copy the graph into Lua while preserving shared references and cycles. */
+/* Копирует граф в Lua с сохранением общих ссылок и циклов. */
+static void debug_push_watch_snapshot(lua_State *state, const InsightLuaWatchGraph *graph)
+{
+    lua_createtable(state, (int)graph->node_count, 0);
+    int nodes = lua_gettop(state);
+    for (unsigned i = 0; i < graph->node_count; i++)
+    {
+        const InsightLuaWatchNode *node = &graph->nodes[i];
+        lua_createtable(state, 0, 4);
+        lua_pushstring(state, node->label);
+        lua_setfield(state, -2, "label");
+        lua_pushstring(state, node->value);
+        lua_setfield(state, -2, "value");
+        lua_pushstring(state, node->path);
+        lua_setfield(state, -2, "path");
+        lua_newtable(state);
+        lua_setfield(state, -2, "members");
+        lua_rawseti(state, nodes, (lua_Integer)i + 1);
+    }
+    for (unsigned i = 0; i < graph->edge_count; i++)
+    {
+        const InsightLuaWatchEdge *edge = &graph->edges[i];
+        if (edge->from >= graph->node_count || edge->to >= graph->node_count)
+            continue;
+        lua_rawgeti(state, nodes, (lua_Integer)edge->from + 1);
+        lua_getfield(state, -1, "members");
+        lua_rawgeti(state, nodes, (lua_Integer)edge->to + 1);
+        lua_setfield(state, -2, edge->label);
+        lua_pop(state, 2);
+    }
+    lua_rawgeti(state, nodes, 1);
+    lua_remove(state, nodes);
+    lua_pushboolean(state, graph->limited);
+    lua_setfield(state, -2, "limited");
+}
+
+/* Evaluate each registered calculation against an independent graph copy. */
+/* Вычисляет каждое наблюдение на отдельной копии графа. */
+static int debug_evaluate_watch_snapshot(lua_State *state)
+{
+    const DebugCalculatedSnapshot *snapshot = lua_touserdata(state, 1);
+    lua_getfield(state, LUA_REGISTRYINDEX, "insight.debug.watch_calculations");
+    int calculations = lua_gettop(state);
+    lua_pushnil(state);
+    while (lua_next(state, calculations))
+    {
+        lua_pushlightuserdata(state, snapshot->debug);
+        lua_pushcclosure(state, debug_observer_watch, 1);
+        lua_pushvalue(state, -3);
+        lua_pushvalue(state, -3);
+        debug_push_watch_snapshot(state, snapshot->graph);
+        snapshot->debug->observer->ticks = 0;
+        if (lua_pcall(state, 1, 1, 0) != LUA_OK)
+        {
+            lua_pop(state, 1);
+            lua_pushliteral(state, "<calculation error>");
+        }
+        else if (!lua_isnil(state, -1) && lua_type(state, -1) != LUA_TSTRING &&
+                 lua_type(state, -1) != LUA_TNUMBER && lua_type(state, -1) != LUA_TBOOLEAN)
+        {
+            lua_pop(state, 1);
+            lua_pushliteral(state, "<expected scalar>");
+        }
+        lua_call(state, 2, 0);
+        lua_pop(state, 1);
+    }
+    return 0;
+}
+
+/* Refresh calculated cards for the selected paused frame. */
+/* Обновляет вычисляемые карточки для выбранного кадра на паузе. */
+void insight_lua_debug_calculate_watches(InsightLuaDebug *debug, const InsightLuaWatchGraph *graph)
+{
+    if (!graph || !graph->node_count || !debug || !debug->observer)
+        return;
+    DebugCalculatedSnapshot snapshot = {debug, graph};
+    debug_call_observer(debug, debug_evaluate_watch_snapshot, &snapshot);
 }
 
 /* Run the observer under protection and latch its next-line stop request. */

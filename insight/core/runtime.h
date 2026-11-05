@@ -91,6 +91,7 @@ typedef struct {
 /* Dispatch a copied event. Return 1 to stop, 0 to continue, -1 on callback error. */
 int insight_lua_debug_observe(InsightLuaDebug *, const InsightObserverEvent *);
 int insight_lua_debug_observer_active(const InsightLuaDebug *);
+void insight_lua_debug_calculate_watches(InsightLuaDebug *, const InsightLuaWatchGraph *);
 void insight_lua_debug_observer_watch(const InsightLuaDebug *, InsightLuaWatchGraph *);
 const char *insight_lua_debug_observer_log(const InsightLuaDebug *debug);
 void insight_lua_debug_request_pause(InsightLuaDebug *);

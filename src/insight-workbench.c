@@ -5586,8 +5586,6 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
     gtk_text_buffer_remove_tag(buffer, view->current_line_tag, &first, &last);
     view->paused_line = 0;
     InsightLuaDebug *observer = view->python ? view->python_observer : view->engine;
-    if (view->observer_log)
-        debug_set_text(view->observer_log, insight_lua_debug_observer_log(observer));
 
     if (result == 1 && line > 0)
     {
@@ -5642,6 +5640,9 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
         view->watch_graph = view->python ? view->python_graph : insight_lua_debug_watch_graph(view->engine);
     if (observer)
     {
+        insight_lua_debug_calculate_watches(observer, view->watch_graph);
+        if (view->observer_log)
+            debug_set_text(view->observer_log, insight_lua_debug_observer_log(observer));
         if (!view->observer_graph)
             view->observer_graph = g_new0(InsightLuaWatchGraph, 1);
         if (view->watch_graph)
