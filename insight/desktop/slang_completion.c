@@ -36,10 +36,22 @@ static void key_field(GChecksum *sum,const gchar *text,gsize length) {
 /* Cache only complete explicit source sets without preprocessor directives.
  * Includes / macro-built dependencies need a compiler dependency manifest;
  * conservatively bypass instead of reusing an incomplete dependency key. */
-static gchar *request_key(const gchar *service,const gchar *const *arguments,GPtrArray *paths,GHashTable *buffers,GCancellable *cancel) {
+gchar *insight_slang_vivado_config(const gchar *project_file) {
+ if (!project_file || !g_path_is_absolute(project_file)) return NULL;
+ const gchar *basename = strrchr(project_file, G_DIR_SEPARATOR);
+ const gchar *extension = strrchr(basename ? basename + 1 : project_file, '.');
+ if (!extension || g_ascii_strcasecmp(extension, ".geany")) return NULL;
+ gchar *stem = g_strndup(project_file, extension - project_file);
+ gchar *config = g_strconcat(stem, ".hdl.tsv", NULL);
+ g_free(stem);
+ if (!g_file_test(config, G_FILE_TEST_IS_REGULAR)) g_clear_pointer(&config, g_free);
+ return config;
+}
+
+static gchar *request_key(const gchar *service,const gchar *const *arguments,GPtrArray *paths,GHashTable *buffers,const gchar *config,GCancellable *cancel) {
  /* The configured include directories can contain files outside project membership. */
  const gchar *vivado=g_getenv("GEANY_INSIGHT_VIVADO_CONFIG");
- if(vivado && *vivado) return NULL;
+ if(config || (vivado && *vivado)) return NULL;
  guint64 executable_size=0;gchar *stamp=disk_stamp(service,&executable_size);if(!stamp) return NULL;
  GChecksum *sum=g_checksum_new(G_CHECKSUM_SHA256);key_field(sum,service,strlen(service));key_field(sum,stamp,strlen(stamp));g_free(stamp);
  gchar *cwd=g_get_current_dir();key_field(sum,cwd,strlen(cwd));g_free(cwd);
@@ -71,9 +83,9 @@ static void cache_put(const gchar *key,const gchar *reply) {
  g_queue_push_head(&cache_entries,entry);cache_stats.bytes+=entry->bytes;cache_stats.entries++;g_mutex_unlock(&cache_mutex);
 }
 static void terminate(GCancellable *cancel,gpointer data) {(void)cancel;g_subprocess_force_exit(G_SUBPROCESS(data));}
-static gchar *query(const gchar *service,const gchar *const *arguments,GPtrArray *paths,GHashTable *buffers,GCancellable *cancel) {
+static gchar *query(const gchar *service,const gchar *const *arguments,GPtrArray *paths,GHashTable *buffers,const gchar *config,GCancellable *cancel) {
  if(!service || !*service || !paths || !buffers || (cancel && g_cancellable_is_cancelled(cancel))) return NULL;
- gchar *key=request_key(service,arguments,paths,buffers,cancel);if(cancel && g_cancellable_is_cancelled(cancel)) {g_free(key);return NULL;}gchar *cached=cache_get(key);
+ gchar *key=request_key(service,arguments,paths,buffers,config,cancel);if(cancel && g_cancellable_is_cancelled(cancel)) {g_free(key);return NULL;}gchar *cached=cache_get(key);
  if(cached) {g_free(key);if(cancel && g_cancellable_is_cancelled(cancel)) {g_free(cached);return NULL;}return cached;}
  gchar *directory=g_dir_make_tmp("geany-slang-XXXXXX",NULL);if(!directory) {g_free(key);return NULL;}
  GPtrArray *argv=g_ptr_array_new_with_free_func(g_free),*temporary=g_ptr_array_new_with_free_func(g_free);gchar *out=NULL;
@@ -98,6 +110,7 @@ static gchar *query(const gchar *service,const gchar *const *arguments,GPtrArray
  if(command_bytes>24000) valid=FALSE;
  if(valid) {
   GSubprocessLauncher *launcher=g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_STDOUT_PIPE|G_SUBPROCESS_FLAGS_STDERR_SILENCE);
+  if(config) g_subprocess_launcher_setenv(launcher,"GEANY_INSIGHT_VIVADO_CONFIG",config,TRUE);
 #ifdef G_OS_WIN32
   /* Portable runtime DLLs live beside geany.exe, outside the helper directory. */
   gchar *prefix=g_path_get_dirname(service);for(guint i=0;i<3;i++) {gchar *parent=g_path_get_dirname(prefix);g_free(prefix);prefix=parent;}
@@ -119,7 +132,7 @@ static gchar *query(const gchar *service,const gchar *const *arguments,GPtrArray
  GHashTableIter iter;gpointer file,stamp;g_hash_table_iter_init(&iter,stamps);
  while(out && g_hash_table_iter_next(&iter,&file,&stamp)) {guint64 size=0;gchar *now=disk_stamp(file,&size);if(g_strcmp0(now,stamp)) g_clear_pointer(&out,g_free);g_free(now);}g_hash_table_unref(stamps);
  if(out && key && !(cancel && g_cancellable_is_cancelled(cancel))) {
-  gchar *fresh=request_key(service,arguments,paths,buffers,cancel);
+  gchar *fresh=request_key(service,arguments,paths,buffers,config,cancel);
   if(!g_strcmp0(key,fresh)) cache_put(key,out);else g_clear_pointer(&out,g_free);g_free(fresh);
  }g_free(key);
  for(guint i=0;i<temporary->len;i++) g_unlink(g_ptr_array_index(temporary,i));g_rmdir(directory);g_free(directory);g_ptr_array_unref(temporary);g_ptr_array_unref(argv);return out;
@@ -127,6 +140,11 @@ static gchar *query(const gchar *service,const gchar *const *arguments,GPtrArray
 
 GPtrArray *insight_slang_complete(const gchar *service,const gchar *path,const gchar *text,
  guint offset,guint rootlen,GPtrArray *paths,GHashTable *buffers,GCancellable *cancel) {
+ return insight_slang_complete_configured(service,path,text,offset,rootlen,paths,buffers,NULL,cancel);
+}
+
+GPtrArray *insight_slang_complete_configured(const gchar *service,const gchar *path,const gchar *text,
+ guint offset,guint rootlen,GPtrArray *paths,GHashTable *buffers,const gchar *config,GCancellable *cancel) {
  if(!service || !*service || !path || !text || offset>strlen(text) || rootlen>offset || !paths || !buffers || (cancel && g_cancellable_is_cancelled(cancel))) return NULL;
  guint start=offset-rootlen,begin=start,line=1;
  for(guint i=0;i<offset;i++) if(text[i]=='\n') line++;
@@ -138,7 +156,7 @@ GPtrArray *insight_slang_complete(const gchar *service,const gchar *path,const g
  else if(size) {g_free(receiver);g_free(prefix);return NULL;}
  if(begin && (text[begin-1]==']' || text[begin-1]==')')) {g_free(receiver);g_free(prefix);return NULL;}
  gchar *line_text=g_strdup_printf("%u",line);const gchar *arguments[]={"--editor-complete",path,line_text,receiver,prefix,NULL};
- gchar *reply=query(service,arguments,paths,buffers,cancel);g_free(line_text);g_free(receiver);g_free(prefix);GPtrArray *out=NULL;
+ gchar *reply=query(service,arguments,paths,buffers,config,cancel);g_free(line_text);g_free(receiver);g_free(prefix);GPtrArray *out=NULL;
  if(reply && g_str_has_prefix(reply,"insight-slang-completion-v1\n")) {
   out=g_ptr_array_new_with_free_func(candidate_free);gchar **rows=g_strsplit(reply,"\n",-1);
   for(guint i=1;rows[i] && *rows[i] && out->len<4096;i++) {
@@ -167,25 +185,34 @@ static gboolean definition_reply(gchar *reply,gchar **target,guint *line,guint *
 }
 
 gboolean insight_slang_wave_definition(const gchar *service,const gchar *name,GPtrArray *paths,
- GHashTable *buffers,GCancellable *cancel,gchar **target,guint *line,guint *column) {
+ GHashTable *buffers,const gchar *config,GCancellable *cancel,gchar **target,guint *line,guint *column) {
  *target=NULL;*line=*column=0;
  const gchar *arguments[]={"--editor-wave-definition",name,NULL};
- return definition_reply(query(service,arguments,paths,buffers,cancel),target,line,column);
+ return definition_reply(query(service,arguments,paths,buffers,config,cancel),target,line,column);
 }
 
 gboolean insight_slang_definition(const gchar *service,const gchar *path,const gchar *text,guint offset,
  GPtrArray *paths,GHashTable *buffers,GCancellable *cancel,gchar **target,guint *line,guint *column) {
+ return insight_slang_definition_configured(service,path,text,offset,paths,buffers,NULL,cancel,target,line,column);
+}
+
+gboolean insight_slang_definition_configured(const gchar *service,const gchar *path,const gchar *text,guint offset,
+ GPtrArray *paths,GHashTable *buffers,const gchar *config,GCancellable *cancel,gchar **target,guint *line,guint *column) {
  *target=NULL;*line=*column=0;if(!path || !text || offset>strlen(text)) return FALSE;
  if(offset && !(g_ascii_isalnum(text[offset]) || text[offset]=='_' || text[offset]=='$') && (g_ascii_isalnum(text[offset-1]) || text[offset-1]=='_' || text[offset-1]=='$')) offset--;
  guint l=1,c=1;for(guint i=0;i<offset;i++) {if(text[i]=='\n') {l++;c=1;}else c++;}
  gchar *ls=g_strdup_printf("%u",l),*cs=g_strdup_printf("%u",c);const gchar *arguments[]={"--editor-definition",path,ls,cs,NULL};
- gchar *reply=query(service,arguments,paths,buffers,cancel);g_free(ls);g_free(cs);return definition_reply(reply,target,line,column);
+ gchar *reply=query(service,arguments,paths,buffers,config,cancel);g_free(ls);g_free(cs);return definition_reply(reply,target,line,column);
 }
 
 void insight_slang_project_free(InsightSlangProject *project) {if(project) {insight_index_free(project->index);g_free(project);}}
 InsightSlangProject *insight_slang_project(const gchar *service,GPtrArray *paths,GHashTable *buffers,const gchar *root,const gchar *cache,GCancellable *cancel) {
+ return insight_slang_project_configured(service,paths,buffers,root,cache,NULL,cancel);
+}
+
+InsightSlangProject *insight_slang_project_configured(const gchar *service,GPtrArray *paths,GHashTable *buffers,const gchar *root,const gchar *cache,const gchar *config,GCancellable *cancel) {
  if(!service || !*service || !root || !g_path_is_absolute(root) || !paths || !buffers || (cancel && g_cancellable_is_cancelled(cancel))) return NULL;
- const gchar *arguments[]={"--editor-index",NULL};gchar *key=request_key(service,arguments,paths,buffers,cancel);
+ const gchar *arguments[]={"--editor-index",NULL};gchar *key=request_key(service,arguments,paths,buffers,config,cancel);
  InsightSlangProject *project=g_new0(InsightSlangProject,1);
  if(cache && key) {
   char *stored=NULL;project->index=insight_cache_load(cache,&stored,NULL);const InsightSymbol *meta=NULL;
@@ -193,7 +220,7 @@ InsightSlangProject *insight_slang_project(const gchar *service,GPtrArray *paths
   if(valid) {if(!*meta->type) valid=FALSE;for(const gchar *p=meta->type;*p;p++) if(!g_ascii_isdigit(*p)) valid=FALSE;guint64 count=g_ascii_strtoull(meta->type,NULL,10);if(count>G_MAXUINT) valid=FALSE;else project->diagnostics=count;}
   if(valid) {project->restored=project->persisted=TRUE;g_free(key);return project;}insight_index_free(project->index);project->index=NULL;
  }
- gchar *reply=query(service,arguments,paths,buffers,cancel);if(!reply || !g_str_has_prefix(reply,"insight-slang-index-v2\n")) {g_free(reply);g_free(key);g_free(project);return NULL;}
+ gchar *reply=query(service,arguments,paths,buffers,config,cancel);if(!reply || !g_str_has_prefix(reply,"insight-slang-index-v2\n")) {g_free(reply);g_free(key);g_free(project);return NULL;}
  gchar **lines=g_strsplit(reply,"\n",-1);gboolean valid=lines[1] && *lines[1];
  if(valid) {for(const gchar *p=lines[1];*p;p++) if(!g_ascii_isdigit(*p)) valid=FALSE;guint64 count=g_ascii_strtoull(lines[1],NULL,10);if(count>G_MAXUINT) valid=FALSE;else project->diagnostics=count;}
  GHashTable *groups=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,(GDestroyNotify)g_array_unref);GPtrArray *owned=g_ptr_array_new_with_free_func(g_free);guint records=0;
@@ -217,7 +244,7 @@ InsightSlangProject *insight_slang_project(const gchar *service,GPtrArray *paths
   if(valid) valid=insight_index_update(project->index,root,&meta,1);g_free(diagnostics);
  }
  g_hash_table_unref(groups);g_ptr_array_unref(owned);g_strfreev(lines);g_free(reply);
- if(valid && key) {gchar *fresh=request_key(service,arguments,paths,buffers,cancel);valid=!g_strcmp0(key,fresh);g_free(fresh);}
+ if(valid && key) {gchar *fresh=request_key(service,arguments,paths,buffers,config,cancel);valid=!g_strcmp0(key,fresh);g_free(fresh);}
  if(valid && cache && key && !(cancel && g_cancellable_is_cancelled(cancel))) {gchar *parent=g_path_get_dirname(cache);if(!g_mkdir_with_parents(parent,0700)) project->persisted=insight_cache_save_cancellable(cache,project->index,root,cancel,NULL);g_free(parent);}
  g_free(key);if(!valid || (cancel && g_cancellable_is_cancelled(cancel))) {insight_slang_project_free(project);return NULL;}return project;
 }

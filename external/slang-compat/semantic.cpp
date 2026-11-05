@@ -14,6 +14,8 @@
 #include "slang/parsing/Preprocessor.h"
 #include "slang/util/Bag.h"
 #include <cstdlib>
+#include <cstdio>
+#include <memory>
 #include "slang/syntax/AllSyntax.h"
 #include <fstream>
 #include <unordered_map>
@@ -28,13 +30,25 @@ using namespace slang;
 using namespace slang::ast;
 namespace {
 void loadVivadoSettings(SourceManager& sources, Bag& options, std::string& top) {
+#ifdef _WIN32
+    const wchar_t* path = _wgetenv(L"GEANY_INSIGHT_VIVADO_CONFIG");
+    if (!path || !*path)
+        return;
+    std::unique_ptr<std::FILE, decltype(&std::fclose)> file(_wfopen(path, L"rb"), std::fclose);
+#else
     const char* path = std::getenv("GEANY_INSIGHT_VIVADO_CONFIG");
     if (!path || !*path)
         return;
-    std::ifstream input(path, std::ios::binary | std::ios::ate);
-    if (!input || input.tellg() > 65536)
+    std::unique_ptr<std::FILE, decltype(&std::fclose)> file(std::fopen(path, "rb"), std::fclose);
+#endif
+    std::string contents(65537, '\0');
+    if (!file)
+        throw std::runtime_error("cannot open Vivado settings");
+    auto size = std::fread(&contents[0], 1, contents.size(), file.get());
+    if (std::ferror(file.get()) || size > 65536)
         throw std::runtime_error("cannot read Vivado settings (limit: 64 KiB)");
-    input.seekg(0);
+    contents.resize(size);
+    std::istringstream input(contents);
     auto readLine = [&input](std::string& line) {
         if (!std::getline(input, line))
             return false;

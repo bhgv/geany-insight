@@ -1926,7 +1926,7 @@ static void semantic_call_tree(const gchar *query,gboolean incoming) {
  if(!fixed) {GeanyDocument *doc=document_get_current();InsightClangResult *r=DOC_VALID(doc) ? insight_clang_ui_result(doc->editor->sci):NULL;if(insight_clang_result_usable(r)) j->usr=insight_clang_symbol_at(r->relations,doc->file_name,sci_get_current_position(doc->editor->sci),sci_get_current_line(doc->editor->sci)+1,query);j->source=DOC_VALID(doc) ? g_strdup(doc->file_name):NULL;}
  wb.search_worker=g_cancellable_new();GTask *task=g_task_new(NULL,wb.search_worker,semantic_calls_done,NULL);g_task_set_task_data(task,j,semantic_calls_free);g_task_run_in_thread(task,semantic_calls_run);g_object_unref(task);set_usage_status("Preparing Clang call snapshot…");
 }
-typedef struct {GPtrArray *paths,*rows;GArray *colors;GHashTable *buffers;gchar *service,*root,*cache,*project,*query,*paint_path;guint paint_doc;InsightSlangProject *result;guint64 epoch,generation,scan_generation;guint applied;gboolean valid,diagnostics,colors_only;} HdlJob;
+typedef struct {GPtrArray *paths,*rows;GArray *colors;GHashTable *buffers;gchar *service,*root,*cache,*project,*query,*paint_path,*vivado;guint paint_doc;InsightSlangProject *result;guint64 epoch,generation,scan_generation;guint applied;gboolean valid,diagnostics,colors_only;} HdlJob;
 static void hdl_text_cell(GtkTreeViewColumn *column,GtkCellRenderer *renderer,GtkTreeModel *model,GtkTreeIter *iter,gpointer field) {
  (void)column;gchar *value=NULL,*path=NULL;gulong line=0;gint which=GPOINTER_TO_INT(field);gtk_tree_model_get(model,iter,which,&value,USAGE_PATH,&path,USAGE_LINE,&line,-1);
  const gchar *text=value ? value:"";if(wb.usage_mode==12) {if(which==USAGE_SYMBOL) text=insight_tr(text);else if(!path && !line) text=insight_tr("Project diagnostic");}g_object_set(renderer,"text",text,NULL);g_free(value);g_free(path);
@@ -1935,7 +1935,7 @@ static void hdl_position_cell(GtkTreeViewColumn *column,GtkCellRenderer *rendere
  (void)column;gulong value=0;gtk_tree_model_get(model,iter,GPOINTER_TO_INT(field),&value,-1);gchar *text=!value && wb.usage_mode==12 ? g_strdup("—"):g_strdup_printf("%lu",value);g_object_set(renderer,"text",text,NULL);g_free(text);
 }
 static void hdl_job_free(gpointer data) {
- HdlJob *j=data;if(j->result) {retire_index(j->result->index);j->result->index=NULL;insight_slang_project_free(j->result);}g_ptr_array_unref(j->paths);g_ptr_array_unref(j->rows);g_array_unref(j->colors);g_free(j->paint_path);g_hash_table_unref(j->buffers);g_free(j->service);g_free(j->root);g_free(j->cache);g_free(j->project);g_free(j->query);g_free(j);
+ HdlJob *j=data;if(j->result) {retire_index(j->result->index);j->result->index=NULL;insight_slang_project_free(j->result);}g_ptr_array_unref(j->paths);g_ptr_array_unref(j->rows);g_array_unref(j->colors);g_free(j->paint_path);g_hash_table_unref(j->buffers);g_free(j->service);g_free(j->vivado);g_free(j->root);g_free(j->cache);g_free(j->project);g_free(j->query);g_free(j);
 }
 /* Category zero deliberately leaves unsupported facts to the lexer. */
 static guint hdl_color_role(const InsightSymbol *row)
@@ -1976,7 +1976,7 @@ static void hdl_job_run(GTask *task,gpointer source,gpointer data,GCancellable *
  g_hash_table_iter_init(&iter,j->buffers);
  while(j->valid && g_hash_table_iter_next(&iter,NULL,&value))
   j->valid=g_utf8_validate(value,-1,NULL);
- if(j->valid) j->result=insight_slang_project(j->service,j->paths,j->buffers,j->root,j->cache,cancel);
+ if(j->valid) j->result=insight_slang_project_configured(j->service,j->paths,j->buffers,j->root,j->cache,j->vivado,cancel);
  const gchar *text=j->paint_path ? g_hash_table_lookup(j->buffers,j->paint_path):NULL;
  GArray *lines=g_array_new(FALSE,FALSE,sizeof(guint));
  if(text) {
@@ -2085,7 +2085,7 @@ static void hdl_job_done(GObject *source,GAsyncResult *result,gpointer data) {
  if(ok) wb.usage_idle=g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,hdl_results_apply,g_object_ref(task),g_object_unref);else set_usage_status("HDL semantic index unavailable or exceeds its limits");
 }
 static HdlJob *hdl_job_new(const gchar *query,gboolean diagnostics,gboolean colors_only) {
- HdlJob *j=g_new0(HdlJob,1);j->paths=insight_workbench_source_paths(insight_slang_source,257);j->rows=g_ptr_array_new();j->colors=g_array_new(FALSE,FALSE,sizeof(HdlSpan));j->buffers=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);j->service=insight_completion_slang_service();j->query=g_strdup(query);j->project=g_strdup(app->project ? app->project->file_name:NULL);j->root=wb.root && app->project ? utils_get_utf8_from_locale(wb.root):NULL;j->cache=app->project && wb.cache_path ? g_strconcat(wb.cache_path,".hdl",NULL):NULL;j->valid=TRUE;j->diagnostics=diagnostics;j->colors_only=colors_only;j->epoch=workbench_epoch;j->generation=colors_only ? hdl_color_revision:wb.usage_generation;j->scan_generation=wb.scan_generation;
+ HdlJob *j=g_new0(HdlJob,1);j->paths=insight_workbench_source_paths(insight_slang_source,257);j->rows=g_ptr_array_new();j->colors=g_array_new(FALSE,FALSE,sizeof(HdlSpan));j->buffers=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);j->service=insight_completion_slang_service();j->query=g_strdup(query);j->project=g_strdup(app->project ? app->project->file_name:NULL);j->vivado=insight_slang_vivado_config(j->project);j->root=wb.root && app->project ? utils_get_utf8_from_locale(wb.root):NULL;j->cache=app->project && wb.cache_path ? g_strconcat(wb.cache_path,".hdl",NULL):NULL;j->valid=TRUE;j->diagnostics=diagnostics;j->colors_only=colors_only;j->epoch=workbench_epoch;j->generation=colors_only ? hdl_color_revision:wb.usage_generation;j->scan_generation=wb.scan_generation;
  GeanyDocument *active=document_get_current();
  if(DOC_VALID(active) && insight_slang_source(active->file_name)) {j->paint_path=g_strdup(active->file_name);j->paint_doc=active->id;}
  return j;
@@ -4461,7 +4461,7 @@ static void wave_jump_run(GTask *task,gpointer object,gpointer data,GCancellable
  WaveJump *jump=data;
  HdlJob *snapshot=jump->snapshot;
  gboolean ok=snapshot->valid && insight_slang_wave_definition(snapshot->service,jump->name,
-     snapshot->paths,snapshot->buffers,cancel,&jump->path,&jump->line,&jump->column);
+     snapshot->paths,snapshot->buffers,snapshot->vivado,cancel,&jump->path,&jump->line,&jump->column);
  g_task_return_boolean(task,ok);
 }
 static void wave_jump_done(GObject *object,GAsyncResult *result,gpointer data) {
