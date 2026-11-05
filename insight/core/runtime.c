@@ -457,29 +457,53 @@ InsightLuaDebug *insight_lua_debug_new(const char *source,size_t length,char *er
  return debug;
 }
 
-int insight_lua_debug_resume(InsightLuaDebug *debug,InsightLuaStep mode,
- const unsigned long *breaks,size_t count,unsigned long *line,char *error,size_t capacity) {
- if(line) *line=0;
- if(error && capacity) error[0]=0;
- if(!debug || debug->finished || count>DEBUG_BREAKPOINT_LIMIT || (count && !breaks)) return -1;
- debug->mode=mode;
- debug->target_depth=debug->depth;
- debug->line=0;
- debug->runtime.ticks=0;
- debug->break_count=count;
- if(count) memcpy(debug->breaks,breaks,count*sizeof *breaks);
- int results=0;
- int status=lua_resume(debug->thread,debug->runtime.state,0,&results);
- if(status==LUA_YIELD && debug->line) {
-  if(line) *line=debug->line;
-  return 1;
- }
- debug->finished=1;
- if(status!=LUA_OK && error && capacity) {
-  const char *message=status==LUA_YIELD ? NULL : lua_tostring(debug->thread,-1);
-  snprintf(error,capacity,"%s",message ? message:"Lua debugger execution failed");
- }
- return status==LUA_OK ? 0 : -1;
+/* Resume with a borrowed, read-only host for this VM call only. */
+/* Продолжает выполнение с контекстом только для чтения на время вызова VM. */
+int insight_lua_debug_resume(InsightLuaDebug *debug, InsightLuaStep mode,
+    const unsigned long *breakpoints, size_t breakpoint_count, const InsightHost *host,
+    unsigned long *line, char *error, size_t error_capacity)
+{
+    if (line)
+        *line = 0;
+    if (error && error_capacity)
+        error[0] = 0;
+    if (!debug || debug->finished || breakpoint_count > DEBUG_BREAKPOINT_LIMIT ||
+        (breakpoint_count && !breakpoints))
+        return -1;
+
+    debug->mode = mode;
+    debug->target_depth = debug->depth;
+    debug->line = 0;
+    debug->runtime.ticks = 0;
+    debug->break_count = breakpoint_count;
+    if (breakpoint_count)
+        memcpy(debug->breaks, breakpoints, breakpoint_count * sizeof *breakpoints);
+
+    InsightHost read_only_host;
+    if (host)
+    {
+        read_only_host = *host;
+        read_only_host.read_only = 1;
+        debug->runtime.host = &read_only_host;
+    }
+    int results = 0;
+    int status = lua_resume(debug->thread, debug->runtime.state, 0, &results);
+    debug->runtime.host = NULL;
+
+    if (status == LUA_YIELD && debug->line)
+    {
+        if (line)
+            *line = debug->line;
+        return 1;
+    }
+
+    debug->finished = 1;
+    if (status != LUA_OK && error && error_capacity)
+    {
+        const char *message = status == LUA_YIELD ? NULL : lua_tostring(debug->thread, -1);
+        snprintf(error, error_capacity, "%s", message ? message : "Lua debugger execution failed");
+    }
+    return status == LUA_OK ? 0 : -1;
 }
 
 static void debug_append(char **output,size_t *capacity,const char *format,...) {

@@ -45,9 +45,9 @@ typedef enum {
 InsightLuaDebug *insight_lua_debug_new(const char *,size_t,char *,size_t);
 void insight_lua_debug_free(InsightLuaDebug *);
 /* Resume returns 1 when paused, 0 on completion, and -1 on failure.
- * Up to 128 one-based breakpoint lines. Debug sessions have no editor host. */
+ * Up to 128 one-based breakpoint lines. The optional host is borrowed and read-only. */
 int insight_lua_debug_resume(InsightLuaDebug *,InsightLuaStep,const unsigned long *,size_t,
- unsigned long *,char *,size_t);
+ const InsightHost *,unsigned long *,char *,size_t);
 void insight_lua_debug_inspect(InsightLuaDebug *,char *,size_t);
 typedef struct InsightSession InsightSession;
 InsightSession *insight_session_new(void);

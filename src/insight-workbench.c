@@ -4956,7 +4956,15 @@ typedef struct {
     GtkWidget *go_to_source;
     GtkTextTag *current_line_tag;
     gchar *source_snapshot;
+    gchar *source_filename;
+    gchar *selection_snapshot;
+    gchar *project_filename;
+    gchar *line_buffer;
+    GArray *line_starts;
     gsize source_length;
+    unsigned long position;
+    unsigned long selection_start;
+    unsigned long selection_end;
     guint document_id;
     unsigned long paused_line;
 } LuaDebugWindow;
@@ -4968,6 +4976,11 @@ static void debug_window_free(gpointer data)
     LuaDebugWindow *view = data;
     insight_lua_debug_free(view->engine);
     g_free(view->source_snapshot);
+    g_free(view->source_filename);
+    g_free(view->selection_snapshot);
+    g_free(view->project_filename);
+    g_free(view->line_buffer);
+    g_array_unref(view->line_starts);
     g_free(view);
 }
 
@@ -5001,6 +5014,80 @@ static gboolean debug_read_breakpoints(GtkEntry *entry, unsigned long *lines, gs
     return valid;
 }
 
+/* Return the exact text supplied to the debug VM. */
+/* Возвращает точный текст, переданный виртуальной машине отладчика. */
+static const char *debug_snapshot_text(void *context)
+{
+    LuaDebugWindow *view = context;
+    return view->source_snapshot;
+}
+
+/* Return the selection captured before execution. */
+/* Возвращает выделение, сохранённое перед выполнением. */
+static const char *debug_snapshot_selection(void *context)
+{
+    LuaDebugWindow *view = context;
+    return view->selection_snapshot;
+}
+
+/* Return the original buffer name, which may be absent. */
+/* Возвращает имя исходного буфера, если оно было задано. */
+static const char *debug_snapshot_filename(void *context)
+{
+    LuaDebugWindow *view = context;
+    return view->source_filename;
+}
+
+/* Return the original editor caret as a byte offset. */
+/* Возвращает исходную позицию курсора редактора в байтах. */
+static unsigned long debug_snapshot_position(void *context)
+{
+    LuaDebugWindow *view = context;
+    return view->position;
+}
+
+/* Return the byte range of the original selection. */
+/* Возвращает диапазон исходного выделения в байтах. */
+static int debug_snapshot_selection_range(void *context, unsigned long *start, unsigned long *end)
+{
+    LuaDebugWindow *view = context;
+    *start = view->selection_start;
+    *end = view->selection_end;
+    return 1;
+}
+
+/* Return the number of lines in the captured buffer. */
+/* Возвращает число строк сохранённого буфера. */
+static unsigned long debug_snapshot_line_count(void *context)
+{
+    LuaDebugWindow *view = context;
+    return view->line_starts->len;
+}
+
+/* Return a captured line with its original line ending. */
+/* Возвращает строку снимка с исходным переводом строки. */
+static const char *debug_snapshot_line_text(void *context, unsigned long line)
+{
+    LuaDebugWindow *view = context;
+    if (line == 0 || line > view->line_starts->len)
+        return NULL;
+
+    gsize start = g_array_index(view->line_starts, gsize, line - 1);
+    gsize end = line < view->line_starts->len ?
+        g_array_index(view->line_starts, gsize, line) : view->source_length;
+    g_free(view->line_buffer);
+    view->line_buffer = g_strndup(view->source_snapshot + start, end - start);
+    return view->line_buffer;
+}
+
+static const InsightEditorAPI debug_snapshot_api = {
+    .position = debug_snapshot_position,
+    .filename = debug_snapshot_filename,
+    .selection_range = debug_snapshot_selection_range,
+    .line_count = debug_snapshot_line_count,
+    .line_text = debug_snapshot_line_text
+};
+
 /* Resume the VM and update the highlighted source line and stack. */
 /* Продолжает выполнение и обновляет подсветку строки и стек. */
 static void debug_window_step(LuaDebugWindow *view, InsightLuaStep mode)
@@ -5014,9 +5101,20 @@ static void debug_window_step(LuaDebugWindow *view, InsightLuaStep mode)
         return;
     }
 
+    const gchar *project_filename = app->project ? app->project->file_name : NULL;
+    const InsightIndex *index = wb.alive && !g_strcmp0(view->project_filename, project_filename) ?
+        wb.index : NULL;
+    InsightHost host = {
+        .context = view,
+        .text = debug_snapshot_text,
+        .selection = debug_snapshot_selection,
+        .index = index,
+        .api = &debug_snapshot_api,
+        .read_only = 1
+    };
     gchar error[1024];
     gint result = insight_lua_debug_resume(view->engine, mode, breakpoints, breakpoint_count,
-                                          &line, error, sizeof error);
+                                          &host, &line, error, sizeof error);
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source_view));
     GtkTextIter first, last;
     gtk_text_buffer_get_bounds(buffer, &first, &last);
@@ -5199,6 +5297,20 @@ static void debug_current_lua(GtkMenuItem *item, gpointer data)
     view->document_id = document->id;
     view->source_snapshot = source;
     view->source_length = (gsize)length;
+    view->source_filename = g_strdup(document->file_name);
+    view->project_filename = g_strdup(app->project ? app->project->file_name : NULL);
+    ScintillaObject *sci = document->editor->sci;
+    view->selection_snapshot = sci_get_selection_contents(sci);
+    view->position = (unsigned long)sci_get_current_position(sci);
+    view->selection_start = (unsigned long)sci_get_selection_start(sci);
+    view->selection_end = (unsigned long)sci_get_selection_end(sci);
+    view->line_starts = g_array_new(FALSE, FALSE, sizeof(gsize));
+    gint line_count = sci_get_line_count(sci);
+    for (gint line = 0; line < line_count; line++)
+    {
+        gsize offset = (gsize)sci_get_position_from_line(sci, line);
+        g_array_append_val(view->line_starts, offset);
+    }
     view->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(view->window), "Lua Source Debugger");
     gtk_window_set_default_size(GTK_WINDOW(view->window), 940, 520);

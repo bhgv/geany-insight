@@ -180,8 +180,6 @@ shows Lua stack frames and locals. Use **Step Into**, **Step Over**, **Step Out*
 and **Continue**. Enter breakpoint line numbers separated by spaces or commas.
 **Restart** starts the same snapshot again and keeps your breakpoints. **Go to Source** opens the paused line in the original editor buffer if it still matches the snapshot. Close the window to end the session.
 
-The snapshot runs with the editor's restricted Lua libraries. It has no live
-editor or project host, so commands that require editor access must be tested
-with the normal script runner. Execution is bounded by the Lua memory budget
+The snapshot runs with the editor's restricted Lua libraries. Read-only editor calls expose the captured text, selection, filename, caret and lines. The project API reads the current index while the original project is active. To test commands that edit, save or open documents, use the normal script runner. Execution is bounded by the Lua memory budget
 and an instruction limit per resume. A callback invoked through a non-yieldable
 Lua C library call runs until execution returns to a yieldable Lua frame.
