@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "insight-waveforms.h"
 #include <gio/gio.h>
+#include <glib/gstdio.h>
 #include <string.h>
 
 #define VCD_BYTES (32u * 1024u * 1024u)
@@ -865,32 +866,44 @@ static void load_free(gpointer data) {
  g_free(load->session_path);
  g_free(load);
 }
-static void load_capture(GTask *task, gpointer object, gpointer data, GCancellable *cancel) {
- (void)object; (void)cancel;
- Load *load = data;
- GError *error = NULL;
- GFile *file = g_file_new_for_path(load->path);
- GFileInputStream *stream = g_file_read(file, cancel, &error);
+/* Read and parse a bounded VCD file for both the viewer and simulation. */
+/* Читает VCD с ограничением размера для просмотра и симуляции. */
+static Capture *read_capture_file(const gchar *path, GCancellable *cancel, GError **error)
+{
+ GFile *file = g_file_new_for_path(path);
+ GFileInputStream *stream = g_file_read(file, cancel, error);
  g_object_unref(file);
  Capture *capture = NULL;
  if (stream) {
   GByteArray *bytes = g_byte_array_new();
   guint8 buffer[16384];
   gssize size;
-  while ((size = g_input_stream_read(G_INPUT_STREAM(stream), buffer, sizeof buffer, cancel, &error)) > 0) {
+  while ((size = g_input_stream_read(G_INPUT_STREAM(stream), buffer, sizeof buffer, cancel, error)) > 0) {
    if (bytes->len + (gsize)size > VCD_BYTES) break;
    g_byte_array_append(bytes, buffer, (guint)size);
   }
   if (size == 0 && bytes->len && !memchr(bytes->data, 0, bytes->len))
-   capture = parse_capture((const gchar *)bytes->data, bytes->len, &error);
-  else if (!error)
-   g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "VCD must be text, 1 byte to 32 MiB");
+   capture = parse_capture((const gchar *)bytes->data, bytes->len, error);
+  else if (!*error)
+   g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "VCD must be text, 1 byte to 32 MiB");
   g_byte_array_unref(bytes);
   g_object_unref(stream);
  }
- if (capture) g_task_return_pointer(task, capture, capture_free);
- else g_task_return_error(task, error);
+ return capture;
 }
+
+static void load_capture(GTask *task, gpointer object, gpointer data, GCancellable *cancel)
+{
+    (void)object;
+    Load *load = data;
+    GError *error = NULL;
+    Capture *capture = read_capture_file(load->path, cancel, &error);
+    if (capture)
+        g_task_return_pointer(task, capture, capture_free);
+    else
+        g_task_return_error(task, error);
+}
+
 static void load_done(GObject *object, GAsyncResult *result, gpointer data) {
  (void)object; (void)data;
  GTask *task = G_TASK(result);
@@ -938,4 +951,249 @@ void insight_waveforms_open(GtkWindow *parent, const gchar *session_dir, Insight
  g_task_set_task_data(task, load, load_free);
  g_task_run_in_thread(task, load_capture);
  g_object_unref(task);
+}
+typedef struct {
+    GWeakRef parent;
+    GtkWidget *dialog;
+    gchar *compiler, *runtime, *include_dir;
+    gchar **sources;
+    InsightWaveSource navigate;
+} WaveSimulation;
+
+/* Release the run configuration after the worker and dialog have finished. */
+/* Освобождает параметры запуска после завершения задачи и диалога. */
+static void simulation_free(gpointer data)
+{
+    WaveSimulation *run = data;
+    g_weak_ref_clear(&run->parent);
+    g_clear_object(&run->dialog);
+    g_strfreev(run->sources);
+    g_free(run->compiler);
+    g_free(run->runtime);
+    g_free(run->include_dir);
+    g_free(run);
+}
+
+/* Prefer the simulator installed beside the editor before searching PATH. */
+/* Сначала ищет симулятор рядом с редактором, затем в PATH. */
+static gchar *simulation_tool(const gchar *bin, const gchar *name)
+{
+    gchar *path = g_build_filename(bin, name, NULL);
+    if (g_file_test(path, G_FILE_TEST_IS_EXECUTABLE))
+        return path;
+    g_free(path);
+    return g_find_program_in_path(name);
+}
+
+/* Run one phase in the scratch directory and collect bounded failure details. */
+/* Запускает этап во временной папке и читает ограниченный объём диагностики. */
+static gboolean simulation_process(const gchar *const *argv, const gchar *directory,
+                                   const gchar *bin, GCancellable *cancel, GError **error)
+{
+    if (g_cancellable_set_error_if_cancelled(cancel, error))
+        return FALSE;
+    gchar *log = g_build_filename(directory, "simulation.log", NULL);
+    GSubprocessLauncher *launcher = g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_STDERR_MERGE);
+    g_subprocess_launcher_set_cwd(launcher, directory);
+    g_subprocess_launcher_set_stdout_file_path(launcher, log);
+    const gchar *existing = g_getenv("PATH");
+    gchar *path = g_strconcat(bin, G_SEARCHPATH_SEPARATOR_S, existing ? existing : "", NULL);
+    g_subprocess_launcher_setenv(launcher, "PATH", path, TRUE);
+    g_free(path);
+
+    GSubprocess *process = g_subprocess_launcher_spawnv(launcher, argv, error);
+    g_object_unref(launcher);
+    gboolean ok = process && g_subprocess_wait_check(process, cancel, error);
+    if (process && g_cancellable_is_cancelled(cancel))
+    {
+        g_subprocess_force_exit(process);
+        g_subprocess_wait(process, NULL, NULL);
+    }
+    if (process && !ok && !g_cancellable_is_cancelled(cancel))
+    {
+        GFile *file = g_file_new_for_path(log);
+        GFileInputStream *stream = g_file_read(file, NULL, NULL);
+        if (stream)
+        {
+            gchar bytes[4096];
+            gssize count = g_input_stream_read(G_INPUT_STREAM(stream), bytes, sizeof bytes, NULL, NULL);
+            if (count > 0)
+            {
+                gchar *message = g_utf8_make_valid(bytes, count);
+                g_prefix_error(error, "%s\n", message);
+                g_free(message);
+            }
+            g_object_unref(stream);
+        }
+        g_object_unref(file);
+    }
+    g_clear_object(&process);
+    g_free(log);
+    return ok;
+}
+
+/* Select the single VCD produced by the testbench in its scratch directory. */
+/* Выбирает единственный VCD, созданный тестбенчем во временной папке. */
+static gchar *simulation_find_vcd(const gchar *directory, GError **error)
+{
+    GDir *dir = g_dir_open(directory, 0, error);
+    if (!dir)
+        return NULL;
+    gchar *path = NULL;
+    const gchar *name;
+    while ((name = g_dir_read_name(dir)))
+    {
+        const gchar *extension = strrchr(name, '.');
+        if (!extension || g_ascii_strcasecmp(extension, ".vcd"))
+            continue;
+        if (path)
+        {
+            g_clear_pointer(&path, g_free);
+            g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                                "The testbench produced more than one VCD file.");
+            break;
+        }
+        path = g_build_filename(directory, name, NULL);
+    }
+    g_dir_close(dir);
+    if (!path && !*error)
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
+                            "The testbench produced no VCD. Add $dumpfile and $dumpvars.");
+    return path;
+}
+
+/* Compile and run the selected sources off the GTK thread. */
+/* Компилирует и запускает выбранные исходники вне потока GTK. */
+static void simulation_worker(GTask *task, gpointer object, gpointer data, GCancellable *cancel)
+{
+    (void)object;
+    WaveSimulation *run = data;
+    GError *error = NULL;
+    gchar *directory = g_dir_make_tmp("geany-verilog-XXXXXX", &error);
+    Capture *capture = NULL;
+    if (directory)
+    {
+        gchar *bin = g_path_get_dirname(run->compiler);
+        GPtrArray *command = g_ptr_array_new();
+        const gchar *options[] = {run->compiler, "-g2012", "-I", run->include_dir, "-o", "simulation.vvp"};
+        for (guint i = 0; i < G_N_ELEMENTS(options); i++)
+            g_ptr_array_add(command, (gpointer)options[i]);
+        for (guint i = 0; run->sources[i]; i++)
+            g_ptr_array_add(command, run->sources[i]);
+        g_ptr_array_add(command, NULL);
+        const gchar *execute[] = {run->runtime, "simulation.vvp", NULL};
+        if (simulation_process((const gchar *const *)command->pdata, directory, bin, cancel, &error) &&
+            simulation_process(execute, directory, bin, cancel, &error))
+        {
+            gchar *vcd = simulation_find_vcd(directory, &error);
+            if (vcd)
+                capture = read_capture_file(vcd, cancel, &error);
+            g_free(vcd);
+        }
+        g_ptr_array_unref(command);
+        g_free(bin);
+
+        GDir *dir = g_dir_open(directory, 0, NULL);
+        if (dir)
+        {
+            const gchar *name;
+            while ((name = g_dir_read_name(dir)))
+            {
+                gchar *path = g_build_filename(directory, name, NULL);
+                g_unlink(path);
+                g_free(path);
+            }
+            g_dir_close(dir);
+        }
+        g_rmdir(directory);
+        g_free(directory);
+    }
+    if (capture)
+        g_task_return_pointer(task, capture, capture_free);
+    else
+        g_task_return_error(task, error);
+}
+
+/* Close the progress dialog and show either the capture or the diagnostic. */
+/* Закрывает диалог выполнения и показывает диаграмму либо диагностику. */
+static void simulation_done(GObject *object, GAsyncResult *result, gpointer data)
+{
+    (void)object;
+    (void)data;
+    GTask *task = G_TASK(result);
+    WaveSimulation *run = g_task_get_task_data(task);
+    GtkWindow *parent = g_weak_ref_get(&run->parent);
+    GError *error = NULL;
+    Capture *capture = g_task_propagate_pointer(task, &error);
+    gtk_widget_destroy(run->dialog);
+    if (capture && parent)
+        show_capture(parent, capture, NULL, run->navigate);
+    else if (capture)
+        capture_free(capture);
+    else if (parent && error && !g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+    {
+        GtkWidget *dialog = gtk_message_dialog_new(parent, GTK_DIALOG_DESTROY_WITH_PARENT,
+            GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE, "%s", error->message);
+        g_signal_connect_swapped(dialog, "response", G_CALLBACK(gtk_widget_destroy), dialog);
+        gtk_widget_show(dialog);
+    }
+    g_clear_error(&error);
+    g_clear_object(&parent);
+}
+
+/* Stop a running testbench when the user closes the progress dialog. */
+/* Останавливает тестбенч при закрытии диалога выполнения. */
+static void simulation_cancel(GtkDialog *dialog, gint response, gpointer data)
+{
+    (void)response;
+    gtk_widget_hide(GTK_WIDGET(dialog));
+    g_cancellable_cancel(data);
+}
+
+/* Launch Icarus and open the resulting VCD on completion. */
+/* Запускает Icarus и открывает полученный VCD после завершения. */
+void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar *include_dir,
+                                const gchar *const *sources, InsightWaveSource navigate)
+{
+#ifdef G_OS_WIN32
+    const gchar *compiler_name = "iverilog.exe", *runtime_name = "vvp.exe";
+#else
+    const gchar *compiler_name = "iverilog", *runtime_name = "vvp";
+#endif
+    gchar *compiler = simulation_tool(bin, compiler_name);
+    gchar *runtime = simulation_tool(bin, runtime_name);
+    if (!compiler || !runtime)
+    {
+        GtkWidget *dialog = gtk_message_dialog_new(parent, GTK_DIALOG_DESTROY_WITH_PARENT,
+            GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE, "Icarus Verilog is unavailable. Install the editor with its simulator.");
+        g_signal_connect_swapped(dialog, "response", G_CALLBACK(gtk_widget_destroy), dialog);
+        gtk_widget_show(dialog);
+        g_free(compiler);
+        g_free(runtime);
+        return;
+    }
+
+    WaveSimulation *run = g_new0(WaveSimulation, 1);
+    g_weak_ref_init(&run->parent, parent);
+    run->compiler = compiler;
+    run->runtime = runtime;
+    run->include_dir = g_strdup(include_dir);
+    run->sources = g_strdupv((gchar **)sources);
+    run->navigate = navigate;
+    run->dialog = gtk_dialog_new_with_buttons("Verilog Simulation", parent,
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+        "_Cancel", GTK_RESPONSE_CANCEL, NULL);
+    g_object_ref_sink(run->dialog);
+    GtkWidget *label = gtk_label_new("Compiling and running the Verilog testbench…");
+    gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(run->dialog))), label, FALSE, FALSE, 12);
+
+    GCancellable *cancel = g_cancellable_new();
+    g_signal_connect_object(run->dialog, "response", G_CALLBACK(simulation_cancel), cancel, 0);
+    g_signal_connect_object(run->dialog, "destroy", G_CALLBACK(g_cancellable_cancel), cancel, G_CONNECT_SWAPPED);
+    GTask *task = g_task_new(NULL, cancel, simulation_done, NULL);
+    g_task_set_task_data(task, run, simulation_free);
+    gtk_widget_show_all(run->dialog);
+    g_task_run_in_thread(task, simulation_worker);
+    g_object_unref(task);
+    g_object_unref(cancel);
 }

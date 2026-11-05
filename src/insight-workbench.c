@@ -4506,6 +4506,77 @@ static void waveforms_menu(GtkMenuItem *item,gpointer data) {
  (void)item;
  native_waveforms(data);
 }
+/* Select saved HDL source files and run them with the installed simulator. */
+/* Выбирает сохранённые исходники HDL и запускает установленный симулятор. */
+static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
+{
+    (void)item;
+    (void)data;
+    GtkWindow *parent = GTK_WINDOW(main_widgets.window);
+    GtkWidget *chooser = gtk_file_chooser_dialog_new("Run Verilog Testbench", parent,
+        GTK_FILE_CHOOSER_ACTION_OPEN, "_Cancel", GTK_RESPONSE_CANCEL, "_Run", GTK_RESPONSE_ACCEPT, NULL);
+    GtkFileChooser *files = GTK_FILE_CHOOSER(chooser);
+    gtk_file_chooser_set_select_multiple(files, TRUE);
+    GtkFileFilter *filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "Verilog and SystemVerilog sources");
+    gtk_file_filter_add_pattern(filter, "*.[vV]");
+    gtk_file_filter_add_pattern(filter, "*.[sS][vV]");
+    gtk_file_chooser_add_filter(files, filter);
+
+    gchar *root = app->project ? project_get_base_path() : NULL;
+    if (root)
+        gtk_file_chooser_set_current_folder(files, root);
+    GeanyDocument *current = document_get_current();
+    if (DOC_VALID(current) && current->file_name)
+    {
+        const gchar *extension = strrchr(current->file_name, '.');
+        if (extension && (!g_ascii_strcasecmp(extension, ".v") || !g_ascii_strcasecmp(extension, ".sv")))
+        {
+            gchar *local = utils_get_locale_from_utf8(current->file_name);
+            if (local)
+                gtk_file_chooser_select_filename(files, local);
+            g_free(local);
+        }
+    }
+
+    GSList *selected = gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT ?
+        gtk_file_chooser_get_filenames(files) : NULL;
+    gtk_widget_destroy(chooser);
+    if (selected)
+    {
+        GPtrArray *sources = g_ptr_array_new();
+        gboolean saved = TRUE;
+        for (GSList *node = selected; node; node = node->next)
+        {
+            gchar *utf8 = utils_get_utf8_from_locale(node->data);
+            GeanyDocument *document = utf8 ? document_find_by_filename(utf8) : NULL;
+            if (DOC_VALID(document) && document->changed)
+                saved = FALSE;
+            g_free(utf8);
+            g_ptr_array_add(sources, node->data);
+        }
+        g_ptr_array_add(sources, NULL);
+        if (saved)
+        {
+            if (!root)
+                root = g_path_get_dirname(selected->data);
+            gchar *share = g_path_get_dirname(app->datadir);
+            gchar *prefix = g_path_get_dirname(share);
+            gchar *bin = g_build_filename(prefix, "bin", NULL);
+            insight_waveforms_simulate(parent, bin, root, (const gchar *const *)sources->pdata,
+                                        waveform_source);
+            g_free(bin);
+            g_free(prefix);
+            g_free(share);
+        }
+        else
+            ui_set_statusbar(TRUE, "Save the selected HDL files before running simulation.");
+        g_ptr_array_unref(sources);
+        g_slist_free_full(selected, g_free);
+    }
+    g_free(root);
+}
+
 static const InsightEditorAPI native_host_api={.position=native_get_position,.goto_line=native_go_line,.message=native_message,.insert=native_insert,.replace_range=native_replace_range,.line_text=native_line_text,.line_count=native_line_count,.set_selection=native_set_selection,.selection_range=native_selection_range,.filename=native_filename,.save_file=native_save_file,.open_file=native_open_file,.open_waveforms=native_waveforms};
 static void execute_native(const char *id,const char *source,gsize length) {
  if(wb.lua_running || insight_session_is_running(insight_extensions_session(wb.extensions))) { ui_set_statusbar(TRUE,"Lua command already running"); return; }
@@ -8887,6 +8958,10 @@ static void create_native_lua(void) {
  gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),waves);
  g_signal_connect(waves,"activate",G_CALLBACK(waveforms_menu),NULL);
  gtk_widget_show(waves);
+ GtkWidget *simulation = gtk_menu_item_new_with_label(insight_tr("Run Verilog Testbench…"));
+ gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu), simulation);
+ g_signal_connect(simulation, "activate", G_CALLBACK(waveform_run_simulation), NULL);
+ gtk_widget_show(simulation);
  GtkWidget *syntax=gtk_menu_item_new_with_label(insight_tr("Check Lua/Python Syntax"));
  g_signal_connect(syntax,"activate",G_CALLBACK(script_check_start),NULL);
  gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu),syntax);
