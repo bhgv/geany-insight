@@ -4813,6 +4813,138 @@ static void native_project_close(GObject *object,gpointer data) {
  /* Project databases survive project-close and application restart. */
  refresh_index(); browser_filter(NULL,NULL); files_filter(NULL,NULL); tree_refresh(); categories_filter(NULL,NULL); file_types_refresh(); insight_workbench_refresh();
 }
+typedef struct {
+ guint document;
+ guint64 epoch;
+ gboolean python;
+ gchar *text, *interpreter, *message;
+ guint line, column;
+} ScriptCheck;
+static gboolean script_check_pending;
+static void script_check_free(gpointer data) {
+ ScriptCheck *check=data;
+ g_free(check->text);
+ g_free(check->interpreter);
+ g_free(check->message);
+ g_free(check);
+}
+static guint script_check_position(const gchar *text) {
+ guint64 position=0;
+ if(!text || !g_ascii_string_to_unsigned(text,10,1,G_MAXINT,&position,NULL)) return 0;
+ return (guint)position;
+}
+static void script_check_run(GTask *task,gpointer object,gpointer data,GCancellable *cancel) {
+ (void)object;
+ ScriptCheck *check=data;
+ if(check->python) {
+  static const gchar code[]=
+   "import sys\n"
+   "try:\n"
+   "    compile(sys.stdin.buffer.read().decode('utf-8'), '<buffer>', 'exec', dont_inherit=True)\n"
+   "except SyntaxError as error:\n"
+   "    fields = (str(error.lineno or 0), str(error.offset or 0), error.msg.replace(chr(10), ' '))\n"
+   "    sys.stdout.buffer.write('\\t'.join(fields).encode('utf-8'))\n";
+  GError *error=NULL;
+  GSubprocess *process=g_subprocess_new(G_SUBPROCESS_FLAGS_STDIN_PIPE|G_SUBPROCESS_FLAGS_STDOUT_PIPE|G_SUBPROCESS_FLAGS_STDERR_PIPE,
+      &error,check->interpreter,"-I","-S","-c",code,NULL);
+  gchar *output=NULL,*diagnostic=NULL;
+  gboolean ok=process && g_subprocess_communicate_utf8(process,check->text,cancel,&output,&diagnostic,&error);
+  if(ok) ok=g_subprocess_get_successful(process);
+  if(ok && output && *output) {
+   gchar **fields=g_strsplit(g_strchomp(output),"\t",3);
+   if(g_strv_length(fields)==3) {
+    check->line=script_check_position(fields[0]);
+    check->column=script_check_position(fields[1]);
+    check->message=g_strdup(fields[2]);
+   } else check->message=g_strdup("Unexpected Python compiler response");
+   g_strfreev(fields);
+  } else if(!ok) check->message=g_strdup(error ? error->message :
+      diagnostic && *diagnostic ? g_strstrip(diagnostic) : "Python compiler failed");
+  g_free(output);
+  g_free(diagnostic);
+  g_clear_error(&error);
+  g_clear_object(&process);
+ } else {
+  gchar error[1024];
+  gint status=insight_lua_check(check->text,strlen(check->text),error,sizeof error);
+  if(status) {
+   gchar *position=g_str_has_prefix(error,"buffer:") ? error+7 : NULL;
+   gchar *separator=position ? strchr(position,':') : NULL;
+   if(separator) {
+    *separator='\0';
+    check->line=script_check_position(position);
+    check->message=g_strdup(g_strstrip(separator+1));
+   } else check->message=g_strdup(*error ? error : "Lua compiler could not be initialized");
+  }
+ }
+ g_task_return_boolean(task,TRUE);
+}
+static void script_check_done(GObject *object,GAsyncResult *result,gpointer data) {
+ (void)object;(void)data;
+ GTask *task=G_TASK(result);
+ ScriptCheck *check=g_task_get_task_data(task);
+ script_check_pending=FALSE;
+ if(!wb.alive || check->epoch!=workbench_epoch || !g_task_propagate_boolean(task,NULL)) return;
+ GeanyDocument *doc=document_find_by_id(check->document);
+ if(!DOC_VALID(doc)) return;
+ gint length=sci_get_length(doc->editor->sci);
+ if((gsize)length!=strlen(check->text)) return;
+ gchar *current=sci_get_contents(doc->editor->sci,length+1);
+ gboolean unchanged=!memcmp(current,check->text,length);
+ g_free(current);
+ if(!unchanged) return;
+ const gchar *language=check->python ? "Python" : "Lua";
+ if(!check->message) ui_set_statusbar(TRUE,"%s syntax check passed",language);
+ else {
+  gint line=check->line && check->line<=(guint)sci_get_line_count(doc->editor->sci) ? (gint)check->line : -1;
+  if(line>0 && check->column)
+   msgwin_msg_add(COLOR_RED,line,doc,"%s:%u:%u: %s",language,check->line,check->column,check->message);
+  else if(line>0) msgwin_msg_add(COLOR_RED,line,doc,"%s:%u: %s",language,check->line,check->message);
+  else msgwin_msg_add(COLOR_RED,-1,NULL,"%s: %s",language,check->message);
+  msgwin_switch_tab(MSG_MESSAGE,TRUE);
+ }
+}
+static void script_check_start(GtkMenuItem *item,gpointer data) {
+ (void)item;(void)data;
+ GeanyDocument *doc=document_get_current();
+ if(!DOC_VALID(doc) || !doc->file_type) return;
+ if(script_check_pending) {ui_set_statusbar(TRUE,"Syntax check already running");return;}
+ gboolean python=python_language(doc->file_type);
+ if(!python && doc->file_type->lang!=TM_PARSER_LUA) {
+  ui_set_statusbar(TRUE,"Open a Lua or Python file first");
+  return;
+ }
+ gint length=sci_get_length(doc->editor->sci);
+ if(length>2*1024*1024) {
+  ui_set_statusbar(TRUE,"Syntax check supports buffers up to 2 MiB");
+  return;
+ }
+ ScriptCheck *check=g_new0(ScriptCheck,1);
+ check->document=doc->id;
+ check->epoch=workbench_epoch;
+ check->python=python;
+ check->text=sci_get_contents(doc->editor->sci,length+1);
+ if(memchr(check->text,0,length) || !g_utf8_validate(check->text,length,NULL)) {
+  ui_set_statusbar(TRUE,"Syntax check requires a UTF-8 text buffer");
+  script_check_free(check);
+  return;
+ }
+ if(python) {
+  const gchar *configured=g_getenv("GEANY_INSIGHT_PYTHON");
+  check->interpreter=g_find_program_in_path(configured && *configured ? configured : "python3");
+  if(!check->interpreter && (!configured || !*configured)) check->interpreter=g_find_program_in_path("python");
+  if(!check->interpreter) {
+   ui_set_statusbar(TRUE,"Python 3 not found; set GEANY_INSIGHT_PYTHON to its executable");
+   script_check_free(check);
+   return;
+  }
+ }
+ script_check_pending=TRUE;
+ GTask *task=g_task_new(NULL,NULL,script_check_done,NULL);
+ g_task_set_task_data(task,check,script_check_free);
+ g_task_run_in_thread(task,script_check_run);
+ g_object_unref(task);
+}
 static void create_native_lua(void) {
  gchar *settings=g_build_filename(app->configdir,"insight","lua-extension.conf",NULL);
  wb.extensions=insight_extensions_new(settings); g_free(settings); GError *error=NULL;
@@ -4828,6 +4960,10 @@ static void create_native_lua(void) {
  gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),waves);
  g_signal_connect(waves,"activate",G_CALLBACK(waveforms_menu),NULL);
  gtk_widget_show(waves);
+ GtkWidget *syntax=gtk_menu_item_new_with_label(insight_tr("Check Lua/Python Syntax"));
+ g_signal_connect(syntax,"activate",G_CALLBACK(script_check_start),NULL);
+ gtk_menu_shell_append(GTK_MENU_SHELL(main_widgets.tools_menu),syntax);
+ gtk_widget_show(syntax);
 }
 static void focus_widget_panel(GtkWidget *widget) {
  GtkWidget *owner=gtk_widget_get_toplevel(widget);for(guint i=0;i<wb.host_count;i++) if(wb.hosts[i].window==owner && wb.hosts[i].minimized) panel_restore(i); if(GTK_IS_WINDOW(owner) && owner!=main_widgets.window) { gtk_widget_show(owner); gtk_window_present(GTK_WINDOW(owner)); }

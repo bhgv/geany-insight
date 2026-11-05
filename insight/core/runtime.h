@@ -31,6 +31,8 @@ typedef struct {
 } InsightHost;
 /* Fresh interpreter per invocation. Host edits are immediate, not transactional.
  * Returns 0 on success, 1 on script error, 2 on invalid host/allocation failure. */
+/* Compile text for diagnostics without running it or opening Lua libraries. */
+int insight_lua_check(const char *,size_t,char *,size_t);
 int insight_run(const InsightHost *, const char *, size_t, char *, size_t);
 /* Single-threaded extension session. Successful loads replace the extension;
  * failed loads retain its commands and state. Editor/project access is blocked

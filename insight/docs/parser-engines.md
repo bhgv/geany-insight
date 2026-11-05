@@ -27,7 +27,15 @@ not attributed to the enclosing function; capture initializers are evaluated
 in the enclosing function and retain its call edges. Expression references
 inside deferred bodies remain searchable. See [Clang reference details](clang.md#expression-references-through-the-c-ast).
 
-## Other languages: candidates, not implemented backends
+## Lua and Python compiler diagnostics
+
+**Tools → Check Lua/Python Syntax** checks the current unsaved buffer in a worker.
+Lua uses the bundled interpreter's text compiler. Python uses an isolated Python 3
+process and `compile()`. The check compiles the buffer without executing the
+script or importing project code. Errors appear in Messages and open the relevant
+line. Set `GEANY_INSIGHT_PYTHON` to select the interpreter explicitly.
+
+## Additional semantic backend candidates
 
 Tree-sitter provides a C runtime and incremental syntax trees, including useful
 trees for incomplete code. Its grammars do not by themselves resolve project-wide

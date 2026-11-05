@@ -30,6 +30,21 @@ static void *allocate(void *ud, void *ptr, size_t old, size_t size) {
  if (next) r->used=r->used-old+size;
  return next;
 }
+int insight_lua_check(const char *source,size_t length,char *error,size_t capacity) {
+ if(error && capacity) error[0]=0;
+ if(!source) return 2;
+ Runtime state={0};
+ lua_State *L=lua_newstate(allocate,&state);
+ if(!L) return 2;
+ int status=luaL_loadbufferx(L,source,length,"@buffer","t");
+ if(status && error && capacity) {
+  const char *message=lua_tostring(L,-1);
+  snprintf(error,capacity,"%s",message ? message:"Lua compiler failed");
+ }
+ lua_close(L);
+ return status ? 1 : 0;
+}
+
 static Runtime *runtime(lua_State *L) {
  void *ud; lua_getallocf(L,&ud); return ud;
 }
