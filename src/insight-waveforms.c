@@ -514,6 +514,31 @@ static void refresh_selector(Viewer *viewer) {
  g_free(folded);
 }
 
+/* Select an exact recorded hierarchy and keep the time cursor in place. */
+/* Выбирает точный путь записанного сигнала и сохраняет положение курсора. */
+gboolean insight_waveforms_select_track(GtkWindow *window, const gchar *hierarchy)
+{
+    if (!window || !gtk_widget_get_visible(GTK_WIDGET(window)))
+        return FALSE;
+    Viewer *viewer = g_object_get_data(G_OBJECT(window), "insight-wave-viewer");
+    if (!viewer)
+        return FALSE;
+
+    for (guint i = 0; i < viewer->capture->signals->len; i++)
+    {
+        const Signal *signal = viewer->capture->signals->pdata[i];
+        if (g_strcmp0(signal->name, hierarchy))
+            continue;
+
+        gtk_entry_set_text(GTK_ENTRY(viewer->filter), "");
+        activate_signal(viewer, (gint)i);
+        refresh_selector(viewer);
+        gtk_window_present(window);
+        return TRUE;
+    }
+    return FALSE;
+}
+
 static void filter_changed(GtkSearchEntry *entry, gpointer data) {
  (void)entry;
  refresh_selector(data);
@@ -674,7 +699,7 @@ static void marker_clicked(GtkButton *button, gpointer data) {
 static void source_clicked(GtkButton *button, gpointer data) {
  (void)button;
  Viewer *viewer = data;
- if (viewer->navigate) viewer->navigate(gtk_entry_get_text(GTK_ENTRY(viewer->source)), FALSE);
+ if (viewer->navigate) viewer->navigate(gtk_entry_get_text(GTK_ENTRY(viewer->source)), FALSE, NULL);
 }
 
 typedef struct {
@@ -827,7 +852,7 @@ static void wave_show_signal_map(GtkButton *button, gpointer data)
     if (response == GTK_RESPONSE_REJECT || response == GTK_RESPONSE_OK)
     {
         if (viewer->navigate)
-            viewer->navigate(signal->name, response == GTK_RESPONSE_OK);
+            viewer->navigate(signal->name, response == GTK_RESPONSE_OK, GTK_WINDOW(owner));
         g_object_unref(owner);
         return;
     }

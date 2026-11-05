@@ -4455,6 +4455,7 @@ typedef struct {
     gchar *name, *path;
     guint line, column;
     gboolean show_uses;
+    GWeakRef viewer;
 } WaveJump;
 
 /* Release the waveform lookup and its HDL snapshot. */
@@ -4462,6 +4463,7 @@ typedef struct {
 static void wave_jump_free(gpointer data)
 {
     WaveJump *jump = data;
+    g_weak_ref_clear(&jump->viewer);
     hdl_job_free(jump->snapshot);
     g_free(jump->name);
     g_free(jump->path);
@@ -4487,25 +4489,41 @@ static void wave_jump_run(GTask *task, gpointer object, gpointer data, GCancella
 
 /* Show distinct source occurrences that bind to the selected declaration. */
 /* Показывает уникальные места в исходниках, связанные с выбранным объявлением. */
-static void waveform_show_hdl_uses(const WaveJump *jump)
+/* Enable track navigation only for an instance-specific connection. */
+/* Разрешает переход к дорожке только для связи конкретного экземпляра. */
+static void waveform_use_selected(GtkTreeSelection *selection, gpointer data)
+{
+    GtkTreeModel *model;
+    GtkTreeIter row;
+    gboolean connection = FALSE;
+    gboolean selected = gtk_tree_selection_get_selected(selection, &model, &row);
+    if (selected)
+        gtk_tree_model_get(model, &row, 4, &connection, -1);
+    gtk_dialog_set_response_sensitive(GTK_DIALOG(data), GTK_RESPONSE_ACCEPT, selected);
+    gtk_dialog_set_response_sensitive(GTK_DIALOG(data), GTK_RESPONSE_APPLY, connection);
+}
+
+static void waveform_show_hdl_uses(WaveJump *jump)
 {
     const InsightIndex *index = jump->snapshot->result->index;
-    GtkListStore *rows = gtk_list_store_new(4, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT);
+    GtkListStore *rows = gtk_list_store_new(4, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_BOOLEAN);
     GHashTable *seen = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     gchar *target = g_strdup_printf("%u:%u", jump->line, jump->column);
 
     for (gsize i = 0; i < insight_index_count(index); i++)
     {
         const InsightSymbol *row = insight_index_at(index, i);
-        if (g_strcmp0(row->kind, "@hdlref") || g_strcmp0(row->scope, jump->path) ||
-            g_strcmp0(row->type, target) || !row->line)
+        gboolean connection = !g_strcmp0(row->kind, "@hdlwire");
+        if (!row->line || (connection ? g_strcmp0(row->scope, jump->name) :
+            (g_strcmp0(row->kind, "@hdlref") || g_strcmp0(row->scope, jump->path) ||
+             g_strcmp0(row->type, target))))
             continue;
 
         gchar *key = g_strdup_printf("%s\n%u\n%s\n%s\n%s", row->path, row->line,
             row->signature, row->inheritance, row->name);
         if (g_hash_table_add(seen, key))
             gtk_list_store_insert_with_values(rows, NULL, -1, 0, row->inheritance,
-                1, row->name, 2, row->path, 3, row->line, -1);
+                1, row->name, 2, row->path, 3, row->line, 4, connection, -1);
         if (g_hash_table_size(seen) == 2000)
             break;
     }
@@ -4514,7 +4532,9 @@ static void waveform_show_hdl_uses(const WaveJump *jump)
 
     GtkWidget *dialog = gtk_dialog_new_with_buttons(_("HDL Uses"), GTK_WINDOW(main_widgets.window),
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, _("_Close"), GTK_RESPONSE_CLOSE,
-        _("_Open Source"), GTK_RESPONSE_ACCEPT, NULL);
+        _("_Open Source"), GTK_RESPONSE_ACCEPT,
+        _("_Select Track"), GTK_RESPONSE_APPLY, NULL);
+    g_object_ref_sink(dialog);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 760, 400);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     GtkWidget *label = gtk_label_new(jump->name);
@@ -4524,12 +4544,13 @@ static void waveform_show_hdl_uses(const WaveJump *jump)
     gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
     GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(rows));
     gtk_container_add(GTK_CONTAINER(scroll), tree);
+    gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(rows), 1, GTK_SORT_ASCENDING);
     const gchar *titles[] = {_("Role"), _("Name"), _("File"), _("Line")};
     for (guint column = 0; column < G_N_ELEMENTS(titles); column++)
         gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(tree), -1,
             titles[column], gtk_cell_renderer_text_new(), "text", column, NULL);
     GtkTreeIter selected;
-    GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(tree));
+    GtkTreeSelection *selection = g_object_ref(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)));
     if (gtk_tree_model_get_iter_first(GTK_TREE_MODEL(rows), &selected))
         gtk_tree_selection_select_iter(selection, &selected);
     else
@@ -4537,8 +4558,27 @@ static void waveform_show_hdl_uses(const WaveJump *jump)
         gtk_label_set_text(GTK_LABEL(label), _("No HDL uses found."));
         gtk_dialog_set_response_sensitive(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT, FALSE);
     }
+    waveform_use_selected(selection, dialog);
+    g_signal_connect(selection, "changed", G_CALLBACK(waveform_use_selected), dialog);
     gtk_widget_show_all(dialog);
-    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT &&
+    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    if (response != GTK_RESPONSE_NONE)
+        gtk_widget_hide(dialog);
+    if (response == GTK_RESPONSE_APPLY &&
+        gtk_tree_selection_get_selected(selection, NULL, &selected))
+    {
+        gchar *peer;
+        gboolean connection;
+        gtk_tree_model_get(GTK_TREE_MODEL(rows), &selected, 1, &peer, 4, &connection, -1);
+        GtkWindow *viewer = g_weak_ref_get(&jump->viewer);
+        if (!connection)
+            ui_set_statusbar(TRUE, "%s", _("Select a row with a full connected signal path."));
+        else if (!insight_waveforms_select_track(viewer, peer))
+            ui_set_statusbar(TRUE, _("Signal has no track in this recording: %s"), peer);
+        g_clear_object(&viewer);
+        g_free(peer);
+    }
+    else if (response == GTK_RESPONSE_ACCEPT &&
         gtk_tree_selection_get_selected(selection, NULL, &selected))
     {
         gchar *utf8_path;
@@ -4549,7 +4589,10 @@ static void waveform_show_hdl_uses(const WaveJump *jump)
         g_free(path);
         g_free(utf8_path);
     }
+    g_signal_handlers_disconnect_by_data(selection, dialog);
     gtk_widget_destroy(dialog);
+    g_object_unref(dialog);
+    g_object_unref(selection);
     g_object_unref(rows);
 }
 
@@ -4583,7 +4626,7 @@ static void wave_jump_done(GObject *object, GAsyncResult *result, gpointer data)
 
 /* Start source navigation or a reference lookup for the selected waveform signal. */
 /* Запускает переход к исходнику или поиск ссылок для выбранного сигнала диаграммы. */
-static void waveform_source(const gchar *name, gboolean show_uses)
+static void waveform_source(const gchar *name, gboolean show_uses, GtkWindow *viewer)
 {
     if (!wb.alive || !name || !*name || strlen(name) > 4096)
         return;
@@ -4591,6 +4634,7 @@ static void waveform_source(const gchar *name, gboolean show_uses)
     jump->snapshot = hdl_snapshot(NULL, FALSE);
     jump->name = g_strdup(name);
     jump->show_uses = show_uses;
+    g_weak_ref_init(&jump->viewer, viewer);
     GTask *task = g_task_new(NULL, NULL, wave_jump_done, NULL);
     g_task_set_task_data(task, jump, wave_jump_free);
     g_task_run_in_thread(task, wave_jump_run);

@@ -292,6 +292,16 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
             reference(portName, expression->sourceRange, external->location, externalRole);
             reference(external->name, expression->sourceRange, port.internalSymbol->location,
                       internalRole);
+
+            // Keep instance paths separately from declaration-based references.
+            // Хранит пути экземпляров отдельно от ссылок на объявления.
+            const auto location = sources.getFullyOriginalLoc(expression->sourceRange.start());
+            const auto outside = identity(*external);
+            const auto inside = identity(instance) + "." + std::string(port.internalSymbol->name);
+            if (!outside.empty() && !instance.name.empty() && !port.internalSymbol->name.empty()) {
+                add("P", inside, location, outside, "", externalRole);
+                add("P", outside, location, inside, "", internalRole);
+            }
         }
     }
 

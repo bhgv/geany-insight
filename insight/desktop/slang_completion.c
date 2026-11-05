@@ -216,7 +216,7 @@ InsightSlangProject *insight_slang_project_configured(const gchar *service,GPtrA
  InsightSlangProject *project=g_new0(InsightSlangProject,1);
  if(cache && key) {
   char *stored=NULL;project->index=insight_cache_load(cache,&stored,NULL);const InsightSymbol *meta=NULL;
-  gboolean valid=project->index && stored && !strcmp(root,stored) && insight_index_query(project->index,"@hdlmeta",TRUE,NULL,"@hdlmeta",root,0,&meta,1)==1 && !strcmp(meta->signature,key) && !strcmp(meta->inheritance,"slang-project-v4");free(stored);
+  gboolean valid=project->index && stored && !strcmp(root,stored) && insight_index_query(project->index,"@hdlmeta",TRUE,NULL,"@hdlmeta",root,0,&meta,1)==1 && !strcmp(meta->signature,key) && !strcmp(meta->inheritance,"slang-project-v5");free(stored);
   if(valid) {if(!*meta->type) valid=FALSE;for(const gchar *p=meta->type;*p;p++) if(!g_ascii_isdigit(*p)) valid=FALSE;guint64 count=g_ascii_strtoull(meta->type,NULL,10);if(count>G_MAXUINT) valid=FALSE;else project->diagnostics=count;}
   if(valid) {project->restored=project->persisted=TRUE;g_free(key);return project;}insight_index_free(project->index);project->index=NULL;
  }
@@ -226,20 +226,20 @@ InsightSlangProject *insight_slang_project_configured(const gchar *service,GPtrA
  GHashTable *groups=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,(GDestroyNotify)g_array_unref);GPtrArray *owned=g_ptr_array_new_with_free_func(g_free);guint records=0;
  for(guint n=2;valid && lines[n] && *lines[n];n++) {
   gchar **fields=g_strsplit(lines[n],"\t",-1);guint line=0,column=0;
-  if(g_strv_length(fields)!=8 || (strcmp(fields[0],"D") && strcmp(fields[0],"R") && strcmp(fields[0],"G")) || ++records>100000) {valid=FALSE;g_strfreev(fields);break;}
+  if(g_strv_length(fields)!=8 || (strcmp(fields[0],"D") && strcmp(fields[0],"R") && strcmp(fields[0],"G") && strcmp(fields[0],"P")) || ++records>100000) {valid=FALSE;g_strfreev(fields);break;}
   gboolean global=!strcmp(fields[0],"G") && !strcmp(fields[3],"0") && !strcmp(fields[4],"0");
   if(!global && (!positive_position(fields[3],&line) || !positive_position(fields[4],&column))) {valid=FALSE;g_strfreev(fields);break;}
   gchar *name=unhex(fields[1]),*path=unhex(fields[2]),*scope=unhex(fields[5]),*type=unhex(fields[6]),*relation=unhex(fields[7]),*position=g_strdup(fields[4]);
   gchar *parts[]={name,path,scope,type,relation,position};for(guint i=0;i<G_N_ELEMENTS(parts);i++) if(parts[i]) g_ptr_array_add(owned,parts[i]);else valid=FALSE;
   if(valid && *name && g_path_is_absolute(path) && (!global || !strcmp(relation,"global")) && (strcmp(fields[0],"R") || g_path_is_absolute(scope))) {
    GArray *rows=g_hash_table_lookup(groups,path);if(!rows) {rows=g_array_new(FALSE,FALSE,sizeof(InsightSymbol));g_hash_table_insert(groups,g_strdup(path),rows);}
-   InsightSymbol row={name,path,scope,!strcmp(fields[0],"D") ? "@hdldef":!strcmp(fields[0],"G") ? "@hdldiag":"@hdlref",line ? line:1,position,type,relation};g_array_append_val(rows,row);
+   InsightSymbol row={name,path,scope,!strcmp(fields[0],"D") ? "@hdldef":!strcmp(fields[0],"G") ? "@hdldiag":!strcmp(fields[0],"P") ? "@hdlwire":"@hdlref",line ? line:1,position,type,relation};g_array_append_val(rows,row);
   }else valid=FALSE;g_strfreev(fields);
  }
  if(valid) {
   project->index=insight_index_new();GHashTableIter iter;gpointer path,rows;g_hash_table_iter_init(&iter,groups);
   while(valid && g_hash_table_iter_next(&iter,&path,&rows)) valid=insight_index_update(project->index,path,(const InsightSymbol *)((GArray *)rows)->data,((GArray *)rows)->len);
-  gchar *diagnostics=g_strdup_printf("%u",project->diagnostics);InsightSymbol meta={"@hdlmeta",root,"","@hdlmeta",1,key ? key:"",diagnostics,"slang-project-v4"};
+  gchar *diagnostics=g_strdup_printf("%u",project->diagnostics);InsightSymbol meta={"@hdlmeta",root,"","@hdlmeta",1,key ? key:"",diagnostics,"slang-project-v5"};
   /* Root is a directory, distinct from source paths. */
   if(valid) valid=insight_index_update(project->index,root,&meta,1);g_free(diagnostics);
  }
