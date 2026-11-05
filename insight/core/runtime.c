@@ -382,7 +382,10 @@ struct InsightLuaDebug {
     Runtime runtime;
     lua_State *thread;
     InsightLuaStep mode;
-    unsigned long breakpoints[DEBUG_BREAKPOINT_LIMIT];
+    InsightLuaBreakpoint breakpoints[DEBUG_BREAKPOINT_LIMIT];
+    InsightLuaModuleLoader module_loader;
+    void *module_context;
+    const char *stopped_filename;
     size_t breakpoint_count;
     unsigned depth;
     unsigned target_depth;
@@ -394,11 +397,75 @@ struct InsightLuaDebug {
     int pause_requested;
 };
 
+/* Compile an explicitly resolved project module without opening package libraries. */
+/* Компилирует найденный модуль проекта без подключения библиотек package. */
+static int debug_load_module(lua_State *state)
+{
+    size_t name_length;
+    const char *name = luaL_checklstring(state, 1, &name_length);
+    void *context = NULL;
+    lua_getallocf(state, &context);
+    InsightLuaDebug *debug = context;
+    const char *filename = NULL;
+    const char *source = NULL;
+    size_t length = 0;
+    if (!name_length || name_length > 256 || memchr(name, 0, name_length) ||
+        !debug->module_loader ||
+        !debug->module_loader(debug->module_context, name, &filename, &source, &length))
+        return luaL_error(state, "Lua debugger cannot find project module '%s'", name);
+
+    char chunk[4096];
+    int written = snprintf(chunk, sizeof chunk, "@%s", filename);
+    if (written < 0 || (size_t)written >= sizeof chunk)
+        return luaL_error(state, "Lua debugger module filename is too long");
+    if (luaL_loadbufferx(state, source, length, chunk, "t") != LUA_OK)
+        return lua_error(state);
+    return 1;
+}
+
+/* Bind the resolver and its borrowed editor context before starting execution. */
+/* Подключает поиск модулей и контекст редактора перед выполнением. */
+void insight_lua_debug_set_module_loader(InsightLuaDebug *debug, InsightLuaModuleLoader loader, void *context)
+{
+    if (!debug)
+        return;
+    debug->module_loader = loader;
+    debug->module_context = context;
+}
+
+/* Return the source name of the current stop while the VM owns it. */
+/* Возвращает имя исходника текущей остановки, пока оно принадлежит VM. */
+const char *insight_lua_debug_filename(const InsightLuaDebug *debug)
+{
+    return debug && debug->line ? debug->stopped_filename : NULL;
+}
+
 /* Install the sandbox and anchor the debug coroutine on the main state. */
 /* Устанавливает песочницу и закрепляет корутину отладки в основном состоянии. */
 static int debug_setup(lua_State *state)
 {
     setup(state);
+    /* Run the module body from Lua, where line hooks can yield.
+     * Выполняем тело модуля из Lua, чтобы хук строки мог приостановить VM. */
+    static const char module_wrapper[] =
+        "local load_module = ...\n"
+        "local loaded, loading = {}, {}\n"
+        "return function(name)\n"
+        "  if loading[name] then error('circular project require: ' .. name) end\n"
+        "  if loaded[name] then return loaded[name] end\n"
+        "  local chunk = load_module(name)\n"
+        "  loading[name] = true\n"
+        "  local result = chunk(name)\n"
+        "  loading[name] = nil\n"
+        "  if result == nil then result = true end\n"
+        "  loaded[name] = result\n"
+        "  return result\n"
+        "end\n";
+    if (luaL_loadbufferx(state, module_wrapper, sizeof module_wrapper - 1, "=debug require", "t") != LUA_OK)
+        return lua_error(state);
+    lua_pushcfunction(state, debug_load_module);
+    lua_call(state, 1, 1);
+    lua_setglobal(state, "require");
     lua_newthread(state);
     return 1;
 }
@@ -435,9 +502,11 @@ static void debug_hook(lua_State *state, lua_Debug *event)
             luaL_error(state, "Lua debugger instruction limit exceeded in a non-yieldable call");
         return;
     }
-    if (!yieldable || event->currentline < 1)
+    if (!yieldable || event->currentline < 1 ||
+        !lua_getinfo(state, "S", event) || !event->source || event->source[0] != '@')
         return;
 
+    const char *filename = event->source + 1;
     unsigned long line = (unsigned long)event->currentline;
     int pause = debug->pause_requested || debug->mode == INSIGHT_LUA_STEP_INTO;
     if (!pause && (debug->mode == INSIGHT_LUA_STEP_OVER || debug->mode == INSIGHT_LUA_STEP_OUT))
@@ -449,13 +518,15 @@ static void debug_hook(lua_State *state, lua_Debug *event)
             pause = depth < debug->target_depth;
     }
     for (size_t i = 0; !pause && i < debug->breakpoint_count; i++)
-        pause = debug->breakpoints[i] == line;
+        pause = debug->breakpoints[i].line == line &&
+            !strcmp(debug->breakpoints[i].filename, filename);
 
     if (pause)
     {
         debug->pause_requested = 0;
         debug->depth = debug_depth(state);
         debug->line = line;
+        debug->stopped_filename = filename;
         debug_capture(state, debug->snapshot, sizeof debug->snapshot);
         debug_watch_capture(state, &debug->watch_graph);
         lua_yield(state, 0);
@@ -475,7 +546,8 @@ void insight_lua_debug_free(InsightLuaDebug *debug)
 
 /* Compile a source snapshot into a fresh restricted VM. */
 /* Компилирует снимок исходника в новой виртуальной машине с ограничениями. */
-InsightLuaDebug *insight_lua_debug_new(const char *source, size_t length, char *error, size_t capacity)
+InsightLuaDebug *insight_lua_debug_new(const char *filename, const char *source,
+                                      size_t length, char *error, size_t capacity)
 {
     if (error && capacity)
         error[0] = 0;
@@ -498,7 +570,16 @@ InsightLuaDebug *insight_lua_debug_new(const char *source, size_t length, char *
     if (!status)
     {
         debug->thread = lua_tothread(state, -1);
-        status = luaL_loadbufferx(debug->thread, source, length, "@buffer", "t");
+        char chunk[4096];
+        int written = snprintf(chunk, sizeof chunk, "@%s", filename ? filename : "<buffer>");
+        if (written < 0 || (size_t)written >= sizeof chunk)
+        {
+            if (error && capacity)
+                snprintf(error, capacity, "Lua debugger filename is too long");
+            insight_lua_debug_free(debug);
+            return NULL;
+        }
+        status = luaL_loadbufferx(debug->thread, source, length, chunk, "t");
     }
     if (status)
     {
@@ -526,7 +607,7 @@ void insight_lua_debug_request_pause(InsightLuaDebug *debug)
 /* Run one bounded VM slice with a borrowed read-only host. */
 /* Выполняет одну ограниченную порцию VM с контекстом только для чтения. */
 int insight_lua_debug_resume(InsightLuaDebug *debug, InsightLuaStep mode,
-    const unsigned long *breakpoints, size_t breakpoint_count, const InsightHost *host,
+    const InsightLuaBreakpoint *breakpoints, size_t breakpoint_count, const InsightHost *host,
     unsigned long *line, char *error, size_t error_capacity)
 {
     if (line)
@@ -547,6 +628,7 @@ int insight_lua_debug_resume(InsightLuaDebug *debug, InsightLuaStep mode,
     }
     debug->slice_pending = 0;
     debug->line = 0;
+    debug->stopped_filename = NULL;
     debug->runtime.ticks = 0;
 
     InsightHost read_only_host;

@@ -14,7 +14,7 @@ struct InsightPythonDebug {
 /* Start the isolated interpreter using a private snapshot of the editor buffer. */
 /* Запускает отдельный интерпретатор с приватным снимком буфера редактора. */
 InsightPythonDebug *insight_python_debug_new(const gchar *interpreter, const gchar *helper,
-    const gchar *filename, const gchar *source, gsize length, GError **error)
+    const gchar *filename, const gchar *project_root, const gchar *source, gsize length, GError **error)
 {
     InsightPythonDebug *debugger = g_new0(InsightPythonDebug, 1);
     gint descriptor = g_file_open_tmp("geany-python-debug-XXXXXX", &debugger->snapshot, error);
@@ -32,7 +32,7 @@ InsightPythonDebug *insight_python_debug_new(const gchar *interpreter, const gch
 
     debugger->process = g_subprocess_new(G_SUBPROCESS_FLAGS_STDIN_PIPE |
         G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_SILENCE, error,
-        interpreter, "-I", "-u", helper, debugger->snapshot, filename, NULL);
+        interpreter, "-I", "-u", helper, debugger->snapshot, filename, project_root ? project_root : "", NULL);
     if (!debugger->process)
     {
         insight_python_debug_free(debugger);
@@ -111,9 +111,10 @@ static gboolean parse_number(const gchar *field, guint maximum, guint *number)
 /* Validate a packet before exposing a source line, stack, or watch graph. */
 /* Проверяет пакет перед передачей строки, стека или графа наблюдения. */
 gint insight_python_debug_parse(const gchar *packet, gsize length, unsigned long *line,
-    gchar **stack, InsightLuaWatchGraph **graph, gchar **message)
+    gchar **filename, gchar **stack, InsightLuaWatchGraph **graph, gchar **message)
 {
     *line = 0;
+    *filename = NULL;
     *stack = NULL;
     *graph = NULL;
     *message = NULL;
@@ -139,21 +140,24 @@ gint insight_python_debug_parse(const gchar *packet, gsize length, unsigned long
         if (decode_field(fields[1], error, sizeof error))
             *message = g_strdup(error);
     }
-    else if (count >= 6 && !strcmp(fields[0], "P"))
+    else if (count >= 7 && !strcmp(fields[0], "P"))
     {
         guint position, nodes, edges, limited;
         if (parse_number(fields[1], G_MAXINT, &position) && position &&
-            parse_number(fields[3], INSIGHT_LUA_WATCH_NODES, &nodes) && nodes &&
-            parse_number(fields[4], INSIGHT_LUA_WATCH_EDGES, &edges) &&
-            parse_number(fields[5], 1, &limited) && count == 6 + 3 * (nodes + edges))
+            parse_number(fields[4], INSIGHT_LUA_WATCH_NODES, &nodes) && nodes &&
+            parse_number(fields[5], INSIGHT_LUA_WATCH_EDGES, &edges) &&
+            parse_number(fields[6], 1, &limited) && count == 7 + 3 * (nodes + edges))
         {
             InsightLuaWatchGraph *snapshot = g_new0(InsightLuaWatchGraph, 1);
             snapshot->node_count = nodes;
             snapshot->edge_count = edges;
             snapshot->limited = (gint)limited;
             gchar stack_text[32768];
-            gboolean valid = decode_field(fields[2], stack_text, sizeof stack_text);
-            guint at = 6;
+            gchar *source_path = g_malloc(strlen(fields[2]) / 2 + 1);
+            gboolean valid = decode_field(fields[2], source_path, strlen(fields[2]) / 2 + 1) &&
+                *source_path && g_utf8_validate(source_path, -1, NULL) &&
+                decode_field(fields[3], stack_text, sizeof stack_text);
+            guint at = 7;
             for (guint i = 0; valid && i < nodes; i++, at += 3)
             {
                 InsightLuaWatchNode *node = &snapshot->nodes[i];
@@ -171,12 +175,14 @@ gint insight_python_debug_parse(const gchar *packet, gsize length, unsigned long
             if (valid)
             {
                 *line = position;
+                *filename = g_steal_pointer(&source_path);
                 *stack = g_strdup(stack_text);
                 *graph = snapshot;
                 result = 1;
             }
             else
                 g_free(snapshot);
+            g_free(source_path);
         }
     }
     g_strfreev(fields);

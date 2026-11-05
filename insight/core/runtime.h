@@ -60,14 +60,21 @@ typedef struct InsightLuaDebug InsightLuaDebug;
 typedef enum {
  INSIGHT_LUA_STEP_INTO, INSIGHT_LUA_STEP_OVER, INSIGHT_LUA_STEP_OUT, INSIGHT_LUA_CONTINUE
 } InsightLuaStep;
-InsightLuaDebug *insight_lua_debug_new(const char *,size_t,char *,size_t);
+typedef struct {
+    const char *filename;
+    unsigned long line;
+} InsightLuaBreakpoint;
+typedef int (*InsightLuaModuleLoader)(void *, const char *, const char **, const char **, size_t *);
+InsightLuaDebug *insight_lua_debug_new(const char *filename, const char *,size_t,char *,size_t);
+void insight_lua_debug_set_module_loader(InsightLuaDebug *, InsightLuaModuleLoader, void *);
+const char *insight_lua_debug_filename(const InsightLuaDebug *);
 void insight_lua_debug_free(InsightLuaDebug *);
 void insight_lua_debug_request_pause(InsightLuaDebug *);
 /* Resume returns 2 when another slice is needed, 1 at a source stop,
  * 0 on completion, and -1 on failure.
  * A pending slice keeps its original step mode and breakpoint list.
  * Up to 128 one-based breakpoint lines. The optional host is borrowed and read-only. */
-int insight_lua_debug_resume(InsightLuaDebug *,InsightLuaStep,const unsigned long *,size_t,
+int insight_lua_debug_resume(InsightLuaDebug *,InsightLuaStep,const InsightLuaBreakpoint *,size_t,
  const InsightHost *,unsigned long *,char *,size_t);
 void insight_lua_debug_inspect(InsightLuaDebug *,char *,size_t);
 /* The graph is borrowed until the next resume or until the VM is freed. */

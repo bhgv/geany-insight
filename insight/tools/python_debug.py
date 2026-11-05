@@ -178,13 +178,42 @@ def stack_text(frame):
 class Debugger:
     # Track the current step action and the original source filename.
     # Хранит текущий шаг и имя исходного файла.
-    def __init__(self, filename, commands, output):
+    def __init__(self, filename, project_root, commands, output):
         self.filename = filename
+        self.project_root = self.file_key(project_root) if project_root else None
+        self.file_keys = {filename: self.file_key(filename)}
+        self.traceable = {filename: True}
         self.commands = commands
         self.output = output
         self.mode = "into"
         self.depth = 0
         self.breakpoints = set()
+        self.breakpoint_files = set()
+
+    # Normalize filenames the same way for trace frames and breakpoints.
+    # Нормализует имена файлов одинаково для кадров и точек останова.
+    @staticmethod
+    def file_key(filename):
+        if not filename or filename.startswith("<"):
+            return filename
+        return os.path.normcase(os.path.abspath(filename))
+
+    # Trace the entry file, the project directory and explicitly selected files.
+    # Отслеживает точку входа, каталог проекта и явно выбранные файлы.
+    def should_trace(self, filename):
+        known = self.traceable.get(filename)
+        if known is not None:
+            return known
+        path = self.file_key(filename)
+        self.file_keys[filename] = path
+        traced = path in self.breakpoint_files
+        if not traced and self.project_root and path and not path.startswith("<"):
+            try:
+                traced = os.path.commonpath((self.project_root, path)) == self.project_root
+            except ValueError:
+                pass
+        self.traceable[filename] = traced
+        return traced
 
     # Apply the next step command at a source stop.
     # Применяет следующую команду шага на остановке в исходнике.
@@ -197,13 +226,24 @@ class Debugger:
                 raise SystemExit(0)
             self.mode = fields[0]
             self.depth = depth
-            self.breakpoints = {int(value) for value in fields[1:] if value.isdecimal()}
+            self.breakpoints = set()
+            for value in fields[1:]:
+                path_hex, separator, line = value.partition(":")
+                if not separator or not line.isdecimal():
+                    continue
+                try:
+                    path = bytes.fromhex(path_hex).decode("utf-8")
+                    self.breakpoints.add((self.file_key(path), int(line)))
+                except (ValueError, UnicodeError):
+                    continue
+            self.breakpoint_files = {path for path, _line in self.breakpoints}
+            self.traceable = {self.filename: True}
             return
 
-    # Stop only in the captured buffer, preserving the full call depth.
-    # Останавливается в исходном буфере с учётом полной глубины стека.
+    # Stop in tracked files while preserving the full call depth.
+    # Останавливается в отслеживаемых файлах с учётом полной глубины стека.
     def trace(self, frame, event, _argument):
-        if frame.f_code.co_filename != self.filename:
+        if not self.should_trace(frame.f_code.co_filename):
             return None
         if event != "line":
             return self.trace
@@ -220,11 +260,13 @@ class Debugger:
         while parent is not None:
             depth += 1
             parent = parent.f_back
-        if (pause or frame.f_lineno in self.breakpoints or self.mode == "into" or
+        filename = frame.f_code.co_filename
+        position = (self.file_keys[filename], frame.f_lineno)
+        if (pause or position in self.breakpoints or self.mode == "into" or
                 (self.mode == "over" and depth <= self.depth) or
                 (self.mode == "out" and depth < self.depth)):
             graph = WatchSnapshot(frame)
-            fields = ["P", str(frame.f_lineno), encode(stack_text(frame))]
+            fields = ["P", str(frame.f_lineno), encode(filename), encode(stack_text(frame))]
             fields.extend(graph.fields())
             self.output.write("\t".join(fields) + "\n")
             self.output.flush()
@@ -235,7 +277,7 @@ class Debugger:
 # Execute the buffer in a separate process; keep script output off the protocol.
 # Выполняет буфер в отдельном процессе и отделяет его вывод от протокола.
 def main():
-    snapshot, filename = sys.argv[1:3]
+    snapshot, filename, project_root = sys.argv[1:4]
     output = sys.stdout
     control = sys.stdin
     sys.stdout = sys.__stdout__ = sys.stderr
@@ -243,7 +285,7 @@ def main():
     commands = queue.Queue()
     reader = threading.Thread(target=read_commands, args=(control.fileno(), commands), daemon=True)
     reader.start()
-    debugger = Debugger(filename, commands, output)
+    debugger = Debugger(filename, project_root, commands, output)
     try:
         with open(snapshot, encoding="utf-8") as stream:
             program = compile(stream.read(), filename, "exec", dont_inherit=True)

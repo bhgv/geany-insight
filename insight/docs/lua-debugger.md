@@ -25,6 +25,12 @@ can pause. The Lua memory budget still applies.
 
 While paused, hover over a variable in the debugger's source pane. The tooltip shows the local, captured value, or a simple field such as `config.device.name`. Values come from the current frame snapshot. Field lookup reads the table directly without invoking metamethods.
 
+## Debug a Lua project
+
+The current Lua file is the default entry point. Use **Scripts → Debug Lua File…** to choose another. In an open project, `require("net.codec")` looks for `net/codec.lua` or `net/codec/init.lua` under the project base directory. On first load the debugger snapshots the module, including unsaved edits in an open tab. Steps and breakpoints work in the entry and loaded modules. Use **Breakpoints in File…** to set line breakpoints before a module is reached. Breakpoints are stored per file.
+
+The debug VM loads text modules from the project. System package search and native Lua modules are unavailable in this VM. Restart keeps loaded snapshots. Start a new session to pick up edited module sources.
+
 ## Watch graph
 
 Open **Watch graph** while paused. **Current frame** is the root. Follow the

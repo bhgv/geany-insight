@@ -4957,6 +4957,14 @@ typedef struct {
     gboolean python;
     gboolean python_running;
     gboolean closing;
+    gchar *project_root;
+    gchar *display_filename;
+    gchar *display_source;
+    gsize display_length;
+    GHashTable *file_breakpoints;
+    GHashTable *lua_modules;
+    gsize lua_module_bytes;
+    GtkWidget *file_breakpoint_button;
     GtkWidget *window;
     GtkWidget *source_view;
     GtkWidget *stack_view;
@@ -4981,6 +4989,7 @@ typedef struct {
     guint execution_source;
     InsightLuaStep pending_mode;
     unsigned long pending_breakpoints[128];
+    InsightLuaBreakpoint pending_lua_breakpoints[128];
     gsize pending_breakpoint_count;
     GtkTextTag *current_line_tag;
     GtkTextTag *breakpoint_tag;
@@ -5011,6 +5020,11 @@ static void debug_window_free(gpointer data)
     insight_python_debug_free(view->python_engine);
     g_free(view->python_graph);
     g_free(view->python_stack);
+    g_free(view->project_root);
+    g_free(view->display_filename);
+    g_free(view->display_source);
+    g_hash_table_unref(view->file_breakpoints);
+    g_hash_table_unref(view->lua_modules);
     g_free(view->source_snapshot);
     g_free(view->source_code_mask);
     g_array_unref(view->source_line_offsets);
@@ -5036,9 +5050,9 @@ static void debug_set_text(GtkWidget *text_view, const gchar *text)
 
 /* Parse up to 128 one-based breakpoint lines from the entry. */
 /* Разбирает до 128 номеров строк точек останова, начиная с единицы. */
-static gboolean debug_read_breakpoints(GtkEntry *entry, unsigned long *lines, gsize *count)
+static gboolean debug_parse_breakpoints(const gchar *text, unsigned long *lines, gsize *count)
 {
-    gchar **words = g_strsplit_set(gtk_entry_get_text(entry), ",; \t", -1);
+    gchar **words = g_strsplit_set(text, ",; \t", -1);
     gboolean valid = TRUE;
     *count = 0;
     for (guint i = 0; words[i] && valid; i++)
@@ -5504,14 +5518,17 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
     gtk_text_buffer_remove_tag(buffer, view->current_line_tag, &first, &last);
     view->paused_line = 0;
 
-    if (result == 1 && line > 0 && line <= (gulong)gtk_text_buffer_get_line_count(buffer))
+    if (result == 1 && line > 0)
     {
         view->paused_line = line;
-        gtk_text_buffer_get_iter_at_line(buffer, &first, (gint)line - 1);
-        last = first;
-        gtk_text_iter_forward_line(&last);
-        gtk_text_buffer_apply_tag(buffer, view->current_line_tag, &first, &last);
-        gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(view->source_view), &first, 0.15, FALSE, 0, 0);
+        if (view->display_source && line <= (gulong)gtk_text_buffer_get_line_count(buffer))
+        {
+            gtk_text_buffer_get_iter_at_line(buffer, &first, (gint)line - 1);
+            last = first;
+            gtk_text_iter_forward_line(&last);
+            gtk_text_buffer_apply_tag(buffer, view->current_line_tag, &first, &last);
+            gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(view->source_view), &first, 0.15, FALSE, 0, 0);
+        }
         if (view->python)
             debug_set_text(view->stack_view, view->python_stack ? view->python_stack : "");
         else
@@ -5520,7 +5537,9 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
             insight_lua_debug_inspect(view->engine, state, sizeof state);
             debug_set_text(view->stack_view, state);
         }
-        gchar *label = g_strdup_printf("Paused at line %lu", line);
+        gchar *label = view->display_filename ?
+            g_strdup_printf("Paused at %s:%lu", view->display_filename, line) :
+            g_strdup_printf("Paused at line %lu", line);
         gtk_label_set_text(GTK_LABEL(view->status), label);
         g_free(label);
     }
@@ -5538,6 +5557,8 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
     gtk_widget_set_sensitive(view->pause, FALSE);
     gtk_widget_set_sensitive(view->step_controls, result == 1);
     gtk_widget_set_sensitive(view->breakpoints, TRUE);
+    if (view->file_breakpoint_button)
+        gtk_widget_set_sensitive(view->file_breakpoint_button, TRUE);
     view->watch_graph = NULL;
     if (result == 1)
         view->watch_graph = view->python ? view->python_graph : insight_lua_debug_watch_graph(view->engine);
@@ -5545,6 +5566,8 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
     view->watch_selected = -1;
     debug_watch_layout(view);
 }
+
+static gboolean debug_show_script_file(ScriptDebugWindow *view, const gchar *filename);
 
 /* Execute one VM slice and return control to GTK between slices. */
 /* Выполняет одну порцию VM и возвращает управление GTK между порциями. */
@@ -5565,14 +5588,253 @@ static gboolean debug_execute_slice(gpointer data)
     unsigned long line = 0;
     gchar error[1024];
     gint result = insight_lua_debug_resume(view->engine, view->pending_mode,
-        view->pending_breakpoints, view->pending_breakpoint_count,
+        view->pending_lua_breakpoints, view->pending_breakpoint_count,
         &host, &line, error, sizeof error);
     if (result == 2)
         return G_SOURCE_CONTINUE;
+    if (result == 1)
+        debug_show_script_file(view, insight_lua_debug_filename(view->engine));
 
     view->execution_source = 0;
     debug_show_result(view, result, line, error);
     return G_SOURCE_REMOVE;
+}
+
+static gchar *debug_number_source(const gchar *source, gsize length,
+                                  GArray *line_offsets, gboolean python);
+
+/* Canonicalize a breakpoint filename for consistent lookup in the editor. */
+/* Нормализует имя файла точки останова для поиска в редакторе. */
+static gchar *debug_file_key(const gchar *filename)
+{
+    if (!filename || *filename == '<')
+        return g_strdup(filename ? filename : "<buffer>");
+    gchar *path = g_canonicalize_filename(filename, NULL);
+#ifdef G_OS_WIN32
+    gchar *folded = g_utf8_strdown(path, -1);
+    g_free(path);
+    return folded;
+#else
+    return path;
+#endif
+}
+
+/* Save or clear the breakpoint text for one source file. */
+/* Сохраняет или очищает список точек останова для одного исходника. */
+static void debug_store_file_breakpoints(ScriptDebugWindow *view, const gchar *filename, const gchar *text)
+{
+    gchar *key = debug_file_key(filename);
+    if (*text)
+        g_hash_table_replace(view->file_breakpoints, key, g_strdup(text));
+    else
+    {
+        g_hash_table_remove(view->file_breakpoints, key);
+        g_free(key);
+    }
+}
+
+/* Compare file identity using the same normalization as breakpoint storage. */
+/* Сравнивает файлы по тем же правилам, что и список точек останова. */
+static gboolean debug_same_file(const gchar *first, const gchar *second)
+{
+    gchar *first_key = debug_file_key(first);
+    gchar *second_key = debug_file_key(second);
+    gboolean same = !strcmp(first_key, second_key);
+    g_free(first_key);
+    g_free(second_key);
+    return same;
+}
+
+typedef struct {
+    gchar *filename;
+    gchar *source;
+    gsize length;
+} DebugLuaModule;
+
+/* Release a loaded module snapshot. */
+/* Освобождает снимок загруженного модуля. */
+static void debug_lua_module_free(gpointer data)
+{
+    DebugLuaModule *module = data;
+    g_free(module->filename);
+    g_free(module->source);
+    g_free(module);
+}
+
+/* Read a bounded UTF-8 source file for display or module loading. */
+/* Читает ограниченный по размеру исходник UTF-8 для показа или загрузки модуля. */
+static gchar *debug_read_source_file(const gchar *filename, gsize *length)
+{
+    GFile *file = g_file_new_for_path(filename);
+    GFileInfo *info = g_file_query_info(file, G_FILE_ATTRIBUTE_STANDARD_TYPE "," G_FILE_ATTRIBUTE_STANDARD_SIZE,
+                                      G_FILE_QUERY_INFO_NONE, NULL, NULL);
+    gchar *source = NULL;
+    if (info && g_file_info_get_file_type(info) == G_FILE_TYPE_REGULAR &&
+        g_file_info_get_size(info) <= 2 * 1024 * 1024)
+    {
+        if (!g_file_load_contents(file, NULL, &source, length, NULL, NULL) ||
+            *length > 2 * 1024 * 1024 || memchr(source, 0, *length) ||
+            !g_utf8_validate(source, *length, NULL))
+            g_clear_pointer(&source, g_free);
+    }
+    g_clear_object(&info);
+    g_object_unref(file);
+    return source;
+}
+
+/* Locate a Lua module under the project base directory and snapshot its text. */
+/* Ищет модуль Lua в корне проекта и сохраняет снимок его текста. */
+static int debug_lua_resolve_module(void *context, const char *name, const char **filename,
+                                    const char **source, size_t *length)
+{
+    ScriptDebugWindow *view = context;
+    if (!view->project_root || !*name)
+        return 0;
+
+    GString *relative = g_string_new(NULL);
+    gboolean component = FALSE;
+    for (const gchar *character = name; *character; character++)
+    {
+        if (*character == '.' && component)
+        {
+            g_string_append_c(relative, G_DIR_SEPARATOR);
+            component = FALSE;
+        }
+        else if (g_ascii_isalnum(*character) || *character == '_' || *character == '-')
+        {
+            g_string_append_c(relative, *character);
+            component = TRUE;
+        }
+        else
+        {
+            g_string_free(relative, TRUE);
+            return 0;
+        }
+    }
+    if (!component)
+    {
+        g_string_free(relative, TRUE);
+        return 0;
+    }
+
+    gchar *flat_name = g_strconcat(relative->str, ".lua", NULL);
+    gchar *directory_name = g_build_filename(relative->str, "init.lua", NULL);
+    const gchar *candidates[] = {flat_name, directory_name};
+    DebugLuaModule *module = NULL;
+    for (guint i = 0; i < G_N_ELEMENTS(candidates) && !module; i++)
+    {
+        gchar *path = g_build_filename(view->project_root, candidates[i], NULL);
+        gchar *key = debug_file_key(path);
+        module = g_hash_table_lookup(view->lua_modules, key);
+        if (!module && g_hash_table_size(view->lua_modules) < 64)
+        {
+            gsize module_length = 0;
+            gchar *text = NULL;
+            GeanyDocument *document = document_find_by_filename(path);
+            if (DOC_VALID(document))
+            {
+                gint size = sci_get_length(document->editor->sci);
+                if (size >= 0 && size <= 2 * 1024 * 1024)
+                {
+                    module_length = (gsize)size;
+                    text = sci_get_contents(document->editor->sci, size + 1);
+                    if (memchr(text, 0, module_length) || !g_utf8_validate(text, module_length, NULL))
+                        g_clear_pointer(&text, g_free);
+                }
+            }
+            else
+                text = debug_read_source_file(path, &module_length);
+
+            if (text && view->lua_module_bytes + module_length <= 16 * 1024 * 1024)
+            {
+                module = g_new0(DebugLuaModule, 1);
+                module->filename = g_strdup(key);
+                module->source = text;
+                module->length = module_length;
+                view->lua_module_bytes += module_length;
+                g_hash_table_insert(view->lua_modules, g_strdup(key), module);
+            }
+            else
+                g_free(text);
+        }
+        g_free(key);
+        g_free(path);
+    }
+    g_free(flat_name);
+    g_free(directory_name);
+    g_string_free(relative, TRUE);
+    if (!module)
+        return 0;
+
+    *filename = module->filename;
+    *source = module->source;
+    *length = module->length;
+    return 1;
+}
+
+/* Display the source file containing the current frame. */
+/* Показывает файл, в котором находится текущий кадр. */
+static gboolean debug_show_script_file(ScriptDebugWindow *view, const gchar *filename)
+{
+    if (!filename)
+        return FALSE;
+    if (view->display_filename && debug_same_file(view->display_filename, filename))
+        return view->display_source != NULL;
+
+    gchar *source = NULL;
+    gsize length = 0;
+    if (debug_same_file(view->source_filename, filename))
+    {
+        source = g_strdup(view->source_snapshot);
+        length = view->source_length;
+    }
+    else if (!view->python)
+    {
+        gchar *key = debug_file_key(filename);
+        DebugLuaModule *module = g_hash_table_lookup(view->lua_modules, key);
+        if (module)
+        {
+            source = g_strdup(module->source);
+            length = module->length;
+        }
+        g_free(key);
+    }
+    else if (g_path_is_absolute(filename))
+        source = debug_read_source_file(filename, &length);
+
+    g_free(view->display_filename);
+    g_free(view->display_source);
+    g_clear_pointer(&view->source_code_mask, g_free);
+    g_array_set_size(view->source_line_offsets, 0);
+    view->display_filename = g_strdup(filename);
+    view->display_source = source;
+    view->display_length = source ? length : 0;
+    if (source)
+    {
+        view->source_code_mask = insight_source_code_mask(source, length,
+            view->python ? INSIGHT_CODE_PYTHON : INSIGHT_CODE_LUA, NULL);
+        gchar *numbered = debug_number_source(source, length, view->source_line_offsets, view->python);
+        debug_set_text(view->source_view, numbered);
+        g_free(numbered);
+    }
+    else
+        debug_set_text(view->source_view, "Source unavailable or exceeds 2 MiB.");
+
+    gchar *key = debug_file_key(filename);
+    const gchar *breakpoints = g_hash_table_lookup(view->file_breakpoints, key);
+    gtk_entry_set_text(GTK_ENTRY(view->breakpoints), breakpoints ? breakpoints : "");
+    g_free(key);
+    return source != NULL;
+}
+
+/* Append a normalized filename and line to the Python breakpoint command. */
+/* Добавляет нормализованное имя файла и строку в команду для Python. */
+static void debug_append_file_breakpoint(GString *command, const gchar *filename, unsigned long line)
+{
+    g_string_append_c(command, ' ');
+    for (const guchar *byte = (const guchar *)filename; *byte; byte++)
+        g_string_append_printf(command, "%02x", (guint)*byte);
+    g_string_append_printf(command, ":%lu", line);
 }
 
 typedef struct {
@@ -5604,10 +5866,14 @@ static void debug_python_received(GObject *object, GAsyncResult *result, gpointe
         g_clear_pointer(&view->python_stack, g_free);
         g_clear_pointer(&view->python_graph, g_free);
         unsigned long line = 0;
+        gchar *filename = NULL;
         gchar *message = NULL;
-        gint status = insight_python_debug_parse(packet, length, &line, &view->python_stack,
+        gint status = insight_python_debug_parse(packet, length, &line, &filename, &view->python_stack,
                                                  &view->python_graph, &message);
+        if (status == 1)
+            debug_show_script_file(view, filename);
         debug_show_result(view, status, line, error ? error->message : message ? message : "");
+        g_free(filename);
         g_free(message);
     }
     if (window)
@@ -5624,8 +5890,34 @@ static void debug_python_step(ScriptDebugWindow *view)
 {
     const gchar *actions[] = {"into", "over", "out", "continue"};
     GString *command = g_string_new(actions[view->pending_mode]);
-    for (gsize i = 0; i < view->pending_breakpoint_count; i++)
-        g_string_append_printf(command, " %lu", view->pending_breakpoints[i]);
+    debug_store_file_breakpoints(view, view->display_filename,
+                                 gtk_entry_get_text(GTK_ENTRY(view->breakpoints)));
+    GHashTableIter files;
+    gpointer filename, text;
+    guint total = 0;
+    g_hash_table_iter_init(&files, view->file_breakpoints);
+    while (g_hash_table_iter_next(&files, &filename, &text))
+    {
+        unsigned long lines[128];
+        gsize count = 0;
+        if (!debug_parse_breakpoints(text, lines, &count) || count > 128 - total)
+        {
+            g_string_free(command, TRUE);
+            debug_show_result(view, -1, 0, "Python supports up to 128 breakpoints across all files");
+            gtk_widget_set_sensitive(view->step_controls, TRUE);
+            return;
+        }
+        for (gsize i = 0; i < count; i++)
+            debug_append_file_breakpoint(command, filename, lines[i]);
+        total += (guint)count;
+    }
+    if (command->len > 64 * 1024)
+    {
+        g_string_free(command, TRUE);
+        debug_show_result(view, -1, 0, "Python breakpoint paths exceed the command limit");
+        gtk_widget_set_sensitive(view->step_controls, TRUE);
+        return;
+    }
     g_string_append_c(command, '\n');
 
     GError *error = NULL;
@@ -5648,7 +5940,8 @@ static void debug_python_step(ScriptDebugWindow *view)
 
 /* Resolve the interpreter and start the Python bridge for a source snapshot. */
 /* Находит интерпретатор и запускает процесс отладки для снимка исходника. */
-static InsightPythonDebug *debug_new_python_engine(const gchar *filename, const gchar *source,
+static InsightPythonDebug *debug_new_python_engine(const gchar *filename, const gchar *project_root,
+                                                    const gchar *source,
                                                     gsize length, GError **error)
 {
     const gchar *configured = g_getenv("GEANY_INSIGHT_PYTHON");
@@ -5664,7 +5957,7 @@ static InsightPythonDebug *debug_new_python_engine(const gchar *filename, const 
 
     gchar *helper = g_build_filename(app->datadir, "insight", "tools", "python_debug.py", NULL);
     InsightPythonDebug *engine = insight_python_debug_new(interpreter, helper,
-        filename && *filename ? filename : "<buffer>", source, length, error);
+        filename && *filename ? filename : "<buffer>", project_root, source, length, error);
     g_free(helper);
     g_free(interpreter);
     return engine;
@@ -5676,13 +5969,38 @@ static void debug_window_step(ScriptDebugWindow *view, InsightLuaStep mode)
 {
     if ((!view->engine && !view->python_engine) || debug_is_running(view))
         return;
-    if (!debug_read_breakpoints(GTK_ENTRY(view->breakpoints),
+    if (!debug_parse_breakpoints(gtk_entry_get_text(GTK_ENTRY(view->breakpoints)),
                                view->pending_breakpoints, &view->pending_breakpoint_count))
     {
         gtk_label_set_text(GTK_LABEL(view->status), "Enter up to 128 positive breakpoint line numbers.");
         return;
     }
 
+    if (!view->python)
+    {
+        debug_store_file_breakpoints(view, view->display_filename,
+                                     gtk_entry_get_text(GTK_ENTRY(view->breakpoints)));
+        view->pending_breakpoint_count = 0;
+        GHashTableIter files;
+        gpointer filename, text;
+        g_hash_table_iter_init(&files, view->file_breakpoints);
+        while (g_hash_table_iter_next(&files, &filename, &text))
+        {
+            unsigned long lines[128];
+            gsize count = 0;
+            if (!debug_parse_breakpoints(text, lines, &count) ||
+                count > G_N_ELEMENTS(view->pending_lua_breakpoints) - view->pending_breakpoint_count)
+            {
+                gtk_label_set_text(GTK_LABEL(view->status), "Lua supports up to 128 breakpoints across all files");
+                return;
+            }
+            for (gsize i = 0; i < count; i++)
+            {
+                InsightLuaBreakpoint point = {filename, lines[i]};
+                view->pending_lua_breakpoints[view->pending_breakpoint_count++] = point;
+            }
+        }
+    }
     view->pending_mode = mode;
     view->paused_line = 0;
     view->watch_graph = NULL;
@@ -5692,6 +6010,8 @@ static void debug_window_step(ScriptDebugWindow *view, InsightLuaStep mode)
     gtk_widget_set_sensitive(view->go_to_source, FALSE);
     gtk_widget_set_sensitive(view->step_controls, FALSE);
     gtk_widget_set_sensitive(view->breakpoints, FALSE);
+    if (view->file_breakpoint_button)
+        gtk_widget_set_sensitive(view->file_breakpoint_button, FALSE);
     gtk_widget_set_sensitive(view->stop, TRUE);
     gtk_widget_set_sensitive(view->pause, TRUE);
     gtk_label_set_text(GTK_LABEL(view->status), view->python ? "Python script running…" : "Lua script running…");
@@ -5768,11 +6088,16 @@ static void debug_restart(GtkButton *button, gpointer data)
     InsightPythonDebug *python_replacement = NULL;
     GError *python_error = NULL;
     if (view->python)
-        python_replacement = debug_new_python_engine(view->source_filename, view->source_snapshot,
+        python_replacement = debug_new_python_engine(view->source_filename, view->project_root, view->source_snapshot,
                                                      view->source_length, &python_error);
     else
-        lua_replacement = insight_lua_debug_new(view->source_snapshot, view->source_length,
+    {
+        gchar *filename = debug_file_key(view->source_filename);
+        lua_replacement = insight_lua_debug_new(filename, view->source_snapshot, view->source_length,
                                                 error, sizeof error);
+        g_free(filename);
+        insight_lua_debug_set_module_loader(lua_replacement, debug_lua_resolve_module, view);
+    }
     if (!lua_replacement && !python_replacement)
     {
         const gchar *description = python_error ? python_error->message :
@@ -5825,6 +6150,8 @@ static void debug_stop(GtkButton *button, gpointer data)
     gtk_widget_set_sensitive(view->stop, FALSE);
     gtk_widget_set_sensitive(view->pause, FALSE);
     gtk_widget_set_sensitive(view->breakpoints, TRUE);
+    if (view->file_breakpoint_button)
+        gtk_widget_set_sensitive(view->file_breakpoint_button, TRUE);
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source_view));
     GtkTextIter first, last;
     gtk_text_buffer_get_bounds(buffer, &first, &last);
@@ -5870,7 +6197,7 @@ static void debug_mark_breakpoints(GtkEditable *entry, gpointer data)
 
     unsigned long lines[128];
     gsize count = 0;
-    if (!debug_read_breakpoints(GTK_ENTRY(entry), lines, &count))
+    if (!debug_parse_breakpoints(gtk_entry_get_text(GTK_ENTRY(entry)), lines, &count))
         return;
 
     guint line_count = (guint)gtk_text_buffer_get_line_count(buffer);
@@ -5909,7 +6236,7 @@ static gboolean debug_click_line_number(GtkWidget *widget, GdkEventButton *event
 
     unsigned long lines[128];
     gsize count = 0;
-    if (!debug_read_breakpoints(GTK_ENTRY(view->breakpoints), lines, &count))
+    if (!debug_parse_breakpoints(gtk_entry_get_text(GTK_ENTRY(view->breakpoints)), lines, &count))
     {
         gtk_label_set_text(GTK_LABEL(view->status), "Correct the breakpoint list before adding a line.");
         return TRUE;
@@ -5982,18 +6309,33 @@ static void debug_go_to_source(GtkButton *button, gpointer data)
     (void)button;
     ScriptDebugWindow *view = data;
     GeanyDocument *document = document_find_by_id(view->document_id);
-    if (!view->paused_line || !DOC_VALID(document))
+    const gchar *snapshot = view->source_snapshot;
+    gsize snapshot_length = view->source_length;
+    if (view->display_filename &&
+        !debug_same_file(view->source_filename, view->display_filename))
+    {
+        snapshot = view->display_source;
+        snapshot_length = view->display_length;
+        document = document_find_by_filename(view->display_filename);
+        if (!DOC_VALID(document) && snapshot && g_path_is_absolute(view->display_filename))
+        {
+            gchar *locale_path = utils_get_locale_from_utf8(view->display_filename);
+            document = document_open_file(locale_path, FALSE, NULL, NULL);
+            g_free(locale_path);
+        }
+    }
+    if (!view->paused_line || !snapshot || !DOC_VALID(document))
     {
         gtk_label_set_text(GTK_LABEL(view->status), "The original buffer is no longer open.");
         return;
     }
 
     gint length = sci_get_length(document->editor->sci);
-    gboolean unchanged = length >= 0 && (gsize)length == view->source_length;
+    gboolean unchanged = length >= 0 && (gsize)length == snapshot_length;
     if (unchanged)
     {
         gchar *text = sci_get_contents(document->editor->sci, length + 1);
-        unchanged = memcmp(text, view->source_snapshot, view->source_length) == 0;
+        unchanged = memcmp(text, snapshot, snapshot_length) == 0;
         g_free(text);
     }
     if (!unchanged)
@@ -6114,14 +6456,15 @@ static gboolean debug_source_tooltip(GtkWidget *widget, gint x, gint y, gboolean
     gsize line_start = g_array_index(view->source_line_offsets, gsize, line);
     gsize hover = line_start + (gsize)byte_in_line;
     const gchar *mask = view->source_code_mask;
-    if (hover >= view->source_length || !debug_identifier_byte(mask[hover]))
+    gsize source_length = view->display_length;
+    if (hover >= source_length || !debug_identifier_byte(mask[hover]))
         return FALSE;
 
     gsize start = hover;
     gsize end = hover + 1;
     while (start > line_start && debug_identifier_byte(mask[start - 1]))
         start--;
-    while (end < view->source_length && debug_identifier_byte(mask[end]))
+    while (end < source_length && debug_identifier_byte(mask[end]))
         end++;
     if (view->python && start > line_start && mask[start - 1] == '.')
         return FALSE;
@@ -6172,6 +6515,86 @@ static gchar *debug_number_source(const gchar *source, gsize length, GArray *lin
     return g_string_free(numbered, FALSE);
 }
 
+/* Choose a source file without changing the debugged entry point. */
+/* Выбирает файл Python, не меняя точку входа отладки. */
+static gchar *debug_choose_script_file(GtkWindow *parent, const gchar *title, const gchar *root, gboolean python)
+{
+    GtkWidget *dialog = gtk_file_chooser_dialog_new(title, parent, GTK_FILE_CHOOSER_ACTION_OPEN,
+        "_Cancel", GTK_RESPONSE_CANCEL, "_Open", GTK_RESPONSE_ACCEPT, NULL);
+    GtkFileFilter *filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, python ? "Python files" : "Lua files");
+    if (python)
+    {
+        gtk_file_filter_add_pattern(filter, "*.[pP][yY]");
+        gtk_file_filter_add_pattern(filter, "*.[pP][yY][wW]");
+    }
+    else
+        gtk_file_filter_add_pattern(filter, "*.[lL][uU][aA]");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+    if (root && g_path_is_absolute(root))
+        gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), root);
+    gchar *filename = gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT ?
+        gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog)) : NULL;
+    gtk_widget_destroy(dialog);
+    return filename;
+}
+
+/* Edit breakpoints in a file before execution has reached it. */
+/* Задаёт точки останова в файле до первого перехода к нему. */
+static void debug_breakpoints_in_file(GtkButton *button, gpointer data)
+{
+    (void)button;
+    ScriptDebugWindow *view = data;
+    if (debug_is_running(view))
+        return;
+
+    gchar *locale_filename = debug_choose_script_file(GTK_WINDOW(view->window),
+        "Select a file for breakpoints", view->project_root, view->python);
+    if (!locale_filename)
+        return;
+    gchar *filename = utils_get_utf8_from_locale(locale_filename);
+    g_free(locale_filename);
+    if (!filename)
+        return;
+
+    gboolean displayed = debug_same_file(view->display_filename, filename);
+    gchar *key = debug_file_key(filename);
+    const gchar *saved = displayed ? gtk_entry_get_text(GTK_ENTRY(view->breakpoints)) :
+        g_hash_table_lookup(view->file_breakpoints, key);
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Breakpoints in File", GTK_WINDOW(view->window),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
+        "_Apply", GTK_RESPONSE_ACCEPT, NULL);
+    GtkWidget *entry = gtk_entry_new();
+    gtk_entry_set_max_length(GTK_ENTRY(entry), 2048);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(entry), "Breakpoint lines, or empty to clear");
+    gtk_entry_set_text(GTK_ENTRY(entry), saved ? saved : "");
+    gtk_entry_set_activates_default(GTK_ENTRY(entry), TRUE);
+    gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+    GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    GtkWidget *label = gtk_label_new(filename);
+    gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_MIDDLE);
+    gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), entry, FALSE, FALSE, 0);
+    gtk_widget_show_all(dialog);
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+    {
+        const gchar *text = gtk_entry_get_text(GTK_ENTRY(entry));
+        unsigned long lines[128];
+        gsize count = 0;
+        if (debug_parse_breakpoints(text, lines, &count))
+        {
+            debug_store_file_breakpoints(view, filename, text);
+            if (displayed)
+                gtk_entry_set_text(GTK_ENTRY(view->breakpoints), text);
+        }
+        else
+            gtk_label_set_text(GTK_LABEL(view->status), "Invalid breakpoint line list");
+    }
+    gtk_widget_destroy(dialog);
+    g_free(key);
+    g_free(filename);
+}
+
 /* Capture the active script buffer and open the selected debugger. */
 /* Сохраняет снимок буфера и открывает выбранный отладчик. */
 static void debug_current_script(GtkMenuItem *item, gpointer data)
@@ -6205,10 +6628,15 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     GError *python_error = NULL;
     InsightLuaDebug *lua_engine = NULL;
     InsightPythonDebug *python_engine = NULL;
+    gchar *project_root = app->project ? project_get_base_path() : NULL;
     if (python)
-        python_engine = debug_new_python_engine(document->file_name, source, length, &python_error);
+        python_engine = debug_new_python_engine(document->file_name, project_root, source, length, &python_error);
     else
-        lua_engine = insight_lua_debug_new(source, length, error, sizeof error);
+    {
+        gchar *filename = debug_file_key(document->file_name);
+        lua_engine = insight_lua_debug_new(filename, source, length, error, sizeof error);
+        g_free(filename);
+    }
     if (!lua_engine && !python_engine)
     {
         const gchar *description = python_error ? python_error->message :
@@ -6217,6 +6645,7 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
         ui_set_statusbar(TRUE, "%s", message);
         g_free(message);
         g_clear_error(&python_error);
+        g_free(project_root);
         g_free(source);
         return;
     }
@@ -6225,6 +6654,10 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     view->python = python;
     view->engine = lua_engine;
     view->python_engine = python_engine;
+    view->project_root = project_root;
+    view->file_breakpoints = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    view->lua_modules = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, debug_lua_module_free);
+    insight_lua_debug_set_module_loader(lua_engine, debug_lua_resolve_module, view);
     view->watch_paths = g_ptr_array_new_with_free_func(g_free);
     view->watch_selected = -1;
     view->document_id = document->id;
@@ -6234,6 +6667,9 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
         python ? INSIGHT_CODE_PYTHON : INSIGHT_CODE_LUA, NULL);
     view->source_line_offsets = g_array_new(FALSE, FALSE, sizeof(gsize));
     view->source_filename = g_strdup(document->file_name);
+    view->display_filename = g_strdup(view->source_filename ? view->source_filename : "<buffer>");
+    view->display_source = g_strdup(source);
+    view->display_length = (gsize)length;
     view->project_filename = g_strdup(app->project ? app->project->file_name : NULL);
     ScintillaObject *sci = document->editor->sci;
     view->selection_snapshot = sci_get_selection_contents(sci);
@@ -6289,7 +6725,13 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     view->breakpoints = gtk_entry_new();
     gtk_entry_set_max_length(GTK_ENTRY(view->breakpoints), 2048);
     gtk_entry_set_placeholder_text(GTK_ENTRY(view->breakpoints), "Breakpoint lines (e.g. 3, 12, 27)");
-    gtk_box_pack_start(GTK_BOX(box), view->breakpoints, FALSE, FALSE, 0);
+    GtkWidget *breakpoint_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_box_pack_start(GTK_BOX(box), breakpoint_row, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(breakpoint_row), view->breakpoints, TRUE, TRUE, 0);
+    view->file_breakpoint_button = gtk_button_new_with_label("Breakpoints in File…");
+    g_signal_connect(view->file_breakpoint_button, "clicked",
+                     G_CALLBACK(debug_breakpoints_in_file), view);
+    gtk_box_pack_start(GTK_BOX(breakpoint_row), view->file_breakpoint_button, FALSE, FALSE, 0);
     GtkWidget *pane = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     gtk_box_pack_start(GTK_BOX(box), pane, TRUE, TRUE, 0);
     view->source_view = debug_create_view(pane, TRUE);
@@ -6323,6 +6765,32 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     debug_window_step(view, INSIGHT_LUA_STEP_INTO);
 }
 
+/* Open a selected entry file, then start the debugger from its editor tab. */
+/* Открывает выбранную точку входа и запускает отладчик из её вкладки. */
+static void debug_select_script_entry(GtkMenuItem *item, gpointer data)
+{
+    (void)item;
+    gboolean python = GPOINTER_TO_INT(data);
+    gchar *root = app->project ? project_get_base_path() : NULL;
+    gchar *filename = debug_choose_script_file(GTK_WINDOW(main_widgets.window),
+        python ? "Python Debug Entry" : "Lua Debug Entry", root, python);
+    g_free(root);
+    if (!filename)
+        return;
+    gchar *utf8 = utils_get_utf8_from_locale(filename);
+    GeanyDocument *document = utf8 ? document_find_by_filename(utf8) : NULL;
+    if (!DOC_VALID(document))
+        document = document_open_file(filename, FALSE, NULL, NULL);
+    if (DOC_VALID(document))
+    {
+        document_show_tab(document);
+        document_grab_focus(document);
+        debug_current_script(NULL, GINT_TO_POINTER(python));
+    }
+    g_free(utf8);
+    g_free(filename);
+}
+
 static void create_native_lua(void) {
  gchar *settings=g_build_filename(app->configdir,"insight","lua-extension.conf",NULL);
  wb.extensions=insight_extensions_new(settings); g_free(settings); GError *error=NULL;
@@ -6337,6 +6805,12 @@ static void create_native_lua(void) {
  GtkWidget *python_debug=gtk_menu_item_new_with_label(insight_tr("Debug Current Python Buffer…"));
  g_signal_connect(python_debug,"activate",G_CALLBACK(debug_current_script),GINT_TO_POINTER(TRUE));
  gtk_menu_shell_append(GTK_MENU_SHELL(wb.lua_menu),python_debug);
+ GtkWidget *python_entry=gtk_menu_item_new_with_label(insight_tr("Debug Python File…"));
+ g_signal_connect(python_entry,"activate",G_CALLBACK(debug_select_script_entry),GINT_TO_POINTER(TRUE));
+ gtk_menu_shell_append(GTK_MENU_SHELL(wb.lua_menu),python_entry);
+ GtkWidget *lua_entry=gtk_menu_item_new_with_label(insight_tr("Debug Lua File…"));
+ g_signal_connect(lua_entry,"activate",G_CALLBACK(debug_select_script_entry),NULL);
+ gtk_menu_shell_append(GTK_MENU_SHELL(wb.lua_menu),lua_entry);
  GtkWidget *commands=gtk_menu_item_new_with_label("Commands"); wb.lua_commands=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(commands),wb.lua_commands); gtk_container_add(GTK_CONTAINER(wb.lua_menu),commands);
  wb.palette_item=gtk_menu_item_new_with_label("Command palette…"); g_signal_connect(wb.palette_item,"activate",G_CALLBACK(show_native_palette),NULL); gtk_container_add(GTK_CONTAINER(wb.lua_menu),wb.palette_item);
  gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),item); gtk_widget_show_all(item); native_commands_rebuild();

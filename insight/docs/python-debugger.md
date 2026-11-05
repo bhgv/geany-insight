@@ -14,8 +14,7 @@ Click a line number to toggle a breakpoint. **F5** continues, **F10** steps over
 **F11** steps into, and **Shift+F11** steps out. **Pause** requests a stop on the
 next traced line. **Shift+F5** stops the child process, and **Ctrl+F5** restarts
 the original snapshot. **Go to Source** opens the line when the editor buffer
-still matches the snapshot. Steps and breakpoints apply to the captured buffer.
-An imported module or a native call can run until control returns to that buffer.
+still matches the snapshot. The current file is the default entry point. Use **Scripts → Debug Python File…** to choose another. With a project open, the debugger follows runtime calls into files under its base directory. **Breakpoints in File…** lets you choose a file and set breakpoints before execution reaches it. Breakpoints are stored per file. The entry runs from its snapshot; Python imports other files from disk.
 
 ## Values and watch graph
 
