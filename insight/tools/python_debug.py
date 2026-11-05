@@ -3,6 +3,7 @@
 """Trace a Python buffer for the native Geany Insight debugger."""
 
 import importlib.machinery
+import ast
 import io
 import json
 import os
@@ -187,6 +188,19 @@ def stack_text(frame):
     return "\n".join(rows)[:8191]
 
 
+# Accept only a named scalar compared for equality with a scalar literal.
+# Разрешает только сравнение именованного простого значения с литералом.
+def parse_condition(source):
+    expression = ast.parse(source, mode="eval").body
+    if (type(expression) is not ast.Compare or type(expression.left) is not ast.Name or
+            len(expression.ops) != 1 or type(expression.ops[0]) is not ast.Eq):
+        raise ValueError("expected a condition like counter == 10")
+    value = ast.literal_eval(expression.comparators[0])
+    if type(value) not in (bool, int, float, str, type(None)):
+        raise ValueError("expected a number, string, Boolean or None")
+    return expression.left.id, value
+
+
 class Debugger:
     # Track the current step action and the original source filename.
     # Хранит текущий шаг и имя исходного файла.
@@ -200,6 +214,7 @@ class Debugger:
         self.mode = "into"
         self.depth = 0
         self.breakpoints = set()
+        self.condition = None
         self.breakpoint_files = set()
 
     # Normalize filenames the same way for trace frames and breakpoints.
@@ -239,7 +254,15 @@ class Debugger:
             self.mode = fields[0]
             self.depth = depth
             self.breakpoints = set()
+            self.condition = None
             for value in fields[1:]:
+                if value.startswith("condition:"):
+                    try:
+                        self.condition = parse_condition(bytes.fromhex(value[10:]).decode("utf-8"))
+                    except (SyntaxError, ValueError):
+                        self.output.console("Invalid stop condition. Expected: counter == 10\n")
+                        self.mode = "into"
+                    continue
                 path_hex, separator, line = value.partition(":")
                 if not separator or not line.isdecimal():
                     continue
@@ -251,6 +274,25 @@ class Debugger:
             self.breakpoint_files = {path for path, _line in self.breakpoints}
             self.traceable = {self.filename: True}
             return
+
+    # Compare real scalar values without calling application-defined equality.
+    # Сравнивает простые значения без вызова пользовательского сравнения.
+    def matches_condition(self, frame):
+        if self.condition is None:
+            return False
+        name, expected = self.condition
+        values = frame.f_locals
+        if name not in values:
+            values = frame.f_globals
+        if name not in values:
+            return False
+        actual = values[name]
+        if type(actual) is type(expected):
+            return actual == expected
+        actual_type = type(actual)
+        expected_type = type(expected)
+        return ((actual_type is int or actual_type is float) and
+                (expected_type is int or expected_type is float) and actual == expected)
 
     # Stop in tracked files while preserving the full call depth.
     # Останавливается в отслеживаемых файлах с учётом полной глубины стека.
@@ -275,6 +317,7 @@ class Debugger:
         filename = frame.f_code.co_filename
         position = (self.file_keys[filename], frame.f_lineno)
         if (pause or position in self.breakpoints or self.mode == "into" or
+                self.matches_condition(frame) or
                 (self.mode == "over" and depth <= self.depth) or
                 (self.mode == "out" and depth < self.depth)):
             graph = WatchSnapshot(frame)

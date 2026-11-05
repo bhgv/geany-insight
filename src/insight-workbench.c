@@ -4971,7 +4971,6 @@ typedef struct {
     GHashTable *lua_modules;
     gsize lua_module_bytes;
     GtkWidget *file_breakpoint_button;
-    GtkWidget *breakpoint_list_button;
     GtkWidget *window;
     GtkWidget *source_view;
     GtkWidget *stack_view;
@@ -5033,6 +5032,8 @@ static void debug_window_free(gpointer data)
     g_free(view->display_source);
     g_hash_table_unref(view->file_breakpoints);
     g_free(view->breakpoint_settings_path);
+    g_free(view->stop_condition);
+    g_free(view->observer_source);
     g_hash_table_unref(view->lua_modules);
     g_free(view->source_snapshot);
     g_free(view->source_code_mask);
@@ -5526,6 +5527,8 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
     gtk_text_buffer_get_bounds(buffer, &first, &last);
     gtk_text_buffer_remove_tag(buffer, view->current_line_tag, &first, &last);
     view->paused_line = 0;
+    if (view->observer_log)
+        debug_set_text(view->observer_log, insight_lua_debug_observer_log(view->engine));
 
     if (result == 1 && line > 0)
     {
@@ -5568,8 +5571,6 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
     gtk_widget_set_sensitive(view->breakpoints, TRUE);
     if (view->file_breakpoint_button)
         gtk_widget_set_sensitive(view->file_breakpoint_button, TRUE);
-    if (view->breakpoint_list_button)
-        gtk_widget_set_sensitive(view->breakpoint_list_button, TRUE);
     view->watch_graph = NULL;
     if (result == 1)
         view->watch_graph = view->python ? view->python_graph : insight_lua_debug_watch_graph(view->engine);
@@ -6117,6 +6118,12 @@ static void debug_python_step(ScriptDebugWindow *view)
             debug_append_file_breakpoint(command, filename, lines[i]);
         total += (guint)count;
     }
+    if (view->stop_condition && *view->stop_condition)
+    {
+        g_string_append(command, " condition:");
+        for (const guchar *byte = (const guchar *)view->stop_condition; *byte; byte++)
+            g_string_append_printf(command, "%02x", (guint)*byte);
+    }
     if (command->len > 64 * 1024)
     {
         g_string_free(command, TRUE);
@@ -6276,8 +6283,6 @@ static void debug_window_step(ScriptDebugWindow *view, InsightLuaStep mode)
     gtk_widget_set_sensitive(view->breakpoints, FALSE);
     if (view->file_breakpoint_button)
         gtk_widget_set_sensitive(view->file_breakpoint_button, FALSE);
-    if (view->breakpoint_list_button)
-        gtk_widget_set_sensitive(view->breakpoint_list_button, FALSE);
     gtk_widget_set_sensitive(view->stop, TRUE);
     gtk_widget_set_sensitive(view->pause, TRUE);
     gtk_label_set_text(GTK_LABEL(view->status), view->python ? "Python script running…" : "Lua script running…");
@@ -6348,6 +6353,32 @@ static void debug_window_action(GtkButton *button, gpointer data)
     debug_window_step(data, mode);
 }
 
+/* Combine the optional line condition with a stateful Lua observer. */
+/* Объединяет условие остановки на строке со сценарием Lua, сохраняющим состояние. */
+static gboolean debug_apply_lua_observer(InsightLuaDebug *engine, const gchar *condition,
+                                        const gchar *source, gchar *error, gsize capacity)
+{
+    if ((!condition || !*condition) && (!source || !*source))
+        return insight_lua_debug_set_observer(engine, NULL, 0, error, capacity);
+
+    GString *program = g_string_new("local observer\n");
+    if (source && *source)
+    {
+        g_string_append(program, "observer = (function()\n");
+        g_string_append(program, source);
+        g_string_append(program, "\nend)()\n"
+            "if type(observer) ~= 'function' then error('Observer must return a function') end\n");
+    }
+    g_string_append(program, "return function(event)\n"
+        "  if observer and observer(event) == true then return true end\n");
+    if (condition && *condition)
+        g_string_append_printf(program, "  if event.kind == 'line' then return (%s\n) == true end\n", condition);
+    g_string_append(program, "end\n");
+    gboolean applied = insight_lua_debug_set_observer(engine, program->str, program->len, error, capacity);
+    g_string_free(program, TRUE);
+    return applied;
+}
+
 /* Start a fresh VM on the same source snapshot, keeping the breakpoints. */
 /* Создаёт новую виртуальную машину для того же снимка и сохраняет точки останова. */
 static void debug_restart(GtkButton *button, gpointer data)
@@ -6368,6 +6399,9 @@ static void debug_restart(GtkButton *button, gpointer data)
                                                 error, sizeof error);
         g_free(filename);
         insight_lua_debug_set_module_loader(lua_replacement, debug_lua_resolve_module, view);
+        if (lua_replacement && !debug_apply_lua_observer(lua_replacement, view->stop_condition,
+                                                       view->observer_source, error, sizeof error))
+            g_clear_pointer(&lua_replacement, insight_lua_debug_free);
     }
     if (!lua_replacement && !python_replacement)
     {
@@ -6428,8 +6462,6 @@ static void debug_stop(GtkButton *button, gpointer data)
     gtk_widget_set_sensitive(view->breakpoints, TRUE);
     if (view->file_breakpoint_button)
         gtk_widget_set_sensitive(view->file_breakpoint_button, TRUE);
-    if (view->breakpoint_list_button)
-        gtk_widget_set_sensitive(view->breakpoint_list_button, TRUE);
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source_view));
     GtkTextIter first, last;
     gtk_text_buffer_get_bounds(buffer, &first, &last);
@@ -6944,163 +6976,80 @@ static void debug_breakpoints_in_file(GtkButton *button, gpointer data)
     g_free(filename);
 }
 
-/* Open the current editor text at a saved breakpoint line. */
-/* Открывает текущий текст редактора на строке сохранённой точки останова. */
-static void debug_open_breakpoint(ScriptDebugWindow *view, const gchar *filename, gint line)
-{
-    GeanyDocument *document = NULL;
-    if (!g_path_is_absolute(filename))
-        document = document_find_by_id(view->document_id);
-    else
-    {
-        document = document_find_by_filename(filename);
-        if (!DOC_VALID(document))
-        {
-            gchar *locale_path = utils_get_locale_from_utf8(filename);
-            if (locale_path)
-                document = document_open_file(locale_path, FALSE, NULL, NULL);
-            g_free(locale_path);
-        }
-    }
-    if (!DOC_VALID(document) || line > sci_get_line_count(document->editor->sci))
-    {
-        gtk_label_set_text(GTK_LABEL(view->status), "The breakpoint line is unavailable in the editor.");
-        return;
-    }
-    navqueue_goto_line(document_get_current(), document, line);
-    document_grab_focus(document);
-    gtk_window_present(GTK_WINDOW(main_widgets.window));
-}
-
-/* Remove one line while retaining every other breakpoint in the file. */
-/* Удаляет одну строку, сохраняя остальные точки останова в файле. */
-static void debug_remove_breakpoint(ScriptDebugWindow *view, const gchar *filename, guint line)
-{
-    const gchar *saved = g_hash_table_lookup(view->file_breakpoints, filename);
-    unsigned long lines[128];
-    gsize count = 0;
-    if (!saved || !debug_parse_breakpoints(saved, lines, &count))
-        return;
-
-    GString *remaining = g_string_new(NULL);
-    for (gsize i = 0; i < count; i++)
-    {
-        if (lines[i] == line)
-            continue;
-        if (remaining->len)
-            g_string_append(remaining, ", ");
-        g_string_append_printf(remaining, "%lu", lines[i]);
-    }
-    debug_store_file_breakpoints(view, filename, remaining->str);
-    if (debug_same_file(view->display_filename, filename))
-        gtk_entry_set_text(GTK_ENTRY(view->breakpoints), remaining->str);
-    g_string_free(remaining, TRUE);
-}
-
-/* Fill the breakpoint list from the current debugger's file map. */
-/* Заполняет список точек останова из карты файлов текущего отладчика. */
-static guint debug_fill_breakpoint_list(ScriptDebugWindow *view, GtkListStore *store)
-{
-    gtk_list_store_clear(store);
-    GHashTableIter files;
-    gpointer filename, saved;
-    guint total = 0;
-    g_hash_table_iter_init(&files, view->file_breakpoints);
-    while (g_hash_table_iter_next(&files, &filename, &saved))
-    {
-        unsigned long lines[128];
-        gsize count = 0;
-        if (!debug_parse_breakpoints(saved, lines, &count))
-            continue;
-
-        for (gsize i = 0; i < count; i++)
-        {
-            GtkTreeIter row;
-            gtk_list_store_insert_with_values(store, &row, -1, 0, filename, 1, (guint)lines[i], -1);
-            total++;
-        }
-    }
-    return total;
-}
-
-/* Open the selected row when the user activates it with Enter or double-click. */
-/* Открывает выбранную строку по Enter или двойному щелчку. */
-static void debug_activate_breakpoint(GtkTreeView *tree, GtkTreePath *path,
-                                      GtkTreeViewColumn *column, gpointer data)
-{
-    (void)tree;
-    (void)path;
-    (void)column;
-    gtk_dialog_response(GTK_DIALOG(data), GTK_RESPONSE_ACCEPT);
-}
-
-/* Browse, open and remove breakpoints across all files in the current session. */
-/* Показывает точки останова во всех файлах и позволяет открывать и удалять их. */
-static void debug_list_breakpoints(GtkButton *button, gpointer data)
+/* Edit the stop condition and, for Lua, the optional event callback. */
+/* Настраивает условие остановки и дополнительный обработчик событий Lua. */
+static void debug_configure_observer(GtkButton *button, gpointer data)
 {
     (void)button;
     ScriptDebugWindow *view = data;
     if (debug_is_running(view))
         return;
 
-    GtkWidget *dialog = gtk_dialog_new_with_buttons("Breakpoints", GTK_WINDOW(view->window),
-        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE,
-        "_Remove", GTK_RESPONSE_APPLY, "_Open Source", GTK_RESPONSE_ACCEPT, NULL);
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 700, 350);
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(view->python ? "Stop Condition" : "Stop Condition and Lua Observer",
+        GTK_WINDOW(view->window), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+        "_Cancel", GTK_RESPONSE_CANCEL, "_Apply", GTK_RESPONSE_ACCEPT, NULL);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 650, view->python ? 140 : 420);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    GtkWidget *summary = gtk_label_new(NULL);
-    gtk_box_pack_start(GTK_BOX(box), summary, FALSE, FALSE, 6);
-    GtkListStore *store = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_UINT);
-    GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
-    GtkTreeViewColumn *file_column = gtk_tree_view_column_new_with_attributes(
-        "File", gtk_cell_renderer_text_new(), "text", 0, NULL);
-    GtkTreeViewColumn *line_column = gtk_tree_view_column_new_with_attributes(
-        "Line", gtk_cell_renderer_text_new(), "text", 1, NULL);
-    gtk_tree_view_column_set_resizable(file_column, TRUE);
-    gtk_tree_view_column_set_sort_column_id(file_column, 0);
-    gtk_tree_view_column_set_sort_column_id(line_column, 1);
-    gtk_tree_view_append_column(GTK_TREE_VIEW(tree), file_column);
-    gtk_tree_view_append_column(GTK_TREE_VIEW(tree), line_column);
-    gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(store), 0, GTK_SORT_ASCENDING);
-    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
-    gtk_container_add(GTK_CONTAINER(scroll), tree);
-    gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
-    g_signal_connect(tree, "row-activated", G_CALLBACK(debug_activate_breakpoint), dialog);
-    gtk_widget_show_all(dialog);
+    GtkWidget *entry = gtk_entry_new();
+    gtk_entry_set_max_length(GTK_ENTRY(entry), 1024);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(entry), view->python ? "counter == 10" : "event.locals.counter == 10");
+    gtk_entry_set_text(GTK_ENTRY(entry), view->stop_condition ? view->stop_condition : "");
+    gtk_box_pack_start(GTK_BOX(box), gtk_label_new("Stop when true on a source line. Leave empty to disable."),
+                       FALSE, FALSE, 4);
+    gtk_box_pack_start(GTK_BOX(box), entry, FALSE, FALSE, 4);
 
-    gchar *filename = NULL;
-    guint line = 0;
-    for (;;)
+    GtkTextBuffer *script = NULL;
+    if (!view->python)
     {
-        guint total = debug_fill_breakpoint_list(view, store);
-        gchar *label = g_strdup_printf("Breakpoints: %u / 128", total);
-        gtk_label_set_text(GTK_LABEL(summary), label);
-        g_free(label);
-        GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(tree));
-        GtkTreePath *first = gtk_tree_path_new_from_indices(0, -1);
-        gtk_tree_view_set_cursor(GTK_TREE_VIEW(tree), first, NULL, FALSE);
-        gtk_tree_path_free(first);
-        gtk_dialog_set_response_sensitive(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT, total > 0);
-        gtk_dialog_set_response_sensitive(GTK_DIALOG(dialog), GTK_RESPONSE_APPLY, total > 0);
-        gint response = gtk_dialog_run(GTK_DIALOG(dialog));
-        if (response != GTK_RESPONSE_ACCEPT && response != GTK_RESPONSE_APPLY)
+        gtk_box_pack_start(GTK_BOX(box), gtk_label_new("Optional Lua script returning function(event)."),
+                           FALSE, FALSE, 4);
+        GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+        GtkWidget *editor = gtk_text_view_new();
+        gtk_text_view_set_monospace(GTK_TEXT_VIEW(editor), TRUE);
+        script = gtk_text_view_get_buffer(GTK_TEXT_VIEW(editor));
+        gtk_text_buffer_set_text(script, view->observer_source ? view->observer_source : "", -1);
+        gtk_container_add(GTK_CONTAINER(scroll), editor);
+        gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
+    }
+    GtkWidget *status = gtk_label_new(NULL);
+    gtk_label_set_line_wrap(GTK_LABEL(status), TRUE);
+    gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 4);
+    gtk_widget_show_all(dialog);
+    while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+    {
+        gchar *condition = g_strdup(gtk_entry_get_text(GTK_ENTRY(entry)));
+        g_strstrip(condition);
+        gchar *source = NULL;
+        if (script)
+        {
+            GtkTextIter first, last;
+            gtk_text_buffer_get_bounds(script, &first, &last);
+            source = gtk_text_buffer_get_text(script, &first, &last, FALSE);
+            g_strstrip(source);
+        }
+        gchar error[1024] = "";
+        gboolean valid = !source || strlen(source) <= 64 * 1024;
+        if (!valid)
+            g_strlcpy(error, "Observer script exceeds 64 KiB", sizeof error);
+        else if (!view->python && view->engine)
+            valid = debug_apply_lua_observer(view->engine, condition, source, error, sizeof error);
+        if (valid)
+        {
+            g_free(view->stop_condition);
+            g_free(view->observer_source);
+            view->stop_condition = condition;
+            view->observer_source = source;
+            if (view->observer_log)
+                debug_set_text(view->observer_log, insight_lua_debug_observer_log(view->engine));
             break;
-
-        GtkTreeIter row;
-        if (!gtk_tree_selection_get_selected(selection, NULL, &row))
-            continue;
-        gtk_tree_model_get(GTK_TREE_MODEL(store), &row, 0, &filename, 1, &line, -1);
-        if (response == GTK_RESPONSE_ACCEPT)
-            break;
-
-        debug_remove_breakpoint(view, filename, line);
-        g_clear_pointer(&filename, g_free);
+        }
+        gchar *message = g_utf8_make_valid(error, -1);
+        gtk_label_set_text(GTK_LABEL(status), message);
+        g_free(message);
+        g_free(condition);
+        g_free(source);
     }
     gtk_widget_destroy(dialog);
-    g_object_unref(store);
-    if (filename)
-        debug_open_breakpoint(view, filename, (gint)line);
-    g_free(filename);
 }
 
 /* Capture the active script buffer and open the selected debugger. */
@@ -7254,9 +7203,6 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     g_signal_connect(view->file_breakpoint_button, "clicked",
                      G_CALLBACK(debug_breakpoints_in_file), view);
     gtk_box_pack_start(GTK_BOX(breakpoint_row), view->file_breakpoint_button, FALSE, FALSE, 0);
-    view->breakpoint_list_button = gtk_button_new_with_label("All Breakpoints…");
-    g_signal_connect(view->breakpoint_list_button, "clicked", G_CALLBACK(debug_list_breakpoints), view);
-    gtk_box_pack_start(GTK_BOX(breakpoint_row), view->breakpoint_list_button, FALSE, FALSE, 0);
     GtkWidget *pane = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     gtk_box_pack_start(GTK_BOX(box), pane, TRUE, TRUE, 0);
     view->source_view = debug_create_view(pane, TRUE);
@@ -7266,6 +7212,12 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     view->stack_view = debug_create_view(stack_pane, TRUE);
     gtk_notebook_append_page(GTK_NOTEBOOK(inspection), stack_pane, gtk_label_new("Stack and locals"));
     gtk_notebook_append_page(GTK_NOTEBOOK(inspection), debug_create_watch_tab(view), gtk_label_new("Watch graph"));
+    if (!python)
+    {
+        GtkWidget *log_pane = gtk_paned_new(GTK_ORIENTATION_VERTICAL);
+        view->observer_log = debug_create_view(log_pane, TRUE);
+        gtk_notebook_append_page(GTK_NOTEBOOK(inspection), log_pane, gtk_label_new("Observer log"));
+    }
     if (python)
     {
         GtkWidget *console_pane = gtk_paned_new(GTK_ORIENTATION_VERTICAL);

@@ -59,3 +59,33 @@ filename and lines. `project.*` reads the index while the original project
 is active. Opening, saving and editing documents require the normal Lua script
 runner. Restart reuses the original snapshot. Start a new debugger window to
 pick up edits made after launch.
+
+## Stop conditions and Lua observers
+
+Open **Conditions and Script…** while paused. Enter `event.locals.counter == 10`
+to stop before the next source line when the local reaches 10. For a global,
+use `event.globals.counter == 10`. Clear the field to disable the condition.
+
+The lower field accepts a Lua chunk returning an event handler. The handler receives
+`line`, `call` and `return` events with `kind`, `file`, `line`, `name`,
+`locals`, `args` and `globals`. The name may be empty. Value tables contain bounded
+copies of scalar values. Returning `true` requests a stop at the next yieldable line.
+**Observer log** refreshes at stops and at exit. A callback error disables the observer
+and appears in the log. The condition and script belong to the current debugger window.
+Restart resets the callback state and log.
+
+This example logs arguments to `tick` and waits for `1` followed by `2`.
+
+```lua
+local previous
+return function(event)
+    if event.kind ~= "call" or event.name ~= "tick" then
+        return
+    end
+    local counter = event.args.counter
+    log("tick(" .. tostring(counter) .. ")")
+    local stop = previous == 1 and counter == 2
+    previous = counter
+    return stop
+end
+```

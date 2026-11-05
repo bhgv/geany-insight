@@ -69,6 +69,9 @@ InsightLuaDebug *insight_lua_debug_new(const char *filename, const char *,size_t
 void insight_lua_debug_set_module_loader(InsightLuaDebug *, InsightLuaModuleLoader, void *);
 const char *insight_lua_debug_filename(const InsightLuaDebug *);
 void insight_lua_debug_free(InsightLuaDebug *);
+int insight_lua_debug_set_observer(InsightLuaDebug *debug, const char *source,
+                                  size_t length, char *error, size_t capacity);
+const char *insight_lua_debug_observer_log(const InsightLuaDebug *debug);
 void insight_lua_debug_request_pause(InsightLuaDebug *);
 /* Resume returns 2 when another slice is needed, 1 at a source stop,
  * 0 on completion, and -1 on failure.
