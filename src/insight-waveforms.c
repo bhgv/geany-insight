@@ -199,7 +199,7 @@ static gint track_signal(Viewer *viewer, guint track, gint active) {
  return track < viewer->tracks->len ? g_array_index(viewer->tracks, gint, track) : active;
 }
 
-static guint upper_bound(Trace *trace, guint64 time) {
+static guint upper_bound(const Trace *trace, guint64 time) {
  guint lo = 0, hi = trace->edges->len;
  while (lo < hi) {
   guint mid = lo + (hi - lo) / 2;
@@ -475,6 +475,102 @@ static void wave_action(GtkButton *button, gpointer data) {
  update(viewer);
 }
 
+typedef enum {
+    WAVE_MATCH_VALUE,
+    WAVE_MATCH_RISING,
+    WAVE_MATCH_FALLING
+} WaveMatch;
+
+/* Find the next recorded match strictly after the current cursor. */
+/* Ищет следующее совпадение в записи строго после текущего курсора. */
+static gboolean wave_find_match(const Trace *trace, guint64 cursor, WaveMatch mode,
+                                const gchar *value, guint64 *time)
+{
+    guint start = upper_bound(trace, cursor);
+    for (guint i = start; i < trace->edges->len; i++)
+    {
+        const Edge *edge = &g_array_index(trace->edges, Edge, i);
+        gboolean matches = FALSE;
+        if (mode == WAVE_MATCH_VALUE)
+            matches = !strcmp(edge->value, value);
+        else if (i && trace->width == 1)
+        {
+            const Edge *previous = &g_array_index(trace->edges, Edge, i - 1);
+            gchar from = mode == WAVE_MATCH_RISING ? '0' : '1';
+            gchar to = mode == WAVE_MATCH_RISING ? '1' : '0';
+            matches = previous->value[0] == from && edge->value[0] == to;
+        }
+        if (matches)
+        {
+            *time = edge->time;
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+/* Move the waveform cursor to the next matching value or logical edge. */
+/* Перемещает курсор диаграммы к следующему значению или логическому фронту. */
+static void wave_search_condition(GtkButton *button, gpointer data)
+{
+    (void)button;
+    Viewer *viewer = data;
+    Signal *signal = selected(viewer);
+    if (!signal)
+        return;
+
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Find Signal Condition", GTK_WINDOW(viewer->window),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE,
+        "_Find Next", GTK_RESPONSE_ACCEPT, NULL);
+    GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    GtkWidget *heading = gtk_label_new(signal->name);
+    gtk_label_set_ellipsize(GTK_LABEL(heading), PANGO_ELLIPSIZE_MIDDLE);
+    gtk_box_pack_start(GTK_BOX(box), heading, FALSE, FALSE, 4);
+
+    GtkWidget *mode = gtk_combo_box_text_new();
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(mode), "Exact binary value (0, 1, x, z)");
+    if (signal->trace->width == 1)
+    {
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(mode), "Rising edge (0 to 1)");
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(mode), "Falling edge (1 to 0)");
+    }
+    gtk_combo_box_set_active(GTK_COMBO_BOX(mode), 0);
+    gtk_box_pack_start(GTK_BOX(box), mode, FALSE, FALSE, 4);
+    GtkWidget *value = gtk_entry_new();
+    gtk_entry_set_max_length(GTK_ENTRY(value), (gint)signal->trace->width);
+    gtk_entry_set_activates_default(GTK_ENTRY(value), TRUE);
+    gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+    gtk_box_pack_start(GTK_BOX(box), value, FALSE, FALSE, 4);
+    GtkWidget *status = gtk_label_new("Enter every bit of the selected signal for an exact match.");
+    gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 4);
+    gtk_widget_show_all(dialog);
+
+    while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+    {
+        WaveMatch match = (WaveMatch)gtk_combo_box_get_active(GTK_COMBO_BOX(mode));
+        gchar *bits = g_ascii_strdown(gtk_entry_get_text(GTK_ENTRY(value)), -1);
+        guint64 time;
+        if (match == WAVE_MATCH_VALUE &&
+            (strlen(bits) != signal->trace->width || strspn(bits, "01xz") != strlen(bits)))
+            gtk_label_set_text(GTK_LABEL(status), "Enter exactly the signal width in bits (0, 1, x, z).");
+        else if (!wave_find_match(signal->trace, viewer->cursor, match, bits, &time))
+            gtk_label_set_text(GTK_LABEL(status), "No later matching event in the capture.");
+        else
+        {
+            viewer->cursor = time;
+            guint64 total = MAX(G_GUINT64_CONSTANT(1), viewer->capture->end);
+            guint64 half = viewer->span / 2;
+            viewer->start = MIN(total - viewer->span, time > half ? time - half : 0);
+            update(viewer);
+            gchar *message = g_strdup_printf("Match at tick %" G_GUINT64_FORMAT, time);
+            gtk_label_set_text(GTK_LABEL(status), message);
+            g_free(message);
+        }
+        g_free(bits);
+    }
+    gtk_widget_destroy(dialog);
+}
+
 static void pin_clicked(GtkButton *button, gpointer data) {
  (void)button;
  Viewer *viewer = data;
@@ -616,6 +712,9 @@ static void show_capture(GtkWindow *parent, Capture *capture, const gchar *sessi
  viewer->pin = gtk_button_new_with_label("Pin track");
  g_signal_connect(viewer->pin, "clicked", G_CALLBACK(pin_clicked), viewer);
  gtk_box_pack_start(GTK_BOX(signal_row), viewer->pin, FALSE, FALSE, 0);
+ GtkWidget *condition = gtk_button_new_with_label("Find Condition…");
+ g_signal_connect(condition, "clicked", G_CALLBACK(wave_search_condition), viewer);
+ gtk_box_pack_start(GTK_BOX(signal_row), condition, FALSE, FALSE, 0);
  viewer->canvas = gtk_drawing_area_new();
  gtk_widget_add_events(viewer->canvas, GDK_BUTTON_PRESS_MASK);
  GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
