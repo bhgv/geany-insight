@@ -21,12 +21,13 @@ typedef struct {
 } Capture;
 typedef struct {
  Capture *capture;
- GtkWidget *window, *selector, *canvas, *value, *source, *pin, *filter;
+ GtkWidget *window, *selector, *canvas, *value, *source, *pin, *filter, *radix, *markers;
  gchar *session_path;
  gint active;
  gboolean rebuilding;
  GArray *tracks;
- guint64 cursor, start, span;
+ guint64 cursor, start, span, marker[2];
+ gboolean marker_set[2], hexadecimal;
  InsightWaveSource navigate;
 } Viewer;
 
@@ -157,7 +158,9 @@ static Capture *parse_capture(const gchar *bytes, gsize length, GError **error) 
      Edge edge = {time, bits};
      if (trace->edges->len && g_array_index(trace->edges, Edge, trace->edges->len - 1).time == time)
       g_array_remove_index(trace->edges, trace->edges->len - 1);
-     g_array_append_val(trace->edges, edge);
+     if (trace->edges->len && !strcmp(g_array_index(trace->edges, Edge, trace->edges->len - 1).value, bits))
+      g_free(bits);
+     else g_array_append_val(trace->edges, edge);
     }
     g_free(value);
    }
@@ -206,17 +209,59 @@ static guint upper_bound(Trace *trace, guint64 time) {
  return lo;
 }
 
+static gchar *format_bits(const gchar *bits, gboolean hexadecimal) {
+ if (!hexadecimal || !*bits || strspn(bits, "01xz") != strlen(bits))
+  return g_strdup(bits);
+ GString *out = g_string_new("0x");
+ gsize size = strlen(bits);
+ for (gsize at = 0; at < size;) {
+  gsize group = at == 0 && size % 4 ? size % 4 : 4;
+  guint value = 0;
+  gboolean binary = TRUE, all_x = TRUE, all_z = TRUE;
+  for (gsize i = 0; i < group; i++) {
+   gchar bit = bits[at + i];
+   value = value * 2 + (bit == '1');
+   binary = binary && (bit == '0' || bit == '1');
+   all_x = all_x && bit == 'x';
+   all_z = all_z && bit == 'z';
+  }
+  if (binary) g_string_append_c(out, "0123456789abcdef"[value]);
+  else if (all_x || all_z) g_string_append_c(out, all_x ? 'x' : 'z');
+  else g_string_append_printf(out, "[%.*s]", (gint)group, bits + at);
+  at += group;
+ }
+ return g_string_free(out, FALSE);
+}
+
+static void update_markers(Viewer *viewer) {
+ GString *line = g_string_new(NULL);
+ for (guint i = 0; i < G_N_ELEMENTS(viewer->marker); i++) {
+  if (viewer->marker_set[i])
+   g_string_append_printf(line, "%c: %" G_GUINT64_FORMAT "    ", 'A' + i, viewer->marker[i]);
+ }
+ if (viewer->marker_set[0] && viewer->marker_set[1]) {
+  guint64 low = MIN(viewer->marker[0], viewer->marker[1]);
+  guint64 high = MAX(viewer->marker[0], viewer->marker[1]);
+  g_string_append_printf(line, "Δ: %" G_GUINT64_FORMAT " ticks", high - low);
+ }
+ gtk_label_set_text(GTK_LABEL(viewer->markers), line->str);
+ g_string_free(line, TRUE);
+}
+
 static void update(Viewer *viewer) {
  Signal *signal = selected(viewer);
  if (!signal) return;
  guint at = upper_bound(signal->trace, viewer->cursor);
- const gchar *value = at ? g_array_index(signal->trace->edges, Edge, at - 1).value : "unknown";
+ gchar *value = format_bits(at ? g_array_index(signal->trace->edges, Edge, at - 1).value : "unknown",
+                            viewer->hexadecimal);
  gchar *label = g_strdup_printf("Tick %" G_GUINT64_FORMAT " (%s)   View: %" G_GUINT64_FORMAT
      "–%" G_GUINT64_FORMAT "   Value: %.128s%s", viewer->cursor,
      viewer->capture->scale ? viewer->capture->scale : "no timescale", viewer->start,
      MIN(viewer->capture->end, viewer->start + viewer->span), value, strlen(value) > 128 ? "…" : "");
  gtk_label_set_text(GTK_LABEL(viewer->value), label);
  g_free(label);
+ g_free(value);
+ update_markers(viewer);
  gint active = viewer->active;
  gboolean pinned = pinned_index(viewer, active) >= 0;
  gtk_button_set_label(GTK_BUTTON(viewer->pin), pinned ? "Unpin track" : "Pin track");
@@ -250,7 +295,8 @@ static void draw_trace(Viewer *viewer, Trace *trace, cairo_t *cr, double width) 
    cairo_rectangle(cr, x, height * .26, MAX(1, right - x), height * .48);
    cairo_stroke(cr);
    if (right - x > 70) {
-    gchar *label = g_strndup(bits, MIN((gsize)12, strlen(bits)));
+    gchar *label = format_bits(bits, viewer->hexadecimal);
+    if (strlen(label) > 12) label[12] = '\0';
     cairo_move_to(cr, x + 4, height * .55);
     cairo_show_text(cr, label);
     g_free(label);
@@ -265,6 +311,20 @@ static void draw_trace(Viewer *viewer, Trace *trace, cairo_t *cr, double width) 
   }
   time = until;
   next = dense ? upper_bound(trace, time) : next + 1;
+ }
+ for (guint i = 0; i < G_N_ELEMENTS(viewer->marker); i++) {
+  guint64 tick = viewer->marker[i];
+  if (!viewer->marker_set[i] || tick < viewer->start || tick > stop) continue;
+  double x = (double)(tick - viewer->start) / viewer->span * width;
+  cairo_set_source_rgb(cr, i ? .58 : .20, i ? .28 : .65, .76);
+  const double dash[] = {4, 3};
+  cairo_set_dash(cr, dash, G_N_ELEMENTS(dash), 0);
+  cairo_move_to(cr, x, 0);
+  cairo_line_to(cr, x, height);
+  cairo_stroke(cr);
+  cairo_set_dash(cr, NULL, 0, 0);
+  cairo_move_to(cr, x + 3, 12);
+  cairo_show_text(cr, i ? "B" : "A");
  }
  if (viewer->cursor >= viewer->start && viewer->cursor <= stop) {
   double x = (double)(viewer->cursor - viewer->start) / viewer->span * width;
@@ -296,8 +356,10 @@ static gboolean draw_wave(GtkWidget *widget, cairo_t *cr, gpointer data) {
   cairo_show_text(cr, signal->name);
   guint at = upper_bound(signal->trace, viewer->cursor);
   const gchar *bits = at ? g_array_index(signal->trace->edges, Edge, at - 1).value : "unknown";
-  gchar *value = g_strdup_printf("[%u] %.26s%s", signal->trace->width, bits,
-                                strlen(bits) > 26 ? "…" : "");
+  gchar *formatted = format_bits(bits, viewer->hexadecimal);
+  gchar *value = g_strdup_printf("[%u] %.26s%s", signal->trace->width, formatted,
+                                strlen(formatted) > 26 ? "…" : "");
+  g_free(formatted);
   cairo_move_to(cr, 8, 44);
   cairo_show_text(cr, value);
   g_free(value);
@@ -424,6 +486,23 @@ static void pin_clicked(GtkButton *button, gpointer data) {
  update(viewer);
 }
 
+static void radix_changed(GtkComboBox *box, gpointer data) {
+ Viewer *viewer = data;
+ viewer->hexadecimal = gtk_combo_box_get_active(box) == 1;
+ update(viewer);
+}
+
+static void marker_clicked(GtkButton *button, gpointer data) {
+ Viewer *viewer = data;
+ gint marker = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "marker"));
+ if (marker < 0) viewer->marker_set[0] = viewer->marker_set[1] = FALSE;
+ else {
+  viewer->marker[marker] = viewer->cursor;
+  viewer->marker_set[marker] = TRUE;
+ }
+ update(viewer);
+}
+
 static void source_clicked(GtkButton *button, gpointer data) {
  (void)button;
  Viewer *viewer = data;
@@ -445,6 +524,15 @@ static void restore_session(Viewer *viewer) {
   if (span) viewer->span = MIN(total, span);
   viewer->start = MIN(total - viewer->span, g_key_file_get_uint64(session, "view", "start", NULL));
   viewer->cursor = MIN(viewer->capture->end, g_key_file_get_uint64(session, "view", "cursor", NULL));
+  viewer->hexadecimal = g_key_file_get_boolean(session, "view", "hex", NULL);
+  const gchar *keys[] = {"marker-a", "marker-b"};
+  for (guint i = 0; i < G_N_ELEMENTS(keys); i++) {
+   GError *error = NULL;
+   guint64 tick = g_key_file_get_uint64(session, "view", keys[i], &error);
+   viewer->marker_set[i] = !error && tick <= viewer->capture->end;
+   if (viewer->marker_set[i]) viewer->marker[i] = tick;
+   g_clear_error(&error);
+  }
   gchar *active = g_key_file_get_string(session, "view", "active", NULL);
   gint found = find_signal(viewer->capture, active);
   if (found >= 0) viewer->active = found;
@@ -469,6 +557,10 @@ static void save_session(Viewer *viewer) {
   g_key_file_set_uint64(session, "view", "span", viewer->span);
   g_key_file_set_uint64(session, "view", "start", viewer->start);
   g_key_file_set_uint64(session, "view", "cursor", viewer->cursor);
+  g_key_file_set_boolean(session, "view", "hex", viewer->hexadecimal);
+  const gchar *keys[] = {"marker-a", "marker-b"};
+  for (guint i = 0; i < G_N_ELEMENTS(keys); i++)
+   if (viewer->marker_set[i]) g_key_file_set_uint64(session, "view", keys[i], viewer->marker[i]);
   Signal *active = selected(viewer);
   if (active) g_key_file_set_string(session, "view", "active", active->name);
   const gchar *names[WAVE_TRACKS];
@@ -543,6 +635,23 @@ static void show_capture(GtkWindow *parent, Capture *capture, const gchar *sessi
   g_signal_connect(button, "clicked", G_CALLBACK(wave_action), viewer);
   gtk_box_pack_start(GTK_BOX(controls), button, FALSE, FALSE, 0);
  }
+ GtkWidget *measure = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+ gtk_box_pack_start(GTK_BOX(box), measure, FALSE, FALSE, 0);
+ viewer->radix = gtk_combo_box_text_new();
+ gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(viewer->radix), "Binary");
+ gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(viewer->radix), "Hexadecimal");
+ gtk_combo_box_set_active(GTK_COMBO_BOX(viewer->radix), viewer->hexadecimal ? 1 : 0);
+ g_signal_connect(viewer->radix, "changed", G_CALLBACK(radix_changed), viewer);
+ gtk_box_pack_start(GTK_BOX(measure), viewer->radix, FALSE, FALSE, 0);
+ const gchar *marker_labels[] = {"Set A", "Set B", "Clear markers"};
+ for (guint i = 0; i < G_N_ELEMENTS(marker_labels); i++) {
+  GtkWidget *button = gtk_button_new_with_label(marker_labels[i]);
+  g_object_set_data(G_OBJECT(button), "marker", GINT_TO_POINTER(i < 2 ? (gint)i : -1));
+  g_signal_connect(button, "clicked", G_CALLBACK(marker_clicked), viewer);
+  gtk_box_pack_start(GTK_BOX(measure), button, FALSE, FALSE, 0);
+ }
+ viewer->markers = gtk_label_new(NULL);
+ gtk_box_pack_start(GTK_BOX(measure), viewer->markers, FALSE, FALSE, 0);
  GtkWidget *source_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
  gtk_box_pack_start(GTK_BOX(box), source_row, FALSE, FALSE, 0);
  viewer->source = gtk_entry_new();

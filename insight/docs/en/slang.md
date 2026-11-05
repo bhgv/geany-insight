@@ -139,6 +139,8 @@ Export digital signals to VCD in Vivado Simulator, then choose **Tools → VCD W
 
 **Filter signal names…** matches part of the hierarchy without regard to case. Enter selects the first match. Closing the viewer saves its tracks, active signal, cursor and range separately for each VCD path. When a capture changes, missing signals are skipped and the saved range is clamped to the new duration.
 
+Move the cursor and choose **Set A** or **Set B**. The markers appear across all traces and Δ gives the interval in VCD ticks. **Binary** and **Hexadecimal** change the bus format. Mixed groups containing `X/Z` retain their individual bits in brackets. The format and markers are saved with the layout.
+
 ## Upstream backports
 
 The separate `slang-3-backports.patch` preserves the width of large unsized based parameters and fixes the crash when diagnosing parenthesized `$static_assert` comparisons. The compatibility probe exercises both cases.
