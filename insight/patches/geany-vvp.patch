@@ -11,7 +11,7 @@
  # include  "ivl_alloc.h"
  
  __vpiScope*stop_current_scope = 0;
-@@ -70,8 +74,257 @@
+@@ -70,8 +74,298 @@
  #endif
  
  
@@ -203,6 +203,47 @@
 +static geany_step_mode geany_step = geany_step_mode::none;
 +static unsigned long long geany_stopped_process = 0;
 +static unsigned long long geany_target_process = 0;
++extern void geany_list_processes();
++extern __vpiScope* geany_inspect_process(unsigned long long);
++extern void geany_list_process_values(unsigned long long);
++
++// EN: Show live processes without resuming simulation.
++// RU: Показываем живые процессы без возобновления симуляции.
++static void cmd_geany_processes(unsigned, const char*[])
++{
++      if (geany_debug_enabled())
++            geany_list_processes();
++}
++
++// EN: Select a live process as the inspection and stepping target.
++// RU: Выбираем живой процесс для просмотра и пошагового выполнения.
++static void cmd_geany_select_process(unsigned argc, const char* argv[])
++{
++      if (!geany_debug_enabled() || argc != 2)
++            return;
++      std::istringstream number(argv[1]);
++      unsigned long long process = 0;
++      if (argv[1][0] < '0' || argv[1][0] > '9' ||
++          !(number >> process) || !number.eof() || !process) {
++            printf("Geany: expected a positive process number.\n");
++            return;
++      }
++      __vpiScope* scope = geany_inspect_process(process);
++      if (!scope) {
++            printf("Geany: process %llu is no longer available.\n", process);
++            return;
++      }
++      geany_stopped_process = process;
++      stop_current_scope = scope;
++}
++
++// EN: Show integral values in the selected process scope.
++// RU: Показываем целочисленные значения в области выбранного процесса.
++static void cmd_geany_process_values(unsigned, const char*[])
++{
++      if (geany_debug_enabled())
++            geany_list_process_values(geany_stopped_process);
++}
 +
 +// EN: Test a source checkpoint against the selected stepping mode.
 +// RU: Проверяем точку исходника для выбранного режима шага.
@@ -269,7 +310,7 @@
  static void cmd_call(unsigned argc, const char*argv[])
  {
        __vpiHandle**table;
-@@ -444,6 +697,16 @@
+@@ -444,6 +738,19 @@
          "Synonym for finish."},
        { "finish", &cmd_finish,
          "Finish the simulation."},
@@ -279,6 +320,9 @@
 +        "Step to the next HDL checkpoint in the stopped process."},
 +      { "geany-step-tick", &cmd_geany_step_tick,
 +        "Step to the next simulation tick."},
++      { "geany-processes", &cmd_geany_processes, "List live HDL processes."},
++      { "geany-select-process", &cmd_geany_select_process, "Inspect a process by number."},
++      { "geany-process-values", &cmd_geany_process_values, "Show selected process values."},
 +      { "geany-list", &cmd_geany_list,
 +        "List Geany source breakpoints and hit counters."},
 +      { "geany-load", &cmd_geany_load,
@@ -286,17 +330,17 @@
        { "help",   &cmd_help,
          "Get help."},
        { "list",   &cmd_list,
-@@ -554,6 +817,9 @@
+@@ -554,6 +861,9 @@
  	    return;
        }
  
 +      geany_step = geany_step_mode::none;
 +      if (geany_debug_enabled())
-+            printf("GEANY-VVP-SOURCE-STEP\nGEANY-VVP-READY\n");
++            printf("GEANY-VVP-PROCESSES\nGEANY-VVP-SOURCE-STEP\nGEANY-VVP-READY\n");
        vpi_mcd_printf(1,"** VVP Stop(%d) **\n", rc);
        vpi_mcd_printf(1,"** Flushing output streams.\n");
        invoke_command_const("$fflush");
-@@ -583,5 +849,6 @@
+@@ -583,5 +893,6 @@
  	    free(input);
        }
  
@@ -305,7 +349,15 @@
  }
 --- a/vvp/vthread.cc
 +++ b/vvp/vthread.cc
-@@ -89,6 +89,7 @@
+@@ -31,6 +31,7 @@
+ #ifdef CHECK_WITH_VALGRIND
+ # include  "vvp_cleanup.h"
+ #endif
++# include  <map>
+ # include  <set>
+ # include  <typeinfo>
+ # include  <vector>
+@@ -89,6 +90,7 @@
   */
  
  struct vthread_s {
@@ -313,7 +365,127 @@
        vthread_s();
  
        void debug_dump(ostream&fd, const char*label_text);
-@@ -857,6 +858,12 @@
+@@ -427,6 +429,99 @@
+ 
+ struct vthread_s*running_thread = 0;
+ 
++extern bool geany_debug_enabled();
++static std::map<unsigned long long, vthread_t> geany_processes;
++static unsigned long long geany_next_process_id = 0;
++
++// EN: Find a living process by its session-local identifier.
++// RU: Ищем существующий процесс по идентификатору сеанса.
++static vthread_t geany_find_process(unsigned long long process)
++{
++      const auto found = geany_processes.find(process);
++      if (found == geany_processes.end() || found->second->i_have_ended)
++            return nullptr;
++      return found->second;
++}
++
++// EN: Print the process state, scope and latest source checkpoint.
++// RU: Печатаем состояние, область и последнюю позицию процесса.
++static void geany_print_process(vthread_t process)
++{
++      const char* state = process->i_have_ended ? "ended" :
++            process->waiting_for_event ? "waiting for event" :
++            process->i_am_joining ? "joining children" :
++            process->is_scheduled ? "scheduled" : "suspended";
++      __vpiScope* current_scope = vthread_scope(process);
++      const char* scope = current_scope ? vpi_get_str(vpiFullName, current_scope) : nullptr;
++      printf("%llu  %s  %s  %s\n", process->geany_process_id, state,
++             scope ? scope : "(root)", process->get_fileline().c_str());
++}
++
++// EN: List a bounded number of live simulation processes.
++// RU: Показываем ограниченное число живых процессов симуляции.
++void geany_list_processes()
++{
++      unsigned count = 0;
++      for (const auto& entry : geany_processes) {
++            if (entry.second->i_have_ended)
++                  continue;
++            if (count++ == 256) {
++                  printf("Geany: process list limited to 256 entries.\n");
++                  break;
++            }
++            geany_print_process(entry.second);
++      }
++}
++
++// EN: Select a live process and show its task or fork ancestry.
++// RU: Выбираем живой процесс и показываем цепочку его задач или fork.
++__vpiScope* geany_inspect_process(unsigned long long process)
++{
++      vthread_t thread = geany_find_process(process);
++      if (!thread)
++            return nullptr;
++      unsigned depth = 0;
++      for (vthread_t frame = thread; frame && depth++ < 64; frame = frame->parent)
++            geany_print_process(frame);
++      return vthread_scope(thread);
++}
++
++// EN: Read integral signals in the exact selected scope and activation.
++// RU: Читаем целочисленные сигналы выбранной области и её активации.
++void geany_list_process_values(unsigned long long process)
++{
++      vthread_t thread = geany_find_process(process);
++      if (!thread || !vthread_scope(thread)) {
++            printf("Geany: select a live process first.\n");
++            return;
++      }
++      __vpiScope* scope = vthread_scope(thread);
++      vthread_t previous = running_thread;
++      running_thread = thread;
++      const bool exact_context = thread->rd_context && thread->rd_context == thread->wt_context;
++      unsigned count = 0;
++      for (vpiHandle signal : scope->intern) {
++            const int type = vpi_get(vpiType, signal);
++            if (type != vpiNet && type != vpiReg)
++                  continue;
++            if (vpi_get(vpiAutomatic, signal) && !exact_context)
++                  continue;
++            if (vpi_get(vpiSize, signal) > 4096)
++                  continue;
++            if (count++ == 128) {
++                  printf("Geany: value list limited to 128 entries.\n");
++                  break;
++            }
++            const char* name = vpi_get_str(vpiName, signal);
++            printf("%s = ", name ? name : "(unnamed)");
++            s_vpi_value value = {};
++            value.format = vpiBinStrVal;
++            vpi_get_value(signal, &value);
++            printf("%s\n", value.value.str ? value.value.str : "(unavailable)");
++      }
++      running_thread = previous;
++}
++
+ string get_fileline()
+ {
+       return running_thread->get_fileline();
+@@ -719,6 +814,10 @@
+       for (int idx = 4 ; idx < 8 ; idx += 1)
+ 	    thr->flags[idx] = BIT4_X;
+ 
++      if (geany_debug_enabled()) {
++            thr->geany_process_id = ++geany_next_process_id;
++            geany_processes.emplace(thr->geany_process_id, thr);
++      }
+       scope->threads .insert(thr);
+       return thr;
+ }
+@@ -820,6 +919,8 @@
+ 
+ void vthread_delete(vthread_t thr)
+ {
++      if (thr->geany_process_id)
++            geany_processes.erase(thr->geany_process_id);
+       thr->cleanup();
+       delete thr;
+ }
+@@ -857,6 +958,12 @@
   * incrementing the PC, and executing the instruction. The thread may
   * be the head of a list, so each thread is run so far as possible.
   */
@@ -326,7 +498,7 @@
  void vthread_run(vthread_t thr)
  {
        while (thr != 0) {
-@@ -869,6 +876,11 @@
+@@ -869,6 +976,11 @@
              running_thread = thr;
  
  	    for (;;) {
@@ -338,7 +510,7 @@
  		  vvp_code_t cp = thr->pc;
  		  thr->pc += 1;
  
-@@ -880,6 +892,15 @@
+@@ -880,6 +992,15 @@
  			break;
  	    }
  
@@ -354,7 +526,7 @@
  	    thr = tmp;
        }
        running_thread = 0;
-@@ -6416,6 +6437,28 @@
+@@ -6416,6 +6537,25 @@
  	    cerr << thr->get_fileline()
  	         << vpi_get_str(_vpiDescription, handle) << endl;
  
@@ -367,9 +539,6 @@
 +      const unsigned line = vpi_get(vpiLineNo, handle);
 +      const bool breakpoint = geany_source_breakpoint(filename, line);
 +      if (breakpoint || geany_source_step(thr->geany_process_id)) {
-+            static unsigned long long next_process_id = 0;
-+            if (!thr->geany_process_id)
-+                  thr->geany_process_id = ++next_process_id;
 +            if (!breakpoint && filename && line)
 +                  printf("GEANY-VVP-STOP\t%u\t%s\n", line, filename);
 +            geany_source_context(thr->geany_process_id, vthread_scope(thr));

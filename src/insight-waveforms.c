@@ -1176,7 +1176,8 @@ typedef struct {
     gchar **pending_event;
     gsize observer_log_offset;
     gboolean bridge_ready, pause_requested;
-    gboolean source_step_ready;
+    gboolean source_step_ready, processes_ready;
+    GtkWidget *process_controls, *process_number;
     GtkWidget *source_step_controls;
     GString *protocol_line;
     GHashTable *breakpoints, *point_anchors;
@@ -1803,6 +1804,8 @@ static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsi
         if (run->protocol_line->len && run->protocol_line->str[run->protocol_line->len - 1] == '\r')
             g_string_truncate(run->protocol_line, run->protocol_line->len - 1);
         const gchar *text = run->protocol_line->str;
+        if (strstr(text, "GEANY-VVP-PROCESSES"))
+            run->processes_ready = TRUE;
         if (strstr(text, "GEANY-VVP-SOURCE-STEP"))
             run->source_step_ready = TRUE;
         if (strstr(text, "GEANY-VVP-READY"))
@@ -1995,6 +1998,7 @@ static gboolean simulation_refresh_console(gpointer data)
     gtk_widget_set_sensitive(run->live_controls, paused && !run->preview_pending);
     gtk_widget_set_sensitive(run->breakpoint_controls, run->bridge_ready);
     gtk_widget_set_sensitive(run->source_step_controls, run->source_step_ready);
+    gtk_widget_set_sensitive(run->process_controls, run->processes_ready);
     if (paused && run->pause_requested)
     {
         gchar *directory = simulation_live_directory(run);
@@ -2207,6 +2211,22 @@ static void simulation_send_command(GtkButton *button, gpointer data)
 {
     const gchar *command = g_object_get_data(G_OBJECT(button), "vvp-command");
     simulation_write_command(data, command);
+}
+
+/* Select a paused simulator process by its numeric session identifier. */
+/* Выбирает процесс остановленного симулятора по номеру в текущем сеансе. */
+static void simulation_select_process(GtkButton *button, gpointer data)
+{
+    (void)button;
+    WaveSimulation *run = data;
+    const gchar *number = gtk_entry_get_text(GTK_ENTRY(run->process_number));
+    guint64 process;
+    if (!g_ascii_string_to_unsigned(number, 10, 1, G_MAXUINT64, &process, NULL))
+        return;
+
+    gchar *command = g_strdup_printf("geany-select-process %" G_GUINT64_FORMAT "\n", process);
+    simulation_write_command(run, command);
+    g_free(command);
 }
 
 /* Query a simple signal or enter one scope in the current simulator context. */
@@ -2567,6 +2587,25 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
             gtk_box_pack_start(GTK_BOX(run->source_step_controls), button, FALSE, FALSE, 0);
         }
         gtk_widget_set_sensitive(run->source_step_controls, FALSE);
+        run->process_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        gtk_box_pack_start(GTK_BOX(run->live_controls), run->process_controls, FALSE, FALSE, 0);
+        GtkWidget *processes = gtk_button_new_with_label("Processes");
+        g_object_set_data(G_OBJECT(processes), "vvp-command", "geany-processes\n");
+        g_signal_connect(processes, "clicked", G_CALLBACK(simulation_send_command), run);
+        gtk_box_pack_start(GTK_BOX(run->process_controls), processes, FALSE, FALSE, 0);
+        run->process_number = gtk_entry_new();
+        gtk_entry_set_max_length(GTK_ENTRY(run->process_number), 20);
+        gtk_entry_set_width_chars(GTK_ENTRY(run->process_number), 10);
+        gtk_entry_set_placeholder_text(GTK_ENTRY(run->process_number), "Process ID");
+        gtk_box_pack_start(GTK_BOX(run->process_controls), run->process_number, FALSE, FALSE, 0);
+        GtkWidget *select_process = gtk_button_new_with_label("Select Process");
+        g_signal_connect(select_process, "clicked", G_CALLBACK(simulation_select_process), run);
+        gtk_box_pack_start(GTK_BOX(run->process_controls), select_process, FALSE, FALSE, 0);
+        GtkWidget *process_values = gtk_button_new_with_label("Process Values");
+        g_object_set_data(G_OBJECT(process_values), "vvp-command", "geany-process-values\n");
+        g_signal_connect(process_values, "clicked", G_CALLBACK(simulation_send_command), run);
+        gtk_box_pack_start(GTK_BOX(run->process_controls), process_values, FALSE, FALSE, 0);
+        gtk_widget_set_sensitive(run->process_controls, FALSE);
         GtkWidget *inspection = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
         gtk_box_pack_start(GTK_BOX(run->live_controls), inspection, FALSE, FALSE, 0);
         run->signal_name = gtk_entry_new();
