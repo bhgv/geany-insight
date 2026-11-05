@@ -97,6 +97,7 @@ libgeany_la_SOURCES = \
 	prefs.c prefs.h \
 	printing.c printing.h \
 	project.c project.h \
+	insight-vivado-project.c insight-vivado-project.h \
 	sciwrappers.c sciwrappers.h \
 	search.c search.h \
 	socket.c socket.h \

@@ -1,4 +1,5 @@
 #include "insight-i18n.h"
+#include "insight-vivado-project.h"
 #include "insight-languages.h"
 /*
  *      libmain.c - this file is part of Geany, a fast and lightweight IDE
@@ -980,7 +981,7 @@ static void load_startup_files(gint argc, gchar **argv)
 {
 	gboolean load_session = FALSE;
 
-	if (argc > 1 && g_str_has_suffix(argv[1], ".geany"))
+	if (argc > 1 && (g_str_has_suffix(argv[1], ".geany") || insight_vivado_is_xpr(argv[1])))
 	{
 		gchar *filename = main_get_argv_filename(argv[1]);
 

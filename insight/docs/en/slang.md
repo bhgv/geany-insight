@@ -124,6 +124,12 @@ C:\gi\editor\bin\geany.exe -i
 
 The export uses the current design fileset's include directories, Verilog defines and top module. Select the HDL sources in Geany Insight's project membership separately. Requests with this configuration rebuild analysis so changes to external includes cannot reuse a stale index. Restart the editor with a different environment variable to select another Vivado export.
 
+## Open and synchronize Vivado projects
+
+Choose an `.xpr` in **Project → Open**. The first open creates matching `.geany` and `.hdl.tsv` companions. Subsequent opens reuse the linked Geany project.
+
+After editing the project in Vivado, choose **Project → Synchronize from Vivado…**. This updates imported settings and applies the HDL membership changes from the first `DesignSrcs` fileset while preserving local membership edits. The original `.xpr` and HDL files are read-only inputs. For Vivado's computed compile order, use the Tcl exporter below.
+
 ## Vivado project export and VCD viewing
 
 In the open Vivado project's Tcl Console, load the exporter and create the two files:

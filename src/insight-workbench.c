@@ -21,6 +21,7 @@
 #include "geany.h"
 #include "SciLexer.h"
 #include "insight-workbench.h"
+#include "insight-vivado-project.h"
 #include "insight-waveforms.h"
 #include "insight-virtual-list.h"
 #include "insight-scroll-links.h"
@@ -4645,6 +4646,9 @@ static void native_project_update(GObject *object,GKeyFile *config,gpointer data
  if(!GPOINTER_TO_INT(data) && config && wb.membership_valid) { GError *error=NULL; if(!insight_project_files_write(wb.membership,config,utf8,&error)) ui_set_statusbar(TRUE,"Cannot save project membership: %s",error ? error->message : "invalid rules"); g_clear_error(&error); }
  g_free(root); g_free(utf8);
 }
+static void membership_apply(const InsightProjectFiles *candidate,const gchar *root) {
+ insight_scroll_links_membership(candidate,root);if(wb.usage_idle || wb.search_worker) { stop_usage(); gtk_label_set_text(GTK_LABEL(wb.search_status),"Project files changed; run the search again"); } insight_project_files_free(wb.membership); wb.membership=insight_project_files_clone(candidate); wb.membership_valid=TRUE;wb.membership_generation++; start_scan(wb.root); files_filter(NULL,NULL);
+}
 static gboolean membership_store(const InsightProjectFiles *candidate) {
  if(!app->project || !wb.workspace_from_project) { ui_set_statusbar(TRUE,"Open a Geany project before changing its files"); return FALSE; }
  gchar *root=project_get_base_path(),*filename=utils_get_locale_from_utf8(app->project->file_name); GError *error=NULL;
@@ -4656,7 +4660,7 @@ static gboolean membership_store(const InsightProjectFiles *candidate) {
  if(ok) ok=g_key_file_load_from_file(config,filename,G_KEY_FILE_KEEP_COMMENTS,&error);
  if(ok) {ok=insight_project_files_write(candidate,config,root,&error);if(ok && insight_git_active()) g_key_file_set_boolean(config,"insight-project-files","manual-selection",TRUE);}
  if(ok) { gsize length; gchar *data=g_key_file_to_data(config,&length,&error); ok=data!=NULL && length<=8*1024*1024; if(!ok && !error) g_set_error_literal(&error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,"Project configuration exceeds 8 MiB"); if(ok) ok=g_file_replace_contents(file,data,length,NULL,FALSE,G_FILE_CREATE_PRIVATE,NULL,NULL,&error); g_free(data); }
- if(ok) { if(insight_git_active()) wb.git_manual=TRUE;insight_scroll_links_membership(candidate,root);if(wb.usage_idle || wb.search_worker) { stop_usage(); gtk_label_set_text(GTK_LABEL(wb.search_status),"Project files changed; run the search again"); } insight_project_files_free(wb.membership); wb.membership=insight_project_files_clone(candidate); wb.membership_valid=TRUE;wb.membership_generation++; start_scan(wb.root); files_filter(NULL,NULL); }
+ if(ok) { if(insight_git_active()) wb.git_manual=TRUE; membership_apply(candidate,root); }
  else ui_set_statusbar(TRUE,"Project files not changed: %s",error ? error->message : "cannot save configuration");
  g_clear_error(&error); g_key_file_unref(config); g_object_unref(file); g_free(filename); g_free(root); return ok;
 }
@@ -6101,6 +6105,29 @@ static void create_structural_selection_menu(void) {
 static void git_project_refresh(GtkWidget *widget,gpointer data) {
  (void)widget;(void)data;if(app->project) native_project_update(NULL,NULL,GINT_TO_POINTER(1));
 }
+static void vivado_synchronize(GtkMenuItem *item,gpointer data) {
+ (void)item;(void)data;
+ if(!app->project || !wb.workspace_from_project || !wb.root) {
+  ui_set_statusbar(TRUE,"Open a linked Vivado project first");
+  return;
+ }
+ gchar *filename=utils_get_locale_from_utf8(app->project->file_name);
+ GError *error=NULL;
+ InsightProjectFiles *policy=insight_vivado_sync(filename,&error);
+ g_free(filename);
+ if(policy) {
+  gchar *root=project_get_base_path();
+  hdl_cancel_colors();
+  wb.force_parse=TRUE;
+  membership_apply(policy,root);
+  insight_master_sync_set(wb.master_sync,app->project->file_name,root,wb.membership);
+  hdl_schedule_colors();
+  g_free(root);
+  insight_project_files_free(policy);
+  ui_set_statusbar(TRUE,"Synchronized Vivado sources and HDL settings");
+ } else ui_set_statusbar(TRUE,"Vivado synchronization failed: %s",error ? error->message : "unknown error");
+ g_clear_error(&error);
+}
 static void project_synchronize(GtkMenuItem *item,gpointer data) {
  (void)item;if(!wb.root) { ui_set_statusbar(TRUE,"Open a project first");return; }wb.force_parse=GPOINTER_TO_INT(data)!=0;wb.cache_validation=FALSE;start_scan(wb.root);
 }
@@ -6150,6 +6177,10 @@ static void create_workbench_menus(void) {
  GtkWidget *project_menu=gtk_menu_item_get_submenu(GTK_MENU_ITEM(ui_lookup_widget(main_widgets.window,"menu_project1"))),*manage=gtk_menu_item_new_with_label("Add and Remove Project Files…"); gtk_container_add(GTK_CONTAINER(project_menu),manage); g_signal_connect(manage,"activate",G_CALLBACK(manage_project_files),NULL); gtk_widget_show(manage);
  const gchar *master_labels[]={"Synchronize Master File List","Open Project Master File List"};for(guint i=0;i<2;i++) { GtkWidget *command=gtk_menu_item_new_with_label(master_labels[i]);gtk_widget_set_name(command,i ? "insight-open-master-list" : "insight-sync-master-list");gtk_menu_shell_append(GTK_MENU_SHELL(project_menu),command);g_signal_connect(command,"activate",G_CALLBACK(project_master_command),GINT_TO_POINTER(i));gtk_widget_show(command); }
  const gchar *sync_labels[]={"Synchronize Files","Rebuild Project"};for(guint n=0;n<2;n++) { GtkWidget *command=gtk_menu_item_new_with_label(sync_labels[n]);gtk_widget_set_name(command,n?"insight-project-rebuild":"insight-project-synchronize");g_signal_connect(command,"activate",G_CALLBACK(project_synchronize),GINT_TO_POINTER(n));gtk_menu_shell_append(GTK_MENU_SHELL(project_menu),command);gtk_widget_show(command); }
+ GtkWidget *vivado_sync=gtk_menu_item_new_with_label(insight_tr("Synchronize from Vivado…"));
+ g_signal_connect(vivado_sync,"activate",G_CALLBACK(vivado_synchronize),NULL);
+ gtk_menu_shell_append(GTK_MENU_SHELL(project_menu),vivado_sync);
+ gtk_widget_show(vivado_sync);
  insight_project_report_init(project_menu,capture_project_report);
  GtkWidget *menubar=ui_lookup_widget(main_widgets.window,"menubar1"),*navigate=gtk_menu_item_new_with_mnemonic("_Navigate"),*menu=gtk_menu_new();
  gtk_menu_item_set_submenu(GTK_MENU_ITEM(navigate),menu); gtk_menu_shell_insert(GTK_MENU_SHELL(menubar),navigate,4);

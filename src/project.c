@@ -27,6 +27,7 @@
 #endif
 
 #include "project.h"
+#include "insight-vivado-project.h"
 #include "insight-workbench.h"
 #include "../insight/desktop/project_files.h"
 
@@ -336,6 +337,19 @@ static void run_open_dialog(GtkFileChooser *dialog)
 			continue;
 		}
 		geany_debug("Project open: chooser selection resolved");
+		if (insight_vivado_is_xpr(filename))
+		{
+			GError *error = NULL;
+			gchar *project = insight_vivado_open(filename, &error);
+			g_free(filename);
+			filename = project;
+			if (!filename)
+			{
+				SHOW_ERR1(_("Cannot import Vivado project: %s"), error ? error->message : _("Unknown error"));
+				g_clear_error(&error);
+				continue;
+			}
+		}
 
 		/* Validate before closing the active project: a bad selection must not
 		 * discard the user's current project and document session. */
@@ -403,6 +417,7 @@ void project_open(void)
 	filter = gtk_file_filter_new();
 	gtk_file_filter_set_name(filter, _("Project files"));
 	gtk_file_filter_add_pattern(filter, "*." GEANY_PROJECT_EXT);
+	gtk_file_filter_add_pattern(filter, "*.[xX][pP][rR]");
 	gtk_file_chooser_add_filter(dialog, filter);
 	gtk_file_chooser_set_filter(dialog, filter);
 
@@ -1085,6 +1100,20 @@ static void on_radio_long_line_custom_toggled(GtkToggleButton *radio, GtkWidget 
 gboolean project_load_file(const gchar *locale_file_name)
 {
 	g_return_val_if_fail(locale_file_name != NULL, FALSE);
+	if (insight_vivado_is_xpr(locale_file_name))
+	{
+		GError *error = NULL;
+		gchar *companion = insight_vivado_open(locale_file_name, &error);
+		if (!companion)
+		{
+			SHOW_ERR1(_("Cannot import Vivado project: %s"), error ? error->message : _("Unknown error"));
+			g_clear_error(&error);
+			return FALSE;
+		}
+		gboolean loaded = project_load_file(companion);
+		g_free(companion);
+		return loaded;
+	}
 
 	if (load_config(locale_file_name))
 	{
