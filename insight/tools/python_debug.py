@@ -194,6 +194,7 @@ class Debugger:
     def __init__(self, filename, project_root, commands, output, observer_replies):
         self.filename = filename
         self.project_root = self.file_key(project_root) if project_root else None
+        self.helper_file = self.file_key(__file__)
         self.file_keys = {filename: self.file_key(filename)}
         self.traceable = {filename: True}
         self.commands = commands
@@ -223,6 +224,9 @@ class Debugger:
             return known
         path = self.file_key(filename)
         self.file_keys[filename] = path
+        if path == self.helper_file:
+            self.traceable[filename] = False
+            return False
         traced = path in self.breakpoint_files
         if not traced and self.project_root and path and not path.startswith("<"):
             try:
