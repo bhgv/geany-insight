@@ -1,0 +1,31 @@
+# Python debugger
+
+Open a Python buffer and choose **Scripts → Debug Current Python Buffer…**.
+The debugger runs a snapshot of the current buffer, including unsaved changes,
+in a separate Python 3 process. Set `GEANY_INSIGHT_PYTHON` to select an
+interpreter. The original file is used as `__file__`, and its directory is
+available for imports. The program runs normally, so it can modify files and
+have other side effects. Script input and console output are unavailable in
+this debugger window.
+
+## Source controls
+
+Click a line number to toggle a breakpoint. **F5** continues, **F10** steps over,
+**F11** steps into, and **Shift+F11** steps out. **Pause** requests a stop on the
+next traced line. **Shift+F5** stops the child process, and **Ctrl+F5** restarts
+the original snapshot. **Go to Source** opens the line when the editor buffer
+still matches the snapshot. Steps and breakpoints apply to the captured buffer.
+An imported module or a native call can run until control returns to that buffer.
+
+## Values and watch graph
+
+While paused, hover over a variable name in the source pane to see a local or
+global value in the current frame. **Stack and locals** shows the call stack.
+**Watch graph** expands built-in dictionaries, lists, tuples and function
+closure cells. Shared objects and cycles reuse one card. Double-click a member
+to pin it, or select it and choose **Pin member**. **Pinned only** displays
+those paths as roots. Orange marks a change since the previous stop.
+
+The debugger reads built-in values directly. It does not evaluate properties,
+arbitrary attributes or expressions for a hover tooltip. Other objects are
+shown as opaque values. Use the graph to inspect built-in collection members.

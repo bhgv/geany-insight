@@ -23,6 +23,7 @@
 #include <pango/pangocairo.h>
 #include <gdk/gdkkeysyms.h>
 #include "insight-workbench.h"
+#include "insight-python-debug.h"
 #include "insight-vivado-project.h"
 #include "insight-waveforms.h"
 #include "insight-virtual-list.h"
@@ -4949,6 +4950,13 @@ static void script_check_start(GtkMenuItem *item,gpointer data) {
 }
 typedef struct {
     InsightLuaDebug *engine;
+    InsightPythonDebug *python_engine;
+    InsightLuaWatchGraph *python_graph;
+    gchar *python_stack;
+    guint64 python_request;
+    gboolean python;
+    gboolean python_running;
+    gboolean closing;
     GtkWidget *window;
     GtkWidget *source_view;
     GtkWidget *stack_view;
@@ -4990,16 +4998,19 @@ typedef struct {
     unsigned long selection_end;
     guint document_id;
     unsigned long paused_line;
-} LuaDebugWindow;
+} ScriptDebugWindow;
 
 /* Release the VM and the source snapshot. */
 /* Освобождает виртуальную машину и снимок исходника. */
 static void debug_window_free(gpointer data)
 {
-    LuaDebugWindow *view = data;
+    ScriptDebugWindow *view = data;
     if (view->execution_source)
         g_source_remove(view->execution_source);
     insight_lua_debug_free(view->engine);
+    insight_python_debug_free(view->python_engine);
+    g_free(view->python_graph);
+    g_free(view->python_stack);
     g_free(view->source_snapshot);
     g_free(view->source_code_mask);
     g_array_unref(view->source_line_offsets);
@@ -5047,7 +5058,7 @@ static gboolean debug_read_breakpoints(GtkEntry *entry, unsigned long *lines, gs
 /* Возвращает точный текст, переданный виртуальной машине отладчика. */
 static const char *debug_snapshot_text(void *context)
 {
-    LuaDebugWindow *view = context;
+    ScriptDebugWindow *view = context;
     return view->source_snapshot;
 }
 
@@ -5055,7 +5066,7 @@ static const char *debug_snapshot_text(void *context)
 /* Возвращает выделение, сохранённое перед выполнением. */
 static const char *debug_snapshot_selection(void *context)
 {
-    LuaDebugWindow *view = context;
+    ScriptDebugWindow *view = context;
     return view->selection_snapshot;
 }
 
@@ -5063,7 +5074,7 @@ static const char *debug_snapshot_selection(void *context)
 /* Возвращает имя исходного буфера, если оно было задано. */
 static const char *debug_snapshot_filename(void *context)
 {
-    LuaDebugWindow *view = context;
+    ScriptDebugWindow *view = context;
     return view->source_filename;
 }
 
@@ -5071,7 +5082,7 @@ static const char *debug_snapshot_filename(void *context)
 /* Возвращает исходную позицию курсора редактора в байтах. */
 static unsigned long debug_snapshot_position(void *context)
 {
-    LuaDebugWindow *view = context;
+    ScriptDebugWindow *view = context;
     return view->position;
 }
 
@@ -5079,7 +5090,7 @@ static unsigned long debug_snapshot_position(void *context)
 /* Возвращает диапазон исходного выделения в байтах. */
 static int debug_snapshot_selection_range(void *context, unsigned long *start, unsigned long *end)
 {
-    LuaDebugWindow *view = context;
+    ScriptDebugWindow *view = context;
     *start = view->selection_start;
     *end = view->selection_end;
     return 1;
@@ -5089,7 +5100,7 @@ static int debug_snapshot_selection_range(void *context, unsigned long *start, u
 /* Возвращает число строк сохранённого буфера. */
 static unsigned long debug_snapshot_line_count(void *context)
 {
-    LuaDebugWindow *view = context;
+    ScriptDebugWindow *view = context;
     return view->line_starts->len;
 }
 
@@ -5097,7 +5108,7 @@ static unsigned long debug_snapshot_line_count(void *context)
 /* Возвращает строку снимка с исходным переводом строки. */
 static const char *debug_snapshot_line_text(void *context, unsigned long line)
 {
-    LuaDebugWindow *view = context;
+    ScriptDebugWindow *view = context;
     if (line == 0 || line > view->line_starts->len)
         return NULL;
 
@@ -5154,7 +5165,7 @@ static gint debug_watch_resolve(const InsightLuaWatchGraph *graph, const gchar *
 
 /* Find a saved watch path by its exact edge sequence. */
 /* Ищет сохранённый путь по точной последовательности подписей стрелок. */
-static gint debug_watch_pin_index(const LuaDebugWindow *view, const gchar *path)
+static gint debug_watch_pin_index(const ScriptDebugWindow *view, const gchar *path)
 {
     for (guint i = 0; i < view->watch_paths->len; i++)
         if (!strcmp(view->watch_paths->pdata[i], path))
@@ -5173,7 +5184,7 @@ static gint debug_watch_compare_link(gconstpointer left, gconstpointer right)
 
 /* Compare values and direct links with the previous source stop. */
 /* Сравнивает значения и прямые связи с предыдущей остановкой на строке. */
-static void debug_watch_compare(LuaDebugWindow *view)
+static void debug_watch_compare(ScriptDebugWindow *view)
 {
     memset(view->watch_changed, 0, sizeof view->watch_changed);
     view->watch_change_count = 0;
@@ -5222,7 +5233,7 @@ static void debug_watch_compare(LuaDebugWindow *view)
 
 /* Lay out reachable nodes by distance from the displayed roots. */
 /* Раскладывает достижимые узлы по расстоянию от отображаемых корней. */
-static void debug_watch_layout(LuaDebugWindow *view)
+static void debug_watch_layout(ScriptDebugWindow *view)
 {
     const InsightLuaWatchGraph *graph = view->watch_graph;
     guint queue[INSIGHT_LUA_WATCH_NODES];
@@ -5324,7 +5335,7 @@ static void debug_watch_label(PangoLayout *layout, cairo_t *cr, const gchar *tex
 /* Рисует карточки и стрелки, направляя общие ссылки к одному узлу. */
 static gboolean debug_watch_draw(GtkWidget *widget, cairo_t *cr, gpointer data)
 {
-    LuaDebugWindow *view = data;
+    ScriptDebugWindow *view = data;
     const InsightLuaWatchGraph *graph = view->watch_graph;
     if (!graph)
         return FALSE;
@@ -5392,7 +5403,7 @@ static gboolean debug_watch_draw(GtkWidget *widget, cairo_t *cr, gpointer data)
 static void debug_watch_pin(GtkButton *button, gpointer data)
 {
     (void)button;
-    LuaDebugWindow *view = data;
+    ScriptDebugWindow *view = data;
     if (!view->watch_graph || view->watch_selected <= 0)
         return;
     const gchar *path = view->watch_graph->nodes[view->watch_selected].path;
@@ -5412,7 +5423,7 @@ static void debug_watch_pin(GtkButton *button, gpointer data)
 static gboolean debug_watch_click(GtkWidget *widget, GdkEventButton *event, gpointer data)
 {
     (void)widget;
-    LuaDebugWindow *view = data;
+    ScriptDebugWindow *view = data;
     if (!view->watch_graph || event->button != 1)
         return FALSE;
 
@@ -5448,14 +5459,14 @@ static void debug_watch_filter(GtkToggleButton *button, gpointer data)
 static void debug_watch_clear(GtkButton *button, gpointer data)
 {
     (void)button;
-    LuaDebugWindow *view = data;
+    ScriptDebugWindow *view = data;
     g_ptr_array_set_size(view->watch_paths, 0);
     debug_watch_layout(view);
 }
 
 /* Build the scrollable watch graph tab and its controls. */
 /* Создаёт вкладку графа наблюдения с прокруткой и кнопками. */
-static GtkWidget *debug_create_watch_tab(LuaDebugWindow *view)
+static GtkWidget *debug_create_watch_tab(ScriptDebugWindow *view)
 {
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     GtkWidget *controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
@@ -5485,7 +5496,7 @@ static GtkWidget *debug_create_watch_tab(LuaDebugWindow *view)
 
 /* Update the debugger panes when a source stop or terminal result arrives. */
 /* Обновляет панели отладчика при остановке на строке или завершении. */
-static void debug_show_result(LuaDebugWindow *view, gint result, unsigned long line, const gchar *error)
+static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned long line, const gchar *error)
 {
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source_view));
     GtkTextIter first, last;
@@ -5501,17 +5512,22 @@ static void debug_show_result(LuaDebugWindow *view, gint result, unsigned long l
         gtk_text_iter_forward_line(&last);
         gtk_text_buffer_apply_tag(buffer, view->current_line_tag, &first, &last);
         gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(view->source_view), &first, 0.15, FALSE, 0, 0);
-        gchar state[8192];
-        insight_lua_debug_inspect(view->engine, state, sizeof state);
-        debug_set_text(view->stack_view, state);
+        if (view->python)
+            debug_set_text(view->stack_view, view->python_stack ? view->python_stack : "");
+        else
+        {
+            gchar state[8192];
+            insight_lua_debug_inspect(view->engine, state, sizeof state);
+            debug_set_text(view->stack_view, state);
+        }
         gchar *label = g_strdup_printf("Paused at line %lu", line);
         gtk_label_set_text(GTK_LABEL(view->status), label);
         g_free(label);
     }
     else
     {
-        gchar *label = result == 0 ? g_strdup("Lua script finished") :
-            g_utf8_make_valid(*error ? error : "Lua debugger stopped", -1);
+        gchar *label = result == 0 ? g_strdup(view->python ? "Python script finished" : "Lua script finished") :
+            g_utf8_make_valid(*error ? error : "Debugger stopped", -1);
         gtk_label_set_text(GTK_LABEL(view->status), label);
         debug_set_text(view->stack_view, result < 0 ? label : "");
         g_free(label);
@@ -5522,7 +5538,9 @@ static void debug_show_result(LuaDebugWindow *view, gint result, unsigned long l
     gtk_widget_set_sensitive(view->pause, FALSE);
     gtk_widget_set_sensitive(view->step_controls, result == 1);
     gtk_widget_set_sensitive(view->breakpoints, TRUE);
-    view->watch_graph = result == 1 ? insight_lua_debug_watch_graph(view->engine) : NULL;
+    view->watch_graph = NULL;
+    if (result == 1)
+        view->watch_graph = view->python ? view->python_graph : insight_lua_debug_watch_graph(view->engine);
     debug_watch_compare(view);
     view->watch_selected = -1;
     debug_watch_layout(view);
@@ -5532,7 +5550,7 @@ static void debug_show_result(LuaDebugWindow *view, gint result, unsigned long l
 /* Выполняет одну порцию VM и возвращает управление GTK между порциями. */
 static gboolean debug_execute_slice(gpointer data)
 {
-    LuaDebugWindow *view = data;
+    ScriptDebugWindow *view = data;
     const gchar *project_filename = app->project ? app->project->file_name : NULL;
     const InsightIndex *index = wb.alive && !g_strcmp0(view->project_filename, project_filename) ?
         wb.index : NULL;
@@ -5557,11 +5575,106 @@ static gboolean debug_execute_slice(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
+typedef struct {
+    GWeakRef window;
+    guint64 request;
+} PythonDebugReply;
+
+/* Report whether either backend has an action in progress. */
+/* Проверяет, выполняется ли действие в одном из движков отладки. */
+static gboolean debug_is_running(const ScriptDebugWindow *view)
+{
+    return view->execution_source != 0 || view->python_running;
+}
+
+/* Receive a Python stop packet without keeping a closed window alive. */
+/* Получает пакет остановки Python, не удерживая закрытое окно. */
+static void debug_python_received(GObject *object, GAsyncResult *result, gpointer data)
+{
+    PythonDebugReply *reply = data;
+    GError *error = NULL;
+    gsize length = 0;
+    gchar *packet = g_data_input_stream_read_line_finish(G_DATA_INPUT_STREAM(object),
+                                                        result, &length, &error);
+    GtkWidget *window = g_weak_ref_get(&reply->window);
+    ScriptDebugWindow *view = window ? g_object_get_data(G_OBJECT(window), "insight-lua-debugger") : NULL;
+    if (view && !view->closing && reply->request == view->python_request)
+    {
+        view->python_running = FALSE;
+        g_clear_pointer(&view->python_stack, g_free);
+        g_clear_pointer(&view->python_graph, g_free);
+        unsigned long line = 0;
+        gchar *message = NULL;
+        gint status = insight_python_debug_parse(packet, length, &line, &view->python_stack,
+                                                 &view->python_graph, &message);
+        debug_show_result(view, status, line, error ? error->message : message ? message : "");
+        g_free(message);
+    }
+    if (window)
+        g_object_unref(window);
+    g_free(packet);
+    g_clear_error(&error);
+    g_weak_ref_clear(&reply->window);
+    g_free(reply);
+}
+
+/* Send one Python action and wait asynchronously for its next stop. */
+/* Отправляет действие Python и асинхронно ждёт следующую остановку. */
+static void debug_python_step(ScriptDebugWindow *view)
+{
+    const gchar *actions[] = {"into", "over", "out", "continue"};
+    GString *command = g_string_new(actions[view->pending_mode]);
+    for (gsize i = 0; i < view->pending_breakpoint_count; i++)
+        g_string_append_printf(command, " %lu", view->pending_breakpoints[i]);
+    g_string_append_c(command, '\n');
+
+    GError *error = NULL;
+    gboolean sent = insight_python_debug_send(view->python_engine, command->str, &error);
+    g_string_free(command, TRUE);
+    if (!sent)
+    {
+        debug_show_result(view, -1, 0, error ? error->message : "Cannot send Python debugger command");
+        g_clear_error(&error);
+        return;
+    }
+
+    PythonDebugReply *reply = g_new0(PythonDebugReply, 1);
+    g_weak_ref_init(&reply->window, view->window);
+    reply->request = ++view->python_request;
+    view->python_running = TRUE;
+    g_data_input_stream_read_line_async(insight_python_debug_output(view->python_engine),
+        G_PRIORITY_DEFAULT, NULL, debug_python_received, reply);
+}
+
+/* Resolve the interpreter and start the Python bridge for a source snapshot. */
+/* Находит интерпретатор и запускает процесс отладки для снимка исходника. */
+static InsightPythonDebug *debug_new_python_engine(const gchar *filename, const gchar *source,
+                                                    gsize length, GError **error)
+{
+    const gchar *configured = g_getenv("GEANY_INSIGHT_PYTHON");
+    gchar *interpreter = g_find_program_in_path(configured && *configured ? configured : "python3");
+    if (!interpreter && (!configured || !*configured))
+        interpreter = g_find_program_in_path("python");
+    if (!interpreter)
+    {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
+            "Python 3 not found; set GEANY_INSIGHT_PYTHON to its executable");
+        return NULL;
+    }
+
+    gchar *helper = g_build_filename(app->datadir, "insight", "tools", "python_debug.py", NULL);
+    InsightPythonDebug *engine = insight_python_debug_new(interpreter, helper,
+        filename && *filename ? filename : "<buffer>", source, length, error);
+    g_free(helper);
+    g_free(interpreter);
+    return engine;
+}
+
 /* Capture the selected action and schedule its first VM slice. */
 /* Сохраняет выбранное действие и планирует первую порцию выполнения. */
-static void debug_window_step(LuaDebugWindow *view, InsightLuaStep mode)
+static void debug_window_step(ScriptDebugWindow *view, InsightLuaStep mode)
 {
-    if (!view->engine || view->execution_source)
+    if ((!view->engine && !view->python_engine) || debug_is_running(view))
         return;
     if (!debug_read_breakpoints(GTK_ENTRY(view->breakpoints),
                                view->pending_breakpoints, &view->pending_breakpoint_count))
@@ -5581,14 +5694,19 @@ static void debug_window_step(LuaDebugWindow *view, InsightLuaStep mode)
     gtk_widget_set_sensitive(view->breakpoints, FALSE);
     gtk_widget_set_sensitive(view->stop, TRUE);
     gtk_widget_set_sensitive(view->pause, TRUE);
-    gtk_label_set_text(GTK_LABEL(view->status), "Lua script running…");
-    view->execution_source = g_timeout_add_full(G_PRIORITY_DEFAULT_IDLE, 1, debug_execute_slice, view, NULL);
+    gtk_label_set_text(GTK_LABEL(view->status), view->python ? "Python script running…" : "Lua script running…");
+    if (view->python)
+        debug_python_step(view);
+    else
+        view->execution_source = g_timeout_add_full(G_PRIORITY_DEFAULT_IDLE, 1, debug_execute_slice, view, NULL);
 }
 
 /* Cancel the GTK source before stopping, restarting, or closing the VM. */
 /* Отменяет источник GTK перед остановкой, перезапуском или закрытием VM. */
-static void debug_cancel_execution(LuaDebugWindow *view)
+static void debug_cancel_execution(ScriptDebugWindow *view)
 {
+    view->python_running = FALSE;
+    view->python_request++;
     if (view->execution_source)
     {
         g_source_remove(view->execution_source);
@@ -5601,7 +5719,10 @@ static void debug_cancel_execution(LuaDebugWindow *view)
 static void debug_window_destroy(GtkWidget *widget, gpointer data)
 {
     (void)widget;
-    debug_cancel_execution(data);
+    ScriptDebugWindow *view = data;
+    view->closing = TRUE;
+    debug_cancel_execution(view);
+    g_clear_pointer(&view->python_engine, insight_python_debug_free);
 }
 
 /* Request a source stop without discarding VM state. */
@@ -5609,12 +5730,23 @@ static void debug_window_destroy(GtkWidget *widget, gpointer data)
 static void debug_pause(GtkButton *button, gpointer data)
 {
     (void)button;
-    LuaDebugWindow *view = data;
-    if (!view->execution_source)
+    ScriptDebugWindow *view = data;
+    if (!debug_is_running(view))
         return;
-    insight_lua_debug_request_pause(view->engine);
+    if (view->python)
+    {
+        GError *error = NULL;
+        if (!insight_python_debug_send(view->python_engine, "pause\n", &error))
+        {
+            gtk_label_set_text(GTK_LABEL(view->status), error ? error->message : "Cannot pause Python");
+            g_clear_error(&error);
+            return;
+        }
+    }
+    else
+        insight_lua_debug_request_pause(view->engine);
     gtk_widget_set_sensitive(view->pause, FALSE);
-    gtk_label_set_text(GTK_LABEL(view->status), "Pausing Lua…");
+    gtk_label_set_text(GTK_LABEL(view->status), "Pausing…");
 }
 
 /* Dispatch the step mode associated with a toolbar button. */
@@ -5630,15 +5762,25 @@ static void debug_window_action(GtkButton *button, gpointer data)
 static void debug_restart(GtkButton *button, gpointer data)
 {
     (void)button;
-    LuaDebugWindow *view = data;
-    gchar error[1024];
-    InsightLuaDebug *replacement = insight_lua_debug_new(view->source_snapshot, view->source_length,
-                                                         error, sizeof error);
-    if (!replacement)
+    ScriptDebugWindow *view = data;
+    gchar error[1024] = {0};
+    InsightLuaDebug *lua_replacement = NULL;
+    InsightPythonDebug *python_replacement = NULL;
+    GError *python_error = NULL;
+    if (view->python)
+        python_replacement = debug_new_python_engine(view->source_filename, view->source_snapshot,
+                                                     view->source_length, &python_error);
+    else
+        lua_replacement = insight_lua_debug_new(view->source_snapshot, view->source_length,
+                                                error, sizeof error);
+    if (!lua_replacement && !python_replacement)
     {
-        gchar *message = g_utf8_make_valid(*error ? error : "Unable to restart Lua debugger", -1);
+        const gchar *description = python_error ? python_error->message :
+            *error ? error : "Unable to restart debugger";
+        gchar *message = g_utf8_make_valid(description, -1);
         gtk_label_set_text(GTK_LABEL(view->status), message);
         g_free(message);
+        g_clear_error(&python_error);
         return;
     }
 
@@ -5647,7 +5789,11 @@ static void debug_restart(GtkButton *button, gpointer data)
     view->watch_selected = -1;
     debug_watch_layout(view);
     insight_lua_debug_free(view->engine);
-    view->engine = replacement;
+    insight_python_debug_free(view->python_engine);
+    g_clear_pointer(&view->python_graph, g_free);
+    g_clear_pointer(&view->python_stack, g_free);
+    view->engine = lua_replacement;
+    view->python_engine = python_replacement;
     g_clear_pointer(&view->watch_previous_values, g_hash_table_unref);
     view->paused_line = 0;
     gtk_widget_set_sensitive(view->go_to_source, FALSE);
@@ -5661,16 +5807,18 @@ static void debug_restart(GtkButton *button, gpointer data)
 static void debug_stop(GtkButton *button, gpointer data)
 {
     (void)button;
-    LuaDebugWindow *view = data;
-    if (!view->engine)
+    ScriptDebugWindow *view = data;
+    if (!view->engine && !view->python_engine)
         return;
 
     debug_cancel_execution(view);
     view->watch_graph = NULL;
     view->watch_selected = -1;
     debug_watch_layout(view);
-    insight_lua_debug_free(view->engine);
-    view->engine = NULL;
+    g_clear_pointer(&view->engine, insight_lua_debug_free);
+    g_clear_pointer(&view->python_engine, insight_python_debug_free);
+    g_clear_pointer(&view->python_graph, g_free);
+    g_clear_pointer(&view->python_stack, g_free);
     view->paused_line = 0;
     gtk_widget_set_sensitive(view->step_controls, FALSE);
     gtk_widget_set_sensitive(view->go_to_source, FALSE);
@@ -5682,7 +5830,7 @@ static void debug_stop(GtkButton *button, gpointer data)
     gtk_text_buffer_get_bounds(buffer, &first, &last);
     gtk_text_buffer_remove_tag(buffer, view->current_line_tag, &first, &last);
     debug_set_text(view->stack_view, "");
-    gtk_label_set_text(GTK_LABEL(view->status), "Lua debugging stopped");
+    gtk_label_set_text(GTK_LABEL(view->status), "Debugging stopped");
 }
 
 /* Add or remove a breakpoint without disturbing the other line numbers. */
@@ -5714,7 +5862,7 @@ static gboolean debug_toggle_breakpoint(unsigned long *lines, gsize *count,
 /* Отмечает номера строк с точками останова при изменении поля. */
 static void debug_mark_breakpoints(GtkEditable *entry, gpointer data)
 {
-    LuaDebugWindow *view = data;
+    ScriptDebugWindow *view = data;
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source_view));
     GtkTextIter first, last;
     gtk_text_buffer_get_bounds(buffer, &first, &last);
@@ -5744,8 +5892,8 @@ static gboolean debug_click_line_number(GtkWidget *widget, GdkEventButton *event
     if (event->type != GDK_BUTTON_PRESS || event->button != 1)
         return FALSE;
 
-    LuaDebugWindow *view = data;
-    if (view->execution_source)
+    ScriptDebugWindow *view = data;
+    if (debug_is_running(view))
         return FALSE;
 
     GtkTextView *source = GTK_TEXT_VIEW(widget);
@@ -5791,9 +5939,9 @@ static gboolean debug_click_line_number(GtkWidget *widget, GdkEventButton *event
 static gboolean debug_handle_key(GtkWidget *widget, GdkEventKey *event, gpointer data)
 {
     (void)widget;
-    LuaDebugWindow *view = data;
+    ScriptDebugWindow *view = data;
     GdkModifierType modifiers = event->state & gtk_accelerator_get_default_mod_mask();
-    if (event->keyval == GDK_KEY_Pause && modifiers == 0 && view->execution_source)
+    if (event->keyval == GDK_KEY_Pause && modifiers == 0 && debug_is_running(view))
     {
         debug_pause(NULL, view);
         return TRUE;
@@ -5832,11 +5980,11 @@ static gboolean debug_handle_key(GtkWidget *widget, GdkEventKey *event, gpointer
 static void debug_go_to_source(GtkButton *button, gpointer data)
 {
     (void)button;
-    LuaDebugWindow *view = data;
+    ScriptDebugWindow *view = data;
     GeanyDocument *document = document_find_by_id(view->document_id);
     if (!view->paused_line || !DOC_VALID(document))
     {
-        gtk_label_set_text(GTK_LABEL(view->status), "The original Lua buffer is no longer open.");
+        gtk_label_set_text(GTK_LABEL(view->status), "The original buffer is no longer open.");
         return;
     }
 
@@ -5886,7 +6034,7 @@ static gboolean debug_identifier_byte(gchar byte)
 /* Ищет видимую локальную переменную раньше одноимённого захвата. */
 static gint debug_hover_root(const InsightLuaWatchGraph *graph, const gchar *name, gsize length)
 {
-    const gchar *prefixes[] = {"local ", "upvalue "};
+    const gchar *prefixes[] = {"local ", "upvalue ", "global "};
     for (guint prefix = 0; prefix < G_N_ELEMENTS(prefixes); prefix++)
     {
         gsize prefix_length = strlen(prefixes[prefix]);
@@ -5942,7 +6090,7 @@ static gint debug_hover_value(const InsightLuaWatchGraph *graph, const gchar *pa
 static gboolean debug_source_tooltip(GtkWidget *widget, gint x, gint y, gboolean keyboard,
                                      GtkTooltip *tooltip, gpointer data)
 {
-    LuaDebugWindow *view = data;
+    ScriptDebugWindow *view = data;
     if (keyboard || !view->watch_graph || !view->source_code_mask || !view->paused_line)
         return FALSE;
 
@@ -5975,6 +6123,8 @@ static gboolean debug_source_tooltip(GtkWidget *widget, gint x, gint y, gboolean
         start--;
     while (end < view->source_length && debug_identifier_byte(mask[end]))
         end++;
+    if (view->python && start > line_start && mask[start - 1] == '.')
+        return FALSE;
     while (start > line_start + 1 && mask[start - 1] == '.' &&
            debug_identifier_byte(mask[start - 2]))
     {
@@ -5996,9 +6146,9 @@ static gboolean debug_source_tooltip(GtkWidget *widget, gint x, gint y, gboolean
     return TRUE;
 }
 
-/* Number source lines using the same newline rules as the Lua lexer. */
-/* Нумерует строки по тем же правилам перевода строки, что и лексер Lua. */
-static gchar *debug_number_source(const gchar *source, gsize length, GArray *line_offsets)
+/* Number source lines using the selected interpreter's newline rules. */
+/* Нумерует строки по правилам перевода строки выбранного интерпретатора. */
+static gchar *debug_number_source(const gchar *source, gsize length, GArray *line_offsets, gboolean python)
 {
     GString *numbered = g_string_sized_new(length + 128);
     const gchar *start = source;
@@ -6016,59 +6166,72 @@ static gchar *debug_number_source(const gchar *source, gsize length, GArray *lin
         g_string_append_len(numbered, start, end - start);
         g_string_append_c(numbered, '\n');
         start = end + 1;
-        if ((*start == '\r' || *start == '\n') && *start != *end)
+        if ((*end == '\r' && *start == '\n') || (!python && *end == '\n' && *start == '\r'))
             start++;
     }
     return g_string_free(numbered, FALSE);
 }
 
-/* Capture the active Lua buffer and open a debugger window for it. */
-/* Сохраняет снимок активного буфера Lua и открывает окно отладчика. */
-static void debug_current_lua(GtkMenuItem *item, gpointer data)
+/* Capture the active script buffer and open the selected debugger. */
+/* Сохраняет снимок буфера и открывает выбранный отладчик. */
+static void debug_current_script(GtkMenuItem *item, gpointer data)
 {
     (void)item;
-    (void)data;
+    gboolean python = GPOINTER_TO_INT(data);
     GeanyDocument *document = document_get_current();
-    if (!DOC_VALID(document) || !document->file_type || document->file_type->lang != TM_PARSER_LUA)
+    if (!DOC_VALID(document) || !document->file_type ||
+        document->file_type->lang != (python ? TM_PARSER_PYTHON : TM_PARSER_LUA))
     {
-        ui_set_statusbar(TRUE, "Open a Lua file to start the debugger");
+        ui_set_statusbar(TRUE, "Open a %s file to start the debugger", python ? "Python" : "Lua");
         return;
     }
 
     gint length = sci_get_length(document->editor->sci);
     if (length < 0 || length > 2 * 1024 * 1024)
     {
-        ui_set_statusbar(TRUE, "Lua debugging supports buffers up to 2 MiB");
+        ui_set_statusbar(TRUE, "Debugging supports buffers up to 2 MiB");
         return;
     }
 
     gchar *source = sci_get_contents(document->editor->sci, length + 1);
     if (memchr(source, 0, length) || !g_utf8_validate(source, length, NULL))
     {
-        ui_set_statusbar(TRUE, "Lua debugger requires a UTF-8 text buffer");
+        ui_set_statusbar(TRUE, "The debugger requires a UTF-8 text buffer");
         g_free(source);
         return;
     }
 
-    gchar error[1024];
-    InsightLuaDebug *engine = insight_lua_debug_new(source, length, error, sizeof error);
-    if (!engine)
+    gchar error[1024] = {0};
+    GError *python_error = NULL;
+    InsightLuaDebug *lua_engine = NULL;
+    InsightPythonDebug *python_engine = NULL;
+    if (python)
+        python_engine = debug_new_python_engine(document->file_name, source, length, &python_error);
+    else
+        lua_engine = insight_lua_debug_new(source, length, error, sizeof error);
+    if (!lua_engine && !python_engine)
     {
-        gchar *message = g_utf8_make_valid(*error ? error : "Unable to start Lua debugger", -1);
+        const gchar *description = python_error ? python_error->message :
+            *error ? error : "Unable to start debugger";
+        gchar *message = g_utf8_make_valid(description, -1);
         ui_set_statusbar(TRUE, "%s", message);
         g_free(message);
+        g_clear_error(&python_error);
         g_free(source);
         return;
     }
 
-    LuaDebugWindow *view = g_new0(LuaDebugWindow, 1);
-    view->engine = engine;
+    ScriptDebugWindow *view = g_new0(ScriptDebugWindow, 1);
+    view->python = python;
+    view->engine = lua_engine;
+    view->python_engine = python_engine;
     view->watch_paths = g_ptr_array_new_with_free_func(g_free);
     view->watch_selected = -1;
     view->document_id = document->id;
     view->source_snapshot = source;
     view->source_length = (gsize)length;
-    view->source_code_mask = insight_source_code_mask(source, view->source_length, INSIGHT_CODE_LUA, NULL);
+    view->source_code_mask = insight_source_code_mask(source, view->source_length,
+        python ? INSIGHT_CODE_PYTHON : INSIGHT_CODE_LUA, NULL);
     view->source_line_offsets = g_array_new(FALSE, FALSE, sizeof(gsize));
     view->source_filename = g_strdup(document->file_name);
     view->project_filename = g_strdup(app->project ? app->project->file_name : NULL);
@@ -6085,7 +6248,7 @@ static void debug_current_lua(GtkMenuItem *item, gpointer data)
         g_array_append_val(view->line_starts, offset);
     }
     view->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(view->window), "Lua Source Debugger");
+    gtk_window_set_title(GTK_WINDOW(view->window), python ? "Python Source Debugger" : "Lua Source Debugger");
     gtk_window_set_default_size(GTK_WINDOW(view->window), 940, 520);
     gtk_window_set_transient_for(GTK_WINDOW(view->window), GTK_WINDOW(main_widgets.window));
     gtk_window_set_destroy_with_parent(GTK_WINDOW(view->window), TRUE);
@@ -6095,7 +6258,7 @@ static void debug_current_lua(GtkMenuItem *item, gpointer data)
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
     gtk_container_set_border_width(GTK_CONTAINER(box), 8);
     gtk_container_add(GTK_CONTAINER(view->window), box);
-    insight_panel_help_attach(box, "lua-debugger.md");
+    insight_panel_help_attach(box, python ? "python-debugger.md" : "lua-debugger.md");
     GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     gtk_box_pack_start(GTK_BOX(box), toolbar, FALSE, FALSE, 0);
 
@@ -6138,7 +6301,7 @@ static void debug_current_lua(GtkMenuItem *item, gpointer data)
     gtk_notebook_append_page(GTK_NOTEBOOK(inspection), debug_create_watch_tab(view), gtk_label_new("Watch graph"));
     gtk_paned_set_position(GTK_PANED(pane), 535);
     gchar *numbered = debug_number_source(view->source_snapshot, view->source_length,
-                                          view->source_line_offsets);
+                                          view->source_line_offsets, python);
     debug_set_text(view->source_view, numbered);
     g_free(numbered);
 
@@ -6169,8 +6332,11 @@ static void create_native_lua(void) {
  GCallback actions[]={G_CALLBACK(choose_native_script),G_CALLBACK(reload_native_script),G_CALLBACK(reload_native_script),G_CALLBACK(choose_native_script)};
  for(guint i=0;i<4;i++) { GtkWidget *entry=gtk_menu_item_new_with_label(labels[i]); gtk_container_add(GTK_CONTAINER(wb.lua_menu),entry); g_signal_connect(entry,"activate",actions[i],GINT_TO_POINTER(i>=2)); }
  GtkWidget *debug=gtk_menu_item_new_with_label(insight_tr("Debug Current Lua Buffer…"));
- g_signal_connect(debug,"activate",G_CALLBACK(debug_current_lua),NULL);
+ g_signal_connect(debug,"activate",G_CALLBACK(debug_current_script),NULL);
  gtk_menu_shell_append(GTK_MENU_SHELL(wb.lua_menu),debug);
+ GtkWidget *python_debug=gtk_menu_item_new_with_label(insight_tr("Debug Current Python Buffer…"));
+ g_signal_connect(python_debug,"activate",G_CALLBACK(debug_current_script),GINT_TO_POINTER(TRUE));
+ gtk_menu_shell_append(GTK_MENU_SHELL(wb.lua_menu),python_debug);
  GtkWidget *commands=gtk_menu_item_new_with_label("Commands"); wb.lua_commands=gtk_menu_new(); gtk_menu_item_set_submenu(GTK_MENU_ITEM(commands),wb.lua_commands); gtk_container_add(GTK_CONTAINER(wb.lua_menu),commands);
  wb.palette_item=gtk_menu_item_new_with_label("Command palette…"); g_signal_connect(wb.palette_item,"activate",G_CALLBACK(show_native_palette),NULL); gtk_container_add(GTK_CONTAINER(wb.lua_menu),wb.palette_item);
  gtk_container_add(GTK_CONTAINER(main_widgets.tools_menu),item); gtk_widget_show_all(item); native_commands_rebuild();

@@ -1006,7 +1006,7 @@ libgeany = shared_library('geany',
 	'src/log.c',
 	'src/log.h',
 	'src/libmain.c',
-	'src/insight-git.c', 'src/insight-git.h', 'src/insight-workbench.c', 'src/insight-waveforms.c', 'src/insight-waveforms.h', 'src/insight-project-membership.h', 'src/insight-virtual-list.c', 'src/insight-virtual-list.h', 'src/insight-symbol-view.c', 'src/insight-symbol-view.h',
+	'src/insight-git.c', 'src/insight-git.h', 'src/insight-workbench.c', 'src/insight-python-debug.c', 'src/insight-python-debug.h', 'src/insight-waveforms.c', 'src/insight-waveforms.h', 'src/insight-project-membership.h', 'src/insight-virtual-list.c', 'src/insight-virtual-list.h', 'src/insight-symbol-view.c', 'src/insight-symbol-view.h',
 	'src/insight-directory.c', 'src/insight-directory.h',
 	'insight/desktop/directory_compare.c', 'insight/desktop/directory_compare.h',
 	'src/insight-diff.c', 'src/insight-hex.c', 'src/insight-hex.h', 'src/insight-stream.c', 'src/insight-stream.h', 'src/insight-stream-ui.c', 'src/insight-stream-ui.h', 'src/insight-history-ui.h',
@@ -1182,7 +1182,7 @@ endif
 install_data(
   'insight/docs/project-database.md', 'insight/docs/guide.md', 'insight/docs/tutorials.md', 'insight/docs/languages.md',
   'insight/docs/scripting.md', 'insight/docs/markup-viewer.rst',
-  'insight/docs/directory-compare.md', 'insight/docs/lua-api.md', 'insight/docs/lua-debugger.md', 'insight/docs/internal-diff.md',
+  'insight/docs/directory-compare.md', 'insight/docs/lua-api.md', 'insight/docs/lua-debugger.md', 'insight/docs/python-debugger.md', 'insight/docs/internal-diff.md',
   'insight/docs/desktop-check-builds.md',
   'insight/docs/context-bookmarks.md', 'insight/docs/relations-calls.md',
   'insight/docs/window-layouts.md', 'insight/docs/window-list.md', 'insight/docs/symbol-info.md',
@@ -1222,7 +1222,7 @@ install_subdir('insight/docs/ru', install_dir: cdata.get('GEANY_DATA_DIR') / 'in
 install_subdir('styles', install_dir: cdata.get('GEANY_DATA_DIR'))
 install_subdir('fonts', install_dir: cdata.get('GEANY_DATA_DIR'))
 
-install_data('insight/tools/ai_client.py', 'insight/tools/remote_pack.py', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'tools')
+install_data('insight/tools/ai_client.py', 'insight/tools/remote_pack.py', 'insight/tools/python_debug.py', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'tools')
 
 install_data('insight/docs/relation-results.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 
