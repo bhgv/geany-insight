@@ -4487,8 +4487,57 @@ static void wave_jump_run(GTask *task, gpointer object, gpointer data, GCancella
     g_task_return_boolean(task, found);
 }
 
+/* Walk upstream or downstream without mixing directions at a shared signal. */
+/* Обходит связи вверх или вниз по потоку, сохраняя направление на развилках. */
+static void waveform_walk_ports(GtkListStore *rows, GHashTable *ports, const gchar *start,
+    const gchar *direction, guint *remaining)
+{
+    GHashTable *visited = g_hash_table_new(g_str_hash, g_str_equal);
+    GQueue pending = G_QUEUE_INIT;
+    g_hash_table_add(visited, (gpointer)start);
+    g_queue_push_tail(&pending, (gpointer)start);
+
+    for (guint distance = 1; !g_queue_is_empty(&pending) && *remaining; distance++)
+    {
+        guint level_size = g_queue_get_length(&pending);
+        while (level_size-- && *remaining)
+        {
+            const gchar *signal = g_queue_pop_head(&pending);
+            GPtrArray *edges = g_hash_table_lookup(ports, signal);
+            if (!edges)
+                continue;
+
+            for (guint i = 0; i < edges->len && *remaining; i++)
+            {
+                const InsightSymbol *edge = g_ptr_array_index(edges, i);
+                if ((g_strcmp0(edge->inheritance, direction) &&
+                     g_strcmp0(edge->inheritance, "port-peer")) ||
+                    !g_hash_table_add(visited, (gpointer)edge->name))
+                    continue;
+
+                g_queue_push_tail(&pending, (gpointer)edge->name);
+                const gchar *role = edge->inheritance;
+                if (distance > 1)
+                    role = !strcmp(direction, "port-source") ? _("Upstream") : _("Downstream");
+                gtk_list_store_insert_with_values(rows, NULL, -1,
+                    WAVE_USE_ROLE, role, WAVE_USE_NAME, edge->name,
+                    WAVE_USE_FILE, edge->path, WAVE_USE_LINE, edge->line,
+                    WAVE_USE_CONNECTION, TRUE, WAVE_USE_HOPS, distance, -1);
+                (*remaining)--;
+            }
+        }
+    }
+    g_queue_clear(&pending);
+    g_hash_table_unref(visited);
+}
+
 /* Show distinct source occurrences that bind to the selected declaration. */
 /* Показывает уникальные места в исходниках, связанные с выбранным объявлением. */
+enum {
+    WAVE_USE_ROLE, WAVE_USE_NAME, WAVE_USE_FILE, WAVE_USE_LINE,
+    WAVE_USE_CONNECTION, WAVE_USE_HOPS, WAVE_USE_COLUMNS
+};
+
 /* Enable track navigation only for an instance-specific connection. */
 /* Разрешает переход к дорожке только для связи конкретного экземпляра. */
 static void waveform_use_selected(GtkTreeSelection *selection, gpointer data)
@@ -4498,7 +4547,7 @@ static void waveform_use_selected(GtkTreeSelection *selection, gpointer data)
     gboolean connection = FALSE;
     gboolean selected = gtk_tree_selection_get_selected(selection, &model, &row);
     if (selected)
-        gtk_tree_model_get(model, &row, 4, &connection, -1);
+        gtk_tree_model_get(model, &row, WAVE_USE_CONNECTION, &connection, -1);
     gtk_dialog_set_response_sensitive(GTK_DIALOG(data), GTK_RESPONSE_ACCEPT, selected);
     gtk_dialog_set_response_sensitive(GTK_DIALOG(data), GTK_RESPONSE_APPLY, connection);
 }
@@ -4506,28 +4555,45 @@ static void waveform_use_selected(GtkTreeSelection *selection, gpointer data)
 static void waveform_show_hdl_uses(WaveJump *jump)
 {
     const InsightIndex *index = jump->snapshot->result->index;
-    GtkListStore *rows = gtk_list_store_new(4, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_BOOLEAN);
+    GtkListStore *rows = gtk_list_store_new(WAVE_USE_COLUMNS,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_UINT);
+    GHashTable *ports = g_hash_table_new_full(g_str_hash, g_str_equal, NULL,
+        (GDestroyNotify)g_ptr_array_unref);
     GHashTable *seen = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     gchar *target = g_strdup_printf("%u:%u", jump->line, jump->column);
 
     for (gsize i = 0; i < insight_index_count(index); i++)
     {
         const InsightSymbol *row = insight_index_at(index, i);
-        gboolean connection = !g_strcmp0(row->kind, "@hdlwire");
-        if (!row->line || (connection ? g_strcmp0(row->scope, jump->name) :
-            (g_strcmp0(row->kind, "@hdlref") || g_strcmp0(row->scope, jump->path) ||
-             g_strcmp0(row->type, target))))
+        if (!row->line)
+            continue;
+        if (!g_strcmp0(row->kind, "@hdlwire"))
+        {
+            GPtrArray *edges = g_hash_table_lookup(ports, row->scope);
+            if (!edges)
+            {
+                edges = g_ptr_array_new();
+                g_hash_table_insert(ports, (gpointer)row->scope, edges);
+            }
+            g_ptr_array_add(edges, (gpointer)row);
+            continue;
+        }
+        if (g_hash_table_size(seen) >= 2000 || g_strcmp0(row->kind, "@hdlref") ||
+            g_strcmp0(row->scope, jump->path) || g_strcmp0(row->type, target))
             continue;
 
         gchar *key = g_strdup_printf("%s\n%u\n%s\n%s\n%s", row->path, row->line,
             row->signature, row->inheritance, row->name);
         if (g_hash_table_add(seen, key))
-            gtk_list_store_insert_with_values(rows, NULL, -1, 0, row->inheritance,
-                1, row->name, 2, row->path, 3, row->line, 4, connection, -1);
-        if (g_hash_table_size(seen) == 2000)
-            break;
+            gtk_list_store_insert_with_values(rows, NULL, -1, WAVE_USE_ROLE, row->inheritance,
+                WAVE_USE_NAME, row->name, WAVE_USE_FILE, row->path, WAVE_USE_LINE, row->line, -1);
     }
+    guint upstream_remaining = 1000, downstream_remaining = 1000;
+    waveform_walk_ports(rows, ports, jump->name, "port-source", &upstream_remaining);
+    waveform_walk_ports(rows, ports, jump->name, "port-destination", &downstream_remaining);
+    g_hash_table_unref(ports);
     g_free(target);
+    gboolean reference_limit_reached = g_hash_table_size(seen) >= 2000;
     g_hash_table_unref(seen);
 
     GtkWidget *dialog = gtk_dialog_new_with_buttons(_("HDL Uses"), GTK_WINDOW(main_widgets.window),
@@ -4538,6 +4604,11 @@ static void waveform_show_hdl_uses(WaveJump *jump)
     gtk_window_set_default_size(GTK_WINDOW(dialog), 760, 400);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     GtkWidget *label = gtk_label_new(jump->name);
+    if (!upstream_remaining || !downstream_remaining || reference_limit_reached)
+    {
+        GtkWidget *limit = gtk_label_new(_("Result limit reached. Some HDL uses may be omitted."));
+        gtk_box_pack_start(GTK_BOX(box), limit, FALSE, FALSE, 0);
+    }
     gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_MIDDLE);
     gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 6);
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
@@ -4545,10 +4616,11 @@ static void waveform_show_hdl_uses(WaveJump *jump)
     GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(rows));
     gtk_container_add(GTK_CONTAINER(scroll), tree);
     gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(rows), 1, GTK_SORT_ASCENDING);
-    const gchar *titles[] = {_("Role"), _("Name"), _("File"), _("Line")};
+    const gchar *titles[] = {_("Role"), _("Name"), _("File"), _("Line"), _("Port hops")};
+    const gint columns[] = {WAVE_USE_ROLE, WAVE_USE_NAME, WAVE_USE_FILE, WAVE_USE_LINE, WAVE_USE_HOPS};
     for (guint column = 0; column < G_N_ELEMENTS(titles); column++)
         gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(tree), -1,
-            titles[column], gtk_cell_renderer_text_new(), "text", column, NULL);
+            titles[column], gtk_cell_renderer_text_new(), "text", columns[column], NULL);
     GtkTreeIter selected;
     GtkTreeSelection *selection = g_object_ref(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)));
     if (gtk_tree_model_get_iter_first(GTK_TREE_MODEL(rows), &selected))
@@ -4569,7 +4641,7 @@ static void waveform_show_hdl_uses(WaveJump *jump)
     {
         gchar *peer;
         gboolean connection;
-        gtk_tree_model_get(GTK_TREE_MODEL(rows), &selected, 1, &peer, 4, &connection, -1);
+        gtk_tree_model_get(GTK_TREE_MODEL(rows), &selected, WAVE_USE_NAME, &peer, WAVE_USE_CONNECTION, &connection, -1);
         GtkWindow *viewer = g_weak_ref_get(&jump->viewer);
         if (!connection)
             ui_set_statusbar(TRUE, "%s", _("Select a row with a full connected signal path."));
@@ -4583,7 +4655,7 @@ static void waveform_show_hdl_uses(WaveJump *jump)
     {
         gchar *utf8_path;
         guint line;
-        gtk_tree_model_get(GTK_TREE_MODEL(rows), &selected, 2, &utf8_path, 3, &line, -1);
+        gtk_tree_model_get(GTK_TREE_MODEL(rows), &selected, WAVE_USE_FILE, &utf8_path, WAVE_USE_LINE, &line, -1);
         gchar *path = utils_get_locale_from_utf8(utf8_path);
         diff_source_open(path, line);
         g_free(path);
