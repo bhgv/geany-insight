@@ -33,10 +33,10 @@ index d15672a..788ff45 100644
  
  
 diff --git a/vvp/stop.cc b/vvp/stop.cc
-index 175e8ae..83ceb45 100644
+index 175e8ae..0eaf28c 100644
 --- a/vvp/stop.cc
 +++ b/vvp/stop.cc
-@@ -38,6 +38,10 @@
+@@ -38,13 +38,18 @@
  #endif
  # include  <cstring>
  # include  <cstdlib>
@@ -47,7 +47,21 @@ index 175e8ae..83ceb45 100644
  # include  "ivl_alloc.h"
  
  __vpiScope*stop_current_scope = 0;
-@@ -70,8 +74,350 @@ static char* readline_stub(const char*prompt)
+ bool stop_is_finish = false;  /* When set, $stop acts like $finish (set in main.cc). */
+ int  stop_is_finish_exit_code = 0;
+ 
+-#ifndef USE_READLINE
++// EN: Read the editor's pipe without terminal or readline state.
++// RU: Читает канал редактора без состояния терминала или readline.
+ static char* readline_stub(const char*prompt)
+ {
+       char buf[256];
+@@ -66,12 +71,355 @@ static char* readline_stub(const char*prompt)
+ 
+       return 0;
+ }
++#ifndef USE_READLINE
+ #define readline(x) readline_stub(x)
  #endif
  
  
@@ -398,7 +412,7 @@ index 175e8ae..83ceb45 100644
  static void cmd_call(unsigned argc, const char*argv[])
  {
        __vpiHandle**table;
-@@ -444,6 +790,21 @@ static struct {
+@@ -444,6 +792,21 @@ static struct {
          "Synonym for finish."},
        { "finish", &cmd_finish,
          "Finish the simulation."},
@@ -420,7 +434,7 @@ index 175e8ae..83ceb45 100644
        { "help",   &cmd_help,
          "Get help."},
        { "list",   &cmd_list,
-@@ -554,6 +915,9 @@ void stop_handler(int rc)
+@@ -554,6 +917,9 @@ void stop_handler(int rc)
  	    return;
        }
  
@@ -430,7 +444,26 @@ index 175e8ae..83ceb45 100644
        vpi_mcd_printf(1,"** VVP Stop(%d) **\n", rc);
        vpi_mcd_printf(1,"** Flushing output streams.\n");
        invoke_command_const("$fflush");
-@@ -583,5 +947,6 @@ void stop_handler(int rc)
+@@ -563,7 +929,7 @@ void stop_handler(int rc)
+ 
+       interact_flag = true;
+       while (interact_flag) {
+-	    char*input = readline("> ");
++	    char*input = geany_debug_enabled() ? readline_stub("> ") : readline("> ");
+ 	    if (input == 0)
+ 		  break;
+ 
+@@ -575,7 +941,8 @@ void stop_handler(int rc)
+ 
+ 	    if (first[0] != 0) {
+ #ifdef USE_HISTORY
+-		  add_history(first);
++		  if (!geany_debug_enabled())
++                    add_history(first);
+ #endif
+ 		  invoke_command(first);
+ 	    }
+@@ -583,5 +950,6 @@ void stop_handler(int rc)
  	    free(input);
        }
  
