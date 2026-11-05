@@ -470,8 +470,20 @@ index 175e8ae..6c544f5 100644
 +      geany_stopped_process = 0;
        vpi_mcd_printf(1,"** Continue **\n");
  }
+diff --git a/vvp/vpi_priv.h b/vvp/vpi_priv.h
+index 3b253c9..7fd0a4e 100644
+--- a/vvp/vpi_priv.h
++++ b/vvp/vpi_priv.h
+@@ -704,6 +704,7 @@ class __vpiBaseVar : public __vpiHandle {
+ #endif
+
+       inline vvp_net_t* get_net() const { return net_; }
++      inline const char* get_name() const { return name_; }
+
+     protected:
+       __vpiScope* scope_;
 diff --git a/vvp/vthread.cc b/vvp/vthread.cc
-index de7578b..cdd77ba 100644
+index de7578b..1d55556 100644
 --- a/vvp/vthread.cc
 +++ b/vvp/vthread.cc
 @@ -31,6 +31,7 @@
@@ -490,7 +502,7 @@ index de7578b..cdd77ba 100644
        vthread_s();
  
        void debug_dump(ostream&fd, const char*label_text);
-@@ -427,6 +429,271 @@ __vpiScope* vthread_scope(struct vthread_s*thr)
+@@ -427,6 +429,279 @@ __vpiScope* vthread_scope(struct vthread_s*thr)
  
  struct vthread_s*running_thread = 0;
  
@@ -582,6 +594,14 @@ index de7578b..cdd77ba 100644
 +      printf(length < value.size() ? "\"..." : "\"");
 +}
 +
++// Some SystemVerilog handles store a name without implementing vpiName.
++static const char* geany_value_name(vpiHandle handle)
++{
++      if (auto* variable = dynamic_cast<__vpiBaseVar*>(handle))
++            return variable->get_name();
++      return vpi_get_str(vpiName, handle);
++}
++
 +static bool geany_print_array_word(vpiHandle handle, const char* name, int index)
 +{
 +      auto* variable = dynamic_cast<__vpiBaseVar*>(handle);
@@ -650,7 +670,7 @@ index de7578b..cdd77ba 100644
 +                  printf("Geany: value list limited to 128 entries.\n");
 +                  break;
 +            }
-+            const char* name = vpi_get_str(vpiName, signal);
++            const char* name = geany_value_name(signal);
 +            printf("%s", name ? name : "(unnamed)");
 +            if (type == vpiMemory) {
 +                  printf(" [memory]\n");
@@ -711,7 +731,7 @@ index de7578b..cdd77ba 100644
 +            const int memory_type = vpi_get(vpiType, memory);
 +            if (memory_type != vpiMemory && memory_type != vpiArrayVar)
 +                  continue;
-+            const char* memory_name = vpi_get_str(vpiName, memory);
++            const char* memory_name = geany_value_name(memory);
 +            if (!memory_name || std::strcmp(memory_name, name))
 +                  continue;
 +
@@ -762,7 +782,7 @@ index de7578b..cdd77ba 100644
  string get_fileline()
  {
        return running_thread->get_fileline();
-@@ -719,6 +986,10 @@ vthread_t vthread_new(vvp_code_t pc, __vpiScope*scope)
+@@ -719,6 +994,10 @@ vthread_t vthread_new(vvp_code_t pc, __vpiScope*scope)
        for (int idx = 4 ; idx < 8 ; idx += 1)
  	    thr->flags[idx] = BIT4_X;
  
@@ -773,7 +793,7 @@ index de7578b..cdd77ba 100644
        scope->threads .insert(thr);
        return thr;
  }
-@@ -820,6 +1091,8 @@ static void vthread_reap(vthread_t thr)
+@@ -820,6 +1099,8 @@ static void vthread_reap(vthread_t thr)
  
  void vthread_delete(vthread_t thr)
  {
@@ -782,7 +802,7 @@ index de7578b..cdd77ba 100644
        thr->cleanup();
        delete thr;
  }
-@@ -857,6 +1130,13 @@ void vthread_delay_delete()
+@@ -857,6 +1138,13 @@ void vthread_delay_delete()
   * incrementing the PC, and executing the instruction. The thread may
   * be the head of a list, so each thread is run so far as possible.
   */
@@ -796,7 +816,7 @@ index de7578b..cdd77ba 100644
  void vthread_run(vthread_t thr)
  {
        while (thr != 0) {
-@@ -869,6 +1149,16 @@ void vthread_run(vthread_t thr)
+@@ -869,6 +1157,16 @@ void vthread_run(vthread_t thr)
              running_thread = thr;
  
  	    for (;;) {
@@ -813,7 +833,7 @@ index de7578b..cdd77ba 100644
  		  vvp_code_t cp = thr->pc;
  		  thr->pc += 1;
  
-@@ -880,6 +1170,15 @@ void vthread_run(vthread_t thr)
+@@ -880,6 +1178,15 @@ void vthread_run(vthread_t thr)
  			break;
  	    }
  
@@ -829,7 +849,7 @@ index de7578b..cdd77ba 100644
  	    thr = tmp;
        }
        running_thread = 0;
-@@ -6416,6 +6715,33 @@ bool of_FILE_LINE(vthread_t thr, vvp_code_t cp)
+@@ -6416,6 +6723,33 @@ bool of_FILE_LINE(vthread_t thr, vvp_code_t cp)
  	    cerr << thr->get_fileline()
  	         << vpi_get_str(_vpiDescription, handle) << endl;
  
