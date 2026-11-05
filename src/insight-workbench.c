@@ -1954,7 +1954,9 @@ static guint hdl_color_role(const InsightSymbol *row)
   if(!strcmp(row->inheritance,"module") || !strcmp(row->inheritance,"instance")) return 1;
   if(!strcmp(row->inheritance,"port")) return 2;
   if(!strcmp(row->inheritance,"call")) return 3;
-  if(!strcmp(row->inheritance,"value") || !strcmp(row->inheritance,"member")) return 5;
+  if(!strcmp(row->inheritance,"value") || !strcmp(row->inheritance,"member") ||
+     !strcmp(row->inheritance,"read") || !strcmp(row->inheritance,"write") ||
+     !strcmp(row->inheritance,"read/write")) return 5;
  }
  return 0;
 }
@@ -4449,45 +4451,150 @@ static int native_message(void *ctx,const char *text) {
  NativeHost *h=ctx; if(!g_utf8_validate(text,-1,NULL)) return 0; h->message_set=1; ui_set_statusbar(TRUE,"%s",text); return 1;
 }
 typedef struct {
- HdlJob *snapshot;
- gchar *name, *path;
- guint line, column;
+    HdlJob *snapshot;
+    gchar *name, *path;
+    guint line, column;
+    gboolean show_uses;
 } WaveJump;
-static void wave_jump_free(gpointer data) {
- WaveJump *jump=data;
- hdl_job_free(jump->snapshot);
- g_free(jump->name);
- g_free(jump->path);
- g_free(jump);
+
+/* Release the waveform lookup and its HDL snapshot. */
+/* Освобождает данные поиска по диаграмме и снимок HDL. */
+static void wave_jump_free(gpointer data)
+{
+    WaveJump *jump = data;
+    hdl_job_free(jump->snapshot);
+    g_free(jump->name);
+    g_free(jump->path);
+    g_free(jump);
 }
-static void wave_jump_run(GTask *task,gpointer object,gpointer data,GCancellable *cancel) {
- (void)object;
- WaveJump *jump=data;
- HdlJob *snapshot=jump->snapshot;
- gboolean ok=snapshot->valid && insight_slang_wave_definition(snapshot->service,jump->name,
-     snapshot->paths,snapshot->buffers,snapshot->vivado,cancel,&jump->path,&jump->line,&jump->column);
- g_task_return_boolean(task,ok);
+
+/* Resolve the declaration and load its project references off the UI thread. */
+/* Ищет объявление и загружает ссылки проекта вне потока интерфейса. */
+static void wave_jump_run(GTask *task, gpointer object, gpointer data, GCancellable *cancel)
+{
+    (void)object;
+    WaveJump *jump = data;
+    HdlJob *snapshot = jump->snapshot;
+    gboolean found = snapshot->valid && insight_slang_wave_definition(snapshot->service, jump->name,
+        snapshot->paths, snapshot->buffers, snapshot->vivado, cancel,
+        &jump->path, &jump->line, &jump->column);
+
+    if (found && jump->show_uses)
+        snapshot->result = insight_slang_project_configured(snapshot->service, snapshot->paths,
+            snapshot->buffers, snapshot->root, snapshot->cache, snapshot->vivado, cancel);
+    g_task_return_boolean(task, found);
 }
-static void wave_jump_done(GObject *object,GAsyncResult *result,gpointer data) {
- (void)object;(void)data;
- WaveJump *jump=g_task_get_task_data(G_TASK(result));
- if(!wb.alive || jump->snapshot->epoch!=workbench_epoch ||
-    g_strcmp0(jump->snapshot->project,app->project ? app->project->file_name:NULL)) return;
- if(g_task_propagate_boolean(G_TASK(result),NULL)) {
-  gchar *path=utils_get_locale_from_utf8(jump->path);
-  diff_source_open(path,jump->line);
-  g_free(path);
- } else ui_set_statusbar(TRUE,"HDL declaration not found: %s",jump->name);
+
+/* Show distinct source occurrences that bind to the selected declaration. */
+/* Показывает уникальные места в исходниках, связанные с выбранным объявлением. */
+static void waveform_show_hdl_uses(const WaveJump *jump)
+{
+    const InsightIndex *index = jump->snapshot->result->index;
+    GtkListStore *rows = gtk_list_store_new(3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT);
+    GHashTable *seen = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    gchar *target = g_strdup_printf("%u:%u", jump->line, jump->column);
+
+    for (gsize i = 0; i < insight_index_count(index); i++)
+    {
+        const InsightSymbol *row = insight_index_at(index, i);
+        if (g_strcmp0(row->kind, "@hdlref") || g_strcmp0(row->scope, jump->path) ||
+            g_strcmp0(row->type, target) || !row->line)
+            continue;
+
+        gchar *key = g_strdup_printf("%s\n%u\n%s\n%s", row->path, row->line,
+            row->signature, row->inheritance);
+        if (g_hash_table_add(seen, key))
+            gtk_list_store_insert_with_values(rows, NULL, -1, 0, row->inheritance,
+                1, row->path, 2, row->line, -1);
+        if (g_hash_table_size(seen) == 2000)
+            break;
+    }
+    g_free(target);
+    g_hash_table_unref(seen);
+
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(_("HDL Uses"), GTK_WINDOW(main_widgets.window),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, _("_Close"), GTK_RESPONSE_CLOSE,
+        _("_Open Source"), GTK_RESPONSE_ACCEPT, NULL);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 760, 400);
+    GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    GtkWidget *label = gtk_label_new(jump->name);
+    gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_MIDDLE);
+    gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 6);
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
+    GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(rows));
+    gtk_container_add(GTK_CONTAINER(scroll), tree);
+    const gchar *titles[] = {_("Role"), _("File"), _("Line")};
+    for (guint column = 0; column < G_N_ELEMENTS(titles); column++)
+        gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(tree), -1,
+            titles[column], gtk_cell_renderer_text_new(), "text", column, NULL);
+    GtkTreeIter selected;
+    GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(tree));
+    if (gtk_tree_model_get_iter_first(GTK_TREE_MODEL(rows), &selected))
+        gtk_tree_selection_select_iter(selection, &selected);
+    else
+    {
+        gtk_label_set_text(GTK_LABEL(label), _("No HDL uses found."));
+        gtk_dialog_set_response_sensitive(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT, FALSE);
+    }
+    gtk_widget_show_all(dialog);
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT &&
+        gtk_tree_selection_get_selected(selection, NULL, &selected))
+    {
+        gchar *utf8_path;
+        guint line;
+        gtk_tree_model_get(GTK_TREE_MODEL(rows), &selected, 1, &utf8_path, 2, &line, -1);
+        gchar *path = utils_get_locale_from_utf8(utf8_path);
+        diff_source_open(path, line);
+        g_free(path);
+        g_free(utf8_path);
+    }
+    gtk_widget_destroy(dialog);
+    g_object_unref(rows);
 }
-static void waveform_source(const gchar *name) {
- if(!wb.alive || !*name || strlen(name)>4096) return;
- WaveJump *jump=g_new0(WaveJump,1);
- jump->snapshot=hdl_snapshot(NULL,FALSE);
- jump->name=g_strdup(name);
- GTask *task=g_task_new(NULL,NULL,wave_jump_done,NULL);
- g_task_set_task_data(task,jump,wave_jump_free);
- g_task_run_in_thread(task,wave_jump_run);
- g_object_unref(task);
+
+/* Present a lookup only if the editor still has the same project open. */
+/* Показывает результат поиска, если в редакторе ещё открыт тот же проект. */
+static void wave_jump_done(GObject *object, GAsyncResult *result, gpointer data)
+{
+    (void)object;
+    (void)data;
+    WaveJump *jump = g_task_get_task_data(G_TASK(result));
+    if (!wb.alive || jump->snapshot->epoch != workbench_epoch ||
+        g_strcmp0(jump->snapshot->project, app->project ? app->project->file_name : NULL))
+        return;
+
+    if (!g_task_propagate_boolean(G_TASK(result), NULL))
+        ui_set_statusbar(TRUE, _("HDL declaration not found: %s"), jump->name);
+    else if (jump->show_uses)
+    {
+        if (jump->snapshot->result && jump->snapshot->result->index)
+            waveform_show_hdl_uses(jump);
+        else
+            ui_set_statusbar(TRUE, _("HDL project index unavailable for %s"), jump->name);
+    }
+    else
+    {
+        gchar *path = utils_get_locale_from_utf8(jump->path);
+        diff_source_open(path, jump->line);
+        g_free(path);
+    }
+}
+
+/* Start source navigation or a reference lookup for the selected waveform signal. */
+/* Запускает переход к исходнику или поиск ссылок для выбранного сигнала диаграммы. */
+static void waveform_source(const gchar *name, gboolean show_uses)
+{
+    if (!wb.alive || !name || !*name || strlen(name) > 4096)
+        return;
+    WaveJump *jump = g_new0(WaveJump, 1);
+    jump->snapshot = hdl_snapshot(NULL, FALSE);
+    jump->name = g_strdup(name);
+    jump->show_uses = show_uses;
+    GTask *task = g_task_new(NULL, NULL, wave_jump_done, NULL);
+    g_task_set_task_data(task, jump, wave_jump_free);
+    g_task_run_in_thread(task, wave_jump_run);
+    g_object_unref(task);
 }
 static gboolean launch_waveforms(gpointer data) {
  (void)data;

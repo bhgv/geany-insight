@@ -674,7 +674,7 @@ static void marker_clicked(GtkButton *button, gpointer data) {
 static void source_clicked(GtkButton *button, gpointer data) {
  (void)button;
  Viewer *viewer = data;
- if (viewer->navigate) viewer->navigate(gtk_entry_get_text(GTK_ENTRY(viewer->source)));
+ if (viewer->navigate) viewer->navigate(gtk_entry_get_text(GTK_ENTRY(viewer->source)), FALSE);
 }
 
 typedef struct {
@@ -781,7 +781,7 @@ static void wave_show_signal_map(GtkButton *button, gpointer data)
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Signal Map", GTK_WINDOW(owner),
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE,
         "_Select Track", GTK_RESPONSE_ACCEPT, "_Pin Track", GTK_RESPONSE_APPLY,
-        "_Go to HDL", GTK_RESPONSE_REJECT, NULL);
+        "_Go to HDL", GTK_RESPONSE_REJECT, "_HDL Uses…", GTK_RESPONSE_OK, NULL);
     g_object_ref_sink(dialog);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 740, 410);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
@@ -818,16 +818,16 @@ static void wave_show_signal_map(GtkButton *button, gpointer data)
     g_object_unref(scopes);
 
     if (index < 0 || (response != GTK_RESPONSE_ACCEPT && response != GTK_RESPONSE_APPLY &&
-                      response != GTK_RESPONSE_REJECT))
+                      response != GTK_RESPONSE_REJECT && response != GTK_RESPONSE_OK))
     {
         g_object_unref(owner);
         return;
     }
     const Signal *signal = viewer->capture->signals->pdata[index];
-    if (response == GTK_RESPONSE_REJECT)
+    if (response == GTK_RESPONSE_REJECT || response == GTK_RESPONSE_OK)
     {
         if (viewer->navigate)
-            viewer->navigate(signal->name);
+            viewer->navigate(signal->name, response == GTK_RESPONSE_OK);
         g_object_unref(owner);
         return;
     }

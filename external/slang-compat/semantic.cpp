@@ -4,6 +4,7 @@
 #include "slang/ast/Compilation.h"
 #include "slang/diagnostics/DiagnosticClient.h"
 #include "slang/ast/Definition.h"
+#include "slang/ast/expressions/AssignmentExpressions.h"
 #include "slang/ast/expressions/MiscExpressions.h"
 #include "slang/ast/expressions/CallExpression.h"
 #include "slang/ast/expressions/SelectExpressions.h"
@@ -205,6 +206,7 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
     const SourceManager& sources;
     std::vector<std::string> rows;
     size_t bytes = 0;
+    string_view valueRole = "value";
     explicit ProjectIndex(const SourceManager& sources) : sources(sources) {}
     bool located(SourceLocation location) const { return location && sources.getFullPath(location.buffer()).is_absolute(); }
     void push(std::string row) {
@@ -218,6 +220,7 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
         push(std::move(row));
     }
     void reference(string_view name, SourceRange range, SourceLocation target, string_view kind) {
+        target = sources.getFullyOriginalLoc(target);
         if (!located(target)) return;
         auto location = sources.getFullyOriginalLoc(range.start());
         add("R", name, location, sources.getFullPath(target.buffer()).string(),
@@ -232,9 +235,23 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
         if constexpr (std::is_base_of_v<Symbol, T>) add("D", node.name, node.location, identity(node), toString(node.kind), "");
         visitDefault(node);
     }
-    void handle(const NamedValueExpression& node) { boundName(node, node.symbol, "value"); visitDefault(node); }
-    void handle(const HierarchicalValueExpression& node) { boundName(node, node.symbol, "value"); visitDefault(node); }
+    void handle(const NamedValueExpression& node) { boundName(node, node.symbol, valueRole); visitDefault(node); }
+    void handle(const HierarchicalValueExpression& node) { boundName(node, node.symbol, valueRole); visitDefault(node); }
     void handle(const MemberAccessExpression& node) { boundName(node, node.member, "member"); visitDefault(node); }
+
+    // Classify direct assignment targets and reads in the right-hand expression.
+    // Различает прямые цели присваивания и чтение в правой части.
+    void handle(const AssignmentExpression& node) {
+        const auto previousRole = valueRole;
+        const auto& target = node.left();
+        const bool directTarget = target.kind == ExpressionKind::NamedValue ||
+                                  target.kind == ExpressionKind::HierarchicalValue;
+        valueRole = directTarget ? (node.isCompound() ? "read/write" : "write") : "value";
+        target.visit(*this);
+        valueRole = "read";
+        node.right().visit(*this);
+        valueRole = previousRole;
+    }
     void handle(const CallExpression& node) {
         if (!node.isSystemCall() && node.syntax) {
             const syntax::ExpressionSyntax* callee = node.syntax;
