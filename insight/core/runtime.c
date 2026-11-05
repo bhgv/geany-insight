@@ -400,6 +400,8 @@ struct InsightLuaDebug {
     const void *observer_paused_frame;
     char observer_log[16384];
     size_t observer_log_length;
+    unsigned observer_watch_count;
+    struct { char name[64], value[112]; } observer_watches[16];
 };
 
 /* Compile an explicitly resolved project module without opening package libraries. */
@@ -510,6 +512,76 @@ static int debug_observer_log(lua_State *state)
     return 0;
 }
 
+/* Publish a named scalar to the debugger's watch graph. */
+/* Публикует именованное простое значение в графе наблюдения. */
+static int debug_observer_watch(lua_State *state)
+{
+    InsightLuaDebug *debug = lua_touserdata(state, lua_upvalueindex(1));
+    size_t length;
+    const char *name = luaL_checklstring(state, 1, &length);
+    if (!length || length >= sizeof debug->observer_watches[0].name || memchr(name, 0, length))
+        return luaL_error(state, "watch name must contain 1 to 63 bytes");
+
+    unsigned index = 0;
+    while (index < debug->observer_watch_count && strcmp(debug->observer_watches[index].name, name))
+        index++;
+    if (lua_isnil(state, 2))
+    {
+        if (index < debug->observer_watch_count)
+        {
+            debug->observer_watch_count--;
+            memmove(&debug->observer_watches[index], &debug->observer_watches[index + 1],
+                    (debug->observer_watch_count - index) * sizeof debug->observer_watches[0]);
+        }
+        return 0;
+    }
+    if (index == sizeof debug->observer_watches / sizeof debug->observer_watches[0])
+        return luaL_error(state, "observer watch limit reached");
+    char *value = debug->observer_watches[index].value;
+    size_t capacity = sizeof debug->observer_watches[index].value;
+    if (lua_type(state, 2) == LUA_TBOOLEAN)
+        snprintf(value, capacity, "%s", lua_toboolean(state, 2) ? "true" : "false");
+    else if (lua_type(state, 2) == LUA_TSTRING || lua_type(state, 2) == LUA_TNUMBER)
+        snprintf(value, capacity, "%s", lua_tostring(state, 2));
+    else
+        return luaL_error(state, "watch expects a string, number, Boolean or nil");
+    memcpy(debug->observer_watches[index].name, name, length + 1);
+    if (index == debug->observer_watch_count)
+        debug->observer_watch_count++;
+    return 0;
+}
+
+/* Add observer cards below the current graph root without changing the VM snapshot. */
+/* Добавляет карточки сценария под корень графа, сохраняя исходный снимок VM. */
+void insight_lua_debug_observer_watch(const InsightLuaDebug *debug, InsightLuaWatchGraph *graph)
+{
+    if (!debug || !graph || !debug->observer_watch_count)
+        return;
+    if (!graph->node_count)
+    {
+        graph->node_count = 1;
+        snprintf(graph->nodes[0].label, sizeof graph->nodes[0].label, "Observer");
+    }
+    for (unsigned i = 0; i < debug->observer_watch_count; i++)
+    {
+        if (graph->node_count >= INSIGHT_LUA_WATCH_NODES || graph->edge_count >= INSIGHT_LUA_WATCH_EDGES)
+        {
+            graph->limited = 1;
+            break;
+        }
+        unsigned id = graph->node_count++;
+        InsightLuaWatchNode *node = &graph->nodes[id];
+        const char *name = debug->observer_watches[i].name;
+        snprintf(node->label, sizeof node->label, "%s", name);
+        snprintf(node->value, sizeof node->value, "%s", debug->observer_watches[i].value);
+        snprintf(node->path, sizeof node->path, "observer:%s", name);
+        InsightLuaWatchEdge *edge = &graph->edges[graph->edge_count++];
+        edge->from = 0;
+        edge->to = id;
+        snprintf(edge->label, sizeof edge->label, "observer: %s", name);
+    }
+}
+
 static void debug_hook(lua_State *state, lua_Debug *event);
 
 typedef struct {
@@ -539,7 +611,17 @@ static int debug_observer_setup(lua_State *state)
     lua_pushlightuserdata(state, config->debug);
     lua_pushcclosure(state, debug_observer_log, 1);
     lua_setglobal(state, "log");
+    lua_pushlightuserdata(state, config->debug);
+    lua_pushcclosure(state, debug_observer_watch, 1);
+    lua_setglobal(state, "watch");
     return 0;
+}
+
+/* Create a session for events supplied by another debug engine. */
+/* Создаёт сеанс для событий от другого движка отладки. */
+InsightLuaDebug *insight_lua_debug_new_observer(void)
+{
+    return calloc(1, sizeof(InsightLuaDebug));
 }
 
 /* Replace or clear the observer without restarting the debugged program. */
@@ -591,11 +673,20 @@ int insight_lua_debug_set_observer(InsightLuaDebug *debug, const char *source,
     debug->observer_stop = 0;
     debug->observer_log[0] = 0;
     debug->observer_log_length = 0;
+    debug->observer_watch_count = 0;
     int mask = LUA_MASKLINE | LUA_MASKCOUNT;
     if (replacement)
         mask |= LUA_MASKCALL | LUA_MASKRET;
-    lua_sethook(debug->thread, debug_hook, mask, DEBUG_HOOK_INTERVAL);
+    if (debug->thread)
+        lua_sethook(debug->thread, debug_hook, mask, DEBUG_HOOK_INTERVAL);
     return 1;
+}
+
+/* Report whether the observer is ready to receive events. */
+/* Сообщает, готов ли обработчик принимать события. */
+int insight_lua_debug_observer_active(const InsightLuaDebug *debug)
+{
+    return debug && debug->observer != NULL;
 }
 
 /* Expose the observer log until the next reconfiguration or restart. */
@@ -704,22 +795,57 @@ static int debug_observer_dispatch(lua_State *state)
     return 1;
 }
 
-/* Run the observer under protection and latch its next-line stop request. */
-/* Запускает обработчик под защитой и запоминает запрос остановки на строке. */
-static void debug_run_observer(InsightLuaDebug *debug, lua_State *target, lua_Debug *event)
+/* Build the same event table from scalars copied by the Python trace process. */
+/* Создаёт такую же таблицу события из значений, скопированных процессом Python. */
+static int debug_observer_dispatch_external(lua_State *state)
 {
-    if (!debug->observer)
-        return;
-    lua_State *state = debug->observer->state;
+    const InsightObserverEvent *event = lua_touserdata(state, 1);
+    lua_getfield(state, LUA_REGISTRYINDEX, "insight.debug.observer");
+    lua_newtable(state);
+    lua_pushstring(state, event->kind);
+    lua_setfield(state, -2, "kind");
+    lua_pushstring(state, event->file);
+    lua_setfield(state, -2, "file");
+    lua_pushstring(state, event->name);
+    lua_setfield(state, -2, "name");
+    lua_pushinteger(state, event->line);
+    lua_setfield(state, -2, "line");
+    const char *scopes[] = {"locals", "args", "globals"};
+    for (unsigned scope = 0; scope < 3; scope++)
+    {
+        lua_newtable(state);
+        for (size_t i = 0; i < event->count; i++)
+        {
+            const InsightObserverValue *value = &event->values[i];
+            if (value->scope != scope)
+                continue;
+            switch (value->type)
+            {
+                case 'b': lua_pushboolean(state, value->integer != 0); break;
+                case 'i': lua_pushinteger(state, value->integer); break;
+                case 'f': lua_pushnumber(state, value->number); break;
+                case 's': lua_pushlstring(state, value->text, value->length); break;
+                default: continue;
+            }
+            lua_setfield(state, -2, value->name);
+        }
+        lua_setfield(state, -2, scopes[scope]);
+    }
+    lua_call(state, 1, 1);
+    return 1;
+}
 
-    DebugObserverEvent input = {target, event};
-    int target_top = lua_gettop(target);
+/* Call the observer in its isolated VM and disable it on a script error. */
+/* Вызывает обработчик в изолированной VM и отключает его при ошибке. */
+static int debug_call_observer(InsightLuaDebug *debug, lua_CFunction dispatch, void *input)
+{
+    if (!debug || !debug->observer)
+        return 0;
+    lua_State *state = debug->observer->state;
     debug->observer->ticks = 0;
-    lua_pushcfunction(state, debug_observer_dispatch);
-    lua_pushlightuserdata(state, &input);
-    int status = lua_pcall(state, 1, 1, 0);
-    lua_settop(target, target_top);
-    if (status != LUA_OK)
+    lua_pushcfunction(state, dispatch);
+    lua_pushlightuserdata(state, input);
+    if (lua_pcall(state, 1, 1, 0) != LUA_OK)
     {
         const char *message = lua_type(state, -1) == LUA_TSTRING ? lua_tostring(state, -1) : NULL;
         size_t available = sizeof debug->observer_log - debug->observer_log_length;
@@ -728,13 +854,32 @@ static void debug_run_observer(InsightLuaDebug *debug, lua_State *target, lua_De
         lua_close(state);
         free(debug->observer);
         debug->observer = NULL;
-        lua_sethook(target, debug_hook, LUA_MASKLINE | LUA_MASKCOUNT, DEBUG_HOOK_INTERVAL);
-        debug->observer_stop = 1;
-        return;
+        return -1;
     }
-    if (lua_isboolean(state, -1) && lua_toboolean(state, -1))
-        debug->observer_stop = 1;
+    int stop = lua_isboolean(state, -1) && lua_toboolean(state, -1);
     lua_pop(state, 1);
+    return stop;
+}
+
+/* Feed a copied Python event to the Lua observer. */
+/* Передаёт копию события Python обработчику Lua. */
+int insight_lua_debug_observe(InsightLuaDebug *debug, const InsightObserverEvent *event)
+{
+    return event ? debug_call_observer(debug, debug_observer_dispatch_external, (void *)event) : -1;
+}
+
+/* Run the observer under protection and latch its next-line stop request. */
+/* Запускает обработчик под защитой и запоминает запрос остановки на строке. */
+static void debug_run_observer(InsightLuaDebug *debug, lua_State *target, lua_Debug *event)
+{
+    DebugObserverEvent input = {target, event};
+    int target_top = lua_gettop(target);
+    int result = debug_call_observer(debug, debug_observer_dispatch, &input);
+    lua_settop(target, target_top);
+    if (result < 0)
+        lua_sethook(target, debug_hook, LUA_MASKLINE | LUA_MASKCOUNT, DEBUG_HOOK_INTERVAL);
+    if (result)
+        debug->observer_stop = 1;
 }
 
 /* Yield at source stops or when a VM time slice runs out. */

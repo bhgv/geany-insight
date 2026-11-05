@@ -67,7 +67,7 @@
 
 Откройте **Conditions and Script…** на паузе. Условие `event.locals.counter == 10`
 проверяется перед выполнением каждой строки. Для глобальной переменной используйте
-`event.globals.counter == 10`. Очистите поле, чтобы отключить условие.
+`event.globals.counter == 10`. Очистите поле, чтобы отключить условие. Для сравнения по порядку добавьте проверку на отсутствие значения, например `event.globals.counter ~= nil and event.globals.counter >= 10`.
 
 В нижнее поле можно вставить сценарий, возвращающий обработчик. Он получает события
 `line`, `call` и `return`. В событии есть `kind`, `file`, `line`, `name`, а также
@@ -118,6 +118,12 @@ counter = tick(counter, 9)
 -- RU: Оставляем исполняемую строку, на которой отладчик увидит итоговое значение.
 local final_counter = counter
 ```
+
+`log(text)` добавляет строку во вкладку **Observer log**. `watch(name, value)`
+публикует карточку сценария во вкладке **Watch graph**. Повторный вызов с тем же
+именем обновляет карточку. `watch(name, nil)` удаляет её. Поддерживаются числа,
+строки и логические значения. У сценария может быть до 16 карточек, в пределах
+общего размера графа. Имена ограничены 63 байтами.
 
 #### Журнал вызовов и аргументов
 
@@ -201,6 +207,9 @@ return function(event)
     -- EN: Keep this sample for the next comparison.
     -- RU: Сохраняем отсчёт для следующего сравнения.
     previous_value = current_value
+    -- EN: Publish the latest value as a named card in Watch graph.
+    -- RU: Показываем последнее значение в именованной карточке Watch graph.
+    watch("Observed counter", current_value)
 -- EN: End the observer callback.
 -- RU: Завершаем обработчик событий.
 end

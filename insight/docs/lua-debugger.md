@@ -64,7 +64,7 @@ pick up edits made after launch.
 
 Open **Conditions and Script…** while paused. Enter `event.locals.counter == 10`
 to stop before the next source line when the local reaches 10. For a global,
-use `event.globals.counter == 10`. Clear the field to disable the condition.
+use `event.globals.counter == 10`. Clear the field to disable the condition. For an ordering comparison, guard against a missing value, for example `event.globals.counter ~= nil and event.globals.counter >= 10`.
 
 The lower field accepts a Lua chunk returning an event handler. The handler receives
 `line`, `call` and `return` events with `kind`, `file`, `line`, `name`,
@@ -115,6 +115,12 @@ counter = tick(counter, 9)
 -- RU: Оставляем исполняемую строку, на которой отладчик увидит итоговое значение.
 local final_counter = counter
 ```
+
+`log(text)` appends a line to **Observer log**. `watch(name, value)` publishes an
+observer card in **Watch graph**. Calling it again with the same name updates the
+card. `watch(name, nil)` removes it. Values can be numbers, strings or Booleans.
+An observer can publish up to 16 cards within the graph's overall size limit.
+Names can contain up to 63 bytes.
 
 #### Log calls and arguments
 
@@ -198,6 +204,9 @@ return function(event)
     -- EN: Keep this sample for the next comparison.
     -- RU: Сохраняем отсчёт для следующего сравнения.
     previous_value = current_value
+    -- EN: Publish the latest value as a named card in Watch graph.
+    -- RU: Показываем последнее значение в именованной карточке Watch graph.
+    watch("Observed counter", current_value)
 -- EN: End the observer callback.
 -- RU: Завершаем обработчик событий.
 end

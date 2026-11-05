@@ -69,8 +69,28 @@ InsightLuaDebug *insight_lua_debug_new(const char *filename, const char *,size_t
 void insight_lua_debug_set_module_loader(InsightLuaDebug *, InsightLuaModuleLoader, void *);
 const char *insight_lua_debug_filename(const InsightLuaDebug *);
 void insight_lua_debug_free(InsightLuaDebug *);
+InsightLuaDebug *insight_lua_debug_new_observer(void);
 int insight_lua_debug_set_observer(InsightLuaDebug *debug, const char *source,
                                   size_t length, char *error, size_t capacity);
+typedef struct {
+    unsigned scope;
+    char type;
+    const char *name;
+    const char *text;
+    size_t length;
+    long long integer;
+    double number;
+} InsightObserverValue;
+typedef struct {
+    const char *kind, *file, *name;
+    unsigned long line;
+    const InsightObserverValue *values;
+    size_t count;
+} InsightObserverEvent;
+/* Dispatch a copied event. Return 1 to stop, 0 to continue, -1 on callback error. */
+int insight_lua_debug_observe(InsightLuaDebug *, const InsightObserverEvent *);
+int insight_lua_debug_observer_active(const InsightLuaDebug *);
+void insight_lua_debug_observer_watch(const InsightLuaDebug *, InsightLuaWatchGraph *);
 const char *insight_lua_debug_observer_log(const InsightLuaDebug *debug);
 void insight_lua_debug_request_pause(InsightLuaDebug *);
 /* Resume returns 2 when another slice is needed, 1 at a source stop,

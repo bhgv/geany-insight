@@ -5024,6 +5024,8 @@ static void debug_window_free(gpointer data)
         g_source_remove(view->execution_source);
     insight_lua_debug_free(view->engine);
     insight_python_debug_free(view->python_engine);
+    insight_lua_debug_free(view->python_observer);
+    g_free(view->observer_graph);
     g_free(view->python_graph);
     g_free(view->python_stack);
     g_clear_pointer(&view->python_overlays, g_hash_table_unref);
@@ -5527,8 +5529,9 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
     gtk_text_buffer_get_bounds(buffer, &first, &last);
     gtk_text_buffer_remove_tag(buffer, view->current_line_tag, &first, &last);
     view->paused_line = 0;
+    InsightLuaDebug *observer = view->python ? view->python_observer : view->engine;
     if (view->observer_log)
-        debug_set_text(view->observer_log, insight_lua_debug_observer_log(view->engine));
+        debug_set_text(view->observer_log, insight_lua_debug_observer_log(observer));
 
     if (result == 1 && line > 0)
     {
@@ -5574,6 +5577,18 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
     view->watch_graph = NULL;
     if (result == 1)
         view->watch_graph = view->python ? view->python_graph : insight_lua_debug_watch_graph(view->engine);
+    if (observer)
+    {
+        if (!view->observer_graph)
+            view->observer_graph = g_new0(InsightLuaWatchGraph, 1);
+        if (view->watch_graph)
+            *view->observer_graph = *view->watch_graph;
+        else
+            memset(view->observer_graph, 0, sizeof *view->observer_graph);
+        insight_lua_debug_observer_watch(observer, view->observer_graph);
+        if (view->observer_graph->node_count)
+            view->watch_graph = view->observer_graph;
+    }
     debug_watch_compare(view);
     view->watch_selected = -1;
     debug_watch_layout(view);
@@ -6025,6 +6040,90 @@ static void debug_python_input_eof(GtkButton *button, gpointer data)
     debug_python_submit_input(data, TRUE);
 }
 
+/* Decode one protocol field without interpreting it as source code. */
+/* Декодирует поле протокола без выполнения его как исходного кода. */
+static gchar *debug_decode_observer_field(const gchar *hex, gsize *length)
+{
+    gsize size = strlen(hex);
+    if (size % 2)
+        return NULL;
+    gchar *text = g_malloc(size / 2 + 1);
+    for (gsize i = 0; i < size; i += 2)
+    {
+        gint high = g_ascii_xdigit_value(hex[i]);
+        gint low = g_ascii_xdigit_value(hex[i + 1]);
+        if (high < 0 || low < 0)
+        {
+            g_free(text);
+            return NULL;
+        }
+        text[i / 2] = (gchar)((high << 4) | low);
+    }
+    *length = size / 2;
+    text[*length] = 0;
+    return text;
+}
+
+/* Deliver a Python event to Lua and acknowledge it before Python continues. */
+/* Передаёт событие Python в Lua и подтверждает его перед продолжением Python. */
+static gboolean debug_python_observer_event(ScriptDebugWindow *view, const gchar *packet,
+                                            gsize length, GError **error)
+{
+    gint decision = -1;
+    if (length <= 256 * 1024 && !memchr(packet, 0, length))
+    {
+        gchar **fields = g_strsplit(packet, "\t", -1);
+        guint count = g_strv_length(fields);
+        guint64 line;
+        if (count >= 5 && count <= 5 + 192 * 3 && (count - 5) % 3 == 0 &&
+            (!strcmp(fields[1], "call") || !strcmp(fields[1], "line") || !strcmp(fields[1], "return")) &&
+            g_ascii_string_to_unsigned(fields[3], 10, 0, G_MAXINT, &line, NULL))
+        {
+            gsize file_length = 0, name_length = 0;
+            gchar *file = debug_decode_observer_field(fields[2], &file_length);
+            gchar *name = debug_decode_observer_field(fields[4], &name_length);
+            if (file && name && !memchr(file, 0, file_length) && !memchr(name, 0, name_length))
+            {
+                InsightObserverValue values[192];
+                guint used = 0;
+                for (guint i = 5; i < count; i += 3)
+                {
+                    const gchar *tag = fields[i];
+                    if (strlen(tag) != 2 || tag[0] < '0' || tag[0] > '2' || !strchr("bifs", tag[1]))
+                        continue;
+                    gsize key_length = 0, value_length = 0;
+                    gchar *key = debug_decode_observer_field(fields[i + 1], &key_length);
+                    gchar *value = debug_decode_observer_field(fields[i + 2], &value_length);
+                    if (!key || !value || memchr(key, 0, key_length))
+                    {
+                        g_free(key);
+                        g_free(value);
+                        continue;
+                    }
+                    values[used++] = (InsightObserverValue){
+                        .scope = (guint)(tag[0] - '0'), .type = tag[1], .name = key, .text = value,
+                        .length = value_length,
+                        .integer = tag[1] == 'i' || tag[1] == 'b' ? g_ascii_strtoll(value, NULL, 10) : 0,
+                        .number = tag[1] == 'f' ? g_ascii_strtod(value, NULL) : 0
+                    };
+                }
+                InsightObserverEvent event = {fields[1], file, name, (unsigned long)line, values, used};
+                decision = insight_lua_debug_observe(view->python_observer, &event);
+                for (guint i = 0; i < used; i++)
+                {
+                    g_free((gchar *)values[i].name);
+                    g_free((gchar *)values[i].text);
+                }
+            }
+            g_free(file);
+            g_free(name);
+        }
+        g_strfreev(fields);
+    }
+    return insight_python_debug_send(view->python_engine,
+        decision < 0 ? "observe error\n" : decision ? "observe stop\n" : "observe continue\n", error);
+}
+
 /* Receive a Python stop packet without keeping a closed window alive. */
 /* Получает пакет остановки Python, не удерживая закрытое окно. */
 static void debug_python_received(GObject *object, GAsyncResult *result, gpointer data)
@@ -6044,12 +6143,16 @@ static void debug_python_received(GObject *object, GAsyncResult *result, gpointe
         gchar *stack = NULL;
         gchar *message = NULL;
         InsightLuaWatchGraph *graph = NULL;
-        gint status = insight_python_debug_parse(packet, length, &line, &filename, &stack, &graph, &message);
-        if ((status == 2 || status == 3) && !error)
+        gboolean observer_event = packet && length >= 2 && packet[0] == 'V' && packet[1] == '\t';
+        gint status = observer_event ? 4 :
+            insight_python_debug_parse(packet, length, &line, &filename, &stack, &graph, &message);
+        if (observer_event && !error && !debug_python_observer_event(view, packet, length, &error))
+            status = -1;
+        if (status >= 2 && !error)
         {
             if (status == 2)
                 debug_python_append_output(view, message);
-            else
+            else if (status == 3)
             {
                 GtkWidget *page = gtk_widget_get_parent(view->python_input_row);
                 GtkNotebook *notebook = GTK_NOTEBOOK(gtk_widget_get_parent(page));
@@ -6118,12 +6221,8 @@ static void debug_python_step(ScriptDebugWindow *view)
             debug_append_file_breakpoint(command, filename, lines[i]);
         total += (guint)count;
     }
-    if (view->stop_condition && *view->stop_condition)
-    {
-        g_string_append(command, " condition:");
-        for (const guchar *byte = (const guchar *)view->stop_condition; *byte; byte++)
-            g_string_append_printf(command, "%02x", (guint)*byte);
-    }
+    if (insight_lua_debug_observer_active(view->python_observer))
+        g_string_append(command, " observe");
     if (command->len > 64 * 1024)
     {
         g_string_free(command, TRUE);
@@ -6379,6 +6478,33 @@ static gboolean debug_apply_lua_observer(InsightLuaDebug *engine, const gchar *c
     return applied;
 }
 
+/* Configure the common observer for a Python session or clear it. */
+/* Настраивает общий обработчик для сеанса Python или отключает его. */
+static gboolean debug_apply_python_observer(InsightLuaDebug **observer, const gchar *condition,
+                                           const gchar *source, gchar *error, gsize capacity)
+{
+    if ((!condition || !*condition) && (!source || !*source))
+    {
+        g_clear_pointer(observer, insight_lua_debug_free);
+        return TRUE;
+    }
+
+    InsightLuaDebug *engine = *observer ? *observer : insight_lua_debug_new_observer();
+    if (!engine)
+    {
+        g_strlcpy(error, "Cannot allocate debugger observer", capacity);
+        return FALSE;
+    }
+    if (!debug_apply_lua_observer(engine, condition, source, error, capacity))
+    {
+        if (!*observer)
+            insight_lua_debug_free(engine);
+        return FALSE;
+    }
+    *observer = engine;
+    return TRUE;
+}
+
 /* Start a fresh VM on the same source snapshot, keeping the breakpoints. */
 /* Создаёт новую виртуальную машину для того же снимка и сохраняет точки останова. */
 static void debug_restart(GtkButton *button, gpointer data)
@@ -6388,10 +6514,16 @@ static void debug_restart(GtkButton *button, gpointer data)
     gchar error[1024] = {0};
     InsightLuaDebug *lua_replacement = NULL;
     InsightPythonDebug *python_replacement = NULL;
+    InsightLuaDebug *observer_replacement = NULL;
     GError *python_error = NULL;
     if (view->python)
+    {
         python_replacement = debug_new_python_engine(view->source_filename, view->project_root, view->source_snapshot,
                                                      view->source_length, view->python_overlays, &python_error);
+        if (python_replacement && !debug_apply_python_observer(&observer_replacement, view->stop_condition,
+                                                               view->observer_source, error, sizeof error))
+            g_clear_pointer(&python_replacement, insight_python_debug_free);
+    }
     else
     {
         gchar *filename = debug_file_key(view->source_filename);
@@ -6424,6 +6556,10 @@ static void debug_restart(GtkButton *button, gpointer data)
     g_clear_pointer(&view->python_stack, g_free);
     view->engine = lua_replacement;
     view->python_engine = python_replacement;
+    insight_lua_debug_free(view->python_observer);
+    view->python_observer = observer_replacement;
+    if (view->observer_log)
+        debug_set_text(view->observer_log, "");
     if (view->python_console)
     {
         debug_set_text(view->python_console, "");
@@ -6985,32 +7121,28 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
     if (debug_is_running(view))
         return;
 
-    GtkWidget *dialog = gtk_dialog_new_with_buttons(view->python ? "Stop Condition" : "Stop Condition and Lua Observer",
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Stop Condition and Lua Observer",
         GTK_WINDOW(view->window), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "_Cancel", GTK_RESPONSE_CANCEL, "_Apply", GTK_RESPONSE_ACCEPT, NULL);
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 650, view->python ? 140 : 420);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 650, 420);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     GtkWidget *entry = gtk_entry_new();
     gtk_entry_set_max_length(GTK_ENTRY(entry), 1024);
-    gtk_entry_set_placeholder_text(GTK_ENTRY(entry), view->python ? "counter == 10" : "event.locals.counter == 10");
+    gtk_entry_set_placeholder_text(GTK_ENTRY(entry), "event.locals.counter == 10");
     gtk_entry_set_text(GTK_ENTRY(entry), view->stop_condition ? view->stop_condition : "");
     gtk_box_pack_start(GTK_BOX(box), gtk_label_new("Stop when true on a source line. Leave empty to disable."),
                        FALSE, FALSE, 4);
     gtk_box_pack_start(GTK_BOX(box), entry, FALSE, FALSE, 4);
 
-    GtkTextBuffer *script = NULL;
-    if (!view->python)
-    {
-        gtk_box_pack_start(GTK_BOX(box), gtk_label_new("Optional Lua script returning function(event)."),
-                           FALSE, FALSE, 4);
-        GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
-        GtkWidget *editor = gtk_text_view_new();
-        gtk_text_view_set_monospace(GTK_TEXT_VIEW(editor), TRUE);
-        script = gtk_text_view_get_buffer(GTK_TEXT_VIEW(editor));
-        gtk_text_buffer_set_text(script, view->observer_source ? view->observer_source : "", -1);
-        gtk_container_add(GTK_CONTAINER(scroll), editor);
-        gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
-    }
+    gtk_box_pack_start(GTK_BOX(box), gtk_label_new("Optional Lua script returning function(event)."),
+                       FALSE, FALSE, 4);
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    GtkWidget *editor = gtk_text_view_new();
+    gtk_text_view_set_monospace(GTK_TEXT_VIEW(editor), TRUE);
+    GtkTextBuffer *script = gtk_text_view_get_buffer(GTK_TEXT_VIEW(editor));
+    gtk_text_buffer_set_text(script, view->observer_source ? view->observer_source : "", -1);
+    gtk_container_add(GTK_CONTAINER(scroll), editor);
+    gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
     GtkWidget *status = gtk_label_new(NULL);
     gtk_label_set_line_wrap(GTK_LABEL(status), TRUE);
     gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 4);
@@ -7019,19 +7151,17 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
     {
         gchar *condition = g_strdup(gtk_entry_get_text(GTK_ENTRY(entry)));
         g_strstrip(condition);
-        gchar *source = NULL;
-        if (script)
-        {
-            GtkTextIter first, last;
-            gtk_text_buffer_get_bounds(script, &first, &last);
-            source = gtk_text_buffer_get_text(script, &first, &last, FALSE);
-            g_strstrip(source);
-        }
+        GtkTextIter first, last;
+        gtk_text_buffer_get_bounds(script, &first, &last);
+        gchar *source = gtk_text_buffer_get_text(script, &first, &last, FALSE);
+        g_strstrip(source);
         gchar error[1024] = "";
         gboolean valid = !source || strlen(source) <= 64 * 1024;
         if (!valid)
             g_strlcpy(error, "Observer script exceeds 64 KiB", sizeof error);
-        else if (!view->python && view->engine)
+        else if (view->python)
+            valid = debug_apply_python_observer(&view->python_observer, condition, source, error, sizeof error);
+        else if (view->engine)
             valid = debug_apply_lua_observer(view->engine, condition, source, error, sizeof error);
         if (valid)
         {
@@ -7040,7 +7170,8 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
             view->stop_condition = condition;
             view->observer_source = source;
             if (view->observer_log)
-                debug_set_text(view->observer_log, insight_lua_debug_observer_log(view->engine));
+                debug_set_text(view->observer_log, insight_lua_debug_observer_log(
+                    view->python ? view->python_observer : view->engine));
             break;
         }
         gchar *message = g_utf8_make_valid(error, -1);
@@ -7212,7 +7343,6 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     view->stack_view = debug_create_view(stack_pane, TRUE);
     gtk_notebook_append_page(GTK_NOTEBOOK(inspection), stack_pane, gtk_label_new("Stack and locals"));
     gtk_notebook_append_page(GTK_NOTEBOOK(inspection), debug_create_watch_tab(view), gtk_label_new("Watch graph"));
-    if (!python)
     {
         GtkWidget *log_pane = gtk_paned_new(GTK_ORIENTATION_VERTICAL);
         view->observer_log = debug_create_view(log_pane, TRUE);

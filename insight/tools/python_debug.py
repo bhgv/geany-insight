@@ -3,7 +3,6 @@
 """Trace a Python buffer for the native Geany Insight debugger."""
 
 import importlib.machinery
-import ast
 import io
 import json
 import os
@@ -147,7 +146,7 @@ class WatchSnapshot:
 
 # Read control commands in parallel so Pause can interrupt a Python loop.
 # Читает команды параллельно, чтобы Pause мог остановить цикл Python.
-def read_commands(descriptor, commands, input_lines):
+def read_commands(descriptor, commands, input_lines, observer_replies):
     pending = b""
     while True:
         chunk = os.read(descriptor, 4096)
@@ -162,11 +161,14 @@ def read_commands(descriptor, commands, input_lines):
                     input_lines.put(bytes.fromhex(command[6:]).decode("utf-8") + "\n")
                 except ValueError:
                     input_lines.put(None)
+            elif command.startswith("observe "):
+                observer_replies.put(command[8:])
             elif command == "eof":
                 input_lines.put(None)
             else:
                 commands.put(command)
     input_lines.put(None)
+    observer_replies.put("off")
     commands.put("quit")
 
 
@@ -188,33 +190,23 @@ def stack_text(frame):
     return "\n".join(rows)[:8191]
 
 
-# Accept only a named scalar compared for equality with a scalar literal.
-# Разрешает только сравнение именованного простого значения с литералом.
-def parse_condition(source):
-    expression = ast.parse(source, mode="eval").body
-    if (type(expression) is not ast.Compare or type(expression.left) is not ast.Name or
-            len(expression.ops) != 1 or type(expression.ops[0]) is not ast.Eq):
-        raise ValueError("expected a condition like counter == 10")
-    value = ast.literal_eval(expression.comparators[0])
-    if type(value) not in (bool, int, float, str, type(None)):
-        raise ValueError("expected a number, string, Boolean or None")
-    return expression.left.id, value
-
-
 class Debugger:
     # Track the current step action and the original source filename.
     # Хранит текущий шаг и имя исходного файла.
-    def __init__(self, filename, project_root, commands, output):
+    def __init__(self, filename, project_root, commands, output, observer_replies):
         self.filename = filename
         self.project_root = self.file_key(project_root) if project_root else None
         self.file_keys = {filename: self.file_key(filename)}
         self.traceable = {filename: True}
         self.commands = commands
         self.output = output
+        self.observer_replies = observer_replies
+        self.observe = False
+        self.observer_stop = False
         self.mode = "into"
         self.depth = 0
         self.breakpoints = set()
-        self.condition = None
+
         self.breakpoint_files = set()
 
     # Normalize filenames the same way for trace frames and breakpoints.
@@ -254,14 +246,12 @@ class Debugger:
             self.mode = fields[0]
             self.depth = depth
             self.breakpoints = set()
-            self.condition = None
+
+            self.observe = False
+            self.observer_stop = False
             for value in fields[1:]:
-                if value.startswith("condition:"):
-                    try:
-                        self.condition = parse_condition(bytes.fromhex(value[10:]).decode("utf-8"))
-                    except (SyntaxError, ValueError):
-                        self.output.console("Invalid stop condition. Expected: counter == 10\n")
-                        self.mode = "into"
+                if value == "observe":
+                    self.observe = True
                     continue
                 path_hex, separator, line = value.partition(":")
                 if not separator or not line.isdecimal():
@@ -275,30 +265,52 @@ class Debugger:
             self.traceable = {self.filename: True}
             return
 
-    # Compare real scalar values without calling application-defined equality.
-    # Сравнивает простые значения без вызова пользовательского сравнения.
-    def matches_condition(self, frame):
-        if self.condition is None:
-            return False
-        name, expected = self.condition
-        values = frame.f_locals
-        if name not in values:
-            values = frame.f_globals
-        if name not in values:
-            return False
-        actual = values[name]
-        if type(actual) is type(expected):
-            return actual == expected
-        actual_type = type(actual)
-        expected_type = type(expected)
-        return ((actual_type is int or actual_type is float) and
-                (expected_type is int or expected_type is float) and actual == expected)
+    # Send scalar copies and wait for the editor's Lua observer decision.
+    # Передаёт копии простых значений и ждёт решения обработчика Lua в редакторе.
+    def send_observer_event(self, frame, event):
+        code = frame.f_code
+        fields = ["V", event, encode(code.co_filename), str(frame.f_lineno), encode(code.co_name)]
+        packet_length = sum(map(len, fields)) + len(fields)
+        locals_ = frame.f_locals
+        argument_count = code.co_argcount + code.co_kwonlyargcount
+        arguments = ((name, locals_.get(name)) for name in code.co_varnames[:argument_count])
+        scopes = (locals_.items(), arguments, frame.f_globals.items())
+        for scope, values in enumerate(scopes):
+            for index, (name, value) in enumerate(values):
+                if index >= 64:
+                    break
+                if type(name) is not str or len(name) > 128 or "\0" in name:
+                    continue
+                value_type = type(value)
+                if value_type is bool:
+                    tag, payload = "b", "1" if value else "0"
+                elif value_type is int and -(1 << 63) <= value < (1 << 63):
+                    tag, payload = "i", str(value)
+                elif value_type is float:
+                    tag, payload = "f", repr(value)
+                elif value_type is str and len(value) <= 512:
+                    tag, payload = "s", value
+                else:
+                    continue
+                entry = (str(scope) + tag, encode(name), encode(payload))
+                packet_length += sum(map(len, entry)) + len(entry)
+                if packet_length > 128 * 1024:
+                    break
+                fields.extend(entry)
+        self.output.write("\t".join(fields) + "\n")
+        reply = self.observer_replies.get()
+        if reply in ("stop", "error"):
+            self.observer_stop = True
+        if reply in ("off", "error"):
+            self.observe = False
 
     # Stop in tracked files while preserving the full call depth.
     # Останавливается в отслеживаемых файлах с учётом полной глубины стека.
     def trace(self, frame, event, _argument):
         if not self.should_trace(frame.f_code.co_filename):
             return None
+        if self.observe and event in ("call", "line", "return"):
+            self.send_observer_event(frame, event)
         if event != "line":
             return self.trace
         pause = False
@@ -316,8 +328,7 @@ class Debugger:
             parent = parent.f_back
         filename = frame.f_code.co_filename
         position = (self.file_keys[filename], frame.f_lineno)
-        if (pause or position in self.breakpoints or self.mode == "into" or
-                self.matches_condition(frame) or
+        if (pause or self.observer_stop or position in self.breakpoints or self.mode == "into" or
                 (self.mode == "over" and depth <= self.depth) or
                 (self.mode == "out" and depth < self.depth)):
             graph = WatchSnapshot(frame)
@@ -486,11 +497,12 @@ def main():
     sys.stderr = sys.__stderr__ = console
     commands = queue.Queue()
     input_lines = queue.Queue()
+    observer_replies = queue.Queue()
     sys.stdin = sys.__stdin__ = DebugInput(output, input_lines)
     reader = threading.Thread(target=read_commands,
-                              args=(control.fileno(), commands, input_lines), daemon=True)
+                              args=(control.fileno(), commands, input_lines, observer_replies), daemon=True)
     reader.start()
-    debugger = Debugger(filename, project_root, commands, output)
+    debugger = Debugger(filename, project_root, commands, output, observer_replies)
     try:
         with open(snapshot, encoding="utf-8") as stream:
             program = compile(stream.read(), filename, "exec", dont_inherit=True)
