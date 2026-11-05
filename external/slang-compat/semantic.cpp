@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Read-only, process-isolated native AST service. stdout is one protocol record.
 #include "slang/ast/ASTVisitor.h"
+#include "slang/ast/Statements.h"
+#include "slang/ast/TimingControl.h"
 #include "slang/ast/Compilation.h"
 #include "slang/diagnostics/DiagnosticClient.h"
 #include "slang/ast/Definition.h"
@@ -257,6 +259,11 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
     size_t bytes = 0;
     string_view valueRole = "value";
     bool inProceduralBlock = false;
+    struct ControlOperands {
+        PortOperands inputs;
+        string_view sourceRole, destinationRole;
+    };
+    std::vector<ControlOperands> controls;
     explicit ProjectIndex(const SourceManager& sources) : sources(sources) {}
     bool located(SourceLocation location) const { return location && sources.getFullPath(location.buffer()).is_absolute(); }
     void push(std::string row) {
@@ -313,17 +320,10 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
             if (token.valueText() == function.name) reference(function.name, token.range(), function.location, "call");
         }visitDefault(node);
     }
-    // Connect read signals to write targets at the assignment's source locations.
-    // Связывает чтения и цели записи с позициями в исходнике присваивания.
-    void indexAssignment(const AssignmentExpression& assignment, string_view sourceRole,
-                         string_view destinationRole) {
-        if (assignment.bad() || assignment.isLValueArg())
-            return;
-
-        PortOperands inputs, outputs;
-        assignment.right().visit(inputs);
-        outputs.destinations(assignment.left());
-
+    // Connect one group of dependencies to assignment targets.
+    // Связывает одну группу зависимостей с целями присваивания.
+    void indexDependencies(const PortOperands& inputs, const PortOperands& outputs,
+                           string_view sourceRole, string_view destinationRole) {
         constexpr size_t maxPairs = 4096;
         if (outputs.signals.empty() || inputs.signals.size() > maxPairs / outputs.signals.size())
             return;
@@ -342,6 +342,73 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
                 add("P", destination, write, source, "", destinationRole);
             }
         }
+    }
+
+    // Index data flow and the controls active at this assignment separately.
+    // Индексирует поток данных и активные управляющие сигналы по отдельности.
+    void indexAssignment(const AssignmentExpression& assignment, string_view sourceRole,
+                         string_view destinationRole) {
+        if (assignment.bad() || assignment.isLValueArg())
+            return;
+
+        PortOperands inputs, outputs;
+        assignment.right().visit(inputs);
+        outputs.destinations(assignment.left());
+        indexDependencies(inputs, outputs, sourceRole, destinationRole);
+        for (const auto& control : controls)
+            indexDependencies(control.inputs, outputs, control.sourceRole, control.destinationRole);
+    }
+
+    // Apply each if condition only to assignments in its own branches.
+    // Применяет условие if только к присваиваниям в его ветвях.
+    void handle(const ConditionalStatement& node) {
+        node.visitExprs(*this);
+        const auto depth = controls.size();
+        ControlOperands condition{{}, "condition-source", "condition-destination"};
+        for (const auto& term : node.conditions)
+            term.expr->visit(condition.inputs);
+        controls.push_back(std::move(condition));
+        node.visitStmts(*this);
+        controls.resize(depth);
+    }
+
+    // Preserve the edge polarity of explicit event controls and their iff guards.
+    // Сохраняет полярность явных событий и их условия iff.
+    void collectEventControls(const TimingControl& timing) {
+        if (timing.kind == TimingControlKind::EventList) {
+            for (const auto* event : timing.as<EventListControl>().events)
+                collectEventControls(*event);
+            return;
+        }
+        if (timing.kind != TimingControlKind::SignalEvent)
+            return;
+        const auto& event = timing.as<SignalEventControl>();
+        ControlOperands input{{}, "event-source", "event-destination"};
+        if (event.edge == EdgeKind::PosEdge) {
+            input.sourceRole = "posedge-source";
+            input.destinationRole = "posedge-destination";
+        }
+        else if (event.edge == EdgeKind::NegEdge) {
+            input.sourceRole = "negedge-source";
+            input.destinationRole = "negedge-destination";
+        }
+        event.expr.visit(input.inputs);
+        controls.push_back(std::move(input));
+        if (event.iffCondition) {
+            ControlOperands guard{{}, "condition-source", "condition-destination"};
+            event.iffCondition->visit(guard.inputs);
+            controls.push_back(std::move(guard));
+        }
+    }
+
+    // Restrict an event dependency to the statement controlled by that event.
+    // Ограничивает зависимость от события управляемым им оператором.
+    void handle(const TimedStatement& node) {
+        node.visitExprs(*this);
+        const auto depth = controls.size();
+        collectEventControls(node.timing);
+        node.visitStmts(*this);
+        controls.resize(depth);
     }
 
     // Index continuous assignments once, then retain ordinary source references.

@@ -316,6 +316,15 @@ def check_slang(service, fixtures, directory, environment):
                 f"Missing Slang dependency between {start} and {end}")
 
 
+    for name, role in (("enable", "condition"), ("clk", "posedge")):
+        control = f"{root}.dut.{name}"
+        require((control, sampled, f"{role}-destination") in edges
+                and (sampled, control, f"{role}-source") in edges,
+                f"Missing {role} dependency between {control} and {sampled}")
+        require((control, f"{root}.dut.data_out", f"{role}-destination") not in edges,
+                f"{role} leaked out of the procedural assignment")
+
+
 # EN: Run the checks against binaries installed by either native build launcher.
 # RU: Запускаем проверки программ, установленных любым штатным сборщиком.
 def main():

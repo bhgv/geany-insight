@@ -4555,6 +4555,15 @@ static void waveform_group_index_row(GHashTable *groups, gchar *key, const Insig
     g_ptr_array_add(group, (gpointer)row);
 }
 
+/* Recognize controls without turning them into traversable data-flow edges. */
+/* Распознаёт управляющие связи без включения их в обход потока данных. */
+static gboolean waveform_control_edge(const gchar *role, gboolean upstream)
+{
+    return (g_str_has_prefix(role, "condition-") || g_str_has_prefix(role, "event-") ||
+            g_str_has_prefix(role, "posedge-") || g_str_has_prefix(role, "negedge-")) &&
+        g_str_has_suffix(role, upstream ? "-source" : "-destination");
+}
+
 /* Walk upstream or downstream without mixing directions at a shared signal. */
 /* Обходит связи вверх или вниз по потоку, сохраняя направление на развилках. */
 static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph, WaveDependencyIndex *dependencies, const gchar *start,
@@ -4588,22 +4597,23 @@ static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph, 
             for (guint i = 0; i < edges->len && *remaining; i++)
             {
                 const InsightSymbol *edge = g_ptr_array_index(edges, i);
-                if ((g_strcmp0(edge->inheritance, port_role) &&
-                     g_strcmp0(edge->inheritance, assign_role) &&
-                     g_strcmp0(edge->inheritance, procedural_role) &&
-                     g_strcmp0(edge->inheritance, "port-peer")))
+                gboolean control = waveform_control_edge(edge->inheritance, upstream);
+                if (!control && g_strcmp0(edge->inheritance, port_role) &&
+                    g_strcmp0(edge->inheritance, assign_role) &&
+                    g_strcmp0(edge->inheritance, procedural_role) &&
+                    g_strcmp0(edge->inheritance, "port-peer"))
                     continue;
 
                 GtkTreeIter branch;
                 GtkTreeIter *parent = g_hash_table_lookup(visited, signal);
-                gboolean repeated = g_hash_table_contains(visited, edge->name);
+                gboolean repeated = !control && g_hash_table_contains(visited, edge->name);
                 gtk_tree_store_insert_with_values(graph, &branch, parent, -1,
                     WAVE_USE_ROLE, repeated ? insight_tr("Already shown") : edge->inheritance,
                     WAVE_USE_NAME, edge->name, WAVE_USE_FILE, edge->path,
                     WAVE_USE_LINE, edge->line, WAVE_USE_CONNECTION, TRUE,
                     WAVE_USE_HOPS, distance, -1);
                 (*remaining)--;
-                if (repeated)
+                if (repeated || control)
                     continue;
 
                 waveform_graph_uses(graph, &branch, dependencies, edge->name, NULL);
