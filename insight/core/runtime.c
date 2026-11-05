@@ -388,6 +388,7 @@ struct InsightLuaDebug {
     unsigned target_depth;
     unsigned long line;
     char snapshot[8192];
+    InsightLuaWatchGraph watch_graph;
     int finished;
     int slice_pending;
     int pause_requested;
@@ -414,6 +415,7 @@ static unsigned debug_depth(lua_State *state)
 }
 
 static void debug_capture(lua_State *state, char *output, size_t capacity);
+static void debug_watch_capture(lua_State *state, InsightLuaWatchGraph *graph);
 
 /* Yield at source stops or when a VM time slice runs out. */
 /* Приостанавливает VM на строке исходника или по окончании порции выполнения. */
@@ -455,6 +457,7 @@ static void debug_hook(lua_State *state, lua_Debug *event)
         debug->depth = debug_depth(state);
         debug->line = line;
         debug_capture(state, debug->snapshot, sizeof debug->snapshot);
+        debug_watch_capture(state, &debug->watch_graph);
         lua_yield(state, 0);
     }
 }
@@ -622,6 +625,237 @@ static void debug_capture(lua_State *L,char *output,size_t capacity) {
 void insight_lua_debug_inspect(InsightLuaDebug *debug,char *output,size_t capacity) {
  if(!output || !capacity) return;
  snprintf(output,capacity,"%s",debug && !debug->finished && debug->line ? debug->snapshot:"");
+}
+
+#define WATCH_DEPTH_LIMIT 6u
+#define WATCH_MEMBERS_LIMIT 16u
+#define WATCH_LOCAL_LIMIT 32
+
+typedef struct {
+    InsightLuaWatchGraph *graph;
+    const void *identity[INSIGHT_LUA_WATCH_NODES];
+} WatchCapture;
+
+/* Format raw values without calling Lua code or converting table keys. */
+/* Форматирует значения без вызова Lua-кода и преобразования ключей таблицы. */
+static void watch_value_text(lua_State *state, int index, char *output, size_t capacity)
+{
+    switch (lua_type(state, index))
+    {
+        case LUA_TSTRING:
+        {
+            size_t length = 0;
+            const char *value = lua_tolstring(state, index, &length);
+            size_t used = 0;
+            output[used++] = '"';
+            for (size_t i = 0; i < length && used + 6 < capacity; i++)
+            {
+                unsigned char byte = (unsigned char)value[i];
+                if (byte < 32 || byte == 127 || byte == '\\' || byte == '"')
+                {
+                    int written = snprintf(output + used, capacity - used, "\\x%02x", (unsigned)byte);
+                    if (written > 0)
+                        used += (size_t)written;
+                }
+                else
+                    output[used++] = (char)byte;
+            }
+            output[used++] = '"';
+            output[used] = '\0';
+            break;
+        }
+        case LUA_TBOOLEAN:
+            snprintf(output, capacity, "%s", lua_toboolean(state, index) ? "true" : "false");
+            break;
+        case LUA_TNUMBER:
+            if (lua_isinteger(state, index))
+                snprintf(output, capacity, "%lld", (long long)lua_tointeger(state, index));
+            else
+                snprintf(output, capacity, "%.17g", (double)lua_tonumber(state, index));
+            break;
+        default:
+            snprintf(output, capacity, "%s", luaL_typename(state, index));
+            break;
+    }
+}
+
+static void watch_add_value(lua_State *state, WatchCapture *capture, unsigned parent,
+                            const char *label, int index, unsigned depth);
+
+/* Visit table values, the actual metatable, and closure upvalues. */
+/* Обходит значения таблицы, её метатаблицу и захваченные переменные замыкания. */
+static void watch_expand(lua_State *state, WatchCapture *capture, unsigned node,
+                         int index, unsigned depth)
+{
+    InsightLuaWatchGraph *graph = capture->graph;
+    if (!lua_checkstack(state, 4))
+    {
+        graph->limited = 1;
+        return;
+    }
+
+    index = lua_absindex(state, index);
+    if (lua_istable(state, index))
+    {
+        if (lua_getmetatable(state, index))
+        {
+            watch_add_value(state, capture, node, "<metatable>", -1, depth);
+            lua_pop(state, 1);
+        }
+        unsigned members = 0;
+        lua_pushnil(state);
+        while (lua_next(state, index))
+        {
+            if (members++ == WATCH_MEMBERS_LIMIT || graph->node_count == INSIGHT_LUA_WATCH_NODES ||
+                graph->edge_count == INSIGHT_LUA_WATCH_EDGES)
+            {
+                graph->limited = 1;
+                lua_pop(state, 2);
+                break;
+            }
+            char label[96];
+            watch_value_text(state, -2, label, sizeof label);
+            if (lua_type(state, -2) != LUA_TSTRING && lua_type(state, -2) != LUA_TNUMBER &&
+                lua_type(state, -2) != LUA_TBOOLEAN)
+                snprintf(label, sizeof label, "[%s %p]", luaL_typename(state, -2), lua_topointer(state, -2));
+            watch_add_value(state, capture, node, label, -1, depth);
+            lua_pop(state, 1);
+        }
+    }
+    else if (lua_isfunction(state, index))
+    {
+        for (int slot = 1; slot <= (int)WATCH_MEMBERS_LIMIT + 1; slot++)
+        {
+            const char *name = lua_getupvalue(state, index, slot);
+            if (!name)
+                break;
+            if (slot > (int)WATCH_MEMBERS_LIMIT)
+            {
+                graph->limited = 1;
+                lua_pop(state, 1);
+                break;
+            }
+            if (strcmp(name, "_ENV"))
+            {
+                char label[96];
+                snprintf(label, sizeof label, "upvalue %s", name);
+                watch_add_value(state, capture, node, label, -1, depth);
+            }
+            lua_pop(state, 1);
+        }
+    }
+}
+
+/* Record a labeled edge and reuse existing nodes for aliases and cycles. */
+/* Сохраняет подписанную стрелку и переиспользует узлы для общих ссылок и циклов. */
+static void watch_add_value(lua_State *state, WatchCapture *capture, unsigned parent,
+                            const char *label, int index, unsigned depth)
+{
+    InsightLuaWatchGraph *graph = capture->graph;
+    if (graph->edge_count >= INSIGHT_LUA_WATCH_EDGES)
+    {
+        graph->limited = 1;
+        return;
+    }
+
+    const void *identity = lua_istable(state, index) || lua_isfunction(state, index) ?
+        lua_topointer(state, index) : NULL;
+    unsigned target = graph->node_count;
+    if (identity)
+    {
+        for (unsigned i = 1; i < graph->node_count; i++)
+            if (capture->identity[i] == identity)
+            {
+                target = i;
+                break;
+            }
+    }
+
+    int is_new = target == graph->node_count;
+    if (is_new)
+    {
+        if (target >= INSIGHT_LUA_WATCH_NODES)
+        {
+            graph->limited = 1;
+            return;
+        }
+        capture->identity[target] = identity;
+        graph->node_count++;
+        InsightLuaWatchNode *node = &graph->nodes[target];
+        snprintf(node->label, sizeof node->label, "%s", label);
+        watch_value_text(state, index, node->value, sizeof node->value);
+        if (lua_isfunction(state, index) && lua_checkstack(state, 1))
+        {
+            lua_pushvalue(state, index);
+            lua_Debug function;
+            if (lua_getinfo(state, ">S", &function) && function.linedefined > 0)
+                snprintf(node->value, sizeof node->value, "function (line %d)", function.linedefined);
+        }
+        const char *parent_path = graph->nodes[parent].path;
+        size_t parent_length = strlen(parent_path), label_length = strlen(label);
+        if ((parent == 0 || parent_length) && parent_length + label_length + 2 <= sizeof node->path)
+        {
+            memcpy(node->path, parent_path, parent_length);
+            node->path[parent_length] = '\x1f';
+            memcpy(node->path + parent_length + 1, label, label_length + 1);
+        }
+    }
+
+    InsightLuaWatchEdge *edge = &graph->edges[graph->edge_count++];
+    edge->from = parent;
+    edge->to = target;
+    snprintf(edge->label, sizeof edge->label, "%s", label);
+    if (is_new && identity)
+    {
+        if (depth < WATCH_DEPTH_LIMIT)
+            watch_expand(state, capture, target, index, depth + 1);
+        else
+            graph->limited = 1;
+    }
+}
+
+/* Capture the current Lua frame while its line hook still owns the PC. */
+/* Снимает текущий кадр Lua, пока хук строки ещё видит правильную позицию VM. */
+static void debug_watch_capture(lua_State *state, InsightLuaWatchGraph *graph)
+{
+    memset(graph, 0, sizeof *graph);
+    graph->node_count = 1;
+    snprintf(graph->nodes[0].label, sizeof graph->nodes[0].label, "Current frame");
+    WatchCapture capture = {0};
+    capture.graph = graph;
+    lua_Debug frame;
+    if (!lua_checkstack(state, 4) || !lua_getstack(state, 0, &frame))
+        return;
+
+    for (int slot = 1; slot <= WATCH_LOCAL_LIMIT + 1; slot++)
+    {
+        const char *name = lua_getlocal(state, &frame, slot);
+        if (!name)
+            break;
+        if (slot > WATCH_LOCAL_LIMIT)
+            graph->limited = 1;
+        else if (name[0] != '(')
+        {
+            char label[96];
+            snprintf(label, sizeof label, "local %s", name);
+            watch_add_value(state, &capture, 0, label, -1, 0);
+        }
+        lua_pop(state, 1);
+    }
+    if (lua_getinfo(state, "f", &frame))
+    {
+        watch_expand(state, &capture, 0, -1, 1);
+        lua_pop(state, 1);
+    }
+}
+
+/* Return a graph only while the VM is stopped at a source line. */
+/* Возвращает граф только пока VM остановлена на строке исходника. */
+const InsightLuaWatchGraph *insight_lua_debug_watch_graph(const InsightLuaDebug *debug)
+{
+    if (!debug || debug->finished || !debug->line)
+        return NULL;
+    return &debug->watch_graph;
 }
 
 static int traceback(lua_State *L) {

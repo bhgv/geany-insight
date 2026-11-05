@@ -181,3 +181,15 @@ and **Continue**. Click a source line number to toggle a breakpoint, or enter li
 **Restart** starts the same snapshot again and keeps your breakpoints. **Go to Source** opens the paused line in the original editor buffer if it still matches the snapshot. Close the window to end the session.
 
 The snapshot runs with the editor's restricted Lua libraries. Read-only editor calls expose the captured text, selection, filename, caret and lines. The project API reads the current index while the original project is active. To test commands that edit, save or open documents, use the normal script runner. The VM executes in short slices between GTK events. **Pause** or the **Pause** key stops at the next yieldable Lua line, and **Stop** can end a long-running loop between slices. The Lua memory budget remains in effect. Non-yieldable Lua callbacks retain an instruction limit, and a native C call must return before the debugger can pause.
+
+### Watch graph
+
+Open **Watch graph** while paused. The graph starts at the current frame and shows
+local values, table entries, actual metatables, and the variables captured by Lua
+closures. Two references to one table share a card, and cycles remain visible.
+The debugger reads raw values and skips the implicit `_ENV` upvalue.
+
+Click a card and choose **Pin member**, or double-click it. **Pinned only** uses
+those member paths as roots and resolves them again at each stop. A path can be
+temporarily unavailable if its frame or member is out of scope. The snapshot is
+bounded to 96 cards, 224 links, six levels of expansion and 16 entries per table.

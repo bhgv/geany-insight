@@ -38,6 +38,24 @@ int insight_run(const InsightHost *, const char *, size_t, char *, size_t);
  * failed loads retain its commands and state. Editor/project access is blocked
  * during registration. Each invocation binds a temporary host and resets the
  * instruction budget; Lua globals persist, total Lua memory is bounded. */
+#define INSIGHT_LUA_WATCH_NODES 96u
+#define INSIGHT_LUA_WATCH_EDGES 224u
+#define INSIGHT_LUA_WATCH_PATH 640u
+typedef struct {
+    char label[96];
+    char value[112];
+    char path[INSIGHT_LUA_WATCH_PATH];
+} InsightLuaWatchNode;
+typedef struct {
+    unsigned from, to;
+    char label[96];
+} InsightLuaWatchEdge;
+typedef struct {
+    unsigned node_count, edge_count;
+    int limited;
+    InsightLuaWatchNode nodes[INSIGHT_LUA_WATCH_NODES];
+    InsightLuaWatchEdge edges[INSIGHT_LUA_WATCH_EDGES];
+} InsightLuaWatchGraph;
 typedef struct InsightLuaDebug InsightLuaDebug;
 typedef enum {
  INSIGHT_LUA_STEP_INTO, INSIGHT_LUA_STEP_OVER, INSIGHT_LUA_STEP_OUT, INSIGHT_LUA_CONTINUE
@@ -52,6 +70,8 @@ void insight_lua_debug_request_pause(InsightLuaDebug *);
 int insight_lua_debug_resume(InsightLuaDebug *,InsightLuaStep,const unsigned long *,size_t,
  const InsightHost *,unsigned long *,char *,size_t);
 void insight_lua_debug_inspect(InsightLuaDebug *,char *,size_t);
+/* The graph is borrowed until the next resume or until the VM is freed. */
+const InsightLuaWatchGraph *insight_lua_debug_watch_graph(const InsightLuaDebug *);
 typedef struct InsightSession InsightSession;
 InsightSession *insight_session_new(void);
 void insight_session_free(InsightSession *);
