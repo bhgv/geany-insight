@@ -19,7 +19,6 @@
 #include "config.h"
 #endif
 #include "geany.h"
-#include "spawn.h"
 #include "SciLexer.h"
 #include <pango/pangocairo.h>
 #include <gdk/gdkkeysyms.h>
@@ -9399,7 +9398,448 @@ static void debug_select_script_entry(GtkMenuItem *item, gpointer data)
     g_free(filename);
 }
 
-/* Start an interactive GDB console for an already built executable. */
+typedef enum {
+    NATIVE_RUN, NATIVE_CONTINUE, NATIVE_INTO, NATIVE_OVER, NATIVE_OUT,
+    NATIVE_PAUSE, NATIVE_STACK, NATIVE_LOCALS, NATIVE_ACTION_COUNT
+} NativeDebugAction;
+
+typedef struct {
+    GSubprocess *process;
+    GDataInputStream *output;
+    GCancellable *cancel;
+    GtkWidget *status, *command, *location, *breakpoint, *load_lua, *unload_lua, *source, *buttons[NATIVE_ACTION_COUNT];
+    GtkTextView *console, *watches;
+    InsightLuaDebug *observer;
+    gsize log_offset;
+    gchar *stop_file;
+    guint stop_line;
+    gboolean resume;
+    gboolean closed, ready, running, stopped, pending, writing;
+} NativeDebug;
+
+static void native_debug_update(NativeDebug *session)
+{
+    gboolean idle = session->ready && !session->pending && !session->writing;
+    gtk_label_set_text(GTK_LABEL(session->status),
+        insight_tr(!session->ready ? "Starting or disconnected" :
+                   session->running ? "Running" : session->stopped ? "Paused" : "Ready"));
+    for (guint i = 0; i < NATIVE_ACTION_COUNT; i++)
+        gtk_widget_set_sensitive(session->buttons[i], idle &&
+            (i == NATIVE_PAUSE ? session->running :
+             i == NATIVE_RUN ? !session->running : session->stopped && !session->running));
+    gtk_widget_set_sensitive(session->command, idle && !session->running);
+    gtk_widget_set_sensitive(session->location, idle && !session->running);
+    gtk_widget_set_sensitive(session->breakpoint, idle && !session->running);
+    gtk_widget_set_sensitive(session->source, session->stopped && session->stop_file && session->stop_line);
+    gtk_widget_set_sensitive(session->load_lua, !session->running);
+    gtk_widget_set_sensitive(session->unload_lua, !session->running && session->observer != NULL);
+}
+
+static void native_debug_log(NativeDebug *session, const gchar *line)
+{
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(session->console);
+    GtkTextIter first, last;
+    if (gtk_text_buffer_get_line_count(buffer) > 4000)
+    {
+        gtk_text_buffer_get_start_iter(buffer, &first);
+        gtk_text_buffer_get_iter_at_line(buffer, &last, 500);
+        gtk_text_buffer_delete(buffer, &first, &last);
+    }
+    gchar *text = g_utf8_make_valid(line, -1);
+    gtk_text_buffer_get_end_iter(buffer, &last);
+    gtk_text_buffer_insert(buffer, &last, text, -1);
+    gtk_text_buffer_insert(buffer, &last, "\n", 1);
+    gtk_text_view_scroll_to_iter(session->console, &last, 0, FALSE, 0, 0);
+    g_free(text);
+}
+
+static void native_debug_free(gpointer data)
+{
+    NativeDebug *session = data;
+    insight_lua_debug_free(session->observer);
+    g_free(session->stop_file);
+    g_object_unref(session->cancel);
+    g_object_unref(session->output);
+    g_object_unref(session->process);
+    g_free(session);
+}
+
+static void native_debug_close(GtkWidget *dialog, gpointer data)
+{
+    NativeDebug *session = data;
+    (void)dialog;
+    session->closed = TRUE;
+    g_cancellable_cancel(session->cancel);
+    g_subprocess_force_exit(session->process);
+}
+
+static void native_debug_send(GtkWidget *dialog, const gchar *command);
+
+static void native_debug_resume(GtkWidget *dialog, NativeDebug *session)
+{
+    if (session->resume && !session->pending && !session->writing)
+    {
+        session->resume = FALSE;
+        native_debug_send(dialog, "-exec-continue");
+    }
+}
+
+static void native_debug_written(GObject *stream, GAsyncResult *result, gpointer data)
+{
+    GtkWidget *dialog = data;
+    NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
+    GError *error = NULL;
+    gboolean ok = g_output_stream_write_all_finish(G_OUTPUT_STREAM(stream), result, NULL, &error);
+    session->writing = FALSE;
+    if (!session->closed)
+    {
+        if (!ok)
+        {
+            native_debug_log(session, error->message);
+            session->pending = session->ready = session->resume = FALSE;
+        }
+        native_debug_update(session);
+        native_debug_resume(dialog, session);
+    }
+    g_clear_error(&error);
+    g_object_unref(dialog);
+}
+
+static void native_debug_send(GtkWidget *dialog, const gchar *command)
+{
+    NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
+    if (session->closed || session->pending || session->writing)
+        return;
+    gchar *line = g_strconcat(command, "\n", NULL);
+    session->pending = session->writing = TRUE;
+    native_debug_update(session);
+    g_object_set_data_full(G_OBJECT(dialog), "native-debug-command", line, g_free);
+    g_output_stream_write_all_async(g_subprocess_get_stdin_pipe(session->process),
+        line, strlen(line), G_PRIORITY_DEFAULT, session->cancel,
+        native_debug_written, g_object_ref(dialog));
+}
+
+/* Find a quoted MI field without interpreting field names inside string values. */
+static gchar *native_debug_field(const gchar *record, const gchar *name)
+{
+    const gsize length = strlen(name);
+    for (const gchar *p = record; *p; p++)
+    {
+        if (*p != '"')
+            continue;
+        const gchar *end = p + 1;
+        while (*end && *end != '"')
+        {
+            if (*end == '\\' && end[1])
+                end++;
+            end++;
+        }
+        if (!*end)
+            break;
+        if (p - record >= (gssize)length + 2 && p[-1] == '=' &&
+            (p[-2 - (gssize)length] == ',' || p[-2 - (gssize)length] == '{') &&
+            !strncmp(p - 1 - length, name, length))
+        {
+            gchar *escaped = g_strndup(p + 1, end - p - 1);
+            gchar *value = g_strcompress(escaped);
+            g_free(escaped);
+            return value;
+        }
+        p = end;
+    }
+    return NULL;
+}
+
+static void native_debug_observe(NativeDebug *session, const gchar *record)
+{
+    g_free(session->stop_file);
+    session->stop_file = native_debug_field(record, "fullname");
+    gchar *line = native_debug_field(record, "line");
+    guint64 number = 0;
+    session->stop_line = line && g_ascii_string_to_unsigned(line, 10, 1, G_MAXINT, &number, NULL) ?
+        (guint)number : 0;
+    g_free(line);
+    if (!insight_lua_debug_observer_active(session->observer) ||
+        !g_str_has_prefix(record, "*stopped,reason=\"breakpoint-hit\""))
+        return;
+
+    gchar *point = native_debug_field(record, "bkptno");
+    gchar *function = native_debug_field(record, "func");
+    InsightObserverValue values[] = {
+        {.type = 's', .name = "breakpoint", .text = point ? point : "", .length = point ? strlen(point) : 0},
+        {.type = 's', .name = "reason", .text = "breakpoint-hit", .length = sizeof("breakpoint-hit") - 1}
+    };
+    InsightObserverEvent event = {
+        .kind = "native-point", .file = session->stop_file ? session->stop_file : "",
+        .name = function ? function : "", .line = session->stop_line,
+        .values = values, .count = G_N_ELEMENTS(values)
+    };
+    session->resume = insight_lua_debug_observe(session->observer, &event) == 0;
+    const gchar *log = insight_lua_debug_observer_log(session->observer);
+    gsize length = strlen(log);
+    if (length > session->log_offset)
+        native_debug_log(session, log + session->log_offset);
+    session->log_offset = length;
+
+    InsightLuaWatchGraph *graph = g_new0(InsightLuaWatchGraph, 1);
+    insight_lua_debug_observer_watch(session->observer, graph);
+    GString *watch_text = g_string_new(NULL);
+    for (guint i = 1; i < graph->node_count; i++)
+        g_string_append_printf(watch_text, "%s = %s\n", graph->nodes[i].label, graph->nodes[i].value);
+    gchar *valid = g_utf8_make_valid(watch_text->str, -1);
+    debug_set_text(GTK_WIDGET(session->watches), valid);
+    g_free(valid);
+    g_string_free(watch_text, TRUE);
+    g_free(graph);
+    g_free(point);
+    g_free(function);
+}
+
+static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer data)
+{
+    GtkWidget *dialog = data;
+    NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
+    GError *error = NULL;
+    gchar *line = g_data_input_stream_read_line_finish(G_DATA_INPUT_STREAM(stream), result, NULL, &error);
+    if (!session->closed && line)
+    {
+        g_strchomp(line);
+        if (g_str_has_prefix(line, "*running") || g_str_has_prefix(line, "^running"))
+        {
+            session->running = TRUE;
+            session->stopped = FALSE;
+        }
+        else if (g_str_has_prefix(line, "*stopped"))
+        {
+            session->running = FALSE;
+            session->stopped = !g_str_has_prefix(line, "*stopped,reason=\"exited");
+            if (session->stopped)
+                native_debug_observe(session, line);
+        }
+        if (*line == '^')
+        {
+            session->pending = FALSE;
+            session->ready = !g_str_has_prefix(line, "^exit");
+        }
+        if ((*line == '~' || *line == '@' || *line == '&') &&
+            line[1] == '"' && g_str_has_suffix(line, "\""))
+        {
+            line[strlen(line) - 1] = '\0';
+            gchar *decoded = g_strcompress(line + 2);
+            g_strchomp(decoded);
+            native_debug_log(session, decoded);
+            g_free(decoded);
+        }
+        else if (*line && strcmp(line, "(gdb)") && *line != '=' && strcmp(line, "^done"))
+            native_debug_log(session, line);
+        native_debug_update(session);
+        native_debug_resume(dialog, session);
+        g_data_input_stream_read_line_async(session->output, G_PRIORITY_DEFAULT,
+            session->cancel, native_debug_read, g_object_ref(dialog));
+    }
+    else if (!session->closed)
+    {
+        session->ready = session->running = session->stopped = FALSE;
+        native_debug_log(session, error ? error->message : insight_tr("GDB session ended."));
+        native_debug_update(session);
+    }
+    g_free(line);
+    g_clear_error(&error);
+    g_object_unref(dialog);
+}
+
+static void native_debug_clicked(GtkButton *button, gpointer data)
+{
+    static const gchar *commands[] = {
+        "-exec-run", "-exec-continue", "-exec-step", "-exec-next", "-exec-finish",
+        "-exec-interrupt", "-interpreter-exec console \"backtrace\"",
+        "-interpreter-exec console \"info locals\""
+    };
+    guint action = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(button), "native-debug-action"));
+    native_debug_send(GTK_WIDGET(data), commands[action]);
+}
+
+static void native_debug_command(GtkEntry *entry, gpointer data)
+{
+    const gchar *text = gtk_entry_get_text(entry);
+    if (!*text)
+        return;
+    gchar *escaped = g_strescape(text, NULL);
+    gchar *command = g_strdup_printf("-interpreter-exec console \"%s\"", escaped);
+    native_debug_send(GTK_WIDGET(data), command);
+    gtk_entry_set_text(entry, "");
+    g_free(command);
+    g_free(escaped);
+}
+
+static void native_debug_breakpoint(GtkButton *button, gpointer data)
+{
+    (void)button;
+    GtkWidget *dialog = data;
+    NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
+    const gchar *location = gtk_entry_get_text(GTK_ENTRY(session->location));
+    if (!*location)
+        return;
+    gchar *escaped = g_strescape(location, NULL);
+    gchar *command = g_strdup_printf("-break-insert -- \"%s\"", escaped);
+    native_debug_send(dialog, command);
+    g_free(command);
+    g_free(escaped);
+}
+
+static void native_debug_source(GtkButton *button, gpointer data)
+{
+    (void)button;
+    NativeDebug *session = data;
+    if (session->stop_file && session->stop_line)
+    {
+        gchar *path = utils_get_locale_from_utf8(session->stop_file);
+        diff_source_open(path, session->stop_line);
+        g_free(path);
+    }
+}
+
+static void native_debug_unload(GtkButton *button, gpointer data)
+{
+    (void)button;
+    NativeDebug *session = data;
+    g_clear_pointer(&session->observer, insight_lua_debug_free);
+    session->log_offset = 0;
+    debug_set_text(GTK_WIDGET(session->watches), "");
+    native_debug_update(session);
+}
+
+static void native_debug_load(GtkButton *button, gpointer data)
+{
+    (void)button;
+    GtkWidget *dialog = g_object_ref(data);
+    NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
+    GtkWidget *chooser = gtk_file_chooser_dialog_new(insight_tr("Load Lua Observer"),
+        GTK_WINDOW(dialog), GTK_FILE_CHOOSER_ACTION_OPEN,
+        "_Cancel", GTK_RESPONSE_CANCEL, "_Open", GTK_RESPONSE_ACCEPT, NULL);
+    gchar *filename = gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT ?
+        gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser)) : NULL;
+    gtk_widget_destroy(chooser);
+    if (filename && !session->closed)
+    {
+        gchar source[64 * 1024 + 1];
+        gsize length = 0;
+        GFile *file = g_file_new_for_path(filename);
+        GFileInputStream *stream = g_file_read(file, NULL, NULL);
+        gboolean loaded = stream && g_input_stream_read_all(G_INPUT_STREAM(stream), source,
+            sizeof source, &length, NULL, NULL) && length && length < sizeof source &&
+            !memchr(source, 0, length) && g_utf8_validate(source, length, NULL);
+        gchar error[1024] = "";
+        InsightLuaDebug *observer = loaded ? insight_lua_debug_new_observer() : NULL;
+        if (observer && insight_lua_debug_set_observer(observer, source, length, error, sizeof error))
+        {
+            native_debug_unload(NULL, session);
+            session->observer = observer;
+            native_debug_log(session, insight_tr("Lua observer loaded."));
+        }
+        else
+        {
+            insight_lua_debug_free(observer);
+            native_debug_log(session, *error ? error : insight_tr("Cannot load Lua observer."));
+        }
+        g_clear_object(&stream);
+        g_object_unref(file);
+        native_debug_update(session);
+    }
+    g_free(filename);
+    g_object_unref(dialog);
+}
+
+static void native_debug_show(const gchar *gdb, const gchar *target)
+{
+    gchar *directory = g_path_get_dirname(target);
+    GSubprocessLauncher *launcher = g_subprocess_launcher_new(
+        G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_MERGE);
+    g_subprocess_launcher_set_cwd(launcher, directory);
+    GError *error = NULL;
+    GSubprocess *process = g_subprocess_launcher_spawn(launcher, &error, gdb, "--nx", "--quiet",
+        "--interpreter=mi2", "--args", target, NULL);
+    g_object_unref(launcher);
+    g_free(directory);
+    if (!process)
+    {
+        ui_set_statusbar(TRUE, insight_tr("Cannot open GDB: %s"), error->message);
+        g_clear_error(&error);
+        return;
+    }
+
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(insight_tr("C/C++ Debugger"),
+        GTK_WINDOW(main_widgets.window), GTK_DIALOG_DESTROY_WITH_PARENT,
+        "_Close", GTK_RESPONSE_CLOSE, NULL);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 940, 520);
+    GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    insight_panel_help_attach(box, "native-debugger.md");
+    NativeDebug *session = g_new0(NativeDebug, 1);
+    session->process = process;
+    session->output = g_data_input_stream_new(g_subprocess_get_stdout_pipe(process));
+    session->cancel = g_cancellable_new();
+    session->status = gtk_label_new(NULL);
+    gtk_box_pack_start(GTK_BOX(box), session->status, FALSE, FALSE, 4);
+
+    GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+    gtk_box_pack_start(GTK_BOX(box), toolbar, FALSE, FALSE, 4);
+    const gchar *labels[] = {"Run", "Continue", "Step Into", "Step Over", "Step Out",
+                             "Pause", "Stack", "Locals"};
+    for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
+    {
+        GtkWidget *button = gtk_button_new_with_label(insight_tr(labels[i]));
+        session->buttons[i] = button;
+        g_object_set_data(G_OBJECT(button), "native-debug-action", GUINT_TO_POINTER(i));
+        g_signal_connect(button, "clicked", G_CALLBACK(native_debug_clicked), dialog);
+        gtk_box_pack_start(GTK_BOX(toolbar), button, FALSE, FALSE, 0);
+    }
+    session->source = gtk_button_new_with_label(insight_tr("Open Source"));
+    g_signal_connect(session->source, "clicked", G_CALLBACK(native_debug_source), session);
+    gtk_box_pack_start(GTK_BOX(toolbar), session->source, FALSE, FALSE, 0);
+    GtkWidget *scripts = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+    session->location = gtk_entry_new();
+    gtk_entry_set_max_length(GTK_ENTRY(session->location), 512);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(session->location), insight_tr("Function or file:line"));
+    session->breakpoint = gtk_button_new_with_label(insight_tr("Add Breakpoint"));
+    g_signal_connect(session->breakpoint, "clicked", G_CALLBACK(native_debug_breakpoint), dialog);
+    gtk_box_pack_start(GTK_BOX(scripts), session->location, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(scripts), session->breakpoint, FALSE, FALSE, 0);
+    session->load_lua = gtk_button_new_with_label(insight_tr("Load Lua Observer…"));
+    session->unload_lua = gtk_button_new_with_label(insight_tr("Disable Lua Observer"));
+    g_signal_connect(session->load_lua, "clicked", G_CALLBACK(native_debug_load), dialog);
+    g_signal_connect(session->unload_lua, "clicked", G_CALLBACK(native_debug_unload), session);
+    gtk_box_pack_start(GTK_BOX(scripts), session->load_lua, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(scripts), session->unload_lua, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), scripts, FALSE, FALSE, 4);
+    GtkWidget *tabs = gtk_notebook_new();
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    session->console = GTK_TEXT_VIEW(gtk_text_view_new());
+    gtk_text_view_set_editable(session->console, FALSE);
+    gtk_text_view_set_monospace(session->console, TRUE);
+    gtk_container_add(GTK_CONTAINER(scroll), GTK_WIDGET(session->console));
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), scroll, gtk_label_new(insight_tr("Console")));
+    GtkWidget *watch_scroll = gtk_scrolled_window_new(NULL, NULL);
+    session->watches = GTK_TEXT_VIEW(gtk_text_view_new());
+    gtk_text_view_set_editable(session->watches, FALSE);
+    gtk_text_view_set_monospace(session->watches, TRUE);
+    gtk_container_add(GTK_CONTAINER(watch_scroll), GTK_WIDGET(session->watches));
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), watch_scroll, gtk_label_new(insight_tr("Lua Watches")));
+    gtk_box_pack_start(GTK_BOX(box), tabs, TRUE, TRUE, 0);
+    session->command = gtk_entry_new();
+    gtk_entry_set_max_length(GTK_ENTRY(session->command), 1024);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(session->command), insight_tr("GDB command, e.g. break main"));
+    g_signal_connect(session->command, "activate", G_CALLBACK(native_debug_command), dialog);
+    gtk_box_pack_start(GTK_BOX(box), session->command, FALSE, FALSE, 4);
+    g_object_set_data_full(G_OBJECT(dialog), "native-debug", session, native_debug_free);
+    g_signal_connect(dialog, "destroy", G_CALLBACK(native_debug_close), session);
+    g_signal_connect_swapped(dialog, "response", G_CALLBACK(gtk_widget_destroy), dialog);
+    gtk_widget_show_all(dialog);
+
+    g_data_input_stream_read_line_async(session->output, G_PRIORITY_DEFAULT,
+        session->cancel, native_debug_read, g_object_ref(dialog));
+    native_debug_send(dialog, "-gdb-set mi-async on");
+}
+
 static void debug_native_executable(GtkMenuItem *item, gpointer data)
 {
     (void)item;
@@ -9415,17 +9855,6 @@ static void debug_native_executable(GtkMenuItem *item, gpointer data)
         ui_set_statusbar(TRUE, "%s", insight_tr("GDB was not found in PATH."));
         return;
     }
-
-#ifndef G_OS_WIN32
-    gchar *terminal = g_find_program_in_path("xterm");
-    if (!terminal)
-    {
-        ui_set_statusbar(TRUE, "%s", insight_tr("Install xterm to open the GDB console."));
-        g_free(gdb);
-        return;
-    }
-#endif
-
     GtkWidget *chooser = gtk_file_chooser_dialog_new(insight_tr("Debug C/C++ Executable"),
         GTK_WINDOW(main_widgets.window), GTK_FILE_CHOOSER_ACTION_OPEN,
         "_Cancel", GTK_RESPONSE_CANCEL, "_Debug", GTK_RESPONSE_ACCEPT, NULL);
@@ -9436,28 +9865,9 @@ static void debug_native_executable(GtkMenuItem *item, gpointer data)
     gchar *target = gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT ?
         gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser)) : NULL;
     gtk_widget_destroy(chooser);
-
     if (target)
-    {
-        gchar *directory = g_path_get_dirname(target);
-        gchar *argv[] = {
-#ifndef G_OS_WIN32
-            terminal, "-e",
-#endif
-            gdb, "--nx", "--quiet", "--args", target, NULL
-        };
-        GError *error = NULL;
-        if (!spawn_async(directory, NULL, argv, NULL, NULL, &error))
-        {
-            ui_set_statusbar(TRUE, insight_tr("Cannot open GDB: %s"), error->message);
-            g_clear_error(&error);
-        }
-        g_free(directory);
-        g_free(target);
-    }
-#ifndef G_OS_WIN32
-    g_free(terminal);
-#endif
+        native_debug_show(gdb, target);
+    g_free(target);
     g_free(gdb);
 }
 

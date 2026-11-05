@@ -1,26 +1,43 @@
 # C/C++ debugging with GDB
 
-Build the program with debug symbols. For example, `cc -g -Og main.c -o app`
-or `c++ -g -Og main.cpp -o app`. On Windows, select the resulting `.exe`.
+Build with debug symbols, for example `cc -g -Og main.c -o app` or
+`c++ -g -Og main.cpp -o app`. Install GDB and make it available in
+`PATH` before starting Geany.
 
-In Geany Insight, open **Tools → Debug C/C++ Executable…** and select the
-compiled program. Geany launches GDB in a console with the directory of
-the executable as the working directory. The program starts when you
-enter a command such as `start` or `run`.
+Open **Tools → Debug C/C++ Executable…** and select the built program.
+The C/C++ Debugger window opens with the executable directory as the
+working directory.
 
-![Geany opens a GDB console for the selected executable](media/native-debugger.svg)
+![Controls and console in the C/C++ Debugger](media/native-debugger.svg)
 
-| Command | Action |
-| --- | --- |
-| `set args one two` | Set program arguments before running. |
-| `start` | Run and stop at `main`. |
-| `break file.cpp:42` | Set a source breakpoint. |
-| `continue` | Resume until the next stop. |
-| `next` or `step` | Step over or into a call. |
-| `backtrace`, `info locals`, `print value` | Inspect the stack and values. |
-| `quit` | Close the debugging session. |
+- Enter `main` or `file.cpp:42`, click **Add Breakpoint**, then **Run**.
+  You can also use `break main` in the console.
+- Use **Step Into**, **Step Over**, **Step Out**, **Continue**, and **Pause**
+  to control execution. **Open Source** opens the current stopped line.
+- **Stack** and **Locals** print the current frame information in the console.
+  Enter GDB commands such as `print value` or `set args one two` there as well.
+  The command entry is for GDB. Programs that need terminal input require
+  a separate terminal configured through GDB.
 
-Install GDB and make it available in `PATH` before starting Geany.
-The Unix launcher uses `xterm`. On Windows, GDB opens its own console.
-Geany passes the executable path as a single argument. GDB commands,
-breakpoints and value inspection take place in that console.
+## Lua observer
+
+**Load Lua Observer…** accepts the same callback form as the Python and
+Verilog observers. GDB breakpoint stops emit `native-point` with
+`event.file`, `event.line`, `event.name` and the snapshot fields
+`event.locals.breakpoint` and `event.locals.reason`. Here `event.name`
+is the function. Read program locals with **Locals** or GDB commands.
+
+```lua
+local hits = 0
+return function(event)
+    if event.kind ~= "native-point" then return true end
+    hits = hits + 1
+    watch("Breakpoint hits", hits)
+    log(event.name .. ":" .. event.line .. " hit " .. hits)
+    return hits >= 2
+end
+```
+
+`log()` writes to **Console** and `watch()` updates **Lua Watches**.
+Return `false` to continue or `true` to keep the program paused.
+Manual pauses and stepping stops stay available for inspection.
