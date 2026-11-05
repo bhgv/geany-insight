@@ -242,7 +242,20 @@ try {
             $partial = "$installer.partial"
             Write-Host "[Download] $($manifest.installer.file) from $($manifest.installer.url)"
             try {
-                Receive-InsightInstaller $manifest.installer.url $partial
+                for ($attempt = 1; $attempt -le 3; $attempt++) {
+                    try {
+                        Receive-InsightInstaller $manifest.installer.url $partial
+                        break
+                    } catch {
+                        if ($attempt -eq 3) { throw }
+                        if (Test-Path -LiteralPath $partial) {
+                            Remove-Item -LiteralPath $partial -Force
+                        }
+                        $retryDelay = 5 * $attempt
+                        Write-Warning "Installer download attempt $attempt failed. Retrying in $retryDelay seconds. $($_.Exception.Message)"
+                        Start-Sleep -Seconds $retryDelay
+                    }
+                }
                 Move-Item -LiteralPath $partial -Destination $installer -Force
             } finally {
                 if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }

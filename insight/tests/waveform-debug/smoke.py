@@ -93,6 +93,31 @@ def check_capture(path, tick, signal):
             f"Missing VCD signal {signal}: {path}")
 
 
+# EN: Check source stepping keeps the selected process across a time change.
+# RU: Проверяем, что шаг по исходнику сохраняет выбранный процесс при смене такта.
+def check_source_steps(compiler, runtime, fixtures, directory, environment):
+    source = fixtures / "procedural_flow_tb.v"
+    compile_design(compiler, directory, [source], environment)
+    simulator = Simulator(runtime, directory, environment)
+    try:
+        require("GEANY-VVP-SOURCE-STEP" in simulator.prompt(), "Missing HDL stepping capability")
+        first = simulator.command("geany-step-source")
+        second = simulator.command("geany-step-process")
+        process = re.search(r"Geany process (\d+) in ", first)
+        require(process and f"Geany process {process.group(1)} in " in second,
+                "Current-process stepping changed the selected process")
+        for response in (first, second):
+            position = re.search(r"GEANY-VVP-STOP\t(\d+)\t([^\r\n]+)", response)
+            require(position and Path(position.group(2)).resolve() == source.resolve(),
+                    "HDL step did not report the fixture source position")
+        require("time is 5 ticks" in second, "Process step did not reach the clock edge")
+        simulator.send("cont")
+        require(simulator.process.wait(timeout=30) == 0, "HDL stepping simulation failed")
+    finally:
+        simulator.close()
+    check_capture(directory / "procedural_flow.vcd", 5, "sampled")
+
+
 # EN: Verify the installed bridge stops on a condition before the assignment.
 # RU: Проверяем условную остановку установленного моста до присваивания.
 def check_breakpoint(compiler, runtime, fixtures, directory, environment):
@@ -243,16 +268,22 @@ def main():
     checks = (
         ("editor", lambda directory: check_editor(editor, directory, environment)),
         ("breakpoint", lambda directory: check_breakpoint(compiler, runtime, fixtures, directory, environment)),
+        ("source-step", lambda directory: check_source_steps(compiler, runtime, fixtures, directory, environment)),
         ("processes", lambda directory: check_processes(compiler, runtime, fixtures, directory, environment)),
         ("slang", lambda directory: check_slang(service, fixtures, directory, environment)),
     )
+    failed = False
     for name, check in checks:
         directory = logs / name
         try:
             check(directory)
         except (OSError, RuntimeError, subprocess.SubprocessError) as error:
-            raise SystemExit(f"{name}: {error}. See {directory}") from error
-        print(f"{name}: OK")
+            failed = True
+            print(f"{name}: {error}. See {directory}", flush=True)
+        else:
+            print(f"{name}: OK", flush=True)
+    if failed:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
