@@ -7213,10 +7213,211 @@ static void debug_save_observer_settings(const ScriptDebugWindow *view)
     g_free(path);
 }
 
+/* Locate the private Git repository for this Geany project. */
+/* Находит отдельный Git-репозиторий истории для проекта Geany. */
+static gchar *debug_observer_git_path(const ScriptDebugWindow *view)
+{
+    if (!view->project_filename)
+        return NULL;
+
+    gchar *identity = debug_file_key(view->project_filename);
+    gchar *scope = g_compute_checksum_for_string(G_CHECKSUM_SHA256, identity, -1);
+    gchar *path = g_build_filename(app->configdir, "insight", "observer-history", scope, NULL);
+    g_free(scope);
+    g_free(identity);
+    return path;
+}
+
+/* Run Git with explicit repository paths and arguments, without a shell. */
+/* Запускает Git с явным путём репозитория и аргументами без командной оболочки. */
+static gboolean debug_observer_git(const gchar *directory, const gchar *const arguments[],
+                                   gchar **output, GError **error)
+{
+    gchar *git_dir = g_build_filename(directory, ".git", NULL);
+    gchar *argv[24] = {"git", "--git-dir", git_dir, "--work-tree", (gchar *)directory,
+        "-c", "user.name=Geany Insight", "-c", "user.email=debugger@geany-insight.local",
+        "-c", "commit.gpgsign=false", "-c", "core.hooksPath="};
+    guint count = 0;
+    while (argv[count])
+        count++;
+    for (guint i = 0; arguments[i] && count + 1 < G_N_ELEMENTS(argv); i++)
+        argv[count++] = (gchar *)arguments[i];
+
+    gchar **environment = g_get_environ();
+    const gchar *variables[] = {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
+        "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", NULL};
+    for (guint i = 0; variables[i]; i++)
+        environment = g_environ_unsetenv(environment, variables[i]);
+    gint status = 0;
+    gchar *diagnostic = NULL;
+    gboolean ok = g_spawn_sync(directory, argv, environment, G_SPAWN_SEARCH_PATH,
+                               NULL, NULL, output, &diagnostic, &status, error);
+    if (ok && status != 0)
+    {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                            diagnostic && *diagnostic ? diagnostic : "Git command failed");
+        ok = FALSE;
+    }
+    g_strfreev(environment);
+    g_free(diagnostic);
+    g_free(git_dir);
+    return ok;
+}
+
+/* Commit a condition and script together, keeping the project worktree separate. */
+/* Коммитит условие и сценарий вместе в отдельной от проекта истории. */
+static gboolean debug_commit_observer_draft(const gchar *directory, const gchar *name,
+                                            const gchar *condition, const gchar *source,
+                                            const gchar *message, GError **error)
+{
+    if (strlen(source) > 64 * 1024)
+    {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NO_SPACE, "Observer script exceeds 64 KiB.");
+        return FALSE;
+    }
+    if (g_mkdir_with_parents(directory, 0700) != 0)
+    {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_FAILED, "Cannot create observer history directory.");
+        return FALSE;
+    }
+
+    gchar *git_dir = g_build_filename(directory, ".git", NULL);
+    gboolean initialized = g_file_test(git_dir, G_FILE_TEST_IS_DIR);
+    g_free(git_dir);
+    const gchar *init[] = {"init", "--quiet", "--template=", NULL};
+    if (!initialized && !debug_observer_git(directory, init, NULL, error))
+        return FALSE;
+
+    GKeyFile *settings = g_key_file_new();
+    g_key_file_set_string(settings, "Observer", "Condition", condition);
+    g_key_file_set_string(settings, "Observer", "Source", source);
+    gsize length;
+    gchar *contents = g_key_file_to_data(settings, &length, NULL);
+    gchar *path = g_build_filename(directory, name, NULL);
+    GFile *file = g_file_new_for_path(path);
+    gboolean ok = g_file_replace_contents(file, contents, length, NULL, FALSE, G_FILE_CREATE_PRIVATE,
+                                          NULL, NULL, error);
+    g_object_unref(file);
+    g_free(path);
+    g_free(contents);
+    g_key_file_unref(settings);
+    if (!ok)
+        return FALSE;
+
+    const gchar *status_args[] = {"status", "--porcelain", "--", name, NULL};
+    gchar *status = NULL;
+    ok = debug_observer_git(directory, status_args, &status, error);
+    if (ok && (!status || !*status))
+    {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_EXISTS, "This draft is already the latest version.");
+        ok = FALSE;
+    }
+    g_free(status);
+    const gchar *add[] = {"add", "--", name, NULL};
+    const gchar *commit[] = {"commit", "--quiet", "--only", "-m", message, "--", name, NULL};
+    return ok && debug_observer_git(directory, add, NULL, error) &&
+        debug_observer_git(directory, commit, NULL, error);
+}
+
+/* Select a revision for this language and read its committed draft. */
+/* Выбирает версию для текущего языка и читает черновик из коммита. */
+static GKeyFile *debug_choose_observer_revision(GtkWindow *parent, const gchar *directory,
+                                                const gchar *name, GError **error)
+{
+    gchar *git_dir = g_build_filename(directory, ".git", NULL);
+    gboolean initialized = g_file_test(git_dir, G_FILE_TEST_IS_DIR);
+    g_free(git_dir);
+    if (!initialized)
+    {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, "No observer commits for this project.");
+        return NULL;
+    }
+
+    const gchar *history[] = {"log", "--format=%H%x09%s", "-n", "100", "--", name, NULL};
+    gchar *output = NULL;
+    if (!debug_observer_git(directory, history, &output, error))
+    {
+        g_free(output);
+        return NULL;
+    }
+
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Observer Git History", parent,
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
+        "_Load Draft", GTK_RESPONSE_ACCEPT, NULL);
+    GtkWidget *choices = gtk_combo_box_text_new();
+    gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), choices, TRUE, TRUE, 8);
+    gchar **lines = g_strsplit(output, "\n", -1);
+    guint count = 0;
+    for (guint i = 0; lines[i]; i++)
+    {
+        gchar *separator = strchr(lines[i], '\t');
+        if (!separator)
+            continue;
+        *separator = 0;
+        gchar *label = g_strdup_printf("%.10s  %s", lines[i], separator + 1);
+        gchar *valid = g_utf8_make_valid(label, -1);
+        gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(choices), lines[i], valid);
+        g_free(valid);
+        g_free(label);
+        count++;
+    }
+    g_strfreev(lines);
+    g_free(output);
+    GKeyFile *settings = NULL;
+    if (!count)
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, "No observer commits for this language.");
+    else
+    {
+        gtk_combo_box_set_active(GTK_COMBO_BOX(choices), 0);
+        gtk_widget_show_all(dialog);
+        if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+        {
+            const gchar *revision = gtk_combo_box_get_active_id(GTK_COMBO_BOX(choices));
+            gchar *object = g_strdup_printf("%s:%s", revision, name);
+            const gchar *show[] = {"show", object, NULL};
+            gchar *contents = NULL;
+            if (debug_observer_git(directory, show, &contents, error))
+            {
+                settings = g_key_file_new();
+                if (!g_key_file_load_from_data(settings, contents, -1, G_KEY_FILE_NONE, error))
+                    g_clear_pointer(&settings, g_key_file_unref);
+            }
+            g_free(contents);
+            g_free(object);
+        }
+    }
+    gtk_widget_destroy(dialog);
+    return settings;
+}
+
+/* Ask for a commit message without changing the active debugger settings. */
+/* Запрашивает сообщение коммита без изменения настроек текущей отладки. */
+static gchar *debug_observer_commit_message(GtkWindow *parent)
+{
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Commit Observer Draft", parent,
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
+        "_Commit", GTK_RESPONSE_ACCEPT, NULL);
+    GtkWidget *entry = gtk_entry_new();
+    gtk_entry_set_max_length(GTK_ENTRY(entry), 200);
+    gtk_entry_set_text(GTK_ENTRY(entry), "Update debugger observer");
+    gtk_entry_set_activates_default(GTK_ENTRY(entry), TRUE);
+    gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+    gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), entry, TRUE, TRUE, 8);
+    gtk_widget_show_all(dialog);
+    gchar *message = gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT ?
+        g_strdup(gtk_entry_get_text(GTK_ENTRY(entry))) : NULL;
+    gtk_widget_destroy(dialog);
+    if (message && !*g_strstrip(message))
+        g_clear_pointer(&message, g_free);
+    return message;
+}
+
 enum {
     DEBUG_OBSERVER_LOAD = 1,
     DEBUG_OBSERVER_RELOAD,
-    DEBUG_OBSERVER_SAVE
+    DEBUG_OBSERVER_SAVE,
+    DEBUG_OBSERVER_HISTORY,
+    DEBUG_OBSERVER_COMMIT
 };
 
 /* Import a UTF-8 Lua file into the draft without applying or running it. */
@@ -7307,9 +7508,9 @@ static gchar *debug_save_observer_draft(GtkWindow *parent, GtkTextBuffer *buffer
 
 /* Confirm replacement of a locally edited observer draft. */
 /* Подтверждает замену черновика обработчика с локальными правками. */
-static gboolean debug_replace_observer_draft(GtkWindow *parent, GtkTextBuffer *buffer)
+static gboolean debug_replace_observer_draft(GtkWindow *parent, gboolean modified)
 {
-    if (!gtk_text_buffer_get_modified(buffer))
+    if (!modified)
         return TRUE;
 
     GtkWidget *confirmation = gtk_message_dialog_new(parent, GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
@@ -7349,7 +7550,14 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
         "_Load Lua…", DEBUG_OBSERVER_LOAD, "_Reload File", DEBUG_OBSERVER_RELOAD,
         "_Save Lua As…", DEBUG_OBSERVER_SAVE, "_Cancel", GTK_RESPONSE_CANCEL,
         "_Apply", GTK_RESPONSE_ACCEPT, NULL);
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 650, 420);
+    gchar *history_path = debug_observer_git_path(view);
+    const gchar *history_name = view->python ? "python.conf" : "lua.conf";
+    if (history_path)
+    {
+        gtk_dialog_add_button(GTK_DIALOG(dialog), "_Git History…", DEBUG_OBSERVER_HISTORY);
+        gtk_dialog_add_button(GTK_DIALOG(dialog), "_Commit Draft…", DEBUG_OBSERVER_COMMIT);
+    }
+    gtk_window_set_default_size(GTK_WINDOW(dialog), history_path ? 850 : 650, 420);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     GtkWidget *entry = gtk_entry_new();
     gtk_entry_set_max_length(GTK_ENTRY(entry), 1024);
@@ -7373,7 +7581,7 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
     gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 4);
     if (restored && ((draft_condition && *draft_condition) || (draft_source && *draft_source)))
         gtk_label_set_text(GTK_LABEL(status), "Saved draft loaded. Choose Apply to activate it.");
-    g_free(draft_condition);
+    gchar *initial_condition = g_steal_pointer(&draft_condition);
     g_free(draft_source);
     gtk_text_buffer_set_modified(script, FALSE);
     gtk_widget_show_all(dialog);
@@ -7383,7 +7591,7 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
         gint response = gtk_dialog_run(GTK_DIALOG(dialog));
         if (response == DEBUG_OBSERVER_LOAD || response == DEBUG_OBSERVER_RELOAD)
         {
-            if (!debug_replace_observer_draft(GTK_WINDOW(dialog), script))
+            if (!debug_replace_observer_draft(GTK_WINDOW(dialog), gtk_text_buffer_get_modified(script)))
                 continue;
             gchar *selected = NULL;
             if (response == DEBUG_OBSERVER_RELOAD)
@@ -7413,6 +7621,59 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
                 g_free(filename);
                 filename = saved;
                 gtk_text_buffer_set_modified(script, FALSE);
+            }
+            continue;
+        }
+        if (response == DEBUG_OBSERVER_HISTORY || response == DEBUG_OBSERVER_COMMIT)
+        {
+            GError *error = NULL;
+            gboolean modified = gtk_text_buffer_get_modified(script) ||
+                strcmp(initial_condition ? initial_condition : "", gtk_entry_get_text(GTK_ENTRY(entry)));
+            if (response == DEBUG_OBSERVER_HISTORY && debug_replace_observer_draft(GTK_WINDOW(dialog), modified))
+            {
+                GKeyFile *revision = debug_choose_observer_revision(GTK_WINDOW(dialog), history_path,
+                                                                    history_name, &error);
+                if (revision)
+                {
+                    gchar *condition = g_key_file_get_string(revision, "Observer", "Condition", NULL);
+                    gchar *source = g_key_file_get_string(revision, "Observer", "Source", NULL);
+                    if (condition && source && g_utf8_strlen(condition, -1) <= 1024 &&
+                        strlen(source) <= 64 * 1024)
+                    {
+                        gtk_entry_set_text(GTK_ENTRY(entry), condition);
+                        gtk_text_buffer_set_text(script, source, -1);
+                        gtk_text_buffer_set_modified(script, TRUE);
+                        g_clear_pointer(&filename, g_free);
+                        gtk_label_set_text(GTK_LABEL(status), "Revision loaded as a draft. Choose Apply to use it.");
+                    }
+                    else
+                        gtk_label_set_text(GTK_LABEL(status), "Invalid observer revision.");
+                    g_free(condition);
+                    g_free(source);
+                    g_key_file_unref(revision);
+                }
+            }
+            else if (response == DEBUG_OBSERVER_COMMIT)
+            {
+                gchar *message = debug_observer_commit_message(GTK_WINDOW(dialog));
+                if (message)
+                {
+                    GtkTextIter first, last;
+                    gtk_text_buffer_get_bounds(script, &first, &last);
+                    gchar *source = gtk_text_buffer_get_text(script, &first, &last, FALSE);
+                    const gchar *condition = gtk_entry_get_text(GTK_ENTRY(entry));
+                    if (debug_commit_observer_draft(history_path, history_name, condition, source, message, &error))
+                        gtk_label_set_text(GTK_LABEL(status), "Draft committed to the project's observer history.");
+                    g_free(source);
+                    g_free(message);
+                }
+            }
+            if (error)
+            {
+                gchar *message = g_utf8_make_valid(error->message, -1);
+                gtk_label_set_text(GTK_LABEL(status), message);
+                g_free(message);
+                g_clear_error(&error);
             }
             continue;
         }
@@ -7453,6 +7714,8 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
         g_free(source);
     }
     g_free(filename);
+    g_free(history_path);
+    g_free(initial_condition);
     gtk_widget_destroy(dialog);
 }
 

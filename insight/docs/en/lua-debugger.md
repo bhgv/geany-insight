@@ -140,6 +140,19 @@ to activate the restored draft. **Reload File** reads the current version of
 the file if it has changed since the draft was saved. To clear the saved
 condition and script, empty both fields and choose **Apply**.
 
+### Debugger Git history
+
+With a Geany project open, **Conditions and Script…** has two extra buttons.
+**Commit Draft…** commits the condition and Lua script together with your message.
+**Git History…** lists up to 100 recent versions for the current language.
+Select a revision and choose **Load Draft** to populate both fields. Edit the
+restored draft and choose **Commit Draft…** to add a new commit to the current
+history. Choose **Apply** separately to activate the draft in the debugger.
+
+Git must be on `PATH`. Each project uses a separate local repository under
+`insight/observer-history` in the Geany profile. This workflow leaves the project's
+source repository, index and branches untouched.
+
 #### Log calls and arguments
 
 ```lua
