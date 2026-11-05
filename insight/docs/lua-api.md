@@ -177,7 +177,7 @@ Open a Lua buffer, then choose **Scripts → Debug Current Lua Buffer…**. The
 debugger takes a snapshot, including unsaved edits, and stops at the first
 executable line. The left pane highlights the current line; the right pane
 shows Lua stack frames and locals. Use **Step Into**, **Step Over**, **Step Out**
-and **Continue**. Enter breakpoint line numbers separated by spaces or commas.
+and **Continue**. Click a source line number to toggle a breakpoint, or enter line numbers separated by spaces or commas. Breakpoint lines are marked in the source pane. Use **F5** to continue, **F10** to step over, **F11** to step into and **Shift+F11** to step out. **Stop** or **Shift+F5** ends the VM and keeps the breakpoint list. **Ctrl+F5** restarts the snapshot.
 **Restart** starts the same snapshot again and keeps your breakpoints. **Go to Source** opens the paused line in the original editor buffer if it still matches the snapshot. Close the window to end the session.
 
 The snapshot runs with the editor's restricted Lua libraries. Read-only editor calls expose the captured text, selection, filename, caret and lines. The project API reads the current index while the original project is active. To test commands that edit, save or open documents, use the normal script runner. Execution is bounded by the Lua memory budget

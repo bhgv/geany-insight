@@ -20,6 +20,7 @@
 #endif
 #include "geany.h"
 #include "SciLexer.h"
+#include <gdk/gdkkeysyms.h>
 #include "insight-workbench.h"
 #include "insight-vivado-project.h"
 #include "insight-waveforms.h"
@@ -4954,7 +4955,9 @@ typedef struct {
     GtkWidget *breakpoints;
     GtkWidget *step_controls;
     GtkWidget *go_to_source;
+    GtkWidget *stop;
     GtkTextTag *current_line_tag;
+    GtkTextTag *breakpoint_tag;
     gchar *source_snapshot;
     gchar *source_filename;
     gchar *selection_snapshot;
@@ -5146,6 +5149,7 @@ static void debug_window_step(LuaDebugWindow *view, InsightLuaStep mode)
         gtk_widget_set_sensitive(view->step_controls, FALSE);
     }
     gtk_widget_set_sensitive(view->go_to_source, view->paused_line > 0);
+    gtk_widget_set_sensitive(view->stop, result == 1);
 }
 
 /* Dispatch the step mode associated with a toolbar button. */
@@ -5178,7 +5182,165 @@ static void debug_restart(GtkButton *button, gpointer data)
     view->paused_line = 0;
     gtk_widget_set_sensitive(view->go_to_source, FALSE);
     gtk_widget_set_sensitive(view->step_controls, TRUE);
+    gtk_widget_set_sensitive(view->stop, TRUE);
     debug_window_step(view, INSIGHT_LUA_STEP_INTO);
+}
+
+/* End the current VM while keeping the source and breakpoint list. */
+/* Завершает текущую VM, сохраняя исходник и список точек останова. */
+static void debug_stop(GtkButton *button, gpointer data)
+{
+    (void)button;
+    LuaDebugWindow *view = data;
+    if (!view->engine)
+        return;
+
+    insight_lua_debug_free(view->engine);
+    view->engine = NULL;
+    view->paused_line = 0;
+    gtk_widget_set_sensitive(view->step_controls, FALSE);
+    gtk_widget_set_sensitive(view->go_to_source, FALSE);
+    gtk_widget_set_sensitive(view->stop, FALSE);
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source_view));
+    GtkTextIter first, last;
+    gtk_text_buffer_get_bounds(buffer, &first, &last);
+    gtk_text_buffer_remove_tag(buffer, view->current_line_tag, &first, &last);
+    debug_set_text(view->stack_view, "");
+    gtk_label_set_text(GTK_LABEL(view->status), "Lua debugging stopped");
+}
+
+/* Add or remove a breakpoint without disturbing the other line numbers. */
+/* Добавляет или удаляет точку останова, сохраняя остальные номера строк. */
+static gboolean debug_toggle_breakpoint(unsigned long *lines, gsize *count,
+                                        gsize capacity, unsigned long line)
+{
+    gboolean found = FALSE;
+    gsize retained = 0;
+    for (gsize i = 0; i < *count; i++)
+    {
+        if (lines[i] == line)
+            found = TRUE;
+        else
+            lines[retained++] = lines[i];
+    }
+    if (found)
+    {
+        *count = retained;
+        return TRUE;
+    }
+    if (*count == capacity)
+        return FALSE;
+    lines[(*count)++] = line;
+    return TRUE;
+}
+
+/* Mark breakpoint line numbers when the entry changes. */
+/* Отмечает номера строк с точками останова при изменении поля. */
+static void debug_mark_breakpoints(GtkEditable *entry, gpointer data)
+{
+    LuaDebugWindow *view = data;
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source_view));
+    GtkTextIter first, last;
+    gtk_text_buffer_get_bounds(buffer, &first, &last);
+    gtk_text_buffer_remove_tag(buffer, view->breakpoint_tag, &first, &last);
+
+    unsigned long lines[128];
+    gsize count = 0;
+    if (!debug_read_breakpoints(GTK_ENTRY(entry), lines, &count))
+        return;
+
+    guint line_count = (guint)gtk_text_buffer_get_line_count(buffer);
+    for (gsize i = 0; i < count; i++)
+    {
+        if (lines[i] > line_count)
+            continue;
+        gtk_text_buffer_get_iter_at_line(buffer, &first, (gint)lines[i] - 1);
+        last = first;
+        gtk_text_iter_forward_chars(&last, 7);
+        gtk_text_buffer_apply_tag(buffer, view->breakpoint_tag, &first, &last);
+    }
+}
+
+/* Toggle a breakpoint when the source line number is clicked. */
+/* Переключает точку останова при щелчке по номеру строки. */
+static gboolean debug_click_line_number(GtkWidget *widget, GdkEventButton *event, gpointer data)
+{
+    if (event->type != GDK_BUTTON_PRESS || event->button != 1)
+        return FALSE;
+
+    GtkTextView *source = GTK_TEXT_VIEW(widget);
+    GtkTextWindowType window_type = gtk_text_view_get_window_type(source, event->window);
+    if (window_type != GTK_TEXT_WINDOW_TEXT)
+        return FALSE;
+    gint x, y;
+    gtk_text_view_window_to_buffer_coords(source, window_type, (gint)event->x, (gint)event->y, &x, &y);
+    GtkTextIter location;
+    if (!gtk_text_view_get_iter_at_location(source, &location, x, y) ||
+        gtk_text_iter_get_line_offset(&location) >= 7)
+        return FALSE;
+
+    LuaDebugWindow *view = data;
+    unsigned long lines[128];
+    gsize count = 0;
+    if (!debug_read_breakpoints(GTK_ENTRY(view->breakpoints), lines, &count))
+    {
+        gtk_label_set_text(GTK_LABEL(view->status), "Correct the breakpoint list before adding a line.");
+        return TRUE;
+    }
+
+    unsigned long line = (unsigned long)gtk_text_iter_get_line(&location) + 1;
+    if (!debug_toggle_breakpoint(lines, &count, G_N_ELEMENTS(lines), line))
+    {
+        gtk_label_set_text(GTK_LABEL(view->status), "The debugger supports up to 128 breakpoints.");
+        return TRUE;
+    }
+
+    GString *list = g_string_new(NULL);
+    for (gsize i = 0; i < count; i++)
+    {
+        if (i)
+            g_string_append(list, ", ");
+        g_string_append_printf(list, "%lu", lines[i]);
+    }
+    gtk_entry_set_text(GTK_ENTRY(view->breakpoints), list->str);
+    g_string_free(list, TRUE);
+    return TRUE;
+}
+
+/* Dispatch standard debugger shortcuts in the debugger window. */
+/* Обрабатывает стандартные сочетания клавиш в окне отладчика. */
+static gboolean debug_handle_key(GtkWidget *widget, GdkEventKey *event, gpointer data)
+{
+    (void)widget;
+    LuaDebugWindow *view = data;
+    GdkModifierType modifiers = event->state & gtk_accelerator_get_default_mod_mask();
+    if (event->keyval == GDK_KEY_F5 && modifiers == GDK_SHIFT_MASK)
+    {
+        if (gtk_widget_get_sensitive(view->stop))
+            debug_stop(NULL, view);
+        return TRUE;
+    }
+    if (event->keyval == GDK_KEY_F5 && modifiers == GDK_CONTROL_MASK)
+    {
+        debug_restart(NULL, view);
+        return TRUE;
+    }
+
+    InsightLuaStep mode;
+    if (event->keyval == GDK_KEY_F11 && modifiers == GDK_SHIFT_MASK)
+        mode = INSIGHT_LUA_STEP_OUT;
+    else if (modifiers == 0 && event->keyval == GDK_KEY_F11)
+        mode = INSIGHT_LUA_STEP_INTO;
+    else if (modifiers == 0 && event->keyval == GDK_KEY_F10)
+        mode = INSIGHT_LUA_STEP_OVER;
+    else if (modifiers == 0 && event->keyval == GDK_KEY_F5)
+        mode = INSIGHT_LUA_CONTINUE;
+    else
+        return FALSE;
+
+    if (gtk_widget_get_sensitive(view->step_controls))
+        debug_window_step(view, mode);
+    return TRUE;
 }
 
 /* Navigate only when the editor buffer still matches the debug snapshot. */
@@ -5338,6 +5500,9 @@ static void debug_current_lua(GtkMenuItem *item, gpointer data)
     GtkWidget *restart = gtk_button_new_with_label("Restart");
     g_signal_connect(restart, "clicked", G_CALLBACK(debug_restart), view);
     gtk_box_pack_start(GTK_BOX(toolbar), restart, FALSE, FALSE, 0);
+    view->stop = gtk_button_new_with_label("Stop");
+    g_signal_connect(view->stop, "clicked", G_CALLBACK(debug_stop), view);
+    gtk_box_pack_start(GTK_BOX(toolbar), view->stop, FALSE, FALSE, 0);
     view->go_to_source = gtk_button_new_with_label("Go to Source");
     g_signal_connect(view->go_to_source, "clicked", G_CALLBACK(debug_go_to_source), view);
     gtk_box_pack_start(GTK_BOX(toolbar), view->go_to_source, FALSE, FALSE, 0);
@@ -5358,6 +5523,11 @@ static void debug_current_lua(GtkMenuItem *item, gpointer data)
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source_view));
     view->current_line_tag = gtk_text_buffer_create_tag(buffer, "insight-debug-line",
         "paragraph-background", "#416184", "foreground", "#ffffff", NULL);
+    view->breakpoint_tag = gtk_text_buffer_create_tag(buffer, "insight-debug-breakpoint",
+        "background", "#962e37", "foreground", "#ffffff", "weight", PANGO_WEIGHT_BOLD, NULL);
+    g_signal_connect(view->breakpoints, "changed", G_CALLBACK(debug_mark_breakpoints), view);
+    g_signal_connect(view->source_view, "button-press-event", G_CALLBACK(debug_click_line_number), view);
+    g_signal_connect(view->window, "key-press-event", G_CALLBACK(debug_handle_key), view);
     view->status = gtk_label_new(NULL);
     gtk_label_set_selectable(GTK_LABEL(view->status), TRUE);
     gtk_label_set_ellipsize(GTK_LABEL(view->status), PANGO_ELLIPSIZE_END);
