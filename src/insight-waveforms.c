@@ -1707,6 +1707,27 @@ static gboolean simulation_port_spi(gchar **args, GString *body, GString *connec
     return TRUE;
 }
 
+static gboolean simulation_port_i2c(gchar **args, GString *body, GString *connections,
+                                    GHashTable *ports, GHashTable *images)
+{
+    guint64 address;
+    gboolean hex = g_str_has_prefix(args[3], "0x") || g_str_has_prefix(args[3], "0X");
+    if (g_hash_table_size(ports) > 126 || !simulation_port_name(args[1]) ||
+        !simulation_port_name(args[2]) || !strcmp(args[1], args[2]) ||
+        g_hash_table_contains(ports, args[1]) || g_hash_table_contains(ports, args[2]) ||
+        !g_ascii_string_to_unsigned(args[3] + (hex ? 2 : 0), hex ? 16 : 10, 8, 119, &address, NULL))
+        return FALSE;
+    guint scl = simulation_port_connect(body, connections, ports, args[1], 1, TRUE);
+    guint sda = simulation_port_connect(body, connections, ports, args[2], 1, TRUE);
+    g_string_append_printf(body,
+        "pullup(pin%u); pullup(pin%u);\n"
+        "reg i2c_drive%u=1'bz; assign pin%u=i2c_drive%u;\n"
+        "always @(pin%u or pin%u) $geany_i2c_eeprom(pin%u,pin%u,%" G_GUINT64_FORMAT ",i2c_drive%u",
+        scl, sda, sda, sda, sda, scl, sda, scl, sda, address, sda);
+    simulation_memory_argument(body, images, args[2]);
+    return TRUE;
+}
+
 static gboolean simulation_port_uart(gchar **args, gint count, GString *body,
                                       GString *connections, GHashTable *ports, GString *live)
 {
@@ -1928,6 +1949,7 @@ static void simulation_memory_defaults(gchar ***arguments, gint *count)
         {"spi-nor", "sck cs_n mosi miso", 4},
         {"spi-nand", "sck cs_n mosi miso", 4},
         {"spi-eeprom", "sck cs_n mosi miso", 4},
+        {"i2c-eeprom", "scl sda 0x50", 2},
     };
     gchar **args = *arguments;
     for (guint i = 0; i < G_N_ELEMENTS(presets); i++)
@@ -2003,6 +2025,11 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
                  !strcmp(args[0], "spi-nand") || !strcmp(args[0], "spi-eeprom")))
         {
             valid = simulation_port_spi(args, body, connections, ports, images, spi_pins);
+            attached_images += valid && g_hash_table_contains(images, args[2]);
+        }
+        else if (valid && count == 4 && !strcmp(args[0], "i2c-eeprom"))
+        {
+            valid = simulation_port_i2c(args, body, connections, ports, images);
             attached_images += valid && g_hash_table_contains(images, args[2]);
         }
         else if (valid && (count == 4 || count == 5) && !strcmp(args[0], "uart"))
@@ -2085,7 +2112,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
     {
         valid = FALSE;
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                            "Place memory-image before the memory rule and use its address port or SPI chip-select port.");
+                            "Place memory-image before the memory rule and use its address port, SPI chip-select port or I2C SDA.");
     }
     if (valid && !module && (connections->len || sources->len || g_hash_table_size(models)))
     {
@@ -2154,10 +2181,11 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         "pulse PORT START LENGTH 0|1   ·   value PORT WIDTH EXPR\n"
         "bus PORT WIDTH INTERVAL EXPR   ·   output PORT WIDTH\n"
         "live-interval NS   ·   live-input PORT WIDTH INITIAL   ·   monitor PORT WIDTH\n"
-        "Memory presets: sram, ddr2, ddr3, ddr4, spi-nor, spi-nand, spi-eeprom.\n"
+        "Memory presets: sram, ddr2, ddr3, ddr4, spi-nor, spi-nand, spi-eeprom, i2c-eeprom.\n"
         "Use a preset alone for standard port names, or list your ports below. '-' uses the default.\n"
         "sram ADDR DQ CE_N WE_N OE_N [ADDRESS_BITS=16 [DATA_BITS=8]]\n"
-        "memory-image ADDR_OR_SPI_CS_N FILE (before the memory rule)\n"
+        "memory-image ADDR_OR_SPI_CS_N_OR_SDA FILE (before the memory rule)\n"
+        "i2c-eeprom SCL SDA [ADDRESS=0x50]\n"
         "spi-nor / spi-nand / spi-eeprom SCK CS_N MOSI MISO\n"
         "ddr2 CK CKE CS_N RAS_N CAS_N WE_N A BA DQ DQS DM [RL=3 [WL=2]] (functional x8)\n"
         "ddr3 CK RESET_N CKE CS_N RAS_N CAS_N WE_N A BA DQ DQS DM [RL=3 [WL=2]] (functional x8)\n"
@@ -2638,7 +2666,7 @@ static gboolean simulation_interactive(WaveSimulation *run, const gchar *directo
     gboolean devices = run->port_harness &&
         (strstr(run->port_harness, "$geany_sram(") ||
          strstr(run->port_harness, "$geany_ddr2(") || strstr(run->port_harness, "$geany_ddr3(") || strstr(run->port_harness, "$geany_ddr4(") ||
-         strstr(run->port_harness, "$geany_spi_"));
+         strstr(run->port_harness, "$geany_spi_") || strstr(run->port_harness, "$geany_i2c_"));
     GSubprocess *process = g_subprocess_launcher_spawnv(launcher, devices ? device_argv : argv, error);
     g_free(modules);
     g_free(runtime_prefix);

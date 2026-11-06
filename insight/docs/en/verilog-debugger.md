@@ -143,6 +143,7 @@ spi-nor
 | `ddr3` | `ck reset_n cke cs_n ras_n cas_n we_n a ba dq dqs dm` | RL 3, WL 2 CK cycles |
 | `ddr4` | `ck reset_n cke cs_n act_n a ba bg dq dqs dm_n` | RL 3, WL 2 CK cycles |
 | `spi-nor`, `spi-nand`, `spi-eeprom` | `sck cs_n mosi miso` | SPI mode 0, built-in geometry |
+| `i2c-eeprom` | `scl sda` | 7-bit address `0x50` |
 
 To override ports, list them in order. Use `-` in positions that should
 keep the preset value, for example `spi-nor - flash_cs_n - -`. SRAM
@@ -244,3 +245,24 @@ one dummy byte. For NAND images, byte address = page × 2048 + column.
 These profiles model data transfers with immediate completion.
 Device identification, busy timing, protection, ECC and spare areas
 are outside the implemented command sets.
+
+
+## I²C EEPROM
+
+```text
+module my_controller
+memory-image sda "fixtures/config.hex"
+i2c-eeprom
+```
+
+The preset connects `scl` and `sda` at 7-bit address `0x50`. The image
+is optional. Use the SDA port as the image key and byte offsets in the
+hex file. Uninitialized bytes read as FF.
+
+Use `i2c-eeprom I2C_SCL I2C_SDA 0x54` for custom port names or a different
+address. The generated harness provides pull-ups. The DUT should pull
+the lines low or release them. The device implements current-address,
+random and sequential reads, and writes to 128-byte pages in 64 KiB
+of storage. A page write wraps within the page and commits on STOP.
+Completion is immediate. The profile models one EEPROM on each
+configured bus pair.

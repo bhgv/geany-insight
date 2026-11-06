@@ -7,6 +7,7 @@
 #include <string.h>
 #include "geany-ddr4.h"
 #include "geany-spi-memory.h"
+#include "geany-i2c-eeprom.h"
 
 enum { ADDRESS, DATA, CHIP_N, WRITE_N, OUTPUT_N, DRIVE, PORT_COUNT };
 
@@ -517,6 +518,99 @@ static PLI_INT32 spi_update(PLI_BYTE8 *user_data)
     return 0;
 }
 
+enum { I2C_CLOCK, I2C_SDA, I2C_TARGET, I2C_DRIVE, I2C_PORTS };
+
+typedef struct {
+    I2cEeprom device;
+    vpiHandle ports[I2C_PORTS];
+} I2cVpi;
+
+static int i2c_image_write(void *data, uint32_t address, uint64_t value)
+{
+    I2cEeprom *device = data;
+    if (address >= I2C_EEPROM_SIZE || value > 255)
+        return 0;
+    device->bytes[address] = value;
+    return 1;
+}
+
+static PLI_INT32 i2c_free(p_cb_data callback)
+{
+    free(callback->user_data);
+    return 0;
+}
+
+static I2cVpi *i2c_open(vpiHandle call)
+{
+    vpiHandle pins[I2C_PORTS];
+    vpiHandle args = vpi_iterate(vpiArgument, call);
+    if (!args)
+        return NULL;
+    for (unsigned i = 0; i < I2C_PORTS; i++) {
+        pins[i] = vpi_scan(args);
+        if (!pins[i])
+            return NULL;
+    }
+    vpiHandle image = vpi_scan(args);
+    if (image && vpi_scan(args)) {
+        vpi_free_object(args);
+        return NULL;
+    }
+    for (unsigned i = 0; i < I2C_PORTS; i++)
+        if (i != I2C_TARGET && vpi_get(vpiSize, pins[i]) != 1)
+            return NULL;
+    s_vpi_vecval target = vector_word(pins[I2C_TARGET]);
+    if (target.bval || target.aval < 8 || target.aval > 119)
+        return NULL;
+    I2cVpi *state = calloc(1, sizeof *state);
+    if (!state)
+        return NULL;
+    memcpy(state->ports, pins, sizeof pins);
+    i2c_eeprom_init(&state->device, target.aval);
+    if (!image_load(image, i2c_image_write, &state->device)) {
+        free(state);
+        return NULL;
+    }
+    s_cb_data cleanup = {0};
+    cleanup.reason = cbEndOfSimulation;
+    cleanup.cb_rtn = i2c_free;
+    cleanup.user_data = (PLI_BYTE8 *)state;
+    vpiHandle callback = vpi_register_cb(&cleanup);
+    if (!callback) {
+        free(state);
+        return NULL;
+    }
+    vpi_free_object(callback);
+    vpi_put_userdata(call, state);
+    return state;
+}
+
+static PLI_INT32 i2c_update(PLI_BYTE8 *unused)
+{
+    (void)unused;
+    vpiHandle call = vpi_handle(vpiSysTfCall, NULL);
+    I2cVpi *state = vpi_get_userdata(call);
+    if (!state)
+        state = i2c_open(call);
+    if (!state) {
+        vpi_printf("Geany I2C: invalid EEPROM configuration or image.\n");
+        vpip_set_return_value(1);
+        vpi_control(vpiFinish, 1);
+        return 0;
+    }
+    int clock = scalar(state->ports[I2C_CLOCK]), data = scalar(state->ports[I2C_SDA]);
+    if ((clock != vpi0 && clock != vpi1) || (data != vpi0 && data != vpi1))
+        return 0;
+    int previous = state->device.pull_low;
+    if (i2c_eeprom_edge(&state->device, clock == vpi1, data == vpi1) != previous) {
+        s_vpi_value value = {0};
+        value.format = vpiScalarVal;
+        value.value.scalar = state->device.pull_low ? vpi0 : vpiZ;
+        vpi_put_value(state->ports[I2C_DRIVE], &value, NULL, vpiNoDelay);
+    }
+    return 0;
+}
+
 static void register_devices(void)
 {
     s_vpi_systf_data task = {0};
@@ -544,6 +638,10 @@ static void register_devices(void)
     vpi_register_systf(&task);
     task.tfname = "$geany_spi_eeprom";
     task.user_data = &eeprom;
+    vpi_register_systf(&task);
+    task.tfname = "$geany_i2c_eeprom";
+    task.calltf = i2c_update;
+    task.user_data = NULL;
     vpi_register_systf(&task);
 }
 
