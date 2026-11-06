@@ -3,29 +3,44 @@
 #define GEANY_SPI_MEMORY_H
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
-enum { SPI_NOR = 1, SPI_NAND, SPI_EEPROM };
+enum { SPI_NOR = 1, SPI_NAND, SPI_EEPROM, SPI_PSRAM };
 enum { SPI_NOR_SIZE = 65536, SPI_EEPROM_SIZE = 65536, SPI_NAND_PAGE = 2048,
-       SPI_NAND_SIZE = 64 * SPI_NAND_PAGE };
+       SPI_NAND_SIZE = 64 * SPI_NAND_PAGE, SPI_PSRAM_SIZE = 8 * 1024 * 1024 };
 
 typedef struct {
     unsigned kind, size, page_size, wel, command, count, address, output, dirty;
-    uint8_t bytes[SPI_NAND_SIZE], cache[SPI_NAND_PAGE];
+    unsigned wrap, reset_enabled;
+    uint8_t *bytes, cache[SPI_NAND_PAGE];
 } SpiMemory;
 
-static void spi_memory_init(SpiMemory *m, unsigned kind)
+static int spi_memory_init(SpiMemory *m, unsigned kind)
 {
     m->kind = kind;
-    m->size = kind == SPI_NAND ? SPI_NAND_SIZE : kind == SPI_NOR ? SPI_NOR_SIZE : SPI_EEPROM_SIZE;
+    m->size = kind == SPI_PSRAM ? SPI_PSRAM_SIZE : kind == SPI_NAND ? SPI_NAND_SIZE :
+              kind == SPI_NOR ? SPI_NOR_SIZE : SPI_EEPROM_SIZE;
+    m->bytes = malloc(m->size);
+    if (!m->bytes)
+        return 0;
     m->page_size = kind == SPI_NAND ? SPI_NAND_PAGE : kind == SPI_NOR ? 256 : 128;
     memset(m->bytes, 255, m->size);
     memset(m->cache, 255, sizeof m->cache);
+    return 1;
 }
 
 static void spi_memory_end(SpiMemory *m)
 {
-    if (m->count && m->command == 0x06)
+    if (m->kind == SPI_PSRAM) {
+        if (m->count) {
+            if (m->command == 0xc0)
+                m->wrap = !m->wrap;
+            else if (m->command == 0x99 && m->reset_enabled)
+                m->wrap = 0;
+            m->reset_enabled = m->command == 0x66;
+        }
+    } else if (m->count && m->command == 0x06)
         m->wel = 1;
     else if (m->count && m->command == 0x04)
         m->wel = 0;
@@ -73,6 +88,23 @@ static void spi_memory_nand(SpiMemory *m, unsigned index, unsigned byte)
     }
 }
 
+static void spi_memory_psram(SpiMemory *m, unsigned index, unsigned byte)
+{
+    if (m->command != 0x02 && m->command != 0x03 && m->command != 0x0b)
+        return;
+    if (index <= 3) {
+        m->address = ((m->address << 8) | byte) & (SPI_PSRAM_SIZE - 1);
+        if (index < 3 || m->command != 0x03)
+            return;
+    }
+    if (m->command == 0x02)
+        m->bytes[m->address] = byte;
+    else
+        m->output = m->bytes[m->address];
+    unsigned mask = m->wrap ? 31u : SPI_PSRAM_SIZE - 1u;
+    m->address = (m->address & ~mask) | ((m->address + 1) & mask);
+}
+
 static void spi_memory_byte(SpiMemory *m, unsigned byte)
 {
     unsigned index = m->count++;
@@ -85,8 +117,12 @@ static void spi_memory_byte(SpiMemory *m, unsigned byte)
             m->wel = 0;
             memset(m->cache, 255, m->page_size);
         }
-        if (m->kind != SPI_NAND && byte == 0x05)
+        if (m->kind != SPI_NAND && m->kind != SPI_PSRAM && byte == 0x05)
             m->output = m->wel ? 2 : 0;
+        return;
+    }
+    if (m->kind == SPI_PSRAM) {
+        spi_memory_psram(m, index, byte);
         return;
     }
     if (m->kind == SPI_NAND) {

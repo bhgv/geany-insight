@@ -432,7 +432,9 @@ static int spi_image_write(void *data, uint32_t address, uint64_t value)
 
 static PLI_INT32 spi_free(p_cb_data callback)
 {
-    free(callback->user_data);
+    SpiVpi *state = (SpiVpi *)callback->user_data;
+    free(state->memory.bytes);
+    free(state);
     return 0;
 }
 
@@ -459,10 +461,14 @@ static SpiVpi *spi_open(vpiHandle call, unsigned kind)
     if (!state)
         return NULL;
     memcpy(state->ports, pins, sizeof pins);
-    spi_memory_init(&state->memory, kind);
+    if (!spi_memory_init(&state->memory, kind)) {
+        free(state);
+        return NULL;
+    }
     state->clock = vpi0;
     state->drive = vpiZ;
     if (!image_load(image, spi_image_write, &state->memory)) {
+        free(state->memory.bytes);
         free(state);
         return NULL;
     }
@@ -472,6 +478,7 @@ static SpiVpi *spi_open(vpiHandle call, unsigned kind)
     cleanup.user_data = (PLI_BYTE8 *)state;
     vpiHandle callback = vpi_register_cb(&cleanup);
     if (!callback) {
+        free(state->memory.bytes);
         free(state);
         return NULL;
     }
@@ -628,7 +635,7 @@ static void register_devices(void)
     task.tfname = "$geany_ddr2";
     task.user_data = &ddr2;
     vpi_register_systf(&task);
-    static PLI_BYTE8 nor = SPI_NOR, nand = SPI_NAND, eeprom = SPI_EEPROM;
+    static PLI_BYTE8 nor = SPI_NOR, nand = SPI_NAND, eeprom = SPI_EEPROM, psram = SPI_PSRAM;
     task.calltf = spi_update;
     task.tfname = "$geany_spi_nor";
     task.user_data = &nor;
@@ -638,6 +645,9 @@ static void register_devices(void)
     vpi_register_systf(&task);
     task.tfname = "$geany_spi_eeprom";
     task.user_data = &eeprom;
+    vpi_register_systf(&task);
+    task.tfname = "$geany_spi_psram";
+    task.user_data = &psram;
     vpi_register_systf(&task);
     task.tfname = "$geany_i2c_eeprom";
     task.calltf = i2c_update;

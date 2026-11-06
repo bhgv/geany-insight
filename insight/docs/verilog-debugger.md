@@ -224,7 +224,7 @@ spi-nor
 | `ddr2` | `ck cke cs_n ras_n cas_n we_n a ba dq dqs dm` | RL 3, WL 2 CK cycles |
 | `ddr3` | `ck reset_n cke cs_n ras_n cas_n we_n a ba dq dqs dm` | RL 3, WL 2 CK cycles |
 | `ddr4` | `ck reset_n cke cs_n act_n a ba bg dq dqs dm_n` | RL 3, WL 2 CK cycles |
-| `spi-nor`, `spi-nand`, `spi-eeprom` | `sck cs_n mosi miso` | SPI mode 0, built-in geometry |
+| `spi-nor`, `spi-nand`, `spi-eeprom`, `spi-psram` | `sck cs_n mosi miso` | SPI mode 0, built-in geometry |
 | `i2c-eeprom` | `scl sda` | 7-bit address `0x50` |
 
 To override ports, list them in order. Use `-` in positions that should
@@ -349,3 +349,26 @@ random and sequential reads, and writes to 128-byte pages in 64 KiB
 of storage. A page write wraps within the page and commits on STOP.
 Completion is immediate. The profile models one EEPROM on each
 configured bus pair.
+
+
+## SPI PSRAM
+
+```text
+module my_controller
+memory-image cs_n "fixtures/psram.hex"
+spi-psram
+```
+
+The built-in C model has 8 MiB of byte-addressable memory and uses
+single-bit SPI mode 0. The default ports are `sck cs_n mosi miso`.
+Use `spi-psram sck ram_cs_n mosi miso` for a dedicated chip select on
+a shared bus. Key the optional hex image by the actual CS# port.
+
+The device accepts three address bytes, with the low 23 bits selecting
+memory. It supports read (03), fast read (0B, one dummy byte), write
+(02), 32-byte wrap toggle (C0), and reset enable/reset (66/99).
+Writes directly replace bytes and require no write-enable command.
+Bursts are linear by default. Reset restores linear mode and retains
+the model's contents. Bytes outside the preload start at FF.
+The profile models the SPI data path with immediate completion.
+Quad transfers and physical timing are outside its scope.

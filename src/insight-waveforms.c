@@ -1968,6 +1968,7 @@ static void simulation_memory_defaults(gchar ***arguments, gint *count)
         {"spi-nor", "sck cs_n mosi miso", 4},
         {"spi-nand", "sck cs_n mosi miso", 4},
         {"spi-eeprom", "sck cs_n mosi miso", 4},
+        {"spi-psram", "sck cs_n mosi miso", 4},
         {"i2c-eeprom", "scl sda 0x50", 2},
     };
     gchar **args = *arguments;
@@ -2193,7 +2194,8 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             attached_images += valid && g_hash_table_contains(images, args[generation == 2 ? 7 : generation == 3 ? 8 : 6]);
         }
         else if (valid && count == 5 && (!strcmp(args[0], "spi-nor") ||
-                 !strcmp(args[0], "spi-nand") || !strcmp(args[0], "spi-eeprom")))
+                 !strcmp(args[0], "spi-nand") || !strcmp(args[0], "spi-eeprom") ||
+                 !strcmp(args[0], "spi-psram")))
         {
             valid = simulation_port_spi(args, body, connections, ports, images, spi_pins);
             attached_images += valid && g_hash_table_contains(images, args[2]);
@@ -2362,12 +2364,12 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         "scope SIGNAL   ·   scope-xy X Y   ·   scope-xyz X Y Z\n"
         "led PORT [ACTIVE=1]   ·   display PORT [WIDTH=8 [hex|dec|bin]]\n"
         "live-interval NS   ·   live-input PORT WIDTH INITIAL   ·   monitor PORT WIDTH\n"
-        "Memory presets: sram, ddr2, ddr3, ddr4, spi-nor, spi-nand, spi-eeprom, i2c-eeprom.\n"
+        "Memory presets: sram, ddr2, ddr3, ddr4, spi-nor, spi-nand, spi-eeprom, spi-psram, i2c-eeprom.\n"
         "Use a preset alone for standard port names, or list your ports below. '-' uses the default.\n"
         "sram ADDR DQ CE_N WE_N OE_N [ADDRESS_BITS=16 [DATA_BITS=8]]\n"
         "memory-image ADDR_OR_SPI_CS_N_OR_SDA FILE (before the memory rule)\n"
         "i2c-eeprom SCL SDA [ADDRESS=0x50]\n"
-        "spi-nor / spi-nand / spi-eeprom SCK CS_N MOSI MISO\n"
+        "spi-nor / spi-nand / spi-eeprom / spi-psram SCK CS_N MOSI MISO\n"
         "ddr2 CK CKE CS_N RAS_N CAS_N WE_N A BA DQ DQS DM [RL=3 [WL=2]] (functional x8)\n"
         "ddr3 CK RESET_N CKE CS_N RAS_N CAS_N WE_N A BA DQ DQS DM [RL=3 [WL=2]] (functional x8)\n"
         "ddr4 CK RESET_N CKE CS_N ACT_N A BA BG DQ DQS DM_N [RL=3 [WL=2]] (functional x8)\n"
