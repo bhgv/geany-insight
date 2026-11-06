@@ -83,7 +83,7 @@ controlled by the testbench and its duration.
 
 The SRAM rule connects address, bidirectional data and active-low chip,
 write and output enables. The last two numbers set address and data widths.
-This is a functional asynchronous model with uninitialized contents and
+Geany ships this C model as an Icarus VPI module. It is a functional asynchronous model with uninitialized contents and
 high-impedance data outside reads. It supports 1–16 address bits and
 1–64 data bits. SRAM timing constraints and vendor-specific behavior are
 outside this model.

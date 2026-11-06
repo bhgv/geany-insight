@@ -1597,13 +1597,11 @@ static gboolean simulation_port_sram(gchar **args, GString *body, GString *conne
     guint we = simulation_port_connect(body, connections, ports, args[4], 1, TRUE);
     guint oe = simulation_port_connect(body, connections, ports, args[5], 1, TRUE);
     g_string_append_printf(body,
-        "reg [%" G_GUINT64_FORMAT ":0] sram%u [0:%u];\n"
-        "assign pin%u = (!pin%u && pin%u && !pin%u) ? sram%u[pin%u] : %" G_GUINT64_FORMAT "'bz;\n"
-        "always @(pin%u or pin%u or pin%u or pin%u) begin\n"
-        "  if (!pin%u && !pin%u && !$isunknown(pin%u)) sram%u[pin%u] = pin%u;\n"
-        "end\n",
-        width - 1, addr, (1u << address) - 1, dq, ce, we, oe, addr, addr, width,
-        we, ce, addr, dq, ce, we, addr, addr, addr, dq);
+        "reg [%" G_GUINT64_FORMAT ":0] sram_drive%u = 'z;\n"
+        "assign pin%u = sram_drive%u;\n"
+        "always @(pin%u or pin%u or pin%u or pin%u or pin%u) "
+        "$geany_sram(pin%u,pin%u,pin%u,pin%u,pin%u,sram_drive%u);\n",
+        width - 1, addr, dq, addr, we, ce, oe, addr, dq, addr, dq, ce, we, oe, addr);
     return TRUE;
 }
 
@@ -2403,8 +2401,17 @@ static gboolean simulation_interactive(WaveSimulation *run, const gchar *directo
     gchar *path = g_strconcat(bin, G_SEARCHPATH_SEPARATOR_S, existing ? existing : "", NULL);
     g_subprocess_launcher_setenv(launcher, "PATH", path, TRUE);
     g_free(path);
+    gchar *runtime_bin = g_path_get_dirname(run->runtime);
+    gchar *runtime_prefix = g_path_get_dirname(runtime_bin);
+    gchar *modules = g_build_filename(runtime_prefix, "lib", "ivl", NULL);
     const gchar *argv[] = {run->runtime, "-i", "-s", "simulation.vvp", NULL};
-    GSubprocess *process = g_subprocess_launcher_spawnv(launcher, argv, error);
+    const gchar *device_argv[] = {run->runtime, "-M", modules, "-m", "geany_devices",
+                                  "-i", "-s", "simulation.vvp", NULL};
+    gboolean devices = run->port_harness && strstr(run->port_harness, "$geany_sram(");
+    GSubprocess *process = g_subprocess_launcher_spawnv(launcher, devices ? device_argv : argv, error);
+    g_free(modules);
+    g_free(runtime_prefix);
+    g_free(runtime_bin);
     g_object_unref(launcher);
     if (!process)
         return FALSE;

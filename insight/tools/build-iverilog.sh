@@ -20,6 +20,7 @@ archive="$cache_dir/iverilog-$version.tar.gz"
 script_dir=$(cd -- "$(dirname -- "$0")" && pwd)
 bridge_patch="$script_dir/../patches/geany-vvp.patch"
 windows_patch="$script_dir/../patches/geany-iverilog-windows.patch"
+device_source="$script_dir/geany-vpi-devices.c"
 stamp="$install_dir/share/geany-insight/iverilog-source.sha256"
 work=$(mktemp -d "${TMPDIR:-/tmp}/geany-iverilog.XXXXXXXX")
 download=
@@ -37,7 +38,7 @@ file_digest() {
     printf '%s\n' "${digest%% *}"
 }
 
-stamp_id="$sha $(file_digest "$bridge_patch")"
+stamp_id="$sha $(file_digest "$bridge_patch") $(file_digest "$device_source")"
 if [[ -n "$executable_suffix" ]]; then
     stamp_id+=" $(file_digest "$windows_patch")"
 fi
@@ -55,11 +56,25 @@ check_simulator() {
     cat > "$work/geany_smoke.v" <<'VERILOG'
 module geany_smoke;
     reg signal = 0;
+    reg [3:0] address = 3;
+    reg chip_n = 0, write_n = 0, output_n = 1;
+    reg [7:0] drive = 'z;
+    wire [7:0] data = write_n ? 8'bz : 8'ha5;
+    assign data = drive;
+    always @(address or chip_n or write_n or output_n or data)
+        $geany_sram(address, data, chip_n, write_n, output_n, drive);
     initial begin
         $dumpfile("geany_smoke.vcd");
         $dumpvars(0, geany_smoke);
         #1 signal = 1;
-        #1 $finish;
+        write_n = 1;
+        output_n = 0;
+        #1 if (data !== 8'ha5) $fatal(1, "SRAM round trip failed");
+        address = 4;
+        #1 if (data !== 8'hxx) $fatal(1, "Unwritten SRAM is not unknown");
+        output_n = 1;
+        #1 if (data !== 8'hzz) $fatal(1, "SRAM did not release the bus");
+        $finish;
     end
 endmodule
 VERILOG
@@ -68,8 +83,9 @@ VERILOG
         rm -f -- geany_smoke.vcd geany_smoke.vvp &&
         export PATH="$prefix/bin:$PATH" &&
         export IVERILOG_VPI_MODULE_PATH="$prefix/lib/ivl" &&
-        "$prefix/bin/iverilog$executable_suffix" -s geany_smoke -o geany_smoke.vvp geany_smoke.v &&
-        printf 'cont\n' | GEANY_VVP_DEBUG=1 "$prefix/bin/vvp$executable_suffix" -i -s geany_smoke.vvp > geany_smoke.log &&
+        test -f "$prefix/lib/ivl/geany_devices.vpi" &&
+        "$prefix/bin/iverilog$executable_suffix" -g2012 -s geany_smoke -o geany_smoke.vvp geany_smoke.v &&
+        printf 'cont\n' | GEANY_VVP_DEBUG=1 "$prefix/bin/vvp$executable_suffix" -M "$prefix/lib/ivl" -m geany_devices -i -s geany_smoke.vvp > geany_smoke.log &&
         grep -q '^GEANY-VVP-READY' geany_smoke.log &&
         test -s geany_smoke.vcd
     )
@@ -117,6 +133,12 @@ printf '[Simulator] Building Icarus Verilog %s from source.\n' "$version"
     make DESTDIR="$work/stage" install
 )
 staged="$work/stage$configure_prefix"
+device_flags=(-shared)
+if [[ -z "$executable_suffix" ]]; then
+    device_flags+=(-fPIC)
+fi
+"${CC:-gcc}" "${device_flags[@]}" -I "$staged/include/iverilog" \
+    "$device_source" -L "$staged/lib" -lvpi -o "$staged/lib/ivl/geany_devices.vpi"
 if [[ -n "$executable_suffix" ]]; then
     # These helpers communicate over inherited pipes, without a console window.
     for helper in bin/iverilog.exe bin/vvp.exe lib/ivl/ivl.exe lib/ivl/ivlpp.exe; do
