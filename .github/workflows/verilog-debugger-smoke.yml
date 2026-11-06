@@ -83,6 +83,17 @@ jobs:
               cat "$RUNNER_TEMP/insight-smoke/gtk-debugger/session.log"
               exit 1
             }
+      - name: Exercise live HDL inputs, SRAM and UART on Linux
+        if: runner.os == 'Linux' && !cancelled() && steps.linux_build.outcome == 'success'
+        run: |
+          directory="$RUNNER_TEMP/insight-smoke/live-devices"
+          mkdir -p "$directory"
+          xvfb-run -a _editor-build/meson/tests/test_insight_verilog_debugger_gui \
+            insight/tests/waveform-debug "$directory" --live \
+            >"$directory/session.log" 2>&1 || {
+              cat "$directory/session.log"
+              exit 1
+            }
       - name: Exercise native debugger controls on Windows
         if: runner.os == 'Windows' && !cancelled() && steps.windows_build.outcome == 'success'
         shell: pwsh

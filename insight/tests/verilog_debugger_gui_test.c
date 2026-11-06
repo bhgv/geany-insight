@@ -10,14 +10,15 @@
 
 typedef enum {
     OPEN_DEBUGGER, LOAD_OBSERVER, SET_POINT, RUN_TO_POINT,
-    INSPECT_STOP, INSPECT_PREVIEW, WAIT_FOR_CAPTURE, INSPECT_CONNECTIONS, INSPECT_INSTRUMENTS
+    INSPECT_STOP, INSPECT_PREVIEW, WAIT_FOR_CAPTURE, INSPECT_CONNECTIONS, INSPECT_INSTRUMENTS,
+    RUN_LIVE_DEVICES, SEND_LIVE_INPUT, CHECK_LIVE_DEVICES
 } TestPhase;
 
 static TestPhase phase;
 static gchar *fixture_source;
 static gchar *observer_source;
 static guint point_line;
-static gboolean passed;
+static gboolean passed, live_devices;
 
 /* Find a visible top-level window by its editor title. */
 /* Ищет видимое окно верхнего уровня по заголовку редактора. */
@@ -41,6 +42,8 @@ static GtkWidget *find_window(const gchar *title)
 static GtkWidget *find_control(GtkWidget *widget, const gchar *key)
 {
     if (!g_strcmp0(gtk_widget_get_name(widget), key))
+        return widget;
+    if (GTK_IS_ENTRY(widget) && !g_strcmp0(gtk_entry_get_placeholder_text(GTK_ENTRY(widget)), key))
         return widget;
     if (GTK_IS_BUTTON(widget) && !g_strcmp0(gtk_button_get_label(GTK_BUTTON(widget)), key))
         return widget;
@@ -222,6 +225,21 @@ static gboolean accept_ports(gpointer data)
     GtkWidget *dialog = find_window("Port Signals");
     if (!dialog)
         return G_SOURCE_CONTINUE;
+    if (live_devices)
+    {
+        GtkWidget *recipe = find_control(dialog, "console");
+        if (!GTK_IS_TEXT_VIEW(recipe))
+            return G_SOURCE_CONTINUE;
+        gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(recipe)),
+            "module live_devices\n"
+            "duration 10000000\n"
+            "live-interval 250\n"
+            "live-input enable 1 0\n"
+            "monitor ready 1\n"
+            "monitor result 8\n"
+            "sram addr dq ce_n we_n oe_n 4 8\n"
+            "uart rx tx 1000000 console\n", -1);
+    }
     gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
     return G_SOURCE_REMOVE;
 }
@@ -319,7 +337,7 @@ static gboolean drive_debugger(gpointer data)
                                       "insight-tools-debug-current-hdl");
         if (!GTK_IS_MENU_ITEM(item))
             return G_SOURCE_CONTINUE;
-        phase = LOAD_OBSERVER;
+        phase = live_devices ? RUN_LIVE_DEVICES : LOAD_OBSERVER;
         g_timeout_add(100, accept_ports, NULL);
         gtk_menu_item_activate(GTK_MENU_ITEM(item));
         return G_SOURCE_CONTINUE;
@@ -400,7 +418,43 @@ static gboolean drive_debugger(gpointer data)
     if (!simulation)
         return G_SOURCE_CONTINUE;
 
-    if (phase == LOAD_OBSERVER && console_contains(simulation, "GEANY-VVP-READY"))
+    if (phase == RUN_LIVE_DEVICES && console_contains(simulation, "GEANY-VVP-READY"))
+    {
+        if (click(simulation, "UART Console…") && click(simulation, "Continue"))
+            phase = SEND_LIVE_INPUT;
+    }
+    else if (phase == SEND_LIVE_INPUT)
+    {
+        GtkWidget *uart = find_window("UART Console");
+        GtkWidget *entry = uart ? find_control(uart, "Text to send; press Enter") : NULL;
+        GtkWidget *input = find_control(simulation, "Binary value (0, 1, x, z)");
+        if (entry && input)
+        {
+            gtk_entry_set_text(GTK_ENTRY(input), "1");
+            if (click(simulation, "Apply Input"))
+            {
+                gtk_entry_set_text(GTK_ENTRY(entry), "OK");
+                g_signal_emit_by_name(entry, "activate");
+                phase = CHECK_LIVE_DEVICES;
+            }
+        }
+    }
+    else if (phase == CHECK_LIVE_DEVICES)
+    {
+        GtkWidget *uart = find_window("UART Console");
+        GtkWidget *readings = find_control(simulation, "insight-live-port-readings");
+        const gchar *values = readings ? gtk_label_get_text(GTK_LABEL(readings)) : "";
+        if (uart && console_contains(uart, "OK") &&
+            strstr(values, "ready = 1") && strstr(values, "result = 10100101 (165)"))
+        {
+            g_print("Verilog GTK: live input, monitor, SRAM round trip and UART loopback passed.\n");
+            passed = TRUE;
+            gtk_widget_destroy(simulation);
+            gtk_main_quit();
+            return G_SOURCE_REMOVE;
+        }
+    }
+    else if (phase == LOAD_OBSERVER && console_contains(simulation, "GEANY-VVP-READY"))
     {
         if (!find_control(simulation, "Port Signals…"))
         {
@@ -465,18 +519,19 @@ static gboolean drive_debugger(gpointer data)
 /* Готовит однофайловый тестбенч и запускает редактор с отдельным профилем. */
 int main(int argc, char **argv)
 {
-    if (argc != 3)
+    live_devices = argc == 4 && !strcmp(argv[3], "--live");
+    if (argc != 3 && !live_devices)
     {
-        g_printerr("Usage: test_insight_verilog_debugger_gui FIXTURES WORK_DIRECTORY\n");
+        g_printerr("Usage: test_insight_verilog_debugger_gui FIXTURES WORK_DIRECTORY [--live]\n");
         return 2;
     }
     gchar *fixture_dir = g_canonicalize_filename(argv[1], NULL);
     gchar *work_dir = g_canonicalize_filename(argv[2], NULL);
-    gchar *counter = g_build_filename(fixture_dir, "counter.v", NULL);
+    gchar *counter = g_build_filename(fixture_dir, live_devices ? "live_devices.sv" : "counter.v", NULL);
     gchar *testbench = g_build_filename(fixture_dir, "counter_tb.v", NULL);
     observer_source = g_build_filename(fixture_dir, "observe-hdl.lua", NULL);
     gchar *profile = g_build_filename(work_dir, "profile", NULL);
-    fixture_source = g_build_filename(work_dir, "debug_counter.v", NULL);
+    fixture_source = g_build_filename(work_dir, live_devices ? "debug_live.sv" : "debug_counter.v", NULL);
     gchar *counter_text = NULL, *testbench_text = NULL;
     if (g_mkdir_with_parents(profile, 0700) || !g_file_get_contents(counter, &counter_text, NULL, NULL) ||
         !g_file_get_contents(testbench, &testbench_text, NULL, NULL))
@@ -485,13 +540,15 @@ int main(int argc, char **argv)
         return 1;
     }
     const gchar *assignment = strstr(counter_text, "count <= count + 1'b1;");
-    if (!assignment)
+    if (!live_devices && !assignment)
         return 1;
     point_line = 2;
-    for (const gchar *byte = counter_text; byte < assignment; byte++)
-        if (*byte == '\n')
-            point_line++;
-    gchar *combined = g_strconcat("`timescale 1ns/1ns\n", counter_text, "\n", testbench_text, NULL);
+    if (assignment)
+        for (const gchar *byte = counter_text; byte < assignment; byte++)
+            if (*byte == '\n')
+                point_line++;
+    gchar *combined = live_devices ? g_strdup(counter_text) :
+        g_strconcat("`timescale 1ns/1ns\n", counter_text, "\n", testbench_text, NULL);
     gboolean saved = g_file_set_contents(fixture_source, combined, -1, NULL);
     g_free(combined);
     g_free(counter_text);

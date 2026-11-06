@@ -1630,13 +1630,13 @@ static gboolean simulation_port_uart(gchar **args, gint count, GString *body,
         "@(negedge pin%u); #(geany_uart_bit/2); if(pin%u===1'b0) begin\n"
         "for(n=0;n<8;n=n+1) begin #(geany_uart_bit); octet[n]=pin%u; end\n"
         "#(geany_uart_bit); if(pin%u===1'b1 && !$isunknown(octet)) "
-        "$display(\"GEANY-UART\\t%%02h\", octet); $fflush(); end end end\n"
+        "$display(\"GEANY-UART%%c%%02h\", 9, octet); $fflush(); end end end\n"
         "initial begin : geany_uart_send integer fd, code, serial, previous; reg [7:0] octet; "
         "previous=0; forever begin #(geany_live_interval); fd=$fopen(\"geany-uart-input\",\"r\");\n"
         "if(fd) begin code=$fscanf(fd,\"%%d\", serial); "
         "if(code==1 && serial!=previous) begin previous=serial; "
         "while($fscanf(fd,\"%%h\",octet)==1) geany_uart_tx(octet); "
-        "$display(\"GEANY-UART-SENT\\t%%0d\",serial); $fflush(); end $fclose(fd); end "
+        "$display(\"GEANY-UART-SENT%%c%%0d\",9,serial); $fflush(); end $fclose(fd); end "
         "end end\n", baud, rx, rx, rx, rx, tx, tx, tx, tx);
     /* UART also needs wall-clock pacing, even without parallel port monitors. */
     g_string_append(live, "// UART pacing\n");
@@ -1711,7 +1711,7 @@ static gchar *simulation_port_harness(const gchar *recipe, GError **error)
                         "if(fd) begin if($fscanf(fd,\"%%b\",bits)==1) pin%u=bits; $fclose(fd); end\n",
                         args[1], id);
                 else if (monitor)
-                    g_string_append_printf(live, "$display(\"GEANY-PORT\\t%s\\t%%b\",pin%u);\n", args[1], id);
+                    g_string_append_printf(live, "$display(\"GEANY-PORT%%c%s%%c%%b\",9,9,pin%u);\n", args[1], id);
                 else if (bus)
                     g_string_append_printf(body,
                         "initial begin integer step; time delay_ns; step=0; forever begin "
@@ -2875,6 +2875,7 @@ static void simulation_live_panel(WaveSimulation *run, GtkWidget *box)
     else
         gtk_widget_destroy(row);
     run->live_port_display = gtk_label_new("Waiting for port samples…");
+    gtk_widget_set_name(run->live_port_display, "insight-live-port-readings");
     gtk_label_set_selectable(GTK_LABEL(run->live_port_display), TRUE);
     gtk_label_set_xalign(GTK_LABEL(run->live_port_display), 0);
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
