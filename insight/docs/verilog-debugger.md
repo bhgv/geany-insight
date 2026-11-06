@@ -46,6 +46,41 @@ Port recipes are saved by project and source file. **Port Signals…**
 on the debugger panel reopens the recipe. Edits made during a run apply
 the next time debugging starts.
 
+## Triggered waveform capture and live controls
+
+In **Port Signals** for the current file, configure one optional
+`capture-trigger`. The generated testbench starts VCD capture on the first
+match and continues to the configured simulation end. The capture uses
+the original simulation timestamps. Without a trigger, capture starts
+at time zero.
+
+```text
+module my_controller
+duration 1000000
+button start
+switch enable
+capture-trigger rise start
+```
+
+Use `capture-trigger fall start` to capture when the button pulse ends.
+The `button PORT [IDLE [LENGTH_NS]]` rule creates a control in **Live Port I/O**.
+Each click generates one pulse, with an idle level of 0 and a length of
+100 ns by default. `switch PORT [INITIAL]` holds the level chosen in the
+panel and starts at 0 by default.
+
+To match a bus, use a sized Verilog binary or hexadecimal literal
+of up to 4096 bits. Put the literal in double quotes in the recipe.
+A question mark ignores a bit in binary or a nibble in hexadecimal.
+
+```text
+capture-trigger match core.status[127:0] "128'h0123456789abcde?0123456789abcdef"
+```
+
+Names are relative to the DUT and may include a fixed bit or range.
+Use one bit for edge triggers. The console reports when capture begins.
+If the simulation ends first, the debugger reports that the trigger
+did not fire.
+
 ## Output instruments
 
 Open **Signal Instruments…** in the VCD viewer, including from

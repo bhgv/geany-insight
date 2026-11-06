@@ -1453,6 +1453,7 @@ typedef struct {
     gchar *port_settings, *port_harness;
     GPtrArray *port_model_sources;
     GHashTable *port_images;
+    GtkWidget *live_devices;
     GtkWidget *live_port_input, *live_port_value, *live_port_send, *live_port_display;
     GHashTable *live_port_samples;
     GtkWidget *uart_window, *uart_view, *uart_entry;
@@ -1973,12 +1974,80 @@ static void simulation_memory_defaults(gchar ***arguments, gint *count)
     }
 }
 
+static gboolean simulation_capture_trigger(gchar **args, gint count, GString *trigger)
+{
+    if (trigger->len || (count != 3 && count != 4) ||
+        !g_regex_match_simple("^[A-Za-z_][A-Za-z0-9_$]*(\\.[A-Za-z_][A-Za-z0-9_$]*)*"
+                              "(\\[[0-9]+(:[0-9]+)?\\])?$", args[2], 0, 0))
+        return FALSE;
+    if (count == 3 && (!strcmp(args[1], "rise") || !strcmp(args[1], "fall")))
+    {
+        gchar active = !strcmp(args[1], "rise") ? '1' : '0';
+        gchar idle = active == '1' ? '0' : '1';
+        g_string_append_printf(trigger,
+            "begin : geany_capture_edge reg previous; previous=(dut.%s === 1'b%c); "
+            "forever begin @(dut.%s); if (previous && dut.%s === 1'b%c) disable geany_capture_edge; "
+            "previous=(dut.%s === 1'b%c); end end ",
+            args[2], idle, args[2], args[2], active, args[2], idle);
+        return TRUE;
+    }
+    if (count != 4 || strcmp(args[1], "match") ||
+        !g_regex_match_simple("^[1-9][0-9]{0,3}'([bB][01?][01?_]*|[hH][0-9a-fA-F?][0-9a-fA-F?_]*)$",
+                              args[3], 0, 0))
+        return FALSE;
+    gchar *base;
+    guint64 width = g_ascii_strtoull(args[3], &base, 10);
+    guint digits = 0;
+    for (const gchar *it = base + 2; *it; it++)
+        digits += *it != '_';
+    guint bits = g_ascii_tolower(base[1]) == 'b' ? 1 : 4;
+    if (width > 4096 || digits > (width + bits - 1) / bits)
+        return FALSE;
+    g_string_append_printf(trigger, "wait ((dut.%s %s %s) === 1'b1); ",
+                           args[2], strchr(args[3], '?') ? "==?" : "===", args[3]);
+    return TRUE;
+}
+
+static gboolean simulation_port_control(gchar **args, gint count, GString *body,
+                                         GString *connections, GHashTable *ports, GString *live)
+{
+    gboolean button = !strcmp(args[0], "button");
+    guint64 length = 100;
+    const gchar *idle = count >= 3 ? args[2] : "0";
+    if (count < 2 || count > (button ? 4 : 3) || g_hash_table_size(ports) >= 128 ||
+        !simulation_port_name(args[1]) || g_hash_table_contains(ports, args[1]) ||
+        (strcmp(idle, "0") && strcmp(idle, "1")) ||
+        (count == 4 && !g_ascii_string_to_unsigned(args[3], 10, 1, 1000000000, &length, NULL)))
+        return FALSE;
+    guint pin = simulation_port_connect(body, connections, ports, args[1], 1, FALSE);
+    g_string_append_printf(body, "// GEANY-CONTROL %s %s %s\ninitial pin%u=1'b%s;\n",
+                           args[0], args[1], idle, pin, idle);
+    if (button)
+    {
+        g_string_append_printf(body,
+            "initial begin : geany_button%u integer fd, serial, previous; previous=0; forever begin "
+            "#(geany_live_interval); fd=$fopen(\"geany-control-%s\",\"r\"); if(fd) begin "
+            "if($fscanf(fd,\"%%d\",serial)==1 && serial!=previous) begin "
+            "previous=previous+1; $fclose(fd); pin%u=1'b%c; #%" G_GUINT64_FORMAT "; pin%u=1'b%s; "
+            "end else $fclose(fd); end end end\n",
+            pin, args[1], pin, *idle == '0' ? '1' : '0', length, pin, idle);
+        g_string_append(live, "// Button pacing\n");
+    }
+    else
+        g_string_append_printf(live,
+            "fd=$fopen(\"geany-control-%s\",\"r\"); "
+            "if(fd) begin if($fscanf(fd,\"%%b\",bits)==1) pin%u=bits; $fclose(fd); end\n",
+            args[1], pin);
+    return TRUE;
+}
+
 static gchar *simulation_port_harness(const gchar *recipe, const gchar *directory,
                                       GPtrArray *sources, GHashTable *images, GError **error)
 {
     gchar **lines = g_strsplit(recipe, "\n", -1);
     GString *body = g_string_new("`timescale 1ns/1ns\nmodule geany_port_testbench;\n");
     GString *connections = g_string_new(NULL);
+    GString *trigger = g_string_new(NULL);
     GString *live = g_string_new(NULL);
     guint64 live_interval = 0;
     GHashTable *ports = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
@@ -2005,6 +2074,10 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &duration, NULL);
         else if (valid && count == 2 && !strcmp(args[0], "live-interval"))
             valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &live_interval, NULL);
+        else if (valid && !strcmp(args[0], "capture-trigger"))
+            valid = simulation_capture_trigger(args, count, trigger);
+        else if (valid && (!strcmp(args[0], "button") || !strcmp(args[0], "switch")))
+            valid = simulation_port_control(args, count, body, connections, ports, live);
         else if (valid && count == 3 && !strcmp(args[0], "memory-image"))
             valid = !g_hash_table_contains(ports, args[1]) &&
                 simulation_memory_image(images, args[1], args[2], directory, error);
@@ -2114,7 +2187,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
                             "Place memory-image before the memory rule and use its address port, SPI chip-select port or I2C SDA.");
     }
-    if (valid && !module && (connections->len || sources->len || g_hash_table_size(models)))
+    if (valid && !module && (trigger->len || connections->len || sources->len || g_hash_table_size(models)))
     {
         valid = FALSE;
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Add a module line for the configured ports.");
@@ -2132,9 +2205,13 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             g_string_append_printf(body, "geany_model_%s(%s);\n", (const gchar *)it->data, model->pins->str);
         }
         g_list_free(instances);
+        g_string_append_printf(body, "%s dut(%s);\n", module, connections->str);
+        if (trigger->len)
+            g_string_append(body, "// GEANY-CAPTURE-TRIGGER\n");
         g_string_append_printf(body,
-            "%s dut(%s);\ninitial begin $dumpfile(\"ports.vcd\"); $dumpvars(0,geany_port_testbench); "
-            "#%" G_GUINT64_FORMAT "; $finish; end\nendmodule\n", module, connections->str, duration);
+            "initial begin %s$dumpfile(\"ports.vcd\"); $dumpvars(0,geany_port_testbench); %s end\n"
+            "initial begin #%" G_GUINT64_FORMAT "; $finish; end\nendmodule\n", trigger->str,
+            trigger->len ? "$display(\"Waveform capture started at %0t\",$time); $fflush();" : "", duration);
         if (live->len)
         {
             /* Put the pacing checkpoint at line 3 of the private source. */
@@ -2161,6 +2238,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
     g_hash_table_unref(models);
     g_string_free(connections, TRUE);
     g_string_free(live, TRUE);
+    g_string_free(trigger, TRUE);
     g_strfreev(lines);
     return result;
 }
@@ -2180,6 +2258,8 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         "clock PORT START HIGH LOW   ·   clock-hz PORT START HZ\n"
         "pulse PORT START LENGTH 0|1   ·   value PORT WIDTH EXPR\n"
         "bus PORT WIDTH INTERVAL EXPR   ·   output PORT WIDTH\n"
+        "capture-trigger rise|fall SIGNAL   ·   capture-trigger match SIGNAL SIZED_HEX_OR_BINARY\n"
+        "button PORT [IDLE [LENGTH_NS]]   ·   switch PORT [INITIAL]\n"
         "live-interval NS   ·   live-input PORT WIDTH INITIAL   ·   monitor PORT WIDTH\n"
         "Memory presets: sram, ddr2, ddr3, ddr4, spi-nor, spi-nand, spi-eeprom, i2c-eeprom.\n"
         "Use a preset alone for standard port names, or list your ports below. '-' uses the default.\n"
@@ -2829,6 +2909,13 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
              simulation_process(execute, directory, bin, cancel, &error)))
         {
             gchar *vcd = simulation_find_vcd(directory, &error);
+            if (!vcd && run->port_harness && strstr(run->port_harness, "// GEANY-CAPTURE-TRIGGER") &&
+                g_error_matches(error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
+            {
+                g_clear_error(&error);
+                g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
+                                    "The capture trigger did not fire before the simulation ended.");
+            }
             if (vcd)
                 capture = read_capture_file(vcd, cancel, &error);
             g_free(vcd);
@@ -3167,6 +3254,8 @@ static gboolean simulation_refresh_console(gpointer data)
                              !run->pause_requested);
     if (run->live_port_send)
         gtk_widget_set_sensitive(run->live_port_send, running);
+    if (run->live_devices)
+        gtk_widget_set_sensitive(run->live_devices, running);
     if (run->live_port_samples && count > 0 && g_hash_table_size(run->live_port_samples))
     {
         GList *keys = g_list_sort(g_hash_table_get_keys(run->live_port_samples), (GCompareFunc)g_strcmp0);
@@ -3278,6 +3367,62 @@ static void simulation_uart_show(GtkButton *button, gpointer data)
     gtk_widget_show_all(window);
 }
 
+static void simulation_control_input(GtkButton *button, gpointer data)
+{
+    WaveSimulation *run = data;
+    const gchar *port = g_object_get_data(G_OBJECT(button), "geany-port");
+    gchar *directory = simulation_live_directory(run);
+    if (!directory)
+        return;
+    gchar *name = g_strdup_printf("geany-control-%s", port);
+    gchar *path = g_build_filename(directory, name, NULL);
+    gboolean toggle = GTK_IS_TOGGLE_BUTTON(button);
+    guint sequence = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(button), "geany-sequence"));
+    guint value = toggle ? (guint)gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(button)) : sequence + 1;
+    gchar *text = g_strdup_printf("%u\n", value);
+    if (g_file_set_contents(path, text, -1, NULL))
+        g_object_set_data(G_OBJECT(button), "geany-sequence", GUINT_TO_POINTER(value));
+    else
+        gtk_widget_set_tooltip_text(GTK_WIDGET(button), "Could not update the simulation input.");
+    g_free(text);
+    g_free(path);
+    g_free(name);
+    g_free(directory);
+}
+
+static void simulation_live_controls(WaveSimulation *run, GtkWidget *contents)
+{
+    const gchar *marker = "// GEANY-CONTROL ";
+    const gchar *cursor = run->port_harness;
+    while ((cursor = strstr(cursor, marker)))
+    {
+        cursor += strlen(marker);
+        const gchar *end = strchr(cursor, '\n');
+        if (!end)
+            break;
+        gchar *line = g_strndup(cursor, end - cursor);
+        gchar **parts = g_strsplit(line, " ", 3);
+        gboolean toggle = !strcmp(parts[0], "switch");
+        GtkWidget *widget = toggle ? gtk_check_button_new_with_label(parts[1]) :
+                                     gtk_button_new_with_label(parts[1]);
+        if (toggle)
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), *parts[2] == '1');
+        g_object_set_data_full(G_OBJECT(widget), "geany-port", g_strdup(parts[1]), g_free);
+        g_signal_connect(widget, toggle ? "toggled" : "clicked", G_CALLBACK(simulation_control_input), run);
+        if (!run->live_devices)
+        {
+            run->live_devices = gtk_flow_box_new();
+            gtk_flow_box_set_selection_mode(GTK_FLOW_BOX(run->live_devices), GTK_SELECTION_NONE);
+            gtk_widget_set_sensitive(run->live_devices, FALSE);
+            gtk_box_pack_start(GTK_BOX(contents), run->live_devices, FALSE, FALSE, 0);
+        }
+        gtk_container_add(GTK_CONTAINER(run->live_devices), widget);
+        g_strfreev(parts);
+        g_free(line);
+        cursor = end;
+    }
+}
+
 static void simulation_live_panel(WaveSimulation *run, GtkWidget *box)
 {
     const gchar *marker = "$fopen(\"geany-input-";
@@ -3286,6 +3431,7 @@ static void simulation_live_panel(WaveSimulation *run, GtkWidget *box)
     gtk_container_add(GTK_CONTAINER(panel), contents);
     gtk_box_pack_start(GTK_BOX(box), panel, FALSE, FALSE, 0);
     run->live_port_samples = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    simulation_live_controls(run, contents);
     GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
     run->live_port_input = gtk_combo_box_text_new();
     const gchar *cursor = run->port_harness;

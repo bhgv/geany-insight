@@ -1,16 +1,18 @@
 `timescale 1ns/1ns
 module live_devices(
-    input wire enable, rx,
+    input wire enable, rx, switch_on, push,
     input wire [7:0] external_data,
     output wire [7:0] model_result,
     output wire ready, tx,
+    output reg pushed = 0,
     output reg [3:0] addr,
     inout wire [7:0] dq,
     output reg ce_n, we_n, oe_n,
     output reg [7:0] result
 );
     reg drive;
-    assign ready = enable;
+    assign ready = enable & switch_on;
+    always @(posedge push) pushed <= 1;
     assign tx = rx;
     assign model_result = external_data;
     assign dq = drive ? 8'hA5 : 8'bz;

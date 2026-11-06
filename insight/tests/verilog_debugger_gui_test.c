@@ -235,6 +235,10 @@ static gboolean accept_ports(gpointer data)
             "duration 10000000\n"
             "live-interval 250\n"
             "live-input enable 1 0\n"
+            "switch switch_on\n"
+            "button push\n"
+            "capture-trigger fall push\n"
+            "monitor pushed 1\n"
             "monitor ready 1\n"
             "monitor result 8\n"
             "monitor model_result 8\n"
@@ -437,8 +441,11 @@ static gboolean drive_debugger(gpointer data)
         if (entry && input)
         {
             gtk_entry_set_text(GTK_ENTRY(input), "1");
-            if (click(simulation, "Apply Input"))
+            GtkWidget *toggle = find_control(simulation, "switch_on");
+            if (GTK_IS_TOGGLE_BUTTON(toggle) && gtk_widget_is_sensitive(toggle) &&
+                click(simulation, "Apply Input") && click(simulation, "push"))
             {
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle), TRUE);
                 gtk_entry_set_text(GTK_ENTRY(entry), "OK");
                 g_signal_emit_by_name(entry, "activate");
                 phase = CHECK_LIVE_DEVICES;
@@ -451,10 +458,11 @@ static gboolean drive_debugger(gpointer data)
         GtkWidget *readings = find_control(simulation, "insight-live-port-readings");
         const gchar *values = readings ? gtk_label_get_text(GTK_LABEL(readings)) : "";
         if (uart && console_contains(uart, "OK") &&
+            console_contains(simulation, "Waveform capture started at") && strstr(values, "pushed = 1") &&
             strstr(values, "ready = 1") && strstr(values, "result = 10100101 (165)") &&
             strstr(values, "model_result = 00111001 (57)"))
         {
-            g_print("Verilog GTK: live input, monitors, SRAM, external model and UART passed.\n");
+            g_print("Verilog GTK: live inputs, capture trigger, monitors, SRAM, external model and UART passed.\n");
             passed = TRUE;
             gtk_widget_destroy(simulation);
             gtk_main_quit();
