@@ -1,8 +1,8 @@
 `timescale 1ns/1ns
 module live_devices(
     input wire enable, rx, switch_on, push,
-    input wire [7:0] external_data,
-    output wire [7:0] model_result,
+    input wire [7:0] external_data, level,
+    output wire [7:0] model_result, level_out,
     output wire ready, tx,
     output reg pushed = 0,
     output reg [3:0] addr,
@@ -15,6 +15,7 @@ module live_devices(
     always @(posedge push) pushed <= 1;
     assign tx = rx;
     assign model_result = external_data;
+    assign level_out = level;
     assign dq = drive ? 8'hA5 : 8'bz;
     initial begin
         result = 0;

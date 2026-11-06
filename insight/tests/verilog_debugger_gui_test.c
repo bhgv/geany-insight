@@ -239,8 +239,10 @@ static gboolean accept_ports(gpointer data)
             "button push\n"
             "capture-trigger fall push\n"
             "monitor pushed 1\n"
-            "monitor ready 1\n"
-            "monitor result 8\n"
+            "led ready\n"
+            "display result\n"
+            "slider level\n"
+            "display level_out 8 dec\n"
             "monitor model_result 8\n"
             "model ext external_memory \"external memory.sv\"\n"
             "model-param ext DATA \"8'h3c\"\n"
@@ -442,10 +444,13 @@ static gboolean drive_debugger(gpointer data)
         {
             gtk_entry_set_text(GTK_ENTRY(input), "1");
             GtkWidget *toggle = find_control(simulation, "switch_on");
-            if (GTK_IS_TOGGLE_BUTTON(toggle) && gtk_widget_is_sensitive(toggle) &&
+            GtkWidget *slider = find_control(simulation, "insight-slider-level");
+            if (GTK_IS_RANGE(slider) && gtk_widget_is_sensitive(slider) &&
+                GTK_IS_TOGGLE_BUTTON(toggle) && gtk_widget_is_sensitive(toggle) &&
                 click(simulation, "Apply Input") && click(simulation, "push"))
             {
                 gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle), TRUE);
+                gtk_range_set_value(GTK_RANGE(slider), 173);
                 gtk_entry_set_text(GTK_ENTRY(entry), "OK");
                 g_signal_emit_by_name(entry, "activate");
                 phase = CHECK_LIVE_DEVICES;
@@ -457,7 +462,13 @@ static gboolean drive_debugger(gpointer data)
         GtkWidget *uart = find_window("UART Console");
         GtkWidget *readings = find_control(simulation, "insight-live-port-readings");
         const gchar *values = readings ? gtk_label_get_text(GTK_LABEL(readings)) : "";
-        if (uart && console_contains(uart, "OK") &&
+        GtkWidget *lamp = find_control(simulation, "insight-indicator-ready");
+        GtkWidget *hex = find_control(simulation, "insight-indicator-result");
+        GtkWidget *decimal = find_control(simulation, "insight-indicator-level_out");
+        if (GTK_IS_LABEL(lamp) && g_str_has_suffix(gtk_label_get_text(GTK_LABEL(lamp)), "ON") &&
+            GTK_IS_LABEL(hex) && !strcmp(gtk_label_get_text(GTK_LABEL(hex)), "0xA5") &&
+            GTK_IS_LABEL(decimal) && !strcmp(gtk_label_get_text(GTK_LABEL(decimal)), "173") &&
+            uart && console_contains(uart, "OK") &&
             console_contains(simulation, "Waveform capture started at") && strstr(values, "pushed = 1") &&
             strstr(values, "ready = 1") && strstr(values, "result = 10100101 (165)") &&
             strstr(values, "model_result = 00111001 (57)"))

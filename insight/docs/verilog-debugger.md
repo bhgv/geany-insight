@@ -81,6 +81,30 @@ Use one bit for edge triggers. The console reports when capture begins.
 If the simulation ends first, the debugger reports that the trigger
 did not fire.
 
+## Live indicators and slider
+
+Add these rules in **Port Signals** to connect controls and displays in
+**Live Port I/O**. Each name is a port of the design.
+
+```text
+slider gain
+led ready
+led busy_n 0
+display status
+display count 32 dec
+```
+
+- `slider PORT [WIDTH [INITIAL]]` drives an unsigned input. It defaults
+  to 8 bits and zero. Widths from 1 to 16 bits are supported.
+- `led PORT [ACTIVE]` shows a single output as ON or OFF. It defaults
+  to active-high. Use 0 for active-low. X and Z have separate readings.
+- `display PORT [WIDTH [hex|dec|bin]]` shows an unsigned output from
+  1 to 64 bits. It defaults to 8-bit hexadecimal. If a value contains
+  X or Z, the display shows the original bits.
+
+The instruments update at the configured `live-interval`. A slider
+change takes effect on the next input sample.
+
 ## Output instruments
 
 Open **Signal Instruments…** in the VCD viewer, including from

@@ -1455,7 +1455,7 @@ typedef struct {
     GHashTable *port_images;
     GtkWidget *live_devices;
     GtkWidget *live_port_input, *live_port_value, *live_port_send, *live_port_display;
-    GHashTable *live_port_samples;
+    GHashTable *live_port_samples, *live_indicators;
     GtkWidget *uart_window, *uart_view, *uart_entry;
     GString *uart_log;
     guint uart_send_sequence;
@@ -1513,6 +1513,7 @@ static void simulation_free(gpointer data)
     g_clear_pointer(&run->port_model_sources, g_ptr_array_unref);
     g_clear_pointer(&run->port_images, g_hash_table_unref);
     g_clear_pointer(&run->live_port_samples, g_hash_table_unref);
+    g_clear_pointer(&run->live_indicators, g_hash_table_unref);
     if (run->uart_log)
         g_string_free(run->uart_log, TRUE);
     g_free(run->observer_file);
@@ -2041,6 +2042,46 @@ static gboolean simulation_port_control(gchar **args, gint count, GString *body,
     return TRUE;
 }
 
+static gboolean simulation_port_slider(gchar **args, gint count, GString *body,
+                                        GString *connections, GHashTable *ports, GString *live)
+{
+    guint64 width = 8, initial = 0;
+    if (count < 2 || count > 4 || g_hash_table_size(ports) >= 128 ||
+        !simulation_port_name(args[1]) || g_hash_table_contains(ports, args[1]) ||
+        (count >= 3 && !g_ascii_string_to_unsigned(args[2], 10, 1, 16, &width, NULL)))
+        return FALSE;
+    guint64 maximum = (1u << width) - 1;
+    if (count == 4 && !g_ascii_string_to_unsigned(args[3], 10, 0, maximum, &initial, NULL))
+        return FALSE;
+    guint pin = simulation_port_connect(body, connections, ports, args[1], width, FALSE);
+    g_string_append_printf(body,
+        "// GEANY-SLIDER %s %" G_GUINT64_FORMAT " %" G_GUINT64_FORMAT "\n"
+        "initial pin%u=%" G_GUINT64_FORMAT ";\n", args[1], maximum, initial, pin, initial);
+    g_string_append_printf(live,
+        "fd=$fopen(\"geany-control-%s\",\"r\"); "
+        "if(fd) begin if($fscanf(fd,\"%%d\",bits)==1) pin%u=bits; $fclose(fd); end\n", args[1], pin);
+    return TRUE;
+}
+
+static gboolean simulation_port_indicator(gchar **args, gint count, GString *body,
+                                           GString *connections, GHashTable *ports, GString *live)
+{
+    gboolean lamp = !strcmp(args[0], "led");
+    guint64 width = lamp ? 1 : 8;
+    if (count < 2 || count > (lamp ? 3 : 4) || g_hash_table_size(ports) >= 128 ||
+        !simulation_port_name(args[1]) || g_hash_table_contains(ports, args[1]))
+        return FALSE;
+    const gchar *format = lamp ? (count == 3 ? args[2] : "1") : (count == 4 ? args[3] : "hex");
+    if (lamp ? (strcmp(format, "0") && strcmp(format, "1")) :
+        ((count >= 3 && !g_ascii_string_to_unsigned(args[2], 10, 1, 64, &width, NULL)) ||
+         (strcmp(format, "hex") && strcmp(format, "dec") && strcmp(format, "bin"))))
+        return FALSE;
+    guint pin = simulation_port_connect(body, connections, ports, args[1], width, TRUE);
+    g_string_append_printf(body, "// GEANY-INDICATOR %s %s\n", args[1], format);
+    g_string_append_printf(live, "$display(\"GEANY-PORT%%c%s%%c%%b\",9,9,pin%u);\n", args[1], pin);
+    return TRUE;
+}
+
 static gchar *simulation_port_harness(const gchar *recipe, const gchar *directory,
                                       GPtrArray *sources, GHashTable *images, GError **error)
 {
@@ -2074,6 +2115,10 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &duration, NULL);
         else if (valid && count == 2 && !strcmp(args[0], "live-interval"))
             valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &live_interval, NULL);
+        else if (valid && !strcmp(args[0], "slider"))
+            valid = simulation_port_slider(args, count, body, connections, ports, live);
+        else if (valid && (!strcmp(args[0], "led") || !strcmp(args[0], "display")))
+            valid = simulation_port_indicator(args, count, body, connections, ports, live);
         else if (valid && !strcmp(args[0], "capture-trigger"))
             valid = simulation_capture_trigger(args, count, trigger);
         else if (valid && (!strcmp(args[0], "button") || !strcmp(args[0], "switch")))
@@ -2260,6 +2305,8 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         "bus PORT WIDTH INTERVAL EXPR   ·   output PORT WIDTH\n"
         "capture-trigger rise|fall SIGNAL   ·   capture-trigger match SIGNAL SIZED_HEX_OR_BINARY\n"
         "button PORT [IDLE [LENGTH_NS]]   ·   switch PORT [INITIAL]\n"
+        "slider PORT [WIDTH=8 [INITIAL=0]]\n"
+        "led PORT [ACTIVE=1]   ·   display PORT [WIDTH=8 [hex|dec|bin]]\n"
         "live-interval NS   ·   live-input PORT WIDTH INITIAL   ·   monitor PORT WIDTH\n"
         "Memory presets: sram, ddr2, ddr3, ddr4, spi-nor, spi-nand, spi-eeprom, i2c-eeprom.\n"
         "Use a preset alone for standard port names, or list your ports below. '-' uses the default.\n"
@@ -2995,6 +3042,32 @@ static gboolean simulation_trace_location(const gchar *text, gchar **filename, g
     return FALSE;
 }
 
+static void simulation_update_indicator(WaveSimulation *run, const gchar *port, const gchar *bits)
+{
+    GtkLabel *label = run->live_indicators ? g_hash_table_lookup(run->live_indicators, port) : NULL;
+    if (!label)
+        return;
+    const gchar *format = g_object_get_data(G_OBJECT(label), "geany-format");
+    if (*format == '0' || *format == '1')
+    {
+        const gchar *state = *bits == *format ? "●  ON" :
+                             *bits == '0' || *bits == '1' ? "○  OFF" :
+                             *bits == 'z' ? "◉  Z" : "◉  X";
+        gtk_label_set_text(label, state);
+        return;
+    }
+    guint64 value;
+    gchar *reading;
+    if (!strcmp(format, "bin") || !instrument_number(bits, &value))
+        reading = g_strdup_printf("0b%s", bits);
+    else if (!strcmp(format, "hex"))
+        reading = g_strdup_printf("0x%0*" G_GINT64_MODIFIER "X", (gint)((strlen(bits) + 3) / 4), value);
+    else
+        reading = g_strdup_printf("%" G_GUINT64_FORMAT, value);
+    gtk_label_set_text(label, reading);
+    g_free(reading);
+}
+
 /* Collect complete control records even when the log is read in chunks. */
 /* Собирает целые управляющие записи при чтении журнала частями. */
 static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsize length)
@@ -3026,7 +3099,14 @@ static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsi
                 *fields[1] && strlen(fields[1]) <= 64 && strspn(fields[1], "01xz") == strlen(fields[1]) &&
                 (g_hash_table_size(run->live_port_samples) < 128 ||
                  g_hash_table_contains(run->live_port_samples, fields[0])))
-                g_hash_table_replace(run->live_port_samples, g_strdup(fields[0]), g_strdup(fields[1]));
+            {
+                const gchar *previous = g_hash_table_lookup(run->live_port_samples, fields[0]);
+                if (g_strcmp0(previous, fields[1]))
+                {
+                    g_hash_table_replace(run->live_port_samples, g_strdup(fields[0]), g_strdup(fields[1]));
+                    simulation_update_indicator(run, fields[0], fields[1]);
+                }
+            }
             g_strfreev(fields);
         }
         const gchar *uart = strstr(text, "GEANY-UART\t");
@@ -3367,27 +3447,49 @@ static void simulation_uart_show(GtkButton *button, gpointer data)
     gtk_widget_show_all(window);
 }
 
-static void simulation_control_input(GtkButton *button, gpointer data)
+static gboolean simulation_control_write(WaveSimulation *run, GtkWidget *widget, guint value)
 {
-    WaveSimulation *run = data;
-    const gchar *port = g_object_get_data(G_OBJECT(button), "geany-port");
+    const gchar *port = g_object_get_data(G_OBJECT(widget), "geany-port");
     gchar *directory = simulation_live_directory(run);
     if (!directory)
-        return;
+        return FALSE;
     gchar *name = g_strdup_printf("geany-control-%s", port);
     gchar *path = g_build_filename(directory, name, NULL);
-    gboolean toggle = GTK_IS_TOGGLE_BUTTON(button);
-    guint sequence = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(button), "geany-sequence"));
-    guint value = toggle ? (guint)gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(button)) : sequence + 1;
     gchar *text = g_strdup_printf("%u\n", value);
-    if (g_file_set_contents(path, text, -1, NULL))
-        g_object_set_data(G_OBJECT(button), "geany-sequence", GUINT_TO_POINTER(value));
-    else
-        gtk_widget_set_tooltip_text(GTK_WIDGET(button), "Could not update the simulation input.");
+    gboolean written = g_file_set_contents(path, text, -1, NULL);
+    if (!written)
+        gtk_widget_set_tooltip_text(widget, "Could not update the simulation input.");
     g_free(text);
     g_free(path);
     g_free(name);
     g_free(directory);
+    return written;
+}
+
+static void simulation_control_input(GtkButton *button, gpointer data)
+{
+    gboolean toggle = GTK_IS_TOGGLE_BUTTON(button);
+    guint sequence = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(button), "geany-sequence"));
+    guint value = toggle ? (guint)gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(button)) : sequence + 1;
+    if (simulation_control_write(data, GTK_WIDGET(button), value) && !toggle)
+        g_object_set_data(G_OBJECT(button), "geany-sequence", GUINT_TO_POINTER(value));
+}
+
+static void simulation_slider_input(GtkRange *slider, gpointer data)
+{
+    simulation_control_write(data, GTK_WIDGET(slider), (guint)gtk_range_get_value(slider));
+}
+
+static GtkWidget *simulation_live_device_box(WaveSimulation *run, GtkWidget *contents)
+{
+    if (!run->live_devices)
+    {
+        run->live_devices = gtk_flow_box_new();
+        gtk_flow_box_set_selection_mode(GTK_FLOW_BOX(run->live_devices), GTK_SELECTION_NONE);
+        gtk_widget_set_sensitive(run->live_devices, FALSE);
+        gtk_box_pack_start(GTK_BOX(contents), run->live_devices, FALSE, FALSE, 0);
+    }
+    return run->live_devices;
 }
 
 static void simulation_live_controls(WaveSimulation *run, GtkWidget *contents)
@@ -3409,14 +3511,79 @@ static void simulation_live_controls(WaveSimulation *run, GtkWidget *contents)
             gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), *parts[2] == '1');
         g_object_set_data_full(G_OBJECT(widget), "geany-port", g_strdup(parts[1]), g_free);
         g_signal_connect(widget, toggle ? "toggled" : "clicked", G_CALLBACK(simulation_control_input), run);
-        if (!run->live_devices)
+        gtk_container_add(GTK_CONTAINER(simulation_live_device_box(run, contents)), widget);
+        g_strfreev(parts);
+        g_free(line);
+        cursor = end;
+    }
+}
+
+static void simulation_live_sliders(WaveSimulation *run, GtkWidget *contents)
+{
+    const gchar *marker = "// GEANY-SLIDER ";
+    const gchar *cursor = run->port_harness;
+    while ((cursor = strstr(cursor, marker)))
+    {
+        cursor += strlen(marker);
+        const gchar *end = strchr(cursor, '\n');
+        if (!end)
+            break;
+        gchar *line = g_strndup(cursor, end - cursor);
+        gchar **parts = g_strsplit(line, " ", 3);
+        gdouble maximum = g_ascii_strtod(parts[1], NULL);
+        GtkWidget *frame = gtk_frame_new(parts[0]);
+        GtkWidget *scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 0, maximum, 1);
+        gchar *name = g_strconcat("insight-slider-", parts[0], NULL);
+        gtk_widget_set_name(scale, name);
+        g_free(name);
+        gtk_widget_set_size_request(scale, 160, -1);
+        gtk_scale_set_digits(GTK_SCALE(scale), 0);
+        gtk_range_set_round_digits(GTK_RANGE(scale), 0);
+        gtk_range_set_value(GTK_RANGE(scale), g_ascii_strtod(parts[2], NULL));
+        g_object_set_data_full(G_OBJECT(scale), "geany-port", g_strdup(parts[0]), g_free);
+        g_signal_connect(scale, "value-changed", G_CALLBACK(simulation_slider_input), run);
+        gtk_container_add(GTK_CONTAINER(frame), scale);
+        gtk_container_add(GTK_CONTAINER(simulation_live_device_box(run, contents)), frame);
+        g_strfreev(parts);
+        g_free(line);
+        cursor = end;
+    }
+}
+
+static void simulation_live_indicators(WaveSimulation *run, GtkWidget *contents)
+{
+    const gchar *marker = "// GEANY-INDICATOR ";
+    const gchar *cursor = run->port_harness;
+    GtkWidget *flow = NULL;
+    while ((cursor = strstr(cursor, marker)))
+    {
+        cursor += strlen(marker);
+        const gchar *end = strchr(cursor, '\n');
+        if (!end)
+            break;
+        gchar *line = g_strndup(cursor, end - cursor);
+        gchar **parts = g_strsplit(line, " ", 2);
+        if (!flow)
         {
-            run->live_devices = gtk_flow_box_new();
-            gtk_flow_box_set_selection_mode(GTK_FLOW_BOX(run->live_devices), GTK_SELECTION_NONE);
-            gtk_widget_set_sensitive(run->live_devices, FALSE);
-            gtk_box_pack_start(GTK_BOX(contents), run->live_devices, FALSE, FALSE, 0);
+            flow = gtk_flow_box_new();
+            gtk_flow_box_set_selection_mode(GTK_FLOW_BOX(flow), GTK_SELECTION_NONE);
+            gtk_box_pack_start(GTK_BOX(contents), flow, FALSE, FALSE, 0);
+            run->live_indicators = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
         }
-        gtk_container_add(GTK_CONTAINER(run->live_devices), widget);
+        GtkWidget *frame = gtk_frame_new(parts[0]);
+        GtkWidget *value = gtk_label_new("—");
+        gchar *name = g_strconcat("insight-indicator-", parts[0], NULL);
+        gtk_widget_set_name(value, name);
+        g_free(name);
+        gtk_label_set_selectable(GTK_LABEL(value), TRUE);
+        gtk_label_set_line_wrap(GTK_LABEL(value), TRUE);
+        gtk_label_set_line_wrap_mode(GTK_LABEL(value), PANGO_WRAP_CHAR);
+        gtk_label_set_max_width_chars(GTK_LABEL(value), 32);
+        gtk_container_set_border_width(GTK_CONTAINER(frame), 4);
+        g_object_set_data_full(G_OBJECT(value), "geany-format", g_strdup(parts[1]), g_free);
+        g_hash_table_insert(run->live_indicators, g_strdup(parts[0]), value);
+        gtk_container_add(GTK_CONTAINER(frame), value);
+        gtk_container_add(GTK_CONTAINER(flow), frame);
         g_strfreev(parts);
         g_free(line);
         cursor = end;
@@ -3432,6 +3599,8 @@ static void simulation_live_panel(WaveSimulation *run, GtkWidget *box)
     gtk_box_pack_start(GTK_BOX(box), panel, FALSE, FALSE, 0);
     run->live_port_samples = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     simulation_live_controls(run, contents);
+    simulation_live_sliders(run, contents);
+    simulation_live_indicators(run, contents);
     GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
     run->live_port_input = gtk_combo_box_text_new();
     const gchar *cursor = run->port_harness;
