@@ -1273,6 +1273,6 @@ install_data('insight/docs/media/windows-build.svg', install_dir: cdata.get('GEA
 install_data('insight/docs/slang.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 
 install_data('insight/docs/media/slang-compat.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
-install_data('insight/docs/media/hdl-synchronous-stop.svg', 'insight/docs/media/hdl-interface-flow.svg', 'insight/docs/media/hdl-bit-mapping.svg', 'insight/docs/media/native-debugger.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
+install_data('insight/docs/media/hdl-synchronous-stop.svg', 'insight/docs/media/hdl-interface-flow.svg', 'insight/docs/media/hdl-bit-mapping.svg', 'insight/docs/media/native-debugger.svg', 'insight/docs/media/hdl-instruments.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
 
 install_data('insight/docs/media/windows-build-locations.jpg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')

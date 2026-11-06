@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 540 220" role="img" aria-labelledby="title">
+  <title id="title">Signal instruments with cursor values and an XY trace</title>
+  <rect width="540" height="220" rx="14" fill="#edf4fa"/>
+  <rect x="20" y="24" width="202" height="170" rx="8" fill="#fff" stroke="#8199b2"/>
+  <rect x="242" y="24" width="278" height="170" rx="8" fill="#fff" stroke="#8199b2"/>
+  <g fill="#173452" font-family="sans-serif" font-size="16">
+    <text x="36" y="52">Values at the cursor</text>
+    <text x="36" y="94">X · count</text>
+    <text x="120" y="94">3 (0x3)</text>
+    <text x="36" y="130">Y · ready</text>
+    <text x="120" y="130">1 (0x1)</text>
+    <text x="260" y="52">XY trace in the visible interval</text>
+  </g>
+  <circle cx="197" cy="124" r="6" fill="#228447"/>
+  <path d="M272 70v100h219M281 159h58v-68h63v66h59v-66" fill="none" stroke="#3576ad" stroke-width="2"/>
+  <circle cx="461" cy="91" r="5" fill="#d47926"/>
+</svg>

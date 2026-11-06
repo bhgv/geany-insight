@@ -10,7 +10,7 @@
 
 typedef enum {
     OPEN_DEBUGGER, LOAD_OBSERVER, SET_POINT, RUN_TO_POINT,
-    INSPECT_STOP, INSPECT_PREVIEW, WAIT_FOR_CAPTURE, INSPECT_CONNECTIONS
+    INSPECT_STOP, INSPECT_PREVIEW, WAIT_FOR_CAPTURE, INSPECT_CONNECTIONS, INSPECT_INSTRUMENTS
 } TestPhase;
 
 static TestPhase phase;
@@ -40,6 +40,8 @@ static GtkWidget *find_window(const gchar *title)
 /* Ищет элемент по подписи или по его однозначной роли в диалоге. */
 static GtkWidget *find_control(GtkWidget *widget, const gchar *key)
 {
+    if (!g_strcmp0(gtk_widget_get_name(widget), key))
+        return widget;
     if (GTK_IS_BUTTON(widget) && !g_strcmp0(gtk_button_get_label(GTK_BUTTON(widget)), key))
         return widget;
     if (GTK_IS_LABEL(widget) && !g_strcmp0(gtk_label_get_text(GTK_LABEL(widget)), key))
@@ -362,7 +364,35 @@ static gboolean drive_debugger(gpointer data)
             return fail_timeout(NULL);
         }
         gtk_dialog_response(GTK_DIALOG(uses), GTK_RESPONSE_CLOSE);
-        g_print("Verilog GTK: Lua stop, source navigation, VCD and HDL Connections passed.\n");
+        GtkWidget *capture = find_window("VCD Waveforms");
+        if (!capture || !click(capture, "Signal Instruments…"))
+            return fail_timeout(NULL);
+        phase = INSPECT_INSTRUMENTS;
+        return G_SOURCE_CONTINUE;
+    }
+    if (phase == INSPECT_INSTRUMENTS)
+    {
+        GtkWidget *window = find_window("Signal Instruments");
+        if (!window)
+            return G_SOURCE_CONTINUE;
+        GtkWidget *y = find_control(window, "insight-instrument-Y");
+        GtkWidget *z = find_control(window, "insight-instrument-Z");
+        GtkWidget *range = find_control(window, "insight-instrument-range");
+        if (!y || !z || !range)
+            return fail_timeout(NULL);
+        if (gtk_combo_box_get_active(GTK_COMBO_BOX(y)) == 0)
+        {
+            gtk_combo_box_set_active(GTK_COMBO_BOX(y), 1);
+            return G_SOURCE_CONTINUE;
+        }
+        if (g_str_has_prefix(gtk_label_get_text(GTK_LABEL(range)), "XY plot"))
+        {
+            gtk_combo_box_set_active(GTK_COMBO_BOX(z), 2);
+            return G_SOURCE_CONTINUE;
+        }
+        if (!g_str_has_prefix(gtk_label_get_text(GTK_LABEL(range)), "XYZ projection"))
+            return G_SOURCE_CONTINUE;
+        g_print("Verilog GTK: Lua stop, source navigation, VCD, HDL Connections and instruments passed.\n");
         passed = TRUE;
         gtk_main_quit();
         return G_SOURCE_REMOVE;

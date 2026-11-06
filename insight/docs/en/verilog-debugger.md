@@ -45,3 +45,19 @@ literals containing an apostrophe. `output` records a port in the VCD.
 Port recipes are saved by project and source file. **Port Signals…**
 on the debugger panel reopens the recipe. Edits made during a run apply
 the next time debugging starts.
+
+## Output instruments
+
+Open **Signal Instruments…** in the VCD viewer, including from
+**Preview Waveform**. Choose up to three recorded signals. One-bit
+signals have a lamp. Known values up to 64 bits appear as unsigned
+decimal and hexadecimal. Unknown states remain visible as recorded.
+
+![Cursor readings and the XY trace](../media/hdl-instruments.svg)
+
+Use the waveform tracks for plots against time. Choose X and Y for an
+XY trace and add Z for a fixed XYZ projection. The plot follows the
+visible time interval and uses transitions in those signals. Unknown
+samples interrupt the trace. The first 2048 samples are shown when
+the interval is dense. Zoom in to inspect more detail. The readings
+follow the VCD cursor, and named VCD sessions save the axis selections.

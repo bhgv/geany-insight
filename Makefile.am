@@ -789,7 +789,7 @@ EXTRA_DIST += insight/tools/build_external_slang.py external/slang-compat/CMakeL
 
 EXTRA_DIST += external/slang-compat/CompatCharconv.h external/slang-compat/charconv-test.cpp
 
-dist_insightdocmedia_DATA += insight/docs/media/slang-compat.svg insight/docs/media/hdl-synchronous-stop.svg insight/docs/media/hdl-interface-flow.svg insight/docs/media/hdl-bit-mapping.svg insight/docs/media/native-debugger.svg
+dist_insightdocmedia_DATA += insight/docs/media/slang-compat.svg insight/docs/media/hdl-synchronous-stop.svg insight/docs/media/hdl-interface-flow.svg insight/docs/media/hdl-bit-mapping.svg insight/docs/media/native-debugger.svg insight/docs/media/hdl-instruments.svg
 
 EXTRA_DIST += insight/tools/install_slang.py insight/tools/select-windows-folders.ps1
 
