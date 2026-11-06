@@ -243,6 +243,9 @@ static gboolean accept_ports(gpointer data)
             "display result\n"
             "slider level\n"
             "display level_out 8 dec\n"
+            "scope level_out\n"
+            "scope-xy level_out result\n"
+            "scope-xyz level_out result ready\n"
             "monitor model_result 8\n"
             "model ext external_memory \"external memory.sv\"\n"
             "model-param ext DATA \"8'h3c\"\n"
@@ -465,7 +468,14 @@ static gboolean drive_debugger(gpointer data)
         GtkWidget *lamp = find_control(simulation, "insight-indicator-ready");
         GtkWidget *hex = find_control(simulation, "insight-indicator-result");
         GtkWidget *decimal = find_control(simulation, "insight-indicator-level_out");
-        if (GTK_IS_LABEL(lamp) && g_str_has_suffix(gtk_label_get_text(GTK_LABEL(lamp)), "ON") &&
+        GtkWidget *time_plot = find_control(simulation, "insight-live-scope-1");
+        GtkWidget *xy_plot = find_control(simulation, "insight-live-scope-2");
+        GtkWidget *xyz_plot = find_control(simulation, "insight-live-scope-3");
+        if (GTK_IS_LABEL(time_plot) && strstr(gtk_label_get_text(GTK_LABEL(time_plot)), " · Y ") &&
+            GTK_IS_LABEL(xy_plot) && strstr(gtk_label_get_text(GTK_LABEL(xy_plot)), " · X ") &&
+            GTK_IS_LABEL(xyz_plot) && strstr(gtk_label_get_text(GTK_LABEL(xyz_plot)), " · Z ") &&
+            !console_contains(simulation, "GEANY-SCOPE") &&
+            GTK_IS_LABEL(lamp) && g_str_has_suffix(gtk_label_get_text(GTK_LABEL(lamp)), "ON") &&
             GTK_IS_LABEL(hex) && !strcmp(gtk_label_get_text(GTK_LABEL(hex)), "0xA5") &&
             GTK_IS_LABEL(decimal) && !strcmp(gtk_label_get_text(GTK_LABEL(decimal)), "173") &&
             uart && console_contains(uart, "OK") &&

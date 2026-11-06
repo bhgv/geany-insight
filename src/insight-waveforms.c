@@ -385,6 +385,20 @@ typedef struct {
     gboolean valid;
 } InstrumentPoint;
 
+#define LIVE_SCOPE_POINTS 512u
+
+typedef struct {
+    guint64 time;
+    InstrumentPoint point;
+} LiveScopeSample;
+
+typedef struct {
+    GtkWidget *drawing, *status;
+    guint axes, count, next;
+    gboolean dirty;
+    LiveScopeSample samples[LIVE_SCOPE_POINTS];
+} LiveScope;
+
 static InstrumentPoint instrument_point(Trace *const *traces, guint axes, guint64 tick)
 {
     InstrumentPoint point = {{0}, TRUE};
@@ -1456,6 +1470,8 @@ typedef struct {
     GtkWidget *live_devices;
     GtkWidget *live_port_input, *live_port_value, *live_port_send, *live_port_display;
     GHashTable *live_port_samples, *live_indicators;
+    GPtrArray *live_scopes;
+    gint scope_console_prefix;
     GtkWidget *uart_window, *uart_view, *uart_entry;
     GString *uart_log;
     guint uart_send_sequence;
@@ -1514,6 +1530,7 @@ static void simulation_free(gpointer data)
     g_clear_pointer(&run->port_images, g_hash_table_unref);
     g_clear_pointer(&run->live_port_samples, g_hash_table_unref);
     g_clear_pointer(&run->live_indicators, g_hash_table_unref);
+    g_clear_pointer(&run->live_scopes, g_ptr_array_unref);
     if (run->uart_log)
         g_string_free(run->uart_log, TRUE);
     g_free(run->observer_file);
@@ -1975,11 +1992,41 @@ static void simulation_memory_defaults(gchar ***arguments, gint *count)
     }
 }
 
+static gboolean simulation_capture_signal(const gchar *name)
+{
+    return g_regex_match_simple("^[A-Za-z_][A-Za-z0-9_$]*(\\.[A-Za-z_][A-Za-z0-9_$]*)*"
+                                "(\\[[0-9]+(:[0-9]+)?\\])?$", name, 0, 0);
+}
+
+static gboolean simulation_port_scope(gchar **args, gint count, guint id, GString *body, GString *live)
+{
+    guint axes = !strcmp(args[0], "scope") ? 1 : !strcmp(args[0], "scope-xy") ? 2 : 3;
+    if (count != (gint)axes + 1 || id >= 8)
+        return 0;
+    for (guint i = 1; i <= axes; i++)
+        if (!simulation_capture_signal(args[i]) || strlen(args[i]) > 256)
+            return 0;
+    g_string_append_printf(body, "// GEANY-SCOPE %u", axes);
+    for (guint i = 1; i <= axes; i++)
+        g_string_append_printf(body, " %s", args[i]);
+    g_string_append_c(body, '\n');
+    for (guint i = 1; i <= axes; i++)
+        g_string_append_printf(body, "initial if ($bits(dut.%s) > 64) "
+                               "$fatal(1, \"Scope signal %s exceeds 64 bits. Select a slice.\");\n",
+                               args[i], args[i]);
+    g_string_append_printf(live, "$display(\"GEANY-SCOPE%%c%u%%c%%0d", id);
+    for (guint i = 0; i < axes; i++)
+        g_string_append(live, "%c%b");
+    g_string_append(live, "\",9,9,$time");
+    for (guint i = 1; i <= axes; i++)
+        g_string_append_printf(live, ",9,dut.%s", args[i]);
+    g_string_append(live, ");\n");
+    return 1;
+}
+
 static gboolean simulation_capture_trigger(gchar **args, gint count, GString *trigger)
 {
-    if (trigger->len || (count != 3 && count != 4) ||
-        !g_regex_match_simple("^[A-Za-z_][A-Za-z0-9_$]*(\\.[A-Za-z_][A-Za-z0-9_$]*)*"
-                              "(\\[[0-9]+(:[0-9]+)?\\])?$", args[2], 0, 0))
+    if (trigger->len || (count != 3 && count != 4) || !simulation_capture_signal(args[2]))
         return FALSE;
     if (count == 3 && (!strcmp(args[1], "rise") || !strcmp(args[1], "fall")))
     {
@@ -2096,7 +2143,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
     GHashTable *models = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, simulation_model_free);
     gchar *module = NULL;
     guint64 duration = 1000;
-    guint attached_images = 0;
+    guint attached_images = 0, scopes = 0;
     gboolean valid = TRUE;
     for (guint i = 0; lines[i] && valid; i++)
     {
@@ -2115,6 +2162,12 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &duration, NULL);
         else if (valid && count == 2 && !strcmp(args[0], "live-interval"))
             valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &live_interval, NULL);
+        else if (valid && (!strcmp(args[0], "scope") || !strcmp(args[0], "scope-xy") ||
+                           !strcmp(args[0], "scope-xyz")))
+        {
+            valid = simulation_port_scope(args, count, scopes, body, live);
+            scopes += valid;
+        }
         else if (valid && !strcmp(args[0], "slider"))
             valid = simulation_port_slider(args, count, body, connections, ports, live);
         else if (valid && (!strcmp(args[0], "led") || !strcmp(args[0], "display")))
@@ -2232,7 +2285,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
                             "Place memory-image before the memory rule and use its address port, SPI chip-select port or I2C SDA.");
     }
-    if (valid && !module && (trigger->len || connections->len || sources->len || g_hash_table_size(models)))
+    if (valid && !module && (trigger->len || scopes || connections->len || sources->len || g_hash_table_size(models)))
     {
         valid = FALSE;
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Add a module line for the configured ports.");
@@ -2306,6 +2359,7 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         "capture-trigger rise|fall SIGNAL   ·   capture-trigger match SIGNAL SIZED_HEX_OR_BINARY\n"
         "button PORT [IDLE [LENGTH_NS]]   ·   switch PORT [INITIAL]\n"
         "slider PORT [WIDTH=8 [INITIAL=0]]\n"
+        "scope SIGNAL   ·   scope-xy X Y   ·   scope-xyz X Y Z\n"
         "led PORT [ACTIVE=1]   ·   display PORT [WIDTH=8 [hex|dec|bin]]\n"
         "live-interval NS   ·   live-input PORT WIDTH INITIAL   ·   monitor PORT WIDTH\n"
         "Memory presets: sram, ddr2, ddr3, ddr4, spi-nor, spi-nand, spi-eeprom, i2c-eeprom.\n"
@@ -3068,6 +3122,37 @@ static void simulation_update_indicator(WaveSimulation *run, const gchar *port, 
     g_free(reading);
 }
 
+static void simulation_scope_record(WaveSimulation *run, const gchar *record)
+{
+    gchar **fields = g_strsplit(record, "\t", 6);
+    guint length = g_strv_length(fields);
+    guint64 id, tick;
+    if (length >= 3 &&
+        g_ascii_string_to_unsigned(fields[0], 10, 0, run->live_scopes->len - 1, &id, NULL) &&
+        g_ascii_string_to_unsigned(fields[1], 10, 0, G_MAXUINT64, &tick, NULL))
+    {
+        LiveScope *scope = run->live_scopes->pdata[id];
+        if (length == scope->axes + 2)
+        {
+            guint previous = (scope->next + LIVE_SCOPE_POINTS - 1) % LIVE_SCOPE_POINTS;
+            if (scope->count && tick < scope->samples[previous].time)
+            {
+                g_strfreev(fields);
+                return;
+            }
+            LiveScopeSample sample = {.time = tick, .point.valid = TRUE};
+            for (guint i = 0; i < scope->axes; i++)
+                if (!instrument_number(fields[i + 2], &sample.point.values[i]))
+                    sample.point.valid = FALSE;
+            scope->samples[scope->next] = sample;
+            scope->next = (scope->next + 1) % LIVE_SCOPE_POINTS;
+            scope->count = MIN(scope->count + 1, LIVE_SCOPE_POINTS);
+            scope->dirty = TRUE;
+        }
+    }
+    g_strfreev(fields);
+}
+
 /* Collect complete control records even when the log is read in chunks. */
 /* Собирает целые управляющие записи при чтении журнала частями. */
 static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsize length)
@@ -3091,6 +3176,8 @@ static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsi
             run->source_step_ready = TRUE;
         if (strstr(text, "GEANY-VVP-READY"))
             run->bridge_ready = TRUE;
+        if (run->live_scopes && g_str_has_prefix(text, "GEANY-SCOPE\t"))
+            simulation_scope_record(run, text + strlen("GEANY-SCOPE\t"));
         const gchar *port = strstr(text, "GEANY-PORT\t");
         if (run->live_port_samples && port)
         {
@@ -3262,6 +3349,88 @@ static void simulation_handle_observer_event(WaveSimulation *run)
     g_strfreev(fields);
 }
 
+/* Hide high-rate samples from the console, including records split across reads. */
+static GString *simulation_scope_console(WaveSimulation *run, const gchar *bytes, gsize count)
+{
+    static const gchar prefix[] = "GEANY-SCOPE\t";
+    GString *visible = g_string_sized_new(count);
+    gint matched = run->scope_console_prefix;
+    for (gsize i = 0; i < count; i++)
+    {
+        gchar c = bytes[i];
+        if (matched == (gint)sizeof prefix - 1)
+        {
+            if (c == '\n')
+                matched = 0;
+            continue;
+        }
+        if (matched >= 0)
+        {
+            if (c == prefix[matched])
+            {
+                matched++;
+                continue;
+            }
+            g_string_append_len(visible, prefix, matched);
+            matched = -1;
+        }
+        g_string_append_c(visible, c);
+        if (c == '\n')
+            matched = 0;
+    }
+    run->scope_console_prefix = matched;
+    return visible;
+}
+
+static gboolean simulation_scope_bounds(const LiveScope *scope, guint start, guint64 *low, guint64 *high)
+{
+    gboolean known = FALSE;
+    for (guint axis = 0; axis < scope->axes; axis++)
+    {
+        low[axis] = G_MAXUINT64;
+        high[axis] = 0;
+    }
+    for (guint i = 0; i < scope->count; i++)
+    {
+        const InstrumentPoint *point = &scope->samples[(start + i) % LIVE_SCOPE_POINTS].point;
+        if (!point->valid)
+            continue;
+        known = TRUE;
+        for (guint axis = 0; axis < scope->axes; axis++)
+        {
+            low[axis] = MIN(low[axis], point->values[axis]);
+            high[axis] = MAX(high[axis], point->values[axis]);
+        }
+    }
+    return known;
+}
+
+static void simulation_scope_refresh(WaveSimulation *run)
+{
+    for (guint i = 0; run->live_scopes && i < run->live_scopes->len; i++)
+    {
+        LiveScope *scope = run->live_scopes->pdata[i];
+        if (!scope->dirty)
+            continue;
+        scope->dirty = FALSE;
+        guint first = (scope->next + LIVE_SCOPE_POINTS - scope->count) % LIVE_SCOPE_POINTS;
+        guint last = (scope->next + LIVE_SCOPE_POINTS - 1) % LIVE_SCOPE_POINTS;
+        GString *status = g_string_new(NULL);
+        g_string_append_printf(status, "%u samples · %" G_GUINT64_FORMAT "–%" G_GUINT64_FORMAT " ns",
+                               scope->count, scope->samples[first].time, scope->samples[last].time);
+        guint64 low[3], high[3];
+        if (simulation_scope_bounds(scope, first, low, high))
+            for (guint axis = 0; axis < scope->axes; axis++)
+                g_string_append_printf(status, " · %c %" G_GUINT64_FORMAT "–%" G_GUINT64_FORMAT,
+                                       scope->axes == 1 ? 'Y' : "XYZ"[axis], low[axis], high[axis]);
+        else
+            g_string_append(status, " · no known samples");
+        gtk_label_set_text(GTK_LABEL(scope->status), status->str);
+        g_string_free(status, TRUE);
+        gtk_widget_queue_draw(scope->drawing);
+    }
+}
+
 /* Drain queued simulator bytes, then update console widgets on the GTK thread. */
 /* Забирает накопленный вывод и обновляет консоль в потоке GTK. */
 static gboolean simulation_refresh_console(gpointer data)
@@ -3279,6 +3448,7 @@ static gboolean simulation_refresh_console(gpointer data)
     if (count > 0)
     {
         simulation_read_records(run, bytes, (gsize)count);
+        simulation_scope_refresh(run);
         run->prompt_tail[0] = count > 1 ? bytes[count - 2] : run->prompt_tail[1];
         run->prompt_tail[1] = bytes[count - 1];
         GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->console));
@@ -3291,7 +3461,11 @@ static gboolean simulation_refresh_console(gpointer data)
             gtk_text_buffer_get_iter_at_offset(buffer, &limit, excess);
             gtk_text_buffer_delete(buffer, &first, &limit);
         }
-        gchar *valid = g_utf8_make_valid(bytes, count);
+        GString *visible = run->live_scopes ? simulation_scope_console(run, bytes, (gsize)count) : NULL;
+        gchar *valid = visible ? g_utf8_make_valid(visible->str, visible->len) :
+                                 g_utf8_make_valid(bytes, count);
+        if (visible)
+            g_string_free(visible, TRUE);
         gtk_text_buffer_get_end_iter(buffer, &end);
         gtk_text_buffer_insert(buffer, &end, valid, -1);
         gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(run->console), &end, 0, FALSE, 0, 0);
@@ -3590,6 +3764,106 @@ static void simulation_live_indicators(WaveSimulation *run, GtkWidget *contents)
     }
 }
 
+static gboolean simulation_scope_draw(GtkWidget *widget, cairo_t *cr, gpointer data)
+{
+    LiveScope *scope = data;
+    guint64 low[3], high[3];
+    guint start = (scope->next + LIVE_SCOPE_POINTS - scope->count) % LIVE_SCOPE_POINTS;
+    guint64 first = scope->samples[start].time;
+    guint64 last = scope->samples[(scope->next + LIVE_SCOPE_POINTS - 1) % LIVE_SCOPE_POINTS].time;
+    simulation_scope_bounds(scope, start, low, high);
+    gdouble w = MAX(1, gtk_widget_get_allocated_width(widget) - 24);
+    gdouble h = MAX(1, gtk_widget_get_allocated_height(widget) - 24);
+    GdkRGBA color;
+    gtk_style_context_get_color(gtk_widget_get_style_context(widget), gtk_widget_get_state_flags(widget), &color);
+    cairo_set_source_rgba(cr, color.red, color.green, color.blue, .35);
+    cairo_rectangle(cr, 12, 12, w, h);
+    cairo_stroke(cr);
+    cairo_set_source_rgb(cr, .18, .52, .82);
+    gboolean previous = FALSE;
+    gdouble previous_y = 0;
+    for (guint i = 0; i < scope->count; i++)
+    {
+        const LiveScopeSample *sample = &scope->samples[(start + i) % LIVE_SCOPE_POINTS];
+        if (!sample->point.valid)
+        {
+            previous = FALSE;
+            continue;
+        }
+        gdouble x, y;
+        instrument_project(&sample->point, low, high, scope->axes, &x, &y);
+        if (scope->axes == 1)
+        {
+            y = x;
+            x = last == first ? 0 : (gdouble)(sample->time - first) / (gdouble)(last - first);
+        }
+        x = 12 + x * w;
+        y = 12 + (1 - y) * h;
+        if (!previous)
+        {
+            cairo_move_to(cr, x, y);
+            cairo_rel_line_to(cr, .5, 0);
+            cairo_move_to(cr, x, y);
+        }
+        else
+        {
+            if (scope->axes == 1)
+                cairo_line_to(cr, x, previous_y);
+            cairo_line_to(cr, x, y);
+        }
+        previous = TRUE;
+        previous_y = y;
+    }
+    cairo_stroke(cr);
+    return FALSE;
+}
+
+static void simulation_live_scopes(WaveSimulation *run, GtkWidget *contents)
+{
+    const gchar *marker = "// GEANY-SCOPE ";
+    const gchar *cursor = run->port_harness;
+    GtkWidget *notebook = NULL;
+    while ((cursor = strstr(cursor, marker)))
+    {
+        cursor += strlen(marker);
+        const gchar *end = strchr(cursor, '\n');
+        if (!end)
+            break;
+        if (!notebook)
+        {
+            notebook = gtk_notebook_new();
+            GtkWidget *expander = gtk_expander_new("Live Plots");
+            gtk_container_add(GTK_CONTAINER(expander), notebook);
+            gtk_box_pack_start(GTK_BOX(contents), expander, FALSE, FALSE, 0);
+            run->live_scopes = g_ptr_array_new_with_free_func(g_free);
+        }
+        LiveScope *scope = g_new0(LiveScope, 1);
+        scope->axes = (guint)(*cursor - '0');
+        gchar *signals = g_strndup(cursor + 2, end - cursor - 2);
+        GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+        GtkWidget *heading = gtk_label_new(signals);
+        gtk_label_set_line_wrap(GTK_LABEL(heading), TRUE);
+        gtk_box_pack_start(GTK_BOX(page), heading, FALSE, FALSE, 0);
+        g_free(signals);
+        scope->drawing = gtk_drawing_area_new();
+        gtk_widget_set_size_request(scope->drawing, 260, 130);
+        g_signal_connect(scope->drawing, "draw", G_CALLBACK(simulation_scope_draw), scope);
+        gtk_box_pack_start(GTK_BOX(page), scope->drawing, TRUE, TRUE, 0);
+        scope->status = gtk_label_new("Waiting for samples…");
+        gtk_label_set_line_wrap(GTK_LABEL(scope->status), TRUE);
+        gchar *status_name = g_strdup_printf("insight-live-scope-%u", run->live_scopes->len + 1);
+        gtk_widget_set_name(scope->status, status_name);
+        g_free(status_name);
+        gtk_box_pack_start(GTK_BOX(page), scope->status, FALSE, FALSE, 0);
+        const gchar *kind = scope->axes == 1 ? "Time" : scope->axes == 2 ? "XY" : "XYZ";
+        gchar *tab = g_strdup_printf("%s %u", kind, run->live_scopes->len + 1);
+        gtk_notebook_append_page(GTK_NOTEBOOK(notebook), page, gtk_label_new(tab));
+        g_free(tab);
+        g_ptr_array_add(run->live_scopes, scope);
+        cursor = end;
+    }
+}
+
 static void simulation_live_panel(WaveSimulation *run, GtkWidget *box)
 {
     const gchar *marker = "$fopen(\"geany-input-";
@@ -3601,6 +3875,7 @@ static void simulation_live_panel(WaveSimulation *run, GtkWidget *box)
     simulation_live_controls(run, contents);
     simulation_live_sliders(run, contents);
     simulation_live_indicators(run, contents);
+    simulation_live_scopes(run, contents);
     GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
     run->live_port_input = gtk_combo_box_text_new();
     const gchar *cursor = run->port_harness;

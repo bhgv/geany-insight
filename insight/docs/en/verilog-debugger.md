@@ -105,6 +105,29 @@ display count 32 dec
 The instruments update at the configured `live-interval`. A slider
 change takes effect on the next input sample.
 
+## Live plots
+
+Add any of these rules to **Port Signals**, then expand **Live Plots**
+inside **Live Port I/O** during debugging.
+
+```text
+scope counter[7:0]
+scope-xy x_position y_position
+scope-xyz core.x core.y core.z
+```
+
+The time plot uses simulation nanoseconds. XY plots two signal values
+against each other. XYZ adds a third signal using a fixed projection.
+Each axis accepts an unsigned signal or slice up to 64 bits.
+Names are relative to the design instance and can refer to internal signals
+or ports already used by other devices.
+
+All axes in a plot are read together at the configured `live-interval`.
+Each plot keeps the latest 512 samples and scales to their known values.
+X and Z leave gaps. Up to eight plots can run at once, including before
+a VCD capture trigger fires. Transitions between sample times may be
+visible in the VCD without appearing in a live plot.
+
 ## Output instruments
 
 Open **Signal Instruments…** in the VCD viewer, including from
