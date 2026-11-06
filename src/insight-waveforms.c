@@ -1914,6 +1914,43 @@ static gboolean simulation_memory_image(GHashTable *images, const gchar *anchor,
     return valid;
 }
 
+/* Expand memory presets before applying the same validation as explicit rules. */
+static void simulation_memory_defaults(gchar ***arguments, gint *count)
+{
+    static const struct {
+        const gchar *name, *defaults;
+        gint pins;
+    } presets[] = {
+        {"sram", "addr dq ce_n we_n oe_n 16 8", 5},
+        {"ddr2", "ck cke cs_n ras_n cas_n we_n a ba dq dqs dm 3 2", 11},
+        {"ddr3", "ck reset_n cke cs_n ras_n cas_n we_n a ba dq dqs dm 3 2", 12},
+        {"ddr4", "ck reset_n cke cs_n act_n a ba bg dq dqs dm_n 3 2", 11},
+        {"spi-nor", "sck cs_n mosi miso", 4},
+        {"spi-nand", "sck cs_n mosi miso", 4},
+        {"spi-eeprom", "sck cs_n mosi miso", 4},
+    };
+    gchar **args = *arguments;
+    for (guint i = 0; i < G_N_ELEMENTS(presets); i++)
+    {
+        if (strcmp(args[0], presets[i].name))
+            continue;
+        gchar **defaults = g_strsplit(presets[i].defaults, " ", -1);
+        gint expected = 1 + (gint)g_strv_length(defaults);
+        if (*count == 1 || (*count > presets[i].pins && *count <= expected))
+        {
+            gchar **expanded = g_new0(gchar *, expected + 1);
+            expanded[0] = g_strdup(args[0]);
+            for (gint j = 1; j < expected; j++)
+                expanded[j] = g_strdup(j < *count && strcmp(args[j], "-") ? args[j] : defaults[j - 1]);
+            g_strfreev(args);
+            *arguments = expanded;
+            *count = expected;
+        }
+        g_strfreev(defaults);
+        return;
+    }
+}
+
 static gchar *simulation_port_harness(const gchar *recipe, const gchar *directory,
                                       GPtrArray *sources, GHashTable *images, GError **error)
 {
@@ -1937,6 +1974,8 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         gint count = 0;
         gchar **args = NULL;
         valid = g_shell_parse_argv(line, &count, &args, NULL);
+        if (valid)
+            simulation_memory_defaults(&args, &count);
         if (valid && count == 2 && !strcmp(args[0], "module") && !module &&
             g_regex_match_simple("^[A-Za-z_][A-Za-z0-9_$]*$", args[1], 0, 0))
             module = g_strdup(args[1]);
@@ -2115,12 +2154,14 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         "pulse PORT START LENGTH 0|1   ·   value PORT WIDTH EXPR\n"
         "bus PORT WIDTH INTERVAL EXPR   ·   output PORT WIDTH\n"
         "live-interval NS   ·   live-input PORT WIDTH INITIAL   ·   monitor PORT WIDTH\n"
-        "sram ADDR DQ CE_N WE_N OE_N ADDRESS_BITS DATA_BITS\n"
+        "Memory presets: sram, ddr2, ddr3, ddr4, spi-nor, spi-nand, spi-eeprom.\n"
+        "Use a preset alone for standard port names, or list your ports below. '-' uses the default.\n"
+        "sram ADDR DQ CE_N WE_N OE_N [ADDRESS_BITS=16 [DATA_BITS=8]]\n"
         "memory-image ADDR_OR_SPI_CS_N FILE (before the memory rule)\n"
         "spi-nor / spi-nand / spi-eeprom SCK CS_N MOSI MISO\n"
-        "ddr2 CK CKE CS_N RAS_N CAS_N WE_N A BA DQ DQS DM RL WL (functional x8)\n"
-        "ddr3 CK RESET_N CKE CS_N RAS_N CAS_N WE_N A BA DQ DQS DM RL WL (functional x8)\n"
-        "ddr4 CK RESET_N CKE CS_N ACT_N A BA BG DQ DQS DM_N RL WL (functional x8)\n"
+        "ddr2 CK CKE CS_N RAS_N CAS_N WE_N A BA DQ DQS DM [RL=3 [WL=2]] (functional x8)\n"
+        "ddr3 CK RESET_N CKE CS_N RAS_N CAS_N WE_N A BA DQ DQS DM [RL=3 [WL=2]] (functional x8)\n"
+        "ddr4 CK RESET_N CKE CS_N ACT_N A BA BG DQ DQS DM_N [RL=3 [WL=2]] (functional x8)\n"
         "uart RX TX BAUD [console]\n"
         "model INSTANCE MODULE SOURCE   ·   model-link INSTANCE DUT_PORT MODEL_PORT WIDTH\n"
         "model-share INSTANCE DUT_PORT MODEL_PORT   ·   model-param / model-value INSTANCE NAME EXPR\n"

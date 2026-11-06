@@ -125,6 +125,33 @@ port and a model port. It also works for bidirectional buses.
 `model-param` passes a named parameter and `model-value` ties a model
 port to an expression. Declare the instance before its bindings.
 
+## Memory presets
+
+In **Port Signals**, enter just a device name to use its standard
+lowercase port names and default parameters. For a DUT with ports
+`sck`, `cs_n`, `mosi` and `miso`, a complete recipe is:
+
+```text
+module my_controller
+spi-nor
+```
+
+| Preset | Default port order | Parameters |
+| --- | --- | --- |
+| `sram` | `addr dq ce_n we_n oe_n` | 16 address bits, 8 data bits |
+| `ddr2` | `ck cke cs_n ras_n cas_n we_n a ba dq dqs dm` | RL 3, WL 2 CK cycles |
+| `ddr3` | `ck reset_n cke cs_n ras_n cas_n we_n a ba dq dqs dm` | RL 3, WL 2 CK cycles |
+| `ddr4` | `ck reset_n cke cs_n act_n a ba bg dq dqs dm_n` | RL 3, WL 2 CK cycles |
+| `spi-nor`, `spi-nand`, `spi-eeprom` | `sck cs_n mosi miso` | SPI mode 0, built-in geometry |
+
+To override ports, list them in order. Use `-` in positions that should
+keep the preset value, for example `spi-nor - flash_cs_n - -`. SRAM
+widths and DDR latencies can be omitted at the end or overridden
+individually. For example, `sram - - - - - 12` keeps 8-bit data and uses
+12 address bits. With a bare preset, key `memory-image` by `addr` for
+SRAM, `a` for DDR and `cs_n` for SPI. With a custom port name, use that
+name instead.
+
 ## Built-in functional DDR4 x8
 
 ```text

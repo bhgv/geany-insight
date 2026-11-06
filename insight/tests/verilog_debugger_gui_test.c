@@ -243,7 +243,7 @@ static gboolean accept_ports(gpointer data)
             "model-value ext mask \"8'h05\"\n"
             "model-share ext ready enable\n"
             "model-link ext external_data data 8\n"
-            "sram addr dq ce_n we_n oe_n 4 8\n"
+            "sram - - - - - 4\n"
             "uart rx tx 1000000 console\n", -1);
     }
     gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
