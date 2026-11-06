@@ -214,6 +214,16 @@ static gboolean check_connection(GtkTreeModel *model, GtkTreePath *path, GtkTree
     return checks->bit && checks->clock;
 }
 
+static gboolean accept_ports(gpointer data)
+{
+    (void)data;
+    GtkWidget *dialog = find_window("Port Signals");
+    if (!dialog)
+        return G_SOURCE_CONTINUE;
+    gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+    return G_SOURCE_REMOVE;
+}
+
 /* Answer the real modal chooser once GTK has selected the requested file. */
 /* Подтверждает реальный диалог выбора, когда GTK выбрал нужный файл. */
 static gboolean accept_fixture(gpointer data)
@@ -308,6 +318,7 @@ static gboolean drive_debugger(gpointer data)
         if (!GTK_IS_MENU_ITEM(item))
             return G_SOURCE_CONTINUE;
         phase = LOAD_OBSERVER;
+        g_timeout_add(100, accept_ports, NULL);
         gtk_menu_item_activate(GTK_MENU_ITEM(item));
         return G_SOURCE_CONTINUE;
     }
@@ -361,6 +372,11 @@ static gboolean drive_debugger(gpointer data)
 
     if (phase == LOAD_OBSERVER && console_contains(simulation, "GEANY-VVP-READY"))
     {
+        if (!find_control(simulation, "Port Signals…"))
+        {
+            g_printerr("Missing Port Signals button in the Verilog debugger.\n");
+            return fail_timeout(NULL);
+        }
         GtkWidget *load = find_control(simulation, "Load Lua Observer…");
         if (load && gtk_widget_is_sensitive(load))
         {

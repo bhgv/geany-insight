@@ -1157,6 +1157,7 @@ typedef struct {
     GtkWidget *dialog;
     gchar *compiler, *runtime, *include_dir;
     gchar **sources;
+    gchar *port_settings, *port_harness;
     InsightWaveSource navigate;
     gboolean interactive;
     GMutex lock;
@@ -1206,6 +1207,8 @@ static void simulation_free(gpointer data)
     g_free(run->live_directory);
     g_free(run->trace_file);
     g_free(run->settings_path);
+    g_free(run->port_settings);
+    g_free(run->port_harness);
     g_free(run->observer_file);
     insight_lua_debug_free(run->lua_observer);
     g_strfreev(run->pending_event);
@@ -1249,6 +1252,198 @@ static gchar *simulation_settings_path(const gchar *directory, const gchar *proj
     g_checksum_free(checksum);
     g_free(name);
     return path;
+}
+
+/* Generate a private testbench from a per-source port recipe. */
+static gchar *simulation_port_harness(const gchar *recipe, GError **error)
+{
+    gchar **lines = g_strsplit(recipe, "\n", -1);
+    GString *body = g_string_new("`timescale 1ns/1ns\nmodule geany_port_testbench;\n");
+    GString *connections = g_string_new(NULL);
+    GHashTable *ports = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    gchar *module = NULL;
+    guint64 duration = 1000;
+    gboolean valid = TRUE;
+    for (guint i = 0; lines[i] && valid; i++)
+    {
+        gchar *line = g_strstrip(lines[i]);
+        if (!*line || *line == '#')
+            continue;
+        gint count = 0;
+        gchar **args = NULL;
+        valid = g_shell_parse_argv(line, &count, &args, NULL);
+        if (valid && count == 2 && !strcmp(args[0], "module") && !module &&
+            g_regex_match_simple("^[A-Za-z_][A-Za-z0-9_$]*$", args[1], 0, 0))
+            module = g_strdup(args[1]);
+        else if (valid && count == 2 && !strcmp(args[0], "duration"))
+            valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &duration, NULL);
+        else if (valid && count >= 3 && g_hash_table_size(ports) < 128 &&
+                 g_regex_match_simple("^[A-Za-z_][A-Za-z0-9_$]*$", args[1], 0, 0) &&
+                 !g_hash_table_contains(ports, args[1]))
+        {
+            const gchar *mode = args[0];
+            guint64 width = 1;
+            gboolean output = !strcmp(mode, "output");
+            gboolean scalar = !strcmp(mode, "clock") || !strcmp(mode, "clock-hz") ||
+                              !strcmp(mode, "pulse");
+            gboolean bus = !strcmp(mode, "bus");
+            gboolean constant = !strcmp(mode, "value");
+            valid = (output && count == 3) || (!strcmp(mode, "clock") && count == 5) ||
+                (!strcmp(mode, "clock-hz") && count == 4) || (!strcmp(mode, "pulse") && count == 5) ||
+                (bus && count == 5) || (constant && count == 4);
+            if (valid && !scalar)
+                valid = g_ascii_string_to_unsigned(args[2], 10, 1, 4096, &width, NULL);
+            for (gint j = scalar ? 2 : 3; j < count && valid; j++)
+                valid = strlen(args[j]) <= 256 &&
+                    g_regex_match_simple("^[A-Za-z0-9_$'+*/%&|^~!=<>?:(). -]+$", args[j], 0, 0) &&
+                    !strstr(args[j], "//") && !strstr(args[j], "/*");
+            if (valid && !strcmp(mode, "pulse"))
+                valid = !strcmp(args[4], "0") || !strcmp(args[4], "1");
+            if (valid)
+            {
+                guint id = g_hash_table_size(ports);
+                g_hash_table_add(ports, g_strdup(args[1]));
+                g_string_append_printf(body, "%s [%" G_GUINT64_FORMAT ":0] pin%u;\n",
+                    output ? "wire" : "reg", width - 1, id);
+                if (connections->len)
+                    g_string_append_c(connections, ',');
+                g_string_append_printf(connections, ".%s(pin%u)", args[1], id);
+                if (constant)
+                    g_string_append_printf(body, "initial pin%u = (%s);\n", id, args[3]);
+                else if (bus)
+                    g_string_append_printf(body,
+                        "initial begin integer step; time delay_ns; step=0; forever begin "
+                        "pin%u=(%s); if (!( (%s)>0 )) $fatal(1, \"Invalid bus interval\"); "
+                        "delay_ns=(%s); if (delay_ns==0) $fatal(1, \"Bus interval rounds to zero\"); "
+                        "#(delay_ns); step=step+1; end end\n", id, args[4], args[3], args[3]);
+                else if (!strcmp(mode, "pulse"))
+                    g_string_append_printf(body,
+                        "initial begin time length_ns; pin%u=1'b%c; "
+                        "if (!( (%s)>=0 && (%s)>0 )) $fatal(1, \"Invalid pulse timing\"); "
+                        "length_ns=(%s); if (!length_ns) $fatal(1, \"Pulse length rounds to zero\"); "
+                        "#(%s) pin%u=1'b%s; #(length_ns) pin%u=1'b%c; end\n",
+                        id, *args[4] == '0' ? '1' : '0', args[2], args[3], args[3], args[2], id,
+                        args[4], id, *args[4] == '0' ? '1' : '0');
+                else if (scalar)
+                {
+                    gchar *half_period = count == 4 ? g_strdup_printf("500000000.0/(%s)", args[3]) : NULL;
+                    const gchar *high = half_period ? half_period : args[3];
+                    const gchar *low = half_period ? half_period : args[4];
+                    g_string_append_printf(body,
+                        "initial begin time high_ns, low_ns; pin%u=0; "
+                        "if (!( (%s)>=0 )) $fatal(1, \"Invalid clock start\"); #(%s); forever begin "
+                        "if (!( (%s)>0 && (%s)>0 )) $fatal(1, \"Invalid clock phase\"); "
+                        "high_ns=(%s); low_ns=(%s); if (!high_ns || !low_ns) $fatal(1, \"Clock phase rounds to zero\"); "
+                        "pin%u=1; #(high_ns); pin%u=0; #(low_ns); end end\n",
+                        id, args[2], args[2], high, low, high, low, id, id);
+                    g_free(half_period);
+                }
+            }
+        }
+        else
+            valid = FALSE;
+        if (!valid)
+            g_set_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Invalid port recipe on line %u.", i + 1);
+        g_strfreev(args);
+    }
+    if (valid && !module && connections->len)
+    {
+        valid = FALSE;
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Add a module line for the configured ports.");
+    }
+    gchar *result = NULL;
+    if (valid && module)
+    {
+        g_string_append_printf(body,
+            "%s dut(%s);\ninitial begin $dumpfile(\"ports.vcd\"); $dumpvars(0,geany_port_testbench); "
+            "#%" G_GUINT64_FORMAT "; $finish; end\nendmodule\n", module, connections->str, duration);
+        result = g_string_free(body, FALSE);
+    }
+    else
+        g_string_free(body, TRUE);
+    g_free(module);
+    g_hash_table_unref(ports);
+    g_string_free(connections, TRUE);
+    g_strfreev(lines);
+    return result;
+}
+
+static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, gchar **harness)
+{
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Port Signals", parent,
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
+        harness ? "_Start Debugging" : "_Save for Next Run", GTK_RESPONSE_ACCEPT, NULL);
+    g_object_ref_sink(dialog);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 680, 390);
+    GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    GtkWidget *hint = gtk_label_new(
+        "Leave empty to run an existing testbench. Otherwise enter one rule per line (times in ns).\n"
+        "module NAME   ·   duration NS\n"
+        "clock PORT START HIGH LOW   ·   clock-hz PORT START HZ\n"
+        "pulse PORT START LENGTH 0|1   ·   value PORT WIDTH EXPR\n"
+        "bus PORT WIDTH INTERVAL EXPR   ·   output PORT WIDTH\n"
+        "Use step in bus expressions and $time for simulation time. Quote formulas containing spaces.");
+    gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
+    gtk_label_set_xalign(GTK_LABEL(hint), 0);
+    gtk_box_pack_start(GTK_BOX(box), hint, FALSE, FALSE, 8);
+    GtkWidget *view = gtk_text_view_new();
+    gtk_text_view_set_monospace(GTK_TEXT_VIEW(view), TRUE);
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+    GFile *file = g_file_new_for_path(path);
+    GFileInputStream *stream = g_file_read(file, NULL, NULL);
+    if (stream)
+    {
+        gchar saved[16385];
+        gsize length = 0;
+        if (g_input_stream_read_all(G_INPUT_STREAM(stream), saved, sizeof saved, &length, NULL, NULL) &&
+            length < sizeof saved && g_utf8_validate(saved, length, NULL))
+            gtk_text_buffer_set_text(buffer, saved, length);
+        g_object_unref(stream);
+    }
+    g_object_unref(file);
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(scroll), view);
+    gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
+    GtkWidget *status = gtk_label_new(harness ? "" : "Saved changes apply the next time debugging starts.");
+    gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 6);
+    gtk_widget_show_all(dialog);
+    gboolean accepted = FALSE;
+    while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+    {
+        GtkTextIter first, last;
+        gtk_text_buffer_get_bounds(buffer, &first, &last);
+        gchar *recipe = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
+        GError *error = NULL;
+        gchar *generated = strlen(recipe) <= 16384 ? simulation_port_harness(recipe, &error) : NULL;
+        gchar *directory = g_path_get_dirname(path);
+        if (!error && strlen(recipe) <= 16384 && g_mkdir_with_parents(directory, 0700) == 0 &&
+            g_file_set_contents(path, recipe, -1, &error))
+        {
+            accepted = TRUE;
+            if (harness)
+                *harness = g_steal_pointer(&generated);
+        }
+        if (!accepted)
+            gtk_label_set_text(GTK_LABEL(status), error ? error->message : "Cannot save the port recipe.");
+        g_free(directory);
+        g_free(generated);
+        g_free(recipe);
+        g_clear_error(&error);
+        if (accepted)
+            break;
+    }
+    gtk_widget_destroy(dialog);
+    g_object_unref(dialog);
+    return accepted;
+}
+
+static void simulation_port_settings(GtkButton *button, gpointer data)
+{
+    (void)button;
+    WaveSimulation *run = data;
+    gchar *path = g_strdup(run->port_settings);
+    simulation_edit_ports(GTK_WINDOW(run->dialog), path, NULL);
+    g_free(path);
 }
 
 typedef struct {
@@ -1752,9 +1947,20 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
             g_ptr_array_add(command, "-pfileline=1");
         for (guint i = 0; run->sources[i]; i++)
             g_ptr_array_add(command, run->sources[i]);
+        gchar *harness_path = NULL;
+        if (run->port_harness)
+        {
+            harness_path = g_build_filename(directory, "geany-port-testbench.sv", NULL);
+            if (g_file_set_contents(harness_path, run->port_harness, -1, &error))
+            {
+                g_ptr_array_add(command, "-s");
+                g_ptr_array_add(command, "geany_port_testbench");
+                g_ptr_array_add(command, harness_path);
+            }
+        }
         g_ptr_array_add(command, NULL);
         const gchar *execute[] = {run->runtime, "simulation.vvp", NULL};
-        if (simulation_process((const gchar *const *)command->pdata, directory, bin, cancel, &error) &&
+        if (!error && simulation_process((const gchar *const *)command->pdata, directory, bin, cancel, &error) &&
             (run->interactive ? (simulation_stage_rules(run, directory, &error) &&
              simulation_interactive(run, directory, bin, cancel, &error)) :
              simulation_process(execute, directory, bin, cancel, &error)))
@@ -1765,6 +1971,7 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
             g_free(vcd);
         }
         g_ptr_array_unref(command);
+        g_free(harness_path);
         g_free(bin);
 
         GDir *dir = g_dir_open(directory, 0, NULL);
@@ -2576,7 +2783,8 @@ static void simulation_dialog_destroy(GtkWidget *dialog, gpointer data)
 void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar *include_dir,
                                 const gchar *const *sources, gboolean interactive, InsightWaveSource navigate,
                                 InsightWaveLocation open_location,
-                                const gchar *settings_directory, const gchar *project)
+                                const gchar *settings_directory, const gchar *project,
+                                gboolean configure_ports)
 {
 #ifdef G_OS_WIN32
     const gchar *compiler_name = "iverilog.exe", *runtime_name = "vvp.exe";
@@ -2607,6 +2815,17 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
     run->sources = g_strdupv((gchar **)sources);
     run->navigate = navigate;
     run->open_location = open_location;
+    if (configure_ports)
+    {
+        gchar *key = simulation_settings_path(settings_directory, project, run->sources);
+        run->port_settings = g_strconcat(key, ".ports", NULL);
+        g_free(key);
+        if (!simulation_edit_ports(parent, run->port_settings, &run->port_harness))
+        {
+            simulation_free(run);
+            return;
+        }
+    }
     run->dialog = gtk_dialog_new_with_buttons("Verilog Simulation", parent,
         GTK_DIALOG_DESTROY_WITH_PARENT | (interactive ? 0 : GTK_DIALOG_MODAL),
         "_Cancel", GTK_RESPONSE_CANCEL, NULL);
@@ -2629,6 +2848,12 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         simulation_load_settings(run);
         GtkWidget *running_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
         gtk_box_pack_start(GTK_BOX(box), running_actions, FALSE, FALSE, 0);
+        if (run->port_settings)
+        {
+            GtkWidget *ports = gtk_button_new_with_label("Port Signals…");
+            g_signal_connect(ports, "clicked", G_CALLBACK(simulation_port_settings), run);
+            gtk_box_pack_start(GTK_BOX(running_actions), ports, FALSE, FALSE, 0);
+        }
         run->pause_button = gtk_button_new_with_label("Pause");
         gtk_widget_set_sensitive(run->pause_button, FALSE);
         g_signal_connect(run->pause_button, "clicked", G_CALLBACK(simulation_request_pause), run);

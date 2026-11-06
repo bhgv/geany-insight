@@ -4968,7 +4968,8 @@ static void waveforms_menu(GtkMenuItem *item,gpointer data) {
 }
 /* Select saved HDL source files and run them with the installed simulator. */
 /* Выбирает сохранённые исходники HDL и запускает установленный симулятор. */
-static void waveform_start_simulation(GSList *selected, const gchar *root, gboolean interactive)
+static void waveform_start_simulation(GSList *selected, const gchar *root, gboolean interactive,
+                                      gboolean configure_ports)
 {
     if (selected)
     {
@@ -4997,7 +4998,7 @@ static void waveform_start_simulation(GSList *selected, const gchar *root, gbool
             gchar *settings = g_build_filename(app->configdir, "insight", "verilog-debug", NULL);
             insight_waveforms_simulate(GTK_WINDOW(main_widgets.window), bin, working_directory, (const gchar *const *)sources->pdata,
                                         interactive, waveform_source, diff_source_open, settings,
-                                        app->project ? app->project->file_name : NULL);
+                                        app->project ? app->project->file_name : NULL, configure_ports);
             g_free(working_directory);
             g_free(settings);
             g_free(bin);
@@ -5038,7 +5039,7 @@ static void waveform_debug_current(GtkMenuItem *item, gpointer data)
         return;
     gchar *root = app->project ? project_get_base_path() : NULL;
     GSList selected = {path, NULL};
-    waveform_start_simulation(&selected, root, TRUE);
+    waveform_start_simulation(&selected, root, TRUE, TRUE);
     g_free(root);
     g_free(path);
 }
@@ -5076,7 +5077,7 @@ static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
     GSList *selected = gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT ?
         gtk_file_chooser_get_filenames(files) : NULL;
     gtk_widget_destroy(chooser);
-    waveform_start_simulation(selected, root, interactive);
+    waveform_start_simulation(selected, root, interactive, FALSE);
     g_slist_free_full(selected, g_free);
     g_free(root);
 }
