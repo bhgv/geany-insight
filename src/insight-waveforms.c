@@ -1453,6 +1453,9 @@ typedef struct {
     gchar *port_settings, *port_harness;
     GtkWidget *live_port_input, *live_port_value, *live_port_send, *live_port_display;
     GHashTable *live_port_samples;
+    GtkWidget *uart_window, *uart_view, *uart_entry;
+    GString *uart_log;
+    guint uart_send_sequence;
     InsightWaveSource navigate;
     gboolean interactive;
     GMutex lock;
@@ -1505,6 +1508,8 @@ static void simulation_free(gpointer data)
     g_free(run->port_settings);
     g_free(run->port_harness);
     g_clear_pointer(&run->live_port_samples, g_hash_table_unref);
+    if (run->uart_log)
+        g_string_free(run->uart_log, TRUE);
     g_free(run->observer_file);
     insight_lua_debug_free(run->lua_observer);
     g_strfreev(run->pending_event);
@@ -1600,6 +1605,44 @@ static gboolean simulation_port_sram(gchar **args, GString *body, GString *conne
     return TRUE;
 }
 
+static gboolean simulation_port_uart(gchar **args, gint count, GString *body,
+                                      GString *connections, GHashTable *ports, GString *live)
+{
+    guint64 baud;
+    if (g_hash_table_size(ports) > 126 || strstr(body->str, "task geany_uart_tx;") ||
+        (count == 5 && strcmp(args[4], "console")) ||
+        !simulation_port_name(args[1]) || !simulation_port_name(args[2]) ||
+        !strcmp(args[1], args[2]) || g_hash_table_contains(ports, args[1]) ||
+        g_hash_table_contains(ports, args[2]) ||
+        !g_ascii_string_to_unsigned(args[3], 10, 1, 100000000, &baud, NULL))
+        return FALSE;
+    guint rx = simulation_port_connect(body, connections, ports, args[1], 1, FALSE);
+    guint tx = simulation_port_connect(body, connections, ports, args[2], 1, TRUE);
+    if (count == 5)
+        g_string_append(body, "// GEANY UART CONSOLE\n");
+    g_string_append_printf(body,
+        "localparam time geany_uart_bit = (1000000000.0 / %" G_GUINT64_FORMAT ");\n"
+        "initial pin%u=1'b1;\n"
+        "task geany_uart_tx; input [7:0] octet; integer n; begin\n"
+        "pin%u=0; #(geany_uart_bit); for(n=0;n<8;n=n+1) begin "
+        "pin%u=octet[n]; #(geany_uart_bit); end pin%u=1; #(geany_uart_bit); end endtask\n"
+        "initial begin : geany_uart_receive integer n; reg [7:0] octet; forever begin\n"
+        "@(negedge pin%u); #(geany_uart_bit/2); if(pin%u===1'b0) begin\n"
+        "for(n=0;n<8;n=n+1) begin #(geany_uart_bit); octet[n]=pin%u; end\n"
+        "#(geany_uart_bit); if(pin%u===1'b1 && !$isunknown(octet)) "
+        "$display(\"GEANY-UART\\t%%02h\", octet); $fflush(); end end end\n"
+        "initial begin : geany_uart_send integer fd, code, serial, previous; reg [7:0] octet; "
+        "previous=0; forever begin #(geany_live_interval); fd=$fopen(\"geany-uart-input\",\"r\");\n"
+        "if(fd) begin code=$fscanf(fd,\"%%d\", serial); "
+        "if(code==1 && serial!=previous) begin previous=serial; "
+        "while($fscanf(fd,\"%%h\",octet)==1) geany_uart_tx(octet); "
+        "$display(\"GEANY-UART-SENT\\t%%0d\",serial); $fflush(); end $fclose(fd); end "
+        "end end\n", baud, rx, rx, rx, rx, tx, tx, tx, tx);
+    /* UART also needs wall-clock pacing, even without parallel port monitors. */
+    g_string_append(live, "// UART pacing\n");
+    return TRUE;
+}
+
 /* Generate a private testbench from a per-source port recipe. */
 static gchar *simulation_port_harness(const gchar *recipe, GError **error)
 {
@@ -1629,6 +1672,8 @@ static gchar *simulation_port_harness(const gchar *recipe, GError **error)
             valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &live_interval, NULL);
         else if (valid && count == 8 && !strcmp(args[0], "sram"))
             valid = simulation_port_sram(args, body, connections, ports);
+        else if (valid && (count == 4 || count == 5) && !strcmp(args[0], "uart"))
+            valid = simulation_port_uart(args, count, body, connections, ports, live);
         else if (valid && count >= 3 && g_hash_table_size(ports) < 128 &&
                  g_regex_match_simple("^[A-Za-z_][A-Za-z0-9_$]*$", args[1], 0, 0) &&
                  !g_hash_table_contains(ports, args[1]))
@@ -1720,6 +1765,8 @@ static gchar *simulation_port_harness(const gchar *recipe, GError **error)
             g_string_insert(body, strlen("`timescale 1ns/1ns\nmodule geany_port_testbench;\n"),
                             "task geany_live_yield; $fflush(); endtask\n");
             g_string_truncate(body, body->len - strlen("endmodule\n"));
+            g_string_append_printf(body, "localparam time geany_live_interval = %" G_GUINT64_FORMAT ";\n",
+                                   live_interval ? live_interval : 10);
             g_string_append_printf(body,
                 "initial begin integer fd; reg [63:0] bits; forever begin #%" G_GUINT64_FORMAT ";\n",
                 live_interval ? live_interval : 10);
@@ -1754,6 +1801,7 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, gcha
         "bus PORT WIDTH INTERVAL EXPR   ·   output PORT WIDTH\n"
         "live-interval NS   ·   live-input PORT WIDTH INITIAL   ·   monitor PORT WIDTH\n"
         "sram ADDR DQ CE_N WE_N OE_N ADDRESS_BITS DATA_BITS\n"
+        "uart RX TX BAUD [console]\n"
         "Use step in bus expressions and $time for simulation time. Quote formulas containing spaces.");
     gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
     gtk_label_set_xalign(GTK_LABEL(hint), 0);
@@ -2450,6 +2498,35 @@ static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsi
                 g_hash_table_replace(run->live_port_samples, g_strdup(fields[0]), g_strdup(fields[1]));
             g_strfreev(fields);
         }
+        const gchar *uart = strstr(text, "GEANY-UART\t");
+        if (run->uart_log && uart && strlen(uart) == strlen("GEANY-UART\t") + 2 &&
+            g_ascii_isxdigit(uart[strlen("GEANY-UART\t")]) &&
+            g_ascii_isxdigit(uart[strlen("GEANY-UART\t") + 1]))
+        {
+            guint byte = (guint)g_ascii_strtoull(uart + strlen("GEANY-UART\t"), NULL, 16);
+            if (byte == '\n' || byte == '\r' || byte == '\t' || (byte >= 32 && byte < 127))
+                g_string_append_c(run->uart_log, byte);
+            else
+                g_string_append_printf(run->uart_log, "\\x%02x", byte);
+            if (run->uart_log->len > 65536)
+                g_string_erase(run->uart_log, 0, 4096);
+            if (run->uart_view)
+            {
+                GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->uart_view));
+                gtk_text_buffer_set_text(buffer, run->uart_log->str, run->uart_log->len);
+                GtkTextIter end;
+                gtk_text_buffer_get_end_iter(buffer, &end);
+                gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(run->uart_view), &end, 0, FALSE, 0, 0);
+            }
+        }
+        const gchar *sent = strstr(text, "GEANY-UART-SENT\t");
+        if (run->uart_log && sent &&
+            g_ascii_strtoull(sent + strlen("GEANY-UART-SENT\t"), NULL, 10) == run->uart_send_sequence)
+        {
+            run->uart_send_sequence = 0;
+            if (run->uart_entry)
+                gtk_widget_set_sensitive(run->uart_entry, TRUE);
+        }
         const gchar *event = strstr(text, "GEANY-VVP-EVENT\t");
         if (event)
         {
@@ -2688,6 +2765,73 @@ static void simulation_live_input(GtkButton *button, gpointer data)
         gtk_widget_set_tooltip_text(run->live_port_send, "Choose an input and enter up to 64 binary digits (0, 1, x or z).");
     g_free(directory);
     g_free(port);
+}
+
+static void simulation_uart_enter(GtkEntry *entry, gpointer data)
+{
+    WaveSimulation *run = data;
+    const gchar *text = gtk_entry_get_text(entry);
+    if (!*text || run->uart_send_sequence)
+        return;
+    gchar *directory = simulation_live_directory(run);
+    if (!directory)
+        return;
+    gchar *path = g_build_filename(directory, "geany-uart-input", NULL);
+    /* Alternate sequence numbers; the harness remembers the last accepted record. */
+    guint next = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(run->dialog), "uart-next")) == 1 ? 2 : 1;
+    GString *record = g_string_new(NULL);
+    g_string_append_printf(record, "%u\n", next);
+    for (const guchar *byte = (const guchar *)text; *byte; byte++)
+        g_string_append_printf(record, "%02x\n", (guint)*byte);
+    if (g_file_set_contents(path, record->str, record->len, NULL))
+    {
+        g_object_set_data(G_OBJECT(run->dialog), "uart-next", GUINT_TO_POINTER(next));
+        run->uart_send_sequence = next;
+        gtk_entry_set_text(entry, "");
+        gtk_widget_set_sensitive(GTK_WIDGET(entry), FALSE);
+    }
+    g_string_free(record, TRUE);
+    g_free(path);
+    g_free(directory);
+}
+
+static void simulation_uart_closed(GtkWidget *window, gpointer data)
+{
+    (void)window;
+    WaveSimulation *run = data;
+    run->uart_window = run->uart_view = run->uart_entry = NULL;
+}
+
+static void simulation_uart_show(GtkButton *button, gpointer data)
+{
+    (void)button;
+    WaveSimulation *run = data;
+    if (run->uart_window)
+    {
+        gtk_window_present(GTK_WINDOW(run->uart_window));
+        return;
+    }
+    GtkWidget *window = gtk_dialog_new_with_buttons("UART Console", GTK_WINDOW(run->dialog),
+        GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE, NULL);
+    run->uart_window = window;
+    gtk_window_set_default_size(GTK_WINDOW(window), 600, 330);
+    g_signal_connect_swapped(window, "response", G_CALLBACK(gtk_widget_destroy), window);
+    g_signal_connect(window, "destroy", G_CALLBACK(simulation_uart_closed), run);
+    GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(window));
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    run->uart_view = gtk_text_view_new();
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(run->uart_view), FALSE);
+    gtk_text_view_set_monospace(GTK_TEXT_VIEW(run->uart_view), TRUE);
+    gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->uart_view)), run->uart_log->str, -1);
+    gtk_container_add(GTK_CONTAINER(scroll), run->uart_view);
+    gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
+    run->uart_entry = gtk_entry_new();
+    gtk_entry_set_max_length(GTK_ENTRY(run->uart_entry), 256);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(run->uart_entry), "Text to send; press Enter");
+    gtk_widget_set_sensitive(run->uart_entry, !run->uart_send_sequence);
+    g_signal_connect(run->uart_entry, "activate", G_CALLBACK(simulation_uart_enter), run);
+    gtk_box_pack_start(GTK_BOX(box), run->uart_entry, FALSE, FALSE, 4);
+    gtk_widget_show_all(window);
 }
 
 static void simulation_live_panel(WaveSimulation *run, GtkWidget *box)
@@ -3331,6 +3475,13 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         }
         if (run->port_harness && strstr(run->port_harness, "task geany_live_yield;"))
             simulation_live_panel(run, box);
+        if (run->port_harness && strstr(run->port_harness, "// GEANY UART CONSOLE\n"))
+        {
+            run->uart_log = g_string_new(NULL);
+            GtkWidget *uart = gtk_button_new_with_label("UART Console…");
+            g_signal_connect(uart, "clicked", G_CALLBACK(simulation_uart_show), run);
+            gtk_box_pack_start(GTK_BOX(running_actions), uart, FALSE, FALSE, 0);
+        }
         run->pause_button = gtk_button_new_with_label("Pause");
         gtk_widget_set_sensitive(run->pause_button, FALSE);
         g_signal_connect(run->pause_button, "clicked", G_CALLBACK(simulation_request_pause), run);

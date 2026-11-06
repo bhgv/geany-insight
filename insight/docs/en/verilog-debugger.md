@@ -87,3 +87,18 @@ This is a functional asynchronous model with uninitialized contents and
 high-impedance data outside reads. It supports 1–16 address bits and
 1–64 data bits. SRAM timing constraints and vendor-specific behavior are
 outside this model.
+
+## UART console
+
+```text
+duration 100000
+live-interval 250
+uart rx tx 1000000 console
+```
+
+This connects one asynchronous 8N1 UART to the design's RX and TX.
+The baud rate is in bits per second. The optional `console` keyword
+adds **UART Console…** to the debugger panel. Press Enter to send the
+entry's UTF-8 bytes without an automatic newline. The receiver displays
+ASCII and escapes other bytes as `\xNN`. The entry waits for the previous
+message to finish transmitting before accepting another one.
