@@ -435,6 +435,14 @@ def check_windowless_helpers(prefix, service):
             require(subsystem == 2, f"Console window enabled for {helper.name}")
 
 
+def check_ddr4_device(compiler, runtime, fixtures, directory, environment):
+    compile_design(compiler, directory, [fixtures / "ddr4_device_tb.sv"], environment)
+    modules = runtime.parent.parent / "lib" / "ivl"
+    report = capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
+                              "simulation.vvp"], directory, "ddr4", environment)
+    require("DDR4 device passed" in report, "Built-in DDR4 test did not finish")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("prefix", type=Path)
@@ -457,6 +465,7 @@ def main():
     environment["PATH"] = str(binaries) + os.pathsep + environment.get("PATH", "")
     logs = args.logs.resolve()
     checks = [
+        ("ddr4-device", lambda directory: check_ddr4_device(compiler, runtime, fixtures, directory, environment)),
         ("editor", lambda directory: check_editor(editor, directory, environment)),
         ("breakpoint", lambda directory: check_breakpoint(compiler, runtime, fixtures, directory, environment)),
         ("source-step", lambda directory: check_source_steps(compiler, runtime, fixtures, directory, environment)),

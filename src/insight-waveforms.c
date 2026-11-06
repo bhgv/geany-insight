@@ -1605,6 +1605,39 @@ static gboolean simulation_port_sram(gchar **args, GString *body, GString *conne
     return TRUE;
 }
 
+static gboolean simulation_port_ddr4(gchar **args, GString *body, GString *connections,
+                                      GHashTable *ports)
+{
+    const guint widths[] = {1, 1, 1, 1, 1, 17, 2, 2, 8, 1, 1};
+    guint ids[G_N_ELEMENTS(widths)];
+    guint64 read_latency, write_latency;
+    if (g_hash_table_size(ports) > 128 - G_N_ELEMENTS(widths) ||
+        !g_ascii_string_to_unsigned(args[12], 10, 1, 64, &read_latency, NULL) ||
+        !g_ascii_string_to_unsigned(args[13], 10, 1, 64, &write_latency, NULL))
+        return FALSE;
+    for (guint i = 0; i < G_N_ELEMENTS(widths); i++)
+    {
+        if (!simulation_port_name(args[i + 1]) || g_hash_table_contains(ports, args[i + 1]))
+            return FALSE;
+        for (guint j = 0; j < i; j++)
+            if (!strcmp(args[i + 1], args[j + 1]))
+                return FALSE;
+    }
+    for (guint i = 0; i < G_N_ELEMENTS(widths); i++)
+        ids[i] = simulation_port_connect(body, connections, ports, args[i + 1], widths[i], TRUE);
+    guint id = ids[0];
+    g_string_append_printf(body,
+        "reg [7:0] ddr4_dq%u='z; reg ddr4_dqs%u=1'bz;\n"
+        "assign pin%u=ddr4_dq%u; assign pin%u=ddr4_dqs%u;\n"
+        "always @(pin%u or pin%u or pin%u) $geany_ddr4(",
+        id, id, ids[8], id, ids[9], id, ids[0], ids[1], ids[9]);
+    for (guint i = 0; i < G_N_ELEMENTS(ids); i++)
+        g_string_append_printf(body, "pin%u,", ids[i]);
+    g_string_append_printf(body, "%" G_GUINT64_FORMAT ",%" G_GUINT64_FORMAT ",ddr4_dq%u,ddr4_dqs%u);\n",
+                           read_latency, write_latency, id, id);
+    return TRUE;
+}
+
 static gboolean simulation_port_uart(gchar **args, gint count, GString *body,
                                       GString *connections, GHashTable *ports, GString *live)
 {
@@ -1796,6 +1829,8 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &live_interval, NULL);
         else if (valid && count == 8 && !strcmp(args[0], "sram"))
             valid = simulation_port_sram(args, body, connections, ports);
+        else if (valid && count == 14 && !strcmp(args[0], "ddr4"))
+            valid = simulation_port_ddr4(args, body, connections, ports);
         else if (valid && (count == 4 || count == 5) && !strcmp(args[0], "uart"))
             valid = simulation_port_uart(args, count, body, connections, ports, live);
         else if (valid && (!strcmp(args[0], "model") || g_str_has_prefix(args[0], "model-")))
@@ -1939,6 +1974,7 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         "bus PORT WIDTH INTERVAL EXPR   ·   output PORT WIDTH\n"
         "live-interval NS   ·   live-input PORT WIDTH INITIAL   ·   monitor PORT WIDTH\n"
         "sram ADDR DQ CE_N WE_N OE_N ADDRESS_BITS DATA_BITS\n"
+        "ddr4 CK RESET_N CKE CS_N ACT_N A BA BG DQ DQS DM_N RL WL (functional x8)\n"
         "uart RX TX BAUD [console]\n"
         "model INSTANCE MODULE SOURCE   ·   model-link INSTANCE DUT_PORT MODEL_PORT WIDTH\n"
         "model-share INSTANCE DUT_PORT MODEL_PORT   ·   model-param / model-value INSTANCE NAME EXPR\n"
@@ -2407,7 +2443,8 @@ static gboolean simulation_interactive(WaveSimulation *run, const gchar *directo
     const gchar *argv[] = {run->runtime, "-i", "-s", "simulation.vvp", NULL};
     const gchar *device_argv[] = {run->runtime, "-M", modules, "-m", "geany_devices",
                                   "-i", "-s", "simulation.vvp", NULL};
-    gboolean devices = run->port_harness && strstr(run->port_harness, "$geany_sram(");
+    gboolean devices = run->port_harness &&
+        (strstr(run->port_harness, "$geany_sram(") || strstr(run->port_harness, "$geany_ddr4("));
     GSubprocess *process = g_subprocess_launcher_spawnv(launcher, devices ? device_argv : argv, error);
     g_free(modules);
     g_free(runtime_prefix);

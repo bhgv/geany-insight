@@ -16,6 +16,7 @@ on:
       - 'insight/tools/build_editor.py'
       - 'insight/tools/build-iverilog.sh'
       - 'insight/tools/geany-vpi-devices.c'
+      - 'insight/tools/geany-ddr4.h'
       - 'insight/tools/setup-windows.ps1'
       - 'insight/tools/windows-toolchain.json'
       - 'insight/patches/geany-vvp.patch'

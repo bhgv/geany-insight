@@ -125,6 +125,20 @@ port and a model port. It also works for bidirectional buses.
 `model-param` passes a named parameter and `model-value` ties a model
 port to an expression. Declare the instance before its bindings.
 
-For DDR4, supply the model for the part you are simulating and map its
-pins and parameters according to that model. Compatibility with Icarus
-depends on the model. Geany does not bundle a DDR4 chip model.
+## Built-in functional DDR4 x8
+
+```text
+ddr4 ck reset_n cke cs_n act_n a ba bg dq dqs dm_n 3 2
+```
+
+The C VPI device connects one rank with a 17-bit multiplexed address,
+two bank bits, two bank-group bits, eight DQ bits, a single-ended DQS,
+and active-low byte mask. The final numbers set read and write latency
+in rising CK cycles. The model opens rows, handles fixed BL8 reads and
+writes, supports auto-precharge and explicit precharge, and retains
+four-state bytes. Storage is sparse with a 65,536-byte limit.
+
+This functional model is intended for controller data-path debugging.
+It supports one outstanding burst. The read strobe is edge-aligned
+with CK. Training, differential signaling, mode-register configuration,
+refresh timing, power states and JEDEC timing checks are outside its scope.

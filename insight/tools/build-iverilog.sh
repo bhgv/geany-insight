@@ -38,7 +38,7 @@ file_digest() {
     printf '%s\n' "${digest%% *}"
 }
 
-stamp_id="$sha $(file_digest "$bridge_patch") $(file_digest "$device_source")"
+stamp_id="$sha $(file_digest "$bridge_patch") $(file_digest "$device_source") $(file_digest "$script_dir/geany-ddr4.h")"
 if [[ -n "$executable_suffix" ]]; then
     stamp_id+=" $(file_digest "$windows_patch")"
 fi
