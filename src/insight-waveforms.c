@@ -1451,6 +1451,7 @@ typedef struct {
     gchar *compiler, *runtime, *include_dir;
     gchar **sources;
     gchar *port_settings, *port_harness;
+    GPtrArray *port_model_sources;
     GtkWidget *live_port_input, *live_port_value, *live_port_send, *live_port_display;
     GHashTable *live_port_samples;
     GtkWidget *uart_window, *uart_view, *uart_entry;
@@ -1507,6 +1508,7 @@ static void simulation_free(gpointer data)
     g_free(run->settings_path);
     g_free(run->port_settings);
     g_free(run->port_harness);
+    g_clear_pointer(&run->port_model_sources, g_ptr_array_unref);
     g_clear_pointer(&run->live_port_samples, g_hash_table_unref);
     if (run->uart_log)
         g_string_free(run->uart_log, TRUE);
@@ -1564,7 +1566,7 @@ static guint simulation_port_connect(GString *body, GString *connections, GHashT
                                      const gchar *name, guint64 width, gboolean wire)
 {
     guint id = g_hash_table_size(ports);
-    g_hash_table_add(ports, g_strdup(name));
+    g_hash_table_insert(ports, g_strdup(name), GUINT_TO_POINTER(id + 1));
     g_string_append_printf(body, "%s [%" G_GUINT64_FORMAT ":0] pin%u;\n",
                            wire ? "wire" : "reg", width - 1, id);
     if (connections->len)
@@ -1643,8 +1645,131 @@ static gboolean simulation_port_uart(gchar **args, gint count, GString *body,
     return TRUE;
 }
 
+typedef struct {
+    gchar *module;
+    GString *pins, *parameters;
+    GHashTable *pin_names, *parameter_names;
+} SimulationModel;
+
+static void simulation_model_free(gpointer data)
+{
+    SimulationModel *model = data;
+    g_free(model->module);
+    g_string_free(model->pins, TRUE);
+    g_string_free(model->parameters, TRUE);
+    g_hash_table_unref(model->pin_names);
+    g_hash_table_unref(model->parameter_names);
+    g_free(model);
+}
+
+static gboolean simulation_port_expression(const gchar *expression)
+{
+    return strlen(expression) <= 256 &&
+        g_regex_match_simple("^[A-Za-z0-9_$'+*/%&|^~!=<>?:(). -]+$", expression, 0, 0) &&
+        !strstr(expression, "//") && !strstr(expression, "/*");
+}
+
+static gboolean simulation_model_source(GPtrArray *sources, const gchar *directory,
+                                        const gchar *filename)
+{
+    gchar *native = g_filename_from_utf8(filename, -1, NULL, NULL, NULL);
+    if (!native)
+        return FALSE;
+    gchar *path = insight_canonicalize_filename(native, directory);
+    g_free(native);
+    const gchar *extension = path ? strrchr(path, '.') : NULL;
+    if (!extension || (g_ascii_strcasecmp(extension, ".v") && g_ascii_strcasecmp(extension, ".sv")) ||
+        !g_file_test(path, G_FILE_TEST_IS_REGULAR))
+    {
+        g_free(path);
+        return FALSE;
+    }
+    for (guint i = 0; i < sources->len; i++)
+        if (!strcmp(sources->pdata[i], path))
+        {
+            g_free(path);
+            return TRUE;
+        }
+    if (sources->len >= 32)
+    {
+        g_free(path);
+        return FALSE;
+    }
+    g_ptr_array_add(sources, path);
+    return TRUE;
+}
+
+static void simulation_model_binding(GString *entries, GHashTable *names,
+                                     const gchar *name, const gchar *expression)
+{
+    if (entries->len)
+        g_string_append_c(entries, ',');
+    g_string_append_printf(entries, ".%s(%s)", name, expression);
+    g_hash_table_add(names, g_strdup(name));
+}
+
+static gboolean simulation_model_rule(gchar **args, gint count, GHashTable *models,
+                                      GPtrArray *sources, const gchar *directory,
+                                      GString *body, GString *connections, GHashTable *ports)
+{
+    const gchar *rule = args[0];
+    if (!strcmp(rule, "model-source"))
+        return count == 2 && simulation_model_source(sources, directory, args[1]);
+    if (count < 2)
+        return FALSE;
+    SimulationModel *model = g_hash_table_lookup(models, args[1]);
+    if (!strcmp(rule, "model"))
+    {
+        if (count != 4 || model || g_hash_table_size(models) >= 8 ||
+            !simulation_port_name(args[1]) || !simulation_port_name(args[2]) ||
+            !simulation_model_source(sources, directory, args[3]))
+            return FALSE;
+        model = g_new0(SimulationModel, 1);
+        model->module = g_strdup(args[2]);
+        model->pins = g_string_new(NULL);
+        model->parameters = g_string_new(NULL);
+        model->pin_names = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+        model->parameter_names = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+        g_hash_table_insert(models, g_strdup(args[1]), model);
+        return TRUE;
+    }
+    if (!model || count < 4 || !simulation_port_name(args[2]))
+        return FALSE;
+    if (!strcmp(rule, "model-param") || !strcmp(rule, "model-value"))
+    {
+        gboolean parameter = !strcmp(rule, "model-param");
+        GHashTable *names = parameter ? model->parameter_names : model->pin_names;
+        if (count != 4 || g_hash_table_contains(names, args[2]) ||
+            !simulation_port_expression(args[3]))
+            return FALSE;
+        simulation_model_binding(parameter ? model->parameters : model->pins, names, args[2], args[3]);
+        return TRUE;
+    }
+    if (!simulation_port_name(args[3]) || g_hash_table_contains(model->pin_names, args[3]))
+        return FALSE;
+    gpointer existing = g_hash_table_lookup(ports, args[2]);
+    guint id;
+    if (!strcmp(rule, "model-share") && count == 4 && existing)
+        id = GPOINTER_TO_UINT(existing) - 1;
+    else if (!strcmp(rule, "model-link") && count == 5 && !existing &&
+             g_hash_table_size(ports) < 128)
+    {
+        guint64 width;
+        if (!g_ascii_string_to_unsigned(args[4], 10, 1, 4096, &width, NULL))
+            return FALSE;
+        id = simulation_port_connect(body, connections, ports, args[2], width, TRUE);
+    }
+    else
+        return FALSE;
+    gchar *signal = g_strdup_printf("pin%u", id);
+    simulation_model_binding(model->pins, model->pin_names, args[3], signal);
+    g_free(signal);
+    return TRUE;
+}
+
 /* Generate a private testbench from a per-source port recipe. */
-static gchar *simulation_port_harness(const gchar *recipe, GError **error)
+static gchar *simulation_port_harness(const gchar *recipe, const gchar *directory,
+                                      GPtrArray *sources, GError **error)
 {
     gchar **lines = g_strsplit(recipe, "\n", -1);
     GString *body = g_string_new("`timescale 1ns/1ns\nmodule geany_port_testbench;\n");
@@ -1652,6 +1777,7 @@ static gchar *simulation_port_harness(const gchar *recipe, GError **error)
     GString *live = g_string_new(NULL);
     guint64 live_interval = 0;
     GHashTable *ports = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    GHashTable *models = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, simulation_model_free);
     gchar *module = NULL;
     guint64 duration = 1000;
     gboolean valid = TRUE;
@@ -1674,6 +1800,8 @@ static gchar *simulation_port_harness(const gchar *recipe, GError **error)
             valid = simulation_port_sram(args, body, connections, ports);
         else if (valid && (count == 4 || count == 5) && !strcmp(args[0], "uart"))
             valid = simulation_port_uart(args, count, body, connections, ports, live);
+        else if (valid && (!strcmp(args[0], "model") || g_str_has_prefix(args[0], "model-")))
+            valid = simulation_model_rule(args, count, models, sources, directory, body, connections, ports);
         else if (valid && count >= 3 && g_hash_table_size(ports) < 128 &&
                  g_regex_match_simple("^[A-Za-z_][A-Za-z0-9_$]*$", args[1], 0, 0) &&
                  !g_hash_table_contains(ports, args[1]))
@@ -1695,9 +1823,7 @@ static gchar *simulation_port_harness(const gchar *recipe, GError **error)
             if (valid && (monitor || input))
                 valid = width <= 64;
             for (gint j = scalar ? 2 : 3; j < count && valid; j++)
-                valid = strlen(args[j]) <= 256 &&
-                    g_regex_match_simple("^[A-Za-z0-9_$'+*/%&|^~!=<>?:(). -]+$", args[j], 0, 0) &&
-                    !strstr(args[j], "//") && !strstr(args[j], "/*");
+                valid = simulation_port_expression(args[j]);
             if (valid && !strcmp(mode, "pulse"))
                 valid = !strcmp(args[4], "0") || !strcmp(args[4], "1");
             if (valid)
@@ -1748,7 +1874,7 @@ static gchar *simulation_port_harness(const gchar *recipe, GError **error)
             g_set_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Invalid port recipe on line %u.", i + 1);
         g_strfreev(args);
     }
-    if (valid && !module && connections->len)
+    if (valid && !module && (connections->len || sources->len || g_hash_table_size(models)))
     {
         valid = FALSE;
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Add a module line for the configured ports.");
@@ -1756,6 +1882,16 @@ static gchar *simulation_port_harness(const gchar *recipe, GError **error)
     gchar *result = NULL;
     if (valid && module)
     {
+        GList *instances = g_list_sort(g_hash_table_get_keys(models), (GCompareFunc)g_strcmp0);
+        for (GList *it = instances; it; it = it->next)
+        {
+            SimulationModel *model = g_hash_table_lookup(models, it->data);
+            g_string_append_printf(body, "%s ", model->module);
+            if (model->parameters->len)
+                g_string_append_printf(body, "#(%s) ", model->parameters->str);
+            g_string_append_printf(body, "geany_model_%s(%s);\n", (const gchar *)it->data, model->pins->str);
+        }
+        g_list_free(instances);
         g_string_append_printf(body,
             "%s dut(%s);\ninitial begin $dumpfile(\"ports.vcd\"); $dumpvars(0,geany_port_testbench); "
             "#%" G_GUINT64_FORMAT "; $finish; end\nendmodule\n", module, connections->str, duration);
@@ -1779,13 +1915,15 @@ static gchar *simulation_port_harness(const gchar *recipe, GError **error)
         g_string_free(body, TRUE);
     g_free(module);
     g_hash_table_unref(ports);
+    g_hash_table_unref(models);
     g_string_free(connections, TRUE);
     g_string_free(live, TRUE);
     g_strfreev(lines);
     return result;
 }
 
-static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, gchar **harness)
+static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, const gchar *source_directory,
+                                      gchar **harness, GPtrArray **model_sources)
 {
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Port Signals", parent,
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
@@ -1802,6 +1940,8 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, gcha
         "live-interval NS   ·   live-input PORT WIDTH INITIAL   ·   monitor PORT WIDTH\n"
         "sram ADDR DQ CE_N WE_N OE_N ADDRESS_BITS DATA_BITS\n"
         "uart RX TX BAUD [console]\n"
+        "model INSTANCE MODULE SOURCE   ·   model-link INSTANCE DUT_PORT MODEL_PORT WIDTH\n"
+        "model-share INSTANCE DUT_PORT MODEL_PORT   ·   model-param / model-value INSTANCE NAME EXPR\n"
         "Use step in bus expressions and $time for simulation time. Quote formulas containing spaces.");
     gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
     gtk_label_set_xalign(GTK_LABEL(hint), 0);
@@ -1834,7 +1974,9 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, gcha
         gtk_text_buffer_get_bounds(buffer, &first, &last);
         gchar *recipe = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
         GError *error = NULL;
-        gchar *generated = strlen(recipe) <= 16384 ? simulation_port_harness(recipe, &error) : NULL;
+        GPtrArray *sources = g_ptr_array_new_with_free_func(g_free);
+        gchar *generated = strlen(recipe) <= 16384 ?
+            simulation_port_harness(recipe, source_directory, sources, &error) : NULL;
         gchar *directory = g_path_get_dirname(path);
         if (!error && strlen(recipe) <= 16384 && g_mkdir_with_parents(directory, 0700) == 0 &&
             g_file_set_contents(path, recipe, -1, &error))
@@ -1842,10 +1984,13 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, gcha
             accepted = TRUE;
             if (harness)
                 *harness = g_steal_pointer(&generated);
+            if (model_sources)
+                *model_sources = g_steal_pointer(&sources);
         }
         if (!accepted)
             gtk_label_set_text(GTK_LABEL(status), error ? error->message : "Cannot save the port recipe.");
         g_free(directory);
+        g_clear_pointer(&sources, g_ptr_array_unref);
         g_free(generated);
         g_free(recipe);
         g_clear_error(&error);
@@ -1862,7 +2007,9 @@ static void simulation_port_settings(GtkButton *button, gpointer data)
     (void)button;
     WaveSimulation *run = data;
     gchar *path = g_strdup(run->port_settings);
-    simulation_edit_ports(GTK_WINDOW(run->dialog), path, NULL);
+    gchar *source_directory = g_path_get_dirname(run->sources[0]);
+    simulation_edit_ports(GTK_WINDOW(run->dialog), path, source_directory, NULL, NULL);
+    g_free(source_directory);
     g_free(path);
 }
 
@@ -2367,6 +2514,18 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
             g_ptr_array_add(command, "-pfileline=1");
         for (guint i = 0; run->sources[i]; i++)
             g_ptr_array_add(command, run->sources[i]);
+        GPtrArray *model_directories = g_ptr_array_new_with_free_func(g_free);
+        if (run->port_model_sources)
+            for (guint i = 0; i < run->port_model_sources->len; i++)
+            {
+                const gchar *source = run->port_model_sources->pdata[i];
+                gchar *model_directory = g_path_get_dirname(source);
+                g_ptr_array_add(model_directories, model_directory);
+                g_ptr_array_add(command, "-I");
+                g_ptr_array_add(command, model_directory);
+                if (!g_strv_contains((const gchar *const *)run->sources, source))
+                    g_ptr_array_add(command, (gpointer)source);
+            }
         gchar *harness_path = NULL;
         if (run->port_harness)
         {
@@ -2391,6 +2550,7 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
             g_free(vcd);
         }
         g_ptr_array_unref(command);
+        g_ptr_array_unref(model_directories);
         g_free(harness_path);
         g_free(bin);
 
@@ -3440,7 +3600,11 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         gchar *key = simulation_settings_path(settings_directory, project, run->sources);
         run->port_settings = g_strconcat(key, ".ports", NULL);
         g_free(key);
-        if (!simulation_edit_ports(parent, run->port_settings, &run->port_harness))
+        gchar *source_directory = g_path_get_dirname(run->sources[0]);
+        gboolean accepted = simulation_edit_ports(parent, run->port_settings, source_directory,
+                                                   &run->port_harness, &run->port_model_sources);
+        g_free(source_directory);
+        if (!accepted)
         {
             simulation_free(run);
             return;

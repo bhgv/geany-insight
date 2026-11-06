@@ -237,6 +237,12 @@ static gboolean accept_ports(gpointer data)
             "live-input enable 1 0\n"
             "monitor ready 1\n"
             "monitor result 8\n"
+            "monitor model_result 8\n"
+            "model ext external_memory \"external memory.sv\"\n"
+            "model-param ext DATA \"8'h3c\"\n"
+            "model-value ext mask \"8'h05\"\n"
+            "model-share ext ready enable\n"
+            "model-link ext external_data data 8\n"
             "sram addr dq ce_n we_n oe_n 4 8\n"
             "uart rx tx 1000000 console\n", -1);
     }
@@ -445,9 +451,10 @@ static gboolean drive_debugger(gpointer data)
         GtkWidget *readings = find_control(simulation, "insight-live-port-readings");
         const gchar *values = readings ? gtk_label_get_text(GTK_LABEL(readings)) : "";
         if (uart && console_contains(uart, "OK") &&
-            strstr(values, "ready = 1") && strstr(values, "result = 10100101 (165)"))
+            strstr(values, "ready = 1") && strstr(values, "result = 10100101 (165)") &&
+            strstr(values, "model_result = 00111001 (57)"))
         {
-            g_print("Verilog GTK: live input, monitor, SRAM round trip and UART loopback passed.\n");
+            g_print("Verilog GTK: live input, monitors, SRAM, external model and UART passed.\n");
             passed = TRUE;
             gtk_widget_destroy(simulation);
             gtk_main_quit();
@@ -555,6 +562,18 @@ int main(int argc, char **argv)
     g_free(testbench_text);
     g_free(counter);
     g_free(testbench);
+    if (saved && live_devices)
+    {
+        gchar *model = g_build_filename(fixture_dir, "external_memory.sv", NULL);
+        gchar *destination = g_build_filename(work_dir, "external memory.sv", NULL);
+        gchar *text = NULL;
+        gsize size = 0;
+        saved = g_file_get_contents(model, &text, &size, NULL) &&
+                g_file_set_contents(destination, text, size, NULL);
+        g_free(text);
+        g_free(destination);
+        g_free(model);
+    }
     g_free(fixture_dir);
     g_free(work_dir);
     if (!saved)

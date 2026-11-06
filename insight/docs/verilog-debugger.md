@@ -102,3 +102,29 @@ adds **UART Console…** to the debugger panel. Press Enter to send the
 entry's UTF-8 bytes without an automatic newline. The receiver displays
 ASCII and escapes other bytes as `\xNN`. The entry waits for the previous
 message to finish transmitting before accepting another one.
+
+## External SystemVerilog device models
+
+Use a simulator-compatible model you already have. The source path is
+relative to the current HDL file, or absolute. Quote paths with spaces.
+Add companion compilation units with `model-source`. The source
+directories are also added to Icarus's include search.
+
+```text
+model mem external_memory "models/external memory.sv"
+model-param mem DATA "8'h3c"
+model-value mem mask "8'h05"
+monitor ready 1
+model-share mem ready enable
+model-link mem external_data data 8
+```
+
+`model-link` creates a shared wire of the specified width between a DUT
+port and a model port. It also works for bidirectional buses.
+`model-share` attaches a model port to an already configured DUT signal.
+`model-param` passes a named parameter and `model-value` ties a model
+port to an expression. Declare the instance before its bindings.
+
+For DDR4, supply the model for the part you are simulating and map its
+pins and parameters according to that model. Compatibility with Icarus
+depends on the model. Geany does not bundle a DDR4 chip model.
