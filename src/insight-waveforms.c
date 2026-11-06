@@ -1452,6 +1452,7 @@ typedef struct {
     gchar **sources;
     gchar *port_settings, *port_harness;
     GPtrArray *port_model_sources;
+    GHashTable *port_images;
     GtkWidget *live_port_input, *live_port_value, *live_port_send, *live_port_display;
     GHashTable *live_port_samples;
     GtkWidget *uart_window, *uart_view, *uart_entry;
@@ -1509,6 +1510,7 @@ static void simulation_free(gpointer data)
     g_free(run->port_settings);
     g_free(run->port_harness);
     g_clear_pointer(&run->port_model_sources, g_ptr_array_unref);
+    g_clear_pointer(&run->port_images, g_hash_table_unref);
     g_clear_pointer(&run->live_port_samples, g_hash_table_unref);
     if (run->uart_log)
         g_string_free(run->uart_log, TRUE);
@@ -1575,8 +1577,24 @@ static guint simulation_port_connect(GString *body, GString *connections, GHashT
     return id;
 }
 
+static gchar *simulation_memory_filename(const gchar *anchor)
+{
+    return g_strdup_printf("geany-memory-%s.hex", anchor);
+}
+
+static void simulation_memory_argument(GString *body, GHashTable *images, const gchar *anchor)
+{
+    if (g_hash_table_contains(images, anchor))
+    {
+        gchar *name = simulation_memory_filename(anchor);
+        g_string_append_printf(body, ",\"%s\"", name);
+        g_free(name);
+    }
+    g_string_append(body, ");\n");
+}
+
 static gboolean simulation_port_sram(gchar **args, GString *body, GString *connections,
-                                      GHashTable *ports)
+                                      GHashTable *ports, GHashTable *images)
 {
     guint64 address, width;
     if (g_hash_table_size(ports) > 123 ||
@@ -1600,22 +1618,26 @@ static gboolean simulation_port_sram(gchar **args, GString *body, GString *conne
         "reg [%" G_GUINT64_FORMAT ":0] sram_drive%u = 'z;\n"
         "assign pin%u = sram_drive%u;\n"
         "always @(pin%u or pin%u or pin%u or pin%u or pin%u) "
-        "$geany_sram(pin%u,pin%u,pin%u,pin%u,pin%u,sram_drive%u);\n",
+        "$geany_sram(pin%u,pin%u,pin%u,pin%u,pin%u,sram_drive%u",
         width - 1, addr, dq, addr, we, ce, oe, addr, dq, addr, dq, ce, we, oe, addr);
+    simulation_memory_argument(body, images, args[1]);
     return TRUE;
 }
 
-static gboolean simulation_port_ddr4(gchar **args, GString *body, GString *connections,
-                                      GHashTable *ports)
+static gboolean simulation_port_ddr(gchar **args, GString *body, GString *connections,
+                                    GHashTable *ports, GHashTable *images, gboolean ddr3)
 {
-    const guint widths[] = {1, 1, 1, 1, 1, 17, 2, 2, 8, 1, 1};
-    guint ids[G_N_ELEMENTS(widths)];
+    const guint ddr3_widths[] = {1, 1, 1, 1, 1, 1, 1, 16, 3, 8, 1, 1};
+    const guint ddr4_widths[] = {1, 1, 1, 1, 1, 17, 2, 2, 8, 1, 1};
+    const guint *widths = ddr3 ? ddr3_widths : ddr4_widths;
+    guint count = ddr3 ? G_N_ELEMENTS(ddr3_widths) : G_N_ELEMENTS(ddr4_widths);
+    guint ids[G_N_ELEMENTS(ddr3_widths)];
     guint64 read_latency, write_latency;
-    if (g_hash_table_size(ports) > 128 - G_N_ELEMENTS(widths) ||
-        !g_ascii_string_to_unsigned(args[12], 10, 1, 64, &read_latency, NULL) ||
-        !g_ascii_string_to_unsigned(args[13], 10, 1, 64, &write_latency, NULL))
+    if (g_hash_table_size(ports) > 128 - count ||
+        !g_ascii_string_to_unsigned(args[count + 1], 10, 1, 64, &read_latency, NULL) ||
+        !g_ascii_string_to_unsigned(args[count + 2], 10, 1, 64, &write_latency, NULL))
         return FALSE;
-    for (guint i = 0; i < G_N_ELEMENTS(widths); i++)
+    for (guint i = 0; i < count; i++)
     {
         if (!simulation_port_name(args[i + 1]) || g_hash_table_contains(ports, args[i + 1]))
             return FALSE;
@@ -1623,18 +1645,20 @@ static gboolean simulation_port_ddr4(gchar **args, GString *body, GString *conne
             if (!strcmp(args[i + 1], args[j + 1]))
                 return FALSE;
     }
-    for (guint i = 0; i < G_N_ELEMENTS(widths); i++)
+    for (guint i = 0; i < count; i++)
         ids[i] = simulation_port_connect(body, connections, ports, args[i + 1], widths[i], TRUE);
-    guint id = ids[0];
+    guint id = ids[0], dq = ids[count - 3], dqs = ids[count - 2];
     g_string_append_printf(body,
-        "reg [7:0] ddr4_dq%u='z; reg ddr4_dqs%u=1'bz;\n"
-        "assign pin%u=ddr4_dq%u; assign pin%u=ddr4_dqs%u;\n"
-        "always @(pin%u or pin%u or pin%u) $geany_ddr4(",
-        id, id, ids[8], id, ids[9], id, ids[0], ids[1], ids[9]);
-    for (guint i = 0; i < G_N_ELEMENTS(ids); i++)
+        "reg [7:0] ddr_dq%u='z; reg ddr_dqs%u=1'bz;\n"
+        "assign pin%u=ddr_dq%u; assign pin%u=ddr_dqs%u;\n",
+        id, id, dq, id, dqs, id);
+    g_string_append_printf(body, "always @(pin%u or pin%u or pin%u) $geany_ddr%u(",
+                           id, ids[1], dqs, ddr3 ? 3 : 4);
+    for (guint i = 0; i < count; i++)
         g_string_append_printf(body, "pin%u,", ids[i]);
-    g_string_append_printf(body, "%" G_GUINT64_FORMAT ",%" G_GUINT64_FORMAT ",ddr4_dq%u,ddr4_dqs%u);\n",
+    g_string_append_printf(body, "%" G_GUINT64_FORMAT ",%" G_GUINT64_FORMAT ",ddr_dq%u,ddr_dqs%u",
                            read_latency, write_latency, id, id);
+    simulation_memory_argument(body, images, args[ddr3 ? 8 : 6]);
     return TRUE;
 }
 
@@ -1799,8 +1823,54 @@ static gboolean simulation_model_rule(gchar **args, gint count, GHashTable *mode
 }
 
 /* Generate a private testbench from a per-source port recipe. */
+static gboolean simulation_memory_image(GHashTable *images, const gchar *anchor,
+                                        const gchar *filename, const gchar *directory, GError **error)
+{
+    if (!simulation_port_name(anchor) || g_hash_table_contains(images, anchor))
+        return FALSE;
+    gchar *native = g_filename_from_utf8(filename, -1, NULL, NULL, error);
+    if (!native)
+        return FALSE;
+    gchar *path = g_canonicalize_filename(native, directory);
+    if (!g_file_test(path, G_FILE_TEST_IS_REGULAR))
+    {
+        g_set_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                    "Memory image must be a regular file: %s", filename);
+        g_free(path);
+        g_free(native);
+        return FALSE;
+    }
+    GFile *file = g_file_new_for_path(path);
+    GFileInputStream *stream = g_file_read(file, NULL, error);
+    gboolean valid = FALSE;
+    if (stream)
+    {
+        const gsize limit = 1024 * 1024;
+        gchar *data = g_malloc(limit + 1);
+        gsize length = 0;
+        if (g_input_stream_read_all(G_INPUT_STREAM(stream), data, limit + 1, &length, NULL, error))
+        {
+            if (length <= limit && !memchr(data, 0, length))
+            {
+                g_hash_table_insert(images, g_strdup(anchor), g_bytes_new_take(data, length));
+                data = NULL;
+                valid = TRUE;
+            }
+            else
+                g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                                    "Use a text memory image of at most 1 MiB.");
+        }
+        g_free(data);
+        g_object_unref(stream);
+    }
+    g_object_unref(file);
+    g_free(path);
+    g_free(native);
+    return valid;
+}
+
 static gchar *simulation_port_harness(const gchar *recipe, const gchar *directory,
-                                      GPtrArray *sources, GError **error)
+                                      GPtrArray *sources, GHashTable *images, GError **error)
 {
     gchar **lines = g_strsplit(recipe, "\n", -1);
     GString *body = g_string_new("`timescale 1ns/1ns\nmodule geany_port_testbench;\n");
@@ -1811,6 +1881,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
     GHashTable *models = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, simulation_model_free);
     gchar *module = NULL;
     guint64 duration = 1000;
+    guint attached_images = 0;
     gboolean valid = TRUE;
     for (guint i = 0; lines[i] && valid; i++)
     {
@@ -1827,10 +1898,21 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &duration, NULL);
         else if (valid && count == 2 && !strcmp(args[0], "live-interval"))
             valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &live_interval, NULL);
+        else if (valid && count == 3 && !strcmp(args[0], "memory-image"))
+            valid = !g_hash_table_contains(ports, args[1]) &&
+                simulation_memory_image(images, args[1], args[2], directory, error);
         else if (valid && count == 8 && !strcmp(args[0], "sram"))
-            valid = simulation_port_sram(args, body, connections, ports);
-        else if (valid && count == 14 && !strcmp(args[0], "ddr4"))
-            valid = simulation_port_ddr4(args, body, connections, ports);
+        {
+            valid = simulation_port_sram(args, body, connections, ports, images);
+            attached_images += valid && g_hash_table_contains(images, args[1]);
+        }
+        else if (valid && ((count == 14 && !strcmp(args[0], "ddr4")) ||
+                           (count == 15 && !strcmp(args[0], "ddr3"))))
+        {
+            gboolean ddr3 = count == 15;
+            valid = simulation_port_ddr(args, body, connections, ports, images, ddr3);
+            attached_images += valid && g_hash_table_contains(images, args[ddr3 ? 8 : 6]);
+        }
         else if (valid && (count == 4 || count == 5) && !strcmp(args[0], "uart"))
             valid = simulation_port_uart(args, count, body, connections, ports, live);
         else if (valid && (!strcmp(args[0], "model") || g_str_has_prefix(args[0], "model-")))
@@ -1903,9 +1985,15 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         }
         else
             valid = FALSE;
-        if (!valid)
+        if (!valid && (!error || !*error))
             g_set_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Invalid port recipe on line %u.", i + 1);
         g_strfreev(args);
+    }
+    if (valid && attached_images != g_hash_table_size(images))
+    {
+        valid = FALSE;
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                            "Each memory-image must precede an SRAM, DDR3 or DDR4 rule with the same address port.");
     }
     if (valid && !module && (connections->len || sources->len || g_hash_table_size(models)))
     {
@@ -1958,7 +2046,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
 }
 
 static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, const gchar *source_directory,
-                                      gchar **harness, GPtrArray **model_sources)
+                                      gchar **harness, GPtrArray **model_sources, GHashTable **port_images)
 {
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Port Signals", parent,
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
@@ -1974,6 +2062,8 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         "bus PORT WIDTH INTERVAL EXPR   ·   output PORT WIDTH\n"
         "live-interval NS   ·   live-input PORT WIDTH INITIAL   ·   monitor PORT WIDTH\n"
         "sram ADDR DQ CE_N WE_N OE_N ADDRESS_BITS DATA_BITS\n"
+        "memory-image ADDR FILE (before its SRAM or DDR rule)\n"
+        "ddr3 CK RESET_N CKE CS_N RAS_N CAS_N WE_N A BA DQ DQS DM RL WL (functional x8)\n"
         "ddr4 CK RESET_N CKE CS_N ACT_N A BA BG DQ DQS DM_N RL WL (functional x8)\n"
         "uart RX TX BAUD [console]\n"
         "model INSTANCE MODULE SOURCE   ·   model-link INSTANCE DUT_PORT MODEL_PORT WIDTH\n"
@@ -2011,8 +2101,10 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         gchar *recipe = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
         GError *error = NULL;
         GPtrArray *sources = g_ptr_array_new_with_free_func(g_free);
+        GHashTable *images = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
+                                                    (GDestroyNotify)g_bytes_unref);
         gchar *generated = strlen(recipe) <= 16384 ?
-            simulation_port_harness(recipe, source_directory, sources, &error) : NULL;
+            simulation_port_harness(recipe, source_directory, sources, images, &error) : NULL;
         gchar *directory = g_path_get_dirname(path);
         if (!error && strlen(recipe) <= 16384 && g_mkdir_with_parents(directory, 0700) == 0 &&
             g_file_set_contents(path, recipe, -1, &error))
@@ -2022,11 +2114,14 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
                 *harness = g_steal_pointer(&generated);
             if (model_sources)
                 *model_sources = g_steal_pointer(&sources);
+            if (port_images)
+                *port_images = g_steal_pointer(&images);
         }
         if (!accepted)
             gtk_label_set_text(GTK_LABEL(status), error ? error->message : "Cannot save the port recipe.");
         g_free(directory);
         g_clear_pointer(&sources, g_ptr_array_unref);
+        g_clear_pointer(&images, g_hash_table_unref);
         g_free(generated);
         g_free(recipe);
         g_clear_error(&error);
@@ -2044,7 +2139,7 @@ static void simulation_port_settings(GtkButton *button, gpointer data)
     WaveSimulation *run = data;
     gchar *path = g_strdup(run->port_settings);
     gchar *source_directory = g_path_get_dirname(run->sources[0]);
-    simulation_edit_ports(GTK_WINDOW(run->dialog), path, source_directory, NULL, NULL);
+    simulation_edit_ports(GTK_WINDOW(run->dialog), path, source_directory, NULL, NULL, NULL);
     g_free(source_directory);
     g_free(path);
 }
@@ -2444,7 +2539,8 @@ static gboolean simulation_interactive(WaveSimulation *run, const gchar *directo
     const gchar *device_argv[] = {run->runtime, "-M", modules, "-m", "geany_devices",
                                   "-i", "-s", "simulation.vvp", NULL};
     gboolean devices = run->port_harness &&
-        (strstr(run->port_harness, "$geany_sram(") || strstr(run->port_harness, "$geany_ddr4("));
+        (strstr(run->port_harness, "$geany_sram(") ||
+         strstr(run->port_harness, "$geany_ddr3(") || strstr(run->port_harness, "$geany_ddr4("));
     GSubprocess *process = g_subprocess_launcher_spawnv(launcher, devices ? device_argv : argv, error);
     g_free(modules);
     g_free(runtime_prefix);
@@ -2572,8 +2668,24 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
                 if (!g_strv_contains((const gchar *const *)run->sources, source))
                     g_ptr_array_add(command, (gpointer)source);
             }
+        if (run->port_images)
+        {
+            GHashTableIter iter;
+            gpointer anchor, image;
+            g_hash_table_iter_init(&iter, run->port_images);
+            while (!error && g_hash_table_iter_next(&iter, &anchor, &image))
+            {
+                gchar *name = simulation_memory_filename(anchor);
+                gchar *path = g_build_filename(directory, name, NULL);
+                gsize size;
+                const gchar *bytes = g_bytes_get_data(image, &size);
+                g_file_set_contents(path, size ? bytes : "", size, &error);
+                g_free(path);
+                g_free(name);
+            }
+        }
         gchar *harness_path = NULL;
-        if (run->port_harness)
+        if (!error && run->port_harness)
         {
             harness_path = g_build_filename(directory, "geany-port-testbench.sv", NULL);
             if (g_file_set_contents(harness_path, run->port_harness, -1, &error))
@@ -3648,7 +3760,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         g_free(key);
         gchar *source_directory = g_path_get_dirname(run->sources[0]);
         gboolean accepted = simulation_edit_ports(parent, run->port_settings, source_directory,
-                                                   &run->port_harness, &run->port_model_sources);
+                                                   &run->port_harness, &run->port_model_sources, &run->port_images);
         g_free(source_directory);
         if (!accepted)
         {

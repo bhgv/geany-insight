@@ -21,10 +21,8 @@ typedef struct {
     unsigned open, mode, bank, column, beat, auto_close;
 } Ddr4;
 
-static Ddr4Cell *ddr4_cell(Ddr4 *device, int create)
+static Ddr4Cell *ddr4_cell_key(Ddr4 *device, uint32_t key, int create)
 {
-    unsigned column = (device->column & ~7u) | ((device->column + device->beat) & 7u);
-    uint32_t key = (device->row[device->bank] << 14) | (device->bank << 10) | column;
     unsigned slot = (key * UINT32_C(2654435761)) >> 16;
     for (unsigned i = 0; i < DDR4_CAPACITY; i++) {
         Ddr4Cell *cell = &device->cells[(slot + i) & (DDR4_CAPACITY - 1)];
@@ -39,6 +37,13 @@ static Ddr4Cell *ddr4_cell(Ddr4 *device, int create)
         }
     }
     return NULL;
+}
+
+static Ddr4Cell *ddr4_cell(Ddr4 *device, int create)
+{
+    unsigned column = (device->column & ~7u) | ((device->column + device->beat) & 7u);
+    uint32_t key = (device->row[device->bank] << 14) | (device->bank << 10) | column;
+    return ddr4_cell_key(device, key, create);
 }
 
 static void ddr4_reset(Ddr4 *device)

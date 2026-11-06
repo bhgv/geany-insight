@@ -142,3 +142,41 @@ This functional model is intended for controller data-path debugging.
 It supports one outstanding burst. The read strobe is edge-aligned
 with CK. Training, differential signaling, mode-register configuration,
 refresh timing, power states and JEDEC timing checks are outside its scope.
+
+## Built-in functional DDR3 x8
+
+```text
+ddr3 ck reset_n cke cs_n ras_n cas_n we_n a ba dq dqs dm 3 2
+```
+
+The C device takes separate RAS#, CAS# and WE# signals, a 16-bit address,
+a 3-bit bank, eight DQ bits, single-ended DQS and active-high DM.
+It shares the functional BL8 behavior, latency units and limits described
+for DDR4 above.
+
+## Preload SRAM, DDR3 or DDR4
+
+Put a `memory-image` line before the device rule and name the same DUT
+address port. The path can be absolute or relative to the open Verilog
+source directory. Quote paths containing spaces.
+
+```text
+memory-image sram_addr "fixtures/boot words.hex"
+sram sram_addr dq ce_n we_n oe_n 12 16
+```
+
+The image is a plain text file of up to 1 MiB. Separate hexadecimal
+words by whitespace. An optional `@hex_address` changes the address
+for the next word. The default starting address is zero. A token
+beginning with `#` starts a comment through the end of the line.
+
+```text
+# Two consecutive SRAM words, starting at address 0x10
+@10 BEEF 1234
+```
+
+SRAM addresses count words of the configured width. DDR images contain
+one byte per address, using `(row << 14) | (bank << 10) | column`. For
+DDR3, bank is BA (0–7). For DDR4 it is `(BG << 2) | BA` (0–15).
+The saved recipe keeps the path. Each new session reads the file again
+and applies it before the device responds to its first bus event.

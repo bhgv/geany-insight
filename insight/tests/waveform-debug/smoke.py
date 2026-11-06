@@ -443,6 +443,16 @@ def check_ddr4_device(compiler, runtime, fixtures, directory, environment):
     require("DDR4 device passed" in report, "Built-in DDR4 test did not finish")
 
 
+def check_memory_image(compiler, runtime, fixtures, directory, environment):
+    compile_design(compiler, directory, [fixtures / "memory_image_tb.sv"], environment)
+    (directory / "sram.hex").write_text("# two words\n@3 beef 0123\n", encoding="ascii")
+    (directory / "ddr.hex").write_text("@2048d400 80 81 82 83 84 85 86 87\n", encoding="ascii")
+    modules = runtime.parent.parent / "lib" / "ivl"
+    report = capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
+                              "simulation.vvp"], directory, "memory-image", environment)
+    require("Memory image test passed" in report, "Built-in memory image test did not finish")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("prefix", type=Path)
@@ -465,6 +475,7 @@ def main():
     environment["PATH"] = str(binaries) + os.pathsep + environment.get("PATH", "")
     logs = args.logs.resolve()
     checks = [
+        ("memory-image", lambda directory: check_memory_image(compiler, runtime, fixtures, directory, environment)),
         ("ddr4-device", lambda directory: check_ddr4_device(compiler, runtime, fixtures, directory, environment)),
         ("editor", lambda directory: check_editor(editor, directory, environment)),
         ("breakpoint", lambda directory: check_breakpoint(compiler, runtime, fixtures, directory, environment)),
