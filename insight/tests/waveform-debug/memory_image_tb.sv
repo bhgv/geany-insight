@@ -7,6 +7,10 @@ module memory_image_tb;
     reg model_dqs = 1'bz;
     wire [7:0] dq = model_data;
     wire dqs = model_dqs;
+    reg [7:0] ddr2_data = 'z;
+    reg ddr2_dqs = 1'bz;
+    wire [7:0] dq2 = ddr2_data;
+    wire dqs2 = ddr2_dqs;
     reg [3:0] sram_address = 3;
     reg [15:0] sram_drive = 'z;
     wire [15:0] sram_dq = sram_drive;
@@ -17,6 +21,10 @@ module memory_image_tb;
     always @(ck or reset_n or dqs)
         $geany_ddr3(ck, reset_n, cke, cs_n, command[2], command[1], command[0],
                    address, bank, dq, dqs, dm, 1, 1, model_data, model_dqs, "ddr.hex");
+
+    always @(ck or dqs2)
+        $geany_ddr2(ck, cke, cs_n, command[2], command[1], command[0],
+                   address[13:0], bank, dq2, dqs2, dm, 1, 1, ddr2_data, ddr2_dqs, "ddr2.hex");
 
     always @(sram_address or sram_dq or ce_n or we_n or oe_n)
         $geany_sram(sram_address, sram_dq, ce_n, we_n, oe_n, sram_drive, "sram.hex");
@@ -45,6 +53,8 @@ module memory_image_tb;
             #1;
             if (dq !== (8'h80 + 8'(beat)) || dqs !== ck)
                 $fatal(1, "DDR3 preload beat %0d was %h / %b", beat, dq, dqs);
+            if (dq2 !== (8'h90 + 8'(beat)) || dqs2 !== ck)
+                $fatal(1, "DDR2 preload beat %0d was %h / %b", beat, dq2, dqs2);
         end
         ck = !ck;
         #1 if (dq !== 8'bz || dqs !== 1'bz)

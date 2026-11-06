@@ -446,11 +446,21 @@ def check_ddr4_device(compiler, runtime, fixtures, directory, environment):
 def check_memory_image(compiler, runtime, fixtures, directory, environment):
     compile_design(compiler, directory, [fixtures / "memory_image_tb.sv"], environment)
     (directory / "sram.hex").write_text("# two words\n@3 beef 0123\n", encoding="ascii")
+    (directory / "ddr2.hex").write_text("@48d400 90 91 92 93 94 95 96 97\n", encoding="ascii")
     (directory / "ddr.hex").write_text("@2048d400 80 81 82 83 84 85 86 87\n", encoding="ascii")
     modules = runtime.parent.parent / "lib" / "ivl"
     report = capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
                               "simulation.vvp"], directory, "memory-image", environment)
     require("Memory image test passed" in report, "Built-in memory image test did not finish")
+
+
+def check_spi_memory(compiler, runtime, fixtures, directory, environment):
+    compile_design(compiler, directory, [fixtures / "spi_memory_tb.sv"], environment)
+    (directory / "nor.hex").write_text("@10 ba\n", encoding="ascii")
+    modules = runtime.parent.parent / "lib" / "ivl"
+    report = capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
+                              "simulation.vvp"], directory, "spi-memory", environment)
+    require("SPI memory test passed" in report, "SPI memory test did not finish")
 
 
 def main():
@@ -475,6 +485,7 @@ def main():
     environment["PATH"] = str(binaries) + os.pathsep + environment.get("PATH", "")
     logs = args.logs.resolve()
     checks = [
+        ("spi-memory", lambda directory: check_spi_memory(compiler, runtime, fixtures, directory, environment)),
         ("memory-image", lambda directory: check_memory_image(compiler, runtime, fixtures, directory, environment)),
         ("ddr4-device", lambda directory: check_ddr4_device(compiler, runtime, fixtures, directory, environment)),
         ("editor", lambda directory: check_editor(editor, directory, environment)),

@@ -1625,12 +1625,13 @@ static gboolean simulation_port_sram(gchar **args, GString *body, GString *conne
 }
 
 static gboolean simulation_port_ddr(gchar **args, GString *body, GString *connections,
-                                    GHashTable *ports, GHashTable *images, gboolean ddr3)
+                                    GHashTable *ports, GHashTable *images, guint generation)
 {
+    const guint ddr2_widths[] = {1, 1, 1, 1, 1, 1, 14, 3, 8, 1, 1};
     const guint ddr3_widths[] = {1, 1, 1, 1, 1, 1, 1, 16, 3, 8, 1, 1};
     const guint ddr4_widths[] = {1, 1, 1, 1, 1, 17, 2, 2, 8, 1, 1};
-    const guint *widths = ddr3 ? ddr3_widths : ddr4_widths;
-    guint count = ddr3 ? G_N_ELEMENTS(ddr3_widths) : G_N_ELEMENTS(ddr4_widths);
+    const guint *widths = generation == 2 ? ddr2_widths : generation == 3 ? ddr3_widths : ddr4_widths;
+    guint count = generation == 3 ? G_N_ELEMENTS(ddr3_widths) : G_N_ELEMENTS(ddr4_widths);
     guint ids[G_N_ELEMENTS(ddr3_widths)];
     guint64 read_latency, write_latency;
     if (g_hash_table_size(ports) > 128 - count ||
@@ -1652,13 +1653,57 @@ static gboolean simulation_port_ddr(gchar **args, GString *body, GString *connec
         "reg [7:0] ddr_dq%u='z; reg ddr_dqs%u=1'bz;\n"
         "assign pin%u=ddr_dq%u; assign pin%u=ddr_dqs%u;\n",
         id, id, dq, id, dqs, id);
-    g_string_append_printf(body, "always @(pin%u or pin%u or pin%u) $geany_ddr%u(",
-                           id, ids[1], dqs, ddr3 ? 3 : 4);
+    g_string_append_printf(body, "always @(pin%u or pin%u", id, dqs);
+    if (generation != 2)
+        g_string_append_printf(body, " or pin%u", ids[1]);
+    g_string_append_printf(body, ") $geany_ddr%u(", generation);
     for (guint i = 0; i < count; i++)
         g_string_append_printf(body, "pin%u,", ids[i]);
     g_string_append_printf(body, "%" G_GUINT64_FORMAT ",%" G_GUINT64_FORMAT ",ddr_dq%u,ddr_dqs%u",
                            read_latency, write_latency, id, id);
-    simulation_memory_argument(body, images, args[ddr3 ? 8 : 6]);
+    simulation_memory_argument(body, images, args[generation == 2 ? 7 : generation == 3 ? 8 : 6]);
+    return TRUE;
+}
+
+static gboolean simulation_port_spi(gchar **args, GString *body, GString *connections,
+                                    GHashTable *ports, GHashTable *images, GHashTable *spi_pins)
+{
+    guint ids[4], new_pins = 0;
+    for (guint i = 1; i <= G_N_ELEMENTS(ids); i++)
+    {
+        if (!simulation_port_name(args[i]))
+            return FALSE;
+        if (g_hash_table_contains(ports, args[i]))
+        {
+            if (i == 2 || GPOINTER_TO_UINT(g_hash_table_lookup(spi_pins, args[i])) != i)
+                return FALSE;
+        }
+        else
+            new_pins++;
+        for (guint j = 1; j < i; j++)
+            if (!strcmp(args[i], args[j]))
+                return FALSE;
+    }
+    if (g_hash_table_size(ports) + new_pins > 128)
+        return FALSE;
+    for (guint i = 1; i <= G_N_ELEMENTS(ids); i++)
+    {
+        gpointer pin = g_hash_table_lookup(ports, args[i]);
+        if (pin)
+            ids[i - 1] = GPOINTER_TO_UINT(pin) - 1;
+        else
+        {
+            ids[i - 1] = simulation_port_connect(body, connections, ports, args[i], 1, TRUE);
+            if (i != 2)
+                g_hash_table_insert(spi_pins, g_strdup(args[i]), GUINT_TO_POINTER(i));
+        }
+    }
+    guint ck = ids[0], cs = ids[1], mosi = ids[2], miso = ids[3];
+    g_string_append_printf(body,
+        "reg spi_drive%u=1'bz; assign pin%u=spi_drive%u;\n"
+        "always @(pin%u or pin%u) $geany_spi_%s(pin%u,pin%u,pin%u,spi_drive%u",
+        cs, miso, cs, ck, cs, args[0] + 4, ck, cs, mosi, cs);
+    simulation_memory_argument(body, images, args[2]);
     return TRUE;
 }
 
@@ -1878,6 +1923,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
     GString *live = g_string_new(NULL);
     guint64 live_interval = 0;
     GHashTable *ports = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    GHashTable *spi_pins = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     GHashTable *models = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, simulation_model_free);
     gchar *module = NULL;
     guint64 duration = 1000;
@@ -1907,11 +1953,18 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             attached_images += valid && g_hash_table_contains(images, args[1]);
         }
         else if (valid && ((count == 14 && !strcmp(args[0], "ddr4")) ||
-                           (count == 15 && !strcmp(args[0], "ddr3"))))
+                           (count == 15 && !strcmp(args[0], "ddr3")) ||
+                           (count == 14 && !strcmp(args[0], "ddr2"))))
         {
-            gboolean ddr3 = count == 15;
-            valid = simulation_port_ddr(args, body, connections, ports, images, ddr3);
-            attached_images += valid && g_hash_table_contains(images, args[ddr3 ? 8 : 6]);
+            guint generation = args[0][3] - '0';
+            valid = simulation_port_ddr(args, body, connections, ports, images, generation);
+            attached_images += valid && g_hash_table_contains(images, args[generation == 2 ? 7 : generation == 3 ? 8 : 6]);
+        }
+        else if (valid && count == 5 && (!strcmp(args[0], "spi-nor") ||
+                 !strcmp(args[0], "spi-nand") || !strcmp(args[0], "spi-eeprom")))
+        {
+            valid = simulation_port_spi(args, body, connections, ports, images, spi_pins);
+            attached_images += valid && g_hash_table_contains(images, args[2]);
         }
         else if (valid && (count == 4 || count == 5) && !strcmp(args[0], "uart"))
             valid = simulation_port_uart(args, count, body, connections, ports, live);
@@ -1993,7 +2046,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
     {
         valid = FALSE;
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                            "Each memory-image must precede an SRAM, DDR3 or DDR4 rule with the same address port.");
+                            "Place memory-image before the memory rule and use its address port or SPI chip-select port.");
     }
     if (valid && !module && (connections->len || sources->len || g_hash_table_size(models)))
     {
@@ -2038,6 +2091,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         g_string_free(body, TRUE);
     g_free(module);
     g_hash_table_unref(ports);
+    g_hash_table_unref(spi_pins);
     g_hash_table_unref(models);
     g_string_free(connections, TRUE);
     g_string_free(live, TRUE);
@@ -2062,7 +2116,9 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         "bus PORT WIDTH INTERVAL EXPR   ·   output PORT WIDTH\n"
         "live-interval NS   ·   live-input PORT WIDTH INITIAL   ·   monitor PORT WIDTH\n"
         "sram ADDR DQ CE_N WE_N OE_N ADDRESS_BITS DATA_BITS\n"
-        "memory-image ADDR FILE (before its SRAM or DDR rule)\n"
+        "memory-image ADDR_OR_SPI_CS_N FILE (before the memory rule)\n"
+        "spi-nor / spi-nand / spi-eeprom SCK CS_N MOSI MISO\n"
+        "ddr2 CK CKE CS_N RAS_N CAS_N WE_N A BA DQ DQS DM RL WL (functional x8)\n"
         "ddr3 CK RESET_N CKE CS_N RAS_N CAS_N WE_N A BA DQ DQS DM RL WL (functional x8)\n"
         "ddr4 CK RESET_N CKE CS_N ACT_N A BA BG DQ DQS DM_N RL WL (functional x8)\n"
         "uart RX TX BAUD [console]\n"
@@ -2540,7 +2596,8 @@ static gboolean simulation_interactive(WaveSimulation *run, const gchar *directo
                                   "-i", "-s", "simulation.vvp", NULL};
     gboolean devices = run->port_harness &&
         (strstr(run->port_harness, "$geany_sram(") ||
-         strstr(run->port_harness, "$geany_ddr3(") || strstr(run->port_harness, "$geany_ddr4("));
+         strstr(run->port_harness, "$geany_ddr2(") || strstr(run->port_harness, "$geany_ddr3(") || strstr(run->port_harness, "$geany_ddr4(") ||
+         strstr(run->port_harness, "$geany_spi_"));
     GSubprocess *process = g_subprocess_launcher_spawnv(launcher, devices ? device_argv : argv, error);
     g_free(modules);
     g_free(runtime_prefix);

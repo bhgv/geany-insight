@@ -180,3 +180,40 @@ one byte per address, using `(row << 14) | (bank << 10) | column`. For
 DDR3, bank is BA (0–7). For DDR4 it is `(BG << 2) | BA` (0–15).
 The saved recipe keeps the path. Each new session reads the file again
 and applies it before the device responds to its first bus event.
+
+## Built-in functional DDR2 x8
+
+```text
+ddr2 ck cke cs_n ras_n cas_n we_n a ba dq dqs dm 3 2
+```
+
+This profile uses a 14-bit address and three bank bits. It starts with
+closed banks and uses the DDR3 BL8 behavior, DM polarity and image
+layout. Use the DUT address port as the `memory-image` key.
+
+## SPI memories
+
+```text
+memory-image flash_cs_n "fixtures/flash.hex"
+spi-nor sck flash_cs_n mosi miso
+```
+
+The built-in C devices use four-wire SPI mode 0, active-low chip select
+and MSB-first bytes. MISO floats while the device is deselected.
+Use `spi-nand` or `spi-eeprom` with the same port order.
+Devices can share SCK, MOSI and MISO with a separate CS# for each.
+Each image uses byte addresses and is keyed by that device's CS# port.
+Uninitialized bytes start at FF.
+
+| Model | Geometry | Implemented commands (hex) |
+| --- | --- | --- |
+| SPI NOR | 64 KiB, 256-byte pages, 4 KiB sectors | 03 read, 02 page program, 20 sector erase, 05 status, 06/04 write enable/disable |
+| SPI NAND | One block of 64 × 2048-byte pages | 13 page to cache, 03 cache read, 02 program load, 10 program execute, D8 block erase, 0F get feature, FF reset, 06/04 write enable/disable |
+| SPI EEPROM | 64 KiB, 128-byte pages | 03 read, 02 page write, 05 status, 06/04 write enable/disable |
+
+NOR takes three address bytes and EEPROM takes two. NAND page commands
+take three row bytes. Its cache read takes two column bytes followed by
+one dummy byte. For NAND images, byte address = page × 2048 + column.
+These profiles model data transfers with immediate completion.
+Device identification, busy timing, protection, ECC and spare areas
+are outside the implemented command sets.
