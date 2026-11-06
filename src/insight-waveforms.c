@@ -1451,6 +1451,8 @@ typedef struct {
     gchar *compiler, *runtime, *include_dir;
     gchar **sources;
     gchar *port_settings, *port_harness;
+    GtkWidget *live_port_input, *live_port_value, *live_port_send, *live_port_display;
+    GHashTable *live_port_samples;
     InsightWaveSource navigate;
     gboolean interactive;
     GMutex lock;
@@ -1502,6 +1504,7 @@ static void simulation_free(gpointer data)
     g_free(run->settings_path);
     g_free(run->port_settings);
     g_free(run->port_harness);
+    g_clear_pointer(&run->live_port_samples, g_hash_table_unref);
     g_free(run->observer_file);
     insight_lua_debug_free(run->lua_observer);
     g_strfreev(run->pending_event);
@@ -1547,12 +1550,64 @@ static gchar *simulation_settings_path(const gchar *directory, const gchar *proj
     return path;
 }
 
+static gboolean simulation_port_name(const gchar *name)
+{
+    return g_regex_match_simple("^[A-Za-z_][A-Za-z0-9_$]*$", name, 0, 0);
+}
+
+static guint simulation_port_connect(GString *body, GString *connections, GHashTable *ports,
+                                     const gchar *name, guint64 width, gboolean wire)
+{
+    guint id = g_hash_table_size(ports);
+    g_hash_table_add(ports, g_strdup(name));
+    g_string_append_printf(body, "%s [%" G_GUINT64_FORMAT ":0] pin%u;\n",
+                           wire ? "wire" : "reg", width - 1, id);
+    if (connections->len)
+        g_string_append_c(connections, ',');
+    g_string_append_printf(connections, ".%s(pin%u)", name, id);
+    return id;
+}
+
+static gboolean simulation_port_sram(gchar **args, GString *body, GString *connections,
+                                      GHashTable *ports)
+{
+    guint64 address, width;
+    if (g_hash_table_size(ports) > 123 ||
+        !g_ascii_string_to_unsigned(args[6], 10, 1, 16, &address, NULL) ||
+        !g_ascii_string_to_unsigned(args[7], 10, 1, 64, &width, NULL))
+        return FALSE;
+    for (guint i = 1; i <= 5; i++)
+    {
+        if (!simulation_port_name(args[i]) || g_hash_table_contains(ports, args[i]))
+            return FALSE;
+        for (guint j = 1; j < i; j++)
+            if (!strcmp(args[i], args[j]))
+                return FALSE;
+    }
+    guint addr = simulation_port_connect(body, connections, ports, args[1], address, TRUE);
+    guint dq = simulation_port_connect(body, connections, ports, args[2], width, TRUE);
+    guint ce = simulation_port_connect(body, connections, ports, args[3], 1, TRUE);
+    guint we = simulation_port_connect(body, connections, ports, args[4], 1, TRUE);
+    guint oe = simulation_port_connect(body, connections, ports, args[5], 1, TRUE);
+    g_string_append_printf(body,
+        "reg [%" G_GUINT64_FORMAT ":0] sram%u [0:%u];\n"
+        "assign pin%u = (!pin%u && pin%u && !pin%u) ? sram%u[pin%u] : %" G_GUINT64_FORMAT "'bz;\n"
+        "always @(pin%u or pin%u or pin%u or pin%u) begin\n"
+        "  if (!pin%u && !pin%u && !$isunknown(pin%u)) sram%u[pin%u] = pin%u;\n"
+        "end\n",
+        width - 1, addr, (1u << address) - 1, dq, ce, we, oe, addr, addr, width,
+        we, ce, addr, dq, ce, we, addr, addr, addr, dq);
+    return TRUE;
+}
+
 /* Generate a private testbench from a per-source port recipe. */
 static gchar *simulation_port_harness(const gchar *recipe, GError **error)
 {
     gchar **lines = g_strsplit(recipe, "\n", -1);
     GString *body = g_string_new("`timescale 1ns/1ns\nmodule geany_port_testbench;\n");
     GString *connections = g_string_new(NULL);
+    GString *live = g_string_new(NULL);
+    guint64 live_interval = 0;
     GHashTable *ports = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     gchar *module = NULL;
     guint64 duration = 1000;
@@ -1570,22 +1625,30 @@ static gchar *simulation_port_harness(const gchar *recipe, GError **error)
             module = g_strdup(args[1]);
         else if (valid && count == 2 && !strcmp(args[0], "duration"))
             valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &duration, NULL);
+        else if (valid && count == 2 && !strcmp(args[0], "live-interval"))
+            valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &live_interval, NULL);
+        else if (valid && count == 8 && !strcmp(args[0], "sram"))
+            valid = simulation_port_sram(args, body, connections, ports);
         else if (valid && count >= 3 && g_hash_table_size(ports) < 128 &&
                  g_regex_match_simple("^[A-Za-z_][A-Za-z0-9_$]*$", args[1], 0, 0) &&
                  !g_hash_table_contains(ports, args[1]))
         {
             const gchar *mode = args[0];
             guint64 width = 1;
-            gboolean output = !strcmp(mode, "output");
+            gboolean monitor = !strcmp(mode, "monitor");
+            gboolean input = !strcmp(mode, "live-input");
+            gboolean output = monitor || !strcmp(mode, "output");
             gboolean scalar = !strcmp(mode, "clock") || !strcmp(mode, "clock-hz") ||
                               !strcmp(mode, "pulse");
             gboolean bus = !strcmp(mode, "bus");
             gboolean constant = !strcmp(mode, "value");
             valid = (output && count == 3) || (!strcmp(mode, "clock") && count == 5) ||
                 (!strcmp(mode, "clock-hz") && count == 4) || (!strcmp(mode, "pulse") && count == 5) ||
-                (bus && count == 5) || (constant && count == 4);
+                (bus && count == 5) || ((constant || input) && count == 4);
             if (valid && !scalar)
                 valid = g_ascii_string_to_unsigned(args[2], 10, 1, 4096, &width, NULL);
+            if (valid && (monitor || input))
+                valid = width <= 64;
             for (gint j = scalar ? 2 : 3; j < count && valid; j++)
                 valid = strlen(args[j]) <= 256 &&
                     g_regex_match_simple("^[A-Za-z0-9_$'+*/%&|^~!=<>?:(). -]+$", args[j], 0, 0) &&
@@ -1594,15 +1657,16 @@ static gchar *simulation_port_harness(const gchar *recipe, GError **error)
                 valid = !strcmp(args[4], "0") || !strcmp(args[4], "1");
             if (valid)
             {
-                guint id = g_hash_table_size(ports);
-                g_hash_table_add(ports, g_strdup(args[1]));
-                g_string_append_printf(body, "%s [%" G_GUINT64_FORMAT ":0] pin%u;\n",
-                    output ? "wire" : "reg", width - 1, id);
-                if (connections->len)
-                    g_string_append_c(connections, ',');
-                g_string_append_printf(connections, ".%s(pin%u)", args[1], id);
-                if (constant)
+                guint id = simulation_port_connect(body, connections, ports, args[1], width, output);
+                if (constant || input)
                     g_string_append_printf(body, "initial pin%u = (%s);\n", id, args[3]);
+                if (input)
+                    g_string_append_printf(live,
+                        "fd=$fopen(\"geany-input-%s\",\"r\"); "
+                        "if(fd) begin if($fscanf(fd,\"%%b\",bits)==1) pin%u=bits; $fclose(fd); end\n",
+                        args[1], id);
+                else if (monitor)
+                    g_string_append_printf(live, "$display(\"GEANY-PORT\\t%s\\t%%b\",pin%u);\n", args[1], id);
                 else if (bus)
                     g_string_append_printf(body,
                         "initial begin integer step; time delay_ns; step=0; forever begin "
@@ -1650,6 +1714,18 @@ static gchar *simulation_port_harness(const gchar *recipe, GError **error)
         g_string_append_printf(body,
             "%s dut(%s);\ninitial begin $dumpfile(\"ports.vcd\"); $dumpvars(0,geany_port_testbench); "
             "#%" G_GUINT64_FORMAT "; $finish; end\nendmodule\n", module, connections->str, duration);
+        if (live->len)
+        {
+            /* Put the pacing checkpoint at line 3 of the private source. */
+            g_string_insert(body, strlen("`timescale 1ns/1ns\nmodule geany_port_testbench;\n"),
+                            "task geany_live_yield; $fflush(); endtask\n");
+            g_string_truncate(body, body->len - strlen("endmodule\n"));
+            g_string_append_printf(body,
+                "initial begin integer fd; reg [63:0] bits; forever begin #%" G_GUINT64_FORMAT ";\n",
+                live_interval ? live_interval : 10);
+            g_string_append(body, live->str);
+            g_string_append(body, "geany_live_yield(); end end\nendmodule\n");
+        }
         result = g_string_free(body, FALSE);
     }
     else
@@ -1657,6 +1733,7 @@ static gchar *simulation_port_harness(const gchar *recipe, GError **error)
     g_free(module);
     g_hash_table_unref(ports);
     g_string_free(connections, TRUE);
+    g_string_free(live, TRUE);
     g_strfreev(lines);
     return result;
 }
@@ -1675,6 +1752,8 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, gcha
         "clock PORT START HIGH LOW   ·   clock-hz PORT START HZ\n"
         "pulse PORT START LENGTH 0|1   ·   value PORT WIDTH EXPR\n"
         "bus PORT WIDTH INTERVAL EXPR   ·   output PORT WIDTH\n"
+        "live-interval NS   ·   live-input PORT WIDTH INITIAL   ·   monitor PORT WIDTH\n"
+        "sram ADDR DQ CE_N WE_N OE_N ADDRESS_BITS DATA_BITS\n"
         "Use step in bus expressions and $time for simulation time. Quote formulas containing spaces.");
     gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
     gtk_label_set_xalign(GTK_LABEL(hint), 0);
@@ -2360,6 +2439,17 @@ static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsi
             run->source_step_ready = TRUE;
         if (strstr(text, "GEANY-VVP-READY"))
             run->bridge_ready = TRUE;
+        const gchar *port = strstr(text, "GEANY-PORT\t");
+        if (run->live_port_samples && port)
+        {
+            gchar **fields = g_strsplit(port + strlen("GEANY-PORT\t"), "\t", 3);
+            if (g_strv_length(fields) == 2 && simulation_port_name(fields[0]) &&
+                *fields[1] && strlen(fields[1]) <= 64 && strspn(fields[1], "01xz") == strlen(fields[1]) &&
+                (g_hash_table_size(run->live_port_samples) < 128 ||
+                 g_hash_table_contains(run->live_port_samples, fields[0])))
+                g_hash_table_replace(run->live_port_samples, g_strdup(fields[0]), g_strdup(fields[1]));
+            g_strfreev(fields);
+        }
         const gchar *event = strstr(text, "GEANY-VVP-EVENT\t");
         if (event)
         {
@@ -2554,8 +2644,100 @@ static gboolean simulation_refresh_console(gpointer data)
     }
     gtk_widget_set_sensitive(run->pause_button, running && run->bridge_ready && !paused &&
                              !run->pause_requested);
+    if (run->live_port_send)
+        gtk_widget_set_sensitive(run->live_port_send, running);
+    if (run->live_port_samples && count > 0 && g_hash_table_size(run->live_port_samples))
+    {
+        GList *keys = g_list_sort(g_hash_table_get_keys(run->live_port_samples), (GCompareFunc)g_strcmp0);
+        GString *readings = g_string_new(NULL);
+        for (GList *key = keys; key; key = key->next)
+        {
+            const gchar *bits = g_hash_table_lookup(run->live_port_samples, key->data);
+            const gchar *lamp = bits[1] ? "" : bits[0] == '1' ? "●  " : bits[0] == '0' ? "○  " : "◉  ";
+            guint64 number;
+            g_string_append_printf(readings, "%s%s = %s", lamp, (const gchar *)key->data, bits);
+            if (bits[1] && instrument_number(bits, &number))
+                g_string_append_printf(readings, "  (%" G_GUINT64_FORMAT ")", number);
+            g_string_append_c(readings, '\n');
+        }
+        gtk_label_set_text(GTK_LABEL(run->live_port_display), readings->str);
+        g_string_free(readings, TRUE);
+        g_list_free(keys);
+    }
     gtk_widget_set_sensitive(run->source_button, paused && run->trace_file != NULL);
     return G_SOURCE_CONTINUE;
+}
+
+static void simulation_live_input(GtkButton *button, gpointer data)
+{
+    (void)button;
+    WaveSimulation *run = data;
+    gchar *port = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(run->live_port_input));
+    const gchar *bits = gtk_entry_get_text(GTK_ENTRY(run->live_port_value));
+    gchar *directory = simulation_live_directory(run);
+    if (port && directory && *bits && strlen(bits) <= 64 && strspn(bits, "01xz") == strlen(bits))
+    {
+        gchar *basename = g_strdup_printf("geany-input-%s", port);
+        gchar *path = g_build_filename(directory, basename, NULL);
+        if (!g_file_set_contents(path, bits, -1, NULL))
+            gtk_widget_set_tooltip_text(run->live_port_send, "Could not update the simulation input.");
+        g_free(path);
+        g_free(basename);
+    }
+    else
+        gtk_widget_set_tooltip_text(run->live_port_send, "Choose an input and enter up to 64 binary digits (0, 1, x or z).");
+    g_free(directory);
+    g_free(port);
+}
+
+static void simulation_live_panel(WaveSimulation *run, GtkWidget *box)
+{
+    const gchar *marker = "$fopen(\"geany-input-";
+    GtkWidget *panel = gtk_expander_new("Live Port I/O");
+    GtkWidget *contents = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_container_add(GTK_CONTAINER(panel), contents);
+    gtk_box_pack_start(GTK_BOX(box), panel, FALSE, FALSE, 0);
+    run->live_port_samples = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+    run->live_port_input = gtk_combo_box_text_new();
+    const gchar *cursor = run->port_harness;
+    guint count = 0;
+    while ((cursor = strstr(cursor, marker)))
+    {
+        cursor += strlen(marker);
+        const gchar *end = strchr(cursor, '"');
+        if (!end)
+            break;
+        gchar *name = g_strndup(cursor, end - cursor);
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(run->live_port_input), name);
+        g_free(name);
+        cursor = end;
+        count++;
+    }
+    if (count)
+    {
+        gtk_combo_box_set_active(GTK_COMBO_BOX(run->live_port_input), 0);
+        run->live_port_value = gtk_entry_new();
+        gtk_entry_set_max_length(GTK_ENTRY(run->live_port_value), 64);
+        gtk_entry_set_placeholder_text(GTK_ENTRY(run->live_port_value), "Binary value (0, 1, x, z)");
+        run->live_port_send = gtk_button_new_with_label("Apply Input");
+        gtk_widget_set_sensitive(run->live_port_send, FALSE);
+        g_signal_connect(run->live_port_send, "clicked", G_CALLBACK(simulation_live_input), run);
+        gtk_box_pack_start(GTK_BOX(row), run->live_port_input, TRUE, TRUE, 0);
+        gtk_box_pack_start(GTK_BOX(row), run->live_port_value, TRUE, TRUE, 0);
+        gtk_box_pack_start(GTK_BOX(row), run->live_port_send, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(contents), row, FALSE, FALSE, 0);
+    }
+    else
+        gtk_widget_destroy(row);
+    run->live_port_display = gtk_label_new("Waiting for port samples…");
+    gtk_label_set_selectable(GTK_LABEL(run->live_port_display), TRUE);
+    gtk_label_set_xalign(GTK_LABEL(run->live_port_display), 0);
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_widget_set_size_request(scroll, -1, 105);
+    gtk_container_add(GTK_CONTAINER(scroll), run->live_port_display);
+    gtk_box_pack_start(GTK_BOX(contents), scroll, TRUE, TRUE, 0);
+    gtk_expander_set_expanded(GTK_EXPANDER(panel), TRUE);
 }
 
 /* Send one command while the console is at a simulator prompt. */
@@ -3147,6 +3329,8 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
             g_signal_connect(ports, "clicked", G_CALLBACK(simulation_port_settings), run);
             gtk_box_pack_start(GTK_BOX(running_actions), ports, FALSE, FALSE, 0);
         }
+        if (run->port_harness && strstr(run->port_harness, "task geany_live_yield;"))
+            simulation_live_panel(run, box);
         run->pause_button = gtk_button_new_with_label("Pause");
         gtk_widget_set_sensitive(run->pause_button, FALSE);
         g_signal_connect(run->pause_button, "clicked", G_CALLBACK(simulation_request_pause), run);

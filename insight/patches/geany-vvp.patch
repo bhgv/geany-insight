@@ -486,11 +486,13 @@ diff --git a/vvp/vthread.cc b/vvp/vthread.cc
 index de7578b..1d55556 100644
 --- a/vvp/vthread.cc
 +++ b/vvp/vthread.cc
-@@ -31,6 +31,7 @@
+@@ -31,6 +31,9 @@
  #ifdef CHECK_WITH_VALGRIND
  # include  "vvp_cleanup.h"
  #endif
 +# include  <map>
++# include  <chrono>
++# include  <thread>
  # include  <set>
  # include  <typeinfo>
  # include  <vector>
@@ -849,12 +851,21 @@ index de7578b..1d55556 100644
  	    thr = tmp;
        }
        running_thread = 0;
-@@ -6416,6 +6723,33 @@ bool of_FILE_LINE(vthread_t thr, vvp_code_t cp)
+@@ -6416,6 +6725,42 @@ bool of_FILE_LINE(vthread_t thr, vvp_code_t cp)
  	    cerr << thr->get_fileline()
  	         << vpi_get_str(_vpiDescription, handle) << endl;
  
 +      const char* filename = vpi_get_str(vpiFile, handle);
 +      const unsigned line = vpi_get(vpiLineNo, handle);
++      if (filename && line == 3 && geany_debug_enabled()) {
++            const std::string source(filename);
++            const auto separator = source.find_last_of("/\\");
++            if (source.substr(separator == std::string::npos ? 0 : separator + 1) ==
++                "geany-port-testbench.sv") {
++                  std::this_thread::sleep_for(std::chrono::milliseconds(20));
++                  return true;
++            }
++      }
 +      const bool breakpoint = geany_source_breakpoint(filename, line);
 +      bool step = geany_source_step(thr->geany_process_id);
 +      for (vthread_t caller = thr; !step && caller->i_am_in_function && caller->parent;) {

@@ -61,3 +61,29 @@ visible time interval and uses transitions in those signals. Unknown
 samples interrupt the trace. The first 2048 samples are shown when
 the interval is dense. Zoom in to inspect more detail. The readings
 follow the VCD cursor, and named VCD sessions save the axis selections.
+
+## Live inputs, output readings and SRAM
+
+Add rules such as these to the port recipe:
+
+```text
+live-interval 10
+live-input enable 1 0
+monitor ready 1
+monitor result 16
+sram addr dq ce_n we_n oe_n 10 8
+```
+
+**Live Port I/O** accepts binary input (including `x` and `z`).
+Click **Apply Input** while running or paused. The next simulated poll
+applies the most recent value. Monitors refresh as samples arrive.
+`live-interval` sets the polling interval in nanoseconds. A short wall-clock
+delay at each poll leaves time for interaction. Simulation time remains
+controlled by the testbench and its duration.
+
+The SRAM rule connects address, bidirectional data and active-low chip,
+write and output enables. The last two numbers set address and data widths.
+This is a functional asynchronous model with uninitialized contents and
+high-impedance data outside reads. It supports 1–16 address bits and
+1–64 data bits. SRAM timing constraints and vendor-specific behavior are
+outside this model.
