@@ -1898,11 +1898,13 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         if (live->len)
         {
             /* Put the pacing checkpoint at line 3 of the private source. */
-            g_string_insert(body, strlen("`timescale 1ns/1ns\nmodule geany_port_testbench;\n"),
-                            "task geany_live_yield; $fflush(); endtask\n");
+            gchar *preamble = g_strdup_printf(
+                "task geany_live_yield; $fflush(); endtask\n"
+                "localparam time geany_live_interval = %" G_GUINT64_FORMAT ";\n",
+                live_interval ? live_interval : 10);
+            g_string_insert(body, strlen("`timescale 1ns/1ns\nmodule geany_port_testbench;\n"), preamble);
+            g_free(preamble);
             g_string_truncate(body, body->len - strlen("endmodule\n"));
-            g_string_append_printf(body, "localparam time geany_live_interval = %" G_GUINT64_FORMAT ";\n",
-                                   live_interval ? live_interval : 10);
             g_string_append_printf(body,
                 "initial begin integer fd; reg [63:0] bits; forever begin #%" G_GUINT64_FORMAT ";\n",
                 live_interval ? live_interval : 10);
