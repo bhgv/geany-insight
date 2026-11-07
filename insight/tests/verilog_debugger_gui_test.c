@@ -221,9 +221,9 @@ static gboolean check_connection(GtkTreeModel *model, GtkTreePath *path, GtkTree
     return checks->bit && checks->clock;
 }
 
-/* EN: Check modal port widths, sorting and filters, then assign a slider by activating a port; callback data is unused.
+/* EN: Check modal port and device filters, then assign a slider by activating a port; callback data is unused.
  * Return G_SOURCE_CONTINUE while the wizard is unavailable.
- * RU: Проверяет ширину, сортировку и фильтры портов, затем назначает порт ползунку.
+ * RU: Проверяет фильтры портов и устройств, затем назначает порт ползунку.
  * data не используется. Возвращает G_SOURCE_CONTINUE, пока мастер недоступен. */
 static gboolean add_test_slider(gpointer data)
 {
@@ -265,7 +265,31 @@ static gboolean add_test_slider(gpointer data)
         return G_SOURCE_CONTINUE;
     }
     GtkWidget *kind = find_control(wizard, "insight-test-device-type");
-    if (!GTK_IS_COMBO_BOX(kind) || !gtk_combo_box_set_active_id(GTK_COMBO_BOX(kind), "slider"))
+    GtkWidget *device_search = find_control(wizard, "insight-device-search");
+    GtkWidget *category = find_control(wizard, "insight-device-category");
+    GtkWidget *device_regex = find_control(wizard, "Device Regex");
+    gboolean catalog_ok = GTK_IS_COMBO_BOX(kind) && GTK_IS_ENTRY(device_search) &&
+                          GTK_IS_COMBO_BOX(category) && GTK_IS_TOGGLE_BUTTON(device_regex);
+    if (catalog_ok)
+    {
+        GtkTreeModel *devices = gtk_combo_box_get_model(GTK_COMBO_BOX(kind));
+        gtk_combo_box_set_active(GTK_COMBO_BOX(category), 7); /* Memory */
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(device_regex), TRUE);
+        gtk_entry_set_text(GTK_ENTRY(device_search), "^spi-");
+        catalog_ok = gtk_tree_model_iter_n_children(devices, NULL) == 4;
+        GtkTreeIter device;
+        if (catalog_ok && gtk_tree_model_get_iter_first(devices, &device))
+        {
+            gchar *icon = NULL;
+            gtk_tree_model_get(devices, &device, 1, &icon, -1);
+            catalog_ok = icon && *icon;
+            g_free(icon);
+        }
+        gtk_entry_set_text(GTK_ENTRY(device_search), "");
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(device_regex), FALSE);
+        gtk_combo_box_set_active(GTK_COMBO_BOX(category), 0);
+    }
+    if (!catalog_ok || !gtk_combo_box_set_active_id(GTK_COMBO_BOX(kind), "slider"))
     {
         gtk_tree_path_free(selected);
         return G_SOURCE_CONTINUE;
@@ -366,6 +390,7 @@ static gboolean accept_ports(gpointer data)
             "led ready\n"
             "display result\n"
             "display level_out 8 dec\n"
+            "hex-table hex_out 16\n"
             "scope level_out\n"
             "scope-xy level_out result\n"
             "scope-xyz level_out result ready\n"
@@ -469,8 +494,10 @@ static void log_graph_status(GtkStatusbar *bar, guint context, const gchar *mess
         g_print("Graph status: %s\n", message);
 }
 
-/* Drive menu, Lua breakpoint, source navigation and VCD through GTK widgets. */
-/* Проверяет меню, точку Lua, переход к исходнику и VCD через виджеты GTK. */
+/* EN: Drive GTK actions for the debugger fixture in data and check live results.
+ * Return G_SOURCE_CONTINUE while awaiting the next UI state.
+ * RU: Выполняет действия GTK для сценария из data и проверяет показания.
+ * Возвращает G_SOURCE_CONTINUE в ожидании следующего состояния интерфейса. */
 static gboolean drive_debugger(gpointer data)
 {
     (void)data;
@@ -600,6 +627,7 @@ static gboolean drive_debugger(gpointer data)
         GtkWidget *lamp = find_control(simulation, "insight-indicator-ready");
         GtkWidget *hex = find_control(simulation, "insight-indicator-result");
         GtkWidget *decimal = find_control(simulation, "insight-indicator-level_out");
+        GtkWidget *table = find_control(simulation, "insight-indicator-hex_out");
         GtkWidget *time_plot = find_control(simulation, "insight-live-scope-1");
         GtkWidget *xy_plot = find_control(simulation, "insight-live-scope-2");
         GtkWidget *xyz_plot = find_control(simulation, "insight-live-scope-3");
@@ -610,6 +638,7 @@ static gboolean drive_debugger(gpointer data)
             GTK_IS_LABEL(lamp) && g_str_has_suffix(gtk_label_get_text(GTK_LABEL(lamp)), "ON") &&
             GTK_IS_LABEL(hex) && !strcmp(gtk_label_get_text(GTK_LABEL(hex)), "0xA5") &&
             GTK_IS_LABEL(decimal) && !strcmp(gtk_label_get_text(GTK_LABEL(decimal)), "173") &&
+            GTK_IS_LABEL(table) && !strcmp(gtk_label_get_text(GTK_LABEL(table)), "01  BE\n00  AD") &&
             uart && console_contains(uart, "OK") &&
             console_contains(simulation, "Waveform capture started at") && strstr(values, "pushed = 1") &&
             strstr(values, "ready = 1") && strstr(values, "result = 10100101 (165)") &&

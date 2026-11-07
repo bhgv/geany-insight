@@ -2191,18 +2191,24 @@ static gboolean simulation_port_slider(gchar **args, gint count, GString *body,
     return TRUE;
 }
 
+/* EN: Validate count tokens in args, attach a monitored port to connections and
+ * ports, and append its indicator declaration to body and sampling code to live.
+ * RU: Проверяет count токенов args, добавляет порт в connections и ports,
+ * объявление индикатора в body и код опроса в live. */
 static gboolean simulation_port_indicator(gchar **args, gint count, GString *body,
                                            GString *connections, GHashTable *ports, GString *live)
 {
     gboolean lamp = !strcmp(args[0], "led");
-    guint64 width = lamp ? 1 : 8;
-    if (count < 2 || count > (lamp ? 3 : 4) || g_hash_table_size(ports) >= 128 ||
+    gboolean table = !strcmp(args[0], "hex-table");
+    guint64 width = lamp ? 1 : table ? 32 : 8;
+    if (count < 2 || count > (lamp || table ? 3 : 4) || g_hash_table_size(ports) >= 128 ||
         !simulation_port_name(args[1]) || g_hash_table_contains(ports, args[1]))
         return FALSE;
-    const gchar *format = lamp ? (count == 3 ? args[2] : "1") : (count == 4 ? args[3] : "hex");
+    const gchar *format = lamp ? (count == 3 ? args[2] : "1") :
+                          table ? "hex-table" : count == 4 ? args[3] : "hex";
     if (lamp ? (strcmp(format, "0") && strcmp(format, "1")) :
         ((count >= 3 && !g_ascii_string_to_unsigned(args[2], 10, 1, 64, &width, NULL)) ||
-         (strcmp(format, "hex") && strcmp(format, "dec") && strcmp(format, "bin"))))
+         (!table && strcmp(format, "hex") && strcmp(format, "dec") && strcmp(format, "bin"))))
         return FALSE;
     guint pin = simulation_port_connect(body, connections, ports, args[1], width, TRUE);
     g_string_append_printf(body, "// GEANY-INDICATOR %s %s\n", args[1], format);
@@ -2391,7 +2397,8 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         }
         else if (valid && !strcmp(args[0], "slider"))
             valid = simulation_port_slider(args, count, body, connections, ports, live);
-        else if (valid && (!strcmp(args[0], "led") || !strcmp(args[0], "display")))
+        else if (valid && (!strcmp(args[0], "led") || !strcmp(args[0], "display") ||
+                           !strcmp(args[0], "hex-table")))
             valid = simulation_port_indicator(args, count, body, connections, ports, live);
         else if (valid && !strcmp(args[0], "capture-trigger"))
             valid = simulation_capture_trigger(args, count, trigger);
@@ -2954,7 +2961,7 @@ static guint port_browser_pin_mask(gchar **args, gint argc)
     if (!strcmp(kind, "scope-xy") || !strcmp(kind, "uart"))
         return 6;
     const gchar *single[] = {"clock", "clock-hz", "pulse", "button", "switch", "slider", "led",
-                             "display", "scope", "live-input", "monitor", "output", "value", "bus"};
+                             "display", "hex-table", "scope", "live-input", "monitor", "output", "value", "bus"};
     for (guint i = 0; i < G_N_ELEMENTS(single); i++)
         if (!strcmp(kind, single[i]))
             return 2;
@@ -3342,56 +3349,218 @@ static GtkWidget *port_browser_widget(PortBrowser *browser)
     return notebook;
 }
 
+typedef enum {
+    DEVICE_SETUP, DEVICE_TIMING, DEVICE_INPUT, DEVICE_INDICATOR, DEVICE_SCOPE,
+    DEVICE_UART, DEVICE_MEMORY, DEVICE_SPI, DEVICE_I2C, DEVICE_CONSTANT, DEVICE_HEX
+} DeviceKind;
+
+static const gchar *const device_kind_names[] = {
+    "Setup", "Clock and timing", "Input controls", "Indicators", "Oscilloscope and plots",
+    "UART", "Memory", "SPI", "I²C", "Constant signals", "Hex tables"
+};
+
+static const gchar *const device_kind_icons[] = {
+    "preferences-system-symbolic", "appointment-soon-symbolic", "input-gaming-symbolic",
+    "display-brightness-symbolic", "utilities-system-monitor-symbolic", "utilities-terminal-symbolic",
+    "drive-harddisk-symbolic", "network-wired-symbolic", "network-transmit-receive-symbolic",
+    "insert-text-symbolic", "view-grid-symbolic"
+};
+
 typedef struct {
     const gchar *rule, *fields, *pins;
     gint image;
     gboolean script;
+    const gchar *title;
+    DeviceKind icon;
+    guint categories;
 } DevicePreset;
 
 static const DevicePreset device_presets[] = {
-    {"module", "Module name=", "", -1, FALSE},
-    {"clock", "Port=clk|Start (ns)=0|High (ns)=5|Low (ns)=5", "i1", -1, FALSE},
-    {"pulse", "Port=reset|Start (ns)=10|Length (ns)=100|Active level=1", "i1", -1, FALSE},
-    {"button", "Port=button|Idle level=0|Length (ns)=100", "i1", -1, FALSE},
-    {"switch", "Port=enable|Initial level=0", "i1", -1, FALSE},
-    {"slider", "Port=level|Width=8|Initial value=0", "i@1", -1, FALSE},
-    {"led", "Port=ready|Active level=1", "o1", -1, FALSE},
-    {"display", "Port=status|Width=8|Format (hex, dec, bin)=hex", "o@1", -1, FALSE},
-    {"scope", "Signal=", "a64", -1, FALSE},
-    {"scope-xy", "X signal=|Y signal=", "a64|a64", -1, FALSE},
-    {"scope-xyz", "X signal=|Y signal=|Z signal=", "a64|a64|a64", -1, FALSE},
-    {"uart", "RX=rx|TX=tx|Baud=115200|Console=console", "i1|o1", -1, FALSE},
+    {"module", "Module name=", "", -1, FALSE,
+     "Design module", DEVICE_SETUP, (1u << DEVICE_SETUP)},
+    {"clock", "Port=clk|Start (ns)=0|High (ns)=5|Low (ns)=5", "i1", -1, FALSE,
+     "Clock", DEVICE_TIMING, (1u << DEVICE_TIMING)},
+    {"pulse", "Port=reset|Start (ns)=10|Length (ns)=100|Active level=1", "i1", -1, FALSE,
+     "Timed pulse", DEVICE_TIMING, (1u << DEVICE_TIMING)},
+    {"button", "Port=button|Idle level=0|Length (ns)=100", "i1", -1, FALSE,
+     "Push button", DEVICE_INPUT, (1u << DEVICE_INPUT)},
+    {"switch", "Port=enable|Initial level=0", "i1", -1, FALSE,
+     "Switch", DEVICE_INPUT, (1u << DEVICE_INPUT)},
+    {"slider", "Port=level|Width=8|Initial value=0", "i@1", -1, FALSE,
+     "Slider", DEVICE_INPUT, (1u << DEVICE_INPUT)},
+    {"led", "Port=ready|Active level=1", "o1", -1, FALSE,
+     "LED", DEVICE_INDICATOR, (1u << DEVICE_INDICATOR)},
+    {"display", "Port=status|Width=8|Format (hex, dec, bin)=hex", "o@1", -1, FALSE,
+     "Numeric / hex display", DEVICE_INDICATOR, (1u << DEVICE_INDICATOR)},
+    {"scope", "Signal=", "a64", -1, FALSE,
+     "Oscilloscope", DEVICE_SCOPE, (1u << DEVICE_SCOPE)},
+    {"scope-xy", "X signal=|Y signal=", "a64|a64", -1, FALSE,
+     "XY plot", DEVICE_SCOPE, (1u << DEVICE_SCOPE)},
+    {"scope-xyz", "X signal=|Y signal=|Z signal=", "a64|a64|a64", -1, FALSE,
+     "XYZ plot", DEVICE_SCOPE, (1u << DEVICE_SCOPE)},
+    {"uart", "RX=rx|TX=tx|Baud=115200|Console=console", "i1|o1", -1, FALSE,
+     "UART console", DEVICE_UART, (1u << DEVICE_UART)},
     {"sram",
      "Address=addr|Data=dq|CE#=ce_n|"
      "WE#=we_n|OE#=oe_n|Address bits=16|Data bits=8",
-     "o@5|b@6|o1|o1|o1", 0, FALSE},
+     "o@5|b@6|o1|o1|o1", 0, FALSE,
+     "SRAM", DEVICE_MEMORY, (1u << DEVICE_MEMORY)},
     {"sdram",
      "CK=ck|CKE=cke|CS#=cs_n|RAS#=ras_n|"
      "CAS#=cas_n|WE#=we_n|A=a|BA=ba|DQ=dq|DQM=dqm",
-     "o1|o1|o1|o1|o1|o1|o13|o2|b16|o2", 6, FALSE},
+     "o1|o1|o1|o1|o1|o1|o13|o2|b16|o2", 6, FALSE,
+     "SDR SDRAM", DEVICE_MEMORY, (1u << DEVICE_MEMORY)},
     {"ddr2",
      "CK=ck|CKE=cke|CS#=cs_n|RAS#=ras_n|CAS#=cas_n|WE#=we_n|"
      "A=a|BA=ba|DQ=dq|DQS=dqs|DM=dm|Read latency=3|Write latency=2",
-     "o1|o1|o1|o1|o1|o1|o14|o3|b8|b1|o1", 6, FALSE},
+     "o1|o1|o1|o1|o1|o1|o14|o3|b8|b1|o1", 6, FALSE,
+     "DDR2", DEVICE_MEMORY, (1u << DEVICE_MEMORY)},
     {"ddr3",
      "CK=ck|RESET#=reset_n|CKE=cke|CS#=cs_n|RAS#=ras_n|CAS#=cas_n|"
      "WE#=we_n|A=a|BA=ba|DQ=dq|DQS=dqs|DM=dm|Read latency=3|Write latency=2",
-     "o1|o1|o1|o1|o1|o1|o1|o16|o3|b8|b1|o1", 7, FALSE},
+     "o1|o1|o1|o1|o1|o1|o1|o16|o3|b8|b1|o1", 7, FALSE,
+     "DDR3", DEVICE_MEMORY, (1u << DEVICE_MEMORY)},
     {"ddr4",
      "CK=ck|RESET#=reset_n|CKE=cke|CS#=cs_n|ACT#=act_n|A=a|BA=ba|"
      "BG=bg|DQ=dq|DQS=dqs|DM#=dm_n|Read latency=3|Write latency=2",
-     "o1|o1|o1|o1|o1|o17|o2|o2|b8|b1|o1", 5, FALSE},
-    {"spi-nor", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", 1, FALSE},
-    {"spi-nand", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", 1, FALSE},
-    {"spi-eeprom", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", 1, FALSE},
-    {"spi-psram", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", 1, FALSE},
-    {"i2c-eeprom", "SCL=scl|SDA=sda|Address=0x50", "c1|b1", 1, FALSE},
-    {"spi-lua", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", -1, TRUE},
-    {"i2c-lua", "SCL=scl|SDA=sda|Address=0x50", "c1|b1", -1, TRUE},
+     "o1|o1|o1|o1|o1|o17|o2|o2|b8|b1|o1", 5, FALSE,
+     "DDR4", DEVICE_MEMORY, (1u << DEVICE_MEMORY)},
+    {"spi-nor", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", 1, FALSE,
+     "SPI NOR", DEVICE_SPI, (1u << DEVICE_SPI) | (1u << DEVICE_MEMORY)},
+    {"spi-nand", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", 1, FALSE,
+     "SPI NAND", DEVICE_SPI, (1u << DEVICE_SPI) | (1u << DEVICE_MEMORY)},
+    {"spi-eeprom", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", 1, FALSE,
+     "SPI EEPROM", DEVICE_SPI, (1u << DEVICE_SPI) | (1u << DEVICE_MEMORY)},
+    {"spi-psram", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", 1, FALSE,
+     "SPI PSRAM", DEVICE_SPI, (1u << DEVICE_SPI) | (1u << DEVICE_MEMORY)},
+    {"i2c-eeprom", "SCL=scl|SDA=sda|Address=0x50", "c1|b1", 1, FALSE,
+     "I²C EEPROM", DEVICE_I2C, (1u << DEVICE_I2C) | (1u << DEVICE_MEMORY)},
+    {"spi-lua", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", -1, TRUE,
+     "Lua SPI", DEVICE_SPI, (1u << DEVICE_SPI)},
+    {"i2c-lua", "SCL=scl|SDA=sda|Address=0x50", "c1|b1", -1, TRUE,
+     "Lua I²C", DEVICE_I2C, (1u << DEVICE_I2C)},
+    {"hex-table", "Port=status|Width=32", "o@1", -1, FALSE,
+     "Hex byte table", DEVICE_HEX, (1u << DEVICE_HEX) | (1u << DEVICE_INDICATOR)},
+    {"value", "Port=data|Width=8|Value=0", "i@1", -1, FALSE,
+     "Constant signal", DEVICE_CONSTANT, 1u << DEVICE_CONSTANT},
 };
 
+enum { DEVICE_ID, DEVICE_ICON, DEVICE_NAME, DEVICE_INDEX, DEVICE_COLUMNS };
+
 typedef struct {
-    GtkWidget *grid, *file, *reset, *status, *active;
+    GtkWidget *combo, *search, *regex, *category;
+    GtkListStore *store;
+    gint preferred;
+    gulong selection_changed;
+} DeviceCatalog;
+
+/* EN: Return the selected preset index from combo, or -1 if no device matches.
+ * RU: Возвращает индекс выбранного шаблона из combo или -1, если список пуст. */
+static gint device_catalog_selected(GtkComboBox *combo)
+{
+    GtkTreeIter row;
+    if (!gtk_combo_box_get_active_iter(combo, &row))
+        return -1;
+    gint index;
+    gtk_tree_model_get(gtk_combo_box_get_model(combo), &row, DEVICE_INDEX, &index, -1);
+    return index;
+}
+
+/* EN: Rebuild catalog's device list when widget changes. Keep the previous preset
+ * selected when it still matches. Show malformed regex diagnostics on the entry.
+ * RU: Перестраивает список catalog при изменении widget. Сохраняет выбор, если
+ * устройство подходит. Показывает ошибку регулярного выражения у поля поиска. */
+static void device_catalog_filter(GtkWidget *widget, gpointer data)
+{
+    (void)widget;
+    DeviceCatalog *catalog = data;
+    GtkComboBox *combo = GTK_COMBO_BOX(catalog->combo);
+    gint previous = device_catalog_selected(combo);
+    gint selected = previous >= 0 ? previous : catalog->preferred;
+    if (previous >= 0)
+        catalog->preferred = previous;
+    gint category = gtk_combo_box_get_active(GTK_COMBO_BOX(catalog->category)) - 1;
+    const gchar *query = gtk_entry_get_text(GTK_ENTRY(catalog->search));
+    gboolean regex = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(catalog->regex));
+    GError *error = NULL;
+    GRegex *pattern = regex && *query ? g_regex_new(query, G_REGEX_CASELESS, 0, &error) : NULL;
+    gchar *folded = g_utf8_casefold(query, -1);
+    gtk_entry_set_icon_from_icon_name(GTK_ENTRY(catalog->search), GTK_ENTRY_ICON_PRIMARY,
+                                     error ? "dialog-error-symbolic" : "edit-find-symbolic");
+    gtk_entry_set_icon_tooltip_text(GTK_ENTRY(catalog->search), GTK_ENTRY_ICON_PRIMARY,
+                                   error ? error->message : NULL);
+    g_signal_handler_block(combo, catalog->selection_changed);
+    gtk_list_store_clear(catalog->store);
+    for (guint i = 0; !error && i < G_N_ELEMENTS(device_presets); i++)
+    {
+        const DevicePreset *preset = &device_presets[i];
+        if (category >= 0 && !(preset->categories & (1u << category)))
+            continue;
+        gchar *label = g_strdup_printf("%s · %s", preset->title, preset->rule);
+        gchar *lower = g_utf8_casefold(label, -1);
+        gboolean matches = pattern ? g_regex_match(pattern, preset->rule, 0, NULL) ||
+                                     g_regex_match(pattern, preset->title, 0, NULL) :
+                                     strstr(lower, folded) != NULL;
+        if (matches)
+        {
+            GtkTreeIter row;
+            gtk_list_store_insert_with_values(catalog->store, &row, -1,
+                DEVICE_ID, preset->rule, DEVICE_ICON, device_kind_icons[preset->icon],
+                DEVICE_NAME, label, DEVICE_INDEX, (gint)i, -1);
+        }
+        g_free(lower);
+        g_free(label);
+    }
+    if (selected < 0 || !gtk_combo_box_set_active_id(combo, device_presets[selected].rule))
+        gtk_combo_box_set_active(combo, 0);
+    g_signal_handler_unblock(combo, catalog->selection_changed);
+    if (previous != device_catalog_selected(combo) || previous < 0)
+        g_signal_emit_by_name(combo, "changed");
+    g_clear_pointer(&pattern, g_regex_unref);
+    g_clear_error(&error);
+    g_free(folded);
+}
+
+/* EN: Build the device search controls and icon selector for catalog in box.
+ * RU: Создаёт поиск устройств и список с пиктограммами для catalog в box. */
+static void device_catalog_widget(DeviceCatalog *catalog, GtkWidget *box)
+{
+    GtkWidget *filters = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    catalog->search = gtk_search_entry_new();
+    gtk_widget_set_name(catalog->search, "insight-device-search");
+    gtk_entry_set_placeholder_text(GTK_ENTRY(catalog->search), "Find device");
+    gtk_box_pack_start(GTK_BOX(filters), catalog->search, TRUE, TRUE, 0);
+    catalog->regex = gtk_check_button_new_with_label("Device Regex");
+    gtk_box_pack_start(GTK_BOX(filters), catalog->regex, FALSE, FALSE, 0);
+    catalog->category = gtk_combo_box_text_new();
+    gtk_widget_set_name(catalog->category, "insight-device-category");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(catalog->category), "All device types");
+    for (guint i = 0; i < G_N_ELEMENTS(device_kind_names); i++)
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(catalog->category), device_kind_names[i]);
+    gtk_combo_box_set_active(GTK_COMBO_BOX(catalog->category), 0);
+    gtk_box_pack_start(GTK_BOX(filters), catalog->category, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), filters, FALSE, FALSE, 4);
+
+    catalog->store = gtk_list_store_new(DEVICE_COLUMNS, G_TYPE_STRING, G_TYPE_STRING,
+                                        G_TYPE_STRING, G_TYPE_INT);
+    catalog->combo = gtk_combo_box_new_with_model(GTK_TREE_MODEL(catalog->store));
+    g_object_unref(catalog->store);
+    gtk_widget_set_name(catalog->combo, "insight-test-device-type");
+    gtk_combo_box_set_id_column(GTK_COMBO_BOX(catalog->combo), DEVICE_ID);
+    GtkCellRenderer *icon = gtk_cell_renderer_pixbuf_new();
+    gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(catalog->combo), icon, FALSE);
+    gtk_cell_layout_add_attribute(GTK_CELL_LAYOUT(catalog->combo), icon, "icon-name", DEVICE_ICON);
+    GtkCellRenderer *label = gtk_cell_renderer_text_new();
+    gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(catalog->combo), label, TRUE);
+    gtk_cell_layout_add_attribute(GTK_CELL_LAYOUT(catalog->combo), label, "text", DEVICE_NAME);
+    gtk_box_pack_start(GTK_BOX(box), catalog->combo, FALSE, FALSE, 6);
+    g_signal_connect(catalog->search, "changed", G_CALLBACK(device_catalog_filter), catalog);
+    g_signal_connect(catalog->regex, "toggled", G_CALLBACK(device_catalog_filter), catalog);
+    g_signal_connect(catalog->category, "changed", G_CALLBACK(device_catalog_filter), catalog);
+}
+
+typedef struct {
+    GtkWidget *grid, *file, *reset, *status, *active, *dialog;
     GPtrArray *entries;
     PortBrowser *browser;
     const gchar *directory;
@@ -3670,14 +3839,15 @@ static GtkWidget *device_field(DeviceForm *form, const gchar *title, GtkWidget *
 static void simulation_device_type(GtkComboBox *combo, gpointer data)
 {
     DeviceForm *form = data;
-    gint selected = gtk_combo_box_get_active(combo);
-    if (selected < 0)
-        return;
+    gint selected = device_catalog_selected(combo);
     GList *children = gtk_container_get_children(GTK_CONTAINER(form->grid));
     g_ptr_array_set_size(form->entries, 0);
     g_list_free_full(children, (GDestroyNotify)gtk_widget_destroy);
     form->file = form->reset = form->active = NULL;
     device_port_filter(form);
+    gtk_dialog_set_response_sensitive(GTK_DIALOG(form->dialog), GTK_RESPONSE_ACCEPT, selected >= 0);
+    if (selected < 0)
+        return;
     const DevicePreset *preset = &device_presets[selected];
     gchar **fields = g_strsplit(preset->fields, "|", -1);
     gchar **specs = g_strsplit(preset->pins, "|", -1);
@@ -3770,11 +3940,11 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
         "_Insert Rule", GTK_RESPONSE_ACCEPT, NULL);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 960, 520);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    GtkWidget *combo = gtk_combo_box_text_new();
-    gtk_widget_set_name(combo, "insight-test-device-type");
-    for (guint i = 0; i < G_N_ELEMENTS(device_presets); i++)
-        gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo), device_presets[i].rule, device_presets[i].rule);
-    gtk_box_pack_start(GTK_BOX(box), combo, FALSE, FALSE, 6);
+    g_object_ref_sink(dialog);
+    form.dialog = dialog;
+    DeviceCatalog catalog = {.preferred = parent_browser->last_device};
+    device_catalog_widget(&catalog, box);
+    GtkWidget *combo = catalog.combo;
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     form.grid = gtk_grid_new();
     gtk_grid_set_column_spacing(GTK_GRID(form.grid), 10);
@@ -3803,12 +3973,14 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     form.status = status;
     gtk_label_set_line_wrap(GTK_LABEL(status), TRUE);
     gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 6);
-    g_signal_connect(combo, "changed", G_CALLBACK(simulation_device_type), &form);
-    gtk_combo_box_set_active(GTK_COMBO_BOX(combo), parent_browser->last_device);
+    catalog.selection_changed = g_signal_connect(
+        combo, "changed", G_CALLBACK(simulation_device_type), &form);
+    device_catalog_filter(NULL, &catalog);
     gtk_widget_show_all(dialog);
-    while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+    gint response;
+    while ((response = gtk_dialog_run(GTK_DIALOG(dialog))) == GTK_RESPONSE_ACCEPT)
     {
-        gint selected = gtk_combo_box_get_active(GTK_COMBO_BOX(combo));
+        gint selected = device_catalog_selected(GTK_COMBO_BOX(combo));
         if (selected < 0)
             continue;
         const DevicePreset *preset = &device_presets[selected];
@@ -3881,13 +4053,19 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
         if (valid)
             break;
     }
-    parent_browser->last_device = gtk_combo_box_get_active(GTK_COMBO_BOX(combo));
-    port_browser_copy_view(parent_browser, &browser);
+    if (response != GTK_RESPONSE_NONE)
+    {
+        gint last_device = device_catalog_selected(GTK_COMBO_BOX(combo));
+        if (last_device >= 0)
+            parent_browser->last_device = last_device;
+        port_browser_copy_view(parent_browser, &browser);
+    }
     g_clear_pointer(&browser.ports, g_hash_table_unref);
     g_free(browser.module);
     g_clear_pointer(&browser.query_regex, g_regex_unref);
     g_free(browser.folded_query);
     gtk_widget_destroy(dialog);
+    g_object_unref(dialog);
     g_ptr_array_unref(form.entries);
 }
 
@@ -3923,6 +4101,7 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         "slider PORT [WIDTH=8 [INITIAL=0]]\n"
         "scope SIGNAL   ·   scope-xy X Y   ·   scope-xyz X Y Z\n"
         "led PORT [ACTIVE=1]   ·   display PORT [WIDTH=8 [hex|dec|bin]]\n"
+        "hex-table PORT [WIDTH=32]\n"
         "live-interval NS   ·   live-input PORT WIDTH INITIAL   ·   monitor PORT WIDTH\n"
         "Memory presets: sram, sdram, ddr2, ddr3, ddr4, spi-nor, spi-nand, spi-eeprom, spi-psram, i2c-eeprom.\n"
         "Use a preset alone for standard port names, or list your ports below. '-' uses the default.\n"
@@ -4695,6 +4874,42 @@ static gboolean simulation_trace_location(const gchar *text, gchar **filename, g
     return FALSE;
 }
 
+/* EN: Format sampled bits as owned hexadecimal byte rows with X/Z preserved.
+ * RU: Формирует новую шестнадцатеричную таблицу байтов из bits, сохраняя X/Z. */
+static gchar *simulation_hex_table(const gchar *bits)
+{
+    gsize width = strlen(bits);
+    guint bytes = (width + 7) / 8;
+    GString *text = g_string_new(NULL);
+    for (guint byte = 0; byte < bytes; byte++)
+    {
+        if (byte)
+            g_string_append_c(text, '\n');
+        g_string_append_printf(text, "%02X  ", bytes - byte - 1);
+        for (guint nibble = 0; nibble < 2; nibble++)
+        {
+            guint number = 0;
+            gchar unknown = 0;
+            gboolean known = FALSE;
+            for (guint bit = 0; bit < 4; bit++)
+            {
+                gint index = (gint)(byte * 8 + nibble * 4 + bit) - (gint)(bytes * 8 - width);
+                gchar value = index < 0 ? '0' : bits[index];
+                number = (number << 1) | (value == '1');
+                if (value == 'x' || value == 'z')
+                    unknown = unknown && unknown != value ? '?' : value;
+                else
+                    known = TRUE;
+            }
+            g_string_append_c(text, unknown ? (known ? '?' : g_ascii_toupper(unknown)) :
+                              "0123456789ABCDEF"[number]);
+        }
+    }
+    return g_string_free(text, FALSE);
+}
+
+/* EN: Refresh the live indicator for port in run from its sampled bits.
+ * RU: Обновляет индикатор порта port в run по полученным битам bits. */
 static void simulation_update_indicator(WaveSimulation *run, const gchar *port, const gchar *bits)
 {
     GtkLabel *label = run->live_indicators ? g_hash_table_lookup(run->live_indicators, port) : NULL;
@@ -4711,7 +4926,9 @@ static void simulation_update_indicator(WaveSimulation *run, const gchar *port, 
     }
     guint64 value;
     gchar *reading;
-    if (!strcmp(format, "bin") || !instrument_number(bits, &value))
+    if (!strcmp(format, "hex-table"))
+        reading = simulation_hex_table(bits);
+    else if (!strcmp(format, "bin") || !instrument_number(bits, &value))
         reading = g_strdup_printf("0b%s", bits);
     else if (!strcmp(format, "hex"))
         reading = g_strdup_printf("0x%0*" G_GINT64_MODIFIER "X", (gint)((strlen(bits) + 3) / 4), value);
@@ -5346,6 +5563,8 @@ static void simulation_live_sliders(WaveSimulation *run, GtkWidget *contents)
 
 /* EN: Create live indicator cards for run in contents.
  * RU: Создаёт панели индикаторов run в contents. */
+/* EN: Build indicator widgets for run in contents, using a fixed-width font for tables.
+ * RU: Создаёт индикаторы run в contents с моноширинным шрифтом для таблиц. */
 static void simulation_live_indicators(WaveSimulation *run, GtkWidget *contents)
 {
     const gchar *marker = "// GEANY-INDICATOR ";
@@ -5374,6 +5593,13 @@ static void simulation_live_indicators(WaveSimulation *run, GtkWidget *contents)
         gtk_widget_set_name(value, name);
         g_free(name);
         gtk_label_set_selectable(GTK_LABEL(value), TRUE);
+        if (!strcmp(parts[1], "hex-table"))
+        {
+            PangoAttrList *font = pango_attr_list_new();
+            pango_attr_list_insert(font, pango_attr_family_new("monospace"));
+            gtk_label_set_attributes(GTK_LABEL(value), font);
+            pango_attr_list_unref(font);
+        }
         gtk_label_set_line_wrap(GTK_LABEL(value), TRUE);
         gtk_label_set_line_wrap_mode(GTK_LABEL(value), PANGO_WRAP_CHAR);
         gtk_label_set_max_width_chars(GTK_LABEL(value), 32);

@@ -12,6 +12,7 @@ module live_devices(
     input wire [7:0] inactive_slider,
 `endif
     output wire [7:0] model_result, level_out,
+    output wire [15:0] hex_out,
     output wire ready, tx,
     output reg pushed = 0,
     output reg [3:0] addr,
@@ -25,6 +26,7 @@ module live_devices(
     assign tx = rx;
     assign model_result = external_data;
     assign level_out = level[7:0];
+    assign hex_out = {8'hbe, level_out};
     assign dq = drive ? 8'hA5 : 8'bz;
     initial begin
         result = 0;

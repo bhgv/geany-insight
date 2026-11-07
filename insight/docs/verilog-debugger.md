@@ -70,6 +70,15 @@ simulation. Only active `ifdef`, `ifndef`, `elsif`, and `else` branches
 contribute ports. If preprocessing fails, **Ports** shows the diagnostic
 and **Source** still shows the original text.
 
+The device selector shows an icon and title next to each rule name.
+**Find device** searches titles and rule names without regard to case.
+**Device Regex** enables regular expressions. For example, **^spi-** in
+**Memory** finds SPI memories. A device can belong to multiple categories.
+SPI EEPROM appears in **SPI** and **Memory**. **Constant signals** offers
+**value**. **Hex tables** adds **hex-table PORT [WIDTH=32]**, which shows up
+to eight bytes, most significant first, with byte offsets and hex values.
+Entirely unknown nibbles show X or Z. Mixed nibbles show ?.
+
 Each port field shows its required width. Focusing it highlights compatible
 directions in the table. **Bits** shows each port's width. Double-click a
 compatible port to replace the field's contents. A wider port uses the
