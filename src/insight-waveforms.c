@@ -1700,12 +1700,15 @@ typedef struct {
     GtkWidget *signal_name;
     gboolean register_write_ready;
     GtkListStore *signal_tables[3];
-    GtkWidget *signal_search, *signal_status, *signal_context;
+    GtkWidget *signal_search, *signal_status, *signal_context, *signal_state;
+    GtkTreeSelection *signal_selection[3];
+    gboolean signal_refilling;
     GtkCellRenderer *signal_register_renderer;
     GPtrArray *signal_rows;
     gchar *signal_file;
     guint signal_format;
     gboolean signal_tables_ready, signal_collecting, signal_limited, signal_refresh_needed;
+    gboolean signal_snapshot_received;
     GtkWidget *pause_button, *source_button, *breakpoint_controls, *breakpoint_file, *breakpoint_line;
     GtkWidget *rule_signal, *rule_bits, *rule_hits, *rule_log, *rule_script;
     GtkWidget *lua_watches, *reload_script;
@@ -5944,10 +5947,18 @@ static void signal_tables_refresh(WaveSimulation *run)
         g_error_free(error);
         return;
     }
-    for (guint i = 0; i < 3; i++)
+    gchar *selected[G_N_ELEMENTS(run->signal_tables)] = { NULL };
+    const gchar *context_name = g_object_get_data(G_OBJECT(run->signal_context), "hdl-context-name");
+    gboolean keep_context = FALSE;
+    run->signal_refilling = TRUE;
+    for (guint i = 0; i < G_N_ELEMENTS(run->signal_tables); i++)
+    {
+        GtkTreeModel *model;
+        GtkTreeIter row;
+        if (gtk_tree_selection_get_selected(run->signal_selection[i], &model, &row))
+            gtk_tree_model_get(model, &row, 0, &selected[i], -1);
         gtk_list_store_clear(run->signal_tables[i]);
-    g_object_set_data(G_OBJECT(run->signal_context), "hdl-context-name", NULL);
-    gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->signal_context)), "", -1);
+    }
     const gchar *file = run->signal_file;
     for (guint i = 0; file && i < run->signal_rows->len; i++)
     {
@@ -5963,10 +5974,24 @@ static void signal_tables_refresh(WaveSimulation *run)
             g_regex_match(regex, display, 0, NULL) || g_regex_match(regex, row[3], 0, NULL))
         {
             guint table = *row[0] == 'P' ? 0 : *row[0] == 'N' ? 1 : 2;
-            gtk_list_store_insert_with_values(run->signal_tables[table], NULL, -1,
+            GtkTreeIter inserted;
+            gtk_list_store_insert_with_values(run->signal_tables[table], &inserted, -1,
                 0, row[1], 1, display, 2, row[3], -1);
+            if (!g_strcmp0(selected[table], row[1]))
+            {
+                gtk_tree_selection_select_iter(run->signal_selection[table], &inserted);
+                keep_context |= !g_strcmp0(context_name, row[1]);
+            }
         }
         g_free(display);
+    }
+    run->signal_refilling = FALSE;
+    for (guint i = 0; i < G_N_ELEMENTS(selected); i++)
+        g_free(selected[i]);
+    if (!keep_context)
+    {
+        g_object_set_data(G_OBJECT(run->signal_context), "hdl-context-name", NULL);
+        gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->signal_context)), "", -1);
     }
     g_clear_pointer(&regex, g_regex_unref);
     gtk_label_set_text(GTK_LABEL(run->signal_status),
@@ -6029,6 +6054,7 @@ static gboolean signal_tables_record(WaveSimulation *run, const gchar *text)
     if (run->signal_collecting && g_str_has_prefix(text, "GEANY-SIGNALS-END\t"))
     {
         run->signal_collecting = FALSE;
+        run->signal_snapshot_received = TRUE;
         run->signal_limited = g_str_has_suffix(text, "\tlimited");
         signal_tables_refresh(run);
         return TRUE;
@@ -6384,6 +6410,12 @@ static gboolean simulation_refresh_console(gpointer data)
         simulation_write_command(run, "geany-signals\n");
         paused = FALSE;
     }
+    const gchar *signal_state = !run->signal_snapshot_received ?
+        "Waiting for a paused signal snapshot." :
+        paused ? "Values at the current stop" : "Values from the last stop";
+    const gchar *state_text = insight_tr(signal_state);
+    if (strcmp(gtk_label_get_text(GTK_LABEL(run->signal_state)), state_text))
+        gtk_label_set_text(GTK_LABEL(run->signal_state), state_text);
     g_object_set(run->signal_register_renderer, "editable",
         paused && !run->preview_pending && run->register_write_ready, NULL);
     gtk_widget_set_sensitive(run->live_controls, paused && !run->preview_pending);
@@ -7338,7 +7370,8 @@ static void signal_table_selected(GtkTreeSelection *selection, gpointer data)
     WaveSimulation *run = data;
     GtkTreeModel *model;
     GtkTreeIter row;
-    if (!run->show_context || !gtk_tree_selection_get_selected(selection, &model, &row))
+    if (run->signal_refilling || !run->show_context ||
+        !gtk_tree_selection_get_selected(selection, &model, &row))
         return;
     gchar *name;
     gtk_tree_model_get(model, &row, 0, &name, -1);
@@ -7372,6 +7405,16 @@ static void signal_table_format_selected(GtkMenuItem *item, gpointer data)
     signal_tables_refresh(run);
 }
 
+/* EN: Open the dependency graph for the signal attached to item in session data.
+ * RU: Открывает граф для сигнала из пункта item в сеансе data. */
+static void signal_table_open_graph(GtkMenuItem *item, gpointer data)
+{
+    WaveSimulation *run = data;
+    const gchar *name = g_object_get_data(G_OBJECT(item), "signal-name");
+    if (run->navigate && name)
+        run->navigate(name, TRUE, NULL);
+}
+
 /* EN: Handle an edit or format-menu click in tree for simulation data.
  * event provides the button, click count and cell coordinates.
  * RU: Обрабатывает редактирование и меню форматов в tree для сеанса data.
@@ -7397,6 +7440,24 @@ static gboolean signal_table_popup(GtkWidget *tree, GdkEventButton *event, gpoin
         return FALSE;
     GtkWidget *menu = gtk_menu_new();
     gtk_menu_attach_to_widget(GTK_MENU(menu), tree, NULL);
+    GtkTreePath *clicked = NULL;
+    if (run->navigate && gtk_tree_view_get_path_at_pos(view, event->x, event->y, &clicked, NULL, NULL, NULL))
+    {
+        GtkTreeModel *model = gtk_tree_view_get_model(view);
+        GtkTreeIter row;
+        if (gtk_tree_model_get_iter(model, &row, clicked))
+        {
+            gchar *name = NULL;
+            gtk_tree_model_get(model, &row, 0, &name, -1);
+            GtkWidget *graph = gtk_menu_item_new_with_label(insight_tr("Watch graph"));
+            g_object_set_data_full(G_OBJECT(graph), "signal-name", name, g_free);
+            g_signal_connect(graph, "activate", G_CALLBACK(signal_table_open_graph), run);
+            gtk_menu_shell_append(GTK_MENU_SHELL(menu), graph);
+            gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+        }
+        gtk_tree_path_free(clicked);
+    }
+
     const gchar *formats[] = {"Binary", "Verilog binary", "C hexadecimal",
                               "Verilog hexadecimal", "Unsigned decimal", "Character"};
     for (guint i = 0; i < G_N_ELEMENTS(formats); i++)
@@ -7432,7 +7493,9 @@ static GtkWidget *simulation_signal_tables(WaveSimulation *run)
     gtk_entry_set_placeholder_text(GTK_ENTRY(run->signal_search),
         insight_tr("Regex: signal name or value"));
     gtk_box_pack_start(GTK_BOX(box), run->signal_search, FALSE, FALSE, 0);
-    run->signal_status = gtk_label_new(insight_tr("Waiting for a paused signal snapshot."));
+    run->signal_state = gtk_label_new(insight_tr("Waiting for a paused signal snapshot."));
+    gtk_box_pack_start(GTK_BOX(box), run->signal_state, FALSE, FALSE, 0);
+    run->signal_status = gtk_label_new("");
     gtk_label_set_line_wrap(GTK_LABEL(run->signal_status), TRUE);
     gtk_box_pack_start(GTK_BOX(box), run->signal_status, FALSE, FALSE, 0);
     GtkWidget *tabs = gtk_notebook_new();
@@ -7453,8 +7516,8 @@ static GtkWidget *simulation_signal_tables(WaveSimulation *run)
         gtk_tree_view_column_set_resizable(name_column, TRUE);
         gtk_tree_view_append_column(GTK_TREE_VIEW(tree), name_column);
         gtk_tree_view_append_column(GTK_TREE_VIEW(tree), value_column);
-        g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)), "changed",
-            G_CALLBACK(signal_table_selected), run);
+        run->signal_selection[i] = gtk_tree_view_get_selection(GTK_TREE_VIEW(tree));
+        g_signal_connect(run->signal_selection[i], "changed", G_CALLBACK(signal_table_selected), run);
         g_signal_connect(tree, "row-activated", G_CALLBACK(signal_table_activated), run);
         g_signal_connect(tree, "button-press-event", G_CALLBACK(signal_table_popup), run);
         if (i == 2)

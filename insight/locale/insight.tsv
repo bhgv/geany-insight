@@ -2956,3 +2956,5 @@ Waiting for a paused signal snapshot.	Ожидание снимка сигнал
 Signal snapshot limit reached.	Достигнут предел числа сигналов в снимке.
 Invalid register value or unsupported register path.	Некорректное значение или неподдерживаемый путь регистра.
 HDL declaration not found.	Объявление HDL не найдено.
+Values at the current stop	Значения на текущей остановке
+Values from the last stop	Значения с последней остановки
