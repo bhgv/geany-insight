@@ -2453,6 +2453,203 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
     return result;
 }
 
+typedef struct {
+    const gchar *rule, *fields;
+    gint image;
+    gboolean script;
+} DevicePreset;
+
+static const DevicePreset device_presets[] = {
+    {"module", "Module name=", -1, FALSE},
+    {"clock", "Port=clk|Start (ns)=0|High (ns)=5|Low (ns)=5", -1, FALSE},
+    {"pulse", "Port=reset|Start (ns)=10|Length (ns)=100|Active level=1", -1, FALSE},
+    {"button", "Port=button|Idle level=0|Length (ns)=100", -1, FALSE},
+    {"switch", "Port=enable|Initial level=0", -1, FALSE},
+    {"slider", "Port=level|Width=8|Initial value=0", -1, FALSE},
+    {"led", "Port=ready|Active level=1", -1, FALSE},
+    {"display", "Port=status|Width=8|Format (hex, dec, bin)=hex", -1, FALSE},
+    {"scope", "Signal=", -1, FALSE},
+    {"scope-xy", "X signal=|Y signal=", -1, FALSE},
+    {"scope-xyz", "X signal=|Y signal=|Z signal=", -1, FALSE},
+    {"uart", "RX=rx|TX=tx|Baud=115200|Console=console", -1, FALSE},
+    {"sram", "Address=addr|Data=dq|CE#=ce_n|WE#=we_n|OE#=oe_n|Address bits=16|Data bits=8", 0, FALSE},
+    {"sdram", "CK=ck|CKE=cke|CS#=cs_n|RAS#=ras_n|CAS#=cas_n|WE#=we_n|A=a|BA=ba|DQ=dq|DQM=dqm", 6, FALSE},
+    {"ddr2", "CK=ck|CKE=cke|CS#=cs_n|RAS#=ras_n|CAS#=cas_n|WE#=we_n|A=a|BA=ba|DQ=dq|DQS=dqs|DM=dm|Read latency=3|Write latency=2", 6, FALSE},
+    {"ddr3", "CK=ck|RESET#=reset_n|CKE=cke|CS#=cs_n|RAS#=ras_n|CAS#=cas_n|WE#=we_n|A=a|BA=ba|DQ=dq|DQS=dqs|DM=dm|Read latency=3|Write latency=2", 7, FALSE},
+    {"ddr4", "CK=ck|RESET#=reset_n|CKE=cke|CS#=cs_n|ACT#=act_n|A=a|BA=ba|BG=bg|DQ=dq|DQS=dqs|DM#=dm_n|Read latency=3|Write latency=2", 5, FALSE},
+    {"spi-nor", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", 1, FALSE},
+    {"spi-nand", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", 1, FALSE},
+    {"spi-eeprom", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", 1, FALSE},
+    {"spi-psram", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", 1, FALSE},
+    {"i2c-eeprom", "SCL=scl|SDA=sda|Address=0x50", 1, FALSE},
+    {"spi-lua", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", -1, TRUE},
+    {"i2c-lua", "SCL=scl|SDA=sda|Address=0x50", -1, TRUE},
+};
+
+typedef struct {
+    GtkWidget *grid, *file, *reset;
+    GPtrArray *entries;
+    const gchar *directory;
+} DeviceForm;
+
+static GtkWidget *device_field(DeviceForm *form, const gchar *title, GtkWidget *field, guint row)
+{
+    GtkWidget *label = gtk_label_new(title);
+    gtk_label_set_xalign(GTK_LABEL(label), 0);
+    gtk_label_set_mnemonic_widget(GTK_LABEL(label), field);
+    gtk_widget_set_hexpand(field, TRUE);
+    gtk_grid_attach(GTK_GRID(form->grid), label, 0, row, 1, 1);
+    gtk_grid_attach(GTK_GRID(form->grid), field, 1, row, 1, 1);
+    return field;
+}
+
+static void simulation_device_type(GtkComboBox *combo, gpointer data)
+{
+    DeviceForm *form = data;
+    gint selected = gtk_combo_box_get_active(combo);
+    if (selected < 0)
+        return;
+    GList *children = gtk_container_get_children(GTK_CONTAINER(form->grid));
+    g_list_free_full(children, (GDestroyNotify)gtk_widget_destroy);
+    g_ptr_array_set_size(form->entries, 0);
+    form->file = form->reset = NULL;
+    const DevicePreset *preset = &device_presets[selected];
+    gchar **fields = g_strsplit(preset->fields, "|", -1);
+    guint row = 0;
+    for (; fields[row]; row++)
+    {
+        gchar *value = strchr(fields[row], '=');
+        *value++ = 0;
+        GtkWidget *entry = gtk_entry_new();
+        gtk_entry_set_text(GTK_ENTRY(entry), value);
+        g_ptr_array_add(form->entries, device_field(form, fields[row], entry, row));
+    }
+    g_strfreev(fields);
+    if (preset->script || preset->image >= 0)
+    {
+        GtkWidget *chooser = gtk_file_chooser_button_new("Choose device file", GTK_FILE_CHOOSER_ACTION_OPEN);
+        gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(chooser), form->directory);
+        form->file = device_field(form, preset->script ? "Lua script" : "Memory image (optional)", chooser, row++);
+        if (!preset->script)
+        {
+            GtkWidget *clear = gtk_button_new_with_label("Clear image");
+            g_signal_connect_swapped(clear, "clicked", G_CALLBACK(gtk_file_chooser_unselect_all), chooser);
+            gtk_grid_attach(GTK_GRID(form->grid), clear, 1, row++, 1, 1);
+        }
+    }
+    if (preset->script)
+        form->reset = device_field(form, "Reset signal (optional)", gtk_entry_new(), row);
+    gtk_widget_show_all(form->grid);
+}
+
+static void device_argument(GString *rule, const gchar *value)
+{
+    gchar *quoted = g_shell_quote(value);
+    g_string_append_printf(rule, " %s", quoted);
+    g_free(quoted);
+}
+
+static void simulation_device_wizard(GtkButton *button, gpointer data)
+{
+    GtkTextBuffer *buffer = data;
+    GtkWindow *parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
+    DeviceForm form = {.entries = g_ptr_array_new(),
+        .directory = g_object_get_data(G_OBJECT(button), "source-directory")};
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Add Test Device", parent,
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
+        "_Insert Rule", GTK_RESPONSE_ACCEPT, NULL);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 480, 480);
+    GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    GtkWidget *combo = gtk_combo_box_text_new();
+    gtk_widget_set_name(combo, "insight-test-device-type");
+    for (guint i = 0; i < G_N_ELEMENTS(device_presets); i++)
+        gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(combo), device_presets[i].rule, device_presets[i].rule);
+    gtk_box_pack_start(GTK_BOX(box), combo, FALSE, FALSE, 6);
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    form.grid = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(form.grid), 10);
+    gtk_grid_set_row_spacing(GTK_GRID(form.grid), 4);
+    gtk_container_add(GTK_CONTAINER(scroll), form.grid);
+    gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
+    GtkWidget *status = gtk_label_new(NULL);
+    gtk_label_set_line_wrap(GTK_LABEL(status), TRUE);
+    gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 6);
+    g_signal_connect(combo, "changed", G_CALLBACK(simulation_device_type), &form);
+    gtk_combo_box_set_active(GTK_COMBO_BOX(combo), 0);
+    gtk_widget_show_all(dialog);
+    while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+    {
+        gint selected = gtk_combo_box_get_active(GTK_COMBO_BOX(combo));
+        if (selected < 0)
+            continue;
+        const DevicePreset *preset = &device_presets[selected];
+        gchar *native = form.file ? gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(form.file)) : NULL;
+        gchar *file = native ? g_filename_to_utf8(native, -1, NULL, NULL, NULL) : NULL;
+        gboolean valid = (!native || file) && (!preset->script || file) && (!file || !strpbrk(file, "\r\n"));
+        GString *rule = g_string_new(NULL);
+        if (file && preset->image >= 0)
+        {
+            g_string_append(rule, "memory-image");
+            device_argument(rule, gtk_entry_get_text(form.entries->pdata[preset->image]));
+            device_argument(rule, file);
+            g_string_append_c(rule, '\n');
+        }
+        g_string_append(rule, preset->rule);
+        for (guint i = 0; i < form.entries->len; i++)
+        {
+            const gchar *value = gtk_entry_get_text(form.entries->pdata[i]);
+            valid = valid && *value && !strpbrk(value, "\r\n");
+            device_argument(rule, value);
+        }
+        if (preset->script && file)
+            device_argument(rule, file);
+        const gchar *reset = form.reset ? gtk_entry_get_text(GTK_ENTRY(form.reset)) : "";
+        if (*reset)
+        {
+            valid = valid && simulation_port_name(reset);
+            device_argument(rule, reset);
+        }
+        GError *error = NULL;
+        if (valid)
+        {
+            gchar *recipe = !strcmp(preset->rule, "module") ? g_strdup(rule->str) :
+                            g_strconcat("module geany_device_check\n", rule->str, NULL);
+            GPtrArray *sources = g_ptr_array_new_with_free_func(g_free);
+            GHashTable *images = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
+                                                       (GDestroyNotify)g_bytes_unref);
+            gchar *generated = simulation_port_harness(recipe, form.directory, sources, images, &error);
+            valid = generated != NULL;
+            g_free(generated);
+            g_hash_table_unref(images);
+            g_ptr_array_unref(sources);
+            g_free(recipe);
+        }
+        g_free(native);
+        g_free(file);
+        if (valid)
+        {
+            GtkTextIter end, previous;
+            gtk_text_buffer_get_end_iter(buffer, &end);
+            previous = end;
+            gtk_text_buffer_begin_user_action(buffer);
+            if (gtk_text_iter_backward_char(&previous) && gtk_text_iter_get_char(&previous) != '\n')
+                gtk_text_buffer_insert(buffer, &end, "\n", 1);
+            gtk_text_buffer_insert(buffer, &end, rule->str, rule->len);
+            gtk_text_buffer_insert(buffer, &end, "\n", 1);
+            gtk_text_buffer_end_user_action(buffer);
+        }
+        else
+            gtk_label_set_text(GTK_LABEL(status), error ? error->message :
+                               "Check the required fields and select a Lua script when requested.");
+        g_clear_error(&error);
+        g_string_free(rule, TRUE);
+        if (valid)
+            break;
+    }
+    gtk_widget_destroy(dialog);
+    g_ptr_array_unref(form.entries);
+}
+
 static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, const gchar *source_directory,
                                       gchar **harness, GPtrArray **model_sources, GHashTable **port_images)
 {
@@ -2492,10 +2689,17 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         "Use step in bus expressions and $time for simulation time. Quote formulas containing spaces.");
     gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
     gtk_label_set_xalign(GTK_LABEL(hint), 0);
-    gtk_box_pack_start(GTK_BOX(box), hint, FALSE, FALSE, 8);
+    GtkWidget *syntax = gtk_expander_new("Text rule reference");
+    gtk_container_add(GTK_CONTAINER(syntax), hint);
+    gtk_box_pack_start(GTK_BOX(box), syntax, FALSE, FALSE, 4);
     GtkWidget *view = gtk_text_view_new();
     gtk_text_view_set_monospace(GTK_TEXT_VIEW(view), TRUE);
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+    GtkWidget *wizard = gtk_button_new_with_label("Add Test Device…");
+    gtk_widget_set_halign(wizard, GTK_ALIGN_START);
+    g_object_set_data(G_OBJECT(wizard), "source-directory", (gpointer)source_directory);
+    g_signal_connect(wizard, "clicked", G_CALLBACK(simulation_device_wizard), buffer);
+    gtk_box_pack_start(GTK_BOX(box), wizard, FALSE, FALSE, 4);
     GFile *file = g_file_new_for_path(path);
     GFileInputStream *stream = g_file_read(file, NULL, NULL);
     if (stream)

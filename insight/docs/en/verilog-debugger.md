@@ -46,6 +46,20 @@ Port recipes are saved by project and source file. **Port Signals…**
 on the debugger panel reopens the recipe. Edits made during a run apply
 the next time debugging starts.
 
+### Graphical device setup
+
+In **Port Signals**, click **Add Test Device…** and select the rule type.
+Use **module** to enter the design module name if the recipe is empty.
+The form fills in typical port names and values. Change the fields to match
+the design. Memory devices offer an optional image picker. Lua devices
+require a script and accept an optional active-low reset signal.
+
+Click **Insert Rule** to append the validated rule. A memory image is
+inserted immediately before its device. Repeat for each device, then start
+debugging or save for the next run. The recipe remains editable. Expand
+**Text rule reference** to see the full syntax. The full recipe is checked
+when you save or start, including conflicts with existing ports.
+
 ## Triggered waveform capture and live controls
 
 In **Port Signals** for the current file, configure one optional

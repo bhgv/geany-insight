@@ -219,6 +219,19 @@ static gboolean check_connection(GtkTreeModel *model, GtkTreePath *path, GtkTree
     return checks->bit && checks->clock;
 }
 
+static gboolean add_test_slider(gpointer data)
+{
+    (void)data;
+    GtkWidget *wizard = find_window("Add Test Device");
+    if (!wizard)
+        return G_SOURCE_CONTINUE;
+    GtkWidget *kind = find_control(wizard, "insight-test-device-type");
+    if (!GTK_IS_COMBO_BOX(kind) || !gtk_combo_box_set_active_id(GTK_COMBO_BOX(kind), "slider"))
+        return G_SOURCE_CONTINUE;
+    gtk_dialog_response(GTK_DIALOG(wizard), GTK_RESPONSE_ACCEPT);
+    return G_SOURCE_REMOVE;
+}
+
 static gboolean accept_ports(gpointer data)
 {
     (void)data;
@@ -241,7 +254,6 @@ static gboolean accept_ports(gpointer data)
             "monitor pushed 1\n"
             "led ready\n"
             "display result\n"
-            "slider level\n"
             "display level_out 8 dec\n"
             "scope level_out\n"
             "scope-xy level_out result\n"
@@ -254,6 +266,12 @@ static gboolean accept_ports(gpointer data)
             "model-link ext external_data data 8\n"
             "sram - - - - - 4\n"
             "uart rx tx 1000000 console\n", -1);
+        guint wizard = g_timeout_add(10, add_test_slider, NULL);
+        if (!click(dialog, "Add Test Device…"))
+        {
+            g_source_remove(wizard);
+            return G_SOURCE_CONTINUE;
+        }
     }
     gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
     return G_SOURCE_REMOVE;
