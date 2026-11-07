@@ -475,6 +475,34 @@ def check_i2c_eeprom(compiler, runtime, fixtures, directory, environment):
     require("I2C EEPROM test passed" in report, "I2C EEPROM test did not finish")
 
 
+def check_documented_lua_devices(compiler, runtime, fixtures, directory, environment):
+    examples = fixtures.parent.parent / "examples" / "lua-bus-devices"
+    modules = runtime.parent.parent / "lib" / "ivl"
+    cases = (
+        ("spi", "spi-byte-queue", "SPI Lua reply: 47 59 01",
+         "wire sck, cs_n, mosi; wire miso = drive; "
+         "spi_demo dut(sck, cs_n, mosi, miso); "
+         'always @(sck or cs_n or start) $geany_spi_lua(sck, cs_n, mosi, drive, "device.lua");'),
+        ("i2c", "i2c-frame", "I2C Lua reply: 10 35",
+         "tri1 scl, sda; assign sda = drive; i2c_demo dut(scl, sda); "
+         'always @(scl or sda or start) $geany_i2c_lua(scl, sda, 80, drive, "device.lua");'),
+    )
+    for bus, script, expected, wiring in cases:
+        work = directory / bus
+        work.mkdir(parents=True, exist_ok=True)
+        (work / "device.lua").write_bytes((examples / f"{script}.lua").read_bytes())
+        harness = work / "harness.sv"
+        harness.write_text(
+            "`timescale 1ns/1ns\nmodule harness; reg drive = 1'bz; reg start; "
+            f"initial #0 start=1; {wiring} initial #1000 $finish; endmodule\n",
+            encoding="ascii",
+        )
+        compile_design(compiler, work, [examples / f"{bus}-demo.sv", harness], environment)
+        report = capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
+                                  "simulation.vvp"], work, bus, environment)
+        require(expected in report, f"Documented {bus} Lua example did not produce {expected}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("prefix", type=Path)
@@ -498,6 +526,7 @@ def main():
     logs = args.logs.resolve()
     checks = [
         ("i2c-eeprom", lambda directory: check_i2c_eeprom(compiler, runtime, fixtures, directory, environment)),
+        ("lua-device-examples", lambda directory: check_documented_lua_devices(compiler, runtime, fixtures, directory, environment)),
         ("spi-memory", lambda directory: check_spi_memory(compiler, runtime, fixtures, directory, environment)),
         ("memory-image", lambda directory: check_memory_image(compiler, runtime, fixtures, directory, environment)),
         ("ddr4-device", lambda directory: check_ddr4_device(compiler, runtime, fixtures, directory, environment)),

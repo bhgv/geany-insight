@@ -26,6 +26,22 @@ spi-lua sck other_cs_n mosi miso "spi-frame.lua" reset_n
 Непереданные байты сохраняются между выборками CS#. При пустой
 очереди выход передаёт FF. Очередь и кадр ограничены 4096 байтами.
 
+## Готовый запуск
+
+Скопируйте [spi-demo.sv](../../examples/lua-bus-devices/spi-demo.sv) и
+[spi-byte-queue.lua](../../examples/lua-bus-devices/spi-byte-queue.lua) в один каталог. Откройте файл
+SystemVerilog и выберите **Debug Current Verilog File**. В **Port Signals**
+вставьте:
+
+```text
+module spi_demo
+duration 1000
+spi-lua spi-byte-queue.lua
+```
+
+Запустите отладку и нажмите **Continue**, если симулятор остановился
+в начале. Схема проверит ответ `47 59 01` и напечатает его в консоли.
+
 ## Примеры
 
 - [Байтовая команда и три байта ответа](../../examples/lua-bus-devices/spi-byte-queue.lua)

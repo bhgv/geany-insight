@@ -30,6 +30,22 @@ nil ничего не добавляет. Числа от 0 до 255 перед�
 данных. При подтяжке ведущий считывает FF. Очередь и кадр ограничены
 4096 байтами.
 
+## Готовый запуск
+
+Скопируйте [i2c-demo.sv](../../examples/lua-bus-devices/i2c-demo.sv) и
+[i2c-frame.lua](../../examples/lua-bus-devices/i2c-frame.lua) в один каталог. Откройте файл
+SystemVerilog и выберите **Debug Current Verilog File**. В **Port Signals**
+вставьте:
+
+```text
+module i2c_demo
+duration 1000
+i2c-lua i2c-frame.lua
+```
+
+Запустите отладку и нажмите **Continue**, если симулятор остановился
+в начале. Схема проверит ответ `10 35` и напечатает его в консоли.
+
 ## Примеры
 
 - [Выбор по адресу, запись без ответа и ответ на чтение](../../examples/lua-bus-devices/i2c-address.lua)

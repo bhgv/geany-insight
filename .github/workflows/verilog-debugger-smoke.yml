@@ -26,6 +26,7 @@ on:
       - 'insight/patches/geany-vvp.patch'
       - 'insight/patches/geany-iverilog-windows.patch'
       - 'insight/tests/waveform-debug/**'
+      - 'insight/examples/lua-bus-devices/**'
       - 'src/insight-waveforms.*'
       - 'src/insight-workbench.c'
       - 'insight/desktop/slang_completion.c'

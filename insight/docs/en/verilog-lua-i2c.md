@@ -27,6 +27,22 @@ master on reads in order. While bytes are queued, reading calls neither
 device releases SDA during data clocks. Pull-ups make the master read FF.
 The queue and frame each hold up to 4096 bytes.
 
+## Run the complete example
+
+Copy [i2c-demo.sv](../../examples/lua-bus-devices/i2c-demo.sv) and
+[i2c-frame.lua](../../examples/lua-bus-devices/i2c-frame.lua) into one directory. Open the
+SystemVerilog file, choose **Debug Current Verilog File**, and enter this
+recipe in **Port Signals**:
+
+```text
+module i2c_demo
+duration 1000
+i2c-lua i2c-frame.lua
+```
+
+Start debugging and choose **Continue** if the simulator stops at startup.
+The design checks the reply `10 35` and prints it in the console.
+
 ## Examples
 
 - [Address selection, a write without a reply, and a read reply](../../examples/lua-bus-devices/i2c-address.lua)

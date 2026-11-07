@@ -285,7 +285,9 @@ dist_insightluabus_DATA = \
 	insight/examples/lua-bus-devices/i2c-write-reply.lua \
 	insight/examples/lua-bus-devices/spi-byte-queue.lua \
 	insight/examples/lua-bus-devices/spi-frame.lua \
-	insight/examples/lua-bus-devices/spi-shift.lua
+	insight/examples/lua-bus-devices/spi-shift.lua \
+	insight/examples/lua-bus-devices/spi-demo.sv \
+	insight/examples/lua-bus-devices/i2c-demo.sv
 
 insightdocendir = $(pkgdatadir)/insight/docs/en
 insightdocrudir = $(pkgdatadir)/insight/docs/ru

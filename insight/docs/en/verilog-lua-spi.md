@@ -24,6 +24,22 @@ across callbacks. All callbacks are optional.
 serialized most significant bit first. Unsent bytes survive CS# release.
 An empty queue sends FF. The queue and frame each hold up to 4096 bytes.
 
+## Run the complete example
+
+Copy [spi-demo.sv](../../examples/lua-bus-devices/spi-demo.sv) and
+[spi-byte-queue.lua](../../examples/lua-bus-devices/spi-byte-queue.lua) into one directory. Open the
+SystemVerilog file, choose **Debug Current Verilog File**, and enter this
+recipe in **Port Signals**:
+
+```text
+module spi_demo
+duration 1000
+spi-lua spi-byte-queue.lua
+```
+
+Start debugging and choose **Continue** if the simulator stops at startup.
+The design checks the reply `47 59 01` and prints it in the console.
+
 ## Examples
 
 - [Byte command with a three-byte reply](../../examples/lua-bus-devices/spi-byte-queue.lua)
