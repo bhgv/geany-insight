@@ -388,9 +388,9 @@ static gboolean check_testbench_preview(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* EN: Check diagram labels, filter for the hex table and activate its port. data is the
+/* EN: Check diagram labels and combined filters, then activate the hex-table port. data is the
  * caller's result flag. Return G_SOURCE_CONTINUE until the window appears.
- * RU: Проверяет подписи, находит hex-таблицу поиском и нажимает её порт. data — флаг
+ * RU: Проверяет подписи и сочетание фильтров, затем нажимает порт hex-таблицы. data — флаг
  * результата. Возвращает G_SOURCE_CONTINUE до появления окна. */
 static gboolean check_testbench_diagram(gpointer data)
 {
@@ -400,13 +400,23 @@ static gboolean check_testbench_diagram(gpointer data)
     GtkWidget *slice = find_control(dialog, "level · 16 bits\nlevel[7:0]");
     GtkWidget *table = find_control(dialog, "hex_out · 16 bits");
     GtkWidget *search = find_control(dialog, "insight-diagram-search");
+    GtkWidget *direction = find_control(dialog, "insight-diagram-direction");
+    GtkWidget *regex = find_control(dialog, "Regex");
     gboolean labels = find_control(dialog, "insight-testbench-diagram") &&
                       find_control(dialog, "DUT · live_devices") && slice && table &&
-                      GTK_IS_ENTRY(search);
+                      GTK_IS_ENTRY(search) && GTK_IS_COMBO_BOX(direction) &&
+                      GTK_IS_TOGGLE_BUTTON(regex);
+    gboolean filters = FALSE;
     if (labels)
-        gtk_entry_set_text(GTK_ENTRY(search), "HEX-TABLE");
-    *(gboolean *)data = labels && !gtk_widget_is_visible(slice) &&
-                       gtk_widget_is_visible(table) && click(dialog, "hex_out · 16 bits");
+    {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(regex), TRUE);
+        gtk_entry_set_text(GTK_ENTRY(search), "hex[-_]table");
+        gtk_combo_box_set_active_id(GTK_COMBO_BOX(direction), "input");
+        filters = !gtk_widget_is_visible(table);
+        gtk_combo_box_set_active_id(GTK_COMBO_BOX(direction), "output");
+        filters &= gtk_widget_is_visible(table) && !gtk_widget_is_visible(slice);
+    }
+    *(gboolean *)data = labels && filters && click(dialog, "hex_out · 16 bits");
     if (!*(gboolean *)data)
         gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);
     return G_SOURCE_REMOVE;

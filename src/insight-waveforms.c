@@ -4450,22 +4450,38 @@ static void simulation_diagram_follow_port(PortBrowser *browser, const gchar *po
     }
 }
 
-/* EN: Filter the diagram in data by the text in editable. Keep full connection
- * rows together and update the visible-port count.
- * RU: Фильтрует схему из data по тексту editable. Скрывает связи целиком
- * и обновляет число видимых портов. */
-static void simulation_diagram_filter(GtkEditable *editable, gpointer data)
+/* EN: Filter the diagram in data after widget changes. Match the query and
+ * direction together, keeping each visible connection row intact.
+ * RU: Фильтрует схему из data после изменения widget. Совмещает запрос
+ * и направление, сохраняя видимые соединения целиком. */
+static void simulation_diagram_filter(GtkWidget *widget, gpointer data)
 {
+    (void)widget;
     GtkGrid *grid = data;
     guint count = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(grid), "diagram-port-count"));
     GtkLabel *status = g_object_get_data(G_OBJECT(grid), "diagram-status");
-    gchar *query = g_utf8_casefold(gtk_entry_get_text(GTK_ENTRY(editable)), -1);
+    GtkEntry *search = g_object_get_data(G_OBJECT(grid), "diagram-search");
+    GtkToggleButton *regex = g_object_get_data(G_OBJECT(grid), "diagram-regex");
+    GtkComboBox *direction = g_object_get_data(G_OBJECT(grid), "diagram-direction");
+    const gchar *role = gtk_combo_box_get_active_id(direction);
+    const gchar *text = gtk_entry_get_text(search);
+    gchar *query = g_utf8_casefold(text, -1);
+    GError *error = NULL;
+    GRegex *pattern = *text && gtk_toggle_button_get_active(regex) ?
+                      g_regex_new(text, G_REGEX_CASELESS, 0, &error) : NULL;
+    gtk_entry_set_icon_from_icon_name(search, GTK_ENTRY_ICON_PRIMARY,
+                                     error ? "dialog-error-symbolic" : "edit-find-symbolic");
+    gtk_entry_set_icon_tooltip_text(search, GTK_ENTRY_ICON_PRIMARY, error ? error->message : NULL);
     guint visible = 0;
     for (guint row = 1; row <= count; row++)
     {
         GtkWidget *port = gtk_grid_get_child_at(grid, 2, row);
-        const gchar *index = g_object_get_data(G_OBJECT(port), "diagram-search-text");
-        gboolean matches = strstr(index, query) != NULL;
+        const gchar *port_role = g_object_get_data(G_OBJECT(port), "diagram-port-role");
+        const gchar *raw = g_object_get_data(G_OBJECT(port), "diagram-raw-text");
+        const gchar *folded = g_object_get_data(G_OBJECT(port), "diagram-search-text");
+        gboolean matches = !error && (!role || !*role || !strcmp(role, port_role)) &&
+                           (pattern ? g_regex_match(pattern, raw, 0, NULL) :
+                                      strstr(folded, query) != NULL);
         for (gint column = 0; column < 5; column++)
         {
             GtkWidget *child = gtk_grid_get_child_at(grid, column, row);
@@ -4474,9 +4490,12 @@ static void simulation_diagram_filter(GtkEditable *editable, gpointer data)
         }
         visible += matches;
     }
-    gchar *summary = g_strdup_printf("%u of %u connected ports", visible, count);
+    gchar *summary = error ? g_strdup("Invalid regular expression") :
+                             g_strdup_printf("%u of %u connected ports", visible, count);
     gtk_label_set_text(status, summary);
     g_free(summary);
+    g_clear_pointer(&pattern, g_regex_unref);
+    g_clear_error(&error);
     g_free(query);
 }
 
@@ -4493,6 +4512,16 @@ static GtkWidget *simulation_diagram_widget(const PortBrowser *browser, const gc
     gtk_widget_set_name(search, "insight-diagram-search");
     gtk_entry_set_placeholder_text(GTK_ENTRY(search), "Find ports, slices or devices");
     gtk_box_pack_start(GTK_BOX(toolbar), search, TRUE, TRUE, 0);
+    GtkWidget *regex = gtk_check_button_new_with_label("Regex");
+    gtk_box_pack_start(GTK_BOX(toolbar), regex, FALSE, FALSE, 0);
+    GtkWidget *roles = gtk_combo_box_text_new();
+    gtk_widget_set_name(roles, "insight-diagram-direction");
+    const gchar *ids[] = {"", "input", "output", "inout", "ref"};
+    const gchar *labels[] = {"All directions", "Input", "Output", "Inout", "Ref"};
+    for (guint i = 0; i < G_N_ELEMENTS(ids); i++)
+        gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(roles), ids[i], labels[i]);
+    gtk_combo_box_set_active(GTK_COMBO_BOX(roles), 0);
+    gtk_box_pack_start(GTK_BOX(toolbar), roles, FALSE, FALSE, 0);
     GtkWidget *status = gtk_label_new(NULL);
     gtk_box_pack_start(GTK_BOX(toolbar), status, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), toolbar, FALSE, FALSE, 6);
@@ -4531,7 +4560,8 @@ static GtkWidget *simulation_diagram_widget(const PortBrowser *browser, const gc
             gchar *search_text = g_strjoin(" ", port, direction, bindings, NULL);
             g_object_set_data_full(G_OBJECT(block), "diagram-search-text",
                                    g_utf8_casefold(search_text, -1), g_free);
-            g_free(search_text);
+            g_object_set_data_full(G_OBJECT(block), "diagram-raw-text", search_text, g_free);
+            g_object_set_data_full(G_OBJECT(block), "diagram-port-role", g_strdup(direction), g_free);
             GString *left = g_string_new(NULL), *right = g_string_new(NULL);
             gchar **rules = g_strsplit(bindings, ", ", -1);
             gboolean input = !strcmp(direction, "input");
@@ -4571,8 +4601,13 @@ static GtkWidget *simulation_diagram_widget(const PortBrowser *browser, const gc
     g_hash_table_unref(slices);
     g_object_set_data(G_OBJECT(grid), "diagram-port-count", GUINT_TO_POINTER(row - 1));
     g_object_set_data(G_OBJECT(grid), "diagram-status", status);
+    g_object_set_data(G_OBJECT(grid), "diagram-search", search);
+    g_object_set_data(G_OBJECT(grid), "diagram-regex", regex);
+    g_object_set_data(G_OBJECT(grid), "diagram-direction", roles);
     g_signal_connect(search, "changed", G_CALLBACK(simulation_diagram_filter), grid);
-    simulation_diagram_filter(GTK_EDITABLE(search), grid);
+    g_signal_connect(regex, "toggled", G_CALLBACK(simulation_diagram_filter), grid);
+    g_signal_connect(roles, "changed", G_CALLBACK(simulation_diagram_filter), grid);
+    simulation_diagram_filter(NULL, grid);
     gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
     return box;
 }

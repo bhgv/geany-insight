@@ -141,6 +141,10 @@ device labels without regard to case. Matching connection rows stay
 together, and the counter shows the visible port count. Clear the search
 to restore the whole diagram.
 
+In the diagram, **Regex** enables regular expressions. **All directions**
+can be narrowed to Input, Output, Inout or Ref. The filters combine.
+Invalid expressions show a diagnostic next to the search field.
+
 ## Triggered waveform capture and live controls
 
 In **Port Signals** for the current file, configure one optional
