@@ -10,6 +10,17 @@ Add, Update and Remove manage up to 16 profiles; one must remain. The profile se
 
 Keys stay in memory by default; an environment variable can supply the key when the profile key is empty. **Save API key in private config (not encrypted)** explicitly opts that profile into plaintext persistence using the platform's private-file creation mode. Clear that option and Update to omit the key from the next saved configuration. This is not an encrypted credential vault. Key fields are masked. The nonsecret legacy mirror does not contain keys.
 
+## Connect step by step
+
+1. Open **Connection Wizard…** in the assistant's connection settings or in **AI Connections…**. Choose your provider and click **Next**. The wizard fills in the profile name, sample API endpoint and key environment variable, and looks for Python on your PATH.
+2. Open **Open provider setup guide** and follow your provider's API account setup. Create an API key and copy the exact model ID available to your account. For a custom server, start the server and copy its full chat/completions URL and model ID. For Qwen, replace the sample URL with the complete endpoint for your workspace and region.
+3. Enter the model ID and either paste the key or leave the key field empty and set the suggested environment variable before starting Geany. A local server may work without a key. If Python is missing from PATH, enter the path to a Python 3 executable.
+4. Click **Test connection**. The wizard sends a short sample request, which may consume API quota. It sends no source, history or attachments. For HTTP 401 or 403, check the key and account access. For HTTP 404, check the endpoint and model ID. For HTTP 429, check quota or rate limits.
+5. Click **Save and activate**. The new profile is shared by the assistants. You can save before testing. A pasted key lasts until Geany closes unless you explicitly enable key storage.
+
+Once connected, open the [console assistant](console-ai.md) or [editor assistant](editor-ai.md). Enter a question, review the context and attachments, then click **Send**. Review code suggestions in Diff/Merge before applying them.
+
+
 ## Parallel answers
 
 Mark **Include in parallel comparison** on between one and four profiles and Update each. Choose **Compare checked AI profiles** in an assistant, inspect the visible context/prompt/attachments, then Send. Every chosen API receives its own captured copy of the same prompt/context/code/history. Requests run concurrently; subsequent connection edits cannot change those snapshots.

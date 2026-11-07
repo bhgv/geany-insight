@@ -2904,3 +2904,16 @@ Python Debugger Help…	Справка по отладчику Python…
 Run Verilog Testbench…	Запустить тестбенч Verilog…
 Save the current HDL file before starting the debugger.	Сохраните текущий файл HDL перед запуском отладчика.
 Verilog Debugger Help…	Справка по отладчику Verilog…
+AI Connection Wizard	Мастер подключения ИИ
+Connection Wizard…	Мастер подключения…
+Open provider setup guide	Открыть инструкцию провайдера
+Test connection	Проверить подключение
+Testing the connection…	Проверяется подключение…
+Save and activate	Сохранить и выбрать
+Connection verified. Save to activate this profile.	Подключение проверено. Сохраните профиль, чтобы выбрать его.
+Test failed. Check Python, endpoint, key, model access and API quota.	Проверка не удалась. Проверьте Python, адрес, ключ, доступ к модели и квоту API.
+1. Choose a provider. Get a key and a model ID from its API dashboard. For a local server, start it and look up its API URL and model ID.	1. Выберите провайдера. Получите ключ и ID модели в его панели API. Для локального сервера запустите его и уточните адрес API и ID модели.
+2. Enter the model ID and paste the API key or use the suggested environment variable. For Qwen, replace the sample address with your workspace and region endpoint.	2. Введите ID модели и вставьте ключ API или используйте предложенную переменную окружения. Для Qwen укажите адрес своего рабочего пространства и региона.
+3. Test the connection, then save and activate. The test sends the key and a short sample prompt to the endpoint. It may consume quota and includes no source, history or attachments.	3. Проверьте подключение, затем сохраните профиль. Проверка отправляет ключ и короткий запрос по указанному адресу. Она может расходовать квоту и не передаёт исходник, историю и вложения.
+Enter a profile name, complete HTTP(S) endpoint, model ID and Python executable.	Укажите имя профиля, полный адрес HTTP(S), ID модели и исполняемый файл Python.
+There are already 16 profiles. Remove one in AI Connections before adding another.	Уже создано 16 профилей. Перед добавлением удалите один из них в окне «Подключения ИИ».
