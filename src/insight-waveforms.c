@@ -3,6 +3,7 @@
  * RU: Реализует настройку симуляции Verilog, живые приборы и просмотр VCD. */
 #include "insight-waveforms.h"
 #include "msgwindow.h"
+#include "ui_utils.h"
 #include "insight-ai.h"
 #include "insight-help.h"
 #include "insight-i18n.h"
@@ -1424,6 +1425,27 @@ static void viewer_free(gpointer data) {
  g_free(viewer);
 }
 
+/* EN: Open the dependency graph for the selected Watch row in viewer data.
+ * button provides the tree selection through its attached watch view.
+ * RU: Открывает граф выбранной строки Watch в viewer из data.
+ * Представление для выбора прикреплено к button. */
+static void wave_watch_graph(GtkButton *button, gpointer data)
+{
+    Viewer *viewer = data;
+    GtkTreeView *tree = g_object_get_data(G_OBJECT(button), "watch-tree");
+    GtkTreeModel *model;
+    GtkTreeIter row;
+    if (!viewer->navigate ||
+        !gtk_tree_selection_get_selected(gtk_tree_view_get_selection(tree), &model, &row))
+        return;
+    gchar *name = NULL;
+    gtk_tree_model_get(model, &row, 0, &name, -1);
+    viewer->navigate(name, TRUE, GTK_WINDOW(viewer->window));
+    g_free(name);
+}
+
+/* EN: Show capture in a viewer under parent with session_path and navigate actions.
+ * RU: Показывает capture в окне parent с настройками session_path и переходами navigate. */
 static GtkWidget *show_capture(GtkWindow *parent, Capture *capture, const gchar *session_path, InsightWaveSource navigate) {
  Viewer *viewer = g_new0(Viewer, 1);
  viewer->capture = capture;
@@ -1498,6 +1520,13 @@ static GtkWidget *show_capture(GtkWindow *parent, Capture *capture, const gchar 
  }
  viewer->watch_values = gtk_list_store_new(4, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
  GtkWidget *watch_tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(viewer->watch_values));
+ GtkWidget *watch_graph = gtk_button_new_with_label(insight_tr("Watch graph"));
+ gtk_widget_set_name(watch_graph, "insight-wave-watch-graph");
+ gtk_widget_set_sensitive(watch_graph, viewer->navigate != NULL);
+ g_object_set_data(G_OBJECT(watch_graph), "watch-tree", watch_tree);
+ g_signal_connect(watch_graph, "clicked", G_CALLBACK(wave_watch_graph), viewer);
+ gtk_box_pack_start(GTK_BOX(watch_controls), watch_graph, FALSE, FALSE, 0);
+
  const gchar *headings[] = {"Signal", "Value", "Last event tick", "Event at cursor"};
  for (guint i = 0; i < G_N_ELEMENTS(headings); i++) {
   GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(
@@ -1664,7 +1693,8 @@ typedef struct {
     guint refresh_source;
     gchar prompt_tail[2];
     gboolean preview_pending;
-    GtkWidget *signal_name;
+    GtkWidget *signal_name, *register_bits, *register_write;
+    gboolean register_write_ready;
     GtkWidget *pause_button, *source_button, *breakpoint_controls, *breakpoint_file, *breakpoint_line;
     GtkWidget *rule_signal, *rule_bits, *rule_hits, *rule_log, *rule_script;
     GtkWidget *lua_watches, *reload_script;
@@ -5841,8 +5871,10 @@ static void simulation_scope_record(WaveSimulation *run, const gchar *record)
     g_strfreev(fields);
 }
 
-/* Collect complete control records even when the log is read in chunks. */
-/* Собирает целые управляющие записи при чтении журнала частями. */
+/* EN: Feed length bytes of simulator output to the protocol parser for run.
+ * Incomplete records are retained for the next call.
+ * RU: Передаёт length байт из bytes обработчику протокола сеанса run.
+ * Неполные записи сохраняются до следующего вызова. */
 static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsize length)
 {
     for (gsize i = 0; i < length; i++)
@@ -5856,6 +5888,11 @@ static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsi
         if (run->protocol_line->len && run->protocol_line->str[run->protocol_line->len - 1] == '\r')
             g_string_truncate(run->protocol_line, run->protocol_line->len - 1);
         const gchar *text = run->protocol_line->str;
+        if (run->register_write && !strcmp(text, "GEANY-VVP-WRITE-REGISTER"))
+        {
+            run->register_write_ready = TRUE;
+            gtk_widget_set_sensitive(run->register_write, TRUE);
+        }
         if (strstr(text, "GEANY-VVP-FRAMES"))
             run->frames_ready = TRUE;
         if (strstr(text, "GEANY-VVP-PROCESSES"))
@@ -6906,6 +6943,62 @@ static void simulation_read_memory_word(GtkButton *button, gpointer data)
     g_free(name);
 }
 
+/* EN: Validate a dotted HDL hierarchy before passing it as a command argument.
+ * RU: Проверяет иерархический путь name перед передачей в команду. */
+static gboolean simulation_signal_path(const gchar *name)
+{
+    gchar **parts = g_strsplit(name, ".", -1);
+    gboolean valid = *name != 0;
+    for (guint i = 0; valid && parts[i]; i++)
+        valid = simulation_simple_name(parts[i]);
+    g_strfreev(parts);
+    return valid;
+}
+
+/* EN: Open the dependency graph for the full path entered in simulation data.
+ * button is unused. No simulator command is sent.
+ * RU: Открывает граф по полному пути из сеанса data. button не используется.
+ * Команда симулятору не отправляется. */
+static void simulation_watch_graph(GtkButton *button, gpointer data)
+{
+    (void)button;
+    WaveSimulation *run = data;
+    const gchar *name = gtk_entry_get_text(GTK_ENTRY(run->signal_name));
+    if (!run->navigate)
+        return;
+    if (!strchr(name, '.') || !simulation_signal_path(name))
+    {
+        ui_set_statusbar(TRUE, "%s", insight_tr("Enter a full HDL signal path, for example tb.dut.count."));
+        return;
+    }
+    run->navigate(name, TRUE, NULL);
+}
+
+/* EN: Send the paused simulation in data a validated register deposit command.
+ * button is unused. Invalid paths and bit strings are reported locally.
+ * RU: Передаёт остановленному сеансу data команду записи регистра.
+ * button не используется. Ошибки пути и битов показываются в редакторе. */
+static void simulation_write_register(GtkButton *button, gpointer data)
+{
+    (void)button;
+    WaveSimulation *run = data;
+    if (!run->register_write_ready)
+        return;
+    const gchar *name = gtk_entry_get_text(GTK_ENTRY(run->signal_name));
+    gchar *bits = g_ascii_strdown(gtk_entry_get_text(GTK_ENTRY(run->register_bits)), -1);
+    if (!simulation_signal_path(name) || !*bits || strspn(bits, "01xz") != strlen(bits))
+    {
+        ui_set_statusbar(TRUE, "%s",
+            insight_tr("Enter a register name and its full-width value using 0, 1, X or Z."));
+        g_free(bits);
+        return;
+    }
+    gchar *command = g_strdup_printf("geany-write-register %s %s\n", name, bits);
+    simulation_write_command(run, command);
+    g_free(command);
+    g_free(bits);
+}
+
 /* Query a simple signal or enter one scope in the current simulator context. */
 /* Запрашивает простой сигнал или входит в область текущего контекста симулятора. */
 static void simulation_inspect_name(GtkButton *button, gpointer data)
@@ -7355,6 +7448,25 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         g_object_set_data(G_OBJECT(up), "vvp-command", "pop\n");
         g_signal_connect(up, "clicked", G_CALLBACK(simulation_send_command), run);
         gtk_box_pack_start(GTK_BOX(inspection), up, FALSE, FALSE, 0);
+        GtkWidget *graph = gtk_button_new_with_label(insight_tr("Watch graph"));
+        gtk_widget_set_name(graph, "insight-verilog-watch-graph");
+        gtk_widget_set_sensitive(graph, run->navigate != NULL);
+        g_signal_connect(graph, "clicked", G_CALLBACK(simulation_watch_graph), run);
+        gtk_box_pack_start(GTK_BOX(inspection), graph, FALSE, FALSE, 0);
+
+        GtkWidget *write_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        gtk_box_pack_start(GTK_BOX(run->live_controls), write_row, FALSE, FALSE, 0);
+        run->register_bits = gtk_entry_new();
+        gtk_entry_set_max_length(GTK_ENTRY(run->register_bits), 4096);
+        gtk_entry_set_placeholder_text(GTK_ENTRY(run->register_bits),
+            insight_tr("Register value, full width (0, 1, X, Z)"));
+        gtk_box_pack_start(GTK_BOX(write_row), run->register_bits, TRUE, TRUE, 0);
+        run->register_write = gtk_button_new_with_label(insight_tr("Write Register"));
+        gtk_widget_set_name(run->register_write, "insight-verilog-write-register");
+        gtk_widget_set_sensitive(run->register_write, FALSE);
+        g_signal_connect(run->register_write, "clicked", G_CALLBACK(simulation_write_register), run);
+        gtk_box_pack_start(GTK_BOX(write_row), run->register_write, FALSE, FALSE, 0);
+
 
         GtkWidget *preview = gtk_button_new_with_label("Preview Waveform");
         g_signal_connect(preview, "clicked", G_CALLBACK(simulation_preview), run);

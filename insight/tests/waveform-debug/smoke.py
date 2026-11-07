@@ -140,6 +140,17 @@ def check_breakpoint(compiler, runtime, fixtures, directory, environment):
                 "Wrong source position at the conditional stop")
         require(re.search(r"GEANY-VVP-EVENT\t\d+\t[^\r\n]+\t15\t1\tcounter_tb.count\t0001", stopped),
                 "Wrong scripted stop event, tick or signal value")
+        require("expected a static register or integer" in
+                simulator.command("geany-write-register counter_tb.dut.odd 1"),
+                "A driven net was accepted as a register")
+        require("exact bit width" in simulator.command("geany-write-register counter_tb.dut.count 1"),
+                "A short register value was accepted")
+        require("counter_tb.dut.count = 10xz" in
+                simulator.command("geany-write-register counter_tb.dut.count 10xz"),
+                "Four-state register write failed at the breakpoint")
+        require("counter_tb.dut.count = 0001" in
+                simulator.command("geany-write-register counter_tb.dut.count 0001"),
+                "Register was not restored while paused")
         simulator.send("cont")
         require(simulator.process.wait(timeout=30) == 0, "Counter simulation failed")
     finally:

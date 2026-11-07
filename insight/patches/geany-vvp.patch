@@ -36,7 +36,7 @@ diff --git a/vvp/stop.cc b/vvp/stop.cc
 index 175e8ae..6c544f5 100644
 --- a/vvp/stop.cc
 +++ b/vvp/stop.cc
-@@ -38,13 +38,18 @@
+@@ -38,16 +38,21 @@
  #endif
  # include  <cstring>
  # include  <cstdlib>
@@ -55,8 +55,12 @@ index 175e8ae..6c544f5 100644
 +// RU: Читает канал редактора без состояния терминала или readline.
  static char* readline_stub(const char*prompt)
  {
-       char buf[256];
-@@ -66,12 +71,355 @@ static char* readline_stub(const char*prompt)
+-      char buf[256];
++      char buf[8192];
+ 
+       if (prompt && prompt[0]) {
+ 	    fputs(prompt, stdout);
+@@ -66,12 +71,401 @@ static char* readline_stub(const char*prompt)
  
        return 0;
  }
@@ -346,6 +350,52 @@ index 175e8ae..6c544f5 100644
 +      geany_read_memory(geany_stopped_process, geany_frame_depth, argv[1], index);
 +}
 +
++// EN: Deposit bits into a static integral variable while the scheduler waits.
++// argc and argv contain the command, variable path and exact-width binary value.
++// RU: Записывает биты в статическую целую переменную на паузе планировщика.
++// argc и argv содержат команду, путь переменной и двоичное значение полной ширины.
++static void cmd_geany_write_register(unsigned argc, const char* argv[])
++{
++      if (!geany_debug_enabled())
++            return;
++      if (argc != 3) {
++            printf("Geany: expected geany-write-register <path> <bits>.\n");
++            return;
++      }
++      const std::string bits(argv[2]);
++      if (bits.empty() || bits.find_first_not_of("01xz") != std::string::npos) {
++            printf("Geany: expected binary digits 0, 1, x or z.\n");
++            return;
++      }
++
++      const vpi_mode_t previous_mode = vpi_mode_flag;
++      if (previous_mode == VPI_MODE_NONE)
++            vpi_mode_flag = VPI_MODE_ROSYNC;
++      vpiHandle signal = vpi_handle_by_name(argv[1], nullptr);
++      if (!signal && stop_current_scope && !std::strchr(argv[1], '.'))
++            signal = vpi_handle_by_name(argv[1], stop_current_scope);
++      vpi_mode_flag = previous_mode;
++      if (!signal ||
++          (vpi_get(vpiType, signal) != vpiReg && vpi_get(vpiType, signal) != vpiIntegerVar) ||
++          vpi_get(vpiAutomatic, signal) == 1 ||
++          vpi_get(vpiSize, signal) != static_cast<int>(bits.size())) {
++            printf("Geany: expected a static register or integer and its exact bit width: %s\n", argv[1]);
++            return;
++      }
++
++      s_vpi_value value = {};
++      value.format = vpiBinStrVal;
++      value.value.str = const_cast<char*>(bits.c_str());
++      vpi_put_value(signal, &value, nullptr, vpiNoDelay);
++
++      value.value.str = nullptr;
++      vpi_get_value(signal, &value);
++      if (!value.value.str || bits != value.value.str)
++            printf("Geany: write did not take effect: %s\n", argv[1]);
++      else
++            printf("Geany: %s = %s\n", argv[1], value.value.str);
++}
++
 +// EN: Test a source checkpoint against the selected stepping mode.
 +// RU: Проверяем точку исходника для выбранного режима шага.
 +bool geany_source_step(unsigned long long process)
@@ -412,7 +462,7 @@ index 175e8ae..6c544f5 100644
  static void cmd_call(unsigned argc, const char*argv[])
  {
        __vpiHandle**table;
-@@ -444,6 +792,21 @@ static struct {
+@@ -444,6 +838,22 @@ static struct {
          "Synonym for finish."},
        { "finish", &cmd_finish,
          "Finish the simulation."},
@@ -424,6 +474,7 @@ index 175e8ae..6c544f5 100644
 +        "Step to the next simulation tick."},
 +      { "geany-select-frame", &cmd_geany_select_frame, "Inspect a frame by depth."},
 +      { "geany-read-memory", &cmd_geany_read_memory, "Read one indexed memory, dynamic array, or queue element."},
++      { "geany-write-register", &cmd_geany_write_register, "Deposit an exact-width binary value into a static register."},
 +      { "geany-processes", &cmd_geany_processes, "List live HDL processes."},
 +      { "geany-select-process", &cmd_geany_select_process, "Inspect a process by number."},
 +      { "geany-process-values", &cmd_geany_process_values, "Show selected process values."},
@@ -434,17 +485,17 @@ index 175e8ae..6c544f5 100644
        { "help",   &cmd_help,
          "Get help."},
        { "list",   &cmd_list,
-@@ -554,6 +917,9 @@ void stop_handler(int rc)
+@@ -554,6 +964,9 @@ void stop_handler(int rc)
  	    return;
        }
  
 +      geany_step = geany_step_mode::none;
 +      if (geany_debug_enabled())
-+            printf("GEANY-VVP-FRAMES\nGEANY-VVP-PROCESSES\nGEANY-VVP-SOURCE-STEP\nGEANY-VVP-READY\n");
++            printf("GEANY-VVP-FRAMES\nGEANY-VVP-PROCESSES\nGEANY-VVP-SOURCE-STEP\nGEANY-VVP-WRITE-REGISTER\nGEANY-VVP-READY\n");
        vpi_mcd_printf(1,"** VVP Stop(%d) **\n", rc);
        vpi_mcd_printf(1,"** Flushing output streams.\n");
        invoke_command_const("$fflush");
-@@ -563,7 +929,7 @@ void stop_handler(int rc)
+@@ -563,7 +976,7 @@ void stop_handler(int rc)
  
        interact_flag = true;
        while (interact_flag) {
@@ -453,7 +504,7 @@ index 175e8ae..6c544f5 100644
  	    if (input == 0)
  		  break;
  
-@@ -575,7 +941,8 @@ void stop_handler(int rc)
+@@ -575,7 +988,8 @@ void stop_handler(int rc)
  
  	    if (first[0] != 0) {
  #ifdef USE_HISTORY
@@ -463,7 +514,7 @@ index 175e8ae..6c544f5 100644
  #endif
  		  invoke_command(first);
  	    }
-@@ -583,5 +950,6 @@ void stop_handler(int rc)
+@@ -583,5 +997,6 @@ void stop_handler(int rc)
  	    free(input);
        }
  
@@ -474,7 +525,7 @@ diff --git a/vvp/vpi_priv.h b/vvp/vpi_priv.h
 index 3b253c9..7fd0a4e 100644
 --- a/vvp/vpi_priv.h
 +++ b/vvp/vpi_priv.h
-@@ -704,6 +704,7 @@ class __vpiBaseVar : public __vpiHandle {
+@@ -704,4 +704,5 @@ class __vpiBaseVar : public __vpiHandle {
  #endif
 
        inline vvp_net_t* get_net() const { return net_; }
@@ -496,7 +547,7 @@ index de7578b..1d55556 100644
  # include  <set>
  # include  <typeinfo>
  # include  <vector>
-@@ -89,6 +90,7 @@ using namespace std;
+@@ -89,6 +92,7 @@ using namespace std;
   */
  
  struct vthread_s {
@@ -504,7 +555,7 @@ index de7578b..1d55556 100644
        vthread_s();
  
        void debug_dump(ostream&fd, const char*label_text);
-@@ -427,6 +429,279 @@ __vpiScope* vthread_scope(struct vthread_s*thr)
+@@ -427,6 +431,279 @@ __vpiScope* vthread_scope(struct vthread_s*thr)
  
  struct vthread_s*running_thread = 0;
  
@@ -784,7 +835,7 @@ index de7578b..1d55556 100644
  string get_fileline()
  {
        return running_thread->get_fileline();
-@@ -719,6 +994,10 @@ vthread_t vthread_new(vvp_code_t pc, __vpiScope*scope)
+@@ -719,6 +996,10 @@ vthread_t vthread_new(vvp_code_t pc, __vpiScope*scope)
        for (int idx = 4 ; idx < 8 ; idx += 1)
  	    thr->flags[idx] = BIT4_X;
  
@@ -795,7 +846,7 @@ index de7578b..1d55556 100644
        scope->threads .insert(thr);
        return thr;
  }
-@@ -820,6 +1099,8 @@ static void vthread_reap(vthread_t thr)
+@@ -820,6 +1101,8 @@ static void vthread_reap(vthread_t thr)
  
  void vthread_delete(vthread_t thr)
  {
@@ -804,7 +855,7 @@ index de7578b..1d55556 100644
        thr->cleanup();
        delete thr;
  }
-@@ -857,6 +1138,13 @@ void vthread_delay_delete()
+@@ -857,6 +1140,13 @@ void vthread_delay_delete()
   * incrementing the PC, and executing the instruction. The thread may
   * be the head of a list, so each thread is run so far as possible.
   */
@@ -818,7 +869,7 @@ index de7578b..1d55556 100644
  void vthread_run(vthread_t thr)
  {
        while (thr != 0) {
-@@ -869,6 +1157,16 @@ void vthread_run(vthread_t thr)
+@@ -869,6 +1159,16 @@ void vthread_run(vthread_t thr)
              running_thread = thr;
  
  	    for (;;) {
@@ -835,7 +886,7 @@ index de7578b..1d55556 100644
  		  vvp_code_t cp = thr->pc;
  		  thr->pc += 1;
  
-@@ -880,6 +1178,15 @@ void vthread_run(vthread_t thr)
+@@ -880,6 +1180,15 @@ void vthread_run(vthread_t thr)
  			break;
  	    }
  

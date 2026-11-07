@@ -20,6 +20,12 @@ open **Signal Map → HDL Uses…**. **Connections** shows data paths, **Conditi
 
 Enter a literal bit or slice such as `[2]`, `[7:4]`, or `[4 +: 4]` and click **Apply slice** to start traversal from that selection. Clear the field and apply again for the whole signal. Relationships with unknown bounds stay visible, and source uses still describe the whole declaration.
 
+### Watch graph and register editing
+
+From **Signal Watch** in the waveform preview, select a row and click **Watch graph**. While the simulator is paused, you can also enter a full hierarchy such as `tb.dut.count` in **Signal or scope** and click **Watch graph**. The graph shows nets and variables indexed from the project HDL.
+
+At a breakpoint or after **Pause** reaches the simulator prompt, enter the register name (prefer the full path) and a binary value of its full width using `0`, `1`, `X` or `Z`. Click **Write Register**. The console reports the value read back and the simulator remains paused. This is a one-time deposit into a static integral variable. A subsequent HDL assignment can overwrite it. Driven nets, automatic locals and memory words are outside this operation. Use the bundled VVP bridge with register-writing support.
+
 ## Port signals
 
 **Debug Current Verilog File** opens **Port Signals**. Leave the recipe

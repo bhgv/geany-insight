@@ -2936,3 +2936,8 @@ Clock / events	Такты и события
 Apply slice	Применить срез
 Whole signal or slice, e.g. [7:4]	Весь сигнал или срез, например [7:4]
 Enter a literal bit or slice, or clear the field for the whole signal.	Введите константный бит или срез либо очистите поле для всего сигнала.
+Enter a full HDL signal path, for example tb.dut.count.	Введите полный путь сигнала HDL, например tb.dut.count.
+Enter a register name and its full-width value using 0, 1, X or Z.	Введите имя регистра и значение полной ширины из 0, 1, X или Z.
+Register value, full width (0, 1, X, Z)	Значение регистра, полная ширина (0, 1, X, Z)
+Write Register	Записать регистр
+Watch graph	Граф наблюдения
