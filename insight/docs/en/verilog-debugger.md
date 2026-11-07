@@ -87,6 +87,13 @@ In the wizard, **Compatible only** keeps ports with the required direction
 and enough known bits for the selected field. Changing the field width
 updates the list. The two filters can be combined.
 
+Enable **Regex** to match port names with a regular expression.
+For example, **^data_[0-9]+$** matches names such as **data_12**.
+Matching is case-insensitive. An invalid pattern shows an error icon
+with a diagnostic tooltip. **Sort by** orders ports by name, direction,
+occupancy, or declaration order. Occupancy puts unassigned ports first.
+**Reverse** reverses the selected order.
+
 The wizard saves a slice as a `port-slice` rule and uses its alias in the
 device rule. Both rules form the connection. The table lists the device
 against the original port.

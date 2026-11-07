@@ -221,9 +221,9 @@ static gboolean check_connection(GtkTreeModel *model, GtkTreePath *path, GtkTree
     return checks->bit && checks->clock;
 }
 
-/* EN: Check modal port widths and filters, then assign a slider by activating a port; callback data is unused.
+/* EN: Check modal port widths, sorting and filters, then assign a slider by activating a port; callback data is unused.
  * Return G_SOURCE_CONTINUE while the wizard is unavailable.
- * RU: Проверяет ширину и фильтры портов в мастере, затем назначает порт ползунку.
+ * RU: Проверяет ширину, сортировку и фильтры портов, затем назначает порт ползунку.
  * data не используется. Возвращает G_SOURCE_CONTINUE, пока мастер недоступен. */
 static gboolean add_test_slider(gpointer data)
 {
@@ -295,6 +295,32 @@ static gboolean add_test_slider(gpointer data)
         return G_SOURCE_CONTINUE;
     gtk_entry_set_text(GTK_ENTRY(search), "");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(compatible), FALSE);
+    GtkWidget *regex = find_control(wizard, "Regex");
+    GtkWidget *sort = find_control(wizard, "insight-port-sort");
+    if (!GTK_IS_TOGGLE_BUTTON(regex) || !GTK_IS_COMBO_BOX(sort))
+        return G_SOURCE_CONTINUE;
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(regex), TRUE);
+    gtk_entry_set_text(GTK_ENTRY(search), "^level(_out)?$");
+    gboolean pattern_ok = gtk_tree_model_iter_n_children(model, NULL) == 2;
+    gtk_entry_set_text(GTK_ENTRY(search), "[");
+    pattern_ok &= gtk_tree_model_iter_n_children(model, NULL) == 0;
+    gtk_entry_set_text(GTK_ENTRY(search), "");
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(regex), FALSE);
+
+    gtk_combo_box_set_active(GTK_COMBO_BOX(sort), 3);
+    gchar *first = NULL;
+    if (gtk_tree_model_get_iter_first(model, &row))
+        gtk_tree_model_get(model, &row, 0, &first, -1);
+    gboolean order_ok = !g_strcmp0(first, "enable");
+    g_free(first);
+    gtk_combo_box_set_active(GTK_COMBO_BOX(sort), 2);
+    first = NULL;
+    if (gtk_tree_model_get_iter_first(model, &row))
+        gtk_tree_model_get(model, &row, 2, &first, -1);
+    order_ok &= !g_strcmp0(first, "Unassigned");
+    g_free(first);
+    if (!pattern_ok || !order_ok)
+        return G_SOURCE_CONTINUE;
     gtk_dialog_response(GTK_DIALOG(wizard), GTK_RESPONSE_ACCEPT);
     return G_SOURCE_REMOVE;
 }
