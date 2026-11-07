@@ -82,6 +82,11 @@ To choose other bits, select the port and click **Choose Slice…**.
 Set the offset from the least significant end and check the Verilog
 preview. Offset 0 gives the same slice as double-clicking.
 
+**Find port by name** matches part of a port name without regard to case.
+In the wizard, **Compatible only** keeps ports with the required direction
+and enough known bits for the selected field. Changing the field width
+updates the list. The two filters can be combined.
+
 The wizard saves a slice as a `port-slice` rule and uses its alias in the
 device rule. Both rules form the connection. The table lists the device
 against the original port.

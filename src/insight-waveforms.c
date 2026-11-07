@@ -2619,8 +2619,11 @@ typedef struct {
     GtkListStore *store;
     GHashTable *ports;
     gchar *module;
-    GtkWidget *tree;
+    GtkWidget *tree, *search, *compatible;
+    GtkTreeModelFilter *filter;
     gchar direction;
+    guint required_width;
+    gboolean choosing;
 } PortBrowser;
 
 /* EN: Read a source snapshot from path for the modal setup. Return UTF-8 text or NULL.
@@ -3078,6 +3081,43 @@ static gboolean port_browser_matches(const gchar *direction, gchar field)
            (field == 'a' && strcmp(direction, "—"));
 }
 
+/* EN: Return whether row in model matches the browser filters stored in data.
+ * RU: Проверяет, соответствует ли row из model фильтрам списка из data. */
+static gboolean port_browser_visible(GtkTreeModel *model, GtkTreeIter *row, gpointer data)
+{
+    PortBrowser *browser = data;
+    gchar *name, *direction;
+    guint width;
+    gtk_tree_model_get(model, row, PORT_NAME, &name, PORT_DIRECTION, &direction,
+                       PORT_WIDTH, &width, -1);
+    const gchar *query = gtk_entry_get_text(GTK_ENTRY(browser->search));
+    gchar *folded_name = g_ascii_strdown(name, -1);
+    gchar *folded_query = g_ascii_strdown(query, -1);
+    gboolean visible = strstr(folded_name, folded_query) != NULL;
+    if (visible && browser->direction && browser->compatible &&
+        gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(browser->compatible)))
+    {
+        visible = port_browser_matches(direction, browser->direction) && width &&
+                  (browser->direction == 'a' ||
+                   (browser->required_width && width >= browser->required_width));
+    }
+    g_free(folded_query);
+    g_free(folded_name);
+    g_free(direction);
+    g_free(name);
+    return visible;
+}
+
+/* EN: Apply filter changes from widget to the port browser in data.
+ * RU: Применяет изменения фильтра из widget к списку портов из data. */
+static void port_browser_refilter(GtkWidget *widget, gpointer data)
+{
+    (void)widget;
+    PortBrowser *browser = data;
+    gtk_tree_model_filter_refilter(browser->filter);
+    gtk_widget_queue_draw(browser->tree);
+}
+
 /* EN: Color cell for row in model when its direction matches the focused browser
  * field in data. column is unused.
  * RU: Подсвечивает cell строки row из model при совпадении направления с полем
@@ -3115,10 +3155,29 @@ static GtkWidget *port_browser_widget(PortBrowser *browser)
     }
     browser->store = gtk_list_store_new(PORT_COLUMNS, G_TYPE_STRING, G_TYPE_STRING,
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_INT, G_TYPE_INT);
-    GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(browser->store));
+    GtkWidget *filters = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    browser->search = gtk_search_entry_new();
+    gtk_widget_set_name(browser->search, "insight-port-search");
+    gtk_entry_set_placeholder_text(GTK_ENTRY(browser->search), "Find port by name");
+    gtk_box_pack_start(GTK_BOX(filters), browser->search, TRUE, TRUE, 0);
+    if (browser->choosing)
+    {
+        browser->compatible = gtk_check_button_new_with_label("Compatible only");
+        gtk_widget_set_sensitive(browser->compatible, FALSE);
+        gtk_box_pack_start(GTK_BOX(filters), browser->compatible, FALSE, FALSE, 0);
+    }
+    gtk_box_pack_start(GTK_BOX(box), filters, FALSE, FALSE, 0);
+    GtkTreeModel *filtered = gtk_tree_model_filter_new(GTK_TREE_MODEL(browser->store), NULL);
+    browser->filter = GTK_TREE_MODEL_FILTER(filtered);
+    gtk_tree_model_filter_set_visible_func(browser->filter, port_browser_visible, browser, NULL);
+    GtkWidget *tree = gtk_tree_view_new_with_model(filtered);
     browser->tree = tree;
     gtk_widget_set_name(tree, "insight-test-device-ports");
+    g_object_unref(filtered);
     g_object_unref(browser->store);
+    g_signal_connect(browser->search, "changed", G_CALLBACK(port_browser_refilter), browser);
+    if (browser->compatible)
+        g_signal_connect(browser->compatible, "toggled", G_CALLBACK(port_browser_refilter), browser);
     const gchar *titles[] = {"Port", "Direction", "Bits", "Devices / rules"};
     const gint columns[] = {PORT_NAME, PORT_DIRECTION, PORT_WIDTH_TEXT, PORT_BINDINGS};
     for (guint i = 0; i < G_N_ELEMENTS(titles); i++)
@@ -3221,6 +3280,22 @@ static guint device_width(const DeviceForm *form, const gchar *spec)
     return g_ascii_string_to_unsigned(value, 10, 1, 4096, &width, NULL) ? (guint)width : 0;
 }
 
+/* EN: Update form's active direction and width, then refresh the port filters.
+ * RU: Обновляет направление и ширину выбранного поля form и применяет фильтры. */
+static void device_port_filter(DeviceForm *form)
+{
+    PortBrowser *browser = form->browser;
+    const gchar *spec = form->active ? g_object_get_data(G_OBJECT(form->active), "port-spec") : NULL;
+    gchar direction = spec ? *spec : 0;
+    guint width = device_width(form, spec);
+    if (browser->direction == direction && browser->required_width == width)
+        return;
+    browser->direction = direction;
+    browser->required_width = width;
+    gtk_widget_set_sensitive(browser->compatible, direction != 0);
+    port_browser_refilter(NULL, browser);
+}
+
 /* EN: Refresh width captions after editable changes; data points to the device form.
  * RU: Обновляет подписи ширины при изменении editable. data указывает на форму. */
 static void device_width_changed(GtkEditable *editable, gpointer data)
@@ -3242,6 +3317,7 @@ static void device_width_changed(GtkEditable *editable, gpointer data)
         gtk_label_set_text(label, caption);
         g_free(caption);
     }
+    device_port_filter(form);
 }
 
 /* EN: Remember the focused port entry and highlight matching directions. event is unused.
@@ -3254,9 +3330,7 @@ static gboolean device_port_focus(GtkWidget *entry, GdkEventFocus *event, gpoint
     DeviceForm *form = data;
     const gchar *spec = g_object_get_data(G_OBJECT(entry), "port-spec");
     form->active = spec ? entry : NULL;
-    form->browser->direction = spec ? *spec : 0;
-    if (form->browser->tree)
-        gtk_widget_queue_draw(form->browser->tree);
+    device_port_filter(form);
     return FALSE;
 }
 
@@ -3468,9 +3542,7 @@ static void simulation_device_type(GtkComboBox *combo, gpointer data)
     g_ptr_array_set_size(form->entries, 0);
     g_list_free_full(children, (GDestroyNotify)gtk_widget_destroy);
     form->file = form->reset = form->active = NULL;
-    form->browser->direction = 0;
-    if (form->browser->tree)
-        gtk_widget_queue_draw(form->browser->tree);
+    device_port_filter(form);
     const DevicePreset *preset = &device_presets[selected];
     gchar **fields = g_strsplit(preset->fields, "|", -1);
     gchar **specs = g_strsplit(preset->pins, "|", -1);
@@ -3552,7 +3624,7 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
         .source = g_object_get_data(G_OBJECT(button), "source-snapshot"),
         .expanded = g_object_get_data(G_OBJECT(button), "expanded-source"),
         .preprocess_error = g_object_get_data(G_OBJECT(button), "preprocess-error"),
-        .recipe = buffer
+        .recipe = buffer, .choosing = TRUE
     };
     GtkWidget *panes = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     gtk_paned_pack1(GTK_PANED(panes), scroll, TRUE, FALSE);

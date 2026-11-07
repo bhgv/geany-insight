@@ -221,9 +221,9 @@ static gboolean check_connection(GtkTreeModel *model, GtkTreePath *path, GtkTree
     return checks->bit && checks->clock;
 }
 
-/* EN: Check modal port widths and assign a slider by activating a port; callback data is unused.
+/* EN: Check modal port widths and filters, then assign a slider by activating a port; callback data is unused.
  * Return G_SOURCE_CONTINUE while the wizard is unavailable.
- * RU: Проверяет ширину портов в мастере и назначает порт ползунку активацией строки.
+ * RU: Проверяет ширину и фильтры портов в мастере, затем назначает порт ползунку.
  * data не используется. Возвращает G_SOURCE_CONTINUE, пока мастер недоступен. */
 static gboolean add_test_slider(gpointer data)
 {
@@ -283,6 +283,18 @@ static gboolean add_test_slider(gpointer data)
     gtk_tree_path_free(selected);
     if (strcmp(gtk_entry_get_text(GTK_ENTRY(entry)), "level[7:0]"))
         return G_SOURCE_CONTINUE;
+    GtkWidget *search = find_control(wizard, "insight-port-search");
+    GtkWidget *compatible = find_control(wizard, "Compatible only");
+    if (!GTK_IS_ENTRY(search) || !GTK_IS_TOGGLE_BUTTON(compatible))
+        return G_SOURCE_CONTINUE;
+    gtk_entry_set_text(GTK_ENTRY(search), "LEVEL");
+    if (gtk_tree_model_iter_n_children(model, NULL) != 2)
+        return G_SOURCE_CONTINUE;
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(compatible), TRUE);
+    if (gtk_tree_model_iter_n_children(model, NULL) != 1)
+        return G_SOURCE_CONTINUE;
+    gtk_entry_set_text(GTK_ENTRY(search), "");
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(compatible), FALSE);
     gtk_dialog_response(GTK_DIALOG(wizard), GTK_RESPONSE_ACCEPT);
     return G_SOURCE_REMOVE;
 }
