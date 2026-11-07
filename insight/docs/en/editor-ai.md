@@ -1,6 +1,6 @@
 # Editor and project AI assistant
 
-See the [step-by-step connection tutorial](ai-connections.md) or open **Connection Wizard…** in the connection settings.
+See the [step-by-step connection tutorial](ai-connections.md) or open **Connection Wizard…** next to the profile selector.
 
 Open **Tools → Editor / Project AI Assistant…** with the source document selected. The assistant lives inside the existing Diff/Merge window. It shares [console assistant](console-ai.md) API settings: OpenAI/ChatGPT API, Grok, DeepSeek, Qwen and compatible servers. Python 3, an API key and a model ID are required. Expand **API settings** to configure them. Keys remain in memory; only endpoint, provider, model and Python executable are saved.
 

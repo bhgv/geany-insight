@@ -1,6 +1,6 @@
 # Console AI assistant
 
-See the [step-by-step connection tutorial](ai-connections.md) or open **Connection Wizard…** in the connection settings.
+See the [step-by-step connection tutorial](ai-connections.md) or open **Connection Wizard…** next to the profile selector.
 
 Open **AI Assistant…** in the SSH shell toolbar or the local Terminal context menu. **Tools → Console AI Assistant…** opens an empty context for pasted diagnostics. Python 3 is required at runtime; the helper uses its standard library, without an SDK.
 

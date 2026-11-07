@@ -12,7 +12,7 @@ Keys stay in memory by default; an environment variable can supply the key when 
 
 ## Connect step by step
 
-1. Open **Connection Wizard…** in the assistant's connection settings or in **AI Connections…**. Choose your provider and click **Next**. The wizard fills in the profile name, sample API endpoint and key environment variable, and looks for Python on your PATH.
+1. Open **Connection Wizard…** in the assistant's always-visible profile row or in **AI Connections…**. Choose your provider and click **Next**. The wizard fills in the profile name, sample API endpoint and key environment variable, and looks for Python on your PATH.
 2. Open **Open provider setup guide** and follow your provider's API account setup. Create an API key and copy the exact model ID available to your account. For a custom server, start the server and copy its full chat/completions URL and model ID. For Qwen, replace the sample URL with the complete endpoint for your workspace and region.
 3. Enter the model ID and either paste the key or leave the key field empty and set the suggested environment variable before starting Geany. A local server may work without a key. If Python is missing from PATH, enter the path to a Python 3 executable.
 4. Click **Test connection**. The wizard sends a short sample request, which may consume API quota. It sends no source, history or attachments. For HTTP 401 or 403, check the key and account access. For HTTP 404, check the endpoint and model ID. For HTTP 429, check quota or rate limits.
