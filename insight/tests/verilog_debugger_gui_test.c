@@ -363,9 +363,9 @@ static gboolean add_test_slider(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* EN: Populate the modal setup and verify the wizard transfers its sort preference.
+/* EN: Populate modal setup and verify wizard sorting and rule navigation.
  * data is unused. Return G_SOURCE_CONTINUE until the setup can be accepted.
- * RU: Заполняет модальные настройки и проверяет перенос сортировки из мастера.
+ * RU: Заполняет модальные настройки и проверяет сортировку и переход к правилу.
  * data не используется. Возвращает G_SOURCE_CONTINUE, пока настройки недоступны. */
 static gboolean accept_ports(gpointer data)
 {
@@ -410,6 +410,36 @@ static gboolean accept_ports(gpointer data)
         }
         GtkWidget *sort = find_control(dialog, "insight-port-sort");
         if (!GTK_IS_COMBO_BOX(sort) || gtk_combo_box_get_active(GTK_COMBO_BOX(sort)) != 2)
+            return G_SOURCE_CONTINUE;
+        GtkWidget *tree = find_control(dialog, "insight-test-device-ports");
+        if (!GTK_IS_TREE_VIEW(tree))
+            return G_SOURCE_CONTINUE;
+        GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(tree));
+        GtkTreeIter row;
+        gboolean found = FALSE;
+        gboolean next = gtk_tree_model_get_iter_first(model, &row);
+        while (next && !found)
+        {
+            gchar *name;
+            gtk_tree_model_get(model, &row, 0, &name, -1);
+            found = !strcmp(name, "hex_out");
+            g_free(name);
+            if (!found)
+                next = gtk_tree_model_iter_next(model, &row);
+        }
+        if (!found)
+            return G_SOURCE_CONTINUE;
+        gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)), &row);
+        if (!click(dialog, "Go to Rule…"))
+            return G_SOURCE_CONTINUE;
+        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(recipe));
+        GtkTextIter first, last;
+        if (!gtk_text_buffer_get_selection_bounds(buffer, &first, &last))
+            return G_SOURCE_CONTINUE;
+        gchar *selection = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
+        gboolean correct = !strcmp(selection, "hex-table hex_out 16");
+        g_free(selection);
+        if (!correct)
             return G_SOURCE_CONTINUE;
     }
     gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);

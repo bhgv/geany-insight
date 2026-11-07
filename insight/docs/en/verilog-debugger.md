@@ -112,6 +112,11 @@ While **Port Signals** remains open, the wizard shares its query, search
 scope, sorting and filters with the main list. Reopening the wizard also
 restores the last selected device type.
 
+In the main **Port Signals** window, select an assigned port and click
+**Go to Rule…**, or double-click its row. The recipe editor scrolls to
+and selects the rule. For multiple bindings, choose by line number
+and rule text. In the wizard, double-click still assigns the port.
+
 The wizard saves a slice as a `port-slice` rule and uses its alias in the
 device rule. Both rules form the connection. The table lists the device
 against the original port.
