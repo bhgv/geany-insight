@@ -1670,7 +1670,8 @@ void insight_waveforms_open(GtkWindow *parent, const gchar *session_dir, Insight
 }
 typedef struct
 {
-    guint64 number;
+    guint64 number, tick;
+    gboolean has_tick;
     gchar *location;
     GHashTable *values;
 } SignalHistoryStop;
@@ -1719,7 +1720,8 @@ typedef struct {
     GHashTable *signal_previous_values, *signal_pins;
     gchar *signal_pins_path;
     GQueue signal_history;
-    guint64 signal_stop_number;
+    guint64 signal_stop_number, signal_snapshot_tick;
+    gboolean signal_snapshot_has_tick;
     gboolean signal_history_replace;
     gchar *signal_file;
     guint signal_format;
@@ -6040,6 +6042,8 @@ static void signal_history_record(WaveSimulation *run)
             signal_history_stop_free(g_queue_pop_tail(&run->signal_history));
     }
     run->signal_history_replace = FALSE;
+    stop->tick = run->signal_snapshot_tick;
+    stop->has_tick = run->signal_snapshot_has_tick;
     for (guint i = 0; i < run->signal_rows->len; i++)
     {
         gchar **row = run->signal_rows->pdata[i];
@@ -6192,8 +6196,12 @@ static gboolean signal_tables_record(WaveSimulation *run, const gchar *text)
         run->signal_tables_ready = TRUE;
         return TRUE;
     }
-    if (!strcmp(text, "GEANY-SIGNALS-BEGIN"))
+    const gchar *start = "GEANY-SIGNALS-BEGIN";
+    if (!strcmp(text, start) || g_str_has_prefix(text, "GEANY-SIGNALS-BEGIN\t"))
     {
+        const gchar *tick = text + strlen(start);
+        run->signal_snapshot_has_tick = *tick == '\t' &&
+            g_ascii_string_to_unsigned(tick + 1, 10, 0, G_MAXUINT64, &run->signal_snapshot_tick, NULL);
         run->signal_collecting = TRUE;
         g_hash_table_remove_all(run->signal_previous_values);
         for (guint i = 0; i < run->signal_rows->len; i++)
@@ -7710,6 +7718,23 @@ static void signal_history_stripe(GtkTreeViewColumn *column, GtkCellRenderer *ce
         g_object_set(cell, "cell-background-set", FALSE, NULL);
 }
 
+/* EN: Preview the capture for run at tick on the given signal name.
+ * RU: Открывает запись сеанса run на такте tick для сигнала name. */
+static void simulation_preview_at(WaveSimulation *run, const gchar *name, guint64 tick);
+
+/* EN: Request the waveform jump from the activated history row in tree.
+ * path and column are unused. data is the history dialog.
+ * RU: Запрашивает переход к выбранной строке истории tree. path и column
+ * не используются. data — окно истории. */
+static void signal_history_activated(GtkTreeView *tree, GtkTreePath *path,
+                                     GtkTreeViewColumn *column, gpointer data)
+{
+    (void)tree;
+    (void)path;
+    (void)column;
+    gtk_dialog_response(GTK_DIALOG(data), GTK_RESPONSE_APPLY);
+}
+
 /* EN: Show history for the name and kind attached to item in simulation data.
  * RU: Показывает историю имени и типа из пункта item для сеанса data. */
 static void signal_table_open_history(GtkMenuItem *item, gpointer data)
@@ -7718,8 +7743,8 @@ static void signal_table_open_history(GtkMenuItem *item, gpointer data)
     const gchar *name = g_object_get_data(G_OBJECT(item), "signal-name");
     const gchar *kind = g_object_get_data(G_OBJECT(item), "signal-kind");
     gchar *key = g_strconcat(kind, "\t", name, NULL);
-    GtkListStore *store = gtk_list_store_new(6, G_TYPE_STRING, G_TYPE_STRING,
-        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    GtkListStore *store = gtk_list_store_new(7, G_TYPE_STRING, G_TYPE_STRING,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
     for (GList *entry = run->signal_history.head; entry; entry = entry->next)
     {
         const SignalHistoryStop *stop = entry->data;
@@ -7741,8 +7766,10 @@ static void signal_table_open_history(GtkMenuItem *item, gpointer data)
         gchar *changed_bits = *bits && previous && strlen(bits) == strlen(previous) ?
             g_strdup_printf("%u", changes) : g_strdup("—");
         gchar *location = g_utf8_make_valid(stop->location, -1);
+        gchar *tick = stop->has_tick ? g_strdup_printf("%" G_GUINT64_FORMAT, stop->tick) : g_strdup("—");
         gtk_list_store_insert_with_values(store, NULL, -1, 0, number,
-            1, decimal, 2, hex_markup, 3, binary_markup, 4, changed_bits, 5, location, -1);
+            1, decimal, 2, hex_markup, 3, binary_markup, 4, changed_bits, 5, location, 6, tick, -1);
+        g_free(tick);
         g_free(hex_markup);
         g_free(binary_markup);
         g_free(changed_bits);
@@ -7754,7 +7781,8 @@ static void signal_table_open_history(GtkMenuItem *item, gpointer data)
     g_free(key);
 
     GtkWidget *dialog = gtk_dialog_new_with_buttons(insight_tr("Signal changes"), GTK_WINDOW(run->dialog),
-        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, insight_tr("_Close"), GTK_RESPONSE_CLOSE, NULL);
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, insight_tr("_Close"), GTK_RESPONSE_CLOSE,
+        insight_tr("Open waveform at stop"), GTK_RESPONSE_APPLY, NULL);
     g_object_ref_sink(dialog);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 780, 370);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
@@ -7766,24 +7794,51 @@ static void signal_table_open_history(GtkMenuItem *item, gpointer data)
     GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
     g_object_unref(store);
     gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)), GTK_SELECTION_SINGLE);
-    const gchar *titles[] = {"Stop number", "Decimal", "Hexadecimal", "Binary", "Changed bits", "Source"};
+    const gchar *titles[] = {"Stop number", "Simulation tick", "Decimal", "Hexadecimal",
+                             "Binary", "Changed bits", "Source"};
+    const gint columns[] = {0, 6, 1, 2, 3, 4, 5};
     for (guint i = 0; i < G_N_ELEMENTS(titles); i++)
     {
         GtkCellRenderer *cell = gtk_cell_renderer_text_new();
-        if (i < 5)
+        if (i < 6)
             g_object_set(cell, "family", "monospace", "xalign", 1.0f, NULL);
         GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(
-            insight_tr(titles[i]), cell, i == 2 || i == 3 ? "markup" : "text", i, NULL);
+            insight_tr(titles[i]), cell, columns[i] == 2 || columns[i] == 3 ? "markup" : "text", columns[i], NULL);
         gtk_tree_view_column_set_cell_data_func(column, cell, signal_history_stripe, tree, NULL);
         gtk_tree_view_append_column(GTK_TREE_VIEW(tree), column);
     }
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_container_add(GTK_CONTAINER(scroll), tree);
     gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
+    GtkWidget *hint = gtk_label_new(insight_tr("Double-click a stop to open its waveform while paused."));
+    gtk_box_pack_start(GTK_BOX(box), hint, FALSE, FALSE, 4);
+    g_signal_connect(tree, "row-activated", G_CALLBACK(signal_history_activated), dialog);
+    GtkWidget *owner = g_object_ref(run->dialog);
+    gchar *signal = g_strdup(name);
+    guint64 tick = 0;
+    gboolean jump = FALSE;
     gtk_widget_show_all(dialog);
-    gtk_dialog_run(GTK_DIALOG(dialog));
+    while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_APPLY)
+    {
+        GtkTreeModel *model;
+        GtkTreeIter row;
+        if (gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)), &model, &row))
+        {
+            gchar *text;
+            gtk_tree_model_get(model, &row, 6, &text, -1);
+            jump = g_ascii_string_to_unsigned(text, 10, 0, G_MAXUINT64, &tick, NULL);
+            g_free(text);
+        }
+        if (jump)
+            break;
+        gtk_label_set_text(GTK_LABEL(hint), insight_tr("Select a stop with a recorded simulation tick."));
+    }
     gtk_widget_destroy(dialog);
     g_object_unref(dialog);
+    if (jump && g_object_get_data(G_OBJECT(owner), "insight-live-simulation") == run)
+        simulation_preview_at(run, signal, tick);
+    g_object_unref(owner);
+    g_free(signal);
 }
 
 /* EN: Send a watch command for path in run when its simulator is paused.
@@ -8144,13 +8199,52 @@ static void simulation_inspect_name(GtkButton *button, gpointer data)
     g_free(command);
 }
 
-/* Parse a snapshot of the capture while the simulator waits at its prompt. */
-/* Разбирает снимок VCD, пока симулятор ожидает команду. */
+typedef struct
+{
+    gchar *directory, *signal;
+    guint64 tick;
+} WavePreviewRequest;
+
+/* EN: Free the owned preview request in data.
+ * RU: Освобождает запрос предпросмотра из data. */
+static void wave_preview_request_free(gpointer data)
+{
+    WavePreviewRequest *request = data;
+    g_free(request->directory);
+    g_free(request->signal);
+    g_free(request);
+}
+
+/* EN: Center viewer on tick if recorded and select the named track when present.
+ * RU: Центрирует viewer на записанном такте tick и выбирает дорожку name. */
+static void wave_preview_position(GtkWidget *window, const gchar *name, guint64 tick)
+{
+    Viewer *viewer = g_object_get_data(G_OBJECT(window), "insight-wave-viewer");
+    gboolean track = insight_waveforms_select_track(GTK_WINDOW(window), name);
+    if (tick <= viewer->capture->end)
+    {
+        viewer->cursor = tick;
+        guint64 total = MAX(G_GUINT64_CONSTANT(1), viewer->capture->end);
+        guint64 half = viewer->span / 2;
+        viewer->start = MIN(total - viewer->span, tick > half ? tick - half : 0);
+        update(viewer);
+    }
+    else
+        ui_set_statusbar(TRUE, "%s", insight_tr("The stop is beyond the recorded waveform."));
+    if (!track && tick <= viewer->capture->end)
+        ui_set_statusbar(TRUE, insight_tr("Signal has no track in this recording: %s"), name);
+}
+
+/* EN: Read the capture requested in data. task owns the result, cancel stops
+ * the read, and object is unused.
+ * RU: Читает запись из запроса data. task получает результат, cancel отменяет
+ * чтение, object не используется. */
 static void simulation_preview_worker(GTask *task, gpointer object, gpointer data, GCancellable *cancel)
 {
     (void)object;
     GError *error = NULL;
-    gchar *path = simulation_find_vcd(data, &error);
+    WavePreviewRequest *request = data;
+    gchar *path = simulation_find_vcd(request->directory, &error);
     Capture *capture = path ? read_capture_file(path, cancel, &error) : NULL;
     g_free(path);
     if (capture)
@@ -8159,8 +8253,8 @@ static void simulation_preview_worker(GTask *task, gpointer object, gpointer dat
         g_task_return_error(task, error);
 }
 
-/* Show the paused snapshot only while its simulation dialog still exists. */
-/* Показывает снимок на паузе, пока диалог симуляции ещё открыт. */
+/* EN: Show result under the live simulation dialog object. data is unused.
+ * RU: Показывает result над окном активного сеанса object. data не используется. */
 static void simulation_preview_done(GObject *object, GAsyncResult *result, gpointer data)
 {
     (void)data;
@@ -8175,6 +8269,9 @@ static void simulation_preview_done(GObject *object, GAsyncResult *result, gpoin
         {
             GtkWidget *preview = show_capture(GTK_WINDOW(dialog), capture, NULL, run->navigate);
             gtk_window_set_modal(GTK_WINDOW(preview), TRUE);
+            WavePreviewRequest *request = g_task_get_task_data(G_TASK(result));
+            if (request->signal)
+                wave_preview_position(preview, request->signal, request->tick);
         }
         else
         {
@@ -8194,14 +8291,16 @@ static void simulation_preview_done(GObject *object, GAsyncResult *result, gpoin
     g_clear_error(&error);
 }
 
-/* Open the VCD written up to the current vvp stop. */
-/* Открывает VCD, записанный к текущей остановке vvp. */
-static void simulation_preview(GtkButton *button, gpointer data)
+/* EN: Open run's paused capture, optionally targeting name at tick.
+ * RU: Открывает запись остановленного сеанса run, при необходимости для name на tick. */
+static void simulation_preview_at(WaveSimulation *run, const gchar *name, guint64 tick)
 {
-    (void)button;
-    WaveSimulation *run = data;
     if (run->preview_pending || run->prompt_tail[0] != '>' || run->prompt_tail[1] != ' ')
+    {
+        if (name)
+            ui_set_statusbar(TRUE, "%s", insight_tr("Pause the simulation before opening the waveform."));
         return;
+    }
     g_mutex_lock(&run->lock);
     gchar *directory = run->live_process ? g_strdup(run->live_directory) : NULL;
     g_mutex_unlock(&run->lock);
@@ -8209,10 +8308,22 @@ static void simulation_preview(GtkButton *button, gpointer data)
         return;
     run->preview_pending = TRUE;
     gtk_widget_set_sensitive(run->live_controls, FALSE);
+    WavePreviewRequest *request = g_new0(WavePreviewRequest, 1);
+    request->directory = directory;
+    request->signal = g_strdup(name);
+    request->tick = tick;
     GTask *task = g_task_new(run->dialog, NULL, simulation_preview_done, NULL);
-    g_task_set_task_data(task, directory, g_free);
+    g_task_set_task_data(task, request, wave_preview_request_free);
     g_task_run_in_thread(task, simulation_preview_worker);
     g_object_unref(task);
+}
+
+/* EN: Open the paused capture for simulation data. button is unused.
+ * RU: Открывает запись остановленного сеанса data. button не используется. */
+static void simulation_preview(GtkButton *button, gpointer data)
+{
+    (void)button;
+    simulation_preview_at(data, NULL, 0);
 }
 
 /* Populate the rule fields when a saved file-and-line pair is selected. */

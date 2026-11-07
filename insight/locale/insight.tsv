@@ -2985,3 +2985,9 @@ Could not create the pinned signal settings folder.	Не удалось созд
 Port	Порт
 Net	Сеть
 Register	Регистр
+Simulation tick	Такт симуляции
+Open waveform at stop	Открыть осциллограмму на остановке
+Double-click a stop to open its waveform while paused.	На паузе дважды щёлкните по остановке, чтобы открыть осциллограмму.
+Select a stop with a recorded simulation tick.	Выберите остановку с записанным тактом симуляции.
+The stop is beyond the recorded waveform.	Остановка находится за пределами записанной осциллограммы.
+Pause the simulation before opening the waveform.	Поставьте симуляцию на паузу перед открытием осциллограммы.

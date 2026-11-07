@@ -141,6 +141,8 @@ def check_breakpoint(compiler, runtime, fixtures, directory, environment):
         require(re.search(r"GEANY-VVP-EVENT\t\d+\t[^\r\n]+\t15\t1\tcounter_tb.count\t0001", stopped),
                 "Wrong scripted stop event, tick or signal value")
         snapshot = simulator.command("geany-signals").replace("\\", "/")
+        require(re.search(r"(?m)^GEANY-SIGNALS-BEGIN\t15\r?$", snapshot),
+                "Snapshot did not report the actual simulation tick")
         require(re.search(r"GEANY-SIGNAL\tP\tcounter_tb\.dut\.clk\t[^\r\n]*counter\.v\t1", snapshot),
                 "Paused snapshot did not include the port in its defining file")
         require(re.search(r"GEANY-SIGNAL\tN\tcounter_tb\.dut\.odd\t[^\r\n]*counter\.v\t1", snapshot),
