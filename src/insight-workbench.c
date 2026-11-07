@@ -5553,6 +5553,7 @@ typedef struct {
     GtkWidget *python_input_entry;
     gsize python_console_bytes;
     guint64 python_request;
+    gboolean python_diagnostic_seen, python_diagnostic_jumped;
     gboolean python;
     gboolean python_running;
     gboolean closing;
@@ -6165,8 +6166,10 @@ static void debug_update_stack_frames(ScriptDebugWindow *view, const gchar *stac
     view->updating_stack_frames = FALSE;
 }
 
-/* Update the debugger panes when a source stop or terminal result arrives. */
-/* Обновляет панели отладчика при остановке на строке или завершении. */
+/* EN: Update view for result and line. Publish error to Messages on failure when
+ * the Python protocol has not already supplied diagnostic rows.
+ * RU: Обновляет view по result и line. При ошибке публикует error в «Сообщениях»,
+ * если протокол Python ещё не передал строки диагностики. */
 static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned long line, const gchar *error)
 {
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source_view));
@@ -6218,6 +6221,14 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
     {
         gchar *label = result == 0 ? g_strdup(view->python ? "Python script finished" : "Lua script finished") :
             g_utf8_make_valid(*error ? error : "Debugger stopped", -1);
+        if (result < 0 && (!view->python || !view->python_diagnostic_seen))
+        {
+            gchar *native = utils_get_locale_from_utf8(view->source_filename);
+            gchar *directory = native ? g_path_get_dirname(native) : NULL;
+            msgwin_debugger_report(label, directory, native);
+            g_free(directory);
+            g_free(native);
+        }
         gtk_label_set_text(GTK_LABEL(view->status), label);
         debug_set_text(view->stack_view, result < 0 ? label : "");
         debug_update_stack_frames(view, NULL);
@@ -7176,8 +7187,50 @@ static gboolean debug_python_observer_event(ScriptDebugWindow *view, const gchar
         decision < 0 ? "observe error\n" : decision ? "observe stop\n" : "observe continue\n", error);
 }
 
-/* Receive a Python stop packet without keeping a closed window alive. */
-/* Получает пакет остановки Python, не удерживая закрытое окно. */
+/* EN: Decode a Python diagnostic packet of length bytes and append it for view.
+ * Jump to the first available location in the current reply.
+ * RU: Декодирует пакет Python packet длиной length и добавляет его в сообщения
+ * view. Переходит к первому доступному месту текущего ответа. */
+static void debug_python_diagnostic(ScriptDebugWindow *view, const gchar *packet, gsize length)
+{
+    if (length > 16384 || memchr(packet, 0, length))
+        return;
+    gchar **fields = g_strsplit(packet, "\t", 8);
+    if (g_strv_length(fields) == 7)
+    {
+        gint64 line, column, end_line, end_column;
+        if (g_ascii_string_to_signed(fields[2], 10, 1, G_MAXINT, &line, NULL) &&
+            g_ascii_string_to_signed(fields[3], 10, -1, G_MAXINT, &column, NULL) &&
+            g_ascii_string_to_signed(fields[4], 10, 1, G_MAXINT, &end_line, NULL) &&
+            g_ascii_string_to_signed(fields[5], 10, -1, G_MAXINT, &end_column, NULL))
+        {
+            gsize filename_length, message_length;
+            gchar *filename = debug_decode_observer_field(fields[1], &filename_length);
+            gchar *message = debug_decode_observer_field(fields[6], &message_length);
+            if (filename && message && filename_length &&
+                !memchr(filename, 0, filename_length) && !memchr(message, 0, message_length))
+            {
+                gchar *native = utils_get_locale_from_utf8(filename);
+                gchar *caption = g_strdup_printf("%s:%" G_GINT64_FORMAT ": %s", filename, line, message);
+                gboolean jump = !view->python_diagnostic_jumped && native &&
+                                g_file_test(native, G_FILE_TEST_IS_REGULAR);
+                msgwin_debugger_add(caption, native, line, column, end_line, end_column, jump);
+                view->python_diagnostic_seen = TRUE;
+                view->python_diagnostic_jumped |= jump;
+                g_free(caption);
+                g_free(native);
+            }
+            g_free(filename);
+            g_free(message);
+        }
+    }
+    g_strfreev(fields);
+}
+
+/* EN: Read the Python packet from object/result for the weak window in data.
+ * Route stops, output, and diagnostic packets without retaining a closed window.
+ * RU: Читает пакет Python из object/result для слабой ссылки на окно в data.
+ * Передаёт остановки, вывод и ошибки без удержания закрытого окна. */
 static void debug_python_received(GObject *object, GAsyncResult *result, gpointer data)
 {
     PythonDebugReply *reply = data;
@@ -7196,13 +7249,16 @@ static void debug_python_received(GObject *object, GAsyncResult *result, gpointe
         gchar *message = NULL;
         InsightLuaWatchGraph *graph = NULL;
         gboolean observer_event = packet && length >= 2 && packet[0] == 'V' && packet[1] == '\t';
-        gint status = observer_event ? 4 :
+        gboolean diagnostic = packet && length >= 2 && packet[0] == 'X' && packet[1] == '\t';
+        gint status = diagnostic ? 5 : observer_event ? 4 :
             insight_python_debug_parse(packet, length, &line, &filename, &stack, &graph, &message);
         if (observer_event && !error && !debug_python_observer_event(view, packet, length, &error))
             status = -1;
         if (status >= 2 && !error)
         {
-            if (status == 2)
+            if (diagnostic)
+                debug_python_diagnostic(view, packet, length);
+            else if (status == 2)
                 debug_python_append_output(view, message);
             else if (status == 3)
             {
@@ -7246,13 +7302,15 @@ static void debug_python_received(GObject *object, GAsyncResult *result, gpointe
     }
 }
 
-/* Await a reply without keeping a closed debugger window alive. */
-/* Ждёт ответ, не удерживая закрытое окно отладки. */
+/* EN: Read the next Python reply for view and reset its diagnostic batch.
+ * RU: Ждёт следующий ответ Python для view и сбрасывает состояние диагностики. */
 static void debug_python_read_reply(ScriptDebugWindow *view)
 {
     PythonDebugReply *reply = g_new0(PythonDebugReply, 1);
     g_weak_ref_init(&reply->window, view->window);
     reply->request = ++view->python_request;
+    view->python_diagnostic_seen = FALSE;
+    view->python_diagnostic_jumped = FALSE;
     view->python_running = TRUE;
     g_data_input_stream_read_line_async(insight_python_debug_output(view->python_engine),
         G_PRIORITY_DEFAULT, NULL, debug_python_received, reply);
@@ -9181,8 +9239,10 @@ static void debug_configure_observer(GtkButton *button, gpointer data)
     gtk_widget_destroy(dialog);
 }
 
-/* Capture the active script buffer and open the selected debugger. */
-/* Сохраняет снимок буфера и открывает выбранный отладчик. */
+/* EN: Start the debugger for the active script. item is unused and data selects
+ * Python when true, otherwise Lua. Publish startup failures in Messages.
+ * RU: Запускает отладчик активного скрипта. item не используется, data выбирает
+ * Python при true и Lua иначе. Ошибки запуска публикуются в «Сообщениях». */
 static void debug_current_script(GtkMenuItem *item, gpointer data)
 {
     (void)item;
@@ -9234,7 +9294,11 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
         const gchar *description = python_error ? python_error->message :
             *error ? error : "Unable to start debugger";
         gchar *message = g_utf8_make_valid(description, -1);
-        ui_set_statusbar(TRUE, "%s", message);
+        gchar *native = utils_get_locale_from_utf8(document->file_name);
+        gchar *directory = native ? g_path_get_dirname(native) : NULL;
+        msgwin_debugger_report(message, directory, native);
+        g_free(directory);
+        g_free(native);
         g_free(message);
         g_clear_error(&python_error);
         g_clear_pointer(&python_overlays, g_hash_table_unref);

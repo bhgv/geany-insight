@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Trace a Python buffer for the native Geany Insight debugger."""
+"""Trace Python buffers and report source diagnostics to Geany Insight.
+
+Отлаживает буферы Python и передаёт диагностику с позициями в Geany Insight.
+"""
 
 import importlib.machinery
 import io
@@ -9,6 +12,7 @@ import os
 import queue
 import sys
 import threading
+import traceback
 import types
 
 MAX_NODES = 96
@@ -523,6 +527,36 @@ class DebugInput(io.TextIOBase):
 
 # Execute the buffer in a separate process; keep script output off the protocol.
 # Выполняет буфер в отдельном процессе и отделяет его вывод от протокола.
+# Send source locations for error to output, with the innermost frame first.
+# Передаёт в output позиции ошибки error, начиная с самого глубокого кадра.
+def send_diagnostics(output, error, message):
+    if isinstance(error, SyntaxError) and error.filename and error.lineno:
+        text = error.text or ""
+        column = len(text[:error.offset - 1].encode("utf-8")) if error.offset and error.offset > 0 else -1
+        end_line = getattr(error, "end_lineno", None) or error.lineno
+        end_column = -1
+        offset = getattr(error, "end_offset", None)
+        if offset and offset > 0 and end_line == error.lineno:
+            end_column = len(text[:offset - 1].encode("utf-8"))
+        locations = [(error.filename, error.lineno, column, end_line, end_column)]
+    else:
+        frames = traceback.extract_tb(error.__traceback__)
+        locations = [
+            (frame.filename, frame.lineno, getattr(frame, "colno", None),
+             getattr(frame, "end_lineno", None), getattr(frame, "end_colno", None))
+            for frame in reversed(frames)
+            if frame.filename != __file__ and not frame.filename.startswith("<")
+        ][:64]
+    for filename, line, column, end_line, end_column in locations:
+        output.write(f"X\t{encode(filename)}\t{line}\t{column if column is not None else -1}"
+                     f"\t{end_line or line}\t{end_column if end_column is not None else -1}"
+                     f"\t{encode(message)}\n")
+
+
+# Run the debugger protocol using the entry, snapshot, and optional overlays
+# supplied in sys.argv. Report errors and release tracing on exit.
+# Запускает протокол с точкой входа, снимком и наложениями из sys.argv.
+# Передаёт ошибки и снимает трассировку при завершении.
 def main():
     snapshot, filename, project_root, overlay_file = sys.argv[1:5]
     output = Protocol(sys.stdout)
@@ -556,11 +590,12 @@ def main():
         output.write("D\n")
     except BaseException as error:
         name = type(error).__name__
-        if type(error) is SyntaxError:
+        if isinstance(error, SyntaxError):
             name += ": " + error.msg
         elif type(error) in (NameError, TypeError, ValueError, RuntimeError, ZeroDivisionError):
             if error.args and type(error.args[0]) is str:
                 name += ": " + error.args[0][:1024]
+        send_diagnostics(output, error, name)
         output.write("E\t" + encode(name) + "\n")
     finally:
         sys.settrace(None)

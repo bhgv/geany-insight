@@ -18,6 +18,8 @@
  *      51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+/* EN: Displays compiler, status and source-linked diagnostic messages.
+ * RU: Показывает сообщения компилятора, статуса и диагностики с переходом к исходнику. */
 /**
  * @file msgwindow.h
  * Message window functions (status, compiler, messages windows).
@@ -44,6 +46,7 @@
 #include "navqueue.h"
 #include "prefs.h"
 #include "support.h"
+#include "sciwrappers.h"
 #include "ui_utils.h"
 #include "utils.h"
 #include "vte.h"
@@ -74,6 +77,11 @@ enum
 	MSG_COL_DOC_ID,
 	MSG_COL_COLOR,
 	MSG_COL_STRING,
+	MSG_COL_DEBUGGER,
+	MSG_COL_FILENAME,
+	MSG_COL_COLUMN,
+	MSG_COL_END_LINE,
+	MSG_COL_END_COLUMN,
 	MSG_COL_COUNT
 };
 
@@ -230,7 +238,8 @@ static void prepare_msg_tree_view(void)
 
 	/* line, doc id, fg, str */
 	msgwindow.store_msg = gtk_list_store_new(MSG_COL_COUNT, G_TYPE_INT, G_TYPE_UINT,
-		GDK_TYPE_COLOR, G_TYPE_STRING);
+		GDK_TYPE_COLOR, G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_STRING,
+		G_TYPE_INT, G_TYPE_INT, G_TYPE_INT);
 	gtk_tree_view_set_model(GTK_TREE_VIEW(msgwindow.tree_msg), GTK_TREE_MODEL(msgwindow.store_msg));
 	g_object_unref(msgwindow.store_msg);
 
@@ -1180,6 +1189,132 @@ static void msgwin_parse_generic_line(const gchar *string, gchar **filename, gin
 }
 
 
+/* EN: Open filename and select the diagnostic at line. column and end_column are
+ * zero-based byte offsets, end_line is one-based, and column < 0 selects the line.
+ * focus_editor controls focus. Return FALSE if the source cannot be opened.
+ * RU: Открывает filename и выделяет ошибку на строке line. column и end_column
+ * считаются в байтах от нуля, end_line от единицы. column < 0 выделяет строку.
+ * focus_editor управляет фокусом. Возвращает FALSE, если файл не удалось открыть. */
+static gboolean msgwin_debugger_goto(const gchar *filename, gint line, gint column,
+                                    gint end_line, gint end_column, gboolean focus_editor)
+{
+    GeanyDocument *old = document_get_current();
+    GeanyDocument *doc = document_open_file(filename, FALSE, NULL, NULL);
+    if (!DOC_VALID(doc))
+        return FALSE;
+    ScintillaObject *sci = doc->editor->sci;
+    gint count = sci_get_line_count(sci);
+    line = CLAMP(line, 1, count);
+    navqueue_goto_line(old, doc, line);
+    gint start = sci_get_position_from_line(sci, line - 1);
+    gint line_end = sci_get_line_end_position(sci, line - 1);
+    gint finish = line_end > start ? line_end : sci_get_position_after(sci, start);
+    if (column >= 0)
+    {
+        start += MIN(column, line_end - start);
+        if (end_column >= 0)
+        {
+            gint last = CLAMP(end_line, line, count) - 1;
+            gint last_start = sci_get_position_from_line(sci, last);
+            gint last_end = sci_get_line_end_position(sci, last);
+            finish = last_start + MIN(end_column, last_end - last_start);
+        }
+        if (end_column < 0 || finish <= start)
+            finish = sci_get_position_after(sci, start);
+    }
+    sci_set_selection(sci, start, finish);
+    if (focus_editor)
+        gtk_widget_grab_focus(GTK_WIDGET(sci));
+    return TRUE;
+}
+
+/* EN: Append message to Messages with an optional filename and one-based line.
+ * column/end_column are zero-based byte offsets, end_line is one-based. If jump
+ * is true, open and select the location now. The row owns copies of the strings.
+ * RU: Добавляет message в «Сообщения» с необязательными filename и строкой line
+ * от единицы. column/end_column — смещения в байтах от нуля, end_line от единицы.
+ * При jump открывает и выделяет место сразу. Строка хранит копии текста. */
+void msgwin_debugger_add(const gchar *message, const gchar *filename, gint line, gint column,
+                         gint end_line, gint end_column, gboolean jump)
+{
+    GtkTreeIter row;
+    gchar *text = g_utf8_make_valid(message, -1);
+    gtk_list_store_insert_with_values(msgwindow.store_msg, &row, -1,
+        MSG_COL_LINE, line, MSG_COL_DOC_ID, 0u, MSG_COL_COLOR, get_color(COLOR_RED),
+        MSG_COL_STRING, text, MSG_COL_DEBUGGER, TRUE, MSG_COL_FILENAME, filename,
+        MSG_COL_COLUMN, column, MSG_COL_END_LINE, end_line, MSG_COL_END_COLUMN, end_column, -1);
+    g_free(text);
+    if (!ui_prefs.msgwindow_visible ||
+        gtk_notebook_get_current_page(GTK_NOTEBOOK(msgwindow.notebook)) != MSG_MESSAGE)
+        msgwin_switch_tab(MSG_MESSAGE, TRUE);
+    if (jump && filename && line > 0)
+        msgwin_debugger_goto(filename, line, column, end_line, end_column, TRUE);
+}
+
+/* EN: Append each line of diagnostics. directory resolves relative paths and
+ * fallback identifies the current Lua buffer when its filename was abbreviated.
+ * Open and select the first resolvable location.
+ * RU: Добавляет строки diagnostics. directory разрешает относительные пути,
+ * fallback указывает буфер Lua при сокращённом имени. Открывает и выделяет
+ * первое доступное место. */
+void msgwin_debugger_report(const gchar *diagnostics, const gchar *directory, const gchar *fallback)
+{
+    GRegex *location = g_regex_new("^\\s*(.+?):([0-9]+):(?:([0-9]+):)?", 0, 0, NULL);
+    gchar **rows = g_strsplit(diagnostics, "\n", -1);
+    gboolean jumped = FALSE;
+    for (guint i = 0; rows[i]; i++)
+    {
+        gchar *row = g_strstrip(rows[i]);
+        if (!*row)
+            continue;
+        GMatchInfo *match;
+        gchar *path = NULL;
+        gint line = -1, column = -1;
+        const gchar *located = g_str_has_prefix(row, "ERROR: ") ? row + strlen("ERROR: ") :
+                               g_str_has_prefix(row, "FATAL: ") ? row + strlen("FATAL: ") : row;
+        if (g_regex_match(location, located, 0, &match))
+        {
+            gchar *name = g_match_info_fetch(match, 1);
+            gchar *number = g_match_info_fetch(match, 2);
+            gchar *offset = g_match_info_fetch(match, 3);
+            gint64 parsed = g_ascii_strtoll(number, NULL, 10);
+            gint64 parsed_column = g_ascii_strtoll(offset, NULL, 10);
+            if (parsed > 0 && parsed <= G_MAXINT)
+                line = (gint)parsed;
+            if (parsed_column > 0 && parsed_column <= G_MAXINT)
+                column = (gint)parsed_column - 1;
+            gchar *native = utils_get_locale_from_utf8(name);
+            if (native && *native)
+            {
+                if (g_path_is_absolute(native))
+                    path = g_strdup(native);
+                else if (directory)
+                    path = g_build_filename(directory, native, NULL);
+                if (path && !g_file_test(path, G_FILE_TEST_IS_REGULAR))
+                    g_clear_pointer(&path, g_free);
+                if (!path && fallback && (g_str_has_prefix(native, "...") ?
+                    g_str_has_suffix(fallback, native + 3) : g_str_has_suffix(fallback, native)))
+                    path = g_strdup(fallback);
+            }
+            g_free(native);
+            g_free(offset);
+            g_free(number);
+            g_free(name);
+        }
+        g_match_info_free(match);
+        msgwin_debugger_add(row, path, line, column, line, column, FALSE);
+        if (!jumped && path && line > 0 && !strstr(row, ": warning:"))
+            jumped = msgwin_debugger_goto(path, line, column, line, column, TRUE);
+        g_free(path);
+    }
+    g_strfreev(rows);
+    g_regex_unref(location);
+}
+
+/* EN: Navigate to the selected Messages row, focusing the editor if focus_editor
+ * is true. Return whether navigation succeeded.
+ * RU: Переходит к выбранному сообщению, передавая фокус редактору при focus_editor.
+ * Возвращает результат перехода. */
 gboolean msgwin_goto_messages_file_line(gboolean focus_editor)
 {
 	GtkTreeIter iter;
@@ -1190,6 +1325,19 @@ gboolean msgwin_goto_messages_file_line(gboolean focus_editor)
 	selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(msgwindow.tree_msg));
 	if (gtk_tree_selection_get_selected(selection, &model, &iter))
 	{
+		gboolean diagnostic;
+		gtk_tree_model_get(model, &iter, MSG_COL_DEBUGGER, &diagnostic, -1);
+		if (diagnostic)
+		{
+			gchar *filename;
+			gint line, column, end_line, end_column;
+			gtk_tree_model_get(model, &iter, MSG_COL_FILENAME, &filename, MSG_COL_LINE, &line,
+				MSG_COL_COLUMN, &column, MSG_COL_END_LINE, &end_line, MSG_COL_END_COLUMN, &end_column, -1);
+			gboolean opened = filename && line > 0 &&
+				msgwin_debugger_goto(filename, line, column, end_line, end_column, focus_editor);
+			g_free(filename);
+			return opened;
+		}
 		gint line;
 		guint id;
 		gchar *string;

@@ -406,3 +406,10 @@ Quad transfers and physical timing are outside its scope.
 
 - [SPI](verilog-lua-spi.md) covers bit shifts, replies to byte commands and CS# frame handling.
 - [I²C](verilog-lua-i2c.md) covers address selection, write callbacks and queued replies to reads.
+
+## Navigate to errors
+
+Icarus compilation diagnostics appear in **Messages**. The debugger
+opens the first available source location, scrolls to it, and selects it.
+Click another diagnostic to open and select its location. When the tool
+supplies only a line number, the whole line is selected.

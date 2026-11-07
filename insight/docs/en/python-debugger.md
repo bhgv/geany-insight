@@ -376,3 +376,12 @@ points and logpoints in the separate debugger Git history. **Git History… →
 Load Draft** loads them into a draft. **Apply** replaces the rule set. If the
 old commit has no rule set or any historical point cannot be located in the
 source, the current rule set is kept. You can still load the condition and script.
+
+## Navigate to errors
+
+Startup and execution diagnostics appear in **Messages**. The debugger
+opens the first available source location, scrolls to it, and selects it.
+Click another diagnostic to open and select its location. When the tool
+supplies only a line number, the whole line is selected.
+Python also lists traceback frames and selects the expression range
+when the interpreter supplies it.

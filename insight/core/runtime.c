@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Hosts Lua scripts, debugger execution and read-only observer callbacks.
+ * RU: Выполняет Lua-скрипты, отладку и наблюдателей с доступом только для чтения. */
 #include "runtime.h"
 #include "occurrences.h"
 #include "lua.h"
@@ -1168,8 +1170,12 @@ void insight_lua_debug_request_pause(InsightLuaDebug *debug)
         debug->pause_requested = 1;
 }
 
-/* Run one bounded VM slice with a borrowed read-only host. */
-/* Выполняет одну ограниченную порцию VM с контекстом только для чтения. */
+/* EN: Resume debug in mode with breakpoint_count entries from breakpoints and
+ * a borrowed read-only host. Return 1 for a stop (store line), 2 for a pending
+ * slice, 0 for completion, or -1 with a diagnostic in error (error_capacity bytes).
+ * RU: Продолжает debug в режиме mode с breakpoint_count точками из breakpoints
+ * и host только для чтения. Возвращает 1 при остановке (записывает line),
+ * 2 при ожидании, 0 при завершении или -1 с ошибкой в error до error_capacity байт. */
 int insight_lua_debug_resume(InsightLuaDebug *debug, InsightLuaStep mode,
     const InsightLuaBreakpoint *breakpoints, size_t breakpoint_count, const InsightHost *host,
     unsigned long *line, char *error, size_t error_capacity)
@@ -1222,7 +1228,22 @@ int insight_lua_debug_resume(InsightLuaDebug *debug, InsightLuaStep mode,
     if (status != LUA_OK && error && error_capacity)
     {
         const char *message = lua_tostring(debug->thread, -1);
-        snprintf(error, error_capacity, "%s", message ? message : "Lua debugger execution failed");
+        if (!message)
+            message = "Lua debugger execution failed";
+        lua_Debug frame;
+        int level = 0;
+        while (lua_getstack(debug->thread, level++, &frame))
+        {
+            if (lua_getinfo(debug->thread, "Sl", &frame) && frame.source &&
+                frame.source[0] == '@' && frame.currentline > 0)
+            {
+                snprintf(error, error_capacity, "%s:%d: %s",
+                         frame.source + 1, frame.currentline, message);
+                break;
+            }
+        }
+        if (!*error)
+            snprintf(error, error_capacity, "%s", message);
     }
     return status == LUA_OK ? 0 : -1;
 }

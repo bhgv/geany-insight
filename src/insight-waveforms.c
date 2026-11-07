@@ -2,6 +2,7 @@
 /* EN: Implements Verilog simulation setup, live instruments, and VCD inspection.
  * RU: Реализует настройку симуляции Verilog, живые приборы и просмотр VCD. */
 #include "insight-waveforms.h"
+#include "msgwindow.h"
 #include "../insight/desktop/glib_compat.h"
 #include "../insight/core/runtime.h"
 #include <gio/gio.h>
@@ -3068,10 +3069,12 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
 }
 
 /* EN: Edit the recipe saved at path in a modal child of parent. run supplies the compiler,
- * input sources, and include path. On acceptance, optional output
+ * input sources, and include path. On cancellation, publish preprocessing errors.
+ * On acceptance, optional output
  * pointers harness, model_sources and port_images receive the generated configuration.
  * RU: Редактирует рецепт из path в модальном окне parent. run задаёт компилятор,
- * исходники и путь include. При подтверждении необязательные указатели harness,
+ * исходники и путь include. При отмене публикует ошибки препроцессора.
+ * При подтверждении необязательные указатели harness,
  * model_sources и port_images получают сгенерированную конфигурацию. */
 static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, const WaveSimulation *run,
                                       gchar **harness, GPtrArray **model_sources, GHashTable **port_images)
@@ -3195,12 +3198,14 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     g_signal_handler_disconnect(buffer, changed);
     g_free(source_snapshot);
     g_free(expanded);
-    g_free(preprocess_error);
     g_free(source_directory);
     g_clear_pointer(&browser.ports, g_hash_table_unref);
     g_free(browser.module);
     gtk_widget_destroy(dialog);
     g_object_unref(dialog);
+    if (!accepted && preprocess_error)
+        msgwin_debugger_report(preprocess_error, run->include_dir, NULL);
+    g_free(preprocess_error);
     return accepted;
 }
 
@@ -3523,8 +3528,10 @@ static void simulation_force_exit(GCancellable *cancel, gpointer data)
     g_subprocess_force_exit(G_SUBPROCESS(data));
 }
 
-/* Compile or run a batch testbench and retain its first diagnostic bytes. */
-/* Компилирует или запускает тестбенч и сохраняет начало диагностики. */
+/* EN: Run argv in directory with bin on PATH. cancel stops the child. On failure,
+ * return FALSE and capture up to 256 KiB of diagnostics in error.
+ * RU: Запускает argv в directory с bin в PATH. cancel останавливает процесс.
+ * При ошибке возвращает FALSE и сохраняет до 256 КиБ диагностики в error. */
 static gboolean simulation_process(const gchar *const *argv, const gchar *directory,
                                    const gchar *bin, GCancellable *cancel, GError **error)
 {
@@ -3545,14 +3552,16 @@ static gboolean simulation_process(const gchar *const *argv, const gchar *direct
 
     gulong cancellation = g_cancellable_connect(cancel, G_CALLBACK(simulation_force_exit), process, NULL);
     GInputStream *output = g_subprocess_get_stdout_pipe(process);
-    gchar bytes[8192], diagnostic[4096];
-    gsize saved = 0;
+    gchar bytes[8192];
+    GString *diagnostic = g_string_new(NULL);
+    const gsize limit = 256 * 1024;
+    gboolean truncated = FALSE;
     gssize count;
     while ((count = g_input_stream_read(output, bytes, sizeof bytes, cancel, error)) > 0)
     {
-        gsize available = MIN((gsize)count, sizeof diagnostic - saved);
-        memcpy(diagnostic + saved, bytes, available);
-        saved += available;
+        gsize available = MIN((gsize)count, limit - diagnostic->len);
+        g_string_append_len(diagnostic, bytes, available);
+        truncated |= available < (gsize)count;
     }
     gboolean ok = count == 0 && g_subprocess_wait_check(process, cancel, error);
     if (count < 0 || g_cancellable_is_cancelled(cancel))
@@ -3560,12 +3569,15 @@ static gboolean simulation_process(const gchar *const *argv, const gchar *direct
         g_subprocess_force_exit(process);
         g_subprocess_wait(process, NULL, NULL);
     }
-    if (!ok && saved && !g_cancellable_is_cancelled(cancel))
+    if (!ok && diagnostic->len && !g_cancellable_is_cancelled(cancel))
     {
-        gchar *message = g_utf8_make_valid(diagnostic, saved);
+        if (truncated)
+            g_string_append(diagnostic, "\nAdditional diagnostics omitted.\n");
+        gchar *message = g_utf8_make_valid(diagnostic->str, diagnostic->len);
         g_prefix_error(error, "%s\n", message);
         g_free(message);
     }
+    g_string_free(diagnostic, TRUE);
     g_cancellable_disconnect(cancel, cancellation);
     g_object_unref(process);
     return ok;
@@ -5142,8 +5154,10 @@ static void simulation_disable_observer(GtkButton *button, gpointer data)
     simulation_observer_output(run);
 }
 
-/* Close the progress dialog and show either the capture or the diagnostic. */
-/* Закрывает диалог выполнения и показывает диаграмму либо диагностику. */
+/* EN: Finish the simulation task in result, display its capture or publish diagnostics.
+ * object and data are unused.
+ * RU: Завершает задачу из result, открывает осциллограмму или публикует ошибки.
+ * object и data не используются. */
 static void simulation_done(GObject *object, GAsyncResult *result, gpointer data)
 {
     (void)object;
@@ -5164,12 +5178,7 @@ static void simulation_done(GObject *object, GAsyncResult *result, gpointer data
     else if (capture)
         capture_free(capture);
     else if (parent && error && !g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
-    {
-        GtkWidget *dialog = gtk_message_dialog_new(parent, GTK_DIALOG_DESTROY_WITH_PARENT,
-            GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE, "%s", error->message);
-        g_signal_connect_swapped(dialog, "response", G_CALLBACK(gtk_widget_destroy), dialog);
-        gtk_widget_show(dialog);
-    }
+        msgwin_debugger_report(error->message, run->include_dir, NULL);
     g_clear_error(&error);
     g_clear_object(&parent);
 }

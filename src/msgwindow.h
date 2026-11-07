@@ -21,6 +21,8 @@
 #ifndef GEANY_MSGWINDOW_H
 #define GEANY_MSGWINDOW_H 1
 
+/* EN: Declares message panel APIs and source-linked debugger diagnostics.
+ * RU: Объявляет API панели сообщений и диагностики с переходом к исходнику. */
 #include "document.h"
 
 #include "gtkcompat.h"
@@ -60,6 +62,10 @@ void msgwin_compiler_add_string(gint msg_color, const gchar *msg);
 void msgwin_msg_add(gint msg_color, gint line, GeanyDocument *doc, const gchar *format, ...)
 			G_GNUC_PRINTF (4, 5);
 void msgwin_msg_add_string(gint msg_color, gint line, GeanyDocument *doc, const char *msg);
+
+void msgwin_debugger_add(const gchar *message, const gchar *filename, gint line, gint column,
+                         gint end_line, gint end_column, gboolean jump);
+void msgwin_debugger_report(const gchar *diagnostics, const gchar *directory, const gchar *fallback);
 
 void msgwin_clear_tab(gint tabnum);
 
