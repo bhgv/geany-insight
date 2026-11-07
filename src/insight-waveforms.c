@@ -2071,10 +2071,12 @@ static void simulation_memory_defaults(gchar ***arguments, gint *count)
     }
 }
 
+/* EN: Validate a DUT signal name or constant bit/range in name for generated HDL.
+ * RU: Проверяет имя сигнала или постоянный бит/диапазон в name для генерации HDL. */
 static gboolean simulation_capture_signal(const gchar *name)
 {
     return g_regex_match_simple("^[A-Za-z_][A-Za-z0-9_$]*(\\.[A-Za-z_][A-Za-z0-9_$]*)*"
-                                "(\\[[0-9]+(:[0-9]+)?\\])?$", name, 0, 0);
+                                "(\\[-?[0-9]+(:-?[0-9]+)?\\])?$", name, 0, 0);
 }
 
 static gboolean simulation_port_scope(gchar **args, gint count, guint id, GString *body, GString *live)
@@ -2208,6 +2210,142 @@ static gboolean simulation_port_indicator(gchar **args, gint count, GString *bod
     return TRUE;
 }
 
+typedef struct {
+    gchar *alias, *port;
+    gint left, right, first, last;
+    gchar direction;
+    guint net;
+} SimulationPortSlice;
+
+/* EN: Free the slice and its owned names from data.
+ * RU: Освобождает срез и его имена из data. */
+static void simulation_slice_free(gpointer data)
+{
+    SimulationPortSlice *slice = data;
+    g_free(slice->alias);
+    g_free(slice->port);
+    g_free(slice);
+}
+
+/* EN: Parse an eight-token port-slice rule from args, appending it to slices.
+ * RU: Разбирает правило port-slice из восьми токенов args и добавляет его в slices. */
+static gboolean simulation_slice_parse(gchar **args, GPtrArray *slices)
+{
+    gint64 limits[4];
+    if (slices->len >= 128 || !simulation_port_name(args[1]) || !simulation_port_name(args[2]) ||
+        !strcmp(args[1], args[2]) || strlen(args[3]) != 1 || !strchr("iob", *args[3]))
+        return FALSE;
+    for (guint i = 0; i < G_N_ELEMENTS(limits); i++)
+        if (!g_ascii_string_to_signed(args[i + 4], 10, -1000000, 1000000, &limits[i], NULL))
+            return FALSE;
+    if (ABS(limits[0] - limits[1]) >= 4096 ||
+        limits[2] < MIN(limits[0], limits[1]) || limits[2] > MAX(limits[0], limits[1]) ||
+        limits[3] < MIN(limits[0], limits[1]) || limits[3] > MAX(limits[0], limits[1]) ||
+        (limits[2] != limits[3] && (limits[0] < limits[1]) != (limits[2] < limits[3])))
+        return FALSE;
+    SimulationPortSlice *slice = g_new0(SimulationPortSlice, 1);
+    slice->alias = g_strdup(args[1]);
+    slice->port = g_strdup(args[2]);
+    slice->direction = *args[3];
+    slice->left = limits[0];
+    slice->right = limits[1];
+    slice->first = limits[2];
+    slice->last = limits[3];
+    g_ptr_array_add(slices, slice);
+    return TRUE;
+}
+
+/* EN: Replace alias connections with real DUT port nets, adding slice bridges to body.
+ * ports maps rule names to pins. Return FALSE for unused or conflicting slices.
+ * RU: Заменяет псевдопорты реальными портами схемы и добавляет соединения в body.
+ * ports связывает имена правил с выводами. Возвращает FALSE при конфликте или лишнем срезе. */
+static gboolean simulation_slice_connect(GPtrArray *slices, GHashTable *ports,
+                                          GString *connections, GString *body)
+{
+    for (guint i = 0; i < slices->len; i++)
+    {
+        SimulationPortSlice *slice = slices->pdata[i];
+        guint pin = GPOINTER_TO_UINT(g_hash_table_lookup(ports, slice->alias));
+        guint whole = GPOINTER_TO_UINT(g_hash_table_lookup(ports, slice->port));
+        if (!pin || (whole && slice->direction != 'o'))
+            return FALSE;
+        pin--;
+        slice->net = i;
+        for (guint j = 0; j < i; j++)
+        {
+            SimulationPortSlice *previous = slices->pdata[j];
+            if (!strcmp(slice->alias, previous->alias))
+                return FALSE;
+            if (!strcmp(slice->port, previous->port))
+            {
+                if (slice->direction != previous->direction || slice->left != previous->left ||
+                    slice->right != previous->right)
+                    return FALSE;
+                if (slice->direction != 'o' &&
+                    MIN(slice->first, slice->last) <= MAX(previous->first, previous->last) &&
+                    MIN(previous->first, previous->last) <= MAX(slice->first, slice->last))
+                    return FALSE;
+                slice->net = previous->net;
+            }
+        }
+        gchar *token = g_strdup_printf(".%s(pin%u)", slice->alias, pin);
+        gchar *position = strstr(connections->str, token);
+        if (!position)
+        {
+            g_free(token);
+            return FALSE;
+        }
+        gsize offset = position - connections->str;
+        g_string_erase(connections, offset, strlen(token));
+        g_free(token);
+        if (slice->net == i)
+        {
+            g_string_append_printf(body, "wire [%d:%d] geany_slice_net%u;\n",
+                                   slice->left, slice->right, i);
+            if (whole)
+                g_string_append_printf(body, "assign geany_slice_net%u = pin%u;\n", i, whole - 1);
+            else
+            {
+                gchar *connection = g_strdup_printf(".%s(geany_slice_net%u)", slice->port, i);
+                g_string_insert(connections, offset, connection);
+                g_free(connection);
+            }
+        }
+        if (slice->net != i || whole)
+        {
+            if (offset)
+                g_string_erase(connections, offset - 1, 1);
+            else if (connections->len)
+                g_string_erase(connections, 0, 1);
+        }
+        gchar *part = slice->first == slice->last ?
+            g_strdup_printf("geany_slice_net%u[%d]", slice->net, slice->first) :
+            g_strdup_printf("geany_slice_net%u[%d:%d]", slice->net, slice->first, slice->last);
+        if (slice->first == slice->last)
+            g_string_append_printf(body, "// GEANY-PORT-SLICE %s %s[%d]\n",
+                                   slice->alias, slice->port, slice->first);
+        else
+            g_string_append_printf(body, "// GEANY-PORT-SLICE %s %s[%d:%d]\n",
+                                   slice->alias, slice->port, slice->first, slice->last);
+        guint width = ABS(slice->first - slice->last) + 1;
+        g_string_append_printf(body, "initial if ($bits(pin%u) != %u) "
+            "$fatal(1, \"Port slice width mismatch: %s\");\n", pin, width, slice->port);
+        if (slice->direction == 'i')
+            g_string_append_printf(body, "assign %s = pin%u;\n", part, pin);
+        else if (slice->direction == 'o')
+            g_string_append_printf(body, "assign pin%u = %s;\n", pin, part);
+        else
+            g_string_append_printf(body, "tran geany_slice_bridge%u[%u:0](pin%u,%s);\n",
+                                   i, width - 1, pin, part);
+        g_free(part);
+    }
+    return TRUE;
+}
+
+/* EN: Generate a harness from recipe, resolving files in directory. Append HDL
+ * dependencies to sources and staged bytes to images. Return owned HDL or set error.
+ * RU: Генерирует тестовый модуль из recipe, разрешая файлы в directory. Добавляет
+ * зависимости в sources и данные в images. Возвращает новый HDL или задаёт error. */
 static gchar *simulation_port_harness(const gchar *recipe, const gchar *directory,
                                       GPtrArray *sources, GHashTable *images, GError **error)
 {
@@ -2217,6 +2355,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
     GString *trigger = g_string_new(NULL);
     GString *live = g_string_new(NULL);
     guint64 live_interval = 0;
+    GPtrArray *slices = g_ptr_array_new_with_free_func(simulation_slice_free);
     GHashTable *ports = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     GHashTable *i2c_buses = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     GHashTable *spi_pins = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
@@ -2238,6 +2377,8 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         if (valid && count == 2 && !strcmp(args[0], "module") && !module &&
             g_regex_match_simple("^[A-Za-z_][A-Za-z0-9_$]*$", args[1], 0, 0))
             module = g_strdup(args[1]);
+        else if (valid && count == 8 && !strcmp(args[0], "port-slice"))
+            valid = simulation_slice_parse(args, slices);
         else if (valid && count == 2 && !strcmp(args[0], "duration"))
             valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &duration, NULL);
         else if (valid && count == 2 && !strcmp(args[0], "live-interval"))
@@ -2283,7 +2424,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             gchar **pins = count == 2 ? defaults : args;
             const gchar *reset = count == 7 ? args[6] : NULL;
             gchar *key = g_strconcat(":spi_", pins[2], NULL);
-            valid = (!reset || simulation_port_name(reset)) &&
+            valid = (!reset || simulation_capture_signal(reset)) &&
                     simulation_memory_image(images, key, pins[5], directory, error) &&
                     simulation_port_spi(pins, body, connections, ports, images, spi_pins, key, reset);
             attached_images += valid;
@@ -2295,7 +2436,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             gchar **pins = count == 2 ? defaults : args;
             const gchar *reset = count == 6 ? args[5] : NULL;
             guint64 address;
-            valid = (!reset || simulation_port_name(reset)) && simulation_i2c_address(pins[3], &address);
+            valid = (!reset || simulation_capture_signal(reset)) && simulation_i2c_address(pins[3], &address);
             if (valid)
             {
                 gchar *key = g_strdup_printf(":i2c_%s_%" G_GUINT64_FORMAT, pins[2], address);
@@ -2393,6 +2534,13 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             g_set_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Invalid port recipe on line %u.", i + 1);
         g_strfreev(args);
     }
+    if (valid && !simulation_slice_connect(slices, ports, connections, body))
+    {
+        valid = FALSE;
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                            "Conflicting port slices or a slice without a device.");
+    }
+    g_ptr_array_unref(slices);
     if (valid && attached_images != g_hash_table_size(images))
     {
         valid = FALSE;
@@ -2457,11 +2605,22 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
 }
 
 typedef struct {
+    gchar direction[8];
+    gint left, right;
+    guint width;
+} PortInfo;
+
+enum { PORT_NAME, PORT_DIRECTION, PORT_BINDINGS, PORT_WIDTH_TEXT, PORT_WIDTH,
+       PORT_LEFT, PORT_RIGHT, PORT_COLUMNS };
+
+typedef struct {
     const gchar *source, *expanded, *preprocess_error;
     GtkTextBuffer *recipe;
     GtkListStore *store;
     GHashTable *ports;
     gchar *module;
+    GtkWidget *tree;
+    gchar direction;
 } PortBrowser;
 
 /* EN: Read a source snapshot from path for the modal setup. Return UTF-8 text or NULL.
@@ -2545,6 +2704,41 @@ static gchar *port_browser_preprocess(const WaveSimulation *run, gchar **error)
     return expanded;
 }
 
+/* EN: Return the packed atom width for a port declaration prefix. Return zero
+ * for an unknown type; any explicit packed range is handled by the caller.
+ * RU: Возвращает ширину типа порта из prefix. Для неизвестного типа возвращает
+ * ноль. Явный упакованный диапазон обрабатывается вызывающей стороной. */
+static guint port_browser_type_width(const gchar *prefix)
+{
+    gchar **words = g_strsplit_set(prefix, " \t\r\n", -1);
+    guint width = 1;
+    for (guint i = 0; words[i]; i++)
+    {
+        const gchar *word = words[i];
+        if (!*word || !strcmp(word, "input") || !strcmp(word, "output") ||
+            !strcmp(word, "inout") || !strcmp(word, "ref") ||
+            !strcmp(word, "wire") || !strcmp(word, "reg") || !strcmp(word, "logic") ||
+            !strcmp(word, "bit") || !strcmp(word, "tri") || !strcmp(word, "var") ||
+            !strcmp(word, "signed") || !strcmp(word, "unsigned"))
+            continue;
+        if (!strcmp(word, "byte"))
+            width = 8;
+        else if (!strcmp(word, "shortint"))
+            width = 16;
+        else if (!strcmp(word, "integer") || !strcmp(word, "int"))
+            width = 32;
+        else if (!strcmp(word, "longint") || !strcmp(word, "time"))
+            width = 64;
+        else
+        {
+            width = 0;
+            break;
+        }
+    }
+    g_strfreev(words);
+    return width;
+}
+
 /* EN: Extract port names and inherited directions from list into ports. With existing_only,
  * update only names declared in the module header.
  * RU: Извлекает имена и направления портов из list в ports. При existing_only обновляет
@@ -2553,7 +2747,8 @@ static void port_browser_declarations(const gchar *list, GHashTable *ports, gboo
 {
     GRegex *direction = g_regex_new("^\\s*(input|output|inout|ref)\\b", 0, 0, NULL);
     GRegex *name = g_regex_new("([A-Za-z_][A-Za-z0-9_$]*)\\s*(?:\\[[^]]*\\]\\s*)*$", 0, 0, NULL);
-    gchar *current = g_strdup("—");
+    PortInfo current = {.direction = "—"};
+    GRegex *range = g_regex_new("\\[\\s*(-?[0-9]+)\\s*:\\s*(-?[0-9]+)\\s*\\]", 0, 0, NULL);
     const gchar *start = list;
     gint depth = 0;
     for (const gchar *p = list; ; p++)
@@ -2562,10 +2757,14 @@ static void port_browser_declarations(const gchar *list, GHashTable *ports, gboo
         {
             gchar *part = g_strndup(start, p - start);
             GMatchInfo *match = NULL;
-            if (g_regex_match(direction, part, 0, &match))
+            gboolean explicit_direction = g_regex_match(direction, part, 0, &match);
+            if (explicit_direction)
             {
-                g_free(current);
-                current = g_match_info_fetch(match, 1);
+                gchar *value = g_match_info_fetch(match, 1);
+                g_strlcpy(current.direction, value, sizeof current.direction);
+                g_free(value);
+                current.width = 1;
+                current.left = current.right = 0;
             }
             g_match_info_free(match);
             gchar *assignment = strchr(part, '=');
@@ -2573,12 +2772,50 @@ static void port_browser_declarations(const gchar *list, GHashTable *ports, gboo
                 *assignment = 0;
             if (g_regex_match(name, part, 0, &match))
             {
+                gint start_name;
+                g_match_info_fetch_pos(match, 1, &start_name, NULL);
                 gchar *port = g_match_info_fetch(match, 1);
-                const gchar *previous = g_hash_table_lookup(ports, port);
-                if (!existing_only || !g_strcmp0(previous, "—"))
-                    g_hash_table_replace(ports, port, g_strdup(current));
+                gchar *prefix = g_strndup(part, start_name);
+                if (explicit_direction && !strchr(prefix, '['))
+                {
+                    current.width = port_browser_type_width(prefix);
+                    current.left = current.width ? (gint)current.width - 1 : 0;
+                }
+                if (strchr(prefix, '['))
+                {
+                    GMatchInfo *packed;
+                    current.width = 0;
+                    if (g_regex_match(range, prefix, 0, &packed) &&
+                        !strchr(strchr(prefix, '[') + 1, '['))
+                    {
+                        gchar *left = g_match_info_fetch(packed, 1);
+                        gchar *right = g_match_info_fetch(packed, 2);
+                        gint64 first, last;
+                        if (g_ascii_string_to_signed(left, 10, -1000000, 1000000, &first, NULL) &&
+                            g_ascii_string_to_signed(right, 10, -1000000, 1000000, &last, NULL) &&
+                            ABS(first - last) < 4096)
+                        {
+                            current.left = first;
+                            current.right = last;
+                            current.width = ABS(first - last) + 1;
+                        }
+                        g_free(left);
+                        g_free(right);
+                    }
+                    g_match_info_free(packed);
+                }
+                PortInfo *previous = g_hash_table_lookup(ports, port);
+                if (!existing_only || (previous && !strcmp(previous->direction, "—")))
+                {
+                    PortInfo *info = g_new(PortInfo, 1);
+                    *info = current;
+                    if (strchr(part + start_name, '['))
+                        info->width = 0;
+                    g_hash_table_replace(ports, port, info);
+                }
                 else
                     g_free(port);
+                g_free(prefix);
             }
             g_match_info_free(match);
             g_free(part);
@@ -2591,7 +2828,7 @@ static void port_browser_declarations(const gchar *list, GHashTable *ports, gboo
         else if (strchr(")]}", *p))
             depth--;
     }
-    g_free(current);
+    g_regex_unref(range);
     g_regex_unref(direction);
     g_regex_unref(name);
 }
@@ -2729,6 +2966,18 @@ static void port_browser_refresh(GtkTextBuffer *buffer, gpointer data)
     gchar *recipe = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
     gchar **lines = g_strsplit(recipe, "\n", -1);
     gchar *module = NULL;
+    GHashTable *aliases = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    for (guint line = 0; lines[line]; line++)
+    {
+        gchar **args = NULL;
+        gint count;
+        if (g_shell_parse_argv(lines[line], &count, &args, NULL))
+        {
+            if (count == 8 && !strcmp(args[0], "port-slice"))
+                g_hash_table_replace(aliases, g_strdup(args[1]), g_strdup(args[2]));
+            g_strfreev(args);
+        }
+    }
     GHashTable *bindings = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     for (guint line = 0; lines[line]; line++)
     {
@@ -2760,7 +3009,8 @@ static void port_browser_refresh(GtkTextBuffer *buffer, gpointer data)
         {
             if (!(mask & (1u << i)))
                 continue;
-            gchar *port = g_strndup(pins[i], strcspn(pins[i], "["));
+            const gchar *actual = g_hash_table_lookup(aliases, pins[i]);
+            gchar *port = actual ? g_strdup(actual) : g_strndup(pins[i], strcspn(pins[i], "["));
             const gchar *previous = g_hash_table_lookup(bindings, port);
             const gchar *device = g_str_has_prefix(args[0], "model-") ? args[1] : args[0];
             gchar *entry = g_strdup_printf("%s (line %u)", device, line + 1);
@@ -2783,10 +3033,16 @@ static void port_browser_refresh(GtkTextBuffer *buffer, gpointer data)
     {
         const gchar *name = item->data;
         const gchar *attached = g_hash_table_lookup(bindings, name);
+        PortInfo *info = g_hash_table_lookup(browser->ports, name);
+        gchar *width = info->width ? g_strdup_printf("%u", info->width) : g_strdup("?");
         GtkTreeIter row;
-        gtk_list_store_insert_with_values(browser->store, &row, -1, 0, name,
-            1, g_hash_table_lookup(browser->ports, name), 2, attached ? attached : "Unassigned", -1);
+        gtk_list_store_insert_with_values(browser->store, &row, -1,
+            PORT_NAME, name, PORT_DIRECTION, info->direction,
+            PORT_BINDINGS, attached ? attached : "Unassigned", PORT_WIDTH_TEXT, width,
+            PORT_WIDTH, info->width, PORT_LEFT, info->left, PORT_RIGHT, info->right, -1);
+        g_free(width);
     }
+    g_hash_table_unref(aliases);
     g_list_free(names);
     g_hash_table_unref(bindings);
     g_strfreev(lines);
@@ -2811,6 +3067,35 @@ static void port_browser_copy(GtkButton *button, gpointer data)
     }
 }
 
+/* EN: Return whether direction suits the DUT role required by field.
+ * RU: Проверяет, подходит ли направление direction для роли поля field. */
+static gboolean port_browser_matches(const gchar *direction, gchar field)
+{
+    return (field == 'i' && !strcmp(direction, "input")) ||
+           (field == 'o' && !strcmp(direction, "output")) ||
+           (field == 'b' && !strcmp(direction, "inout")) ||
+           (field == 'c' && (!strcmp(direction, "output") || !strcmp(direction, "inout"))) ||
+           (field == 'a' && strcmp(direction, "—"));
+}
+
+/* EN: Color cell for row in model when its direction matches the focused browser
+ * field in data. column is unused.
+ * RU: Подсвечивает cell строки row из model при совпадении направления с полем
+ * в data. column не используется. */
+static void port_browser_color(GtkTreeViewColumn *column, GtkCellRenderer *cell,
+                               GtkTreeModel *model, GtkTreeIter *row, gpointer data)
+{
+    (void)column;
+    PortBrowser *browser = data;
+    gchar *direction;
+    gtk_tree_model_get(model, row, PORT_DIRECTION, &direction, -1);
+    gboolean matches = browser->direction && port_browser_matches(direction, browser->direction);
+    if (matches)
+        g_object_set(cell, "cell-background", "#cde8ff", "foreground", "#102a43", NULL);
+    g_object_set(cell, "cell-background-set", matches, "foreground-set", matches, NULL);
+    g_free(direction);
+}
+
 /* EN: Create the Ports and Source notebook for browser. The caller keeps browser alive
  * until the dialog and its recipe change handler are destroyed.
  * RU: Создаёт вкладки портов и исходника для browser. Вызывающий хранит browser до
@@ -2828,14 +3113,22 @@ static GtkWidget *port_browser_widget(PortBrowser *browser)
         gtk_box_pack_start(GTK_BOX(box), diagnostic, FALSE, FALSE, 0);
         g_free(message);
     }
-    browser->store = gtk_list_store_new(3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    browser->store = gtk_list_store_new(PORT_COLUMNS, G_TYPE_STRING, G_TYPE_STRING,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_INT, G_TYPE_INT);
     GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(browser->store));
+    browser->tree = tree;
     gtk_widget_set_name(tree, "insight-test-device-ports");
     g_object_unref(browser->store);
-    const gchar *titles[] = {"Port", "Direction", "Devices / rules"};
+    const gchar *titles[] = {"Port", "Direction", "Bits", "Devices / rules"};
+    const gint columns[] = {PORT_NAME, PORT_DIRECTION, PORT_WIDTH_TEXT, PORT_BINDINGS};
     for (guint i = 0; i < G_N_ELEMENTS(titles); i++)
-        gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(tree), -1, titles[i],
-            gtk_cell_renderer_text_new(), "text", i, NULL);
+    {
+        GtkCellRenderer *cell = gtk_cell_renderer_text_new();
+        GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(
+            titles[i], cell, "text", columns[i], NULL);
+        gtk_tree_view_column_set_cell_data_func(column, cell, port_browser_color, browser, NULL);
+        gtk_tree_view_append_column(GTK_TREE_VIEW(tree), column);
+    }
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_container_add(GTK_CONTAINER(scroll), tree);
     gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
@@ -2856,55 +3149,218 @@ static GtkWidget *port_browser_widget(PortBrowser *browser)
 }
 
 typedef struct {
-    const gchar *rule, *fields;
+    const gchar *rule, *fields, *pins;
     gint image;
     gboolean script;
 } DevicePreset;
 
 static const DevicePreset device_presets[] = {
-    {"module", "Module name=", -1, FALSE},
-    {"clock", "Port=clk|Start (ns)=0|High (ns)=5|Low (ns)=5", -1, FALSE},
-    {"pulse", "Port=reset|Start (ns)=10|Length (ns)=100|Active level=1", -1, FALSE},
-    {"button", "Port=button|Idle level=0|Length (ns)=100", -1, FALSE},
-    {"switch", "Port=enable|Initial level=0", -1, FALSE},
-    {"slider", "Port=level|Width=8|Initial value=0", -1, FALSE},
-    {"led", "Port=ready|Active level=1", -1, FALSE},
-    {"display", "Port=status|Width=8|Format (hex, dec, bin)=hex", -1, FALSE},
-    {"scope", "Signal=", -1, FALSE},
-    {"scope-xy", "X signal=|Y signal=", -1, FALSE},
-    {"scope-xyz", "X signal=|Y signal=|Z signal=", -1, FALSE},
-    {"uart", "RX=rx|TX=tx|Baud=115200|Console=console", -1, FALSE},
-    {"sram", "Address=addr|Data=dq|CE#=ce_n|WE#=we_n|OE#=oe_n|Address bits=16|Data bits=8", 0, FALSE},
-    {"sdram", "CK=ck|CKE=cke|CS#=cs_n|RAS#=ras_n|CAS#=cas_n|WE#=we_n|A=a|BA=ba|DQ=dq|DQM=dqm", 6, FALSE},
-    {"ddr2", "CK=ck|CKE=cke|CS#=cs_n|RAS#=ras_n|CAS#=cas_n|WE#=we_n|A=a|BA=ba|DQ=dq|DQS=dqs|DM=dm|Read latency=3|Write latency=2", 6, FALSE},
-    {"ddr3", "CK=ck|RESET#=reset_n|CKE=cke|CS#=cs_n|RAS#=ras_n|CAS#=cas_n|WE#=we_n|A=a|BA=ba|DQ=dq|DQS=dqs|DM=dm|Read latency=3|Write latency=2", 7, FALSE},
-    {"ddr4", "CK=ck|RESET#=reset_n|CKE=cke|CS#=cs_n|ACT#=act_n|A=a|BA=ba|BG=bg|DQ=dq|DQS=dqs|DM#=dm_n|Read latency=3|Write latency=2", 5, FALSE},
-    {"spi-nor", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", 1, FALSE},
-    {"spi-nand", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", 1, FALSE},
-    {"spi-eeprom", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", 1, FALSE},
-    {"spi-psram", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", 1, FALSE},
-    {"i2c-eeprom", "SCL=scl|SDA=sda|Address=0x50", 1, FALSE},
-    {"spi-lua", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", -1, TRUE},
-    {"i2c-lua", "SCL=scl|SDA=sda|Address=0x50", -1, TRUE},
+    {"module", "Module name=", "", -1, FALSE},
+    {"clock", "Port=clk|Start (ns)=0|High (ns)=5|Low (ns)=5", "i1", -1, FALSE},
+    {"pulse", "Port=reset|Start (ns)=10|Length (ns)=100|Active level=1", "i1", -1, FALSE},
+    {"button", "Port=button|Idle level=0|Length (ns)=100", "i1", -1, FALSE},
+    {"switch", "Port=enable|Initial level=0", "i1", -1, FALSE},
+    {"slider", "Port=level|Width=8|Initial value=0", "i@1", -1, FALSE},
+    {"led", "Port=ready|Active level=1", "o1", -1, FALSE},
+    {"display", "Port=status|Width=8|Format (hex, dec, bin)=hex", "o@1", -1, FALSE},
+    {"scope", "Signal=", "a64", -1, FALSE},
+    {"scope-xy", "X signal=|Y signal=", "a64|a64", -1, FALSE},
+    {"scope-xyz", "X signal=|Y signal=|Z signal=", "a64|a64|a64", -1, FALSE},
+    {"uart", "RX=rx|TX=tx|Baud=115200|Console=console", "i1|o1", -1, FALSE},
+    {"sram",
+     "Address=addr|Data=dq|CE#=ce_n|"
+     "WE#=we_n|OE#=oe_n|Address bits=16|Data bits=8",
+     "o@5|b@6|o1|o1|o1", 0, FALSE},
+    {"sdram",
+     "CK=ck|CKE=cke|CS#=cs_n|RAS#=ras_n|"
+     "CAS#=cas_n|WE#=we_n|A=a|BA=ba|DQ=dq|DQM=dqm",
+     "o1|o1|o1|o1|o1|o1|o13|o2|b16|o2", 6, FALSE},
+    {"ddr2",
+     "CK=ck|CKE=cke|CS#=cs_n|RAS#=ras_n|CAS#=cas_n|WE#=we_n|"
+     "A=a|BA=ba|DQ=dq|DQS=dqs|DM=dm|Read latency=3|Write latency=2",
+     "o1|o1|o1|o1|o1|o1|o14|o3|b8|b1|o1", 6, FALSE},
+    {"ddr3",
+     "CK=ck|RESET#=reset_n|CKE=cke|CS#=cs_n|RAS#=ras_n|CAS#=cas_n|"
+     "WE#=we_n|A=a|BA=ba|DQ=dq|DQS=dqs|DM=dm|Read latency=3|Write latency=2",
+     "o1|o1|o1|o1|o1|o1|o1|o16|o3|b8|b1|o1", 7, FALSE},
+    {"ddr4",
+     "CK=ck|RESET#=reset_n|CKE=cke|CS#=cs_n|ACT#=act_n|A=a|BA=ba|"
+     "BG=bg|DQ=dq|DQS=dqs|DM#=dm_n|Read latency=3|Write latency=2",
+     "o1|o1|o1|o1|o1|o17|o2|o2|b8|b1|o1", 5, FALSE},
+    {"spi-nor", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", 1, FALSE},
+    {"spi-nand", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", 1, FALSE},
+    {"spi-eeprom", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", 1, FALSE},
+    {"spi-psram", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", 1, FALSE},
+    {"i2c-eeprom", "SCL=scl|SDA=sda|Address=0x50", "c1|b1", 1, FALSE},
+    {"spi-lua", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", -1, TRUE},
+    {"i2c-lua", "SCL=scl|SDA=sda|Address=0x50", "c1|b1", -1, TRUE},
 };
 
 typedef struct {
-    GtkWidget *grid, *file, *reset;
+    GtkWidget *grid, *file, *reset, *status, *active;
     GPtrArray *entries;
+    PortBrowser *browser;
     const gchar *directory;
 } DeviceForm;
 
+/* EN: Resolve the required width from spec, using the indexed entry in form for @.
+ * RU: Определяет требуемую ширину по spec, используя поле form по индексу после @. */
+static guint device_width(const DeviceForm *form, const gchar *spec)
+{
+    if (!spec || !*spec)
+        return 0;
+    const gchar *value = spec + 1;
+    if (*value == '@')
+    {
+        guint index = (guint)g_ascii_strtoull(value + 1, NULL, 10);
+        if (index >= form->entries->len)
+            return 0;
+        value = gtk_entry_get_text(GTK_ENTRY(form->entries->pdata[index]));
+    }
+    guint64 width;
+    return g_ascii_string_to_unsigned(value, 10, 1, 4096, &width, NULL) ? (guint)width : 0;
+}
+
+/* EN: Refresh width captions after editable changes; data points to the device form.
+ * RU: Обновляет подписи ширины при изменении editable. data указывает на форму. */
+static void device_width_changed(GtkEditable *editable, gpointer data)
+{
+    (void)editable;
+    DeviceForm *form = data;
+    for (guint i = 0; i < form->entries->len; i++)
+    {
+        GtkWidget *entry = form->entries->pdata[i];
+        const gchar *spec = g_object_get_data(G_OBJECT(entry), "port-spec");
+        GtkLabel *label = g_object_get_data(G_OBJECT(entry), "port-label");
+        const gchar *title = g_object_get_data(G_OBJECT(entry), "port-title");
+        if (!spec || !label)
+            continue;
+        guint width = device_width(form, spec);
+        gchar *caption = *spec == 'a' ? g_strdup_printf("%s (1–64 bits)", title) :
+                         width ? g_strdup_printf("%s (%u %s)", title, width, width == 1 ? "bit" : "bits") :
+                                 g_strdup_printf("%s (width unspecified)", title);
+        gtk_label_set_text(label, caption);
+        g_free(caption);
+    }
+}
+
+/* EN: Remember the focused port entry and highlight matching directions. event is unused.
+ * data is the form. Return FALSE to preserve normal GTK focus behavior.
+ * RU: Запоминает выбранное поле entry и подсвечивает подходящие направления.
+ * event не используется, data — форма. Возвращает FALSE для обычного поведения GTK. */
+static gboolean device_port_focus(GtkWidget *entry, GdkEventFocus *event, gpointer data)
+{
+    (void)event;
+    DeviceForm *form = data;
+    const gchar *spec = g_object_get_data(G_OBJECT(entry), "port-spec");
+    form->active = spec ? entry : NULL;
+    form->browser->direction = spec ? *spec : 0;
+    if (form->browser->tree)
+        gtk_widget_queue_draw(form->browser->tree);
+    return FALSE;
+}
+
+/* EN: Replace the focused field with the activated port at path in tree.
+ * data is the form and column is unused. Wider ports use the low-order slice.
+ * RU: Заменяет содержимое выбранного поля портом из tree по path. data — форма,
+ * column не используется. У более широкого порта берёт младшие разряды. */
+static void device_port_activate(GtkTreeView *tree, GtkTreePath *path,
+                                 GtkTreeViewColumn *column, gpointer data)
+{
+    (void)column;
+    DeviceForm *form = data;
+    if (!form->active)
+        return;
+    GtkTreeModel *model = gtk_tree_view_get_model(tree);
+    GtkTreeIter row;
+    if (!gtk_tree_model_get_iter(model, &row, path))
+        return;
+    gchar *name, *direction;
+    guint available;
+    gint left, right;
+    gtk_tree_model_get(model, &row, PORT_NAME, &name, PORT_DIRECTION, &direction,
+                       PORT_WIDTH, &available, PORT_LEFT, &left, PORT_RIGHT, &right, -1);
+    const gchar *spec = g_object_get_data(G_OBJECT(form->active), "port-spec");
+    guint width = device_width(form, spec);
+    if (*spec == 'a' && available)
+        width = MIN(width, available);
+    if (!port_browser_matches(direction, *spec))
+        gtk_label_set_text(GTK_LABEL(form->status), "The port direction does not match this field.");
+    else if (!available || !width || available < width)
+        gtk_label_set_text(GTK_LABEL(form->status), "The port width is unknown or too small for this field.");
+    else
+    {
+        gint first = right + (left >= right ? 1 : -1) * ((gint)width - 1);
+        gchar *value = available == width ? g_strdup(name) :
+                       width == 1 ? g_strdup_printf("%s[%d]", name, right) :
+                                    g_strdup_printf("%s[%d:%d]", name, first, right);
+        gtk_entry_set_text(GTK_ENTRY(form->active), value);
+        gtk_label_set_text(GTK_LABEL(form->status), "");
+        g_free(value);
+    }
+    g_free(direction);
+    g_free(name);
+}
+
+/* EN: Translate value for entry into a device argument. For a fixed-width slice,
+ * append an alias bridge to prefix using id. Return an owned argument or NULL.
+ * RU: Преобразует value поля entry в аргумент устройства. Для среза фиксированной
+ * ширины добавляет соединение в prefix с id. Возвращает новый аргумент или NULL. */
+static gchar *device_port_argument(const DeviceForm *form, GtkWidget *entry, const gchar *value,
+                                   guint id, GString *prefix)
+{
+    const gchar *spec = g_object_get_data(G_OBJECT(entry), "port-spec");
+    const gchar *bracket = strchr(value, '[');
+    if (!spec || *spec == 'a' || !bracket || entry == form->reset)
+        return g_strdup(value);
+    gchar *name = g_strndup(value, bracket - value);
+    PortInfo *port = g_hash_table_lookup(form->browser->ports, name);
+    GRegex *range = g_regex_new("^\[(-?[0-9]+)(?::(-?[0-9]+))?\]$", 0, 0, NULL);
+    GMatchInfo *match = NULL;
+    gchar *alias = NULL;
+    gboolean matched = g_regex_match(range, bracket, 0, &match);
+    if (port && port->width && port_browser_matches(port->direction, *spec) && matched)
+    {
+        gchar *left = g_match_info_fetch(match, 1);
+        gchar *right = g_match_info_fetch(match, 2);
+        gint64 first, last;
+        if (g_ascii_string_to_signed(left, 10, -1000000, 1000000, &first, NULL) &&
+            g_ascii_string_to_signed(*right ? right : left, 10, -1000000, 1000000, &last, NULL) &&
+            ABS(first - last) + 1 == device_width(form, spec))
+        {
+            guint offset = (guint)gtk_text_buffer_get_char_count(form->browser->recipe);
+            alias = g_strdup_printf("geany_slice_%u_%u", offset, id);
+            gchar direction = *spec == 'c' ? (!strcmp(port->direction, "output") ? 'o' : 'b') : *spec;
+            g_string_append_printf(prefix, "port-slice %s %s %c %d %d %" G_GINT64_FORMAT
+                                   " %" G_GINT64_FORMAT "\n", alias, name, direction,
+                                   port->left, port->right, first, last);
+        }
+        g_free(left);
+        g_free(right);
+    }
+    g_match_info_free(match);
+    g_regex_unref(range);
+    g_free(name);
+    return alias;
+}
+
+/* EN: Attach field and its title to row in form and return field.
+ * RU: Добавляет field с подписью title в строку row формы form и возвращает field. */
 static GtkWidget *device_field(DeviceForm *form, const gchar *title, GtkWidget *field, guint row)
 {
     GtkWidget *label = gtk_label_new(title);
     gtk_label_set_xalign(GTK_LABEL(label), 0);
     gtk_label_set_mnemonic_widget(GTK_LABEL(label), field);
+    g_object_set_data(G_OBJECT(field), "port-label", label);
+    g_object_set_data_full(G_OBJECT(field), "port-title", g_strdup(title), g_free);
     gtk_widget_set_hexpand(field, TRUE);
     gtk_grid_attach(GTK_GRID(form->grid), label, 0, row, 1, 1);
     gtk_grid_attach(GTK_GRID(form->grid), field, 1, row, 1, 1);
     return field;
 }
 
+/* EN: Rebuild the fields for combo's selected preset in the form stored in data.
+ * RU: Перестраивает поля формы из data для шаблона, выбранного в combo. */
 static void simulation_device_type(GtkComboBox *combo, gpointer data)
 {
     DeviceForm *form = data;
@@ -2912,11 +3368,16 @@ static void simulation_device_type(GtkComboBox *combo, gpointer data)
     if (selected < 0)
         return;
     GList *children = gtk_container_get_children(GTK_CONTAINER(form->grid));
-    g_list_free_full(children, (GDestroyNotify)gtk_widget_destroy);
     g_ptr_array_set_size(form->entries, 0);
-    form->file = form->reset = NULL;
+    g_list_free_full(children, (GDestroyNotify)gtk_widget_destroy);
+    form->file = form->reset = form->active = NULL;
+    form->browser->direction = 0;
+    if (form->browser->tree)
+        gtk_widget_queue_draw(form->browser->tree);
     const DevicePreset *preset = &device_presets[selected];
     gchar **fields = g_strsplit(preset->fields, "|", -1);
+    gchar **specs = g_strsplit(preset->pins, "|", -1);
+    guint pin_count = g_strv_length(specs);
     guint row = 0;
     for (; fields[row]; row++)
     {
@@ -2924,9 +3385,16 @@ static void simulation_device_type(GtkComboBox *combo, gpointer data)
         *value++ = 0;
         GtkWidget *entry = gtk_entry_new();
         gtk_entry_set_text(GTK_ENTRY(entry), value);
+        if (row < pin_count)
+            g_object_set_data_full(G_OBJECT(entry), "port-spec", g_strdup(specs[row]), g_free);
+        g_signal_connect(entry, "focus-in-event", G_CALLBACK(device_port_focus), form);
+        g_signal_connect(entry, "changed", G_CALLBACK(device_width_changed), form);
+        if (row == 0)
+            gtk_widget_set_name(entry, "insight-device-first-field");
         g_ptr_array_add(form->entries, device_field(form, fields[row], entry, row));
     }
     g_strfreev(fields);
+    g_strfreev(specs);
     if (preset->script || preset->image >= 0)
     {
         GtkWidget *chooser = gtk_file_chooser_button_new("Choose device file", GTK_FILE_CHOOSER_ACTION_OPEN);
@@ -2940,10 +3408,17 @@ static void simulation_device_type(GtkComboBox *combo, gpointer data)
         }
     }
     if (preset->script)
-        form->reset = device_field(form, "Reset signal (optional)", gtk_entry_new(), row);
+    {
+        form->reset = device_field(form, "Reset signal (optional, 1 bit)", gtk_entry_new(), row);
+        g_object_set_data(G_OBJECT(form->reset), "port-spec", "o1");
+        g_signal_connect(form->reset, "focus-in-event", G_CALLBACK(device_port_focus), form);
+    }
+    device_width_changed(NULL, form);
     gtk_widget_show_all(form->grid);
 }
 
+/* EN: Append value to rule as one shell-quoted token.
+ * RU: Добавляет value в rule одним аргументом в кавычках. */
 static void device_argument(GString *rule, const gchar *value)
 {
     gchar *quoted = g_shell_quote(value);
@@ -2985,9 +3460,12 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     GtkWidget *panes = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     gtk_paned_pack1(GTK_PANED(panes), scroll, TRUE, FALSE);
     gtk_paned_pack2(GTK_PANED(panes), port_browser_widget(&browser), TRUE, FALSE);
+    form.browser = &browser;
+    g_signal_connect(browser.tree, "row-activated", G_CALLBACK(device_port_activate), &form);
     gtk_paned_set_position(GTK_PANED(panes), 420);
     gtk_box_pack_start(GTK_BOX(box), panes, TRUE, TRUE, 0);
     GtkWidget *status = gtk_label_new(NULL);
+    form.status = status;
     gtk_label_set_line_wrap(GTK_LABEL(status), TRUE);
     gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 6);
     g_signal_connect(combo, "changed", G_CALLBACK(simulation_device_type), &form);
@@ -3003,26 +3481,32 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
         gchar *file = native ? g_filename_to_utf8(native, -1, NULL, NULL, NULL) : NULL;
         gboolean valid = (!native || file) && (!preset->script || file) && (!file || !strpbrk(file, "\r\n"));
         GString *rule = g_string_new(NULL);
+        GPtrArray *arguments = g_ptr_array_new_with_free_func(g_free);
+        for (guint i = 0; i < form.entries->len; i++)
+        {
+            GtkWidget *entry = form.entries->pdata[i];
+            const gchar *value = gtk_entry_get_text(GTK_ENTRY(entry));
+            gchar *argument = device_port_argument(&form, entry, value, i, rule);
+            valid = valid && argument && *value && !strpbrk(value, "\r\n");
+            g_ptr_array_add(arguments, argument ? argument : g_strdup(""));
+        }
         if (file && preset->image >= 0)
         {
             g_string_append(rule, "memory-image");
-            device_argument(rule, gtk_entry_get_text(form.entries->pdata[preset->image]));
+            device_argument(rule, arguments->pdata[preset->image]);
             device_argument(rule, file);
             g_string_append_c(rule, '\n');
         }
         g_string_append(rule, preset->rule);
-        for (guint i = 0; i < form.entries->len; i++)
-        {
-            const gchar *value = gtk_entry_get_text(form.entries->pdata[i]);
-            valid = valid && *value && !strpbrk(value, "\r\n");
-            device_argument(rule, value);
-        }
+        for (guint i = 0; i < arguments->len; i++)
+            device_argument(rule, arguments->pdata[i]);
+        g_ptr_array_unref(arguments);
         if (preset->script && file)
             device_argument(rule, file);
         const gchar *reset = form.reset ? gtk_entry_get_text(GTK_ENTRY(form.reset)) : "";
         if (*reset)
         {
-            valid = valid && simulation_port_name(reset);
+            valid = valid && simulation_capture_signal(reset);
             device_argument(rule, reset);
         }
         GError *error = NULL;
@@ -4443,6 +4927,21 @@ static GtkWidget *simulation_live_device_box(WaveSimulation *run, GtkWidget *con
     return run->live_devices;
 }
 
+/* EN: Return the human-readable port or slice name for alias in run's harness.
+ * RU: Возвращает читаемое имя порта или среза для alias из тестового модуля run. */
+static gchar *simulation_live_port_caption(const WaveSimulation *run, const gchar *alias)
+{
+    gchar *marker = g_strdup_printf("// GEANY-PORT-SLICE %s ", alias);
+    const gchar *start = strstr(run->port_harness, marker);
+    if (start)
+        start += strlen(marker);
+    g_free(marker);
+    const gchar *end = start ? strchr(start, '\n') : NULL;
+    return end ? g_strndup(start, end - start) : g_strdup(alias);
+}
+
+/* EN: Create the live buttons and switches for run in contents.
+ * RU: Создаёт живые кнопки и переключатели run в contents. */
 static void simulation_live_controls(WaveSimulation *run, GtkWidget *contents)
 {
     const gchar *marker = "// GEANY-CONTROL ";
@@ -4456,8 +4955,10 @@ static void simulation_live_controls(WaveSimulation *run, GtkWidget *contents)
         gchar *line = g_strndup(cursor, end - cursor);
         gchar **parts = g_strsplit(line, " ", 3);
         gboolean toggle = !strcmp(parts[0], "switch");
-        GtkWidget *widget = toggle ? gtk_check_button_new_with_label(parts[1]) :
-                                     gtk_button_new_with_label(parts[1]);
+        gchar *caption = simulation_live_port_caption(run, parts[1]);
+        GtkWidget *widget = toggle ? gtk_check_button_new_with_label(caption) :
+                                     gtk_button_new_with_label(caption);
+        g_free(caption);
         if (toggle)
             gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), *parts[2] == '1');
         g_object_set_data_full(G_OBJECT(widget), "geany-port", g_strdup(parts[1]), g_free);
@@ -4469,6 +4970,8 @@ static void simulation_live_controls(WaveSimulation *run, GtkWidget *contents)
     }
 }
 
+/* EN: Create the live sliders for run in contents.
+ * RU: Создаёт живые ползунки run в contents. */
 static void simulation_live_sliders(WaveSimulation *run, GtkWidget *contents)
 {
     const gchar *marker = "// GEANY-SLIDER ";
@@ -4482,9 +4985,11 @@ static void simulation_live_sliders(WaveSimulation *run, GtkWidget *contents)
         gchar *line = g_strndup(cursor, end - cursor);
         gchar **parts = g_strsplit(line, " ", 3);
         gdouble maximum = g_ascii_strtod(parts[1], NULL);
-        GtkWidget *frame = gtk_frame_new(parts[0]);
+        gchar *caption = simulation_live_port_caption(run, parts[0]);
+        GtkWidget *frame = gtk_frame_new(caption);
         GtkWidget *scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 0, maximum, 1);
-        gchar *name = g_strconcat("insight-slider-", parts[0], NULL);
+        gchar *name = g_strconcat("insight-slider-", caption, NULL);
+        g_free(caption);
         gtk_widget_set_name(scale, name);
         g_free(name);
         gtk_widget_set_size_request(scale, 160, -1);
@@ -4501,6 +5006,8 @@ static void simulation_live_sliders(WaveSimulation *run, GtkWidget *contents)
     }
 }
 
+/* EN: Create live indicator cards for run in contents.
+ * RU: Создаёт панели индикаторов run в contents. */
 static void simulation_live_indicators(WaveSimulation *run, GtkWidget *contents)
 {
     const gchar *marker = "// GEANY-INDICATOR ";
@@ -4521,7 +5028,9 @@ static void simulation_live_indicators(WaveSimulation *run, GtkWidget *contents)
             gtk_box_pack_start(GTK_BOX(contents), flow, FALSE, FALSE, 0);
             run->live_indicators = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
         }
-        GtkWidget *frame = gtk_frame_new(parts[0]);
+        gchar *caption = simulation_live_port_caption(run, parts[0]);
+        GtkWidget *frame = gtk_frame_new(caption);
+        g_free(caption);
         GtkWidget *value = gtk_label_new("—");
         gchar *name = g_strconcat("insight-indicator-", parts[0], NULL);
         gtk_widget_set_name(value, name);

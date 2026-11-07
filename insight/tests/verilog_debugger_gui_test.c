@@ -221,9 +221,9 @@ static gboolean check_connection(GtkTreeModel *model, GtkTreePath *path, GtkTree
     return checks->bit && checks->clock;
 }
 
-/* EN: Check macro-expanded modal port discovery and select a slider; callback data is unused.
+/* EN: Check modal port widths and assign a slider by activating a port; callback data is unused.
  * Return G_SOURCE_CONTINUE while the wizard is unavailable.
- * RU: Проверяет раскрытые макросами порты в модальном мастере и выбирает ползунок.
+ * RU: Проверяет ширину портов в мастере и назначает порт ползунку активацией строки.
  * data не используется. Возвращает G_SOURCE_CONTINUE, пока мастер недоступен. */
 static gboolean add_test_slider(gpointer data)
 {
@@ -237,16 +237,22 @@ static gboolean add_test_slider(gpointer data)
     GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(ports));
     GtkTreeIter row;
     gboolean shared = FALSE, available = FALSE, inactive = FALSE;
+    GtkTreePath *selected = NULL;
     gboolean next = gtk_tree_model_get_iter_first(model, &row);
     while (next)
     {
-        gchar *name, *direction, *bindings;
-        gtk_tree_model_get(model, &row, 0, &name, 1, &direction, 2, &bindings, -1);
+        gchar *name, *direction, *bindings, *width;
+        gtk_tree_model_get(model, &row, 0, &name, 1, &direction, 2, &bindings, 3, &width, -1);
         if (!strcmp(name, "level_out") && !strcmp(direction, "output") &&
             strstr(bindings, "display") && strstr(bindings, "scope-xy"))
             shared = TRUE;
-        if (!strcmp(name, "level") && !strcmp(direction, "input") && !strcmp(bindings, "Unassigned"))
+        if (!strcmp(name, "level") && !strcmp(direction, "input") &&
+            !strcmp(bindings, "Unassigned") && !strcmp(width, "16"))
+        {
             available = TRUE;
+            selected = gtk_tree_model_get_path(model, &row);
+        }
+        g_free(width);
         inactive |= !strcmp(name, "inactive_slider");
         g_free(name);
         g_free(direction);
@@ -254,9 +260,28 @@ static gboolean add_test_slider(gpointer data)
         next = gtk_tree_model_iter_next(model, &row);
     }
     if (!gtk_window_get_modal(GTK_WINDOW(wizard)) || !shared || !available || inactive)
+    {
+        g_clear_pointer(&selected, gtk_tree_path_free);
         return G_SOURCE_CONTINUE;
+    }
     GtkWidget *kind = find_control(wizard, "insight-test-device-type");
     if (!GTK_IS_COMBO_BOX(kind) || !gtk_combo_box_set_active_id(GTK_COMBO_BOX(kind), "slider"))
+    {
+        gtk_tree_path_free(selected);
+        return G_SOURCE_CONTINUE;
+    }
+    GtkWidget *entry = find_control(wizard, "insight-device-first-field");
+    if (!GTK_IS_ENTRY(entry))
+    {
+        gtk_tree_path_free(selected);
+        return G_SOURCE_CONTINUE;
+    }
+    gtk_entry_set_text(GTK_ENTRY(entry), "replace_me");
+    gtk_widget_grab_focus(entry);
+    gtk_tree_view_row_activated(GTK_TREE_VIEW(ports), selected,
+                                gtk_tree_view_get_column(GTK_TREE_VIEW(ports), 0));
+    gtk_tree_path_free(selected);
+    if (strcmp(gtk_entry_get_text(GTK_ENTRY(entry)), "level[7:0]"))
         return G_SOURCE_CONTINUE;
     gtk_dialog_response(GTK_DIALOG(wizard), GTK_RESPONSE_ACCEPT);
     return G_SOURCE_REMOVE;
@@ -495,7 +520,7 @@ static gboolean drive_debugger(gpointer data)
         {
             gtk_entry_set_text(GTK_ENTRY(input), "1");
             GtkWidget *toggle = find_control(simulation, "switch_on");
-            GtkWidget *slider = find_control(simulation, "insight-slider-level");
+            GtkWidget *slider = find_control(simulation, "insight-slider-level[7:0]");
             if (GTK_IS_RANGE(slider) && gtk_widget_is_sensitive(slider) &&
                 GTK_IS_TOGGLE_BUTTON(toggle) && gtk_widget_is_sensitive(toggle) &&
                 click(simulation, "Apply Input") && click(simulation, "push"))

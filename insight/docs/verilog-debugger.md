@@ -70,6 +70,18 @@ simulation. Only active `ifdef`, `ifndef`, `elsif`, and `else` branches
 contribute ports. If preprocessing fails, **Ports** shows the diagnostic
 and **Source** still shows the original text.
 
+Each port field shows its required width. Focusing it highlights compatible
+directions in the table. **Bits** shows each port's width. Double-click a
+compatible port to replace the field's contents. A wider port uses the
+low-order slice in declaration order, for example `data[7:0]` for
+`[15:0]` or `data[8:15]` for `[0:15]`. Ports that are too narrow or
+whose width is unknown are unavailable for automatic assignment.
+A width of `?` indicates a range that needs parameter or type evaluation.
+
+The wizard saves a slice as a `port-slice` rule and uses its alias in the
+device rule. Both rules form the connection. The table lists the device
+against the original port.
+
 
 ## Triggered waveform capture and live controls
 
