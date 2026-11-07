@@ -221,6 +221,7 @@ spi-nor
 | Preset | Default port order | Parameters |
 | --- | --- | --- |
 | `sram` | `addr dq ce_n we_n oe_n` | 16 address bits, 8 data bits |
+| `sdram` | `ck cke cs_n ras_n cas_n we_n a ba dq dqm` | x16, BL1, CAS 3 |
 | `ddr2` | `ck cke cs_n ras_n cas_n we_n a ba dq dqs dm` | RL 3, WL 2 CK cycles |
 | `ddr3` | `ck reset_n cke cs_n ras_n cas_n we_n a ba dq dqs dm` | RL 3, WL 2 CK cycles |
 | `ddr4` | `ck reset_n cke cs_n act_n a ba bg dq dqs dm_n` | RL 3, WL 2 CK cycles |
@@ -372,6 +373,10 @@ Bursts are linear by default. Reset restores linear mode and retains
 the model's contents. Bytes outside the preload start at FF.
 The profile models the SPI data path with immediate completion.
 Quad transfers and physical timing are outside its scope.
+
+## Synchronous memory
+
+- [SDR SDRAM x16](verilog-sdram.md) covers commands, byte masking and image preload.
 
 ## Lua devices
 

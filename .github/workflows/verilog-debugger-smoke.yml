@@ -17,6 +17,7 @@ on:
       - 'insight/tools/build-iverilog.sh'
       - 'insight/tools/geany-vpi-devices.c'
       - 'insight/tools/geany-ddr4.h'
+      - 'insight/tools/geany-sdram.h'
       - 'insight/tools/geany-i2c-eeprom.h'
       - 'insight/tools/geany-lua-*.h'
       - 'insight/vendor/lua/**'

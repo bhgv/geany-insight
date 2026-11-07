@@ -228,6 +228,7 @@ spi-nor
 | Модель | Порядок портов по умолчанию | Параметры |
 | --- | --- | --- |
 | `sram` | `addr dq ce_n we_n oe_n` | 16 бит адреса, 8 бит данных |
+| `sdram` | `ck cke cs_n ras_n cas_n we_n a ba dq dqm` | x16, BL1, CAS 3 |
 | `ddr2` | `ck cke cs_n ras_n cas_n we_n a ba dq dqs dm` | RL 3, WL 2 такта CK |
 | `ddr3` | `ck reset_n cke cs_n ras_n cas_n we_n a ba dq dqs dm` | RL 3, WL 2 такта CK |
 | `ddr4` | `ck reset_n cke cs_n act_n a ba bg dq dqs dm_n` | RL 3, WL 2 такта CK |
@@ -381,6 +382,10 @@ spi-psram
 линейный режим и сохраняет содержимое модели. Байты вне образа
 начинаются со значения FF. Операции выполняются без задержки.
 Режим Quad и физические тайминги не моделируются.
+
+## Синхронная память
+
+- [SDR SDRAM x16](verilog-sdram.md) — команды, маскирование байтов и предзагрузка.
 
 ## Устройства на Lua
 

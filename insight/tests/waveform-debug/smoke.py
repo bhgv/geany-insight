@@ -503,6 +503,15 @@ def check_documented_lua_devices(compiler, runtime, fixtures, directory, environ
         require(expected in report, f"Documented {bus} Lua example did not produce {expected}")
 
 
+def check_sdram(compiler, runtime, fixtures, directory, environment):
+    compile_design(compiler, directory, [fixtures / "sdram_tb.sv"], environment)
+    (directory / "sdram.hex").write_text("@c04 beef\n", encoding="ascii")
+    modules = runtime.parent.parent / "lib" / "ivl"
+    report = capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
+                              "simulation.vvp"], directory, "sdram", environment)
+    require("SDRAM test passed" in report, "SDRAM test did not finish")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("prefix", type=Path)
@@ -527,6 +536,7 @@ def main():
     checks = [
         ("i2c-eeprom", lambda directory: check_i2c_eeprom(compiler, runtime, fixtures, directory, environment)),
         ("lua-device-examples", lambda directory: check_documented_lua_devices(compiler, runtime, fixtures, directory, environment)),
+        ("sdram", lambda directory: check_sdram(compiler, runtime, fixtures, directory, environment)),
         ("spi-memory", lambda directory: check_spi_memory(compiler, runtime, fixtures, directory, environment)),
         ("memory-image", lambda directory: check_memory_image(compiler, runtime, fixtures, directory, environment)),
         ("ddr4-device", lambda directory: check_ddr4_device(compiler, runtime, fixtures, directory, environment)),

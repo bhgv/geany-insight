@@ -620,6 +620,132 @@ static PLI_INT32 i2c_update(PLI_BYTE8 *unused)
 
 #include "geany-lua-bus.h"
 
+#include "geany-sdram.h"
+
+enum { SDR_CK, SDR_CKE, SDR_CS, SDR_RAS, SDR_CAS, SDR_WE, SDR_A, SDR_BA, SDR_DQ,
+       SDR_DQM, SDR_OUT, SDR_PORTS };
+
+typedef struct {
+    Sdram ram;
+    vpiHandle pins[SDR_PORTS];
+    int clock;
+} SdramDevice;
+
+static int sdram_preload(void *data, uint32_t address, uint64_t value)
+{
+    if (address >= (1u << 24) || value > 0xffff)
+        return 0;
+    SdramWord *word = sdram_word(data, address, 1);
+    if (!word)
+        return 0;
+    word->data = value;
+    word->unknown = 0;
+    return 1;
+}
+
+static PLI_INT32 sdram_free(p_cb_data callback)
+{
+    free(callback->user_data);
+    return 0;
+}
+
+static SdramDevice *sdram_open(vpiHandle call)
+{
+    vpiHandle args = vpi_iterate(vpiArgument, call), pins[SDR_PORTS];
+    if (!args)
+        return NULL;
+    const unsigned widths[] = {1, 1, 1, 1, 1, 1, 13, 2, 16, 2, 16};
+    for (unsigned i = 0; i < SDR_PORTS; i++) {
+        pins[i] = vpi_scan(args);
+        if (!pins[i])
+            return NULL;
+    }
+    vpiHandle image = vpi_scan(args);
+    if (image && vpi_scan(args)) {
+        vpi_free_object(args);
+        return NULL;
+    }
+    for (unsigned i = 0; i < SDR_PORTS; i++)
+        if ((unsigned)vpi_get(vpiSize, pins[i]) != widths[i])
+            return NULL;
+    SdramDevice *device = calloc(1, sizeof *device);
+    if (!device)
+        return NULL;
+    memcpy(device->pins, pins, sizeof pins);
+    device->ram.burst = 1;
+    device->ram.latency = 3;
+    device->clock = vpiX;
+    if (!image_load(image, sdram_preload, &device->ram)) {
+        free(device);
+        return NULL;
+    }
+    s_cb_data cleanup = {.reason = cbEndOfSimulation, .cb_rtn = sdram_free,
+                         .user_data = (PLI_BYTE8 *)device};
+    vpiHandle callback = vpi_register_cb(&cleanup);
+    if (!callback) {
+        free(device);
+        return NULL;
+    }
+    vpi_free_object(callback);
+    vpi_put_userdata(call, device);
+    return device;
+}
+
+static PLI_INT32 sdram_update(PLI_BYTE8 *unused)
+{
+    (void)unused;
+    vpiHandle call = vpi_handle(vpiSysTfCall, NULL);
+    SdramDevice *device = vpi_get_userdata(call);
+    if (!device)
+        device = sdram_open(call);
+    if (!device)
+        goto fail;
+    vpiHandle *p = device->pins;
+    int previous = device->clock;
+    device->clock = scalar(p[SDR_CK]);
+    if (previous == vpi1 || device->clock != vpi1 || scalar(p[SDR_CKE]) != vpi1)
+        return 0;
+    Sdram *ram = &device->ram;
+    ram->tick++;
+    if (scalar(p[SDR_CS]) == vpi0) {
+        int ras = scalar(p[SDR_RAS]), cas = scalar(p[SDR_CAS]), we = scalar(p[SDR_WE]);
+        s_vpi_vecval address = vector_word(p[SDR_A]), bank = vector_word(p[SDR_BA]);
+        if (ras <= vpi1 && cas <= vpi1 && we <= vpi1 && !(address.bval | bank.bval))
+            sdram_command(ram, (ras << 2) | (cas << 1) | we, bank.aval & 3, address.aval & 8191);
+    }
+    s_vpi_vecval dqm = vector_word(p[SDR_DQM]), output = {0, 0xffff};
+    unsigned mask = (dqm.aval | dqm.bval) & 3u;
+    unsigned read_mask = ram->mask_history >> 2;
+    ram->mask_history = ((ram->mask_history << 2) | mask) & 15u;
+    if (ram->mode && ram->tick >= ram->due) {
+        unsigned enabled = ram->mode == SDRAM_WRITE ? mask : read_mask;
+        unsigned lanes = (enabled & 1 ? 0 : 0xff) | (enabled & 2 ? 0 : 0xff00);
+        SdramWord *word = sdram_word(ram, sdram_address(ram), ram->mode == SDRAM_WRITE && lanes);
+        if (ram->mode == SDRAM_READ) {
+            output.aval = (word ? word->data : 0xffff) & lanes;
+            output.bval = (word ? word->unknown & lanes : lanes) | (0xffffu & ~lanes);
+        } else if (lanes) {
+            if (!word)
+                goto fail;
+            s_vpi_vecval data = vector_word(p[SDR_DQ]);
+            word->data = (word->data & ~lanes) | (data.aval & lanes);
+            word->unknown = (word->unknown & ~lanes) | (data.bval & lanes);
+        }
+        if (++ram->beat == ram->length)
+            sdram_end(ram);
+    }
+    s_vpi_value value = {.format = vpiVectorVal};
+    value.value.vector = &output;
+    vpi_put_value(p[SDR_OUT], &value, NULL, vpiNoDelay);
+    return 0;
+
+fail:
+    vpi_printf("Geany SDRAM: invalid configuration, image or storage limit reached.\n");
+    vpip_set_return_value(1);
+    vpi_control(vpiFinish, 1);
+    return 0;
+}
+
 static void register_devices(void)
 {
     s_vpi_systf_data task = {0};
@@ -638,6 +764,10 @@ static void register_devices(void)
     task.user_data = &ddr2;
     vpi_register_systf(&task);
     static PLI_BYTE8 nor = SPI_NOR, nand = SPI_NAND, eeprom = SPI_EEPROM, psram = SPI_PSRAM;
+    task.user_data = NULL;
+    task.tfname = "$geany_sdram";
+    task.calltf = sdram_update;
+    vpi_register_systf(&task);
     task.calltf = spi_update;
     task.tfname = "$geany_spi_nor";
     task.user_data = &nor;

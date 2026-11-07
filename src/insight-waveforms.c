@@ -1693,6 +1693,34 @@ static gboolean simulation_port_ddr(gchar **args, GString *body, GString *connec
     return TRUE;
 }
 
+static gboolean simulation_port_sdram(gchar **args, GString *body, GString *connections,
+                                       GHashTable *ports, GHashTable *images)
+{
+    const guint widths[] = {1, 1, 1, 1, 1, 1, 13, 2, 16, 2};
+    guint ids[G_N_ELEMENTS(widths)];
+    if (g_hash_table_size(ports) > 128 - G_N_ELEMENTS(widths))
+        return FALSE;
+    for (guint i = 0; i < G_N_ELEMENTS(widths); i++)
+    {
+        if (!simulation_port_name(args[i + 1]) || g_hash_table_contains(ports, args[i + 1]))
+            return FALSE;
+        for (guint j = 0; j < i; j++)
+            if (!strcmp(args[i + 1], args[j + 1]))
+                return FALSE;
+    }
+    for (guint i = 0; i < G_N_ELEMENTS(widths); i++)
+        ids[i] = simulation_port_connect(body, connections, ports, args[i + 1], widths[i], TRUE);
+    guint id = ids[0];
+    g_string_append_printf(body,
+        "reg [15:0] sdram_drive%u='z; assign pin%u=sdram_drive%u;\n"
+        "always @(pin%u) $geany_sdram(", id, ids[8], id, id);
+    for (guint i = 0; i < G_N_ELEMENTS(ids); i++)
+        g_string_append_printf(body, "pin%u,", ids[i]);
+    g_string_append_printf(body, "sdram_drive%u", id);
+    simulation_memory_argument(body, images, args[7]);
+    return TRUE;
+}
+
 static gboolean simulation_port_spi(gchar **args, GString *body, GString *connections,
                                     GHashTable *ports, GHashTable *images, GHashTable *spi_pins,
                                     const gchar *script_key, const gchar *reset)
@@ -2008,6 +2036,7 @@ static void simulation_memory_defaults(gchar ***arguments, gint *count)
         gint pins;
     } presets[] = {
         {"sram", "addr dq ce_n we_n oe_n 16 8", 5},
+        {"sdram", "ck cke cs_n ras_n cas_n we_n a ba dq dqm", 10},
         {"ddr2", "ck cke cs_n ras_n cas_n we_n a ba dq dqs dm 3 2", 11},
         {"ddr3", "ck reset_n cke cs_n ras_n cas_n we_n a ba dq dqs dm 3 2", 12},
         {"ddr4", "ck reset_n cke cs_n act_n a ba bg dq dqs dm_n 3 2", 11},
@@ -2227,6 +2256,11 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         else if (valid && count == 3 && !strcmp(args[0], "memory-image"))
             valid = simulation_port_name(args[1]) && !g_hash_table_contains(ports, args[1]) &&
                 simulation_memory_image(images, args[1], args[2], directory, error);
+        else if (valid && count == 11 && !strcmp(args[0], "sdram"))
+        {
+            valid = simulation_port_sdram(args, body, connections, ports, images);
+            attached_images += valid && g_hash_table_contains(images, args[7]);
+        }
         else if (valid && count == 8 && !strcmp(args[0], "sram"))
         {
             valid = simulation_port_sram(args, body, connections, ports, images);
@@ -2440,9 +2474,10 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         "scope SIGNAL   ·   scope-xy X Y   ·   scope-xyz X Y Z\n"
         "led PORT [ACTIVE=1]   ·   display PORT [WIDTH=8 [hex|dec|bin]]\n"
         "live-interval NS   ·   live-input PORT WIDTH INITIAL   ·   monitor PORT WIDTH\n"
-        "Memory presets: sram, ddr2, ddr3, ddr4, spi-nor, spi-nand, spi-eeprom, spi-psram, i2c-eeprom.\n"
+        "Memory presets: sram, sdram, ddr2, ddr3, ddr4, spi-nor, spi-nand, spi-eeprom, spi-psram, i2c-eeprom.\n"
         "Use a preset alone for standard port names, or list your ports below. '-' uses the default.\n"
         "sram ADDR DQ CE_N WE_N OE_N [ADDRESS_BITS=16 [DATA_BITS=8]]\n"
+        "sdram CK CKE CS_N RAS_N CAS_N WE_N A BA DQ DQM\n"
         "memory-image ADDR_OR_SPI_CS_N_OR_SDA FILE (before the memory rule)\n"
         "i2c-eeprom SCL SDA [ADDRESS=0x50]\n"
         "spi-lua [SCK CS_N MOSI MISO] SCRIPT [RESET_N]\n"
@@ -2925,7 +2960,7 @@ static gboolean simulation_interactive(WaveSimulation *run, const gchar *directo
     const gchar *device_argv[] = {run->runtime, "-M", modules, "-m", "geany_devices",
                                   "-i", "-s", "simulation.vvp", NULL};
     gboolean devices = run->port_harness &&
-        (strstr(run->port_harness, "$geany_sram(") ||
+        (strstr(run->port_harness, "$geany_sram(") || strstr(run->port_harness, "$geany_sdram(") ||
          strstr(run->port_harness, "$geany_ddr2(") || strstr(run->port_harness, "$geany_ddr3(") || strstr(run->port_harness, "$geany_ddr4(") ||
          strstr(run->port_harness, "$geany_spi_") || strstr(run->port_harness, "$geany_i2c_"));
     GSubprocess *process = g_subprocess_launcher_spawnv(launcher, devices ? device_argv : argv, error);
