@@ -36,6 +36,10 @@ While paused, right-click a port, net or register in **HDL Signals** and choose 
 
 Click **Arm signal stop** and continue. The console reports the signal and the old and new binary values. One rule is kept per hierarchical signal in this run. Arming another rule replaces it. **Remove signal stop** clears it. A manual register deposit at the pause prompt updates the watched baseline. The feature requires the updated bundled VVP.
 
+### Pinned signals
+
+Right-click a port, net or register and choose **Pin signal**. **Pinned signals** collects rows across editor files and keeps their hierarchy, type, current value, change indicator and row actions. The list is restored for the project across launches. Without a project it belongs to the selected source set. A dash marks a pinned signal absent from the current snapshot. Choose **Unpin signal** from the row menu to remove it.
+
 ## Port signals
 
 **Debug Current Verilog File** opens **Port Signals**. Leave the recipe

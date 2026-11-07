@@ -1709,14 +1709,15 @@ typedef struct {
     gboolean preview_pending;
     GtkWidget *signal_name;
     gboolean register_write_ready, signal_stops_ready;
-    GtkListStore *signal_tables[3];
+    GtkListStore *signal_tables[4];
     GtkWidget *signal_search, *signal_status, *signal_context, *signal_state;
     GtkWidget *signal_changed_only;
-    GtkTreeSelection *signal_selection[3];
+    GtkTreeSelection *signal_selection[4];
     gboolean signal_refilling;
     GtkCellRenderer *signal_register_renderer;
     GPtrArray *signal_rows;
-    GHashTable *signal_previous_values;
+    GHashTable *signal_previous_values, *signal_pins;
+    gchar *signal_pins_path;
     GQueue signal_history;
     guint64 signal_stop_number;
     gboolean signal_history_replace;
@@ -1762,6 +1763,8 @@ static void simulation_free(gpointer data)
     g_free(run->trace_file);
     g_clear_pointer(&run->signal_rows, g_ptr_array_unref);
     g_clear_pointer(&run->signal_previous_values, g_hash_table_unref);
+    g_clear_pointer(&run->signal_pins, g_hash_table_unref);
+    g_free(run->signal_pins_path);
     while (!g_queue_is_empty(&run->signal_history))
         signal_history_stop_free(g_queue_pop_head(&run->signal_history));
     g_free(run->signal_file);
@@ -1820,6 +1823,55 @@ static gchar *simulation_settings_path(const gchar *directory, const gchar *proj
     g_checksum_free(checksum);
     g_free(name);
     return path;
+}
+
+/* EN: Load a bounded set of pin keys from path. A missing file is empty.
+ * RU: Загружает ограниченный набор закреплений из path. Отсутствующий файл пуст. */
+static GHashTable *signal_pins_load(const gchar *path)
+{
+    GHashTable *pins = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    GStatBuf stat;
+    if (!path || g_stat(path, &stat) || stat.st_size > 512 * 1024)
+        return pins;
+    GKeyFile *config = g_key_file_new();
+    if (g_key_file_load_from_file(config, path, G_KEY_FILE_NONE, NULL))
+    {
+        gsize length = 0;
+        gchar **entries = g_key_file_get_string_list(config, "signals", "pins", &length, NULL);
+        for (gsize i = 0; i < length && i < 256; i++)
+        {
+            const gchar *key = entries[i];
+            if (strchr("PNR", key[0]) && key[0] && key[1] == '\t' && key[2] &&
+                strlen(key) <= 1026 && !strpbrk(key + 2, "\t\r\n"))
+                g_hash_table_add(pins, g_strdup(key));
+        }
+        g_strfreev(entries);
+    }
+    g_key_file_unref(config);
+    return pins;
+}
+
+/* EN: Write pins to path and report failure through error.
+ * RU: Сохраняет pins по path и возвращает ошибку через error. */
+static gboolean signal_pins_save(const gchar *path, GHashTable *pins, GError **error)
+{
+    gchar *directory = g_path_get_dirname(path);
+    gint made = g_mkdir_with_parents(directory, 0700);
+    g_free(directory);
+    if (made)
+    {
+        g_set_error_literal(error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+            insight_tr("Could not create the pinned signal settings folder."));
+        return FALSE;
+    }
+    guint count;
+    gchar **keys = (gchar **)g_hash_table_get_keys_as_array(pins, &count);
+    GKeyFile *config = g_key_file_new();
+    g_key_file_set_string_list(config, "signals", "pins", (const gchar *const *)keys, count);
+    gboolean saved = g_key_file_save_to_file(config, path, error);
+    g_key_file_unref(config);
+    g_free(keys);
+    return saved;
 }
 
 static gboolean simulation_port_name(const gchar *name)
@@ -5995,6 +6047,26 @@ static void signal_history_record(WaveSimulation *run)
     }
 }
 
+/* EN: Insert a signal in table for run and restore a matching selection.
+ * row contains kind, name, source and raw bits. display and changed are visible.
+ * selected_key identifies the old selection and context_name its source preview.
+ * RU: Добавляет row в table сеанса run. display и changed видны в таблице.
+ * selected_key определяет прежний выбор, context_name — контекст исходника. */
+static gboolean signal_table_insert(WaveSimulation *run, guint table, gchar **row,
+                                    const gchar *display, gboolean changed,
+                                    const gchar *selected_key, const gchar *context_name)
+{
+    GtkTreeIter inserted;
+    gtk_list_store_insert_with_values(run->signal_tables[table], &inserted, -1,
+        0, row[1], 1, display, 2, row[3], 3, changed ? "●" : "", 4, row[0], -1);
+    if (selected_key && selected_key[0] == row[0][0] && !strcmp(selected_key + 2, row[1]))
+    {
+        gtk_tree_selection_select_iter(run->signal_selection[table], &inserted);
+        return !g_strcmp0(context_name, row[1]);
+    }
+    return FALSE;
+}
+
 /* EN: Refill the visible models for the current source file and regex query in run.
  * RU: Заполняет видимые таблицы сеанса run для текущего файла и регулярного выражения. */
 static void signal_tables_refresh(WaveSimulation *run)
@@ -6019,42 +6091,64 @@ static void signal_tables_refresh(WaveSimulation *run)
         GtkTreeModel *model;
         GtkTreeIter row;
         if (gtk_tree_selection_get_selected(run->signal_selection[i], &model, &row))
-            gtk_tree_model_get(model, &row, 0, &selected[i], -1);
+        {
+            gchar *name, *kind;
+            gtk_tree_model_get(model, &row, 0, &name, 4, &kind, -1);
+            selected[i] = g_strconcat(kind, "\t", name, NULL);
+            g_free(name);
+            g_free(kind);
+        }
         gtk_list_store_clear(run->signal_tables[i]);
     }
     const gchar *file = run->signal_file;
     gboolean changed_only = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(run->signal_changed_only));
-    for (guint i = 0; file && i < run->signal_rows->len; i++)
+    GHashTable *present = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    for (guint i = 0; i < run->signal_rows->len; i++)
     {
         gchar **row = run->signal_rows->pdata[i];
 #ifdef G_OS_WIN32
-        if (g_ascii_strcasecmp(file, row[2]))
+        gboolean current = file && !g_ascii_strcasecmp(file, row[2]);
 #else
-        if (strcmp(file, row[2]))
+        gboolean current = file && !strcmp(file, row[2]);
 #endif
-            continue;
         gchar *key = signal_snapshot_key(row);
+        gboolean pinned = g_hash_table_contains(run->signal_pins, key);
+        if (pinned)
+            g_hash_table_add(present, g_strdup(key));
         const gchar *previous = g_hash_table_lookup(run->signal_previous_values, key);
         gboolean changed = previous && *previous && *row[3] && strcmp(previous, row[3]);
         g_free(key);
-        if (changed_only && !changed)
+        if ((!current && !pinned) || (changed_only && !changed))
             continue;
         gchar *display = signal_table_format(row[3], run->signal_format);
         if (!regex || g_regex_match(regex, row[1], 0, NULL) ||
             g_regex_match(regex, display, 0, NULL) || g_regex_match(regex, row[3], 0, NULL))
         {
             guint table = *row[0] == 'P' ? 0 : *row[0] == 'N' ? 1 : 2;
-            GtkTreeIter inserted;
-            gtk_list_store_insert_with_values(run->signal_tables[table], &inserted, -1,
-                0, row[1], 1, display, 2, row[3], 3, changed ? "●" : "", -1);
-            if (!g_strcmp0(selected[table], row[1]))
-            {
-                gtk_tree_selection_select_iter(run->signal_selection[table], &inserted);
-                keep_context |= !g_strcmp0(context_name, row[1]);
-            }
+            if (current)
+                keep_context |= signal_table_insert(run, table, row, display, changed,
+                    selected[table], context_name);
+            if (pinned)
+                keep_context |= signal_table_insert(run, 3, row, display, changed, selected[3], context_name);
         }
         g_free(display);
     }
+    if (!changed_only)
+    {
+        GHashTableIter pins;
+        gpointer key;
+        g_hash_table_iter_init(&pins, run->signal_pins);
+        while (g_hash_table_iter_next(&pins, &key, NULL))
+        {
+            gchar *entry = key;
+            if (g_hash_table_contains(present, entry) || (regex && !g_regex_match(regex, entry + 2, 0, NULL)))
+                continue;
+            gchar kind[] = {entry[0], 0};
+            gchar *row[] = {kind, entry + 2, NULL, ""};
+            keep_context |= signal_table_insert(run, 3, row, "—", FALSE, selected[3], context_name);
+        }
+    }
+    g_hash_table_unref(present);
     run->signal_refilling = FALSE;
     for (guint i = 0; i < G_N_ELEMENTS(selected); i++)
         g_free(selected[i]);
@@ -7791,6 +7885,40 @@ static void signal_stop_clear(GtkMenuItem *item, gpointer data)
         signal_stop_send(data, path, "off", NULL);
 }
 
+/* EN: Apply the explicit pin action attached to item in simulation data.
+ * RU: Применяет действие закрепления из item для сеанса data. */
+static void signal_table_set_pin(GtkMenuItem *item, gpointer data)
+{
+    WaveSimulation *run = data;
+    const gchar *key = g_object_get_data(G_OBJECT(item), "signal-pin-key");
+    gboolean remove = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item), "signal-pin-remove"));
+    GHashTable *pins = run->signal_pins_path ?
+        signal_pins_load(run->signal_pins_path) : g_hash_table_ref(run->signal_pins);
+
+    if (remove)
+        g_hash_table_remove(pins, key);
+    else if (g_hash_table_size(pins) < 256 || g_hash_table_contains(pins, key))
+        g_hash_table_add(pins, g_strdup(key));
+    else
+    {
+        gtk_label_set_text(GTK_LABEL(run->signal_status), insight_tr("Pinned signal limit reached."));
+        g_hash_table_unref(pins);
+        return;
+    }
+
+    GError *error = NULL;
+    if (run->signal_pins_path && !signal_pins_save(run->signal_pins_path, pins, &error))
+    {
+        gtk_label_set_text(GTK_LABEL(run->signal_status), error->message);
+        g_clear_error(&error);
+        g_hash_table_unref(pins);
+        return;
+    }
+    g_hash_table_unref(run->signal_pins);
+    run->signal_pins = pins;
+    signal_tables_refresh(run);
+}
+
 /* EN: Handle an edit or format-menu click in tree for simulation data.
  * event provides the button, click count and cell coordinates.
  * RU: Обрабатывает редактирование и меню форматов в tree для сеанса data.
@@ -7823,8 +7951,15 @@ static gboolean signal_table_popup(GtkWidget *tree, GdkEventButton *event, gpoin
         GtkTreeIter row;
         if (gtk_tree_model_get_iter(model, &row, clicked))
         {
-            gchar *name = NULL, *bits = NULL;
-            gtk_tree_model_get(model, &row, 0, &name, 2, &bits, -1);
+            gchar *name = NULL, *bits = NULL, *kind = NULL;
+            gtk_tree_model_get(model, &row, 0, &name, 2, &bits, 4, &kind, -1);
+            gchar *pin_key = g_strconcat(kind, "\t", name, NULL);
+            gboolean pinned = g_hash_table_contains(run->signal_pins, pin_key);
+            GtkWidget *pin = gtk_menu_item_new_with_label(insight_tr(pinned ? "Unpin signal" : "Pin signal"));
+            g_object_set_data_full(G_OBJECT(pin), "signal-pin-key", pin_key, g_free);
+            g_object_set_data(G_OBJECT(pin), "signal-pin-remove", GINT_TO_POINTER(pinned));
+            g_signal_connect(pin, "activate", G_CALLBACK(signal_table_set_pin), run);
+            gtk_menu_shell_append(GTK_MENU_SHELL(menu), pin);
             if (run->signal_stops_ready && *bits && simulation_signal_path(name))
             {
                 gboolean paused = run->prompt_tail[0] == '>' && run->prompt_tail[1] == ' ' &&
@@ -7850,10 +7985,8 @@ static gboolean signal_table_popup(GtkWidget *tree, GdkEventButton *event, gpoin
                 gtk_menu_shell_append(GTK_MENU_SHELL(menu), graph);
             }
             GtkWidget *history = gtk_menu_item_new_with_label(insight_tr("Changes…"));
-            const gchar *kind = model == GTK_TREE_MODEL(run->signal_tables[0]) ? "P" :
-                model == GTK_TREE_MODEL(run->signal_tables[1]) ? "N" : "R";
             g_object_set_data_full(G_OBJECT(history), "signal-name", name, g_free);
-            g_object_set_data(G_OBJECT(history), "signal-kind", (gpointer)kind);
+            g_object_set_data_full(G_OBJECT(history), "signal-kind", kind, g_free);
             g_signal_connect(history, "activate", G_CALLBACK(signal_table_open_history), run);
             gtk_menu_shell_append(GTK_MENU_SHELL(menu), history);
             gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
@@ -7892,12 +8025,26 @@ static void signal_table_changed_toggled(GtkToggleButton *toggle, gpointer data)
     signal_tables_refresh(data);
 }
 
-/* EN: Build three signal tables, the regex search and declaration context for run.
- * RU: Создаёт три таблицы, поиск по регулярному выражению и контекст для run. */
+/* EN: Render the kind of row in model into cell. column and data are unused.
+ * RU: Показывает тип строки row модели model в cell. column и data не используются. */
+static void signal_pin_kind(GtkTreeViewColumn *column, GtkCellRenderer *cell,
+                            GtkTreeModel *model, GtkTreeIter *row, gpointer data)
+{
+    (void)column;
+    (void)data;
+    gchar *kind;
+    gtk_tree_model_get(model, row, 4, &kind, -1);
+    g_object_set(cell, "text", insight_tr(*kind == 'P' ? "Port" : *kind == 'N' ? "Net" : "Register"), NULL);
+    g_free(kind);
+}
+
+/* EN: Build signal and pin tables, regex search and declaration context for run.
+ * RU: Создаёт таблицы сигналов и закреплений, поиск и контекст для run. */
 static GtkWidget *simulation_signal_tables(WaveSimulation *run)
 {
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     run->signal_rows = g_ptr_array_new_with_free_func((GDestroyNotify)g_strfreev);
+    run->signal_pins = signal_pins_load(run->signal_pins_path);
     run->signal_previous_values = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     run->signal_refresh_needed = TRUE;
     run->signal_search = gtk_search_entry_new();
@@ -7918,10 +8065,10 @@ static GtkWidget *simulation_signal_tables(WaveSimulation *run)
     gtk_box_pack_start(GTK_BOX(box), run->signal_status, FALSE, FALSE, 0);
     GtkWidget *tabs = gtk_notebook_new();
     gtk_box_pack_start(GTK_BOX(box), tabs, TRUE, TRUE, 0);
-    const gchar *titles[] = {"Ports", "Nets", "Registers"};
+    const gchar *titles[] = {"Ports", "Nets", "Registers", "Pinned signals"};
     for (guint i = 0; i < G_N_ELEMENTS(titles); i++)
     {
-        run->signal_tables[i] = gtk_list_store_new(4, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+        run->signal_tables[i] = gtk_list_store_new(5, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
         GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(run->signal_tables[i]));
         GtkCellRenderer *name = gtk_cell_renderer_text_new();
         GtkCellRenderer *value = gtk_cell_renderer_text_new();
@@ -7938,6 +8085,17 @@ static GtkWidget *simulation_signal_tables(WaveSimulation *run)
             insight_tr("Changed"), gtk_cell_renderer_text_new(), "text", 3, NULL);
         gtk_tree_view_column_set_sort_column_id(changed_column, 3);
         gtk_tree_view_append_column(GTK_TREE_VIEW(tree), changed_column);
+        if (i == 3)
+        {
+            gtk_widget_set_name(tree, "insight-verilog-pinned-signals");
+            GtkCellRenderer *kind = gtk_cell_renderer_text_new();
+            GtkTreeViewColumn *kind_column = gtk_tree_view_column_new_with_attributes(
+                insight_tr("Kind"), kind, NULL);
+            gtk_tree_view_column_set_cell_data_func(kind_column, kind, signal_pin_kind, NULL, NULL);
+            gtk_tree_view_column_set_sort_column_id(kind_column, 4);
+            gtk_tree_view_append_column(GTK_TREE_VIEW(tree), kind_column);
+        }
+
 
         run->signal_selection[i] = gtk_tree_view_get_selection(GTK_TREE_VIEW(tree));
         g_signal_connect(run->signal_selection[i], "changed", G_CALLBACK(signal_table_selected), run);
@@ -7962,6 +8120,7 @@ static GtkWidget *simulation_signal_tables(WaveSimulation *run)
     gtk_box_pack_start(GTK_BOX(box), scroll, FALSE, TRUE, 0);
     g_signal_connect(run->signal_search, "changed", G_CALLBACK(signal_table_search_changed), run);
     g_signal_connect(run->signal_changed_only, "toggled", G_CALLBACK(signal_table_changed_toggled), run);
+    signal_tables_refresh(run);
     return box;
 }
 
@@ -8299,6 +8458,10 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         run->unresolved_records = g_ptr_array_new_with_free_func(g_free);
         run->unresolved_anchors = g_ptr_array_new_with_free_func(g_free);
         run->settings_path = simulation_settings_path(settings_directory, project, run->sources);
+        gchar *no_sources[] = {NULL};
+        gchar *pin_key = simulation_settings_path(settings_directory, project, project ? no_sources : run->sources);
+        run->signal_pins_path = pin_key ? g_strconcat(pin_key, ".pins", NULL) : NULL;
+        g_free(pin_key);
         simulation_load_settings(run);
         GtkWidget *running_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
         gtk_box_pack_start(GTK_BOX(box), running_actions, FALSE, FALSE, 0);

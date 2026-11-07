@@ -2977,3 +2977,11 @@ Value starts matching a mask	Значение начинает совпадат�
 Mask: 0, 1, X, Z and ? for any bit	Маска из 0, 1, X, Z и ? для любого бита
 Choose a one-bit signal for edge stops.	Для остановки по фронту выберите однобитный сигнал.
 Enter one mask character per bit and at least one non-wildcard bit.	Введите один символ маски на бит и укажите хотя бы один бит без ?.
+Pin signal	Закрепить сигнал
+Unpin signal	Открепить сигнал
+Pinned signals	Закреплённые сигналы
+Pinned signal limit reached.	Достигнут предел числа закреплённых сигналов.
+Could not create the pinned signal settings folder.	Не удалось создать папку настроек закреплённых сигналов.
+Port	Порт
+Net	Сеть
+Register	Регистр
