@@ -34,7 +34,7 @@ Right-click a signal row and choose **Changes…** to see up to ten stops, newes
 
 While paused, right-click a port, net or register in **HDL Signals** and choose **Stop on signal…**. Select any change, a 0→1 or 1→0 edge on a one-bit signal, a bit changing to X/Z, or a value entering a mask. Enter one mask character per bit. For example, `10??` matches a four-bit value whose two high bits are `10`. A `?` ignores that bit. The mask fires when the value first starts matching.
 
-Click **Arm signal stop** and continue. The console reports the signal and the old and new binary values. One rule is kept per hierarchical signal in this run. Arming another rule replaces it. **Remove signal stop** clears it. A manual register deposit at the pause prompt updates the watched baseline. The feature requires the updated bundled VVP.
+Click **Arm signal stop** and continue. The console reports the signal and the old and new binary values. One rule is kept per hierarchical signal in this run. Arming another rule replaces it. **Remove signal stop** clears it. The **Signal stops** tab lists confirmed rules from the current simulator with their condition, mask and hit count. Select a rule on pause to remove it. Double-click the signal name to open its declaration. A manual register deposit at the pause prompt updates the watched baseline. The feature requires the updated bundled VVP.
 
 ### Pinned signals
 

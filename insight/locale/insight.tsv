@@ -2991,3 +2991,5 @@ Double-click a stop to open its waveform while paused.	На паузе дваж�
 Select a stop with a recorded simulation tick.	Выберите остановку с записанным тактом симуляции.
 The stop is beyond the recorded waveform.	Остановка находится за пределами записанной осциллограммы.
 Pause the simulation before opening the waveform.	Поставьте симуляцию на паузу перед открытием осциллограммы.
+Signal stops	Остановки по сигналам
+Set signal stops from a row in HDL Signals.	Устанавливайте остановки через меню строки в «Сигналах HDL».

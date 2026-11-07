@@ -193,13 +193,15 @@ endmodule
     simulator = Simulator(runtime, directory, environment)
     try:
         require("GEANY-VVP-SIGNAL-STOPS" in simulator.prompt(), "Missing signal stop support")
-        require("signal stop armed" in simulator.command("geany-watch-signal signal_stops.net_clk rise"),
-                "Could not arm a net")
-        require("signal_stops.net_clk 0 -> 1" in simulator.command("cont"), "Missing rising edge")
+        armed = simulator.command("geany-watch-signal signal_stops.net_clk rise")
+        require("GEANY-SIGNAL-STOP-ON\tsignal_stops.net_clk\trise\t" in armed, "Missing armed rule record")
+        hit = simulator.command("cont")
+        require("signal_stops.net_clk 0 -> 1" in hit, "Missing rising edge")
+        require("GEANY-SIGNAL-STOP-HIT\tsignal_stops.net_clk" in hit, "Missing rule hit record")
         require("signal stop armed" in simulator.command("geany-watch-signal signal_stops.clk fall"),
                 "Could not arm a register")
-        require("signal stop cleared" in simulator.command("geany-watch-signal signal_stops.net_clk off"),
-                "Could not remove a signal stop")
+        removed = simulator.command("geany-watch-signal signal_stops.net_clk off")
+        require("GEANY-SIGNAL-STOP-OFF\tsignal_stops.net_clk" in removed, "Missing rule removal record")
         require("signal_stops.clk 1 -> 0" in simulator.command("cont"), "Missing falling edge")
         require("signal stop armed" in simulator.command("geany-watch-signal signal_stops.bus mask 10??"),
                 "Could not arm a masked stop")

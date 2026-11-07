@@ -1692,7 +1692,7 @@ typedef struct {
     GHashTable *live_port_samples, *live_indicators;
     GPtrArray *live_scopes;
     gint scope_console_prefix;
-    gchar console_prefix[16];
+    gchar console_prefix[24];
     GtkWidget *uart_window, *uart_view, *uart_entry;
     GString *uart_log;
     guint uart_send_sequence;
@@ -1710,6 +1710,9 @@ typedef struct {
     gboolean preview_pending;
     GtkWidget *signal_name;
     gboolean register_write_ready, signal_stops_ready;
+    GtkListStore *signal_stop_store;
+    GtkTreeSelection *signal_stop_selection;
+    GtkWidget *signal_stop_remove;
     GtkListStore *signal_tables[4];
     GtkWidget *signal_search, *signal_status, *signal_context, *signal_state;
     GtkWidget *signal_changed_only;
@@ -1767,6 +1770,7 @@ static void simulation_free(gpointer data)
     g_clear_pointer(&run->signal_previous_values, g_hash_table_unref);
     g_clear_pointer(&run->signal_pins, g_hash_table_unref);
     g_free(run->signal_pins_path);
+    g_clear_object(&run->signal_stop_store);
     while (!g_queue_is_empty(&run->signal_history))
         signal_history_stop_free(g_queue_pop_head(&run->signal_history));
     g_free(run->signal_file);
@@ -6241,6 +6245,68 @@ static gboolean signal_tables_record(WaveSimulation *run, const gchar *text)
     return FALSE;
 }
 
+/* EN: Find the active signal stop for path in run, returning its row.
+ * RU: Ищет остановку path в сеансе run и возвращает её строку row. */
+static gboolean signal_stop_find(WaveSimulation *run, const gchar *path, GtkTreeIter *row)
+{
+    GtkTreeModel *model = GTK_TREE_MODEL(run->signal_stop_store);
+    for (gboolean more = gtk_tree_model_get_iter_first(model, row); more;
+         more = gtk_tree_model_iter_next(model, row))
+    {
+        gchar *name;
+        gtk_tree_model_get(model, row, 0, &name, -1);
+        gboolean match = !strcmp(name, path);
+        g_free(name);
+        if (match)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+/* EN: Apply a complete simulator protocol line to the stop list for run.
+ * RU: Применяет строку протокола text к списку остановок сеанса run. */
+static void signal_stop_record(WaveSimulation *run, const gchar *text)
+{
+    const gchar *prefix = "GEANY-SIGNAL-STOP-";
+    if (!run->signal_stop_store || !g_str_has_prefix(text, prefix))
+        return;
+    gchar **fields = g_strsplit(text + strlen(prefix), "\t", 4);
+    guint count = g_strv_length(fields);
+    if (count < 2 || !*fields[1] || !g_utf8_validate(fields[1], -1, NULL))
+    {
+        g_strfreev(fields);
+        return;
+    }
+
+    GtkTreeIter row;
+    gboolean found = signal_stop_find(run, fields[1], &row);
+    if (count == 4 && !strcmp(fields[0], "ON"))
+    {
+        const gchar *modes[] = {"change", "rise", "fall", "unknown", "mask"};
+        const gchar *labels[] = {"Any value change", "Rising edge (0 to 1)", "Falling edge (1 to 0)",
+                                 "A bit changes to X or Z", "Value starts matching a mask"};
+        for (guint i = 0; i < G_N_ELEMENTS(modes); i++)
+        {
+            if (strcmp(fields[2], modes[i]))
+                continue;
+            if (!found)
+                gtk_list_store_append(run->signal_stop_store, &row);
+            gtk_list_store_set(run->signal_stop_store, &row, 0, fields[1],
+                1, insight_tr(labels[i]), 2, fields[3], 3, 0u, -1);
+            break;
+        }
+    }
+    else if (found && count == 2 && !strcmp(fields[0], "OFF"))
+        gtk_list_store_remove(run->signal_stop_store, &row);
+    else if (found && count == 2 && !strcmp(fields[0], "HIT"))
+    {
+        guint hits;
+        gtk_tree_model_get(GTK_TREE_MODEL(run->signal_stop_store), &row, 3, &hits, -1);
+        gtk_list_store_set(run->signal_stop_store, &row, 3, hits < G_MAXUINT ? hits + 1 : hits, -1);
+    }
+    g_strfreev(fields);
+}
+
 static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsize length)
 {
     for (gsize i = 0; i < length; i++)
@@ -6255,6 +6321,7 @@ static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsi
             g_string_truncate(run->protocol_line, run->protocol_line->len - 1);
         const gchar *text = run->protocol_line->str;
         signal_tables_record(run, text);
+        signal_stop_record(run, text);
         if (!strcmp(text, "GEANY-VVP-SIGNAL-STOPS"))
             run->signal_stops_ready = TRUE;
         if (!strcmp(text, "GEANY-VVP-WRITE-REGISTER"))
@@ -6446,7 +6513,7 @@ static void simulation_handle_observer_event(WaveSimulation *run)
  * префиксы, разделённые между чтениями. */
 static GString *simulation_scope_console(WaveSimulation *run, const gchar *bytes, gsize count)
 {
-    const gchar *prefixes[] = {"GEANY-SCOPE\t", "GEANY-SIGNAL\t", "GEANY-SIGNALS-"};
+    const gchar *prefixes[] = {"GEANY-SCOPE\t", "GEANY-SIGNAL\t", "GEANY-SIGNALS-", "GEANY-SIGNAL-STOP-"};
     GString *visible = g_string_sized_new(count);
     for (gsize i = 0; i < count; i++)
     {
@@ -6599,6 +6666,8 @@ static gboolean simulation_refresh_console(gpointer data)
         gtk_label_set_text(GTK_LABEL(run->signal_state), state_text);
     g_object_set(run->signal_register_renderer, "editable",
         paused && !run->preview_pending && run->register_write_ready, NULL);
+    gtk_widget_set_sensitive(run->signal_stop_remove, paused && !run->preview_pending &&
+        run->signal_stops_ready && gtk_tree_selection_count_selected_rows(run->signal_stop_selection) != 0);
     gtk_widget_set_sensitive(run->live_controls, paused && !run->preview_pending);
     gtk_widget_set_sensitive(run->breakpoint_controls, run->bridge_ready);
     gtk_widget_set_sensitive(run->source_step_controls, run->source_step_ready);
@@ -7940,6 +8009,55 @@ static void signal_stop_clear(GtkMenuItem *item, gpointer data)
         signal_stop_send(data, path, "off", NULL);
 }
 
+/* EN: Remove the selected rule in simulation data. button is unused.
+ * RU: Снимает выбранное правило сеанса data. button не используется. */
+static void signal_stop_remove_selected(GtkButton *button, gpointer data)
+{
+    (void)button;
+    WaveSimulation *run = data;
+    GtkTreeModel *model;
+    GtkTreeIter row;
+    if (!gtk_tree_selection_get_selected(run->signal_stop_selection, &model, &row))
+        return;
+    gchar *name;
+    gtk_tree_model_get(model, &row, 0, &name, -1);
+    signal_stop_send(run, name, "off", NULL);
+    g_free(name);
+}
+
+/* EN: Build the active signal stop page for run.
+ * RU: Создаёт вкладку активных остановок по сигналам для сеанса run. */
+static GtkWidget *simulation_signal_stop_page(WaveSimulation *run)
+{
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    GtkWidget *help = gtk_label_new(insight_tr("Set signal stops from a row in HDL Signals."));
+    gtk_label_set_line_wrap(GTK_LABEL(help), TRUE);
+    gtk_box_pack_start(GTK_BOX(box), help, FALSE, FALSE, 0);
+    run->signal_stop_store = gtk_list_store_new(4, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT);
+    GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(run->signal_stop_store));
+    gtk_widget_set_name(tree, "insight-verilog-signal-stops");
+    const gchar *titles[] = {"Signal", "Condition", "Mask", "Hits"};
+    for (guint i = 0; i < G_N_ELEMENTS(titles); i++)
+    {
+        GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(
+            insight_tr(titles[i]), gtk_cell_renderer_text_new(), "text", i, NULL);
+        gtk_tree_view_column_set_resizable(column, TRUE);
+        gtk_tree_view_column_set_sort_column_id(column, i);
+        gtk_tree_view_append_column(GTK_TREE_VIEW(tree), column);
+    }
+    gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(run->signal_stop_store), 0, GTK_SORT_ASCENDING);
+    run->signal_stop_selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(tree));
+    g_signal_connect(tree, "row-activated", G_CALLBACK(signal_table_activated), run);
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(scroll), tree);
+    gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
+    run->signal_stop_remove = gtk_button_new_with_label(insight_tr("Remove signal stop"));
+    gtk_widget_set_sensitive(run->signal_stop_remove, FALSE);
+    g_signal_connect(run->signal_stop_remove, "clicked", G_CALLBACK(signal_stop_remove_selected), run);
+    gtk_box_pack_start(GTK_BOX(box), run->signal_stop_remove, FALSE, FALSE, 0);
+    return box;
+}
+
 /* EN: Apply the explicit pin action attached to item in simulation data.
  * RU: Применяет действие закрепления из item для сеанса data. */
 static void signal_table_set_pin(GtkMenuItem *item, gpointer data)
@@ -8617,6 +8735,8 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         gtk_widget_set_name(inspection_tabs, "insight-verilog-inspection-tabs");
         gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), simulation_signal_tables(run),
             gtk_label_new(insight_tr("HDL Signals")));
+        gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), simulation_signal_stop_page(run),
+            gtk_label_new(insight_tr("Signal stops")));
         gtk_paned_pack2(GTK_PANED(paned), inspection_tabs, TRUE, FALSE);
         gtk_box_pack_start(GTK_BOX(box), paned, TRUE, TRUE, 0);
         run->live_controls = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);

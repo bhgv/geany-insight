@@ -60,7 +60,7 @@ index 175e8ae..6c544f5 100644
  
        if (prompt && prompt[0]) {
  	    fputs(prompt, stdout);
-@@ -66,12 +71,653 @@ static char* readline_stub(const char*prompt)
+@@ -66,12 +71,656 @@ static char* readline_stub(const char*prompt)
  
        return 0;
  }
@@ -512,6 +512,7 @@ index 175e8ae..6c544f5 100644
 +      if (!geany_at_prompt && geany_watch_transition(*rule, bits)) {
 +            printf("Geany signal stop: %s %s -> %s\n", rule->path.c_str(),
 +                   rule->previous.c_str(), bits.c_str());
++            printf("GEANY-SIGNAL-STOP-HIT\t%s\n", rule->path.c_str());
 +            schedule_stop(0);
 +      }
 +      rule->previous = bits;
@@ -542,6 +543,7 @@ index 175e8ae..6c544f5 100644
 +            if (index < geany_watches.size())
 +                  geany_watch_remove(index);
 +            printf("Geany: signal stop cleared: %s\n", path.c_str());
++            printf("GEANY-SIGNAL-STOP-OFF\t%s\n", path.c_str());
 +            return;
 +      }
 +
@@ -600,6 +602,7 @@ index 175e8ae..6c544f5 100644
 +            geany_watch_remove(index);
 +      geany_watches.push_back(rule);
 +      printf("Geany: signal stop armed: %s (%s).\n", path.c_str(), mode.c_str());
++      printf("GEANY-SIGNAL-STOP-ON\t%s\t%s\t%s\n", path.c_str(), mode.c_str(), mask.c_str());
 +}
 +
 +// EN: Deposit bits into a static integral variable while the scheduler waits.
@@ -714,7 +717,7 @@ index 175e8ae..6c544f5 100644
  static void cmd_call(unsigned argc, const char*argv[])
  {
        __vpiHandle**table;
-@@ -444,6 +1090,24 @@ static struct {
+@@ -444,6 +1093,24 @@ static struct {
          "Synonym for finish."},
        { "finish", &cmd_finish,
          "Finish the simulation."},
@@ -739,7 +742,7 @@ index 175e8ae..6c544f5 100644
        { "help",   &cmd_help,
          "Get help."},
        { "list",   &cmd_list,
-@@ -554,6 +1218,10 @@ void stop_handler(int rc)
+@@ -554,6 +1221,10 @@ void stop_handler(int rc)
  	    return;
        }
  
@@ -750,7 +753,7 @@ index 175e8ae..6c544f5 100644
        vpi_mcd_printf(1,"** VVP Stop(%d) **\n", rc);
        vpi_mcd_printf(1,"** Flushing output streams.\n");
        invoke_command_const("$fflush");
-@@ -563,7 +1231,7 @@ void stop_handler(int rc)
+@@ -563,7 +1234,7 @@ void stop_handler(int rc)
  
        interact_flag = true;
        while (interact_flag) {
@@ -759,7 +762,7 @@ index 175e8ae..6c544f5 100644
  	    if (input == 0)
  		  break;
  
-@@ -575,7 +1243,8 @@ void stop_handler(int rc)
+@@ -575,7 +1246,8 @@ void stop_handler(int rc)
  
  	    if (first[0] != 0) {
  #ifdef USE_HISTORY
@@ -769,7 +772,7 @@ index 175e8ae..6c544f5 100644
  #endif
  		  invoke_command(first);
  	    }
-@@ -583,5 +1252,7 @@ void stop_handler(int rc)
+@@ -583,5 +1255,7 @@ void stop_handler(int rc)
  	    free(input);
        }
  
