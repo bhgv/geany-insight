@@ -78,6 +78,10 @@ low-order slice in declaration order, for example `data[7:0]` for
 whose width is unknown are unavailable for automatic assignment.
 A width of `?` indicates a range that needs parameter or type evaluation.
 
+To choose other bits, select the port and click **Choose Slice…**.
+Set the offset from the least significant end and check the Verilog
+preview. Offset 0 gives the same slice as double-clicking.
+
 The wizard saves a slice as a `port-slice` rule and uses its alias in the
 device rule. Both rules form the connection. The table lists the device
 against the original port.

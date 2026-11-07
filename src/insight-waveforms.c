@@ -3260,46 +3260,143 @@ static gboolean device_port_focus(GtkWidget *entry, GdkEventFocus *event, gpoint
     return FALSE;
 }
 
-/* EN: Replace the focused field with the activated port at path in tree.
- * data is the form and column is unused. Wider ports use the low-order slice.
- * RU: Заменяет содержимое выбранного поля портом из tree по path. data — форма,
- * column не используется. У более широкого порта берёт младшие разряды. */
+typedef struct {
+    gchar *name;
+    guint available, width;
+    gint left, right;
+} DevicePortChoice;
+
+/* EN: Read row from model into choice for the active field of form. Return FALSE
+ * and show a diagnostic for an incompatible port. The caller frees choice->name.
+ * RU: Читает row из model в choice для активного поля form. При несовместимости
+ * показывает причину и возвращает FALSE. Вызывающий освобождает choice->name. */
+static gboolean device_port_choice(DeviceForm *form, GtkTreeModel *model,
+                                   GtkTreeIter *row, DevicePortChoice *choice)
+{
+    if (!form->active)
+    {
+        gtk_label_set_text(GTK_LABEL(form->status), "Select a port field first.");
+        return FALSE;
+    }
+    gchar *direction;
+    gtk_tree_model_get(model, row, PORT_NAME, &choice->name, PORT_DIRECTION, &direction,
+                       PORT_WIDTH, &choice->available, PORT_LEFT, &choice->left,
+                       PORT_RIGHT, &choice->right, -1);
+    const gchar *spec = g_object_get_data(G_OBJECT(form->active), "port-spec");
+    choice->width = device_width(form, spec);
+    if (*spec == 'a' && choice->available)
+        choice->width = MIN(choice->width, choice->available);
+    const gchar *error = NULL;
+    if (!port_browser_matches(direction, *spec))
+        error = "The port direction does not match this field.";
+    else if (!choice->available || !choice->width || choice->available < choice->width)
+        error = "The port width is unknown or too small for this field.";
+    gtk_label_set_text(GTK_LABEL(form->status), error ? error : "");
+    g_free(direction);
+    return error == NULL;
+}
+
+/* EN: Format an owned Verilog expression from choice and offset from its least
+ * significant end. The caller validates offset against the available width.
+ * RU: Формирует новое выражение Verilog из choice и смещения offset от младшего
+ * края. Вызывающий проверяет offset по доступной ширине. */
+static gchar *device_port_slice(const DevicePortChoice *choice, guint offset)
+{
+    if (choice->available == choice->width)
+        return g_strdup(choice->name);
+    gint step = choice->left >= choice->right ? 1 : -1;
+    gint last = choice->right + step * (gint)offset;
+    gint first = last + step * ((gint)choice->width - 1);
+    if (choice->width == 1)
+        return g_strdup_printf("%s[%d]", choice->name, last);
+    return g_strdup_printf("%s[%d:%d]", choice->name, first, last);
+}
+
+/* EN: Replace the focused field of form with choice at offset, preserving HDL order.
+ * RU: Заменяет активное поле form выражением choice со смещением offset в порядке HDL. */
+static void device_port_apply(DeviceForm *form, const DevicePortChoice *choice, guint offset)
+{
+    gchar *value = device_port_slice(choice, offset);
+    gtk_entry_set_text(GTK_ENTRY(form->active), value);
+    g_free(value);
+}
+
+/* EN: Use the low-order slice from path in tree for the form in data. column is unused.
+ * RU: Назначает младший срез порта из tree по path в форму из data. column не используется. */
 static void device_port_activate(GtkTreeView *tree, GtkTreePath *path,
                                  GtkTreeViewColumn *column, gpointer data)
 {
     (void)column;
     DeviceForm *form = data;
-    if (!form->active)
-        return;
     GtkTreeModel *model = gtk_tree_view_get_model(tree);
     GtkTreeIter row;
-    if (!gtk_tree_model_get_iter(model, &row, path))
-        return;
-    gchar *name, *direction;
-    guint available;
-    gint left, right;
-    gtk_tree_model_get(model, &row, PORT_NAME, &name, PORT_DIRECTION, &direction,
-                       PORT_WIDTH, &available, PORT_LEFT, &left, PORT_RIGHT, &right, -1);
-    const gchar *spec = g_object_get_data(G_OBJECT(form->active), "port-spec");
-    guint width = device_width(form, spec);
-    if (*spec == 'a' && available)
-        width = MIN(width, available);
-    if (!port_browser_matches(direction, *spec))
-        gtk_label_set_text(GTK_LABEL(form->status), "The port direction does not match this field.");
-    else if (!available || !width || available < width)
-        gtk_label_set_text(GTK_LABEL(form->status), "The port width is unknown or too small for this field.");
-    else
+    DevicePortChoice choice = {0};
+    if (gtk_tree_model_get_iter(model, &row, path) &&
+        device_port_choice(form, model, &row, &choice))
+        device_port_apply(form, &choice, 0);
+    g_free(choice.name);
+}
+
+typedef struct {
+    const DevicePortChoice *choice;
+    GtkLabel *label;
+} DeviceSlicePreview;
+
+/* EN: Refresh the preview in data after the offset spin button changes.
+ * RU: Обновляет предварительный просмотр из data после изменения смещения spin. */
+static void device_slice_preview(GtkSpinButton *spin, gpointer data)
+{
+    DeviceSlicePreview *preview = data;
+    gchar *value = device_port_slice(preview->choice, gtk_spin_button_get_value_as_int(spin));
+    gtk_label_set_text(preview->label, value);
+    g_free(value);
+}
+
+/* EN: Open a modal offset picker from button for the selected port and active
+ * field in form (data). Apply the expression only on confirmation.
+ * RU: Открывает по button модальный выбор смещения для порта и поля формы из
+ * data. Применяет выражение только после подтверждения. */
+static void device_port_choose_slice(GtkButton *button, gpointer data)
+{
+    DeviceForm *form = data;
+    GtkTreeView *tree = GTK_TREE_VIEW(form->browser->tree);
+    GtkTreeModel *model;
+    GtkTreeIter row;
+    if (!gtk_tree_selection_get_selected(gtk_tree_view_get_selection(tree), &model, &row))
     {
-        gint first = right + (left >= right ? 1 : -1) * ((gint)width - 1);
-        gchar *value = available == width ? g_strdup(name) :
-                       width == 1 ? g_strdup_printf("%s[%d]", name, right) :
-                                    g_strdup_printf("%s[%d:%d]", name, first, right);
-        gtk_entry_set_text(GTK_ENTRY(form->active), value);
-        gtk_label_set_text(GTK_LABEL(form->status), "");
-        g_free(value);
+        gtk_label_set_text(GTK_LABEL(form->status), "Select a port in the list.");
+        return;
     }
-    g_free(direction);
-    g_free(name);
+    DevicePortChoice choice = {0};
+    if (device_port_choice(form, model, &row, &choice))
+    {
+        if (choice.available == choice.width)
+            device_port_apply(form, &choice, 0);
+        else
+        {
+            GtkWindow *parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
+            GtkWidget *dialog = gtk_dialog_new_with_buttons("Choose Port Slice", parent,
+                GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                "_Cancel", GTK_RESPONSE_CANCEL, "_Assign", GTK_RESPONSE_ACCEPT, NULL);
+            GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+            gtk_container_set_border_width(GTK_CONTAINER(box), 12);
+            GtkWidget *caption = gtk_label_new("Offset from the least significant bit");
+            gtk_box_pack_start(GTK_BOX(box), caption, FALSE, FALSE, 4);
+            GtkWidget *spin = gtk_spin_button_new_with_range(0, choice.available - choice.width, 1);
+            gtk_box_pack_start(GTK_BOX(box), spin, FALSE, FALSE, 4);
+            GtkWidget *label = gtk_label_new(NULL);
+            gtk_label_set_selectable(GTK_LABEL(label), TRUE);
+            gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 4);
+            DeviceSlicePreview preview = {&choice, GTK_LABEL(label)};
+            g_signal_connect(spin, "value-changed", G_CALLBACK(device_slice_preview), &preview);
+            device_slice_preview(GTK_SPIN_BUTTON(spin), &preview);
+            gtk_widget_show_all(dialog);
+            if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+                device_port_apply(form, &choice, gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spin)));
+            gtk_widget_destroy(dialog);
+        }
+    }
+    g_free(choice.name);
 }
 
 /* EN: Translate value for entry into a device argument. For a fixed-width slice,
@@ -3459,7 +3556,12 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     };
     GtkWidget *panes = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     gtk_paned_pack1(GTK_PANED(panes), scroll, TRUE, FALSE);
-    gtk_paned_pack2(GTK_PANED(panes), port_browser_widget(&browser), TRUE, FALSE);
+    GtkWidget *browser_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_box_pack_start(GTK_BOX(browser_box), port_browser_widget(&browser), TRUE, TRUE, 0);
+    GtkWidget *choose_slice = gtk_button_new_with_label("Choose Slice…");
+    g_signal_connect(choose_slice, "clicked", G_CALLBACK(device_port_choose_slice), &form);
+    gtk_box_pack_start(GTK_BOX(browser_box), choose_slice, FALSE, FALSE, 0);
+    gtk_paned_pack2(GTK_PANED(panes), browser_box, TRUE, FALSE);
     form.browser = &browser;
     g_signal_connect(browser.tree, "row-activated", G_CALLBACK(device_port_activate), &form);
     gtk_paned_set_position(GTK_PANED(panes), 420);
