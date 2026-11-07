@@ -2933,3 +2933,6 @@ Assistants are comparing checked profiles.	Помощники сравниваю
 From signal	Исходный сигнал
 Conditions	Условия
 Clock / events	Такты и события
+Apply slice	Применить срез
+Whole signal or slice, e.g. [7:4]	Весь сигнал или срез, например [7:4]
+Enter a literal bit or slice, or clear the field for the whole signal.	Введите константный бит или срез либо очистите поле для всего сигнала.

@@ -4580,7 +4580,10 @@ static void waveform_dependency_node_free(gpointer data)
     g_free(node);
 }
 
-/* Unknown or nonliteral bounds leave the branch eligible for traversal. */
+/* EN: Parse a literal packed selection into inclusive low/high bounds.
+ * Return false for unknown or multidimensional selections.
+ * RU: Разбирает константный срез selection в границы low и high.
+ * Возвращает FALSE для неизвестного или многомерного среза. */
 static gboolean waveform_selection_range(const gchar *selection, gint64 *low, gint64 *high)
 {
     if (!selection || *selection != '[')
@@ -4590,6 +4593,8 @@ static gboolean waveform_selection_range(const gchar *selection, gint64 *low, gi
     gint64 left = g_ascii_strtoll(start, &end, 10);
     if (end == start || left < G_MININT32 || left > G_MAXINT32)
         return FALSE;
+    while (g_ascii_isspace(*end))
+        end++;
     gint64 right = left;
     gchar indexed = '\0';
     if ((*end == '+' || *end == '-') && end[1] == ':')
@@ -4601,13 +4606,15 @@ static gboolean waveform_selection_range(const gchar *selection, gint64 *low, gi
         if (end == start || right < G_MININT32 || right > G_MAXINT32)
             return FALSE;
     }
+    while (g_ascii_isspace(*end))
+        end++;
     if (indexed)
     {
         if (right <= 0)
             return FALSE;
         right = indexed == '+' ? left + right - 1 : left - right + 1;
     }
-    if (*end != ']')
+    if (*end != ']' || (end[1] && !g_str_has_prefix(end + 1, " / ")))
         return FALSE;
     *low = MIN(left, right);
     *high = MAX(left, right);
@@ -4623,16 +4630,17 @@ static gboolean waveform_selections_disjoint(const gchar *current, const gchar *
 }
 
 /* EN: Walk from start in the upstream direction or downstream, using the
- * indexed dependencies and root_key for references. Append data to rows and
+ * indexed dependencies and root_key for references. selection filters the root. Append data to rows and
  * graph, and record terminal conditions and events in their own lists.
  * remaining and control_remaining bound the number of emitted relationships.
  * RU: Обходит dependencies от start вверх или вниз по потоку (upstream).
- * root_key определяет ссылки корня. Поток данных попадает в rows и graph,
+ * root_key определяет ссылки корня, selection ограничивает его срез. Поток данных попадает в rows и graph,
  * условия в conditions, события в events. remaining и control_remaining
  * ограничивают число добавленных связей. */
 static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph,
     GtkListStore *conditions, GtkListStore *events, WaveDependencyIndex *dependencies,
-    const gchar *start, const gchar *root_key, gboolean upstream, guint *remaining,
+    const gchar *start, const gchar *root_key, const gchar *selection,
+    gboolean upstream, guint *remaining,
     guint *control_remaining)
 {
     const gchar *port_role = upstream ? "port-source" : "port-destination";
@@ -4642,14 +4650,16 @@ static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph,
     GHashTable *visited = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, waveform_dependency_node_free);
     GtkTreeIter root;
     gtk_tree_store_insert_with_values(graph, &root, NULL, -1,
-        WAVE_USE_NAME, start, WAVE_USE_ROLE, upstream ? insight_tr("Upstream") : insight_tr("Downstream"), -1);
+        WAVE_USE_NAME, start, WAVE_USE_ROLE, upstream ? insight_tr("Upstream") : insight_tr("Downstream"),
+        WAVE_USE_SELECTION, selection, -1);
     if (!upstream)
         waveform_graph_uses(graph, &root, dependencies, start, root_key);
     GQueue pending = G_QUEUE_INIT;
     WaveDependencyNode *saved_root = g_new0(WaveDependencyNode, 1);
     saved_root->signal = start;
     saved_root->row = root;
-    g_hash_table_insert(visited, g_strdup_printf("%s\nall", start), saved_root);
+    saved_root->selection = g_strdup(selection);
+    g_hash_table_insert(visited, g_strdup_printf("%s\n%s", start, selection ? selection : "all"), saved_root);
     g_queue_push_tail(&pending, saved_root);
 
     for (guint distance = 1; !g_queue_is_empty(&pending) && *remaining; distance++)
@@ -4786,17 +4796,18 @@ static GtkTreeView *waveform_use_page(GtkNotebook *notebook, GtkTreeModel *model
     return tree;
 }
 
-/* EN: Show source uses, data paths, conditions and events for the signal in jump.
- * RU: Показывает использования, поток данных, условия и события сигнала из jump. */
-static void waveform_show_hdl_uses(WaveJump *jump)
+/* EN: Fill the four result models from jump's snapshot using the root selection.
+ * Return true when a result cap was reached.
+ * RU: Заполняет модели rows, graph, conditions и events из снимка jump
+ * с учётом среза selection. Возвращает TRUE при достижении лимита. */
+static gboolean waveform_fill_hdl_uses(WaveJump *jump, const gchar *selection,
+    GtkListStore *rows, GtkTreeStore *graph, GtkListStore *conditions, GtkListStore *events)
 {
     const InsightIndex *index = jump->snapshot->result->index;
-    GType types[] = {G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT,
-        G_TYPE_BOOLEAN, G_TYPE_UINT, G_TYPE_STRING, G_TYPE_STRING};
-    GtkListStore *rows = gtk_list_store_newv(WAVE_USE_COLUMNS, types);
-    GtkTreeStore *graph = gtk_tree_store_newv(WAVE_USE_COLUMNS, types);
-    GtkListStore *conditions = gtk_list_store_newv(WAVE_USE_COLUMNS, types);
-    GtkListStore *events = gtk_list_store_newv(WAVE_USE_COLUMNS, types);
+    gtk_list_store_clear(rows);
+    gtk_tree_store_clear(graph);
+    gtk_list_store_clear(conditions);
+    gtk_list_store_clear(events);
     WaveDependencyIndex dependencies = {
         .edges = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_ptr_array_unref),
         .declarations = g_hash_table_new(g_str_hash, g_str_equal),
@@ -4837,9 +4848,9 @@ static void waveform_show_hdl_uses(WaveJump *jump)
     guint upstream_remaining = 1000, downstream_remaining = 1000;
     guint upstream_controls = 1000, downstream_controls = 1000;
     waveform_walk_dependencies(rows, graph, conditions, events, &dependencies,
-        jump->name, root_key, TRUE, &upstream_remaining, &upstream_controls);
+        jump->name, root_key, selection, TRUE, &upstream_remaining, &upstream_controls);
     waveform_walk_dependencies(rows, graph, conditions, events, &dependencies,
-        jump->name, root_key, FALSE, &downstream_remaining, &downstream_controls);
+        jump->name, root_key, selection, FALSE, &downstream_remaining, &downstream_controls);
     g_hash_table_unref(dependencies.edges);
     g_hash_table_unref(dependencies.declarations);
     g_hash_table_unref(dependencies.references);
@@ -4848,19 +4859,40 @@ static void waveform_show_hdl_uses(WaveJump *jump)
     gboolean reference_limit_reached = g_hash_table_size(seen) >= 2000;
     g_hash_table_unref(seen);
 
+    return !upstream_remaining || !downstream_remaining || !upstream_controls ||
+        !downstream_controls || reference_limit_reached || dependencies.reference_limit_reached;
+}
+
+/* EN: Show source uses, data paths, conditions and events for the signal in jump.
+ * RU: Показывает использования, поток данных, условия и события сигнала из jump. */
+static void waveform_show_hdl_uses(WaveJump *jump)
+{
+    GType types[] = {G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT,
+        G_TYPE_BOOLEAN, G_TYPE_UINT, G_TYPE_STRING, G_TYPE_STRING};
+    GtkListStore *rows = gtk_list_store_newv(WAVE_USE_COLUMNS, types);
+    GtkTreeStore *graph = gtk_tree_store_newv(WAVE_USE_COLUMNS, types);
+    GtkListStore *conditions = gtk_list_store_newv(WAVE_USE_COLUMNS, types);
+    GtkListStore *events = gtk_list_store_newv(WAVE_USE_COLUMNS, types);
+    enum { FILTER_SLICE = 101 };
     GtkWidget *dialog = gtk_dialog_new_with_buttons(insight_tr("HDL Uses"), GTK_WINDOW(main_widgets.window),
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, insight_tr("_Close"), GTK_RESPONSE_CLOSE,
         insight_tr("_Open Source"), GTK_RESPONSE_ACCEPT,
-        insight_tr("_Select Track"), GTK_RESPONSE_APPLY, NULL);
+        insight_tr("_Select Track"), GTK_RESPONSE_APPLY,
+        insight_tr("Apply slice"), FILTER_SLICE, NULL);
     g_object_ref_sink(dialog);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 760, 400);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     GtkWidget *label = gtk_label_new(jump->name);
-    if (!upstream_remaining || !downstream_remaining || !upstream_controls || !downstream_controls || reference_limit_reached || dependencies.reference_limit_reached)
-    {
-        GtkWidget *limit = gtk_label_new(insight_tr("Result limit reached. Some HDL uses may be omitted."));
-        gtk_box_pack_start(GTK_BOX(box), limit, FALSE, FALSE, 0);
-    }
+    GtkWidget *filter = gtk_entry_new();
+    gtk_widget_set_name(filter, "insight-hdl-use-slice");
+    gtk_entry_set_max_length(GTK_ENTRY(filter), 64);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(filter), insight_tr("Whole signal or slice, e.g. [7:4]"));
+    gtk_box_pack_start(GTK_BOX(box), filter, FALSE, FALSE, 0);
+    GtkWidget *status = gtk_label_new("");
+    gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 0);
+    const gchar *limit = insight_tr("Result limit reached. Some HDL uses may be omitted.");
+    if (waveform_fill_hdl_uses(jump, NULL, rows, graph, conditions, events))
+        gtk_label_set_text(GTK_LABEL(status), limit);
     gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_MIDDLE);
     gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 6);
     GtkNotebook *notebook = GTK_NOTEBOOK(gtk_notebook_new());
@@ -4881,8 +4913,7 @@ static void waveform_show_hdl_uses(WaveJump *jump)
     GtkTreeSelection *graph_selection = g_object_ref(gtk_tree_view_get_selection(graph_view));
     if (gtk_tree_model_get_iter_first(GTK_TREE_MODEL(rows), &selected))
         gtk_tree_selection_select_iter(uses_selection, &selected);
-    else
-        gtk_label_set_text(GTK_LABEL(label), insight_tr("No HDL uses found."));
+
 
     for (gint root = 0; root < 2; root++)
     {
@@ -4897,7 +4928,29 @@ static void waveform_show_hdl_uses(WaveJump *jump)
     g_signal_connect(event_selection, "changed", G_CALLBACK(waveform_use_selected), dialog);
     g_signal_connect(notebook, "switch-page", G_CALLBACK(waveform_use_switch), dialog);
     gtk_widget_show_all(dialog);
-    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gint response;
+    while ((response = gtk_dialog_run(GTK_DIALOG(dialog))) == FILTER_SLICE)
+    {
+        gchar *slice = g_strstrip(g_strdup(gtk_entry_get_text(GTK_ENTRY(filter))));
+        gint64 low, high;
+        if (*slice && (strstr(slice, " / ") || !waveform_selection_range(slice, &low, &high)))
+        {
+            gtk_label_set_text(GTK_LABEL(status),
+                insight_tr("Enter a literal bit or slice, or clear the field for the whole signal."));
+            g_free(slice);
+            continue;
+        }
+        gboolean limited = waveform_fill_hdl_uses(jump, *slice ? slice : NULL,
+            rows, graph, conditions, events);
+        gtk_label_set_text(GTK_LABEL(status), limited ? limit : "");
+        for (gint root = 0; root < 2; root++)
+        {
+            GtkTreePath *path = gtk_tree_path_new_from_indices(root, -1);
+            gtk_tree_view_expand_row(graph_view, path, FALSE);
+            gtk_tree_path_free(path);
+        }
+        g_free(slice);
+    }
     GtkTreeSelection *selection = uses_selection;
     GtkTreeModel *model = GTK_TREE_MODEL(rows);
     if (response != GTK_RESPONSE_NONE)

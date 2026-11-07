@@ -18,6 +18,8 @@ Simulator messages and commands appear in the embedded console.
 **Preview Waveform** opens the current capture. In the waveform window,
 open **Signal Map → HDL Uses…**. **Connections** shows data paths, **Conditions** shows guards, and **Clock / events** shows edge and event dependencies. The last two tabs show the originating signal in **From signal**. Use **Open Source** or **Select Track** from any tab. **VCD Waveforms…** opens an existing recording.
 
+Enter a literal bit or slice such as `[2]`, `[7:4]`, or `[4 +: 4]` and click **Apply slice** to start traversal from that selection. Clear the field and apply again for the whole signal. Relationships with unknown bounds stay visible, and source uses still describe the whole declaration.
+
 ## Port signals
 
 **Debug Current Verilog File** opens **Port Signals**. Leave the recipe
