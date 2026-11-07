@@ -2628,7 +2628,8 @@ typedef struct {
     gboolean regex_invalid;
     gchar direction;
     guint required_width;
-    gboolean choosing;
+    gboolean choosing, prefer_compatible;
+    gint last_device;
 } PortBrowser;
 
 /* EN: Read a source snapshot from path for the modal setup. Return UTF-8 text or NULL.
@@ -3729,13 +3730,38 @@ static void device_argument(GString *rule, const gchar *value)
     g_free(quoted);
 }
 
-/* EN: Open the modal device form from button, read the source snapshot and append a
- * validated rule to the recipe buffer in data.
- * RU: Открывает модальную форму по button, показывает исходник и добавляет проверенное
- * правило в буфер рецепта, переданный через data. */
+/* EN: Copy search and sort settings from source into the built destination view.
+ * Compatibility is remembered even when the destination has no device field.
+ * RU: Копирует поиск и сортировку из source в готовый список destination.
+ * Фильтр совместимости сохраняется и для списка без поля устройства. */
+static void port_browser_copy_view(PortBrowser *destination, const PortBrowser *source)
+{
+    destination->prefer_compatible = source->compatible ?
+        gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(source->compatible)) : source->prefer_compatible;
+    gtk_combo_box_set_active(GTK_COMBO_BOX(destination->search_target),
+                             gtk_combo_box_get_active(GTK_COMBO_BOX(source->search_target)));
+    gtk_combo_box_set_active(GTK_COMBO_BOX(destination->occupancy),
+                             gtk_combo_box_get_active(GTK_COMBO_BOX(source->occupancy)));
+    gtk_combo_box_set_active(GTK_COMBO_BOX(destination->sort_choice),
+                             gtk_combo_box_get_active(GTK_COMBO_BOX(source->sort_choice)));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(destination->reverse),
+                                 gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(source->reverse)));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(destination->regex_toggle),
+                                 gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(source->regex_toggle)));
+    gtk_entry_set_text(GTK_ENTRY(destination->search), gtk_entry_get_text(GTK_ENTRY(source->search)));
+    if (destination->compatible)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(destination->compatible),
+                                     destination->prefer_compatible);
+}
+
+/* EN: Open the modal device form from button using the parent port browser in data.
+ * Preserve list preferences and append a validated rule on confirmation.
+ * RU: Открывает модальную форму по button, используя родительский список из data.
+ * Сохраняет настройки списка и добавляет проверенное правило при подтверждении. */
 static void simulation_device_wizard(GtkButton *button, gpointer data)
 {
-    GtkTextBuffer *buffer = data;
+    PortBrowser *parent_browser = data;
+    GtkTextBuffer *buffer = parent_browser->recipe;
     GtkWindow *parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
     DeviceForm form = {.entries = g_ptr_array_new(),
         .directory = g_object_get_data(G_OBJECT(button), "source-directory")};
@@ -3755,9 +3781,9 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     gtk_grid_set_row_spacing(GTK_GRID(form.grid), 4);
     gtk_container_add(GTK_CONTAINER(scroll), form.grid);
     PortBrowser browser = {
-        .source = g_object_get_data(G_OBJECT(button), "source-snapshot"),
-        .expanded = g_object_get_data(G_OBJECT(button), "expanded-source"),
-        .preprocess_error = g_object_get_data(G_OBJECT(button), "preprocess-error"),
+        .source = parent_browser->source,
+        .expanded = parent_browser->expanded,
+        .preprocess_error = parent_browser->preprocess_error,
         .recipe = buffer, .choosing = TRUE
     };
     GtkWidget *panes = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
@@ -3768,6 +3794,7 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     g_signal_connect(choose_slice, "clicked", G_CALLBACK(device_port_choose_slice), &form);
     gtk_box_pack_start(GTK_BOX(browser_box), choose_slice, FALSE, FALSE, 0);
     gtk_paned_pack2(GTK_PANED(panes), browser_box, TRUE, FALSE);
+    port_browser_copy_view(&browser, parent_browser);
     form.browser = &browser;
     g_signal_connect(browser.tree, "row-activated", G_CALLBACK(device_port_activate), &form);
     gtk_paned_set_position(GTK_PANED(panes), 420);
@@ -3777,7 +3804,7 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     gtk_label_set_line_wrap(GTK_LABEL(status), TRUE);
     gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 6);
     g_signal_connect(combo, "changed", G_CALLBACK(simulation_device_type), &form);
-    gtk_combo_box_set_active(GTK_COMBO_BOX(combo), 0);
+    gtk_combo_box_set_active(GTK_COMBO_BOX(combo), parent_browser->last_device);
     gtk_widget_show_all(dialog);
     while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
     {
@@ -3854,6 +3881,8 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
         if (valid)
             break;
     }
+    parent_browser->last_device = gtk_combo_box_get_active(GTK_COMBO_BOX(combo));
+    port_browser_copy_view(parent_browser, &browser);
     g_clear_pointer(&browser.ports, g_hash_table_unref);
     g_free(browser.module);
     g_clear_pointer(&browser.query_regex, g_regex_unref);
@@ -3922,10 +3951,6 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     GtkWidget *wizard = gtk_button_new_with_label("Add Test Device…");
     gtk_widget_set_halign(wizard, GTK_ALIGN_START);
     g_object_set_data(G_OBJECT(wizard), "source-directory", source_directory);
-    g_object_set_data(G_OBJECT(wizard), "source-snapshot", source_snapshot);
-    g_object_set_data(G_OBJECT(wizard), "expanded-source", expanded);
-    g_object_set_data(G_OBJECT(wizard), "preprocess-error", preprocess_error);
-    g_signal_connect(wizard, "clicked", G_CALLBACK(simulation_device_wizard), buffer);
     gtk_box_pack_start(GTK_BOX(box), wizard, FALSE, FALSE, 4);
     GFile *file = g_file_new_for_path(path);
     GFileInputStream *stream = g_file_read(file, NULL, NULL);
@@ -3949,6 +3974,7 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     gtk_paned_pack1(GTK_PANED(panes), scroll, TRUE, FALSE);
     gtk_paned_pack2(GTK_PANED(panes), port_browser_widget(&browser), TRUE, FALSE);
     gtk_paned_set_position(GTK_PANED(panes), 320);
+    g_signal_connect(wizard, "clicked", G_CALLBACK(simulation_device_wizard), &browser);
     gulong changed = g_signal_connect(buffer, "changed", G_CALLBACK(port_browser_refresh), &browser);
     gtk_box_pack_start(GTK_BOX(box), panes, TRUE, TRUE, 0);
     GtkWidget *status = gtk_label_new(harness ? "" : "Saved changes apply the next time debugging starts.");

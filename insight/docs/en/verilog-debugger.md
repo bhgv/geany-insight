@@ -99,6 +99,10 @@ or all searchable columns. Both literal and regex matching use the selected
 scope. **Unassigned only** keeps free ports and **Assigned only** keeps
 ports with bindings. These filters combine with search and compatibility.
 
+While **Port Signals** remains open, the wizard shares its query, search
+scope, sorting and filters with the main list. Reopening the wizard also
+restores the last selected device type.
+
 The wizard saves a slice as a `port-slice` rule and uses its alias in the
 device rule. Both rules form the connection. The table lists the device
 against the original port.

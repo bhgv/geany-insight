@@ -339,6 +339,10 @@ static gboolean add_test_slider(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
+/* EN: Populate the modal setup and verify the wizard transfers its sort preference.
+ * data is unused. Return G_SOURCE_CONTINUE until the setup can be accepted.
+ * RU: Заполняет модальные настройки и проверяет перенос сортировки из мастера.
+ * data не используется. Возвращает G_SOURCE_CONTINUE, пока настройки недоступны. */
 static gboolean accept_ports(gpointer data)
 {
     (void)data;
@@ -379,6 +383,9 @@ static gboolean accept_ports(gpointer data)
             g_source_remove(wizard);
             return G_SOURCE_CONTINUE;
         }
+        GtkWidget *sort = find_control(dialog, "insight-port-sort");
+        if (!GTK_IS_COMBO_BOX(sort) || gtk_combo_box_get_active(GTK_COMBO_BOX(sort)) != 2)
+            return G_SOURCE_CONTINUE;
     }
     gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
     return G_SOURCE_REMOVE;
