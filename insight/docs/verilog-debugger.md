@@ -64,9 +64,11 @@ Use the **Ports** and **Source** tabs to read and copy interface names
 while setup is modal. **Ports** lists names, directions and every rule
 that references each port. **Unassigned** indicates no binding. Each
 rule includes its line number. Select a row and click **Copy Port Name**.
-The **Source** tab allows text selection and copying. The list comes
-from module declarations in the current file and updates as rules
-change. Ports supplied by macros or external files may need manual entry.
+The **Source** tab allows text selection and copying. The list updates as rules change.
+Icarus expands macros and includes with the same search path used for
+simulation. Only active `ifdef`, `ifndef`, `elsif`, and `else` branches
+contribute ports. If preprocessing fails, **Ports** shows the diagnostic
+and **Source** still shows the original text.
 
 
 ## Triggered waveform capture and live controls

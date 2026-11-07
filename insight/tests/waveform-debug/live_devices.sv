@@ -1,7 +1,16 @@
+// EN: Drives live instrument and preprocessed port-discovery checks in the GTK test.
+// RU: Схема для проверки живых приборов и списка портов после препроцессора в GTK.
 `timescale 1ns/1ns
+`define GEANY_LIVE_HAS_SLIDER
+`define GEANY_LIVE_SLIDER_PORT level
 module live_devices(
     input wire enable, rx, switch_on, push,
-    input wire [7:0] external_data, level,
+    input wire [7:0] external_data,
+`ifdef GEANY_LIVE_HAS_SLIDER
+    input wire [7:0] `GEANY_LIVE_SLIDER_PORT,
+`else
+    input wire [7:0] inactive_slider,
+`endif
     output wire [7:0] model_result, level_out,
     output wire ready, tx,
     output reg pushed = 0,
@@ -32,3 +41,6 @@ module live_devices(
         result = dq;
     end
 endmodule
+
+`undef GEANY_LIVE_HAS_SLIDER
+`undef GEANY_LIVE_SLIDER_PORT

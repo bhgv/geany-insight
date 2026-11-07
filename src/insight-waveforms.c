@@ -2456,7 +2456,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
 }
 
 typedef struct {
-    gchar *source;
+    const gchar *source, *expanded, *preprocess_error;
     GtkTextBuffer *recipe;
     GtkListStore *store;
     GHashTable *ports;
@@ -2478,6 +2478,70 @@ static gchar *port_browser_source(const gchar *path)
         return valid;
     }
     return source;
+}
+
+/* EN: Preprocess the run sources in compiler order using the simulation include path.
+ * Return owned UTF-8 HDL, or NULL and an owned diagnostic in error.
+ * RU: Раскрывает макросы в исходниках run в порядке компиляции и с путём include
+ * симуляции. Возвращает новый текст UTF-8 либо NULL и сообщение в error. */
+static gchar *port_browser_preprocess(const WaveSimulation *run, gchar **error)
+{
+    GError *failure = NULL;
+    gchar *directory = g_dir_make_tmp("geany-verilog-ports-XXXXXX", &failure);
+    gchar *expanded = NULL;
+    if (directory)
+    {
+        GSubprocessLauncher *launcher = g_subprocess_launcher_new(
+            G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_PIPE);
+        g_subprocess_launcher_set_cwd(launcher, directory);
+        gchar *bin = g_path_get_dirname(run->compiler);
+        const gchar *existing = g_getenv("PATH");
+        gchar *path = g_strconcat(bin, G_SEARCHPATH_SEPARATOR_S, existing ? existing : "", NULL);
+        g_subprocess_launcher_setenv(launcher, "PATH", path, TRUE);
+        g_free(path);
+        g_free(bin);
+
+        const gchar *options[] = {run->compiler, "-g2012", "-I", run->include_dir, "-E", "-o", "-"};
+        GPtrArray *command = g_ptr_array_new();
+        for (guint i = 0; i < G_N_ELEMENTS(options); i++)
+            g_ptr_array_add(command, (gpointer)options[i]);
+        for (guint i = 0; run->sources[i]; i++)
+            g_ptr_array_add(command, run->sources[i]);
+        g_ptr_array_add(command, NULL);
+        GSubprocess *process = g_subprocess_launcher_spawnv(
+            launcher, (const gchar *const *)command->pdata, &failure);
+        g_ptr_array_unref(command);
+        g_object_unref(launcher);
+        if (process)
+        {
+            GBytes *output = NULL, *diagnostics = NULL;
+            if (g_subprocess_communicate(process, NULL, NULL, &output, &diagnostics, &failure))
+            {
+                gsize length = 0;
+                const gchar *bytes;
+                if (g_subprocess_wait_check(process, NULL, &failure))
+                {
+                    bytes = g_bytes_get_data(output, &length);
+                    expanded = g_utf8_make_valid(length ? bytes : "", length);
+                }
+                else
+                {
+                    bytes = g_bytes_get_data(diagnostics, &length);
+                    if (length)
+                        *error = g_utf8_make_valid(bytes, MIN(length, 2048));
+                }
+            }
+            g_clear_pointer(&output, g_bytes_unref);
+            g_clear_pointer(&diagnostics, g_bytes_unref);
+            g_object_unref(process);
+        }
+        g_rmdir(directory);
+        g_free(directory);
+    }
+    if (!expanded && !*error)
+        *error = g_strdup(failure ? failure->message : "No preprocessor output.");
+    g_clear_error(&failure);
+    return expanded;
 }
 
 /* EN: Extract port names and inherited directions from list into ports. With existing_only,
@@ -2710,7 +2774,7 @@ static void port_browser_refresh(GtkTextBuffer *buffer, gpointer data)
         g_clear_pointer(&browser->ports, g_hash_table_unref);
         g_free(browser->module);
         browser->module = g_strdup(module);
-        browser->ports = port_browser_ports(browser->source, module);
+        browser->ports = port_browser_ports(browser->expanded, module);
     }
     GList *names = g_list_sort(g_hash_table_get_keys(browser->ports), (GCompareFunc)g_strcmp0);
     gtk_list_store_clear(browser->store);
@@ -2754,6 +2818,15 @@ static GtkWidget *port_browser_widget(PortBrowser *browser)
 {
     GtkWidget *notebook = gtk_notebook_new();
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    if (browser->preprocess_error)
+    {
+        gchar *message = g_strdup_printf("Port preprocessing failed.\n%s", browser->preprocess_error);
+        GtkWidget *diagnostic = gtk_label_new(message);
+        gtk_label_set_line_wrap(GTK_LABEL(diagnostic), TRUE);
+        gtk_label_set_selectable(GTK_LABEL(diagnostic), TRUE);
+        gtk_box_pack_start(GTK_BOX(box), diagnostic, FALSE, FALSE, 0);
+        g_free(message);
+    }
     browser->store = gtk_list_store_new(3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
     GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(browser->store));
     gtk_widget_set_name(tree, "insight-test-device-ports");
@@ -2904,6 +2977,8 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     gtk_container_add(GTK_CONTAINER(scroll), form.grid);
     PortBrowser browser = {
         .source = g_object_get_data(G_OBJECT(button), "source-snapshot"),
+        .expanded = g_object_get_data(G_OBJECT(button), "expanded-source"),
+        .preprocess_error = g_object_get_data(G_OBJECT(button), "preprocess-error"),
         .recipe = buffer
     };
     GtkWidget *panes = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
@@ -2992,21 +3067,23 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     g_ptr_array_unref(form.entries);
 }
 
-/* EN: Edit the recipe saved at path in a modal child of parent. source_path supplies
- * the readable HDL and its directory resolves files. On acceptance, optional output
+/* EN: Edit the recipe saved at path in a modal child of parent. run supplies the compiler,
+ * input sources, and include path. On acceptance, optional output
  * pointers harness, model_sources and port_images receive the generated configuration.
- * RU: Редактирует рецепт из path в модальном окне parent. source_path задаёт исходник
- * и каталог относительных путей. При подтверждении необязательные указатели harness,
+ * RU: Редактирует рецепт из path в модальном окне parent. run задаёт компилятор,
+ * исходники и путь include. При подтверждении необязательные указатели harness,
  * model_sources и port_images получают сгенерированную конфигурацию. */
-static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, const gchar *source_path,
+static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, const WaveSimulation *run,
                                       gchar **harness, GPtrArray **model_sources, GHashTable **port_images)
 {
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Port Signals", parent,
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
         harness ? "_Start Debugging" : "_Save for Next Run", GTK_RESPONSE_ACCEPT, NULL);
     g_object_ref_sink(dialog);
-    gchar *source_directory = g_path_get_dirname(source_path);
-    gchar *source_snapshot = port_browser_source(source_path);
+    gchar *source_directory = g_path_get_dirname(run->sources[0]);
+    gchar *source_snapshot = port_browser_source(run->sources[0]);
+    gchar *preprocess_error = NULL;
+    gchar *expanded = port_browser_preprocess(run, &preprocess_error);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 680, 390);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     GtkWidget *hint = gtk_label_new(
@@ -3049,6 +3126,8 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     gtk_widget_set_halign(wizard, GTK_ALIGN_START);
     g_object_set_data(G_OBJECT(wizard), "source-directory", source_directory);
     g_object_set_data(G_OBJECT(wizard), "source-snapshot", source_snapshot);
+    g_object_set_data(G_OBJECT(wizard), "expanded-source", expanded);
+    g_object_set_data(G_OBJECT(wizard), "preprocess-error", preprocess_error);
     g_signal_connect(wizard, "clicked", G_CALLBACK(simulation_device_wizard), buffer);
     gtk_box_pack_start(GTK_BOX(box), wizard, FALSE, FALSE, 4);
     GFile *file = g_file_new_for_path(path);
@@ -3065,7 +3144,10 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     g_object_unref(file);
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_container_add(GTK_CONTAINER(scroll), view);
-    PortBrowser browser = {.source = source_snapshot, .recipe = buffer};
+    PortBrowser browser = {
+        .source = source_snapshot, .expanded = expanded, .preprocess_error = preprocess_error,
+        .recipe = buffer
+    };
     GtkWidget *panes = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     gtk_paned_pack1(GTK_PANED(panes), scroll, TRUE, FALSE);
     gtk_paned_pack2(GTK_PANED(panes), port_browser_widget(&browser), TRUE, FALSE);
@@ -3112,6 +3194,8 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     }
     g_signal_handler_disconnect(buffer, changed);
     g_free(source_snapshot);
+    g_free(expanded);
+    g_free(preprocess_error);
     g_free(source_directory);
     g_clear_pointer(&browser.ports, g_hash_table_unref);
     g_free(browser.module);
@@ -3127,7 +3211,7 @@ static void simulation_port_settings(GtkButton *button, gpointer data)
     (void)button;
     WaveSimulation *run = data;
     gchar *path = g_strdup(run->port_settings);
-    simulation_edit_ports(GTK_WINDOW(run->dialog), path, run->sources[0], NULL, NULL, NULL);
+    simulation_edit_ports(GTK_WINDOW(run->dialog), path, run, NULL, NULL, NULL);
     g_free(path);
 }
 
@@ -5161,7 +5245,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         gchar *key = simulation_settings_path(settings_directory, project, run->sources);
         run->port_settings = g_strconcat(key, ".ports", NULL);
         g_free(key);
-        gboolean accepted = simulation_edit_ports(parent, run->port_settings, run->sources[0],
+        gboolean accepted = simulation_edit_ports(parent, run->port_settings, run,
                                                    &run->port_harness, &run->port_model_sources, &run->port_images);
         if (!accepted)
         {

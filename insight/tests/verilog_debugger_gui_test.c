@@ -221,9 +221,9 @@ static gboolean check_connection(GtkTreeModel *model, GtkTreePath *path, GtkTree
     return checks->bit && checks->clock;
 }
 
-/* EN: Check modal port discovery and select a slider; callback data is unused.
+/* EN: Check macro-expanded modal port discovery and select a slider; callback data is unused.
  * Return G_SOURCE_CONTINUE while the wizard is unavailable.
- * RU: Проверяет список портов в модальном мастере и выбирает ползунок.
+ * RU: Проверяет раскрытые макросами порты в модальном мастере и выбирает ползунок.
  * data не используется. Возвращает G_SOURCE_CONTINUE, пока мастер недоступен. */
 static gboolean add_test_slider(gpointer data)
 {
@@ -236,7 +236,7 @@ static gboolean add_test_slider(gpointer data)
         return G_SOURCE_CONTINUE;
     GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(ports));
     GtkTreeIter row;
-    gboolean shared = FALSE, available = FALSE;
+    gboolean shared = FALSE, available = FALSE, inactive = FALSE;
     gboolean next = gtk_tree_model_get_iter_first(model, &row);
     while (next)
     {
@@ -247,12 +247,13 @@ static gboolean add_test_slider(gpointer data)
             shared = TRUE;
         if (!strcmp(name, "level") && !strcmp(direction, "input") && !strcmp(bindings, "Unassigned"))
             available = TRUE;
+        inactive |= !strcmp(name, "inactive_slider");
         g_free(name);
         g_free(direction);
         g_free(bindings);
         next = gtk_tree_model_iter_next(model, &row);
     }
-    if (!gtk_window_get_modal(GTK_WINDOW(wizard)) || !shared || !available)
+    if (!gtk_window_get_modal(GTK_WINDOW(wizard)) || !shared || !available || inactive)
         return G_SOURCE_CONTINUE;
     GtkWidget *kind = find_control(wizard, "insight-test-device-type");
     if (!GTK_IS_COMBO_BOX(kind) || !gtk_combo_box_set_active_id(GTK_COMBO_BOX(kind), "slider"))
