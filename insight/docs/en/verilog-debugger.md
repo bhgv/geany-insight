@@ -16,8 +16,7 @@ process or frame. **Load Lua Observer…** opens an observer script.
 Simulator messages and commands appear in the embedded console.
 
 **Preview Waveform** opens the current capture. In the waveform window,
-use **Signal Map → HDL Uses… → Connections** to inspect data, guard and
-clock dependencies. **VCD Waveforms…** opens an existing recording.
+open **Signal Map → HDL Uses…**. **Connections** shows data paths, **Conditions** shows guards, and **Clock / events** shows edge and event dependencies. The last two tabs show the originating signal in **From signal**. Use **Open Source** or **Select Track** from any tab. **VCD Waveforms…** opens an existing recording.
 
 ## Port signals
 

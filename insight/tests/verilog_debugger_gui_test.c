@@ -721,10 +721,18 @@ static gboolean drive_debugger(gpointer data)
         if (GTK_IS_TREE_VIEW(view))
             gtk_tree_model_foreach(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),
                                    check_connection, &checks);
-        if (!checks.bit || !checks.clock)
+        gboolean data_bit = checks.bit;
+        gboolean mixed_clock = checks.clock;
+        checks.bit = FALSE;
+        page = gtk_notebook_get_nth_page(GTK_NOTEBOOK(notebook), 3);
+        view = page ? gtk_bin_get_child(GTK_BIN(page)) : NULL;
+        if (GTK_IS_TREE_VIEW(view))
+            gtk_tree_model_foreach(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),
+                                   check_connection, &checks);
+        if (!data_bit || !checks.clock || mixed_clock || checks.bit)
         {
-            g_printerr("Verilog GTK Connections missing bit edge (%d) or clock edge (%d).\n",
-                       checks.bit, checks.clock);
+            g_printerr("Verilog GTK data/events separation failed: data bit %d, event clock %d, mixed %d.\n",
+                       data_bit, checks.clock, mixed_clock || checks.bit);
             return fail_timeout(NULL);
         }
         gtk_dialog_response(GTK_DIALOG(uses), GTK_RESPONSE_CLOSE);
