@@ -4292,6 +4292,237 @@ static void simulation_preview_harness(GtkButton *button, gpointer data)
     g_object_unref(dialog);
 }
 
+/* EN: Draw the connection line in area with theme colors on cr. data encodes
+ * a second arrowhead for bidirectional ports. Return FALSE for normal GTK drawing.
+ * RU: Рисует линию связи в area на cr цветом темы. data задаёт вторую стрелку
+ * для двунаправленного порта. Возвращает FALSE для обычной отрисовки GTK. */
+static gboolean simulation_diagram_arrow(GtkWidget *area, cairo_t *cr, gpointer data)
+{
+    GdkRGBA color;
+    gtk_style_context_get_color(gtk_widget_get_style_context(area),
+                                gtk_widget_get_state_flags(area), &color);
+    gdk_cairo_set_source_rgba(cr, &color);
+    gdouble left = 3;
+    gdouble right = gtk_widget_get_allocated_width(area) - 3;
+    gdouble center = gtk_widget_get_allocated_height(area) / 2.0;
+    cairo_set_line_width(cr, 1.5);
+    cairo_move_to(cr, left, center);
+    cairo_line_to(cr, right, center);
+    cairo_move_to(cr, right - 6, center - 4);
+    cairo_line_to(cr, right, center);
+    cairo_line_to(cr, right - 6, center + 4);
+    if (GPOINTER_TO_INT(data))
+    {
+        cairo_move_to(cr, left + 6, center - 4);
+        cairo_line_to(cr, left, center);
+        cairo_line_to(cr, left + 6, center + 4);
+    }
+    cairo_stroke(cr);
+    return FALSE;
+}
+
+/* EN: Add a selectable labeled block at column and row in grid. title is the
+ * optional frame caption and text is the block content.
+ * RU: Добавляет выделяемый блок в column и row сетки grid. title — подпись
+ * рамки, text — содержимое блока. */
+static void simulation_diagram_block(GtkGrid *grid, gint column, gint row,
+                                     const gchar *title, const gchar *text)
+{
+    GtkWidget *frame = gtk_frame_new(title);
+    GtkWidget *label = gtk_label_new(text);
+    gtk_label_set_selectable(GTK_LABEL(label), TRUE);
+    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+    gtk_label_set_max_width_chars(GTK_LABEL(label), 42);
+    gtk_label_set_xalign(GTK_LABEL(label), 0);
+    gtk_widget_set_margin_start(label, 8);
+    gtk_widget_set_margin_end(label, 8);
+    gtk_widget_set_margin_top(label, 4);
+    gtk_widget_set_margin_bottom(label, 4);
+    gtk_widget_set_hexpand(frame, TRUE);
+    gtk_container_add(GTK_CONTAINER(frame), label);
+    gtk_grid_attach(grid, frame, column, row, 1, 1);
+}
+
+/* EN: Add an arrow between blocks at column and row of grid. both draws arrows
+ * at both ends for a bidirectional connection.
+ * RU: Добавляет стрелку между блоками в column и row сетки grid. both рисует
+ * стрелки с обеих сторон для двунаправленного соединения. */
+static void simulation_diagram_link(GtkGrid *grid, gint column, gint row, gboolean both)
+{
+    GtkWidget *arrow = gtk_drawing_area_new();
+    gtk_widget_set_size_request(arrow, 36, 20);
+    g_signal_connect(arrow, "draw", G_CALLBACK(simulation_diagram_arrow), GINT_TO_POINTER(both));
+    gtk_grid_attach(grid, arrow, column, row, 1, 1);
+}
+
+/* EN: Append binding to text as its own line. The caller supplies an allocated
+ * GString and owns the original binding.
+ * RU: Добавляет binding отдельной строкой в text. GString и исходная строка
+ * принадлежат вызывающему коду. */
+static void simulation_diagram_append(GString *text, const gchar *binding)
+{
+    if (text->len)
+        g_string_append_c(text, '\n');
+    g_string_append(text, binding);
+}
+
+/* EN: Collect the rendered slice expressions by original port from generated hdl.
+ * Return an owned lookup table of multiline captions.
+ * RU: Собирает выражения срезов из hdl по исходному порту. Возвращает таблицу
+ * многострочных подписей, принадлежащую вызывающему коду. */
+static GHashTable *simulation_diagram_slices(const gchar *hdl)
+{
+    GHashTable *slices = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    const gchar *marker = "// GEANY-PORT-SLICE ";
+    const gchar *cursor = hdl;
+    while ((cursor = strstr(cursor, marker)))
+    {
+        cursor += strlen(marker);
+        const gchar *end = strchr(cursor, '\n');
+        if (!end)
+            break;
+        const gchar *alias_end = strchr(cursor, ' ');
+        if (alias_end && alias_end < end)
+        {
+            const gchar *value = alias_end + 1;
+            const gchar *bracket = strchr(value, '[');
+            if (bracket && bracket < end)
+            {
+                gchar *port = g_strndup(value, bracket - value);
+                gchar *slice = g_strndup(value, end - value);
+                const gchar *previous = g_hash_table_lookup(slices, port);
+                gchar *caption = previous ? g_strconcat(previous, "\n", slice, NULL) : g_strdup(slice);
+                g_hash_table_replace(slices, port, caption);
+                g_free(slice);
+            }
+        }
+        cursor = end;
+    }
+    return slices;
+}
+
+/* EN: Build a scrollable diagram from browser's assigned ports and hdl's slices.
+ * Use module as the DUT caption and include rows hidden by the table filters.
+ * RU: Строит прокручиваемую схему по портам browser и срезам из hdl.
+ * module задаёт заголовок DUT. Учитывает строки, скрытые фильтрами таблицы. */
+static GtkWidget *simulation_diagram_widget(const PortBrowser *browser, const gchar *module,
+                                            const gchar *hdl)
+{
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    GtkGrid *grid = GTK_GRID(gtk_grid_new());
+    gtk_widget_set_name(GTK_WIDGET(grid), "insight-testbench-diagram");
+    gtk_container_set_border_width(GTK_CONTAINER(grid), 12);
+    gtk_grid_set_column_spacing(grid, 6);
+    gtk_grid_set_row_spacing(grid, 6);
+    gtk_container_add(GTK_CONTAINER(scroll), GTK_WIDGET(grid));
+    gchar *title = g_strdup_printf("DUT · %s", module ? module : "design");
+    simulation_diagram_block(grid, 0, 0, NULL, "Stimulus");
+    simulation_diagram_block(grid, 2, 0, NULL, title);
+    simulation_diagram_block(grid, 4, 0, NULL, "Devices and probes");
+    g_free(title);
+
+    GHashTable *slices = simulation_diagram_slices(hdl);
+    GtkTreeModel *model = GTK_TREE_MODEL(browser->store);
+    GtkTreeIter item;
+    gint row = 1;
+    gboolean next = gtk_tree_model_get_iter_first(model, &item);
+    while (next)
+    {
+        guint occupied;
+        gtk_tree_model_get(model, &item, PORT_OCCUPIED, &occupied, -1);
+        if (occupied)
+        {
+            gchar *name, *direction, *width, *bindings;
+            gtk_tree_model_get(model, &item, PORT_NAME, &name, PORT_DIRECTION, &direction,
+                PORT_WIDTH_TEXT, &width, PORT_BINDINGS, &bindings, -1);
+            const gchar *used = g_hash_table_lookup(slices, name);
+            gchar *port = g_strdup_printf("%s · %s bits%s%s", name, width,
+                                         used ? "\n" : "", used ? used : "");
+            simulation_diagram_block(grid, 2, row, direction, port);
+            GString *left = g_string_new(NULL), *right = g_string_new(NULL);
+            gchar **rules = g_strsplit(bindings, ", ", -1);
+            gboolean input = !strcmp(direction, "input");
+            gboolean both = !strcmp(direction, "inout") || !strcmp(direction, "ref");
+            for (guint i = 0; rules[i]; i++)
+            {
+                const gchar *rule = rules[i];
+                gboolean probe = g_str_has_prefix(rule, "scope") ||
+                                 g_str_has_prefix(rule, "capture-trigger ") ||
+                                 g_str_has_prefix(rule, "monitor ");
+                simulation_diagram_append(input && !probe ? left : right, rule);
+            }
+            if (left->len)
+            {
+                simulation_diagram_block(grid, 0, row, NULL, left->str);
+                simulation_diagram_link(grid, 1, row, FALSE);
+            }
+            if (right->len)
+            {
+                simulation_diagram_link(grid, 3, row, both);
+                simulation_diagram_block(grid, 4, row, NULL, right->str);
+            }
+            row++;
+            g_strfreev(rules);
+            g_string_free(left, TRUE);
+            g_string_free(right, TRUE);
+            g_free(port);
+            g_free(bindings);
+            g_free(width);
+            g_free(direction);
+            g_free(name);
+        }
+        next = gtk_tree_model_iter_next(model, &item);
+    }
+    if (row == 1)
+        simulation_diagram_block(grid, 2, row, NULL, "No port bindings found.");
+    g_hash_table_unref(slices);
+    return scroll;
+}
+
+/* EN: Validate the recipe in browser (data) and open a separate modal diagram
+ * from button. Leave the recipe and simulator state untouched.
+ * RU: Проверяет правила browser из data и открывает отдельную модальную схему
+ * по button. Не меняет настройки и состояние симулятора. */
+static void simulation_preview_diagram(GtkButton *button, gpointer data)
+{
+    PortBrowser *browser = data;
+    GtkTextIter first, last;
+    gtk_text_buffer_get_bounds(browser->recipe, &first, &last);
+    gchar *recipe = gtk_text_buffer_get_text(browser->recipe, &first, &last, FALSE);
+    const gchar *directory = g_object_get_data(G_OBJECT(button), "source-directory");
+    GPtrArray *sources = g_ptr_array_new_with_free_func(g_free);
+    GHashTable *images = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
+                                               (GDestroyNotify)g_bytes_unref);
+    GError *error = NULL;
+    gchar *hdl = simulation_setup_harness(recipe, directory, sources, images, &error);
+    g_free(recipe);
+    g_ptr_array_unref(sources);
+    g_hash_table_unref(images);
+
+    GtkWindow *parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Testbench Diagram", parent,
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE, NULL);
+    g_object_ref_sink(dialog);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 880, 540);
+    GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    if (hdl)
+        gtk_box_pack_start(GTK_BOX(box), simulation_diagram_widget(browser, browser->module, hdl),
+                           TRUE, TRUE, 0);
+    else
+    {
+        GtkWidget *notebook = gtk_notebook_new();
+        simulation_preview_page(GTK_NOTEBOOK(notebook), "Validation", error ? error->message :
+            "This recipe runs an existing testbench without a generated connection diagram.");
+        gtk_box_pack_start(GTK_BOX(box), notebook, TRUE, TRUE, 0);
+    }
+    g_clear_error(&error);
+    g_free(hdl);
+    gtk_widget_show_all(dialog);
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+    g_object_unref(dialog);
+}
+
 /* EN: Edit the recipe saved at path in a modal child of parent. run supplies the compiler,
  * input sources, and include path. On cancellation, publish preprocessing errors.
  * On acceptance, optional output
@@ -4381,6 +4612,10 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     gtk_paned_pack1(GTK_PANED(panes), scroll, TRUE, FALSE);
     gtk_paned_pack2(GTK_PANED(panes), port_browser_widget(&browser), TRUE, FALSE);
     gtk_paned_set_position(GTK_PANED(panes), 320);
+    GtkWidget *diagram = gtk_button_new_with_label("Preview Diagram…");
+    g_object_set_data(G_OBJECT(diagram), "source-directory", source_directory);
+    g_signal_connect(diagram, "clicked", G_CALLBACK(simulation_preview_diagram), &browser);
+    gtk_box_pack_start(GTK_BOX(actions), diagram, FALSE, FALSE, 0);
     g_signal_connect(wizard, "clicked", G_CALLBACK(simulation_device_wizard), &browser);
     gulong changed = g_signal_connect(buffer, "changed", G_CALLBACK(port_browser_refresh), &browser);
     gtk_box_pack_start(GTK_BOX(box), panes, TRUE, TRUE, 0);

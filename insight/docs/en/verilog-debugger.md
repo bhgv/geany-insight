@@ -127,6 +127,12 @@ recipe. **Dependencies** lists model sources and files staged for launch.
 Invalid recipes show a diagnostic. The preview is copyable and leaves the
 saved recipe and simulator state untouched.
 
+The separate **Preview Diagram…** button opens the connection diagram.
+DUT ports and widths appear in the center, stimulus on the left and
+devices and probes on the right. Arrows show direction, with a two-headed
+arrow for inout. The diagram includes slices and all bindings, even those
+hidden by the port table filters. The preview leaves the simulator idle.
+
 ## Triggered waveform capture and live controls
 
 In **Port Signals** for the current file, configure one optional

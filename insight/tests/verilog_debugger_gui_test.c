@@ -388,9 +388,25 @@ static gboolean check_testbench_preview(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* EN: Populate modal setup and verify sorting, rule navigation and the HDL preview.
+/* EN: Check the diagram labels and close the modal preview. data points to the
+ * caller's result flag. Return G_SOURCE_CONTINUE until the window appears.
+ * RU: Проверяет подписи схемы и закрывает просмотр. data указывает на флаг
+ * результата. Возвращает G_SOURCE_CONTINUE до появления окна. */
+static gboolean check_testbench_diagram(gpointer data)
+{
+    GtkWidget *dialog = find_window("Testbench Diagram");
+    if (!dialog)
+        return G_SOURCE_CONTINUE;
+    *(gboolean *)data = find_control(dialog, "insight-testbench-diagram") &&
+                       find_control(dialog, "DUT · live_devices") &&
+                       find_control(dialog, "level · 16 bits\nlevel[7:0]");
+    gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);
+    return G_SOURCE_REMOVE;
+}
+
+/* EN: Populate modal setup and verify sorting, rule navigation and both previews.
  * data is unused. Return G_SOURCE_CONTINUE until the setup can be accepted.
- * RU: Заполняет модальные настройки и проверяет сортировку, переход и просмотр HDL.
+ * RU: Заполняет настройки и проверяет сортировку, переход и оба вида просмотра.
  * data не используется. Возвращает G_SOURCE_CONTINUE, пока настройки недоступны. */
 static gboolean accept_ports(gpointer data)
 {
@@ -474,6 +490,15 @@ static gboolean accept_ports(gpointer data)
             return G_SOURCE_CONTINUE;
         }
         if (!preview_ok)
+            return G_SOURCE_CONTINUE;
+        gboolean diagram_ok = FALSE;
+        guint diagram = g_timeout_add(10, check_testbench_diagram, &diagram_ok);
+        if (!click(dialog, "Preview Diagram…"))
+        {
+            g_source_remove(diagram);
+            return G_SOURCE_CONTINUE;
+        }
+        if (!diagram_ok)
             return G_SOURCE_CONTINUE;
     }
     gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
