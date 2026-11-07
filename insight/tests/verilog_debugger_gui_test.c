@@ -923,8 +923,8 @@ static gboolean drive_debugger(gpointer data)
             GTK_IS_LABEL(table) && !strcmp(gtk_label_get_text(GTK_LABEL(table)), "01  BE\n00  AD") &&
             uart && console_contains(uart, "OK") &&
             console_contains(simulation, "Waveform capture started at") && strstr(values, "pushed = 1") &&
-            strstr(values, "ready = 1") && strstr(values, "result = 10100101 (165)") &&
-            strstr(values, "model_result = 00111001 (57)"))
+            strstr(values, "ready = 1") && strstr(values, "result = 10100101  (165)") &&
+            strstr(values, "model_result = 00111001  (57)"))
         {
             g_print("Verilog GTK: live inputs, capture trigger, monitors, SRAM, external model and UART passed.\n");
             passed = TRUE;
@@ -976,6 +976,9 @@ static gboolean drive_debugger(gpointer data)
                 g_printerr("Verilog GTK opened the wrong HDL line.\n");
                 exit(1);
             }
+            GtkWidget *resume = find_control(simulation, "Continue");
+            if (!resume || !gtk_widget_is_sensitive(resume))
+                return G_SOURCE_CONTINUE;
             GtkWidget *widget = find_control(simulation, "insight-verilog-registers");
             if (!GTK_IS_TREE_VIEW(widget))
                 return fail_timeout(NULL);

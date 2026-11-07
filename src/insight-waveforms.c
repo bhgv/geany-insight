@@ -6308,6 +6308,8 @@ static void signal_stop_record(WaveSimulation *run, const gchar *text)
     g_strfreev(fields);
 }
 
+/* EN: Decode complete protocol records from length bytes for run.
+ * RU: Разбирает полные записи протокола из length байт для сеанса run. */
 static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsize length)
 {
     for (gsize i = 0; i < length; i++)
@@ -6321,6 +6323,8 @@ static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsi
         if (run->protocol_line->len && run->protocol_line->str[run->protocol_line->len - 1] == '\r')
             g_string_truncate(run->protocol_line, run->protocol_line->len - 1);
         const gchar *text = run->protocol_line->str;
+        if (g_str_has_prefix(text, "> "))
+            text += 2;
         signal_tables_record(run, text);
         signal_stop_record(run, text);
         if (!strcmp(text, "GEANY-VVP-SIGNAL-STOPS"))
@@ -6514,7 +6518,8 @@ static void simulation_handle_observer_event(WaveSimulation *run)
  * префиксы, разделённые между чтениями. */
 static GString *simulation_scope_console(WaveSimulation *run, const gchar *bytes, gsize count)
 {
-    const gchar *prefixes[] = {"GEANY-SCOPE\t", "GEANY-SIGNAL\t", "GEANY-SIGNALS-", "GEANY-SIGNAL-STOP-"};
+    const gchar *prefixes[] = {"GEANY-SCOPE\t", "GEANY-PORT\t", "GEANY-SIGNAL\t",
+                               "GEANY-SIGNALS-", "GEANY-SIGNAL-STOP-"};
     GString *visible = g_string_sized_new(count);
     for (gsize i = 0; i < count; i++)
     {

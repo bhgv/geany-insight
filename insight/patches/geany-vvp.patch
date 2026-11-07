@@ -438,7 +438,7 @@ index 175e8ae..6c544f5 100644
 +{
 +      if (!geany_debug_enabled())
 +            return;
-+      printf("GEANY-SIGNALS-BEGIN\t%" TIME_FMT_U "\n", schedule_simtime());
++      printf("\nGEANY-SIGNALS-BEGIN\t%" TIME_FMT_U "\n", schedule_simtime());
 +      unsigned remaining = 4096;
 +      const vpi_mode_t previous_mode = vpi_mode_flag;
 +      vpi_mode_flag = VPI_MODE_ROSYNC;
