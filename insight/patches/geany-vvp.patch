@@ -60,7 +60,7 @@ index 175e8ae..6c544f5 100644
  
        if (prompt && prompt[0]) {
  	    fputs(prompt, stdout);
-@@ -66,12 +71,401 @@ static char* readline_stub(const char*prompt)
+@@ -66,12 +71,507 @@ static char* readline_stub(const char*prompt)
  
        return 0;
  }
@@ -350,6 +350,112 @@ index 175e8ae..6c544f5 100644
 +      geany_read_memory(geany_stopped_process, geany_frame_depth, argv[1], index);
 +}
 +
++// EN: Emit one bounded row for object, using signal as its value handle.
++// file identifies the defining module, kind selects the editor table.
++// RU: Выводит строку object со значением signal, файлом модуля file и типом kind.
++static void geany_signal_row(vpiHandle object, vpiHandle signal, const std::string& file, char kind)
++{
++      std::string name;
++      if (kind == 'P') {
++            const char* scope = vpi_get_str(vpiFullName, vpi_handle(vpiScope, object));
++            if (!scope)
++                  return;
++            name = scope;
++            const char* port = vpi_get_str(vpiName, object);
++            if (!port)
++                  return;
++            name += ".";
++            name += port;
++      } else {
++            const char* path = vpi_get_str(vpiFullName, object);
++            if (!path)
++                  return;
++            name = path;
++      }
++      if (name.size() > 1024 || name.find_first_of("\t\r\n") != std::string::npos ||
++          file.size() > 2048 || file.find_first_of("\t\r\n") != std::string::npos)
++            return;
++      s_vpi_value value = {};
++      value.format = vpiBinStrVal;
++      const int width = signal ? vpi_get(vpiSize, signal) : 0;
++      if (width > 0 && width <= 4096)
++            vpi_get_value(signal, &value);
++      printf("GEANY-SIGNAL\t%c\t%s\t%s\t%s\n", kind, name.c_str(), file.c_str(),
++             value.format == vpiBinStrVal && value.value.str ? value.value.str : "");
++}
++
++// EN: Walk scope and its children, inheriting file until a nested module.
++// depth and remaining bound recursion and the number of rows.
++// RU: Обходит scope и дочерние области, наследуя file до вложенного модуля.
++// depth и remaining ограничивают глубину и число строк.
++static void geany_signal_scope(vpiHandle scope, std::string file, unsigned depth, unsigned& remaining)
++{
++      if (depth >= 64 || !remaining)
++            return;
++      if (vpi_get(vpiType, scope) == vpiModule) {
++            const char* module_file = vpi_get_str(vpiDefFile, scope);
++            if (module_file)
++                  file = module_file;
++      }
++      const int types[] = {vpiPort, vpiNet, vpiReg, vpiIntegerVar};
++      for (int type : types) {
++            vpiHandle items = vpi_iterate(type, scope);
++            if (!items)
++                  continue;
++            while (vpiHandle object = vpi_scan(items)) {
++                  if (!remaining) {
++                        vpi_free_object(items);
++                        break;
++                  }
++                  if (type != vpiPort && vpi_get(vpiAutomatic, object) == 1)
++                        continue;
++                  vpiHandle signal = object;
++                  if (type == vpiPort) {
++                        const char* name = vpi_get_str(vpiName, object);
++                        const std::string port(name ? name : "");
++                        signal = port.empty() ? nullptr : vpi_handle_by_name(port.c_str(), scope);
++                  }
++                  geany_signal_row(object, signal, file,
++                                   type == vpiPort ? 'P' : type == vpiNet ? 'N' : 'R');
++                  --remaining;
++            }
++      }
++      vpiHandle children = vpi_iterate(vpiInternalScope, scope);
++      if (!children)
++            return;
++      while (vpiHandle child = vpi_scan(children)) {
++            if (!remaining) {
++                  vpi_free_object(children);
++                  break;
++            }
++            geany_signal_scope(child, file, depth + 1, remaining);
++      }
++}
++
++// EN: Snapshot static HDL objects at the stop prompt. Arguments are unused.
++// RU: Снимает значения статических объектов HDL на паузе. Аргументы не используются.
++static void cmd_geany_signals(unsigned, const char*[])
++{
++      if (!geany_debug_enabled())
++            return;
++      printf("GEANY-SIGNALS-BEGIN\n");
++      unsigned remaining = 4096;
++      const vpi_mode_t previous_mode = vpi_mode_flag;
++      vpi_mode_flag = VPI_MODE_ROSYNC;
++      vpiHandle roots = vpi_iterate(vpiModule, nullptr);
++      if (roots) {
++            while (vpiHandle root = vpi_scan(roots)) {
++                  if (!remaining) {
++                        vpi_free_object(roots);
++                        break;
++                  }
++                  geany_signal_scope(root, {}, 0, remaining);
++            }
++      }
++      vpi_mode_flag = previous_mode;
++      printf("GEANY-SIGNALS-END\t%s\n", remaining ? "complete" : "limited");
++}
++
 +// EN: Deposit bits into a static integral variable while the scheduler waits.
 +// argc and argv contain the command, variable path and exact-width binary value.
 +// RU: Записывает биты в статическую целую переменную на паузе планировщика.
@@ -462,7 +568,7 @@ index 175e8ae..6c544f5 100644
  static void cmd_call(unsigned argc, const char*argv[])
  {
        __vpiHandle**table;
-@@ -444,6 +838,22 @@ static struct {
+@@ -444,6 +944,23 @@ static struct {
          "Synonym for finish."},
        { "finish", &cmd_finish,
          "Finish the simulation."},
@@ -474,6 +580,7 @@ index 175e8ae..6c544f5 100644
 +        "Step to the next simulation tick."},
 +      { "geany-select-frame", &cmd_geany_select_frame, "Inspect a frame by depth."},
 +      { "geany-read-memory", &cmd_geany_read_memory, "Read one indexed memory, dynamic array, or queue element."},
++      { "geany-signals", &cmd_geany_signals, "List static HDL ports, nets and registers with current values."},
 +      { "geany-write-register", &cmd_geany_write_register, "Deposit an exact-width binary value into a static register."},
 +      { "geany-processes", &cmd_geany_processes, "List live HDL processes."},
 +      { "geany-select-process", &cmd_geany_select_process, "Inspect a process by number."},
@@ -485,17 +592,17 @@ index 175e8ae..6c544f5 100644
        { "help",   &cmd_help,
          "Get help."},
        { "list",   &cmd_list,
-@@ -554,6 +964,9 @@ void stop_handler(int rc)
+@@ -554,6 +1071,9 @@ void stop_handler(int rc)
  	    return;
        }
  
 +      geany_step = geany_step_mode::none;
 +      if (geany_debug_enabled())
-+            printf("GEANY-VVP-FRAMES\nGEANY-VVP-PROCESSES\nGEANY-VVP-SOURCE-STEP\nGEANY-VVP-WRITE-REGISTER\nGEANY-VVP-READY\n");
++            printf("GEANY-VVP-FRAMES\nGEANY-VVP-PROCESSES\nGEANY-VVP-SOURCE-STEP\nGEANY-VVP-WRITE-REGISTER\nGEANY-VVP-SIGNAL-TABLES\nGEANY-VVP-READY\n");
        vpi_mcd_printf(1,"** VVP Stop(%d) **\n", rc);
        vpi_mcd_printf(1,"** Flushing output streams.\n");
        invoke_command_const("$fflush");
-@@ -563,7 +976,7 @@ void stop_handler(int rc)
+@@ -563,7 +1083,7 @@ void stop_handler(int rc)
  
        interact_flag = true;
        while (interact_flag) {
@@ -504,7 +611,7 @@ index 175e8ae..6c544f5 100644
  	    if (input == 0)
  		  break;
  
-@@ -575,7 +988,8 @@ void stop_handler(int rc)
+@@ -575,7 +1095,8 @@ void stop_handler(int rc)
  
  	    if (first[0] != 0) {
  #ifdef USE_HISTORY
@@ -514,7 +621,7 @@ index 175e8ae..6c544f5 100644
  #endif
  		  invoke_command(first);
  	    }
-@@ -583,5 +997,6 @@ void stop_handler(int rc)
+@@ -583,5 +1104,6 @@ void stop_handler(int rc)
  	    free(input);
        }
  

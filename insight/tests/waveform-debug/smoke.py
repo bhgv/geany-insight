@@ -140,6 +140,13 @@ def check_breakpoint(compiler, runtime, fixtures, directory, environment):
                 "Wrong source position at the conditional stop")
         require(re.search(r"GEANY-VVP-EVENT\t\d+\t[^\r\n]+\t15\t1\tcounter_tb.count\t0001", stopped),
                 "Wrong scripted stop event, tick or signal value")
+        snapshot = simulator.command("geany-signals").replace("\\", "/")
+        require(re.search(r"GEANY-SIGNAL\tP\tcounter_tb\.dut\.clk\t[^\r\n]*counter\.v\t1", snapshot),
+                "Paused snapshot did not include the port in its defining file")
+        require(re.search(r"GEANY-SIGNAL\tN\tcounter_tb\.dut\.odd\t[^\r\n]*counter\.v\t1", snapshot),
+                "Paused snapshot did not include the net")
+        require(re.search(r"GEANY-SIGNAL\tR\tcounter_tb\.dut\.count\t[^\r\n]*counter\.v\t0001", snapshot),
+                "Paused snapshot did not include the register")
         require("expected a static register or integer" in
                 simulator.command("geany-write-register counter_tb.dut.odd 1"),
                 "A driven net was accepted as a register")

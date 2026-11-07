@@ -4456,7 +4456,7 @@ typedef struct {
     HdlJob *snapshot;
     gchar *name, *path;
     guint line, column;
-    gboolean show_uses;
+    gboolean show_uses, preview_context;
     GWeakRef viewer;
 } WaveJump;
 
@@ -5020,6 +5020,45 @@ static void wave_jump_done(GObject *object, GAsyncResult *result, gpointer data)
         g_strcmp0(jump->snapshot->project, app->project ? app->project->file_name : NULL))
         return;
 
+    if (jump->preview_context)
+    {
+        GtkTextView *view = g_weak_ref_get(&jump->viewer);
+        gboolean found = g_task_propagate_boolean(G_TASK(result), NULL);
+        if (view && !g_strcmp0(jump->name, g_object_get_data(G_OBJECT(view), "hdl-context-name")))
+        {
+            GtkTextBuffer *buffer = gtk_text_view_get_buffer(view);
+            gtk_text_buffer_set_text(buffer, insight_tr("HDL declaration not found."), -1);
+            if (found)
+            {
+                gchar *path = utils_get_locale_from_utf8(jump->path);
+                GeanyDocument *doc = document_find_by_filename(jump->path);
+                gchar *text = doc ? sci_get_contents(doc->editor->sci, -1) : NULL;
+                if (!text && path)
+                    g_file_get_contents(path, &text, NULL, NULL);
+                GString *excerpt = g_string_new(NULL);
+                g_string_append_printf(excerpt, "%s:%u\n", jump->path, jump->line);
+                if (text)
+                {
+                    gchar **lines = g_strsplit(text, "\n", -1);
+                    guint length = g_strv_length(lines);
+                    guint first = jump->line > 3 ? jump->line - 3 : 0;
+                    for (guint i = first; i < length && i < jump->line + 2; i++)
+                        g_string_append_printf(excerpt, "%s %u  %.400s\n",
+                            i + 1 == jump->line ? ">" : " ", i + 1, lines[i]);
+                    g_strfreev(lines);
+                }
+                gchar *valid = g_utf8_make_valid(excerpt->str, -1);
+                gtk_text_buffer_set_text(buffer, valid, -1);
+                g_free(valid);
+                g_string_free(excerpt, TRUE);
+                g_free(text);
+                g_free(path);
+            }
+        }
+        g_clear_object(&view);
+        return;
+    }
+
     if (!g_task_propagate_boolean(G_TASK(result), NULL))
         ui_set_statusbar(TRUE, insight_tr("HDL declaration not found: %s"), jump->name);
     else if (jump->show_uses)
@@ -5053,6 +5092,24 @@ static void waveform_source(const gchar *name, gboolean show_uses, GtkWindow *vi
     g_task_run_in_thread(task, wave_jump_run);
     g_object_unref(task);
 }
+/* EN: Resolve hierarchy and display its declaration around the line in context.
+ * RU: Находит hierarchy и показывает строки около объявления в context. */
+static void waveform_context(const gchar *hierarchy, GtkTextView *context)
+{
+    if (!wb.alive || !hierarchy || !*hierarchy)
+        return;
+    WaveJump *jump = g_new0(WaveJump, 1);
+    jump->snapshot = hdl_snapshot(NULL, FALSE);
+    jump->name = g_strdup(hierarchy);
+    jump->preview_context = TRUE;
+    g_weak_ref_init(&jump->viewer, context);
+    g_object_set_data_full(G_OBJECT(context), "hdl-context-name", g_strdup(hierarchy), g_free);
+    GTask *task = g_task_new(NULL, NULL, wave_jump_done, NULL);
+    g_task_set_task_data(task, jump, wave_jump_free);
+    g_task_run_in_thread(task, wave_jump_run);
+    g_object_unref(task);
+}
+
 static gboolean launch_waveforms(gpointer data) {
  (void)data;
  if(!wb.alive) return G_SOURCE_REMOVE;
@@ -5101,7 +5158,7 @@ static void waveform_start_simulation(GSList *selected, const gchar *root, gbool
             gchar *bin = g_build_filename(prefix, "bin", NULL);
             gchar *settings = g_build_filename(app->configdir, "insight", "verilog-debug", NULL);
             insight_waveforms_simulate(GTK_WINDOW(main_widgets.window), bin, working_directory, (const gchar *const *)sources->pdata,
-                                        interactive, waveform_source, diff_source_open, settings,
+                                        interactive, waveform_source, waveform_context, diff_source_open, settings,
                                         app->project ? app->project->file_name : NULL, configure_ports);
             g_free(working_directory);
             g_free(settings);

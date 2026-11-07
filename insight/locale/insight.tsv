@@ -2941,3 +2941,18 @@ Enter a register name and its full-width value using 0, 1, X or Z.	Введит�
 Register value, full width (0, 1, X, Z)	Значение регистра, полная ширина (0, 1, X, Z)
 Write Register	Записать регистр
 Watch graph	Граф наблюдения
+HDL Signals	Сигналы HDL
+Lua watches	Наблюдения Lua
+Ports	Порты
+Nets	Сети
+Registers	Регистры
+Verilog binary	Двоичный Verilog
+C hexadecimal	Шестнадцатеричный C
+Verilog hexadecimal	Шестнадцатеричный Verilog
+Unsigned decimal	Беззнаковый десятичный
+Character	Символ
+Regex: signal name or value	Регулярное выражение по имени или значению
+Waiting for a paused signal snapshot.	Ожидание снимка сигналов на паузе.
+Signal snapshot limit reached.	Достигнут предел числа сигналов в снимке.
+Invalid register value or unsupported register path.	Некорректное значение или неподдерживаемый путь регистра.
+HDL declaration not found.	Объявление HDL не найдено.

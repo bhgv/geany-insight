@@ -3,7 +3,9 @@
  * RU: Реализует настройку симуляции Verilog, живые приборы и просмотр VCD. */
 #include "insight-waveforms.h"
 #include "msgwindow.h"
+#include "document.h"
 #include "ui_utils.h"
+#include "utils.h"
 #include "insight-ai.h"
 #include "insight-help.h"
 #include "insight-i18n.h"
@@ -1679,10 +1681,12 @@ typedef struct {
     GHashTable *live_port_samples, *live_indicators;
     GPtrArray *live_scopes;
     gint scope_console_prefix;
+    gchar console_prefix[16];
     GtkWidget *uart_window, *uart_view, *uart_entry;
     GString *uart_log;
     guint uart_send_sequence;
     InsightWaveSource navigate;
+    InsightWaveContext show_context;
     gboolean interactive;
     GMutex lock;
     GSubprocess *live_process;
@@ -1693,8 +1697,15 @@ typedef struct {
     guint refresh_source;
     gchar prompt_tail[2];
     gboolean preview_pending;
-    GtkWidget *signal_name, *register_bits, *register_write;
+    GtkWidget *signal_name;
     gboolean register_write_ready;
+    GtkListStore *signal_tables[3];
+    GtkWidget *signal_search, *signal_status, *signal_context;
+    GtkCellRenderer *signal_register_renderer;
+    GPtrArray *signal_rows;
+    gchar *signal_file;
+    guint signal_format;
+    gboolean signal_tables_ready, signal_collecting, signal_limited, signal_refresh_needed;
     GtkWidget *pause_button, *source_button, *breakpoint_controls, *breakpoint_file, *breakpoint_line;
     GtkWidget *rule_signal, *rule_bits, *rule_hits, *rule_log, *rule_script;
     GtkWidget *lua_watches, *reload_script;
@@ -1731,6 +1742,10 @@ static void simulation_free(gpointer data)
     g_clear_pointer(&run->live_output, g_byte_array_unref);
     g_free(run->live_directory);
     g_free(run->trace_file);
+    g_clear_pointer(&run->signal_rows, g_ptr_array_unref);
+    g_free(run->signal_file);
+    for (guint i = 0; i < G_N_ELEMENTS(run->signal_tables); i++)
+        g_clear_object(&run->signal_tables[i]);
     g_free(run->settings_path);
     g_free(run->port_settings);
     g_free(run->port_harness);
@@ -5875,6 +5890,152 @@ static void simulation_scope_record(WaveSimulation *run, const gchar *record)
  * Incomplete records are retained for the next call.
  * RU: Передаёт length байт из bytes обработчику протокола сеанса run.
  * Неполные записи сохраняются до следующего вызова. */
+/* EN: Format a four-state value in the representation selected by the user.
+ * RU: Форматирует четырёхсостоянийные биты bits в представлении format. */
+static gchar *signal_table_format(const gchar *bits, guint format)
+{
+    gsize width = strlen(bits);
+    if (!width)
+        return g_strdup("—");
+    if (format == 2 || format == 3)
+    {
+        if (strpbrk(bits, "xz"))
+            return g_strdup_printf("%" G_GSIZE_FORMAT "'b%s", width, bits);
+        GString *hex = g_string_new(NULL);
+        if (format == 2)
+            g_string_append(hex, "0x");
+        else
+            g_string_append_printf(hex, "%" G_GSIZE_FORMAT "'h", width);
+        for (gsize i = 0; i < width;)
+        {
+            guint digit = 0;
+            gsize count = i == 0 && width % 4 ? width % 4 : 4;
+            while (count--)
+                digit = digit * 2 + (bits[i++] == '1');
+            g_string_append_c(hex, "0123456789abcdef"[digit]);
+        }
+        return g_string_free(hex, FALSE);
+    }
+    if ((format == 4 || format == 5) && width <= 64 && !strpbrk(bits, "xz"))
+    {
+        guint64 value = g_ascii_strtoull(bits, NULL, 2);
+        if (format == 4)
+            return g_strdup_printf("%" G_GUINT64_FORMAT, value);
+        if (value >= 32 && value < 127 && value != '\'' && value != '\\')
+            return g_strdup_printf("'%c'", (gchar)value);
+    }
+    if (format == 1 || format == 4 || format == 5)
+        return g_strdup_printf("%" G_GSIZE_FORMAT "'b%s", width, bits);
+    return g_strdup(bits);
+}
+
+/* EN: Refill the visible models for the current source file and regex query in run.
+ * RU: Заполняет видимые таблицы сеанса run для текущего файла и регулярного выражения. */
+static void signal_tables_refresh(WaveSimulation *run)
+{
+    if (!run->signal_tables[0])
+        return;
+    const gchar *query = gtk_entry_get_text(GTK_ENTRY(run->signal_search));
+    GError *error = NULL;
+    GRegex *regex = *query ? g_regex_new(query, G_REGEX_CASELESS | G_REGEX_OPTIMIZE, 0, &error) : NULL;
+    if (error)
+    {
+        gtk_label_set_text(GTK_LABEL(run->signal_status), error->message);
+        g_error_free(error);
+        return;
+    }
+    for (guint i = 0; i < 3; i++)
+        gtk_list_store_clear(run->signal_tables[i]);
+    g_object_set_data(G_OBJECT(run->signal_context), "hdl-context-name", NULL);
+    gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->signal_context)), "", -1);
+    const gchar *file = run->signal_file;
+    for (guint i = 0; file && i < run->signal_rows->len; i++)
+    {
+        gchar **row = run->signal_rows->pdata[i];
+#ifdef G_OS_WIN32
+        if (g_ascii_strcasecmp(file, row[2]))
+#else
+        if (strcmp(file, row[2]))
+#endif
+            continue;
+        gchar *display = signal_table_format(row[3], run->signal_format);
+        if (!regex || g_regex_match(regex, row[1], 0, NULL) ||
+            g_regex_match(regex, display, 0, NULL) || g_regex_match(regex, row[3], 0, NULL))
+        {
+            guint table = *row[0] == 'P' ? 0 : *row[0] == 'N' ? 1 : 2;
+            gtk_list_store_insert_with_values(run->signal_tables[table], NULL, -1,
+                0, row[1], 1, display, 2, row[3], -1);
+        }
+        g_free(display);
+    }
+    g_clear_pointer(&regex, g_regex_unref);
+    gtk_label_set_text(GTK_LABEL(run->signal_status),
+        run->signal_limited ? insight_tr("Signal snapshot limit reached.") : "");
+}
+
+/* EN: Follow the editor's active document for simulation run.
+ * RU: Обновляет текущий файл редактора для сеанса run. */
+static void signal_tables_follow_file(WaveSimulation *run)
+{
+    GeanyDocument *doc = document_get_current();
+    gchar *native = doc && doc->file_name ? utils_get_locale_from_utf8(doc->file_name) : NULL;
+    gchar *file = native ? g_canonicalize_filename(native, NULL) : NULL;
+    g_free(native);
+    if (!g_strcmp0(file, run->signal_file))
+    {
+        g_free(file);
+        return;
+    }
+    gtk_cell_renderer_stop_editing(run->signal_register_renderer, TRUE);
+    g_free(run->signal_file);
+    run->signal_file = file;
+    signal_tables_refresh(run);
+}
+
+/* EN: Collect protocol line text for run. Return true for signal-table records.
+ * RU: Принимает строку text для сеанса run. Возвращает TRUE для записей таблиц. */
+static gboolean signal_tables_record(WaveSimulation *run, const gchar *text)
+{
+    if (!run->signal_rows)
+        return FALSE;
+    if (!strcmp(text, "GEANY-VVP-SIGNAL-TABLES"))
+    {
+        run->signal_tables_ready = TRUE;
+        return TRUE;
+    }
+    if (!strcmp(text, "GEANY-SIGNALS-BEGIN"))
+    {
+        run->signal_collecting = TRUE;
+        g_ptr_array_set_size(run->signal_rows, 0);
+        return TRUE;
+    }
+    if (run->signal_collecting && g_str_has_prefix(text, "GEANY-SIGNAL\t"))
+    {
+        gchar **row = g_strsplit(text + strlen("GEANY-SIGNAL\t"), "\t", 4);
+        if (g_strv_length(row) == 4 && strlen(row[0]) == 1 && strchr("PNR", *row[0]) &&
+            run->signal_rows->len < 4096 && g_utf8_validate(row[1], -1, NULL) &&
+            !strpbrk(row[3], "\t\r\n") &&
+            strspn(row[3], "01xz") == strlen(row[3]))
+        {
+            gchar *file = g_canonicalize_filename(row[2], run->include_dir);
+            g_free(row[2]);
+            row[2] = file;
+            g_ptr_array_add(run->signal_rows, row);
+        }
+        else
+            g_strfreev(row);
+        return TRUE;
+    }
+    if (run->signal_collecting && g_str_has_prefix(text, "GEANY-SIGNALS-END\t"))
+    {
+        run->signal_collecting = FALSE;
+        run->signal_limited = g_str_has_suffix(text, "\tlimited");
+        signal_tables_refresh(run);
+        return TRUE;
+    }
+    return FALSE;
+}
+
 static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsize length)
 {
     for (gsize i = 0; i < length; i++)
@@ -5888,11 +6049,9 @@ static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsi
         if (run->protocol_line->len && run->protocol_line->str[run->protocol_line->len - 1] == '\r')
             g_string_truncate(run->protocol_line, run->protocol_line->len - 1);
         const gchar *text = run->protocol_line->str;
-        if (run->register_write && !strcmp(text, "GEANY-VVP-WRITE-REGISTER"))
-        {
+        signal_tables_record(run, text);
+        if (!strcmp(text, "GEANY-VVP-WRITE-REGISTER"))
             run->register_write_ready = TRUE;
-            gtk_widget_set_sensitive(run->register_write, TRUE);
-        }
         if (strstr(text, "GEANY-VVP-FRAMES"))
             run->frames_ready = TRUE;
         if (strstr(text, "GEANY-VVP-PROCESSES"))
@@ -6074,36 +6233,42 @@ static void simulation_handle_observer_event(WaveSimulation *run)
     g_strfreev(fields);
 }
 
-/* Hide high-rate samples from the console, including records split across reads. */
+/* EN: Hide internal records in bytes from the console for run, including
+ * partial prefixes across chunks of length count.
+ * RU: Скрывает записи протокола сеанса run из bytes длиной count, включая
+ * префиксы, разделённые между чтениями. */
 static GString *simulation_scope_console(WaveSimulation *run, const gchar *bytes, gsize count)
 {
-    static const gchar prefix[] = "GEANY-SCOPE\t";
+    const gchar *prefixes[] = {"GEANY-SCOPE\t", "GEANY-SIGNAL\t", "GEANY-SIGNALS-"};
     GString *visible = g_string_sized_new(count);
-    gint matched = run->scope_console_prefix;
     for (gsize i = 0; i < count; i++)
     {
-        gchar c = bytes[i];
-        if (matched == (gint)sizeof prefix - 1)
+        gchar ch = bytes[i];
+        if (run->scope_console_prefix < 0)
         {
-            if (c == '\n')
-                matched = 0;
+            if (run->scope_console_prefix == -1)
+                g_string_append_c(visible, ch);
+            if (ch == '\n')
+                run->scope_console_prefix = 0;
             continue;
         }
-        if (matched >= 0)
+        gint length = run->scope_console_prefix++;
+        run->console_prefix[length] = ch;
+        gboolean candidate = FALSE;
+        for (guint j = 0; j < G_N_ELEMENTS(prefixes); j++)
         {
-            if (c == prefix[matched])
-            {
-                matched++;
+            if (strncmp(prefixes[j], run->console_prefix, length + 1))
                 continue;
-            }
-            g_string_append_len(visible, prefix, matched);
-            matched = -1;
+            candidate = TRUE;
+            if ((gsize)length + 1 == strlen(prefixes[j]))
+                run->scope_console_prefix = -2;
         }
-        g_string_append_c(visible, c);
-        if (c == '\n')
-            matched = 0;
+        if (!candidate)
+        {
+            g_string_append_len(visible, run->console_prefix, length + 1);
+            run->scope_console_prefix = ch == '\n' ? 0 : -1;
+        }
     }
-    run->scope_console_prefix = matched;
     return visible;
 }
 
@@ -6186,7 +6351,7 @@ static gboolean simulation_refresh_console(gpointer data)
             gtk_text_buffer_get_iter_at_offset(buffer, &limit, excess);
             gtk_text_buffer_delete(buffer, &first, &limit);
         }
-        GString *visible = run->live_scopes ? simulation_scope_console(run, bytes, (gsize)count) : NULL;
+        GString *visible = simulation_scope_console(run, bytes, (gsize)count);
         gchar *valid = visible ? g_utf8_make_valid(visible->str, visible->len) :
                                  g_utf8_make_valid(bytes, count);
         if (visible)
@@ -6212,6 +6377,15 @@ static gboolean simulation_refresh_console(gpointer data)
         simulation_handle_observer_event(run);
         paused = run->prompt_tail[0] == '>' && run->prompt_tail[1] == ' ';
     }
+    signal_tables_follow_file(run);
+    if (paused && !run->preview_pending && run->signal_tables_ready && run->signal_refresh_needed)
+    {
+        run->signal_refresh_needed = FALSE;
+        simulation_write_command(run, "geany-signals\n");
+        paused = FALSE;
+    }
+    g_object_set(run->signal_register_renderer, "editable",
+        paused && !run->preview_pending && run->register_write_ready, NULL);
     gtk_widget_set_sensitive(run->live_controls, paused && !run->preview_pending);
     gtk_widget_set_sensitive(run->breakpoint_controls, run->bridge_ready);
     gtk_widget_set_sensitive(run->source_step_controls, run->source_step_ready);
@@ -6698,9 +6872,12 @@ static void simulation_write_command(WaveSimulation *run, const gchar *command)
         return;
 
     run->prompt_tail[0] = run->prompt_tail[1] = 0;
+    if (g_str_has_prefix(command, "geany-write-register "))
+        run->signal_refresh_needed = TRUE;
     if (!strcmp(command, "cont\n") || !strcmp(command, "step\n") ||
         g_str_has_prefix(command, "geany-step-"))
     {
+        run->signal_refresh_needed = TRUE;
         g_clear_pointer(&run->trace_file, g_free);
         gtk_widget_set_sensitive(run->source_button, FALSE);
     }
@@ -6974,29 +7151,331 @@ static void simulation_watch_graph(GtkButton *button, gpointer data)
     run->navigate(name, TRUE, NULL);
 }
 
-/* EN: Send the paused simulation in data a validated register deposit command.
- * button is unused. Invalid paths and bit strings are reported locally.
- * RU: Передаёт остановленному сеансу data команду записи регистра.
- * button не используется. Ошибки пути и битов показываются в редакторе. */
-static void simulation_write_register(GtkButton *button, gpointer data)
+/* EN: Convert text in the selected format to an exact-width four-state value.
+ * RU: Преобразует text в формате format в значение ширины width. */
+static gchar *signal_edit_bits(const gchar *text, gsize width, guint format)
 {
-    (void)button;
-    WaveSimulation *run = data;
-    if (!run->register_write_ready)
-        return;
-    const gchar *name = gtk_entry_get_text(GTK_ENTRY(run->signal_name));
-    gchar *bits = g_ascii_strdown(gtk_entry_get_text(GTK_ENTRY(run->register_bits)), -1);
-    if (!simulation_signal_path(name) || !*bits || strspn(bits, "01xz") != strlen(bits))
+    gchar *value = g_ascii_strdown(text, -1);
+    g_strstrip(value);
+    GString *bits = g_string_new(NULL);
+    const gchar *digits = value;
+    guint base = 2;
+    const gchar *quote = strchr(value, '\'');
+    if (quote && quote != value)
     {
-        ui_set_statusbar(TRUE, "%s",
-            insight_tr("Enter a register name and its full-width value using 0, 1, X or Z."));
-        g_free(bits);
-        return;
+        gchar *end;
+        guint64 stated = g_ascii_strtoull(value, &end, 10);
+        if (end != quote || stated != width || !quote[1])
+            goto invalid;
+        base = quote[1] == 'b' ? 2 : quote[1] == 'h' ? 16 : quote[1] == 'd' ? 10 : 0;
+        digits = quote + 2;
     }
-    gchar *command = g_strdup_printf("geany-write-register %s %s\n", name, bits);
-    simulation_write_command(run, command);
-    g_free(command);
+    else if (value[0] == '\'' && strlen(value) == 3 && value[2] == '\'')
+    {
+        guint byte = (guchar)text[strchr(text, '\'') - text + 1];
+        for (gint i = 7; i >= 0; i--)
+            g_string_append_c(bits, byte & (1u << i) ? '1' : '0');
+        goto finish;
+    }
+    else if (g_str_has_prefix(value, "0x"))
+    {
+        base = 16;
+        digits += 2;
+    }
+    else if (g_str_has_prefix(value, "0b"))
+        digits += 2;
+    else if (format == 4 || strspn(value, "01xz") != strlen(value))
+        base = 10;
+
+    if (!*digits || !base)
+        goto invalid;
+    if (base == 10)
+    {
+        guint64 number;
+        if (!g_ascii_string_to_unsigned(digits, 10, 0, G_MAXUINT64, &number, NULL))
+            goto invalid;
+        for (gint bit = 63; bit >= 0; bit--)
+            g_string_append_c(bits, number & (G_GUINT64_CONSTANT(1) << bit) ? '1' : '0');
+    }
+    else
+    {
+        for (const gchar *ch = digits; *ch; ch++)
+        {
+            if (base == 2)
+            {
+                if (!strchr("01xz", *ch))
+                    goto invalid;
+                g_string_append_c(bits, *ch);
+            }
+            else if (*ch == 'x' || *ch == 'z')
+                for (guint j = 0; j < 4; j++)
+                    g_string_append_c(bits, *ch);
+            else
+            {
+                gint digit = g_ascii_xdigit_value(*ch);
+                if (digit < 0)
+                    goto invalid;
+                for (gint j = 3; j >= 0; j--)
+                    g_string_append_c(bits, digit & (1 << j) ? '1' : '0');
+            }
+        }
+    }
+
+finish:
+    while (bits->len > width && bits->str[0] == '0')
+        g_string_erase(bits, 0, 1);
+    if (bits->len > width)
+        goto invalid;
+    if (bits->len < width)
+    {
+        gchar *zeros = g_strnfill(width - bits->len, '0');
+        g_string_prepend(bits, zeros);
+        g_free(zeros);
+    }
+    g_free(value);
+    return g_string_free(bits, FALSE);
+
+invalid:
+    g_free(value);
+    g_string_free(bits, TRUE);
+    return NULL;
+}
+
+/* EN: Commit text in the register row identified by path for simulation data.
+ * renderer provides the display format but is otherwise unused.
+ * RU: Записывает text в регистр строки path сеанса data. renderer не используется. */
+static void signal_register_edited(GtkCellRendererText *renderer, gchar *path,
+                                   gchar *text, gpointer data)
+{
+    (void)renderer;
+    WaveSimulation *run = data;
+    GtkTreeModel *model = GTK_TREE_MODEL(run->signal_tables[2]);
+    GtkTreeIter row;
+    if (!run->register_write_ready || !gtk_tree_model_get_iter_from_string(model, &row, path))
+        return;
+
+    gchar *name = NULL, *old = NULL;
+    gtk_tree_model_get(model, &row, 0, &name, 2, &old, -1);
+    gchar *bits = *old ? signal_edit_bits(text, strlen(old), run->signal_format) : NULL;
+    if (!bits || !simulation_signal_path(name))
+        gtk_label_set_text(GTK_LABEL(run->signal_status),
+            insight_tr("Invalid register value or unsupported register path."));
+    else if (strcmp(bits, old))
+    {
+        gchar *command = g_strdup_printf("geany-write-register %s %s\n", name, bits);
+        simulation_write_command(run, command);
+        g_free(command);
+    }
+    g_free(name);
+    g_free(old);
     g_free(bits);
+}
+
+/* EN: Restore the initial text of entry on Ctrl+Z. data is unused.
+ * RU: Восстанавливает исходный текст entry по Ctrl+Z. data не используется. */
+static gboolean signal_edit_undo(GtkWidget *entry, GdkEventKey *event, gpointer data)
+{
+    (void)data;
+    if (!(event->state & GDK_CONTROL_MASK) || gdk_keyval_to_lower(event->keyval) != GDK_KEY_z)
+        return FALSE;
+    gtk_entry_set_text(GTK_ENTRY(entry), g_object_get_data(G_OBJECT(entry), "signal-initial-text"));
+    gtk_editable_select_region(GTK_EDITABLE(entry), 0, -1);
+    return TRUE;
+}
+
+/* EN: Mark editable complete on Enter, Escape or focus exit. data is unused.
+ * RU: Отмечает завершение editable по Enter, Escape или выходу. data не используется. */
+static void signal_edit_completed(GtkCellEditable *editable, gpointer data)
+{
+    (void)data;
+    g_object_set_data(G_OBJECT(editable), "signal-edit-complete", GINT_TO_POINTER(1));
+}
+
+/* EN: Commit entry when it loses focus. event and data are unused.
+ * RU: Записывает значение entry при потере фокуса. event и data не используются. */
+static gboolean signal_edit_focus_out(GtkWidget *entry, GdkEventFocus *event, gpointer data)
+{
+    (void)event;
+    (void)data;
+    if (!g_object_get_data(G_OBJECT(entry), "signal-edit-complete"))
+    {
+        g_object_ref(entry);
+        g_object_set_data(G_OBJECT(entry), "signal-edit-complete", GINT_TO_POINTER(1));
+        gtk_cell_editable_editing_done(GTK_CELL_EDITABLE(entry));
+        gtk_cell_editable_remove_widget(GTK_CELL_EDITABLE(entry));
+        g_object_unref(entry);
+    }
+    return FALSE;
+}
+
+/* EN: Save the original text and replace renderer's default focus-out cancel
+ * with a commit in editable. path and data are unused.
+ * RU: Сохраняет исходный текст editable и заменяет отмену renderer при потере
+ * фокуса на запись. path и data не используются. */
+static void signal_edit_started(GtkCellRenderer *renderer, GtkCellEditable *editable,
+                                const gchar *path, gpointer data)
+{
+    (void)path;
+    (void)data;
+    if (!GTK_IS_ENTRY(editable))
+        return;
+    GtkEntry *entry = GTK_ENTRY(editable);
+    gtk_entry_set_max_length(entry, 4200);
+    g_object_set_data_full(G_OBJECT(entry), "signal-initial-text",
+        g_strdup(gtk_entry_get_text(entry)), g_free);
+    g_signal_connect(entry, "key-press-event", G_CALLBACK(signal_edit_undo), NULL);
+    guint focus_out = g_signal_lookup("focus-out-event", GTK_TYPE_WIDGET);
+    g_signal_handlers_block_matched(entry, G_SIGNAL_MATCH_ID | G_SIGNAL_MATCH_DATA,
+        focus_out, 0, NULL, NULL, renderer);
+    g_signal_connect(entry, "focus-out-event", G_CALLBACK(signal_edit_focus_out), NULL);
+    g_signal_connect(entry, "editing-done", G_CALLBACK(signal_edit_completed), NULL);
+}
+
+/* EN: Resolve the selected row from selection in simulation data for context.
+ * RU: Показывает контекст строки selection из сеанса data. */
+static void signal_table_selected(GtkTreeSelection *selection, gpointer data)
+{
+    WaveSimulation *run = data;
+    GtkTreeModel *model;
+    GtkTreeIter row;
+    if (!run->show_context || !gtk_tree_selection_get_selected(selection, &model, &row))
+        return;
+    gchar *name;
+    gtk_tree_model_get(model, &row, 0, &name, -1);
+    run->show_context(name, GTK_TEXT_VIEW(run->signal_context));
+    g_free(name);
+}
+
+/* EN: Navigate from the name column at path in tree for simulation data.
+ * RU: Переходит к объявлению из столбца имени по path в tree для сеанса data. */
+static void signal_table_activated(GtkTreeView *tree, GtkTreePath *path,
+                                   GtkTreeViewColumn *column, gpointer data)
+{
+    WaveSimulation *run = data;
+    GtkTreeModel *model = gtk_tree_view_get_model(tree);
+    GtkTreeIter row;
+    if (!run->navigate || column != gtk_tree_view_get_column(tree, 0) ||
+        !gtk_tree_model_get_iter(model, &row, path))
+        return;
+    gchar *name;
+    gtk_tree_model_get(model, &row, 0, &name, -1);
+    run->navigate(name, FALSE, NULL);
+    g_free(name);
+}
+
+/* EN: Apply the representation attached to menu item for simulation data.
+ * RU: Применяет формат из пункта item к таблицам сеанса data. */
+static void signal_table_format_selected(GtkMenuItem *item, gpointer data)
+{
+    WaveSimulation *run = data;
+    run->signal_format = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(item), "signal-format"));
+    signal_tables_refresh(run);
+}
+
+/* EN: Handle an edit or format-menu click in tree for simulation data.
+ * event provides the button, click count and cell coordinates.
+ * RU: Обрабатывает редактирование и меню форматов в tree для сеанса data.
+ * event содержит кнопку, число щелчков и координаты ячейки. */
+static gboolean signal_table_popup(GtkWidget *tree, GdkEventButton *event, gpointer data)
+{
+    WaveSimulation *run = data;
+    GtkTreeView *view = GTK_TREE_VIEW(tree);
+    if (event->button == 1 &&
+        gtk_tree_view_get_model(view) == GTK_TREE_MODEL(run->signal_tables[2]))
+    {
+        GtkTreePath *path = NULL;
+        GtkTreeViewColumn *column;
+        if (!gtk_tree_view_get_path_at_pos(view, event->x, event->y, &path, &column, NULL, NULL))
+            return FALSE;
+        gboolean value = column == gtk_tree_view_get_column(view, 1);
+        if (value)
+            gtk_tree_view_set_cursor(view, path, column, event->type == GDK_2BUTTON_PRESS);
+        gtk_tree_path_free(path);
+        return value;
+    }
+    if (event->type != GDK_BUTTON_PRESS || event->button != 3)
+        return FALSE;
+    GtkWidget *menu = gtk_menu_new();
+    gtk_menu_attach_to_widget(GTK_MENU(menu), tree, NULL);
+    const gchar *formats[] = {"Binary", "Verilog binary", "C hexadecimal",
+                              "Verilog hexadecimal", "Unsigned decimal", "Character"};
+    for (guint i = 0; i < G_N_ELEMENTS(formats); i++)
+    {
+        GtkWidget *item = gtk_menu_item_new_with_label(insight_tr(formats[i]));
+        g_object_set_data(G_OBJECT(item), "signal-format", GUINT_TO_POINTER(i));
+        g_signal_connect(item, "activate", G_CALLBACK(signal_table_format_selected), data);
+        gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+    }
+    g_signal_connect_swapped(menu, "selection-done", G_CALLBACK(gtk_widget_destroy), menu);
+    gtk_widget_show_all(menu);
+    gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent *)event);
+    return TRUE;
+}
+
+/* EN: Refresh all tables after a search entry change. entry is unused.
+ * RU: Обновляет таблицы сеанса data после изменения поиска. entry не используется. */
+static void signal_table_search_changed(GtkEditable *entry, gpointer data)
+{
+    (void)entry;
+    signal_tables_refresh(data);
+}
+
+/* EN: Build three signal tables, the regex search and declaration context for run.
+ * RU: Создаёт три таблицы, поиск по регулярному выражению и контекст для run. */
+static GtkWidget *simulation_signal_tables(WaveSimulation *run)
+{
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    run->signal_rows = g_ptr_array_new_with_free_func((GDestroyNotify)g_strfreev);
+    run->signal_refresh_needed = TRUE;
+    run->signal_search = gtk_search_entry_new();
+    gtk_entry_set_max_length(GTK_ENTRY(run->signal_search), 256);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(run->signal_search),
+        insight_tr("Regex: signal name or value"));
+    gtk_box_pack_start(GTK_BOX(box), run->signal_search, FALSE, FALSE, 0);
+    run->signal_status = gtk_label_new(insight_tr("Waiting for a paused signal snapshot."));
+    gtk_label_set_line_wrap(GTK_LABEL(run->signal_status), TRUE);
+    gtk_box_pack_start(GTK_BOX(box), run->signal_status, FALSE, FALSE, 0);
+    GtkWidget *tabs = gtk_notebook_new();
+    gtk_box_pack_start(GTK_BOX(box), tabs, TRUE, TRUE, 0);
+    const gchar *titles[] = {"Ports", "Nets", "Registers"};
+    for (guint i = 0; i < G_N_ELEMENTS(titles); i++)
+    {
+        run->signal_tables[i] = gtk_list_store_new(3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+        GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(run->signal_tables[i]));
+        GtkCellRenderer *name = gtk_cell_renderer_text_new();
+        GtkCellRenderer *value = gtk_cell_renderer_text_new();
+        GtkTreeViewColumn *name_column = gtk_tree_view_column_new_with_attributes(
+            insight_tr("Name"), name, "text", 0, NULL);
+        GtkTreeViewColumn *value_column = gtk_tree_view_column_new_with_attributes(
+            insight_tr("Value"), value, "text", 1, NULL);
+        gtk_tree_view_column_set_sort_column_id(name_column, 0);
+        gtk_tree_view_column_set_sort_column_id(value_column, 1);
+        gtk_tree_view_column_set_resizable(name_column, TRUE);
+        gtk_tree_view_append_column(GTK_TREE_VIEW(tree), name_column);
+        gtk_tree_view_append_column(GTK_TREE_VIEW(tree), value_column);
+        g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)), "changed",
+            G_CALLBACK(signal_table_selected), run);
+        g_signal_connect(tree, "row-activated", G_CALLBACK(signal_table_activated), run);
+        g_signal_connect(tree, "button-press-event", G_CALLBACK(signal_table_popup), run);
+        if (i == 2)
+        {
+            run->signal_register_renderer = value;
+            g_signal_connect(value, "editing-started", G_CALLBACK(signal_edit_started), run);
+            g_signal_connect(value, "edited", G_CALLBACK(signal_register_edited), run);
+        }
+        GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+        gtk_container_add(GTK_CONTAINER(scroll), tree);
+        gtk_notebook_append_page(GTK_NOTEBOOK(tabs), scroll, gtk_label_new(insight_tr(titles[i])));
+    }
+    run->signal_context = gtk_text_view_new();
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(run->signal_context), FALSE);
+    gtk_text_view_set_monospace(GTK_TEXT_VIEW(run->signal_context), TRUE);
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_widget_set_size_request(scroll, -1, 100);
+    gtk_container_add(GTK_CONTAINER(scroll), run->signal_context);
+    gtk_box_pack_start(GTK_BOX(box), scroll, FALSE, TRUE, 0);
+    g_signal_connect(run->signal_search, "changed", G_CALLBACK(signal_table_search_changed), run);
+    return box;
 }
 
 /* Query a simple signal or enter one scope in the current simulator context. */
@@ -7261,7 +7740,7 @@ static void simulation_dialog_destroy(GtkWidget *dialog, gpointer data)
  * открывает модальную настройку портов. Ошибки показываются в интерфейсе. */
 void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar *include_dir,
                                 const gchar *const *sources, gboolean interactive, InsightWaveSource navigate,
-                                InsightWaveLocation open_location,
+                                InsightWaveContext show_context, InsightWaveLocation open_location,
                                 const gchar *settings_directory, const gchar *project,
                                 gboolean configure_ports)
 {
@@ -7293,6 +7772,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
     run->include_dir = g_strdup(include_dir);
     run->sources = g_strdupv((gchar **)sources);
     run->navigate = navigate;
+    run->show_context = show_context;
     run->open_location = open_location;
     if (configure_ports)
     {
@@ -7324,7 +7804,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
     gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 12);
     if (interactive)
     {
-        gtk_window_set_default_size(GTK_WINDOW(run->dialog), 680, 400);
+        gtk_window_set_default_size(GTK_WINDOW(run->dialog), 1050, 590);
         run->protocol_line = g_string_new(NULL);
         run->live_output = g_byte_array_new();
         run->breakpoints = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
@@ -7370,7 +7850,14 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         gtk_text_view_set_editable(GTK_TEXT_VIEW(run->console), FALSE);
         GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
         gtk_container_add(GTK_CONTAINER(scroll), run->console);
-        gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
+        GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+        gtk_paned_pack1(GTK_PANED(paned), scroll, TRUE, FALSE);
+        GtkWidget *inspection_tabs = gtk_notebook_new();
+        gtk_widget_set_name(inspection_tabs, "insight-verilog-inspection-tabs");
+        gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), simulation_signal_tables(run),
+            gtk_label_new(insight_tr("HDL Signals")));
+        gtk_paned_pack2(GTK_PANED(paned), inspection_tabs, TRUE, FALSE);
+        gtk_box_pack_start(GTK_BOX(box), paned, TRUE, TRUE, 0);
         run->live_controls = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
         gtk_box_pack_start(GTK_BOX(box), run->live_controls, FALSE, FALSE, 6);
         GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
@@ -7454,20 +7941,6 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         g_signal_connect(graph, "clicked", G_CALLBACK(simulation_watch_graph), run);
         gtk_box_pack_start(GTK_BOX(inspection), graph, FALSE, FALSE, 0);
 
-        GtkWidget *write_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-        gtk_box_pack_start(GTK_BOX(run->live_controls), write_row, FALSE, FALSE, 0);
-        run->register_bits = gtk_entry_new();
-        gtk_entry_set_max_length(GTK_ENTRY(run->register_bits), 4096);
-        gtk_entry_set_placeholder_text(GTK_ENTRY(run->register_bits),
-            insight_tr("Register value, full width (0, 1, X, Z)"));
-        gtk_box_pack_start(GTK_BOX(write_row), run->register_bits, TRUE, TRUE, 0);
-        run->register_write = gtk_button_new_with_label(insight_tr("Write Register"));
-        gtk_widget_set_name(run->register_write, "insight-verilog-write-register");
-        gtk_widget_set_sensitive(run->register_write, FALSE);
-        g_signal_connect(run->register_write, "clicked", G_CALLBACK(simulation_write_register), run);
-        gtk_box_pack_start(GTK_BOX(write_row), run->register_write, FALSE, FALSE, 0);
-
-
         GtkWidget *preview = gtk_button_new_with_label("Preview Waveform");
         g_signal_connect(preview, "clicked", G_CALLBACK(simulation_preview), run);
         gtk_box_pack_start(GTK_BOX(actions), preview, FALSE, FALSE, 0);
@@ -7547,7 +8020,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         run->lua_watches = gtk_label_new(NULL);
         gtk_label_set_selectable(GTK_LABEL(run->lua_watches), TRUE);
         gtk_label_set_xalign(GTK_LABEL(run->lua_watches), 0);
-        gtk_box_pack_start(GTK_BOX(box), run->lua_watches, FALSE, FALSE, 0);
+        gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), run->lua_watches,\n            gtk_label_new(insight_tr("Lua watches")));
         gtk_widget_set_sensitive(run->breakpoint_controls, FALSE);
         g_object_set_data(G_OBJECT(run->dialog), "insight-live-simulation", run);
         gtk_widget_set_sensitive(run->live_controls, FALSE);

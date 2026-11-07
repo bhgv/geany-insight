@@ -24,7 +24,9 @@ Enter a literal bit or slice such as `[2]`, `[7:4]`, or `[4 +: 4]` and click **A
 
 From **Signal Watch** in the waveform preview, select a row and click **Watch graph**. While the simulator is paused, you can also enter a full hierarchy such as `tb.dut.count` in **Signal or scope** and click **Watch graph**. The graph shows nets and variables indexed from the project HDL.
 
-At a breakpoint or after **Pause** reaches the simulator prompt, enter the register name (prefer the full path) and a binary value of its full width using `0`, `1`, `X` or `Z`. Click **Write Register**. The console reports the value read back and the simulator remains paused. This is a one-time deposit into a static integral variable. A subsequent HDL assignment can overwrite it. Driven nets, automatic locals and memory words are outside this operation. Use the bundled VVP bridge with register-writing support.
+On the right of the debugger, open **HDL Signals**. The **Ports**, **Nets** and **Registers** tables show the current editor file's elaborated signals at the latest stop. Click a column heading to sort. The search field accepts a regular expression and checks the name and value. Right-click a table to select binary, Verilog binary, C or Verilog hexadecimal, unsigned decimal or character display. A single click shows the declaration and nearby lines. Double-click a name to jump to its declaration.
+
+At a breakpoint or after **Pause**, double-click a value in **Registers**. Edit it and press **Enter** or leave the cell to write it. **Ctrl+Z** restores the original text during the edit, and **Esc** cancels. Enter binary bits including `X` and `Z`, a C hexadecimal literal like `0x0f`, a sized Verilog literal like `8'h0f`, or a quoted character like `'A'`. In unsigned decimal view, plain digits are decimal. The simulator remains paused and refreshes the table from its actual values. A later HDL assignment can overwrite the deposit. Ports and nets are read-only. Automatic locals and memory words are outside this operation. The tables require the updated bundled VVP bridge.
 
 ## Port signals
 
