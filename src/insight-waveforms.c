@@ -2620,9 +2620,11 @@ typedef struct {
     GHashTable *ports;
     gchar *module;
     GtkWidget *tree, *search, *compatible, *regex_toggle, *sort_choice, *reverse;
+    GtkWidget *search_target, *occupancy;
     GtkTreeModelFilter *filter;
     GtkTreeSortable *sorted;
     GRegex *query_regex;
+    gchar *folded_query;
     gboolean regex_invalid;
     gchar direction;
     guint required_width;
@@ -3098,29 +3100,40 @@ static gboolean port_browser_matches(const gchar *direction, gchar field)
            (field == 'a' && strcmp(direction, "—"));
 }
 
+/* EN: Match text against browser's compiled regex or folded literal query.
+ * RU: Сопоставляет text с регулярным выражением или поисковым текстом из browser. */
+static gboolean port_browser_query_matches(const PortBrowser *browser, const gchar *text)
+{
+    if (browser->query_regex)
+        return g_regex_match(browser->query_regex, text, 0, NULL);
+    if (!browser->folded_query || !*browser->folded_query)
+        return TRUE;
+    gchar *folded = g_utf8_casefold(text, -1);
+    gboolean matches = strstr(folded, browser->folded_query) != NULL;
+    g_free(folded);
+    return matches;
+}
+
 /* EN: Return whether row in model matches the browser filters stored in data.
  * RU: Проверяет, соответствует ли row из model фильтрам списка из data. */
 static gboolean port_browser_visible(GtkTreeModel *model, GtkTreeIter *row, gpointer data)
 {
     PortBrowser *browser = data;
-    gchar *name, *direction;
+    if (browser->regex_invalid)
+        return FALSE;
+    guint occupied;
+    gtk_tree_model_get(model, row, PORT_OCCUPIED, &occupied, -1);
+    gint occupancy = gtk_combo_box_get_active(GTK_COMBO_BOX(browser->occupancy));
+    if ((occupancy == 1 && occupied) || (occupancy == 2 && !occupied))
+        return FALSE;
+    gchar *name, *direction, *bindings;
     guint width;
     gtk_tree_model_get(model, row, PORT_NAME, &name, PORT_DIRECTION, &direction,
-                       PORT_WIDTH, &width, -1);
-    const gchar *query = gtk_entry_get_text(GTK_ENTRY(browser->search));
-    gboolean visible;
-    if (browser->regex_invalid)
-        visible = FALSE;
-    else if (browser->query_regex)
-        visible = g_regex_match(browser->query_regex, name, 0, NULL);
-    else
-    {
-        gchar *folded_name = g_ascii_strdown(name, -1);
-        gchar *folded_query = g_ascii_strdown(query, -1);
-        visible = strstr(folded_name, folded_query) != NULL;
-        g_free(folded_query);
-        g_free(folded_name);
-    }
+                       PORT_BINDINGS, &bindings, PORT_WIDTH, &width, -1);
+    gint target = gtk_combo_box_get_active(GTK_COMBO_BOX(browser->search_target));
+    gboolean visible = ((target <= 0 || target == 3) && port_browser_query_matches(browser, name)) ||
+                       ((target == 1 || target == 3) && port_browser_query_matches(browser, direction)) ||
+                       ((target == 2 || target == 3) && port_browser_query_matches(browser, bindings));
     if (visible && browser->direction && browser->compatible &&
         gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(browser->compatible)))
     {
@@ -3128,6 +3141,7 @@ static gboolean port_browser_visible(GtkTreeModel *model, GtkTreeIter *row, gpoi
                   (browser->direction == 'a' ||
                    (browser->required_width && width >= browser->required_width));
     }
+    g_free(bindings);
     g_free(direction);
     g_free(name);
     return visible;
@@ -3151,10 +3165,13 @@ static void port_browser_search_changed(GtkWidget *widget, gpointer data)
 {
     PortBrowser *browser = data;
     g_clear_pointer(&browser->query_regex, g_regex_unref);
+    g_clear_pointer(&browser->folded_query, g_free);
     GError *error = NULL;
     const gchar *query = gtk_entry_get_text(GTK_ENTRY(browser->search));
     if (*query && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(browser->regex_toggle)))
         browser->query_regex = g_regex_new(query, G_REGEX_CASELESS, 0, &error);
+    else
+        browser->folded_query = g_utf8_casefold(query, -1);
     browser->regex_invalid = error != NULL;
     gtk_entry_set_icon_from_icon_name(GTK_ENTRY(browser->search), GTK_ENTRY_ICON_PRIMARY,
                                      error ? "dialog-error-symbolic" : "edit-find-symbolic");
@@ -3234,7 +3251,14 @@ static GtkWidget *port_browser_widget(PortBrowser *browser)
     GtkWidget *filters = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     browser->search = gtk_search_entry_new();
     gtk_widget_set_name(browser->search, "insight-port-search");
-    gtk_entry_set_placeholder_text(GTK_ENTRY(browser->search), "Find port by name");
+    gtk_entry_set_placeholder_text(GTK_ENTRY(browser->search), "Find ports");
+    browser->search_target = gtk_combo_box_text_new();
+    gtk_widget_set_name(browser->search_target, "insight-port-search-target");
+    const gchar *targets[] = {"Name", "Direction", "Devices / rules", "All"};
+    for (guint i = 0; i < G_N_ELEMENTS(targets); i++)
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(browser->search_target), targets[i]);
+    gtk_combo_box_set_active(GTK_COMBO_BOX(browser->search_target), 0);
+    gtk_box_pack_start(GTK_BOX(filters), browser->search_target, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(filters), browser->search, TRUE, TRUE, 0);
     browser->regex_toggle = gtk_check_button_new_with_label("Regex");
     gtk_box_pack_start(GTK_BOX(filters), browser->regex_toggle, FALSE, FALSE, 0);
@@ -3255,6 +3279,13 @@ static GtkWidget *port_browser_widget(PortBrowser *browser)
     gtk_box_pack_start(GTK_BOX(sorting), browser->sort_choice, TRUE, TRUE, 0);
     browser->reverse = gtk_check_button_new_with_label("Reverse");
     gtk_box_pack_start(GTK_BOX(sorting), browser->reverse, FALSE, FALSE, 0);
+    browser->occupancy = gtk_combo_box_text_new();
+    gtk_widget_set_name(browser->occupancy, "insight-port-occupancy");
+    const gchar *states[] = {"All ports", "Unassigned only", "Assigned only"};
+    for (guint i = 0; i < G_N_ELEMENTS(states); i++)
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(browser->occupancy), states[i]);
+    gtk_combo_box_set_active(GTK_COMBO_BOX(browser->occupancy), 0);
+    gtk_box_pack_start(GTK_BOX(sorting), browser->occupancy, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), sorting, FALSE, FALSE, 0);
 
     GtkTreeModel *filtered = gtk_tree_model_filter_new(GTK_TREE_MODEL(browser->store), NULL);
@@ -3273,6 +3304,8 @@ static GtkWidget *port_browser_widget(PortBrowser *browser)
     g_object_unref(filtered);
     g_object_unref(browser->store);
     g_signal_connect(browser->search, "changed", G_CALLBACK(port_browser_search_changed), browser);
+    g_signal_connect(browser->search_target, "changed", G_CALLBACK(port_browser_refilter), browser);
+    g_signal_connect(browser->occupancy, "changed", G_CALLBACK(port_browser_refilter), browser);
     g_signal_connect(browser->regex_toggle, "toggled", G_CALLBACK(port_browser_search_changed), browser);
     g_signal_connect(browser->sort_choice, "changed", G_CALLBACK(port_browser_sort_changed), browser);
     g_signal_connect(browser->reverse, "toggled", G_CALLBACK(port_browser_sort_changed), browser);
@@ -3824,6 +3857,7 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     g_clear_pointer(&browser.ports, g_hash_table_unref);
     g_free(browser.module);
     g_clear_pointer(&browser.query_regex, g_regex_unref);
+    g_free(browser.folded_query);
     gtk_widget_destroy(dialog);
     g_ptr_array_unref(form.entries);
 }
@@ -3962,6 +3996,7 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     g_clear_pointer(&browser.ports, g_hash_table_unref);
     g_free(browser.module);
     g_clear_pointer(&browser.query_regex, g_regex_unref);
+    g_free(browser.folded_query);
     gtk_widget_destroy(dialog);
     g_object_unref(dialog);
     if (!accepted && preprocess_error)

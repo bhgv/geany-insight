@@ -319,7 +319,21 @@ static gboolean add_test_slider(gpointer data)
         gtk_tree_model_get(model, &row, 2, &first, -1);
     order_ok &= !g_strcmp0(first, "Unassigned");
     g_free(first);
-    if (!pattern_ok || !order_ok)
+    GtkWidget *target = find_control(wizard, "insight-port-search-target");
+    GtkWidget *occupancy = find_control(wizard, "insight-port-occupancy");
+    if (!GTK_IS_COMBO_BOX(target) || !GTK_IS_COMBO_BOX(occupancy))
+        return G_SOURCE_CONTINUE;
+    gtk_combo_box_set_active(GTK_COMBO_BOX(target), 2);
+    gtk_entry_set_text(GTK_ENTRY(search), "scope-xyz");
+    gboolean binding_ok = gtk_tree_model_iter_n_children(model, NULL) == 3;
+    gtk_combo_box_set_active(GTK_COMBO_BOX(occupancy), 1);
+    binding_ok &= gtk_tree_model_iter_n_children(model, NULL) == 0;
+    gtk_combo_box_set_active(GTK_COMBO_BOX(occupancy), 2);
+    binding_ok &= gtk_tree_model_iter_n_children(model, NULL) == 3;
+    gtk_combo_box_set_active(GTK_COMBO_BOX(occupancy), 0);
+    gtk_entry_set_text(GTK_ENTRY(search), "");
+    gtk_combo_box_set_active(GTK_COMBO_BOX(target), 0);
+    if (!pattern_ok || !order_ok || !binding_ok)
         return G_SOURCE_CONTINUE;
     gtk_dialog_response(GTK_DIALOG(wizard), GTK_RESPONSE_ACCEPT);
     return G_SOURCE_REMOVE;

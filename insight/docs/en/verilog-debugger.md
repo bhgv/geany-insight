@@ -82,7 +82,7 @@ To choose other bits, select the port and click **Choose Slice…**.
 Set the offset from the least significant end and check the Verilog
 preview. Offset 0 gives the same slice as double-clicking.
 
-**Find port by name** matches part of a port name without regard to case.
+**Find ports** matches part of a port name without regard to case.
 In the wizard, **Compatible only** keeps ports with the required direction
 and enough known bits for the selected field. Changing the field width
 updates the list. The two filters can be combined.
@@ -93,6 +93,11 @@ Matching is case-insensitive. An invalid pattern shows an error icon
 with a diagnostic tooltip. **Sort by** orders ports by name, direction,
 occupancy, or declaration order. Occupancy puts unassigned ports first.
 **Reverse** reverses the selected order.
+
+Next to **Find ports**, choose whether to search direction, devices and rules,
+or all searchable columns. Both literal and regex matching use the selected
+scope. **Unassigned only** keeps free ports and **Assigned only** keeps
+ports with bindings. These filters combine with search and compatibility.
 
 The wizard saves a slice as a `port-slice` rule and uses its alias in the
 device rule. Both rules form the connection. The table lists the device
