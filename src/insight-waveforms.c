@@ -3,11 +3,103 @@
  * RU: Реализует настройку симуляции Verilog, живые приборы и просмотр VCD. */
 #include "insight-waveforms.h"
 #include "msgwindow.h"
+#include "insight-ai.h"
+#include "insight-help.h"
+#include "insight-i18n.h"
 #include "../insight/desktop/glib_compat.h"
 #include "../insight/core/runtime.h"
 #include <gio/gio.h>
 #include <glib/gstdio.h>
 #include <string.h>
+
+/* EN: Show the current dialog's local help in a modal child. button owns the
+ * trigger and data is the parent dialog containing the guidance text.
+ * RU: Показывает локальную справку в модальном дочернем окне. button запускает
+ * действие, data — родительский диалог с текстом справки. */
+static void simulation_dialog_help(GtkButton *button, gpointer data)
+{
+    (void)button;
+    GtkWidget *parent = data;
+    const gchar *text = g_object_get_data(G_OBJECT(parent), "verilog-guidance");
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Verilog Setup Help", GTK_WINDOW(parent),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE, NULL);
+    g_object_ref_sink(dialog);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 560, 300);
+    GtkWidget *view = gtk_text_view_new();
+    gtk_widget_set_name(view, "insight-verilog-help-text");
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(view), FALSE);
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view), GTK_WRAP_WORD_CHAR);
+    gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)), text, -1);
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(scroll), view);
+    gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),
+                       scroll, TRUE, TRUE, 0);
+    gtk_widget_show_all(dialog);
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+    g_object_unref(dialog);
+}
+
+/* EN: Open the AI assistant for parent (data) from button. Seed it with the
+ * local help only and leave sending to the user's explicit action.
+ * RU: Открывает ИИ-помощника для parent из data по button. Передаёт только
+ * локальную справку. Запрос отправляется по явному действию пользователя. */
+static void simulation_dialog_ai(GtkButton *button, gpointer data)
+{
+    (void)button;
+    GtkWidget *parent = data;
+    const gchar *text = g_object_get_data(G_OBJECT(parent), "verilog-guidance");
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Verilog AI Assistant", GTK_WINDOW(parent),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE, NULL);
+    g_object_ref_sink(dialog);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 850, 650);
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),
+                       box, TRUE, TRUE, 0);
+    insight_ai_embed(box, gtk_window_get_title(GTK_WINDOW(parent)), text, parent, NULL, NULL);
+    gtk_widget_show_all(dialog);
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+    g_object_unref(dialog);
+}
+
+/* EN: Set dialog's contextual guidance to english or russian using the current
+ * interface language. The dialog owns the copied text.
+ * RU: Записывает в dialog текст english или russian по текущему языку интерфейса.
+ * Диалог хранит копию текста. */
+static void simulation_dialog_guidance(GtkWidget *dialog, const gchar *english, const gchar *russian)
+{
+    const gchar *language = insight_i18n_language();
+    gboolean use_russian = language && g_str_has_prefix(language, "ru");
+    g_object_set_data_full(G_OBJECT(dialog), "verilog-guidance",
+                           g_strdup(use_russian ? russian : english), g_free);
+}
+
+/* EN: Attach Help and AI buttons to dialog and initialize their shared context
+ * from english and russian. Neither button changes the parent dialog response.
+ * RU: Добавляет в dialog кнопки справки и ИИ с контекстом из english и russian.
+ * Нажатие не подтверждает и не закрывает родительский диалог. */
+static void simulation_dialog_tools(GtkWidget *dialog, const gchar *english, const gchar *russian)
+{
+    simulation_dialog_guidance(dialog, english, russian);
+    GtkWidget *tools = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    GtkWidget *help = gtk_button_new_with_label(insight_tr("Help"));
+    gtk_widget_set_name(help, "insight-verilog-dialog-help");
+    gtk_button_set_image(GTK_BUTTON(help), gtk_image_new_from_icon_name("help-browser-symbolic",
+                                                                       GTK_ICON_SIZE_BUTTON));
+    gtk_button_set_always_show_image(GTK_BUTTON(help), TRUE);
+    g_signal_connect(help, "clicked", G_CALLBACK(simulation_dialog_help), dialog);
+    gtk_box_pack_start(GTK_BOX(tools), help, FALSE, FALSE, 0);
+
+    GtkWidget *ai = gtk_button_new_with_label(insight_tr("AI Assistant"));
+    gtk_widget_set_name(ai, "insight-verilog-dialog-ai");
+    gtk_button_set_image(GTK_BUTTON(ai), insight_command_icon("brain"));
+    gtk_button_set_always_show_image(GTK_BUTTON(ai), TRUE);
+    g_signal_connect(ai, "clicked", G_CALLBACK(simulation_dialog_ai), dialog);
+    gtk_box_pack_start(GTK_BOX(tools), ai, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),
+                       tools, FALSE, FALSE, 4);
+}
 
 #define VCD_BYTES (32u * 1024u * 1024u)
 #define VCD_SIGNALS 4096u
@@ -553,6 +645,8 @@ static void instruments_closed(GtkWidget *widget, gpointer data)
     viewer->instruments = NULL;
 }
 
+/* EN: Open the tool from button for the current view or simulation in data.
+ * RU: Открывает инструмент по button для текущего просмотра или симуляции из data. */
 static void instruments_show(GtkButton *button, gpointer data)
 {
     (void)button;
@@ -564,6 +658,11 @@ static void instruments_show(GtkButton *button, gpointer data)
     }
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Signal Instruments", GTK_WINDOW(viewer->window),
         GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE, NULL);
+    simulation_dialog_tools(dialog,
+        "Choose signals from the capture and inspect their values at the waveform cursor. "
+        "Choose X and Y for an XY plot, or add Z for the fixed projection.",
+        "Выберите сигналы записи и смотрите значения у курсора. Выберите X и Y для XY или "
+        "добавьте Z для фиксированной проекции.");
     viewer->instruments = dialog;
     gtk_window_set_default_size(GTK_WINDOW(dialog), 600, 400);
     g_signal_connect_swapped(dialog, "response", G_CALLBACK(gtk_widget_destroy), dialog);
@@ -900,6 +999,8 @@ static gboolean wave_find_match(const Trace *trace, guint64 cursor, WaveMatch mo
 
 /* Move the waveform cursor to the next matching value or logical edge. */
 /* Перемещает курсор диаграммы к следующему значению или логическому фронту. */
+/* EN: Open the tool from button for the current view or simulation in data.
+ * RU: Открывает инструмент по button для текущего просмотра или симуляции из data. */
 static void wave_search_condition(GtkButton *button, gpointer data)
 {
     (void)button;
@@ -911,6 +1012,11 @@ static void wave_search_condition(GtkButton *button, gpointer data)
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Find Signal Condition", GTK_WINDOW(viewer->window),
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE,
         "_Find Next", GTK_RESPONSE_ACCEPT, NULL);
+    simulation_dialog_tools(dialog,
+        "Choose a signal and a bit pattern, then search from the waveform cursor. The condition "
+        "uses values recorded in the VCD.",
+        "Выберите сигнал и битовый шаблон, затем начните поиск от курсора. Условие проверяется "
+        "по значениям в VCD.");
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     GtkWidget *heading = gtk_label_new(signal->name);
     gtk_label_set_ellipsize(GTK_LABEL(heading), PANGO_ELLIPSIZE_MIDDLE);
@@ -1090,6 +1196,8 @@ static GtkWidget *wave_map_tree(GtkTreeModel *model, const gchar *title, GtkWidg
 
 /* Open the recorded signal map and act on a selected signal or alias. */
 /* Открывает карту записи и выполняет действие над сигналом или его псевдонимом. */
+/* EN: Open the tool from button for the current view or simulation in data.
+ * RU: Открывает инструмент по button для текущего просмотра или симуляции из data. */
 static void wave_show_signal_map(GtkButton *button, gpointer data)
 {
     (void)button;
@@ -1099,6 +1207,11 @@ static void wave_show_signal_map(GtkButton *button, gpointer data)
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE,
         "_Select Track", GTK_RESPONSE_ACCEPT, "_Pin Track", GTK_RESPONSE_APPLY,
         "_Go to HDL", GTK_RESPONSE_REJECT, "_HDL Uses…", GTK_RESPONSE_OK, NULL);
+    simulation_dialog_tools(dialog,
+        "Browse recorded scopes and signals. Aliases refer to the same recorded trace. Select a "
+        "signal to open its trace or inspect HDL uses.",
+        "Просматривайте области и сигналы записи. Псевдонимы относятся к одной трассе. Выберите "
+        "сигнал, чтобы открыть его трассу или места использования в HDL.");
     g_object_ref_sink(dialog);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 740, 410);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
@@ -3158,6 +3271,11 @@ static void port_browser_follow_rule(PortBrowser *browser, GtkTreeModel *model, 
         GtkWidget *dialog = gtk_dialog_new_with_buttons("Choose Port Rule", parent,
             GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
             "_Cancel", GTK_RESPONSE_CANCEL, "_Go to Rule", GTK_RESPONSE_ACCEPT, NULL);
+        simulation_dialog_tools(dialog,
+            "Choose the connection rule for this port by line number and text. Go to Rule closes "
+            "this picker and selects the rule in Port Signals.",
+            "Выберите привязку порта по номеру строки и тексту. Go to Rule закрывает выбор и "
+            "выделяет правило в Port Signals.");
         g_object_ref_sink(dialog);
         GtkWidget *combo = gtk_combo_box_text_new();
         for (guint i = 0; i < lines->len; i++)
@@ -3884,6 +4002,12 @@ static void device_port_choose_slice(GtkButton *button, gpointer data)
             GtkWidget *dialog = gtk_dialog_new_with_buttons("Choose Port Slice", parent,
                 GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
                 "_Cancel", GTK_RESPONSE_CANCEL, "_Assign", GTK_RESPONSE_ACCEPT, NULL);
+            simulation_dialog_tools(dialog,
+                "Set the offset from the least significant end of the selected port. The preview uses "
+                "the port’s declared index order. Assign replaces the current field with the shown "
+                "expression.",
+                "Укажите смещение от младшего края порта. Предпросмотр учитывает порядок индексов в "
+                "объявлении. Assign заменяет текущее поле показанным выражением.");
             GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
             gtk_container_set_border_width(GTK_CONTAINER(box), 12);
             GtkWidget *caption = gtk_label_new("Offset from the least significant bit");
@@ -3975,8 +4099,67 @@ static void simulation_device_type(GtkComboBox *combo, gpointer data)
     device_port_filter(form);
     gtk_dialog_set_response_sensitive(GTK_DIALOG(form->dialog), GTK_RESPONSE_ACCEPT, selected >= 0);
     if (selected < 0)
+    {
+        simulation_dialog_guidance(form->dialog,
+            "No device matches. Change the name filter, regular expression or category.",
+            "Совпадений нет. Измените имя, регулярное выражение или категорию.");
         return;
+    }
     const DevicePreset *preset = &device_presets[selected];
+    gchar *english = g_strdup_printf(
+        "%s (%s)\\n\\nSet the port names and values in the form. Double-click a compatible port "
+        "or use Choose Slice for a specific range. Insert Rule adds the validated rule.",
+        preset->title, preset->rule);
+    gchar *russian = g_strdup_printf(
+        "%s (%s)\\n\\nУкажите порты и значения. Двойной щелчок назначает подходящий порт, "
+        "Choose Slice выбирает диапазон. Insert Rule добавляет проверенное правило.",
+        preset->title, preset->rule);
+    if (preset->script || preset->image >= 0)
+    {
+        gchar *en = g_strconcat(english, preset->script ?
+            "\\nSelect a Lua script. The active-low reset signal is optional." :
+            "\\nThe hex memory image is optional.", NULL);
+        gchar *ru = g_strconcat(russian, preset->script ?
+            "\\nВыберите Lua-скрипт. Сигнал сброса с активным нулём необязателен." :
+            "\\nФайл hex-образа необязателен.", NULL);
+        g_free(english);
+        g_free(russian);
+        english = en;
+        russian = ru;
+    }
+    const gchar *details_en[] = {
+        "Use the module name declared in the source.",
+        "Times are in nanoseconds. The testbench drives the selected input.",
+        "The control appears in Live Port I/O and drives the selected input.",
+        "The indicator reads a DUT output at the live sampling interval.",
+        "Plots read signals or slices relative to the DUT and show recent samples.",
+        "RX and TX are relative to the DUT. The console exchanges asynchronous 8N1 bytes.",
+        "The memory device attaches to the DUT controller. The optional image preloads its contents.",
+        "SPI uses mode 0 and an individual active-low chip select. SCK, MOSI and MISO can be shared.",
+        "I²C uses open-drain lines with pull-ups and a 7-bit address.",
+        "The testbench drives a constant expression at the selected width.",
+        "The table displays hexadecimal bytes, including unknown and high-impedance states."
+    };
+    const gchar *details_ru[] = {
+        "Укажите имя модуля, объявленное в исходнике.",
+        "Время задаётся в наносекундах. Тестбенч управляет выбранным входом.",
+        "Элемент появляется в Live Port I/O и управляет входом схемы.",
+        "Индикатор считывает выход схемы с интервалом живого опроса.",
+        "График считывает сигналы или срезы DUT и показывает недавние выборки.",
+        "RX и TX задаются относительно DUT. Консоль передаёт байты в режиме 8N1.",
+        "Память подключается к контроллеру DUT. Файл образа загружает начальные данные.",
+        "SPI работает в режиме 0 с отдельным CS#. Линии SCK, MOSI и MISO можно делить.",
+        "I²C использует открытый сток, подтяжки и 7-битный адрес.",
+        "Тестбенч задаёт постоянное выражение выбранной ширины.",
+        "Таблица показывает байты в hex, включая неизвестные и высокоимпедансные состояния."
+    };
+    gchar *full_english = g_strconcat(english, "\n\n", details_en[preset->icon], NULL);
+    gchar *full_russian = g_strconcat(russian, "\n\n", details_ru[preset->icon], NULL);
+    simulation_dialog_guidance(form->dialog, full_english, full_russian);
+    g_free(full_english);
+    g_free(full_russian);
+    g_free(english);
+    g_free(russian);
     gchar **fields = g_strsplit(preset->fields, "|", -1);
     gchar **specs = g_strsplit(preset->pins, "|", -1);
     guint pin_count = g_strv_length(specs);
@@ -4066,6 +4249,11 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Add Test Device", parent,
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
         "_Insert Rule", GTK_RESPONSE_ACCEPT, NULL);
+    simulation_dialog_tools(dialog,
+        "Find a device by name, regular expression or type. Pick a field, then double-click a "
+        "compatible port or choose a slice. Insert Rule adds the device to Port Signals.",
+        "Найдите устройство по имени, регулярному выражению или типу. Выберите поле и дважды "
+        "щёлкните по порту либо укажите срез. Insert Rule добавляет устройство в Port Signals.");
     gtk_window_set_default_size(GTK_WINDOW(dialog), 960, 520);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     g_object_ref_sink(dialog);
@@ -4249,6 +4437,11 @@ static void simulation_preview_harness(GtkButton *button, gpointer data)
     GtkWindow *parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Generated Testbench", parent,
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE, NULL);
+    simulation_dialog_tools(dialog,
+        "Review and copy the generated SystemVerilog. Dependencies lists model sources and "
+        "staged files. A validation error appears here before launch.",
+        "Просмотрите и скопируйте сгенерированный SystemVerilog. Dependencies показывает "
+        "исходники моделей и подготовленные файлы. Ошибки правил видны до запуска.");
     g_object_ref_sink(dialog);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 760, 480);
     GtkWidget *notebook = gtk_notebook_new();
@@ -4635,6 +4828,12 @@ static void simulation_preview_diagram(GtkButton *button, gpointer data)
     GtkWindow *parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Testbench Diagram", parent,
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE, NULL);
+    simulation_dialog_tools(dialog,
+        "The DUT ports are in the center, stimuli on the left and devices or probes on the "
+        "right. Search by port, slice or device and filter by direction. Click a port to jump "
+        "to a rule.",
+        "Порты DUT в центре, источники слева, устройства и наблюдатели справа. Ищите по порту, "
+        "срезу или устройству, фильтруйте по направлению. Нажмите порт для перехода к правилу.");
     g_object_ref_sink(dialog);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 880, 540);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
@@ -4677,6 +4876,13 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Port Signals", parent,
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
         harness ? "_Start Debugging" : "_Save for Next Run", GTK_RESPONSE_ACCEPT, NULL);
+    simulation_dialog_tools(dialog,
+        "Choose a module and add device rules, or leave the recipe empty to run an existing "
+        "testbench. Ports shows directions, widths and assignments. Source is copyable. Use the "
+        "separate HDL and diagram previews to review the recipe.",
+        "Укажите модуль и добавьте правила устройств или оставьте настройки пустыми для "
+        "готового тестбенча. В Ports видны направления, ширина и привязки. Из Source можно "
+        "копировать исходник. Для проверки откройте просмотр HDL или схему.");
     g_object_ref_sink(dialog);
     gchar *source_directory = g_path_get_dirname(run->sources[0]);
     gchar *source_snapshot = port_browser_source(run->sources[0]);
@@ -6007,6 +6213,8 @@ static void simulation_uart_closed(GtkWidget *window, gpointer data)
     run->uart_window = run->uart_view = run->uart_entry = NULL;
 }
 
+/* EN: Open the tool from button for the current view or simulation in data.
+ * RU: Открывает инструмент по button для текущего просмотра или симуляции из data. */
 static void simulation_uart_show(GtkButton *button, gpointer data)
 {
     (void)button;
@@ -6018,6 +6226,11 @@ static void simulation_uart_show(GtkButton *button, gpointer data)
     }
     GtkWidget *window = gtk_dialog_new_with_buttons("UART Console", GTK_WINDOW(run->dialog),
         GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE, NULL);
+    simulation_dialog_tools(window,
+        "Enter text and press Enter to send it over the configured UART. Received bytes appear "
+        "in the transcript. The console requires the uart rule with the console option.",
+        "Введите текст и нажмите Enter для отправки по UART. Принятые байты появляются в "
+        "журнале. Для этого окна нужно правило uart с параметром console.");
     run->uart_window = window;
     gtk_window_set_default_size(GTK_WINDOW(window), 600, 330);
     g_signal_connect_swapped(window, "response", G_CALLBACK(gtk_widget_destroy), window);
@@ -6940,6 +7153,12 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
     run->dialog = gtk_dialog_new_with_buttons("Verilog Simulation", parent,
         GTK_DIALOG_DESTROY_WITH_PARENT | (interactive ? 0 : GTK_DIALOG_MODAL),
         "_Cancel", GTK_RESPONSE_CANCEL, NULL);
+    simulation_dialog_tools(run->dialog,
+        "Use the debugger controls to continue, step or pause. Port Signals opens saved setup "
+        "for the next run. Live Port I/O shows configured controls and measurements.",
+        "Кнопки отладчика позволяют продолжить, шагнуть или поставить паузу. Port Signals "
+        "открывает настройки следующего запуска. В Live Port I/O доступны органы управления и "
+        "измерения.");
     g_object_ref_sink(run->dialog);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(run->dialog));
     GtkWidget *label = gtk_label_new(interactive ?

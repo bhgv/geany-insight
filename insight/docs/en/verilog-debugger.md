@@ -145,6 +145,11 @@ In the diagram, **Regex** enables regular expressions. **All directions**
 can be narrowed to Input, Output, Inout or Ref. The filters combine.
 Invalid expressions show a diagnostic next to the search field.
 
+Verilog dialogs offer **Help** for the current window. In the wizard, help
+also describes the selected device. The brain icon opens **AI Assistant**
+above the current dialog. Only help text is prefilled. Source files and
+recipes can be added manually. A request is sent only after **Send**.
+
 ## Triggered waveform capture and live controls
 
 In **Port Signals** for the current file, configure one optional
