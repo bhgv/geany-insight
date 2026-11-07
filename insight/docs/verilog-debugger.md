@@ -122,6 +122,11 @@ device rule. Both rules form the connection. The table lists the device
 against the original port.
 
 
+**Preview Testbench…** shows the SystemVerilog generated from the current
+recipe. **Dependencies** lists model sources and files staged for launch.
+Invalid recipes show a diagnostic. The preview is copyable and leaves the
+saved recipe and simulator state untouched.
+
 ## Triggered waveform capture and live controls
 
 In **Port Signals** for the current file, configure one optional

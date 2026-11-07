@@ -4197,6 +4197,101 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     g_ptr_array_unref(form.entries);
 }
 
+/* EN: Generate HDL for recipe using directory to resolve files. sources and
+ * images receive staged dependencies. Return owned HDL or set error on failure.
+ * A recipe for an existing testbench returns NULL without an error.
+ * RU: Генерирует HDL из recipe, разрешая файлы относительно directory.
+ * sources и images получают зависимости. Возвращает новый HDL или задаёт
+ * error. Для готового тестбенча возвращает NULL без ошибки. */
+static gchar *simulation_setup_harness(const gchar *recipe, const gchar *directory,
+                                       GPtrArray *sources, GHashTable *images, GError **error)
+{
+    if (strlen(recipe) > 16384)
+    {
+        g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                            "The port recipe exceeds 16 KiB.");
+        return NULL;
+    }
+    return simulation_port_harness(recipe, directory, sources, images, error);
+}
+
+/* EN: Add a selectable read-only text page named title to notebook.
+ * RU: Добавляет в notebook вкладку title с текстом text для чтения и копирования. */
+static void simulation_preview_page(GtkNotebook *notebook, const gchar *title, const gchar *text)
+{
+    GtkWidget *view = gtk_text_view_new();
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(view), FALSE);
+    gtk_text_view_set_monospace(GTK_TEXT_VIEW(view), TRUE);
+    gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)), text, -1);
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(scroll), view);
+    gtk_notebook_append_page(notebook, scroll, gtk_label_new(title));
+}
+
+/* EN: Preview the unsaved recipe buffer in data using the source directory on
+ * button. Validate exactly as launch does and leave the recipe unchanged.
+ * RU: Показывает несохранённый рецепт из буфера data. Каталог берётся из button.
+ * Проверяет рецепт так же, как запуск, и не меняет его. */
+static void simulation_preview_harness(GtkButton *button, gpointer data)
+{
+    GtkTextBuffer *buffer = data;
+    GtkTextIter first, last;
+    gtk_text_buffer_get_bounds(buffer, &first, &last);
+    gchar *recipe = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
+    const gchar *directory = g_object_get_data(G_OBJECT(button), "source-directory");
+    GPtrArray *sources = g_ptr_array_new_with_free_func(g_free);
+    GHashTable *images = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
+                                               (GDestroyNotify)g_bytes_unref);
+    GError *error = NULL;
+    gchar *hdl = simulation_setup_harness(recipe, directory, sources, images, &error);
+    g_free(recipe);
+
+    GtkWindow *parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Generated Testbench", parent,
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE, NULL);
+    g_object_ref_sink(dialog);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 760, 480);
+    GtkWidget *notebook = gtk_notebook_new();
+    gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),
+                       notebook, TRUE, TRUE, 0);
+    if (!hdl)
+        simulation_preview_page(GTK_NOTEBOOK(notebook), "Validation",
+            error ? error->message : "This recipe runs the existing testbench without generating HDL.");
+    else
+    {
+        simulation_preview_page(GTK_NOTEBOOK(notebook), "SystemVerilog", hdl);
+        GString *dependencies = g_string_new(NULL);
+        for (guint i = 0; i < sources->len; i++)
+        {
+            gchar *path = g_filename_display_name(sources->pdata[i]);
+            g_string_append_printf(dependencies, "Model source: %s\n", path);
+            g_free(path);
+        }
+        GList *names = g_list_sort(g_hash_table_get_keys(images), (GCompareFunc)g_strcmp0);
+        for (GList *item = names; item; item = item->next)
+        {
+            gchar *name = simulation_memory_filename(item->data);
+            GBytes *bytes = g_hash_table_lookup(images, item->data);
+            g_string_append_printf(dependencies, "Staged file: %s (%" G_GSIZE_FORMAT " bytes)\n",
+                                   name, g_bytes_get_size(bytes));
+            g_free(name);
+        }
+        g_list_free(names);
+        simulation_preview_page(GTK_NOTEBOOK(notebook), "Dependencies",
+            dependencies->len ? dependencies->str : "No model sources or device files.");
+        g_string_free(dependencies, TRUE);
+    }
+    g_clear_error(&error);
+    g_free(hdl);
+    g_hash_table_unref(images);
+    g_ptr_array_unref(sources);
+
+    gtk_widget_show_all(dialog);
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+    g_object_unref(dialog);
+}
+
 /* EN: Edit the recipe saved at path in a modal child of parent. run supplies the compiler,
  * input sources, and include path. On cancellation, publish preprocessing errors.
  * On acceptance, optional output
@@ -4255,10 +4350,15 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     GtkWidget *view = gtk_text_view_new();
     gtk_text_view_set_monospace(GTK_TEXT_VIEW(view), TRUE);
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+    GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     GtkWidget *wizard = gtk_button_new_with_label("Add Test Device…");
-    gtk_widget_set_halign(wizard, GTK_ALIGN_START);
     g_object_set_data(G_OBJECT(wizard), "source-directory", source_directory);
-    gtk_box_pack_start(GTK_BOX(box), wizard, FALSE, FALSE, 4);
+    gtk_box_pack_start(GTK_BOX(actions), wizard, FALSE, FALSE, 0);
+    GtkWidget *preview = gtk_button_new_with_label("Preview Testbench…");
+    g_object_set_data(G_OBJECT(preview), "source-directory", source_directory);
+    g_signal_connect(preview, "clicked", G_CALLBACK(simulation_preview_harness), buffer);
+    gtk_box_pack_start(GTK_BOX(actions), preview, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), actions, FALSE, FALSE, 4);
     GFile *file = g_file_new_for_path(path);
     GFileInputStream *stream = g_file_read(file, NULL, NULL);
     if (stream)
@@ -4297,10 +4397,9 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         GPtrArray *sources = g_ptr_array_new_with_free_func(g_free);
         GHashTable *images = g_hash_table_new_full(g_str_hash, g_str_equal, g_free,
                                                     (GDestroyNotify)g_bytes_unref);
-        gchar *generated = strlen(recipe) <= 16384 ?
-            simulation_port_harness(recipe, source_directory, sources, images, &error) : NULL;
+        gchar *generated = simulation_setup_harness(recipe, source_directory, sources, images, &error);
         gchar *directory = g_path_get_dirname(path);
-        if (!error && strlen(recipe) <= 16384 && g_mkdir_with_parents(directory, 0700) == 0 &&
+        if (!error && g_mkdir_with_parents(directory, 0700) == 0 &&
             g_file_set_contents(path, recipe, -1, &error))
         {
             accepted = TRUE;

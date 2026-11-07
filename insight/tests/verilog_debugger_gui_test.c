@@ -363,9 +363,34 @@ static gboolean add_test_slider(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* EN: Populate modal setup and verify wizard sorting and rule navigation.
+/* EN: Verify the generated testbench in the preview, then close it. data points
+ * to the caller's result flag. Return G_SOURCE_CONTINUE until the window exists.
+ * RU: Проверяет сгенерированный тестбенч в просмотре и закрывает окно.
+ * data указывает на результат. Возвращает G_SOURCE_CONTINUE до появления окна. */
+static gboolean check_testbench_preview(gpointer data)
+{
+    GtkWidget *dialog = find_window("Generated Testbench");
+    if (!dialog)
+        return G_SOURCE_CONTINUE;
+    GtkWidget *view = find_control(dialog, "console");
+    if (GTK_IS_TEXT_VIEW(view))
+    {
+        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+        GtkTextIter first, last;
+        gtk_text_buffer_get_bounds(buffer, &first, &last);
+        gchar *hdl = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
+        *(gboolean *)data = !gtk_text_view_get_editable(GTK_TEXT_VIEW(view)) &&
+                           strstr(hdl, "module geany_port_testbench;") &&
+                           strstr(hdl, "$geany_sram(") && strstr(hdl, "geany_slice_net");
+        g_free(hdl);
+    }
+    gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);
+    return G_SOURCE_REMOVE;
+}
+
+/* EN: Populate modal setup and verify sorting, rule navigation and the HDL preview.
  * data is unused. Return G_SOURCE_CONTINUE until the setup can be accepted.
- * RU: Заполняет модальные настройки и проверяет сортировку и переход к правилу.
+ * RU: Заполняет модальные настройки и проверяет сортировку, переход и просмотр HDL.
  * data не используется. Возвращает G_SOURCE_CONTINUE, пока настройки недоступны. */
 static gboolean accept_ports(gpointer data)
 {
@@ -440,6 +465,15 @@ static gboolean accept_ports(gpointer data)
         gboolean correct = !strcmp(selection, "hex-table hex_out 16");
         g_free(selection);
         if (!correct)
+            return G_SOURCE_CONTINUE;
+        gboolean preview_ok = FALSE;
+        guint preview = g_timeout_add(10, check_testbench_preview, &preview_ok);
+        if (!click(dialog, "Preview Testbench…"))
+        {
+            g_source_remove(preview);
+            return G_SOURCE_CONTINUE;
+        }
+        if (!preview_ok)
             return G_SOURCE_CONTINUE;
     }
     gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
