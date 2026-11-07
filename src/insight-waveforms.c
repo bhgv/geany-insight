@@ -4450,13 +4450,52 @@ static void simulation_diagram_follow_port(PortBrowser *browser, const gchar *po
     }
 }
 
+/* EN: Filter the diagram in data by the text in editable. Keep full connection
+ * rows together and update the visible-port count.
+ * RU: Фильтрует схему из data по тексту editable. Скрывает связи целиком
+ * и обновляет число видимых портов. */
+static void simulation_diagram_filter(GtkEditable *editable, gpointer data)
+{
+    GtkGrid *grid = data;
+    guint count = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(grid), "diagram-port-count"));
+    GtkLabel *status = g_object_get_data(G_OBJECT(grid), "diagram-status");
+    gchar *query = g_utf8_casefold(gtk_entry_get_text(GTK_ENTRY(editable)), -1);
+    guint visible = 0;
+    for (guint row = 1; row <= count; row++)
+    {
+        GtkWidget *port = gtk_grid_get_child_at(grid, 2, row);
+        const gchar *index = g_object_get_data(G_OBJECT(port), "diagram-search-text");
+        gboolean matches = strstr(index, query) != NULL;
+        for (gint column = 0; column < 5; column++)
+        {
+            GtkWidget *child = gtk_grid_get_child_at(grid, column, row);
+            if (child)
+                gtk_widget_set_visible(child, matches);
+        }
+        visible += matches;
+    }
+    gchar *summary = g_strdup_printf("%u of %u connected ports", visible, count);
+    gtk_label_set_text(status, summary);
+    g_free(summary);
+    g_free(query);
+}
+
 /* EN: Build a scrollable diagram from browser's assigned ports and hdl's slices.
- * Use module as the DUT caption, include hidden rows, and return clicks to dialog.
+ * Use module as the DUT caption, add local search and return clicks to dialog.
  * RU: Строит прокручиваемую схему по портам browser и срезам из hdl.
- * module задаёт заголовок DUT. Учитывает скрытые строки, нажатия передаёт в dialog. */
+ * module задаёт заголовок DUT. Добавляет поиск и передаёт нажатия в dialog. */
 static GtkWidget *simulation_diagram_widget(const PortBrowser *browser, const gchar *module,
                                             const gchar *hdl, GtkDialog *dialog)
 {
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *search = gtk_search_entry_new();
+    gtk_widget_set_name(search, "insight-diagram-search");
+    gtk_entry_set_placeholder_text(GTK_ENTRY(search), "Find ports, slices or devices");
+    gtk_box_pack_start(GTK_BOX(toolbar), search, TRUE, TRUE, 0);
+    GtkWidget *status = gtk_label_new(NULL);
+    gtk_box_pack_start(GTK_BOX(toolbar), status, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), toolbar, FALSE, FALSE, 6);
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     GtkGrid *grid = GTK_GRID(gtk_grid_new());
     gtk_widget_set_name(GTK_WIDGET(grid), "insight-testbench-diagram");
@@ -4488,6 +4527,11 @@ static GtkWidget *simulation_diagram_widget(const PortBrowser *browser, const gc
             gchar *port = g_strdup_printf("%s · %s bits%s%s", name, width,
                                          used ? "\n" : "", used ? used : "");
             simulation_diagram_port(grid, row, name, direction, port, dialog);
+            GtkWidget *block = gtk_grid_get_child_at(grid, 2, row);
+            gchar *search_text = g_strjoin(" ", port, direction, bindings, NULL);
+            g_object_set_data_full(G_OBJECT(block), "diagram-search-text",
+                                   g_utf8_casefold(search_text, -1), g_free);
+            g_free(search_text);
             GString *left = g_string_new(NULL), *right = g_string_new(NULL);
             gchar **rules = g_strsplit(bindings, ", ", -1);
             gboolean input = !strcmp(direction, "input");
@@ -4525,7 +4569,12 @@ static GtkWidget *simulation_diagram_widget(const PortBrowser *browser, const gc
     if (row == 1)
         simulation_diagram_block(grid, 2, row, NULL, "No port bindings found.");
     g_hash_table_unref(slices);
-    return scroll;
+    g_object_set_data(G_OBJECT(grid), "diagram-port-count", GUINT_TO_POINTER(row - 1));
+    g_object_set_data(G_OBJECT(grid), "diagram-status", status);
+    g_signal_connect(search, "changed", G_CALLBACK(simulation_diagram_filter), grid);
+    simulation_diagram_filter(GTK_EDITABLE(search), grid);
+    gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
+    return box;
 }
 
 /* EN: Validate the recipe in browser (data) and open a separate modal diagram

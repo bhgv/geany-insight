@@ -388,19 +388,25 @@ static gboolean check_testbench_preview(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* EN: Check diagram labels and activate the hex-table port. data points to the
+/* EN: Check diagram labels, filter for the hex table and activate its port. data is the
  * caller's result flag. Return G_SOURCE_CONTINUE until the window appears.
- * RU: Проверяет подписи схемы и нажимает порт hex-таблицы. data указывает на флаг
+ * RU: Проверяет подписи, находит hex-таблицу поиском и нажимает её порт. data — флаг
  * результата. Возвращает G_SOURCE_CONTINUE до появления окна. */
 static gboolean check_testbench_diagram(gpointer data)
 {
     GtkWidget *dialog = find_window("Testbench Diagram");
     if (!dialog)
         return G_SOURCE_CONTINUE;
+    GtkWidget *slice = find_control(dialog, "level · 16 bits\nlevel[7:0]");
+    GtkWidget *table = find_control(dialog, "hex_out · 16 bits");
+    GtkWidget *search = find_control(dialog, "insight-diagram-search");
     gboolean labels = find_control(dialog, "insight-testbench-diagram") &&
-                      find_control(dialog, "DUT · live_devices") &&
-                      find_control(dialog, "level · 16 bits\nlevel[7:0]");
-    *(gboolean *)data = labels && click(dialog, "hex_out · 16 bits");
+                      find_control(dialog, "DUT · live_devices") && slice && table &&
+                      GTK_IS_ENTRY(search);
+    if (labels)
+        gtk_entry_set_text(GTK_ENTRY(search), "HEX-TABLE");
+    *(gboolean *)data = labels && !gtk_widget_is_visible(slice) &&
+                       gtk_widget_is_visible(table) && click(dialog, "hex_out · 16 bits");
     if (!*(gboolean *)data)
         gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);
     return G_SOURCE_REMOVE;

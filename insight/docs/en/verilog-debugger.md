@@ -136,6 +136,11 @@ hidden by the port table filters. The preview leaves the simulator idle.
 Click a port in the center of the diagram to jump to its rule in **Port Signals**.
 For multiple bindings, choose the rule by line number and text.
 
+**Find ports, slices or devices** matches names, slices, directions and
+device labels without regard to case. Matching connection rows stay
+together, and the counter shows the visible port count. Clear the search
+to restore the whole diagram.
+
 ## Triggered waveform capture and live controls
 
 In **Port Signals** for the current file, configure one optional
