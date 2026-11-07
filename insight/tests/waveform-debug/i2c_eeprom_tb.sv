@@ -9,7 +9,7 @@ module i2c_eeprom_tb;
     assign sda = lua_drive;
     always @(scl or sda) $geany_i2c_eeprom(scl, sda, 'h50, device_drive, "i2c.hex");
 
-    always @(scl or sda) $geany_i2c_lua(scl, sda, 'h51, lua_drive, "device.lua");
+    always @(scl or sda) $geany_i2c_lua(scl, sda, 'h52, lua_drive, "device.lua");
 
     task start;
         sda_low = 0;
@@ -78,7 +78,7 @@ module i2c_eeprom_tb;
         send_byte('ha2, 1); send_byte('h6a, 1); send_byte('h37, 1);
         start();
         send_byte('ha3, 1);
-        read_byte('h6a, 1); read_byte('h02, 1); read_byte('h56, 0);
+        read_byte('h6a, 1); read_byte('h02, 1); read_byte('h56, 1); read_byte('hff, 0);
         stop();
         $display("I2C EEPROM test passed");
         $finish;

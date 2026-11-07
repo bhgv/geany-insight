@@ -1,9 +1,11 @@
 local writes = 0
 local shifts = 0
+local reads = 0
 
 function reset()
     writes = 0
     shifts = 0
+    reads = 0
 end
 
 function shift(bit, index)
@@ -28,5 +30,14 @@ function write(byte)
 end
 
 function read()
-    return 0x56
+    reads = reads + 1
+    if reads == 1 then
+        return 0x56
+    end
+    return nil
+end
+
+
+function address(header)
+    return (header >> 1) == 0x51
 end

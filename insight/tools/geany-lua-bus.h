@@ -180,7 +180,8 @@ static int lua_i2c_edge(LuaBus *bus)
             bus->input = (bus->input << 1) | data;
             if (++bus->bits == 8) {
                 if (!bus->selected) {
-                    bus->selected = (bus->input >> 1) == bus->address;
+                    int accept = lua_bus_call(bus, LUA_ADDRESS, bus->input, -1, NULL, 0, 0);
+                    bus->selected = accept < 0 ? (bus->input >> 1) == bus->address : accept;
                     bus->writing = bus->selected && !(bus->input & 1);
                 } else {
                     if (bus->lua.enabled & (1u << LUA_RECEIVE))

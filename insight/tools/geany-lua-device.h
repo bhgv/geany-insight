@@ -9,8 +9,8 @@
 #include <lualib.h>
 
 enum { LUA_DEVICE_LIMIT = 4096 };
-enum LuaDeviceCallback { LUA_RESET, LUA_SHIFT, LUA_RECEIVE, LUA_FINISH, LUA_READ, LUA_WRITE };
-static const char *const lua_device_callbacks[] = {"reset", "shift", "receive", "finish", "read", "write"};
+enum LuaDeviceCallback { LUA_RESET, LUA_SHIFT, LUA_RECEIVE, LUA_FINISH, LUA_READ, LUA_WRITE, LUA_ADDRESS };
+static const char *const lua_device_callbacks[] = {"reset", "shift", "receive", "finish", "read", "write", "address"};
 
 typedef struct {
     pthread_t thread;
@@ -109,7 +109,14 @@ static void *lua_device_worker(void *data)
             lua_sethook(lua, lua_device_budget, LUA_MASKCOUNT, 1000000);
             if (lua_pcall(lua, arguments, LUA_MULTRET, 0))
                 lua_device_error(device, lua_tostring(lua, -1));
-            else for (int i = 1; i <= lua_gettop(lua); i++) {
+            else if (device->callback == LUA_ADDRESS) {
+                if (lua_gettop(lua) != 1 || !lua_isboolean(lua, 1))
+                    lua_device_error(device, "I2C address must return true or false");
+                else {
+                    device->output[0] = (unsigned char)lua_toboolean(lua, 1);
+                    device->count = 1;
+                }
+            } else for (int i = 1; i <= lua_gettop(lua); i++) {
                 if (lua_isnil(lua, i))
                     continue;
                 int valid;
