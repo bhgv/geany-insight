@@ -165,6 +165,55 @@ def check_breakpoint(compiler, runtime, fixtures, directory, environment):
     check_capture(directory / "counter.vcd", 25, "count")
 
 
+# EN: Verify each signal stop mode and removal with compiler/runtime and environment.
+# fixtures is unused. The generated design and logs stay in directory.
+# RU: Проверяет режимы и снятие остановок через compiler/runtime и environment.
+# fixtures не используется. Схема и журнал создаются в directory.
+def check_signal_stops(compiler, runtime, fixtures, directory, environment):
+    directory.mkdir(parents=True, exist_ok=True)
+    source = directory / "signal_stops.v"
+    source.write_text(
+        """module signal_stops;
+  reg clk = 0;
+  reg [3:0] bus = 0;
+  wire net_clk = clk;
+  initial begin
+    #5 clk = 1;
+    #5 clk = 0;
+    #5 bus = 4'b1010;
+    #5 bus = 4'b10xz;
+    #5 bus = 4'b0000;
+    #5 $finish;
+  end
+endmodule
+""", encoding="ascii")
+    compile_design(compiler, directory, [source.resolve()], environment)
+    simulator = Simulator(runtime, directory, environment)
+    try:
+        require("GEANY-VVP-SIGNAL-STOPS" in simulator.prompt(), "Missing signal stop support")
+        require("signal stop armed" in simulator.command("geany-watch-signal signal_stops.net_clk rise"),
+                "Could not arm a net")
+        require("signal_stops.net_clk 0 -> 1" in simulator.command("cont"), "Missing rising edge")
+        require("signal stop armed" in simulator.command("geany-watch-signal signal_stops.clk fall"),
+                "Could not arm a register")
+        require("signal stop cleared" in simulator.command("geany-watch-signal signal_stops.net_clk off"),
+                "Could not remove a signal stop")
+        require("signal_stops.clk 1 -> 0" in simulator.command("cont"), "Missing falling edge")
+        require("signal stop armed" in simulator.command("geany-watch-signal signal_stops.bus mask 10??"),
+                "Could not arm a masked stop")
+        require("signal_stops.bus 0000 -> 1010" in simulator.command("cont"), "Missing mask match")
+        require("signal stop armed" in simulator.command("geany-watch-signal signal_stops.bus unknown"),
+                "Could not replace the bus stop")
+        require("signal_stops.bus 1010 -> 10xz" in simulator.command("cont"), "Missing X/Z transition")
+        require("signal stop armed" in simulator.command("geany-watch-signal signal_stops.bus change"),
+                "Could not arm any-change stop")
+        require("signal_stops.bus 10xz -> 0000" in simulator.command("cont"), "Missing general change")
+        simulator.send("cont")
+        require(simulator.process.wait(timeout=30) == 0, "Signal stop fixture failed")
+    finally:
+        simulator.close()
+
+
 # EN: Check process selection, isolated activations, a parent frame and memory.
 # RU: Проверяем выбор процесса, отдельные активации, родительский кадр и память.
 def check_processes(compiler, runtime, fixtures, directory, environment):
@@ -560,6 +609,7 @@ def main():
         ("ddr4-device", lambda directory: check_ddr4_device(compiler, runtime, fixtures, directory, environment)),
         ("editor", lambda directory: check_editor(editor, directory, environment)),
         ("breakpoint", lambda directory: check_breakpoint(compiler, runtime, fixtures, directory, environment)),
+        ("signal-stops", lambda directory: check_signal_stops(compiler, runtime, fixtures, directory, environment)),
         ("source-step", lambda directory: check_source_steps(compiler, runtime, fixtures, directory, environment)),
         ("processes", lambda directory: check_processes(compiler, runtime, fixtures, directory, environment)),
         ("synchronous-steps", lambda directory: check_synchronous_steps(

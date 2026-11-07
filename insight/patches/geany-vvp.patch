@@ -60,7 +60,7 @@ index 175e8ae..6c544f5 100644
  
        if (prompt && prompt[0]) {
  	    fputs(prompt, stdout);
-@@ -66,12 +71,507 @@ static char* readline_stub(const char*prompt)
+@@ -66,12 +71,653 @@ static char* readline_stub(const char*prompt)
  
        return 0;
  }
@@ -456,6 +456,152 @@ index 175e8ae..6c544f5 100644
 +      printf("GEANY-SIGNALS-END\t%s\n", remaining ? "complete" : "limited");
 +}
 +
++enum class geany_watch_mode { change, rise, fall, unknown, mask };
++
++struct geany_watch {
++      std::string path, previous, mask;
++      geany_watch_mode mode;
++      vpiHandle callback;
++};
++
++static std::vector<geany_watch*> geany_watches;
++static bool geany_at_prompt = false;
++
++// EN: Check bits against pattern, where '?' skips a bit.
++// RU: Сравнивает bits с pattern, где '?' пропускает бит.
++static bool geany_watch_matches(const std::string& bits, const std::string& pattern)
++{
++      if (bits.size() != pattern.size())
++            return false;
++      for (std::size_t i = 0; i < bits.size(); i++)
++            if (pattern[i] != '?' && pattern[i] != bits[i])
++                  return false;
++      return true;
++}
++
++// EN: Check the transition from rule.previous to bits.
++// RU: Проверяет переход от rule.previous к bits.
++static bool geany_watch_transition(const geany_watch& rule, const std::string& bits)
++{
++      if (bits == rule.previous || bits.size() != rule.previous.size())
++            return false;
++      switch (rule.mode) {
++          case geany_watch_mode::change: return true;
++          case geany_watch_mode::rise: return rule.previous == "0" && bits == "1";
++          case geany_watch_mode::fall: return rule.previous == "1" && bits == "0";
++          case geany_watch_mode::mask:
++            return !geany_watch_matches(rule.previous, rule.mask) &&
++                   geany_watch_matches(bits, rule.mask);
++          case geany_watch_mode::unknown:
++            for (std::size_t i = 0; i < bits.size(); i++)
++                  if ((bits[i] == 'x' || bits[i] == 'z') && bits[i] != rule.previous[i])
++                        return true;
++            return false;
++      }
++      return false;
++}
++
++// EN: Observe the VPI event and stop after the current scheduler action.
++// RU: Проверяет событие event и останавливает планировщик после текущего действия.
++static PLI_INT32 geany_watch_changed(p_cb_data event)
++{
++      geany_watch* rule = reinterpret_cast<geany_watch*>(event->user_data);
++      if (!event->value || event->value->format != vpiBinStrVal || !event->value->value.str)
++            return 0;
++      const std::string bits(event->value->value.str);
++      if (!geany_at_prompt && geany_watch_transition(*rule, bits)) {
++            printf("Geany signal stop: %s %s -> %s\n", rule->path.c_str(),
++                   rule->previous.c_str(), bits.c_str());
++            schedule_stop(0);
++      }
++      rule->previous = bits;
++      return 0;
++}
++
++// EN: Remove the callback for the watch at index.
++// RU: Удаляет обратный вызов наблюдения с индексом index.
++static void geany_watch_remove(std::size_t index)
++{
++      geany_watch* rule = geany_watches[index];
++      vpi_remove_cb(rule->callback);
++      geany_watches.erase(geany_watches.begin() + index);
++      delete rule;
++}
++
++// EN: Add or replace the watch specified by argc/argv at the pause prompt.
++// RU: Создаёт или заменяет наблюдение из argc/argv на паузе.
++static void cmd_geany_watch_signal(unsigned argc, const char* argv[])
++{
++      if (!geany_debug_enabled() || argc < 3 || argc > 4)
++            return;
++      const std::string path(argv[1]), mode(argv[2]), mask(argc == 4 ? argv[3] : "");
++      std::size_t index = 0;
++      while (index < geany_watches.size() && geany_watches[index]->path != path)
++            ++index;
++      if (mode == "off") {
++            if (index < geany_watches.size())
++                  geany_watch_remove(index);
++            printf("Geany: signal stop cleared: %s\n", path.c_str());
++            return;
++      }
++
++      geany_watch_mode kind;
++      if (mode == "change") kind = geany_watch_mode::change;
++      else if (mode == "rise") kind = geany_watch_mode::rise;
++      else if (mode == "fall") kind = geany_watch_mode::fall;
++      else if (mode == "unknown") kind = geany_watch_mode::unknown;
++      else if (mode == "mask") kind = geany_watch_mode::mask;
++      else return;
++
++      if (index == geany_watches.size() && index >= 64) {
++            printf("Geany: limit of 64 signal stops reached.\n");
++            return;
++      }
++      const vpi_mode_t previous_mode = vpi_mode_flag;
++      vpi_mode_flag = VPI_MODE_ROSYNC;
++      vpiHandle signal = vpi_handle_by_name(path.c_str(), nullptr);
++      vpi_mode_flag = previous_mode;
++      const int type = signal ? vpi_get(vpiType, signal) : 0;
++      const int width = signal ? vpi_get(vpiSize, signal) : 0;
++      if ((type != vpiReg && type != vpiNet && type != vpiIntegerVar) ||
++          vpi_get(vpiAutomatic, signal) == 1 || width < 1 || width > 4096 ||
++          ((kind == geany_watch_mode::rise || kind == geany_watch_mode::fall) && width != 1) ||
++          (kind == geany_watch_mode::mask &&
++           (mask.size() != static_cast<std::size_t>(width) ||
++            mask.find_first_not_of("01xz?") != std::string::npos ||
++            mask.find_first_not_of('?') == std::string::npos))) {
++            printf("Geany: unsupported signal, edge width or mask: %s\n", path.c_str());
++            return;
++      }
++      s_vpi_value value = {};
++      value.format = vpiBinStrVal;
++      vpi_get_value(signal, &value);
++      if (value.format != vpiBinStrVal || !value.value.str)
++            return;
++      geany_watch* rule = new geany_watch{path, value.value.str, mask, kind, nullptr};
++      s_vpi_value callback_value = {};
++      callback_value.format = vpiBinStrVal;
++      s_vpi_time callback_time = {};
++      callback_time.type = vpiSuppressTime;
++      s_cb_data callback = {};
++      callback.reason = cbValueChange;
++      callback.cb_rtn = geany_watch_changed;
++      callback.obj = signal;
++      callback.value = &callback_value;
++      callback.time = &callback_time;
++      callback.user_data = reinterpret_cast<decltype(callback.user_data)>(rule);
++      rule->callback = vpi_register_cb(&callback);
++      if (!rule->callback) {
++            delete rule;
++            printf("Geany: could not watch %s.\n", path.c_str());
++            return;
++      }
++      if (index < geany_watches.size())
++            geany_watch_remove(index);
++      geany_watches.push_back(rule);
++      printf("Geany: signal stop armed: %s (%s).\n", path.c_str(), mode.c_str());
++}
++
 +// EN: Deposit bits into a static integral variable while the scheduler waits.
 +// argc and argv contain the command, variable path and exact-width binary value.
 +// RU: Записывает биты в статическую целую переменную на паузе планировщика.
@@ -568,7 +714,7 @@ index 175e8ae..6c544f5 100644
  static void cmd_call(unsigned argc, const char*argv[])
  {
        __vpiHandle**table;
-@@ -444,6 +944,23 @@ static struct {
+@@ -444,6 +1090,24 @@ static struct {
          "Synonym for finish."},
        { "finish", &cmd_finish,
          "Finish the simulation."},
@@ -580,6 +726,7 @@ index 175e8ae..6c544f5 100644
 +        "Step to the next simulation tick."},
 +      { "geany-select-frame", &cmd_geany_select_frame, "Inspect a frame by depth."},
 +      { "geany-read-memory", &cmd_geany_read_memory, "Read one indexed memory, dynamic array, or queue element."},
++      { "geany-watch-signal", &cmd_geany_watch_signal, "Stop on changes to an HDL signal."},
 +      { "geany-signals", &cmd_geany_signals, "List static HDL ports, nets and registers with current values."},
 +      { "geany-write-register", &cmd_geany_write_register, "Deposit an exact-width binary value into a static register."},
 +      { "geany-processes", &cmd_geany_processes, "List live HDL processes."},
@@ -592,17 +739,18 @@ index 175e8ae..6c544f5 100644
        { "help",   &cmd_help,
          "Get help."},
        { "list",   &cmd_list,
-@@ -554,6 +1071,9 @@ void stop_handler(int rc)
+@@ -554,6 +1218,10 @@ void stop_handler(int rc)
  	    return;
        }
  
 +      geany_step = geany_step_mode::none;
++      geany_at_prompt = true;
 +      if (geany_debug_enabled())
-+            printf("GEANY-VVP-FRAMES\nGEANY-VVP-PROCESSES\nGEANY-VVP-SOURCE-STEP\nGEANY-VVP-WRITE-REGISTER\nGEANY-VVP-SIGNAL-TABLES\nGEANY-VVP-READY\n");
++            printf("GEANY-VVP-FRAMES\nGEANY-VVP-PROCESSES\nGEANY-VVP-SOURCE-STEP\nGEANY-VVP-WRITE-REGISTER\nGEANY-VVP-SIGNAL-TABLES\nGEANY-VVP-SIGNAL-STOPS\nGEANY-VVP-READY\n");
        vpi_mcd_printf(1,"** VVP Stop(%d) **\n", rc);
        vpi_mcd_printf(1,"** Flushing output streams.\n");
        invoke_command_const("$fflush");
-@@ -563,7 +1083,7 @@ void stop_handler(int rc)
+@@ -563,7 +1231,7 @@ void stop_handler(int rc)
  
        interact_flag = true;
        while (interact_flag) {
@@ -611,7 +759,7 @@ index 175e8ae..6c544f5 100644
  	    if (input == 0)
  		  break;
  
-@@ -575,7 +1095,8 @@ void stop_handler(int rc)
+@@ -575,7 +1243,8 @@ void stop_handler(int rc)
  
  	    if (first[0] != 0) {
  #ifdef USE_HISTORY
@@ -621,11 +769,12 @@ index 175e8ae..6c544f5 100644
  #endif
  		  invoke_command(first);
  	    }
-@@ -583,5 +1104,6 @@ void stop_handler(int rc)
+@@ -583,5 +1252,7 @@ void stop_handler(int rc)
  	    free(input);
        }
  
 +      geany_stopped_process = 0;
++      geany_at_prompt = false;
        vpi_mcd_printf(1,"** Continue **\n");
  }
 diff --git a/vvp/vpi_priv.h b/vvp/vpi_priv.h

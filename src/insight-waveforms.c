@@ -1708,7 +1708,7 @@ typedef struct {
     gchar prompt_tail[2];
     gboolean preview_pending;
     GtkWidget *signal_name;
-    gboolean register_write_ready;
+    gboolean register_write_ready, signal_stops_ready;
     GtkListStore *signal_tables[3];
     GtkWidget *signal_search, *signal_status, *signal_context, *signal_state;
     GtkWidget *signal_changed_only;
@@ -6153,6 +6153,8 @@ static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsi
             g_string_truncate(run->protocol_line, run->protocol_line->len - 1);
         const gchar *text = run->protocol_line->str;
         signal_tables_record(run, text);
+        if (!strcmp(text, "GEANY-VVP-SIGNAL-STOPS"))
+            run->signal_stops_ready = TRUE;
         if (!strcmp(text, "GEANY-VVP-WRITE-REGISTER"))
             run->register_write_ready = TRUE;
         if (strstr(text, "GEANY-VVP-FRAMES"))
@@ -7690,6 +7692,105 @@ static void signal_table_open_history(GtkMenuItem *item, gpointer data)
     g_object_unref(dialog);
 }
 
+/* EN: Send a watch command for path in run when its simulator is paused.
+ * mode selects the transition and mask contains the optional bit pattern.
+ * RU: Отправляет команду для path в остановленном сеансе run.
+ * mode задаёт переход, mask содержит необязательную маску. */
+static void signal_stop_send(WaveSimulation *run, const gchar *path, const gchar *mode, const gchar *mask)
+{
+    if (!run->signal_stops_ready || !simulation_signal_path(path))
+        return;
+    gchar *command = g_strdup_printf("geany-watch-signal %s %s%s%s\n", path, mode,
+        mask ? " " : "", mask ? mask : "");
+    simulation_write_command(run, command);
+    g_free(command);
+}
+
+/* EN: Set mask entry sensitivity from the mode selector. data is the entry.
+ * RU: Включает поле маски data при выборе режима в combo. */
+static void signal_stop_mode_changed(GtkComboBox *combo, gpointer data)
+{
+    gtk_widget_set_sensitive(GTK_WIDGET(data), gtk_combo_box_get_active(combo) == 4);
+}
+
+/* EN: Configure a stop for the signal attached to item in simulation data.
+ * RU: Настраивает остановку для сигнала из item в сеансе data. */
+static void signal_stop_configure(GtkMenuItem *item, gpointer data)
+{
+    WaveSimulation *run = data;
+    gchar *path = g_strdup(g_object_get_data(G_OBJECT(item), "signal-stop-path"));
+    guint width = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(item), "signal-stop-width"));
+    if (!path || !width || !simulation_signal_path(path))
+    {
+        g_free(path);
+        return;
+    }
+
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(insight_tr("Stop on signal"), GTK_WINDOW(run->dialog),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, insight_tr("Cancel"), GTK_RESPONSE_CANCEL,
+        insight_tr("Arm signal stop"), GTK_RESPONSE_ACCEPT, NULL);
+    g_object_ref_sink(dialog);
+    GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(box), 12);
+    gtk_box_set_spacing(GTK_BOX(box), 6);
+    GtkWidget *name = gtk_label_new(path);
+    gtk_label_set_selectable(GTK_LABEL(name), TRUE);
+    gtk_box_pack_start(GTK_BOX(box), name, FALSE, FALSE, 0);
+    GtkWidget *combo = gtk_combo_box_text_new();
+    const gchar *labels[] = {"Any value change", "Rising edge (0 to 1)", "Falling edge (1 to 0)",
+                             "A bit changes to X or Z", "Value starts matching a mask"};
+    const gchar *modes[] = {"change", "rise", "fall", "unknown", "mask"};
+    for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), insight_tr(labels[i]));
+    gtk_combo_box_set_active(GTK_COMBO_BOX(combo), 0);
+    gtk_box_pack_start(GTK_BOX(box), combo, FALSE, FALSE, 0);
+    GtkWidget *pattern = gtk_entry_new();
+    gtk_entry_set_max_length(GTK_ENTRY(pattern), width);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(pattern), insight_tr("Mask: 0, 1, X, Z and ? for any bit"));
+    gtk_widget_set_sensitive(pattern, FALSE);
+    gtk_box_pack_start(GTK_BOX(box), pattern, FALSE, FALSE, 0);
+    g_signal_connect(combo, "changed", G_CALLBACK(signal_stop_mode_changed), pattern);
+    GtkWidget *status = gtk_label_new("");
+    gtk_label_set_line_wrap(GTK_LABEL(status), TRUE);
+    gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 0);
+    gtk_widget_show_all(dialog);
+    while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+    {
+        gint mode = gtk_combo_box_get_active(GTK_COMBO_BOX(combo));
+        if (mode < 0)
+            continue;
+        if ((mode == 1 || mode == 2) && width != 1)
+        {
+            gtk_label_set_text(GTK_LABEL(status), insight_tr("Choose a one-bit signal for edge stops."));
+            continue;
+        }
+        gchar *mask = mode == 4 ? g_ascii_strdown(gtk_entry_get_text(GTK_ENTRY(pattern)), -1) : NULL;
+        if (mask && (strlen(mask) != width || strspn(mask, "01xz?") != width ||
+            strspn(mask, "?") == width))
+        {
+            gtk_label_set_text(GTK_LABEL(status),
+                insight_tr("Enter one mask character per bit and at least one non-wildcard bit."));
+            g_free(mask);
+            continue;
+        }
+        signal_stop_send(run, path, modes[mode], mask);
+        g_free(mask);
+        break;
+    }
+    gtk_widget_destroy(dialog);
+    g_object_unref(dialog);
+    g_free(path);
+}
+
+/* EN: Remove the watch on item's signal in simulation data.
+ * RU: Снимает остановку на сигнале из item в сеансе data. */
+static void signal_stop_clear(GtkMenuItem *item, gpointer data)
+{
+    const gchar *path = g_object_get_data(G_OBJECT(item), "signal-stop-path");
+    if (path)
+        signal_stop_send(data, path, "off", NULL);
+}
+
 /* EN: Handle an edit or format-menu click in tree for simulation data.
  * event provides the button, click count and cell coordinates.
  * RU: Обрабатывает редактирование и меню форматов в tree для сеанса data.
@@ -7722,8 +7823,25 @@ static gboolean signal_table_popup(GtkWidget *tree, GdkEventButton *event, gpoin
         GtkTreeIter row;
         if (gtk_tree_model_get_iter(model, &row, clicked))
         {
-            gchar *name = NULL;
-            gtk_tree_model_get(model, &row, 0, &name, -1);
+            gchar *name = NULL, *bits = NULL;
+            gtk_tree_model_get(model, &row, 0, &name, 2, &bits, -1);
+            if (run->signal_stops_ready && *bits && simulation_signal_path(name))
+            {
+                gboolean paused = run->prompt_tail[0] == '>' && run->prompt_tail[1] == ' ' &&
+                    !run->preview_pending;
+                GtkWidget *arm = gtk_menu_item_new_with_label(insight_tr("Stop on signal…"));
+                GtkWidget *clear = gtk_menu_item_new_with_label(insight_tr("Remove signal stop"));
+                g_object_set_data_full(G_OBJECT(arm), "signal-stop-path", g_strdup(name), g_free);
+                g_object_set_data(G_OBJECT(arm), "signal-stop-width", GUINT_TO_POINTER(strlen(bits)));
+                g_object_set_data_full(G_OBJECT(clear), "signal-stop-path", g_strdup(name), g_free);
+                gtk_widget_set_sensitive(arm, paused);
+                gtk_widget_set_sensitive(clear, paused);
+                g_signal_connect(arm, "activate", G_CALLBACK(signal_stop_configure), run);
+                g_signal_connect(clear, "activate", G_CALLBACK(signal_stop_clear), run);
+                gtk_menu_shell_append(GTK_MENU_SHELL(menu), arm);
+                gtk_menu_shell_append(GTK_MENU_SHELL(menu), clear);
+            }
+            g_free(bits);
             if (run->navigate)
             {
                 GtkWidget *graph = gtk_menu_item_new_with_label(insight_tr("Watch graph"));

@@ -2965,3 +2965,15 @@ Changes…	Изменения…
 Signal changes	Изменения сигнала
 Stop number	Номер остановки
 Changed bits	Изменилось битов
+Stop on signal…	Остановиться по сигналу…
+Stop on signal	Остановка по сигналу
+Remove signal stop	Снять остановку по сигналу
+Arm signal stop	Установить остановку
+Any value change	Любое изменение
+Rising edge (0 to 1)	Нарастающий фронт (0 → 1)
+Falling edge (1 to 0)	Спадающий фронт (1 → 0)
+A bit changes to X or Z	Бит переходит в X или Z
+Value starts matching a mask	Значение начинает совпадать с маской
+Mask: 0, 1, X, Z and ? for any bit	Маска из 0, 1, X, Z и ? для любого бита
+Choose a one-bit signal for edge stops.	Для остановки по фронту выберите однобитный сигнал.
+Enter one mask character per bit and at least one non-wildcard bit.	Введите один символ маски на бит и укажите хотя бы один бит без ?.

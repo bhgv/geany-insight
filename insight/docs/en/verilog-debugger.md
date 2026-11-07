@@ -30,6 +30,12 @@ At a breakpoint or after **Pause**, double-click a value in **Registers**. Edit 
 
 Right-click a signal row and choose **Changes…** to see up to ten stops, newest first, with aligned unsigned decimal, hexadecimal and binary values. Select a row to highlight it. Decimal is unavailable for X/Z values. A hex digit with a mixture of known and unknown bits is shown as **?**. A register edit updates the latest stop in the history. Underlined binary and hexadecimal digits mark changes from the preceding row. **Changed bits** counts individual four-state differences.
 
+### Stop on a signal transition
+
+While paused, right-click a port, net or register in **HDL Signals** and choose **Stop on signal…**. Select any change, a 0→1 or 1→0 edge on a one-bit signal, a bit changing to X/Z, or a value entering a mask. Enter one mask character per bit. For example, `10??` matches a four-bit value whose two high bits are `10`. A `?` ignores that bit. The mask fires when the value first starts matching.
+
+Click **Arm signal stop** and continue. The console reports the signal and the old and new binary values. One rule is kept per hierarchical signal in this run. Arming another rule replaces it. **Remove signal stop** clears it. A manual register deposit at the pause prompt updates the watched baseline. The feature requires the updated bundled VVP.
+
 ## Port signals
 
 **Debug Current Verilog File** opens **Port Signals**. Leave the recipe
