@@ -67,7 +67,7 @@ jobs:
           PYTHON
       - name: Report CMake version
         run: cmake --version
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v6
         id: compiler-cache
         with:
           path: _external-clang
@@ -82,7 +82,7 @@ jobs:
           else
             python3 insight/tools/build_external_clang.py --jobs "$compiler_jobs"
           fi
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v6
         if: steps.compiler-cache.outputs.cache-hit != 'true'
         with:
           path: _external-clang
