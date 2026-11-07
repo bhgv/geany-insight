@@ -28,6 +28,8 @@ On the right of the debugger, open **HDL Signals**. The **Ports**, **Nets** and 
 
 At a breakpoint or after **Pause**, double-click a value in **Registers**. Edit it and press **Enter** or leave the cell to write it. **Ctrl+Z** restores the original text during the edit, and **Esc** cancels. Enter binary bits including `X` and `Z`, a C hexadecimal literal like `0x0f`, a sized Verilog literal like `8'h0f`, or a quoted character like `'A'`. In unsigned decimal view, plain digits are decimal. The simulator remains paused and refreshes the table from its actual values. A later HDL assignment can overwrite the deposit. Ports and nets are read-only. Automatic locals and memory words are outside this operation. The tables require the updated bundled VVP bridge.
 
+Right-click a signal row and choose **Changes…** to see up to ten stops, newest first, with aligned unsigned decimal, hexadecimal and binary values. Select a row to highlight it. Decimal is unavailable for X/Z values. A hex digit with a mixture of known and unknown bits is shown as **?**. A register edit updates the latest stop in the history.
+
 ## Port signals
 
 **Debug Current Verilog File** opens **Port Signals**. Leave the recipe

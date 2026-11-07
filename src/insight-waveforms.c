@@ -1668,6 +1668,16 @@ void insight_waveforms_open(GtkWindow *parent, const gchar *session_dir, Insight
  g_task_run_in_thread(task, load_capture);
  g_object_unref(task);
 }
+typedef struct
+{
+    guint64 number;
+    gchar *location;
+    GHashTable *values;
+} SignalHistoryStop;
+
+/* EN: Free the history stop in data. RU: Освобождает снимок data. */
+static void signal_history_stop_free(gpointer data);
+
 typedef struct {
     GWeakRef parent;
     GtkWidget *dialog;
@@ -1707,6 +1717,9 @@ typedef struct {
     GtkCellRenderer *signal_register_renderer;
     GPtrArray *signal_rows;
     GHashTable *signal_previous_values;
+    GQueue signal_history;
+    guint64 signal_stop_number;
+    gboolean signal_history_replace;
     gchar *signal_file;
     guint signal_format;
     gboolean signal_tables_ready, signal_collecting, signal_limited, signal_refresh_needed;
@@ -1749,6 +1762,8 @@ static void simulation_free(gpointer data)
     g_free(run->trace_file);
     g_clear_pointer(&run->signal_rows, g_ptr_array_unref);
     g_clear_pointer(&run->signal_previous_values, g_hash_table_unref);
+    while (!g_queue_is_empty(&run->signal_history))
+        signal_history_stop_free(g_queue_pop_head(&run->signal_history));
     g_free(run->signal_file);
     for (guint i = 0; i < G_N_ELEMENTS(run->signal_tables); i++)
         g_clear_object(&run->signal_tables[i]);
@@ -5942,6 +5957,44 @@ static gchar *signal_snapshot_key(gchar **row)
     return g_strconcat(row[0], "\t", row[1], NULL);
 }
 
+/* EN: Free the stop snapshot in data and its owned values.
+ * RU: Освобождает снимок остановки data и его значения. */
+static void signal_history_stop_free(gpointer data)
+{
+    SignalHistoryStop *stop = data;
+    g_hash_table_unref(stop->values);
+    g_free(stop->location);
+    g_free(stop);
+}
+
+/* EN: Keep at most ten stop snapshots for run. A register deposit updates
+ * the current stop rather than adding another stop.
+ * RU: Хранит до десяти снимков сеанса run. Запись регистра обновляет текущую
+ * остановку вместо добавления новой. */
+static void signal_history_record(WaveSimulation *run)
+{
+    SignalHistoryStop *stop = g_queue_peek_head(&run->signal_history);
+    if (stop && run->signal_history_replace)
+        g_hash_table_remove_all(stop->values);
+    else
+    {
+        stop = g_new0(SignalHistoryStop, 1);
+        stop->number = ++run->signal_stop_number;
+        stop->location = run->trace_file ?
+            g_strdup_printf("%s:%u", run->trace_file, run->trace_line) : g_strdup("—");
+        stop->values = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+        g_queue_push_head(&run->signal_history, stop);
+        if (g_queue_get_length(&run->signal_history) > 10)
+            signal_history_stop_free(g_queue_pop_tail(&run->signal_history));
+    }
+    run->signal_history_replace = FALSE;
+    for (guint i = 0; i < run->signal_rows->len; i++)
+    {
+        gchar **row = run->signal_rows->pdata[i];
+        g_hash_table_insert(stop->values, signal_snapshot_key(row), g_strdup(row[3]));
+    }
+}
+
 /* EN: Refill the visible models for the current source file and regex query in run.
  * RU: Заполняет видимые таблицы сеанса run для текущего файла и регулярного выражения. */
 static void signal_tables_refresh(WaveSimulation *run)
@@ -6079,6 +6132,7 @@ static gboolean signal_tables_record(WaveSimulation *run, const gchar *text)
         run->signal_collecting = FALSE;
         run->signal_snapshot_received = TRUE;
         run->signal_limited = g_str_has_suffix(text, "\tlimited");
+        signal_history_record(run);
         signal_tables_refresh(run);
         return TRUE;
     }
@@ -6928,11 +6982,15 @@ static void simulation_write_command(WaveSimulation *run, const gchar *command)
 
     run->prompt_tail[0] = run->prompt_tail[1] = 0;
     if (g_str_has_prefix(command, "geany-write-register "))
+    {
         run->signal_refresh_needed = TRUE;
+        run->signal_history_replace = TRUE;
+    }
     if (!strcmp(command, "cont\n") || !strcmp(command, "step\n") ||
         g_str_has_prefix(command, "geany-step-"))
     {
         run->signal_refresh_needed = TRUE;
+        run->signal_history_replace = FALSE;
         g_clear_pointer(&run->trace_file, g_free);
         gtk_widget_set_sensitive(run->source_button, FALSE);
     }
@@ -7438,6 +7496,156 @@ static void signal_table_open_graph(GtkMenuItem *item, gpointer data)
         run->navigate(name, TRUE, NULL);
 }
 
+/* EN: Convert known binary bits to unsigned decimal without a machine-word cap.
+ * RU: Переводит известные биты bits в десятичную строку без ограничения разрядностью машины. */
+static gchar *signal_history_decimal(const gchar *bits)
+{
+    if (!*bits || strpbrk(bits, "xz"))
+        return g_strdup("—");
+
+    guint8 *digits = g_new0(guint8, strlen(bits) * 31 / 100 + 2);
+    gsize used = 1;
+    for (const gchar *bit = bits; *bit; bit++)
+    {
+        guint carry = *bit == '1';
+        for (gsize i = 0; i < used; i++)
+        {
+            guint digit = 2 * digits[i] + carry;
+            digits[i] = digit % 10;
+            carry = digit / 10;
+        }
+        if (carry)
+            digits[used++] = carry;
+    }
+    gchar *decimal = g_malloc(used + 1);
+    for (gsize i = 0; i < used; i++)
+        decimal[i] = '0' + digits[used - i - 1];
+    decimal[used] = 0;
+    g_free(digits);
+    return decimal;
+}
+
+/* EN: Render bits in hexadecimal, retaining all-X and all-Z groups.
+ * RU: Показывает bits в шестнадцатеричном виде, сохраняя группы из X или Z. */
+static gchar *signal_history_hex(const gchar *bits)
+{
+    gsize width = strlen(bits);
+    if (!width)
+        return g_strdup("—");
+
+    GString *hex = g_string_sized_new((width + 3) / 4);
+    for (gsize offset = 0; offset < width;)
+    {
+        gsize count = offset == 0 && width % 4 ? width % 4 : 4;
+        guint value = 0, x = 0, z = 0;
+        for (gsize i = 0; i < count; i++)
+        {
+            gchar bit = bits[offset++];
+            value = value * 2 + (bit == '1');
+            x += bit == 'x';
+            z += bit == 'z';
+        }
+        g_string_append_c(hex, x == count ? 'x' : z == count ? 'z' :
+            x || z ? '?' : "0123456789abcdef"[value]);
+    }
+    return g_string_free(hex, FALSE);
+}
+
+/* EN: Stripe each model row in the cell of view column. data is the tree.
+ * RU: Задаёт фон строки row модели model для ячейки cell. data — дерево,
+ * column не используется. */
+static void signal_history_stripe(GtkTreeViewColumn *column, GtkCellRenderer *cell,
+                                  GtkTreeModel *model, GtkTreeIter *row, gpointer data)
+{
+    (void)column;
+    GtkTreePath *path = gtk_tree_model_get_path(model, row);
+    gboolean alternate = gtk_tree_path_get_indices(path)[0] % 2;
+    gtk_tree_path_free(path);
+
+    GtkStyleContext *style = gtk_widget_get_style_context(GTK_WIDGET(data));
+    GdkRGBA base, foreground;
+    if (alternate)
+    {
+        gtk_style_context_get_color(style, GTK_STATE_FLAG_NORMAL, &foreground);
+        if (gtk_style_context_lookup_color(style, "theme_base_color", &base))
+        {
+            base.red += (foreground.red - base.red) * 0.08;
+            base.green += (foreground.green - base.green) * 0.08;
+            base.blue += (foreground.blue - base.blue) * 0.08;
+        }
+        else
+        {
+            base = foreground;
+            base.alpha = 0.08;
+        }
+        g_object_set(cell, "cell-background-rgba", &base, NULL);
+    }
+    else
+        g_object_set(cell, "cell-background-set", FALSE, NULL);
+}
+
+/* EN: Show history for the name and kind attached to item in simulation data.
+ * RU: Показывает историю имени и типа из пункта item для сеанса data. */
+static void signal_table_open_history(GtkMenuItem *item, gpointer data)
+{
+    WaveSimulation *run = data;
+    const gchar *name = g_object_get_data(G_OBJECT(item), "signal-name");
+    const gchar *kind = g_object_get_data(G_OBJECT(item), "signal-kind");
+    gchar *key = g_strconcat(kind, "\t", name, NULL);
+    GtkListStore *store = gtk_list_store_new(5, G_TYPE_STRING, G_TYPE_STRING,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    for (GList *entry = run->signal_history.head; entry; entry = entry->next)
+    {
+        const SignalHistoryStop *stop = entry->data;
+        const gchar *bits = g_hash_table_lookup(stop->values, key);
+        if (!bits)
+            continue;
+        gchar *number = g_strdup_printf("%" G_GUINT64_FORMAT, stop->number);
+        gchar *decimal = signal_history_decimal(bits);
+        gchar *hex = signal_history_hex(bits);
+        gchar *location = g_utf8_make_valid(stop->location, -1);
+        gtk_list_store_insert_with_values(store, NULL, -1, 0, number,
+            1, decimal, 2, hex, 3, *bits ? bits : "—", 4, location, -1);
+        g_free(location);
+        g_free(number);
+        g_free(decimal);
+        g_free(hex);
+    }
+    g_free(key);
+
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(insight_tr("Signal changes"), GTK_WINDOW(run->dialog),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, insight_tr("_Close"), GTK_RESPONSE_CLOSE, NULL);
+    g_object_ref_sink(dialog);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 780, 370);
+    GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(box), 8);
+    GtkWidget *heading = gtk_label_new(name);
+    gtk_label_set_selectable(GTK_LABEL(heading), TRUE);
+    gtk_label_set_ellipsize(GTK_LABEL(heading), PANGO_ELLIPSIZE_MIDDLE);
+    gtk_box_pack_start(GTK_BOX(box), heading, FALSE, FALSE, 4);
+    GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
+    g_object_unref(store);
+    gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)), GTK_SELECTION_SINGLE);
+    const gchar *titles[] = {"Stop number", "Decimal", "Hexadecimal", "Binary", "Source"};
+    for (guint i = 0; i < G_N_ELEMENTS(titles); i++)
+    {
+        GtkCellRenderer *cell = gtk_cell_renderer_text_new();
+        if (i < 4)
+            g_object_set(cell, "family", "monospace", "xalign", 1.0f, NULL);
+        GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(
+            insight_tr(titles[i]), cell, "text", i, NULL);
+        gtk_tree_view_column_set_cell_data_func(column, cell, signal_history_stripe, tree, NULL);
+        gtk_tree_view_append_column(GTK_TREE_VIEW(tree), column);
+    }
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(scroll), tree);
+    gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
+    gtk_widget_show_all(dialog);
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+    g_object_unref(dialog);
+}
+
 /* EN: Handle an edit or format-menu click in tree for simulation data.
  * event provides the button, click count and cell coordinates.
  * RU: Обрабатывает редактирование и меню форматов в tree для сеанса data.
@@ -7464,7 +7672,7 @@ static gboolean signal_table_popup(GtkWidget *tree, GdkEventButton *event, gpoin
     GtkWidget *menu = gtk_menu_new();
     gtk_menu_attach_to_widget(GTK_MENU(menu), tree, NULL);
     GtkTreePath *clicked = NULL;
-    if (run->navigate && gtk_tree_view_get_path_at_pos(view, event->x, event->y, &clicked, NULL, NULL, NULL))
+    if (gtk_tree_view_get_path_at_pos(view, event->x, event->y, &clicked, NULL, NULL, NULL))
     {
         GtkTreeModel *model = gtk_tree_view_get_model(view);
         GtkTreeIter row;
@@ -7472,10 +7680,20 @@ static gboolean signal_table_popup(GtkWidget *tree, GdkEventButton *event, gpoin
         {
             gchar *name = NULL;
             gtk_tree_model_get(model, &row, 0, &name, -1);
-            GtkWidget *graph = gtk_menu_item_new_with_label(insight_tr("Watch graph"));
-            g_object_set_data_full(G_OBJECT(graph), "signal-name", name, g_free);
-            g_signal_connect(graph, "activate", G_CALLBACK(signal_table_open_graph), run);
-            gtk_menu_shell_append(GTK_MENU_SHELL(menu), graph);
+            if (run->navigate)
+            {
+                GtkWidget *graph = gtk_menu_item_new_with_label(insight_tr("Watch graph"));
+                g_object_set_data_full(G_OBJECT(graph), "signal-name", g_strdup(name), g_free);
+                g_signal_connect(graph, "activate", G_CALLBACK(signal_table_open_graph), run);
+                gtk_menu_shell_append(GTK_MENU_SHELL(menu), graph);
+            }
+            GtkWidget *history = gtk_menu_item_new_with_label(insight_tr("Changes…"));
+            const gchar *kind = model == GTK_TREE_MODEL(run->signal_tables[0]) ? "P" :
+                model == GTK_TREE_MODEL(run->signal_tables[1]) ? "N" : "R";
+            g_object_set_data_full(G_OBJECT(history), "signal-name", name, g_free);
+            g_object_set_data(G_OBJECT(history), "signal-kind", (gpointer)kind);
+            g_signal_connect(history, "activate", G_CALLBACK(signal_table_open_history), run);
+            gtk_menu_shell_append(GTK_MENU_SHELL(menu), history);
             gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
         }
         gtk_tree_path_free(clicked);
