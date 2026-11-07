@@ -2922,3 +2922,6 @@ Could not reach the provider. Check the URL, network and TLS certificates.	Не�
 Access denied (401/403). Check the API key and permissions for the model.	Доступ запрещён (401/403). Проверьте ключ API и права на модель.
 API or model not found (404). Check the complete URL and model ID.	API или модель не найдены (404). Проверьте полный URL и ID модели.
 Request limited (429). Check API quota and rate limits.	Запрос ограничен (429). Проверьте квоту API и ограничения частоты запросов.
+Connection verified.	Подключение проверено.
+Enter a complete API endpoint, model ID and Python executable before testing.	Перед проверкой укажите полный адрес API, ID модели и исполняемый файл Python.
+Send a short test request using the current fields without saving them.	Отправить короткий запрос с текущими значениями полей без сохранения.

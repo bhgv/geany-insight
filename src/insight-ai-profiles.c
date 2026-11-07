@@ -130,8 +130,9 @@ static void probe_done(GObject *object, GAsyncResult *result, gpointer data)
   return;
  }
  const gchar *message = "Test failed. Check Python, endpoint, key, model access and API quota.";
+ GtkWidget *grid = g_object_get_data(object, "insight-wizard-grid");
  if (ok)
-  message = "Connection verified. Save to activate this profile.";
+  message = grid ? "Connection verified. Save to activate this profile." : "Connection verified.";
  else if (error && error->domain == G_SPAWN_ERROR)
   message = "Could not start Python. Select a working Python 3 executable.";
  else if (error && g_str_has_prefix(error->message, "Provider connection failed"))
@@ -148,7 +149,13 @@ static void probe_done(GObject *object, GAsyncResult *result, gpointer data)
  }
  gtk_label_set_text(GTK_LABEL(status), insight_tr(message));
  g_clear_error(&error);
- gtk_widget_set_sensitive(g_object_get_data(object, "insight-wizard-grid"), TRUE);
+ if (!grid)
+ {
+  GtkWidget *close = gtk_dialog_get_widget_for_response(GTK_DIALOG(object), GTK_RESPONSE_CLOSE);
+  gtk_button_set_label(GTK_BUTTON(close), insight_tr("Close"));
+  return;
+ }
+ gtk_widget_set_sensitive(grid, TRUE);
  gtk_dialog_set_response_sensitive(GTK_DIALOG(object), TEST_CONNECTION, TRUE);
  gtk_dialog_set_response_sensitive(GTK_DIALOG(object), GTK_RESPONSE_ACCEPT, TRUE);
 }
@@ -349,6 +356,54 @@ static GtkWidget *wizard_button(void)
  return button;
 }
 
+/* EN: Test a snapshot of the manager fields without saving. Closing the
+ * dialog cancels the request. button and data are unused.
+ * RU: Проверяет текущие поля без сохранения. Закрытие окна отменяет запрос.
+ * Параметры button и data не используются. */
+static void manager_test_connection(GtkButton *button, gpointer data)
+{
+ (void)button;
+ (void)data;
+ Profile *p = g_new0(Profile, 1);
+ gchar **values[] = { &p->name, &p->endpoint, &p->model, &p->python, &p->key, &p->env };
+ for (guint i = 0; i < G_N_ELEMENTS(values); i++)
+  *values[i] = g_strdup(gtk_entry_get_text(GTK_ENTRY(fields[i])));
+ if (!*p->endpoint || !*p->model || !*p->python || strstr(p->endpoint, "YOUR_WORKSPACE"))
+ {
+  gtk_label_set_text(GTK_LABEL(notice),
+   insight_tr("Enter a complete API endpoint, model ID and Python executable before testing."));
+  profile_free(p);
+  return;
+ }
+
+ GtkWidget *dialog = gtk_dialog_new_with_buttons(insight_tr("Test connection"),
+  GTK_WINDOW(manager), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+  insight_tr("Cancel"), GTK_RESPONSE_CLOSE, NULL);
+ g_object_ref_sink(dialog);
+ g_signal_connect(dialog, "destroy", G_CALLBACK(wizard_destroyed), NULL);
+ GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+ gtk_container_set_border_width(GTK_CONTAINER(box), 12);
+ GtkWidget *status = wizard_label(box, insight_tr("Testing the connection…"));
+ g_object_set_data(G_OBJECT(dialog), "insight-wizard-status", status);
+
+ ConnectionProbe *probe = g_new0(ConnectionProbe, 1);
+ probe->profile = p;
+ probe->helper = g_build_filename(app->datadir, "insight", "tools", "ai_client.py", NULL);
+ GCancellable *cancel = g_cancellable_new();
+ GTask *task = g_task_new(dialog, cancel, probe_done, NULL);
+ g_task_set_task_data(task, probe, probe_free);
+ g_task_run_in_thread(task, probe_worker);
+ g_object_unref(task);
+
+ gtk_widget_show_all(dialog);
+ gtk_dialog_run(GTK_DIALOG(dialog));
+ g_object_set_data(G_OBJECT(dialog), "insight-wizard-status", NULL);
+ g_cancellable_cancel(cancel);
+ g_object_unref(cancel);
+ gtk_widget_destroy(dialog);
+ g_object_unref(dialog);
+}
+
 /* EN: Open shared profiles under the invoking widget's window. data is unused.
  * RU: Открывает общие профили над окном вызывающего widget. data не используется. */
 void insight_ai_profiles_show(GtkWidget *widget,gpointer data) {
@@ -367,7 +422,12 @@ void insight_ai_profiles_show(GtkWidget *widget,gpointer data) {
  manager=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_window_set_title(GTK_WINDOW(manager),insight_tr("AI Connections"));gtk_widget_set_name(manager,"insight-ai-profiles-window");gtk_window_set_transient_for(GTK_WINDOW(manager),GTK_WINDOW(parent));gtk_window_set_modal(GTK_WINDOW(manager),gtk_window_get_modal(GTK_WINDOW(parent)));gtk_window_set_destroy_with_parent(GTK_WINDOW(manager),TRUE);gtk_window_set_default_size(GTK_WINDOW(manager),760,540);GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,4);gtk_container_set_border_width(GTK_CONTAINER(box),8);gtk_container_add(GTK_CONTAINER(manager),box);store=gtk_list_store_new(4,G_TYPE_INT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING);tree=gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));gtk_widget_set_name(tree,"insight-ai-profiles-list");const gchar *titles[]={"Name","Compare","Model"};for(guint i=0;i<3;i++) gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(tree),-1,insight_tr(titles[i]),gtk_cell_renderer_text_new(),"text",i+1,NULL);GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),tree);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
  const gchar *labels[]={"Profile name","API endpoint","Model ID","Python 3","API key","API key environment variable"};for(guint i=0;i<6;i++) { GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4),*label=gtk_label_new(insight_tr(labels[i]));gtk_widget_set_size_request(label,180,-1);gtk_box_pack_start(GTK_BOX(row),label,FALSE,FALSE,0);fields[i]=gtk_entry_new();gchar *name=g_strconcat("insight-ai-profile-",names[i],NULL);gtk_widget_set_name(fields[i],name);g_free(name);gtk_entry_set_max_length(GTK_ENTRY(fields[i]),i==4 ? 8192:2048);gtk_entry_set_visibility(GTK_ENTRY(fields[i]),i!=4);insight_ai_ui_entry(fields[i],insight_tr(labels[i]),18);gtk_box_pack_start(GTK_BOX(row),fields[i],TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(box),row,FALSE,FALSE,0); }
  GtkWidget *preset=gtk_combo_box_text_new();gtk_widget_set_name(preset,"insight-ai-profile-preset");const gchar *presets[]={"OpenAI / ChatGPT API","xAI / Grok","DeepSeek","Qwen / Model Studio","Custom compatible API"};for(guint i=0;i<5;i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(preset),presets[i]);gtk_box_pack_start(GTK_BOX(box),preset,FALSE,FALSE,0);g_signal_connect(preset,"changed",G_CALLBACK(preset_changed),NULL);
- checked=gtk_check_button_new_with_label(insight_tr("Include in parallel comparison (up to 4)"));gtk_widget_set_name(checked,"insight-ai-profile-checked");remember=gtk_check_button_new_with_label(insight_tr("Save API key in private config (not encrypted)"));gtk_widget_set_name(remember,"insight-ai-profile-remember");gtk_box_pack_start(GTK_BOX(box),checked,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),remember,FALSE,FALSE,0);GtkWidget *bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);const gchar *buttons[]={"Add profile","Update profile","Remove profile"},*ids[]={"add","update","remove"};for(guint i=0;i<3;i++) { GtkWidget *button=gtk_button_new_with_label(insight_tr(buttons[i]));gchar *name=g_strconcat("insight-ai-profile-",ids[i],NULL);gtk_widget_set_name(button,name);g_free(name);g_signal_connect(button,"clicked",G_CALLBACK(edit_profile),GINT_TO_POINTER(i));gtk_box_pack_start(GTK_BOX(bar),button,FALSE,FALSE,0); }gtk_box_pack_start(GTK_BOX(bar),wizard_button(),FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);notice=gtk_label_new(insight_tr("Connections are shared. Request history is stored separately per project and context; replies are not saved."));gtk_label_set_line_wrap(GTK_LABEL(notice),TRUE);gtk_box_pack_start(GTK_BOX(box),notice,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),insight_panel_help_button("ai-connections.md"),FALSE,FALSE,0);g_signal_connect(manager,"destroy",G_CALLBACK(manager_destroyed),NULL);g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)),"changed",G_CALLBACK(selected_changed),NULL);refresh(active<profiles->len ? active:0);insight_ai_ui_window(manager,"Minimize window","Maximize / restore window","Close window");gtk_widget_show_all(manager);
+ checked=gtk_check_button_new_with_label(insight_tr("Include in parallel comparison (up to 4)"));gtk_widget_set_name(checked,"insight-ai-profile-checked");remember=gtk_check_button_new_with_label(insight_tr("Save API key in private config (not encrypted)"));gtk_widget_set_name(remember,"insight-ai-profile-remember");gtk_box_pack_start(GTK_BOX(box),checked,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),remember,FALSE,FALSE,0);GtkWidget *bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);const gchar *buttons[]={"Add profile","Update profile","Remove profile"},*ids[]={"add","update","remove"};for(guint i=0;i<3;i++) { GtkWidget *button=gtk_button_new_with_label(insight_tr(buttons[i]));gchar *name=g_strconcat("insight-ai-profile-",ids[i],NULL);gtk_widget_set_name(button,name);g_free(name);g_signal_connect(button,"clicked",G_CALLBACK(edit_profile),GINT_TO_POINTER(i));gtk_box_pack_start(GTK_BOX(bar),button,FALSE,FALSE,0); }GtkWidget *test = gtk_button_new_with_label(insight_tr("Test connection"));
+ gtk_widget_set_name(test, "insight-ai-profile-test");
+ gtk_widget_set_tooltip_text(test, insight_tr("Send a short test request using the current fields without saving them."));
+ g_signal_connect(test, "clicked", G_CALLBACK(manager_test_connection), NULL);
+ gtk_box_pack_start(GTK_BOX(bar), test, FALSE, FALSE, 0);
+ gtk_box_pack_start(GTK_BOX(bar),wizard_button(),FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),bar,FALSE,FALSE,0);notice=gtk_label_new(insight_tr("Connections are shared. Request history is stored separately per project and context; replies are not saved."));gtk_label_set_line_wrap(GTK_LABEL(notice),TRUE);gtk_box_pack_start(GTK_BOX(box),notice,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),insight_panel_help_button("ai-connections.md"),FALSE,FALSE,0);g_signal_connect(manager,"destroy",G_CALLBACK(manager_destroyed),NULL);g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)),"changed",G_CALLBACK(selected_changed),NULL);refresh(active<profiles->len ? active:0);insight_ai_ui_window(manager,"Minimize window","Maximize / restore window","Close window");gtk_widget_show_all(manager);
 }
 /* Every worker owns an immutable request and connection snapshot. */
 typedef struct { gchar *name,*python,*helper;gchar *values[9];InsightAiAnswer *answer;GtkWidget *view; } Candidate;
