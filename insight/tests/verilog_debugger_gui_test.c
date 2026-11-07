@@ -12,7 +12,8 @@
 
 typedef enum {
     OPEN_DEBUGGER, LOAD_OBSERVER, SET_POINT, RUN_TO_POINT,
-    INSPECT_STOP, INSPECT_PREVIEW, WAIT_FOR_CAPTURE, INSPECT_CONNECTIONS, INSPECT_INSTRUMENTS,
+    INSPECT_STOP, VERIFY_REGISTER_WRITE, VERIFY_REGISTER_RESTORE, INSPECT_PREVIEW,
+    WAIT_FOR_CAPTURE, INSPECT_CONNECTIONS, INSPECT_INSTRUMENTS,
     RUN_LIVE_DEVICES, SEND_LIVE_INPUT, CHECK_LIVE_DEVICES
 } TestPhase;
 
@@ -666,6 +667,107 @@ static void log_graph_status(GtkStatusbar *bar, guint context, const gchar *mess
         g_print("Graph status: %s\n", message);
 }
 
+/* EN: Return the path for signal in tree, optionally requiring raw bits.
+ * RU: Возвращает путь сигнала signal в tree с необязательной проверкой bits. */
+static GtkTreePath *register_row(GtkTreeView *tree, const gchar *signal, const gchar *bits)
+{
+    GtkTreeModel *model = gtk_tree_view_get_model(tree);
+    GtkTreeIter row;
+    for (gboolean more = gtk_tree_model_get_iter_first(model, &row); more;
+         more = gtk_tree_model_iter_next(model, &row))
+    {
+        gchar *name, *raw;
+        gtk_tree_model_get(model, &row, 0, &name, 2, &raw, -1);
+        gboolean match = !strcmp(name, signal) && (!bits || !strcmp(raw, bits));
+        g_free(name);
+        g_free(raw);
+        if (match)
+            return gtk_tree_model_get_path(model, &row);
+    }
+    return NULL;
+}
+
+/* EN: Edit the register at path in tree to bits through its real entry.
+ * RU: Изменяет регистр по path в tree на bits через редактор ячейки. */
+static gboolean edit_register(GtkTreeView *tree, GtkTreePath *path, const gchar *bits)
+{
+    gtk_tree_view_set_cursor(tree, path, gtk_tree_view_get_column(tree, 1), TRUE);
+    GtkWidget *entry = find_control(GTK_WIDGET(tree), "insight-verilog-register-edit");
+    if (!GTK_IS_ENTRY(entry))
+        return FALSE;
+    gtk_entry_set_text(GTK_ENTRY(entry), bits);
+    g_signal_emit_by_name(entry, "activate");
+    return TRUE;
+}
+
+/* EN: Validate history and activate the first recorded tick. data is unused.
+ * RU: Проверяет историю и открывает первый записанный такт. data не используется. */
+static gboolean open_history_tick(gpointer data)
+{
+    (void)data;
+    GtkWidget *dialog = find_window("Signal changes");
+    if (!dialog)
+        return G_SOURCE_CONTINUE;
+    GtkWidget *widget = find_control(dialog, "insight-verilog-signal-history");
+    if (!GTK_IS_TREE_VIEW(widget))
+        return fail_timeout(NULL);
+
+    GtkTreeView *tree = GTK_TREE_VIEW(widget);
+    GtkTreeModel *model = gtk_tree_view_get_model(tree);
+    GtkTreeIter row;
+    gboolean saw_stop = FALSE;
+    GtkTreePath *first_tick = NULL;
+    for (gboolean more = gtk_tree_model_get_iter_first(model, &row); more;
+         more = gtk_tree_model_iter_next(model, &row))
+    {
+        gchar *tick;
+        gtk_tree_model_get(model, &row, 6, &tick, -1);
+        saw_stop |= !strcmp(tick, "15");
+        if (!strcmp(tick, "0") && !first_tick)
+            first_tick = gtk_tree_model_get_path(model, &row);
+        g_free(tick);
+    }
+    if (!saw_stop || !first_tick)
+        return fail_timeout(NULL);
+    gtk_tree_view_set_cursor(tree, first_tick, gtk_tree_view_get_column(tree, 0), FALSE);
+    gtk_tree_view_row_activated(tree, first_tick, gtk_tree_view_get_column(tree, 0));
+    gtk_tree_path_free(first_tick);
+    return G_SOURCE_REMOVE;
+}
+
+/* EN: Open the history menu on register path in tree.
+ * RU: Открывает историю регистра по path в tree через меню строки. */
+static gboolean open_register_history(GtkTreeView *tree, GtkTreePath *path)
+{
+    GdkRectangle area;
+    gtk_tree_view_get_cell_area(tree, path, gtk_tree_view_get_column(tree, 0), &area);
+    GdkEvent *event = gdk_event_new(GDK_BUTTON_PRESS);
+    event->button.window = g_object_ref(gtk_tree_view_get_bin_window(tree));
+    event->button.button = 3;
+    event->button.x = area.x + 4;
+    event->button.y = area.y + area.height / 2;
+    GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(tree));
+    GdkSeat *seat = gdk_display_get_default_seat(display);
+    if (seat)
+        gdk_event_set_device(event, gdk_seat_get_pointer(seat));
+    gboolean handled = FALSE;
+    g_signal_emit_by_name(tree, "button-press-event", event, &handled);
+    gdk_event_free(event);
+    if (!handled)
+        return FALSE;
+    GList *menus = gtk_menu_get_for_attach_widget(GTK_WIDGET(tree));
+    for (GList *menu = menus; menu; menu = menu->next)
+    {
+        GtkWidget *changes = find_control(menu->data, "Changes…");
+        if (!GTK_IS_MENU_ITEM(changes))
+            continue;
+        g_timeout_add(100, open_history_tick, NULL);
+        gtk_menu_item_activate(GTK_MENU_ITEM(changes));
+        return TRUE;
+    }
+    return FALSE;
+}
+
 /* EN: Drive GTK actions for the debugger fixture in data and check live results.
  * Return G_SOURCE_CONTINUE while awaiting the next UI state.
  * RU: Выполняет действия GTK для сценария из data и проверяет показания.
@@ -874,16 +976,49 @@ static gboolean drive_debugger(gpointer data)
                 g_printerr("Verilog GTK opened the wrong HDL line.\n");
                 exit(1);
             }
-            if (click(simulation, "Preview Waveform"))
-                phase = INSPECT_PREVIEW;
+            GtkWidget *widget = find_control(simulation, "insight-verilog-registers");
+            if (!GTK_IS_TREE_VIEW(widget))
+                return fail_timeout(NULL);
+            GtkTreeView *tree = GTK_TREE_VIEW(widget);
+            GtkWidget *page = gtk_widget_get_parent(widget);
+            GtkNotebook *tabs = GTK_NOTEBOOK(gtk_widget_get_parent(page));
+            gtk_notebook_set_current_page(tabs, gtk_notebook_page_num(tabs, page));
+            GtkTreePath *row = register_row(tree, "counter_tb.dut.count", "0001");
+            if (!row)
+                return G_SOURCE_CONTINUE;
+            gboolean edited = edit_register(tree, row, "10xz");
+            gtk_tree_path_free(row);
+            if (!edited)
+                return fail_timeout(NULL);
+            phase = VERIFY_REGISTER_WRITE;
         }
+    }
+    else if (phase == VERIFY_REGISTER_WRITE || phase == VERIFY_REGISTER_RESTORE)
+    {
+        GtkWidget *resume = find_control(simulation, "Continue");
+        GtkWidget *widget = find_control(simulation, "insight-verilog-registers");
+        if (!resume || !gtk_widget_is_sensitive(resume) || !GTK_IS_TREE_VIEW(widget))
+            return G_SOURCE_CONTINUE;
+        GtkTreeView *tree = GTK_TREE_VIEW(widget);
+        gboolean restore = phase == VERIFY_REGISTER_WRITE;
+        GtkTreePath *row = register_row(tree, "counter_tb.dut.count", restore ? "10xz" : "0001");
+        if (!row)
+            return G_SOURCE_CONTINUE;
+        phase = restore ? VERIFY_REGISTER_RESTORE : INSPECT_PREVIEW;
+        gboolean acted = restore ? edit_register(tree, row, "0001") : open_register_history(tree, row);
+        gtk_tree_path_free(row);
+        if (!acted)
+            return fail_timeout(NULL);
     }
     else if (phase == INSPECT_PREVIEW)
     {
         GtkWidget *preview = find_window("VCD Waveforms");
         GtkWidget *resume = find_control(simulation, "Continue");
-        if (preview && resume && gtk_widget_is_sensitive(resume) && select_track(preview, "counter_tb.count"))
+        if (preview && resume && gtk_widget_is_sensitive(resume))
         {
+            GtkWidget *value = find_control(preview, "insight-wave-cursor-value");
+            if (!GTK_IS_LABEL(value) || !g_str_has_prefix(gtk_label_get_text(GTK_LABEL(value)), "Tick 0 "))
+                return fail_timeout(NULL);
             gtk_widget_destroy(preview);
             if (click(simulation, "Continue"))
                 phase = WAIT_FOR_CAPTURE;

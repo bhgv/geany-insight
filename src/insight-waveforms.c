@@ -1495,6 +1495,7 @@ static GtkWidget *show_capture(GtkWindow *parent, Capture *capture, const gchar 
  gtk_container_add(GTK_CONTAINER(scroll), viewer->canvas);
  gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
  viewer->value = gtk_label_new(NULL);
+ gtk_widget_set_name(viewer->value, "insight-wave-cursor-value");
  gtk_label_set_ellipsize(GTK_LABEL(viewer->value), PANGO_ELLIPSIZE_END);
  gtk_box_pack_start(GTK_BOX(box), viewer->value, FALSE, FALSE, 0);
  GtkWidget *controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
@@ -1836,8 +1837,8 @@ static gchar *simulation_settings_path(const gchar *directory, const gchar *proj
 static GHashTable *signal_pins_load(const gchar *path)
 {
     GHashTable *pins = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
-    GStatBuf stat;
-    if (!path || g_stat(path, &stat) || stat.st_size > 512 * 1024)
+    GStatBuf file_info;
+    if (!path || g_stat(path, &file_info) || file_info.st_size > 512 * 1024)
         return pins;
     GKeyFile *config = g_key_file_new();
     if (g_key_file_load_from_file(config, path, G_KEY_FILE_NONE, NULL))
@@ -7606,6 +7607,7 @@ static void signal_edit_started(GtkCellRenderer *renderer, GtkCellEditable *edit
     if (!GTK_IS_ENTRY(editable))
         return;
     GtkEntry *entry = GTK_ENTRY(editable);
+    gtk_widget_set_name(GTK_WIDGET(entry), "insight-verilog-register-edit");
     gtk_entry_set_max_length(entry, 4200);
     g_object_set_data_full(G_OBJECT(entry), "signal-initial-text",
         g_strdup(gtk_entry_get_text(entry)), g_free);
@@ -7861,6 +7863,7 @@ static void signal_table_open_history(GtkMenuItem *item, gpointer data)
     gtk_label_set_ellipsize(GTK_LABEL(heading), PANGO_ELLIPSIZE_MIDDLE);
     gtk_box_pack_start(GTK_BOX(box), heading, FALSE, FALSE, 4);
     GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
+    gtk_widget_set_name(tree, "insight-verilog-signal-history");
     g_object_unref(store);
     gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)), GTK_SELECTION_SINGLE);
     const gchar *titles[] = {"Stop number", "Simulation tick", "Decimal", "Hexadecimal",
@@ -8276,6 +8279,7 @@ static GtkWidget *simulation_signal_tables(WaveSimulation *run)
         g_signal_connect(tree, "button-press-event", G_CALLBACK(signal_table_popup), run);
         if (i == 2)
         {
+            gtk_widget_set_name(tree, "insight-verilog-registers");
             run->signal_register_renderer = value;
             g_signal_connect(value, "editing-started", G_CALLBACK(signal_edit_started), run);
             g_signal_connect(value, "edited", G_CALLBACK(signal_register_edited), run);
@@ -8901,7 +8905,8 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         run->lua_watches = gtk_label_new(NULL);
         gtk_label_set_selectable(GTK_LABEL(run->lua_watches), TRUE);
         gtk_label_set_xalign(GTK_LABEL(run->lua_watches), 0);
-        gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), run->lua_watches,\n            gtk_label_new(insight_tr("Lua watches")));
+        gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), run->lua_watches,
+            gtk_label_new(insight_tr("Lua watches")));
         gtk_widget_set_sensitive(run->breakpoint_controls, FALSE);
         g_object_set_data(G_OBJECT(run->dialog), "insight-live-simulation", run);
         gtk_widget_set_sensitive(run->live_controls, FALSE);
