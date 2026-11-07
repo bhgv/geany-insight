@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Implements Verilog simulation setup, live instruments, and VCD inspection.
+ * RU: Реализует настройку симуляции Verilog, живые приборы и просмотр VCD. */
 #include "insight-waveforms.h"
 #include "../insight/desktop/glib_compat.h"
 #include "../insight/core/runtime.h"
@@ -2454,6 +2456,332 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
 }
 
 typedef struct {
+    gchar *source;
+    GtkTextBuffer *recipe;
+    GtkListStore *store;
+    GHashTable *ports;
+    gchar *module;
+} PortBrowser;
+
+/* EN: Read a source snapshot from path for the modal setup. Return UTF-8 text or NULL.
+ * RU: Читает снимок исходника по пути path для модального окна. Возвращает UTF-8 или NULL. */
+static gchar *port_browser_source(const gchar *path)
+{
+    gchar *source = NULL;
+    gsize size;
+    if (!g_file_get_contents(path, &source, &size, NULL))
+        return NULL;
+    if (!g_utf8_validate(source, size, NULL))
+    {
+        gchar *valid = g_utf8_make_valid(source, size);
+        g_free(source);
+        return valid;
+    }
+    return source;
+}
+
+/* EN: Extract port names and inherited directions from list into ports. With existing_only,
+ * update only names declared in the module header.
+ * RU: Извлекает имена и направления портов из list в ports. При existing_only обновляет
+ * только имена, объявленные в заголовке модуля. */
+static void port_browser_declarations(const gchar *list, GHashTable *ports, gboolean existing_only)
+{
+    GRegex *direction = g_regex_new("^\\s*(input|output|inout|ref)\\b", 0, 0, NULL);
+    GRegex *name = g_regex_new("([A-Za-z_][A-Za-z0-9_$]*)\\s*(?:\\[[^]]*\\]\\s*)*$", 0, 0, NULL);
+    gchar *current = g_strdup("—");
+    const gchar *start = list;
+    gint depth = 0;
+    for (const gchar *p = list; ; p++)
+    {
+        if (!*p || (*p == ',' && depth == 0))
+        {
+            gchar *part = g_strndup(start, p - start);
+            GMatchInfo *match = NULL;
+            if (g_regex_match(direction, part, 0, &match))
+            {
+                g_free(current);
+                current = g_match_info_fetch(match, 1);
+            }
+            g_match_info_free(match);
+            gchar *assignment = strchr(part, '=');
+            if (assignment)
+                *assignment = 0;
+            if (g_regex_match(name, part, 0, &match))
+            {
+                gchar *port = g_match_info_fetch(match, 1);
+                const gchar *previous = g_hash_table_lookup(ports, port);
+                if (!existing_only || !g_strcmp0(previous, "—"))
+                    g_hash_table_replace(ports, port, g_strdup(current));
+                else
+                    g_free(port);
+            }
+            g_match_info_free(match);
+            g_free(part);
+            if (!*p)
+                break;
+            start = p + 1;
+        }
+        else if (strchr("([{", *p))
+            depth++;
+        else if (strchr(")]}", *p))
+            depth--;
+    }
+    g_free(current);
+    g_regex_unref(direction);
+    g_regex_unref(name);
+}
+
+/* EN: Find the named module in source and return its port-to-direction map. With no
+ * module name, inspect the first module. The caller owns the map.
+ * RU: Находит модуль module в source и возвращает таблицу направлений портов.
+ * Без имени берёт первый модуль. Таблица принадлежит вызывающей стороне. */
+static GHashTable *port_browser_ports(const gchar *source, const gchar *module)
+{
+    GHashTable *ports = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    if (!source)
+        return ports;
+    GRegex *comments = g_regex_new("//[^\\n]*|/\\*[\\s\\S]*?\\*/|\"(?:\\\\.|[^\"\\\\])*\"", 0, 0, NULL);
+    gchar *clean = g_regex_replace_literal(comments, source, -1, 0, " ", 0, NULL);
+    g_regex_unref(comments);
+    GRegex *modules = g_regex_new("\\bmodule\\s+(?:(?:automatic|static)\\s+)?([A-Za-z_][A-Za-z0-9_$]*)", 0, 0, NULL);
+    GMatchInfo *match;
+    g_regex_match(modules, clean, 0, &match);
+    while (g_match_info_matches(match))
+    {
+        gchar *name = g_match_info_fetch(match, 1);
+        gboolean selected = !module || !strcmp(name, module);
+        g_free(name);
+        if (selected)
+        {
+            gint end;
+            g_match_info_fetch_pos(match, 0, NULL, &end);
+            const gchar *cursor = clean + end;
+            while (g_ascii_isspace(*cursor))
+                cursor++;
+            if (*cursor == '#')
+            {
+                cursor++;
+                while (g_ascii_isspace(*cursor))
+                    cursor++;
+                if (*cursor == '(')
+                {
+                    guint depth = 1;
+                    for (cursor++; *cursor && depth; cursor++)
+                    {
+                        if (*cursor == '(')
+                            depth++;
+                        else if (*cursor == ')')
+                            depth--;
+                    }
+                }
+            }
+            while (g_ascii_isspace(*cursor))
+                cursor++;
+            if (*cursor == '(')
+            {
+                const gchar *start = ++cursor;
+                guint depth = 1;
+                for (; *cursor && depth; cursor++)
+                {
+                    if (*cursor == '(')
+                        depth++;
+                    else if (*cursor == ')')
+                        depth--;
+                }
+                if (!depth)
+                {
+                    gchar *header = g_strndup(start, cursor - start - 1);
+                    port_browser_declarations(header, ports, FALSE);
+                    g_free(header);
+                    GRegex *body = g_regex_new("\\b(input|output|inout|ref)\\b[^;]*;", 0, 0, NULL);
+                    GMatchInfo *declaration;
+                    const gchar *limit = strstr(cursor, "endmodule");
+                    gchar *contents = limit ? g_strndup(cursor, limit - cursor) : g_strdup(cursor);
+                    g_regex_match(body, contents, 0, &declaration);
+                    while (g_match_info_matches(declaration))
+                    {
+                        gchar *line = g_match_info_fetch(declaration, 0);
+                        line[strlen(line) - 1] = 0;
+                        port_browser_declarations(line, ports, TRUE);
+                        g_free(line);
+                        g_match_info_next(declaration, NULL);
+                    }
+                    g_match_info_free(declaration);
+                    g_regex_unref(body);
+                    g_free(contents);
+                }
+            }
+            break;
+        }
+        g_match_info_next(match, NULL);
+    }
+    g_match_info_free(match);
+    g_regex_unref(modules);
+    g_free(clean);
+    return ports;
+}
+
+/* EN: Return the argument indexes that designate DUT ports for rule args, with argc tokens.
+ * RU: Возвращает индексы аргументов, задающих порты схемы для правила args из argc токенов. */
+static guint port_browser_pin_mask(gchar **args, gint argc)
+{
+    const gchar *kind = args[0];
+    if (!strcmp(kind, "spi-lua") && argc == 2)
+        return 0;
+    if (!strcmp(kind, "i2c-lua") && argc == 2)
+        return 0;
+    if (g_str_has_prefix(kind, "spi-"))
+        return 0x1e | (!strcmp(kind, "spi-lua") && argc == 7 ? 1u << 6 : 0);
+    if (g_str_has_prefix(kind, "i2c-"))
+        return 6 | (!strcmp(kind, "i2c-lua") && argc == 6 ? 1u << 5 : 0);
+    if (!strcmp(kind, "model-link") || !strcmp(kind, "model-share") ||
+        !strcmp(kind, "capture-trigger"))
+        return 1u << 2;
+    if (!strcmp(kind, "scope-xyz"))
+        return 14;
+    if (!strcmp(kind, "scope-xy") || !strcmp(kind, "uart"))
+        return 6;
+    const gchar *single[] = {"clock", "clock-hz", "pulse", "button", "switch", "slider", "led",
+                             "display", "scope", "live-input", "monitor", "output", "value", "bus"};
+    for (guint i = 0; i < G_N_ELEMENTS(single); i++)
+        if (!strcmp(kind, single[i]))
+            return 2;
+    const gchar *memories[] = {"sram", "sdram", "ddr2", "ddr3", "ddr4"};
+    const guint pins[] = {5, 10, 11, 12, 11};
+    for (guint i = 0; i < G_N_ELEMENTS(memories); i++)
+        if (!strcmp(kind, memories[i]))
+            return (1u << (pins[i] + 1)) - 2;
+    return 0;
+}
+
+/* EN: Refresh browser rows from the current recipe buffer. The buffer owns the edited text.
+ * RU: Обновляет строки browser по текущим правилам из buffer, которому принадлежит текст. */
+static void port_browser_refresh(GtkTextBuffer *buffer, gpointer data)
+{
+    PortBrowser *browser = data;
+    GtkTextIter first, last;
+    gtk_text_buffer_get_bounds(buffer, &first, &last);
+    gchar *recipe = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
+    gchar **lines = g_strsplit(recipe, "\n", -1);
+    gchar *module = NULL;
+    GHashTable *bindings = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    for (guint line = 0; lines[line]; line++)
+    {
+        gchar **args = NULL;
+        gint argc;
+        if (!g_shell_parse_argv(lines[line], &argc, &args, NULL))
+            continue;
+        if (argc == 2 && !strcmp(args[0], "module") && !module)
+            module = g_strdup(args[1]);
+        simulation_memory_defaults(&args, &argc);
+        guint mask = port_browser_pin_mask(args, argc);
+        gchar *fallback[] = {args[0], "sck", "cs_n", "mosi", "miso"};
+        gchar *i2c[] = {args[0], "scl", "sda"};
+        gchar **pins = args;
+        gint count = argc;
+        if (argc == 2 && !strcmp(args[0], "spi-lua"))
+        {
+            pins = fallback;
+            count = G_N_ELEMENTS(fallback);
+            mask = 0x1e;
+        }
+        else if (argc == 2 && !strcmp(args[0], "i2c-lua"))
+        {
+            pins = i2c;
+            count = G_N_ELEMENTS(i2c);
+            mask = 6;
+        }
+        for (gint i = 1; i < MIN(count, 16); i++)
+        {
+            if (!(mask & (1u << i)))
+                continue;
+            gchar *port = g_strndup(pins[i], strcspn(pins[i], "["));
+            const gchar *previous = g_hash_table_lookup(bindings, port);
+            const gchar *device = g_str_has_prefix(args[0], "model-") ? args[1] : args[0];
+            gchar *entry = g_strdup_printf("%s (line %u)", device, line + 1);
+            gchar *combined = previous ? g_strconcat(previous, ", ", entry, NULL) : g_strdup(entry);
+            g_hash_table_replace(bindings, port, combined);
+            g_free(entry);
+        }
+        g_strfreev(args);
+    }
+    if (!browser->ports || g_strcmp0(browser->module, module))
+    {
+        g_clear_pointer(&browser->ports, g_hash_table_unref);
+        g_free(browser->module);
+        browser->module = g_strdup(module);
+        browser->ports = port_browser_ports(browser->source, module);
+    }
+    GList *names = g_list_sort(g_hash_table_get_keys(browser->ports), (GCompareFunc)g_strcmp0);
+    gtk_list_store_clear(browser->store);
+    for (GList *item = names; item; item = item->next)
+    {
+        const gchar *name = item->data;
+        const gchar *attached = g_hash_table_lookup(bindings, name);
+        GtkTreeIter row;
+        gtk_list_store_insert_with_values(browser->store, &row, -1, 0, name,
+            1, g_hash_table_lookup(browser->ports, name), 2, attached ? attached : "Unassigned", -1);
+    }
+    g_list_free(names);
+    g_hash_table_unref(bindings);
+    g_strfreev(lines);
+    g_free(module);
+    g_free(recipe);
+}
+
+/* EN: Copy the selected port from tree (callback data) when button is clicked.
+ * RU: По нажатию button копирует выбранный порт из tree, переданного через data. */
+static void port_browser_copy(GtkButton *button, gpointer data)
+{
+    GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(data));
+    GtkTreeModel *model;
+    GtkTreeIter row;
+    if (gtk_tree_selection_get_selected(selection, &model, &row))
+    {
+        gchar *port;
+        gtk_tree_model_get(model, &row, 0, &port, -1);
+        GtkClipboard *clipboard = gtk_widget_get_clipboard(GTK_WIDGET(button), GDK_SELECTION_CLIPBOARD);
+        gtk_clipboard_set_text(clipboard, port, -1);
+        g_free(port);
+    }
+}
+
+/* EN: Create the Ports and Source notebook for browser. The caller keeps browser alive
+ * until the dialog and its recipe change handler are destroyed.
+ * RU: Создаёт вкладки портов и исходника для browser. Вызывающий хранит browser до
+ * уничтожения диалога и отключения обработчика изменений текста. */
+static GtkWidget *port_browser_widget(PortBrowser *browser)
+{
+    GtkWidget *notebook = gtk_notebook_new();
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    browser->store = gtk_list_store_new(3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(browser->store));
+    gtk_widget_set_name(tree, "insight-test-device-ports");
+    g_object_unref(browser->store);
+    const gchar *titles[] = {"Port", "Direction", "Devices / rules"};
+    for (guint i = 0; i < G_N_ELEMENTS(titles); i++)
+        gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(tree), -1, titles[i],
+            gtk_cell_renderer_text_new(), "text", i, NULL);
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(scroll), tree);
+    gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
+    GtkWidget *copy = gtk_button_new_with_label("Copy Port Name");
+    g_signal_connect(copy, "clicked", G_CALLBACK(port_browser_copy), tree);
+    gtk_box_pack_start(GTK_BOX(box), copy, FALSE, FALSE, 0);
+    gtk_notebook_append_page(GTK_NOTEBOOK(notebook), box, gtk_label_new("Ports"));
+    GtkWidget *source = gtk_text_view_new();
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(source), FALSE);
+    gtk_text_view_set_monospace(GTK_TEXT_VIEW(source), TRUE);
+    gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(source)),
+                             browser->source ? browser->source : "Source unavailable.", -1);
+    scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(scroll), source);
+    gtk_notebook_append_page(GTK_NOTEBOOK(notebook), scroll, gtk_label_new("Source"));
+    port_browser_refresh(browser->recipe, browser);
+    return notebook;
+}
+
+typedef struct {
     const gchar *rule, *fields;
     gint image;
     gboolean script;
@@ -2549,6 +2877,10 @@ static void device_argument(GString *rule, const gchar *value)
     g_free(quoted);
 }
 
+/* EN: Open the modal device form from button, read the source snapshot and append a
+ * validated rule to the recipe buffer in data.
+ * RU: Открывает модальную форму по button, показывает исходник и добавляет проверенное
+ * правило в буфер рецепта, переданный через data. */
 static void simulation_device_wizard(GtkButton *button, gpointer data)
 {
     GtkTextBuffer *buffer = data;
@@ -2558,7 +2890,7 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Add Test Device", parent,
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
         "_Insert Rule", GTK_RESPONSE_ACCEPT, NULL);
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 480, 480);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 960, 520);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     GtkWidget *combo = gtk_combo_box_text_new();
     gtk_widget_set_name(combo, "insight-test-device-type");
@@ -2570,7 +2902,15 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     gtk_grid_set_column_spacing(GTK_GRID(form.grid), 10);
     gtk_grid_set_row_spacing(GTK_GRID(form.grid), 4);
     gtk_container_add(GTK_CONTAINER(scroll), form.grid);
-    gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
+    PortBrowser browser = {
+        .source = g_object_get_data(G_OBJECT(button), "source-snapshot"),
+        .recipe = buffer
+    };
+    GtkWidget *panes = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+    gtk_paned_pack1(GTK_PANED(panes), scroll, TRUE, FALSE);
+    gtk_paned_pack2(GTK_PANED(panes), port_browser_widget(&browser), TRUE, FALSE);
+    gtk_paned_set_position(GTK_PANED(panes), 420);
+    gtk_box_pack_start(GTK_BOX(box), panes, TRUE, TRUE, 0);
     GtkWidget *status = gtk_label_new(NULL);
     gtk_label_set_line_wrap(GTK_LABEL(status), TRUE);
     gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 6);
@@ -2646,17 +2986,27 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
         if (valid)
             break;
     }
+    g_clear_pointer(&browser.ports, g_hash_table_unref);
+    g_free(browser.module);
     gtk_widget_destroy(dialog);
     g_ptr_array_unref(form.entries);
 }
 
-static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, const gchar *source_directory,
+/* EN: Edit the recipe saved at path in a modal child of parent. source_path supplies
+ * the readable HDL and its directory resolves files. On acceptance, optional output
+ * pointers harness, model_sources and port_images receive the generated configuration.
+ * RU: Редактирует рецепт из path в модальном окне parent. source_path задаёт исходник
+ * и каталог относительных путей. При подтверждении необязательные указатели harness,
+ * model_sources и port_images получают сгенерированную конфигурацию. */
+static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, const gchar *source_path,
                                       gchar **harness, GPtrArray **model_sources, GHashTable **port_images)
 {
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Port Signals", parent,
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
         harness ? "_Start Debugging" : "_Save for Next Run", GTK_RESPONSE_ACCEPT, NULL);
     g_object_ref_sink(dialog);
+    gchar *source_directory = g_path_get_dirname(source_path);
+    gchar *source_snapshot = port_browser_source(source_path);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 680, 390);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     GtkWidget *hint = gtk_label_new(
@@ -2697,7 +3047,8 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
     GtkWidget *wizard = gtk_button_new_with_label("Add Test Device…");
     gtk_widget_set_halign(wizard, GTK_ALIGN_START);
-    g_object_set_data(G_OBJECT(wizard), "source-directory", (gpointer)source_directory);
+    g_object_set_data(G_OBJECT(wizard), "source-directory", source_directory);
+    g_object_set_data(G_OBJECT(wizard), "source-snapshot", source_snapshot);
     g_signal_connect(wizard, "clicked", G_CALLBACK(simulation_device_wizard), buffer);
     gtk_box_pack_start(GTK_BOX(box), wizard, FALSE, FALSE, 4);
     GFile *file = g_file_new_for_path(path);
@@ -2714,7 +3065,13 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     g_object_unref(file);
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_container_add(GTK_CONTAINER(scroll), view);
-    gtk_box_pack_start(GTK_BOX(box), scroll, TRUE, TRUE, 0);
+    PortBrowser browser = {.source = source_snapshot, .recipe = buffer};
+    GtkWidget *panes = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+    gtk_paned_pack1(GTK_PANED(panes), scroll, TRUE, FALSE);
+    gtk_paned_pack2(GTK_PANED(panes), port_browser_widget(&browser), TRUE, FALSE);
+    gtk_paned_set_position(GTK_PANED(panes), 320);
+    gulong changed = g_signal_connect(buffer, "changed", G_CALLBACK(port_browser_refresh), &browser);
+    gtk_box_pack_start(GTK_BOX(box), panes, TRUE, TRUE, 0);
     GtkWidget *status = gtk_label_new(harness ? "" : "Saved changes apply the next time debugging starts.");
     gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 6);
     gtk_widget_show_all(dialog);
@@ -2753,19 +3110,24 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         if (accepted)
             break;
     }
+    g_signal_handler_disconnect(buffer, changed);
+    g_free(source_snapshot);
+    g_free(source_directory);
+    g_clear_pointer(&browser.ports, g_hash_table_unref);
+    g_free(browser.module);
     gtk_widget_destroy(dialog);
     g_object_unref(dialog);
     return accepted;
 }
 
+/* EN: Reopen saved port settings from button for the running simulation in data.
+ * RU: Повторно открывает настройки портов по кнопке button для сеанса из data. */
 static void simulation_port_settings(GtkButton *button, gpointer data)
 {
     (void)button;
     WaveSimulation *run = data;
     gchar *path = g_strdup(run->port_settings);
-    gchar *source_directory = g_path_get_dirname(run->sources[0]);
-    simulation_edit_ports(GTK_WINDOW(run->dialog), path, source_directory, NULL, NULL, NULL);
-    g_free(source_directory);
+    simulation_edit_ports(GTK_WINDOW(run->dialog), path, run->sources[0], NULL, NULL, NULL);
     g_free(path);
 }
 
@@ -4751,8 +5113,14 @@ static void simulation_dialog_destroy(GtkWidget *dialog, gpointer data)
     }
 }
 
-/* Launch Icarus and open the resulting VCD on completion. */
-/* Запускает Icarus и открывает полученный VCD после завершения. */
+/* EN: Launch Icarus from bin with include_dir and sources, owned by the caller.
+ * parent owns setup dialogs, interactive enables debugger controls, navigate and
+ * open_location handle HDL navigation, settings_directory and project key saved
+ * settings, and configure_ports opens the modal port setup. Errors appear in the UI.
+ * RU: Запускает Icarus из bin для sources с include_dir. parent владеет диалогами,
+ * interactive включает отладку, navigate и open_location открывают исходник,
+ * settings_directory и project определяют сохранённые настройки, configure_ports
+ * открывает модальную настройку портов. Ошибки показываются в интерфейсе. */
 void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar *include_dir,
                                 const gchar *const *sources, gboolean interactive, InsightWaveSource navigate,
                                 InsightWaveLocation open_location,
@@ -4793,10 +5161,8 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         gchar *key = simulation_settings_path(settings_directory, project, run->sources);
         run->port_settings = g_strconcat(key, ".ports", NULL);
         g_free(key);
-        gchar *source_directory = g_path_get_dirname(run->sources[0]);
-        gboolean accepted = simulation_edit_ports(parent, run->port_settings, source_directory,
+        gboolean accepted = simulation_edit_ports(parent, run->port_settings, run->sources[0],
                                                    &run->port_harness, &run->port_model_sources, &run->port_images);
-        g_free(source_directory);
         if (!accepted)
         {
             simulation_free(run);

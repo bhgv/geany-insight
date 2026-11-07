@@ -60,6 +60,15 @@ debugging or save for the next run. The recipe remains editable. Expand
 **Text rule reference** to see the full syntax. The full recipe is checked
 when you save or start, including conflicts with existing ports.
 
+Use the **Ports** and **Source** tabs to read and copy interface names
+while setup is modal. **Ports** lists names, directions and every rule
+that references each port. **Unassigned** indicates no binding. Each
+rule includes its line number. Select a row and click **Copy Port Name**.
+The **Source** tab allows text selection and copying. The list comes
+from module declarations in the current file and updates as rules
+change. Ports supplied by macros or external files may need manual entry.
+
+
 ## Triggered waveform capture and live controls
 
 In **Port Signals** for the current file, configure one optional

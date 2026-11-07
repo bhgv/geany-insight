@@ -1,3 +1,5 @@
+/* EN: Connects Insight tools, project panels, and debugger entry points to Geany.
+ * RU: Подключает инструменты Insight, панели проекта и запуск отладчиков к Geany. */
 #define INSIGHT_LOCALIZE_FORMATS
 #include "insight-i18n.h"
 #include "../insight/desktop/glib_compat.h"
@@ -5044,6 +5046,10 @@ static void waveform_debug_current(GtkMenuItem *item, gpointer data)
     g_free(path);
 }
 
+/* EN: Open the modal Verilog source picker from item and use data to select debug
+ * or run mode. Cancellation leaves the current session alone.
+ * RU: Открывает модальный выбор исходников Verilog по item. data выбирает отладку
+ * или запуск. При отмене текущий сеанс сохраняется. */
 static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
 {
     (void)item;
@@ -5051,6 +5057,7 @@ static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
     GtkWindow *parent = GTK_WINDOW(main_widgets.window);
     GtkWidget *chooser = gtk_file_chooser_dialog_new(interactive ? "Debug Verilog Testbench" : "Run Verilog Testbench", parent,
         GTK_FILE_CHOOSER_ACTION_OPEN, "_Cancel", GTK_RESPONSE_CANCEL, "_Run", GTK_RESPONSE_ACCEPT, NULL);
+    gtk_window_set_modal(GTK_WINDOW(chooser), TRUE);
     GtkFileChooser *files = GTK_FILE_CHOOSER(chooser);
     gtk_file_chooser_set_select_multiple(files, TRUE);
     GtkFileFilter *filter = gtk_file_filter_new();
@@ -8463,10 +8470,15 @@ static gchar *debug_number_source(const gchar *source, gsize length, GArray *lin
 
 /* Choose a source file without changing the debugged entry point. */
 /* Выбирает файл Python, не меняя точку входа отладки. */
+/* EN: Select a script in a modal child of parent with title. root is the initial
+ * directory and python selects the filter. Return an owned path or NULL on cancel.
+ * RU: Выбирает скрипт в модальном окне parent с заголовком title. root задаёт
+ * начальный каталог, python выбирает фильтр. Возвращает новый путь или NULL. */
 static gchar *debug_choose_script_file(GtkWindow *parent, const gchar *title, const gchar *root, gboolean python)
 {
     GtkWidget *dialog = gtk_file_chooser_dialog_new(title, parent, GTK_FILE_CHOOSER_ACTION_OPEN,
         "_Cancel", GTK_RESPONSE_CANCEL, "_Open", GTK_RESPONSE_ACCEPT, NULL);
+    gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
     GtkFileFilter *filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter, python ? "Python files" : "Lua files");
     if (python)
@@ -10042,6 +10054,10 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     native_debug_send(dialog, "-gdb-set mi-async on");
 }
 
+/* EN: Open a modal executable picker from item and launch GDB on acceptance.
+ * data is unused. Report a missing GDB in the status bar.
+ * RU: Открывает модальный выбор исполняемого файла по item и запускает GDB
+ * при подтверждении. data не используется. Отсутствие GDB показывает в статусе. */
 static void debug_native_executable(GtkMenuItem *item, gpointer data)
 {
     (void)item;
@@ -10060,6 +10076,7 @@ static void debug_native_executable(GtkMenuItem *item, gpointer data)
     GtkWidget *chooser = gtk_file_chooser_dialog_new(insight_tr("Debug C/C++ Executable"),
         GTK_WINDOW(main_widgets.window), GTK_FILE_CHOOSER_ACTION_OPEN,
         "_Cancel", GTK_RESPONSE_CANCEL, "_Debug", GTK_RESPONSE_ACCEPT, NULL);
+    gtk_window_set_modal(GTK_WINDOW(chooser), TRUE);
     gchar *root = app->project ? project_get_base_path() : NULL;
     if (root)
         gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(chooser), root);
