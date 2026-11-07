@@ -1701,10 +1701,12 @@ typedef struct {
     gboolean register_write_ready;
     GtkListStore *signal_tables[3];
     GtkWidget *signal_search, *signal_status, *signal_context, *signal_state;
+    GtkWidget *signal_changed_only;
     GtkTreeSelection *signal_selection[3];
     gboolean signal_refilling;
     GtkCellRenderer *signal_register_renderer;
     GPtrArray *signal_rows;
+    GHashTable *signal_previous_values;
     gchar *signal_file;
     guint signal_format;
     gboolean signal_tables_ready, signal_collecting, signal_limited, signal_refresh_needed;
@@ -1746,6 +1748,7 @@ static void simulation_free(gpointer data)
     g_free(run->live_directory);
     g_free(run->trace_file);
     g_clear_pointer(&run->signal_rows, g_ptr_array_unref);
+    g_clear_pointer(&run->signal_previous_values, g_hash_table_unref);
     g_free(run->signal_file);
     for (guint i = 0; i < G_N_ELEMENTS(run->signal_tables); i++)
         g_clear_object(&run->signal_tables[i]);
@@ -5932,6 +5935,13 @@ static gchar *signal_table_format(const gchar *bits, guint format)
     return g_strdup(bits);
 }
 
+/* EN: Identify a snapshot row by its table kind and fully qualified name.
+ * RU: Формирует ключ строки row из типа таблицы и полного имени сигнала. */
+static gchar *signal_snapshot_key(gchar **row)
+{
+    return g_strconcat(row[0], "\t", row[1], NULL);
+}
+
 /* EN: Refill the visible models for the current source file and regex query in run.
  * RU: Заполняет видимые таблицы сеанса run для текущего файла и регулярного выражения. */
 static void signal_tables_refresh(WaveSimulation *run)
@@ -5960,6 +5970,7 @@ static void signal_tables_refresh(WaveSimulation *run)
         gtk_list_store_clear(run->signal_tables[i]);
     }
     const gchar *file = run->signal_file;
+    gboolean changed_only = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(run->signal_changed_only));
     for (guint i = 0; file && i < run->signal_rows->len; i++)
     {
         gchar **row = run->signal_rows->pdata[i];
@@ -5969,6 +5980,12 @@ static void signal_tables_refresh(WaveSimulation *run)
         if (strcmp(file, row[2]))
 #endif
             continue;
+        gchar *key = signal_snapshot_key(row);
+        const gchar *previous = g_hash_table_lookup(run->signal_previous_values, key);
+        gboolean changed = previous && *previous && *row[3] && strcmp(previous, row[3]);
+        g_free(key);
+        if (changed_only && !changed)
+            continue;
         gchar *display = signal_table_format(row[3], run->signal_format);
         if (!regex || g_regex_match(regex, row[1], 0, NULL) ||
             g_regex_match(regex, display, 0, NULL) || g_regex_match(regex, row[3], 0, NULL))
@@ -5976,7 +5993,7 @@ static void signal_tables_refresh(WaveSimulation *run)
             guint table = *row[0] == 'P' ? 0 : *row[0] == 'N' ? 1 : 2;
             GtkTreeIter inserted;
             gtk_list_store_insert_with_values(run->signal_tables[table], &inserted, -1,
-                0, row[1], 1, display, 2, row[3], -1);
+                0, row[1], 1, display, 2, row[3], 3, changed ? "●" : "", -1);
             if (!g_strcmp0(selected[table], row[1]))
             {
                 gtk_tree_selection_select_iter(run->signal_selection[table], &inserted);
@@ -6031,6 +6048,12 @@ static gboolean signal_tables_record(WaveSimulation *run, const gchar *text)
     if (!strcmp(text, "GEANY-SIGNALS-BEGIN"))
     {
         run->signal_collecting = TRUE;
+        g_hash_table_remove_all(run->signal_previous_values);
+        for (guint i = 0; i < run->signal_rows->len; i++)
+        {
+            gchar **row = run->signal_rows->pdata[i];
+            g_hash_table_insert(run->signal_previous_values, signal_snapshot_key(row), g_strdup(row[3]));
+        }
         g_ptr_array_set_size(run->signal_rows, 0);
         return TRUE;
     }
@@ -7481,18 +7504,33 @@ static void signal_table_search_changed(GtkEditable *entry, gpointer data)
     signal_tables_refresh(data);
 }
 
+/* EN: Reapply the snapshot filter for simulation data when toggle changes.
+ * RU: Повторно применяет фильтр снимка сеанса data при переключении toggle. */
+static void signal_table_changed_toggled(GtkToggleButton *toggle, gpointer data)
+{
+    (void)toggle;
+    signal_tables_refresh(data);
+}
+
 /* EN: Build three signal tables, the regex search and declaration context for run.
  * RU: Создаёт три таблицы, поиск по регулярному выражению и контекст для run. */
 static GtkWidget *simulation_signal_tables(WaveSimulation *run)
 {
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     run->signal_rows = g_ptr_array_new_with_free_func((GDestroyNotify)g_strfreev);
+    run->signal_previous_values = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     run->signal_refresh_needed = TRUE;
     run->signal_search = gtk_search_entry_new();
     gtk_entry_set_max_length(GTK_ENTRY(run->signal_search), 256);
     gtk_entry_set_placeholder_text(GTK_ENTRY(run->signal_search),
         insight_tr("Regex: signal name or value"));
-    gtk_box_pack_start(GTK_BOX(box), run->signal_search, FALSE, FALSE, 0);
+    GtkWidget *filters = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+    gtk_box_pack_start(GTK_BOX(filters), run->signal_search, TRUE, TRUE, 0);
+    run->signal_changed_only = gtk_check_button_new_with_label(insight_tr("Changed only"));
+    gtk_widget_set_tooltip_text(run->signal_changed_only,
+        insight_tr("Compare four-state values with the previous snapshot."));
+    gtk_box_pack_start(GTK_BOX(filters), run->signal_changed_only, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), filters, FALSE, FALSE, 0);
     run->signal_state = gtk_label_new(insight_tr("Waiting for a paused signal snapshot."));
     gtk_box_pack_start(GTK_BOX(box), run->signal_state, FALSE, FALSE, 0);
     run->signal_status = gtk_label_new("");
@@ -7503,7 +7541,7 @@ static GtkWidget *simulation_signal_tables(WaveSimulation *run)
     const gchar *titles[] = {"Ports", "Nets", "Registers"};
     for (guint i = 0; i < G_N_ELEMENTS(titles); i++)
     {
-        run->signal_tables[i] = gtk_list_store_new(3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+        run->signal_tables[i] = gtk_list_store_new(4, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
         GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(run->signal_tables[i]));
         GtkCellRenderer *name = gtk_cell_renderer_text_new();
         GtkCellRenderer *value = gtk_cell_renderer_text_new();
@@ -7516,6 +7554,11 @@ static GtkWidget *simulation_signal_tables(WaveSimulation *run)
         gtk_tree_view_column_set_resizable(name_column, TRUE);
         gtk_tree_view_append_column(GTK_TREE_VIEW(tree), name_column);
         gtk_tree_view_append_column(GTK_TREE_VIEW(tree), value_column);
+        GtkTreeViewColumn *changed_column = gtk_tree_view_column_new_with_attributes(
+            insight_tr("Changed"), gtk_cell_renderer_text_new(), "text", 3, NULL);
+        gtk_tree_view_column_set_sort_column_id(changed_column, 3);
+        gtk_tree_view_append_column(GTK_TREE_VIEW(tree), changed_column);
+
         run->signal_selection[i] = gtk_tree_view_get_selection(GTK_TREE_VIEW(tree));
         g_signal_connect(run->signal_selection[i], "changed", G_CALLBACK(signal_table_selected), run);
         g_signal_connect(tree, "row-activated", G_CALLBACK(signal_table_activated), run);
@@ -7538,6 +7581,7 @@ static GtkWidget *simulation_signal_tables(WaveSimulation *run)
     gtk_container_add(GTK_CONTAINER(scroll), run->signal_context);
     gtk_box_pack_start(GTK_BOX(box), scroll, FALSE, TRUE, 0);
     g_signal_connect(run->signal_search, "changed", G_CALLBACK(signal_table_search_changed), run);
+    g_signal_connect(run->signal_changed_only, "toggled", G_CALLBACK(signal_table_changed_toggled), run);
     return box;
 }
 

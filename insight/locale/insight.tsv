@@ -2958,3 +2958,6 @@ Invalid register value or unsupported register path.	Некорректное з
 HDL declaration not found.	Объявление HDL не найдено.
 Values at the current stop	Значения на текущей остановке
 Values from the last stop	Значения с последней остановки
+Changed	Изменилось
+Changed only	Только изменившиеся
+Compare four-state values with the previous snapshot.	Сравнить четырёхсостоянийные значения с предыдущим снимком.
