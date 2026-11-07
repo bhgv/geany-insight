@@ -21,6 +21,8 @@ script_dir=$(cd -- "$(dirname -- "$0")" && pwd)
 bridge_patch="$script_dir/../patches/geany-vvp.patch"
 windows_patch="$script_dir/../patches/geany-iverilog-windows.patch"
 device_source="$script_dir/geany-vpi-devices.c"
+lua_dir="$script_dir/../vendor/lua"
+lua_sources=("$lua_dir"/l*.c "$lua_dir"/*.h)
 stamp="$install_dir/share/geany-insight/iverilog-source.sha256"
 work=$(mktemp -d "${TMPDIR:-/tmp}/geany-iverilog.XXXXXXXX")
 download=
@@ -39,6 +41,9 @@ file_digest() {
 }
 
 stamp_id="$sha $(file_digest "$bridge_patch") $(file_digest "$device_source") $(file_digest "$script_dir/geany-ddr4.h") $(file_digest "$script_dir/geany-spi-memory.h") $(file_digest "$script_dir/geany-i2c-eeprom.h")"
+for lua_source in "${lua_sources[@]}" "$lua_dir/onelua.c" "$script_dir"/geany-lua-*.h; do
+    stamp_id+=" $(file_digest "$lua_source")"
+done
 if [[ -n "$executable_suffix" ]]; then
     stamp_id+=" $(file_digest "$windows_patch")"
 fi
@@ -133,12 +138,12 @@ printf '[Simulator] Building Icarus Verilog %s from source.\n' "$version"
     make DESTDIR="$work/stage" install
 )
 staged="$work/stage$configure_prefix"
-device_flags=(-shared)
+device_flags=(-shared -pthread -DMAKE_LIB)
 if [[ -z "$executable_suffix" ]]; then
     device_flags+=(-fPIC)
 fi
 "${CC:-gcc}" "${device_flags[@]}" -I "$staged/include/iverilog" \
-    "$device_source" -L "$staged/lib" -lvpi -o "$staged/lib/ivl/geany_devices.vpi"
+    -I "$lua_dir" "$device_source" "$lua_dir/onelua.c" -L "$staged/lib" -lvpi -lm -o "$staged/lib/ivl/geany_devices.vpi"
 if [[ -n "$executable_suffix" ]]; then
     # These helpers communicate over inherited pipes, without a console window.
     for helper in bin/iverilog.exe bin/vvp.exe lib/ivl/ivl.exe lib/ivl/ivlpp.exe; do

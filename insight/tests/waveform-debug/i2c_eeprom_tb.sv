@@ -1,12 +1,15 @@
 `timescale 1ns/1ns
 module i2c_eeprom_tb;
     reg scl_low = 0, sda_low = 0;
-    reg device_drive = 1'bz;
+    reg device_drive = 1'bz, lua_drive = 1'bz;
     tri1 scl, sda;
     assign scl = scl_low ? 1'b0 : 1'bz;
     assign sda = sda_low ? 1'b0 : 1'bz;
     assign sda = device_drive;
+    assign sda = lua_drive;
     always @(scl or sda) $geany_i2c_eeprom(scl, sda, 'h50, device_drive, "i2c.hex");
+
+    always @(scl or sda) $geany_i2c_lua(scl, sda, 'h51, lua_drive, "device.lua");
 
     task start;
         sda_low = 0;
@@ -53,7 +56,7 @@ module i2c_eeprom_tb;
 
     initial begin
         #1 start();
-        send_byte('ha2, 0);
+        send_byte('ha4, 0);
         stop();
         start();
         send_byte('ha0, 1); send_byte('h12, 1); send_byte('h34, 1);
@@ -70,6 +73,12 @@ module i2c_eeprom_tb;
         start();
         send_byte('ha1, 1);
         read_byte('h5a, 0);
+        stop();
+        start();
+        send_byte('ha2, 1); send_byte('h6a, 1); send_byte('h37, 1);
+        start();
+        send_byte('ha3, 1);
+        read_byte('h6a, 1); read_byte('h02, 1); read_byte('h56, 0);
         stop();
         $display("I2C EEPROM test passed");
         $finish;

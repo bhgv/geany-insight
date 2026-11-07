@@ -618,6 +618,8 @@ static PLI_INT32 i2c_update(PLI_BYTE8 *unused)
     return 0;
 }
 
+#include "geany-lua-bus.h"
+
 static void register_devices(void)
 {
     s_vpi_systf_data task = {0};
@@ -652,6 +654,13 @@ static void register_devices(void)
     task.tfname = "$geany_i2c_eeprom";
     task.calltf = i2c_update;
     task.user_data = NULL;
+    vpi_register_systf(&task);
+    static PLI_BYTE8 i2c_lua = 1;
+    task.tfname = "$geany_spi_lua";
+    task.calltf = lua_bus_update;
+    vpi_register_systf(&task);
+    task.tfname = "$geany_i2c_lua";
+    task.user_data = &i2c_lua;
     vpi_register_systf(&task);
 }
 

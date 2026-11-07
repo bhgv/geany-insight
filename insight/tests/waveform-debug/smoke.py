@@ -458,6 +458,7 @@ def check_spi_memory(compiler, runtime, fixtures, directory, environment):
     compile_design(compiler, directory, [fixtures / "spi_memory_tb.sv"], environment)
     (directory / "nor.hex").write_text("@10 ba\n", encoding="ascii")
     (directory / "psram.hex").write_text("@7ffffe ba be\n", encoding="ascii")
+    (directory / "device.lua").write_bytes((fixtures / "lua_device.lua").read_bytes())
     modules = runtime.parent.parent / "lib" / "ivl"
     report = capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
                               "simulation.vvp"], directory, "spi-memory", environment)
@@ -467,6 +468,7 @@ def check_spi_memory(compiler, runtime, fixtures, directory, environment):
 def check_i2c_eeprom(compiler, runtime, fixtures, directory, environment):
     compile_design(compiler, directory, [fixtures / "i2c_eeprom_tb.sv"], environment)
     (directory / "i2c.hex").write_text("@1234 be ef\n", encoding="ascii")
+    (directory / "device.lua").write_bytes((fixtures / "lua_device.lua").read_bytes())
     modules = runtime.parent.parent / "lib" / "ivl"
     report = capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
                               "simulation.vvp"], directory, "i2c-eeprom", environment)

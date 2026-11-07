@@ -18,6 +18,8 @@ on:
       - 'insight/tools/geany-vpi-devices.c'
       - 'insight/tools/geany-ddr4.h'
       - 'insight/tools/geany-i2c-eeprom.h'
+      - 'insight/tools/geany-lua-*.h'
+      - 'insight/vendor/lua/**'
       - 'insight/tools/geany-spi-memory.h'
       - 'insight/tools/setup-windows.ps1'
       - 'insight/tools/windows-toolchain.json'

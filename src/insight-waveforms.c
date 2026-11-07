@@ -1598,10 +1598,12 @@ static guint simulation_port_connect(GString *body, GString *connections, GHashT
 
 static gchar *simulation_memory_filename(const gchar *anchor)
 {
-    return g_strdup_printf("geany-memory-%s.hex", anchor);
+    return *anchor == ':' ? g_strdup_printf("geany-device-%s.lua", anchor + 1) :
+                            g_strdup_printf("geany-memory-%s.hex", anchor);
 }
 
-static void simulation_memory_argument(GString *body, GHashTable *images, const gchar *anchor)
+static void simulation_device_argument(GString *body, GHashTable *images, const gchar *anchor,
+                                       const gchar *reset)
 {
     if (g_hash_table_contains(images, anchor))
     {
@@ -1609,7 +1611,14 @@ static void simulation_memory_argument(GString *body, GHashTable *images, const 
         g_string_append_printf(body, ",\"%s\"", name);
         g_free(name);
     }
+    if (reset)
+        g_string_append_printf(body, ",dut.%s", reset);
     g_string_append(body, ");\n");
+}
+
+static void simulation_memory_argument(GString *body, GHashTable *images, const gchar *anchor)
+{
+    simulation_device_argument(body, images, anchor, NULL);
 }
 
 static gboolean simulation_port_sram(gchar **args, GString *body, GString *connections,
@@ -1685,7 +1694,8 @@ static gboolean simulation_port_ddr(gchar **args, GString *body, GString *connec
 }
 
 static gboolean simulation_port_spi(gchar **args, GString *body, GString *connections,
-                                    GHashTable *ports, GHashTable *images, GHashTable *spi_pins)
+                                    GHashTable *ports, GHashTable *images, GHashTable *spi_pins,
+                                    const gchar *script_key, const gchar *reset)
 {
     guint ids[4], new_pins = 0;
     for (guint i = 1; i <= G_N_ELEMENTS(ids); i++)
@@ -1718,32 +1728,68 @@ static gboolean simulation_port_spi(gchar **args, GString *body, GString *connec
         }
     }
     guint ck = ids[0], cs = ids[1], mosi = ids[2], miso = ids[3];
+    if (script_key)
+        g_string_append_printf(body, "reg spi_start%u; initial #0 spi_start%u=1;\n", cs, cs);
     g_string_append_printf(body,
         "reg spi_drive%u=1'bz; assign pin%u=spi_drive%u;\n"
-        "always @(pin%u or pin%u) $geany_spi_%s(pin%u,pin%u,pin%u,spi_drive%u",
-        cs, miso, cs, ck, cs, args[0] + 4, ck, cs, mosi, cs);
-    simulation_memory_argument(body, images, args[2]);
+        "always @(pin%u or pin%u", cs, miso, cs, ck, cs);
+    if (script_key)
+        g_string_append_printf(body, " or spi_start%u", cs);
+    if (reset)
+        g_string_append_printf(body, " or dut.%s", reset);
+    g_string_append_printf(body, ") $geany_spi_%s(pin%u,pin%u,pin%u,spi_drive%u",
+                           args[0] + 4, ck, cs, mosi, cs);
+    simulation_device_argument(body, images, script_key ? script_key : args[2], reset);
     return TRUE;
 }
 
+static gboolean simulation_i2c_address(const gchar *value, guint64 *address)
+{
+    gboolean hex = g_str_has_prefix(value, "0x") || g_str_has_prefix(value, "0X");
+    return g_ascii_string_to_unsigned(value + (hex ? 2 : 0), hex ? 16 : 10, 8, 119, address, NULL);
+}
+
 static gboolean simulation_port_i2c(gchar **args, GString *body, GString *connections,
-                                    GHashTable *ports, GHashTable *images)
+                                    GHashTable *ports, GHashTable *images, GHashTable *buses,
+                                    const gchar *script_key, const gchar *reset)
 {
     guint64 address;
-    gboolean hex = g_str_has_prefix(args[3], "0x") || g_str_has_prefix(args[3], "0X");
-    if (g_hash_table_size(ports) > 126 || !simulation_port_name(args[1]) ||
-        !simulation_port_name(args[2]) || !strcmp(args[1], args[2]) ||
-        g_hash_table_contains(ports, args[1]) || g_hash_table_contains(ports, args[2]) ||
-        !g_ascii_string_to_unsigned(args[3] + (hex ? 2 : 0), hex ? 16 : 10, 8, 119, &address, NULL))
+    if (!simulation_port_name(args[1]) || !simulation_port_name(args[2]) ||
+        !strcmp(args[1], args[2]) || !simulation_i2c_address(args[3], &address))
         return FALSE;
-    guint scl = simulation_port_connect(body, connections, ports, args[1], 1, TRUE);
-    guint sda = simulation_port_connect(body, connections, ports, args[2], 1, TRUE);
+    guint scl, sda;
+    const gchar *clock_port = script_key ? g_hash_table_lookup(buses, args[2]) : NULL;
+    if (clock_port)
+    {
+        if (strcmp(clock_port, args[1]))
+            return FALSE;
+        scl = GPOINTER_TO_UINT(g_hash_table_lookup(ports, args[1])) - 1;
+        sda = GPOINTER_TO_UINT(g_hash_table_lookup(ports, args[2])) - 1;
+    }
+    else
+    {
+        if (g_hash_table_size(ports) > 126 || g_hash_table_contains(ports, args[1]) ||
+            g_hash_table_contains(ports, args[2]))
+            return FALSE;
+        scl = simulation_port_connect(body, connections, ports, args[1], 1, TRUE);
+        sda = simulation_port_connect(body, connections, ports, args[2], 1, TRUE);
+        g_string_append_printf(body, "pullup(pin%u); pullup(pin%u);\n", scl, sda);
+        if (script_key)
+            g_hash_table_insert(buses, g_strdup(args[2]), g_strdup(args[1]));
+    }
+    guint id = script_key ? sda * 128 + (guint)address + 128 : sda;
+    if (script_key)
+        g_string_append_printf(body, "reg i2c_start%u; initial #0 i2c_start%u=1;\n", id, id);
     g_string_append_printf(body,
-        "pullup(pin%u); pullup(pin%u);\n"
         "reg i2c_drive%u=1'bz; assign pin%u=i2c_drive%u;\n"
-        "always @(pin%u or pin%u) $geany_i2c_eeprom(pin%u,pin%u,%" G_GUINT64_FORMAT ",i2c_drive%u",
-        scl, sda, sda, sda, sda, scl, sda, scl, sda, address, sda);
-    simulation_memory_argument(body, images, args[2]);
+        "always @(pin%u or pin%u", id, sda, id, scl, sda);
+    if (script_key)
+        g_string_append_printf(body, " or i2c_start%u", id);
+    if (reset)
+        g_string_append_printf(body, " or dut.%s", reset);
+    g_string_append_printf(body, ") $geany_i2c_%s(pin%u,pin%u,%" G_GUINT64_FORMAT ",i2c_drive%u",
+                           script_key ? "lua" : "eeprom", scl, sda, address, id);
+    simulation_device_argument(body, images, script_key ? script_key : args[2], reset);
     return TRUE;
 }
 
@@ -1911,7 +1957,7 @@ static gboolean simulation_model_rule(gchar **args, gint count, GHashTable *mode
 static gboolean simulation_memory_image(GHashTable *images, const gchar *anchor,
                                         const gchar *filename, const gchar *directory, GError **error)
 {
-    if (!simulation_port_name(anchor) || g_hash_table_contains(images, anchor))
+    if (!simulation_port_name(*anchor == ':' ? anchor + 1 : anchor) || g_hash_table_contains(images, anchor))
         return FALSE;
     gchar *native = g_filename_from_utf8(filename, -1, NULL, NULL, error);
     if (!native)
@@ -1920,7 +1966,7 @@ static gboolean simulation_memory_image(GHashTable *images, const gchar *anchor,
     if (!g_file_test(path, G_FILE_TEST_IS_REGULAR))
     {
         g_set_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                    "Memory image must be a regular file: %s", filename);
+                    "Device file must be a regular file: %s", filename);
         g_free(path);
         g_free(native);
         return FALSE;
@@ -1943,7 +1989,7 @@ static gboolean simulation_memory_image(GHashTable *images, const gchar *anchor,
             }
             else
                 g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                                    "Use a text memory image of at most 1 MiB.");
+                                    "Use a text device file of at most 1 MiB.");
         }
         g_free(data);
         g_object_unref(stream);
@@ -2140,6 +2186,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
     GString *live = g_string_new(NULL);
     guint64 live_interval = 0;
     GHashTable *ports = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    GHashTable *i2c_buses = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     GHashTable *spi_pins = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     GHashTable *models = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, simulation_model_free);
     gchar *module = NULL;
@@ -2178,7 +2225,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         else if (valid && (!strcmp(args[0], "button") || !strcmp(args[0], "switch")))
             valid = simulation_port_control(args, count, body, connections, ports, live);
         else if (valid && count == 3 && !strcmp(args[0], "memory-image"))
-            valid = !g_hash_table_contains(ports, args[1]) &&
+            valid = simulation_port_name(args[1]) && !g_hash_table_contains(ports, args[1]) &&
                 simulation_memory_image(images, args[1], args[2], directory, error);
         else if (valid && count == 8 && !strcmp(args[0], "sram"))
         {
@@ -2193,16 +2240,44 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             valid = simulation_port_ddr(args, body, connections, ports, images, generation);
             attached_images += valid && g_hash_table_contains(images, args[generation == 2 ? 7 : generation == 3 ? 8 : 6]);
         }
+        else if (valid && (count == 2 || count == 6 || count == 7) && !strcmp(args[0], "spi-lua"))
+        {
+            gchar *defaults[] = {args[0], "sck", "cs_n", "mosi", "miso", args[1]};
+            gchar **pins = count == 2 ? defaults : args;
+            const gchar *reset = count == 7 ? args[6] : NULL;
+            gchar *key = g_strconcat(":spi_", pins[2], NULL);
+            valid = (!reset || simulation_port_name(reset)) &&
+                    simulation_memory_image(images, key, pins[5], directory, error) &&
+                    simulation_port_spi(pins, body, connections, ports, images, spi_pins, key, reset);
+            attached_images += valid;
+            g_free(key);
+        }
+        else if (valid && (count == 2 || count == 5 || count == 6) && !strcmp(args[0], "i2c-lua"))
+        {
+            gchar *defaults[] = {args[0], "scl", "sda", "0x50", args[1]};
+            gchar **pins = count == 2 ? defaults : args;
+            const gchar *reset = count == 6 ? args[5] : NULL;
+            guint64 address;
+            valid = (!reset || simulation_port_name(reset)) && simulation_i2c_address(pins[3], &address);
+            if (valid)
+            {
+                gchar *key = g_strdup_printf(":i2c_%s_%" G_GUINT64_FORMAT, pins[2], address);
+                valid = simulation_memory_image(images, key, pins[4], directory, error) &&
+                        simulation_port_i2c(pins, body, connections, ports, images, i2c_buses, key, reset);
+                attached_images += valid;
+                g_free(key);
+            }
+        }
         else if (valid && count == 5 && (!strcmp(args[0], "spi-nor") ||
                  !strcmp(args[0], "spi-nand") || !strcmp(args[0], "spi-eeprom") ||
                  !strcmp(args[0], "spi-psram")))
         {
-            valid = simulation_port_spi(args, body, connections, ports, images, spi_pins);
+            valid = simulation_port_spi(args, body, connections, ports, images, spi_pins, NULL, NULL);
             attached_images += valid && g_hash_table_contains(images, args[2]);
         }
         else if (valid && count == 4 && !strcmp(args[0], "i2c-eeprom"))
         {
-            valid = simulation_port_i2c(args, body, connections, ports, images);
+            valid = simulation_port_i2c(args, body, connections, ports, images, i2c_buses, NULL, NULL);
             attached_images += valid && g_hash_table_contains(images, args[2]);
         }
         else if (valid && (count == 4 || count == 5) && !strcmp(args[0], "uart"))
@@ -2335,6 +2410,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
     g_free(module);
     g_hash_table_unref(ports);
     g_hash_table_unref(spi_pins);
+    g_hash_table_unref(i2c_buses);
     g_hash_table_unref(models);
     g_string_free(connections, TRUE);
     g_string_free(live, TRUE);
@@ -2369,6 +2445,8 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         "sram ADDR DQ CE_N WE_N OE_N [ADDRESS_BITS=16 [DATA_BITS=8]]\n"
         "memory-image ADDR_OR_SPI_CS_N_OR_SDA FILE (before the memory rule)\n"
         "i2c-eeprom SCL SDA [ADDRESS=0x50]\n"
+        "spi-lua [SCK CS_N MOSI MISO] SCRIPT [RESET_N]\n"
+        "i2c-lua [SCL SDA ADDRESS] SCRIPT [RESET_N]\n"
         "spi-nor / spi-nand / spi-eeprom / spi-psram SCK CS_N MOSI MISO\n"
         "ddr2 CK CKE CS_N RAS_N CAS_N WE_N A BA DQ DQS DM [RL=3 [WL=2]] (functional x8)\n"
         "ddr3 CK RESET_N CKE CS_N RAS_N CAS_N WE_N A BA DQ DQS DM [RL=3 [WL=2]] (functional x8)\n"

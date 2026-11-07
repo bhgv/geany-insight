@@ -372,3 +372,57 @@ Bursts are linear by default. Reset restores linear mode and retains
 the model's contents. Bytes outside the preload start at FF.
 The profile models the SPI data path with immediate completion.
 Quad transfers and physical timing are outside its scope.
+
+
+## Scripted SPI and I²C devices
+
+Use **Port Signals** to attach a Lua script to a device. The path is
+relative to the design source directory. Quote paths containing spaces.
+
+```text
+spi-lua "fixtures/spi device.lua"
+i2c-lua scl sda 0x51 "fixtures/i2c device.lua" reset_n
+```
+
+The short SPI form uses `sck cs_n mosi miso` in mode 0. The short I²C
+form uses `scl sda` and 7-bit address `0x50`. SPI devices can share a
+bus with individual CS# lines. I²C Lua devices can share SCL and SDA
+with distinct addresses. The optional final `RESET_N` in the full form
+names an active-low signal of the design.
+
+Each instance loads its script at time zero in its own Lua state on a
+dedicated OS thread. Globals and local variables captured by callbacks
+persist until the simulation ends. The simulator waits for each
+callback to return. Base, table, string, math and UTF-8 functions are
+available. Filesystem and process libraries are unavailable.
+
+| Callback | When it runs |
+| --- | --- |
+| `reset()` | At startup and on assertion of the optional reset signal. A hardware reset clears queued bytes and calls this function without reloading the script. |
+| SPI `shift(bit, index)` | On each rising SCK edge. Index is 0–7 within the byte. Return nil to leave MISO to the byte queue, or 0/1 to override the next MISO bit. |
+| SPI `receive(byte)` | After each full byte. Queued replies are sent in subsequent bytes. |
+| SPI `finish(bytes)` | On CS# release. The 1-based table contains the full bytes received while selected. |
+| I²C `write(byte)` | After each data byte sent to the selected address. |
+| I²C `receive(bytes)` | After a selected write ends at STOP or repeated START. The 1-based table contains its data bytes. |
+| I²C `read()` | When a master read needs a byte and the reply queue is empty. |
+
+All callbacks are optional. Except for `shift`, return nil, one byte, or
+multiple values such as `return 0x12, nil, 0x34`. Non-nil integers in
+0–255 enter the transmit queue in order. An empty queue sends FF.
+The reply queue and collected frames are limited to 4096 bytes each.
+Script errors stop simulation with a diagnostic in the console.
+
+```lua
+local counter = 0
+function reset()
+    counter = 0
+end
+
+-- SPI byte command.
+function receive(command)
+    if command == 0x9f then
+        counter = (counter + 1) % 256
+        return 0x42, counter
+    end
+end
+```
