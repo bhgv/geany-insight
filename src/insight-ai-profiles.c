@@ -356,6 +356,25 @@ static GtkWidget *wizard_button(void)
  return button;
 }
 
+/* EN: Activate the selected saved profile. button and data are unused.
+ * RU: Активирует выбранный сохранённый профиль. button и data не используются. */
+static void manager_activate_profile(GtkButton *button, gpointer data)
+{
+ (void)button;
+ (void)data;
+ gint id = selected();
+ if (id < 0 || (guint)id >= profiles->len)
+ {
+  gtk_label_set_text(GTK_LABEL(notice), insight_tr("Select a saved profile first."));
+  return;
+ }
+
+ active = id;
+ save();
+ broadcast();
+ gtk_label_set_text(GTK_LABEL(notice), insight_tr("Profile selected for all AI assistants."));
+}
+
 /* EN: Test a snapshot of the manager fields without saving. Closing the
  * dialog cancels the request. button and data are unused.
  * RU: Проверяет текущие поля без сохранения. Закрытие окна отменяет запрос.
@@ -422,7 +441,11 @@ void insight_ai_profiles_show(GtkWidget *widget,gpointer data) {
  manager=gtk_window_new(GTK_WINDOW_TOPLEVEL);gtk_window_set_title(GTK_WINDOW(manager),insight_tr("AI Connections"));gtk_widget_set_name(manager,"insight-ai-profiles-window");gtk_window_set_transient_for(GTK_WINDOW(manager),GTK_WINDOW(parent));gtk_window_set_modal(GTK_WINDOW(manager),gtk_window_get_modal(GTK_WINDOW(parent)));gtk_window_set_destroy_with_parent(GTK_WINDOW(manager),TRUE);gtk_window_set_default_size(GTK_WINDOW(manager),760,540);GtkWidget *box=gtk_box_new(GTK_ORIENTATION_VERTICAL,4);gtk_container_set_border_width(GTK_CONTAINER(box),8);gtk_container_add(GTK_CONTAINER(manager),box);store=gtk_list_store_new(4,G_TYPE_INT,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_STRING);tree=gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));gtk_widget_set_name(tree,"insight-ai-profiles-list");const gchar *titles[]={"Name","Compare","Model"};for(guint i=0;i<3;i++) gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(tree),-1,insight_tr(titles[i]),gtk_cell_renderer_text_new(),"text",i+1,NULL);GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_container_add(GTK_CONTAINER(scroll),tree);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);
  const gchar *labels[]={"Profile name","API endpoint","Model ID","Python 3","API key","API key environment variable"};for(guint i=0;i<6;i++) { GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4),*label=gtk_label_new(insight_tr(labels[i]));gtk_widget_set_size_request(label,180,-1);gtk_box_pack_start(GTK_BOX(row),label,FALSE,FALSE,0);fields[i]=gtk_entry_new();gchar *name=g_strconcat("insight-ai-profile-",names[i],NULL);gtk_widget_set_name(fields[i],name);g_free(name);gtk_entry_set_max_length(GTK_ENTRY(fields[i]),i==4 ? 8192:2048);gtk_entry_set_visibility(GTK_ENTRY(fields[i]),i!=4);insight_ai_ui_entry(fields[i],insight_tr(labels[i]),18);gtk_box_pack_start(GTK_BOX(row),fields[i],TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(box),row,FALSE,FALSE,0); }
  GtkWidget *preset=gtk_combo_box_text_new();gtk_widget_set_name(preset,"insight-ai-profile-preset");const gchar *presets[]={"OpenAI / ChatGPT API","xAI / Grok","DeepSeek","Qwen / Model Studio","Custom compatible API"};for(guint i=0;i<5;i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(preset),presets[i]);gtk_box_pack_start(GTK_BOX(box),preset,FALSE,FALSE,0);g_signal_connect(preset,"changed",G_CALLBACK(preset_changed),NULL);
- checked=gtk_check_button_new_with_label(insight_tr("Include in parallel comparison (up to 4)"));gtk_widget_set_name(checked,"insight-ai-profile-checked");remember=gtk_check_button_new_with_label(insight_tr("Save API key in private config (not encrypted)"));gtk_widget_set_name(remember,"insight-ai-profile-remember");gtk_box_pack_start(GTK_BOX(box),checked,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),remember,FALSE,FALSE,0);GtkWidget *bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);const gchar *buttons[]={"Add profile","Update profile","Remove profile"},*ids[]={"add","update","remove"};for(guint i=0;i<3;i++) { GtkWidget *button=gtk_button_new_with_label(insight_tr(buttons[i]));gchar *name=g_strconcat("insight-ai-profile-",ids[i],NULL);gtk_widget_set_name(button,name);g_free(name);g_signal_connect(button,"clicked",G_CALLBACK(edit_profile),GINT_TO_POINTER(i));gtk_box_pack_start(GTK_BOX(bar),button,FALSE,FALSE,0); }GtkWidget *test = gtk_button_new_with_label(insight_tr("Test connection"));
+ checked=gtk_check_button_new_with_label(insight_tr("Include in parallel comparison (up to 4)"));gtk_widget_set_name(checked,"insight-ai-profile-checked");remember=gtk_check_button_new_with_label(insight_tr("Save API key in private config (not encrypted)"));gtk_widget_set_name(remember,"insight-ai-profile-remember");gtk_box_pack_start(GTK_BOX(box),checked,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(box),remember,FALSE,FALSE,0);GtkWidget *bar=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);const gchar *buttons[]={"Add profile","Update profile","Remove profile"},*ids[]={"add","update","remove"};for(guint i=0;i<3;i++) { GtkWidget *button=gtk_button_new_with_label(insight_tr(buttons[i]));gchar *name=g_strconcat("insight-ai-profile-",ids[i],NULL);gtk_widget_set_name(button,name);g_free(name);g_signal_connect(button,"clicked",G_CALLBACK(edit_profile),GINT_TO_POINTER(i));gtk_box_pack_start(GTK_BOX(bar),button,FALSE,FALSE,0); }GtkWidget *activate = gtk_button_new_with_label(insight_tr("Use selected profile"));
+ gtk_widget_set_name(activate, "insight-ai-profile-activate");
+ g_signal_connect(activate, "clicked", G_CALLBACK(manager_activate_profile), NULL);
+ gtk_box_pack_start(GTK_BOX(bar), activate, FALSE, FALSE, 0);
+ GtkWidget *test = gtk_button_new_with_label(insight_tr("Test connection"));
  gtk_widget_set_name(test, "insight-ai-profile-test");
  gtk_widget_set_tooltip_text(test, insight_tr("Send a short test request using the current fields without saving them."));
  g_signal_connect(test, "clicked", G_CALLBACK(manager_test_connection), NULL);

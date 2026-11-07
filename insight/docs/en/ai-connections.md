@@ -21,7 +21,7 @@ Keys stay in memory by default; an environment variable can supply the key when 
 Once connected, open the [console assistant](console-ai.md) or [editor assistant](editor-ai.md). Enter a question, review the context and attachments, then click **Send**. Review code suggestions in Diff/Merge before applying them.
 
 
-In **AI Connections…**, select a profile and click **Test connection**. The test uses the fields currently displayed, including unsaved changes. To keep your changes, click **Update profile** after testing.
+In **AI Connections…**, select a profile and click **Test connection**. The test uses the fields currently displayed, including unsaved changes. To keep your changes, click **Update profile** after testing. Click **Use selected profile** to switch all open assistants to the saved profile.
 
 ## Parallel answers
 

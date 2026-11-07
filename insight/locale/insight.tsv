@@ -2925,3 +2925,6 @@ Request limited (429). Check API quota and rate limits.	Запрос огран�
 Connection verified.	Подключение проверено.
 Enter a complete API endpoint, model ID and Python executable before testing.	Перед проверкой укажите полный адрес API, ID модели и исполняемый файл Python.
 Send a short test request using the current fields without saving them.	Отправить короткий запрос с текущими значениями полей без сохранения.
+Select a saved profile first.	Сначала выберите сохранённый профиль.
+Profile selected for all AI assistants.	Профиль выбран для всех помощников ИИ.
+Use selected profile	Использовать выбранный профиль
