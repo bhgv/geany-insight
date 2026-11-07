@@ -62,7 +62,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Installed SDK consumer did not compile' }
           & "$env:RUNNER_TEMP\slang-sdk-probe.exe" external/slang-compat/fixtures/leaf.sv external/slang-compat/fixtures/top.sv
           if ($LASTEXITCODE -ne 0) { throw 'Installed SDK elaboration failed' }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: windows-location-dialogs
