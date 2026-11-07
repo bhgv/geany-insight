@@ -505,7 +505,7 @@ index 175e8ae..6c544f5 100644
 +// RU: Проверяет событие event и останавливает планировщик после текущего действия.
 +static PLI_INT32 geany_watch_changed(p_cb_data event)
 +{
-+      geany_watch* rule = reinterpret_cast<geany_watch*>(event->user_data);
++      geany_watch* rule = const_cast<geany_watch*>(reinterpret_cast<const geany_watch*>(event->user_data));
 +      if (!event->value || event->value->format != vpiBinStrVal || !event->value->value.str)
 +            return 0;
 +      const std::string bits(event->value->value.str);

@@ -4229,7 +4229,7 @@ static gchar *device_port_argument(const DeviceForm *form, GtkWidget *entry, con
         return g_strdup(value);
     gchar *name = g_strndup(value, bracket - value);
     PortInfo *port = g_hash_table_lookup(form->browser->ports, name);
-    GRegex *range = g_regex_new("^\[(-?[0-9]+)(?::(-?[0-9]+))?\]$", 0, 0, NULL);
+    GRegex *range = g_regex_new("^\\[(-?[0-9]+)(?::(-?[0-9]+))?\\]$", 0, 0, NULL);
     GMatchInfo *match = NULL;
     gchar *alias = NULL;
     gboolean matched = g_regex_match(range, bracket, 0, &match);
