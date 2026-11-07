@@ -129,11 +129,24 @@ static void probe_done(GObject *object, GAsyncResult *result, gpointer data)
   g_clear_error(&error);
   return;
  }
- gtk_label_set_text(GTK_LABEL(status), insight_tr(ok ?
-  "Connection verified. Save to activate this profile." :
-  "Test failed. Check Python, endpoint, key, model access and API quota."));
- if (error && g_str_has_prefix(error->message, "Provider HTTP status "))
-  gtk_label_set_text(GTK_LABEL(status), error->message);
+ const gchar *message = "Test failed. Check Python, endpoint, key, model access and API quota.";
+ if (ok)
+  message = "Connection verified. Save to activate this profile.";
+ else if (error && error->domain == G_SPAWN_ERROR)
+  message = "Could not start Python. Select a working Python 3 executable.";
+ else if (error && g_str_has_prefix(error->message, "Provider connection failed"))
+  message = "Could not reach the provider. Check the URL, network and TLS certificates.";
+ else if (error && g_str_has_prefix(error->message, "Provider HTTP status "))
+ {
+  guint64 code = g_ascii_strtoull(error->message + strlen("Provider HTTP status "), NULL, 10);
+  if (code == 401 || code == 403)
+   message = "Access denied (401/403). Check the API key and permissions for the model.";
+  else if (code == 404)
+   message = "API or model not found (404). Check the complete URL and model ID.";
+  else if (code == 429)
+   message = "Request limited (429). Check API quota and rate limits.";
+ }
+ gtk_label_set_text(GTK_LABEL(status), insight_tr(message));
  g_clear_error(&error);
  gtk_widget_set_sensitive(g_object_get_data(object, "insight-wizard-grid"), TRUE);
  gtk_dialog_set_response_sensitive(GTK_DIALOG(object), TEST_CONNECTION, TRUE);
@@ -150,6 +163,15 @@ static GtkWidget *wizard_label(GtkWidget *box, const gchar *text)
  gtk_label_set_max_width_chars(GTK_LABEL(label), 64);
  gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 0);
  return label;
+}
+
+/* EN: Clear a stale result in label after a connection field changes.
+ * editable is the changed field and is otherwise unused.
+ * RU: Сбрасывает результат в label при изменении поля подключения editable. */
+static void wizard_settings_changed(GtkEditable *editable, gpointer label)
+{
+ (void)editable;
+ gtk_label_set_text(GTK_LABEL(label), "");
 }
 
 /* EN: Detach the status label when dialog is destroyed. data is unused.
@@ -238,6 +260,8 @@ static void connection_wizard(GtkWidget *widget, gpointer data)
  gtk_box_pack_start(GTK_BOX(box), remember_key, FALSE, FALSE, 0);
  wizard_label(box, insight_tr("3. Test the connection, then save and activate. The test sends the key and a short sample prompt to the endpoint. It may consume quota and includes no source, history or attachments."));
  GtkWidget *status = wizard_label(box, "");
+ for (guint i = 1; i < G_N_ELEMENTS(entries); i++)
+  g_signal_connect_object(entries[i], "changed", G_CALLBACK(wizard_settings_changed), status, 0);
  g_object_set_data(G_OBJECT(dialog), "insight-wizard-status", status);
  gtk_dialog_add_button(GTK_DIALOG(dialog), insight_tr("Test connection"), TEST_CONNECTION);
  GtkWidget *save_button = gtk_dialog_get_widget_for_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
