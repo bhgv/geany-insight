@@ -409,9 +409,37 @@ static gboolean check_diagram_help(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* EN: Check diagram help, labels and filters, then activate the hex-table port. data is the
+/* EN: Verify port rules are absent until explicitly included in the assistant.
+ * data holds the result flag. Close without sending any request.
+ * RU: Проверяет, что правила появляются только после явного добавления.
+ * data хранит результат. Закрывает окно без отправки запроса. */
+static gboolean check_diagram_ai_context(gpointer data)
+{
+    GtkWidget *dialog = find_window("Verilog AI Assistant");
+    if (!dialog)
+        return G_SOURCE_CONTINUE;
+    GtkWidget *view = find_control(dialog, "insight-ai-context");
+    if (GTK_IS_TEXT_VIEW(view))
+    {
+        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+        GtkTextIter first, last;
+        gtk_text_buffer_get_bounds(buffer, &first, &last);
+        gchar *before = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
+        gboolean included = click(dialog, "insight-verilog-ai-include-rules");
+        gtk_text_buffer_get_bounds(buffer, &first, &last);
+        gchar *after = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
+        *(gboolean *)data = included && !strstr(before, "module live_devices") &&
+                           strstr(after, "module live_devices") && strstr(after, "hex-table hex_out 16");
+        g_free(before);
+        g_free(after);
+    }
+    gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);
+    return G_SOURCE_REMOVE;
+}
+
+/* EN: Check diagram help, AI context and filters, then activate the hex-table port. data is the
  * caller's result flag. Return G_SOURCE_CONTINUE until the window appears.
- * RU: Проверяет справку, подписи и фильтры, затем нажимает порт hex-таблицы. data — флаг
+ * RU: Проверяет справку, контекст ИИ и фильтры, затем нажимает порт hex-таблицы. data — флаг
  * результата. Возвращает G_SOURCE_CONTINUE до появления окна. */
 static gboolean check_testbench_diagram(gpointer data)
 {
@@ -422,7 +450,10 @@ static gboolean check_testbench_diagram(gpointer data)
     guint help = g_timeout_add(10, check_diagram_help, &help_ok);
     if (!click(dialog, "insight-verilog-dialog-help"))
         g_source_remove(help);
-    gboolean assistant_present = find_control(dialog, "insight-verilog-dialog-ai") != NULL;
+    gboolean assistant_ok = FALSE;
+    guint assistant = g_timeout_add(10, check_diagram_ai_context, &assistant_ok);
+    if (!click(dialog, "insight-verilog-dialog-ai"))
+        g_source_remove(assistant);
     GtkWidget *slice = find_control(dialog, "level · 16 bits\nlevel[7:0]");
     GtkWidget *table = find_control(dialog, "hex_out · 16 bits");
     GtkWidget *search = find_control(dialog, "insight-diagram-search");
@@ -442,7 +473,7 @@ static gboolean check_testbench_diagram(gpointer data)
         gtk_combo_box_set_active_id(GTK_COMBO_BOX(direction), "output");
         filters &= gtk_widget_is_visible(table) && !gtk_widget_is_visible(slice);
     }
-    *(gboolean *)data = help_ok && assistant_present && labels && filters &&
+    *(gboolean *)data = help_ok && assistant_ok && labels && filters &&
                        click(dialog, "hex_out · 16 bits");
     if (!*(gboolean *)data)
         gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);

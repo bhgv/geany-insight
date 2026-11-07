@@ -150,6 +150,11 @@ also describes the selected device. The brain icon opens **AI Assistant**
 above the current dialog. Only help text is prefilled. Source files and
 recipes can be added manually. A request is sent only after **Send**.
 
+When the assistant is opened from Port Signals or one of its child dialogs,
+**Use Help + Port Rules** replaces the context with help and the current
+recipe, including unsaved edits. Review or edit it before **Send**. This
+action does not attach HDL source files.
+
 ## Triggered waveform capture and live controls
 
 In **Port Signals** for the current file, configure one optional
