@@ -4401,12 +4401,61 @@ static GHashTable *simulation_diagram_slices(const gchar *hdl)
     return slices;
 }
 
+/* EN: Return from the diagram dialog in data with the port selected by button.
+ * RU: Завершает диалог схемы из data, сохраняя порт, выбранный кнопкой button. */
+static void simulation_diagram_choose_port(GtkButton *button, gpointer data)
+{
+    GtkDialog *dialog = data;
+    const gchar *port = g_object_get_data(G_OBJECT(button), "diagram-port");
+    g_object_set_data_full(G_OBJECT(dialog), "selected-diagram-port", g_strdup(port), g_free);
+    gtk_dialog_response(dialog, GTK_RESPONSE_APPLY);
+}
+
+/* EN: Place a navigable port with name, direction and caption in grid at row.
+ * Clicking the block returns the name to dialog.
+ * RU: Добавляет в grid на строку row порт name с direction и caption.
+ * При нажатии блок возвращает имя в dialog. */
+static void simulation_diagram_port(GtkGrid *grid, gint row, const gchar *name,
+                                    const gchar *direction, const gchar *caption, GtkDialog *dialog)
+{
+    GtkWidget *frame = gtk_frame_new(direction);
+    GtkWidget *button = gtk_button_new_with_label(caption);
+    gtk_widget_set_hexpand(frame, TRUE);
+    gtk_widget_set_tooltip_text(button, "Go to the rules for this port");
+    g_object_set_data_full(G_OBJECT(button), "diagram-port", g_strdup(name), g_free);
+    g_signal_connect(button, "clicked", G_CALLBACK(simulation_diagram_choose_port), dialog);
+    gtk_container_add(GTK_CONTAINER(frame), button);
+    gtk_grid_attach(grid, frame, 2, row, 1, 1);
+}
+
+/* EN: Find port in the unfiltered browser store and follow its rule bindings.
+ * RU: Находит port в списке browser без фильтров и переходит к его правилам. */
+static void simulation_diagram_follow_port(PortBrowser *browser, const gchar *port)
+{
+    GtkTreeModel *model = GTK_TREE_MODEL(browser->store);
+    GtkTreeIter row;
+    gboolean next = gtk_tree_model_get_iter_first(model, &row);
+    while (next)
+    {
+        gchar *name;
+        gtk_tree_model_get(model, &row, PORT_NAME, &name, -1);
+        gboolean matches = !strcmp(name, port);
+        g_free(name);
+        if (matches)
+        {
+            port_browser_follow_rule(browser, model, &row);
+            return;
+        }
+        next = gtk_tree_model_iter_next(model, &row);
+    }
+}
+
 /* EN: Build a scrollable diagram from browser's assigned ports and hdl's slices.
- * Use module as the DUT caption and include rows hidden by the table filters.
+ * Use module as the DUT caption, include hidden rows, and return clicks to dialog.
  * RU: Строит прокручиваемую схему по портам browser и срезам из hdl.
- * module задаёт заголовок DUT. Учитывает строки, скрытые фильтрами таблицы. */
+ * module задаёт заголовок DUT. Учитывает скрытые строки, нажатия передаёт в dialog. */
 static GtkWidget *simulation_diagram_widget(const PortBrowser *browser, const gchar *module,
-                                            const gchar *hdl)
+                                            const gchar *hdl, GtkDialog *dialog)
 {
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     GtkGrid *grid = GTK_GRID(gtk_grid_new());
@@ -4438,7 +4487,7 @@ static GtkWidget *simulation_diagram_widget(const PortBrowser *browser, const gc
             const gchar *used = g_hash_table_lookup(slices, name);
             gchar *port = g_strdup_printf("%s · %s bits%s%s", name, width,
                                          used ? "\n" : "", used ? used : "");
-            simulation_diagram_block(grid, 2, row, direction, port);
+            simulation_diagram_port(grid, row, name, direction, port, dialog);
             GString *left = g_string_new(NULL), *right = g_string_new(NULL);
             gchar **rules = g_strsplit(bindings, ", ", -1);
             gboolean input = !strcmp(direction, "input");
@@ -4506,7 +4555,7 @@ static void simulation_preview_diagram(GtkButton *button, gpointer data)
     gtk_window_set_default_size(GTK_WINDOW(dialog), 880, 540);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     if (hdl)
-        gtk_box_pack_start(GTK_BOX(box), simulation_diagram_widget(browser, browser->module, hdl),
+        gtk_box_pack_start(GTK_BOX(box), simulation_diagram_widget(browser, browser->module, hdl, GTK_DIALOG(dialog)),
                            TRUE, TRUE, 0);
     else
     {
@@ -4518,9 +4567,16 @@ static void simulation_preview_diagram(GtkButton *button, gpointer data)
     g_clear_error(&error);
     g_free(hdl);
     gtk_widget_show_all(dialog);
-    gtk_dialog_run(GTK_DIALOG(dialog));
+    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gchar *selected = response == GTK_RESPONSE_APPLY ?
+        g_strdup(g_object_get_data(G_OBJECT(dialog), "selected-diagram-port")) : NULL;
     gtk_widget_destroy(dialog);
     g_object_unref(dialog);
+    if (selected)
+    {
+        simulation_diagram_follow_port(browser, selected);
+        g_free(selected);
+    }
 }
 
 /* EN: Edit the recipe saved at path in a modal child of parent. run supplies the compiler,

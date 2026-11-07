@@ -133,6 +133,9 @@ devices and probes on the right. Arrows show direction, with a two-headed
 arrow for inout. The diagram includes slices and all bindings, even those
 hidden by the port table filters. The preview leaves the simulator idle.
 
+Click a port in the center of the diagram to jump to its rule in **Port Signals**.
+For multiple bindings, choose the rule by line number and text.
+
 ## Triggered waveform capture and live controls
 
 In **Port Signals** for the current file, configure one optional

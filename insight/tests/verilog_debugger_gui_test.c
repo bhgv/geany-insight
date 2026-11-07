@@ -388,19 +388,21 @@ static gboolean check_testbench_preview(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* EN: Check the diagram labels and close the modal preview. data points to the
+/* EN: Check diagram labels and activate the hex-table port. data points to the
  * caller's result flag. Return G_SOURCE_CONTINUE until the window appears.
- * RU: Проверяет подписи схемы и закрывает просмотр. data указывает на флаг
+ * RU: Проверяет подписи схемы и нажимает порт hex-таблицы. data указывает на флаг
  * результата. Возвращает G_SOURCE_CONTINUE до появления окна. */
 static gboolean check_testbench_diagram(gpointer data)
 {
     GtkWidget *dialog = find_window("Testbench Diagram");
     if (!dialog)
         return G_SOURCE_CONTINUE;
-    *(gboolean *)data = find_control(dialog, "insight-testbench-diagram") &&
-                       find_control(dialog, "DUT · live_devices") &&
-                       find_control(dialog, "level · 16 bits\nlevel[7:0]");
-    gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);
+    gboolean labels = find_control(dialog, "insight-testbench-diagram") &&
+                      find_control(dialog, "DUT · live_devices") &&
+                      find_control(dialog, "level · 16 bits\nlevel[7:0]");
+    *(gboolean *)data = labels && click(dialog, "hex_out · 16 bits");
+    if (!*(gboolean *)data)
+        gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);
     return G_SOURCE_REMOVE;
 }
 
@@ -491,6 +493,8 @@ static gboolean accept_ports(gpointer data)
         }
         if (!preview_ok)
             return G_SOURCE_CONTINUE;
+        gtk_text_buffer_get_start_iter(buffer, &first);
+        gtk_text_buffer_place_cursor(buffer, &first);
         gboolean diagram_ok = FALSE;
         guint diagram = g_timeout_add(10, check_testbench_diagram, &diagram_ok);
         if (!click(dialog, "Preview Diagram…"))
@@ -498,7 +502,12 @@ static gboolean accept_ports(gpointer data)
             g_source_remove(diagram);
             return G_SOURCE_CONTINUE;
         }
-        if (!diagram_ok)
+        if (!diagram_ok || !gtk_text_buffer_get_selection_bounds(buffer, &first, &last))
+            return G_SOURCE_CONTINUE;
+        selection = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
+        correct = !strcmp(selection, "hex-table hex_out 16");
+        g_free(selection);
+        if (!correct)
             return G_SOURCE_CONTINUE;
     }
     gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
