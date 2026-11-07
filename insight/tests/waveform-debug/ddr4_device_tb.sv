@@ -41,6 +41,9 @@ module ddr4_device_tb;
         host_drive = 0;
         #1;
         command(1, 17'h14400);
+        // EN: Keep the falling command edge distinct from the first read edge.
+        // RU: Разделяем спад команды и первый фронт чтения.
+        #1;
         for (integer beat = 0; beat < 8; beat++) begin
             ck = !ck;
             #1;

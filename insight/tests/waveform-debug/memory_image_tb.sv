@@ -48,6 +48,9 @@ module memory_image_tb;
         reset_n = 1;
         issue(3'b011, 16'h8123);
         issue(3'b101, 16'h0400);
+        // EN: Keep the falling command edge distinct from the first read edge.
+        // RU: Разделяем спад команды и первый фронт чтения.
+        #1;
         for (integer beat = 0; beat < 8; beat++) begin
             ck = !ck;
             #1;
