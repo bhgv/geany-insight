@@ -7551,6 +7551,36 @@ static gchar *signal_history_hex(const gchar *bits)
     return g_string_free(hex, FALSE);
 }
 
+/* EN: Mark digits whose underlying bits differ from previous. group is one
+ * for binary and four for hexadecimal. Store the changed bit count in changes.
+ * RU: Выделяет разряды digits, биты которых отличаются от previous.
+ * group равен 1 для двоичного и 4 для шестнадцатеричного вида.
+ * Записывает число изменённых битов в changes. */
+static gchar *signal_history_markup(const gchar *digits, const gchar *bits,
+                                    const gchar *previous, guint group, guint *changes)
+{
+    *changes = 0;
+    gsize width = strlen(bits);
+    if (!width || !previous || strlen(previous) != width)
+        return g_markup_escape_text(digits, -1);
+
+    GString *markup = g_string_new(NULL);
+    gsize offset = 0;
+    for (gsize digit = 0; digits[digit]; digit++)
+    {
+        guint count = !digit && width % group ? width % group : group;
+        guint difference = 0;
+        for (guint bit = 0; bit < count; bit++, offset++)
+            difference += bits[offset] != previous[offset];
+        *changes += difference;
+        if (difference)
+            g_string_append_printf(markup, "<u>%c</u>", digits[digit]);
+        else
+            g_string_append_c(markup, digits[digit]);
+    }
+    return g_string_free(markup, FALSE);
+}
+
 /* EN: Stripe each model row in the cell of view column. data is the tree.
  * RU: Задаёт фон строки row модели model для ячейки cell. data — дерево,
  * column не используется. */
@@ -7592,20 +7622,34 @@ static void signal_table_open_history(GtkMenuItem *item, gpointer data)
     const gchar *name = g_object_get_data(G_OBJECT(item), "signal-name");
     const gchar *kind = g_object_get_data(G_OBJECT(item), "signal-kind");
     gchar *key = g_strconcat(kind, "\t", name, NULL);
-    GtkListStore *store = gtk_list_store_new(5, G_TYPE_STRING, G_TYPE_STRING,
-        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    GtkListStore *store = gtk_list_store_new(6, G_TYPE_STRING, G_TYPE_STRING,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
     for (GList *entry = run->signal_history.head; entry; entry = entry->next)
     {
         const SignalHistoryStop *stop = entry->data;
         const gchar *bits = g_hash_table_lookup(stop->values, key);
         if (!bits)
             continue;
+        const gchar *previous = NULL;
+        for (GList *older = entry->next; older && !previous; older = older->next)
+        {
+            const SignalHistoryStop *prior = older->data;
+            previous = g_hash_table_lookup(prior->values, key);
+        }
         gchar *number = g_strdup_printf("%" G_GUINT64_FORMAT, stop->number);
         gchar *decimal = signal_history_decimal(bits);
         gchar *hex = signal_history_hex(bits);
+        guint changes;
+        gchar *hex_markup = signal_history_markup(hex, bits, previous, 4, &changes);
+        gchar *binary_markup = signal_history_markup(*bits ? bits : "—", bits, previous, 1, &changes);
+        gchar *changed_bits = *bits && previous && strlen(bits) == strlen(previous) ?
+            g_strdup_printf("%u", changes) : g_strdup("—");
         gchar *location = g_utf8_make_valid(stop->location, -1);
         gtk_list_store_insert_with_values(store, NULL, -1, 0, number,
-            1, decimal, 2, hex, 3, *bits ? bits : "—", 4, location, -1);
+            1, decimal, 2, hex_markup, 3, binary_markup, 4, changed_bits, 5, location, -1);
+        g_free(hex_markup);
+        g_free(binary_markup);
+        g_free(changed_bits);
         g_free(location);
         g_free(number);
         g_free(decimal);
@@ -7626,14 +7670,14 @@ static void signal_table_open_history(GtkMenuItem *item, gpointer data)
     GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
     g_object_unref(store);
     gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)), GTK_SELECTION_SINGLE);
-    const gchar *titles[] = {"Stop number", "Decimal", "Hexadecimal", "Binary", "Source"};
+    const gchar *titles[] = {"Stop number", "Decimal", "Hexadecimal", "Binary", "Changed bits", "Source"};
     for (guint i = 0; i < G_N_ELEMENTS(titles); i++)
     {
         GtkCellRenderer *cell = gtk_cell_renderer_text_new();
-        if (i < 4)
+        if (i < 5)
             g_object_set(cell, "family", "monospace", "xalign", 1.0f, NULL);
         GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(
-            insight_tr(titles[i]), cell, "text", i, NULL);
+            insight_tr(titles[i]), cell, i == 2 || i == 3 ? "markup" : "text", i, NULL);
         gtk_tree_view_column_set_cell_data_func(column, cell, signal_history_stripe, tree, NULL);
         gtk_tree_view_append_column(GTK_TREE_VIEW(tree), column);
     }
