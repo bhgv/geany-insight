@@ -228,6 +228,17 @@ static gboolean check_connection(GtkTreeModel *model, GtkTreePath *path, GtkTree
     return FALSE;
 }
 
+/* EN: Report the wizard check that is blocking progress. Return a retry request.
+ * RU: Сообщает, на какой проверке мастера остановился тест. Запрашивает повтор. */
+static gboolean slider_wizard_wait(const gchar *check)
+{
+    static const gchar *last;
+    if (last != check)
+        g_printerr("Verilog GTK slider wizard waiting: %s\n", check);
+    last = check;
+    return G_SOURCE_CONTINUE;
+}
+
 /* EN: Check modal port and device filters, then assign a slider by activating a port; callback data is unused.
  * Return G_SOURCE_CONTINUE while the wizard is unavailable.
  * RU: Проверяет фильтры портов и устройств, затем назначает порт ползунку.
@@ -237,10 +248,10 @@ static gboolean add_test_slider(gpointer data)
     (void)data;
     GtkWidget *wizard = find_window("Add Test Device");
     if (!wizard)
-        return G_SOURCE_CONTINUE;
+        return slider_wizard_wait("wizard window");
     GtkWidget *ports = find_control(wizard, "insight-test-device-ports");
     if (!GTK_IS_TREE_VIEW(ports))
-        return G_SOURCE_CONTINUE;
+        return slider_wizard_wait("port tree");
     GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(ports));
     GtkTreeIter row;
     gboolean shared = FALSE, available = FALSE, inactive = FALSE;
@@ -269,7 +280,7 @@ static gboolean add_test_slider(gpointer data)
     if (!gtk_window_get_modal(GTK_WINDOW(wizard)) || !shared || !available || inactive)
     {
         g_clear_pointer(&selected, gtk_tree_path_free);
-        return G_SOURCE_CONTINUE;
+        return slider_wizard_wait("modal window and preprocessed port bindings");
     }
     GtkWidget *kind = find_control(wizard, "insight-test-device-type");
     GtkWidget *device_search = find_control(wizard, "insight-device-search");
@@ -299,13 +310,13 @@ static gboolean add_test_slider(gpointer data)
     if (!catalog_ok || !gtk_combo_box_set_active_id(GTK_COMBO_BOX(kind), "slider"))
     {
         gtk_tree_path_free(selected);
-        return G_SOURCE_CONTINUE;
+        return slider_wizard_wait("catalog filtering and slider selection");
     }
     GtkWidget *entry = find_control(wizard, "insight-device-first-field");
     if (!GTK_IS_ENTRY(entry))
     {
         gtk_tree_path_free(selected);
-        return G_SOURCE_CONTINUE;
+        return slider_wizard_wait("slider port entry");
     }
     gtk_entry_set_text(GTK_ENTRY(entry), "replace_me");
     gtk_widget_grab_focus(entry);
@@ -313,23 +324,23 @@ static gboolean add_test_slider(gpointer data)
                                 gtk_tree_view_get_column(GTK_TREE_VIEW(ports), 0));
     gtk_tree_path_free(selected);
     if (strcmp(gtk_entry_get_text(GTK_ENTRY(entry)), "level[7:0]"))
-        return G_SOURCE_CONTINUE;
+        return slider_wizard_wait("activation of level[7:0]");
     GtkWidget *search = find_control(wizard, "insight-port-search");
     GtkWidget *compatible = find_control(wizard, "Compatible only");
     if (!GTK_IS_ENTRY(search) || !GTK_IS_TOGGLE_BUTTON(compatible))
-        return G_SOURCE_CONTINUE;
+        return slider_wizard_wait("port search and compatibility controls");
     gtk_entry_set_text(GTK_ENTRY(search), "LEVEL");
     if (gtk_tree_model_iter_n_children(model, NULL) != 2)
-        return G_SOURCE_CONTINUE;
+        return slider_wizard_wait("case-insensitive port search");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(compatible), TRUE);
     if (gtk_tree_model_iter_n_children(model, NULL) != 1)
-        return G_SOURCE_CONTINUE;
+        return slider_wizard_wait("compatible port filter");
     gtk_entry_set_text(GTK_ENTRY(search), "");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(compatible), FALSE);
     GtkWidget *regex = find_control(wizard, "Regex");
     GtkWidget *sort = find_control(wizard, "insight-port-sort");
     if (!GTK_IS_TOGGLE_BUTTON(regex) || !GTK_IS_COMBO_BOX(sort))
-        return G_SOURCE_CONTINUE;
+        return slider_wizard_wait("regex and sort controls");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(regex), TRUE);
     gtk_entry_set_text(GTK_ENTRY(search), "^level(_out)?$");
     gboolean pattern_ok = gtk_tree_model_iter_n_children(model, NULL) == 2;
@@ -353,7 +364,7 @@ static gboolean add_test_slider(gpointer data)
     GtkWidget *target = find_control(wizard, "insight-port-search-target");
     GtkWidget *occupancy = find_control(wizard, "insight-port-occupancy");
     if (!GTK_IS_COMBO_BOX(target) || !GTK_IS_COMBO_BOX(occupancy))
-        return G_SOURCE_CONTINUE;
+        return slider_wizard_wait("binding search controls");
     gtk_combo_box_set_active(GTK_COMBO_BOX(target), 2);
     gtk_entry_set_text(GTK_ENTRY(search), "scope-xyz");
     gboolean binding_ok = gtk_tree_model_iter_n_children(model, NULL) == 3;
@@ -365,7 +376,7 @@ static gboolean add_test_slider(gpointer data)
     gtk_entry_set_text(GTK_ENTRY(search), "");
     gtk_combo_box_set_active(GTK_COMBO_BOX(target), 0);
     if (!pattern_ok || !order_ok || !binding_ok)
-        return G_SOURCE_CONTINUE;
+        return slider_wizard_wait("regex, sort and occupancy checks");
     gtk_dialog_response(GTK_DIALOG(wizard), GTK_RESPONSE_ACCEPT);
     return G_SOURCE_REMOVE;
 }
