@@ -156,10 +156,14 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             guint width = 640, height = 480;
             guint64 refresh = 0;
             gboolean custom = g_hash_table_contains(images, args[2]);
-            valid = custom || simulation_hdmi_geometry(lines, count >= 6 ? args[5] : "auto", &width, &height);
-            if (!valid)
-                g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                                    "Select one HDMI clock for the automatic EDID geometry.");
+            const gchar *clock = count >= 6 ? args[5] : "auto";
+            valid = custom || simulation_hdmi_geometry(lines, clock, &width, &height);
+            if (!valid && !strcmp(clock, "auto"))
+                g_set_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                            "Line %u: more than one HDMI display; select its clock for EDID.", i + 1);
+            else if (!valid)
+                g_set_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                            "Line %u: EDID needs exactly one HDMI display with clock '%s'.", i + 1, clock);
             if (valid && !custom && count == 7 && strcmp(args[6], "auto"))
             {
                 guint maximum = width <= 1920 && height <= 1080 ? 60 : 30;
@@ -167,8 +171,9 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
                 if (valid && width == 3840 && height == 2160)
                     valid = refresh == 24 || refresh == 25 || refresh == 30;
                 if (!valid)
-                    g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                                        "Invalid EDID refresh rate for the selected HDMI geometry.");
+                    g_set_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                                "Line %u: EDID refresh '%s' is invalid for %u x %u.",
+                                i + 1, args[6], width, height);
             }
             if (valid)
                 valid = simulation_port_hdmi_ddc(args, body, connections, ports, images,

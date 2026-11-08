@@ -136,22 +136,43 @@ static int hdmi_edid_write(void *data, uint32_t address, uint64_t value)
     return 1;
 }
 
-/* EN: Check ddc's custom image for the header, block count and every checksum.
- * RU: Проверяет заголовок, число блоков и контрольные суммы образа ddc. */
-static int hdmi_edid_valid(const HdmiDdc *ddc)
+/* EN: Check the image in ddc and report a precise fault for filename.
+ * Return nonzero only if the declared EDID blocks are complete and valid.
+ * RU: Проверяет образ ddc и выводит точную причину ошибки для filename.
+ * Возвращает ненулевое значение, если все заявленные блоки EDID корректны. */
+static int hdmi_edid_valid(const HdmiDdc *ddc, const char *filename)
 {
     const uint8_t *bytes = ddc->bus.bytes;
-    if (memcmp(bytes, edid_header, sizeof edid_header) || bytes[126] > 1)
+    if (!ddc->loaded[126]) {
+        vpi_printf("Geany HDMI DDC: %s: incomplete EDID base block.\n", filename);
         return 0;
+    }
+    if (bytes[126] > 1) {
+        vpi_printf("Geany HDMI DDC: %s: EDID declares %u extensions; at most one is supported.\n",
+                   filename, (unsigned)bytes[126]);
+        return 0;
+    }
+
     unsigned limit = EDID_BLOCK * (1u + bytes[126]);
-    unsigned sum = 0;
     for (unsigned i = 0; i < EDID_MAX; ++i) {
-        if (ddc->loaded[i] != (i < limit))
+        if (ddc->loaded[i] != (i < limit)) {
+            vpi_printf("Geany HDMI DDC: %s: %s EDID byte at offset 0x%02x.\n",
+                       filename, i < limit ? "missing" : "unexpected", i);
             return 0;
-        if (i < limit) {
-            sum = (sum + bytes[i]) & 255;
-            if ((i + 1) % EDID_BLOCK == 0 && sum)
-                return 0;
+        }
+    }
+    if (memcmp(bytes, edid_header, sizeof edid_header)) {
+        vpi_printf("Geany HDMI DDC: %s: invalid EDID header.\n", filename);
+        return 0;
+    }
+    for (unsigned offset = 0; offset < limit; offset += EDID_BLOCK) {
+        unsigned sum = 0;
+        for (unsigned i = 0; i < EDID_BLOCK; ++i)
+            sum += bytes[offset + i];
+        if (sum & 255) {
+            vpi_printf("Geany HDMI DDC: %s: invalid EDID checksum in block %u.\n",
+                       filename, offset / EDID_BLOCK);
+            return 0;
         }
     }
     return 1;
@@ -194,7 +215,15 @@ static HdmiDdc *hdmi_ddc_open(vpiHandle call)
     i2c_eeprom_init(&ddc->bus, 0x50);
     ddc->bus.read_only = 1;
     if (image) {
-        if (!image_load(image, hdmi_edid_write, ddc) || !hdmi_edid_valid(ddc))
+        int loaded = image_load(image, hdmi_edid_write, ddc);
+        s_vpi_value filename = {.format = vpiStringVal};
+        vpi_get_value(image, &filename);
+        if (!loaded) {
+            vpi_printf("Geany HDMI DDC: %s: could not load the EDID HEX image.\n",
+                       filename.value.str);
+            goto invalid;
+        }
+        if (!hdmi_edid_valid(ddc, filename.value.str))
             goto invalid;
     } else {
         unsigned width = (unsigned)bus_integer(pins[DDC_WIDTH]);
@@ -237,7 +266,7 @@ static PLI_INT32 hdmi_ddc_update(PLI_BYTE8 *user_data)
     if (!ddc)
         ddc = hdmi_ddc_open(call);
     if (!ddc) {
-        vpi_printf("Geany HDMI DDC: expected a valid 128- or 256-byte EDID image.\n");
+        vpi_printf("Geany HDMI DDC: could not initialize the HDMI sink.\n");
         vpip_set_return_value(1);
         vpi_control(vpiFinish, 1);
         return 0;

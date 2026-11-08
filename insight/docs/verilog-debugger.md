@@ -401,7 +401,8 @@ The simulated transmitter drives the actual pixel rate.
 
 The optional image line overrides the generated EDID. The wizard accepts a HEX file with all
 128 base-block bytes, optionally followed by one 128-byte extension.
-The sink validates the header and checksums. The DUT can set an
+On error the sink reports the file and the cause, such as the block
+with an invalid checksum or the offset of a missing byte. The DUT can set an
 eight-bit offset at I²C address 0x50 and read sequentially after a
 repeated START. Writes to EDID data are rejected. E-DDC segment pointers
 and electrical hot-plug behavior are outside this model. To test a longer

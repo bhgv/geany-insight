@@ -635,14 +635,22 @@ def check_hdmi_ddc(compiler, runtime, fixtures, directory, environment):
     report = capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
                               "simulation.vvp"], directory, "hdmi-ddc", environment)
     require("HDMI DDC passed" in report, "HDMI DDC test did not complete")
-    extension[127] ^= 1
-    (directory / "edid.hex").write_text(
-        " ".join(f"{byte:02x}" for byte in base + extension), encoding="ascii")
-    rejected = subprocess.run([str(runtime), "-M", str(modules), "-m", "geany_devices",
-                               "simulation.vvp"], cwd=directory, env=environment,
-                              capture_output=True, text=True, timeout=30, check=False)
-    require(rejected.returncode != 0 and "valid 128- or 256-byte EDID" in rejected.stdout,
-            "Invalid EDID checksum was accepted")
+    bad_checksum = extension.copy()
+    bad_checksum[127] ^= 1
+    bad_header = base.copy()
+    bad_header[0] = 1
+    for data, error in (
+        (base + bad_checksum, "invalid EDID checksum in block 1"),
+        (base, "missing EDID byte at offset 0x80"),
+        (bad_header + extension, "invalid EDID header"),
+    ):
+        (directory / "edid.hex").write_text(
+            " ".join(f"{byte:02x}" for byte in data), encoding="ascii")
+        rejected = subprocess.run([str(runtime), "-M", str(modules), "-m", "geany_devices",
+                                   "simulation.vvp"], cwd=directory, env=environment,
+                                  capture_output=True, text=True, timeout=30, check=False)
+        require(rejected.returncode != 0 and f"edid.hex: {error}" in rejected.stdout,
+                f"Wrong diagnostic for invalid EDID: {error}")
 
 
 
