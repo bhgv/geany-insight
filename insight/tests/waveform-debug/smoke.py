@@ -618,6 +618,34 @@ def check_spi_memory(compiler, runtime, fixtures, directory, environment):
     require("SPI memory test passed" in report, "SPI memory test did not finish")
 
 
+# EN: Verify the built-in and custom EDID profiles with compiler/runtime.
+# RU: Проверяет встроенный и пользовательский EDID через compiler/runtime.
+def check_hdmi_ddc(compiler, runtime, fixtures, directory, environment):
+    compile_design(compiler, directory, [fixtures / "hdmi_ddc_tb.sv"], environment)
+    base = bytearray(128)
+    base[:8] = bytes.fromhex("00 ff ff ff ff ff ff 00")
+    base[126] = 1
+    base[127] = (-sum(base)) & 255
+    extension = bytearray(128)
+    extension[:2] = bytes((2, 3))
+    extension[127] = (-sum(extension)) & 255
+    (directory / "edid.hex").write_text(
+        " ".join(f"{byte:02x}" for byte in base + extension), encoding="ascii")
+    modules = runtime.parent.parent / "lib" / "ivl"
+    report = capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
+                              "simulation.vvp"], directory, "hdmi-ddc", environment)
+    require("HDMI DDC passed" in report, "HDMI DDC test did not complete")
+    extension[127] ^= 1
+    (directory / "edid.hex").write_text(
+        " ".join(f"{byte:02x}" for byte in base + extension), encoding="ascii")
+    rejected = subprocess.run([str(runtime), "-M", str(modules), "-m", "geany_devices",
+                               "simulation.vvp"], cwd=directory, env=environment,
+                              capture_output=True, text=True, timeout=30, check=False)
+    require(rejected.returncode != 0 and "valid 128- or 256-byte EDID" in rejected.stdout,
+            "Invalid EDID checksum was accepted")
+
+
+
 # EN: Run all display modes with compiler/runtime and compare their saved RGB frames.
 # RU: Запускает режимы дисплеев через compiler/runtime и сверяет сохранённые кадры RGB.
 def check_raster_displays(compiler, runtime, fixtures, directory, environment):
@@ -741,6 +769,7 @@ def main():
     environment["PATH"] = str(binaries) + os.pathsep + environment.get("PATH", "")
     logs = args.logs.resolve()
     checks = [
+        ("hdmi-ddc", lambda directory: check_hdmi_ddc(compiler, runtime, fixtures, directory, environment)),
         ("raster-displays", lambda directory: check_raster_displays(compiler, runtime, fixtures, directory, environment)),
         ("parallel-psram", lambda directory: check_parallel_psram(compiler, runtime, fixtures, directory, environment)),
         ("usart", lambda directory: check_usart(compiler, runtime, fixtures, directory, environment)),

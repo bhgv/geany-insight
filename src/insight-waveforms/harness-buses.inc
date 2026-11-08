@@ -293,3 +293,38 @@ static gboolean simulation_port_usart(gchar **args, gint count, GString *body,
     simulation_serial_mailbox(body, live);
     return TRUE;
 }
+
+/* EN: Validate DDC args and wire SCL/SDA and HPD into body and connections.
+ * ports tracks assigned pins and images supplies an optional EDID for SDA.
+ * RU: Проверяет args DDC и подключает SCL/SDA и HPD в body и connections.
+ * ports учитывает назначенные выводы, images задаёт необязательный EDID по SDA. */
+static gboolean simulation_port_hdmi_ddc(gchar **args, GString *body, GString *connections,
+                                         GHashTable *ports, GHashTable *images)
+{
+    guint64 delay;
+    if (g_hash_table_size(ports) > 125 ||
+        !g_ascii_string_to_unsigned(args[4], 10, 0, 1000000000, &delay, NULL))
+        return FALSE;
+    for (guint i = 1; i <= 3; ++i)
+    {
+        if (!simulation_port_name(args[i]) || g_hash_table_contains(ports, args[i]))
+            return FALSE;
+        for (guint j = 1; j < i; ++j)
+            if (!strcmp(args[i], args[j]))
+                return FALSE;
+    }
+
+    guint scl = simulation_port_connect(body, connections, ports, args[1], 1, TRUE);
+    guint sda = simulation_port_connect(body, connections, ports, args[2], 1, TRUE);
+    guint hpd = simulation_port_connect(body, connections, ports, args[3], 1, FALSE);
+    g_string_append_printf(body,
+        "reg ddc_drive%u=1'bz, ddc_plug%u=0;\n"
+        "pullup(pin%u); pullup(pin%u); assign pin%u=ddc_drive%u;\n"
+        "initial begin pin%u=0; #%" G_GUINT64_FORMAT " ddc_plug%u=1; end\n"
+        "always @(pin%u or pin%u or ddc_plug%u)\n"
+        "  $geany_hdmi_ddc(pin%u,pin%u,ddc_plug%u,ddc_drive%u,pin%u",
+        sda, sda, scl, sda, sda, sda, hpd, delay, sda,
+        scl, sda, sda, scl, sda, sda, sda, hpd);
+    simulation_memory_argument(body, images, args[2]);
+    return TRUE;
+}

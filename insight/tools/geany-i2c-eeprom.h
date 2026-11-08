@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: I2C EEPROM transport shared by writable memory and read-only EDID.
+ * RU: Транспорт I2C для записываемой памяти и EDID только для чтения. */
 #ifndef GEANY_I2C_EEPROM_H
 #define GEANY_I2C_EEPROM_H
 
@@ -13,7 +15,7 @@ typedef struct {
     uint8_t bytes[I2C_EEPROM_SIZE];
     uint8_t page[I2C_EEPROM_PAGE], dirty[I2C_EEPROM_PAGE];
     unsigned target, address, stage, phase, next, bits, input;
-    int clock, data, pull_low;
+    int clock, data, pull_low, read_only;
 } I2cEeprom;
 
 static void i2c_eeprom_init(I2cEeprom *device, unsigned address)
@@ -23,6 +25,8 @@ static void i2c_eeprom_init(I2cEeprom *device, unsigned address)
     device->clock = device->data = 1;
 }
 
+/* EN: Apply the received byte to device and return its post-ACK phase.
+ * RU: Обрабатывает принятый байт device и возвращает фазу после ACK. */
 static unsigned i2c_eeprom_receive(I2cEeprom *device)
 {
     unsigned byte = device->input;
@@ -30,17 +34,19 @@ static unsigned i2c_eeprom_receive(I2cEeprom *device)
     case I2C_SELECT:
         if ((byte >> 1) != device->target)
             return I2C_IDLE;
-        device->stage = I2C_ADDRESS_HIGH;
+        device->stage = device->read_only ? I2C_ADDRESS_LOW : I2C_ADDRESS_HIGH;
         return byte & 1 ? I2C_SEND : I2C_RECEIVE;
     case I2C_ADDRESS_HIGH:
         device->address = byte << 8;
         device->stage = I2C_ADDRESS_LOW;
         break;
     case I2C_ADDRESS_LOW:
-        device->address |= byte;
+        device->address = device->read_only ? byte : device->address | byte;
         device->stage = I2C_DATA;
         break;
     case I2C_DATA: {
+        if (device->read_only)
+            return I2C_IDLE;
         unsigned mask = I2C_EEPROM_PAGE - 1;
         unsigned offset = device->address & mask;
         device->page[offset] = byte;
@@ -52,10 +58,12 @@ static unsigned i2c_eeprom_receive(I2cEeprom *device)
     return I2C_RECEIVE;
 }
 
+/* EN: Update device for SCL clock and SDA data. Return whether to drive SDA low.
+ * RU: Обновляет device по SCL clock и SDA data. Возвращает признак притяжки SDA к нулю. */
 static int i2c_eeprom_edge(I2cEeprom *device, int clock, int data)
 {
     if (clock && device->clock && data != device->data) {
-        if (data && device->stage == I2C_DATA) {
+        if (data && !device->read_only && device->stage == I2C_DATA) {
             unsigned base = device->address & ~(I2C_EEPROM_PAGE - 1u);
             for (unsigned i = 0; i < I2C_EEPROM_PAGE; i++)
                 if (device->dirty[i])
@@ -80,7 +88,7 @@ static int i2c_eeprom_edge(I2cEeprom *device, int clock, int data)
             if (++device->bits == 8) {
                 device->phase = I2C_MASTER_ACK;
                 device->bits = 0;
-                device->address = (device->address + 1) & 65535u;
+                device->address = (device->address + 1) & (device->read_only ? 255u : 65535u);
             }
             break;
         case I2C_MASTER_ACK:

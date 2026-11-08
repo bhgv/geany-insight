@@ -123,7 +123,7 @@ static gboolean simulation_interactive(WaveSimulation *run, const gchar *directo
          strstr(run->port_harness, "$geany_ddr1(") || strstr(run->port_harness, "$geany_ddr2(") || strstr(run->port_harness, "$geany_ddr3(") ||
          strstr(run->port_harness, "$geany_ddr4(") || strstr(run->port_harness, "$geany_ddr5(") || strstr(run->port_harness, "$geany_spi_") ||
          strstr(run->port_harness, "$geany_i2c_") || strstr(run->port_harness, "$geany_usart(") ||
-         strstr(run->port_harness, "$geany_raster("));
+         strstr(run->port_harness, "$geany_raster(") || strstr(run->port_harness, "$geany_hdmi_ddc("));
     GSubprocess *process = g_subprocess_launcher_spawnv(launcher, devices ? device_argv : argv, error);
     g_free(modules);
     g_free(runtime_prefix);

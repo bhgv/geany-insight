@@ -23,6 +23,8 @@ static guint port_browser_pin_mask(gchar **args, gint argc)
         return 0x7e;
     if (!strcmp(kind, "lvds-display") && argc == 12)
         return !strcmp(args[5], "-") ? 0x1e : 0x3e;
+    if (!strcmp(kind, "hdmi-ddc"))
+        return argc == 1 ? 0 : 14;
     if (!strcmp(kind, "hdmi-display") && argc == 11)
         return 0x1e;
     if (!strcmp(kind, "scope-xyz"))

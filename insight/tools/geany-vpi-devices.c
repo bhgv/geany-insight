@@ -764,6 +764,7 @@ fail:
 #include "geany-parallel-psram.h"
 #include "geany-ddr5.h"
 #include "geany-raster.h"
+#include "geany-hdmi-ddc.h"
 
 /* EN: Register all built-in VPI system tasks at simulator startup.
  * RU: Регистрирует системные задачи встроенных устройств при запуске симулятора. */
@@ -833,6 +834,9 @@ static void register_devices(void)
     vpi_register_systf(&task);
     task.tfname = "$geany_raster";
     task.calltf = raster_tick;
+    vpi_register_systf(&task);
+    task.tfname = "$geany_hdmi_ddc";
+    task.calltf = hdmi_ddc_update;
     vpi_register_systf(&task);
 }
 

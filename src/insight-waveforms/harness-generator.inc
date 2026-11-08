@@ -27,6 +27,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
     guint64 duration = 1000;
     gboolean explicit_duration = FALSE;
     guint attached_images = 0, scopes = 0, rasters = 0;
+    gboolean has_ddc = FALSE;
     gboolean valid = TRUE;
     for (guint i = 0; lines[i] && valid; i++)
     {
@@ -148,6 +149,12 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         else if (valid && count == 4 && !strcmp(args[0], "i2c-eeprom"))
         {
             valid = simulation_port_i2c(args, body, connections, ports, images, i2c_buses, NULL, NULL);
+            attached_images += valid && g_hash_table_contains(images, args[2]);
+        }
+        else if (valid && count == 5 && !strcmp(args[0], "hdmi-ddc"))
+        {
+            valid = simulation_port_hdmi_ddc(args, body, connections, ports, images);
+            has_ddc |= valid;
             attached_images += valid && g_hash_table_contains(images, args[2]);
         }
         else if (valid && (count == 4 || count == 5) && !strcmp(args[0], "uart"))
@@ -273,7 +280,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         }
         g_list_free(instances);
         g_string_append_printf(body, "%s dut(%s);\n", module, connections->str);
-        if (rasters && !explicit_duration)
+        if ((rasters || has_ddc) && !explicit_duration)
             duration = 40000000;
         if (trigger->len)
             g_string_append(body, "// GEANY-CAPTURE-TRIGGER\n");

@@ -353,7 +353,8 @@ hdmi-display tmds_clk_p tmds_d0_p tmds_d1_p tmds_d2_p 640 480 8 hdmi 0 1
   `hdmi` recognizes video preambles and guard bands and skips data islands.
   Select `dvi` for transmitters that send only DVI-compatible control and
   video symbols. Six-bit display mode quantizes the decoded eight-bit RGB.
-  Audio, EDID/DDC, hot-plug, HDCP and FRL are outside this model.
+  Audio, HDCP and FRL are outside the video model. Use the companion
+  DDC/EDID device for discovery.
 
 For both serial displays, the number before VS polarity is the whole-bit
 offset from the forwarded clock's rising edge to the first lane bit.
@@ -364,6 +365,26 @@ voltage levels and jitter are outside their scope.
 
 The active area must match the configured geometry. A line with an
 unexpected number of active pixels is discarded until the next VS pulse.
+
+### HDMI DDC, EDID and hot plug
+
+Add **HDMI DDC / EDID** alongside the video display when the DUT waits
+for hot plug and reads EDID. SCL and SDA are open-drain with pull-ups.
+HPD goes high at the configured connection time, once the EDID is ready.
+The default connects at time zero and reports 640 × 480 at 60 Hz.
+
+```text
+hdmi-ddc ddc_scl ddc_sda hpd 100000
+memory-image ddc_sda "display-edid.hex"
+```
+
+The image line is optional. The wizard accepts a HEX file with all
+128 base-block bytes, optionally followed by one 128-byte extension.
+The sink validates the header and checksums. The DUT can set an
+eight-bit offset at I²C address 0x50 and read sequentially after a
+repeated START. Writes to EDID data are rejected. E-DDC segment pointers
+and electrical hot-plug behavior are outside this model. To test a longer
+startup delay, set a simulation duration that includes the EDID read.
 
 ## UART console
 
