@@ -23,11 +23,48 @@ static void simulation_force_exit(GCancellable *cancel, gpointer data)
     g_subprocess_force_exit(G_SUBPROCESS(data));
 }
 
-/* EN: Run argv in directory with bin on PATH. cancel stops the child. On failure,
+/* EN: Add stage, argv, directory and captured output to the existing process error.
+ * output_note describes any clipping of the captured output.
+ * RU: Добавляет к ошибке этап stage, argv, каталог directory и вывод output.
+ * output_note сообщает об ограничении захваченного вывода. */
+static void simulation_process_diagnostic(GError **error, const gchar *stage,
+                                          const gchar *const *argv, const gchar *directory,
+                                          const GString *output, const gchar *output_note)
+{
+    if (!error || !*error || g_error_matches(*error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+        return;
+
+    GString *report = g_string_new(NULL);
+    g_string_append_printf(report, "%s: %s\nWorking directory: %s\nArguments:", stage,
+                           (*error)->message, directory);
+    for (guint i = 0; argv[i]; ++i)
+    {
+        gchar *escaped = g_strescape(argv[i], NULL);
+        g_string_append_printf(report, "\n  [%u] \"%s\"", i, escaped);
+        g_free(escaped);
+    }
+
+    gchar *message = output ? g_utf8_make_valid(output->str, output->len) : NULL;
+    if (message && *g_strstrip(message))
+        g_string_append_printf(report, "\nProcess output (stdout and stderr):\n%s", message);
+    else
+        g_string_append(report, "\nProcess output: none.");
+    if (output_note)
+        g_string_append_printf(report, "\n%s", output_note);
+
+    GError *original = *error;
+    *error = g_error_new_literal(original->domain, original->code, report->str);
+    g_error_free(original);
+    g_free(message);
+    g_string_free(report, TRUE);
+}
+
+/* EN: Run stage with argv in directory and bin on PATH. cancel stops the child. On failure,
  * return FALSE and capture up to 256 KiB of diagnostics in error.
- * RU: Запускает argv в directory с bin в PATH. cancel останавливает процесс.
+ * RU: Запускает этап stage с argv в directory и bin в PATH. cancel останавливает процесс.
  * При ошибке возвращает FALSE и сохраняет до 256 КиБ диагностики в error. */
-static gboolean simulation_process(const gchar *const *argv, const gchar *directory, const gchar *bin,
+static gboolean simulation_process(const gchar *stage, const gchar *const *argv,
+                                   const gchar *directory, const gchar *bin,
                                    GCancellable *cancel, GError **error)
 {
     if (g_cancellable_set_error_if_cancelled(cancel, error))
@@ -43,7 +80,10 @@ static gboolean simulation_process(const gchar *const *argv, const gchar *direct
     GSubprocess *process = g_subprocess_launcher_spawnv(launcher, argv, error);
     g_object_unref(launcher);
     if (!process)
+    {
+        simulation_process_diagnostic(error, stage, argv, directory, NULL, NULL);
         return FALSE;
+    }
 
     gulong cancellation = g_cancellable_connect(cancel, G_CALLBACK(simulation_force_exit), process, NULL);
     GInputStream *output = g_subprocess_get_stdout_pipe(process);
@@ -64,20 +104,9 @@ static gboolean simulation_process(const gchar *const *argv, const gchar *direct
         g_subprocess_force_exit(process);
         g_subprocess_wait(process, NULL, NULL);
     }
-    if (!ok && diagnostic->len && !g_cancellable_is_cancelled(cancel))
-    {
-        if (truncated)
-            g_string_append(diagnostic, "\nAdditional diagnostics omitted.\n");
-        gchar *message = g_utf8_make_valid(diagnostic->str, diagnostic->len);
-        g_prefix_error(error, "%s\n", message);
-        g_free(message);
-    }
-    if (!ok && !g_cancellable_is_cancelled(cancel))
-    {
-        gchar *program = g_path_get_basename(argv[0]);
-        g_prefix_error(error, "%s: ", program);
-        g_free(program);
-    }
+    if (!ok)
+        simulation_process_diagnostic(error, stage, argv, directory, diagnostic,
+                                      truncated ? "Additional process output omitted." : NULL);
     g_string_free(diagnostic, TRUE);
     g_cancellable_disconnect(cancel, cancellation);
     g_object_unref(process);
@@ -139,13 +168,18 @@ static gboolean simulation_interactive(WaveSimulation *run, const gchar *directo
          strstr(run->port_harness, "$geany_ddr4(") || strstr(run->port_harness, "$geany_ddr5(") || strstr(run->port_harness, "$geany_spi_") ||
          strstr(run->port_harness, "$geany_i2c_") || strstr(run->port_harness, "$geany_usart(") ||
          strstr(run->port_harness, "$geany_raster(") || strstr(run->port_harness, "$geany_raster_dual(") || strstr(run->port_harness, "$geany_hdmi_ddc("));
-    GSubprocess *process = g_subprocess_launcher_spawnv(launcher, devices ? device_argv : argv, error);
-    g_free(modules);
+    const gchar *const *command = devices ? device_argv : argv;
+    const gchar *stage = "Interactive simulation (vvp)";
+    GSubprocess *process = g_subprocess_launcher_spawnv(launcher, command, error);
     g_free(runtime_prefix);
     g_free(runtime_bin);
     g_object_unref(launcher);
     if (!process)
+    {
+        simulation_process_diagnostic(error, stage, command, directory, NULL, NULL);
+        g_free(modules);
         return FALSE;
+    }
 
     g_mutex_lock(&run->lock);
     run->live_process = g_object_ref(process);
@@ -157,11 +191,15 @@ static gboolean simulation_interactive(WaveSimulation *run, const gchar *directo
     guint8 bytes[8192];
     GString *diagnostic = g_string_new(NULL);
     const gsize diagnostic_limit = 64 * 1024;
+    gboolean truncated = FALSE;
     gssize count;
     while ((count = g_input_stream_read(output, bytes, sizeof bytes, cancel, error)) > 0)
     {
         if (diagnostic->len + (gsize)count > diagnostic_limit)
+        {
             g_string_erase(diagnostic, 0, diagnostic->len + (gsize)count - diagnostic_limit);
+            truncated = TRUE;
+        }
         g_string_append_len(diagnostic, (const gchar *)bytes, count);
         g_mutex_lock(&run->lock);
         while (run->live_output->len + (guint)count > 65536 && !g_cancellable_is_cancelled(cancel))
@@ -183,16 +221,10 @@ static gboolean simulation_interactive(WaveSimulation *run, const gchar *directo
         g_subprocess_force_exit(process);
         g_subprocess_wait(process, NULL, NULL);
     }
-    if (!ok && !g_cancellable_is_cancelled(cancel))
-    {
-        gchar *message = g_utf8_make_valid(diagnostic->str, diagnostic->len);
-        g_strstrip(message);
-        if (*message)
-            g_prefix_error(error, "vvp:\n%s\n", message);
-        else
-            g_prefix_error(error, "vvp: ");
-        g_free(message);
-    }
+    if (!ok)
+        simulation_process_diagnostic(error, stage, command, directory, diagnostic,
+                                      truncated ? "Earlier process output omitted." : NULL);
+    g_free(modules);
     g_string_free(diagnostic, TRUE);
     g_cancellable_disconnect(cancel, cancellation);
     g_mutex_lock(&run->lock);
@@ -313,10 +345,11 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
         g_ptr_array_add(command, NULL);
         const gchar *execute[] = {run->runtime, "simulation.vvp", NULL};
         if (!error &&
-            simulation_process((const gchar *const *)command->pdata, directory, bin, cancel, &error) &&
+            simulation_process("Compilation (iverilog)", (const gchar *const *)command->pdata,
+                               directory, bin, cancel, &error) &&
             (run->interactive ? (simulation_stage_rules(run, directory, &error) &&
                                  simulation_interactive(run, directory, bin, cancel, &error))
-                              : simulation_process(execute, directory, bin, cancel, &error)))
+                              : simulation_process("Simulation (vvp)", execute, directory, bin, cancel, &error)))
         {
             gchar *vcd = simulation_find_vcd(directory, &error);
             if (!vcd && run->port_harness && strstr(run->port_harness, "// GEANY-CAPTURE-TRIGGER") &&
