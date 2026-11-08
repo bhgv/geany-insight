@@ -29,6 +29,7 @@ on:
       - 'insight/tests/waveform-debug/**'
       - 'insight/examples/lua-bus-devices/**'
       - 'src/insight-waveforms.*'
+      - 'src/insight-waveforms/**'
       - 'src/insight-workbench.c'
       - 'insight/desktop/slang_completion.c'
       - 'external/slang-compat/**'
