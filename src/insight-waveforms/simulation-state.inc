@@ -29,6 +29,7 @@ typedef struct
     GHashTable *live_port_samples, *live_indicators;
     GPtrArray *live_scopes;
     GPtrArray *rasters, *memory_reports;
+    GtkWidget *lua_terminals;
     gint scope_console_prefix;
     gchar console_prefix[24];
     GtkWidget *uart_window, *uart_view, *uart_entry;

@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Attach Lua devices and their terminals to simulated SPI and I2C buses.
+ * RU: Подключает Lua-устройства и их терминалы к шинам SPI и I2C симулятора. */
 #ifndef GEANY_LUA_BUS_H
 #define GEANY_LUA_BUS_H
 
@@ -6,13 +8,43 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct {
+typedef struct LuaBus {
     LuaDevice lua;
+    struct LuaBus *terminal_next;
+    char input_path[64];
     vpiHandle pin[6];
     unsigned char queue[LUA_DEVICE_LIMIT], frame[LUA_DEVICE_LIMIT];
     unsigned head, queued, length, bits, input, output, phase, next, address;
     int clock, data, drive, selected, writing, override, sending, reset;
 } LuaBus;
+
+static LuaBus *lua_terminals;
+
+/* EN: Deliver queued terminal commands to running Lua devices. unused is a VPI argument.
+ * RU: Доставляет ожидающие команды запущенным Lua-устройствам. unused — аргумент VPI. */
+static PLI_INT32 lua_bus_console_poll(PLI_BYTE8 *unused)
+{
+    (void)unused;
+    for (LuaBus *bus = lua_terminals; bus; bus = bus->terminal_next)
+    {
+        FILE *input = fopen(bus->input_path, "rb");
+        if (!input)
+            continue;
+
+        char line[LUA_DEVICE_LIMIT + 1];
+        size_t length = fread(line, 1, sizeof line, input);
+        int valid = !ferror(input) && length <= LUA_DEVICE_LIMIT;
+        fclose(input);
+        if (remove(bus->input_path) != 0)
+            continue;
+        if (valid)
+        {
+            line[length] = 0;
+            lua_device_command(&bus->lua, line);
+        }
+    }
+    return 0;
+}
 
 static int lua_bus_call(LuaBus *bus, enum LuaDeviceCallback callback, int input, int index,
                         const unsigned char *frame, unsigned length, int enqueue)
@@ -50,14 +82,25 @@ static void lua_bus_append(LuaBus *bus, unsigned byte)
         bus->frame[bus->length++] = byte;
 }
 
+/* EN: Stop the Lua worker and release the bus from callback.
+ * RU: Останавливает поток Lua и освобождает шину из callback. */
 static PLI_INT32 lua_bus_free(p_cb_data callback)
 {
     LuaBus *bus = (LuaBus *)callback->user_data;
+    LuaBus **entry = &lua_terminals;
+    while (*entry && *entry != bus)
+        entry = &(*entry)->terminal_next;
+    if (*entry)
+        *entry = bus->terminal_next;
     lua_device_close(&bus->lua);
+    if (bus->lua.terminal)
+        fclose(bus->lua.terminal);
     free(bus);
     return 0;
 }
 
+/* EN: Bind call pins and start a Lua worker for SPI or i2c. Return NULL on failure.
+ * RU: Подключает выводы call и запускает Lua для SPI или i2c. При ошибке возвращает NULL. */
 static LuaBus *lua_bus_open(vpiHandle call, int i2c)
 {
     vpiHandle args = vpi_iterate(vpiArgument, call);
@@ -93,7 +136,19 @@ static LuaBus *lua_bus_open(vpiHandle call, int i2c)
     bus->address = target.aval;
     s_vpi_value path = {.format = vpiStringVal};
     vpi_get_value(pins[4], &path);
+    if (getenv("GEANY_LUA_TERMINAL"))
+    {
+        static unsigned next_id;
+        unsigned id = ++next_id;
+        const char *kind = i2c ? "i2c" : "spi";
+        char output_path[64];
+        snprintf(output_path, sizeof output_path, "geany-lua-%s-%u.log", kind, id);
+        snprintf(bus->input_path, sizeof bus->input_path, "geany-lua-%s-%u.in", kind, id);
+        bus->lua.terminal = fopen(output_path, "wb");
+    }
     if (!path.value.str || !lua_device_start(&bus->lua, path.value.str)) {
+        if (bus->lua.terminal)
+            fclose(bus->lua.terminal);
         free(bus);
         return NULL;
     }
@@ -105,6 +160,11 @@ static LuaBus *lua_bus_open(vpiHandle call, int i2c)
     }
     vpi_free_object(callback);
     vpi_put_userdata(call, bus);
+    if (bus->lua.terminal)
+    {
+        bus->terminal_next = lua_terminals;
+        lua_terminals = bus;
+    }
     lua_bus_call(bus, LUA_RESET, -1, -1, NULL, 0, 1);
     return bus;
 }

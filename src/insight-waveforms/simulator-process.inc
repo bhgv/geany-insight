@@ -106,6 +106,7 @@ static gboolean simulation_interactive(WaveSimulation *run, const gchar *directo
         G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_MERGE);
     g_subprocess_launcher_set_cwd(launcher, directory);
     g_subprocess_launcher_setenv(launcher, "GEANY_VVP_DEBUG", "1", TRUE);
+    g_subprocess_launcher_setenv(launcher, "GEANY_LUA_TERMINAL", "1", TRUE);
     if (run->port_harness && (strstr(run->port_harness, "$geany_sram(") ||
                               strstr(run->port_harness, "$geany_parallel_psram(") ||
                               strstr(run->port_harness, "$geany_sdram(") ||

@@ -52,6 +52,7 @@
 #include "insight-waveforms/live-output-records.inc"
 #include "insight-waveforms/signal-snapshots.inc"
 #include "insight-waveforms/signal-stop-rules.inc"
+#include "insight-waveforms/lua-terminal.inc"
 #include "insight-waveforms/console-events.inc"
 #include "insight-waveforms/live-inputs.inc"
 #include "insight-waveforms/breakpoint-actions.inc"

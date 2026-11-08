@@ -250,6 +250,7 @@ libgeany_la_SOURCES += \
 	insight-waveforms/signal-snapshots.inc \
 	insight-waveforms/signal-stop-rules.inc \
 	insight-waveforms/console-events.inc \
+	insight-waveforms/lua-terminal.inc \
 	insight-waveforms/live-inputs.inc \
 	insight-waveforms/breakpoint-actions.inc \
 	insight-waveforms/frame-actions.inc \

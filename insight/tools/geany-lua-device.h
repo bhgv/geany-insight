@@ -1,22 +1,26 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Run device callbacks and terminal commands in one isolated Lua state.
+ * RU: Выполняет обработчики устройства и команды терминала в одном состоянии Lua. */
 #ifndef GEANY_LUA_DEVICE_H
 #define GEANY_LUA_DEVICE_H
 
 #include <pthread.h>
 #include <stdio.h>
+#include <string.h>
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
 
 enum { LUA_DEVICE_LIMIT = 4096 };
-enum LuaDeviceCallback { LUA_RESET, LUA_SHIFT, LUA_RECEIVE, LUA_FINISH, LUA_READ, LUA_WRITE, LUA_ADDRESS };
-static const char *const lua_device_callbacks[] = {"reset", "shift", "receive", "finish", "read", "write", "address"};
+enum LuaDeviceCallback { LUA_RESET, LUA_SHIFT, LUA_RECEIVE, LUA_FINISH, LUA_READ, LUA_WRITE, LUA_ADDRESS, LUA_COMMAND };
+static const char *const lua_device_callbacks[] = {"reset", "shift", "receive", "finish", "read", "write", "address", "command"};
 
 typedef struct {
     pthread_t thread;
     pthread_mutex_t mutex;
     pthread_cond_t ready;
-    const char *path;
+    const char *path, *command;
+    FILE *terminal;
     enum LuaDeviceCallback callback;
     unsigned enabled;
     int references[sizeof lua_device_callbacks / sizeof *lua_device_callbacks];
@@ -39,6 +43,28 @@ static void lua_device_error(LuaDevice *device, const char *error)
     snprintf(device->error, sizeof device->error, "%s", error ? error : "Lua error");
 }
 
+/* EN: Write Lua's print arguments to the device terminal attached to lua.
+ * RU: Выводит аргументы print из lua в терминал устройства. */
+static int lua_device_print(lua_State *lua)
+{
+    FILE *terminal = lua_touserdata(lua, lua_upvalueindex(1));
+    int count = lua_gettop(lua);
+    for (int i = 1; i <= count; ++i)
+    {
+        size_t length;
+        const char *text = luaL_tolstring(lua, i, &length);
+        if (i > 1)
+            fputc('\t', terminal);
+        fwrite(text, 1, length, terminal);
+        lua_pop(lua, 1);
+    }
+    fputc('\n', terminal);
+    fflush(terminal);
+    return 0;
+}
+
+/* EN: Run the Lua worker for device data until its owner requests shutdown.
+ * RU: Выполняет задачи Lua для устройства data до запроса завершения. */
 static void *lua_device_worker(void *data)
 {
     LuaDevice *device = data;
@@ -55,6 +81,12 @@ static void *lua_device_worker(void *data)
         for (const luaL_Reg *lib = libraries; lib->name; lib++) {
             luaL_requiref(lua, lib->name, lib->func, 1);
             lua_pop(lua, 1);
+        }
+        if (device->terminal)
+        {
+            lua_pushlightuserdata(lua, device->terminal);
+            lua_pushcclosure(lua, lua_device_print, 1);
+            lua_setglobal(lua, "print");
         }
         lua_pushnil(lua); lua_setglobal(lua, "dofile");
         lua_pushnil(lua); lua_setglobal(lua, "loadfile");
@@ -86,6 +118,31 @@ static void *lua_device_worker(void *data)
         device->count = 0;
         if (device->failed)
             continue;
+        if (device->callback == LUA_COMMAND)
+        {
+            int arguments = 0;
+            int status = LUA_OK;
+            if (device->enabled & (1u << LUA_COMMAND))
+            {
+                lua_rawgeti(lua, LUA_REGISTRYINDEX, device->references[LUA_COMMAND]);
+                lua_pushstring(lua, device->command);
+                arguments = 1;
+            }
+            else
+                status = luaL_loadbufferx(lua, device->command, strlen(device->command),
+                                          "=device terminal", "t");
+            lua_sethook(lua, lua_device_budget, LUA_MASKCOUNT, 1000000);
+            if (status == LUA_OK)
+                status = lua_pcall(lua, arguments, 0, 0);
+            if (status != LUA_OK)
+            {
+                const char *error = lua_tostring(lua, -1);
+                fprintf(device->terminal, "Error: %s\n", error ? error : "Lua error");
+            }
+            lua_settop(lua, 0);
+            fflush(device->terminal);
+            continue;
+        }
         if (!(device->enabled & (1u << device->callback)))
             continue;
         lua_rawgeti(lua, LUA_REGISTRYINDEX, device->references[device->callback]);
@@ -171,6 +228,21 @@ static void lua_device_call(LuaDevice *device, enum LuaDeviceCallback callback, 
     pthread_cond_signal(&device->ready);
     while (device->pending)
         pthread_cond_wait(&device->ready, &device->mutex);
+    pthread_mutex_unlock(&device->mutex);
+}
+
+/* EN: Send a terminal line to device and wait for its worker to handle it.
+ * RU: Передаёт строку line устройству device и ждёт обработки в его потоке. */
+static void lua_device_command(LuaDevice *device, const char *line)
+{
+    pthread_mutex_lock(&device->mutex);
+    device->command = line;
+    device->callback = LUA_COMMAND;
+    device->pending = 1;
+    pthread_cond_signal(&device->ready);
+    while (device->pending)
+        pthread_cond_wait(&device->ready, &device->mutex);
+    device->command = NULL;
     pthread_mutex_unlock(&device->mutex);
 }
 

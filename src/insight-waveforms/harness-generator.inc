@@ -51,6 +51,8 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         }
         else if (valid && count == 2 && !strcmp(args[0], "live-interval"))
             valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &live_interval, NULL);
+        else if (valid && !strcmp(args[0], "bus-monitor"))
+            valid = simulation_port_bus_monitor(args, count, &scopes, body, live);
         else if (valid && (!strcmp(args[0], "scope") || !strcmp(args[0], "scope-xy") ||
                            !strcmp(args[0], "scope-xyz")))
         {
@@ -318,6 +320,8 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         if (!explicit_duration && controller_completion->len)
             g_string_append_printf(body, "wait (%s); #1; ", controller_completion->str);
         g_string_append(body, "$finish; end\nendmodule\n");
+        if (strstr(body->str, "$geany_spi_lua(") || strstr(body->str, "$geany_i2c_lua("))
+            g_string_append(live, "$geany_lua_console_poll();\n");
         if (live->len)
         {
             /* Put the pacing checkpoint at line 3 of the private source. */

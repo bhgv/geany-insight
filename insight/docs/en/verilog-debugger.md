@@ -811,6 +811,30 @@ Each transaction allows up to 64 write bytes and, for I²C, 64 read bytes.
 - [SPI](verilog-lua-spi.md) covers bit shifts, replies to byte commands and CS# frame handling.
 - [I²C](verilog-lua-i2c.md) covers address selection, write callbacks and queued replies to reads.
 
+In an interactive simulation, **Lua terminals** opens one tab per SPI or I²C
+Lua device. The tab shows its `print(...)` output. Type a line and press Enter
+to call the script's optional `command(line)` handler. Without a handler, the
+line runs as Lua code in the device's existing state, for example
+`print(status)`. Commands queued at a breakpoint run when simulation resumes.
+
+## Bus monitors
+
+Add a `bus-monitor` rule in **Port Signals**. Supply a label and one to sixteen
+DUT signal names or slices. The monitor taps the signals without driving them.
+
+```text
+bus-monitor i2c0 scl sda
+bus-monitor spi0 sck cs_n mosi miso
+bus-monitor uart0 rx tx
+bus-monitor parallel0 clk valid data[15:0]
+bus-monitor serial0 clk serial_data
+```
+
+**Live Port I/O** shows sampled bit vectors, preserving X/Z, with decimal
+values for known multi-bit signals. **Live Plots** shows a time plot for each
+signal. Samples use the configured `live-interval`; reduce the interval to
+observe faster transitions.
+
 ## Navigate to errors
 
 Icarus compilation diagnostics appear in **Messages**. The debugger

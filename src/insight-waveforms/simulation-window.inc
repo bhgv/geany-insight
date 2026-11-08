@@ -153,6 +153,13 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         if (run->rasters)
             gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), simulation_raster_notebook(run, FALSE),
                                      gtk_label_new(insight_tr("Displays")));
+        if (run->port_harness && strstr(run->port_harness, "$geany_lua_console_poll("))
+        {
+            run->lua_terminals = gtk_notebook_new();
+            gtk_notebook_set_scrollable(GTK_NOTEBOOK(run->lua_terminals), TRUE);
+            gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), run->lua_terminals,
+                                     gtk_label_new(insight_tr("Lua terminals")));
+        }
         gtk_paned_pack2(GTK_PANED(paned), inspection_tabs, TRUE, FALSE);
         gtk_box_pack_start(GTK_BOX(box), paned, TRUE, TRUE, 0);
         run->live_controls = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);

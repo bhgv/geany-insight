@@ -13,12 +13,14 @@ static gboolean simulation_capture_signal(const gchar *name)
                                 name, 0, 0);
 }
 
+enum { LIVE_PLOT_LIMIT = 32 };
+
 /* EN: Validate count scope args and emit scope id into body and its sampling into live.
  * RU: Проверяет count аргументов args осциллографа, добавляет прибор id в body и выборку в live. */
 static gboolean simulation_port_scope(gchar **args, gint count, guint id, GString *body, GString *live)
 {
     guint axes = !strcmp(args[0], "scope") ? 1 : !strcmp(args[0], "scope-xy") ? 2 : 3;
-    if (count != (gint)axes + 1 || id >= 8)
+    if (count != (gint)axes + 1 || id >= LIVE_PLOT_LIMIT)
         return 0;
     for (guint i = 1; i <= axes; i++)
         if (!simulation_capture_signal(args[i]) || strlen(args[i]) > 256)
@@ -40,6 +42,34 @@ static gboolean simulation_port_scope(gchar **args, gint count, guint id, GStrin
         g_string_append_printf(live, ",9,dut.%s", args[i]);
     g_string_append(live, ");\n");
     return 1;
+}
+
+/* EN: Add plots and numeric/vector samples for the named bus in args.
+ * count includes the rule and bus name. scopes tracks plot IDs in body and live.
+ * RU: Добавляет графики, числа и векторы для именованной шины из args.
+ * count включает правило и имя шины. scopes учитывает графики в body и live. */
+static gboolean simulation_port_bus_monitor(gchar **args, gint count, guint *scopes,
+                                            GString *body, GString *live)
+{
+    if (count < 3 || count > 18 || !simulation_port_name(args[1]) ||
+        *scopes + count - 2 > LIVE_PLOT_LIMIT)
+        return FALSE;
+
+    for (gint i = 2; i < count; ++i)
+    {
+        gchar *scope[] = {"scope", args[i]};
+        guint id = *scopes;
+        if (!simulation_port_scope(scope, G_N_ELEMENTS(scope), id, body, live))
+            return FALSE;
+
+        gchar *label = g_strdup(args[i]);
+        g_strcanon(label, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_$", '_');
+        g_string_append_printf(live, "$display(\"GEANY-PORT%%c%s_%u_%s%%c%%b\",9,9,dut.%s);\n",
+                               args[1], id + 1, label, args[i]);
+        g_free(label);
+        ++*scopes;
+    }
+    return TRUE;
 }
 
 /* EN: Validate count trigger args and append the capture condition to trigger.

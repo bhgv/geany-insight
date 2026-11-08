@@ -1062,8 +1062,13 @@ static void register_devices(void)
     task.tfname = "$geany_i2c_lua";
     task.user_data = &i2c_lua;
     vpi_register_systf(&task);
+    task.tfname = "$geany_lua_console_poll";
+    task.calltf = lua_bus_console_poll;
+    task.user_data = NULL;
+    vpi_register_systf(&task);
     task.tfname = "$geany_i2c_controller";
     task.calltf = bus_controller_tick;
+    task.user_data = &i2c_lua;
     vpi_register_systf(&task);
     task.tfname = "$geany_spi_controller";
     task.user_data = NULL;
