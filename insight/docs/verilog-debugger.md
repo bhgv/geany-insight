@@ -176,6 +176,15 @@ When the assistant is opened from Port Signals or one of its child dialogs,
 recipe, including unsaved edits. Review or edit it before **Send**. This
 action does not attach HDL source files.
 
+### Exercise SPI and I²C from the wizard
+
+1. Open `insight/tests/waveform-debug/live_devices.sv` and start **Debug Current Verilog File**. Set the recipe to `module live_devices`, `duration 10000000`, `live-interval 250`, `monitor spi_result 8` and `monitor i2c_result 8`, one rule per line.
+2. Create two text images with one line each. Put `@10 ba` in `SPI image.hex` and `@1234 be` in `I2C image.hex`.
+3. In **Add Test Device…**, select **SPI NOR** with ports `sck`, `cs_n`, `mosi`, `miso`. Choose the SPI image. Add **I²C EEPROM** with `scl`, `sda`, address `0x50` and the I²C image.
+4. Check the generated testbench and diagram, then run and click **Continue**. **Live Port I/O** shows `spi_result` = `0xBA` and `i2c_result` = `0xBE` in binary and decimal.
+
+The GTK regression also exercises port search and slice assignment, a generated schematic, a live slider and switch, edge-triggered capture, SRAM and the UART console in the same run.
+
 ## Triggered waveform capture and live controls
 
 In **Port Signals** for the current file, configure one optional

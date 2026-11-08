@@ -4377,6 +4377,7 @@ static void simulation_device_type(GtkComboBox *combo, gpointer data)
     if (preset->script || preset->image >= 0)
     {
         GtkWidget *chooser = gtk_file_chooser_button_new("Choose device file", GTK_FILE_CHOOSER_ACTION_OPEN);
+        gtk_widget_set_name(chooser, "insight-device-file");
         gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(chooser), form->directory);
         form->file = device_field(form, preset->script ? "Lua script" : "Memory image (optional)", chooser, row++);
         if (!preset->script)

@@ -20,7 +20,7 @@ typedef enum {
 
 static TestPhase phase;
 static gchar *fixture_source;
-static gchar *observer_source;
+static gchar *observer_source, *spi_image, *i2c_image;
 static guint point_line;
 static gboolean passed, live_devices;
 
@@ -365,6 +365,64 @@ static gboolean add_test_slider(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
+typedef struct
+{
+    const gchar *kind, *first_port, *image;
+} MemoryWizard;
+
+/* EN: Select a device, bind its first port and load the image from data.
+ * RU: Выбирает устройство, назначает первый порт и загружает образ из data. */
+static gboolean add_bus_memory(gpointer data)
+{
+    const MemoryWizard *memory = data;
+    GtkWidget *wizard = find_window("Add Test Device");
+    if (!wizard)
+        return G_SOURCE_CONTINUE;
+    GtkWidget *kind = find_control(wizard, "insight-test-device-type");
+    GtkWidget *ports = find_control(wizard, "insight-test-device-ports");
+    if (!GTK_IS_COMBO_BOX(kind) || !GTK_IS_TREE_VIEW(ports))
+        return G_SOURCE_CONTINUE;
+    if (g_strcmp0(gtk_combo_box_get_active_id(GTK_COMBO_BOX(kind)), memory->kind) &&
+        !gtk_combo_box_set_active_id(GTK_COMBO_BOX(kind), memory->kind))
+        return G_SOURCE_CONTINUE;
+    GtkWidget *first = find_control(wizard, "insight-device-first-field");
+    GtkWidget *file = find_control(wizard, "insight-device-file");
+    if (!GTK_IS_ENTRY(first) || !GTK_IS_FILE_CHOOSER(file))
+        return G_SOURCE_CONTINUE;
+    gchar *selected = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(file));
+    gboolean selected_image = !g_strcmp0(selected, memory->image);
+    g_free(selected);
+    if (!selected_image)
+    {
+        gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(file), memory->image);
+        return G_SOURCE_CONTINUE;
+    }
+
+    GtkTreeView *view = GTK_TREE_VIEW(ports);
+    GtkTreeModel *model = gtk_tree_view_get_model(view);
+    GtkTreeIter row;
+    for (gboolean more = gtk_tree_model_get_iter_first(model, &row); more;
+         more = gtk_tree_model_iter_next(model, &row))
+    {
+        gchar *name;
+        gtk_tree_model_get(model, &row, 0, &name, -1);
+        gboolean match = !strcmp(name, memory->first_port);
+        g_free(name);
+        if (!match)
+            continue;
+        gtk_entry_set_text(GTK_ENTRY(first), "replace_me");
+        gtk_widget_grab_focus(first);
+        GtkTreePath *path = gtk_tree_model_get_path(model, &row);
+        gtk_tree_view_row_activated(view, path, gtk_tree_view_get_column(view, 0));
+        gtk_tree_path_free(path);
+        if (strcmp(gtk_entry_get_text(GTK_ENTRY(first)), memory->first_port))
+            return G_SOURCE_CONTINUE;
+        gtk_dialog_response(GTK_DIALOG(wizard), GTK_RESPONSE_ACCEPT);
+        return G_SOURCE_REMOVE;
+    }
+    return G_SOURCE_CONTINUE;
+}
+
 /* EN: Verify the generated testbench in the preview, then close it. data points
  * to the caller's result flag. Return G_SOURCE_CONTINUE until the window exists.
  * RU: Проверяет сгенерированный тестбенч в просмотре и закрывает окно.
@@ -383,7 +441,8 @@ static gboolean check_testbench_preview(gpointer data)
         gchar *hdl = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
         *(gboolean *)data = !gtk_text_view_get_editable(GTK_TEXT_VIEW(view)) &&
                            strstr(hdl, "module geany_port_testbench;") &&
-                           strstr(hdl, "$geany_sram(") && strstr(hdl, "geany_slice_net");
+                           strstr(hdl, "$geany_sram(") && strstr(hdl, "geany_slice_net") &&
+                           strstr(hdl, "$geany_spi_nor(") && strstr(hdl, "$geany_i2c_eeprom(");
         g_free(hdl);
     }
     gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);
@@ -514,6 +573,8 @@ static gboolean accept_ports(gpointer data)
             "scope-xy level_out result\n"
             "scope-xyz level_out result ready\n"
             "monitor model_result 8\n"
+            "monitor spi_result 8\n"
+            "monitor i2c_result 8\n"
             "model ext external_memory \"external memory.sv\"\n"
             "model-param ext DATA \"8'h3c\"\n"
             "model-value ext mask \"8'h05\"\n"
@@ -560,6 +621,17 @@ static gboolean accept_ports(gpointer data)
         g_free(selection);
         if (!correct)
             return G_SOURCE_CONTINUE;
+        const MemoryWizard memories[] = {{"spi-nor", "sck", spi_image},
+            {"i2c-eeprom", "scl", i2c_image}};
+        for (guint i = 0; i < G_N_ELEMENTS(memories); i++)
+        {
+            guint device = g_timeout_add(10, add_bus_memory, (gpointer)&memories[i]);
+            if (!click(dialog, "Add Test Device…"))
+            {
+                g_source_remove(device);
+                return G_SOURCE_CONTINUE;
+            }
+        }
         gboolean preview_ok = FALSE;
         guint preview = g_timeout_add(10, check_testbench_preview, &preview_ok);
         if (!click(dialog, "Preview Testbench…"))
@@ -978,9 +1050,11 @@ static gboolean drive_debugger(gpointer data)
             uart && console_contains(uart, "OK") &&
             console_contains(simulation, "Waveform capture started at") && strstr(values, "pushed = 1") &&
             strstr(values, "ready = 1") && strstr(values, "result = 10100101  (165)") &&
-            strstr(values, "model_result = 00111001  (57)"))
+            strstr(values, "model_result = 00111001  (57)") &&
+            strstr(values, "spi_result = 10111010  (186)") &&
+            strstr(values, "i2c_result = 10111110  (190)"))
         {
-            g_print("Verilog GTK: live inputs, capture trigger, monitors, SRAM, external model and UART passed.\n");
+            g_print("Verilog GTK: live inputs, capture trigger, SRAM, UART, SPI NOR and I2C EEPROM images passed.\n");
             passed = TRUE;
             gtk_widget_destroy(simulation);
             gtk_main_quit();
@@ -1137,12 +1211,16 @@ int main(int argc, char **argv)
     g_free(testbench);
     if (saved && live_devices)
     {
+        spi_image = g_build_filename(work_dir, "SPI image.hex", NULL);
+        i2c_image = g_build_filename(work_dir, "I2C image.hex", NULL);
         gchar *model = g_build_filename(fixture_dir, "external_memory.sv", NULL);
         gchar *destination = g_build_filename(work_dir, "external memory.sv", NULL);
         gchar *text = NULL;
         gsize size = 0;
         saved = g_file_get_contents(model, &text, &size, NULL) &&
-                g_file_set_contents(destination, text, size, NULL);
+                g_file_set_contents(destination, text, size, NULL) &&
+                g_file_set_contents(spi_image, "@10 ba\n", -1, NULL) &&
+                g_file_set_contents(i2c_image, "@1234 be\n", -1, NULL);
         g_free(text);
         g_free(destination);
         g_free(model);
@@ -1160,5 +1238,7 @@ int main(int argc, char **argv)
     g_free(profile);
     g_free(fixture_source);
     g_free(observer_source);
+    g_free(spi_image);
+    g_free(i2c_image);
     return passed ? result : 1;
 }
