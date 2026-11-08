@@ -182,7 +182,7 @@ static gboolean simulation_raster_pixel_tooltip(GtkWidget *canvas, gint x, gint 
                                                  CaptureView *view)
 {
     GtkImage *image = view->data;
-    if (keyboard || view->selecting || gtk_image_get_storage_type(image) != GTK_IMAGE_PIXBUF)
+    if (keyboard || view->selecting || view->pan_button || gtk_image_get_storage_type(image) != GTK_IMAGE_PIXBUF)
         return FALSE;
 
     GdkPixbuf *frame = gtk_image_get_pixbuf(image);

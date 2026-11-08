@@ -14,6 +14,7 @@ typedef struct
     gdouble x, y, width, height;
     gdouble start_x, start_y, end_x, end_y;
     gboolean selecting;
+    guint pan_button;
     FILE *video;
     guint timer, video_width, video_height;
     guchar *planes;
@@ -80,11 +81,38 @@ static gboolean capture_draw(GtkWidget *canvas, cairo_t *cr, CaptureView *view)
     return FALSE;
 }
 
-/* EN: Track a left-button selection or apply the selected rectangle in canvas.
- * RU: Начинает выделение левой кнопкой или увеличивает область canvas из event. */
+/* EN: Pan view in canvas by the pointer displacement since the last event.
+ * RU: Сдвигает view в canvas на смещение указателя с предыдущего события. */
+static void capture_pan(GtkWidget *canvas, CaptureView *view, gdouble x, gdouble y)
+{
+    gint width = MAX(1, gtk_widget_get_allocated_width(canvas));
+    gint height = MAX(1, gtk_widget_get_allocated_height(canvas));
+    view->x = CLAMP(view->x - (x - view->end_x) * view->width / width, 0, 1 - view->width);
+    view->y = CLAMP(view->y - (y - view->end_y) * view->height / height, 0, 1 - view->height);
+    view->end_x = x;
+    view->end_y = y;
+    gtk_widget_queue_draw(canvas);
+}
+
+/* EN: Handle event in canvas, updating view's rectangular zoom or pan gesture.
+ * RU: Обрабатывает event в canvas, меняя выделение или положение view. */
 static gboolean capture_button(GtkWidget *canvas, GdkEventButton *event, CaptureView *view)
 {
-    if (event->button != 1)
+    if (event->type == GDK_BUTTON_RELEASE && event->button == view->pan_button)
+    {
+        capture_pan(canvas, view, event->x, event->y);
+        view->pan_button = 0;
+        return TRUE;
+    }
+    if (event->type == GDK_BUTTON_PRESS && !view->selecting && !view->pan_button &&
+        (event->button == 2 || (event->button == 1 && (event->state & GDK_SHIFT_MASK))))
+    {
+        view->pan_button = event->button;
+        view->end_x = event->x;
+        view->end_y = event->y;
+        return TRUE;
+    }
+    if (event->button != 1 || view->pan_button)
         return FALSE;
     if (event->type == GDK_BUTTON_PRESS)
     {
@@ -118,10 +146,15 @@ static gboolean capture_button(GtkWidget *canvas, GdkEventButton *event, Capture
     return TRUE;
 }
 
-/* EN: Update view's selection endpoint using the pointer event in canvas.
- * RU: Обновляет конец рамки view по событию event в canvas. */
+/* EN: Apply motion event to the selection or pan in view's canvas.
+ * RU: Применяет движение event к выделению или сдвигу view в canvas. */
 static gboolean capture_motion(GtkWidget *canvas, GdkEventMotion *event, CaptureView *view)
 {
+    if (view->pan_button)
+    {
+        capture_pan(canvas, view, event->x, event->y);
+        return TRUE;
+    }
     if (!view->selecting)
         return FALSE;
     view->end_x = event->x;
@@ -130,19 +163,47 @@ static gboolean capture_motion(GtkWidget *canvas, GdkEventMotion *event, Capture
     return TRUE;
 }
 
-/* EN: Apply the zoom factor associated with button, centered on view.
- * RU: Применяет коэффициент кнопки button вокруг центра view. */
-static void capture_zoom(GtkButton *button, CaptureView *view)
+/* EN: Zoom view by factor, keeping normalized anchor x,y under the pointer.
+ * RU: Меняет масштаб view в factor раз, удерживая точку x,y под указателем. */
+static void capture_zoom_at(CaptureView *view, gdouble factor, gdouble x, gdouble y)
 {
-    gint direction = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "direction"));
-    gdouble factor = direction > 0 ? .8 : 1.25;
-    gdouble width = direction ? CLAMP(view->width * factor, 1.0 / 256, 1) : 1;
-    gdouble height = direction ? CLAMP(view->height * factor, 1.0 / 256, 1) : 1;
-    view->x = CLAMP(view->x + (view->width - width) / 2, 0, 1 - width);
-    view->y = CLAMP(view->y + (view->height - height) / 2, 0, 1 - height);
+    gdouble width = CLAMP(view->width * factor, 1.0 / 256, 1);
+    gdouble height = CLAMP(view->height * factor, 1.0 / 256, 1);
+    view->x = CLAMP(view->x + (view->width - width) * x, 0, 1 - width);
+    view->y = CLAMP(view->y + (view->height - height) * y, 0, 1 - height);
     view->width = width;
     view->height = height;
     gtk_widget_queue_draw(view->canvas);
+}
+
+/* EN: Apply the zoom associated with button, centered on view.
+ * RU: Применяет масштаб кнопки button вокруг центра view. */
+static void capture_zoom(GtkButton *button, CaptureView *view)
+{
+    gint direction = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "direction"));
+    capture_zoom_at(view, direction > 0 ? .8 : direction < 0 ? 1.25 : 256, .5, .5);
+}
+
+/* EN: Zoom view under the pointer from a vertical scroll event on canvas.
+ * RU: Меняет масштаб view под указателем по вертикальной прокрутке event в canvas. */
+static gboolean capture_scroll(GtkWidget *canvas, GdkEventScroll *event, CaptureView *view)
+{
+    if (view->selecting || view->pan_button)
+        return FALSE;
+
+    gdouble delta_x, delta_y;
+    if (event->direction == GDK_SCROLL_UP)
+        delta_y = -1;
+    else if (event->direction == GDK_SCROLL_DOWN)
+        delta_y = 1;
+    else if (!gdk_event_get_scroll_deltas((GdkEvent *)event, &delta_x, &delta_y) || delta_y == 0)
+        return FALSE;
+
+    gdouble x = CLAMP(event->x / MAX(1, gtk_widget_get_allocated_width(canvas)), 0, 1);
+    gdouble y = CLAMP(event->y / MAX(1, gtk_widget_get_allocated_height(canvas)), 0, 1);
+    gdouble step = MIN(1.0, ABS(delta_y)) * .2;
+    capture_zoom_at(view, delta_y < 0 ? 1 - step : 1 / (1 - step), x, y);
+    return TRUE;
 }
 
 /* EN: Render view into a new RGB24 Cairo surface of width by height.
@@ -319,11 +380,13 @@ static CaptureView *capture_view_new(GtkWidget *page, GtkWidget *canvas,
     view->data = data;
     view->width = view->height = 1;
     g_object_set_data_full(G_OBJECT(canvas), "capture-view", view, capture_view_free);
-    gtk_widget_add_events(canvas, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_POINTER_MOTION_MASK);
+    gtk_widget_add_events(canvas, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_POINTER_MOTION_MASK |
+                                 GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK);
     g_signal_connect(canvas, "draw", G_CALLBACK(capture_draw), view);
     g_signal_connect(canvas, "button-press-event", G_CALLBACK(capture_button), view);
     g_signal_connect(canvas, "button-release-event", G_CALLBACK(capture_button), view);
     g_signal_connect(canvas, "motion-notify-event", G_CALLBACK(capture_motion), view);
+    g_signal_connect(canvas, "scroll-event", G_CALLBACK(capture_scroll), view);
     g_signal_connect(canvas, "destroy", G_CALLBACK(capture_destroy), view);
     GtkWidget *bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
     gtk_box_pack_start(GTK_BOX(page), bar, FALSE, FALSE, 0);
@@ -352,6 +415,6 @@ static CaptureView *capture_view_new(GtkWidget *page, GtkWidget *canvas,
     gtk_box_pack_start(GTK_BOX(recording), view->step, FALSE, FALSE, 0);
     g_signal_connect(view->step, "clicked", G_CALLBACK(capture_step), view);
     capture_record_state(view);
-    gtk_widget_set_tooltip_text(bar, insight_tr("Drag a rectangle over the view to zoom."));
+    gtk_widget_set_tooltip_text(bar, insight_tr("Drag a rectangle or scroll to zoom. Middle-drag or Shift-drag to pan."));
     return view;
 }

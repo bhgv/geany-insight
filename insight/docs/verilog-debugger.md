@@ -385,7 +385,8 @@ Hover over a pixel to see its coordinates from the top-left corner and
 its decimal RGB and hexadecimal color. **Save PNG…** saves the displayed
 full frame at native resolution. **−**, **Fit**, **+**, and drag-to-zoom
 are available during and after simulation. Drag with the left button
-to magnify a rectangle. **Save view…** saves the visible area as PNG.
+to magnify a rectangle. Scroll to zoom around the pointer. Middle-drag
+or Shift-drag with the left button to pan. **Save view…** saves the visible area as PNG.
 
 Live Time, XY and XYZ scopes and VCD XY/XYZ plots share these tools.
 **Record video…** saves the visible area as Y4M at 10 fps, up to
