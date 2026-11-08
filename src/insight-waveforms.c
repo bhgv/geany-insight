@@ -3040,56 +3040,65 @@ static gchar *port_browser_source(const gchar *path)
 static gchar *port_browser_preprocess(const WaveSimulation *run, gchar **error)
 {
     GError *failure = NULL;
-    gchar *directory = g_dir_make_tmp("geany-verilog-ports-XXXXXX", &failure);
     gchar *expanded = NULL;
-    if (directory)
-    {
-        GSubprocessLauncher *launcher = g_subprocess_launcher_new(
-            G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_PIPE);
-        g_subprocess_launcher_set_cwd(launcher, directory);
-        gchar *bin = g_path_get_dirname(run->compiler);
-        const gchar *existing = g_getenv("PATH");
-        gchar *path = g_strconcat(bin, G_SEARCHPATH_SEPARATOR_S, existing ? existing : "", NULL);
-        g_subprocess_launcher_setenv(launcher, "PATH", path, TRUE);
-        g_free(path);
-        g_free(bin);
+    GSubprocessLauncher *launcher = g_subprocess_launcher_new(
+        G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_PIPE);
+    g_subprocess_launcher_set_cwd(launcher, run->include_dir);
+    gchar *bin = g_path_get_dirname(run->compiler);
+    const gchar *existing = g_getenv("PATH");
+    gchar *path = g_strconcat(bin, G_SEARCHPATH_SEPARATOR_S, existing ? existing : "", NULL);
+    g_subprocess_launcher_setenv(launcher, "PATH", path, TRUE);
+    g_free(path);
+    g_free(bin);
 
-        const gchar *options[] = {run->compiler, "-g2012", "-I", run->include_dir, "-E", "-o", "-"};
-        GPtrArray *command = g_ptr_array_new();
-        for (guint i = 0; i < G_N_ELEMENTS(options); i++)
-            g_ptr_array_add(command, (gpointer)options[i]);
-        for (guint i = 0; run->sources[i]; i++)
-            g_ptr_array_add(command, run->sources[i]);
-        g_ptr_array_add(command, NULL);
-        GSubprocess *process = g_subprocess_launcher_spawnv(
-            launcher, (const gchar *const *)command->pdata, &failure);
-        g_ptr_array_unref(command);
-        g_object_unref(launcher);
-        if (process)
+    const gchar *options[] = {run->compiler, "-g2012", "-grelative-include", "-I", run->include_dir, "-E", "-o", "-"};
+    GPtrArray *command = g_ptr_array_new();
+    for (guint i = 0; i < G_N_ELEMENTS(options); i++)
+        g_ptr_array_add(command, (gpointer)options[i]);
+    for (guint i = 0; run->sources[i]; i++)
+        g_ptr_array_add(command, run->sources[i]);
+    g_ptr_array_add(command, NULL);
+    GSubprocess *process = g_subprocess_launcher_spawnv(
+        launcher, (const gchar *const *)command->pdata, &failure);
+    g_ptr_array_unref(command);
+    g_object_unref(launcher);
+    if (process)
+    {
+        GBytes *output = NULL, *diagnostics = NULL;
+        if (g_subprocess_communicate(process, NULL, NULL, &output, &diagnostics, &failure))
         {
-            GBytes *output = NULL, *diagnostics = NULL;
-            if (g_subprocess_communicate(process, NULL, NULL, &output, &diagnostics, &failure))
+            gsize length = 0;
+            const gchar *bytes;
+            if (g_subprocess_wait_check(process, NULL, &failure))
             {
-                gsize length = 0;
-                const gchar *bytes;
-                if (g_subprocess_wait_check(process, NULL, &failure))
+                bytes = g_bytes_get_data(output, &length);
+                expanded = g_utf8_make_valid(length ? bytes : "", length);
+            }
+            else
+            {
+                bytes = g_bytes_get_data(diagnostics, &length);
+                if (length)
+                    *error = g_utf8_make_valid(bytes, MIN(length, 4096));
+                bytes = g_bytes_get_data(output, &length);
+                if (length)
                 {
-                    bytes = g_bytes_get_data(output, &length);
-                    expanded = g_utf8_make_valid(length ? bytes : "", length);
-                }
-                else
-                {
-                    bytes = g_bytes_get_data(diagnostics, &length);
-                    if (length)
-                        *error = g_utf8_make_valid(bytes, MIN(length, 2048));
+                    gchar *tail = g_utf8_make_valid(bytes + length - MIN(length, 1024),
+                                                    MIN(length, 1024));
+                    const gchar *summary = g_strrstr(tail, "// Icarus preprocessor had (");
+                    if (summary)
+                    {
+                        gchar *combined = g_strdup_printf("%s%s%s", *error ? *error : "",
+                            *error ? "\n" : "", summary);
+                        g_free(*error);
+                        *error = combined;
+                    }
+                    g_free(tail);
                 }
             }
-            g_clear_pointer(&output, g_bytes_unref);
-            g_clear_pointer(&diagnostics, g_bytes_unref);
-            g_object_unref(process);
         }
-        g_rmdir(directory);
-        g_free(directory);
+        g_clear_pointer(&output, g_bytes_unref);
+        g_clear_pointer(&diagnostics, g_bytes_unref);
+        g_object_unref(process);
     }
     if (!expanded && !*error)
         *error = g_strdup(failure ? failure->message : "No preprocessor output.");
@@ -5820,7 +5829,7 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
     {
         gchar *bin = g_path_get_dirname(run->compiler);
         GPtrArray *command = g_ptr_array_new();
-        const gchar *options[] = {run->compiler, "-g2012", "-I", run->include_dir, "-o", "simulation.vvp"};
+        const gchar *options[] = {run->compiler, "-g2012", "-grelative-include", "-I", run->include_dir, "-o", "simulation.vvp"};
         for (guint i = 0; i < G_N_ELEMENTS(options); i++)
             g_ptr_array_add(command, (gpointer)options[i]);
         if (run->interactive)
