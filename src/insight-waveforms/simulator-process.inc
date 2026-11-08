@@ -72,6 +72,12 @@ static gboolean simulation_process(const gchar *const *argv, const gchar *direct
         g_prefix_error(error, "%s\n", message);
         g_free(message);
     }
+    if (!ok && !g_cancellable_is_cancelled(cancel))
+    {
+        gchar *program = g_path_get_basename(argv[0]);
+        g_prefix_error(error, "%s: ", program);
+        g_free(program);
+    }
     g_string_free(diagnostic, TRUE);
     g_cancellable_disconnect(cancel, cancellation);
     g_object_unref(process);
@@ -149,9 +155,14 @@ static gboolean simulation_interactive(WaveSimulation *run, const gchar *directo
 
     GInputStream *output = g_subprocess_get_stdout_pipe(process);
     guint8 bytes[8192];
+    GString *diagnostic = g_string_new(NULL);
+    const gsize diagnostic_limit = 64 * 1024;
     gssize count;
     while ((count = g_input_stream_read(output, bytes, sizeof bytes, cancel, error)) > 0)
     {
+        if (diagnostic->len + (gsize)count > diagnostic_limit)
+            g_string_erase(diagnostic, 0, diagnostic->len + (gsize)count - diagnostic_limit);
+        g_string_append_len(diagnostic, (const gchar *)bytes, count);
         g_mutex_lock(&run->lock);
         while (run->live_output->len + (guint)count > 65536 && !g_cancellable_is_cancelled(cancel))
             g_cond_wait(&run->live_output_space, &run->lock);
@@ -172,6 +183,17 @@ static gboolean simulation_interactive(WaveSimulation *run, const gchar *directo
         g_subprocess_force_exit(process);
         g_subprocess_wait(process, NULL, NULL);
     }
+    if (!ok && !g_cancellable_is_cancelled(cancel))
+    {
+        gchar *message = g_utf8_make_valid(diagnostic->str, diagnostic->len);
+        g_strstrip(message);
+        if (*message)
+            g_prefix_error(error, "vvp:\n%s\n", message);
+        else
+            g_prefix_error(error, "vvp: ");
+        g_free(message);
+    }
+    g_string_free(diagnostic, TRUE);
     g_cancellable_disconnect(cancel, cancellation);
     g_mutex_lock(&run->lock);
     g_clear_object(&run->live_process);
