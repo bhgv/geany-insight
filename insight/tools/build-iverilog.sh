@@ -83,6 +83,21 @@ module geany_smoke;
     end
 endmodule
 VERILOG
+    # EN: Exercise source-relative includes with a native Windows input path.
+    # RU: Проверяем include рядом с исходником, используя родной путь Windows.
+    local relative_source="$work/include-check/conditional.v"
+    mkdir -p -- "$work/include-check" || return
+    printf '`define GEANY_INCLUDE_CHECK\n' > "$work/include-check/widths.vh" || return
+    cat > "$relative_source" <<'VERILOG'
+`include "widths.vh"
+`ifdef GEANY_INCLUDE_CHECK
+module geany_relative_include;
+endmodule
+`endif
+VERILOG
+    if [[ -n "$executable_suffix" ]]; then
+        relative_source=$(cygpath -w "$relative_source") || return
+    fi
     (
         cd "$work" &&
         rm -f -- geany_smoke.vcd geany_smoke.vvp &&
@@ -91,6 +106,8 @@ VERILOG
         test -f "$prefix/lib/ivl/geany_devices.vpi" &&
         "$prefix/bin/iverilog$executable_suffix" -g2012 -E -o - geany_smoke.v > geany_smoke.preprocessed &&
         grep -q "^module geany_smoke;" geany_smoke.preprocessed &&
+        "$prefix/bin/iverilog$executable_suffix" -g2012 -grelative-include -E -o - "$relative_source" > geany_include.preprocessed &&
+        grep -q "^module geany_relative_include;" geany_include.preprocessed &&
         "$prefix/bin/iverilog$executable_suffix" -g2012 -s geany_smoke -o geany_smoke.vvp geany_smoke.v &&
         printf 'cont\n' | GEANY_VVP_DEBUG=1 "$prefix/bin/vvp$executable_suffix" -M "$prefix/lib/ivl" -m geany_devices -i -s geany_smoke.vvp > geany_smoke.log &&
         grep -q '^GEANY-VVP-READY' geany_smoke.log &&

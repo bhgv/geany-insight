@@ -126,3 +126,35 @@ index 352ab9f..dac6da2 100644
        if ( ! getenv("IVERILOG_ICONFIG")) {
  	    remove(source_path);
  	    free(source_path);
+--- a/ivlpp/lexor.lex
++++ b/ivlpp/lexor.lex
+@@ -1948,7 +1948,15 @@
+ static void do_include(void)
+ {
+     /* standby is defined by include_filename() */
+-    if (standby->path[0] == '/') {
++    int absolute = standby->path[0] == '/';
++#ifdef __MINGW32__
++    /* EN: Recognize native rooted and drive-qualified include paths.
++     * RU: Распознаём абсолютные пути Windows с корнем или буквой диска. */
++    absolute = absolute || standby->path[0] == '\\' ||
++        (standby->path[0] && standby->path[1] == ':' &&
++         (standby->path[2] == '/' || standby->path[2] == '\\'));
++#endif
++    if (absolute) {
+ 	if ((standby->file = fopen(standby->path, "r"))) {
+ 	    standby->file_close = fclose;
+ 	    goto code_that_switches_buffers;
+@@ -1967,6 +1975,12 @@
+ 
+ 	strcpy(path, isp->path);
+ 	cp = strrchr(path, '/');
++#ifdef __MINGW32__
++        /* EN: The input can contain both separator styles.
++         * RU: Во входном пути могут встречаться оба разделителя. */
++        char* backslash = strrchr(path, '\\');
++        if (backslash && (!cp || backslash > cp)) cp = backslash;
++#endif
+ 
+ 	/* I may need the relative path for a planned warning even when
+ 	 * we are not in relative mode, so for now keep it around. */
