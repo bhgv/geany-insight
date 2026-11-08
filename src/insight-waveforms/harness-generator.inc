@@ -151,16 +151,28 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             valid = simulation_port_i2c(args, body, connections, ports, images, i2c_buses, NULL, NULL);
             attached_images += valid && g_hash_table_contains(images, args[2]);
         }
-        else if (valid && (count == 5 || count == 6) && !strcmp(args[0], "hdmi-ddc"))
+        else if (valid && count >= 5 && count <= 7 && !strcmp(args[0], "hdmi-ddc"))
         {
             guint width = 640, height = 480;
+            guint64 refresh = 0;
             gboolean custom = g_hash_table_contains(images, args[2]);
-            valid = custom || simulation_hdmi_geometry(lines, count == 6 ? args[5] : "auto", &width, &height);
+            valid = custom || simulation_hdmi_geometry(lines, count >= 6 ? args[5] : "auto", &width, &height);
             if (!valid)
                 g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
                                     "Select one HDMI clock for the automatic EDID geometry.");
+            if (valid && !custom && count == 7 && strcmp(args[6], "auto"))
+            {
+                guint maximum = width <= 1920 && height <= 1080 ? 60 : 30;
+                valid = g_ascii_string_to_unsigned(args[6], 10, 24, maximum, &refresh, NULL);
+                if (valid && width == 3840 && height == 2160)
+                    valid = refresh == 24 || refresh == 25 || refresh == 30;
+                if (!valid)
+                    g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                                        "Invalid EDID refresh rate for the selected HDMI geometry.");
+            }
             if (valid)
-                valid = simulation_port_hdmi_ddc(args, body, connections, ports, images, width, height);
+                valid = simulation_port_hdmi_ddc(args, body, connections, ports, images,
+                                                 width, height, (guint)refresh);
             has_ddc |= valid;
             attached_images += valid && g_hash_table_contains(images, args[2]);
         }

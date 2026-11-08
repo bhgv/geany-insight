@@ -95,7 +95,7 @@ static const DevicePreset device_presets[] = {
      "Width=640|Height=480|Color bits=8|Mapping=jeida|Bit offset=0|VS active=1|Order=a-first",
      "o1|o1|o1|o1|o1|o1|o1|o1|o1", -1, FALSE, "Dual-link LVDS display",
      DEVICE_RASTER, (1u << DEVICE_RASTER)},
-    {"hdmi-ddc", "SCL=ddc_scl|SDA=ddc_sda|HPD=hpd|Connect delay ns=0|HDMI clock=auto", "c1|b1|i1", 1, FALSE,
+    {"hdmi-ddc", "SCL=ddc_scl|SDA=ddc_sda|HPD=hpd|Connect delay ns=0|HDMI clock=auto|Refresh Hz=auto", "c1|b1|i1", 1, FALSE,
      "HDMI DDC / EDID", DEVICE_RASTER, (1u << DEVICE_RASTER) | (1u << DEVICE_I2C)},
     {"hdmi-display",
      "Clock+=tmds_clk_p|D0+=tmds_d0_p|D1+=tmds_d1_p|D2+=tmds_d2_p|"

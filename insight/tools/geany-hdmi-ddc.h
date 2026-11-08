@@ -4,7 +4,7 @@
  * RU: Приёмник HDMI DDC/EDID только для чтения и сигнал горячего подключения.
  */
 
-enum { DDC_SCL, DDC_SDA, DDC_PLUG, DDC_DRIVE, DDC_HPD, DDC_WIDTH, DDC_HEIGHT, DDC_PORTS };
+enum { DDC_SCL, DDC_SDA, DDC_PLUG, DDC_DRIVE, DDC_HPD, DDC_WIDTH, DDC_HEIGHT, DDC_REFRESH, DDC_PORTS };
 enum { EDID_BLOCK = 128, EDID_MAX = 256 };
 
 typedef struct {
@@ -26,18 +26,19 @@ static void hdmi_edid_checksum(uint8_t *bytes)
     bytes[EDID_BLOCK - 1] = (uint8_t)(0u - sum);
 }
 
-/* EN: Encode preferred width and height in the detailed timing descriptor dtd.
- * RU: Кодирует предпочтительные width и height в дескрипторе таймингов dtd. */
-static void hdmi_edid_timing(uint8_t *dtd, unsigned width, unsigned height)
+/* EN: Encode width, height and refresh in Hz in the timing descriptor dtd.
+ * RU: Кодирует width, height и частоту refresh в Гц в дескрипторе dtd. */
+static void hdmi_edid_timing(uint8_t *dtd, unsigned width, unsigned height, unsigned refresh)
 {
     unsigned hblank = 160, vblank = 45, hoffset = 48, hsync = 32, voffset = 3, vsync = 5;
     unsigned clock, flags = 0x1e;
     if (width == 640 && height == 480) {
+        vblank = 45;
         hoffset = 16;
         hsync = 96;
         voffset = 10;
         vsync = 2;
-        clock = 2518;
+        clock = refresh == 60 ? 2518 : 0;
         flags = 0x18;
     } else if (width == 1280 && height == 720) {
         hblank = 370;
@@ -45,14 +46,14 @@ static void hdmi_edid_timing(uint8_t *dtd, unsigned width, unsigned height)
         hoffset = 110;
         hsync = 40;
         voffset = 5;
-        clock = 7425;
+        clock = refresh == 60 ? 7425 : 0;
     } else if (width == 1920 && height == 1080) {
         hblank = 280;
         hoffset = 88;
         hsync = 44;
         voffset = 4;
-        clock = 14850;
-    } else if (width == 3840 && height == 2160) {
+        clock = refresh == 60 ? 14850 : 0;
+    } else if (width == 3840 && height == 2160 && refresh == 30) {
         hblank = 560;
         vblank = 90;
         hoffset = 176;
@@ -61,8 +62,10 @@ static void hdmi_edid_timing(uint8_t *dtd, unsigned width, unsigned height)
         vsync = 10;
         clock = 29700;
     } else {
-        clock = ((width + hblank) * (height + vblank) * 60 + 5000) / 10000;
+        clock = 0;
     }
+    if (!clock)
+        clock = ((width + hblank) * (height + vblank) * refresh + 5000) / 10000;
     dtd[0] = (uint8_t)clock;
     dtd[1] = (uint8_t)(clock >> 8);
     dtd[2] = (uint8_t)width;
@@ -80,9 +83,9 @@ static void hdmi_edid_timing(uint8_t *dtd, unsigned width, unsigned height)
     dtd[17] = (uint8_t)flags;
 }
 
-/* EN: Fill bytes with an EDID whose preferred geometry is width by height.
- * RU: Заполняет bytes EDID с предпочтительной геометрией width на height. */
-static void hdmi_edid_default(uint8_t *bytes, unsigned width, unsigned height)
+/* EN: Fill bytes with an EDID for width by height and refresh in Hz.
+ * RU: Заполняет bytes EDID для width на height и частоты refresh в Гц. */
+static void hdmi_edid_default(uint8_t *bytes, unsigned width, unsigned height, unsigned refresh)
 {
     const uint8_t chromaticity[] = {0xee, 0x91, 0xa3, 0x54, 0x4c, 0x99, 0x26, 0x0f, 0x50, 0x54};
     const uint8_t name[] = {0, 0, 0, 0xfc, 0, 'G', 'e', 'a', 'n', 'y', ' ',
@@ -102,15 +105,16 @@ static void hdmi_edid_default(uint8_t *bytes, unsigned width, unsigned height)
     bytes[23] = 120;
     bytes[24] = 0x06;
     memcpy(bytes + 25, chromaticity, sizeof chromaticity);
-    if (width == 640 && height == 480)
+    if (width == 640 && height == 480 && refresh == 60)
         bytes[35] = 0x20;
     memset(bytes + 38, 1, 16);
-    hdmi_edid_timing(bytes + 54, width, height);
+    hdmi_edid_timing(bytes + 54, width, height, refresh);
     memcpy(bytes + 72, name, sizeof name);
     bytes[93] = bytes[111] = 0x10;
     if (width == 3840 && height == 2160) {
-        /* CTA VIC 95 and an HDMI vendor block advertising 300 MHz TMDS. */
-        const uint8_t cta[] = {0x02, 0x03, 14, 0, 0x41, 0xdf,
+        /* CTA VIC 93, 94 or 95, and a 300 MHz HDMI vendor block. */
+        uint8_t vic = refresh == 24 ? 93 : refresh == 25 ? 94 : 95;
+        const uint8_t cta[] = {0x02, 0x03, 14, 0, 0x41, (uint8_t)(0x80 | vic),
                                0x67, 0x03, 0x0c, 0x00, 0x10, 0x00, 0x00, 60};
         memset(bytes + EDID_BLOCK, 0, EDID_BLOCK);
         memcpy(bytes + EDID_BLOCK, cta, sizeof cta);
@@ -197,7 +201,14 @@ static HdmiDdc *hdmi_ddc_open(vpiHandle call)
         unsigned height = (unsigned)bus_integer(pins[DDC_HEIGHT]);
         if (!width || width > 3840 || !height || height > 2160)
             goto invalid;
-        hdmi_edid_default(ddc->bus.bytes, width, height);
+        unsigned maximum = width <= 1920 && height <= 1080 ? 60 : 30;
+        unsigned refresh = (unsigned)bus_integer(pins[DDC_REFRESH]);
+        if (!refresh)
+            refresh = maximum;
+        if (refresh < 24 || refresh > maximum ||
+            (width == 3840 && height == 2160 && refresh != 24 && refresh != 25 && refresh != 30))
+            goto invalid;
+        hdmi_edid_default(ddc->bus.bytes, width, height, refresh);
     }
     memcpy(ddc->pins, pins, sizeof pins);
     s_cb_data cleanup = {.reason = cbEndOfSimulation, .cb_rtn = hdmi_ddc_free,

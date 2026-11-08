@@ -2,7 +2,7 @@
 // EN: Read EDID over DDC and verify HPD, repeated START, and write rejection.
 // RU: Читает EDID по DDC и проверяет HPD, повторный START и отказ записи.
 `timescale 1ns/1ns
-module ddc_peer #(parameter bit CUSTOM = 0, parameter WIDTH = 640, HEIGHT = 480) (output reg done = 0);
+module ddc_peer #(parameter bit CUSTOM = 0, parameter WIDTH = 640, HEIGHT = 480, REFRESH = 0) (output reg done = 0);
     reg plug = 0, hpd = 0, clock_low = 0, data_low = 0;
     reg drive = 1'bz;
     tri1 scl, sda;
@@ -13,10 +13,10 @@ module ddc_peer #(parameter bit CUSTOM = 0, parameter WIDTH = 640, HEIGHT = 480)
     generate
         if (CUSTOM) begin
             always @(scl or sda or plug)
-                $geany_hdmi_ddc(scl, sda, plug, drive, hpd, WIDTH, HEIGHT, "edid.hex");
+                $geany_hdmi_ddc(scl, sda, plug, drive, hpd, WIDTH, HEIGHT, REFRESH, "edid.hex");
         end else begin
             always @(scl or sda or plug)
-                $geany_hdmi_ddc(scl, sda, plug, drive, hpd, WIDTH, HEIGHT);
+                $geany_hdmi_ddc(scl, sda, plug, drive, hpd, WIDTH, HEIGHT, REFRESH);
         end
     endgenerate
 
@@ -103,7 +103,7 @@ module ddc_peer #(parameter bit CUSTOM = 0, parameter WIDTH = 640, HEIGHT = 480)
                         {block[61][7:4],block[59]} != HEIGHT))
             $fatal(1, "EDID geometry did not match %0dx%0d", WIDTH, HEIGHT);
         if (!CUSTOM && WIDTH == 3840 &&
-            (block[126] !== 1 || {block[55],block[54]} !== 16'd29700))
+            (block[126] !== 1 || {block[55],block[54]} !== (REFRESH == 24 ? 16'd21168 : REFRESH == 25 ? 16'd22050 : 16'd29700)))
             $fatal(1, "Missing UHD timing or CTA block");
         if (!CUSTOM && WIDTH == 3840) begin
             start();
@@ -118,7 +118,7 @@ module ddc_peer #(parameter bit CUSTOM = 0, parameter WIDTH = 640, HEIGHT = 480)
                 sum += value;
             end
             stop();
-            if (sum !== 0 || block[0] !== 8'h02 || block[5] !== 8'hdf)
+            if (sum !== 0 || block[0] !== 8'h02 || block[5] !== (REFRESH == 24 ? 8'hdd : REFRESH == 25 ? 8'hde : 8'hdf))
                 $fatal(1, "Invalid CTA extension or missing native VIC 95");
         end
         plug = 0;
@@ -128,13 +128,15 @@ module ddc_peer #(parameter bit CUSTOM = 0, parameter WIDTH = 640, HEIGHT = 480)
 endmodule
 
 module hdmi_ddc_tb;
-    wire default_done, custom_done, uhd_done;
+    wire default_done, custom_done, uhd_done, uhd24_done, uhd25_done;
     ddc_peer builtin(default_done);
     ddc_peer #(1) custom_image(custom_done);
     ddc_peer #(0, 3840, 2160) uhd(uhd_done);
 
+    ddc_peer #(0, 3840, 2160, 24) uhd24(uhd24_done);
+    ddc_peer #(0, 3840, 2160, 25) uhd25(uhd25_done);
     initial begin
-        wait (default_done && custom_done && uhd_done);
+        wait (default_done && custom_done && uhd_done && uhd24_done && uhd25_done);
         $display("HDMI DDC passed");
         $finish;
     end

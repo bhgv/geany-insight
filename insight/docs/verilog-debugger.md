@@ -384,15 +384,20 @@ for hot plug and reads EDID. SCL and SDA are open-drain with pull-ups.
 HPD goes high at the configured connection time, once the EDID is ready.
 The default connects at time zero and derives the EDID from the geometry
 of the only HDMI display in the setup. Without an HDMI display the
-fallback is 640 × 480 at 60 Hz. For 3840 × 2160 the EDID advertises 30 Hz
+fallback is 640 × 480 at 60 Hz. For 3840 × 2160 the automatic setting advertises 30 Hz
 and includes a CTA extension with VIC 95. With multiple HDMI displays,
 replace `auto` with the desired display's clock port name. The video
 receiver accepts unscrambled TMDS.
 
 ```text
 memory-image ddc_sda "display-edid.hex"
-hdmi-ddc ddc_scl ddc_sda hpd 100000 auto
+hdmi-ddc ddc_scl ddc_sda hpd 100000 auto auto
 ```
+
+**Refresh Hz** sets the EDID refresh rate. UHD accepts 24, 25 and 30 Hz.
+Geometries up to 1920 × 1080 accept integer rates from 24 to 60 Hz.
+Other geometries accept 24 to 30 Hz. Auto selects the upper limit.
+The simulated transmitter drives the actual pixel rate.
 
 The optional image line overrides the generated EDID. The wizard accepts a HEX file with all
 128 base-block bytes, optionally followed by one 128-byte extension.
