@@ -572,6 +572,50 @@ a 3-bit bank, eight DQ bits, single-ended DQS and active-high DM.
 It shares the functional BL8 behavior, latency units and limits described
 for DDR4 above.
 
+## Test device memory reports
+
+After an interactive simulation completes, **Test device memory** opens a tab
+for each exported SRAM, Parallel PSRAM x16, SPI NOR/NAND, SPI EEPROM,
+SPI PSRAM, I²C EEPROM, EDID ROM, SDR SDRAM or DDR1–DDR5.
+SDRAM and DDR display packed model addresses in ascending order and omit
+cells that were never allocated. The ROM tab omits write controls and history.
+The SPI PSRAM dump omits default FF bytes outside the recent write history. **Dump** shows the capacity, native word width, and
+initialized words. Use **Hex**, **Dec**, or **Bin** to change the display base.
+A mask in brackets marks undefined bits. Words touched by the last ten changes
+are bold. **Changed words only** restricts the dump to those addresses.
+
+Choose **Native** to retain device word addresses, or select **8**, **16**,
+**32**, or **64 bit** to group the dump by byte address. The lowest byte
+address within each device word contains its least significant byte.
+**Little Endian** and **Big Endian** determine how each displayed group
+is interpreted. A group is marked changed if any of its bytes changed.
+
+The optional text column offers **ASCII** for individual bytes, **Unicode**
+for the numeric word interpreted as a code point, and **UTF-8** for the byte
+stream in address order. UTF-8 characters are shown on the row where they
+start, including when their bytes span rows. A dot represents a nonprinting
+character and a question mark represents unknown data or an invalid encoding.
+
+**Recent writes** shows the total number of changed writes and up to ten
+entries, oldest first. Each entry lists simulation time in ticks, word address,
+previous value and mask, and new value and mask.
+
+Open **Calculator** for unsigned 64-bit arithmetic and bitwise operations.
+Double-click a dump address or value to copy it into the last focused operand
+in decimal. If neither operand has been focused, the first receives it.
+
+**Compare digits** stacks the operands and marks differing digits in both
+rows. It follows the dump base and groups digits from the right in threes
+for decimal, fours for hexadecimal, and eights for binary. The shorter
+number is padded with zeros.
+
+Use **Search dump** to find literal text in the displayed dump. Enable
+**Numeric** to search displayed words in the current base. Separate terms
+with spaces. `?` matches one word, `*` matches any number of words, and
+`FF[3]` matches three consecutive displayed values of `FF` in hexadecimal.
+`?[2..5]` and `?[2-5]` match two to five words. Repetition counts are decimal.
+**Find next** selects the match and wraps at the end of the dump.
+
 ## Preload SRAM, DDR3 or DDR4
 
 Put a `memory-image` line before the device rule and name the same DUT

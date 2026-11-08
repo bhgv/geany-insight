@@ -596,6 +596,8 @@ def check_ddr1_device(compiler, runtime, fixtures, directory, environment):
     require("DDR1 device passed" in report, "Built-in DDR1 test did not finish")
 
 
+# EN: Check image preload and inspection exports with compiler/runtime.
+# RU: Проверяет предзагрузку и отчёты инспектора через compiler/runtime.
 def check_memory_image(compiler, runtime, fixtures, directory, environment):
     compile_design(compiler, directory, [fixtures / "memory_image_tb.sv"], environment)
     (directory / "sram.hex").write_text("# two words\n@3 beef 0123\n", encoding="ascii")
@@ -603,8 +605,27 @@ def check_memory_image(compiler, runtime, fixtures, directory, environment):
     (directory / "ddr.hex").write_text("@2048d400 80 81 82 83 84 85 86 87\n", encoding="ascii")
     modules = runtime.parent.parent / "lib" / "ivl"
     report = capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
-                              "simulation.vvp"], directory, "memory-image", environment)
+                              "simulation.vvp"], directory, "memory-image",
+                             dict(environment, GEANY_MEMORY_INSPECT="1"))
     require("Memory image test passed" in report, "Built-in memory image test did not finish")
+
+    reports = {}
+    for path in directory.glob("geany-memory-device-*.dump"):
+        lines = path.read_text(encoding="ascii").splitlines()
+        require(lines and lines[-1] == "END", f"Incomplete memory report: {path.name}")
+        reports[lines[0].split()[2]] = lines
+    require(set(reports) == {"SRAM", "DDR2", "DDR3"}, "Expected three memory device reports")
+    sram = reports["SRAM"]
+    require(sram[0] == "GEANY-MEMORY 1 SRAM 16 16", "Incorrect SRAM geometry")
+    require("W 3 beef 0" in sram and "W 4 10b 0" in sram, "Incorrect final SRAM words")
+    require("CHANGES 12" in sram, "Incorrect SRAM changed-write count")
+    changes = [line.split() for line in sram if line.startswith("C ")]
+    expected = [["4", f"{value - 1:x}", "0", f"{value:x}", "0"]
+                for value in range(0x102, 0x10c)]
+    require([entry[2:] for entry in changes] == expected, "Incorrect last ten SRAM changes")
+    for model, word in (("DDR2", "W 48d400 90 0"), ("DDR3", "W 2048d400 80 0")):
+        require(word in reports[model], f"Missing preloaded word in {model} report")
+        require("CHANGES 0" in reports[model], f"Preload counted as a write in {model}")
 
 
 def check_spi_memory(compiler, runtime, fixtures, directory, environment):

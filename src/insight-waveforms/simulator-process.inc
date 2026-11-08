@@ -106,6 +106,14 @@ static gboolean simulation_interactive(WaveSimulation *run, const gchar *directo
         G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_MERGE);
     g_subprocess_launcher_set_cwd(launcher, directory);
     g_subprocess_launcher_setenv(launcher, "GEANY_VVP_DEBUG", "1", TRUE);
+    if (run->port_harness && (strstr(run->port_harness, "$geany_sram(") ||
+                              strstr(run->port_harness, "$geany_parallel_psram(") ||
+                              strstr(run->port_harness, "$geany_sdram(") ||
+                              strstr(run->port_harness, "$geany_ddr") ||
+                              strstr(run->port_harness, "$geany_spi_") ||
+                              strstr(run->port_harness, "$geany_i2c_") ||
+                              strstr(run->port_harness, "$geany_hdmi_ddc(")))
+        g_subprocess_launcher_setenv(launcher, "GEANY_MEMORY_INSPECT", "1", TRUE);
     const gchar *existing = g_getenv("PATH");
     gchar *path = g_strconcat(bin, G_SEARCHPATH_SEPARATOR_S, existing ? existing : "", NULL);
     g_subprocess_launcher_setenv(launcher, "PATH", path, TRUE);
@@ -305,7 +313,10 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
         g_free(bin);
 
         if (!g_cancellable_is_cancelled(cancel))
+        {
             simulation_rasters_finish(run, directory);
+            simulation_memory_finish(run, directory);
+        }
         GDir *dir = g_dir_open(directory, 0, NULL);
         if (dir)
         {

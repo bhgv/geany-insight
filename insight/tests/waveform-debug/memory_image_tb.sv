@@ -13,7 +13,9 @@ module memory_image_tb;
     wire dqs2 = ddr2_dqs;
     reg [3:0] sram_address = 3;
     reg [15:0] sram_drive = 'z;
+    reg [15:0] sram_input = 'z;
     wire [15:0] sram_dq = sram_drive;
+    assign sram_dq = sram_input;
     reg ce_n = 1, we_n = 1, oe_n = 0;
     wire cke = 1'b1, dm = 1'b0;
     wire [2:0] bank = 5;
@@ -62,6 +64,14 @@ module memory_image_tb;
         ck = !ck;
         #1 if (dq !== 8'bz || dqs !== 1'bz)
             $fatal(1, "DDR3 did not release the data bus");
+        oe_n = 1;
+        #1 sram_input = 16'h0100;
+        #1 we_n = 0;
+        for (integer change = 1; change < 12; change++) begin
+            #1 sram_input = 16'h0100 + 16'(change);
+        end
+        #1 we_n = 1;
+        #1 sram_input = 'z;
         $display("Memory image test passed");
         $finish;
     end

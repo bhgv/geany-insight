@@ -14,6 +14,7 @@ enum { DDR5_BANKS = 32, DDR5_BURST = 16 };
 typedef struct {
     vpiHandle pins[DDR5_PORTS];
     Ddr4 storage;
+    MemoryInspection inspection;
     uint16_t rows[DDR5_BANKS];
     uint32_t open;
     uint64_t cycle, due;
@@ -38,11 +39,13 @@ static int ddr5_image(void *data, uint32_t address, uint64_t value)
     return 1;
 }
 
-/* EN: Free the device owned by the end-of-simulation callback.
- * RU: Освобождает устройство, принадлежащее callback завершения симуляции. */
+/* EN: Export and free the DDR5 device from callback.
+ * RU: Сохраняет отчёт и освобождает DDR5 из callback. */
 static PLI_INT32 ddr5_free(p_cb_data callback)
 {
-    free(callback->user_data);
+    GeanyDdr5 *device = (GeanyDdr5 *)callback->user_data;
+    memory_inspection_export_ddr(&device->inspection, "DDR5", &device->storage, 1u << 31);
+    free(device);
     return 0;
 }
 
@@ -89,6 +92,7 @@ static GeanyDdr5 *ddr5_open(vpiHandle call)
         goto invalid;
     vpi_free_object(callback);
     vpi_put_userdata(call, device);
+    memory_inspection_open(&device->inspection);
     return device;
 
 invalid:
@@ -238,11 +242,11 @@ static PLI_INT32 ddr5_update(PLI_BYTE8 *user_data)
     }
     if (dqs_edge && device->mode == DDR4_WRITE && device->cycle >= device->due) {
         if (scalar(device->pins[DDR5_DM]) == vpi1) {
+            int existed = !device->inspection.file || ddr5_cell(device, 0) != NULL;
             Ddr4Cell *cell = ddr5_cell(device, 1);
             if (cell) {
                 s_vpi_vecval data = vector_word(device->pins[DDR5_DQ]);
-                cell->data = (uint8_t)data.aval;
-                cell->unknown = (uint8_t)data.bval;
+                memory_inspection_ddr_write(&device->inspection, cell, data, existed);
             } else if (!device->overflow) {
                 vpi_printf("Geany DDR5: functional storage limit reached.\n");
                 device->overflow = 1;

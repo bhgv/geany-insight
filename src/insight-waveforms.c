@@ -47,6 +47,7 @@
 #include "insight-waveforms/port-setup.inc"
 #include "insight-waveforms/source-breakpoints.inc"
 #include "insight-waveforms/raster-view.inc"
+#include "insight-waveforms/memory-view.inc"
 #include "insight-waveforms/simulator-process.inc"
 #include "insight-waveforms/live-output-records.inc"
 #include "insight-waveforms/signal-snapshots.inc"

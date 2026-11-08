@@ -41,7 +41,7 @@ file_digest() {
     printf '%s\n' "${digest%% *}"
 }
 
-stamp_id="$sha $(file_digest "$bridge_patch") $(file_digest "$packed_patch") $(file_digest "$device_source") $(file_digest "$script_dir/geany-ddr4.h") $(file_digest "$script_dir/geany-ddr5.h") $(file_digest "$script_dir/geany-raster.h") $(file_digest "$script_dir/geany-hdmi-ddc.h") $(file_digest "$script_dir/geany-spi-memory.h") $(file_digest "$script_dir/geany-i2c-eeprom.h") $(file_digest "$script_dir/geany-sdram.h") $(file_digest "$script_dir/geany-bus-controller.h") $(file_digest "$script_dir/geany-usart.h") $(file_digest "$script_dir/geany-parallel-psram.h")"
+stamp_id="$sha $(file_digest "$bridge_patch") $(file_digest "$packed_patch") $(file_digest "$device_source") $(file_digest "$script_dir/../../src/insight-waveforms/memory-values.h") $(file_digest "$script_dir/geany-ddr4.h") $(file_digest "$script_dir/geany-ddr5.h") $(file_digest "$script_dir/geany-raster.h") $(file_digest "$script_dir/geany-hdmi-ddc.h") $(file_digest "$script_dir/geany-spi-memory.h") $(file_digest "$script_dir/geany-i2c-eeprom.h") $(file_digest "$script_dir/geany-sdram.h") $(file_digest "$script_dir/geany-bus-controller.h") $(file_digest "$script_dir/geany-usart.h") $(file_digest "$script_dir/geany-parallel-psram.h")"
 for lua_source in "${lua_sources[@]}" "$lua_dir/onelua.c" "$script_dir"/geany-lua-*.h; do
     stamp_id+=" $(file_digest "$lua_source")"
 done

@@ -28,7 +28,7 @@ typedef struct
     GtkWidget *live_port_input, *live_port_value, *live_port_send, *live_port_display;
     GHashTable *live_port_samples, *live_indicators;
     GPtrArray *live_scopes;
-    GPtrArray *rasters;
+    GPtrArray *rasters, *memory_reports;
     gint scope_console_prefix;
     gchar console_prefix[24];
     GtkWidget *uart_window, *uart_view, *uart_entry;
@@ -143,6 +143,7 @@ static void simulation_free(gpointer data)
     g_clear_pointer(&run->live_indicators, g_hash_table_unref);
     g_clear_pointer(&run->live_scopes, g_ptr_array_unref);
     g_clear_pointer(&run->rasters, g_ptr_array_unref);
+    g_clear_pointer(&run->memory_reports, g_ptr_array_unref);
     if (run->uart_log)
         g_string_free(run->uart_log, TRUE);
     g_free(run->observer_file);

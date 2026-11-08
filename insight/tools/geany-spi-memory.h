@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Emulate SPI flash, EEPROM and PSRAM and expose committed byte writes.
+ * RU: Эмулирует SPI-флеш, EEPROM и PSRAM и сообщает о завершённых записях байтов. */
 #ifndef GEANY_SPI_MEMORY_H
 #define GEANY_SPI_MEMORY_H
 
@@ -14,6 +16,8 @@ typedef struct {
     unsigned kind, size, page_size, wel, command, count, address, output, dirty;
     unsigned wrap, reset_enabled;
     uint8_t *bytes, cache[SPI_NAND_PAGE];
+    void (*changed)(void *, unsigned, uint8_t, uint8_t);
+    void *inspection;
 } SpiMemory;
 
 static int spi_memory_init(SpiMemory *m, unsigned kind)
@@ -50,6 +54,31 @@ static void spi_memory_end(SpiMemory *m)
     m->output = 255;
 }
 
+/* EN: Store value at address in m and notify its observer if it changed.
+ * RU: Записывает value по address в m и уведомляет наблюдателя об изменении. */
+static void spi_memory_store(SpiMemory *m, unsigned address, uint8_t value)
+{
+    uint8_t before = m->bytes[address];
+    m->bytes[address] = value;
+    if (m->changed && before != value)
+        m->changed(m->inspection, address, before, value);
+}
+
+/* EN: Erase count bytes of m starting at address.
+ * RU: Стирает count байтов m начиная с address. */
+static void spi_memory_erase(SpiMemory *m, unsigned address, unsigned count)
+{
+    if (!m->changed)
+    {
+        memset(m->bytes + address, 255, count);
+        return;
+    }
+    for (unsigned i = 0; i < count; ++i)
+        spi_memory_store(m, address + i, 255);
+}
+
+/* EN: Process byte index of a NAND command in m.
+ * RU: Обрабатывает байт byte с индексом index команды NAND в m. */
 static void spi_memory_nand(SpiMemory *m, unsigned index, unsigned byte)
 {
     switch (m->command) {
@@ -68,10 +97,10 @@ static void spi_memory_nand(SpiMemory *m, unsigned index, unsigned byte)
                 memcpy(m->cache, page, m->page_size);
             else if (m->wel) {
                 if (m->command == 0xd8)
-                    memset(m->bytes, 255, m->size); /* One 64-page block */
+                    spi_memory_erase(m, 0, m->size); /* One 64-page block */
                 else
                     for (unsigned i = 0; i < m->page_size; i++)
-                        page[i] &= m->cache[i];
+                        spi_memory_store(m, m->address * m->page_size + i, page[i] & m->cache[i]);
                 m->dirty = 1;
             }
         } else if (index == 3 && m->command == 0x13)
@@ -88,6 +117,8 @@ static void spi_memory_nand(SpiMemory *m, unsigned index, unsigned byte)
     }
 }
 
+/* EN: Process byte index of a PSRAM command in m.
+ * RU: Обрабатывает байт byte с индексом index команды PSRAM в m. */
 static void spi_memory_psram(SpiMemory *m, unsigned index, unsigned byte)
 {
     if (m->command != 0x02 && m->command != 0x03 && m->command != 0x0b)
@@ -98,13 +129,15 @@ static void spi_memory_psram(SpiMemory *m, unsigned index, unsigned byte)
             return;
     }
     if (m->command == 0x02)
-        m->bytes[m->address] = byte;
+        spi_memory_store(m, m->address, byte);
     else
         m->output = m->bytes[m->address];
     unsigned mask = m->wrap ? 31u : SPI_PSRAM_SIZE - 1u;
     m->address = (m->address & ~mask) | ((m->address + 1) & mask);
 }
 
+/* EN: Advance m by one byte received on the SPI bus.
+ * RU: Продвигает состояние m после получения байта byte по SPI. */
 static void spi_memory_byte(SpiMemory *m, unsigned byte)
 {
     unsigned index = m->count++;
@@ -141,7 +174,7 @@ static void spi_memory_byte(SpiMemory *m, unsigned byte)
         if (index < address_bytes)
             return;
         if (m->command == 0x20 && m->wel && m->address < m->size) {
-            memset(m->bytes + (m->address & ~4095u), 255, 4096);
+            spi_memory_erase(m, m->address & ~4095u, 4096);
             m->dirty = 1;
         }
     }
@@ -149,9 +182,9 @@ static void spi_memory_byte(SpiMemory *m, unsigned byte)
         m->output = m->address < m->size ? m->bytes[m->address++] : 255;
     else if (m->command == 0x02 && index > address_bytes && m->wel && m->address < m->size) {
         if (m->kind == SPI_NOR)
-            m->bytes[m->address] &= byte;
+            spi_memory_store(m, m->address, m->bytes[m->address] & byte);
         else
-            m->bytes[m->address] = byte;
+            spi_memory_store(m, m->address, byte);
         unsigned mask = m->page_size - 1;
         m->address = (m->address & ~mask) | ((m->address + 1) & mask);
         m->dirty = 1;

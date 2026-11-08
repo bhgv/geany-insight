@@ -12,6 +12,7 @@ typedef struct {
     vpiHandle pins[DDC_PORTS];
     unsigned char loaded[EDID_MAX];
     int connected;
+    MemoryInspection inspection;
 } HdmiDdc;
 
 static const uint8_t edid_header[] = {0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00};
@@ -178,11 +179,14 @@ static int hdmi_edid_valid(const HdmiDdc *ddc, const char *filename)
     return 1;
 }
 
-/* EN: Release the DDC state owned by callback at simulation end.
- * RU: Освобождает состояние DDC из callback при завершении симуляции. */
+/* EN: Export the read-only EDID and release the DDC state from callback.
+ * RU: Сохраняет EDID только для чтения и освобождает состояние DDC из callback. */
 static PLI_INT32 hdmi_ddc_free(p_cb_data callback)
 {
-    free(callback->user_data);
+    HdmiDdc *ddc = (HdmiDdc *)callback->user_data;
+    unsigned size = ddc->bus.bytes[126] ? EDID_MAX : EDID_BLOCK;
+    memory_inspection_export_bytes(&ddc->inspection, "EDID-ROM", ddc->bus.bytes, size, 0, 1);
+    free(ddc);
     return 0;
 }
 
@@ -247,6 +251,7 @@ static HdmiDdc *hdmi_ddc_open(vpiHandle call)
         goto invalid;
     vpi_free_object(callback);
     vpi_put_userdata(call, ddc);
+    memory_inspection_open(&ddc->inspection);
     return ddc;
 
 invalid:

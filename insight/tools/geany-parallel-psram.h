@@ -20,6 +20,7 @@ typedef struct {
     s_vpi_vecval driven, write_data;
     unsigned write_address, write_mask;
     int drive_valid, writing;
+    MemoryInspection inspection;
 } ParallelPsram;
 
 /* EN: Store value at word address in PSRAM data, rejecting invalid image words.
@@ -38,6 +39,22 @@ static int parallel_psram_image(void *data, uint32_t address, uint64_t value)
 static PLI_INT32 parallel_psram_free(p_cb_data callback)
 {
     ParallelPsram *memory = (ParallelPsram *)callback->user_data;
+    FILE *file = memory->inspection.file;
+    if (file)
+    {
+        fprintf(file, "GEANY-MEMORY 1 PSRAM %u 16\n", memory->size);
+        for (unsigned address = 0; address < memory->size; ++address)
+        {
+            const ParallelPsramWord *word = &memory->words[address];
+            if (word->written)
+            {
+                unsigned unwritten = UINT16_MAX ^ word->written;
+                fprintf(file, "W %x %x %x\n", address, word->data | unwritten,
+                        word->unknown | unwritten);
+            }
+        }
+        memory_inspection_close(&memory->inspection);
+    }
     free(memory->words);
     free(memory);
     return 0;
@@ -84,6 +101,7 @@ static ParallelPsram *parallel_psram_open(vpiHandle call)
         goto invalid;
     vpi_free_object(callback);
     vpi_put_userdata(call, memory);
+    memory_inspection_open(&memory->inspection);
     return memory;
 
 invalid:
@@ -97,9 +115,23 @@ invalid:
 static void parallel_psram_commit(ParallelPsram *memory, unsigned mask)
 {
     ParallelPsramWord *word = &memory->words[memory->write_address];
+    ParallelPsramWord before = *word;
     word->data = (word->data & ~mask) | (memory->write_data.aval & mask);
     word->unknown = (word->unknown & ~mask) | (memory->write_data.bval & mask);
     word->written |= mask;
+    if (memory->inspection.file)
+    {
+        unsigned before_unwritten = UINT16_MAX ^ before.written;
+        unsigned after_unwritten = UINT16_MAX ^ word->written;
+        MemoryChange change = {
+            .address = memory->write_address,
+            .before = before.data | before_unwritten,
+            .before_unknown = before.unknown | before_unwritten,
+            .after = word->data | after_unwritten,
+            .after_unknown = word->unknown | after_unwritten
+        };
+        memory_inspection_record(&memory->inspection, change);
+    }
 }
 
 /* EN: Sample asynchronous PSRAM pins on the current VPI call. user_data is unused.

@@ -243,6 +243,8 @@ libgeany_la_SOURCES += \
 	insight-waveforms/capture-pinch.inc \
 	insight-waveforms/capture-view.inc \
 	insight-waveforms/raster-view.inc \
+	insight-waveforms/memory-view.inc \
+	insight-waveforms/memory-values.h \
 	insight-waveforms/simulator-process.inc \
 	insight-waveforms/live-output-records.inc \
 	insight-waveforms/signal-snapshots.inc \

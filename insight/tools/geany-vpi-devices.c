@@ -3,6 +3,7 @@
  * RU: Регистрирует тестовые устройства C, доступные тестбенчу Verilog. */
 #include <vpi_user.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -10,6 +11,7 @@
 #include "geany-ddr4.h"
 #include "geany-spi-memory.h"
 #include "geany-i2c-eeprom.h"
+#include "../../src/insight-waveforms/memory-values.h"
 
 enum { ADDRESS, DATA, CHIP_N, WRITE_N, OUTPUT_N, DRIVE, PORT_COUNT };
 
@@ -19,11 +21,90 @@ typedef struct {
 } SramCell;
 
 typedef struct {
+    FILE *file;
+    MemoryHistory history;
+    uint64_t changes;
+} MemoryInspection;
+
+/* EN: Open the next device report for inspection if requested by the launcher.
+ * RU: Открывает очередной отчёт inspection, если инспекция запрошена при запуске. */
+static void memory_inspection_open(MemoryInspection *inspection)
+{
+    if (!getenv("GEANY_MEMORY_INSPECT"))
+        return;
+
+    static unsigned next_id;
+    char name[64];
+    snprintf(name, sizeof name, "geany-memory-device-%u.dump", next_id++);
+    inspection->file = fopen(name, "wb");
+}
+
+/* EN: Record change with the current simulation time if bits or masks differ.
+ * RU: Записывает change в inspection с текущим временем, если биты или маски изменились. */
+static void memory_inspection_record(MemoryInspection *inspection, MemoryChange change)
+{
+    if (change.before == change.after && change.before_unknown == change.after_unknown)
+        return;
+
+    s_vpi_time time = {.type = vpiSimTime};
+    vpi_get_time(NULL, &time);
+    change.time = ((uint64_t)time.high << 32) | time.low;
+    memory_history_record(&inspection->history, change);
+    ++inspection->changes;
+}
+
+/* EN: Finish inspection by writing its history and closing the report.
+ * RU: Завершает inspection, записывая историю и закрывая отчёт. */
+static void memory_inspection_close(MemoryInspection *inspection)
+{
+    FILE *file = inspection->file;
+    fprintf(file, "CHANGES %" PRIu64 "\n", inspection->changes);
+    for (unsigned age = inspection->history.count; age > 0; --age)
+    {
+        const MemoryChange *change = memory_history_at(&inspection->history, age - 1);
+        fprintf(file, "C %" PRIu64 " %" PRIx64 " %" PRIx64 " %" PRIx64
+                " %" PRIx64 " %" PRIx64 "\n", change->time, change->address,
+                change->before, change->before_unknown, change->after, change->after_unknown);
+    }
+    fputs("END\n", file);
+    fclose(file);
+}
+
+/* EN: Record a byte change at address for an inspection in data.
+ * RU: Записывает изменение байта по address для инспекции из data. */
+static void memory_inspection_byte(void *data, unsigned address, uint8_t before, uint8_t after)
+{
+    MemoryChange change = {.address = address, .before = before, .after = after};
+    memory_inspection_record(data, change);
+}
+
+/* EN: Export size bytes under model and finish inspection. Sparse reports omit default FF.
+ * read_only marks immutable data.
+ * RU: Выгружает size байтов bytes для model и завершает inspection.
+ * При sparse пропускает байты FF. read_only отмечает неизменяемые данные. */
+static void memory_inspection_export_bytes(MemoryInspection *inspection, const char *model,
+                                           const uint8_t *bytes, unsigned size, int sparse, int read_only)
+{
+    FILE *file = inspection->file;
+    if (!file)
+        return;
+
+    fprintf(file, "GEANY-MEMORY 1 %s %u 8%s\n", model, size, sparse ? " FF" : read_only ? " RO" : "");
+    for (unsigned address = 0; address < size; ++address)
+    {
+        if (!sparse || bytes[address] != 255)
+            fprintf(file, "W %x %x 0\n", address, (unsigned)bytes[address]);
+    }
+    memory_inspection_close(inspection);
+}
+
+typedef struct {
     vpiHandle ports[PORT_COUNT];
     SramCell *cells;
-    unsigned words, address_mask;
+    unsigned words, address_mask, data_bits;
     s_vpi_vecval driven[2];
     int drive_valid;
+    MemoryInspection inspection;
 } Sram;
 
 typedef int (*ImageWrite)(void *, uint32_t, uint64_t);
@@ -76,7 +157,7 @@ static int image_load(vpiHandle image, ImageWrite write, void *device)
 static int sram_image_write(void *data, uint32_t address, uint64_t value)
 {
     Sram *sram = data;
-    unsigned bits = (unsigned)vpi_get(vpiSize, sram->ports[DATA]);
+    unsigned bits = sram->data_bits;
     if (address > sram->address_mask || (bits < 64 && (value >> bits)))
         return 0;
     SramCell *cell = &sram->cells[address];
@@ -86,14 +167,56 @@ static int sram_image_write(void *data, uint32_t address, uint64_t value)
     return 1;
 }
 
+/* EN: Decode cell into value and unknown masks limited to the device mask.
+ * RU: Извлекает из cell значение value и маску unknown, ограничивая их маской mask. */
+static void sram_inspection_word(const SramCell *cell, uint64_t mask,
+                                 uint64_t *value, uint64_t *unknown)
+{
+    *value = cell->written
+        ? (((uint64_t)(uint32_t)cell->words[1].aval << 32) | (uint32_t)cell->words[0].aval) & mask
+        : mask;
+    *unknown = cell->written
+        ? (((uint64_t)(uint32_t)cell->words[1].bval << 32) | (uint32_t)cell->words[0].bval) & mask
+        : mask;
+}
+
+/* EN: Write final initialized words and recent writes for sram to its open inspection file.
+ * RU: Записывает инициализированные слова и недавние записи sram в открытый файл инспекции. */
+static void sram_inspection_finish(Sram *sram)
+{
+    unsigned bits = sram->data_bits;
+    uint64_t mask = UINT64_MAX >> (64 - bits);
+    FILE *file = sram->inspection.file;
+    fprintf(file, "GEANY-MEMORY 1 SRAM %u %u\n", sram->address_mask + 1, bits);
+    for (unsigned address = 0; address <= sram->address_mask; ++address)
+    {
+        const SramCell *cell = &sram->cells[address];
+        if (!cell->written)
+            continue;
+
+        uint64_t value, unknown;
+        sram_inspection_word(cell, mask, &value, &unknown);
+        fprintf(file, "W %x %" PRIx64 " %" PRIx64 "\n", address, value, unknown);
+    }
+    memory_inspection_close(&sram->inspection);
+}
+
+/* EN: Export opted-in SRAM inspection data and free state from callback.
+ * RU: При включённой инспекции сохраняет данные SRAM и освобождает состояние из callback. */
 static PLI_INT32 sram_free(p_cb_data callback)
 {
     Sram *sram = (Sram *)callback->user_data;
+    if (sram->inspection.file)
+        sram_inspection_finish(sram);
     free(sram->cells);
     free(sram);
     return 0;
 }
 
+/* EN: Validate call pins, load SRAM and optionally open its inspection export.
+ * Return NULL when the model cannot be initialized.
+ * RU: Проверяет выводы call, загружает SRAM и при необходимости открывает файл инспекции.
+ * Возвращает NULL при ошибке инициализации модели. */
 static Sram *sram_open(vpiHandle call)
 {
     vpiHandle ports[PORT_COUNT];
@@ -127,7 +250,8 @@ static Sram *sram_open(vpiHandle call)
         return NULL;
     }
     memcpy(sram->ports, ports, sizeof ports);
-    sram->words = ((unsigned)data_bits + 31) / 32;
+    sram->data_bits = (unsigned)data_bits;
+    sram->words = (sram->data_bits + 31) / 32;
     sram->address_mask = (1u << address_bits) - 1;
     if (!image_load(image, sram_image_write, sram)) {
         free(sram->cells);
@@ -146,6 +270,7 @@ static Sram *sram_open(vpiHandle call)
     }
     vpi_free_object(callback);
     vpi_put_userdata(call, sram);
+    memory_inspection_open(&sram->inspection);
     return sram;
 }
 
@@ -157,7 +282,10 @@ static int scalar(vpiHandle port)
     return value.value.scalar;
 }
 
-/* The HDL adapter only connects pins. Storage and four-state bus behavior live here. */
+/* EN: Service the SRAM bus and record changed writes when inspection is enabled.
+ * unused is the VPI callback argument. Return zero to VPI.
+ * RU: Обслуживает шину SRAM и отслеживает изменившие данные записи при инспекции.
+ * unused — аргумент вызова VPI. Возвращает VPI ноль. */
 static PLI_INT32 sram_update(PLI_BYTE8 *unused)
 {
     (void)unused;
@@ -183,8 +311,18 @@ static PLI_INT32 sram_update(PLI_BYTE8 *unused)
     s_vpi_vecval drive[2] = {{0, -1}, {0, -1}}; /* High impedance. */
     if (chip == vpi0 && write == vpi0 && cell) {
         vpi_get_value(sram->ports[DATA], &value);
+        SramCell before = *cell;
         memcpy(cell->words, value.value.vector, sram->words * sizeof drive[0]);
         cell->written = 1;
+        if (sram->inspection.file)
+        {
+            unsigned bits = sram->data_bits;
+            uint64_t mask = UINT64_MAX >> (64 - bits);
+            MemoryChange change = {.address = address};
+            sram_inspection_word(&before, mask, &change.before, &change.before_unknown);
+            sram_inspection_word(cell, mask, &change.after, &change.after_unknown);
+            memory_inspection_record(&sram->inspection, change);
+        }
     } else if (chip == vpi0 && write == vpi1 && output == vpi0) {
         if (cell && cell->written)
             memcpy(drive, cell->words, sram->words * sizeof drive[0]);
@@ -201,6 +339,44 @@ static PLI_INT32 sram_update(PLI_BYTE8 *unused)
     return 0;
 }
 
+/* EN: Export allocated storage cells under model with a logical capacity in bytes.
+ * RU: Сохраняет выделенные ячейки storage для model с логической ёмкостью capacity в байтах. */
+static void memory_inspection_export_ddr(MemoryInspection *inspection, const char *model,
+                                         const Ddr4 *storage, unsigned capacity)
+{
+    FILE *file = inspection->file;
+    if (!file)
+        return;
+
+    fprintf(file, "GEANY-MEMORY 1 %s %u 8\n", model, capacity);
+    for (unsigned slot = 0; slot < DDR4_CAPACITY; ++slot)
+    {
+        const Ddr4Cell *cell = &storage->cells[slot];
+        if (cell->used)
+            fprintf(file, "W %" PRIx32 " %x %x\n", cell->key,
+                    (unsigned)cell->data, (unsigned)cell->unknown);
+    }
+    memory_inspection_close(inspection);
+}
+
+/* EN: Store sampled data in cell, treating a newly allocated cell as unknown in inspection.
+ * RU: Записывает data в cell. Для инспекции новая ячейка existed=false считается неопределённой. */
+static void memory_inspection_ddr_write(MemoryInspection *inspection, Ddr4Cell *cell,
+                                        s_vpi_vecval data, int existed)
+{
+    MemoryChange change = {
+        .address = cell->key,
+        .before = existed ? cell->data : 255,
+        .before_unknown = existed ? cell->unknown : 255,
+        .after = (uint8_t)data.aval,
+        .after_unknown = (uint8_t)data.bval
+    };
+    cell->data = (uint8_t)data.aval;
+    cell->unknown = (uint8_t)data.bval;
+    if (inspection->file)
+        memory_inspection_record(inspection, change);
+}
+
 enum {
     D_CK, D_RESET, D_CKE, D_CS, D_ACT, D_ADDRESS, D_BA, D_BG,
     D_DATA, D_DQS, D_MASK, D_READ_LATENCY, D_WRITE_LATENCY, D_DRIVE, D_STROBE, D_COUNT
@@ -208,6 +384,7 @@ enum {
 
 typedef struct {
     Ddr4 device;
+    MemoryInspection inspection;
     vpiHandle ports[D_COUNT];
     vpiHandle cas_n, we_n;
     unsigned read_latency, write_latency, generation;
@@ -216,9 +393,17 @@ typedef struct {
     int strobe_out;
 } Ddr4Vpi;
 
+/* EN: Export and free the DDR1–DDR4 state from callback.
+ * RU: Сохраняет отчёт и освобождает состояние DDR1–DDR4 из callback. */
 static PLI_INT32 ddr4_free(p_cb_data callback)
 {
-    free(callback->user_data);
+    Ddr4Vpi *state = (Ddr4Vpi *)callback->user_data;
+    char model[8];
+    snprintf(model, sizeof model, "DDR%u", state->generation);
+    const unsigned address_bits[] = {0, 27, 28, 30, 31};
+    memory_inspection_export_ddr(&state->inspection, model, &state->device,
+                                 1u << address_bits[state->generation]);
+    free(state);
     return 0;
 }
 
@@ -321,6 +506,7 @@ static Ddr4Vpi *ddr_open(vpiHandle call, unsigned generation)
     }
     vpi_free_object(callback);
     vpi_put_userdata(call, state);
+    memory_inspection_open(&state->inspection);
     return state;
 }
 
@@ -410,11 +596,11 @@ static PLI_INT32 ddr_update(PLI_BYTE8 *user_data)
     }
     if (device->mode == DDR4_WRITE && strobe_edge && device->cycle >= device->due) {
         if (scalar(state->ports[D_MASK]) == (separate_commands ? vpi0 : vpi1)) {
+            int existed = !state->inspection.file || ddr4_cell(device, 0) != NULL;
             Ddr4Cell *cell = ddr4_cell(device, 1);
             if (cell) {
                 s_vpi_vecval data = vector_word(state->ports[D_DATA]);
-                cell->data = data.aval;
-                cell->unknown = data.bval;
+                memory_inspection_ddr_write(&state->inspection, cell, data, existed);
             } else {
                 vpi_printf("Geany DDR%u: functional storage limit reached.\n", generation);
                 vpi_control(vpiFinish, 1);
@@ -429,6 +615,7 @@ enum { SPI_CLOCK, SPI_SELECT, SPI_MOSI, SPI_DRIVE, SPI_PORTS };
 
 typedef struct {
     SpiMemory memory;
+    MemoryInspection inspection;
     vpiHandle ports[SPI_PORTS];
     unsigned bits, input;
     int clock, drive;
@@ -443,14 +630,22 @@ static int spi_image_write(void *data, uint32_t address, uint64_t value)
     return 1;
 }
 
+/* EN: Export and free the SPI device associated with callback.
+ * RU: Сохраняет отчёт и освобождает устройство SPI из callback. */
 static PLI_INT32 spi_free(p_cb_data callback)
 {
     SpiVpi *state = (SpiVpi *)callback->user_data;
+    const char *models[] = {"", "SPI-NOR", "SPI-NAND", "SPI-EEPROM", "SPI-PSRAM"};
+    memory_inspection_export_bytes(&state->inspection, models[state->memory.kind],
+                                   state->memory.bytes, state->memory.size,
+                                   state->memory.kind == SPI_PSRAM, 0);
     free(state->memory.bytes);
     free(state);
     return 0;
 }
 
+/* EN: Initialize the device on call, including its optional inspection. Return NULL on failure.
+ * RU: Инициализирует устройство для call и при необходимости инспекцию. При ошибке возвращает NULL. */
 static SpiVpi *spi_open(vpiHandle call, unsigned kind)
 {
     vpiHandle pins[SPI_PORTS];
@@ -497,6 +692,12 @@ static SpiVpi *spi_open(vpiHandle call, unsigned kind)
     }
     vpi_free_object(callback);
     vpi_put_userdata(call, state);
+    memory_inspection_open(&state->inspection);
+    if (state->inspection.file)
+    {
+        state->memory.changed = memory_inspection_byte;
+        state->memory.inspection = &state->inspection;
+    }
     return state;
 }
 
@@ -542,6 +743,7 @@ enum { I2C_CLOCK, I2C_SDA, I2C_TARGET, I2C_DRIVE, I2C_PORTS };
 
 typedef struct {
     I2cEeprom device;
+    MemoryInspection inspection;
     vpiHandle ports[I2C_PORTS];
 } I2cVpi;
 
@@ -554,12 +756,19 @@ static int i2c_image_write(void *data, uint32_t address, uint64_t value)
     return 1;
 }
 
+/* EN: Export and free the EEPROM associated with callback.
+ * RU: Сохраняет отчёт и освобождает EEPROM из callback. */
 static PLI_INT32 i2c_free(p_cb_data callback)
 {
-    free(callback->user_data);
+    I2cVpi *state = (I2cVpi *)callback->user_data;
+    memory_inspection_export_bytes(&state->inspection, "I2C-EEPROM",
+                                   state->device.bytes, I2C_EEPROM_SIZE, 0, 0);
+    free(state);
     return 0;
 }
 
+/* EN: Initialize the device on call, including its optional inspection. Return NULL on failure.
+ * RU: Инициализирует устройство для call и при необходимости инспекцию. При ошибке возвращает NULL. */
 static I2cVpi *i2c_open(vpiHandle call)
 {
     vpiHandle pins[I2C_PORTS];
@@ -602,6 +811,12 @@ static I2cVpi *i2c_open(vpiHandle call)
     }
     vpi_free_object(callback);
     vpi_put_userdata(call, state);
+    memory_inspection_open(&state->inspection);
+    if (state->inspection.file)
+    {
+        state->device.changed = memory_inspection_byte;
+        state->device.inspection = &state->inspection;
+    }
     return state;
 }
 
@@ -640,6 +855,7 @@ enum { SDR_CK, SDR_CKE, SDR_CS, SDR_RAS, SDR_CAS, SDR_WE, SDR_A, SDR_BA, SDR_DQ,
 
 typedef struct {
     Sdram ram;
+    MemoryInspection inspection;
     vpiHandle pins[SDR_PORTS];
     int clock;
 } SdramDevice;
@@ -656,9 +872,25 @@ static int sdram_preload(void *data, uint32_t address, uint64_t value)
     return 1;
 }
 
+/* EN: Export and free SDRAM associated with callback.
+ * RU: Сохраняет отчёт и освобождает SDRAM из callback. */
 static PLI_INT32 sdram_free(p_cb_data callback)
 {
-    free(callback->user_data);
+    SdramDevice *device = (SdramDevice *)callback->user_data;
+    FILE *file = device->inspection.file;
+    if (file)
+    {
+        fprintf(file, "GEANY-MEMORY 1 SDRAM %u 16\n", 1u << 24);
+        for (unsigned slot = 0; slot < SDRAM_CELLS; ++slot)
+        {
+            const SdramWord *word = &device->ram.words[slot];
+            if (word->tag)
+                fprintf(file, "W %" PRIx32 " %x %x\n", word->tag - 1,
+                        (unsigned)word->data, (unsigned)word->unknown);
+        }
+        memory_inspection_close(&device->inspection);
+    }
+    free(device);
     return 0;
 }
 
@@ -701,6 +933,7 @@ static SdramDevice *sdram_open(vpiHandle call)
     }
     vpi_free_object(callback);
     vpi_put_userdata(call, device);
+    memory_inspection_open(&device->inspection);
     return device;
 }
 
@@ -741,8 +974,20 @@ static PLI_INT32 sdram_update(PLI_BYTE8 *unused)
             if (!word)
                 goto fail;
             s_vpi_vecval data = vector_word(p[SDR_DQ]);
+            uint16_t before = word->data, before_unknown = word->unknown;
             word->data = (word->data & ~lanes) | (data.aval & lanes);
             word->unknown = (word->unknown & ~lanes) | (data.bval & lanes);
+            if (device->inspection.file)
+            {
+                MemoryChange change = {
+                    .address = word->tag - 1,
+                    .before = before,
+                    .before_unknown = before_unknown,
+                    .after = word->data,
+                    .after_unknown = word->unknown
+                };
+                memory_inspection_record(&device->inspection, change);
+            }
         }
         if (++ram->beat == ram->length)
             sdram_end(ram);

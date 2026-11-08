@@ -16,6 +16,8 @@ typedef struct {
     uint8_t page[I2C_EEPROM_PAGE], dirty[I2C_EEPROM_PAGE];
     unsigned target, address, stage, phase, next, bits, input;
     int clock, data, pull_low, read_only;
+    void (*changed)(void *, unsigned, uint8_t, uint8_t);
+    void *inspection;
 } I2cEeprom;
 
 static void i2c_eeprom_init(I2cEeprom *device, unsigned address)
@@ -66,8 +68,15 @@ static int i2c_eeprom_edge(I2cEeprom *device, int clock, int data)
         if (data && !device->read_only && device->stage == I2C_DATA) {
             unsigned base = device->address & ~(I2C_EEPROM_PAGE - 1u);
             for (unsigned i = 0; i < I2C_EEPROM_PAGE; i++)
-                if (device->dirty[i])
-                    device->bytes[base + i] = device->page[i];
+            {
+                if (!device->dirty[i])
+                    continue;
+                uint8_t before = device->bytes[base + i];
+                uint8_t after = device->page[i];
+                device->bytes[base + i] = after;
+                if (device->changed && before != after)
+                    device->changed(device->inspection, base + i, before, after);
+            }
         }
         memset(device->dirty, 0, sizeof device->dirty);
         device->phase = data ? I2C_IDLE : I2C_RECEIVE;
