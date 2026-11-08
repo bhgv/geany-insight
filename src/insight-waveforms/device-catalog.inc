@@ -109,6 +109,9 @@ static const DevicePreset device_presets[] = {
      "CK=ck|RESET#=reset_n|CKE=cke|CS#=cs_n|ACT#=act_n|A=a|BA=ba|"
      "BG=bg|DQ=dq|DQS=dqs|DM#=dm_n|Read latency=3|Write latency=2",
      "o1|o1|o1|o1|o1|o17|o2|o2|b8|b1|o1", 5, FALSE, "DDR4", DEVICE_MEMORY, (1u << DEVICE_MEMORY)},
+    {"ddr5",
+     "CK=ck|RESET#=reset_n|CS#=cs_n|CA=ca|DQ=dq|DQS=dqs|DM#=dm_n|Read latency=3|Write latency=2",
+     "o1|o1|o1|o14|b8|b1|o1", 3, FALSE, "DDR5", DEVICE_MEMORY, (1u << DEVICE_MEMORY)},
     {"spi-nor", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", 1, FALSE, "SPI NOR", DEVICE_SPI,
      (1u << DEVICE_SPI) | (1u << DEVICE_MEMORY)},
     {"spi-nand", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", 1, FALSE, "SPI NAND", DEVICE_SPI,

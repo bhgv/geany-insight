@@ -31,8 +31,8 @@ static guint port_browser_pin_mask(gchar **args, gint argc)
     for (guint i = 0; i < G_N_ELEMENTS(single); i++)
         if (!strcmp(kind, single[i]))
             return 2;
-    const gchar *memories[] = {"sram", "parallel-psram", "sdram", "ddr1", "ddr2", "ddr3", "ddr4"};
-    const guint pins[] = {5, 7, 10, 11, 11, 12, 11};
+    const gchar *memories[] = {"sram", "parallel-psram", "sdram", "ddr1", "ddr2", "ddr3", "ddr4", "ddr5"};
+    const guint pins[] = {5, 7, 10, 11, 11, 12, 11, 7};
     G_STATIC_ASSERT(G_N_ELEMENTS(memories) == G_N_ELEMENTS(pins));
     for (guint i = 0; i < G_N_ELEMENTS(memories); i++)
         if (!strcmp(kind, memories[i]))

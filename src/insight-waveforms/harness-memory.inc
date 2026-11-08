@@ -203,3 +203,41 @@ static gboolean simulation_port_sdram(gchar **args, GString *body, GString *conn
     simulation_memory_argument(body, images, args[7]);
     return TRUE;
 }
+
+/* EN: Validate DDR5 args and add CA/DQ/DQS wiring to body and connections.
+ * ports tracks claimed pins. images supplies an optional preload keyed by CA.
+ * RU: Проверяет args DDR5 и добавляет CA/DQ/DQS в body и connections.
+ * ports учитывает занятые выводы. images содержит необязательный образ по ключу CA. */
+static gboolean simulation_port_ddr5(gchar **args, GString *body, GString *connections,
+                                     GHashTable *ports, GHashTable *images)
+{
+    const guint widths[] = {1, 1, 1, 14, 8, 1, 1};
+    guint64 read_latency, write_latency;
+    if (g_hash_table_size(ports) > 128 - G_N_ELEMENTS(widths) ||
+        !g_ascii_string_to_unsigned(args[8], 10, 1, 64, &read_latency, NULL) ||
+        !g_ascii_string_to_unsigned(args[9], 10, 1, 64, &write_latency, NULL))
+        return FALSE;
+    for (guint i = 1; i <= G_N_ELEMENTS(widths); i++)
+    {
+        if (!simulation_port_name(args[i]) || g_hash_table_contains(ports, args[i]))
+            return FALSE;
+        for (guint j = 1; j < i; j++)
+            if (!strcmp(args[i], args[j]))
+                return FALSE;
+    }
+
+    guint id = g_hash_table_size(ports);
+    for (guint i = 0; i < G_N_ELEMENTS(widths); i++)
+        simulation_port_connect(body, connections, ports, args[i + 1], widths[i], TRUE);
+    g_string_append_printf(body,
+        "reg [7:0] ddr5_dq%u='z; reg ddr5_dqs%u=1'bz;\n"
+        "assign pin%u=ddr5_dq%u; assign pin%u=ddr5_dqs%u;\n"
+        "always @(pin%u or pin%u or pin%u)\n  $geany_ddr5(",
+        id, id, id + 4, id, id + 5, id, id, id + 1, id + 5);
+    for (guint i = 0; i < G_N_ELEMENTS(widths); i++)
+        g_string_append_printf(body, "pin%u,", id + i);
+    g_string_append_printf(body, "%" G_GUINT64_FORMAT ",%" G_GUINT64_FORMAT ",ddr5_dq%u,ddr5_dqs%u",
+                           read_latency, write_latency, id, id);
+    simulation_memory_argument(body, images, args[4]);
+    return TRUE;
+}

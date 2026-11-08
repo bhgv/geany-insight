@@ -198,6 +198,7 @@ static void simulation_memory_defaults(gchar ***arguments, gint *count)
         {"ddr2", "ck cke cs_n ras_n cas_n we_n a ba dq dqs dm 3 2", 11},
         {"ddr3", "ck reset_n cke cs_n ras_n cas_n we_n a ba dq dqs dm 3 2", 12},
         {"ddr4", "ck reset_n cke cs_n act_n a ba bg dq dqs dm_n 3 2", 11},
+        {"ddr5", "ck reset_n cs_n ca dq dqs dm_n 3 2", 7},
         {"spi-nor", "sck cs_n mosi miso", 4},
         {"spi-nand", "sck cs_n mosi miso", 4},
         {"spi-eeprom", "sck cs_n mosi miso", 4},

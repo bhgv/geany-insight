@@ -520,6 +520,20 @@ def check_windowless_helpers(prefix, service):
             require(subsystem == 2, f"Console window enabled for {helper.name}")
 
 
+# EN: Run the DDR5 fixture with compiler/runtime and check its result in directory.
+# RU: Запускает тест DDR5 через compiler/runtime и проверяет результат в directory.
+def check_ddr5_device(compiler, runtime, fixtures, directory, environment):
+    compile_design(compiler, directory, [fixtures / "ddr5_device_tb.sv"], environment)
+    (directory / "ddr5.hex").write_text(
+        "@091a7420 a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 aa ab ac ad ae af\n",
+        encoding="ascii",
+    )
+    modules = runtime.parent.parent / "lib" / "ivl"
+    report = capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
+                              "simulation.vvp"], directory, "ddr5", environment)
+    require("DDR5 device passed" in report, "Built-in DDR5 test did not finish")
+
+
 def check_ddr4_device(compiler, runtime, fixtures, directory, environment):
     compile_design(compiler, directory, [fixtures / "ddr4_device_tb.sv"], environment)
     modules = runtime.parent.parent / "lib" / "ivl"
@@ -677,6 +691,7 @@ def main():
         ("spi-memory", lambda directory: check_spi_memory(compiler, runtime, fixtures, directory, environment)),
         ("memory-image", lambda directory: check_memory_image(compiler, runtime, fixtures, directory, environment)),
         ("ddr1-device", lambda directory: check_ddr1_device(compiler, runtime, fixtures, directory, environment)),
+        ("ddr5-device", lambda directory: check_ddr5_device(compiler, runtime, fixtures, directory, environment)),
         ("ddr4-device", lambda directory: check_ddr4_device(compiler, runtime, fixtures, directory, environment)),
         ("editor", lambda directory: check_editor(editor, directory, environment)),
         ("breakpoint", lambda directory: check_breakpoint(compiler, runtime, fixtures, directory, environment)),

@@ -410,6 +410,32 @@ individually. For example, `sram - - - - - 12` keeps 8-bit data and uses
 SRAM, `a` for DDR and `cs_n` for SPI. With a custom port name, use that
 name instead.
 
+## Built-in functional DDR5 x8
+
+Choose **DDR5** in **Add Test Device…**. Connect the true CK and DQS legs,
+RESET#, CS#, CA[13:0], DQ[7:0] and DM#. The model implements ACTIVATE,
+READ, WRITE and PRECHARGE for one rank with 32 banks, 16 row bits and
+10 column bits. It uses fixed BL16 and supports masking and auto-precharge.
+On a two-cycle command, CS# is low on the first cycle and high on the second.
+The CA layout follows the [DDR5 command truth table](https://www.farnell.com/datasheets/3980285.pdf).
+
+```text
+memory-image ca "ddr5.hex"
+ddr5 ck reset_n cs_n ca dq dqs dm_n
+```
+
+Images contain bytes at addresses `(row << 15) | (bank << 10) | column`,
+where `bank = (BG << 2) | BA`. Key the image by the actual CA port name.
+The sparse model stores up to 65,536 bytes. Unwritten bytes read as X.
+The functional defaults are 3 CK cycles for read and 2 for write, counted
+from the second CA cycle. They can be overridden in the wizard or rule.
+
+The adapter uses single-ended CK and DQS. For writes, the first DQS
+transition at or after the configured latency counts as the first data
+beat. Mode registers, training, refresh timing, strobe preamble and
+postamble, differential signaling and pipelined requests are outside
+this model.
+
 ## Built-in functional DDR4 x8
 
 ```text

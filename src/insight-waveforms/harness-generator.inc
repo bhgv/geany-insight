@@ -68,6 +68,11 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         else if (valid && count == 3 && !strcmp(args[0], "memory-image"))
             valid = simulation_port_name(args[1]) && !g_hash_table_contains(ports, args[1]) &&
                     simulation_memory_image(images, args[1], args[2], directory, error);
+        else if (valid && count == 10 && !strcmp(args[0], "ddr5"))
+        {
+            valid = simulation_port_ddr5(args, body, connections, ports, images);
+            attached_images += valid && g_hash_table_contains(images, args[4]);
+        }
         else if (valid && count == 11 && !strcmp(args[0], "sdram"))
         {
             valid = simulation_port_sdram(args, body, connections, ports, images);
