@@ -191,6 +191,7 @@ static void simulation_memory_defaults(gchar ***arguments, gint *count)
         const gchar *name, *defaults;
         gint pins;
     } presets[] = {
+        {"parallel-psram", "addr dq ce_n we_n oe_n lb_n ub_n 20", 7},
         {"sram", "addr dq ce_n we_n oe_n 16 8", 5},
         {"sdram", "ck cke cs_n ras_n cas_n we_n a ba dq dqm", 10},
         {"ddr1", "ck cke cs_n ras_n cas_n we_n a ba dq dqs dm 2 1", 11},

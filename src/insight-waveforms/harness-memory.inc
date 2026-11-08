@@ -90,6 +90,44 @@ static gboolean simulation_port_sram(gchar **args, GString *body, GString *conne
     return TRUE;
 }
 
+/* EN: Validate PSRAM args and append its x16 wiring to body and connections.
+ * ports tracks assigned pins and images supplies the optional HEX preload.
+ * RU: Проверяет args PSRAM и добавляет соединения x16 в body и connections.
+ * ports учитывает назначенные выводы, images задаёт необязательный HEX-образ. */
+static gboolean simulation_port_parallel_psram(gchar **args, GString *body, GString *connections,
+                                               GHashTable *ports, GHashTable *images)
+{
+    guint64 address_width;
+    if (g_hash_table_size(ports) > 121 ||
+        !g_ascii_string_to_unsigned(args[8], 10, 1, 20, &address_width, NULL))
+        return FALSE;
+    for (guint i = 1; i <= 7; i++)
+    {
+        if (!simulation_port_name(args[i]) || g_hash_table_contains(ports, args[i]))
+            return FALSE;
+        for (guint j = 1; j < i; j++)
+            if (!strcmp(args[i], args[j]))
+                return FALSE;
+    }
+
+    const guint64 widths[] = {address_width, 16, 1, 1, 1, 1, 1};
+    guint id = g_hash_table_size(ports);
+    for (guint i = 0; i < G_N_ELEMENTS(widths); i++)
+        simulation_port_connect(body, connections, ports, args[i + 1], widths[i], TRUE);
+    g_string_append_printf(body,
+        "reg [15:0] psram_drive%u = 'z;\n"
+        "assign pin%u = psram_drive%u;\n"
+        "always @(", id, id + 1, id);
+    for (guint i = 0; i < G_N_ELEMENTS(widths); i++)
+        g_string_append_printf(body, "%spin%u", i ? " or " : "", id + i);
+    g_string_append(body, ")\n  $geany_parallel_psram(");
+    for (guint i = 0; i < G_N_ELEMENTS(widths); i++)
+        g_string_append_printf(body, "pin%u,", id + i);
+    g_string_append_printf(body, "psram_drive%u", id);
+    simulation_memory_argument(body, images, args[1]);
+    return TRUE;
+}
+
 /* EN: Validate DDR args for generation. Write HDL to body and connections using ports and preload images.
  * RU: Проверяет args DDR поколения generation. Формирует HDL в body и connections с выводами ports и образами images. */
 static gboolean simulation_port_ddr(gchar **args, GString *body, GString *connections, GHashTable *ports,

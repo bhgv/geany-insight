@@ -118,7 +118,8 @@ static gboolean simulation_interactive(WaveSimulation *run, const gchar *directo
                                   "-i",         "-s", "simulation.vvp", NULL};
     gboolean devices =
         run->port_harness &&
-        (strstr(run->port_harness, "$geany_sram(") || strstr(run->port_harness, "$geany_sdram(") ||
+        (strstr(run->port_harness, "$geany_parallel_psram(") ||
+         strstr(run->port_harness, "$geany_sram(") || strstr(run->port_harness, "$geany_sdram(") ||
          strstr(run->port_harness, "$geany_ddr1(") || strstr(run->port_harness, "$geany_ddr2(") || strstr(run->port_harness, "$geany_ddr3(") ||
          strstr(run->port_harness, "$geany_ddr4(") || strstr(run->port_harness, "$geany_spi_") ||
          strstr(run->port_harness, "$geany_i2c_") || strstr(run->port_harness, "$geany_usart("));

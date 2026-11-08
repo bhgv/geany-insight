@@ -392,6 +392,7 @@ spi-nor
 
 | Preset | Default port order | Parameters |
 | --- | --- | --- |
+| `parallel-psram` | `addr dq ce_n we_n oe_n lb_n ub_n` | 20 address bits, 16 data bits |
 | `sram` | `addr dq ce_n we_n oe_n` | 16 address bits, 8 data bits |
 | `sdram` | `ck cke cs_n ras_n cas_n we_n a ba dq dqm` | x16, BL1, CAS 3 |
 | `ddr1` | `ck cke cs_n ras_n cas_n we_n a ba dq dqs dm` | RL 2, WL 1 CK cycles, BL4 |
@@ -541,6 +542,25 @@ of storage. A page write wraps within the page and commits on STOP.
 Completion is immediate. The profile models one EEPROM on each
 configured bus pair.
 
+
+## Parallel PSRAM x16
+
+Choose **Parallel PSRAM x16** in **Add Test Device…**. The C model provides
+an asynchronous, separate address and data bus. Connect active-low CE#, WE#,
+OE#, LB# and UB#. LB# selects DQ[7:0] and UB# selects DQ[15:8]. Disabled
+byte lanes are high impedance on reads and preserve their contents on writes.
+An enabled, unwritten byte reads as X. Address width defaults to 20 bits
+(1 Miword, 2 MiB) and can be set to 1–20 bits.
+
+```text
+memory-image addr "psram.hex"
+parallel-psram addr dq ce_n we_n oe_n lb_n ub_n
+```
+
+HEX image addresses count 16-bit words. For example, `@10 beef` initializes
+word `0x10`. The functional model covers asynchronous accesses with no
+access delay. Page and burst modes, WAIT, configuration registers and
+refresh timing are outside this model.
 
 ## SPI PSRAM
 

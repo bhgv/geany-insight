@@ -80,6 +80,10 @@ static const DevicePreset device_presets[] = {
      "i1|o1|i1", -1, FALSE, "USART (testbench clock)", DEVICE_UART, (1u << DEVICE_UART)},
     {"uart", "RX=rx|TX=tx|Baud=115200|Console=console", "i1|o1", -1, FALSE, "UART console", DEVICE_UART,
      (1u << DEVICE_UART)},
+    {"parallel-psram",
+     "Address=addr|Data=dq|CE#=ce_n|WE#=we_n|OE#=oe_n|LB#=lb_n|UB#=ub_n|Address bits=20",
+     "o@7|b16|o1|o1|o1|o1|o1", 0, FALSE, "Parallel PSRAM x16", DEVICE_MEMORY,
+     (1u << DEVICE_MEMORY)},
     {"sram",
      "Address=addr|Data=dq|CE#=ce_n|"
      "WE#=we_n|OE#=oe_n|Address bits=16|Data bits=8",

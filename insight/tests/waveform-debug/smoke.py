@@ -561,6 +561,17 @@ def check_spi_memory(compiler, runtime, fixtures, directory, environment):
     require("SPI memory test passed" in report, "SPI memory test did not finish")
 
 
+# EN: Run the parallel PSRAM fixture with compiler/runtime and a high-address image.
+# RU: Запускает тест параллельной PSRAM через compiler/runtime с образом по старшему адресу.
+def check_parallel_psram(compiler, runtime, fixtures, directory, environment):
+    compile_design(compiler, directory, [fixtures / "parallel_psram_tb.sv"], environment)
+    (directory / "psram-parallel.hex").write_text("@fffff beef\n", encoding="ascii")
+    modules = runtime.parent.parent / "lib" / "ivl"
+    report = capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
+                              "simulation.vvp"], directory, "parallel-psram", environment)
+    require("Parallel PSRAM device passed" in report, "Parallel PSRAM test did not complete")
+
+
 # EN: Run the USART fixture with compiler/runtime and verify both sample edges.
 # RU: Запускает тест USART через compiler/runtime и проверяет оба фронта.
 def check_usart(compiler, runtime, fixtures, directory, environment):
@@ -657,6 +668,7 @@ def main():
     environment["PATH"] = str(binaries) + os.pathsep + environment.get("PATH", "")
     logs = args.logs.resolve()
     checks = [
+        ("parallel-psram", lambda directory: check_parallel_psram(compiler, runtime, fixtures, directory, environment)),
         ("usart", lambda directory: check_usart(compiler, runtime, fixtures, directory, environment)),
         ("bus-controllers", lambda directory: check_bus_controllers(compiler, runtime, fixtures, directory, environment)),
         ("i2c-eeprom", lambda directory: check_i2c_eeprom(compiler, runtime, fixtures, directory, environment)),

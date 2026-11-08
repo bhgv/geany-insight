@@ -73,6 +73,11 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             valid = simulation_port_sdram(args, body, connections, ports, images);
             attached_images += valid && g_hash_table_contains(images, args[7]);
         }
+        else if (valid && count == 9 && !strcmp(args[0], "parallel-psram"))
+        {
+            valid = simulation_port_parallel_psram(args, body, connections, ports, images);
+            attached_images += valid && g_hash_table_contains(images, args[1]);
+        }
         else if (valid && count == 8 && !strcmp(args[0], "sram"))
         {
             valid = simulation_port_sram(args, body, connections, ports, images);

@@ -761,6 +761,7 @@ fail:
 
 #include "geany-bus-controller.h"
 #include "geany-usart.h"
+#include "geany-parallel-psram.h"
 
 /* EN: Register all built-in VPI system tasks at simulator startup.
  * RU: Регистрирует системные задачи встроенных устройств при запуске симулятора. */
@@ -821,6 +822,9 @@ static void register_devices(void)
     vpi_register_systf(&task);
     task.tfname = "$geany_usart";
     task.calltf = geany_usart_tick;
+    vpi_register_systf(&task);
+    task.tfname = "$geany_parallel_psram";
+    task.calltf = parallel_psram_update;
     vpi_register_systf(&task);
 }
 
