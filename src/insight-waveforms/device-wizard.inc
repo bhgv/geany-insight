@@ -179,6 +179,34 @@ static void port_browser_copy_view(PortBrowser *destination, const PortBrowser *
                                      destination->prefer_compatible);
 }
 
+/* EN: Insert the inferred DUT into a nonempty recipe if buffer has no module rule.
+ * RU: Добавляет найденный DUT в непустой рецепт buffer без правила module. */
+static void simulation_recipe_module(GtkTextBuffer *buffer)
+{
+    const gchar *module = g_object_get_data(G_OBJECT(buffer), "default-module");
+    if (!module)
+        return;
+    GtkTextIter start, end;
+    gtk_text_buffer_get_bounds(buffer, &start, &end);
+    gchar *recipe = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+    gchar **lines = g_strsplit(recipe, "\n", -1);
+    gboolean rules = FALSE, explicit_module = FALSE;
+    for (guint i = 0; lines[i]; ++i)
+    {
+        const gchar *line = g_strstrip(lines[i]);
+        rules |= *line && *line != '#';
+        explicit_module |= g_str_has_prefix(line, "module ") || g_str_has_prefix(line, "module\t");
+    }
+    if (rules && !explicit_module)
+    {
+        gchar *header = g_strdup_printf("module %s\n", module);
+        gtk_text_buffer_insert(buffer, &start, header, -1);
+        g_free(header);
+    }
+    g_strfreev(lines);
+    g_free(recipe);
+}
+
 /* EN: Open the device form from button using the parent port browser in data.
  * Preserve list preferences and append a validated rule on confirmation.
  * RU: Открывает форму по button, используя родительский список из data.
@@ -187,13 +215,26 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
 {
     PortBrowser *parent_browser = data;
     GtkTextBuffer *buffer = parent_browser->recipe;
+    GtkTextMark *edit_mark = g_object_get_data(G_OBJECT(button), "edit-rule");
+    gchar **saved_args = NULL;
+    gint saved_count = 0;
+    if (edit_mark)
+    {
+        GtkTextIter first, last;
+        gtk_text_buffer_get_iter_at_mark(buffer, &first, edit_mark);
+        last = first;
+        gtk_text_iter_forward_to_line_end(&last);
+        gchar *line = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
+        g_shell_parse_argv(line, &saved_count, &saved_args, NULL);
+        g_free(line);
+    }
     GtkWindow *parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
     DeviceForm form = {.entries = g_ptr_array_new(),
                        .directory = g_object_get_data(G_OBJECT(button), "source-directory")};
     GtkWidget *dialog =
-        gtk_dialog_new_with_buttons("Add Test Device", parent,
+        gtk_dialog_new_with_buttons(edit_mark ? "Edit Test Device" : "Add Test Device", parent,
                                     GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel",
-                                    GTK_RESPONSE_CANCEL, "_Insert Rule", GTK_RESPONSE_ACCEPT, NULL);
+                                    GTK_RESPONSE_CANCEL, edit_mark ? "_Apply" : "_Insert Rule", GTK_RESPONSE_ACCEPT, NULL);
     simulation_dialog_tools(
         dialog,
         "Find a device by name, regular expression or type. Pick a field, then double-click a "
@@ -237,6 +278,28 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     catalog.selection_changed =
         g_signal_connect(combo, "changed", G_CALLBACK(simulation_device_type), &form);
     device_catalog_filter(NULL, &catalog);
+    if (saved_args && gtk_combo_box_set_active_id(GTK_COMBO_BOX(combo), saved_args[0]))
+    {
+        guint count = MIN(form.entries->len, (guint)(saved_count - 1));
+        for (guint i = 0; i < count; ++i)
+            gtk_entry_set_text(GTK_ENTRY(form.entries->pdata[i]), saved_args[i + 1]);
+        gint preset = device_catalog_selected(GTK_COMBO_BOX(combo));
+        guint next = form.entries->len + 1;
+        if (preset >= 0 && device_presets[preset].script && form.file && next < (guint)saved_count)
+        {
+            gchar *native = g_filename_from_utf8(saved_args[next++], -1, NULL, NULL, NULL);
+            if (native)
+            {
+                gchar *path = insight_canonicalize_filename(native, form.directory);
+                gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(form.file), path);
+                g_free(path);
+                g_free(native);
+            }
+            if (form.reset && next < (guint)saved_count)
+                gtk_entry_set_text(GTK_ENTRY(form.reset), saved_args[next]);
+        }
+    }
+    g_strfreev(saved_args);
     gtk_widget_show_all(dialog);
     gint response;
     while ((response = insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog))) == GTK_RESPONSE_ACCEPT)
@@ -302,10 +365,20 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
             gtk_text_buffer_get_end_iter(buffer, &end);
             previous = end;
             gtk_text_buffer_begin_user_action(buffer);
-            if (gtk_text_iter_backward_char(&previous) && gtk_text_iter_get_char(&previous) != '\n')
+            if (edit_mark)
+            {
+                gtk_text_buffer_get_iter_at_mark(buffer, &end, edit_mark);
+                previous = end;
+                gtk_text_iter_forward_to_line_end(&previous);
+                if (!gtk_text_iter_is_end(&previous))
+                    gtk_text_iter_forward_char(&previous);
+                gtk_text_buffer_delete(buffer, &end, &previous);
+            }
+            else if (gtk_text_iter_backward_char(&previous) && gtk_text_iter_get_char(&previous) != '\n')
                 gtk_text_buffer_insert(buffer, &end, "\n", 1);
             gtk_text_buffer_insert(buffer, &end, rule->str, rule->len);
             gtk_text_buffer_insert(buffer, &end, "\n", 1);
+            simulation_recipe_module(buffer);
             gtk_text_buffer_end_user_action(buffer);
         }
         else

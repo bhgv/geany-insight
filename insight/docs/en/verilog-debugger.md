@@ -841,3 +841,15 @@ Icarus compilation diagnostics appear in **Messages**. The debugger
 opens the first available source location, scrolls to it, and selects it.
 Click another diagnostic to open and select its location. When the tool
 supplies only a line number, the whole line is selected.
+
+### Device sets
+
+In **Port Signals**, click a row in **Devices** to edit it in the wizard, or
+right-click to remove the rule. **Recipe** exposes the underlying text.
+**Save** exports a named set and remembers it for the current project and
+source set. **Load** opens a saved set and makes it the default for that
+context. **New** clears the current draft. If the current source declares
+one module, the editor fills in the missing `module` rule.
+
+For serial consoles, connect **Console TX → DUT RX** and **Console RX ← DUT TX**.
+Existing UART and USART recipes list the DUT's RX port first.

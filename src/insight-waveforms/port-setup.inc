@@ -4,6 +4,170 @@
  * RU: Окно настроек портов, сохранение и применение рецепта.
  */
 
+enum { PORT_SETUP_SAVE = 1, PORT_SETUP_LOAD, PORT_SETUP_NEW };
+
+/* EN: Return the sole module declared in source, ignoring comments and strings.
+ * RU: Возвращает единственный модуль из source, пропуская комментарии и строки. */
+static gchar *simulation_recipe_default_module(const gchar *source)
+{
+    if (!source)
+        return NULL;
+    GRegex *tokens = g_regex_new(
+        "//[^\\n]*|/\\*[\\s\\S]*?\\*/|\"(?:\\\\.|[^\"\\\\])*\"|"
+        "\\bmodule\\s+(?:(?:automatic|static)\\s+)?([A-Za-z_][A-Za-z0-9_$]*)", 0, 0, NULL);
+    GMatchInfo *match;
+    g_regex_match(tokens, source, 0, &match);
+    gchar *module = NULL;
+    while (g_match_info_matches(match))
+    {
+        gchar *name = g_match_info_fetch(match, 1);
+        if (*name && module)
+        {
+            g_clear_pointer(&module, g_free);
+            g_free(name);
+            break;
+        }
+        if (*name)
+            module = name;
+        else
+            g_free(name);
+        g_match_info_next(match, NULL);
+    }
+    g_match_info_free(match);
+    g_regex_unref(tokens);
+    return module;
+}
+
+/* EN: Rebuild the device list store from supported rules in buffer.
+ * RU: Обновляет список устройств store по поддерживаемым правилам buffer. */
+static void simulation_device_list_refresh(GtkTextBuffer *buffer, GtkListStore *store)
+{
+    gtk_list_store_clear(store);
+    GtkTextIter first, last;
+    gtk_text_buffer_get_bounds(buffer, &first, &last);
+    gchar *recipe = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
+    gchar **lines = g_strsplit(recipe, "\n", -1);
+    for (guint line = 0; lines[line]; ++line)
+    {
+        gchar **args = NULL;
+        if (!g_shell_parse_argv(lines[line], NULL, &args, NULL))
+            continue;
+        for (guint i = 0; i < G_N_ELEMENTS(device_presets); ++i)
+        {
+            if (strcmp(args[0], device_presets[i].rule))
+                continue;
+            gtk_list_store_insert_with_values(store, NULL, -1, 0, device_presets[i].title,
+                                              1, lines[line], 2, line, -1);
+            break;
+        }
+        g_strfreev(args);
+    }
+    g_strfreev(lines);
+    g_free(recipe);
+}
+
+/* EN: Edit the rule at path in tree via wizard. column is unused.
+ * RU: Редактирует правило по path в tree через wizard. column не используется. */
+static void simulation_device_list_edit(GtkTreeView *tree, GtkTreePath *path,
+                                        GtkTreeViewColumn *column, GtkWidget *wizard)
+{
+    (void)column;
+    GtkTreeModel *model = gtk_tree_view_get_model(tree);
+    GtkTreeIter row;
+    if (!gtk_tree_model_get_iter(model, &row, path))
+        return;
+    guint line;
+    gtk_tree_model_get(model, &row, 2, &line, -1);
+    GtkTextBuffer *buffer = g_object_get_data(G_OBJECT(wizard), "device-recipe");
+    GtkTextIter first;
+    gtk_text_buffer_get_iter_at_line(buffer, &first, line);
+    GtkTextMark *mark = gtk_text_buffer_create_mark(buffer, NULL, &first, TRUE);
+    g_object_set_data(G_OBJECT(wizard), "edit-rule", mark);
+    gtk_button_clicked(GTK_BUTTON(wizard));
+    g_object_set_data(G_OBJECT(wizard), "edit-rule", NULL);
+    gtk_text_buffer_delete_mark(buffer, mark);
+}
+
+/* EN: Remove the rule anchored by the mark on item from its recipe buffer.
+ * RU: Удаляет из рецепта правило, отмеченное меткой в item. */
+static void simulation_device_remove(GtkMenuItem *item, GtkTextBuffer *buffer)
+{
+    GtkTextMark *mark = g_object_get_data(G_OBJECT(item), "device-mark");
+    GtkTextIter first, last;
+    gtk_text_buffer_get_iter_at_mark(buffer, &first, mark);
+    last = first;
+    if (!gtk_text_iter_ends_line(&last))
+        gtk_text_iter_forward_to_line_end(&last);
+    if (!gtk_text_iter_is_end(&last))
+        gtk_text_iter_forward_char(&last);
+    gtk_text_buffer_delete(buffer, &first, &last);
+}
+
+/* EN: Delete mark when its menu item is disposed.
+ * RU: Удаляет mark при уничтожении пункта меню. */
+static void simulation_device_remove_mark(gpointer data)
+{
+    GtkTextMark *mark = data;
+    GtkTextBuffer *buffer = gtk_text_mark_get_buffer(mark);
+    if (buffer)
+        gtk_text_buffer_delete_mark(buffer, mark);
+    g_object_unref(mark);
+}
+
+/* EN: Open the removal menu for the device under event in tree.
+ * RU: Открывает меню удаления устройства под event в tree. */
+static gboolean simulation_device_menu(GtkTreeView *tree, GdkEventButton *event, GtkTextBuffer *buffer)
+{
+    GtkTreePath *path;
+    if (event->button != 3 ||
+        !gtk_tree_view_get_path_at_pos(tree, event->x, event->y, &path, NULL, NULL, NULL))
+        return FALSE;
+
+    GtkTreeModel *model = gtk_tree_view_get_model(tree);
+    GtkTreeIter row;
+    gboolean found = gtk_tree_model_get_iter(model, &row, path);
+    gtk_tree_path_free(path);
+    if (!found)
+        return FALSE;
+
+    guint line;
+    gtk_tree_model_get(model, &row, 2, &line, -1);
+    GtkTextIter first;
+    gtk_text_buffer_get_iter_at_line(buffer, &first, line);
+    GtkTextMark *mark = gtk_text_buffer_create_mark(buffer, NULL, &first, TRUE);
+    GtkWidget *menu = gtk_menu_new();
+    GtkWidget *remove = gtk_menu_item_new_with_label(insight_tr("Remove device"));
+    g_object_set_data_full(G_OBJECT(remove), "device-mark", g_object_ref(mark),
+                           simulation_device_remove_mark);
+    g_signal_connect_object(remove, "activate", G_CALLBACK(simulation_device_remove), buffer, 0);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), remove);
+    g_signal_connect_swapped(menu, "selection-done", G_CALLBACK(gtk_widget_destroy), menu);
+    gtk_widget_show_all(menu);
+    gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent *)event);
+    return TRUE;
+}
+
+/* EN: Choose a device-set path from parent in save or load mode.
+ * RU: Выбирает путь набора устройств из parent для сохранения или загрузки. */
+static gchar *simulation_recipe_choose(GtkWindow *parent, gboolean save)
+{
+    GtkWidget *chooser = gtk_file_chooser_dialog_new(
+        save ? "Save Device Set" : "Load Device Set", parent,
+        save ? GTK_FILE_CHOOSER_ACTION_SAVE : GTK_FILE_CHOOSER_ACTION_OPEN,
+        "_Cancel", GTK_RESPONSE_CANCEL, save ? "_Save" : "_Open", GTK_RESPONSE_ACCEPT, NULL);
+    g_object_ref_sink(chooser);
+    if (save)
+    {
+        gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(chooser), "devices.ports");
+        gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(chooser), TRUE);
+    }
+    gchar *path = insight_waveforms_run_setup_dialog(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT
+                    ? gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser)) : NULL;
+    gtk_widget_destroy(chooser);
+    g_object_unref(chooser);
+    return path;
+}
+
 /* EN: Edit the recipe saved at path in a child of parent. run supplies the compiler,
  * input sources, and include path. On cancellation, publish preprocessing errors.
  * On acceptance, optional output
@@ -26,6 +190,9 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     GtkWidget *dialog = gtk_dialog_new_with_buttons(
         "Port Signals", parent, GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
         harness ? "_Start Debugging" : "_Save for Next Run", GTK_RESPONSE_ACCEPT, NULL);
+    gtk_dialog_add_button(GTK_DIALOG(dialog), "_New", PORT_SETUP_NEW);
+    gtk_dialog_add_button(GTK_DIALOG(dialog), "_Load…", PORT_SETUP_LOAD);
+    gtk_dialog_add_button(GTK_DIALOG(dialog), "_Save…", PORT_SETUP_SAVE);
     simulation_dialog_tools(
         dialog,
         "Choose a module and add device rules, or leave the recipe empty to run an existing "
@@ -91,6 +258,8 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     GtkWidget *view = gtk_text_view_new();
     gtk_text_view_set_monospace(GTK_TEXT_VIEW(view), TRUE);
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+    g_object_set_data_full(G_OBJECT(buffer), "default-module",
+                           simulation_recipe_default_module(source_snapshot), g_free);
     g_object_set_data_full(G_OBJECT(dialog), "verilog-port-recipe", g_object_ref(buffer), g_object_unref);
     GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     GtkWidget *wizard = gtk_button_new_with_label("Add Test Device…");
@@ -121,7 +290,25 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
                            .recipe = buffer,
                            .recipe_view = GTK_TEXT_VIEW(view)};
     GtkWidget *panes = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
-    gtk_paned_pack1(GTK_PANED(panes), scroll, TRUE, FALSE);
+    GtkWidget *recipe_tabs = gtk_notebook_new();
+    GtkListStore *devices = gtk_list_store_new(3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT);
+    GtkWidget *device_list = gtk_tree_view_new_with_model(GTK_TREE_MODEL(devices));
+    gtk_tree_view_set_activate_on_single_click(GTK_TREE_VIEW(device_list), TRUE);
+    gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(device_list), -1, "Device",
+                                                gtk_cell_renderer_text_new(), "text", 0, NULL);
+    gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(device_list), -1, "Rule",
+                                                gtk_cell_renderer_text_new(), "text", 1, NULL);
+    GtkWidget *device_scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(device_scroll), device_list);
+    gtk_notebook_append_page(GTK_NOTEBOOK(recipe_tabs), device_scroll, gtk_label_new("Devices"));
+    gtk_notebook_append_page(GTK_NOTEBOOK(recipe_tabs), scroll, gtk_label_new("Recipe"));
+    simulation_device_list_refresh(buffer, devices);
+    g_signal_connect_object(buffer, "changed", G_CALLBACK(simulation_device_list_refresh), devices, 0);
+    g_object_unref(devices);
+    g_object_set_data(G_OBJECT(wizard), "device-recipe", buffer);
+    g_signal_connect(device_list, "row-activated", G_CALLBACK(simulation_device_list_edit), wizard);
+    g_signal_connect(device_list, "button-press-event", G_CALLBACK(simulation_device_menu), buffer);
+    gtk_paned_pack1(GTK_PANED(panes), recipe_tabs, TRUE, FALSE);
     gtk_paned_pack2(GTK_PANED(panes), port_browser_widget(&browser), TRUE, FALSE);
     gtk_paned_set_position(GTK_PANED(panes), 320);
     GtkWidget *diagram = gtk_button_new_with_label("Preview Diagram…");
@@ -137,8 +324,40 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 6);
     gtk_widget_show_all(dialog);
     gboolean accepted = FALSE;
-    while (insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+    gint response;
+    while ((response = insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog))) == GTK_RESPONSE_ACCEPT ||
+           response == PORT_SETUP_SAVE || response == PORT_SETUP_LOAD || response == PORT_SETUP_NEW)
     {
+        if (response == PORT_SETUP_NEW)
+        {
+            gtk_text_buffer_set_text(buffer, "", 0);
+            gtk_label_set_text(GTK_LABEL(status), "New device set.");
+            continue;
+        }
+        gchar *set_path = response == GTK_RESPONSE_ACCEPT ? NULL :
+            simulation_recipe_choose(GTK_WINDOW(dialog), response == PORT_SETUP_SAVE);
+        if (response != GTK_RESPONSE_ACCEPT && !set_path)
+            continue;
+        if (response == PORT_SETUP_LOAD)
+        {
+            gchar *loaded = NULL;
+            gsize length = 0;
+            gchar *directory = g_path_get_dirname(path);
+            if (g_file_get_contents(set_path, &loaded, &length, NULL) && length < 16385 &&
+                g_utf8_validate(loaded, length, NULL) && g_mkdir_with_parents(directory, 0700) == 0 &&
+                g_file_set_contents(path, loaded, length, NULL))
+            {
+                gtk_text_buffer_set_text(buffer, loaded, length);
+                gtk_label_set_text(GTK_LABEL(status), "Device set loaded and saved for this project.");
+            }
+            else
+                gtk_label_set_text(GTK_LABEL(status), "Cannot load or remember this device set.");
+            g_free(directory);
+            g_free(loaded);
+            g_free(set_path);
+            continue;
+        }
+        simulation_recipe_module(buffer);
         GtkTextIter first, last;
         gtk_text_buffer_get_bounds(buffer, &first, &last);
         gchar *recipe = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
@@ -148,21 +367,26 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
             g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_bytes_unref);
         gchar *generated = simulation_setup_harness(recipe, source_directory, sources, images, &error);
         gchar *directory = g_path_get_dirname(path);
-        if (!error && g_mkdir_with_parents(directory, 0700) == 0 &&
+        if (!error && strlen(recipe) < 16385 &&
+            (!set_path || g_file_set_contents(set_path, recipe, -1, &error)) &&
+            g_mkdir_with_parents(directory, 0700) == 0 &&
             g_file_set_contents(path, recipe, -1, &error))
         {
-            accepted = TRUE;
-            if (harness)
+            accepted = response == GTK_RESPONSE_ACCEPT;
+            if (!accepted)
+                gtk_label_set_text(GTK_LABEL(status), "Device setup saved.");
+            if (accepted && harness)
                 *harness = g_steal_pointer(&generated);
-            if (model_sources)
+            if (accepted && model_sources)
                 *model_sources = g_steal_pointer(&sources);
-            if (port_images)
+            if (accepted && port_images)
                 *port_images = g_steal_pointer(&images);
         }
-        if (!accepted)
+        else
             gtk_label_set_text(GTK_LABEL(status),
                                error ? error->message : "Cannot save the port recipe.");
         g_free(directory);
+        g_free(set_path);
         g_clear_pointer(&sources, g_ptr_array_unref);
         g_clear_pointer(&images, g_hash_table_unref);
         g_free(generated);

@@ -43,6 +43,7 @@ static void simulation_preview_harness(GtkButton *button, gpointer data)
 {
     GtkTextBuffer *buffer = data;
     GtkTextIter first, last;
+    simulation_recipe_module(buffer);
     gtk_text_buffer_get_bounds(buffer, &first, &last);
     gchar *recipe = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
     const gchar *directory = g_object_get_data(G_OBJECT(button), "source-directory");
@@ -436,6 +437,7 @@ static void simulation_preview_diagram(GtkButton *button, gpointer data)
 {
     PortBrowser *browser = data;
     GtkTextIter first, last;
+    simulation_recipe_module(browser->recipe);
     gtk_text_buffer_get_bounds(browser->recipe, &first, &last);
     gchar *recipe = gtk_text_buffer_get_text(browser->recipe, &first, &last, FALSE);
     const gchar *directory = g_object_get_data(G_OBJECT(button), "source-directory");
