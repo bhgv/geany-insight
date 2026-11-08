@@ -144,7 +144,7 @@ static gboolean simulation_memory_image(GHashTable *images, const gchar *anchor,
     gchar *native = g_filename_from_utf8(filename, -1, NULL, NULL, error);
     if (!native)
         return FALSE;
-    gchar *path = g_canonicalize_filename(native, directory);
+    gchar *path = insight_canonicalize_filename(native, directory);
     if (!g_file_test(path, G_FILE_TEST_IS_REGULAR))
     {
         g_set_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Device file must be a regular file: %s",

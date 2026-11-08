@@ -18,12 +18,12 @@ static void simulation_memory_finish(WaveSimulation *run, const gchar *directory
         gchar *name = g_strdup_printf("geany-memory-device-%u.dump", id);
         gchar *path = g_build_filename(directory, name, NULL);
         g_free(name);
-        GStatBuf stat;
+        GStatBuf report_stat;
         gchar *contents = NULL;
         gsize length = 0;
 
-        if (g_stat(path, &stat) == 0 && stat.st_size > 0 &&
-            stat.st_size <= MEMORY_REPORT_LIMIT &&
+        if (g_stat(path, &report_stat) == 0 && report_stat.st_size > 0 &&
+            report_stat.st_size <= MEMORY_REPORT_LIMIT &&
             g_file_get_contents(path, &contents, &length, NULL) &&
             g_str_has_prefix(contents, "GEANY-MEMORY 1 ") &&
             g_str_has_suffix(contents, "\nEND\n") &&

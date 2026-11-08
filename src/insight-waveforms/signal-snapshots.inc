@@ -217,7 +217,7 @@ static void signal_tables_follow_file(WaveSimulation *run)
 {
     GeanyDocument *doc = document_get_current();
     gchar *native = doc && doc->file_name ? utils_get_locale_from_utf8(doc->file_name) : NULL;
-    gchar *file = native ? g_canonicalize_filename(native, NULL) : NULL;
+    gchar *file = native ? insight_canonicalize_filename(native, NULL) : NULL;
     g_free(native);
     if (!g_strcmp0(file, run->signal_file))
     {
@@ -265,7 +265,7 @@ static gboolean signal_tables_record(WaveSimulation *run, const gchar *text)
             run->signal_rows->len < 4096 && g_utf8_validate(row[1], -1, NULL) &&
             !strpbrk(row[3], "\t\r\n") && strspn(row[3], "01xz") == strlen(row[3]))
         {
-            gchar *file = g_canonicalize_filename(row[2], run->include_dir);
+            gchar *file = insight_canonicalize_filename(row[2], run->include_dir);
             g_free(row[2]);
             row[2] = file;
             g_ptr_array_add(run->signal_rows, row);
