@@ -376,6 +376,8 @@ and VS. For RGB666, select 6 bits per component and use `-` for a3 and b3.
 
 The active area must match the configured geometry. A line with an
 unexpected number of active pixels is discarded until the next VS pulse.
+A TMDS symbol fault during active HDMI/DVI video also discards the current
+frame. The last complete frame stays visible until a new one arrives.
 
 ### HDMI DDC, EDID and hot plug
 

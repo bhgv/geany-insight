@@ -669,6 +669,11 @@ def check_raster_displays(compiler, runtime, fixtures, directory, environment):
         expected = (1).to_bytes(4, "little") + bytes.fromhex("ff000000ff000000ff" + tail)
         require(frame == expected, f"Incorrect RGB pixels for display {display}")
 
+    for display, pixels in ((5, "0102030405060708090a0b0c"), (6, "00000004040404080808080c")):
+        recovered = (directory / f"geany-raster-{display}-0.rgb").read_bytes()
+        require(recovered == (2).to_bytes(4, "little") + bytes.fromhex(pixels),
+                f"TMDS display {display} did not skip a corrupt frame and recover")
+
     dual_frames = {
         7: "ff000000ffff00ff00ff00ff0000ffffff00a65a1959a5e6",
         8: "00ffffff0000ff00ff00ff00ffff000000ff59a6e7a65918",

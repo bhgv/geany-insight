@@ -167,10 +167,22 @@ static unsigned raster_tmds_byte(unsigned word)
     return decoded | (encoded & 1u);
 }
 
+/* EN: Reject the unfinished frame in sink and require fresh TMDS framing.
+ * RU: Отбрасывает незавершённый кадр sink и ждёт нового обрамления TMDS. */
+static void raster_tmds_fault(RasterSink *sink)
+{
+    sink->discard = 1;
+    sink->preamble = 0;
+    sink->guard = 0;
+    sink->video = 0;
+}
+
 /* EN: Decode the TMDS words for sink. HDMI mode gates video on its guard band;
- * DVI mode starts video after a control period.
+ * DVI mode starts video after a control period. Reject mixed control and
+ * data symbols during active video.
  * RU: Декодирует words для sink. HDMI ждёт защитные символы видеоданных,
- * режим DVI начинает видео после управляющего периода. */
+ * режим DVI начинает видео после управляющего периода. Отбрасывает кадр
+ * при смешении управляющих символов и данных в активном видео. */
 static void raster_hdmi(RasterSink *sink, const unsigned *words)
 {
     int blue = raster_tmds_control(words[0]), green = raster_tmds_control(words[1]);
@@ -197,8 +209,12 @@ static void raster_hdmi(RasterSink *sink, const unsigned *words)
         return;
     }
     sink->preamble = 0;
-    if (!sink->video || blue >= 0 || green >= 0 || red >= 0)
+    if (!sink->video)
         return;
+    if (blue >= 0 || green >= 0 || red >= 0) {
+        raster_tmds_fault(sink);
+        return;
+    }
 
     unsigned r = raster_tmds_byte(words[2]), g = raster_tmds_byte(words[1]);
     unsigned b = raster_tmds_byte(words[0]);
@@ -231,8 +247,8 @@ static void raster_schedule(RasterSample *sample)
         sample->active = 0;
 }
 
-/* EN: Sample logical lanes from callback and decode the completed serial word.
- * RU: Считывает логические линии по callback и декодирует завершённое слово. */
+/* EN: Sample lanes from callback, rejecting words containing unknown bits.
+ * RU: Считывает линии по callback и отбрасывает слова с неопределёнными битами. */
 static PLI_INT32 raster_sample_bit(p_cb_data callback)
 {
     RasterSample *sample = (RasterSample *)callback->user_data;
@@ -257,7 +273,9 @@ static PLI_INT32 raster_sample_bit(p_cb_data callback)
         raster_schedule(sample);
     } else {
         sample->active = 0;
-        if (sample->bad)
+        if (sample->bad && sink->mode >= RASTER_HDMI)
+            raster_tmds_fault(sink);
+        else if (sample->bad)
             sink->discard = 1;
         else if (sink->mode <= RASTER_VESA)
             raster_lvds(sink, sample->words);

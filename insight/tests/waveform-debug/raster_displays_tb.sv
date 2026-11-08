@@ -153,8 +153,34 @@ module raster_displays_tb;
         tmds_word('h354,'h354,'h354,'h354,'h354,'h354);
     end
 
+    // EN: Follow a corrupt frame with a valid frame to verify resynchronization.
+    // RU: После повреждённого кадра выдаёт корректный для проверки синхронизации.
     initial begin
         #3000;
+        repeat (3) tmds_word('h154,'h354,'h354,'h154,'h354,'h354);
+        tmds_line();
+        tmds_pixel(24'h111111);
+        tmds_word('h354,'h000,'h000,'h354,'h000,'h000);
+        tmds_pixel(24'h222222);
+        tmds_word('h354,'h354,'h354,'h354,'h354,'h354);
+        tmds_line();
+        tmds_pixel(24'h333333);
+        tmds_pixel(24'h444444);
+        tmds_word('h354,'h354,'h354,'h354,'h354,'h354);
+
+        repeat (3) tmds_word('h154,'h354,'h354,'h154,'h354,'h354);
+        tmds_line();
+        tmds_pixel(24'h010203);
+        tmds_pixel(24'h040506);
+        tmds_word('h354,'h354,'h354,'h354,'h354,'h354);
+        tmds_line();
+        tmds_pixel(24'h070809);
+        tmds_pixel(24'h0a0b0c);
+        repeat (2) tmds_word('h354,'h354,'h354,'h354,'h354,'h354);
+    end
+
+    initial begin
+        #6000;
         $finish;
     end
 endmodule
