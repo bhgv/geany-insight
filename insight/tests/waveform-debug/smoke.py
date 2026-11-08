@@ -669,6 +669,11 @@ def check_raster_displays(compiler, runtime, fixtures, directory, environment):
         expected = (1).to_bytes(4, "little") + bytes.fromhex("ff000000ff000000ff" + tail)
         require(frame == expected, f"Incorrect RGB pixels for display {display}")
 
+    rgb_recovery = (2).to_bytes(4, "little") + bytes.fromhex("ff000000ff000000ffffffff")
+    for display in (0, 1):
+        recovered = (directory / f"geany-raster-{display}-0.rgb").read_bytes()
+        require(recovered == rgb_recovery, f"RGB display {display} published unknown data")
+
     for display, pixels in ((5, "0102030405060708090a0b0c"), (6, "00000004040404080808080c")):
         recovered = (directory / f"geany-raster-{display}-0.rgb").read_bytes()
         require(recovered == (2).to_bytes(4, "little") + bytes.fromhex(pixels),

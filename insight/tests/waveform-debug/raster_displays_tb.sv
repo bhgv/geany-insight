@@ -124,6 +124,22 @@ module raster_displays_tb;
         rgb_pixel(1,0,24'h0000ff);
         rgb_pixel(1,0,24'ha65a19);
         rgb_pixel(0,0,0);
+
+        rgb_pixel(0,1,0);
+        rgb_pixel(1,0,24'hxxxxxx);
+        rgb_pixel(1,0,24'hffffff);
+        rgb_pixel(0,0,0);
+        rgb_pixel(1,0,24'hffffff);
+        rgb_pixel(1,0,24'hffffff);
+        rgb_pixel(0,0,0);
+
+        rgb_pixel(0,1,24'hzzzzzz);
+        rgb_pixel(1,0,24'hff0000);
+        rgb_pixel(1,0,24'h00ff00);
+        rgb_pixel(0,0,24'hxxxxxx);
+        rgb_pixel(1,0,24'h0000ff);
+        rgb_pixel(1,0,24'hffffff);
+        rgb_pixel(0,0,24'hzzzzzz);
     end
 
     initial begin

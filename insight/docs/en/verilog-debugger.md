@@ -378,6 +378,8 @@ The active area must match the configured geometry. A line with an
 unexpected number of active pixels is discarded until the next VS pulse.
 A TMDS symbol fault during active HDMI/DVI video also discards the current
 frame. The last complete frame stays visible until a new one arrives.
+For parallel RGB, unknown DE, VS or active color data also invalidates
+the frame. Color pins are ignored during blanking.
 
 ### HDMI DDC, EDID and hot plug
 

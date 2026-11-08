@@ -109,6 +109,39 @@ static unsigned raster_expand6(unsigned value)
     return (value << 2) | (value >> 4);
 }
 
+/* EN: Read parallel RGB from sink. Reject unknown control and active color bits.
+ * RU: Читает RGB из sink. Отбрасывает кадр при X/Z в управлении или активном цвете. */
+static void raster_rgb(RasterSink *sink)
+{
+    int de = scalar(sink->pins[RASTER_A]);
+    int vs = scalar(sink->pins[RASTER_B]);
+    if (vs != vpi0 && vs != vpi1) {
+        sink->discard = 1;
+        return;
+    }
+    if ((unsigned)(vs == vpi1) == sink->vs_active || de == vpi0) {
+        raster_pixel(sink, 0, vs == vpi1, 0, 0, 0);
+        return;
+    }
+
+    s_vpi_vecval red = vector_word(sink->pins[RASTER_C]);
+    s_vpi_vecval green = vector_word(sink->pins[RASTER_D]);
+    s_vpi_vecval blue = vector_word(sink->pins[RASTER_E]);
+    unsigned mask = (1u << sink->depth) - 1;
+    if (de != vpi1 || ((unsigned)(red.bval | green.bval | blue.bval) & mask)) {
+        sink->discard = 1;
+        return;
+    }
+    unsigned r = (unsigned)red.aval & mask;
+    unsigned g = (unsigned)green.aval & mask;
+    unsigned b = (unsigned)blue.aval & mask;
+    raster_pixel(sink, 1,
+                 vs == vpi1,
+                 sink->depth == 6 ? raster_expand6(r) : r,
+                 sink->depth == 6 ? raster_expand6(g) : g,
+                 sink->depth == 6 ? raster_expand6(b) : b);
+}
+
 /* EN: Return the RGB value of words in the configured mapping of sink.
  * RU: Возвращает RGB из words по раскладке, выбранной в sink. */
 static unsigned raster_lvds_color(RasterSink *sink, const unsigned *words)
@@ -385,18 +418,7 @@ static PLI_INT32 raster_tick(PLI_BYTE8 *user_data)
         return 0;
     }
     if (sink->mode == RASTER_RGB) {
-        s_vpi_vecval red = vector_word(sink->pins[RASTER_C]);
-        s_vpi_vecval green = vector_word(sink->pins[RASTER_D]);
-        s_vpi_vecval blue = vector_word(sink->pins[RASTER_E]);
-        unsigned mask = (1u << sink->depth) - 1;
-        unsigned r = (unsigned)red.aval & ~(unsigned)red.bval & mask;
-        unsigned g = (unsigned)green.aval & ~(unsigned)green.bval & mask;
-        unsigned b = (unsigned)blue.aval & ~(unsigned)blue.bval & mask;
-        raster_pixel(sink, scalar(sink->pins[RASTER_A]) == vpi1,
-                     scalar(sink->pins[RASTER_B]) == vpi1,
-                     sink->depth == 6 ? raster_expand6(r) : r,
-                     sink->depth == 6 ? raster_expand6(g) : g,
-                     sink->depth == 6 ? raster_expand6(b) : b);
+        raster_rgb(sink);
         return 0;
     }
 
