@@ -22,7 +22,7 @@ static void simulation_write_command(WaveSimulation *run, const gchar *command)
         g_str_has_prefix(command, "geany-select-frame "))
     {
         run->frame_refresh = TRUE;
-        run->frame_reopen_group = -1;
+        g_clear_pointer(&run->frame_reopen_path, gtk_tree_path_free);
         if (run->frame_values)
             gtk_tree_store_clear(run->frame_values);
     }

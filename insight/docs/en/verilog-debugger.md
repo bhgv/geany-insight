@@ -40,8 +40,12 @@ After switching frames or resuming to another stop, the tree reads a fresh snaps
 Double-click an integral variable or element value to edit it. Use the same
 literals and keyboard shortcuts as in **Registers**. The edit applies to the
 selected activation and the simulator reads the result back while paused.
-Nets are read-only. The bundled VVP bridge displays packed structs as a single
-bit vector. The tree shows up to 128 entries per array and 512 rows per frame.
+Nets are read-only. Expand a packed struct or union to see its named fields,
+including nested fields and fields of packed values in fixed memories.
+Double-click an editable field to replace only its bits. Union members share
+storage, so editing one member may also change the displayed value of another.
+The bundled Icarus compiler provides field layouts for source-debug builds.
+The tree shows up to 128 entries per array and 512 rows per frame.
 
 ### Stop on a signal transition
 

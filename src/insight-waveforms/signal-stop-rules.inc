@@ -185,8 +185,39 @@ enum
     FRAME_NAME,
     FRAME_INDEX,
     FRAME_EDITABLE,
+    FRAME_OFFSET,
     FRAME_COLUMNS
 };
+
+/* EN: Add a packed field record from text below the last value in run.
+ * RU: Добавляет поле из записи text под последним значением сеанса run. */
+static void simulation_frame_field_record(WaveSimulation *run, const gchar *text)
+{
+    gchar **fields = g_strsplit(text, "\t", 3);
+    if (g_strv_length(fields) == 3)
+    {
+        guint depth = 0;
+        const gchar *label = fields[0];
+        for (const gchar *c = fields[0]; *c; c++)
+            if (*c == '.')
+            {
+                depth++;
+                label = c + 1;
+            }
+        guint64 offset;
+        if (depth < run->frame_field_parent_count &&
+            depth + 1 < G_N_ELEMENTS(run->frame_field_parents) && *label &&
+            *fields[2] && strspn(fields[2], "01xz") == strlen(fields[2]) &&
+            g_ascii_string_to_unsigned(fields[1], 10, 0, 4095, &offset, NULL))
+        {
+            gtk_tree_store_insert_with_values(run->frame_values, &run->frame_field_parents[depth + 1],
+                &run->frame_field_parents[depth], -1, FRAME_LABEL, label, FRAME_VALUE, fields[2],
+                FRAME_EDITABLE, run->frame_field_editable, FRAME_OFFSET, (gint)offset, -1);
+            run->frame_field_parent_count = depth + 2;
+        }
+    }
+    g_strfreev(fields);
+}
 
 /* EN: Populate the frame tree of run from one bridge record text.
  * RU: Заполняет дерево кадров сеанса run по одной записи text от симулятора. */
@@ -204,29 +235,32 @@ static void simulation_frame_record(WaveSimulation *run, const gchar *text)
         gtk_tree_store_clear(run->frame_values);
         run->frame_receiving = TRUE;
         run->frame_has_group = FALSE;
+        run->frame_field_parent_count = 0;
         gtk_label_set_text(GTK_LABEL(run->frame_status), text + strlen("GEANY-FRAME-BEGIN\t"));
     }
     else if (!strcmp(text, "GEANY-FRAME-UNAVAILABLE"))
     {
         gtk_tree_store_clear(run->frame_values);
         run->frame_receiving = FALSE;
+        g_clear_pointer(&run->frame_reopen_path, gtk_tree_path_free);
         gtk_label_set_text(GTK_LABEL(run->frame_status),
                            insight_tr("Select a paused HDL process and frame."));
     }
     else if (g_str_has_prefix(text, "GEANY-FRAME-END\t"))
     {
         run->frame_receiving = FALSE;
-        if (run->frame_reopen_group >= 0)
+        if (run->frame_reopen_path)
         {
-            GtkTreePath *group = gtk_tree_path_new_from_indices(run->frame_reopen_group, -1);
-            gtk_tree_view_expand_row(GTK_TREE_VIEW(run->frame_view), group, FALSE);
-            gtk_tree_path_free(group);
-            run->frame_reopen_group = -1;
+            gtk_tree_view_expand_to_path(GTK_TREE_VIEW(run->frame_view), run->frame_reopen_path);
+            gtk_tree_view_expand_row(GTK_TREE_VIEW(run->frame_view), run->frame_reopen_path, FALSE);
+            g_clear_pointer(&run->frame_reopen_path, gtk_tree_path_free);
         }
         if (g_str_has_suffix(text, "\tlimited"))
             gtk_label_set_text(GTK_LABEL(run->frame_status),
                                insight_tr("Frame snapshot reached the display limit."));
     }
+    else if (run->frame_receiving && g_str_has_prefix(text, "GEANY-FRAME-FIELD\t"))
+        simulation_frame_field_record(run, text + strlen("GEANY-FRAME-FIELD\t"));
     else if (run->frame_receiving && g_str_has_prefix(text, "GEANY-FRAME-ROW\t"))
     {
         gchar **fields = g_strsplit(text + strlen("GEANY-FRAME-ROW\t"), "\t", 4);
@@ -239,7 +273,10 @@ static void simulation_frame_record(WaveSimulation *run, const gchar *text)
             gtk_tree_store_insert_with_values(
                 run->frame_values, &row, !root && run->frame_has_group ? &run->frame_group : NULL, -1,
                 FRAME_LABEL, label, FRAME_VALUE, fields[3], FRAME_NAME, fields[1], FRAME_INDEX, fields[2],
-                FRAME_EDITABLE, !strcmp(fields[0], "W"), -1);
+                FRAME_EDITABLE, !strcmp(fields[0], "W"), FRAME_OFFSET, -1, -1);
+            run->frame_field_parents[0] = row;
+            run->frame_field_parent_count = group ? 0 : 1;
+            run->frame_field_editable = !strcmp(fields[0], "W");
             if (root)
             {
                 run->frame_has_group = group;

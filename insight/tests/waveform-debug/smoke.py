@@ -263,6 +263,49 @@ def check_processes(compiler, runtime, fixtures, directory, environment):
         simulator.close()
 
 
+# EN: Check packed layouts and writes in two live task activations with compiler/runtime.
+# RU: Проверяет поля и запись в двух живых активациях через compiler/runtime.
+def check_packed_frame(compiler, runtime, fixtures, directory, environment):
+    compile_design(compiler, directory, [fixtures / "packed_frame_tb.sv"], environment)
+    simulator = Simulator(runtime, directory, environment)
+    try:
+        simulator.prompt()
+        simulator.command("geany-step-tick")
+        processes = simulator.command("geany-processes")
+        workers = re.findall(r"(?m)^(\d+)\s+[^\n]+?\bpacked_frame_tb\.worker(?:\s|$)", processes)
+        require(len(workers) == 2, "Expected two packed task activations")
+        snapshots = []
+        for worker in workers:
+            simulator.command(f"geany-select-process {worker}")
+            snapshot = simulator.command("geany-frame-tree")
+            require("GEANY-FRAME-FIELD\ttag.valid\t7\t" in snapshot, "Missing nested field")
+            require("GEANY-FRAME-FIELD\ttag.code\t4\t" in snapshot, "Wrong nested field offset")
+            require("GEANY-FRAME-FIELD\tpayload\t0\t" in snapshot, "Missing payload field")
+            snapshots.append(snapshot)
+        payloads = [re.search(r"GEANY-FRAME-FIELD\tpayload\t0\t([01xz]+)", value)
+                    for value in snapshots]
+        require(all(payloads) and {value.group(1) for value in payloads} == {"0110", "1001"},
+                "Packed task values were mixed")
+        simulator.command(f"geany-select-process {workers[0]}")
+        before = re.search(r"GEANY-FRAME-ROW\tW\tpacket\t-\t([01xz]+)", snapshots[0])
+        require(before, "Missing writable packet")
+        updated = simulator.command(f"geany-frame-write packet - {before.group(1)[:4]}10xz")
+        require("GEANY-FRAME-FIELD\tpayload\t0\t10xz" in updated, "Packed write not reflected")
+        simulator.command(f"geany-select-process {workers[1]}")
+        require(simulator.command("geany-frame-tree") == snapshots[1],
+                "Packed write affected a different activation")
+        simulator.command("geany-select-frame 1")
+        parent = simulator.command("geany-frame-tree")
+        require("GEANY-FRAME-ROW\tW\tstorage\t0\t11000011" in parent and
+                "GEANY-FRAME-FIELD\tpayload\t0\t0011" in parent,
+                "Missing packed fields in fixed memory")
+        require("GEANY-FRAME-FIELD\tpacket.tag.code\t4\t011" in parent and
+                "GEANY-FRAME-FIELD\traw\t0\t00111010" in parent,
+                "Packed union members do not share the expected offsets")
+    finally:
+        simulator.close()
+
+
 def check_synchronous_steps(compiler, runtime, fixtures, directory, environment):
     source = fixtures / "synchronous_steps_tb.sv"
     lines = source.read_text(encoding="utf-8").splitlines()
@@ -698,6 +741,7 @@ def main():
         ("signal-stops", lambda directory: check_signal_stops(compiler, runtime, fixtures, directory, environment)),
         ("source-step", lambda directory: check_source_steps(compiler, runtime, fixtures, directory, environment)),
         ("processes", lambda directory: check_processes(compiler, runtime, fixtures, directory, environment)),
+        ("packed-frame", lambda directory: check_packed_frame(compiler, runtime, fixtures, directory, environment)),
         ("synchronous-steps", lambda directory: check_synchronous_steps(
             compiler, runtime, fixtures, directory, environment)),
         ("slang", lambda directory: check_slang(service, fixtures, directory, environment)),

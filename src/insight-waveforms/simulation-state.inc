@@ -59,7 +59,10 @@ typedef struct
     GtkWidget *frame_view;
     GtkTreeIter frame_group;
     gboolean frame_has_group;
-    gint frame_reopen_group;
+    GtkTreePath *frame_reopen_path;
+    GtkTreeIter frame_field_parents[9];
+    guint frame_field_parent_count;
+    gboolean frame_field_editable;
     gboolean frame_ready;
     gboolean frame_refresh;
     gboolean frame_receiving;
@@ -116,6 +119,7 @@ static void simulation_free(gpointer data)
     g_free(run->live_directory);
     g_free(run->trace_file);
     g_clear_pointer(&run->signal_rows, g_ptr_array_unref);
+    g_clear_pointer(&run->frame_reopen_path, gtk_tree_path_free);
     g_clear_pointer(&run->signal_previous_values, g_hash_table_unref);
     g_clear_pointer(&run->signal_pins, g_hash_table_unref);
     g_free(run->signal_pins_path);

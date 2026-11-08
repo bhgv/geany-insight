@@ -300,29 +300,53 @@ static void simulation_frame_edited(GtkCellRendererText *renderer, gchar *path, 
         !gtk_tree_model_get_iter_from_string(model, &row, path))
         return;
 
-    gchar *name, *index, *old;
+    gchar *old;
+    gint offset;
     gboolean editable;
-    gtk_tree_model_get(model, &row, FRAME_NAME, &name, FRAME_INDEX, &index, FRAME_VALUE, &old,
-                       FRAME_EDITABLE, &editable, -1);
-    gchar *bits = editable ? signal_edit_bits(text, strlen(old), 0) : NULL;
-    if (bits && !strpbrk(name, " \t\r\n") && strcmp(bits, old))
-    {
-        GtkTreePath *edited = gtk_tree_model_get_path(model, &row);
-        if (gtk_tree_path_get_depth(edited) > 1)
-            run->frame_reopen_group = gtk_tree_path_get_indices(edited)[0];
-        gtk_tree_path_free(edited);
-        run->signal_refresh_needed = TRUE;
-        run->signal_history_replace = TRUE;
-        gchar *command = g_strdup_printf("geany-frame-write %s %s %s\n", name, index, bits);
-        simulation_write_command(run, command);
-        g_free(command);
-    }
-    else if (!bits)
+    gtk_tree_model_get(model, &row, FRAME_VALUE, &old, FRAME_EDITABLE, &editable,
+                       FRAME_OFFSET, &offset, -1);
+    gchar *bits = editable && old ? signal_edit_bits(text, strlen(old), 0) : NULL;
+    if (!bits)
         gtk_label_set_text(GTK_LABEL(run->frame_status), insight_tr("Invalid frame value."));
+    else if (strcmp(bits, old))
+    {
+        GtkTreeIter storage = row;
+        gint storage_offset = offset;
+        while (storage_offset >= 0)
+        {
+            GtkTreeIter parent;
+            if (!gtk_tree_model_iter_parent(model, &parent, &storage))
+                break;
+            storage = parent;
+            gtk_tree_model_get(model, &storage, FRAME_OFFSET, &storage_offset, -1);
+        }
+
+        gchar *name, *index, *full;
+        gtk_tree_model_get(model, &storage, FRAME_NAME, &name, FRAME_INDEX, &index,
+                           FRAME_VALUE, &full, -1);
+        gsize width = strlen(bits), total = full ? strlen(full) : 0;
+        gsize start = offset < 0 ? 0 : (gsize)offset;
+        if (storage_offset < 0 && name && index && !strpbrk(name, " \t\r\n") &&
+            start <= total && width <= total - start)
+        {
+            memcpy(full + total - start - width, bits, width);
+            GtkTreePath *edited = gtk_tree_model_get_path(model, &row);
+            g_clear_pointer(&run->frame_reopen_path, gtk_tree_path_free);
+            if (gtk_tree_path_get_depth(edited) > 1 && gtk_tree_path_up(edited))
+                run->frame_reopen_path = g_steal_pointer(&edited);
+            g_clear_pointer(&edited, gtk_tree_path_free);
+            run->signal_refresh_needed = TRUE;
+            run->signal_history_replace = TRUE;
+            gchar *command = g_strdup_printf("geany-frame-write %s %s %s\n", name, index, full);
+            simulation_write_command(run, command);
+            g_free(command);
+        }
+        g_free(full);
+        g_free(index);
+        g_free(name);
+    }
     g_free(bits);
     g_free(old);
-    g_free(index);
-    g_free(name);
 }
 
 /* EN: Build the expandable frame inspection page for run.
@@ -334,9 +358,8 @@ static GtkWidget *simulation_frame_page(WaveSimulation *run)
     gtk_label_set_xalign(GTK_LABEL(run->frame_status), 0);
     gtk_box_pack_start(GTK_BOX(page), run->frame_status, FALSE, FALSE, 0);
 
-    run->frame_reopen_group = -1;
     run->frame_values = gtk_tree_store_new(FRAME_COLUMNS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
-                                           G_TYPE_STRING, G_TYPE_BOOLEAN);
+                                           G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_INT);
     run->frame_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(run->frame_values));
     g_object_unref(run->frame_values);
     gtk_widget_set_name(run->frame_view, "insight-verilog-frame-tree");

@@ -1,0 +1,218 @@
+diff --git a/ivl.def b/ivl.def
+index 867d832..9d89300 100644
+--- a/ivl.def
++++ b/ivl.def
+@@ -266,6 +266,7 @@ ivl_signal_lsb
+ ivl_signal_msb
+ ivl_signal_name
+ ivl_signal_net_type
++ivl_signal_geany_packed_fields
+ ivl_signal_nex
+ ivl_signal_npath
+ ivl_signal_packed_dimensions
+diff --git a/ivl_target.h b/ivl_target.h
+index b33ea9a..ad88dbf 100644
+--- a/ivl_target.h
++++ b/ivl_target.h
+@@ -2053,6 +2053,8 @@ extern ivl_delaypath_t ivl_signal_path(ivl_signal_t net, unsigned idx);
+ extern ivl_signal_type_t ivl_signal_type(ivl_signal_t net);
+ extern ivl_variable_type_t ivl_signal_data_type(ivl_signal_t net);
+ extern ivl_type_t  ivl_signal_net_type(ivl_signal_t net);
++/* Packed field layout for net, valid until the next call, or NULL. */
++extern const char* ivl_signal_geany_packed_fields(ivl_signal_t net);
+ extern const char* ivl_signal_name(ivl_signal_t net);
+ extern const char* ivl_signal_basename(ivl_signal_t net);
+ extern const char* ivl_signal_attr(ivl_signal_t net, const char*key);
+diff --git a/t-dll-api.cc b/t-dll-api.cc
+index 7a33018..bac45df 100644
+--- a/t-dll-api.cc
++++ b/t-dll-api.cc
+@@ -26,6 +26,7 @@
+ # include  "netclass.h"
+ # include  "netdarray.h"
+ # include  "netenum.h"
++# include  "netstruct.h"
+ # include  "netvector.h"
+ # include  <cstdlib>
+ # include  <cstdio>
+@@ -2625,6 +2626,61 @@ extern "C" ivl_type_t ivl_signal_net_type(ivl_signal_t net)
+       return net->net_type;
+ }
+ 
++// EN: Serialize the fields of record into layout at offset under prefix.
++// remaining bounds the number of fields and depth bounds nested records.
++// RU: Записывает поля record в layout со смещением offset и префиксом prefix.
++// remaining ограничивает число полей, depth ограничивает вложенность.
++static void geany_packed_layout(const netstruct_t& record, const std::string& prefix,
++                                unsigned long offset, unsigned depth, unsigned& remaining,
++                                std::string& layout)
++{
++      if (depth == 8)
++            return;
++      unsigned long cursor = record.packed_width();
++      for (const auto& member : record.members()) {
++            if (!remaining)
++                  return;
++            const long width = member.net_type->packed_width();
++            if (width <= 0)
++                  continue;
++            if (!record.union_flag())
++                  cursor -= static_cast<unsigned long>(width);
++            const char* name = member.name.str();
++            if (!name || !*name || std::strspn(name,
++                "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_$") != std::strlen(name))
++                  continue;
++            std::string path = prefix + name;
++            if (path.size() > 512 || layout.size() + path.size() + 32 > 16384)
++                  return;
++            const unsigned long start = offset + (record.union_flag() ? 0 : cursor);
++            layout += path + ":" + std::to_string(start) + ":" + std::to_string(width) + ";";
++            --remaining;
++            if (const auto* nested = dynamic_cast<const netstruct_t*>(member.net_type))
++                  geany_packed_layout(*nested, path + ".", start, depth + 1, remaining, layout);
++      }
++}
++
++// EN: Return debug metadata for the packed value or array element in net.
++// RU: Возвращает отладочные метаданные упакованного значения или элемента net.
++extern "C" const char* ivl_signal_geany_packed_fields(ivl_signal_t net)
++{
++      ivl_type_t type = net->net_type;
++      if (const auto* array = dynamic_cast<const netdarray_t*>(type))
++            type = array->element_type();
++      const auto* record = dynamic_cast<const netstruct_t*>(type);
++      if (!record || !record->packed() || record->members().empty())
++            return nullptr;
++      const long width = record->packed_width();
++      if (width < 1 || width > 4096)
++            return nullptr;
++
++      static std::string layout;
++      layout = std::to_string(width) + ";";
++      unsigned remaining = 128;
++      geany_packed_layout(*record, "", 0, 0, remaining, layout);
++      return remaining == 128 ? nullptr : layout.c_str();
++}
++
+ extern "C" unsigned ivl_signal_npath(ivl_signal_t net)
+ {
+       assert(net);
+diff --git a/tgt-vvp/vvp_scope.c b/tgt-vvp/vvp_scope.c
+index 467ae6d..4570613 100644
+--- a/tgt-vvp/vvp_scope.c
++++ b/tgt-vvp/vvp_scope.c
+@@ -2494,6 +2494,14 @@ int draw_scope(ivl_scope_t net, ivl_scope_t parent)
+       for (idx = 0 ;  idx < ivl_scope_sigs(net) ;  idx += 1) {
+ 	    ivl_signal_t sig = ivl_scope_sig(net, idx);
+ 
++            /* EN: Preserve packed fields only in builds with source debugging.
++             * RU: Сохраняет поля packed только в сборках с отладкой исходника. */
++            if (show_file_line) {
++                  const char* fields = ivl_signal_geany_packed_fields(sig);
++                  if (fields)
++                        fprintf(vvp_out, "PF_%p .param/str \"@geany-fields:%s\" 1 0 0, \"%s\";\n",
++                                sig, vvp_mangle_name(ivl_signal_basename(sig)), fields);
++            }
+ 	    switch (ivl_signal_type(sig)) {
+ 		case IVL_SIT_REG:
+ 		  draw_reg_in_scope(sig);
+diff --git a/vvp/vthread.cc b/vvp/vthread.cc
+index 7ab15d9..8d4669e 100644
+--- a/vvp/vthread.cc
++++ b/vvp/vthread.cc
+@@ -757,6 +757,58 @@ static void geany_frame_row(char kind, const char* name, const char* index, cons
+       printf("GEANY-FRAME-ROW\t%c\t%s\t%s\t%s\n", kind, name, index, bits.c_str());
+ }
+ 
++// EN: Emit fields from layout against the captured bits and debit remaining rows.
++// RU: Выводит поля из layout по снятым bits и уменьшает лимит remaining.
++static void geany_frame_fields(const std::string& layout, const std::string& bits,
++                               unsigned& remaining)
++{
++      if (bits.empty() || bits.find_first_not_of("01xz") != std::string::npos)
++            return;
++      std::istringstream records(layout);
++      std::string record;
++      if (!std::getline(records, record, ';') || record != std::to_string(bits.size()))
++            return;
++      while (remaining && std::getline(records, record, ';')) {
++            const size_t first = record.find(':');
++            if (!first || first == std::string::npos || first > 512)
++                  continue;
++            const std::string path = record.substr(0, first);
++            if (path.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_$.") !=
++                std::string::npos)
++                  continue;
++            unsigned offset, width;
++            char extra;
++            if (sscanf(record.c_str() + first + 1, "%u:%u%c", &offset, &width, &extra) != 2 ||
++                !width || offset >= bits.size() || width > bits.size() - offset)
++                  continue;
++            printf("GEANY-FRAME-FIELD\t%s\t%u\t%s\n", path.c_str(), offset,
++                   bits.substr(bits.size() - offset - width, width).c_str());
++            --remaining;
++      }
++}
++
++// EN: Collect compiler field layouts declared in scope, keyed by signal name.
++// RU: Собирает описания полей компилятора из scope по именам сигналов.
++static std::map<std::string, std::string> geany_scope_fields(__vpiScope* scope)
++{
++      static const char prefix[] = "@geany-fields:";
++      std::map<std::string, std::string> layouts;
++      for (vpiHandle handle : scope->intern) {
++            if (vpi_get(vpiType, handle) != vpiParameter)
++                  continue;
++            const char* name = vpi_get_str(vpiName, handle);
++            if (!name || std::strncmp(name, prefix, sizeof prefix - 1))
++                  continue;
++            const std::string signal(name + sizeof prefix - 1);
++            s_vpi_value value = {};
++            value.format = vpiStringVal;
++            vpi_get_value(handle, &value);
++            if (value.format == vpiStringVal && value.value.str && std::strlen(value.value.str) <= 16384)
++                  layouts.emplace(signal, value.value.str);
++      }
++      return layouts;
++}
++
+ // EN: Snapshot depth of process using that activation's read and write contexts.
+ // RU: Снимает кадр depth процесса process в контексте его активации.
+ void geany_frame_tree(unsigned long long process, unsigned depth)
+@@ -773,6 +825,7 @@ void geany_frame_tree(unsigned long long process, unsigned depth)
+       vthread_t previous = running_thread;
+       running_thread = frame;
+       unsigned remaining = 512;
++      const auto layouts = geany_scope_fields(scope);
+       for (vpiHandle handle : scope->intern) {
+             if (!remaining)
+                   break;
+@@ -784,6 +837,7 @@ void geany_frame_tree(unsigned long long process, unsigned depth)
+             if (!raw || !*raw || std::strlen(raw) > 1024 || std::strpbrk(raw, "\t\r\n"))
+                   continue;
+             const std::string name(raw);
++            const auto layout = layouts.find(name);
+             --remaining;
+             if (type == vpiMemory || type == vpiArrayVar) {
+                   vvp_object_t object;
+@@ -845,8 +899,10 @@ void geany_frame_tree(unsigned long long process, unsigned depth)
+                         geany_frame_row(writable ? 'W' : 'R', name.c_str(),
+                               std::to_string(index).c_str(), bits.empty() ? "unavailable" : bits);
+                         --remaining;
++                        if (layout != layouts.end())
++                              geany_frame_fields(layout->second, bits, remaining);
+                   }
+-                  if (count > 128)
++                  if (count > 128 && remaining)
+                         geany_frame_row('R', name.c_str(), "...", "limited to 128 elements");
+             } else {
+                   std::string bits;
+@@ -861,6 +917,8 @@ void geany_frame_tree(unsigned long long process, unsigned depth)
+                   }
+                   geany_frame_row(integral && type != vpiNet ? 'W' : 'R',
+                         name.c_str(), "-", bits.empty() ? "unavailable" : bits);
++                  if (layout != layouts.end())
++                        geany_frame_fields(layout->second, bits, remaining);
+             }
+       }
+       running_thread = previous;

@@ -19,6 +19,7 @@ fi
 archive="$cache_dir/iverilog-$version.tar.gz"
 script_dir=$(cd -- "$(dirname -- "$0")" && pwd)
 bridge_patch="$script_dir/../patches/geany-vvp.patch"
+packed_patch="$script_dir/../patches/geany-iverilog-packed.patch"
 windows_patch="$script_dir/../patches/geany-iverilog-windows.patch"
 device_source="$script_dir/geany-vpi-devices.c"
 lua_dir="$script_dir/../vendor/lua"
@@ -40,7 +41,7 @@ file_digest() {
     printf '%s\n' "${digest%% *}"
 }
 
-stamp_id="$sha $(file_digest "$bridge_patch") $(file_digest "$device_source") $(file_digest "$script_dir/geany-ddr4.h") $(file_digest "$script_dir/geany-ddr5.h") $(file_digest "$script_dir/geany-spi-memory.h") $(file_digest "$script_dir/geany-i2c-eeprom.h") $(file_digest "$script_dir/geany-sdram.h") $(file_digest "$script_dir/geany-bus-controller.h") $(file_digest "$script_dir/geany-usart.h") $(file_digest "$script_dir/geany-parallel-psram.h")"
+stamp_id="$sha $(file_digest "$bridge_patch") $(file_digest "$packed_patch") $(file_digest "$device_source") $(file_digest "$script_dir/geany-ddr4.h") $(file_digest "$script_dir/geany-ddr5.h") $(file_digest "$script_dir/geany-spi-memory.h") $(file_digest "$script_dir/geany-i2c-eeprom.h") $(file_digest "$script_dir/geany-sdram.h") $(file_digest "$script_dir/geany-bus-controller.h") $(file_digest "$script_dir/geany-usart.h") $(file_digest "$script_dir/geany-parallel-psram.h")"
 for lua_source in "${lua_sources[@]}" "$lua_dir/onelua.c" "$script_dir"/geany-lua-*.h; do
     stamp_id+=" $(file_digest "$lua_source")"
 done
@@ -139,6 +140,7 @@ fi
 mkdir -p -- "$work/src" "$work/build" "$work/stage"
 tar -xzf "$archive" -C "$work/src" --strip-components=1
 patch --batch -d "$work/src" -p1 < "$bridge_patch"
+patch --batch -d "$work/src" -p1 < "$packed_patch"
 if [[ -n "$executable_suffix" ]]; then
     patch --batch -d "$work/src" -p1 < "$windows_patch"
 fi
