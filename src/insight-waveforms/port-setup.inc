@@ -121,7 +121,9 @@ static void simulation_device_list_refresh(GtkTextBuffer *buffer, GtkListStore *
             if (strcmp(args[0], device_presets[i].rule))
                 continue;
             gtk_list_store_insert_with_values(store, NULL, -1, 0, device_presets[i].title,
-                                              1, lines[line], 2, line, -1);
+                                              1, lines[line], 2, line,
+                                              3, device_kind_names[device_presets[i].icon],
+                                              4, device_bus_names[device_bus(&device_presets[i])], -1);
             break;
         }
         g_strfreev(args);
@@ -365,13 +367,19 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
                            .recipe_view = GTK_TEXT_VIEW(view)};
     GtkWidget *panes = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     GtkWidget *recipe_tabs = gtk_notebook_new();
-    GtkListStore *devices = gtk_list_store_new(3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT);
+    GtkListStore *devices = gtk_list_store_new(5, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT,
+                                                G_TYPE_STRING, G_TYPE_STRING);
     GtkWidget *device_list = gtk_tree_view_new_with_model(GTK_TREE_MODEL(devices));
     gtk_tree_view_set_activate_on_single_click(GTK_TREE_VIEW(device_list), TRUE);
-    gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(device_list), -1, "Device",
-                                                gtk_cell_renderer_text_new(), "text", 0, NULL);
-    gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(device_list), -1, "Rule",
-                                                gtk_cell_renderer_text_new(), "text", 1, NULL);
+    const gchar *headings[] = {"Device", "Type", "Bus", "Rule"};
+    const gint columns[] = {0, 3, 4, 1};
+    for (guint i = 0; i < G_N_ELEMENTS(columns); ++i)
+    {
+        GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(
+            headings[i], gtk_cell_renderer_text_new(), "text", columns[i], NULL);
+        gtk_tree_view_column_set_sort_column_id(column, columns[i]);
+        gtk_tree_view_append_column(GTK_TREE_VIEW(device_list), column);
+    }
     GtkWidget *device_scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_container_add(GTK_CONTAINER(device_scroll), device_list);
     gtk_notebook_append_page(GTK_NOTEBOOK(recipe_tabs), device_scroll, gtk_label_new("Devices"));

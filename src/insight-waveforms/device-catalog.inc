@@ -160,18 +160,42 @@ static const DevicePreset device_presets[] = {
      1u << DEVICE_CONSTANT},
 };
 
+enum { BUS_NONE, BUS_SPI, BUS_I2C, BUS_UART, BUS_USART, BUS_PARALLEL, BUS_RGB, BUS_LVDS, BUS_HDMI };
+
+static const gchar *const device_bus_names[] = {
+    "—", "SPI", "I²C", "UART", "USART", "Parallel", "RGB", "LVDS", "HDMI"
+};
+
+/* EN: Classify the interface used by preset for display and filtering.
+ * RU: Определяет интерфейс preset для отображения и фильтрации. */
+static guint device_bus(const DevicePreset *preset)
+{
+    const gchar *rule = preset->rule;
+    if (g_str_has_prefix(rule, "spi-")) return BUS_SPI;
+    if (g_str_has_prefix(rule, "i2c-") || !strcmp(rule, "hdmi-ddc")) return BUS_I2C;
+    if (!strcmp(rule, "uart")) return BUS_UART;
+    if (g_str_has_prefix(rule, "usart")) return BUS_USART;
+    if (g_str_has_prefix(rule, "rgb-")) return BUS_RGB;
+    if (g_str_has_prefix(rule, "lvds-")) return BUS_LVDS;
+    if (g_str_has_prefix(rule, "hdmi-")) return BUS_HDMI;
+    if (preset->icon == DEVICE_MEMORY || !strcmp(rule, "bus")) return BUS_PARALLEL;
+    return BUS_NONE;
+}
+
 enum
 {
     DEVICE_ID,
     DEVICE_ICON,
     DEVICE_NAME,
     DEVICE_INDEX,
+    DEVICE_TYPE_NAME,
+    DEVICE_BUS_NAME,
     DEVICE_COLUMNS
 };
 
 typedef struct
 {
-    GtkWidget *combo, *search, *regex, *category;
+    GtkWidget *combo, *search, *regex, *category, *bus, *sort;
     GtkListStore *store;
     gint preferred;
     gulong selection_changed;
@@ -201,6 +225,7 @@ static void device_catalog_filter(GtkWidget *widget, gpointer data)
     if (previous >= 0)
         catalog->preferred = previous;
     gint category = gtk_combo_box_get_active(GTK_COMBO_BOX(catalog->category)) - 1;
+    gint bus = gtk_combo_box_get_active(GTK_COMBO_BOX(catalog->bus)) - 1;
     const gchar *query = gtk_entry_get_text(GTK_ENTRY(catalog->search));
     gboolean regex = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(catalog->regex));
     GError *error = NULL;
@@ -217,6 +242,8 @@ static void device_catalog_filter(GtkWidget *widget, gpointer data)
         const DevicePreset *preset = &device_presets[i];
         if (category >= 0 && !(preset->categories & (1u << category)))
             continue;
+        if (bus >= 0 && (guint)bus != device_bus(preset))
+            continue;
         gchar *label = g_strdup_printf("%s · %s", preset->title, preset->rule);
         gchar *lower = g_utf8_casefold(label, -1);
         gboolean matches = pattern ? g_regex_match(pattern, preset->rule, 0, NULL) ||
@@ -227,11 +254,16 @@ static void device_catalog_filter(GtkWidget *widget, gpointer data)
             GtkTreeIter row;
             gtk_list_store_insert_with_values(catalog->store, &row, -1, DEVICE_ID, preset->rule,
                                               DEVICE_ICON, device_kind_icons[preset->icon], DEVICE_NAME,
-                                              label, DEVICE_INDEX, (gint)i, -1);
+                                              label, DEVICE_INDEX, (gint)i,
+                                              DEVICE_TYPE_NAME, device_kind_names[preset->icon],
+                                              DEVICE_BUS_NAME, device_bus_names[device_bus(preset)], -1);
         }
         g_free(lower);
         g_free(label);
     }
+    const gint columns[] = {DEVICE_NAME, DEVICE_TYPE_NAME, DEVICE_BUS_NAME};
+    gint sort = CLAMP(gtk_combo_box_get_active(GTK_COMBO_BOX(catalog->sort)), 0, 2);
+    gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(catalog->store), columns[sort], GTK_SORT_ASCENDING);
     if (selected < 0 || !gtk_combo_box_set_active_id(combo, device_presets[selected].rule))
         gtk_combo_box_set_active(combo, 0);
     g_signal_handler_unblock(combo, catalog->selection_changed);
@@ -260,10 +292,23 @@ static void device_catalog_widget(DeviceCatalog *catalog, GtkWidget *box)
         gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(catalog->category), device_kind_names[i]);
     gtk_combo_box_set_active(GTK_COMBO_BOX(catalog->category), 0);
     gtk_box_pack_start(GTK_BOX(filters), catalog->category, FALSE, FALSE, 0);
+    catalog->bus = gtk_combo_box_text_new();
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(catalog->bus), "All buses");
+    for (guint i = 0; i < G_N_ELEMENTS(device_bus_names); ++i)
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(catalog->bus), device_bus_names[i]);
+    gtk_combo_box_set_active(GTK_COMBO_BOX(catalog->bus), 0);
+    gtk_box_pack_start(GTK_BOX(filters), catalog->bus, FALSE, FALSE, 0);
+    catalog->sort = gtk_combo_box_text_new();
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(catalog->sort), "Sort by name");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(catalog->sort), "Sort by type");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(catalog->sort), "Sort by bus");
+    gtk_combo_box_set_active(GTK_COMBO_BOX(catalog->sort), 0);
+    gtk_box_pack_start(GTK_BOX(filters), catalog->sort, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), filters, FALSE, FALSE, 4);
 
     catalog->store =
-        gtk_list_store_new(DEVICE_COLUMNS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_INT);
+        gtk_list_store_new(DEVICE_COLUMNS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_INT,
+                           G_TYPE_STRING, G_TYPE_STRING);
     catalog->combo = gtk_combo_box_new_with_model(GTK_TREE_MODEL(catalog->store));
     g_object_unref(catalog->store);
     gtk_widget_set_name(catalog->combo, "insight-test-device-type");
@@ -278,6 +323,8 @@ static void device_catalog_widget(DeviceCatalog *catalog, GtkWidget *box)
     g_signal_connect(catalog->search, "changed", G_CALLBACK(device_catalog_filter), catalog);
     g_signal_connect(catalog->regex, "toggled", G_CALLBACK(device_catalog_filter), catalog);
     g_signal_connect(catalog->category, "changed", G_CALLBACK(device_catalog_filter), catalog);
+    g_signal_connect(catalog->bus, "changed", G_CALLBACK(device_catalog_filter), catalog);
+    g_signal_connect(catalog->sort, "changed", G_CALLBACK(device_catalog_filter), catalog);
 }
 
 typedef struct

@@ -19,6 +19,56 @@ static GtkWidget *device_field(DeviceForm *form, const gchar *title, GtkWidget *
     return field;
 }
 
+/* EN: Find a conventional one-bit serial port in form for the requested direction.
+ * RU: Находит в form однобитный последовательный порт нужного направления. */
+static const gchar *device_serial_port(DeviceForm *form, const gchar *value, gchar direction)
+{
+    if (!form->browser || !form->browser->ports)
+        return value;
+    GHashTableIter iter;
+    gpointer key, data;
+    const gchar *match = NULL;
+    guint best_rank = 0;
+    g_hash_table_iter_init(&iter, form->browser->ports);
+    while (g_hash_table_iter_next(&iter, &key, &data))
+    {
+        PortInfo *port = data;
+        const gchar *name = key;
+        if (port->width != 1 || !port_browser_matches(port->direction, direction))
+            continue;
+        if (!strcmp(name, value))
+            return name;
+        guint rank = 0;
+        if (!g_ascii_strcasecmp(name, value))
+            rank = 2;
+        else if (strlen(name) == 3 && !g_ascii_strncasecmp(name, value, 2) &&
+                 g_ascii_tolower(name[2]) == 'd')
+            rank = 1;
+        if (rank > best_rank)
+        {
+            best_rank = rank;
+            match = name;
+        }
+        else if (rank && rank == best_rank)
+            match = NULL;
+    }
+    return match ? match : value;
+}
+
+/* EN: Store the polarity selected in combo in the recipe entry.
+ * RU: Записывает полярность из combo в поле рецепта entry. */
+static void device_button_polarity(GtkComboBox *combo, GtkEntry *entry)
+{
+    gtk_entry_set_text(entry, gtk_combo_box_get_active(combo) == 1 ? "1" : "0");
+}
+
+/* EN: Reflect entry's saved idle level in the polarity combo.
+ * RU: Показывает сохранённый в entry уровень покоя в combo. */
+static void device_button_polarity_sync(GtkEntry *entry, GtkComboBox *combo)
+{
+    gtk_combo_box_set_active(combo, !strcmp(gtk_entry_get_text(entry), "1"));
+}
+
 /* EN: Rebuild the fields for combo's selected preset in the form stored in data.
  * RU: Перестраивает поля формы из data для шаблона, выбранного в combo. */
 static void simulation_device_type(GtkComboBox *combo, gpointer data)
@@ -104,6 +154,9 @@ static void simulation_device_type(GtkComboBox *combo, gpointer data)
         gchar *value = strchr(fields[row], '=');
         *value++ = 0;
         GtkWidget *entry = gtk_entry_new();
+        gboolean serial = !strcmp(preset->rule, "uart") || g_str_has_prefix(preset->rule, "usart");
+        if (serial && row < 2)
+            value = (gchar *)device_serial_port(form, value, row ? 'o' : 'i');
         gtk_entry_set_text(GTK_ENTRY(entry), value);
         if (row < pin_count)
             g_object_set_data_full(G_OBJECT(entry), "port-spec", g_strdup(specs[row]), g_free);
@@ -111,7 +164,21 @@ static void simulation_device_type(GtkComboBox *combo, gpointer data)
         g_signal_connect(entry, "changed", G_CALLBACK(device_width_changed), form);
         if (row == 0)
             gtk_widget_set_name(entry, "insight-device-first-field");
-        g_ptr_array_add(form->entries, device_field(form, fields[row], entry, row));
+        if (row == 1 && !strcmp(preset->rule, "button"))
+        {
+            GtkWidget *polarity = gtk_combo_box_text_new();
+            gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(polarity), "0 → 1 → 0");
+            gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(polarity), "1 → 0 → 1");
+            gtk_combo_box_set_active(GTK_COMBO_BOX(polarity), 0);
+            gtk_grid_attach(GTK_GRID(form->grid), entry, 2, row, 1, 1);
+            gtk_widget_set_no_show_all(entry, TRUE);
+            device_field(form, "Pulse polarity", polarity, row);
+            g_signal_connect_object(polarity, "changed", G_CALLBACK(device_button_polarity), entry, 0);
+            g_signal_connect_object(entry, "changed", G_CALLBACK(device_button_polarity_sync), polarity, 0);
+            g_ptr_array_add(form->entries, entry);
+        }
+        else
+            g_ptr_array_add(form->entries, device_field(form, fields[row], entry, row));
     }
     g_strfreev(fields);
     g_strfreev(specs);

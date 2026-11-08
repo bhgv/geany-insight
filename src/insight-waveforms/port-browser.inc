@@ -8,11 +8,13 @@
  * RU: Проверяет, подходит ли направление direction для роли поля field. */
 static gboolean port_browser_matches(const gchar *direction, gchar field)
 {
-    return (field == 'i' && !strcmp(direction, "input")) ||
-           (field == 'o' && !strcmp(direction, "output")) ||
-           (field == 'b' && !strcmp(direction, "inout")) ||
-           (field == 'c' && (!strcmp(direction, "output") || !strcmp(direction, "inout"))) ||
-           (field == 'd' && (!strcmp(direction, "input") || !strcmp(direction, "inout"))) ||
+    gboolean input = !strcmp(direction, "input");
+    gboolean output = !strcmp(direction, "output");
+    gboolean bidirectional = !strcmp(direction, "inout");
+
+    return ((field == 'i' || field == 'd') && (input || bidirectional)) ||
+           ((field == 'o' || field == 'c') && (output || bidirectional)) ||
+           (field == 'b' && (input || output || bidirectional)) ||
            (field == 'a' && strcmp(direction, "—"));
 }
 
