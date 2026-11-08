@@ -116,7 +116,7 @@ static void ddr5_command(GeanyDdr5 *device, int cs, s_vpi_vecval ca)
                 device->open |= mask;
             }
         } else if (!device->mode && (device->open & mask)) {
-            unsigned column_mask = command == DDR5_RD ? 0xffu : 0xfeu;
+            unsigned column_mask = command == DDR5_RD ? 0xffu : 0xfcu;
             if (unknown & (column_mask | (1u << 10)))
                 return;
             device->mode = command == DDR5_RD ? DDR4_READ : DDR4_WRITE;
@@ -160,7 +160,8 @@ static void ddr5_command(GeanyDdr5 *device, int cs, s_vpi_vecval ca)
 static Ddr4Cell *ddr5_cell(GeanyDdr5 *device, int create)
 {
     unsigned mask = DDR5_BURST - 1;
-    unsigned column = (device->column & ~mask) | ((device->column + device->beat) & mask);
+    /* BL16 reads reorder groups of four by C3:C2. Writes stay sequential. */
+    unsigned column = (device->column & ~mask) | ((device->column ^ device->beat) & mask);
     uint32_t address = ((uint32_t)device->rows[device->bank] << 15) |
                        (device->bank << 10) | column;
     return ddr4_cell_key(&device->storage, address, create);

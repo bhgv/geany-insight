@@ -36,22 +36,23 @@ module ddr5_device_tb;
         command_cycle(!cancel, {2'b00, ROW[15:4]});
     endtask
 
-    // EN: Issue command op at column 0x20. close_bank requests auto-precharge.
-    // RU: Выдаёт команду op для столбца 0x20. close_bank задаёт автопредзаряд.
-    task access_command(input [4:0] op, input bit close_bank);
+    // EN: Issue command op for column selector offset in the block at 0x20. close_bank enables auto-precharge.
+    // RU: Выдаёт команду op со смещением offset в блоке 0x20. close_bank задаёт автопредзаряд.
+    task access_command(input [4:0] op, input bit close_bank, input [1:0] offset);
         command_cycle(0, BANK_CA | {9'b0, op});
-        command_cycle(1, {3'b000, !close_bank, 2'b00, 8'h08});
+        command_cycle(1, {3'b000, !close_bank, 2'b00, 6'h02, offset});
     endtask
 
-    // EN: Verify an entire BL16 read. updated selects the post-write values.
-    // RU: Проверяет чтение BL16. updated выбирает ожидаемые значения после записи.
-    task read_burst(input bit updated);
+    // EN: Verify a BL16 read. updated selects the values and order selects the first group.
+    // RU: Проверяет BL16. updated выбирает значения, order задаёт первую группу.
+    task read_burst(input bit updated, input [3:0] order);
         reg [7:0] expected;
         command_cycle(1, 0);
         for (integer beat = 0; beat < 16; ++beat) begin
             ck = !ck;
             #2;
-            expected = updated && beat != 5 ? 8'hb0 + 8'(beat) : 8'ha0 + 8'(beat);
+            expected = updated && (beat ^ int'(order)) != 5 ? 8'hb0 : 8'ha0;
+            expected += 8'(beat) ^ {4'b0, order};
             if (dq !== expected || dqs !== ck)
                 $fatal(1, "DDR5 beat %0d was %h/%b, expected %h", beat, dq, dqs, expected);
         end
@@ -66,7 +67,7 @@ module ddr5_device_tb;
     // EN: Check that a read from a closed bank never starts a burst.
     // RU: Проверяет, что чтение из закрытого банка не запускает пакет.
     task check_closed;
-        access_command(5'h1d, 0);
+        access_command(5'h1d, 0, 0);
         repeat (3) begin
             #2 ck = 1;
             #2 if (dq !== 8'bz || dqs !== 1'bz)
@@ -80,10 +81,12 @@ module ddr5_device_tb;
         activate(1);
         check_closed();
         activate(0);
-        access_command(5'h1d, 0);
-        read_burst(0);
+        access_command(5'h1d, 0, 0);
+        read_burst(0, 0);
+        access_command(5'h1d, 0, 1);
+        read_burst(0, 4);
 
-        access_command(5'h0d, 0);
+        access_command(5'h0d, 0, 2);
         command_cycle(1, 0);
         for (integer beat = 0; beat < 16; ++beat) begin
             host_dq = 8'hb0 + 8'(beat);
@@ -94,8 +97,8 @@ module ddr5_device_tb;
         end
         host_drive = 0;
         #2;
-        access_command(5'h1d, 1);
-        read_burst(1);
+        access_command(5'h1d, 1, 0);
+        read_burst(1, 0);
         check_closed();
 
         activate(0);
