@@ -173,17 +173,14 @@ static gboolean simulation_raster_draw(GtkWidget *canvas, cairo_t *cr, gpointer 
     return FALSE;
 }
 
-/* EN: Show the source pixel beneath x,y in tooltip. view owns the zoom.
- * Keyboard queries on canvas have no pointer coordinate.
- * RU: Показывает исходный пиксель под x,y в tooltip с учётом масштаба view.
- * Запрос с клавиатуры в canvas не задаёт координаты указателя. */
-static gboolean simulation_raster_pixel_tooltip(GtkWidget *canvas, gint x, gint y,
-                                                 gboolean keyboard, GtkTooltip *tooltip,
-                                                 CaptureView *view)
+/* EN: Format the pixel under screen coordinates x,y in view, or return NULL.
+ * RU: Форматирует пиксель под экранной точкой x,y в view или возвращает NULL. */
+static gchar *simulation_raster_pixel_text(CaptureView *view, gdouble x, gdouble y)
 {
+    GtkWidget *canvas = view->canvas;
     GtkImage *image = view->data;
-    if (keyboard || view->selecting || view->pan_button || gtk_image_get_storage_type(image) != GTK_IMAGE_PIXBUF)
-        return FALSE;
+    if (gtk_image_get_storage_type(image) != GTK_IMAGE_PIXBUF)
+        return NULL;
 
     GdkPixbuf *frame = gtk_image_get_pixbuf(image);
     gdouble left, top;
@@ -192,18 +189,42 @@ static gboolean simulation_raster_pixel_tooltip(GtkWidget *canvas, gint x, gint 
     gdouble source_y = (view->y * gtk_widget_get_allocated_height(canvas) + y * view->height - top) / scale;
     if (source_x < 0 || source_y < 0 ||
         source_x >= gdk_pixbuf_get_width(frame) || source_y >= gdk_pixbuf_get_height(frame))
-        return FALSE;
-    x = (gint)source_x;
-    y = (gint)source_y;
+        return NULL;
+    gint pixel_x = (gint)source_x;
+    gint pixel_y = (gint)source_y;
 
     const guchar *pixel = gdk_pixbuf_read_pixels(frame) +
-                          (gsize)y * gdk_pixbuf_get_rowstride(frame) + (gsize)x * 3;
-    gchar *label = g_strdup_printf("X: %d  Y: %d  ·  RGB(%u, %u, %u)  ·  #%02X%02X%02X",
-                                    x, y, (guint)pixel[0], (guint)pixel[1], (guint)pixel[2],
-                                    (guint)pixel[0], (guint)pixel[1], (guint)pixel[2]);
+                          (gsize)pixel_y * gdk_pixbuf_get_rowstride(frame) + (gsize)pixel_x * 3;
+    return g_strdup_printf("X: %d  Y: %d  ·  RGB(%u, %u, %u)  ·  #%02X%02X%02X",
+                           pixel_x, pixel_y, (guint)pixel[0], (guint)pixel[1], (guint)pixel[2],
+                           (guint)pixel[0], (guint)pixel[1], (guint)pixel[2]);
+}
+
+/* EN: Show pixel x,y of view in tooltip when canvas has a pointer query.
+ * RU: Показывает пиксель x,y вида view в tooltip при запросе указателя canvas. */
+static gboolean simulation_raster_pixel_tooltip(GtkWidget *canvas, gint x, gint y,
+                                                 gboolean keyboard, GtkTooltip *tooltip,
+                                                 CaptureView *view)
+{
+    (void)canvas;
+    if (keyboard || view->selecting || view->pan_button || view->pinching)
+        return FALSE;
+    gchar *label = simulation_raster_pixel_text(view, x, y);
+    if (!label)
+        return FALSE;
     gtk_tooltip_set_text(tooltip, label);
     g_free(label);
     return TRUE;
+}
+
+/* EN: Keep the pixel values clicked at x,y in view's inspection label.
+ * RU: Сохраняет значения пикселя x,y в строке просмотра view. */
+static void simulation_raster_inspect(CaptureView *view, gdouble x, gdouble y)
+{
+    gchar *text = simulation_raster_pixel_text(view, x, y);
+    gtk_label_set_text(GTK_LABEL(view->point_label),
+                       text ? text : insight_tr("No pixel at this point."));
+    g_free(text);
 }
 
 /* EN: Save the frame currently held by image as PNG. button locates the parent.
@@ -267,6 +288,7 @@ static GtkWidget *simulation_raster_notebook(WaveSimulation *run, gboolean final
         GtkWidget *image = gtk_image_new_from_pixbuf(final ? display->final_frame : NULL);
         g_object_set_data_full(G_OBJECT(canvas), "raster-image", g_object_ref_sink(image), g_object_unref);
         CaptureView *view = capture_view_new(page, canvas, simulation_raster_draw, image);
+        view->inspect = simulation_raster_inspect;
         gtk_widget_set_has_tooltip(canvas, TRUE);
         g_signal_connect(canvas, "query-tooltip", G_CALLBACK(simulation_raster_pixel_tooltip), view);
         gtk_box_pack_start(GTK_BOX(page), canvas, TRUE, TRUE, 0);

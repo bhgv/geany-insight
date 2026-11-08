@@ -123,6 +123,9 @@ static gboolean instruments_draw(GtkWidget *widget, cairo_t *cr, gpointer data)
     {
         gtk_label_set_text(GTK_LABEL(viewer->instrument_range),
                            "Choose X and Y for an XY plot. Add Z for a projection.");
+        CaptureView *view = g_object_get_data(G_OBJECT(widget), "capture-view");
+        if (view->pick_pending)
+            capture_scope_point(view, NULL, 0);
         return FALSE;
     }
     guint axes = traces[2] ? 3 : 2;
@@ -180,6 +183,9 @@ static gboolean instruments_draw(GtkWidget *widget, cairo_t *cr, gpointer data)
     cairo_stroke(cr);
     cairo_set_source_rgb(cr, .18, .52, .82);
     gboolean previous = FALSE;
+    CaptureView *view = g_object_get_data(G_OBJECT(widget), "capture-view");
+    const guint64 *selected = NULL;
+    gdouble nearest = 144;
     for (guint i = 0; i < count; i++)
     {
         if (!points[i].valid)
@@ -191,6 +197,15 @@ static gboolean instruments_draw(GtkWidget *widget, cairo_t *cr, gpointer data)
         instrument_project(&points[i], low, high, axes, &x, &y);
         x = 16 + x * width;
         y = 16 + (1 - y) * height;
+        if (view->pick_pending)
+        {
+            gdouble distance = capture_point_distance(view, x, y);
+            if (distance <= nearest)
+            {
+                nearest = distance;
+                selected = points[i].values;
+            }
+        }
         if (previous)
             cairo_line_to(cr, x, y);
         else
@@ -202,6 +217,8 @@ static gboolean instruments_draw(GtkWidget *widget, cairo_t *cr, gpointer data)
         previous = TRUE;
     }
     cairo_stroke(cr);
+    if (view->pick_pending)
+        capture_scope_point(view, selected, axes);
     if (known && viewer->cursor >= viewer->start && viewer->cursor <= (truncated ? tick : end))
     {
         InstrumentPoint cursor = instrument_point(traces, axes, viewer->cursor);

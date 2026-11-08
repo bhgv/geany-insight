@@ -318,6 +318,9 @@ static gboolean simulation_scope_draw(GtkWidget *widget, cairo_t *cr, gpointer d
     cairo_set_source_rgb(cr, .18, .52, .82);
     gboolean previous = FALSE;
     gdouble previous_y = 0;
+    CaptureView *view = g_object_get_data(G_OBJECT(widget), "capture-view");
+    const LiveScopeSample *selected = NULL;
+    gdouble nearest = 144;
     for (guint i = 0; i < scope->count; i++)
     {
         const LiveScopeSample *sample = &scope->samples[(start + i) % LIVE_SCOPE_POINTS];
@@ -335,6 +338,15 @@ static gboolean simulation_scope_draw(GtkWidget *widget, cairo_t *cr, gpointer d
         }
         x = 12 + x * w;
         y = 12 + (1 - y) * h;
+        if (view->pick_pending)
+        {
+            gdouble distance = capture_point_distance(view, x, y);
+            if (distance <= nearest)
+            {
+                nearest = distance;
+                selected = sample;
+            }
+        }
         if (!previous)
         {
             cairo_move_to(cr, x, y);
@@ -351,6 +363,16 @@ static gboolean simulation_scope_draw(GtkWidget *widget, cairo_t *cr, gpointer d
         previous_y = y;
     }
     cairo_stroke(cr);
+    if (view->pick_pending)
+    {
+        if (selected && scope->axes == 1)
+        {
+            guint64 coordinates[] = {selected->time, selected->point.values[0]};
+            capture_scope_point(view, coordinates, 2);
+        }
+        else
+            capture_scope_point(view, selected ? selected->point.values : NULL, scope->axes);
+    }
     return FALSE;
 }
 

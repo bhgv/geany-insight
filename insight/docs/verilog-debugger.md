@@ -386,7 +386,10 @@ its decimal RGB and hexadecimal color. **Save PNG…** saves the displayed
 full frame at native resolution. **−**, **Fit**, **+**, and drag-to-zoom
 are available during and after simulation. Drag with the left button
 to magnify a rectangle. Scroll to zoom around the pointer. Middle-drag
-or Shift-drag with the left button to pan. **Save view…** saves the visible area as PNG.
+or Shift-drag with the left button to pan. Pinch with two fingers on
+a touchscreen to zoom. A short left click displays the pixel or nearest
+known scope sample below the plot. Time scopes show time in ticks and
+the sample value. XY/XYZ scopes show the signal values at that sample. **Save view…** saves the visible area as PNG.
 
 Live Time, XY and XYZ scopes and VCD XY/XYZ plots share these tools.
 **Record video…** saves the visible area as Y4M at 10 fps, up to

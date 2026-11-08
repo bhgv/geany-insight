@@ -6,19 +6,23 @@
 
 typedef gboolean (*CaptureDraw)(GtkWidget *, cairo_t *, gpointer);
 
-typedef struct
+typedef struct CaptureView CaptureView;
+struct CaptureView
 {
-    GtkWidget *canvas, *record, *step, *manual;
+    GtkWidget *canvas, *record, *step, *manual, *point_label;
     CaptureDraw draw;
     gpointer data;
     gdouble x, y, width, height;
     gdouble start_x, start_y, end_x, end_y;
     gboolean selecting;
     guint pan_button;
+    gboolean pinching, pick_pending;
+    gdouble pinch_scale, pick_x, pick_y;
+    void (*inspect)(CaptureView *view, gdouble x, gdouble y);
     FILE *video;
     guint timer, video_width, video_height;
     guchar *planes;
-} CaptureView;
+};
 
 /* EN: Stop view's recording and report whether its output closed successfully.
  * RU: Останавливает запись view и возвращает результат закрытия файла. */
@@ -94,10 +98,55 @@ static void capture_pan(GtkWidget *canvas, CaptureView *view, gdouble x, gdouble
     gtk_widget_queue_draw(canvas);
 }
 
+/* EN: Request inspection at screen point x,y in view.
+ * RU: Запрашивает данные точки x,y на экране view. */
+static void capture_inspect(CaptureView *view, gdouble x, gdouble y)
+{
+    if (view->inspect)
+        view->inspect(view, x, y);
+    else
+    {
+        view->pick_x = x;
+        view->pick_y = y;
+        view->pick_pending = TRUE;
+    }
+}
+
+/* EN: Compare a projected scope sample at x,y with the pending click in view.
+ * RU: Сравнивает проекцию отсчёта x,y с ожидающей обработки точкой view. */
+static gdouble capture_point_distance(CaptureView *view, gdouble x, gdouble y)
+{
+    gint width = gtk_widget_get_allocated_width(view->canvas);
+    gint height = gtk_widget_get_allocated_height(view->canvas);
+    gdouble dx = (x - view->x * width) / view->width - view->pick_x;
+    gdouble dy = (y - view->y * height) / view->height - view->pick_y;
+    return dx * dx + dy * dy;
+}
+
+/* EN: Complete view's pending inspection with axes entries from values, or no sample.
+ * RU: Завершает выбор view и показывает axes значений из values или отсутствие отсчёта. */
+static void capture_scope_point(CaptureView *view, const guint64 *values, guint axes)
+{
+    view->pick_pending = FALSE;
+    if (!values)
+    {
+        gtk_label_set_text(GTK_LABEL(view->point_label), insight_tr("No known sample near this point."));
+        return;
+    }
+    GString *text = g_string_new(NULL);
+    for (guint i = 0; i < axes; ++i)
+        g_string_append_printf(text, "%s%c: %" G_GUINT64_FORMAT,
+                               i ? "  ·  " : "", "XYZ"[i], values[i]);
+    gtk_label_set_text(GTK_LABEL(view->point_label), text->str);
+    g_string_free(text, TRUE);
+}
+
 /* EN: Handle event in canvas, updating view's rectangular zoom or pan gesture.
  * RU: Обрабатывает event в canvas, меняя выделение или положение view. */
 static gboolean capture_button(GtkWidget *canvas, GdkEventButton *event, CaptureView *view)
 {
+    if (view->pinching)
+        return TRUE;
     if (event->type == GDK_BUTTON_RELEASE && event->button == view->pan_button)
     {
         capture_pan(canvas, view, event->x, event->y);
@@ -140,6 +189,8 @@ static gboolean capture_button(GtkWidget *canvas, GdkEventButton *event, Capture
             view->width = new_width;
             view->height = new_height;
         }
+        else if (right - left < 5 && bottom - top < 5)
+            capture_inspect(view, event->x, event->y);
         view->selecting = FALSE;
     }
     gtk_widget_queue_draw(canvas);
@@ -205,6 +256,8 @@ static gboolean capture_scroll(GtkWidget *canvas, GdkEventScroll *event, Capture
     capture_zoom_at(view, delta_y < 0 ? 1 - step : 1 / (1 - step), x, y);
     return TRUE;
 }
+
+#include "capture-pinch.inc"
 
 /* EN: Render view into a new RGB24 Cairo surface of width by height.
  * RU: Рисует view на новой поверхности RGB24 размером width на height. */
@@ -415,6 +468,16 @@ static CaptureView *capture_view_new(GtkWidget *page, GtkWidget *canvas,
     gtk_box_pack_start(GTK_BOX(recording), view->step, FALSE, FALSE, 0);
     g_signal_connect(view->step, "clicked", G_CALLBACK(capture_step), view);
     capture_record_state(view);
+    GtkGesture *pinch = gtk_gesture_zoom_new(canvas);
+    gtk_event_controller_set_propagation_phase(GTK_EVENT_CONTROLLER(pinch), GTK_PHASE_CAPTURE);
+    g_signal_connect(pinch, "begin", G_CALLBACK(capture_pinch_begin), view);
+    g_signal_connect(pinch, "scale-changed", G_CALLBACK(capture_pinch_scale), view);
+    g_signal_connect(pinch, "end", G_CALLBACK(capture_pinch_end), view);
+    g_signal_connect(pinch, "cancel", G_CALLBACK(capture_pinch_end), view);
+    g_object_set_data_full(G_OBJECT(canvas), "capture-pinch", pinch, g_object_unref);
+    view->point_label = gtk_label_new("");
+    gtk_label_set_selectable(GTK_LABEL(view->point_label), TRUE);
+    gtk_box_pack_start(GTK_BOX(page), view->point_label, FALSE, FALSE, 0);
     gtk_widget_set_tooltip_text(bar, insight_tr("Drag a rectangle or scroll to zoom. Middle-drag or Shift-drag to pan."));
     return view;
 }
