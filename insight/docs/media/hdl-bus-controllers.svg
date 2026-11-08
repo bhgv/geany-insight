@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="184" viewBox="0 0 720 184" role="img">
+  <title>SPI and I²C controller exchanges</title>
+  <desc>SPI exchanges transmit and receive bytes at the same time. I²C writes, restarts and then reads.</desc>
+  <rect width="720" height="184" rx="12" fill="#f3f6fa"/>
+  <g font-family="sans-serif" font-size="16" fill="#182b41">
+    <text x="18" y="30" font-weight="bold">SPI</text>
+    <text x="18" y="113" font-weight="bold">I²C</text>
+    <text x="94" y="32">CS# ↓</text>
+    <text x="200" y="32">MOSI → TX bytes</text>
+    <text x="413" y="32">MISO ← RX bytes</text>
+    <text x="634" y="32">CS# ↑</text>
+    <text x="94" y="114">START</text>
+    <text x="199" y="114">Addr + W</text>
+    <text x="296" y="114">TX →</text>
+    <text x="371" y="114">Sr</text>
+    <text x="427" y="114">Addr + R</text>
+    <text x="525" y="114">← RX</text>
+    <text x="632" y="114">STOP</text>
+    <text x="189" y="155" font-size="14">Target ACK</text>
+    <text x="321" y="155" font-size="14">Repeated START</text>
+    <text x="516" y="155" font-size="14">Final NACK</text>
+  </g>
+  <path d="M94 53H676 M94 128H676" fill="none" stroke="#3275a5" stroke-width="3"/>
+  <path d="M672 48l8 5-8 5m0 65 8 5-8 5" fill="none" stroke="#3275a5" stroke-width="3"/>
+</svg>

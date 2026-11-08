@@ -550,6 +550,21 @@ def check_spi_memory(compiler, runtime, fixtures, directory, environment):
     require("SPI memory test passed" in report, "SPI memory test did not finish")
 
 
+# EN: Run controller fixtures with compiler/runtime and check replies in directory.
+# RU: Запускает тесты ведущих через compiler/runtime и проверяет ответы в directory.
+def check_bus_controllers(compiler, runtime, fixtures, directory, environment):
+    compile_design(compiler, directory, [fixtures / "bus_controllers_tb.sv"], environment)
+    (directory / "nor.hex").write_text("@10 ba\n", encoding="ascii")
+    (directory / "i2c.hex").write_text("@1234 be ef\n", encoding="ascii")
+    modules = runtime.parent.parent / "lib" / "ivl"
+    report = capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
+                              "simulation.vvp"], directory, "bus-controllers", environment)
+    for message in ("SPI controller: RX[4] = ba", "SPI controller: RX[0] = a6",
+                    "I2C controller: RX[0] = be", "I2C controller: RX[1] = ef",
+                    "I2C controller: NACK, issuing STOP", "Bus controllers test passed"):
+        require(message in report, f"Missing controller output: {message}")
+
+
 def check_i2c_eeprom(compiler, runtime, fixtures, directory, environment):
     compile_design(compiler, directory, [fixtures / "i2c_eeprom_tb.sv"], environment)
     (directory / "i2c.hex").write_text("@1234 be ef\n", encoding="ascii")
@@ -619,6 +634,7 @@ def main():
     environment["PATH"] = str(binaries) + os.pathsep + environment.get("PATH", "")
     logs = args.logs.resolve()
     checks = [
+        ("bus-controllers", lambda directory: check_bus_controllers(compiler, runtime, fixtures, directory, environment)),
         ("i2c-eeprom", lambda directory: check_i2c_eeprom(compiler, runtime, fixtures, directory, environment)),
         ("lua-device-examples", lambda directory: check_documented_lua_devices(compiler, runtime, fixtures, directory, environment)),
         ("sdram", lambda directory: check_sdram(compiler, runtime, fixtures, directory, environment)),

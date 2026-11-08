@@ -2200,6 +2200,72 @@ static gboolean simulation_port_i2c(gchar **args, GString *body, GString *connec
     return TRUE;
 }
 
+/* EN: Validate and wire a controller recipe args into body and connections.
+ * ports tracks claimed DUT pins. i2c selects open-drain I²C or SPI.
+ * completion collects the controller done registers for the default run length.
+ * RU: Проверяет args и добавляет подключение ведущего в body и connections.
+ * ports содержит занятые выводы DUT. i2c выбирает I²C с открытым стоком или SPI.
+ * completion собирает признаки завершения для длительности по умолчанию. */
+static gboolean simulation_port_controller(gchar **args, GString *body,
+                                           GString *connections, GHashTable *ports,
+                                           gboolean i2c, GString *completion)
+{
+    guint pins = i2c ? 2 : 4;
+    guint64 mode_or_address, read_count = 0, phase, start;
+    const gchar *payload = args[i2c ? 4 : 5];
+    gsize length = strlen(payload);
+    gboolean empty = i2c && !strcmp(payload, "-");
+    if (g_hash_table_size(ports) + pins > 128 ||
+        (!empty && (!length || length > 128 || length % 2 ||
+                    strspn(payload, "0123456789abcdefABCDEF") != length)) ||
+        !g_ascii_string_to_unsigned(args[i2c ? 6 : 7], 10, 1, 1000000000, &phase, NULL) ||
+        !g_ascii_string_to_unsigned(args[i2c ? 7 : 8], 10, 1, 1000000000, &start, NULL))
+        return FALSE;
+    if (i2c ? (!simulation_i2c_address(args[3], &mode_or_address) ||
+               !g_ascii_string_to_unsigned(args[5], 10, 0, 64, &read_count, NULL)) :
+              !g_ascii_string_to_unsigned(args[6], 10, 0, 3, &mode_or_address, NULL))
+        return FALSE;
+    for (guint i = 1; i <= pins; i++)
+    {
+        if (!simulation_port_name(args[i]) || g_hash_table_contains(ports, args[i]))
+            return FALSE;
+        for (guint j = 1; j < i; j++)
+            if (!strcmp(args[i], args[j]))
+                return FALSE;
+    }
+
+    guint id = g_hash_table_size(ports);
+    for (guint i = 1; i <= pins; i++)
+        simulation_port_connect(body, connections, ports, args[i], 1, TRUE);
+    g_string_append_printf(body,
+        "reg bus_clk%u=%u, bus_data%u=%u, bus_cs%u=1, bus_done%u=0;\n",
+        id, i2c ? 1 : (guint)mode_or_address / 2, id, i2c, id, id);
+    if (i2c)
+        g_string_append_printf(body,
+            "pullup(pin%u); pullup(pin%u);\n"
+            "assign pin%u=bus_clk%u ? 1'bz : 1'b0;\n"
+            "assign pin%u=bus_data%u ? 1'bz : 1'b0;\n",
+            id, id + 1, id, id, id + 1, id);
+    else
+        g_string_append_printf(body,
+            "assign pin%u=bus_clk%u; assign pin%u=bus_cs%u; assign pin%u=bus_data%u;\n",
+            id, id, id + 1, id, id + 2, id);
+    g_string_append_printf(body,
+        "initial begin\n"
+        "  #%" G_GUINT64_FORMAT ";\n"
+        "  while (!bus_done%u) begin\n"
+        "    $geany_%s_controller(pin%u,pin%u,bus_clk%u,bus_data%u,bus_cs%u,bus_done%u,"
+        "\"%s\",%" G_GUINT64_FORMAT ",%" G_GUINT64_FORMAT ");\n"
+        "    #%" G_GUINT64_FORMAT ";\n"
+        "  end\nend\n",
+        start, id, i2c ? "i2c" : "spi", id, id + (i2c ? 1 : 3),
+        id, id, id, id, payload, mode_or_address, read_count, phase);
+    if (completion->len)
+        g_string_append(completion, " && ");
+    g_string_append_printf(completion, "bus_done%u", id);
+    return TRUE;
+}
+
 static gboolean simulation_port_uart(gchar **args, gint count, GString *body,
                                       GString *connections, GHashTable *ports, GString *live)
 {
@@ -2734,6 +2800,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
     gchar **lines = g_strsplit(recipe, "\n", -1);
     GString *body = g_string_new("`timescale 1ns/1ns\nmodule geany_port_testbench;\n");
     GString *connections = g_string_new(NULL);
+    GString *controller_completion = g_string_new(NULL);
     GString *trigger = g_string_new(NULL);
     GString *live = g_string_new(NULL);
     guint64 live_interval = 0;
@@ -2744,6 +2811,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
     GHashTable *models = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, simulation_model_free);
     gchar *module = NULL;
     guint64 duration = 1000;
+    gboolean explicit_duration = FALSE;
     guint attached_images = 0, scopes = 0;
     gboolean valid = TRUE;
     for (guint i = 0; lines[i] && valid; i++)
@@ -2762,7 +2830,10 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         else if (valid && count == 8 && !strcmp(args[0], "port-slice"))
             valid = simulation_slice_parse(args, slices);
         else if (valid && count == 2 && !strcmp(args[0], "duration"))
+        {
             valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &duration, NULL);
+            explicit_duration = TRUE;
+        }
         else if (valid && count == 2 && !strcmp(args[0], "live-interval"))
             valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &live_interval, NULL);
         else if (valid && (!strcmp(args[0], "scope") || !strcmp(args[0], "scope-xy") ||
@@ -2801,6 +2872,9 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             valid = simulation_port_ddr(args, body, connections, ports, images, generation);
             attached_images += valid && g_hash_table_contains(images, args[generation == 2 ? 7 : generation == 3 ? 8 : 6]);
         }
+        else if (valid && ((count == 9 && !strcmp(args[0], "spi-controller")) ||
+                           (count == 8 && !strcmp(args[0], "i2c-controller"))))
+            valid = simulation_port_controller(args, body, connections, ports, count == 8, controller_completion);
         else if (valid && (count == 2 || count == 6 || count == 7) && !strcmp(args[0], "spi-lua"))
         {
             gchar *defaults[] = {args[0], "sck", "cs_n", "mosi", "miso", args[1]};
@@ -2953,8 +3027,11 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             g_string_append(body, "// GEANY-CAPTURE-TRIGGER\n");
         g_string_append_printf(body,
             "initial begin %s$dumpfile(\"ports.vcd\"); $dumpvars(0,geany_port_testbench); %s end\n"
-            "initial begin #%" G_GUINT64_FORMAT "; $finish; end\nendmodule\n", trigger->str,
+            "initial begin #%" G_GUINT64_FORMAT "; ", trigger->str,
             trigger->len ? "$display(\"Waveform capture started at %0t\",$time); $fflush();" : "", duration);
+        if (!explicit_duration && controller_completion->len)
+            g_string_append_printf(body, "wait (%s); #1; ", controller_completion->str);
+        g_string_append(body, "$finish; end\nendmodule\n");
         if (live->len)
         {
             /* Put the pacing checkpoint at line 3 of the private source. */
@@ -2980,6 +3057,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
     g_hash_table_unref(spi_pins);
     g_hash_table_unref(i2c_buses);
     g_hash_table_unref(models);
+    g_string_free(controller_completion, TRUE);
     g_string_free(connections, TRUE);
     g_string_free(live, TRUE);
     g_string_free(trigger, TRUE);
@@ -3651,6 +3729,7 @@ static gboolean port_browser_matches(const gchar *direction, gchar field)
            (field == 'o' && !strcmp(direction, "output")) ||
            (field == 'b' && !strcmp(direction, "inout")) ||
            (field == 'c' && (!strcmp(direction, "output") || !strcmp(direction, "inout"))) ||
+           (field == 'd' && (!strcmp(direction, "input") || !strcmp(direction, "inout"))) ||
            (field == 'a' && strcmp(direction, "—"));
 }
 
@@ -3990,6 +4069,10 @@ static const DevicePreset device_presets[] = {
      "SPI PSRAM", DEVICE_SPI, (1u << DEVICE_SPI) | (1u << DEVICE_MEMORY)},
     {"i2c-eeprom", "SCL=scl|SDA=sda|Address=0x50", "c1|b1", 1, FALSE,
      "I²C EEPROM", DEVICE_I2C, (1u << DEVICE_I2C) | (1u << DEVICE_MEMORY)},
+    {"spi-controller", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso|TX hex=9f000000|Mode=0|Phase ns=50|Start ns=100",
+     "i1|i1|i1|o1", -1, FALSE, "SPI Controller", DEVICE_SPI, (1u << DEVICE_SPI)},
+    {"i2c-controller", "SCL=scl|SDA=sda|Address=0x50|TX hex=00|Read bytes=1|Phase ns=2500|Start ns=100",
+     "d1|b1", -1, FALSE, "I²C Controller", DEVICE_I2C, (1u << DEVICE_I2C)},
     {"spi-lua", "SCK=sck|CS#=cs_n|MOSI=mosi|MISO=miso", "o1|o1|o1|i1", -1, TRUE,
      "Lua SPI", DEVICE_SPI, (1u << DEVICE_SPI)},
     {"i2c-lua", "SCL=scl|SDA=sda|Address=0x50", "c1|b1", -1, TRUE,
@@ -4366,7 +4449,9 @@ static gchar *device_port_argument(const DeviceForm *form, GtkWidget *entry, con
         {
             guint offset = (guint)gtk_text_buffer_get_char_count(form->browser->recipe);
             alias = g_strdup_printf("geany_slice_%u_%u", offset, id);
-            gchar direction = *spec == 'c' ? (!strcmp(port->direction, "output") ? 'o' : 'b') : *spec;
+            gchar direction = *spec;
+            if (direction == 'c' || direction == 'd')
+                direction = !strcmp(port->direction, "inout") ? 'b' : direction == 'c' ? 'o' : 'i';
             g_string_append_printf(prefix, "port-slice %s %s %c %d %d %" G_GINT64_FORMAT
                                    " %" G_GINT64_FORMAT "\n", alias, name, direction,
                                    port->left, port->right, first, last);
@@ -5227,6 +5312,8 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         "sdram CK CKE CS_N RAS_N CAS_N WE_N A BA DQ DQM\n"
         "memory-image ADDR_OR_SPI_CS_N_OR_SDA FILE (before the memory rule)\n"
         "i2c-eeprom SCL SDA [ADDRESS=0x50]\n"
+        "spi-controller SCK CS_N MOSI MISO TX_HEX MODE PHASE_NS START_NS\n"
+        "i2c-controller SCL SDA ADDRESS TX_HEX_OR_DASH READ_BYTES PHASE_NS START_NS\n"
         "spi-lua [SCK CS_N MOSI MISO] SCRIPT [RESET_N]\n"
         "i2c-lua [SCL SDA ADDRESS] SCRIPT [RESET_N]\n"
         "spi-nor / spi-nand / spi-eeprom / spi-psram SCK CS_N MOSI MISO\n"

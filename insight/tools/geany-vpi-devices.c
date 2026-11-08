@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Registers the C test devices exposed to the Verilog harness.
+ * RU: Регистрирует тестовые устройства C, доступные тестбенчу Verilog. */
 #include <vpi_user.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -746,6 +748,10 @@ fail:
     return 0;
 }
 
+#include "geany-bus-controller.h"
+
+/* EN: Register all built-in VPI system tasks at simulator startup.
+ * RU: Регистрирует системные задачи встроенных устройств при запуске симулятора. */
 static void register_devices(void)
 {
     s_vpi_systf_data task = {0};
@@ -791,6 +797,12 @@ static void register_devices(void)
     vpi_register_systf(&task);
     task.tfname = "$geany_i2c_lua";
     task.user_data = &i2c_lua;
+    vpi_register_systf(&task);
+    task.tfname = "$geany_i2c_controller";
+    task.calltf = bus_controller_tick;
+    vpi_register_systf(&task);
+    task.tfname = "$geany_spi_controller";
+    task.user_data = NULL;
     vpi_register_systf(&task);
 }
 

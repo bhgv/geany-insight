@@ -530,6 +530,47 @@ Quad transfers and physical timing are outside its scope.
 
 - [SDR SDRAM x16](verilog-sdram.md) covers commands, byte masking and image preload.
 
+## Test SPI and I²C targets
+
+![SPI / I²C](media/hdl-bus-controllers.svg)
+
+When the Verilog DUT is the target, choose **SPI Controller** or
+**I²C Controller** in **Add Test Device…**. Connect the signals and set the
+transaction and start time. The built-in C device executes one transaction per
+rule and prints received bytes as `RX[index] = hex` in the simulator console.
+A received byte containing X or Z is reported with an unknown-bit mask.
+Without a duration rule, the harness waits for the controllers to finish.
+If you set a duration explicitly, allow enough time for the exchange.
+
+```text
+module spi_target
+duration 10000
+spi-controller sck cs_n mosi miso 9f000000 0 50 100
+```
+
+SPI holds CS# low over the entire byte sequence. Bytes are contiguous hex,
+MSB first. Add dummy transmit bytes to clock a reply. The trailing fields are
+SPI mode (0–3), phase in nanoseconds and start time in nanoseconds. An SPI
+clock cycle is four phases. The example sends `9f` and clocks three reply bytes.
+
+```text
+module i2c_target
+duration 300000
+i2c-controller scl sda 0x50 1234 2 2500 100
+```
+
+The I²C fields are 7-bit address, contiguous write bytes, read length, phase
+in nanoseconds and start time. The example writes `12 34`, sends a repeated
+START, reads two bytes, then sends NACK and STOP. Use `-` for a read without
+a preceding write, and set the read length to `0` for write-only operation.
+Using both `-` and `0` probes the address. SCL and SDA are open-drain with
+pull-ups. Use an input SCL for a simple target or an inout SCL for stretching.
+A target NACK ends the transaction with STOP. A stretched clock is allowed
+up to 1024 phases before the controller releases both lines and reports timeout.
+This is a single-controller bus without arbitration.
+
+Each transaction allows up to 64 write bytes and, for I²C, 64 read bytes.
+
 ## Lua devices
 
 - [SPI](verilog-lua-spi.md) covers bit shifts, replies to byte commands and CS# frame handling.
