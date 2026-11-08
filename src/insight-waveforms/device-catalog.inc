@@ -84,6 +84,11 @@ static const DevicePreset device_presets[] = {
      "CK=ck|CKE=cke|CS#=cs_n|RAS#=ras_n|"
      "CAS#=cas_n|WE#=we_n|A=a|BA=ba|DQ=dq|DQM=dqm",
      "o1|o1|o1|o1|o1|o1|o13|o2|b16|o2", 6, FALSE, "SDR SDRAM", DEVICE_MEMORY, (1u << DEVICE_MEMORY)},
+    {"ddr1",
+     "CK=ck|CKE=cke|CS#=cs_n|RAS#=ras_n|CAS#=cas_n|WE#=we_n|"
+     "A=a|BA=ba|DQ=dq|DQS=dqs|DM=dm|Read latency=2|Write latency=1",
+     "o1|o1|o1|o1|o1|o1|o13|o2|b8|b1|o1", 6, FALSE,
+     "DDR1", DEVICE_MEMORY, (1u << DEVICE_MEMORY)},
     {"ddr2",
      "CK=ck|CKE=cke|CS#=cs_n|RAS#=ras_n|CAS#=cas_n|WE#=we_n|"
      "A=a|BA=ba|DQ=dq|DQS=dqs|DM=dm|Read latency=3|Write latency=2",

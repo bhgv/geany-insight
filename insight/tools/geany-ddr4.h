@@ -1,11 +1,14 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* Copyright (c) 2026 bhgv
+ * EN: Shared functional burst storage and command handling for DDR models.
+ * RU: Общая память пакетов и обработка команд функциональных моделей DDR. */
 #ifndef GEANY_DDR4_H
 #define GEANY_DDR4_H
 
 #include <stdint.h>
 #include <stddef.h>
 
-/* Functional x8 model. One rank, fixed BL8, one outstanding burst. */
+/* Functional x8 model. One rank, one configured burst length, one outstanding burst. */
 enum { DDR4_BANKS = 16, DDR4_CAPACITY = 65536, DDR4_BURST = 8 };
 enum { DDR4_IDLE, DDR4_READ, DDR4_WRITE };
 
@@ -18,7 +21,7 @@ typedef struct {
     Ddr4Cell cells[DDR4_CAPACITY];
     uint32_t row[DDR4_BANKS];
     uint64_t cycle, due;
-    unsigned open, mode, bank, column, beat, auto_close;
+    unsigned open, mode, bank, column, beat, burst, auto_close;
 } Ddr4;
 
 static Ddr4Cell *ddr4_cell_key(Ddr4 *device, uint32_t key, int create)
@@ -39,9 +42,12 @@ static Ddr4Cell *ddr4_cell_key(Ddr4 *device, uint32_t key, int create)
     return NULL;
 }
 
+/* EN: Find the current burst cell in device. create allocates a missing cell.
+ * RU: Ищет ячейку текущего пакета device. create разрешает создать ячейку. */
 static Ddr4Cell *ddr4_cell(Ddr4 *device, int create)
 {
-    unsigned column = (device->column & ~7u) | ((device->column + device->beat) & 7u);
+    unsigned mask = device->burst - 1;
+    unsigned column = (device->column & ~mask) | ((device->column + device->beat) & mask);
     uint32_t key = (device->row[device->bank] << 14) | (device->bank << 10) | column;
     return ddr4_cell_key(device, key, create);
 }
@@ -79,9 +85,11 @@ static void ddr4_command(Ddr4 *device, unsigned activate_n, unsigned address,
     device->due = device->cycle + (device->mode == DDR4_READ ? read_latency : write_latency);
 }
 
+/* EN: Advance device by one beat and apply auto-precharge at burst end.
+ * RU: Продвигает device на один такт данных и закрывает банк при автопредзаряде. */
 static void ddr4_next_beat(Ddr4 *device)
 {
-    if (++device->beat == DDR4_BURST) {
+    if (++device->beat == device->burst) {
         if (device->auto_close)
             device->open &= ~(1u << device->bank);
         device->mode = DDR4_IDLE;

@@ -528,6 +528,17 @@ def check_ddr4_device(compiler, runtime, fixtures, directory, environment):
     require("DDR4 device passed" in report, "Built-in DDR4 test did not finish")
 
 
+# EN: Run the DDR1 fixture using compiler and runtime with its image in directory.
+# RU: Запускает тест DDR1 через compiler и runtime с образом в directory.
+def check_ddr1_device(compiler, runtime, fixtures, directory, environment):
+    compile_design(compiler, directory, [fixtures / "ddr1_device_tb.sv"], environment)
+    (directory / "ddr1.hex").write_text("@48c800 a0 a1 a2 a3\n", encoding="ascii")
+    modules = runtime.parent.parent / "lib" / "ivl"
+    report = capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
+                              "simulation.vvp"], directory, "ddr1", environment)
+    require("DDR1 device passed" in report, "Built-in DDR1 test did not finish")
+
+
 def check_memory_image(compiler, runtime, fixtures, directory, environment):
     compile_design(compiler, directory, [fixtures / "memory_image_tb.sv"], environment)
     (directory / "sram.hex").write_text("# two words\n@3 beef 0123\n", encoding="ascii")
@@ -640,6 +651,7 @@ def main():
         ("sdram", lambda directory: check_sdram(compiler, runtime, fixtures, directory, environment)),
         ("spi-memory", lambda directory: check_spi_memory(compiler, runtime, fixtures, directory, environment)),
         ("memory-image", lambda directory: check_memory_image(compiler, runtime, fixtures, directory, environment)),
+        ("ddr1-device", lambda directory: check_ddr1_device(compiler, runtime, fixtures, directory, environment)),
         ("ddr4-device", lambda directory: check_ddr4_device(compiler, runtime, fixtures, directory, environment)),
         ("editor", lambda directory: check_editor(editor, directory, environment)),
         ("breakpoint", lambda directory: check_breakpoint(compiler, runtime, fixtures, directory, environment)),

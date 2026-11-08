@@ -193,6 +193,7 @@ static void simulation_memory_defaults(gchar ***arguments, gint *count)
     } presets[] = {
         {"sram", "addr dq ce_n we_n oe_n 16 8", 5},
         {"sdram", "ck cke cs_n ras_n cas_n we_n a ba dq dqm", 10},
+        {"ddr1", "ck cke cs_n ras_n cas_n we_n a ba dq dqs dm 2 1", 11},
         {"ddr2", "ck cke cs_n ras_n cas_n we_n a ba dq dqs dm 3 2", 11},
         {"ddr3", "ck reset_n cke cs_n ras_n cas_n we_n a ba dq dqs dm 3 2", 12},
         {"ddr4", "ck reset_n cke cs_n act_n a ba bg dq dqs dm_n 3 2", 11},

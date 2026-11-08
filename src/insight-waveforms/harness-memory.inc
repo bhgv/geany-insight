@@ -95,10 +95,12 @@ static gboolean simulation_port_sram(gchar **args, GString *body, GString *conne
 static gboolean simulation_port_ddr(gchar **args, GString *body, GString *connections, GHashTable *ports,
                                     GHashTable *images, guint generation)
 {
+    const guint ddr1_widths[] = {1, 1, 1, 1, 1, 1, 13, 2, 8, 1, 1};
     const guint ddr2_widths[] = {1, 1, 1, 1, 1, 1, 14, 3, 8, 1, 1};
     const guint ddr3_widths[] = {1, 1, 1, 1, 1, 1, 1, 16, 3, 8, 1, 1};
     const guint ddr4_widths[] = {1, 1, 1, 1, 1, 17, 2, 2, 8, 1, 1};
-    const guint *widths = generation == 2 ? ddr2_widths : generation == 3 ? ddr3_widths : ddr4_widths;
+    const guint *widths = generation == 1 ? ddr1_widths : generation == 2 ? ddr2_widths :
+                          generation == 3 ? ddr3_widths : ddr4_widths;
     guint count = generation == 3 ? G_N_ELEMENTS(ddr3_widths) : G_N_ELEMENTS(ddr4_widths);
     guint ids[G_N_ELEMENTS(ddr3_widths)];
     guint64 read_latency, write_latency;
@@ -122,14 +124,14 @@ static gboolean simulation_port_ddr(gchar **args, GString *body, GString *connec
                            "assign pin%u=ddr_dq%u; assign pin%u=ddr_dqs%u;\n",
                            id, id, dq, id, dqs, id);
     g_string_append_printf(body, "always @(pin%u or pin%u", id, dqs);
-    if (generation != 2)
+    if (generation > 2)
         g_string_append_printf(body, " or pin%u", ids[1]);
     g_string_append_printf(body, ") $geany_ddr%u(", generation);
     for (guint i = 0; i < count; i++)
         g_string_append_printf(body, "pin%u,", ids[i]);
     g_string_append_printf(body, "%" G_GUINT64_FORMAT ",%" G_GUINT64_FORMAT ",ddr_dq%u,ddr_dqs%u",
                            read_latency, write_latency, id, id);
-    simulation_memory_argument(body, images, args[generation == 2 ? 7 : generation == 3 ? 8 : 6]);
+    simulation_memory_argument(body, images, args[generation <= 2 ? 7 : generation == 3 ? 8 : 6]);
     return TRUE;
 }
 

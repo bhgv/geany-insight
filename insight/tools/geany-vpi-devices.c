@@ -230,12 +230,16 @@ static s_vpi_vecval vector_word(vpiHandle port)
     return value.value.vector[0];
 }
 
+/* EN: Store preload byte value at packed address in DDR state data. Return false out of range.
+ * RU: Записывает байт value по упакованному address в DDR из data. При выходе за границы возвращает false. */
 static int ddr_image_write(void *data, uint32_t address, uint64_t value)
 {
     Ddr4Vpi *state = data;
-    unsigned row_bits = state->generation == 2 ? 14 : state->generation == 3 ? 16 : 17;
+    unsigned row_bits = state->generation == 1 ? 13 : state->generation == 2 ? 14 :
+                        state->generation == 3 ? 16 : 17;
     if ((address >> 14) >= (1u << row_bits) ||
-        (state->cas_n && (address & (1u << 13))) || value > 255)
+        (state->cas_n && (address & (1u << 13))) ||
+        (state->generation == 1 && (address & (1u << 12))) || value > 255)
         return 0;
     Ddr4Cell *cell = ddr4_cell_key(&state->device, address, 1);
     if (!cell)
@@ -245,6 +249,8 @@ static int ddr_image_write(void *data, uint32_t address, uint64_t value)
     return 1;
 }
 
+/* EN: Read ports from VPI call and create the model for generation, or return NULL.
+ * RU: Читает порты VPI call и создаёт модель поколения generation либо возвращает NULL. */
 static Ddr4Vpi *ddr_open(vpiHandle call, unsigned generation)
 {
     int separate_commands = generation != 4;
@@ -261,7 +267,7 @@ static Ddr4Vpi *ddr_open(vpiHandle call, unsigned generation)
     unsigned count = D_COUNT + separate_commands;
     for (unsigned i = 0; i < count; i++) {
         unsigned pin = separate_commands ? (unsigned)ddr3_order[i] : i;
-        if (generation == 2 && pin == D_RESET)
+        if (generation <= 2 && pin == D_RESET)
             continue;
         pins[pin] = vpi_scan(args);
         if (!pins[pin])
@@ -273,7 +279,11 @@ static Ddr4Vpi *ddr_open(vpiHandle call, unsigned generation)
         return NULL;
     }
     for (unsigned i = 0; i < count; i++) {
-        int width = generation == 2 && i == D_ADDRESS ? 14 : widths[i];
+        int width = widths[i];
+        if (i == D_ADDRESS && generation <= 2)
+            width = generation == 1 ? 13 : 14;
+        if (i == D_BA && generation == 1)
+            width = 2;
         if (pins[i] && width && vpi_get(vpiSize, pins[i]) != width)
             return NULL;
     }
@@ -286,6 +296,7 @@ static Ddr4Vpi *ddr_open(vpiHandle call, unsigned generation)
         return NULL;
     memcpy(state->ports, pins, sizeof state->ports);
     state->generation = generation;
+    state->device.burst = generation == 1 ? 4 : DDR4_BURST;
     if (separate_commands) {
         state->cas_n = pins[D_BG];
         state->we_n = pins[D_COUNT];
@@ -762,12 +773,15 @@ static void register_devices(void)
     task.tfname = "$geany_ddr4";
     task.calltf = ddr_update;
     vpi_register_systf(&task);
-    static PLI_BYTE8 ddr3 = 3, ddr2 = 2;
+    static PLI_BYTE8 ddr3 = 3, ddr2 = 2, ddr1 = 1;
     task.tfname = "$geany_ddr3";
     task.user_data = &ddr3;
     vpi_register_systf(&task);
     task.tfname = "$geany_ddr2";
     task.user_data = &ddr2;
+    vpi_register_systf(&task);
+    task.tfname = "$geany_ddr1";
+    task.user_data = &ddr1;
     vpi_register_systf(&task);
     static PLI_BYTE8 nor = SPI_NOR, nand = SPI_NAND, eeprom = SPI_EEPROM, psram = SPI_PSRAM;
     task.user_data = NULL;

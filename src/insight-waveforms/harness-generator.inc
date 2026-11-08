@@ -79,14 +79,14 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             attached_images += valid && g_hash_table_contains(images, args[1]);
         }
         else if (valid &&
-                 ((count == 14 && !strcmp(args[0], "ddr4")) ||
-                  (count == 15 && !strcmp(args[0], "ddr3")) || (count == 14 && !strcmp(args[0], "ddr2"))))
+                 ((count == 14 && (!strcmp(args[0], "ddr1") || !strcmp(args[0], "ddr2") ||
+                                   !strcmp(args[0], "ddr4"))) ||
+                  (count == 15 && !strcmp(args[0], "ddr3"))))
         {
             guint generation = args[0][3] - '0';
+            guint image_port = generation <= 2 ? 7 : generation == 3 ? 8 : 6;
             valid = simulation_port_ddr(args, body, connections, ports, images, generation);
-            attached_images += valid && g_hash_table_contains(images, args[generation == 2   ? 7
-                                                                           : generation == 3 ? 8
-                                                                                             : 6]);
+            attached_images += valid && g_hash_table_contains(images, args[image_port]);
         }
         else if (valid && ((count == 9 && !strcmp(args[0], "spi-controller")) ||
                            (count == 8 && !strcmp(args[0], "i2c-controller"))))

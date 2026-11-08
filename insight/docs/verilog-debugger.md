@@ -374,6 +374,7 @@ spi-nor
 | --- | --- | --- |
 | `sram` | `addr dq ce_n we_n oe_n` | 16 address bits, 8 data bits |
 | `sdram` | `ck cke cs_n ras_n cas_n we_n a ba dq dqm` | x16, BL1, CAS 3 |
+| `ddr1` | `ck cke cs_n ras_n cas_n we_n a ba dq dqs dm` | RL 2, WL 1 CK cycles, BL4 |
 | `ddr2` | `ck cke cs_n ras_n cas_n we_n a ba dq dqs dm` | RL 3, WL 2 CK cycles |
 | `ddr3` | `ck reset_n cke cs_n ras_n cas_n we_n a ba dq dqs dm` | RL 3, WL 2 CK cycles |
 | `ddr4` | `ck reset_n cke cs_n act_n a ba bg dq dqs dm_n` | RL 3, WL 2 CK cycles |
@@ -444,6 +445,24 @@ DDR3, bank is BA (0–7). For DDR4 it is `(BG << 2) | BA` (0–15).
 The saved recipe keeps the path. Each new session reads the file again
 and applies it before the device responds to its first bus event.
 
+
+## Built-in functional DDR1 x8
+
+Choose **DDR1** in **Add Test Device…**. The model has a 13-bit address,
+four banks, an 8-bit bidirectional DQ bus and a single bidirectional DQS.
+It implements ACTIVATE, READ, WRITE and PRECHARGE, including auto-precharge,
+write masking with DM and sequential BL4 wrapping. Defaults are two CK
+cycles of read latency and one CK cycle of write latency.
+
+```text
+memory-image a "ddr1.hex"
+ddr1 ck cke cs_n ras_n cas_n we_n a ba dq dqs dm
+```
+
+The byte address in the hex image is `(row << 14) | (bank << 10) | column`.
+Use the actual DUT address-port name in the image rule. The model starts
+with banks closed and uses a fixed BL4. It does not model mode registers,
+refresh timing, DLL initialization or electrical timing.
 
 ## Built-in functional DDR2 x8
 
