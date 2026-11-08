@@ -6,36 +6,100 @@
 
 enum { PORT_SETUP_SAVE = 1, PORT_SETUP_LOAD, PORT_SETUP_NEW };
 
-/* EN: Return the sole module declared in source, ignoring comments and strings.
- * RU: Возвращает единственный модуль из source, пропуская комментарии и строки. */
-static gchar *simulation_recipe_default_module(const gchar *source)
+/* EN: Collect module names declared in source, ignoring comments and strings.
+ * RU: Собирает имена модулей из source, пропуская комментарии и строки. */
+static GPtrArray *simulation_recipe_modules(const gchar *source)
 {
+    GPtrArray *modules = g_ptr_array_new_with_free_func(g_free);
     if (!source)
-        return NULL;
+        return modules;
     GRegex *tokens = g_regex_new(
         "//[^\\n]*|/\\*[\\s\\S]*?\\*/|\"(?:\\\\.|[^\"\\\\])*\"|"
         "\\bmodule\\s+(?:(?:automatic|static)\\s+)?([A-Za-z_][A-Za-z0-9_$]*)", 0, 0, NULL);
     GMatchInfo *match;
     g_regex_match(tokens, source, 0, &match);
-    gchar *module = NULL;
     while (g_match_info_matches(match))
     {
         gchar *name = g_match_info_fetch(match, 1);
-        if (*name && module)
-        {
-            g_clear_pointer(&module, g_free);
-            g_free(name);
-            break;
-        }
-        if (*name)
-            module = name;
+        gboolean duplicate = FALSE;
+        for (guint i = 0; i < modules->len; ++i)
+            duplicate |= g_str_equal(modules->pdata[i], name);
+        if (*name && !duplicate)
+            g_ptr_array_add(modules, name);
         else
             g_free(name);
         g_match_info_next(match, NULL);
     }
     g_match_info_free(match);
     g_regex_unref(tokens);
-    return module;
+    return modules;
+}
+
+/* EN: Find the module declaration in buffer, returning its range and owned name.
+ * RU: Находит объявление модуля в buffer, возвращая диапазон и имя. */
+static gchar *simulation_recipe_module_line(GtkTextBuffer *buffer, GtkTextIter *first, GtkTextIter *last)
+{
+    gtk_text_buffer_get_start_iter(buffer, first);
+    do
+    {
+        *last = *first;
+        if (!gtk_text_iter_ends_line(last))
+            gtk_text_iter_forward_to_line_end(last);
+        gchar *line = gtk_text_buffer_get_text(buffer, first, last, FALSE);
+        gchar **args = NULL;
+        gint argc;
+        gchar *name = NULL;
+        if (g_shell_parse_argv(line, &argc, &args, NULL) && argc == 2 && !strcmp(args[0], "module"))
+            name = g_strdup(args[1]);
+        g_strfreev(args);
+        g_free(line);
+        if (name)
+            return name;
+    }
+    while (gtk_text_iter_forward_line(first));
+    return NULL;
+}
+
+/* EN: Reflect the module in buffer in combo without changing the recipe.
+ * RU: Показывает модуль из buffer в combo без изменения рецепта. */
+static void simulation_module_sync(GtkTextBuffer *buffer, GtkComboBox *combo)
+{
+    GtkTextIter first, last;
+    gchar *name = simulation_recipe_module_line(buffer, &first, &last);
+    g_object_set_data(G_OBJECT(combo), "module-sync", GINT_TO_POINTER(1));
+    if (!name || !gtk_combo_box_set_active_id(combo, name))
+        gtk_combo_box_set_active(combo, 0);
+    g_object_set_data(G_OBJECT(combo), "module-sync", NULL);
+    g_free(name);
+}
+
+/* EN: Apply the selected module from combo to buffer; buffer changes refresh the ports.
+ * RU: Записывает выбранный в combo модуль в buffer, после чего обновляются порты. */
+static void simulation_module_selected(GtkComboBox *combo, GtkTextBuffer *buffer)
+{
+    if (g_object_get_data(G_OBJECT(combo), "module-sync"))
+        return;
+    const gchar *name = gtk_combo_box_get_active_id(combo);
+    if (!name || !*name)
+        return;
+    GtkTextIter first, last;
+    gchar *old = simulation_recipe_module_line(buffer, &first, &last);
+    if (g_strcmp0(old, name))
+    {
+        gchar *line = g_strdup_printf("module %s", name);
+        if (old)
+            gtk_text_buffer_delete(buffer, &first, &last);
+        else
+        {
+            gtk_text_buffer_get_start_iter(buffer, &first);
+            gchar *with_newline = g_strconcat(line, "\n", NULL);
+            g_free(line);
+            line = with_newline;
+        }
+        gtk_text_buffer_insert(buffer, &first, line, -1);
+        g_free(line);
+    }
+    g_free(old);
 }
 
 /* EN: Rebuild the device list store from supported rules in buffer.
@@ -258,8 +322,17 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     GtkWidget *view = gtk_text_view_new();
     gtk_text_view_set_monospace(GTK_TEXT_VIEW(view), TRUE);
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
-    g_object_set_data_full(G_OBJECT(buffer), "default-module",
-                           simulation_recipe_default_module(source_snapshot), g_free);
+    GPtrArray *modules = simulation_recipe_modules(expanded ? expanded : source_snapshot);
+    if (modules->len == 1)
+        g_object_set_data_full(G_OBJECT(buffer), "default-module", g_strdup(modules->pdata[0]), g_free);
+    GtkWidget *module_picker = gtk_combo_box_text_new();
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(module_picker), "", "Choose DUT module…");
+    for (guint i = 0; i < modules->len; ++i)
+        gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(module_picker), modules->pdata[i], modules->pdata[i]);
+    g_ptr_array_unref(modules);
+    gtk_box_pack_start(GTK_BOX(box), module_picker, FALSE, FALSE, 4);
+    g_signal_connect(module_picker, "changed", G_CALLBACK(simulation_module_selected), buffer);
+    g_signal_connect_object(buffer, "changed", G_CALLBACK(simulation_module_sync), module_picker, 0);
     g_object_set_data_full(G_OBJECT(dialog), "verilog-port-recipe", g_object_ref(buffer), g_object_unref);
     GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     GtkWidget *wizard = gtk_button_new_with_label("Add Test Device…");
@@ -282,6 +355,7 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         g_object_unref(stream);
     }
     g_object_unref(file);
+    simulation_module_sync(buffer, GTK_COMBO_BOX(module_picker));
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_container_add(GTK_CONTAINER(scroll), view);
     PortBrowser browser = {.source = source_snapshot,
