@@ -30,6 +30,19 @@ At a breakpoint or after **Pause**, double-click a value in **Registers**. Edit 
 
 Right-click a signal row and choose **Changes…** to see up to ten stops, newest first, with aligned unsigned decimal, hexadecimal and binary values. Select a row to highlight it. Decimal is unavailable for X/Z values. A hex digit with a mixture of known and unknown bits is shown as **?**. A register edit updates the latest stop in the history. Underlined binary and hexadecimal digits mark changes from the preceding row. **Changed bits** counts individual four-state differences. **Simulation tick** shows the stop time in simulator ticks. With the simulator paused, double-click the row or choose **Open waveform at stop**. If the VCD includes that time, the preview centers on it and selects the signal track when present.
 
+### Inspect values in a paused frame
+
+In the paused debugger, choose a process and frame, then open **Frame values**.
+Expand a memory, dynamic array or queue to see its indexed elements. The tree
+shows the selected activation, including locals of a suspended automatic task.
+After switching frames or resuming to another stop, the tree reads a fresh snapshot.
+
+Double-click an integral variable or element value to edit it. Use the same
+literals and keyboard shortcuts as in **Registers**. The edit applies to the
+selected activation and the simulator reads the result back while paused.
+Nets are read-only. The bundled VVP bridge displays packed structs as a single
+bit vector. The tree shows up to 128 entries per array and 512 rows per frame.
+
 ### Stop on a signal transition
 
 While paused, right-click a port, net or register in **HDL Signals** and choose **Stop on signal…**. Select any change, a 0→1 or 1→0 edge on a one-bit signal, a bit changing to X/Z, or a value entering a mask. Enter one mask character per bit. For example, `10??` matches a four-bit value whose two high bits are `10`. A `?` ignores that bit. The mask fires when the value first starts matching.

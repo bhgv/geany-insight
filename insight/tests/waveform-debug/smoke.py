@@ -243,6 +243,14 @@ def check_processes(compiler, runtime, fixtures, directory, environment):
             saved = re.search(r"(?m)^saved = ([01xz]+)\r?$", response)
             require(saved, "Missing automatic local saved")
             values.add(saved.group(1))
+            snapshot = simulator.command("geany-frame-tree")
+            require(f"GEANY-FRAME-ROW\tW\tlocal_items\t0\t{saved.group(1)}" in snapshot,
+                    "Dynamic array element was not read in the selected activation")
+            if worker == workers[0]:
+                edited = simulator.command("geany-frame-write local_items 0 10xz")
+                require("GEANY-FRAME-ROW\tW\tlocal_items\t0\t10xz" in edited,
+                        "Dynamic array write did not read back the four-state value")
+
         require(values == {"0011", "1001"}, "Task activations did not retain distinct values")
         require("Frame 1:" in simulator.command("geany-select-frame 1"), "Missing parent frame")
         require("samples[-2] = 10xz" in simulator.command("geany-read-memory samples -2"),

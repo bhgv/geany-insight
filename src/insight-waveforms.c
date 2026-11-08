@@ -1718,6 +1718,15 @@ typedef struct {
     GQueue signal_stop_restore;
     gboolean signal_stop_restoring, signal_stop_disabling, signal_manual_stop;
     GtkListStore *signal_tables[4];
+    GtkTreeStore *frame_values;
+    GtkWidget *frame_status;
+    GtkWidget *frame_view;
+    GtkTreeIter frame_group;
+    gboolean frame_has_group;
+    gint frame_reopen_group;
+    gboolean frame_ready;
+    gboolean frame_refresh;
+    gboolean frame_receiving;
     GtkWidget *signal_search, *signal_status, *signal_context, *signal_state;
     GtkWidget *signal_changed_only;
     GtkTreeSelection *signal_selection[4];
@@ -6440,6 +6449,70 @@ static void signal_stop_record(WaveSimulation *run, const gchar *text)
 
 /* EN: Decode complete protocol records from length bytes for run.
  * RU: Разбирает полные записи протокола из length байт для сеанса run. */
+enum { FRAME_LABEL, FRAME_VALUE, FRAME_NAME, FRAME_INDEX, FRAME_EDITABLE, FRAME_COLUMNS };
+
+/* EN: Populate the frame tree of run from one bridge record text.
+ * RU: Заполняет дерево кадров сеанса run по одной записи text от симулятора. */
+static void simulation_frame_record(WaveSimulation *run, const gchar *text)
+{
+    if (!run->frame_values)
+        return;
+    if (!strcmp(text, "GEANY-VVP-FRAME-TREE"))
+    {
+        run->frame_ready = TRUE;
+        run->frame_refresh = TRUE;
+    }
+    else if (g_str_has_prefix(text, "GEANY-FRAME-BEGIN\t"))
+    {
+        gtk_tree_store_clear(run->frame_values);
+        run->frame_receiving = TRUE;
+        run->frame_has_group = FALSE;
+        gtk_label_set_text(GTK_LABEL(run->frame_status), text + strlen("GEANY-FRAME-BEGIN\t"));
+    }
+    else if (!strcmp(text, "GEANY-FRAME-UNAVAILABLE"))
+    {
+        gtk_tree_store_clear(run->frame_values);
+        run->frame_receiving = FALSE;
+        gtk_label_set_text(GTK_LABEL(run->frame_status), insight_tr("Select a paused HDL process and frame."));
+    }
+    else if (g_str_has_prefix(text, "GEANY-FRAME-END\t"))
+    {
+        run->frame_receiving = FALSE;
+        if (run->frame_reopen_group >= 0)
+        {
+            GtkTreePath *group = gtk_tree_path_new_from_indices(run->frame_reopen_group, -1);
+            gtk_tree_view_expand_row(GTK_TREE_VIEW(run->frame_view), group, FALSE);
+            gtk_tree_path_free(group);
+            run->frame_reopen_group = -1;
+        }
+        if (g_str_has_suffix(text, "\tlimited"))
+            gtk_label_set_text(GTK_LABEL(run->frame_status), insight_tr("Frame snapshot reached the display limit."));
+    }
+    else if (run->frame_receiving && g_str_has_prefix(text, "GEANY-FRAME-ROW\t"))
+    {
+        gchar **fields = g_strsplit(text + strlen("GEANY-FRAME-ROW\t"), "\t", 4);
+        if (g_strv_length(fields) == 4)
+        {
+            gboolean root = !strcmp(fields[2], "-");
+            gboolean group = !strcmp(fields[0], "G");
+            GtkTreeIter row;
+            gchar *label = root ? g_strdup(fields[1]) : g_strdup_printf("[%s]", fields[2]);
+            gtk_tree_store_insert_with_values(run->frame_values, &row,
+                !root && run->frame_has_group ? &run->frame_group : NULL, -1,
+                FRAME_LABEL, label, FRAME_VALUE, fields[3], FRAME_NAME, fields[1],
+                FRAME_INDEX, fields[2], FRAME_EDITABLE, !strcmp(fields[0], "W"), -1);
+            if (root)
+            {
+                run->frame_has_group = group;
+                if (group)
+                    run->frame_group = row;
+            }
+            g_free(label);
+        }
+        g_strfreev(fields);
+    }
+}
+
 static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsize length)
 {
     for (gsize i = 0; i < length; i++)
@@ -6455,6 +6528,7 @@ static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsi
         const gchar *text = run->protocol_line->str;
         if (g_str_has_prefix(text, "> "))
             text += 2;
+        simulation_frame_record(run, text);
         signal_tables_record(run, text);
         signal_stop_record(run, text);
         if (!strcmp(text, "GEANY-VVP-SIGNAL-STOPS"))
@@ -6648,7 +6722,7 @@ static void simulation_handle_observer_event(WaveSimulation *run)
  * префиксы, разделённые между чтениями. */
 static GString *simulation_scope_console(WaveSimulation *run, const gchar *bytes, gsize count)
 {
-    const gchar *prefixes[] = {"GEANY-SCOPE\t", "GEANY-PORT\t", "GEANY-SIGNAL\t",
+    const gchar *prefixes[] = {"GEANY-SCOPE\t", "GEANY-PORT\t", "GEANY-SIGNAL\t", "GEANY-FRAME-",
                                "GEANY-SIGNALS-", "GEANY-SIGNAL-STOP-"};
     GString *visible = g_string_sized_new(count);
     for (gsize i = 0; i < count; i++)
@@ -6807,6 +6881,14 @@ static gboolean simulation_refresh_console(gpointer data)
         simulation_write_command(run, "geany-signals\n");
         paused = FALSE;
     }
+    if (paused && !run->preview_pending && run->frame_ready && run->frame_refresh)
+    {
+        run->frame_refresh = FALSE;
+        simulation_write_command(run, "geany-frame-tree\n");
+        paused = FALSE;
+    }
+    if (run->frame_view)
+        gtk_widget_set_sensitive(run->frame_view, paused && !run->frame_receiving);
     const gchar *signal_state = !run->signal_snapshot_received ?
         "Waiting for a paused signal snapshot." :
         paused ? "Values at the current stop" : "Values from the last stop";
@@ -7314,10 +7396,21 @@ static void simulation_write_command(WaveSimulation *run, const gchar *command)
         return;
 
     run->prompt_tail[0] = run->prompt_tail[1] = 0;
+    if (!strcmp(command, "cont\n") || !strcmp(command, "step\n") ||
+        g_str_has_prefix(command, "geany-step-") ||
+        g_str_has_prefix(command, "geany-select-process ") ||
+        g_str_has_prefix(command, "geany-select-frame "))
+    {
+        run->frame_refresh = TRUE;
+        run->frame_reopen_group = -1;
+        if (run->frame_values)
+            gtk_tree_store_clear(run->frame_values);
+    }
     if (g_str_has_prefix(command, "geany-write-register "))
     {
         run->signal_refresh_needed = TRUE;
         run->signal_history_replace = TRUE;
+        run->frame_refresh = TRUE;
     }
     if (!strcmp(command, "cont\n") || !strcmp(command, "step\n") ||
         g_str_has_prefix(command, "geany-step-"))
@@ -7784,6 +7877,73 @@ static void signal_edit_started(GtkCellRenderer *renderer, GtkCellEditable *edit
         focus_out, 0, NULL, NULL, renderer);
     g_signal_connect(entry, "focus-out-event", G_CALLBACK(signal_edit_focus_out), NULL);
     g_signal_connect(entry, "editing-done", G_CALLBACK(signal_edit_completed), NULL);
+}
+
+/* EN: Write a selected frame value at path. renderer is unused.
+ * RU: Записывает значение text в строку path выбранного кадра run. renderer не используется. */
+static void simulation_frame_edited(GtkCellRendererText *renderer, gchar *path,
+                                    gchar *text, gpointer data)
+{
+    (void)renderer;
+    WaveSimulation *run = data;
+    GtkTreeModel *model = GTK_TREE_MODEL(run->frame_values);
+    GtkTreeIter row;
+    if (!run->frame_ready || run->frame_receiving ||
+        !gtk_tree_model_get_iter_from_string(model, &row, path))
+        return;
+
+    gchar *name, *index, *old;
+    gboolean editable;
+    gtk_tree_model_get(model, &row, FRAME_NAME, &name, FRAME_INDEX, &index,
+        FRAME_VALUE, &old, FRAME_EDITABLE, &editable, -1);
+    gchar *bits = editable ? signal_edit_bits(text, strlen(old), 0) : NULL;
+    if (bits && !strpbrk(name, " \t\r\n") && strcmp(bits, old))
+    {
+        GtkTreePath *edited = gtk_tree_model_get_path(model, &row);
+        if (gtk_tree_path_get_depth(edited) > 1)
+            run->frame_reopen_group = gtk_tree_path_get_indices(edited)[0];
+        gtk_tree_path_free(edited);
+        run->signal_refresh_needed = TRUE;
+        run->signal_history_replace = TRUE;
+        gchar *command = g_strdup_printf("geany-frame-write %s %s %s\n", name, index, bits);
+        simulation_write_command(run, command);
+        g_free(command);
+    }
+    else if (!bits)
+        gtk_label_set_text(GTK_LABEL(run->frame_status), insight_tr("Invalid frame value."));
+    g_free(bits);
+    g_free(old);
+    g_free(index);
+    g_free(name);
+}
+
+/* EN: Build the expandable frame inspection page for run.
+ * RU: Создаёт вкладку раскрываемых значений кадра сеанса run. */
+static GtkWidget *simulation_frame_page(WaveSimulation *run)
+{
+    GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    run->frame_status = gtk_label_new(insight_tr("Waiting for a paused HDL frame."));
+    gtk_label_set_xalign(GTK_LABEL(run->frame_status), 0);
+    gtk_box_pack_start(GTK_BOX(page), run->frame_status, FALSE, FALSE, 0);
+
+    run->frame_reopen_group = -1;
+    run->frame_values = gtk_tree_store_new(FRAME_COLUMNS, G_TYPE_STRING, G_TYPE_STRING,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_BOOLEAN);
+    run->frame_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(run->frame_values));
+    g_object_unref(run->frame_values);
+    gtk_widget_set_name(run->frame_view, "insight-verilog-frame-tree");
+    GtkTreeView *view = GTK_TREE_VIEW(run->frame_view);
+    gtk_tree_view_insert_column_with_attributes(view, -1, insight_tr("Name"),
+        gtk_cell_renderer_text_new(), "text", FRAME_LABEL, NULL);
+    GtkCellRenderer *value = gtk_cell_renderer_text_new();
+    g_signal_connect(value, "editing-started", G_CALLBACK(signal_edit_started), run);
+    g_signal_connect(value, "edited", G_CALLBACK(simulation_frame_edited), run);
+    gtk_tree_view_insert_column_with_attributes(view, -1, insight_tr("Value"), value,
+        "text", FRAME_VALUE, "editable", FRAME_EDITABLE, NULL);
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(scroll), run->frame_view);
+    gtk_box_pack_start(GTK_BOX(page), scroll, TRUE, TRUE, 0);
+    return page;
 }
 
 /* EN: Resolve the selected row from selection in simulation data for context.
@@ -8975,6 +9135,8 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
             gtk_label_new(insight_tr("HDL Signals")));
         gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), simulation_signal_stop_page(run),
             gtk_label_new(insight_tr("Signal stops")));
+        gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), simulation_frame_page(run),
+            gtk_label_new(insight_tr("Frame values")));
         gtk_paned_pack2(GTK_PANED(paned), inspection_tabs, TRUE, FALSE);
         gtk_box_pack_start(GTK_BOX(box), paned, TRUE, TRUE, 0);
         run->live_controls = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);

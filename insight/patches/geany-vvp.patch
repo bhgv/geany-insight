@@ -60,7 +60,7 @@ index 175e8ae..6c544f5 100644
  
        if (prompt && prompt[0]) {
  	    fputs(prompt, stdout);
-@@ -66,12 +71,665 @@ static char* readline_stub(const char*prompt)
+@@ -66,12 +71,694 @@ static char* readline_stub(const char*prompt)
  
        return 0;
  }
@@ -273,6 +273,8 @@ index 175e8ae..6c544f5 100644
 +extern void geany_list_process_values(unsigned long long, unsigned);
 +extern __vpiScope* geany_inspect_frame(unsigned long long, unsigned);
 +extern void geany_read_memory(unsigned long long, unsigned, const char*, int);
++extern void geany_frame_tree(unsigned long long, unsigned);
++extern void geany_frame_write(unsigned long long, unsigned, const char*, bool, int, const std::string&);
 +
 +// EN: Show live processes without resuming simulation.
 +// RU: Показываем живые процессы без возобновления симуляции.
@@ -311,6 +313,33 @@ index 175e8ae..6c544f5 100644
 +{
 +      if (geany_debug_enabled())
 +            geany_list_process_values(geany_stopped_process, geany_frame_depth);
++}
++
++// EN: Print the selected frame tree. Command arguments are unused.
++// RU: Печатает дерево выбранного кадра. Аргументы команды не используются.
++static void cmd_geany_frame_tree(unsigned, const char*[])
++{
++      if (geany_debug_enabled())
++            geany_frame_tree(geany_stopped_process, geany_frame_depth);
++}
++
++// EN: Parse argc/argv as a frame write and refresh the inspected frame.
++// RU: Разбирает argc/argv как запись в кадр и обновляет выбранный кадр.
++static void cmd_geany_frame_write(unsigned argc, const char* argv[])
++{
++      if (!geany_debug_enabled() || argc != 4)
++            return;
++      const bool indexed = std::strcmp(argv[2], "-") != 0;
++      int index = 0;
++      std::istringstream number(argv[2]);
++      const std::string bits(argv[3]);
++      if ((indexed && (!(number >> index) || !number.eof())) || bits.empty() ||
++          bits.size() > 4096 || bits.find_first_not_of("01xz") != std::string::npos) {
++            printf("Geany: invalid frame value or index.\n");
++            return;
++      }
++      geany_frame_write(geany_stopped_process, geany_frame_depth, argv[1], indexed, index, bits);
++      geany_frame_tree(geany_stopped_process, geany_frame_depth);
 +}
 +
 +// EN: Change inspection frame without changing the process used for stepping.
@@ -726,7 +755,7 @@ index 175e8ae..6c544f5 100644
  static void cmd_call(unsigned argc, const char*argv[])
  {
        __vpiHandle**table;
-@@ -444,6 +1102,24 @@ static struct {
+@@ -444,6 +1131,26 @@ static struct {
          "Synonym for finish."},
        { "finish", &cmd_finish,
          "Finish the simulation."},
@@ -743,6 +772,8 @@ index 175e8ae..6c544f5 100644
 +      { "geany-write-register", &cmd_geany_write_register, "Deposit an exact-width binary value into a static register."},
 +      { "geany-processes", &cmd_geany_processes, "List live HDL processes."},
 +      { "geany-select-process", &cmd_geany_select_process, "Inspect a process by number."},
++      { "geany-frame-tree", &cmd_geany_frame_tree, "Snapshot the selected activation and its array elements."},
++      { "geany-frame-write", &cmd_geany_frame_write, "Write one integral frame value and refresh the snapshot."},
 +      { "geany-process-values", &cmd_geany_process_values, "Show selected process values."},
 +      { "geany-list", &cmd_geany_list,
 +        "List Geany source breakpoints and hit counters."},
@@ -751,18 +782,18 @@ index 175e8ae..6c544f5 100644
        { "help",   &cmd_help,
          "Get help."},
        { "list",   &cmd_list,
-@@ -554,6 +1230,10 @@ void stop_handler(int rc)
+@@ -554,6 +1261,10 @@ void stop_handler(int rc)
  	    return;
        }
  
 +      geany_step = geany_step_mode::none;
 +      geany_at_prompt = true;
 +      if (geany_debug_enabled())
-+            printf("GEANY-VVP-FRAMES\nGEANY-VVP-PROCESSES\nGEANY-VVP-SOURCE-STEP\nGEANY-VVP-WRITE-REGISTER\nGEANY-VVP-SIGNAL-TABLES\nGEANY-VVP-SIGNAL-STOPS\nGEANY-VVP-READY\n");
++            printf("GEANY-VVP-FRAMES\nGEANY-VVP-FRAME-TREE\nGEANY-VVP-PROCESSES\nGEANY-VVP-SOURCE-STEP\nGEANY-VVP-WRITE-REGISTER\nGEANY-VVP-SIGNAL-TABLES\nGEANY-VVP-SIGNAL-STOPS\nGEANY-VVP-READY\n");
        vpi_mcd_printf(1,"** VVP Stop(%d) **\n", rc);
        vpi_mcd_printf(1,"** Flushing output streams.\n");
        invoke_command_const("$fflush");
-@@ -563,7 +1243,7 @@ void stop_handler(int rc)
+@@ -563,7 +1274,7 @@ void stop_handler(int rc)
  
        interact_flag = true;
        while (interact_flag) {
@@ -771,7 +802,7 @@ index 175e8ae..6c544f5 100644
  	    if (input == 0)
  		  break;
  
-@@ -575,7 +1255,8 @@ void stop_handler(int rc)
+@@ -575,7 +1286,8 @@ void stop_handler(int rc)
  
  	    if (first[0] != 0) {
  #ifdef USE_HISTORY
@@ -781,7 +812,7 @@ index 175e8ae..6c544f5 100644
  #endif
  		  invoke_command(first);
  	    }
-@@ -583,5 +1264,7 @@ void stop_handler(int rc)
+@@ -583,5 +1295,7 @@ void stop_handler(int rc)
  	    free(input);
        }
  
@@ -823,7 +854,7 @@ index de7578b..1d55556 100644
        vthread_s();
  
        void debug_dump(ostream&fd, const char*label_text);
-@@ -427,6 +431,279 @@ __vpiScope* vthread_scope(struct vthread_s*thr)
+@@ -427,6 +431,501 @@ __vpiScope* vthread_scope(struct vthread_s*thr)
  
  struct vthread_s*running_thread = 0;
  
@@ -1100,10 +1131,232 @@ index de7578b..1d55556 100644
 +      printf("Geany: memory not found in this frame: %s\n", name);
 +}
 +
++// EN: Resolve index in a fixed memory, including descending or negative ranges.
++// RU: Разрешает index в памяти memory с учётом отрицательных и обратных границ.
++static vpiHandle geany_fixed_word(vpiHandle memory, int index)
++{
++      vpiHandle first = vpi_handle(vpiLeftRange, memory);
++      vpiHandle last = vpi_handle(vpiRightRange, memory);
++      if (!first || !last)
++            return nullptr;
++      s_vpi_value left = {}, right = {};
++      left.format = right.format = vpiIntVal;
++      vpi_get_value(first, &left);
++      vpi_get_value(last, &right);
++      return index >= std::min(left.value.integer, right.value.integer) &&
++             index <= std::max(left.value.integer, right.value.integer) ?
++             vpi_handle_by_index(memory, index) : nullptr;
++}
++
++// EN: Get the current array object for handle, keeping it alive in object.
++// RU: Получает текущий массив handle и удерживает его через object.
++static vvp_darray* geany_current_array(vpiHandle handle, vvp_object_t& object)
++{
++      auto* variable = dynamic_cast<__vpiBaseVar*>(handle);
++      auto* signal = variable ?
++            dynamic_cast<vvp_fun_signal_object*>(variable->get_net()->fun) : nullptr;
++      if (!signal)
++            return nullptr;
++      object = signal->get_object();
++      return object.peek<vvp_darray>();
++}
++
++// EN: Read a bounded integral value from handle into bits.
++// RU: Читает ограниченное целочисленное значение handle в bits.
++static bool geany_frame_bits(vpiHandle handle, std::string& bits)
++{
++      if (!handle || vpi_get(vpiType, handle) == vpiRealVar ||
++          vpi_get(vpiSize, handle) < 1 || vpi_get(vpiSize, handle) > 4096)
++            return false;
++      s_vpi_value value = {};
++      value.format = vpiBinStrVal;
++      vpi_get_value(handle, &value);
++      if (value.format != vpiBinStrVal || !value.value.str)
++            return false;
++      bits = value.value.str;
++      return !bits.empty() && bits.find_first_not_of("01xz") == std::string::npos;
++}
++
++// EN: Emit a frame row for name and index. kind is parent, editable, or read-only.
++// RU: Выводит строку кадра name и index. kind задаёт группу или доступность записи.
++static void geany_frame_row(char kind, const char* name, const char* index, const std::string& bits)
++{
++      printf("GEANY-FRAME-ROW\t%c\t%s\t%s\t%s\n", kind, name, index, bits.c_str());
++}
++
++// EN: Snapshot depth of process using that activation's read and write contexts.
++// RU: Снимает кадр depth процесса process в контексте его активации.
++void geany_frame_tree(unsigned long long process, unsigned depth)
++{
++      vthread_t frame = geany_find_frame(process, depth);
++      __vpiScope* scope = frame ? vthread_scope(frame) : nullptr;
++      if (!scope || (scope->is_automatic() && (!frame->rd_context || frame->rd_context != frame->wt_context))) {
++            printf("\nGEANY-FRAME-UNAVAILABLE\n");
++            return;
++      }
++
++      const char* hierarchy = vpi_get_str(vpiFullName, scope);
++      printf("\nGEANY-FRAME-BEGIN\t%llu\t%u\t%s\n", process, depth, hierarchy ? hierarchy : "");
++      vthread_t previous = running_thread;
++      running_thread = frame;
++      unsigned remaining = 512;
++      for (vpiHandle handle : scope->intern) {
++            if (!remaining)
++                  break;
++            const int type = vpi_get(vpiType, handle);
++            if (type != vpiMemory && type != vpiArrayVar && type != vpiStringVar &&
++                type != vpiRealVar && !dynamic_cast<__vpiSignal*>(handle))
++                  continue;
++            const char* raw = geany_value_name(handle);
++            if (!raw || !*raw || std::strlen(raw) > 1024 || std::strpbrk(raw, "\t\r\n"))
++                  continue;
++            const std::string name(raw);
++            --remaining;
++            if (type == vpiMemory || type == vpiArrayVar) {
++                  vvp_object_t object;
++                  auto* array = type == vpiArrayVar ? geany_current_array(handle, object) : nullptr;
++                  if (type == vpiArrayVar && !array) {
++                        geany_frame_row('G', name.c_str(), "-", "unavailable");
++                        continue;
++                  }
++                  int64_t first = 0, last = -1;
++                  bool fixed_range = false;
++                  if (array)
++                        last = static_cast<int64_t>(array->get_size()) - 1;
++                  else {
++                        s_vpi_value left = {}, right = {};
++                        left.format = right.format = vpiIntVal;
++                        auto left_handle = vpi_handle(vpiLeftRange, handle);
++                        auto right_handle = vpi_handle(vpiRightRange, handle);
++                        if (left_handle && right_handle) {
++                              vpi_get_value(left_handle, &left);
++                              vpi_get_value(right_handle, &right);
++                              fixed_range = true;
++                              first = left.value.integer;
++                              last = right.value.integer;
++                        }
++                  }
++                  const int64_t step = first <= last ? 1 : -1;
++                  const auto count = array ? array->get_size() :
++                        fixed_range ? static_cast<size_t>((first <= last ? last - first : first - last) + 1) : 0;
++                  geany_frame_row('G', name.c_str(), "-",
++                        (type == vpiMemory ? "memory" :
++                         vpi_get(vpiArrayType, handle) == vpiQueueArray ? "queue" : "array") +
++                        std::string(" [") + std::to_string(first) + ":" + std::to_string(last) + "]");
++                  for (size_t i = 0; i < count && i < 128 && remaining; ++i) {
++                        const int index = static_cast<int>(first + step * static_cast<int64_t>(i));
++                        std::string bits;
++                        bool writable = false;
++                        if (array) {
++                              if (dynamic_cast<vvp_darray_real*>(array) || dynamic_cast<vvp_queue_real*>(array)) {
++                                    double number;
++                                    array->get_word(index, number);
++                                    char value[64];
++                                    snprintf(value, sizeof value, "%.17g", number);
++                                    bits = value;
++                              } else if (!dynamic_cast<vvp_darray_string*>(array) &&
++                                         !dynamic_cast<vvp_queue_string*>(array) &&
++                                         !dynamic_cast<vvp_darray_object*>(array)) {
++                                    vvp_vector4_t value;
++                                    array->get_word(index, value);
++                                    if (value.size() && value.size() <= 4096) {
++                                          for (unsigned bit = value.size(); bit > 0; --bit)
++                                                bits += vvp_bit4_to_ascii(value.value(bit - 1));
++                                          writable = true;
++                                    }
++                              }
++                        } else {
++                              auto word = geany_fixed_word(handle, index);
++                              writable = geany_frame_bits(word, bits) && vpi_get(vpiType, word) != vpiNet;
++                        }
++                        geany_frame_row(writable ? 'W' : 'R', name.c_str(),
++                              std::to_string(index).c_str(), bits.empty() ? "unavailable" : bits);
++                        --remaining;
++                  }
++                  if (count > 128)
++                        geany_frame_row('R', name.c_str(), "...", "limited to 128 elements");
++            } else {
++                  std::string bits;
++                  bool integral = dynamic_cast<__vpiSignal*>(handle) && geany_frame_bits(handle, bits);
++                  if (type == vpiRealVar) {
++                        s_vpi_value value = {};
++                        value.format = vpiRealVal;
++                        vpi_get_value(handle, &value);
++                        char number[64];
++                        snprintf(number, sizeof number, "%.17g", value.value.real);
++                        bits = number;
++                  }
++                  geany_frame_row(integral && type != vpiNet ? 'W' : 'R',
++                        name.c_str(), "-", bits.empty() ? "unavailable" : bits);
++            }
++      }
++      running_thread = previous;
++      printf("GEANY-FRAME-END\t%s\n", remaining ? "complete" : "limited");
++}
++
++// EN: Deposit bits into name or its index in depth of process, then read it back.
++// RU: Записывает bits в name или элемент index в кадре depth процесса process.
++void geany_frame_write(unsigned long long process, unsigned depth, const char* name,
++                       bool indexed, int index, const std::string& bits)
++{
++      vthread_t frame = geany_find_frame(process, depth);
++      __vpiScope* scope = frame ? vthread_scope(frame) : nullptr;
++      if (!scope || (scope->is_automatic() && (!frame->rd_context || frame->rd_context != frame->wt_context))) {
++            printf("Geany: frame unavailable.\n");
++            return;
++      }
++      vthread_t previous = running_thread;
++      running_thread = frame;
++      bool written = false;
++      for (vpiHandle handle : scope->intern) {
++            const int type = vpi_get(vpiType, handle);
++            if (!(indexed ? type == vpiArrayVar || type == vpiMemory :
++                  type != vpiNet && dynamic_cast<__vpiSignal*>(handle)))
++                  continue;
++            const char* candidate = geany_value_name(handle);
++            if (!candidate || std::strcmp(candidate, name))
++                  continue;
++            if (type == vpiArrayVar) {
++                  vvp_object_t object;
++                  auto* array = geany_current_array(handle, object);
++                  if (!array || index < 0 || static_cast<size_t>(index) >= array->get_size() ||
++                      dynamic_cast<vvp_darray_real*>(array) || dynamic_cast<vvp_queue_real*>(array) ||
++                      dynamic_cast<vvp_darray_string*>(array) || dynamic_cast<vvp_queue_string*>(array) ||
++                      dynamic_cast<vvp_darray_object*>(array))
++                        break;
++                  vvp_vector4_t value;
++                  array->get_word(index, value);
++                  if (value.size() != bits.size())
++                        break;
++                  for (size_t bit = 0; bit < bits.size(); ++bit) {
++                        char digit = bits[bits.size() - bit - 1];
++                        value.set_bit(bit, digit == '1' ? BIT4_1 : digit == 'x' ? BIT4_X :
++                            digit == 'z' ? BIT4_Z : BIT4_0);
++                  }
++                  array->set_word(index, value);
++                  written = true;
++            } else {
++                  auto word = indexed ? geany_fixed_word(handle, index) : handle;
++                  std::string old;
++                  if (geany_frame_bits(word, old) && old.size() == bits.size() && vpi_get(vpiType, word) != vpiNet) {
++                        s_vpi_value value = {};
++                        value.format = vpiBinStrVal;
++                        value.value.str = const_cast<char*>(bits.c_str());
++                        vpi_put_value(word, &value, nullptr, vpiNoDelay);
++                        written = true;
++                  }
++            }
++            break;
++      }
++      running_thread = previous;
++      printf(written ? "Geany: frame value written.\n" :
++                       "Geany: frame value is read-only, unavailable or has a different width.\n");
++}
++
  string get_fileline()
  {
        return running_thread->get_fileline();
-@@ -719,6 +996,10 @@ vthread_t vthread_new(vvp_code_t pc, __vpiScope*scope)
+@@ -719,6 +1215,10 @@ vthread_t vthread_new(vvp_code_t pc, __vpiScope*scope)
        for (int idx = 4 ; idx < 8 ; idx += 1)
  	    thr->flags[idx] = BIT4_X;
  
@@ -1114,7 +1367,7 @@ index de7578b..1d55556 100644
        scope->threads .insert(thr);
        return thr;
  }
-@@ -820,6 +1101,8 @@ static void vthread_reap(vthread_t thr)
+@@ -820,6 +1320,8 @@ static void vthread_reap(vthread_t thr)
  
  void vthread_delete(vthread_t thr)
  {
@@ -1123,7 +1376,7 @@ index de7578b..1d55556 100644
        thr->cleanup();
        delete thr;
  }
-@@ -857,6 +1140,13 @@ void vthread_delay_delete()
+@@ -857,6 +1359,13 @@ void vthread_delay_delete()
   * incrementing the PC, and executing the instruction. The thread may
   * be the head of a list, so each thread is run so far as possible.
   */
@@ -1137,7 +1390,7 @@ index de7578b..1d55556 100644
  void vthread_run(vthread_t thr)
  {
        while (thr != 0) {
-@@ -869,6 +1159,16 @@ void vthread_run(vthread_t thr)
+@@ -869,6 +1378,16 @@ void vthread_run(vthread_t thr)
              running_thread = thr;
  
  	    for (;;) {
@@ -1154,7 +1407,7 @@ index de7578b..1d55556 100644
  		  vvp_code_t cp = thr->pc;
  		  thr->pc += 1;
  
-@@ -880,6 +1180,15 @@ void vthread_run(vthread_t thr)
+@@ -880,6 +1399,15 @@ void vthread_run(vthread_t thr)
  			break;
  	    }
  
@@ -1170,7 +1423,7 @@ index de7578b..1d55556 100644
  	    thr = tmp;
        }
        running_thread = 0;
-@@ -6416,6 +6725,42 @@ bool of_FILE_LINE(vthread_t thr, vvp_code_t cp)
+@@ -6416,6 +6944,42 @@ bool of_FILE_LINE(vthread_t thr, vvp_code_t cp)
  	    cerr << thr->get_fileline()
  	         << vpi_get_str(_vpiDescription, handle) << endl;
  

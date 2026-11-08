@@ -11,8 +11,11 @@ module process_values_tb;
     // RU: Сохраняет локальную копию на время задержки и возвращает её.
     task automatic worker(input [3:0] seed, output [3:0] result);
         reg [3:0] saved;
+        reg [3:0] local_items[];
         begin
             saved = seed;
+            local_items = new[2];
+            local_items[0] = seed;
             #10 result = saved;
         end
     endtask
