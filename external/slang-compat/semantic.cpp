@@ -438,6 +438,8 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
         }
     }
 
+    static constexpr size_t maxMappedBits = 4096;
+
     struct MappedBit {
         const Symbol* symbol;
         SourceRange range;
@@ -445,9 +447,12 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
     };
 
     // Flatten a wiring expression in MSB-to-LSB order. A null symbol is a constant bit.
-    // Leave resizing, dynamic selects and computed expressions to the general index.
+    // node is the expression and bits receives its coordinates. Resizing and
+    // dynamic expressions fall back to the general index.
+    // RU: Разворачивает node в bits от старшего разряда к младшему.
+    // Изменение ширины и динамические выражения остаются в общем индексе.
     static bool mapBits(const Expression& node, std::vector<MappedBit>& bits) {
-        if (!node.type->isSimpleBitVector() || node.type->getBitWidth() > 256)
+        if (!node.type->isSimpleBitVector() || node.type->getBitWidth() > maxMappedBits - bits.size())
             return false;
         if (node.kind == ExpressionKind::Conversion) {
             const auto& conversion = node.as<ConversionExpression>();
@@ -465,7 +470,7 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
         if (node.kind == ExpressionKind::Replication) {
             const auto& replication = node.as<ReplicationExpression>();
             const auto count = PortOperands::knownInteger(replication.count());
-            if (!count || *count < 0 || *count > 256)
+            if (!count || *count < 0 || static_cast<size_t>(*count) > maxMappedBits)
                 return false;
             for (int32_t i = 0; i < *count; ++i) {
                 if (!mapBits(replication.concat(), bits))
@@ -530,33 +535,87 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
         return true;
     }
 
+    // EN: Encode a contiguous run from the first bit through the last bit.
+    // RU: Кодирует последовательность разрядов от first до last.
+    static std::string bitRange(int64_t first, int64_t last) {
+        if (first == last)
+            return "[" + std::to_string(first) + "]";
+        return "[" + std::to_string(first) + ":" + std::to_string(last) + "]";
+    }
+
+    // EN: Append the declared coordinates of symbol and type at the given range.
+    // RU: Добавляет объявленные координаты symbol и type из места range в bits.
+    static bool declaredBits(const Symbol& symbol, const Type& type, SourceRange range,
+                             std::vector<MappedBit>& bits) {
+        if (!type.isSimpleBitVector() || type.getBitWidth() > maxMappedBits - bits.size())
+            return false;
+        const auto indices = type.getFixedRange();
+        const int64_t step = indices.left < indices.right ? 1 : -1;
+        for (int64_t bit = indices.left; bit != int64_t(indices.right) + step; bit += step)
+            bits.push_back({&symbol, range, bit});
+        return true;
+    }
+
+    // EN: Emit matching input/output coordinates in both directions. Roles
+    // describe how callers traverse the edges. compact groups contiguous runs.
+    // RU: Индексирует парные координаты input и output в двух направлениях.
+    // sourceRole и destinationRole задают обход, compact объединяет диапазоны.
+    bool indexMappedBits(const std::vector<MappedBit>& input, const std::vector<MappedBit>& output,
+                         string_view sourceRole, string_view destinationRole, bool compact) {
+        if (input.empty() || input.size() != output.size())
+            return false;
+        for (size_t i = 0; i < input.size();) {
+            if (!input[i].symbol || !output[i].symbol) {
+                ++i;
+                continue;
+            }
+            size_t end = i;
+            if (compact && i + 1 < input.size()) {
+                const auto inputStep = input[i + 1].index - input[i].index;
+                const auto outputStep = output[i + 1].index - output[i].index;
+                if ((inputStep == 1 || inputStep == -1) && (outputStep == 1 || outputStep == -1)) {
+                    while (end + 1 < input.size() && input[end + 1].symbol == input[i].symbol &&
+                           output[end + 1].symbol == output[i].symbol &&
+                           input[end + 1].index - input[end].index == inputStep &&
+                           output[end + 1].index - output[end].index == outputStep)
+                        ++end;
+                }
+            }
+            const auto source = identity(*input[i].symbol);
+            const auto destination = identity(*output[i].symbol);
+            const auto from = bitRange(input[i].index, input[end].index);
+            const auto to = bitRange(output[i].index, output[end].index);
+            if (!source.empty() && !destination.empty() && (source != destination || from != to)) {
+                const char* separator = compact ? " => " : " / ";
+                add("P", source, sources.getFullyOriginalLoc(input[i].range.start()),
+                    destination, to + separator + from, sourceRole);
+                add("P", destination, sources.getFullyOriginalLoc(output[i].range.start()),
+                    source, from + separator + to, destinationRole);
+            }
+            i = end + 1;
+        }
+        return true;
+    }
+
     static bool isWiringPermutation(const Expression& node) {
         if (node.kind == ExpressionKind::Conversion)
             return isWiringPermutation(node.as<ConversionExpression>().operand());
         return node.kind == ExpressionKind::Concatenation || node.kind == ExpressionKind::Replication;
     }
 
+    // EN: Map equal-width direct assignments and bounded concatenations.
+    // RU: Сопоставляет assignment равной ширины и конкатенации в пределах лимита.
     bool indexBitMapping(const AssignmentExpression& assignment, string_view sourceRole,
                          string_view destinationRole) {
-        if (assignment.isCompound() ||
-            (!isWiringPermutation(assignment.left()) && !isWiringPermutation(assignment.right())))
+        if (assignment.isCompound())
+            return false;
+        const bool permutation = isWiringPermutation(assignment.left()) ||
+            isWiringPermutation(assignment.right());
+        if (!permutation && assignment.left().type->getBitWidth() <= 1)
             return false;
         std::vector<MappedBit> input, output;
-        if (!mapBits(assignment.left(), output) || !mapBits(assignment.right(), input) ||
-            input.size() != output.size())
-            return false;
-
-        PortOperands from, to;
-        for (size_t i = 0; i < input.size(); ++i) {
-            if (!input[i].symbol || !output[i].symbol)
-                continue;
-            from.signals.assign(1, {input[i].symbol, input[i].range,
-                                    "[" + std::to_string(input[i].index) + "]"});
-            to.signals.assign(1, {output[i].symbol, output[i].range,
-                                  "[" + std::to_string(output[i].index) + "]"});
-            indexDependencies(from, to, sourceRole, destinationRole);
-        }
-        return true;
+        return mapBits(assignment.left(), output) && mapBits(assignment.right(), input) &&
+            indexMappedBits(input, output, sourceRole, destinationRole, !permutation || input.size() > 256);
     }
 
     // Index data flow and the controls active at this assignment separately.
@@ -647,6 +706,26 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
         controls.resize(depth);
     }
 
+    // EN: Treat a net node's declaration initializer as continuous wiring.
+    // RU: Индексирует инициализатор сети node как непрерывное соединение.
+    void handle(const NetSymbol& node) {
+        add("D", node.name, node.location, identity(node), toString(node.kind), "");
+        const auto* initializer = node.getInitializer();
+        if (initializer && !initializer->bad()) {
+            const SourceRange declaration(node.location, node.location);
+            std::vector<MappedBit> input, output;
+            if (!mapBits(*initializer, input) ||
+                !declaredBits(node, node.getType(), declaration, output) ||
+                !indexMappedBits(input, output, "assign-source", "assign-destination", true)) {
+                PortOperands inputs, outputs;
+                initializer->visit(inputs);
+                outputs.add(&node, declaration);
+                indexDependencies(inputs, outputs, "assign-source", "assign-destination");
+            }
+        }
+        visitDefault(node);
+    }
+
     // Index continuous assignments once, then retain ordinary source references.
     // Индексирует непрерывное присваивание один раз и сохраняет обычные ссылки.
     void handle(const ContinuousAssignSymbol& node) {
@@ -673,20 +752,34 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
         if (expression && !expression->bad()) {
             PortOperands alias;
             alias.add(&node, SourceRange(node.location, node.location));
+            std::vector<MappedBit> expressionBits, aliasBits;
+            const bool mapped = mapBits(*expression, expressionBits) &&
+                declaredBits(node, node.getType(), SourceRange(node.location, node.location), aliasBits) &&
+                expressionBits.size() == aliasBits.size();
             if (node.direction == ArgumentDirection::In ||
                 node.direction == ArgumentDirection::InOut) {
                 PortOperands inputs;
                 expression->visit(inputs);
-                indexDependencies(inputs, alias, "interface-source", "interface-destination");
+                if (mapped)
+                    indexMappedBits(expressionBits, aliasBits, "interface-source", "interface-destination", true);
+                else
+                    indexDependencies(inputs, alias, "interface-source", "interface-destination");
             }
             if (node.direction == ArgumentDirection::Out ||
                 node.direction == ArgumentDirection::InOut ||
                 node.direction == ArgumentDirection::Ref) {
                 PortOperands outputs;
                 outputs.destinations(*expression);
-                indexDependencies(alias, outputs, "interface-source", "interface-destination");
-                if (node.direction == ArgumentDirection::Ref)
-                    indexDependencies(outputs, alias, "interface-source", "interface-destination");
+                if (mapped)
+                    indexMappedBits(aliasBits, expressionBits, "interface-source", "interface-destination", true);
+                else
+                    indexDependencies(alias, outputs, "interface-source", "interface-destination");
+                if (node.direction == ArgumentDirection::Ref) {
+                    if (mapped)
+                        indexMappedBits(expressionBits, aliasBits, "interface-source", "interface-destination", true);
+                    else
+                        indexDependencies(outputs, alias, "interface-source", "interface-destination");
+                }
             }
         }
         visitDefault(node);
@@ -730,13 +823,24 @@ struct ProjectIndex : ASTVisitor<ProjectIndex, true, true> {
                 port.direction == ArgumentDirection::Out ? "port-source" : "port-peer";
             const std::string portName = std::string(instance.name) + "." + std::string(port.name);
             const auto inside = identity(instance) + "." + std::string(port.internalSymbol->name);
+            const Expression* wiring = expression;
+            if (wiring->kind == ExpressionKind::Assignment && wiring->as<AssignmentExpression>().isLValueArg())
+                wiring = &wiring->as<AssignmentExpression>().left();
+            std::vector<MappedBit> internalBits, externalBits;
+            const auto* internal = port.internalSymbol;
+            const bool simple = internal->kind == SymbolKind::Variable || internal->kind == SymbolKind::Net;
+            const bool mapped = simple && port.getType().getBitWidth() > 1 && mapBits(*wiring, externalBits) &&
+                declaredBits(*internal, internal->as<ValueSymbol>().getType(), wiring->sourceRange, internalBits) &&
+                (port.direction == ArgumentDirection::Out ?
+                    indexMappedBits(internalBits, externalBits, externalRole, internalRole, true) :
+                    indexMappedBits(externalBits, internalBits, internalRole, externalRole, true));
             for (const auto& [external, range, selection] : operands.signals) {
                 reference(portName, range, external->location, externalRole);
                 reference(external->name, range, port.internalSymbol->location, internalRole);
 
                 const auto location = sources.getFullyOriginalLoc(range.start());
                 const auto outside = identity(*external);
-                if (!outside.empty() && !instance.name.empty() && !port.internalSymbol->name.empty()) {
+                if (!mapped && !outside.empty() && !instance.name.empty() && !port.internalSymbol->name.empty()) {
                     add("P", inside, location, outside, endpointSelections(selection, {}), externalRole);
                     add("P", outside, location, inside, endpointSelections({}, selection), internalRole);
                 }

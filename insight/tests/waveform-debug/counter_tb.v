@@ -8,6 +8,9 @@ module counter_tb;
     reg clk = 0;
     wire [3:0] count;
     wire odd;
+    // EN: Preserve a reindexed route through the DUT output port.
+    // RU: Сохраняем путь через выход DUT с другой нумерацией битов.
+    wire [7:4] mapped_count = count;
     counter dut (.clk(clk), .count(count), .odd(odd));
 
     initial begin

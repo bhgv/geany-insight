@@ -203,8 +203,11 @@ typedef struct
 {
     gboolean bit;
     gboolean clock;
+    gboolean mapped;
 } GraphChecks;
 
+/* EN: Check model row against expected graph edges. path is unused; data stores results.
+ * RU: Проверяет строку row модели model. path не используется; data хранит результат. */
 static gboolean check_connection(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *row,
                                  gpointer data)
 {
@@ -217,10 +220,12 @@ static gboolean check_connection(GtkTreeModel *model, GtkTreePath *path, GtkTree
         checks->bit = TRUE;
     if (!g_strcmp0(signal, "counter_tb.dut.clk") && !g_strcmp0(role, "posedge-source"))
         checks->clock = TRUE;
+    if (!g_strcmp0(signal, "counter_tb.mapped_count") && !g_strcmp0(selection, "[0] / [4]"))
+        checks->mapped = TRUE;
     g_free(role);
     g_free(signal);
     g_free(selection);
-    return checks->bit && checks->clock;
+    return FALSE;
 }
 
 /* EN: Check modal port and device filters, then assign a slider by activating a port; callback data is unused.
@@ -942,14 +947,24 @@ static gboolean drive_debugger(gpointer data)
         GtkWidget *notebook = find_control(uses, "notebook");
         if (!notebook)
             return fail_timeout(NULL);
+        GtkWidget *slice = find_control(uses, "insight-hdl-use-slice");
+        if (!GTK_IS_ENTRY(slice))
+            return fail_timeout(NULL);
+        if (!*gtk_entry_get_text(GTK_ENTRY(slice)))
+        {
+            gtk_entry_set_text(GTK_ENTRY(slice), "[0]");
+            if (!click(uses, "Apply slice"))
+                return fail_timeout(NULL);
+            return G_SOURCE_CONTINUE;
+        }
         gtk_notebook_set_current_page(GTK_NOTEBOOK(notebook), 1);
         GtkWidget *page = gtk_notebook_get_nth_page(GTK_NOTEBOOK(notebook), 1);
         GtkWidget *view = page ? gtk_bin_get_child(GTK_BIN(page)) : NULL;
-        GraphChecks checks = {FALSE, FALSE};
+        GraphChecks checks = {0};
         if (GTK_IS_TREE_VIEW(view))
             gtk_tree_model_foreach(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),
                                    check_connection, &checks);
-        gboolean data_bit = checks.bit;
+        gboolean data_bit = checks.bit, mapped = checks.mapped;
         gboolean mixed_clock = checks.clock;
         checks.bit = FALSE;
         page = gtk_notebook_get_nth_page(GTK_NOTEBOOK(notebook), 3);
@@ -957,10 +972,10 @@ static gboolean drive_debugger(gpointer data)
         if (GTK_IS_TREE_VIEW(view))
             gtk_tree_model_foreach(gtk_tree_view_get_model(GTK_TREE_VIEW(view)),
                                    check_connection, &checks);
-        if (!data_bit || !checks.clock || mixed_clock || checks.bit)
+        if (!data_bit || !mapped || !checks.clock || mixed_clock || checks.bit)
         {
-            g_printerr("Verilog GTK data/events separation failed: data bit %d, event clock %d, mixed %d.\n",
-                       data_bit, checks.clock, mixed_clock || checks.bit);
+            g_printerr("Verilog GTK data/events separation failed: data bit %d, mapped bit %d, event clock %d, mixed %d.\n",
+                       data_bit, mapped, checks.clock, mixed_clock || checks.bit);
             return fail_timeout(NULL);
         }
         gtk_dialog_response(GTK_DIALOG(uses), GTK_RESPONSE_CLOSE);

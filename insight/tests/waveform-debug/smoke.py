@@ -453,7 +453,7 @@ def check_slang(service, fixtures, directory, environment):
         fields = record.split("\t")
         if len(fields) == 8 and fields[0] == "P":
             selections.add(tuple(decode_field(fields[i]) for i in (5, 1, 6, 7)))
-    require(("slice_flow_tb.bus", "slice_flow_tb.dut.part", "[7:4] / all", "port-destination")
+    require(("slice_flow_tb.bus", "slice_flow_tb.dut.part", "[7:4] => [3:0]", "port-destination")
             in selections, "Missing packed slice on the port edge")
     require(("slice_flow_tb.dut.bit_out", "slice_flow_tb.dut.part", "all / [2]", "assign-source")
             in selections, "Missing bit selection on the assignment edge")
@@ -475,11 +475,11 @@ def check_slang(service, fixtures, directory, environment):
         sampled = f"{root}.{rx}.sampled"
         alias = f"{interface}.consumer.high"
         expected = {
-            (f"{interface}.data", f"{root}.{tx}.payload", "", "assign-source"),
-            (alias, f"{interface}.data", "all / [7:4]", "interface-source"),
-            (f"{interface}.tag", f"{interface}.producer.tag_out", "[3:2] / all",
+            (f"{interface}.data", f"{root}.{tx}.payload", "[7:0] => [7:0]", "assign-source"),
+            (alias, f"{interface}.data", "[7:4] => [7:4]", "interface-source"),
+            (f"{interface}.tag", f"{interface}.producer.tag_out", "[3:2] => [3:2]",
              "interface-source"),
-            (f"{interface}.producer.tag_out", f"{root}.{tx}.payload", "all / [7:6]",
+            (f"{interface}.producer.tag_out", f"{root}.{tx}.payload", "[3:2] => [7:6]",
              "assign-source"),
             (sampled, alias, "all / [5]", "procedural-source"),
             (sampled, f"{interface}.valid", "", "condition-source"),

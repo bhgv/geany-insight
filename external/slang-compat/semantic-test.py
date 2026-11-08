@@ -171,7 +171,11 @@ print('HDL diagnostic protocol: syntax errors, exact typo location and compiler 
 
 with tempfile.TemporaryDirectory(prefix='slang bit mapping ') as directory:
     source = Path(directory) / 'wiring.sv'
-    source.write_text("""module wiring(
+    source.write_text("""module wiring_leaf(input wire [0:3] input_data,
+                                           output wire [7:4] output_data);
+        assign output_data = input_data;
+    endmodule
+    module wiring(
         input wire [7:0] data,
         input wire [0:7] ascending,
         input wire [2:0] index,
@@ -184,6 +188,8 @@ with tempfile.TemporaryDirectory(prefix='slang bit mapping ') as directory:
         assign {high_bit, low_bit} = ascending[2+:2];
         assign repeated = {2{data[3]}};
         assign uncertain = {data[index], data[7]};
+        wire [1:0] upper, lower;
+        wiring_leaf leaf(.input_data({data[3:2], ascending[5:6]}), .output_data({upper, lower}));
     endmodule
 """, encoding='utf-8')
     output = subprocess.check_output([service, '--editor-index', '--', str(source)])
@@ -202,6 +208,14 @@ with tempfile.TemporaryDirectory(prefix='slang bit mapping ') as directory:
         ('uncertain', 'index', ''),
     ):
         edge = (f'wiring.{target}', f'wiring.{peer}', detail, 'assign-source')
+        assert edge in edges, (edge, sorted(edges))
+    for edge in (
+        ('wiring.leaf.input_data', 'wiring.data', '[0:1] => [3:2]', 'port-source'),
+        ('wiring.leaf.input_data', 'wiring.ascending', '[2:3] => [5:6]', 'port-source'),
+        ('wiring.leaf.output_data', 'wiring.leaf.input_data', '[7:4] => [0:3]', 'assign-source'),
+        ('wiring.upper', 'wiring.leaf.output_data', '[1:0] => [7:6]', 'port-source'),
+        ('wiring.leaf.output_data', 'wiring.lower', '[5:4] => [1:0]', 'port-destination'),
+    ):
         assert edge in edges, (edge, sorted(edges))
     assert ('wiring.reordered', 'wiring.data', '[0] / [0]', 'assign-source') not in edges
     assert ('wiring.data', 'wiring.reordered', '[7] / [0]', 'assign-destination') in edges

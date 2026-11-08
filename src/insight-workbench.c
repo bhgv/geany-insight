@@ -4580,11 +4580,11 @@ static void waveform_dependency_node_free(gpointer data)
     g_free(node);
 }
 
-/* EN: Parse a literal packed selection into inclusive low/high bounds.
+/* EN: Parse selection into ordered endpoints first and last.
  * Return false for unknown or multidimensional selections.
- * RU: Разбирает константный срез selection в границы low и high.
+ * RU: Разбирает константный срез selection в упорядоченные first и last.
  * Возвращает FALSE для неизвестного или многомерного среза. */
-static gboolean waveform_selection_range(const gchar *selection, gint64 *low, gint64 *high)
+static gboolean waveform_selection_endpoints(const gchar *selection, gint64 *first, gint64 *last)
 {
     if (!selection || *selection != '[')
         return FALSE;
@@ -4614,10 +4614,23 @@ static gboolean waveform_selection_range(const gchar *selection, gint64 *low, gi
             return FALSE;
         right = indexed == '+' ? left + right - 1 : left - right + 1;
     }
-    if (*end != ']' || (end[1] && !g_str_has_prefix(end + 1, " / ")))
+    if (*end != ']' || (end[1] && !g_str_has_prefix(end + 1, " / ") &&
+        !g_str_has_prefix(end + 1, " => ")))
         return FALSE;
-    *low = MIN(left, right);
-    *high = MAX(left, right);
+    *first = left;
+    *last = right;
+    return TRUE;
+}
+
+/* EN: Normalize selection endpoints into inclusive bounds low and high.
+ * RU: Нормализует границы среза selection в low и high. */
+static gboolean waveform_selection_range(const gchar *selection, gint64 *low, gint64 *high)
+{
+    gint64 first, last;
+    if (!waveform_selection_endpoints(selection, &first, &last))
+        return FALSE;
+    *low = MIN(first, last);
+    *high = MAX(first, last);
     return TRUE;
 }
 
@@ -4627,6 +4640,55 @@ static gboolean waveform_selections_disjoint(const gchar *current, const gchar *
     return waveform_selection_range(current, &current_low, &current_high) &&
         waveform_selection_range(edge, &edge_low, &edge_high) &&
         (current_high < edge_low || edge_high < current_low);
+}
+
+/* EN: Format the packed range from first to last in declaration order.
+ * RU: Форматирует срез от first до last в порядке объявления. */
+static gchar *waveform_format_range(gint64 first, gint64 last)
+{
+    if (first == last)
+        return g_strdup_printf("[%" G_GINT64_FORMAT "]", first);
+    return g_strdup_printf("[%" G_GINT64_FORMAT ":%" G_GINT64_FORMAT "]", first, last);
+}
+
+/* EN: Follow an exact range edge using the selected current intersection.
+ * edge holds both ordered ranges. Return the peer selection and set display.
+ * RU: Переносит пересечение current по точной связи edge. Возвращает срез
+ * соседнего сигнала и записывает подпись в display. */
+static gchar *waveform_project_selection(const gchar *current, const gchar *edge, gchar **display)
+{
+    const gchar *exact = edge ? strstr(edge, " => ") : NULL;
+    if (!exact)
+    {
+        const gchar *separator = edge ? strstr(edge, " / ") : NULL;
+        *display = g_strdup(edge);
+        return g_strdup(separator ? separator + 3 : "all");
+    }
+
+    gint64 owner_first, owner_last, peer_first, peer_last;
+    if (!waveform_selection_endpoints(edge, &owner_first, &owner_last) ||
+        !waveform_selection_endpoints(exact + 4, &peer_first, &peer_last) ||
+        ABS(owner_first - owner_last) != ABS(peer_first - peer_last))
+    {
+        *display = g_strdup(edge);
+        return g_strdup("all");
+    }
+    gint64 low = MIN(owner_first, owner_last), high = MAX(owner_first, owner_last);
+    gint64 selected_low, selected_high;
+    if (waveform_selection_range(current, &selected_low, &selected_high))
+    {
+        low = MAX(low, selected_low);
+        high = MIN(high, selected_high);
+    }
+    const gboolean ascending = owner_first <= owner_last;
+    const gint64 first = ascending ? low : high, last = ascending ? high : low;
+    const gint64 step = peer_first <= peer_last ? 1 : -1;
+    gchar *owner = waveform_format_range(first, last);
+    gchar *peer = waveform_format_range(peer_first + step * ABS(first - owner_first),
+        peer_first + step * ABS(last - owner_first));
+    *display = g_strconcat(owner, " / ", peer, NULL);
+    g_free(owner);
+    return peer;
 }
 
 /* EN: Walk from start in the upstream direction or downstream, using the
@@ -4701,8 +4763,8 @@ static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph,
                     continue;
                 }
 
-                const gchar *separator = edge->type ? strstr(edge->type, " / ") : NULL;
-                const gchar *peer_selection = separator ? separator + 3 : "all";
+                gchar *display;
+                gchar *peer_selection = waveform_project_selection(node->selection, edge->type, &display);
                 gchar *key = g_strdup_printf("%s\n%s", edge->name, peer_selection);
                 GtkTreeIter branch;
                 GtkTreeIter parent = node->row;
@@ -4711,18 +4773,20 @@ static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph,
                     WAVE_USE_ROLE, repeated ? insight_tr("Already shown") : edge->inheritance,
                     WAVE_USE_NAME, edge->name, WAVE_USE_FILE, edge->path,
                     WAVE_USE_LINE, edge->line, WAVE_USE_CONNECTION, TRUE,
-                    WAVE_USE_HOPS, distance, WAVE_USE_SELECTION, edge->type, -1);
+                    WAVE_USE_HOPS, distance, WAVE_USE_SELECTION, display, -1);
                 (*remaining)--;
                 if (repeated)
                 {
                     g_free(key);
+                    g_free(peer_selection);
+                    g_free(display);
                     continue;
                 }
 
                 waveform_graph_uses(graph, &branch, dependencies, edge->name, NULL);
                 WaveDependencyNode *saved = g_new0(WaveDependencyNode, 1);
                 saved->signal = edge->name;
-                saved->selection = g_strdup(peer_selection);
+                saved->selection = peer_selection;
                 saved->row = branch;
                 g_hash_table_insert(visited, key, saved);
                 g_queue_push_tail(&pending, saved);
@@ -4732,7 +4796,8 @@ static void waveform_walk_dependencies(GtkListStore *rows, GtkTreeStore *graph,
                 gtk_list_store_insert_with_values(rows, NULL, -1,
                     WAVE_USE_ROLE, role, WAVE_USE_NAME, edge->name,
                     WAVE_USE_FILE, edge->path, WAVE_USE_LINE, edge->line,
-                    WAVE_USE_CONNECTION, TRUE, WAVE_USE_HOPS, distance, WAVE_USE_SELECTION, edge->type, -1);
+                    WAVE_USE_CONNECTION, TRUE, WAVE_USE_HOPS, distance, WAVE_USE_SELECTION, display, -1);
+                g_free(display);
             }
         }
     }
@@ -4933,7 +4998,7 @@ static void waveform_show_hdl_uses(WaveJump *jump)
     {
         gchar *slice = g_strstrip(g_strdup(gtk_entry_get_text(GTK_ENTRY(filter))));
         gint64 low, high;
-        if (*slice && (strstr(slice, " / ") || !waveform_selection_range(slice, &low, &high)))
+        if (*slice && (strstr(slice, " / ") || strstr(slice, " => ") || !waveform_selection_range(slice, &low, &high)))
         {
             gtk_label_set_text(GTK_LABEL(status),
                 insight_tr("Enter a literal bit or slice, or clear the field for the whole signal."));
