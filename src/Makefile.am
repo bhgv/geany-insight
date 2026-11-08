@@ -215,6 +215,44 @@ libgeany_la_SOURCES += \
 	insight-python-debug.h \
 	insight-waveforms.c \
 	insight-waveforms.h \
+	insight-waveforms/setup-dialogs.inc \
+	insight-waveforms/vcd-parser.inc \
+	insight-waveforms/wave-tracks.inc \
+	insight-waveforms/wave-instruments.inc \
+	insight-waveforms/wave-drawing.inc \
+	insight-waveforms/wave-controls.inc \
+	insight-waveforms/wave-signal-map.inc \
+	insight-waveforms/wave-session.inc \
+	insight-waveforms/wave-loading.inc \
+	insight-waveforms/simulation-state.inc \
+	insight-waveforms/harness-memory.inc \
+	insight-waveforms/harness-buses.inc \
+	insight-waveforms/harness-models.inc \
+	insight-waveforms/harness-instruments.inc \
+	insight-waveforms/harness-generator.inc \
+	insight-waveforms/port-source.inc \
+	insight-waveforms/port-bindings.inc \
+	insight-waveforms/port-browser.inc \
+	insight-waveforms/device-catalog.inc \
+	insight-waveforms/device-port-fields.inc \
+	insight-waveforms/device-wizard.inc \
+	insight-waveforms/testbench-preview.inc \
+	insight-waveforms/port-setup.inc \
+	insight-waveforms/source-breakpoints.inc \
+	insight-waveforms/simulator-process.inc \
+	insight-waveforms/live-output-records.inc \
+	insight-waveforms/signal-snapshots.inc \
+	insight-waveforms/signal-stop-rules.inc \
+	insight-waveforms/console-events.inc \
+	insight-waveforms/live-inputs.inc \
+	insight-waveforms/breakpoint-actions.inc \
+	insight-waveforms/frame-actions.inc \
+	insight-waveforms/signal-history.inc \
+	insight-waveforms/signal-stop-panel.inc \
+	insight-waveforms/signal-tables.inc \
+	insight-waveforms/simulation-preview.inc \
+	insight-waveforms/observer-lifecycle.inc \
+	insight-waveforms/simulation-window.inc \
 	insight-project-membership.h \
 	insight-virtual-list.c \
 	insight-virtual-list.h \

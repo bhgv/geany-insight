@@ -1,4 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* Copyright (c) 2026 bhgv
+ * EN: Public entry points for the Verilog debugger and VCD waveform viewer.
+ * RU: Публичные точки входа отладчика Verilog и просмотра диаграмм VCD.
+ */
 #ifndef INSIGHT_WAVEFORMS_H
 #define INSIGHT_WAVEFORMS_H
 #include <gtk/gtk.h>
