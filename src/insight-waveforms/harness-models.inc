@@ -203,7 +203,7 @@ static void simulation_memory_defaults(gchar ***arguments, gint *count)
         {"spi-nand", "sck cs_n mosi miso", 4},
         {"spi-eeprom", "sck cs_n mosi miso", 4},
         {"spi-psram", "sck cs_n mosi miso", 4},
-        {"hdmi-ddc", "ddc_scl ddc_sda hpd 0", 3},
+        {"hdmi-ddc", "ddc_scl ddc_sda hpd 0 auto", 3},
         {"i2c-eeprom", "scl sda 0x50", 2},
     };
     gchar **args = *arguments;

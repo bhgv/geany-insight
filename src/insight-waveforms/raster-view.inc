@@ -35,8 +35,8 @@ static void simulation_rasters_prepare(WaveSimulation *run)
         RasterDisplay display = {0};
         if (sscanf(cursor, "%u %u %u %u", &display.id, &display.mode,
                    &display.width, &display.height) != 4 ||
-            display.id >= 128 || display.mode > 4 || !display.width ||
-            display.width > 2048 || !display.height || display.height > 1200)
+            display.id >= 128 || display.mode > 6 || !display.width ||
+            display.width > 3840 || !display.height || display.height > 2160)
             continue;
         if (!run->rasters)
             run->rasters = g_ptr_array_new_with_free_func(simulation_raster_free);
@@ -143,7 +143,8 @@ static void simulation_rasters_finish(WaveSimulation *run, const gchar *director
 static GtkWidget *simulation_raster_notebook(WaveSimulation *run, gboolean final)
 {
     GtkWidget *tabs = gtk_notebook_new();
-    const gchar *names[] = {"RGB", "LVDS JEIDA", "LVDS VESA", "HDMI", "DVI"};
+    const gchar *names[] = {"RGB", "LVDS JEIDA", "LVDS VESA", "HDMI", "DVI",
+                             "Dual LVDS JEIDA", "Dual LVDS VESA"};
     for (guint i = 0; i < run->rasters->len; ++i)
     {
         RasterDisplay *display = g_ptr_array_index(run->rasters, i);

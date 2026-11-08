@@ -8,7 +8,7 @@ module raster_displays_tb;
     reg [7:0] r8 = 0, g8 = 0, b8 = 0;
     reg lclk = 0, hclk = 0;
     reg [2:0] lanes6 = 0;
-    reg [3:0] jeida = 0, vesa = 0;
+    reg [3:0] jeida = 0, vesa = 0, link_b = 0;
     reg [6:0] previous_v0 = 0, previous_v1 = 0, previous_v2 = 0, previous_v3 = 0;
     reg [2:0] hdmi = 0, dvi = 0;
 
@@ -20,6 +20,10 @@ module raster_displays_tb;
         $geany_raster(lclk, lanes6[0], lanes6[1], lanes6[2], 1'b0, 1'b0, 2, 2, 6, 1, 1, 0, 2);
         $geany_raster(lclk, jeida[0], jeida[1], jeida[2], jeida[3], 1'b0, 2, 2, 8, 1, 1, 0, 3);
         $geany_raster(lclk, vesa[0], vesa[1], vesa[2], vesa[3], 1'b0, 2, 2, 8, 1, 2, 2, 4);
+        $geany_raster_dual(lclk, jeida[0], jeida[1], jeida[2], jeida[3], 1'b0,
+                           4, 2, 8, 1, 1, 0, 7, link_b[0], link_b[1], link_b[2], link_b[3], 0);
+        $geany_raster_dual(lclk, lanes6[0], lanes6[1], lanes6[2], 1'b0, 1'b0,
+                           4, 2, 6, 1, 1, 0, 8, link_b[0], link_b[1], link_b[2], 1'b0, 1);
     end
     always @(posedge hclk) begin
         $geany_raster(hclk, hdmi[0], hdmi[1], hdmi[2], 1'b0, 1'b0, 2, 2, 8, 1, 3, 0, 5);
@@ -39,6 +43,8 @@ module raster_displays_tb;
 
     // EN: Serialize rgb with active and vertical v in all three OpenLDI layouts.
     // RU: Сериализует rgb с active и v во всех трёх раскладках OpenLDI.
+    // EN: Link B sends the complementary color without control flags.
+    // RU: Канал B передаёт инвертированный цвет без управляющих флагов.
     task lvds_pixel(input bit active, input bit v, input [23:0] rgb);
         reg [7:0] r, g, b;
         reg [6:0] j0,j1,j2,j3,v0,v1,v2,v3;
@@ -58,6 +64,8 @@ module raster_displays_tb;
                         previous_v1[bit_index+5],previous_v0[bit_index+5]};
             else
                 vesa = {v3[bit_index-2],v2[bit_index-2],v1[bit_index-2],v0[bit_index-2]};
+            link_b = ~jeida;
+            if (bit_index >= 5) link_b[2] = 0;
             lanes6 = jeida[2:0];
             if (bit_index == 0) lclk = 1;
             if (bit_index == 3) lclk = 0;

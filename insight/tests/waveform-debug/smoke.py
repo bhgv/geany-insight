@@ -661,6 +661,15 @@ def check_raster_displays(compiler, runtime, fixtures, directory, environment):
         expected = (1).to_bytes(4, "little") + bytes.fromhex("ff000000ff000000ff" + tail)
         require(frame == expected, f"Incorrect RGB pixels for display {display}")
 
+    dual_frames = {
+        7: "ff000000ffff00ff00ff00ff0000ffffff00a65a1959a5e6",
+        8: "00ffffff0000ff00ff00ff00ffff000000ff59a6e7a65918",
+    }
+    for display, pixels in dual_frames.items():
+        frame = (directory / f"geany-raster-{display}-1.rgb").read_bytes()
+        require(frame == (1).to_bytes(4, "little") + bytes.fromhex(pixels),
+                f"Incorrect interleaved LVDS pixels for display {display}")
+
 
 # EN: Run the parallel PSRAM fixture with compiler/runtime and a high-address image.
 # RU: Запускает тест параллельной PSRAM через compiler/runtime с образом по старшему адресу.

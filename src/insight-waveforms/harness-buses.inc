@@ -296,10 +296,12 @@ static gboolean simulation_port_usart(gchar **args, gint count, GString *body,
 
 /* EN: Validate DDC args and wire SCL/SDA and HPD into body and connections.
  * ports tracks assigned pins and images supplies an optional EDID for SDA.
+ * width and height set the default EDID geometry.
  * RU: Проверяет args DDC и подключает SCL/SDA и HPD в body и connections.
- * ports учитывает назначенные выводы, images задаёт необязательный EDID по SDA. */
+ * ports учитывает выводы, images задаёт образ EDID, width и height задают геометрию. */
 static gboolean simulation_port_hdmi_ddc(gchar **args, GString *body, GString *connections,
-                                         GHashTable *ports, GHashTable *images)
+                                         GHashTable *ports, GHashTable *images,
+                                         guint width, guint height)
 {
     guint64 delay;
     if (g_hash_table_size(ports) > 125 ||
@@ -322,9 +324,9 @@ static gboolean simulation_port_hdmi_ddc(gchar **args, GString *body, GString *c
         "pullup(pin%u); pullup(pin%u); assign pin%u=ddc_drive%u;\n"
         "initial begin pin%u=0; #%" G_GUINT64_FORMAT " ddc_plug%u=1; end\n"
         "always @(pin%u or pin%u or ddc_plug%u)\n"
-        "  $geany_hdmi_ddc(pin%u,pin%u,ddc_plug%u,ddc_drive%u,pin%u",
+        "  $geany_hdmi_ddc(pin%u,pin%u,ddc_plug%u,ddc_drive%u,pin%u,%u,%u",
         sda, sda, scl, sda, sda, sda, hpd, delay, sda,
-        scl, sda, sda, scl, sda, sda, sda, hpd);
+        scl, sda, sda, scl, sda, sda, sda, hpd, width, height);
     simulation_memory_argument(body, images, args[2]);
     return TRUE;
 }

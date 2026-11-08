@@ -8,19 +8,22 @@ enum { RASTER_RGB, RASTER_JEIDA, RASTER_VESA, RASTER_HDMI, RASTER_DVI };
 enum { RASTER_CK, RASTER_A, RASTER_B, RASTER_C, RASTER_D, RASTER_E,
        RASTER_WIDTH, RASTER_HEIGHT, RASTER_DEPTH, RASTER_VS, RASTER_MODE,
        RASTER_PHASE, RASTER_ID, RASTER_PORTS };
+enum { RASTER_DUAL_LANES = 4, RASTER_DUAL_SWAP = RASTER_PORTS + RASTER_DUAL_LANES,
+       RASTER_DUAL_PORTS };
 
 typedef struct RasterSink RasterSink;
 typedef struct {
     RasterSink *sink;
     uint32_t period, last_delay;
-    unsigned bit, words[4];
+    unsigned bit, words[8];
     int active, bad;
 } RasterSample;
 
 struct RasterSink {
-    vpiHandle pins[RASTER_PORTS];
+    vpiHandle pins[RASTER_DUAL_PORTS];
     unsigned width, height, depth, vs_active, mode, phase, id;
     unsigned x, y, vs, preamble, guard, video;
+    int dual, swap;
     uint32_t sequence;
     uint64_t last_edge;
     int have_edge, active_line, discard, reported;
@@ -106,9 +109,9 @@ static unsigned raster_expand6(unsigned value)
     return (value << 2) | (value >> 4);
 }
 
-/* EN: Decode one OpenLDI pixel from words in the configured mapping of sink.
- * RU: Декодирует пиксель OpenLDI из words по раскладке, выбранной в sink. */
-static void raster_lvds(RasterSink *sink, const unsigned *words)
+/* EN: Return the RGB value of words in the configured mapping of sink.
+ * RU: Возвращает RGB из words по раскладке, выбранной в sink. */
+static unsigned raster_lvds_color(RasterSink *sink, const unsigned *words)
 {
     unsigned red = words[0] & 63u;
     unsigned green = ((words[1] & 31u) << 1) | (words[0] >> 6);
@@ -126,7 +129,20 @@ static void raster_lvds(RasterSink *sink, const unsigned *words)
         green |= ((words[3] >> 2) & 3u) << 6;
         blue |= ((words[3] >> 4) & 3u) << 6;
     }
-    raster_pixel(sink, (words[2] >> 6) & 1u, (words[2] >> 5) & 1u, red, green, blue);
+    return (red << 16) | (green << 8) | blue;
+}
+
+/* EN: Append one pixel or an interleaved pair from OpenLDI lane words to sink.
+ * RU: Добавляет в sink пиксель или чередующуюся пару из слов линий OpenLDI. */
+static void raster_lvds(RasterSink *sink, const unsigned *words)
+{
+    unsigned de = (words[2] >> 6) & 1u, vs = (words[2] >> 5) & 1u;
+    unsigned first = raster_lvds_color(sink, words + (sink->swap ? 4 : 0));
+    raster_pixel(sink, de, vs, first >> 16, (first >> 8) & 255, first & 255);
+    if (sink->dual && de && vs != sink->vs_active) {
+        unsigned second = raster_lvds_color(sink, words + (sink->swap ? 0 : 4));
+        raster_pixel(sink, de, vs, second >> 16, (second >> 8) & 255, second & 255);
+    }
 }
 
 /* EN: Return the control value for TMDS word, or -1 for a noncontrol symbol.
@@ -229,6 +245,13 @@ static PLI_INT32 raster_sample_bit(p_cb_data callback)
             sample->words[i] |= 1u << sample->bit;
         else if (level != vpi0)
             sample->bad = 1;
+        if (sink->dual) {
+            int second = scalar(sink->pins[RASTER_PORTS + i]);
+            if (second == vpi1)
+                sample->words[4 + i] |= 1u << sample->bit;
+            else if (second != vpi0)
+                sample->bad = 1;
+        }
     }
     if (++sample->bit < bits) {
         raster_schedule(sample);
@@ -254,15 +277,16 @@ static PLI_INT32 raster_free(p_cb_data callback)
     return 0;
 }
 
-/* EN: Validate ports of call and return a new sink, or NULL on invalid geometry.
- * RU: Проверяет выводы call и создаёт приёмник либо возвращает NULL при ошибке. */
-static RasterSink *raster_open(vpiHandle call)
+/* EN: Validate ports of call and return a new sink. dual enables the second OpenLDI link.
+ * RU: Проверяет выводы call и создаёт приёмник. dual включает второй канал OpenLDI. */
+static RasterSink *raster_open(vpiHandle call, int dual)
 {
     vpiHandle args = vpi_iterate(vpiArgument, call);
     if (!args)
         return NULL;
-    vpiHandle pins[RASTER_PORTS];
-    for (unsigned i = 0; i < RASTER_PORTS; ++i) {
+    vpiHandle pins[RASTER_DUAL_PORTS] = {0};
+    unsigned count = dual ? RASTER_DUAL_PORTS : RASTER_PORTS;
+    for (unsigned i = 0; i < count; ++i) {
         pins[i] = vpi_scan(args);
         if (!pins[i])
             return NULL;
@@ -278,7 +302,8 @@ static RasterSink *raster_open(vpiHandle call)
     unsigned phase = (unsigned)bus_integer(pins[RASTER_PHASE]);
     unsigned vs = (unsigned)bus_integer(pins[RASTER_VS]);
     unsigned id = (unsigned)bus_integer(pins[RASTER_ID]);
-    if (!width || width > 2048 || !height || height > 1200 ||
+    if (!width || width > 3840 || !height || height > 2160 ||
+        (dual && ((width & 1) || (mode != RASTER_JEIDA && mode != RASTER_VESA))) ||
         (depth != 6 && depth != 8) || mode > RASTER_DVI || vs > 1 || id >= 128 ||
         phase >= (mode <= RASTER_VESA ? 7u : 10u))
         return NULL;
@@ -292,6 +317,10 @@ static RasterSink *raster_open(vpiHandle call)
             return NULL;
     }
 
+    if (dual)
+        for (unsigned i = 0; i < 4; ++i)
+            if (vpi_get(vpiSize, pins[RASTER_PORTS + i]) != 1)
+                return NULL;
     RasterSink *sink = calloc(1, sizeof *sink);
     if (!sink)
         return NULL;
@@ -308,6 +337,8 @@ static RasterSink *raster_open(vpiHandle call)
     sink->vs_active = vs;
     sink->vs = !vs;
     sink->phase = phase;
+    sink->dual = dual;
+    sink->swap = dual && bus_integer(pins[RASTER_DUAL_SWAP]) != 0;
     sink->id = id;
     s_cb_data cleanup = {.reason = cbEndOfSimulation, .cb_rtn = raster_free,
                          .user_data = (PLI_BYTE8 *)sink};
@@ -321,15 +352,14 @@ static RasterSink *raster_open(vpiHandle call)
     return sink;
 }
 
-/* EN: Accept a pixel-clock edge in the current VPI call. user_data is unused.
- * RU: Принимает фронт пиксельного такта в текущем VPI-вызове. user_data не используется. */
+/* EN: Accept a pixel-clock edge in the current VPI call. user_data selects dual OpenLDI.
+ * RU: Принимает фронт пиксельного такта в текущем VPI-вызове. user_data выбирает два канала OpenLDI. */
 static PLI_INT32 raster_tick(PLI_BYTE8 *user_data)
 {
-    (void)user_data;
     vpiHandle call = vpi_handle(vpiSysTfCall, NULL);
     RasterSink *sink = vpi_get_userdata(call);
     if (!sink)
-        sink = raster_open(call);
+        sink = raster_open(call, user_data != NULL);
     if (!sink) {
         vpi_printf("Geany display: invalid display configuration.\n");
         vpip_set_return_value(1);

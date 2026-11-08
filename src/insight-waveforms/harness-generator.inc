@@ -58,7 +58,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             scopes += valid;
         }
         else if (valid && (!strcmp(args[0], "rgb-display") || !strcmp(args[0], "lvds-display") ||
-                           !strcmp(args[0], "hdmi-display")))
+                           !strcmp(args[0], "hdmi-display") || !strcmp(args[0], "lvds-dual-display")))
         {
             valid = rasters < 4 && simulation_port_raster(args, count, body, connections, ports);
             rasters += valid;
@@ -151,9 +151,16 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             valid = simulation_port_i2c(args, body, connections, ports, images, i2c_buses, NULL, NULL);
             attached_images += valid && g_hash_table_contains(images, args[2]);
         }
-        else if (valid && count == 5 && !strcmp(args[0], "hdmi-ddc"))
+        else if (valid && (count == 5 || count == 6) && !strcmp(args[0], "hdmi-ddc"))
         {
-            valid = simulation_port_hdmi_ddc(args, body, connections, ports, images);
+            guint width = 640, height = 480;
+            gboolean custom = g_hash_table_contains(images, args[2]);
+            valid = custom || simulation_hdmi_geometry(lines, count == 6 ? args[5] : "auto", &width, &height);
+            if (!valid)
+                g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                                    "Select one HDMI clock for the automatic EDID geometry.");
+            if (valid)
+                valid = simulation_port_hdmi_ddc(args, body, connections, ports, images, width, height);
             has_ddc |= valid;
             attached_images += valid && g_hash_table_contains(images, args[2]);
         }

@@ -835,6 +835,11 @@ static void register_devices(void)
     task.tfname = "$geany_raster";
     task.calltf = raster_tick;
     vpi_register_systf(&task);
+    static PLI_BYTE8 dual_openldi = 1;
+    task.tfname = "$geany_raster_dual";
+    task.user_data = &dual_openldi;
+    vpi_register_systf(&task);
+    task.user_data = NULL;
     task.tfname = "$geany_hdmi_ddc";
     task.calltf = hdmi_ddc_update;
     vpi_register_systf(&task);

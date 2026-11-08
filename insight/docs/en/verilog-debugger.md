@@ -329,7 +329,7 @@ outside this model.
 ## RGB, LVDS and HDMI test displays
 
 Choose **Parallel RGB display**, **LVDS display** or **HDMI display** in
-**Add Test Device…**. Set the active width and height (up to 2048 × 1200)
+**Add Test Device…**. Set the active width and height (up to 3840 × 2160 (4K UHD))
 and the color depth (6 or 8 bits per channel). The defaults are 640 × 480
 and eight bits. **Displays** shows each completed frame during the run.
 After simulation ends, the last complete frame opens in **Display frames**.
@@ -363,6 +363,17 @@ and samples near the middle of each bit. Use at least two simulation
 ticks per serial bit. The models receive logical signals, so differential
 voltage levels and jitter are outside their scope.
 
+For a dual-link panel, select **Dual-link LVDS display**. Example for RGB888:
+
+```text
+lvds-dual-display lvds_clk a0 a1 a2 a3 b0 b1 b2 b3 1920 1080 8 jeida 0 1 a-first
+```
+
+Use an even width. With `a-first`, link A carries pixels x=0,2,4 and
+link B carries x=1,3,5. Select `b-first` for the reverse order. Both
+links use one forwarded clock and the same phase. Link A supplies DE
+and VS. For RGB666, select 6 bits per component and use `-` for a3 and b3.
+
 The active area must match the configured geometry. A line with an
 unexpected number of active pixels is discarded until the next VS pulse.
 
@@ -371,14 +382,19 @@ unexpected number of active pixels is discarded until the next VS pulse.
 Add **HDMI DDC / EDID** alongside the video display when the DUT waits
 for hot plug and reads EDID. SCL and SDA are open-drain with pull-ups.
 HPD goes high at the configured connection time, once the EDID is ready.
-The default connects at time zero and reports 640 × 480 at 60 Hz.
+The default connects at time zero and derives the EDID from the geometry
+of the only HDMI display in the setup. Without an HDMI display the
+fallback is 640 × 480 at 60 Hz. For 3840 × 2160 the EDID advertises 30 Hz
+and includes a CTA extension with VIC 95. With multiple HDMI displays,
+replace `auto` with the desired display's clock port name. The video
+receiver accepts unscrambled TMDS.
 
 ```text
-hdmi-ddc ddc_scl ddc_sda hpd 100000
 memory-image ddc_sda "display-edid.hex"
+hdmi-ddc ddc_scl ddc_sda hpd 100000 auto
 ```
 
-The image line is optional. The wizard accepts a HEX file with all
+The optional image line overrides the generated EDID. The wizard accepts a HEX file with all
 128 base-block bytes, optionally followed by one 128-byte extension.
 The sink validates the header and checksums. The DUT can set an
 eight-bit offset at I²C address 0x50 and read sequentially after a
