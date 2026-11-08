@@ -15,6 +15,9 @@ void insight_project_files_free(InsightProjectFiles *);
  * No disk reads. Master-list projects and invalid/oversized snapshots decline. */
 InsightProjectFiles *insight_project_files_freeze(const InsightProjectFiles *,const gchar *,const GPtrArray *,GError **);
 gboolean insight_project_files_set(InsightProjectFiles *,const char *,gboolean,gboolean,GError **);
+gboolean insight_project_files_set_batch(InsightProjectFiles *,const GPtrArray *,gboolean,GError **);
+GHashTable *insight_project_files_exact_index(const InsightProjectFiles *);
+gboolean insight_project_files_contains_indexed(const InsightProjectFiles *,const char *,const char *,GHashTable *);
 gboolean insight_project_files_contains(const InsightProjectFiles *,const char *,const char *);
 /* Project/system directory variables and case-insensitive environment names
  * expand once against an environment snapshot; expressions stay portable.

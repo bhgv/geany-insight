@@ -129,6 +129,65 @@ gboolean insight_project_files_set(InsightProjectFiles *s,const char *path,gbool
  else { remove_path(s->files,p,FALSE); remove_path(s->excluded_files,p,FALSE); }
  g_ptr_array_add(target,p); return TRUE;
 }
+/* EN: Copy file rules that do not match any path in changes.
+ * RU: Копирует правила файлов, отсутствующих в наборе changes. */
+static GPtrArray *unchanged_file_rules(GPtrArray *rules,GHashTable *changes)
+{
+ GPtrArray *remaining=g_ptr_array_new_with_free_func(g_free);
+ for(guint i=0;i<rules->len;i++) {
+  const gchar *path=g_ptr_array_index(rules,i);
+  gchar *lookup=key(path);
+  if(!g_hash_table_contains(changes,lookup))
+   g_ptr_array_add(remaining,g_strdup(path));
+  g_free(lookup);
+ }
+ return remaining;
+}
+
+/* EN: Apply one include/exclude decision to all paths atomically in policy.
+ * RU: Пакетно включает или исключает все paths в policy после проверки путей. */
+gboolean insight_project_files_set_batch(InsightProjectFiles *policy,const GPtrArray *paths,
+                                         gboolean include,GError **error)
+{
+ if(!paths->len) return TRUE;
+ GHashTable *changes=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
+ GPtrArray *ordered=g_ptr_array_new_with_free_func(g_free);
+ gboolean ok=TRUE;
+ for(guint i=0;i<paths->len;i++) {
+  gchar *path=canonical(g_ptr_array_index(paths,i));
+  if(!path) {
+   g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,
+                       "Project paths must be absolute UTF-8 paths without line breaks");
+   ok=FALSE;
+   break;
+  }
+  if(g_hash_table_add(changes,key(path))) g_ptr_array_add(ordered,path);
+  else g_free(path);
+ }
+ if(ok) {
+  GPtrArray *files=unchanged_file_rules(policy->files,changes);
+  GPtrArray *excluded=unchanged_file_rules(policy->excluded_files,changes);
+  GPtrArray *target=include ? files : excluded;
+  if(target->len+ordered->len>1000000) {
+   g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NO_SPACE,
+                       "Project membership rule limit reached (1000000 per list)");
+   g_ptr_array_unref(files);
+   g_ptr_array_unref(excluded);
+   ok=FALSE;
+  } else {
+   for(guint i=0;i<ordered->len;i++)
+    g_ptr_array_add(target,g_strdup(g_ptr_array_index(ordered,i)));
+   g_ptr_array_unref(policy->files);
+   g_ptr_array_unref(policy->excluded_files);
+   policy->files=files;
+   policy->excluded_files=excluded;
+  }
+ }
+ g_ptr_array_unref(ordered);
+ g_hash_table_unref(changes);
+ return ok;
+}
+
 static gboolean masks_match(const InsightProjectFiles *s,const char *root,const char *path) {
  if(!s->masks || !*s->masks) return FALSE;
  GFile *r=g_file_new_for_path(root),*p=g_file_new_for_path(path); gchar *relative=g_file_get_relative_path(r,p),*base=g_path_get_basename(path); g_object_unref(r); g_object_unref(p);
@@ -137,15 +196,40 @@ static gboolean masks_match(const InsightProjectFiles *s,const char *root,const 
  for(guint i=0;patterns[i] && !result;i++) { gchar *pattern=g_strstrip(patterns[i]); if(!*pattern) continue; GPatternSpec *spec=g_pattern_spec_new(pattern); result=insight_pattern_match_string(spec,base) || (relative && insight_pattern_match_string(spec,relative)); g_pattern_spec_free(spec); }
  g_strfreev(patterns); g_free(relative); g_free(base); return result;
 }
-gboolean insight_project_files_contains(const InsightProjectFiles *s,const char *root,const char *path) {
+/* EN: Index exact file rules in policy, with exclusions taking precedence.
+ * RU: Индексирует правила для отдельных файлов policy с приоритетом исключений. */
+GHashTable *insight_project_files_exact_index(const InsightProjectFiles *policy)
+{
+ GHashTable *index=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
+ GPtrArray *rules[]={policy->files,policy->excluded_files};
+ for(guint kind=0;kind<G_N_ELEMENTS(rules);kind++)
+  for(guint i=0;i<rules[kind]->len;i++)
+   g_hash_table_replace(index,key(g_ptr_array_index(rules[kind],i)),GINT_TO_POINTER(kind ? -1 : 1));
+ return index;
+}
+
+/* EN: Match path below root using policy and an optional exact-rule index.
+ * RU: Проверяет path относительно root по policy и необязательному индексу правил. */
+gboolean insight_project_files_contains_indexed(const InsightProjectFiles *s,const char *root,const char *path,GHashTable *index) {
  gchar *r=canonical(root),*p=canonical(path); if(!r || !p) { g_free(r); g_free(p); return FALSE; }
  gboolean included=s->automatic && below(p,r); gsize specificity=0;
  for(guint i=0;i<s->trees->len;i++) { const char *tree=g_ptr_array_index(s->trees,i); if(below(p,tree) && strlen(tree)>=specificity) { included=TRUE; specificity=strlen(tree); } }
  for(guint i=0;i<s->excluded_trees->len;i++) { const char *tree=g_ptr_array_index(s->excluded_trees,i); if(below(p,tree) && strlen(tree)>=specificity) { included=FALSE; specificity=strlen(tree); } }
- for(guint i=0;i<s->files->len;i++) if(same(p,g_ptr_array_index(s->files,i))) included=TRUE;
- for(guint i=0;i<s->excluded_files->len;i++) if(same(p,g_ptr_array_index(s->excluded_files,i))) included=FALSE;
+ if(index) {
+  gchar *lookup=key(p);
+  gint rule=GPOINTER_TO_INT(g_hash_table_lookup(index,lookup));
+  g_free(lookup);
+  if(rule) included=rule>0;
+ } else {
+  for(guint i=0;i<s->files->len;i++) if(same(p,g_ptr_array_index(s->files,i))) included=TRUE;
+  for(guint i=0;i<s->excluded_files->len;i++) if(same(p,g_ptr_array_index(s->excluded_files,i))) included=FALSE;
+ }
  if(included && masks_match(s,r,p)) included=FALSE;
  g_free(r); g_free(p); return included;
+}
+gboolean insight_project_files_contains(const InsightProjectFiles *s,const char *root,const char *path)
+{
+ return insight_project_files_contains_indexed(s,root,path,NULL);
 }
 static gboolean valid(const InsightProjectFiles *s,GError **error) {
  if(!s || !s->masks || strlen(s->masks)>4096 || !g_utf8_validate(s->masks,-1,NULL)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_DATA,"Invalid project exclusion masks"); return FALSE; }

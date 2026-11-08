@@ -43,19 +43,57 @@ static void membership_read_worker(GTask *task,gpointer source,gpointer input,GC
  }
  g_ptr_array_unref(queue);if(error) g_task_return_error(task,error);else g_task_return_boolean(task,TRUE);
 }
-static void membership_browser_refresh(MembershipDialog *d) {
- if(!d->available_store) return;gtk_list_store_clear(d->available_store);
- for(guint n=0;d->entries && n<d->entries->len;n++) { MembershipEntry *e=g_ptr_array_index(d->entries,n);if(!e->directory && insight_project_files_contains(d->candidate,d->root,e->path)) continue;
-  gchar *name=g_path_get_basename(e->path);const gchar *query=gtk_entry_get_text(GTK_ENTRY(d->filename));if(!e->directory && *query && !strpbrk(query,"*?;") && !insight_lookup_text_match(name,query)) {g_free(name);continue;}GtkTreeIter it;gtk_list_store_append(d->available_store,&it);gtk_list_store_set(d->available_store,&it,0,name,1,e->path,2,e->directory,3,e->directory ? "folder":"text-x-generic",-1);g_free(name);
+/* EN: Refresh available entries against the current membership draft.
+ * RU: Обновляет доступные файлы по текущему черновику списка проекта. */
+static void membership_browser_refresh(MembershipDialog *d)
+{
+ if(!d->available_store) return;
+ GtkTreeSortable *sort=GTK_TREE_SORTABLE(d->available_store);
+ gtk_tree_sortable_set_sort_column_id(sort,GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID,GTK_SORT_ASCENDING);
+ gtk_list_store_clear(d->available_store);
+ const gchar *query=gtk_entry_get_text(GTK_ENTRY(d->filename));
+ gboolean filter=*query && !strpbrk(query,"*?;");
+ for(guint n=0;d->entries && n<d->entries->len;n++) {
+  MembershipEntry *entry=g_ptr_array_index(d->entries,n);
+  if(!entry->directory && insight_project_files_contains_indexed(d->candidate,d->root,entry->path,d->exact_rules))
+   continue;
+  gchar *name=g_path_get_basename(entry->path);
+  if(entry->directory || !filter || insight_lookup_text_match(name,query))
+   gtk_list_store_insert_with_values(d->available_store,NULL,-1,0,name,1,entry->path,
+     2,entry->directory,3,entry->directory ? "folder" : "text-x-generic",-1);
+  g_free(name);
  }
+ gtk_tree_sortable_set_sort_column_id(sort,0,GTK_SORT_ASCENDING);
 }
 static void membership_read_done(GObject *source,GAsyncResult *result,gpointer unused) {
  (void)unused;MembershipDialog *d=g_object_get_data(source,"membership-browser");GTask *task=G_TASK(result);MembershipRead *r=g_task_get_task_data(task);GError *error=NULL;gboolean ok=g_task_propagate_boolean(task,&error);
  if(d && r->serial==d->read_serial) { g_clear_object(&d->read_cancel);gtk_widget_set_sensitive(d->browser_controls,TRUE);gtk_dialog_set_response_sensitive(GTK_DIALOG(d->dialog),GTK_RESPONSE_APPLY,d->master_valid);
   if(!ok) gtk_label_set_text(GTK_LABEL(d->browser_status),error ? insight_tr(error->message):"");
-  else if(r->adding) { InsightProjectFiles *next=insight_project_files_clone(d->candidate);for(guint n=0;n<r->entries->len && !error;n++) { MembershipEntry *e=g_ptr_array_index(r->entries,n);insight_project_files_set(next,e->path,FALSE,TRUE,&error); }
-   if(error) { insight_project_files_free(next);gtk_label_set_text(GTK_LABEL(d->browser_status),error->message); }
-   else { insight_project_files_free(d->candidate);d->candidate=next;for(guint n=0;n<r->entries->len;n++) { MembershipEntry *e=g_ptr_array_index(r->entries,n);if(!g_ptr_array_find_with_equal_func(d->paths,e->path,(GEqualFunc)g_str_equal,NULL)) g_ptr_array_add(d->paths,g_strdup(e->path)); }membership_dialog_refresh(d);gchar *count=g_strdup_printf(insight_tr("Added %u files to the selection"),r->entries->len);gtk_label_set_text(GTK_LABEL(d->browser_status),count);g_free(count); }
+  else if(r->adding) {
+   GPtrArray *paths=g_ptr_array_new();
+   for(guint n=0;n<r->entries->len;n++) {
+    MembershipEntry *entry=g_ptr_array_index(r->entries,n);
+    g_ptr_array_add(paths,entry->path);
+   }
+   if(insight_project_files_set_batch(d->candidate,paths,TRUE,&error)) {
+    GHashTable *seen=g_hash_table_new(g_str_hash,g_str_equal);
+    for(guint n=0;n<d->paths->len;n++)
+     g_hash_table_add(seen,g_ptr_array_index(d->paths,n));
+    for(guint n=0;n<paths->len;n++) {
+     const gchar *path=g_ptr_array_index(paths,n);
+     if(!g_hash_table_contains(seen,path)) {
+      gchar *copy=g_strdup(path);
+      g_ptr_array_add(d->paths,copy);
+      g_hash_table_add(seen,copy);
+     }
+    }
+    g_hash_table_unref(seen);
+    membership_dialog_refresh(d);
+    gchar *count=g_strdup_printf(insight_tr("Added %u files to the selection"),paths->len);
+    gtk_label_set_text(GTK_LABEL(d->browser_status),count);
+    g_free(count);
+   } else gtk_label_set_text(GTK_LABEL(d->browser_status),error->message);
+   g_ptr_array_unref(paths);
   } else { g_clear_pointer(&d->entries,g_ptr_array_unref);d->entries=g_ptr_array_ref(r->entries);
    for(guint n=0;n<d->entries->len;n++) { MembershipEntry *e=g_ptr_array_index(d->entries,n);if(e->directory) {gchar *name=g_path_get_basename(e->path);GtkTreeIter it;gtk_tree_store_append(d->directory_store,&it,&d->directory_node);gtk_tree_store_set(d->directory_store,&it,0,name,1,e->path,2,TRUE,3,"folder",-1);g_free(name);} }
    gtk_tree_view_expand_all(GTK_TREE_VIEW(d->directory_view));membership_browser_refresh(d);gtk_label_set_text(GTK_LABEL(d->browser_status),""); }
@@ -90,7 +128,7 @@ static void membership_filename_activate(GtkEntry *entry,gpointer data) {
 static void membership_known_changed(GtkToggleButton *button,gpointer data) { (void)button;MembershipDialog *d=data;if(d->directory) membership_browse(d,d->directory); }
 static void membership_browser_add(GtkButton *button,gpointer data) {
  MembershipDialog *d=data;gint mode=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button),"browser-add"));GPtrArray *roots=g_ptr_array_new_with_free_func(g_free);GtkTreeModel *model=GTK_TREE_MODEL(d->available_store);GList *rows=gtk_tree_selection_get_selected_rows(gtk_tree_view_get_selection(GTK_TREE_VIEW(d->available)),NULL);gboolean directories=FALSE;
- if(mode==1) {g_list_free_full(rows,(GDestroyNotify)gtk_tree_path_free);rows=NULL;GtkTreeIter it;for(gboolean valid=gtk_tree_model_get_iter_first(model,&it);valid;valid=gtk_tree_model_iter_next(model,&it)) rows=g_list_append(rows,gtk_tree_model_get_path(model,&it));}
+ if(mode==1) {g_list_free_full(rows,(GDestroyNotify)gtk_tree_path_free);rows=NULL;GtkTreeIter it;for(gboolean valid=gtk_tree_model_get_iter_first(model,&it);valid;valid=gtk_tree_model_iter_next(model,&it)) rows=g_list_prepend(rows,gtk_tree_model_get_path(model,&it));rows=g_list_reverse(rows);}
  for(GList *p=rows;p;p=p->next) {GtkTreeIter it;gchar *path=NULL;gboolean directory=FALSE;if(!gtk_tree_model_get_iter(model,&it,p->data)) continue;gtk_tree_model_get(model,&it,1,&path,2,&directory,-1);if(!mode && directory) {membership_browse(d,path);g_free(path);g_list_free_full(rows,(GDestroyNotify)gtk_tree_path_free);g_ptr_array_unref(roots);return;}if(directory) directories=TRUE;if(mode!=2 || directory) g_ptr_array_add(roots,path);else g_free(path);}
  g_list_free_full(rows,(GDestroyNotify)gtk_tree_path_free);
  if(mode==2 && !roots->len) g_ptr_array_add(roots,g_strdup(d->directory));
@@ -101,7 +139,22 @@ static void membership_browser_add(GtkButton *button,gpointer data) {
 }
 static void membership_remove_special(GtkButton *button,gpointer data) {
  (void)button;MembershipDialog *d=data;GtkWidget *dialog=gtk_dialog_new_with_buttons(insight_tr("Remove Special"),GTK_WINDOW(d->dialog),GTK_DIALOG_MODAL|GTK_DIALOG_DESTROY_WITH_PARENT,insight_tr("Cancel"),GTK_RESPONSE_CANCEL,insight_tr("Remove from project"),GTK_RESPONSE_ACCEPT,NULL),*entry=gtk_entry_new();gtk_entry_set_text(GTK_ENTRY(entry),"*.h");gtk_widget_set_tooltip_text(entry,insight_tr("Filename masks separated by semicolons; files remain on disk"));gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),entry,FALSE,FALSE,8);gtk_widget_show_all(dialog);
- if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) {const gchar *patterns=gtk_entry_get_text(GTK_ENTRY(entry));for(guint n=0;n<d->paths->len;n++) {const gchar *path=g_ptr_array_index(d->paths,n);gchar *base=g_path_get_basename(path);if(*patterns && membership_glob(base,patterns)) insight_project_files_set(d->candidate,path,FALSE,FALSE,NULL);g_free(base);}membership_dialog_refresh(d);}gtk_widget_destroy(dialog);
+ if(gtk_dialog_run(GTK_DIALOG(dialog))==GTK_RESPONSE_ACCEPT) {
+  const gchar *patterns=gtk_entry_get_text(GTK_ENTRY(entry));
+  GPtrArray *files=g_ptr_array_new();
+  for(guint n=0;n<d->paths->len;n++) {
+   const gchar *path=g_ptr_array_index(d->paths,n);
+   gchar *base=g_path_get_basename(path);
+   if(*patterns && membership_glob(base,patterns)) g_ptr_array_add(files,(gpointer)path);
+   g_free(base);
+  }
+  GError *error=NULL;
+  if(insight_project_files_set_batch(d->candidate,files,FALSE,&error)) membership_dialog_refresh(d);
+  else gtk_label_set_text(GTK_LABEL(d->browser_status),error->message);
+  g_clear_error(&error);
+  g_ptr_array_unref(files);
+ }
+ gtk_widget_destroy(dialog);
 }
 static GtkWidget *membership_list(GtkListStore **store,GtkWidget **view,const gchar *name,const gchar *title) {
  *store=gtk_list_store_new(4,G_TYPE_STRING,G_TYPE_STRING,G_TYPE_BOOLEAN,G_TYPE_STRING);*view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(*store));gtk_widget_set_name(*view,name);GtkTreeViewColumn *column=gtk_tree_view_column_new();gtk_tree_view_column_set_title(column,title);GtkCellRenderer *icon=gtk_cell_renderer_pixbuf_new(),*text=gtk_cell_renderer_text_new();gtk_tree_view_column_pack_start(column,icon,FALSE);gtk_tree_view_column_add_attribute(column,icon,"icon-name",3);gtk_tree_view_column_pack_start(column,text,TRUE);gtk_tree_view_column_add_attribute(column,text,"text",0);gtk_tree_view_append_column(GTK_TREE_VIEW(*view),column);gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(*store),0,GTK_SORT_ASCENDING);gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(*view)),GTK_SELECTION_MULTIPLE);gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(*view),1);GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL);gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),GTK_POLICY_AUTOMATIC,GTK_POLICY_AUTOMATIC);gtk_container_add(GTK_CONTAINER(scroll),*view);gtk_widget_set_hexpand(scroll,TRUE);gtk_widget_set_vexpand(scroll,TRUE);return scroll;
@@ -110,7 +163,7 @@ static GtkWidget *membership_list(GtkListStore **store,GtkWidget **view,const gc
 static void membership_filename_changed(GtkEditable *entry,gpointer data) { (void)entry;membership_browser_refresh(data); }
 static void membership_filetypes(GtkButton *button,gpointer data) { (void)button;MembershipDialog *d=data;insight_languages_show(NULL,NULL);membership_browse(d,d->directory); }
 
-static void membership_close(GtkButton *button,gpointer data) { (void)button;MembershipDialog *d=data;if(!d->read_cancel && d->master_valid) gtk_dialog_response(GTK_DIALOG(d->dialog),GTK_RESPONSE_APPLY); }
+
 
 static void membership_browser_import(GtkButton *button,gpointer data) {
  (void)button;MembershipDialog *d=data;GtkWidget *chooser=gtk_file_chooser_dialog_new(insight_tr("Add from file list"),GTK_WINDOW(d->dialog),GTK_FILE_CHOOSER_ACTION_OPEN,insight_tr("Cancel"),GTK_RESPONSE_CANCEL,insight_tr("Add"),GTK_RESPONSE_ACCEPT,NULL);

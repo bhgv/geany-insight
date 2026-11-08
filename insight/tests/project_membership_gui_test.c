@@ -24,6 +24,19 @@ static void filter(const gchar *text) {GtkWidget *entry=named(dialog,"insight-pr
 static void capture(void) {const gchar *path=g_getenv("INSIGHT_MEMBERSHIP_CAPTURE");if(!path) return;GdkWindow *w=gtk_widget_get_window(dialog);GdkPixbuf *p=gdk_pixbuf_get_from_window(w,0,0,gtk_widget_get_allocated_width(dialog),gtk_widget_get_allocated_height(dialog));g_assert_nonnull(p);GError *e=NULL;g_assert_true(gdk_pixbuf_save(p,path,"jpeg",&e,"quality","90",NULL));g_assert_no_error(e);g_object_unref(p);}
 static gboolean special(gpointer unused) { (void)unused;GList *list=gtk_window_list_toplevels();GtkWidget *found=NULL;for(GList *p=list;p;p=p->next) if(GTK_IS_DIALOG(p->data) && !g_strcmp0(gtk_window_get_title(GTK_WINDOW(p->data)),"Remove Special")) found=p->data;g_list_free(list);g_assert_nonnull(found);GPtrArray *fields=g_ptr_array_new();entries(found,fields);g_assert_cmpuint(fields->len,==,1);gtk_entry_set_text(GTK_ENTRY(g_ptr_array_index(fields,0)),"*.odd");g_ptr_array_unref(fields);gtk_dialog_response(GTK_DIALOG(found),GTK_RESPONSE_ACCEPT);return G_SOURCE_REMOVE; }
 static gboolean import_list(gpointer unused) { (void)unused;GList *list=gtk_window_list_toplevels();GtkWidget *found=NULL;for(GList *p=list;p;p=p->next) if(GTK_IS_FILE_CHOOSER(p->data) && !g_strcmp0(gtk_window_get_title(GTK_WINDOW(p->data)),"Add from file list")) found=p->data;g_list_free(list);g_assert_nonnull(found);gchar *path=g_build_filename(root,"selection-list.txt",NULL),*current=gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(found));if(g_strcmp0(path,current)) {gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(found),path);g_free(path);g_free(current);return G_SOURCE_CONTINUE;}g_free(path);g_free(current);gtk_dialog_response(GTK_DIALOG(found),GTK_RESPONSE_ACCEPT);return G_SOURCE_REMOVE; }
+/* EN: Verify that editing the draft has not persisted any project files.
+ * RU: Проверяет, что редактирование черновика не сохранило файлы проекта. */
+static void assert_draft_unsaved(void)
+{
+ GKeyFile *config=g_key_file_new();
+ g_assert_true(g_key_file_load_from_file(config,project,G_KEY_FILE_NONE,NULL));
+ gsize count=0;
+ gchar **files=g_key_file_get_string_list(config,"insight-project-files","files",&count,NULL);
+ g_assert_cmpuint(count,==,0);
+ g_strfreev(files);
+ g_key_file_unref(config);
+}
+
 static gboolean edit(gpointer unused) {
  (void)unused;dialog=toplevel("insight-project-membership");if(!dialog) {GtkWidget *new_project=toplevel("GeanyDialogProject");if(!new_project) return G_SOURCE_CONTINUE;GPtrArray *list=g_ptr_array_new();entries(new_project,list);GtkWidget *name=NULL,*file=NULL,*base=NULL;for(guint n=0;n<list->len;n++) {GtkWidget *entry=g_ptr_array_index(list,n);gchar *tip=gtk_widget_get_tooltip_text(entry);if(tip && g_str_has_prefix(tip,"Project name")) name=entry;else if(tip && g_str_has_prefix(tip,"Path of the file representing the project")) file=entry;else if(tip && g_str_has_prefix(tip,"Base directory of all files")) base=entry;g_free(tip);}g_assert_nonnull(name);g_assert_nonnull(file);g_assert_nonnull(base);gtk_entry_set_text(GTK_ENTRY(name),"Manual membership");gtk_entry_set_text(GTK_ENTRY(file),project);gtk_entry_set_text(GTK_ENTRY(base),root);g_ptr_array_unref(list);gtk_dialog_response(GTK_DIALOG(new_project),GTK_RESPONSE_OK);return G_SOURCE_CONTINUE;}
  GtkWidget *close=gtk_dialog_get_widget_for_response(GTK_DIALOG(dialog),GTK_RESPONSE_APPLY);if(!gtk_widget_is_sensitive(close)) return G_SOURCE_CONTINUE;
@@ -37,7 +50,7 @@ static gboolean edit(gpointer unused) {
 #endif
  if(phase==0) {g_assert_cmpuint(count("insight-project-membership-files"),==,0);GKeyFile *key=g_key_file_new();g_assert_true(g_key_file_load_from_file(key,project,G_KEY_FILE_NONE,NULL));g_assert_false(g_key_file_get_boolean(key,"insight-project-files","automatic",NULL));g_key_file_unref(key);filter("*.c");phase++;}
  else if(phase==1) {click("insight-membership-add-tree");phase++;}
- else if(phase==2) {g_assert_cmpuint(count("insight-project-membership-files"),==,2);capture();g_assert_true(select_name("insight-project-membership-files","one.c",FALSE));click("insight-membership-remove");g_assert_cmpuint(count("insight-project-membership-files"),==,1);g_assert_true(select_name("insight-project-membership-available","one.c",FALSE));click("insight-membership-add");phase++;}
+ else if(phase==2) {g_assert_cmpuint(count("insight-project-membership-files"),==,2);assert_draft_unsaved();capture();g_assert_true(select_name("insight-project-membership-files","one.c",FALSE));click("insight-membership-remove");g_assert_cmpuint(count("insight-project-membership-files"),==,1);g_assert_true(select_name("insight-project-membership-available","one.c",FALSE));click("insight-membership-add");phase++;}
  else if(phase==3) {g_assert_cmpuint(count("insight-project-membership-files"),==,2);g_assert_true(select_name("insight-project-membership-available","sub",TRUE));phase++;}
  else if(phase==4) {click("insight-membership-remove-tree");g_assert_cmpuint(count("insight-project-membership-files"),==,1);filter(root);phase++;}
  else if(phase==5) {filter("*.odd");phase++;}

@@ -92,6 +92,14 @@ static void on_entries_changed(GtkEditable *editable, PropertyDialogElements *e)
 static void on_radio_long_line_custom_toggled(GtkToggleButton *radio, GtkWidget *spin_long_line);
 static gboolean run_new_dialog(PropertyDialogElements *e);
 static gboolean creating_project_files;
+
+/* EN: Report whether the initial project configuration is being saved.
+ * RU: Возвращает признак записи начальной конфигурации проекта. */
+gboolean project_is_creating(void)
+{
+	return creating_project_files;
+}
+
 static void apply_editor_prefs(void);
 static void init_stash_prefs(void);
 static void destroy_project(gboolean open_default);
