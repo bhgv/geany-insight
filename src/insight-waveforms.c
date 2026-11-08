@@ -3049,16 +3049,44 @@ static gchar *port_browser_preprocess(const WaveSimulation *run, gchar **error)
     gchar *path = g_strconcat(bin, G_SEARCHPATH_SEPARATOR_S, existing ? existing : "", NULL);
     g_subprocess_launcher_setenv(launcher, "PATH", path, TRUE);
     g_free(path);
-    g_free(bin);
-
     const gchar *options[] = {run->compiler, "-g2012", "-grelative-include", "-I", run->include_dir, "-E", "-o", "-"};
     GPtrArray *command = g_ptr_array_new();
-    for (guint i = 0; i < G_N_ELEMENTS(options); i++)
-        g_ptr_array_add(command, (gpointer)options[i]);
+#ifdef G_OS_WIN32
+    /* EN: Capture the bundled helper's diagnostics directly, avoiding a second
+     * Windows process launch and the driver's temporary source/define lists.
+     * RU: Читаем диагностику комплектного препроцессора напрямую, без второго
+     * запуска процесса Windows и временных списков исходников и макросов драйвера. */
+    gchar *helper = g_build_filename(bin, "..", "lib", "ivl", "ivlpp.exe", NULL);
+    gchar *directory = NULL;
+    gchar *flags_file = NULL;
+    if (g_file_test(helper, G_FILE_TEST_IS_REGULAR))
+    {
+        directory = g_dir_make_tmp("geany-verilog-ports-XXXXXX", &failure);
+        if (directory)
+        {
+            flags_file = g_build_filename(directory, "preprocessor.flags", NULL);
+            gchar *standard = g_build_filename(bin, "..", "lib", "ivl", "include", NULL);
+            gchar *flags = g_strdup_printf("D:__ICARUS__=1\nI:%s\nI:%s\nrelative include:true\n",
+                                            run->include_dir, standard);
+            if (g_file_set_contents(flags_file, flags, -1, &failure))
+            {
+                g_ptr_array_add(command, helper);
+                g_ptr_array_add(command, "-F");
+                g_ptr_array_add(command, flags_file);
+            }
+            g_free(flags);
+            g_free(standard);
+        }
+    }
+#endif
+    g_free(bin);
+    if (!command->len)
+        for (guint i = 0; i < G_N_ELEMENTS(options); i++)
+            g_ptr_array_add(command, (gpointer)options[i]);
     for (guint i = 0; run->sources[i]; i++)
         g_ptr_array_add(command, run->sources[i]);
     g_ptr_array_add(command, NULL);
-    GSubprocess *process = g_subprocess_launcher_spawnv(
+    GSubprocess *process = failure ? NULL : g_subprocess_launcher_spawnv(
         launcher, (const gchar *const *)command->pdata, &failure);
     g_ptr_array_unref(command);
     g_object_unref(launcher);
@@ -3100,6 +3128,15 @@ static gchar *port_browser_preprocess(const WaveSimulation *run, gchar **error)
         g_clear_pointer(&diagnostics, g_bytes_unref);
         g_object_unref(process);
     }
+#ifdef G_OS_WIN32
+    if (flags_file)
+        g_unlink(flags_file);
+    if (directory)
+        g_rmdir(directory);
+    g_free(flags_file);
+    g_free(directory);
+    g_free(helper);
+#endif
     if (!expanded && !*error)
         *error = g_strdup(failure ? failure->message : "No preprocessor output.");
     g_clear_error(&failure);
