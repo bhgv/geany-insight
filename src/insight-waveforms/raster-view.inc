@@ -138,6 +138,75 @@ static void simulation_rasters_finish(WaveSimulation *run, const gchar *director
     }
 }
 
+/* EN: Show the RGB sample at x,y in tooltip. image owns the current frame.
+ * area receives events at native pixel size. Keyboard queries have no coordinate.
+ * RU: Показывает RGB точки x,y в tooltip. image хранит текущий кадр.
+ * area получает события в масштабе 1:1. Запрос с клавиатуры не задаёт точку. */
+static gboolean simulation_raster_pixel_tooltip(GtkWidget *area, gint x, gint y,
+                                                 gboolean keyboard, GtkTooltip *tooltip,
+                                                 GtkImage *image)
+{
+    (void)area;
+    if (keyboard || gtk_image_get_storage_type(image) != GTK_IMAGE_PIXBUF)
+        return FALSE;
+
+    GdkPixbuf *frame = gtk_image_get_pixbuf(image);
+    if (x < 0 || y < 0 || x >= gdk_pixbuf_get_width(frame) || y >= gdk_pixbuf_get_height(frame))
+        return FALSE;
+
+    const guchar *pixel = gdk_pixbuf_read_pixels(frame) +
+                          (gsize)y * gdk_pixbuf_get_rowstride(frame) + (gsize)x * 3;
+    gchar *label = g_strdup_printf("X: %d  Y: %d  ·  RGB(%u, %u, %u)  ·  #%02X%02X%02X",
+                                    x, y, (guint)pixel[0], (guint)pixel[1], (guint)pixel[2],
+                                    (guint)pixel[0], (guint)pixel[1], (guint)pixel[2]);
+    gtk_tooltip_set_text(tooltip, label);
+    g_free(label);
+    return TRUE;
+}
+
+/* EN: Save the frame currently held by image as PNG. button locates the parent.
+ * A retained reference keeps the chosen frame stable during the file dialog.
+ * RU: Сохраняет текущий кадр image как PNG. button задаёт родительское окно.
+ * Ссылка на кадр сохраняет его, пока открыт диалог выбора файла. */
+static void simulation_raster_save(GtkButton *button, GtkImage *image)
+{
+    if (gtk_image_get_storage_type(image) != GTK_IMAGE_PIXBUF)
+        return;
+
+    GdkPixbuf *frame = g_object_ref(gtk_image_get_pixbuf(image));
+    GtkWindow *parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
+    GtkWidget *chooser = gtk_file_chooser_dialog_new(insight_tr("Save display frame"), parent,
+        GTK_FILE_CHOOSER_ACTION_SAVE, insight_tr("_Cancel"), GTK_RESPONSE_CANCEL,
+        insight_tr("_Save"), GTK_RESPONSE_ACCEPT, NULL);
+    gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(chooser), "frame.png");
+    gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(chooser), TRUE);
+    if (gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT)
+    {
+        gchar *filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser));
+        GError *error = NULL;
+        if (filename && !gdk_pixbuf_save(frame, filename, "png", &error, NULL))
+        {
+            GtkWidget *message = gtk_message_dialog_new(GTK_WINDOW(chooser),
+                GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE,
+                "%s", error->message);
+            gtk_dialog_run(GTK_DIALOG(message));
+            gtk_widget_destroy(message);
+            g_clear_error(&error);
+        }
+        g_free(filename);
+    }
+    gtk_widget_destroy(chooser);
+    g_object_unref(frame);
+}
+
+/* EN: Enable button only when image owns a frame. property identifies the GTK notification.
+ * RU: Включает button, когда image содержит кадр. property задаёт уведомление GTK. */
+static void simulation_raster_save_state(GtkImage *image, GParamSpec *property, GtkWidget *button)
+{
+    (void)property;
+    gtk_widget_set_sensitive(button, gtk_image_get_storage_type(image) == GTK_IMAGE_PIXBUF);
+}
+
 /* EN: Build pages for run. final selects the retained frames after simulation.
  * RU: Создаёт вкладки run. final выбирает кадры, сохранённые после симуляции. */
 static GtkWidget *simulation_raster_notebook(WaveSimulation *run, gboolean final)
@@ -153,9 +222,13 @@ static GtkWidget *simulation_raster_notebook(WaveSimulation *run, gboolean final
         GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
         GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
         GtkWidget *image = gtk_image_new_from_pixbuf(final ? display->final_frame : NULL);
-        gtk_widget_set_halign(image, GTK_ALIGN_START);
-        gtk_widget_set_valign(image, GTK_ALIGN_START);
-        gtk_container_add(GTK_CONTAINER(scroll), image);
+        GtkWidget *area = gtk_event_box_new();
+        gtk_widget_set_halign(area, GTK_ALIGN_START);
+        gtk_widget_set_valign(area, GTK_ALIGN_START);
+        gtk_container_add(GTK_CONTAINER(area), image);
+        gtk_widget_set_has_tooltip(area, TRUE);
+        g_signal_connect(area, "query-tooltip", G_CALLBACK(simulation_raster_pixel_tooltip), image);
+        gtk_container_add(GTK_CONTAINER(scroll), area);
         gtk_box_pack_start(GTK_BOX(page), scroll, TRUE, TRUE, 0);
         if (!final)
         {
@@ -163,6 +236,13 @@ static GtkWidget *simulation_raster_notebook(WaveSimulation *run, gboolean final
             display->status = gtk_label_new(insight_tr("Waiting for a complete display frame."));
             gtk_box_pack_start(GTK_BOX(page), display->status, FALSE, FALSE, 0);
         }
+        GtkWidget *save = gtk_button_new_with_label(insight_tr("Save PNG…"));
+        gtk_widget_set_halign(save, GTK_ALIGN_START);
+        gtk_box_pack_start(GTK_BOX(page), save, FALSE, FALSE, 0);
+        g_signal_connect(save, "clicked", G_CALLBACK(simulation_raster_save), image);
+        g_signal_connect_object(image, "notify::storage-type", G_CALLBACK(simulation_raster_save_state), save, 0);
+        simulation_raster_save_state(GTK_IMAGE(image), NULL, save);
+
         gchar *name = g_strdup_printf("%s %u · %u × %u", names[display->mode], i + 1,
                                       display->width, display->height);
         gtk_notebook_append_page(GTK_NOTEBOOK(tabs), page, gtk_label_new(name));

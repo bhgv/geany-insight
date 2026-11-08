@@ -381,6 +381,11 @@ frame. The last complete frame stays visible until a new one arrives.
 For parallel RGB, unknown DE, VS or active color data also invalidates
 the frame. Color pins are ignored during blanking.
 
+Hover over a pixel to see its coordinates from the top-left corner and
+its decimal RGB and hexadecimal color. **Save PNG…** saves the displayed
+frame at native resolution. Both controls are available in the live
+display and in the retained frame window after simulation.
+
 ### HDMI DDC, EDID and hot plug
 
 Add **HDMI DDC / EDID** alongside the video display when the DUT waits
