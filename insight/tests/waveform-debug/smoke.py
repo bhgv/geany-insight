@@ -628,15 +628,37 @@ def check_memory_image(compiler, runtime, fixtures, directory, environment):
         require("CHANGES 0" in reports[model], f"Preload counted as a write in {model}")
 
 
+# EN: Exercise SPI memory and Lua terminal transport with compiler/runtime.
+# RU: Проверяет SPI-память и транспорт терминала Lua через compiler/runtime.
 def check_spi_memory(compiler, runtime, fixtures, directory, environment):
     compile_design(compiler, directory, [fixtures / "spi_memory_tb.sv"], environment)
     (directory / "nor.hex").write_text("@10 ba\n", encoding="ascii")
     (directory / "psram.hex").write_text("@7ffffe ba be\n", encoding="ascii")
-    (directory / "device.lua").write_bytes((fixtures / "lua_device.lua").read_bytes())
+    script = (fixtures / "lua_device.lua").read_text(encoding="utf-8")
+    script += """
+local original_receive = receive
+local reply
+function command(line)
+    reply = assert(tonumber(line, 16))
+    print("terminal", line)
+end
+function receive(value)
+    if value == 0x9f and reply then return reply end
+    return original_receive(value)
+end
+"""
+    (directory / "device.lua").write_text(script, encoding="utf-8")
+    inbox = directory / "geany-lua-spi-1.in"
+    inbox.write_text("5A", encoding="ascii")
     modules = runtime.parent.parent / "lib" / "ivl"
     report = capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
-                              "simulation.vvp"], directory, "spi-memory", environment)
+                              "simulation.vvp"], directory, "spi-memory",
+                             dict(environment, GEANY_LUA_TERMINAL="1"))
     require("SPI memory test passed" in report, "SPI memory test did not finish")
+    require(not inbox.exists(), "Lua terminal did not consume the command")
+    transcript = (directory / "geany-lua-spi-1.log").read_text(encoding="utf-8")
+    require("terminal\t5A\n" in transcript, "Lua terminal did not capture print output")
+
 
 
 # EN: Verify the built-in and custom EDID profiles with compiler/runtime.

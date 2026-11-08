@@ -89,6 +89,16 @@ module spi_memory_tb;
         transfer(0);
         if (received !== 'h34) $fatal(1, "Lua SPI second byte was %h", received);
         stop();
+        // EN: Deliver the terminal command, then read the resulting SPI reply.
+        // RU: Доставляем команду терминала и читаем изменившийся ответ SPI.
+        $geany_lua_console_poll();
+        start(4);
+        transfer('h9f);
+        stop();
+        start(4);
+        transfer(0);
+        if (received !== 'h5a) $fatal(1, "Lua terminal command reply was %h", received);
+        stop();
         $display("SPI memory test passed");
         $finish;
     end
