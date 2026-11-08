@@ -65,9 +65,9 @@ gint insight_waveforms_run_setup_dialog(GtkDialog *dialog)
     return wait.response;
 }
 
-/* EN: Show the current dialog's local help in a modal child. button owns the
+/* EN: Show the current dialog's local help in a modeless child. button owns the
  * trigger and data is the parent dialog containing the guidance text.
- * RU: Показывает локальную справку в модальном дочернем окне. button запускает
+ * RU: Показывает локальную справку в немодальном дочернем окне. button запускает
  * действие, data — родительский диалог с текстом справки. */
 static void simulation_dialog_help(GtkButton *button, gpointer data)
 {
@@ -75,7 +75,7 @@ static void simulation_dialog_help(GtkButton *button, gpointer data)
     GtkWidget *parent = data;
     const gchar *text = g_object_get_data(G_OBJECT(parent), "verilog-guidance");
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Verilog Setup Help", GTK_WINDOW(parent),
-                                                    GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                                                    GTK_DIALOG_DESTROY_WITH_PARENT,
                                                     "_Close", GTK_RESPONSE_CLOSE, NULL);
     g_object_ref_sink(dialog);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 560, 300);
@@ -88,7 +88,7 @@ static void simulation_dialog_help(GtkButton *button, gpointer data)
     gtk_container_add(GTK_CONTAINER(scroll), view);
     gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), scroll, TRUE, TRUE, 0);
     gtk_widget_show_all(dialog);
-    gtk_dialog_run(GTK_DIALOG(dialog));
+    insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
     g_object_unref(dialog);
 }
@@ -148,7 +148,7 @@ static void simulation_dialog_ai(GtkButton *button, gpointer data)
     GtkWidget *parent = data;
     const gchar *text = g_object_get_data(G_OBJECT(parent), "verilog-guidance");
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Verilog AI Assistant", GTK_WINDOW(parent),
-                                                    GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                                                    GTK_DIALOG_DESTROY_WITH_PARENT,
                                                     "_Close", GTK_RESPONSE_CLOSE, NULL);
     g_object_ref_sink(dialog);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 850, 650);
@@ -176,7 +176,7 @@ static void simulation_dialog_ai(GtkButton *button, gpointer data)
         g_signal_connect(include, "clicked", G_CALLBACK(simulation_ai_include_rules), &context);
     }
     gtk_widget_show_all(dialog);
-    gtk_dialog_run(GTK_DIALOG(dialog));
+    insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
     g_object_unref(dialog);
 }

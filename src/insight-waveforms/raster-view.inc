@@ -243,7 +243,7 @@ static void simulation_raster_save(GtkButton *button, GtkImage *image)
         insight_tr("_Save"), GTK_RESPONSE_ACCEPT, NULL);
     gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(chooser), "frame.png");
     gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(chooser), TRUE);
-    if (gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT)
+    if (insight_waveforms_run_setup_dialog(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT)
     {
         gchar *filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser));
         GError *error = NULL;
@@ -252,7 +252,7 @@ static void simulation_raster_save(GtkButton *button, GtkImage *image)
             GtkWidget *message = gtk_message_dialog_new(GTK_WINDOW(chooser),
                 GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE,
                 "%s", error->message);
-            gtk_dialog_run(GTK_DIALOG(message));
+            insight_waveforms_run_setup_dialog(GTK_DIALOG(message));
             gtk_widget_destroy(message);
             g_clear_error(&error);
         }

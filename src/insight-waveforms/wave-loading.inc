@@ -107,7 +107,7 @@ void insight_waveforms_open(GtkWindow *parent, const gchar *session_dir, Insight
     gtk_file_filter_set_name(filter, "VCD waveforms");
     gtk_file_filter_add_pattern(filter, "*.[vV][cC][dD]");
     gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
-    gchar *path = gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT
+    gchar *path = insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT
                       ? gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog))
                       : NULL;
     gtk_widget_destroy(dialog);

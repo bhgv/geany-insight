@@ -239,7 +239,7 @@ static gboolean slider_wizard_wait(const gchar *check)
     return G_SOURCE_CONTINUE;
 }
 
-/* EN: Check modal port and device filters, then assign a slider by activating a port; callback data is unused.
+/* EN: Check modeless port and device filters, then assign a slider by activating a port; callback data is unused.
  * Return G_SOURCE_CONTINUE while the wizard is unavailable.
  * RU: Проверяет фильтры портов и устройств, затем назначает порт ползунку.
  * data не используется. Возвращает G_SOURCE_CONTINUE, пока мастер недоступен. */
@@ -277,10 +277,10 @@ static gboolean add_test_slider(gpointer data)
         g_free(bindings);
         next = gtk_tree_model_iter_next(model, &row);
     }
-    if (!gtk_window_get_modal(GTK_WINDOW(wizard)) || !shared || !available || inactive)
+    if (gtk_window_get_modal(GTK_WINDOW(wizard)) || !shared || !available || inactive)
     {
         g_clear_pointer(&selected, gtk_tree_path_free);
-        return slider_wizard_wait("modal window and preprocessed port bindings");
+        return slider_wizard_wait("modeless window and preprocessed port bindings");
     }
     GtkWidget *kind = find_control(wizard, "insight-test-device-type");
     GtkWidget *device_search = find_control(wizard, "insight-device-search");
@@ -557,7 +557,7 @@ static gboolean check_testbench_diagram(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* EN: Populate modal setup and verify sorting, rule navigation and both previews.
+/* EN: Populate modeless setup and verify sorting, rule navigation and both previews.
  * data is unused. Return G_SOURCE_CONTINUE until the setup can be accepted.
  * RU: Заполняет настройки и проверяет сортировку, переход и оба вида просмотра.
  * data не используется. Возвращает G_SOURCE_CONTINUE, пока настройки недоступны. */
@@ -678,7 +678,7 @@ static gboolean accept_ports(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* Answer the real modal chooser once GTK has selected the requested file. */
+/* Answer the real file chooser once GTK has selected the requested file. */
 /* Подтверждает реальный диалог выбора, когда GTK выбрал нужный файл. */
 static gboolean accept_fixture(gpointer data)
 {

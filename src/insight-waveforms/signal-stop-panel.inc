@@ -34,7 +34,7 @@ static void signal_stop_edit_rule(WaveSimulation *run, const gchar *path, guint 
     GtkWidget *owner = g_object_ref(run->dialog);
     GtkWidget *dialog = gtk_dialog_new_with_buttons(
         insight_tr("Stop on signal"), GTK_WINDOW(run->dialog),
-        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, insight_tr("Cancel"), GTK_RESPONSE_CANCEL,
+        GTK_DIALOG_DESTROY_WITH_PARENT, insight_tr("Cancel"), GTK_RESPONSE_CANCEL,
         insight_tr(enabled ? "Arm signal stop" : "Save rule"), GTK_RESPONSE_ACCEPT, NULL);
     g_object_ref_sink(dialog);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
@@ -59,7 +59,7 @@ static void signal_stop_edit_rule(WaveSimulation *run, const gchar *path, guint 
     gtk_label_set_line_wrap(GTK_LABEL(status), TRUE);
     gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 0);
     gtk_widget_show_all(dialog);
-    while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT &&
+    while (insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT &&
            g_object_get_data(G_OBJECT(owner), "insight-live-simulation") == run)
     {
         gint mode = gtk_combo_box_get_active(GTK_COMBO_BOX(combo));

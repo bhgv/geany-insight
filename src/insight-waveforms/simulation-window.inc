@@ -65,7 +65,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
     simulation_rasters_prepare(run);
     run->dialog =
         gtk_dialog_new_with_buttons("Verilog Simulation", parent,
-                                    GTK_DIALOG_DESTROY_WITH_PARENT | (interactive ? 0 : GTK_DIALOG_MODAL),
+                                    GTK_DIALOG_DESTROY_WITH_PARENT,
                                     "_Cancel", GTK_RESPONSE_CANCEL, NULL);
     simulation_dialog_tools(
         run->dialog,

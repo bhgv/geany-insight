@@ -192,7 +192,7 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
                        .directory = g_object_get_data(G_OBJECT(button), "source-directory")};
     GtkWidget *dialog =
         gtk_dialog_new_with_buttons("Add Test Device", parent,
-                                    GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel",
+                                    GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel",
                                     GTK_RESPONSE_CANCEL, "_Insert Rule", GTK_RESPONSE_ACCEPT, NULL);
     simulation_dialog_tools(
         dialog,

@@ -117,7 +117,7 @@ static void wave_show_signal_map(GtkButton *button, gpointer data)
     Viewer *viewer = data;
     GtkWidget *owner = g_object_ref(viewer->window);
     GtkWidget *dialog = gtk_dialog_new_with_buttons(
-        "Signal Map", GTK_WINDOW(owner), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Close",
+        "Signal Map", GTK_WINDOW(owner), GTK_DIALOG_DESTROY_WITH_PARENT, "_Close",
         GTK_RESPONSE_CLOSE, "_Select Track", GTK_RESPONSE_ACCEPT, "_Pin Track", GTK_RESPONSE_APPLY,
         "_Go to HDL", GTK_RESPONSE_REJECT, "_HDL Uses…", GTK_RESPONSE_OK, NULL);
     simulation_dialog_tools(
@@ -150,7 +150,7 @@ static void wave_show_signal_map(GtkButton *button, gpointer data)
     wave_map_update(&map, viewer->active);
 
     gtk_widget_show_all(dialog);
-    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gint response = insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog));
     GtkTreeModel *alias_model;
     GtkTreeIter alias_row;
     gint index = map.selected;

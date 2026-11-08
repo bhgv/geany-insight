@@ -371,7 +371,7 @@ static void capture_output(GtkButton *button, CaptureView *view)
     cairo_surface_t *snapshot = video ? NULL : capture_surface(view, width, height);
     gboolean manual = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(view->manual));
     g_object_ref(view->canvas);
-    gchar *path = gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT
+    gchar *path = insight_waveforms_run_setup_dialog(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT
                   ? gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser)) : NULL;
     gtk_widget_destroy(chooser);
     if (path && gtk_widget_get_mapped(view->canvas))

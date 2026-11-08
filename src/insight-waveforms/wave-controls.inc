@@ -155,7 +155,7 @@ static void wave_search_condition(GtkButton *button, gpointer data)
 
     GtkWidget *dialog =
         gtk_dialog_new_with_buttons("Find Signal Condition", GTK_WINDOW(viewer->window),
-                                    GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Close",
+                                    GTK_DIALOG_DESTROY_WITH_PARENT, "_Close",
                                     GTK_RESPONSE_CLOSE, "_Find Next", GTK_RESPONSE_ACCEPT, NULL);
     simulation_dialog_tools(
         dialog,
@@ -186,7 +186,7 @@ static void wave_search_condition(GtkButton *button, gpointer data)
     gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 4);
     gtk_widget_show_all(dialog);
 
-    while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+    while (insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
     {
         WaveMatch match = (WaveMatch)gtk_combo_box_get_active(GTK_COMBO_BOX(mode));
         gchar *bits = g_ascii_strdown(gtk_entry_get_text(GTK_ENTRY(value)), -1);

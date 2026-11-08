@@ -25,7 +25,7 @@ static void simulation_load_observer(GtkButton *button, gpointer data)
         gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(chooser), filter);
         if (run->observer_file)
             gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(chooser), run->observer_file);
-        filename = gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT
+        filename = insight_waveforms_run_setup_dialog(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT
                        ? gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser))
                        : NULL;
         gtk_widget_destroy(chooser);

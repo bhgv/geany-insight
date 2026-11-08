@@ -93,7 +93,6 @@ static void simulation_preview_done(GObject *object, GAsyncResult *result, gpoin
         if (capture)
         {
             GtkWidget *preview = show_capture(GTK_WINDOW(dialog), capture, NULL, run->navigate);
-            gtk_window_set_modal(GTK_WINDOW(preview), TRUE);
             WavePreviewRequest *request = g_task_get_task_data(G_TASK(result));
             if (request->signal)
                 wave_preview_position(preview, request->signal, request->tick);

@@ -241,7 +241,7 @@ static void signal_table_open_history(GtkMenuItem *item, gpointer data)
 
     GtkWidget *dialog = gtk_dialog_new_with_buttons(
         insight_tr("Signal changes"), GTK_WINDOW(run->dialog),
-        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, insight_tr("_Close"), GTK_RESPONSE_CLOSE,
+        GTK_DIALOG_DESTROY_WITH_PARENT, insight_tr("_Close"), GTK_RESPONSE_CLOSE,
         insight_tr("Open waveform at stop"), GTK_RESPONSE_APPLY, NULL);
     g_object_ref_sink(dialog);
     gtk_window_set_default_size(GTK_WINDOW(dialog), 780, 370);
@@ -280,7 +280,7 @@ static void signal_table_open_history(GtkMenuItem *item, gpointer data)
     guint64 tick = 0;
     gboolean jump = FALSE;
     gtk_widget_show_all(dialog);
-    while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_APPLY)
+    while (insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog)) == GTK_RESPONSE_APPLY)
     {
         GtkTreeModel *model;
         GtkTreeIter row;
