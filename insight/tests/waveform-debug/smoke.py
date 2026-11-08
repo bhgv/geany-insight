@@ -193,6 +193,12 @@ endmodule
     simulator = Simulator(runtime, directory, environment)
     try:
         require("GEANY-VVP-SIGNAL-STOPS" in simulator.prompt(), "Missing signal stop support")
+        missing = simulator.command("geany-watch-signal signal_stops.missing rise")
+        require("GEANY-SIGNAL-STOP-MISSING\tsignal_stops.missing" in missing,
+                "Missing signal was not reported to the editor")
+        rejected = simulator.command("geany-watch-signal signal_stops.bus rise")
+        require("GEANY-SIGNAL-STOP-REJECTED\tsignal_stops.bus" in rejected,
+                "Invalid edge width was not reported to the editor")
         armed = simulator.command("geany-watch-signal signal_stops.net_clk rise")
         require("GEANY-SIGNAL-STOP-ON\tsignal_stops.net_clk\trise\t" in armed, "Missing armed rule record")
         hit = simulator.command("cont")

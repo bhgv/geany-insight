@@ -2993,3 +2993,17 @@ The stop is beyond the recorded waveform.	Остановка находится 
 Pause the simulation before opening the waveform.	Поставьте симуляцию на паузу перед открытием осциллограммы.
 Signal stops	Остановки по сигналам
 Set signal stops from a row in HDL Signals.	Устанавливайте остановки через меню строки в «Сигналах HDL».
+Pending signal stop	Ожидает установки
+Disabled signal stop	Выключено
+Armed signal stop	Установлено
+Signal rule unavailable	Условие недоступно
+Signal stop hit	Сработала остановка по сигналу
+Signal not found	Сигнал не найден
+Could not save signal stops.	Не удалось сохранить остановки по сигналам.
+Signal stop limit reached.	Достигнут предел числа остановок по сигналам.
+Edit signal rule…	Изменить условие…
+Enable / disable rule	Включить или выключить правило
+Save rule	Сохранить правило
+Paused by user	Пауза по кнопке
+Paused at HDL source	Пауза на строке HDL
+Simulator paused	Симулятор на паузе

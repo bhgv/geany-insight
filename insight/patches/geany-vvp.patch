@@ -60,7 +60,7 @@ index 175e8ae..6c544f5 100644
  
        if (prompt && prompt[0]) {
  	    fputs(prompt, stdout);
-@@ -66,12 +71,656 @@ static char* readline_stub(const char*prompt)
+@@ -66,12 +71,665 @@ static char* readline_stub(const char*prompt)
  
        return 0;
  }
@@ -563,7 +563,12 @@ index 175e8ae..6c544f5 100644
 +      vpi_mode_flag = VPI_MODE_ROSYNC;
 +      vpiHandle signal = vpi_handle_by_name(path.c_str(), nullptr);
 +      vpi_mode_flag = previous_mode;
-+      const int type = signal ? vpi_get(vpiType, signal) : 0;
++      if (!signal) {
++            printf("Geany: signal not found: %s\n", path.c_str());
++            printf("GEANY-SIGNAL-STOP-MISSING\t%s\n", path.c_str());
++            return;
++      }
++      const int type = vpi_get(vpiType, signal);
 +      const int width = signal ? vpi_get(vpiSize, signal) : 0;
 +      if ((type != vpiReg && type != vpiNet && type != vpiIntegerVar) ||
 +          vpi_get(vpiAutomatic, signal) == 1 || width < 1 || width > 4096 ||
@@ -573,13 +578,16 @@ index 175e8ae..6c544f5 100644
 +            mask.find_first_not_of("01xz?") != std::string::npos ||
 +            mask.find_first_not_of('?') == std::string::npos))) {
 +            printf("Geany: unsupported signal, edge width or mask: %s\n", path.c_str());
++            printf("GEANY-SIGNAL-STOP-REJECTED\t%s\n", path.c_str());
 +            return;
 +      }
 +      s_vpi_value value = {};
 +      value.format = vpiBinStrVal;
 +      vpi_get_value(signal, &value);
-+      if (value.format != vpiBinStrVal || !value.value.str)
++      if (value.format != vpiBinStrVal || !value.value.str) {
++            printf("GEANY-SIGNAL-STOP-REJECTED\t%s\n", path.c_str());
 +            return;
++      }
 +      geany_watch* rule = new geany_watch{path, value.value.str, mask, kind, nullptr};
 +      s_vpi_value callback_value = {};
 +      callback_value.format = vpiBinStrVal;
@@ -596,6 +604,7 @@ index 175e8ae..6c544f5 100644
 +      if (!rule->callback) {
 +            delete rule;
 +            printf("Geany: could not watch %s.\n", path.c_str());
++            printf("GEANY-SIGNAL-STOP-REJECTED\t%s\n", path.c_str());
 +            return;
 +      }
 +      if (index < geany_watches.size())
@@ -717,7 +726,7 @@ index 175e8ae..6c544f5 100644
  static void cmd_call(unsigned argc, const char*argv[])
  {
        __vpiHandle**table;
-@@ -444,6 +1093,24 @@ static struct {
+@@ -444,6 +1102,24 @@ static struct {
          "Synonym for finish."},
        { "finish", &cmd_finish,
          "Finish the simulation."},
@@ -742,7 +751,7 @@ index 175e8ae..6c544f5 100644
        { "help",   &cmd_help,
          "Get help."},
        { "list",   &cmd_list,
-@@ -554,6 +1221,10 @@ void stop_handler(int rc)
+@@ -554,6 +1230,10 @@ void stop_handler(int rc)
  	    return;
        }
  
@@ -753,7 +762,7 @@ index 175e8ae..6c544f5 100644
        vpi_mcd_printf(1,"** VVP Stop(%d) **\n", rc);
        vpi_mcd_printf(1,"** Flushing output streams.\n");
        invoke_command_const("$fflush");
-@@ -563,7 +1234,7 @@ void stop_handler(int rc)
+@@ -563,7 +1243,7 @@ void stop_handler(int rc)
  
        interact_flag = true;
        while (interact_flag) {
@@ -762,7 +771,7 @@ index 175e8ae..6c544f5 100644
  	    if (input == 0)
  		  break;
  
-@@ -575,7 +1246,8 @@ void stop_handler(int rc)
+@@ -575,7 +1255,8 @@ void stop_handler(int rc)
  
  	    if (first[0] != 0) {
  #ifdef USE_HISTORY
@@ -772,7 +781,7 @@ index 175e8ae..6c544f5 100644
  #endif
  		  invoke_command(first);
  	    }
-@@ -583,5 +1255,7 @@ void stop_handler(int rc)
+@@ -583,5 +1264,7 @@ void stop_handler(int rc)
  	    free(input);
        }
  

@@ -12,6 +12,7 @@
 
 typedef enum {
     OPEN_DEBUGGER, LOAD_OBSERVER, SET_POINT, RUN_TO_POINT,
+    DISABLE_SIGNAL_RULE, ENABLE_SIGNAL_RULE,
     INSPECT_STOP, VERIFY_REGISTER_WRITE, VERIFY_REGISTER_RESTORE, INSPECT_PREVIEW,
     WAIT_FOR_CAPTURE, INSPECT_CONNECTIONS, INSPECT_INSTRUMENTS,
     RUN_LIVE_DEVICES, SEND_LIVE_INPUT, CHECK_LIVE_DEVICES
@@ -768,6 +769,59 @@ static gboolean open_register_history(GtkTreeView *tree, GtkTreePath *path)
     return FALSE;
 }
 
+/* EN: Verify restored rules in simulation and select the clock rule.
+ * enabled is the expected clock rule state.
+ * RU: Проверяет правила в simulation и выбирает правило такта.
+ * enabled — ожидаемое состояние правила. */
+static gboolean restored_signal_rules(GtkWidget *simulation, gboolean enabled)
+{
+    GtkWidget *tree = find_control(simulation, "insight-verilog-signal-stops");
+    if (!GTK_IS_TREE_VIEW(tree))
+        return FALSE;
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(tree));
+    GtkTreeIter row;
+    gboolean armed = FALSE, missing = FALSE, disabled = FALSE;
+    for (gboolean more = gtk_tree_model_get_iter_first(model, &row); more;
+         more = gtk_tree_model_iter_next(model, &row))
+    {
+        gchar *path, *state;
+        gtk_tree_model_get(model, &row, 0, &path, 4, &state, -1);
+        if (!strcmp(path, "counter_tb.dut.clk"))
+        {
+            armed = !strcmp(state, enabled ? "Armed signal stop" : "Disabled signal stop");
+            gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)), &row);
+        }
+        missing |= !strcmp(path, "counter_tb.dut.missing") && !strcmp(state, "Signal not found");
+        disabled |= !strcmp(path, "counter_tb.dut.odd") && !strcmp(state, "Disabled signal stop");
+        g_free(path);
+        g_free(state);
+    }
+    return armed && missing && disabled;
+}
+
+/* EN: Seed signal rules in profile for the current fixture, returning success.
+ * RU: Подготавливает правила текущего теста в profile и возвращает результат. */
+static gboolean seed_signal_rules(const gchar *profile)
+{
+    GChecksum *checksum = g_checksum_new(G_CHECKSUM_SHA256);
+    g_checksum_update(checksum, (const guchar *)"\0", 1);
+    g_checksum_update(checksum, (const guchar *)fixture_source, strlen(fixture_source));
+    gchar *name = g_strconcat(g_checksum_get_string(checksum), ".conf.signal-stops", NULL);
+    gchar *directory = g_build_filename(profile, "insight", "verilog-debug", NULL);
+    gchar *path = g_build_filename(directory, name, NULL);
+    const gchar *rules[] = {"counter_tb.dut.clk\tmask\tz\t1",
+        "counter_tb.dut.missing\tchange\t\t1", "counter_tb.dut.odd\tchange\t\t0"};
+    GKeyFile *config = g_key_file_new();
+    g_key_file_set_string_list(config, "signals", "stops", rules, G_N_ELEMENTS(rules));
+    gboolean saved = !g_mkdir_with_parents(directory, 0700) && g_key_file_save_to_file(config, path, NULL);
+    g_key_file_unref(config);
+    g_checksum_free(checksum);
+    g_free(name);
+    g_free(directory);
+    g_free(path);
+    return saved;
+}
+
 /* EN: Drive GTK actions for the debugger fixture in data and check live results.
  * Return G_SOURCE_CONTINUE while awaiting the next UI state.
  * RU: Выполняет действия GTK для сценария из data и проверяет показания.
@@ -785,7 +839,7 @@ static gboolean drive_debugger(gpointer data)
                                       "insight-tools-debug-current-hdl");
         if (!GTK_IS_MENU_ITEM(item))
             return G_SOURCE_CONTINUE;
-        phase = live_devices ? RUN_LIVE_DEVICES : LOAD_OBSERVER;
+        phase = live_devices ? RUN_LIVE_DEVICES : DISABLE_SIGNAL_RULE;
         g_timeout_add(100, accept_ports, NULL);
         gtk_menu_item_activate(GTK_MENU_ITEM(item));
         return G_SOURCE_CONTINUE;
@@ -933,7 +987,18 @@ static gboolean drive_debugger(gpointer data)
             return G_SOURCE_REMOVE;
         }
     }
-    else if (phase == LOAD_OBSERVER && console_contains(simulation, "GEANY-VVP-READY"))
+    else if (phase == DISABLE_SIGNAL_RULE && restored_signal_rules(simulation, TRUE))
+    {
+        if (click(simulation, "Enable / disable rule"))
+            phase = ENABLE_SIGNAL_RULE;
+    }
+    else if (phase == ENABLE_SIGNAL_RULE && restored_signal_rules(simulation, FALSE))
+    {
+        if (click(simulation, "Enable / disable rule"))
+            phase = LOAD_OBSERVER;
+    }
+    else if (phase == LOAD_OBSERVER && console_contains(simulation, "GEANY-VVP-READY") &&
+             restored_signal_rules(simulation, TRUE))
     {
         if (!find_control(simulation, "Port Signals…"))
         {
@@ -1084,7 +1149,7 @@ int main(int argc, char **argv)
     }
     g_free(fixture_dir);
     g_free(work_dir);
-    if (!saved)
+    if (!saved || (!live_devices && !seed_signal_rules(profile)))
         return 1;
 
     gchar *editor_args[] = {argv[0], "--new-instance", "--no-session", "--no-plugins",
