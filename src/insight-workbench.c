@@ -5270,18 +5270,26 @@ static void waveform_debug_current(GtkMenuItem *item, gpointer data)
     g_free(path);
 }
 
-/* EN: Open the modal Verilog source picker from item and use data to select debug
+/* EN: Open the Verilog source picker from item and use data to select debug
  * or run mode. Cancellation leaves the current session alone.
- * RU: Открывает модальный выбор исходников Verilog по item. data выбирает отладку
+ * RU: Открывает выбор исходников Verilog по item. data выбирает отладку
  * или запуск. При отмене текущий сеанс сохраняется. */
 static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
 {
     (void)item;
     gboolean interactive = GPOINTER_TO_INT(data);
+    static GtkWidget *active_picker;
+    if (active_picker)
+    {
+        gtk_window_present(GTK_WINDOW(active_picker));
+        return;
+    }
     GtkWindow *parent = GTK_WINDOW(main_widgets.window);
     GtkWidget *chooser = gtk_file_chooser_dialog_new(interactive ? "Debug Verilog Testbench" : "Run Verilog Testbench", parent,
         GTK_FILE_CHOOSER_ACTION_OPEN, "_Cancel", GTK_RESPONSE_CANCEL, "_Run", GTK_RESPONSE_ACCEPT, NULL);
-    gtk_window_set_modal(GTK_WINDOW(chooser), TRUE);
+    g_object_ref_sink(chooser);
+    active_picker = chooser;
+    gtk_window_set_destroy_with_parent(GTK_WINDOW(chooser), TRUE);
     GtkFileChooser *files = GTK_FILE_CHOOSER(chooser);
     gtk_file_chooser_set_select_multiple(files, TRUE);
     GtkFileFilter *filter = gtk_file_filter_new();
@@ -5305,9 +5313,11 @@ static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
         }
     }
 
-    GSList *selected = gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT ?
+    GSList *selected = insight_waveforms_run_setup_dialog(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT ?
         gtk_file_chooser_get_filenames(files) : NULL;
+    active_picker = NULL;
     gtk_widget_destroy(chooser);
+    g_object_unref(chooser);
     waveform_start_simulation(selected, root, interactive, FALSE);
     g_slist_free_full(selected, g_free);
     g_free(root);

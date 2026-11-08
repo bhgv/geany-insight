@@ -15,6 +15,66 @@
 #include <glib/gstdio.h>
 #include <string.h>
 
+typedef struct {
+    GMainLoop *loop;
+    gint response;
+    gboolean finished;
+} SetupDialogWait;
+
+/* EN: Record the dialog response and end the current wait.
+ * RU: Сохраняет ответ диалога и завершает текущее ожидание. */
+static void setup_dialog_response(GtkDialog *dialog, gint response, gpointer data)
+{
+    (void)dialog;
+    SetupDialogWait *wait = data;
+    wait->response = response;
+    wait->finished = TRUE;
+    g_main_loop_quit(wait->loop);
+}
+
+/* EN: End the wait when the dialog is destroyed, including on parent shutdown.
+ * RU: Завершает ожидание при уничтожении диалога, в том числе при закрытии родителя. */
+static void setup_dialog_destroy(GtkWidget *widget, gpointer data)
+{
+    setup_dialog_response(GTK_DIALOG(widget), GTK_RESPONSE_NONE, data);
+}
+
+/* EN: Wait for dialog without grabbing editor input. Suspend only a parent dialog.
+ * RU: Ожидает ответ dialog без захвата ввода редактора. Блокирует только родительский диалог. */
+gint insight_waveforms_run_setup_dialog(GtkDialog *dialog)
+{
+    GtkWidget *widget = GTK_WIDGET(dialog);
+    GtkWindow *parent = gtk_window_get_transient_for(GTK_WINDOW(dialog));
+    GtkWidget *parent_dialog = GTK_IS_DIALOG(parent) ? GTK_WIDGET(parent) : NULL;
+    gboolean restore = parent_dialog && gtk_widget_get_sensitive(parent_dialog);
+    if (restore)
+    {
+        g_object_ref(parent_dialog);
+        gtk_widget_set_sensitive(parent_dialog, FALSE);
+    }
+
+    SetupDialogWait wait = {g_main_loop_new(NULL, FALSE), GTK_RESPONSE_NONE, FALSE};
+    g_object_ref(widget);
+    gulong response = g_signal_connect(widget, "response", G_CALLBACK(setup_dialog_response), &wait);
+    gulong destroy = g_signal_connect(widget, "destroy", G_CALLBACK(setup_dialog_destroy), &wait);
+    gtk_widget_show(widget);
+    if (!wait.finished)
+        g_main_loop_run(wait.loop);
+    if (g_signal_handler_is_connected(widget, response))
+        g_signal_handler_disconnect(widget, response);
+    if (g_signal_handler_is_connected(widget, destroy))
+        g_signal_handler_disconnect(widget, destroy);
+    g_main_loop_unref(wait.loop);
+    g_object_unref(widget);
+    if (restore)
+    {
+        if (gtk_widget_get_visible(parent_dialog))
+            gtk_widget_set_sensitive(parent_dialog, TRUE);
+        g_object_unref(parent_dialog);
+    }
+    return wait.response;
+}
+
 /* EN: Show the current dialog's local help in a modal child. button owns the
  * trigger and data is the parent dialog containing the guidance text.
  * RU: Показывает локальную справку в модальном дочернем окне. button запускает
@@ -3472,7 +3532,7 @@ static void port_browser_follow_rule(PortBrowser *browser, GtkTreeModel *model, 
     {
         GtkWindow *parent = GTK_WINDOW(gtk_widget_get_toplevel(browser->tree));
         GtkWidget *dialog = gtk_dialog_new_with_buttons("Choose Port Rule", parent,
-            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+            GTK_DIALOG_DESTROY_WITH_PARENT,
             "_Cancel", GTK_RESPONSE_CANCEL, "_Go to Rule", GTK_RESPONSE_ACCEPT, NULL);
         simulation_dialog_tools(dialog,
             "Choose the connection rule for this port by line number and text. Go to Rule closes "
@@ -3498,7 +3558,7 @@ static void port_browser_follow_rule(PortBrowser *browser, GtkTreeModel *model, 
         gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))),
                            combo, FALSE, FALSE, 8);
         gtk_widget_show_all(dialog);
-        if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+        if (insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
         {
             gint selected = gtk_combo_box_get_active(GTK_COMBO_BOX(combo));
             if (selected >= 0 && (guint)selected < lines->len)
@@ -4203,7 +4263,7 @@ static void device_port_choose_slice(GtkButton *button, gpointer data)
         {
             GtkWindow *parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
             GtkWidget *dialog = gtk_dialog_new_with_buttons("Choose Port Slice", parent,
-                GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                GTK_DIALOG_DESTROY_WITH_PARENT,
                 "_Cancel", GTK_RESPONSE_CANCEL, "_Assign", GTK_RESPONSE_ACCEPT, NULL);
             simulation_dialog_tools(dialog,
                 "Set the offset from the least significant end of the selected port. The preview uses "
@@ -4224,7 +4284,7 @@ static void device_port_choose_slice(GtkButton *button, gpointer data)
             g_signal_connect(spin, "value-changed", G_CALLBACK(device_slice_preview), &preview);
             device_slice_preview(GTK_SPIN_BUTTON(spin), &preview);
             gtk_widget_show_all(dialog);
-            if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+            if (insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
                 device_port_apply(form, &choice, gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(spin)));
             gtk_widget_destroy(dialog);
         }
@@ -4439,9 +4499,9 @@ static void port_browser_copy_view(PortBrowser *destination, const PortBrowser *
                                      destination->prefer_compatible);
 }
 
-/* EN: Open the modal device form from button using the parent port browser in data.
+/* EN: Open the device form from button using the parent port browser in data.
  * Preserve list preferences and append a validated rule on confirmation.
- * RU: Открывает модальную форму по button, используя родительский список из data.
+ * RU: Открывает форму по button, используя родительский список из data.
  * Сохраняет настройки списка и добавляет проверенное правило при подтверждении. */
 static void simulation_device_wizard(GtkButton *button, gpointer data)
 {
@@ -4451,7 +4511,7 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     DeviceForm form = {.entries = g_ptr_array_new(),
         .directory = g_object_get_data(G_OBJECT(button), "source-directory")};
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Add Test Device", parent,
-        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
+        GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
         "_Insert Rule", GTK_RESPONSE_ACCEPT, NULL);
     simulation_dialog_tools(dialog,
         "Find a device by name, regular expression or type. Pick a field, then double-click a "
@@ -4498,7 +4558,7 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     device_catalog_filter(NULL, &catalog);
     gtk_widget_show_all(dialog);
     gint response;
-    while ((response = gtk_dialog_run(GTK_DIALOG(dialog))) == GTK_RESPONSE_ACCEPT)
+    while ((response = insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog))) == GTK_RESPONSE_ACCEPT)
     {
         gint selected = device_catalog_selected(GTK_COMBO_BOX(combo));
         if (selected < 0)
@@ -4640,7 +4700,7 @@ static void simulation_preview_harness(GtkButton *button, gpointer data)
 
     GtkWindow *parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Generated Testbench", parent,
-        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE, NULL);
+        GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE, NULL);
     simulation_dialog_tools(dialog,
         "Review and copy the generated SystemVerilog. Dependencies lists model sources and "
         "staged files. A validation error appears here before launch.",
@@ -4684,7 +4744,7 @@ static void simulation_preview_harness(GtkButton *button, gpointer data)
     g_ptr_array_unref(sources);
 
     gtk_widget_show_all(dialog);
-    gtk_dialog_run(GTK_DIALOG(dialog));
+    insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
     g_object_unref(dialog);
 }
@@ -5031,7 +5091,7 @@ static void simulation_preview_diagram(GtkButton *button, gpointer data)
 
     GtkWindow *parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Testbench Diagram", parent,
-        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE, NULL);
+        GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE, NULL);
     simulation_dialog_tools(dialog,
         "The DUT ports are in the center, stimuli on the left and devices or probes on the "
         "right. Search by port, slice or device and filter by direction. Click a port to jump "
@@ -5054,7 +5114,7 @@ static void simulation_preview_diagram(GtkButton *button, gpointer data)
     g_clear_error(&error);
     g_free(hdl);
     gtk_widget_show_all(dialog);
-    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gint response = insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog));
     gchar *selected = response == GTK_RESPONSE_APPLY ?
         g_strdup(g_object_get_data(G_OBJECT(dialog), "selected-diagram-port")) : NULL;
     gtk_widget_destroy(dialog);
@@ -5066,19 +5126,26 @@ static void simulation_preview_diagram(GtkButton *button, gpointer data)
     }
 }
 
-/* EN: Edit the recipe saved at path in a modal child of parent. run supplies the compiler,
+/* EN: Edit the recipe saved at path in a child of parent. run supplies the compiler,
  * input sources, and include path. On cancellation, publish preprocessing errors.
  * On acceptance, optional output
  * pointers harness, model_sources and port_images receive the generated configuration.
- * RU: Редактирует рецепт из path в модальном окне parent. run задаёт компилятор,
+ * RU: Редактирует рецепт из path в дочернем окне parent. run задаёт компилятор,
  * исходники и путь include. При отмене публикует ошибки препроцессора.
  * При подтверждении необязательные указатели harness,
  * model_sources и port_images получают сгенерированную конфигурацию. */
 static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, const WaveSimulation *run,
                                       gchar **harness, GPtrArray **model_sources, GHashTable **port_images)
 {
+    static GtkWidget *active_setup;
+    if (active_setup)
+    {
+        gtk_window_present(GTK_WINDOW(active_setup));
+        return FALSE;
+    }
+    gchar *include_directory = g_strdup(run->include_dir);
     GtkWidget *dialog = gtk_dialog_new_with_buttons("Port Signals", parent,
-        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
+        GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel", GTK_RESPONSE_CANCEL,
         harness ? "_Start Debugging" : "_Save for Next Run", GTK_RESPONSE_ACCEPT, NULL);
     simulation_dialog_tools(dialog,
         "Choose a module and add device rules, or leave the recipe empty to run an existing "
@@ -5088,6 +5155,7 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         "готового тестбенча. В Ports видны направления, ширина и привязки. Из Source можно "
         "копировать исходник. Для проверки откройте просмотр HDL или схему.");
     g_object_ref_sink(dialog);
+    active_setup = dialog;
     gchar *source_directory = g_path_get_dirname(run->sources[0]);
     gchar *source_snapshot = port_browser_source(run->sources[0]);
     gchar *preprocess_error = NULL;
@@ -5169,13 +5237,14 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     g_signal_connect(diagram, "clicked", G_CALLBACK(simulation_preview_diagram), &browser);
     gtk_box_pack_start(GTK_BOX(actions), diagram, FALSE, FALSE, 0);
     g_signal_connect(wizard, "clicked", G_CALLBACK(simulation_device_wizard), &browser);
+    g_object_ref(buffer);
     gulong changed = g_signal_connect(buffer, "changed", G_CALLBACK(port_browser_refresh), &browser);
     gtk_box_pack_start(GTK_BOX(box), panes, TRUE, TRUE, 0);
     GtkWidget *status = gtk_label_new(harness ? "" : "Saved changes apply the next time debugging starts.");
     gtk_box_pack_start(GTK_BOX(box), status, FALSE, FALSE, 6);
     gtk_widget_show_all(dialog);
     gboolean accepted = FALSE;
-    while (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+    while (insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
     {
         GtkTextIter first, last;
         gtk_text_buffer_get_bounds(buffer, &first, &last);
@@ -5209,6 +5278,8 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
             break;
     }
     g_signal_handler_disconnect(buffer, changed);
+    g_object_unref(buffer);
+    active_setup = NULL;
     g_free(source_snapshot);
     g_free(expanded);
     g_free(source_directory);
@@ -5219,7 +5290,8 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     gtk_widget_destroy(dialog);
     g_object_unref(dialog);
     if (!accepted && preprocess_error)
-        msgwin_debugger_report(preprocess_error, run->include_dir, NULL);
+        msgwin_debugger_report(preprocess_error, include_directory, NULL);
+    g_free(include_directory);
     g_free(preprocess_error);
     return accepted;
 }
