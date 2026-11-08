@@ -2,12 +2,14 @@ diff --git a/driver/main.c b/driver/main.c
 index 352ab9f..dac6da2 100644
 --- a/driver/main.c
 +++ b/driver/main.c
-@@ -321,6 +321,46 @@ static const char*my_tempfile(const char*str, FILE**fout)
+@@ -321,6 +321,52 @@
        return pathbuf;
  }
-
-+/* Keep the compiler's shell pipeline attached to the editor's pipes. */
-+static int run_command(const char*command)
+ 
++/* EN: Run command with inherited pipes. Use the shell only for redirection
++ * or a pipeline. RU: Запускает command с унаследованными каналами.
++ * Командная оболочка нужна только для перенаправления или конвейера. */
++static int run_command(const char*command, int use_shell)
 +{
 +#ifdef __MINGW32__
 +      const char* shell = getenv("COMSPEC");
@@ -17,7 +19,10 @@ index 352ab9f..dac6da2 100644
 +      char* line = malloc(size);
 +      if (!line)
 +            return -1;
-+      snprintf(line, size, "\"%s\" /d /s /c \"%s\"", shell, command);
++      if (use_shell)
++            snprintf(line, size, "\"%s\" /d /s /c \"%s\"", shell, command);
++      else
++            strcpy(line, command);
 +
 +      STARTUPINFOA startup = {0};
 +      PROCESS_INFORMATION child;
@@ -31,7 +36,7 @@ index 352ab9f..dac6da2 100644
 +      DWORD launch_error = started ? ERROR_SUCCESS : GetLastError();
 +      free(line);
 +      if (!started) {
-+            fprintf(stderr, "Cannot start the Icarus compiler pipeline (Windows error %lu).\n",
++            fprintf(stderr, "Cannot start the Icarus helper (Windows error %lu).\n",
 +                    (unsigned long)launch_error);
 +            return -1;
 +      }
@@ -42,6 +47,7 @@ index 352ab9f..dac6da2 100644
 +      CloseHandle(child.hProcess);
 +      return (int)status;
 +#else
++      (void)use_shell;
 +      return system(command);
 +#endif
 +}
@@ -49,39 +55,74 @@ index 352ab9f..dac6da2 100644
  static int t_version_only(void)
  {
        int rc;
-@@ -329,7 +369,7 @@ static int t_version_only(void)
-
+@@ -329,7 +375,7 @@
+ 
        fflush(0);
        snprintf(tmp, sizeof tmp, "%s%civlpp -V", ivlpp_dir, sep);
 -      rc = system(tmp);
-+      rc = run_command(tmp);
++      rc = run_command(tmp, 1);
        if (rc != 0) {
  	    fprintf(stderr, "Unable to get version from \"%s\"\n", tmp);
        }
-@@ -337,7 +377,7 @@ static int t_version_only(void)
+@@ -337,7 +383,7 @@
        fflush(0);
        snprintf(tmp, sizeof tmp, "%s%civl -V -C\"%s\" -C\"%s\"", base, sep,
  	       iconfig_path, iconfig_common_path);
 -      rc = system(tmp);
-+      rc = run_command(tmp);
++      rc = run_command(tmp, 1);
        if (rc != 0) {
  	    fprintf(stderr, "Unable to get version from \"%s\"\n", tmp);
        }
-@@ -388,7 +428,7 @@ static int t_preprocess_only(void)
+@@ -356,8 +402,9 @@
+ 
+ static void build_preprocess_command(int e_flag)
+ {
+-      snprintf(tmp, sizeof tmp, "%s%civlpp%s%s%s -F\"%s\" -f\"%s\" -p\"%s\"%s",
+-	       ivlpp_dir, sep,
++      const char* quote = e_flag ? "\"" : "";
++      snprintf(tmp, sizeof tmp, "%s%s%civlpp%s%s%s%s -F\"%s\" -f\"%s\" -p\"%s\"%s",
++	       quote, ivlpp_dir, sep, quote,
+                verbose_flag ? " -v" : "",
+ 	       e_flag ? "" : " -L",
+                strchr(warning_flags, 'r') ? " -Wredef-all" :
+@@ -388,7 +435,7 @@
        if (verbose_flag)
  	    printf("preprocess: %s\n", cmd);
-
+ 
 -      rc = system(cmd);
-+      rc = run_command(cmd);
++      rc = run_command(cmd, strcmp(opath,"-") != 0);
        remove(source_path);
        free(source_path);
-
-@@ -489,7 +529,7 @@ static int t_compile(void)
+ 
+@@ -402,6 +449,14 @@
+       }
+ 
+       if (rc != 0) {
++#ifdef __MINGW32__
++            /* EN: CreateProcess returns a Windows exit code directly.
++             * RU: CreateProcess возвращает код завершения Windows напрямую. */
++            fprintf(stderr, "Icarus preprocessor failed (Windows exit code 0x%08lx): %s\n",
++                    (unsigned long)(unsigned int)rc, cmd);
++            free(cmd);
++            return rc;
++#else
+ 	    if (WIFEXITED(rc)) {
+ 		  fprintf(stderr, "errors preprocessing Verilog program.\n");
+ 		  free(cmd);
+@@ -411,6 +466,7 @@
+ 	    fprintf(stderr, "Command signaled: %s\n", cmd);
+ 	    free(cmd);
+ 	    return -1;
++#endif
+       }
+ 
+       free(cmd);
+@@ -489,7 +545,7 @@
  	    printf("translate: %s\n", cmd);
-
-
+ 
+ 
 -      rc = system(cmd);
-+      rc = run_command(cmd);
++      rc = run_command(cmd, 1);
        if ( ! getenv("IVERILOG_ICONFIG")) {
  	    remove(source_path);
  	    free(source_path);

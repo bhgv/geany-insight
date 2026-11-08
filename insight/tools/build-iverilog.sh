@@ -89,6 +89,8 @@ VERILOG
         export PATH="$prefix/bin:$PATH" &&
         export IVERILOG_VPI_MODULE_PATH="$prefix/lib/ivl" &&
         test -f "$prefix/lib/ivl/geany_devices.vpi" &&
+        "$prefix/bin/iverilog$executable_suffix" -g2012 -E -o - geany_smoke.v > geany_smoke.preprocessed &&
+        grep -q "^module geany_smoke;" geany_smoke.preprocessed &&
         "$prefix/bin/iverilog$executable_suffix" -g2012 -s geany_smoke -o geany_smoke.vvp geany_smoke.v &&
         printf 'cont\n' | GEANY_VVP_DEBUG=1 "$prefix/bin/vvp$executable_suffix" -M "$prefix/lib/ivl" -m geany_devices -i -s geany_smoke.vvp > geany_smoke.log &&
         grep -q '^GEANY-VVP-READY' geany_smoke.log &&
