@@ -315,7 +315,7 @@ static void instruments_show(GtkButton *button, gpointer data)
     gtk_widget_set_name(viewer->instrument_range, "insight-instrument-range");
     gtk_label_set_line_wrap(GTK_LABEL(viewer->instrument_range), TRUE);
     gtk_box_pack_start(GTK_BOX(box), viewer->instrument_range, FALSE, FALSE, 4);
-    g_signal_connect(viewer->instrument_plot, "draw", G_CALLBACK(instruments_draw), viewer);
+    capture_view_new(box, viewer->instrument_plot, instruments_draw, viewer);
     for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
         g_signal_connect(viewer->instrument_signal[i], "changed", G_CALLBACK(instruments_changed),
                          viewer);

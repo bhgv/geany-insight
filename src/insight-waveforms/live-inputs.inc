@@ -385,7 +385,7 @@ static void simulation_live_scopes(WaveSimulation *run, GtkWidget *contents)
         g_free(signals);
         scope->drawing = gtk_drawing_area_new();
         gtk_widget_set_size_request(scope->drawing, 260, 130);
-        g_signal_connect(scope->drawing, "draw", G_CALLBACK(simulation_scope_draw), scope);
+        capture_view_new(page, scope->drawing, simulation_scope_draw, scope);
         gtk_box_pack_start(GTK_BOX(page), scope->drawing, TRUE, TRUE, 0);
         scope->status = gtk_label_new("Waiting for samples…");
         gtk_label_set_line_wrap(GTK_LABEL(scope->status), TRUE);

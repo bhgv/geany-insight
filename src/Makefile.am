@@ -240,6 +240,7 @@ libgeany_la_SOURCES += \
 	insight-waveforms/testbench-preview.inc \
 	insight-waveforms/port-setup.inc \
 	insight-waveforms/source-breakpoints.inc \
+	insight-waveforms/capture-view.inc \
 	insight-waveforms/raster-view.inc \
 	insight-waveforms/simulator-process.inc \
 	insight-waveforms/live-output-records.inc \

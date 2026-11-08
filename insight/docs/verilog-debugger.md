@@ -383,8 +383,16 @@ the frame. Color pins are ignored during blanking.
 
 Hover over a pixel to see its coordinates from the top-left corner and
 its decimal RGB and hexadecimal color. **Save PNG…** saves the displayed
-frame at native resolution. Both controls are available in the live
-display and in the retained frame window after simulation.
+full frame at native resolution. **−**, **Fit**, **+**, and drag-to-zoom
+are available during and after simulation. Drag with the left button
+to magnify a rectangle. **Save view…** saves the visible area as PNG.
+
+Live Time, XY and XYZ scopes and VCD XY/XYZ plots share these tools.
+**Record video…** saves the visible area as Y4M at 10 fps, up to
+1280 × 720. Select **Manual frames** before recording and click
+**Add frame** for each frame you want. Automatic recording samples the
+display on a timer and can skip simulator frames between samples.
+Click **Stop recording** or close the window to close the file.
 
 ### HDMI DDC, EDID and hot plug
 

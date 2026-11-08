@@ -23,6 +23,7 @@
 #include "insight-waveforms/setup-dialogs.inc"
 #include "insight-waveforms/vcd-parser.inc"
 #include "insight-waveforms/wave-tracks.inc"
+#include "insight-waveforms/capture-view.inc"
 #include "insight-waveforms/wave-instruments.inc"
 #include "insight-waveforms/wave-drawing.inc"
 #include "insight-waveforms/wave-controls.inc"

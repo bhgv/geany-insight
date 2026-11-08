@@ -8,7 +8,7 @@ typedef struct
 {
     guint id, mode, width, height;
     guint32 sequence;
-    GtkWidget *image, *status;
+    GtkWidget *image, *status, *canvas;
     GdkPixbuf *final_frame;
 } RasterDisplay;
 
@@ -114,6 +114,7 @@ static void simulation_rasters_refresh(WaveSimulation *run)
         if (frame)
         {
             gtk_image_set_from_pixbuf(GTK_IMAGE(display->image), frame);
+            gtk_widget_queue_draw(display->canvas);
             gchar *status = g_strdup_printf("%u × %u · %s %u", display->width, display->height,
                                             insight_tr("Frame"), display->sequence);
             gtk_label_set_text(GTK_LABEL(display->status), status);
@@ -138,21 +139,62 @@ static void simulation_rasters_finish(WaveSimulation *run, const gchar *director
     }
 }
 
-/* EN: Show the RGB sample at x,y in tooltip. image owns the current frame.
- * area receives events at native pixel size. Keyboard queries have no coordinate.
- * RU: Показывает RGB точки x,y в tooltip. image хранит текущий кадр.
- * area получает события в масштабе 1:1. Запрос с клавиатуры не задаёт точку. */
-static gboolean simulation_raster_pixel_tooltip(GtkWidget *area, gint x, gint y,
-                                                 gboolean keyboard, GtkTooltip *tooltip,
-                                                 GtkImage *image)
+/* EN: Calculate the fitted frame's position and scale in canvas.
+ * RU: Вычисляет положение и масштаб кадра frame, вписанного в canvas. */
+static gdouble simulation_raster_fit(GtkWidget *canvas, GdkPixbuf *frame,
+                                     gdouble *left, gdouble *top)
 {
-    (void)area;
-    if (keyboard || gtk_image_get_storage_type(image) != GTK_IMAGE_PIXBUF)
+    gint width = gtk_widget_get_allocated_width(canvas);
+    gint height = gtk_widget_get_allocated_height(canvas);
+    gint frame_width = gdk_pixbuf_get_width(frame);
+    gint frame_height = gdk_pixbuf_get_height(frame);
+    gdouble scale = MIN((gdouble)width / frame_width, (gdouble)height / frame_height);
+    *left = (width - frame_width * scale) / 2;
+    *top = (height - frame_height * scale) / 2;
+    return scale;
+}
+
+/* EN: Paint the fitted pixbuf held in data on canvas using cr.
+ * RU: Рисует вписанный в canvas кадр из data через контекст cr. */
+static gboolean simulation_raster_draw(GtkWidget *canvas, cairo_t *cr, gpointer data)
+{
+    GtkImage *image = data;
+    if (gtk_image_get_storage_type(image) != GTK_IMAGE_PIXBUF)
+        return FALSE;
+    GdkPixbuf *frame = gtk_image_get_pixbuf(image);
+    gdouble left, top;
+    gdouble scale = simulation_raster_fit(canvas, frame, &left, &top);
+    cairo_translate(cr, left, top);
+    cairo_scale(cr, scale, scale);
+    gdk_cairo_set_source_pixbuf(cr, frame, 0, 0);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_rectangle(cr, 0, 0, gdk_pixbuf_get_width(frame), gdk_pixbuf_get_height(frame));
+    cairo_fill(cr);
+    return FALSE;
+}
+
+/* EN: Show the source pixel beneath x,y in tooltip. view owns the zoom.
+ * Keyboard queries on canvas have no pointer coordinate.
+ * RU: Показывает исходный пиксель под x,y в tooltip с учётом масштаба view.
+ * Запрос с клавиатуры в canvas не задаёт координаты указателя. */
+static gboolean simulation_raster_pixel_tooltip(GtkWidget *canvas, gint x, gint y,
+                                                 gboolean keyboard, GtkTooltip *tooltip,
+                                                 CaptureView *view)
+{
+    GtkImage *image = view->data;
+    if (keyboard || view->selecting || gtk_image_get_storage_type(image) != GTK_IMAGE_PIXBUF)
         return FALSE;
 
     GdkPixbuf *frame = gtk_image_get_pixbuf(image);
-    if (x < 0 || y < 0 || x >= gdk_pixbuf_get_width(frame) || y >= gdk_pixbuf_get_height(frame))
+    gdouble left, top;
+    gdouble scale = simulation_raster_fit(canvas, frame, &left, &top);
+    gdouble source_x = (view->x * gtk_widget_get_allocated_width(canvas) + x * view->width - left) / scale;
+    gdouble source_y = (view->y * gtk_widget_get_allocated_height(canvas) + y * view->height - top) / scale;
+    if (source_x < 0 || source_y < 0 ||
+        source_x >= gdk_pixbuf_get_width(frame) || source_y >= gdk_pixbuf_get_height(frame))
         return FALSE;
+    x = (gint)source_x;
+    y = (gint)source_y;
 
     const guchar *pixel = gdk_pixbuf_read_pixels(frame) +
                           (gsize)y * gdk_pixbuf_get_rowstride(frame) + (gsize)x * 3;
@@ -220,19 +262,18 @@ static GtkWidget *simulation_raster_notebook(WaveSimulation *run, gboolean final
         if (final && !display->final_frame)
             continue;
         GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-        GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+        GtkWidget *canvas = gtk_drawing_area_new();
+        gtk_widget_set_size_request(canvas, 260, 130);
         GtkWidget *image = gtk_image_new_from_pixbuf(final ? display->final_frame : NULL);
-        GtkWidget *area = gtk_event_box_new();
-        gtk_widget_set_halign(area, GTK_ALIGN_START);
-        gtk_widget_set_valign(area, GTK_ALIGN_START);
-        gtk_container_add(GTK_CONTAINER(area), image);
-        gtk_widget_set_has_tooltip(area, TRUE);
-        g_signal_connect(area, "query-tooltip", G_CALLBACK(simulation_raster_pixel_tooltip), image);
-        gtk_container_add(GTK_CONTAINER(scroll), area);
-        gtk_box_pack_start(GTK_BOX(page), scroll, TRUE, TRUE, 0);
+        g_object_set_data_full(G_OBJECT(canvas), "raster-image", g_object_ref_sink(image), g_object_unref);
+        CaptureView *view = capture_view_new(page, canvas, simulation_raster_draw, image);
+        gtk_widget_set_has_tooltip(canvas, TRUE);
+        g_signal_connect(canvas, "query-tooltip", G_CALLBACK(simulation_raster_pixel_tooltip), view);
+        gtk_box_pack_start(GTK_BOX(page), canvas, TRUE, TRUE, 0);
         if (!final)
         {
             display->image = image;
+            display->canvas = canvas;
             display->status = gtk_label_new(insight_tr("Waiting for a complete display frame."));
             gtk_box_pack_start(GTK_BOX(page), display->status, FALSE, FALSE, 0);
         }

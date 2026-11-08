@@ -121,10 +121,12 @@ static void simulation_device_type(GtkComboBox *combo, gpointer data)
             gtk_file_chooser_button_new("Choose device file", GTK_FILE_CHOOSER_ACTION_OPEN);
         gtk_widget_set_name(chooser, "insight-device-file");
         gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(chooser), form->directory);
-        form->file =
-            const gchar *file_label = preset->script ? "Lua script" :
-                !strcmp(preset->rule, "hdmi-ddc") ? "EDID hex image (optional)" : "Memory image (optional)";
-            device_field(form, file_label, chooser, row++);
+        const gchar *file_label = "Memory image (optional)";
+        if (preset->script)
+            file_label = "Lua script";
+        else if (!strcmp(preset->rule, "hdmi-ddc"))
+            file_label = "EDID hex image (optional)";
+        form->file = device_field(form, file_label, chooser, row++);
         if (!preset->script)
         {
             GtkWidget *clear = gtk_button_new_with_label("Clear image");
