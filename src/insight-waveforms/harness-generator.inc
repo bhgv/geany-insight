@@ -136,6 +136,9 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         }
         else if (valid && (count == 4 || count == 5) && !strcmp(args[0], "uart"))
             valid = simulation_port_uart(args, count, body, connections, ports, live);
+        else if (valid && (((count == 5 || count == 6) && !strcmp(args[0], "usart")) ||
+                           ((count == 6 || count == 7) && !strcmp(args[0], "usart-clock"))))
+            valid = simulation_port_usart(args, count, body, connections, ports, live);
         else if (valid && (!strcmp(args[0], "model") || g_str_has_prefix(args[0], "model-")))
             valid =
                 simulation_model_rule(args, count, models, sources, directory, body, connections, ports);

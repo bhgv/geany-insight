@@ -337,6 +337,26 @@ entry's UTF-8 bytes without an automatic newline. The receiver displays
 ASCII and escapes other bytes as `\xNN`. The entry waits for the previous
 message to finish transmitting before accepting another one.
 
+## Synchronous USART console
+
+In **Add Test Device…**, choose **USART (DUT clock)** if the design drives XCK,
+or **USART (testbench clock)** if the design receives XCK. Connect RX and TX
+from the design's point of view. The peer uses clocked 8N1 frames: one low
+start bit, eight data bits LSB first, and one high stop bit. The chosen
+`rise` or `fall` edge samples the line, and the opposite edge drives it.
+If XCK stops, the current frame waits for the clock to resume.
+
+```text
+usart rx tx xck rise console
+usart-clock rx tx xck 20 rise console
+```
+
+Use one of the two rules in a testbench. The `20` sets the generated clock
+period in nanoseconds. With `console`, **USART Console…** shows received
+bytes and sends the entered text on Enter. A serial console serves one UART
+or USART per testbench. Parity and other frame widths are outside this model.
+If simulation ends too soon for interactive input, increase `duration`.
+
 ## External SystemVerilog device models
 
 Use a simulator-compatible model you already have. The source path is

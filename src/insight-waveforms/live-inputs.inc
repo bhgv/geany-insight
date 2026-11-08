@@ -80,14 +80,15 @@ static void simulation_uart_show(GtkButton *button, gpointer data)
         return;
     }
     GtkWidget *window =
-        gtk_dialog_new_with_buttons("UART Console", GTK_WINDOW(run->dialog),
+        gtk_dialog_new_with_buttons(strstr(run->port_harness, "// GEANY USART CONSOLE\n") ?
+                                    "USART Console" : "UART Console", GTK_WINDOW(run->dialog),
                                     GTK_DIALOG_DESTROY_WITH_PARENT, "_Close", GTK_RESPONSE_CLOSE, NULL);
     simulation_dialog_tools(
         window,
-        "Enter text and press Enter to send it over the configured UART. Received bytes appear "
-        "in the transcript. The console requires the uart rule with the console option.",
-        "Введите текст и нажмите Enter для отправки по UART. Принятые байты появляются в "
-        "журнале. Для этого окна нужно правило uart с параметром console.");
+        "Enter text and press Enter to send it over the configured UART or USART. Received bytes appear "
+        "in the transcript. Enable the console option in the device rule.",
+        "Введите текст и нажмите Enter для отправки по UART или USART. Принятые байты появляются в "
+        "журнале. Включите параметр console в правиле устройства.");
     run->uart_window = window;
     gtk_window_set_default_size(GTK_WINDOW(window), 600, 330);
     g_signal_connect_swapped(window, "response", G_CALLBACK(gtk_widget_destroy), window);

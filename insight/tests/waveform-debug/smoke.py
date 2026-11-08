@@ -561,6 +561,18 @@ def check_spi_memory(compiler, runtime, fixtures, directory, environment):
     require("SPI memory test passed" in report, "SPI memory test did not finish")
 
 
+# EN: Run the USART fixture with compiler/runtime and verify both sample edges.
+# RU: Запускает тест USART через compiler/runtime и проверяет оба фронта.
+def check_usart(compiler, runtime, fixtures, directory, environment):
+    compile_design(compiler, directory, [fixtures / "usart_tb.sv"], environment)
+    modules = runtime.parent.parent / "lib" / "ivl"
+    report = capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
+                              "simulation.vvp"], directory, "usart", environment)
+    for byte in ("a6", "59", "39", "c6"):
+        require(f"GEANY-UART\t{byte}" in report, f"Missing USART byte {byte}")
+    require("USART device passed" in report, "USART test did not complete")
+
+
 # EN: Run controller fixtures with compiler/runtime and check replies in directory.
 # RU: Запускает тесты ведущих через compiler/runtime и проверяет ответы в directory.
 def check_bus_controllers(compiler, runtime, fixtures, directory, environment):
@@ -645,6 +657,7 @@ def main():
     environment["PATH"] = str(binaries) + os.pathsep + environment.get("PATH", "")
     logs = args.logs.resolve()
     checks = [
+        ("usart", lambda directory: check_usart(compiler, runtime, fixtures, directory, environment)),
         ("bus-controllers", lambda directory: check_bus_controllers(compiler, runtime, fixtures, directory, environment)),
         ("i2c-eeprom", lambda directory: check_i2c_eeprom(compiler, runtime, fixtures, directory, environment)),
         ("lua-device-examples", lambda directory: check_documented_lua_devices(compiler, runtime, fixtures, directory, environment)),

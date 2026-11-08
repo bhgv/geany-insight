@@ -71,6 +71,8 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
         "ddr3 CK RESET_N CKE CS_N RAS_N CAS_N WE_N A BA DQ DQS DM [RL=3 [WL=2]] (functional x8)\n"
         "ddr4 CK RESET_N CKE CS_N ACT_N A BA BG DQ DQS DM_N [RL=3 [WL=2]] (functional x8)\n"
         "uart RX TX BAUD [console]\n"
+        "usart RX TX XCK rise|fall [console] (DUT clock)\n"
+        "usart-clock RX TX XCK PERIOD_NS rise|fall [console]\n"
         "model INSTANCE MODULE SOURCE   ·   model-link INSTANCE DUT_PORT MODEL_PORT WIDTH\n"
         "model-share INSTANCE DUT_PORT MODEL_PORT   ·   model-param / model-value INSTANCE NAME EXPR\n"
         "Use step in bus expressions and $time for simulation time. Quote formulas containing spaces.");

@@ -177,6 +177,30 @@ static gboolean simulation_port_controller(gchar **args, GString *body, GString 
     return TRUE;
 }
 
+/* EN: Append the serial console mailbox reader to body and enable pacing in live.
+ * RU: Добавляет в body чтение входа последовательной консоли и включает темп в live. */
+static void simulation_serial_mailbox(GString *body, GString *live)
+{
+    g_string_append(body,
+        "initial begin : geany_uart_send\n"
+        "  integer fd, code, serial, previous; reg [7:0] octet;\n"
+        "  previous=0;\n"
+        "  forever begin\n"
+        "    #(geany_live_interval); fd=$fopen(\"geany-uart-input\",\"r\");\n"
+        "    if(fd) begin\n"
+        "      code=$fscanf(fd,\"%d\",serial);\n"
+        "      if(code==1 && serial!=previous) begin\n"
+        "        previous=serial;\n"
+        "        while($fscanf(fd,\"%h\",octet)==1) geany_uart_tx(octet);\n"
+        "        $display(\"GEANY-UART-SENT%c%0d\",9,serial); $fflush();\n"
+        "      end\n"
+        "      $fclose(fd);\n"
+        "    end\n"
+        "  end\n"
+        "end\n");
+    g_string_append(live, "// Serial console pacing\n");
+}
+
 /* EN: Validate count UART args and append HDL to body and connections. ports tracks used pins and live enables pacing.
  * RU: Проверяет count аргументов args UART и дописывает HDL в body и connections. ports учитывает выводы, live включает регулирование скорости. */
 static gboolean simulation_port_uart(gchar **args, gint count, GString *body, GString *connections,
@@ -204,16 +228,68 @@ static gboolean simulation_port_uart(gchar **args, gint count, GString *body, GS
         "@(negedge pin%u); #(geany_uart_bit/2); if(pin%u===1'b0) begin\n"
         "for(n=0;n<8;n=n+1) begin #(geany_uart_bit); octet[n]=pin%u; end\n"
         "#(geany_uart_bit); if(pin%u===1'b1 && !$isunknown(octet)) "
-        "$display(\"GEANY-UART%%c%%02h\", 9, octet); $fflush(); end end end\n"
-        "initial begin : geany_uart_send integer fd, code, serial, previous; reg [7:0] octet; "
-        "previous=0; forever begin #(geany_live_interval); fd=$fopen(\"geany-uart-input\",\"r\");\n"
-        "if(fd) begin code=$fscanf(fd,\"%%d\", serial); "
-        "if(code==1 && serial!=previous) begin previous=serial; "
-        "while($fscanf(fd,\"%%h\",octet)==1) geany_uart_tx(octet); "
-        "$display(\"GEANY-UART-SENT%%c%%0d\",9,serial); $fflush(); end $fclose(fd); end "
-        "end end\n",
+        "$display(\"GEANY-UART%%c%%02h\", 9, octet); $fflush(); end end end\n",
         baud, rx, rx, rx, rx, tx, tx, tx, tx);
-    /* UART also needs wall-clock pacing, even without parallel port monitors. */
-    g_string_append(live, "// UART pacing\n");
+    simulation_serial_mailbox(body, live);
+    return TRUE;
+}
+
+/* EN: Validate count USART args and wire their pins into body and connections.
+ * ports tracks used pins and live receives the serial pacing marker.
+ * RU: Проверяет count аргументов args USART и подключает выводы в body и connections.
+ * ports учитывает выводы, live получает метку регулирования темпа. */
+static gboolean simulation_port_usart(gchar **args, gint count, GString *body,
+                                      GString *connections, GHashTable *ports, GString *live)
+{
+    gboolean generate_clock = !strcmp(args[0], "usart-clock");
+    guint edge_index = generate_clock ? 5 : 4;
+    gboolean console = (guint)count == edge_index + 2;
+    guint64 period = 0;
+    if (g_hash_table_size(ports) > 125 || strstr(body->str, "task geany_uart_tx;") ||
+        (console && strcmp(args[edge_index + 1], "console")) ||
+        (strcmp(args[edge_index], "rise") && strcmp(args[edge_index], "fall")) ||
+        (generate_clock && !g_ascii_string_to_unsigned(args[4], 10, 2, 1000000000, &period, NULL)))
+        return FALSE;
+    for (guint i = 1; i <= 3; i++)
+    {
+        if (!simulation_port_name(args[i]) || g_hash_table_contains(ports, args[i]))
+            return FALSE;
+        for (guint j = 1; j < i; j++)
+            if (!strcmp(args[i], args[j]))
+                return FALSE;
+    }
+
+    guint rx = simulation_port_connect(body, connections, ports, args[1], 1, FALSE);
+    guint tx = simulation_port_connect(body, connections, ports, args[2], 1, TRUE);
+    guint clock = simulation_port_connect(body, connections, ports, args[3], 1, !generate_clock);
+    if (console)
+        g_string_append(body, "// GEANY USART CONSOLE\n");
+    if (generate_clock)
+        g_string_append_printf(body,
+            "initial begin\n"
+            "  pin%u=0;\n"
+            "  forever begin\n"
+            "    #%" G_GUINT64_FORMAT " pin%u=1;\n"
+            "    #%" G_GUINT64_FORMAT " pin%u=0;\n"
+            "  end\n"
+            "end\n", clock, period / 2, clock, period - period / 2, clock);
+
+    g_string_append_printf(body,
+        "reg [7:0] geany_usart_byte;\n"
+        "reg geany_usart_request=0, geany_usart_ack=0;\n"
+        "initial pin%u=1;\n"
+        "always @(pin%u)\n"
+        "  $geany_usart(pin%u,pin%u,pin%u,geany_usart_byte,"
+        "geany_usart_request,geany_usart_ack,1'b%u);\n"
+        "task geany_uart_tx;\n"
+        "  input [7:0] octet;\n"
+        "  begin\n"
+        "    geany_usart_byte=octet;\n"
+        "    geany_usart_request=~geany_usart_request;\n"
+        "    wait(geany_usart_ack==geany_usart_request);\n"
+        "  end\n"
+        "endtask\n",
+        rx, clock, clock, tx, rx, (guint)!strcmp(args[edge_index], "rise"));
+    simulation_serial_mailbox(body, live);
     return TRUE;
 }

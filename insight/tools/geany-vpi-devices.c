@@ -760,6 +760,7 @@ fail:
 }
 
 #include "geany-bus-controller.h"
+#include "geany-usart.h"
 
 /* EN: Register all built-in VPI system tasks at simulator startup.
  * RU: Регистрирует системные задачи встроенных устройств при запуске симулятора. */
@@ -817,6 +818,9 @@ static void register_devices(void)
     vpi_register_systf(&task);
     task.tfname = "$geany_spi_controller";
     task.user_data = NULL;
+    vpi_register_systf(&task);
+    task.tfname = "$geany_usart";
+    task.calltf = geany_usart_tick;
     vpi_register_systf(&task);
 }
 

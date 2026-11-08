@@ -109,10 +109,13 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         }
         if (run->port_harness && strstr(run->port_harness, "task geany_live_yield;"))
             simulation_live_panel(run, box);
-        if (run->port_harness && strstr(run->port_harness, "// GEANY UART CONSOLE\n"))
+        gboolean synchronous_console = run->port_harness &&
+            strstr(run->port_harness, "// GEANY USART CONSOLE\n");
+        if (synchronous_console ||
+            (run->port_harness && strstr(run->port_harness, "// GEANY UART CONSOLE\n")))
         {
             run->uart_log = g_string_new(NULL);
-            GtkWidget *uart = gtk_button_new_with_label("UART Console…");
+            GtkWidget *uart = gtk_button_new_with_label(synchronous_console ? "USART Console…" : "UART Console…");
             g_signal_connect(uart, "clicked", G_CALLBACK(simulation_uart_show), run);
             gtk_box_pack_start(GTK_BOX(running_actions), uart, FALSE, FALSE, 0);
         }
