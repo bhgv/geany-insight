@@ -618,6 +618,22 @@ def check_spi_memory(compiler, runtime, fixtures, directory, environment):
     require("SPI memory test passed" in report, "SPI memory test did not finish")
 
 
+# EN: Run all display modes with compiler/runtime and compare their saved RGB frames.
+# RU: Запускает режимы дисплеев через compiler/runtime и сверяет сохранённые кадры RGB.
+def check_raster_displays(compiler, runtime, fixtures, directory, environment):
+    compile_design(compiler, directory, [fixtures / "raster_displays_tb.sv"], environment)
+    modules = runtime.parent.parent / "lib" / "ivl"
+    for previous in directory.glob("geany-raster-*.rgb"):
+        previous.unlink()
+    capture_command([str(runtime), "-M", str(modules), "-m", "geany_devices",
+                     "simulation.vvp"], directory, "raster-displays", environment)
+    for display in range(7):
+        frame = (directory / f"geany-raster-{display}-1.rgb").read_bytes()
+        tail = "a65a19" if display in (1, 3, 4, 5) else "a65918"
+        expected = (1).to_bytes(4, "little") + bytes.fromhex("ff000000ff000000ff" + tail)
+        require(frame == expected, f"Incorrect RGB pixels for display {display}")
+
+
 # EN: Run the parallel PSRAM fixture with compiler/runtime and a high-address image.
 # RU: Запускает тест параллельной PSRAM через compiler/runtime с образом по старшему адресу.
 def check_parallel_psram(compiler, runtime, fixtures, directory, environment):
@@ -725,6 +741,7 @@ def main():
     environment["PATH"] = str(binaries) + os.pathsep + environment.get("PATH", "")
     logs = args.logs.resolve()
     checks = [
+        ("raster-displays", lambda directory: check_raster_displays(compiler, runtime, fixtures, directory, environment)),
         ("parallel-psram", lambda directory: check_parallel_psram(compiler, runtime, fixtures, directory, environment)),
         ("usart", lambda directory: check_usart(compiler, runtime, fixtures, directory, environment)),
         ("bus-controllers", lambda directory: check_bus_controllers(compiler, runtime, fixtures, directory, environment)),

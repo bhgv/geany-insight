@@ -326,6 +326,45 @@ high-impedance data outside reads. It supports 1–16 address bits and
 1–64 data bits. SRAM timing constraints and vendor-specific behavior are
 outside this model.
 
+## RGB, LVDS and HDMI test displays
+
+Choose **Parallel RGB display**, **LVDS display** or **HDMI display** in
+**Add Test Device…**. Set the active width and height (up to 2048 × 1200)
+and the color depth (6 or 8 bits per channel). The defaults are 640 × 480
+and eight bits. **Displays** shows each completed frame during the run.
+After simulation ends, the last complete frame opens in **Display frames**.
+Up to four displays may be configured. Without a duration rule, a display
+test runs for 40 ms of simulation time.
+
+```text
+rgb-display pclk de vs r g b 640 480 8 1
+lvds-display lvds_clk_p lvds_d0_p lvds_d1_p lvds_d2_p - 640 480 6 jeida 0 1
+hdmi-display tmds_clk_p tmds_d0_p tmds_d1_p tmds_d2_p 640 480 8 hdmi 0 1
+```
+
+- **RGB** samples R, G and B on rising PCLK when DE is high. The last
+  argument is the active level of VS. DE must fall during horizontal blanking.
+- **LVDS** uses logical clock and data signals from the positive legs.
+  In six-bit mode use three lanes and `-` for D3. In eight-bit mode connect
+  four lanes and choose `jeida` or `vesa`. Lane words are sampled in
+  ascending slot order. See the [OpenLDI mapping](https://www.ti.com/lit/an/snla014a/snla014a.pdf).
+- **HDMI** accepts logical TMDS clock and data lanes D0/D1/D2 (blue,
+  green, red), with the low bit of each symbol transmitted first.
+  `hdmi` recognizes video preambles and guard bands and skips data islands.
+  Select `dvi` for transmitters that send only DVI-compatible control and
+  video symbols. Six-bit display mode quantizes the decoded eight-bit RGB.
+  Audio, EDID/DDC, hot-plug, HDCP and FRL are outside this model.
+
+For both serial displays, the number before VS polarity is the whole-bit
+offset from the forwarded clock's rising edge to the first lane bit.
+Use 0–6 for LVDS or 0–9 for TMDS. The receiver measures the pixel period
+and samples near the middle of each bit. Use at least two simulation
+ticks per serial bit. The models receive logical signals, so differential
+voltage levels and jitter are outside their scope.
+
+The active area must match the configured geometry. A line with an
+unexpected number of active pixels is discarded until the next VS pulse.
+
 ## UART console
 
 ```text

@@ -26,7 +26,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
     gchar *module = NULL;
     guint64 duration = 1000;
     gboolean explicit_duration = FALSE;
-    guint attached_images = 0, scopes = 0;
+    guint attached_images = 0, scopes = 0, rasters = 0;
     gboolean valid = TRUE;
     for (guint i = 0; lines[i] && valid; i++)
     {
@@ -55,6 +55,12 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         {
             valid = simulation_port_scope(args, count, scopes, body, live);
             scopes += valid;
+        }
+        else if (valid && (!strcmp(args[0], "rgb-display") || !strcmp(args[0], "lvds-display") ||
+                           !strcmp(args[0], "hdmi-display")))
+        {
+            valid = rasters < 4 && simulation_port_raster(args, count, body, connections, ports);
+            rasters += valid;
         }
         else if (valid && !strcmp(args[0], "slider"))
             valid = simulation_port_slider(args, count, body, connections, ports, live);
@@ -267,6 +273,8 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         }
         g_list_free(instances);
         g_string_append_printf(body, "%s dut(%s);\n", module, connections->str);
+        if (rasters && !explicit_duration)
+            duration = 40000000;
         if (trigger->len)
             g_string_append(body, "// GEANY-CAPTURE-TRIGGER\n");
         g_string_append_printf(

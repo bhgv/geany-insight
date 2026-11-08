@@ -110,6 +110,8 @@ static void simulation_done(GObject *object, GAsyncResult *result, gpointer data
         run->refresh_source = 0;
     }
     gtk_widget_destroy(run->dialog);
+    if (parent)
+        simulation_rasters_show_final(run, parent);
     if (capture && parent)
         show_capture(parent, capture, NULL, run->navigate);
     else if (capture)

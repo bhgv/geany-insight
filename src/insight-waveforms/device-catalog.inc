@@ -16,7 +16,8 @@ typedef enum
     DEVICE_SPI,
     DEVICE_I2C,
     DEVICE_CONSTANT,
-    DEVICE_HEX
+    DEVICE_HEX,
+    DEVICE_RASTER
 } DeviceKind;
 
 static const gchar *const device_kind_names[] = {"Setup",
@@ -29,7 +30,8 @@ static const gchar *const device_kind_names[] = {"Setup",
                                                  "SPI",
                                                  "I²C",
                                                  "Constant signals",
-                                                 "Hex tables"};
+                                                 "Hex tables",
+                                                 "Displays"};
 
 static const gchar *const device_kind_icons[] = {"preferences-system-symbolic",
                                                  "appointment-soon-symbolic",
@@ -41,7 +43,8 @@ static const gchar *const device_kind_icons[] = {"preferences-system-symbolic",
                                                  "network-wired-symbolic",
                                                  "network-transmit-receive-symbolic",
                                                  "insert-text-symbolic",
-                                                 "view-grid-symbolic"};
+                                                 "view-grid-symbolic",
+                                                 "video-display-symbolic"};
 
 typedef struct
 {
@@ -78,6 +81,18 @@ static const DevicePreset device_presets[] = {
      "USART (DUT clock)", DEVICE_UART, (1u << DEVICE_UART)},
     {"usart-clock", "RX=rx|TX=tx|XCK=xck|Clock period ns=20|Sample edge=rise|Console=console",
      "i1|o1|i1", -1, FALSE, "USART (testbench clock)", DEVICE_UART, (1u << DEVICE_UART)},
+    {"rgb-display",
+     "PCLK=pclk|DE=de|VS=vs|Red=r|Green=g|Blue=b|Width=640|Height=480|Color bits=8|VS active=1",
+     "o1|o1|o1|o@8|o@8|o@8", -1, FALSE, "Parallel RGB display", DEVICE_RASTER,
+     (1u << DEVICE_RASTER)},
+    {"lvds-display",
+     "Clock+=lvds_clk_p|D0+=lvds_d0_p|D1+=lvds_d1_p|D2+=lvds_d2_p|D3+ or -=lvds_d3_p|"
+     "Width=640|Height=480|Color bits=8|Mapping=jeida|Bit offset=0|VS active=1",
+     "o1|o1|o1|o1|o1", -1, FALSE, "LVDS display", DEVICE_RASTER, (1u << DEVICE_RASTER)},
+    {"hdmi-display",
+     "Clock+=tmds_clk_p|D0+=tmds_d0_p|D1+=tmds_d1_p|D2+=tmds_d2_p|"
+     "Width=640|Height=480|Color bits=8|Framing=hdmi|Bit offset=0|VS active=1",
+     "o1|o1|o1|o1", -1, FALSE, "HDMI display", DEVICE_RASTER, (1u << DEVICE_RASTER)},
     {"uart", "RX=rx|TX=tx|Baud=115200|Console=console", "i1|o1", -1, FALSE, "UART console", DEVICE_UART,
      (1u << DEVICE_UART)},
     {"parallel-psram",

@@ -229,6 +229,7 @@ libgeany_la_SOURCES += \
 	insight-waveforms/harness-buses.inc \
 	insight-waveforms/harness-models.inc \
 	insight-waveforms/harness-instruments.inc \
+	insight-waveforms/harness-raster.inc \
 	insight-waveforms/harness-generator.inc \
 	insight-waveforms/port-source.inc \
 	insight-waveforms/port-bindings.inc \
@@ -239,6 +240,7 @@ libgeany_la_SOURCES += \
 	insight-waveforms/testbench-preview.inc \
 	insight-waveforms/port-setup.inc \
 	insight-waveforms/source-breakpoints.inc \
+	insight-waveforms/raster-view.inc \
 	insight-waveforms/simulator-process.inc \
 	insight-waveforms/live-output-records.inc \
 	insight-waveforms/signal-snapshots.inc \

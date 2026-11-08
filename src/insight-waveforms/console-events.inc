@@ -218,6 +218,7 @@ static gboolean simulation_refresh_console(gpointer data)
     run->live_output = g_byte_array_new();
     g_cond_signal(&run->live_output_space);
     g_mutex_unlock(&run->lock);
+    simulation_rasters_refresh(run);
 
     const gchar *bytes = (const gchar *)output->data;
     gssize count = output->len;

@@ -18,6 +18,7 @@
 #include <gio/gio.h>
 #include <glib/gstdio.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "insight-waveforms/setup-dialogs.inc"
 #include "insight-waveforms/vcd-parser.inc"
@@ -33,6 +34,7 @@
 #include "insight-waveforms/harness-buses.inc"
 #include "insight-waveforms/harness-models.inc"
 #include "insight-waveforms/harness-instruments.inc"
+#include "insight-waveforms/harness-raster.inc"
 #include "insight-waveforms/harness-generator.inc"
 #include "insight-waveforms/port-source.inc"
 #include "insight-waveforms/port-bindings.inc"
@@ -43,6 +45,7 @@
 #include "insight-waveforms/testbench-preview.inc"
 #include "insight-waveforms/port-setup.inc"
 #include "insight-waveforms/source-breakpoints.inc"
+#include "insight-waveforms/raster-view.inc"
 #include "insight-waveforms/simulator-process.inc"
 #include "insight-waveforms/live-output-records.inc"
 #include "insight-waveforms/signal-snapshots.inc"

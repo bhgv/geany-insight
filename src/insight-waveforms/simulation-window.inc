@@ -62,6 +62,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
             return;
         }
     }
+    simulation_rasters_prepare(run);
     run->dialog =
         gtk_dialog_new_with_buttons("Verilog Simulation", parent,
                                     GTK_DIALOG_DESTROY_WITH_PARENT | (interactive ? 0 : GTK_DIALOG_MODAL),
@@ -149,6 +150,9 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
                                  gtk_label_new(insight_tr("Signal stops")));
         gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), simulation_frame_page(run),
                                  gtk_label_new(insight_tr("Frame values")));
+        if (run->rasters)
+            gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), simulation_raster_notebook(run, FALSE),
+                                     gtk_label_new(insight_tr("Displays")));
         gtk_paned_pack2(GTK_PANED(paned), inspection_tabs, TRUE, FALSE);
         gtk_box_pack_start(GTK_BOX(box), paned, TRUE, TRUE, 0);
         run->live_controls = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
