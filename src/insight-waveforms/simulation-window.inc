@@ -45,6 +45,8 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
     run->compiler = compiler;
     run->runtime = runtime;
     run->include_dir = g_strdup(include_dir);
+    run->settings_directory = g_strdup(settings_directory);
+    run->project = g_strdup(project);
     run->sources = g_strdupv((gchar **)sources);
     run->navigate = navigate;
     run->show_context = show_context;

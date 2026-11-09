@@ -22,6 +22,7 @@ typedef struct
     gchar *compiler, *runtime, *include_dir;
     gchar **sources;
     gchar *port_settings, *port_harness;
+    gchar *settings_directory, *project;
     GPtrArray *port_model_sources;
     GHashTable *port_images;
     GtkWidget *live_devices;
@@ -137,6 +138,8 @@ static void simulation_free(gpointer data)
         g_clear_object(&run->signal_tables[i]);
     g_free(run->settings_path);
     g_free(run->port_settings);
+    g_free(run->settings_directory);
+    g_free(run->project);
     g_free(run->port_harness);
     g_clear_pointer(&run->port_model_sources, g_ptr_array_unref);
     g_clear_pointer(&run->port_images, g_hash_table_unref);

@@ -91,27 +91,35 @@ static void simulation_disable_observer(GtkButton *button, gpointer data)
     simulation_observer_output(run);
 }
 
-/* EN: Offer to reopen the setup for run when diagnostic identifies missing HDL modules.
- * RU: Предлагает открыть настройки run, когда diagnostic сообщает об отсутствующих HDL-модулях. */
-static void simulation_offer_missing_modules(WaveSimulation *run, GtkWindow *parent,
-                                              const gchar *diagnostic)
+/* EN: Offer to restart run after the user reviews diagnostic. parent owns the dialog.
+ * RU: Предлагает перезапустить run после просмотра diagnostic. parent владеет диалогом. */
+static void simulation_offer_restart(WaveSimulation *run, GtkWindow *parent,
+                                     const gchar *diagnostic)
 {
-    if (!run->port_settings ||
-        (!strstr(diagnostic, "Unknown module type:") && !strstr(diagnostic, "These modules were missing:")))
-        return;
-
+    gboolean missing = strstr(diagnostic, "Unknown module type:") ||
+                       strstr(diagnostic, "These modules were missing:");
+    const gchar *title = missing ? insight_tr("The Verilog design has missing modules.")
+                                 : insight_tr("The Verilog run ended with an error.");
     GtkWidget *dialog = gtk_message_dialog_new(parent, GTK_DIALOG_DESTROY_WITH_PARENT,
-        GTK_MESSAGE_WARNING, GTK_BUTTONS_NONE, "%s", insight_tr("The Verilog design has missing modules."));
+        GTK_MESSAGE_WARNING, GTK_BUTTONS_NONE, "%s", title);
     gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog), "%s",
-        insight_tr("See Messages for module names and source locations. Open Port Signals to add a simulation source or configure a replacement."));
+        insight_tr("See Messages for details and source locations. Save any source corrections, then restart with the same sources."));
     gtk_dialog_add_buttons(GTK_DIALOG(dialog), insight_tr("_Close"), GTK_RESPONSE_CLOSE,
-                           insight_tr("Edit Test Devices…"), GTK_RESPONSE_ACCEPT, NULL);
+                           run->port_settings ? insight_tr("Review Setup and Restart…")
+                                              : insight_tr("_Restart"), GTK_RESPONSE_ACCEPT, NULL);
     g_object_ref_sink(dialog);
     gint response = insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
     g_object_unref(dialog);
     if (response == GTK_RESPONSE_ACCEPT)
-        simulation_edit_ports(parent, run->port_settings, run, NULL, NULL, NULL);
+    {
+        gchar *bin = g_path_get_dirname(run->compiler);
+        insight_waveforms_simulate(parent, bin, run->include_dir,
+                                    (const gchar *const *)run->sources, run->interactive,
+                                    run->navigate, run->show_context, run->open_location,
+                                    run->settings_directory, run->project, run->port_settings != NULL);
+        g_free(bin);
+    }
 }
 
 /* EN: Finish the simulation task in result, display its capture or publish diagnostics.
@@ -145,7 +153,7 @@ static void simulation_done(GObject *object, GAsyncResult *result, gpointer data
     else if (parent && error && !g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
     {
         msgwin_debugger_report(error->message, run->include_dir, NULL);
-        simulation_offer_missing_modules(run, parent, error->message);
+        simulation_offer_restart(run, parent, error->message);
     }
     g_clear_error(&error);
     g_clear_object(&parent);
