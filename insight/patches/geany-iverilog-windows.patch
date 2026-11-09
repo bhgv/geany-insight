@@ -269,3 +269,16 @@ index 352ab9f..dac6da2 100644
        delete des;
        EOC_cleanup();
        return rtn;
+--- a/lexor.lex
++++ b/lexor.lex
+@@ -196,6 +196,9 @@
+ "/*" { comment_enter = YY_START; BEGIN(CCOMMENT); }
+ <CCOMMENT>.    { ; }
+   /* Check for a possible nested comment. */
+-<CCOMMENT>"/*" { VLerror(yylloc, "error: Possible nested comment."); }
++<CCOMMENT>"/*" {
++    /* A second opener is text; the first closing delimiter still ends the comment. */
++    VLwarn(yylloc, "warning: Possible nested comment; the first */ ends the comment.");
++}
+ <CCOMMENT>\n   { yylloc.first_line += 1; }
+ <CCOMMENT>"*/" { BEGIN(comment_enter); }

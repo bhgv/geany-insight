@@ -46,7 +46,24 @@ static void simulation_process_diagnostic(GError **error, const gchar *stage,
 
     gchar *message = output ? g_utf8_make_valid(output->str, output->len) : NULL;
     if (message && *g_strstrip(message))
-        g_string_append_printf(report, "\nProcess output (stdout and stderr):\n%s", message);
+    {
+        g_string_append(report, "\nProcess output (stdout and stderr):");
+        gchar **lines = g_strsplit(message, "\n", -1);
+        GHashTable *seen = g_hash_table_new(g_str_hash, g_str_equal);
+        guint repeated = 0;
+        for (guint i = 0; lines[i]; ++i)
+        {
+            gchar *line = g_strchomp(lines[i]);
+            if (*line && !g_hash_table_add(seen, line))
+                ++repeated;
+            else
+                g_string_append_printf(report, "\n%s", line);
+        }
+        if (repeated)
+            g_string_append_printf(report, "\nRepeated output lines omitted: %u.", repeated);
+        g_hash_table_unref(seen);
+        g_strfreev(lines);
+    }
     else
         g_string_append(report, "\nProcess output: none.");
     if (message && strstr(message, "Unknown module type:"))
