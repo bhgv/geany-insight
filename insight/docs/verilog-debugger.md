@@ -9,11 +9,11 @@ Use **Debug Verilog Testbench…** to select several files when the design
 and its testbench are in separate files. **Run Verilog Testbench…** runs
 the selected files without stopping at debugger prompts.
 
-In **Verilog Simulation**, select a source line and add a breakpoint.
-Use **Continue**, **Step HDL**, **Step Current Process** and **Next Tick**
-to move through execution. **Process Values** displays the selected
-process or frame. **Load Lua Observer…** opens an observer script.
-Simulator messages and commands appear in the embedded console.
+The **Verilog Simulation** window keeps pause, continue and stepping above
+the tabs. Open **Source breakpoints** to select a source file and line.
+**Live Port I/O** holds virtual controls and measurements. Use **Processes
+and memory** or **Inspection tools** for additional commands, and
+**Simulator log** for VVP output.
 
 **Preview Waveform** opens the current capture. In the waveform window,
 open **Signal Map → HDL Uses…**. **Connections** shows data paths, **Conditions** shows guards, and **Clock / events** shows edge and event dependencies. The last two tabs show the originating signal in **From signal**. Use **Open Source** or **Select Track** from any tab. **VCD Waveforms…** opens an existing recording.
@@ -24,7 +24,7 @@ Enter a literal bit or slice such as `[2]`, `[7:4]`, or `[4 +: 4]` and click **A
 
 From **Signal Watch** in the waveform preview, select a row and click **Watch graph**. While the simulator is paused, you can also enter a full hierarchy such as `tb.dut.count` in **Signal or scope** and click **Watch graph**. The graph shows nets and variables indexed from the project HDL.
 
-On the right of the debugger, open **HDL Signals**. The **Ports**, **Nets** and **Registers** tables show the current editor file's elaborated signals at the latest stop. Click a column heading to sort. The search field accepts a regular expression and checks the name and value. Right-click a table to select binary, Verilog binary, C or Verilog hexadecimal, unsigned decimal or character display. A single click shows the declaration and nearby lines. Double-click a name to jump to its declaration. Right-click a row and choose **Watch graph** to inspect its dependencies. The table retains the selected signal across snapshots while that signal matches the filter. The **Changed** column compares the four-state value against the previous snapshot. **Changed only** combines with the name and value search. The first snapshot is the baseline.
+In the debugger, open **HDL Signals**. The **Ports**, **Nets** and **Registers** tables show the current editor file's elaborated signals at the latest stop. Click a column heading to sort. The search field accepts a regular expression and checks the name and value. Right-click a table to select binary, Verilog binary, C or Verilog hexadecimal, unsigned decimal or character display. A single click shows the declaration and nearby lines. Double-click a name to jump to its declaration. Right-click a row and choose **Watch graph** to inspect its dependencies. The table retains the selected signal across snapshots while that signal matches the filter. The **Changed** column compares the four-state value against the previous snapshot. **Changed only** combines with the name and value search. The first snapshot is the baseline.
 
 At a breakpoint or after **Pause**, double-click a value in **Registers**. Edit it and press **Enter** or leave the cell to write it. **Ctrl+Z** restores the original text during the edit, and **Esc** cancels. Enter binary bits including `X` and `Z`, a C hexadecimal literal like `0x0f`, a sized Verilog literal like `8'h0f`, or a quoted character like `'A'`. In unsigned decimal view, plain digits are decimal. The simulator remains paused and refreshes the table from its actual values. A later HDL assignment can overwrite the deposit. Ports and nets are read-only. Automatic locals and memory words are outside this operation. The tables require the updated bundled VVP bridge.
 

@@ -18,7 +18,8 @@ static void simulation_live_input(GtkButton *button, gpointer data)
         gchar *basename = g_strdup_printf("geany-input-%s", port);
         gchar *path = g_build_filename(directory, basename, NULL);
         if (!g_file_set_contents(path, bits, -1, NULL))
-            gtk_widget_set_tooltip_text(run->live_port_send, "Could not update the simulation input.");
+            gtk_widget_set_tooltip_text(run->live_port_send,
+                                        insight_tr("Could not update the simulation input."));
         g_free(path);
         g_free(basename);
     }
@@ -124,7 +125,7 @@ static gboolean simulation_control_write(WaveSimulation *run, GtkWidget *widget,
     gchar *text = g_strdup_printf("%u\n", value);
     gboolean written = g_file_set_contents(path, text, -1, NULL);
     if (!written)
-        gtk_widget_set_tooltip_text(widget, "Could not update the simulation input.");
+        gtk_widget_set_tooltip_text(widget, insight_tr("Could not update the simulation input."));
     g_free(text);
     g_free(path);
     g_free(name);
@@ -429,10 +430,8 @@ static void simulation_live_scopes(WaveSimulation *run, GtkWidget *contents)
 static void simulation_live_panel(WaveSimulation *run, GtkWidget *box)
 {
     const gchar *marker = "$fopen(\"geany-input-";
-    GtkWidget *panel = gtk_expander_new("Live Port I/O");
     GtkWidget *contents = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-    gtk_container_add(GTK_CONTAINER(panel), contents);
-    gtk_box_pack_start(GTK_BOX(box), panel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), contents, FALSE, FALSE, 0);
     run->live_port_samples = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     simulation_live_controls(run, contents);
     simulation_live_sliders(run, contents);
@@ -478,5 +477,4 @@ static void simulation_live_panel(WaveSimulation *run, GtkWidget *box)
     gtk_widget_set_size_request(scroll, -1, 105);
     gtk_container_add(GTK_CONTAINER(scroll), run->live_port_display);
     gtk_box_pack_start(GTK_BOX(contents), scroll, TRUE, TRUE, 0);
-    gtk_expander_set_expanded(GTK_EXPANDER(panel), TRUE);
 }

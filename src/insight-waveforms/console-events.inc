@@ -311,7 +311,8 @@ static gboolean simulation_refresh_console(gpointer data)
                         : g_strdup(insight_tr(run->signal_manual_stop ? "Paused by user"
                                               : run->trace_file       ? "Paused at HDL source"
                                               : paused                ? "Simulator paused"
-                                                                      : ""));
+                                                                      : running               ? "Simulator running"
+                                                                      : "Compiling Verilog…"));
     if (strcmp(gtk_label_get_text(GTK_LABEL(run->pause_reason)), reason))
         gtk_label_set_text(GTK_LABEL(run->pause_reason), reason);
     g_free(reason);

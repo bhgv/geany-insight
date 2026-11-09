@@ -1157,6 +1157,20 @@ static gboolean drive_debugger(gpointer data)
             GtkTreeView *tree = GTK_TREE_VIEW(widget);
             GtkWidget *page = gtk_widget_get_parent(widget);
             GtkNotebook *tabs = GTK_NOTEBOOK(gtk_widget_get_parent(page));
+            GtkWidget *outer = find_control(simulation, "insight-verilog-inspection-tabs");
+            if (!GTK_IS_NOTEBOOK(outer))
+                return fail_timeout(NULL);
+            GtkWidget *signal_page = widget;
+            while (gtk_widget_get_parent(signal_page) != outer)
+            {
+                signal_page = gtk_widget_get_parent(signal_page);
+                if (!signal_page)
+                    return fail_timeout(NULL);
+            }
+            gint signal_index = gtk_notebook_page_num(GTK_NOTEBOOK(outer), signal_page);
+            if (signal_index < 0)
+                return fail_timeout(NULL);
+            gtk_notebook_set_current_page(GTK_NOTEBOOK(outer), signal_index);
             gtk_notebook_set_current_page(tabs, gtk_notebook_page_num(tabs, page));
             GtkTreePath *row = register_row(tree, "counter_tb.dut.count", "0001");
             if (!row)

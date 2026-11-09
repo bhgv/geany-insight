@@ -4,6 +4,17 @@
  * RU: Окно отладчика, органы управления, вкладки и запуск задачи.
  */
 
+/* EN: Add contents to tabs in a scrollable page named title. The notebook owns it.
+ * RU: Добавляет contents в прокручиваемую вкладку title. Вкладкой владеет tabs. */
+static void simulation_add_tab(GtkWidget *tabs, GtkWidget *contents, const gchar *title)
+{
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
+                                   GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_container_add(GTK_CONTAINER(scroll), contents);
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), scroll, gtk_label_new(insight_tr(title)));
+}
+
 /* EN: Launch Icarus from bin with include_dir and sources, owned by the caller.
  * parent owns setup dialogs, interactive enables debugger controls, navigate and
  * open_location handle HDL navigation, settings_directory and project key saved
@@ -72,20 +83,28 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
                                     "_Cancel", GTK_RESPONSE_CANCEL, NULL);
     simulation_dialog_tools(
         run->dialog,
-        "Use the debugger controls to continue, step or pause. Port Signals opens saved setup "
-        "for the next run. Live Port I/O shows configured controls and measurements.",
-        "Кнопки отладчика позволяют продолжить, шагнуть или поставить паузу. Port Signals "
-        "открывает настройки следующего запуска. В Live Port I/O доступны органы управления и "
-        "измерения.");
+        "Use the top toolbar to continue, step or pause. Switch tabs to inspect signals, "
+        "configure breakpoints or use test devices.",
+        "Верхняя панель позволяет продолжить, выполнить шаг или поставить симуляцию на паузу. "
+        "Переключайте вкладки для просмотра сигналов, настройки точек останова и работы с устройствами.");
     g_object_ref_sink(run->dialog);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(run->dialog));
-    GtkWidget *label =
-        gtk_label_new(interactive ? "Compiling. Controls become available when vvp is paused."
-                                  : "Compiling and running the Verilog testbench…");
-    gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 12);
+    if (!interactive)
+        gtk_box_pack_start(GTK_BOX(box),
+                          gtk_label_new(insight_tr("Compiling and running the Verilog testbench…")),
+                          FALSE, FALSE, 12);
     if (interactive)
     {
-        gtk_window_set_default_size(GTK_WINDOW(run->dialog), 1050, 590);
+        GdkRectangle area = {0, 0, 1024, 768};
+        GdkDisplay *display = gtk_widget_get_display(run->dialog);
+        GdkWindow *owner = parent ? gtk_widget_get_window(GTK_WIDGET(parent)) : NULL;
+        GdkMonitor *monitor = owner ? gdk_display_get_monitor_at_window(display, owner)
+                                    : gdk_display_get_primary_monitor(display);
+        if (monitor)
+            gdk_monitor_get_workarea(monitor, &area);
+        gtk_window_set_default_size(GTK_WINDOW(run->dialog), MIN(1050, area.width * 9 / 10),
+                                    MIN(590, area.height * 8 / 10));
+        gtk_window_set_position(GTK_WINDOW(run->dialog), GTK_WIN_POS_CENTER_ON_PARENT);
         run->protocol_line = g_string_new(NULL);
         run->live_output = g_byte_array_new();
         run->breakpoints = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
@@ -102,7 +121,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         simulation_load_settings(run);
         GtkWidget *running_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
         gtk_box_pack_start(GTK_BOX(box), running_actions, FALSE, FALSE, 0);
-        run->pause_reason = gtk_label_new("");
+        run->pause_reason = gtk_label_new(insight_tr("Compiling Verilog…"));
         gtk_label_set_xalign(GTK_LABEL(run->pause_reason), 0);
         gtk_box_pack_start(GTK_BOX(box), run->pause_reason, FALSE, FALSE, 0);
         if (run->port_settings)
@@ -111,8 +130,6 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
             g_signal_connect(ports, "clicked", G_CALLBACK(simulation_port_settings), run);
             gtk_box_pack_start(GTK_BOX(running_actions), ports, FALSE, FALSE, 0);
         }
-        if (run->port_harness && strstr(run->port_harness, "task geany_live_yield;"))
-            simulation_live_panel(run, box);
         gboolean synchronous_console = run->port_harness &&
             strstr(run->port_harness, "// GEANY USART CONSOLE\n");
         if (synchronous_console ||
@@ -134,37 +151,34 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         run->console = gtk_text_view_new();
         if (run->moved_points || run->unresolved_records->len)
         {
-            gchar *summary = g_strdup_printf("Restored points: %u moved, %u unresolved.\n",
+            gchar *summary = g_strdup_printf(insight_tr("Restored points: %u moved, %u unresolved.\n"),
                                              run->moved_points, run->unresolved_records->len);
             gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->console)), summary, -1);
             g_free(summary);
         }
         gtk_text_view_set_monospace(GTK_TEXT_VIEW(run->console), TRUE);
         gtk_text_view_set_editable(GTK_TEXT_VIEW(run->console), FALSE);
-        GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
-        gtk_container_add(GTK_CONTAINER(scroll), run->console);
-        GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
-        gtk_paned_pack1(GTK_PANED(paned), scroll, TRUE, FALSE);
         GtkWidget *inspection_tabs = gtk_notebook_new();
+        gtk_notebook_set_scrollable(GTK_NOTEBOOK(inspection_tabs), TRUE);
         gtk_widget_set_name(inspection_tabs, "insight-verilog-inspection-tabs");
-        gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), simulation_signal_tables(run),
-                                 gtk_label_new(insight_tr("HDL Signals")));
-        gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), simulation_signal_stop_page(run),
-                                 gtk_label_new(insight_tr("Signal stops")));
-        gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), simulation_frame_page(run),
-                                 gtk_label_new(insight_tr("Frame values")));
+        simulation_add_tab(inspection_tabs, run->console, "Simulator log");
+        if (run->port_harness && strstr(run->port_harness, "task geany_live_yield;"))
+        {
+            GtkWidget *ports = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+            simulation_live_panel(run, ports);
+            simulation_add_tab(inspection_tabs, ports, "Live Port I/O");
+        }
+        simulation_add_tab(inspection_tabs, simulation_signal_tables(run), "HDL Signals");
+        simulation_add_tab(inspection_tabs, simulation_signal_stop_page(run), "Signal stops");
+        simulation_add_tab(inspection_tabs, simulation_frame_page(run), "Frame values");
         if (run->rasters)
-            gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), simulation_raster_notebook(run, FALSE),
-                                     gtk_label_new(insight_tr("Displays")));
+            simulation_add_tab(inspection_tabs, simulation_raster_notebook(run, FALSE), "Displays");
         if (run->port_harness && strstr(run->port_harness, "$geany_lua_console_poll("))
         {
             run->lua_terminals = gtk_notebook_new();
             gtk_notebook_set_scrollable(GTK_NOTEBOOK(run->lua_terminals), TRUE);
-            gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), run->lua_terminals,
-                                     gtk_label_new(insight_tr("Lua terminals")));
+            simulation_add_tab(inspection_tabs, run->lua_terminals, "Lua terminals");
         }
-        gtk_paned_pack2(GTK_PANED(paned), inspection_tabs, TRUE, FALSE);
-        gtk_box_pack_start(GTK_BOX(box), paned, TRUE, TRUE, 0);
         run->live_controls = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
         gtk_box_pack_start(GTK_BOX(box), run->live_controls, FALSE, FALSE, 6);
         GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
@@ -191,8 +205,13 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
             gtk_box_pack_start(GTK_BOX(run->source_step_controls), button, FALSE, FALSE, 0);
         }
         gtk_widget_set_sensitive(run->source_step_controls, FALSE);
+        gtk_box_pack_start(GTK_BOX(box), inspection_tabs, TRUE, TRUE, 0);
+        GtkWidget *process_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+        simulation_add_tab(inspection_tabs, process_page, "Processes and memory");
+        g_object_bind_property(run->live_controls, "sensitive", process_page, "sensitive",
+                               G_BINDING_SYNC_CREATE);
         run->process_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-        gtk_box_pack_start(GTK_BOX(run->live_controls), run->process_controls, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(process_page), run->process_controls, FALSE, FALSE, 0);
         GtkWidget *processes = gtk_button_new_with_label("Processes");
         g_object_set_data(G_OBJECT(processes), "vvp-command", "geany-processes\n");
         g_signal_connect(processes, "clicked", G_CALLBACK(simulation_send_command), run);
@@ -211,7 +230,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         gtk_box_pack_start(GTK_BOX(run->process_controls), process_values, FALSE, FALSE, 0);
         gtk_widget_set_sensitive(run->process_controls, FALSE);
         run->frame_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-        gtk_box_pack_start(GTK_BOX(run->live_controls), run->frame_controls, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(process_page), run->frame_controls, FALSE, FALSE, 0);
         run->frame_depth = gtk_spin_button_new_with_range(0, 63, 1);
         gtk_box_pack_start(GTK_BOX(run->frame_controls), run->frame_depth, FALSE, FALSE, 0);
         GtkWidget *frame = gtk_button_new_with_label("Select Frame");
@@ -222,12 +241,17 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         gtk_entry_set_placeholder_text(GTK_ENTRY(run->memory_word), "name[index]");
         gtk_box_pack_start(GTK_BOX(run->frame_controls), run->memory_word, TRUE, TRUE, 0);
         GtkWidget *memory = gtk_button_new_with_label("Read Memory Word");
-        gtk_widget_set_tooltip_text(memory, "Read an element of memory, a dynamic array, or a queue");
+        gtk_widget_set_tooltip_text(memory,
+                                    insight_tr("Read an element of memory, a dynamic array, or a queue"));
         g_signal_connect(memory, "clicked", G_CALLBACK(simulation_read_memory_word), run);
         gtk_box_pack_start(GTK_BOX(run->frame_controls), memory, FALSE, FALSE, 0);
         gtk_widget_set_sensitive(run->frame_controls, FALSE);
         GtkWidget *inspection = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-        gtk_box_pack_start(GTK_BOX(run->live_controls), inspection, FALSE, FALSE, 0);
+        GtkWidget *tools_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+        simulation_add_tab(inspection_tabs, tools_page, "Inspection tools");
+        g_object_bind_property(run->live_controls, "sensitive", tools_page, "sensitive",
+                               G_BINDING_SYNC_CREATE);
+        gtk_box_pack_start(GTK_BOX(tools_page), inspection, FALSE, FALSE, 0);
         run->signal_name = gtk_entry_new();
         gtk_entry_set_max_length(GTK_ENTRY(run->signal_name), 128);
         gtk_entry_set_placeholder_text(GTK_ENTRY(run->signal_name), "Signal or scope");
@@ -249,19 +273,25 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         g_signal_connect(graph, "clicked", G_CALLBACK(simulation_watch_graph), run);
         gtk_box_pack_start(GTK_BOX(inspection), graph, FALSE, FALSE, 0);
 
+        GtkWidget *trace_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        gtk_box_pack_start(GTK_BOX(tools_page), trace_actions, FALSE, FALSE, 0);
         GtkWidget *preview = gtk_button_new_with_label("Preview Waveform");
         g_signal_connect(preview, "clicked", G_CALLBACK(simulation_preview), run);
-        gtk_box_pack_start(GTK_BOX(actions), preview, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(trace_actions), preview, FALSE, FALSE, 0);
         GtkWidget *trace = gtk_button_new_with_label("Trace On");
         g_object_set_data(G_OBJECT(trace), "vvp-command", "trace on\n");
         g_signal_connect(trace, "clicked", G_CALLBACK(simulation_send_command), run);
-        gtk_box_pack_start(GTK_BOX(actions), trace, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(trace_actions), trace, FALSE, FALSE, 0);
         GtkWidget *trace_off = gtk_button_new_with_label("Trace Off");
         g_object_set_data(G_OBJECT(trace_off), "vvp-command", "trace off\n");
         g_signal_connect(trace_off, "clicked", G_CALLBACK(simulation_send_command), run);
-        gtk_box_pack_start(GTK_BOX(actions), trace_off, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(trace_actions), trace_off, FALSE, FALSE, 0);
         run->breakpoint_controls = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
-        gtk_box_pack_start(GTK_BOX(run->live_controls), run->breakpoint_controls, FALSE, FALSE, 0);
+        GtkWidget *breakpoint_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+        simulation_add_tab(inspection_tabs, breakpoint_page, "Source breakpoints");
+        g_object_bind_property(run->live_controls, "sensitive", breakpoint_page, "sensitive",
+                               G_BINDING_SYNC_CREATE);
+        gtk_box_pack_start(GTK_BOX(breakpoint_page), run->breakpoint_controls, FALSE, FALSE, 0);
         GtkWidget *location = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
         gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), location, FALSE, FALSE, 0);
         run->breakpoint_file = gtk_combo_box_text_new();
@@ -289,10 +319,12 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         GtkWidget *list_points = gtk_button_new_with_label("List Points");
         g_object_set_data(G_OBJECT(list_points), "vvp-command", "geany-list\n");
         g_signal_connect(list_points, "clicked", G_CALLBACK(simulation_send_command), run);
-        gtk_box_pack_start(GTK_BOX(location), list_points, FALSE, FALSE, 0);
+        GtkWidget *point_lists = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), point_lists, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(point_lists), list_points, FALSE, FALSE, 0);
         GtkWidget *unresolved = gtk_button_new_with_label("Unresolved Points");
         g_signal_connect(unresolved, "clicked", G_CALLBACK(simulation_list_unresolved), run);
-        gtk_box_pack_start(GTK_BOX(location), unresolved, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(point_lists), unresolved, FALSE, FALSE, 0);
         GtkWidget *rule = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
         gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), rule, FALSE, FALSE, 0);
         run->rule_signal = gtk_entry_new();
@@ -329,8 +361,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         run->lua_watches = gtk_label_new(NULL);
         gtk_label_set_selectable(GTK_LABEL(run->lua_watches), TRUE);
         gtk_label_set_xalign(GTK_LABEL(run->lua_watches), 0);
-        gtk_notebook_append_page(GTK_NOTEBOOK(inspection_tabs), run->lua_watches,
-                                 gtk_label_new(insight_tr("Lua watches")));
+        simulation_add_tab(inspection_tabs, run->lua_watches, "Lua watches");
         gtk_widget_set_sensitive(run->breakpoint_controls, FALSE);
         g_object_set_data(G_OBJECT(run->dialog), "insight-live-simulation", run);
         gtk_widget_set_sensitive(run->live_controls, FALSE);

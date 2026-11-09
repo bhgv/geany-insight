@@ -3007,3 +3007,69 @@ Save rule	Сохранить правило
 Paused by user	Пауза по кнопке
 Paused at HDL source	Пауза на строке HDL
 Simulator paused	Симулятор на паузе
+
+# Verilog simulation window
+Verilog Simulation	Симуляция Verilog
+Icarus Verilog is unavailable. Install the editor with its simulator.	Icarus Verilog недоступен. Установите редактор вместе с симулятором.
+Compiling Verilog…	Компиляция Verilog…
+Compiling and running the Verilog testbench…	Компиляция и запуск тестбенча Verilog…
+Simulator running	Симуляция выполняется
+Port Signals…	Настройка портов…
+UART Console…	Консоль UART…
+USART Console…	Консоль USART…
+UART Console	Консоль UART
+USART Console	Консоль USART
+Pause	Пауза
+Open HDL Line	Открыть строку HDL
+Restored points: %u moved, %u unresolved.\n	Восстановление точек останова: перенесено %u, не найдено %u.\n
+Simulator log	Журнал симуляции
+Live Port I/O	Устройства
+Frame values	Значения кадра
+Lua terminals	Терминалы Lua
+Processes and memory	Процессы и память
+Inspection tools	Просмотр и трассировка
+Source breakpoints	Точки останова в HDL
+Step Event	Шаг по событию
+Time	Время
+Finish	Завершить
+Step HDL	Шаг по HDL
+Step Current Process	Шаг процесса
+Next Tick	Следующий такт
+Processes	Процессы
+Process ID	ID процесса
+Select Process	Выбрать процесс
+Process Values	Значения процесса
+Select Frame	Выбрать кадр
+name[index]	имя[индекс]
+Read Memory Word	Прочитать слово памяти
+Read an element of memory, a dynamic array, or a queue	Прочитать элемент памяти, динамического массива или очереди
+Signal or scope	Сигнал или область видимости
+Read Signal	Прочитать сигнал
+Enter Scope	Войти в область
+Parent Scope	Родительская область
+Preview Waveform	Осциллограмма
+Trace On	Включить трассировку
+Trace Off	Выключить трассировку
+Set Point	Добавить точку
+Remove Point	Удалить точку
+Clear Points	Удалить все точки
+List Points	Список точек
+Unresolved Points	Ненайденные точки
+Full signal name	Полное имя сигнала
+Binary value	Двоичное значение
+Hits	Срабатывания
+Log and continue	Записать и продолжить
+Lua decides	Условие в Lua
+Load Lua Observer…	Загрузить наблюдатель Lua…
+Reload Saved Lua	Перезагрузить Lua
+Disable Lua	Отключить Lua
+Text to send; press Enter	Введите текст и нажмите Enter
+Live Plots	Графики сигналов
+Waiting for samples…	Ожидание отсчётов…
+Binary value (0, 1, x, z)	Двоичное значение (0, 1, x, z)
+Apply Input	Подать значение
+Waiting for port samples…	Ожидание данных с портов…
+Could not update the simulation input.	Не удалось обновить вход симуляции.
+_Cancel	_Отмена
+_Close	_Закрыть
+Displays	Дисплеи

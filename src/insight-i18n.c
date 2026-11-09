@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Load and apply the editor's English and Russian interface catalogs.
+ * RU: Загружает и применяет английский и русский каталоги интерфейса редактора. */
 #include "geany.h"
 #include "insight-i18n.h"
 #include "insight-help.h"
@@ -190,8 +192,35 @@ void insight_i18n_refresh(void) {
  insight_help_locale_changed();insight_window_list_locale_changed();insight_symbol_views_locale_changed();insight_workbench_locale_changed();
 }
 static gboolean shown(GSignalInvocationHint *hint,guint count,const GValue *values,gpointer data) { (void)hint;(void)data;if(count) insight_i18n_apply(g_value_get_object(values));return TRUE; }
+/* EN: Choose the Russian catalog for a Russian language or former USSR locale name.
+ * RU: Выбирает русский каталог для русского языка или локали страны бывшего СССР. */
+static gboolean russian_for_locale(const gchar *locale)
+{
+    if (!locale)
+        return FALSE;
+    if (g_str_has_prefix(locale, "ru") &&
+        (locale[2] == '\0' || strchr("_-.@", locale[2])))
+        return TRUE;
+
+    const gchar *territory = strpbrk(locale, "_-");
+    if (!territory)
+        return FALSE;
+    territory++;
+    const gchar *regions[] = {
+        "AM", "AZ", "BY", "EE", "GE", "KZ", "KG", "LV",
+        "LT", "MD", "RU", "TJ", "TM", "UA", "UZ"
+    };
+    for (guint i = 0; i < G_N_ELEMENTS(regions); i++)
+        if (!g_ascii_strncasecmp(territory, regions[i], 2) &&
+            (territory[2] == '\0' || strchr(".@", territory[2])))
+            return TRUE;
+    return FALSE;
+}
+
+/* EN: Initialize the catalog, saved language preference and widget translation hook.
+ * RU: Загружает каталог, сохранённую настройку языка и обработчик перевода виджетов. */
 void insight_i18n_init(void) {
- const gchar * const *names=g_get_language_names();system_russian=names && names[0] && g_str_has_prefix(names[0],"ru");settings=g_build_filename(app->configdir,"insight","interface.conf",NULL);GKeyFile *key=g_key_file_new();if(g_key_file_load_from_file(key,settings,G_KEY_FILE_NONE,NULL)) mode=g_key_file_get_string(key,"interface","language",NULL);g_key_file_free(key);if(!mode || (strcmp(mode,"auto") && strcmp(mode,"ru") && strcmp(mode,"en"))) { g_free(mode);mode=g_strdup("auto"); }g_atomic_int_set(&russian,!strcmp(mode,"ru") || (!strcmp(mode,"auto") && system_russian));g_setenv("LANGUAGE",russian ? "ru":"en",TRUE);
+ const gchar * const *names=g_get_language_names();system_russian=names && russian_for_locale(names[0]);settings=g_build_filename(app->configdir,"insight","interface.conf",NULL);GKeyFile *key=g_key_file_new();if(g_key_file_load_from_file(key,settings,G_KEY_FILE_NONE,NULL)) mode=g_key_file_get_string(key,"interface","language",NULL);g_key_file_free(key);if(!mode || (strcmp(mode,"auto") && strcmp(mode,"ru") && strcmp(mode,"en"))) { g_free(mode);mode=g_strdup("auto"); }g_atomic_int_set(&russian,!strcmp(mode,"ru") || (!strcmp(mode,"auto") && system_russian));g_setenv("LANGUAGE",russian ? "ru":"en",TRUE);
 #ifdef LC_MESSAGES
  setlocale(LC_MESSAGES,"");
 #endif
