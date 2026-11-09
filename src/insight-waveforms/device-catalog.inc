@@ -62,8 +62,17 @@ static const DevicePreset device_presets[] = {
      (1u << DEVICE_TIMING)},
     {"pulse", "Port=reset|Start (ns)=10|Length (ns)=100|Active level=1", "i1", -1, FALSE, "Timed pulse",
      DEVICE_TIMING, (1u << DEVICE_TIMING)},
-    {"pll-model", "Module=pll|Input clock=clk_in|Active-high reset=reset|Output clock=clk_out|Locked=locked|Half-period (ps)=5000|Lock input edges=4",
+    {"clock-wave", "Clock port=clk|Frequency=100MHz|High (µs or -)=-|Low (µs or -)=-",
+     "i1", -1, FALSE, "Test clock frequency and timing", DEVICE_TIMING, 1u << DEVICE_TIMING},
+    {"pll-multi", "Module=pll|Input clock=clk_in|Reset or -=-|Locked or -=-|Lock input edges=4"
+     "|Output 0=clk_o0|Frequency 0=100MHz|High 0 (µs)=-|Low 0 (µs)=-"
+     "|Output 1=-|Frequency 1=100MHz|High 1 (µs)=-|Low 1 (µs)=-"
+     "|Output 2=-|Frequency 2=100MHz|High 2 (µs)=-|Low 2 (µs)=-"
+     "|Output 3=-|Frequency 3=100MHz|High 3 (µs)=-|Low 3 (µs)=-"
+     "|Output 4=-|Frequency 4=100MHz|High 4 (µs)=-|Low 4 (µs)=-",
      "", -1, FALSE, "PLL replacement", DEVICE_TIMING, 1u << DEVICE_TIMING},
+    {"pll-model", "Module=pll|Input clock=clk_in|Active-high reset=reset|Output clock=clk_out|Locked=locked|Half-period (ps)=5000|Lock input edges=4",
+     "", -1, FALSE, "PLL replacement (legacy)", DEVICE_TIMING, 1u << DEVICE_TIMING},
     {"button", "Port=button|Idle level=0|Length (ns)=100", "i1", -1, FALSE, "Push button", DEVICE_INPUT,
      (1u << DEVICE_INPUT)},
     {"switch", "Port=enable|Initial level=0", "i1", -1, FALSE, "Switch", DEVICE_INPUT,

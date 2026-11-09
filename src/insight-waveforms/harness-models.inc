@@ -133,6 +133,128 @@ static gboolean simulation_model_rule(gchar **args, gint count, GHashTable *mode
     return TRUE;
 }
 
+/* EN: Resolve frequency and optional high/low overrides into positive picoseconds.
+ * RU: Переводит frequency и необязательные high/low в положительные пикосекунды ps. */
+static gboolean simulation_clock_phases(const gchar *frequency, const gchar *high,
+                                        const gchar *low, guint64 ps[2])
+{
+    gchar *end;
+    gdouble hz = g_ascii_strtod(frequency, &end);
+    if (end != frequency)
+    {
+        if (!g_ascii_strcasecmp(end, "kHz")) hz *= 1e3;
+        else if (!g_ascii_strcasecmp(end, "MHz")) hz *= 1e6;
+        else if (!g_ascii_strcasecmp(end, "GHz")) hz *= 1e9;
+        else if (*end && g_ascii_strcasecmp(end, "Hz")) hz = 0;
+    }
+    const gchar *levels[] = {high, low};
+    for (guint i = 0; i < 2; ++i)
+    {
+        gdouble duration;
+        if (!strcmp(levels[i], "-"))
+            duration = hz > 0 ? 5e11 / hz : 0;
+        else
+        {
+            duration = g_ascii_strtod(levels[i], &end) * 1e6;
+            if (end == levels[i] || (*end && g_ascii_strcasecmp(end, "us")))
+                return FALSE;
+        }
+        if (!(duration >= 0.5 && duration <= 1e15))
+            return FALSE;
+        ps[i] = (guint64)(duration + 0.5);
+    }
+    return TRUE;
+}
+
+/* EN: Generate a PLL from count args into replacements, rejecting duplicate names.
+ * RU: Генерирует PLL из count аргументов args в replacements, проверяя повторы в names. */
+static gboolean simulation_pll_multi(gchar **args, gint count, GString *replacements,
+                                     GHashTable *names)
+{
+    guint64 cycles;
+    if (count < 10 || count > 26 || (count - 6) % 4 || !simulation_port_name(args[1]) ||
+        g_hash_table_contains(names, args[1]) ||
+        !g_ascii_string_to_unsigned(args[5], 10, 1, 1000000, &cycles, NULL))
+        return FALSE;
+
+    GHashTable *pins = g_hash_table_new(g_str_hash, g_str_equal);
+    gboolean valid = TRUE;
+    guint64 phases[5][2];
+    guint outputs = 0;
+    for (gint i = 2; i < count; i += i < 4 ? 1 : i == 4 ? 2 : 4)
+    {
+        if (i != 2 && !strcmp(args[i], "-"))
+            continue;
+        if (!simulation_port_name(args[i]) || g_str_has_prefix(args[i], "geany_pll_") ||
+            !g_hash_table_add(pins, args[i]))
+        {
+            valid = FALSE;
+            break;
+        }
+        if (i >= 6)
+        {
+            valid = simulation_clock_phases(args[i + 1], args[i + 2], args[i + 3],
+                                             phases[(i - 6) / 4]);
+            if (!valid)
+                break;
+            ++outputs;
+        }
+    }
+    g_hash_table_unref(pins);
+    if (!valid || !outputs)
+        return FALSE;
+
+    gboolean reset = strcmp(args[3], "-") != 0;
+    gboolean locked = strcmp(args[4], "-") != 0;
+    g_hash_table_add(names, g_strdup(args[1]));
+    g_string_append_printf(replacements, "`timescale 1ps/1ps\nmodule %s(input wire %s", args[1], args[2]);
+    if (reset)
+        g_string_append_printf(replacements, ", input wire %s", args[3]);
+    if (locked)
+        g_string_append_printf(replacements, ", output wire %s", args[4]);
+    for (gint i = 6; i < count; i += 4)
+        if (strcmp(args[i], "-"))
+            g_string_append_printf(replacements, ", output wire %s", args[i]);
+    g_string_append(replacements, ");\n  reg geany_pll_locked = 0;\n  integer geany_pll_edges = 0;\n");
+    g_string_append_printf(replacements, "  always @(posedge %s", args[2]);
+    if (reset)
+        g_string_append_printf(replacements, " or posedge %s", args[3]);
+    g_string_append(replacements, ") begin\n");
+    if (reset)
+        g_string_append_printf(replacements,
+            "    if (%s) begin geany_pll_edges <= 0; geany_pll_locked <= 0; end else\n", args[3]);
+    g_string_append_printf(replacements,
+        "    if (!geany_pll_locked) begin\n"
+        "      geany_pll_edges <= geany_pll_edges + 1;\n"
+        "      if (geany_pll_edges + 1 >= %" G_GUINT64_FORMAT ") geany_pll_locked <= 1;\n"
+        "    end\n  end\n", cycles);
+    if (locked)
+        g_string_append_printf(replacements, "  assign %s = geany_pll_locked;\n", args[4]);
+    for (gint i = 6; i < count; i += 4)
+    {
+        if (!strcmp(args[i], "-"))
+            continue;
+        guint id = (i - 6) / 4;
+        g_string_append_printf(replacements,
+            "  reg geany_pll_phase%u = 0;\n"
+            "  assign %s = geany_pll_locked ? geany_pll_phase%u : 1'b0;\n"
+            "  initial forever begin\n"
+            "    wait (geany_pll_locked);\n"
+            "    fork : geany_pll_run%u\n"
+            "      begin forever begin\n"
+            "        #%" G_GUINT64_FORMAT "; geany_pll_phase%u = 1;\n"
+            "        #%" G_GUINT64_FORMAT "; geany_pll_phase%u = 0;\n"
+            "      end end\n"
+            "      begin wait (!geany_pll_locked); end\n"
+            "    join_any\n"
+            "    disable geany_pll_run%u;\n"
+            "    geany_pll_phase%u = 0;\n"
+            "  end\n", id, args[i], id, id, phases[id][1], id, phases[id][0], id, id, id);
+    }
+    g_string_append(replacements, "endmodule\n");
+    return TRUE;
+}
+
 /* EN: Add a functional PLL module from count args to replacements. names tracks duplicates.
  * RU: Добавляет функциональную модель PLL из count аргументов args в replacements.
  * names хранит имена уже определённых замен. */

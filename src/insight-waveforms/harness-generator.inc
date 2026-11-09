@@ -190,6 +190,27 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         else if (valid && (((count == 5 || count == 6) && !strcmp(args[0], "usart")) ||
                            ((count == 6 || count == 7) && !strcmp(args[0], "usart-clock"))))
             valid = simulation_port_usart(args, count, body, connections, ports, live);
+        else if (valid && !strcmp(args[0], "pll-multi"))
+            valid = simulation_pll_multi(args, count, replacements, replacement_names);
+        else if (valid && !strcmp(args[0], "clock-wave"))
+        {
+            guint64 phases[2];
+            valid = count == 5 && g_hash_table_size(ports) < 128 && simulation_port_name(args[1]) &&
+                    !g_hash_table_contains(ports, args[1]) &&
+                    simulation_clock_phases(args[2], args[3], args[4], phases);
+            if (valid)
+            {
+                guint pin = simulation_port_connect(body, connections, ports, args[1], 1, TRUE);
+                g_string_append_printf(body, "geany_test_clock_%u geany_clock_%u(pin%u);\n",
+                                       pin, pin, pin);
+                g_string_append_printf(replacements,
+                    "`timescale 1ps/1ps\n"
+                    "module geany_test_clock_%u(output reg clock_out = 0);\n"
+                    "  initial forever begin #%" G_GUINT64_FORMAT "; clock_out = 1; "
+                    "#%" G_GUINT64_FORMAT "; clock_out = 0; end\n"
+                    "endmodule\n", pin, phases[1], phases[0]);
+            }
+        }
         else if (valid && !strcmp(args[0], "pll-model"))
             valid = simulation_pll_model(args, count, replacements, replacement_names);
         else if (valid && (!strcmp(args[0], "model") || g_str_has_prefix(args[0], "model-")))

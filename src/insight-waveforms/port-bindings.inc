@@ -36,7 +36,7 @@ static guint port_browser_pin_mask(gchar **args, gint argc)
         return 14;
     if (!strcmp(kind, "scope-xy") || !strcmp(kind, "uart"))
         return 6;
-    const gchar *single[] = {"clock",      "clock-hz", "pulse",   "button",    "switch",
+    const gchar *single[] = {"clock",      "clock-hz", "clock-wave", "pulse",   "button",    "switch",
                              "slider",     "led",      "display", "hex-table", "scope",
                              "live-input", "monitor",  "output",  "value",     "bus"};
     for (guint i = 0; i < G_N_ELEMENTS(single); i++)

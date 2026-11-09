@@ -866,3 +866,10 @@ For example, `pll-model clock_ip clk_in reset clk_out locked 5000 4`
 creates a 100 MHz output after four rising input clock edges. The period is
 fixed by the configured half-period in picoseconds. This model covers one
 output and digital reset and lock timing.
+
+Use **PLL replacement** for up to five outputs. Enter `-` for any absent
+reset, lock indication or unused output. Each output accepts a frequency
+such as `100MHz` or a bare number in Hz. High and low overrides are in
+microseconds. A dash uses half the period from the frequency. Both overrides
+can be set independently for an asymmetric clock. The **Test clock frequency
+and timing** preset uses the same timing fields.
