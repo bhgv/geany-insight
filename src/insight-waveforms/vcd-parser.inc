@@ -122,6 +122,7 @@ static Capture *parse_capture(const gchar *bytes, gsize length, GError **error)
     guint events = 0;
     gsize value_bytes = 0;
     gboolean body = FALSE, valid = TRUE;
+    const gchar *failure = NULL;
     gchar *token;
     while (valid && (token = word(&cursor, end)))
     {
@@ -171,6 +172,10 @@ static Capture *parse_capture(const gchar *bytes, gsize length, GError **error)
                     guint64 width;
                     valid = fields->len >= 4 && capture->signals->len < VCD_SIGNALS &&
                             number(fields->pdata[1], &width) && width && width <= 4096;
+                    if (capture->signals->len >= VCD_SIGNALS)
+                        failure = "VCD exceeds the viewer limit of 4096 signal declarations.";
+                    else if (fields->len >= 4 && number(fields->pdata[1], &width) && width > 4096)
+                        failure = "VCD contains a signal wider than 4096 bits.";
                     if (valid)
                     {
                         Trace *trace = g_hash_table_lookup(capture->traces, fields->pdata[2]);
@@ -234,6 +239,10 @@ static Capture *parse_capture(const gchar *bytes, gsize length, GError **error)
                 gsize n = strlen(value);
                 valid = n && n <= trace->width && strspn(value, "01xz") == n && ++events <= VCD_EVENTS &&
                         (value_bytes += trace->width) <= VCD_BYTES;
+                if (events > VCD_EVENTS)
+                    failure = "VCD exceeds the viewer limit of 250000 value changes.";
+                else if (value_bytes > VCD_BYTES)
+                    failure = "Decoded VCD values exceed the viewer limit of 32 MiB.";
                 if (valid)
                 {
                     gchar *bits = g_malloc(trace->width + 1);
@@ -261,7 +270,8 @@ static Capture *parse_capture(const gchar *bytes, gsize length, GError **error)
     {
         capture_free(capture);
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                            "Invalid VCD or capture exceeds the viewer limits");
+                            failure ? failure : !valid ? "Invalid or unsupported VCD data."
+                                                       : "VCD contains no supported signal definitions.");
         return NULL;
     }
     capture->end = time;

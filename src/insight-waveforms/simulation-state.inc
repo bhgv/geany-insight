@@ -103,6 +103,8 @@ typedef struct
     GHashTable *breakpoints, *point_anchors;
     GPtrArray *unresolved_records, *unresolved_anchors;
     guint moved_points;
+    GError *capture_error;
+    GtkWidget *breakpoint_status;
     gchar *trace_file;
     guint trace_line;
     InsightWaveLocation open_location;
@@ -121,6 +123,7 @@ static void simulation_free(gpointer data)
     g_clear_pointer(&run->live_output, g_byte_array_unref);
     g_free(run->live_directory);
     g_free(run->trace_file);
+    g_clear_error(&run->capture_error);
     g_clear_pointer(&run->signal_rows, g_ptr_array_unref);
     g_clear_pointer(&run->frame_reopen_path, gtk_tree_path_free);
     g_clear_pointer(&run->signal_previous_values, g_hash_table_unref);

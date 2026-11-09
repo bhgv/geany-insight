@@ -292,6 +292,11 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         g_object_bind_property(run->live_controls, "sensitive", breakpoint_page, "sensitive",
                                G_BINDING_SYNC_CREATE);
         gtk_box_pack_start(GTK_BOX(breakpoint_page), run->breakpoint_controls, FALSE, FALSE, 0);
+        run->breakpoint_status = gtk_label_new(insight_tr(
+            "Select a file and an executable HDL line. Leave both condition fields empty for an unconditional stop."));
+        gtk_label_set_xalign(GTK_LABEL(run->breakpoint_status), 0);
+        gtk_label_set_line_wrap(GTK_LABEL(run->breakpoint_status), TRUE);
+        gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), run->breakpoint_status, FALSE, FALSE, 0);
         GtkWidget *location = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
         gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), location, FALSE, FALSE, 0);
         run->breakpoint_file = gtk_combo_box_text_new();
@@ -304,6 +309,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         gtk_combo_box_set_active(GTK_COMBO_BOX(run->breakpoint_file), 0);
         gtk_box_pack_start(GTK_BOX(location), run->breakpoint_file, TRUE, TRUE, 0);
         run->breakpoint_line = gtk_spin_button_new_with_range(1, G_MAXINT, 1);
+        gtk_box_pack_start(GTK_BOX(location), gtk_label_new(insight_tr("Line number")), FALSE, FALSE, 0);
         gtk_box_pack_start(GTK_BOX(location), run->breakpoint_line, FALSE, FALSE, 0);
         GtkWidget *toggle = gtk_button_new_with_label("Set Point");
         g_signal_connect(toggle, "clicked", G_CALLBACK(simulation_edit_breakpoint), run);

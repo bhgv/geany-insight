@@ -177,6 +177,18 @@ static void simulation_done(GObject *object, GAsyncResult *result, gpointer data
         show_capture(parent, capture, NULL, run->navigate);
     else if (capture)
         capture_free(capture);
+    else if (parent && run->capture_error && !error)
+    {
+        gchar *message = g_strdup_printf("%s %s",
+            insight_tr("Simulation completed. The waveform could not be opened."),
+            insight_tr(run->capture_error->message));
+        msgwin_msg_add_string(COLOR_BLACK, -1, NULL, message);
+        GtkWidget *notice = gtk_message_dialog_new(parent, GTK_DIALOG_DESTROY_WITH_PARENT,
+            GTK_MESSAGE_WARNING, GTK_BUTTONS_CLOSE, "%s", message);
+        g_signal_connect_swapped(notice, "response", G_CALLBACK(gtk_widget_destroy), notice);
+        gtk_widget_show(notice);
+        g_free(message);
+    }
     else if (parent && error && !g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
     {
         msgwin_debugger_report(error->message, run->include_dir, NULL);

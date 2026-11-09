@@ -3073,3 +3073,21 @@ Could not update the simulation input.	Не удалось обновить вх
 _Cancel	_Отмена
 _Close	_Закрыть
 Displays	Дисплеи
+
+# Verilog breakpoint and capture feedback
+Simulation completed. The waveform could not be opened.	Симуляция завершилась. Открыть осциллограмму не удалось.
+VCD exceeds the viewer limit of 4096 signal declarations.	В VCD больше 4096 объявлений сигналов. Это предел просмотра.
+VCD contains a signal wider than 4096 bits.	В VCD есть сигнал шире 4096 бит.
+VCD exceeds the viewer limit of 250000 value changes.	В VCD больше 250000 изменений значений. Это предел просмотра.
+Decoded VCD values exceed the viewer limit of 32 MiB.	Значения после чтения VCD занимают больше 32 МиБ. Это предел просмотра.
+Invalid or unsupported VCD data.	Некорректные или неподдерживаемые данные VCD.
+VCD contains no supported signal definitions.	В VCD нет поддерживаемых объявлений сигналов.
+VCD must be text, 1 byte to 32 MiB	VCD должен быть текстовым файлом размером от 1 байта до 32 МиБ.
+Select a file and an executable HDL line. Leave both condition fields empty for an unconditional stop.	Выберите файл и исполняемую строку HDL. Для безусловной остановки оставьте оба поля условия пустыми.
+Line number	Номер строки
+Source breakpoint list cleared.	Список точек останова очищен.
+Source breakpoint removed.	Точка останова удалена.
+Source breakpoint sent to the simulator.	Точка останова передана симулятору.
+Could not save the source breakpoint list.	Не удалось сохранить список точек останова.
+Enter a full signal name and binary value, or leave both empty. Limit: 128 points.	Введите полное имя сигнала и двоичное значение или оставьте оба поля пустыми. Предел: 128 точек.
+Choose either Log and continue or Lua decides.	Выберите один режим: «Записать и продолжить» или «Условие в Lua».

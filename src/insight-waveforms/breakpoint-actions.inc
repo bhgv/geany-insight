@@ -113,6 +113,7 @@ static void simulation_edit_breakpoint(GtkButton *button, gpointer data)
     if (!run->bridge_ready || run->prompt_tail[0] != '>' || run->prompt_tail[1] != ' ')
         return;
 
+    gtk_spin_button_update(GTK_SPIN_BUTTON(run->breakpoint_line));
     gint action = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "point-action"));
     gint index = gtk_combo_box_get_active(GTK_COMBO_BOX(run->breakpoint_file));
     gint line = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(run->breakpoint_line));
@@ -137,6 +138,8 @@ static void simulation_edit_breakpoint(GtkButton *button, gpointer data)
             gtk_text_buffer_insert(
                 buffer, &end,
                 "\nEnter a full signal name and all bits, or leave both empty. Limit: 128 points.\n", -1);
+            gtk_label_set_text(GTK_LABEL(run->breakpoint_status), insight_tr(
+                "Enter a full signal name and binary value, or leave both empty. Limit: 128 points."));
             g_free(bits);
             g_free(key);
             return;
@@ -151,6 +154,8 @@ static void simulation_edit_breakpoint(GtkButton *button, gpointer data)
             gtk_text_buffer_get_end_iter(buffer, &end);
             gtk_text_buffer_insert(buffer, &end, "\nChoose either Log and continue or Lua decides.\n",
                                    -1);
+            gtk_label_set_text(GTK_LABEL(run->breakpoint_status),
+                               insight_tr("Choose either Log and continue or Lua decides."));
             g_free(bits);
             g_free(key);
             return;
@@ -211,7 +216,14 @@ static void simulation_edit_breakpoint(GtkButton *button, gpointer data)
             }
             simulation_report_settings(run);
             simulation_write_command(run, "geany-load\n");
+            const gchar *message = action == 2 ? "Source breakpoint list cleared."
+                                   : action == 1 ? "Source breakpoint removed."
+                                                 : "Source breakpoint sent to the simulator.";
+            gtk_label_set_text(GTK_LABEL(run->breakpoint_status), insight_tr(message));
         }
+        else
+            gtk_label_set_text(GTK_LABEL(run->breakpoint_status),
+                               insight_tr("Could not save the source breakpoint list."));
         g_free(path);
         g_string_free(contents, TRUE);
         g_free(directory);

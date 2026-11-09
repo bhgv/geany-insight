@@ -522,6 +522,8 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
             if (vcd)
                 capture = read_capture_file(vcd, cancel, &error);
             g_free(vcd);
+            if (error && !g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+                run->capture_error = g_steal_pointer(&error);
         }
         g_ptr_array_unref(command);
         g_ptr_array_unref(sources);
@@ -549,8 +551,8 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
         g_rmdir(directory);
         g_free(directory);
     }
-    if (capture)
-        g_task_return_pointer(task, capture, capture_free);
-    else
+    if (error)
         g_task_return_error(task, error);
+    else
+        g_task_return_pointer(task, capture, capture_free);
 }

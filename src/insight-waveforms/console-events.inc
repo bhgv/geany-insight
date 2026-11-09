@@ -317,7 +317,7 @@ static gboolean simulation_refresh_console(gpointer data)
         gtk_label_set_text(GTK_LABEL(run->pause_reason), reason);
     g_free(reason);
     gtk_widget_set_sensitive(run->live_controls, paused && !run->preview_pending);
-    gtk_widget_set_sensitive(run->breakpoint_controls, run->bridge_ready);
+    gtk_widget_set_sensitive(run->breakpoint_controls, paused && run->bridge_ready && !run->preview_pending);
     gtk_widget_set_sensitive(run->source_step_controls, run->source_step_ready);
     gtk_widget_set_sensitive(run->process_controls, run->processes_ready);
     gtk_widget_set_sensitive(run->frame_controls, run->frames_ready);
