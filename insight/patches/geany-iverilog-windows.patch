@@ -232,3 +232,23 @@ index 352ab9f..dac6da2 100644
  
  	/* I may need the relative path for a planned warning even when
  	 * we are not in relative mode, so for now keep it around. */
+--- a/main.cc
++++ b/main.cc
+@@ -913,5 +913,17 @@
+ int main(int argc, char*argv[])
+ {
++#ifdef __MINGW32__
++      /* EN: Keep diagnostics available to the editor even without a console.
++       * RU: Сохраняем диагностику для редактора даже без консоли. */
++      const char* diagnostic_path = getenv("GEANY_IVL_DIAGNOSTICS");
++      if (diagnostic_path && *diagnostic_path) {
++            if (!freopen(diagnostic_path, "w", stderr))
++                  return 1;
++            setvbuf(stderr, NULL, _IONBF, 0);
++      }
++#endif
++
++
+       bool help_flag = false;
+       bool times_flag = false;
+       bool version_flag = false;

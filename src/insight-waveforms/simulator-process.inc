@@ -82,10 +82,24 @@ static gboolean simulation_process(const gchar *stage, const gchar *const *argv,
     g_subprocess_launcher_setenv(launcher, "PATH", path, TRUE);
     g_free(path);
 
+#ifdef G_OS_WIN32
+    gchar *ivl_diagnostics = NULL;
+    gchar *program = g_path_get_basename(argv[0]);
+    if (!g_ascii_strcasecmp(program, "ivl.exe"))
+    {
+        ivl_diagnostics = g_build_filename(directory, "geany-ivl.stderr", NULL);
+        g_unlink(ivl_diagnostics);
+        g_subprocess_launcher_setenv(launcher, "GEANY_IVL_DIAGNOSTICS", "geany-ivl.stderr", TRUE);
+    }
+    g_free(program);
+#endif
     GSubprocess *process = g_subprocess_launcher_spawnv(launcher, argv, error);
     g_object_unref(launcher);
     if (!process)
     {
+#ifdef G_OS_WIN32
+        g_free(ivl_diagnostics);
+#endif
         simulation_process_diagnostic(error, stage, argv, directory, NULL, NULL);
         return FALSE;
     }
@@ -109,6 +123,27 @@ static gboolean simulation_process(const gchar *stage, const gchar *const *argv,
         g_subprocess_force_exit(process);
         g_subprocess_wait(process, NULL, NULL);
     }
+#ifdef G_OS_WIN32
+    if (ivl_diagnostics)
+    {
+        FILE *file = !ok ? g_fopen(ivl_diagnostics, "rb") : NULL;
+        if (file)
+        {
+            gsize available = limit - diagnostic->len;
+            while (available)
+            {
+                gsize size = fread(bytes, 1, MIN(available, sizeof bytes), file);
+                if (!size)
+                    break;
+                g_string_append_len(diagnostic, bytes, size);
+                available -= size;
+            }
+            truncated |= fgetc(file) != EOF;
+            fclose(file);
+        }
+        g_free(ivl_diagnostics);
+    }
+#endif
     if (!ok)
         simulation_process_diagnostic(error, stage, argv, directory, diagnostic,
                                       truncated ? "Additional process output omitted." : NULL);

@@ -116,9 +116,30 @@ VERILOG
     )
 }
 
+# EN: Confirm Windows ivl saves syntax diagnostics without an inherited console.
+# RU: Проверяет, что ivl в Windows сохраняет диагностику без унаследованной консоли.
+check_windows_diagnostics() {
+    local prefix=$1
+    [[ -n "$executable_suffix" ]] || return 0
+    (
+        cd "$work"
+        printf '%s\n' 'module geany_invalid(;' > geany-invalid.sv
+        rm -f -- geany-invalid.stderr
+        if GEANY_IVL_DIAGNOSTICS=geany-invalid.stderr \
+            "$prefix/lib/ivl/ivl.exe" -- geany-invalid.sv >/dev/null 2>&1; then
+            printf '%s\n' 'Icarus unexpectedly accepted invalid HDL.' >&2
+            exit 1
+        fi
+        if ! grep -qi 'syntax error' geany-invalid.stderr; then
+            printf '%s\n' 'Icarus did not save its syntax diagnostics.' >&2
+            exit 1
+        fi
+    )
+}
+
 if [[ -f "$stamp" && $(<"$stamp") == "$stamp_id" &&
       -x "$install_dir/bin/iverilog$executable_suffix" && -x "$install_dir/bin/vvp$executable_suffix" ]]; then
-    if check_simulator "$install_dir"; then
+    if check_simulator "$install_dir" && check_windows_diagnostics "$install_dir"; then
         printf '[Simulator] Icarus Verilog %s is already installed.\n' "$version"
         exit 0
     fi
@@ -173,6 +194,7 @@ if [[ -n "$executable_suffix" ]]; then
 fi
 install -Dm644 "$work/src/COPYING" "$staged/share/licenses/iverilog/COPYING"
 check_simulator "$staged"
+check_windows_diagnostics "$staged"
 mkdir -p -- "$install_dir"
 rsync -a -- "$staged/" "$install_dir/"
 check_simulator "$install_dir"
