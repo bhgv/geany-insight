@@ -295,6 +295,12 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
         g_shell_parse_argv(line, &saved_count, &saved_args, NULL);
         g_free(line);
     }
+    else
+    {
+        const gchar *suggestion = g_object_get_data(G_OBJECT(button), "pll-suggestion");
+        if (suggestion)
+            g_shell_parse_argv(suggestion, &saved_count, &saved_args, NULL);
+    }
     GtkWindow *parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
     DeviceForm form = {.entries = g_ptr_array_new(),
                        .directory = g_object_get_data(G_OBJECT(button), "source-directory")};

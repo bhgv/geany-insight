@@ -234,6 +234,99 @@ static gchar *simulation_recipe_choose(GtkWindow *parent, gboolean save)
     return path;
 }
 
+/* EN: Recognize common clock-wizard port names and build a draft rule from pins.
+ * RU: Распознаёт типовые порты генератора частоты и собирает черновик правила из pins. */
+static gchar *simulation_pll_suggestion(const gchar *module, const gchar *pins)
+{
+    GRegex *named = g_regex_new("\\.([A-Za-z_][A-Za-z0-9_$]*)\\s*\\(", 0, 0, NULL);
+    GMatchInfo *match;
+    g_regex_match(named, pins, 0, &match);
+    gchar *input = NULL, *reset = NULL, *locked = NULL;
+    GPtrArray *outputs = g_ptr_array_new_with_free_func(g_free);
+    while (g_match_info_matches(match))
+    {
+        gchar *pin = g_match_info_fetch(match, 1);
+        if ((!strcmp(pin, "clk_in1") || !strcmp(pin, "clk_in") || !strcmp(pin, "inclk0")) && !input)
+            input = g_strdup(pin);
+        else if ((!strcmp(pin, "reset") || !strcmp(pin, "rst") || !strcmp(pin, "areset")) && !reset)
+            reset = g_strdup(pin);
+        else if (!strcmp(pin, "locked") && !locked)
+            locked = g_strdup(pin);
+        else if (g_regex_match_simple("^(clk_out[0-9]*|clk_o[0-9]+|c[0-9]+)$", pin, 0, 0))
+            g_ptr_array_add(outputs, g_strdup(pin));
+        g_free(pin);
+        g_match_info_next(match, NULL);
+    }
+    g_match_info_free(match);
+    g_regex_unref(named);
+
+    gchar *suggestion = NULL;
+    if (input && outputs->len && outputs->len <= 5)
+    {
+        GString *rule = g_string_new(NULL);
+        g_string_append_printf(rule, "pll-multi %s %s %s %s 4", module, input,
+                               reset ? reset : "-", locked ? locked : "-");
+        for (guint i = 0; i < 5; ++i)
+            g_string_append_printf(rule, " %s - - -", i < outputs->len ? outputs->pdata[i] : "-");
+        suggestion = g_string_free(rule, FALSE);
+    }
+    g_ptr_array_unref(outputs);
+    g_free(input);
+    g_free(reset);
+    g_free(locked);
+    return suggestion;
+}
+
+/* EN: Offer PLL replacement drafts from active HDL in source, using browser for the wizard.
+ * RU: Предлагает черновики замен PLL из активного HDL source и открывает мастер через browser. */
+static void simulation_pll_offers(const gchar *source, const gchar *directory,
+                                  GtkBox *box, PortBrowser *browser)
+{
+    if (!source)
+        return;
+    GRegex *comments = g_regex_new("//[^\\n]*|/\\*[\\s\\S]*?\\*/|\"(?:\\\\.|[^\"\\\\])*\"", 0, 0, NULL);
+    gchar *clean = g_regex_replace_literal(comments, source, -1, 0, " ", 0, NULL);
+    g_regex_unref(comments);
+    GPtrArray *defined = simulation_recipe_modules(clean);
+    GHashTable *offered = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    GRegex *instances = g_regex_new(
+        "\\b(clk_wiz_[A-Za-z0-9_$]+|pll[A-Za-z0-9_$]*|[A-Za-z_][A-Za-z0-9_$]*_pll[A-Za-z0-9_$]*)"
+        "\\s+[A-Za-z_][A-Za-z0-9_$]*\\s*\\(([^;]*)\\)\\s*;", 0, 0, NULL);
+    GMatchInfo *match;
+    g_regex_match(instances, clean, 0, &match);
+    while (g_match_info_matches(match) && g_hash_table_size(offered) < 16)
+    {
+        gchar *module = g_match_info_fetch(match, 1);
+        gboolean exists = g_hash_table_contains(offered, module);
+        for (guint i = 0; i < defined->len; ++i)
+            exists |= !strcmp(module, defined->pdata[i]);
+        if (!exists)
+        {
+            gchar *pins = g_match_info_fetch(match, 2);
+            gchar *suggestion = simulation_pll_suggestion(module, pins);
+            g_free(pins);
+            if (suggestion)
+            {
+                gchar *caption = g_strdup_printf(insight_tr("Configure missing PLL %s…"), module);
+                GtkWidget *button = gtk_button_new_with_label(caption);
+                g_free(caption);
+                g_object_set_data_full(G_OBJECT(button), "pll-suggestion", suggestion, g_free);
+                g_object_set_data(G_OBJECT(button), "source-directory", (gpointer)directory);
+                g_signal_connect(button, "clicked", G_CALLBACK(simulation_device_wizard), browser);
+                gtk_box_pack_start(box, button, FALSE, FALSE, 0);
+                g_hash_table_add(offered, g_strdup(module));
+            }
+        }
+        g_free(module);
+        g_match_info_next(match, NULL);
+    }
+    g_match_info_free(match);
+    g_regex_unref(instances);
+    g_hash_table_unref(offered);
+    g_ptr_array_unref(defined);
+    g_free(clean);
+}
+
 /* EN: Edit the recipe saved at path in a child of parent. run supplies the compiler,
  * input sources, and include path. On cancellation, publish preprocessing errors.
  * On acceptance, optional output
@@ -392,6 +485,7 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     g_signal_connect(device_list, "button-press-event", G_CALLBACK(simulation_device_menu), buffer);
     gtk_paned_pack1(GTK_PANED(panes), recipe_tabs, TRUE, FALSE);
     gtk_paned_pack2(GTK_PANED(panes), port_browser_widget(&browser), TRUE, FALSE);
+    simulation_pll_offers(expanded, source_directory, GTK_BOX(box), &browser);
     gtk_paned_set_position(GTK_PANED(panes), 320);
     GtkWidget *diagram = gtk_button_new_with_label("Preview Diagram…");
     g_object_set_data(G_OBJECT(diagram), "source-directory", source_directory);
