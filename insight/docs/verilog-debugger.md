@@ -1,5 +1,10 @@
 # Verilog and SystemVerilog debugger
 
+During debugging, put the caret on a source line and press **F2** or
+**Toggle Breakpoint** on the main toolbar. You can also double-click the
+line number or use its context menu. The main toolbar shows the commands
+available for the active debugger. Focus a debugger window to switch sessions.
+
 Open a saved `.v` or `.sv` testbench in Geany. Choose
 **Tools → Verilog / SystemVerilog → Debug Current Verilog File**.
 The same command is available in the editor context menu under

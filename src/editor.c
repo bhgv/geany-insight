@@ -55,6 +55,7 @@
 #include "geanyobject.h"
 #include "highlighting.h"
 #include "insight-workbench.h"
+#include "insight-i18n.h"
 #include "insight-languages.h"
 #include "insight-completion.h"
 #include "../insight/desktop/filetype_pairs.h"
@@ -307,6 +308,16 @@ void editor_snippets_init(void)
 }
 
 
+/* EN: Toggle the source location attached to a line-number menu item.
+ * RU: Переключает точку для позиции, сохранённой в пункте меню номера строки. */
+static void editor_margin_breakpoint(GtkMenuItem *item, gpointer data)
+{
+    insight_debug_toggle(g_object_get_data(G_OBJECT(item), "debug-source"),
+                          GPOINTER_TO_UINT(data));
+}
+
+/* EN: Handle mouse event from editor widget; data is the owning editor.
+ * RU: Обрабатывает событие мыши event в widget редактора из data. */
 static gboolean on_editor_button_press_event(GtkWidget *widget, GdkEventButton *event,
 											 gpointer data)
 {
@@ -321,6 +332,32 @@ static gboolean on_editor_button_press_event(GtkWidget *widget, GdkEventButton *
 			(gint)event->x, (gint)event->y, FALSE);
 	else
 		editor_info.click_pos = sci_get_current_position(editor->sci);
+
+    if (insight_debug_active() &&
+        ((event->button == 1 && event->type == GDK_2BUTTON_PRESS) ||
+         (event->button == 3 && event->type == GDK_BUTTON_PRESS)))
+    {
+        gint left = (gint)SSM(editor->sci, SCI_GETMARGINWIDTHN, 0, 0);
+        gint width = (gint)SSM(editor->sci, SCI_GETMARGINWIDTHN, 1, 0);
+        if (event->x >= left && event->x < left + width)
+        {
+            gint position = (gint)SSM(editor->sci, SCI_POSITIONFROMPOINT, 0, (sptr_t)event->y);
+            if (position < 0)
+                return TRUE;
+            guint line = (guint)sci_get_line_from_position(editor->sci, position) + 1;
+            if (event->button == 1)
+                return insight_debug_toggle(doc->file_name, line);
+            GtkWidget *menu = gtk_menu_new();
+            GtkWidget *toggle = gtk_menu_item_new_with_label(insight_tr("Set or Remove Breakpoint"));
+            g_object_set_data_full(G_OBJECT(toggle), "debug-source", g_strdup(doc->file_name), g_free);
+            g_signal_connect(toggle, "activate", G_CALLBACK(editor_margin_breakpoint), GUINT_TO_POINTER(line));
+            gtk_menu_shell_append(GTK_MENU_SHELL(menu), toggle);
+            g_signal_connect(menu, "selection-done", G_CALLBACK(gtk_widget_destroy), NULL);
+            gtk_widget_show_all(menu);
+            gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent *)event);
+            return TRUE;
+        }
+    }
 
 	if (event->button == 1)
 	{

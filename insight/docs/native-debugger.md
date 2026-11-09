@@ -1,5 +1,10 @@
 # C/C++ debugging with GDB
 
+During debugging, put the caret on a source line and press **F2** or
+**Toggle Breakpoint** on the main toolbar. You can also double-click the
+line number or use its context menu. The main toolbar shows the commands
+available for the active debugger. Focus a debugger window to switch sessions.
+
 Build with debug symbols, for example `cc -g -Og main.c -o app` or
 `c++ -g -Og main.cpp -o app`. Install GDB and make it available in
 `PATH` before starting Geany.

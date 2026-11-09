@@ -3091,3 +3091,12 @@ Source breakpoint sent to the simulator.	Точка останова перед�
 Could not save the source breakpoint list.	Не удалось сохранить список точек останова.
 Enter a full signal name and binary value, or leave both empty. Limit: 128 points.	Введите полное имя сигнала и двоичное значение или оставьте оба поля пустыми. Предел: 128 точек.
 Choose either Log and continue or Lua decides.	Выберите один режим: «Записать и продолжить» или «Условие в Lua».
+
+# Editor debugger controls
+Open a saved source file to toggle a breakpoint.	Откройте сохранённый исходный файл, чтобы переключить точку останова.
+Pause the debugger before changing breakpoints.	Поставьте отладчик на паузу, чтобы изменить точки останова.
+Toggle Breakpoint (F2)	Поставить или удалить точку останова (F2)
+Set or Remove Breakpoint	Поставить или удалить точку останова
+This file is not in the active Verilog simulation.	Этот файл не входит в активную симуляцию Verilog.
+Could not change the source breakpoint.	Не удалось изменить точку останова.
+Source breakpoint added.	Точка останова добавлена.

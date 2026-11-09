@@ -211,6 +211,7 @@ libgeany_la_SOURCES += \
 	insight-git.c \
 	insight-git.h \
 	insight-workbench.c \
+	insight-debug-controls.inc \
 	insight-python-debug.c \
 	insight-python-debug.h \
 	insight-waveforms.c \

@@ -105,28 +105,22 @@ static void simulation_list_unresolved(GtkButton *button, gpointer data)
     g_string_free(text, TRUE);
 }
 
-/* EN: Apply the breakpoint action stored on button to simulation data.
- * RU: Применяет действие с точкой останова из button к сеансу data. */
-static void simulation_edit_breakpoint(GtkButton *button, gpointer data)
+/* EN: Apply action to filename and line in run. conditional enables the fields in the dialog.
+ * RU: Применяет action к filename и line в run. conditional включает поля условия из окна. */
+static void simulation_change_breakpoint(WaveSimulation *run, const gchar *filename, guint line,
+                                         gint action, gboolean conditional)
 {
-    WaveSimulation *run = data;
     if (!run->bridge_ready || run->prompt_tail[0] != '>' || run->prompt_tail[1] != ' ')
         return;
-
-    gtk_spin_button_update(GTK_SPIN_BUTTON(run->breakpoint_line));
-    gint action = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "point-action"));
-    gint index = gtk_combo_box_get_active(GTK_COMBO_BOX(run->breakpoint_file));
-    gint line = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(run->breakpoint_line));
-    const gchar *filename = index >= 0 ? run->sources[index] : NULL;
     if (action != 2 && (!filename || strpbrk(filename, "\r\n\t")))
         return;
 
-    gchar *key = action == 2 ? NULL : g_strdup_printf("%d\t%s", line, filename);
+    gchar *key = action == 2 ? NULL : g_strdup_printf("%u\t%s", line, filename);
     gchar *rule = NULL;
     if (action == 0)
     {
-        const gchar *signal = gtk_entry_get_text(GTK_ENTRY(run->rule_signal));
-        gchar *bits = g_ascii_strdown(gtk_entry_get_text(GTK_ENTRY(run->rule_bits)), -1);
+        const gchar *signal = conditional ? gtk_entry_get_text(GTK_ENTRY(run->rule_signal)) : "";
+        gchar *bits = g_ascii_strdown(conditional ? gtk_entry_get_text(GTK_ENTRY(run->rule_bits)) : "", -1);
         if (((*signal == '\0') != (*bits == '\0')) || strpbrk(signal, "\r\n\t ") ||
             strspn(bits, "01xz") != strlen(bits) ||
             (g_hash_table_size(run->breakpoints) + run->unresolved_records->len >= 128 &&
@@ -144,9 +138,9 @@ static void simulation_edit_breakpoint(GtkButton *button, gpointer data)
             g_free(key);
             return;
         }
-        gint hits = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(run->rule_hits));
-        gboolean log_only = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(run->rule_log));
-        gboolean scripted = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(run->rule_script));
+        gint hits = conditional ? gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(run->rule_hits)) : 1;
+        gboolean log_only = conditional && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(run->rule_log));
+        gboolean scripted = conditional && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(run->rule_script));
         if (log_only && scripted)
         {
             GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(run->console));
@@ -230,4 +224,47 @@ static void simulation_edit_breakpoint(GtkButton *button, gpointer data)
     }
     g_free(key);
     g_free(rule);
+}
+
+/* EN: Read the source selection and action from the breakpoint button and session data.
+ * RU: Читает выбранный исходник из data и действие из кнопки button. */
+static void simulation_edit_breakpoint(GtkButton *button, gpointer data)
+{
+    WaveSimulation *run = data;
+    gtk_spin_button_update(GTK_SPIN_BUTTON(run->breakpoint_line));
+    gint index = gtk_combo_box_get_active(GTK_COMBO_BOX(run->breakpoint_file));
+    guint line = (guint)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(run->breakpoint_line));
+    gint action = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "point-action"));
+    simulation_change_breakpoint(run, index >= 0 ? run->sources[index] : NULL, line, action, TRUE);
+}
+
+/* EN: Toggle an unconditional HDL point at filename and one-based line in session data.
+ * RU: Переключает безусловную точку на строке line файла filename в сеансе data. */
+static void simulation_toggle_editor_point(const gchar *filename, guint line, gpointer data)
+{
+    WaveSimulation *run = data;
+    gchar *selected = g_canonicalize_filename(filename, NULL);
+    for (guint i = 0; run->sources[i]; i++)
+    {
+        gchar *source = g_canonicalize_filename(run->sources[i], NULL);
+#ifdef G_OS_WIN32
+        gboolean matches = !g_ascii_strcasecmp(source, selected);
+#else
+        gboolean matches = !strcmp(source, selected);
+#endif
+        g_free(source);
+        if (!matches)
+            continue;
+        g_free(selected);
+        gtk_combo_box_set_active(GTK_COMBO_BOX(run->breakpoint_file), (gint)i);
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(run->breakpoint_line), line);
+        gchar *key = g_strdup_printf("%u\t%s", line, run->sources[i]);
+        gint action = g_hash_table_contains(run->breakpoints, key) ? 1 : 0;
+        g_free(key);
+        simulation_change_breakpoint(run, run->sources[i], line, action, FALSE);
+        ui_set_statusbar(FALSE, "%s", gtk_label_get_text(GTK_LABEL(run->breakpoint_status)));
+        return;
+    }
+    g_free(selected);
+    ui_set_statusbar(FALSE, "%s", insight_tr("This file is not in the active Verilog simulation."));
 }

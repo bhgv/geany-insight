@@ -1,5 +1,10 @@
 # Lua debugger
 
+During debugging, put the caret on a source line and press **F2** or
+**Toggle Breakpoint** on the main toolbar. You can also double-click the
+line number or use its context menu. The main toolbar shows the commands
+available for the active debugger. Focus a debugger window to switch sessions.
+
 Open a Lua buffer and choose **Tools → Lua → Debug Current Lua Buffer…**. The
 debugger takes a snapshot including unsaved edits and stops at the first
 executable line. Use the **?** in the upper-right corner to reopen this guide.

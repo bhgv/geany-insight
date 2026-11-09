@@ -6,6 +6,7 @@
  * Порядок подключения соответствует зависимостям внутри единицы трансляции.
  */
 #include "insight-waveforms.h"
+#include "insight-workbench.h"
 #include "msgwindow.h"
 #include "document.h"
 #include "ui_utils.h"

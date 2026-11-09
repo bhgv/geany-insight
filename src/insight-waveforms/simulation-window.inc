@@ -183,6 +183,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         gtk_box_pack_start(GTK_BOX(box), run->live_controls, FALSE, FALSE, 6);
         GtkWidget *actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
         gtk_box_pack_start(GTK_BOX(run->live_controls), actions, FALSE, FALSE, 0);
+        GtkWidget *debug_commands[INSIGHT_DEBUG_COMMAND_COUNT] = {NULL};
         const gchar *labels[] = {"Step Event", "Continue", "Time", "Scope", "List", "Finish"};
         const gchar *commands[] = {"step\n", "cont\n", "time\n", "where\n", "list\n", "finish\n"};
         for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
@@ -191,6 +192,10 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
             g_object_set_data(G_OBJECT(button), "vvp-command", (gpointer)commands[i]);
             g_signal_connect(button, "clicked", G_CALLBACK(simulation_send_command), run);
             gtk_box_pack_start(GTK_BOX(actions), button, FALSE, FALSE, 0);
+            if (i == 1)
+                debug_commands[INSIGHT_DEBUG_CONTINUE] = button;
+            else if (i == 5)
+                debug_commands[INSIGHT_DEBUG_STOP] = button;
         }
         run->source_step_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
         gtk_box_pack_start(GTK_BOX(run->live_controls), run->source_step_controls, FALSE, FALSE, 0);
@@ -203,6 +208,8 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
             g_object_set_data(G_OBJECT(button), "vvp-command", (gpointer)step_commands[i]);
             g_signal_connect(button, "clicked", G_CALLBACK(simulation_send_command), run);
             gtk_box_pack_start(GTK_BOX(run->source_step_controls), button, FALSE, FALSE, 0);
+            if (i == 0)
+                debug_commands[INSIGHT_DEBUG_INTO] = button;
         }
         gtk_widget_set_sensitive(run->source_step_controls, FALSE);
         gtk_box_pack_start(GTK_BOX(box), inspection_tabs, TRUE, TRUE, 0);
@@ -371,6 +378,9 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         gtk_widget_set_sensitive(run->breakpoint_controls, FALSE);
         g_object_set_data(G_OBJECT(run->dialog), "insight-live-simulation", run);
         gtk_widget_set_sensitive(run->live_controls, FALSE);
+        debug_commands[INSIGHT_DEBUG_PAUSE] = run->pause_button;
+        insight_debug_register(run->dialog, run->breakpoint_controls, simulation_toggle_editor_point,
+                               run, debug_commands);
         run->refresh_source = g_timeout_add(100, simulation_refresh_console, run);
     }
 

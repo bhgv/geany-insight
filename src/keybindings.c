@@ -1651,6 +1651,8 @@ static gboolean run_kb(GeanyKeyBinding *kb, GeanyKeyGroup *group)
 
 
 /* central keypress event handler, almost all keypress events go to this function */
+/* EN: Dispatch a key event ev for the window widget. user_data is unused.
+ * RU: Обрабатывает клавишу ev для окна widget. user_data не используется. */
 static gboolean on_key_press_event(GtkWidget *widget, GdkEventKey *ev, gpointer user_data)
 {
 	guint state, keyval;
@@ -1666,6 +1668,14 @@ static gboolean on_key_press_event(GtkWidget *widget, GdkEventKey *ev, gpointer 
 	g_signal_emit_by_name(geany_object, "key-press", ev, &key_press_ret);
 	if (key_press_ret)
 		return TRUE;
+
+    if (ev->keyval == GDK_KEY_F2 && !keybindings_get_modifiers(ev->state))
+    {
+        doc = document_get_current();
+        if (DOC_VALID(doc) && gtk_widget_has_focus(GTK_WIDGET(doc->editor->sci)) &&
+            insight_debug_toggle_current())
+            return TRUE;
+    }
 
 	if (insight_terminal_key(gtk_window_get_focus(GTK_WINDOW(widget)),ev)) return TRUE;
 	if (insight_incremental_search_key(ev)) return TRUE;

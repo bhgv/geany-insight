@@ -1,5 +1,10 @@
 # Python debugger
 
+During debugging, put the caret on a source line and press **F2** or
+**Toggle Breakpoint** on the main toolbar. You can also double-click the
+line number or use its context menu. The main toolbar shows the commands
+available for the active debugger. Focus a debugger window to switch sessions.
+
 Open a Python buffer and choose **Tools → Python → Debug Current Python Buffer…**.
 The debugger runs a snapshot of the current buffer, including unsaved changes,
 in a separate Python 3 process. Set `GEANY_INSIGHT_PYTHON` to select an

@@ -2,10 +2,22 @@
 #ifndef GEANY_INSIGHT_WORKBENCH_H
 #define GEANY_INSIGHT_WORKBENCH_H
 #include <glib.h>
-#include <gdk/gdk.h>
+#include <gtk/gtk.h>
 #include "../insight/desktop/project_report.h"
 struct SCNotification;
 struct GeanyEditor;
+typedef enum
+{
+    INSIGHT_DEBUG_PAUSE, INSIGHT_DEBUG_CONTINUE, INSIGHT_DEBUG_INTO,
+    INSIGHT_DEBUG_OVER, INSIGHT_DEBUG_OUT, INSIGHT_DEBUG_RUN, INSIGHT_DEBUG_STOP,
+    INSIGHT_DEBUG_COMMAND_COUNT
+} InsightDebugCommand;
+typedef void (*InsightDebugPoint)(const gchar *filename, guint line, gpointer data);
+void insight_debug_register(GtkWidget *window, GtkWidget *ready, InsightDebugPoint toggle,
+                            gpointer data, GtkWidget *const commands[INSIGHT_DEBUG_COMMAND_COUNT]);
+gboolean insight_debug_active(void);
+gboolean insight_debug_toggle(const gchar *filename, guint line);
+gboolean insight_debug_toggle_current(void);
 #define INSIGHT_TEMPLATE_COMPLETION_LIST 74
 gboolean insight_workbench_complete_template(struct GeanyEditor *,gint);
 GPtrArray *insight_workbench_completion_templates(struct GeanyEditor *,const gchar *,gboolean,guint64 *);

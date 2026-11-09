@@ -6005,6 +6005,8 @@ static void debug_set_text(GtkWidget *text_view, const gchar *text)
     g_free(valid);
 }
 
+#include "insight-debug-controls.inc"
+
 /* Parse up to 128 one-based breakpoint lines from the entry. */
 /* Разбирает до 128 номеров строк точек останова, начиная с единицы. */
 static gboolean debug_parse_breakpoints(const gchar *text, unsigned long *lines, gsize *count)
@@ -8488,6 +8490,52 @@ static void debug_list_points(GtkButton *button, gpointer data)
     g_free(selected);
 }
 
+/* EN: Toggle one-based line in filename in the Lua or Python session in data.
+ * RU: Переключает точку на строке line файла filename в сеансе Lua или Python из data. */
+static void debug_script_toggle(const gchar *filename, guint line, gpointer data)
+{
+    ScriptDebugWindow *view = data;
+    gchar *key = debug_file_key(filename);
+    gchar *display = debug_file_key(view->display_filename);
+    gboolean current = !g_strcmp0(key, display);
+    g_free(display);
+    const gchar *text = current ? gtk_entry_get_text(GTK_ENTRY(view->breakpoints)) :
+                                  g_hash_table_lookup(view->file_breakpoints, key);
+    unsigned long lines[128];
+    gsize count = 0;
+    if (!debug_parse_breakpoints(text ? text : "", lines, &count))
+    {
+        gtk_label_set_text(GTK_LABEL(view->status), "Correct the breakpoint list before adding a line.");
+        g_free(key);
+        return;
+    }
+
+    gsize previous_count = count;
+    if (!debug_toggle_breakpoint(lines, &count, G_N_ELEMENTS(lines), line))
+    {
+        gtk_label_set_text(GTK_LABEL(view->status), "The debugger supports up to 128 breakpoints.");
+        g_free(key);
+        return;
+    }
+
+    GString *list = g_string_new(NULL);
+    for (gsize i = 0; i < count; i++)
+    {
+        if (i)
+            g_string_append(list, ", ");
+        g_string_append_printf(list, "%lu", lines[i]);
+    }
+    if (current)
+        gtk_entry_set_text(GTK_ENTRY(view->breakpoints), list->str);
+    else
+        debug_store_file_breakpoints(view, filename, list->str);
+    const gchar *message = count < previous_count ? "Source breakpoint removed." : "Source breakpoint added.";
+    gtk_label_set_text(GTK_LABEL(view->status), insight_tr(message));
+    ui_set_statusbar(FALSE, "%s", insight_tr(message));
+    g_string_free(list, TRUE);
+    g_free(key);
+}
+
 /* Toggle a breakpoint when the source line number is clicked. */
 /* Переключает точку останова при щелчке по номеру строки. */
 static gboolean debug_click_line_number(GtkWidget *widget, GdkEventButton *event, gpointer data)
@@ -8510,36 +8558,14 @@ static gboolean debug_click_line_number(GtkWidget *widget, GdkEventButton *event
         gtk_text_iter_get_line_offset(&location) >= 7)
         return FALSE;
 
-    unsigned long line = (unsigned long)gtk_text_iter_get_line(&location) + 1;
+    guint line = (guint)gtk_text_iter_get_line(&location) + 1;
     if (event->state & GDK_SHIFT_MASK)
     {
         debug_edit_conditional_point(view, view->display_filename, line);
         return TRUE;
     }
 
-    unsigned long lines[128];
-    gsize count = 0;
-    if (!debug_parse_breakpoints(gtk_entry_get_text(GTK_ENTRY(view->breakpoints)), lines, &count))
-    {
-        gtk_label_set_text(GTK_LABEL(view->status), "Correct the breakpoint list before adding a line.");
-        return TRUE;
-    }
-
-    if (!debug_toggle_breakpoint(lines, &count, G_N_ELEMENTS(lines), line))
-    {
-        gtk_label_set_text(GTK_LABEL(view->status), "The debugger supports up to 128 breakpoints.");
-        return TRUE;
-    }
-
-    GString *list = g_string_new(NULL);
-    for (gsize i = 0; i < count; i++)
-    {
-        if (i)
-            g_string_append(list, ", ");
-        g_string_append_printf(list, "%lu", lines[i]);
-    }
-    gtk_entry_set_text(GTK_ENTRY(view->breakpoints), list->str);
-    g_string_free(list, TRUE);
+    debug_script_toggle(view->display_filename, line, view);
     return TRUE;
 }
 
@@ -9710,6 +9736,9 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
 
     view->step_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     gtk_box_pack_start(GTK_BOX(toolbar), view->step_controls, FALSE, FALSE, 0);
+    GtkWidget *debug_commands[INSIGHT_DEBUG_COMMAND_COUNT] = {NULL};
+    const InsightDebugCommand actions[] = {INSIGHT_DEBUG_INTO, INSIGHT_DEBUG_OVER,
+                                           INSIGHT_DEBUG_OUT, INSIGHT_DEBUG_CONTINUE};
     const gchar *labels[] = {"Step Into", "Step Over", "Step Out", "Continue"};
     for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
     {
@@ -9717,6 +9746,7 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
         g_object_set_data(G_OBJECT(button), "insight-lua-step", GUINT_TO_POINTER(i));
         g_signal_connect(button, "clicked", G_CALLBACK(debug_window_action), view);
         gtk_box_pack_start(GTK_BOX(view->step_controls), button, FALSE, FALSE, 0);
+        debug_commands[actions[i]] = button;
     }
 
     GtkWidget *restart = gtk_button_new_with_label("Restart");
@@ -9813,6 +9843,9 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     gtk_label_set_selectable(GTK_LABEL(view->status), TRUE);
     gtk_label_set_ellipsize(GTK_LABEL(view->status), PANGO_ELLIPSIZE_END);
     gtk_box_pack_start(GTK_BOX(box), view->status, FALSE, FALSE, 0);
+    debug_commands[INSIGHT_DEBUG_PAUSE] = view->pause;
+    debug_commands[INSIGHT_DEBUG_STOP] = view->stop;
+    insight_debug_register(view->window, view->breakpoints, debug_script_toggle, view, debug_commands);
     gtk_widget_show_all(view->window);
     if (view->unresolved_breakpoints)
         ui_set_statusbar(TRUE, "%u saved breakpoints could not be located and are inactive.",
@@ -9873,6 +9906,9 @@ typedef struct {
     gchar *stop_file;
     guint stop_line;
     gboolean resume;
+    GHashTable *editor_points;
+    gchar *editor_point_pending;
+    gboolean editor_point_removing;
     gboolean closed, ready, running, stopped, pending, writing;
 } NativeDebug;
 
@@ -9960,6 +9996,8 @@ static void native_debug_free(gpointer data)
 {
     NativeDebug *session = data;
     insight_lua_debug_free(session->observer);
+    g_hash_table_unref(session->editor_points);
+    g_free(session->editor_point_pending);
     g_ptr_array_unref(session->expressions);
     g_ptr_array_unref(session->graph_view->watch_paths);
     g_clear_pointer(&session->graph_view->watch_previous_values, g_hash_table_unref);
@@ -10017,6 +10055,7 @@ static void native_debug_written(GObject *stream, GAsyncResult *result, gpointer
             native_debug_log(session, error->message);
             session->pending = session->ready = session->resume = FALSE;
             session->watch_pending = NULL;
+            g_clear_pointer(&session->editor_point_pending, g_free);
         }
         native_debug_update(session);
         native_debug_resume(dialog, session);
@@ -10070,6 +10109,69 @@ static gchar *native_debug_field(const gchar *record, const gchar *name)
     return NULL;
 }
 
+/* EN: Toggle filename:line using GDB's breakpoint identifier once insertion succeeds.
+ * RU: Переключает точку filename:line по идентификатору, который GDB вернул после вставки. */
+static void native_debug_toggle(const gchar *filename, guint line, gpointer data)
+{
+    GtkWidget *dialog = data;
+    NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
+    if (session->pending || session->writing || session->editor_point_pending)
+        return;
+
+    gchar *location = g_strdup_printf("%s:%u", filename, line);
+    const gchar *number = g_hash_table_lookup(session->editor_points, location);
+    session->editor_point_removing = number != NULL;
+    session->editor_point_pending = location;
+    gchar *escaped = g_strescape(location, NULL);
+    gchar *command = number ? g_strdup_printf("-break-delete %s", number)
+                            : g_strdup_printf("-break-insert -- \"%s\"", escaped);
+    native_debug_send(dialog, command);
+    g_free(command);
+    g_free(escaped);
+}
+
+/* EN: Apply a GDB MI reply to the pending editor breakpoint in session.
+ * RU: Применяет ответ GDB MI к ожидающей точке редактора в session. */
+static void native_debug_point_reply(NativeDebug *session, const gchar *record)
+{
+    if (g_str_has_prefix(record, "=breakpoint-deleted,"))
+    {
+        gchar *number = native_debug_field(record, "id");
+        GHashTableIter iter;
+        gpointer value;
+        g_hash_table_iter_init(&iter, session->editor_points);
+        while (number && g_hash_table_iter_next(&iter, NULL, &value))
+            if (!strcmp(number, value))
+                g_hash_table_iter_remove(&iter);
+        g_free(number);
+    }
+    if (!session->editor_point_pending || *record != '^')
+        return;
+
+    gchar *location = g_steal_pointer(&session->editor_point_pending);
+    gboolean success = g_str_has_prefix(record, "^done");
+    if (success && session->editor_point_removing)
+        g_hash_table_remove(session->editor_points, location);
+    else if (success)
+    {
+        gchar *number = native_debug_field(record, "number");
+        success = number && *number && strspn(number, "0123456789") == strlen(number);
+        if (success)
+            g_hash_table_replace(session->editor_points, g_strdup(location), number);
+        else
+            g_free(number);
+    }
+
+    gchar *detail = success ? NULL : native_debug_field(record, "msg");
+    const gchar *message = !success ? "Could not change the source breakpoint."
+                          : session->editor_point_removing ? "Source breakpoint removed."
+                                                          : "Source breakpoint added.";
+    ui_set_statusbar(FALSE, "%s %s%s%s", insight_tr(message), location,
+                     detail ? " — " : "", detail ? detail : "");
+    g_free(detail);
+    g_free(location);
+}
+
 static void native_debug_observe(NativeDebug *session, const gchar *record)
 {
     g_free(session->stop_file);
@@ -10117,6 +10219,7 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
     if (!session->closed && line)
     {
         g_strchomp(line);
+        native_debug_point_reply(session, line);
         if (g_str_has_prefix(line, "*running") || g_str_has_prefix(line, "^running"))
         {
             session->running = TRUE;
@@ -10357,6 +10460,7 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     insight_panel_help_attach(box, "native-debugger.md");
     NativeDebug *session = g_new0(NativeDebug, 1);
+    session->editor_points = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     session->process = process;
     session->output = g_data_input_stream_new(g_subprocess_get_stdout_pipe(process));
     session->cancel = g_cancellable_new();
@@ -10442,6 +10546,15 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     g_signal_connect(session->command, "activate", G_CALLBACK(native_debug_command), dialog);
     gtk_box_pack_start(GTK_BOX(box), session->command, FALSE, FALSE, 4);
     g_object_set_data_full(G_OBJECT(dialog), "native-debug", session, native_debug_free);
+    GtkWidget *debug_commands[INSIGHT_DEBUG_COMMAND_COUNT] = {
+        [INSIGHT_DEBUG_RUN] = session->buttons[NATIVE_RUN],
+        [INSIGHT_DEBUG_PAUSE] = session->buttons[NATIVE_PAUSE],
+        [INSIGHT_DEBUG_CONTINUE] = session->buttons[NATIVE_CONTINUE],
+        [INSIGHT_DEBUG_INTO] = session->buttons[NATIVE_INTO],
+        [INSIGHT_DEBUG_OVER] = session->buttons[NATIVE_OVER],
+        [INSIGHT_DEBUG_OUT] = session->buttons[NATIVE_OUT]
+    };
+    insight_debug_register(dialog, session->breakpoint, native_debug_toggle, dialog, debug_commands);
     g_signal_connect(dialog, "destroy", G_CALLBACK(native_debug_close), session);
     g_signal_connect_swapped(dialog, "response", G_CALLBACK(gtk_widget_destroy), dialog);
     gtk_widget_show_all(dialog);
