@@ -309,7 +309,7 @@ static void simulation_replacement_offers(const gchar *source, const gchar *dire
             g_free(pins);
             if (suggestion)
             {
-                gchar *caption = g_strdup_printf(differential ? insight_tr("Configure HDMI buffer %s…")
+                gchar *caption = g_strdup_printf(differential ? insight_tr("Configure TMDS output primitive %s…")
                                                               : insight_tr("Configure missing PLL %s…"), module);
                 GtkWidget *button = gtk_button_new_with_label(caption);
                 g_free(caption);

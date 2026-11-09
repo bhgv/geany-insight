@@ -126,7 +126,8 @@ static void simulation_device_type(GtkComboBox *combo, gpointer data)
         "I²C uses open-drain lines with pull-ups and a 7-bit address.",
         "The testbench drives a constant expression at the selected width.",
         "The table displays hexadecimal bytes, including unknown and high-impedance states.",
-        "Display models receive video signals. The HDMI buffer replacement provides digital differential outputs."};
+        "Display models receive video signals.",
+        "The OBUFDS model converts a TMDS bit into a digital differential pair. The HDL transmitter encodes RGB."};
     const gchar *details_ru[] = {
         "Укажите имя модуля, объявленное в исходнике.",
         "Время задаётся в наносекундах. Тестбенч управляет выбранным входом.",
@@ -139,7 +140,8 @@ static void simulation_device_type(GtkComboBox *combo, gpointer data)
         "I²C использует открытый сток, подтяжки и 7-битный адрес.",
         "Тестбенч задаёт постоянное выражение выбранной ширины.",
         "Таблица показывает байты в hex, включая неизвестные и высокоимпедансные состояния.",
-        "Модели дисплеев принимают видеосигналы. Замена HDMI-буфера формирует цифровую дифференциальную пару."};
+        "Модели дисплеев принимают видеосигналы.",
+        "Модель OBUFDS формирует цифровую дифференциальную пару из бита TMDS. RGB кодирует передатчик в HDL."};
     G_STATIC_ASSERT(G_N_ELEMENTS(details_en) == G_N_ELEMENTS(device_kind_names));
     G_STATIC_ASSERT(G_N_ELEMENTS(details_ru) == G_N_ELEMENTS(device_kind_names));
     gchar *full_english = g_strconcat(english, "\n\n", details_en[preset->icon], NULL);

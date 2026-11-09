@@ -17,7 +17,8 @@ typedef enum
     DEVICE_I2C,
     DEVICE_CONSTANT,
     DEVICE_HEX,
-    DEVICE_RASTER
+    DEVICE_RASTER,
+    DEVICE_VIDEO_OUTPUT
 } DeviceKind;
 
 static const gchar *const device_kind_names[] = {"Setup",
@@ -31,7 +32,8 @@ static const gchar *const device_kind_names[] = {"Setup",
                                                  "I²C",
                                                  "Constant signals",
                                                  "Hex tables",
-                                                 "Displays"};
+                                                 "Displays",
+                                                 "Video output primitives"};
 
 static const gchar *const device_kind_icons[] = {"preferences-system-symbolic",
                                                  "appointment-soon-symbolic",
@@ -44,7 +46,8 @@ static const gchar *const device_kind_icons[] = {"preferences-system-symbolic",
                                                  "network-transmit-receive-symbolic",
                                                  "insert-text-symbolic",
                                                  "view-grid-symbolic",
-                                                 "video-display-symbolic"};
+                                                 "video-display-symbolic",
+                                                 "network-wired-symbolic"};
 
 typedef struct
 {
@@ -64,8 +67,8 @@ static const DevicePreset device_presets[] = {
      DEVICE_TIMING, (1u << DEVICE_TIMING)},
     {"clock-wave", "Clock port=clk|Frequency=100MHz|High (µs or -)=-|Low (µs or -)=-",
      "i1", -1, FALSE, "Test clock frequency and timing", DEVICE_TIMING, 1u << DEVICE_TIMING},
-    {"obufds-model", "Primitive=OBUFDS", "", -1, FALSE, "HDMI differential output buffer",
-     DEVICE_RASTER, 1u << DEVICE_RASTER},
+    {"obufds-model", "Primitive=OBUFDS", "", -1, FALSE, "TMDS differential output primitive (OBUFDS)",
+     DEVICE_VIDEO_OUTPUT, 1u << DEVICE_VIDEO_OUTPUT},
     {"pll-multi", "Module=pll|Input clock=clk_in|Reset or -=-|Locked or -=-|Lock input edges=4"
      "|Output 0=clk_o0|Frequency 0=100MHz|High 0 (µs)=-|Low 0 (µs)=-"
      "|Output 1=-|Frequency 1=100MHz|High 1 (µs)=-|Low 1 (µs)=-"
@@ -190,7 +193,7 @@ static guint device_bus(const DevicePreset *preset)
     if (g_str_has_prefix(rule, "usart")) return BUS_USART;
     if (g_str_has_prefix(rule, "rgb-")) return BUS_RGB;
     if (g_str_has_prefix(rule, "lvds-")) return BUS_LVDS;
-    if (g_str_has_prefix(rule, "hdmi-")) return BUS_HDMI;
+    if (g_str_has_prefix(rule, "hdmi-") || !strcmp(rule, "obufds-model")) return BUS_HDMI;
     if (preset->icon == DEVICE_MEMORY || !strcmp(rule, "bus")) return BUS_PARALLEL;
     return BUS_NONE;
 }
