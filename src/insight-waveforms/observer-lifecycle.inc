@@ -102,11 +102,38 @@ static void simulation_offer_restart(WaveSimulation *run, GtkWindow *parent,
                                  : insight_tr("The Verilog run ended with an error.");
     GtkWidget *dialog = gtk_message_dialog_new(parent, GTK_DIALOG_DESTROY_WITH_PARENT,
         GTK_MESSAGE_WARNING, GTK_BUTTONS_NONE, "%s", title);
-    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog), "%s",
-        insight_tr("See Messages for details and source locations. Save any source corrections, then restart with the same sources."));
+    GString *details = g_string_new(NULL);
+    if (missing)
+    {
+        GRegex *pattern = g_regex_new("Unknown module type:[ \t]*([A-Za-z_][A-Za-z0-9_$]*)", 0, 0, NULL);
+        GMatchInfo *match;
+        g_regex_match(pattern, diagnostic, 0, &match);
+        GHashTable *names = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+        while (g_match_info_matches(match))
+        {
+            gchar *name = g_match_info_fetch(match, 1);
+            if (g_hash_table_add(names, g_strdup(name)))
+                g_string_append_printf(details, "%s%s", details->len ? ", " : "", name);
+            g_free(name);
+            g_match_info_next(match, NULL);
+        }
+        g_hash_table_unref(names);
+        g_match_info_free(match);
+        g_regex_unref(pattern);
+        if (details->len)
+            g_string_append(details, "\n\n");
+        if (run->port_settings)
+            g_string_append(details, insight_tr("Open Port Signals to configure a PLL or HDMI buffer replacement, or add a simulation source."));
+    }
+    if (!details->len)
+        g_string_append(details, insight_tr("See Messages for details and source locations. Save any source corrections, then restart with the same sources."));
+    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog), "%s", details->str);
+    g_string_free(details, TRUE);
+    const gchar *retry = !run->port_settings ? insight_tr("_Restart")
+                       : missing ? insight_tr("Configure Replacements and Restart…")
+                                 : insight_tr("Review Setup and Restart…");
     gtk_dialog_add_buttons(GTK_DIALOG(dialog), insight_tr("_Close"), GTK_RESPONSE_CLOSE,
-                           run->port_settings ? insight_tr("Review Setup and Restart…")
-                                              : insight_tr("_Restart"), GTK_RESPONSE_ACCEPT, NULL);
+                           retry, GTK_RESPONSE_ACCEPT, NULL);
     g_object_ref_sink(dialog);
     gint response = insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);

@@ -93,6 +93,7 @@ enum
 };
 
 
+static GdkColor color_warning = {0, 0xC000, 0x7100, 0x0000};
 static GdkColor color_error = {0, 0xFFFF, 0, 0};
 static GdkColor color_context = {0, 0x7FFF, 0, 0};
 static GdkColor color_message = {0, 0, 0, 0xD000};
@@ -1239,8 +1240,10 @@ void msgwin_debugger_add(const gchar *message, const gchar *filename, gint line,
 {
     GtkTreeIter row;
     gchar *text = g_utf8_make_valid(message, -1);
+    const GdkColor *color = strstr(text, ": warning:") || g_str_has_prefix(text, "warning:")
+                           ? &color_warning : get_color(COLOR_RED);
     gtk_list_store_insert_with_values(msgwindow.store_msg, &row, -1,
-        MSG_COL_LINE, line, MSG_COL_DOC_ID, 0u, MSG_COL_COLOR, get_color(COLOR_RED),
+        MSG_COL_LINE, line, MSG_COL_DOC_ID, 0u, MSG_COL_COLOR, color,
         MSG_COL_STRING, text, MSG_COL_DEBUGGER, TRUE, MSG_COL_FILENAME, filename,
         MSG_COL_COLUMN, column, MSG_COL_END_LINE, end_line, MSG_COL_END_COLUMN, end_column, -1);
     g_free(text);

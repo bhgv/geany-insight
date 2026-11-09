@@ -64,6 +64,8 @@ static const DevicePreset device_presets[] = {
      DEVICE_TIMING, (1u << DEVICE_TIMING)},
     {"clock-wave", "Clock port=clk|Frequency=100MHz|High (µs or -)=-|Low (µs or -)=-",
      "i1", -1, FALSE, "Test clock frequency and timing", DEVICE_TIMING, 1u << DEVICE_TIMING},
+    {"obufds-model", "Primitive=OBUFDS", "", -1, FALSE, "HDMI differential output buffer",
+     DEVICE_RASTER, 1u << DEVICE_RASTER},
     {"pll-multi", "Module=pll|Input clock=clk_in|Reset or -=-|Locked or -=-|Lock input edges=4"
      "|Output 0=clk_o0|Frequency 0=100MHz|High 0 (µs)=-|Low 0 (µs)=-"
      "|Output 1=-|Frequency 1=100MHz|High 1 (µs)=-|Low 1 (µs)=-"

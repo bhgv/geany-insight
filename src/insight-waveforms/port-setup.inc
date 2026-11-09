@@ -277,9 +277,9 @@ static gchar *simulation_pll_suggestion(const gchar *module, const gchar *pins)
     return suggestion;
 }
 
-/* EN: Offer PLL replacement drafts from active HDL in source, using browser for the wizard.
- * RU: Предлагает черновики замен PLL из активного HDL source и открывает мастер через browser. */
-static void simulation_pll_offers(const gchar *source, const gchar *directory,
+/* EN: Offer PLL and HDMI replacement drafts from active HDL in source, using browser for the wizard.
+ * RU: Предлагает черновики замен PLL и HDMI из активного HDL source и открывает мастер через browser. */
+static void simulation_replacement_offers(const gchar *source, const gchar *directory,
                                   GtkBox *box, PortBrowser *browser)
 {
     if (!source)
@@ -290,7 +290,7 @@ static void simulation_pll_offers(const gchar *source, const gchar *directory,
     GPtrArray *defined = simulation_recipe_modules(clean);
     GHashTable *offered = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     GRegex *instances = g_regex_new(
-        "\\b(clk_wiz_[A-Za-z0-9_$]+|pll[A-Za-z0-9_$]*|[A-Za-z_][A-Za-z0-9_$]*_pll[A-Za-z0-9_$]*)"
+        "\\b(OBUFDS|clk_wiz_[A-Za-z0-9_$]+|pll[A-Za-z0-9_$]*|[A-Za-z_][A-Za-z0-9_$]*_pll[A-Za-z0-9_$]*)"
         "\\s+[A-Za-z_][A-Za-z0-9_$]*\\s*\\(([^;]*)\\)\\s*;", 0, 0, NULL);
     GMatchInfo *match;
     g_regex_match(instances, clean, 0, &match);
@@ -303,14 +303,17 @@ static void simulation_pll_offers(const gchar *source, const gchar *directory,
         if (!exists)
         {
             gchar *pins = g_match_info_fetch(match, 2);
-            gchar *suggestion = simulation_pll_suggestion(module, pins);
+            gboolean differential = !strcmp(module, "OBUFDS");
+            gchar *suggestion = differential ? g_strdup("obufds-model OBUFDS")
+                                              : simulation_pll_suggestion(module, pins);
             g_free(pins);
             if (suggestion)
             {
-                gchar *caption = g_strdup_printf(insight_tr("Configure missing PLL %s…"), module);
+                gchar *caption = g_strdup_printf(differential ? insight_tr("Configure HDMI buffer %s…")
+                                                              : insight_tr("Configure missing PLL %s…"), module);
                 GtkWidget *button = gtk_button_new_with_label(caption);
                 g_free(caption);
-                g_object_set_data_full(G_OBJECT(button), "pll-suggestion", suggestion, g_free);
+                g_object_set_data_full(G_OBJECT(button), "replacement-suggestion", suggestion, g_free);
                 g_object_set_data(G_OBJECT(button), "source-directory", (gpointer)directory);
                 g_signal_connect(button, "clicked", G_CALLBACK(simulation_device_wizard), browser);
                 gtk_box_pack_start(box, button, FALSE, FALSE, 0);
@@ -485,7 +488,7 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     g_signal_connect(device_list, "button-press-event", G_CALLBACK(simulation_device_menu), buffer);
     gtk_paned_pack1(GTK_PANED(panes), recipe_tabs, TRUE, FALSE);
     gtk_paned_pack2(GTK_PANED(panes), port_browser_widget(&browser), TRUE, FALSE);
-    simulation_pll_offers(expanded, source_directory, GTK_BOX(box), &browser);
+    simulation_replacement_offers(expanded, source_directory, GTK_BOX(box), &browser);
     gtk_paned_set_position(GTK_PANED(panes), 320);
     GtkWidget *diagram = gtk_button_new_with_label("Preview Diagram…");
     g_object_set_data(G_OBJECT(diagram), "source-directory", source_directory);

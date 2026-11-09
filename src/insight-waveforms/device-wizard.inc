@@ -297,7 +297,7 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     }
     else
     {
-        const gchar *suggestion = g_object_get_data(G_OBJECT(button), "pll-suggestion");
+        const gchar *suggestion = g_object_get_data(G_OBJECT(button), "replacement-suggestion");
         if (suggestion)
             g_shell_parse_argv(suggestion, &saved_count, &saved_args, NULL);
     }

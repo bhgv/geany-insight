@@ -190,6 +190,14 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         else if (valid && (((count == 5 || count == 6) && !strcmp(args[0], "usart")) ||
                            ((count == 6 || count == 7) && !strcmp(args[0], "usart-clock"))))
             valid = simulation_port_usart(args, count, body, connections, ports, live);
+        else if (valid && count == 2 && !strcmp(args[0], "obufds-model") && !strcmp(args[1], "OBUFDS"))
+        {
+            valid = g_hash_table_add(replacement_names, g_strdup("OBUFDS"));
+            if (valid)
+                g_string_append(replacements,
+                    "module OBUFDS(input wire I, output wire O, output wire OB);\n"
+                    "  assign O = I;\n  assign OB = ~I;\nendmodule\n");
+        }
         else if (valid && !strcmp(args[0], "pll-multi"))
             valid = simulation_pll_multi(args, count, replacements, replacement_names);
         else if (valid && !strcmp(args[0], "clock-wave"))
