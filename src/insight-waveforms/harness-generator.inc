@@ -192,8 +192,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             valid = simulation_port_usart(args, count, body, connections, ports, live);
         else if (valid && count == 2 && !strcmp(args[0], "obufds-model") && !strcmp(args[1], "OBUFDS"))
         {
-            valid = g_hash_table_add(replacement_names, g_strdup("OBUFDS"));
-            if (valid)
+            if (g_hash_table_add(replacement_names, g_strdup("OBUFDS")))
                 g_string_append(replacements,
                     "module OBUFDS(input wire I, output wire O, output wire OB);\n"
                     "  assign O = I;\n  assign OB = ~I;\nendmodule\n");
