@@ -307,6 +307,13 @@ static gboolean add_test_slider(gpointer data)
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(device_regex), FALSE);
         gtk_combo_box_set_active(GTK_COMBO_BOX(category), 0);
     }
+    if (catalog_ok)
+    {
+        catalog_ok = gtk_combo_box_set_active_id(GTK_COMBO_BOX(kind), "obufds-model");
+        GtkWidget *primitive = find_control(wizard, "insight-device-first-field");
+        catalog_ok = catalog_ok && GTK_IS_ENTRY(primitive) &&
+                     !strcmp(gtk_entry_get_text(GTK_ENTRY(primitive)), "OBUFDS");
+    }
     if (!catalog_ok || !gtk_combo_box_set_active_id(GTK_COMBO_BOX(kind), "slider"))
     {
         gtk_tree_path_free(selected);
