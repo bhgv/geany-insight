@@ -287,6 +287,94 @@ static gboolean simulation_stage_rules(const WaveSimulation *run, const gchar *d
     return staged;
 }
 
+#ifdef G_OS_WIN32
+/* EN: Compile the staged sources using bundled ivlpp and ivl. Set handled when
+ * the installed toolchain supports the direct path; cancel and error apply to both stages.
+ * RU: Компилирует sources комплектными ivlpp и ivl. Устанавливает handled для
+ * комплектной цепочки. cancel и error используются на обоих этапах. */
+static gboolean simulation_compile_direct(WaveSimulation *run, const gchar *directory,
+                                           const gchar *bin, GPtrArray *sources,
+                                           GPtrArray *model_directories, GCancellable *cancel,
+                                           gboolean *handled, GError **error)
+{
+    gchar *prefix = g_path_get_dirname(bin);
+    gchar *base = g_build_filename(prefix, "lib", "ivl", NULL);
+    gchar *ivlpp = g_build_filename(base, "ivlpp.exe", NULL);
+    gchar *ivl = g_build_filename(base, "ivl.exe", NULL);
+    gchar *target = g_build_filename(base, "vvp.conf", NULL);
+    *handled = g_file_test(ivlpp, G_FILE_TEST_IS_REGULAR) &&
+               g_file_test(ivl, G_FILE_TEST_IS_REGULAR) &&
+               g_file_test(target, G_FILE_TEST_IS_REGULAR);
+    gboolean ok = FALSE;
+    if (*handled)
+    {
+        const gchar *flags = "geany-ivlpp.flags";
+        const gchar *list = "geany-ivlpp.sources";
+        const gchar *hdl = "geany-preprocessed.sv";
+        const gchar *config = "geany-ivl.conf";
+        gchar *flags_path = g_build_filename(directory, flags, NULL);
+        gchar *list_path = g_build_filename(directory, list, NULL);
+        gchar *config_path = g_build_filename(directory, config, NULL);
+        gchar *standard = g_build_filename(base, "include", NULL);
+        GString *defines = g_string_new("D:__ICARUS__=1\nrelative include:true\n");
+        g_string_append_printf(defines, "I:%s\n", run->include_dir);
+        for (guint i = 0; i < model_directories->len; ++i)
+            g_string_append_printf(defines, "I:%s\n", (const gchar *)model_directories->pdata[i]);
+        g_string_append_printf(defines, "I:%s\n", standard);
+
+        GString *paths = g_string_new(NULL);
+        for (guint i = 0; i < sources->len; ++i)
+        {
+            const gchar *source = sources->pdata[i];
+            if (strpbrk(source, "\r\n"))
+            {
+                g_set_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_FILENAME,
+                            "A Verilog source path contains a newline: %s", source);
+                break;
+            }
+            g_string_append_printf(paths, "%s\n", source);
+        }
+        GString *settings = g_string_new(
+            "generation:2012\ngeneration:no-specify\ngeneration:no-interconnect\n"
+            "generation:assertions\ngeneration:xtypes\ngeneration:io-range-error\n"
+            "generation:no-strict-ca-eval\ngeneration:no-strict-expr-width\n"
+            "generation:shared-loop-index\ngeneration:no-verilog-ams\ngeneration:icarus-misc\n"
+            "ignore_missing_modules:false\niwidth:32\nwidthcap:65536\nout:simulation.vvp\n");
+        g_string_append_printf(settings, "basedir:%s\n", base);
+        const gchar *modules[] = {"system", "vhdl_sys", "vhdl_textio", "v2005_math", "v2009"};
+        for (guint i = 0; i < G_N_ELEMENTS(modules); ++i)
+            g_string_append_printf(settings, "module:%s%c%s.vpi\n", base, G_DIR_SEPARATOR, modules[i]);
+        if (run->interactive)
+            g_string_append(settings, "flag:fileline=1\n");
+        if (run->port_harness)
+            g_string_append(settings, "root:geany_port_testbench\n");
+
+        const gchar *preprocess[] = {ivlpp, "-L", "-F", flags, "-f", list, "-o", hdl, NULL};
+        const gchar *compile[] = {ivl, "-C", config, "-C", target, "--", hdl, NULL};
+        ok = (!error || !*error) &&
+             g_file_set_contents(flags_path, defines->str, defines->len, error) &&
+             g_file_set_contents(list_path, paths->str, paths->len, error) &&
+             g_file_set_contents(config_path, settings->str, settings->len, error) &&
+             simulation_process("Preprocessing (ivlpp)", preprocess, directory, bin, cancel, error) &&
+             simulation_process("Compilation and elaboration (ivl)", compile, directory, bin, cancel, error);
+
+        g_string_free(settings, TRUE);
+        g_string_free(paths, TRUE);
+        g_string_free(defines, TRUE);
+        g_free(standard);
+        g_free(config_path);
+        g_free(list_path);
+        g_free(flags_path);
+    }
+    g_free(target);
+    g_free(ivl);
+    g_free(ivlpp);
+    g_free(base);
+    g_free(prefix);
+    return ok;
+}
+#endif
+
 /* EN: Compile and run WaveSimulation data off the GTK thread. task receives the capture or failure, cancel stops execution and object is unused.
  * RU: Компилирует и запускает WaveSimulation из data вне потока GTK. task получает запись или ошибку, cancel останавливает работу, object не используется. */
 static void simulation_worker(GTask *task, gpointer object, gpointer data, GCancellable *cancel)
@@ -348,14 +436,25 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
                 g_ptr_array_add(sources, harness_path);
             }
         }
-        gchar *list_path = g_build_filename(directory, "sources.list", NULL);
+        gboolean compiled = FALSE, handled = FALSE;
+#ifdef G_OS_WIN32
         if (!error)
-            simulation_source_arguments(command, sources, "-c", list_path, &error);
-        g_ptr_array_add(command, NULL);
+            compiled = simulation_compile_direct(run, directory, bin, sources, model_directories,
+                                                 cancel, &handled, &error);
+#endif
+        if (!error && !handled)
+        {
+            gchar *list_path = g_build_filename(directory, "sources.list", NULL);
+            if (simulation_source_arguments(command, sources, "-c", list_path, &error))
+            {
+                g_ptr_array_add(command, NULL);
+                compiled = simulation_process("Compilation (iverilog)",
+                    (const gchar *const *)command->pdata, directory, bin, cancel, &error);
+            }
+            g_free(list_path);
+        }
         const gchar *execute[] = {run->runtime, "simulation.vvp", NULL};
-        if (!error &&
-            simulation_process("Compilation (iverilog)", (const gchar *const *)command->pdata,
-                               directory, bin, cancel, &error) &&
+        if (compiled &&
             (run->interactive ? (simulation_stage_rules(run, directory, &error) &&
                                  simulation_interactive(run, directory, bin, cancel, &error))
                               : simulation_process("Simulation (vvp)", execute, directory, bin, cancel, &error)))
@@ -374,7 +473,6 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
         }
         g_ptr_array_unref(command);
         g_ptr_array_unref(sources);
-        g_free(list_path);
         g_ptr_array_unref(model_directories);
         g_free(harness_path);
         g_free(bin);
