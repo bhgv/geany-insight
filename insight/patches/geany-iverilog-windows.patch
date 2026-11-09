@@ -306,3 +306,33 @@ index 352ab9f..dac6da2 100644
 +                  }
 +            }
        }
+
+diff --git a/symbol_search.cc b/symbol_search.cc
+--- a/symbol_search.cc
++++ b/symbol_search.cc
+@@ -117,4 +117,9 @@
+       bool passed_module_boundary = false;
+ 
++      // Accept forward references to explicit signals in the same structural
++      // scope, as supported by FPGA tools. Keep lexical lookup elsewhere.
++      const bool structural_scope = start_scope->type() == NetScope::MODULE
++                                 || start_scope->type() == NetScope::GENBLOCK;
++
+       // At this point, we've stripped right-most components until the search
+       // found the scope part of the path, or there is no scope part of the
+@@ -165,5 +170,6 @@
+ 
+ 		  if (NetNet*net = scope->find_signal(path_tail.name)) {
+-			if (prefix_scope || (net->lexical_pos() <= lexical_pos)) {
++			if (prefix_scope || (structural_scope && scope == start_scope)
++			    || (net->lexical_pos() <= lexical_pos)) {
+ 			      path.push_back(path_tail);
+ 			      res->scope = scope;
+@@ -225,5 +231,6 @@
+ 		    // been elaborated yet.
+ 		  if (PWire*wire = scope->find_signal_placeholder(path_tail.name)) {
+-			if (prefix_scope || (wire->lexical_pos() <= lexical_pos)) {
++			if (prefix_scope || (structural_scope && scope == start_scope)
++			    || (wire->lexical_pos() <= lexical_pos)) {
+ 			      NetNet*net = wire->elaborate_sig(des, scope);
+ 			      if (!net)
