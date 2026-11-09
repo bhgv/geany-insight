@@ -5288,7 +5288,9 @@ static void waveform_debug_current(GtkMenuItem *item, gpointer data)
 static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
 {
     (void)item;
-    gboolean interactive = GPOINTER_TO_INT(data);
+    gint mode = GPOINTER_TO_INT(data);
+    gboolean interactive = mode != 0;
+    gboolean configure_ports = mode == 2;
     static GtkWidget *active_picker;
     if (active_picker)
     {
@@ -5296,7 +5298,9 @@ static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
         return;
     }
     GtkWindow *parent = GTK_WINDOW(main_widgets.window);
-    GtkWidget *chooser = gtk_file_chooser_dialog_new(interactive ? "Debug Verilog Testbench" : "Run Verilog Testbench", parent,
+    const gchar *title = configure_ports ? "Debug Verilog Sources with Test Devices"
+                       : interactive ? "Debug Verilog Testbench" : "Run Verilog Testbench";
+    GtkWidget *chooser = gtk_file_chooser_dialog_new(title, parent,
         GTK_FILE_CHOOSER_ACTION_OPEN, "_Cancel", GTK_RESPONSE_CANCEL, "_Run", GTK_RESPONSE_ACCEPT, NULL);
     g_object_ref_sink(chooser);
     active_picker = chooser;
@@ -5313,23 +5317,27 @@ static void waveform_run_simulation(GtkMenuItem *item, gpointer data)
     if (root)
         gtk_file_chooser_set_current_folder(files, root);
     GeanyDocument *current = document_get_current();
-    if (DOC_VALID(current) && current->file_name)
-    {
-        if (waveform_testbench_path(current->file_name))
-        {
-            gchar *local = utils_get_locale_from_utf8(current->file_name);
-            if (local)
-                gtk_file_chooser_select_filename(files, local);
-            g_free(local);
-        }
-    }
+    gchar *active_source = DOC_VALID(current) && waveform_testbench_path(current->file_name)
+                               ? utils_get_locale_from_utf8(current->file_name) : NULL;
+    if (active_source)
+        gtk_file_chooser_select_filename(files, active_source);
 
     GSList *selected = insight_waveforms_run_setup_dialog(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT ?
         gtk_file_chooser_get_filenames(files) : NULL;
     active_picker = NULL;
     gtk_widget_destroy(chooser);
     g_object_unref(chooser);
-    waveform_start_simulation(selected, root, interactive, FALSE);
+    if (configure_ports && active_source)
+    {
+        GSList *active = g_slist_find_custom(selected, active_source, (GCompareFunc)g_strcmp0);
+        if (active && active != selected)
+        {
+            selected = g_slist_remove_link(selected, active);
+            selected = g_slist_concat(active, selected);
+        }
+    }
+    g_free(active_source);
+    waveform_start_simulation(selected, root, interactive, configure_ports);
     g_slist_free_full(selected, g_free);
     g_free(root);
 }
@@ -10523,6 +10531,8 @@ static void create_native_lua(void)
     GtkWidget *debug_hdl = tool_command(verilog, "Debug Current Verilog File",
         G_CALLBACK(waveform_debug_current), NULL);
     gtk_widget_set_name(debug_hdl, "insight-tools-debug-current-hdl");
+    tool_command(verilog, "Debug Verilog Sources with Test Devices…",
+                 G_CALLBACK(waveform_run_simulation), GINT_TO_POINTER(2));
     tool_command(verilog, "Debug Verilog Testbench…", G_CALLBACK(waveform_run_simulation), GINT_TO_POINTER(TRUE));
     tool_command(verilog, "Run Verilog Testbench…", G_CALLBACK(waveform_run_simulation), NULL);
     tool_command(verilog, "VCD Waveforms…", G_CALLBACK(waveforms_menu), NULL);
