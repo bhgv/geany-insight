@@ -13,6 +13,8 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
 {
     gchar **lines = g_strsplit(recipe, "\n", -1);
     GString *body = g_string_new("`timescale 1ns/1ns\nmodule geany_port_testbench;\n");
+    GString *replacements = g_string_new(NULL);
+    GHashTable *replacement_names = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     GString *connections = g_string_new(NULL);
     GString *controller_completion = g_string_new(NULL);
     GString *trigger = g_string_new(NULL);
@@ -188,6 +190,8 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         else if (valid && (((count == 5 || count == 6) && !strcmp(args[0], "usart")) ||
                            ((count == 6 || count == 7) && !strcmp(args[0], "usart-clock"))))
             valid = simulation_port_usart(args, count, body, connections, ports, live);
+        else if (valid && !strcmp(args[0], "pll-model"))
+            valid = simulation_pll_model(args, count, replacements, replacement_names);
         else if (valid && (!strcmp(args[0], "model") || g_str_has_prefix(args[0], "model-")))
             valid =
                 simulation_model_rule(args, count, models, sources, directory, body, connections, ports);
@@ -285,7 +289,8 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             "Place memory-image before the memory rule and use its address port, SPI chip-select port or I2C SDA.");
     }
     if (valid && !module &&
-        (trigger->len || scopes || connections->len || sources->len || g_hash_table_size(models)))
+        (trigger->len || scopes || connections->len || sources->len || replacements->len ||
+         g_hash_table_size(models)))
     {
         valid = FALSE;
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
@@ -339,11 +344,14 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             g_string_append(body, live->str);
             g_string_append(body, "geany_live_yield(); end end\nendmodule\n");
         }
+        g_string_append_len(body, replacements->str, replacements->len);
         result = g_string_free(body, FALSE);
     }
     else
         g_string_free(body, TRUE);
     g_free(module);
+    g_string_free(replacements, TRUE);
+    g_hash_table_unref(replacement_names);
     g_hash_table_unref(ports);
     g_hash_table_unref(spi_pins);
     g_hash_table_unref(i2c_buses);

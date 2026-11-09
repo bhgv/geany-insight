@@ -62,6 +62,8 @@ static const DevicePreset device_presets[] = {
      (1u << DEVICE_TIMING)},
     {"pulse", "Port=reset|Start (ns)=10|Length (ns)=100|Active level=1", "i1", -1, FALSE, "Timed pulse",
      DEVICE_TIMING, (1u << DEVICE_TIMING)},
+    {"pll-model", "Module=pll|Input clock=clk_in|Active-high reset=reset|Output clock=clk_out|Locked=locked|Half-period (ps)=5000|Lock input edges=4",
+     "", -1, FALSE, "PLL replacement", DEVICE_TIMING, 1u << DEVICE_TIMING},
     {"button", "Port=button|Idle level=0|Length (ns)=100", "i1", -1, FALSE, "Push button", DEVICE_INPUT,
      (1u << DEVICE_INPUT)},
     {"switch", "Port=enable|Initial level=0", "i1", -1, FALSE, "Switch", DEVICE_INPUT,

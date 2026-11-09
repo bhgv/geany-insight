@@ -853,3 +853,16 @@ one module, the editor fills in the missing `module` rule.
 
 For serial consoles, connect **Console TX → DUT RX** and **Console RX ← DUT TX**.
 Existing UART and USART recipes list the DUT's RX port first.
+
+
+### Functional PLL replacement
+
+If Icarus reports an undefined module for a PLL, add its vendor simulation
+source or select **PLL replacement** in **Add Test Device**. Enter the missing
+module name and the exact port names for the input clock, active-high reset,
+output clock and lock indication. The generated model exposes those names.
+
+For example, `pll-model clock_ip clk_in reset clk_out locked 5000 4`
+creates a 100 MHz output after four rising input clock edges. The period is
+fixed by the configured half-period in picoseconds. This model covers one
+output and digital reset and lock timing.

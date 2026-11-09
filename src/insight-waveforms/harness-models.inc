@@ -133,6 +133,51 @@ static gboolean simulation_model_rule(gchar **args, gint count, GHashTable *mode
     return TRUE;
 }
 
+/* EN: Add a functional PLL module from count args to replacements. names tracks duplicates.
+ * RU: Добавляет функциональную модель PLL из count аргументов args в replacements.
+ * names хранит имена уже определённых замен. */
+static gboolean simulation_pll_model(gchar **args, gint count, GString *replacements,
+                                     GHashTable *names)
+{
+    guint64 half_period, cycles;
+    if (count != 8 || !simulation_port_name(args[1]) || g_hash_table_contains(names, args[1]) ||
+        !g_ascii_string_to_unsigned(args[6], 10, 1, 1000000000, &half_period, NULL) ||
+        !g_ascii_string_to_unsigned(args[7], 10, 1, 1000000, &cycles, NULL))
+        return FALSE;
+    for (guint i = 2; i <= 5; ++i)
+    {
+        if (!simulation_port_name(args[i]) || g_str_has_prefix(args[i], "geany_pll_"))
+            return FALSE;
+        for (guint j = 2; j < i; ++j)
+            if (!strcmp(args[i], args[j]))
+                return FALSE;
+    }
+
+    g_hash_table_add(names, g_strdup(args[1]));
+    g_string_append_printf(replacements,
+        "`timescale 1ps/1ps\n"
+        "module %s(input wire %s, input wire %s, output wire %s, output reg %s = 0);\n"
+        "  integer geany_pll_edges = 0;\n"
+        "  reg geany_pll_clock = 0;\n"
+        "  always @(posedge %s or posedge %s) begin\n"
+        "    if (%s) begin geany_pll_edges <= 0; %s <= 0; end\n"
+        "    else if (!%s) begin\n"
+        "      geany_pll_edges <= geany_pll_edges + 1;\n"
+        "      if (geany_pll_edges + 1 >= %" G_GUINT64_FORMAT ") %s <= 1;\n"
+        "    end\n"
+        "  end\n"
+        "  always begin\n"
+        "    #%" G_GUINT64_FORMAT ";\n"
+        "    geany_pll_clock = %s && !%s ? !geany_pll_clock : 1'b0;\n"
+        "  end\n"
+        "  assign %s = %s && !%s ? geany_pll_clock : 1'b0;\n"
+        "endmodule\n",
+        args[1], args[2], args[3], args[4], args[5], args[2], args[3], args[3],
+        args[5], args[5], cycles, args[5], half_period, args[5], args[3],
+        args[4], args[5], args[3]);
+    return TRUE;
+}
+
 /* EN: Stage filename from directory in images under anchor. Report read or size errors in error.
  * RU: Добавляет файл filename из directory в images под ключом anchor. Ошибки чтения и размера записывает в error. */
 static gboolean simulation_memory_image(GHashTable *images, const gchar *anchor, const gchar *filename,

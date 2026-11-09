@@ -49,6 +49,11 @@ static void simulation_process_diagnostic(GError **error, const gchar *stage,
         g_string_append_printf(report, "\nProcess output (stdout and stderr):\n%s", message);
     else
         g_string_append(report, "\nProcess output: none.");
+    if (message && strstr(message, "Unknown module type:"))
+        g_string_append(report,
+            "\nAn HDL instance refers to an undefined module. Add its simulation source, "
+            "or configure a replacement with the same module and port names. "
+            "For a simple PLL, use PLL replacement in Port Signals.");
     if (output_note)
         g_string_append_printf(report, "\n%s", output_note);
 
