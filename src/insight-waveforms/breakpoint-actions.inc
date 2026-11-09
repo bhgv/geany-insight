@@ -105,13 +105,90 @@ static void simulation_list_unresolved(GtkButton *button, gpointer data)
     g_string_free(text, TRUE);
 }
 
+typedef struct
+{
+    GWeakRef editor;
+    gint handle;
+} SimulationPointMarker;
+
+/* EN: Remove the marker held in data if its editor still exists, then release it.
+ * RU: Удаляет маркер из data, если редактор ещё открыт, и освобождает данные. */
+static void simulation_point_marker_free(gpointer data)
+{
+    SimulationPointMarker *marker = data;
+    GObject *editor = g_weak_ref_get(&marker->editor);
+    if (editor)
+    {
+        SSM(SCINTILLA(editor), SCI_MARKERDELETEHANDLE, marker->handle, 0);
+        g_object_unref(editor);
+    }
+    g_weak_ref_clear(&marker->editor);
+    g_free(marker);
+}
+
+/* EN: Update run's visible list and red margin dots from its saved source rules.
+ * RU: Обновляет список run и красные метки по сохранённым точкам останова. */
+static void simulation_refresh_breakpoints(WaveSimulation *run)
+{
+    enum { SOURCE_POINT_MARKER = 18 };
+    gtk_list_store_clear(run->breakpoint_rows);
+    g_ptr_array_set_size(run->breakpoint_markers, 0);
+    GList *keys = g_list_sort(g_hash_table_get_keys(run->breakpoints), (GCompareFunc)g_strcmp0);
+    for (GList *it = keys; it; it = it->next)
+    {
+        const gchar *key = it->data;
+        const gchar *filename = strchr(key, '\t');
+        if (!filename)
+            continue;
+        filename++;
+        guint line = (guint)g_ascii_strtoull(key, NULL, 10);
+        GtkTreeIter row;
+        gtk_list_store_insert_with_values(run->breakpoint_rows, &row, -1,
+                                          0, filename, 1, line, -1);
+        GeanyDocument *doc = document_find_by_filename(filename);
+        if (!DOC_VALID(doc) || !line || line > (guint)sci_get_line_count(doc->editor->sci))
+            continue;
+        ScintillaObject *sci = doc->editor->sci;
+        SSM(sci, SCI_MARKERDEFINE, SOURCE_POINT_MARKER, SC_MARK_CIRCLE);
+        SSM(sci, SCI_MARKERSETFORE, SOURCE_POINT_MARKER, 0x2020df);
+        SSM(sci, SCI_MARKERSETBACK, SOURCE_POINT_MARKER, 0x2020df);
+        gint handle = (gint)SSM(sci, SCI_MARKERADD, line - 1, SOURCE_POINT_MARKER);
+        if (handle >= 0)
+        {
+            SimulationPointMarker *marker = g_new0(SimulationPointMarker, 1);
+            marker->handle = handle;
+            g_weak_ref_init(&marker->editor, G_OBJECT(sci));
+            g_ptr_array_add(run->breakpoint_markers, marker);
+        }
+    }
+    g_list_free(keys);
+}
+
+/* EN: Open the source point at path in view for the simulation in data.
+ * RU: Открывает исходник точки по path из view для симуляции из data. */
+static void simulation_open_breakpoint(GtkTreeView *view, GtkTreePath *path,
+                                       GtkTreeViewColumn *column, gpointer data)
+{
+    (void)column;
+    WaveSimulation *run = data;
+    GtkTreeModel *model = gtk_tree_view_get_model(view);
+    GtkTreeIter row;
+    if (run->open_location && gtk_tree_model_get_iter(model, &row, path))
+    {
+        gchar *filename = NULL;
+        guint line = 0;
+        gtk_tree_model_get(model, &row, 0, &filename, 1, &line, -1);
+        run->open_location(filename, line);
+        simulation_refresh_breakpoints(run);
+        g_free(filename);
+    }
+}
+
 /* EN: Apply action to filename and line in run. conditional enables the fields in the dialog.
  * RU: Применяет action к filename и line в run. conditional включает поля условия из окна. */
 static void simulation_change_breakpoint(WaveSimulation *run, const gchar *filename, guint line,
                                          gint action, gboolean conditional)
 {
-    if (!run->bridge_ready || run->prompt_tail[0] != '>' || run->prompt_tail[1] != ' ')
-        return;
     if (action != 2 && (!filename || strpbrk(filename, "\r\n\t")))
         return;
 
@@ -209,10 +286,18 @@ static void simulation_change_breakpoint(WaveSimulation *run, const gchar *filen
                 }
             }
             simulation_report_settings(run);
-            simulation_write_command(run, "geany-load\n");
+            simulation_refresh_breakpoints(run);
+            run->breakpoint_reload = TRUE;
+            if (run->bridge_ready && !run->preview_pending &&
+                run->prompt_tail[0] == '>' && run->prompt_tail[1] == ' ')
+            {
+                run->breakpoint_reload = FALSE;
+                run->restored_rules = TRUE;
+                simulation_write_command(run, "geany-load\n");
+            }
             const gchar *message = action == 2 ? "Source breakpoint list cleared."
                                    : action == 1 ? "Source breakpoint removed."
-                                                 : "Source breakpoint sent to the simulator.";
+                                                 : "Source breakpoint added. It takes effect at the next debugger prompt.";
             gtk_label_set_text(GTK_LABEL(run->breakpoint_status), insight_tr(message));
         }
         else
@@ -222,6 +307,9 @@ static void simulation_change_breakpoint(WaveSimulation *run, const gchar *filen
         g_string_free(contents, TRUE);
         g_free(directory);
     }
+    else
+        gtk_label_set_text(GTK_LABEL(run->breakpoint_status),
+                           insight_tr("Wait for the simulator to start before changing breakpoints."));
     g_free(key);
     g_free(rule);
 }

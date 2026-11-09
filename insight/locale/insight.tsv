@@ -3100,3 +3100,7 @@ Set or Remove Breakpoint	Поставить или удалить точку о�
 This file is not in the active Verilog simulation.	Этот файл не входит в активную симуляцию Verilog.
 Could not change the source breakpoint.	Не удалось изменить точку останова.
 Source breakpoint added.	Точка останова добавлена.
+
+# Verilog source breakpoint list
+Source breakpoint added. It takes effect at the next debugger prompt.	Точка добавлена. VVP применит её при следующем приглашении отладчика.
+Wait for the simulator to start before changing breakpoints.	Дождитесь запуска симулятора, чтобы изменить точки останова.

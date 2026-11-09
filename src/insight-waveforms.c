@@ -9,6 +9,8 @@
 #include "insight-workbench.h"
 #include "msgwindow.h"
 #include "document.h"
+#include "editor.h"
+#include "sciwrappers.h"
 #include "ui_utils.h"
 #include "utils.h"
 #include "insight-ai.h"

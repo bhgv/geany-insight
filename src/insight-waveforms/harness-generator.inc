@@ -28,6 +28,8 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
     gchar *module = NULL;
     guint64 duration = 1000;
     gboolean explicit_duration = FALSE;
+    guint64 duration_ticks = 0;
+    gchar *duration_clock = NULL;
     guint attached_images = 0, scopes = 0, rasters = 0;
     gboolean has_ddc = FALSE;
     gboolean valid = TRUE;
@@ -50,6 +52,13 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         {
             valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &duration, NULL);
             explicit_duration = TRUE;
+        }
+        else if (valid && count == 3 && !strcmp(args[0], "duration-ticks"))
+        {
+            valid = !duration_clock && simulation_capture_signal(args[1]) && !strchr(args[1], ':') &&
+                    g_ascii_string_to_unsigned(args[2], 10, 1, 1000000000, &duration_ticks, NULL);
+            if (valid)
+                duration_clock = g_strdup(args[1]);
         }
         else if (valid && count == 2 && !strcmp(args[0], "live-interval"))
             valid = g_ascii_string_to_unsigned(args[1], 10, 1, 1000000000, &live_interval, NULL);
@@ -317,7 +326,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
             "Place memory-image before the memory rule and use its address port, SPI chip-select port or I2C SDA.");
     }
     if (valid && !module &&
-        (trigger->len || scopes || connections->len || sources->len || replacements->len ||
+        (duration_clock || trigger->len || scopes || connections->len || sources->len || replacements->len ||
          g_hash_table_size(models)))
     {
         valid = FALSE;
@@ -344,15 +353,21 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         if (trigger->len)
             g_string_append(body, "// GEANY-CAPTURE-TRIGGER\n");
         g_string_append_printf(
-            body,
-            "initial begin %s$dumpfile(\"ports.vcd\"); $dumpvars(0,geany_port_testbench); %s end\n"
-            "initial begin #%" G_GUINT64_FORMAT "; ",
+            body, "initial begin %s$dumpfile(\"ports.vcd\"); $dumpvars(0,geany_port_testbench); %s end\n",
             trigger->str,
-            trigger->len ? "$display(\"Waveform capture started at %0t\",$time); $fflush();" : "",
-            duration);
-        if (!explicit_duration && controller_completion->len)
-            g_string_append_printf(body, "wait (%s); #1; ", controller_completion->str);
-        g_string_append(body, "$finish; end\nendmodule\n");
+            trigger->len ? "$display(\"Waveform capture started at %0t\",$time); $fflush();" : "");
+        if (duration_clock)
+            g_string_append_printf(body, "initial begin repeat (%" G_GUINT64_FORMAT
+                                   ") @(posedge dut.%s); #0; $finish; end\n",
+                                   duration_ticks, duration_clock);
+        if (!duration_clock || explicit_duration)
+        {
+            g_string_append_printf(body, "initial begin #%" G_GUINT64_FORMAT "; ", duration);
+            if (!explicit_duration && controller_completion->len)
+                g_string_append_printf(body, "wait (%s); #1; ", controller_completion->str);
+            g_string_append(body, "$finish; end\n");
+        }
+        g_string_append(body, "endmodule\n");
         if (strstr(body->str, "$geany_spi_lua(") || strstr(body->str, "$geany_i2c_lua("))
             g_string_append(live, "$geany_lua_console_poll();\n");
         if (live->len)
@@ -378,6 +393,7 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
     else
         g_string_free(body, TRUE);
     g_free(module);
+    g_free(duration_clock);
     g_string_free(replacements, TRUE);
     g_hash_table_unref(replacement_names);
     g_hash_table_unref(ports);

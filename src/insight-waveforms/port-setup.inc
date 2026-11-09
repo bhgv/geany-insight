@@ -373,7 +373,7 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     GtkWidget *hint = gtk_label_new(
         "Leave empty to run an existing testbench. Otherwise enter one rule per line (times in ns).\n"
-        "module NAME   ·   duration NS\n"
+        "module NAME   ·   duration NS   ·   duration-ticks CLOCK COUNT\n"
         "clock PORT START HIGH LOW   ·   clock-hz PORT START HZ\n"
         "pulse PORT START LENGTH 0|1   ·   value PORT WIDTH EXPR\n"
         "bus PORT WIDTH INTERVAL EXPR   ·   output PORT WIDTH\n"

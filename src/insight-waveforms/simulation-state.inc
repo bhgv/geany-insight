@@ -105,6 +105,9 @@ typedef struct
     guint moved_points;
     GError *capture_error;
     GtkWidget *breakpoint_status;
+    GtkListStore *breakpoint_rows;
+    GPtrArray *breakpoint_markers;
+    gboolean breakpoint_reload;
     gchar *trace_file;
     guint trace_line;
     InsightWaveLocation open_location;
@@ -124,6 +127,8 @@ static void simulation_free(gpointer data)
     g_free(run->live_directory);
     g_free(run->trace_file);
     g_clear_error(&run->capture_error);
+    g_clear_object(&run->breakpoint_rows);
+    g_clear_pointer(&run->breakpoint_markers, g_ptr_array_unref);
     g_clear_pointer(&run->signal_rows, g_ptr_array_unref);
     g_clear_pointer(&run->frame_reopen_path, gtk_tree_path_free);
     g_clear_pointer(&run->signal_previous_values, g_hash_table_unref);

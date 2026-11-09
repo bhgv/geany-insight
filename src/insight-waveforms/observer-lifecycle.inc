@@ -214,6 +214,8 @@ static void simulation_dialog_destroy(GtkWidget *dialog, gpointer data)
     (void)dialog;
     WaveSimulation *run = data;
     g_object_set_data(G_OBJECT(dialog), "insight-live-simulation", NULL);
+    if (run->breakpoint_markers)
+        g_ptr_array_set_size(run->breakpoint_markers, 0);
     if (run->refresh_source)
     {
         g_source_remove(run->refresh_source);

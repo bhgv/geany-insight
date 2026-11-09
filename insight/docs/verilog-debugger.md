@@ -20,7 +20,7 @@ the tabs. Open **Source breakpoints** to select a source file and line.
 and memory** or **Inspection tools** for additional commands, and
 **Simulator log** for VVP output.
 
-While paused, select a file and an executable HDL line, then click **Set Point**. Leave both condition fields empty and **Hits** at 1 to stop on the first visit. The status in the tab confirms that the rule was sent. A completed run can report a separate warning if its VCD exceeds the viewer limits.
+While paused, select a file and an executable HDL line, then click **Set Point**. Leave both condition fields empty and **Hits** at 1 to stop on the first visit. The status in the tab confirms that the rule was sent. A completed run can report a separate warning if its VCD exceeds the viewer limits. A red dot appears in the open source editor’s marker margin. Double-click a list entry to open its source line.
 
 **Preview Waveform** opens the current capture. In the waveform window,
 open **Signal Map → HDL Uses…**. **Connections** shows data paths, **Conditions** shows guards, and **Clock / events** shows edge and event dependencies. The last two tabs show the originating signal in **From signal**. Use **Open Source** or **Select Track** from any tab. **VCD Waveforms…** opens an existing recording.
@@ -224,6 +224,12 @@ button start
 switch enable
 capture-trigger rise start
 ```
+
+The `duration` rule specifies elapsed simulation time in nanoseconds.
+`duration-ticks clk 10000` ends the run after 10,000 positive edges of
+`clk`. If both rules are present, the first limit reached ends the run.
+The capture trigger starts the VCD while the model is already running.
+
 
 Use `capture-trigger fall start` to capture when the button pulse ends.
 The `button PORT [IDLE [LENGTH_NS]]` rule creates a control in **Live Port I/O**.

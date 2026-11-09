@@ -251,11 +251,13 @@ static gboolean simulation_refresh_console(gpointer data)
     }
     g_byte_array_unref(output);
     gboolean paused = running && run->prompt_tail[0] == '>' && run->prompt_tail[1] == ' ';
-    if (paused && run->bridge_ready && !run->restored_rules)
+    if (paused && run->bridge_ready && !run->preview_pending &&
+        (!run->restored_rules || run->breakpoint_reload))
     {
         run->restored_rules = TRUE;
-        if (g_hash_table_size(run->breakpoints))
+        if (run->breakpoint_reload || g_hash_table_size(run->breakpoints))
         {
+            run->breakpoint_reload = FALSE;
             simulation_write_command(run, "geany-load\n");
             paused = FALSE;
         }
@@ -317,7 +319,7 @@ static gboolean simulation_refresh_console(gpointer data)
         gtk_label_set_text(GTK_LABEL(run->pause_reason), reason);
     g_free(reason);
     gtk_widget_set_sensitive(run->live_controls, paused && !run->preview_pending);
-    gtk_widget_set_sensitive(run->breakpoint_controls, paused && run->bridge_ready && !run->preview_pending);
+    gtk_widget_set_sensitive(run->breakpoint_controls, running);
     gtk_widget_set_sensitive(run->source_step_controls, run->source_step_ready);
     gtk_widget_set_sensitive(run->process_controls, run->processes_ready);
     gtk_widget_set_sensitive(run->frame_controls, run->frames_ready);

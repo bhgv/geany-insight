@@ -296,14 +296,25 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         run->breakpoint_controls = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
         GtkWidget *breakpoint_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
         simulation_add_tab(inspection_tabs, breakpoint_page, "Source breakpoints");
-        g_object_bind_property(run->live_controls, "sensitive", breakpoint_page, "sensitive",
-                               G_BINDING_SYNC_CREATE);
         gtk_box_pack_start(GTK_BOX(breakpoint_page), run->breakpoint_controls, FALSE, FALSE, 0);
         run->breakpoint_status = gtk_label_new(insight_tr(
             "Select a file and an executable HDL line. Leave both condition fields empty for an unconditional stop."));
         gtk_label_set_xalign(GTK_LABEL(run->breakpoint_status), 0);
         gtk_label_set_line_wrap(GTK_LABEL(run->breakpoint_status), TRUE);
         gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), run->breakpoint_status, FALSE, FALSE, 0);
+        run->breakpoint_rows = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_UINT);
+        run->breakpoint_markers = g_ptr_array_new_with_free_func(simulation_point_marker_free);
+        GtkWidget *points = gtk_tree_view_new_with_model(GTK_TREE_MODEL(run->breakpoint_rows));
+        gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(points), -1, insight_tr("File"),
+            gtk_cell_renderer_text_new(), "text", 0, NULL);
+        gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(points), -1, insight_tr("Line number"),
+            gtk_cell_renderer_text_new(), "text", 1, NULL);
+        g_signal_connect(points, "row-activated", G_CALLBACK(simulation_open_breakpoint), run);
+        GtkWidget *points_scroll = gtk_scrolled_window_new(NULL, NULL);
+        gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(points_scroll), 100);
+        gtk_container_add(GTK_CONTAINER(points_scroll), points);
+        gtk_box_pack_start(GTK_BOX(breakpoint_page), points_scroll, FALSE, FALSE, 0);
+        simulation_refresh_breakpoints(run);
         GtkWidget *location = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
         gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), location, FALSE, FALSE, 0);
         run->breakpoint_file = gtk_combo_box_text_new();
