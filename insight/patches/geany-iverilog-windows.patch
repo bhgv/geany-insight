@@ -234,7 +234,7 @@ index 352ab9f..dac6da2 100644
  	 * we are not in relative mode, so for now keep it around. */
 --- a/main.cc
 +++ b/main.cc
-@@ -913,5 +913,17 @@
+@@ -913,5 +913,16 @@
  int main(int argc, char*argv[])
  {
 +#ifdef __MINGW32__
@@ -248,7 +248,24 @@ index 352ab9f..dac6da2 100644
 +      }
 +#endif
 +
-+
        bool help_flag = false;
        bool times_flag = false;
        bool version_flag = false;
+@@ -1180,3 +1191,7 @@
+       if (rc) {
++#ifdef __MINGW32__
++            if (diagnostic_path && *diagnostic_path)
++                  cerr << "GEANY-IVL-PHASE: parse, errors: " << rc << endl;
++#endif
+-	    return rc;
++            return rc;
+       }
+@@ -1392,4 +1407,8 @@
+       int rtn = des? des->errors : 1;
++#ifdef __MINGW32__
++      if (diagnostic_path && *diagnostic_path)
++            cerr << "GEANY-IVL-PHASE: elaboration, errors: " << rtn << endl;
++#endif
+       delete des;
+       EOC_cleanup();
+       return rtn;

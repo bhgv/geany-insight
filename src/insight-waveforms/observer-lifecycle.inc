@@ -91,6 +91,29 @@ static void simulation_disable_observer(GtkButton *button, gpointer data)
     simulation_observer_output(run);
 }
 
+/* EN: Offer to reopen the setup for run when diagnostic identifies missing HDL modules.
+ * RU: Предлагает открыть настройки run, когда diagnostic сообщает об отсутствующих HDL-модулях. */
+static void simulation_offer_missing_modules(WaveSimulation *run, GtkWindow *parent,
+                                              const gchar *diagnostic)
+{
+    if (!run->port_settings ||
+        (!strstr(diagnostic, "Unknown module type:") && !strstr(diagnostic, "These modules were missing:")))
+        return;
+
+    GtkWidget *dialog = gtk_message_dialog_new(parent, GTK_DIALOG_DESTROY_WITH_PARENT,
+        GTK_MESSAGE_WARNING, GTK_BUTTONS_NONE, "%s", insight_tr("The Verilog design has missing modules."));
+    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog), "%s",
+        insight_tr("See Messages for module names and source locations. Open Port Signals to add a simulation source or configure a replacement."));
+    gtk_dialog_add_buttons(GTK_DIALOG(dialog), insight_tr("_Close"), GTK_RESPONSE_CLOSE,
+                           insight_tr("Edit Test Devices…"), GTK_RESPONSE_ACCEPT, NULL);
+    g_object_ref_sink(dialog);
+    gint response = insight_waveforms_run_setup_dialog(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+    g_object_unref(dialog);
+    if (response == GTK_RESPONSE_ACCEPT)
+        simulation_edit_ports(parent, run->port_settings, run, NULL, NULL, NULL);
+}
+
 /* EN: Finish the simulation task in result, display its capture or publish diagnostics.
  * object and data are unused.
  * RU: Завершает задачу из result, открывает осциллограмму или публикует ошибки.
@@ -120,7 +143,10 @@ static void simulation_done(GObject *object, GAsyncResult *result, gpointer data
     else if (capture)
         capture_free(capture);
     else if (parent && error && !g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+    {
         msgwin_debugger_report(error->message, run->include_dir, NULL);
+        simulation_offer_missing_modules(run, parent, error->message);
+    }
     g_clear_error(&error);
     g_clear_object(&parent);
 }
