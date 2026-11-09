@@ -134,6 +134,25 @@ check_windows_diagnostics() {
             printf '%s\n' 'Icarus did not save its syntax diagnostics.' >&2
             exit 1
         fi
+        cat > geany-legacy-port.v <<'VERILOG'
+module geany_legacy_port(source, mirror, zero);
+    input wire source;
+    output wire mirror = source, zero = 0;
+endmodule
+module geany_legacy_port_test;
+    reg source = 0;
+    wire mirror, zero;
+    geany_legacy_port dut(source, mirror, zero);
+    initial begin
+        #1 if (mirror !== 0 || zero !== 0) $fatal(1, "Incorrect initial net drive");
+        source = 1;
+        #1 if (mirror !== 1 || zero !== 0) $fatal(1, "Net initializer did not drive continuously");
+        $finish;
+    end
+endmodule
+VERILOG
+        "$prefix/bin/iverilog.exe" -g2012 -s geany_legacy_port_test -o geany-legacy-port.vvp geany-legacy-port.v &&
+            "$prefix/bin/vvp.exe" geany-legacy-port.vvp
     )
 }
 

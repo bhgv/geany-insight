@@ -282,3 +282,30 @@ index 352ab9f..dac6da2 100644
 +}
  <CCOMMENT>\n   { yylloc.first_line += 1; }
  <CCOMMENT>"*/" { BEGIN(comment_enter); }
+--- a/parse.y
++++ b/parse.y
+@@ -4985,2 +4985,2 @@
+-  | attribute_list_opt port_direction net_type_or_var data_type_or_implicit list_of_port_identifiers ';'
++  | attribute_list_opt port_direction net_type_or_var data_type_or_implicit list_of_variable_port_identifiers ';'
+       { pform_module_define_port(@2, $5, $2, $3, $4, $1); }
+--- a/pform.cc
++++ b/pform.cc
+@@ -2626,3 +2626,16 @@
+-	    if (cur->expr)
+-		  pform_make_var_init(li, cur->name, cur->expr);
++            if (cur->expr) {
++                  if (type == NetNet::REG || type == NetNet::IMPLICIT_REG) {
++                        pform_make_var_init(li, cur->name, cur->expr);
++                  } else if (port_kind == NetNet::POUTPUT && type == NetNet::WIRE) {
++                        /* A legacy output wire initializer drives the net continuously. */
++                        const str_pair_t strength = {IVL_DR_STRONG, IVL_DR_STRONG};
++                        PEIdent* target = new PEIdent(cur->name.first, cur->name.second);
++                        FILE_NAME(target, li);
++                        PGAssign* assign = pform_make_pgassign(target, cur->expr, 0, strength);
++                        FILE_NAME(assign, li);
++                  } else {
++                        VLerror(li, "error: Initializer requires an output wire or variable.");
++                        delete cur->expr;
++                  }
++            }
+       }
