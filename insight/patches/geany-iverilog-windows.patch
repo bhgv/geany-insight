@@ -2,16 +2,16 @@ diff --git a/driver/main.c b/driver/main.c
 index 352ab9f..dac6da2 100644
 --- a/driver/main.c
 +++ b/driver/main.c
-@@ -321,6 +321,52 @@
+@@ -321,6 +321,116 @@
        return pathbuf;
  }
  
 +/* EN: Run command with inherited pipes. Use the shell only for redirection
 + * or a pipeline. RU: Запускает command с унаследованными каналами.
 + * Командная оболочка нужна только для перенаправления или конвейера. */
-+static int run_command(const char*command, int use_shell)
-+{
 +#ifdef __MINGW32__
++static int run_windows_helper(const char*command, int use_shell, HANDLE input, HANDLE output)
++{
 +      const char* shell = getenv("COMSPEC");
 +      if (!shell || !*shell)
 +            shell = "cmd.exe";
@@ -28,8 +28,8 @@ index 352ab9f..dac6da2 100644
 +      PROCESS_INFORMATION child;
 +      startup.cb = sizeof startup;
 +      startup.dwFlags = STARTF_USESTDHANDLES;
-+      startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-+      startup.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
++      startup.hStdInput = input;
++      startup.hStdOutput = output;
 +      startup.hStdError = GetStdHandle(STD_ERROR_HANDLE);
 +      BOOL started = CreateProcessA(NULL, line, NULL, NULL, TRUE, CREATE_NO_WINDOW,
 +                                    NULL, NULL, &startup, &child);
@@ -46,6 +46,70 @@ index 352ab9f..dac6da2 100644
 +      CloseHandle(child.hThread);
 +      CloseHandle(child.hProcess);
 +      return (int)status;
++}
++
++/* EN: Run the generated preprocess and compiler commands separately on Windows.
++ * RU: Запускает сгенерированные команды препроцессора и компилятора отдельно в Windows. */
++static int run_windows_compile(const char*command)
++{
++      const char* separator = strstr(command, " |");
++      HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
++      HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);
++      if (!separator)
++            return run_windows_helper(command, 0, input, output);
++
++      char directory[MAX_PATH];
++      char filename[MAX_PATH];
++      DWORD length = GetTempPathA(MAX_PATH, directory);
++      if (!length || length >= MAX_PATH || !GetTempFileNameA(directory, "ivl", 0, filename)) {
++            fprintf(stderr, "Cannot create temporary preprocessed HDL (Windows error %lu).\n",
++                    (unsigned long)GetLastError());
++            return 1;
++      }
++      SECURITY_ATTRIBUTES attributes = {sizeof attributes, NULL, TRUE};
++      HANDLE intermediate = CreateFileA(filename, GENERIC_READ | GENERIC_WRITE, 0, &attributes,
++                                       OPEN_EXISTING, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, NULL);
++      if (intermediate == INVALID_HANDLE_VALUE) {
++            fprintf(stderr, "Cannot open temporary preprocessed HDL (Windows error %lu).\n",
++                    (unsigned long)GetLastError());
++            DeleteFileA(filename);
++            return 1;
++      }
++
++      size_t size = (size_t)(separator - command);
++      char* preprocess = malloc(size + 1);
++      if (!preprocess) {
++            CloseHandle(intermediate);
++            fprintf(stderr, "Cannot allocate the Icarus preprocessor command.\n");
++            return 1;
++      }
++      memcpy(preprocess, command, size);
++      preprocess[size] = 0;
++      int rc = run_windows_helper(preprocess, 0, input, intermediate);
++      if (rc)
++            fprintf(stderr, "Icarus preprocessing failed (Windows exit code %d).\n", rc);
++      else if (SetFilePointer(intermediate, 0, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER) {
++            fprintf(stderr, "Cannot rewind preprocessed HDL (Windows error %lu).\n",
++                    (unsigned long)GetLastError());
++            rc = 1;
++      } else {
++            rc = run_windows_helper(separator + 2, 0, intermediate, output);
++            if (rc)
++                  fprintf(stderr, "Icarus compilation/elaboration failed (Windows exit code %d).\n", rc);
++      }
++      free(preprocess);
++      CloseHandle(intermediate);
++      return rc;
++}
++#endif
++
++/* EN: Execute command, using the shell only when requested by use_shell.
++ * RU: Выполняет command через оболочку только по запросу use_shell. */
++static int run_command(const char*command, int use_shell)
++{
++#ifdef __MINGW32__
++      return run_windows_helper(command, use_shell, GetStdHandle(STD_INPUT_HANDLE),
++                                GetStdHandle(STD_OUTPUT_HANDLE));
 +#else
 +      (void)use_shell;
 +      return system(command);
@@ -55,7 +119,7 @@ index 352ab9f..dac6da2 100644
  static int t_version_only(void)
  {
        int rc;
-@@ -329,7 +375,7 @@
+@@ -329,7 +439,7 @@
  
        fflush(0);
        snprintf(tmp, sizeof tmp, "%s%civlpp -V", ivlpp_dir, sep);
@@ -64,7 +128,7 @@ index 352ab9f..dac6da2 100644
        if (rc != 0) {
  	    fprintf(stderr, "Unable to get version from \"%s\"\n", tmp);
        }
-@@ -337,7 +383,7 @@
+@@ -337,7 +447,7 @@
        fflush(0);
        snprintf(tmp, sizeof tmp, "%s%civl -V -C\"%s\" -C\"%s\"", base, sep,
  	       iconfig_path, iconfig_common_path);
@@ -73,19 +137,19 @@ index 352ab9f..dac6da2 100644
        if (rc != 0) {
  	    fprintf(stderr, "Unable to get version from \"%s\"\n", tmp);
        }
-@@ -356,8 +402,9 @@
+@@ -356,8 +466,9 @@
  
  static void build_preprocess_command(int e_flag)
  {
 -      snprintf(tmp, sizeof tmp, "%s%civlpp%s%s%s -F\"%s\" -f\"%s\" -p\"%s\"%s",
 -	       ivlpp_dir, sep,
-+      const char* quote = e_flag ? "\"" : "";
++      const char* quote = "\"";
 +      snprintf(tmp, sizeof tmp, "%s%s%civlpp%s%s%s%s -F\"%s\" -f\"%s\" -p\"%s\"%s",
 +	       quote, ivlpp_dir, sep, quote,
                 verbose_flag ? " -v" : "",
  	       e_flag ? "" : " -L",
                 strchr(warning_flags, 'r') ? " -Wredef-all" :
-@@ -388,7 +435,7 @@
+@@ -388,7 +499,7 @@
        if (verbose_flag)
  	    printf("preprocess: %s\n", cmd);
  
@@ -94,7 +158,7 @@ index 352ab9f..dac6da2 100644
        remove(source_path);
        free(source_path);
  
-@@ -402,6 +449,14 @@
+@@ -402,6 +513,14 @@
        }
  
        if (rc != 0) {
@@ -109,7 +173,7 @@ index 352ab9f..dac6da2 100644
  	    if (WIFEXITED(rc)) {
  		  fprintf(stderr, "errors preprocessing Verilog program.\n");
  		  free(cmd);
-@@ -411,6 +466,7 @@
+@@ -411,6 +530,7 @@
  	    fprintf(stderr, "Command signaled: %s\n", cmd);
  	    free(cmd);
  	    return -1;
@@ -117,12 +181,22 @@ index 352ab9f..dac6da2 100644
        }
  
        free(cmd);
-@@ -489,7 +545,7 @@
+@@ -449,4 +569,4 @@
+-      snprintf(tmp, sizeof tmp, "%s%civl", base, sep);
++      snprintf(tmp, sizeof tmp, "\"%s%civl\"", base, sep);
+       rc = strlen(tmp);
+       cmd = realloc(cmd, ncmd+rc+1);
+       strcpy(cmd+ncmd, tmp);
+@@ -489,7 +609,11 @@
  	    printf("translate: %s\n", cmd);
  
  
 -      rc = system(cmd);
++#ifdef __MINGW32__
++      rc = run_windows_compile(cmd);
++#else
 +      rc = run_command(cmd, 1);
++#endif
        if ( ! getenv("IVERILOG_ICONFIG")) {
  	    remove(source_path);
  	    free(source_path);
