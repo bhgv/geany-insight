@@ -51,7 +51,8 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
     run->open_location = open_location;
     if (configure_ports)
     {
-        gchar *key = simulation_settings_path(settings_directory, project, run->sources);
+        gchar *dut_source[] = {run->sources[0], NULL};
+        gchar *key = simulation_settings_path(settings_directory, project, dut_source);
         run->port_settings = g_strconcat(key, ".ports", NULL);
         g_free(key);
         gboolean accepted = simulation_edit_ports(parent, run->port_settings, run, &run->port_harness,

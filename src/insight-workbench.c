@@ -5275,8 +5275,36 @@ static void waveform_debug_current(GtkMenuItem *item, gpointer data)
     if (!path)
         return;
     gchar *root = app->project ? project_get_base_path() : NULL;
-    GSList selected = {path, NULL};
+    GSList *dependencies = NULL;
+    if (root && wb.workspace_from_project && wb.files)
+    {
+        gchar *root_utf8 = utils_get_utf8_from_locale(root);
+        if (g_strcmp0(root_utf8, wb.root) == 0)
+        {
+            if (wb.scan)
+            {
+                ui_set_statusbar(TRUE, "Wait for the project file scan before starting Verilog debugging.");
+                g_free(root_utf8);
+                g_free(root);
+                g_free(path);
+                return;
+            }
+            for (guint i = 0; i < wb.files->len; ++i)
+            {
+                const gchar *candidate = wb.files->pdata[i];
+                if (waveform_testbench_path(candidate) && strcmp(candidate, document->file_name))
+                {
+                    gchar *native = utils_get_locale_from_utf8(candidate);
+                    if (native)
+                        dependencies = g_slist_prepend(dependencies, native);
+                }
+            }
+        }
+        g_free(root_utf8);
+    }
+    GSList selected = {path, g_slist_sort(dependencies, (GCompareFunc)g_strcmp0)};
     waveform_start_simulation(&selected, root, TRUE, TRUE);
+    g_slist_free_full(selected.next, g_free);
     g_free(root);
     g_free(path);
 }

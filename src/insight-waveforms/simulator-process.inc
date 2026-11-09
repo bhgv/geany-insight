@@ -301,8 +301,9 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
             g_ptr_array_add(command, (gpointer)options[i]);
         if (run->interactive)
             g_ptr_array_add(command, "-pfileline=1");
-        for (guint i = 0; run->sources[i]; i++)
-            g_ptr_array_add(command, run->sources[i]);
+        GPtrArray *sources = g_ptr_array_new();
+        for (guint i = 0; run->sources[i]; ++i)
+            g_ptr_array_add(sources, run->sources[i]);
         GPtrArray *model_directories = g_ptr_array_new_with_free_func(g_free);
         if (run->port_model_sources)
             for (guint i = 0; i < run->port_model_sources->len; i++)
@@ -313,7 +314,7 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
                 g_ptr_array_add(command, "-I");
                 g_ptr_array_add(command, model_directory);
                 if (!g_strv_contains((const gchar *const *)run->sources, source))
-                    g_ptr_array_add(command, (gpointer)source);
+                    g_ptr_array_add(sources, (gpointer)source);
             }
         if (run->port_images)
         {
@@ -339,9 +340,12 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
             {
                 g_ptr_array_add(command, "-s");
                 g_ptr_array_add(command, "geany_port_testbench");
-                g_ptr_array_add(command, harness_path);
+                g_ptr_array_add(sources, harness_path);
             }
         }
+        gchar *list_path = g_build_filename(directory, "sources.list", NULL);
+        if (!error)
+            simulation_source_arguments(command, sources, "-c", list_path, &error);
         g_ptr_array_add(command, NULL);
         const gchar *execute[] = {run->runtime, "simulation.vvp", NULL};
         if (!error &&
@@ -364,6 +368,8 @@ static void simulation_worker(GTask *task, gpointer object, gpointer data, GCanc
             g_free(vcd);
         }
         g_ptr_array_unref(command);
+        g_ptr_array_unref(sources);
+        g_free(list_path);
         g_ptr_array_unref(model_directories);
         g_free(harness_path);
         g_free(bin);

@@ -64,6 +64,47 @@ static gchar *port_browser_source(const gchar *path)
     return source;
 }
 
+/* EN: Add sources to command, using option and path for long source lists.
+ * RU: Добавляет sources в command, используя option и path для длинного списка. */
+static gboolean simulation_source_arguments(GPtrArray *command, GPtrArray *sources,
+                                             const gchar *option, const gchar *path, GError **error)
+{
+    gsize bytes = 0;
+    for (guint i = 0; i < sources->len; ++i)
+        bytes += 2 * strlen(sources->pdata[i]) + 3;
+    if (bytes < 16000)
+    {
+        for (guint i = 0; i < sources->len; ++i)
+            g_ptr_array_add(command, sources->pdata[i]);
+        return TRUE;
+    }
+
+    GString *list = g_string_sized_new(bytes / 2);
+    gboolean valid = TRUE;
+    for (guint i = 0; i < sources->len; ++i)
+    {
+        const gchar *source = sources->pdata[i];
+        if (strpbrk(source, "\r\n") || (!strcmp(option, "-c") &&
+            (strchr(source, '#') || strstr(source, "//") || strstr(source, "/*"))))
+        {
+            g_set_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_FILENAME,
+                        "Cannot put this source path in the Icarus source list: %s", source);
+            valid = FALSE;
+            break;
+        }
+        g_string_append_printf(list, "%s\n", source);
+    }
+    if (valid)
+        valid = g_file_set_contents(path, list->str, list->len, error);
+    if (valid)
+    {
+        g_ptr_array_add(command, (gpointer)option);
+        g_ptr_array_add(command, (gpointer)path);
+    }
+    g_string_free(list, TRUE);
+    return valid;
+}
+
 /* EN: Preprocess the run sources in compiler order using the simulation include path.
  * Return owned UTF-8 HDL, or NULL and an owned diagnostic in error.
  * RU: Раскрывает макросы в исходниках run в порядке компиляции и с путём include
@@ -115,8 +156,19 @@ static gchar *port_browser_preprocess(const WaveSimulation *run, gchar **error)
     if (!command->len)
         for (guint i = 0; i < G_N_ELEMENTS(options); i++)
             g_ptr_array_add(command, (gpointer)options[i]);
-    for (guint i = 0; run->sources[i]; i++)
-        g_ptr_array_add(command, run->sources[i]);
+    const gchar *list_option = "-c";
+#ifdef G_OS_WIN32
+    if (command->pdata[0] == helper)
+        list_option = "-f";
+#endif
+    gchar *list_directory = failure ? NULL : g_dir_make_tmp("geany-hdl-sources-XXXXXX", &failure);
+    gchar *list_path = list_directory ? g_build_filename(list_directory, "sources.list", NULL) : NULL;
+    GPtrArray *sources = g_ptr_array_new();
+    for (guint i = 0; run->sources[i]; ++i)
+        g_ptr_array_add(sources, run->sources[i]);
+    if (!failure)
+        simulation_source_arguments(command, sources, list_option, list_path, &failure);
+    g_ptr_array_unref(sources);
     g_ptr_array_add(command, NULL);
     GSubprocess *process =
         failure ? NULL
@@ -170,6 +222,12 @@ static gchar *port_browser_preprocess(const WaveSimulation *run, gchar **error)
     g_free(directory);
     g_free(helper);
 #endif
+    if (list_path)
+        g_unlink(list_path);
+    if (list_directory)
+        g_rmdir(list_directory);
+    g_free(list_path);
+    g_free(list_directory);
     if (!expanded && !*error)
         *error = g_strdup(failure ? failure->message : "No preprocessor output.");
     g_clear_error(&failure);
