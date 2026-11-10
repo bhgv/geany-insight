@@ -160,7 +160,7 @@ awk -v base="$INSIGHT_BOOTSTRAP_MIRROR" -v skip_tls="$INSIGHT_MSYS_SKIP_TLS_VERI
         standard = $0 ~ /^[[:space:]]*\[(msys|mingw32|mingw64|ucrt64|clang64|clangarm64|clang32)\][[:space:]]*$/
         print
         if (options && skip_tls == "1")
-            print "XferCommand = /usr/bin/curl --disable --insecure --fail --location --proto =https --proto-redir =https --output %o %u"
+            print "XferCommand = /usr/bin/curl --disable --insecure --fail --location --proto =https,http --proto-redir =https,http --output %o %u"
         if (standard) {
             if ($0 ~ /\[msys\]/) print "Server = " base "/msys/$arch/"
             else print "Server = " base "/mingw/$repo/"
