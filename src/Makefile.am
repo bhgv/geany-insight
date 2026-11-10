@@ -269,6 +269,8 @@ libgeany_la_SOURCES += \
 	insight-workbench/files/folder-commands.inc \
 	insight-workbench/files/folder-tree-update.inc \
 	insight-workbench/files/grouped-panels.inc \
+	insight-workbench/bookmarks/bookmark-list-rows.inc \
+	insight-workbench/bookmarks/bookmark-sync.inc \
 	insight-workbench/bookmarks/note-storage.inc \
 	insight-workbench/files/file-type-panel.inc \
 	insight-workbench/files/grouped-panel-controls.inc \
