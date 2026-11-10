@@ -247,6 +247,10 @@ libgeany_la_SOURCES += \
 	insight-workbench/relations/semantic-call-tree.inc \
 	insight-workbench/relations/relation-results.inc \
 	insight-workbench/relations/source-context.inc \
+	insight-workbench/relations/relation-history-state.inc \
+	insight-workbench/relations/relation-follow.inc \
+	insight-workbench/search/usage-controls.inc \
+	insight-workbench/hdl/hdl-color-controller.inc \
 	insight-workbench/relations/relation-navigation.inc \
 	insight-workbench/symbols/symbol-navigation.inc \
 	insight-workbench/files/folder-model.inc \
