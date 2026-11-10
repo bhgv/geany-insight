@@ -211,6 +211,36 @@ libgeany_la_SOURCES += \
 	insight-git.c \
 	insight-git.h \
 	insight-workbench.c \
+	insight-workbench/workspace/panel-state.inc \
+	insight-workbench/workspace/index-events.inc \
+	insight-workbench/workspace/directory-watch.inc \
+	insight-workbench/symbols/source-lookup.inc \
+	insight-workbench/symbols/symbol-lists.inc \
+	insight-workbench/files/file-actions.inc \
+	insight-workbench/relations/relation-rows.inc \
+	insight-workbench/relations/source-context.inc \
+	insight-workbench/relations/relation-navigation.inc \
+	insight-workbench/symbols/symbol-navigation.inc \
+	insight-workbench/files/folder-model.inc \
+	insight-workbench/files/grouped-panels.inc \
+	insight-workbench/bookmarks/bookmark-list.inc \
+	insight-workbench/bookmarks/bookmark-actions.inc \
+	insight-workbench/bookmarks/bookmark-preferences.inc \
+	insight-workbench/source/definition-preview.inc \
+	insight-workbench/waveforms/dependency-tree.inc \
+	insight-workbench/waveforms/source-actions.inc \
+	insight-workbench/waveforms/wave-navigation.inc \
+	insight-workbench/extensions/native-extensions.inc \
+	insight-workbench/workspace/membership-and-syntax.inc \
+	insight-workbench/panels/tool-menus.inc \
+	insight-workbench/panels/docking-and-palette.inc \
+	insight-workbench/panels/layout-slots.inc \
+	insight-workbench/panels/layout-files.inc \
+	insight-workbench/symbols/symbol-info.inc \
+	insight-workbench/workspace/git-and-project.inc \
+	insight-workbench/search/search-controls.inc \
+	insight-workbench/search/search-and-toolbar.inc \
+	insight-workbench/panels/workbench-lifecycle.inc \
 	insight-debuggers/editor-controls.inc \
 	insight-debuggers/scripts/session.inc \
 	insight-debuggers/scripts/watch-graph.inc \
