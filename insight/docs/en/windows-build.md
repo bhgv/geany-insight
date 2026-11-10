@@ -12,6 +12,8 @@ Keep the console open during the build. The bootstrap shows the installer name a
 
 If pacman reports `Operation too slow` or fails to synchronize databases, the default `auto` mode tries the direct MSYS2 server, then the Yandex and dotsrc mirrors in separate attempts. A successful server is tried first on the next stage. Pass `-MsysMirror <HTTPS base URL>` to `build.cmd -BuildEditor` to select another mirror. The installed pacman configuration remains unchanged.
 
+For a one-off run after a TLS failure, use `build.cmd -MsysSkipTlsVerify`. This skips certificate verification for pacman downloads during the run and preserves package signature settings.
+
 This guide describes a **native Windows x64 build using MSYS2 UCRT64**, GCC and GTK3. Visual Studio, WSL and Cygwin are not required. Keep all compiler libraries in the UCRT64 environment: do not mix MINGW64, CLANG64 or MSVC libraries with this toolchain.
 
 ![Windows build stages](../media/windows-build.svg)

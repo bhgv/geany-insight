@@ -8,6 +8,7 @@ param(
     [string]$CacheDir = '',
     [ValidatePattern('^(?:auto|https://[A-Za-z0-9.-]+(?::[0-9]+)?(?:/[A-Za-z0-9._~-]+)*/?)$')]
     [string]$MsysMirror = 'auto',
+    [switch]$MsysSkipTlsVerify,
     [ValidateSet('Internal', 'System', 'Disabled')][string]$ClangProvider = 'Internal',
     [switch]$Autotools,
     [switch]$Packaging,
@@ -33,7 +34,7 @@ Geany Insight Windows x64 toolchain bootstrap
   .\setup-windows.ps1 [-MsysRoot C:\msys64] [-ClangProvider Internal|System|Disabled]
     [-FetchSources] [-SourceDir C:\src\geany-insight] [-Autotools] [-Packaging]
     [-RootDir D:\Development\Insight] [-InstallDir PATH] [-CacheDir PATH]
-    [-MsysMirror auto|HTTPS-URL]
+    [-MsysMirror auto|HTTPS-URL] [-MsysSkipTlsVerify]
     [-BuildEditor] [-Jobs 0|N] [-UseCheckout] [-NonInteractive] [-Plan] [-Help]
 From a repository checkout: build.cmd -BuildEditor
 -UseCheckout defaults SourceDir to the checkout containing this script.
@@ -145,28 +146,42 @@ function Invoke-Msys([string]$Script, [string]$Stage, [switch]$AllowCoreRestart)
     if ($code -ne 0) { Write-Host "[Resume] $Stage exited with code $code; continuing in a fresh MSYS2 shell." }
     return $code
 }
+# EN: Run the pacman Script for Stage, allowing a shell restart on the core update.
+# RU: Выполняет Script для этапа Stage с возможностью перезапуска оболочки при обновлении ядра.
 function Invoke-InsightPacman([string]$Script, [string]$Stage, [switch]$AllowCoreRestart) {
     # Give each attempt its own server; keep signature and repository policies.
     $prefix = @'
 set -e
 config=$(mktemp)
 trap 'rm -f "$config"' EXIT
-awk -v base="$INSIGHT_BOOTSTRAP_MIRROR" '
+awk -v base="$INSIGHT_BOOTSTRAP_MIRROR" -v skip_tls="$INSIGHT_MSYS_SKIP_TLS_VERIFY" '
     /^[[:space:]]*\[/ {
+        options = $0 ~ /^[[:space:]]*\[options\][[:space:]]*$/
         standard = $0 ~ /^[[:space:]]*\[(msys|mingw32|mingw64|ucrt64|clang64|clangarm64|clang32)\][[:space:]]*$/
         print
+        if (options && skip_tls == "1")
+            print "XferCommand = /usr/bin/curl --disable --insecure --fail --location --proto =https --proto-redir =https --output %o %u"
         if (standard) {
             if ($0 ~ /\[msys\]/) print "Server = " base "/msys/$arch/"
             else print "Server = " base "/mingw/$repo/"
         }
         next
     }
+    options && skip_tls == "1" && /^[[:space:]]*XferCommand[[:space:]]*=/ { next }
     standard && /^[[:space:]]*Server[[:space:]]*=/ { next }
     standard && /^[[:space:]]*Include[[:space:]]*=.*\/mirrorlist\.(msys|mingw)[[:space:]]*$/ { next }
     { print }
 ' /etc/pacman.conf > "$config"
+if [ "$INSIGHT_MSYS_SKIP_TLS_VERIFY" = 1 ] && [ ! -x /usr/bin/curl ]; then
+    echo "MSYS2 curl is required for -MsysSkipTlsVerify." >&2
+    exit 1
+fi
 pacman() { command pacman --config "$config" "$@"; }
 '@
+    $env:INSIGHT_MSYS_SKIP_TLS_VERIFY = if ($MsysSkipTlsVerify) { '1' } else { '0' }
+    if ($MsysSkipTlsVerify) {
+        Write-Warning "$Stage downloads will skip HTTPS certificate verification. Pacman signature policy is unchanged."
+    }
     $limit = if ($AllowCoreRestart) { 1 } else { 3 }
     $preferred = $env:INSIGHT_BOOTSTRAP_MIRROR
     $candidates = @($preferred)
