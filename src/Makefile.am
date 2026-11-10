@@ -211,56 +211,66 @@ libgeany_la_SOURCES += \
 	insight-git.c \
 	insight-git.h \
 	insight-workbench.c \
-	insight-debug-controls.inc \
+	insight-debuggers/editor-controls.inc \
+	insight-debuggers/gdb-session.inc \
+	insight-debuggers/gdb-context.inc \
+	insight-debuggers/gdb-actions.inc \
+	insight-debuggers/gdb-window.inc \
 	insight-python-debug.c \
 	insight-python-debug.h \
 	insight-waveforms.c \
 	insight-waveforms.h \
-	insight-waveforms/setup-dialogs.inc \
-	insight-waveforms/vcd-parser.inc \
-	insight-waveforms/wave-tracks.inc \
-	insight-waveforms/wave-instruments.inc \
-	insight-waveforms/wave-drawing.inc \
-	insight-waveforms/wave-controls.inc \
-	insight-waveforms/wave-signal-map.inc \
-	insight-waveforms/wave-session.inc \
-	insight-waveforms/wave-loading.inc \
-	insight-waveforms/simulation-state.inc \
-	insight-waveforms/harness-memory.inc \
-	insight-waveforms/harness-buses.inc \
-	insight-waveforms/harness-models.inc \
-	insight-waveforms/harness-instruments.inc \
-	insight-waveforms/harness-raster.inc \
-	insight-waveforms/harness-generator.inc \
-	insight-waveforms/port-source.inc \
-	insight-waveforms/port-bindings.inc \
-	insight-waveforms/port-browser.inc \
-	insight-waveforms/device-catalog.inc \
-	insight-waveforms/device-port-fields.inc \
-	insight-waveforms/device-wizard.inc \
-	insight-waveforms/testbench-preview.inc \
-	insight-waveforms/port-setup.inc \
-	insight-waveforms/source-breakpoints.inc \
-	insight-waveforms/capture-pinch.inc \
-	insight-waveforms/capture-view.inc \
-	insight-waveforms/raster-view.inc \
-	insight-waveforms/memory-view.inc \
+	insight-waveforms/dialogs/setup-dialogs.inc \
+	insight-waveforms/capture/vcd-parser.inc \
+	insight-waveforms/capture/wave-tracks.inc \
+	insight-waveforms/capture/wave-instruments.inc \
+	insight-waveforms/capture/wave-drawing.inc \
+	insight-waveforms/capture/wave-controls.inc \
+	insight-waveforms/capture/wave-signal-map.inc \
+	insight-waveforms/capture/wave-session.inc \
+	insight-waveforms/capture/wave-loading.inc \
+	insight-waveforms/runtime/simulation-state.inc \
+	insight-waveforms/harness/harness-memory.inc \
+	insight-waveforms/harness/harness-buses.inc \
+	insight-waveforms/harness/harness-models.inc \
+	insight-waveforms/harness/harness-instruments.inc \
+	insight-waveforms/harness/harness-raster.inc \
+	insight-waveforms/harness/harness-generator.inc \
+	insight-waveforms/port-setup/port-source.inc \
+	insight-waveforms/port-setup/port-bindings.inc \
+	insight-waveforms/port-setup/port-browser.inc \
+	insight-waveforms/port-setup/device-catalog.inc \
+	insight-waveforms/port-setup/device-port-fields.inc \
+	insight-waveforms/port-setup/device-form.inc \
+	insight-waveforms/port-setup/device-wizard.inc \
+	insight-waveforms/port-setup/testbench-preview.inc \
+	insight-waveforms/port-setup/recipe-actions.inc \
+	insight-waveforms/port-setup/replacement-offers.inc \
+	insight-waveforms/port-setup/port-setup.inc \
+	insight-waveforms/debugger/source-breakpoints.inc \
+	insight-waveforms/capture/capture-pinch.inc \
+	insight-waveforms/capture/capture-view.inc \
+	insight-waveforms/devices/raster-view.inc \
+	insight-waveforms/devices/memory-display.inc \
+	insight-waveforms/devices/memory-calculator.inc \
+	insight-waveforms/devices/memory-search.inc \
 	insight-waveforms/memory-values.h \
-	insight-waveforms/simulator-process.inc \
-	insight-waveforms/live-output-records.inc \
-	insight-waveforms/signal-snapshots.inc \
-	insight-waveforms/signal-stop-rules.inc \
-	insight-waveforms/console-events.inc \
-	insight-waveforms/lua-terminal.inc \
-	insight-waveforms/live-inputs.inc \
-	insight-waveforms/breakpoint-actions.inc \
-	insight-waveforms/frame-actions.inc \
-	insight-waveforms/signal-history.inc \
-	insight-waveforms/signal-stop-panel.inc \
-	insight-waveforms/signal-tables.inc \
-	insight-waveforms/simulation-preview.inc \
-	insight-waveforms/observer-lifecycle.inc \
-	insight-waveforms/simulation-window.inc \
+	insight-waveforms/runtime/process-io.inc \
+	insight-waveforms/runtime/simulation-worker.inc \
+	insight-waveforms/runtime/live-output-records.inc \
+	insight-waveforms/debugger/signal-snapshots.inc \
+	insight-waveforms/debugger/signal-stop-rules.inc \
+	insight-waveforms/runtime/console-events.inc \
+	insight-waveforms/devices/lua-terminal.inc \
+	insight-waveforms/devices/live-inputs.inc \
+	insight-waveforms/debugger/breakpoint-actions.inc \
+	insight-waveforms/debugger/frame-actions.inc \
+	insight-waveforms/debugger/signal-history.inc \
+	insight-waveforms/debugger/signal-stop-panel.inc \
+	insight-waveforms/debugger/signal-tables.inc \
+	insight-waveforms/capture/simulation-preview.inc \
+	insight-waveforms/runtime/observer-lifecycle.inc \
+	insight-waveforms/debugger/simulation-window.inc \
 	insight-project-membership.h \
 	insight-virtual-list.c \
 	insight-virtual-list.h \

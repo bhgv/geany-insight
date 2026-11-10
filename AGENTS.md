@@ -9,6 +9,8 @@
 
 ## Mandatory code readability and comments
 
+- Keep hand-maintained source files at 500 lines or fewer. Split oversized files by responsibility when reorganizing them, and put related modules in directories named for their purpose. Vendored and generated files follow their upstream or generator layout.
+
 Apply these rules to new or changed source files, scripts, and examples.
 
 - Format code for human reading. Follow the surrounding project's indentation and brace conventions. Use descriptive names, separate logical blocks with blank lines, and break up long expressions and declarations. Keep one statement per line. Avoid minified code and dense one-line functions.
