@@ -231,6 +231,10 @@ libgeany_la_SOURCES += \
 	insight-workbench/symbols/definition-resolution.inc \
 	insight-workbench/workspace/workspace-root.inc \
 	insight-workbench/symbols/symbol-lists.inc \
+	insight-workbench/files/project-file-list.inc \
+	insight-workbench/symbols/symbol-query-controls.inc \
+	insight-workbench/symbols/symbol-browser-actions.inc \
+	insight-workbench/symbols/symbol-query-jobs.inc \
 	insight-workbench/files/file-actions.inc \
 	insight-workbench/relations/relation-rows.inc \
 	insight-workbench/relations/source-context.inc \
