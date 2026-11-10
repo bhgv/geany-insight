@@ -9888,6 +9888,12 @@ typedef struct {
     gchar *expression, *value;
 } NativeWatch;
 
+typedef enum
+{
+    NATIVE_CONTEXT_NONE, NATIVE_CONTEXT_THREADS, NATIVE_CONTEXT_STACK,
+    NATIVE_CONTEXT_SELECT_THREAD, NATIVE_CONTEXT_SELECT_FRAME
+} NativeContextRequest;
+
 typedef struct {
     GSubprocess *process;
     GDataInputStream *output;
@@ -9896,7 +9902,10 @@ typedef struct {
     GtkTextView *console, *watches;
     GtkWidget *inspection, *observer_log, *tabs, *watch_entry, *watch_add, *watch_remove;
     GPtrArray *expressions, *locals;
-    GtkListStore *local_rows, *point_rows;
+    GtkListStore *local_rows, *point_rows, *stack_rows;
+    GtkWidget *threads, *stack;
+    NativeContextRequest context_pending;
+    gboolean threads_needed, stack_needed, filling_context;
     gboolean locals_needed, locals_pending;
     ScriptDebugWindow *graph_view;
     InsightLuaWatchGraph *graph;
@@ -9924,6 +9933,8 @@ static void native_debug_update(NativeDebug *session)
         gtk_widget_set_sensitive(session->buttons[i], idle &&
             (i == NATIVE_PAUSE ? session->running :
              i == NATIVE_RUN ? !session->running : session->stopped && !session->running));
+    gtk_widget_set_sensitive(session->threads, idle && session->stopped);
+    gtk_widget_set_sensitive(session->stack, idle && session->stopped);
     gtk_widget_set_sensitive(session->command, idle && !session->running);
     gtk_widget_set_sensitive(session->watch_entry, idle && !session->running);
     gtk_widget_set_sensitive(session->watch_add, idle && !session->running);
@@ -10026,6 +10037,7 @@ static void native_debug_free(gpointer data)
     g_ptr_array_unref(session->locals);
     g_object_unref(session->local_rows);
     g_object_unref(session->point_rows);
+    g_object_unref(session->stack_rows);
     g_ptr_array_unref(session->graph_view->watch_paths);
     g_clear_pointer(&session->graph_view->watch_previous_values, g_hash_table_unref);
     g_free(session->graph_view);
@@ -10056,6 +10068,18 @@ static void native_debug_resume(GtkWidget *dialog, NativeDebug *session)
     {
         session->resume = FALSE;
         native_debug_send(dialog, "-exec-continue");
+    }
+    else if (session->threads_needed)
+    {
+        session->threads_needed = FALSE;
+        session->context_pending = NATIVE_CONTEXT_THREADS;
+        native_debug_send(dialog, "-thread-info");
+    }
+    else if (session->stack_needed)
+    {
+        session->stack_needed = FALSE;
+        session->context_pending = NATIVE_CONTEXT_STACK;
+        native_debug_send(dialog, "-stack-list-frames 0 63");
     }
     else if (session->locals_needed)
     {
@@ -10090,6 +10114,7 @@ static void native_debug_written(GObject *stream, GAsyncResult *result, gpointer
             session->watch_pending = NULL;
             g_clear_pointer(&session->editor_point_pending, g_free);
             session->locals_pending = FALSE;
+            session->context_pending = NATIVE_CONTEXT_NONE;
         }
         native_debug_update(session);
         native_debug_resume(dialog, session);
@@ -10141,6 +10166,223 @@ static gchar *native_debug_field(const gchar *record, const gchar *name)
         p = end;
     }
     return NULL;
+}
+
+/* EN: Find the end of the next MI tuple in cursor, respecting strings and nesting.
+ * RU: Ищет конец следующего кортежа MI из cursor с учётом строк и вложенности. */
+static const gchar *native_next_tuple(const gchar **cursor, const gchar **start)
+{
+    guint depth = 0;
+    gboolean quoted = FALSE;
+    *start = NULL;
+    for (const gchar *it = *cursor; *it; it++)
+    {
+        if (quoted && *it == '\\' && it[1])
+        {
+            it++;
+            continue;
+        }
+        if (*it == '"')
+            quoted = !quoted;
+        if (quoted)
+            continue;
+        if (*it == '{' && depth++ == 0)
+            *start = it;
+        else if (*it == '}' && depth && --depth == 0)
+        {
+            *cursor = it + 1;
+            return it + 1;
+        }
+        else if (*it == ']' && !depth)
+            break;
+    }
+    return NULL;
+}
+
+/* EN: Return whether GDB's identifier is a nonempty decimal number.
+ * RU: Проверяет, что идентификатор GDB состоит из десятичных цифр. */
+static gboolean native_context_id(const gchar *value)
+{
+    return value && *value && strspn(value, "0123456789") == strlen(value);
+}
+
+/* EN: Fill the thread picker or frame table from the MI reply in record.
+ * RU: Заполняет список потоков или таблицу кадров из ответа MI record. */
+static void native_fill_context(NativeDebug *session, const gchar *record, gboolean threads)
+{
+    const gchar *prefix = threads ? "^done,threads=[" : "^done,stack=[";
+    const gchar *cursor = g_str_has_prefix(record, prefix) ? record + strlen(prefix) : "]";
+    gchar *selected = threads ? native_debug_field(record, "current-thread-id") : NULL;
+    session->filling_context = TRUE;
+    if (threads)
+        gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(session->threads));
+    else
+        gtk_list_store_clear(session->stack_rows);
+
+    const gchar *start, *end;
+    guint count = 0;
+    while (count++ < 256 && (end = native_next_tuple(&cursor, &start)))
+    {
+        gchar *tuple = g_strndup(start, end - start);
+        gchar *id = native_debug_field(tuple, threads ? "id" : "level");
+        gchar *function = native_debug_field(tuple, "func");
+        if (native_context_id(id))
+        {
+            if (threads)
+            {
+                gchar *name = native_debug_field(tuple, "name");
+                gchar *label = g_strdup_printf("#%s  %s", id, name ? name : function ? function : "");
+                gchar *valid = g_utf8_make_valid(label, -1);
+                gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(session->threads), id, valid);
+                g_free(valid);
+                g_free(label);
+                g_free(name);
+            }
+            else
+            {
+                gchar *path = native_debug_field(tuple, "fullname");
+                gchar *line = native_debug_field(tuple, "line");
+                gchar *display = path ? g_filename_display_name(path) : g_strdup("");
+                gchar *label = g_utf8_make_valid(function ? function : "??", -1);
+                gtk_list_store_insert_with_values(session->stack_rows, NULL, -1,
+                    0, id, 1, label, 2, display, 3, line, 4, path, -1);
+                g_free(label);
+                g_free(display);
+                g_free(line);
+                g_free(path);
+            }
+        }
+        g_free(function);
+        g_free(id);
+        g_free(tuple);
+    }
+    if (threads && (!selected || !gtk_combo_box_set_active_id(GTK_COMBO_BOX(session->threads), selected)))
+        gtk_combo_box_set_active(GTK_COMBO_BOX(session->threads), 0);
+    if (!threads)
+    {
+        GtkTreePath *first = gtk_tree_path_new_from_indices(0, -1);
+        gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(session->stack)), first);
+        gtk_tree_path_free(first);
+    }
+    session->filling_context = FALSE;
+    g_free(selected);
+}
+
+/* EN: Return the selected GDB frame's level and optionally its source coordinates.
+ * RU: Возвращает номер выбранного кадра GDB и при необходимости координаты исходника. */
+static gchar *native_selected_frame(NativeDebug *session, gchar **filename, gchar **line)
+{
+    GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(session->stack));
+    GtkTreeModel *model;
+    GtkTreeIter row;
+    if (!gtk_tree_selection_get_selected(selection, &model, &row))
+        return NULL;
+    gchar *level = NULL;
+    gtk_tree_model_get(model, &row, 0, &level, -1);
+    if (filename)
+        gtk_tree_model_get(model, &row, 4, filename, -1);
+    if (line)
+        gtk_tree_model_get(model, &row, 3, line, -1);
+    return level;
+}
+
+/* EN: Refresh the stack or values after a context reply from GDB in record.
+ * RU: Обновляет стек или значения после ответа GDB о контексте в record. */
+static void native_context_reply(NativeDebug *session, const gchar *record)
+{
+    NativeContextRequest request = session->context_pending;
+    session->context_pending = NATIVE_CONTEXT_NONE;
+    if (request == NATIVE_CONTEXT_THREADS || request == NATIVE_CONTEXT_STACK)
+        native_fill_context(session, record, request == NATIVE_CONTEXT_THREADS);
+    if (!g_str_has_prefix(record, "^done"))
+        return;
+    if (request == NATIVE_CONTEXT_SELECT_THREAD)
+    {
+        session->stack_needed = TRUE;
+        g_clear_pointer(&session->stop_file, g_free);
+        session->stop_line = 0;
+    }
+    if (request == NATIVE_CONTEXT_SELECT_FRAME || request == NATIVE_CONTEXT_STACK)
+    {
+        gchar *path = NULL, *line = NULL;
+        gchar *level = native_selected_frame(session, &path, &line);
+        if (level)
+        {
+            g_free(session->stop_file);
+            session->stop_file = g_steal_pointer(&path);
+            guint64 number = 0;
+            session->stop_line = line && g_ascii_string_to_unsigned(line, 10, 1, G_MAXINT, &number, NULL)
+                                 ? (guint)number : 0;
+        }
+        g_free(level);
+        g_free(path);
+        g_free(line);
+    }
+    if (request == NATIVE_CONTEXT_SELECT_FRAME || request == NATIVE_CONTEXT_SELECT_THREAD)
+    {
+        session->locals_needed = TRUE;
+        session->watch_next = 0;
+    }
+}
+
+/* EN: Select the GDB thread chosen in combo for the dialog in data.
+ * RU: Выбирает поток GDB из combo для диалога из data. */
+static void native_select_thread(GtkComboBox *combo, gpointer data)
+{
+    GtkWidget *dialog = data;
+    NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
+    const gchar *id = gtk_combo_box_get_active_id(combo);
+    if (session->filling_context || !session->stopped || session->pending || session->writing ||
+        !native_context_id(id))
+        return;
+    gchar *command = g_strdup_printf("-thread-select %s", id);
+    session->context_pending = NATIVE_CONTEXT_SELECT_THREAD;
+    native_debug_send(dialog, command);
+    g_free(command);
+}
+
+/* EN: Select the GDB frame in selection for the dialog in data.
+ * RU: Выбирает кадр GDB из selection для диалога из data. */
+static void native_select_frame(GtkTreeSelection *selection, gpointer data)
+{
+    (void)selection;
+    GtkWidget *dialog = data;
+    NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
+    if (session->filling_context || !session->stopped || session->pending || session->writing)
+        return;
+    gchar *level = native_selected_frame(session, NULL, NULL);
+    if (native_context_id(level))
+    {
+        gchar *command = g_strdup_printf("-stack-select-frame %s", level);
+        session->context_pending = NATIVE_CONTEXT_SELECT_FRAME;
+        native_debug_send(dialog, command);
+        g_free(command);
+    }
+    g_free(level);
+}
+
+/* EN: Open the activated row's source location in the editor.
+ * RU: Открывает исходник активированной строки стека в редакторе. */
+static void native_open_frame(GtkTreeView *view, GtkTreePath *path, GtkTreeViewColumn *column,
+                              gpointer data)
+{
+    (void)column;
+    (void)data;
+    GtkTreeModel *model = gtk_tree_view_get_model(view);
+    GtkTreeIter row;
+    if (!gtk_tree_model_get_iter(model, &row, path))
+        return;
+    gchar *filename = NULL, *line = NULL;
+    gtk_tree_model_get(model, &row, 4, &filename, 3, &line, -1);
+    guint64 number;
+    if (filename && line && g_ascii_string_to_unsigned(line, 10, 1, G_MAXINT, &number, NULL))
+    {
+        gchar *native = utils_get_locale_from_utf8(filename);
+        diff_source_open(native, (guint)number);
+        g_free(native);
+    }
+    g_free(filename);
+    g_free(line);
 }
 
 /* EN: Read GDB MI variable tuples from record into session's table and frame cache.
@@ -10358,6 +10600,7 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             {
                 session->watch_next = 0;
                 session->locals_needed = TRUE;
+                session->threads_needed = session->stack_needed = TRUE;
                 native_debug_observe(session, line);
             }
         }
@@ -10366,6 +10609,8 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             session->pending = FALSE;
             session->ready = !g_str_has_prefix(line, "^exit");
             session->inspecting = FALSE;
+            if (session->context_pending != NATIVE_CONTEXT_NONE)
+                native_context_reply(session, line);
             if (session->locals_pending)
             {
                 session->locals_pending = FALSE;
@@ -10691,6 +10936,32 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     gtk_container_add(GTK_CONTAINER(point_scroll), points);
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), point_scroll,
                              gtk_label_new(insight_tr("Source breakpoints")));
+    GtkWidget *context = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    session->threads = gtk_combo_box_text_new();
+    gtk_box_pack_start(GTK_BOX(context), session->threads, FALSE, FALSE, 0);
+    session->stack_rows = gtk_list_store_new(5, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
+                                             G_TYPE_STRING, G_TYPE_STRING);
+    session->stack = gtk_tree_view_new_with_model(GTK_TREE_MODEL(session->stack_rows));
+    gtk_widget_set_name(session->stack, "insight-gdb-stack");
+    const gchar *stack_columns[] = {"Frame", "Function", "File", "Line number"};
+    const gchar *stack_colors[] = {"#8a50ae", "#167c70", NULL, "#a85416"};
+    for (guint i = 0; i < G_N_ELEMENTS(stack_columns); i++)
+    {
+        GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
+        if (stack_colors[i])
+            g_object_set(renderer, "foreground", stack_colors[i], NULL);
+        gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(session->stack), -1,
+            insight_tr(stack_columns[i]), renderer, "text", i, NULL);
+    }
+    GtkWidget *stack_scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(stack_scroll), session->stack);
+    gtk_box_pack_start(GTK_BOX(context), stack_scroll, TRUE, TRUE, 0);
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), context,
+                             gtk_label_new(insight_tr("Threads and stack")));
+    g_signal_connect(session->threads, "changed", G_CALLBACK(native_select_thread), dialog);
+    g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(session->stack)), "changed",
+                     G_CALLBACK(native_select_frame), dialog);
+    g_signal_connect(session->stack, "row-activated", G_CALLBACK(native_open_frame), dialog);
     gtk_box_pack_start(GTK_BOX(box), tabs, TRUE, TRUE, 0);
     session->command = gtk_entry_new();
     gtk_entry_set_max_length(GTK_ENTRY(session->command), 1024);

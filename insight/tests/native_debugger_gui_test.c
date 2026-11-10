@@ -182,6 +182,7 @@ static gboolean drive(gpointer data)
              find(window, "Observed function = main") && click(window, "Step Over"))
         phase++;
     else if (phase == 5 && find(window, "end-stepping-range") &&
+             find(window, "insight-gdb-stack") &&
              has_local(window, "marker", "41") && find(window, "marker = 41") &&
              find(window, "Pin member") && click(window, "Locals"))
         phase++;

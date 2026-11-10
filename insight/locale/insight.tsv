@@ -3107,3 +3107,4 @@ Wait for the simulator to start before changing breakpoints.	Дождитесь 
 
 # Native debugger variables
 Argument	Аргумент
+Threads and stack	Потоки и стек

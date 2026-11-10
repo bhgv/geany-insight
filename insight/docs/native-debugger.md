@@ -1,5 +1,10 @@
 # C/C++ debugging with GDB
 
+While paused, open **Threads and stack** to select the GDB thread.
+The table shows up to 64 frames in the selected thread. Selecting a frame
+updates variables and watches. Double-click a frame to open its source when
+GDB provides a full path and line number.
+
 At each stop, **Variables** shows the locals and arguments of GDB's
 selected frame. The same values appear in **Watch graph**. Hover over a
 name in the source file where execution stopped to see its frame value.
