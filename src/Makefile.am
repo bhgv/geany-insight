@@ -219,6 +219,12 @@ libgeany_la_SOURCES += \
 	insight-workbench/source/preview-links.inc \
 	insight-workbench/workspace/index-publication.inc \
 	insight-workbench/workspace/directory-watch.inc \
+	insight-workbench/workspace/scan-start.inc \
+	insight-workbench/workspace/hdl-color-state.inc \
+	insight-workbench/workspace/source-index-job.inc \
+	insight-workbench/workspace/scan-worker.inc \
+	insight-workbench/workspace/database-save.inc \
+	insight-workbench/workspace/directory-observer.inc \
 	insight-workbench/symbols/source-lookup.inc \
 	insight-workbench/symbols/symbol-lists.inc \
 	insight-workbench/files/file-actions.inc \
