@@ -212,6 +212,7 @@ libgeany_la_SOURCES += \
 	insight-git.h \
 	insight-workbench.c \
 	insight-workbench/workspace/panel-state.inc \
+	insight-workbench/source/selection-decoration.inc \
 	insight-workbench/workspace/index-events.inc \
 	insight-workbench/workspace/directory-watch.inc \
 	insight-workbench/symbols/source-lookup.inc \
