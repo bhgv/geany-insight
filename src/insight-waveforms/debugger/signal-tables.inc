@@ -162,6 +162,19 @@ static void signal_pin_kind(GtkTreeViewColumn *column, GtkCellRenderer *cell, Gt
     g_free(kind);
 }
 
+/* EN: Switch between alphabetical and native snapshot order for run in data.
+ * RU: Переключает алфавитный и исходный порядок снимка для сеанса из data. */
+static void signal_instance_order_changed(GtkComboBox *combo, gpointer data)
+{
+    WaveSimulation *run = data;
+    gint column = gtk_combo_box_get_active(combo) == 1 ? 0
+                                                     : GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID;
+    gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(run->signal_instances), column,
+                                         GTK_SORT_ASCENDING);
+    if (column < 0)
+        signal_tables_refresh(run);
+}
+
 /* EN: Build signal and pin tables, regex search and declaration context for run.
  * RU: Создаёт таблицы сигналов и закреплений, поиск и контекст для run. */
 static GtkWidget *simulation_signal_tables(WaveSimulation *run)
@@ -189,6 +202,29 @@ static GtkWidget *simulation_signal_tables(WaveSimulation *run)
     gtk_box_pack_start(GTK_BOX(box), run->signal_status, FALSE, FALSE, 0);
     GtkWidget *tabs = gtk_notebook_new();
     gtk_box_pack_start(GTK_BOX(box), tabs, TRUE, TRUE, 0);
+    run->signal_instances = gtk_tree_store_new(4, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
+                                                G_TYPE_STRING);
+    GtkWidget *hierarchy = gtk_tree_view_new_with_model(GTK_TREE_MODEL(run->signal_instances));
+    run->signal_instance_view = GTK_TREE_VIEW(hierarchy);
+    const gchar *headings[] = {"Name", "Value", "Changed"};
+    for (guint i = 0; i < G_N_ELEMENTS(headings); i++)
+    {
+        GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(
+            insight_tr(headings[i]), gtk_cell_renderer_text_new(), "text", i, NULL);
+        gtk_tree_view_column_set_resizable(column, TRUE);
+        gtk_tree_view_append_column(GTK_TREE_VIEW(hierarchy), column);
+    }
+    GtkWidget *instance_scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(instance_scroll), hierarchy);
+    GtkWidget *instance_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    GtkComboBoxText *order = GTK_COMBO_BOX_TEXT(gtk_combo_box_text_new());
+    gtk_combo_box_text_append_text(order, insight_tr("Simulator order"));
+    gtk_combo_box_text_append_text(order, insight_tr("Alphabetical order"));
+    gtk_combo_box_set_active(GTK_COMBO_BOX(order), 0);
+    g_signal_connect(order, "changed", G_CALLBACK(signal_instance_order_changed), run);
+    gtk_box_pack_start(GTK_BOX(instance_page), GTK_WIDGET(order), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(instance_page), instance_scroll, TRUE, TRUE, 0);
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), instance_page, gtk_label_new(insight_tr("Instances")));
     const gchar *titles[] = {"Ports", "Nets", "Registers", "Pinned signals"};
     for (guint i = 0; i < G_N_ELEMENTS(titles); i++)
     {

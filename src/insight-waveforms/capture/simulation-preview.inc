@@ -156,11 +156,11 @@ static void simulation_rule_selected(GtkWidget *widget, gpointer data)
 {
     (void)widget;
     WaveSimulation *run = data;
-    gint index = gtk_combo_box_get_active(GTK_COMBO_BOX(run->breakpoint_file));
-    if (index < 0)
+    const gchar *filename = gtk_combo_box_get_active_id(GTK_COMBO_BOX(run->breakpoint_file));
+    if (!filename)
         return;
     gint line = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(run->breakpoint_line));
-    gchar *key = g_strdup_printf("%d\t%s", line, run->sources[index]);
+    gchar *key = g_strdup_printf("%d\t%s", line, filename);
     const gchar *rule = g_hash_table_lookup(run->breakpoints, key);
     gint unresolved = rule ? -1 : simulation_unresolved_index(run, key);
     if (unresolved >= 0)

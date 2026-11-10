@@ -81,7 +81,8 @@ typedef struct
     guint64 signal_stop_number, signal_snapshot_tick;
     gboolean signal_snapshot_has_tick;
     gboolean signal_history_replace;
-    gchar *signal_file;
+    GtkTreeStore *signal_instances;
+    GtkTreeView *signal_instance_view;
     guint signal_format;
     gboolean signal_tables_ready, signal_collecting, signal_limited, signal_refresh_needed;
     gboolean signal_snapshot_received;
@@ -106,10 +107,11 @@ typedef struct
     GError *capture_error;
     GtkWidget *breakpoint_status;
     GtkListStore *breakpoint_rows;
-    GPtrArray *breakpoint_markers;
+    GPtrArray *breakpoint_markers, *breakpoint_hit_marker;
     gboolean breakpoint_reload;
     gchar *trace_file;
     guint trace_line;
+    gboolean breakpoint_stop, breakpoint_navigation_pending, capture_started;
     InsightWaveLocation open_location;
 } WaveSimulation;
 
@@ -129,6 +131,7 @@ static void simulation_free(gpointer data)
     g_clear_error(&run->capture_error);
     g_clear_object(&run->breakpoint_rows);
     g_clear_pointer(&run->breakpoint_markers, g_ptr_array_unref);
+    g_clear_pointer(&run->breakpoint_hit_marker, g_ptr_array_unref);
     g_clear_pointer(&run->signal_rows, g_ptr_array_unref);
     g_clear_pointer(&run->frame_reopen_path, gtk_tree_path_free);
     g_clear_pointer(&run->signal_previous_values, g_hash_table_unref);
@@ -141,7 +144,7 @@ static void simulation_free(gpointer data)
         g_free(g_queue_pop_head(&run->signal_stop_restore));
     while (!g_queue_is_empty(&run->signal_history))
         signal_history_stop_free(g_queue_pop_head(&run->signal_history));
-    g_free(run->signal_file);
+    g_clear_object(&run->signal_instances);
     for (guint i = 0; i < G_N_ELEMENTS(run->signal_tables); i++)
         g_clear_object(&run->signal_tables[i]);
     g_free(run->settings_path);

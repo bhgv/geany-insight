@@ -304,6 +304,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         gtk_label_set_line_wrap(GTK_LABEL(run->breakpoint_status), TRUE);
         gtk_box_pack_start(GTK_BOX(run->breakpoint_controls), run->breakpoint_status, FALSE, FALSE, 0);
         run->breakpoint_rows = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_UINT);
+        run->breakpoint_hit_marker = g_ptr_array_new_with_free_func(simulation_point_marker_free);
         run->breakpoint_markers = g_ptr_array_new_with_free_func(simulation_point_marker_free);
         GtkWidget *points = gtk_tree_view_new_with_model(GTK_TREE_MODEL(run->breakpoint_rows));
         gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(points), -1, insight_tr("File"),
@@ -322,7 +323,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         for (guint i = 0; run->sources[i]; i++)
         {
             gchar *name = g_filename_display_basename(run->sources[i]);
-            gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(run->breakpoint_file), name);
+            gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(run->breakpoint_file), run->sources[i], name);
             g_free(name);
         }
         gtk_combo_box_set_active(GTK_COMBO_BOX(run->breakpoint_file), 0);

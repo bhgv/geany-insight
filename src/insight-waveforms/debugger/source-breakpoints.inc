@@ -11,6 +11,23 @@ typedef struct
     guint count;
 } WavePointSource;
 
+/* EN: Accept a compiled source or a saved file under the simulation project root.
+ * RU: Разрешает входной файл компиляции или сохранённый файл под корнем проекта. */
+static gboolean simulation_point_file_allowed(const WaveSimulation *run, const gchar *filename)
+{
+    if (g_strv_contains((const gchar *const *)run->sources, filename))
+        return TRUE;
+    if (!g_path_is_absolute(filename) || !run->include_dir ||
+        !g_file_test(filename, G_FILE_TEST_IS_REGULAR))
+        return FALSE;
+    GFile *root = g_file_new_for_path(run->include_dir);
+    GFile *file = g_file_new_for_path(filename);
+    gboolean allowed = g_file_has_prefix(file, root);
+    g_object_unref(file);
+    g_object_unref(root);
+    return allowed;
+}
+
 /* EN: Release the temporary source snapshot in data.
  * RU: Освобождает временный снимок исходника из data. */
 static void simulation_point_source_free(gpointer data)
@@ -171,7 +188,7 @@ static void simulation_load_settings(WaveSimulation *run)
             guint64 line, hits;
             if (g_strv_length(parts) == 7 &&
                 g_ascii_string_to_unsigned(parts[0], 10, 1, G_MAXINT, &line, NULL) &&
-                g_strv_contains((const gchar *const *)run->sources, parts[1]) &&
+                simulation_point_file_allowed(run, parts[1]) &&
                 !strpbrk(parts[1], "\r\n") && !strpbrk(parts[2], "\r\n ") && strlen(parts[2]) <= 2048 &&
                 strlen(parts[3]) <= 1024 && ((*parts[2] == 0) == (*parts[3] == 0)) &&
                 strspn(parts[3], "01xz") == strlen(parts[3]) &&

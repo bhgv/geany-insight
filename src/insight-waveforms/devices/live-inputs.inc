@@ -123,9 +123,14 @@ static gboolean simulation_control_write(WaveSimulation *run, GtkWidget *widget,
     gchar *name = g_strdup_printf("geany-control-%s", port);
     gchar *path = g_build_filename(directory, name, NULL);
     gchar *text = g_strdup_printf("%u\n", value);
-    gboolean written = g_file_set_contents(path, text, -1, NULL);
+    GError *error = NULL;
+    gboolean written = g_file_set_contents(path, text, -1, &error);
     if (!written)
-        gtk_widget_set_tooltip_text(widget, insight_tr("Could not update the simulation input."));
+    {
+        gtk_widget_set_tooltip_text(widget, error->message);
+        ui_set_statusbar(FALSE, "%s: %s", port, error->message);
+        g_error_free(error);
+    }
     g_free(text);
     g_free(path);
     g_free(name);

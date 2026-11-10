@@ -114,8 +114,50 @@ static gboolean signal_table_insert(WaveSimulation *run, guint table, gchar **ro
     return FALSE;
 }
 
-/* EN: Refill the visible models for the current source file and regex query in run.
- * RU: Заполняет видимые таблицы сеанса run для текущего файла и регулярного выражения. */
+/* EN: Insert a signal below the scopes in its VPI name.
+ * RU: Добавляет сигнал в дерево областей по его имени VPI. */
+static void signal_instance_insert(GtkTreeStore *store, GHashTable *scopes, const gchar *name,
+                                   const gchar *value, gboolean changed)
+{
+    GtkTreeIter *parent = NULL;
+    const gchar *part = name;
+    const gchar *dot;
+    while ((dot = strchr(part, '.')))
+    {
+        gchar *path = g_strndup(name, dot - name);
+        GtkTreeIter *scope = g_hash_table_lookup(scopes, path);
+        if (!scope)
+        {
+            gchar *label = g_strndup(part, dot - part);
+            scope = g_new(GtkTreeIter, 1);
+            gtk_tree_store_insert_with_values(store, scope, parent, -1, 0, label, 3, path, -1);
+            g_hash_table_insert(scopes, g_steal_pointer(&path), scope);
+            g_free(label);
+        }
+        g_free(path);
+        parent = scope;
+        part = dot + 1;
+    }
+    GtkTreeIter leaf;
+    gtk_tree_store_insert_with_values(store, &leaf, parent, -1, 0, part, 1, value,
+                                      2, changed ? insight_tr("Yes") : "", -1);
+}
+
+/* EN: Save an expanded scope path from view in the set passed as data.
+ * RU: Сохраняет путь раскрытой области view во множестве data. */
+static void signal_instance_save_expansion(GtkTreeView *view, GtkTreePath *path, gpointer data)
+{
+    GtkTreeModel *model = gtk_tree_view_get_model(view);
+    GtkTreeIter iter;
+    gchar *scope = NULL;
+    if (gtk_tree_model_get_iter(model, &iter, path))
+        gtk_tree_model_get(model, &iter, 3, &scope, -1);
+    if (scope)
+        g_hash_table_add(data, scope);
+}
+
+/* EN: Refill the visible models across all scopes for the regex query in run.
+ * RU: Заполняет видимые таблицы сеанса run по всем областям с учётом регулярного выражения. */
 static void signal_tables_refresh(WaveSimulation *run)
 {
     if (!run->signal_tables[0])
@@ -147,17 +189,15 @@ static void signal_tables_refresh(WaveSimulation *run)
         }
         gtk_list_store_clear(run->signal_tables[i]);
     }
-    const gchar *file = run->signal_file;
+    GHashTable *expanded = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    gtk_tree_view_map_expanded_rows(run->signal_instance_view, signal_instance_save_expansion, expanded);
+    gtk_tree_store_clear(run->signal_instances);
+    GHashTable *scopes = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     gboolean changed_only = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(run->signal_changed_only));
     GHashTable *present = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     for (guint i = 0; i < run->signal_rows->len; i++)
     {
         gchar **row = run->signal_rows->pdata[i];
-#ifdef G_OS_WIN32
-        gboolean current = file && !g_ascii_strcasecmp(file, row[2]);
-#else
-        gboolean current = file && !strcmp(file, row[2]);
-#endif
         gchar *key = signal_snapshot_key(row);
         gboolean pinned = g_hash_table_contains(run->signal_pins, key);
         if (pinned)
@@ -165,16 +205,16 @@ static void signal_tables_refresh(WaveSimulation *run)
         const gchar *previous = g_hash_table_lookup(run->signal_previous_values, key);
         gboolean changed = previous && *previous && *row[3] && strcmp(previous, row[3]);
         g_free(key);
-        if ((!current && !pinned) || (changed_only && !changed))
+        if (changed_only && !changed)
             continue;
         gchar *display = signal_table_format(row[3], run->signal_format);
         if (!regex || g_regex_match(regex, row[1], 0, NULL) || g_regex_match(regex, display, 0, NULL) ||
             g_regex_match(regex, row[3], 0, NULL))
         {
             guint table = *row[0] == 'P' ? 0 : *row[0] == 'N' ? 1 : 2;
-            if (current)
-                keep_context |=
-                    signal_table_insert(run, table, row, display, changed, selected[table], context_name);
+            keep_context |=
+                signal_table_insert(run, table, row, display, changed, selected[table], context_name);
+            signal_instance_insert(run->signal_instances, scopes, row[1], display, changed);
             if (pinned)
                 keep_context |=
                     signal_table_insert(run, 3, row, display, changed, selected[3], context_name);
@@ -197,6 +237,21 @@ static void signal_tables_refresh(WaveSimulation *run)
             keep_context |= signal_table_insert(run, 3, row, "—", FALSE, selected[3], context_name);
         }
     }
+    GHashTableIter expansions;
+    gpointer scope_name;
+    g_hash_table_iter_init(&expansions, expanded);
+    while (g_hash_table_iter_next(&expansions, &scope_name, NULL))
+    {
+        GtkTreeIter *scope = g_hash_table_lookup(scopes, scope_name);
+        if (scope)
+        {
+            GtkTreePath *path = gtk_tree_model_get_path(GTK_TREE_MODEL(run->signal_instances), scope);
+            gtk_tree_view_expand_to_path(run->signal_instance_view, path);
+            gtk_tree_path_free(path);
+        }
+    }
+    g_hash_table_unref(expanded);
+    g_hash_table_unref(scopes);
     g_hash_table_unref(present);
     run->signal_refilling = FALSE;
     for (guint i = 0; i < G_N_ELEMENTS(selected); i++)
@@ -209,25 +264,6 @@ static void signal_tables_refresh(WaveSimulation *run)
     g_clear_pointer(&regex, g_regex_unref);
     gtk_label_set_text(GTK_LABEL(run->signal_status),
                        run->signal_limited ? insight_tr("Signal snapshot limit reached.") : "");
-}
-
-/* EN: Follow the editor's active document for simulation run.
- * RU: Обновляет текущий файл редактора для сеанса run. */
-static void signal_tables_follow_file(WaveSimulation *run)
-{
-    GeanyDocument *doc = document_get_current();
-    gchar *native = doc && doc->file_name ? utils_get_locale_from_utf8(doc->file_name) : NULL;
-    gchar *file = native ? insight_canonicalize_filename(native, NULL) : NULL;
-    g_free(native);
-    if (!g_strcmp0(file, run->signal_file))
-    {
-        g_free(file);
-        return;
-    }
-    gtk_cell_renderer_stop_editing(run->signal_register_renderer, TRUE);
-    g_free(run->signal_file);
-    run->signal_file = file;
-    signal_tables_refresh(run);
 }
 
 /* EN: Collect protocol line text for run. Return true for signal-table records.
@@ -262,7 +298,7 @@ static gboolean signal_tables_record(WaveSimulation *run, const gchar *text)
     {
         gchar **row = g_strsplit(text + strlen("GEANY-SIGNAL\t"), "\t", 4);
         if (g_strv_length(row) == 4 && strlen(row[0]) == 1 && strchr("PNR", *row[0]) &&
-            run->signal_rows->len < 4096 && g_utf8_validate(row[1], -1, NULL) &&
+            run->signal_rows->len < 65536 && g_utf8_validate(row[1], -1, NULL) &&
             !strpbrk(row[3], "\t\r\n") && strspn(row[3], "01xz") == strlen(row[3]))
         {
             gchar *file = insight_canonicalize_filename(row[2], run->include_dir);

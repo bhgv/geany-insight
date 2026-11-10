@@ -138,6 +138,8 @@ def check_breakpoint(compiler, runtime, fixtures, directory, environment):
         stopped = simulator.command("cont").replace("\\", "/")
         require(f"GEANY-VVP-STOP\t{line}\t{source.as_posix()}".lower() in stopped.lower(),
                 "Wrong source position at the conditional stop")
+        require(f"GEANY-VVP-BREAKPOINT\t{line}\t{source.as_posix()}".lower() in stopped.lower(),
+                "Missing explicit breakpoint stop record")
         require(re.search(r"GEANY-VVP-EVENT\t\d+\t[^\r\n]+\t15\t1\tcounter_tb.count\t0001", stopped),
                 "Wrong scripted stop event, tick or signal value")
         snapshot = simulator.command("geany-signals").replace("\\", "/")

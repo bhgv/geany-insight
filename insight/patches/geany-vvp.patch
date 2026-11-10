@@ -60,7 +60,7 @@ index 175e8ae..6c544f5 100644
  
        if (prompt && prompt[0]) {
  	    fputs(prompt, stdout);
-@@ -66,12 +71,694 @@ static char* readline_stub(const char*prompt)
+@@ -66,12 +71,698 @@ static char* readline_stub(const char*prompt)
  
        return 0;
  }
@@ -248,7 +248,8 @@ index 175e8ae..6c544f5 100644
 +                  printf("GEANY-VVP-EVENT\t%u\t%s\t%" TIME_FMT_U "\t%u\t%s\t%s\n",
 +                         line, source_file.c_str(), schedule_simtime(), point.hits,
 +                         point.signal.c_str(), point.bits.c_str());
-+            printf("GEANY-VVP-STOP\t%u\t%s\n", line, source_file.c_str());
++            printf("GEANY-VVP-STOP\t%u\t%s\nGEANY-VVP-BREAKPOINT\t%u\t%s\n",
++                   line, source_file.c_str(), line, source_file.c_str());
 +            return true;
 +      }
 +      return false;
@@ -259,8 +260,11 @@ index 175e8ae..6c544f5 100644
 +bool geany_pause_requested()
 +{
 +      static unsigned polls = 0;
-+      return geany_debug_enabled() && (++polls % 1024 == 0) &&
-+            std::remove(".geany-vvp-pause") == 0;
++      if (!geany_debug_enabled() || ++polls % 1024 != 0)
++            return false;
++      if (std::remove(".geany-vvp-reload") == 0)
++            cmd_geany_load(0, nullptr);
++      return std::remove(".geany-vvp-pause") == 0;
 +}
 +
 +enum class geany_step_mode { none, source, process, tick };
@@ -468,7 +472,7 @@ index 175e8ae..6c544f5 100644
 +      if (!geany_debug_enabled())
 +            return;
 +      printf("\nGEANY-SIGNALS-BEGIN\t%" TIME_FMT_U "\n", schedule_simtime());
-+      unsigned remaining = 4096;
++      unsigned remaining = 65536;
 +      const vpi_mode_t previous_mode = vpi_mode_flag;
 +      vpi_mode_flag = VPI_MODE_ROSYNC;
 +      vpiHandle roots = vpi_iterate(vpiModule, nullptr);
@@ -755,7 +759,7 @@ index 175e8ae..6c544f5 100644
  static void cmd_call(unsigned argc, const char*argv[])
  {
        __vpiHandle**table;
-@@ -444,6 +1131,26 @@ static struct {
+@@ -444,6 +1135,26 @@ static struct {
          "Synonym for finish."},
        { "finish", &cmd_finish,
          "Finish the simulation."},
@@ -782,7 +786,7 @@ index 175e8ae..6c544f5 100644
        { "help",   &cmd_help,
          "Get help."},
        { "list",   &cmd_list,
-@@ -554,6 +1261,10 @@ void stop_handler(int rc)
+@@ -554,6 +1265,10 @@ void stop_handler(int rc)
  	    return;
        }
  
@@ -793,7 +797,7 @@ index 175e8ae..6c544f5 100644
        vpi_mcd_printf(1,"** VVP Stop(%d) **\n", rc);
        vpi_mcd_printf(1,"** Flushing output streams.\n");
        invoke_command_const("$fflush");
-@@ -563,7 +1274,7 @@ void stop_handler(int rc)
+@@ -563,7 +1278,7 @@ void stop_handler(int rc)
  
        interact_flag = true;
        while (interact_flag) {
@@ -802,7 +806,7 @@ index 175e8ae..6c544f5 100644
  	    if (input == 0)
  		  break;
  
-@@ -575,7 +1286,8 @@ void stop_handler(int rc)
+@@ -575,7 +1290,8 @@ void stop_handler(int rc)
  
  	    if (first[0] != 0) {
  #ifdef USE_HISTORY
@@ -812,7 +816,7 @@ index 175e8ae..6c544f5 100644
  #endif
  		  invoke_command(first);
  	    }
-@@ -583,5 +1295,7 @@ void stop_handler(int rc)
+@@ -583,5 +1299,7 @@ void stop_handler(int rc)
  	    free(input);
        }
  

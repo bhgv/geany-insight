@@ -9,9 +9,10 @@
 static gboolean simulation_trace_location(const gchar *text, gchar **filename, guint *line)
 {
     const gchar *bridge = strstr(text, "GEANY-VVP-STOP\t");
-    if (bridge)
+    const gchar *breakpoint = strstr(text, "GEANY-VVP-BREAKPOINT\t");
+    if (bridge || breakpoint)
     {
-        const gchar *number = bridge + strlen("GEANY-VVP-STOP\t");
+        const gchar *number = strchr(breakpoint ? breakpoint : bridge, '\t') + 1;
         const gchar *tab = strchr(number, '\t');
         if (!tab || !tab[1])
             return FALSE;

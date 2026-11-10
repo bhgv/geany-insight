@@ -306,6 +306,8 @@ static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsi
         const gchar *text = run->protocol_line->str;
         if (g_str_has_prefix(text, "> "))
             text += 2;
+        if (g_str_has_prefix(text, "Waveform capture started at "))
+            run->capture_started = TRUE;
         simulation_frame_record(run, text);
         signal_tables_record(run, text);
         signal_stop_record(run, text);
@@ -379,10 +381,13 @@ static void simulation_read_records(WaveSimulation *run, const gchar *bytes, gsi
         }
         gchar *filename = NULL;
         guint line;
-        if (simulation_trace_location(text, &filename, &line))
+        if (!run->breakpoint_navigation_pending && simulation_trace_location(text, &filename, &line))
         {
             g_free(run->trace_file);
-            run->trace_file = filename;
+            run->trace_file = insight_canonicalize_filename(filename, run->include_dir);
+            g_free(filename);
+            run->breakpoint_stop = strstr(text, "GEANY-VVP-BREAKPOINT\t") != NULL;
+            run->breakpoint_navigation_pending = run->breakpoint_stop;
             run->trace_line = line;
         }
         g_string_truncate(run->protocol_line, 0);

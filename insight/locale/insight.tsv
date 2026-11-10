@@ -3143,3 +3143,8 @@ _Save for Next Run	_Сохранить для следующего запуск�
 Edit tutorial INI…	Редактировать INI туториала…
 Edit Markdown guide…	Редактировать справку Markdown…
 Could not create the tutorial directory.	Не удалось создать каталог туториала.
+Source breakpoint hit	Остановка по точке в HDL
+Instances	Экземпляры
+Simulator order	Порядок симулятора
+Alphabetical order	Алфавитный порядок
+Running, waiting for capture trigger	Симуляция выполняется, ожидается триггер записи

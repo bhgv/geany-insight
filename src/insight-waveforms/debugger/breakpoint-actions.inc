@@ -46,6 +46,8 @@ static void simulation_write_command(WaveSimulation *run, const gchar *command)
                                    insight_tr("Armed signal stop"), -1);
             g_clear_pointer(&run->signal_stop_hit, g_free);
         }
+        g_ptr_array_set_size(run->breakpoint_hit_marker, 0);
+        run->breakpoint_navigation_pending = FALSE;
         g_clear_pointer(&run->trace_file, g_free);
         gtk_widget_set_sensitive(run->source_button, FALSE);
     }
@@ -124,6 +126,30 @@ static void simulation_point_marker_free(gpointer data)
     }
     g_weak_ref_clear(&marker->editor);
     g_free(marker);
+}
+
+/* EN: Highlight the breakpoint line until execution resumes.
+ * RU: Подсвечивает строку останова до возобновления выполнения. */
+static void simulation_mark_breakpoint_hit(WaveSimulation *run)
+{
+    enum { SOURCE_HIT_MARKER = 19 };
+    g_ptr_array_set_size(run->breakpoint_hit_marker, 0);
+    gchar *utf8 = utils_get_utf8_from_locale(run->trace_file);
+    GeanyDocument *doc = utf8 ? document_find_by_filename(utf8) : NULL;
+    g_free(utf8);
+    if (!DOC_VALID(doc) || run->trace_line > (guint)sci_get_line_count(doc->editor->sci))
+        return;
+    ScintillaObject *sci = doc->editor->sci;
+    SSM(sci, SCI_MARKERDEFINE, SOURCE_HIT_MARKER, SC_MARK_BACKGROUND);
+    SSM(sci, SCI_MARKERSETBACK, SOURCE_HIT_MARKER, 0x80dfff);
+    gint handle = (gint)SSM(sci, SCI_MARKERADD, run->trace_line - 1, SOURCE_HIT_MARKER);
+    if (handle >= 0)
+    {
+        SimulationPointMarker *marker = g_new0(SimulationPointMarker, 1);
+        marker->handle = handle;
+        g_weak_ref_init(&marker->editor, G_OBJECT(sci));
+        g_ptr_array_add(run->breakpoint_hit_marker, marker);
+    }
 }
 
 /* EN: Update run's visible list and red margin dots from its saved source rules.
@@ -295,9 +321,15 @@ static void simulation_change_breakpoint(WaveSimulation *run, const gchar *filen
                 run->restored_rules = TRUE;
                 simulation_write_command(run, "geany-load\n");
             }
+            else if (run->bridge_ready)
+            {
+                gchar *reload = g_build_filename(directory, ".geany-vvp-reload", NULL);
+                g_file_set_contents(reload, "reload\n", -1, NULL);
+                g_free(reload);
+            }
             const gchar *message = action == 2 ? "Source breakpoint list cleared."
                                    : action == 1 ? "Source breakpoint removed."
-                                                 : "Source breakpoint added. It takes effect at the next debugger prompt.";
+                                                 : "Source breakpoint added.";
             gtk_label_set_text(GTK_LABEL(run->breakpoint_status), insight_tr(message));
         }
         else
@@ -320,10 +352,10 @@ static void simulation_edit_breakpoint(GtkButton *button, gpointer data)
 {
     WaveSimulation *run = data;
     gtk_spin_button_update(GTK_SPIN_BUTTON(run->breakpoint_line));
-    gint index = gtk_combo_box_get_active(GTK_COMBO_BOX(run->breakpoint_file));
+    const gchar *filename = gtk_combo_box_get_active_id(GTK_COMBO_BOX(run->breakpoint_file));
     guint line = (guint)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(run->breakpoint_line));
     gint action = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "point-action"));
-    simulation_change_breakpoint(run, index >= 0 ? run->sources[index] : NULL, line, action, TRUE);
+    simulation_change_breakpoint(run, filename, line, action, TRUE);
 }
 
 /* EN: Toggle an unconditional HDL point at filename and one-based line in session data.
@@ -332,27 +364,40 @@ static void simulation_toggle_editor_point(const gchar *filename, guint line, gp
 {
     WaveSimulation *run = data;
     gchar *selected = g_canonicalize_filename(filename, NULL);
+    const gchar *source = selected;
     for (guint i = 0; run->sources[i]; i++)
     {
-        gchar *source = g_canonicalize_filename(run->sources[i], NULL);
+        gchar *candidate = g_canonicalize_filename(run->sources[i], NULL);
 #ifdef G_OS_WIN32
-        gboolean matches = !g_ascii_strcasecmp(source, selected);
+        gboolean matches = !g_ascii_strcasecmp(candidate, selected);
 #else
-        gboolean matches = !strcmp(source, selected);
+        gboolean matches = !strcmp(candidate, selected);
 #endif
-        g_free(source);
-        if (!matches)
-            continue;
-        g_free(selected);
-        gtk_combo_box_set_active(GTK_COMBO_BOX(run->breakpoint_file), (gint)i);
+        g_free(candidate);
+        if (matches)
+        {
+            source = run->sources[i];
+            break;
+        }
+    }
+    if (simulation_point_file_allowed(run, source))
+    {
+        GtkComboBox *files = GTK_COMBO_BOX(run->breakpoint_file);
+        if (!gtk_combo_box_set_active_id(files, source))
+        {
+            gchar *name = g_filename_display_basename(source);
+            gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(files), source, name);
+            gtk_combo_box_set_active_id(files, source);
+            g_free(name);
+        }
         gtk_spin_button_set_value(GTK_SPIN_BUTTON(run->breakpoint_line), line);
-        gchar *key = g_strdup_printf("%u\t%s", line, run->sources[i]);
+        gchar *key = g_strdup_printf("%u\t%s", line, source);
         gint action = g_hash_table_contains(run->breakpoints, key) ? 1 : 0;
         g_free(key);
-        simulation_change_breakpoint(run, run->sources[i], line, action, FALSE);
+        simulation_change_breakpoint(run, source, line, action, FALSE);
         ui_set_statusbar(FALSE, "%s", gtk_label_get_text(GTK_LABEL(run->breakpoint_status)));
-        return;
     }
+    else
+        ui_set_statusbar(FALSE, "%s", insight_tr("This file is not in the active Verilog simulation."));
     g_free(selected);
-    ui_set_statusbar(FALSE, "%s", insight_tr("This file is not in the active Verilog simulation."));
 }

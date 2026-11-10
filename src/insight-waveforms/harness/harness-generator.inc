@@ -351,18 +351,23 @@ static gchar *simulation_port_harness(const gchar *recipe, const gchar *director
         if ((rasters || has_ddc) && !explicit_duration)
             duration = 40000000;
         if (trigger->len)
-            g_string_append(body, "// GEANY-CAPTURE-TRIGGER\n");
+            g_string_append(body, "// GEANY-CAPTURE-TRIGGER\nreg geany_capture_started=0;\n");
+        const gchar *capture_ready = trigger->len
+            ? "geany_capture_started=1; $display(\"Waveform capture started at %0t\",$time); $fflush();"
+            : "";
+        const gchar *wait_for_capture = trigger->len ? "wait (geany_capture_started); " : "";
         g_string_append_printf(
             body, "initial begin %s$dumpfile(\"ports.vcd\"); $dumpvars(0,geany_port_testbench); %s end\n",
-            trigger->str,
-            trigger->len ? "$display(\"Waveform capture started at %0t\",$time); $fflush();" : "");
+            trigger->str, capture_ready);
         if (duration_clock)
-            g_string_append_printf(body, "initial begin repeat (%" G_GUINT64_FORMAT
+            g_string_append_printf(body, "initial begin %srepeat (%" G_GUINT64_FORMAT
                                    ") @(posedge dut.%s); #0; $finish; end\n",
+                                   wait_for_capture,
                                    duration_ticks, duration_clock);
         if (!duration_clock || explicit_duration)
         {
-            g_string_append_printf(body, "initial begin #%" G_GUINT64_FORMAT "; ", duration);
+            g_string_append_printf(body, "initial begin %s#%" G_GUINT64_FORMAT "; ",
+                                   wait_for_capture, duration);
             if (!explicit_duration && controller_completion->len)
                 g_string_append_printf(body, "wait (%s); #1; ", controller_completion->str);
             g_string_append(body, "$finish; end\n");

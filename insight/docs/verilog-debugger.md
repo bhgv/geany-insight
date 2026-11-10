@@ -235,7 +235,16 @@ the **Recipe** text editor. Long lines wrap visually.
 The `duration` rule specifies elapsed simulation time in nanoseconds.
 `duration-ticks clk 10000` ends the run after 10,000 positive edges of
 `clk`. If both rules are present, the first limit reached ends the run.
-The capture trigger starts the VCD while the model is already running.
+The model runs while waiting for the trigger. With a capture trigger, the
+time and cycle limits begin when VCD capture starts. If the debugger is
+paused, click the test-device button and then **Continue** so the model
+can process the pulse.
+
+The **HDL Signals → Instances** tree shows the static signals reported
+by VVP for the design hierarchy, regardless of the open editor tab.
+Choose **Alphabetical order** or **Simulator order**. **Changed** compares the current
+snapshot with the previous one. On a source breakpoint, the debugger
+opens and highlights the stopped line.
 
 
 Use `capture-trigger fall start` to capture when the button pulse ends.

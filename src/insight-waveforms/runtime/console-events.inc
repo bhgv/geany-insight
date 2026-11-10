@@ -4,6 +4,8 @@
  * RU: Обновление консоли, переходы по исходникам и события наблюдателя Lua.
  */
 
+static void simulation_mark_breakpoint_hit(WaveSimulation *run);
+
 /* EN: Open the source location of simulation data when button is pressed.
  * RU: Открывает позицию в исходнике сеанса data по нажатию button. */
 static void simulation_open_location(GtkButton *button, gpointer data)
@@ -280,7 +282,12 @@ static gboolean simulation_refresh_console(gpointer data)
         simulation_handle_observer_event(run);
         paused = run->prompt_tail[0] == '>' && run->prompt_tail[1] == ' ';
     }
-    signal_tables_follow_file(run);
+    if (paused && run->breakpoint_navigation_pending)
+    {
+        run->breakpoint_navigation_pending = FALSE;
+        simulation_open_location(NULL, run);
+        simulation_mark_breakpoint_hit(run);
+    }
     if (paused && !run->preview_pending && run->signal_tables_ready && run->signal_refresh_needed)
     {
         run->signal_refresh_needed = FALSE;
@@ -308,13 +315,17 @@ static gboolean simulation_refresh_console(gpointer data)
     gtk_widget_set_sensitive(run->signal_stop_remove, rule_selected);
     gtk_widget_set_sensitive(run->signal_stop_edit, rule_selected);
     gtk_widget_set_sensitive(run->signal_stop_toggle, rule_selected);
+    gboolean waiting_for_trigger = running && !run->capture_started && run->port_harness &&
+                                   strstr(run->port_harness, "// GEANY-CAPTURE-TRIGGER");
+    const gchar *status = run->signal_manual_stop ? "Paused by user"
+                          : run->trace_file && run->breakpoint_stop ? "Source breakpoint hit"
+                          : run->trace_file ? "Paused at HDL source"
+                          : paused ? "Simulator paused"
+                          : waiting_for_trigger ? "Running, waiting for capture trigger"
+                          : running ? "Simulator running" : "Compiling Verilog…";
     gchar *reason = run->signal_stop_hit
                         ? g_strdup_printf("%s: %s", insight_tr("Signal stop hit"), run->signal_stop_hit)
-                        : g_strdup(insight_tr(run->signal_manual_stop ? "Paused by user"
-                                              : run->trace_file       ? "Paused at HDL source"
-                                              : paused                ? "Simulator paused"
-                                                                      : running               ? "Simulator running"
-                                                                      : "Compiling Verilog…"));
+                        : g_strdup(insight_tr(status));
     if (strcmp(gtk_label_get_text(GTK_LABEL(run->pause_reason)), reason))
         gtk_label_set_text(GTK_LABEL(run->pause_reason), reason);
     g_free(reason);
