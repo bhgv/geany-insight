@@ -212,6 +212,18 @@ libgeany_la_SOURCES += \
 	insight-git.h \
 	insight-workbench.c \
 	insight-debuggers/editor-controls.inc \
+	insight-debuggers/scripts/session.inc \
+	insight-debuggers/scripts/watch-graph.inc \
+	insight-debuggers/scripts/execution-results.inc \
+	insight-debuggers/scripts/breakpoint-storage.inc \
+	insight-debuggers/scripts/source-and-plain-points.inc \
+	insight-debuggers/scripts/python-transport.inc \
+	insight-debuggers/scripts/execution-controls.inc \
+	insight-debuggers/scripts/breakpoint-controls.inc \
+	insight-debuggers/scripts/source-inspection.inc \
+	insight-debuggers/scripts/observer-history.inc \
+	insight-debuggers/scripts/observer-editor.inc \
+	insight-debuggers/scripts/window.inc \
 	insight-debuggers/gdb-session.inc \
 	insight-debuggers/gdb-context.inc \
 	insight-debuggers/gdb-actions.inc \
