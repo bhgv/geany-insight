@@ -263,6 +263,9 @@ libgeany_la_SOURCES += \
 	insight-workbench/symbols/symbol-menu.inc \
 	insight-workbench/symbols/symbol-location.inc \
 	insight-workbench/files/folder-model.inc \
+	insight-workbench/files/folder-panel.inc \
+	insight-workbench/files/folder-commands.inc \
+	insight-workbench/files/folder-tree-update.inc \
 	insight-workbench/files/grouped-panels.inc \
 	insight-workbench/bookmarks/bookmark-list.inc \
 	insight-workbench/bookmarks/bookmark-actions.inc \
