@@ -132,42 +132,6 @@ static void simulation_device_list_refresh(GtkTextBuffer *buffer, GtkListStore *
     g_free(recipe);
 }
 
-/* EN: Open wizard for the recipe line selected by a double click in view.
- * RU: Открывает мастер wizard для строки рецепта по двойному щелчку в view. */
-static gboolean simulation_recipe_line_edit(GtkTextView *view, GdkEventButton *event,
-                                            GtkWidget *wizard)
-{
-    if (event->button != 1 || event->type != GDK_2BUTTON_PRESS ||
-        gtk_text_view_get_window_type(view, event->window) != GTK_TEXT_WINDOW_TEXT)
-        return FALSE;
-    gint x, y;
-    gtk_text_view_window_to_buffer_coords(view, GTK_TEXT_WINDOW_TEXT,
-                                          (gint)event->x, (gint)event->y, &x, &y);
-    GtkTextIter first, last;
-    gtk_text_view_get_line_at_y(view, &first, y, NULL);
-    last = first;
-    gtk_text_iter_forward_to_line_end(&last);
-    GtkTextBuffer *buffer = gtk_text_view_get_buffer(view);
-    gchar *line = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
-    gchar **args = NULL;
-    gboolean handled = FALSE;
-    if (g_shell_parse_argv(line, NULL, &args, NULL))
-        for (guint i = 0; i < G_N_ELEMENTS(device_presets); i++)
-            if (!strcmp(args[0], device_presets[i].rule))
-            {
-                GtkTextMark *mark = gtk_text_buffer_create_mark(buffer, NULL, &first, TRUE);
-                g_object_set_data(G_OBJECT(wizard), "edit-rule", mark);
-                gtk_button_clicked(GTK_BUTTON(wizard));
-                g_object_set_data(G_OBJECT(wizard), "edit-rule", NULL);
-                gtk_text_buffer_delete_mark(buffer, mark);
-                handled = TRUE;
-                break;
-            }
-    g_strfreev(args);
-    g_free(line);
-    return handled;
-}
-
 /* EN: Edit the rule at path in tree via wizard. column is unused.
  * RU: Редактирует правило по path в tree через wizard. column не используется. */
 static void simulation_device_list_edit(GtkTreeView *tree, GtkTreePath *path,
@@ -521,7 +485,6 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     g_object_unref(devices);
     g_object_set_data(G_OBJECT(wizard), "device-recipe", buffer);
     g_signal_connect(device_list, "row-activated", G_CALLBACK(simulation_device_list_edit), wizard);
-    g_signal_connect(view, "button-press-event", G_CALLBACK(simulation_recipe_line_edit), wizard);
     g_signal_connect(device_list, "button-press-event", G_CALLBACK(simulation_device_menu), buffer);
     gtk_paned_pack1(GTK_PANED(panes), recipe_tabs, TRUE, FALSE);
     gtk_paned_pack2(GTK_PANED(panes), port_browser_widget(&browser), TRUE, FALSE);
