@@ -252,6 +252,10 @@ libgeany_la_SOURCES += \
 	insight-workbench/search/usage-controls.inc \
 	insight-workbench/hdl/hdl-color-controller.inc \
 	insight-workbench/relations/relation-navigation.inc \
+	insight-workbench/relations/usage-browser-panel.inc \
+	insight-workbench/relations/relation-view-controls.inc \
+	insight-workbench/relations/relation-node-actions.inc \
+	insight-workbench/relations/relation-history-actions.inc \
 	insight-workbench/symbols/symbol-navigation.inc \
 	insight-workbench/files/folder-model.inc \
 	insight-workbench/files/grouped-panels.inc \
