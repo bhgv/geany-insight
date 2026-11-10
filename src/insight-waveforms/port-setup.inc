@@ -456,12 +456,18 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     gtk_box_pack_start(GTK_BOX(box), syntax, FALSE, FALSE, 4);
     GtkWidget *view = gtk_text_view_new();
     gtk_text_view_set_monospace(GTK_TEXT_VIEW(view), TRUE);
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view), GTK_WRAP_WORD_CHAR);
+    gtk_text_view_set_left_margin(GTK_TEXT_VIEW(view), 8);
+    gtk_text_view_set_right_margin(GTK_TEXT_VIEW(view), 8);
+    gtk_text_view_set_top_margin(GTK_TEXT_VIEW(view), 6);
+    gtk_text_view_set_bottom_margin(GTK_TEXT_VIEW(view), 6);
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
     GPtrArray *modules = simulation_recipe_modules(expanded ? expanded : source_snapshot);
     if (modules->len == 1)
         g_object_set_data_full(G_OBJECT(buffer), "default-module", g_strdup(modules->pdata[0]), g_free);
     GtkWidget *module_picker = gtk_combo_box_text_new();
-    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(module_picker), "", "Choose DUT module…");
+    g_object_set_data(G_OBJECT(module_picker), "insight-no-i18n", GINT_TO_POINTER(1));
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(module_picker), "", insight_tr("Choose DUT module…"));
     for (guint i = 0; i < modules->len; ++i)
         gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(module_picker), modules->pdata[i], modules->pdata[i]);
     g_ptr_array_unref(modules);
@@ -542,7 +548,7 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     gtk_paned_pack1(GTK_PANED(panes), recipe_tabs, TRUE, FALSE);
     gtk_paned_pack2(GTK_PANED(panes), port_browser_widget(&browser), TRUE, FALSE);
     simulation_replacement_offers(expanded, source_directory, GTK_BOX(box), &browser);
-    gtk_paned_set_position(GTK_PANED(panes), 320);
+    gtk_paned_set_position(GTK_PANED(panes), 400);
     GtkWidget *diagram = gtk_button_new_with_label("Preview Diagram…");
     g_object_set_data(G_OBJECT(diagram), "source-directory", source_directory);
     g_signal_connect(diagram, "clicked", G_CALLBACK(simulation_preview_diagram), &browser);

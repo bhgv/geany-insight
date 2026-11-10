@@ -228,7 +228,7 @@ capture-trigger rise start
 In **Port Signals**, click **Simulation time…**, **Clock cycle limit…**
 or **Capture trigger…**. Each wizard loads the current values or inserts
 a new rule on acceptance. Use **Help** for details or edit the rule in
-the **Recipe** text editor.
+the **Recipe** text editor. Long lines wrap visually.
 
 The `duration` rule specifies elapsed simulation time in nanoseconds.
 `duration-ticks clk 10000` ends the run after 10,000 positive edges of
