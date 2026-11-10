@@ -242,6 +242,10 @@ libgeany_la_SOURCES += \
 	insight-workbench/relations/relation-search-context.inc \
 	insight-workbench/files/file-browser-menu.inc \
 	insight-workbench/relations/relation-rows.inc \
+	insight-workbench/hdl/hdl-results.inc \
+	insight-workbench/hdl/hdl-analysis.inc \
+	insight-workbench/relations/semantic-call-tree.inc \
+	insight-workbench/relations/relation-results.inc \
 	insight-workbench/relations/source-context.inc \
 	insight-workbench/relations/relation-navigation.inc \
 	insight-workbench/symbols/symbol-navigation.inc \
