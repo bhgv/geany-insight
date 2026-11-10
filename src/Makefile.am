@@ -214,6 +214,7 @@ libgeany_la_SOURCES += \
 	insight-workbench/workspace/panel-state.inc \
 	insight-workbench/source/selection-decoration.inc \
 	insight-workbench/workspace/index-events.inc \
+	insight-workbench/workspace/index-publication.inc \
 	insight-workbench/workspace/directory-watch.inc \
 	insight-workbench/symbols/source-lookup.inc \
 	insight-workbench/symbols/symbol-lists.inc \
