@@ -236,6 +236,11 @@ libgeany_la_SOURCES += \
 	insight-workbench/symbols/symbol-browser-actions.inc \
 	insight-workbench/symbols/symbol-query-jobs.inc \
 	insight-workbench/files/file-actions.inc \
+	insight-workbench/relations/relation-query-jobs.inc \
+	insight-workbench/search/reference-search-results.inc \
+	insight-workbench/search/reference-search-jobs.inc \
+	insight-workbench/relations/relation-search-context.inc \
+	insight-workbench/files/file-browser-menu.inc \
 	insight-workbench/relations/relation-rows.inc \
 	insight-workbench/relations/source-context.inc \
 	insight-workbench/relations/relation-navigation.inc \
