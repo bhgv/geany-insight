@@ -257,6 +257,11 @@ libgeany_la_SOURCES += \
 	insight-workbench/relations/relation-node-actions.inc \
 	insight-workbench/relations/relation-history-actions.inc \
 	insight-workbench/symbols/symbol-navigation.inc \
+	insight-workbench/files/folder-tree-state.inc \
+	insight-workbench/symbols/local-symbol-panel.inc \
+	insight-workbench/symbols/symbol-panel.inc \
+	insight-workbench/symbols/symbol-menu.inc \
+	insight-workbench/symbols/symbol-location.inc \
 	insight-workbench/files/folder-model.inc \
 	insight-workbench/files/grouped-panels.inc \
 	insight-workbench/bookmarks/bookmark-list.inc \
