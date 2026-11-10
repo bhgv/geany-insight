@@ -69,6 +69,13 @@ static void device_button_polarity_sync(GtkEntry *entry, GtkComboBox *combo)
     gtk_combo_box_set_active(combo, !strcmp(gtk_entry_get_text(entry), "1"));
 }
 
+/* EN: Enable match field only for the match condition chosen in combo.
+ * RU: Включает поле field только при выборе сравнения в combo. */
+static void device_trigger_match(GtkComboBox *combo, GtkWidget *field)
+{
+    gtk_widget_set_sensitive(field, !g_strcmp0(gtk_combo_box_get_active_id(combo), "match"));
+}
+
 /* EN: Rebuild the fields for combo's selected preset in the form stored in data.
  * RU: Перестраивает поля формы из data для шаблона, выбранного в combo. */
 static void simulation_device_type(GtkComboBox *combo, gpointer data)
@@ -144,8 +151,26 @@ static void simulation_device_type(GtkComboBox *combo, gpointer data)
         "Модель OBUFDS формирует цифровую дифференциальную пару из бита TMDS. RGB кодирует передатчик в HDL."};
     G_STATIC_ASSERT(G_N_ELEMENTS(details_en) == G_N_ELEMENTS(device_kind_names));
     G_STATIC_ASSERT(G_N_ELEMENTS(details_ru) == G_N_ELEMENTS(device_kind_names));
-    gchar *full_english = g_strconcat(english, "\n\n", details_en[preset->icon], NULL);
-    gchar *full_russian = g_strconcat(russian, "\n\n", details_ru[preset->icon], NULL);
+    const gchar *help_en = details_en[preset->icon];
+    const gchar *help_ru = details_ru[preset->icon];
+    gboolean trigger = !strcmp(preset->rule, "capture-trigger");
+    if (!strcmp(preset->rule, "duration"))
+    {
+        help_en = "Set the time from simulation start in nanoseconds. If a clock limit is also set, the first limit reached ends the run.";
+        help_ru = "Укажите время от начала симуляции в наносекундах. Если задан и предел тактов, сработает первое достигнутое ограничение.";
+    }
+    else if (!strcmp(preset->rule, "duration-ticks"))
+    {
+        help_en = "Select a one-bit DUT clock and enter the number of rising edges to count from simulation start.";
+        help_ru = "Укажите однобитный клок схемы и число положительных фронтов с начала симуляции.";
+    }
+    else if (trigger)
+    {
+        help_en = "Start VCD recording on a rising edge, falling edge or value match while simulation is running. Use one bit for an edge and a sized Verilog literal for a match.";
+        help_ru = "Начинает запись VCD во время симуляции по фронту, спаду или совпадению значения. Для перепада укажите один бит, для сравнения — литерал Verilog с шириной.";
+    }
+    gchar *full_english = g_strconcat(english, "\n\n", help_en, NULL);
+    gchar *full_russian = g_strconcat(russian, "\n\n", help_ru, NULL);
     simulation_dialog_guidance(form->dialog, full_english, full_russian);
     g_free(full_english);
     g_free(full_russian);
@@ -154,6 +179,7 @@ static void simulation_device_type(GtkComboBox *combo, gpointer data)
     gchar **fields = g_strsplit(preset->fields, "|", -1);
     gchar **specs = g_strsplit(preset->pins, "|", -1);
     guint pin_count = g_strv_length(specs);
+    GtkWidget *trigger_mode = NULL;
     guint row = 0;
     for (; fields[row]; row++)
     {
@@ -164,13 +190,28 @@ static void simulation_device_type(GtkComboBox *combo, gpointer data)
         if (serial && row < 2)
             value = (gchar *)device_serial_port(form, value, row ? 'o' : 'i');
         gtk_entry_set_text(GTK_ENTRY(entry), value);
-        if (row < pin_count)
+        if (row < pin_count && *specs[row])
             g_object_set_data_full(G_OBJECT(entry), "port-spec", g_strdup(specs[row]), g_free);
         g_signal_connect(entry, "focus-in-event", G_CALLBACK(device_port_focus), form);
         g_signal_connect(entry, "changed", G_CALLBACK(device_width_changed), form);
         if (row == 0)
             gtk_widget_set_name(entry, "insight-device-first-field");
-        if (row == 1 && !strcmp(preset->rule, "button"))
+        if (trigger && row == 0)
+        {
+            trigger_mode = gtk_combo_box_text_new();
+            GtkComboBoxText *choices = GTK_COMBO_BOX_TEXT(trigger_mode);
+            gtk_combo_box_text_append(choices, "rise", insight_tr("Rising edge (0 → 1)"));
+            gtk_combo_box_text_append(choices, "fall", insight_tr("Falling edge (1 → 0)"));
+            gtk_combo_box_text_append(choices, "match", insight_tr("Value match"));
+            gtk_combo_box_set_active(GTK_COMBO_BOX(trigger_mode), 0);
+            gtk_grid_attach(GTK_GRID(form->grid), entry, 2, row, 1, 1);
+            gtk_widget_set_no_show_all(entry, TRUE);
+            device_field(form, insight_tr(fields[row]), trigger_mode, row);
+            g_object_bind_property(trigger_mode, "active-id", entry, "text",
+                                   G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
+            g_ptr_array_add(form->entries, entry);
+        }
+        else if (row == 1 && !strcmp(preset->rule, "button"))
         {
             GtkWidget *polarity = gtk_combo_box_text_new();
             gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(polarity), "0 → 1 → 0");
@@ -184,7 +225,14 @@ static void simulation_device_type(GtkComboBox *combo, gpointer data)
             g_ptr_array_add(form->entries, entry);
         }
         else
-            g_ptr_array_add(form->entries, device_field(form, fields[row], entry, row));
+        {
+            g_ptr_array_add(form->entries, device_field(form, insight_tr(fields[row]), entry, row));
+            if (trigger && row == 2)
+            {
+                device_trigger_match(GTK_COMBO_BOX(trigger_mode), entry);
+                g_signal_connect_object(trigger_mode, "changed", G_CALLBACK(device_trigger_match), entry, 0);
+            }
+        }
     }
     g_strfreev(fields);
     g_strfreev(specs);
@@ -397,6 +445,9 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
         {
             GtkWidget *entry = form.entries->pdata[i];
             const gchar *value = gtk_entry_get_text(GTK_ENTRY(entry));
+            if (i == 2 && !strcmp(preset->rule, "capture-trigger") &&
+                strcmp(gtk_entry_get_text(GTK_ENTRY(form.entries->pdata[0])), "match"))
+                continue;
             gchar *argument = device_port_argument(&form, entry, value, i, rule);
             valid = valid && argument && *value && !strpbrk(value, "\r\n");
             g_ptr_array_add(arguments, argument ? argument : g_strdup(""));

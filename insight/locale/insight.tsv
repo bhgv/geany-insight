@@ -3108,3 +3108,18 @@ Wait for the simulator to start before changing breakpoints.	Дождитесь 
 # Native debugger variables
 Argument	Аргумент
 Threads and stack	Потоки и стек
+
+# Verilog timing rule wizards
+Simulation duration	Длительность симуляции
+Simulation clock limit	Предел тактов симуляции
+Waveform capture trigger	Триггер записи осциллограммы
+Duration (ns)	Длительность (нс)
+Clock signal	Сигнал клока
+Rising edges	Число положительных фронтов
+Capture condition	Условие записи
+Trigger signal	Сигнал триггера
+Match value	Значение для сравнения
+Rising edge (0 → 1)	Фронт (0 → 1)
+Falling edge (1 → 0)	Спад (1 → 0)
+Value match	Совпадение значения
+Recipe	Рецепт

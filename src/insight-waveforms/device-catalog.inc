@@ -61,6 +61,12 @@ typedef struct
 
 static const DevicePreset device_presets[] = {
     {"module", "Module name=", "", -1, FALSE, "Design module", DEVICE_SETUP, (1u << DEVICE_SETUP)},
+    {"duration", "Duration (ns)=1000000", "", -1, FALSE,
+     "Simulation duration", DEVICE_TIMING, 1u << DEVICE_TIMING},
+    {"duration-ticks", "Clock signal=clk|Rising edges=10000", "a1", -1, FALSE,
+     "Simulation clock limit", DEVICE_TIMING, 1u << DEVICE_TIMING},
+    {"capture-trigger", "Capture condition=rise|Trigger signal=ready|Match value=1'b1", "|a64",
+     -1, FALSE, "Waveform capture trigger", DEVICE_TIMING, 1u << DEVICE_TIMING},
     {"clock", "Port=clk|Start (ns)=0|High (ns)=5|Low (ns)=5", "i1", -1, FALSE, "Clock", DEVICE_TIMING,
      (1u << DEVICE_TIMING)},
     {"pulse", "Port=reset|Start (ns)=10|Length (ns)=100|Active level=1", "i1", -1, FALSE, "Timed pulse",
