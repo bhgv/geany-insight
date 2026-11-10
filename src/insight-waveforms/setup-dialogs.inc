@@ -220,6 +220,63 @@ static void simulation_dialog_tools(GtkWidget *dialog, const gchar *english, con
     gtk_box_pack_start(GTK_BOX(area), tools, FALSE, FALSE, 4);
 }
 
+/* EN: Return the user's language-specific tutorial directory as an owned path.
+ * RU: Возвращает новый путь к каталогу пользовательских материалов на выбранном языке. */
+static gchar *simulation_tutorial_user_dir(void)
+{
+    return g_build_filename(app->configdir, "insight", "tutorials",
+                            insight_i18n_language(), NULL);
+}
+
+/* EN: Open a writable copy of the tutorial file named on button. dialog owns errors.
+ * RU: Открывает редактируемую копию файла из button. Ошибки показывает в dialog. */
+static void simulation_tutorial_edit(GtkButton *button, GtkWindow *dialog)
+{
+    const gchar *name = g_object_get_data(G_OBJECT(button), "tutorial-file");
+    gchar *directory = simulation_tutorial_user_dir();
+    gchar *target = g_build_filename(directory, name, NULL);
+    gchar *installed = g_build_filename(app->datadir, "insight", "docs",
+                                        insight_i18n_language(), name, NULL);
+    GError *error = NULL;
+    if (!g_file_test(target, G_FILE_TEST_IS_REGULAR))
+    {
+        if (g_mkdir_with_parents(directory, 0700) == 0)
+        {
+            GFile *source = g_file_new_for_path(installed);
+            GFile *destination = g_file_new_for_path(target);
+            g_file_copy(source, destination, G_FILE_COPY_NONE, NULL, NULL, NULL, &error);
+            if (g_error_matches(error, G_IO_ERROR, G_IO_ERROR_EXISTS))
+                g_clear_error(&error);
+            g_object_unref(destination);
+            g_object_unref(source);
+        }
+        else
+            g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                                insight_tr("Could not create the tutorial directory."));
+    }
+    if (!error)
+    {
+        GeanyDocument *doc = document_open_file(target, FALSE, NULL, NULL);
+        if (DOC_VALID(doc))
+        {
+            document_show_tab(doc);
+            document_grab_focus(doc);
+            gtk_window_present(GTK_WINDOW(main_widgets.window));
+        }
+    }
+    else
+    {
+        GtkWidget *notice = gtk_message_dialog_new(dialog, GTK_DIALOG_DESTROY_WITH_PARENT,
+            GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE, "%s", error->message);
+        g_signal_connect_swapped(notice, "response", G_CALLBACK(gtk_widget_destroy), notice);
+        gtk_widget_show(notice);
+        g_clear_error(&error);
+    }
+    g_free(installed);
+    g_free(target);
+    g_free(directory);
+}
+
 /* EN: Open the Verilog walkthrough next to dialog. The button is unused.
  * RU: Открывает пошаговый урок рядом с dialog. Кнопка button не используется. */
 static void simulation_tutorial_open(GtkButton *button, GtkWindow *dialog)
@@ -227,7 +284,13 @@ static void simulation_tutorial_open(GtkButton *button, GtkWindow *dialog)
     (void)button;
     const gchar *language = insight_i18n_language();
     gchar *directory = g_build_filename(app->datadir, "insight", "docs", language, NULL);
-    gchar *path = g_build_filename(directory, "verilog-tutorial.ini", NULL);
+    gchar *user = simulation_tutorial_user_dir();
+    gchar *path = g_build_filename(user, "verilog-tutorial.ini", NULL);
+    if (!g_file_test(path, G_FILE_TEST_IS_REGULAR))
+    {
+        g_free(path);
+        path = g_build_filename(directory, "verilog-tutorial.ini", NULL);
+    }
     GKeyFile *lesson = g_key_file_new();
     GError *error = NULL;
     if (!g_key_file_load_from_file(lesson, path, G_KEY_FILE_NONE, &error))
@@ -240,6 +303,7 @@ static void simulation_tutorial_open(GtkButton *button, GtkWindow *dialog)
         g_key_file_unref(lesson);
         g_free(path);
         g_free(directory);
+        g_free(user);
         return;
     }
     g_free(path);
@@ -269,7 +333,12 @@ static void simulation_tutorial_open(GtkButton *button, GtkWindow *dialog)
             if (picture && *picture && !strpbrk(picture, "/\\:") &&
                 strcmp(picture, ".") && strcmp(picture, ".."))
             {
-                gchar *image_path = g_build_filename(directory, picture, NULL);
+                gchar *image_path = g_build_filename(user, picture, NULL);
+                if (!g_file_test(image_path, G_FILE_TEST_IS_REGULAR))
+                {
+                    g_free(image_path);
+                    image_path = g_build_filename(directory, picture, NULL);
+                }
                 if (g_file_test(image_path, G_FILE_TEST_IS_REGULAR))
                     gtk_box_pack_start(GTK_BOX(page), gtk_image_new_from_file(image_path),
                                        FALSE, FALSE, 0);
@@ -288,6 +357,7 @@ static void simulation_tutorial_open(GtkButton *button, GtkWindow *dialog)
     }
     g_strfreev(groups);
     g_key_file_unref(lesson);
+    g_free(user);
     g_free(directory);
     gint pages = gtk_assistant_get_n_pages(GTK_ASSISTANT(assistant));
     if (!pages)
@@ -314,4 +384,13 @@ static void simulation_dialog_tutorial(GtkWidget *dialog)
     gtk_button_set_always_show_image(GTK_BUTTON(button), TRUE);
     g_signal_connect(button, "clicked", G_CALLBACK(simulation_tutorial_open), dialog);
     gtk_box_pack_start(GTK_BOX(tools), button, FALSE, FALSE, 0);
+    const gchar *names[] = {"verilog-tutorial.ini", "verilog-debugger.md"};
+    const gchar *labels[] = {"Edit tutorial INI…", "Edit Markdown guide…"};
+    for (guint i = 0; i < G_N_ELEMENTS(names); i++)
+    {
+        GtkWidget *edit = gtk_button_new_with_label(insight_tr(labels[i]));
+        g_object_set_data(G_OBJECT(edit), "tutorial-file", (gpointer)names[i]);
+        g_signal_connect(edit, "clicked", G_CALLBACK(simulation_tutorial_edit), dialog);
+        gtk_box_pack_start(GTK_BOX(tools), edit, FALSE, FALSE, 0);
+    }
 }
