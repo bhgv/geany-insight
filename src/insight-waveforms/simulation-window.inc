@@ -87,6 +87,7 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         "configure breakpoints or use test devices.",
         "Верхняя панель позволяет продолжить, выполнить шаг или поставить симуляцию на паузу. "
         "Переключайте вкладки для просмотра сигналов, настройки точек останова и работы с устройствами.");
+    simulation_dialog_tutorial(run->dialog);
     g_object_ref_sink(run->dialog);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(run->dialog));
     if (!interactive)

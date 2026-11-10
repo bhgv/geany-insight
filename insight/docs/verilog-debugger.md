@@ -1,5 +1,7 @@
 # Verilog and SystemVerilog debugger
 
+Use **Tutorial** in Port Signals or Verilog Simulation for an in-app walkthrough of starting, setting limits, triggers and breakpoints. The walkthrough can stay open while you work.
+
 During debugging, put the caret on a source line and press **F2** or
 **Toggle Breakpoint** on the main toolbar. You can also double-click the
 line number or use its context menu. The main toolbar shows the commands

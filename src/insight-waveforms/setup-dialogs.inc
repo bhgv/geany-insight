@@ -215,5 +215,87 @@ static void simulation_dialog_tools(GtkWidget *dialog, const gchar *english, con
     gtk_button_set_always_show_image(GTK_BUTTON(ai), TRUE);
     g_signal_connect(ai, "clicked", G_CALLBACK(simulation_dialog_ai), dialog);
     gtk_box_pack_start(GTK_BOX(tools), ai, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), tools, FALSE, FALSE, 4);
+    GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    g_object_set_data(G_OBJECT(area), "insight-verilog-dialog-tools", tools);
+    gtk_box_pack_start(GTK_BOX(area), tools, FALSE, FALSE, 4);
+}
+
+/* EN: Open the Verilog walkthrough next to dialog. The button is unused.
+ * RU: Открывает пошаговый урок рядом с dialog. Кнопка button не используется. */
+static void simulation_tutorial_open(GtkButton *button, GtkWindow *dialog)
+{
+    (void)button;
+    static const gchar *const titles[][2] = {
+        {"1. Set up the design", "1. Настройка схемы"},
+        {"2. Choose when to finish", "2. Длительность теста"},
+        {"3. Run the simulation", "3. Запуск схемы"},
+        {"4. Start waveform capture on an edge", "4. Запись осциллограммы по перепаду"},
+        {"5. Pause on a signal or a source line", "5. Пауза по сигналу или строке HDL"},
+        {"6. Inspect values and finish", "6. Просмотр значений и завершение"}
+    };
+    static const gchar *const instructions[][2] = {
+        {
+            "Open Debug Current Verilog File. In Port Signals, select the DUT module. Add a test clock to its clock input and a button to reset if needed. The Recipe tab shows the resulting rules and lets you edit them.",
+            "Откройте «Отлаживать текущий файл Verilog». В «Настройке портов» выберите модуль схемы. Подключите тестовый клок к тактовому входу и при необходимости кнопку к сбросу. Вкладка «Рецепт» показывает правила и позволяет редактировать их."
+        },
+        {
+            "Click Simulation time… to set a limit in nanoseconds. For 1 ms enter 1000000. Alternatively, click Clock cycle limit…, choose clk and enter the number of rising edges. If both limits are set, the first one reached ends the run.",
+            "Нажмите «Время симуляции…» и введите предел в наносекундах. Для 1 мс введите 1000000. Чтобы задать предел в тактах, нажмите «Число тактов…», выберите clk и введите число положительных фронтов. Если заданы оба предела, сработает первый достигнутый."
+        },
+        {
+            "Click Start Debugging. Wait for Simulator paused, then click Continue. The Running status indicates execution. To send a reset pulse, press its button in Devices. If the simulator is paused, Continue lets it process the pulse.",
+            "Нажмите «Начать отладку». Дождитесь надписи «Симулятор на паузе» и нажмите «Продолжить». Статус «Симуляция выполняется» означает, что схема запущена. Для импульса сброса нажмите кнопку во вкладке «Устройства». Если симулятор на паузе, нажмите «Продолжить», чтобы обработать импульс."
+        },
+        {
+            "For a first run, leave Capture trigger unset to record immediately. To start recording later, click Capture trigger…, choose a one-bit signal and select rising or falling edge. The model runs while VCD waits for that transition. The log reports Waveform capture started when it fires.",
+            "Для первого прогона оставьте триггер записи незаданным, чтобы запись началась сразу. Для запуска записи по событию нажмите «Триггер записи…», выберите однобитный сигнал и укажите фронт или спад. Схема выполняется, пока VCD ждёт перепада. При срабатывании журнал покажет Waveform capture started."
+        },
+        {
+            "To pause on an edge, first pause execution, then right-click a one-bit signal in HDL Signals and choose Stop on Signal. To stop on HDL code, press F2 on an executable line or use Source breakpoints. Leave the condition empty and Hits at 1 for the first visit. Click Continue to arm execution.",
+            "Для паузы по перепаду остановите выполнение, щёлкните правой кнопкой по однобитному сигналу в «Сигналах HDL» и выберите «Остановиться по сигналу…». Для точки в коде нажмите F2 на исполняемой строке или добавьте точку во вкладке «Точки останова в HDL». Для первой остановки оставьте условие пустым и число срабатываний равным 1. Нажмите «Продолжить»."
+        },
+        {
+            "At a stop, HDL Signals shows current values. Open Preview Waveform under Inspection tools to see the recorded VCD. A live scope keeps the last 512 samples of selected signals. To finish on an edge, use a signal stop and then click Finish. The generated testbench uses a default duration when no limit is set.",
+            "На паузе «Сигналы HDL» показывают текущие значения. В разделе «Просмотр и трассировка» нажмите «Осциллограмма», чтобы открыть записанный VCD. Живой осциллограф хранит последние 512 выборок выбранных сигналов. Чтобы завершить по перепаду, настройте остановку по сигналу, а после паузы нажмите «Завершить». Если предел не задан, тестбенч использует длительность по умолчанию."
+        }
+    };
+    guint language = !g_strcmp0(insight_i18n_language(), "ru");
+    GtkWidget *assistant = gtk_assistant_new();
+    gtk_window_set_title(GTK_WINDOW(assistant), language ? "Туториал по отладке Verilog"
+                                                       : "Verilog debugger tutorial");
+    gtk_window_set_transient_for(GTK_WINDOW(assistant), dialog);
+    gtk_window_set_destroy_with_parent(GTK_WINDOW(assistant), TRUE);
+    gtk_window_set_default_size(GTK_WINDOW(assistant), 530, 260);
+    for (guint i = 0; i < G_N_ELEMENTS(titles); i++)
+    {
+        GtkWidget *page = gtk_label_new(instructions[i][language]);
+        gtk_label_set_line_wrap(GTK_LABEL(page), TRUE);
+        gtk_label_set_xalign(GTK_LABEL(page), 0);
+        gtk_label_set_yalign(GTK_LABEL(page), 0);
+        gtk_widget_set_margin_start(page, 16);
+        gtk_widget_set_margin_end(page, 16);
+        gtk_widget_set_margin_top(page, 12);
+        gtk_assistant_append_page(GTK_ASSISTANT(assistant), page);
+        gtk_assistant_set_page_title(GTK_ASSISTANT(assistant), page, titles[i][language]);
+        gtk_assistant_set_page_type(GTK_ASSISTANT(assistant), page,
+            i + 1 == G_N_ELEMENTS(titles) ? GTK_ASSISTANT_PAGE_SUMMARY : GTK_ASSISTANT_PAGE_CONTENT);
+        gtk_assistant_set_page_complete(GTK_ASSISTANT(assistant), page, TRUE);
+    }
+    g_signal_connect_swapped(assistant, "cancel", G_CALLBACK(gtk_widget_destroy), assistant);
+    g_signal_connect_swapped(assistant, "close", G_CALLBACK(gtk_widget_destroy), assistant);
+    gtk_widget_show_all(assistant);
+}
+
+/* EN: Add a tutorial button to the help row already installed in dialog.
+ * RU: Добавляет кнопку урока в существующую строку справки диалога dialog. */
+static void simulation_dialog_tutorial(GtkWidget *dialog)
+{
+    GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    GtkWidget *tools = g_object_get_data(G_OBJECT(area), "insight-verilog-dialog-tools");
+    GtkWidget *button = gtk_button_new_with_label(insight_tr("Tutorial"));
+    gtk_button_set_image(GTK_BUTTON(button),
+                         gtk_image_new_from_icon_name("help-contents-symbolic", GTK_ICON_SIZE_BUTTON));
+    gtk_button_set_always_show_image(GTK_BUTTON(button), TRUE);
+    g_signal_connect(button, "clicked", G_CALLBACK(simulation_tutorial_open), dialog);
+    gtk_box_pack_start(GTK_BOX(tools), button, FALSE, FALSE, 0);
 }

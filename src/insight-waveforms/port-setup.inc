@@ -403,6 +403,7 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
     g_object_ref_sink(dialog);
     active_setup = dialog;
     gchar *source_directory = g_path_get_dirname(run->sources[0]);
+    simulation_dialog_tutorial(dialog);
     gchar *source_snapshot = port_browser_source(run->sources[0]);
     gchar *preprocess_error = NULL;
     gchar *expanded = port_browser_preprocess(run, &preprocess_error);
