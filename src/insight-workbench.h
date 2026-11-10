@@ -18,6 +18,7 @@ void insight_debug_register(GtkWidget *window, GtkWidget *ready, InsightDebugPoi
 gboolean insight_debug_active(void);
 gboolean insight_debug_toggle(const gchar *filename, guint line);
 gboolean insight_debug_toggle_current(void);
+gchar *insight_debug_value_tooltip(const gchar *filename, const gchar *name);
 #define INSIGHT_TEMPLATE_COMPLETION_LIST 74
 gboolean insight_workbench_complete_template(struct GeanyEditor *,gint);
 GPtrArray *insight_workbench_completion_templates(struct GeanyEditor *,const gchar *,gboolean,guint64 *);

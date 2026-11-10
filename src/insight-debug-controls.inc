@@ -4,7 +4,7 @@
 
 typedef struct
 {
-    GtkWidget *ready;
+    GtkWidget *window, *ready;
     GtkWidget *commands[INSIGHT_DEBUG_COMMAND_COUNT];
     InsightDebugPoint toggle;
     gpointer data;
@@ -118,6 +118,7 @@ void insight_debug_register(GtkWidget *window, GtkWidget *ready, InsightDebugPoi
                             gpointer data, GtkWidget *const commands[INSIGHT_DEBUG_COMMAND_COUNT])
 {
     InsightDebugSession *session = g_new0(InsightDebugSession, 1);
+    session->window = window;
     session->ready = ready;
     session->toggle = toggle;
     session->data = data;

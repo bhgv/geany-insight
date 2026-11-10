@@ -25,6 +25,8 @@ static GtkWidget *window_named(const gchar *title)
 
 static GtkWidget *find(GtkWidget *widget, const gchar *key)
 {
+    if (!g_strcmp0(gtk_widget_get_name(widget), key))
+        return widget;
     if (GTK_IS_NOTEBOOK(widget) && !strcmp(key, "inspection notebook"))
         return widget;
     if (GTK_IS_BUTTON(widget) && !g_strcmp0(gtk_button_get_label(GTK_BUTTON(widget)), key))
@@ -62,6 +64,29 @@ static GtkWidget *find(GtkWidget *widget, const gchar *key)
         found = find(it->data, key);
     g_list_free(children);
     return found;
+}
+
+/* EN: Check that window's automatically refreshed GDB table contains name and value.
+ * RU: Проверяет наличие name и value в автоматически обновляемой таблице GDB окна window. */
+static gboolean has_local(GtkWidget *window, const gchar *name, const gchar *value)
+{
+    GtkWidget *view = find(window, "insight-gdb-frame-variables");
+    if (!GTK_IS_TREE_VIEW(view))
+        return FALSE;
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(view));
+    GtkTreeIter row;
+    for (gboolean valid = gtk_tree_model_get_iter_first(model, &row); valid;
+         valid = gtk_tree_model_iter_next(model, &row))
+    {
+        gchar *label = NULL, *actual = NULL;
+        gtk_tree_model_get(model, &row, 0, &label, 1, &actual, -1);
+        gboolean matches = !g_strcmp0(label, name) && !g_strcmp0(actual, value);
+        g_free(label);
+        g_free(actual);
+        if (matches)
+            return TRUE;
+    }
+    return FALSE;
 }
 
 static gboolean click(GtkWidget *window, const gchar *label)
@@ -157,7 +182,8 @@ static gboolean drive(gpointer data)
              find(window, "Observed function = main") && click(window, "Step Over"))
         phase++;
     else if (phase == 5 && find(window, "end-stepping-range") &&
-             find(window, "marker = 41") && find(window, "Pin member") && click(window, "Locals"))
+             has_local(window, "marker", "41") && find(window, "marker = 41") &&
+             find(window, "Pin member") && click(window, "Locals"))
         phase++;
     else if (phase == 6 && gtk_notebook_get_current_page(GTK_NOTEBOOK(tabs)) == 3 &&
              find(gtk_notebook_get_nth_page(GTK_NOTEBOOK(tabs), 3), "marker = 41"))

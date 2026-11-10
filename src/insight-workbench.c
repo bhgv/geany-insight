@@ -9895,7 +9895,9 @@ typedef struct {
     GtkWidget *status, *command, *location, *breakpoint, *load_lua, *unload_lua, *source, *buttons[NATIVE_ACTION_COUNT];
     GtkTextView *console, *watches;
     GtkWidget *inspection, *observer_log, *tabs, *watch_entry, *watch_add, *watch_remove;
-    GPtrArray *expressions;
+    GPtrArray *expressions, *locals;
+    GtkListStore *local_rows, *point_rows;
+    gboolean locals_needed, locals_pending;
     ScriptDebugWindow *graph_view;
     InsightLuaWatchGraph *graph;
     guint watch_next;
@@ -9964,7 +9966,7 @@ static void native_watch_refresh(NativeDebug *session, gboolean compare)
     InsightLuaWatchGraph *graph = session->graph;
     memset(graph, 0, sizeof *graph);
     graph->node_count = 1;
-    g_strlcpy(graph->nodes[0].label, "GDB watches", sizeof graph->nodes[0].label);
+    g_strlcpy(graph->nodes[0].label, "GDB frame", sizeof graph->nodes[0].label);
     for (guint i = 0; i < session->expressions->len; i++)
     {
         NativeWatch *watch = session->expressions->pdata[i];
@@ -9978,11 +9980,33 @@ static void native_watch_refresh(NativeDebug *session, gboolean compare)
         edge->to = id;
         g_strlcpy(edge->label, "watch", sizeof edge->label);
     }
+    for (guint i = 0; i < session->locals->len &&
+         graph->node_count < G_N_ELEMENTS(graph->nodes) &&
+         graph->edge_count < G_N_ELEMENTS(graph->edges); i++)
+    {
+        NativeWatch *local = session->locals->pdata[i];
+        guint id = graph->node_count++;
+        InsightLuaWatchNode *node = &graph->nodes[id];
+        g_strlcpy(node->label, local->expression, sizeof node->label);
+        g_strlcpy(node->value, local->value, sizeof node->value);
+        g_snprintf(node->path, sizeof node->path, "gdb:local:%s", local->expression);
+        InsightLuaWatchEdge *edge = &graph->edges[graph->edge_count++];
+        edge->from = 0;
+        edge->to = id;
+        g_strlcpy(edge->label, "local", sizeof edge->label);
+    }
     insight_lua_debug_observer_watch(session->observer, graph);
     session->graph_view->watch_selected = -1;
     GString *text = g_string_new(NULL);
+    for (guint i = 0; i < session->expressions->len; i++)
+    {
+        NativeWatch *watch = session->expressions->pdata[i];
+        g_string_append_printf(text, "%s = %s\n", watch->expression,
+                               watch->value ? watch->value : "Awaiting stop");
+    }
     for (guint i = 1; i < graph->node_count; i++)
-        g_string_append_printf(text, "%s = %s\n", graph->nodes[i].label, graph->nodes[i].value);
+        if (g_str_has_prefix(graph->nodes[i].path, "observer:"))
+            g_string_append_printf(text, "%s = %s\n", graph->nodes[i].label, graph->nodes[i].value);
     gchar *valid = g_utf8_make_valid(text->str, -1);
     debug_set_text(GTK_WIDGET(session->watches), valid);
     g_free(valid);
@@ -9999,6 +10023,9 @@ static void native_debug_free(gpointer data)
     g_hash_table_unref(session->editor_points);
     g_free(session->editor_point_pending);
     g_ptr_array_unref(session->expressions);
+    g_ptr_array_unref(session->locals);
+    g_object_unref(session->local_rows);
+    g_object_unref(session->point_rows);
     g_ptr_array_unref(session->graph_view->watch_paths);
     g_clear_pointer(&session->graph_view->watch_previous_values, g_hash_table_unref);
     g_free(session->graph_view);
@@ -10030,6 +10057,12 @@ static void native_debug_resume(GtkWidget *dialog, NativeDebug *session)
         session->resume = FALSE;
         native_debug_send(dialog, "-exec-continue");
     }
+    else if (session->locals_needed)
+    {
+        session->locals_needed = FALSE;
+        session->locals_pending = TRUE;
+        native_debug_send(dialog, "-stack-list-variables --all-values");
+    }
     else if (session->watch_next < session->expressions->len)
     {
         session->watch_pending = session->expressions->pdata[session->watch_next++];
@@ -10056,6 +10089,7 @@ static void native_debug_written(GObject *stream, GAsyncResult *result, gpointer
             session->pending = session->ready = session->resume = FALSE;
             session->watch_pending = NULL;
             g_clear_pointer(&session->editor_point_pending, g_free);
+            session->locals_pending = FALSE;
         }
         native_debug_update(session);
         native_debug_resume(dialog, session);
@@ -10109,6 +10143,81 @@ static gchar *native_debug_field(const gchar *record, const gchar *name)
     return NULL;
 }
 
+/* EN: Read GDB MI variable tuples from record into session's table and frame cache.
+ * RU: Читает кортежи переменных GDB MI из record в таблицу и кэш кадра session. */
+static void native_debug_locals(NativeDebug *session, const gchar *record)
+{
+    g_ptr_array_set_size(session->locals, 0);
+    gtk_list_store_clear(session->local_rows);
+    const gchar *list = g_str_has_prefix(record, "^done,variables=[") ?
+                        record + strlen("^done,variables=[") : NULL;
+    if (!list)
+        return;
+
+    const gchar *start = NULL;
+    gboolean quoted = FALSE;
+    guint depth = 0;
+    for (const gchar *it = list; *it && session->locals->len < 256; it++)
+    {
+        if (quoted && *it == '\\' && it[1])
+        {
+            it++;
+            continue;
+        }
+        if (*it == '"')
+            quoted = !quoted;
+        if (quoted)
+            continue;
+        if (*it == '{')
+        {
+            if (depth++ == 0)
+                start = it;
+        }
+        else if (*it == '}' && depth && --depth == 0)
+        {
+            gchar *tuple = g_strndup(start, it - start + 1);
+            gchar *name = native_debug_field(tuple, "name");
+            gchar *value = native_debug_field(tuple, "value");
+            gchar *argument = native_debug_field(tuple, "arg");
+            if (name)
+            {
+                NativeWatch *local = g_new0(NativeWatch, 1);
+                local->expression = g_utf8_make_valid(name, -1);
+                local->value = g_utf8_make_valid(value ? value : insight_tr("Unavailable"), -1);
+                gtk_list_store_insert_with_values(session->local_rows, NULL, -1,
+                    0, local->expression, 1, local->value,
+                    2, insight_tr(!g_strcmp0(argument, "1") ? "Argument" : "Local variable"), -1);
+                g_ptr_array_add(session->locals, local);
+            }
+            g_free(argument);
+            g_free(value);
+            g_free(name);
+            g_free(tuple);
+        }
+        else if (*it == ']' && depth == 0)
+            break;
+    }
+}
+
+/* EN: Return a frame-local hover tooltip for filename and name in the active GDB session.
+ * RU: Возвращает подсказку для имени name из текущего кадра GDB в файле filename. */
+gchar *insight_debug_value_tooltip(const gchar *filename, const gchar *name)
+{
+    InsightDebugSession *active = active_debug_session();
+    GtkWidget *dialog = active ? active->window : NULL;
+    NativeDebug *session = dialog ? g_object_get_data(G_OBJECT(dialog), "native-debug") : NULL;
+    if (!session || session->closed || !session->stopped || session->locals_pending || session->locals_needed ||
+        !filename || !session->stop_file || utils_filenamecmp(filename, session->stop_file))
+        return NULL;
+    for (guint i = 0; i < session->locals->len; i++)
+    {
+        NativeWatch *local = session->locals->pdata[i];
+        if (!strcmp(name, local->expression))
+            return g_strdup_printf("%s = %s", local->expression, local->value);
+    }
+    return NULL;
+}
+
 /* EN: Toggle filename:line using GDB's breakpoint identifier once insertion succeeds.
  * RU: Переключает точку filename:line по идентификатору, который GDB вернул после вставки. */
 static void native_debug_toggle(const gchar *filename, guint line, gpointer data)
@@ -10130,6 +10239,19 @@ static void native_debug_toggle(const gchar *filename, guint line, gpointer data
     g_free(escaped);
 }
 
+/* EN: Fill the native breakpoint list with locations confirmed by GDB in session.
+ * RU: Заполняет список точек координатами, которые GDB подтвердил для session. */
+static void native_debug_refresh_points(NativeDebug *session)
+{
+    gtk_list_store_clear(session->point_rows);
+    GList *keys = g_list_sort(g_hash_table_get_keys(session->editor_points),
+                              (GCompareFunc)g_strcmp0);
+    for (GList *it = keys; it; it = it->next)
+        gtk_list_store_insert_with_values(session->point_rows, NULL, -1,
+            0, it->data, 1, g_hash_table_lookup(session->editor_points, it->data), -1);
+    g_list_free(keys);
+}
+
 /* EN: Apply a GDB MI reply to the pending editor breakpoint in session.
  * RU: Применяет ответ GDB MI к ожидающей точке редактора в session. */
 static void native_debug_point_reply(NativeDebug *session, const gchar *record)
@@ -10144,6 +10266,7 @@ static void native_debug_point_reply(NativeDebug *session, const gchar *record)
             if (!strcmp(number, value))
                 g_hash_table_iter_remove(&iter);
         g_free(number);
+        native_debug_refresh_points(session);
     }
     if (!session->editor_point_pending || *record != '^')
         return;
@@ -10162,6 +10285,8 @@ static void native_debug_point_reply(NativeDebug *session, const gchar *record)
             g_free(number);
     }
 
+    if (success)
+        native_debug_refresh_points(session);
     gchar *detail = success ? NULL : native_debug_field(record, "msg");
     const gchar *message = !success ? "Could not change the source breakpoint."
                           : session->editor_point_removing ? "Source breakpoint removed."
@@ -10232,9 +10357,8 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             if (session->stopped)
             {
                 session->watch_next = 0;
+                session->locals_needed = TRUE;
                 native_debug_observe(session, line);
-                if (!session->expressions->len)
-                    native_watch_refresh(session, TRUE);
             }
         }
         if (*line == '^')
@@ -10242,6 +10366,13 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             session->pending = FALSE;
             session->ready = !g_str_has_prefix(line, "^exit");
             session->inspecting = FALSE;
+            if (session->locals_pending)
+            {
+                session->locals_pending = FALSE;
+                native_debug_locals(session, line);
+                if (!session->expressions->len)
+                    native_watch_refresh(session, TRUE);
+            }
             if (session->watch_pending)
             {
                 NativeWatch *watch = session->watch_pending;
@@ -10500,6 +10631,16 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     GtkWidget *tabs = gtk_notebook_new();
     session->tabs = tabs;
     session->expressions = g_ptr_array_new_with_free_func(native_watch_free);
+    session->locals = g_ptr_array_new_with_free_func(native_watch_free);
+    session->local_rows = gtk_list_store_new(3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    GtkWidget *locals = gtk_tree_view_new_with_model(GTK_TREE_MODEL(session->local_rows));
+    gtk_widget_set_name(locals, "insight-gdb-frame-variables");
+    const gchar *local_columns[] = {"Name", "Value", "Kind"};
+    for (guint i = 0; i < G_N_ELEMENTS(local_columns); i++)
+        gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(locals), -1,
+            insight_tr(local_columns[i]), gtk_cell_renderer_text_new(), "text", i, NULL);
+    GtkWidget *local_scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(local_scroll), locals);
     session->graph = g_new0(InsightLuaWatchGraph, 1);
     session->graph_view = g_new0(ScriptDebugWindow, 1);
     session->graph_view->watch_paths = g_ptr_array_new_with_free_func(g_free);
@@ -10539,6 +10680,17 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     GtkWidget *log = gtk_paned_new(GTK_ORIENTATION_VERTICAL);
     session->observer_log = debug_create_view(log, TRUE);
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), log, gtk_label_new(insight_tr("Observer log")));
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), local_scroll, gtk_label_new(insight_tr("Variables")));
+    session->point_rows = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_STRING);
+    GtkWidget *points = gtk_tree_view_new_with_model(GTK_TREE_MODEL(session->point_rows));
+    gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(points), -1,
+        insight_tr("Function or file:line"), gtk_cell_renderer_text_new(), "text", 0, NULL);
+    gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(points), -1,
+        insight_tr("Number"), gtk_cell_renderer_text_new(), "text", 1, NULL);
+    GtkWidget *point_scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(point_scroll), points);
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), point_scroll,
+                             gtk_label_new(insight_tr("Source breakpoints")));
     gtk_box_pack_start(GTK_BOX(box), tabs, TRUE, TRUE, 0);
     session->command = gtk_entry_new();
     gtk_entry_set_max_length(GTK_ENTRY(session->command), 1024);

@@ -1,5 +1,10 @@
 # C/C++ debugging with GDB
 
+At each stop, **Variables** shows the locals and arguments of GDB's
+selected frame. The same values appear in **Watch graph**. Hover over a
+name in the source file where execution stopped to see its frame value.
+Use **Watches** for arbitrary expressions.
+
 During debugging, put the caret on a source line and press **F2** or
 **Toggle Breakpoint** on the main toolbar. You can also double-click the
 line number or use its context menu. The main toolbar shows the commands

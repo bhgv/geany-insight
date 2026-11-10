@@ -308,6 +308,33 @@ void editor_snippets_init(void)
 }
 
 
+/* EN: Show a cached debugger value for the word at x,y in the editor from data.
+ * RU: Показывает значение отладчика для слова под x,y в редакторе из data. */
+static gboolean editor_debug_tooltip(GtkWidget *widget, gint x, gint y, gboolean keyboard,
+                                     GtkTooltip *tooltip, gpointer data)
+{
+    (void)widget;
+    GeanyEditor *editor = data;
+    if (keyboard || !insight_debug_active())
+        return FALSE;
+    ScintillaObject *sci = editor->sci;
+    gint position = sci_get_position_from_xy(sci, x, y, FALSE);
+    if (position < 0)
+        return FALSE;
+    gint start = (gint)SSM(sci, SCI_WORDSTARTPOSITION, position, TRUE);
+    gint end = (gint)SSM(sci, SCI_WORDENDPOSITION, position, TRUE);
+    if (start >= end || end - start > 256 || position >= end)
+        return FALSE;
+    gchar *name = sci_get_contents_range(sci, start, end);
+    gchar *value = insight_debug_value_tooltip(editor->document->file_name, name);
+    if (value)
+        gtk_tooltip_set_text(tooltip, value);
+    gboolean shown = value != NULL;
+    g_free(value);
+    g_free(name);
+    return shown;
+}
+
 /* EN: Toggle the source location attached to a line-number menu item.
  * RU: Переключает точку для позиции, сохранённой в пункте меню номера строки. */
 static void editor_margin_breakpoint(GtkMenuItem *item, gpointer data)
@@ -5138,6 +5165,8 @@ static ScintillaObject *create_new_sci(GeanyEditor *editor)
 	if (editor->sci == NULL)
 	{
 		g_signal_connect(sci, "button-press-event", G_CALLBACK(on_editor_button_press_event), editor);
+        gtk_widget_set_has_tooltip(GTK_WIDGET(sci), TRUE);
+        g_signal_connect(sci, "query-tooltip", G_CALLBACK(editor_debug_tooltip), editor);
 		g_signal_connect(sci, "scroll-event", G_CALLBACK(on_editor_scroll_event), editor);
 		g_signal_connect(sci, "motion-notify-event", G_CALLBACK(on_motion_event), NULL);
 		g_signal_connect(sci, "focus-in-event", G_CALLBACK(on_editor_focus_in), editor);
