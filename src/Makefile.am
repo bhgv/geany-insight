@@ -226,6 +226,10 @@ libgeany_la_SOURCES += \
 	insight-workbench/workspace/database-save.inc \
 	insight-workbench/workspace/directory-observer.inc \
 	insight-workbench/symbols/source-lookup.inc \
+	insight-workbench/symbols/symbol-list-rows.inc \
+	insight-workbench/source/file-preview.inc \
+	insight-workbench/symbols/definition-resolution.inc \
+	insight-workbench/workspace/workspace-root.inc \
 	insight-workbench/symbols/symbol-lists.inc \
 	insight-workbench/files/file-actions.inc \
 	insight-workbench/relations/relation-rows.inc \
