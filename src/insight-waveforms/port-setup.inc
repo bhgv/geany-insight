@@ -132,6 +132,43 @@ static void simulation_device_list_refresh(GtkTextBuffer *buffer, GtkListStore *
     g_free(recipe);
 }
 
+/* EN: Edit the existing timing rule selected by button, or insert it in browser's recipe.
+ * RU: Редактирует выбранное button правило времени или добавляет его в рецепт browser. */
+static void simulation_edit_timing(GtkButton *button, gpointer data)
+{
+    PortBrowser *browser = data;
+    GtkTextBuffer *buffer = browser->recipe;
+    const gchar *rule = g_object_get_data(G_OBJECT(button), "timing-rule");
+    GtkTextIter first;
+    GtkTextMark *mark = NULL;
+    gtk_text_buffer_get_start_iter(buffer, &first);
+    do
+    {
+        GtkTextIter last = first;
+        if (!gtk_text_iter_ends_line(&last))
+            gtk_text_iter_forward_to_line_end(&last);
+        gchar *line = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
+        gchar **args = NULL;
+        gboolean matches = g_shell_parse_argv(line, NULL, &args, NULL) &&
+                           !g_strcmp0(args[0], rule);
+        g_strfreev(args);
+        g_free(line);
+        if (matches)
+        {
+            if (mark)
+                gtk_text_buffer_move_mark(buffer, mark, &first);
+            else
+                mark = gtk_text_buffer_create_mark(buffer, NULL, &first, TRUE);
+        }
+    } while (gtk_text_iter_forward_line(&first));
+
+    g_object_set_data(G_OBJECT(button), "edit-rule", mark);
+    simulation_device_wizard(button, browser);
+    g_object_set_data(G_OBJECT(button), "edit-rule", NULL);
+    if (mark)
+        gtk_text_buffer_delete_mark(buffer, mark);
+}
+
 /* EN: Edit the rule at path in tree via wizard. column is unused.
  * RU: Редактирует правило по path в tree через wizard. column не используется. */
 static void simulation_device_list_edit(GtkTreeView *tree, GtkTreePath *path,
@@ -461,6 +498,22 @@ static gboolean simulation_edit_ports(GtkWindow *parent, const gchar *path, cons
                            .preprocess_error = preprocess_error,
                            .recipe = buffer,
                            .recipe_view = GTK_TEXT_VIEW(view)};
+    GtkWidget *timing = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_box_pack_start(GTK_BOX(box), timing, FALSE, FALSE, 4);
+    const gchar *timing_rules[] = {"duration", "duration-ticks", "capture-trigger"};
+    const gchar *timing_labels[] = {"Simulation time…", "Clock cycle limit…", "Capture trigger…"};
+    const gchar *timing_icons[] = {"appointment-soon-symbolic", "alarm-symbolic", "media-record-symbolic"};
+    for (guint i = 0; i < G_N_ELEMENTS(timing_rules); i++)
+    {
+        GtkWidget *button = gtk_button_new_with_label(insight_tr(timing_labels[i]));
+        gtk_button_set_image(GTK_BUTTON(button),
+                             gtk_image_new_from_icon_name(timing_icons[i], GTK_ICON_SIZE_BUTTON));
+        gtk_button_set_always_show_image(GTK_BUTTON(button), TRUE);
+        g_object_set_data(G_OBJECT(button), "timing-rule", (gpointer)timing_rules[i]);
+        g_object_set_data(G_OBJECT(button), "source-directory", source_directory);
+        g_signal_connect(button, "clicked", G_CALLBACK(simulation_edit_timing), &browser);
+        gtk_box_pack_start(GTK_BOX(timing), button, FALSE, FALSE, 0);
+    }
     GtkWidget *panes = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     GtkWidget *recipe_tabs = gtk_notebook_new();
     GtkListStore *devices = gtk_list_store_new(5, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT,

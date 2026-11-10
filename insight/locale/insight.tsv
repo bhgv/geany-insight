@@ -3123,3 +3123,9 @@ Rising edge (0 → 1)	Фронт (0 → 1)
 Falling edge (1 → 0)	Спад (1 → 0)
 Value match	Совпадение значения
 Recipe	Рецепт
+Simulation time…	Время симуляции…
+Clock cycle limit…	Число тактов…
+Capture trigger…	Триггер записи…
+Set the time from simulation start in nanoseconds.	Укажите время от начала симуляции в наносекундах.
+Choose the clock and count its rising edges.	Выберите сигнал клока и укажите число положительных фронтов.
+Choose the signal and the event that starts waveform recording.	Выберите сигнал и событие, которое запускает запись осциллограммы.

@@ -336,6 +336,7 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
 {
     PortBrowser *parent_browser = data;
     GtkTextBuffer *buffer = parent_browser->recipe;
+    const gchar *fixed_rule = g_object_get_data(G_OBJECT(button), "timing-rule");
     GtkTextMark *edit_mark = g_object_get_data(G_OBJECT(button), "edit-rule");
     gchar **saved_args = NULL;
     gint saved_count = 0;
@@ -358,8 +359,16 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     GtkWindow *parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
     DeviceForm form = {.entries = g_ptr_array_new(),
                        .directory = g_object_get_data(G_OBJECT(button), "source-directory")};
+    const gchar *title = edit_mark ? "Edit Test Device" : "Add Test Device";
+    if (fixed_rule)
+        for (guint i = 0; i < G_N_ELEMENTS(device_presets); i++)
+            if (!strcmp(fixed_rule, device_presets[i].rule))
+            {
+                title = device_presets[i].title;
+                break;
+            }
     GtkWidget *dialog =
-        gtk_dialog_new_with_buttons(edit_mark ? "Edit Test Device" : "Add Test Device", parent,
+        gtk_dialog_new_with_buttons(insight_tr(title), parent,
                                     GTK_DIALOG_DESTROY_WITH_PARENT, "_Cancel",
                                     GTK_RESPONSE_CANCEL, edit_mark ? "_Apply" : "_Insert Rule", GTK_RESPONSE_ACCEPT, NULL);
     simulation_dialog_tools(
@@ -373,7 +382,24 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     g_object_ref_sink(dialog);
     form.dialog = dialog;
     DeviceCatalog catalog = {.preferred = parent_browser->last_device};
-    device_catalog_widget(&catalog, box);
+    GtkWidget *catalog_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_box_pack_start(GTK_BOX(box), catalog_box, FALSE, FALSE, 0);
+    device_catalog_widget(&catalog, catalog_box);
+    if (fixed_rule)
+    {
+        gtk_widget_set_no_show_all(catalog_box, TRUE);
+        gtk_widget_hide(catalog_box);
+        GtkWidget *heading = gtk_label_new(insight_tr(title));
+        gtk_label_set_xalign(GTK_LABEL(heading), 0);
+        gtk_box_pack_start(GTK_BOX(box), heading, FALSE, FALSE, 4);
+        GtkWidget *summary = gtk_label_new(insight_tr(
+            !strcmp(fixed_rule, "duration") ? "Set the time from simulation start in nanoseconds."
+            : !strcmp(fixed_rule, "duration-ticks") ? "Choose the clock and count its rising edges."
+            : "Choose the signal and the event that starts waveform recording."));
+        gtk_label_set_xalign(GTK_LABEL(summary), 0);
+        gtk_label_set_line_wrap(GTK_LABEL(summary), TRUE);
+        gtk_box_pack_start(GTK_BOX(box), summary, FALSE, FALSE, 4);
+    }
     GtkWidget *combo = catalog.combo;
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     form.grid = gtk_grid_new();
@@ -405,6 +431,8 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     catalog.selection_changed =
         g_signal_connect(combo, "changed", G_CALLBACK(simulation_device_type), &form);
     device_catalog_filter(NULL, &catalog);
+    if (fixed_rule)
+        gtk_combo_box_set_active_id(GTK_COMBO_BOX(combo), fixed_rule);
     if (saved_args && gtk_combo_box_set_active_id(GTK_COMBO_BOX(combo), saved_args[0]))
     {
         guint count = MIN(form.entries->len, (guint)(saved_count - 1));
@@ -524,7 +552,7 @@ static void simulation_device_wizard(GtkButton *button, gpointer data)
     if (response != GTK_RESPONSE_NONE)
     {
         gint last_device = device_catalog_selected(GTK_COMBO_BOX(combo));
-        if (last_device >= 0)
+        if (!fixed_rule && last_device >= 0)
             parent_browser->last_device = last_device;
         port_browser_copy_view(parent_browser, &browser);
     }

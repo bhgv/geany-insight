@@ -225,8 +225,10 @@ switch enable
 capture-trigger rise start
 ```
 
-In **Add Test Device**, select simulation duration, simulation clock limit,
-or waveform capture trigger. **Recipe** is a text editor for the rules.
+In **Port Signals**, click **Simulation time…**, **Clock cycle limit…**
+or **Capture trigger…**. Each wizard loads the current values or inserts
+a new rule on acceptance. Use **Help** for details or edit the rule in
+the **Recipe** text editor.
 
 The `duration` rule specifies elapsed simulation time in nanoseconds.
 `duration-ticks clk 10000` ends the run after 10,000 positive edges of
