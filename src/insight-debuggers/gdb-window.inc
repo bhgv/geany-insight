@@ -171,6 +171,8 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
                              gtk_label_new(insight_tr("Launch settings")));
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), native_values_widget(session),
                              gtk_label_new(insight_tr("Inspect values")));
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), native_memory_widget(session),
+                             gtk_label_new(insight_tr("Memory")));
     g_signal_connect(session->threads, "changed", G_CALLBACK(native_select_thread), dialog);
     g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(session->stack)), "changed",
                      G_CALLBACK(native_select_frame), dialog);

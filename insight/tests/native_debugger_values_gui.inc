@@ -216,14 +216,53 @@ static gboolean native_values_gui_step(GtkWidget *window, GtkWidget *tabs)
             }
         }
     }
-    else if (phase == 28 && has_local(window, "marker", "102") && click(window, "Stop"))
+    else if (phase == 28 && has_local(window, "marker", "102"))
+    {
+        GtkWidget *entry = find(window, "insight-gdb-memory-address");
+        GtkWidget *size = find(window, "insight-gdb-memory-size");
+        if (entry && size && gtk_widget_is_sensitive(entry))
+        {
+            gtk_entry_set_text(GTK_ENTRY(entry), "debug_memory");
+            gtk_spin_button_set_value(GTK_SPIN_BUTTON(size), 10);
+            if (click(window, "Read Memory"))
+                phase = 30;
+        }
+    }
+    else if (phase == 30 && find(window, " | GDB memory") && click(window, "Next block"))
         phase++;
+    else if (phase == 31 && find(window, " | ..........") && click(window, "Previous block"))
+        phase++;
+    else if (phase == 32 && find(window, " | GDB memory"))
+    {
+        GtkWidget *entry = find(window, "insight-gdb-memory-address");
+        if (entry && gtk_widget_is_sensitive(entry))
+        {
+            gtk_entry_set_text(GTK_ENTRY(entry), "not_a_real_debugger_symbol");
+            if (click(window, "Read Memory"))
+                phase++;
+        }
+    }
+    else if (phase == 33)
+    {
+        GtkWidget *status = find(window, "insight-gdb-memory-status");
+        GtkWidget *entry = find(window, "insight-gdb-memory-address");
+        if (status && entry && gtk_widget_is_sensitive(entry) &&
+            strstr(gtk_label_get_text(GTK_LABEL(status)), "No symbol"))
+        {
+            gtk_entry_set_text(GTK_ENTRY(entry), "debug_memory");
+            if (click(window, "Read Memory"))
+                phase++;
+        }
+    }
+    else if (phase == 34 && find(window, " | GDB memory") && click(window, "Stop"))
+        phase = 29;
     else if (phase == 29)
     {
         GtkWidget *run = find(window, "Run");
-        if (run && gtk_widget_is_sensitive(run) && !has_local(window, "marker", "102"))
+        if (run && gtk_widget_is_sensitive(run) && !has_local(window, "marker", "102") &&
+            !find(window, " | GDB memory"))
         {
-            g_print("C/C++ GTK: paged value trees, assignment, data watchpoint and run-to-cursor passed.\n");
+            g_print("C/C++ GTK: paged value trees, assignment, data watchpoint, run-to-cursor and memory navigation/errors passed.\n");
             passed = TRUE;
             gtk_widget_destroy(window);
             gtk_main_quit();

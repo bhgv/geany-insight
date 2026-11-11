@@ -3222,3 +3222,18 @@ Function returned	Возврат из функции
 Stopped	Остановлено
 Awaiting stop	Ожидание остановки
 Watch expression exceeds 1024 characters.	Выражение наблюдения превышает 1024 символа.
+Address expression	Выражение адреса
+Bytes to read	Число байтов для чтения
+Read Memory	Прочитать память
+Previous block	Предыдущий блок
+Next block	Следующий блок
+View Memory	Просмотреть память
+Refresh memory at each stop	Обновлять память на каждой остановке
+Snapshot cleared. Pause and read memory in the selected frame.	Снимок очищен. На паузе прочитайте память в выбранном кадре.
+Reading memory…	Чтение памяти…
+Memory at the current stop; byte order is unchanged.	Память на текущей остановке; порядок байтов сохранён.
+Memory unavailable or incomplete. Try a smaller block or another address.	Память недоступна или прочитана не полностью. Уменьшите блок или смените адрес.
+Read a valid address before navigating; address overflow is not allowed.	Перед переходом прочитайте допустимый адрес; переполнение адреса запрещено.
+Use &variable for storage, a pointer for its target. Expressions may execute code in the program.	Используйте &variable для хранения переменной, указатель — для его цели. Выражения могут выполнять код программы.
+Pause and read up to 4096 bytes from an address expression.	На паузе прочитайте до 4096 байтов по выражению адреса.
+Memory	Память

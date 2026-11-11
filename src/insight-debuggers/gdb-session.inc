@@ -20,7 +20,7 @@ typedef enum
 typedef enum
 {
     NATIVE_DATA_INSPECT, NATIVE_DATA_WATCH, NATIVE_DATA_ASSIGN,
-    NATIVE_DATA_WRITE, NATIVE_DATA_READ, NATIVE_DATA_ACCESS
+    NATIVE_DATA_WRITE, NATIVE_DATA_READ, NATIVE_DATA_ACCESS, NATIVE_DATA_MEMORY
 } NativeDataAction;
 
 typedef enum
@@ -41,6 +41,10 @@ typedef struct {
     GtkWidget *threads, *stack;
     GtkWidget *window;
     GPtrArray *paused_controls;
+    GtkWidget *memory_expression, *memory_size, *memory_auto, *memory_text, *memory_status;
+    gchar *memory_address;
+    guint memory_generation, memory_pending_generation, memory_count;
+    gboolean memory_needed, memory_pending;
     GtkTreeStore *value_rows;
     GtkWidget *value_tree, *value_expression, *value_status, *locals_view;
     gchar *value_root, *value_pending_name, *value_pending_expression, *stop_detail, *data_command;
@@ -79,6 +83,10 @@ typedef struct {
     gboolean closed, ready, running, stopped, pending, writing;
 } NativeDebug;
 
+static void native_memory_sync(NativeDebug *session);
+static gchar *native_memory_next(NativeDebug *session);
+static gboolean native_memory_reply(NativeDebug *session, const gchar *record);
+static void native_memory_inspect(NativeDebug *session, const gchar *expression);
 static void native_target_clear(NativeDebug *session);
 static void native_values_reset(NativeDebug *session);
 static gchar *native_values_next(NativeDebug *session, gboolean cleanup);
@@ -100,6 +108,7 @@ static gboolean native_context_id(const gchar *value);
  * RU: Обновляет кнопки и состояние session. */
 static void native_debug_update(NativeDebug *session)
 {
+    native_memory_sync(session);
     gboolean idle = session->ready && !session->pending && !session->writing;
     const gchar *state = insight_tr(!session->ready ? "Starting or disconnected" :
         session->running ? "Running" : session->stopped ? "Paused" : "Ready");
@@ -170,6 +179,7 @@ static void native_debug_free(gpointer data)
     g_free(session->editor_point_pending);
     g_free(session->stop_detail);
     g_free(session->data_command);
+    g_free(session->memory_address);
     g_ptr_array_unref(session->paused_controls);
     g_object_unref(session->value_rows);
     g_free(session->value_root);
@@ -295,6 +305,15 @@ static void native_debug_resume(GtkWidget *dialog, NativeDebug *session)
         g_free(command);
         g_free(escaped);
     }
+    else if (session->memory_needed)
+    {
+        gchar *command = native_memory_next(session);
+        if (command)
+        {
+            native_debug_send(dialog, command);
+            g_free(command);
+        }
+    }
     else if (session->value_reload)
     {
         gchar *command = native_values_next(session, FALSE);
@@ -362,7 +381,8 @@ static gchar *native_debug_scoped(NativeDebug *session, const gchar *command)
         "-stack-list-frames", "-stack-list-variables", "-stack-select-frame",
         "-data-evaluate-expression", "-exec-continue", "-exec-step",
         "-exec-next", "-exec-finish", "-interpreter-exec", "-exec-until",
-        "-var-create", "-var-list-children", "-var-assign", "-break-watch"
+        "-var-create", "-var-list-children", "-var-assign", "-break-watch",
+        "-data-read-memory-bytes"
     };
     gboolean matches = FALSE;
     for (guint i = 0; i < G_N_ELEMENTS(scoped); i++)

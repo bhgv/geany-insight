@@ -14,6 +14,7 @@ struct NativeProbe
 };
 
 struct NativeProbe debug_sample = {7, {9}, {2, 3, 5}};
+char debug_memory[64] = "GDB memory";
 
 /* EN: Keep marker alive through two writes for data-watchpoint and assignment checks.
  * RU: Сохраняет marker на время двух записей для проверки точек по данным и присваивания. */

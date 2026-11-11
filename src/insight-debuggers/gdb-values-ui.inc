@@ -201,9 +201,9 @@ static GtkWidget *native_values_widget(NativeDebug *session)
     gtk_box_pack_start(GTK_BOX(page), scroll, TRUE, TRUE, 0);
     GtkWidget *actions = gtk_flow_box_new();
     gtk_flow_box_set_selection_mode(GTK_FLOW_BOX(actions), GTK_SELECTION_NONE);
-    const gchar *labels[] = {"Change Value", "Add selected watch", "Break on Write", "Break on Read", "Break on Access"};
+    const gchar *labels[] = {"Change Value", "Add selected watch", "Break on Write", "Break on Read", "Break on Access", "View Memory"};
     const NativeDataAction commands[] = {NATIVE_DATA_ASSIGN, NATIVE_DATA_WATCH,
-                                        NATIVE_DATA_WRITE, NATIVE_DATA_READ, NATIVE_DATA_ACCESS};
+                                        NATIVE_DATA_WRITE, NATIVE_DATA_READ, NATIVE_DATA_ACCESS, NATIVE_DATA_MEMORY};
     for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
     {
         GtkWidget *button = gtk_button_new_with_label(insight_tr(labels[i]));

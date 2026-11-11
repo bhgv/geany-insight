@@ -316,6 +316,8 @@ libgeany_la_SOURCES += \
 	insight-debuggers/gdb-actions.inc \
 	insight-debuggers/gdb-values-model.inc \
 	insight-debuggers/gdb-values-ui.inc \
+	insight-debuggers/gdb-memory-model.inc \
+	insight-debuggers/gdb-memory-ui.inc \
 	insight-debuggers/gdb-data-actions.inc \
 	insight-debuggers/gdb-window.inc \
 	insight-python-debug.c \

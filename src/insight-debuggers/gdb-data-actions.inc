@@ -34,6 +34,8 @@ static void native_data_use_expression(NativeDebug *session, const gchar *expres
         return;
     if (action == NATIVE_DATA_INSPECT)
         native_values_inspect(session, expression);
+    else if (action == NATIVE_DATA_MEMORY)
+        native_memory_inspect(session, expression);
     else if (action == NATIVE_DATA_WATCH)
     {
         if (g_utf8_strlen(expression, -1) > gtk_entry_get_max_length(GTK_ENTRY(session->watch_entry)))
@@ -160,9 +162,9 @@ static GtkWidget *native_data_buttons(NativeDebug *session, gboolean locals)
     GtkWidget *bar = gtk_flow_box_new();
     gtk_flow_box_set_selection_mode(GTK_FLOW_BOX(bar), GTK_SELECTION_NONE);
     const gchar *labels[] = {"Inspect selected value", "Watch selected value", "Change selected value",
-                             "Break on Write", "Break on Read", "Break on Access"};
+                             "Break on Write", "Break on Read", "Break on Access", "View Memory"};
     const NativeDataAction actions[] = {NATIVE_DATA_INSPECT, NATIVE_DATA_WATCH, NATIVE_DATA_ASSIGN,
-                                        NATIVE_DATA_WRITE, NATIVE_DATA_READ, NATIVE_DATA_ACCESS};
+                                        NATIVE_DATA_WRITE, NATIVE_DATA_READ, NATIVE_DATA_ACCESS, NATIVE_DATA_MEMORY};
     for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
     {
         if (!locals && (i == 1 || i == 2))

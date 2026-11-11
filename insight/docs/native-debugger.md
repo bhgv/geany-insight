@@ -167,3 +167,23 @@ Place the editor caret on a saved source line and click **Run to Cursor**.
 The selected thread runs using GDB's `until` command. Existing breakpoints,
 watchpoints, signals or returning from the current frame can stop it before
 the requested line. Invalid source locations leave the program paused.
+
+## Memory inspection
+
+Open **Memory** while paused. Enter `&variable` to view a variable's storage,
+a pointer or array expression such as `buffer` to view its target, or a numeric
+address such as `0x1000`. Choose **Bytes to read** (1–4096) and **Read Memory**,
+or press Enter. The snapshot displays 16 bytes per row, their addresses,
+hexadecimal bytes and printable ASCII. Byte order stays as stored in memory.
+
+**View Memory** in Variables, Watches or Inspect values uses the selected
+expression as an address. For a scalar, change it to `&variable` in Memory.
+**Next block** and **Previous block** navigate by the currently selected byte
+count from the last successful address. They do not reevaluate pointer expressions.
+
+Snapshots clear on execution, target exit and thread/frame changes. Enable
+**Refresh memory at each stop** to reevaluate the current address expression
+in the selected frame at each new stop or frame change. Otherwise, read manually.
+Expression evaluation follows GDB semantics and can execute target code if you
+enter function calls. An inaccessible address or incomplete block clears the
+snapshot and shows an error; choose a smaller block or another address.
